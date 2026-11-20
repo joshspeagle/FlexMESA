@@ -1,7 +1,7 @@
 # MESA version: r26.4.1 (commit c8c2026, Zenodo 19722306) | SDK: x86_64-linux-26.6.1 | Compiler: GNU Fortran (GCC) 15.2.0
-# Captured UTC: 2026-11-19T07:30:22Z | OMP_NUM_THREADS=2
-case,mesa_version_number,omp_threads,termination_code,steps_taken,total_retries,total_zone_steps,rn_wall_sec,mesa_internal_evolve_sec,rn_wall_ms_per_step,rn_wall_us_per_zone_step,evolve_wall_ms_per_step,evolve_wall_us_per_zone_step
-1.3M_ms_high_Z,r26.4.1,2,log_L_upper_limit,219,0,209387,169.458766,167.400000,773.784320,809.308916,764.383562,799.476567
-low_z,r26.4.1,2,xa_central_lower_limit,574,0,446489,116.394916,115.200000,202.778600,260.689326,200.696864,258.013075
-high_z,r26.4.1,2,xa_central_lower_limit,445,0,569607,488.927025,487.800000,1098.712416,858.358527,1096.179775,856.379925
-make_metals,r26.4.1,2,xa_central_lower_limit,511,4,651119,348.254748,300.600000,681.516141,534.855761,588.258317,461.666761
+# Captured UTC: 2026-11-20T20:23:14Z | OMP_NUM_THREADS=2 | repeats=3 (median + min-max range, normal LOGS every repeat)
+case,mesa_version_number,omp_threads,repeats,termination_code,steps_taken,total_retries,total_newton_iterations,total_zone_steps,rn_wall_sec,rn_wall_sec_range,mesa_internal_evolve_sec,mesa_internal_evolve_sec_range,rn_wall_ms_per_step,rn_wall_us_per_zone_step,rn_wall_ms_per_newton_iter,evolve_wall_ms_per_step,evolve_wall_us_per_zone_step,evolve_wall_ms_per_newton_iter
+1.3M_ms_high_Z,r26.4.1,2,3,log_L_upper_limit,219,0,2100,209387,163.752517,4.242779,162.600000,3.000000,747.728388,782.056751,77.977389,742.465753,776.552508,77.428571
+semiconvection,r26.4.1,2,3,xa_central_lower_limit,293,0,2094,472072,367.461421,15.915417,366.000000,15.000000,1254.134544,778.401221,175.483009,1249.146758,775.305462,174.785100
+low_z,r26.4.1,2,3,xa_central_lower_limit,574,0,1705,446489,109.309528,0.896487,108.600000,0.600000,190.434718,244.820204,64.111160,189.198606,243.231076,63.695015
+make_metals,r26.4.1,2,3,xa_central_lower_limit,511,4,4122,651119,333.582899,5.803330,287.400000,4.800000,652.804107,512.322477,80.927438,562.426614,441.393969,69.723435

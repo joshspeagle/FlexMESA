@@ -63,19 +63,19 @@
     }
   },
   "mean_evolution_phase_shares_pct": {
-    "eos_share_pct": 12.59193747,
-    "kap_share_pct": 2.68187512225,
-    "net_and_jacobian_share_pct": 15.2278748805,
-    "turbulence_share_pct": 38.908877340000004,
-    "equation_assembly_share_pct": 7.143767539000001,
-    "block_solve_share_pct": 14.33699684025,
-    "remesh_share_pct": 8.3279719545,
-    "bookkeeping_and_copies_share_pct": 0.7806988545
+    "eos_share_pct": 8.4146585205,
+    "kap_share_pct": 2.0538141625,
+    "net_and_jacobian_share_pct": 22.1286281175,
+    "turbulence_share_pct": 37.4340276375,
+    "equation_assembly_share_pct": 6.183534195,
+    "block_solve_share_pct": 18.35391533625,
+    "remesh_share_pct": 4.7524461375,
+    "bookkeeping_and_copies_share_pct": 0.6789758934
   },
-  "stateless_microphysics_fraction": 0.6941056481275001,
-  "stateful_solver_remesh_fraction": 0.3058943518724999,
-  "amdahl_infinite_gpu_micro_speedup_ceiling": 3.2691025312452022,
-  "rust_8t_worker_pool_throughput_gain_vs_single_star_2t": 4.847138386401675,
+  "stateless_microphysics_fraction": 0.70031128438,
+  "stateful_solver_remesh_fraction": 0.29968871562,
+  "amdahl_infinite_gpu_micro_speedup_ceiling": 3.336795641207867,
+  "rust_8t_worker_pool_throughput_gain_vs_single_star_2t": 5.424595778417597,
   "model_assumptions": {
     "pcie_effective_bandwidth_gb_s": 24.0,
     "xla_dispatch_latency_us_per_iter": 80.0,
@@ -86,53 +86,53 @@
   "grid_projections": [
     {
       "n_stars": 1,
-      "total_grid_zones": 888,
-      "rust_8t_worker_pool_step_sec": 0.032279599739336536,
-      "hybrid_gpu_micro_step_sec": 0.028804046760634104,
-      "hybrid_gpu_vs_rust_8t_ratio": 1.1206619683541272,
-      "stateless_batch_only_rust_8t_sec": 0.022405452498368467,
-      "stateless_batch_only_gpu_sec": 0.01818512627209099,
-      "stateless_batch_only_gpu_speedup_vs_rust_8t": 1.2320757174369736
+      "total_grid_zones": 963,
+      "rust_8t_worker_pool_step_sec": 0.05017468881221448,
+      "hybrid_gpu_micro_step_sec": 0.047982371421379,
+      "hybrid_gpu_vs_rust_8t_ratio": 1.0456900592007563,
+      "stateless_batch_only_rust_8t_sec": 0.03513790076544874,
+      "stateless_batch_only_gpu_sec": 0.031853286555465474,
+      "stateless_batch_only_gpu_speedup_vs_rust_8t": 1.1031169642185534
     },
     {
       "n_stars": 8,
-      "total_grid_zones": 7107,
-      "rust_8t_worker_pool_step_sec": 0.2582367979146923,
-      "hybrid_gpu_micro_step_sec": 0.28337517002192275,
-      "hybrid_gpu_vs_rust_8t_ratio": 0.9112894326440609,
-      "stateless_batch_only_rust_8t_sec": 0.17924361998694774,
-      "stateless_batch_only_gpu_sec": 0.14492101017672793,
-      "stateless_batch_only_gpu_speedup_vs_rust_8t": 1.2368366723939073
+      "total_grid_zones": 7703,
+      "rust_8t_worker_pool_step_sec": 0.4013975104977158,
+      "hybrid_gpu_micro_step_sec": 0.478092009044051,
+      "hybrid_gpu_vs_rust_8t_ratio": 0.8395821367111187,
+      "stateless_batch_only_rust_8t_sec": 0.2811032061235899,
+      "stateless_batch_only_gpu_sec": 0.25426629244372384,
+      "stateless_batch_only_gpu_speedup_vs_rust_8t": 1.10554648601645
     },
     {
       "n_stars": 64,
-      "total_grid_zones": 56858,
-      "rust_8t_worker_pool_step_sec": 2.0658943833175383,
-      "hybrid_gpu_micro_step_sec": 2.261051135384382,
-      "hybrid_gpu_vs_rust_8t_ratio": 0.9136875990937432,
-      "stateless_batch_only_rust_8t_sec": 1.433948959895582,
-      "stateless_batch_only_gpu_sec": 1.1588080814138235,
-      "stateless_batch_only_gpu_speedup_vs_rust_8t": 1.2374343801141499
+      "total_grid_zones": 61622,
+      "rust_8t_worker_pool_step_sec": 3.2111800839817266,
+      "hybrid_gpu_micro_step_sec": 3.81647173952663,
+      "hybrid_gpu_vs_rust_8t_ratio": 0.8414001997509931,
+      "stateless_batch_only_rust_8t_sec": 2.2488256489887193,
+      "stateless_batch_only_gpu_sec": 2.0335703395497906,
+      "stateless_batch_only_gpu_speedup_vs_rust_8t": 1.1058509289069312
     },
     {
       "n_stars": 256,
-      "total_grid_zones": 227430,
-      "rust_8t_worker_pool_step_sec": 8.263577533270153,
-      "hybrid_gpu_micro_step_sec": 9.04165444519853,
-      "hybrid_gpu_vs_rust_8t_ratio": 0.913945294343607,
-      "stateless_batch_only_rust_8t_sec": 5.735795839582328,
-      "stateless_batch_only_gpu_sec": 4.634992325655293,
-      "stateless_batch_only_gpu_speedup_vs_rust_8t": 1.2374984544923497
+      "total_grid_zones": 246489,
+      "rust_8t_worker_pool_step_sec": 12.844720335926906,
+      "hybrid_gpu_micro_step_sec": 15.26234510118119,
+      "hybrid_gpu_vs_rust_8t_ratio": 0.8415954593329712,
+      "stateless_batch_only_rust_8t_sec": 8.995302595954877,
+      "stateless_batch_only_gpu_sec": 8.134041358199163,
+      "stateless_batch_only_gpu_speedup_vs_rust_8t": 1.1058835577332733
     },
     {
       "n_stars": 1024,
-      "total_grid_zones": 909720,
-      "rust_8t_worker_pool_step_sec": 33.05431013308061,
-      "hybrid_gpu_micro_step_sec": 36.16406768445511,
-      "hybrid_gpu_vs_rust_8t_ratio": 0.914009740870184,
-      "stateless_batch_only_rust_8t_sec": 22.94318335832931,
-      "stateless_batch_only_gpu_sec": 18.539729302621176,
-      "stateless_batch_only_gpu_speedup_vs_rust_8t": 1.237514474123717
+      "total_grid_zones": 985958,
+      "rust_8t_worker_pool_step_sec": 51.378881343707626,
+      "hybrid_gpu_micro_step_sec": 61.04583854779942,
+      "hybrid_gpu_vs_rust_8t_ratio": 0.8416442883895766,
+      "stateless_batch_only_rust_8t_sec": 35.98121038381951,
+      "stateless_batch_only_gpu_sec": 32.535925432796645,
+      "stateless_batch_only_gpu_speedup_vs_rust_8t": 1.1058917152407157
     }
   ]
 }

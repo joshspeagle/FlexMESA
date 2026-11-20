@@ -23,7 +23,7 @@ Generated mechanically by `flexmesa dashboard render` from [`port_manifest.toml`
 | Strict mode bit-identical across machines (`#165`) | gated in CI by scripts/check_strict_determinism.py (x86_64 vs aarch64, 1 vs 4 threads; 474,062 math vectors + uncapped star/1.3M_ms_high_Z + binary/jdot_gr_check run with unsupported controls ignored; a bit-identity check, not a comparison with MESA) | [#165](https://github.com/joshspeagle/FlexMESA/issues/165) |
 | Strict-mode kernels bit-identical to MESA `26.4.1` (`#165`) | math: 403,258/403,258 CRMATH 0 ULP (70,804 libm <= 1 ULP); 304,567/304,635 probed module hex 0 ULP (5 complete, 14 non-math probed) | [#165](https://github.com/joshspeagle/FlexMESA/issues/165) |
 | Test line coverage (Rust `llvm-cov` / Python `pytest --cov`) | 75.3% (86,915/115,460) / 87.8% (22,448/25,569) | [`coverage_summary.json`](https://github.com/joshspeagle/FlexMESA/blob/main/benchmarks/dashboard/coverage_summary.json) |
-| Road-to-`v0.1.0` packages ([#140](https://github.com/joshspeagle/FlexMESA/issues/140)) & open PRs | 15 closed, 20 open; 0 open PR(s) | [`github_snapshot.json`](https://github.com/joshspeagle/FlexMESA/blob/main/benchmarks/dashboard/github_snapshot.json) |
+| Road-to-`v0.1.0` packages ([#140](https://github.com/joshspeagle/FlexMESA/issues/140)) & open PRs | 16 closed, 20 open; 2 open PR(s) | [`github_snapshot.json`](https://github.com/joshspeagle/FlexMESA/blob/main/benchmarks/dashboard/github_snapshot.json) |
 | Post-parity deferred backlog ([#169](https://github.com/joshspeagle/FlexMESA/issues/169)) | 42 open (41 upstream bugs, 1 enhancement, 3 `parity-pending`) | [`github_snapshot.json`](https://github.com/joshspeagle/FlexMESA/blob/main/benchmarks/dashboard/github_snapshot.json) |
 
 ### 1. Port Coverage by Module (MESA `26.4.1`)
@@ -61,7 +61,7 @@ Progress is measured by **upstream MESA `26.4.1` source lines by status**, never
 | **Subtotal: star + star_data + binary + astero** | 144,952 | 22,863 | 6,378 | 71,911 | 38,829 | 4,971 | 0 | 100,953 | 6,401 | 30.2% | 3.4% |
 | **Total (all 26 modules)** | 497,703 | 247,888 | 6,378 | 196,077 | 42,389 | 4,971 | 0 | 172,156 | 57,169 | 9.5% | 1.0% |
 
-*Notes*: `star_data` state structs reside in `crates/flexmesa-star`. Bridge, testing, and benchmark infrastructure account for an additional `19,294` Rust lines (`flexmesa-py`, `flexmesa-testing`, `flexmesa-bench`) and `15,080` Python lines (`flexmesa.testing`, `flexmesa.bench`). For plotting ([#173](https://github.com/joshspeagle/FlexMESA/issues/173)), `flexmesa.plotting` currently provides `34` `plot_*` builders against `46` upstream `pgstar`/`pgbinary` panel modules.
+*Notes*: `star_data` state structs reside in `crates/flexmesa-star`. Bridge, testing, and benchmark infrastructure account for an additional `19,417` Rust lines (`flexmesa-py`, `flexmesa-testing`, `flexmesa-bench`) and `15,080` Python lines (`flexmesa.testing`, `flexmesa.bench`). For plotting ([#173](https://github.com/joshspeagle/FlexMESA/issues/173)), `flexmesa.plotting` currently provides `34` `plot_*` builders against `46` upstream `pgstar`/`pgbinary` panel modules.
 
 ### 2. Verification & Numerics Status
 
@@ -80,7 +80,7 @@ Progress is measured by **upstream MESA `26.4.1` source lines by status**, never
 | **Total** | **106** | **102** | **4** | **0** | **106** | **47** | **6** | **0** | **102** | **0** |
 
 - **Full per-case table**: [`notes/audit/case_table.md`](https://github.com/joshspeagle/FlexMESA/blob/main/notes/audit/case_table.md). `6` case(s) within numeric tolerance (`rsp_BEP`, `rsp_BLAP`, `rsp_Cepheid`, `rsp_RR_Lyrae`, `rsp_save_and_load_file`, `surface_effects`) remain governed as declared gaps under [#161](https://github.com/joshspeagle/FlexMESA/issues/161), [#162](https://github.com/joshspeagle/FlexMESA/issues/162).
-- **Declared gaps by owning package**: [#161](https://github.com/joshspeagle/FlexMESA/issues/161) (27), [#159](https://github.com/joshspeagle/FlexMESA/issues/159) (20), [#154](https://github.com/joshspeagle/FlexMESA/issues/154) (13), [#157](https://github.com/joshspeagle/FlexMESA/issues/157) (9), [#162](https://github.com/joshspeagle/FlexMESA/issues/162) (9), [#160](https://github.com/joshspeagle/FlexMESA/issues/160) (7), [#170](https://github.com/joshspeagle/FlexMESA/issues/170) (7), [#158](https://github.com/joshspeagle/FlexMESA/issues/158) (6), [#231](https://github.com/joshspeagle/FlexMESA/issues/231) (2), [#151](https://github.com/joshspeagle/FlexMESA/issues/151) (1), [#171](https://github.com/joshspeagle/FlexMESA/issues/171) (1).
+- **Declared gaps by owning package**: [#161](https://github.com/joshspeagle/FlexMESA/issues/161) (27), [#299](https://github.com/joshspeagle/FlexMESA/issues/299) (20), [#154](https://github.com/joshspeagle/FlexMESA/issues/154) (13), [#157](https://github.com/joshspeagle/FlexMESA/issues/157) (9), [#162](https://github.com/joshspeagle/FlexMESA/issues/162) (9), [#160](https://github.com/joshspeagle/FlexMESA/issues/160) (7), [#170](https://github.com/joshspeagle/FlexMESA/issues/170) (7), [#158](https://github.com/joshspeagle/FlexMESA/issues/158) (6), [#231](https://github.com/joshspeagle/FlexMESA/issues/231) (2), [#151](https://github.com/joshspeagle/FlexMESA/issues/151) (1), [#171](https://github.com/joshspeagle/FlexMESA/issues/171) (1).
 - **Trajectory comparison figures ([#173](https://github.com/joshspeagle/FlexMESA/issues/173))**: `0` committed.
 
 ### 4. Controls & Defaults Coverage (`#147`, `#149`)
@@ -110,14 +110,14 @@ Full scalar diff: [`notes/audit/defaults_diff_26_4_1.md`](https://github.com/jos
 | `#140` Phase | Closed | Open | Open Issues |
 | :--- | ---: | ---: | :--- |
 | Phase 0 | 6 | 0 | none |
-| Phase A | 2 | 2 | [#144](https://github.com/joshspeagle/FlexMESA/issues/144), [#168](https://github.com/joshspeagle/FlexMESA/issues/168) |
+| Phase A | 3 | 1 | [#144](https://github.com/joshspeagle/FlexMESA/issues/144) |
 | Phase B | 4 | 1 | [#151](https://github.com/joshspeagle/FlexMESA/issues/151) |
-| Phase C | 3 | 13 | [#152](https://github.com/joshspeagle/FlexMESA/issues/152), [#153](https://github.com/joshspeagle/FlexMESA/issues/153), [#154](https://github.com/joshspeagle/FlexMESA/issues/154), [#155](https://github.com/joshspeagle/FlexMESA/issues/155), [#156](https://github.com/joshspeagle/FlexMESA/issues/156), [#157](https://github.com/joshspeagle/FlexMESA/issues/157), [#158](https://github.com/joshspeagle/FlexMESA/issues/158), [#159](https://github.com/joshspeagle/FlexMESA/issues/159), [#160](https://github.com/joshspeagle/FlexMESA/issues/160), [#161](https://github.com/joshspeagle/FlexMESA/issues/161), [#162](https://github.com/joshspeagle/FlexMESA/issues/162), [#231](https://github.com/joshspeagle/FlexMESA/issues/231), [#295](https://github.com/joshspeagle/FlexMESA/issues/295) |
+| Phase C | 3 | 14 | [#152](https://github.com/joshspeagle/FlexMESA/issues/152), [#153](https://github.com/joshspeagle/FlexMESA/issues/153), [#154](https://github.com/joshspeagle/FlexMESA/issues/154), [#155](https://github.com/joshspeagle/FlexMESA/issues/155), [#156](https://github.com/joshspeagle/FlexMESA/issues/156), [#157](https://github.com/joshspeagle/FlexMESA/issues/157), [#158](https://github.com/joshspeagle/FlexMESA/issues/158), [#159](https://github.com/joshspeagle/FlexMESA/issues/159), [#160](https://github.com/joshspeagle/FlexMESA/issues/160), [#161](https://github.com/joshspeagle/FlexMESA/issues/161), [#162](https://github.com/joshspeagle/FlexMESA/issues/162), [#231](https://github.com/joshspeagle/FlexMESA/issues/231), [#295](https://github.com/joshspeagle/FlexMESA/issues/295), [#299](https://github.com/joshspeagle/FlexMESA/issues/299) |
 | Phase D | 0 | 3 | [#170](https://github.com/joshspeagle/FlexMESA/issues/170), [#171](https://github.com/joshspeagle/FlexMESA/issues/171), [#172](https://github.com/joshspeagle/FlexMESA/issues/172) |
 | Phase E | 1 | 1 | [#173](https://github.com/joshspeagle/FlexMESA/issues/173) |
 | Deferred scope | 0 | 0 | none |
 
-- **Open pull requests (0)**: none.
+- **Open pull requests (2)**: [#297](https://github.com/joshspeagle/FlexMESA/pull/297), [#298](https://github.com/joshspeagle/FlexMESA/pull/298).
 - **Post-parity deferred backlog ([#169](https://github.com/joshspeagle/FlexMESA/issues/169))**: `42` open issues (`41` `upstream-bug`, `1` `enhancement`; `3` marked `parity-pending` for upstream restoration before `v0.1.0`).
 
 ### 7. Headline History Across Merges

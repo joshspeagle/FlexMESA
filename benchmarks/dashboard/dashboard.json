@@ -455,7 +455,7 @@
       "upstream_panel_modules": 46
     },
     "infrastructure_lines": {
-      "rust_bridge_testing_bench": 19294,
+      "rust_bridge_testing_bench": 19417,
       "python_testing_bench": 15080
     }
   },
@@ -660,7 +660,7 @@
     ],
     "gaps_by_issue": {
       "#161": 27,
-      "#159": 20,
+      "#299": 20,
       "#154": 13,
       "#157": 9,
       "#162": 9,
@@ -1238,8 +1238,8 @@
       },
       {
         "phase": "Phase A",
-        "open": 2,
-        "closed": 2,
+        "open": 1,
+        "closed": 3,
         "issues": [
           {
             "number": 142,
@@ -1259,7 +1259,7 @@
           {
             "number": 168,
             "title": "[Audit A6] Profile a real evolution and measure what fast math, batching and waste removal each buy",
-            "state": "open"
+            "state": "closed"
           }
         ]
       },
@@ -1297,7 +1297,7 @@
       },
       {
         "phase": "Phase C",
-        "open": 13,
+        "open": 14,
         "closed": 3,
         "issues": [
           {
@@ -1379,6 +1379,11 @@
             "number": 295,
             "title": "[JAX] Rust-versus-JAX consistency tests expected to fail while the JAX engine is frozen",
             "state": "open"
+          },
+          {
+            "number": 299,
+            "title": "[Audit C8/C12] Wire remaining photo/log I/O and test-harness driver controls",
+            "state": "open"
           }
         ]
       },
@@ -1428,7 +1433,18 @@
         "issues": []
       }
     ],
-    "open_pull_requests": [],
+    "open_pull_requests": [
+      {
+        "number": 297,
+        "title": "fix(star): face radiation pressure from the face temperature in do1_mlt_2; evolve-step bench on 64 zones (#291, #295)",
+        "draft": false
+      },
+      {
+        "number": 298,
+        "title": "feat(harness): upgrade A2 case table and refresh strict MESA 26.4.1 baseline",
+        "draft": false
+      }
+    ],
     "deferred_169": [
       {
         "number": 175,

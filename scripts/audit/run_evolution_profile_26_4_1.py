@@ -4,21 +4,25 @@
 
 Executes and records raw JSON/CSV artifacts under
 `benchmarks/evolution_profile/26.4.1/`:
-1. Four real `star/test_suite` evolutions (`1.3M_ms_high_Z`, `low_z`, `high_z`,
-   `make_metals`) in `NumericsMode::Strict` (unperturbed + per-step phase
-   breakdown and microphysics call counts per accepted step).
+1. Four real `star/test_suite` evolutions (`1.3M_ms_high_Z`, `semiconvection`,
+   `low_z`, `make_metals`) in `NumericsMode::Strict` (3 repeats each with
+   normal `LOGS/` output written on every repeat, plus a separate per-step
+   phase-probe pass verified at `0 ULP` `.photo` checksum identity).
 2. Real Fortran MESA `26.4.1` on the same four cases at matched thread count
-   (`OMP_NUM_THREADS=2`), recording wall/step, wall/zone-step, steps, retries,
-   and final/track trajectory differences.
+   (`OMP_NUM_THREADS=2`) and matched repeat count (3 repeats with normal
+   `LOGS/` output on every repeat), recording wall median + min-max spread,
+   `ms/step`, `us/zone-step`, exact `testhub.yml` Newton iterations, and
+   `ms/Newton-iteration`.
 3. `NumericsMode::Fast` vs `NumericsMode::Strict` (`#165`) speedups and
-   full-trajectory differences across the same four cases.
-4. `#150` waste removal: direct pre-`#150` (`af9747e`) vs post-`#150`
-   (`3f7fa734`) benchmark on `1.3M_ms_high_Z` plus `HEAD` component breakdown
-   (`MicrophysicsCache` saved evaluations and `PrimaryStateBuffer` vs
-   `StarModel::clone`).
-5. `N`-star Safe Rust `rayon` worker-pool batching throughput scaling (`N` = 1
-   to 32 across 2-thread and 8-thread pools) and a quantitative grid-scale
-   accelerator estimate (`#166`) anchored to `benchmarks/raw/26.4.1/`.
+   full-trajectory differences across the same four cases (3 repeats each).
+4. `#150` waste removal: preserved pre-`#150` (`af9747e1`) vs post-`#150`
+   (`3f7fa734`) git A/B benchmark on `1.3M_ms_high_Z` plus fresh `origin/main`
+   component measurements (`MicrophysicsCache` hits/misses and
+   `PrimaryStateBuffer` vs `StarModel` heap bytes) and probe estimates.
+5. `N`-star Safe Rust `rayon` worker-pool batching throughput scaling
+   (`smoke: 60 steps`, `N` = 1 to 32 across 2-thread and 8-thread pools) and a
+   grid-scale accelerator estimate (`#166`) anchored to
+   `benchmarks/raw/26.4.1/`.
 """
 
 from __future__ import annotations
@@ -30,6 +34,7 @@ import json
 import os
 import pathlib
 import platform
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -59,8 +64,8 @@ def _resolve_mesa_test_inputs_dir() -> pathlib.Path:
 
 SELECTED_CASES: tuple[str, ...] = (
     "1.3M_ms_high_Z",
+    "semiconvection",
     "low_z",
-    "high_z",
     "make_metals",
 )
 TRACKED_COLS: tuple[str, ...] = (
@@ -152,25 +157,56 @@ def _run_median_unperturbed_case(
     threads: int,
     repeats: int = 3,
 ) -> dict[str, Any]:
-    """Run unperturbed evolution ``repeats`` times and return the median run."""
-    samples: list[dict[str, Any]] = []
-    for rep in range(repeats):
-        args = [
-            "case",
-            "--case-dir",
-            str(case_dir),
-            "--allow-unsupported-controls",
-        ]
-        if rep == repeats - 1:
-            args.extend(["--history-out", str(history_out)])
-        samples.append(
-            _run_profile_bin(bin_path, args, mode=mode, threads=threads)
-        )
-    samples.sort(key=lambda r: float(r["evolve_wall_sec"]))
-    med = dict(samples[len(samples) // 2])
-    med["evolve_wall_sec_samples"] = [
-        float(s["evolve_wall_sec"]) for s in samples
-    ]
+    """Run unperturbed evolution ``repeats`` times with history output on all.
+
+    Writes full ``history.data`` (every step) and ``final.mod`` on every timed
+    repeat, checks ``0-ULP`` checksum identity across repeats, copies the
+    median repeat's ``history.data`` to ``history_out``, and attaches min-max
+    spreads.
+    """
+    samples: list[tuple[dict[str, Any], pathlib.Path]] = []
+    with tempfile.TemporaryDirectory(prefix="prof168_logs_") as tmp_logs:
+        logs_root = pathlib.Path(tmp_logs)
+        for rep in range(repeats):
+            rep_hist = logs_root / f"rep_{rep}_history.data"
+            args = [
+                "case",
+                "--case-dir",
+                str(case_dir),
+                "--allow-unsupported-controls",
+                "--history-out",
+                str(rep_hist),
+            ]
+            rec = _run_profile_bin(bin_path, args, mode=mode, threads=threads)
+            if not rep_hist.is_file():
+                raise RuntimeError(
+                    f"Missing history output {rep_hist} for {case_dir.name}"
+                )
+            samples.append((rec, rep_hist))
+
+        checksums = {str(r["photo_checksum"]) for r, _ in samples}
+        if len(checksums) != 1:
+            raise RuntimeError(
+                f"Repeat checksum drift on {case_dir.name} ({mode}): "
+                f"{sorted(checksums)}"
+            )
+        samples.sort(key=lambda pair: float(pair[0]["evolve_wall_sec"]))
+        med_rec, med_hist = samples[len(samples) // 2]
+        shutil.copyfile(med_hist, history_out)
+
+    ev_vals = sorted(float(r["evolve_wall_sec"]) for r, _ in samples)
+    tot_vals = sorted(float(r["total_wall_sec"]) for r, _ in samples)
+    med = dict(med_rec)
+    med["repeats"] = repeats
+    med["history_output_every_repeat"] = True
+    med["evolve_wall_sec_samples"] = ev_vals
+    med["evolve_wall_sec_min"] = ev_vals[0]
+    med["evolve_wall_sec_max"] = ev_vals[-1]
+    med["evolve_wall_sec_range"] = ev_vals[-1] - ev_vals[0]
+    med["total_wall_sec_samples"] = tot_vals
+    med["total_wall_sec_min"] = tot_vals[0]
+    med["total_wall_sec_max"] = tot_vals[-1]
+    med["total_wall_sec_range"] = tot_vals[-1] - tot_vals[0]
     return med
 
 
@@ -346,6 +382,17 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--profile-bin", type=pathlib.Path, required=True)
     parser.add_argument("--out-dir", type=pathlib.Path, default=_OUT_DIR)
     parser.add_argument("--threads", type=int, default=2)
+    parser.add_argument("--repeats", type=int, default=3)
+    parser.add_argument(
+        "--reuse-ab-from",
+        type=pathlib.Path,
+        default=None,
+        help=(
+            "Reuse existing git_ab_1_3M_ms_high_Z from a committed "
+            "waste_removal_150.json while regenerating fresh component "
+            "measurements on origin/main."
+        ),
+    )
     parser.add_argument(
         "--mesa-dir",
         type=pathlib.Path,
@@ -370,6 +417,7 @@ def main(argv: list[str] | None = None) -> int:
     out_dir.mkdir(parents=True, exist_ok=True)
     test_inputs = _resolve_mesa_test_inputs_dir()
     threads: int = args.threads
+    repeats: int = args.repeats
 
     load_start = os.getloadavg()[0]
     date_utc = dt.datetime.now(dt.UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -389,7 +437,9 @@ def main(argv: list[str] | None = None) -> int:
         h_root = pathlib.Path(tmp_h)
         for cname in SELECTED_CASES:
             cdir = test_inputs / "star" / "test_suite" / cname
-            sys.stdout.write(f"[168] Running FlexMESA strict on {cname}...\n")
+            sys.stdout.write(
+                f"[168] Running FlexMESA strict ({repeats}x) on {cname}...\n"
+            )
             sys.stdout.flush()
             shist = h_root / f"{cname}_strict.data"
             unpert_s = _run_median_unperturbed_case(
@@ -398,7 +448,7 @@ def main(argv: list[str] | None = None) -> int:
                 shist,
                 mode="strict",
                 threads=threads,
-                repeats=3,
+                repeats=repeats,
             )
             prof_s = _run_profile_bin(
                 args.profile_bin,
@@ -419,7 +469,9 @@ def main(argv: list[str] | None = None) -> int:
             unpert_s["phases"] = prof_s["phases"]
             strict_records.append(unpert_s)
 
-            sys.stdout.write(f"[168] Running FlexMESA fast on {cname}...\n")
+            sys.stdout.write(
+                f"[168] Running FlexMESA fast ({repeats}x) on {cname}...\n"
+            )
             sys.stdout.flush()
             fhist = h_root / f"{cname}_fast.data"
             unpert_f = _run_median_unperturbed_case(
@@ -428,7 +480,7 @@ def main(argv: list[str] | None = None) -> int:
                 fhist,
                 mode="fast",
                 threads=threads,
-                repeats=3,
+                repeats=repeats,
             )
             fast_records.append(unpert_f)
 
@@ -441,32 +493,71 @@ def main(argv: list[str] | None = None) -> int:
             fast_sec = float(unpert_f["evolve_wall_sec"])
             strict_uzs = float(unpert_s["wall_us_per_zone_step"])
             fast_uzs = float(unpert_f["wall_us_per_zone_step"])
+            strict_mnit = float(unpert_s["wall_ms_per_newton_iter"])
+            fast_mnit = float(unpert_f["wall_ms_per_newton_iter"])
             strict_vs_fast_records.append(
                 {
                     "case": cname,
                     "comparison": "fast_vs_strict_only",
+                    "n_controls_ignored": int(unpert_s["n_controls_ignored"]),
+                    "run_mode": str(unpert_s["run_mode"]),
+                    "repeats": repeats,
                     "strict_steps": int(unpert_s["steps_taken"]),
                     "fast_steps": int(unpert_f["steps_taken"]),
                     "step_delta_fast_minus_strict": int(unpert_f["steps_taken"])
                     - int(unpert_s["steps_taken"]),
                     "strict_retries": int(unpert_s["total_retries"]),
                     "fast_retries": int(unpert_f["total_retries"]),
+                    "strict_total_newton_iterations": int(
+                        unpert_s["total_newton_iterations"]
+                    ),
+                    "fast_total_newton_iterations": int(
+                        unpert_f["total_newton_iterations"]
+                    ),
                     "strict_evolve_wall_sec": strict_sec,
+                    "strict_evolve_wall_sec_min": float(
+                        unpert_s["evolve_wall_sec_min"]
+                    ),
+                    "strict_evolve_wall_sec_max": float(
+                        unpert_s["evolve_wall_sec_max"]
+                    ),
+                    "strict_evolve_wall_sec_range": float(
+                        unpert_s["evolve_wall_sec_range"]
+                    ),
                     "fast_evolve_wall_sec": fast_sec,
+                    "fast_evolve_wall_sec_min": float(
+                        unpert_f["evolve_wall_sec_min"]
+                    ),
+                    "fast_evolve_wall_sec_max": float(
+                        unpert_f["evolve_wall_sec_max"]
+                    ),
+                    "fast_evolve_wall_sec_range": float(
+                        unpert_f["evolve_wall_sec_range"]
+                    ),
                     "wall_speedup_strict_over_fast": strict_sec
                     / max(fast_sec, 1.0e-12),
                     "strict_us_per_zone_step": strict_uzs,
                     "fast_us_per_zone_step": fast_uzs,
                     "zone_step_speedup_strict_over_fast": strict_uzs
                     / max(fast_uzs, 1.0e-12),
+                    "strict_ms_per_newton_iter": strict_mnit,
+                    "fast_ms_per_newton_iter": fast_mnit,
+                    "newton_iter_speedup_strict_over_fast": strict_mnit
+                    / max(fast_mnit, 1.0e-12),
                     "trajectory_diff": svf_cmp,
                 }
             )
 
-            sys.stdout.write(f"[168] Running real MESA 26.4.1 on {cname}...\n")
+            sys.stdout.write(
+                f"[168] Running real MESA 26.4.1 ({repeats}x) on {cname}...\n"
+            )
             sys.stdout.flush()
             m_rec, cols_m, arr_m = helpers.run_real_mesa_case(
-                cname, args.mesa_dir, args.mesasdk_root, threads
+                cname,
+                args.mesa_dir,
+                args.mesasdk_root,
+                threads,
+                repeats=repeats,
             )
             m_cmp = helpers.compare_trajectories_by_age(
                 cols_m, arr_m, cols_s, arr_s, TRACKED_COLS
@@ -474,36 +565,78 @@ def main(argv: list[str] | None = None) -> int:
             m_rec["strict_vs_mesa_comparison"] = m_cmp
             mesa_records.append(m_rec)
 
-    sys.stdout.write("[168] Running #150 pre/post commit A/B benchmark...\n")
-    sys.stdout.flush()
-    c13_dir = test_inputs / "star" / "test_suite" / "1.3M_ms_high_Z"
-    with tempfile.TemporaryDirectory(prefix="wt150_shared_tgt_") as shared_tmp:
-        shared_tgt = pathlib.Path(shared_tmp)
-        pre150 = helpers.measure_commit_case_wall(
-            _REPO_ROOT,
-            "af9747e",
-            c13_dir,
-            threads,
-            repeats=3,
-            shared_target_dir=shared_tgt,
+    if args.reuse_ab_from is not None:
+        sys.stdout.write(
+            f"[168] Reusing #150 git A/B record from {args.reuse_ab_from}...\n"
         )
-        post150 = helpers.measure_commit_case_wall(
-            _REPO_ROOT,
-            "3f7fa734",
-            c13_dir,
-            threads,
-            repeats=3,
-            shared_target_dir=shared_tgt,
+        sys.stdout.flush()
+        prev_waste = cast(
+            dict[str, Any],
+            json.loads(args.reuse_ab_from.read_text(encoding="utf-8")),
         )
+        git_ab_block = cast(dict[str, Any], prev_waste["git_ab_1_3M_ms_high_Z"])
+        pre150 = cast(dict[str, Any], git_ab_block["pre_150"])
+        post150 = cast(dict[str, Any], git_ab_block["post_150"])
+    else:
+        sys.stdout.write(
+            "[168] Running #150 pre/post commit A/B benchmark...\n"
+        )
+        sys.stdout.flush()
+        c13_dir = test_inputs / "star" / "test_suite" / "1.3M_ms_high_Z"
+        with tempfile.TemporaryDirectory(
+            prefix="wt150_shared_tgt_"
+        ) as shared_tmp:
+            shared_tgt = pathlib.Path(shared_tmp)
+            pre150 = helpers.measure_commit_case_wall(
+                _REPO_ROOT,
+                "af9747e",
+                c13_dir,
+                threads,
+                repeats=repeats,
+                shared_target_dir=shared_tgt,
+            )
+            post150 = helpers.measure_commit_case_wall(
+                _REPO_ROOT,
+                "3f7fa734",
+                c13_dir,
+                threads,
+                repeats=repeats,
+                shared_target_dir=shared_tgt,
+            )
+        git_ab_block = {
+            "case": "1.3M_ms_high_Z",
+            "pre_150": pre150,
+            "post_150": post150,
+            "wall_speedup_pre_over_post": float(pre150["median_wall_sec"])
+            / max(float(post150["median_wall_sec"]), 1.0e-12),
+            "wall_time_saved_sec": float(pre150["median_wall_sec"])
+            - float(post150["median_wall_sec"]),
+            "wall_time_saved_pct": 100.0
+            * (
+                float(pre150["median_wall_sec"])
+                - float(post150["median_wall_sec"])
+            )
+            / max(float(pre150["median_wall_sec"]), 1.0e-12),
+        }
+
     waste_components = [
         {
             "case": c["case"],
+            "measured_commit": base_commit[:8],
+            "n_controls_ignored": c["n_controls_ignored"],
+            "run_mode": c["run_mode"],
             "steps_taken": c["steps_taken"],
             "evolve_wall_sec": c["evolve_wall_sec"],
             "micro_cache_hits": c["micro_cache_hits"],
             "micro_cache_misses": c["micro_cache_misses"],
             "micro_cache_hits_per_step": c["micro_cache_hits_per_step"],
             "micro_cache_misses_per_step": c["micro_cache_misses_per_step"],
+            "micro_cache_hit_rate_pct": 100.0
+            * float(c["micro_cache_hits"])
+            / max(
+                1.0,
+                float(c["micro_cache_hits"]) + float(c["micro_cache_misses"]),
+            ),
             "saved_micro_eval_sec": c["phases"]["saved_micro_eval_sec"],
             "pre150_full_clone_every_step_sec": c["phases"][
                 "pre150_full_clone_every_step_sec"
@@ -521,25 +654,14 @@ def main(argv: list[str] | None = None) -> int:
         for c in strict_records
     ]
     waste_payload = {
-        "git_ab_1_3M_ms_high_Z": {
-            "case": "1.3M_ms_high_Z",
-            "pre_150": pre150,
-            "post_150": post150,
-            "wall_speedup_pre_over_post": float(pre150["median_wall_sec"])
-            / max(float(post150["median_wall_sec"]), 1.0e-12),
-            "wall_time_saved_sec": float(pre150["median_wall_sec"])
-            - float(post150["median_wall_sec"]),
-            "wall_time_saved_pct": 100.0
-            * (
-                float(pre150["median_wall_sec"])
-                - float(post150["median_wall_sec"])
-            )
-            / max(float(pre150["median_wall_sec"]), 1.0e-12),
-        },
+        "git_ab_1_3M_ms_high_Z": git_ab_block,
+        "head_component_measured_commit": base_commit,
         "head_component_breakdown": waste_components,
     }
 
-    sys.stdout.write("[168] Running N-star worker-pool batching curves...\n")
+    sys.stdout.write(
+        "[168] Running N-star worker-pool batching (smoke: 60 steps)...\n"
+    )
     sys.stdout.flush()
     lowz_dir = test_inputs / "star" / "test_suite" / "low_z"
     batch_2t = _run_profile_bin(
@@ -590,7 +712,7 @@ def main(argv: list[str] | None = None) -> int:
 
     load_end = os.getloadavg()[0]
     prov_payload = {
-        "schema_version": 1,
+        "schema_version": 2,
         "issue": "#168",
         "date_utc": date_utc,
         "flexmesa_origin_main_commit": base_commit,
@@ -602,6 +724,30 @@ def main(argv: list[str] | None = None) -> int:
             "load_avg_1m_start": round(load_start, 2),
             "load_avg_1m_end": round(load_end, 2),
             "serialized_single_campaign": True,
+        },
+        "timing_protocol": {
+            "matched_repeats_per_engine": repeats,
+            "summary_statistic": "median with min-max range",
+            "history_output_every_repeat": True,
+            "flexmesa_logs_mode": (
+                "history.data (every step) + final.mod on every repeat "
+                "(profiles disabled because semiconvection "
+                "profile_columns.list uses unported grad_temperature)"
+            ),
+            "mesa_logs_mode": (
+                "stock ./rn LOGS/history.data + LOGS/profile*.data + "
+                "photos + final.mod + testhub.yml"
+            ),
+            "batch_experiment_protocol": "smoke: 60 steps",
+        },
+        "build_flags": {
+            "flexmesa_cargo_profile": (
+                "release (opt-level=3, lto=fat, codegen-units=1)"
+            ),
+            "mesa_fortran_flags": (
+                "-O2 -ftree-vectorize -fopenmp -fprotect-parens "
+                "-fno-sign-zero -finit-real=snan"
+            ),
         },
         "hardware": {
             "os": f"{platform.system()} {platform.machine()}",
@@ -644,15 +790,20 @@ def main(argv: list[str] | None = None) -> int:
     mesa_hdr = [
         f"MESA version: r26.4.1 (commit c8c2026, Zenodo 19722306) | "
         f"SDK: x86_64-linux-26.6.1 | Compiler: {gf_ver}",
-        f"Captured UTC: {date_utc} | OMP_NUM_THREADS={threads}",
+        f"Captured UTC: {date_utc} | OMP_NUM_THREADS={threads} | "
+        f"repeats={repeats} (median + min-max range, normal LOGS every repeat)",
     ]
     helpers.write_csv_rows(
         out_dir / "phase_breakdown.csv",
         [
             "case",
+            "n_controls_ignored",
             "steps_taken",
+            "total_newton_iterations",
             "total_zone_steps",
             "evolve_wall_sec",
+            "evolve_wall_sec_range",
+            "wall_ms_per_newton_iter",
             "eos_share_pct",
             "kap_share_pct",
             "net_and_jacobian_share_pct",
@@ -670,9 +821,13 @@ def main(argv: list[str] | None = None) -> int:
         [
             {
                 "case": c["case"],
+                "n_controls_ignored": c["n_controls_ignored"],
                 "steps_taken": c["steps_taken"],
+                "total_newton_iterations": c["total_newton_iterations"],
                 "total_zone_steps": c["total_zone_steps"],
                 "evolve_wall_sec": c["evolve_wall_sec"],
+                "evolve_wall_sec_range": c["evolve_wall_sec_range"],
+                "wall_ms_per_newton_iter": c["wall_ms_per_newton_iter"],
                 **{
                     k: c["phases"][k]
                     for k in (
@@ -701,16 +856,22 @@ def main(argv: list[str] | None = None) -> int:
             "case",
             "mesa_version_number",
             "omp_threads",
+            "repeats",
             "termination_code",
             "steps_taken",
             "total_retries",
+            "total_newton_iterations",
             "total_zone_steps",
             "rn_wall_sec",
+            "rn_wall_sec_range",
             "mesa_internal_evolve_sec",
+            "mesa_internal_evolve_sec_range",
             "rn_wall_ms_per_step",
             "rn_wall_us_per_zone_step",
+            "rn_wall_ms_per_newton_iter",
             "evolve_wall_ms_per_step",
             "evolve_wall_us_per_zone_step",
+            "evolve_wall_ms_per_newton_iter",
         ],
         mesa_records,
         comment_header=mesa_hdr,
@@ -719,14 +880,22 @@ def main(argv: list[str] | None = None) -> int:
         out_dir / "strict_vs_fast_trajectories.csv",
         [
             "case",
+            "n_controls_ignored",
             "strict_steps",
             "fast_steps",
+            "strict_total_newton_iterations",
+            "fast_total_newton_iterations",
             "strict_evolve_wall_sec",
+            "strict_evolve_wall_sec_range",
             "fast_evolve_wall_sec",
+            "fast_evolve_wall_sec_range",
             "wall_speedup_strict_over_fast",
             "strict_us_per_zone_step",
             "fast_us_per_zone_step",
             "zone_step_speedup_strict_over_fast",
+            "strict_ms_per_newton_iter",
+            "fast_ms_per_newton_iter",
+            "newton_iter_speedup_strict_over_fast",
             "rel_star_age_diff",
             "max_track_log_L_diff",
             "max_track_log_Teff_diff",
@@ -735,10 +904,21 @@ def main(argv: list[str] | None = None) -> int:
         [
             {
                 "case": r["case"],
+                "n_controls_ignored": r["n_controls_ignored"],
                 "strict_steps": r["strict_steps"],
                 "fast_steps": r["fast_steps"],
+                "strict_total_newton_iterations": r[
+                    "strict_total_newton_iterations"
+                ],
+                "fast_total_newton_iterations": r[
+                    "fast_total_newton_iterations"
+                ],
                 "strict_evolve_wall_sec": r["strict_evolve_wall_sec"],
+                "strict_evolve_wall_sec_range": r[
+                    "strict_evolve_wall_sec_range"
+                ],
                 "fast_evolve_wall_sec": r["fast_evolve_wall_sec"],
+                "fast_evolve_wall_sec_range": r["fast_evolve_wall_sec_range"],
                 "wall_speedup_strict_over_fast": r[
                     "wall_speedup_strict_over_fast"
                 ],
@@ -746,6 +926,11 @@ def main(argv: list[str] | None = None) -> int:
                 "fast_us_per_zone_step": r["fast_us_per_zone_step"],
                 "zone_step_speedup_strict_over_fast": r[
                     "zone_step_speedup_strict_over_fast"
+                ],
+                "strict_ms_per_newton_iter": r["strict_ms_per_newton_iter"],
+                "fast_ms_per_newton_iter": r["fast_ms_per_newton_iter"],
+                "newton_iter_speedup_strict_over_fast": r[
+                    "newton_iter_speedup_strict_over_fast"
                 ],
                 "rel_star_age_diff": r["trajectory_diff"]["rel_star_age_diff"],
                 "max_track_log_L_diff": r["trajectory_diff"]["columns"][
@@ -780,6 +965,9 @@ def main(argv: list[str] | None = None) -> int:
             "peak_rss_kib",
         ],
         batch_rows,
+        comment_header=[
+            f"Protocol: smoke: 60 steps | Case: low_z ({batch_2t['run_mode']})"
+        ],
     )
     sys.stdout.write(f"[168] Completed all captures in {out_dir}\n")
     return 0

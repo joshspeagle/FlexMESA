@@ -30,7 +30,7 @@ fn usage() -> &'static str {
     "Usage:
   profile_evolution case --case-dir <DIR> [--allow-unsupported-controls] \
 [--max-steps <N>] [--with-phase-profile] [--ref-evolve-sec <SEC>] \
-[--history-out <PATH>] [--json-out <PATH>]
+[--history-out <PATH>] [--logs-dir <DIR>] [--json-out <PATH>]
   profile_evolution batch --case-dir <DIR> [--batch-sizes 1,2,4,8,16] \
 [--pool-threads <T>] [--max-steps <N>] [--heterogeneous] [--json-out <PATH>]
   profile_evolution self-test --case-dir <DIR>"
@@ -43,6 +43,7 @@ fn parse_case_cmd(args: &[String]) -> Result<(), String> {
     let mut with_phase_profile = false;
     let mut ref_evolve_sec: Option<f64> = None;
     let mut history_out: Option<PathBuf> = None;
+    let mut logs_dir_out: Option<PathBuf> = None;
     let mut json_out: Option<PathBuf> = None;
 
     let mut i = 0;
@@ -78,6 +79,11 @@ fn parse_case_cmd(args: &[String]) -> Result<(), String> {
                 let val = args.get(i).ok_or("--history-out requires a path")?;
                 history_out = Some(PathBuf::from(val));
             }
+            "--logs-dir" => {
+                i += 1;
+                let val = args.get(i).ok_or("--logs-dir requires a path")?;
+                logs_dir_out = Some(PathBuf::from(val));
+            }
             "--json-out" => {
                 i += 1;
                 let val = args.get(i).ok_or("--json-out requires a path")?;
@@ -99,6 +105,7 @@ fn parse_case_cmd(args: &[String]) -> Result<(), String> {
         with_phase_profile,
         ref_evolve_sec,
         history_out.as_deref(),
+        logs_dir_out.as_deref(),
     )?;
     let json = rec.to_json();
     if let Some(out) = json_out {
@@ -222,13 +229,15 @@ fn parse_self_test_cmd(args: &[String]) -> Result<(), String> {
 
     // Verify that `--with-phase-profile` leaves the canonical trajectory
     // bit-identical (`0 ULP` on serialized `.photo` checksum) to unperturbed mode.
-    let unpert = profile_star_case(&dir, true, Some(2), false, None, None)?;
+    let unpert =
+        profile_star_case(&dir, true, Some(2), false, None, None, None)?;
     let prof = profile_star_case(
         &dir,
         true,
         Some(2),
         true,
         Some(unpert.evolve_wall_sec),
+        None,
         None,
     )?;
     if unpert.photo_checksum != prof.photo_checksum {

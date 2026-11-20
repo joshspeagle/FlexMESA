@@ -109,7 +109,9 @@ pub(crate) fn set_mlt_vars_range(
 
 /// Updates Lagrangian mass-diffusion coefficients `model.sig` from `model.d_mix`
 /// by delegating to [`crate::mix_info::compute_convection_sigmas`].
-pub fn update_sig_from_d_mix(model: &mut StarModel) {
+pub fn update_sig_from_d_mix(
+    model: &mut StarModel,
+) -> Result<(), StarError> {
     let eff_mix_factor = if model.controls.do_mix {
         model.controls.mix_factor
     } else {
@@ -120,7 +122,7 @@ pub fn update_sig_from_d_mix(model: &mut StarModel) {
         model.dt,
         eff_mix_factor,
         model.controls.sig_term_limit,
-    );
+    )
 }
 
 /// Switches face `k` to radiative transport for MLT variables
@@ -1285,7 +1287,7 @@ pub fn set_hydro_vars(
         }
         if !model.aux.doing_struct_burn_mix && sig_was_zero {
             model.sig.fill(0.0);
-            update_sig_from_d_mix(model);
+            update_sig_from_d_mix(model)?;
         }
         do_brunt_n2(model);
         if model.controls.u_flag {
@@ -1299,7 +1301,7 @@ pub fn set_hydro_vars(
         if model.aux.mixing.okay_to_set_mixing_info {
             crate::mix_info::set_mixing_info(model)?;
             if sig_was_zero {
-                update_sig_from_d_mix(model);
+                update_sig_from_d_mix(model)?;
             }
         }
     }

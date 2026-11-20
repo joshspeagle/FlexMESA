@@ -237,7 +237,8 @@ impl PyStarModel {
             apply_overshooting(&mut self.inner, &bdy, &cfgs)
                 .map_err(to_py_err)?;
         }
-        compute_convection_sigmas(&mut self.inner, dt, 1.0, 1.0e10);
+        compute_convection_sigmas(&mut self.inner, dt, 1.0, 1.0e10)
+            .map_err(to_py_err)?;
         Ok(bdy.len())
     }
 

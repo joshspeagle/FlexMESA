@@ -141,3 +141,32 @@ unpacked_sha256 = ""
 unpacked_size_bytes = 43101866
 test_only = true
 description = "348,321 exact IEEE-754 hexadecimal and raw 64-bit reference values across all 25 MESA 26.4.1 module test suites plus DWARF compiler FP flags."
+
+[embedded_ionization]
+name = "ion_tables_full"
+format = "FMION001"
+crate_relpath = "crates/flexmesa-ionization/data/ion_tables_full.bin"
+manifest_relpath = "crates/flexmesa-ionization/data/ion_tables_full.toml"
+builder_script = "scripts/data/build_ion_tables.py"
+make_target = "data-ionization"
+source_dir = "data/ionization_data"
+source_tarball = "ionization/test/ionization_data.tar.xz"
+file_prefix = "ion"
+z1_suffix = ""
+z1_suffix_choices = ["", "_CO_0", "_CO_1"]
+sha256 = "fce26a40906ddf8ed386cabed9cdacc26c2ed20e8f4ecb2e8b9f0375796b04dd"
+size_bytes = 17389152
+ion_version = 51
+min_version = 49
+num_tables = 22
+num_vals = 28
+num_log_qs = 175
+log_q_min = -10.0
+log_q_max = 5.66
+del_log_q = 0.09
+num_log_ts = 102
+log_t_min = 2.1
+log_t_max = 8.16
+del_log_t = 0.06
+value_scale = 1000
+description = "Embedded 22-table (Z, X) 175 x 102 x 28 MESA 26.4.1 ionization table (FMION001, z1_suffix='' matching star_job.defaults:2813, exact integer thousandths matching ASCII %.3f bit-for-bit)."

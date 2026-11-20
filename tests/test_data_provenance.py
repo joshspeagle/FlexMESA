@@ -12,6 +12,7 @@ import struct
 import subprocess
 import sys
 import tarfile
+import tomllib
 import types
 
 import h5py
@@ -21,6 +22,7 @@ import pytest
 from flexmesa import cli
 from flexmesa.data import fetch
 from flexmesa.kap import tables_jax
+from flexmesa.testing import known_gaps_gate
 
 _REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
 
@@ -34,6 +36,19 @@ def _load_build_physics_module() -> types.ModuleType:
     assert spec is not None and spec.loader is not None
     mod = importlib.util.module_from_spec(spec)
     sys.modules["build_physics_bundles"] = mod
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def _load_build_ion_module() -> types.ModuleType:
+    """Import `scripts/data/build_ion_tables.py` without editing path."""
+    script_path = _REPO_ROOT / "scripts" / "data" / "build_ion_tables.py"
+    spec = importlib.util.spec_from_file_location(
+        "build_ion_tables", script_path
+    )
+    assert spec is not None and spec.loader is not None
+    mod = importlib.util.module_from_spec(spec)
+    sys.modules["build_ion_tables"] = mod
     spec.loader.exec_module(mod)
     return mod
 
@@ -814,3 +829,346 @@ def test_jax_kap_loader_rejects_nan_opacities_and_corrupt_fmkap001(
     finally:
         tables_jax.reset_index_cache()
         tables_co_lowt_jax._AESOPUS_SPLINE_CACHE.clear()
+
+
+def _make_synthetic_ion_ascii(
+    x: float,
+    z: float,
+    *,
+    version: int = 51,
+    header_override: str | None = None,
+    bad_token: str | None = None,
+    nq: int = 4,
+    nt: int = 4,
+) -> bytes:
+    """Render one synthetic `ion_*.data` table matching upstream line layout."""
+    hdr = (
+        header_override
+        if header_override is not None
+        else (
+            f"{version} {x:.4f} {z:.4f} {nt} 3.00 3.18 0.06 "
+            f"{nq} -6.00 -5.73 0.09"
+        )
+    )
+    lines = ["version X Z ...", hdr, ""]
+    for iq in range(nq):
+        lines.extend(["", f"{-6.00 + 0.09 * iq:.6f}", "", "logT vals"])
+        for jt in range(nt):
+            vals: list[str] = []
+            for v in range(28):
+                if bad_token is not None and iq == 1 and jt == 2 and v == 3:
+                    vals.append(bad_token)
+                elif v == 0:
+                    # Constant across logQ -> exercises flag 0 encoding.
+                    vals.append(f"{-5.125 + 0.010 * jt:.3f}")
+                else:
+                    raw = -1.250 + 0.017 * iq * iq + 0.011 * jt + 0.002 * v
+                    vals.append(f"{raw:.3f}")
+            lines.append(f"{3.00 + 0.06 * jt:.2f} " + " ".join(vals))
+        if iq + 1 < nq:
+            lines.extend(["", ""])
+    return ("\n".join(lines) + "\n").encode("ascii")
+
+
+def test_build_ion_tables_converter_roundtrip_and_rejection(
+    tmp_path: pathlib.Path,
+) -> None:
+    """`build_ion_tables` round-trips FMION001 and rejects malformed inputs."""
+    bi = _load_build_ion_module()
+
+    # z1_suffix applies only to Z = 1.0 tables.
+    assert bi.table_filename(1.0, 0.0, "") == "ion_100z00x.data"
+    assert bi.table_filename(1.0, 0.0, "_CO_0") == "ion_100z00x_CO_0.data"
+    assert bi.table_filename(1.0, 0.0, "_CO_1") == "ion_100z00x_CO_1.data"
+    assert bi.table_filename(0.02, 0.6, "_CO_1") == "ion_02z60x.data"
+
+    # Synthetic 22-table round-trip (deterministic bytes + manifest).
+    sources = {
+        bi.table_filename(z, x, "_CO_1"): _make_synthetic_ion_ascii(x, z)
+        for z, x in bi.table_compositions()
+    }
+    res_a = bi.build(sources, "_CO_1")
+    res_b = bi.build(sources, "_CO_1")
+    assert res_a.payload == res_b.payload
+    assert res_a.manifest == res_b.manifest
+    decoded = bi.decode_fmion001(res_a.payload)
+    assert len(decoded) == 22
+    for got, want in zip(decoded, res_a.tables, strict=True):
+        assert np.array_equal(got, want)
+    parsed_manifest = tomllib.loads(res_a.manifest)
+    assert parsed_manifest["z1_suffix"] == "_CO_1"
+    assert parsed_manifest["sha256"] == bi.sha256_bytes(res_a.payload)
+    assert parsed_manifest["size_bytes"] == len(res_a.payload)
+
+    # Decoder accepts flag 2 (constant non-zero delta per column) as well.
+    flag2_buf = bytearray(b"FMION001")
+    flag2_buf += struct.pack("<4I", 1, 1, 4, 2)
+    flag2_buf += struct.pack("<Bih", 2, -1000, 250)
+    flag2_buf += struct.pack("<Bi", 0, 500)
+    flag2_tables = bi.decode_fmion001(bytes(flag2_buf))
+    assert np.array_equal(
+        flag2_tables[0][0, :, 0], np.array([-1000, -750, -500, -250])
+    )
+    assert np.array_equal(
+        flag2_tables[0][0, :, 1], np.array([500, 500, 500, 500])
+    )
+
+    # Reject non-finite values and non-%.3f tokens in table body.
+    for bad_tok, pat in (
+        ("NaN", "non-finite"),
+        ("Inf", "non-finite"),
+        ("-Inf", "non-finite"),
+        ("1.2345", "not printed as %.3f"),
+    ):
+        bad_sources = dict(sources)
+        bad_sources["ion_02z60x.data"] = _make_synthetic_ion_ascii(
+            0.6, 0.02, bad_token=bad_tok
+        )
+        with pytest.raises(ValueError, match=pat):
+            bi.build(bad_sources, "_CO_1")
+
+    # Reject stale version, mismatched (X, Z), and inconsistent/non-finite hdrs.
+    bad_header_cases = (
+        (
+            "ion_00z00x.data",
+            "48 0.0000 0.0000 4 3.00 3.18 0.06 4 -6.00 -5.73 0.09",
+            "min_version = 49",
+        ),
+        (
+            "ion_02z40x.data",
+            "51 0.6000 0.0200 4 3.00 3.18 0.06 4 -6.00 -5.73 0.09",
+            "header field X",
+        ),
+        (
+            "ion_20z60x.data",
+            "51 0.6000 0.0400 4 3.00 3.18 0.06 4 -6.00 -5.73 0.09",
+            "header field Z",
+        ),
+        (
+            "ion_04z80x.data",
+            "51 0.8000 0.0400 4 3.00 3.20 0.06 4 -6.00 -5.73 0.09",
+            "header field log_t_max",
+        ),
+        (
+            "ion_04z80x.data",
+            "51 0.8000 0.0400 4 3.00 NaN 0.06 4 -6.00 -5.73 0.09",
+            "non-finite header value",
+        ),
+    )
+    for fname, bad_hdr, pat in bad_header_cases:
+        bad_sources = dict(sources)
+        bad_sources[fname] = _make_synthetic_ion_ascii(
+            0.0, 0.0, header_override=bad_hdr
+        )
+        with pytest.raises(ValueError, match=pat):
+            bi.build(bad_sources, "_CO_1")
+
+    # Reject i16 delta overflow, i32 value overflow, and corrupt FMION001 bytes.
+    big_delta = np.zeros((1, 2, 1), dtype=np.int64)
+    big_delta[0, 1, 0] = 40000
+    with pytest.raises(ValueError, match="overflows i16"):
+        bi.encode_fmion001([big_delta])
+    big_val = np.full((1, 2, 1), 3_000_000_000, dtype=np.int64)
+    with pytest.raises(ValueError, match="overflows i32"):
+        bi.encode_fmion001([big_val])
+
+    with pytest.raises(ValueError, match="invalid FMION001 header"):
+        bi.decode_fmion001(b"BADMAGIC" + b"\x00" * 20)
+    with pytest.raises(ValueError, match="truncated"):
+        bi.decode_fmion001(res_a.payload[:-5])
+    with pytest.raises(ValueError, match="trailing bytes"):
+        bi.decode_fmion001(res_a.payload + b"\x00")
+    bad_flag = bytearray(res_a.payload)
+    bad_flag[24] = 9
+    with pytest.raises(ValueError, match="unknown FMION001 flag"):
+        bi.decode_fmion001(bytes(bad_flag))
+
+    # CLI --check round-trips cleanly against an on-disk directory.
+    ion_dir = tmp_path / "ion_src"
+    ion_dir.mkdir()
+    for fname, blob in sources.items():
+        (ion_dir / fname).write_bytes(blob)
+    out_bin = tmp_path / "out.bin"
+    out_toml = tmp_path / "out.toml"
+    assert (
+        bi.main(
+            [
+                "--source",
+                str(ion_dir),
+                "--z1-suffix",
+                "_CO_1",
+                "--out",
+                str(out_bin),
+                "--manifest-out",
+                str(out_toml),
+            ]
+        )
+        == 0
+    )
+    assert (
+        bi.main(
+            [
+                "--source",
+                str(ion_dir),
+                "--z1-suffix",
+                "_CO_1",
+                "--out",
+                str(out_bin),
+                "--manifest-out",
+                str(out_toml),
+                "--check",
+            ]
+        )
+        == 0
+    )
+
+
+def test_embedded_ion_tables_reproducible_from_mesa_26_4_1_and_matches_rust(
+    tmp_path: pathlib.Path,
+) -> None:
+    """Rebuild embedded FMION001 from MESA 26.4.1 and verify Rust parity."""
+    mesa_root = known_gaps_gate.require_mesa_test_inputs_dir()
+    if mesa_root is None:
+        return
+    tarball = mesa_root / "ionization" / "test" / "ionization_data.tar.xz"
+    if not known_gaps_gate.require_upstream_file(
+        tarball, label="MESA 26.4.1 ionization_data.tar.xz"
+    ):
+        return
+
+    bi = _load_build_ion_module()
+    sources = bi.read_sources(tarball, "")
+    res = bi.build(sources, "")
+
+    crate_data = _REPO_ROOT / "crates" / "flexmesa-ionization" / "data"
+    shipped_bin = (crate_data / "ion_tables_full.bin").read_bytes()
+    shipped_toml = (crate_data / "ion_tables_full.toml").read_text(
+        encoding="utf-8"
+    )
+    assert res.payload == shipped_bin
+    assert res.manifest == shipped_toml
+
+    # Provenance in bundles.toml agrees with ion_tables_full.toml and binary.
+    asset = fetch.load_embedded_ionization_asset()
+    m = tomllib.loads(shipped_toml)
+    assert asset.sha256 == bi.sha256_bytes(shipped_bin) == m["sha256"]
+    assert asset.size_bytes == len(shipped_bin) == m["size_bytes"]
+    assert asset.z1_suffix == m["z1_suffix"] == ""
+    assert asset.ion_version == m["ion_version"] == 51
+    assert asset.num_tables == m["num_tables"] == 22
+    assert asset.num_vals == m["num_vals"] == 28
+    assert asset.num_log_qs == m["num_log_qs"] == 175
+    assert asset.num_log_ts == m["num_log_ts"] == 102
+    assert (asset.log_q_min, asset.log_q_max, asset.del_log_q) == (
+        m["log_q_min"],
+        m["log_q_max"],
+        m["del_log_q"],
+    )
+    assert (asset.log_t_min, asset.log_t_max, asset.del_log_t) == (
+        m["log_t_min"],
+        m["log_t_max"],
+        m["del_log_t"],
+    )
+
+    # 0-ULP agreement between decoded i32/1000.0 and raw float() parsing
+    # across all 22 tables (10,995,600 entries).
+    decoded = bi.decode_fmion001(shipped_bin)
+    for idx, (fname, raw_bytes) in enumerate(sources.items()):
+        lines = raw_bytes.decode("ascii").splitlines()
+        row_blocks: list[str] = []
+        pos = 3
+        for iq in range(175):
+            pos += 4
+            row_blocks.extend(lines[pos : pos + 102])
+            pos += 102
+            if iq + 1 < 175:
+                pos += 2
+        parsed = np.fromstring(" ".join(row_blocks), sep=" ", dtype=np.float64)
+        parsed = parsed.reshape(175, 102, 29)[:, :, 1:].transpose(2, 0, 1)
+        from_bin = decoded[idx].astype(np.float64) / 1000.0
+        assert np.array_equal(from_bin, parsed), (
+            f"ULP mismatch in {fname}: max diff = "
+            f"{np.max(np.abs(from_bin - parsed))}"
+        )
+
+    # Verify _CO_0 and _CO_1 Z=1 tables validate, encode, and differ from ''.
+    ref_hdr = bi.parse_header(
+        "ion_00z00x.data", sources["ion_00z00x.data"].decode("ascii")
+    )
+    for suffix in ("_CO_0", "_CO_1"):
+        co_sources = bi.read_sources(tarball, suffix)
+        z1_name = bi.table_filename(1.0, 0.0, suffix)
+        z1_text = co_sources[z1_name].decode("ascii")
+        z1_hdr = bi.parse_header(z1_name, z1_text)
+        bi.validate_headers(
+            [
+                ("ion_00z00x.data", ref_hdr, 0.0, 0.0),
+                (z1_name, z1_hdr, 1.0, 0.0),
+            ]
+        )
+        z1_tbl = bi.parse_table_body(z1_name, z1_text, z1_hdr)
+        assert not np.array_equal(z1_tbl, res.tables[-1])
+        encoded_one = bi.encode_fmion001([z1_tbl])
+        assert np.array_equal(bi.decode_fmion001(encoded_one)[0], z1_tbl)
+
+    # Rust IonTableGrid::from_data_dir on real MESA 26.4.1 ASCII tables
+    # matches embedded FMION001 bit-for-bit, and rejects mutated headers loudly.
+    ext_root = tmp_path / "ext_data"
+    ion_dir = ext_root / "ionization_data"
+    ion_dir.mkdir(parents=True)
+    for fname, raw_bytes in sources.items():
+        (ion_dir / fname).write_bytes(raw_bytes)
+    empty_data = tmp_path / "empty_data"
+    empty_data.mkdir()
+    cache_dir = tmp_path / "cache"
+
+    eval_code = (
+        "import json; "
+        "from flexmesa.ionization import eval_ionization; "
+        "r1 = eval_ionization(0.0188, 0.725, rho=9.0768775206067858e-6, "
+        "t=3.2345529591587989e4, backend='rust').values.tolist(); "
+        "r2 = eval_ionization(1.0, 0.0, log10_rho=-2.0, log10_t=6.0, "
+        "backend='rust').values.tolist(); "
+        "print(json.dumps([r1, r2]))"
+    )
+    proc_ext = _run_py_subprocess(
+        eval_code,
+        {
+            "FLEXMESA_DATA_DIR": str(ext_root),
+            "FLEXMESA_CACHE_DIR": str(cache_dir),
+            "FLEXMESA_DISABLE_RUNTIME_CACHE": "1",
+            "MESA_DIR": "",
+        },
+    )
+    assert proc_ext.returncode == 0, proc_ext.stderr
+    proc_emb = _run_py_subprocess(
+        eval_code,
+        {
+            "FLEXMESA_DATA_DIR": str(empty_data),
+            "FLEXMESA_CACHE_DIR": str(cache_dir),
+            "FLEXMESA_DISABLE_RUNTIME_CACHE": "1",
+            "MESA_DIR": "",
+        },
+    )
+    assert proc_emb.returncode == 0, proc_emb.stderr
+    assert proc_ext.stdout == proc_emb.stdout
+
+    # Mutate header X in ion_02z60x.data -> loud ValueError naming file & field.
+    target = ion_dir / "ion_02z60x.data"
+    lines = target.read_text(encoding="ascii").splitlines()
+    lines[1] = lines[1].replace("0.6000", "0.8000", 1)
+    target.write_text("\n".join(lines) + "\n", encoding="ascii")
+    proc_bad = _run_py_subprocess(
+        eval_code,
+        {
+            "FLEXMESA_DATA_DIR": str(ext_root),
+            "FLEXMESA_CACHE_DIR": str(cache_dir),
+            "FLEXMESA_DISABLE_RUNTIME_CACHE": "1",
+            "MESA_DIR": "",
+        },
+    )
+    assert proc_bad.returncode != 0
+    assert "PanicException" not in proc_bad.stderr
+    assert "ValueError" in proc_bad.stderr
+    assert "ion_02z60x.data" in proc_bad.stderr
+    assert "field X = 0.8" in proc_bad.stderr

@@ -198,8 +198,10 @@ def test_t_tau_gradr_rms_profile_column_and_cycling_guard() -> None:
     bad_state = {**state, "lnt": [lnt_val + 0.1, lnt_val + 0.1, 10.0]}
     assert h.extras_check_model(bad_state) == "keep_going"
     assert h.failed is True
-    with pytest.raises(NotImplementedError, match="#161"):
-        h.extras_check_model({**state, "model_number": 10})
+    assert h.extras_check_model({**state, "model_number": 10}) == (
+        "keep_going",
+        {"atm_t_tau_relation": "solar_Hopf"},
+    )
 
 
 def test_check_pulse_atm_cycling_guards() -> None:
@@ -386,16 +388,19 @@ def test_accreted_material_j_real4_threshold_and_wind_switch() -> None:
 
 
 def test_make_sdb_retry_and_wind_shutoff_guards() -> None:
-    """`MakeSdbStarExtras` retries below `h_lower_limit` and guards `#159`."""
+    """`MakeSdbStarExtras` retries below `h_lower_limit` and zeroes winds."""
     sdb = star_extras.MakeSdbStarExtras()
-    sdb.extras_startup(
-        {"x_ctrl": [0.01, 0.1], "star_mass": 0.50, "he_core_mass": 0.48}, False
-    )
-    with pytest.raises(NotImplementedError, match="#159"):
+    assert (
         sdb.extras_startup(
-            {"x_ctrl": [0.05, 0.1], "star_mass": 0.50, "he_core_mass": 0.48},
+            {"x_ctrl": [0.01, 0.1], "star_mass": 0.50, "he_core_mass": 0.48},
             False,
         )
+        is None
+    )
+    assert sdb.extras_startup(
+        {"x_ctrl": [0.05, 0.1], "star_mass": 0.50, "he_core_mass": 0.48},
+        False,
+    ) == {"reimers_scaling_factor": 0.0, "blocker_scaling_factor": 0.0}
     assert (
         sdb.extras_check_model(
             {"x_ctrl": [0.01, 0.1], "star_mass": 0.50, "he_core_mass": 0.48}
@@ -413,15 +418,17 @@ def test_make_sdb_retry_and_wind_shutoff_guards() -> None:
         )
         == "retry"
     )
-    with pytest.raises(NotImplementedError, match="#159"):
-        sdb.extras_check_model(
-            {
-                "x_ctrl": [0.02, 0.5],
-                "star_mass": 0.495,
-                "he_core_mass": 0.48,
-                "reimers_scaling_factor": 0.5,
-            }
-        )
+    assert sdb.extras_check_model(
+        {
+            "x_ctrl": [0.02, 0.5],
+            "star_mass": 0.495,
+            "he_core_mass": 0.48,
+            "reimers_scaling_factor": 0.5,
+        }
+    ) == (
+        "keep_going",
+        {"reimers_scaling_factor": 0.0, "blocker_scaling_factor": 0.0},
+    )
 
 
 def test_conserve_angular_momentum_drift_guard() -> None:
@@ -700,7 +707,7 @@ def test_high_rot_darkening_and_semiconvection_checks() -> None:
 def test_batch2_live_py_star_extras_adapter_execution_and_loud_key_error(
     tmp_path: pathlib.Path,
 ) -> None:
-    """`R_CrB_star` steps live; the unserved `hb_2M` hook is not attached."""
+    """`R_CrB_star` and `hb_2M` step live; unserved `low_z` stays detached."""
     rcrb_dir = harness_runner.resolve_case_dir("star", "R_CrB_star")
     rep = harness_runner.run_trace_inprocess(
         "star",
@@ -712,11 +719,13 @@ def test_batch2_live_py_star_extras_adapter_execution_and_loud_key_error(
     )
     assert rep["total_steps"] == 4
 
-    # The `hb_2M` handler reads `center_he4` in `extras_finish_step`, which
-    # the adapter snapshot does not carry there, so it is not attached and
-    # the case runs with default hooks.
+    # `hb_2M` graduated into `ADAPTER_SERVED_STAR_HANDLERS` once `center_he4`
+    # and `mass_conv_core` landed on per-step snapshots (`#231`).
     hb_dir = harness_runner.resolve_case_dir("star", "hb_2M")
-    assert case_extras.resolve_case_extras("star", hb_dir) is None
+    assert isinstance(
+        case_extras.resolve_case_extras("star", hb_dir),
+        star_extras.Hb2MStarExtras,
+    )
     rep_hb = harness_runner.run_trace_inprocess(
         "star",
         hb_dir,
@@ -726,6 +735,11 @@ def test_batch2_live_py_star_extras_adapter_execution_and_loud_key_error(
         extras_factory="tests.case_extras:resolve_case_extras",
     )
     assert rep_hb["total_steps"] == 2
+
+    # `low_z` requires `extra_history_header_items` /
+    # `extra_profile_header_items` (`#163`, `#231`), so it remains detached.
+    low_z_dir = harness_runner.resolve_case_dir("star", "low_z")
+    assert case_extras.resolve_case_extras("star", low_z_dir) is None
 
 
 def test_batch2_handlers_raise_key_error_on_missing_snapshot_fields() -> None:

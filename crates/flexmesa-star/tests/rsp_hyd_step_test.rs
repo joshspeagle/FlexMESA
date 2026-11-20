@@ -323,7 +323,11 @@ impl StarExtras for TestGyreRspExtras {
         log_dir: Option<&Path>,
     ) -> Result<bool, StarError> {
         let nzn = model.nz;
+        if model.aux.mixing.gradt_sub_grada.len() != nzn {
+            model.aux.mixing.resize(nzn);
+        }
         for k0 in 0..nzn {
+            model.aux.mixing.gradt_sub_grada[k0] = model.aux.rsp.y_face_rsp[k0];
             if k0 > 0 {
                 model.gradt[k0] = model.aux.rsp.y_face_rsp[k0]
                     + f64::midpoint(model.grada[k0 - 1], model.grada[k0]);

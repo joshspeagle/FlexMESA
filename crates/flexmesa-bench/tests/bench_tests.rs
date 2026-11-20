@@ -58,13 +58,17 @@ const WAVE3B_REGRESSION_SNAPSHOTS_N8: [(&str, f64); 5] = [
 /// `star_evolve_step` shifted under `#141` when `neu` `#193` and `num` `#194`
 /// were aligned to MESA `26.4.1`, all five shifted under `#149` when
 /// `&controls` / microphysics / mesh-function defaults were aligned to MESA
-/// `26.4.1`, and `star_remesh` shifted from `5.513_777_703_025_969e2` to
+/// `26.4.1`, `star_remesh` shifted from `5.513_777_703_025_969e2` to
 /// `5.108_453_216_631_093e2` under `#153` when `eval_mesh_gval` was ported to
-/// `set_mesh_function_data` + `get_gval_info`; tracked in #146).
+/// `set_mesh_function_data` + `get_gval_info`, and `star_micro_vars`,
+/// `star_hydro_eqns`, and `star_newton_step` shifted under `#155` when
+/// `remove_mixing_singletons` (`mix_info.f90:1026-1072`) switched the isolated
+/// `k = 2` convective singleton on the coarse `N = 8` grid to radiative
+/// (`gradt = gradr`); tracked in #146).
 const WAVE4_REGRESSION_SNAPSHOTS_N8: [(&str, f64); 5] = [
-    ("star_micro_vars", 2.497_139_571_258_105e2),
-    ("star_hydro_eqns", 4.253_179_678_855_851e6),
-    ("star_newton_step", 1.451_475_459_976_951e2),
+    ("star_micro_vars", 2.500_111_893_102_388e2),
+    ("star_hydro_eqns", 4.243_492_123_572_694e6),
+    ("star_newton_step", 6.383_737_350_497_265),
     ("star_remesh", 5.108_453_216_631_093e2),
     ("star_evolve_step", 1.005_971_756_200_643e2),
 ];

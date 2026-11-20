@@ -273,7 +273,7 @@ macro_rules! impl_py_star_model {
                 overshoot_f: f64,
                 overshoot_f0: f64,
                 scheme: &str,
-            ) -> usize {
+            ) -> PyResult<usize> {
                 self.do_update_mixing(dt, overshoot_f, overshoot_f0, scheme)
             }
 

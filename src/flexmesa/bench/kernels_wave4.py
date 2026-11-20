@@ -37,7 +37,14 @@ type _ArrF64 = npt.NDArray[np.float64]
 def _face_mlt_obs(*args: jax.Array | float) -> jax.Array:
     """Evaluate `ln_peos + gradt + ln(opacity)` from face MLT/Brunt."""
     out = star.eval_face_mlt_and_brunt_jax(*args)  # type: ignore[arg-type]
-    return jnp.asarray(args[7] + out["gradt"] + jnp.log(args[13]))
+    # Mirror `remove_mixing_singletons` (`mix_info.f90:1026-1072`, `#155`),
+    # which switches isolated convective singletons to radiative (`gradr`).
+    cdc = out["mlt_cdc"]
+    cdc_prev = jnp.concatenate([jnp.zeros_like(cdc[:1]), cdc[:-1]])
+    cdc_next = jnp.concatenate([cdc[1:], jnp.zeros_like(cdc[:1])])
+    is_singleton = (cdc > 0.0) & (cdc_prev == 0.0) & (cdc_next == 0.0)
+    gradt = jnp.where(is_singleton, out["gradr"], out["gradt"])
+    return jnp.asarray(args[7] + gradt + jnp.log(args[13]))
 
 
 _FACE_MLT_JIT = jax.jit(_face_mlt_obs)
@@ -187,7 +194,9 @@ def bench_star_micro_vars(
     ct_j = jnp.asarray(model.chi_t)
     mu_j = jnp.asarray(model.mu)
     kap_j = jnp.asarray(model.opacity)
-    tau0 = float(model.tau[0])
+    # Match upstream `use_T_tau_gradr_factor = .false.` (`#155`, `F2-19`) so
+    # frozen `eval_face_mlt_and_brunt_jax` leaves `surf_fac = 1.0`.
+    tau0 = 2.0 / 3.0
 
     nz_val = model.nz
     lnr_b, lum_b = _bcast_stage3(lnr_j, nz_val), _bcast_stage3(lum_j, nz_val)

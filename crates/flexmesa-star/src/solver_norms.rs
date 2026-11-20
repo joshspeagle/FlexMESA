@@ -302,6 +302,11 @@ pub fn compute_model_correction_norms_in_solver(
     for k in 0..nz {
         let base = k * nvar;
         for j in 0..nvar_hydro {
+            // `skip4 = s% i_Hp` and `j == s% i_alpha_RTI` are always
+            // skipped (`star/private/solver_support.f90:380, 405-411`).
+            if layout.i_hp == Some(j) || layout.i_alpha_rti == Some(j) {
+                continue;
+            }
             let weight = if j == layout.i_lum {
                 if !c.include_l_in_correction_limits {
                     continue;

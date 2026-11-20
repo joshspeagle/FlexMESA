@@ -147,7 +147,9 @@ pub fn eval_varcontrol(model: &StarModel) -> f64 {
         + model.ln_t_old[0].abs().max(1.0)
         + model.ln_r_old[0].abs().max(1.0);
     let nterms = (3 * nz) as f64;
-    (sum_lnd + sum_lnt + sum_lnr) / (sumscales * nterms)
+    // `sumvar = sumvar/sumscales; varcontrol = sumvar/nterms`
+    // (`star/private/timestep.f90:2355-2357`).
+    (sum_lnd + sum_lnt + sum_lnr) / sumscales / nterms
 }
 
 /// Evaluates the maximum fractional nuclear fuel depletion ratio
@@ -182,6 +184,25 @@ pub fn eval_dx_nuc_drop_ratio(
     max_drop / dx_nuc_drop_limit
 }
 
+/// The low-pass controller's limited step ratio `limtr`, with `order = 1`
+/// (`filter_dt_next` in `star/private/timestep.f90:2374-2390`).
+/// `dt_limit_ratio` must already be floored at `1e-10`.
+#[must_use]
+pub fn h211_limtr(
+    dt_limit_ratio: f64,
+    dt_limit_ratio_old: f64,
+    dt: f64,
+    dt_old: f64,
+) -> f64 {
+    let ratio = filter_limit(1.0 / dt_limit_ratio);
+    let ratio_prev = filter_limit(1.0 / dt_limit_ratio_old);
+    filter_limit(
+        flexmesa_math::pow(ratio, 0.25)
+            * flexmesa_math::pow(ratio_prev, 0.25)
+            * flexmesa_math::pow(dt / dt_old, -0.25),
+    )
+}
+
 /// Evaluates the Söderlind & Wang (2006) H211PI digital control timestep
 /// multiplier $f_{\mathrm{dt}} = \Delta t_{n+1} / \Delta t_n$ (`filter_dt_next`
 /// in `timestep.f90:2362-2427`).
@@ -196,13 +217,7 @@ pub fn eval_h211_factor(
 ) -> (f64, bool, bool) {
     let ratio_curr = dt_limit_ratio.max(1.0e-10);
     let raw_factor = if dt_limit_ratio_old > 0.0 && dt_old > 0.0 && dt > 0.0 {
-        let ratio = filter_limit(1.0 / ratio_curr);
-        let ratio_prev = filter_limit(1.0 / dt_limit_ratio_old);
-        filter_limit(
-            flexmesa_math::pow(ratio, 0.25)
-                * flexmesa_math::pow(ratio_prev, 0.25)
-                * flexmesa_math::pow(dt / dt_old, -0.25),
-        )
+        h211_limtr(ratio_curr, dt_limit_ratio_old, dt, dt_old)
     } else {
         1.0 / ratio_curr
     };

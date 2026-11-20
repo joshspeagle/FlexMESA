@@ -3,8 +3,9 @@
 //! - Brassard et al. (1991) finite-difference EOS vs. $\nabla_\mu$ `do_brunt_b`
 //!   and `brunt_n2_composition_term` (`brunt.f90`).
 //! - `set_mlt_vars` dispatch to `set_semiconvection`, `set_thermohaline`, and
-//!   `set_tdc`, plus `mlt_vc = 0` for non-convective mixing (`turb_support.f90`,
-//!   `turb_info.f90`).
+//!   `set_tdc`, plus `mlt_vc = 3 * D / Lambda` for semiconvective and
+//!   thermohaline faces (`turb/private/semiconvection.f90:82, 120`,
+//!   `turb/public/turb.f90:74`, `star/private/turb_info.f90:263`).
 //! - Rotational distortion $(f_P, f_T, i_{\mathrm{rot}})$ coupling into
 //!   `set_mlt_vars`, `do_brunt_n2`, `set_rotation_mixing_info`, and
 //!   `solve_omega_mix` (`hydro_rotation.f90`, `solve_omega_mix.f90`).
@@ -147,7 +148,18 @@ fn test_eval_face_mlt_semiconvection_thermohaline_and_tdc_dispatch() {
         "face with grada < gradr < gradL and alpha_semiconvection > 0 must be SemiconvectiveMixing"
     );
     assert!(model.mlt_d[k_rad] > 0.0);
-    assert!(model.mlt_vc[k_rad] > 0.0);
+    // Literal provenance (#155): pre-#262 asserted `mlt_vc == 0.0`, which
+    // departed from upstream MESA 26.4.1. Upstream sets `conv_vel = 3*D/Lambda`
+    // (`turb/private/semiconvection.f90:82, 120`) and stores it in `mlt_vc`
+    // (`star/private/turb_info.f90:263`).
+    let expected_sc_vc =
+        3.0 * model.mlt_d[k_rad] / model.aux.mixing.mlt_mixing_length[k_rad];
+    assert!(
+        (model.mlt_vc[k_rad] - expected_sc_vc).abs()
+            <= 1.0e-12 * expected_sc_vc.abs().max(1.0),
+        "semiconvection mlt_vc must equal 3*D/Lambda: got {}, want {expected_sc_vc}",
+        model.mlt_vc[k_rad]
+    );
 
     // 2. Thermohaline mixing: grad_r < grad_ad and B < 0
     model.lum[k_rad] *= 0.2;
@@ -162,6 +174,17 @@ fn test_eval_face_mlt_semiconvection_thermohaline_and_tdc_dispatch() {
         "face with gradr < grada, B < 0, and thermohaline_coeff > 0 must be ThermohalineMixing"
     );
     assert!(model.mlt_d[k_rad] > 0.0);
+    // Literal provenance (#155): pre-#262 asserted `mlt_vc == 0.0` and #262
+    // dropped the check. Upstream `set_thermohaline` sets `conv_vel = 3*D/Lambda`
+    // (`turb/public/turb.f90:74`, stored at `star/private/turb_info.f90:263`).
+    let expected_th_vc =
+        3.0 * model.mlt_d[k_rad] / model.aux.mixing.mlt_mixing_length[k_rad];
+    assert!(
+        (model.mlt_vc[k_rad] - expected_th_vc).abs()
+            <= 1.0e-12 * expected_th_vc.abs().max(1.0),
+        "thermohaline mlt_vc must equal 3*D/Lambda: got {}, want {expected_th_vc}",
+        model.mlt_vc[k_rad]
+    );
 
     // 3. Time-Dependent Convection (`MltOption::Tdc`)
     let k_conv = (1..model.nz)
@@ -206,9 +229,11 @@ fn test_eval_face_mlt_and_brunt_n2_rotational_fp_ft_coupling() {
     set_mlt_vars(&mut model).expect("set_mlt_vars rotating");
     do_brunt_n2(&mut model);
 
-    // Upstream `star_utils.f90:4001` (`get_scale_height_face`) and
-    // `brunt.f90:160` (`do_brunt_N2`) use spherical `grav = G*m_grav/r^2`;
-    // only `gradr` scales by `ft_rot/fp_rot` (`turb_info.f90:125-126`).
+    // Literal provenance (#155): pre-#262 asserted `hp_ratio == 1.0 / fp_k`,
+    // which departed from upstream MESA 26.4.1. Upstream `get_scale_height_face`
+    // (`star/private/star_utils.f90:4001`) and `do_brunt_N2`
+    // (`star/private/brunt.f90:160`) use spherical `grav = G*m_grav/r^2`;
+    // only `gradr` scales by `ft_rot/fp_rot` (`star/private/turb_info.f90:125-126`).
     let hp_ratio = model.scale_height[k] / hp_nonrot;
     assert!(
         (hp_ratio - 1.0).abs() < 1.0e-12,

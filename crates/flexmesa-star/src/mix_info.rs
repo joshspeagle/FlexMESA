@@ -4,7 +4,7 @@
 //! diffusion coupling factors ($\sigma_k$), and conservative species mixing
 //! rates (`star/private/mix_info.f90`).
 
-use flexmesa_const::{MixingType, FOUR_PI, LN10, M_SUN};
+use flexmesa_const::{MixingType, FOUR_PI, LN10, M_SUN, SQRT_2_DIV_3};
 
 use crate::controls::StarError;
 use crate::model::StarModel;
@@ -13,31 +13,9 @@ const CAT_PP: usize = 0;
 const CAT_CNO: usize = 1;
 const CAT_3ALF: usize = 2;
 
-/// Sub-cell convective boundary descriptor returned by
-/// [`locate_convection_boundaries`] (`star/private/mix_info.f90:532-788`).
-#[derive(Debug, Clone, PartialEq)]
-pub struct ConvBoundary {
-    /// True if this boundary is the outer (top) edge of a convection zone;
-    /// false if it is the inner (bottom) edge.
-    pub top_conv_bdy: bool,
-    /// 0-based boundary face index matching MESA `conv_bdy_loc` (`k` for a
-    /// top boundary in cell `k`, `k + 1` for a bottom boundary in cell `k`, and
-    /// `0` for a surface-reaching convection zone).
-    pub conv_bdy_loc: usize,
-    /// 0-based cell index containing the sub-cell boundary (`k_cb`).
-    pub cell_index: usize,
-    /// Interior mass fraction $q_{\mathrm{cb}} \in (0, 1]$ at the boundary.
-    pub conv_bdy_q: f64,
-    /// Inward fractional mass offset
-    /// $\Delta q_{\mathrm{bdy}} \in [0, \Delta q_k]$ from outer face
-    /// `cell_index` to the zero crossing.
-    pub cz_bdy_dq: f64,
-    /// Sub-cell boundary radius $r_{\mathrm{cb}}$ in cm (`eval_conv_bdy_r`).
-    pub r_cb: f64,
-    /// Sub-cell pressure scale height $H_{P,\mathrm{cb}}$ in cm
-    /// (`eval_conv_bdy_Hp`).
-    pub hp_cb: f64,
-}
+/// Upstream `controls_dev.defaults:44-45` RSP2 mixing-type luminosity ratios.
+const RSP2_MIN_LT_DIV_L_FOR_OVERSHOOTING_MIXING_TYPE: f64 = 1.0e-4;
+const RSP2_MIN_LC_DIV_L_FOR_CONVECTIVE_MIXING_TYPE: f64 = 1.0e-4;
 
 /// Computes the face-interpolated density $\rho_{\mathrm{face},k}$ at interior
 /// face $k \in \{1, \dots, \mathrm{nz}-1\}$ (`mix_info.f90:118-119`).
@@ -65,31 +43,63 @@ pub fn cdc_factor(model: &StarModel, k: usize) -> f64 {
     }
 }
 
-/// Runs the complete MESA `26.4.1` `set_mixing_info` pipeline
-/// (`star/private/mix_info.f90:70-425`):
-/// 1. Copies `mlt_mixing_type`, `mlt_D`, `mlt_cdc`, `mlt_vc` into
-///    `mixing_type`, `d_mix`, `cdc`, `conv_vel`.
-/// 2. Runs the 7 glitch-cleanup passes when `remove_mixing_glitches`.
-/// 3. Runs `do_mix_envelope` (`T_mix_limit`).
-/// 4. Runs `set_cz_boundary_info`, `locate_convection_boundaries`,
-///    `add_predictive_mixing`, re-runs `locate_convection_boundaries`, runs
-///    `locate_mixing_boundaries`, and runs `add_overshooting`.
-/// 5. Updates `set_cz_bdy_mass`.
-/// 6. Applies `min_D_mix`, `min_D_mix_below_Tmax`, `min_D_mix_in_H_He`.
-/// 7. Saves `d_mix_non_rotation` and adds rotational mixing if enabled.
-/// 8. Applies `D_mix_zero_region_*`, H/He and H/C crossover zeroing.
-/// 9. Updates `conv_vel` from `d_mix` and sets surface plotting values.
+/// Runs the complete MESA `26.4.1` `set_mixing_info` pipeline with
+/// `skip_set_cz_bdy_mass = false` (`star/private/mix_info.f90:48-425`).
 ///
 /// # Errors
-/// Returns [`StarError`] if predictive mixing, overshooting, or boundary
-/// checks fail or produce non-finite `D_mix`.
+/// Returns [`StarError`] if RTI/RSP2 arrays or `eps_nuc_categories` are
+/// unsized, or if predictive mixing, overshooting, or boundary checks fail or
+/// produce non-finite `D_mix`.
 pub fn set_mixing_info(model: &mut StarModel) -> Result<(), StarError> {
+    set_mixing_info_with_skip(model, false)
+}
+
+/// Runs the complete MESA `26.4.1` `set_mixing_info` pipeline
+/// (`star/private/mix_info.f90:48-425`):
+/// 1. When `RTI_flag` is set, calls `set_rti_mixing_info` and
+///    `set_dpdr_drhodr_info` (`mix_info.f90:79-84`).
+/// 2. Copies `mlt_mixing_type`, `mlt_D`, `mlt_cdc`, `mlt_vc` into
+///    `mixing_type`, `d_mix`, `cdc`, `conv_vel` (or evaluates the `RSP_flag` /
+///    `RSP2_flag` branches at `mix_info.f90:120-149`).
+/// 3. Runs the 7 glitch-cleanup passes when `remove_mixing_glitches` and not
+///    `RSP2_or_RSP`.
+/// 4. Runs `do_mix_envelope` (`T_mix_limit`).
+/// 5. Runs `set_cz_boundary_info`, `locate_convection_boundaries`,
+///    `add_predictive_mixing`, re-runs `locate_convection_boundaries`, runs
+///    `locate_mixing_boundaries`, runs `add_overshooting`, and calls
+///    `add_rti_turbulence` (`mix_info.f90:230-231, 2373-2436`).
+/// 6. Updates `set_cz_bdy_mass` unless `skip_set_cz_bdy_mass || RSP2_or_RSP`
+///    (`mix_info.f90:236-239`, `hydro_vars.f90:81`).
+/// 7. Applies `min_D_mix`, `min_D_mix_below_Tmax`, `min_D_mix_in_H_He`.
+/// 8. Saves `d_mix_non_rotation` and adds rotational mixing if enabled.
+/// 9. Applies `D_mix_zero_region_*`, H/He and H/C crossover zeroing.
+/// 10. Updates `conv_vel` from `d_mix` and sets surface plotting values.
+///
+/// Upstream also calls `other_after_set_mixing_info` (`mix_info.f90:233-234`)
+/// and `other_D_mix` when `use_other_D_mix` (`:275-278`); neither hook is
+/// ported (`use_other_D_mix` is rejected as an unsupported control during
+/// strict inlist validation, and no MESA `26.4.1` test case installs
+/// `other_after_set_mixing_info`).
+///
+/// # Errors
+/// Returns [`StarError`] if required RSP2, RTI, or nuclear-burn arrays are
+/// unsized, or if predictive mixing, overshooting, RTI turbulence, or boundary
+/// checks fail or produce non-finite `D_mix`.
+pub fn set_mixing_info_with_skip(
+    model: &mut StarModel,
+    skip_set_cz_bdy_mass: bool,
+) -> Result<(), StarError> {
     let nz = model.nz;
     if nz == 0 {
         return Ok(());
     }
     if model.aux.mixing.cdc.len() != nz {
         model.aux.mixing.resize(nz);
+    }
+
+    if model.controls.rti_flag {
+        crate::hydro_rti::set_rti_mixing_info(model);
+        crate::hydro_rti::set_dpdr_drhodr_info(model);
     }
 
     let rsp2_or_rsp = model.controls.rsp_flag || model.controls.rsp2_flag;
@@ -113,7 +123,50 @@ pub fn set_mixing_info(model: &mut StarModel) -> Result<(), StarError> {
         model.d_mix[..nz].fill(0.0);
         model.aux.mixing.cdc[..nz].fill(0.0);
         model.conv_vel[..nz].fill(0.0);
-    } else if !model.controls.rsp2_flag {
+    } else if model.controls.rsp2_flag {
+        // Upstream `star/private/mix_info.f90:126-142` and
+        // `star/private/auto_diff_support.f90:402-413` (`get_RSP2_conv_velocity`).
+        if model.aux.rsp.et_rsp.len() != nz
+            || model.aux.rsp.hp_face.len() != nz
+            || model.aux.rsp.lc_rsp.len() != nz
+            || model.aux.rsp.lt_rsp.len() != nz
+        {
+            return Err(StarError::InvalidInput(format!(
+                "set_mixing_info: RSP2 arrays unsized (nz={nz}, et={}, hp_face={}, lc={}, lt={})",
+                model.aux.rsp.et_rsp.len(),
+                model.aux.rsp.hp_face.len(),
+                model.aux.rsp.lc_rsp.len(),
+                model.aux.rsp.lt_rsp.len()
+            )));
+        }
+        let alpha = model.controls.mixing_length_alpha;
+        for k in 0..nz {
+            let cv = if k == 0 {
+                0.0
+            } else {
+                let alfa = model.dq[k - 1] / (model.dq[k - 1] + model.dq[k]);
+                let beta = 1.0 - alfa;
+                let w_k = model.aux.rsp.et_rsp[k].max(0.0).sqrt();
+                let w_km1 = model.aux.rsp.et_rsp[k - 1].max(0.0).sqrt();
+                SQRT_2_DIV_3 * (alfa * w_k + beta * w_km1)
+            };
+            model.conv_vel[k] = cv;
+            model.d_mix[k] = cv * alpha * model.aux.rsp.hp_face[k] / 3.0;
+            model.aux.mixing.cdc[k] = cdc_fac[k] * model.d_mix[k];
+            let l_val = 1.0e-99_f64.max(model.lum[k].abs());
+            if model.aux.rsp.lt_rsp[k].abs()
+                > l_val * RSP2_MIN_LT_DIV_L_FOR_OVERSHOOTING_MIXING_TYPE
+            {
+                model.mixing_type[k] = MixingType::OvershootMixing;
+            } else if model.aux.rsp.lc_rsp[k].abs()
+                > l_val * RSP2_MIN_LC_DIV_L_FOR_CONVECTIVE_MIXING_TYPE
+            {
+                model.mixing_type[k] = MixingType::ConvectiveMixing;
+            } else {
+                model.mixing_type[k] = MixingType::NoMixing;
+            }
+        }
+    } else {
         model.d_mix[..nz].copy_from_slice(&model.mlt_d[..nz]);
         model.aux.mixing.cdc[..nz].copy_from_slice(&model.mlt_cdc[..nz]);
         model.conv_vel[..nz].copy_from_slice(&model.mlt_vc[..nz]);
@@ -129,23 +182,7 @@ pub fn set_mixing_info(model: &mut StarModel) -> Result<(), StarError> {
 
     do_mix_envelope(model);
 
-    let mut eps_h = vec![0.0_f64; nz];
-    let mut eps_he = vec![0.0_f64; nz];
-    let mut eps_z = vec![0.0_f64; nz];
-    // Upstream reads `s% eps_nuc_categories` unconditionally
-    // (`star/private/mix_info.f90:186-191`).
-    if model.aux.eps_nuc_categories.len() != nz {
-        return Err(StarError::InvalidInput(format!(
-            "set_mixing_info: eps_nuc_categories has {} cells, expected nz = {nz}",
-            model.aux.eps_nuc_categories.len()
-        )));
-    }
-    for k in 0..nz {
-        let cats = &model.aux.eps_nuc_categories[k];
-        eps_h[k] = cats[CAT_PP] + cats[CAT_CNO];
-        eps_he[k] = cats[CAT_3ALF];
-        eps_z[k] = model.eps_nuc[k] - (eps_h[k] + eps_he[k]);
-    }
+    let (eps_h, eps_he, eps_z) = extract_burn_eps(model)?;
 
     if !model.controls.rsp_flag {
         set_cz_boundary_info(model)?;
@@ -167,7 +204,9 @@ pub fn set_mixing_info(model: &mut StarModel) -> Result<(), StarError> {
 
     check_d_mix_finite(model, "after add_overshooting")?;
 
-    if !rsp2_or_rsp {
+    add_rti_turbulence(model)?;
+
+    if !(skip_set_cz_bdy_mass || rsp2_or_rsp) {
         set_cz_bdy_mass(model);
     }
 
@@ -1204,165 +1243,126 @@ fn apply_d_mix_zero_regions(model: &mut StarModel) {
     }
 }
 
-/// Locates sub-cell convective boundaries without mutating `model`
-/// (`set_cz_boundary_info` and `locate_convection_boundaries` in
-/// `star/private/mix_info.f90:428-788`).
-///
-/// Returns `(cz_bdy_dq, boundaries)` where `cz_bdy_dq` has length `nz` and
-/// `boundaries` lists convective boundaries ordered from center to surface.
-#[must_use]
-pub fn locate_convection_boundaries(
+/// Extracts per-cell H, He, and metal burning rates from
+/// `model.aux.eps_nuc_categories` (`star/private/mix_info.f90:186-191`).
+fn extract_burn_eps(
     model: &StarModel,
-) -> (Vec<f64>, Vec<ConvBoundary>) {
+) -> Result<(Vec<f64>, Vec<f64>, Vec<f64>), StarError> {
     let nz = model.nz;
-    let mut cz_bdy_dq = vec![0.0; nz];
-    if nz < 2 {
-        return (cz_bdy_dq, Vec::new());
+    if model.aux.eps_nuc_categories.len() != nz {
+        return Err(StarError::InvalidInput(format!(
+            "extract_burn_eps: eps_nuc_categories has {} cells, expected nz = {nz}",
+            model.aux.eps_nuc_categories.len()
+        )));
     }
-
-    let has_gf = model.aux.mixing.grada_face.len() == nz;
-    for k in 1..nz {
-        let mt1 = model.mixing_type[k - 1];
-        let mt2 = model.mixing_type[k];
-        if mt1 == mt2 {
-            continue;
-        }
-        let (dg0, dg1) = if mt2 == MixingType::ConvectiveMixing
-            || mt1 == MixingType::ConvectiveMixing
-        {
-            (
-                model.gradl[k - 1] - model.gradr[k - 1],
-                model.gradl[k] - model.gradr[k],
-            )
-        } else if mt2 == MixingType::SemiconvectiveMixing
-            || mt1 == MixingType::SemiconvectiveMixing
-        {
-            let ga0 = if has_gf && model.aux.mixing.grada_face[k - 1] > 0.0 {
-                model.aux.mixing.grada_face[k - 1]
-            } else if k == 1 {
-                model.grada[0]
-            } else {
-                model.interp_val_to_pt(&model.grada, k - 1)
-            };
-            let ga1 = if has_gf && model.aux.mixing.grada_face[k] > 0.0 {
-                model.aux.mixing.grada_face[k]
-            } else {
-                model.interp_val_to_pt(&model.grada, k)
-            };
-            (ga0 - model.gradr[k - 1], ga1 - model.gradr[k])
-        } else {
-            continue;
-        };
-        if dg0 * dg1 >= 0.0 {
-            continue;
-        }
-        if let Ok(x0) = flexmesa_num::find0(0.0, dg0, model.dq[k - 1], dg1) {
-            cz_bdy_dq[k - 1] = x0.clamp(0.0, model.dq[k - 1]);
-        }
+    let mut eps_h = vec![0.0_f64; nz];
+    let mut eps_he = vec![0.0_f64; nz];
+    let mut eps_z = vec![0.0_f64; nz];
+    for k in 0..nz {
+        let cats = &model.aux.eps_nuc_categories[k];
+        eps_h[k] = cats[CAT_PP] + cats[CAT_CNO];
+        eps_he[k] = cats[CAT_3ALF];
+        eps_z[k] = model.eps_nuc[k] - (eps_h[k] + eps_he[k]);
     }
-
-    let mut boundaries = Vec::new();
-    let mut in_conv = model.mixing_type[nz - 1] == MixingType::ConvectiveMixing;
-    if nz >= 3 {
-        for k in (1..(nz - 1)).rev() {
-            let is_conv = model.mixing_type[k] == MixingType::ConvectiveMixing;
-            if !in_conv && is_conv {
-                in_conv = true;
-                // Verbatim `star/private/mix_info.f90:602-610`: bottom
-                // boundary records `conv_bdy_loc = k + 1` (0-based) and
-                // `conv_bdy_q = q[k] - cz_bdy_dq[k]`.
-                boundaries.push(build_conv_boundary(
-                    model,
-                    false,
-                    k + 1,
-                    k,
-                    cz_bdy_dq[k],
-                ));
-            } else if in_conv && !is_conv {
-                in_conv = false;
-                // Verbatim `star/private/mix_info.f90:744-746`: top boundary
-                // records `conv_bdy_loc = k` and `conv_bdy_q = q[k] - cz_bdy_dq[k]`.
-                boundaries.push(build_conv_boundary(
-                    model,
-                    true,
-                    k,
-                    k,
-                    cz_bdy_dq[k],
-                ));
-            }
-        }
-    }
-    if in_conv {
-        // Verbatim `star/private/mix_info.f90:738-746`: convective region
-        // reaching the surface has `conv_bdy_loc = 0`, `conv_bdy_q = 1.0`.
-        let mut b = build_conv_boundary(model, true, 0, 0, 0.0);
-        b.conv_bdy_q = 1.0;
-        b.r_cb = model.r[0];
-        boundaries.push(b);
-    }
-
-    (cz_bdy_dq, boundaries)
+    Ok((eps_h, eps_he, eps_z))
 }
 
-fn build_conv_boundary(
-    model: &StarModel,
-    top_conv_bdy: bool,
-    conv_bdy_loc: usize,
-    cell_index: usize,
-    cz_bdy_dq: f64,
-) -> ConvBoundary {
-    let nz = model.nz;
-    let dq_k = model.dq[cell_index].max(1.0e-99);
-    let w = (cz_bdy_dq / dq_k).clamp(0.0, 1.0);
-    let r_top = model.r[cell_index];
-    let r_bot = if cell_index + 1 < nz {
-        model.r[cell_index + 1]
-    } else {
-        model.r_center
-    };
-    let r_cb = flexmesa_math::pow(
-        (w * r_bot * r_bot * r_bot + (1.0 - w) * r_top * r_top * r_top).max(0.0),
-        1.0 / 3.0,
-    );
-    let conv_bdy_q = (model.q[cell_index] - cz_bdy_dq).clamp(0.0, 1.0);
-
-    let hp_cb = if cell_index > 0 && cell_index + 1 < nz {
-        let (k_o, k_m, k_i) = (cell_index - 1, cell_index, cell_index + 1);
-        let x0 = model.dq[k_o] / 2.0;
-        let x1 = model.dq[k_o] + model.dq[k_m] / 2.0;
-        let x2 = model.dq[k_o] + model.dq[k_m] + model.dq[k_i] / 2.0;
-        let x = model.dq[k_o] + cz_bdy_dq;
-        if let Ok((a0, a1, a2)) =
-            flexmesa_num::two_piece_linear_coeffs(x, x0, x1, x2)
-        {
-            let p = flexmesa_math::exp(
-                a0 * model.ln_peos[k_o]
-                    + a1 * model.ln_peos[k_m]
-                    + a2 * model.ln_peos[k_i],
-            );
-            let rho = flexmesa_math::exp(
-                a0 * model.lnd[k_o] + a1 * model.lnd[k_m] + a2 * model.lnd[k_i],
-            );
-            p / (rho
-                * model.cgrav[k_m]
-                * (model.m_center + model.xmstar * conv_bdy_q)
-                / (r_cb * r_cb).max(1.0))
-        } else {
-            model.scale_height[cell_index]
-        }
-    } else {
-        model.scale_height[cell_index]
-    };
-
-    ConvBoundary {
-        top_conv_bdy,
-        conv_bdy_loc,
-        cell_index,
-        conv_bdy_q,
-        cz_bdy_dq,
-        r_cb,
-        hp_cb,
+/// Adds Rayleigh-Taylor turbulent diffusivity (`eta_RTI`) into `d_mix`, `cdc`,
+/// `conv_vel`, and `mixing_type` (`add_RTI_turbulence` in
+/// `star/private/mix_info.f90:2373-2436`).
+///
+/// Uses the upstream `controls.defaults:3127-3128, 8596-8597` defaults for the
+/// mass taper and floor (`max_M_RTI_factors_full_on = 1e99`,
+/// `min_M_RTI_factors_full_off = 1e99`, `RTI_D_mix_floor = 0`,
+/// `RTI_min_m_for_D_mix_floor = 0`); inlists setting non-default values for
+/// those controls fail loudly during strict validation.
+fn add_rti_turbulence(model: &mut StarModel) -> Result<(), StarError> {
+    if !model.controls.rti_flag {
+        return Ok(());
     }
+    let coeff = model.controls.composition_rti_diffusion_factor;
+    if coeff <= 0.0 {
+        return Ok(());
+    }
+    let nz = model.nz;
+    if model.aux.eta_rti.len() != nz {
+        return Err(StarError::InvalidInput(format!(
+            "add_rti_turbulence: eta_rti has length {}, expected nz = {nz}",
+            model.aux.eta_rti.len()
+        )));
+    }
+    let has_alpha = model.aux.mixing.alpha_mlt.len() == nz
+        && model.aux.mixing.alpha_mlt.iter().any(|&v| v > 0.0);
+    for k in 1..nz {
+        let mut d = model.aux.eta_rti[k] * coeff;
+        if !d.is_finite() {
+            return Err(StarError::MicrophysicsError(format!(
+                "add_rti_turbulence: non-finite eta_RTI at face {k}: {d}"
+            )));
+        }
+        if d > model.d_mix[k] {
+            model.mixing_type[k] = MixingType::RayleighTaylorMixing;
+        }
+        d += model.d_mix[k];
+        let alfa = model.dq[k - 1] / (model.dq[k - 1] + model.dq[k]);
+        let beta = 1.0 - alfa;
+        let rho_face = alfa * model.rho[k] + beta * model.rho[k - 1];
+        let p_face = alfa * model.peos[k] + beta * model.peos[k - 1];
+        let r_face = model.r[k];
+        let q_face = model.q[k];
+        let f = FOUR_PI * r_face * r_face * rho_face;
+        let cdc = f * f * d;
+        let hp = if model.cgrav[k] <= 0.0 {
+            r_face
+        } else {
+            p_face
+                / (rho_face
+                    * model.cgrav[k]
+                    * (model.m_center + model.xmstar * q_face)
+                    / (r_face * r_face))
+        };
+        let alpha_k = if has_alpha {
+            model.aux.mixing.alpha_mlt[k]
+        } else {
+            model.controls.mixing_length_alpha
+        };
+        let vc = 3.0 * d / (alpha_k * hp);
+        model.aux.mixing.cdc[k] = cdc;
+        model.d_mix[k] = d;
+        model.conv_vel[k] = vc;
+    }
+    Ok(())
+}
+
+/// Populates sub-cell boundary fractions (`set_cz_boundary_info`) and locates
+/// all convective boundaries in place on `model.aux.mixing`
+/// (`set_cz_boundary_info` and `locate_convection_boundaries` in
+/// `star/private/mix_info.f90:428-469, 532-788`).
+///
+/// Returns the number of convective boundaries stored in
+/// `model.aux.mixing.conv_bdy_loc`.
+///
+/// # Errors
+/// Returns [`StarError::InvalidInput`] if `eps_nuc_categories` is unsized or
+/// if `set_cz_boundary_info` fails `find0` or produces out-of-range
+/// `cz_bdy_dq`.
+pub fn locate_convection_boundaries(
+    model: &mut StarModel,
+) -> Result<usize, StarError> {
+    let nz = model.nz;
+    if nz == 0 {
+        model.aux.mixing.conv_bdy_loc.clear();
+        model.aux.mixing.conv_bdy_q.clear();
+        model.aux.mixing.top_conv_bdy.clear();
+        model.aux.mixing.burn_h_conv_region.clear();
+        model.aux.mixing.burn_he_conv_region.clear();
+        model.aux.mixing.burn_z_conv_region.clear();
+        return Ok(0);
+    }
+    let (eps_h, eps_he, eps_z) = extract_burn_eps(model)?;
+    set_cz_boundary_info(model)?;
+    locate_convection_boundaries_in_place(model, &eps_h, &eps_he, &eps_z);
+    Ok(model.aux.mixing.conv_bdy_loc.len())
 }
 
 /// Computes the Lagrangian face mixing coupling factors $\sigma_k$ (`sig`)

@@ -39,7 +39,7 @@ use crate::mix_info::{
 };
 use crate::model::StarModel;
 pub use crate::omega_mix::solve_omega_mix;
-use crate::overshoot::{OvershootConfig, apply_overshooting};
+use crate::overshoot::{apply_overshoot_configs, OvershootConfig};
 use crate::solver::{HenyeySolverReport, solve_henyey_step};
 
 struct SplitZoneOutcome {
@@ -392,9 +392,8 @@ pub(crate) fn refresh_mixing_state(
     overshoot_configs: &[OvershootConfig],
 ) -> Result<(), StarError> {
     if !overshoot_configs.is_empty() {
-        let (cz_bdy_dq, boundaries) = locate_convection_boundaries(model);
-        model.aux.mixing.cz_bdy_dq = cz_bdy_dq;
-        apply_overshooting(model, &boundaries, overshoot_configs)?;
+        let _ = locate_convection_boundaries(model)?;
+        apply_overshoot_configs(model, overshoot_configs)?;
         apply_min_d_mix_floor(model);
     }
     let eff_mix_factor = if model.controls.do_mix {
@@ -412,8 +411,11 @@ pub(crate) fn refresh_mixing_state(
         && model.controls.do_mix
         && model.controls.mix_factor > 0.0
     {
+        // `set_mixing_info` already invokes `set_rti_mixing_info`,
+        // `set_dpdr_drhodr_info`, and `add_rti_turbulence` (`mix_info.f90:79-84,
+        // 230-231`), so `d_mix` and `sig` already include RTI diffusivity; only
+        // refresh `sig_rti`/`sigmid_rti` for the active step `dt`.
         crate::hydro_rti::set_rti_mixing_info(model);
-        crate::hydro_rti::augment_mixing_with_rti(model);
     }
     Ok(())
 }

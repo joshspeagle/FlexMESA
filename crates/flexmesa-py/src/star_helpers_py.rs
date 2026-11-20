@@ -8,7 +8,7 @@
 //! [`crate::star_py`].
 
 use flexmesa_star::{
-    apply_overshooting, build_pre_ms_model, clean_mixing_glitches,
+    apply_overshoot_configs, build_pre_ms_model, clean_mixing_glitches,
     compute_convection_sigmas, do_adjust_mass, do_struct_burn_mix,
     eval_henyey_equations, extract_history_row, load_zams_model,
     locate_convection_boundaries, set_mdot, solve_omega_mix, star_evolve,
@@ -231,15 +231,16 @@ impl PyStarModel {
         scheme: &str,
     ) -> PyResult<usize> {
         clean_mixing_glitches(&mut self.inner, 1.0, 0.1);
-        let (_cz_dq, bdy) = locate_convection_boundaries(&self.inner);
+        let n_bdy = locate_convection_boundaries(&mut self.inner)
+            .map_err(to_py_err)?;
         let cfgs = build_overshoot_configs(overshoot_f, overshoot_f0, scheme);
         if !cfgs.is_empty() {
-            apply_overshooting(&mut self.inner, &bdy, &cfgs)
+            apply_overshoot_configs(&mut self.inner, &cfgs)
                 .map_err(to_py_err)?;
         }
         compute_convection_sigmas(&mut self.inner, dt, 1.0, 1.0e10)
             .map_err(to_py_err)?;
-        Ok(bdy.len())
+        Ok(n_bdy)
     }
 
     /// Helper for `PyStarModel::run_omega_mix`.

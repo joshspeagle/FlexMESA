@@ -471,7 +471,7 @@ fn init_zone_info(model: &StarModel) -> Result<Vec<ZoneInfo>, StarError> {
     for z in &mut zi {
         set_penetration_velocities(model, z)?;
         set_burn_data(model, z);
-        set_abund_data(model, z);
+        set_abund_data(model, z)?;
         z.dt_t = 0.0;
         z.dt_b = 0.0;
         z.sel_t = z.kc_t != 0;
@@ -709,8 +709,21 @@ fn set_burn_data(model: &StarModel, zi: &mut ZoneInfo) {
     }
 }
 
-fn set_abund_data(model: &StarModel, zi: &mut ZoneInfo) {
+fn set_abund_data(
+    model: &StarModel,
+    zi: &mut ZoneInfo,
+) -> Result<(), StarError> {
     let sp = model.species;
+    // Upstream reads `s% dxdt_nuc` unconditionally
+    // (`star/private/conv_premix.f90:1141`); a model without the array
+    // cannot supply the burning term.
+    if model.dxdt_nuc.len() != model.nz * sp {
+        return Err(StarError::InvalidInput(format!(
+            "conv_premix set_abund_data: dxdt_nuc has length {}, expected nz*species = {}",
+            model.dxdt_nuc.len(),
+            model.nz * sp
+        )));
+    }
     zi.avg_xa.resize(sp, 0.0);
     zi.davg_xa_dt.resize(sp, 0.0);
 
@@ -718,9 +731,8 @@ fn set_abund_data(model: &StarModel, zi: &mut ZoneInfo) {
     if m_zone <= 0.0 {
         zi.avg_xa.fill(0.0);
         zi.davg_xa_dt.fill(0.0);
-        return;
+        return Ok(());
     }
-    let has_dxdt = model.dxdt_nuc.len() == model.nz * sp;
     for l in 0..sp {
         let mut s_x = 0.0;
         let mut s_dx = 0.0;
@@ -728,9 +740,7 @@ fn set_abund_data(model: &StarModel, zi: &mut ZoneInfo) {
             let dm_k = model.dm[k];
             let idx = k * sp + l;
             s_x += dm_k * model.xa[idx];
-            if has_dxdt {
-                s_dx += dm_k * model.dxdt_nuc[idx];
-            }
+            s_dx += dm_k * model.dxdt_nuc[idx];
         }
         zi.avg_xa[l] = (s_x / m_zone).clamp(0.0, 1.0);
         zi.davg_xa_dt[l] = s_dx / m_zone;
@@ -741,6 +751,7 @@ fn set_abund_data(model: &StarModel, zi: &mut ZoneInfo) {
             *v /= sum_x;
         }
     }
+    Ok(())
 }
 
 fn validate_zone_info(

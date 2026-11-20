@@ -132,13 +132,18 @@ pub fn set_mixing_info(model: &mut StarModel) -> Result<(), StarError> {
     let mut eps_h = vec![0.0_f64; nz];
     let mut eps_he = vec![0.0_f64; nz];
     let mut eps_z = vec![0.0_f64; nz];
-    let has_cats = model.aux.eps_nuc_categories.len() == nz;
+    // Upstream reads `s% eps_nuc_categories` unconditionally
+    // (`star/private/mix_info.f90:186-191`).
+    if model.aux.eps_nuc_categories.len() != nz {
+        return Err(StarError::InvalidInput(format!(
+            "set_mixing_info: eps_nuc_categories has {} cells, expected nz = {nz}",
+            model.aux.eps_nuc_categories.len()
+        )));
+    }
     for k in 0..nz {
-        if has_cats {
-            let cats = &model.aux.eps_nuc_categories[k];
-            eps_h[k] = cats[CAT_PP] + cats[CAT_CNO];
-            eps_he[k] = cats[CAT_3ALF];
-        }
+        let cats = &model.aux.eps_nuc_categories[k];
+        eps_h[k] = cats[CAT_PP] + cats[CAT_CNO];
+        eps_he[k] = cats[CAT_3ALF];
         eps_z[k] = model.eps_nuc[k] - (eps_h[k] + eps_he[k]);
     }
 

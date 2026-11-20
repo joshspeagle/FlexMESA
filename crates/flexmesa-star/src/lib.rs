@@ -70,6 +70,7 @@ mod controls_defaults;
 pub mod controls_mix_wind;
 pub mod controls_output;
 pub mod controls_timestep_stop;
+pub mod conv_premix;
 pub mod core_boundaries;
 pub mod diffusion;
 pub mod eps_grav;
@@ -107,12 +108,15 @@ pub mod micro;
 pub mod micro_cache;
 pub mod micro_net;
 pub mod mix_info;
+pub(crate) mod mixing_micro;
+pub mod mixing_state;
 pub mod model;
 pub mod model_io;
 pub mod omega_mix;
 pub mod overshoot;
 pub mod photo_io;
 pub mod pre_ms;
+pub mod predictive_mix;
 pub mod premix;
 pub mod primary_state;
 pub mod pulse;
@@ -259,8 +263,12 @@ pub use hydro_state::{
 };
 pub use hydro_temperature::{interp_p_point_ad, set_rsp_lsurf_bc};
 pub use hydro_vars::{
-    check_for_redo_mlt, do_brunt_b, do_brunt_n2, eval_surf_bc, set_hydro_vars,
-    set_mlt_vars, update_sig_from_d_mix,
+    check_for_redo_mlt, do_brunt_b, do_brunt_n2, eval_surf_bc,
+    set_gradt_excess_alpha, set_hydro_vars, set_mlt_vars,
+    update_sig_from_d_mix,
+};
+pub use mixing_state::{
+    set_grads, threshold_smoothing, weighted_smoothing, MixingAuxState,
 };
 pub use inlist::{InlistBundle, InlistLoadOptions, SectionControls};
 pub use inlist_inventory::{
@@ -313,8 +321,9 @@ pub use micro::{
 };
 pub use micro_cache::MicrophysicsCache;
 pub use mix_info::{
-    ConvBoundary, cdc_factor, clean_mixing_glitches, compute_convection_sigmas,
-    eval_dxdt_mix, face_density, locate_convection_boundaries,
+    cdc_factor, clean_mixing_glitches, compute_convection_sigmas,
+    do_mix_envelope, eval_dxdt_mix, face_density, locate_convection_boundaries,
+    set_cz_bdy_mass, set_cz_boundary_info, set_mixing_info, ConvBoundary,
 };
 pub use model::StarModel;
 pub use model_io::{
@@ -322,15 +331,17 @@ pub use model_io::{
     load_photo_bytes, photo_numerics_mode, read_mod_str, read_photo_bytes,
     try_write_photo_bytes, write_mod_string, write_photo_bytes,
 };
-pub use overshoot::{OvershootConfig, OvershootScheme, apply_overshooting};
+pub use overshoot::{
+    add_overshooting, apply_overshooting, eval_conv_bdy_hp, eval_conv_bdy_k,
+    eval_conv_bdy_r, eval_over_bdy_params, OvershootConfig, OvershootScheme,
+};
 pub use pre_ms::{
     PreMsShell, build_pre_ms_model, build1_pre_ms_model,
     default_basic_net_composition,
 };
 pub use premix::{
     add_predictive_mixing, apply_predictive_mixing_from_controls,
-    do_conv_premix, do_phase_separation, eval_castellani_penetration_vel,
-    eval_phase_separation_shift,
+    do_conv_premix, do_phase_separation, eval_phase_separation_shift,
 };
 pub use primary_state::PrimaryStateBuffer;
 pub use pulse::{

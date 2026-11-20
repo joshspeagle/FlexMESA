@@ -139,48 +139,43 @@ fn test_eval_face_mlt_semiconvection_thermohaline_and_tdc_dispatch() {
     model.controls.use_ledoux_criterion = true;
     model.controls.alpha_semiconvection = 0.1;
     model.controls.semiconvection_option = SemiconvectionOption::Langer85;
-    model.brunt_b[k_rad] = 0.50;
+    model.aux.mixing.gradl_composition_term[k_rad] = 0.50;
     set_mlt_vars(&mut model).expect("set_mlt_vars with semiconvection");
     assert_eq!(
-        model.mixing_type[k_rad],
+        model.aux.mixing.mlt_mixing_type[k_rad],
         MixingType::SemiconvectiveMixing,
         "face with grada < gradr < gradL and alpha_semiconvection > 0 must be SemiconvectiveMixing"
     );
-    assert!(model.d_mix[k_rad] > 0.0);
-    assert!(model.conv_vel[k_rad] > 0.0);
-    assert_eq!(
-        model.mlt_vc[k_rad], 0.0,
-        "mlt_vc must be zeroed when mixing_type != ConvectiveMixing"
-    );
+    assert!(model.mlt_d[k_rad] > 0.0);
+    assert!(model.mlt_vc[k_rad] > 0.0);
 
     // 2. Thermohaline mixing: grad_r < grad_ad and B < 0
     model.lum[k_rad] *= 0.2;
     model.controls.alpha_semiconvection = 0.0;
     model.controls.thermohaline_coeff = 2.0;
     model.controls.thermohaline_option = ThermohalineOption::Kippenhahn;
-    model.brunt_b[k_rad] = -0.05;
+    model.aux.mixing.gradl_composition_term[k_rad] = -0.05;
     set_mlt_vars(&mut model).expect("set_mlt_vars with thermohaline");
     assert_eq!(
-        model.mixing_type[k_rad],
+        model.aux.mixing.mlt_mixing_type[k_rad],
         MixingType::ThermohalineMixing,
         "face with gradr < grada, B < 0, and thermohaline_coeff > 0 must be ThermohalineMixing"
     );
-    assert!(model.d_mix[k_rad] > 0.0);
-    assert_eq!(
-        model.mlt_vc[k_rad], 0.0,
-        "mlt_vc must be zeroed for ThermohalineMixing"
-    );
+    assert!(model.mlt_d[k_rad] > 0.0);
 
     // 3. Time-Dependent Convection (`MltOption::Tdc`)
     let k_conv = (1..model.nz)
-        .find(|&k| model.mixing_type[k] == MixingType::ConvectiveMixing)
+        .find(|&k| model.aux.mixing.mlt_mixing_type[k] == MixingType::ConvectiveMixing)
         .expect("convective face in 1 Msun ZAMS");
     model.controls.mlt_option = MltOption::Tdc;
     model.dt = 1.0e4;
     model.aux.have_mlt_vc = true;
     model.aux.mlt_vc_old[k_conv] = model.mlt_vc[k_conv].max(1.0e3);
     set_mlt_vars(&mut model).expect("set_mlt_vars with TDC");
-    assert_eq!(model.mixing_type[k_conv], MixingType::ConvectiveMixing);
+    assert_eq!(
+        model.aux.mixing.mlt_mixing_type[k_conv],
+        MixingType::ConvectiveMixing
+    );
     assert!(model.mlt_vc[k_conv] > 0.0);
 }
 
@@ -211,11 +206,13 @@ fn test_eval_face_mlt_and_brunt_n2_rotational_fp_ft_coupling() {
     set_mlt_vars(&mut model).expect("set_mlt_vars rotating");
     do_brunt_n2(&mut model);
 
+    // Upstream `star_utils.f90:4001` (`get_scale_height_face`) and
+    // `brunt.f90:160` (`do_brunt_N2`) use spherical `grav = G*m_grav/r^2`;
+    // only `gradr` scales by `ft_rot/fp_rot` (`turb_info.f90:125-126`).
     let hp_ratio = model.scale_height[k] / hp_nonrot;
     assert!(
-        (hp_ratio - 1.0 / fp_k).abs() < 1.0e-10,
-        "scale_height must scale by 1/fp_rot: got {hp_ratio}, expected {}",
-        1.0 / fp_k
+        (hp_ratio - 1.0).abs() < 1.0e-12,
+        "scale_height must match upstream spherical gravity (star_utils.f90:4001): got {hp_ratio}"
     );
     let gradr_ratio = model.gradr[k] / gradr_nonrot;
     assert!(

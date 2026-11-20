@@ -7,10 +7,10 @@
 use flexmesa_star::{
     add_predictive_mixing, do_conv_premix, do_element_diffusion,
     do_phase_separation, eval_burgers_velocities, eval_caplan_ocp_dstar,
-    eval_castellani_penetration_vel, eval_omega_crit,
-    eval_phase_separation_shift, eval_radiative_levitation_accel,
-    eval_rotation_fp_ft, eval_rotational_mixing_zone,
-    eval_wd_sedimentation_heating, set_rotation_mixing_info, DiffusionScheme,
+    eval_omega_crit, eval_phase_separation_shift,
+    eval_radiative_levitation_accel, eval_rotation_fp_ft,
+    eval_rotational_mixing_zone, eval_wd_sedimentation_heating,
+    set_rotation_mixing_info, DiffusionScheme,
 };
 use numpy::{PyArray1, PyArray2, PyArrayMethods, PyReadonlyArray1};
 use pyo3::exceptions::PyValueError;
@@ -261,23 +261,6 @@ pub fn star_eval_phase_separation_shift(
     eval_phase_separation_shift(x_heavy, is_one_mixture)
 }
 
-/// Evaluates the Castellani et al. (1971) convective boundary penetration
-/// velocity $v_p$ in $\mathrm{cm\,s^{-1}}$.
-#[pyfunction]
-pub fn star_eval_castellani_penetration_vel(
-    conv_vel: f64,
-    r: f64,
-    hp: f64,
-    gradr: f64,
-    grada: f64,
-    abar_in: f64,
-    abar_out: f64,
-) -> f64 {
-    eval_castellani_penetration_vel(
-        conv_vel, r, hp, gradr, grada, abar_in, abar_out,
-    )
-}
-
 /// Runs iterative convective premixing on `model` and returns the number of
 /// cells absorbed across convective boundaries.
 #[pyfunction]
@@ -300,12 +283,13 @@ pub fn star_add_predictive_mixing(
     model: &mut PyStarModel,
     ingested_mass_limit_coeff: f64,
     superad_thresh: f64,
-) -> usize {
+) -> PyResult<usize> {
     add_predictive_mixing(
         &mut model.inner,
         ingested_mass_limit_coeff,
         superad_thresh,
     )
+    .map_err(crate::star_helpers_py::to_py_err)
 }
 
 /// Executes white-dwarf crystallization phase separation on `model` and returns
@@ -343,7 +327,6 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(star_eval_rotational_mixing_zone, m)?)?;
     m.add_function(wrap_pyfunction!(star_set_rotation_mixing_info, m)?)?;
     m.add_function(wrap_pyfunction!(star_eval_phase_separation_shift, m)?)?;
-    m.add_function(wrap_pyfunction!(star_eval_castellani_penetration_vel, m)?)?;
     m.add_function(wrap_pyfunction!(star_do_conv_premix, m)?)?;
     m.add_function(wrap_pyfunction!(star_add_predictive_mixing, m)?)?;
     m.add_function(wrap_pyfunction!(star_do_phase_separation, m)?)?;

@@ -398,11 +398,8 @@ pub fn solve_henyey_step(
 
     let saved_doing_sbm = model.aux.doing_struct_burn_mix;
     model.aux.solver_mlt_eval_count = 0;
-    model.aux.solver_had_mlt_flip = false;
     model.aux.fixed_gradr_sticky.resize(nz, false);
     model.aux.fixed_gradr_sticky.fill(false);
-    model.aux.mlt_flip_count.resize(nz, 0);
-    model.aux.mlt_flip_count.fill(0);
     model.aux.doing_struct_burn_mix = true;
 
     let mut sys = HenyeySystem::new(0, 0, Vec::new());

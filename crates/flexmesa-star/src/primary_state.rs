@@ -290,13 +290,15 @@ pub(crate) fn primary_heap_bytes(model: &StarModel) -> usize {
             j_rot_old,
             eps_mdot_old,
             eps_nuc_categories,
-            fixed_gradr_sticky,
-            mlt_prev_conv,
-            mlt_flip_count
+            fixed_gradr_sticky
         ]
     );
     let name_bytes: usize = model.iso_names.iter().map(String::len).sum();
-    model_vecs + aux_vecs + name_bytes + rsp_heap_bytes(&aux.rsp)
+    model_vecs
+        + aux_vecs
+        + aux.mixing.heap_bytes()
+        + name_bytes
+        + rsp_heap_bytes(&aux.rsp)
 }
 
 /// Compact snapshot of a [`StarModel`]'s evolved primary, start, old, grid,
@@ -464,16 +466,13 @@ pub struct PrimaryStateBuffer {
     pub(crate) d_i_rot_dlnr: Vec<f64>,
     pub(crate) brunt_n2_composition_term: Vec<f64>,
     pub(crate) smoothed_brunt_b: Vec<f64>,
-    pub(crate) smoothed_brunt_b_hash: u64,
     pub(crate) mass_correction: Vec<f64>,
     pub(crate) omega_old: Vec<f64>,
     pub(crate) j_rot_old: Vec<f64>,
     pub(crate) eps_mdot_old: Vec<f64>,
     pub(crate) solver_mlt_eval_count: usize,
-    pub(crate) solver_had_mlt_flip: bool,
     pub(crate) fixed_gradr_sticky: Vec<bool>,
-    pub(crate) mlt_prev_conv: Vec<u8>,
-    pub(crate) mlt_flip_count: Vec<u8>,
+    pub(crate) mixing: crate::mixing_state::MixingPrimarySnapshot,
     pub(crate) step_hist: StepHistoryScalars,
     pub(crate) rsp: RspState,
     pub(crate) tidal_deformation: Option<TidalDeformationHandle>,
@@ -489,6 +488,7 @@ macro_rules! make_empty_buf {
             eos_config: EosConfig::default(),
             kap_config: KapConfig::default(),
             dt_limit_ratio_old: 1.0,
+            mixing: crate::mixing_state::MixingPrimarySnapshot::default(),
             step_hist: StepHistoryScalars::default(),
             rsp: RspState::new(0),
             tidal_deformation: None,
@@ -496,7 +496,6 @@ macro_rules! make_empty_buf {
             model_number: 0,
             init_model_number: 0,
             bad_max_corr_cnt: 0,
-            smoothed_brunt_b_hash: 0,
             solver_mlt_eval_count: 0,
             k_const_mass: 0,
             $( $v: Vec::new(), )+
@@ -530,7 +529,7 @@ impl PrimaryStateBuffer {
                 w_div_wc, fp_rot, d_fp_rot_dlnr, ft_rot, d_ft_rot_dlnr, i_rot,
                 d_i_rot_dlnr, brunt_n2_composition_term, smoothed_brunt_b,
                 mass_correction, omega_old, j_rot_old, eps_mdot_old,
-                fixed_gradr_sticky, mlt_prev_conv, mlt_flip_count
+                fixed_gradr_sticky
             ],
             zeros: [
                 star_age, star_age_old, time_sec, time_old_sec, dt, dt_next,
@@ -543,7 +542,7 @@ impl PrimaryStateBuffer {
             ],
             falses: [
                 doing_first_model_of_run, doing_relax, doing_struct_burn_mix,
-                have_mlt_vc, okay_to_set_mlt_vc, solver_had_mlt_flip
+                have_mlt_vc, okay_to_set_mlt_vc
             ]
         )
     }
@@ -647,11 +646,10 @@ impl PrimaryStateBuffer {
                 total_internal_energy_start,
                 cumulative_energy_error,
                 non_epsnuc_energy_change_from_split_burn,
-                smoothed_brunt_b_hash,
-                solver_mlt_eval_count,
-                solver_had_mlt_flip
+                solver_mlt_eval_count
             ]
         );
+        self.mixing.capture_from(&a.mixing);
         clone_vecs!(
             self,
             a,
@@ -702,8 +700,6 @@ impl PrimaryStateBuffer {
                 j_rot_old,
                 eps_mdot_old,
                 fixed_gradr_sticky,
-                mlt_prev_conv,
-                mlt_flip_count,
                 step_hist,
                 rsp,
                 tidal_deformation
@@ -873,10 +869,8 @@ impl PrimaryStateBuffer {
                 ]
             );
             a.solver_mlt_eval_count = 0;
-            a.solver_had_mlt_flip = false;
             a.fixed_gradr_sticky.fill(false);
-            a.mlt_prev_conv.fill(0);
-            a.mlt_flip_count.fill(0);
+            self.mixing.restore_pre_hydro(&mut a.mixing);
             if let Some(ref eg) = self.extra_grav_if_nonzero {
                 a.extra_grav.clone_from(eg);
             } else {
@@ -923,11 +917,10 @@ impl PrimaryStateBuffer {
             self,
             [
                 doing_struct_burn_mix,
-                smoothed_brunt_b_hash,
-                solver_mlt_eval_count,
-                solver_had_mlt_flip
+                solver_mlt_eval_count
             ]
         );
+        self.mixing.restore_post_hydro(&mut a.mixing);
         clone_vecs!(
             a,
             self,
@@ -941,9 +934,7 @@ impl PrimaryStateBuffer {
                 i_rot,
                 d_i_rot_dlnr,
                 smoothed_brunt_b,
-                fixed_gradr_sticky,
-                mlt_prev_conv,
-                mlt_flip_count
+                fixed_gradr_sticky
             ]
         );
         Ok(())
@@ -1064,9 +1055,7 @@ impl PrimaryStateBuffer {
                 omega_old,
                 j_rot_old,
                 eps_mdot_old,
-                fixed_gradr_sticky,
-                mlt_prev_conv,
-                mlt_flip_count
+                fixed_gradr_sticky
             ]
         );
         let name_bytes: usize = self.iso_names.iter().map(String::len).sum();
@@ -1074,6 +1063,10 @@ impl PrimaryStateBuffer {
             .extra_grav_if_nonzero
             .as_ref()
             .map_or(0, |v| size_of_val(v.as_slice()));
-        own_vecs + name_bytes + rsp_heap_bytes(&self.rsp) + extra_grav
+        own_vecs
+            + name_bytes
+            + rsp_heap_bytes(&self.rsp)
+            + self.mixing.heap_bytes()
+            + extra_grav
     }
 }

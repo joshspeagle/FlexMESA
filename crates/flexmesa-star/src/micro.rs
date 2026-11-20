@@ -13,10 +13,10 @@ use flexmesa_const::{
     AVO, CRAD, FOUR_PI, FOUR_THIRDS_PI, KERG, LN10, ONE_THIRD, QE,
 };
 use flexmesa_eos::{
-    eos_dt_get_zones_with_logs, HelmTable, I_CHI_RHO, I_CHI_T, I_CP, I_CV,
-    I_ETA, I_FRAC_PC, I_GAMMA1, I_GAMMA3, I_GRAD_AD, I_LATENT_DDLNRHO,
-    I_LATENT_DDLNT, I_LN_E, I_LN_FREE_E, I_LN_PGAS, I_LN_S, I_MU,
-    NUM_EOS_BASIC_RESULTS,
+    eos_dt_get_zones_with_logs, EosEvalOutput, HelmTable, I_CHI_RHO, I_CHI_T,
+    I_CP, I_CV, I_ETA, I_FRAC_PC, I_GAMMA1, I_GAMMA3, I_GRAD_AD,
+    I_LATENT_DDLNRHO, I_LATENT_DDLNT, I_LN_E, I_LN_FREE_E, I_LN_PGAS, I_LN_S,
+    I_MU, NUM_EOS_BASIC_RESULTS,
 };
 use flexmesa_kap::get_kap_results;
 use flexmesa_net::NetGeneralInfo;
@@ -363,134 +363,170 @@ pub fn do_eos(model: &mut StarModel) -> Result<(), StarError> {
     }
 
     for (k, out) in eos_outputs.into_iter().enumerate() {
-        for i in 0..NUM_EOS_BASIC_RESULTS {
-            if is_bad(out.res[i] + out.d_dlnd[i] + out.d_dln_t[i]) {
-                return Err(StarError::MicrophysicsError(format!(
-                    "store_eos_for_cell: non-finite EOS result[{i}] at zone {k}"
-                )));
-            }
-        }
-
-        let t_k = model.t[k];
-        let rho_k = model.rho[k];
-        if t_k > 1.0e15 || rho_k > 1.0e15 {
-            return Err(StarError::MicrophysicsError(format!(
-                "store_eos_for_cell: T ({t_k}) or rho ({rho_k}) > 1e15 at zone {k}"
-            )));
-        }
-
-        let ln_pgas = out.res[I_LN_PGAS];
-        let pgas = flexmesa_math::exp(ln_pgas);
-        // `star/private/micro.f90:464`: `s% Prad(k) = crad * T*T*T*T / 3d0`.
-        let prad = ((((CRAD * t_k) * t_k) * t_k) * t_k) / 3.0;
-        let peos = prad + pgas;
-        let ln_peos = flexmesa_math::log(peos);
-
-        let d_lnpgas_dlnd = out.d_dlnd[I_LN_PGAS];
-        let d_lnpgas_dlnt = out.d_dln_t[I_LN_PGAS];
-        let d_lnpeos_dlnd = pgas * d_lnpgas_dlnd / peos;
-        let d_lnpeos_dlnt = (pgas * d_lnpgas_dlnt + 4.0 * prad) / peos;
-
-        let ln_e = out.res[I_LN_E];
-        let energy = flexmesa_math::exp(ln_e);
-        let ln_s = out.res[I_LN_S];
-        let entropy = flexmesa_math::exp(ln_s);
-        let grada = out.res[I_GRAD_AD];
-        let cv = out.res[I_CV];
-        let cp = out.res[I_CP];
-        let chi_rho = out.res[I_CHI_RHO];
-        let chi_t = out.res[I_CHI_T];
-        let gamma1 = out.res[I_GAMMA1];
-
-        let cs2 = gamma1 * peos / rho_k;
-        if cs2 < 0.0 {
-            return Err(StarError::MicrophysicsError(format!(
-                "eval_csound: negative cs^2 ({cs2}) at zone {k}"
-            )));
-        }
-        let csound = cs2.sqrt();
-        if gamma1 <= 0.0
-            || grada <= 0.0
-            || csound <= 0.0
-            || is_bad(csound)
-            || chi_t <= 0.0
-            || chi_rho <= 0.0
-            || cv <= 0.0
-            || cp <= 0.0
-        {
-            return Err(StarError::MicrophysicsError(format!(
-                concat!(
-                    "store_eos_for_cell: non-positive thermodynamic state at zone {} ",
-                    "(gamma1={}, grada={}, csound={}, chiT={}, chiRho={}, Cv={}, Cp={})"
-                ),
-                k, gamma1, grada, csound, chi_t, chi_rho, cv, cp
-            )));
-        }
-
-        // `star/private/micro.f90:480-481`.
-        let gam = model.z53bar[k]
-            * QE
-            * QE
-            * flexmesa_math::pow(
-                FOUR_THIRDS_PI * AVO * rho_k * model.zbar[k] / model.abar[k],
-                ONE_THIRD,
-            )
-            / (KERG * t_k);
-
-        model.pgas[k] = pgas;
-        model.ln_pgas[k] = ln_pgas;
-        model.prad[k] = prad;
-        model.peos[k] = peos;
-        model.ln_peos[k] = ln_peos;
-        model.energy[k] = energy;
-        model.ln_e[k] = ln_e;
-        model.entropy[k] = entropy;
-        model.ln_s[k] = ln_s;
-        model.grada[k] = grada;
-        model.cv[k] = cv;
-        model.cp[k] = cp;
-        model.chi_rho[k] = chi_rho;
-        model.chi_t[k] = chi_t;
-        model.gamma1[k] = gamma1;
-        model.gamma3[k] = out.res[I_GAMMA3];
-        model.eta[k] = out.res[I_ETA];
-        model.gam[k] = gam;
-        model.mu[k] = out.res[I_MU];
-        model.lnfree_e[k] = out.res[I_LN_FREE_E];
-        model.csound[k] = csound;
-
-        model.aux.eos_frac_pc[k] = out.res[I_FRAC_PC];
-        model.aux.latent_ddlnt[k] = out.res[I_LATENT_DDLNT];
-        model.aux.latent_ddlnrho[k] = out.res[I_LATENT_DDLNRHO];
-        let sp_base = k * species;
-        for j in 0..species {
-            let [d_lnpgas_dxa, d_lne_dxa] =
-                out.d_dxa.get(j).copied().unwrap_or([0.0, 0.0]);
-            model.aux.dln_e_dxa_for_partials[sp_base + j] = d_lne_dxa;
-            model.aux.dln_peos_dxa_for_partials[sp_base + j] =
-                pgas * d_lnpgas_dxa / peos;
-        }
-
-        model.ln_peos_ad[k] = StarAdOrder1::from_dlnd_dlnt_00(
-            ln_peos,
-            d_lnpeos_dlnd,
-            d_lnpeos_dlnt,
-        );
-        model.ln_e_ad[k] = StarAdOrder1::from_dlnd_dlnt_00(
-            ln_e,
-            out.d_dlnd[I_LN_E],
-            out.d_dln_t[I_LN_E],
-        );
-        model.ln_s_ad[k] = StarAdOrder1::from_dlnd_dlnt_00(
-            ln_s,
-            out.d_dlnd[I_LN_S],
-            out.d_dln_t[I_LN_S],
-        );
-
-        model.eos_res[k] = out.res;
-        model.eos_d_dlnd[k] = out.d_dlnd;
-        model.eos_d_dlnt[k] = out.d_dln_t;
+        store_eos_for_cell(model, k, &out)?;
     }
+    Ok(())
+}
+
+/// Validates and writes an [`EosEvalOutput`] into all cell-centered EOS fields
+/// of `model` at cell `k` (`store_eos_for_cell` in
+/// `star/private/micro.f90:428-545`).
+///
+/// # Errors
+/// Returns [`StarError::MicrophysicsError`] if any EOS output or derivative is
+/// non-finite, $T$ or $\rho$ exceeds $10^{15}$, or any thermodynamic quantity
+/// (`gamma1`, `grada`, `csound`, `chiT`, `chiRho`, `Cv`, `Cp`) is non-positive.
+pub(crate) fn store_eos_for_cell(
+    model: &mut StarModel,
+    k: usize,
+    out: &EosEvalOutput,
+) -> Result<(), StarError> {
+    let nz = model.nz;
+    let species = model.species;
+    let n_sp = nz * species;
+    if model.aux.eos_frac_pc.len() != nz {
+        model.aux.eos_frac_pc.resize(nz, 0.0);
+    }
+    if model.aux.latent_ddlnt.len() != nz {
+        model.aux.latent_ddlnt.resize(nz, 0.0);
+    }
+    if model.aux.latent_ddlnrho.len() != nz {
+        model.aux.latent_ddlnrho.resize(nz, 0.0);
+    }
+    if model.aux.dln_e_dxa_for_partials.len() != n_sp {
+        model.aux.dln_e_dxa_for_partials.resize(n_sp, 0.0);
+    }
+    if model.aux.dln_peos_dxa_for_partials.len() != n_sp {
+        model.aux.dln_peos_dxa_for_partials.resize(n_sp, 0.0);
+    }
+
+    for i in 0..NUM_EOS_BASIC_RESULTS {
+        if is_bad(out.res[i] + out.d_dlnd[i] + out.d_dln_t[i]) {
+            return Err(StarError::MicrophysicsError(format!(
+                "store_eos_for_cell: non-finite EOS result[{i}] at zone {k}"
+            )));
+        }
+    }
+
+    let t_k = model.t[k];
+    let rho_k = model.rho[k];
+    if t_k > 1.0e15 || rho_k > 1.0e15 {
+        return Err(StarError::MicrophysicsError(format!(
+            "store_eos_for_cell: T ({t_k}) or rho ({rho_k}) > 1e15 at zone {k}"
+        )));
+    }
+
+    let ln_pgas = out.res[I_LN_PGAS];
+    let pgas = flexmesa_math::exp(ln_pgas);
+    // `star/private/micro.f90:464`: `s% Prad(k) = crad * T*T*T*T / 3d0`.
+    let prad = ((((CRAD * t_k) * t_k) * t_k) * t_k) / 3.0;
+    let peos = prad + pgas;
+    let ln_peos = flexmesa_math::log(peos);
+
+    let d_lnpgas_dlnd = out.d_dlnd[I_LN_PGAS];
+    let d_lnpgas_dlnt = out.d_dln_t[I_LN_PGAS];
+    let d_lnpeos_dlnd = pgas * d_lnpgas_dlnd / peos;
+    let d_lnpeos_dlnt = (pgas * d_lnpgas_dlnt + 4.0 * prad) / peos;
+
+    let ln_e = out.res[I_LN_E];
+    let energy = flexmesa_math::exp(ln_e);
+    let ln_s = out.res[I_LN_S];
+    let entropy = flexmesa_math::exp(ln_s);
+    let grada = out.res[I_GRAD_AD];
+    let cv = out.res[I_CV];
+    let cp = out.res[I_CP];
+    let chi_rho = out.res[I_CHI_RHO];
+    let chi_t = out.res[I_CHI_T];
+    let gamma1 = out.res[I_GAMMA1];
+
+    let cs2 = gamma1 * peos / rho_k;
+    if cs2 < 0.0 {
+        return Err(StarError::MicrophysicsError(format!(
+            "eval_csound: negative cs^2 ({cs2}) at zone {k}"
+        )));
+    }
+    let csound = cs2.sqrt();
+    if gamma1 <= 0.0
+        || grada <= 0.0
+        || csound <= 0.0
+        || is_bad(csound)
+        || chi_t <= 0.0
+        || chi_rho <= 0.0
+        || cv <= 0.0
+        || cp <= 0.0
+    {
+        return Err(StarError::MicrophysicsError(format!(
+            concat!(
+                "store_eos_for_cell: non-positive thermodynamic state at zone {} ",
+                "(gamma1={}, grada={}, csound={}, chiT={}, chiRho={}, Cv={}, Cp={})"
+            ),
+            k, gamma1, grada, csound, chi_t, chi_rho, cv, cp
+        )));
+    }
+
+    // `star/private/micro.f90:480-481`.
+    let gam = model.z53bar[k]
+        * QE
+        * QE
+        * flexmesa_math::pow(
+            FOUR_THIRDS_PI * AVO * rho_k * model.zbar[k] / model.abar[k],
+            ONE_THIRD,
+        )
+        / (KERG * t_k);
+
+    model.pgas[k] = pgas;
+    model.ln_pgas[k] = ln_pgas;
+    model.prad[k] = prad;
+    model.peos[k] = peos;
+    model.ln_peos[k] = ln_peos;
+    model.energy[k] = energy;
+    model.ln_e[k] = ln_e;
+    model.entropy[k] = entropy;
+    model.ln_s[k] = ln_s;
+    model.grada[k] = grada;
+    model.cv[k] = cv;
+    model.cp[k] = cp;
+    model.chi_rho[k] = chi_rho;
+    model.chi_t[k] = chi_t;
+    model.gamma1[k] = gamma1;
+    model.gamma3[k] = out.res[I_GAMMA3];
+    model.eta[k] = out.res[I_ETA];
+    model.gam[k] = gam;
+    model.mu[k] = out.res[I_MU];
+    model.lnfree_e[k] = out.res[I_LN_FREE_E];
+    model.csound[k] = csound;
+
+    model.aux.eos_frac_pc[k] = out.res[I_FRAC_PC];
+    model.aux.latent_ddlnt[k] = out.res[I_LATENT_DDLNT];
+    model.aux.latent_ddlnrho[k] = out.res[I_LATENT_DDLNRHO];
+    let sp_base = k * species;
+    for j in 0..species {
+        let [d_lnpgas_dxa, d_lne_dxa] =
+            out.d_dxa.get(j).copied().unwrap_or([0.0, 0.0]);
+        model.aux.dln_e_dxa_for_partials[sp_base + j] = d_lne_dxa;
+        model.aux.dln_peos_dxa_for_partials[sp_base + j] =
+            pgas * d_lnpgas_dxa / peos;
+    }
+
+    model.ln_peos_ad[k] = StarAdOrder1::from_dlnd_dlnt_00(
+        ln_peos,
+        d_lnpeos_dlnd,
+        d_lnpeos_dlnt,
+    );
+    model.ln_e_ad[k] = StarAdOrder1::from_dlnd_dlnt_00(
+        ln_e,
+        out.d_dlnd[I_LN_E],
+        out.d_dln_t[I_LN_E],
+    );
+    model.ln_s_ad[k] = StarAdOrder1::from_dlnd_dlnt_00(
+        ln_s,
+        out.d_dlnd[I_LN_S],
+        out.d_dln_t[I_LN_S],
+    );
+
+    model.eos_res[k] = out.res;
+    model.eos_d_dlnd[k] = out.d_dlnd;
+    model.eos_d_dlnt[k] = out.d_dln_t;
     Ok(())
 }
 
@@ -590,12 +626,43 @@ pub fn do_neu(model: &mut StarModel) -> Result<(), StarError> {
 /// Returns [`StarError::InvalidInput`] if `use_other_kap` is active without a
 /// hook, or [`StarError::MicrophysicsError`] if opacity evaluation fails.
 pub fn do_kap(model: &mut StarModel) -> Result<(), StarError> {
+    if model.nz > 0 {
+        eval_kap_for_range(model, 0, model.nz - 1)?;
+    } else if model.controls.use_other_kap {
+        return Err(StarError::InvalidInput(String::from(
+            "use_other_kap = .true. requires an other_kap hook",
+        )));
+    }
+    get_tau(model);
+    Ok(())
+}
+
+/// Evaluates `do_kap_for_cell` (`star/private/micro.f90:548-664` and
+/// `star/private/kap_support.f90:245-307`) in parallel across cells
+/// `k_lo..=k_hi`, updating `opacity`, `d_opacity_dlnd`, `d_opacity_dlnt`, and
+/// `aux.kap_frac` in deterministic index order without touching `tau`.
+///
+/// Shared by [`do_kap`], `predictive_mix::eval_mixing_coeffs`, and
+/// `conv_premix::update_model`.
+///
+/// # Errors
+/// Returns [`StarError::InvalidInput`] if `use_other_kap` is active without a
+/// hook, or [`StarError::MicrophysicsError`] if composition or opacity
+/// evaluation fails.
+pub(crate) fn eval_kap_for_range(
+    model: &mut StarModel,
+    k_lo: usize,
+    k_hi: usize,
+) -> Result<(), StarError> {
     if model.controls.use_other_kap {
         return Err(StarError::InvalidInput(String::from(
             "use_other_kap = .true. requires an other_kap hook",
         )));
     }
     let nz = model.nz;
+    if nz == 0 || k_lo > k_hi || k_hi >= nz {
+        return Ok(());
+    }
     let species = model.species;
     if model.aux.kap_frac.len() != nz {
         model.aux.kap_frac.resize(nz, [0.0; 4]);
@@ -606,10 +673,37 @@ pub fn do_kap(model: &mut StarModel) -> Result<(), StarError> {
         .iter()
         .map(|&cid| catalog.get_by_id(cid).map_or(0, |n| n.z))
         .collect();
+    let iso_h12: Vec<bool> = model
+        .chem_id
+        .iter()
+        .map(|&cid| {
+            catalog.get_by_id(cid).is_some_and(|n| {
+                n.z == 1 && (n.z_plus_n == 1 || n.z_plus_n == 2)
+            })
+        })
+        .collect();
+    let iso_he34: Vec<bool> = model
+        .chem_id
+        .iter()
+        .map(|&cid| {
+            catalog.get_by_id(cid).is_some_and(|n| {
+                n.z == 2 && (n.z_plus_n == 3 || n.z_plus_n == 4)
+            })
+        })
+        .collect();
     let base_kap_factor = model.controls.opacity_factor;
     let use_simple_es = model.controls.use_simple_es_for_kap;
-    let use_start_comp = model.controls.use_starting_composition_for_kap
-        && model.xa_start.len() == nz * species;
+    // `micro.f90:589-595` reads `xa_start` and `zbar_start` whenever the control
+    // is set, with no fallback to the current composition.
+    let use_start_comp = model.controls.use_starting_composition_for_kap;
+    if use_start_comp && model.xa_start.len() != nz * species {
+        return Err(StarError::InvalidInput(format!(
+            "use_starting_composition_for_kap = .true. but xa_start holds {} \
+             values where nz * species = {}",
+            model.xa_start.len(),
+            nz * species
+        )));
+    }
     let opacity_max = model.controls.opacity_max;
     let opacity_min = model.controls.opacity_min;
     let min_off = model.controls.rsp.min_logt_for_opacity_factor_off;
@@ -617,147 +711,167 @@ pub fn do_kap(model: &mut StarModel) -> Result<(), StarError> {
     let max_on = model.controls.rsp.max_logt_for_opacity_factor_on;
     let max_off = model.controls.rsp.max_logt_for_opacity_factor_off;
     let kap_cfg = &model.kap_config;
+    let chem_id = &model.chem_id;
 
-    let kap_results: Result<Vec<(f64, f64, f64, [f64; 4])>, StarError> = (0..nz)
-        .into_par_iter()
-        .map(|k| {
-            let (xa_k, zbar_k, xh_k, xhe_k, z_k) = if use_start_comp {
-                let xs = &model.xa_start[k * species..(k + 1) * species];
-                let comp = get_composition_info(catalog, &model.chem_id, xs, true)
-                    .map_err(|e| {
-                        StarError::MicrophysicsError(format!(
-                            "get_kap starting composition error at zone {k}: {e}"
-                        ))
-                    })?;
-                let xh_s = comp.xh.clamp(0.0, 1.0);
-                let xhe_s = comp.xhe.clamp(0.0, 1.0);
-                let z_s = (1.0 - (xh_s + xhe_s)).clamp(0.0, 1.0);
-                (xs, comp.zbar, xh_s, xhe_s, z_s)
-            } else {
-                (
-                    &model.xa[k * species..(k + 1) * species],
-                    model.zbar[k],
-                    model.xh_mass[k],
-                    model.yhe_mass[k],
-                    model.z_mass[k],
-                )
-            };
+    let kap_results: Result<Vec<(f64, f64, f64, [f64; 4])>, StarError> =
+        (k_lo..=k_hi)
+            .into_par_iter()
+            .map(|k| {
+                let (xa_k, zbar_k, xh_k, xhe_k, z_k) = if use_start_comp {
+                    let xs = &model.xa_start[k * species..(k + 1) * species];
+                    let comp = get_composition_info(catalog, chem_id, xs, true)
+                        .map_err(|e| {
+                            StarError::MicrophysicsError(format!(
+                                "get_kap starting composition error at zone {k}: {e}"
+                            ))
+                        })?;
+                    let xh_s = comp.xh.clamp(0.0, 1.0);
+                    let xhe_s = comp.xhe.clamp(0.0, 1.0);
+                    let z_s = (1.0 - (xh_s + xhe_s)).clamp(0.0, 1.0);
+                    (xs, comp.zbar, xh_s, xhe_s, z_s)
+                } else {
+                    // `star/private/kap_support.f90:250` + `star_utils.f90:2029-2043`
+                    // (`get_XYZ` directly from `s% xa(:, k)` so partial EOS
+                    // updates in `predictive_mix` see trial `xa_mx` without
+                    // requiring `xh_mass`/`yhe_mass`/`z_mass` to be overwritten).
+                    let xa_slice = &model.xa[k * species..(k + 1) * species];
+                    let mut xh_s = 0.0;
+                    let mut xhe_s = 0.0;
+                    for (j, &xj) in xa_slice.iter().enumerate() {
+                        if iso_h12[j] {
+                            xh_s += xj;
+                        } else if iso_he34[j] {
+                            xhe_s += xj;
+                        }
+                    }
+                    let xh_c = xh_s.clamp(0.0, 1.0);
+                    let xhe_c = xhe_s.clamp(0.0, 1.0);
+                    let z_c = (1.0 - (xh_c + xhe_c)).clamp(0.0, 1.0);
+                    (xa_slice, model.zbar[k], xh_c, xhe_c, z_c)
+                };
 
-            let (mut xc, mut xn, mut xo, mut xne) = (0.0, 0.0, 0.0, 0.0);
-            for (&z, &xj) in iso_z.iter().zip(xa_k.iter()) {
-                match z {
-                    6 => xc += xj,
-                    7 => xn += xj,
-                    8 => xo += xj,
-                    10 => xne += xj,
-                    _ => {}
+                let (mut xc, mut xn, mut xo, mut xne) = (0.0, 0.0, 0.0, 0.0);
+                for (&z, &xj) in iso_z.iter().zip(xa_k.iter()) {
+                    match z {
+                        6 => xc += xj,
+                        7 => xn += xj,
+                        8 => xo += xj,
+                        10 => xne += xj,
+                        _ => {}
+                    }
                 }
-            }
-            // `star/private/kap_support.f90:251,276-288`: `eps = 1d-6`.
-            const EPS: f64 = 1.0e-6;
-            if !(-EPS..=1.0 + EPS).contains(&xc)
-                || !(-EPS..=1.0 + EPS).contains(&xn)
-                || !(-EPS..=1.0 + EPS).contains(&xo)
-                || !(-EPS..=1.0 + EPS).contains(&xne)
-                || xh_k < 0.0
-                || xhe_k < 0.0
-                || z_k < 0.0
-            {
-                return Err(StarError::MicrophysicsError(format!(
-                    concat!(
-                        "get_kap: invalid mass fractions at zone {} ",
-                        "(xh={}, xhe={}, z={}, xc={}, xn={}, xo={}, xne={})"
-                    ),
-                    k, xh_k, xhe_k, z_k, xc, xn, xo, xne
-                )));
-            }
-
-            let log_rho = model.lnd[k] / LN10;
-            let log_t = model.ln_t[k] / LN10;
-            let (kap_raw, dlnkap_dlnd, dlnkap_dlnt, kap_fracs) = if use_simple_es
-            {
-                (0.2 * (1.0 + xh_k), 0.0, 0.0, [0.0; 4])
-            } else {
-                let out = get_kap_results(
-                    kap_cfg,
-                    zbar_k,
-                    xh_k,
-                    z_k,
-                    xc,
-                    xn,
-                    xo,
-                    xne,
-                    log_rho,
-                    log_t,
-                    model.lnfree_e[k],
-                    model.eos_d_dlnd[k][I_LN_FREE_E],
-                    model.eos_d_dlnt[k][I_LN_FREE_E],
-                    model.eta[k],
-                    model.eos_d_dlnd[k][I_ETA],
-                    model.eos_d_dlnt[k][I_ETA],
-                )
-                .map_err(|e| {
-                    StarError::MicrophysicsError(format!(
-                        "get_kap_results failed at zone {k}: {e}"
-                    ))
-                })?;
-                (out.kap, out.dlnkap_dln_rho, out.dlnkap_dln_t, out.kap_fracs)
-            };
-
-            if is_bad(kap_raw) {
-                return Err(StarError::MicrophysicsError(format!(
-                    "do_kap_for_cell: non-finite opacity ({kap_raw}) at zone {k}"
-                )));
-            }
-
-            // `star/private/micro.f90:622-652`: piecewise-linear `log10_T` ramp
-            // on `opacity_factor` (held constant in `d_opacity_dlnT`) followed
-            // by `opacity_max` and `opacity_min` clamps.
-            let mut opacity_factor = base_kap_factor;
-            if min_off > 0.0 {
-                if log_t >= max_off || log_t <= min_off {
-                    opacity_factor = 1.0;
-                } else if log_t > max_on {
-                    opacity_factor = 1.0
-                        + (opacity_factor - 1.0) * (log_t - max_off)
-                            / (max_on - max_off);
-                } else if log_t < min_on {
-                    opacity_factor = 1.0
-                        + (opacity_factor - 1.0) * (log_t - min_off)
-                            / (min_on - min_off);
+                // `star/private/kap_support.f90:251,276-288`: `eps = 1d-6`.
+                const EPS: f64 = 1.0e-6;
+                if !(-EPS..=1.0 + EPS).contains(&xc)
+                    || !(-EPS..=1.0 + EPS).contains(&xn)
+                    || !(-EPS..=1.0 + EPS).contains(&xo)
+                    || !(-EPS..=1.0 + EPS).contains(&xne)
+                    || xh_k < 0.0
+                    || xhe_k < 0.0
+                    || z_k < 0.0
+                {
+                    return Err(StarError::MicrophysicsError(format!(
+                        concat!(
+                            "get_kap: invalid mass fractions at zone {} ",
+                            "(xh={}, xhe={}, z={}, xc={}, xn={}, xo={}, xne={})"
+                        ),
+                        k, xh_k, xhe_k, z_k, xc, xn, xo, xne
+                    )));
                 }
-            }
 
-            let mut kap = kap_raw * opacity_factor;
-            let mut dlnd = kap * dlnkap_dlnd;
-            let mut dlnt = kap * dlnkap_dlnt;
-            if opacity_max > 0.0 && kap > opacity_max {
-                kap = opacity_max;
-                dlnd = 0.0;
-                dlnt = 0.0;
-            }
-            if opacity_min > 0.0 && kap < opacity_min {
-                kap = opacity_min;
-                dlnd = 0.0;
-                dlnt = 0.0;
-            }
-            if is_bad(kap) {
-                return Err(StarError::MicrophysicsError(format!(
-                    "do_kap_for_cell: non-finite scaled opacity ({kap}) at zone {k}"
-                )));
-            }
-            Ok((kap, dlnd, dlnt, kap_fracs))
-        })
-        .collect();
+                let log_rho = model.lnd[k] / LN10;
+                let log_t = model.ln_t[k] / LN10;
+                let (kap_raw, dlnkap_dlnd, dlnkap_dlnt, kap_fracs) =
+                    if use_simple_es {
+                        (0.2 * (1.0 + xh_k), 0.0, 0.0, [0.0; 4])
+                    } else {
+                        let out = get_kap_results(
+                            kap_cfg,
+                            zbar_k,
+                            xh_k,
+                            z_k,
+                            xc,
+                            xn,
+                            xo,
+                            xne,
+                            log_rho,
+                            log_t,
+                            model.lnfree_e[k],
+                            model.eos_d_dlnd[k][I_LN_FREE_E],
+                            model.eos_d_dlnt[k][I_LN_FREE_E],
+                            model.eta[k],
+                            model.eos_d_dlnd[k][I_ETA],
+                            model.eos_d_dlnt[k][I_ETA],
+                        )
+                        .map_err(|e| {
+                            StarError::MicrophysicsError(format!(
+                                "get_kap_results failed at zone {k}: {e}"
+                            ))
+                        })?;
+                        (
+                            out.kap,
+                            out.dlnkap_dln_rho,
+                            out.dlnkap_dln_t,
+                            out.kap_fracs,
+                        )
+                    };
 
-    for (k, (kap, dlnd, dlnt, fracs)) in kap_results?.into_iter().enumerate() {
+                if is_bad(kap_raw) {
+                    return Err(StarError::MicrophysicsError(format!(
+                        "do_kap_for_cell: non-finite opacity ({kap_raw}) at zone {k}"
+                    )));
+                }
+
+                // `star/private/micro.f90:622-652`: piecewise-linear `log10_T` ramp
+                // on `opacity_factor` (held constant in `d_opacity_dlnT`) followed
+                // by `opacity_max` and `opacity_min` clamps.
+                let mut opacity_factor = base_kap_factor;
+                if min_off > 0.0 {
+                    if log_t >= max_off || log_t <= min_off {
+                        opacity_factor = 1.0;
+                    } else if log_t > max_on {
+                        opacity_factor = 1.0
+                            + (opacity_factor - 1.0) * (log_t - max_off)
+                                / (max_on - max_off);
+                    } else if log_t < min_on {
+                        opacity_factor = 1.0
+                            + (opacity_factor - 1.0) * (log_t - min_off)
+                                / (min_on - min_off);
+                    }
+                }
+
+                let mut kap = kap_raw * opacity_factor;
+                let mut dlnd = kap * dlnkap_dlnd;
+                let mut dlnt = kap * dlnkap_dlnt;
+                if opacity_max > 0.0 && kap > opacity_max {
+                    kap = opacity_max;
+                    dlnd = 0.0;
+                    dlnt = 0.0;
+                }
+                if opacity_min > 0.0 && kap < opacity_min {
+                    kap = opacity_min;
+                    dlnd = 0.0;
+                    dlnt = 0.0;
+                }
+                if is_bad(kap) {
+                    return Err(StarError::MicrophysicsError(format!(
+                        "do_kap_for_cell: non-finite scaled opacity ({kap}) at zone {k}"
+                    )));
+                }
+                Ok((kap, dlnd, dlnt, kap_fracs))
+            })
+            .collect();
+
+    for (offset, (kap, dlnd, dlnt, fracs)) in
+        kap_results?.into_iter().enumerate()
+    {
+        let k = k_lo + offset;
         model.opacity[k] = kap;
         model.d_opacity_dlnd[k] = dlnd;
         model.d_opacity_dlnt[k] = dlnt;
         model.aux.kap_frac[k] = fracs;
     }
 
-    get_tau(model);
     Ok(())
 }
 

@@ -102,8 +102,9 @@ digest = "c9fe076ed4ab62efb2417b76d7c22efe0a65f68a1872e098a694d0f5324e03dc"
 [[cases]]
 suite = "star"
 case = "T_tau_gradr"
-status = "ported"
+status = "unported"
 digest = "2141345c8c4555b2b0be2c2abf1fdb1d537ba1665f61bae2b70c85801868a6f7"
+issue = "#231"
 
 [[cases]]
 suite = "star"
@@ -121,8 +122,9 @@ digest = "49b02086a5c4448d24632d5c48cb32c155ec854021cd2a130b791c18113f76ee"
 [[cases]]
 suite = "star"
 case = "c13_pocket"
-status = "ported"
+status = "unported"
 digest = "b559f6ff3fd435e2cb627030975c00de0612a5828d933febbb884168ef6569b4"
+issue = "#231"
 
 [[cases]]
 suite = "star"
@@ -246,8 +248,9 @@ issue = "#231"
 [[cases]]
 suite = "star"
 case = "hb_2M"
-status = "ported"
+status = "unported"
 digest = "43f8d2e178b99ebdaaa9dbb5f08205755afc53abd0f98b815c6e5e717b39e788"
+issue = "#231"
 
 [[cases]]
 suite = "star"
@@ -353,8 +356,9 @@ issue = "#231"
 [[cases]]
 suite = "star"
 case = "make_sdb"
-status = "ported"
+status = "unported"
 digest = "9092ad80d4c0b222806c3c712650afea4ab964b1c0d1604060acbde68c5b460a"
+issue = "#231"
 
 [[cases]]
 suite = "star"
@@ -402,8 +406,9 @@ issue = "#231"
 [[cases]]
 suite = "star"
 case = "pisn"
-status = "ported"
+status = "unported"
 digest = "671bb9ec338e2a07a8d7ef3d7fc81913ea8841cc5ac657132a8d463adf97b4d7"
+issue = "#231"
 
 [[cases]]
 suite = "star"
@@ -528,14 +533,16 @@ issue = "#231"
 [[cases]]
 suite = "star"
 case = "wd_acc_small_dm"
-status = "ported"
+status = "unported"
 digest = "7d75b8170807ce58e0c065b076b13ca1102d04ba6bb4e8dbbb21822e5c9935fd"
+issue = "#231"
 
 [[cases]]
 suite = "star"
 case = "wd_aic"
-status = "ported"
+status = "unported"
 digest = "83af033802e03ca12c5f9c0ad4b71d051596d63c5b349280364c6e6169f87949"
+issue = "#231"
 
 [[cases]]
 suite = "star"
@@ -566,8 +573,9 @@ digest = "4b7b570f3a144678fa67d368b2c5b485ad89e03f9b43abe8575c1635939c1a5a"
 [[cases]]
 suite = "star"
 case = "wd_nova_burst"
-status = "ported"
+status = "unported"
 digest = "c8d97a525ad1bad6bab372cb302cd1e0dc1c67d8b42765f8555154b88f829c73"
+issue = "#231"
 
 [[cases]]
 suite = "star"

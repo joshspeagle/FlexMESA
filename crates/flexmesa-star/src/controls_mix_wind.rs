@@ -21,10 +21,10 @@ pub const NUM_XA_FUNCTION: usize = 9;
 pub const NUM_MESH_LOGX: usize = 9;
 
 /// One indexed convective overshooting parameter set (`1..=16` in
-/// `controls.defaults:2580-2660`).
+/// `controls.defaults:2702-2762`).
 #[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
 pub struct OvershootParamSet {
-    /// Scheme name (`""`, `"exponential"`, `"step"`, `"step+exponential"`, `"other"`).
+    /// Scheme name (`""`, `"none"`, `"exponential"`, `"step"`, `"other"`).
     pub scheme: String,
     /// Convection-zone nuclear burning criterion (`""`, `"burn_H"`, `"burn_He"`, `"burn_Z"`, `"nonburn"`, `"any"`).
     pub zone_type: String,
@@ -36,8 +36,6 @@ pub struct OvershootParamSet {
     pub f: f64,
     /// Step-back fraction $f_0$ inside the convective boundary (`overshoot_f0`).
     pub f0: f64,
-    /// Secondary exponential length parameter $f_2$ for `"step+exponential"` (`overshoot_f2`).
-    pub f2: f64,
     /// Additive diffusivity floor $D_0$ ($\mathrm{cm^2\,s^{-1}}$, `overshoot_D0`).
     pub d0: f64,
     /// Multiplicative boundary diffusivity scale $\Delta_0$ (`overshoot_Delta0`, `1.0` default).
@@ -128,10 +126,6 @@ pub struct MixWindControls {
     pub max_y_for_burn_z_mix_region: f64,
     /// Maximum $X$ across zone for `burn_He` classification (`max_X_for_burn_he_mix_region`).
     pub max_x_for_burn_he_mix_region: f64,
-    /// Péclet number above which full convective diffusivity is applied in overshooting (`peclet_function_full_on`).
-    pub peclet_function_full_on: f64,
-    /// Péclet number below which thermal diffusivity replaces convective diffusivity (`peclet_function_full_off`).
-    pub peclet_function_full_off: f64,
     /// Indexed predictive mixing parameter sets `1..=16`.
     pub predictive_sets: [PredictiveParamSet; NUM_PREDICTIVE_PARAM_SETS],
     /// Prevent fuel mass-fraction increases during `do_conv_premix` (`conv_premix_avoid_increase`).
@@ -568,10 +562,128 @@ pub struct MixWindControls {
     pub min_j_div_delta_j: f64,
     /// Zero rotational instability diffusivities inside convective zones (`skip_rotation_in_convection_zones`, `false` default).
     pub skip_rotation_in_convection_zones: bool,
-    /// Half-width cell count for triangular smoothing of $\nabla_L$ composition term (`num_cells_for_smooth_gradL_composition_term`, `3` default).
+    /// Half-width cell count for binomial smoothing of $\nabla_L$ composition term (`num_cells_for_smooth_gradL_composition_term`, `3` default).
     pub num_cells_for_smooth_gradl_composition_term: usize,
-    /// Half-width cell count for triangular smoothing of Brunt $B$ (`num_cells_for_smooth_brunt_B`, `2` default).
+    /// Minimum $|B|$ threshold for contiguous-region smoothing of $\nabla_L$ composition term (`threshold_for_smooth_gradL_composition_term`, `0.0` default).
+    pub threshold_for_smooth_gradl_composition_term: f64,
+    /// Half-width cell count for binomial smoothing of Brunt $B$ (`num_cells_for_smooth_brunt_B`, `2` default).
     pub num_cells_for_smooth_brunt_b: usize,
+    /// Minimum $|B|$ threshold for contiguous-region smoothing of Brunt $B$ (`threshold_for_smooth_brunt_B`, `0.0` default).
+    pub threshold_for_smooth_brunt_b: f64,
+    /// Minimum $|B|$ below which Brunt $B$ and $N^2$ are zeroed (`min_magnitude_brunt_B`, `-1e99` default).
+    pub min_magnitude_brunt_b: f64,
+    /// Overall multiplier on $N^2$ and $N_{\mu}^2$ (`brunt_N2_coefficient`, `1.0` default).
+    pub brunt_n2_coefficient: f64,
+    /// Re-evaluate `set_mixing_info` after each evolve step (`recalc_mix_info_after_evolve`, `false` default).
+    pub recalc_mix_info_after_evolve: bool,
+    /// Surface envelope mixing temperature limit in K (`T_mix_limit`, `0.0` default).
+    pub t_mix_limit: f64,
+    /// Enable minimum mixing floor below peak temperature (`set_min_D_mix_below_Tmax`, `false` default).
+    pub set_min_d_mix_below_tmax: bool,
+    /// Minimum diffusivity ($\mathrm{cm^2\,s^{-1}}$) below peak temperature (`min_D_mix_below_Tmax`, `1e3` default).
+    pub min_d_mix_below_tmax: f64,
+    /// Enable minimum mixing floor inside the H/He envelope (`set_min_D_mix_in_H_He`, `false` default).
+    pub set_min_d_mix_in_h_he: bool,
+    /// Minimum diffusivity ($\mathrm{cm^2\,s^{-1}}$) inside the H/He envelope (`min_D_mix_in_H_He`, `1e3` default).
+    pub min_d_mix_in_h_he: f64,
+    /// Bottom $q$ bound for zeroing $D_{\mathrm{mix}}$ (`D_mix_zero_region_bottom_q`, `1e99` default).
+    pub d_mix_zero_region_bottom_q: f64,
+    /// Top $q$ bound for zeroing $D_{\mathrm{mix}}$ (`D_mix_zero_region_top_q`, `-1e99` default).
+    pub d_mix_zero_region_top_q: f64,
+    /// Mass-fraction half-width for zeroing $D_{\mathrm{mix}}$ at the H/He crossover (`dq_D_mix_zero_at_H_He_crossover`, `-1.0` default).
+    pub dq_d_mix_zero_at_h_he_crossover: f64,
+    /// Mass-fraction half-width for zeroing $D_{\mathrm{mix}}$ at the H/C crossover (`dq_D_mix_zero_at_H_C_crossover`, `-1.0` default).
+    pub dq_d_mix_zero_at_h_c_crossover: f64,
+    /// Minimum convective-zone height in $H_P$ below which low-burning CZs are pruned (`prune_bad_cz_min_Hp_height`, `0.0` default).
+    pub prune_bad_cz_min_hp_height: f64,
+    /// Minimum $\log_{10}(\epsilon_{\mathrm{nuc}})$ exempting a thin CZ from pruning (`prune_bad_cz_min_log_eps_nuc`, `-99.0` default).
+    pub prune_bad_cz_min_log_eps_nuc: f64,
+    /// High-$T_c$ convective-boundary diffusion tapering floor (`sig_min_factor_for_high_Tcenter`, `0.01` default).
+    pub sig_min_factor_for_high_tcenter: f64,
+    /// Central temperature (K) at which high-$T_c$ $\sigma$ tapering is fully active (`Tcenter_min_for_sig_min_factor_full_on`, `3.2e9` default).
+    pub tcenter_min_for_sig_min_factor_full_on: f64,
+    /// Central temperature (K) below which high-$T_c$ $\sigma$ tapering is off (`Tcenter_max_for_sig_min_factor_full_off`, `2.8e9` default).
+    pub tcenter_max_for_sig_min_factor_full_off: f64,
+    /// Maximum mass distance ($M_\odot$) from a boundary affected by high-$T_c$ $\sigma$ tapering (`max_delta_m_to_bdy_for_sig_min_factor`, `0.5` default).
+    pub max_delta_m_to_bdy_for_sig_min_factor: f64,
+    /// Upper mass distance ($M_\odot$) for linear high-$T_c$ $\sigma$ ramp (`delta_m_upper_for_sig_min_factor`, `0.3` default).
+    pub delta_m_upper_for_sig_min_factor: f64,
+    /// Lower mass distance ($M_\odot$) for linear high-$T_c$ $\sigma$ ramp (`delta_m_lower_for_sig_min_factor`, `0.1` default).
+    pub delta_m_lower_for_sig_min_factor: f64,
+    /// Multiply $\nabla_{\mathrm{rad}}$ by $1 + dq/d\tau$ from the active $T(\tau)$ relation (`use_T_tau_gradr_factor`, `false` default).
+    pub use_t_tau_gradr_factor: bool,
+    /// Apply Eggleton alternative pressure scale height $\sqrt{P/G}/\rho$ cap (`alt_scale_height_flag`, `true` default).
+    pub alt_scale_height_flag: bool,
+    /// Multiply $\nabla_{\mathrm{rad}}$ by $f_{T,\mathrm{rot}}/f_{P,\mathrm{rot}}$ when rotating (`mlt_use_rotation_correction`, `true` default).
+    pub mlt_use_rotation_correction: bool,
+    /// Diffusivity threshold ($\mathrm{cm^2\,s^{-1}}$) below which MLT falls back to `NoMixing` (`remove_small_D_limit`, `1e-6` default).
+    pub remove_small_d_limit: f64,
+    /// Force the outermost face `k = 0` to `NoMixing` (`mlt_make_surface_no_mixing`, `false` default).
+    pub mlt_make_surface_no_mixing: bool,
+    /// Maximum $\log_{10} T_{\mathrm{start}}$ above which MLT is disabled (`max_logT_for_mlt`, `99.0` default).
+    pub max_logt_for_mlt: f64,
+    /// Suppress MLT beneath an outward supersonic shock (`no_MLT_below_shock`, `false` default).
+    pub no_mlt_below_shock: bool,
+    /// Maximum velocity ($\mathrm{km\,s^{-1}}$) allowing convection with hydro on (`max_v_for_convection`, `1e99` default).
+    pub max_v_for_convection: f64,
+    /// Maximum mass fraction $q$ allowing convection with hydro on (`max_q_for_convection_with_hydro_on`, `1e99` default).
+    pub max_q_for_convection_with_hydro_on: f64,
+    /// Maximum $|v|/c_s$ allowing convection with hydro on (`max_v_div_cs_for_convection`, `1e99` default).
+    pub max_v_div_cs_for_convection: f64,
+    /// Maximum $|\Delta u|/c_s$ allowing convection with `u_flag` on (`max_abs_du_div_cs_for_convection`, `0.03` default).
+    pub max_abs_du_div_cs_for_convection: f64,
+    /// Uniform blend weight $f \in [0, 1]$ replacing $\nabla_T = f\nabla_{\mathrm{ad}} + (1-f)\nabla_{\mathrm{rad}}$ (`mlt_gradT_fraction`, `-1.0` default = off).
+    pub mlt_gradt_fraction: f64,
+    /// Enable implicit superadiabaticity reduction (`use_superad_reduction`, `false` default).
+    pub use_superad_reduction: bool,
+    /// Eddington ratio threshold $\Gamma_{\mathrm{lim}}$ (`superad_reduction_Gamma_limit`, `0.5` default).
+    pub superad_reduction_gamma_limit: f64,
+    /// Scale factor on $\Gamma_{\mathrm{lim}}$ exceedance (`superad_reduction_Gamma_limit_scale`, `5.0` default).
+    pub superad_reduction_gamma_limit_scale: f64,
+    /// Scale factor on density-inversion threshold exceedance (`superad_reduction_Gamma_inv_scale`, `5.0` default).
+    pub superad_reduction_gamma_inv_scale: f64,
+    /// Smooth ramp width in $\nabla_T - \nabla_L$ (`superad_reduction_diff_grads_limit`, `1e-3` default).
+    pub superad_reduction_diff_grads_limit: f64,
+    /// Logistic upper cap on $\Gamma_{\mathrm{factor}}$ (`superad_reduction_limit`, `-1.0` default = off).
+    pub superad_reduction_limit: f64,
+    /// Enable MLT++ $\nabla_T$ excess reduction (`okay_to_reduce_gradT_excess`, `false` default).
+    pub okay_to_reduce_gradt_excess: bool,
+    /// Superadiabaticity threshold for MLT++ (`gradT_excess_f1`, `1e-4` default).
+    pub gradt_excess_f1: f64,
+    /// Full-boost $\nabla_T$ retention fraction for MLT++ (`gradT_excess_f2`, `1e-3` default).
+    pub gradt_excess_f2: f64,
+    /// Time-smoothing retention weight for `gradT_excess_alpha` (`gradT_excess_age_fraction`, `0.9` default).
+    pub gradt_excess_age_fraction: f64,
+    /// Maximum step-to-step change in `gradT_excess_alpha` (`gradT_excess_max_change`, `-1.0` default).
+    pub gradt_excess_max_change: f64,
+    /// Upper $\lambda$ threshold for MLT++ (`gradT_excess_lambda1`, `1.0` default).
+    pub gradt_excess_lambda1: f64,
+    /// Upper $\beta$ threshold for MLT++ (`gradT_excess_beta1`, `0.35` default).
+    pub gradt_excess_beta1: f64,
+    /// Lower $\lambda$ threshold for MLT++ (`gradT_excess_lambda2`, `0.5` default).
+    pub gradt_excess_lambda2: f64,
+    /// Lower $\beta$ threshold for MLT++ (`gradT_excess_beta2`, `0.25` default).
+    pub gradt_excess_beta2: f64,
+    /// Transition width $\Delta\lambda$ for MLT++ (`gradT_excess_dlambda`, `0.1` default).
+    pub gradt_excess_dlambda: f64,
+    /// Transition width $\Delta\beta$ for MLT++ (`gradT_excess_dbeta`, `0.1` default).
+    pub gradt_excess_dbeta: f64,
+    /// Maximum central $X(^1\mathrm{H})$ permitting MLT++ (`gradT_excess_max_center_h1`, `1.0` default).
+    pub gradt_excess_max_center_h1: f64,
+    /// Minimum central $X(^4\mathrm{He})$ permitting MLT++ (`gradT_excess_min_center_he4`, `0.0` default).
+    pub gradt_excess_min_center_he4: f64,
+    /// Maximum $\log_{10} T$ permitting MLT++ (`gradT_excess_max_logT`, `8.0` default).
+    pub gradt_excess_max_logt: f64,
+    /// Minimum $\log_{10} \tau$ for full MLT++ boost (`gradT_excess_min_log_tau_full_on`, `-99.0` default).
+    pub gradt_excess_min_log_tau_full_on: f64,
+    /// Maximum $\log_{10} \tau$ below which MLT++ is off (`gradT_excess_max_log_tau_full_off`, `-99.0` default).
+    pub gradt_excess_max_log_tau_full_off: f64,
+    /// Number of innermost cells forced non-turbulent in MLT/TDC (`TDC_num_innermost_cells_forced_nonturbulent`, `0` default).
+    pub tdc_num_innermost_cells_forced_nonturbulent: usize,
+    /// Number of outermost cells forced non-turbulent in MLT/TDC (`TDC_num_outermost_cells_forced_nonturbulent`, `0` default).
+    pub tdc_num_outermost_cells_forced_nonturbulent: usize,
+    /// Dump diagnostic snapshots during `do_conv_premix` (`conv_premix_dump_snapshots`, `false` default).
+    pub conv_premix_dump_snapshots: bool,
 
     // --- Upstream Wind Gates & RLO Wind (`winds.f90:104-285, 661-703`) ---
     /// Timestep in seconds above which wind scheme mass loss is at full strength (`mass_change_full_on_dt`, `1e-99` default).
@@ -694,8 +806,6 @@ impl Default for MixWindControls {
             burn_h_mix_region_logt: 6.7,
             max_y_for_burn_z_mix_region: 1.0e-4,
             max_x_for_burn_he_mix_region: 1.0e-4,
-            peclet_function_full_on: 0.0,
-            peclet_function_full_off: 0.0,
             predictive_sets: std::array::from_fn(|_| {
                 PredictiveParamSet::default()
             }),
@@ -915,7 +1025,66 @@ impl Default for MixWindControls {
             min_j_div_delta_j: 3.0,
             skip_rotation_in_convection_zones: false,
             num_cells_for_smooth_gradl_composition_term: 3,
+            threshold_for_smooth_gradl_composition_term: 0.0,
             num_cells_for_smooth_brunt_b: 2,
+            threshold_for_smooth_brunt_b: 0.0,
+            min_magnitude_brunt_b: -1.0e99,
+            brunt_n2_coefficient: 1.0,
+            recalc_mix_info_after_evolve: false,
+            t_mix_limit: 0.0,
+            set_min_d_mix_below_tmax: false,
+            min_d_mix_below_tmax: 1.0e3,
+            set_min_d_mix_in_h_he: false,
+            min_d_mix_in_h_he: 1.0e3,
+            d_mix_zero_region_bottom_q: 1.0e99,
+            d_mix_zero_region_top_q: -1.0e99,
+            dq_d_mix_zero_at_h_he_crossover: -1.0,
+            dq_d_mix_zero_at_h_c_crossover: -1.0,
+            prune_bad_cz_min_hp_height: 0.0,
+            prune_bad_cz_min_log_eps_nuc: -99.0,
+            sig_min_factor_for_high_tcenter: 0.01,
+            tcenter_min_for_sig_min_factor_full_on: 3.2e9,
+            tcenter_max_for_sig_min_factor_full_off: 2.8e9,
+            max_delta_m_to_bdy_for_sig_min_factor: 0.5,
+            delta_m_upper_for_sig_min_factor: 0.3,
+            delta_m_lower_for_sig_min_factor: 0.1,
+            use_t_tau_gradr_factor: false,
+            alt_scale_height_flag: true,
+            mlt_use_rotation_correction: true,
+            remove_small_d_limit: 1.0e-6,
+            mlt_make_surface_no_mixing: false,
+            max_logt_for_mlt: 99.0,
+            no_mlt_below_shock: false,
+            max_v_for_convection: 1.0e99,
+            max_q_for_convection_with_hydro_on: 1.0e99,
+            max_v_div_cs_for_convection: 1.0e99,
+            max_abs_du_div_cs_for_convection: 0.03,
+            mlt_gradt_fraction: -1.0,
+            use_superad_reduction: false,
+            superad_reduction_gamma_limit: 0.5,
+            superad_reduction_gamma_limit_scale: 5.0,
+            superad_reduction_gamma_inv_scale: 5.0,
+            superad_reduction_diff_grads_limit: 1.0e-3,
+            superad_reduction_limit: -1.0,
+            okay_to_reduce_gradt_excess: false,
+            gradt_excess_f1: 1.0e-4,
+            gradt_excess_f2: 1.0e-3,
+            gradt_excess_age_fraction: 0.9,
+            gradt_excess_max_change: -1.0,
+            gradt_excess_lambda1: 1.0,
+            gradt_excess_beta1: 0.35,
+            gradt_excess_lambda2: 0.5,
+            gradt_excess_beta2: 0.25,
+            gradt_excess_dlambda: 0.1,
+            gradt_excess_dbeta: 0.1,
+            gradt_excess_max_center_h1: 1.0,
+            gradt_excess_min_center_he4: 0.0,
+            gradt_excess_max_logt: 8.0,
+            gradt_excess_min_log_tau_full_on: -99.0,
+            gradt_excess_max_log_tau_full_off: -99.0,
+            tdc_num_innermost_cells_forced_nonturbulent: 0,
+            tdc_num_outermost_cells_forced_nonturbulent: 0,
+            conv_premix_dump_snapshots: false,
             mass_change_full_on_dt: 1.0e-99,
             mass_change_full_off_dt: 1.0e-99,
             max_t_center_for_any_mass_loss: 2.0e9,

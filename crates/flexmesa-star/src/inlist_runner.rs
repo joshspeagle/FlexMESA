@@ -492,7 +492,7 @@ pub fn run_inlist_stage_with_logs(
                     model,
                     model.dt,
                     &[],
-                );
+                )?;
                 model.save_start_values()?;
                 snapshot_step_start_extras(model);
             }

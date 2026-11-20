@@ -124,7 +124,7 @@ Generated mechanically by `flexmesa harness` from `benchmarks/history_harness/ca
 | `binary` | `jdot_ls_check` | `mesa_26_4_1` | `max_age|max_model_number` | diagnostic (2 controls ignored) | `max_age` | 223 | +0.08% | `star_1_mass`: 0.000e+00 | - | #160 | declared gap (#160) |
 | `binary` | `jdot_ml_check` | `mesa_26_4_1` | `max_age` | diagnostic (1 controls ignored) | `max_age` | 888 | +0.04% | `star_1_mass`: 7.409e-05 | - | #160 | declared gap (#160) |
 | `binary` | `star_plus_point_mass` | `mesa_26_4_1` | `xa_central_lower_limit` | diagnostic (2 controls ignored) | `xa_central_lower_limit(h1)` | 301 | +2.31% | `star_1_mass`: 2.097e-02 | 109 | #160 | declared gap (#160) |
-| `binary` | `star_plus_point_mass_explicit_mdot` | `mesa_26_4_1` | `xa_central_lower_limit` | diagnostic (2 controls ignored) | `xa_central_lower_limit(h1)` | 534 | -0.00% | `star_2_mass`: 5.731e-03 | 112 | #160 | declared gap (#160) |
+| `binary` | `star_plus_point_mass_explicit_mdot` | `mesa_26_4_1` | `xa_central_lower_limit` | diagnostic (2 controls ignored) | `xa_central_lower_limit` | 524 | +0.03% | `star_1_mass`: 7.844e-03 | 112 | #160 | declared gap (#160) |
 | `binary` | `wind_fed_bhhmxb` | `mesa_26_4_1` | `xa_central_lower_limit` | diagnostic (2 controls ignored) | `timeout` | 281 | -22.67% | `star_1_mass`: 2.087e+00 | 69 | #160 | declared gap (#160) |
 | `astero` | `astero_adipls` | `mesa_26_4_1` | `xa_central_lower_limit` | diagnostic (4 controls ignored) | `xa_central_lower_limit(h1)` | 465 | +0.01% | `log_L`: 5.429e-02 | 3 | #171 | declared gap (#171) |
 | `astero` | `astero_gyre` | `mesa_26_4_1` | `xa_central_lower_limit` | diagnostic (4 controls ignored) | `xa_central_lower_limit(h1)` | 465 | +0.01% | `log_L`: 5.429e-02 | 3 | #170 | declared gap (#170) |

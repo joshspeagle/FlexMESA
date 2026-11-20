@@ -269,6 +269,7 @@ const SUPPORTED_SCALAR_COLUMNS: &[&str] = &[
     "logQ_min",
     "num_zones",
     "num_retries",
+    "phase_of_evolution",
     "total_num_solver_iterations",
     "num_solver_iterations",
     "num_iters",
@@ -1255,6 +1256,9 @@ fn eval_scalar_column(
         "photosphere_cell_k" => {
             MesaCellValue::Int(ctx.phot.cell_k_1based as i64)
         }
+        "phase_of_evolution" => {
+            MesaCellValue::Int(i64::from(sh.phase_of_evolution))
+        }
 
         "star_age" | "star_age_yr" => MesaCellValue::Float(model.star_age),
         "log_star_age" => MesaCellValue::Float(safe_log10(model.star_age)),
@@ -1855,6 +1859,9 @@ fn eval_scalar_column(
         }
         "v_surf_km_s" => MesaCellValue::Float(v_surf * 1.0e-5),
         "v_surf" => MesaCellValue::Float(v_surf),
+        // Deferred upstream bug (#265): `star/private/history.f90:1956-1957`
+        // computes `v_surf / (R_phot_Rsun / kh_timescale_yr)` in mixed units
+        // (`cm/s * yr / Rsun`); reproduced verbatim until #169 decides.
         "v_surf_div_v_kh" => MesaCellValue::Float(if ctx.phot.r_rsun > 0.0 {
             v_surf / (ctx.phot.r_rsun / ctx.kh_timescale_yr.max(1.0e-99))
         } else {

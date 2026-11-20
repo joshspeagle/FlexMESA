@@ -4,7 +4,7 @@ r"""Upstream ``pgstar`` ``TRho_Profile``, ``Power``, ``Abundance``, ``Mixing``.
 Ports ``TRho_Profile`` (`star/private/pgstar_trho_profile.f90:56-445`),
 ``Power`` (`star/private/pgstar_power.f90:73-278`), ``Abundance``
 (`star/private/pgstar_abundance.f90:74-403`), and ``Mixing``
-(`star/private/pgstar_mixing_ds.f90:106-350`) strictly from saved
+(`star/private/pgstar_mixing_ds.f90:106-480`) strictly from saved
 ``profileN.data`` outputs and bundled MESA ``26.4.1`` ``plot_info/*.data``.
 """
 
@@ -589,11 +589,103 @@ def plot_abundance_profile(
     return fig, ax
 
 
+_NON_ROT_MIXING_SPECS: tuple[tuple[str, str, str], ...] = (
+    ("log_D_conv", r"$D_{\mathrm{conv}}$", style.OKABE_ITO["sky_blue"]),
+    ("log_D_leftover", r"$D_{\mathrm{left}}$", style.OKABE_ITO["blue"]),
+    ("log_D_ovr", r"$D_{\mathrm{ovr}}$", style.OKABE_ITO["orange"]),
+    ("log_D_semi", r"$D_{\mathrm{semi}}$", style.OKABE_ITO["bluish_green"]),
+    ("log_D_thrm", r"$D_{\mathrm{thrm}}$", style.OKABE_ITO["reddish_purple"]),
+    (
+        "log_D_rayleigh_taylor",
+        r"$D_{\mathrm{RTI}}$",
+        style.OKABE_ITO["vermilion"],
+    ),
+    ("log_D_minimum", r"$D_{\min}$", style.OKABE_ITO["grey"]),
+    ("log_D_anon", r"$D_{\mathrm{anon}}$", style.OKABE_ITO["black"]),
+)
+
+# Rotational diffusion curves from star/private/pgstar_mixing_ds.f90:372-439
+# paired with profile column names in star/private/profile_getval.f90:1585-1634.
+_ROT_MIXING_SPECS: tuple[tuple[tuple[str, ...], str, str, str], ...] = (
+    (
+        ("am_log_D_ST", "log_D_ST", "D_ST"),
+        r"$D_{\mathrm{ST}}$",
+        style.OKABE_ITO["vermilion"],
+        "-.",
+    ),
+    (
+        ("am_log_D_visc", "log_D_visc", "D_visc"),
+        r"$D_{\mathrm{visc}}$",
+        style.OKABE_ITO["grey"],
+        "--",
+    ),
+    (
+        ("am_log_D_DSI", "log_D_DSI", "D_DSI"),
+        r"$D_{\mathrm{DSI}}$",
+        style.OKABE_ITO["orange"],
+        "-.",
+    ),
+    (
+        ("am_log_D_SH", "log_D_SH", "D_SH"),
+        r"$D_{\mathrm{SH}}$",
+        style.OKABE_ITO["reddish_purple"],
+        "--",
+    ),
+    (
+        ("am_log_D_SSI", "log_D_SSI", "D_SSI"),
+        r"$D_{\mathrm{SSI}}$",
+        style.OKABE_ITO["yellow"],
+        "-.",
+    ),
+    (
+        ("am_log_D_ES", "log_D_ES", "D_ES"),
+        r"$D_{\mathrm{ES}}$",
+        style.OKABE_ITO["blue"],
+        "--",
+    ),
+    (
+        ("am_log_D_GSF", "log_D_GSF", "D_GSF"),
+        r"$D_{\mathrm{GSF}}$",
+        style.OKABE_ITO["bluish_green"],
+        "-.",
+    ),
+)
+
+_ROT_TOTAL_CANDIDATES: tuple[str, ...] = (
+    "log_D_mix_rotation",
+    "D_mix_rotation",
+    "log_D_omega",
+    "D_omega",
+)
+
+
+def _mask_log_d(arr: np.ndarray) -> np.ndarray:
+    """Mask non-finite or negligible ``log10(D) <= -20`` diffusivities."""
+    valid = _compare_panels.finite_mask(arr) & (arr > -20.0)
+    return np.where(valid, arr, np.nan)
+
+
+def _linear_to_masked_log_d(arr: np.ndarray) -> np.ndarray:
+    """Convert linear diffusivity to masked ``log10(D)`` with floor ``-20``."""
+    return _mask_log_d(safe_log10_pos(arr))
+
+
+def _find_diffusivity_col(
+    prof: compare.ProfileTable, candidates: tuple[str, ...]
+) -> tuple[str, bool] | None:
+    """Return ``(col_name, is_linear)`` for the first present column."""
+    for col in candidates:
+        if col in prof.columns:
+            return col, col.startswith("D_")
+    return None
+
+
 def plot_mixing_profile(
     profile_path: pathlib.Path | str,
     *,
     ref_profile_path: pathlib.Path | str | None = None,
     xaxis: str = "mass",
+    show_rotation_details: bool = True,
     ymin: float | None = None,
     ymax: float | None = None,
     ax: mpl_axes.Axes | None = None,
@@ -601,12 +693,22 @@ def plot_mixing_profile(
 ) -> tuple[mpl_figure.Figure, mpl_axes.Axes]:
     r"""Plot radial ``Mixing`` diffusivity (`pgstar_mixing_ds.f90`).
 
-    Implements ``MixDs_plot`` (`star/private/pgstar_mixing_ds.f90:106-350`).
+    Implements ``MixDs_plot`` (`star/private/pgstar_mixing_ds.f90:106-480`),
+    including non-rotational mixing regimes and rotational diffusion curves
+    (``D_ST``, ``D_visc``, ``D_DSI``, ``D_SH``, ``D_SSI``, ``D_ES``,
+    ``D_GSF``, and ``D_mix_rotation`` / ``log_D_omega`` per
+    `star/private/pgstar_mixing_ds.f90:342-441`) whenever those profile
+    columns are present.
 
     Args:
         profile_path: Path to ``profileN.data``.
         ref_profile_path: Optional MESA ``26.4.1`` ``profileN.data`` overlay.
         xaxis: Radial coordinate name (default ``"mass"``).
+        show_rotation_details: Plot individual rotational diffusivity curves
+            (``D_ST``, ``D_visc``, ``D_DSI``, ``D_SH``, ``D_SSI``, ``D_ES``,
+            ``D_GSF``) when present; if ``False`` and no aggregate rotation
+            column exists, plot their sum matching
+            `star/private/pgstar_mixing_ds.f90:354-368`.
         ymin: Optional lower $\log_{10}(D / \mathrm{cm^2\,s^{-1}})$ bound.
         ymax: Optional upper $\log_{10}(D / \mathrm{cm^2\,s^{-1}})$ bound.
         ax: Optional target ``matplotlib.axes.Axes``.
@@ -616,7 +718,16 @@ def plot_mixing_profile(
         Tuple ``(fig, ax)``.
     """
     prof = compare.load_profile_file(profile_path)
-    if "log_D_mix" not in prof.columns:
+    base_col = (
+        "log_D_mix"
+        if "log_D_mix" in prof.columns
+        else (
+            "log_D_mix_non_rotation"
+            if "log_D_mix_non_rotation" in prof.columns
+            else None
+        )
+    )
+    if base_col is None:
         raise KeyError("Mixing panel requires 'log_D_mix' in profileN.data")
     ref_prof = (
         compare.load_profile_file(ref_profile_path)
@@ -632,14 +743,14 @@ def plot_mixing_profile(
 
     standalone = ax is None
     fig, ax = style.init_ax(ax, "single", 0.80)
-    y_d = prof.columns["log_D_mix"]
+    y_d = prof.columns[base_col]
     _plot_support.plot_profile_pair(
         ax,
         prof,
         x_run,
         ref_prof,
         x_ref,
-        "log_D_mix",
+        base_col,
         label=r"$\log D_{\mathrm{mix}}$",
         color=style.OKABE_ITO["grey"],
         lw=1.2,
@@ -663,26 +774,95 @@ def plot_mixing_profile(
                     zorder=4,
                 )
 
-    for comp_col, comp_lbl, comp_hex in (
-        ("log_D_conv", r"$D_{\mathrm{conv}}$", style.OKABE_ITO["sky_blue"]),
-        ("log_D_ovr", r"$D_{\mathrm{ovr}}$", style.OKABE_ITO["orange"]),
-        ("log_D_semi", r"$D_{\mathrm{semi}}$", style.OKABE_ITO["bluish_green"]),
-        (
-            "log_D_thrm",
-            r"$D_{\mathrm{thrm}}$",
-            style.OKABE_ITO["reddish_purple"],
-        ),
-    ):
+    for comp_col, comp_lbl, comp_hex in _NON_ROT_MIXING_SPECS:
         if comp_col in prof.columns:
-            yc = prof.columns[comp_col]
-            _compare_panels._plot_series(
+            _plot_support.plot_profile_pair(
                 ax,
+                prof,
                 x_run,
-                np.where(yc > -20.0, yc, np.nan),
+                ref_prof,
+                x_ref,
+                comp_col,
                 label=comp_lbl,
                 color=comp_hex,
                 ls=":",
                 lw=1.35,
+                transform=_mask_log_d,
+            )
+
+    # Rotational diffusion curves (star/private/pgstar_mixing_ds.f90:342-441)
+    rot_total = _find_diffusivity_col(prof, _ROT_TOTAL_CANDIDATES)
+    drew_rot_total = False
+    if rot_total is not None:
+        r_col, r_lin = rot_total
+        drew_rot_total = _plot_support.plot_profile_pair(
+            ax,
+            prof,
+            x_run,
+            ref_prof,
+            x_ref,
+            r_col,
+            label=r"$D_{\mathrm{rot}}$",
+            color=style.OKABE_ITO["yellow"],
+            ls="-",
+            lw=1.55,
+            transform=_linear_to_masked_log_d if r_lin else _mask_log_d,
+        )
+
+    if show_rotation_details:
+        for cands, rot_lbl, rot_hex, rot_ls in _ROT_MIXING_SPECS:
+            found = _find_diffusivity_col(prof, cands)
+            if found is None:
+                continue
+            r_col, r_lin = found
+            _plot_support.plot_profile_pair(
+                ax,
+                prof,
+                x_run,
+                ref_prof,
+                x_ref,
+                r_col,
+                label=rot_lbl,
+                color=rot_hex,
+                ls=rot_ls,
+                lw=1.35,
+                transform=_linear_to_masked_log_d if r_lin else _mask_log_d,
+            )
+    elif not drew_rot_total:
+        # Aggregate rotational mixing D_DSI + D_SH + D_SSI + D_ES + D_GSF + D_ST
+        # matching star/private/pgstar_mixing_ds.f90:356-364 (excluding D_visc).
+        rot_sum = np.zeros(prof.num_zones, dtype=np.float64)
+        found_any = False
+        for cands, rot_lbl, _rot_hex, _rot_ls in _ROT_MIXING_SPECS:
+            if rot_lbl == r"$D_{\mathrm{visc}}$":
+                continue
+            found = _find_diffusivity_col(prof, cands)
+            if found is None:
+                continue
+            r_col, r_lin = found
+            raw_v = prof.columns[r_col]
+            if r_lin:
+                lin_v = np.where(
+                    _compare_panels.finite_mask(raw_v) & (raw_v > 0.0),
+                    raw_v,
+                    0.0,
+                )
+            else:
+                v_ok = _compare_panels.finite_mask(raw_v) & (raw_v > -20.0)
+                lin_v = np.where(
+                    v_ok, np.power(10.0, np.where(v_ok, raw_v, -30.0)), 0.0
+                )
+            rot_sum = rot_sum + lin_v
+            found_any = True
+        if found_any:
+            _compare_panels._plot_series(
+                ax,
+                x_run,
+                _linear_to_masked_log_d(rot_sum),
+                label=r"$D_{\mathrm{rot}}$",
+                color=style.OKABE_ITO["yellow"],
+                ls="-",
+                lw=1.55,
             )
 
     if ymin is not None or ymax is not None:
@@ -698,6 +878,6 @@ def plot_mixing_profile(
     _plot_support.set_profile_panel_title(
         ax, "Mixing Diffusivity", prof, ref_prof, standalone=standalone
     )
-    ax.legend(loc="best", frameon=False, fontsize=6.6, ncol=2)
+    ax.legend(loc="best", frameon=False, fontsize=6.4, ncol=2)
     _compare_panels.save_figure(fig, save_path)
     return fig, ax

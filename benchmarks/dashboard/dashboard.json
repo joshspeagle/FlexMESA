@@ -447,11 +447,11 @@
         "pct_ported": 0.0,
         "pct_verified": 0.0,
         "rust_lines": 0,
-        "python_jax_lines": 7761
+        "python_jax_lines": 12076
       }
     ],
     "plotting_panels": {
-      "flexmesa_plot_builders": 25,
+      "flexmesa_plot_builders": 34,
       "upstream_panel_modules": 46
     },
     "infrastructure_lines": {

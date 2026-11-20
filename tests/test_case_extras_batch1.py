@@ -399,20 +399,39 @@ def test_wd_aic_and_make_one_wd_hooks() -> None:
 
 
 def test_make_co_wd_ignition_diffusion_and_surface_cut_guards() -> None:
-    """`MakeCoWdStarExtras` checks `icc` burning and guards `#158` / `#153`."""
+    """`MakeCoWdStarExtras` checks `icc`, toggles diffusion, and guards
+    `#153`.
+    """
     msun = constants.MSUN
     co = star_extras.MakeCoWdStarExtras()
-    with pytest.raises(NotImplementedError, match="#158"):
-        co.extras_startup(
-            {"x_integer_ctrl": [3], "power_he_burn": 10.0}, restart=False
-        )
-    co.extras_startup({"x_integer_ctrl": [2]}, restart=False)
-    assert (
-        co.extras_check_model(
-            {"l_by_category_icc": 2.0e4, "x_integer_ctrl": [2]}
-        )[0]
-        == "terminate"
+    assert co.extras_startup(
+        {"x_integer_ctrl": [3], "power_he_burn": 10.0}, restart=False
+    ) == {"do_element_diffusion": True}
+    assert co.extras_startup(
+        {"x_integer_ctrl": [3], "power_he_burn": 2.0e3}, restart=False
+    ) == {"do_element_diffusion": False}
+    assert co.extras_check_model(
+        {
+            "l_by_category_icc": 1.0e2,
+            "x_integer_ctrl": [3],
+            "power_he_burn": 10.0,
+        }
+    ) == ("keep_going", {"do_element_diffusion": True})
+    res_term = co.extras_check_model(
+        {
+            "l_by_category_icc": 2.0e4,
+            "x_integer_ctrl": [3],
+            "power_he_burn": 5.0e3,
+        }
     )
+    assert isinstance(res_term, dict)
+    assert res_term["action"] == "terminate"
+    assert res_term["updates"] == {"do_element_diffusion": False}
+    co.extras_startup({"x_integer_ctrl": [2]}, restart=False)
+    res_part2 = co.extras_check_model(
+        {"l_by_category_icc": 2.0e4, "x_integer_ctrl": [2]}
+    )
+    assert isinstance(res_part2, tuple) and res_part2[0] == "terminate"
     with pytest.raises(NotImplementedError, match="#153"):
         co.extras_finish_step(
             {

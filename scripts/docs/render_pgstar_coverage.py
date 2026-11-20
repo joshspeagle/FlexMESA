@@ -60,7 +60,8 @@ def render_pgstar_coverage_markdown(repo_root: pathlib.Path) -> str:
         "`flexmesa.plotting.pgstar_coverage` (`#173`). All plots read strictly "
         "from saved `history.data`, `binary_history.data`, `profileN.data`, "
         "and MESA `26.4.1` `plot_info` files (`flexmesa plot compare` / "
-        "`profile` / `kipp` / `binary` / `track` / `grid`).",
+        "`profile` / `kipp` / `rti` / `binary` / `track` / `cmd` / "
+        "`text-summary` / `grid` / `watch`).",
         "",
         "The status of each family is assigned by hand in "
         "`flexmesa.plotting.pgstar_coverage` from a reading of the upstream "

@@ -932,7 +932,13 @@ pub fn eval_conv_and_mx_summary(model: &StarModel) -> ConvAndMixSummary {
             ..ConvAndMixSummary::default()
         };
     }
-    let cz_bdy_dq = eval_cz_bdy_dq(model);
+    let cz_bdy_dq = if model.aux.mixing.have_mixing_info
+        && model.aux.mixing.cz_bdy_dq.len() == nz
+    {
+        model.aux.mixing.cz_bdy_dq.clone()
+    } else {
+        eval_cz_bdy_dq(model)
+    };
 
     // 1. `set_cz_bdy_mass` (`mix_info.f90:472-517`, ordered center -> surface).
     let mut cz_regions: Vec<(f64, f64)> = Vec::new();

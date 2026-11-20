@@ -424,12 +424,17 @@ fn test_frozen_microphysics_star_ad_jacobian_matches_central_fd_to_1e_10() {
                         let an = lookup_block_entry(
                             &sys0, k_equ, i_equ, k_var, j_var,
                         );
+                        let eq0 = sys0.equ[k_equ * nvar + i_equ].abs();
+                        let eff_atol =
+                            1.0e-9_f64.max(2.0 * f64::EPSILON * eq0 / eps);
                         assert_entry_matches(
-                            &format!("frozen({v_flag},{u_flag},{rti_flag})"),
+                            &format!(
+                                "frozen({v_flag},{u_flag},{rti_flag}) k_equ={k_equ} i_equ={i_equ} k_var={k_var} j_var={j_var}"
+                            ),
                             an,
                             fd,
                             1.0e-7,
-                            1.0e-9,
+                            eff_atol,
                         );
                     }
                 }

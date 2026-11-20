@@ -215,6 +215,32 @@ impl InlistBundle {
             am_nu_gsf_factor, am_nu_st_factor, am_nu_visc_factor,
             am_sig_term_limit,
             adjust_j_fraction, min_q_for_adjust_j_lost, min_j_div_delta_j,
+            threshold_for_smooth_gradl_composition_term,
+            threshold_for_smooth_brunt_b, min_magnitude_brunt_b,
+            brunt_n2_coefficient, t_mix_limit, min_d_mix_below_tmax,
+            min_d_mix_in_h_he, d_mix_zero_region_bottom_q,
+            d_mix_zero_region_top_q, dq_d_mix_zero_at_h_he_crossover,
+            dq_d_mix_zero_at_h_c_crossover, prune_bad_cz_min_hp_height,
+            prune_bad_cz_min_log_eps_nuc, sig_min_factor_for_high_tcenter,
+            tcenter_min_for_sig_min_factor_full_on,
+            tcenter_max_for_sig_min_factor_full_off,
+            max_delta_m_to_bdy_for_sig_min_factor,
+            delta_m_upper_for_sig_min_factor,
+            delta_m_lower_for_sig_min_factor, remove_small_d_limit,
+            max_logt_for_mlt, max_v_for_convection,
+            max_q_for_convection_with_hydro_on, max_v_div_cs_for_convection,
+            max_abs_du_div_cs_for_convection, mlt_gradt_fraction,
+            superad_reduction_gamma_limit,
+            superad_reduction_gamma_limit_scale,
+            superad_reduction_gamma_inv_scale,
+            superad_reduction_diff_grads_limit, superad_reduction_limit,
+            gradt_excess_f1, gradt_excess_f2, gradt_excess_age_fraction,
+            gradt_excess_max_change, gradt_excess_lambda1, gradt_excess_beta1,
+            gradt_excess_lambda2, gradt_excess_beta2, gradt_excess_dlambda,
+            gradt_excess_dbeta, gradt_excess_max_center_h1,
+            gradt_excess_min_center_he4, gradt_excess_max_logt,
+            gradt_excess_min_log_tau_full_on,
+            gradt_excess_max_log_tau_full_off,
             mass_change_full_on_dt, mass_change_full_off_dt,
             max_t_center_for_any_mass_loss, max_t_center_for_full_mass_loss,
             wind_h_envelope_limit, wind_h_he_envelope_limit, wind_he_layer_limit,
@@ -234,9 +260,15 @@ impl InlistBundle {
         map_bools!("controls", ctrl, mw, [
             limit_overshoot_hp_using_size_of_convection_zone,
             conv_premix_avoid_increase, conv_premix_fix_pgas,
+            conv_premix_dump_snapshots,
             make_gradr_sticky_in_solver_iters,
-            set_min_d_mix, okay_to_remove_mixing_singleton,
+            set_min_d_mix, set_min_d_mix_below_tmax, set_min_d_mix_in_h_he,
+            recalc_mix_info_after_evolve, okay_to_remove_mixing_singleton,
             remove_embedded_semiconvection,
+            use_t_tau_gradr_factor, alt_scale_height_flag,
+            mlt_use_rotation_correction, mlt_make_surface_no_mixing,
+            no_mlt_below_shock, use_superad_reduction,
+            okay_to_reduce_gradt_excess,
             no_wind_if_no_rotation, use_accreted_material_j,
             premix_omega, do_adjust_j_lost, skip_rotation_in_convection_zones,
             accretion_dump_missing_metals_into_heaviest,
@@ -297,6 +329,18 @@ impl InlistBundle {
             "num_cells_for_smooth_brunt_b",
             0,
         )?;
+        ctrl.try_usize_into(
+            "controls",
+            &mut mw.tdc_num_innermost_cells_forced_nonturbulent,
+            "tdc_num_innermost_cells_forced_nonturbulent",
+            0,
+        )?;
+        ctrl.try_usize_into(
+            "controls",
+            &mut mw.tdc_num_outermost_cells_forced_nonturbulent,
+            "tdc_num_outermost_cells_forced_nonturbulent",
+            0,
+        )?;
 
         let n_ov = mw.overshoot_sets.len();
         apply_fortran_1based(ctrl, "overshoot_scheme", n_ov, |i, v| mw.overshoot_sets[i].scheme = v, val_str)?;
@@ -305,7 +349,7 @@ impl InlistBundle {
         apply_fortran_1based(ctrl, "overshoot_bdy_loc", n_ov, |i, v| mw.overshoot_sets[i].bdy_loc = v, val_str)?;
         for (idx, set) in mw.overshoot_sets.iter().enumerate() {
             let s_low = set.scheme.trim().to_ascii_lowercase();
-            if !matches!(s_low.as_str(), "" | "none" | "exponential" | "step" | "step+exponential") {
+            if !matches!(s_low.as_str(), "" | "none" | "exponential" | "step" | "other") {
                 return Err(StarError::InvalidInput(format!(
                     "unrecognized/unsupported '&controls::overshoot_scheme({})' = '{}'",
                     idx + 1,
@@ -355,6 +399,32 @@ impl InlistBundle {
         apply_fortran_1based(ctrl, "predictive_avoid_reversal", n_pr, |i, v| mw.predictive_sets[i].avoid_reversal = v, val_str)?;
         apply_fortran_1based(ctrl, "predictive_limit_ingestion", n_pr, |i, v| mw.predictive_sets[i].limit_ingestion = v, val_str)?;
         apply_fortran_1based(ctrl, "predictive_ingestion_factor", n_pr, |i, v| mw.predictive_sets[i].ingestion_factor = v, val_f64)?;
+        for (idx, set) in mw.predictive_sets.iter().enumerate() {
+            let zt = set.zone_type.trim();
+            if !matches!(zt, "" | "any" | "burn_H" | "burn_He" | "burn_Z" | "nonburn") {
+                return Err(StarError::InvalidInput(format!(
+                    "unrecognized '&controls::predictive_zone_type({})' = '{}'",
+                    idx + 1,
+                    set.zone_type
+                )));
+            }
+            let zl = set.zone_loc.trim();
+            if !matches!(zl, "" | "any" | "core" | "shell" | "surf") {
+                return Err(StarError::InvalidInput(format!(
+                    "unrecognized '&controls::predictive_zone_loc({})' = '{}'",
+                    idx + 1,
+                    set.zone_loc
+                )));
+            }
+            let bl = set.bdy_loc.trim();
+            if !matches!(bl, "" | "any" | "top" | "bottom") {
+                return Err(StarError::InvalidInput(format!(
+                    "unrecognized '&controls::predictive_bdy_loc({})' = '{}'",
+                    idx + 1,
+                    set.bdy_loc
+                )));
+            }
+        }
 
         const NUM_XA_FUNCTION: usize = crate::controls_mix_wind::NUM_XA_FUNCTION;
         if mw.xa_function_species.len() < NUM_XA_FUNCTION {

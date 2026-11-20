@@ -304,7 +304,7 @@ fn test_do_adjust_mass_step_and_eps_mdot_conserve_accreted_species_and_angular_m
 
 #[test]
 #[allow(clippy::too_many_lines)]
-fn test_overshoot_16_param_sets_and_peclet_damping_follow_mesa_rules() {
+fn test_overshoot_16_param_sets_and_brunt_b_cutoff_follow_mesa_rules() {
     let ctrl = StarControls {
         initial_mass: 4.0,
         zbase: 0.02,
@@ -343,13 +343,14 @@ fn test_overshoot_16_param_sets_and_peclet_damping_follow_mesa_rules() {
     m_short_circuit.controls.mix_wind.overshoot_sets[0].scheme =
         String::from("none");
 
-    let mut m_peclet = m_exp.clone();
-    m_peclet.controls.mix_wind.peclet_function_full_off = 1.0e30;
-    m_peclet.controls.mix_wind.peclet_function_full_on = 1.0e31;
+    let mut m_bmax = m_exp.clone();
+    m_bmax.controls.mix_wind.overshoot_brunt_b_max = 1.0e-6;
+    m_bmax.aux.mixing.unsmoothed_brunt_b.fill(1.0);
 
-    apply_overshooting(&mut m_exp, &boundaries, &[]);
-    apply_overshooting(&mut m_short_circuit, &boundaries, &[]);
-    apply_overshooting(&mut m_peclet, &boundaries, &[]);
+    apply_overshooting(&mut m_exp, &boundaries, &[]).expect("exp overshoot");
+    apply_overshooting(&mut m_short_circuit, &boundaries, &[])
+        .expect("short-circuit overshoot");
+    apply_overshooting(&mut m_bmax, &boundaries, &[]).expect("bmax overshoot");
 
     let n_ov_exp = m_exp
         .mixing_type
@@ -361,63 +362,36 @@ fn test_overshoot_16_param_sets_and_peclet_damping_follow_mesa_rules() {
         .iter()
         .filter(|&&mt| mt == MixingType::OvershootMixing)
         .count();
-    let n_ov_peclet = m_peclet
+    let n_ov_bmax = m_bmax
         .mixing_type
         .iter()
         .filter(|&&mt| mt == MixingType::OvershootMixing)
         .count();
 
     assert!(n_ov_exp > 0, "expected OvershootMixing zones from set 0");
-    let bdy = &boundaries[0];
-    let dr_cz = (base.r[bdy.cell_index] - base.r_center).max(0.0);
-    let alpha = base.controls.mixing_length_alpha.max(1.0e-6);
-    let hp_cb = if base
-        .controls
-        .mix_wind
-        .limit_overshoot_hp_using_size_of_convection_zone
-        && dr_cz > 0.0
-        && alpha * bdy.hp_cb > dr_cz
-    {
-        dr_cz / alpha
-    } else {
-        bdy.hp_cb
-    };
-    let r_ob = (bdy.r_cb - 0.005 * hp_cb).max(base.r[base.nz - 1]);
-    let mut k_ob = bdy.cell_index;
-    while k_ob + 1 < base.nz && base.r[k_ob] > r_ob && base.r[k_ob + 1] > r_ob {
-        k_ob += 1;
-    }
-    let k_next = (k_ob + 1).min(base.nz - 1);
-    let w_ob =
-        ((flexmesa_math::pow3(base.r[k_ob]) - flexmesa_math::pow3(r_ob)).abs()
-            / (flexmesa_math::pow3(base.r[k_ob])
-                - flexmesa_math::pow3(base.r[k_next]))
-            .abs()
-            .max(1.0e-99))
-        .clamp(0.0, 1.0);
-    let vc_ob = ((1.0 - w_ob) * base.mlt_vc[k_ob] + w_ob * base.mlt_vc[k_next])
-        .max(0.0);
-    let hp_anchor = (1.0 - w_ob) * base.scale_height[k_ob]
-        + w_ob * base.scale_height[k_next];
-    let d_ob =
-        (vc_ob * alpha * hp_anchor / 3.0).max(base.mlt_d[bdy.conv_bdy_loc]);
+    let hp_cb = flexmesa_star::eval_conv_bdy_hp(&base, 0)
+        .expect("eval_conv_bdy_hp");
+    let (_k_ob, r_ob, d_ob, _vc_ob) =
+        flexmesa_star::eval_over_bdy_params(&base, 0, 0.005)
+            .expect("eval_over_bdy_params");
     let ov_face_idx = m_exp
         .mixing_type
         .iter()
         .position(|&mt| mt == MixingType::OvershootMixing)
         .expect("first overshoot face");
-    let dr_ov = (m_exp.r[ov_face_idx] - r_ob).max(0.0);
+    let dr_ov = m_exp.r[ov_face_idx] - r_ob;
     let expected_d_ov =
         d_ob * flexmesa_math::exp(-2.0 * dr_ov / (0.02 * hp_cb));
     assert!(rel_err(m_exp.d_mix[ov_face_idx], expected_d_ov) < 1.0e-11);
     assert_eq!(n_ov_short, 0, "'none' in set 0 must short-circuit set 1");
     assert_eq!(
-        n_ov_peclet, 0,
-        "Pe <= peclet_function_full_off must damp overshoot diffusivity to zero"
+        n_ov_bmax, 0,
+        "unsmoothed_brunt_B > overshoot_brunt_B_max must stop overshooting"
     );
 }
 
 #[test]
+#[allow(clippy::too_many_lines)]
 fn test_conv_premix_predictive_mixing_and_extra_heat_in_evolve_step() {
     let ctrl = StarControls {
         initial_mass: 4.0,
@@ -438,16 +412,61 @@ fn test_conv_premix_predictive_mixing_and_extra_heat_in_evolve_step() {
         assert!((sum_x - 1.0).abs() < 1.0e-12);
     }
 
-    assert_eq!(apply_predictive_mixing_from_controls(&mut m_pm), 0);
+    assert_eq!(
+        apply_predictive_mixing_from_controls(&mut m_pm)
+            .expect("disabled predictive mixing returns 0"),
+        0
+    );
+    // Construct a realistic multi-cell H/He composition gradient inside the
+    // Schwarzschild core under the Ledoux criterion so `gradL` stabilizes a
+    // thick gradient zone above the convective core, and verbatim predictive
+    // mixing (`predictive_mix.f90`) expands the core outward under the
+    // trial-mixed Schwarzschild criterion.
+    m_pred.controls.do_conv_premix = false;
+    m_pred.controls.use_ledoux_criterion = true;
+    m_pred.controls.mix_wind.num_cells_for_smooth_gradl_composition_term = 0;
+    m_pred.controls.mix_wind.num_cells_for_smooth_brunt_b = 0;
     let (_, b_pred) = locate_convection_boundaries(&m_pred);
     let k_bdy = b_pred[0].conv_bdy_loc;
-    m_pred.gradr[k_bdy] = m_pred.grada[k_bdy] + 0.5;
-    m_pred.controls.mix_wind.predictive_sets[0].predictive_mix = true;
-    m_pred.controls.mix_wind.predictive_sets[0].superad_thresh = 0.0;
-    let extended = apply_predictive_mixing_from_controls(&mut m_pred);
+    let idx_h1 = m_pred
+        .iso_names
+        .iter()
+        .position(|s| s == "h1")
+        .expect("h1 present");
+    let idx_he4 = m_pred
+        .iso_names
+        .iter()
+        .position(|s| s == "he4")
+        .expect("he4 present");
+    let sp = m_pred.species;
+    let k_grad_top = (k_bdy + 30).min(m_pred.nz - 25);
+    let k_grad_bot = (k_grad_top + 12).min(m_pred.nz - 10);
+    let span = f64::from(
+        u32::try_from((k_grad_bot - k_grad_top).max(1)).expect("small span"),
+    );
+    for k in k_grad_top..m_pred.nz {
+        let frac = if k < k_grad_bot {
+            f64::from(u32::try_from(k - k_grad_top).expect("small offset"))
+                / span
+        } else {
+            1.0
+        };
+        let delta = (0.015 * frac).min(m_pred.xa[k * sp + idx_h1]);
+        m_pred.xa[k * sp + idx_h1] -= delta;
+        m_pred.xa[k * sp + idx_he4] += delta;
+    }
+    set_hydro_vars(&mut m_pred, false, false).expect("refresh before pred");
+    let ps0 = &mut m_pred.controls.mix_wind.predictive_sets[0];
+    ps0.predictive_mix = true;
+    ps0.zone_type = String::from("any");
+    ps0.zone_loc = String::from("core");
+    ps0.bdy_loc = String::from("top");
+    ps0.superad_thresh = 0.0;
+    let extended = apply_predictive_mixing_from_controls(&mut m_pred)
+        .expect("predictive mixing succeeds");
     assert!(
         extended > 0,
-        "predictive mixing must extend superadiabatic core"
+        "predictive mixing must extend Ledoux-stabilized convective core"
     );
     assert!(m_pred.d_mix.iter().all(|v| v.is_finite()));
     assert!(m_pred.conv_vel.iter().all(|v| v.is_finite()));

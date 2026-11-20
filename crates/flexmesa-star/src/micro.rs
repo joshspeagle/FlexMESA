@@ -341,6 +341,7 @@ pub(crate) fn store_eos_for_cell(
     k: usize,
     out: &EosEvalOutput,
 ) -> Result<(), StarError> {
+    ensure_eos_aux_len(model);
     for i in 0..NUM_EOS_BASIC_RESULTS {
         if is_bad(out.res[i] + out.d_dlnd[i] + out.d_dln_t[i]) {
             return Err(StarError::MicrophysicsError(format!(
@@ -686,14 +687,38 @@ pub fn do_neu(model: &mut StarModel) -> Result<(), StarError> {
 }
 
 /// Evaluates Rosseland mean opacity `opacity` (radiative + Compton + electron
-/// conduction, or simple electron scattering) in parallel over zones
-/// `k_lo..=k_hi` without recomputing full-star `tau` (`do_kap_for_cell` in
-/// `star/private/micro.f90:548-664` and `star/private/kap_support.f90:245-307`).
+/// conduction, or simple electron scattering) in parallel across all `nz` zones
+/// and integrates optical depth `tau` inward from the surface (`do_kap_for_cell`
+/// in `star/private/micro.f90:548-664` and `star/private/kap_support.f90:245-307`).
 ///
 /// # Errors
 /// Returns [`StarError::InvalidInput`] if `use_other_kap` is active without a
 /// hook, or [`StarError::MicrophysicsError`] if opacity evaluation fails.
-pub(crate) fn do_kap_range(
+pub fn do_kap(model: &mut StarModel) -> Result<(), StarError> {
+    if model.nz > 0 {
+        eval_kap_for_range(model, 0, model.nz - 1)?;
+    } else if model.controls.use_other_kap {
+        return Err(StarError::InvalidInput(String::from(
+            "use_other_kap = .true. requires an other_kap hook",
+        )));
+    }
+    get_tau(model);
+    Ok(())
+}
+
+/// Evaluates `do_kap_for_cell` (`star/private/micro.f90:548-664` and
+/// `star/private/kap_support.f90:245-307`) in parallel across cells
+/// `k_lo..=k_hi`, updating `opacity`, `d_opacity_dlnd`, `d_opacity_dlnt`, and
+/// `aux.kap_frac` in deterministic index order without touching `tau`.
+///
+/// Shared by [`do_kap`], `predictive_mix::eval_mixing_coeffs`,
+/// `conv_premix::update_model`, and `phase_separation::update_model_range`.
+///
+/// # Errors
+/// Returns [`StarError::InvalidInput`] if `use_other_kap` is active without a
+/// hook, or [`StarError::MicrophysicsError`] if composition or opacity
+/// evaluation fails.
+pub(crate) fn eval_kap_for_range(
     model: &mut StarModel,
     k_lo: usize,
     k_hi: usize,
@@ -718,6 +743,24 @@ pub(crate) fn do_kap_range(
         .iter()
         .map(|&cid| catalog.get_by_id(cid).map_or(0, |n| n.z))
         .collect();
+    let iso_h12: Vec<bool> = model
+        .chem_id
+        .iter()
+        .map(|&cid| {
+            catalog.get_by_id(cid).is_some_and(|n| {
+                n.z == 1 && (n.z_plus_n == 1 || n.z_plus_n == 2)
+            })
+        })
+        .collect();
+    let iso_he34: Vec<bool> = model
+        .chem_id
+        .iter()
+        .map(|&cid| {
+            catalog.get_by_id(cid).is_some_and(|n| {
+                n.z == 2 && (n.z_plus_n == 3 || n.z_plus_n == 4)
+            })
+        })
+        .collect();
     let base_kap_factor = model.controls.opacity_factor;
     let use_simple_es = model.controls.use_simple_es_for_kap;
     let use_start_comp = model.controls.use_starting_composition_for_kap
@@ -729,6 +772,7 @@ pub(crate) fn do_kap_range(
     let max_on = model.controls.rsp.max_logt_for_opacity_factor_on;
     let max_off = model.controls.rsp.max_logt_for_opacity_factor_off;
     let kap_cfg = &model.kap_config;
+    let chem_id = &model.chem_id;
 
     let kap_results: Result<Vec<(f64, f64, f64, [f64; 4])>, StarError> =
         (k_lo..=k_end)
@@ -736,25 +780,35 @@ pub(crate) fn do_kap_range(
             .map(|k| {
                 let (xa_k, zbar_k, xh_k, xhe_k, z_k) = if use_start_comp {
                     let xs = &model.xa_start[k * species..(k + 1) * species];
-                    let comp =
-                        get_composition_info(catalog, &model.chem_id, xs, true)
-                            .map_err(|e| {
-                                StarError::MicrophysicsError(format!(
-                                    "get_kap starting composition error at zone {k}: {e}"
-                                ))
-                            })?;
+                    let comp = get_composition_info(catalog, chem_id, xs, true)
+                        .map_err(|e| {
+                            StarError::MicrophysicsError(format!(
+                                "get_kap starting composition error at zone {k}: {e}"
+                            ))
+                        })?;
                     let xh_s = comp.xh.clamp(0.0, 1.0);
                     let xhe_s = comp.xhe.clamp(0.0, 1.0);
                     let z_s = (1.0 - (xh_s + xhe_s)).clamp(0.0, 1.0);
                     (xs, comp.zbar, xh_s, xhe_s, z_s)
                 } else {
-                    (
-                        &model.xa[k * species..(k + 1) * species],
-                        model.zbar[k],
-                        model.xh_mass[k],
-                        model.yhe_mass[k],
-                        model.z_mass[k],
-                    )
+                    // `star/private/kap_support.f90:250` + `star_utils.f90:2029-2043`
+                    // (`get_XYZ` directly from `s% xa(:, k)` so partial EOS
+                    // updates in `predictive_mix` see trial `xa_mx` without
+                    // requiring `xh_mass`/`yhe_mass`/`z_mass` to be overwritten).
+                    let xa_slice = &model.xa[k * species..(k + 1) * species];
+                    let mut xh_s = 0.0;
+                    let mut xhe_s = 0.0;
+                    for (j, &xj) in xa_slice.iter().enumerate() {
+                        if iso_h12[j] {
+                            xh_s += xj;
+                        } else if iso_he34[j] {
+                            xhe_s += xj;
+                        }
+                    }
+                    let xh_c = xh_s.clamp(0.0, 1.0);
+                    let xhe_c = xhe_s.clamp(0.0, 1.0);
+                    let z_c = (1.0 - (xh_c + xhe_c)).clamp(0.0, 1.0);
+                    (xa_slice, model.zbar[k], xh_c, xhe_c, z_c)
                 };
 
                 let (mut xc, mut xn, mut xo, mut xne) = (0.0, 0.0, 0.0, 0.0);
@@ -878,28 +932,6 @@ pub(crate) fn do_kap_range(
         model.d_opacity_dlnt[k] = dlnt;
         model.aux.kap_frac[k] = fracs;
     }
-    Ok(())
-}
-
-/// Evaluates Rosseland mean opacity `opacity` (radiative + Compton + electron
-/// conduction, or simple electron scattering) in parallel across all `nz` zones
-/// and integrates optical depth `tau` inward from the surface (`do_kap_for_cell`
-/// in `star/private/micro.f90:548-664` and `star/private/kap_support.f90:245-307`).
-///
-/// # Errors
-/// Returns [`StarError::InvalidInput`] if `use_other_kap` is active without a
-/// hook, or [`StarError::MicrophysicsError`] if opacity evaluation fails.
-pub fn do_kap(model: &mut StarModel) -> Result<(), StarError> {
-    if model.nz == 0 {
-        if model.controls.use_other_kap {
-            return Err(StarError::InvalidInput(String::from(
-                "use_other_kap = .true. requires an other_kap hook",
-            )));
-        }
-        return Ok(());
-    }
-    do_kap_range(model, 0, model.nz - 1)?;
-    get_tau(model);
     Ok(())
 }
 

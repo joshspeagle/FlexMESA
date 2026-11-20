@@ -1045,7 +1045,7 @@ fn test_phase_sep_brunt_b_mode_rejection_and_unconditional_solid_shutoff() {
 }
 
 #[test]
-fn test_diffusion_phase_sep_guards_energy_gating_and_photo_v25_restart() {
+fn test_diffusion_phase_sep_guards_energy_gating_and_photo_v26_restart() {
     // 1. Parse #156 controls strictly and reject unsupported op_mono / other hooks
     let inlist_ok = "
 &controls
@@ -1201,7 +1201,7 @@ fn test_diffusion_phase_sep_guards_energy_gating_and_photo_v25_restart() {
         em.aux.eps_diffusion[k]
     );
 
-    // 8. PrimaryStateBuffer rollback, .mod header, and FMPHOTO2 v25 round-trip
+    // 8. PrimaryStateBuffer rollback, .mod header, and FMPHOTO2 v26 round-trip
     let mut wd = build_wd_phase_sep_model(false);
     do_phase_separation_step(&mut wd, 1.0e13).expect("wd phase sep");
     let saved_cryst = wd.aux.crystal_core_boundary_mass;
@@ -1235,9 +1235,9 @@ fn test_diffusion_phase_sep_guards_energy_gating_and_photo_v25_restart() {
         0.0,
     );
 
-    assert_eq!(PHOTO_FORMAT_VERSION, 25);
+    assert_eq!(PHOTO_FORMAT_VERSION, 26);
     let photo = write_photo_bytes(&wd);
-    let wd_photo = load_photo_bytes(&photo).expect("load_photo_bytes v25");
+    let wd_photo = load_photo_bytes(&photo).expect("load_photo_bytes v26");
     assert_eq!(
         wd_photo.aux.crystal_core_boundary_mass.to_bits(),
         saved_cryst.to_bits()

@@ -15,7 +15,9 @@ use flexmesa_eos::{eos_dt_get, I_LN_PGAS, I_PHASE};
 use flexmesa_utils::is_bad;
 
 use crate::job_controls::StarError;
-use crate::micro::{builtin_helm_table, do_eos_fix_pgas_range, do_kap_range};
+use crate::micro::{
+    builtin_helm_table, do_eos_fix_pgas_range, eval_kap_for_range,
+};
 use crate::model::StarModel;
 use crate::star_ad::{StarAdExt, StarAdOrder1};
 
@@ -472,7 +474,7 @@ fn update_model_range(
 
     // 2. Opacities over kc_t..=kc_hi via shared `micro.rs` helper
     //    (`phase_separation.f90:365-370`, `micro.f90:548-664`).
-    do_kap_range(model, kc_t, kc_hi)?;
+    eval_kap_for_range(model, kc_t, kc_hi)?;
 
     // 3. Unsmoothed Brunt-B (Brassard finite-difference EOS at face (rho, T),
     //    matching `phase_separation.f90:373-383` and `brunt.f90:231-315`).

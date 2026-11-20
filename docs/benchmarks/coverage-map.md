@@ -9,8 +9,8 @@ Progress is tracked by **upstream MESA `26.4.1` lines promoted to verified statu
 
 | Denominator Scope | Upstream Lines | Ported (Unverified) | Verified Against MESA `26.4.1` | Notes |
 | :--- | ---: | ---: | ---: | :--- |
-| Core engines (`star` + `star_data` + `binary` + `astero`) | 144,952 | 27,886 (19.2%) | 4,971 (3.4%) | Excludes stub (`8,904`) and partial (`80,328`) lines |
-| All `26` MESA `26.4.1` modules (incl. `gyre`, `adipls`, `stella`, `plotting`) | 497,703 | 31,446 (6.3%) | 4,971 (1.0%) | Full `v0.1.0` target denominator (`notes/SCOPE.md`) |
+| Core engines (`star` + `star_data` + `binary` + `astero`) | 144,952 | 32,910 (22.7%) | 4,971 (3.4%) | Excludes stub (`6,378`) and partial (`77,830`) lines |
+| All `26` MESA `26.4.1` modules (incl. `gyre`, `adipls`, `stella`, `plotting`) | 497,703 | 36,470 (7.3%) | 4,971 (1.0%) | Full `v0.1.0` target denominator (`notes/SCOPE.md`) |
 | Pre-rebaseline non-plotting `star`+`binary`+`astero` audit (`0b2e6bb`) | 134,940 | 21,493 `PORTED` (16%) / 66,685 `PARTIAL` (49%) | unverified pre-audit | `17%` `STUB` (23,259 LOC), `17%` `ABSENT` (23,503 LOC) |
 | `math` strict-mode scalar vectors (`#165`) | 474,062 vectors | math: 403,258/403,258 CRMATH 0 ULP (70,804 libm <= 1 ULP); 304,567/304,635 probed module hex 0 ULP (5 complete, 14 non-math probed) | gated in CI by scripts/check_strict_determinism.py (x86_64 vs aarch64, 1 vs 4 threads; 474,062 math vectors + uncapped star/1.3M_ms_high_Z + binary/jdot_gr_check run with unsupported controls ignored; a bit-identity check, not a comparison with MESA) | 14 / 23 remaining module suites marked verified in manifest |
 | End-to-end `test_suite` cases | 106 cases | 106 in manifest | **0 / 106** passing | 102 declared gaps, 4 `no_reference_yet` |
@@ -19,7 +19,7 @@ Progress is tracked by **upstream MESA `26.4.1` lines promoted to verified statu
 
 | Module | Upstream LOC | Absent | Stub | Partial | Ported (Unverified) | Verified LOC | % Ported | % Verified |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| `star` | 120,509 | 17,759 | 8,904 | 63,170 | 25,705 | 4,971 | 25.5% | 4.1% |
+| `star` | 120,509 | 17,759 | 6,378 | 60,672 | 30,729 | 4,971 | 29.6% | 4.1% |
 | `star_data` | 4,870 | 34 | 0 | 4,836 | 0 | 0 | 0.0% | 0.0% |
 | `binary` | 11,638 | 2,885 | 0 | 6,572 | 2,181 | 0 | 18.7% | 0.0% |
 | `astero` | 7,935 | 2,185 | 0 | 5,750 | 0 | 0 | 0.0% | 0.0% |
@@ -45,16 +45,16 @@ Progress is tracked by **upstream MESA `26.4.1` lines promoted to verified statu
 | `adipls` | 30,923 | 30,923 | 0 | 0 | 0 | 0 | 0.0% | 0.0% |
 | `stella` | 62,117 | 62,117 | 0 | 0 | 0 | 0 | 0.0% | 0.0% |
 | `plotting` | 35,732 | 35,732 | 0 | 0 | 0 | 0 | 0.0% | 0.0% |
-| **Core Engine Subtotal** | **144,952** | **22,863** | **8,904** | **80,328** | **27,886** | **4,971** | **22.7%** | **3.4%** |
-| **All 26 Modules Total** | **497,703** | **247,888** | **8,904** | **204,494** | **31,446** | **4,971** | **7.3%** | **1.0%** |
+| **Core Engine Subtotal** | **144,952** | **22,863** | **6,378** | **77,830** | **32,910** | **4,971** | **26.1%** | **3.4%** |
+| **All 26 Modules Total** | **497,703** | **247,888** | **6,378** | **201,996** | **36,470** | **4,971** | **8.3%** | **1.0%** |
 
 ## Namelist Controls & Defaults Alignment
 
-Compared against MESA `26.4.1` `.defaults` schemas, **528 / 1,444** `&controls` keys (`36.6%`) and **361 / 455** `&star_job` keys (`79.3%`) are currently unimplemented (details in [`notes/audit/defaults_diff_26_4_1.md`](https://github.com/joshspeagle/FlexMESA/blob/main/notes/audit/defaults_diff_26_4_1.md); loud rejection of unsupported keys is tracked in `#147` and default alignment in `#149`):
+Compared against MESA `26.4.1` `.defaults` schemas, **469 / 1,444** `&controls` keys (`32.5%`) and **361 / 455** `&star_job` keys (`79.3%`) are currently unimplemented (details in [`notes/audit/defaults_diff_26_4_1.md`](https://github.com/joshspeagle/FlexMESA/blob/main/notes/audit/defaults_diff_26_4_1.md); loud rejection of unsupported keys is tracked in `#147` and default alignment in `#149`):
 
 | Namelist | Upstream Scalars | Matched in FlexMESA | Defaults Agree | Value Mismatch | Disabled (`none`/limit) | Non-Scalar Rust | Unimplemented |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| `star &controls` | 1,444 | 899 | 899 | 0 | 0 | 17 | 528 |
+| `star &controls` | 1,444 | 958 | 958 | 0 | 0 | 17 | 469 |
 | `star &star_job` | 455 | 93 | 93 | 0 | 0 | 1 | 361 |
 | `binary &binary_controls + &binary_job` | 209 | 145 | 145 | 0 | 0 | 1 | 63 |
 | `astero &astero_search_controls` | 150 | 75 | 75 | 0 | 0 | 1 | 74 |
@@ -67,7 +67,7 @@ Compared against MESA `26.4.1` `.defaults` schemas, **528 / 1,444** `&controls` 
 - **Silent Inlist Drops & Default Mismatches (`#147`, `#149`)**: Existing parsers silently ignore unimplemented namelist keys or map unknown option strings (`mlt_option`, `atm_option`, `screening_mode`) onto defaults instead of failing loudly.
 - **In-Library Per-Case Extras Removed (`#148`)**: In-library `Tier1..Tier5` test-case extras and fabricated ZAMS/gravity/opacity overrides have been deleted from library crates; upstream `run_star_extras.f90` and `run_binary_extras.f90` callbacks now live strictly in `tests/case_extras/`.
 - **Solver Control, Remeshing, Mixing & Transport (`#152`-`#162`)**: Upstream Newton retry scheduling, `mesh_adjust.f90` zoning, convective premixing, predictive mixing, Burgers diffusion, monochromatic radiative levitation (`op_radacc`), shellular rotation variables, and coupled binary stepping remain partial or unverified.
-- **Bundled Codes & Plotting (`#170`-`#173`)**: Upstream `GYRE`, `ADIPLS`, and `STELLA` (`148,748` combined upstream LOC) are currently unported (`eval_linear_oscillation_modes` uses an internal adiabatic BVP stub), and `flexmesa.plotting` provides `25` Matplotlib builders against `46` upstream `PGSTAR`/`PGBINARY` panel modules.
+- **Bundled Codes & Plotting (`#170`-`#173`)**: Upstream `GYRE`, `ADIPLS`, and `STELLA` (`148,748` combined upstream LOC) are currently unported (`eval_linear_oscillation_modes` uses an internal adiabatic BVP stub), and `flexmesa.plotting` provides `34` Matplotlib builders against `46` upstream `PGSTAR`/`PGBINARY` panel modules.
 - **Derived JAX Engine Twins (`#166`)**: Python/JAX kernels under `src/flexmesa/{star,binary,astero}` are frozen from new engine feature additions until canonical Safe Rust `strict` mode clears the MESA `26.4.1` trajectory harness.
 
 ## Reading `port_manifest.toml` in Python

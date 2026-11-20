@@ -1085,22 +1085,9 @@ fn test_phase_separation_co_and_one_match_mesa_26_4_1_oracles() {
                 1.0e-12,
             );
             if k > 0 {
-                // `hydro_vars.rs::do1_mlt_2` currently interpolates cell `Prad`
-                // linearly instead of upstream `get_Prad_face = crad * T_face^4 / 3`
-                // (`star_utils.f90:3838-3843`; tracked in #291). Factor out
-                // that exact `Prad` ratio here so `P_face * kap_face * L / (16 pi c G m)`
-                // from `phase_separation::update_model_range` is checked to 1e-11
-                // against MESA 26.4.1 without loosening the tolerance.
-                let (alfa, beta) = model.get_face_weights(k);
-                let t0 = model.t[k];
-                let tm1 = model.t[k - 1];
-                let t_face = alfa * t0 + beta * tm1;
-                let prad_ratio = (alfa * flexmesa_math::pow4(t0)
-                    + beta * flexmesa_math::pow4(tm1))
-                    / flexmesa_math::pow4(t_face);
                 assert_close(
-                    &format!("ps/{cid}/gradr_final[{k1}] (adj #291)"),
-                    model.gradr[k] * prad_ratio,
+                    &format!("ps/{cid}/gradr_final[{k1}]"),
+                    model.gradr[k],
                     oracle_val(
                         &oracles,
                         "phase_sep",

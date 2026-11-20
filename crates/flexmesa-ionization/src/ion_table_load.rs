@@ -8,11 +8,20 @@
 //!   tables (`ion_tables_full.bin`), containing exact upstream MESA not-a-knot
 //!   bicubic spline coefficients across $(Z, X)$.
 //! - [`IonTableGrid::from_data_dir`]: Full 22-table ASCII loader (`ion_*.data`)
-//!   that builds global $175 \times 102$ not-a-knot bicubic splines via
-//!   [`flexmesa_interp2d::interp_mkbicub_db`] and sanitizes non-finite
-//!   higher-order derivatives (`Check_ion_Interpolation_Data`).
+//!   that validates every table header against upstream `ion_read_sizes` and
+//!   `Load1_ion_Table` checks, builds global $175 \times 102$ not-a-knot
+//!   bicubic splines via [`flexmesa_interp2d::interp_mkbicub_db`], and
+//!   sanitizes non-finite higher-order derivatives
+//!   (`Check_ion_Interpolation_Data`).
+//!
+//! The embedded `ion_tables_full.bin` (`FMION001`) is rebuilt from the MESA
+//! `26.4.1` ASCII tables by `scripts/data/build_ion_tables.py`, which also
+//! writes the provenance manifest `ion_tables_full.toml` (SHA-256, source
+//! tables, `Z = 1` suffix, and grid bounds) read by
+//! [`IonTableGrid::try_from_embedded_full`].
 
 use std::fs;
+use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
@@ -34,8 +43,26 @@ use crate::{
 
 const ION_TABLES_FULL_BIN: &[u8] =
     include_bytes!("../data/ion_tables_full.bin");
+const ION_TABLES_FULL_MANIFEST: &str =
+    include_str!("../data/ion_tables_full.toml");
+const ION_TABLES_FULL_NAME: &str = "ion_tables_full.bin";
+const ION_TABLES_MANIFEST_NAME: &str = "ion_tables_full.toml";
+const FMION_MAGIC: &[u8; 8] = b"FMION001";
+const FMION_HEADER_BYTES: usize = 24;
 const ION_CACHE_MAGIC: &[u8; 8] = b"FMIONCA1";
 const ION_CACHE_BUILDER_VERSION: u32 = 1;
+
+/// Minimum accepted `ion_*.data` format version (`min_version = 49`,
+/// `ionization/public/ionization_def.f90:91`).
+pub const ION_MIN_VERSION: i64 = 49;
+
+/// Header comparison tolerance of `Load1_ion_Table`.
+///
+/// Upstream declares `real(dp), parameter :: tiny = 1e-6`
+/// (`ionization/private/ion_tables_load.f90:236`); the default-real literal
+/// `1e-6` is rounded to single precision before widening, giving
+/// `f64::from(1.0e-6_f32)`.
+pub const ION_HEADER_TINY: f64 = 9.999_999_974_752_427e-7;
 
 /// Precomputed 4D $(Z, X, \log Q, \log T)$ ionization spline grid.
 #[derive(Debug, Clone)]
@@ -115,8 +142,26 @@ impl IonTableGrid {
         let source_sha = if let Some(dir) = ascii_dir {
             compute_ion_dir_sha256(dir, "ion", "")?
         } else {
-            compute_sha256_bytes(ION_TABLES_FULL_BIN)
+            let sha = compute_sha256_bytes(ION_TABLES_FULL_BIN);
+            let manifest = embedded_ion_manifest()?;
+            if sha != manifest.sha256 {
+                return Err(IonError::TableParse {
+                    path: ION_TABLES_FULL_NAME.to_string(),
+                    detail: format!(
+                        "SHA-256 {sha} differs from {} recorded in {}",
+                        manifest.sha256, ION_TABLES_MANIFEST_NAME
+                    ),
+                });
+            }
+            sha
         };
+        // Upstream checks every table's text header on each load before it
+        // looks at its cache (`ionization/private/ion_tables_load.f90:54-69,
+        // 259-292`), so a cache entry cannot stand in for a directory whose
+        // headers fail those checks.
+        if let Some(dir) = ascii_dir {
+            read_and_validate_ion_headers(dir, "ion", "")?;
+        }
         let cache_file =
             cache_root.map(|root| ion_cache_path(root, &source_sha));
         if let Some(ref cp) = cache_file {
@@ -153,23 +198,48 @@ impl IonTableGrid {
     /// Construct the full $175 \times 102$ spline grid from the embedded compact
     /// binary `ion_tables_full.bin`, returning typed errors on corruption.
     ///
+    /// Grid sizes and bounds come from the provenance manifest
+    /// `ion_tables_full.toml` written by `scripts/data/build_ion_tables.py`
+    /// from the MESA `26.4.1` ASCII table headers, and are cross-checked
+    /// against the `FMION001` header.
+    ///
     /// # Errors
-    /// Returns [`IonError`] if the embedded payload is malformed.
+    /// Returns [`IonError`] if the embedded payload or manifest is malformed.
+    pub fn try_from_embedded_full() -> Result<Self, IonError> {
+        Self::from_fmion001_bytes(ION_TABLES_FULL_BIN, embedded_ion_manifest()?)
+    }
+
     #[allow(
         clippy::assigning_clones,
         clippy::cast_precision_loss,
         clippy::cast_sign_loss
     )]
-    pub fn try_from_embedded_full() -> Result<Self, IonError> {
-        let (n_tables, n_vals, nq, nt) = parse_embedded_ion_header()?;
-        let (lq_min, dq, lt_min, dt) =
-            (-10.0_f64, 0.09_f64, 2.10_f64, 0.06_f64);
+    fn from_fmion001_bytes(
+        bytes: &[u8],
+        manifest: &EmbeddedIonManifest,
+    ) -> Result<Self, IonError> {
+        let (n_tables, n_vals, nq, nt) = parse_fmion001_header(bytes)?;
+        manifest.check_fmion001(bytes.len(), n_tables, n_vals, nq, nt)?;
+        let (lq_min, dq, lt_min, dt) = (
+            manifest.log_q_min,
+            manifest.del_log_q,
+            manifest.log_t_min,
+            manifest.del_log_t,
+        );
+        let scale = f64::from(manifest.value_scale);
 
-        let mut pos = 24usize;
+        let mut pos = FMION_HEADER_BYTES;
         let mut raw_tables: Vec<Vec<Vec<f64>>> = Vec::with_capacity(n_tables);
         for _ in 0..n_tables {
-            raw_tables
-                .push(decode_embedded_ion_table(&mut pos, n_vals, nq, nt)?);
+            raw_tables.push(decode_fmion001_table(
+                bytes, &mut pos, n_vals, nq, nt, scale,
+            )?);
+        }
+        if pos != bytes.len() {
+            return Err(fmion_err(format!(
+                "{} trailing bytes after the last table",
+                bytes.len() - pos
+            )));
         }
 
         let log_qs: Vec<f64> =
@@ -217,57 +287,34 @@ impl IonTableGrid {
     /// Load the full 22-table $(Z, X, \log Q, \log T)$ grid from an upstream
     /// MESA `ionization_data` directory (such as `data/ionization_data`).
     ///
+    /// Before reading any table body, every header is checked as upstream
+    /// does: the first table (`ion_00z00x.data`) must have `version >=
+    /// min_version` (`49`, `ionization/private/ion_tables_load.f90:54-69`),
+    /// and each table must match the expected `(X, Z)` of its file name and
+    /// the first table's version and grid (`num_logQs`, `num_logTs`,
+    /// `logT_min`, `logT_max`, `del_logT`, `logQ_min`, `logQ_max`,
+    /// `del_logQ`) within `tiny` (`ion_tables_load.f90:236, 259-290`).
+    ///
     /// # Errors
-    /// Returns [`IonError`] if any table file is missing or malformed.
-    #[allow(
-        clippy::assigning_clones,
-        clippy::needless_range_loop,
-        clippy::type_complexity
-    )]
+    /// Returns [`IonError::TableParse`] naming the file and header field on
+    /// any header violation, and [`IonError`] if any table file is missing or
+    /// malformed.
+    #[allow(clippy::assigning_clones, clippy::needless_range_loop)]
     pub fn from_data_dir(
         data_dir: &Path,
         file_prefix: &str,
         z1_suffix: &str,
     ) -> Result<Self, IonError> {
-        validate_ion_data_dir(data_dir, file_prefix, z1_suffix)?;
-        let mut pairs = Vec::with_capacity(22);
-        for iz in 0..NUM_ION_ZS {
-            for ix in 0..NUM_ION_XS_FOR_Z[iz] {
-                let path = ion_table_filename(
-                    data_dir,
-                    file_prefix,
-                    z1_suffix,
-                    ION_ZS[iz],
-                    ION_XS[ix],
-                );
-                pairs.push((iz, ix, path));
-            }
-        }
-        let parsed: Result<
-            Vec<(
-                usize,
-                usize,
-                usize,
-                f64,
-                f64,
-                usize,
-                f64,
-                f64,
-                Vec<Vec<f64>>,
-            )>,
-            IonError,
-        > = pairs
+        let (entries, grid) =
+            read_and_validate_ion_headers(data_dir, file_prefix, z1_suffix)?;
+        let parsed: Vec<(usize, usize, Vec<Vec<f64>>)> = entries
             .into_par_iter()
-            .map(|(iz, ix, path)| {
-                let (nq, lq_min, dq, nt, lt_min, dt, tbl) =
-                    parse_ion_ascii_table(&path)?;
-                Ok((iz, ix, nq, lq_min, dq, nt, lt_min, dt, tbl))
+            .map(|(iz, ix, path, _)| {
+                Ok((iz, ix, parse_ion_ascii_table(&path, &grid)?))
             })
-            .collect();
-        let parsed = parsed?;
-        let (_, _, nq, lq_min, dq, nt, lt_min, dt, _) = parsed[0];
+            .collect::<Result<_, IonError>>()?;
         let mut coeffs = vec![vec![Vec::new(); NUM_ION_XS]; NUM_ION_ZS];
-        for (iz, ix, _, _, _, _, _, _, tbl) in parsed {
+        for (iz, ix, tbl) in parsed {
             coeffs[iz][ix] = tbl;
         }
         for iz in 0..NUM_ION_ZS {
@@ -277,12 +324,12 @@ impl IonTableGrid {
             }
         }
         Ok(Self {
-            log_q_min: lq_min,
-            del_log_q: dq,
-            num_log_qs: nq,
-            log_t_min: lt_min,
-            del_log_t: dt,
-            num_log_ts: nt,
+            log_q_min: grid.log_q_min,
+            del_log_q: grid.del_log_q,
+            num_log_qs: grid.num_log_qs,
+            log_t_min: grid.log_t_min,
+            del_log_t: grid.del_log_t,
+            num_log_ts: grid.num_log_ts,
             coeffs,
         })
     }
@@ -516,91 +563,482 @@ fn ion_cache_path(cache_root: &Path, source_sha: &str) -> PathBuf {
         .join(format!("ionization_full.{}.bin", &source_sha[..16]))
 }
 
-fn parse_embedded_ion_header() -> Result<(usize, usize, usize, usize), IonError>
-{
-    if ION_TABLES_FULL_BIN.get(..8) != Some(b"FMION001".as_slice())
-        || ION_TABLES_FULL_BIN.len() < 24
-    {
-        return Err(IonError::TableParse {
-            path: "ion_tables_full.bin".to_string(),
-            detail: "invalid FMION001 header".to_string(),
-        });
+fn fmion_err(detail: String) -> IonError {
+    IonError::TableParse {
+        path: ION_TABLES_FULL_NAME.to_string(),
+        detail,
     }
-    let u32_hdr = |off: usize| -> Result<usize, IonError> {
-        let b: [u8; 4] = ION_TABLES_FULL_BIN
-            .get(off..off + 4)
-            .and_then(|s| s.try_into().ok())
-            .ok_or_else(|| IonError::TableParse {
-                path: "ion_tables_full.bin".to_string(),
-                detail: format!("truncated header at {off}"),
-            })?;
-        Ok(u32::from_le_bytes(b) as usize)
-    };
-    Ok((u32_hdr(8)?, u32_hdr(12)?, u32_hdr(16)?, u32_hdr(20)?))
 }
 
-fn decode_embedded_ion_table(
+/// Parse the 24-byte `FMION001` header `(num_tables, num_vals, num_logQs,
+/// num_logTs)`.
+fn parse_fmion001_header(
+    bytes: &[u8],
+) -> Result<(usize, usize, usize, usize), IonError> {
+    if bytes.len() < FMION_HEADER_BYTES
+        || bytes.get(..8) != Some(FMION_MAGIC.as_slice())
+    {
+        return Err(fmion_err("invalid FMION001 header".to_string()));
+    }
+    let u32_hdr = |off: usize| -> usize {
+        let b: [u8; 4] =
+            [bytes[off], bytes[off + 1], bytes[off + 2], bytes[off + 3]];
+        u32::from_le_bytes(b) as usize
+    };
+    Ok((u32_hdr(8), u32_hdr(12), u32_hdr(16), u32_hdr(20)))
+}
+
+/// Decode one `(28, nq, nt)` table of signed integer thousandths.
+///
+/// Each `logT` column starts with a flag byte and the `i32` value at
+/// `iQ = 0`: flag `0` repeats it for every `logQ`, flag `1` is followed by
+/// `nq - 1` `i16` successive differences, and flag `2` by a single `i16`
+/// constant difference. Values are `f64::from(n) / scale`, which for the
+/// MESA `%.3f` tables (`scale = 1000`) equals the correctly rounded decimal
+/// parse of the ASCII token.
+fn decode_fmion001_table(
+    bytes: &[u8],
     pos: &mut usize,
     n_vals: usize,
     nq: usize,
     nt: usize,
+    scale: f64,
 ) -> Result<Vec<Vec<f64>>, IonError> {
-    let read_i32 = |p: &mut usize| -> Result<i32, IonError> {
-        let b: [u8; 4] = ION_TABLES_FULL_BIN
-            .get(*p..*p + 4)
+    fn take<const N: usize>(
+        bytes: &[u8],
+        p: &mut usize,
+    ) -> Result<[u8; N], IonError> {
+        let b: [u8; N] = bytes
+            .get(*p..*p + N)
             .and_then(|s| s.try_into().ok())
-            .ok_or_else(|| IonError::TableParse {
-                path: "ion_tables_full.bin".to_string(),
-                detail: "unexpected EOF reading i32".to_string(),
+            .ok_or_else(|| {
+                fmion_err(format!("unexpected EOF at byte offset {p}"))
             })?;
-        *p += 4;
-        Ok(i32::from_le_bytes(b))
-    };
-    let read_i16 = |p: &mut usize| -> Result<i16, IonError> {
-        let b: [u8; 2] = ION_TABLES_FULL_BIN
-            .get(*p..*p + 2)
-            .and_then(|s| s.try_into().ok())
-            .ok_or_else(|| IonError::TableParse {
-                path: "ion_tables_full.bin".to_string(),
-                detail: "unexpected EOF reading i16".to_string(),
-            })?;
-        *p += 2;
-        Ok(i16::from_le_bytes(b))
+        *p += N;
+        Ok(b)
+    }
+    let step = |cur: i32, d: i16| -> Result<i32, IonError> {
+        cur.checked_add(i32::from(d)).ok_or_else(|| {
+            fmion_err("i32 overflow while summing differences".to_string())
+        })
     };
 
     let mut raw = vec![vec![0.0_f64; nq * nt]; n_vals];
-    for ch in raw.iter_mut().take(n_vals) {
+    for ch in &mut raw {
         for jt in 0..nt {
-            let flag = *ION_TABLES_FULL_BIN.get(*pos).ok_or_else(|| {
-                IonError::TableParse {
-                    path: "ion_tables_full.bin".to_string(),
-                    detail: "unexpected EOF reading flag".to_string(),
+            let [flag] = take::<1>(bytes, pos)?;
+            let mut cur = i32::from_le_bytes(take::<4>(bytes, pos)?);
+            ch[jt] = f64::from(cur) / scale;
+            match flag {
+                0 => {
+                    let val = ch[jt];
+                    for iq in 1..nq {
+                        ch[iq * nt + jt] = val;
+                    }
                 }
-            })?;
-            *pos += 1;
-            let mut cur = read_i32(pos)?;
-            ch[jt] = f64::from(cur) / 1000.0;
-            if flag == 0 {
-                let val = ch[jt];
-                for iq in 1..nq {
-                    ch[iq * nt + jt] = val;
+                1 => {
+                    for iq in 1..nq {
+                        let d = i16::from_le_bytes(take::<2>(bytes, pos)?);
+                        cur = step(cur, d)?;
+                        ch[iq * nt + jt] = f64::from(cur) / scale;
+                    }
                 }
-            } else if flag == 2 {
-                let d0 = i32::from(read_i16(pos)?);
-                for iq in 1..nq {
-                    cur += d0;
-                    ch[iq * nt + jt] = f64::from(cur) / 1000.0;
+                2 => {
+                    let d0 = i16::from_le_bytes(take::<2>(bytes, pos)?);
+                    for iq in 1..nq {
+                        cur = step(cur, d0)?;
+                        ch[iq * nt + jt] = f64::from(cur) / scale;
+                    }
                 }
-            } else {
-                for iq in 1..nq {
-                    let d = i32::from(read_i16(pos)?);
-                    cur += d;
-                    ch[iq * nt + jt] = f64::from(cur) / 1000.0;
+                other => {
+                    return Err(fmion_err(format!(
+                        "unknown column flag {other} at byte offset {}",
+                        *pos - 5
+                    )));
                 }
             }
         }
     }
     Ok(raw)
+}
+
+/// Flat top-level fields of the `ion_tables_full.toml` provenance manifest
+/// written by `scripts/data/build_ion_tables.py`.
+#[derive(Debug, Clone, PartialEq)]
+struct EmbeddedIonManifest {
+    /// SHA-256 of `ion_tables_full.bin`.
+    sha256: String,
+    /// Byte length of `ion_tables_full.bin`.
+    size_bytes: usize,
+    /// `Z = 1` table suffix used for the build (`""`, `_CO_0`, `_CO_1`).
+    z1_suffix: String,
+    /// Upstream `ion_version` of the source tables.
+    ion_version: i64,
+    num_tables: usize,
+    num_vals: usize,
+    num_log_qs: usize,
+    log_q_min: f64,
+    log_q_max: f64,
+    del_log_q: f64,
+    num_log_ts: usize,
+    log_t_min: f64,
+    log_t_max: f64,
+    del_log_t: f64,
+    /// Integer scale of the stored values (`1000` for `%.3f` tables).
+    value_scale: u32,
+}
+
+impl EmbeddedIonManifest {
+    /// Parse the flat `key = value` lines ahead of the first `[table]`.
+    fn parse(text: &str) -> Result<Self, IonError> {
+        let err = |detail: String| IonError::TableParse {
+            path: ION_TABLES_MANIFEST_NAME.to_string(),
+            detail,
+        };
+        let mut kv: Vec<(&str, &str)> = Vec::new();
+        for line in text.lines().map(str::trim) {
+            if line.starts_with('[') {
+                break;
+            }
+            if line.is_empty() || line.starts_with('#') {
+                continue;
+            }
+            let (k, v) = line
+                .split_once('=')
+                .ok_or_else(|| err(format!("malformed line '{line}'")))?;
+            kv.push((k.trim(), v.trim()));
+        }
+        let get = |key: &str| -> Result<&str, IonError> {
+            kv.iter()
+                .find(|(k, _)| *k == key)
+                .map(|(_, v)| *v)
+                .ok_or_else(|| err(format!("missing key '{key}'")))
+        };
+        let get_str = |key: &str| -> Result<String, IonError> {
+            let v = get(key)?;
+            v.strip_prefix('"')
+                .and_then(|s| s.strip_suffix('"'))
+                .map(str::to_string)
+                .ok_or_else(|| err(format!("key '{key}' is not a string")))
+        };
+        let get_num = |key: &str| -> Result<f64, IonError> {
+            let v = get(key)?;
+            let val = v.parse::<f64>().map_err(|e| {
+                err(format!("invalid number for '{key}' ({v}): {e}"))
+            })?;
+            if is_bad(val) {
+                return Err(err(format!("non-finite '{key}' ({v})")));
+            }
+            Ok(val)
+        };
+        let get_int = |key: &str| -> Result<i64, IonError> {
+            let v = get(key)?;
+            v.parse::<i64>().map_err(|e| {
+                err(format!("invalid integer for '{key}' ({v}): {e}"))
+            })
+        };
+        let get_usize = |key: &str| -> Result<usize, IonError> {
+            usize::try_from(get_int(key)?)
+                .map_err(|_| err(format!("negative '{key}'")))
+        };
+        let format = get_str("format")?;
+        if format != "FMION001" {
+            return Err(err(format!("unsupported format '{format}'")));
+        }
+        let value_scale = u32::try_from(get_int("value_scale")?)
+            .ok()
+            .filter(|&s| s > 0)
+            .ok_or_else(|| err("value_scale must be positive".to_string()))?;
+        Ok(Self {
+            sha256: get_str("sha256")?,
+            size_bytes: get_usize("size_bytes")?,
+            z1_suffix: get_str("z1_suffix")?,
+            ion_version: get_int("ion_version")?,
+            num_tables: get_usize("num_tables")?,
+            num_vals: get_usize("num_vals")?,
+            num_log_qs: get_usize("num_log_qs")?,
+            log_q_min: get_num("log_q_min")?,
+            log_q_max: get_num("log_q_max")?,
+            del_log_q: get_num("del_log_q")?,
+            num_log_ts: get_usize("num_log_ts")?,
+            log_t_min: get_num("log_t_min")?,
+            log_t_max: get_num("log_t_max")?,
+            del_log_t: get_num("del_log_t")?,
+            value_scale,
+        })
+    }
+
+    /// Cross-check an `FMION001` payload against this manifest.
+    fn check_fmion001(
+        &self,
+        len: usize,
+        n_tables: usize,
+        n_vals: usize,
+        nq: usize,
+        nt: usize,
+    ) -> Result<(), IonError> {
+        let expected_tables: usize = NUM_ION_XS_FOR_Z.iter().sum();
+        let checks = [
+            ("size_bytes", self.size_bytes, len),
+            ("num_tables", self.num_tables, n_tables),
+            ("num_tables (ion_Zs x ion_Xs)", expected_tables, n_tables),
+            ("num_vals", self.num_vals, n_vals),
+            ("num_vals (NUM_ION_VALS)", NUM_ION_VALS, n_vals),
+            ("num_log_qs", self.num_log_qs, nq),
+            ("num_log_ts", self.num_log_ts, nt),
+        ];
+        for (field, want, got) in checks {
+            if want != got {
+                return Err(fmion_err(format!(
+                    "{field} = {got} differs from {want} in \
+                     {ION_TABLES_MANIFEST_NAME}"
+                )));
+            }
+        }
+        if nq < 2 || nt < 2 || self.del_log_q <= 0.0 || self.del_log_t <= 0.0 {
+            return Err(fmion_err(format!(
+                "invalid grid ({nq} x {nt}, del_log_q={}, del_log_t={})",
+                self.del_log_q, self.del_log_t
+            )));
+        }
+        if self.ion_version < ION_MIN_VERSION {
+            return Err(fmion_err(format!(
+                "ion_version = {} is below min_version = {ION_MIN_VERSION}",
+                self.ion_version
+            )));
+        }
+        Ok(())
+    }
+}
+
+/// Return the parsed embedded `ion_tables_full.toml` manifest.
+fn embedded_ion_manifest() -> Result<&'static EmbeddedIonManifest, IonError> {
+    static MANIFEST: OnceLock<Result<EmbeddedIonManifest, IonError>> =
+        OnceLock::new();
+    MANIFEST
+        .get_or_init(|| EmbeddedIonManifest::parse(ION_TABLES_FULL_MANIFEST))
+        .as_ref()
+        .map_err(Clone::clone)
+}
+
+/// Second header row of an upstream `ion_*.data` table (`Load1_ion_Table`,
+/// `ionization/private/ion_tables_load.f90:250-252`).
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct IonAsciiHeader {
+    version: i64,
+    x: f64,
+    z: f64,
+    num_log_ts: usize,
+    log_t_min: f64,
+    log_t_max: f64,
+    del_log_t: f64,
+    num_log_qs: usize,
+    log_q_min: f64,
+    log_q_max: f64,
+    del_log_q: f64,
+}
+
+/// Read the 11-field header row (second line) of an `ion_*.data` table.
+fn read_ion_ascii_header(path: &Path) -> Result<IonAsciiHeader, IonError> {
+    let file = fs::File::open(path).map_err(|e| {
+        IonError::Io(format!("failed to open {}: {e}", path.display()))
+    })?;
+    let mut lines = BufReader::new(file).lines();
+    let _ = lines.next();
+    let line = lines
+        .next()
+        .transpose()
+        .map_err(|e| {
+            IonError::Io(format!("failed to read {}: {e}", path.display()))
+        })?
+        .ok_or_else(|| IonError::TableParse {
+            path: path.display().to_string(),
+            detail: "missing header row".to_string(),
+        })?;
+    parse_ion_header_line(path, &line)
+}
+
+/// Parse `version X Z num_logTs logT_min logT_max del_logT num_logQs
+/// logQ_min logQ_max del_logQ`, rejecting non-finite values.
+fn parse_ion_header_line(
+    path: &Path,
+    line: &str,
+) -> Result<IonAsciiHeader, IonError> {
+    let err = |detail: String| IonError::TableParse {
+        path: path.display().to_string(),
+        detail,
+    };
+    let hdr: Vec<&str> = line.split_whitespace().collect();
+    if hdr.len() < 11 {
+        return Err(err("incomplete header row".to_string()));
+    }
+    let int = |idx: usize, label: &str| -> Result<i64, IonError> {
+        hdr[idx].parse::<i64>().map_err(|e| {
+            err(format!("invalid header field {label} '{}': {e}", hdr[idx]))
+        })
+    };
+    let count = |idx: usize, label: &str| -> Result<usize, IonError> {
+        usize::try_from(int(idx, label)?)
+            .map_err(|_| err(format!("negative header field {label}")))
+    };
+    let real = |idx: usize, label: &str| -> Result<f64, IonError> {
+        let val = hdr[idx].parse::<f64>().map_err(|e| {
+            err(format!("invalid header field {label} '{}': {e}", hdr[idx]))
+        })?;
+        if is_bad(val) {
+            return Err(err(format!(
+                "non-finite header field {label} '{val}'"
+            )));
+        }
+        Ok(val)
+    };
+    let h = IonAsciiHeader {
+        version: int(0, "version")?,
+        x: real(1, "X")?,
+        z: real(2, "Z")?,
+        num_log_ts: count(3, "num_logTs")?,
+        log_t_min: real(4, "logT_min")?,
+        log_t_max: real(5, "logT_max")?,
+        del_log_t: real(6, "del_logT")?,
+        num_log_qs: count(7, "num_logQs")?,
+        log_q_min: real(8, "logQ_min")?,
+        log_q_max: real(9, "logQ_max")?,
+        del_log_q: real(10, "del_logQ")?,
+    };
+    if h.num_log_ts < 2
+        || h.num_log_qs < 2
+        || h.del_log_t <= 0.0
+        || h.del_log_q <= 0.0
+    {
+        return Err(err(format!(
+            "invalid grid ({} x {}, del_logQ={}, del_logT={})",
+            h.num_log_qs, h.num_log_ts, h.del_log_q, h.del_log_t
+        )));
+    }
+    Ok(h)
+}
+
+/// One table's `(iz, ix)` slot, path and parsed header.
+type IonTableEntry = (usize, usize, PathBuf, IonAsciiHeader);
+
+/// Reads the header of every `ion_*.data` table under `data_dir` and applies
+/// the upstream header checks ([`validate_ion_headers`]), returning the table
+/// entries and the reference grid.
+#[allow(clippy::needless_range_loop)]
+fn read_and_validate_ion_headers(
+    data_dir: &Path,
+    file_prefix: &str,
+    z1_suffix: &str,
+) -> Result<(Vec<IonTableEntry>, IonAsciiHeader), IonError> {
+    validate_ion_data_dir(data_dir, file_prefix, z1_suffix)?;
+    let mut entries = Vec::with_capacity(22);
+    for iz in 0..NUM_ION_ZS {
+        for ix in 0..NUM_ION_XS_FOR_Z[iz] {
+            let path = ion_table_filename(
+                data_dir,
+                file_prefix,
+                z1_suffix,
+                ION_ZS[iz],
+                ION_XS[ix],
+            );
+            let hdr = read_ion_ascii_header(&path)?;
+            entries.push((iz, ix, path, hdr));
+        }
+    }
+    let headers: Vec<(&Path, IonAsciiHeader, f64, f64)> = entries
+        .iter()
+        .map(|(iz, ix, p, h)| (p.as_path(), *h, ION_ZS[*iz], ION_XS[*ix]))
+        .collect();
+    let grid = validate_ion_headers(&headers)?;
+    Ok((entries, grid))
+}
+
+/// Apply the upstream header checks to the 22 tables in load order.
+///
+/// `entries` holds `(path, header, expected_Z, expected_X)`. The first
+/// table supplies the reference version and grid (`ion_read_sizes`,
+/// `ionization/private/ion_tables_load.f90:54-69`), whose version must be
+/// at least [`ION_MIN_VERSION`]. Every table is then compared with the
+/// reference and its expected composition exactly as in `Load1_ion_Table`
+/// (`ion_tables_load.f90:259-270`), using [`ION_HEADER_TINY`]. Returns the
+/// reference header.
+fn validate_ion_headers(
+    entries: &[(&Path, IonAsciiHeader, f64, f64)],
+) -> Result<IonAsciiHeader, IonError> {
+    let (ref_path, reference, _, _) = *entries.first().ok_or_else(|| {
+        IonError::Io("no ionization table headers to validate".to_string())
+    })?;
+    let fail = |path: &Path, detail: String| IonError::TableParse {
+        path: path.display().to_string(),
+        detail,
+    };
+    if reference.version < ION_MIN_VERSION {
+        return Err(fail(
+            ref_path,
+            format!(
+                "header field version = {} is below min_version = \
+                 {ION_MIN_VERSION} (reinstall ionization_data)",
+                reference.version
+            ),
+        ));
+    }
+    let ref_name = ref_path.display();
+    for &(path, h, z_exp, x_exp) in entries {
+        if reference.version > h.version {
+            return Err(fail(
+                path,
+                format!(
+                    "header field version = {} is older than version = {} \
+                     in {ref_name}",
+                    h.version, reference.version
+                ),
+            ));
+        }
+        for (field, got, want) in [
+            ("num_logQs", h.num_log_qs, reference.num_log_qs),
+            ("num_logTs", h.num_log_ts, reference.num_log_ts),
+        ] {
+            if got != want {
+                return Err(fail(
+                    path,
+                    format!(
+                        "header field {field} = {got} differs from {want} \
+                         in {ref_name}"
+                    ),
+                ));
+            }
+        }
+        for (field, got, want) in [("X", h.x, x_exp), ("Z", h.z, z_exp)] {
+            if (want - got).abs() > ION_HEADER_TINY {
+                return Err(fail(
+                    path,
+                    format!(
+                        "header field {field} = {got} differs from the \
+                         expected table mass fraction {want}"
+                    ),
+                ));
+            }
+        }
+        for (field, got, want) in [
+            ("logT_min", h.log_t_min, reference.log_t_min),
+            ("logT_max", h.log_t_max, reference.log_t_max),
+            ("del_logT", h.del_log_t, reference.del_log_t),
+            ("logQ_min", h.log_q_min, reference.log_q_min),
+            ("logQ_max", h.log_q_max, reference.log_q_max),
+            ("del_logQ", h.del_log_q, reference.del_log_q),
+        ] {
+            if (want - got).abs() > ION_HEADER_TINY {
+                return Err(fail(
+                    path,
+                    format!(
+                        "header field {field} = {got} differs from {want} \
+                         in {ref_name}"
+                    ),
+                ));
+            }
+        }
+    }
+    Ok(reference)
 }
 
 fn compute_ion_dir_sha256(
@@ -653,69 +1091,26 @@ fn ion_table_filename(
 /// not-a-knot bicubic splines (`Load1_ion_Table` +
 /// `Make_ion_Interpolation_Data`).
 ///
-/// Reads the header row `(nt, lt_min, dt, nq, lq_min, dq)`, parses all
-/// `nq * nt` rows across the 28 output channels (rejecting non-finite raw
-/// inputs loudly), fits a 2D not-a-knot bicubic spline to each channel via
-/// [`interp_mkbicub_db`], and replaces non-finite fitted spline coefficients
-/// with `0.0` matching upstream `Check_ion_Interpolation_Data`
+/// Uses the grid of the already validated reference header `grid`, parses
+/// all `nq * nt` rows across the 28 output channels (rejecting non-finite
+/// raw inputs loudly), fits a 2D not-a-knot bicubic spline to each channel
+/// via [`interp_mkbicub_db`], and replaces non-finite fitted spline
+/// coefficients with `0.0` matching upstream `Check_ion_Interpolation_Data`
 /// (`ionization/private/ion_tables_load.f90:362-382`).
 ///
 /// # Errors
-/// Returns [`IonError`] if the file cannot be read, has an incomplete header,
-/// or fails bicubic spline construction.
-#[allow(clippy::cast_precision_loss, clippy::type_complexity)]
+/// Returns [`IonError`] if the file cannot be read, is truncated, or fails
+/// bicubic spline construction.
+#[allow(clippy::cast_precision_loss)]
 fn parse_ion_ascii_table(
     path: &Path,
-) -> Result<(usize, f64, f64, usize, f64, f64, Vec<Vec<f64>>), IonError> {
+    grid: &IonAsciiHeader,
+) -> Result<Vec<Vec<f64>>, IonError> {
     let text =
         fs::read_to_string(path).map_err(|e| IonError::Io(e.to_string()))?;
-    let mut lines = text.lines();
-    let _ = lines.next();
-    let hdr_line = lines.next().ok_or_else(|| IonError::TableParse {
-        path: path.display().to_string(),
-        detail: "missing header row".to_string(),
-    })?;
-    let hdr: Vec<&str> = hdr_line.split_whitespace().collect();
-    if hdr.len() < 11 {
-        return Err(IonError::TableParse {
-            path: path.display().to_string(),
-            detail: "incomplete header row".to_string(),
-        });
-    }
-    let parse_hdr_usize =
-        |idx: usize, label: &str| -> Result<usize, IonError> {
-            hdr[idx].parse::<usize>().map_err(|e| IonError::TableParse {
-                path: path.display().to_string(),
-                detail: format!("invalid {label} '{}': {e}", hdr[idx]),
-            })
-        };
-    let parse_hdr_f64 = |idx: usize, label: &str| -> Result<f64, IonError> {
-        let val =
-            hdr[idx].parse::<f64>().map_err(|e| IonError::TableParse {
-                path: path.display().to_string(),
-                detail: format!("invalid {label} '{}': {e}", hdr[idx]),
-            })?;
-        if is_bad(val) {
-            return Err(IonError::TableParse {
-                path: path.display().to_string(),
-                detail: format!("non-finite {label} '{val}'"),
-            });
-        }
-        Ok(val)
-    };
-    let nt = parse_hdr_usize(3, "num_logTs")?;
-    let lt_min = parse_hdr_f64(4, "logT_min")?;
-    let dt = parse_hdr_f64(6, "del_logT")?;
-    let nq = parse_hdr_usize(7, "num_logQs")?;
-    let lq_min = parse_hdr_f64(8, "logQ_min")?;
-    let dq = parse_hdr_f64(10, "del_logQ")?;
-    if nt < 2 || nq < 2 || dt <= 0.0 || dq <= 0.0 {
-        return Err(IonError::TableParse {
-            path: path.display().to_string(),
-            detail: format!("invalid grid ({nq} x {nt}, dq={dq}, dt={dt})"),
-        });
-    }
-    let _ = lines.next();
+    let (nq, lq_min, dq) = (grid.num_log_qs, grid.log_q_min, grid.del_log_q);
+    let (nt, lt_min, dt) = (grid.num_log_ts, grid.log_t_min, grid.del_log_t);
+    let mut lines = text.lines().skip(3);
 
     let mut raw = vec![vec![0.0_f64; nq * nt]; NUM_ION_VALS];
     for iq in 0..nq {
@@ -762,8 +1157,7 @@ fn parse_ion_ascii_table(
 
     let log_qs: Vec<f64> = (0..nq).map(|i| lq_min + (i as f64) * dq).collect();
     let log_ts: Vec<f64> = (0..nt).map(|j| lt_min + (j as f64) * dt).collect();
-    let coeffs = build_table_splines(&log_qs, &log_ts, &raw)?;
-    Ok((nq, lq_min, dq, nt, lt_min, dt, coeffs))
+    build_table_splines(&log_qs, &log_ts, &raw)
 }
 
 fn build_table_splines(
@@ -857,6 +1251,8 @@ pub(crate) fn resolve_pair(
 
 #[cfg(test)]
 mod tests {
+    use std::fmt::Write as _;
+
     use super::*;
 
     #[test]
@@ -924,6 +1320,414 @@ mod tests {
                 let p = ion_table_filename(dir, "ion", "", z, x);
                 fs::write(p, b"placeholder\n").expect("write ion stub");
             }
+        }
+    }
+
+    /// Header row of every MESA 26.4.1 `data/ionization_data/ion_*.data`
+    /// table, with the `(X, Z)` fields substituted per file.
+    fn mesa_26_4_1_header_row(x: f64, z: f64) -> String {
+        format!(
+            "            51        {x:.4}        {z:.4}       102            \
+             2.1000        8.1600        0.0600       175          \
+             -10.0000        5.6600        0.0900"
+        )
+    }
+
+    /// Write 22 small `4 x 4` tables whose header rows come from `header`
+    /// (`(file_name, X, Z) -> row`), following the upstream line layout.
+    #[allow(clippy::cast_precision_loss)]
+    fn write_synthetic_ion_tables(
+        dir: &Path,
+        header: impl Fn(&str, f64, f64) -> String,
+    ) {
+        fs::create_dir_all(dir).expect("mkdir ion dir");
+        for (&z, &n_xs) in ION_ZS.iter().zip(NUM_ION_XS_FOR_Z.iter()) {
+            for &x in ION_XS.iter().take(n_xs) {
+                let p = ion_table_filename(dir, "ion", "", z, x);
+                let name = p.file_name().and_then(|s| s.to_str()).unwrap_or("");
+                let mut out = String::from("version X Z ...\n");
+                out.push_str(&header(name, x, z));
+                out.push_str("\n\n");
+                for iq in 0..4_u32 {
+                    out.push_str("\n      logQ\n\n logT vals\n");
+                    for jt in 0..4_u32 {
+                        let _ =
+                            write!(out, "{:.2}", 3.0 + 0.06 * f64::from(jt));
+                        for v in 0..NUM_ION_VALS {
+                            let val = 0.25
+                                + 0.011 * f64::from(iq * iq)
+                                + 0.007 * f64::from(jt)
+                                + 0.001 * (v as f64);
+                            let _ = write!(out, " {val:.3}");
+                        }
+                        out.push('\n');
+                    }
+                    if iq + 1 < 4 {
+                        out.push_str("\n\n");
+                    }
+                }
+                fs::write(&p, out).expect("write synthetic ion table");
+            }
+        }
+    }
+
+    fn small_header_row(version: i64, x: f64, z: f64) -> String {
+        format!("{version} {x:.4} {z:.4} 4 3.00 3.18 0.06 4 -6.00 -5.73 0.09")
+    }
+
+    fn assert_bad_header_case(
+        dir: &Path,
+        target_file: &str,
+        override_row: &str,
+        expected_detail: &str,
+    ) {
+        write_synthetic_ion_tables(dir, |name, x, z| {
+            if name == target_file {
+                override_row.to_string()
+            } else {
+                small_header_row(51, x, z)
+            }
+        });
+        let err = IonTableGrid::from_data_dir(dir, "ion", "")
+            .expect_err("bad header must be rejected");
+        let (path, detail) = table_parse_detail(&err);
+        assert!(path.ends_with(target_file), "got path {path}");
+        assert!(
+            detail.contains(expected_detail),
+            "expected '{expected_detail}' in '{detail}'"
+        );
+    }
+
+    fn table_parse_detail(err: &IonError) -> (String, String) {
+        match err {
+            IonError::TableParse { path, detail } => {
+                (path.clone(), detail.clone())
+            }
+            other => panic!("expected IonError::TableParse, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_header_tiny_equals_single_precision_literal_widened_to_double() {
+        assert_eq!(ION_HEADER_TINY.to_bits(), f64::from(1.0e-6_f32).to_bits());
+    }
+
+    #[test]
+    fn test_valid_mesa_26_4_1_header_rows_pass_upstream_header_checks() {
+        let dir = Path::new("ionization_data");
+        let mut paths = Vec::new();
+        let mut headers = Vec::new();
+        for (&z, &n_xs) in ION_ZS.iter().zip(NUM_ION_XS_FOR_Z.iter()) {
+            for &x in ION_XS.iter().take(n_xs) {
+                let p = ion_table_filename(dir, "ion", "", z, x);
+                let h =
+                    parse_ion_header_line(&p, &mesa_26_4_1_header_row(x, z))
+                        .expect("MESA 26.4.1 header row parses");
+                paths.push(p);
+                headers.push((h, z, x));
+            }
+        }
+        let entries: Vec<(&Path, IonAsciiHeader, f64, f64)> = paths
+            .iter()
+            .zip(headers.iter())
+            .map(|(p, &(h, z, x))| (p.as_path(), h, z, x))
+            .collect();
+        let reference =
+            validate_ion_headers(&entries).expect("valid 26.4.1 headers");
+        assert_eq!(reference.version, 51);
+        assert_eq!((reference.num_log_qs, reference.num_log_ts), (175, 102));
+        assert_eq!(reference.log_q_min.to_bits(), (-10.0_f64).to_bits());
+        assert_eq!(reference.del_log_q.to_bits(), 0.09_f64.to_bits());
+        assert_eq!(reference.log_t_min.to_bits(), 2.1_f64.to_bits());
+        assert_eq!(reference.del_log_t.to_bits(), 0.06_f64.to_bits());
+        assert_eq!(reference.log_q_max.to_bits(), 5.66_f64.to_bits());
+        assert_eq!(reference.log_t_max.to_bits(), 8.16_f64.to_bits());
+    }
+
+    #[test]
+    fn test_from_data_dir_accepts_valid_and_sub_tiny_headers() {
+        let root = std::env::temp_dir()
+            .join(format!("flexmesa_ion_hdr_ok_{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+
+        let ok_dir = root.join("ok");
+        write_synthetic_ion_tables(&ok_dir, |_, x, z| {
+            small_header_row(51, x, z)
+        });
+        let grid = IonTableGrid::from_data_dir(&ok_dir, "ion", "")
+            .expect("valid synthetic headers load");
+        assert_eq!((grid.num_log_qs, grid.num_log_ts), (4, 4));
+
+        let near_dir = root.join("near");
+        write_synthetic_ion_tables(&near_dir, |name, x, z| {
+            if name == "ion_02z40x.data" {
+                format!(
+                    "51 {x:.4} {z:.4} 4 3.00 3.18 0.0600005 4 -6.00 -5.73 0.09"
+                )
+            } else {
+                small_header_row(51, x, z)
+            }
+        });
+        IonTableGrid::from_data_dir(&near_dir, "ion", "")
+            .expect("5e-7 grid offset is within tiny");
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn test_cache_entry_does_not_bypass_header_checks() {
+        let root = std::env::temp_dir()
+            .join(format!("flexmesa_ion_hdr_cache_{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        let cache_v1 = root.join("cache").join("v1");
+
+        let ok_dir = root.join("ok");
+        write_synthetic_ion_tables(&ok_dir, |_, x, z| {
+            small_header_row(51, x, z)
+        });
+        let grid = IonTableGrid::from_data_dir(&ok_dir, "ion", "")
+            .expect("valid synthetic headers load");
+
+        // A directory whose first header carries a version below
+        // `min_version`, with a well-formed cache entry already present for
+        // its hash (as code without header checks would have written).
+        let bad_dir = root.join("bad");
+        write_synthetic_ion_tables(&bad_dir, |_, x, z| {
+            small_header_row(48, x, z)
+        });
+        let bad_sha =
+            compute_ion_dir_sha256(&bad_dir, "ion", "").expect("hash bad dir");
+        let cache_path = ion_cache_path(&cache_v1, &bad_sha);
+        write_verified_cache_atomic(
+            &cache_path,
+            ION_CACHE_BUILDER_VERSION,
+            ION_CACHE_MAGIC,
+            &bad_sha,
+            &grid.encode_cache_payload().expect("encode payload"),
+        )
+        .expect("plant cache entry");
+        assert!(cache_path.is_file());
+
+        let err = IonTableGrid::load_or_verify_cache_in(
+            Some(&bad_dir),
+            Some(&cache_v1),
+        )
+        .expect_err("stale header must be rejected despite the cache entry");
+        assert!(
+            matches!(err, IonError::TableParse { .. }),
+            "expected IonError::TableParse, got {err:?}"
+        );
+
+        // A valid directory still loads through its cache entry.
+        let g1 = IonTableGrid::load_or_verify_cache_in(
+            Some(&ok_dir),
+            Some(&cache_v1),
+        )
+        .expect("build and cache valid dir");
+        let g2 = IonTableGrid::load_or_verify_cache_in(
+            Some(&ok_dir),
+            Some(&cache_v1),
+        )
+        .expect("reload valid dir from cache");
+        assert_eq!(g1.num_log_qs, g2.num_log_qs);
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn test_from_data_dir_rejects_bad_headers_naming_file_and_field() {
+        let root = std::env::temp_dir()
+            .join(format!("flexmesa_ion_headers_{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+
+        // All tables stale (version < min_version = 49) fails on ion_00z00x.
+        let stale_dir = root.join("stale");
+        write_synthetic_ion_tables(&stale_dir, |_, x, z| {
+            small_header_row(48, x, z)
+        });
+        let (p, d) = table_parse_detail(
+            &IonTableGrid::from_data_dir(&stale_dir, "ion", "")
+                .expect_err("stale version must fail"),
+        );
+        assert!(p.ends_with("ion_00z00x.data"), "got {p}");
+        assert!(d.contains("version = 48"), "got {d}");
+
+        let cases = [
+            (
+                "ion_04z20x.data",
+                "50 0.2000 0.0400 4 3.00 3.18 0.06 4 -6.00 -5.73 0.09",
+                "version = 50",
+            ),
+            (
+                "ion_02z40x.data",
+                "51 0.6000 0.0200 4 3.00 3.18 0.06 4 -6.00 -5.73 0.09",
+                "field X = 0.6",
+            ),
+            (
+                "ion_20z60x.data",
+                "51 0.6000 0.0200 4 3.00 3.18 0.06 4 -6.00 -5.73 0.09",
+                "field Z = 0.02",
+            ),
+            (
+                "ion_00z20x.data",
+                "51 0.2000 0.0000 5 3.00 3.24 0.06 4 -6.00 -5.73 0.09",
+                "field num_logTs = 5",
+            ),
+            (
+                "ion_00z40x.data",
+                "51 0.4000 0.0000 4 3.01 3.18 0.06 4 -6.00 -5.73 0.09",
+                "field logT_min = 3.01",
+            ),
+            (
+                "ion_20z60x.data",
+                "51 0.6000 0.2000 4 3.00 3.18002 0.06 4 -6.00 -5.73 0.09",
+                "field logT_max = 3.18002",
+            ),
+            (
+                "ion_02z20x.data",
+                "51 0.2000 0.0200 4 3.00 3.18 0.07 4 -6.00 -5.73 0.09",
+                "field del_logT = 0.07",
+            ),
+            (
+                "ion_00z80x.data",
+                "51 0.8000 0.0000 4 3.00 3.18 0.06 5 -6.00 -5.64 0.09",
+                "field num_logQs = 5",
+            ),
+            (
+                "ion_04z40x.data",
+                "51 0.4000 0.0400 4 3.00 3.18 0.06 4 -5.99 -5.73 0.09",
+                "field logQ_min = -5.99",
+            ),
+            (
+                "ion_100z00x.data",
+                "51 0.0000 1.0000 4 3.00 3.18 0.06 4 -6.00 -5.70 0.09",
+                "field logQ_max = -5.7",
+            ),
+            (
+                "ion_20z80x.data",
+                "51 0.8000 0.2000 4 3.00 3.18 0.06 4 -6.00 -5.73 0.08",
+                "field del_logQ = 0.08",
+            ),
+            (
+                "ion_04z60x.data",
+                "51 0.6000 0.0400 4 3.00 NaN 0.06 4 -6.00 -5.73 0.09",
+                "non-finite header field logT_max",
+            ),
+        ];
+        for (i, (file, row, needle)) in cases.iter().enumerate() {
+            assert_bad_header_case(
+                &root.join(format!("bad_{i}")),
+                file,
+                row,
+                needle,
+            );
+        }
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn test_embedded_manifest_matches_fmion001_payload_and_sha256() {
+        let m = embedded_ion_manifest().expect("embedded manifest parses");
+        assert_eq!(m.sha256, compute_sha256_bytes(ION_TABLES_FULL_BIN));
+        assert_eq!(m.size_bytes, ION_TABLES_FULL_BIN.len());
+        assert_eq!(
+            parse_fmion001_header(ION_TABLES_FULL_BIN).expect("header"),
+            (m.num_tables, m.num_vals, m.num_log_qs, m.num_log_ts)
+        );
+        // MESA star_job.defaults:2813 sets ionization_Z1_suffix = '', the
+        // suffix used by resolve_ion_data_dir_from for external tables.
+        assert_eq!(m.z1_suffix, "");
+        assert!(m.ion_version >= ION_MIN_VERSION);
+        assert_eq!(m.value_scale, 1000);
+        // Grid nodes implied by min, spacing and count reach the recorded
+        // maxima of the MESA 26.4.1 headers within upstream tiny.
+        #[allow(clippy::cast_precision_loss)]
+        let (q_end, t_end) = (
+            m.log_q_min + (m.num_log_qs - 1) as f64 * m.del_log_q,
+            m.log_t_min + (m.num_log_ts - 1) as f64 * m.del_log_t,
+        );
+        assert!((q_end - m.log_q_max).abs() <= ION_HEADER_TINY);
+        assert!((t_end - m.log_t_max).abs() <= ION_HEADER_TINY);
+        let grid = IonTableGrid::try_from_embedded_full().expect("embedded");
+        assert_eq!(grid.log_q_min.to_bits(), m.log_q_min.to_bits());
+        assert_eq!(grid.del_log_q.to_bits(), m.del_log_q.to_bits());
+        assert_eq!(grid.log_t_min.to_bits(), m.log_t_min.to_bits());
+        assert_eq!(grid.del_log_t.to_bits(), m.del_log_t.to_bits());
+    }
+
+    #[test]
+    fn test_manifest_parser_rejects_missing_or_non_finite_fields() {
+        let good = ION_TABLES_FULL_MANIFEST;
+        assert!(EmbeddedIonManifest::parse(good).is_ok());
+        for (from, to) in [
+            ("format = \"FMION001\"", "format = \"FMION999\""),
+            ("del_log_q = 0.09", "del_log_q = nan"),
+            ("log_t_min = 2.1", "log_t_min = inf"),
+            ("value_scale = 1000", "value_scale = 0"),
+            ("num_log_qs = 175", "num_log_qs = -175"),
+            ("z1_suffix = \"\"", "z1_suffix = ''"),
+            ("ion_version = 51\n", ""),
+        ] {
+            assert!(good.contains(from), "fixture lacks '{from}'");
+            let bad = good.replacen(from, to, 1);
+            let err = EmbeddedIonManifest::parse(&bad)
+                .expect_err("malformed manifest must be rejected");
+            let (path, _) = table_parse_detail(&err);
+            assert_eq!(path, ION_TABLES_MANIFEST_NAME);
+        }
+    }
+
+    #[test]
+    fn test_fmion001_decoder_rejects_corrupt_payloads_without_panic() {
+        let m = embedded_ion_manifest().expect("manifest").clone();
+        let bin = ION_TABLES_FULL_BIN;
+        let mut bad_flag = bin.to_vec();
+        bad_flag[FMION_HEADER_BYTES] = 7;
+        let mut trailing = bin.to_vec();
+        trailing.push(0);
+        let mut trailing_m = m.clone();
+        trailing_m.size_bytes += 1;
+        let mut bad_dims = bin.to_vec();
+        bad_dims[16] = 174;
+        let cases: [(&[u8], &EmbeddedIonManifest, &str); 6] = [
+            (&bin[..10], &m, "invalid FMION001 header"),
+            (b"FMION002_PADDING_PADDING", &m, "invalid FMION001 header"),
+            (&bin[..bin.len() - 3], &m, "size_bytes"),
+            (&bad_flag, &m, "unknown column flag 7"),
+            (&trailing, &trailing_m, "trailing bytes"),
+            (&bad_dims, &m, "num_log_qs = 174"),
+        ];
+        for (bytes, manifest, needle) in cases {
+            let err = IonTableGrid::from_fmion001_bytes(bytes, manifest)
+                .expect_err("corrupt FMION001 must be rejected");
+            let (path, detail) = table_parse_detail(&err);
+            assert_eq!(path, ION_TABLES_FULL_NAME);
+            assert!(detail.contains(needle), "'{needle}' not in '{detail}'");
+        }
+        // Truncation inside the body is reported as EOF, not a panic.
+        let mut trunc_m = m;
+        trunc_m.size_bytes = bin.len() - 3;
+        let err =
+            IonTableGrid::from_fmion001_bytes(&bin[..bin.len() - 3], &trunc_m)
+                .expect_err("truncated body must be rejected");
+        assert!(table_parse_detail(&err).1.contains("unexpected EOF"));
+    }
+
+    /// `f64::from(n) / 1000.0` (embedded decode) equals the correctly rounded
+    /// parse of the `%.3f` token printed for `n` thousandths (ASCII decode)
+    /// for every value range spanned by the MESA 26.4.1 tables
+    /// (`[-59.829, 28.403]`, checked here over `[-100, 100]`).
+    #[test]
+    fn test_thousandths_division_matches_decimal_parse_bit_for_bit() {
+        for n in -100_000_i32..=100_000 {
+            let sign = if n < 0 { "-" } else { "" };
+            let a = n.unsigned_abs();
+            let token = format!("{sign}{}.{:03}", a / 1000, a % 1000);
+            let parsed: f64 = token.parse().expect("parse %.3f token");
+            let divided = f64::from(n) / 1000.0;
+            assert_eq!(
+                parsed.to_bits(),
+                divided.to_bits(),
+                "n = {n}, token {token}"
+            );
         }
     }
 

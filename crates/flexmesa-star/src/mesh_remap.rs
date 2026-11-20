@@ -1336,6 +1336,7 @@ pub(crate) fn execute_adjust_mesh_from_plan(
     let (age_old, dt_old, mstar_old) =
         (model.star_age_old, model.dt_old, model.mstar_old);
     let prev_okay_mlt_vc = model.aux.okay_to_set_mlt_vc;
+    let prev_have_new_generation = model.aux.mixing.have_new_generation;
 
     model.resize_zones(nz);
     model.dq.copy_from_slice(&plan.dq_new);
@@ -1959,8 +1960,13 @@ pub(crate) fn execute_adjust_mesh_from_plan(
 
     model.pack_xh();
     model.aux.okay_to_set_mlt_vc = false;
+    // Upstream clears `have_new_generation` across `prepare_for_new_step`
+    // remeshing (`evolve.f90:377, 384`), causing `set_vars` to pass
+    // `skip_set_cz_bdy_mass = .true.` (`hydro_vars.f90:81`).
+    model.aux.mixing.have_new_generation = false;
     let hydro_res = set_hydro_vars(model, false, false);
     model.aux.okay_to_set_mlt_vc = prev_okay_mlt_vc;
+    model.aux.mixing.have_new_generation = prev_have_new_generation;
     hydro_res?;
 
     if model.controls.rotation_flag {

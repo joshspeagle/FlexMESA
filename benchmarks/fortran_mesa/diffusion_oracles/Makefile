@@ -55,15 +55,41 @@ endif
 
 BUILD_DIR ?= build
 BIN := $(BUILD_DIR)/gen_diffusion_oracles
+KERNELS_INC := $(BUILD_DIR)/mesa_private_kernels.inc
 OUT ?= mesa_26_4_1_diffusion_oracles.tsv
+
+# Private MESA routines (not exported by libstar.a) whose source text is copied
+# verbatim from the MESA tree, each from its opening line to its matching end line.
+DIFFUSION_SUPPORT_SRC := $(MESA_DIR)/star/private/diffusion_support.f90
+PHASE_SEPARATION_SRC := $(MESA_DIR)/star/private/phase_separation.f90
+
+# $(call extract_routine,<subroutine|function>,<name>,<source file>)
+define extract_routine
+	awk -v kind='$(1)' -v name='$(2)' ' \
+		BEGIN { start = "^[ \t]*([a-z()]+[ \t]+)?" kind "[ \t]+" name "[ \t]*\\("; stop = "^[ \t]*end[ \t]+" kind "[ \t]+" name "[ \t]*$$" } \
+		tolower($$0) ~ tolower(start) { p = 1; n++ } \
+		p { print } \
+		p && tolower($$0) ~ tolower(stop) { p = 0; done++ } \
+		END { if (n != 1 || done != 1) { print "extract_routine: " kind " " name " not found exactly once" > "/dev/stderr"; exit 1 } }' \
+		'$(3)' >> $@.tmp
+endef
 
 .PHONY: all generate run clean
 
 all: $(BIN)
 
-$(BIN): gen_diffusion_oracles.f90
+$(KERNELS_INC): $(DIFFUSION_SUPPORT_SRC) $(PHASE_SEPARATION_SRC)
 	@mkdir -p $(BUILD_DIR)
-	$(FC) $(FFLAGS) $(MESA_INCS) -J$(BUILD_DIR) gen_diffusion_oracles.f90 $(MESA_STAR_LIBS) $(SDK_LIBS) -o $@
+	@rm -f $@.tmp
+	$(call extract_routine,subroutine,get_Dstar_OCP,$(DIFFUSION_SUPPORT_SRC))
+	$(call extract_routine,function,bitsafe_erf_fit,$(DIFFUSION_SUPPORT_SRC))
+	$(call extract_routine,function,blouin_delta_xo,$(PHASE_SEPARATION_SRC))
+	$(call extract_routine,function,blouin_delta_xne,$(PHASE_SEPARATION_SRC))
+	mv $@.tmp $@
+
+$(BIN): gen_diffusion_oracles.f90 $(KERNELS_INC)
+	@mkdir -p $(BUILD_DIR)
+	$(FC) $(FFLAGS) $(MESA_INCS) -I$(BUILD_DIR) -J$(BUILD_DIR) gen_diffusion_oracles.f90 $(MESA_STAR_LIBS) $(SDK_LIBS) -o $@
 
 generate: $(BIN)
 	OMP_NUM_THREADS=1 MESA_DIR="$(MESA_DIR)" MESASDK_VERSION_STR="$(SDK_VER)" $(BIN) "$(OUT)"
@@ -71,5 +97,5 @@ generate: $(BIN)
 run: generate
 
 clean:
-	rm -f $(BIN) $(BUILD_DIR)/*.o $(BUILD_DIR)/*.mod
+	rm -f $(BIN) $(KERNELS_INC) $(BUILD_DIR)/*.o $(BUILD_DIR)/*.mod
 	rmdir $(BUILD_DIR) 2>/dev/null || true

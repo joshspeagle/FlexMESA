@@ -6,12 +6,44 @@ predictive mixing, and white-dwarf crystallization phase separation.
 
 from __future__ import annotations
 
+import pathlib
+import struct
+
 import jax
 import jax.numpy as jnp
 import numpy as np
 
 import flexmesa
 from flexmesa import _rust, star
+
+_DIFFUSION_ORACLES_TSV = (
+    pathlib.Path(__file__).resolve().parent.parent
+    / "benchmarks"
+    / "fortran_mesa"
+    / "diffusion_oracles"
+    / "mesa_26_4_1_diffusion_oracles.tsv"
+)
+
+
+def _load_mesa_kernel_oracles() -> dict[tuple[str, str, int], float]:
+    """Load Section 5 (`kernels`) IEEE-754 MESA 26.4.1 reference values."""
+    out: dict[tuple[str, str, int], float] = {}
+    with _DIFFUSION_ORACLES_TSV.open("r", encoding="utf-8") as fh:
+        for line in fh:
+            stripped = line.strip()
+            if (
+                not stripped
+                or stripped.startswith("#")
+                or stripped.startswith("section\t")
+            ):
+                continue
+            cols = stripped.split("\t")
+            if cols[0] != "kernels":
+                continue
+            bits = int(cols[5], 16)
+            val = struct.unpack(">d", bits.to_bytes(8, "big"))[0]
+            out[(cols[1], cols[2], int(cols[3]))] = val
+    return out
 
 
 def test_rotation_fp_ft_and_omega_crit_rust_jax_consistency_and_autodiff() -> (
@@ -123,63 +155,23 @@ def test_rotational_instabilities_and_spruit_tayler_rust_jax_consistency() -> (
         assert np.isfinite(g_q0)
 
 
-def _mesa_26_4_1_caplan_dstar(gam: float, kap: float) -> float:
-    """Closed-form MESA 26.4.1 `diffusion_support.f90:get_Dstar_OCP` oracle."""
-    a0, a1, a2 = 1.55973, 1.10941, 1.36909
-    b0, b1, b2 = 0.0070782, 0.80499, 4.53523
-    c0, c1, c2, c3 = 2.20689, 1.351594, 1.57138, 3.34187
-    x = c2 * (kap**c3)
-    t = 1.0 / (1.0 + 0.47047 * x)
-    erf_fit = 1.0 - (
-        0.3480242 * t - 0.0958798 * t * t + 0.7478556 * t * t * t
-    ) * float(np.exp(-x * x))
-    ak = float(np.sqrt(np.pi / 3.0)) * (a0 + a1 * (kap**a2))
-    bk = b0 * float(np.exp(-b1 * (kap**b2)))
-    ck = c0 + c1 * erf_fit
-    return float(
-        np.sqrt(np.pi / 3.0)
-        * ak
-        * (gam**-2.5)
-        * np.exp(-bk * gam)
-        / np.log(1.0 + ck * (gam**-1.5) / np.sqrt(3.0))
-    )
-
-
-def _mesa_26_4_1_blouin_shift(x_in: float, is_one: bool) -> float:
-    """Closed-form MESA 26.4.1 `phase_separation.f90` Blouin 2021a/b oracle."""
-    if is_one:
-        m_heavy, m_light = 20.0, 16.0
-        a1, a2, a3, a4, a5 = (
-            -0.120299,
-            1.304399,
-            -1.722625,
-            0.393996,
-            0.144529,
-        )
-    else:
-        m_heavy, m_light = 16.0, 12.0
-        a1, a2, a3, a4, a5 = (
-            -0.311540,
-            2.114743,
-            -1.661095,
-            -1.406005,
-            1.263897,
-        )
-    xn = (x_in / m_heavy) / (x_in / m_heavy + (1.0 - x_in) / m_light)
-    dxn = a1 * xn + a2 * xn**2 + a3 * xn**3 + a4 * xn**4 + a5 * xn**5
-    xn_new = xn + dxn
-    x_new = m_heavy * xn_new / (m_heavy * xn_new + m_light * (1.0 - xn_new))
-    return x_new - x_in
-
-
 def test_burgers_and_caplan_ocp_consistency_and_flux() -> None:
-    """Verify Rust Caplan OCP & Burgers velocities match MESA 26.4.1 (#156)
-    and frozen `#166` JAX prototype stays finite and differentiable.
+    """Verify Rust Caplan OCP matches committed MESA 26.4.1 hex oracles (#156),
+    Burgers velocities satisfy flux conservation, and frozen `#166` JAX
+    prototypes stay finite and differentiable.
+
+    `src/flexmesa/star/jax_diffusion_rot.py` is frozen under `#166` with its
+    pre-`#156` placeholder Caplan/Burgers expressions, so Rust strict is
+    checked against the committed MESA 26.4.1 reference table while the frozen
+    JAX prototypes are checked for finiteness and reverse-mode autodiff only.
     """
+    oracles = _load_mesa_kernel_oracles()
     with flexmesa.numerics_mode_context("strict"):
-        for gam, kap in [(5.0, 0.5), (20.0, 1.2), (100.0, 0.8)]:
+        for idx in (1, 2, 3):
+            gam = oracles[("dstar_ocp", "Gamma", idx)]
+            kap = oracles[("dstar_ocp", "kappa", idx)]
+            d_mesa = oracles[("dstar_ocp", "Dstar", idx)]
             d_r = _rust.star_eval_caplan_ocp_dstar(gam, kap)
-            d_mesa = _mesa_26_4_1_caplan_dstar(gam, kap)
             assert abs(d_r - d_mesa) / d_mesa <= 1.0e-14
             d_j = float(
                 star.eval_caplan_ocp_dstar_jax(
@@ -236,14 +228,19 @@ def test_burgers_and_caplan_ocp_consistency_and_flux() -> None:
 
 
 def test_phase_separation_and_star_model_wave5_1_methods() -> None:
-    """Verify Blouin et al. (2021a,b) phase separation shifts match MESA 26.4.1
-    and StarModel Wave 5.1 methods conserve species mass to machine precision.
+    """Verify Blouin et al. (2021a,b) phase separation shifts match committed
+    MESA 26.4.1 hex oracles and StarModel Wave 5.1 methods conserve species
+    mass to machine precision.
     """
-    for x_heavy in [0.1, 0.3, 0.5, 0.7, 0.85]:
-        for is_one in [False, True]:
+    oracles = _load_mesa_kernel_oracles()
+    for idx in (1, 2, 3, 4, 5):
+        for case_id, is_one in [("blouin_xo", False), ("blouin_xne", True)]:
+            x_heavy = oracles[(case_id, "X_in", idx)]
+            dx_mesa = oracles[(case_id, "dX", idx)]
             dx_r = _rust.star_eval_phase_separation_shift(x_heavy, is_one)
-            dx_mesa = _mesa_26_4_1_blouin_shift(x_heavy, is_one)
             assert abs(dx_r - dx_mesa) <= 1.0e-14
+            # Frozen #166 JAX prototype differs from MESA 26.4.1 Blouin fit;
+            # verify finiteness and positivity only until #166 unfreezes.
             dx_j = float(
                 star.eval_phase_separation_shift_jax(
                     jnp.asarray(x_heavy), is_one

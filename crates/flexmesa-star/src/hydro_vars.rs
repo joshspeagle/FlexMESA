@@ -292,8 +292,10 @@ pub(crate) fn do1_mlt_2(
     let phase_k = model.eos_res.get(k).map_or(0.0, |r| r[I_PHASE]);
     let m_cryst = model.aux.crystal_core_boundary_mass;
     let m_mix = model.aux.phase_sep_mixing_mass;
+    // `turb_info.f90:143-159` tests the boundary masses without a sign gate;
+    // the `-1` sentinels (`init.f90:770-771`) never satisfy either test.
     if (phase_k > 0.5 && model.mu[k] > 1.7)
-        || (m_cryst > 0.0 && m_cryst + crystal_pad > model.m[k])
+        || m_cryst + crystal_pad > model.m[k]
     {
         set_no_mixing_face(
             model,
@@ -307,7 +309,7 @@ pub(crate) fn do1_mlt_2(
         return Ok(false);
     }
 
-    if m_mix > 0.0 && model.m[k] <= m_mix {
+    if model.m[k] <= m_mix {
         set_no_mixing_face(
             model,
             k,
@@ -1304,7 +1306,11 @@ pub fn set_hydro_vars(
     if !model.aux.doing_struct_burn_mix {
         do_brunt_n2(model);
         if model.aux.mixing.okay_to_set_mixing_info {
-            crate::mix_info::set_mixing_info(model)?;
+            let skip_set_cz_bdy_mass = !model.aux.mixing.have_new_generation;
+            crate::mix_info::set_mixing_info_with_skip(
+                model,
+                skip_set_cz_bdy_mass,
+            )?;
             if sig_was_zero {
                 update_sig_from_d_mix(model)?;
             }

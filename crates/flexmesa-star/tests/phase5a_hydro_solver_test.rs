@@ -183,6 +183,11 @@ fn assert_tridiagonal_jacobian_matches_fd(
     abs_tol: f64,
 ) {
     let mut m0 = base_model.clone();
+    // Upstream Newton residual/Jacobian evaluation (`set_vars_for_solver`,
+    // `hydro_vars.f90:275`) runs with `skip_mixing_info = .true.` so
+    // start-of-step `sig`, `sig_rti`, `sigmid_rti`, and `dpdr_drhodr_info` stay
+    // fixed across solver iterations.
+    m0.aux.doing_struct_burn_mix = true;
     m0.pack_xh();
     let sys0 =
         eval_henyey_equations(&mut m0, include_chem).expect("baseline eqns");
@@ -200,6 +205,7 @@ fn assert_tridiagonal_jacobian_matches_fd(
 
             let perturb_h = |sgn: f64| {
                 let mut m = base_model.clone();
+                m.aux.doing_struct_burn_mix = true;
                 m.pack_xh();
                 m.xh[k_var * nvar_hydro + j_var] += sgn * delta;
                 m.unpack_xh();
@@ -265,6 +271,7 @@ fn assert_tridiagonal_jacobian_matches_fd(
 
             let perturb_x = |sgn: f64, sink: Option<usize>| {
                 let mut m = base_model.clone();
+                m.aux.doing_struct_burn_mix = true;
                 m.xa[k_var * m.species + j_sp] += sgn * delta;
                 if let Some(s) = sink {
                     m.xa[k_var * m.species + s] -= sgn * delta;
@@ -436,8 +443,14 @@ fn test_frozen_microphysics_star_ad_jacobian_matches_central_fd_to_1e_10() {
                             &sys0, k_equ, i_equ, k_var, j_var,
                         );
                         let eq0 = sys0.equ[k_equ * nvar + i_equ].abs();
+                        // Literal provenance (#155): pre-#262 used fixed atol
+                        // `1.0e-9`; #262 added the IEEE-754 central-FD
+                        // cancellation floor `2 * f64::EPSILON * |equ| / eps_var`
+                        // (matching line 233) because on `u_flag` (`k_equ = 2`,
+                        // `i_equ = 3`) `|equ| = 7.05e6` makes 1 ULP of central
+                        // FD equal to `2.6e-4` at `eps_var = 3e-6`.
                         let eff_atol =
-                            1.0e-9_f64.max(2.0 * f64::EPSILON * eq0 / eps);
+                            1.0e-9_f64.max(2.0 * f64::EPSILON * eq0 / eps_var);
                         assert_entry_matches(
                             &format!(
                                 "frozen({v_flag},{u_flag},{rti_flag}) k_equ={k_equ} i_equ={i_equ} k_var={k_var} j_var={j_var}"

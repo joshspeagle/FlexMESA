@@ -335,7 +335,8 @@ pub use micro_cache::MicrophysicsCache;
 pub use mix_info::{
     cdc_factor, clean_mixing_glitches, compute_convection_sigmas,
     do_mix_envelope, eval_dxdt_mix, face_density, locate_convection_boundaries,
-    set_cz_bdy_mass, set_cz_boundary_info, set_mixing_info, ConvBoundary,
+    set_cz_bdy_mass, set_cz_boundary_info, set_mixing_info,
+    set_mixing_info_with_skip,
 };
 pub use model::StarModel;
 pub use model_io::{
@@ -344,8 +345,9 @@ pub use model_io::{
     try_write_photo_bytes, write_mod_string, write_photo_bytes,
 };
 pub use overshoot::{
-    add_overshooting, apply_overshooting, eval_conv_bdy_hp, eval_conv_bdy_k,
-    eval_conv_bdy_r, eval_over_bdy_params, OvershootConfig, OvershootScheme,
+    add_overshooting, apply_overshoot_configs, eval_conv_bdy_hp,
+    eval_conv_bdy_k, eval_conv_bdy_r, eval_over_bdy_params, OvershootConfig,
+    OvershootScheme,
 };
 pub use paquette_coeffs::paquette_coefficients;
 pub use phase_separation::{

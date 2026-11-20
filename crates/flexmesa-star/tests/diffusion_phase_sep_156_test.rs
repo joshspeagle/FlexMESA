@@ -20,7 +20,9 @@ use flexmesa_eos::{I_PHASE, SkyeSolidMixingRule};
 use flexmesa_kap::KapConfig;
 use flexmesa_star::diffusion::{
     SolveDiffusionInput, SolveDiffusionOutput, do_solve_diffusion,
+    eval_caplan_ocp_dstar,
 };
+use flexmesa_star::diffusion_procs::setup_struct_info;
 use flexmesa_star::diffusion_support::{
     MatrixCoeffsInput, MatrixCoeffsOutput, get_matrix_coeffs,
 };
@@ -28,7 +30,7 @@ use flexmesa_star::element_diffusion::{
     do_element_diffusion_step, finish_element_diffusion,
 };
 use flexmesa_star::hydro_energy::setup_sources_and_others;
-use flexmesa_star::hydro_vars::set_hydro_vars;
+use flexmesa_star::hydro_vars::{set_hydro_vars, set_mlt_vars};
 use flexmesa_star::inlist::InlistBundle;
 use flexmesa_star::model_io::{
     PHOTO_FORMAT_VERSION, load_photo_bytes, read_mod_str, write_mod_string,
@@ -51,9 +53,28 @@ fn load_oracles() -> OracleMap {
     let text = std::fs::read_to_string(&path).unwrap_or_else(|e| {
         panic!("failed to read {}: {e}", path.display());
     });
+    let mut has_mesa_ver = false;
+    let mut has_sdk_ver = false;
+    let mut has_compiler = false;
     let mut map = HashMap::new();
     for line in text.lines() {
         let trimmed = line.trim();
+        if trimmed.starts_with("# mesa_version:") {
+            has_mesa_ver = true;
+            continue;
+        }
+        if trimmed.starts_with("# mesasdk_version:") {
+            has_sdk_ver = true;
+            continue;
+        }
+        if trimmed.starts_with("# compiler:") {
+            assert!(
+                trimmed.contains("GCC version"),
+                "unexpected compiler header: {trimmed}"
+            );
+            has_compiler = true;
+            continue;
+        }
         if trimmed.is_empty()
             || trimmed.starts_with('#')
             || trimmed.starts_with("section\t")
@@ -75,9 +96,12 @@ fn load_oracles() -> OracleMap {
         let val = f64::from_bits(bits);
         map.insert((sec, cid, fld, ii, jj), val);
     }
+    assert!(has_mesa_ver, "oracle TSV missing # mesa_version header");
+    assert!(has_sdk_ver, "oracle TSV missing # mesasdk_version header");
+    assert!(has_compiler, "oracle TSV missing # compiler header");
     assert!(
-        map.len() >= 1500,
-        "expected >= 1500 oracle entries, got {}",
+        map.len() >= 2400,
+        "expected >= 2400 oracle entries, got {}",
         map.len()
     );
     map
@@ -452,15 +476,120 @@ fn test_do_solve_diffusion_be_and_isolve_match_mesa_26_4_1_oracles() {
     let class_z = [1_usize, 2, 6, 26];
     let diff_fac = [1.0_f64; 4];
 
-    // (cid, use_isolve, use_cgs, use_caplan, total_time, eta_v, gam_v, is_wd)
-    let cases: [(&str, bool, bool, bool, f64, f64, f64, bool); 3] = [
-        ("be_thoul_solar", false, false, false, 1.0e14, -1.0, 0.05, false),
-        ("isolve_ros2_solar", true, false, false, 1.0e14, -1.0, 0.05, false),
-        ("be_cgs_caplan_wd", false, true, true, 1.0e12, 50.0, 20.0, true),
+    // (cid, use_isolve, solver_name, use_cgs, use_caplan, total_time, eta_v, gam_v, is_wd)
+    let cases: [(&str, bool, &str, bool, bool, f64, f64, f64, bool); 9] = [
+        (
+            "be_thoul_solar",
+            false,
+            "ros2_solver",
+            false,
+            false,
+            1.0e14,
+            -1.0,
+            0.05,
+            false,
+        ),
+        (
+            "isolve_ros2_solar",
+            true,
+            "ros2_solver",
+            false,
+            false,
+            1.0e14,
+            -1.0,
+            0.05,
+            false,
+        ),
+        (
+            "isolve_rose2_solar",
+            true,
+            "rose2_solver",
+            false,
+            false,
+            1.0e14,
+            -1.0,
+            0.05,
+            false,
+        ),
+        (
+            "isolve_ros3p_solar",
+            true,
+            "ros3p_solver",
+            false,
+            false,
+            1.0e14,
+            -1.0,
+            0.05,
+            false,
+        ),
+        (
+            "isolve_ros3pl_solar",
+            true,
+            "ros3pl_solver",
+            false,
+            false,
+            1.0e14,
+            -1.0,
+            0.05,
+            false,
+        ),
+        (
+            "isolve_rodas3_solar",
+            true,
+            "rodas3_solver",
+            false,
+            false,
+            1.0e14,
+            -1.0,
+            0.05,
+            false,
+        ),
+        (
+            "isolve_rodas4_solar",
+            true,
+            "rodas4_solver",
+            false,
+            false,
+            1.0e14,
+            -1.0,
+            0.05,
+            false,
+        ),
+        (
+            "isolve_rodasp_solar",
+            true,
+            "rodasp_solver",
+            false,
+            false,
+            1.0e14,
+            -1.0,
+            0.05,
+            false,
+        ),
+        (
+            "be_cgs_caplan_wd",
+            false,
+            "ros2_solver",
+            true,
+            true,
+            1.0e12,
+            50.0,
+            20.0,
+            true,
+        ),
     ];
 
-    for (cid, use_isolve, use_cgs, use_caplan, total_time, eta_v, gam_v, is_wd) in
-        cases
+    for (
+        cid,
+        use_isolve,
+        solver_name,
+        use_cgs,
+        use_caplan,
+        total_time,
+        eta_v,
+        gam_v,
+        is_wd,
+    ) in cases
     {
         let m_tot = if is_wd { 0.6 * M_SUN } else { M_SUN };
         let r_out = if is_wd { 8.0e8 } else { 6.0e10 };
@@ -614,7 +743,7 @@ fn test_do_solve_diffusion_be_and_isolve_match_mesa_26_4_1_oracles() {
             rtol_for_isolve: 1.0e-4,
             atol_for_isolve: 1.0e-5,
             maxsteps_for_isolve: 1000,
-            isolve_solver_name: "ros2_solver",
+            isolve_solver_name: solver_name,
             nzlo_in: 0,
             nzhi_in: nz - 1,
         };
@@ -639,52 +768,57 @@ fn test_do_solve_diffusion_be_and_isolve_match_mesa_26_4_1_oracles() {
 
         let want_steps =
             oracle_val(&oracles, "solve_diff", cid, "steps_used", 0, 0);
-        if use_isolve {
-            assert!(stats.steps_used >= 1);
-        } else {
-            assert_eq!(
-                stats.steps_used as f64, want_steps,
-                "solve_diff/{cid}/steps_used mismatch"
-            );
-        }
+        assert_eq!(
+            stats.steps_used as f64, want_steps,
+            "solve_diff/{cid}/steps_used mismatch"
+        );
 
-        let x_tol = if use_isolve { 1.0e-6 } else { 1.0e-11 };
-        let v_tol = if use_isolve { 1.0e-5 } else { 1.0e-10 };
+        let x_tol = 1.0e-12;
+        let v_tol = 1.0e-11;
 
+        let mut moved = false;
         for k in 0..nz {
             let k1 = k + 1;
+            let we = oracle_val(&oracles, "solve_diff", cid, "E_field", k1, 0);
+            let wg = oracle_val(&oracles, "solve_diff", cid, "g_field", k1, 0);
             assert_close(
                 &format!("solve_diff/{cid}/E_field[{k1}]"),
                 e_fld[k],
-                oracle_val(&oracles, "solve_diff", cid, "E_field", k1, 0),
+                we,
                 v_tol,
                 1.0e-25,
             );
             assert_close(
                 &format!("solve_diff/{cid}/g_field[{k1}]"),
                 g_fld[k],
-                oracle_val(&oracles, "solve_diff", cid, "g_field", k1, 0),
+                wg,
                 v_tol,
                 1.0e-25,
             );
             for j in 0..nc {
                 let j1 = j + 1;
+                let wx = oracle_val(&oracles, "solve_diff", cid, "X_final", j1, k1);
+                let wv = oracle_val(&oracles, "solve_diff", cid, "v_total", j1, k1);
+                if (x_final[k * nc + j] - x_init[k * nc + j]).abs() > 1.0e-9 {
+                    moved = true;
+                }
                 assert_close(
                     &format!("solve_diff/{cid}/X_final[{j1},{k1}]"),
                     x_final[k * nc + j],
-                    oracle_val(&oracles, "solve_diff", cid, "X_final", j1, k1),
+                    wx,
                     x_tol,
-                    1.0e-12,
+                    1.0e-14,
                 );
                 assert_close(
                     &format!("solve_diff/{cid}/v_total[{j1},{k1}]"),
                     v_tot[k * nc + j],
-                    oracle_val(&oracles, "solve_diff", cid, "v_total", j1, k1),
+                    wv,
                     v_tol,
                     1.0e-25,
                 );
             }
         }
+        assert!(moved, "solve_diff/{cid} did not evolve X_final from X_init");
 
         // Verify species conservation across the domain
         for j in 0..nc {
@@ -803,16 +937,54 @@ fn build_wd_phase_sep_model(is_one: bool) -> StarModel {
 fn test_phase_separation_co_and_one_match_mesa_26_4_1_oracles() {
     let oracles = load_oracles();
 
-    // Direct sanity checks on Blouin (2021a/b) boundary endpoints and sign
+    // Direct checks against Section 5 (`kernels`) compiled MESA 26.4.1 hex oracles
+    for idx in 1..=3 {
+        let gam = oracle_val(&oracles, "kernels", "dstar_ocp", "Gamma", idx, 0);
+        let kap = oracle_val(&oracles, "kernels", "dstar_ocp", "kappa", idx, 0);
+        let want =
+            oracle_val(&oracles, "kernels", "dstar_ocp", "Dstar", idx, 0);
+        assert_close(
+            &format!("kernels/dstar_ocp[{idx}]"),
+            eval_caplan_ocp_dstar(gam, kap),
+            want,
+            1.0e-14,
+            0.0,
+        );
+    }
+    for idx in 1..=5 {
+        let x_in = oracle_val(&oracles, "kernels", "blouin_xo", "X_in", idx, 0);
+        let want_o = oracle_val(&oracles, "kernels", "blouin_xo", "dX", idx, 0);
+        assert_close(
+            &format!("kernels/blouin_xo[{idx}]"),
+            blouin_delta_xo(x_in),
+            want_o,
+            1.0e-14,
+            1.0e-16,
+        );
+        let x_ne =
+            oracle_val(&oracles, "kernels", "blouin_xne", "X_in", idx, 0);
+        let want_ne =
+            oracle_val(&oracles, "kernels", "blouin_xne", "dX", idx, 0);
+        assert_close(
+            &format!("kernels/blouin_xne[{idx}]"),
+            blouin_delta_xne(x_ne),
+            want_ne,
+            1.0e-14,
+            1.0e-16,
+        );
+    }
     assert_eq!(blouin_delta_xo(0.0), 0.0);
     assert_eq!(blouin_delta_xo(1.0), 0.0);
     assert_eq!(blouin_delta_xne(0.0), 0.0);
     assert_eq!(blouin_delta_xne(1.0), 0.0);
-    assert!(blouin_delta_xo(0.5) > 0.08 && blouin_delta_xo(0.5) < 0.14);
-    assert!(blouin_delta_xne(0.5) > 0.05 && blouin_delta_xne(0.5) < 0.10);
 
-    for (is_one, cid) in [(false, "blouin_co"), (true, "blouin_one")] {
+    for (is_one, use_brunt, cid) in [
+        (false, false, "blouin_co"),
+        (true, false, "blouin_one"),
+        (false, true, "blouin_co_brunt"),
+    ] {
         let mut model = build_wd_phase_sep_model(is_one);
+        model.controls.diffusion.phase_separation_mixing_use_brunt = use_brunt;
         let nz = model.nz;
         let sp = model.species;
         let catalog = NuclideCatalog::builtin_ref();
@@ -874,37 +1046,87 @@ fn test_phase_separation_co_and_one_match_mesa_26_4_1_oracles() {
                 &format!("ps/{cid}/X_c12[{k1}]"),
                 model.xa[k * sp + ic12_i],
                 oracle_val(&oracles, "phase_sep", cid, "X_c12", k1, 0),
-                1.0e-10,
                 1.0e-12,
+                1.0e-14,
             );
             assert_close(
                 &format!("ps/{cid}/X_o16[{k1}]"),
                 model.xa[k * sp + io16_i],
                 oracle_val(&oracles, "phase_sep", cid, "X_o16", k1, 0),
-                1.0e-10,
                 1.0e-12,
+                1.0e-14,
             );
             assert_close(
                 &format!("ps/{cid}/X_ne20[{k1}]"),
                 model.xa[k * sp + ine20_i],
                 oracle_val(&oracles, "phase_sep", cid, "X_ne20", k1, 0),
-                1.0e-10,
                 1.0e-12,
+                1.0e-14,
             );
             assert_close(
                 &format!("ps/{cid}/eps_phase_sep[{k1}]"),
                 model.aux.eps_phase_separation[k],
                 oracle_val(&oracles, "phase_sep", cid, "eps_phase_sep", k1, 0),
-                1.0e-4,
-                1.0e-4,
+                1.0e-8,
+                1.0e-10,
             );
             assert_close(
                 &format!("ps/{cid}/lnd_final[{k1}]"),
                 model.lnd[k],
                 oracle_val(&oracles, "phase_sep", cid, "lnd_final", k1, 0),
-                1.0e-6,
-                1.0e-6,
+                1.0e-12,
+                1.0e-12,
             );
+            assert_close(
+                &format!("ps/{cid}/lnPgas_final[{k1}]"),
+                model.ln_pgas[k],
+                oracle_val(&oracles, "phase_sep", cid, "lnPgas_final", k1, 0),
+                1.0e-12,
+                1.0e-12,
+            );
+            if k > 0 {
+                // `hydro_vars.rs::do1_mlt_2` currently interpolates cell `Prad`
+                // linearly instead of upstream `get_Prad_face = crad * T_face^4 / 3`
+                // (`star_utils.f90:3838-3843`; tracked in #291). Factor out
+                // that exact `Prad` ratio here so `P_face * kap_face * L / (16 pi c G m)`
+                // from `phase_separation::update_model_range` is checked to 1e-11
+                // against MESA 26.4.1 without loosening the tolerance.
+                let (alfa, beta) = model.get_face_weights(k);
+                let t0 = model.t[k];
+                let tm1 = model.t[k - 1];
+                let t_face = alfa * t0 + beta * tm1;
+                let prad_ratio = (alfa * flexmesa_math::pow4(t0)
+                    + beta * flexmesa_math::pow4(tm1))
+                    / flexmesa_math::pow4(t_face);
+                assert_close(
+                    &format!("ps/{cid}/gradr_final[{k1}] (adj #291)"),
+                    model.gradr[k] * prad_ratio,
+                    oracle_val(
+                        &oracles,
+                        "phase_sep",
+                        cid,
+                        "gradr_final",
+                        k1,
+                        0,
+                    ),
+                    1.0e-11,
+                    1.0e-15,
+                );
+                assert_close(
+                    &format!("ps/{cid}/grada_face_final[{k1}]"),
+                    model.aux.mixing.grada_face[k],
+                    oracle_val(
+                        &oracles,
+                        "phase_sep",
+                        cid,
+                        "grada_face_final",
+                        k1,
+                        0,
+                    ),
+                    1.0e-7,
+                    1.0e-12,
+                );
+            }
         }
 
         // Verify turb_info.f90:143-159 mixing types persist through set_hydro_vars
@@ -1255,4 +1477,273 @@ fn test_diffusion_phase_sep_guards_energy_gating_and_photo_v26_restart() {
         wd_photo.aux.eps_phase_separation,
         wd.aux.eps_phase_separation
     );
+}
+
+#[test]
+fn test_phase_sep_update_model_range_matches_set_mlt_vars_and_rotation_gating()
+{
+    // Verify `phase_separation::update_model_range` calls `set_mlt_vars_range`
+    // (`phase_separation.f90:387-390`, `turb_info.f90:125-134`), applying both
+    // `gradr_factor` and `rotation_flag && mlt_use_rotation_correction` (and
+    // NOT keying on `use_gravity_rotation_correction`).
+    for (rot_on, mlt_rot, grav_rot, gradr_fac) in [
+        (false, false, false, 1.35_f64),
+        (true, true, false, 1.25_f64),
+        (true, false, true, 1.15_f64),
+    ] {
+        let mut model = build_wd_phase_sep_model(false);
+        let nz = model.nz;
+        model.controls.rotation_flag = rot_on;
+        model.controls.mix_wind.mlt_use_rotation_correction = mlt_rot;
+        model.controls.use_gravity_rotation_correction = grav_rot;
+        model.aux.mixing.gradr_factor.fill(gradr_fac);
+        model.aux.fp_rot = vec![0.85; nz];
+        model.aux.ft_rot = vec![0.92; nz];
+
+        do_phase_separation_step(&mut model, 1.0e13)
+            .expect("phase separation step with MLT gradr_factor/rotation");
+
+        let gradr_after_ps = model.gradr.clone();
+        let grada_after_ps = model.aux.mixing.grada_face.clone();
+        let gradt_after_ps = model.gradt.clone();
+        let mlt_d_after_ps = model.mlt_d.clone();
+
+        // Compare directly against `set_mlt_vars` on the exact same post-step
+        // thermodynamic state (disable `rotation_flag` side-effect recalc by
+        // calling `set_mlt_vars` after restoring fixed fp_rot/ft_rot).
+        let saved_fp = model.aux.fp_rot.clone();
+        let saved_ft = model.aux.ft_rot.clone();
+        model.aux.doing_struct_burn_mix = true;
+        set_mlt_vars(&mut model).expect("set_mlt_vars reference");
+        model.aux.doing_struct_burn_mix = false;
+        assert_eq!(model.aux.fp_rot, saved_fp);
+        assert_eq!(model.aux.ft_rot, saved_ft);
+
+        for k in 1..nz {
+            assert_eq!(
+                gradr_after_ps[k].to_bits(),
+                model.gradr[k].to_bits(),
+                "gradr[{k}] mismatch (rot={rot_on}, mlt_rot={mlt_rot}, grav_rot={grav_rot})"
+            );
+            assert_eq!(
+                grada_after_ps[k].to_bits(),
+                model.aux.mixing.grada_face[k].to_bits(),
+                "grada_face[{k}] mismatch"
+            );
+            assert_eq!(
+                gradt_after_ps[k].to_bits(),
+                model.gradt[k].to_bits(),
+                "gradt[{k}] mismatch"
+            );
+            assert_eq!(
+                mlt_d_after_ps[k].to_bits(),
+                model.mlt_d[k].to_bits(),
+                "mlt_d[{k}] mismatch"
+            );
+        }
+    }
+
+    // Confirm `gradr_factor` and `mlt_use_rotation_correction` measurably shift
+    // `gradr` relative to baseline (so the comparison above is non-trivial).
+    let mut m_base = build_wd_phase_sep_model(false);
+    do_phase_separation_step(&mut m_base, 1.0e13).expect("baseline ps");
+
+    let mut m_fac = build_wd_phase_sep_model(false);
+    m_fac.aux.mixing.gradr_factor.fill(1.5);
+    do_phase_separation_step(&mut m_fac, 1.0e13).expect("gradr_factor ps");
+    assert_close(
+        "gradr_factor scaling on interior face",
+        m_fac.gradr[1] / m_base.gradr[1],
+        1.5,
+        1.0e-14,
+        0.0,
+    );
+
+    let mut m_rot_off = build_wd_phase_sep_model(false);
+    let nz = m_rot_off.nz;
+    m_rot_off.controls.rotation_flag = true;
+    m_rot_off.controls.mix_wind.mlt_use_rotation_correction = false;
+    m_rot_off.controls.use_gravity_rotation_correction = true;
+    m_rot_off.aux.fp_rot = vec![0.8; nz];
+    m_rot_off.aux.ft_rot = vec![0.9; nz];
+    do_phase_separation_step(&mut m_rot_off, 1.0e13).expect("rot_off ps");
+    assert_eq!(
+        m_rot_off.gradr[1].to_bits(),
+        m_base.gradr[1].to_bits(),
+        "use_gravity_rotation_correction must NOT alter gradr when mlt_use_rotation_correction is false"
+    );
+
+    let mut m_rot_on = build_wd_phase_sep_model(false);
+    m_rot_on.controls.rotation_flag = true;
+    m_rot_on.controls.mix_wind.mlt_use_rotation_correction = true;
+    m_rot_on.controls.use_gravity_rotation_correction = false;
+    m_rot_on.aux.fp_rot = vec![0.8; nz];
+    m_rot_on.aux.ft_rot = vec![0.9; nz];
+    do_phase_separation_step(&mut m_rot_on, 1.0e13).expect("rot_on ps");
+    assert_close(
+        "mlt_use_rotation_correction ft/fp ratio",
+        m_rot_on.gradr[1] / m_base.gradr[1],
+        0.9 / 0.8,
+        1.0e-14,
+        0.0,
+    );
+}
+
+#[test]
+fn test_diffusion_dump_call_number_and_deferred_286_287_288_guards() {
+    // 1. Strict inlist loading rejects `diffusion_dump_call_number`
+    let tmp_dir = std::env::temp_dir()
+        .join(format!("flexmesa_156_dump_{}", std::process::id()));
+    std::fs::create_dir_all(&tmp_dir).expect("mkdir tmp");
+    let dump_path = tmp_dir.join("inlist_dump");
+    std::fs::write(&dump_path, "&controls\n  diffusion_dump_call_number = 1\n/\n")
+        .expect("write dump inlist");
+    assert!(
+        InlistBundle::from_file(&dump_path).is_err(),
+        "diffusion_dump_call_number must fail strict inlist validation"
+    );
+    let _ = std::fs::remove_dir_all(&tmp_dir);
+
+    // 2. Runtime `diffusion_dump_call_number`: call 1 runs when set to 2, call 2
+    //    fails loudly matching `element_diffusion.f90:242, 293, 361`.
+    let mut m_dump =
+        load_zams_model(StarControls::default(), StarJobControls::default())
+            .expect("load 1 Msun ZAMS");
+    m_dump.controls.do_element_diffusion = true;
+    m_dump.controls.diffusion.diffusion_dump_call_number = 2;
+    m_dump.d_mix.fill(0.0);
+    do_element_diffusion_step(&mut m_dump, 1.0e11)
+        .expect("call 1 before diffusion_dump_call_number = 2 must succeed");
+    assert_eq!(m_dump.aux.diffusion_call_number, 1);
+    let err_dump = do_element_diffusion_step(&mut m_dump, 1.0e11)
+        .expect_err("call 2 matching diffusion_dump_call_number = 2 must fail loudly");
+    let msg_dump = err_dump.to_string();
+    assert!(
+        matches!(err_dump, StarError::InvalidInput(_))
+            && msg_dump.contains("dump_diffusion_info"),
+        "unexpected error for diffusion_dump_call_number: {msg_dump}"
+    );
+
+    // 3. Radiative levitation (`op_mono`) loud error cites #286
+    let mut m_rad =
+        load_zams_model(StarControls::default(), StarJobControls::default())
+            .expect("load 1 Msun ZAMS");
+    m_rad.controls.do_element_diffusion = true;
+    m_rad.controls.diffusion.diffusion_max_t_for_radaccel = 1.0e9;
+    m_rad.d_mix.fill(0.0);
+    let err_rad = do_element_diffusion_step(&mut m_rad, 1.0e11)
+        .expect_err("op_mono must fail loudly");
+    assert!(
+        err_rad.to_string().contains("#286"),
+        "op_mono error must cite #286, got: {err_rad}"
+    );
+
+    // 4. #287 loud OOB guards: diffusion_num_classes == 0 and dq(nz+1) when
+    //    diffusion_min_T_at_surface pushes nzlo to the innermost zone.
+    let mut m_nc0 =
+        load_zams_model(StarControls::default(), StarJobControls::default())
+            .expect("load 1 Msun ZAMS");
+    m_nc0.controls.do_element_diffusion = true;
+    m_nc0.controls.diffusion.diffusion_use_full_net = false;
+    m_nc0.controls.diffusion.diffusion_num_classes = 0;
+    let err_nc0 = do_element_diffusion_step(&mut m_nc0, 1.0e11)
+        .expect_err("diffusion_num_classes == 0 must fail loudly (#287)");
+    assert!(
+        matches!(err_nc0, StarError::InvalidInput(_))
+            && err_nc0.to_string().contains("#287"),
+        "unexpected error for nc=0: {err_nc0}"
+    );
+
+    let mut m_dq_oob =
+        load_zams_model(StarControls::default(), StarJobControls::default())
+            .expect("load 1 Msun ZAMS");
+    m_dq_oob.controls.do_element_diffusion = true;
+    m_dq_oob.controls.diffusion.diffusion_min_t_at_surface = 1.0e20;
+    m_dq_oob.controls.diffusion.diffusion_min_dq_ratio_at_surface = 10.0;
+    let err_dq = do_element_diffusion_step(&mut m_dq_oob, 1.0e11)
+        .expect_err("nzlo == nz-1 with min_dq_ratio > 0 must fail loudly (#287)");
+    assert!(
+        matches!(err_dq, StarError::InvalidInput(_))
+            && err_dq.to_string().contains("#287"),
+        "unexpected error for dq(nz+1) OOB: {err_dq}"
+    );
+
+    // 5. #288 `setup_struct_info` typical_charge smoothing for 2 active zones:
+    //    fails loudly for nzlo == 0 (OOB) and calculate_ionization == true
+    //    (uninitialized), and matches upstream stencil when nzlo > 0 and
+    //    !calculate_ionization.
+    let nz = 4_usize;
+    let nc = 1_usize;
+    let m = 2_usize;
+    let zeros = vec![0.0_f64; nz];
+    let ones = vec![1.0_f64; nz];
+    let temps = vec![1.0e7_f64; nz];
+    let lnts: Vec<f64> = temps.iter().map(|&t| flexmesa_math::log(t)).collect();
+    let rhos = vec![1.0_f64; nz];
+    let lnds = vec![0.0_f64; nz];
+    let class_z = [2_usize];
+
+    let run_smooth = |nzlo: usize, nzhi: usize, calc_ion: bool| {
+        let mut rho_f = vec![0.0; nz];
+        let mut t_f = vec![0.0; nz];
+        let mut fpr = vec![0.0; nz];
+        let mut dlnp = vec![0.0; nz];
+        let mut dlnt = vec![0.0; nz];
+        let mut dlnr = vec![0.0; nz];
+        let mut z = vec![0.0; nz * m];
+        let mut typ_q = vec![1.0, 2.0, 5.0, 8.0];
+        let mut xm_f = vec![0.0; nz];
+        let mut rad_f = vec![0.0; nz * m];
+        let mut g_rad = vec![0.0; nz * nc];
+        let res = setup_struct_info(
+            nzlo,
+            nzhi,
+            nc,
+            m,
+            &zeros,
+            &zeros,
+            &zeros,
+            &ones,
+            &ones,
+            &ones,
+            &temps,
+            &lnts,
+            &rhos,
+            &lnds,
+            &ones,
+            &ones,
+            &class_z,
+            calc_ion,
+            1,
+            -1.0,
+            &mut rho_f,
+            &mut t_f,
+            &mut fpr,
+            &mut dlnp,
+            &mut dlnt,
+            &mut dlnr,
+            &mut z,
+            &mut typ_q,
+            &mut xm_f,
+            &mut rad_f,
+            &mut g_rad,
+        );
+        (res, typ_q)
+    };
+
+    let (r_oob, _) = run_smooth(0, 1, false);
+    let err_oob = r_oob.expect_err("2-zone smoothing at nzlo=0 must fail (#288)");
+    assert!(err_oob.to_string().contains("#288"));
+
+    let (r_uninit, _) = run_smooth(1, 2, true);
+    let err_uninit = r_uninit
+        .expect_err("2-zone smoothing with calculate_ionization must fail (#288)");
+    assert!(err_uninit.to_string().contains("#288"));
+
+    let (r_defined, q_defined) = run_smooth(1, 2, false);
+    r_defined.expect("2-zone smoothing with nzlo=1 and fixed charges is defined");
+    // Upstream pass: q[1] = (2*2 + 5)/3 = 3.0; then q[1] = (2*3.0 + q[0]=1.0)/3 = 7/3;
+    // then q[2] = q[1] = 7/3.
+    assert_close("2-zone upstream smooth q[1]", q_defined[1], 7.0 / 3.0, 1.0e-15, 0.0);
+    assert_close("2-zone upstream smooth q[2]", q_defined[2], 7.0 / 3.0, 1.0e-15, 0.0);
 }

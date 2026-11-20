@@ -21,7 +21,7 @@
         "verified_total": 4971,
         "pct_ported": 34.5,
         "pct_verified": 4.1,
-        "rust_lines": 83070,
+        "rust_lines": 83224,
         "python_jax_lines": 3869
       },
       {
@@ -225,7 +225,7 @@
         "verified_total": 0,
         "pct_ported": 0.0,
         "pct_verified": 0.0,
-        "rust_lines": 3348,
+        "rust_lines": 4152,
         "python_jax_lines": 1033
       },
       {
@@ -379,7 +379,7 @@
         "pct_ported": 0.0,
         "pct_verified": 0.0,
         "rust_lines": 4846,
-        "python_jax_lines": 2584
+        "python_jax_lines": 2659
       },
       {
         "module": "gyre",
@@ -455,7 +455,7 @@
       "upstream_panel_modules": 46
     },
     "infrastructure_lines": {
-      "rust_bridge_testing_bench": 19293,
+      "rust_bridge_testing_bench": 19294,
       "python_testing_bench": 14207
     }
   },
@@ -769,9 +769,9 @@
     "rust": {
       "tool": "cargo llvm-cov",
       "overall": {
-        "lines": 114322,
-        "covered": 85433,
-        "percent": 74.7
+        "lines": 114868,
+        "covered": 85949,
+        "percent": 74.8
       },
       "by_crate": [
         {
@@ -854,9 +854,9 @@
         },
         {
           "crate": "flexmesa-ionization",
-          "lines": 1386,
-          "covered": 1093,
-          "percent": 78.9
+          "lines": 1924,
+          "covered": 1619,
+          "percent": 84.1
         },
         {
           "crate": "flexmesa-kap",
@@ -908,8 +908,8 @@
         },
         {
           "crate": "flexmesa-star",
-          "lines": 54690,
-          "covered": 40764,
+          "lines": 54698,
+          "covered": 40754,
           "percent": 74.5
         },
         {
@@ -935,8 +935,8 @@
     "python": {
       "tool": "pytest --cov",
       "overall": {
-        "statements": 25535,
-        "covered": 22414,
+        "statements": 25569,
+        "covered": 22448,
         "percent": 87.8
       },
       "by_subpackage": [
@@ -996,9 +996,9 @@
         },
         {
           "subpackage": "flexmesa.data",
-          "statements": 661,
-          "covered": 536,
-          "percent": 81.1
+          "statements": 695,
+          "covered": 570,
+          "percent": 82.0
         },
         {
           "subpackage": "flexmesa.eos",
@@ -1435,8 +1435,18 @@
     ],
     "open_pull_requests": [
       {
-        "number": 285,
-        "title": "fix(star): follow upstream in the line-search rescue, sizeB skips, implicit-wind mdot and timestep arithmetic; refresh stale baseline rows (#152)",
+        "number": 292,
+        "title": "fix(star,binary): resolve #152, #153, and #159 audit code, precision, and test findings",
+        "draft": false
+      },
+      {
+        "number": 293,
+        "title": "fix(star): close #156 audit gaps (phase separation MLT, diffusion guards, all-7 Rosenbrock oracles)",
+        "draft": false
+      },
+      {
+        "number": 294,
+        "title": "fix(ionization): check table headers before using a cache entry (#281)",
         "draft": false
       }
     ],
@@ -1759,6 +1769,22 @@
         "state": "open",
         "kind": "upstream-bug",
         "parity_pending": false,
+        "needs_confirmation": false
+      },
+      {
+        "number": 287,
+        "title": "[Deferred bug] element_diffusion.f90 out-of-bounds array indexing for degenerate nzlo/nzhi and diffusion_num_classes",
+        "state": "open",
+        "kind": "upstream-bug",
+        "parity_pending": true,
+        "needs_confirmation": false
+      },
+      {
+        "number": 288,
+        "title": "[Deferred bug] diffusion_procs.f90 typical_charge smoothing reads nzlo-1 when active range has two zones",
+        "state": "open",
+        "kind": "upstream-bug",
+        "parity_pending": true,
         "needs_confirmation": false
       }
     ]
@@ -2244,6 +2270,32 @@
       "closed_140": "15",
       "total_140": "34",
       "deferred_169": "40"
+    },
+    {
+      "date_utc": "2026-11-20",
+      "commit": "aaa29e9",
+      "event": "main merge",
+      "engine_ported_pct": "30.2",
+      "all_verified_pct": "1.0",
+      "cases_passing": "0",
+      "rust_cov_pct": "74.7",
+      "python_cov_pct": "87.8",
+      "closed_140": "15",
+      "total_140": "34",
+      "deferred_169": "42"
+    },
+    {
+      "date_utc": "2026-11-20",
+      "commit": "e8042fa",
+      "event": "main merge",
+      "engine_ported_pct": "30.2",
+      "all_verified_pct": "1.0",
+      "cases_passing": "0",
+      "rust_cov_pct": "74.8",
+      "python_cov_pct": "87.8",
+      "closed_140": "15",
+      "total_140": "34",
+      "deferred_169": "42"
     }
   ]
 }

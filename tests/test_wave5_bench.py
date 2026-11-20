@@ -44,7 +44,11 @@ def test_wave5_bench_kernels_match_snapshots() -> None:
             assert rec.max_rel_err < (5.0e-12 if rec.n_zones == 8 else 5.0e-11)
         elif rec.workload == "w5_diff_rot":
             # Rust `eval_caplan_ocp_dstar` matches MESA 26.4.1 `get_Dstar_OCP`
-            # (#156), while `src/flexmesa/star/` stays frozen (#166).
+            # (`diffusion_support.f90:1716-1743`, #156), while the frozen #166
+            # prototype `eval_caplan_ocp_dstar_jax` in `jax_diffusion_rot.py`
+            # retains its pre-#156 placeholder fit (`1.22 + 0.405 * kap**1.77`).
+            # That frozen-JAX delta produces a measured max_rel_err of ~5.4e-5
+            # on the benchmark checksum; tighten once #166 unfreezes JAX.
             assert rec.max_rel_err < 5.0e-4
         elif rec.n_zones == 8:
             assert rec.max_rel_err < 1.0e-12

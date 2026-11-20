@@ -1019,9 +1019,10 @@ pub fn get_limit_coeffs(
 ///
 /// # Errors
 ///
-/// Returns [`StarError::InvalidInput`] if `T_face[nzlo + 1] <= max_t_for_radaccel`,
-/// because radiative levitation via OP monochromatic opacities (`op_mono`,
-/// `#156` Task 4 / `#161` Slice 3) is not yet implemented.
+/// Returns [`StarError::InvalidInput`] if `nsmooth_typical_charge > 0` hits
+/// the two-zone out-of-bounds/uninitialized read tracked in `#288`, or if
+/// `T_face[nzlo + 1] <= max_t_for_radaccel`, because radiative levitation via
+/// OP monochromatic opacities (`op_mono`, `#286`) is not yet implemented.
 #[allow(clippy::too_many_arguments, clippy::similar_names)]
 pub fn setup_struct_info(
     nzlo: usize,
@@ -1092,7 +1093,24 @@ pub fn setup_struct_info(
         rad_accel_face[k * m + nc] = 0.0;
     }
 
-    if nsmooth_typical_charge > 0 && nzhi >= nzlo + 2 {
+    if nsmooth_typical_charge > 0 {
+        // Upstream `diffusion_procs.f90:1098-1116` indexes `nzhi - 2`
+        // unconditionally. When `nzhi == nzlo + 1`, `nzhi - 2 == nzlo - 1` is
+        // out of bounds at `nzlo == 0` and uninitialized when
+        // `calculate_ionization` is true (#288). When `nzlo > 0` and
+        // `!calculate_ionization`, `typical_charge(:, nzlo - 1)` is defined
+        // from `element_diffusion.f90:248-252` and upstream's stencil runs
+        // verbatim.
+        if nzhi < nzlo + 2
+            && (nzhi <= nzlo || nzlo == 0 || calculate_ionization)
+        {
+            return Err(StarError::InvalidInput(format!(
+                "setup_struct_info typical_charge smoothing reached upstream \
+                 out-of-bounds/uninitialized read at nzhi-2 (nzlo={nzlo}, \
+                 nzhi={nzhi}, calculate_ionization={calculate_ionization}; \
+                 tracked under #288)"
+            )));
+        }
         for _pass in 0..nsmooth_typical_charge {
             for i in 0..nc {
                 typical_charge[nzlo * nc + i] =
@@ -1141,7 +1159,7 @@ pub fn setup_struct_info(
     Err(StarError::InvalidInput(format!(
         "radiative levitation via OP monochromatic opacities (op_mono) is not \
          implemented yet (T_face(nzlo+1)={:.6e} K <= diffusion_max_T_for_radaccel={:.6e} K; \
-         tracked under #156/#161). Set diffusion_max_T_for_radaccel = 0 to disable \
+         tracked under #286). Set diffusion_max_T_for_radaccel = 0 to disable \
          radiative acceleration.",
         t_face[nzlo + 1],
         max_t_for_radaccel

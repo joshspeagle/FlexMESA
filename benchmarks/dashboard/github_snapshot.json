@@ -229,8 +229,18 @@
   ],
   "open_pull_requests": [
     {
-      "number": 285,
-      "title": "fix(star): follow upstream in the line-search rescue, sizeB skips, implicit-wind mdot and timestep arithmetic; refresh stale baseline rows (#152)",
+      "number": 292,
+      "title": "fix(star,binary): resolve #152, #153, and #159 audit code, precision, and test findings",
+      "draft": false
+    },
+    {
+      "number": 293,
+      "title": "fix(star): close #156 audit gaps (phase separation MLT, diffusion guards, all-7 Rosenbrock oracles)",
+      "draft": false
+    },
+    {
+      "number": 294,
+      "title": "fix(ionization): check table headers before using a cache entry (#281)",
       "draft": false
     }
   ],
@@ -553,6 +563,22 @@
       "state": "open",
       "kind": "upstream-bug",
       "parity_pending": false,
+      "needs_confirmation": false
+    },
+    {
+      "number": 287,
+      "title": "[Deferred bug] element_diffusion.f90 out-of-bounds array indexing for degenerate nzlo/nzhi and diffusion_num_classes",
+      "state": "open",
+      "kind": "upstream-bug",
+      "parity_pending": true,
+      "needs_confirmation": false
+    },
+    {
+      "number": 288,
+      "title": "[Deferred bug] diffusion_procs.f90 typical_charge smoothing reads nzlo-1 when active range has two zones",
+      "state": "open",
+      "kind": "upstream-bug",
+      "parity_pending": true,
       "needs_confirmation": false
     }
   ]

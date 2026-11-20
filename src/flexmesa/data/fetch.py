@@ -73,6 +73,39 @@ class ReleaseBundle:
     manifest_dir: str = ""
 
 
+@dataclasses.dataclass(frozen=True, slots=True)
+class EmbeddedIonizationAsset:
+    """Provenance and grid metadata for embedded ``ion_tables_full.bin``."""
+
+    name: str
+    format: str
+    crate_relpath: str
+    manifest_relpath: str
+    builder_script: str
+    make_target: str
+    source_dir: str
+    source_tarball: str
+    file_prefix: str
+    z1_suffix: str
+    z1_suffix_choices: tuple[str, ...]
+    sha256: str
+    size_bytes: int
+    ion_version: int
+    min_version: int
+    num_tables: int
+    num_vals: int
+    num_log_qs: int
+    log_q_min: float
+    log_q_max: float
+    del_log_q: float
+    num_log_ts: int
+    log_t_min: float
+    log_t_max: float
+    del_log_t: float
+    value_scale: int
+    description: str
+
+
 RUNTIME_CACHE_SCHEMA_VERSION: int = 1
 _LEGACY_DATA_CACHE_ENTRIES: tuple[str, ...] = (
     "eos_4d_slices",
@@ -278,6 +311,48 @@ def load_bundles_manifest(
             )
         )
     return repo, tag, tuple(items)
+
+
+def load_embedded_ionization_asset(
+    manifest_path: pathlib.Path | None = None,
+) -> EmbeddedIonizationAsset:
+    """Load ``[embedded_ionization]`` provenance from ``bundles.toml``."""
+    path = (
+        manifest_path
+        if manifest_path is not None
+        else pathlib.Path(__file__).with_name("bundles.toml")
+    ).resolve()
+    raw = _read_bundles_toml(path)
+    ion = raw["embedded_ionization"]
+    return EmbeddedIonizationAsset(
+        name=str(ion["name"]),
+        format=str(ion["format"]),
+        crate_relpath=str(ion["crate_relpath"]),
+        manifest_relpath=str(ion["manifest_relpath"]),
+        builder_script=str(ion["builder_script"]),
+        make_target=str(ion["make_target"]),
+        source_dir=str(ion["source_dir"]),
+        source_tarball=str(ion["source_tarball"]),
+        file_prefix=str(ion["file_prefix"]),
+        z1_suffix=str(ion["z1_suffix"]),
+        z1_suffix_choices=tuple(str(s) for s in ion["z1_suffix_choices"]),
+        sha256=str(ion["sha256"]).lower(),
+        size_bytes=int(ion["size_bytes"]),
+        ion_version=int(ion["ion_version"]),
+        min_version=int(ion["min_version"]),
+        num_tables=int(ion["num_tables"]),
+        num_vals=int(ion["num_vals"]),
+        num_log_qs=int(ion["num_log_qs"]),
+        log_q_min=float(ion["log_q_min"]),
+        log_q_max=float(ion["log_q_max"]),
+        del_log_q=float(ion["del_log_q"]),
+        num_log_ts=int(ion["num_log_ts"]),
+        log_t_min=float(ion["log_t_min"]),
+        log_t_max=float(ion["log_t_max"]),
+        del_log_t=float(ion["del_log_t"]),
+        value_scale=int(ion["value_scale"]),
+        description=str(ion.get("description", "")),
+    )
 
 
 def _resolve_bundle_target_root(

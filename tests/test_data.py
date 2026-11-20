@@ -283,6 +283,38 @@ def test_bundles_manifest_and_directory_resolution(
         if b.kind == "single_zst":
             assert manifest.is_valid_sha256_hex(b.unpacked_sha256)
 
+    ion_asset = fetch.load_embedded_ionization_asset()
+    assert ion_asset.name == "ion_tables_full"
+    assert ion_asset.format == "FMION001"
+    assert manifest.is_valid_sha256_hex(ion_asset.sha256)
+    assert ion_asset.size_bytes == 17389152
+    assert ion_asset.z1_suffix == ""
+    assert ion_asset.z1_suffix_choices == ("", "_CO_0", "_CO_1")
+    assert ion_asset.ion_version == 51
+    assert ion_asset.min_version == 49
+    assert (
+        ion_asset.num_tables,
+        ion_asset.num_vals,
+        ion_asset.num_log_qs,
+        ion_asset.num_log_ts,
+    ) == (22, 28, 175, 102)
+    assert (
+        ion_asset.log_q_min,
+        ion_asset.log_q_max,
+        ion_asset.del_log_q,
+    ) == (-10.0, 5.66, 0.09)
+    assert (
+        ion_asset.log_t_min,
+        ion_asset.log_t_max,
+        ion_asset.del_log_t,
+    ) == (2.1, 8.16, 0.06)
+    assert ion_asset.value_scale == 1000
+    repo_root = pathlib.Path(__file__).resolve().parents[1]
+    ion_bin = repo_root / ion_asset.crate_relpath
+    assert ion_bin.is_file()
+    assert ion_bin.stat().st_size == ion_asset.size_bytes
+    assert manifest.compute_sha256_file(ion_bin) == ion_asset.sha256
+
     exp_dir = tmp_path / "explicit_data"
     env_dir = tmp_path / "env_data"
     xdg_dir = tmp_path / "xdg"

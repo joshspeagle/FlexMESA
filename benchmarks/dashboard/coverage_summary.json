@@ -2,9 +2,9 @@
   "rust": {
     "tool": "cargo llvm-cov",
     "overall": {
-      "lines": 114322,
-      "covered": 85433,
-      "percent": 74.7
+      "lines": 114868,
+      "covered": 85949,
+      "percent": 74.8
     },
     "by_crate": [
       {
@@ -87,9 +87,9 @@
       },
       {
         "crate": "flexmesa-ionization",
-        "lines": 1386,
-        "covered": 1093,
-        "percent": 78.9
+        "lines": 1924,
+        "covered": 1619,
+        "percent": 84.1
       },
       {
         "crate": "flexmesa-kap",
@@ -141,8 +141,8 @@
       },
       {
         "crate": "flexmesa-star",
-        "lines": 54690,
-        "covered": 40764,
+        "lines": 54698,
+        "covered": 40754,
         "percent": 74.5
       },
       {
@@ -168,8 +168,8 @@
   "python": {
     "tool": "pytest --cov",
     "overall": {
-      "statements": 25535,
-      "covered": 22414,
+      "statements": 25569,
+      "covered": 22448,
       "percent": 87.8
     },
     "by_subpackage": [
@@ -229,9 +229,9 @@
       },
       {
         "subpackage": "flexmesa.data",
-        "statements": 661,
-        "covered": 536,
-        "percent": 81.1
+        "statements": 695,
+        "covered": 570,
+        "percent": 82.0
       },
       {
         "subpackage": "flexmesa.eos",

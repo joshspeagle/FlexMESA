@@ -2,20 +2,19 @@
 //! Multi-star worker-pool batching experiment (`N` independent stars evolved
 //! concurrently on a `rayon::ThreadPool`, `#168` Task 6).
 
+use std::collections::BTreeSet;
 use std::fs;
 use std::path::Path;
 use std::time::Instant;
 
 use flexmesa_math::numerics_mode;
-use flexmesa_star::evolve::star_evolve_step_with_extras;
-use flexmesa_star::history::extract_history_row;
-use flexmesa_star::hydro_vars::set_hydro_vars;
 use flexmesa_star::inlist::{InlistBundle, InlistLoadOptions};
-use flexmesa_star::inlist_runner::DefaultStarExtras;
+use flexmesa_star::inlist_runner::{
+    run_inlist_stage_with_logs, DefaultStarExtras, ExtrasDirective, StarExtras,
+};
 use flexmesa_star::model::StarModel;
 use flexmesa_star::rn_parser::{parse_rn_stages, RnStage};
 use flexmesa_star::star_job_init::init_or_update_model_from_bundle;
-use flexmesa_star::termination::check_termination_limits_with_history;
 use rayon::prelude::*;
 
 use crate::json_fmt::{
@@ -58,9 +57,21 @@ impl BatchPointRecord {
     }
 }
 
+#[derive(Default)]
+struct ZoneCountExtras {
+    total_zone_steps: usize,
+}
+
+impl StarExtras for ZoneCountExtras {
+    fn extras_finish_step(&mut self, model: &mut StarModel) -> ExtrasDirective {
+        self.total_zone_steps += model.nz;
+        ExtrasDirective::KeepGoing
+    }
+}
+
 fn load_template_model_from_case(
     orig_case_dir: &Path,
-) -> Result<StarModel, String> {
+) -> Result<(StarModel, InlistBundle, Vec<String>), String> {
     let staging = StagedCaseGuard::new(orig_case_dir)?;
     let case_dir = staging.staged_dir.as_path();
     let rn_stages = parse_rn_stages(case_dir, true)
@@ -83,13 +94,24 @@ fn load_template_model_from_case(
                     case_dir, inlist, load_opts,
                 )
                 .map_err(|e| format!("inlist load failed: {e}"))?;
-                let model = init_or_update_model_from_bundle(
+                let mut ignored_set: BTreeSet<String> = BTreeSet::new();
+                for sec in &bundle.validation_report.unsupported_sections {
+                    ignored_set.insert(format!("&{sec}"));
+                }
+                for (sec, key) in &bundle.validation_report.unsupported_controls
+                {
+                    ignored_set.insert(format!("&{sec}::{key}"));
+                }
+                let mut model = init_or_update_model_from_bundle(
                     &bundle,
                     current_model.take(),
                     &mut extras,
                 )
                 .map_err(|e| format!("model init failed: {e}"))?;
-                return Ok(model);
+                // Prevent parallel batch workers from writing `final.mod` into
+                // the temporary staging directory after it is dropped.
+                model.job.save_model_when_terminate = false;
+                return Ok((model, bundle, ignored_set.into_iter().collect()));
             }
         }
     }
@@ -98,47 +120,14 @@ fn load_template_model_from_case(
 
 fn evolve_one_grid_star(
     model: &mut StarModel,
+    bundle: &InlistBundle,
     max_steps: Option<usize>,
 ) -> Result<(usize, usize), String> {
-    let mut extras = DefaultStarExtras;
-    let do_remesh =
-        model.controls.okay_to_remesh && model.controls.mesh_delta_coeff > 0.0;
-    let op_split = model.controls.op_split_burn;
-    let cap = max_steps.unwrap_or(50_000);
-    let mut steps = 0_usize;
-    let mut zone_steps = 0_usize;
-
-    for _ in 0..cap {
-        star_evolve_step_with_extras(
-            model,
-            do_remesh,
-            op_split,
-            true,
-            &mut extras,
-        )
-        .map_err(|e| format!("grid star step failed: {e}"))?;
-        steps += 1;
-        zone_steps += model.nz;
-        model.mstar_start = model.mstar;
-        if !model.controls.rsp_flag {
-            model
-                .sync_mesh_and_pack()
-                .map_err(|e| format!("sync_mesh failed: {e}"))?;
-            set_hydro_vars(model, false, false)
-                .map_err(|e| format!("set_hydro_vars failed: {e}"))?;
-            model
-                .save_start_values()
-                .map_err(|e| format!("save_start_values failed: {e}"))?;
-        }
-        let hr = extract_history_row(model);
-        if matches!(
-            check_termination_limits_with_history(model, Some(&hr)),
-            Ok(flexmesa_star::LimitCheckOutcome::Terminate { .. })
-        ) {
-            break;
-        }
-    }
-    Ok((steps, zone_steps))
+    let mut extras = ZoneCountExtras::default();
+    let rep =
+        run_inlist_stage_with_logs(model, bundle, &mut extras, max_steps, None)
+            .map_err(|e| format!("grid star step failed: {e}"))?;
+    Ok((rep.steps_taken, extras.total_zone_steps))
 }
 
 /// Runs `batch_sizes` independent stellar evolutions concurrently on a dedicated
@@ -156,7 +145,18 @@ pub fn run_batch_scaling_json(
         .and_then(|s| s.to_str())
         .unwrap_or("unknown")
         .to_string();
-    let base_model = load_template_model_from_case(orig_case_dir)?;
+    let (base_model, base_bundle, ignored_controls) =
+        load_template_model_from_case(orig_case_dir)?;
+    let n_controls_ignored = ignored_controls.len();
+    let run_mode = if n_controls_ignored == 0 {
+        String::from("strict")
+    } else {
+        format!("diagnostic ({n_controls_ignored} controls ignored)")
+    };
+    let protocol_label = match max_steps {
+        Some(n) => format!("smoke: {n} steps"),
+        None => String::from("uncapped"),
+    };
 
     let pool = rayon::ThreadPoolBuilder::new()
         .num_threads(pool_threads.max(1))
@@ -185,7 +185,7 @@ pub fn run_batch_scaling_json(
             pool.install(|| {
                 models
                     .par_iter_mut()
-                    .map(|m| evolve_one_grid_star(m, max_steps))
+                    .map(|m| evolve_one_grid_star(m, &base_bundle, max_steps))
                     .collect()
             });
         let wall_sec = t0.elapsed().as_secs_f64().max(1.0e-9);
@@ -226,6 +226,11 @@ pub fn run_batch_scaling_json(
     let mut root = JsonObjectBuilder::new(0);
     root.field_str("case", &case_name);
     root.field_str("numerics_mode", numerics_mode().as_str());
+    root.field_bool("allow_unsupported_controls", true);
+    root.field_usize("n_controls_ignored", n_controls_ignored);
+    root.field_str_array("ignored_controls", &ignored_controls);
+    root.field_str("run_mode", &run_mode);
+    root.field_str("protocol_label", &protocol_label);
     root.field_usize("pool_threads", pool_threads.max(1));
     root.field_usize("max_steps_cap", max_steps.unwrap_or(0));
     root.field_bool("heterogeneous_alpha", heterogeneous_alpha);

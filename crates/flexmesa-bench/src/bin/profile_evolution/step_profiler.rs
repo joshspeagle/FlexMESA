@@ -2,6 +2,7 @@
 //! Real-evolution trajectory timer, per-step phase decomposition, and `#150`
 //! waste-removal profiler (`#168`).
 
+use std::collections::BTreeSet;
 use std::fs;
 use std::hint::black_box;
 use std::path::Path;
@@ -11,14 +12,15 @@ use flexmesa_math::{exp10, math_init, numerics_mode};
 use flexmesa_mtx::{solve_block_tridiag_bcyclic, solve_block_tridiagonal};
 use flexmesa_star::controls::{StarControls, StarError, StarJobControls};
 use flexmesa_star::eps_grav::eval_eps_grav;
-use flexmesa_star::evolve::star_evolve_step_with_extras;
 use flexmesa_star::history::{extract_history_row, HistoryRow};
 use flexmesa_star::hydro_eqns::{assemble_henyey_system, HenyeySystem};
 use flexmesa_star::hydro_vars::{
     do_brunt_b, do_brunt_n2, eval_surf_bc, set_hydro_vars, set_mlt_vars,
 };
 use flexmesa_star::inlist::{InlistBundle, InlistLoadOptions};
-use flexmesa_star::inlist_runner::{DefaultStarExtras, StarLogsOptions};
+use flexmesa_star::inlist_runner::{
+    run_inlist_stage_with_logs, ExtrasDirective, StarExtras, StarLogsOptions,
+};
 use flexmesa_star::mesh_adjust::{
     plan_mesh, remap_onto_dq, MeshFunctionConfig,
 };
@@ -36,7 +38,6 @@ use flexmesa_star::solver::{
 };
 use flexmesa_star::star_job_init::init_or_update_model_from_bundle;
 use flexmesa_star::struct_burn_mix::op_split_burn_zones;
-use flexmesa_star::termination::check_termination_limits_with_history;
 use flexmesa_star::timestep_limits::timestep_controller;
 use flexmesa_star::zams::load_zams_model;
 use flexmesa_star::{
@@ -53,9 +54,12 @@ use crate::json_fmt::{
 pub fn warmup_static_tables() -> Result<f64, String> {
     let t0 = Instant::now();
     math_init();
-    let mut model =
-        load_zams_model(StarControls::default(), StarJobControls::default())
-            .map_err(|e| format!("warmup load_zams_model failed: {e}"))?;
+    let ctrl = StarControls {
+        zbase: 0.02,
+        ..StarControls::default()
+    };
+    let mut model = load_zams_model(ctrl, StarJobControls::default())
+        .map_err(|e| format!("warmup load_zams_model failed: {e}"))?;
     set_hydro_vars(&mut model, false, false)
         .map_err(|e| format!("warmup set_hydro_vars failed: {e}"))?;
     Ok(t0.elapsed().as_secs_f64())
@@ -200,6 +204,9 @@ pub struct CaseProfileRecord {
     pub numerics_mode: String,
     pub rayon_threads: usize,
     pub allow_unsupported_controls: bool,
+    pub n_controls_ignored: usize,
+    pub ignored_controls: Vec<String>,
+    pub run_mode: String,
     pub net_name: String,
     pub termination_code: String,
     pub warmup_wall_sec: f64,
@@ -208,16 +215,16 @@ pub struct CaseProfileRecord {
     pub total_wall_sec: f64,
     pub steps_taken: usize,
     pub total_zone_steps: usize,
+    pub total_zone_newton_iters: usize,
     pub initial_zones: usize,
     pub final_zones: usize,
     pub species: usize,
     pub nvar_coupled: usize,
     pub total_newton_iterations: usize,
+    pub accepted_step_newton_iterations: usize,
     pub total_solver_calls: usize,
     pub total_retries: usize,
     pub total_redos: usize,
-    pub total_splits: usize,
-    pub total_merges: usize,
     pub remesh_applied_steps: usize,
     pub micro_cache_hits: usize,
     pub micro_cache_misses: usize,
@@ -236,6 +243,8 @@ impl CaseProfileRecord {
     pub fn to_json(&self) -> String {
         let steps_f = (self.steps_taken.max(1)) as f64;
         let zs_f = (self.total_zone_steps.max(1)) as f64;
+        let nit_f = (self.total_newton_iterations.max(1)) as f64;
+        let znit_f = (self.total_zone_newton_iters.max(1)) as f64;
         let mut obj = JsonObjectBuilder::new(0);
         obj.field_str("case", &self.case_name);
         obj.field_str("numerics_mode", &self.numerics_mode);
@@ -244,6 +253,9 @@ impl CaseProfileRecord {
             "allow_unsupported_controls",
             self.allow_unsupported_controls,
         );
+        obj.field_usize("n_controls_ignored", self.n_controls_ignored);
+        obj.field_str_array("ignored_controls", &self.ignored_controls);
+        obj.field_str("run_mode", &self.run_mode);
         obj.field_str("net_name", &self.net_name);
         obj.field_str("termination_code", &self.termination_code);
         obj.field_f64("warmup_wall_sec", self.warmup_wall_sec);
@@ -258,8 +270,20 @@ impl CaseProfileRecord {
             "wall_us_per_zone_step",
             1.0e6 * self.evolve_wall_sec / zs_f,
         );
+        obj.field_f64(
+            "wall_ms_per_newton_iter",
+            1000.0 * self.evolve_wall_sec / nit_f,
+        );
+        obj.field_f64(
+            "wall_us_per_zone_newton_iter",
+            1.0e6 * self.evolve_wall_sec / znit_f,
+        );
         obj.field_usize("steps_taken", self.steps_taken);
         obj.field_usize("total_zone_steps", self.total_zone_steps);
+        obj.field_usize(
+            "total_zone_newton_iters",
+            self.total_zone_newton_iters,
+        );
         obj.field_usize("initial_zones", self.initial_zones);
         obj.field_usize("final_zones", self.final_zones);
         obj.field_f64("mean_zones", (self.total_zone_steps as f64) / steps_f);
@@ -269,6 +293,10 @@ impl CaseProfileRecord {
             "total_newton_iterations",
             self.total_newton_iterations,
         );
+        obj.field_usize(
+            "accepted_step_newton_iterations",
+            self.accepted_step_newton_iterations,
+        );
         obj.field_f64(
             "newton_iters_per_step",
             (self.total_newton_iterations as f64) / steps_f,
@@ -276,8 +304,6 @@ impl CaseProfileRecord {
         obj.field_usize("total_solver_calls", self.total_solver_calls);
         obj.field_usize("total_retries", self.total_retries);
         obj.field_usize("total_redos", self.total_redos);
-        obj.field_usize("total_splits", self.total_splits);
-        obj.field_usize("total_merges", self.total_merges);
         obj.field_usize("remesh_applied_steps", self.remesh_applied_steps);
         obj.field_usize("micro_cache_hits", self.micro_cache_hits);
         obj.field_usize("micro_cache_misses", self.micro_cache_misses);
@@ -467,8 +493,174 @@ fn measure_step_kernels_on_probe(
     })
 }
 
-/// Runs a staged `star/test_suite/<case>` directory cleanly (with optional
-/// per-step kernel phase decomposition and optional full-history output).
+#[derive(Default)]
+struct ProfileExtras {
+    with_phase_profile: bool,
+    do_remesh: bool,
+    total_zone_steps: usize,
+    total_zone_newton_iters: usize,
+    remesh_applied_steps: usize,
+    prev_hits: usize,
+    prev_misses: usize,
+    prev_solver_iters: usize,
+    prev_retries: usize,
+    prev_nz: usize,
+    pre_state_for_probe: Option<StarModel>,
+    last_probe_sample: Option<StepKernelSample>,
+    phases: PhaseBreakdown,
+    probe_error: Option<String>,
+}
+
+impl ProfileExtras {
+    fn reset_stage(&mut self, model: &StarModel) {
+        self.do_remesh = model.controls.okay_to_remesh
+            && model.controls.mesh_delta_coeff > 0.0;
+        self.prev_hits = model.micro_cache_hits;
+        self.prev_misses = model.micro_cache_misses;
+        self.prev_solver_iters = model.total_num_solver_iterations;
+        self.prev_retries = model.num_retries;
+        self.prev_nz = model.nz;
+        self.pre_state_for_probe = None;
+        self.last_probe_sample = None;
+    }
+
+    fn record_post_step_hydro(
+        &mut self,
+        d_hits: usize,
+        d_misses: usize,
+        sample: &StepKernelSample,
+    ) {
+        let miss_f = d_misses as f64;
+        let hit_f = d_hits as f64;
+        let hydro_calls = d_misses + d_hits;
+        self.phases.eos_sec += miss_f * sample.eos_sec;
+        self.phases.kap_sec += miss_f * sample.kap_sec;
+        self.phases.neu_sec += miss_f * sample.neu_sec;
+        self.phases.net_sec += miss_f * sample.net_jac_sec;
+        self.phases.turbulence_sec += (hydro_calls as f64) * sample.turb_sec;
+        let raw_micro = sample.eos_sec
+            + sample.kap_sec
+            + sample.neu_sec
+            + sample.net_jac_sec;
+        self.phases.saved_micro_eval_sec +=
+            hit_f * (raw_micro - sample.cache_hit_copy_sec).max(0.0);
+        self.phases.direct_bookkeeping_measured_sec +=
+            hit_f * sample.cache_hit_copy_sec;
+        self.phases.eos_eval_calls += d_misses;
+        self.phases.kap_eval_calls += d_misses;
+        self.phases.neu_eval_calls += d_misses;
+        self.phases.net_jac_eval_calls += d_misses;
+        self.phases.mlt_eval_calls += hydro_calls;
+    }
+}
+
+impl StarExtras for ProfileExtras {
+    fn extras_start_step(&mut self, model: &mut StarModel) -> ExtrasDirective {
+        if self.with_phase_profile {
+            self.pre_state_for_probe = Some(model.clone());
+        }
+        ExtrasDirective::KeepGoing
+    }
+
+    fn extras_finish_step(&mut self, model: &mut StarModel) -> ExtrasDirective {
+        let d_solver_iters = model
+            .total_num_solver_iterations
+            .saturating_sub(self.prev_solver_iters);
+        let d_retries = model.num_retries.saturating_sub(self.prev_retries);
+        self.prev_solver_iters = model.total_num_solver_iterations;
+        self.prev_retries = model.num_retries;
+        self.total_zone_steps += model.nz;
+        self.total_zone_newton_iters += model.nz * d_solver_iters;
+
+        if self.with_phase_profile {
+            let d_hits = model.micro_cache_hits.saturating_sub(self.prev_hits);
+            let d_misses =
+                model.micro_cache_misses.saturating_sub(self.prev_misses);
+            self.prev_hits = model.micro_cache_hits;
+            self.prev_misses = model.micro_cache_misses;
+            if let Some(pre_m) = self.pre_state_for_probe.take() {
+                let did_remap = pre_m.nz != model.nz || pre_m.dq != model.dq;
+                if did_remap {
+                    self.remesh_applied_steps += 1;
+                }
+                match measure_step_kernels_on_probe(
+                    &pre_m,
+                    self.do_remesh,
+                    did_remap,
+                ) {
+                    Ok(sample) => {
+                        let n_asm = 1 + d_solver_iters + d_retries;
+                        let n_lin = d_solver_iters;
+                        self.record_post_step_hydro(d_hits, d_misses, &sample);
+                        self.phases.equation_assembly_sec +=
+                            (n_asm as f64) * sample.assembly_sec;
+                        self.phases.block_solve_sec +=
+                            (n_lin as f64) * sample.block_solve_sec;
+                        if self.do_remesh {
+                            self.phases.remesh_plan_calls += 1;
+                            self.phases.remesh_sec += sample.remesh_plan_sec
+                                + sample.remesh_remap_sec;
+                            self.phases.pre150_full_clone_every_step_sec +=
+                                sample.star_clone_sec;
+                        }
+                        if did_remap {
+                            self.phases.remesh_applied_calls += 1;
+                            self.phases.post150_lazy_primary_buf_sec +=
+                                sample.primary_buf_sec;
+                        }
+                        self.phases.direct_bookkeeping_measured_sec += sample
+                            .step_bookkeeping_sec
+                            + if did_remap {
+                                sample.primary_buf_sec
+                            } else {
+                                0.0
+                            };
+                        self.phases.assembly_calls += n_asm;
+                        self.phases.linear_solve_calls += n_lin;
+                        self.last_probe_sample = Some(sample);
+                    }
+                    Err(err) => {
+                        self.probe_error = Some(format!("phase probe: {err}"));
+                        return ExtrasDirective::Error(format!(
+                            "phase probe failed: {err}"
+                        ));
+                    }
+                }
+            }
+        } else if model.nz != self.prev_nz {
+            self.remesh_applied_steps += 1;
+        }
+        self.prev_nz = model.nz;
+        ExtrasDirective::KeepGoing
+    }
+
+    fn extras_after_evolve(
+        &mut self,
+        model: &mut StarModel,
+    ) -> Result<(), StarError> {
+        if let Some(ref err) = self.probe_error {
+            return Err(StarError::ConvergenceFailure(err.clone()));
+        }
+        if self.with_phase_profile {
+            let d_hits = model.micro_cache_hits.saturating_sub(self.prev_hits);
+            let d_misses =
+                model.micro_cache_misses.saturating_sub(self.prev_misses);
+            self.prev_hits = model.micro_cache_hits;
+            self.prev_misses = model.micro_cache_misses;
+            if d_hits > 0 || d_misses > 0 {
+                if let Some(sample) = self.last_probe_sample.take() {
+                    self.record_post_step_hydro(d_hits, d_misses, &sample);
+                    self.last_probe_sample = Some(sample);
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
+/// Runs a staged `star/test_suite/<case>` directory cleanly through the
+/// canonical `run_inlist_stage_with_logs` driver (with optional per-step
+/// kernel phase decomposition and optional full-history or `LOGS/` output).
 pub fn profile_star_case(
     orig_case_dir: &Path,
     allow_unsupported_controls: bool,
@@ -476,6 +668,7 @@ pub fn profile_star_case(
     with_phase_profile: bool,
     reference_evolve_sec_override: Option<f64>,
     history_out: Option<&Path>,
+    logs_dir_out: Option<&Path>,
 ) -> Result<CaseProfileRecord, String> {
     let warmup_wall_sec = warmup_static_tables()?;
     let mode_str = numerics_mode().as_str().to_string();
@@ -495,25 +688,25 @@ pub fn profile_star_case(
     let load_opts = InlistLoadOptions {
         allow_unsupported_controls,
     };
-    let mut extras = DefaultStarExtras;
+    let mut extras = ProfileExtras {
+        with_phase_profile,
+        ..ProfileExtras::default()
+    };
     let mut current_model: Option<StarModel> = None;
 
     let mut init_wall_sec = 0.0_f64;
     let mut evolve_wall_sec = 0.0_f64;
     let mut steps_taken = 0_usize;
-    let mut total_zone_steps = 0_usize;
     let mut initial_zones = 0_usize;
     let mut total_newton_iterations = 0_usize;
+    let mut accepted_step_newton_iterations = 0_usize;
     let mut total_solver_calls = 0_usize;
     let mut total_retries = 0_usize;
     let mut total_redos = 0_usize;
-    let mut total_splits = 0_usize;
-    let mut total_merges = 0_usize;
-    let mut remesh_applied_steps = 0_usize;
     let mut micro_cache_hits = 0_usize;
     let mut micro_cache_misses = 0_usize;
     let mut termination_code = String::from("no_stages_executed");
-    let mut phases = PhaseBreakdown::default();
+    let mut ignored_set: BTreeSet<String> = BTreeSet::new();
 
     for stage in &rn_stages {
         match stage {
@@ -537,6 +730,13 @@ pub fn profile_star_case(
                     case_dir, inlist, load_opts,
                 )
                 .map_err(|e| format!("inlist load failed: {e}"))?;
+                for sec in &bundle.validation_report.unsupported_sections {
+                    ignored_set.insert(format!("&{sec}"));
+                }
+                for (sec, key) in &bundle.validation_report.unsupported_controls
+                {
+                    ignored_set.insert(format!("&{sec}::{key}"));
+                }
                 let mut model = init_or_update_model_from_bundle(
                     &bundle,
                     current_model.take(),
@@ -548,14 +748,20 @@ pub fn profile_star_case(
                 if initial_zones == 0 {
                     initial_zones = model.nz;
                 }
-                // Reset post-init counters so evolution counters reflect only
-                // the evolutionary step loop (excluding pre-MS relaxation).
                 let base_hits = model.micro_cache_hits;
                 let base_misses = model.micro_cache_misses;
+                let base_solver_iters = model.total_num_solver_iterations;
                 let base_solver_calls = model.total_num_solver_calls;
                 let base_redos = model.num_redos;
+                extras.reset_stage(&model);
 
-                let mut logs_writer = if let Some(h_path) = history_out {
+                let mut logs_writer = if let Some(l_dir) = logs_dir_out {
+                    let logs_opts =
+                        StarLogsOptions::from_target(l_dir, true, false, true);
+                    logs_opts
+                        .build_writer(&model, case_dir, logs_dir.as_deref())
+                        .map_err(|e| format!("logs writer init failed: {e}"))?
+                } else if let Some(h_path) = history_out {
                     let logs_opts = StarLogsOptions::from_target(
                         h_path, false, false, false,
                     );
@@ -566,151 +772,25 @@ pub fn profile_star_case(
                     None
                 };
 
-                let job_step_cap =
-                    usize::try_from(model.job.steps_to_take_before_terminate)
-                        .ok();
-                let cap = max_steps_per_stage
-                    .into_iter()
-                    .chain(job_step_cap)
-                    .min()
-                    .unwrap_or(50_000);
-                termination_code = if job_step_cap.is_some_and(|b| b <= cap) {
-                    String::from("steps_to_take_before_terminate")
-                } else {
-                    String::from("max_steps_cap")
-                };
-                let do_remesh = model.controls.okay_to_remesh
-                    && model.controls.mesh_delta_coeff > 0.0;
-                let op_split_burn = model.controls.op_split_burn;
+                let stage_rep = run_inlist_stage_with_logs(
+                    &mut model,
+                    &bundle,
+                    &mut extras,
+                    max_steps_per_stage,
+                    logs_writer.as_mut(),
+                )
+                .map_err(|e| format!("stage evolution failed: {e}"))?;
 
-                for _ in 0..cap {
-                    let pre_hits = model.micro_cache_hits;
-                    let pre_misses = model.micro_cache_misses;
-                    let pre_state_for_probe =
-                        with_phase_profile.then(|| model.clone());
+                evolve_wall_sec += stage_rep.runtime_sec;
+                steps_taken += stage_rep.steps_taken;
+                accepted_step_newton_iterations +=
+                    stage_rep.total_newton_iterations;
+                total_retries += stage_rep.total_retries;
+                termination_code = stage_rep.termination_code;
 
-                    let t_step0 = Instant::now();
-                    let step_rep = star_evolve_step_with_extras(
-                        &mut model,
-                        do_remesh,
-                        op_split_burn,
-                        true,
-                        &mut extras,
-                    )
-                    .map_err(|e| format!("step evolution failed: {e}"))?;
-                    steps_taken += 1;
-                    total_zone_steps += model.nz;
-                    total_newton_iterations += step_rep.iterations;
-                    total_retries += step_rep.retries;
-                    total_splits += step_rep.num_splits;
-                    total_merges += step_rep.num_merges;
-                    let did_remap =
-                        (step_rep.num_splits + step_rep.num_merges) > 0;
-                    if did_remap {
-                        remesh_applied_steps += 1;
-                    }
-
-                    model.mstar_start = model.mstar;
-                    if !model.controls.rsp_flag {
-                        model
-                            .sync_mesh_and_pack()
-                            .map_err(|e| format!("sync_mesh failed: {e}"))?;
-                        set_hydro_vars(&mut model, false, false).map_err(
-                            |e| format!("post-step hydro failed: {e}"),
-                        )?;
-                        model
-                            .save_start_values()
-                            .map_err(|e| format!("save_start failed: {e}"))?;
-                    }
-                    let hr = extract_history_row(&model);
-                    let mut will_terminate = false;
-                    if let Ok(flexmesa_star::LimitCheckOutcome::Terminate {
-                        code,
-                        ..
-                    }) = check_termination_limits_with_history(&model, Some(&hr))
-                    {
-                        termination_code = code;
-                        will_terminate = true;
-                    }
-                    let is_terminating = will_terminate || steps_taken == cap;
-                    if let Some(lw) = logs_writer.as_mut() {
-                        lw.record_step_with_extra(
-                            &model,
-                            steps_taken == 1,
-                            is_terminating,
-                            &[],
-                        )
-                        .map_err(|e| format!("history write failed: {e}"))?;
-                    }
-                    evolve_wall_sec += t_step0.elapsed().as_secs_f64();
-
-                    let d_hits =
-                        model.micro_cache_hits.saturating_sub(pre_hits);
-                    let d_misses =
-                        model.micro_cache_misses.saturating_sub(pre_misses);
-
-                    if let Some(ref pre_m) = pre_state_for_probe {
-                        let sample = measure_step_kernels_on_probe(
-                            pre_m, do_remesh, did_remap,
-                        )
-                        .map_err(|e| format!("phase probe failed: {e}"))?;
-                        let miss_f = d_misses as f64;
-                        let hit_f = d_hits as f64;
-                        let hydro_calls = d_misses + d_hits;
-                        let n_asm = 1 + step_rep.iterations + step_rep.retries;
-                        let n_lin = step_rep.iterations;
-
-                        phases.eos_sec += miss_f * sample.eos_sec;
-                        phases.kap_sec += miss_f * sample.kap_sec;
-                        phases.neu_sec += miss_f * sample.neu_sec;
-                        phases.net_sec += miss_f * sample.net_jac_sec;
-                        phases.turbulence_sec +=
-                            (hydro_calls as f64) * sample.turb_sec;
-                        phases.equation_assembly_sec +=
-                            (n_asm as f64) * sample.assembly_sec;
-                        phases.block_solve_sec +=
-                            (n_lin as f64) * sample.block_solve_sec;
-                        if do_remesh {
-                            phases.remesh_plan_calls += 1;
-                            phases.remesh_sec += sample.remesh_plan_sec
-                                + sample.remesh_remap_sec;
-                            phases.pre150_full_clone_every_step_sec +=
-                                sample.star_clone_sec;
-                        }
-                        if did_remap {
-                            phases.remesh_applied_calls += 1;
-                            phases.post150_lazy_primary_buf_sec +=
-                                sample.primary_buf_sec;
-                        }
-                        let raw_micro = sample.eos_sec
-                            + sample.kap_sec
-                            + sample.neu_sec
-                            + sample.net_jac_sec;
-                        phases.saved_micro_eval_sec += hit_f
-                            * (raw_micro - sample.cache_hit_copy_sec).max(0.0);
-                        phases.direct_bookkeeping_measured_sec += hit_f
-                            * sample.cache_hit_copy_sec
-                            + sample.step_bookkeeping_sec
-                            + if did_remap {
-                                sample.primary_buf_sec
-                            } else {
-                                0.0
-                            };
-
-                        phases.eos_eval_calls += d_misses;
-                        phases.kap_eval_calls += d_misses;
-                        phases.neu_eval_calls += d_misses;
-                        phases.net_jac_eval_calls += d_misses;
-                        phases.mlt_eval_calls += hydro_calls;
-                        phases.assembly_calls += n_asm;
-                        phases.linear_solve_calls += n_lin;
-                    }
-
-                    if will_terminate {
-                        break;
-                    }
-                }
-
+                total_newton_iterations += model
+                    .total_num_solver_iterations
+                    .saturating_sub(base_solver_iters);
                 micro_cache_hits +=
                     model.micro_cache_hits.saturating_sub(base_hits);
                 micro_cache_misses +=
@@ -751,6 +831,15 @@ pub fn profile_star_case(
     let include_chem = (do_burn || do_mix) && final_model.species > 0;
     let nvar_coupled = final_model.layout.nvar(include_chem);
 
+    let ignored_controls: Vec<String> = ignored_set.into_iter().collect();
+    let n_controls_ignored = ignored_controls.len();
+    let run_mode = if !allow_unsupported_controls || n_controls_ignored == 0 {
+        String::from("strict")
+    } else {
+        format!("diagnostic ({n_controls_ignored} controls ignored)")
+    };
+
+    let mut phases = extras.phases;
     let phases_opt = if with_phase_profile {
         phases.net_and_jacobian_sec = phases.neu_sec + phases.net_sec;
         let ref_sec = reference_evolve_sec_override.unwrap_or(evolve_wall_sec);
@@ -763,9 +852,6 @@ pub fn profile_star_case(
             + phases.remesh_sec;
         phases.bottom_up_total_sec =
             non_bookkeeping + phases.direct_bookkeeping_measured_sec;
-        // Partition `ref_sec` cleanly if `non_bookkeeping < ref_sec`; if probe
-        // cache misses slightly exceed `ref_sec`, normalize proportionally to
-        // `bottom_up_total_sec` so phase shares always sum to 100.0%.
         if non_bookkeeping + phases.direct_bookkeeping_measured_sec <= ref_sec {
             phases.reference_evolve_wall_sec = ref_sec;
             phases.bookkeeping_and_copies_sec = ref_sec - non_bookkeeping;
@@ -794,6 +880,9 @@ pub fn profile_star_case(
         numerics_mode: mode_str,
         rayon_threads,
         allow_unsupported_controls,
+        n_controls_ignored,
+        ignored_controls,
+        run_mode,
         net_name: final_model.job.net_name.clone(),
         termination_code,
         warmup_wall_sec,
@@ -801,18 +890,18 @@ pub fn profile_star_case(
         evolve_wall_sec,
         total_wall_sec,
         steps_taken,
-        total_zone_steps,
+        total_zone_steps: extras.total_zone_steps,
+        total_zone_newton_iters: extras.total_zone_newton_iters,
         initial_zones,
         final_zones: final_model.nz,
         species: final_model.species,
         nvar_coupled,
         total_newton_iterations,
+        accepted_step_newton_iterations,
         total_solver_calls,
         total_retries,
         total_redos,
-        total_splits,
-        total_merges,
-        remesh_applied_steps,
+        remesh_applied_steps: extras.remesh_applied_steps,
         micro_cache_hits,
         micro_cache_misses,
         photo_checksum,

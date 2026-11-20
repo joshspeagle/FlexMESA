@@ -91,16 +91,69 @@ def _estimate_zone_steps_from_history(
     return round(accum), init_z, final_z
 
 
+def _parse_testhub_yml(testhub_path: pathlib.Path) -> dict[str, Any]:
+    """Parse exact MESA `test_suite_testhub_end` counters from `testhub.yml`."""
+    if not testhub_path.is_file():
+        return {}
+    parsed: dict[str, Any] = {}
+    int_keys = {
+        "model_number",
+        "num_retries",
+        "steps",
+        "retries",
+        "redos",
+        "solver_calls_made",
+        "solver_calls_failed",
+        "solver_iterations",
+    }
+    float_keys = {"runtime_minutes", "star_age", "log_rel_run_E_err"}
+    for raw_line in testhub_path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if ":" not in line or line.startswith("#") or line.startswith("-"):
+            continue
+        key, val = line.split(":", 1)
+        key = key.strip()
+        val = val.strip()
+        if not val:
+            continue
+        if key in int_keys:
+            parsed[key] = int(val)
+        elif key in float_keys:
+            parsed[key] = float(val.replace("D", "E").replace("d", "e"))
+    return parsed
+
+
+def _clean_mesa_repeat_outputs(work_dir: pathlib.Path) -> None:
+    """Remove per-run MESA outputs before each timed `./rn` repeat."""
+    for subdir in ("LOGS", "photos"):
+        target = work_dir / subdir
+        if target.is_dir():
+            shutil.rmtree(target)
+    for fname in ("testhub.yml", "final.mod"):
+        fpath = work_dir / fname
+        if fpath.is_file():
+            fpath.unlink()
+
+
 def run_real_mesa_case(
     case_name: str,
     mesa_dir: pathlib.Path,
     mesasdk_root: pathlib.Path,
     omp_threads: int,
+    repeats: int = 3,
 ) -> tuple[dict[str, Any], list[str], ArrF64]:
-    """Compile and time a real Fortran MESA `26.4.1` `star/test_suite` case."""
+    """Compile and time a real Fortran MESA `26.4.1` `star/test_suite` case.
+
+    Compiles once in a temporary copy of ``case_name``, then executes
+    unmodified ``./rn`` ``repeats`` times with normal ``LOGS/`` output written
+    on every timed repeat, returning the median timing plus min-max spread and
+    exact ``testhub.yml`` Newton iteration counts.
+    """
     src_case = mesa_dir / "star" / "test_suite" / case_name
     if not src_case.is_dir():
         raise FileNotFoundError(f"Missing MESA case directory: {case_name}")
+    if repeats < 1:
+        raise ValueError(f"repeats must be >= 1, got {repeats}")
 
     sysdeps = pathlib.Path.home() / "mesasdk-sysdeps"
     init_cmd = (
@@ -115,12 +168,14 @@ def run_real_mesa_case(
         "unset DISPLAY || true; "
         f"export OMP_NUM_THREADS={omp_threads}; "
         f"export OPENBLAS_NUM_THREADS={omp_threads}; "
+        f"export MKL_NUM_THREADS={omp_threads}; "
         "export MESA_SKIP_OPTIONAL=t; "
     )
 
     with tempfile.TemporaryDirectory(prefix=f"mesa2641_{case_name}_") as tmp:
         work_dir = pathlib.Path(tmp) / case_name
         shutil.copytree(src_case, work_dir)
+        _clean_mesa_repeat_outputs(work_dir)
         build_proc = subprocess.run(
             ["bash", "-lc", init_cmd + 'make -C make MESA_DIR="$MESA_DIR"'],
             cwd=work_dir,
@@ -133,50 +188,98 @@ def run_real_mesa_case(
                 f"MESA compile failed for {case_name}:\n{build_proc.stderr}"
             )
 
-        t0 = time.perf_counter()
-        rn_proc = subprocess.run(
-            ["bash", "-lc", init_cmd + "./rn"],
-            cwd=work_dir,
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        rn_wall_sec = time.perf_counter() - t0
-        out_txt = rn_proc.stdout + "\n" + rn_proc.stderr
-        if rn_proc.returncode != 0:
-            raise RuntimeError(
-                f"MESA ./rn failed for {case_name} ({rn_proc.returncode})"
+        rn_samples: list[float] = []
+        evolve_samples: list[float] = []
+        last_meta: dict[str, Any] = {}
+        cols_out: list[str] = []
+        arr_out: ArrF64 = np.empty((0, 0), dtype=np.float64)
+
+        for _ in range(repeats):
+            _clean_mesa_repeat_outputs(work_dir)
+            t0 = time.perf_counter()
+            rn_proc = subprocess.run(
+                ["bash", "-lc", init_cmd + "./rn"],
+                cwd=work_dir,
+                capture_output=True,
+                text=True,
+                check=False,
             )
+            rn_wall_sec = time.perf_counter() - t0
+            out_txt = rn_proc.stdout + "\n" + rn_proc.stderr
+            if rn_proc.returncode != 0:
+                raise RuntimeError(
+                    f"MESA ./rn failed for {case_name} ({rn_proc.returncode})"
+                )
 
-        matches = _MESA_RUNTIME_RE.findall(out_txt)
-        if not matches:
-            raise RuntimeError(
-                f"Could not parse MESA runtime summary for {case_name}"
+            matches = _MESA_RUNTIME_RE.findall(out_txt)
+            if not matches:
+                raise RuntimeError(
+                    f"Could not parse MESA runtime summary for {case_name}"
+                )
+            rt_min_str, retries_str, steps_str = matches[-1]
+            mesa_evolve_sec = (
+                float(rt_min_str.replace("D", "E").replace("d", "e")) * 60.0
             )
-        rt_min_str, retries_str, steps_str = matches[-1]
-        mesa_evolve_sec = (
-            float(rt_min_str.replace("D", "E").replace("d", "e")) * 60.0
-        )
-        retries = int(retries_str)
-        steps = int(steps_str)
-        term_matches = _TERM_CODE_RE.findall(out_txt)
-        term_code = term_matches[-1] if term_matches else "unknown"
+            retries = int(retries_str)
+            steps = int(steps_str)
+            term_matches = _TERM_CODE_RE.findall(out_txt)
+            term_code = term_matches[-1] if term_matches else "unknown"
 
-        hist_path = work_dir / "LOGS" / "history.data"
-        hdr, cols, arr = parse_mesa_history_file(hist_path)
-        zone_steps, init_z, final_z = _estimate_zone_steps_from_history(
-            cols, arr, steps
-        )
-        iters_total = 0
-        if "num_iters" in cols and len(cols) > 0 and arr.shape[0] > 0:
-            # `num_iters` is per logged step; estimate total from mean * steps.
-            it_col = arr[:, cols.index("num_iters")]
-            iters_total = round(float(np.mean(it_col)) * steps)
+            testhub = _parse_testhub_yml(work_dir / "testhub.yml")
+            hist_path = work_dir / "LOGS" / "history.data"
+            hdr, cols, arr = parse_mesa_history_file(hist_path)
+            zone_steps, init_z, final_z = _estimate_zone_steps_from_history(
+                cols, arr, steps
+            )
+            if "solver_iterations" in testhub:
+                iters_total = int(testhub["solver_iterations"])
+                iters_source = (
+                    "testhub.yml (exact s% total_num_solver_iterations)"
+                )
+            elif "num_iters" in cols and len(cols) > 0 and arr.shape[0] > 0:
+                it_col = arr[:, cols.index("num_iters")]
+                iters_total = round(float(np.mean(it_col)) * steps)
+                iters_source = "history.data mean(num_iters) * steps"
+            else:
+                iters_total = 0
+                iters_source = "unavailable"
 
-        col_map = {c: idx for idx, c in enumerate(cols)}
-        last = arr[-1]
+            rn_samples.append(rn_wall_sec)
+            evolve_samples.append(mesa_evolve_sec)
+            cols_out = cols
+            arr_out = arr
+            last_meta = {
+                "hdr": hdr,
+                "term_code": term_code,
+                "steps": steps,
+                "retries": retries,
+                "redos": int(testhub.get("redos", 0)),
+                "solver_calls_made": int(testhub.get("solver_calls_made", 0)),
+                "solver_calls_failed": int(
+                    testhub.get("solver_calls_failed", 0)
+                ),
+                "iters_total": iters_total,
+                "iters_source": iters_source,
+                "zone_steps": zone_steps,
+                "init_z": init_z,
+                "final_z": final_z,
+            }
+
+        rn_sorted = sorted(rn_samples)
+        ev_sorted = sorted(evolve_samples)
+        rn_med = rn_sorted[len(rn_sorted) // 2]
+        ev_med = ev_sorted[len(ev_sorted) // 2]
+
+        hdr = last_meta["hdr"]
+        steps = int(last_meta["steps"])
+        retries = int(last_meta["retries"])
+        iters_total = int(last_meta["iters_total"])
+        zone_steps = int(last_meta["zone_steps"])
+        col_map = {c: idx for idx, c in enumerate(cols_out)}
+        last = arr_out[-1]
         steps_f = max(1.0, float(steps))
         zs_f = max(1.0, float(zone_steps))
+        nit_f = max(1.0, float(iters_total))
         rec: dict[str, Any] = {
             "case": case_name,
             "mesa_version_number": hdr.get("version_number", "r26.4.1"),
@@ -184,20 +287,37 @@ def run_real_mesa_case(
             "build": hdr.get("build", ""),
             "math_backend": hdr.get("math_backend", "CRMATH"),
             "omp_threads": omp_threads,
-            "termination_code": term_code,
-            "rn_wall_sec": rn_wall_sec,
-            "mesa_internal_evolve_sec": mesa_evolve_sec,
+            "repeats": repeats,
+            "history_output_every_repeat": True,
+            "termination_code": last_meta["term_code"],
+            "rn_wall_sec": rn_med,
+            "rn_wall_sec_samples": rn_sorted,
+            "rn_wall_sec_min": rn_sorted[0],
+            "rn_wall_sec_max": rn_sorted[-1],
+            "rn_wall_sec_range": rn_sorted[-1] - rn_sorted[0],
+            "mesa_internal_evolve_sec": ev_med,
+            "mesa_internal_evolve_sec_samples": ev_sorted,
+            "mesa_internal_evolve_sec_min": ev_sorted[0],
+            "mesa_internal_evolve_sec_max": ev_sorted[-1],
+            "mesa_internal_evolve_sec_range": ev_sorted[-1] - ev_sorted[0],
             "steps_taken": steps,
             "total_retries": retries,
-            "estimated_total_newton_iterations": iters_total,
+            "total_redos": int(last_meta["redos"]),
+            "total_newton_iterations": iters_total,
+            "newton_iterations_source": last_meta["iters_source"],
+            "newton_iters_per_step": float(iters_total) / steps_f,
+            "solver_calls_made": int(last_meta["solver_calls_made"]),
+            "solver_calls_failed": int(last_meta["solver_calls_failed"]),
             "total_zone_steps": zone_steps,
-            "initial_zones": init_z,
-            "final_zones": final_z,
+            "initial_zones": int(last_meta["init_z"]),
+            "final_zones": int(last_meta["final_z"]),
             "mean_zones": float(zone_steps) / steps_f,
-            "rn_wall_ms_per_step": 1000.0 * rn_wall_sec / steps_f,
-            "rn_wall_us_per_zone_step": 1.0e6 * rn_wall_sec / zs_f,
-            "evolve_wall_ms_per_step": 1000.0 * mesa_evolve_sec / steps_f,
-            "evolve_wall_us_per_zone_step": 1.0e6 * mesa_evolve_sec / zs_f,
+            "rn_wall_ms_per_step": 1000.0 * rn_med / steps_f,
+            "rn_wall_us_per_zone_step": 1.0e6 * rn_med / zs_f,
+            "rn_wall_ms_per_newton_iter": 1000.0 * rn_med / nit_f,
+            "evolve_wall_ms_per_step": 1000.0 * ev_med / steps_f,
+            "evolve_wall_us_per_zone_step": 1.0e6 * ev_med / zs_f,
+            "evolve_wall_ms_per_newton_iter": 1000.0 * ev_med / nit_f,
             "final_star_age_yr": float(last[col_map["star_age"]]),
             "final_log_l": float(last[col_map["log_L"]]),
             "final_log_teff": float(last[col_map["log_Teff"]]),
@@ -207,7 +327,7 @@ def run_real_mesa_case(
             "final_center_h1": float(last[col_map["center_h1"]]),
             "final_center_he4": float(last[col_map["center_he4"]]),
         }
-        return rec, cols, arr
+        return rec, cols_out, arr_out
 
 
 def compare_trajectories_by_age(

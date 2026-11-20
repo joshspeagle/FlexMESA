@@ -473,6 +473,88 @@ pub(crate) fn store_eos_for_cell(
     Ok(())
 }
 
+/// Tolerances and iteration cap of the constant-`(Pgas, T)` density solve
+/// (`LOGRHO_TOL`, `LOGPGAS_TOL` in `star/private/micro.f90:311`;
+/// `MAX_ITER_FOR_SOLVE` in `star/private/eos_support.f90:38`).
+const LOGRHO_TOL: f64 = 1.0e-8;
+const LOGPGAS_TOL: f64 = 1.0e-8;
+const MAX_ITER_FOR_SOLVE: usize = 100;
+
+/// One cell of `do_eos_for_cell` with `fix_Pgas = .true.`
+/// (`star/private/micro.f90:326-361`): solves for density at fixed
+/// `(Pgas, T)` through `solve_eos_given_PgasT`
+/// (`star/private/eos_support.f90:341-347`), sets `lnd = logRho*ln10` and
+/// `rho = exp(lnd)`, then evaluates the EOS again at that state.
+///
+/// Returns `(lnd, rho, eos)`.
+///
+/// # Errors
+/// Returns [`StarError::MicrophysicsError`] if the density solve or the EOS
+/// evaluation fails, or if `logRho < -25`.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn solve_fix_pgas_cell(
+    ht: &HelmTable,
+    chem_id: &[usize],
+    xa_k: &[f64],
+    k: usize,
+    ln_t: f64,
+    t: f64,
+    ln_pgas: f64,
+    lnd_guess: f64,
+    cfg: &flexmesa_eos::EosConfig,
+) -> Result<(f64, f64, EosEvalOutput), StarError> {
+    let log_t = ln_t / LN10;
+    let log_pgas = ln_pgas / LN10;
+    let inv = eos_dt_get_rho(
+        ht,
+        chem_id,
+        xa_k,
+        log_t,
+        I_LN_PGAS as isize,
+        log_pgas * LN10,
+        lnd_guess / LN10,
+        LOGRHO_TOL,
+        LOGPGAS_TOL * LN10,
+        MAX_ITER_FOR_SOLVE,
+        cfg,
+    )
+    .map_err(|e| {
+        StarError::MicrophysicsError(format!(
+            "solve_eos_given_PgasT failed at zone {k}: {e}"
+        ))
+    })?;
+    if inv.log10_result < -25.0 {
+        return Err(StarError::MicrophysicsError(format!(
+            "do_eos_for_cell failed at zone {k}: logRho ({}) < -25",
+            inv.log10_result
+        )));
+    }
+    let lnd = inv.log10_result * LN10;
+    let rho = flexmesa_math::exp(lnd);
+    let log_rho = lnd / LN10;
+    let mut out = eos_dt_get_zones_with_logs(
+        ht,
+        &[rho],
+        &[log_rho],
+        &[t],
+        &[log_t],
+        chem_id,
+        xa_k,
+        cfg,
+    )
+    .map_err(|e| {
+        StarError::MicrophysicsError(format!(
+            "do_eos_for_cell: get_eos failed at zone {k}: {e}"
+        ))
+    })?;
+    let eos = out.pop().ok_or_else(|| {
+        StarError::MicrophysicsError(format!(
+            "do_eos_for_cell: get_eos returned no result at zone {k}"
+        ))
+    })?;
+    Ok((lnd, rho, eos))
+}
+
 /// Evaluates constant-`(Pgas, T)` EOS (`fix_Pgas = .true.`) over zones
 /// `k_lo..=k_hi`, updating composition moments, `lnd`/`rho`, and all
 /// cell-centered thermodynamic fields through [`store_eos_for_cell`]
@@ -486,9 +568,6 @@ pub(crate) fn do_eos_fix_pgas_range(
     k_lo: usize,
     k_hi: usize,
 ) -> Result<(), StarError> {
-    const LOGRHO_TOL: f64 = 1.0e-8;
-    const LOGPGAS_TOL: f64 = 1.0e-8;
-
     let nz = model.nz;
     if nz == 0 || k_lo >= nz || k_lo > k_hi {
         return Ok(());
@@ -518,38 +597,20 @@ pub(crate) fn do_eos_fix_pgas_range(
         model.yhe_mass[k] = xhe;
         model.z_mass[k] = (1.0 - (xh + xhe)).clamp(0.0, 1.0);
 
-        let log_t = model.ln_t[k] / LN10;
-        let log_rho_guess = model.lnd[k] / LN10;
-        let target_ln_pgas = model.ln_pgas[k];
-
-        let inv = eos_dt_get_rho(
+        let (lnd_new, rho_new, eos) = solve_fix_pgas_cell(
             ht,
             &model.chem_id,
             xa_k,
-            log_t,
-            I_LN_PGAS as isize,
-            target_ln_pgas,
-            log_rho_guess,
-            LOGRHO_TOL,
-            LOGPGAS_TOL,
-            20,
+            k,
+            model.ln_t[k],
+            model.t[k],
+            model.ln_pgas[k],
+            model.lnd[k],
             &model.eos_config,
-        )
-        .map_err(|e| {
-            StarError::MicrophysicsError(format!(
-                "do_eos_fix_pgas_range constant-Pgas EOS failed at zone {k}: {e}"
-            ))
-        })?;
-
-        if inv.log10_result < -25.0 {
-            return Err(StarError::MicrophysicsError(format!(
-                "do_eos_fix_pgas_range failed at zone {k}: logRho ({}) < -25",
-                inv.log10_result
-            )));
-        }
-        model.lnd[k] = inv.log10_result * LN10;
-        model.rho[k] = inv.linear_result;
-        store_eos_for_cell(model, k, &inv.eos)?;
+        )?;
+        model.lnd[k] = lnd_new;
+        model.rho[k] = rho_new;
+        store_eos_for_cell(model, k, &eos)?;
     }
     Ok(())
 }

@@ -101,7 +101,7 @@
     },
     {
       "phase": "Phase C",
-      "open": 12,
+      "open": 13,
       "closed": 3,
       "issues": [
         {
@@ -177,6 +177,11 @@
         {
           "number": 231,
           "title": "[Audit C17] Port the remaining upstream per-case extras to test-side hooks",
+          "state": "open"
+        },
+        {
+          "number": 295,
+          "title": "[JAX] Rust-versus-JAX consistency tests expected to fail while the JAX engine is frozen",
           "state": "open"
         }
       ]

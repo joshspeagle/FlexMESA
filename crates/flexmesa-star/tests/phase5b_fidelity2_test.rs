@@ -11,7 +11,7 @@ use flexmesa_const::{
 use flexmesa_star::{
     DiffusionScheme, DutchLowTScheme, EnergyEqnOption, MeshFunctionConfig,
     StarControls, StarError, StarJobControls, StarModel, TimestepAction,
-    apply_overshooting, apply_predictive_mixing_from_controls,
+    add_overshooting, apply_predictive_mixing_from_controls,
     apply_step_pre_physics, check_termination_limits, compute_core_masses,
     do_adjust_mass_step, do_adjust_mesh, do_conv_premix, do_element_diffusion,
     do_kap, do_set_mdot, eval_bjorklund_wind, eval_de_jager_wind,
@@ -313,9 +313,10 @@ fn test_overshoot_16_param_sets_and_brunt_b_cutoff_follow_mesa_rules() {
     let mut base = load_zams_model(ctrl, StarJobControls::default())
         .expect("load 4 Msun ZAMS");
     set_hydro_vars(&mut base, false, false).expect("set_hydro_vars");
-    let (_, boundaries) = locate_convection_boundaries(&base);
+    let n_bdy = locate_convection_boundaries(&mut base)
+        .expect("locate_convection_boundaries");
     assert!(
-        !boundaries.is_empty(),
+        n_bdy > 0,
         "4 Msun ZAMS must have convective core"
     );
 
@@ -347,10 +348,9 @@ fn test_overshoot_16_param_sets_and_brunt_b_cutoff_follow_mesa_rules() {
     m_bmax.controls.mix_wind.overshoot_brunt_b_max = 1.0e-6;
     m_bmax.aux.mixing.unsmoothed_brunt_b.fill(1.0);
 
-    apply_overshooting(&mut m_exp, &boundaries, &[]).expect("exp overshoot");
-    apply_overshooting(&mut m_short_circuit, &boundaries, &[])
-        .expect("short-circuit overshoot");
-    apply_overshooting(&mut m_bmax, &boundaries, &[]).expect("bmax overshoot");
+    add_overshooting(&mut m_exp).expect("exp overshoot");
+    add_overshooting(&mut m_short_circuit).expect("short-circuit overshoot");
+    add_overshooting(&mut m_bmax).expect("bmax overshoot");
 
     let n_ov_exp = m_exp
         .mixing_type
@@ -426,8 +426,9 @@ fn test_conv_premix_predictive_mixing_and_extra_heat_in_evolve_step() {
     m_pred.controls.use_ledoux_criterion = true;
     m_pred.controls.mix_wind.num_cells_for_smooth_gradl_composition_term = 0;
     m_pred.controls.mix_wind.num_cells_for_smooth_brunt_b = 0;
-    let (_, b_pred) = locate_convection_boundaries(&m_pred);
-    let k_bdy = b_pred[0].conv_bdy_loc;
+    let _ = locate_convection_boundaries(&mut m_pred)
+        .expect("locate_convection_boundaries");
+    let k_bdy = m_pred.aux.mixing.conv_bdy_loc[0];
     let idx_h1 = m_pred
         .iso_names
         .iter()

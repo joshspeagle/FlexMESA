@@ -7,7 +7,10 @@
 
 use flexmesa_const::{MixingType, M_SUN};
 use flexmesa_star::conv_premix;
-use flexmesa_star::mix_info::{clean_mixing_glitches, set_mixing_info};
+use flexmesa_star::mix_info::{
+    clean_mixing_glitches, compute_convection_sigmas, set_mixing_info,
+    set_mixing_info_with_skip,
+};
 use flexmesa_star::overshoot::add_overshooting;
 use flexmesa_star::predictive_mix;
 use flexmesa_star::{
@@ -37,8 +40,9 @@ fn build_ledoux_core_gradient_4m() -> StarModel {
     model.controls.use_ledoux_criterion = true;
     model.controls.mix_wind.num_cells_for_smooth_gradl_composition_term = 0;
     model.controls.mix_wind.num_cells_for_smooth_brunt_b = 0;
-    let (_, bdy) = locate_convection_boundaries(&model);
-    let k_bdy = bdy[0].conv_bdy_loc;
+    let _ = locate_convection_boundaries(&mut model)
+        .expect("locate_convection_boundaries");
+    let k_bdy = model.aux.mixing.conv_bdy_loc[0];
 
     // Place a modest H/He gradient deep inside the convective core where
     // `gradr >> grada` so `gradr > grada` holds across the gradient while
@@ -603,19 +607,158 @@ fn test_premix_add_predictive_mixing_fails_loudly_on_conv_premix_conflict() {
 }
 
 #[test]
-fn test_locate_convection_boundaries_matches_upstream_conv_bdy_loc() {
-    let model = zams_4m();
-    let (_cz_dq, boundaries) = locate_convection_boundaries(&model);
-    assert_eq!(boundaries.len(), model.aux.mixing.conv_bdy_loc.len());
-    for (b, (&loc, &top)) in boundaries.iter().zip(
-        model
-            .aux
-            .mixing
-            .conv_bdy_loc
-            .iter()
-            .zip(model.aux.mixing.top_conv_bdy.iter()),
-    ) {
-        assert_eq!(b.conv_bdy_loc, loc);
-        assert_eq!(b.top_conv_bdy, top);
+fn test_locate_convection_boundaries_matches_set_mixing_info() {
+    let mut model = zams_4m();
+    let expected_loc = model.aux.mixing.conv_bdy_loc.clone();
+    let expected_top = model.aux.mixing.top_conv_bdy.clone();
+    let expected_dq = model.aux.mixing.cz_bdy_dq.clone();
+    let n_bdy = locate_convection_boundaries(&mut model)
+        .expect("locate_convection_boundaries");
+    assert_eq!(n_bdy, expected_loc.len());
+    assert_eq!(model.aux.mixing.conv_bdy_loc, expected_loc);
+    assert_eq!(model.aux.mixing.top_conv_bdy, expected_top);
+    assert_eq!(model.aux.mixing.cz_bdy_dq, expected_dq);
+}
+
+#[test]
+fn test_overshoot_selectors_compare_case_sensitively_matching_upstream() {
+    // Exact MESA 26.4.1 case (`'burn_H'`, `'core'`, `'top'`, `'exponential'`)
+    // succeeds (`star/private/overshoot.f90:101-177`).
+    let mut m_ok = zams_4m();
+    let ov = &mut m_ok.controls.mix_wind.overshoot_sets[0];
+    ov.scheme = String::from("exponential");
+    ov.zone_type = String::from("burn_H");
+    ov.zone_loc = String::from("core");
+    ov.bdy_loc = String::from("top");
+    ov.f = 0.016;
+    ov.f0 = 0.004;
+    add_overshooting(&mut m_ok).expect("exact MESA case must succeed");
+
+    // Wrong case on any selector must return `Err(StarError::InvalidInput)`.
+    for (label, scheme, zone_type, zone_loc, bdy_loc) in [
+        ("zone_type", "exponential", "burn_h", "core", "top"),
+        ("zone_loc", "exponential", "burn_H", "CORE", "top"),
+        ("bdy_loc", "exponential", "burn_H", "core", "Top"),
+        ("scheme", "Exponential", "burn_H", "core", "top"),
+        ("none_case", "NONE", "any", "any", "any"),
+    ] {
+        let mut m_bad = zams_4m();
+        let s0 = &mut m_bad.controls.mix_wind.overshoot_sets[0];
+        s0.scheme = String::from(scheme);
+        s0.zone_type = String::from(zone_type);
+        s0.zone_loc = String::from(zone_loc);
+        s0.bdy_loc = String::from(bdy_loc);
+        s0.f = 0.016;
+        s0.f0 = 0.004;
+        assert!(
+            add_overshooting(&mut m_bad).is_err(),
+            "wrong case on {label} must fail loudly"
+        );
     }
+}
+
+#[test]
+fn test_set_mixing_info_skip_cz_bdy_mass_and_have_new_generation() {
+    let mut model = zams_4m();
+    model.aux.mixing.cz_top_mass.clear();
+    model.aux.mixing.cz_bot_mass.clear();
+    model.aux.mixing.have_new_cz_bdy_info = false;
+
+    set_mixing_info_with_skip(&mut model, true)
+        .expect("set_mixing_info_with_skip(true)");
+    assert!(!model.aux.mixing.have_new_cz_bdy_info);
+    assert_eq!(model.aux.mixing.cz_top_mass.len(), 0);
+
+    // `hydro_vars.f90:81`: `skip_set_cz_bdy_mass = .not. have_new_generation`.
+    model.aux.mixing.have_new_generation = false;
+    set_hydro_vars(&mut model, false, false).expect("set_hydro_vars");
+    assert!(!model.aux.mixing.have_new_cz_bdy_info);
+    assert_eq!(model.aux.mixing.cz_top_mass.len(), 0);
+
+    model.aux.mixing.have_new_generation = true;
+    set_hydro_vars(&mut model, false, false).expect("set_hydro_vars");
+    assert!(model.aux.mixing.have_new_cz_bdy_info);
+    assert_ne!(model.aux.mixing.cz_top_mass.len(), 0);
+}
+
+#[test]
+fn test_set_mixing_info_rsp2_and_rti_branches_match_upstream() {
+    // 1. RSP2 branch (`mix_info.f90:126-142`): computes `conv_vel`, `d_mix`,
+    //    `cdc`, and mixing_type thresholds from `et_rsp`/`hp_face`/`lt`/`lc`.
+    let mut m_rsp2 = zams_4m();
+    let nz = m_rsp2.nz;
+    m_rsp2.controls.rsp2_flag = true;
+    m_rsp2.aux.rsp.et_rsp = vec![1.0e10; nz];
+    m_rsp2.aux.rsp.hp_face = vec![1.0e9; nz];
+    m_rsp2.aux.rsp.lc_rsp = vec![0.0; nz];
+    m_rsp2.aux.rsp.lt_rsp = vec![0.0; nz];
+    let k_overshoot = nz / 3;
+    let k_conv = nz / 2;
+    let lum_overshoot = m_rsp2.lum[k_overshoot].abs().max(1.0);
+    let lum_conv = m_rsp2.lum[k_conv].abs().max(1.0);
+    m_rsp2.aux.rsp.lt_rsp[k_overshoot] = 1.0e-2 * lum_overshoot;
+    m_rsp2.aux.rsp.lc_rsp[k_conv] = 1.0e-2 * lum_conv;
+    set_mixing_info(&mut m_rsp2).expect("set_mixing_info rsp2");
+    assert_eq!(m_rsp2.mixing_type[k_overshoot], MixingType::OvershootMixing);
+    assert_eq!(m_rsp2.mixing_type[k_conv], MixingType::ConvectiveMixing);
+    assert!(m_rsp2.d_mix[k_conv] > 0.0);
+
+    // Unsized RSP2 arrays must fail loudly rather than silently skipping.
+    let mut m_bad_rsp2 = zams_4m();
+    m_bad_rsp2.controls.rsp2_flag = true;
+    m_bad_rsp2.aux.rsp.et_rsp.clear();
+    assert!(set_mixing_info(&mut m_bad_rsp2).is_err());
+
+    // 2. RTI branch (`mix_info.f90:79-84, 230-231, 2373-2436`): runs
+    //    `set_rti_mixing_info`, `set_dpdr_drhodr_info`, and `add_rti_turbulence`.
+    let mut m_rti = zams_4m();
+    let nz_r = m_rti.nz;
+    m_rti.controls.rti_flag = true;
+    m_rti.controls.composition_rti_diffusion_factor = 1.0;
+    m_rti.aux.alpha_rti = vec![0.05; nz_r];
+    m_rti.aux.alpha_rti_start = vec![0.05; nz_r];
+    let k_rad = (2..(nz_r - 2))
+        .find(|&k| m_rti.aux.mixing.mlt_mixing_type[k] == MixingType::NoMixing)
+        .expect("radiative interior face");
+    set_mixing_info(&mut m_rti).expect("set_mixing_info rti");
+    assert!(m_rti.aux.eta_rti[k_rad] > 0.0);
+    assert!(m_rti.d_mix[k_rad] >= m_rti.aux.eta_rti[k_rad]);
+    assert_eq!(m_rti.mixing_type[k_rad], MixingType::RayleighTaylorMixing);
+}
+
+#[test]
+fn test_compute_convection_sigmas_errors_on_inconsistent_mix_boundaries() {
+    let make_high_tc = || {
+        let mut m = zams_4m();
+        let nz = m.nz;
+        m.t[nz - 1] = 1.0e9;
+        m.controls.mix_wind.sig_min_factor_for_high_tcenter = 1.0e-4;
+        m.controls.mix_wind.tcenter_max_for_sig_min_factor_full_off = 1.0e6;
+        m.controls.mix_wind.tcenter_min_for_sig_min_factor_full_on = 1.0e7;
+        m
+    };
+
+    // Case 1 (`mix_info.f90:1474`): bottom boundary with no matching top.
+    let mut m1 = make_high_tc();
+    m1.aux.mixing.mix_bdy_loc = vec![m1.nz / 2];
+    m1.aux.mixing.top_mix_bdy = vec![false];
+    let err1 = compute_convection_sigmas(&mut m1, 1.0e8, 1.0, 1.0e10)
+        .expect_err("bad mix bdy info 1 must error");
+    assert!(err1.to_string().contains("bad mix bdy info 1"), "{err1}");
+
+    // Case 2 (`mix_info.f90:1482`): consecutive top boundaries.
+    let mut m2 = make_high_tc();
+    m2.aux.mixing.mix_bdy_loc = vec![m2.nz / 2, m2.nz / 3];
+    m2.aux.mixing.top_mix_bdy = vec![true, true];
+    let err2 = compute_convection_sigmas(&mut m2, 1.0e8, 1.0, 1.0e10)
+        .expect_err("bad mix bdy info 2 must error");
+    assert!(err2.to_string().contains("bad mix bdy info 2"), "{err2}");
+
+    // Case 3 (`mix_info.f90:1488`): second bottom boundary without matching top.
+    let mut m3 = make_high_tc();
+    m3.aux.mixing.mix_bdy_loc = vec![m3.nz / 2, m3.nz / 3];
+    m3.aux.mixing.top_mix_bdy = vec![true, false];
+    let err3 = compute_convection_sigmas(&mut m3, 1.0e8, 1.0, 1.0e10)
+        .expect_err("bad mix bdy info 3 must error");
+    assert!(err3.to_string().contains("bad mix bdy info 3"), "{err3}");
 }

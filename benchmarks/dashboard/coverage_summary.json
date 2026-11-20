@@ -2,9 +2,9 @@
   "rust": {
     "tool": "cargo llvm-cov",
     "overall": {
-      "lines": 112078,
-      "covered": 83788,
-      "percent": 74.8
+      "lines": 114322,
+      "covered": 85433,
+      "percent": 74.7
     },
     "by_crate": [
       {
@@ -27,15 +27,15 @@
       },
       {
         "crate": "flexmesa-bench",
-        "lines": 3560,
-        "covered": 2410,
-        "percent": 67.7
+        "lines": 3569,
+        "covered": 2419,
+        "percent": 67.8
       },
       {
         "crate": "flexmesa-binary",
-        "lines": 7923,
-        "covered": 5234,
-        "percent": 66.1
+        "lines": 7933,
+        "covered": 5217,
+        "percent": 65.8
       },
       {
         "crate": "flexmesa-chem",
@@ -70,8 +70,8 @@
       {
         "crate": "flexmesa-eos",
         "lines": 9797,
-        "covered": 7831,
-        "percent": 79.9
+        "covered": 7836,
+        "percent": 80.0
       },
       {
         "crate": "flexmesa-interp1d",
@@ -94,8 +94,8 @@
       {
         "crate": "flexmesa-kap",
         "lines": 3494,
-        "covered": 2799,
-        "percent": 80.1
+        "covered": 2809,
+        "percent": 80.4
       },
       {
         "crate": "flexmesa-math",
@@ -106,8 +106,8 @@
       {
         "crate": "flexmesa-mtx",
         "lines": 2783,
-        "covered": 2451,
-        "percent": 88.1
+        "covered": 2460,
+        "percent": 88.4
       },
       {
         "crate": "flexmesa-net",
@@ -124,8 +124,8 @@
       {
         "crate": "flexmesa-num",
         "lines": 2877,
-        "covered": 2467,
-        "percent": 85.7
+        "covered": 2468,
+        "percent": 85.8
       },
       {
         "crate": "flexmesa-rates",
@@ -141,9 +141,9 @@
       },
       {
         "crate": "flexmesa-star",
-        "lines": 52465,
-        "covered": 39136,
-        "percent": 74.6
+        "lines": 54690,
+        "covered": 40764,
+        "percent": 74.5
       },
       {
         "crate": "flexmesa-testing",
@@ -168,8 +168,8 @@
   "python": {
     "tool": "pytest --cov",
     "overall": {
-      "statements": 25530,
-      "covered": 22411,
+      "statements": 25535,
+      "covered": 22414,
       "percent": 87.8
     },
     "by_subpackage": [
@@ -199,8 +199,8 @@
       },
       {
         "subpackage": "flexmesa.bench",
-        "statements": 1375,
-        "covered": 1370,
+        "statements": 1380,
+        "covered": 1375,
         "percent": 99.6
       },
       {
@@ -320,7 +320,7 @@
       {
         "subpackage": "flexmesa.testing",
         "statements": 3640,
-        "covered": 2880,
+        "covered": 2878,
         "percent": 79.1
       },
       {

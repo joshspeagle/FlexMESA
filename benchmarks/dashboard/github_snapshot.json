@@ -227,7 +227,13 @@
       "issues": []
     }
   ],
-  "open_pull_requests": [],
+  "open_pull_requests": [
+    {
+      "number": 285,
+      "title": "fix(star): follow upstream in the line-search rescue, sizeB skips, implicit-wind mdot and timestep arithmetic; refresh stale baseline rows (#152)",
+      "draft": false
+    }
+  ],
   "deferred_169": [
     {
       "number": 175,

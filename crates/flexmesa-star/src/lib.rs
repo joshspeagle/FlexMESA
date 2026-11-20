@@ -67,12 +67,16 @@ pub mod adjust_mesh_support;
 pub mod case_staging;
 pub mod controls;
 mod controls_defaults;
+pub mod controls_diffusion;
 pub mod controls_mix_wind;
 pub mod controls_output;
 pub mod controls_timestep_stop;
 pub mod conv_premix;
 pub mod core_boundaries;
 pub mod diffusion;
+pub mod diffusion_procs;
+pub mod diffusion_support;
+pub mod element_diffusion;
 pub mod eps_grav;
 pub mod eps_mdot;
 pub mod evolve;
@@ -114,6 +118,8 @@ pub mod model;
 pub mod model_io;
 pub mod omega_mix;
 pub mod overshoot;
+pub mod paquette_coeffs;
+pub mod phase_separation;
 pub mod photo_io;
 pub mod pre_ms;
 pub mod predictive_mix;
@@ -201,6 +207,7 @@ pub use controls::{
     AtmOption, AtmTTauRelation, EnergyEqnOption, StarControls, StarError,
     StarJobControls, StepFailureInfo, VarLayout,
 };
+pub use controls_diffusion::{DiffusionControls, MAX_NUM_DIFFUSION_CLASSES};
 pub use controls_mix_wind::{
     MixWindControls, NUM_OVERSHOOT_PARAM_SETS, NUM_PREDICTIVE_PARAM_SETS,
     OvershootParamSet, PredictiveParamSet,
@@ -213,10 +220,14 @@ pub use core_boundaries::{
     snapshot_step_history_old,
 };
 pub use diffusion::{
-    BurgersZoneResult, DiffusionScheme, do_element_diffusion,
-    eval_burgers_velocities, eval_caplan_ocp_dstar,
-    eval_coulomb_collision_factors, eval_radiative_levitation_accel,
-    eval_wd_sedimentation_heating,
+    BurgersZoneResult, DIFFUSION_MIN_NC, DiffusionScheme, IsolveSolver,
+    SolveDiffusionInput, SolveDiffusionOutput, SolveDiffusionStats,
+    do_element_diffusion, do_solve_diffusion, eval_burgers_velocities,
+    eval_caplan_ocp_dstar, eval_coulomb_collision_factors,
+    eval_radiative_levitation_accel, eval_wd_sedimentation_heating,
+};
+pub use element_diffusion::{
+    do_element_diffusion_step, finish_element_diffusion,
 };
 pub use eps_grav::{
     eval_eps_grav, eval_eps_grav_lns_cell, eval_eps_grav_std_cell,
@@ -334,13 +345,19 @@ pub use overshoot::{
     add_overshooting, apply_overshooting, eval_conv_bdy_hp, eval_conv_bdy_k,
     eval_conv_bdy_r, eval_over_bdy_params, OvershootConfig, OvershootScheme,
 };
+pub use paquette_coeffs::paquette_coefficients;
+pub use phase_separation::{
+    EOS_PHASE_BOUNDARY, apply_phase_sep_mixing_types, blouin_delta_xne,
+    blouin_delta_xo, do_phase_separation, do_phase_separation_step,
+    eval_phase_separation_shift,
+};
 pub use pre_ms::{
     PreMsShell, build_pre_ms_model, build1_pre_ms_model,
     default_basic_net_composition,
 };
 pub use premix::{
     add_predictive_mixing, apply_predictive_mixing_from_controls,
-    do_conv_premix, do_phase_separation, eval_phase_separation_shift,
+    do_conv_premix,
 };
 pub use primary_state::PrimaryStateBuffer;
 pub use pulse::{

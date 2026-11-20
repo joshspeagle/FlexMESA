@@ -7,13 +7,18 @@ Checks that:
    `run_all_wave5_benchmarks` execute across Stages 0..3 (`rust` sequential,
    `rust` 4-thread parallel, `@jax.jit`, and `jax.jit(jax.vmap)`).
 2. JAX validated against Rust strict at tolerance `< 1.0e-12` at `n_zones = 8`
-   and `< 2.0e-14` at `n_zones = 128` for `w5_diff_rot`, `w5_binary_rlof`, and
-   `w5_astero_seism`, and `< 5.0e-12` (`n_zones = 8`) / `< 5.0e-11`
-   (`n_zones = 128`) near the `s ~ 0.435` zero crossing of `w5_riemann_rsp2`.
+   and `< 2.0e-14` at `n_zones = 128` for `w5_binary_rlof` and
+   `w5_astero_seism`, `< 5.0e-12` (`n_zones = 8`) / `< 5.0e-11`
+   (`n_zones = 128`) near the `s ~ 0.435` zero crossing of `w5_riemann_rsp2`,
+   and `< 5.0e-4` for `w5_diff_rot` (where Rust `eval_caplan_ocp_dstar` matches
+   MESA `26.4.1` `get_Dstar_OCP` under `#156` while `src/flexmesa/star/`
+   remains frozen under `#166`).
 3. At `n_zones = 8` and `n_zones = 128`, outputs match self-generated FlexMESA
    regression snapshots (not upstream MESA outputs; `w5_diff_rot` shifted in
    `642da54` from `3.082380424983001e5` to `2.551374595308515e3` at `N=8` and
-   from `3.12459668e5` to `2.60059307e3` at `N=128`; tracked in #146).
+   from `3.12459668e5` to `2.60059307e3` at `N=128`, and in `#156` to
+   `2.5515117527720968e3` at `N=8` and `2.60073078e3` at `N=128` for exact
+   MESA `26.4.1` `get_Dstar_OCP`; tracked in #146).
 """
 
 from __future__ import annotations
@@ -37,6 +42,10 @@ def test_wave5_bench_kernels_match_snapshots() -> None:
         assert rec.stage3.median_us > 0.0
         if rec.workload == "w5_riemann_rsp2":
             assert rec.max_rel_err < (5.0e-12 if rec.n_zones == 8 else 5.0e-11)
+        elif rec.workload == "w5_diff_rot":
+            # Rust `eval_caplan_ocp_dstar` matches MESA 26.4.1 `get_Dstar_OCP`
+            # (#156), while `src/flexmesa/star/` stays frozen (#166).
+            assert rec.max_rel_err < 5.0e-4
         elif rec.n_zones == 8:
             assert rec.max_rel_err < 1.0e-12
         else:
@@ -45,7 +54,7 @@ def test_wave5_bench_kernels_match_snapshots() -> None:
         assert np.isfinite(rec.checksum)
 
     regression_snapshots_n8 = {
-        "w5_diff_rot": 2.551374595308515e3,
+        "w5_diff_rot": 2.5515117527720968e3,
         "w5_riemann_rsp2": -2.543418211346364e5,
         "w5_binary_rlof": 6.234702123446103,
         "w5_astero_seism": 7.563537818023943e1,
@@ -58,7 +67,7 @@ def test_wave5_bench_kernels_match_snapshots() -> None:
         )
 
     regression_snapshots_n128 = {
-        "w5_diff_rot": 2.60059307e3,
+        "w5_diff_rot": 2.60073078e3,
         "w5_riemann_rsp2": -2.69003013e5,
         "w5_binary_rlof": 6.27865748,
         "w5_astero_seism": 7.37762193e1,

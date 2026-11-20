@@ -115,6 +115,11 @@ pub fn write_mod_string(model: &StarModel) -> Result<String, StarError> {
             write_rsp && model.aux.total_energy != 0.0,
         ),
         ("cumulative_energy_error", c_err, c_err != 0.0),
+        (
+            "crystal_core_boundary_mass",
+            model.aux.crystal_core_boundary_mass,
+            model.aux.crystal_core_boundary_mass > 0.0,
+        ),
     ] {
         if show {
             writeln!(out, "{k_str:>19}      {val:26.16E}").unwrap();
@@ -253,6 +258,7 @@ pub fn read_mod_str(
     let (mut r_center, mut l_center, mut v_center, mut cum_energy_err) =
         (0.0_f64, 0.0_f64, 0.0_f64, 0.0_f64);
     let mut total_energy = 0.0_f64;
+    let mut crystal_core_boundary_mass = -1.0_f64;
     let mut header_cols: Vec<String> = Vec::new();
 
     for line in lines.by_ref() {
@@ -328,6 +334,9 @@ pub fn read_mod_str(
                 controls.tau_factor = parse_fortran_f64(v)?;
             }
             "opacity_factor" => controls.opacity_factor = parse_fortran_f64(v)?,
+            "crystal_core_boundary_mass" => {
+                crystal_core_boundary_mass = parse_fortran_f64(v)?;
+            }
             "num_retries" => {
                 num_retries = v.parse::<usize>().map_err(|e| {
                     StarError::IoError(format!(
@@ -564,6 +573,7 @@ pub fn read_mod_str(
         model.aux.rsp.hp_face = hp;
     }
     (model.mstar_old, model.dt_old) = (parsed_mstar_old, parsed_dt_old);
+    model.aux.crystal_core_boundary_mass = crystal_core_boundary_mass;
 
     Ok(model)
 }

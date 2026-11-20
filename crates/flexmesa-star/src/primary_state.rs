@@ -444,6 +444,9 @@ pub struct PrimaryStateBuffer {
     pub(crate) j_rot_old: Vec<f64>,
     pub(crate) eps_mdot_old: Vec<f64>,
     pub(crate) solver_mlt_eval_count: usize,
+    pub(crate) crystal_core_boundary_mass: f64,
+    pub(crate) phase_sep_mixing_mass: f64,
+    pub(crate) diffusion_call_number: usize,
     pub(crate) fixed_gradr_sticky: Vec<bool>,
     pub(crate) mixing: crate::mixing_state::MixingPrimarySnapshot,
     pub(crate) step_hist: StepHistoryScalars,
@@ -468,6 +471,7 @@ macro_rules! make_empty_buf {
             extra_grav_if_nonzero: None,
             model_number: 0,
             solver_mlt_eval_count: 0,
+            diffusion_call_number: 0,
             k_const_mass: 0,
             $( $v: Vec::new(), )+
             $( $z: 0.0, )+
@@ -507,7 +511,8 @@ impl PrimaryStateBuffer {
                 mstar_old, xmstar, mstar_dot, m_center, r_center, l_center,
                 v_center, tau_base, teff, total_energy,
                 total_internal_energy_start, cumulative_energy_error,
-                non_epsnuc_energy_change_from_split_burn
+                non_epsnuc_energy_change_from_split_burn,
+                crystal_core_boundary_mass, phase_sep_mixing_mass
             ],
             falses: [
                 doing_relax, doing_struct_burn_mix, have_mlt_vc,
@@ -615,7 +620,10 @@ impl PrimaryStateBuffer {
                 total_internal_energy_start,
                 cumulative_energy_error,
                 non_epsnuc_energy_change_from_split_burn,
-                solver_mlt_eval_count
+                solver_mlt_eval_count,
+                crystal_core_boundary_mass,
+                phase_sep_mixing_mass,
+                diffusion_call_number
             ]
         );
         self.mixing.capture_from(&a.mixing);
@@ -785,7 +793,10 @@ impl PrimaryStateBuffer {
                     total_energy,
                     total_internal_energy_start,
                     cumulative_energy_error,
-                    non_epsnuc_energy_change_from_split_burn
+                    non_epsnuc_energy_change_from_split_burn,
+                    crystal_core_boundary_mass,
+                    phase_sep_mixing_mass,
+                    diffusion_call_number
                 ]
             );
             a.doing_struct_burn_mix = false;
@@ -886,7 +897,10 @@ impl PrimaryStateBuffer {
             self,
             [
                 doing_struct_burn_mix,
-                solver_mlt_eval_count
+                solver_mlt_eval_count,
+                crystal_core_boundary_mass,
+                phase_sep_mixing_mass,
+                diffusion_call_number
             ]
         );
         self.mixing.restore_post_hydro(&mut a.mixing);

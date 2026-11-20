@@ -40,6 +40,11 @@ _CASE_PHYSICS_NOTES: dict[str, str] = {
         "`basic.net` (8 species), Cox MLT, fixed `gs98` opacity, "
         "CNO main sequence (`Z = 0.04`) to `log_L_upper_limit`"
     ),
+    "semiconvection": (
+        "`pp_and_cno_extras.net` (25 species), Henyey MLT, Type-2 `a09_co` "
+        "opacity, Ledoux criterion with Langer (1985) semiconvection and "
+        "predictive mixing (`1.5 Msun`, `Z = 0.02`) to `center_h1 <= 0.38`"
+    ),
     "low_z": (
         "`basic.net` (8 species), Henyey MLT, Type-2 CO opacity, "
         "Eddington `T(tau)` atmosphere (`Z = 1e-4`) to central H depletion"
@@ -91,8 +96,11 @@ def _build_shared_sections(
     hw = cast(dict[str, Any], prov["hardware"])
     tc = cast(dict[str, Any], prov["toolchains"])
     qh = cast(dict[str, Any], prov["quiet_host"])
-    main_short = str(prov["flexmesa_origin_main_commit"])[:7]
-    branch_short = str(prov["flexmesa_branch_commit"])[:7]
+    tp = cast(dict[str, Any], prov["timing_protocol"])
+    bf = cast(dict[str, Any], prov["build_flags"])
+    main_short = str(prov["flexmesa_origin_main_commit"])[:8]
+    branch_short = str(prov["flexmesa_branch_commit"])[:8]
+    repeats = int(tp["matched_repeats_per_engine"])
 
     lines: list[str] = []
     if for_docs:
@@ -110,24 +118,42 @@ def _build_shared_sections(
         "`scripts/audit/render_evolution_profile_report.py` from raw JSON and "
         "CSV captures in `benchmarks/evolution_profile/26.4.1/`. Section 3 "
         "compares with compiled Fortran MESA `r26.4.1` (`commit c8c2026`, "
-        "Zenodo `19722306`) at matched thread count; Sections 2, 4, 5 and 6 "
-        "compare FlexMESA with itself."
+        "Zenodo `19722306`) under a matched timing protocol; Sections 2, 4, "
+        "5, and 6 compare FlexMESA with itself."
     )
     lines.append("")
     n_diag = sum(
         1 for c in strict_cases if bool(c["allow_unsupported_controls"])
     )
+    mode_summary = ", ".join(
+        f"`{c['case']}`: `{c['run_mode']}`" for c in strict_cases
+    )
+    step_matched_names = [
+        str(cname)
+        for cname in prov["selected_cases"]
+        if int(strict_by_case[cname]["steps_taken"])
+        == int(mesa_by_case[cname]["steps_taken"])
+    ]
+    if len(step_matched_names) == 2:
+        step_matched_txt = (
+            f"`{step_matched_names[0]}` and `{step_matched_names[1]}`"
+        )
+    elif step_matched_names:
+        step_matched_txt = ", ".join(f"`{c}`" for c in step_matched_names)
+    else:
+        step_matched_txt = "none"
     lines.append(
         f"**Every FlexMESA run in this report is a diagnostic run.** "
         f"`{n_diag}` of the `{len(strict_cases)}` `strict` records carry "
-        f"`allow_unsupported_controls = true`: the runs continued past "
-        f"upstream controls FlexMESA does not implement, so they did not do "
-        f"everything the inlists ask (`DECISIONS #26`). All four cases are "
-        f"declared known gaps in `benchmarks/history_harness/known_gaps.toml` "
-        f"and none counts as passing. The step counts and track differences "
-        f"in Section 1 show that the FlexMESA and MESA runs are not the same "
-        f"calculation; the timings are a profile of FlexMESA as it is, not a "
-        f"like-for-like speed comparison with MESA."
+        f"`allow_unsupported_controls = true` ({mode_summary}), so the runs "
+        f"continued past upstream controls FlexMESA does not implement and "
+        f"did not execute every control requested by the inlists "
+        f"(`DECISIONS #26`). All four cases are declared known gaps in "
+        f"`benchmarks/history_harness/known_gaps.toml` and none counts as "
+        f"passing under `#143`. Although {step_matched_txt} match MESA's step "
+        f"counts identically at `{main_short}`, track differences in Section 1 "
+        f"remain non-zero; these timings profile FlexMESA at `{main_short}` "
+        f"rather than a verified `#143` parity run."
     )
     lines.append("")
 
@@ -138,7 +164,8 @@ def _build_shared_sections(
         f"- **Capture Timestamp (UTC)**: `{prov['date_utc']}` "
         f"(1-minute host load average `{qh['load_avg_1m_start']:.2f}` "
         f"at start; `{qh['load_avg_1m_end']:.2f}` at completion immediately "
-        f"after the `8`-thread `N = 32` worker-pool scaling burst)"
+        f"after the `8`-thread `N = 32` worker-pool burst; serialized with "
+        f"an exclusive host timing lock)"
     )
     lines.append(
         f"- **Host Hardware**: `{hw['cpu_model']}` "
@@ -149,43 +176,48 @@ def _build_shared_sections(
     lines.append(
         f"- **Upstream MESA Toolchain**: `{tc['mesa_release']}` "
         f"(`commit {tc['mesa_commit']}`, Zenodo `{tc['mesa_zenodo_record']}`), "
-        f"MESA SDK `{tc['mesa_sdk']}`, `{tc['gfortran']}`, `CRMATH`"
+        f"MESA SDK `{tc['mesa_sdk']}`, `{tc['gfortran']}`, `CRMATH`, "
+        f"flags `{bf['mesa_fortran_flags']}`"
     )
     lines.append(
         f"- **FlexMESA Toolchain**: `{tc['rustc']}`, `{tc['python']}`, "
-        f"`JAX {tc['jax']}`, `origin/main` base `{main_short}` (driver commit "
-        f"`{branch_short}`)"
+        f"`JAX {tc['jax']}`, `origin/main` `{main_short}` (driver commit "
+        f"`{branch_short}`), profile `{bf['flexmesa_cargo_profile']}`"
     )
     lines.append(
-        f"- **Matched Thread Caps**: "
+        f"- **Matched Timing Protocol**: `{repeats}` repeats per case on "
+        f"both MESA `26.4.1` and FlexMESA (`strict` and `fast`), reporting "
+        f"median and `[min, max]` spread, with normal history output written "
+        f"on every timed repeat and matched thread caps "
         f"`OMP_NUM_THREADS={tc['omp_num_threads']}`, "
         f"`RAYON_NUM_THREADS={tc['rayon_num_threads']}`, "
-        f"`OPENBLAS_NUM_THREADS={tc['omp_num_threads']}`"
+        f"`OPENBLAS_NUM_THREADS={tc['omp_num_threads']}`, "
+        f"`MKL_NUM_THREADS={tc['omp_num_threads']}`"
     )
     lines.append("")
     lines.append(
-        "Four `star/test_suite` cases whose diagnostic runs end at upstream's "
-        "termination code on `origin/main`, with stock `run_star_extras.f90` "
-        "hooks, were selected to span fixed and Type-2 CO opacities, "
-        "8-species and 10-species nuclear networks, Cox and Henyey MLT, "
-        "stellar winds, "
-        "convective overshooting, and zero-metallicity pre-MS-through-core-He "
-        "evolution (`star/test_suite/semiconvection` currently stops at step "
-        "197 on `origin/main` awaiting the `#149` Type-2 `a09_co` defaults "
-        "alignment):"
+        f"Four `star/test_suite` cases whose diagnostic runs reach upstream's "
+        f"termination code on `origin/main` (`{main_short}`), with stock "
+        f"`run_star_extras.f90` evolutionary loops, were selected to span "
+        f"fixed and Type-2 CO opacities, 8-species and 25-species nuclear "
+        f"networks, Cox and Henyey MLT, Ledoux semiconvection with predictive "
+        f"mixing, and zero-metallicity pre-MS-through-core-He evolution "
+        f"(including the two exact step-matching cases {step_matched_txt}):"
     )
     lines.append("")
     for cname in prov["selected_cases"]:
         lines.append(f"- **`{cname}`**: {_CASE_PHYSICS_NOTES[cname]}.")
     lines.append("")
     lines.append(
-        "| Case | Termination (`strict` / MESA) | Steps (`strict` / MESA) | "
-        "Zones (`init -> final`) | Final Age (`strict` / MESA, yr) | "
-        "`d_age / age` | Max Track `|d log L|` | Max Track `|d log Teff|` | "
+        "| Case | FlexMESA Run Mode | Termination (`strict` / MESA) | "
+        "Steps (`strict` / MESA) | Zones (`init -> final`) | "
+        "Final Age (`strict` / MESA, yr) | `d_age / age` | "
+        "Max Track `|d log L|` | Max Track `|d log Teff|` | "
         "Max Track `|d log rho_c|` |"
     )
     lines.append(
-        "| :--- | :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |"
+        "| :--- | :--- | :--- | ---: | ---: | ---: | ---: | "
+        "---: | ---: | ---: |"
     )
     for cname in prov["selected_cases"]:
         sc = strict_by_case[cname]
@@ -194,8 +226,8 @@ def _build_shared_sections(
         cols = cast(dict[str, Any], cmp["columns"])
         rel_age_pct = 100.0 * float(cmp["rel_star_age_diff"])
         lines.append(
-            f"| `{cname}` | `{sc['termination_code']}` / "
-            f"`{mc['termination_code']}` | "
+            f"| `{cname}` | `{sc['run_mode']}` | "
+            f"`{sc['termination_code']}` / `{mc['termination_code']}` | "
             f"`{sc['steps_taken']}` / `{mc['steps_taken']}` | "
             f"`{sc['initial_zones']}->{sc['final_zones']}` | "
             f"`{sc['final_star_age_yr']:.4e}` / "
@@ -211,39 +243,42 @@ def _build_shared_sections(
     lines.append("## 2. Per-Step Phase Breakdown & Microphysics Call Counts")
     lines.append("")
     lines.append(
-        "Unperturbed wall times (`repeats = 3` median) are measured without "
-        "instrumentation hooks inside `flexmesa-star`. A second pass "
-        "(`profile_evolution case --with-phase-profile`) times read-only step "
-        "probes cloned before each step while verifying a `0-ULP` match on the "
-        "serialized `.photo` state checksum so phase attribution never "
-        "perturbs the canonical evolution trajectory."
+        f"Unperturbed wall times (`repeats = {repeats}` median, with full "
+        f"`history.data` written on every repeat) are measured without "
+        f"instrumentation hooks inside `flexmesa-star`. A second pass "
+        f"(`profile_evolution case --with-phase-profile`) times read-only step "
+        f"probes cloned before each step while verifying a `0-ULP` match on "
+        f"the serialized `.photo` state checksum so phase attribution never "
+        f"perturbs the canonical evolution trajectory."
     )
     lines.append("")
     lines.append(
-        "The shares below are a model, not a direct measurement. Each kernel "
-        "is timed once per step on a copy of the pre-step model and the time "
-        "is multiplied by the number of calls counted in the real step. The "
-        "sum of those products exceeds the measured wall time in every case, "
-        "and the shares are then scaled to add up to `100%`:"
+        "The shares below are a rescaled bottom-up model, not a direct "
+        "instrumented wall-clock measurement. Each kernel is timed once per "
+        "step on a copy of the pre-step model and multiplied by the call "
+        "counts recorded during the real step. The sum of those products "
+        "exceeds the measured evolve wall time in every case, and the shares "
+        "are then rescaled proportionally to sum to `100%`:"
     )
     lines.append("")
     lines.append(
-        "| Case | Measured Evolve Wall (`s`) | Sum of Kernel Estimates (`s`) | "
-        "Overshoot |"
+        "| Case | Run Mode | Measured Evolve Wall (`s`) | "
+        "Sum of Kernel Estimates (`s`) | Overshoot |"
     )
-    lines.append("| :--- | ---: | ---: | ---: |")
+    lines.append("| :--- | :--- | ---: | ---: | ---: |")
     for cname in prov["selected_cases"]:
-        ph = cast(dict[str, Any], strict_by_case[cname]["phases"])
+        sc = strict_by_case[cname]
+        ph = cast(dict[str, Any], sc["phases"])
         ref_sec = float(ph["reference_evolve_wall_sec"])
         bottom_up = float(ph["bottom_up_total_sec"])
         over_pct = 100.0 * (bottom_up / ref_sec - 1.0)
         lines.append(
-            f"| `{cname}` | `{ref_sec:.2f}` | `{bottom_up:.2f}` | "
-            f"`{_fmt_pct(over_pct, 1, signed=True)}` |"
+            f"| `{cname}` | `{sc['run_mode']}` | `{ref_sec:.2f}` | "
+            f"`{bottom_up:.2f}` | `{_fmt_pct(over_pct, 1, signed=True)}` |"
         )
     lines.append("")
     lines.append(
-        "The turbulence bucket also includes the Brunt, surface boundary and "
+        "The turbulence bucket also includes the Brunt, surface boundary, and "
         "`eps_grav` probes, which the real step does not call on every sweep. "
         "Figures derived from these shares later in the report (the stateless "
         "microphysics share and the Amdahl ceiling in Section 6) inherit this "
@@ -321,88 +356,129 @@ def _build_shared_sections(
     micro_tot_pct = 100.0 * float(accel["stateless_microphysics_fraction"])
     solver_tot_pct = 100.0 * float(accel["stateful_solver_remesh_fraction"])
     lines.append(
-        f"Across the four evolutions, local zone microphysics (`EOS`, "
-        f"`Opacity`, `Net + Jacobian`, and `Turbulence`) accounts for "
-        f"`{micro_tot_pct:.1f}%` of per-step wall time on average, while "
-        f"coupled Henyey equation assembly, block-tridiagonal linear solves, "
-        f"mesh adjustment, and step bookkeeping account for the remaining "
-        f"`{solver_tot_pct:.1f}%`. Notably, `MicrophysicsCache` (`#150`) hits "
-        f"on `{min(hit_rates):.1f}%` to `{max(hit_rates):.1f}%` of full-star "
-        f"`set_hydro_vars` sweeps (skipping `EOS`, `Opacity`, `Neu`, and "
-        f"`Net + Jacobian`), whereas `Turbulence` (`MLT`/`TDC` plus "
-        f"finite-difference face perturbations) executes on every sweep "
-        f"because convective transport depends on neighbor-zone face "
-        f"gradients, making `Turbulence` the largest single subsystem "
-        f"(`{mean_sh['turbulence_share_pct']:.1f}%` mean share)."
+        f"In the rescaled bottom-up model across these four evolutions, local "
+        f"zone microphysics (`EOS`, `Opacity`, `Net + Jacobian`, and "
+        f"`Turbulence`) accounts for `{micro_tot_pct:.1f}%` of per-step wall "
+        f"time on average, while coupled Henyey equation assembly, "
+        f"block-tridiagonal linear solves, mesh adjustment, and step "
+        f"bookkeeping account for `{solver_tot_pct:.1f}%`. Directly counted "
+        f"`MicrophysicsCache` (`#150`) hits occur on `{min(hit_rates):.1f}%` "
+        f"to `{max(hit_rates):.1f}%` of full-star `set_hydro_vars` sweeps "
+        f"(skipping `EOS`, `Opacity`, `Neu`, and `Net + Jacobian`), whereas "
+        f"`Turbulence` (`MLT`/`TDC` plus face perturbations) executes on every "
+        f"sweep because convective transport depends on neighbor-zone face "
+        f"gradients (`{mean_sh['turbulence_share_pct']:.1f}%` modelled mean "
+        f"share)."
     )
     lines.append("")
 
-    # Section 3: Real MESA 26.4.1 vs FlexMESA strict
+    # Section 3: Matched-protocol real MESA 26.4.1 vs FlexMESA strict
     lines.append(
-        "## 3. Real Fortran MESA `26.4.1` vs FlexMESA (`strict`) at Matched "
-        "Thread Count (`2` Threads)"
+        "## 3. Matched-Protocol Comparison: Real Fortran MESA `26.4.1` vs "
+        f"FlexMESA (`strict`) at `{tc['omp_num_threads']}` Threads"
     )
     lines.append("")
     lines.append(
-        "Each upstream case was compiled cleanly against `$MESA_DIR` "
-        "(`r26.4.1`) and run via `./rn` with `OMP_NUM_THREADS=2` and "
-        "`MESA_SKIP_OPTIONAL=t`. Both MESA's internal `runtime (minutes)` "
-        "evolve timer (excluding one-time table startup) and total `./rn` "
-        "wall time are reported alongside FlexMESA's post-warmup "
-        "`evolve_wall_sec`:"
+        f"Each upstream case was compiled once against `$MESA_DIR` (`r26.4.1`) "
+        f"and timed over `{repeats}` clean `./rn` repeats with "
+        f"`OMP_NUM_THREADS={tc['omp_num_threads']}` and `MESA_SKIP_OPTIONAL=t` "
+        f"under the same exclusive host lock as FlexMESA (`{repeats}` repeats "
+        f"at `RAYON_NUM_THREADS={tc['rayon_num_threads']}`, writing full "
+        f"`history.data` and `final.mod` on every repeat). Exact cumulative "
+        f"Newton solver iterations (including retries) are read from MESA's "
+        f"`testhub.yml` (`s% total_num_solver_iterations`) and FlexMESA's "
+        f"`model.total_num_solver_iterations`. For MESA, both internal "
+        f"`runtime (minutes)` (excluding table startup, quantized to `0.6 s`) "
+        f"and full `./rn` wall time are recorded:"
     )
     lines.append("")
     lines.append(
-        "| Case | Engine (`2t`) | Steps | Retries | Mean Zones | "
-        "Evolve Wall (`s`) | Wall / Step (`ms`) | Wall / Zone-Step (`us`) | "
-        "Zone-Step Speedup (`MESA / FlexMESA`) |"
+        "| Case | Engine & Run Mode (`2t`) | Steps | Retries | "
+        "Newton Iters | Mean Zones | Evolve Wall Median `[min, max]` (`s`) | "
+        "`ms / step` | `us / zone-step` | `ms / Newton-iter` | "
+        "`MESA / FlexMESA` (`us/zs` ; `ms/iter`) |"
     )
     lines.append(
-        "| :--- | :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |"
+        "| :--- | :--- | ---: | ---: | ---: | ---: | ---: | "
+        "---: | ---: | ---: | ---: |"
     )
-    zs_speedups: list[float] = []
-    wall_speedups: list[float] = []
+    matched_zs_ratios: list[float] = []
+    matched_nit_ratios: list[float] = []
+    divergent_zs_ratios: list[float] = []
+    divergent_nit_ratios: list[float] = []
     for cname in prov["selected_cases"]:
         sc = strict_by_case[cname]
         mc = mesa_by_case[cname]
         f_uzs = float(sc["wall_us_per_zone_step"])
         m_uzs = float(mc["evolve_wall_us_per_zone_step"])
+        f_mnit = float(sc["wall_ms_per_newton_iter"])
+        m_mnit = float(mc["evolve_wall_ms_per_newton_iter"])
         zs_sp = m_uzs / max(f_uzs, 1.0e-12)
-        w_sp = float(mc["mesa_internal_evolve_sec"]) / max(
-            float(sc["evolve_wall_sec"]), 1.0e-12
-        )
-        zs_speedups.append(zs_sp)
-        wall_speedups.append(w_sp)
+        nit_sp = m_mnit / max(f_mnit, 1.0e-12)
+        if int(sc["steps_taken"]) == int(mc["steps_taken"]):
+            matched_zs_ratios.append(zs_sp)
+            matched_nit_ratios.append(nit_sp)
+        else:
+            divergent_zs_ratios.append(zs_sp)
+            divergent_nit_ratios.append(nit_sp)
         lines.append(
-            f"| `{cname}` | FlexMESA `strict` | "
+            f"| `{cname}` | FlexMESA `strict`, `{sc['run_mode']}` | "
             f"`{sc['steps_taken']}` | `{sc['total_retries']}` | "
-            f"`{sc['mean_zones']:.0f}` | `{sc['evolve_wall_sec']:.3f}` | "
+            f"`{sc['total_newton_iterations']}` | `{sc['mean_zones']:.0f}` | "
+            f"`{sc['evolve_wall_sec']:.3f}` "
+            f"`[{sc['evolve_wall_sec_min']:.3f}, "
+            f"{sc['evolve_wall_sec_max']:.3f}]` | "
             f"`{sc['wall_ms_per_step']:.2f}` | `{f_uzs:.2f}` | "
-            f"`{zs_sp:.2f}x` |"
+            f"`{f_mnit:.2f}` | `{zs_sp:.2f}x` ; `{nit_sp:.2f}x` |"
         )
         lines.append(
-            f"| `{cname}` | MESA `26.4.1` (evolve / `./rn`) | "
+            f"| `{cname}` | MESA `26.4.1` (evolve; `./rn` in note) | "
             f"`{mc['steps_taken']}` | `{mc['total_retries']}` | "
-            f"`{mc['mean_zones']:.0f}` | "
+            f"`{mc['total_newton_iterations']}` | `{mc['mean_zones']:.0f}` | "
             f"`{mc['mesa_internal_evolve_sec']:.2f}` "
-            f"(`{mc['rn_wall_sec']:.2f}`) | "
+            f"`[{mc['mesa_internal_evolve_sec_min']:.2f}, "
+            f"{mc['mesa_internal_evolve_sec_max']:.2f}]` | "
             f"`{mc['evolve_wall_ms_per_step']:.2f}` | `{m_uzs:.2f}` | "
-            f"`1.00x` |"
+            f"`{m_mnit:.2f}` | `1.00x` ; `1.00x` |"
         )
     lines.append("")
-    lines.append(
-        f"Wall time per zone-step for the FlexMESA `strict` diagnostic runs "
-        f"is `{min(zs_speedups):.2f}x` to `{max(zs_speedups):.2f}x` smaller "
-        f"than for the MESA `26.4.1` runs (`{min(wall_speedups):.2f}x` to "
-        f"`{max(wall_speedups):.2f}x` on evolution wall clock). These ratios "
-        f"are not a speed comparison of equal work. The two codes take "
-        f"different numbers of steps on every case and their tracks differ "
-        f"(Section 1), the FlexMESA runs ignore unsupported controls, a zone "
-        f"step is not normalised for Newton iterations, and the timing "
-        f"protocols differ: MESA was run once with its normal output, while "
-        f"FlexMESA is the median of three runs with history output on one of "
-        f"them. Why the step counts differ has not been established."
+    rn_notes = "; ".join(
+        f"`{c}`: `{mesa_by_case[c]['rn_wall_sec']:.2f} s` "
+        f"`[{mesa_by_case[c]['rn_wall_sec_min']:.2f}, "
+        f"{mesa_by_case[c]['rn_wall_sec_max']:.2f}]` "
+        f"(`{mesa_by_case[c]['rn_wall_ms_per_newton_iter']:.2f} ms/iter`)"
+        for c in prov["selected_cases"]
     )
+    lines.append(
+        f"*MESA full `./rn` wall medians (`{repeats}` repeats): {rn_notes}.*"
+    )
+    lines.append("")
+    if matched_zs_ratios:
+        lines.append(
+            f"On the two step-matched cases ({step_matched_txt}), wall time "
+            f"per zone-step for the FlexMESA `strict` diagnostic runs is "
+            f"`{min(matched_zs_ratios):.2f}x` to "
+            f"`{max(matched_zs_ratios):.2f}x` smaller than MESA `26.4.1` "
+            f"(`{min(matched_nit_ratios):.2f}x` to "
+            f"`{max(matched_nit_ratios):.2f}x` per Newton iteration). On the "
+            f"two cases whose step counts still diverge from MESA, the "
+            f"per-zone-step ratios are `{min(divergent_zs_ratios):.2f}x` to "
+            f"`{max(divergent_zs_ratios):.2f}x` "
+            f"(`{min(divergent_nit_ratios):.2f}x` to "
+            f"`{max(divergent_nit_ratios):.2f}x` per Newton iteration). "
+            f"Normalizing by Newton iterations isolates per-iteration cost "
+            f"from step-count and retry differences, but even the step-matched "
+            f"runs remain diagnostic (`allow_unsupported_controls = true`) "
+            f"with non-zero track differences (Section 1) and different "
+            f"default build optimization levels (`gfortran -O2` vs Cargo "
+            f"`opt-level=3`, `lto=fat`)."
+        )
+    else:
+        lines.append(
+            "All four cases take different step counts and tracks from MESA "
+            "(Section 1), and every FlexMESA run is diagnostic "
+            "(`allow_unsupported_controls = true`)."
+        )
     lines.append("")
 
     # Section 4: #150 waste removal
@@ -411,6 +487,12 @@ def _build_shared_sections(
     ab = cast(dict[str, Any], waste["git_ab_1_3M_ms_high_Z"])
     pre150 = cast(dict[str, Any], ab["pre_150"])
     post150 = cast(dict[str, Any], ab["post_150"])
+    comp_commit = str(
+        waste.get(
+            "head_component_measured_commit",
+            prov["flexmesa_origin_main_commit"],
+        )
+    )[:8]
     lines.append(
         "Issue `#150` removed two recurring sources of per-step waste in "
         "`flexmesa-star`: (1) redundant microphysics evaluations across "
@@ -419,7 +501,7 @@ def _build_shared_sections(
         "every timestep via the pre-sized `PrimaryStateBuffer` retry snapshot."
     )
     lines.append("")
-    lines.append("### 4.1 Direct Pre-`#150` vs Post-`#150` Commit Benchmark")
+    lines.append("### 4.1 Historical Pre-`#150` vs Post-`#150` Git A/B Record")
     lines.append("")
     lines.append(
         "| Case | Build Commit | Steps | Median Wall (`s`) | "
@@ -443,42 +525,51 @@ def _build_shared_sections(
         f"`{ab['wall_speedup_pre_over_post']:.2f}x` |"
     )
     lines.append("")
-
     lines.append(
-        f"This is one case with `{pre150['repeats']}` repeats per build. The "
-        f"spread of the pre-`#150` samples "
+        f"This git A/B record covers one case (`{ab['case']}`, "
+        f"`{pre150['repeats']}` repeats per build) measured directly across "
+        f"commits `{pre150['short_commit']}` and `{post150['short_commit']}`. "
+        f"The spread of the pre-`#150` samples "
         f"(`{pre150['range_wall_sec']:.2f} s`) is about as large as the "
         f"measured saving (`{ab['wall_time_saved_sec']:.2f} s`), so the "
-        f"saving is not well resolved. The two commits also differ by more "
-        f"than the two items described above."
-    )
-    lines.append("")
-    lines.append("### 4.2 `HEAD` Component Breakdown Across All Four Cases")
-    lines.append("")
-    lines.append(
-        "The columns below are estimates, not A/B measurements. "
-        '"Est. Micro Wall Saved" is cache hits multiplied by the difference '
-        "between a cold and a warm kernel probe, using the un-rescaled probe "
-        "costs of Section 2. The clone cost is `StarModel::clone()` timed at "
-        "`HEAD`, not the pre-`#150` code."
+        f"wall-clock saving is not well resolved. The two historical commits "
+        f"also differ by more than the two items described above."
     )
     lines.append("")
     lines.append(
-        "| Case | `MicrophysicsCache` Hits / Step | "
-        "Est. Micro Wall Saved (`s`) | `StarModel` Heap (`KiB`) | "
-        "`PrimaryStateBuffer` (`KiB`) | Snapshot Footprint Ratio | "
-        "Pre-`#150` Clone Cost (`s`) vs Lazy Buffer (`s`) |"
+        f"### 4.2 `{comp_commit}` Cache & Memory Measurements vs Probe "
+        f"Estimates"
     )
-    lines.append("| :--- | ---: | ---: | ---: | ---: | ---: | ---: |")
+    lines.append("")
+    lines.append(
+        f"In the table below, the cache counters (`Hits / Step`, `Hit Rate`) "
+        f"and heap footprint columns (`StarModel` vs `PrimaryStateBuffer` "
+        f"bytes and ratio) are **direct measurements on `{comp_commit}`**. "
+        f"The last two columns (`Est. Micro Wall Saved` and `Est. Clone vs "
+        f"Lazy Buffer`) are **un-rescaled probe estimates**, not A/B "
+        f"measurements: `Est. Micro Wall Saved` is cache hits multiplied by "
+        f"the difference between a cold and a warm kernel probe from Section "
+        f"2, and the clone column times `StarModel::clone()` at "
+        f"`{comp_commit}` rather than on pre-`#150` code."
+    )
+    lines.append("")
+    lines.append(
+        "| Case | Run Mode | `MicrophysicsCache` Hits / Step (Hit Rate) | "
+        "`StarModel` Heap (`KiB`) | `PrimaryStateBuffer` (`KiB`) | "
+        "Heap Reduction | Est. Micro Wall Saved (`s`, probe) | "
+        "Est. Clone vs Lazy Buffer (`s`, probe) |"
+    )
+    lines.append("| :--- | :--- | ---: | ---: | ---: | ---: | ---: | ---: |")
     for wc in cast(list[dict[str, Any]], waste["head_component_breakdown"]):
         sm_kib = float(wc["star_model_heap_bytes"]) / 1024.0
         pb_kib = float(wc["primary_state_buffer_heap_bytes"]) / 1024.0
+        hit_pct = float(wc["micro_cache_hit_rate_pct"])
         lines.append(
-            f"| `{wc['case']}` | "
-            f"`{wc['micro_cache_hits_per_step']:.2f}` | "
-            f"`{wc['saved_micro_eval_sec']:.4f}` | "
+            f"| `{wc['case']}` | `{wc['run_mode']}` | "
+            f"`{wc['micro_cache_hits_per_step']:.2f}` (`{hit_pct:.1f}%`) | "
             f"`{sm_kib:.1f}` | `{pb_kib:.1f}` | "
             f"`{wc['snapshot_byte_reduction_factor']:.2f}x` | "
+            f"`{wc['saved_micro_eval_sec']:.4f}` | "
             f"`{wc['pre150_full_clone_every_step_sec']:.4f}` vs "
             f"`{wc['post150_lazy_primary_buf_sec']:.5f}` |"
         )
@@ -490,43 +581,58 @@ def _build_shared_sections(
     )
     lines.append("")
     lines.append(
-        "Per `DECISIONS #23` and `#165`, `NumericsMode::Fast` (platform `std` "
-        "`f64` intrinsics and hardware `mul_add`) is compared **exclusively** "
-        "against `NumericsMode::Strict` (`crlibm 1.0beta4` without FMA "
-        "contraction) and is never compared against MESA:"
+        f"Per `DECISIONS #23` and `#165`, `NumericsMode::Fast` (platform `std` "
+        f"`f64` intrinsics and hardware `mul_add`) is compared **exclusively** "
+        f"against `NumericsMode::Strict` (`crlibm 1.0beta4` without FMA "
+        f"contraction) over `{repeats}` matched repeats per mode and is never "
+        f"compared against MESA:"
     )
     lines.append("")
     lines.append(
-        "| Case | Steps (`strict` / `fast`) | Retries (`s` / `f`) | "
-        "Wall (`strict` / `fast`, `s`) | `us / zone-step` (`s` / `f`) | "
-        "Zone-Step Speedup (`s / f`) | `d_age / age` | "
+        "| Case | Run Mode | Steps (`s` / `f`) | Newton Iters (`s` / `f`) | "
+        "Wall Median `[min, max]` (`s` ; `f`, `s`) | "
+        "`us / zone-step` (`s` / `f`) | `ms / Newton-iter` (`s` / `f`) | "
+        "Speedup (`us/zs` ; `ms/iter`) | `d_age / age` | "
         "Max Track `|d log L|` | Max Track `|d log Teff|` | "
         "Max Track `|d log rho_c|` |"
     )
     lines.append(
-        "| :--- | ---: | ---: | ---: | ---: | ---: | "
+        "| :--- | :--- | ---: | ---: | ---: | ---: | ---: | ---: | "
         "---: | ---: | ---: | ---: |"
     )
     svf_zs_sp: list[float] = []
+    svf_nit_sp: list[float] = []
     svf_w_sp: list[float] = []
+    svf_abs_age_diffs: list[float] = []
     for cname in prov["selected_cases"]:
         r = svf_by_case[cname]
         td = cast(dict[str, Any], r["trajectory_diff"])
         tcols = cast(dict[str, Any], td["columns"])
         zs_sp = float(r["zone_step_speedup_strict_over_fast"])
+        nit_sp = float(r["newton_iter_speedup_strict_over_fast"])
         w_sp = float(r["wall_speedup_strict_over_fast"])
+        age_d = float(td["rel_star_age_diff"])
         svf_zs_sp.append(zs_sp)
+        svf_nit_sp.append(nit_sp)
         svf_w_sp.append(w_sp)
+        svf_abs_age_diffs.append(abs(age_d))
         lines.append(
-            f"| `{cname}` | "
+            f"| `{cname}` | `{r['run_mode']}` | "
             f"`{r['strict_steps']}` / `{r['fast_steps']}` | "
-            f"`{r['strict_retries']}` / `{r['fast_retries']}` | "
-            f"`{r['strict_evolve_wall_sec']:.3f}` / "
-            f"`{r['fast_evolve_wall_sec']:.3f}` | "
+            f"`{r['strict_total_newton_iterations']}` / "
+            f"`{r['fast_total_newton_iterations']}` | "
+            f"`{r['strict_evolve_wall_sec']:.3f}` "
+            f"`[{r['strict_evolve_wall_sec_min']:.3f}, "
+            f"{r['strict_evolve_wall_sec_max']:.3f}]` ; "
+            f"`{r['fast_evolve_wall_sec']:.3f}` "
+            f"`[{r['fast_evolve_wall_sec_min']:.3f}, "
+            f"{r['fast_evolve_wall_sec_max']:.3f}]` | "
             f"`{r['strict_us_per_zone_step']:.2f}` / "
             f"`{r['fast_us_per_zone_step']:.2f}` | "
-            f"`{zs_sp:.2f}x` | "
-            f"`{float(td['rel_star_age_diff']):+.2e}` | "
+            f"`{r['strict_ms_per_newton_iter']:.2f}` / "
+            f"`{r['fast_ms_per_newton_iter']:.2f}` | "
+            f"`{zs_sp:.2f}x` ; `{nit_sp:.2f}x` | "
+            f"`{age_d:+.2e}` | "
             f"`{tcols['log_L']['track_max_abs_diff']:.2e}` | "
             f"`{tcols['log_Teff']['track_max_abs_diff']:.2e}` | "
             f"`{tcols['log_cntr_Rho']['track_max_abs_diff']:.2e}` |"
@@ -534,41 +640,53 @@ def _build_shared_sections(
     lines.append("")
     wall_red_lo = 100.0 * (1.0 - 1.0 / max(min(svf_w_sp), 1.0e-12))
     wall_red_hi = 100.0 * (1.0 - 1.0 / max(max(svf_w_sp), 1.0e-12))
+    max_age_diff = max(svf_abs_age_diffs)
     lines.append(
         f"Switching from `strict` (`crlibm`) to `fast` (`std` + hardware FMA) "
-        f"yields `{min(svf_zs_sp):.2f}x` to `{max(svf_zs_sp):.2f}x` per "
-        f"zone-step (`{min(svf_w_sp):.2f}x` to `{max(svf_w_sp):.2f}x` wall "
-        f"speedup, reducing evolution runtime by `{wall_red_lo:.1f}%` to "
+        f"on `{main_short}` yields `{min(svf_zs_sp):.2f}x` to "
+        f"`{max(svf_zs_sp):.2f}x` per zone-step (`{min(svf_nit_sp):.2f}x` to "
+        f"`{max(svf_nit_sp):.2f}x` per Newton iteration, and "
+        f"`{min(svf_w_sp):.2f}x` to `{max(svf_w_sp):.2f}x` wall speedup, "
+        f"reducing evolution runtime by `{wall_red_lo:.1f}%` to "
         f"`{wall_red_hi:.1f}%`) while keeping relative lifetime differences "
-        f"within `|d_age / age| <= 6.8e-5`. The measured speedup reflects "
-        f"`crlibm` transcendental calls (`exp`, `ln`, `log10`, `pow`) in "
-        f"reaction screening, nuclear rates, and MLT/opacity log conversions "
-        f"operating alongside FMA-insensitive spline lookups and "
+        f"within `|d_age / age| <= {max_age_diff:.2e}`. The measured speedup "
+        f"reflects `crlibm` transcendental calls (`exp`, `ln`, `log10`, `pow`) "
+        f"in reaction screening, nuclear rates, and MLT/opacity log "
+        f"conversions operating alongside FMA-insensitive spline lookups and "
         f"block-tridiagonal linear solves."
     )
     lines.append("")
 
     # Section 6: N-star worker pool batching + GPU grid estimate (#166)
     lines.append(
-        "## 6. `N`-Star Worker-Pool Batching vs Stateless Accelerator "
-        "Estimate (`#166` Input)"
+        "## 6. `N`-Star Worker-Pool Batching (`smoke: 60 steps`) vs Stateless "
+        "Accelerator Model (`#166` Input)"
     )
     lines.append("")
     lines.append(
-        "### 6.1 Safe Rust `rayon::ThreadPool` Multi-Star Batch Scaling"
+        "### 6.1 Safe Rust `rayon::ThreadPool` Multi-Star Batch Scaling "
+        "(`smoke: 60 steps`)"
+    )
+    lines.append("")
+    b2 = cast(dict[str, Any], batch["pool_2_threads"])
+    b8 = cast(dict[str, Any], batch["pool_8_threads"])
+    b_cap = int(b2["max_steps_cap"])
+    b_zones = int(b2["template_zones"])
+    b_mode = str(b2["run_mode"])
+    lines.append(
+        f"This experiment is a **`smoke: {b_cap} steps`** scaling benchmark "
+        f"(capped at `{b_cap}` steps per star rather than uncapped evolution "
+        f"to physical termination). `profile_evolution batch` evolves `N` "
+        f"independent `low_z` diagnostic models (`{b_mode}`, `{b_zones}` "
+        f"initial zones, heterogeneous `mixing_length_alpha` spanning "
+        f"`[1.98, 2.02]` so Newton iteration counts vary across stars) on "
+        f"dedicated `2`-thread and `8`-thread `rayon` worker pools sharing "
+        f"immutable `OnceLock` EOS and opacity tables:"
     )
     lines.append("")
     lines.append(
-        "`profile_evolution batch` evolves `N` independent `low_z` models "
-        "(`60` steps per track, heterogeneous `mixing_length_alpha` spanning "
-        "`[1.98, 2.02]` so Newton iteration counts vary realistically across "
-        "stars) on dedicated `2`-thread and `8`-thread `rayon` worker pools "
-        "sharing immutable `OnceLock` EOS and opacity tables:"
-    )
-    lines.append("")
-    lines.append(
-        "| Pool Threads | Batch `N` Stars | Wall (`s`) | Total Steps | "
-        "Throughput (`stars / min`) | `zone-steps / s` | "
+        "| Pool Threads | Batch `N` Stars (`smoke: 60 steps`) | Wall (`s`) | "
+        "Total Steps | Throughput (`stars / min`) | `zone-steps / s` | "
         "Speedup vs `N = 1` | Peak RSS (`MiB`) |"
     )
     lines.append("| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |")
@@ -583,19 +701,30 @@ def _build_shared_sections(
                 f"`{pt['zone_steps_per_sec']:.0f}` | "
                 f"`{pt['speedup_vs_n1']:.2f}x` | `{rss_mib:.1f}` |"
             )
-    pts_8t = cast(list[dict[str, Any]], batch["pool_8_threads"]["points"])
+    pts_2t = cast(list[dict[str, Any]], b2["points"])
+    pts_8t = cast(list[dict[str, Any]], b8["points"])
     best_8t = max(pts_8t, key=lambda p: float(p["stars_per_min"]))
     rss_32_mib = float(pts_8t[-1]["peak_rss_kib"]) / 1024.0
     gain_vs_2t = float(
         accel["rust_8t_worker_pool_throughput_gain_vs_single_star_2t"]
     )
+    n1_2t_wall = float(pts_2t[0]["wall_sec"])
+    n1_8t_wall = float(pts_8t[0]["wall_sec"])
+    n1_cmp = (
+        "slower than"
+        if n1_8t_wall > n1_2t_wall
+        else "faster than"
+        if n1_8t_wall < n1_2t_wall
+        else "equal to"
+    )
     lines.append("")
     lines.append(
-        f"At `N = 1`, an `8`-thread pool is slightly slower than a `2`-thread "
-        f"pool because intra-star `rayon` loops partition `~785` zones into "
-        f"sub-`100`-zone chunks. Once `N >= 8` independent tracks run "
-        f"concurrently, `rayon` work-stealing assigns whole stars to threads "
-        f"without per-zone synchronization, reaching "
+        f"In this `smoke: {b_cap} steps` scaling benchmark, at `N = 1` an "
+        f"`8`-thread pool (`{n1_8t_wall:.3f} s`) is {n1_cmp} a `2`-thread pool "
+        f"(`{n1_2t_wall:.3f} s`) because intra-star `rayon` loops partition "
+        f"`~{b_zones}` zones into sub-`100`-zone chunks. Once `N >= 8` "
+        f"independent tracks run concurrently, `rayon` work-stealing assigns "
+        f"whole stars to threads without per-zone synchronization, reaching "
         f"`{best_8t['stars_per_min']:.1f}` `stars / min` "
         f"(`{best_8t['zone_steps_per_sec']:.0f}` `zone-steps / s`, "
         f"`{best_8t['speedup_vs_n1']:.2f}x` vs `8t` `N = 1` and "
@@ -660,15 +789,25 @@ def _build_shared_sections(
             f"{kernel_notes[kname]} |"
         )
     lines.append("")
+    assump = cast(dict[str, Any], accel["model_assumptions"])
+    dev_sp = float(assump["hypothetical_device_micro_speedup_vs_2t_rust"])
+    pcie_bw = float(assump["pcie_effective_bandwidth_gb_s"])
+    xla_us = float(assump["xla_dispatch_latency_us_per_iter"])
+    lock_eff = float(assump["heterogeneous_grid_lockstep_efficiency"])
     amdahl_ceil = float(accel["amdahl_infinite_gpu_micro_speedup_ceiling"])
     lines.append(
-        f"Combining the measured `{micro_tot_pct:.1f}%` stateless microphysics "
-        f"share with Amdahl's law fixes an upper bound of `{amdahl_ceil:.2f}x` "
-        f"for any hybrid CPU-Henyey + GPU-microphysics step, even before PCIe "
-        f"transfers (`24 GB/s`), XLA launch latency (`80 us` per Newton "
-        f"iteration), and heterogeneous adaptive-timestep lockstep padding "
-        f"(`0.72` utilization). By contrast, standalone stateless grid "
-        f"evaluations (`SED` photometry, screening, analytical EOS, MLT "
+        f"Combining the modelled `{micro_tot_pct:.1f}%` stateless microphysics "
+        f"share (Section 2) with Amdahl's law fixes an upper bound of "
+        f"`{amdahl_ceil:.2f}x` for any hybrid CPU-Henyey + GPU-microphysics "
+        f"step, even before finite device speedup and host-device overheads. "
+        f"The analytical grid table below explicitly assumes a hypothetical "
+        f"**`{dev_sp:.1f}x` device speedup** for pure-GPU stateless "
+        f"microphysics over `2`-thread Safe Rust (assuming `N1-24`/`N1-25` "
+        f"host callbacks were removed), together with PCIe transfers "
+        f"(`{pcie_bw:.0f} GB/s`), XLA dispatch latency (`{xla_us:.0f} us` per "
+        f"Newton iteration), and heterogeneous adaptive-timestep lockstep "
+        f"efficiency (`{lock_eff:.2f}`). By contrast, standalone stateless "
+        f"grid evaluations (`SED` photometry, screening, analytical EOS, MLT "
         f"surrogates) avoid the Henyey solver loop entirely:"
     )
     lines.append("")
@@ -689,6 +828,18 @@ def _build_shared_sections(
             f"`{gp['stateless_batch_only_gpu_sec']:.5f}` | "
             f"`{gp['stateless_batch_only_gpu_speedup_vs_rust_8t']:.2f}x` |"
         )
+    lines.append("")
+    lines.append(
+        f"*Model footnote: Both GPU columns assume a hypothetical "
+        f"`{dev_sp:.1f}x` device kernel speedup over `2`-thread Safe Rust "
+        f"(`run_evolution_profile_26_4_1.py`, `accelerator_grid_estimate.json` "
+        f"`hypothetical_device_micro_speedup_vs_2t_rust`), "
+        f"`{pcie_bw:.0f} GB/s` effective PCIe bandwidth, `{xla_us:.0f} us` "
+        f"per Newton iteration, and `{lock_eff:.2f}` lockstep utilization "
+        f"for `N > 1`, anchored to the Section 2 rescaled subsystem shares "
+        f"and the Section 6.1 `smoke: {b_cap} steps` `8`-thread Rust pool "
+        f"throughput.*"
+    )
     lines.append("")
     lines.append("### 6.3 Concrete Recommendations for `#166`")
     lines.append("")
@@ -724,7 +875,7 @@ def _build_shared_sections(
         "evaluation points. Porting stateful 4D `eos` / `kap` bicubic tables "
         "or stiff `net` Rosenbrock solvers to pure GPU solely to accelerate "
         "1D Henyey steps is bounded by the `<= "
-        f"{amdahl_ceil:.2f}x` Amdahl ceiling."
+        f"{amdahl_ceil:.2f}x` modelled Amdahl ceiling."
     )
     lines.append("")
 
@@ -732,33 +883,47 @@ def _build_shared_sections(
     lines.append("## 7. What Was Not Verified")
     lines.append("")
     lines.append(
-        "- **Agreement with MESA**: None of the four cases passes the "
-        "upstream-history harness. Every FlexMESA run here ignored "
-        "unsupported controls, and the runs diverge from MESA in step count "
-        "and track (Section 1). No statement in this report is a statement "
-        "about FlexMESA's speed at equal work."
+        "- **Agreement with MESA (`#143`)**: None of the four cases passes "
+        "the upstream-history harness. Every FlexMESA run here is a diagnostic "
+        "run (`allow_unsupported_controls = true`, exact counts in Section 1), "
+        "and track differences remain non-zero even on the step-matched cases. "
+        "No timing in this report represents a verified `#143` parity run."
     )
     lines.append(
-        "- **Timing protocol**: MESA was timed from a single run; FlexMESA "
-        "from the median of three. Build flags are not recorded for either "
-        "code. MESA zone-steps are estimated from `history.data`."
+        "- **Remaining I/O, timer, and build-flag differences**: Both engines "
+        f"ran `{repeats}` timed repeats with history output on every repeat at "
+        f"`{tc['omp_num_threads']}` threads, but MESA's stock `./rn` also "
+        "writes `LOGS/profile*.data`, `photos/`, and terminal summaries "
+        "whereas `profile_evolution` writes `history.data` on every step and "
+        "`final.mod` (radial profiles are omitted because `semiconvection`'s "
+        "`profile_columns.list` requests unported `grad_temperature`). MESA's "
+        "internal evolve timer rounds to `0.01 min` (`0.6 s`), MESA "
+        "zone-steps are estimated via trapezoidal integration of `num_zones` "
+        "in `history.data`, and compiler defaults differ (`gfortran -O2` vs "
+        "Cargo `opt-level=3, lto=fat`)."
     )
     lines.append(
         "- **Subsystem shares**: The per-subsystem shares are a rescaled "
-        "model (Section 2), not instrumented timings."
+        "bottom-up model (Section 2), not instrumented wall timings, and the "
+        "stateless share and Amdahl ceiling in Section 6 inherit that model "
+        "overshoot."
     )
     lines.append(
-        f"- **Engine version**: The FlexMESA measurements were taken at "
+        f"- **Engine version**: FlexMESA measurements were taken at "
         f"`origin/main` `{main_short}` and have not been repeated on later "
         f"commits."
     )
     lines.append(
+        f"- **Batching step cap**: Section 6.1 is a `smoke: {b_cap} steps` "
+        f"benchmark on `low_z` (`{b_mode}`), not an uncapped evolution to "
+        f"physical termination."
+    )
+    lines.append(
         "- **Case breadth**: Measurements cover four `star/test_suite` cases "
-        "(`1.3M_ms_high_Z`, `low_z`, `high_z`, `make_metals`) on a single "
-        "`x86_64` workstation; `semiconvection` (blocked at step 197 on "
-        "`origin/main` pending `#149`), late burning with `approx21.net`, "
-        "hydrodynamic `rsp2` pulsations, `binary` evolutions, and `astero` "
-        "simplex runs were not profiled in this campaign."
+        f"({', '.join(f'`{c}`' for c in prov['selected_cases'])}) on a single "
+        "`x86_64` workstation; late burning with `approx21.net`, hydrodynamic "
+        "`rsp2` pulsations, `binary` evolutions, and `astero` simplex runs "
+        "were not profiled in this campaign."
     )
     lines.append(
         "- **`aarch64` & multi-socket scaling**: `strict` vs `fast` ratios and "
@@ -767,19 +932,21 @@ def _build_shared_sections(
         "high-core-count server NUMA scaling were not measured."
     )
     lines.append(
-        "- **`#150` git A/B scope**: Direct pre-`#150` (`af9747e`) vs "
-        "post-`#150` (`3f7fa734`) binary timing was run on `1.3M_ms_high_Z`; "
-        "the remaining three cases report `HEAD` component measurements "
-        "(`MicrophysicsCache` hit rates and `PrimaryStateBuffer` vs "
-        "`StarModel::clone` timings)."
+        f"- **`#150` git A/B scope**: Historical pre-`#150` "
+        f"(`{pre150['short_commit']}`) vs post-`#150` "
+        f"(`{post150['short_commit']}`) binary timing covers one case "
+        f"(`{ab['case']}`) with sample spread comparable to the saving; "
+        f"Section 4.2 separates direct `{comp_commit}` cache/memory "
+        f"measurements from un-rescaled probe estimates."
     )
     lines.append(
-        "- **Grid-scale GPU evolution**: Because `src/flexmesa/star/` JAX "
-        "helpers are frozen (`JAX_ENGINE_STATUS = "
-        '"frozen-unverified-until-#143"`), the `N = 1..1024` hybrid GPU '
-        "numbers in Section 6.2 come from an analytical Amdahl + PCIe + "
-        "lockstep model anchored to `benchmarks/raw/26.4.1/` single-kernel "
-        "measurements rather than an executed GPU Henyey evolution engine."
+        f"- **Grid-scale GPU evolution**: Because `src/flexmesa/star/` JAX "
+        f"helpers are frozen (`JAX_ENGINE_STATUS = "
+        f'"frozen-unverified-until-#143"`), the `N = 1..1024` hybrid GPU '
+        f"numbers in Section 6.2 come from an analytical model assuming a "
+        f"`{dev_sp:.1f}x` device speedup, `{pcie_bw:.0f} GB/s` PCIe, "
+        f"`{xla_us:.0f} us` XLA launch overhead, and `{lock_eff:.2f}` "
+        f"lockstep efficiency rather than an executed GPU Henyey engine."
     )
 
     if for_docs:

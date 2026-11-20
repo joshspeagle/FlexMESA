@@ -1,16 +1,28 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "issue": "#168",
-  "date_utc": "2026-11-19T07:30:22Z",
-  "flexmesa_origin_main_commit": "11312594646d2df455a539b2077c3f851d2baf0e",
-  "flexmesa_branch_commit": "d63af212d9c3a7c88ce94ac3c544e9b11eeaf161",
+  "date_utc": "2026-11-20T20:23:14Z",
+  "flexmesa_origin_main_commit": "e0e987fce1e8566198dcaf23a17739abf35d61d5",
+  "flexmesa_branch_commit": "e0e987fce1e8566198dcaf23a17739abf35d61d5",
   "pre_150_commit": "af9747e16966cf3a99def75a88db778a40971020",
   "post_150_commit": "3f7fa73480035372551c411529bf7c18be5c365c",
   "ci_continuous_verification": false,
   "quiet_host": {
-    "load_avg_1m_start": 1.88,
-    "load_avg_1m_end": 5.2,
+    "load_avg_1m_start": 2.8,
+    "load_avg_1m_end": 6.32,
     "serialized_single_campaign": true
+  },
+  "timing_protocol": {
+    "matched_repeats_per_engine": 3,
+    "summary_statistic": "median with min-max range",
+    "history_output_every_repeat": true,
+    "flexmesa_logs_mode": "history.data (every step) + final.mod on every repeat (profiles disabled because semiconvection profile_columns.list uses unported grad_temperature)",
+    "mesa_logs_mode": "stock ./rn LOGS/history.data + LOGS/profile*.data + photos + final.mod + testhub.yml",
+    "batch_experiment_protocol": "smoke: 60 steps"
+  },
+  "build_flags": {
+    "flexmesa_cargo_profile": "release (opt-level=3, lto=fat, codegen-units=1)",
+    "mesa_fortran_flags": "-O2 -ftree-vectorize -fopenmp -fprotect-parens -fno-sign-zero -finit-real=snan"
   },
   "hardware": {
     "os": "Linux x86_64",
@@ -34,8 +46,8 @@
   },
   "selected_cases": [
     "1.3M_ms_high_Z",
+    "semiconvection",
     "low_z",
-    "high_z",
     "make_metals"
   ]
 }

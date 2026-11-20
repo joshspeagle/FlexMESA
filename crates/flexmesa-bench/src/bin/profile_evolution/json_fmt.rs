@@ -166,6 +166,19 @@ impl JsonObjectBuilder {
         self.buf.push_str(raw_json);
     }
 
+    /// Appends a JSON array of escaped string literals.
+    pub fn field_str_array(&mut self, key: &str, values: &[String]) {
+        self.write_key(key);
+        self.buf.push('[');
+        for (idx, val) in values.iter().enumerate() {
+            if idx > 0 {
+                self.buf.push_str(", ");
+            }
+            push_json_str(&mut self.buf, val);
+        }
+        self.buf.push(']');
+    }
+
     /// Closes and returns the serialized JSON object string.
     #[must_use]
     pub fn finish(mut self) -> String {
@@ -219,12 +232,19 @@ mod tests {
         obj.field_hex_u64("hash", 0x1234_abcd);
         obj.field_f64("dt", 1.25);
         obj.field_f64("nan_val", f64::NAN);
+        obj.field_str_array(
+            "ignored",
+            &[String::from("&controls::a"), String::from("&star_job::b")],
+        );
         let out = obj.finish();
         assert!(out.contains("\"name\": \"star/\\\"test\\\"\""));
         assert!(out.contains("\"ok\": true"));
         assert!(out.contains("\"steps\": 42"));
         assert!(out.contains("\"hash\": \"0x000000001234abcd\""));
         assert!(out.contains("\"nan_val\": null"));
+        assert!(
+            out.contains("\"ignored\": [\"&controls::a\", \"&star_job::b\"]")
+        );
         assert_eq!(fmt_json_f64(f64::INFINITY), "null");
     }
 }

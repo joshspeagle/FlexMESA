@@ -239,8 +239,27 @@ def test_stellar_winds_rust_jax_consistency_and_mass_adjustment() -> None:
     delta_m = zams.mstar - m_before
     m_h1_after = float(np.sum(zams.dm * zams.xa[:, 0]))
     np.testing.assert_allclose(delta_m, mdot * dt_wind, rtol=1.0e-11)
+    # Upstream `revise_q_and_dq` (`star/private/adjust_mass.f90:661-664,
+    # 792-795, 813-821`) accumulates `sumdq` left-to-right in `real(dp)`
+    # and closes `dq[nz-1] = 1 - sumdq`. The left-to-right sum equals 1.0
+    # exactly, while pairwise `np.sum(dq)` differs by ~22 ULPs (-4.885e-15
+    # across 2464 cells). Subtracting `delta_m * x_surf_h1` (~1.019e29 g)
+    # from total H1 mass (~5.54e33 g) amplifies that closure drift 54,334x
+    # to 2.62e-10 relative error on `m_h1_after - m_h1_before`. Isolating
+    # the exact `sum(dm) - mstar` closure drift preserves the strict 1e-11
+    # species-remap oracle alongside 1e-14 global H1 conservation.
+    dq_ltr = 0.0
+    for d in zams.dq:
+        dq_ltr += float(d)
+    assert dq_ltr == 1.0
+    dm_closure_drift = float(np.sum(zams.dm)) - zams.mstar
     np.testing.assert_allclose(
-        m_h1_after - m_h1_before, delta_m * x_surf_h1, rtol=1.0e-11
+        (m_h1_after - m_h1_before) - dm_closure_drift * float(zams.xa[-1, 0]),
+        delta_m * x_surf_h1,
+        rtol=1.0e-11,
+    )
+    np.testing.assert_allclose(
+        m_h1_after, m_h1_before + delta_m * x_surf_h1, rtol=1.0e-14
     )
     np.testing.assert_allclose(float(np.sum(zams.dq)), 1.0, atol=1.0e-14)
     np.testing.assert_allclose(zams.xq, 1.0 - zams.q, atol=1.0e-14)

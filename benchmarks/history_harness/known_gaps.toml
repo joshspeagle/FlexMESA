@@ -15,8 +15,8 @@ reason = "Newton iteration and retry/timestep control differences (audit M-1, #1
 [[gaps]]
 suite = "star"
 case = "1.5M_with_diffusion"
-issue = "#156"
-reason = "Atomic diffusion shortens main-sequence age relative to MESA 26.4.1."
+issue = "#155"
+reason = "Predictive convective core mixing controls (predictive_zone_type/loc, predictive_bdy_loc) and solver energy-error controls remain unported (#155, #152), shortening main-sequence age relative to MESA 26.4.1."
 
 [[gaps]]
 suite = "star"
@@ -171,8 +171,8 @@ reason = "Custom rate table evolution fails to converge after retries (#161, #15
 [[gaps]]
 suite = "star"
 case = "diffusion_smoothness"
-issue = "#156"
-reason = "Atomic diffusion profile and age depart from MESA 26.4.1."
+issue = "#159"
+reason = "Diagnostic run reaches max_age with 2 ignored controls (photo_interval, required_termination_code_string) and overshoots max_age = 3 Gyr pending exact max_age approach and solver/timestep parity (#159, #152)."
 
 [[gaps]]
 suite = "star"
@@ -489,14 +489,14 @@ reason = "Accreting CO WD carbon ignition times out (#152, #159)."
 [[gaps]]
 suite = "star"
 case = "wd_cool_0.6M"
-issue = "#156"
-reason = "White-dwarf cooling exceeds wall-time guard at step 283 with unported sedimentation/diffusion heating and solver controls (#156, #152)."
+issue = "#152"
+reason = "White-dwarf cooling with phase separation and full-net diffusion reaches 5.92 Gyr (center_c12 diff -1.3e-6) before hitting the 300 s wall-time cap at step 180 with 5 remaining ignored controls (when_to_stop_*, prune_bad_cz_min_hp_height, photo_interval, required_termination_code_string; #152, #155, #159)."
 
 [[gaps]]
 suite = "star"
 case = "wd_diffusion"
-issue = "#156"
-reason = "White-dwarf element diffusion reaches upstream Teff_lower_limit in diagnostic mode but misses strict tolerances with unported cgs/full-net diffusion and opacity controls (#156, #161)."
+issue = "#161"
+reason = "White-dwarf element diffusion reaches upstream Teff_lower_limit (rel_star_age -1.4%, center_c12 diff +1.9e-6) in diagnostic mode with 3 ignored controls (atm_T_tau_opacity, photo_interval, required_termination_code_string) pending atmosphere/solver parity (#161, #152)."
 
 [[gaps]]
 suite = "star"

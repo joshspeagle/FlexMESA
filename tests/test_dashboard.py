@@ -18,7 +18,7 @@ from flexmesa.testing import (
 REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent
 
 
-def test_port_manifest_matches_mesa_26_4_1_with_zero_verified_rows() -> None:
+def test_port_manifest_matches_mesa_26_4_1_and_verified_evidence() -> None:
     """Committed port_manifest.toml must validate against MESA 26.4.1."""
     mesa_dir = fetch.resolve_mesa_test_inputs_dir()
     manifest = port_manifest.load_port_manifest(
@@ -38,7 +38,16 @@ def test_port_manifest_matches_mesa_26_4_1_with_zero_verified_rows() -> None:
     )
     assert not errs
     verified_entries = [e for e in manifest.entries if e.status.is_verified]
-    assert not verified_entries
+    assert verified_entries
+    for entry in verified_entries:
+        assert entry.evidence_artifacts
+        assert entry.evidence_tests
+    case_verified = [
+        e
+        for e in verified_entries
+        if e.status == port_manifest.PortStatus.CASE_LEVEL_EVIDENCE
+    ]
+    assert not case_verified
 
 
 def test_port_manifest_rejects_ported_without_routine_counterpart() -> None:

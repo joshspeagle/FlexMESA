@@ -6671,27 +6671,36 @@ upstream_path = "star/private/diffusion.f90"
 module = "star"
 upstream_lines = 2050
 upstream_sha256 = "3957f16470a93dc5a7456299ae9e9812af7fba94ab9023efffc3c5c09ac9a109"
-status = "stub"
+status = "kernel_reference_vectors"
 flexmesa_files = ["crates/flexmesa-star/src/diffusion.rs"]
-notes = "seeded from coverage-map.md (stub): deep (C1-16). One backward-Euler step with a single mean D; no coupled Burgers solve over cells, no substeps, no classes"
+evidence_artifacts = ["benchmarks/fortran_mesa/diffusion_oracles/mesa_26_4_1_diffusion_oracles.tsv"]
+evidence_tests = ["crates/flexmesa-star/tests/diffusion_phase_sep_156_test.rs"]
+notes = "updated for #156: do_solve_diffusion (BE_solve + block-tridiagonal Rosenbrock solve_with_isolve across all 7 solvers), get_timescale, get_dx_dt, get_eqn_matrix_entries, positivity, set_diffusion_classes, adjust_timestep verified against MESA 26.4.1 Fortran oracles"
+[files.routine_map]
+"do_solve_diffusion" = "crates/flexmesa-star/src/diffusion.rs::do_solve_diffusion"
+"set_diffusion_classes" = "crates/flexmesa-star/src/diffusion.rs::set_diffusion_classes"
 
 [[files]]
 upstream_path = "star/private/diffusion_procs.f90"
 module = "star"
 upstream_lines = 1746
 upstream_sha256 = "f303dfdb628e5fdb8ba4a6e1b9de3851313fd2a55d745865eb6af7b9395d2809"
-status = "stub"
-flexmesa_files = ["crates/flexmesa-star/src/diffusion.rs"]
-notes = "seeded from coverage-map.md (stub): deep-ish. Local per-zone Burgers solve; none of the 17 upstream routine names"
+status = "partial"
+flexmesa_files = ["crates/flexmesa-star/src/diffusion_procs.rs"]
+notes = "updated for #156: fixup, fix_single_point_extremes, fix_negative_masses, fix_species_conservation, smooth_x, get1_dx_dm, redistribute_mass, get_limit_coeffs, setup_struct_info, and set_new_xa ported; calc_g_rad_mombarg/calc_g_rad_hu/update_rad_accel_face fail loudly pending op_mono (C10 / #161)"
 
 [[files]]
 upstream_path = "star/private/diffusion_support.f90"
 module = "star"
 upstream_lines = 1800
 upstream_sha256 = "85042b8bd1fd19e6379a3d88f582e78f3aa5642e9527ede4f62fce84bdee7777"
-status = "stub"
-flexmesa_files = ["crates/flexmesa-star/src/diffusion.rs"]
-notes = "seeded from coverage-map.md (stub): deep. Closed-form blends for collision integrals; 0/16 names"
+status = "kernel_reference_vectors"
+flexmesa_files = ["crates/flexmesa-star/src/diffusion_support.rs"]
+evidence_artifacts = ["benchmarks/fortran_mesa/diffusion_oracles/mesa_26_4_1_diffusion_oracles.tsv"]
+evidence_tests = ["crates/flexmesa-star/tests/diffusion_phase_sep_156_test.rs"]
+notes = "updated for #156: get_matrix_coeffs, do1_solve_thoul_hu, solve_burgers_cgs_no_thermal, solve_burgers_cgs_with_thermal, get_sm_coeffs, lam_sm, get_cbf_coeffs, get_dstar_ocp, kappa_cbf, and bitsafe_erf_fit verified across all 8 transport/Burgers regimes against MESA 26.4.1 Fortran oracles"
+[files.routine_map]
+"get_matrix_coeffs" = "crates/flexmesa-star/src/diffusion_support.rs::get_matrix_coeffs"
 
 [[files]]
 upstream_path = "star/private/do_one_utils.f90"
@@ -6707,9 +6716,12 @@ upstream_path = "star/private/element_diffusion.f90"
 module = "star"
 upstream_lines = 582
 upstream_sha256 = "2c6236cad67e3f5f3fb72208e01a8b99b10e5a86cda8a0e2bc0f986abf7a43f9"
-status = "stub"
-flexmesa_files = ["crates/flexmesa-star/src/evolve_support.rs"]
-notes = "seeded from coverage-map.md (stub): deep. Single call with hard-coded `DiffusionScheme::Paquette`; `diffusion_class_*`, `diffusion_min_*`, `diffusion_dt_limit`, rad-lev (`op_mono`) not wired"
+status = "ported_unverified"
+flexmesa_files = ["crates/flexmesa-star/src/element_diffusion.rs"]
+notes = "updated for #156: do_element_diffusion_step and finish_element_diffusion (eps_diffusion, eps_WD_sedimentation, #272 loud guard, #273 verbatim early return); radiative levitation (op_mono) fails loudly pending C10"
+[files.routine_map]
+"do_element_diffusion" = "crates/flexmesa-star/src/element_diffusion.rs::do_element_diffusion_step"
+"finish_element_diffusion" = "crates/flexmesa-star/src/element_diffusion.rs::finish_element_diffusion"
 
 [[files]]
 upstream_path = "star/private/eos_support.f90"
@@ -7084,8 +7096,15 @@ upstream_path = "star/private/paquette_coeffs.f90"
 module = "star"
 upstream_lines = 721
 upstream_sha256 = "47b3db29cce213cf21166a93f9ada8febc8d3905607ea9130ad3d05a38f0847d"
-status = "absent"
-notes = "seeded from coverage-map.md (absent): deep. Upstream spline tables absent; diffusion.rs:93-102 uses closed-form blends"
+status = "kernel_reference_vectors"
+flexmesa_files = ["crates/flexmesa-star/src/paquette_coeffs.rs"]
+evidence_artifacts = ["benchmarks/fortran_mesa/diffusion_oracles/mesa_26_4_1_diffusion_oracles.tsv"]
+evidence_tests = ["crates/flexmesa-star/tests/diffusion_phase_sep_156_test.rs"]
+notes = "updated for #156: full Paquette et al. (1986) 1,600-coefficient spline tables (compile-time const arrays, no heap init/free required) verified across 4 psi regimes against MESA 26.4.1 Fortran oracles"
+[files.routine_map]
+"paquette_coefficients" = "crates/flexmesa-star/src/paquette_coeffs.rs::paquette_coefficients"
+"initialise_collision_integrals" = "crates/flexmesa-star/src/paquette_coeffs.rs::paquette_coefficients"
+"free_collision_integrals" = "crates/flexmesa-star/src/paquette_coeffs.rs::paquette_coefficients"
 
 [[files]]
 upstream_path = "star/private/pgstar_abundance.f90"
@@ -7396,9 +7415,13 @@ upstream_path = "star/private/phase_separation.f90"
 module = "star"
 upstream_lines = 400
 upstream_sha256 = "ff4bde78184c84ee56e995f93b90f1ce97b1576332a0a9175abbfbb384d295f1"
-status = "stub"
-flexmesa_files = ["crates/flexmesa-star/src/premix.rs"]
-notes = "seeded from coverage-map.md (stub): deep (C1-16). Phase-diagram coefficients do not match `blouin_delta_xo` (:418-423); no Medin-Cumming 3-component; no `mix_outward`"
+status = "kernel_reference_vectors"
+flexmesa_files = ["crates/flexmesa-star/src/phase_separation.rs"]
+evidence_artifacts = ["benchmarks/fortran_mesa/diffusion_oracles/mesa_26_4_1_diffusion_oracles.tsv"]
+evidence_tests = ["crates/flexmesa-star/tests/diffusion_phase_sep_156_test.rs"]
+notes = "updated for #156: Blouin et al. (2021a,b) CO and ONe phase diagrams, EOS phase > 0.9 front, constant-Pgas Skye updates with Skye_use_ion_offsets = false, mix_outward, eps_phase_separation, and #271 OOB guards verified against MESA 26.4.1 Fortran oracles (Medin-Cumming 3-component tables are absent from upstream 26.4.1)"
+[files.routine_map]
+"do_phase_separation" = "crates/flexmesa-star/src/phase_separation.rs::do_phase_separation_step"
 
 [[files]]
 upstream_path = "star/private/photo_in.f90"

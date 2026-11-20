@@ -63,10 +63,10 @@ print(validated)
 | `mesh_delta_coeff`, `varcontrol_target` | `model.set_evolve_controls(mesh_delta_coeff=1.0, varcontrol_target=1.0e-3)` |
 | `overshoot_scheme`, `overshoot_f`, `overshoot_f0` | `model.update_mixing(dt, overshoot_f=..., overshoot_f0=..., scheme="exponential")` |
 | `cool_wind_RGB_scheme`, `hot_wind_scheme`, `Dutch_scaling_factor` | `model.apply_wind_and_adjust_mass(scheme="Dutch", eta=1.0, dt=dt)` |
-| `do_element_diffusion = .true.` | `model.do_element_diffusion(dt, scheme="stanton_murillo")` *(partial/unverified; `#156`)* |
+| `do_element_diffusion = .true.` | `model.do_element_diffusion(dt, scheme="stanton_murillo")` *(kernel-verified against MESA `26.4.1` in `#156`; `op_mono` radlev fails loudly pending C10)* |
 | `do_conv_premix = .true.` | `model.do_conv_premix(max_iters=10, avoid_fuel_increase=True)` *(partial/unverified; `#155`)* |
 | `predictive_mix = .true.` | `model.add_predictive_mixing(ingested_mass_limit_coeff=0.1, superad_thresh=0.005)` *(partial/unverified; `#155`)* |
-| `do_phase_separation = .true.` | `model.do_phase_separation(dt, gamma_crystallization=175.0)` *(partial/unverified; `#156`)* |
+| `do_phase_separation = .true.` | `model.do_phase_separation(dt, gamma_crystallization=175.0)` *(kernel-verified against MESA `26.4.1` Blouin `'CO'`/`'ONe'` in `#156`)* |
 | **`&binary_controls`** | |
 | `m1`, `m2`, `initial_period_in_days`, `initial_eccentricity` | `BinarySystem.from_point_mass(donor, companion_mass_msun=..., initial_period_days=..., eccentricity=...)` or `BinarySystem.from_two_stars(donor, accretor, initial_period_days=...)` |
 | `mdot_scheme = 'Ritter'` / `'Kolb'` | `binary.eval_ritter_mdot_thin`, `binary.eval_kolb_mdot_thick`, `binary.solve_roche_lobe_mdot_jax` |

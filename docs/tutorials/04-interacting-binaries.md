@@ -229,7 +229,7 @@ print(
 
 ## 4. Binary Checkpoints, Restart Reproducibility & Test-Side Extras
 
-In-library per-case hooks and standalone oracle stubs were removed under `#148`, so `BinarySystem` and `StarModel` execute pure upstream controls unless a test harness or user attaches an explicit callback object (`BinaryExtras` / `StarExtras`). Both `BinarySystem` (`FMBINCP1` v2) and `StarModel` (`FMPHOTO2` v23) support deterministic `serde` byte checkpoints and bit-identical continuation verification (`#150`, while binary trajectory parity against MESA `26.4.1` remains open under `#160`; see [Declared Known Gaps](../benchmarks/known-gaps.md)):
+In-library per-case hooks and standalone oracle stubs were removed under `#148`, so `BinarySystem` and `StarModel` execute pure upstream controls unless a test harness or user attaches an explicit callback object (`BinaryExtras` / `StarExtras`). Both `BinarySystem` (`FMBINCP1` v2) and `StarModel` (`FMPHOTO2` v24) support deterministic `serde` byte checkpoints and bit-identical continuation verification (`#150`, while binary trajectory parity against MESA `26.4.1` remains open under `#160`; see [Declared Known Gaps](../benchmarks/known-gaps.md)):
 
 ```python
 from flexmesa import binary, star

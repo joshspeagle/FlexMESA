@@ -9,7 +9,7 @@ use crate::inlist_runner::{DefaultStarExtras, ExtrasDirective, StarExtras};
 use crate::mesa_history::{eval_min_cell_collapse_time, eval_min_dr_div_cs};
 use crate::model::StarModel;
 use crate::timestep::{
-    TimestepAction, TimestepLimitReason, TimestepReport, eval_h211_factor,
+    TimestepAction, TimestepLimitReason, TimestepReport, h211_limtr,
     eval_varcontrol,
 };
 use crate::timestep_checks::{
@@ -462,29 +462,33 @@ pub(crate) fn timestep_controller_with_extras(
     };
     let min_tf = ts.min_timestep_factor;
 
-    // `filter_dt_next` (`star/private/timestep.f90:2362-2427`)
-    let (factor, hit_max, hit_min) = if ts.use_dt_low_pass_controller {
-        eval_h211_factor(
-            dt_limit_ratio,
-            model.dt_limit_ratio_old,
-            model.dt,
-            model.dt_old,
-            max_tf,
-            min_tf,
-        )
+    // `filter_dt_next` (`star/private/timestep.f90:2362-2411`): the low-pass
+    // controller when the previous ratio and step are available, otherwise
+    // the first-order `dt*dt_limit_ratio_target/dt_limit_ratio`.
+    let ratio_floored = dt_limit_ratio.max(1.0e-10);
+    let mut dt_next = if ts.use_dt_low_pass_controller
+        && model.dt_limit_ratio_old > 0.0
+        && model.dt_old > 0.0
+    {
+        model.dt
+            * h211_limtr(
+                ratio_floored,
+                model.dt_limit_ratio_old,
+                model.dt,
+                model.dt_old,
+            )
     } else {
-        let raw = 1.0 / dt_limit_ratio.max(1.0e-10);
-        let h_max = max_tf > 0.0 && raw > max_tf;
-        let h_min = min_tf > 0.0 && raw < min_tf;
-        let mut f = raw;
-        if max_tf > 0.0 {
-            f = f.min(max_tf);
-        }
-        if min_tf > 0.0 {
-            f = f.max(min_tf);
-        }
-        (f, h_max, h_min)
+        model.dt * 1.0 / ratio_floored
     };
+    // `star/private/timestep.f90:343-363`.
+    let hit_max = max_tf > 0.0 && dt_next > max_tf * model.dt;
+    if hit_max {
+        dt_next = max_tf * model.dt;
+    }
+    let hit_min = min_tf > 0.0 && dt_next < min_tf * model.dt;
+    if hit_min {
+        dt_next = min_tf * model.dt;
+    }
 
     if reason == TimestepLimitReason::Varcontrol {
         if hit_max {
@@ -494,7 +498,6 @@ pub(crate) fn timestep_controller_with_extras(
         }
     }
 
-    let mut dt_next = model.dt * factor;
 
     let force_dt = if ts.force_timestep > 0.0 {
         ts.force_timestep

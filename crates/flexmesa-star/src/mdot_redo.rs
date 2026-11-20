@@ -290,17 +290,19 @@ impl MdotRedoState {
                 }
             }
             let implicit_mdot = model.mstar_dot;
-            model.mstar_dot = saved_mdot;
             model.aux.step_hist.rotational_mdot_boost_old = saved_boost_old;
             if (self.explicit_mdot - implicit_mdot).abs()
                 > implicit_mdot.abs() * self.iwind_tolerance
             {
+                model.mstar_dot = saved_mdot;
                 let next_mdot = self.explicit_mdot
                     + self.iwind_lambda * (implicit_mdot - self.explicit_mdot);
                 self.explicit_mdot = next_mdot;
                 self.iwind_redo_cnt += 1;
                 return Ok(SelectMdotAction::RedoWithMdot(next_mdot));
             }
+            // Within tolerance: `s% mstar_dot` keeps the value `set_mdot`
+            // just gave it (`star/private/evolve.f90:807-821`).
             self.iwind_max_redo_cnt = self.iwind_redo_cnt;
         }
 

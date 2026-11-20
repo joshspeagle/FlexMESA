@@ -650,10 +650,8 @@ pub fn solve_henyey_step(
                 });
 
                 if let Err(e) = eq_res {
-                    if alam > eff_min_coeff
-                        && (model.model_number <= 1
-                            || model.doing_first_model_of_run)
-                    {
+                    // `star/private/star_solver.f90:819`.
+                    if alam > eff_min_coeff && model.model_number == 1 {
                         alam = (alam / 10.0).max(eff_min_coeff);
                         continue;
                     }

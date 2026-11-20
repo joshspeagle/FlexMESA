@@ -480,6 +480,7 @@ pub fn solve_henyey_step(
     } else {
         while !passed_tol_tests {
             iter_used = iter;
+            model.aux.solver_mlt_eval_count = iter;
             model.total_num_solver_iterations += 1;
 
             let (tol_rn, tol_mr) = active_residual_tolerances_with_gold(

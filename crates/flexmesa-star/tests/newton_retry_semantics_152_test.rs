@@ -789,3 +789,40 @@ fn test_relax_uniform_omega_restores_all_timestamps_and_hits_target_on_early_exi
         "early exit must apply exact target_omega rather than interpolated fraction"
     );
 }
+
+#[test]
+fn test_make_gradr_sticky_tracks_solver_iter_not_line_search_eval_count() {
+    let mut ctrl = StarControls {
+        initial_mass: 1.0,
+        zbase: 0.02,
+        ..StarControls::default()
+    };
+    ctrl.mix_wind.make_gradr_sticky_in_solver_iters = true;
+    let mut model =
+        load_zams_model(ctrl, StarJobControls::default()).expect("1 Msun ZAMS");
+    model.aux.doing_struct_burn_mix = true;
+    model.aux.solver_mlt_eval_count = 1;
+    model.aux.fixed_gradr_sticky.fill(false);
+
+    // Repeated line-search evaluations during Newton iteration 1 must NOT
+    // advance `solver_iter` past 3 or latch `fixed_gradr_sticky`
+    // (`star_solver.f90:284, 610`, `turb_info.f90:56`).
+    for _ in 0..5 {
+        set_hydro_vars(&mut model, false, false)
+            .expect("set_hydro_vars iter 1");
+    }
+    assert_eq!(model.aux.solver_mlt_eval_count, 1);
+    assert!(
+        model.aux.fixed_gradr_sticky.iter().all(|&b| !b),
+        "repeated line-search trials at solver_iter=1 must not latch fixed_gradr_sticky"
+    );
+
+    // At Newton iteration 4 (`solver_iter > 3`), radiative faces latch sticky.
+    model.aux.solver_mlt_eval_count = 4;
+    set_hydro_vars(&mut model, false, false).expect("set_hydro_vars iter 4");
+    assert_eq!(model.aux.solver_mlt_eval_count, 4);
+    assert!(
+        model.aux.fixed_gradr_sticky.iter().any(|&b| b),
+        "solver_iter=4 (> 3) must latch radiative faces into fixed_gradr_sticky"
+    );
+}

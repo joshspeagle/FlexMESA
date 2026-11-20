@@ -320,7 +320,10 @@ pub struct HydroAuxState {
     pub j_rot_old: Vec<f64>,
     /// Previous-step mass-change heating rate $\epsilon_{\dot{M},\mathrm{old},k}$ for step retry.
     pub eps_mdot_old: Vec<f64>,
-    /// Solver `set_mlt_vars` evaluation counter within the active `do_struct_burn_mix` solve.
+    /// Active Newton iteration index (`s% solver_iter` in `star_solver.f90:191,
+    /// 284, 610` and `turb_info.f90:56`) during `do_struct_burn_mix`, preserved
+    /// at solve exit for post-solve rotation conservation and reset by the
+    /// post-solve `set_mlt_vars` pass.
     pub solver_mlt_eval_count: usize,
     /// Per-face sticky radiative latch (`fixed_gradr_for_rest_of_solver_iters` in `turb_info.f90:56-61`).
     pub fixed_gradr_sticky: Vec<bool>,

@@ -597,7 +597,7 @@ fn test_premix_add_predictive_mixing_fails_loudly_on_conv_premix_conflict() {
     let err = flexmesa_star::add_predictive_mixing(&mut model, 0.1, 0.005)
         .expect_err("must fail loudly when do_conv_premix is active");
     assert!(
-        err.to_string().contains("conv_premix"),
+        err.to_string().contains("convective premixing"),
         "unexpected error: {err}"
     );
 }

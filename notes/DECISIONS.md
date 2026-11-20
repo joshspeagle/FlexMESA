@@ -57,6 +57,7 @@ Scope and the `v0.1.0` definition are in [`SCOPE.md`](SCOPE.md). Work is tracked
 | 40 | MESA 26.4.1 Convective Boundaries, Overshoot, Predictive Mixing, Convective Premixing, and Threshold Smoothing (`#155`, `#266`, `#267`, `#268`, `#277`) | In force | below |
 | 41 | Upstream MESA 26.4.1 Element Diffusion, Blouin CO/ONe Phase Separation, Loud `op_mono` Rejection, and Deferred-Bug Guards (`#156`, `#271`, `#272`, `#273`) | In force | below |
 | 42 | Unconditional MESA 26.4.1 Newton Solver, Retry/Redo Semantics, and Deferred Upstream Bugs (`#152`, `#139`, `#177`, `#251`-`#253`, `#260`) | In force | below |
+| 43 | Undefined Upstream Reads Become Loud Errors; Rust-versus-JAX Comparisons Are Tracked Expected Failures While JAX Is Frozen (`#169`, `#295`) | In force | below |
 
 ## Pre-audit decisions still in force
 
@@ -558,3 +559,18 @@ The text of these four entries predates the audit of 2026-11-16. The decisions s
 - **Alternatives Rejected**:
   - *Adding runtime flags to toggle `#177`, `#251`-`#253`, and `#260` fixes*: Violates the unconditional single-target MESA `26.4.1` parity rule (`CLAUDE.md`, `#145`, `#169`).
   - *Retaining `force_accept_next` fallback in `select_mdot_action`*: Force-accepts steps with $\Omega / \Omega_{\mathrm{crit}}$ above limit when boosted winds fail to converge (`#139`).
+
+---
+
+## DECISIONS #43: Undefined Upstream Reads Become Loud Errors; Rust-versus-JAX Comparisons Are Tracked Expected Failures While JAX Is Frozen (`#169`, `#295`)
+
+- **Date**: 2026-11-20 (rulings by the project lead)
+- **Decision**:
+  1. **Undefined upstream reads.** Where MESA `26.4.1` reads past the end of an array or reads a variable it has not set, there is no defined behaviour to reproduce. FlexMESA returns an explicit error on that path. This is the general rule and no longer needs a ruling per case. Each such path still gets a deferred issue under `#169` (upstream `file:line`, the inputs that reach it, and whether any shipped case does), a row in the `#169` register, and the issue number cited at the erroring line. The rule covers `#242`, `#271`, `#272`, `#287` and `#288`.
+  2. **Scope of rule 1.** It applies only where the upstream result depends on memory contents. A defined upstream result that looks wrong is reproduced as before. Compiler-specific evaluation and anything else that cannot be reproduced exactly still goes to the project lead.
+  3. **Rust-versus-JAX comparisons.** The JAX engine is frozen (`#166`) and is not being worked on. A test comparing Rust with JAX that fails because Rust was changed to follow MESA is marked `xfail(strict=True)` citing `#295` and declared in `benchmarks/history_harness/known_gaps.toml`, with its bound left at the value it had before the Rust change. The bound is not loosened and the measured value is not adjusted in the test. `#295` holds the register.
+- **Why**: An undefined read returns whatever is in memory on the reference build, so any value FlexMESA chose would be an invented behaviour, and an error is the only choice that cannot be mistaken for agreement with MESA. For the JAX tests, loosening a bound or correcting the measured value hides the divergence; a strict expected failure records it and fails the gate when the comparison starts passing again.
+- **Alternatives Rejected**:
+  - *Substituting zero or the nearest valid element for an undefined read*: The run continues with a value upstream does not define.
+  - *Reproducing what the reference build happens to read*: Depends on the compiler, the allocator and the run.
+  - *Loosening Rust-versus-JAX bounds, or editing the frozen JAX code to follow each Rust change*: The first hides the difference; the second is the work `#166` defers.

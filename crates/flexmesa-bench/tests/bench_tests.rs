@@ -71,7 +71,7 @@ const WAVE3B_REGRESSION_SNAPSHOTS_N8: [(&str, f64); 5] = [
 const WAVE4_REGRESSION_SNAPSHOTS_N8: [(&str, f64); 5] = [
     ("star_micro_vars", 2.500_111_893_102_388e2),
     ("star_hydro_eqns", 4.243_485_684_423_352e6),
-    ("star_newton_step", 6.383_773_435_545_090),
+    ("star_newton_step", 6.383_773_435_545_09),
     ("star_remesh", 5.108_453_216_631_093e2),
     ("star_evolve_step", 1.005_928_065_548_472e2),
 ];

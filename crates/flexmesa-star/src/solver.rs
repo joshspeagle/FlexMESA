@@ -202,6 +202,78 @@ fn eval_slope(nvar: usize, nz: usize, grad_f: &[f64], soln: &[f64]) -> f64 {
     slope
 }
 
+/// Picks the next line-search coefficient `alam` after a trial correction
+/// failed the sufficient-decrease test, following
+/// `star/private/star_solver.f90:869-931` (inside `adjust_correction`)
+/// verbatim.
+///
+/// The first backtrack minimises the quadratic model through `fold`, `slope`
+/// and `f`; later backtracks minimise the cubic through the two most recent
+/// trials and are capped at `alam_factor * alam`. Upstream has no guard on a
+/// non-finite `tmplam`: a `+inf` from the quadratic branch propagates into
+/// `alam`, and a `NaN` only arises from degenerate `0/0` inputs (where
+/// gfortran's `MAX` with a `NaN` argument is processor dependent; `f64::max`
+/// returns the other operand).
+///
+/// Args:
+///     first_time: Whether this is the first backtrack of the line search.
+///     slope: Directional derivative of `f` along the correction at
+///         `alam = 0`.
+///     f: Merit function `0.5 * |equ|^2` at the current trial `alam`.
+///     fold: Merit function at `alam = 0`.
+///     f2: Merit function at the previous trial `alam2` (cubic branch only).
+///     alam: Current trial coefficient.
+///     alam2: Previous trial coefficient (cubic branch only).
+///     min_corr_coeff: Lower bound on the coefficient.
+///
+/// Returns:
+///     The next trial coefficient,
+///     `max(tmplam, alam_factor * alam, min_corr_coeff)`.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn next_line_search_alam(
+    first_time: bool,
+    slope: f64,
+    f: f64,
+    fold: f64,
+    f2: f64,
+    alam: f64,
+    alam2: f64,
+    min_corr_coeff: f64,
+) -> f64 {
+    // `star_solver.f90:763`: `alam_factor = 0.2d0`.
+    let alam_factor = 0.2_f64;
+    let tmplam = if first_time {
+        // `star_solver.f90:871`.
+        -slope / (2.0 * (f - fold - slope))
+    } else {
+        // `star_solver.f90:884-925`.
+        let rhs1 = f - fold - alam * slope;
+        let rhs2 = f2 - fold - alam2 * slope;
+        let a1 = (rhs1 / (alam * alam) - rhs2 / (alam2 * alam2)) / (alam - alam2);
+        let a2 = (-alam2 * rhs1 / (alam * alam) + alam * rhs2 / (alam2 * alam2))
+            / (alam - alam2);
+        let mut tmplam = if a1 == 0.0 {
+            -slope / (2.0 * a2)
+        } else {
+            let disc = a2 * a2 - 3.0 * a1 * slope;
+            if disc < 0.0 {
+                alam * alam_factor
+            } else if a2 <= 0.0 {
+                (-a2 + disc.sqrt()) / (3.0 * a1)
+            } else {
+                -slope / (a2 + disc.sqrt())
+            }
+        };
+        // `star_solver.f90:926`: the cap applies only in the cubic branch.
+        if tmplam > alam * alam_factor {
+            tmplam = alam * alam_factor;
+        }
+        tmplam
+    };
+    // `star_solver.f90:931`.
+    tmplam.max(alam * alam_factor).max(min_corr_coeff)
+}
+
 #[inline]
 fn apply_coeff(
     nvar: usize,
@@ -695,43 +767,20 @@ pub fn solve_henyey_step(
                     break;
                 }
 
-                let alam_factor = 0.2_f64;
-                let tmplam_raw = if first_time {
-                    first_time = false;
-                    -slope / (2.0 * (f - fold - slope))
-                } else {
-                    let rhs1 = f - fold - alam * slope;
-                    let rhs2 = f2 - fold - alam2 * slope;
-                    let denom = alam - alam2;
-                    let a1 =
-                        (rhs1 / (alam * alam) - rhs2 / (alam2 * alam2)) / denom;
-                    let a2 = (-alam2 * rhs1 / (alam * alam)
-                        + alam * rhs2 / (alam2 * alam2))
-                        / denom;
-                    let raw = if a1 == 0.0 {
-                        -slope / (2.0 * a2)
-                    } else {
-                        let disc = a2 * a2 - 3.0 * a1 * slope;
-                        if disc < 0.0 {
-                            alam * alam_factor
-                        } else if a2 <= 0.0 {
-                            (-a2 + disc.sqrt()) / (3.0 * a1)
-                        } else {
-                            -slope / (a2 + disc.sqrt())
-                        }
-                    };
-                    // `star_solver.f90:926`: upper clamp applies only in the
-                    // cubic (`!first_time`) branch, not on the first backtrack.
-                    raw.min(alam * alam_factor)
-                };
-                let tmplam = if tmplam_raw.is_finite() {
-                    tmplam_raw
-                } else {
-                    alam * alam_factor
-                };
+                let next_alam = next_line_search_alam(
+                    first_time,
+                    slope,
+                    f,
+                    fold,
+                    f2,
+                    alam,
+                    alam2,
+                    eff_min_coeff,
+                );
+                first_time = false;
                 alam2 = alam;
                 f2 = f;
-                alam = tmplam.max(alam * alam_factor).max(eff_min_coeff);
+                alam = next_alam;
             }
 
             let Some(coeff) = accepted_coeff else {
@@ -958,4 +1007,57 @@ pub fn solve_henyey_step(
         correction_norm,
         max_correction,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::next_line_search_alam;
+
+    // Expected values below are hand-evaluated from
+    // `star/private/star_solver.f90:871, 884-926, 931`.
+
+    #[test]
+    fn test_first_backtrack_minimises_quadratic_model() {
+        // tmplam = -(-2) / (2 * (1.5 - 1 + 2)) = 2 / 5.
+        let alam = next_line_search_alam(true, -2.0, 1.5, 1.0, 0.0, 1.0, 0.0, 1e-3);
+        assert_eq!(alam, 2.0 / 5.0);
+    }
+
+    #[test]
+    fn test_first_backtrack_is_floored_at_alam_factor_times_alam() {
+        // tmplam = 2 / (2 * (10 - 1 + 2)) = 1/11 < 0.2 * alam = 0.2.
+        let alam = next_line_search_alam(true, -2.0, 10.0, 1.0, 0.0, 1.0, 0.0, 1e-3);
+        assert_eq!(alam, 0.2);
+    }
+
+    #[test]
+    fn test_first_backtrack_has_no_upper_cap() {
+        // tmplam = 2 / (2 * (-0.5 - 1 + 2)) = 2; upstream caps only the
+        // cubic branch (`star_solver.f90:926`).
+        let alam = next_line_search_alam(true, -2.0, -0.5, 1.0, 0.0, 1.0, 0.0, 1e-3);
+        assert_eq!(alam, 2.0);
+    }
+
+    #[test]
+    fn test_first_backtrack_with_infinite_tmplam_propagates_like_upstream() {
+        // f - fold - slope = -1 - 1 + 2 = 0, so tmplam = 2 / 0 = +inf.
+        // Upstream has no finite-value guard (`star_solver.f90:870-931`),
+        // so `alam = max(+inf, 0.2, min_corr_coeff) = +inf`.
+        let alam = next_line_search_alam(true, -2.0, -1.0, 1.0, 0.0, 1.0, 0.0, 1e-3);
+        assert_eq!(alam, f64::INFINITY);
+    }
+
+    #[test]
+    fn test_cubic_backtrack_returns_alam_factor_times_alam() {
+        // The cubic minimiser is 0.1408... (a2 > 0 branch), capped at
+        // 0.2 * alam = 0.1 by line 926 and floored at 0.2 * alam by line 931.
+        let alam = next_line_search_alam(false, -1.0, 1.2, 1.0, 1.5, 0.5, 1.0, 1e-3);
+        assert_eq!(alam, 0.5 * 0.2);
+    }
+
+    #[test]
+    fn test_backtrack_is_floored_at_min_corr_coeff() {
+        let alam = next_line_search_alam(false, -1.0, 1.2, 1.0, 1.5, 0.5, 1.0, 0.3);
+        assert_eq!(alam, 0.3);
+    }
 }

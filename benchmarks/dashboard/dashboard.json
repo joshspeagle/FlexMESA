@@ -21,7 +21,7 @@
         "verified_total": 4971,
         "pct_ported": 34.5,
         "pct_verified": 4.1,
-        "rust_lines": 82621,
+        "rust_lines": 83224,
         "python_jax_lines": 3869
       },
       {
@@ -55,7 +55,7 @@
         "verified_total": 0,
         "pct_ported": 18.7,
         "pct_verified": 0.0,
-        "rust_lines": 11772,
+        "rust_lines": 11965,
         "python_jax_lines": 1244
       },
       {
@@ -455,7 +455,7 @@
       "upstream_panel_modules": 46
     },
     "infrastructure_lines": {
-      "rust_bridge_testing_bench": 19289,
+      "rust_bridge_testing_bench": 19294,
       "python_testing_bench": 14207
     }
   },

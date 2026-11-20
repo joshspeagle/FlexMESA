@@ -1,0 +1,23 @@
+&star_job
+   show_log_description_at_start = .false.
+   set_initial_dt = .true.
+   years_for_initial_dt = 1d3
+/
+
+&eos
+/
+
+&kap
+   Zbase = 0.02
+/
+
+&controls
+   initial_mass = 1.5
+   initial_z = 0.02
+   max_model_number = 3
+   max_number_retries = 40
+   history_interval = 1
+   terminal_interval = 1
+   profile_interval = 0
+   photo_interval = 0
+/

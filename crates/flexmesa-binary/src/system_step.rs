@@ -8,7 +8,8 @@
 
 use flexmesa_const::{LSUN, MSUN, PI, SECYER};
 use flexmesa_star::{
-    StarError, StarModel, check_termination_limits, compute_core_masses_msun,
+    LimitCheckOutcome, StarError, StarModel, compute_core_masses_msun,
+    do_check_limits,
     eval_photosphere_info, eval_total_energy_integrals,
     remesh_star_before_step, set_hydro_vars, sync_post_henyey_rotation,
 };
@@ -292,11 +293,21 @@ impl BinarySystem {
         let max_tries =
             usize::try_from(self.controls.max_tries_to_achieve).unwrap_or(0);
         let target_model = pre_step_snap.model_number + 1;
+        let doing_first_model_of_run = pre_step_snap.model_number == 0;
         let tracing = flexmesa_star::step_trace::enabled(target_model);
         let mut outer_retry = 0_usize;
+        let mut star_limit_redo_cnt = 0_usize;
+        let mut pending_star_redo_dt: Option<f64> = None;
 
         loop {
-            if outer_retry > 0 {
+            if let Some(redo_dt) = pending_star_redo_dt.take() {
+                // Star limit-hitting redo (`do_one_utils.f90:1436-1437`,
+                // `run_binary_support.f90:585-603`): restore pre-step state
+                // and repeat at halved `dt` without counting an outer retry.
+                self.restore_snapshot(&pre_step_snap)?;
+                self.apply_retry_holds(&retry_holds);
+                dt_try = redo_dt;
+            } else if outer_retry > 0 {
                 self.counters.num_retries += 1;
                 self.record_retry_holds(&mut retry_holds);
                 self.restore_snapshot(&pre_step_snap)?;
@@ -368,16 +379,28 @@ impl BinarySystem {
                             };
                             self.adjust_irradiation();
 
+                            let mut star_redo_req: Option<(f64, usize)> = None;
                             let mut decision = if let Some(reason) =
                                 self.eval_binary_overflow_termination()
                             {
                                 TrialDecision::Terminate(reason)
-                            } else if let Some(reason) =
-                                self.eval_star_stopping_termination()
-                            {
-                                TrialDecision::Terminate(reason)
                             } else {
-                                TrialDecision::KeepGoing
+                                let (star_dec, star_dt, star_lim) = match self
+                                    .eval_star_stopping_limits(
+                                        doing_first_model_of_run,
+                                    ) {
+                                    Ok(v) => v,
+                                    Err(e) => {
+                                        self.restore_snapshot(&pre_step_snap)?;
+                                        return Err(e);
+                                    }
+                                };
+                                if let (Some(dt_new), Some(lim)) =
+                                    (star_dt, star_lim)
+                                {
+                                    star_redo_req = Some((dt_new, lim));
+                                }
+                                star_dec
                             };
 
                             let extras_decision = match extras.check_model(self)
@@ -445,8 +468,40 @@ impl BinarySystem {
                                     );
                                 }
                                 TrialDecision::Redo => {
+                                    if let Some((dt_new, max_redos)) =
+                                        star_redo_req
+                                    {
+                                        star_limit_redo_cnt += 1;
+                                        if max_redos > 0
+                                            && star_limit_redo_cnt > max_redos
+                                        {
+                                            self.restore_snapshot(
+                                                &pre_step_snap,
+                                            )?;
+                                            return Err(StarError::Terminated {
+                                                model_number: target_model,
+                                                reason: String::from(
+                                                    "redo_limit",
+                                                ),
+                                            });
+                                        }
+                                        if !(dt_new.is_finite()
+                                            && dt_new > 0.0)
+                                        {
+                                            self.restore_snapshot(
+                                                &pre_step_snap,
+                                            )?;
+                                            return Err(StarError::Terminated {
+                                                model_number: target_model,
+                                                reason: String::from(
+                                                    "dt_is_zero",
+                                                ),
+                                            });
+                                        }
+                                        dt_try = dt_new;
+                                    }
                                     // Upstream's `step_loop` has no limit on
-                                    // redos (`binary/private/
+                                    // binary-extras redos (`binary/private/
                                     // run_binary_support.f90:385-660`).
                                     redo_idx += 1;
                                 }
@@ -533,7 +588,7 @@ impl BinarySystem {
             }
 
             // Implicit RLOF branch (`run_binary_support.f90:417-652`).
-            if outer_retry == 0 {
+            if outer_retry == 0 && star_limit_redo_cnt == 0 {
                 self.refresh_tidal_deformation_hooks(false)?;
                 if self.donor.controls.mesh_delta_coeff > 0.0 {
                     let _ = remesh_star_before_step(&mut self.donor, dt_try)?;
@@ -784,11 +839,21 @@ impl BinarySystem {
                         TrialDecision::Terminate(reason),
                     );
                 }
+                let mut star_redo_req: Option<(f64, usize)> = None;
                 if decision == TrialDecision::KeepGoing {
-                    if let Some(reason) = self.eval_star_stopping_termination()
+                    let (star_dec, star_dt, star_lim) = match self
+                        .eval_star_stopping_limits(doing_first_model_of_run)
                     {
-                        decision = TrialDecision::Terminate(reason);
+                        Ok(v) => v,
+                        Err(e) => {
+                            self.restore_snapshot(&pre_step_snap)?;
+                            return Err(e);
+                        }
+                    };
+                    if let (Some(dt_new), Some(lim)) = (star_dt, star_lim) {
+                        star_redo_req = Some((dt_new, lim));
                     }
+                    decision = combine_worst_result(decision, star_dec);
                 }
 
                 // `run_binary_support.f90:537-538`: `extras_binary_check_model`
@@ -853,6 +918,27 @@ impl BinarySystem {
                         );
                     }
                     TrialDecision::Redo => {
+                        if let Some((dt_new, max_redos)) = star_redo_req {
+                            star_limit_redo_cnt += 1;
+                            if max_redos > 0
+                                && star_limit_redo_cnt > max_redos
+                            {
+                                self.restore_snapshot(&pre_step_snap)?;
+                                return Err(StarError::Terminated {
+                                    model_number: target_model,
+                                    reason: String::from("redo_limit"),
+                                });
+                            }
+                            if !(dt_new.is_finite() && dt_new > 0.0) {
+                                self.restore_snapshot(&pre_step_snap)?;
+                                return Err(StarError::Terminated {
+                                    model_number: target_model,
+                                    reason: String::from("dt_is_zero"),
+                                });
+                            }
+                            pending_star_redo_dt = Some(dt_new);
+                            break;
+                        }
                         if try_idx > max_tries {
                             let next_dt = self.compute_retry_dt(
                                 dt_used,
@@ -1057,13 +1143,46 @@ impl BinarySystem {
         None
     }
 
-    fn eval_star_stopping_termination(&self) -> Option<String> {
-        check_termination_limits(&self.donor).or_else(|| {
-            match &self.companion {
-                BinaryCompanion::PointMass { .. } => None,
-                BinaryCompanion::Star(s2) => check_termination_limits(s2),
+    /// Evaluates `star_check_model` (`do_check_limits`) on the donor and, if
+    /// still `keep_going`, on the companion star, propagating `Terminate`,
+    /// `Retry`, `Redo` (with halved `dt_new` and `redo_limit`), and fatal
+    /// errors verbatim (`binary/private/run_binary_support.f90:523-535`).
+    fn eval_star_stopping_limits(
+        &mut self,
+        doing_first_model_of_run: bool,
+    ) -> Result<(TrialDecision, Option<f64>, Option<usize>), StarError> {
+        match do_check_limits(&mut self.donor, None, doing_first_model_of_run)?
+        {
+            LimitCheckOutcome::KeepGoing => {}
+            LimitCheckOutcome::Terminate { code, .. } => {
+                self.donor.aux.step_hist.termination_code = Some(code.clone());
+                return Ok((TrialDecision::Terminate(code), None, None));
             }
-        })
+            LimitCheckOutcome::Retry { .. } => {
+                return Ok((TrialDecision::Retry, None, None));
+            }
+            LimitCheckOutcome::Redo { dt_new, .. } => {
+                let lim = self.donor.controls.ts_stop.redo_limit;
+                return Ok((TrialDecision::Redo, Some(dt_new), Some(lim)));
+            }
+        }
+        if let BinaryCompanion::Star(ref mut s2) = self.companion {
+            match do_check_limits(s2, None, doing_first_model_of_run)? {
+                LimitCheckOutcome::KeepGoing => {}
+                LimitCheckOutcome::Terminate { code, .. } => {
+                    s2.aux.step_hist.termination_code = Some(code.clone());
+                    return Ok((TrialDecision::Terminate(code), None, None));
+                }
+                LimitCheckOutcome::Retry { .. } => {
+                    return Ok((TrialDecision::Retry, None, None));
+                }
+                LimitCheckOutcome::Redo { dt_new, .. } => {
+                    let lim = s2.controls.ts_stop.redo_limit;
+                    return Ok((TrialDecision::Redo, Some(dt_new), Some(lim)));
+                }
+            }
+        }
+        Ok((TrialDecision::KeepGoing, None, None))
     }
 
     fn run_single_trial(
@@ -1637,5 +1756,79 @@ mod tests {
         assert!((extras.seen_cf[2] - 1.25).abs() < 1.0e-12);
         assert_eq!(sys.model_number, 1);
         assert_eq!(sys.counters.num_retries, 1);
+    }
+
+    #[test]
+    fn test_eval_star_stopping_limits_propagates_redo_retry_terminate_and_err()
+    {
+        let mut donor = load_zams_model(
+            StarControls {
+                initial_mass: 1.5,
+                zbase: 0.02,
+                ..StarControls::default()
+            },
+            StarJobControls::default(),
+        )
+        .expect("1.5 Msun donor");
+        donor.dt = 1.0e3 * SECYER;
+        donor.dt_next = donor.dt;
+        let bctrl = BinaryInlistControls {
+            m1_msun: 1.5,
+            m2_msun: 1.0,
+            initial_period_in_days: 5.0,
+            terminate_if_initial_overflow: false,
+            ..BinaryInlistControls::default()
+        };
+        let mut sys = BinarySystem::from_controls_point_mass(donor, bctrl)
+            .expect("detached binary");
+
+        // 1. KeepGoing
+        let (dec, dt_opt, _) = sys
+            .eval_star_stopping_limits(false)
+            .expect("default keep_going");
+        assert_eq!(dec, TrialDecision::KeepGoing);
+        assert!(dt_opt.is_none());
+
+        // 2. Redo (target-hitting `when_to_stop_atol` on `max_age`)
+        sys.donor.star_age = 100.0;
+        sys.donor.controls.max_age = 50.0;
+        sys.donor.controls.ts_stop.when_to_stop_atol = 1.0;
+        sys.donor.controls.ts_stop.when_to_stop_rtol = 0.0;
+        let (dec_redo, dt_redo, _) = sys
+            .eval_star_stopping_limits(false)
+            .expect("target redo");
+        assert_eq!(dec_redo, TrialDecision::Redo);
+        assert_eq!(dt_redo, Some(0.5 * sys.donor.dt));
+
+        // 3. Terminate (within tolerance)
+        sys.donor.controls.ts_stop.when_to_stop_atol = 100.0;
+        let (dec_term, dt_term, _) = sys
+            .eval_star_stopping_limits(false)
+            .expect("target terminate");
+        assert_eq!(dec_term, TrialDecision::Terminate(String::from("max_age")));
+        assert!(dt_term.is_none());
+        sys.donor.controls.max_age = -1.0;
+
+        // 4. Retry (`retry_for_v_above_clight`)
+        sys.donor.controls.v_flag = true;
+        sys.donor.controls.ts_stop.retry_for_v_above_clight = true;
+        sys.donor.v[0] = 1.1 * flexmesa_const::CLIGHT;
+        let (dec_retry, _, _) = sys
+            .eval_star_stopping_limits(false)
+            .expect("v > c retry");
+        assert_eq!(dec_retry, TrialDecision::Retry);
+        sys.donor.v[0] = 0.0;
+        sys.donor.controls.v_flag = false;
+
+        // 5. Fatal Err (`#264` `peak_burn_vconv_div_cs > 0.75 * limit`)
+        let k_pk = sys.donor.nz - 2;
+        sys.donor.eps_nuc.fill(0.0);
+        sys.donor.eps_nuc[k_pk] = 1.0e10;
+        sys.donor.conv_vel[k_pk] = 0.8 * sys.donor.csound[k_pk];
+        sys.donor.controls.ts_stop.peak_burn_vconv_div_cs_limit = 1.0;
+        let err = sys
+            .eval_star_stopping_limits(false)
+            .expect_err("#264 fatal error must propagate");
+        assert!(matches!(err, StarError::InvalidInput(_)));
     }
 }

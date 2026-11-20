@@ -389,6 +389,14 @@ pub fn bench_star_remesh(
     }
 }
 
+/// Smallest grid on which [`bench_star_evolve_step`] runs. The resampled
+/// ZAMS fixture is too far from equilibrium on coarser grids to take a step
+/// at the model's own timestep: with the face radiation pressure of
+/// `get_Prad_face` (`star/private/star_utils.f90:3838-3843`) grids of 8, 16
+/// and 32 zones fail to converge there, and 64 zones converges in three
+/// iterations with no retries.
+pub const MIN_EVOLVE_STEP_ZONES: usize = 64;
+
 /// Benchmarks a full structure + burn + mix evolutionary step
 /// (`star_evolve_step`) across Stages 0..3 for `nz` zones.
 #[must_use]
@@ -397,7 +405,7 @@ pub fn bench_star_evolve_step(
     n_warmup: usize,
     n_repeats: usize,
 ) -> BenchRecord {
-    let mut base = make_wave4_zams_model(nz);
+    let mut base = make_wave4_zams_model(nz.max(MIN_EVOLVE_STEP_ZONES));
     let dt = base.dt;
     star_evolve_step(&mut base, false, false, true)
         .expect("equilibrate resampled ZAMS step");
@@ -455,7 +463,7 @@ pub fn bench_star_evolve_step(
 
     BenchRecord {
         workload: "star_evolve_step",
-        n_zones: nz,
+        n_zones: base.nz,
         stage0,
         stage1,
         stage2,

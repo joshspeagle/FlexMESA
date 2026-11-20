@@ -799,3 +799,21 @@ issue = "#161"
 role = "physics_gap"
 expect_fail_when_run = true
 reason = "Rust strict PC and Skye derivatives differ from MESA 26.4.1 beyond the base tolerances (1.0e-11 values, 5.0e-9 PC and 1.0e-8 Skye derivatives); largest measured pc_co_liq d_dlnT 7.1e-6 and skye_co_liq d_dlnT 1.3e-6. The same gap is declared for the Rust tests."
+
+[[test_gaps]]
+kind = "python_xfail"
+file = "tests/test_wave4_bench.py"
+test_name = "test_wave4_star_micro_vars_rust_matches_frozen_jax"
+issue = "#295"
+role = "physics_gap"
+expect_fail_when_run = true
+reason = "Rust do1_mlt_2 takes the face radiation pressure from the face temperature (MESA 26.4.1 star_utils.f90:3838-3843, #291); the frozen JAX face-MLT twin still interpolates the cell values, so the cross-stage difference is 8.9e-3 against a 1.0e-10 bound."
+
+[[test_gaps]]
+kind = "python_xfail"
+file = "tests/test_wave5_bench.py"
+test_name = "test_wave5_diff_rot_rust_matches_frozen_jax"
+issue = "#295"
+role = "physics_gap"
+expect_fail_when_run = true
+reason = "Rust eval_caplan_ocp_dstar follows MESA 26.4.1 get_Dstar_OCP (diffusion_support.f90:1716-1743, #156); the frozen JAX twin keeps its earlier fit, so the cross-stage difference is about 5.4e-5 against bounds of 1.0e-12 (8 zones) and 2.0e-14 (128 zones)."

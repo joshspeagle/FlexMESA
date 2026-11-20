@@ -47,12 +47,6 @@ enum BurnType {
     Z,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum UpdateMode {
-    FixedPt,
-    FixedDt,
-}
-
 #[derive(Debug, Clone)]
 struct ZoneInfo {
     /// 0-based cell index of top boundary (`kc_t`, inclusive).
@@ -111,8 +105,8 @@ struct SavedData {
     face_snap: Option<FaceMltSnapshot>,
     gradl_comp_lo: usize,
     gradl_comp: Vec<f64>,
-    update_mode_lo: usize,
-    update_mode: Vec<UpdateMode>,
+    fix_pgas_lo: usize,
+    fix_pgas: Vec<bool>,
 }
 
 /// Runs verbatim MESA `26.4.1` convective premixing (`do_conv_premix` in
@@ -129,7 +123,7 @@ pub fn do_conv_premix(model: &mut StarModel) -> Result<usize, StarError> {
         return Ok(0);
     }
 
-    let mut update_mode = vec![UpdateMode::FixedDt; nz];
+    let mut fix_pgas = vec![false; nz];
     let mut zi = init_zone_info(model)?;
     let mut total_advanced = 0_usize;
     let mut j_it = 0_usize;
@@ -163,7 +157,7 @@ pub fn do_conv_premix(model: &mut StarModel) -> Result<usize, StarError> {
         let mut i_bdy = best_i;
         total_advanced += advance_bdy(
             model,
-            &mut update_mode,
+            &mut fix_pgas,
             &mut zi,
             &mut i_bdy,
             best_t_bdy,
@@ -176,7 +170,7 @@ pub fn do_conv_premix(model: &mut StarModel) -> Result<usize, StarError> {
 
 fn advance_bdy(
     model: &mut StarModel,
-    update_mode: &mut [UpdateMode],
+    fix_pgas: &mut [bool],
     zi: &mut Vec<ZoneInfo>,
     i_bdy: &mut usize,
     t_bdy: bool,
@@ -213,7 +207,7 @@ fn advance_bdy(
 
         let accepted = advance_bdy_by_one_cell(
             model,
-            update_mode,
+            fix_pgas,
             zi,
             i_bdy,
             t_bdy,
@@ -246,7 +240,7 @@ fn advance_bdy(
 #[allow(clippy::too_many_lines)]
 fn advance_bdy_by_one_cell(
     model: &mut StarModel,
-    update_mode: &mut [UpdateMode],
+    fix_pgas: &mut [bool],
     zi: &mut Vec<ZoneInfo>,
     i_bdy: &mut usize,
     t_bdy: bool,
@@ -301,14 +295,9 @@ fn advance_bdy_by_one_cell(
     } else {
         (zi[*i_bdy].kc_t, kc_new)
     };
-    let sd = save_model(model, update_mode, save_t, save_b);
+    let sd = save_model(model, fix_pgas, save_t, save_b);
 
-    let fix_pgas = model.controls.mix_wind.conv_premix_fix_pgas;
-    let mode_for_mix = if fix_pgas {
-        UpdateMode::FixedPt
-    } else {
-        UpdateMode::FixedDt
-    };
+    let mode_for_mix = model.controls.mix_wind.conv_premix_fix_pgas;
 
     let mut n_sub = N_SUB_INI;
     let mut kc_t;
@@ -324,9 +313,7 @@ fn advance_bdy_by_one_cell(
         kf_t = kc_t;
         kf_b = kc_b + 1;
 
-        for mode in &mut update_mode[kc_t..=kc_b] {
-            *mode = mode_for_mix;
-        }
+        fix_pgas[kc_t..=kc_b].fill(mode_for_mix);
 
         // Zero `gradL_composition_term` on interior faces plus the advancing
         // face (`conv_premix.f90:422-426`).
@@ -382,7 +369,7 @@ fn advance_bdy_by_one_cell(
                 }
             }
 
-            update_model(model, update_mode, kc_t, kc_b)?;
+            update_model(model, fix_pgas, kc_t, kc_b)?;
 
             // Count interior faces that became non-convective (`conv_premix.f90:474`).
             let n_nc = ((kf_t + 1)..kf_b)
@@ -394,7 +381,7 @@ fn advance_bdy_by_one_cell(
 
             if n_nc > 1 && n_sub_cur < N_SUB_MAX {
                 n_sub = 2 * n_sub_cur;
-                restore_model(model, update_mode, &sd);
+                restore_model(model, fix_pgas, &sd);
                 continue 'refine_loop;
             } else if n_nc > 0 {
                 has_split = true;
@@ -432,7 +419,7 @@ fn advance_bdy_by_one_cell(
     // Write final averaged composition into `kc_new` and update the extended
     // zone (`conv_premix.f90:541-557`).
     model.xa[kc_new * sp..(kc_new + 1) * sp].copy_from_slice(&avg_xa);
-    update_mode[kc_new] = mode_for_mix;
+    fix_pgas[kc_new] = mode_for_mix;
 
     if t_bdy {
         kc_t = kc_new;
@@ -442,14 +429,14 @@ fn advance_bdy_by_one_cell(
         kf_b = kc_b + 1;
     }
 
-    update_model(model, update_mode, kc_t, kc_b)?;
+    update_model(model, fix_pgas, kc_t, kc_b)?;
 
     // Check fuel abundance increase avoidance (`conv_premix.f90:562-594`).
     if let Some(iso) = zi[*i_bdy].avoid_inc_iso {
         if model.dt > 0.0 {
             let davg = (avg_xa[iso] - zi[*i_bdy].avg_xa[iso]) / model.dt;
             if davg > (-zi[*i_bdy].davg_xa_dt[iso]).max(0.0) {
-                restore_model(model, update_mode, &sd);
+                restore_model(model, fix_pgas, &sd);
                 if t_bdy {
                     zi[*i_bdy].sel_t = false;
                 } else {
@@ -466,14 +453,14 @@ fn advance_bdy_by_one_cell(
         if model.aux.mixing.mlt_mixing_type[kf_t + 1]
             != MixingType::ConvectiveMixing
         {
-            restore_model(model, update_mode, &sd);
+            restore_model(model, fix_pgas, &sd);
             zi[*i_bdy].sel_t = false;
             return Ok(false);
         }
     } else if model.aux.mixing.mlt_mixing_type[kf_b - 1]
         != MixingType::ConvectiveMixing
     {
-        restore_model(model, update_mode, &sd);
+        restore_model(model, fix_pgas, &sd);
         zi[*i_bdy].sel_b = false;
         return Ok(false);
     }
@@ -826,17 +813,13 @@ fn validate_zone_info(
 
 fn update_model(
     model: &mut StarModel,
-    update_mode: &[UpdateMode],
+    fix_pgas: &[bool],
     kc_t: usize,
     kc_b: usize,
 ) -> Result<(), StarError> {
     // Pass 1/2: FIXED_PT_MODE / FIXED_DT_MODE EOS + opacity in parallel
     // (`conv_premix.f90:1311-1335`).
-    let fix_pgas_by_cell: Vec<bool> = update_mode
-        .iter()
-        .map(|&m| matches!(m, UpdateMode::FixedPt))
-        .collect();
-    eval_eos_kap_range_by_mode(model, kc_t, kc_b, &fix_pgas_by_cell)?;
+    eval_eos_kap_range_by_mode(model, kc_t, kc_b, fix_pgas)?;
 
     // Update MLT on interior faces `(kc_t + 1)..=kc_b` (`conv_premix.f90:1342`).
     if kc_t < kc_b {
@@ -847,7 +830,7 @@ fn update_model(
 
 fn save_model(
     model: &StarModel,
-    update_mode: &[UpdateMode],
+    fix_pgas: &[bool],
     kc_t: usize,
     kc_b: usize,
 ) -> SavedData {
@@ -868,19 +851,19 @@ fn save_model(
         face_snap,
         gradl_comp_lo: kf_lo,
         gradl_comp,
-        update_mode_lo: kc_t,
-        update_mode: update_mode[kc_t..=kc_b].to_vec(),
+        fix_pgas_lo: kc_t,
+        fix_pgas: fix_pgas[kc_t..=kc_b].to_vec(),
     }
 }
 
 fn restore_model(
     model: &mut StarModel,
-    update_mode: &mut [UpdateMode],
+    fix_pgas: &mut [bool],
     sd: &SavedData,
 ) {
-    let len_u = sd.update_mode.len();
-    update_mode[sd.update_mode_lo..(sd.update_mode_lo + len_u)]
-        .copy_from_slice(&sd.update_mode);
+    let len_u = sd.fix_pgas.len();
+    fix_pgas[sd.fix_pgas_lo..(sd.fix_pgas_lo + len_u)]
+        .copy_from_slice(&sd.fix_pgas);
     sd.cell_snap.restore(model);
     if !sd.gradl_comp.is_empty() {
         let len_g = sd.gradl_comp.len();

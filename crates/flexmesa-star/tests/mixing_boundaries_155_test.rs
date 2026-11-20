@@ -517,3 +517,105 @@ fn test_conv_premix_ingestion_conservation_time_factor_and_fix_pgas_modes() {
         "fix_pgas=false must keep lnd bit-identical"
     );
 }
+
+#[test]
+fn test_find0_clamps_to_bracket_on_steep_overshoot_boundary() {
+    // Reproduces the +1 ULP overshoot case from MESA `num_lib.f90:530-533`.
+    let dq = 0.000_435_829_416_274_917_85_f64;
+    let d_val = 7.034_117_503_949_756e15_f64;
+    let d_cutoff = 1.0e-2_f64;
+    let x0 = flexmesa_num::find0(0.0, d_val - d_cutoff, dq, -d_cutoff)
+        .expect("find0 steep bracket");
+    assert!(
+        (0.0..=dq).contains(&x0),
+        "find0 must clamp x0={x0:.17e} within [0, {dq:.17e}]"
+    );
+}
+
+#[test]
+fn test_retry_rollback_preserves_alpha_mlt_and_boundaries_across_nz_change() {
+    use flexmesa_star::{compute_convection_sigmas, PrimaryStateBuffer};
+
+    let mut model = zams_4m();
+    let orig_nz = model.nz;
+    let orig_alpha = model.aux.mixing.alpha_mlt.clone();
+    let orig_mix_bdy = model.aux.mixing.mix_bdy_loc.clone();
+    assert_ne!(orig_mix_bdy.len(), 0);
+
+    let buf = PrimaryStateBuffer::from_model(&model);
+
+    // Simulate a failed attempt that split zones (`nz` grew) and left
+    // boundary indices beyond `orig_nz`, then rolled back.
+    model.resize_zones(orig_nz + 40);
+    model.aux.mixing.mix_bdy_loc.push(orig_nz + 25);
+    buf.restore_into(&mut model).expect("rollback after grow");
+    assert_eq!(model.nz, orig_nz);
+    assert_eq!(model.aux.mixing.mix_bdy_loc, orig_mix_bdy);
+    assert!(model.aux.mixing.mix_bdy_loc.iter().all(|&k| k < orig_nz));
+
+    // Trigger `Tc > 2.8e9` path in `compute_convection_sigmas`; must not OOB.
+    model.t[orig_nz - 1] = 3.0e9;
+    compute_convection_sigmas(&mut model, 1.0e8, 1.0, 1.0e10);
+
+    // Simulate a failed attempt that merged zones (`nz` shrank) then rolled
+    // back; `alpha_mlt` in the restored tail must match pre-attempt values.
+    model.resize_zones(orig_nz - 20);
+    buf.restore_into(&mut model).expect("rollback after shrink");
+    assert_eq!(model.aux.mixing.alpha_mlt, orig_alpha);
+}
+
+#[test]
+fn test_set_mixing_info_rotation_flag_clips_d_mix_and_refreshes_cdc() {
+    let mut model = zams_4m();
+    model.controls.rotation_flag = true;
+    model.controls.mix_wind.am_d_mix_factor = 0.0;
+    model.controls.mix_wind.d_visc_factor = 0.0;
+    model.controls.mix_wind.set_min_d_mix = true;
+    model.controls.min_d_mix = 1.0e-12;
+    set_hydro_vars(&mut model, false, false).expect("set_hydro_vars");
+
+    // Upstream `mix_info.f90:287-301`: even with `am_d_mix_factor = 0`,
+    // `rotation_flag` clips `D_mix < 1e-10` to `0.0` and refreshes `cdc`.
+    for k in 1..model.nz {
+        assert!(
+            model.d_mix[k] == 0.0 || model.d_mix[k] >= 1.0e-10,
+            "face {k} retained sub-threshold d_mix={}",
+            model.d_mix[k]
+        );
+        if model.d_mix[k] == 0.0 {
+            assert_eq!(model.aux.mixing.cdc[k], 0.0);
+            assert_ne!(model.mixing_type[k], MixingType::RotationMixing);
+        }
+    }
+    assert_eq!(model.aux.mixing.cdc[0], model.aux.mixing.cdc[1]);
+}
+
+#[test]
+fn test_premix_add_predictive_mixing_fails_loudly_on_conv_premix_conflict() {
+    let mut model = zams_4m();
+    model.controls.do_conv_premix = true;
+    let err = flexmesa_star::add_predictive_mixing(&mut model, 0.1, 0.005)
+        .expect_err("must fail loudly when do_conv_premix is active");
+    assert!(
+        err.to_string().contains("conv_premix"),
+        "unexpected error: {err}"
+    );
+}
+
+#[test]
+fn test_locate_convection_boundaries_matches_upstream_conv_bdy_loc() {
+    let model = zams_4m();
+    let (_cz_dq, boundaries) = locate_convection_boundaries(&model);
+    assert_eq!(boundaries.len(), model.aux.mixing.conv_bdy_loc.len());
+    for (b, (&loc, &top)) in boundaries.iter().zip(
+        model
+            .aux
+            .mixing
+            .conv_bdy_loc
+            .iter()
+            .zip(model.aux.mixing.top_conv_bdy.iter()),
+    ) {
+        assert_eq!(b.conv_bdy_loc, loc);
+        assert_eq!(b.top_conv_bdy, top);
+    }
+}

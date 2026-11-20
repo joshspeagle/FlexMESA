@@ -192,8 +192,11 @@ impl MixingAuxState {
         }
     }
 
-    /// Resizes all zone-indexed vectors in [`MixingAuxState`] to `nz`.
+    /// Resizes all zone-indexed vectors in [`MixingAuxState`] to `nz`,
+    /// clearing zone-index boundary tables whenever `nz` changes so stale
+    /// indices cannot survive across a shrinking remesh or rollback.
     pub fn resize(&mut self, nz: usize) {
+        let len_changed = self.mlt_mixing_type.len() != nz;
         self.mlt_mixing_type.resize(nz, MixingType::NoMixing);
         for v in [
             &mut self.mlt_mixing_length,
@@ -218,6 +221,22 @@ impl MixingAuxState {
         self.gradr_factor.resize(nz, 1.0);
         self.superad_reduction_factor.resize(nz, 1.0);
         self.adjust_mlt_gradt_fraction.resize(nz, -1.0);
+        if len_changed {
+            self.conv_bdy_loc.clear();
+            self.conv_bdy_q.clear();
+            self.top_conv_bdy.clear();
+            self.burn_h_conv_region.clear();
+            self.burn_he_conv_region.clear();
+            self.burn_z_conv_region.clear();
+            self.cz_top_mass.clear();
+            self.cz_bot_mass.clear();
+            self.mix_bdy_loc.clear();
+            self.mix_bdy_q.clear();
+            self.top_mix_bdy.clear();
+            self.burn_h_mix_region.clear();
+            self.burn_he_mix_region.clear();
+            self.burn_z_mix_region.clear();
+        }
     }
 
     /// Returns total live heap bytes held by [`MixingAuxState`] vectors.
@@ -266,9 +285,25 @@ impl MixingAuxState {
 #[derive(Debug, Clone)]
 pub(crate) struct MixingPrimarySnapshot {
     pub(crate) mlt_mixing_type: Vec<MixingType>,
+    pub(crate) alpha_mlt: Vec<f64>,
     pub(crate) cdc: Vec<f64>,
+    pub(crate) sig_raw: Vec<f64>,
     pub(crate) cz_bdy_dq: Vec<f64>,
     pub(crate) d_mix_non_rotation: Vec<f64>,
+    pub(crate) conv_bdy_loc: Vec<usize>,
+    pub(crate) conv_bdy_q: Vec<f64>,
+    pub(crate) top_conv_bdy: Vec<bool>,
+    pub(crate) burn_h_conv_region: Vec<bool>,
+    pub(crate) burn_he_conv_region: Vec<bool>,
+    pub(crate) burn_z_conv_region: Vec<bool>,
+    pub(crate) cz_top_mass: Vec<f64>,
+    pub(crate) cz_bot_mass: Vec<f64>,
+    pub(crate) mix_bdy_loc: Vec<usize>,
+    pub(crate) mix_bdy_q: Vec<f64>,
+    pub(crate) top_mix_bdy: Vec<bool>,
+    pub(crate) burn_h_mix_region: Vec<bool>,
+    pub(crate) burn_he_mix_region: Vec<bool>,
+    pub(crate) burn_z_mix_region: Vec<bool>,
     pub(crate) okay_to_set_mixing_info: bool,
     pub(crate) have_mixing_info: bool,
     pub(crate) have_new_cz_bdy_info: bool,
@@ -283,9 +318,25 @@ impl Default for MixingPrimarySnapshot {
     fn default() -> Self {
         Self {
             mlt_mixing_type: Vec::new(),
+            alpha_mlt: Vec::new(),
             cdc: Vec::new(),
+            sig_raw: Vec::new(),
             cz_bdy_dq: Vec::new(),
             d_mix_non_rotation: Vec::new(),
+            conv_bdy_loc: Vec::new(),
+            conv_bdy_q: Vec::new(),
+            top_conv_bdy: Vec::new(),
+            burn_h_conv_region: Vec::new(),
+            burn_he_conv_region: Vec::new(),
+            burn_z_conv_region: Vec::new(),
+            cz_top_mass: Vec::new(),
+            cz_bot_mass: Vec::new(),
+            mix_bdy_loc: Vec::new(),
+            mix_bdy_q: Vec::new(),
+            top_mix_bdy: Vec::new(),
+            burn_h_mix_region: Vec::new(),
+            burn_he_mix_region: Vec::new(),
+            burn_z_mix_region: Vec::new(),
             okay_to_set_mixing_info: true,
             have_mixing_info: false,
             have_new_cz_bdy_info: false,
@@ -301,9 +352,25 @@ impl Default for MixingPrimarySnapshot {
 impl MixingPrimarySnapshot {
     pub(crate) fn capture_from(&mut self, m: &MixingAuxState) {
         self.mlt_mixing_type.clone_from(&m.mlt_mixing_type);
+        self.alpha_mlt.clone_from(&m.alpha_mlt);
         self.cdc.clone_from(&m.cdc);
+        self.sig_raw.clone_from(&m.sig_raw);
         self.cz_bdy_dq.clone_from(&m.cz_bdy_dq);
         self.d_mix_non_rotation.clone_from(&m.d_mix_non_rotation);
+        self.conv_bdy_loc.clone_from(&m.conv_bdy_loc);
+        self.conv_bdy_q.clone_from(&m.conv_bdy_q);
+        self.top_conv_bdy.clone_from(&m.top_conv_bdy);
+        self.burn_h_conv_region.clone_from(&m.burn_h_conv_region);
+        self.burn_he_conv_region.clone_from(&m.burn_he_conv_region);
+        self.burn_z_conv_region.clone_from(&m.burn_z_conv_region);
+        self.cz_top_mass.clone_from(&m.cz_top_mass);
+        self.cz_bot_mass.clone_from(&m.cz_bot_mass);
+        self.mix_bdy_loc.clone_from(&m.mix_bdy_loc);
+        self.mix_bdy_q.clone_from(&m.mix_bdy_q);
+        self.top_mix_bdy.clone_from(&m.top_mix_bdy);
+        self.burn_h_mix_region.clone_from(&m.burn_h_mix_region);
+        self.burn_he_mix_region.clone_from(&m.burn_he_mix_region);
+        self.burn_z_mix_region.clone_from(&m.burn_z_mix_region);
         self.okay_to_set_mixing_info = m.okay_to_set_mixing_info;
         self.have_mixing_info = m.have_mixing_info;
         self.have_new_cz_bdy_info = m.have_new_cz_bdy_info;
@@ -315,6 +382,7 @@ impl MixingPrimarySnapshot {
     }
 
     pub(crate) fn restore_pre_hydro(&self, m: &mut MixingAuxState) {
+        m.alpha_mlt.clone_from(&self.alpha_mlt);
         m.gradt_excess_alpha = self.gradt_excess_alpha;
         m.gradt_excess_alpha_old = self.gradt_excess_alpha_old;
         m.crystal_core_boundary_mass = self.crystal_core_boundary_mass;
@@ -326,8 +394,23 @@ impl MixingPrimarySnapshot {
     pub(crate) fn restore_post_hydro(&self, m: &mut MixingAuxState) {
         m.mlt_mixing_type.clone_from(&self.mlt_mixing_type);
         m.cdc.clone_from(&self.cdc);
+        m.sig_raw.clone_from(&self.sig_raw);
         m.cz_bdy_dq.clone_from(&self.cz_bdy_dq);
         m.d_mix_non_rotation.clone_from(&self.d_mix_non_rotation);
+        m.conv_bdy_loc.clone_from(&self.conv_bdy_loc);
+        m.conv_bdy_q.clone_from(&self.conv_bdy_q);
+        m.top_conv_bdy.clone_from(&self.top_conv_bdy);
+        m.burn_h_conv_region.clone_from(&self.burn_h_conv_region);
+        m.burn_he_conv_region.clone_from(&self.burn_he_conv_region);
+        m.burn_z_conv_region.clone_from(&self.burn_z_conv_region);
+        m.cz_top_mass.clone_from(&self.cz_top_mass);
+        m.cz_bot_mass.clone_from(&self.cz_bot_mass);
+        m.mix_bdy_loc.clone_from(&self.mix_bdy_loc);
+        m.mix_bdy_q.clone_from(&self.mix_bdy_q);
+        m.top_mix_bdy.clone_from(&self.top_mix_bdy);
+        m.burn_h_mix_region.clone_from(&self.burn_h_mix_region);
+        m.burn_he_mix_region.clone_from(&self.burn_he_mix_region);
+        m.burn_z_mix_region.clone_from(&self.burn_z_mix_region);
         m.okay_to_set_mixing_info = self.okay_to_set_mixing_info;
         m.have_mixing_info = self.have_mixing_info;
         m.have_new_cz_bdy_info = self.have_new_cz_bdy_info;
@@ -335,10 +418,27 @@ impl MixingPrimarySnapshot {
 
     #[must_use]
     pub(crate) fn heap_bytes(&self) -> usize {
-        std::mem::size_of_val(self.mlt_mixing_type.as_slice())
-            + std::mem::size_of_val(self.cdc.as_slice())
-            + std::mem::size_of_val(self.cz_bdy_dq.as_slice())
-            + std::mem::size_of_val(self.d_mix_non_rotation.as_slice())
+        use std::mem::size_of_val;
+        size_of_val(self.mlt_mixing_type.as_slice())
+            + size_of_val(self.alpha_mlt.as_slice())
+            + size_of_val(self.cdc.as_slice())
+            + size_of_val(self.sig_raw.as_slice())
+            + size_of_val(self.cz_bdy_dq.as_slice())
+            + size_of_val(self.d_mix_non_rotation.as_slice())
+            + size_of_val(self.conv_bdy_loc.as_slice())
+            + size_of_val(self.conv_bdy_q.as_slice())
+            + size_of_val(self.top_conv_bdy.as_slice())
+            + size_of_val(self.burn_h_conv_region.as_slice())
+            + size_of_val(self.burn_he_conv_region.as_slice())
+            + size_of_val(self.burn_z_conv_region.as_slice())
+            + size_of_val(self.cz_top_mass.as_slice())
+            + size_of_val(self.cz_bot_mass.as_slice())
+            + size_of_val(self.mix_bdy_loc.as_slice())
+            + size_of_val(self.mix_bdy_q.as_slice())
+            + size_of_val(self.top_mix_bdy.as_slice())
+            + size_of_val(self.burn_h_mix_region.as_slice())
+            + size_of_val(self.burn_he_mix_region.as_slice())
+            + size_of_val(self.burn_z_mix_region.as_slice())
     }
 }
 

@@ -340,8 +340,7 @@ pub use pre_ms::{
 };
 pub use premix::{
     add_predictive_mixing, apply_predictive_mixing_from_controls,
-    do_conv_premix, do_phase_separation, eval_castellani_penetration_vel,
-    eval_phase_separation_shift,
+    do_conv_premix, do_phase_separation, eval_phase_separation_shift,
 };
 pub use primary_state::PrimaryStateBuffer;
 pub use pulse::{

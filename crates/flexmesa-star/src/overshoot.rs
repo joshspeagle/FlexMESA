@@ -218,7 +218,9 @@ pub fn eval_conv_bdy_hp(model: &StarModel, i: usize) -> Result<f64, StarError> {
                 hp = dr / mw.overshoot_alpha;
             }
         } else {
-            let alpha_k = if mx.alpha_mlt.get(k).copied().unwrap_or(0.0) > 0.0 {
+            let has_alpha = mx.alpha_mlt.len() == model.nz
+                && mx.alpha_mlt.iter().any(|&v| v > 0.0);
+            let alpha_k = if has_alpha {
                 mx.alpha_mlt[k]
             } else {
                 model.controls.mixing_length_alpha
@@ -297,26 +299,19 @@ pub fn eval_over_bdy_params(
     let r3 = r * r * r;
     let w = (rk3 - r3) / (rk3 - rkp1_3);
 
-    let lam_k = model
-        .aux
-        .mixing
-        .mlt_mixing_length
-        .get(k)
-        .copied()
-        .filter(|&v| v > 0.0)
-        .unwrap_or_else(|| {
-            model.controls.mixing_length_alpha * model.scale_height[k]
-        });
-    let lam_kp1 = model
-        .aux
-        .mixing
-        .mlt_mixing_length
-        .get(k + 1)
-        .copied()
-        .filter(|&v| v > 0.0)
-        .unwrap_or_else(|| {
-            model.controls.mixing_length_alpha * model.scale_height[k + 1]
-        });
+    // Verbatim `star/private/overshoot_utils.f90:322`: read `mlt_mixing_length`
+    // directly whenever populated so faces zeroed by `switch_to_radiative` stay
+    // `0.0` (falling back only if the entire slice was never populated).
+    let mx_ml = &model.aux.mixing.mlt_mixing_length;
+    let has_ml = mx_ml.len() == nz && mx_ml.iter().any(|&v| v > 0.0);
+    let (lam_k, lam_kp1) = if has_ml {
+        (mx_ml[k], mx_ml[k + 1])
+    } else {
+        (
+            model.controls.mixing_length_alpha * model.scale_height[k],
+            model.controls.mixing_length_alpha * model.scale_height[k + 1],
+        )
+    };
     let lambda = (1.0 - w) * lam_k + w * lam_kp1;
 
     let vc_k = model.conv_vel[k];
@@ -443,6 +438,7 @@ fn apply_evaluated_overshoot_to_model(
     let calc_b = model.controls.calculate_brunt_b;
     let calc_n2 = model.controls.calculate_brunt_n2;
 
+    let r_cb = eval_conv_bdy_r(model, i)?;
     let mut k_i = k_a as isize;
     let k_end_i = k_b as isize;
     while (dk < 0 && k_i >= k_end_i) || (dk > 0 && k_i <= k_end_i) {
@@ -518,7 +514,6 @@ fn apply_evaluated_overshoot_to_model(
         let area_rho = FOUR_PI * model.r[k] * model.r[k] * rho;
         let cdc = area_rho * area_rho * d_arr[k];
 
-        let r_cb = eval_conv_bdy_r(model, i)?;
         if model.r[k] * (dk as f64) >= r_cb * (dk as f64) {
             model.aux.mixing.cdc[k] = cdc;
             model.d_mix[k] = d_arr[k];
@@ -702,25 +697,28 @@ pub fn add_overshooting(model: &mut StarModel) -> Result<(), StarError> {
 ///
 /// When `configs` is empty, delegates to [`add_overshooting`] using
 /// `model.controls.mix_wind.overshoot_sets`. When `configs` is non-empty,
-/// populates boundary state if absent and applies each matching explicit
-/// [`OvershootConfig`].
+/// populates boundary state if absent and applies the first matching explicit
+/// [`OvershootConfig`] per boundary (`overshoot.f90:301`).
+///
+/// # Errors
+/// Returns [`StarError`] if boundary parameters, overshoot profile evaluation,
+/// or `find0` boundary-fraction updates fail.
 pub fn apply_overshooting(
     model: &mut StarModel,
     boundaries: &[ConvBoundary],
     configs: &[OvershootConfig],
-) {
+) -> Result<(), StarError> {
     if model.nz < 3 {
-        return;
+        return Ok(());
     }
     if configs.is_empty() {
         if model.aux.mixing.conv_bdy_loc.is_empty() && !boundaries.is_empty() {
             sync_aux_boundaries_from_slice(model, boundaries);
         }
-        let _ = add_overshooting(model);
-        return;
+        return add_overshooting(model);
     }
     if boundaries.is_empty() {
-        return;
+        return Ok(());
     }
     sync_aux_boundaries_from_slice(model, boundaries);
     let nz = model.nz;
@@ -735,16 +733,14 @@ pub fn apply_overshooting(
             continue;
         }
         let top = model.aux.mixing.top_conv_bdy[i];
-        let Ok(k_cb) = eval_conv_bdy_k(model, i) else {
-            continue;
-        };
+        let k_cb = eval_conv_bdy_k(model, i)?;
         for cfg in configs {
             if cfg.top_conv_bdy != top || cfg.f <= 0.0 || cfg.f0 <= 0.0 {
                 continue;
             }
             d_arr.fill(0.0);
             vc_arr.fill(0.0);
-            if let Ok((k_a, k_b)) = eval_overshoot_profile(
+            let (k_a, k_b) = eval_overshoot_profile(
                 model,
                 i,
                 cfg.scheme,
@@ -757,13 +753,16 @@ pub fn apply_overshooting(
                 cfg.d_min,
                 &mut d_arr,
                 &mut vc_arr,
-            ) {
-                let _ = apply_evaluated_overshoot_to_model(
-                    model, i, k_cb, k_a, k_b, &d_arr, &vc_arr, cfg.d_min,
-                );
-            }
+            )?;
+            apply_evaluated_overshoot_to_model(
+                model, i, k_cb, k_a, k_b, &d_arr, &vc_arr, cfg.d_min,
+            )?;
+            // `star/private/overshoot.f90:301`: exit overshoot-set loop after
+            // applying the first matching overshoot configuration.
+            break;
         }
     }
+    Ok(())
 }
 
 fn sync_aux_boundaries_from_slice(
@@ -781,11 +780,7 @@ fn sync_aux_boundaries_from_slice(
     model.aux.mixing.burn_he_conv_region.clear();
     model.aux.mixing.burn_z_conv_region.clear();
     for b in boundaries {
-        let loc = if b.top_conv_bdy {
-            b.cell_index
-        } else {
-            (b.cell_index + 1).min(nz - 1)
-        };
+        let loc = b.conv_bdy_loc.min(nz - 1);
         model.aux.mixing.conv_bdy_loc.push(loc);
         model.aux.mixing.conv_bdy_q.push(b.conv_bdy_q);
         model.aux.mixing.top_conv_bdy.push(b.top_conv_bdy);

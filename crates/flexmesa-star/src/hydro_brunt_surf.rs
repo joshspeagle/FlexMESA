@@ -227,6 +227,12 @@ pub fn do_brunt_n2(model: &mut StarModel) {
             model.cgrav[k] * model.m_grav[k] / (r_k * r_k)
         };
         let f = flexmesa_math::pow2(g) * face_fac[k];
+        if !f.is_finite() || !model.brunt_b[k].is_finite() {
+            model.brunt_b[k] = 0.0;
+            model.brunt_n2[k] = 0.0;
+            model.aux.brunt_n2_composition_term[k] = 0.0;
+            continue;
+        }
         model.brunt_n2[k] = f * (model.brunt_b[k] - gradt_sub_grada);
         model.aux.brunt_n2_composition_term[k] = f * model.brunt_b[k];
     }

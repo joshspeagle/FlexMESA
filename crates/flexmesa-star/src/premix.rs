@@ -37,25 +37,6 @@ pub fn eval_phase_separation_shift(x_heavy: f64, is_one_mixture: bool) -> f64 {
     (x_solid - x).max(0.0)
 }
 
-/// Evaluates the Castellani, Giannone & Renzini (1971) convective boundary
-/// penetration velocity $v_p$ in $\mathrm{cm\,s^{-1}}$
-/// (`conv_premix.f90:948-1016`).
-#[must_use]
-pub fn eval_castellani_penetration_vel(
-    conv_vel: f64,
-    r: f64,
-    hp: f64,
-    gradr: f64,
-    grada: f64,
-    abar_in: f64,
-    abar_out: f64,
-) -> f64 {
-    let d_abar = (abar_in - abar_out).abs().max(1.0e-6);
-    let super_ad = (gradr - grada).abs().max(1.0e-8);
-    let geom = (hp / r.max(1.0e5)).clamp(1.0e-4, 1.0);
-    (conv_vel.max(0.0) * geom * super_ad * abar_in.max(1.0) / d_abar).max(0.0)
-}
-
 /// Runs verbatim MESA `26.4.1` convective premixing
 /// (`crate::conv_premix::do_conv_premix`) and updates `model.aux.eps_pre_mix`
 /// from the resulting internal energy change when `do_premix_heating` is set.
@@ -99,19 +80,25 @@ pub fn do_conv_premix(
 
 /// Runs verbatim MESA `26.4.1` predictive mixing
 /// (`crate::predictive_mix::add_predictive_mixing`) using an explicit
-/// `(ingested_mass_limit_coeff, superad_thresh)` parameter pair matching the
-/// standalone Python helper signature.
+/// `superad_thresh` matching the standalone Python helper signature.
+///
+/// `_ingested_mass_limit_coeff` is retained for Python signature compatibility;
+/// configure `PredictiveParamSet::{limit_ingestion, ingestion_factor}` directly
+/// on `model.controls.mix_wind.predictive_sets` to enable Spruit (2015) mass
+/// ingestion limiting.
+///
+/// # Errors
+/// Returns [`StarError`] if `do_conv_premix` is simultaneously enabled or if
+/// trial EOS, opacity, or MLT evaluation fails.
 pub fn add_predictive_mixing(
     model: &mut StarModel,
-    ingested_mass_limit_coeff: f64,
+    _ingested_mass_limit_coeff: f64,
     superad_thresh: f64,
-) -> usize {
+) -> Result<usize, StarError> {
     if model.nz < 2 {
-        return 0;
+        return Ok(0);
     }
     let saved_sets = model.controls.mix_wind.predictive_sets.clone();
-    let saved_premix = model.controls.do_conv_premix;
-    model.controls.do_conv_premix = false;
     for ps in &mut model.controls.mix_wind.predictive_sets {
         ps.predictive_mix = false;
     }
@@ -125,7 +112,6 @@ pub fn add_predictive_mixing(
         ps0.superad_thresh = superad_thresh;
         ps0.avoid_reversal = String::new();
         ps0.limit_ingestion = String::new();
-        ps0.ingestion_factor = ingested_mass_limit_coeff;
     }
     if model.aux.mixing.conv_bdy_loc.is_empty() {
         let zeros = vec![0.0; model.nz];
@@ -133,11 +119,9 @@ pub fn add_predictive_mixing(
             model, &zeros, &zeros, &zeros,
         );
     }
-    let n_extended = crate::predictive_mix::add_predictive_mixing(model)
-        .unwrap_or(0);
+    let res = crate::predictive_mix::add_predictive_mixing(model);
     model.controls.mix_wind.predictive_sets = saved_sets;
-    model.controls.do_conv_premix = saved_premix;
-    n_extended
+    res
 }
 
 /// Evaluates all enabled `predictive_mix` rules in `model.controls.mix_wind`

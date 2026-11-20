@@ -1,394 +1,138 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
-//! Single-cell and slice-scoped microphysics helpers (`do_eos_for_cell`,
-//! `solve_eos_given_PgasT`, `do_kap_for_cell`) used by verbatim MESA `26.4.1`
-//! predictive mixing (`predictive_mix.f90`) and convective premixing
-//! (`conv_premix.f90`).
+//! Slice-scoped microphysics helpers (`eval_uniform_xa_eos_kap_range`,
+//! `eval_eos_kap_range_by_mode`) and zero-drift range snapshots used by
+//! verbatim MESA `26.4.1` predictive mixing (`predictive_mix.f90`) and
+//! convective premixing (`conv_premix.f90`).
 
 use flexmesa_chem::{get_composition_info, NuclideCatalog};
-use flexmesa_const::{AVO, CRAD, FOUR_PI, KERG, LN10, QE};
+use flexmesa_const::LN10;
 use flexmesa_eos::{
-    eos_dt_get, eos_dt_get_rho, EosEvalOutput, I_CHI_RHO, I_CHI_T, I_CP, I_CV,
-    I_ETA, I_FRAC_PC, I_GAMMA1, I_GAMMA3, I_GRAD_AD, I_LATENT_DDLNRHO,
-    I_LATENT_DDLNT, I_LN_E, I_LN_FREE_E, I_LN_PGAS, I_LN_S, I_MU,
+    eos_dt_get_rho, eos_dt_get_zones_with_logs, EosEvalOutput, I_CHI_RHO,
+    I_CHI_T, I_CP, I_CV, I_GAMMA1, I_GRAD_AD, I_LN_FREE_E, I_LN_PGAS,
     NUM_EOS_BASIC_RESULTS,
 };
-use flexmesa_kap::get_kap_results;
 use rayon::prelude::*;
 
 use crate::controls::StarError;
-use crate::micro::builtin_helm_table;
+use crate::micro::{
+    builtin_helm_table, eval_kap_for_range, store_eos_for_cell,
+};
 use crate::model::StarModel;
-use crate::star_ad::{StarAdExt, StarAdOrder1};
+use crate::star_ad::StarAdOrder1;
 
 /// Maximum root-finder iterations for inverse EOS solves
 /// (`max_iter_for_solve` in `star/private/eos_support.f90:38`).
 const MAX_ITER_FOR_SOLVE: usize = 100;
 
 /// Tolerance on $\log_{10}\rho$ for `solve_eos_given_PgasT`
-/// (`star/private/micro.f90:330`).
+/// (`star/private/predictive_mix.f90:889`, `star/private/micro.f90:330`).
 const LOG_RHO_TOL_PGAS_T: f64 = 1.0e-8;
 
-#[inline]
-fn clamp_unit_roundoff(val: f64) -> f64 {
-    if (-1.0e-3..=1.0 + 1.0e-3).contains(&val) {
-        val.clamp(0.0, 1.0)
-    } else {
-        val
-    }
-}
-
-/// Writes an [`EosEvalOutput`] into all cell-centered EOS fields of `model` at
-/// cell `k` identically to `crate::micro::do_eos`.
-fn write_cell_eos_output(
-    model: &mut StarModel,
-    k: usize,
-    out: &EosEvalOutput,
-) {
-    let nz = model.nz;
-    let species = model.species;
-    let n_sp = nz * species;
-    if model.aux.eos_frac_pc.len() != nz {
-        model.aux.eos_frac_pc.resize(nz, 0.0);
-    }
-    if model.aux.latent_ddlnt.len() != nz {
-        model.aux.latent_ddlnt.resize(nz, 0.0);
-    }
-    if model.aux.latent_ddlnrho.len() != nz {
-        model.aux.latent_ddlnrho.resize(nz, 0.0);
-    }
-    if model.aux.dln_e_dxa_for_partials.len() != n_sp {
-        model.aux.dln_e_dxa_for_partials.resize(n_sp, 0.0);
-    }
-    if model.aux.dln_peos_dxa_for_partials.len() != n_sp {
-        model.aux.dln_peos_dxa_for_partials.resize(n_sp, 0.0);
-    }
-
-    let t_k = model.t[k];
-    let rho_k = model.rho[k];
-    let ln_pgas = out.res[I_LN_PGAS];
-    let pgas = flexmesa_math::exp(ln_pgas);
-    let prad = CRAD * flexmesa_math::pow4(t_k) / 3.0;
-    let peos = pgas + prad;
-    let ln_peos = flexmesa_math::log(peos);
-
-    let d_lnpgas_dlnd = out.d_dlnd[I_LN_PGAS];
-    let d_lnpgas_dlnt = out.d_dln_t[I_LN_PGAS];
-    let alfa_rad = prad / peos;
-    let beta_gas = pgas / peos;
-    let d_lnpeos_dlnd = beta_gas * d_lnpgas_dlnd;
-    let d_lnpeos_dlnt = beta_gas * d_lnpgas_dlnt + 4.0 * alfa_rad;
-
-    let ln_e = out.res[I_LN_E];
-    let energy = flexmesa_math::exp(ln_e);
-    let ln_s = out.res[I_LN_S];
-    let entropy = flexmesa_math::exp(ln_s);
-    let gamma1 = out.res[I_GAMMA1];
-    let csound = (gamma1 * peos / rho_k).max(0.0).sqrt();
-
-    let a_e = flexmesa_math::pow(
-        3.0 / (FOUR_PI * AVO * rho_k * model.zbar[k].max(1.0e-10)
-            / model.abar[k]),
-        1.0 / 3.0,
-    );
-    let gam = model.z53bar[k] * QE * QE / (a_e * KERG * t_k);
-
-    model.pgas[k] = pgas;
-    model.ln_pgas[k] = ln_pgas;
-    model.prad[k] = prad;
-    model.peos[k] = peos;
-    model.ln_peos[k] = ln_peos;
-    model.energy[k] = energy;
-    model.ln_e[k] = ln_e;
-    model.entropy[k] = entropy;
-    model.ln_s[k] = ln_s;
-    model.grada[k] = out.res[I_GRAD_AD];
-    model.cv[k] = out.res[I_CV];
-    model.cp[k] = out.res[I_CP];
-    model.chi_rho[k] = out.res[I_CHI_RHO];
-    model.chi_t[k] = out.res[I_CHI_T];
-    model.gamma1[k] = gamma1;
-    model.gamma3[k] = out.res[I_GAMMA3];
-    model.eta[k] = out.res[I_ETA];
-    model.gam[k] = gam;
-    model.mu[k] = out.res[I_MU];
-    model.lnfree_e[k] = out.res[I_LN_FREE_E];
-    model.csound[k] = csound;
-
-    model.aux.eos_frac_pc[k] = out.res[I_FRAC_PC];
-    model.aux.latent_ddlnt[k] = out.res[I_LATENT_DDLNT];
-    model.aux.latent_ddlnrho[k] = out.res[I_LATENT_DDLNRHO];
-    let sp_base = k * species;
-    for j in 0..species {
-        let [d_lnpgas_dxa, d_lne_dxa] =
-            out.d_dxa.get(j).copied().unwrap_or([0.0, 0.0]);
-        model.aux.dln_e_dxa_for_partials[sp_base + j] = d_lne_dxa;
-        model.aux.dln_peos_dxa_for_partials[sp_base + j] =
-            beta_gas * d_lnpgas_dxa;
-    }
-
-    model.ln_peos_ad[k] =
-        StarAdOrder1::from_dlnd_dlnt_00(ln_peos, d_lnpeos_dlnd, d_lnpeos_dlnt);
-    model.ln_e_ad[k] = StarAdOrder1::from_dlnd_dlnt_00(
-        ln_e,
-        out.d_dlnd[I_LN_E],
-        out.d_dln_t[I_LN_E],
-    );
-    model.ln_s_ad[k] = StarAdOrder1::from_dlnd_dlnt_00(
-        ln_s,
-        out.d_dlnd[I_LN_S],
-        out.d_dln_t[I_LN_S],
-    );
-
-    model.eos_res[k] = out.res;
-    model.eos_d_dlnd[k] = out.d_dlnd;
-    model.eos_d_dlnt[k] = out.d_dln_t;
-}
-
-/// Computes `(xc, xn, xo, xne)` C/N/O/Ne mass fractions from `xa_k`.
-fn eval_cno_ne_mass_fractions(
-    catalog: &NuclideCatalog,
-    chem_id: &[usize],
-    xa_k: &[f64],
-) -> (f64, f64, f64, f64) {
-    let mut xc = 0.0;
-    let mut xn = 0.0;
-    let mut xo = 0.0;
-    let mut xne = 0.0;
-    for (&cid, &xj) in chem_id.iter().zip(xa_k.iter()) {
-        let z = catalog.get_by_id(cid).map_or(0, |n| n.z);
-        match z {
-            6 => xc += xj,
-            7 => xn += xj,
-            8 => xo += xj,
-            10 => xne += xj,
-            _ => {}
-        }
-    }
-    (xc, xn, xo, xne)
-}
-
-/// Composition moments for a single cell.
-#[derive(Debug, Clone, Copy)]
-struct CellCompMoments {
-    abar: f64,
-    zbar: f64,
-    z2bar: f64,
-    z53bar: f64,
-    ye: f64,
-    xh_mass: f64,
-    yhe_mass: f64,
-    z_mass: f64,
-}
-
-/// Per-cell EOS + opacity outputs returned from parallel workers.
-struct CellEosKapUpdate {
-    comp: CellCompMoments,
-    lnd: f64,
-    rho: f64,
-    t: f64,
-    eos: EosEvalOutput,
-    op: f64,
-    dop_d: f64,
-    dop_t: f64,
-}
-
-#[allow(clippy::too_many_arguments)]
-fn eval_one_cell_eos_kap(
-    ht: &flexmesa_eos::HelmTable,
-    chem_id: &[usize],
-    eos_cfg: &flexmesa_eos::EosConfig,
-    kap_cfg: &flexmesa_kap::KapConfig,
-    kap_factor: f64,
-    k: usize,
-    xa_k: &[f64],
-    comp: CellCompMoments,
-    cno_ne: (f64, f64, f64, f64),
-    ln_t_k: f64,
-    lnd_k: f64,
-    ln_pgas_k: f64,
-    fix_pgas: bool,
-) -> Result<CellEosKapUpdate, StarError> {
-    let (lnd_new, rho_new, t_new, eos_out) = if fix_pgas {
-        let inv = eos_dt_get_rho(
-            ht,
-            chem_id,
-            xa_k,
-            ln_t_k / LN10,
-            I_LN_PGAS as isize,
-            ln_pgas_k,
-            lnd_k / LN10,
-            LOG_RHO_TOL_PGAS_T,
-            LOG_RHO_TOL_PGAS_T * LN10,
-            MAX_ITER_FOR_SOLVE,
-            eos_cfg,
-        )
-        .map_err(|e| {
-            StarError::MicrophysicsError(format!(
-                "solve_eos_given_PgasT failed at zone {k}: {e}"
-            ))
-        })?;
-        let lnd_out = inv.log10_result * LN10;
-        (
-            lnd_out,
-            flexmesa_math::exp(lnd_out),
-            flexmesa_math::exp(ln_t_k),
-            inv.eos,
-        )
-    } else {
-        let r_new = flexmesa_math::exp(lnd_k);
-        let t_out = flexmesa_math::exp(ln_t_k);
-        let out = eos_dt_get(ht, r_new, t_out, chem_id, xa_k, eos_cfg)
-            .map_err(|e| {
-                StarError::MicrophysicsError(format!(
-                    "do_eos_for_cell failed at zone {k}: {e}"
-                ))
-            })?;
-        (lnd_k, r_new, t_out, out)
-    };
-
-    let (xc, xn, xo, xne) = cno_ne;
-    let kap_out = get_kap_results(
-        kap_cfg,
-        comp.zbar,
-        comp.xh_mass,
-        comp.z_mass,
-        xc,
-        xn,
-        xo,
-        xne,
-        flexmesa_math::log10(rho_new),
-        flexmesa_math::log10(t_new),
-        eos_out.res[I_LN_FREE_E],
-        eos_out.d_dlnd[I_LN_FREE_E],
-        eos_out.d_dln_t[I_LN_FREE_E],
-        eos_out.res[I_ETA],
-        eos_out.d_dlnd[I_ETA],
-        eos_out.d_dln_t[I_ETA],
-    )
-    .map_err(|e| {
-        StarError::MicrophysicsError(format!(
-            "do_kap_for_cell failed at zone {k}: {e}"
-        ))
-    })?;
-
-    Ok(CellEosKapUpdate {
-        comp,
-        lnd: lnd_new,
-        rho: rho_new,
-        t: t_new,
-        eos: eos_out,
-        op: kap_out.kap * kap_factor,
-        dop_d: kap_out.kap * kap_out.dlnkap_dln_rho * kap_factor,
-        dop_t: kap_out.kap * kap_out.dlnkap_dln_t * kap_factor,
-    })
-}
-
-fn write_cell_eos_kap_update(
-    model: &mut StarModel,
-    k: usize,
-    upd: &CellEosKapUpdate,
-) {
-    model.abar[k] = upd.comp.abar;
-    model.zbar[k] = upd.comp.zbar;
-    model.z2bar[k] = upd.comp.z2bar;
-    model.z53bar[k] = upd.comp.z53bar;
-    model.ye[k] = upd.comp.ye;
-    model.xh_mass[k] = upd.comp.xh_mass;
-    model.yhe_mass[k] = upd.comp.yhe_mass;
-    model.z_mass[k] = upd.comp.z_mass;
-    model.lnd[k] = upd.lnd;
-    model.rho[k] = upd.rho;
-    model.t[k] = upd.t;
-    write_cell_eos_output(model, k, &upd.eos);
-    model.opacity[k] = upd.op;
-    model.d_opacity_dlnd[k] = upd.dop_d;
-    model.d_opacity_dlnt[k] = upd.dop_t;
-}
-
-/// Evaluates uniform-composition EOS (`solve_eos_given_PgasT` when `fix_pgas`
-/// is true, else `do_eos_for_cell`) and opacity (`do_kap_for_cell`) in
-/// parallel across `k_lo..=k_hi` using `rayon`, then writes all cell arrays in
-/// deterministic index order (`eval_mixing_coeffs` in
-/// `star/private/predictive_mix.f90:720-774`).
+/// Evaluates uniform-composition trial EOS (`solve_eos_given_PgasT`) and
+/// opacity (`do_kap_for_cell`) in parallel across `k_lo..=k_hi` using `rayon`,
+/// then writes outputs back in deterministic index order
+/// (`eval_mixing_coeffs` / `eval_eos` in
+/// `star/private/predictive_mix.f90:720-780, 862-927`).
+///
+/// Reproduces MESA `26.4.1` `#169 / #277` verbatim: only the 12 cell fields
+/// updated by upstream `predictive_mix::eval_eos` (`lnd`, `cp`, `cv`, `gamma1`,
+/// `grada`, `chi_rho`, `chi_t`, `lnfree_e`, `eos_d_dlnd`, `eos_d_dlnt`, `xa`,
+/// `zbar`) are overwritten before `do_kap_for_cell` and `do1_mlt_2`, leaving
+/// `rho`, `eta`, `ln_pgas`/`pgas`/`peos`, `mu`, and `t` at their pre-trial
+/// values.
 ///
 /// # Errors
-/// Returns [`StarError::MicrophysicsError`] if composition, EOS, or opacity
+/// Returns [`StarError::InvalidInput`] if `use_other_kap` is active without a
+/// hook, or [`StarError::MicrophysicsError`] if composition, EOS, or opacity
 /// evaluation fails for any cell in `k_lo..=k_hi`.
 pub(crate) fn eval_uniform_xa_eos_kap_range(
     model: &mut StarModel,
     k_lo: usize,
     k_hi: usize,
     xa_mx: &[f64],
-    fix_pgas: bool,
 ) -> Result<(), StarError> {
     if k_lo > k_hi {
         return Ok(());
     }
     let catalog = NuclideCatalog::builtin_ref();
-    let comp_raw = get_composition_info(catalog, &model.chem_id, xa_mx, false)
+    let comp_raw = get_composition_info(catalog, &model.chem_id, xa_mx, true)
         .map_err(|e| {
             StarError::MicrophysicsError(format!(
                 "composition error in predictive_mix: {e}"
             ))
         })?;
-    let comp = CellCompMoments {
-        abar: comp_raw.abar,
-        zbar: comp_raw.zbar,
-        z2bar: comp_raw.z2bar,
-        z53bar: comp_raw.z53bar,
-        ye: comp_raw.ye,
-        xh_mass: clamp_unit_roundoff(comp_raw.xh),
-        yhe_mass: clamp_unit_roundoff(comp_raw.xhe),
-        z_mass: clamp_unit_roundoff(comp_raw.xz),
-    };
-    let cno_ne = eval_cno_ne_mass_fractions(catalog, &model.chem_id, xa_mx);
+    let zbar = comp_raw.zbar;
     let ht = builtin_helm_table()?;
     let species = model.species;
-    let kap_factor = model.controls.opacity_factor;
 
     let chem_id = &model.chem_id;
     let eos_cfg = &model.eos_config;
-    let kap_cfg = &model.kap_config;
     let ln_t = &model.ln_t;
     let lnd = &model.lnd;
     let ln_pgas = &model.ln_pgas;
 
-    let results: Vec<CellEosKapUpdate> = (k_lo..=k_hi)
+    let eos_results: Vec<(f64, EosEvalOutput)> = (k_lo..=k_hi)
         .into_par_iter()
-        .map(|k| {
-            eval_one_cell_eos_kap(
+        .map(|k| -> Result<(f64, EosEvalOutput), StarError> {
+            let inv = eos_dt_get_rho(
                 ht,
                 chem_id,
-                eos_cfg,
-                kap_cfg,
-                kap_factor,
-                k,
                 xa_mx,
-                comp,
-                cno_ne,
-                ln_t[k],
-                lnd[k],
+                ln_t[k] / LN10,
+                I_LN_PGAS as isize,
                 ln_pgas[k],
-                fix_pgas,
+                lnd[k] / LN10,
+                LOG_RHO_TOL_PGAS_T,
+                LOG_RHO_TOL_PGAS_T * LN10,
+                MAX_ITER_FOR_SOLVE,
+                eos_cfg,
             )
+            .map_err(|e| {
+                StarError::MicrophysicsError(format!(
+                    "solve_eos_given_PgasT failed at zone {k}: {e}"
+                ))
+            })?;
+            if inv.log10_result < -25.0 {
+                return Err(StarError::MicrophysicsError(format!(
+                    "predictive_mix::eval_eos failed at zone {k}: logRho ({}) < -25",
+                    inv.log10_result
+                )));
+            }
+            Ok((inv.log10_result * LN10, inv.eos))
         })
         .collect::<Result<Vec<_>, _>>()?;
 
-    for (offset, upd) in results.iter().enumerate() {
+    // Verbatim `star/private/predictive_mix.f90:748-760, 912-924` (`#169 / #277`):
+    // update only the 12 upstream cell fields (`lnd`, `Cp`, `Cv`, `gamma1`,
+    // `grada`, `chiRho`, `chiT`, `lnfree_e`, `d_eos_dlnd`, `d_eos_dlnT`, `xa`,
+    // `zbar`), keeping `rho`, `eta`, `lnPgas`/`Pgas`/`Peos`, `mu`, and `T` fixed.
+    for (offset, (lnd_new, out)) in eos_results.into_iter().enumerate() {
         let k = k_lo + offset;
+        model.lnd[k] = lnd_new;
+        model.cp[k] = out.res[I_CP];
+        model.cv[k] = out.res[I_CV];
+        model.gamma1[k] = out.res[I_GAMMA1];
+        model.grada[k] = out.res[I_GRAD_AD];
+        model.chi_rho[k] = out.res[I_CHI_RHO];
+        model.chi_t[k] = out.res[I_CHI_T];
+        model.lnfree_e[k] = out.res[I_LN_FREE_E];
+        model.eos_d_dlnd[k] = out.d_dlnd;
+        model.eos_d_dlnt[k] = out.d_dln_t;
         model.xa[k * species..(k + 1) * species].copy_from_slice(xa_mx);
-        write_cell_eos_kap_update(model, k, upd);
+        model.zbar[k] = zbar;
     }
-    Ok(())
+
+    eval_kap_for_range(model, k_lo, k_hi)
 }
 
-/// Evaluates per-cell EOS (`fix_pgas_by_cell[k]` selects fixed `(Pgas, T)` vs
-/// fixed `(rho, T)`) and opacity across `k_lo..=k_hi` in parallel via `rayon`,
-/// writing outputs back in deterministic index order (`update_model` in
-/// `star/private/conv_premix.f90:1311-1335`).
+/// Evaluates per-cell composition moments, EOS (`fix_pgas_by_cell[k]` selects
+/// fixed `(Pgas, T)` vs fixed `(rho, T)`), and opacity across `k_lo..=k_hi` in
+/// parallel via `rayon`, writing outputs back in deterministic index order
+/// (`update_model_` in `star/private/conv_premix.f90:1306-1335`).
 ///
 /// # Errors
-/// Returns [`StarError::MicrophysicsError`] if composition, EOS, or opacity
+/// Returns [`StarError::InvalidInput`] if `use_other_kap` is active without a
+/// hook, or [`StarError::MicrophysicsError`] if composition, EOS, or opacity
 /// evaluation fails.
 pub(crate) fn eval_eos_kap_range_by_mode(
     model: &mut StarModel,
@@ -402,59 +146,142 @@ pub(crate) fn eval_eos_kap_range_by_mode(
     let catalog = NuclideCatalog::builtin_ref();
     let ht = builtin_helm_table()?;
     let species = model.species;
-    let kap_factor = model.controls.opacity_factor;
 
-    let chem_id = &model.chem_id;
-    let eos_cfg = &model.eos_config;
-    let kap_cfg = &model.kap_config;
-    let xa = &model.xa;
-    let ln_t = &model.ln_t;
-    let lnd = &model.lnd;
-    let ln_pgas = &model.ln_pgas;
-
-    let results: Vec<CellEosKapUpdate> = (k_lo..=k_hi)
-        .into_par_iter()
-        .map(|k| -> Result<CellEosKapUpdate, StarError> {
-            let xa_k = &xa[k * species..(k + 1) * species];
-            let comp_raw = get_composition_info(catalog, chem_id, xa_k, false)
+    // Refresh cell composition moments (`basic_composition_info` + `get_XYZ`
+    // clamping in `star/private/star_utils.f90:2029-2043`) across `k_lo..=k_hi`.
+    let comp_results: Vec<(f64, f64, f64, f64, f64, f64, f64, f64)> =
+        (k_lo..=k_hi)
+            .into_par_iter()
+            .map(|k| {
+                let xa_k = &model.xa[k * species..(k + 1) * species];
+                let c = get_composition_info(
+                    catalog,
+                    &model.chem_id,
+                    xa_k,
+                    true,
+                )
                 .map_err(|e| {
                     StarError::MicrophysicsError(format!(
                         "composition error at zone {k}: {e}"
                     ))
                 })?;
-            let comp = CellCompMoments {
-                abar: comp_raw.abar,
-                zbar: comp_raw.zbar,
-                z2bar: comp_raw.z2bar,
-                z53bar: comp_raw.z53bar,
-                ye: comp_raw.ye,
-                xh_mass: clamp_unit_roundoff(comp_raw.xh),
-                yhe_mass: clamp_unit_roundoff(comp_raw.xhe),
-                z_mass: clamp_unit_roundoff(comp_raw.xz),
-            };
-            let cno_ne = eval_cno_ne_mass_fractions(catalog, chem_id, xa_k);
-            eval_one_cell_eos_kap(
-                ht,
-                chem_id,
-                eos_cfg,
-                kap_cfg,
-                kap_factor,
-                k,
-                xa_k,
-                comp,
-                cno_ne,
-                ln_t[k],
-                lnd[k],
-                ln_pgas[k],
-                fix_pgas_by_cell[k],
-            )
-        })
-        .collect::<Result<Vec<_>, _>>()?;
-
-    for (offset, upd) in results.iter().enumerate() {
-        write_cell_eos_kap_update(model, k_lo + offset, upd);
+                let xh = c.xh.clamp(0.0, 1.0);
+                let xhe = c.xhe.clamp(0.0, 1.0);
+                let z = (1.0 - (xh + xhe)).clamp(0.0, 1.0);
+                Ok((c.abar, c.zbar, c.z2bar, c.z53bar, c.ye, xh, xhe, z))
+            })
+            .collect::<Result<Vec<_>, StarError>>()?;
+    for (offset, (abar, zbar, z2bar, z53bar, ye, xh, xhe, z)) in
+        comp_results.into_iter().enumerate()
+    {
+        let k = k_lo + offset;
+        model.abar[k] = abar;
+        model.zbar[k] = zbar;
+        model.z2bar[k] = z2bar;
+        model.z53bar[k] = z53bar;
+        model.ye[k] = ye;
+        model.xh_mass[k] = xh;
+        model.yhe_mass[k] = xhe;
+        model.z_mass[k] = z;
     }
-    Ok(())
+
+    // Partition range into Pass 1 (`fix_Pgas == true`) and Pass 2
+    // (`fix_Pgas == false`), matching `conv_premix.f90:1311-1325`.
+    let mut pt_cells = Vec::new();
+    let mut dt_cells = Vec::new();
+    for k in k_lo..=k_hi {
+        if fix_pgas_by_cell[k] {
+            pt_cells.push(k);
+        } else {
+            dt_cells.push(k);
+        }
+    }
+
+    if !pt_cells.is_empty() {
+        let chem_id = &model.chem_id;
+        let eos_cfg = &model.eos_config;
+        let xa = &model.xa;
+        let ln_t = &model.ln_t;
+        let lnd = &model.lnd;
+        let ln_pgas = &model.ln_pgas;
+        let pt_results: Vec<(usize, f64, f64, EosEvalOutput)> = pt_cells
+            .par_iter()
+            .map(|&k| -> Result<(usize, f64, f64, EosEvalOutput), StarError> {
+                let xa_k = &xa[k * species..(k + 1) * species];
+                let inv = eos_dt_get_rho(
+                    ht,
+                    chem_id,
+                    xa_k,
+                    ln_t[k] / LN10,
+                    I_LN_PGAS as isize,
+                    ln_pgas[k],
+                    lnd[k] / LN10,
+                    LOG_RHO_TOL_PGAS_T,
+                    LOG_RHO_TOL_PGAS_T * LN10,
+                    MAX_ITER_FOR_SOLVE,
+                    eos_cfg,
+                )
+                .map_err(|e| {
+                    StarError::MicrophysicsError(format!(
+                        "solve_eos_given_PgasT failed at zone {k}: {e}"
+                    ))
+                })?;
+                if inv.log10_result < -25.0 {
+                    return Err(StarError::MicrophysicsError(format!(
+                        "do_eos_for_cell failed at zone {k}: logRho ({}) < -25",
+                        inv.log10_result
+                    )));
+                }
+                let lnd_out = inv.log10_result * LN10;
+                Ok((k, lnd_out, flexmesa_math::exp(lnd_out), inv.eos))
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        for (k, lnd_new, rho_new, out) in pt_results {
+            model.lnd[k] = lnd_new;
+            model.rho[k] = rho_new;
+            store_eos_for_cell(model, k, &out)?;
+        }
+    }
+
+    if !dt_cells.is_empty() {
+        let n_dt = dt_cells.len();
+        let mut rho_sub = Vec::with_capacity(n_dt);
+        let mut log_rho_sub = Vec::with_capacity(n_dt);
+        let mut t_sub = Vec::with_capacity(n_dt);
+        let mut log_t_sub = Vec::with_capacity(n_dt);
+        let mut xa_sub = Vec::with_capacity(n_dt * species);
+        for &k in &dt_cells {
+            let log_rho = model.lnd[k] / LN10;
+            if log_rho < -25.0 {
+                return Err(StarError::MicrophysicsError(format!(
+                    "do_eos_for_cell failed at zone {k}: logRho ({log_rho}) < -25"
+                )));
+            }
+            rho_sub.push(model.rho[k]);
+            log_rho_sub.push(log_rho);
+            t_sub.push(model.t[k]);
+            log_t_sub.push(model.ln_t[k] / LN10);
+            xa_sub.extend_from_slice(&model.xa[k * species..(k + 1) * species]);
+        }
+        let dt_results = eos_dt_get_zones_with_logs(
+            ht,
+            &rho_sub,
+            &log_rho_sub,
+            &t_sub,
+            &log_t_sub,
+            &model.chem_id,
+            &xa_sub,
+            &model.eos_config,
+        )
+        .map_err(|e| {
+            StarError::MicrophysicsError(format!("do_eos_for_cell failed: {e}"))
+        })?;
+        for (&k, out) in dt_cells.iter().zip(dt_results.iter()) {
+            store_eos_for_cell(model, k, out)?;
+        }
+    }
+
+    eval_kap_for_range(model, k_lo, k_hi)
 }
 
 /// Snapshot of cell microphysics + composition + density over `k_lo..=k_hi`
@@ -497,6 +324,7 @@ pub(crate) struct CellRangeSnapshot {
     pub(crate) lnfree_e: Vec<f64>,
     pub(crate) csound: Vec<f64>,
     pub(crate) eos_frac_pc: Vec<f64>,
+    pub(crate) kap_frac: Vec<[f64; 4]>,
     pub(crate) latent_ddlnt: Vec<f64>,
     pub(crate) latent_ddlnrho: Vec<f64>,
     pub(crate) dln_e_dxa: Vec<f64>,
@@ -525,6 +353,11 @@ impl CellRangeSnapshot {
         let sp_lo = k_lo * sp;
         let sp_hi = (k_hi + 1) * sp;
         let r = k_lo..=k_hi;
+        let kap_frac = if model.aux.kap_frac.len() > k_hi {
+            model.aux.kap_frac[r.clone()].to_vec()
+        } else {
+            vec![[0.0; 4]; k_hi - k_lo + 1]
+        };
         Self {
             k_lo,
             k_hi,
@@ -561,6 +394,7 @@ impl CellRangeSnapshot {
             lnfree_e: model.lnfree_e[r.clone()].to_vec(),
             csound: model.csound[r.clone()].to_vec(),
             eos_frac_pc: model.aux.eos_frac_pc[r.clone()].to_vec(),
+            kap_frac,
             latent_ddlnt: model.aux.latent_ddlnt[r.clone()].to_vec(),
             latent_ddlnrho: model.aux.latent_ddlnrho[r.clone()].to_vec(),
             dln_e_dxa: model.aux.dln_e_dxa_for_partials[sp_lo..sp_hi].to_vec(),
@@ -617,6 +451,10 @@ impl CellRangeSnapshot {
         model.lnfree_e[r.clone()].copy_from_slice(&self.lnfree_e);
         model.csound[r.clone()].copy_from_slice(&self.csound);
         model.aux.eos_frac_pc[r.clone()].copy_from_slice(&self.eos_frac_pc);
+        if model.aux.kap_frac.len() != model.nz {
+            model.aux.kap_frac.resize(model.nz, [0.0; 4]);
+        }
+        model.aux.kap_frac[r.clone()].copy_from_slice(&self.kap_frac);
         model.aux.latent_ddlnt[r.clone()].copy_from_slice(&self.latent_ddlnt);
         model.aux.latent_ddlnrho[r.clone()]
             .copy_from_slice(&self.latent_ddlnrho);

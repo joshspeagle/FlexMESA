@@ -23,7 +23,7 @@ use crate::mixing_state::driving_species_for_cid;
 use crate::model::StarModel;
 use crate::rotation::update_rotation_distortion_factors;
 use crate::star_ad::{
-    StarAdExt, StarAdOrder1, I_LND_00, I_LNR_00, I_LNT_00, I_L_00,
+    StarAdExt, StarAdOrder1, I_LNR_00, I_L_00,
 };
 
 /// Evaluates face-centered radiative, adiabatic, Ledoux, and actual temperature
@@ -179,10 +179,12 @@ pub(crate) fn do1_mlt_2(
 
     let (alfa, beta_w) = model.get_face_weights(k);
 
-    let lnd_00 = StarAdOrder1::variable(model.lnd[k], I_LND_00);
-    let lnt_00 = StarAdOrder1::variable(model.ln_t[k], I_LNT_00);
-    let rho_00 = lnd_00.exp();
-    let t_00 = lnt_00.exp();
+    // Match `wrap_d_00` and `wrap_T_00` (`auto_diff_support.f90:257-276`),
+    // reading `model.rho[k]` and `model.t[k]` directly (reproduces upstream
+    // `#169 / #277` during `predictive_mix` trial MLT calls).
+    let rho_00 =
+        StarAdOrder1::from_dlnd_dlnt_00(model.rho[k], model.rho[k], 0.0);
+    let t_00 = StarAdOrder1::from_dlnd_dlnt_00(model.t[k], 0.0, model.t[k]);
     let pgas_00 = StarAdOrder1::from_dlnd_dlnt_00(
         model.ln_pgas[k],
         model.eos_d_dlnd[k][I_LN_PGAS],

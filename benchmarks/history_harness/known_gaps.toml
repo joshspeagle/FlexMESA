@@ -34,13 +34,13 @@ reason = "Spruit-Tayler dynamo and rotational mixing time out."
 suite = "star"
 case = "16M_conv_premix"
 issue = "#152"
-reason = "Diagnostic run reaches xa_central_lower_limit(h1) (+0.58% rel_star_age) with unsupported non-mixing controls (max_abs_rel_run_e_err, photo/termination controls; #152, #159)."
+reason = "Diagnostic run reaches xa_central_lower_limit(h1) (-0.112% rel_star_age, 370 steps) with 5 unsupported non-mixing controls (max_abs_rel_run_e_err, photo/termination controls; #152, #159)."
 
 [[gaps]]
 suite = "star"
 case = "16M_predictive_mix"
 issue = "#152"
-reason = "Diagnostic run reaches xa_central_lower_limit(h1) (+0.33% rel_star_age) with 5 unsupported non-mixing controls (max_abs_rel_run_e_err, photo/termination controls; #152, #159)."
+reason = "Diagnostic run reaches xa_central_lower_limit(h1) (-0.0098% rel_star_age, all final tolerances pass) with 5 unsupported non-mixing controls (max_abs_rel_run_e_err, photo/termination controls; #152, #159)."
 
 [[gaps]]
 suite = "star"
@@ -154,7 +154,7 @@ reason = "Rotational angular-momentum evolution reaches he_core_mass_limit slowl
 suite = "star"
 case = "conv_core_cpm"
 issue = "#159"
-reason = "Diagnostic run reaches xa_central_lower_limit(h1) (+0.84% rel_star_age, 93 vs 92 steps) with unsupported non-mixing controls (photo_interval, required_termination_code_string; #159, #152)."
+reason = "Diagnostic run reaches xa_central_lower_limit(h1) (-0.181% rel_star_age, 92 steps matching MESA 26.4.1) with 2 unsupported non-mixing controls (photo_interval, required_termination_code_string; #159, #152)."
 
 [[gaps]]
 suite = "star"
@@ -220,7 +220,7 @@ reason = "Case history_columns.list requests unported MLT++ gradT_excess_alpha c
 suite = "star"
 case = "hb_2M"
 issue = "#152"
-reason = "Diagnostic run reaches xa_central_lower_limit(he4) (+1.00% rel_star_age, peak mass_conv_core 0.2673 vs 0.2668 Msun, co_core_mass +0.0004 Msun) with 2 unsupported non-mixing controls (photo_interval, required_termination_code_string) and solver differences (#152, #159)."
+reason = "Diagnostic run reaches xa_central_lower_limit(he4) (+0.623% rel_star_age, co_core_mass +0.00067 Msun, 185 steps in 418 s with a 720 s budget on #153's ~2,640-zone mesh) with 2 unsupported non-mixing controls (photo_interval, required_termination_code_string); still exceeds the 300 s default harness wall-time guard in baseline_run_26_4_1.json (#152, #159)."
 
 [[gaps]]
 suite = "star"

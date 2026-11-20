@@ -479,7 +479,6 @@ def star_eval_omega_crit(cgrav: float, m_grav: float, r_polar: float, lum: float
 def star_eval_rotational_mixing_zone(r: float, hp: float, grav: float, rho: float, t: float, cp: float, opacity: float, chi_t: float, chi_rho: float, grada: float, gradt: float, brunt_n2_t: float, brunt_n2_mu: float, omega: float, dln_omega_dln_r: float, abar: float, zbar: float, d_visc: float = 0.0) -> tuple[float, float, float, float, float, float, float, float, float]: ...  # noqa: E501
 def star_set_rotation_mixing_info(model: RustStarModel) -> _ArrF64: ...
 def star_eval_phase_separation_shift(x_heavy: float, is_one_mixture: bool = False) -> float: ...  # noqa: E501
-def star_eval_castellani_penetration_vel(conv_vel: float, r: float, hp: float, gradr: float, grada: float, abar_in: float, abar_out: float) -> float: ...  # noqa: E501
 def star_do_conv_premix(model: RustStarModel, max_iters: int = 10, avoid_fuel_increase: bool = True) -> int: ...  # noqa: E501
 def star_add_predictive_mixing(model: RustStarModel, ingested_mass_limit_coeff: float = 0.1, superad_thresh: float = 0.005) -> int: ...  # noqa: E501
 def star_do_phase_separation(model: RustStarModel, dt: float, gamma_crystallization: float = 175.0, is_one_mixture: bool = False) -> _ArrF64: ...  # noqa: E501

@@ -382,15 +382,19 @@ pub(crate) fn apply_burn_avg_epsnuc(model: &mut StarModel) {
 
 /// Applies explicit `overshoot_configs` (if supplied), computes Lagrangian
 /// coupling factors (`sig`), and augments with RTI if enabled.
+///
+/// # Errors
+/// Returns [`StarError`] if explicit `overshoot_configs` fail boundary or
+/// profile evaluation.
 pub(crate) fn refresh_mixing_state(
     model: &mut StarModel,
     dt: f64,
     overshoot_configs: &[OvershootConfig],
-) {
+) -> Result<(), StarError> {
     if !overshoot_configs.is_empty() {
         let (cz_bdy_dq, boundaries) = locate_convection_boundaries(model);
         model.aux.mixing.cz_bdy_dq = cz_bdy_dq;
-        apply_overshooting(model, &boundaries, overshoot_configs);
+        apply_overshooting(model, &boundaries, overshoot_configs)?;
         apply_min_d_mix_floor(model);
     }
     let eff_mix_factor = if model.controls.do_mix {
@@ -411,6 +415,7 @@ pub(crate) fn refresh_mixing_state(
         crate::hydro_rti::set_rti_mixing_info(model);
         crate::hydro_rti::augment_mixing_with_rti(model);
     }
+    Ok(())
 }
 
 fn run_struct_burn_mix_core(
@@ -452,7 +457,7 @@ fn run_struct_burn_mix_core(
     }
 
     if do_mix {
-        refresh_mixing_state(model, dt, overshoot_configs);
+        refresh_mixing_state(model, dt, overshoot_configs)?;
     } else {
         model.sig.fill(0.0);
     }
@@ -533,7 +538,7 @@ pub fn do_struct_burn_mix(
     final_res?;
 
     if do_mix && model.controls.mix_wind.recalc_mix_info_after_evolve {
-        refresh_mixing_state(model, dt, overshoot_configs);
+        refresh_mixing_state(model, dt, overshoot_configs)?;
     }
     Ok(report)
 }

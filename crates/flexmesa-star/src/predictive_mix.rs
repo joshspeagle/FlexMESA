@@ -580,10 +580,12 @@ fn eval_mixing_coeffs(
         None
     };
 
+    let has_alpha = model.aux.mixing.alpha_mlt.len() == model.nz
+        && model.aux.mixing.alpha_mlt.iter().any(|&v| v > 0.0);
     let result = (|| -> Result<(), StarError> {
-        eval_uniform_xa_eos_kap_range(model, k_top_mz, k_bot_mz, xa_mx, true)?;
+        eval_uniform_xa_eos_kap_range(model, k_top_mz, k_bot_mz, xa_mx)?;
         for k in k_a..=k_b {
-            let alpha_k = if model.aux.mixing.alpha_mlt[k] > 0.0 {
+            let alpha_k = if has_alpha {
                 model.aux.mixing.alpha_mlt[k]
             } else {
                 model.controls.mixing_length_alpha

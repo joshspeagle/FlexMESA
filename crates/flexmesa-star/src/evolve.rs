@@ -405,7 +405,7 @@ pub fn star_evolve_step_with_extras(
             let step_try = do_adjust_mass_step(model, dt_try)
                 .and_then(|()| {
                     if model.mstar_dot != 0.0 && !model.controls.rsp_flag {
-                        refresh_mixing_state(model, dt_try.max(1.0), &[]);
+                        refresh_mixing_state(model, dt_try.max(1.0), &[])?;
                     }
                     apply_step_pre_physics(model, dt_try)
                 })

@@ -459,15 +459,20 @@ pub(crate) fn eval_d_mix_non_rotation_vec(model: &StarModel) -> Vec<f64> {
         .collect()
 }
 
-pub(crate) fn augment_d_mix_with_rotation(model: &mut StarModel) {
+/// Evaluates rotational chemical diffusivities, adds them to `model.d_mix`,
+/// and returns `d_mix_rotation` (`update_rotation_mixing_info` in
+/// `star/private/mix_info.f90:287-301`).
+pub(crate) fn compute_and_add_rotation_d_mix(model: &mut StarModel) -> Vec<f64> {
+    let nz = model.nz;
+    let mut d_mix_rotation = vec![0.0; nz];
     let mw = model.controls.mix_wind.clone();
     if !model.controls.rotation_flag
         || (mw.am_d_mix_factor <= 0.0 && mw.d_visc_factor <= 0.0)
     {
-        return;
+        return d_mix_rotation;
     }
     let diffs = eval_heger_rot_diffusivities(model);
-    for k in 0..model.nz {
+    for k in 0..nz {
         let d_rot_k = mw.d_visc_factor.max(0.0) * diffs.d_visc[k]
             + mw.am_d_mix_factor.max(0.0)
                 * (mw.d_dsi_factor * diffs.d_dsi[k]
@@ -476,13 +481,20 @@ pub(crate) fn augment_d_mix_with_rotation(model: &mut StarModel) {
                     + mw.d_es_factor * diffs.d_es[k]
                     + mw.d_gsf_factor * diffs.d_gsf[k]
                     + mw.d_st_factor * diffs.d_st[k]);
+        d_mix_rotation[k] = d_rot_k;
         if d_rot_k > 0.0 {
-            if model.mixing_type[k] != MixingType::ConvectiveMixing
-                && d_rot_k > model.d_mix[k]
-            {
-                model.mixing_type[k] = MixingType::RotationMixing;
-            }
             model.d_mix[k] += d_rot_k;
+        }
+    }
+    d_mix_rotation
+}
+
+pub(crate) fn augment_d_mix_with_rotation(model: &mut StarModel) {
+    let d_non_rot = model.d_mix.clone();
+    let d_mix_rotation = compute_and_add_rotation_d_mix(model);
+    for k in 0..model.nz {
+        if model.d_mix[k] != 0.0 && d_non_rot[k] < d_mix_rotation[k] {
+            model.mixing_type[k] = MixingType::RotationMixing;
         }
     }
 }

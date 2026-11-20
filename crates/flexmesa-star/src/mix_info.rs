@@ -20,9 +20,9 @@ pub struct ConvBoundary {
     /// True if this boundary is the outer (top) edge of a convection zone;
     /// false if it is the inner (bottom) edge.
     pub top_conv_bdy: bool,
-    /// 0-based face index nearest to the boundary inside the convection zone
-    /// (`k + 1` for a top boundary in cell `k`, `k` for a bottom boundary in
-    /// cell `k`).
+    /// 0-based boundary face index matching MESA `conv_bdy_loc` (`k` for a
+    /// top boundary in cell `k`, `k + 1` for a bottom boundary in cell `k`, and
+    /// `0` for a surface-reaching convection zone).
     pub conv_bdy_loc: usize,
     /// 0-based cell index containing the sub-cell boundary (`k_cb`).
     pub cell_index: usize,
@@ -178,16 +178,22 @@ pub fn set_mixing_info(model: &mut StarModel) -> Result<(), StarError> {
 
     check_d_mix_finite(model, "before rotation_flag")?;
 
-    if model.controls.rotation_flag
-        && (model.controls.mix_wind.am_d_mix_factor > 0.0
-            || model.controls.mix_wind.d_visc_factor > 0.0)
-    {
-        crate::rotation::augment_d_mix_with_rotation(model);
+    // Verbatim `star/private/mix_info.f90:287-301`: gate on `rotation_flag`,
+    // clip `D_mix < 1e-10` and refresh `cdc`, then mark `RotationMixing` iff
+    // `D_mix /= 0 && D_mix_non_rotation < D_mix_rotation`.
+    if model.controls.rotation_flag {
+        let d_mix_rotation =
+            crate::rotation_mix::compute_and_add_rotation_d_mix(model);
         for k in 1..nz {
             if model.d_mix[k] < 1.0e-10 {
                 model.d_mix[k] = 0.0;
             }
             model.aux.mixing.cdc[k] = model.d_mix[k] * cdc_fac[k];
+            if model.d_mix[k] != 0.0
+                && model.aux.mixing.d_mix_non_rotation[k] < d_mix_rotation[k]
+            {
+                model.mixing_type[k] = MixingType::RotationMixing;
+            }
         }
         if nz >= 2 {
             model.aux.mixing.cdc[0] = model.aux.mixing.cdc[1];
@@ -199,8 +205,10 @@ pub fn set_mixing_info(model: &mut StarModel) -> Result<(), StarError> {
     apply_d_mix_zero_regions(model);
 
     // Final `conv_vel` update from `D_mix` and mixing length (`mix_info.f90:364-376`).
+    let has_alpha = model.aux.mixing.alpha_mlt.len() == nz
+        && model.aux.mixing.alpha_mlt.iter().any(|&v| v > 0.0);
     for k in 1..nz {
-        let alpha_k = if model.aux.mixing.alpha_mlt[k] > 0.0 {
+        let alpha_k = if has_alpha {
             model.aux.mixing.alpha_mlt[k]
         } else {
             model.controls.mixing_length_alpha
@@ -328,6 +336,8 @@ fn remove_tiny_mixing(model: &mut StarModel, tiny: f64) {
 fn remove_mixing_singletons(model: &mut StarModel, remove_conv: bool) {
     // Verbatim `star/private/mix_info.f90:999-1076`.
     let nz = model.nz;
+    let has_alpha = model.aux.mixing.alpha_mlt.len() == nz
+        && model.aux.mixing.alpha_mlt.iter().any(|&v| v > 0.0);
     for k in 1..(nz - 1) {
         if model.aux.mixing.cdc[k] == 0.0 {
             if model.aux.mixing.cdc[k - 1] != 0.0
@@ -341,7 +351,7 @@ fn remove_mixing_singletons(model: &mut StarModel, remove_conv: bool) {
                     FOUR_PI * model.r[k] * model.r[k] * model.rho[k],
                 );
                 model.d_mix[k] = cdc_k / denom;
-                let alpha_k = if model.aux.mixing.alpha_mlt[k] > 0.0 {
+                let alpha_k = if has_alpha {
                     model.aux.mixing.alpha_mlt[k]
                 } else {
                     model.controls.mixing_length_alpha
@@ -1263,19 +1273,24 @@ pub fn locate_convection_boundaries(
             let is_conv = model.mixing_type[k] == MixingType::ConvectiveMixing;
             if !in_conv && is_conv {
                 in_conv = true;
+                // Verbatim `star/private/mix_info.f90:602-610`: bottom
+                // boundary records `conv_bdy_loc = k + 1` (0-based) and
+                // `conv_bdy_q = q[k] - cz_bdy_dq[k]`.
                 boundaries.push(build_conv_boundary(
                     model,
                     false,
-                    k,
+                    k + 1,
                     k,
                     cz_bdy_dq[k],
                 ));
             } else if in_conv && !is_conv {
                 in_conv = false;
+                // Verbatim `star/private/mix_info.f90:744-746`: top boundary
+                // records `conv_bdy_loc = k` and `conv_bdy_q = q[k] - cz_bdy_dq[k]`.
                 boundaries.push(build_conv_boundary(
                     model,
                     true,
-                    k + 1,
+                    k,
                     k,
                     cz_bdy_dq[k],
                 ));
@@ -1283,10 +1298,12 @@ pub fn locate_convection_boundaries(
         }
     }
     if in_conv {
-        let is_surf_conv = model.mixing_type[0] == MixingType::ConvectiveMixing;
-        let conv_face = usize::from(!is_surf_conv);
-        let dq_off = if is_surf_conv { 0.0 } else { cz_bdy_dq[0] };
-        boundaries.push(build_conv_boundary(model, true, conv_face, 0, dq_off));
+        // Verbatim `star/private/mix_info.f90:738-746`: convective region
+        // reaching the surface has `conv_bdy_loc = 0`, `conv_bdy_q = 1.0`.
+        let mut b = build_conv_boundary(model, true, 0, 0, 0.0);
+        b.conv_bdy_q = 1.0;
+        b.r_cb = model.r[0];
+        boundaries.push(b);
     }
 
     (cz_bdy_dq, boundaries)

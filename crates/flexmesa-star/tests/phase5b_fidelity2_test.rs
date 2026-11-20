@@ -347,9 +347,10 @@ fn test_overshoot_16_param_sets_and_brunt_b_cutoff_follow_mesa_rules() {
     m_bmax.controls.mix_wind.overshoot_brunt_b_max = 1.0e-6;
     m_bmax.aux.mixing.unsmoothed_brunt_b.fill(1.0);
 
-    apply_overshooting(&mut m_exp, &boundaries, &[]);
-    apply_overshooting(&mut m_short_circuit, &boundaries, &[]);
-    apply_overshooting(&mut m_bmax, &boundaries, &[]);
+    apply_overshooting(&mut m_exp, &boundaries, &[]).expect("exp overshoot");
+    apply_overshooting(&mut m_short_circuit, &boundaries, &[])
+        .expect("short-circuit overshoot");
+    apply_overshooting(&mut m_bmax, &boundaries, &[]).expect("bmax overshoot");
 
     let n_ov_exp = m_exp
         .mixing_type

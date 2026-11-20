@@ -16,9 +16,8 @@ use flexmesa_num::find0;
 
 use crate::controls::StarError;
 use crate::hydro_vars::do1_mlt_2;
-use crate::mixing_micro::{
-    eval_uniform_xa_eos_kap_range, CellRangeSnapshot, FaceMltSnapshot,
-};
+use crate::micro::eval_kap_for_range;
+use crate::mixing_micro::{eval_uniform_xa_eos_kap_range, CellRangeSnapshot};
 use crate::model::StarModel;
 
 /// Applies MESA `26.4.1` predictive mixing across all located convective
@@ -564,9 +563,18 @@ pub(crate) fn eval_abundances(
 
 /// Evaluates trial mixing coefficients (`D`, `vc`, `grada`, `gradr`) across
 /// faces `k_a..=k_b` (`k_top_mz + 1 ..= k_bot_mz`) under homogenized
-/// composition `xa_mx` at fixed `(Pgas, T)`, restoring all mutated cell and
-/// face arrays before returning (`eval_mixing_coeffs` in
+/// composition `xa_mx` at fixed `(Pgas, T)` (`eval_mixing_coeffs` in
 /// `star/private/predictive_mix.f90:670-859`).
+///
+/// After the trial, the saved cell EOS state and composition are put back and
+/// the cell opacities and face MLT values are recomputed rather than copied
+/// back: upstream calls `do_kap_for_cell` on every cell of the mixed region
+/// and then `do1_mlt_2` with its default arguments (`mixing_length_alpha` and
+/// the `use_Ledoux_criterion` composition term) on every face
+/// (`star/private/predictive_mix.f90:813-852`). The recomputed `gradT`,
+/// `mlt_*` and `L_conv` therefore reflect the restored state, including any
+/// difference between the default MLT arguments and those of the earlier
+/// call that produced the values on entry.
 #[allow(clippy::too_many_arguments)]
 fn eval_mixing_coeffs(
     model: &mut StarModel,
@@ -582,11 +590,6 @@ fn eval_mixing_coeffs(
     let k_b = k_bot_mz;
 
     let cell_snap = CellRangeSnapshot::capture(model, k_top_mz, k_bot_mz);
-    let face_snap = if k_a <= k_b {
-        Some(FaceMltSnapshot::capture(model, k_a, k_b))
-    } else {
-        None
-    };
 
     let has_alpha = model.aux.mixing.alpha_mlt.len() == model.nz
         && model.aux.mixing.alpha_mlt.iter().any(|&v| v > 0.0);
@@ -608,13 +611,25 @@ fn eval_mixing_coeffs(
         Ok(())
     })();
 
-    // Always restore original cell EOS/opacity and face MLT state.
+    // Put back the saved cell EOS state and composition
+    // (`restore_cell_loop`, `star/private/predictive_mix.f90:815-841`). The
+    // trial only overwrote those fields and the opacities, so restoring the
+    // whole snapshot is equivalent.
     cell_snap.restore(model);
-    if let Some(fs) = face_snap {
-        fs.restore(model);
-    }
-
+    // Upstream returns `ierr` from a failed trial EOS or opacity call before
+    // its restore loops (`star/private/predictive_mix.f90:762-779`), and a
+    // failed trial `do1_mlt_2` is fatal (`:802`); the error ends the step
+    // either way, so the recomputation below runs only after a clean trial.
     result?;
+
+    // Recompute opacity from the restored cell state (`do_kap_for_cell` in
+    // `restore_cell_loop`, `star/private/predictive_mix.f90:837-838`).
+    eval_kap_for_range(model, k_top_mz, k_bot_mz)?;
+    // Recompute face MLT with default arguments (`restore_face_loop`,
+    // `star/private/predictive_mix.f90:848-854`).
+    for k in k_a..=k_b {
+        let _ = do1_mlt_2(model, k, None, None)?;
+    }
     Ok((k_a, k_b))
 }
 
@@ -638,4 +653,111 @@ pub(crate) fn eval_ingest_limit(
         * (AMU * model.lum[k] / (BOLTZM * t_face))
         * (1.0 - grada[k] / gradr[k])
         * model.dt
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::controls::{StarControls, StarJobControls};
+    use crate::hydro_vars::set_hydro_vars;
+    use crate::zams::load_zams_model;
+
+    /// The trial in `eval_mixing_coeffs` must end as upstream's does
+    /// (`star/private/predictive_mix.f90:813-852`): the cell state is put back
+    /// and the opacities and face MLT values are recomputed, the latter with
+    /// `do1_mlt_2` default arguments. A non-default `alpha_mlt` used by the
+    /// trial and a stale `gradT` on entry must both be replaced by the
+    /// default-argument recomputation.
+    #[test]
+    fn test_eval_mixing_coeffs_recomputes_kap_and_default_mlt_on_reset() {
+        let ctrl = StarControls {
+            initial_mass: 4.0,
+            zbase: 0.02,
+            ..StarControls::default()
+        };
+        let mut model = load_zams_model(ctrl, StarJobControls::default())
+            .expect("4 Msun ZAMS");
+        set_hydro_vars(&mut model, false, false).expect("set_hydro_vars");
+
+        let nz = model.nz;
+        let sp = model.species;
+        let k_top_mz = nz - 40;
+        let k_bot_mz = nz - 30;
+        let (k_a, k_b) = (k_top_mz + 1, k_bot_mz);
+
+        // Trial composition: the cell at the bottom of the window, applied to
+        // every cell of the window.
+        let xa_mx = model.xa[k_bot_mz * sp..(k_bot_mz + 1) * sp].to_vec();
+        // Non-default per-face alpha read only by the trial call, and a
+        // stale `gradT` that a copy-back reset would keep.
+        let alpha_trial = 2.5 * model.controls.mixing_length_alpha;
+        model.aux.mixing.alpha_mlt.fill(alpha_trial);
+        for k in k_a..=k_b {
+            model.gradt[k] = -1.0;
+        }
+
+        // Expected state: what upstream's restore loops compute on the
+        // untouched model.
+        let mut expected = model.clone();
+        eval_kap_for_range(&mut expected, k_top_mz, k_bot_mz)
+            .expect("expected kap");
+        for k in k_a..=k_b {
+            do1_mlt_2(&mut expected, k, None, None).expect("expected mlt");
+        }
+
+        let xa_before = model.xa.clone();
+        let lnd_before = model.lnd.clone();
+        let mut d = vec![0.0; nz];
+        let mut vc = vec![0.0; nz];
+        let mut grada = vec![0.0; nz];
+        let mut gradr = vec![0.0; nz];
+        let (ka, kb) = eval_mixing_coeffs(
+            &mut model, k_bot_mz, k_top_mz, &xa_mx, &mut d, &mut vc,
+            &mut grada, &mut gradr,
+        )
+        .expect("eval_mixing_coeffs");
+        assert_eq!((ka, kb), (k_a, k_b));
+
+        assert_eq!(model.xa, xa_before);
+        assert_eq!(model.lnd, lnd_before);
+        for k in k_top_mz..=k_bot_mz {
+            assert_eq!(
+                model.opacity[k].to_bits(),
+                expected.opacity[k].to_bits(),
+                "opacity at cell {k}"
+            );
+        }
+        let mx = &model.aux.mixing;
+        let ex = &expected.aux.mixing;
+        for k in k_a..=k_b {
+            assert_ne!(model.gradt[k], -1.0, "stale gradT kept at face {k}");
+            for (name, got, want) in [
+                ("gradT", model.gradt[k], expected.gradt[k]),
+                ("gradr", model.gradr[k], expected.gradr[k]),
+                ("gradL", model.gradl[k], expected.gradl[k]),
+                ("mlt_D", model.mlt_d[k], expected.mlt_d[k]),
+                ("mlt_vc", model.mlt_vc[k], expected.mlt_vc[k]),
+                ("mlt_cdc", model.mlt_cdc[k], expected.mlt_cdc[k]),
+                ("mlt_Gamma", model.mlt_gamma[k], expected.mlt_gamma[k]),
+                (
+                    "mlt_mixing_length",
+                    mx.mlt_mixing_length[k],
+                    ex.mlt_mixing_length[k],
+                ),
+                ("grada_face", mx.grada_face[k], ex.grada_face[k]),
+                ("L_conv", mx.l_conv[k], ex.l_conv[k]),
+            ] {
+                assert_eq!(got.to_bits(), want.to_bits(), "{name} at face {k}");
+            }
+            assert_eq!(mx.mlt_mixing_type[k], ex.mlt_mixing_type[k]);
+            // The reset uses `mixing_length_alpha`, not the trial alpha.
+            let lambda_default =
+                model.controls.mixing_length_alpha * model.scale_height[k];
+            assert_eq!(
+                mx.mlt_mixing_length[k].to_bits(),
+                lambda_default.to_bits(),
+                "mixing length at face {k}"
+            );
+        }
+    }
 }

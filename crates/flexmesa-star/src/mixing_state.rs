@@ -11,6 +11,10 @@ use flexmesa_turb::DrivingSpecies;
 use crate::model::StarModel;
 use crate::star_ad::{StarAdExt, StarAdOrder1};
 
+const fn default_have_new_generation() -> bool {
+    true
+}
+
 /// Auxiliary mixing, MLT, convective-boundary, and composition-gradient arrays
 /// stored on [`crate::hydro_state::HydroAuxState::mixing`].
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -109,6 +113,13 @@ pub struct MixingAuxState {
     /// Whether `set_cz_bdy_mass` has been updated since the last mixing update
     /// (`have_new_cz_bdy_info` in `mix_info.f90:472`).
     pub have_new_cz_bdy_info: bool,
+    /// Whether the model holds a new generation after remeshing; when `false`,
+    /// `set_hydro_vars` passes `skip_set_cz_bdy_mass = true` to
+    /// `set_mixing_info` (`evolve.f90:377, 384`, `hydro_vars.f90:81`).
+    /// Skipped in `FMPHOTO2` `v27` checkpoints because it is a transient
+    /// in-flight remesh guard that is always `true` at checkpoint boundaries.
+    #[serde(skip, default = "default_have_new_generation")]
+    pub have_new_generation: bool,
     /// Implicit superadiabaticity reduction factor (`superad_reduction_factor`
     /// in `turb_support.f90:289,504`).
     pub superad_reduction_factor: Vec<f64>,
@@ -179,6 +190,7 @@ impl MixingAuxState {
             okay_to_set_mixing_info: true,
             have_mixing_info: false,
             have_new_cz_bdy_info: false,
+            have_new_generation: true,
             superad_reduction_factor: vec![1.0; nz],
             gradt_excess_alpha: 0.0,
             gradt_excess_alpha_old: 0.0,
@@ -307,6 +319,7 @@ pub(crate) struct MixingPrimarySnapshot {
     pub(crate) okay_to_set_mixing_info: bool,
     pub(crate) have_mixing_info: bool,
     pub(crate) have_new_cz_bdy_info: bool,
+    pub(crate) have_new_generation: bool,
     pub(crate) gradt_excess_alpha: f64,
     pub(crate) gradt_excess_alpha_old: f64,
     pub(crate) crystal_core_boundary_mass: f64,
@@ -340,6 +353,7 @@ impl Default for MixingPrimarySnapshot {
             okay_to_set_mixing_info: true,
             have_mixing_info: false,
             have_new_cz_bdy_info: false,
+            have_new_generation: true,
             gradt_excess_alpha: 0.0,
             gradt_excess_alpha_old: 0.0,
             crystal_core_boundary_mass: -1.0,
@@ -374,6 +388,7 @@ impl MixingPrimarySnapshot {
         self.okay_to_set_mixing_info = m.okay_to_set_mixing_info;
         self.have_mixing_info = m.have_mixing_info;
         self.have_new_cz_bdy_info = m.have_new_cz_bdy_info;
+        self.have_new_generation = m.have_new_generation;
         self.gradt_excess_alpha = m.gradt_excess_alpha;
         self.gradt_excess_alpha_old = m.gradt_excess_alpha_old;
         self.crystal_core_boundary_mass = m.crystal_core_boundary_mass;
@@ -414,6 +429,7 @@ impl MixingPrimarySnapshot {
         m.okay_to_set_mixing_info = self.okay_to_set_mixing_info;
         m.have_mixing_info = self.have_mixing_info;
         m.have_new_cz_bdy_info = self.have_new_cz_bdy_info;
+        m.have_new_generation = self.have_new_generation;
     }
 
     #[must_use]

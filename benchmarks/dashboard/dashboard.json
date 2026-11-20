@@ -769,8 +769,8 @@
     "rust": {
       "tool": "cargo llvm-cov",
       "overall": {
-        "lines": 114322,
-        "covered": 85433,
+        "lines": 114330,
+        "covered": 85423,
         "percent": 74.7
       },
       "by_crate": [
@@ -908,8 +908,8 @@
         },
         {
           "crate": "flexmesa-star",
-          "lines": 54690,
-          "covered": 40764,
+          "lines": 54698,
+          "covered": 40754,
           "percent": 74.5
         },
         {
@@ -1435,8 +1435,13 @@
     ],
     "open_pull_requests": [
       {
-        "number": 285,
-        "title": "fix(star): follow upstream in the line-search rescue, sizeB skips, implicit-wind mdot and timestep arithmetic; refresh stale baseline rows (#152)",
+        "number": 289,
+        "title": "fix(ionization,data): validate ion_*.data headers and verify FMION001/physics provenance (#281, #282)",
+        "draft": false
+      },
+      {
+        "number": 290,
+        "title": "fix(star,benchmarks): resolve #155 mixing audit items, literal provenance, DECISIONS #40, and Ledoux 2x2 experiment",
         "draft": false
       }
     ],
@@ -1759,6 +1764,22 @@
         "state": "open",
         "kind": "upstream-bug",
         "parity_pending": false,
+        "needs_confirmation": false
+      },
+      {
+        "number": 287,
+        "title": "[Deferred bug] element_diffusion.f90 out-of-bounds array indexing for degenerate nzlo/nzhi and diffusion_num_classes",
+        "state": "open",
+        "kind": "upstream-bug",
+        "parity_pending": true,
+        "needs_confirmation": false
+      },
+      {
+        "number": 288,
+        "title": "[Deferred bug] diffusion_procs.f90 typical_charge smoothing reads nzlo-1 when active range has two zones",
+        "state": "open",
+        "kind": "upstream-bug",
+        "parity_pending": true,
         "needs_confirmation": false
       }
     ]
@@ -2244,6 +2265,19 @@
       "closed_140": "15",
       "total_140": "34",
       "deferred_169": "40"
+    },
+    {
+      "date_utc": "2026-11-20",
+      "commit": "aaa29e9",
+      "event": "main merge",
+      "engine_ported_pct": "30.2",
+      "all_verified_pct": "1.0",
+      "cases_passing": "0",
+      "rust_cov_pct": "74.7",
+      "python_cov_pct": "87.8",
+      "closed_140": "15",
+      "total_140": "34",
+      "deferred_169": "42"
     }
   ]
 }

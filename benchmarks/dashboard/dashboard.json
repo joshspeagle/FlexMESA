@@ -1194,7 +1194,7 @@
         "issues": "#161"
       }
     ],
-    "python_xfail_or_skip_count": 4,
+    "python_xfail_or_skip_count": 5,
     "python_skips": [
       {
         "location": "tests/test_eos_wave3a3.py:200",
@@ -1205,6 +1205,11 @@
         "location": "tests/test_eos_wave3b1.py:395",
         "reason": "pytest.mark.xfail( strict=True, reason=( \"declared gap (#161): Python eos.eos_dt_get_t does not yet expose \" \"logT_tol/other_tol (eos/test/test_output:395 tol=1e-5 stops one \" \"Newton step earlier at 4.8009613155595554)\" ), )",
         "issues": "#161"
+      },
+      {
+        "location": "tests/test_star_wave4_1.py:83",
+        "reason": "pytest.mark.xfail( strict=True, reason=( \"#295: Rust computes the face radiation pressure from the face \" \"temperature (#291); the frozen JAX twin still interpolates it \" \"from the two cell values.\" ), )",
+        "issues": "#291, #295"
       },
       {
         "location": "tests/test_wave4_bench.py:136",

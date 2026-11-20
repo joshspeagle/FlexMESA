@@ -153,7 +153,7 @@ Cases lacking a committed MESA `26.4.1` baseline report `no reference yet` and c
 | `astero` | `fast_simplex` | [#162](https://github.com/joshspeagle/FlexMESA/issues/162) | `xtra1` | `astero_simplex_samples=5_best_chi2=1.194816e4_term=max_age` (1259 steps; diagnostic (4 controls ignored)) | Asteroseismic simplex optimizer and in-house pulsation scaffolding (#162, #171). |
 | `astero` | `surface_effects` | [#162](https://github.com/joshspeagle/FlexMESA/issues/162) | `max_model_number` | `max_model_number` (1 steps; diagnostic (1 controls ignored)) | Asteroseismic surface-effects starting model and ADIPLS scaffolding (#162, #171). |
 
-## Declared Test-Suite Gaps (`[[test_gaps]]`, 20 Markers)
+## Declared Test-Suite Gaps (`[[test_gaps]]`, 21 Markers)
 
 Every Rust `#[ignore]` and Python `xfail`/`skip` marker in the repository is tracked bijectively in `benchmarks/history_harness/known_gaps.toml` (`#144`):
 
@@ -179,6 +179,7 @@ Every Rust `#[ignore]` and Python `xfail`/`skip` marker in the repository is tra
 | `python_xfail` | `tests/test_eos_wave3a3.py` | `test_pc_and_skye_rust_strict_match_mesa_26_4_1_at_base_tolerance` | `physics_gap` | [#161](https://github.com/joshspeagle/FlexMESA/issues/161) | Rust strict PC and Skye derivatives differ from MESA 26.4.1 beyond the base tolerances (1.0e-11 values, 5.0e-9 PC and 1.0e-8 Skye derivatives); largest measured pc_co_liq d_dlnT 7.1e-6 and skye_co_liq d_dlnT 1.3e-6. The same gap is declared for the Rust tests. |
 | `python_xfail` | `tests/test_wave4_bench.py` | `test_wave4_star_micro_vars_rust_matches_frozen_jax` | `physics_gap` | [#295](https://github.com/joshspeagle/FlexMESA/issues/295) | Rust do1_mlt_2 takes the face radiation pressure from the face temperature (MESA 26.4.1 star_utils.f90:3838-3843, #291); the frozen JAX face-MLT twin still interpolates the cell values, so the cross-stage difference is 8.9e-3 against a 1.0e-10 bound. |
 | `python_xfail` | `tests/test_wave5_bench.py` | `test_wave5_diff_rot_rust_matches_frozen_jax` | `physics_gap` | [#295](https://github.com/joshspeagle/FlexMESA/issues/295) | Rust eval_caplan_ocp_dstar follows MESA 26.4.1 get_Dstar_OCP (diffusion_support.f90:1716-1743, #156); the frozen JAX twin keeps its earlier fit, so the cross-stage difference is about 5.4e-5 against bounds of 1.0e-12 (8 zones) and 2.0e-14 (128 zones). |
+| `python_xfail` | `tests/test_star_wave4_1.py` | `test_star_jax_face_gradr_and_gradt_match_rust` | `physics_gap` | [#295](https://github.com/joshspeagle/FlexMESA/issues/295) | Rust do1_mlt_2 computes the face radiation pressure from the face temperature as MESA 26.4.1 get_Prad_face does (star_utils.f90:3838-3843, #291); the frozen JAX twin interpolates it from the two cell values, so gradr differs by up to 3.8e-4 against a bound of 1.0e-12 and gradt by up to 3.2e-4 against 1.0e-6. |
 
 ## Level-2 Module Hex Reference Gaps (`benchmarks/module_hex/`)
 

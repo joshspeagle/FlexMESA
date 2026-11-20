@@ -817,3 +817,13 @@ issue = "#295"
 role = "physics_gap"
 expect_fail_when_run = true
 reason = "Rust eval_caplan_ocp_dstar follows MESA 26.4.1 get_Dstar_OCP (diffusion_support.f90:1716-1743, #156); the frozen JAX twin keeps its earlier fit, so the cross-stage difference is about 5.4e-5 against bounds of 1.0e-12 (8 zones) and 2.0e-14 (128 zones)."
+
+[[test_gaps]]
+kind = "python_xfail"
+file = "tests/test_star_wave4_1.py"
+test_name = "test_star_jax_face_gradr_and_gradt_match_rust"
+issue = "#295"
+role = "physics_gap"
+expect_fail_when_run = true
+reason = "Rust do1_mlt_2 computes the face radiation pressure from the face temperature as MESA 26.4.1 get_Prad_face does (star_utils.f90:3838-3843, #291); the frozen JAX twin interpolates it from the two cell values, so gradr differs by up to 3.8e-4 against a bound of 1.0e-12 and gradt by up to 3.2e-4 against 1.0e-6."
+

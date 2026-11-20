@@ -132,13 +132,18 @@ pub fn set_mixing_info(model: &mut StarModel) -> Result<(), StarError> {
     let mut eps_h = vec![0.0_f64; nz];
     let mut eps_he = vec![0.0_f64; nz];
     let mut eps_z = vec![0.0_f64; nz];
-    let has_cats = model.aux.eps_nuc_categories.len() == nz;
+    // Upstream reads `s% eps_nuc_categories` unconditionally
+    // (`star/private/mix_info.f90:186-191`).
+    if model.aux.eps_nuc_categories.len() != nz {
+        return Err(StarError::InvalidInput(format!(
+            "set_mixing_info: eps_nuc_categories has {} cells, expected nz = {nz}",
+            model.aux.eps_nuc_categories.len()
+        )));
+    }
     for k in 0..nz {
-        if has_cats {
-            let cats = &model.aux.eps_nuc_categories[k];
-            eps_h[k] = cats[CAT_PP] + cats[CAT_CNO];
-            eps_he[k] = cats[CAT_3ALF];
-        }
+        let cats = &model.aux.eps_nuc_categories[k];
+        eps_h[k] = cats[CAT_PP] + cats[CAT_CNO];
+        eps_he[k] = cats[CAT_3ALF];
         eps_z[k] = model.eps_nuc[k] - (eps_h[k] + eps_he[k]);
     }
 
@@ -435,13 +440,8 @@ fn close_gaps(model: &mut StarModel, mix_type: MixingType, min_gap: f64) {
         } else if model.mixing_type[k] == mix_type {
             let ktop = k;
             let rtop = model.r[ktop];
-            let grav_k = if model.grav[ktop] > 0.0 {
-                model.grav[ktop]
-            } else {
-                model.cgrav[ktop] * model.m_grav[ktop]
-                    / (model.r[ktop] * model.r[ktop]).max(1.0)
-            };
-            let hp = model.peos[ktop] / (model.rho[ktop] * grav_k);
+            let hp =
+                model.peos[ktop] / (model.rho[ktop] * model.grav[ktop]);
             if rtop - rbot < hp * min_gap {
                 if kbot < nz - 1 {
                     let cdc_avg = (model.aux.mixing.cdc[ktop]
@@ -506,13 +506,8 @@ fn remove_thermohaline_dropouts(
             } else {
                 let ktop = k + 1;
                 let rtop = model.r[ktop];
-                let grav_k = if model.grav[ktop] > 0.0 {
-                    model.grav[ktop]
-                } else {
-                    model.cgrav[ktop] * model.m_grav[ktop]
-                        / (model.r[ktop] * model.r[ktop]).max(1.0)
-                };
-                let hp = model.peos[ktop] / (model.rho[ktop] * grav_k);
+                let hp = model.peos[ktop]
+                    / (model.rho[ktop] * model.grav[ktop]);
                 let q_upper = model.q[ktop - 1];
                 let q_lower = model.q[kbot + 1];
                 if rtop - rbot < hp * min_dropout_hp

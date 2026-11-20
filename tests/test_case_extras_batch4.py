@@ -479,3 +479,52 @@ def test_unserved_star_handlers_detached_and_binaries_covered() -> None:
     ]
     assert len(star_ported) >= 26
     assert set(_BATCH4_GRADUATED_STAR_CASES) <= set(star_ported)
+
+
+class _NonDictStartupExtras:
+    """Hook object whose `extras_startup` returns a non-dict, non-None value."""
+
+    def extras_startup(self, snapshot: dict[str, object], restart: bool) -> str:
+        return "not a dict"
+
+
+class _NonDictUpdatesExtras:
+    """Hook object whose `extras_check_model` returns non-dict `updates`."""
+
+    def extras_check_model(
+        self, snapshot: dict[str, object]
+    ) -> dict[str, object]:
+        return {"action": "keep_going", "updates": ["mixing_length_alpha"]}
+
+
+def _non_dict_startup_factory(suite: str, case_dir: pathlib.Path) -> object:
+    return _NonDictStartupExtras()
+
+
+def _non_dict_updates_factory(suite: str, case_dir: pathlib.Path) -> object:
+    return _NonDictUpdatesExtras()
+
+
+@pytest.mark.parametrize(
+    ("factory", "match"),
+    [
+        ("_non_dict_startup_factory", "must return None or a dict"),
+        ("_non_dict_updates_factory", "expected a dict"),
+    ],
+)
+def test_adapter_rejects_non_dict_hook_returns(
+    factory: str, match: str, tmp_path: pathlib.Path
+) -> None:
+    """A hook that returns updates in any form other than a dict stops the run
+    with an error instead of having the value ignored.
+    """
+    case_dir = harness_runner.resolve_case_dir("star", "semiconvection")
+    with pytest.raises(Exception, match=match):
+        harness_runner.run_trace_inprocess(
+            "star",
+            case_dir,
+            tmp_path / f"out_{factory}",
+            max_steps=1,
+            allow_unsupported_controls=True,
+            extras_factory=f"tests.test_case_extras_batch4:{factory}",
+        )

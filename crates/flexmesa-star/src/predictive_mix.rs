@@ -235,7 +235,7 @@ fn do_predictive_mixing(
 
     let mut xa_cz = vec![0.0_f64; species];
     let mut xa_cz_burn = vec![0.0_f64; species];
-    eval_abundances(model, k_bot_cz, k_top_cz, &mut xa_cz, &mut xa_cz_burn);
+    eval_abundances(model, k_bot_cz, k_top_cz, &mut xa_cz, &mut xa_cz_burn)?;
 
     let mut ledoux_extension = model.controls.use_ledoux_criterion;
 
@@ -243,7 +243,7 @@ fn do_predictive_mixing(
     let mut k_top_ez = k_top_cz;
     let mut xa_ez = vec![0.0_f64; species];
     let mut xa_ez_burn = vec![0.0_f64; species];
-    eval_abundances(model, k_bot_ez, k_top_ez, &mut xa_ez, &mut xa_ez_burn);
+    eval_abundances(model, k_bot_ez, k_top_ez, &mut xa_ez, &mut xa_ez_burn)?;
 
     let mut xa_mz = vec![0.0_f64; species];
     let mut xa_mz_burn = vec![0.0_f64; species];
@@ -272,7 +272,7 @@ fn do_predictive_mixing(
         let k_top_mz = k_top_mz_i as usize;
         let k_bot_mz = k_bot_mz_i as usize;
 
-        eval_abundances(model, k_bot_mz, k_top_mz, &mut xa_mz, &mut xa_mz_burn);
+        eval_abundances(model, k_bot_mz, k_top_mz, &mut xa_mz, &mut xa_mz_burn)?;
 
         let (k_a, k_b) = eval_mixing_coeffs(
             model,
@@ -298,7 +298,7 @@ fn do_predictive_mixing(
                     k_top_ez,
                     &mut xa_ez,
                     &mut xa_ez_burn,
-                );
+                )?;
             } else {
                 ledoux_extension = false;
             }
@@ -369,7 +369,7 @@ fn do_predictive_mixing(
     }
 
     // Re-evaluate mixed abundances and mixing coefficients at the backed-off extent.
-    eval_abundances(model, k_bot_mz, k_top_mz, &mut xa_mz, &mut xa_mz_burn);
+    eval_abundances(model, k_bot_mz, k_top_mz, &mut xa_mz, &mut xa_mz_burn)?;
     let (k_a_eval, k_b_eval) = eval_mixing_coeffs(
         model,
         k_bot_mz,
@@ -513,16 +513,25 @@ pub(crate) fn eval_abundances(
     k_top: usize,
     xa: &mut [f64],
     xa_burn: &mut [f64],
-) {
+) -> Result<(), StarError> {
     let sp = model.species;
+    // Upstream reads `s% dxdt_nuc` unconditionally
+    // (`star/private/predictive_mix.f90:654`); a model without the array
+    // cannot supply the burning correction.
+    if model.dxdt_nuc.len() != model.nz * sp {
+        return Err(StarError::InvalidInput(format!(
+            "predictive_mix eval_abundances: dxdt_nuc has length {}, expected nz*species = {}",
+            model.dxdt_nuc.len(),
+            model.nz * sp
+        )));
+    }
     let mc: f64 = model.dm[k_top..=k_bot].iter().sum();
     if mc <= 0.0 || sp == 0 {
         xa.fill(0.0);
         xa_burn.fill(0.0);
-        return;
+        return Ok(());
     }
     let dt = model.dt;
-    let has_dxdt = model.dxdt_nuc.len() == model.nz * sp;
 
     for l in 0..sp {
         let mut s_xa = 0.0;
@@ -531,9 +540,7 @@ pub(crate) fn eval_abundances(
             let dm_k = model.dm[k];
             let idx = k * sp + l;
             s_xa += dm_k * model.xa[idx];
-            if has_dxdt {
-                s_burn += dm_k * model.dxdt_nuc[idx] * dt;
-            }
+            s_burn += dm_k * model.dxdt_nuc[idx] * dt;
         }
         let x_raw = s_xa / mc;
         xa[l] = x_raw.clamp(0.0, 1.0);
@@ -552,6 +559,7 @@ pub(crate) fn eval_abundances(
             *v /= sum_burn;
         }
     }
+    Ok(())
 }
 
 /// Evaluates trial mixing coefficients (`D`, `vc`, `grada`, `gradr`) across

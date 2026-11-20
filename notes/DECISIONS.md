@@ -58,6 +58,7 @@ Scope and the `v0.1.0` definition are in [`SCOPE.md`](SCOPE.md). Work is tracked
 | 41 | Upstream MESA 26.4.1 Element Diffusion, Blouin CO/ONe Phase Separation, Loud `op_mono` Rejection, and Deferred-Bug Guards (`#156`, `#271`, `#272`, `#273`) | In force | below |
 | 42 | Unconditional MESA 26.4.1 Newton Solver, Retry/Redo Semantics, and Deferred Upstream Bugs (`#152`, `#139`, `#177`, `#251`-`#253`, `#260`) | In force | below |
 | 43 | Undefined Upstream Reads Become Loud Errors; Rust-versus-JAX Comparisons Are Tracked Expected Failures While JAX Is Frozen (`#169`, `#295`) | In force | below |
+| 44 | Along-Track `num_zones` and `hb_2M` `mass_conv_core` Manifest Tolerances, A2 Table Upgrades, and `hb_2M` Timeout Budget (`#152`, `#153`, `#155`, `#156`, `#159`) | In force | below |
 
 ## Pre-audit decisions still in force
 
@@ -574,3 +575,17 @@ The text of these four entries predates the audit of 2026-11-16. The decisions s
   - *Substituting zero or the nearest valid element for an undefined read*: The run continues with a value upstream does not define.
   - *Reproducing what the reference build happens to read*: Depends on the compiler, the allocator and the run.
   - *Loosening Rust-versus-JAX bounds, or editing the frozen JAX code to follow each Rust change*: The first hides the difference; the second is the work `#166` defers.
+
+---
+
+## DECISIONS #44: Along-Track `num_zones` and `hb_2M` `mass_conv_core` Manifest Tolerances, A2 Table Upgrades, and `hb_2M` Timeout Budget (`#152`, `#153`, `#155`, `#156`, `#159`)
+
+- **Date**: 2026-11-20
+- **Decision**:
+  1. **Along-Track `rel_num_zones = 0.02` (`case_manifest.toml`, `DECISIONS #20`, `#153`)**: Add `rel_num_zones = 0.02` (`2%`, old: unconstrained) to `[defaults.star.track_tolerances]`, `[defaults.astero.track_tolerances]`, and `star/custom_colors` (excluding `star/starspots`, whose MESA `26.4.1` reference omits `num_zones`). Evaluate `num_zones` on overlapping MESA reference coordinates (`DISCRETE_TRACK_COLUMNS`) rather than linearly interpolating sparse `history_interval > 1` step-function jumps.
+  2. **`star/hb_2M` `mass_conv_core` Tolerances & Timeout (`#155`)**: Add `mass_conv_core = 0.001` $M_\odot$ (final) and `0.002` $M_\odot$ (track; old: unconstrained; source: `DECISIONS #20` mass scale) on `star/hb_2M`, and run `star/hb_2M` with explicit `--timeout-sec 720` (vs `300 s` default) so all 190 steps complete in `baseline_run_26_4_1.json`.
+  3. **A2 Table Telemetry & Mechanical Track Sections (`#152`, `#153`, `#155`, `#159`)**: Store FlexMESA and MESA `26.4.1` `(steps, retries, iters, mean_iters)` in `baseline_run_26_4_1.json`; render `Steps (MESA)`, `Retries (MESA)`, `Iters (MESA)`, `num_zones Track Diff`, plus mechanical `#155` (`mass_conv_core`) and `#159` (`star_mass` / `log_abs_mdot` from cached full `mesa-histories-v1` runs) sections in `notes/audit/case_table.md`. Tightening `rel_num_zones` on binary `LOGS1` moves `binary/jdot_{gr,ml}_check` outside component tolerance (`DECISIONS #27`).
+- **Why**: Satisfies `#152`, `#153`, `#155`, and `#159` acceptance criteria mechanically without hand-typed numbers; `2%` matches `DECISIONS #20`'s `0.005` dex (`1.16%`) scale while accommodating integer mesh-boundary quantization across multi-hundred-step evolutions, and only tightens acceptance.
+- **Alternatives Rejected**:
+  - *Chord-interpolating sparse `history_interval > 1` MESA `num_zones` onto intermediate steps*: Creates artificial `80%-230%` errors across unlogged step-2 remeshes (`semiconvection`, `hse_riemann`).
+  - *Absolute zone-count tolerance across all masses*: Scales poorly between `417`-zone and `3001`-zone models.

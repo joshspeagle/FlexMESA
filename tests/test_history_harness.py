@@ -1276,3 +1276,276 @@ def test_binary_harness_compares_component_logs1_and_logs2_tracks(
     assert rec_missing.verdict == "fail (undeclared)"
     assert rec_missing.has_component_error
     assert "missing LOGS2/history.data" in rec_missing.error_message
+
+
+def test_extract_history_run_stats_and_rel_num_zones_and_mass_loss_tables(
+    tmp_path: pathlib.Path,
+) -> None:
+    """Verify #152/#153/#155/#159 stats, rel_num_zones, and table sections."""
+    # 1. Step/retry/iter extraction across full, interval, and .mod-offset logs.
+    full_ref = tmp_path / "full.tsv"
+    full_ref.write_text(
+        "# full every-step reference\n"
+        "model_number\tstar_age\tnum_zones\tnum_retries\tnum_iters\t"
+        "log_L\tmass_conv_core\tstar_mass\tlog_abs_mdot\n"
+        "1\t0.0\t1000\t0\t5\t1.000\t0.200\t7.000\t-8.000\n"
+        "2\t1.0e6\t1020\t1\t7\t1.010\t0.220\t6.990\t-7.800\n"
+        "3\t2.0e6\t1040\t2\t6\t1.020\t0.240\t6.980\t-7.600\n",
+        encoding="utf-8",
+    )
+    full_tbl = history_compare.load_history_file(full_ref)
+    full_stats = history_compare.extract_history_run_stats(full_tbl, "star")
+    assert full_stats.steps == 3
+    assert full_stats.retries == 2
+    assert full_stats.iters_sum == 18
+    assert full_stats.mean_iters == 6.0
+    assert full_stats.iters_rows == 3
+
+    mod_offset = tmp_path / "mod_offset.tsv"
+    mod_offset.write_text(
+        "# started from .mod at model 10\n"
+        "model_number\tstar_age\tnum_retries\tnum_iters\n"
+        "11\t1.0e5\t0\t6\n"
+        "20\t2.0e5\t1\t8\n"
+        "30\t3.0e5\t3\t7\n"
+        "387\t4.0e5\t3\t5\n",
+        encoding="utf-8",
+    )
+    mod_stats = history_compare.extract_history_run_stats(
+        history_compare.load_history_file(mod_offset), "star"
+    )
+    assert mod_stats.steps == 377
+    assert mod_stats.retries == 3
+    assert mod_stats.iters_sum == 26
+    assert mod_stats.mean_iters == 6.5
+    assert mod_stats.iters_rows == 4
+
+    zero_stride = tmp_path / "zero_stride.tsv"
+    zero_stride.write_text(
+        "# started at model 0 with history_interval=5\n"
+        "model_number\tstar_age\tnum_retries\tnum_iters\n"
+        "5\t1.0e4\t0\t4\n"
+        "10\t2.0e4\t0\t6\n"
+        "15\t3.0e4\t1\t5\n"
+        "61\t4.0e4\t1\t5\n",
+        encoding="utf-8",
+    )
+    zs_stats = history_compare.extract_history_run_stats(
+        history_compare.load_history_file(zero_stride), "star"
+    )
+    assert zs_stats.steps == 61
+    assert zs_stats.retries == 1
+
+    # 2. Along-track rel_num_zones tolerance, mass_conv_core, and log_abs_mdot.
+    run_good = tmp_path / "run_good.tsv"
+    run_good.write_text(
+        "# run within rel_num_zones=0.02\n"
+        "model_number\tstar_age\tnum_zones\tnum_retries\tnum_iters\t"
+        "log_L\tmass_conv_core\tstar_mass\tlog_abs_mdot\n"
+        "1\t0.0\t1005\t0\t5\t1.000\t0.200\t7.000\t-8.000\n"
+        "2\t1.0e6\t1030\t1\t8\t1.010\t0.221\t6.989\t-7.790\n"
+        "3\t2.0e6\t1050\t2\t5\t1.020\t0.240\t6.979\t-7.590\n",
+        encoding="utf-8",
+    )
+    run_bad_nz = tmp_path / "run_bad_nz.tsv"
+    run_bad_nz.write_text(
+        "# run exceeding rel_num_zones=0.02 at step 2\n"
+        "model_number\tstar_age\tnum_zones\tnum_retries\tnum_iters\t"
+        "log_L\tmass_conv_core\tstar_mass\tlog_abs_mdot\n"
+        "1\t0.0\t1000\t0\t5\t1.000\t0.200\t7.000\t-8.000\n"
+        "2\t1.0e6\t1100\t1\t7\t1.010\t0.220\t6.990\t-7.800\n"
+        "3\t2.0e6\t1040\t2\t6\t1.020\t0.240\t6.980\t-7.600\n",
+        encoding="utf-8",
+    )
+    spec = case_manifest.CaseManifestEntry(
+        suite="star",
+        case="hot_cool_wind",
+        reference_status="mesa_26_4_1",
+        reference_path="full.tsv",
+        required_termination="log_L_upper_limit",
+        independent_var="star_age",
+        final_tolerances={"rel_star_age": 0.001, "log_L": 0.001},
+        track_tolerances={"log_L": 0.005, "rel_num_zones": 0.02},
+        extras_status="stock",
+    )
+    comp_ok = history_compare.compare_histories(
+        full_tbl, history_compare.load_history_file(run_good), spec
+    )
+    assert comp_ok.within_track_tolerances
+    nz_dev = next(
+        d for d in comp_ok.track_deviations if d.column == "num_zones"
+    )
+    assert nz_dev.max_rel_diff is not None
+    assert nz_dev.max_rel_diff < 0.02
+    assert any(d.column == "mass_conv_core" for d in comp_ok.track_deviations)
+    assert any(d.column == "star_mass" for d in comp_ok.track_deviations)
+    assert any(d.column == "log_abs_mdot" for d in comp_ok.track_deviations)
+
+    # JSON round-trip preserves max_rel_diff and re-evaluation enforces it.
+    rt = history_compare.comparison_from_dict(
+        history_compare.comparison_to_dict(comp_ok)
+    )
+    rt_nz = next(d for d in rt.track_deviations if d.column == "num_zones")
+    assert rt_nz.max_rel_diff == pytest.approx(nz_dev.max_rel_diff)
+    tight_spec = dataclasses.replace(
+        spec, track_tolerances={"log_L": 0.005, "rel_num_zones": 0.001}
+    )
+    re_eval = history_compare.re_evaluate_comparison(rt, tight_spec)
+    assert not re_eval.within_track_tolerances
+    assert "rel_num_zones" in re_eval.failed_track_columns
+
+    comp_bad = history_compare.compare_histories(
+        full_tbl, history_compare.load_history_file(run_bad_nz), spec
+    )
+    assert not comp_bad.within_track_tolerances
+    assert "rel_num_zones" in comp_bad.failed_track_columns
+    assert comp_bad.first_diverging_step == 2
+
+    # 3. Render A2 case table with Steps/Retries/Iters/num_zones & #155/#159.
+    hb_spec = dataclasses.replace(
+        spec,
+        case="hb_2M",
+        track_tolerances={
+            "log_L": 0.005,
+            "rel_num_zones": 0.02,
+            "mass_conv_core": 0.002,
+        },
+    )
+    mini_manifest = case_manifest.HarnessManifest(
+        mesa_release="26.4.1",
+        zenodo_record="19722306",
+        cases=(spec, hb_spec),
+    )
+    rec_wind = harness_runner.evaluate_case_record(
+        spec,
+        {},
+        harness_runner.TraceRunOutcome(
+            suite="star",
+            case="hot_cool_wind",
+            status="ok",
+            termination_code="log_L_upper_limit",
+            steps=3,
+            retries=2,
+            wall_time_sec=0.1,
+            peak_rss_gb=0.1,
+            history_path=run_good,
+        ),
+        root_dir=tmp_path,
+    )
+    rec_hb = harness_runner.evaluate_case_record(
+        hb_spec,
+        {},
+        harness_runner.TraceRunOutcome(
+            suite="star",
+            case="hb_2M",
+            status="ok",
+            termination_code="log_L_upper_limit",
+            steps=3,
+            retries=2,
+            wall_time_sec=0.1,
+            peak_rss_gb=0.1,
+            history_path=run_good,
+        ),
+        root_dir=tmp_path,
+    )
+    assert rec_wind.mesa_steps == 3
+    assert rec_wind.mesa_retries == 2
+    assert rec_wind.mesa_iters == 18
+    assert rec_wind.iters == 18
+    md = case_report.render_case_table_markdown(
+        mini_manifest, [rec_wind, rec_hb], known_gaps={}
+    )
+    assert "| Steps (MESA) | Retries (MESA) | Iters (MESA) |" in md
+    assert "| num_zones Track Diff |" in md
+    assert "3 (3) | 2 (2) | 6.0 [18] (6.0 [18]) |" in md
+    assert (
+        "## Convective-Core Track Comparisons (`mass_conv_core`, `#155`)" in md
+    )
+    assert (
+        "## Mass-Loss Track Comparisons (`star_mass` and `mdot`, `#159`)" in md
+    )
+    assert "`log_abs_mdot`" in md
+    assert "`hb_2M`" in md
+    assert "`hot_cool_wind`" in md
+
+    # 4. Full-history runs/ augmentation merges log_abs_mdot onto thinned refs.
+    thin_ref = tmp_path / "thin_wind.tsv"
+    thin_ref.write_text(
+        "# thinned ref without log_abs_mdot\n"
+        "model_number\tstar_age\tnum_zones\tnum_retries\tnum_iters\t"
+        "log_L\tstar_mass\n"
+        "1\t0.0\t1000\t0\t5\t1.000\t7.000\n"
+        "2\t1.0e6\t1020\t1\t7\t1.010\t6.990\n"
+        "3\t2.0e6\t1040\t2\t6\t1.020\t6.980\n",
+        encoding="utf-8",
+    )
+    full_run_dir = tmp_path / "runs" / "star" / "hot_cool_wind" / "LOGS"
+    full_run_dir.mkdir(parents=True)
+    (full_run_dir / "history.data").write_text(
+        full_ref.read_text(encoding="utf-8"), encoding="utf-8"
+    )
+    thin_spec = dataclasses.replace(spec, reference_path="thin_wind.tsv")
+    rec_aug = harness_runner.evaluate_case_record(
+        thin_spec,
+        {},
+        harness_runner.TraceRunOutcome(
+            suite="star",
+            case="hot_cool_wind",
+            status="ok",
+            termination_code="log_L_upper_limit",
+            steps=3,
+            retries=2,
+            wall_time_sec=0.1,
+            peak_rss_gb=0.1,
+            history_path=run_good,
+        ),
+        root_dir=tmp_path,
+    )
+    assert rec_aug.comparison is not None
+    assert "log_abs_mdot" in rec_aug.comparison.final_diffs
+    assert any(
+        d.column == "log_abs_mdot" for d in rec_aug.comparison.track_deviations
+    )
+
+    # 5. Discrete num_zones avoids false chord errors across history_interval>1.
+    sparse_ref = tmp_path / "sparse_nz_ref.tsv"
+    sparse_ref.write_text(
+        "# MESA logged at history_interval=10 (models 1, 10, 20)\n"
+        "model_number\tstar_age\tnum_zones\tlog_L\n"
+        "1\t1.0e5\t800\t1.000\n"
+        "10\t1.0e6\t1600\t1.010\n"
+        "20\t2.0e6\t1600\t1.020\n",
+        encoding="utf-8",
+    )
+    dense_run = tmp_path / "dense_nz_run.tsv"
+    dense_run.write_text(
+        "# FlexMESA logged every step; step-2 remesh jumps 800->1600\n"
+        "model_number\tstar_age\tnum_zones\tlog_L\n"
+        "1\t1.0e5\t800\t1.000\n"
+        "2\t2.0e5\t1600\t1.001\n"
+        "10\t1.0e6\t1600\t1.010\n"
+        "20\t2.0e6\t1600\t1.020\n",
+        encoding="utf-8",
+    )
+    nz_spec = case_manifest.CaseManifestEntry(
+        suite="star",
+        case="sparse_nz",
+        reference_status="mesa_26_4_1",
+        reference_path="sparse_nz_ref.tsv",
+        required_termination="max_age",
+        independent_var="star_age",
+        final_tolerances={"rel_star_age": 0.001, "log_L": 0.001},
+        track_tolerances={"log_L": 0.005, "rel_num_zones": 0.02},
+    )
+    nz_comp = history_compare.compare_histories(
+        history_compare.load_history_file(sparse_ref),
+        history_compare.load_history_file(dense_run),
+        nz_spec,
+    )
+    assert nz_comp.within_track_tolerances
+    nz_dev_s = next(
+        d for d in nz_comp.track_deviations if d.column == "num_zones"
+    )
+    assert nz_dev_s.max_abs_diff == pytest.approx(0.0)
+    assert nz_dev_s.max_rel_diff == pytest.approx(0.0)
+    assert nz_comp.first_diverging_step is None

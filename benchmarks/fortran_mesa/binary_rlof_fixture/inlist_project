@@ -1,0 +1,16 @@
+&binary_job
+   inlist_names(1) = 'inlist1'
+   inlist_names(2) = 'inlist2'
+   evolve_both_stars = .false.
+/
+
+&binary_controls
+   m1 = 1.5d0
+   m2 = 1.0d0
+   initial_period_in_days = 0.45d0
+   mdot_scheme = 'Ritter'
+   max_tries_to_achieve = 20
+   terminate_if_initial_overflow = .false.
+   use_radiation_corrected_transfer_rate = .false.
+   history_interval = 1
+/

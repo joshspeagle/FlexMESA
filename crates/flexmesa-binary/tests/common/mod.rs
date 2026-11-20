@@ -10,12 +10,15 @@ use flexmesa_star::{StarControls, StarJobControls, load_zams_model};
 
 #[allow(dead_code)]
 pub fn build_rlof_binary() -> BinarySystem {
-    // Use a 2.0 Msun ZAMS donor (radiative envelope and well-developed
-    // convective core, avoiding the unrelaxed 1.5 Msun ZAMS convective-core
-    // Newton limit cycle in MESA 26.4.1 under step 2's artificial fr_hard = 1e-5)
-    // near Roche-lobe contact (P = 0.5045 d, q = 4/3) with default StarControls
-    // so the fixture tests binary RLOF, rollback counter, determinism, and
-    // checkpoint mechanics cleanly.
+    // Use a 2.0 Msun ZAMS donor near Roche-lobe contact (m2 = 1.5 Msun,
+    // P = 0.5045 d, q = 4/3) with default StarControls. Reproducible MESA
+    // 26.4.1 verification in `benchmarks/fortran_mesa/binary_rlof_fixture/`
+    // shows that the original unrelaxed (1.5 Msun, 1.0 Msun, P = 0.45 d)
+    // fixture fails step 1's initial 1e3 yr solve (`logT >
+    // hydro_mtx_max_allowed_logT`, 3 retries -> 125 yr) and enters a 24-solver-
+    // retry rejection cascade on step 2 under `fr_hard = 1e-5` (terminating at
+    // `max_number_retries = 40`), whereas the 2.0 Msun donor converges step 1
+    // cleanly in MESA 26.4.1 with 0 retries and 2 solver iterations.
     let donor_ctrl = StarControls {
         initial_mass: 2.0,
         zbase: 0.02,

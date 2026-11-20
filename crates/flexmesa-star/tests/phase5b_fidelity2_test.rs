@@ -558,7 +558,10 @@ fn test_timestep_controller_hard_limit_triggers_retry_and_termination_stops_evol
     let reports =
         star_evolve(&mut m_term, 6, false, false, true).expect("star_evolve");
     assert_eq!(reports.len(), 2);
-    assert!(check_termination_limits(&m_term).is_some());
+    assert!(matches!(
+        check_termination_limits(&m_term),
+        Ok(flexmesa_star::LimitCheckOutcome::Terminate { .. })
+    ));
 }
 
 #[test]

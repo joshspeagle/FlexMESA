@@ -131,7 +131,10 @@ fn evolve_one_grid_star(
                 .map_err(|e| format!("save_start_values failed: {e}"))?;
         }
         let hr = extract_history_row(model);
-        if check_termination_limits_with_history(model, Some(&hr)).is_some() {
+        if matches!(
+            check_termination_limits_with_history(model, Some(&hr)),
+            Ok(flexmesa_star::LimitCheckOutcome::Terminate { .. })
+        ) {
             break;
         }
     }

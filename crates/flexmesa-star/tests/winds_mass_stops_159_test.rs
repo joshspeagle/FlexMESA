@@ -23,23 +23,28 @@
 
 use flexmesa_const::{
     MixingType, CLIGHT, LN10, L_SUN, M_SUN, R_SUN, SECDAY, SECYER,
+    STANDARD_CGRAV,
 };
 use flexmesa_star::{
-    compute_delta_m, compute_power_categories, do_adjust_mass_step,
-    do_check_limits, do_set_mdot, do_set_mdot_with_extras,
-    eval_cell_specific_total_energy, eval_core_infall_and_rebound_cms,
-    eval_min_gamma1, eval_phase_of_evolution, eval_rlo_wind,
+    check_termination_limits_with_history, compute_delta_m,
+    compute_power_categories, do_adjust_mass_step, do_check_limits,
+    do_set_mdot, do_set_mdot_with_extras, eval_bjorklund_wind,
+    eval_blocker_wind, eval_cell_specific_total_energy,
+    eval_core_infall_and_rebound_cms, eval_de_jager_wind, eval_dutch_wind,
+    eval_min_gamma1, eval_nieuwenhuijzen_wind, eval_nugis_lamers_wind,
+    eval_phase_of_evolution, eval_reimers_wind, eval_rlo_wind,
     eval_super_eddington_wind, eval_surf_avg_rotation_info,
-    eval_surf_avg_w_div_w_crit, evaluate_star_history_row, get_ejecta_mass,
-    get_remnant_mass, get_shock_mass_msun, get_xa_for_accretion,
-    load_zams_model, parse_star_history_columns, run_inlist_stage,
-    set_hydro_vars, set_phase_of_evolution, star_evolve, star_evolve_step,
+    eval_surf_avg_w_div_w_crit, eval_van_loon_wind, eval_vink_wind,
+    evaluate_star_history_row, get_ejecta_mass, get_remnant_mass,
+    get_shock_mass_msun, get_xa_for_accretion, load_zams_model,
+    parse_star_history_columns, run_inlist_stage, set_hydro_vars,
+    set_phase_of_evolution, star_evolve, star_evolve_step, DutchLowTScheme,
     ExtrasDirective, InlistBundle, LimitCheckOutcome, MesaCellValue,
     StarControls, StarError, StarExtras, StarJobControls, StarModel,
-    StepReportContext, WindScheme, PHASE_C_BURN,
-    PHASE_HE_BURN, PHASE_IAMS, PHASE_NE_BURN, PHASE_O_BURN, PHASE_PREMS,
-    PHASE_RELAX, PHASE_SI_BURN, PHASE_STARTING, PHASE_TACHEB, PHASE_TAMS,
-    PHASE_TP_AGB, PHASE_WDCS, PHASE_ZACHEB, PHASE_ZAMS,
+    StepReportContext, WindScheme, PHASE_C_BURN, PHASE_HE_BURN, PHASE_IAMS,
+    PHASE_NE_BURN, PHASE_O_BURN, PHASE_PREMS, PHASE_RELAX, PHASE_SI_BURN,
+    PHASE_STARTING, PHASE_TACHEB, PHASE_TAMS, PHASE_TP_AGB, PHASE_WDCS,
+    PHASE_ZACHEB, PHASE_ZAMS,
 };
 
 fn zams_model(mass_msun: f64) -> StarModel {
@@ -391,14 +396,17 @@ fn test_adjust_mass_limits_crossing_clamp_263_omega_and_smooth_outer_xa() {
     );
 
     // 3. Accreted angular momentum default (`use_accreted_material_j = false`):
-    //    uses `omega[k_below_just_added]` with recomputed `i_rot`, NOT old surface `j_rot`.
+    //    uses `omega[k_below_just_added]` with verbatim upstream `set1_irot`
+    //    (`adjust_mass.f90:1199-1205, 1232-1257`; `hydro_rotation.f90:55-226`),
+    //    NOT old surface `j_rot`.
     let mut rot_acc = zams_model(2.0);
     rot_acc.controls.rotation_flag = true;
     rot_acc.controls.mix_wind.use_accreted_material_j = false;
     let omega_surf_old = 1.2e-5;
     rot_acc.omega.fill(omega_surf_old);
     flexmesa_star::update_rotation_distortion_factors(&mut rot_acc);
-    let i_rot_before = rot_acc.aux.i_rot[0];
+    let r0_before = flexmesa_math::exp(rot_acc.ln_r[0]);
+    let m0_after = rot_acc.mstar + 5.0e-4 * M_SUN * 0.5;
     // Deliberately make `j_rot[0]` carry a stale/huge value while keeping
     // `omega = omega_surf_old` everywhere so copying old surface `j_rot[0]`
     // would produce a huge error whereas copying `omega[k_below_just_added]`
@@ -407,12 +415,20 @@ fn test_adjust_mass_limits_crossing_clamp_263_omega_and_smooth_outer_xa() {
     rot_acc.save_old_values();
     rot_acc.mstar_dot = 5.0e-4 * M_SUN / SECYER;
     do_adjust_mass_step(&mut rot_acc, 0.5 * SECYER).expect("accrete default omega");
-    // `set_omega_adjust_mass` assigns `j_rot[0] = i_rot_before[0] * omega_surf_old`
-    // (exact to < 1e-6 before radius reconstruction shifts `i_rot` slightly).
+    // Independent Paxton et al. (2019) `eval_i_rot(r0_before, w_roche)` check:
+    // at slow rotation `w = omega / sqrt(G*M/r^3) << 1`, `rpsi/re ~ 1 - w^2/6`
+    // so `w_roche ~ omega / sqrt(G*M/r^3)` and `i_rot ~ (2/3)*r0^2*(1 + (8/15)*w^2)`.
+    let w_approx = omega_surf_old
+        / (rot_acc.cgrav[0] * m0_after / (r0_before * r0_before * r0_before))
+            .sqrt();
+    let i_rot_approx = (2.0 / 3.0)
+        * r0_before
+        * r0_before
+        * (1.0 + (8.0 / 15.0) * w_approx * w_approx);
     assert!(
-        rel_err(rot_acc.j_rot[0], i_rot_before * omega_surf_old) < 1.0e-5,
+        rel_err(rot_acc.j_rot[0], i_rot_approx * omega_surf_old) < 1.0e-4,
         "default accretion should give j_rot[0] = i_rot * omega_old ({:.6e}), got {:.6e}",
-        i_rot_before * omega_surf_old,
+        i_rot_approx * omega_surf_old,
         rot_acc.j_rot[0]
     );
     assert!(
@@ -1256,5 +1272,580 @@ fn test_in_step_termination_propagates_across_post_step_refresh() {
     assert_eq!(
         extras.finish_calls, 1,
         "extras_finish_step must still run once on the terminating step"
+    );
+}
+
+#[test]
+fn test_all_wind_schemes_match_independent_upstream_formulas() {
+    // Independent numeric oracles evaluated directly in Python from
+    // `star/private/winds.f90:323, 347-400, 479-632` using MESA `26.4.1`
+    // `const_def.f90` constants (`Lsun=3.828e33`, `Msun=1.3271244e26/6.67430e-8`,
+    // `Rsun=6.957e10`, `clight=2.99792458e10`, `standard_cgrav=6.67430e-8`):
+    //   L = 1e5 Lsun, M = 20 Msun, R = 10 Rsun, Z_low = 0.005, Y_wr = 0.98.
+    let l_cgs = 1.0e5 * L_SUN;
+    let m_cgs = 20.0 * M_SUN;
+    let r_cgs = 10.0 * R_SUN;
+
+    // 1. Reimers (`winds.f90:323, 363-364`), eta = 0.5
+    let w_reimers = eval_reimers_wind(l_cgs, m_cgs, r_cgs, 0.5);
+    assert!(
+        rel_err(w_reimers, 9.999_999_999_999_999e-9) < 1.0e-13,
+        "Reimers mismatch: {w_reimers:.16e}"
+    );
+    assert_eq!(eval_reimers_wind(l_cgs, m_cgs, r_cgs, 0.0), 0.0);
+
+    // 2. Blocker (`winds.f90:382-384, 556-561`), eta = 0.1
+    let w_blocker = eval_blocker_wind(l_cgs, m_cgs, r_cgs, 0.1);
+    assert!(
+        rel_err(w_blocker, 5.659_970_081_494_931e-7) < 1.0e-13,
+        "Blocker mismatch: {w_blocker:.16e}"
+    );
+
+    // 3. de Jager (`winds.f90:385-388, 596-606`), T = 4000 K, eta = 0.8
+    let w_dj = eval_de_jager_wind(l_cgs, 4000.0, 0.8);
+    assert!(
+        rel_err(w_dj, 3.573_036_407_928_932e-6) < 1.0e-13,
+        "de Jager mismatch: {w_dj:.16e}"
+    );
+
+    // 4. van Loon (`winds.f90:389-392, 609-616`), T = 3500 K, eta = 0.7
+    let w_vl = eval_van_loon_wind(l_cgs, 3500.0, 0.7);
+    assert!(
+        rel_err(w_vl, 1.758_320_502_056_704e-5) < 1.0e-13,
+        "van Loon mismatch: {w_vl:.16e}"
+    );
+
+    // 5. Nieuwenhuijzen (`winds.f90:393-396, 619-632`), eta = 0.6
+    let w_nj = eval_nieuwenhuijzen_wind(l_cgs, m_cgs, r_cgs, 0.6);
+    assert!(
+        rel_err(w_nj, 9.469_260_183_906_717e-8) < 1.0e-13,
+        "Nieuwenhuijzen mismatch: {w_nj:.16e}"
+    );
+
+    // 6. Vink (`winds.f90:377-381, 497-553`): hot side (T=35000 K, Z=0.005, eta=0.9),
+    //    cool side (T=18000 K, Z=0.005, eta=0.9), and exact bi-stability jump
+    //    midpoint (Z=0.019 -> Teff_jump=25882.76 K, alfa=0.5, eta=1.0).
+    let w_vh = eval_vink_wind(l_cgs, m_cgs, 35_000.0, 0.005, 0.9);
+    assert!(
+        rel_err(w_vh, 7.203_017_482_239_952e-8) < 1.0e-13,
+        "Vink hot mismatch: {w_vh:.16e}"
+    );
+    let w_vc = eval_vink_wind(l_cgs, m_cgs, 18_000.0, 0.005, 0.9);
+    assert!(
+        rel_err(w_vc, 2.401_309_888_448_109e-7) < 1.0e-13,
+        "Vink cool mismatch: {w_vc:.16e}"
+    );
+    let w_vj = eval_vink_wind(l_cgs, m_cgs, 25_882.76, 0.019, 1.0);
+    assert!(
+        rel_err(w_vj, 4.971_923_061_901_877e-7) < 1.0e-13,
+        "Vink jump midpoint mismatch: {w_vj:.16e}"
+    );
+
+    // 7. Bjorklund (`winds.f90:397-400, 479-495`): L=1e6 Lsun, M=45 Msun, T=45000 K, Z=0.014, eta=0.8
+    let w_bj = eval_bjorklund_wind(
+        1.0e6 * L_SUN,
+        45.0 * M_SUN,
+        45_000.0,
+        0.014,
+        STANDARD_CGRAV,
+        0.8,
+    );
+    assert!(
+        rel_err(w_bj, 8.677_105_553_773_57e-6) < 1.0e-13,
+        "Bjorklund mismatch: {w_bj:.16e}"
+    );
+
+    // 8. Nugis & Lamers WR (`winds.f90:567-570`) and composite Dutch (`winds.f90:347-362, 564-593`):
+    let w_nl = eval_nugis_lamers_wind(l_cgs, 0.98, 0.02, 0.8);
+    assert!(
+        rel_err(w_nl, 3.080_983_081_532_222e-6) < 1.0e-13,
+        "Nugis-Lamers WR mismatch: {w_nl:.16e}"
+    );
+    // Dutch eta = 0 -> 0.0
+    assert_eq!(
+        eval_dutch_wind(
+            l_cgs,
+            m_cgs,
+            r_cgs,
+            35_000.0,
+            0.70,
+            0.28,
+            0.02,
+            DutchLowTScheme::DeJager,
+            0.0
+        ),
+        0.0
+    );
+    // Dutch high-T with X < 0.4 -> Nugis-Lamers WR
+    let w_dutch_wr = eval_dutch_wind(
+        l_cgs,
+        m_cgs,
+        r_cgs,
+        15_000.0,
+        0.0,
+        0.98,
+        0.02,
+        DutchLowTScheme::DeJager,
+        0.8,
+    );
+    assert!(rel_err(w_dutch_wr, 3.080_983_081_532_222e-6) < 1.0e-13);
+    // Dutch high-T with X >= 0.4 -> Vink
+    let w_dutch_vink = eval_dutch_wind(
+        l_cgs,
+        m_cgs,
+        r_cgs,
+        35_000.0,
+        0.70,
+        0.295,
+        0.005,
+        DutchLowTScheme::DeJager,
+        0.9,
+    );
+    assert!(rel_err(w_dutch_vink, 7.203_017_482_239_952e-8) < 1.0e-13);
+    // Dutch low-T branches (`de Jager`, `van Loon`, `Nieuwenhuijzen`)
+    let w_dutch_dj = eval_dutch_wind(
+        l_cgs,
+        m_cgs,
+        r_cgs,
+        4000.0,
+        0.70,
+        0.28,
+        0.02,
+        DutchLowTScheme::DeJager,
+        0.8,
+    );
+    assert!(rel_err(w_dutch_dj, 3.573_036_407_928_932e-6) < 1.0e-13);
+    let w_dutch_vl = eval_dutch_wind(
+        l_cgs,
+        m_cgs,
+        r_cgs,
+        3500.0,
+        0.70,
+        0.28,
+        0.02,
+        DutchLowTScheme::VanLoon,
+        0.7,
+    );
+    assert!(rel_err(w_dutch_vl, 1.758_320_502_056_704e-5) < 1.0e-13);
+    let w_dutch_nj = eval_dutch_wind(
+        l_cgs,
+        m_cgs,
+        r_cgs,
+        4000.0,
+        0.70,
+        0.28,
+        0.02,
+        DutchLowTScheme::Nieuwenhuijzen,
+        0.6,
+    );
+    assert!(rel_err(w_dutch_nj, 9.469_260_183_906_717e-8) < 1.0e-13);
+    // Dutch transition midpoint T = 10500 K (`alfa = 0.5`) between de Jager and Nugis-Lamers
+    let w_dutch_mid = eval_dutch_wind(
+        l_cgs,
+        m_cgs,
+        r_cgs,
+        10_500.0,
+        0.0,
+        0.98,
+        0.02,
+        DutchLowTScheme::DeJager,
+        0.8,
+    );
+    assert!(
+        rel_err(w_dutch_mid, 1.894_934_803_826_664e-6) < 1.0e-13,
+        "Dutch 10500 K midpoint mismatch: {w_dutch_mid:.16e}"
+    );
+}
+
+#[test]
+fn test_wind_driver_dispatch_gates_caps_and_rotation_limits() {
+    let mut model = zams_model(5.0);
+
+    // 1. `hot_wind_full_on_T < cool_wind_full_on_T` errors loudly (`winds.f90:144-148`).
+    model.controls.hot_wind_full_on_t = 5_000.0;
+    model.controls.cool_wind_full_on_t = 10_000.0;
+    assert!(matches!(
+        do_set_mdot(&mut model),
+        Err(StarError::InvalidInput(_))
+    ));
+
+    // 2. Invalid `Dutch_wind_lowT_scheme` errors loudly (`winds.f90:588-592`).
+    model.controls.hot_wind_full_on_t = 12_000.0;
+    model.controls.cool_wind_full_on_t = 8_000.0;
+    model.controls.mix_wind.dutch_wind_lowt_scheme = String::from("bogus");
+    assert!(matches!(
+        do_set_mdot(&mut model),
+        Err(StarError::InvalidInput(_))
+    ));
+    model.controls.mix_wind.dutch_wind_lowt_scheme = String::from("de Jager");
+
+    // 3. Hot/cool temperature dispatch, RGB vs AGB switch, and midpoint linear blend
+    //    (`winds.f90:150-184`): set Teff = 10000 K (exact midpoint between 8000 K and 12000 K).
+    model.teff = 10_000.0;
+    model.controls.mix_wind.hot_wind_scheme = String::from("Reimers");
+    model.controls.cool_wind_rgb_scheme = String::from("de Jager");
+    model.controls.cool_wind_agb_scheme = String::from("van Loon");
+    model.controls.reimers_scaling_factor = 1.0;
+    model.controls.mix_wind.de_jager_scaling_factor = 1.0;
+    model.controls.mix_wind.van_loon_scaling_factor = 1.0;
+    let phot = flexmesa_star::eval_photosphere_info(&model);
+    let l1 = phot.l_lsun * L_SUN;
+    let m1 = model.mstar;
+    let r1 = (l1
+        / (flexmesa_const::PI
+            * flexmesa_const::CRAD
+            * CLIGHT
+            * flexmesa_math::pow4(10_000.0)))
+    .sqrt();
+    let expected_hot = 4.0e-13 * (l1 * r1 / m1) / (L_SUN * R_SUN / M_SUN);
+    let expected_cool_rgb = flexmesa_math::exp10(
+        1.769 * flexmesa_math::log10(l1 / L_SUN)
+            - 1.676 * flexmesa_math::log10(10_000.0)
+            - 8.158,
+    );
+    let expected_blend = 0.5 * expected_hot + 0.5 * expected_cool_rgb;
+    let mdot_blend = do_set_mdot(&mut model).expect("hot/cool blend");
+    assert!(
+        rel_err(mdot_blend, -expected_blend * M_SUN / SECYER) < 1.0e-12,
+        "hot/cool midpoint blend mismatch: got {mdot_blend:.12e}, expected {:.12e}",
+        -expected_blend * M_SUN / SECYER
+    );
+
+    // Pure cool RGB vs AGB switch (`center_h1 < 0.01 && center_he4 < rgb_to_agb_wind_switch`).
+    model.teff = 4_000.0;
+    let h1_idx = model.iso_names.iter().position(|n| n == "h1").expect("h1");
+    let he4_idx = model.iso_names.iter().position(|n| n == "he4").expect("he4");
+    let nz = model.nz;
+    model.cell_xa_mut(nz - 1)[h1_idx] = 0.0;
+    model.cell_xa_mut(nz - 1)[he4_idx] = 1.0e-5;
+    model.controls.mix_wind.rgb_to_agb_wind_switch = 1.0e-4;
+    let expected_agb = flexmesa_math::exp10(
+        -5.65 + 1.05 * flexmesa_math::log10(l1 / (1.0e4 * L_SUN))
+            - 6.3 * flexmesa_math::log10(4_000.0 / 3_500.0),
+    );
+    let mdot_agb = do_set_mdot(&mut model).expect("cool AGB switch");
+    assert!(
+        rel_err(mdot_agb, -expected_agb * M_SUN / SECYER) < 1.0e-12,
+        "AGB switch mismatch: got {mdot_agb:.12e}, expected {:.12e}",
+        -expected_agb * M_SUN / SECYER
+    );
+
+    // 4. `mass_change` positive accretion + `xfer_ratio` reduction, negative loss,
+    //    `min_wind`, `max_wind`, `wind_H_He_envelope_limit`, `wind_He_layer_limit`
+    //    (`winds.f90:133-141, 240-252, 271-285`).
+    let mut mc = zams_model(2.0);
+    mc.controls.mix_wind.hot_wind_scheme = String::new();
+    mc.controls.cool_wind_rgb_scheme = String::new();
+    mc.controls.cool_wind_agb_scheme = String::new();
+    mc.controls.mass_change = 1.0e-6; // accretion -> positive mstar_dot
+    let acc_full = do_set_mdot(&mut mc).expect("mass_change accretion");
+    assert!(rel_err(acc_full, 1.0e-6 * M_SUN / SECYER) < 1.0e-13);
+
+    // Reduce positive `mass_change` by `xfer_ratio = 0.5` from `eval_rlo_wind` (`ratio = 0.9`).
+    let phot_mc = flexmesa_star::eval_photosphere_info(&mc);
+    let r_phot_rsun = (phot_mc.l_lsun * L_SUN
+        / (flexmesa_const::PI
+            * flexmesa_const::CRAD
+            * CLIGHT
+            * flexmesa_math::pow4(mc.teff)))
+    .sqrt()
+        / R_SUN;
+    mc.controls.mix_wind.rlo_scaling_factor = 1.0;
+    mc.controls.mix_wind.rlo_wind_min_l = 0.0;
+    mc.controls.mix_wind.rlo_wind_max_teff = 1.0e6;
+    mc.controls.mix_wind.rlo_wind_roche_lobe_radius = r_phot_rsun / 0.9;
+    mc.controls.mix_wind.roche_lobe_xfer_full_on = 0.8;
+    mc.controls.mix_wind.roche_lobe_xfer_full_off = 1.0;
+    let acc_red = do_set_mdot(&mut mc).expect("accretion xfer_ratio");
+    assert!(
+        rel_err(acc_red, 0.5 * 1.0e-6 * M_SUN / SECYER) < 1.0e-12,
+        "xfer_ratio=0.5 reduction mismatch: got {acc_red:.12e}"
+    );
+    mc.controls.mix_wind.rlo_scaling_factor = 0.0;
+
+    // Negative `mass_change`, `min_wind`, `max_wind`.
+    mc.controls.mass_change = -2.0e-7;
+    assert!(
+        rel_err(
+            do_set_mdot(&mut mc).expect("neg mass_change"),
+            -2.0e-7 * M_SUN / SECYER
+        ) < 1.0e-13
+    );
+    mc.controls.mass_change = 0.0;
+    mc.controls.mix_wind.min_wind = 3.0e-7;
+    assert!(
+        rel_err(
+            do_set_mdot(&mut mc).expect("min_wind"),
+            -3.0e-7 * M_SUN / SECYER
+        ) < 1.0e-13
+    );
+    mc.controls.mix_wind.max_wind = 1.0e-7;
+    assert!(
+        rel_err(
+            do_set_mdot(&mut mc).expect("max_wind"),
+            -1.0e-7 * M_SUN / SECYER
+        ) < 1.0e-13
+    );
+    mc.controls.mix_wind.max_wind = 0.0;
+
+    // `wind_H_He_envelope_limit` and `wind_He_layer_limit` shut off wind.
+    mc.controls.mix_wind.wind_h_he_envelope_limit = mc.mstar / M_SUN + 1.0;
+    assert_eq!(do_set_mdot(&mut mc).expect("H_He env lim"), 0.0);
+    mc.controls.mix_wind.wind_h_he_envelope_limit = 0.0;
+    mc.controls.mix_wind.wind_he_layer_limit = 0.1; // ZAMS has he_core_mass == co_core_mass == 0
+    assert_eq!(do_set_mdot(&mut mc).expect("He layer lim"), 0.0);
+    mc.controls.mix_wind.wind_he_layer_limit = 0.0;
+
+    // 5. `rotation_enhancement` caps (`winds.f90:412-476`):
+    //    `rotational_mdot_boost_fac`, `rotational_mdot_kh_fac`,
+    //    `max_mdot_jump_for_rotation`, and post-rotation `max_wind`.
+    let mut rot = zams_model(10.0);
+    rot.controls.rotation_flag = true;
+    rot.controls.mix_wind.hot_wind_scheme = String::from("other");
+    rot.controls.cool_wind_rgb_scheme = String::from("other");
+    rot.controls.cool_wind_agb_scheme = String::from("other");
+    rot.controls.use_other_wind = true;
+    let base_msun_yr = 1.0e-6;
+    let base_cgs = base_msun_yr * M_SUN / SECYER;
+    let extras = FixedOtherWindExtras {
+        wind_msun_yr: base_msun_yr,
+    };
+    for k in 0..rot.nz {
+        let w_c = flexmesa_star::eval_upstream_omega_crit(&rot, k);
+        rot.omega[k] = 0.9 * w_c;
+    }
+    rot.controls.mix_wind.max_rotational_mdot_boost = 1.0e6;
+    rot.controls.mix_wind.rotational_mdot_kh_fac = 1.0e10;
+    rot.controls.mix_wind.rotational_mdot_boost_fac = 2.0;
+    rot.controls.mix_wind.max_mdot_jump_for_rotation = 1.0e10;
+    rot.aux.step_hist.mstar_dot_old = -base_cgs;
+    let mdot_bfac =
+        do_set_mdot_with_extras(&mut rot, &extras).expect("boost_fac cap");
+    assert!(
+        rel_err(mdot_bfac, -2.0 * base_cgs) < 1.0e-12,
+        "rotational_mdot_boost_fac=2 cap mismatch: {mdot_bfac:.12e}"
+    );
+
+    // `rotational_mdot_kh_fac`: independent `kh_timescale = 0.75 * G * M^2 / (R * L)`.
+    let phot_r = flexmesa_star::eval_photosphere_info(&rot);
+    let l1_r = phot_r.l_lsun * L_SUN;
+    let r1_r = (l1_r
+        / (flexmesa_const::PI
+            * flexmesa_const::CRAD
+            * CLIGHT
+            * flexmesa_math::pow4(rot.teff)))
+    .sqrt();
+    let kh_s = 0.75 * rot.cgrav[0] * rot.mstar * rot.mstar / (r1_r * l1_r);
+    let kh_fac = 1.0e-4;
+    let expected_kh_cap = kh_fac * rot.mstar / kh_s;
+    rot.controls.mix_wind.rotational_mdot_boost_fac = 1.0e10;
+    rot.controls.mix_wind.rotational_mdot_kh_fac = kh_fac;
+    let mdot_kh = do_set_mdot_with_extras(&mut rot, &extras).expect("kh cap");
+    assert!(
+        rel_err(mdot_kh, -expected_kh_cap) < 1.0e-12,
+        "rotational_mdot_kh_fac cap mismatch: got {mdot_kh:.12e}, expected {:.12e}",
+        -expected_kh_cap
+    );
+
+    // `max_mdot_jump_for_rotation`: caps jump relative to `-mstar_dot_old`.
+    rot.controls.mix_wind.rotational_mdot_kh_fac = 1.0e10;
+    rot.controls.mix_wind.max_mdot_jump_for_rotation = 1.5;
+    rot.aux.step_hist.mstar_dot_old = -base_cgs;
+    let mdot_jump =
+        do_set_mdot_with_extras(&mut rot, &extras).expect("jump cap");
+    assert!(
+        rel_err(mdot_jump, -1.5 * base_cgs) < 1.0e-12,
+        "max_mdot_jump_for_rotation cap mismatch: {mdot_jump:.12e}"
+    );
+
+    // Post-rotation `max_wind` recheck (`winds.f90:467-471`).
+    rot.controls.mix_wind.max_mdot_jump_for_rotation = 1.0e10;
+    rot.controls.mix_wind.max_wind = 1.25 * base_msun_yr;
+    let mdot_mw =
+        do_set_mdot_with_extras(&mut rot, &extras).expect("post-rot max_wind");
+    assert!(
+        rel_err(mdot_mw, -1.25 * base_cgs) < 1.0e-12,
+        "post-rotation max_wind cap mismatch: {mdot_mw:.12e}"
+    );
+}
+
+#[test]
+fn test_mass_stopping_limits_check_termination_outcomes_and_set1_irot() {
+    let base = zams_model(5.0);
+
+    // 1. Mass stopping limits (`star/private/do_one_utils.f90:877-935`):
+    //    `star_mass_min_limit`, `star_mass_max_limit`,
+    //    `star_species_mass_{min,max}_limit`, `xmstar_{min,max}_limit`,
+    //    `envelope_mass_limit`, `envelope_fraction_left_limit`,
+    //    `he_core_mass_limit`, `co_core_mass_limit`.
+    let mut m = base.clone();
+    m.controls.ts_stop.when_to_stop_atol = 1.0e99;
+    m.controls.ts_stop.when_to_stop_rtol = 1.0e99;
+
+    m.controls.star_mass_min_limit = 6.0;
+    assert!(matches!(
+        do_check_limits(&mut m, None, false).expect("star_mass_min"),
+        LimitCheckOutcome::Terminate { ref code, .. } if code == "star_mass_min_limit"
+    ));
+    m.controls.star_mass_min_limit = 0.0;
+
+    m.controls.star_mass_max_limit = 4.0;
+    assert!(matches!(
+        do_check_limits(&mut m, None, false).expect("star_mass_max"),
+        LimitCheckOutcome::Terminate { ref code, .. } if code == "star_mass_max_limit"
+    ));
+    m.controls.star_mass_max_limit = 0.0;
+
+    m.controls.star_species_mass_min_limit_iso = String::from("h1");
+    m.controls.star_species_mass_min_limit = 4.9;
+    assert!(matches!(
+        do_check_limits(&mut m, None, false).expect("species_min"),
+        LimitCheckOutcome::Terminate { ref code, .. } if code == "star_species_mass_min_limit"
+    ));
+    m.controls.star_species_mass_min_limit = -1.0;
+
+    m.controls.star_species_mass_max_limit_iso = String::from("h1");
+    m.controls.star_species_mass_max_limit = 0.1;
+    assert!(matches!(
+        do_check_limits(&mut m, None, false).expect("species_max"),
+        LimitCheckOutcome::Terminate { ref code, .. } if code == "star_species_mass_max_limit"
+    ));
+    m.controls.star_species_mass_max_limit = 1.0e99;
+
+    m.controls.ts_stop.xmstar_min_limit = m.xmstar + 1.0;
+    assert!(matches!(
+        do_check_limits(&mut m, None, false).expect("xmstar_min"),
+        LimitCheckOutcome::Terminate { ref code, .. } if code == "xmstar_min_limit"
+    ));
+    m.controls.ts_stop.xmstar_min_limit = -1.0;
+
+    m.controls.ts_stop.xmstar_max_limit = m.xmstar - 1.0;
+    assert!(matches!(
+        do_check_limits(&mut m, None, false).expect("xmstar_max"),
+        LimitCheckOutcome::Terminate { ref code, .. } if code == "xmstar_max_limit"
+    ));
+    m.controls.ts_stop.xmstar_max_limit = -1.0;
+
+    m.controls.envelope_mass_limit = 6.0;
+    assert!(matches!(
+        do_check_limits(&mut m, None, false).expect("envelope_mass"),
+        LimitCheckOutcome::Terminate { ref code, .. } if code == "envelope_mass_limit"
+    ));
+    m.controls.envelope_mass_limit = -1.0;
+
+    m.controls.ts_stop.envelope_fraction_left_limit = 1.5;
+    assert!(matches!(
+        do_check_limits(&mut m, None, false).expect("envelope_frac"),
+        LimitCheckOutcome::Terminate { ref code, .. } if code == "envelope_fraction_left_limit"
+    ));
+    m.controls.ts_stop.envelope_fraction_left_limit = -1.0;
+
+    // Construct an inner He + CO core to exercise `he_core_mass_limit` and `co_core_mass_limit`.
+    let h1_idx = m.iso_names.iter().position(|n| n == "h1").expect("h1");
+    let he4_idx = m.iso_names.iter().position(|n| n == "he4").expect("he4");
+    let c12_idx = m.iso_names.iter().position(|n| n == "c12").expect("c12");
+    let k_he = m.nz / 2;
+    let k_co = 3 * m.nz / 4;
+    for k in k_he..m.nz {
+        let mut x = vec![0.0; m.species];
+        if k >= k_co {
+            x[c12_idx] = 1.0;
+        } else {
+            x[he4_idx] = 1.0;
+        }
+        x[h1_idx] = 0.0;
+        m.cell_xa_mut(k).copy_from_slice(&x);
+    }
+    m.controls.he_core_mass_limit = Some(0.1);
+    assert!(matches!(
+        do_check_limits(&mut m, None, false).expect("he_core_mass"),
+        LimitCheckOutcome::Terminate { ref code, .. } if code == "he_core_mass_limit"
+    ));
+    m.controls.he_core_mass_limit = None;
+
+    m.controls.co_core_mass_limit = Some(0.05);
+    assert!(matches!(
+        do_check_limits(&mut m, None, false).expect("co_core_mass"),
+        LimitCheckOutcome::Terminate { ref code, .. } if code == "co_core_mass_limit"
+    ));
+    m.controls.co_core_mass_limit = None;
+
+    // 2. `check_termination_limits_with_history` preserves `KeepGoing`, `Redo`,
+    //    `Retry`, `Terminate`, and `Err` verbatim (`termination.rs`, `#159`).
+    let mut chk = base.clone();
+    assert_eq!(
+        check_termination_limits_with_history(&chk, None).expect("keep_going"),
+        LimitCheckOutcome::KeepGoing
+    );
+    chk.dt = 1.0e4;
+    chk.star_age = 100.0;
+    chk.controls.max_age = 50.0;
+    chk.controls.ts_stop.when_to_stop_atol = 1.0;
+    chk.controls.ts_stop.when_to_stop_rtol = 0.0;
+    assert!(matches!(
+        check_termination_limits_with_history(&chk, None).expect("redo"),
+        LimitCheckOutcome::Redo { dt_new, .. } if (dt_new - 5.0e3).abs() < 1.0e-12
+    ));
+    chk.controls.ts_stop.when_to_stop_atol = 100.0;
+    assert!(matches!(
+        check_termination_limits_with_history(&chk, None).expect("terminate"),
+        LimitCheckOutcome::Terminate { ref code, .. } if code == "max_age"
+    ));
+    chk.controls.max_age = -1.0;
+    chk.controls.v_flag = true;
+    chk.controls.ts_stop.retry_for_v_above_clight = true;
+    chk.v[0] = 1.1 * CLIGHT;
+    assert!(matches!(
+        check_termination_limits_with_history(&chk, None).expect("retry"),
+        LimitCheckOutcome::Retry { .. }
+    ));
+    chk.v[0] = 0.0;
+    chk.controls.v_flag = false;
+    let k_pk = chk.nz - 2;
+    chk.eps_nuc.fill(0.0);
+    chk.eps_nuc[k_pk] = 1.0e10;
+    chk.conv_vel[k_pk] = 0.8 * chk.csound[k_pk];
+    chk.controls.ts_stop.peak_burn_vconv_div_cs_limit = 1.0;
+    assert!(matches!(
+        check_termination_limits_with_history(&chk, None),
+        Err(StarError::InvalidInput(_))
+    ));
+
+    // 3. `set1_irot` inside `do_adjust_mass_step` reproduces upstream
+    //    `adjust_mass.f90:1232-1257` + `hydro_rotation.f90:55-226`:
+    //    (a) at zero rotation (`omega = 0`), `w_roche = 0` so `i_rot = (2/3)*r^2`;
+    //    (b) at rapid rotation (`omega = 2e-4 rad/s`), oblate distortion raises
+    //        `i_rot` strictly above `(2/3)*r^2` following Paxton et al. (2019).
+    let mut m_rot0 = zams_model(2.0);
+    m_rot0.controls.rotation_flag = true;
+    m_rot0.controls.mix_wind.use_accreted_material_j = false;
+    m_rot0.omega.fill(0.0);
+    m_rot0.j_rot.fill(0.0);
+    // `do_adjust_mass_core` reconstructs `ln_r` from `(lnd, dm)` before calling
+    // `set_omega_adjust_mass` / `set1_irot` (`adjust_mass.rs:402, 535`).
+    m_rot0.reconstruct_ln_r_from_lnd_and_dm();
+    m_rot0.save_old_values();
+    let r0_before_zero = flexmesa_math::exp(m_rot0.ln_r[0]);
+    m_rot0.mstar_dot = 5.0e-4 * M_SUN / SECYER;
+    do_adjust_mass_step(&mut m_rot0, 0.5 * SECYER).expect("adjust mass zero omega");
+    let spherical_0 = (2.0 / 3.0) * (r0_before_zero * r0_before_zero);
+    assert!(
+        rel_err(m_rot0.aux.i_rot[0], spherical_0) < 1.0e-13,
+        "set1_irot zero-omega expected spherical (2/3)r^2={spherical_0:.12e}, got {:.12e}",
+        m_rot0.aux.i_rot[0]
+    );
+
+    let mut m_rot = zams_model(2.0);
+    m_rot.controls.rotation_flag = true;
+    m_rot.controls.mix_wind.use_accreted_material_j = false;
+    m_rot.omega.fill(2.0e-4);
+    flexmesa_star::update_rotation_distortion_factors(&mut m_rot);
+    m_rot.save_old_values();
+    m_rot.mstar_dot = 5.0e-4 * M_SUN / SECYER;
+    do_adjust_mass_step(&mut m_rot, 0.5 * SECYER).expect("adjust mass set1_irot");
+    let r00 = flexmesa_math::exp(m_rot.ln_r[0]);
+    assert!(
+        m_rot.aux.i_rot[0] > (2.0 / 3.0) * r00 * r00,
+        "rapidly rotating set1_irot must exceed spherical (2/3)r^2"
     );
 }

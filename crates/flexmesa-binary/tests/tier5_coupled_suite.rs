@@ -1155,10 +1155,14 @@ fn test_edot_isotropic_eccentricity_enhancement_and_mdot_redo_boost() {
         star.omega[k] = 1.0e-3;
     }
     // Verify check_termination_limits does NOT terminate on surf_omega_div_omega_crit_limit.
-    let term = check_termination_limits(&star);
-    assert_ne!(
-        term.as_deref(),
-        Some("surf_omega_div_omega_crit_limit"),
+    let term = check_termination_limits(&star)
+        .expect("check_termination_limits must not error on high omega");
+    assert!(
+        !matches!(
+            term,
+            flexmesa_star::LimitCheckOutcome::Terminate { ref code, .. }
+                if code == "surf_omega_div_omega_crit_limit"
+        ),
         "surf_omega_div_omega_crit_limit must be handled by mdot_redo, not termination"
     );
     let mut redo = MdotRedoState::setup(&mut star);

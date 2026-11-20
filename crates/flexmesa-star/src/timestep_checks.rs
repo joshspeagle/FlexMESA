@@ -240,8 +240,12 @@ pub(crate) fn check_dx_limits(
                 if !decreases_only && delta_x < 0.0 {
                     delta_x = -delta_x;
                 }
+                // `star/private/timestep.f90:580-581, 603-605`: the hard
+                // limits are compared without a positivity guard, so a hard
+                // limit `<= 0` retries on any positive change, and
+                // `delta_X / X` is formed without an `X > 0` guard.
                 if x >= ts.dx_limit_min_x[i] {
-                    if !skip_hard_limit && dx_hard > 0.0 && delta_x > dx_hard {
+                    if !skip_hard_limit && delta_x > dx_hard {
                         return Err(CheckFailure::Retry(format!(
                             "dX {} hard limit",
                             nuc.name
@@ -251,9 +255,9 @@ pub(crate) fn check_dx_limits(
                         max_dx = delta_x;
                     }
                 }
-                if x >= ts.dx_div_x_limit_min_x[i] && x > 0.0 {
+                if x >= ts.dx_div_x_limit_min_x[i] {
                     let dxx = delta_x / x;
-                    if !skip_hard_limit && dxx_hard > 0.0 && dxx > dxx_hard {
+                    if !skip_hard_limit && dxx > dxx_hard {
                         return Err(CheckFailure::Retry(format!(
                             "dX_div_X {} hard limit",
                             nuc.name

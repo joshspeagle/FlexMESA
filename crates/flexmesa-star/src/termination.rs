@@ -1852,28 +1852,35 @@ pub fn do_check_limits(
     eval_check_limits_core(model, report_ctx, phase)
 }
 
-/// Evaluates all built-in `&controls` termination conditions on `model`
-/// (`star/private/do_one_utils.f90`). Returns `Some(termination_code)` if any
-/// active limit requests termination.
-#[must_use]
-pub fn check_termination_limits(model: &StarModel) -> Option<String> {
+/// Evaluates all built-in `&controls` stopping limits on `model`
+/// (`star/private/do_one_utils.f90:565-1465`), returning the full
+/// [`LimitCheckOutcome`] (`KeepGoing`, `Redo`, `Retry`, or `Terminate`) without
+/// suppressing non-terminating outcomes.
+///
+/// # Errors
+/// Returns [`StarError`] if a fatal upstream condition triggers (such as
+/// `peak_burn_vconv_div_cs > 0.75 * peak_burn_vconv_div_cs_limit`, `#264`).
+pub fn check_termination_limits(
+    model: &StarModel,
+) -> Result<LimitCheckOutcome, StarError> {
     check_termination_limits_with_history(model, None)
 }
 
-/// Evaluates all built-in `&controls` termination conditions on `model`,
-/// delegating to the canonical `do_check_limits` cascade.
-#[must_use]
+/// Evaluates all built-in `&controls` stopping limits on `model`, delegating to
+/// the canonical `do_check_limits` cascade and preserving `Redo`, `Retry`,
+/// `Terminate`, and error outcomes verbatim (`star/private/do_one_utils.f90`).
+///
+/// # Errors
+/// Returns [`StarError`] if a fatal upstream condition triggers (such as
+/// `peak_burn_vconv_div_cs > 0.75 * peak_burn_vconv_div_cs_limit`, `#264`).
 pub fn check_termination_limits_with_history(
     model: &StarModel,
     _cached_hr: Option<&HistoryRow>,
-) -> Option<String> {
+) -> Result<LimitCheckOutcome, StarError> {
     if model.nz == 0 {
-        return None;
+        return Ok(LimitCheckOutcome::KeepGoing);
     }
     let ctx = StepReportContext::compute(model);
     let phase = eval_phase_of_evolution(model, &ctx, false);
-    match eval_check_limits_core(model, &ctx, phase) {
-        Ok(LimitCheckOutcome::Terminate { code, .. }) => Some(code),
-        _ => None,
-    }
+    eval_check_limits_core(model, &ctx, phase)
 }

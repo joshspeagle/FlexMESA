@@ -612,11 +612,14 @@ fn test_split_merge_amr_zoning_modes_conserve_invariants_and_reject_242() {
 }
 
 #[test]
-fn test_num_zones_tracks_mesa_26_4_1_across_star_test_hb_2m_and_1p3m_high_z() {
+fn test_num_zones_star_test_four_pass_remesh_matches_committed_model5_reference()
+{
     let root = repo_root();
 
-    // 1. `star/test` (`4 Msun, Z = 0.02` ZAMS, `mesh_delta_coeff = 1.0`):
-    //    MESA `26.4.1` `star/test/LOGS/history.data` transitions `2464 -> 992` zones by step 5.
+    // `star/test` (`4 Msun, Z = 0.02` ZAMS, `mesh_delta_coeff = 1.0`):
+    // Committed `tests/fixtures/golden/star_test/history.data` records models
+    // 1, 5, 10, and 11 with `num_zones = 2464, 992, 992, 992` (intermediate
+    // models 2..4 are not stored in that reference file).
     let star_test_ref = read_reference_num_zones(
         &root
             .join("tests")
@@ -625,8 +628,10 @@ fn test_num_zones_tracks_mesa_26_4_1_across_star_test_hb_2m_and_1p3m_high_z() {
             .join("star_test")
             .join("history.data"),
     );
-    assert_eq!(star_test_ref[0], (1, 2464));
-    assert_eq!(star_test_ref[1], (5, 992));
+    assert_eq!(
+        star_test_ref,
+        vec![(1, 2464), (5, 992), (10, 992), (11, 992)]
+    );
 
     let mut m_st = load_zams_model(
         StarControls {
@@ -647,13 +652,24 @@ fn test_num_zones_tracks_mesa_26_4_1_across_star_test_hb_2m_and_1p3m_high_z() {
         st_nz_seq.push(m_st.nz);
     }
     println!(
-        "star/test 4-pass remesh num_zones: {st_nz_seq:?} (MESA 26.4.1: [1556, 1124, 999, 992])"
+        "star/test 4-pass static remesh num_zones: {st_nz_seq:?} (committed star_test/history.data: model 1 = 2464, models 5/10/11 = 992)"
     );
-    assert_eq!(st_nz_seq[2], 999);
-    assert_eq!(m_st.nz, 992);
+    assert_eq!(m_st.nz, star_test_ref[1].1);
+}
 
-    // 2. `hb_2M` (`standard_2.0_ZACHeB.mod`, `mesh_delta_coeff = 0.5`):
-    //    MESA `26.4.1` starts at `1346` zones on step 1 and refines to `2629` -> `2569` -> `2566`.
+/// Diagnostic-only remesh check (`DECISIONS #26`) for `hb_2M` and
+/// `1.3M_ms_high_Z`. Both inlists load with `allow_unsupported_controls: true`
+/// (`hb_2M` ignores 8 controls; `1.3M_ms_high_Z` ignores 2 controls), so these
+/// runs are diagnostic checks of the remesher and never count as passing MESA
+/// agreement.
+#[test]
+fn test_diagnostic_remesh_num_zones_hb_2m_and_1p3m_high_z() {
+    let root = repo_root();
+
+    // 1. Diagnostic `hb_2M` (`standard_2.0_ZACHeB.mod`, `mesh_delta_coeff = 0.5`,
+    //    `allow_unsupported_controls = true`, 8 controls ignored):
+    //    Committed `benchmarks/history_harness/reference_histories/star/hb_2M.data`
+    //    records `num_zones` at models 1..4 as `1346, 2629, 2569, 2566`.
     let hb_ref = read_reference_num_zones(
         &root
             .join("benchmarks")
@@ -678,7 +694,7 @@ fn test_num_zones_tracks_mesa_26_4_1_across_star_test_hb_2m_and_1p3m_high_z() {
             allow_unsupported_controls: true,
         },
     )
-    .expect("parse hb_2M inlist");
+    .expect("parse hb_2M inlist (diagnostic)");
     let hb_mod_text =
         std::fs::read_to_string(hb_dir.join("standard_2.0_ZACHeB.mod"))
             .expect("read standard_2.0_ZACHeB.mod");
@@ -697,19 +713,21 @@ fn test_num_zones_tracks_mesa_26_4_1_across_star_test_hb_2m_and_1p3m_high_z() {
     let (hb_splits, hb_merges) =
         do_adjust_mesh(&mut m_hb, &cfg_hb).expect("remesh hb_2M step 2");
     println!(
-        "hb_2M step-2 remesh: 1346 -> {} (splits={hb_splits}, merges={hb_merges}; MESA 26.4.1: 2629)",
+        "diagnostic hb_2M step-2 remesh (allow_unsupported_controls=true): 1346 -> {} (splits={hb_splits}, merges={hb_merges}; reference hb_2M.data model 2: 2629)",
         m_hb.nz
     );
     assert!(hb_splits > 1000, "hb_2M must refine from 1346 toward ~2629");
     let rel_hb = (m_hb.nz as f64 - 2629.0).abs() / 2629.0;
     assert!(
         rel_hb < 0.01,
-        "hb_2M step-2 num_zones={} differs from MESA 26.4.1 2629 (rel={rel_hb:.4})",
+        "diagnostic hb_2M step-2 num_zones={} differs from hb_2M.data model 2 (2629; rel={rel_hb:.4})",
         m_hb.nz
     );
 
-    // 3. `1.3M_ms_high_Z` (`standard_zams_0.040_1.30.mod`, evolved 4 steps with remeshing):
-    //    MESA `26.4.1` `num_zones` along steps 1..5 is `[807, 811, 809, 810, 805]`.
+    // 2. Diagnostic `1.3M_ms_high_Z` (`standard_zams_0.040_1.30.mod`,
+    //    `allow_unsupported_controls = true`, 2 controls ignored):
+    //    Committed `benchmarks/history_harness/reference_histories/star/1.3M_ms_high_Z.data`
+    //    records `num_zones` at models 1..5 as `[807, 811, 809, 810, 805]`.
     let highz_ref = read_reference_num_zones(
         &root
             .join("benchmarks")
@@ -733,7 +751,7 @@ fn test_num_zones_tracks_mesa_26_4_1_across_star_test_hb_2m_and_1p3m_high_z() {
             allow_unsupported_controls: true,
         },
     )
-    .expect("parse 1.3M_ms_high_Z inlist");
+    .expect("parse 1.3M_ms_high_Z inlist (diagnostic)");
     let highz_mod_text =
         std::fs::read_to_string(highz_dir.join("standard_zams_0.040_1.30.mod"))
             .expect("read standard_zams_0.040_1.30.mod");
@@ -761,13 +779,114 @@ fn test_num_zones_tracks_mesa_26_4_1_across_star_test_hb_2m_and_1p3m_high_z() {
             / (expected_zones as f64);
         assert!(
             rel_diff < 0.01,
-            "1.3M_ms_high_Z step {} num_zones={} vs MESA 26.4.1 {expected_zones} (rel={rel_diff:.4})",
+            "diagnostic 1.3M_ms_high_Z step {} num_zones={} vs 1.3M_ms_high_Z.data {expected_zones} (rel={rel_diff:.4})",
             step_idx + 1,
             m_highz.nz
         );
     }
     println!(
-        "1.3M_ms_high_Z steps 1..5 num_zones: {highz_seq:?} (MESA 26.4.1: [807, 811, 809, 810, 805])"
+        "diagnostic 1.3M_ms_high_Z steps 1..5 num_zones (allow_unsupported_controls=true): {highz_seq:?} (reference 1.3M_ms_high_Z.data: [807, 811, 809, 810, 805])"
+    );
+}
+
+#[test]
+#[allow(clippy::manual_midpoint)]
+fn test_cell_specific_pe_and_ke_double_double_matches_quad_oracle() {
+    // Independent 113-bit (`real(qp)`) reference literals computed in Python
+    // `mpmath` (`mp.prec = 113`) directly from `star/private/star_utils.f90:
+    // 2184-2277` (`cell_specific_PE_qp` and `cell_specific_KE_qp`), choosing
+    // inputs where naive `f64` rounding differs from `real(qp)` by 1 ULP:
+    //   PE: cgrav = 6.67430e-8, mbar = 1.013579246801357,
+    //       m0 = MSUN*(1+1e-12), r0 = RSUN*(1+3e-12),
+    //       m1 = MSUN*(0.97+7e-12), r1 = RSUN*(0.98+5e-12)
+    //       -> qp = -1.92364921840529325e15, f64 = -1.92364921840529300e15
+    //   KE: v_flag = true, mbar = 1.013579246801357,
+    //       v0 = 1.234567890123456e7*(1+2e-11), v1 = 9.876543210987654e6*(1+6e-11)
+    //       -> qp =  6.33390468973532656e13, f64 =  6.33390468973532734e13
+    let mut m = load_zams_model(
+        StarControls {
+            initial_mass: 1.0,
+            initial_z: 0.02,
+            zbase: 0.02,
+            ..StarControls::default()
+        },
+        StarJobControls::default(),
+    )
+    .expect("load 1 Msun ZAMS");
+    set_hydro_vars(&mut m, false, false).expect("set_hydro_vars");
+
+    // Measure `f64` vs double-double difference across all cells of a 1 Msun ZAMS star.
+    let mut max_rel_pe_diff = 0.0_f64;
+    let mut pe_diff_zones = 0_usize;
+    for k in 0..m.nz {
+        let pe_dd = flexmesa_star::mesh_remap::cell_specific_pe(&m, k);
+        let (rp1, mp1, gp1) = if k + 1 == m.nz {
+            (m.r_center, m.m_center, m.cgrav[m.nz - 1])
+        } else {
+            (m.r[k + 1], m.m_grav[k + 1], m.cgrav[k + 1])
+        };
+        let gravp1 = if rp1 <= 0.0 { 0.0 } else { -gp1 * mp1 / rp1 };
+        let grav00 = -m.cgrav[k] * m.m_grav[k] / m.r[k];
+        let pe_f64 = 0.5 * (gravp1 + grav00);
+        if pe_dd != pe_f64 {
+            pe_diff_zones += 1;
+            let rel = (pe_dd - pe_f64).abs() / pe_dd.abs().max(1.0);
+            if rel > max_rel_pe_diff {
+                max_rel_pe_diff = rel;
+            }
+        }
+    }
+    assert!(
+        max_rel_pe_diff <= 1.0e-15,
+        "1 Msun ZAMS f64 vs dd PE difference bounded by ~1 ULP ({pe_diff_zones} zones differ, max rel={max_rel_pe_diff:.3e})"
+    );
+
+    // Exact bit-identity check against 113-bit `mpmath` `real(qp)` oracles where
+    // naive `f64` is off by 1 ULP.
+    let cgrav = flexmesa_const::STANDARD_CGRAV;
+    let msun = flexmesa_const::M_SUN;
+    let rsun = flexmesa_const::R_SUN;
+    let mb = 1.0 + 0.013_579_246_801_357;
+    m.controls.use_mass_corrections = true;
+    m.aux.mass_correction[0] = mb;
+    m.cgrav[0] = cgrav;
+    m.cgrav[1] = cgrav;
+    m.m_grav[0] = msun * (1.0 + 1.0e-12);
+    m.r[0] = rsun * (1.0 + 3.0e-12);
+    m.m_grav[1] = msun * (0.97 + 7.0e-12);
+    m.r[1] = rsun * (0.98 + 5.0e-12);
+
+    let pe_dd = flexmesa_star::mesh_remap::cell_specific_pe(&m, 0);
+    let pe_qp_oracle = -1.923_649_218_405_293_3e15_f64;
+    let pe_f64_naive =
+        0.5 * mb * (-cgrav * m.m_grav[1] / m.r[1] + (-cgrav * m.m_grav[0] / m.r[0]));
+    assert_ne!(
+        pe_f64_naive.to_bits(),
+        pe_qp_oracle.to_bits(),
+        "test case must distinguish naive f64 from 113-bit qp"
+    );
+    assert_eq!(
+        pe_dd.to_bits(),
+        pe_qp_oracle.to_bits(),
+        "double-double cell_specific_pe must match 113-bit qp oracle bit-for-bit"
+    );
+
+    m.controls.u_flag = false;
+    m.controls.v_flag = true;
+    m.v[0] = 1.234_567_890_123_456e7 * (1.0 + 2.0e-11);
+    m.v[1] = 9.876_543_210_987_654e6 * (1.0 + 6.0e-11);
+    let ke_dd = flexmesa_star::mesh_remap::cell_specific_ke(&m, 0);
+    let ke_qp_oracle = 6.333_904_689_735_326_6e13_f64;
+    let ke_f64_naive = 0.5 * mb * (0.5 * (m.v[0] * m.v[0] + m.v[1] * m.v[1]));
+    assert_ne!(
+        ke_f64_naive.to_bits(),
+        ke_qp_oracle.to_bits(),
+        "test case must distinguish naive f64 from 113-bit qp"
+    );
+    assert_eq!(
+        ke_dd.to_bits(),
+        ke_qp_oracle.to_bits(),
+        "double-double cell_specific_ke must match 113-bit qp oracle bit-for-bit"
     );
 }
 

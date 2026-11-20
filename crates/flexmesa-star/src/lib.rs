@@ -86,6 +86,7 @@ pub mod hydro_brunt_surf;
 pub mod hydro_energy;
 pub mod hydro_eqns;
 pub mod hydro_momentum;
+pub mod hydro_rotation;
 pub mod hydro_rti;
 pub mod hydro_state;
 pub mod hydro_temperature;

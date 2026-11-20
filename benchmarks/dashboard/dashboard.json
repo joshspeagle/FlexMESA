@@ -769,9 +769,9 @@
     "rust": {
       "tool": "cargo llvm-cov",
       "overall": {
-        "lines": 114918,
-        "covered": 86044,
-        "percent": 74.9
+        "lines": 114956,
+        "covered": 86265,
+        "percent": 75.0
       },
       "by_crate": [
         {
@@ -854,9 +854,9 @@
         },
         {
           "crate": "flexmesa-ionization",
-          "lines": 1924,
-          "covered": 1619,
-          "percent": 84.1
+          "lines": 1983,
+          "covered": 1680,
+          "percent": 84.7
         },
         {
           "crate": "flexmesa-kap",
@@ -908,9 +908,9 @@
         },
         {
           "crate": "flexmesa-star",
-          "lines": 54748,
-          "covered": 40849,
-          "percent": 74.6
+          "lines": 54727,
+          "covered": 41009,
+          "percent": 74.9
         },
         {
           "crate": "flexmesa-testing",
@@ -1433,13 +1433,7 @@
         "issues": []
       }
     ],
-    "open_pull_requests": [
-      {
-        "number": 292,
-        "title": "fix(star,binary): resolve #152, #153, and #159 audit code, precision, and test findings",
-        "draft": false
-      }
-    ],
+    "open_pull_requests": [],
     "deferred_169": [
       {
         "number": 175,
@@ -2295,6 +2289,19 @@
       "all_verified_pct": "1.0",
       "cases_passing": "0",
       "rust_cov_pct": "74.9",
+      "python_cov_pct": "87.8",
+      "closed_140": "15",
+      "total_140": "34",
+      "deferred_169": "42"
+    },
+    {
+      "date_utc": "2026-11-20",
+      "commit": "32028cd",
+      "event": "main merge",
+      "engine_ported_pct": "30.2",
+      "all_verified_pct": "1.0",
+      "cases_passing": "0",
+      "rust_cov_pct": "75.0",
       "python_cov_pct": "87.8",
       "closed_140": "15",
       "total_140": "34",

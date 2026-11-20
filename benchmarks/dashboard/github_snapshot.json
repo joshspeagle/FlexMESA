@@ -227,13 +227,7 @@
       "issues": []
     }
   ],
-  "open_pull_requests": [
-    {
-      "number": 292,
-      "title": "fix(star,binary): resolve #152, #153, and #159 audit code, precision, and test findings",
-      "draft": false
-    }
-  ],
+  "open_pull_requests": [],
   "deferred_169": [
     {
       "number": 175,

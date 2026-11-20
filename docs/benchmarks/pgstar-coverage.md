@@ -11,8 +11,8 @@ The status of each family is assigned by hand in `flexmesa.plotting.pgstar_cover
 | :--- | ---: |
 | Panel families catalogued (`star` / `binary` / `astero`) | `42` |
 | Upstream `*_win_flag` window instances | `123` |
-| Families whose builder is classed `equivalent` | `42` (`123` windows) |
-| Families with partial builder coverage | `0` (`0` windows) |
+| Families whose builder is classed `equivalent` | `31` (`72` windows) |
+| Families with partial builder coverage | `11` (`51` windows) |
 | Families absent (pending engine/plotting increments) | `0` |
 | Parsed `.defaults` keys (`pgstar` / `pgbinary` / `astero_pgstar`) | `2,900` / `1,329` / `45` |
 
@@ -23,14 +23,14 @@ The status of each family is assigned by hand in `flexmesa.plotting.pgstar_cover
 | `pgstar` | `TRho_Profile` | 1 | `equivalent` | `plot_trho_profile`, `plot_profile_panels` | #173 | T-rho profile with MESA plot_info degeneracy, P_rad=P_gas, and burn guides. |
 | `pgstar` | `Abundance` | 1 | `equivalent` | `plot_abundance_profile`, `plot_profile_panels` | #173 | Ranked multi-isotope log mass fractions with mixing spine bar. |
 | `pgstar` | `Power` | 1 | `equivalent` | `plot_power_profile`, `plot_profile_panels` | #173 | 22-category nuclear specific power breakdown from profileN.data. |
-| `pgstar` | `Mixing` | 1 | `equivalent` | `plot_mixing_profile`, `plot_profile_panels` | #173 | log_D_mix by mixing_type plus conv/ovr/semi/thrm and rotational diffusion curves (D_ST, D_visc, D_DSI, D_SH, D_SSI, D_ES, D_GSF). |
-| `pgstar` | `Dynamo` | 1 | `equivalent` | `plot_dynamo_profile`, `plot_pgstar_grid` | #173 | Radial log B_phi, log B_r, log Omega, and log(j/1e20) profiles from saved profileN.data (physics generation tracked in #158). |
+| `pgstar` | `Mixing` | 1 | `partial` | `plot_mixing_profile`, `plot_profile_panels` | #173 | Draws the mixing and rotational diffusion curves, but accepts D_omega as the rotation total where upstream draws D_mix_rotation only (star/private/pgstar_mixing_ds.f90:347), and linear D_* columns and the summed mode omit the D_*_factor weights. |
+| `pgstar` | `Dynamo` | 1 | `partial` | `plot_dynamo_profile`, `plot_pgstar_grid` | #173 | Draws log B_phi, log B_r, log Omega and log(j/1e20), but still draws when some of the four are absent; upstream always draws all four (star/private/pgstar_dynamo.f90:190-294). |
 | `pgstar` | `Mode_Prop` | 1 | `equivalent` | `plot_propagation_diagram` | #173 | Brunt-Vaisala N and Lamb S_l propagation diagram. |
 | `pgstar` | `Summary_Burn` | 1 | `equivalent` | `plot_summary_burn_profile`, `plot_case_comparison` | #173 | Radial logT/logRho/eps_nuc/eps_neu with peak category labels. |
 | `pgstar` | `Summary_Profile` | 1 | `equivalent` | `plot_summary_profile`, `plot_profile_panels` | #173 | Normalized [0, 1] 11-quantity interior summary and 4-panel structure. |
 | `pgstar` | `Summary_History` | 1 | `equivalent` | `plot_summary_history`, `plot_case_comparison` | #173 | Normalized [0, 1] star history summary and MESA 26.4.1 comparison. |
 | `pgstar` | `Kipp` | 1 | `equivalent` | `plot_history_kippenhahn`, `plot_profile_kippenhahn`, `plot_kippenhahn` | #173 | Mass/q/radius vs model_number/age mixing, burning, and core boundaries. |
-| `pgstar` | `rti` | 1 | `equivalent` | `plot_rti_history`, `plot_pgstar_grid` | #173 | Rayleigh-Taylor instability mass spans from rti_type_*, mix_type_* == 6, or profile mixing_type/alpha_RTI. |
+| `pgstar` | `rti` | 1 | `partial` | `plot_rti_history`, `plot_pgstar_grid` | #173 | Draws RTI spans from the rti_type and rti_qtop history columns as upstream does (star/private/pgstar_rti.f90:326-399), and also from mix_type and profile columns, which upstream does not use. |
 | `pgstar` | `TRho` | 1 | `equivalent` | `plot_tc_rhoc_diagram`, `plot_history_track`, `plot_case_comparison` | #173 | Central log_center_Rho vs log_center_T evolutionary track. |
 | `pgstar` | `TmaxRho` | 1 | `equivalent` | `plot_history_track` | #173 | log_center_Rho vs log_max_T track with psi4 degeneracy guide. |
 | `pgstar` | `HR` | 1 | `equivalent` | `plot_hr_diagram`, `plot_history_track`, `plot_case_comparison` | #173 | Inverted log_Teff vs log_L Hertzsprung-Russell track. |
@@ -45,20 +45,20 @@ The status of each family is assigned by hand in `flexmesa.plotting.pgstar_cover
 | `pgstar` | `logg_Teff` | 1 | `equivalent` | `plot_history_track` | #173 | Spectroscopic Kiel diagram (inverted Teff and log_g). |
 | `pgstar` | `logg_logT` | 1 | `equivalent` | `plot_history_track` | #173 | Logarithmic Kiel diagram (inverted log_Teff and log_g). |
 | `pgstar` | `dPg_dnu` | 1 | `equivalent` | `plot_dpg_dnu`, `plot_history_track`, `plot_pgstar_grid` | #173 | Gravity-mode period spacing delta_Pg vs delta_nu track from saved history.data (pulsation physics tracked in #170). |
-| `pgstar` | `Network` | 1 | `equivalent` | `plot_network_chart`, `plot_pgstar_grid` | #173 | N-vs-Z chart of nuclides shaded by mass-averaged log10 X_i via flexmesa.chem. |
-| `pgstar` | `Production` | 1 | `equivalent` | `plot_production_profile`, `plot_pgstar_grid` | #173 | Stable-isotope production factors log10(X/X_init) vs A via flexmesa.chem.get_stable_mass_frac. |
+| `pgstar` | `Network` | 1 | `partial` | `plot_network_chart`, `plot_pgstar_grid` | #173 | N-Z chart of the isotopes saved in the profile; upstream draws every species of the net (star/private/pgstar_network.f90:184-219) and leaves abundances above the maximum unfilled. |
+| `pgstar` | `Production` | 1 | `partial` | `plot_production_profile`, `plot_pgstar_grid` | #173 | Production factors against a scaled AG89 table or a supplied profile; upstream builds the reference with get_xa_for_standard_metals from initial_zfracs and maps it through get_stable_mass_frac (star/private/pgstar_production.f90:190-211). |
 | `pgstar` | `Profile_Panels<N>` | 9 | `equivalent` | `plot_profile_custom_panels`, `plot_profile_panels` | #173 | Multi-row dual-axis profile column stack and 4-panel default. |
 | `pgstar` | `History_Track<N>` | 9 | `equivalent` | `plot_history_track`, `plot_case_comparison` | #173 | Arbitrary two-column history track with MESA 26.4.1 overlay. |
 | `pgstar` | `History_Panels<N>` | 9 | `equivalent` | `plot_history_panels`, `plot_case_comparison` | #173 | Multi-row dual-axis history column stack vs model_number or age. |
-| `pgstar` | `Color_magnitude<N>` | 9 | `equivalent` | `plot_color_magnitude`, `plot_pgstar_grid` | #173 | Photometric color-magnitude tracks from abs_mag_*/bc_* columns and Color_magnitude<N> inlists. |
-| `pgstar` | `Text_Summary<N>` | 9 | `equivalent` | `plot_text_summary`, `plot_pgstar_grid`, `plot_case_comparison` | #173 | 2D Text_Summary<N> key-value table from history.data and inlist layouts (star/private/pgstar_summary.f90). |
-| `pgstar` | `Grid<N>` | 9 | `equivalent` | `plot_pgstar_grid`, `plot_case_comparison` | #173 | GridSpec composer for &pgstar Grid<N>_* inlists, including upstream default Grid1..4 with Text_Summary<N> cells. |
+| `pgstar` | `Color_magnitude<N>` | 9 | `partial` | `plot_color_magnitude`, `plot_pgstar_grid` | #173 | Draws configured colour-magnitude panels, and picks a default pair when none is configured; upstream's default has no panels (star/defaults/pgstar.defaults:5284-5323). |
+| `pgstar` | `Text_Summary<N>` | 9 | `partial` | `plot_text_summary`, `plot_pgstar_grid`, `plot_case_comparison` | #173 | Shows only quantities saved in history.data and leaves other cells out; upstream evaluates every named quantity from the model (star/private/pgstar_summary.f90:399-402). |
+| `pgstar` | `Grid<N>` | 9 | `partial` | `plot_pgstar_grid`, `plot_case_comparison` | #173 | Lays out the supported windows; inherits the Text_Summary and Color_magnitude differences and leaves out default panel columns absent from the file. |
 | `pgbinary` | `Summary_History` | 1 | `equivalent` | `plot_pgbinary_summary_history`, `plot_pgbinary_panels`, `plot_case_comparison` | #173 | Normalized [0, 1] binary summary and 6-panel comparison figure. |
 | `pgbinary` | `History_Track<N>` | 9 | `equivalent` | `plot_history_track`, `plot_pgbinary_panels`, `plot_case_comparison` | #173 | Arbitrary binary two-column track with MESA 26.4.1 overlay. |
 | `pgbinary` | `History_Panels<N>` | 9 | `equivalent` | `plot_pgbinary_panels`, `plot_history_panels`, `plot_binary_evolution`, `plot_case_comparison` | #173 | Multi-panel orbital period, RLOF filling, mdot, and custom stacks. |
-| `pgbinary` | `Text_Summary<N>` | 9 | `equivalent` | `plot_pgbinary_text_summary`, `plot_text_summary`, `plot_pgstar_grid` | #173 | Binary 2D Text_Summary<N> table from binary_history.data and pgbinary inlists (binary/private/pgbinary_summary.f90). |
-| `pgbinary` | `Grid<N>` | 9 | `equivalent` | `plot_pgstar_grid`, `plot_pgbinary_panels`, `plot_case_comparison` | #173 | GridSpec composer for &pgbinary Grid<N>_* inlists, including upstream default Grid1/2/4 with Text_Summary<N> and Star<N> cells. |
+| `pgbinary` | `Text_Summary<N>` | 9 | `partial` | `plot_pgbinary_text_summary`, `plot_text_summary`, `plot_pgstar_grid` | #173 | Shows only quantities saved in binary_history.data and leaves other cells out; upstream evaluates every named quantity (binary/private/pgbinary_summary.f90:338-445). |
+| `pgbinary` | `Grid<N>` | 9 | `partial` | `plot_pgstar_grid`, `plot_pgbinary_panels`, `plot_case_comparison` | #173 | Lays out the supported windows; inherits the Text_Summary difference and leaves out default panel columns absent from the file. |
 | `pgbinary` | `Star<N>` | 2 | `equivalent` | `plot_pgbinary_star`, `plot_pgstar_grid`, `plot_pgbinary_panels` | #173 | Embeds any supported pgstar window or nested Grid<N> of Star 1 or Star 2, with point-mass banner support. |
-| `pgbinary` | `Orbit` | 1 | `equivalent` | `plot_pgbinary_orbit`, `plot_pgbinary_panels` | #173 | 2D orbits, CoM, and Roche/stellar equipotentials from eccentricity or exact Keplerian J_orb inversion for default binary histories. |
+| `pgbinary` | `Orbit` | 1 | `partial` | `plot_pgbinary_orbit`, `plot_pgbinary_panels` | #173 | Draws the orbit and stellar outlines; derives eccentricity from J_orb when the column is absent and adds Roche-lobe contours, where upstream reads b% eccentricity and draws stellar contours only (binary/private/pgbinary_orbit.f90:102, 132, 171). |
 | `astero_pgstar` | `echelle` | 1 | `equivalent` | `plot_echelle_diagram` | #173 | Echelle diagram for observed and model oscillation modes. |
 | `astero_pgstar` | `ratios` | 1 | `equivalent` | `plot_separation_ratios` | #173 | Roxburgh & Vorontsov r_010 and r_02 separation ratios. |

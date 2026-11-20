@@ -225,7 +225,7 @@
         "verified_total": 0,
         "pct_ported": 0.0,
         "pct_verified": 0.0,
-        "rust_lines": 4069,
+        "rust_lines": 4152,
         "python_jax_lines": 1033
       },
       {
@@ -769,9 +769,9 @@
     "rust": {
       "tool": "cargo llvm-cov",
       "overall": {
-        "lines": 114330,
-        "covered": 85423,
-        "percent": 74.7
+        "lines": 114868,
+        "covered": 85949,
+        "percent": 74.8
       },
       "by_crate": [
         {
@@ -854,9 +854,9 @@
         },
         {
           "crate": "flexmesa-ionization",
-          "lines": 1386,
-          "covered": 1093,
-          "percent": 78.9
+          "lines": 1924,
+          "covered": 1619,
+          "percent": 84.1
         },
         {
           "crate": "flexmesa-kap",
@@ -935,8 +935,8 @@
     "python": {
       "tool": "pytest --cov",
       "overall": {
-        "statements": 25535,
-        "covered": 22414,
+        "statements": 25569,
+        "covered": 22448,
         "percent": 87.8
       },
       "by_subpackage": [
@@ -996,9 +996,9 @@
         },
         {
           "subpackage": "flexmesa.data",
-          "statements": 661,
-          "covered": 536,
-          "percent": 81.1
+          "statements": 695,
+          "covered": 570,
+          "percent": 82.0
         },
         {
           "subpackage": "flexmesa.eos",
@@ -1435,13 +1435,18 @@
     ],
     "open_pull_requests": [
       {
-        "number": 289,
-        "title": "fix(ionization,data): validate ion_*.data headers and verify FMION001/physics provenance (#281, #282)",
+        "number": 292,
+        "title": "fix(star,binary): resolve #152, #153, and #159 audit code, precision, and test findings",
         "draft": false
       },
       {
-        "number": 290,
-        "title": "fix(star,benchmarks): resolve #155 mixing audit items, literal provenance, DECISIONS #40, and Ledoux 2x2 experiment",
+        "number": 293,
+        "title": "fix(star): close #156 audit gaps (phase separation MLT, diffusion guards, all-7 Rosenbrock oracles)",
+        "draft": false
+      },
+      {
+        "number": 294,
+        "title": "fix(ionization): check table headers before using a cache entry (#281)",
         "draft": false
       }
     ],
@@ -2274,6 +2279,19 @@
       "all_verified_pct": "1.0",
       "cases_passing": "0",
       "rust_cov_pct": "74.7",
+      "python_cov_pct": "87.8",
+      "closed_140": "15",
+      "total_140": "34",
+      "deferred_169": "42"
+    },
+    {
+      "date_utc": "2026-11-20",
+      "commit": "e8042fa",
+      "event": "main merge",
+      "engine_ported_pct": "30.2",
+      "all_verified_pct": "1.0",
+      "cases_passing": "0",
+      "rust_cov_pct": "74.8",
       "python_cov_pct": "87.8",
       "closed_140": "15",
       "total_140": "34",

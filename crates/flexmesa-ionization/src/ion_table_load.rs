@@ -155,6 +155,13 @@ impl IonTableGrid {
             }
             sha
         };
+        // Upstream checks every table's text header on each load before it
+        // looks at its cache (`ionization/private/ion_tables_load.f90:54-69,
+        // 259-292`), so a cache entry cannot stand in for a directory whose
+        // headers fail those checks.
+        if let Some(dir) = ascii_dir {
+            read_and_validate_ion_headers(dir, "ion", "")?;
+        }
         let cache_file =
             cache_root.map(|root| ion_cache_path(root, &source_sha));
         if let Some(ref cp) = cache_file {
@@ -298,26 +305,8 @@ impl IonTableGrid {
         file_prefix: &str,
         z1_suffix: &str,
     ) -> Result<Self, IonError> {
-        validate_ion_data_dir(data_dir, file_prefix, z1_suffix)?;
-        let mut entries = Vec::with_capacity(22);
-        for iz in 0..NUM_ION_ZS {
-            for ix in 0..NUM_ION_XS_FOR_Z[iz] {
-                let path = ion_table_filename(
-                    data_dir,
-                    file_prefix,
-                    z1_suffix,
-                    ION_ZS[iz],
-                    ION_XS[ix],
-                );
-                let hdr = read_ion_ascii_header(&path)?;
-                entries.push((iz, ix, path, hdr));
-            }
-        }
-        let headers: Vec<(&Path, IonAsciiHeader, f64, f64)> = entries
-            .iter()
-            .map(|(iz, ix, p, h)| (p.as_path(), *h, ION_ZS[*iz], ION_XS[*ix]))
-            .collect();
-        let grid = validate_ion_headers(&headers)?;
+        let (entries, grid) =
+            read_and_validate_ion_headers(data_dir, file_prefix, z1_suffix)?;
         let parsed: Vec<(usize, usize, Vec<Vec<f64>>)> = entries
             .into_par_iter()
             .map(|(iz, ix, path, _)| {
@@ -929,6 +918,41 @@ fn parse_ion_header_line(
     Ok(h)
 }
 
+/// One table's `(iz, ix)` slot, path and parsed header.
+type IonTableEntry = (usize, usize, PathBuf, IonAsciiHeader);
+
+/// Reads the header of every `ion_*.data` table under `data_dir` and applies
+/// the upstream header checks ([`validate_ion_headers`]), returning the table
+/// entries and the reference grid.
+#[allow(clippy::needless_range_loop)]
+fn read_and_validate_ion_headers(
+    data_dir: &Path,
+    file_prefix: &str,
+    z1_suffix: &str,
+) -> Result<(Vec<IonTableEntry>, IonAsciiHeader), IonError> {
+    validate_ion_data_dir(data_dir, file_prefix, z1_suffix)?;
+    let mut entries = Vec::with_capacity(22);
+    for iz in 0..NUM_ION_ZS {
+        for ix in 0..NUM_ION_XS_FOR_Z[iz] {
+            let path = ion_table_filename(
+                data_dir,
+                file_prefix,
+                z1_suffix,
+                ION_ZS[iz],
+                ION_XS[ix],
+            );
+            let hdr = read_ion_ascii_header(&path)?;
+            entries.push((iz, ix, path, hdr));
+        }
+    }
+    let headers: Vec<(&Path, IonAsciiHeader, f64, f64)> = entries
+        .iter()
+        .map(|(iz, ix, p, h)| (p.as_path(), *h, ION_ZS[*iz], ION_XS[*ix]))
+        .collect();
+    let grid = validate_ion_headers(&headers)?;
+    Ok((entries, grid))
+}
+
 /// Apply the upstream header checks to the 22 tables in load order.
 ///
 /// `entries` holds `(path, header, expected_Z, expected_X)`. The first
@@ -1446,6 +1470,65 @@ mod tests {
         });
         IonTableGrid::from_data_dir(&near_dir, "ion", "")
             .expect("5e-7 grid offset is within tiny");
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn test_cache_entry_does_not_bypass_header_checks() {
+        let root = std::env::temp_dir()
+            .join(format!("flexmesa_ion_hdr_cache_{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        let cache_v1 = root.join("cache").join("v1");
+
+        let ok_dir = root.join("ok");
+        write_synthetic_ion_tables(&ok_dir, |_, x, z| {
+            small_header_row(51, x, z)
+        });
+        let grid = IonTableGrid::from_data_dir(&ok_dir, "ion", "")
+            .expect("valid synthetic headers load");
+
+        // A directory whose first header carries a version below
+        // `min_version`, with a well-formed cache entry already present for
+        // its hash (as code without header checks would have written).
+        let bad_dir = root.join("bad");
+        write_synthetic_ion_tables(&bad_dir, |_, x, z| {
+            small_header_row(48, x, z)
+        });
+        let bad_sha =
+            compute_ion_dir_sha256(&bad_dir, "ion", "").expect("hash bad dir");
+        let cache_path = ion_cache_path(&cache_v1, &bad_sha);
+        write_verified_cache_atomic(
+            &cache_path,
+            ION_CACHE_BUILDER_VERSION,
+            ION_CACHE_MAGIC,
+            &bad_sha,
+            &grid.encode_cache_payload().expect("encode payload"),
+        )
+        .expect("plant cache entry");
+        assert!(cache_path.is_file());
+
+        let err = IonTableGrid::load_or_verify_cache_in(
+            Some(&bad_dir),
+            Some(&cache_v1),
+        )
+        .expect_err("stale header must be rejected despite the cache entry");
+        assert!(
+            matches!(err, IonError::TableParse { .. }),
+            "expected IonError::TableParse, got {err:?}"
+        );
+
+        // A valid directory still loads through its cache entry.
+        let g1 = IonTableGrid::load_or_verify_cache_in(
+            Some(&ok_dir),
+            Some(&cache_v1),
+        )
+        .expect("build and cache valid dir");
+        let g2 = IonTableGrid::load_or_verify_cache_in(
+            Some(&ok_dir),
+            Some(&cache_v1),
+        )
+        .expect("reload valid dir from cache");
+        assert_eq!(g1.num_log_qs, g2.num_log_qs);
         let _ = fs::remove_dir_all(&root);
     }
 

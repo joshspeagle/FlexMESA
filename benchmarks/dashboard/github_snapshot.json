@@ -229,13 +229,18 @@
   ],
   "open_pull_requests": [
     {
-      "number": 289,
-      "title": "fix(ionization,data): validate ion_*.data headers and verify FMION001/physics provenance (#281, #282)",
+      "number": 292,
+      "title": "fix(star,binary): resolve #152, #153, and #159 audit code, precision, and test findings",
       "draft": false
     },
     {
-      "number": 290,
-      "title": "fix(star,benchmarks): resolve #155 mixing audit items, literal provenance, DECISIONS #40, and Ledoux 2x2 experiment",
+      "number": 293,
+      "title": "fix(star): close #156 audit gaps (phase separation MLT, diffusion guards, all-7 Rosenbrock oracles)",
+      "draft": false
+    },
+    {
+      "number": 294,
+      "title": "fix(ionization): check table headers before using a cache entry (#281)",
       "draft": false
     }
   ],

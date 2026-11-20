@@ -5,11 +5,31 @@
 ! Sections emitted:
 !   1. paquette      : paquette_coeffs::paquette_coefficients (4 regimes)
 !   2. matrix_coeffs : diffusion_support::get_matrix_coeffs (8 solver/transport regimes)
-!   3. solve_diff    : diffusion::do_solve_diffusion (BE_solve Thoul, BE_solve CGS WD, isolve ros2)
-!   4. phase_sep     : phase_separation::do_phase_separation (CO and ONe crystallization)
+!   3. solve_diff    : diffusion::do_solve_diffusion (BE_solve Thoul, BE_solve CGS WD,
+!                      and isolve with all 7 Rosenbrock solvers)
+!   4. phase_sep     : phase_separation::do_phase_separation (CO, ONe, and CO with
+!                      phase_separation_mixing_use_brunt)
+!   5. kernels       : private MESA kernels get_Dstar_OCP (with bitsafe_erf_fit),
+!                      blouin_delta_xo, and blouin_delta_xne, compiled from source text
+!                      extracted verbatim from the MESA tree by the Makefile
+
+! The MESA 26.4.1 routines below are private to their modules and are not callable
+! through libstar.a. The Makefile copies their source text verbatim from
+! star/private/diffusion_support.f90 and star/private/phase_separation.f90 into
+! mesa_private_kernels.inc in the build directory, and this module compiles that
+! text with the same compiler flags as the rest of the generator.
+module gen_diffusion_private_kernels
+   use const_def, only: dp, pi
+   use math_lib
+   implicit none
+   private
+   public :: get_Dstar_OCP, blouin_delta_xo, blouin_delta_xne
+contains
+   include 'mesa_private_kernels.inc'
+end module gen_diffusion_private_kernels
 
 program gen_diffusion_oracles
-   use, intrinsic :: iso_fortran_env, only: int64
+   use, intrinsic :: iso_fortran_env, only: int64, compiler_version
    use const_def, only: dp, pi, pi4, amu, me, msun, rsun, lsun, standard_cgrav
    use const_lib, only: const_init
    use math_lib, only: math_init, exp10
@@ -25,6 +45,7 @@ program gen_diffusion_oracles
    use diffusion_support, only: get_matrix_coeffs
    use diffusion, only: do_solve_diffusion
    use phase_separation, only: do_phase_separation
+   use gen_diffusion_private_kernels, only: get_Dstar_OCP, blouin_delta_xo, blouin_delta_xne
    implicit none
 
    character(len=512) :: mesa_dir, out_path, sdk_ver, mesa_ver
@@ -69,12 +90,14 @@ program gen_diffusion_oracles
    write(u, '(A)') '# mesa_git_commit: c8c202662922a22b3efefa824473ad615c623afd'
    write(u, '(A)') '# mesasdk_version: ' // trim(sdk_ver)
    write(u, '(A)') '# math_backend: CRMATH'
+   write(u, '(A)') '# compiler: ' // compiler_version()
    write(u, '(A)') 'section	case_id	field	i	j	raw_bits_hex	decimal'
 
    call emit_paquette_oracles(u)
    call emit_matrix_coeffs_oracles(u, s)
    call emit_solve_diffusion_oracles(u, s)
    call emit_phase_sep_oracles(u, mesa_dir)
+   call emit_kernel_oracles(u)
 
    close(u)
    call free_star(id, ierr)
@@ -339,7 +362,7 @@ contains
    end subroutine emit_matrix_coeffs_oracles
 
    ! --------------------------------------------------------------------------
-   ! Section 3: do_solve_diffusion (BE_solve Thoul, BE_solve CGS WD, isolve ros2)
+   ! Section 3: do_solve_diffusion (BE_solve Thoul, BE_solve CGS WD, 7 isolve solvers)
    ! --------------------------------------------------------------------------
    subroutine emit_solve_diffusion_oracles(unit_no, s)
       integer, intent(in) :: unit_no
@@ -408,7 +431,7 @@ contains
       end do
       diff_fac = [1.0_dp, 1.0_dp, 1.0_dp, 1.0_dp]
 
-      do icase = 1, 3
+      do icase = 1, 9
          select case (icase)
          case (1)
             cid = 'be_thoul_solar'
@@ -418,8 +441,31 @@ contains
             s%diffusion_use_caplan = .false.
             total_time = 1.0e14_dp
             s%eta(:) = -1.0_dp; gam_arr(:) = 0.05_dp; s%gam(:) = 0.05_dp
-         case (2)
-            cid = 'isolve_ros2_solar'
+         case (2, 4:9)
+            ! Rosenbrock isolve on the solar profile; only the solver differs
+            select case (icase)
+            case (2)
+               cid = 'isolve_ros2_solar'
+               s%diffusion_isolve_solver = 'ros2_solver'
+            case (4)
+               cid = 'isolve_rose2_solar'
+               s%diffusion_isolve_solver = 'rose2_solver'
+            case (5)
+               cid = 'isolve_ros3p_solar'
+               s%diffusion_isolve_solver = 'ros3p_solver'
+            case (6)
+               cid = 'isolve_ros3pl_solar'
+               s%diffusion_isolve_solver = 'ros3pl_solver'
+            case (7)
+               cid = 'isolve_rodas3_solar'
+               s%diffusion_isolve_solver = 'rodas3_solver'
+            case (8)
+               cid = 'isolve_rodas4_solar'
+               s%diffusion_isolve_solver = 'rodas4_solver'
+            case default
+               cid = 'isolve_rodasp_solar'
+               s%diffusion_isolve_solver = 'rodasp_solver'
+            end select
             s%diffusion_use_isolve = .true.
             s%diffusion_use_cgs_solver = .false.
             s%diffusion_use_paquette = .false.
@@ -491,6 +537,12 @@ contains
          end do
 
          nzlo = 1; nzhi = nz
+         ! Zero intent(out) buffers so untouched boundary slot k=1 (nzlo) is
+         ! deterministic 0.0 rather than uninitialized stack memory.
+         x_init = 0.0_dp; x_final = 0.0_dp
+         d_self = 0.0_dp; v_adv = 0.0_dp; v_tot = 0.0_dp
+         vlnp = 0.0_dp; vlnt = 0.0_dp; vrad = 0.0_dp; g_rad_f = 0.0_dp
+         e_fld = 0.0_dp; g_fld = 0.0_dp
          call do_solve_diffusion( &
             s, nz, species, nc, m, cls, class_cid, net_iso, chem_id, &
             abar, ye, free_e, dm_bar, dm_in, &
@@ -511,7 +563,13 @@ contains
             vlnp, vlnt, vrad, g_rad_f, &
             e_fld, g_fld, &
             ierr)
-         if (ierr /= 0) stop 'do_solve_diffusion failed'
+         if (ierr /= 0) then
+            ! A failing solver is recorded in the table rather than hidden
+            write(*, '(A,A,A,I0)') 'do_solve_diffusion failed for ', trim(cid), ': ierr = ', ierr
+            if (icase <= 3) stop 'do_solve_diffusion failed'
+            call emit_row(unit_no, 'solve_diff', cid, 'ierr', 0, 0, real(ierr, dp))
+            cycle
+         end if
 
          call emit_row(unit_no, 'solve_diff', cid, 'steps_used', 0, 0, real(steps_used, dp))
          call emit_row(unit_no, 'solve_diff', cid, 'total_iters', 0, 0, real(tot_iters, dp))
@@ -528,7 +586,7 @@ contains
    end subroutine emit_solve_diffusion_oracles
 
    ! --------------------------------------------------------------------------
-   ! Section 4: phase_separation::do_phase_separation (CO and ONe WDs)
+   ! Section 4: phase_separation::do_phase_separation (CO, ONe, CO with Brunt B)
    ! --------------------------------------------------------------------------
    subroutine emit_phase_sep_oracles(unit_no, mdir)
       integer, intent(in) :: unit_no
@@ -538,7 +596,7 @@ contains
       real(dp) :: dt_ps, r3_run, dm_k, rho_k
       character(len=16) :: cid
 
-      do icase = 1, 2
+      do icase = 1, 3
          call alloc_star(id_ps, ierr)
          if (ierr /= 0) stop 'alloc_star ps failed'
          call star_ptr(id_ps, sp, ierr)
@@ -607,8 +665,14 @@ contains
             sp%m(k) = sp%mstar * sp%q(k)
          end do
 
-         if (icase == 1) then
-            cid = 'blouin_co'
+         if (icase == 1 .or. icase == 3) then
+            if (icase == 1) then
+               cid = 'blouin_co'
+            else
+               ! Same CO profile with Brunt B in the mix_outward stability test
+               cid = 'blouin_co_brunt'
+               sp%phase_separation_mixing_use_brunt = .true.
+            end if
             sp%phase_separation_option = 'CO'
             ! Outer zones k=1,2 have stably lower mu (higher C12) so mix_outward
             ! stabilizes before reaching k=1; inner zones k=5..8 are solid (phase > 0.9)
@@ -674,9 +738,43 @@ contains
             call emit_row(unit_no, 'phase_sep', cid, 'eps_phase_sep', k, 0, sp%eps_phase_separation(k))
             call emit_row(unit_no, 'phase_sep', cid, 'lnd_final', k, 0, sp%lnd(k))
          end do
+         do k = 2, nz_ps
+            call emit_row(unit_no, 'phase_sep', cid, 'gradr_final', k, 0, sp%gradr(k))
+            call emit_row(unit_no, 'phase_sep', cid, 'grada_face_final', k, 0, sp%grada_face(k))
+         end do
+         do k = 1, nz_ps
+            call emit_row(unit_no, 'phase_sep', cid, 'lnPgas_final', k, 0, sp%lnPgas(k))
+         end do
 
          call free_star(id_ps, ierr)
       end do
    end subroutine emit_phase_sep_oracles
+
+   ! --------------------------------------------------------------------------
+   ! Section 5: private kernels compiled from verbatim MESA 26.4.1 source text
+   ! --------------------------------------------------------------------------
+   subroutine emit_kernel_oracles(unit_no)
+      integer, intent(in) :: unit_no
+      real(dp), parameter :: gammas(3) = [5.0_dp, 20.0_dp, 100.0_dp]
+      real(dp), parameter :: kappas(3) = [0.5_dp, 1.2_dp, 0.8_dp]
+      real(dp), parameter :: x_ins(5) = [0.1_dp, 0.3_dp, 0.5_dp, 0.7_dp, 0.85_dp]
+      real(dp) :: dstar
+      integer :: i
+
+      do i = 1, size(gammas)
+         call get_Dstar_OCP(gammas(i), kappas(i), dstar)
+         call emit_row(unit_no, 'kernels', 'dstar_ocp', 'Gamma', i, 0, gammas(i))
+         call emit_row(unit_no, 'kernels', 'dstar_ocp', 'kappa', i, 0, kappas(i))
+         call emit_row(unit_no, 'kernels', 'dstar_ocp', 'Dstar', i, 0, dstar)
+      end do
+      do i = 1, size(x_ins)
+         call emit_row(unit_no, 'kernels', 'blouin_xo', 'X_in', i, 0, x_ins(i))
+         call emit_row(unit_no, 'kernels', 'blouin_xo', 'dX', i, 0, blouin_delta_xo(x_ins(i)))
+      end do
+      do i = 1, size(x_ins)
+         call emit_row(unit_no, 'kernels', 'blouin_xne', 'X_in', i, 0, x_ins(i))
+         call emit_row(unit_no, 'kernels', 'blouin_xne', 'dX', i, 0, blouin_delta_xne(x_ins(i)))
+      end do
+   end subroutine emit_kernel_oracles
 
 end program gen_diffusion_oracles

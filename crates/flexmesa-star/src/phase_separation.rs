@@ -10,7 +10,7 @@
 //! Medin-Cumming phase tables are absent from upstream `26.4.1`.
 
 use flexmesa_chem::NuclideCatalog;
-use flexmesa_const::{CLIGHT, CRAD, FOUR_PI, MixingType};
+use flexmesa_const::{CRAD, FOUR_PI, MixingType};
 use flexmesa_eos::{eos_dt_get, I_LN_PGAS, I_PHASE};
 use flexmesa_utils::is_bad;
 
@@ -140,8 +140,12 @@ fn do_2component_phase_separation(
     model.aux.eps_phase_separation.resize(nz, 0.0);
     model.aux.eps_phase_separation.fill(0.0);
 
-    if nz < 2 || species < 2 {
-        return Ok(());
+    if nz == 0 {
+        return Err(StarError::InvalidInput(
+            "phase_separation reached upstream out-of-bounds phase(0) read \
+             (nz == 0; tracked under #271)"
+                .into(),
+        ));
     }
 
     if model.eos_res[nz - 1][I_PHASE] < EOS_PHASE_BOUNDARY {
@@ -251,25 +255,24 @@ fn do_2component_phase_separation(
 
     let result = (|| -> Result<(), StarError> {
         let mut unsmoothed_brunt_b = vec![0.0_f64; nz];
-        let mut grada_face = vec![0.0_f64; nz];
 
-        update_model_range(
-            model,
-            0,
-            nz - 1,
-            false,
-            &mut unsmoothed_brunt_b,
-            &mut grada_face,
-        )?;
+        update_model_range(model, 0, nz - 1, false, &mut unsmoothed_brunt_b)?;
         let energy_before = model.energy.clone();
 
         for k in (0..=kstart).rev() {
             if model.eos_res[k][I_PHASE] <= EOS_PHASE_BOUNDARY {
-                model.aux.crystal_core_boundary_mass = if k + 1 < nz {
-                    model.m[k + 1]
-                } else {
-                    model.m_center
-                };
+                // Upstream reads `s% m(k+1)` (`phase_separation.f90:121`),
+                // which is out of bounds when the innermost zone has
+                // `phase == eos_phase_boundary` exactly (#271).
+                if k + 1 >= nz {
+                    return Err(StarError::InvalidInput(
+                        "phase_separation reached upstream out-of-bounds \
+                         m(nz+1) read (innermost zone has phase == 0.9; \
+                         tracked under #271)"
+                            .into(),
+                    ));
+                }
+                model.aux.crystal_core_boundary_mass = model.m[k + 1];
                 break;
             }
             if k == 0 {
@@ -286,31 +289,16 @@ fn do_2component_phase_separation(
                 idx_light,
                 idx_heavy,
                 &mut unsmoothed_brunt_b,
-                &mut grada_face,
             )?;
-            mix_outward(
-                model,
-                k - 1,
-                0,
-                &mut unsmoothed_brunt_b,
-                &mut grada_face,
-            )?;
+            mix_outward(model, k - 1, 0, &mut unsmoothed_brunt_b)?;
         }
 
-        update_model_range(
-            model,
-            0,
-            nz - 1,
-            false,
-            &mut unsmoothed_brunt_b,
-            &mut grada_face,
-        )?;
+        update_model_range(model, 0, nz - 1, false, &mut unsmoothed_brunt_b)?;
 
-        if dt > 0.0 && dt.is_finite() {
-            for k in 0..nz {
-                model.aux.eps_phase_separation[k] =
-                    (energy_before[k] - model.energy[k]) / dt;
-            }
+        // `phase_separation.f90:135-137` divides by `dt` unconditionally.
+        for k in 0..nz {
+            model.aux.eps_phase_separation[k] =
+                (energy_before[k] - model.energy[k]) / dt;
         }
         Ok(())
     })();
@@ -327,7 +315,6 @@ fn move_one_zone(
     idx_light: usize,
     idx_heavy: usize,
     unsmoothed_brunt_b: &mut [f64],
-    grada_face: &mut [f64],
 ) -> Result<(), StarError> {
     let species = model.species;
     let nz = model.nz;
@@ -354,14 +341,7 @@ fn move_one_zone(
     model.xa[(k - 1) * species + idx_heavy] =
         x_heavy_above - xfac * dx_heavy * dq_ratio;
 
-    update_model_range(
-        model,
-        k - 1,
-        nz - 1,
-        true,
-        unsmoothed_brunt_b,
-        grada_face,
-    )
+    update_model_range(model, k - 1, nz - 1, true, unsmoothed_brunt_b)
 }
 
 fn mix_outward(
@@ -369,7 +349,6 @@ fn mix_outward(
     kbot: usize,
     min_mix_zones: usize,
     unsmoothed_brunt_b: &mut [f64],
-    grada_face: &mut [f64],
 ) -> Result<(), StarError> {
     let nz = model.nz;
     let species = model.species;
@@ -424,12 +403,11 @@ fn mix_outward(
             (ktop + 1).min(nz - 1),
             use_brunt,
             unsmoothed_brunt_b,
-            grada_face,
         )?;
 
         if use_brunt {
             let b_term = unsmoothed_brunt_b[ktop];
-            let grada = grada_face[ktop];
+            let grada = model.aux.mixing.grada_face[ktop];
             let gradr = model.gradr[ktop];
             if b_term + grada - gradr > 0.0 {
                 break;
@@ -445,13 +423,13 @@ fn mix_outward(
         (kbot + 1).min(nz - 1),
         true,
         unsmoothed_brunt_b,
-        grada_face,
     )
 }
 
 /// Refreshes constant-`Pgas` EOS (`fix_Pgas = .true.`), opacities, optional
-/// unsmoothed Brassard Brunt-B (`brunt.f90:231-313`), and interior face
-/// `grada_face`/`gradr` over zones `kc_t..=kc_b`
+/// unsmoothed Brassard Brunt-B (`brunt.f90:231-313`) over zones `kc_t..=kc_b`,
+/// then MLT over interior faces `kc_t + 1..=kc_b` through
+/// [`crate::hydro_vars::set_mlt_vars_range`]
 /// (`star/private/phase_separation.f90:333-398`).
 fn update_model_range(
     model: &mut StarModel,
@@ -459,7 +437,6 @@ fn update_model_range(
     kc_b: usize,
     do_brunt: bool,
     unsmoothed_brunt_b: &mut [f64],
-    grada_face: &mut [f64],
 ) -> Result<(), StarError> {
     let nz = model.nz;
     let species = model.species;
@@ -571,36 +548,12 @@ fn update_model_range(
         }
     }
 
-    // 4. Face grada_face and gradr over interior faces (kc_t + 1)..=kc_hi
-    //    (phase_separation.f90:387-390, hydro_vars.rs:140-187).
-    for k in (kc_t + 1)..=kc_hi {
-        let alfa = model.dq[k - 1] / (model.dq[k - 1] + model.dq[k]);
-        let beta = 1.0 - alfa;
-        let p_f = alfa * model.peos[k] + beta * model.peos[k - 1];
-        let prad_f = alfa * model.prad[k] + beta * model.prad[k - 1];
-        let kap_f = alfa * model.opacity[k] + beta * model.opacity[k - 1];
-        let grada_f = alfa * model.grada[k] + beta * model.grada[k - 1];
-        let (fp_k, ft_k) = if model.controls.rotation_flag
-            && model.controls.use_gravity_rotation_correction
-        {
-            let fp = model.aux.fp_rot.get(k).copied().unwrap_or(1.0);
-            let ft = model.aux.ft_rot.get(k).copied().unwrap_or(1.0);
-            (
-                if fp > 0.0 { fp } else { 1.0 },
-                if ft > 0.0 { ft } else { 1.0 },
-            )
-        } else {
-            (1.0, 1.0)
-        };
-        let gm_k = model.cgrav[k] * model.m_grav[k];
-        let gradr_f = (p_f * kap_f * model.lum[k]
-            / (4.0 * FOUR_PI * CLIGHT * gm_k * prad_f))
-            * (ft_k / fp_k);
-        grada_face[k] = grada_f;
-        model.gradr[k] = gradr_f;
-    }
-
-    Ok(())
+    // 4. MLT for interior faces (`phase_separation.f90:385-394`): upstream sets
+    //    `kf_t = kc_t`, `kf_b = kc_b + 1` and calls
+    //    `set_mlt_vars(s, kf_t+1, kf_b-1, ierr)`, i.e. faces `kc_t+1..kc_b`,
+    //    which applies `gradr_factor` and the `mlt_use_rotation_correction`
+    //    gate inside `do1_mlt_2` (`turb_info.f90:121-134`).
+    crate::hydro_vars::set_mlt_vars_range(model, kc_t + 1, kc_hi)
 }
 
 /// Applies crystallized and phase-separation mixing classifications and zeroes
@@ -618,8 +571,8 @@ pub fn apply_phase_sep_mixing_types(model: &mut StarModel) {
     for k in 0..nz {
         let phase_k = model.eos_res.get(k).map_or(0.0, |r| r[I_PHASE]);
         let is_solid = (phase_k > 0.5 && model.mu[k] > 1.7)
-            || (m_cryst > 0.0 && m_cryst + crystal_pad > model.m[k]);
-        let is_phase_sep = m_mix > 0.0 && model.m[k] <= m_mix;
+            || m_cryst + crystal_pad > model.m[k];
+        let is_phase_sep = model.m[k] <= m_mix;
 
         if is_solid || is_phase_sep {
             model.gradt[k] = model.gradr[k];

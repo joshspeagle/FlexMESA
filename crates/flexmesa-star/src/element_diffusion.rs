@@ -43,10 +43,12 @@ fn maxloc_species(xa_zone: &[f64]) -> usize {
 ///
 /// Returns [`StarError::InvalidInput`] for incompatible heating controls,
 /// unsupported `use_other_diffusion*` hooks, missing `h1`/`he4` isotopes,
-/// unsupported radiative levitation (`op_mono`), or the `#272` upstream OOB
-/// boundary condition (`nzlo == 0 && D_mix[0] > D_mix_ignore_diffusion`), and
-/// [`StarError::ConvergenceFailure`] if the coupled diffusion solver fails to
-/// complete `dt_in` (restoring `model.xa` to its pre-diffusion state).
+/// unsupported radiative levitation (`op_mono`, `#286`), an active
+/// `diffusion_dump_call_number` debug stop (`element_diffusion.f90:242,293,361`),
+/// or the upstream out-of-bounds boundary conditions tracked in `#272`, `#287`,
+/// and `#288`, and [`StarError::ConvergenceFailure`] if the coupled diffusion
+/// solver fails to complete `dt_in` (restoring `model.xa` to its pre-diffusion
+/// state).
 #[allow(clippy::too_many_lines, clippy::similar_names)]
 pub fn do_element_diffusion_step(
     model: &mut StarModel,
@@ -100,8 +102,12 @@ pub fn do_element_diffusion_step(
         ));
     }
 
-    if nz < 2 || species == 0 {
-        return Ok(());
+    if nz == 0 || species == 0 {
+        return Err(StarError::InvalidInput(
+            "element_diffusion reached upstream out-of-bounds empty model \
+             (nz == 0 or species == 0; tracked under #287)"
+                .into(),
+        ));
     }
 
     let nc = if dctrl.diffusion_use_full_net {
@@ -113,11 +119,15 @@ pub fn do_element_diffusion_step(
         }
         species
     } else {
+        // Upstream `element_diffusion.f90:123` copies `diffusion_num_classes`
+        // without range checking, indexing past `diffusion_class_representative(100)`
+        // or writing `X(0, k)` when `nc == 0` (#287).
         if dctrl.diffusion_num_classes == 0
             || dctrl.diffusion_num_classes > MAX_NUM_DIFFUSION_CLASSES
         {
             return Err(StarError::InvalidInput(format!(
-                "invalid diffusion_num_classes = {} (must be in 1..={MAX_NUM_DIFFUSION_CLASSES})",
+                "invalid diffusion_num_classes = {} (must be in \
+                 1..={MAX_NUM_DIFFUSION_CLASSES}; upstream OOB tracked under #287)",
                 dctrl.diffusion_num_classes
             )));
         }
@@ -159,8 +169,17 @@ pub fn do_element_diffusion_step(
     if dctrl.diffusion_min_dq_ratio_at_surface > 0.0 {
         let mut dqsum: f64 = model.dq[..=nzlo].iter().sum();
         let mut k = nzlo;
-        while k + 1 < nz
-            && dqsum < dctrl.diffusion_min_dq_ratio_at_surface * model.dq[k + 1]
+        // Upstream `element_diffusion.f90:159` reads `s% dq(k+1)` on entry,
+        // which is out of bounds when `nzlo == nz` (0-based `nz - 1`, #287).
+        if k + 1 >= nz {
+            return Err(StarError::InvalidInput(
+                "element_diffusion reached upstream out-of-bounds dq(nz+1) \
+                 read in diffusion_min_dq_ratio_at_surface loop \
+                 (nzlo reached innermost zone; tracked under #287)"
+                    .into(),
+            ));
+        }
+        while dqsum < dctrl.diffusion_min_dq_ratio_at_surface * model.dq[k + 1]
         {
             k += 1;
             if k + 1 >= nz {
@@ -293,6 +312,19 @@ pub fn do_element_diffusion_step(
     );
 
     model.aux.diffusion_call_number += 1;
+    // Upstream `element_diffusion.f90:242, 293, 361` writes `diffusion.data`
+    // and terminates via `mesa_error('debug: dump_diffusion_info')` when
+    // `diffusion_call_number == diffusion_dump_call_number`.
+    if (model.aux.diffusion_call_number as isize)
+        == dctrl.diffusion_dump_call_number
+    {
+        return Err(StarError::InvalidInput(format!(
+            "debug: dump_diffusion_info triggered at diffusion_call_number = {} \
+             (diffusion_dump_call_number = {}; \
+             `star/private/element_diffusion.f90:242,293,361`)",
+            model.aux.diffusion_call_number, dctrl.diffusion_dump_call_number
+        )));
+    }
 
     let calculate_ionization =
         dctrl.diffusion_calculates_ionization || dctrl.diffusion_use_full_net;
@@ -486,97 +518,105 @@ pub fn do_element_diffusion_step(
     model.aux.eps_wd_sedimentation.resize(nz, 0.0);
     model.aux.eps_wd_sedimentation.fill(0.0);
 
-    model.aux.e_field.copy_from_slice(&e_field);
-    model.aux.g_field_element_diffusion.copy_from_slice(&g_field);
+    // Copy active-face electric and gravitational fields from do_solve_diffusion
+    // (upstream passes `s% E_field` and `s% g_field_element_diffusion` directly
+    // into `do_solve_diffusion`, which writes `(nzlo_eff + 1)..=nzhi_eff`).
+    if nzlo_eff < nzhi_eff {
+        model.aux.e_field[(nzlo_eff + 1)..=nzhi_eff]
+            .copy_from_slice(&e_field[(nzlo_eff + 1)..=nzhi_eff]);
+        model.aux.g_field_element_diffusion[(nzlo_eff + 1)..=nzhi_eff]
+            .copy_from_slice(&g_field[(nzlo_eff + 1)..=nzhi_eff]);
+    }
 
-    if nzhi_eff > nzlo_eff {
+    // Post-solve diagnostic unpack and surface/center extrapolation
+    // (`element_diffusion.f90:363-434`). When `nzhi_eff <= nzlo_eff`, the
+    // active loops run zero iterations and the boundary loops still execute.
+    for k in (nzlo_eff + 1)..=nzhi_eff {
+        for (j, &cls) in class.iter().enumerate().take(species) {
+            model.aux.diffusion_d_self[k * species + j] = d_self[k * nc + cls];
+            model.aux.edv[k * species + j] = v_total[k * nc + cls];
+            model.aux.v_rad[k * species + j] = v_rad[k * nc + cls];
+            model.aux.g_rad[k * species + j] = g_rad[k * nc + cls];
+            model.aux.typical_charge[k * species + j] =
+                typical_charge[k * nc + cls];
+            model.aux.diffusion_dx[k * species + j] =
+                model.xa[k * species + j] - xa_save[k * species + j];
+        }
+    }
+
+    if dctrl.do_wd_sedimentation_heating {
+        let eps_fac = model.controls.mix_wind.eps_wd_sedimentation_factor;
+        let min_xa = dctrl.min_xa_for_wd_sedimentation_heating;
+        let v_max = dctrl.diffusion_v_max;
         for k in (nzlo_eff + 1)..=nzhi_eff {
-            for (j, &cls) in class.iter().enumerate().take(species) {
-                model.aux.diffusion_d_self[k * species + j] =
-                    d_self[k * nc + cls];
-                model.aux.edv[k * species + j] = v_total[k * nc + cls];
-                model.aux.v_rad[k * species + j] = v_rad[k * nc + cls];
-                model.aux.g_rad[k * species + j] = g_rad[k * nc + cls];
-                model.aux.typical_charge[k * species + j] =
-                    typical_charge[k * nc + cls];
-                model.aux.diffusion_dx[k * species + j] =
-                    model.xa[k * species + j] - xa_save[k * species + j];
-            }
-        }
-
-        if dctrl.do_wd_sedimentation_heating {
-            let eps_fac = model.controls.mix_wind.eps_wd_sedimentation_factor;
-            let min_xa = dctrl.min_xa_for_wd_sedimentation_heating;
-            let v_max = dctrl.diffusion_v_max;
-            for k in (nzlo_eff + 1)..=nzhi_eff {
-                let mut eps_k = 0.0;
-                let e_k = model.aux.e_field[k];
-                let g_k = model.aux.g_field_element_diffusion[k];
-                for i in 0..species {
-                    let x_ik = model.xa[k * species + i];
-                    if x_ik > min_xa {
-                        let amass = species_a[i];
-                        let zcharge = species_z[i] as f64;
-                        let edv_ik = model.aux.edv[k * species + i];
-                        let sgn = 1.0_f64.copysign(-edv_ik);
-                        eps_k += eps_fac
-                            * (amass - zcharge * QE * e_k / (AMU * g_k))
-                            * sgn
-                            * v_max.min(edv_ik.abs())
-                            * x_ik
-                            * g_k
-                            / amass;
-                    }
+            let mut eps_k = 0.0;
+            let e_k = model.aux.e_field[k];
+            let g_k = model.aux.g_field_element_diffusion[k];
+            for i in 0..species {
+                let x_ik = model.xa[k * species + i];
+                if x_ik > min_xa {
+                    let amass = species_a[i];
+                    let zcharge = species_z[i] as f64;
+                    let edv_ik = model.aux.edv[k * species + i];
+                    let sgn = 1.0_f64.copysign(-edv_ik);
+                    eps_k += eps_fac
+                        * (amass - zcharge * QE * e_k / (AMU * g_k))
+                        * sgn
+                        * v_max.min(edv_ik.abs())
+                        * x_ik
+                        * g_k
+                        / amass;
                 }
-                model.aux.eps_wd_sedimentation[k] = eps_k;
             }
+            model.aux.eps_wd_sedimentation[k] = eps_k;
         }
+    }
 
-        let k_ref_top = nzlo_eff + 1;
-        for k in 0..=nzlo_eff {
-            for j in 0..species {
-                model.aux.diffusion_d_self[k * species + j] =
-                    model.aux.diffusion_d_self[k_ref_top * species + j];
-                model.aux.edv[k * species + j] = 0.0;
-                model.aux.v_rad[k * species + j] =
-                    model.aux.v_rad[k_ref_top * species + j];
-                model.aux.g_rad[k * species + j] =
-                    model.aux.g_rad[k_ref_top * species + j];
-                model.aux.typical_charge[k * species + j] =
-                    model.aux.typical_charge[k_ref_top * species + j];
-                model.aux.diffusion_dx[k * species + j] =
-                    model.xa[k * species + j] - xa_save[k * species + j];
-            }
-            model.aux.e_field[k] = 0.0;
-            model.aux.g_field_element_diffusion[k] = 0.0;
+    let k_ref_top = nzlo_eff + 1;
+    if k_ref_top >= nz {
+        // Upstream `element_diffusion.f90:410-421` indexes `nzlo + 1` even when
+        // `nzlo == nz` (0-based `nz - 1`), reading past array bounds (#287).
+        return Err(StarError::InvalidInput(
+            "element_diffusion reached upstream out-of-bounds read at \
+             nzlo + 1 == nz + 1 in post-solve diagnostic fill \
+             (tracked under #287)"
+                .into(),
+        ));
+    }
+    for k in 0..=nzlo_eff {
+        for j in 0..species {
+            model.aux.diffusion_d_self[k * species + j] =
+                model.aux.diffusion_d_self[k_ref_top * species + j];
+            model.aux.edv[k * species + j] = 0.0;
+            model.aux.v_rad[k * species + j] =
+                model.aux.v_rad[k_ref_top * species + j];
+            model.aux.g_rad[k * species + j] =
+                model.aux.g_rad[k_ref_top * species + j];
+            model.aux.typical_charge[k * species + j] =
+                model.aux.typical_charge[k_ref_top * species + j];
+            model.aux.diffusion_dx[k * species + j] =
+                model.xa[k * species + j] - xa_save[k * species + j];
         }
+        model.aux.e_field[k] = 0.0;
+        model.aux.g_field_element_diffusion[k] = 0.0;
+    }
 
-        for k in (nzhi_eff + 1)..nz {
-            for j in 0..species {
-                model.aux.diffusion_d_self[k * species + j] =
-                    model.aux.diffusion_d_self[nzhi_eff * species + j];
-                model.aux.edv[k * species + j] = 0.0;
-                model.aux.v_rad[k * species + j] =
-                    model.aux.v_rad[nzhi_eff * species + j];
-                model.aux.g_rad[k * species + j] =
-                    model.aux.g_rad[nzhi_eff * species + j];
-                model.aux.typical_charge[k * species + j] =
-                    model.aux.typical_charge[nzhi_eff * species + j];
-                model.aux.diffusion_dx[k * species + j] =
-                    model.xa[k * species + j] - xa_save[k * species + j];
-            }
-            model.aux.e_field[k] = 0.0;
-            model.aux.g_field_element_diffusion[k] = 0.0;
+    for k in (nzhi_eff + 1)..nz {
+        for j in 0..species {
+            model.aux.diffusion_d_self[k * species + j] =
+                model.aux.diffusion_d_self[nzhi_eff * species + j];
+            model.aux.edv[k * species + j] = 0.0;
+            model.aux.v_rad[k * species + j] =
+                model.aux.v_rad[nzhi_eff * species + j];
+            model.aux.g_rad[k * species + j] =
+                model.aux.g_rad[nzhi_eff * species + j];
+            model.aux.typical_charge[k * species + j] =
+                model.aux.typical_charge[nzhi_eff * species + j];
+            model.aux.diffusion_dx[k * species + j] =
+                model.xa[k * species + j] - xa_save[k * species + j];
         }
-    } else {
-        model.aux.diffusion_d_self.fill(0.0);
-        model.aux.edv.fill(0.0);
-        model.aux.v_rad.fill(0.0);
-        model.aux.g_rad.fill(0.0);
-        model.aux.typical_charge.fill(0.0);
-        model.aux.diffusion_dx.fill(0.0);
-        model.aux.e_field.fill(0.0);
-        model.aux.g_field_element_diffusion.fill(0.0);
+        model.aux.e_field[k] = 0.0;
+        model.aux.g_field_element_diffusion[k] = 0.0;
     }
 
     Ok(())
@@ -588,10 +628,6 @@ pub fn do_element_diffusion_step(
 pub fn finish_element_diffusion(model: &mut StarModel, dt: f64) {
     let nz = model.nz;
     model.aux.eps_diffusion.resize(nz, 0.0);
-    if dt <= 0.0 || !dt.is_finite() {
-        model.aux.eps_diffusion.fill(0.0);
-        return;
-    }
     for k in 0..nz {
         model.aux.eps_diffusion[k] =
             (model.energy_start[k] - model.energy[k]) / dt;

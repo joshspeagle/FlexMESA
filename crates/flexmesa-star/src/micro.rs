@@ -693,8 +693,17 @@ pub(crate) fn eval_kap_for_range(
         .collect();
     let base_kap_factor = model.controls.opacity_factor;
     let use_simple_es = model.controls.use_simple_es_for_kap;
-    let use_start_comp = model.controls.use_starting_composition_for_kap
-        && model.xa_start.len() == nz * species;
+    // `micro.f90:589-595` reads `xa_start` and `zbar_start` whenever the control
+    // is set, with no fallback to the current composition.
+    let use_start_comp = model.controls.use_starting_composition_for_kap;
+    if use_start_comp && model.xa_start.len() != nz * species {
+        return Err(StarError::InvalidInput(format!(
+            "use_starting_composition_for_kap = .true. but xa_start holds {} \
+             values where nz * species = {}",
+            model.xa_start.len(),
+            nz * species
+        )));
+    }
     let opacity_max = model.controls.opacity_max;
     let opacity_min = model.controls.opacity_min;
     let min_off = model.controls.rsp.min_logt_for_opacity_factor_off;

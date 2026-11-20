@@ -86,21 +86,26 @@ _FAMILY_SPECS: dict[tuple[str, str], tuple[str, str, str, str]] = {
         "22-category nuclear specific power breakdown from profileN.data.",
     ),
     ("pgstar", "Mixing"): (
-        "equivalent",
+        "partial",
         "plot_mixing_profile, plot_profile_panels",
         "#173",
         (
-            "log_D_mix by mixing_type plus conv/ovr/semi/thrm and rotational "
-            "diffusion curves (D_ST, D_visc, D_DSI, D_SH, D_SSI, D_ES, D_GSF)."
+            "Draws the mixing and rotational diffusion curves, but "
+            "accepts D_omega as the rotation total where upstream draws "
+            "D_mix_rotation only "
+            "(star/private/pgstar_mixing_ds.f90:347), and linear D_* "
+            "columns and the summed mode omit the D_*_factor weights."
         ),
     ),
     ("pgstar", "Dynamo"): (
-        "equivalent",
+        "partial",
         "plot_dynamo_profile, plot_pgstar_grid",
         "#173",
         (
-            "Radial log B_phi, log B_r, log Omega, and log(j/1e20) profiles "
-            "from saved profileN.data (physics generation tracked in #158)."
+            "Draws log B_phi, log B_r, log Omega and log(j/1e20), but "
+            "still draws when some of the four are absent; upstream "
+            "always draws all four "
+            "(star/private/pgstar_dynamo.f90:190-294)."
         ),
     ),
     ("pgstar", "Mode_Prop"): (
@@ -137,12 +142,14 @@ _FAMILY_SPECS: dict[tuple[str, str], tuple[str, str, str, str]] = {
         ),
     ),
     ("pgstar", "rti"): (
-        "equivalent",
+        "partial",
         "plot_rti_history, plot_pgstar_grid",
         "#173",
         (
-            "Rayleigh-Taylor instability mass spans from rti_type_*, "
-            "mix_type_* == 6, or profile mixing_type/alpha_RTI."
+            "Draws RTI spans from the rti_type and rti_qtop history "
+            "columns as upstream does "
+            "(star/private/pgstar_rti.f90:326-399), and also from "
+            "mix_type and profile columns, which upstream does not use."
         ),
     ),
     ("pgstar", "TRho"): (
@@ -233,21 +240,26 @@ _FAMILY_SPECS: dict[tuple[str, str], tuple[str, str, str, str]] = {
         ),
     ),
     ("pgstar", "Network"): (
-        "equivalent",
+        "partial",
         "plot_network_chart, plot_pgstar_grid",
         "#173",
         (
-            "N-vs-Z chart of nuclides shaded by mass-averaged log10 X_i via "
-            "flexmesa.chem."
+            "N-Z chart of the isotopes saved in the profile; upstream "
+            "draws every species of the net "
+            "(star/private/pgstar_network.f90:184-219) and leaves "
+            "abundances above the maximum unfilled."
         ),
     ),
     ("pgstar", "Production"): (
-        "equivalent",
+        "partial",
         "plot_production_profile, plot_pgstar_grid",
         "#173",
         (
-            "Stable-isotope production factors log10(X/X_init) vs A via "
-            "flexmesa.chem.get_stable_mass_frac."
+            "Production factors against a scaled AG89 table or a "
+            "supplied profile; upstream builds the reference with "
+            "get_xa_for_standard_metals from initial_zfracs and maps it "
+            "through get_stable_mass_frac "
+            "(star/private/pgstar_production.f90:190-211)."
         ),
     ),
     ("pgstar", "Profile_Panels<N>"): (
@@ -269,30 +281,33 @@ _FAMILY_SPECS: dict[tuple[str, str], tuple[str, str, str, str]] = {
         "Multi-row dual-axis history column stack vs model_number or age.",
     ),
     ("pgstar", "Color_magnitude<N>"): (
-        "equivalent",
+        "partial",
         "plot_color_magnitude, plot_pgstar_grid",
         "#173",
         (
-            "Photometric color-magnitude tracks from abs_mag_*/bc_* columns "
-            "and Color_magnitude<N> inlists."
+            "Draws configured colour-magnitude panels, and picks a "
+            "default pair when none is configured; upstream's default "
+            "has no panels (star/defaults/pgstar.defaults:5284-5323)."
         ),
     ),
     ("pgstar", "Text_Summary<N>"): (
-        "equivalent",
+        "partial",
         "plot_text_summary, plot_pgstar_grid, plot_case_comparison",
         "#173",
         (
-            "2D Text_Summary<N> key-value table from history.data and inlist "
-            "layouts (star/private/pgstar_summary.f90)."
+            "Shows only quantities saved in history.data and leaves "
+            "other cells out; upstream evaluates every named quantity "
+            "from the model (star/private/pgstar_summary.f90:399-402)."
         ),
     ),
     ("pgstar", "Grid<N>"): (
-        "equivalent",
+        "partial",
         "plot_pgstar_grid, plot_case_comparison",
         "#173",
         (
-            "GridSpec composer for &pgstar Grid<N>_* inlists, including "
-            "upstream default Grid1..4 with Text_Summary<N> cells."
+            "Lays out the supported windows; inherits the Text_Summary "
+            "and Color_magnitude differences and leaves out default "
+            "panel columns absent from the file."
         ),
     ),
     ("pgbinary", "Summary_History"): (
@@ -320,21 +335,23 @@ _FAMILY_SPECS: dict[tuple[str, str], tuple[str, str, str, str]] = {
         "Multi-panel orbital period, RLOF filling, mdot, and custom stacks.",
     ),
     ("pgbinary", "Text_Summary<N>"): (
-        "equivalent",
+        "partial",
         "plot_pgbinary_text_summary, plot_text_summary, plot_pgstar_grid",
         "#173",
         (
-            "Binary 2D Text_Summary<N> table from binary_history.data and "
-            "pgbinary inlists (binary/private/pgbinary_summary.f90)."
+            "Shows only quantities saved in binary_history.data and "
+            "leaves other cells out; upstream evaluates every named "
+            "quantity (binary/private/pgbinary_summary.f90:338-445)."
         ),
     ),
     ("pgbinary", "Grid<N>"): (
-        "equivalent",
+        "partial",
         "plot_pgstar_grid, plot_pgbinary_panels, plot_case_comparison",
         "#173",
         (
-            "GridSpec composer for &pgbinary Grid<N>_* inlists, including "
-            "upstream default Grid1/2/4 with Text_Summary<N> and Star<N> cells."
+            "Lays out the supported windows; inherits the Text_Summary "
+            "difference and leaves out default panel columns absent "
+            "from the file."
         ),
     ),
     ("pgbinary", "Star<N>"): (
@@ -347,13 +364,15 @@ _FAMILY_SPECS: dict[tuple[str, str], tuple[str, str, str, str]] = {
         ),
     ),
     ("pgbinary", "Orbit"): (
-        "equivalent",
+        "partial",
         "plot_pgbinary_orbit, plot_pgbinary_panels",
         "#173",
         (
-            "2D orbits, CoM, and Roche/stellar equipotentials from "
-            "eccentricity or exact Keplerian J_orb inversion for default "
-            "binary histories."
+            "Draws the orbit and stellar outlines; derives eccentricity "
+            "from J_orb when the column is absent and adds Roche-lobe "
+            "contours, where upstream reads b% eccentricity and draws "
+            "stellar contours only "
+            "(binary/private/pgbinary_orbit.f90:102, 132, 171)."
         ),
     ),
     ("astero_pgstar", "echelle"): (

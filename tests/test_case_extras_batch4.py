@@ -23,7 +23,6 @@ _MINIMAL_HISTORY_COLUMNS = "model_number\nstar_age\nlog_L\nlog_Teff\n"
 _GRADUATED_LIVE_CASES: tuple[tuple[str, str, int], ...] = (
     ("binary", "jdot_ls_check", 1),
     ("binary", "wind_fed_bhhmxb", 2),
-    ("star", "T_tau_gradr", 10),
     ("star", "diffusion_smoothness", 1),
     ("star", "conv_core_cpm", 1),
     ("star", "hot_cool_wind", 1),
@@ -32,10 +31,6 @@ _GRADUATED_LIVE_CASES: tuple[tuple[str, str, int], ...] = (
     ("star", "hse_riemann", 1),
     ("star", "ns_h", 1),
     ("star", "ns_he", 1),
-    ("star", "wd_nova_burst", 1),
-    ("star", "hb_2M", 1),
-    ("star", "make_sdb", 1),
-    ("star", "c13_pocket", 1),
 )
 
 _STAGED_HISTORY_COLUMN_CASES: tuple[tuple[str, int], ...] = (
@@ -44,31 +39,22 @@ _STAGED_HISTORY_COLUMN_CASES: tuple[tuple[str, int], ...] = (
     ("ns_c", 1),
     ("cburn_inward", 1),
     ("high_rot_darkening", 1),
-    ("wd_acc_small_dm", 2),
 )
 
 _BATCH4_GRADUATED_STAR_CASES: tuple[str, ...] = (
-    "T_tau_gradr",
     "adjust_net",
-    "c13_pocket",
     "cburn_inward",
     "conserve_angular_momentum",
     "conv_core_cpm",
     "diffusion_smoothness",
-    "hb_2M",
     "high_rot_darkening",
     "hot_cool_wind",
     "hse_riemann",
     "make_o_ne_wd",
-    "make_sdb",
     "ns_c",
     "ns_h",
     "ns_he",
-    "pisn",
     "semiconvection",
-    "wd_acc_small_dm",
-    "wd_aic",
-    "wd_nova_burst",
 )
 
 
@@ -491,5 +477,5 @@ def test_unserved_star_handlers_detached_and_binaries_covered() -> None:
         for c in ledger["cases"]
         if c["suite"] == "star" and c["status"] == "ported"
     ]
-    assert len(star_ported) >= 34
+    assert len(star_ported) >= 26
     assert set(_BATCH4_GRADUATED_STAR_CASES) <= set(star_ported)

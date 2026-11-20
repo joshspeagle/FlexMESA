@@ -14,9 +14,10 @@ use flexmesa_star::mix_info::{
 use flexmesa_star::overshoot::add_overshooting;
 use flexmesa_star::predictive_mix;
 use flexmesa_star::{
-    do_brunt_b, do_brunt_n2, load_zams_model, locate_convection_boundaries,
-    set_hydro_vars, set_mlt_vars, threshold_smoothing, update_sig_from_d_mix,
-    weighted_smoothing, StarControls, StarJobControls, StarModel,
+    do_brunt_b, do_brunt_n2, load_photo_bytes, load_zams_model,
+    locate_convection_boundaries, set_hydro_vars, set_mlt_vars,
+    threshold_smoothing, update_sig_from_d_mix, weighted_smoothing,
+    write_photo_bytes, StarControls, StarJobControls, StarModel,
 };
 
 fn zams_4m() -> StarModel {
@@ -679,6 +680,13 @@ fn test_set_mixing_info_skip_cz_bdy_mass_and_have_new_generation() {
     set_hydro_vars(&mut model, false, false).expect("set_hydro_vars");
     assert!(model.aux.mixing.have_new_cz_bdy_info);
     assert_ne!(model.aux.mixing.cz_top_mass.len(), 0);
+
+    // `FMPHOTO2` v27 wire compatibility: `have_new_generation` is skipped in
+    // serialization and deserializes back to `true` via
+    // `default_have_new_generation`.
+    let bytes = write_photo_bytes(&model);
+    let restored = load_photo_bytes(&bytes).expect("load_photo_bytes");
+    assert!(restored.aux.mixing.have_new_generation);
 }
 
 #[test]

@@ -11,6 +11,10 @@ use flexmesa_turb::DrivingSpecies;
 use crate::model::StarModel;
 use crate::star_ad::{StarAdExt, StarAdOrder1};
 
+const fn default_have_new_generation() -> bool {
+    true
+}
+
 /// Auxiliary mixing, MLT, convective-boundary, and composition-gradient arrays
 /// stored on [`crate::hydro_state::HydroAuxState::mixing`].
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -112,6 +116,9 @@ pub struct MixingAuxState {
     /// Whether the model holds a new generation after remeshing; when `false`,
     /// `set_hydro_vars` passes `skip_set_cz_bdy_mass = true` to
     /// `set_mixing_info` (`evolve.f90:377, 384`, `hydro_vars.f90:81`).
+    /// Skipped in `FMPHOTO2` `v27` checkpoints because it is a transient
+    /// in-flight remesh guard that is always `true` at checkpoint boundaries.
+    #[serde(skip, default = "default_have_new_generation")]
     pub have_new_generation: bool,
     /// Implicit superadiabaticity reduction factor (`superad_reduction_factor`
     /// in `turb_support.f90:289,504`).

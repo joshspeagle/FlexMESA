@@ -2,16 +2,25 @@
 //! Shared test fixtures for `flexmesa-binary` counter, determinism, and
 //! child-process checkpoint integration tests.
 
-use flexmesa_binary::{BinaryInlistControls, BinarySystem, DefaultBinaryExtras};
+use flexmesa_binary::{
+    BinaryInlistControls, BinarySystem, DefaultBinaryExtras,
+};
 use flexmesa_const::SECYER;
-use flexmesa_star::{load_zams_model, StarControls, StarJobControls};
+use flexmesa_star::{StarControls, StarJobControls, load_zams_model};
 
 #[allow(dead_code)]
 pub fn build_rlof_binary() -> BinarySystem {
-    let donor_ctrl = StarControls {
+    // Unrelaxed 1.5 Msun ZAMS at step 2's artificial fr_hard = 1e-5 enters a
+    // 2-cycle convective-core Newton limit cycle in MESA 26.4.1 (zone 2227 at
+    // dt = 1.505e5 s); enable upstream make_gradr_sticky_in_solver_iters
+    // (controls.defaults:2450) so the RLOF fixture tests binary mechanics
+    // rather than that unrelaxed ZAMS oscillation.
+    let mut donor_ctrl = StarControls {
         initial_mass: 1.5,
+        zbase: 0.02,
         ..StarControls::default()
     };
+    donor_ctrl.mix_wind.make_gradr_sticky_in_solver_iters = true;
     let mut donor = load_zams_model(donor_ctrl, StarJobControls::default())
         .expect("1.5 Msun donor ZAMS");
     donor.dt = 1.0e3 * SECYER;
@@ -23,6 +32,7 @@ pub fn build_rlof_binary() -> BinarySystem {
         initial_period_in_days: 0.45,
         mdot_scheme: String::from("Ritter"),
         max_tries_to_achieve: 20,
+        terminate_if_initial_overflow: false,
         ..BinaryInlistControls::default()
     };
     bctrl.use_radiation_corrected_transfer_rate = false;

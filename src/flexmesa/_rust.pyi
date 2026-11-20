@@ -100,6 +100,12 @@ def neu_get_batch(
     flags: Sequence[bool] = (True, True, True, True, True),
     parallel: bool = False,
 ) -> _ArrF64: ...
+def neu_get_full_zones(
+    log10_t: _ArrF64, log10_rho: _ArrF64, abar: _ArrF64, zbar: _ArrF64,
+    log10_tlim: float = 7.5,
+    flags: Sequence[bool] = (True, True, True, True, True),
+    parallel: bool = False,
+) -> _ArrF64: ...
 def set_mlt_f64(
     option: str, mixing_length_alpha: float, henyey_y_param: float,
     henyey_nu_param: float, chi_t: float, chi_rho: float, cp: float,
@@ -257,7 +263,7 @@ def eos_eval_pt_get(
 ) -> tuple[float, float, float, float, _ArrF64, _ArrF64, _ArrF64]: ...
 def eos_eval_opal_scvh(rho: float, temp: float, chem_id: list[int], xa: _ArrF64) -> tuple[_ArrF64, _ArrF64, _ArrF64]: ...  # noqa: E501
 def eos_eval_free_eos(rho: float, temp: float, chem_id: list[int], xa: _ArrF64) -> tuple[_ArrF64, _ArrF64, _ArrF64]: ...  # noqa: E501
-def eos_eval_cms(rho: float, temp: float, chem_id: list[int], xa: _ArrF64) -> tuple[_ArrF64, _ArrF64, _ArrF64]: ...  # noqa: E501
+def eos_eval_cms(rho: float, temp: float, chem_id: list[int], xa: _ArrF64, include_radiation: bool = True) -> tuple[_ArrF64, _ArrF64, _ArrF64]: ...  # noqa: E501
 def eos_eval_dt_get_t(
     rho: float, which_other: int, other_value: float, chem_id: list[int],
     xa: _ArrF64, log_t_guess: float = 6.0, use_skye: bool = True,
@@ -288,15 +294,15 @@ def eos_eval_gamma_de_get(
 ) -> tuple[float, float, _ArrF64, _ArrF64, _ArrF64]: ...
 def eos_dt_slice_coeffs(kind: int, ix_1b: int, iz_1b: int) -> tuple[float, float, int, float, float, int, _ArrF64]: ...  # noqa: E501
 def eos_cms_slice_coeffs(ix_1b: int) -> tuple[float, float, int, float, float, int, _ArrF64]: ...  # noqa: E501
-def kap_get_results_rust(z: float, x: float, zbase: float, xc: float, xn: float, xo: float, xne: float, log_rho: float, log_t: float, lnfree_e: float, d_lnfree_e_dln_rho: float, d_lnfree_e_dln_t: float, eta: float, d_eta_dln_rho: float, d_eta_dln_t: float, zbar: float = 1.0, kap_option: str = "gs98", kap_co_option: str = "gs98_co", kap_low_t_option: str = "lowT_fa05_gs98", kap_blend_log_t_upper_bdy: float = 3.88, kap_blend_log_t_lower_bdy: float = 3.80, cubic_interpolation_in_x: bool = False, cubic_interpolation_in_z: bool = False, include_electron_conduction: bool = True, use_blouin_conductive_opacities: bool = True, use_zbase_for_type1: bool = False, use_type2_opacities: bool = False, kap_type2_full_off_x: float = 1.0e-3, kap_type2_full_on_x: float = 1.0e-6, kap_type2_full_off_dz: float = 0.001, kap_type2_full_on_dz: float = 0.01) -> tuple[float, float, float, list[float]]: ...  # noqa: E501
-def kap_get_rust(chem_id: npt.NDArray[np.uintp], xa: _ArrF64, log_rho: float, log_t: float, lnfree_e: float, d_lnfree_e_dln_rho: float, d_lnfree_e_dln_t: float, eta: float, d_eta_dln_rho: float, d_eta_dln_t: float, zbase: float = 0.02, kap_option: str = "gs98", kap_co_option: str = "gs98_co", kap_low_t_option: str = "lowT_fa05_gs98", kap_blend_log_t_upper_bdy: float = 3.88, kap_blend_log_t_lower_bdy: float = 3.80, cubic_interpolation_in_x: bool = False, cubic_interpolation_in_z: bool = False, include_electron_conduction: bool = True, use_blouin_conductive_opacities: bool = True, use_zbase_for_type1: bool = False, use_type2_opacities: bool = False, kap_type2_full_off_x: float = 1.0e-3, kap_type2_full_on_x: float = 1.0e-6, kap_type2_full_off_dz: float = 0.001, kap_type2_full_on_dz: float = 0.01) -> tuple[float, float, float, list[float]]: ...  # noqa: E501
+def kap_get_results_rust(z: float, x: float, zbase: float, xc: float, xn: float, xo: float, xne: float, log_rho: float, log_t: float, lnfree_e: float, d_lnfree_e_dln_rho: float, d_lnfree_e_dln_t: float, eta: float, d_eta_dln_rho: float, d_eta_dln_t: float, zbar: float = 1.0, kap_option: str = "gs98", kap_co_option: str = "gs98_co", kap_low_t_option: str = "lowT_fa05_gs98", kap_blend_log_t_upper_bdy: float = 3.88, kap_blend_log_t_lower_bdy: float = 3.80, cubic_interpolation_in_x: bool = False, cubic_interpolation_in_z: bool = False, include_electron_conduction: bool = True, use_blouin_conductive_opacities: bool = True, use_zbase_for_type1: bool = True, use_type2_opacities: bool = True, kap_type2_full_off_x: float = 1.0e-3, kap_type2_full_on_x: float = 1.0e-6, kap_type2_full_off_dz: float = 0.001, kap_type2_full_on_dz: float = 0.01) -> tuple[float, float, float, list[float]]: ...  # noqa: E501
+def kap_get_rust(chem_id: npt.NDArray[np.uintp], xa: _ArrF64, log_rho: float, log_t: float, lnfree_e: float, d_lnfree_e_dln_rho: float, d_lnfree_e_dln_t: float, eta: float, d_eta_dln_rho: float, d_eta_dln_t: float, zbase: float = -1.0, kap_option: str = "gs98", kap_co_option: str = "gs98_co", kap_low_t_option: str = "lowT_fa05_gs98", kap_blend_log_t_upper_bdy: float = 3.88, kap_blend_log_t_lower_bdy: float = 3.80, cubic_interpolation_in_x: bool = False, cubic_interpolation_in_z: bool = False, include_electron_conduction: bool = True, use_blouin_conductive_opacities: bool = True, use_zbase_for_type1: bool = True, use_type2_opacities: bool = True, kap_type2_full_off_x: float = 1.0e-3, kap_type2_full_on_x: float = 1.0e-6, kap_type2_full_off_dz: float = 0.001, kap_type2_full_on_dz: float = 0.01) -> tuple[float, float, float, list[float]]: ...  # noqa: E501
 def kap_get_elect_cond_opacity_rust(zbar: float, log_rho: float, log_t: float, use_blouin: bool = True) -> tuple[float, float, float]: ...  # noqa: E501
 def kap_get_compton_opacity_rust(rho: float, t: float, lnfree_e: float, d_lnfree_e_dln_rho: float, d_lnfree_e_dln_t: float, eta: float, d_eta_dln_rho: float, d_eta_dln_t: float) -> tuple[float, float, float]: ...  # noqa: E501
 def kap_get_fixed_metal_rust(z: float, x: float, log_rho: float, log_t: float, prefix: str = "gs98", cubic_x: bool = False, cubic_z: bool = False) -> tuple[float, float, float]: ...  # noqa: E501
 def kap_get_co_rust(zbase: float, x: float, dxc: float, dxo: float, log_rho: float, log_t: float, kap_co_option: str = "gn93_co", cubic_x: bool = False, cubic_z: bool = False) -> tuple[float, float, float]: ...  # noqa: E501
 def kap_get_aesopus_rust(zbase: float, x: float, xc: float, xn: float, xo: float, log_rho: float, log_t: float) -> tuple[float, float, float]: ...  # noqa: E501
 def kap_get_kapcn_rust(zbase: float, x: float, fc: float, fn_val: float, log_rho: float, log_t: float) -> tuple[float, float, float]: ...  # noqa: E501
-def kap_get_zones_rust(chem_id: npt.NDArray[np.uintp], xa_zones: _ArrF64, log_rho_zones: _ArrF64, log_t_zones: _ArrF64, lnfree_e_zones: _ArrF64, d_lnfree_e_dln_rho_zones: _ArrF64, d_lnfree_e_dln_t_zones: _ArrF64, eta_zones: _ArrF64, d_eta_dln_rho_zones: _ArrF64, d_eta_dln_t_zones: _ArrF64, zbase: float = 0.02, kap_option: str = "gs98", kap_co_option: str = "gs98_co", kap_low_t_option: str = "lowT_fa05_gs98", kap_blend_log_t_upper_bdy: float = 3.88, kap_blend_log_t_lower_bdy: float = 3.80, cubic_interpolation_in_x: bool = False, cubic_interpolation_in_z: bool = False, include_electron_conduction: bool = True, use_blouin_conductive_opacities: bool = True, use_zbase_for_type1: bool = False, use_type2_opacities: bool = False, kap_type2_full_off_x: float = 1.0e-3, kap_type2_full_on_x: float = 1.0e-6, kap_type2_full_off_dz: float = 0.001, kap_type2_full_on_dz: float = 0.01, parallel: bool = True) -> _ArrF64: ...  # noqa: E501
+def kap_get_zones_rust(chem_id: npt.NDArray[np.uintp], xa_zones: _ArrF64, log_rho_zones: _ArrF64, log_t_zones: _ArrF64, lnfree_e_zones: _ArrF64, d_lnfree_e_dln_rho_zones: _ArrF64, d_lnfree_e_dln_t_zones: _ArrF64, eta_zones: _ArrF64, d_eta_dln_rho_zones: _ArrF64, d_eta_dln_t_zones: _ArrF64, zbase: float = -1.0, kap_option: str = "gs98", kap_co_option: str = "gs98_co", kap_low_t_option: str = "lowT_fa05_gs98", kap_blend_log_t_upper_bdy: float = 3.88, kap_blend_log_t_lower_bdy: float = 3.80, cubic_interpolation_in_x: bool = False, cubic_interpolation_in_z: bool = False, include_electron_conduction: bool = True, use_blouin_conductive_opacities: bool = True, use_zbase_for_type1: bool = True, use_type2_opacities: bool = True, kap_type2_full_off_x: float = 1.0e-3, kap_type2_full_on_x: float = 1.0e-6, kap_type2_full_off_dz: float = 0.001, kap_type2_full_on_dz: float = 0.01, parallel: bool = True) -> _ArrF64: ...  # noqa: E501
 def kap_build_full_tables_bin(kap_dir: str, aesopus_section_path: str, out_path: str) -> None: ...  # noqa: E501
 def rates_reaction_id_by_name(name: str) -> int: ...
 def rates_reaction_name_by_id(ir: int) -> str: ...
@@ -315,14 +321,19 @@ def rates_eval_weak_pair(lhs_name: str, rhs_name: str, t9: float, ye_rho: float,
 def rates_eval_ecapture_pair(lhs_name: str, rhs_name: str, t9: float, ye_rho: float, eta_k: float, which_mui: str = "pcr2009", which_vs: str = "itoh2002", zbar: float = 10.909090909090908, abar: float = 21.818181818181817) -> list[float]: ...  # noqa: E501
 def rates_weak_info_by_names(lhs_name: str, rhs_name: str) -> tuple[float, float]: ...  # noqa: E501
 def rates_eval_weak_table_index(idx: int, t9: float, l_ye_rho: float) -> tuple[str, str, list[float]]: ...  # noqa: E501
+def rates_compute_rev_ratio_coeff1(w_in: Sequence[float], spin_in: Sequence[float], w_out: Sequence[float], spin_out: Sequence[float]) -> float: ...  # noqa: E501
 def atm_eval_t_tau(t_tau_id: int, tau: float, teff: float) -> float: ...
 def atm_eval_t_tau_dq_dtau(t_tau_id: int, tau: float) -> float: ...
 def atm_get_t_tau_base(t_tau_id: int) -> float: ...
+def atm_get_t_tau_id(name: str) -> int: ...
+def atm_get_table_id(name: str) -> int: ...
 def atm_eval_e2(x: float) -> tuple[float, float]: ...
 def atm_eval_paczynski_gradr(t: float, p: float, rho: float, tau: float, kap: float, l: float, m: float, r: float, cgrav: float) -> float: ...  # noqa: E501
 def atm_eval_table(l: float, r: float, m: float, cgrav: float, id: int, z: float, skip_partials: bool, teff: float) -> tuple[float, ...]: ...  # noqa: E501
+def atm_eval_table_atm(l: float, r: float, m: float, cgrav: float, atm_table: str, z: float, tau_factor: float, atm_off_table_option: str, t_tau_relation: str, t_tau_opacity: str, kap_guess: float, pextra_factor: float, errtol: float, max_iters: int, max_steps: int, skip_partials: bool, teff: float, chem_id: Sequence[int] | None = None, xa: _ArrF64 | None = None, zbase: float = 0.02, low_t_option: str = "low_t_fa05_gs98") -> tuple[tuple[float, ...], float]: ...  # noqa: E501
 def atm_get_table_alfa_beta(l: float, teff: float, r: float, m: float, cgrav: float, id: int) -> tuple[float, float]: ...  # noqa: E501
 def atm_get_table_base(id: int) -> float: ...
+def atm_eval_t_tau_atm(tau_surf: float, l: float, r: float, m: float, cgrav: float, kap_guess: float, pextra_factor: float, t_tau_relation: str, t_tau_opacity: str, errtol: float, max_iters: int, max_steps: int, skip_partials: bool, teff: float, chem_id: Sequence[int] | None = None, xa: _ArrF64 | None = None, zbase: float = 0.02, low_t_option: str = "low_t_fa05_gs98") -> tuple[float, ...]: ...  # noqa: E501
 def atm_eval_t_tau_uniform(tau_surf: float, l: float, r: float, m: float, cgrav: float, kap_guess: float, pextra_factor: float, t_tau_id: int, errtol: float, max_iters: int, skip_partials: bool, teff: float, chem_id: Sequence[int] | None = None, xa: _ArrF64 | None = None, zbase: float = 0.02, low_t_option: str = "low_t_fa05_gs98") -> tuple[float, ...]: ...  # noqa: E501
 def atm_eval_t_tau_varying(tau_surf: float, l: float, r: float, m: float, cgrav: float, t_tau_id: int, errtol: float, max_steps: int, skip_partials: bool, teff: float, chem_id: Sequence[int], xa: _ArrF64, zbase: float = 0.02, low_t_option: str = "low_t_fa05_gs98") -> tuple[float, ...]: ...  # noqa: E501
 def atm_eval_irradiated(l: float, r: float, m: float, cgrav: float, t_eq: float, p_surf: float, kap_guess: float, kap_v: float, gamma: float, errtol: float, max_iters: int, skip_partials: bool, chem_id: Sequence[int] | None = None, xa: _ArrF64 | None = None, zbase: float = 0.02, low_t_option: str = "low_t_fa05_gs98") -> tuple[float, ...]: ...  # noqa: E501
@@ -335,7 +346,7 @@ def net_burn_1_zone_const_p(net_name: str, starting_temp: float, starting_x: _Ar
 def eos_eval_opal_scvh_zones(rho: _ArrF64, temp: _ArrF64, chem_id: Sequence[int], xa: _ArrF64, parallel: bool = True) -> _ArrF64: ...  # noqa: E501
 def eos_opal_scvh_cells_batch(log_rho: _ArrF64, log_temp: _ArrF64, ix_1based: int = 5, iz_1based: int = 2) -> tuple[_ArrF64, _ArrF64, _ArrF64, _ArrF64, _ArrF64, _ArrF64, _ArrF64, _ArrF64]: ...  # noqa: E501
 def atm_table_photosphere_zsol_spline() -> tuple[_ArrF64, _ArrF64, bool, bool, _ArrF64]: ...  # noqa: E501
-def kap_get_results_zones_rust(z: float, x: float, zbase: float, xc: float, xn: float, xo: float, xne: float, log_rho_zones: _ArrF64, log_t_zones: _ArrF64, lnfree_e: float, d_lnfree_e_dln_rho: float, d_lnfree_e_dln_t: float, eta: float, d_eta_dln_rho: float, d_eta_dln_t: float, zbar: float = 1.0, kap_option: str = "gs98", kap_co_option: str = "gs98_co", kap_low_t_option: str = "lowT_fa05_gs98", kap_blend_log_t_upper_bdy: float = 3.88, kap_blend_log_t_lower_bdy: float = 3.80, cubic_interpolation_in_x: bool = False, cubic_interpolation_in_z: bool = False, include_electron_conduction: bool = True, use_blouin_conductive_opacities: bool = True, use_zbase_for_type1: bool = False, use_type2_opacities: bool = False, kap_type2_full_off_x: float = 1.0e-3, kap_type2_full_on_x: float = 1.0e-6, kap_type2_full_off_dz: float = 0.001, kap_type2_full_on_dz: float = 0.01, parallel: bool = True) -> _ArrF64: ...  # noqa: E501
+def kap_get_results_zones_rust(z: float, x: float, zbase: float, xc: float, xn: float, xo: float, xne: float, log_rho_zones: _ArrF64, log_t_zones: _ArrF64, lnfree_e: float, d_lnfree_e_dln_rho: float, d_lnfree_e_dln_t: float, eta: float, d_eta_dln_rho: float, d_eta_dln_t: float, zbar: float = 1.0, kap_option: str = "gs98", kap_co_option: str = "gs98_co", kap_low_t_option: str = "lowT_fa05_gs98", kap_blend_log_t_upper_bdy: float = 3.88, kap_blend_log_t_lower_bdy: float = 3.80, cubic_interpolation_in_x: bool = False, cubic_interpolation_in_z: bool = False, include_electron_conduction: bool = True, use_blouin_conductive_opacities: bool = True, use_zbase_for_type1: bool = True, use_type2_opacities: bool = True, kap_type2_full_off_x: float = 1.0e-3, kap_type2_full_on_x: float = 1.0e-6, kap_type2_full_off_dz: float = 0.001, kap_type2_full_on_dz: float = 0.01, parallel: bool = True) -> _ArrF64: ...  # noqa: E501
 def rates_eval_reaclib_screen_zones(handle: str, mode: str, temps: _ArrF64, dens: _ArrF64, zbar: float, abar: float, z2bar: float, a1: float, z1: float, a2: float, z2: float, parallel: bool = True) -> _ArrF64: ...  # noqa: E501
 def atm_eval_table_zones(l: _ArrF64, r: _ArrF64, m: _ArrF64, cgrav: float, id: int, z: float, skip_partials: bool, teff: _ArrF64, parallel: bool = True) -> _ArrF64: ...  # noqa: E501
 def net_eval_zones(net_name: str, x: _ArrF64, temps: _ArrF64, log_ts: _ArrF64, rhos: _ArrF64, log_rhos: _ArrF64, abar: float, zbar: float, z2bar: float, ye: float, eta: float = 0.0, d_eta_dlnt: float = 0.0, d_eta_dlnrho: float = 0.0, weak_rate_factor: float = 1.0, screening_mode: str = "extended", skip_jacobian: bool = False, parallel: bool = True) -> _ArrF64: ...  # noqa: E501
@@ -362,6 +373,7 @@ class RustStarModel:
     num_redos: int
     micro_cache_hits: int
     micro_cache_misses: int
+    zbase: float
     ln_peos_surf: float
     ln_t_surf: float
     iso_names: list[str]
@@ -429,7 +441,7 @@ class RustStarModel:
     @staticmethod
     def from_zams(initial_mass: float = 1.0, initial_z: float = 0.02, initial_y: float = -1.0) -> RustStarModel: ...  # noqa: E501
     @staticmethod
-    def from_pre_ms(initial_mass: float = 1.0, initial_z: float = 0.02, initial_y: float = -1.0, t_c: float = 9.0e5, d_log10_p: float = 0.02) -> RustStarModel: ...  # noqa: E501
+    def from_pre_ms(initial_mass: float = 1.0, initial_z: float = 0.02, initial_y: float = -1.0, t_c: float = 3.0e5, d_log10_p: float = 0.0) -> RustStarModel: ...  # noqa: E501
     @staticmethod
     def from_mod_str(text: str) -> RustStarModel: ...
     @staticmethod
@@ -437,7 +449,7 @@ class RustStarModel:
     def to_mod_str(self) -> str: ...
     def to_photo_bytes(self) -> bytes: ...
     def eval_hydro_vars(self, skip_net: bool = False, skip_net_jacobian: bool = False) -> None: ...  # noqa: E501
-    def set_evolve_controls(self, mesh_delta_coeff: float = 1.0, varcontrol_target: float = 1.0e-4) -> None: ...  # noqa: E501
+    def set_evolve_controls(self, mesh_delta_coeff: float = 1.0, varcontrol_target: float = 1.0e-3) -> None: ...  # noqa: E501
     def save_start_values(self) -> None: ...
     def save_old_values(self) -> None: ...
     def eval_equations(self, include_chem: bool = False) -> tuple[_ArrF64, _ArrF64, _ArrF64, _ArrF64, _ArrF64]: ...  # noqa: E501
@@ -467,7 +479,6 @@ def star_eval_omega_crit(cgrav: float, m_grav: float, r_polar: float, lum: float
 def star_eval_rotational_mixing_zone(r: float, hp: float, grav: float, rho: float, t: float, cp: float, opacity: float, chi_t: float, chi_rho: float, grada: float, gradt: float, brunt_n2_t: float, brunt_n2_mu: float, omega: float, dln_omega_dln_r: float, abar: float, zbar: float, d_visc: float = 0.0) -> tuple[float, float, float, float, float, float, float, float, float]: ...  # noqa: E501
 def star_set_rotation_mixing_info(model: RustStarModel) -> _ArrF64: ...
 def star_eval_phase_separation_shift(x_heavy: float, is_one_mixture: bool = False) -> float: ...  # noqa: E501
-def star_eval_castellani_penetration_vel(conv_vel: float, r: float, hp: float, gradr: float, grada: float, abar_in: float, abar_out: float) -> float: ...  # noqa: E501
 def star_do_conv_premix(model: RustStarModel, max_iters: int = 10, avoid_fuel_increase: bool = True) -> int: ...  # noqa: E501
 def star_add_predictive_mixing(model: RustStarModel, ingested_mass_limit_coeff: float = 0.1, superad_thresh: float = 0.005) -> int: ...  # noqa: E501
 def star_do_phase_separation(model: RustStarModel, dt: float, gamma_crystallization: float = 175.0, is_one_mixture: bool = False) -> _ArrF64: ...  # noqa: E501
@@ -583,6 +594,9 @@ class PyRspBuildContext:
     def eval_lina(self, teff_k: float, l_lsun: float, n_modes: int = 3) -> tuple[list[float], list[float]]: ...  # noqa: E501
 
 def star_solve_gyre_mesa_modes_full(gyre_content: str, l: int = 0, omega_min: float = 0.5, omega_max: float = 12.0, n_freq: int = 400) -> list[tuple[int, int, int, int, float, list[float], list[float]]]: ...  # noqa: E501
+def star_extras_snapshot(model: RustStarModel, case_dir: str = "", include_history: bool = True) -> dict[str, Any]: ...  # noqa: E501
+def star_apply_extras_updates(model: RustStarModel, updates: dict[str, Any]) -> None: ...  # noqa: E501
+def binary_extras_snapshot(bin: RustBinarySystem, case_dir: str = "") -> dict[str, Any]: ...  # noqa: E501
 def star_verify_photo_restart(model: Any, n_steps: int = 1) -> tuple[int, int]: ...  # noqa: E501
 def star_copy_cleaned_case(src_dir: str, dst_dir: str, suite: str = "star") -> None: ...  # noqa: E501
 def star_parse_inlist_bundle(inlist_path: str, allow_unsupported_controls: bool = False) -> dict[str, Any]: ...  # noqa: E501

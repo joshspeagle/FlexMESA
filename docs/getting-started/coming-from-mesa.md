@@ -52,7 +52,7 @@ print(validated)
 | Fortran Namelist & Option | FlexMESA Equivalent |
 | :--- | :--- |
 | **`&star_job`** | |
-| `create_pre_main_sequence_model = .true.` | `StarModel.from_pre_ms(initial_mass=..., initial_z=..., t_c=9.0e5)` |
+| `create_pre_main_sequence_model = .true.` | `StarModel.from_pre_ms(initial_mass=..., initial_z=..., t_c=3.0e5, d_log10_p=0.0)` |
 | `load_saved_model = .true.` / `load_model_filename` | `StarModel.from_mod_file(path)` or `StarModel.from_mod_str(text)` |
 | `save_model_when_terminate = .true.` | `model.write_mod_file(path)` or `model.to_mod_str()` |
 | `change_net = .true.` / `new_net_name = 'basic.net'` | `flexmesa.net.get_net_info("basic.net")` (embedded in `StarModel`) |
@@ -60,7 +60,7 @@ print(validated)
 | **`&controls`** | |
 | `initial_mass`, `initial_z`, `initial_y` | `StarModel.from_zams(initial_mass=..., initial_z=..., initial_y=...)` |
 | `max_model_number`, `max_age` | `model.evolve(max_steps=..., max_age=...)` |
-| `mesh_delta_coeff`, `varcontrol_target` | `model.set_evolve_controls(mesh_delta_coeff=1.0, varcontrol_target=1.0e-4)` |
+| `mesh_delta_coeff`, `varcontrol_target` | `model.set_evolve_controls(mesh_delta_coeff=1.0, varcontrol_target=1.0e-3)` |
 | `overshoot_scheme`, `overshoot_f`, `overshoot_f0` | `model.update_mixing(dt, overshoot_f=..., overshoot_f0=..., scheme="exponential")` |
 | `cool_wind_RGB_scheme`, `hot_wind_scheme`, `Dutch_scaling_factor` | `model.apply_wind_and_adjust_mass(scheme="Dutch", eta=1.0, dt=dt)` |
 | `do_element_diffusion = .true.` | `model.do_element_diffusion(dt, scheme="stanton_murillo")` *(partial/unverified; `#156`)* |
@@ -87,7 +87,7 @@ from flexmesa import star
 # Export a ZAMS model to an upstream-compatible ASCII .mod string and roundtrip it
 model = star.StarModel.from_zams(initial_mass=2.0, initial_z=0.02)
 mod_text = model.to_mod_str()
-reloaded = star.StarModel.from_mod_str(mod_text, eval_hydro=True)
+reloaded = star.StarModel.from_mod_str(mod_text)
 assert reloaded.nz == model.nz
 
 # Save and restore an internal FlexMESA binary snapshot (.photo; not Fortran MESA binary compatible)

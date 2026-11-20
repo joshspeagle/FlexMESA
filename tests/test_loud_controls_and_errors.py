@@ -168,11 +168,11 @@ def test_python_inlist_and_runner_loud_failures_and_opt_out() -> None:
             "&binary_controls\n"
             "  m1 = 10.0\n"
             "  m2 = 8.0\n"
-            "  terminal_interval = 10\n"
+            "  photo_interval = 10\n"
             "/\n",
             encoding="utf-8",
         )
-        with pytest.raises(ValueError, match="terminal_interval"):
+        with pytest.raises(ValueError, match="photo_interval"):
             binary.run_binary_test_suite_case(bin_case, max_steps_cap=1)
         ast_case = root / "ast_case"
         ast_case.mkdir()
@@ -207,6 +207,9 @@ def test_extras_missing_hooks_callback_errors_and_redo_fail_loudly(
     wind_case = tmp_path / "wind_case"
     wind_case.mkdir()
     (wind_case / "inlist").write_text(
+        "&kap\n"
+        "  zbase = 0.02\n"
+        "/\n"
         "&controls\n"
         "  initial_mass = 1.0\n"
         "  use_other_wind = .true.\n"
@@ -227,8 +230,13 @@ def test_extras_missing_hooks_callback_errors_and_redo_fail_loudly(
 
     ok_star = tmp_path / "ok_star"
     ok_star.mkdir()
+    # ZAMS models start at `model_number = 1` (becoming `2` after 1 step);
+    # keep `max_model_number > 2` so step 1 does not already terminate inside
+    # `star_check_model` (`run_star_support.f90:211-212`) before
+    # `extras_check_model` runs (`max_steps_per_stage=1` caps to 1 step).
     (ok_star / "inlist").write_text(
-        "&controls\n  initial_mass = 1.0\n  max_model_number = 1\n/\n",
+        "&kap\n  zbase = 0.02\n/\n"
+        "&controls\n  initial_mass = 1.0\n  max_model_number = 10\n/\n",
         encoding="utf-8",
     )
     with pytest.raises(ValueError, match="boom from python star extras"):
@@ -269,7 +277,7 @@ def test_extras_missing_hooks_callback_errors_and_redo_fail_loudly(
         encoding="utf-8",
     )
     (ok_bin / "inlist1").write_text(
-        "&controls\n  initial_mass = 10.0\n/\n",
+        "&kap\n  zbase = 0.02\n/\n&controls\n  initial_mass = 10.0\n/\n",
         encoding="utf-8",
     )
     with pytest.raises(ValueError, match="boom from python binary extras"):

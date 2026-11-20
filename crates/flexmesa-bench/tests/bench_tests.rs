@@ -7,9 +7,9 @@
 //! are internal regression values, not upstream MESA outputs (tracked in #146).
 
 use flexmesa_bench::{
-    run_all_wave1_benchmarks, run_all_wave2_benchmarks,
+    BenchRecord, run_all_wave1_benchmarks, run_all_wave2_benchmarks,
     run_all_wave3a_benchmarks, run_all_wave3b_benchmarks,
-    run_all_wave4_benchmarks, run_all_wave5_benchmarks, BenchRecord,
+    run_all_wave4_benchmarks, run_all_wave5_benchmarks,
 };
 
 /// `FlexMESA` regression snapshots for $N_{\mathrm{zones}} = 8$ across all six
@@ -56,13 +56,21 @@ const WAVE3B_REGRESSION_SNAPSHOTS_N8: [(&str, f64); 5] = [
 /// Wave 4 1D stellar engine workloads (internal self-consistency check, not an
 /// upstream MESA output; `star_hydro_eqns`, `star_newton_step`, and
 /// `star_evolve_step` shifted under `#141` when `neu` `#193` and `num` `#194`
-/// were aligned to MESA `26.4.1`; tracked in #146).
+/// were aligned to MESA `26.4.1`, all five shifted under `#149` when
+/// `&controls` / microphysics / mesh-function defaults were aligned to MESA
+/// `26.4.1`, `star_remesh` shifted from `5.513_777_703_025_969e2` to
+/// `5.108_453_216_631_093e2` under `#153` when `eval_mesh_gval` was ported to
+/// `set_mesh_function_data` + `get_gval_info`, and `star_micro_vars`,
+/// `star_hydro_eqns`, and `star_newton_step` shifted under `#155` when
+/// `remove_mixing_singletons` (`mix_info.f90:1026-1072`) switched the isolated
+/// `k = 2` convective singleton on the coarse `N = 8` grid to radiative
+/// (`gradt = gradr`); tracked in #146).
 const WAVE4_REGRESSION_SNAPSHOTS_N8: [(&str, f64); 5] = [
-    ("star_micro_vars", 2.497_297_961_588_147e2),
-    ("star_hydro_eqns", 4.253_179_678_462_525e6),
-    ("star_newton_step", 1.451_336_644_709_231e2),
-    ("star_remesh", 4.203_476_959_958_853e2),
-    ("star_evolve_step", 1.005_942_875_453_512e2),
+    ("star_micro_vars", 2.500_111_893_102_388e2),
+    ("star_hydro_eqns", 4.243_492_123_572_694e6),
+    ("star_newton_step", 6.383_737_350_497_265),
+    ("star_remesh", 5.108_453_216_631_093e2),
+    ("star_evolve_step", 1.005_971_756_200_643e2),
 ];
 
 /// `FlexMESA` regression snapshots for $N_{\mathrm{zones}} = 8$ across all four
@@ -97,8 +105,9 @@ fn assert_records_match_snapshots_with_tol(
         assert!(rec.stage3.median_us > 0.0);
         assert!(rec.checksum.is_finite());
     }
-    for (rec, &(exp_name, exp_sum)) in
-        records[..snapshots_n8.len()].iter().zip(snapshots_n8.iter())
+    for (rec, &(exp_name, exp_sum)) in records[..snapshots_n8.len()]
+        .iter()
+        .zip(snapshots_n8.iter())
     {
         assert_eq!(rec.workload, exp_name);
         let rel_err = (rec.checksum - exp_sum).abs() / exp_sum.abs();

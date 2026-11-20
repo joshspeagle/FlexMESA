@@ -48,12 +48,7 @@ class BaselineRegression:
 
 
 def _within_tolerance(rec: _case_verdict.CaseHarnessRecord) -> bool:
-    comp = rec.comparison
-    return bool(
-        comp is not None
-        and comp.within_final_tolerances
-        and comp.within_track_tolerances
-    )
+    return rec.is_within_tolerances
 
 
 def find_baseline_regressions(

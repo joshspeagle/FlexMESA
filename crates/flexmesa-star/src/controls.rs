@@ -29,12 +29,12 @@ pub struct StarControls {
     pub zams_filename: String,
     /// Maximum model number before stopping (`max_model_number`).
     pub max_model_number: Option<usize>,
-    /// Maximum stellar age in years (`max_age`).
-    pub max_age: Option<f64>,
+    /// Maximum stellar age in years (`max_age`, `<= 0` disables).
+    pub max_age: f64,
     /// Maximum stellar age in seconds (`max_age_in_seconds`).
     pub max_age_in_seconds: Option<f64>,
-    /// Maximum timestep in years (`max_years_for_timestep`).
-    pub max_years_for_timestep: Option<f64>,
+    /// Maximum timestep in years (`max_years_for_timestep`, `<= 0` disables).
+    pub max_years_for_timestep: f64,
     /// Minimum timestep limit in seconds (`min_timestep_limit`).
     pub min_timestep_limit: f64,
     /// Mixing-length parameter $\alpha_{\mathrm{MLT}}$ (`2.0` default).
@@ -69,12 +69,30 @@ pub struct StarControls {
     pub tau_factor: f64,
     /// Opacity multiplicative factor (`1.0`).
     pub opacity_factor: f64,
+    /// Use analytic electron-scattering opacity $\kappa = 0.2(1 + X)$ (`use_simple_es_for_kap`).
+    #[serde(default)]
+    pub use_simple_es_for_kap: bool,
+    /// Evaluate opacity using start-of-step `xa_start` composition (`use_starting_composition_for_kap`).
+    #[serde(default)]
+    pub use_starting_composition_for_kap: bool,
+    /// Upper clamp on Rosseland opacity (`opacity_max`, `<= 0` disables; `-1.0` default).
+    #[serde(default = "default_neg_one")]
+    pub opacity_max: f64,
+    /// Lower clamp on Rosseland opacity (`opacity_min`, `<= 0` disables; `-1.0` default).
+    #[serde(default = "default_neg_one")]
+    pub opacity_min: f64,
     /// Minimum temperature for thermal neutrino evaluation ($\mathrm{K}$).
     pub min_t_for_neu: f64,
     /// Thermal neutrino multiplicative factor (`1.0`).
     pub non_nuc_neu_factor: f64,
     /// Maximum $\log_{10}(T/\mathrm{K})$ above which network $T$ is clipped (`max_logT_for_net`).
     pub max_logt_for_net: f64,
+    /// Lower $\log_{10}(T/\mathrm{K})$ strong-rate zero threshold (`net_logTcut_lo`, `-1.0` default).
+    #[serde(default = "default_neg_one")]
+    pub net_logtcut_lo: f64,
+    /// Upper $\log_{10}(T/\mathrm{K})$ strong-rate smooth cutoff threshold (`net_logTcut_lim`, `-1.0` default).
+    #[serde(default = "default_neg_one")]
+    pub net_logtcut_lim: f64,
     /// Maximum mean atomic mass $\bar{A}$ for nuclear burning (`max_abar_for_burning`).
     pub max_abar_for_burning: f64,
     /// Whether operator-split 1-zone burning is active (`op_split_burn`).
@@ -83,7 +101,16 @@ pub struct StarControls {
     pub eps_nuc_factor: f64,
     /// Nuclear abundance rate multiplicative factor (`1.0`).
     pub dxdt_nuc_factor: f64,
-    /// Plasma screening prescription (`ScreeningMode::Extended` default).
+    /// Global weak-reaction rate multiplier (`weak_rate_factor`, `1.0` default).
+    #[serde(default = "default_one")]
+    pub weak_rate_factor: f64,
+    /// Global reaction neutrino $Q_\nu$ multiplier (`reaction_neuQs_factor`, `1.0` default).
+    #[serde(default = "default_one")]
+    pub reaction_neuqs_factor: f64,
+    /// Magnitude cap on $|\epsilon_{\mathrm{nuc}}|$ before `eps_nuc_factor` (`max_abs_eps_nuc`, `1e99` default).
+    #[serde(default = "default_max_abs_eps_nuc")]
+    pub max_abs_eps_nuc: f64,
+    /// Plasma screening prescription (`ScreeningMode::Chugunov` default).
     pub screening_mode: ScreeningMode,
     /// Whether to compute the Brunt-Väisälä composition term $B$ (`calculate_Brunt_B`, `true` default, `controls.defaults:7915`).
     pub calculate_brunt_b: bool,
@@ -205,16 +232,16 @@ pub struct StarControls {
     pub log_teff_upper_limit: Option<f64>,
     /// Lower limit on $\log_{10}(T_{\mathrm{eff}}/\mathrm{K})$ (`log_Teff_lower_limit`).
     pub log_teff_lower_limit: Option<f64>,
-    /// Upper limit on $\log_{10}(T_c/\mathrm{K})$ (`log_center_temp_upper_limit`).
-    pub log_center_temp_upper_limit: Option<f64>,
+    /// Upper limit on $\log_{10}(T_c/\mathrm{K})$ (`log_center_temp_upper_limit`, `>= 1e99` disables).
+    pub log_center_temp_upper_limit: f64,
     /// Lower limit on $\log_{10}(T_c/\mathrm{K})$ (`log_center_temp_lower_limit`).
     pub log_center_temp_lower_limit: Option<f64>,
-    /// Upper limit on $\log_{10}(\rho_c/\mathrm{g\,cm^{-3}})$ (`log_center_density_upper_limit`).
-    pub log_center_density_upper_limit: Option<f64>,
+    /// Upper limit on $\log_{10}(\rho_c/\mathrm{g\,cm^{-3}})$ (`log_center_density_upper_limit`, `>= 1e99` disables).
+    pub log_center_density_upper_limit: f64,
     /// Lower limit on $\log_{10}(\rho_c/\mathrm{g\,cm^{-3}})$ (`log_center_density_lower_limit`).
     pub log_center_density_lower_limit: Option<f64>,
-    /// Upper limit on $\max_k \log_{10}(T_k/\mathrm{K})$ (`log_max_temp_upper_limit`).
-    pub log_max_temp_upper_limit: Option<f64>,
+    /// Upper limit on $\max_k \log_{10}(T_k/\mathrm{K})$ (`log_max_temp_upper_limit`, `>= 1e99` disables).
+    pub log_max_temp_upper_limit: f64,
     /// Upper limit on $\log_{10} g_{\mathrm{surf}}$ (`log_g_upper_limit`).
     pub log_g_upper_limit: Option<f64>,
     /// Lower limit on $\log_{10} g_{\mathrm{surf}}$ (`log_g_lower_limit`).
@@ -231,32 +258,32 @@ pub struct StarControls {
     pub co_core_mass_limit: Option<f64>,
     /// Upper limit on ONe-core mass in $M_\odot$ (`one_core_mass_limit`).
     pub one_core_mass_limit: Option<f64>,
-    /// Lower limit on H-rich envelope mass $M_* - M_{\mathrm{He,core}}$ in $M_\odot$ (`envelope_mass_limit`).
-    pub envelope_mass_limit: Option<f64>,
-    /// Lower limit on He-shell mass $M_{\mathrm{He,core}} - M_{\mathrm{CO,core}}$ in $M_\odot$ (`he_layer_mass_lower_limit`).
-    pub he_layer_mass_lower_limit: Option<f64>,
+    /// Lower limit on H-rich envelope mass $M_* - M_{\mathrm{He,core}}$ in $M_\odot$ (`envelope_mass_limit`, `<= 0` disables).
+    pub envelope_mass_limit: f64,
+    /// Lower limit on He-shell mass $M_{\mathrm{He,core}} - M_{\mathrm{CO,core}}$ in $M_\odot$ (`he_layer_mass_lower_limit`, `<= 0` disables).
+    pub he_layer_mass_lower_limit: f64,
     /// Upper limit on total nuclear luminosity in $L_\odot$ (`power_nuc_burn_upper_limit`).
     pub power_nuc_burn_upper_limit: Option<f64>,
     /// Lower limit on total nuclear luminosity in $L_\odot$ (`power_nuc_burn_lower_limit`).
     pub power_nuc_burn_lower_limit: Option<f64>,
     /// Upper limit on He-burning luminosity in $L_\odot$ (`power_he_burn_upper_limit`).
     pub power_he_burn_upper_limit: Option<f64>,
-    /// Maximum total stellar mass in $M_\odot$ (`star_mass_max_limit`).
-    pub star_mass_max_limit: Option<f64>,
-    /// Minimum total stellar mass in $M_\odot$ (`star_mass_min_limit`).
-    pub star_mass_min_limit: Option<f64>,
-    /// Minimum remnant/baryonic mass in $M_\odot$ (`remnant_mass_min_limit`).
-    pub remnant_mass_min_limit: Option<f64>,
-    /// Minimum total mass of species `star_species_mass_min_limit_iso` in $M_\odot$ (`star_species_mass_min_limit`).
-    pub star_species_mass_min_limit: Option<f64>,
+    /// Maximum total stellar mass in $M_\odot$ (`star_mass_max_limit`, `<= 0` disables).
+    pub star_mass_max_limit: f64,
+    /// Minimum total stellar mass in $M_\odot$ (`star_mass_min_limit`, `<= 0` disables).
+    pub star_mass_min_limit: f64,
+    /// Minimum remnant/baryonic mass in $M_\odot$ (`remnant_mass_min_limit`, `<= 0` disables).
+    pub remnant_mass_min_limit: f64,
+    /// Minimum total mass of species `star_species_mass_min_limit_iso` in $M_\odot$ (`star_species_mass_min_limit`, `<= 0` disables).
+    pub star_species_mass_min_limit: f64,
     /// Isotope name for `star_species_mass_min_limit` (`star_species_mass_min_limit_iso`).
     pub star_species_mass_min_limit_iso: String,
-    /// Maximum total mass of species `star_species_mass_max_limit_iso` in $M_\odot$ (`star_species_mass_max_limit`).
-    pub star_species_mass_max_limit: Option<f64>,
+    /// Maximum total mass of species `star_species_mass_max_limit_iso` in $M_\odot$ (`star_species_mass_max_limit`, `<= 0` disables).
+    pub star_species_mass_max_limit: f64,
     /// Isotope name for `star_species_mass_max_limit` (`star_species_mass_max_limit_iso`).
     pub star_species_mass_max_limit_iso: String,
-    /// Iron-core infall velocity threshold in $\mathrm{cm\,s^{-1}}$ (`fe_core_infall_limit`).
-    pub fe_core_infall_limit: Option<f64>,
+    /// Iron-core infall velocity threshold in $\mathrm{cm\,s^{-1}}$ (`fe_core_infall_limit`, `<= 0` or hydrostatic disables).
+    pub fe_core_infall_limit: f64,
     /// Upper limit on $|v_{\mathrm{surf}}| / v_{\mathrm{KH}}$ (`v_surf_div_v_kh_upper_limit`).
     pub v_surf_div_v_kh_upper_limit: Option<f64>,
     /// Upper limit on central Coulomb coupling parameter $\Gamma_c$ (`gamma_center_limit`).
@@ -264,9 +291,9 @@ pub struct StarControls {
     /// Upper limit on $v_{\mathrm{surf}} / v_{\mathrm{esc}}$ (`v_surf_div_v_esc_limit`).
     pub v_surf_div_v_esc_limit: Option<f64>,
     /// Upper limit on $\Omega_{\mathrm{surf}} / \Omega_{\mathrm{crit}}$ (`surf_omega_div_omega_crit_limit`).
-    pub surf_omega_div_omega_crit_limit: Option<f64>,
-    /// Minimum convective core gap $\Delta q$ (`conv_core_gap_dq_limit`).
-    pub conv_core_gap_dq_limit: Option<f64>,
+    pub surf_omega_div_omega_crit_limit: f64,
+    /// Convective-core boundary gap tolerance in fractional mass (`conv_core_gap_dq_limit`).
+    pub conv_core_gap_dq_limit: f64,
     /// Stop when evolutionary phase reaches TP-AGB (`stop_at_phase_TP_AGB`).
     pub stop_at_phase_tp_agb: bool,
     /// Stop when carbon burning ignites (`stop_at_phase_C_burn`).
@@ -275,8 +302,8 @@ pub struct StarControls {
     pub stop_at_phase_ne_burn: bool,
     /// Stop when oxygen burning ignites (`stop_at_phase_O_burn`).
     pub stop_at_phase_o_burn: bool,
-    /// Maximum pulsation periods for RSP (`RSP_max_num_periods`).
-    pub rsp_max_num_periods: Option<isize>,
+    /// Maximum pulsation periods for RSP (`RSP_max_num_periods`, `< 0` disables).
+    pub rsp_max_num_periods: isize,
     /// Target steps per pulsation cycle (`RSP_target_steps_per_cycle`).
     pub rsp_target_steps_per_cycle: usize,
     /// RSP envelope mass in $M_\odot$ (`RSP_mass`).
@@ -361,12 +388,34 @@ pub struct StarControls {
     pub nonlocal_nico_decay_heat: bool,
     /// Whether convective premixing energy release is included (`do_premix_heating`).
     pub do_premix_heating: bool,
+    /// Whether to cap diffusive `sig` at `sig_term_limit` (`sig_term_limit`, `1e13` default).
+    pub sig_term_limit: f64,
+    /// Fake electron-capture scaling factor for $^{56}\mathrm{Fe}$ in `approx21` (`fe56ec_fake_factor`, `1e-7` default).
+    pub fe56ec_fake_factor: f64,
+    /// Minimum temperature (K) above which `fe56ec_fake_factor` is active (`min_T_for_fe56ec_fake_factor`, `3e9` default).
+    pub min_t_for_fe56ec_fake_factor: f64,
+    /// Cap convective velocity at `csound * max_conv_vel_div_csound` (`max_conv_vel_div_csound`, `1e99` default).
+    pub max_conv_vel_div_csound: f64,
+    /// Henyey MLT optical-depth parameter $y$ (`Henyey_MLT_y_param`, `0.33333333` default).
+    pub henyey_mlt_y_param: f64,
+    /// Henyey MLT velocity parameter $\nu$ (`Henyey_MLT_nu_param`, `8.0` default).
+    pub henyey_mlt_nu_param: f64,
     /// Step threshold at or after which TDC replaces Cox MLT (`steps_before_use_tdc`, `0` disables override).
     pub steps_before_use_tdc: isize,
+    /// TDC turbulent dissipation coefficient $\alpha_d$ (`TDC_alpha_D`, `1.0` default).
+    pub tdc_alpha_d: f64,
     /// TDC radiative damping coefficient $\alpha_r$ (`TDC_alpha_R`, `0.0` default).
     pub tdc_alpha_r: f64,
-    /// TDC turbulent pressure/work coefficient $\alpha_m$ (`TDC_alpha_M`).
+    /// TDC turbulent pressure $P_t\,dV/dt$ work multiplier $\alpha_{P_t}$ (`TDC_alpha_Pt`, `0.0` default).
+    pub tdc_alpha_pt: f64,
+    /// TDC convective flux multiplier $\alpha_c$ (`TDC_alpha_C`, `1.0` default).
+    pub tdc_alpha_c: f64,
+    /// TDC buoyant source multiplier $\alpha_s$ (`TDC_alpha_S`, `1.0` default).
+    pub tdc_alpha_s: f64,
+    /// TDC eddy-viscous dissipation multiplier $\alpha_m$ (`TDC_alpha_M`, `0.0` default).
     pub tdc_alpha_m: f64,
+    /// Include $\Gamma/(1+\Gamma)$ MLT geometric correction in TDC (`include_mlt_corr_to_TDC`, `true` default).
+    pub include_mlt_corr_to_tdc: bool,
     /// Include TDC turbulent energy in the energy equation (`TDC_include_eturb_in_energy_equation`).
     pub tdc_include_eturb_in_energy_equation: bool,
     /// Whether Rayleigh-Taylor instability (`RTI_flag`) transport is active.
@@ -547,4 +596,16 @@ impl StarControls {
                 && (model_number as isize)
                     >= self.steps_before_use_velocity_time_centering)
     }
+}
+
+const fn default_neg_one() -> f64 {
+    -1.0
+}
+
+const fn default_one() -> f64 {
+    1.0
+}
+
+const fn default_max_abs_eps_nuc() -> f64 {
+    1.0e99
 }

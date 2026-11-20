@@ -251,6 +251,12 @@ def test_build_physics_converters_and_nonfinite_rejection(
         )
 
     # 4. AESOPUS HDF5 native float32 conversion & non-f32 / NaN rejection
+    # Fixture Zsun updated from placeholder 0.0134 -> 0.01337
+    # (0x1.b61bb05faebc4p-7) to match upstream MESA 26.4.1
+    # kap/preprocessor/AESOPUS/AGSS09.yml:29 (`Zsun: 0.01337`), written into
+    # data/kap_data/AESOPUS_AGSS09.h5 by kap/preprocessor/AESOPUS/aesopus.py:
+    # 172,192 and read at kap/private/kap_aesopus.f90:122 (with fCO_ref,
+    # fC_ref, fN_ref from AGSS09.yml:30-32 and aesopus.py:188-195).
     h5_path = tmp_path / "AESOPUS_AGSS09.h5"
     f32_grid_z = np.array([0.02], dtype=np.float32)
     f32_kap_vals = np.array(
@@ -411,6 +417,9 @@ def test_shipped_fmkap001_aesopus_section_preserves_native_float32_grids() -> (
     """
     raw_buf = tables_jax.ensure_indexed()
     aes = tables_jax.AESOPUS_META
+    # Upstream MESA 26.4.1 kap/preprocessor/AESOPUS/AGSS09.yml:29 (Zsun =
+    # 0.01337), written to data/kap_data/AESOPUS_AGSS09.h5 by
+    # kap/preprocessor/AESOPUS/aesopus.py:172,192.
     assert float(aes["zsun"]) == pytest.approx(0.01337, rel=0.0, abs=1.0e-15)
     log_rs = np.asarray(aes["log_rs_np"], dtype=np.float64)
     log_ts = np.asarray(aes["log_ts_np"], dtype=np.float64)

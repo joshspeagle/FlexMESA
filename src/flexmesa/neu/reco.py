@@ -247,10 +247,26 @@ def reco_neu(inp: _inputs.NeuInputs) -> _inputs.NeuRate:
     z_nu = math.exp(nu)
     inv_gum = 1.0 / gum
     bigj = c00 * z_nu * inv_gum
-    bigjdt = (c01 * dumdt + c00 * nudt - c00 * inv_gum * gumdt) * z_nu * inv_gum
-    bigjdd = (c01 * dumdd + c00 * nudd - c00 * inv_gum * gumdd) * z_nu * inv_gum
-    bigjda = (c01 * dumda + c00 * nuda - c00 * inv_gum * gumda) * z_nu * inv_gum
-    bigjdz = (c01 * dumdz + c00 * nudz - c00 * inv_gum * gumdz) * z_nu * inv_gum
+    bigjdt = (
+        c01 * dumdt * z_nu * inv_gum
+        + c00 * z_nu * nudt * inv_gum
+        - c00 * z_nu * inv_gum * inv_gum * gumdt
+    )
+    bigjdd = (
+        c01 * dumdd * z_nu * inv_gum
+        + c00 * z_nu * nudd * inv_gum
+        - c00 * z_nu * inv_gum * inv_gum * gumdd
+    )
+    bigjda = (
+        c01 * dumda * z_nu * inv_gum
+        + c00 * z_nu * nuda * inv_gum
+        - c00 * z_nu * inv_gum * inv_gum * gumda
+    )
+    bigjdz = (
+        c01 * dumdz * z_nu * inv_gum
+        + c00 * z_nu * nudz * inv_gum
+        - c00 * z_nu * inv_gum * inv_gum * gumdz
+    )
 
     # Combine bound-free prefactor, J(zeta, nu), and Pauli blocking factor
     # 1 / (1 + exp(zeta + nu)) into the volumetric recombination rate.
@@ -261,7 +277,7 @@ def reco_neu(inp: _inputs.NeuInputs) -> _inputs.NeuRate:
         _inputs.TFAC6
         * 2.649e-18
         * inp.ye
-        * math.pow(inp.zbar, 13.0)
+        * (inp.zbar**13)
         * inp.den
         * bigj
         * inv_1pz

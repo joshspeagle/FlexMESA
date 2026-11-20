@@ -932,7 +932,13 @@ pub fn eval_conv_and_mx_summary(model: &StarModel) -> ConvAndMixSummary {
             ..ConvAndMixSummary::default()
         };
     }
-    let cz_bdy_dq = eval_cz_bdy_dq(model);
+    let cz_bdy_dq = if model.aux.mixing.have_mixing_info
+        && model.aux.mixing.cz_bdy_dq.len() == nz
+    {
+        model.aux.mixing.cz_bdy_dq.clone()
+    } else {
+        eval_cz_bdy_dq(model)
+    };
 
     // 1. `set_cz_bdy_mass` (`mix_info.f90:472-517`, ordered center -> surface).
     let mut cz_regions: Vec<(f64, f64)> = Vec::new();
@@ -960,7 +966,7 @@ pub fn eval_conv_and_mx_summary(model: &StarModel) -> ConvAndMixSummary {
     }
 
     // 2. `set_mass_conv_core` (`report.f90:456-475`).
-    let gap_dq = model.controls.conv_core_gap_dq_limit.unwrap_or(0.0);
+    let gap_dq = model.controls.conv_core_gap_dq_limit.max(0.0);
     let dm_limit = gap_dq * model.xmstar;
     let mut mass_conv_core = 0.0;
     for (j, &(bot_m, top_m)) in cz_regions.iter().enumerate() {

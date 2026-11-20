@@ -654,9 +654,11 @@ fn ion_table_filename(
 /// `Make_ion_Interpolation_Data`).
 ///
 /// Reads the header row `(nt, lt_min, dt, nq, lq_min, dq)`, parses all
-/// `nq * nt` rows across the 28 output channels, fits a 2D not-a-knot bicubic
-/// spline to each channel via [`interp_mkbicub_db`], and rejects any
-/// non-finite raw input or spline derivative entry loudly (`DECISIONS #33`).
+/// `nq * nt` rows across the 28 output channels (rejecting non-finite raw
+/// inputs loudly), fits a 2D not-a-knot bicubic spline to each channel via
+/// [`interp_mkbicub_db`], and replaces non-finite fitted spline coefficients
+/// with `0.0` matching upstream `Check_ion_Interpolation_Data`
+/// (`ionization/private/ion_tables_load.f90:362-382`).
 ///
 /// # Errors
 /// Returns [`IonError`] if the file cannot be read, has an incomplete header,
@@ -770,7 +772,7 @@ fn build_table_splines(
     raw: &[Vec<f64>],
 ) -> Result<Vec<Vec<f64>>, IonError> {
     let mut coeffs = Vec::with_capacity(NUM_ION_VALS);
-    for (v, raw_v) in raw.iter().enumerate().take(NUM_ION_VALS) {
+    for raw_v in raw.iter().take(NUM_ION_VALS) {
         let (c, _, _) = interp_mkbicub_db(
             log_qs,
             log_ts,
@@ -785,15 +787,14 @@ fn build_table_splines(
             &[],
         )
         .map_err(|e| IonError::Interp(e.to_string()))?;
-        let mut flat = Vec::with_capacity(c.len() * 4);
-        for (idx, val) in c.into_iter().flatten().enumerate() {
-            if is_bad(val) {
-                return Err(IonError::Interp(format!(
-                    "non-finite spline coefficient ({val}) at var={v}, idx={idx}"
-                )));
-            }
-            flat.push(val);
-        }
+        // Upstream MESA 26.4.1 Check_ion_Interpolation_Data
+        // (ionization/private/ion_tables_load.f90:362-382) replaces NaN and
+        // infinite fitted spline entries with 0.0.
+        let flat: Vec<f64> = c
+            .into_iter()
+            .flatten()
+            .map(|val| if is_bad(val) { 0.0 } else { val })
+            .collect();
         coeffs.push(flat);
     }
     Ok(coeffs)
@@ -927,18 +928,57 @@ mod tests {
     }
 
     #[test]
-    fn test_build_table_splines_rejects_non_finite_coefficients_loudly() {
+    fn test_build_table_splines_zeros_non_finite_coefficients_matching_upstream()
+     {
         let log_qs = [-6.0_f64, -5.9, -5.8, -5.7];
         let log_ts = [3.0_f64, 3.1, 3.2, 3.3];
         let mut raw = vec![vec![0.0_f64; 16]; NUM_ION_VALS];
-        raw[0][0] = f64::MAX;
-        raw[0][1] = -f64::MAX;
-        let err = build_table_splines(&log_qs, &log_ts, &raw)
-            .expect_err("overflowed spline derivative must error loudly");
+        // Choose finite vertex values whose first-pass f_xx (~1e307) stays
+        // finite while the second-pass cross-derivative f_xxyy (~1e309)
+        // overflows to +/-Inf inside interp_mkbicub_db.
+        raw[0][0] = 1.0e305;
+        raw[0][1] = -1.0e305;
+        // Confirm raw interp_mkbicub_db actually produces non-finite derivative
+        // terms on this grid, then verify build_table_splines zeroes them per
+        // Check_ion_Interpolation_Data (ionization/private/ion_tables_load.f90:362-382).
+        let (raw_c, _, _) = interp_mkbicub_db(
+            &log_qs,
+            &log_ts,
+            &raw[0],
+            BicubicBc::NotAKnot,
+            &[],
+            BicubicBc::NotAKnot,
+            &[],
+            BicubicBc::NotAKnot,
+            &[],
+            BicubicBc::NotAKnot,
+            &[],
+        )
+        .expect("bicubic fit returns array with overflowed derivative terms");
+        let bad_indices: Vec<usize> = raw_c
+            .iter()
+            .flatten()
+            .enumerate()
+            .filter_map(|(idx, &val)| is_bad(val).then_some(idx))
+            .collect();
         assert!(
-            matches!(err, IonError::Interp(_)),
-            "expected IonError::Interp, got {err:?}"
+            !bad_indices.is_empty(),
+            "test input must trigger non-finite spline derivatives"
         );
+
+        let coeffs = build_table_splines(&log_qs, &log_ts, &raw).expect(
+            "upstream Check_ion_Interpolation_Data zeroes non-finite entries",
+        );
+        assert!(
+            coeffs[0].iter().all(|&v| !is_bad(v)),
+            "all output spline coefficients must be finite"
+        );
+        for idx in bad_indices {
+            assert_eq!(
+                coeffs[0][idx], 0.0,
+                "non-finite spline entry at idx={idx} must be replaced with 0.0"
+            );
+        }
     }
 
     #[test]

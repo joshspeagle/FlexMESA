@@ -118,9 +118,7 @@ def render_known_gaps_markdown(repo_root: pathlib.Path) -> str:
     within_tol_non_pass = [
         r
         for r in records
-        if r.comparison is not None
-        and r.comparison.within_final_tolerances
-        and r.comparison.within_track_tolerances
+        if r.is_within_tolerances
         and r.termination_matches
         and r.verdict != "pass"
     ]

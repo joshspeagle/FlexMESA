@@ -52,7 +52,7 @@ print(
 
 ## Radiative, Conductive & Compton Opacities (`flexmesa.kap`)
 
-`flexmesa.kap` combines low-temperature molecular (`Ferguson`/`AESOPUS`) and high-temperature atomic (`OPAL` Type 1/Type 2 and `Opacity Project`) Rosseland mean radiative opacities $\kappa_{\mathrm{rad}}(\log_{10} R, \log_{10} T, X, Z)$ with Poutanen (2017) relativistic Compton scattering and Cassisi et al. (2007) / Potekhin degenerate electron thermal conduction $\kappa_{\mathrm{cond}}$ via harmonic blending $\kappa^{-1} = \kappa_{\mathrm{rad}}^{-1} + \kappa_{\mathrm{cond}}^{-1}$.
+`flexmesa.kap` combines low-temperature molecular (`Ferguson`/`AESOPUS`/`kapCN`) and high-temperature atomic (`OPAL` Type 1/Type 2 and `Opacity Project`) Rosseland mean radiative opacities $\kappa_{\mathrm{rad}}(\log_{10} R, \log_{10} T, X, Z)$ with Poutanen (2017) relativistic Compton scattering and Cassisi et al. (2007) / Blouin et al. (2020) degenerate electron thermal conduction $\kappa_{\mathrm{cond}}$ via harmonic blending $\kappa^{-1} = \kappa_{\mathrm{rad}}^{-1} + \kappa_{\mathrm{cond}}^{-1}$. Matching MESA `26.4.1` `kap.defaults` and `kap_eval.f90` (`#149`, `#161`), `kap_get_results` and `kap_get_results_jax` default to `use_type2_opacities=True`, `use_zbase_for_type1=True`, `use_blouin_conductive_opacities=True`, `kap_co_option="gs98_co"`, and `kap_type2_full_off_x=1.0e-3` / `kap_type2_full_on_x=1.0e-6`, derive Compton and low-$T$/high-$T$ blend boundaries dynamically from the loaded table headers (`7.99` on `OP_a09` vs. `8.69` on `gs98`/`a09`/`OP_gs98`), and require an explicit `zbase >= 0.0` whenever Type 2, `kapCN`, or `AESOPUS` opacities are active.
 
 ::: flexmesa.kap.core
 
@@ -72,7 +72,7 @@ print(
 
 ## Model Atmospheres & Outer Boundary Conditions (`flexmesa.atm`)
 
-`flexmesa.atm` evaluates outer photospheric boundary conditions $(P_{\mathrm{surf}}, T_{\mathrm{surf}})$ and their exact $(L, R, M)$ partial derivatives using grey $T(\tau)$ relations (Eddington, Krishna-Swamy, solar Hopf, Guillot irradiated planetary atmospheres), RK4 optical-depth integration, and pre-validated 2D bicubic spline atmosphere tables (`photosphere`, `tau_100`, `tau_10`, `tau_1`, `tau_1m1`, `wd_tau_25`, `db_wd_tau_25`).
+`flexmesa.atm` evaluates outer photospheric boundary conditions $(\ln P_{\mathrm{surf}}, \ln T_{\mathrm{surf}})$ and their exact $(L, \ln R, \ln M, \ln \kappa)$ partial derivatives using grey $T(\tau)$ relations (`Eddington`, `solar_Hopf`, `Krishna_Swamy`, `Trampedach_solar` via `get_t_tau_id` and `eval_t_tau_atm` across `'fixed'`, `'iterated'`, and `'varying'` opacity modes with `pextra_factor`), Guillot (2010) irradiated planetary atmospheres (`eval_irradiated`), adaptive Dormand-Prince 5(4) (`dopri5`) optical-depth integration (`eval_t_tau_varying`), and pre-validated 2D bicubic spline atmosphere tables (`photosphere`, `tau_100`, `tau_10`, `tau_1`, `tau_1m1`, `WD_tau_25`, `DB_WD_tau_25` via `get_table_id`, `eval_table`, and off-table `'T_tau'` boundary blending in `eval_table_atm` using `get_table_alfa_beta`).
 
 ::: flexmesa.atm._core
 

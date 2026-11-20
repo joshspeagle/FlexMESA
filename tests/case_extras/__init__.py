@@ -119,19 +119,96 @@ STOCK_EXTRAS_DIGESTS: frozenset[str] = frozenset(
 
 # Star handlers that have been run through `PyStarExtrasAdapter` on their own
 # case without failing on state the adapter does not provide. A handler not
-# listed here is written but cannot run yet: its hooks read snapshot keys that
-# `build_star_snapshot` (`crates/flexmesa-py/src/extras_py.rs`) does not
-# supply, or need an engine capability that does not exist. Attaching such a
-# handler stops a run that otherwise takes steps, so `resolve_case_extras`
-# does not attach it and the case stays `unported` (it runs with default
-# no-op hooks and can never count as a pass, `DECISIONS #32`). Add a handler
-# here in the pull request that makes it runnable, with the harness rows of
-# its cases regenerated.
+# listed here is written but cannot run yet because its hooks require an
+# unported engine or `StarExtras` capability:
+# - `#152` (solver/timestep/state hooks): `CarbonKhStarExtras` (`ergs_error`,
+#   `cv_start`, `de_drho_start`), `MagneticBrakingStarExtras`
+#   (`other_timestep_limit`), `TzoStarExtras` (`star_set_v_flag`, center mass
+#   and luminosity mutation).
+# - `#153` (mesh/surface-cut hooks): `MakeCoWdStarExtras`
+#   (`star_remove_surface_at_cell_k`), `PreMs1MToWdStarExtras`
+#   (`other_mesh_delta_coeff_factor`).
+# - `#154` (startup/relax/build-model hooks): `MakeEnvStarExtras`
+#   (`create_env`), `RelaxCompositionJEntropyStarExtras` (`initial_mass`
+#   mutation before model build).
+# - `#155` (per-cell MLT/overshoot/rotation diffusivity hooks):
+#   `PreMs12MCoreCollapseStarExtras`, `PreMs20MCoreCollapseStarExtras`,
+#   `SplitBurnBigNetStarExtras`, `MakePreCcsn13bvnStarExtras` (per-cell
+#   `alpha_mlt(1:nz)`), `ExtendedConvectivePenetrationStarExtras`
+#   (`other_adjust_mlt_gradT_fraction`, `other_overshooting_scheme`),
+#   `Dynamo15MStarExtras`, `Thermohaline1MStarExtras` (`D_ES`/`D_ST`/`nu_ST`
+#   arrays not yet publicly exposed on `StarModel`).
+# - `#156` (element diffusion electric/gravity fields): `WdDiffusionStarExtras`
+#   (`e_field`, `g_field_element_diffusion`).
+# - `#158` / `#159` (mutable `other_adjust_mdot` / rotation-distortion hooks):
+#   `AccretedMaterialJStarExtras` (`accreted_material_j` mutation inside
+#   `other_adjust_mdot`), `PpisnStarExtras` (`other_kap_get`,
+#   `other_eval_fp_ft`, `other_before_struct_burn_mix`, `#152`/`#159`/`#161`).
+# - `#161` (opacity/surface-PT/other-physics hooks): `ConductiveFlameStarExtras`
+#   (`other_surface_PT`, `#154`), `MsOpMonoStarExtras` (`op_mono` tables),
+#   `RadiativeLevitationStarExtras` (`set_op_mono_factors`),
+#   `OtherPhysicsHooksStarExtras` (`other_kap_get`, `other_eos_results`,
+#   `other_overshooting_scheme`, `#152`/`#153`/`#155`/`#161`).
+# - `#162` (pulse export & simplex calibration): `CheckPulseAtmStarExtras`
+#   (`star_export_pulse_data('FGONG')`, `atm_T_tau_opacity`, `#161`),
+#   `SimplexSolarCalibrationStarExtras` (`star_simplex_procs`, `#153`).
+# - `#163` / `#231` (extra profile/header hooks): `LowZStarExtras`
+#   (`extra_history_header_items`, `extra_profile_header_items`),
+#   `HighRotation20MZ2m2StarExtras` and `WdCool06MStarExtras` (only implement
+#   `extra_profile_columns`, which `StarExtras` does not yet wire).
+#   `Hb2MStarExtras`, `TTauGradrStarExtras`, `WdAccSmallDmStarExtras`,
+#   `WdAicStarExtras` and `WdNovaBurstStarExtras` are detached for the same
+#   reason: upstream sets `how_many_extra_profile_columns = 1` in each
+#   (`star/test_suite/hb_2M/src/run_star_extras.f90:198`,
+#   `star/test_suite/T_tau_gradr/src/run_star_extras.f90:183`,
+#   `star/test_suite/wd_acc_small_dm/src/run_star_extras.f90:194`,
+#   `star/test_suite/wd_aic/src/run_star_extras.f90:210`,
+#   `star/test_suite/wd_nova_burst/src/run_star_extras.f90:162`).
+# - `#231` (custom termination codes): `C13PocketStarExtras`,
+#   `PisnStarExtras` and `WdAicStarExtras` set `termination_code_str(t_xtra*)`
+#   (`star/test_suite/c13_pocket/src/run_star_extras.f90:416`,
+#   `star/test_suite/pisn/src/run_star_extras.f90:227`,
+#   `star/test_suite/wd_aic/src/run_star_extras.f90:149`) and the case
+#   manifest requires those strings; the adapter reports only the hook name.
+# - `#152` (extras retry): `MakeSdbStarExtras` returns `retry`
+#   (`star/test_suite/make_sdb/src/run_star_extras.f90:108`), which the step
+#   driver does not implement.
+# - `#170` (bundled GYRE pulsation): `GyreInMesaStarExtras`.
+# - `#172` (CCSN/STELLA + per-cell `alpha_mlt`): `CcsnIIpStarExtras`
+#   (`#154`/`#155`/`#158`/`#172`).
+#
+# Attaching an unserved handler stops a run that otherwise takes steps, so
+# `resolve_case_extras` leaves it detached and the case stays `unported` (it
+# runs with default no-op hooks and never counts as a pass, `DECISIONS #32`).
 ADAPTER_SERVED_STAR_HANDLERS: frozenset[str] = frozenset(
     {
-        "CheckRedoStarExtras",
+        "AdjustNetStarExtras",
+        "CburnInwardStarExtras",
         "CepheidBlueLoopStarExtras",
+        "CheckRedoStarExtras",
+        "ConserveAngularMomentumStarExtras",
+        "ConvCoreCpmStarExtras",
+        "DiffusionSmoothnessStarExtras",
+        "HighRotDarkeningStarExtras",
+        "HotCoolWindStarExtras",
+        "HseRiemannStarExtras",
+        "MakeONeWdStarExtras",
+        "NeutronStarEnvStarExtras",
         "RCrBStarExtras",
+        "SemiconvectionStarExtras",
+    }
+)
+
+# Binary handlers whose snapshot keys are supplied by `build_binary_snapshot`
+# (`crates/flexmesa-py/src/extras_py.rs`). All 5 custom binary handlers in the
+# MESA 26.4.1 manifest are now adapter-served (`DECISIONS #32`).
+ADAPTER_SERVED_BINARY_HANDLERS: frozenset[str] = frozenset(
+    {
+        "DoubleBhBinaryExtras",
+        "JdotGrCheckBinaryExtras",
+        "JdotLsCheckBinaryExtras",
+        "JdotMlCheckBinaryExtras",
+        "WindFedBhHmxbBinaryExtras",
     }
 )
 
@@ -148,8 +225,8 @@ def classify_case_extras(suite: str, case_dir: pathlib.Path | str) -> str:
         when the normalized sources equal a reviewed no-logic template, and
         `"unported"` otherwise. An unported case runs with default no-op
         hooks, so its upstream extras logic is not executed. A case whose
-        handler is written but not in `ADAPTER_SERVED_STAR_HANDLERS` is
-        `"unported"`.
+        handler is written but not in `ADAPTER_SERVED_STAR_HANDLERS` or
+        `ADAPTER_SERVED_BINARY_HANDLERS` is `"unported"`.
     """
     if resolve_case_extras(suite, case_dir) is not None:
         return "ported"
@@ -169,7 +246,7 @@ def resolve_case_extras(suite: str, case_dir: pathlib.Path | str) -> Any:
         Python extras object implementing `StarExtras` or `BinaryExtras`
         callbacks, or `None` when the upstream source uses default no-op
         hooks or its handler cannot run through the adapter yet (see
-        `ADAPTER_SERVED_STAR_HANDLERS`).
+        `ADAPTER_SERVED_STAR_HANDLERS` and `ADAPTER_SERVED_BINARY_HANDLERS`).
     """
     handler = match_case_extras(suite, case_dir)
     if handler is None:
@@ -178,6 +255,11 @@ def resolve_case_extras(suite: str, case_dir: pathlib.Path | str) -> Any:
         suite == "star"
         and not isinstance(handler, rsp_extras.RspPeriodLimitExtras)
         and type(handler).__name__ not in ADAPTER_SERVED_STAR_HANDLERS
+    ):
+        return None
+    if (
+        suite == "binary"
+        and type(handler).__name__ not in ADAPTER_SERVED_BINARY_HANDLERS
     ):
         return None
     return handler

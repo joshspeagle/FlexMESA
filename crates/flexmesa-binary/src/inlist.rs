@@ -14,9 +14,10 @@ use flexmesa_star::{
 };
 
 pub use crate::inlist_inventory::{
-    copy_cleaned_binary_case, supported_binary_control_inventory,
-    validate_binary_sections, BinaryControlInventory,
-    BINARY_CONTROLS_SUPPORTED, BINARY_JOB_HEADLESS_GUI, BINARY_JOB_SUPPORTED,
+    BINARY_CONTROLS_SUPPORTED, BINARY_CONTROLS_TERMINAL_OUTPUT,
+    BINARY_JOB_HEADLESS_GUI, BINARY_JOB_SUPPORTED, BINARY_JOB_TERMINAL_OUTPUT,
+    BinaryControlInventory, copy_cleaned_binary_case,
+    supported_binary_control_inventory, validate_binary_sections,
 };
 
 /// Parsed `&binary_job` and `&binary_controls` settings corresponding to
@@ -36,6 +37,38 @@ pub struct BinaryInlistControls {
     pub change_ignore_rlof_flag: bool,
     /// Target `ignore_rlof_flag` value (`new_ignore_rlof_flag`).
     pub new_ignore_rlof_flag: bool,
+    /// Override `point_mass_i` on load (`change_point_mass_i`).
+    pub change_point_mass_i: bool,
+    /// Override initial `point_mass_i` (`change_initial_point_mass_i`).
+    pub change_initial_point_mass_i: bool,
+    /// Target `point_mass_i` value (`new_point_mass_i`).
+    pub new_point_mass_i: i64,
+    /// Override star 1 point-mass mass on load (`change_m1`).
+    pub change_m1: bool,
+    /// Override initial star 1 point-mass mass (`change_initial_m1`).
+    pub change_initial_m1: bool,
+    /// Target star 1 mass in $M_\odot$ (`new_m1`).
+    pub new_m1: f64,
+    /// Override star 2 point-mass mass on load (`change_m2`).
+    pub change_m2: bool,
+    /// Override initial star 2 point-mass mass (`change_initial_m2`).
+    pub change_initial_m2: bool,
+    /// Target star 2 mass in $M_\odot$ (`new_m2`).
+    pub new_m2: f64,
+    /// Override separation and eccentricity on load (`change_separation_eccentricity`).
+    pub change_separation_eccentricity: bool,
+    /// Override initial separation and eccentricity (`change_initial_separation_eccentricity`).
+    pub change_initial_separation_eccentricity: bool,
+    /// Override period and eccentricity on load (`change_period_eccentricity`).
+    pub change_period_eccentricity: bool,
+    /// Override initial period and eccentricity (`change_initial_period_eccentricity`).
+    pub change_initial_period_eccentricity: bool,
+    /// Target semi-major axis in $R_\odot$ (`new_separation`).
+    pub new_separation: f64,
+    /// Target orbital period in days (`new_period`).
+    pub new_period: f64,
+    /// Target orbital eccentricity (`new_eccentricity`).
+    pub new_eccentricity: f64,
 
     // --- Binary history output controls (`binary_controls.defaults:65-122`) ---
     /// Output directory for `binary_history.data` (`log_directory`, default `"."`).
@@ -93,6 +126,12 @@ pub struct BinaryInlistControls {
     pub max_change_factor: f64,
     /// Lower clamp on `change_factor` (`min_change_factor`).
     pub min_change_factor: f64,
+    /// Unbracketed try interval between `change_factor` boosts (`num_tries_for_increase_change_factor`).
+    pub num_tries_for_increase_change_factor: i64,
+    /// Multiplicative boost applied to `change_factor` (`change_factor_increase`).
+    pub change_factor_increase: f64,
+    /// Print implicit RLOF iteration diagnostics (`report_rlo_solver_progress`).
+    pub report_rlo_solver_progress: bool,
     /// Detachment threshold in $M_\odot\,\mathrm{yr}^{-1}$ (`roche_min_mdot`).
     pub roche_min_mdot: f64,
     /// Minimum explicit $|\dot{M}|$ ($M_\odot\,\mathrm{yr}^{-1}$) for implicit RLOF (`min_mdot_for_implicit`).
@@ -279,6 +318,20 @@ pub struct BinaryInlistControls {
     pub varcontrol_ms: f64,
     /// Stellar `varcontrol_target` on detached post-MS (`varcontrol_post_ms`).
     pub varcontrol_post_ms: f64,
+
+    // --- Donor irradiation controls (`binary_controls.defaults:1200-1264`) ---
+    /// Irradiate donor from point-mass accretion luminosity (`accretion_powered_irradiation`).
+    pub accretion_powered_irradiation: bool,
+    /// Donor attenuation column depth in $\mathrm{g\,cm^{-2}}$ (`col_depth_for_eps_extra`).
+    pub col_depth_for_eps_extra: f64,
+    /// Irradiate donor from evolved accretor luminosity (`use_accretor_luminosity_for_irrad`).
+    pub use_accretor_luminosity_for_irrad: bool,
+    /// Reference irradiation flux in $\mathrm{erg\,cm^{-2}\,s^{-1}}$ (`irrad_flux_at_std_distance`).
+    pub irrad_flux_at_std_distance: f64,
+    /// Reference distance in cm for `irrad_flux_at_std_distance` (`std_distance_for_irradiation`).
+    pub std_distance_for_irradiation: f64,
+    /// Ceiling on donor irradiation flux in $\mathrm{erg\,cm^{-2}\,s^{-1}}$ (`max_F_irr`).
+    pub max_f_irr: f64,
 }
 
 impl Default for BinaryInlistControls {
@@ -290,6 +343,22 @@ impl Default for BinaryInlistControls {
             change_initial_ignore_rlof_flag: false,
             change_ignore_rlof_flag: false,
             new_ignore_rlof_flag: false,
+            change_point_mass_i: false,
+            change_initial_point_mass_i: false,
+            new_point_mass_i: 0,
+            change_m1: false,
+            change_initial_m1: false,
+            new_m1: 0.0,
+            change_m2: false,
+            change_initial_m2: false,
+            new_m2: 0.0,
+            change_separation_eccentricity: false,
+            change_initial_separation_eccentricity: false,
+            change_period_eccentricity: false,
+            change_initial_period_eccentricity: false,
+            new_separation: 0.0,
+            new_period: 0.0,
+            new_eccentricity: 0.0,
             log_directory: String::from("."),
             history_name: String::from("binary_history.data"),
             history_interval: 5,
@@ -308,14 +377,17 @@ impl Default for BinaryInlistControls {
             mdot_scheme: String::from("Ritter"),
             max_tries_to_achieve: 20,
             solver_type: String::from("both"),
-            implicit_scheme_tolerance: 1.0e-3,
+            implicit_scheme_tolerance: 1.0e-2,
             implicit_scheme_tiny_factor: 1.0e-6,
-            initial_change_factor: 1.2,
+            initial_change_factor: 1.5,
             change_factor_fraction: 0.9,
             implicit_lambda: 0.25,
             max_change_factor: 1.5,
             min_change_factor: 1.05,
-            roche_min_mdot: 1.0e-12,
+            num_tries_for_increase_change_factor: 20,
+            change_factor_increase: 1.1,
+            report_rlo_solver_progress: false,
+            roche_min_mdot: 1.0e-16,
             min_mdot_for_implicit: 1.0e-16,
             max_implicit_abs_mdot: 1.0e99,
             starting_mdot: 1.0e-12,
@@ -405,6 +477,12 @@ impl Default for BinaryInlistControls {
             varcontrol_case_b: -1.0,
             varcontrol_ms: -1.0,
             varcontrol_post_ms: -1.0,
+            accretion_powered_irradiation: false,
+            col_depth_for_eps_extra: -1.0,
+            use_accretor_luminosity_for_irrad: false,
+            irrad_flux_at_std_distance: -1.0,
+            std_distance_for_irradiation: -1.0,
+            max_f_irr: 5.0e12,
         }
     }
 }
@@ -559,6 +637,14 @@ impl BinaryInlistControls {
         {
             self.binary_history_columns_file = v.trim().to_string();
         }
+        if let Some(v) = bjob.try_get_i64("binary_job", "new_point_mass_i")? {
+            if !(0..=2).contains(&v) {
+                return Err(StarError::InvalidInput(format!(
+                    "invalid '&binary_job::new_point_mass_i' = {v} (must be 0, 1, or 2)"
+                )));
+            }
+            self.new_point_mass_i = v;
+        }
         for (dst, key) in [
             (&mut self.evolve_both_stars, "evolve_both_stars"),
             (
@@ -567,8 +653,42 @@ impl BinaryInlistControls {
             ),
             (&mut self.change_ignore_rlof_flag, "change_ignore_rlof_flag"),
             (&mut self.new_ignore_rlof_flag, "new_ignore_rlof_flag"),
+            (&mut self.change_point_mass_i, "change_point_mass_i"),
+            (
+                &mut self.change_initial_point_mass_i,
+                "change_initial_point_mass_i",
+            ),
+            (&mut self.change_m1, "change_m1"),
+            (&mut self.change_initial_m1, "change_initial_m1"),
+            (&mut self.change_m2, "change_m2"),
+            (&mut self.change_initial_m2, "change_initial_m2"),
+            (
+                &mut self.change_separation_eccentricity,
+                "change_separation_eccentricity",
+            ),
+            (
+                &mut self.change_initial_separation_eccentricity,
+                "change_initial_separation_eccentricity",
+            ),
+            (
+                &mut self.change_period_eccentricity,
+                "change_period_eccentricity",
+            ),
+            (
+                &mut self.change_initial_period_eccentricity,
+                "change_initial_period_eccentricity",
+            ),
         ] {
             bjob.try_bool_into("binary_job", dst, key)?;
+        }
+        for (dst, key) in [
+            (&mut self.new_m1, "new_m1"),
+            (&mut self.new_m2, "new_m2"),
+            (&mut self.new_separation, "new_separation"),
+            (&mut self.new_period, "new_period"),
+            (&mut self.new_eccentricity, "new_eccentricity"),
+        ] {
+            bjob.try_f64_into("binary_job", dst, key)?;
         }
         Ok(())
     }
@@ -581,6 +701,12 @@ impl BinaryInlistControls {
             s.try_get_i64("binary_controls", "max_tries_to_achieve")?
         {
             self.max_tries_to_achieve = v;
+        }
+        if let Some(v) = s.try_get_i64(
+            "binary_controls",
+            "num_tries_for_increase_change_factor",
+        )? {
+            self.num_tries_for_increase_change_factor = v;
         }
         if let Some(v) = s.try_get_i64("binary_controls", "anomaly_steps")? {
             if v < 2 {
@@ -660,6 +786,18 @@ impl BinaryInlistControls {
                 "use_eccentricity_enhancement",
             ),
             (&mut self.use_tidal_deformation, "use_tidal_deformation"),
+            (
+                &mut self.report_rlo_solver_progress,
+                "report_rlo_solver_progress",
+            ),
+            (
+                &mut self.accretion_powered_irradiation,
+                "accretion_powered_irradiation",
+            ),
+            (
+                &mut self.use_accretor_luminosity_for_irrad,
+                "use_accretor_luminosity_for_irrad",
+            ),
         ] {
             s.try_bool_into("binary_controls", dst, key)?;
         }
@@ -697,6 +835,7 @@ impl BinaryInlistControls {
             (&mut self.implicit_lambda, "implicit_lambda"),
             (&mut self.max_change_factor, "max_change_factor"),
             (&mut self.min_change_factor, "min_change_factor"),
+            (&mut self.change_factor_increase, "change_factor_increase"),
             (&mut self.roche_min_mdot, "roche_min_mdot"),
             (&mut self.min_mdot_for_implicit, "min_mdot_for_implicit"),
             (&mut self.max_implicit_abs_mdot, "max_implicit_abs_mdot"),
@@ -776,6 +915,16 @@ impl BinaryInlistControls {
             (&mut self.varcontrol_case_b, "varcontrol_case_b"),
             (&mut self.varcontrol_ms, "varcontrol_ms"),
             (&mut self.varcontrol_post_ms, "varcontrol_post_ms"),
+            (&mut self.col_depth_for_eps_extra, "col_depth_for_eps_extra"),
+            (
+                &mut self.irrad_flux_at_std_distance,
+                "irrad_flux_at_std_distance",
+            ),
+            (
+                &mut self.std_distance_for_irradiation,
+                "std_distance_for_irradiation",
+            ),
+            (&mut self.max_f_irr, "max_f_irr"),
         ] {
             s.try_f64_into("binary_controls", dst, key)?;
         }

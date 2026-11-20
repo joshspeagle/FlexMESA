@@ -297,7 +297,10 @@ fn test_kapcn_and_multi_zone_batch_evaluation() {
     );
     assert!(dln_dr.is_finite() && dln_dt.is_finite());
 
-    let cfg = KapConfig::default();
+    let cfg = KapConfig {
+        zbase: 0.02,
+        ..KapConfig::default()
+    };
     let zbar = [1.101_885_743_409_164_7, 1.2, 1.5];
     let x = [0.7, 0.7, 0.7];
     let z = [0.018, 0.02, 0.02];
@@ -430,4 +433,213 @@ fn test_kap_full_tables_all_slices_loaded_and_distinct() {
     let (aes2, _, _) =
         aesopus_get(0.0300, 0.75, 8.0e-3, 2.0e-3, 1.2e-2, -9.0, 3.45).unwrap();
     assert!((aes1 - aes2).abs() / aes1 > 1.0e-2, "distinct AESOPUS Z/X");
+}
+
+#[test]
+fn test_kap_co_table_header_zfracs_match_upstream_26_4_1() {
+    let tables = kap_tables().expect("kap_tables failed");
+    for opt in [KapCoOption::Gn93Co, KapCoOption::Gs98Co, KapCoOption::A09Co] {
+        let prefix = opt.prefix();
+        let set = tables
+            .co_sets
+            .iter()
+            .find(|s| s.prefix == prefix)
+            .unwrap_or_else(|| panic!("missing CO set {prefix}"));
+        let z0 = set.z_tables.first().expect("non-empty z_tables");
+        let (fc, fn_, fo, fne) = opt.ref_zfracs();
+        assert_rel_close(z0.zfrac_c, fc, 1.0e-12, "zfrac_c");
+        assert_rel_close(z0.zfrac_n, fn_, 1.0e-12, "zfrac_n");
+        assert_rel_close(z0.zfrac_o, fo, 1.0e-12, "zfrac_o");
+        assert_rel_close(z0.zfrac_ne, fne, 1.0e-12, "zfrac_ne");
+    }
+}
+
+#[test]
+fn test_op_a09_compton_blend_bounds_match_mesa_26_4_1() {
+    // Reference values emitted by compiled MESA 26.4.1 (`r26.4.1`, MESA SDK
+    // `x86_64-linux-26.6.1`, `GCC 15.2.0`, `CRMATH`) via `Get_kap_Results`
+    // (`kap/private/load_kap.f90:65-70`, `kap/private/kap_eval.f90:287-318`,
+    // `#161`, `F2-11`).
+    let tables = kap_tables().expect("kap_tables");
+    let cfg_op_a09 = KapConfig {
+        zbase: 0.014,
+        kap_option: KapOption::OpA09,
+        use_type2_opacities: false,
+        ..KapConfig::default()
+    };
+    let (lt_c_hi, lr_c_lo) =
+        tables.compton_blend_bounds(&cfg_op_a09).expect("bounds");
+    assert_rel_close(lt_c_hi, 7.99, 1.0e-14, "OP_a09 logT_Compton_blend_hi");
+    assert_rel_close(lr_c_lo, -7.99, 1.0e-14, "OP_a09 logR_Compton_blend_lo");
+
+    let out_775 = get_kap_results(
+        &cfg_op_a09,
+        1.1,
+        0.70,
+        0.014,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        -2.0,
+        7.75,
+        -0.17,
+        0.0,
+        0.0,
+        -10.0,
+        0.0,
+        0.0,
+    )
+    .expect("OP_a09 at logT=7.75");
+    assert_rel_close(
+        out_775.kap,
+        3.024_289_201_006_790_7e-1,
+        1.0e-12,
+        "OP_a09 7.75 kap",
+    );
+    assert_rel_close(
+        out_775.dlnkap_dln_rho,
+        -9.871_252_150_096_227e-4,
+        1.0e-11,
+        "OP_a09 7.75 dlnkap_dlnRho",
+    );
+    assert_rel_close(
+        out_775.dlnkap_dln_t,
+        -1.742_298_293_406_443e-1,
+        1.0e-11,
+        "OP_a09 7.75 dlnkap_dlnT",
+    );
+    assert_rel_close(
+        out_775.kap_fracs[I_FRAC_HIGH_T],
+        4.625_399_808_000_008e-1,
+        1.0e-12,
+        "OP_a09 7.75 frac_highT",
+    );
+    assert_rel_close(
+        out_775.kap_fracs[I_FRAC_COMPTON],
+        5.374_600_191_999_992e-1,
+        1.0e-12,
+        "OP_a09 7.75 frac_Compton",
+    );
+
+    let out_820 = get_kap_results(
+        &cfg_op_a09,
+        1.1,
+        0.70,
+        0.014,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        -2.0,
+        8.20,
+        -0.17,
+        0.0,
+        0.0,
+        -10.0,
+        0.0,
+        0.0,
+    )
+    .expect("OP_a09 at logT=8.20 above table logT_max=8.00");
+    assert_rel_close(
+        out_820.kap,
+        2.484_889_761_354_873e-1,
+        1.0e-12,
+        "OP_a09 8.20 kap",
+    );
+    assert_rel_close(
+        out_820.dlnkap_dln_rho,
+        -1.357_601_112_171_816e-9,
+        1.0e-10,
+        "OP_a09 8.20 dlnkap_dlnRho",
+    );
+    assert_rel_close(
+        out_820.dlnkap_dln_t,
+        -2.343_481_768_674_828e-1,
+        1.0e-12,
+        "OP_a09 8.20 dlnkap_dlnT",
+    );
+    assert_eq!(out_820.kap_fracs[I_FRAC_COMPTON], 1.0);
+    assert_eq!(out_820.kap_fracs[I_FRAC_HIGH_T], 0.0);
+}
+
+#[test]
+fn test_gn93_low_t_blend_bounds_and_aesopus_validation_match_mesa_26_4_1() {
+    let tables = kap_tables().expect("kap_tables");
+    let cfg_gn93 = KapConfig {
+        zbase: 0.02,
+        kap_option: KapOption::Gn93,
+        kap_low_t_option: KapLowTOption::LowTFa05Gn93,
+        kap_blend_log_t_lower_bdy: 3.80,
+        kap_blend_log_t_upper_bdy: 4.20,
+        use_type2_opacities: false,
+        ..KapConfig::default()
+    };
+    let (ht_min, lt_max) =
+        tables.temp_blend_bounds(&cfg_gn93).expect("temp bounds");
+    assert_rel_close(ht_min, 3.75, 1.0e-14, "gn93 highT_logT_min");
+    assert_rel_close(lt_max, 4.10, 1.0e-14, "lowT_fa05_gn93 lowT_logT_max");
+
+    let out_395 = get_kap_results(
+        &cfg_gn93, 1.1, 0.70, 0.02, 0.0, 0.0, 0.0, 0.0, -6.0, 3.95, -0.17, 0.0,
+        0.0, -10.0, 0.0, 0.0,
+    )
+    .expect("gn93 + lowT_fa05_gn93 at logT=3.95");
+    assert_rel_close(
+        out_395.kap,
+        3.840_006_733_209_830e1,
+        1.0e-12,
+        "gn93 lowT 3.95 kap",
+    );
+    assert_rel_close(
+        out_395.dlnkap_dln_rho,
+        3.599_235_419_588_555e-1,
+        1.0e-11,
+        "gn93 lowT 3.95 dlnkap_dlnRho",
+    );
+    assert_rel_close(
+        out_395.dlnkap_dln_t,
+        9.113_479_970_882_450,
+        1.0e-11,
+        "gn93 lowT 3.95 dlnkap_dlnT",
+    );
+    assert_rel_close(
+        out_395.kap_fracs[I_FRAC_LOW_T],
+        0.5,
+        1.0e-13,
+        "gn93 lowT 3.95 frac_lowT",
+    );
+    assert_rel_close(
+        out_395.kap_fracs[I_FRAC_HIGH_T],
+        0.5,
+        1.0e-13,
+        "gn93 lowT 3.95 frac_highT",
+    );
+
+    let cfg_bad_aes = KapConfig {
+        zbase: 0.02,
+        kap_low_t_option: KapLowTOption::Aesopus,
+        aesopus_filename: String::from("AESOPUS_GS98_RCrB.h5"),
+        ..KapConfig::default()
+    };
+    let err = get_kap_results(
+        &cfg_bad_aes,
+        1.1,
+        0.70,
+        0.02,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        -8.0,
+        3.5,
+        -0.17,
+        0.0,
+        0.0,
+        -10.0,
+        0.0,
+        0.0,
+    )
+    .expect_err("unbundled AESOPUS_filename must fail loudly");
+    assert!(err.to_string().contains("AESOPUS_GS98_RCrB.h5"));
 }

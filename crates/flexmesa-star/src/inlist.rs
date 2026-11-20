@@ -460,7 +460,9 @@ impl InlistBundle {
             .into_result(options.allow_unsupported_controls)
             .map_err(|e| StarError::InvalidInput(e.to_string()))?;
         bundle.validation_report = report;
-        bundle.populate_typed_structs()?;
+        bundle.populate_typed_structs_with_options(
+            options.allow_unsupported_controls,
+        )?;
         Ok(bundle)
     }
 
@@ -501,21 +503,23 @@ impl InlistBundle {
                     );
                 }
                 "eos" => {
-                    report.validate_implemented_section(
+                    report.validate_implemented_section_with_terminal_output(
                         sec,
                         &keys,
                         &inv.eos_supported,
                         &empty,
                         &empty,
+                        &inv.eos_terminal_output,
                     );
                 }
                 "kap" => {
-                    report.validate_implemented_section(
+                    report.validate_implemented_section_with_terminal_output(
                         sec,
                         &keys,
                         &inv.kap_supported,
                         &empty,
                         &empty,
+                        &inv.kap_terminal_output,
                     );
                 }
                 "controls" => {

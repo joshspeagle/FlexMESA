@@ -160,9 +160,12 @@ impl InlistBundle {
     /// # Errors
     /// Returns [`StarError::InvalidInput`] on any type mismatch, out-of-range
     /// integer/float, or unrecognized option string.
-    pub(crate) fn populate_typed_structs(&mut self) -> Result<(), StarError> {
+    pub(crate) fn populate_typed_structs_with_options(
+        &mut self,
+        allow_unsupported_controls: bool,
+    ) -> Result<(), StarError> {
         self.populate_star_job()?;
-        self.populate_eos_kap()?;
+        self.populate_eos_kap_with_options(allow_unsupported_controls)?;
         self.populate_controls_physics()?;
         self.populate_controls_output()?;
         self.populate_controls_solver()?;
@@ -175,20 +178,6 @@ impl InlistBundle {
             &mut self.job,
             &mut self.controls,
         )?;
-        let has_kap_zbase = self
-            .sections
-            .get("kap")
-            .map(|k| k.try_get_f64("kap", "zbase"))
-            .transpose()?
-            .flatten()
-            .is_some();
-        if self.job.create_rsp_model
-            && !has_kap_zbase
-            && self.controls.rsp_z > 0.0
-        {
-            self.controls.zbase = self.controls.rsp_z;
-            self.kap_config.zbase = self.controls.rsp_z;
-        }
         Ok(())
     }
 
@@ -209,6 +198,9 @@ impl InlistBundle {
             relax_initial_to_xaccrete, set_initial_v_center, set_initial_l_center,
             new_rti_flag, pgstar_flag,
             write_profile_when_terminate, profile_starting_model,
+            set_omega, set_initial_omega,
+            set_omega_div_omega_crit, set_initial_omega_div_omega_crit,
+            set_surface_rotation_v, set_initial_surface_rotation_v,
             astero_just_call_my_extras_check_model,
         ]);
         map_f64s!("star_job", sj, j, [
@@ -217,6 +209,8 @@ impl InlistBundle {
             initial_age, years_for_initial_dt, seconds_for_initial_dt,
             new_cumulative_energy_error, initial_h1, initial_h2, initial_he3, initial_he4,
             new_mass, new_z, new_y, core_avg_rho, core_avg_eps, new_r_center, new_l_center,
+            new_omega, new_omega_div_omega_crit, new_surface_rotation_v,
+            remove_initial_center_by_temperature,
         ]);
         map_strs!("star_job", sj, j, [
             save_model_filename, save_photo_filename, save_pulse_data_filename,
@@ -233,13 +227,7 @@ impl InlistBundle {
         if let Some(s) = sj.try_get_str("star_job", "load_model_filename")? {
             j.saved_model_name = s.to_string();
         }
-        if let Some(v) = sj.try_get_i64("star_job", "save_model_number")? {
-            if v > 0 {
-                j.save_model_number = Some(v as usize);
-            } else {
-                j.save_model_number = None;
-            }
-        }
+        sj.try_isize_into("star_job", &mut j.save_model_number, "save_model_number")?;
         if let Some(b) = sj.try_any_bool("star_job", &["change_net", "change_initial_net"])? {
             j.change_net = b;
         }
@@ -276,7 +264,6 @@ impl InlistBundle {
                 self.controls.rotation_flag = b;
             }
         }
-        map_opt_f64s!("star_job", sj, j, [new_omega, new_omega_div_omega_crit, new_surface_rotation_v]);
         sj.try_usize_into("star_job", &mut j.initial_model_number, "initial_model_number", 0)?;
         if let Some(v) = sj.try_get_i64("star_job", "initial_zfracs")? {
             if !(1..=10).contains(&v) {
@@ -347,98 +334,31 @@ impl InlistBundle {
             self.controls.rti_flag = j.new_rti_flag;
         }
         if let Some(v) = sj.try_get_i64("star_job", "steps_to_take_before_terminate")? {
-            if v == -1 {
-                j.steps_to_take_before_terminate = None;
-            } else if v >= 0 {
-                j.steps_to_take_before_terminate = Some(v as usize);
-            } else {
+            if v < -1 {
                 return Err(StarError::InvalidInput(format!(
                     "'&star_job::steps_to_take_before_terminate' must be >= -1, got {v}"
                 )));
             }
-        }
-        if let Some(v) = sj.try_get_f64("star_job", "remove_initial_center_by_temperature")? {
-            j.remove_initial_center_by_temperature = (v > 0.0).then_some(v);
+            j.steps_to_take_before_terminate = v as isize;
         }
         Ok(())
     }
 
-    fn populate_eos_kap(&mut self) -> Result<(), StarError> {
-        if let Some(eos) = self.sections.get("eos") {
-            eos.try_bool_into(
-                "eos",
-                &mut self.eos_config.use_free_eos,
-                "use_freeeos",
-            )?;
-            map_bools!(
-                "eos",
-                eos,
-                self.eos_config,
-                [use_opal_scvh, use_pc, use_skye, use_cms]
-            );
-        }
-        if let Some(kap) = self.sections.get("kap") {
-            if let Some(v) = kap.try_get_f64("kap", "zbase")? {
-                self.kap_config.zbase = v;
-                self.controls.zbase = v;
-            }
-            if let Some(s) = kap.try_get_str("kap", "kap_file_prefix")? {
-                self.kap_config.kap_option =
-                    flexmesa_kap::KapOption::from_prefix(s).map_err(|e| {
-                        StarError::InvalidInput(format!(
-                            "invalid '&kap::kap_file_prefix' = '{s}': {e}"
-                        ))
-                    })?;
-            }
-            if let Some(s) = kap.try_get_str("kap", "kap_co_prefix")? {
-                self.kap_config.kap_co_option =
-                    flexmesa_kap::KapCoOption::from_prefix(s).map_err(|e| {
-                        StarError::InvalidInput(format!(
-                            "invalid '&kap::kap_co_prefix' = '{s}': {e}"
-                        ))
-                    })?;
-            }
-            if let Some(s) = kap.try_get_str("kap", "kap_lowt_prefix")? {
-                self.kap_config.kap_low_t_option =
-                    flexmesa_kap::KapLowTOption::from_prefix(s).map_err(
-                        |e| {
-                            StarError::InvalidInput(format!(
-                                "invalid '&kap::kap_lowt_prefix' = '{s}': {e}"
-                            ))
-                        },
-                    )?;
-            }
-            kap.try_bool_into(
-                "kap",
-                &mut self.kap_config.use_type2_opacities,
-                "use_type2_opacities",
-            )?;
-        }
-        Ok(())
+    fn populate_eos_kap_with_options(
+        &mut self,
+        allow_unsupported_controls: bool,
+    ) -> Result<(), StarError> {
+        self.populate_eos_and_kap_configs(allow_unsupported_controls)
     }
 
     #[rustfmt::skip]
     fn populate_controls_physics(&mut self) -> Result<(), StarError> {
-        let has_kap_zbase = self
-            .sections
-            .get("kap")
-            .map(|k| k.try_get_f64("kap", "zbase"))
-            .transpose()?
-            .flatten()
-            .is_some();
         let Some(ctrl) = self.sections.get("controls") else {
             return Ok(());
         };
         let c = &mut self.controls;
-        if let Some(v) = ctrl.try_get_f64("controls", "initial_z")? {
-            c.initial_z = v;
-            if !has_kap_zbase {
-                c.zbase = v;
-                self.kap_config.zbase = v;
-            }
-        }
         map_f64s!("controls", ctrl, c, [
-            initial_mass, initial_y, min_timestep_limit, mixing_length_alpha,
+            initial_mass, initial_z, initial_y, min_timestep_limit, mixing_length_alpha,
             alpha_semiconvection, thermohaline_coeff, min_d_mix,
             opacity_factor, non_nuc_neu_factor,
             max_logt_for_net, max_abar_for_burning,
@@ -452,7 +372,10 @@ impl InlistBundle {
             max_logt_for_include_p_and_l_in_velocity_time_centering,
             op_split_burn_min_t, op_split_burn_eps, op_split_burn_odescal,
             op_split_burn_eps_nuc_infall_limit, op_split_burn_min_t_for_variable_t_solver,
-            tdc_alpha_r, tdc_alpha_m, alpha_rti_diffusion_factor, dedt_rti_diffusion_factor,
+            sig_term_limit, fe56ec_fake_factor, min_t_for_fe56ec_fake_factor,
+            max_conv_vel_div_csound, henyey_mlt_y_param, henyey_mlt_nu_param,
+            tdc_alpha_d, tdc_alpha_r, tdc_alpha_pt, tdc_alpha_c, tdc_alpha_s, tdc_alpha_m,
+            alpha_rti_diffusion_factor, dedt_rti_diffusion_factor,
             dudt_rti_diffusion_factor, dlnddt_rti_diffusion_factor,
             composition_rti_diffusion_factor, alpha_rti_src_min_v_div_cs,
             alpha_rti_src_min_q, alpha_rti_src_max_q,
@@ -479,8 +402,8 @@ impl InlistBundle {
             include_p_in_velocity_time_centering,
             use_p_d_1_div_rho_form_of_work_when_time_centering_velocity,
             nonlocal_nico_decay_heat, do_premix_heating,
-            tdc_include_eturb_in_energy_equation, use_drag_energy,
-            use_pvsc_art_visc, use_time_centered_eps_grav,
+            include_mlt_corr_to_tdc, tdc_include_eturb_in_energy_equation,
+            use_drag_energy, use_pvsc_art_visc, use_time_centered_eps_grav,
             include_composition_in_eps_grav, use_gravity_rotation_correction,
             use_mass_corrections, use_gradt_actual_vs_gradt_mlt_for_t_gradient_eqn,
             use_dprad_dm_form_of_t_gradient_eqn, use_flux_limiting_with_dprad_dm_form,
@@ -643,9 +566,7 @@ impl InlistBundle {
                 }
             };
         }
-        if let Some(v) = ctrl.try_get_i64("controls", "rsp_max_num_periods")? {
-            c.rsp_max_num_periods = Some(v as isize);
-        }
+        ctrl.try_isize_into("controls", &mut c.rsp_max_num_periods, "rsp_max_num_periods")?;
         if let Some(v) = ctrl.try_get_i64("controls", "rsp_target_steps_per_cycle")? {
             if v <= 0 {
                 return Err(StarError::InvalidInput(format!(

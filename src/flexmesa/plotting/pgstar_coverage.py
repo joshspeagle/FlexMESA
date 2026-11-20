@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import collections
 import dataclasses
+import importlib
 import pathlib
 import re
 
@@ -85,16 +86,27 @@ _FAMILY_SPECS: dict[tuple[str, str], tuple[str, str, str, str]] = {
         "22-category nuclear specific power breakdown from profileN.data.",
     ),
     ("pgstar", "Mixing"): (
-        "equivalent",
+        "partial",
         "plot_mixing_profile, plot_profile_panels",
         "#173",
-        "log_D_mix segmented by mixing_type and component diffusivities.",
+        (
+            "Draws the mixing and rotational diffusion curves, but "
+            "accepts D_omega as the rotation total where upstream draws "
+            "D_mix_rotation only "
+            "(star/private/pgstar_mixing_ds.f90:347), and linear D_* "
+            "columns and the summed mode omit the D_*_factor weights."
+        ),
     ),
     ("pgstar", "Dynamo"): (
-        "absent",
-        "-",
-        "#158",
-        "Magnetic/rotational interior diagnostics await rotation port.",
+        "partial",
+        "plot_dynamo_profile, plot_pgstar_grid",
+        "#173",
+        (
+            "Draws log B_phi, log B_r, log Omega and log(j/1e20), but "
+            "still draws when some of the four are absent; upstream "
+            "always draws all four "
+            "(star/private/pgstar_dynamo.f90:190-294)."
+        ),
     ),
     ("pgstar", "Mode_Prop"): (
         "equivalent",
@@ -130,10 +142,15 @@ _FAMILY_SPECS: dict[tuple[str, str], tuple[str, str, str, str]] = {
         ),
     ),
     ("pgstar", "rti"): (
-        "absent",
-        "-",
+        "partial",
+        "plot_rti_history, plot_pgstar_grid",
         "#173",
-        "Rayleigh-Taylor mixing diagnostic not yet implemented.",
+        (
+            "Draws RTI spans from the rti_type and rti_qtop history "
+            "columns as upstream does "
+            "(star/private/pgstar_rti.f90:326-399), and also from "
+            "mix_type and profile columns, which upstream does not use."
+        ),
     ),
     ("pgstar", "TRho"): (
         "equivalent",
@@ -214,22 +231,36 @@ _FAMILY_SPECS: dict[tuple[str, str], tuple[str, str, str, str]] = {
         "Logarithmic Kiel diagram (inverted log_Teff and log_g).",
     ),
     ("pgstar", "dPg_dnu"): (
-        "absent",
-        "-",
-        "#170",
-        "Gravity-mode period spacing diagram awaits GYRE/ADIPLS ports.",
+        "equivalent",
+        "plot_dpg_dnu, plot_history_track, plot_pgstar_grid",
+        "#173",
+        (
+            "Gravity-mode period spacing delta_Pg vs delta_nu track from "
+            "saved history.data (pulsation physics tracked in #170)."
+        ),
     ),
     ("pgstar", "Network"): (
-        "absent",
-        "-",
+        "partial",
+        "plot_network_chart, plot_pgstar_grid",
         "#173",
-        "Isochrone / nuclide abundance grid plot not yet implemented.",
+        (
+            "N-Z chart of the isotopes saved in the profile; upstream "
+            "draws every species of the net "
+            "(star/private/pgstar_network.f90:184-219) and leaves "
+            "abundances above the maximum unfilled."
+        ),
     ),
     ("pgstar", "Production"): (
-        "absent",
-        "-",
+        "partial",
+        "plot_production_profile, plot_pgstar_grid",
         "#173",
-        "Yield production factor panel not yet implemented.",
+        (
+            "Production factors against a scaled AG89 table or a "
+            "supplied profile; upstream builds the reference with "
+            "get_xa_for_standard_metals from initial_zfracs and maps it "
+            "through get_stable_mass_frac "
+            "(star/private/pgstar_production.f90:190-211)."
+        ),
     ),
     ("pgstar", "Profile_Panels<N>"): (
         "equivalent",
@@ -250,22 +281,34 @@ _FAMILY_SPECS: dict[tuple[str, str], tuple[str, str, str, str]] = {
         "Multi-row dual-axis history column stack vs model_number or age.",
     ),
     ("pgstar", "Color_magnitude<N>"): (
-        "absent",
-        "-",
+        "partial",
+        "plot_color_magnitude, plot_pgstar_grid",
         "#173",
-        "Photometric CMD panels not yet wired to plotting.",
+        (
+            "Draws configured colour-magnitude panels, and picks a "
+            "default pair when none is configured; upstream's default "
+            "has no panels (star/defaults/pgstar.defaults:5284-5323)."
+        ),
     ),
     ("pgstar", "Text_Summary<N>"): (
         "partial",
-        "plot_case_comparison",
+        "plot_text_summary, plot_pgstar_grid, plot_case_comparison",
         "#173",
-        "Provenance and tolerance summary banner in figure title.",
+        (
+            "Shows only quantities saved in history.data and leaves "
+            "other cells out; upstream evaluates every named quantity "
+            "from the model (star/private/pgstar_summary.f90:399-402)."
+        ),
     ),
     ("pgstar", "Grid<N>"): (
-        "equivalent",
+        "partial",
         "plot_pgstar_grid, plot_case_comparison",
         "#173",
-        "GridSpec multi-window composer supporting &pgstar Grid<N>_* inlists.",
+        (
+            "Lays out the supported windows; inherits the Text_Summary "
+            "and Color_magnitude differences and leaves out default "
+            "panel columns absent from the file."
+        ),
     ),
     ("pgbinary", "Summary_History"): (
         "equivalent",
@@ -293,27 +336,44 @@ _FAMILY_SPECS: dict[tuple[str, str], tuple[str, str, str, str]] = {
     ),
     ("pgbinary", "Text_Summary<N>"): (
         "partial",
-        "plot_pgbinary_panels, plot_case_comparison",
-        "#160",
-        "Binary provenance and residual tolerance banner in title.",
+        "plot_pgbinary_text_summary, plot_text_summary, plot_pgstar_grid",
+        "#173",
+        (
+            "Shows only quantities saved in binary_history.data and "
+            "leaves other cells out; upstream evaluates every named "
+            "quantity (binary/private/pgbinary_summary.f90:338-445)."
+        ),
     ),
     ("pgbinary", "Grid<N>"): (
-        "equivalent",
+        "partial",
         "plot_pgstar_grid, plot_pgbinary_panels, plot_case_comparison",
         "#173",
-        "GridSpec composer supporting &pgbinary Grid<N>_* inlists.",
+        (
+            "Lays out the supported windows; inherits the Text_Summary "
+            "difference and leaves out default panel columns absent "
+            "from the file."
+        ),
     ),
     ("pgbinary", "Star<N>"): (
         "equivalent",
-        "plot_pgbinary_panels, plot_pgstar_grid",
+        "plot_pgbinary_star, plot_pgstar_grid, plot_pgbinary_panels",
         "#173",
-        "Donor/accretor HR tracks, point-mass status, and Star1/Star2 cells.",
+        (
+            "Embeds any supported pgstar window or nested Grid<N> of Star 1 "
+            "or Star 2, with point-mass banner support."
+        ),
     ),
     ("pgbinary", "Orbit"): (
-        "equivalent",
+        "partial",
         "plot_pgbinary_orbit, plot_pgbinary_panels",
         "#173",
-        "2D Keplerian orbits, CoM, and Roche/stellar equipotential contours.",
+        (
+            "Draws the orbit and stellar outlines; derives eccentricity "
+            "from J_orb when the column is absent and adds Roche-lobe "
+            "contours, where upstream reads b% eccentricity and draws "
+            "stellar contours only "
+            "(binary/private/pgbinary_orbit.f90:102, 132, 171)."
+        ),
     ),
     ("astero_pgstar", "echelle"): (
         "equivalent",
@@ -344,7 +404,8 @@ def build_pgstar_coverage_report(
     Raises:
         FileNotFoundError: If any plotting ``.defaults`` file is missing.
         ValueError: If upstream ``.defaults`` contains an uncatalogued
-            ``*_win_flag`` panel family.
+            ``*_win_flag`` panel family, or a catalogued row names a builder
+            that ``flexmesa.plotting`` does not export.
     """
     specs = (
         ("pgstar", mesa_dir / "star" / "defaults" / "pgstar.defaults"),
@@ -382,6 +443,16 @@ def build_pgstar_coverage_report(
                     f"uncatalogued upstream plotting panel family {key!r}"
                 )
             status, builders, issue, notes = _FAMILY_SPECS[key]
+            if status not in ("equivalent", "partial", "absent"):
+                raise ValueError(f"unknown coverage status {status!r}")
+            if builders != "-":
+                plotting_pkg = importlib.import_module("flexmesa.plotting")
+                for b_name in (b.strip() for b in builders.split(",")):
+                    if not callable(getattr(plotting_pkg, b_name, None)):
+                        raise ValueError(
+                            f"coverage row {key!r} names builder {b_name!r}, "
+                            "which flexmesa.plotting does not export"
+                        )
             panels.append(
                 PgstarPanelStatus(
                     namelist=namelist,

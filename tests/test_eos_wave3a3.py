@@ -164,7 +164,7 @@ def test_get_pc_and_skye_alfa_match_mesa_26_4_1_oracle() -> None:
         for cid, lr, lt in (
             ("skye_alfa_simple_2p0_6p0", 2.0, 6.0),
             ("skye_alfa_simple_4p0_8p0", 4.0, 8.0),
-            ("skye_alfa_simple_f64_2p35_7p3", 2.35, 7.3),
+            ("skye_alfa_simple_2p35_7p3", 2.35, 7.3),
         ):
             exp = _load_scalar_row("ALFA", cid)
             sm_r = eos.get_skye_alfa_simple(lr, lt, backend="rust")
@@ -180,26 +180,116 @@ def test_get_pc_and_skye_alfa_match_mesa_26_4_1_oracle() -> None:
                 )
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "declared gap (#161): get_skye_alfa_simple uses f64 2.3/2.4/7.2/7.4 "
-        "defaults vs MESA eos/defaults/eos.defaults:225-228 real(4) literals"
-    ),
-)
 def test_skye_alfa_simple_default_bounds_match_mesa_26_4_1_real4() -> None:
     """Check `get_skye_alfa_simple` default bounds against MESA `26.4.1`."""
     exp_def = _load_scalar_row("ALFA", "skye_alfa_simple_2p35_7p3")
     with flexmesa.numerics_mode_context("strict"):
         sm_r = eos.get_skye_alfa_simple(2.35, 7.3, backend="rust")
+    sm_j = eos.get_skye_alfa_simple(
+        jnp.float64(2.35), jnp.float64(7.3), backend="jax"
+    )
     for col in range(3):
         np.testing.assert_allclose(
             float(sm_r[col]), exp_def[col], rtol=1e-13, atol=1e-15
         )
+        np.testing.assert_allclose(
+            float(sm_j[col]), exp_def[col], rtol=1e-13, atol=1e-15
+        )
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason=(
+        "declared gap (#161): Rust strict PC and Skye derivatives differ "
+        "from MESA 26.4.1 beyond the base tolerances (largest measured: "
+        "pc_co_liq d_dlnT 7.1e-6, skye_co_liq d_dlnT 1.3e-6)"
+    ),
+)
+def test_pc_and_skye_rust_strict_match_mesa_26_4_1_at_base_tolerance() -> None:
+    """Rust strict `PC` and `Skye` against MESA `26.4.1` with no allowances.
+
+    The test below this one lets known differences through with wider
+    derivative tolerances for some cases. This one applies the same base
+    tolerances as the Rust tests to every case (`crates/flexmesa-eos/tests/
+    wave3a3_pc_tests.rs`: `1.0e-11` on values, `5.0e-9` on derivatives;
+    `wave3a3_skye_inverse_tests.rs`: `1.0e-11` and `1.0e-8`), so the
+    differences are a declared gap and this test starts passing only when
+    they are gone.
+    """
+    cids, xa_c, ab_c, zb_c = _oracle_7sp_composition(0.0, 1.0, 0.0)
+    _, xa_co, ab_co, zb_co = _oracle_7sp_composition(0.0, 0.5, 0.5)
+    _, xa_he, ab_he, zb_he = _oracle_7sp_composition(1.0, 0.0, 0.0)
+    pc_cases = (
+        ("pc_c12_liq", xa_c, ab_c, zb_c, 1.0e6, 1.0e8),
+        ("pc_co_liq", xa_co, ab_co, zb_co, 1.0e6, 1.0e7),
+        ("pc_c12_trans_eosfi", xa_c, ab_c, zb_c, 1.0e6, 3.1e6),
+        ("pc_c12_trans_phase", xa_c, ab_c, zb_c, 1.0e6, 2.05e6),
+        ("pc_c12_sol", xa_c, ab_c, zb_c, 1.0e6, 1.0e6),
+        ("pc_co_sol", xa_co, ab_co, zb_co, 1.0e6, 1.0e6),
+        ("pc_he4_qmelt", xa_he, ab_he, zb_he, 1.0e8, 1.0e5),
+    )
+    skye_cases = (
+        ("skye_c12_liq", xa_c, ab_c, zb_c, 1.0e6, 1.0e8, False, "Ogata"),
+        ("skye_c12_liq_ion", xa_c, ab_c, zb_c, 1.0e6, 1.0e8, True, "Ogata"),
+        ("skye_co_liq", xa_co, ab_co, zb_co, 1.0e6, 1.0e7, False, "Ogata"),
+        (
+            "skye_co_sol_ogata",
+            xa_co,
+            ab_co,
+            zb_co,
+            1.0e6,
+            2.0e6,
+            False,
+            "Ogata",
+        ),
+        ("skye_co_sol_pc", xa_co, ab_co, zb_co, 1.0e6, 2.0e6, False, "PC"),
+        ("skye_c12_phase", xa_c, ab_c, zb_c, 1.0e6, 2.65e6, False, "Ogata"),
+    )
+    with flexmesa.numerics_mode_context("strict"):
+        for cid, xa, ab, zb, rho, temp in pc_cases:
+            exp = _load_eos_case(cid)
+            out = eos.eval_pc_eos(rho, temp, ab, zb, cids, xa, backend="rust")
+            np.testing.assert_allclose(
+                np.asarray(out.res), exp[:, 0], rtol=1.0e-11, atol=1.0e-14
+            )
+            np.testing.assert_allclose(
+                np.asarray(out.d_dlnd), exp[:, 1], rtol=5.0e-9, atol=1.0e-12
+            )
+            np.testing.assert_allclose(
+                np.asarray(out.d_dln_t), exp[:, 2], rtol=5.0e-9, atol=1.0e-12
+            )
+        for cid, xa, ab, zb, rho, temp, ion, rule in skye_cases:
+            exp = _load_eos_case(cid)
+            out = eos.eval_skye_eos(
+                rho,
+                temp,
+                ab,
+                zb,
+                cids,
+                xa,
+                skye_use_ion_offsets=ion,
+                skye_solid_mixing_rule=rule,
+                backend="rust",
+            )
+            np.testing.assert_allclose(
+                np.asarray(out.res), exp[:, 0], rtol=1.0e-11, atol=1.0e-14
+            )
+            np.testing.assert_allclose(
+                np.asarray(out.d_dlnd), exp[:, 1], rtol=1.0e-8, atol=1.0e-12
+            )
+            np.testing.assert_allclose(
+                np.asarray(out.d_dln_t), exp[:, 2], rtol=1.0e-8, atol=1.0e-12
+            )
 
 
 def test_pc_and_skye_oracle_cases_match_mesa_26_4_1_across_backends() -> None:
-    """Verify all 7 `PC`, 6 `Skye`, and 3 blend cases against MESA `26.4.1`."""
+    """Verify all 7 `PC`, 6 `Skye`, and 3 blend cases against MESA `26.4.1`.
+
+    The derivative tolerances here are wide enough to let known differences
+    from MESA through (measured: up to `7.1e-6` for `PC`, `1.3e-6` for
+    `skye_co_liq`). Those differences are a declared gap: the strict test
+    above applies the base tolerances and is expected to fail (`#161`).
+    """
     cids, xa_c, ab_c, zb_c = _oracle_7sp_composition(0.0, 1.0, 0.0)
     _, xa_co, ab_co, zb_co = _oracle_7sp_composition(0.0, 0.5, 0.5)
     _, xa_he, ab_he, zb_he = _oracle_7sp_composition(1.0, 0.0, 0.0)
@@ -408,7 +498,14 @@ def test_pc_and_skye_oracle_cases_match_mesa_26_4_1_across_backends() -> None:
 
 
 def test_eval_pc_eos_and_zones_match_across_rust_and_jax() -> None:
-    """Verify `eval_pc_eos` and `eval_pc_eos_zones` across liquid/solid WDs."""
+    """Verify `eval_pc_eos` and `eval_pc_eos_zones` across liquid/solid WDs.
+
+    This compares the derived JAX layer with Rust strict, not with MESA. The
+    derivative tolerance is `5.0e-9`. It was `1.0e-9` until commit `850f223`,
+    which widened it after the comparison measured `1.432e-9` on the CI
+    runner while passing on the author's machine. The cause of the
+    machine dependence in the JAX result has not been established.
+    """
     chem_id, xa, abar, zbar = _c12_o16_composition()
     azion = np.array(
         [float(chem.get_nuclide_info(c).z) for c in chem_id], dtype=np.float64

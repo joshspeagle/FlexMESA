@@ -175,6 +175,8 @@ def _eval_4d_table_dt(
     xa: np.ndarray | jax.Array,
     backend: _dispatch.Backend,
     solver_mode: str = "jax",
+    *,
+    include_radiation: bool = True,
 ) -> core.EosEvalOutput:
     """Shared dual-track wrapper for standalone 4D EOS table evaluators."""
     cids = [int(c) for c in chem_id]
@@ -186,7 +188,10 @@ def _eval_4d_table_dt(
             comp = chem.get_composition_info(cids, xa_c)
             if kind_code == 2:
                 res, dlnd, dlnt = _tables_4d_jax.eval_cms_eos_jax(
-                    r_j, t_j, float(comp.xh)
+                    r_j,
+                    t_j,
+                    float(comp.xh),
+                    include_radiation=bool(include_radiation),
                 )
             else:
                 res, dlnd, dlnt = _tables_4d_jax.eval_eosdt_table_jax(
@@ -197,7 +202,18 @@ def _eval_4d_table_dt(
         def _host_cb(
             r_a: np.ndarray, t_a: np.ndarray
         ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-            res_np, dlnd_np, dlnt_np = fn(float(r_a), float(t_a), cids, xa_c)
+            if kind_code == 2:
+                res_np, dlnd_np, dlnt_np = fn(
+                    float(r_a),
+                    float(t_a),
+                    cids,
+                    xa_c,
+                    include_radiation=bool(include_radiation),
+                )
+            else:
+                res_np, dlnd_np, dlnt_np = fn(
+                    float(r_a), float(t_a), cids, xa_c
+                )
             return (
                 np.asarray(res_np, dtype=np.float64),
                 np.asarray(dlnd_np, dtype=np.float64),
@@ -206,6 +222,16 @@ def _eval_4d_table_dt(
 
         res, d_dlnd, d_dln_t = skye.eval_host_dt_jvp(r_j, t_j, _host_cb)
         return core.EosEvalOutput(res, d_dlnd, d_dln_t)
+    if kind_code == 2:
+        return core.EosEvalOutput(
+            *fn(
+                float(rho),
+                float(temp),
+                cids,
+                xa_c,
+                include_radiation=bool(include_radiation),
+            )
+        )
     return core.EosEvalOutput(*fn(float(rho), float(temp), cids, xa_c))
 
 
@@ -259,10 +285,19 @@ def eval_cms_eos(
     chem_id: Sequence[int],
     xa: np.ndarray | jax.Array,
     *,
+    include_radiation: bool = True,
     backend: _dispatch.Backend = "auto",
     solver_mode: str = "jax",
 ) -> core.EosEvalOutput:
     """Evaluate Chabrier, Mazevet & Soubiran (`CMS`) EOS standalone."""
     return _eval_4d_table_dt(
-        _rust.eos_eval_cms, 2, rho, temp, chem_id, xa, backend, solver_mode
+        _rust.eos_eval_cms,
+        2,
+        rho,
+        temp,
+        chem_id,
+        xa,
+        backend,
+        solver_mode,
+        include_radiation=include_radiation,
     )

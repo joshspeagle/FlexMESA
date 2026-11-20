@@ -20,7 +20,7 @@ def eval_mesh_gval_jax(
     ln_peos: jax.Array,
     ln_t: jax.Array,
     mesh_delta_coeff: float = 1.0,
-    p_function_weight: float = 30.0,
+    p_function_weight: float = 40.0,
     t_function1_weight: float = 110.0,
 ) -> jax.Array:
     """Compute dimensionless mesh variation indicator `g_k` (`(nz,)`).
@@ -29,7 +29,7 @@ def eval_mesh_gval_jax(
         ln_peos: Cell logarithmic pressures of shape `(nz,)`.
         ln_t: Cell logarithmic temperatures of shape `(nz,)`.
         mesh_delta_coeff: Global mesh spacing factor (`1.0` default).
-        p_function_weight: Pressure spacing weight (`30.0` default).
+        p_function_weight: Pressure spacing weight (`40.0` default).
         t_function1_weight: Temperature spacing weight (`110.0` default).
 
     Returns:

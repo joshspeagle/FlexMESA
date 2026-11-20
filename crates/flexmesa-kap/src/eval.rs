@@ -10,6 +10,7 @@ pub use crate::blend::{
 };
 use crate::compton::compton_opacity;
 use crate::conduction::do_electron_conduction;
+use crate::loader::kap_tables;
 use crate::types::{
     KapConfig, KapError, KapEvalOutput, I_FRAC_COMPTON, I_FRAC_HIGH_T,
     I_FRAC_LOW_T, I_FRAC_TYPE2, NUM_KAP_FRACS,
@@ -66,9 +67,9 @@ pub fn get_kap_results(
     };
     let log_r_ad = log_rho_ad - log_t_ad * 3.0 + 18.0;
 
-    let log_t_compton_blend_hi = cfg.log_t_compton_blend_hi;
+    let (log_t_compton_blend_hi, log_r_compton_blend_lo) =
+        kap_tables()?.compton_blend_bounds(cfg)?;
     let log_t_compton_blend_lo = log_t_compton_blend_hi - 0.5;
-    let log_r_compton_blend_lo = cfg.log_r_compton_blend_lo;
     let log_r_compton_blend_hi = log_r_compton_blend_lo + 0.5;
 
     let blend_log_t = if log_t_ad.val <= log_t_compton_blend_lo {

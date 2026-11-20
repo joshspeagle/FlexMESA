@@ -10,8 +10,8 @@ use flexmesa_binary::{
     BinaryInlistControls, BinarySystem, DefaultBinaryExtras,
 };
 use flexmesa_const::SECYER;
-use flexmesa_math::{with_numerics_mode, NumericsMode};
-use flexmesa_star::{load_zams_model, StarControls, StarJobControls};
+use flexmesa_math::{NumericsMode, with_numerics_mode};
+use flexmesa_star::{StarControls, StarJobControls, load_zams_model};
 
 fn run_point_mass_rlof_in_pool(n_threads: usize) -> Vec<u8> {
     let pool = rayon::ThreadPoolBuilder::new()
@@ -37,6 +37,7 @@ fn run_two_star_coupled_in_pool(n_threads: usize) -> Vec<u8> {
             let donor = load_zams_model(
                 StarControls {
                     initial_mass: 1.4,
+                    zbase: 0.02,
                     ..StarControls::default()
                 },
                 StarJobControls::default(),
@@ -45,6 +46,7 @@ fn run_two_star_coupled_in_pool(n_threads: usize) -> Vec<u8> {
             let accretor = load_zams_model(
                 StarControls {
                     initial_mass: 1.1,
+                    zbase: 0.02,
                     ..StarControls::default()
                 },
                 StarJobControls::default(),
@@ -57,6 +59,7 @@ fn run_two_star_coupled_in_pool(n_threads: usize) -> Vec<u8> {
                 m2_msun: 1.1,
                 initial_period_in_days: 0.55,
                 mdot_scheme: String::from("Ritter"),
+                terminate_if_initial_overflow: false,
                 ..BinaryInlistControls::default()
             };
             bctrl.use_radiation_corrected_transfer_rate = false;

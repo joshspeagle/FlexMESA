@@ -116,9 +116,8 @@ issue = "#231"
 [[cases]]
 suite = "star"
 case = "adjust_net"
-status = "unported"
+status = "ported"
 digest = "49b02086a5c4448d24632d5c48cb32c155ec854021cd2a130b791c18113f76ee"
-issue = "#231"
 
 [[cases]]
 suite = "star"
@@ -137,9 +136,8 @@ issue = "#231"
 [[cases]]
 suite = "star"
 case = "cburn_inward"
-status = "unported"
+status = "ported"
 digest = "d2f88bf4e0736355e0674a6b081cef2aac5d145226719e1f7b77b0454b71c450"
-issue = "#231"
 
 [[cases]]
 suite = "star"
@@ -171,16 +169,14 @@ issue = "#231"
 [[cases]]
 suite = "star"
 case = "conserve_angular_momentum"
-status = "unported"
+status = "ported"
 digest = "d4262d99a3255038e373fd8ad93943810663950723c4f97d083ce3fe43631dc6"
-issue = "#231"
 
 [[cases]]
 suite = "star"
 case = "conv_core_cpm"
-status = "unported"
+status = "ported"
 digest = "931ff8381a8a075a3f73fdf33b4c149bdddf728f8c952c91c497faeb6351ad10"
-issue = "#231"
 
 [[cases]]
 suite = "star"
@@ -197,9 +193,8 @@ digest = "4b7b570f3a144678fa67d368b2c5b485ad89e03f9b43abe8575c1635939c1a5a"
 [[cases]]
 suite = "star"
 case = "diffusion_smoothness"
-status = "unported"
+status = "ported"
 digest = "a9a4c120a36a4e0b5a448cc701d92bedd1d2b848d6688acc3d866becaa8fa492"
-issue = "#231"
 
 [[cases]]
 suite = "star"
@@ -266,9 +261,8 @@ digest = "4b7b570f3a144678fa67d368b2c5b485ad89e03f9b43abe8575c1635939c1a5a"
 [[cases]]
 suite = "star"
 case = "high_rot_darkening"
-status = "unported"
+status = "ported"
 digest = "ec626f7f95c781d174c1fb47e3c52aa8fda0944ae73f3c2bb595646db6d4cc91"
-issue = "#231"
 
 [[cases]]
 suite = "star"
@@ -279,16 +273,14 @@ digest = "cee123d06d0473df8468de41c0b53c508ca76ecbb347e8ae08e00caa640ec426"
 [[cases]]
 suite = "star"
 case = "hot_cool_wind"
-status = "unported"
+status = "ported"
 digest = "da08b0027bcfb6e10802bebfe76d1311107d9959bc37c1175eecf2bc10f38b3d"
-issue = "#231"
 
 [[cases]]
 suite = "star"
 case = "hse_riemann"
-status = "unported"
+status = "ported"
 digest = "0fa904bff5dc0d95989e47bd6c63b6a9f31c91e555f985d175fa9287b5b38e50"
-issue = "#231"
 
 [[cases]]
 suite = "star"
@@ -345,9 +337,8 @@ digest = "4b7b570f3a144678fa67d368b2c5b485ad89e03f9b43abe8575c1635939c1a5a"
 [[cases]]
 suite = "star"
 case = "make_o_ne_wd"
-status = "unported"
+status = "ported"
 digest = "66d8fe751688234d5fd13d79968b4df0b42473861d85d4b8ca37bed61dd2967e"
-issue = "#231"
 
 [[cases]]
 suite = "star"
@@ -390,23 +381,20 @@ digest = "506d0aac408f309287ac27f7bc3ca449cb309f7ce73379c95e348ac4228c7902"
 [[cases]]
 suite = "star"
 case = "ns_c"
-status = "unported"
+status = "ported"
 digest = "1ac91de655827c664452fb584b406c483a6ff18adae55302ed5f9377e95a83c9"
-issue = "#231"
 
 [[cases]]
 suite = "star"
 case = "ns_h"
-status = "unported"
+status = "ported"
 digest = "1ac91de655827c664452fb584b406c483a6ff18adae55302ed5f9377e95a83c9"
-issue = "#231"
 
 [[cases]]
 suite = "star"
 case = "ns_he"
-status = "unported"
+status = "ported"
 digest = "1ac91de655827c664452fb584b406c483a6ff18adae55302ed5f9377e95a83c9"
-issue = "#231"
 
 [[cases]]
 suite = "star"
@@ -500,9 +488,8 @@ digest = "a56821ca61903437c9de7b9b7ea595496e070d47c56ff90cbb58f62640bf266d"
 [[cases]]
 suite = "star"
 case = "semiconvection"
-status = "unported"
+status = "ported"
 digest = "b935b9355a19ef5ddfa885a697659cf13e278a8fd2e57968900c85922e740f24"
-issue = "#231"
 
 [[cases]]
 suite = "star"
@@ -624,9 +611,8 @@ digest = "2a36105a91f29055314a9b3921a750b73c2a1899b27533adc288016f702030d7"
 [[cases]]
 suite = "binary"
 case = "jdot_ls_check"
-status = "unported"
+status = "ported"
 digest = "12890a442476124f7b8c680e188e64f14baca94b696a78b75cefa106683a923d"
-issue = "#231"
 
 [[cases]]
 suite = "binary"
@@ -649,9 +635,8 @@ digest = "f4e8cb4d5f84304947b6a817879063dc65c04cacca90bba857f07fd50020e440"
 [[cases]]
 suite = "binary"
 case = "wind_fed_bhhmxb"
-status = "unported"
+status = "ported"
 digest = "ccc26a9dff72ae93b3c465d0835e7c171ab6d705f165d18c2693cbcea0378296"
-issue = "#231"
 
 [[cases]]
 suite = "astero"

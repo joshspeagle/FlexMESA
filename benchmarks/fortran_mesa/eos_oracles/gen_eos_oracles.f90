@@ -304,6 +304,25 @@ program gen_eos_oracles
    call free_eos_handle(eos_handle)
 
    ! ------------------------------------------------------------------
+   ! 7b. Level-6 HELM/ideal edge blends (`eosdt_eval.f90:728,749-750`, #176)
+   ! ------------------------------------------------------------------
+   eos_handle = alloc_eos_handle(ierr)
+   call eos_ptr(eos_handle, rq, ierr)
+   rq% use_CMS = .false.
+   rq% use_Skye = .false.
+   rq% use_PC = .false.
+   rq% use_FreeEOS = .false.
+   rq% use_OPAL_SCVH = .false.
+   call make_xa(0.0d0, 1.0d0, 0.0d0, xa)
+   call emit_dt_case(eos_handle, 'eosdt_helm_ideal_hi_rho_blend', &
+      7, chem_id, net_iso, xa, exp10(15.05d0), exp10(12.5d0))
+   rq% include_elec_pos = .false.
+   call make_solar_xa(0.70d0, 0.02d0, xa)
+   call emit_dt_case(eos_handle, 'eosdt_helm_ideal_lo_t_noep_blend', &
+      7, chem_id, net_iso, xa, 1.0d-8, exp10(2.95d0))
+   call free_eos_handle(eos_handle)
+
+   ! ------------------------------------------------------------------
    ! 8. Inverse EOS solvers (`eosPT_get`, `eosDT_get_T`, `eosDT_get_Rho`, `eos_gamma_DE_get`, `eosPT_get_T`)
    ! ------------------------------------------------------------------
    call emit_inverse_cases(chem_id, net_iso, abar_c12)

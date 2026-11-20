@@ -30,7 +30,7 @@
 
 use crate::inputs::TFAC6;
 use crate::{NeuInputs, NeuRate};
-use flexmesa_math::{exp, log, pow};
+use flexmesa_math::{exp, log, pow, powi};
 
 /// Inverse Fermi-Dirac integral $F_{1/2}^{-1}(f)$ via Antia (1993, ApJS, 84,
 /// 101) rational approximation (`ifermi12` in `mod_neu.f90`, max error
@@ -231,11 +231,10 @@ pub fn reco_neu(input: &NeuInputs) -> NeuRate {
     let c00_p = 1.0 / (1.0 + f1 * nu + f2 * nu2 + f3 * nu3);
     let c01_p = f1 + f2 * 2.0 * nu + f3 * 3.0 * nu2;
     let dum = zeta * c00_p;
-    let k_nu = -c00_p * c00_p * zeta * c01_p;
-    let dumdt = zetadt * c00_p + k_nu * nudt;
-    let dumdd = k_nu * nudd;
-    let dumda = k_nu * nuda;
-    let dumdz = zetadz * c00_p + k_nu * nudz;
+    let dumdt = zetadt * c00_p - c00_p * c00_p * zeta * c01_p * nudt;
+    let dumdd = -c00_p * c00_p * zeta * c01_p * nudd;
+    let dumda = -c00_p * c00_p * zeta * c01_p * nuda;
+    let dumdz = zetadz * c00_p - c00_p * c00_p * zeta * c01_p * nudz;
 
     let inv_dum = 1.0 / dum;
     let dd00 = pow(dum, -2.25);
@@ -251,17 +250,19 @@ pub fn reco_neu(input: &NeuInputs) -> NeuRate {
     let gumda = dd00_g * c * nuda + b * z_cnu * d * dumda;
     let gumdz = dd00_g * c * nudz + b * z_cnu * d * dumdz;
 
+    // Match unfactored `bigjd*` and integer `pow(zbar, 13)` in
+    // neu/private/mod_neu.f90:1388-1405.
     let z_nu = exp(nu);
     let inv_gum = 1.0 / gum;
     let bigj = c00 * z_nu * inv_gum;
-    let bigjdt =
-        (c01 * dumdt + c00 * nudt - c00 * inv_gum * gumdt) * z_nu * inv_gum;
-    let bigjdd =
-        (c01 * dumdd + c00 * nudd - c00 * inv_gum * gumdd) * z_nu * inv_gum;
-    let bigjda =
-        (c01 * dumda + c00 * nuda - c00 * inv_gum * gumda) * z_nu * inv_gum;
-    let bigjdz =
-        (c01 * dumdz + c00 * nudz - c00 * inv_gum * gumdz) * z_nu * inv_gum;
+    let bigjdt = c01 * dumdt * z_nu * inv_gum + c00 * z_nu * nudt * inv_gum
+        - c00 * z_nu * inv_gum * inv_gum * gumdt;
+    let bigjdd = c01 * dumdd * z_nu * inv_gum + c00 * z_nu * nudd * inv_gum
+        - c00 * z_nu * inv_gum * inv_gum * gumdd;
+    let bigjda = c01 * dumda * z_nu * inv_gum + c00 * z_nu * nuda * inv_gum
+        - c00 * z_nu * inv_gum * inv_gum * gumda;
+    let bigjdz = c01 * dumdz * z_nu * inv_gum + c00 * z_nu * nudz * inv_gum
+        - c00 * z_nu * inv_gum * inv_gum * gumdz;
 
     let z_zn = exp(zeta + nu);
     let inv_1pz = 1.0 / (1.0 + z_zn);
@@ -269,7 +270,7 @@ pub fn reco_neu(input: &NeuInputs) -> NeuRate {
     let sreco = TFAC6
         * 2.649e-18
         * input.ye
-        * pow(input.zbar, 13.0)
+        * powi(input.zbar, 13)
         * input.den
         * bigj
         * inv_1pz;

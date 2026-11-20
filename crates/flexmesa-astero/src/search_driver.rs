@@ -66,7 +66,7 @@ struct AsteroTrackExtras<'a> {
 impl AsteroTrackExtras<'_> {
     fn set_max_years_dt(model: &mut StarModel, max_yrs: f64) {
         let yrs = max_yrs.max(1.0);
-        model.controls.max_years_for_timestep = Some(yrs);
+        model.controls.max_years_for_timestep = yrs;
         model.dt = model.dt.min(yrs * SECYER);
         model.dt_next = model.dt_next.min(yrs * SECYER);
     }
@@ -159,11 +159,12 @@ impl StarExtras for AsteroTrackExtras<'_> {
         }
         if checking_age && model.star_age < self.ctrl.age_target {
             let rem = (self.ctrl.age_target - model.star_age).max(1.0);
-            let cur_max = model
-                .controls
-                .max_years_for_timestep
-                .unwrap_or(self.ctrl.max_yrs_dt_when_cold)
-                .max(1.0);
+            let cur_max = if model.controls.max_years_for_timestep > 0.0 {
+                model.controls.max_years_for_timestep
+            } else {
+                self.ctrl.max_yrs_dt_when_cold
+            }
+            .max(1.0);
             if rem <= cur_max {
                 Self::set_max_years_dt(model, rem);
             } else if self.ctrl.num_smaller_steps_before_age_target > 0
@@ -338,7 +339,7 @@ fn apply_params_to_bundle(
     bundle: &mut InlistBundle,
     ctrl: &AsteroSearchControls,
     params: &AsteroParamSet,
-) {
+) -> Result<(), StarError> {
     bundle.controls.initial_mass = params.initial_mass;
     let z_div_x = ctrl.z_div_x_solar * flexmesa_math::exp10(params.initial_feh);
     let (x, y) = if ctrl.y_depends_on_z {
@@ -360,12 +361,18 @@ fn apply_params_to_bundle(
     }
     let ov = &mut bundle.controls.mix_wind.overshoot_sets[0];
     if params.f_ov > 0.0 {
+        if ctrl.f0_ov_div_f_ov <= 0.0 {
+            return Err(StarError::InvalidInput(format!(
+                "astero f_ov = {} > 0 requires f0_ov_div_f_ov > 0 (got {})",
+                params.f_ov, ctrl.f0_ov_div_f_ov
+            )));
+        }
         ov.scheme = String::from("exponential");
         ov.zone_type = String::from("any");
         ov.zone_loc = String::from("any");
         ov.bdy_loc = String::from("any");
         ov.f = params.f_ov;
-        ov.f0 = ctrl.f0_ov_div_f_ov.abs().max(0.1) * params.f_ov;
+        ov.f0 = ctrl.f0_ov_div_f_ov * params.f_ov;
     } else {
         ov.scheme.clear();
         (ov.f, ov.f0) = (0.0, 0.0);
@@ -381,8 +388,9 @@ fn apply_params_to_bundle(
     }
     if !ctrl.eval_chi2_at_target_age_only && !ctrl.include_age_in_chi2_spectro {
         bundle.controls.max_years_for_timestep =
-            Some(ctrl.max_yrs_dt_when_cold.max(1.0));
+            ctrl.max_yrs_dt_when_cold.max(1.0);
     }
+    Ok(())
 }
 
 /// Evolves one stellar track for `params` and returns its best [`AsteroSampleResult`].
@@ -416,7 +424,7 @@ pub fn run_single_astero_track_with_logs(
     logs_opts: StarLogsOptions<'_>,
 ) -> Result<(AsteroSampleResult, StageRunReport, StarModel), StarError> {
     let mut bundle = base_bundle.clone();
-    apply_params_to_bundle(&mut bundle, ctrl, &params);
+    apply_params_to_bundle(&mut bundle, ctrl, &params)?;
     if let Some(cap) = max_steps_cap {
         bundle.controls.max_model_number =
             Some(bundle.controls.max_model_number.map_or(cap, |m| m.min(cap)));

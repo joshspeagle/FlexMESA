@@ -21,7 +21,7 @@ $$\nabla_{\mathrm{rad}} = \frac{3}{16\pi a c G}\,\frac{\kappa\,L\,P}{m\,T^4}, \q
 2. **Low-Temperature Molecular & Dust Opacities**:
    - In cool stellar atmospheres and red-giant envelopes ($\log_{10} T \lesssim 4.0$), radiative tables blend smoothly into Ferguson et al. (2005) (`lowT_fa05_gs98`, `gn93`, `a09p`), Freedman et al. (2008, 2014) (`lowT_Freedman11`), Lederer & Aringer (2009) C/N-varying `kapCN`, and Marigo & Aringer (2009) C/N/O-varying `AESOPUS` tables.
 3. **Relativistic Compton Scattering & Degenerate Electron Conduction**:
-   - At high temperatures ($\log_{10} T \gtrsim 8.2$) or low $\log_{10} R$, bound-free and free-free absorption give way to Compton scattering off partially degenerate, relativistic electrons. `compton_opacity_jax` evaluates the Poutanen (2017) relativistic Compton opacity and blends it with the radiative table via a $C^2$ quintic smootherstep.
+   - Near the upper temperature or lower $\log_{10} R$ edges of the loaded Type 1 and Type 2 radiative tables ($\log_{10} T_{\mathrm{hi}} = \min(\log_{10} T_{\max,\mathrm{Type1}}, \log_{10} T_{\max,\mathrm{CO}}) - 0.01$, i.e. $8.69$ for `gs98`/`a09`/`OP_gs98` and $7.99$ for `OP_a09`), bound-free and free-free absorption give way to Compton scattering off partially degenerate, relativistic electrons (`kap/private/kap_eval.f90:287-318`). `compton_opacity_jax` evaluates the Poutanen (2017) relativistic Compton opacity and blends it with the radiative table via a $C^2$ quintic smootherstep over a $0.5\,\mathrm{dex}$ band (`get_kap_blend_bounds_jax`).
    - In degenerate cores, `combine_rad_with_conduction_jax` combines radiative opacity harmonically with Potekhin et al. (1999, `condint.f`) electron conduction tables and Blouin et al. (2020) H/He strong-coupling conductive corrections.
    - `make_differentiable_kap` wraps the full composite opacity evaluator in a `@jax.custom_jvp` rule so that `jax.grad` and `jax.jacfwd` propagate exact analytical $(\log_{10}\rho, \log_{10} T)$ spline derivatives without finite differences.
 
@@ -35,16 +35,16 @@ $$\nabla_{\mathrm{rad}} = \frac{3}{16\pi a c G}\,\frac{\kappa\,L\,P}{m\,T^4}, \q
 
 Integrating the 1D stellar structure equations requires outer boundary values for the photospheric gas pressure $\ln P_{\mathrm{surf}}$ and temperature $\ln T_{\mathrm{surf}}$ at the surface optical depth $\tau_{\mathrm{surf}}$, together with their partial derivatives with respect to $(L, \ln R, \ln M, \ln \kappa)$. `flexmesa.atm` (`crates/flexmesa-atm`) provides three atmosphere boundary families:
 
-1. **Analytic & Integrated Grey $T(\tau)$ Relations (`eval_t_tau_uniform`, `eval_t_tau_varying`)**:
+1. **Analytic & Integrated Grey $T(\tau)$ Relations (`eval_t_tau_atm`, `eval_t_tau_uniform`, `eval_t_tau_varying`, `get_t_tau_id`)**:
    In a plane-parallel grey atmosphere in radiative equilibrium, temperature varies with optical depth $\tau$ according to a dimensionless Hopf function $q(\tau)$:
 
    $$T^4(\tau) = \frac{3}{4}\,T_{\mathrm{eff}}^4\,\left[\tau + q(\tau)\right], \qquad \frac{dP}{d\tau} = \frac{g}{\kappa(\rho, T)}.$$
 
-   `flexmesa.atm` supports the classic Eddington ($q(\tau) = 2/3$), solar Hopf, Krishna-Swamy (1966), and Trampedach et al. (2014) / Ball (2021) radiation-hydrodynamics $T(\tau)$ relations, solving for $P_{\mathrm{surf}}$ via either uniform-opacity fixed-point iteration or adaptive Cash-Karp RK45 integration of $dP/d\tau = g/\kappa$.
+   `flexmesa.atm` supports the classic Eddington ($q(\tau) = 2/3$), solar Hopf, Krishna-Swamy (1966), and Trampedach et al. (2014) / Ball (2021) radiation-hydrodynamics $T(\tau)$ relations (`get_t_tau_id`), solving for $P_{\mathrm{surf}}$ via `eval_t_tau_atm` (`star/private/atm_support.f90:218-343`) across `'fixed'` uniform opacity (`max_iters = 0`), `'iterated'` 0.5-underrelaxed fixed-point opacity iteration with radiation-pressure enhancement `pextra_factor` and implicit $(\chi_\rho, \chi_T, \kappa_\rho, \kappa_T)$ partial-derivative corrections, or `'varying'` adaptive Dormand-Prince 5(4) (`dopri5`, `num/private/mod_dopri5.f` and `atm/private/atm_t_tau_varying.f90:182-279`) integration of $dP/d\tau = g/\kappa$.
 2. **Irradiated Planetary & Binary Atmospheres (`eval_irradiated`)**:
    Implements the Guillot (2010) semi-grey two-stream irradiated atmosphere model for close-in giant planets and strongly irradiated binary companions, using a precomputed Steffen (1990) monotonic spline (`eval_e2`) for the second exponential integral $E_2(x)$.
-3. **Tabulated Model Atmospheres (`eval_table`)**:
-   Performs 2D bicubic Hermite interpolation in $(\log g, T_{\mathrm{eff}})$ and 1D Steffen interpolation in metallicity $[\mathrm{M/H}]$ across all 7 MESA atmosphere table sets (`ATM_TABLE_PHOTOSPHERE`, `TAU_100`, `TAU_10`, `TAU_1`, `TAU_1M1`, `WD_TAU_25`, and `DB_WD_TAU_25`).
+3. **Tabulated Model Atmospheres & Off-Table Blending (`eval_table_atm`, `eval_table`, `get_table_alfa_beta`, `get_table_id`)**:
+   Performs 2D bicubic Hermite interpolation in $(\log g, T_{\mathrm{eff}})$ and 4-point 1D Steffen interpolation in metallicity $[\mathrm{M/H}]$ across all 7 MESA atmosphere table sets (`ATM_TABLE_PHOTOSPHERE`, `TAU_100`, `TAU_10`, `TAU_1`, `TAU_1M1`, `WD_TAU_25`, and `DB_WD_TAU_25`; resolved by name via `get_table_id`), while `eval_table_atm` (`star/private/atm_support.f90:430-689`) blends boundary-margin and off-table states smoothly into `'T_tau'` via `get_table_alfa_beta` weights $(\alpha, \beta)$ and switches $\tau_{\mathrm{base}}$ when $\beta = 0$.
 
 ---
 

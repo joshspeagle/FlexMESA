@@ -27,36 +27,40 @@ pub struct CmsConfig {
     pub fixed_composition_index: isize,
     /// Use 4-point piecewise monotonic cubic interpolation in $X$ (default `false`).
     pub cubic_in_x: bool,
-    /// Include blackbody radiation pressure/energy/entropy in `CMS` (default `false`).
+    /// Include blackbody radiation pressure/energy/entropy in `CMS` (default `true`).
     pub include_radiation: bool,
     /// Metallicity $Z$ above which `CMS` has zero weight (default `-1.0`, disabled).
     pub max_z_for_any_cms: f64,
     /// Metallicity $Z$ below which `CMS` has full weight (default `-1.0`, disabled).
     pub max_z_for_all_cms: f64,
-    /// Lower $\log_{10} Q$ cutoff for any `CMS` weight (default `-100.0`).
+    /// Lower $\log_{10} Q$ cutoff for any `CMS` weight (default `-1.0`, disabled).
     pub logq_min_for_any_cms: f64,
-    /// Lower $\log_{10} Q$ threshold for full `CMS` weight (default `-100.0`).
+    /// Lower $\log_{10} Q$ threshold for full `CMS` weight (default `-1.0`, disabled).
     pub logq_min_for_all_cms: f64,
-    /// Upper $\log_{10} Q$ threshold for full `CMS` weight (default `100.0`).
+    /// Upper $\log_{10} Q$ threshold for full `CMS` weight (default `-1.0`, disabled).
     pub logq_max_for_all_cms: f64,
-    /// Upper $\log_{10} Q$ cutoff for any `CMS` weight (default `100.0`).
+    /// Upper $\log_{10} Q$ cutoff for any `CMS` weight (default `-1.0`, disabled).
     pub logq_max_for_any_cms: f64,
-    /// Lower $\log_{10} \rho$ cutoff for any `CMS` weight (default `-8.0`).
+    /// Lower $\log_{10} \rho$ cutoff for any `CMS` weight (default `-1.0`, disabled).
     pub logrho_min_for_any_cms: f64,
-    /// Lower $\log_{10} \rho$ threshold for full `CMS` weight (default `-7.9`).
+    /// Lower $\log_{10} \rho$ threshold for full `CMS` weight (default `-1.0`, disabled).
     pub logrho_min_for_all_cms: f64,
-    /// Upper $\log_{10} \rho$ threshold for full `CMS` weight (default `5.9`).
+    /// Upper $\log_{10} \rho$ threshold for full `CMS` weight (default `-1.0`, disabled).
     pub logrho_max_for_all_cms: f64,
-    /// Upper $\log_{10} \rho$ cutoff for any `CMS` weight (default `6.0`).
+    /// Upper $\log_{10} \rho$ cutoff for any `CMS` weight (default `-1.0`, disabled).
     pub logrho_max_for_any_cms: f64,
-    /// Lower $\log_{10} T$ cutoff for any `CMS` weight (default `2.0`).
+    /// Lower $\log_{10} T$ cutoff for any `CMS` weight (default `-1.0`, disabled).
     pub logt_min_for_any_cms: f64,
-    /// Lower $\log_{10} T$ threshold for full `CMS` weight (default `2.1`).
+    /// Lower $\log_{10} T$ threshold for full `CMS` weight (default `-1.0`, disabled).
     pub logt_min_for_all_cms: f64,
-    /// Upper $\log_{10} T$ threshold for full `CMS` weight (default `7.9`).
+    /// Upper $\log_{10} T$ threshold for full `CMS` weight (default `-1.0`, disabled).
     pub logt_max_for_all_cms: f64,
-    /// Upper $\log_{10} T$ cutoff for any `CMS` weight (default `8.0`).
+    /// Upper $\log_{10} T$ cutoff for any `CMS` weight (default `-1.0`, disabled).
     pub logt_max_for_any_cms: f64,
+    /// Upper $\log_{10} T$ threshold for full `CMS` weight on pure He (default `-1.0`, disabled).
+    pub logt_max_for_all_cms_pure_he: f64,
+    /// Upper $\log_{10} T$ cutoff for any `CMS` weight on pure He (default `-1.0`, disabled).
+    pub logt_max_for_any_cms_pure_he: f64,
     /// Upper $\log_{10} T$ threshold for full `CMS` in the lower-right corner (default `5.5`).
     pub logt_low_max_for_all_cms: f64,
     /// Upper $\log_{10} T$ cutoff for any `CMS` in the lower-right corner (default `5.6`).
@@ -73,7 +77,42 @@ impl Default for CmsConfig {
             use_fixed_composition: false,
             fixed_composition_index: -1,
             cubic_in_x: false,
-            include_radiation: false,
+            include_radiation: true,
+            max_z_for_any_cms: -1.0,
+            max_z_for_all_cms: -1.0,
+            logq_min_for_any_cms: -1.0,
+            logq_min_for_all_cms: -1.0,
+            logq_max_for_all_cms: -1.0,
+            logq_max_for_any_cms: -1.0,
+            logrho_min_for_any_cms: -1.0,
+            logrho_min_for_all_cms: -1.0,
+            logrho_max_for_all_cms: -1.0,
+            logrho_max_for_any_cms: -1.0,
+            logt_min_for_any_cms: -1.0,
+            logt_min_for_all_cms: -1.0,
+            logt_max_for_all_cms: -1.0,
+            logt_max_for_any_cms: -1.0,
+            logt_max_for_all_cms_pure_he: -1.0,
+            logt_max_for_any_cms_pure_he: -1.0,
+            logt_low_max_for_all_cms: 5.5,
+            logt_low_max_for_any_cms: 5.6,
+            logrho_high_min_for_all_cms: 2.2,
+            logrho_high_min_for_any_cms: 2.1,
+        }
+    }
+}
+
+impl CmsConfig {
+    /// Returns a wide active `CMS` validity rectangle spanning the tabulated
+    /// `CMS` table bounds (`logQ in [-100, 100]`, `logRho in [-8, 6]`,
+    /// `logT in [2, 8]`) for standalone unit tests without an `&eos` namelist.
+    #[must_use]
+    pub const fn wide_table_bounds() -> Self {
+        Self {
+            use_fixed_composition: false,
+            fixed_composition_index: -1,
+            cubic_in_x: false,
+            include_radiation: true,
             max_z_for_any_cms: -1.0,
             max_z_for_all_cms: -1.0,
             logq_min_for_any_cms: -100.0,
@@ -88,6 +127,8 @@ impl Default for CmsConfig {
             logt_min_for_all_cms: 2.1,
             logt_max_for_all_cms: 7.9,
             logt_max_for_any_cms: 8.0,
+            logt_max_for_all_cms_pure_he: -1.0,
+            logt_max_for_any_cms_pure_he: -1.0,
             logt_low_max_for_all_cms: 5.5,
             logt_low_max_for_any_cms: 5.6,
             logrho_high_min_for_all_cms: 2.2,

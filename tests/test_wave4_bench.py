@@ -28,13 +28,18 @@ from flexmesa import bench, star
 # Self-generated FlexMESA regression snapshots at N=8 (not upstream MESA
 # outputs; `star_hydro_eqns`, `star_newton_step`, and `star_evolve_step`
 # shifted under #141 when `neu` #193 and `num` #194 were aligned to MESA
-# 26.4.1; tracked in #146).
+# 26.4.1, all five shifted under #149 when `&controls`, microphysics, and
+# mesh-function defaults were aligned to MESA 26.4.1, and `star_micro_vars`,
+# `star_hydro_eqns`, and `star_newton_step` shifted under #155 when
+# `remove_mixing_singletons` (`mix_info.f90:1026-1072`) switched the isolated
+# `k = 2` convective singleton on the coarse `N = 8` grid to radiative; tracked
+# in #146).
 _WAVE4_REGRESSION_SNAPSHOTS_N8: dict[str, float] = {
-    "star_micro_vars": 2.497297961588147e2,
-    "star_hydro_eqns": 4.253179678462525e6,
-    "star_newton_step": 1.451336644709231e2,
-    "star_remesh": 4.203476959958853e2,
-    "star_evolve_step": 1.005942875453512e2,
+    "star_micro_vars": 2.500111893102388e2,
+    "star_hydro_eqns": 4.243492123572694e6,
+    "star_newton_step": 6.383737350497265,
+    "star_remesh": 5.513777703025969e2,
+    "star_evolve_step": 1.005971756200643e2,
 }
 
 _STAR_TEST_HISTORY = (
@@ -147,13 +152,6 @@ def test_four_msun_zams_evolve_matches_upstream_fortran_mesa_star_test(
         assert abs(row.center_h1 - ref["center_h1"]) < 5.0e-6
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "MESA 26.4.1 star/test remeshes 2464 -> 992 zones at step 2; "
-        "log_cntr_Rho differs by 1.11e-3 > 1.0e-3 at step 11 (#153)"
-    ),
-)
 def test_four_msun_zams_evolve_log_cntr_rho_matches_mesa_26_4_1(
     evolved_four_msun_zams_by_step: dict[int, star.HistoryRow],
 ) -> None:

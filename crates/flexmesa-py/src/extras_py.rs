@@ -7,24 +7,34 @@ use std::path::{Path, PathBuf};
 use std::sync::{Mutex, MutexGuard, PoisonError};
 
 use flexmesa_binary::{
-    separation_from_period, BinaryCompanion, BinaryExtras, BinaryExtrasAction,
-    BinarySystem, DefaultBinaryExtras,
+    BinaryCompanion, BinaryExtras, BinaryExtrasAction, BinarySystem,
+    DefaultBinaryExtras, separation_from_period,
 };
-use flexmesa_const::{CLIGHT, CRAD, LSUN, M_SUN, PI, RSUN, SECDAY};
+use flexmesa_const::{
+    CLIGHT, CRAD, LN10, LSUN, M_SUN, PI, RSUN, SECDAY, SECYER,
+};
+use flexmesa_eos::{
+    I_FRAC_CMS, I_FRAC_FREE_EOS, I_FRAC_HELM, I_FRAC_IDEAL, I_FRAC_OPAL_SCVH,
+    I_FRAC_PC, I_FRAC_SKYE,
+};
 use flexmesa_star::inlist_runner::{
     DefaultStarExtras, ExtrasDirective, RspBuildOutcome, StarExtras,
 };
+use flexmesa_star::report_utils::surface_avg_x_slot;
 use flexmesa_star::{
-    center_avg_x_by_name, compute_core_masses, compute_power_categories,
-    do_rsp_build_model, eval_photosphere_info, export_gyre,
-    parse_gyre_mesa_model, safe_log10, solve_bvp_eigenmodes, InertiaNormKind,
-    InlistBundle, OuterBoundKind, RspChemCache, StarControls, StarError,
-    StarModel,
+    AtmTTauRelation, InertiaNormKind, InlistBundle, OuterBoundKind,
+    RspChemCache, StarControls, StarError, StarModel, center_avg_x_by_name,
+    center_value, compute_core_masses, compute_power_categories,
+    do_rsp_build_model, eval_conv_and_mx_summary, eval_photosphere_info,
+    eval_surf_avg_rotation_info, export_gyre, parse_gyre_mesa_model,
+    safe_log10, solve_bvp_eigenmodes,
 };
+use numpy::PyArray1;
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList, PyTuple};
 
+use crate::binary_py::PyBinarySystem;
 use crate::star_helpers_py::to_py_err;
 use crate::star_py::PyStarModel;
 
@@ -307,6 +317,323 @@ fn surface_iso_frac(model: &StarModel, iso_name: &str) -> Option<f64> {
         .and_then(|j| model.cell_xa(0).get(j).copied())
 }
 
+/// 0-based index of the `c12_c12` (`icc`) burning category in
+/// `flexmesa_chem::CATEGORY_NAME` (`CATEGORY_NAME[16] == "c12_c12"`).
+const CATEGORY_ICC: usize = 16;
+
+/// Signed $\log_{10}$ matching `star/private/profile_getval.f90:475-477`
+/// (`p_net_nuclear_energy`) and `flexmesa_star::mesa_profile::signed_log`.
+#[inline]
+fn signed_log(val: f64) -> f64 {
+    let sgn = if val.is_sign_negative() { -1.0 } else { 1.0 };
+    sgn * flexmesa_math::log10(val.abs().max(1.0))
+}
+
+/// Canonical upstream MESA string for [`AtmTTauRelation`].
+const fn atm_t_tau_relation_name(rel: AtmTTauRelation) -> &'static str {
+    match rel {
+        AtmTTauRelation::Eddington => "Eddington",
+        AtmTTauRelation::SolarHopf => "solar_Hopf",
+        AtmTTauRelation::KrishnaSwamy => "Krishna_Swamy",
+        AtmTTauRelation::TrampedachSolar => "Trampedach_solar",
+    }
+}
+
+/// Parses an upstream MESA `atm_T_tau_relation` string, raising `ValueError`
+/// on unrecognized names (`inlist_populate.rs:504-511`).
+fn parse_atm_t_tau_relation(raw: &str) -> PyResult<AtmTTauRelation> {
+    match raw.trim().to_ascii_lowercase().as_str() {
+        "eddington" => Ok(AtmTTauRelation::Eddington),
+        "solar_hopf" => Ok(AtmTTauRelation::SolarHopf),
+        "krishna_swamy" => Ok(AtmTTauRelation::KrishnaSwamy),
+        "trampedach_solar" => Ok(AtmTTauRelation::TrampedachSolar),
+        other => Err(PyValueError::new_err(format!(
+            "unrecognized atm_t_tau_relation '{other}'"
+        ))),
+    }
+}
+
+fn set_star_control_scalars(
+    d: &Bound<'_, PyDict>,
+    model: &StarModel,
+) -> PyResult<()> {
+    let c = &model.controls;
+    d.set_item("rsp_flag", c.rsp_flag)?;
+    d.set_item("u_flag", c.u_flag)?;
+    d.set_item("v_flag", c.v_flag)?;
+    d.set_item("rotation_flag", c.rotation_flag)?;
+    d.set_item(
+        "create_pre_main_sequence_model",
+        model.job.create_pre_ms_model,
+    )?;
+    d.set_item(
+        "atm_t_tau_relation",
+        atm_t_tau_relation_name(c.atm_t_tau_relation),
+    )?;
+    d.set_item("log_l_upper_limit", c.log_l_upper_limit.unwrap_or(1.0e99))?;
+    d.set_item("teff_lower_limit", c.teff_lower_limit.unwrap_or(-1.0e99))?;
+    d.set_item("max_age", c.max_age)?;
+    d.set_item("mixing_length_alpha", c.mixing_length_alpha)?;
+    d.set_item("accretion_h1", c.accretion_h1)?;
+    d.set_item("reimers_scaling_factor", c.reimers_scaling_factor)?;
+    d.set_item("blocker_scaling_factor", c.blocker_scaling_factor)?;
+    d.set_item("do_element_diffusion", c.do_element_diffusion)?;
+    d.set_item("mass_change", c.mass_change)?;
+    d.set_item("initial_mass", c.initial_mass)?;
+    d.set_item("max_timestep", c.ts_stop.max_timestep)?;
+    d.set_item("center_avg_value_dq", c.output.center_avg_value_dq)?;
+    d.set_item(
+        "he_core_boundary_h1_fraction",
+        c.ts_stop.he_core_boundary_h1_fraction,
+    )?;
+    d.set_item("zbase", c.zbase)?;
+    d.set_item("use_other_cgrav", c.use_other_cgrav)?;
+    d.set_item("use_other_alpha_mlt", c.use_other_alpha_mlt)?;
+    d.set_item("use_other_wind", c.use_other_wind)?;
+    d.set_item("use_other_adjust_mdot", c.use_other_adjust_mdot)?;
+    d.set_item("use_other_torque", c.use_other_torque)?;
+    d.set_item("use_other_energy", c.use_other_energy)?;
+    d.set_item("use_other_kap", c.use_other_kap)?;
+    d.set_item("use_other_surface_pt", c.use_other_surface_pt)?;
+    d.set_item(
+        "use_other_overshooting_scheme",
+        c.use_other_overshooting_scheme,
+    )?;
+    d.set_item(
+        "use_other_mesh_functions",
+        c.mix_wind.use_other_mesh_functions,
+    )?;
+    d.set_item(
+        "use_other_mesh_delta_coeff_factor",
+        c.mix_wind.use_other_mesh_delta_coeff_factor,
+    )?;
+    // Upstream `controls.defaults` sets `use_other_remove_surface = .false.`,
+    // and `StarControls` does not yet wire `other_remove_surface` (`#153`).
+    d.set_item("use_other_remove_surface", false)?;
+    Ok(())
+}
+
+fn set_star_report_scalars(
+    py: Python<'_>,
+    d: &Bound<'_, PyDict>,
+    model: &StarModel,
+) -> PyResult<()> {
+    let nz = model.nz;
+    let cores = compute_core_masses(model);
+    let powers = compute_power_categories(model);
+    let phot = eval_photosphere_info(model);
+    let mix = eval_conv_and_mx_summary(model);
+    let surf_rot = eval_surf_avg_rotation_info(model);
+
+    d.set_item("center_h1", center_avg_x_by_name(model, "h1"))?;
+    d.set_item("center_he4", center_avg_x_by_name(model, "he4"))?;
+    d.set_item("center_c12", center_avg_x_by_name(model, "c12"))?;
+    d.set_item("he_core_mass", cores.he_core_mass)?;
+    d.set_item("co_core_mass", cores.co_core_mass)?;
+    d.set_item("one_core_mass", cores.one_core_mass)?;
+    d.set_item("fe_core_mass", cores.fe_core_mass)?;
+    d.set_item("he_core_omega", cores.he_bdy.omega)?;
+    d.set_item("power_nuc_burn", powers.power_nuc_burn)?;
+    d.set_item("power_h_burn", powers.power_h_burn)?;
+    d.set_item("power_he_burn", powers.power_he_burn)?;
+    d.set_item("power_z_burn", powers.power_z_burn)?;
+    d.set_item("power_photo", powers.power_photo)?;
+    d.set_item("power_neutrinos", powers.power_neutrinos)?;
+    d.set_item("l_by_category_icc", powers.l_by_category_lsun[CATEGORY_ICC])?;
+    d.set_item(
+        "l_by_category",
+        PyArray1::from_slice(py, &powers.l_by_category_lsun),
+    )?;
+    d.set_item("l_phot", phot.l_lsun)?;
+    d.set_item("photosphere_r", phot.r_rsun)?;
+    d.set_item("mass_conv_core", mix.mass_conv_core)?;
+    d.set_item("conv_mx1_top", mix.conv_mx_q[0])?;
+    d.set_item("conv_mx1_bot", mix.conv_mx_q[1])?;
+    d.set_item("w_div_w_crit_avg_surf", surf_rot.w_div_w_crit)?;
+    d.set_item("omega_avg_surf", surf_rot.omega)?;
+    d.set_item("v_rot_avg_surf", surf_rot.v_rot_cm_s)?;
+    d.set_item(
+        "log_center_temperature",
+        center_value(model, &model.ln_t) / LN10,
+    )?;
+    d.set_item("log_center_density", center_value(model, &model.lnd) / LN10)?;
+    d.set_item("center_omega", center_value(model, &model.omega))?;
+    d.set_item("log_dt", safe_log10(model.dt / SECYER))?;
+    d.set_item("log_l", safe_log10(model.surface_l_lsun()))?;
+    d.set_item("log_teff", safe_log10(model.teff))?;
+    d.set_item("log_r", safe_log10(model.surface_r_rsun()))?;
+
+    let total_j: f64 = if model.controls.rotation_flag {
+        model
+            .dm_bar
+            .iter()
+            .take(nz)
+            .zip(model.j_rot.iter().take(nz))
+            .map(|(&dm, &j)| dm * j)
+            .sum()
+    } else {
+        0.0
+    };
+    d.set_item("total_angular_momentum", total_j)?;
+
+    let net_iso = PyDict::new(py);
+    for (j, name) in model.iso_names.iter().enumerate() {
+        let iso_lower = name.to_ascii_lowercase();
+        let slot_1based = j + 1;
+        net_iso.set_item(&iso_lower, slot_1based)?;
+        d.set_item(format!("net_iso_{iso_lower}"), slot_1based)?;
+        if nz > 0 {
+            d.set_item(
+                format!("surface_{iso_lower}"),
+                surface_avg_x_slot(model, Some(j)),
+            )?;
+        }
+    }
+    d.set_item("net_iso", net_iso)?;
+    Ok(())
+}
+
+fn set_star_eos_frac_arrays(
+    py: Python<'_>,
+    d: &Bound<'_, PyDict>,
+    model: &StarModel,
+) -> PyResult<()> {
+    let nz = model.nz;
+    if nz == 0 || model.eos_res.len() < nz {
+        return Ok(());
+    }
+    let mut opal = Vec::with_capacity(nz);
+    let mut helm = Vec::with_capacity(nz);
+    let mut skye = Vec::with_capacity(nz);
+    let mut pc = Vec::with_capacity(nz);
+    let mut free_eos = Vec::with_capacity(nz);
+    let mut cms = Vec::with_capacity(nz);
+    let mut ideal = Vec::with_capacity(nz);
+    for row in &model.eos_res[..nz] {
+        opal.push(row[I_FRAC_OPAL_SCVH]);
+        helm.push(row[I_FRAC_HELM]);
+        skye.push(row[I_FRAC_SKYE]);
+        pc.push(row[I_FRAC_PC]);
+        free_eos.push(row[I_FRAC_FREE_EOS]);
+        cms.push(row[I_FRAC_CMS]);
+        ideal.push(row[I_FRAC_IDEAL]);
+    }
+    d.set_item("eos_frac_opal_scvh", PyArray1::from_vec(py, opal))?;
+    d.set_item("eos_frac_helm", PyArray1::from_vec(py, helm))?;
+    d.set_item("eos_frac_skye", PyArray1::from_vec(py, skye))?;
+    d.set_item("eos_frac_pc", PyArray1::from_vec(py, pc))?;
+    d.set_item("eos_frac_free_eos", PyArray1::from_vec(py, free_eos))?;
+    d.set_item("eos_frac_cms", PyArray1::from_vec(py, cms))?;
+    d.set_item("eos_frac_ideal", PyArray1::from_vec(py, ideal))?;
+    Ok(())
+}
+
+fn set_star_species_arrays(
+    py: Python<'_>,
+    d: &Bound<'_, PyDict>,
+    model: &StarModel,
+) -> PyResult<()> {
+    let nz = model.nz;
+    let ns = model.species;
+    if nz == 0
+        || ns == 0
+        || model.xa.len() < nz * ns
+        || model.iso_names.len() < ns
+    {
+        return Ok(());
+    }
+    let mut cols: Vec<Vec<f64>> =
+        (0..ns).map(|_| Vec::with_capacity(nz)).collect();
+    for k in 0..nz {
+        let row = &model.xa[k * ns..(k + 1) * ns];
+        for (col, &val) in cols.iter_mut().zip(row.iter()) {
+            col.push(val);
+        }
+    }
+    for (name, col) in model.iso_names.iter().take(ns).zip(cols) {
+        let key = format!("xa_{}", name.to_ascii_lowercase());
+        d.set_item(key, PyArray1::from_vec(py, col))?;
+    }
+    Ok(())
+}
+
+fn set_star_radial_arrays(
+    py: Python<'_>,
+    d: &Bound<'_, PyDict>,
+    model: &StarModel,
+) -> PyResult<()> {
+    let nz = model.nz;
+    if nz == 0 {
+        return Ok(());
+    }
+    let set_f64 = |key: &str, slice: &[f64]| -> PyResult<()> {
+        if slice.len() >= nz {
+            d.set_item(key, PyArray1::from_slice(py, &slice[..nz]))?;
+        }
+        Ok(())
+    };
+    set_f64("r", &model.r)?;
+    set_f64("m", &model.m)?;
+    set_f64("q", &model.q)?;
+    set_f64("dq", &model.dq)?;
+    set_f64("dm", &model.dm)?;
+    set_f64("dm_bar", &model.dm_bar)?;
+    set_f64("t", &model.t)?;
+    set_f64("rho", &model.rho)?;
+    set_f64("lnd", &model.lnd)?;
+    set_f64("lnt", &model.ln_t)?;
+    set_f64("peos", &model.peos)?;
+    set_f64("pgas", &model.pgas)?;
+    set_f64("prad", &model.prad)?;
+    set_f64("energy", &model.energy)?;
+    set_f64("entropy", &model.entropy)?;
+    set_f64("csound", &model.csound)?;
+    set_f64("gamma1", &model.gamma1)?;
+    set_f64("grada", &model.grada)?;
+    set_f64("gradr", &model.gradr)?;
+    set_f64("gradt", &model.gradt)?;
+    set_f64("abar", &model.abar)?;
+    set_f64("zbar", &model.zbar)?;
+    set_f64("mu", &model.mu)?;
+    set_f64("opacity", &model.opacity)?;
+    set_f64("d_opacity_dlnd", &model.d_opacity_dlnd)?;
+    set_f64("d_opacity_dlnt", &model.d_opacity_dlnt)?;
+    set_f64("tau", &model.tau)?;
+    set_f64("v", &model.v)?;
+    set_f64("u", &model.u)?;
+    set_f64("cgrav", &model.cgrav)?;
+    set_f64("grav", &model.grav)?;
+    set_f64("omega", &model.omega)?;
+    set_f64("j_rot", &model.j_rot)?;
+    set_f64("d_mix", &model.d_mix)?;
+    set_f64("conv_vel", &model.conv_vel)?;
+    set_f64("mlt_vc", &model.mlt_vc)?;
+    set_f64("eps_nuc", &model.eps_nuc)?;
+    set_f64("non_nuc_neu", &model.non_nuc_neu)?;
+    set_f64(
+        "brunt_n2_composition_term",
+        &model.aux.brunt_n2_composition_term,
+    )?;
+    set_f64("w_div_w_crit_roche", &model.aux.w_div_wc)?;
+
+    if model.eps_nuc.len() >= nz && model.non_nuc_neu.len() >= nz {
+        let net_nuc: Vec<f64> = (0..nz)
+            .map(|k| signed_log(model.eps_nuc[k] - model.non_nuc_neu[k]))
+            .collect();
+        d.set_item("net_nuclear_energy", PyArray1::from_vec(py, net_nuc))?;
+    }
+    if model.mixing_type.len() >= nz {
+        let mix_codes: Vec<i32> = model.mixing_type[..nz]
+            .iter()
+            .map(|&mt| mt as i32)
+            .collect();
+        d.set_item("mixing_type", PyArray1::from_vec(py, mix_codes))?;
+    }
+    set_star_eos_frac_arrays(py, d, model)?;
+    set_star_species_arrays(py, d, model)?;
+    Ok(())
+}
+
 fn build_star_snapshot<'py>(
     py: Python<'py>,
     model: &StarModel,
@@ -314,21 +641,29 @@ fn build_star_snapshot<'py>(
     include_history: bool,
 ) -> PyResult<Bound<'py, PyDict>> {
     let d = PyDict::new(py);
+    let surface_l = model.surface_l_lsun();
     d.set_item("model_number", model.model_number)?;
     d.set_item("star_age", model.star_age)?;
     d.set_item("star_age_old", model.star_age_old)?;
+    d.set_item("time", model.star_age * SECYER)?;
     d.set_item("dt", model.dt)?;
     d.set_item("dt_next", model.dt_next)?;
     d.set_item("mstar", model.mstar)?;
+    d.set_item("m_center", model.m_center)?;
     d.set_item("star_mass", model.mstar / M_SUN)?;
+    d.set_item("mstar_dot", model.mstar_dot)?;
+    d.set_item("star_mdot", model.mstar_dot / (M_SUN / SECYER))?;
     d.set_item("teff", model.teff)?;
-    d.set_item("surface_l_lsun", model.surface_l_lsun())?;
+    d.set_item("surface_l_lsun", surface_l)?;
+    d.set_item("log_surface_luminosity", safe_log10(surface_l))?;
     d.set_item("surface_r_rsun", model.surface_r_rsun())?;
     d.set_item("total_energy", model.aux.total_energy)?;
+    d.set_item("total_energy_end", model.aux.step_hist.total_energy_end)?;
     d.set_item("cumulative_energy_error", model.aux.cumulative_energy_error)?;
     d.set_item("nz", model.nz)?;
+    d.set_item("species", model.species)?;
     d.set_item("case_dir", case_dir)?;
-    d.set_item("rsp_flag", model.controls.rsp_flag)?;
+    set_star_control_scalars(&d, model)?;
     set_user_controls(&d, &model.controls)?;
     if model.controls.rsp_flag {
         d.set_item("rsp_num_periods", model.aux.rsp.num_periods)?;
@@ -351,6 +686,10 @@ fn build_star_snapshot<'py>(
         d.set_item("rsp_teff", model.controls.rsp_teff)?;
         d.set_item("rsp_nmodes", model.controls.rsp.nmodes)?;
     }
+    if !model.controls.rsp_flag || include_history {
+        set_star_report_scalars(py, &d, model)?;
+        set_star_radial_arrays(py, &d, model)?;
+    }
     if model.controls.use_other_wind && model.nz > 0 {
         if let Some(x) = surface_iso_frac(model, "h1") {
             d.set_item("surface_h1", x)?;
@@ -358,19 +697,6 @@ fn build_star_snapshot<'py>(
         if let Some(y) = surface_iso_frac(model, "he4") {
             d.set_item("surface_he4", y)?;
         }
-        d.set_item("zbase", model.controls.zbase)?;
-    }
-    if include_history {
-        let cores = compute_core_masses(model);
-        d.set_item("center_h1", center_avg_x_by_name(model, "h1"))?;
-        d.set_item("center_he4", center_avg_x_by_name(model, "he4"))?;
-        d.set_item("center_c12", center_avg_x_by_name(model, "c12"))?;
-        d.set_item("he_core_mass", cores.he_core_mass)?;
-        d.set_item("co_core_mass", cores.co_core_mass)?;
-        d.set_item("log_dt", safe_log10(model.dt / flexmesa_const::SECYER))?;
-        d.set_item("log_l", safe_log10(model.surface_l_lsun()))?;
-        d.set_item("log_teff", safe_log10(model.teff))?;
-        d.set_item("log_r", safe_log10(model.surface_r_rsun()))?;
     }
     Ok(d)
 }
@@ -379,32 +705,76 @@ fn apply_star_updates(
     model: &mut StarModel,
     updates: &Bound<'_, PyDict>,
 ) -> PyResult<()> {
-    if let Some(val) = updates.get_item("x_ctrl")? {
-        let xs: Vec<f64> = val.extract()?;
-        let n = xs.len().min(model.controls.x_ctrl.len());
-        model.controls.x_ctrl[..n].copy_from_slice(&xs[..n]);
-    }
-    if let Some(val) = updates.get_item("x_integer_ctrl")? {
-        let xs: Vec<i64> = val.extract()?;
-        let n = xs.len().min(model.controls.x_integer_ctrl.len());
-        model.controls.x_integer_ctrl[..n].copy_from_slice(&xs[..n]);
-    }
-    if let Some(val) = updates.get_item("x_logical_ctrl")? {
-        let xs: Vec<bool> = val.extract()?;
-        let n = xs.len().min(model.controls.x_logical_ctrl.len());
-        model.controls.x_logical_ctrl[..n].copy_from_slice(&xs[..n]);
-    }
-    if let Some(val) = updates.get_item("x_character_ctrl")? {
-        let xs: Vec<String> = val.extract()?;
-        let n = xs.len().min(model.controls.x_character_ctrl.len());
-        for (dst, src) in
-            model.controls.x_character_ctrl[..n].iter_mut().zip(xs)
-        {
-            *dst = src;
+    for (key_obj, val) in updates.iter() {
+        let key: String = key_obj.extract()?;
+        match key.as_str() {
+            "x_ctrl" => {
+                let xs: Vec<f64> = val.extract()?;
+                let n = xs.len().min(model.controls.x_ctrl.len());
+                model.controls.x_ctrl[..n].copy_from_slice(&xs[..n]);
+            }
+            "x_integer_ctrl" => {
+                let xs: Vec<i64> = val.extract()?;
+                let n = xs.len().min(model.controls.x_integer_ctrl.len());
+                model.controls.x_integer_ctrl[..n].copy_from_slice(&xs[..n]);
+            }
+            "x_logical_ctrl" => {
+                let xs: Vec<bool> = val.extract()?;
+                let n = xs.len().min(model.controls.x_logical_ctrl.len());
+                model.controls.x_logical_ctrl[..n].copy_from_slice(&xs[..n]);
+            }
+            "x_character_ctrl" => {
+                let xs: Vec<String> = val.extract()?;
+                let n = xs.len().min(model.controls.x_character_ctrl.len());
+                for (dst, src) in
+                    model.controls.x_character_ctrl[..n].iter_mut().zip(xs)
+                {
+                    *dst = src;
+                }
+            }
+            "dt_next" => {
+                model.dt_next = val.extract::<f64>()?;
+            }
+            "atm_t_tau_relation" => {
+                let raw: String = val.extract()?;
+                model.controls.atm_t_tau_relation =
+                    parse_atm_t_tau_relation(&raw)?;
+            }
+            "reimers_scaling_factor" => {
+                model.controls.reimers_scaling_factor = val.extract::<f64>()?;
+            }
+            "blocker_scaling_factor" => {
+                model.controls.blocker_scaling_factor = val.extract::<f64>()?;
+            }
+            "do_element_diffusion" => {
+                model.controls.do_element_diffusion = val.extract::<bool>()?;
+            }
+            "mass_change" => {
+                model.controls.mass_change = val.extract::<f64>()?;
+            }
+            "mixing_length_alpha" => {
+                model.controls.mixing_length_alpha = val.extract::<f64>()?;
+            }
+            "max_timestep" => {
+                model.controls.ts_stop.max_timestep = val.extract::<f64>()?;
+            }
+            "initial_mass" => {
+                model.controls.initial_mass = val.extract::<f64>()?;
+            }
+            "log_l_upper_limit" => {
+                model.controls.log_l_upper_limit =
+                    val.extract::<Option<f64>>()?;
+            }
+            "teff_lower_limit" => {
+                model.controls.teff_lower_limit =
+                    val.extract::<Option<f64>>()?;
+            }
+            other => {
+                return Err(PyValueError::new_err(format!(
+                    "unsupported star extras update key '{other}'"
+                )));
+            }
         }
-    }
-    if let Some(val) = updates.get_item("dt_next")? {
-        model.dt_next = val.extract::<f64>()?;
     }
     Ok(())
 }
@@ -1205,6 +1575,10 @@ fn set_binary_star_scalars(
         d.set_item(format!("{prefix}_surface_he4"), y)?;
     }
     d.set_item(format!("{prefix}_he_core_mass"), cores.he_core_mass)?;
+    d.set_item(
+        format!("{prefix}_omega_avg_surf"),
+        eval_surf_avg_rotation_info(star).omega,
+    )?;
     Ok(())
 }
 
@@ -1258,28 +1632,54 @@ fn build_binary_snapshot<'py>(
     d.set_item("mass_transfer_delta", bin.mass_transfer_delta)?;
     d.set_item("mass_transfer_gamma", bin.mass_transfer_gamma)?;
     d.set_item("jdot", bin.jdot)?;
-    d.set_item("rl", PyList::new(py, bin.rl)?)?;
-    d.set_item("rl_relative_gap", PyList::new(py, bin.rl_relative_gap)?)?;
+    d.set_item("rl", PyList::new(py, bin.rl_by_star())?)?;
+    d.set_item(
+        "rl_relative_gap",
+        PyList::new(py, bin.rl_relative_gap_by_star())?,
+    )?;
     d.set_item("point_mass_i", bin.point_mass_i)?;
     d.set_item("donor_i", bin.donor_i)?;
     d.set_item("ignore_rlof_flag", bin.ignore_rlof_flag)?;
+    d.set_item("eq_initial_bh_mass", bin.eq_initial_bh_mass)?;
+    let map_by_star = |pair: [f64; 2]| -> [f64; 2] {
+        if bin.donor_i == 1 {
+            pair
+        } else {
+            [pair[1], pair[0]]
+        }
+    };
+    let mdot = &bin.last_mdot;
+    d.set_item(
+        "component_mdot",
+        PyList::new(py, map_by_star(mdot.component_mdot))?,
+    )?;
+    d.set_item(
+        "mdot_wind_transfer",
+        PyList::new(py, map_by_star(mdot.mdot_wind_transfer))?,
+    )?;
+    d.set_item(
+        "mdot_system_transfer",
+        PyList::new(py, map_by_star(mdot.mdot_system_transfer))?,
+    )?;
+    d.set_item(
+        "mdot_system_wind",
+        PyList::new(py, map_by_star(mdot.mdot_system_wind))?,
+    )?;
+    d.set_item(
+        "wind_xfer_fraction",
+        PyList::new(py, map_by_star(mdot.wind_xfer_fraction))?,
+    )?;
+    d.set_item("mdot_edd", mdot.mdot_edd)?;
+    d.set_item("mdot_edd_eta", mdot.mdot_edd_eta)?;
+    d.set_item("accretion_luminosity", mdot.accretion_luminosity)?;
     d.set_item("donor_mass_msun", bin.donor.mstar / M_SUN)?;
     d.set_item("accretor_mass_msun", bin.accretor_mass_g() / M_SUN)?;
     d.set_item("case_dir", case_dir)?;
     set_user_controls(&d, &bin.donor.controls)?;
-    let companion_star = match &bin.companion {
-        BinaryCompanion::Star(s2) => Some(s2.as_ref()),
-        BinaryCompanion::PointMass { .. } => None,
-    };
-    let (s1, s2) = if bin.donor_i == 2 {
-        (companion_star, Some(&bin.donor))
-    } else {
-        (Some(&bin.donor), companion_star)
-    };
-    if let Some(star1) = s1 {
+    if let Some(star1) = bin.star_slot_ref(1) {
         set_binary_star_scalars(&d, "s1", star1)?;
     }
-    if let Some(star2) = s2 {
+    if let Some(star2) = bin.star_slot_ref(2) {
         set_binary_star_scalars(&d, "s2", star2)?;
     }
     Ok(d)
@@ -1296,9 +1696,23 @@ fn apply_binary_updates(
         bin.set_point_mass_i(val.extract::<usize>()?)
             .map_err(to_py_err)?;
     }
+    if let Some(val) = updates.get_item("eq_initial_bh_mass")? {
+        bin.set_eq_initial_bh_mass(val.extract::<f64>()?);
+    }
+    if let Some(val) = updates.get_item("m1")? {
+        bin.set_m1(val.extract::<f64>()?).map_err(to_py_err)?;
+    }
+    if let Some(val) = updates.get_item("m2")? {
+        bin.set_m2(val.extract::<f64>()?).map_err(to_py_err)?;
+    }
     if let Some(val) = updates.get_item("period_eccentricity")? {
         let (p_sec, ecc) = val.extract::<(f64, f64)>()?;
         bin.set_period_eccentricity(p_sec, ecc).map_err(to_py_err)?;
+    }
+    if let Some(val) = updates.get_item("separation_eccentricity")? {
+        let (sep_cm, ecc) = val.extract::<(f64, f64)>()?;
+        bin.set_separation_eccentricity(sep_cm, ecc)
+            .map_err(to_py_err)?;
     }
     if let Some(val) = updates.get_item("max_implicit_abs_mdot")? {
         bin.controls.max_implicit_abs_mdot = val.extract::<f64>()?;
@@ -1378,6 +1792,8 @@ fn parse_binary_action(
 
     match action_str.as_str() {
         "keep_going" => Ok(BinaryExtrasAction::KeepGoing),
+        "redo" => Ok(BinaryExtrasAction::Redo),
+        "retry" => Ok(BinaryExtrasAction::Retry),
         "error" => {
             Ok(BinaryExtrasAction::Error(dict_msg.unwrap_or_else(|| {
                 String::from("error returned by binary extras hook")
@@ -1403,6 +1819,8 @@ fn parse_binary_action(
 #[allow(clippy::struct_excessive_bools)]
 pub struct PyBinaryExtrasAdapter {
     py_obj: Py<PyAny>,
+    startup_method: Option<&'static str>,
+    after_evolve_method: Option<&'static str>,
     has_other_wind_cgs: bool,
     has_check_model: bool,
     has_finish_step: bool,
@@ -1418,7 +1836,23 @@ impl PyBinaryExtrasAdapter {
     /// Returns [`PyErr`] if attribute inspection fails.
     pub fn new(py: Python<'_>, obj: Py<PyAny>) -> PyResult<Self> {
         let b = obj.bind(py);
+        let startup_method = if b.hasattr("extras_binary_startup")? {
+            Some("extras_binary_startup")
+        } else if b.hasattr("startup")? {
+            Some("startup")
+        } else {
+            None
+        };
+        let after_evolve_method = if b.hasattr("extras_binary_after_evolve")? {
+            Some("extras_binary_after_evolve")
+        } else if b.hasattr("after_evolve")? {
+            Some("after_evolve")
+        } else {
+            None
+        };
         Ok(Self {
+            startup_method,
+            after_evolve_method,
             has_other_wind_cgs: b.hasattr("other_wind_cgs")?,
             has_check_model: b.hasattr("check_model")?,
             has_finish_step: b.hasattr("finish_step")?,
@@ -1483,6 +1917,71 @@ impl PyBinaryExtrasAdapter {
 impl BinaryExtras for PyBinaryExtrasAdapter {
     fn set_staged_case_dir(&mut self, case_dir: &Path) {
         self.state.set_staged_case_dir(case_dir);
+    }
+
+    fn startup(
+        &mut self,
+        bin: &mut BinarySystem,
+        restart: bool,
+    ) -> BinaryExtrasAction {
+        if let Some(msg) = self.state.take_pending_msg() {
+            return BinaryExtrasAction::Error(msg);
+        }
+        let Some(method) = self.startup_method else {
+            return BinaryExtrasAction::KeepGoing;
+        };
+        let case_dir = self.state.staged_dir_string();
+        Python::attach(|py| {
+            let snap = match build_binary_snapshot(py, bin, &case_dir) {
+                Ok(s) => s,
+                Err(e) => {
+                    return BinaryExtrasAction::Error(format!(
+                        "{method}: {}",
+                        format_py_err(py, &e)
+                    ));
+                }
+            };
+            match self.py_obj.bind(py).call_method1(method, (snap, restart)) {
+                Ok(res) => {
+                    parse_binary_action(&res, "extras_binary_startup", bin)
+                        .unwrap_or_else(|e| {
+                            BinaryExtrasAction::Error(format!(
+                                "{method}: {}",
+                                format_py_err(py, &e)
+                            ))
+                        })
+                }
+                Err(e) => BinaryExtrasAction::Error(format!(
+                    "{method}: {}",
+                    format_py_err(py, &e)
+                )),
+            }
+        })
+    }
+
+    fn after_evolve(
+        &mut self,
+        bin: &mut BinarySystem,
+    ) -> Result<(), StarError> {
+        self.state.take_pending_star_err()?;
+        let Some(method) = self.after_evolve_method else {
+            return Ok(());
+        };
+        let case_dir = self.state.staged_dir_string();
+        Python::attach(|py| {
+            let snap = build_binary_snapshot(py, bin, &case_dir)
+                .map_err(|e| StarError::InvalidInput(format_py_err(py, &e)))?;
+            self.py_obj
+                .bind(py)
+                .call_method1(method, (snap,))
+                .map(|_| ())
+                .map_err(|e| {
+                    StarError::InvalidInput(format!(
+                        "{method}: {}",
+                        format_py_err(py, &e)
+                    ))
+                })
+        })
     }
 
     fn other_wind_cgs(
@@ -1688,9 +2187,57 @@ where
     }
 }
 
+/// Builds the general MESA `star_info` extras snapshot dictionary for a
+/// [`PyStarModel`] without running a full trace (`#148`, `#231`).
+///
+/// # Errors
+/// Returns [`PyErr`] if Python dictionary or NumPy array construction fails.
+#[pyfunction]
+#[pyo3(signature = (model, case_dir = "", include_history = true))]
+pub fn star_extras_snapshot<'py>(
+    py: Python<'py>,
+    model: PyRef<'_, PyStarModel>,
+    case_dir: &str,
+    include_history: bool,
+) -> PyResult<Bound<'py, PyDict>> {
+    build_star_snapshot(py, &model.inner, case_dir, include_history)
+}
+
+/// Applies a general MESA star extras update dictionary onto a [`PyStarModel`]
+/// in place (`#148`, `#231`).
+///
+/// # Errors
+/// Returns [`PyValueError`] when `updates` contains an unrecognized key or an
+/// invalid control value (such as an unknown `atm_t_tau_relation` string).
+#[pyfunction]
+pub fn star_apply_extras_updates(
+    mut model: PyRefMut<'_, PyStarModel>,
+    updates: &Bound<'_, PyDict>,
+) -> PyResult<()> {
+    apply_star_updates(&mut model.inner, updates)
+}
+
+/// Builds the general MESA `binary_info` extras snapshot dictionary for a
+/// [`PyBinarySystem`] without running a full trace (`#148`, `#231`).
+///
+/// # Errors
+/// Returns [`PyErr`] if Python dictionary construction fails.
+#[pyfunction]
+#[pyo3(signature = (bin, case_dir = ""))]
+pub fn binary_extras_snapshot<'py>(
+    py: Python<'py>,
+    bin: PyRef<'_, PyBinarySystem>,
+    case_dir: &str,
+) -> PyResult<Bound<'py, PyDict>> {
+    build_binary_snapshot(py, &bin.inner, case_dir)
+}
+
 /// Registers test-side extras context types and full `GYRE` mode helpers on `flexmesa._rust`.
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyRspBuildContext>()?;
     m.add_function(wrap_pyfunction!(star_solve_gyre_mesa_modes_full, m)?)?;
+    m.add_function(wrap_pyfunction!(star_extras_snapshot, m)?)?;
+    m.add_function(wrap_pyfunction!(star_apply_extras_updates, m)?)?;
+    m.add_function(wrap_pyfunction!(binary_extras_snapshot, m)?)?;
     Ok(())
 }

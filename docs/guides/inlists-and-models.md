@@ -1,6 +1,6 @@
 # User Guide: Inlist Bundles, `.mod` Files, Binary Photos & Data Caches
 
-Upstream Fortran MESA workflows organize stellar evolution runs around hierarchical Fortran namelists (`inlist` files chained via `read_extra_star_job_inlist(1..5)` and `read_extra_controls_inlist(1..5)`), multi-stage `./rn` shell scripts, ASCII `.mod` structure files, and binary `photos/` checkpoint files. `FlexMESA` provides parsers, schema validators, and ASCII/binary I/O helpers (recording the active `numerics_mode` in `LOGS/`, `.mod`, and internal `.photo` headers). Strict runtime `inlist` loading fails loudly by default on unported control keys (`#147`; pass `allow_unsupported_controls=True` only for diagnostic runs), and `FlexMESA` `.photo` buffers (`FMPHOTO2` v20 for `StarModel` and `FMBINCP1` v1 for `BinarySystem`) are internal full-state checkpoints not binary-compatible with Fortran MESA `photos/` (`#150`).
+Upstream Fortran MESA workflows organize stellar evolution runs around hierarchical Fortran namelists (`inlist` files chained via `read_extra_star_job_inlist(1..5)` and `read_extra_controls_inlist(1..5)`), multi-stage `./rn` shell scripts, ASCII `.mod` structure files, and binary `photos/` checkpoint files. `FlexMESA` provides parsers, schema validators, and ASCII/binary I/O helpers (recording the active `numerics_mode` in `LOGS/`, `.mod`, and internal `.photo` headers). Strict runtime `inlist` loading fails loudly by default on unported control keys (`#147`; pass `allow_unsupported_controls=True` only for diagnostic runs), and `FlexMESA` `.photo` buffers (`FMPHOTO2` v25 for `StarModel` and `FMBINCP1` v2 for `BinarySystem`) are internal full-state checkpoints not binary-compatible with Fortran MESA `photos/` (`#150`, `#149`, `#153`, `#155`, `#159`, `#160`, `#161`).
 
 ---
 
@@ -89,6 +89,9 @@ with tempfile.TemporaryDirectory() as tmpdir:
         "  save_model_when_terminate = .true.\n"
         "  save_model_filename = 'stage1.mod'\n"
         "/\n"
+        "&kap\n"
+        "  zbase = 0.02d0\n"
+        "/\n"
         "&controls\n"
         "  initial_mass = 1.0d0\n"
         "  initial_z = 0.02d0\n"
@@ -102,6 +105,9 @@ with tempfile.TemporaryDirectory() as tmpdir:
         "  load_model_filename = 'stage1.mod'\n"
         "  save_model_when_terminate = .true.\n"
         "  save_model_filename = 'final.mod'\n"
+        "/\n"
+        "&kap\n"
+        "  zbase = 0.02d0\n"
         "/\n"
         "&controls\n"
         "  max_model_number = 4\n"
@@ -136,7 +142,7 @@ with tempfile.TemporaryDirectory() as tmpdir:
 
 - **Incremental `LOGS/` History, Radial Profiles & Binary History (`history.data`, `profileN.data`, `profiles.index`, `binary_history.data`)**: In Rust (`run_inlist_stage_with_logs`, `run_test_suite_case_with_logs`, `StarLogsWriter`, `run_binary_test_suite_case_with_logs`, `BinaryLogsWriter`) and the `star_case_trace` / `binary_case_trace` drivers (plus `StarModel.to_profile_str()` in Python, which formats the 6-line-header MESA `profileN.data` snapshot), log emission honors `&star_job` (`history_columns_file`, `profile_columns_file`, `write_profile_when_terminate`, `filename_for_profile_when_terminate`, `profile_starting_model`), `&controls` (`log_directory`, `star_history_name`, `star_history_header_name`, `history_interval`, `write_profiles_flag`, `profile_interval`, `priority_profile_interval`, `profile_data_header_suffix`, `max_num_profile_models`, `max_num_profile_zones`, `burn_min1`, `burn_min2`, `center_avg_value_dq`, `surface_avg_abundance_dq`), `&binary_job` (`binary_history_columns_file`), and `&binary_controls` (`log_directory`, `history_name`, `history_interval`, `append_to_star_history`), flushing each recorded history row immediately and writing `profileN.data` before updating `profiles.index`. (The default Python `run_test_suite_case` helper runs in-memory without writing `LOGS/` unless invoked via the log-emitting Rust drivers.)
 - **ASCII `.mod` Files (`to_mod_str`, `from_mod_str`, `write_mod_file`, `from_mod_file`)**: Human-readable MESA model files storing header scalars (`M/Msun`, `model_number`, `star_age`, `net_name`, `species`, `n_shells`), per-zone structural variables (`lnd`, `lnT`, `lnR`, `L`, `dq`), and isotope mass fractions $X_{i,k}$ formatted in scientific notation.
-- **Internal Binary `photos/` Checkpoints (`to_photo_bytes`, `from_photo_bytes`, `verify_photo_restart`)**: Deterministic little-endian `serde` byte buffers (`FMPHOTO2` v20 for `StarModel`, `FMBINCP1` v1 for `BinarySystem`) storing primary, old, and start-of-step solver state arrays alongside `controls`, `job`, `rsp`, `BinaryStepCounters`, retry/redo counters, and the active `numerics_mode` wire tag (`strict` or `fast`, rejecting mismatched modes on load) while skipping ephemeral `MicrophysicsCache` hit/miss counters. `from_photo_bytes(bytes)` restores serialized `controls` and `job` (`read_photo_bytes` overrides them when requested), and `verify_photo_restart(n_steps)` verifies that checkpointing and restarting produces bit-identical continuation for `n_steps` under the same `numerics_mode`. `FlexMESA` `.photo` bytes remain internal and are not binary-compatible with Fortran MESA `photos/` files (`#150`).
+- **Internal Binary `photos/` Checkpoints (`to_photo_bytes`, `from_photo_bytes`, `verify_photo_restart`)**: Deterministic little-endian `serde` byte buffers (`FMPHOTO2` v25 for `StarModel`, `FMBINCP1` v2 for `BinarySystem`) storing primary, old, and start-of-step solver state arrays alongside `controls`, `job`, `rsp`, `BinaryStepCounters`, retry/redo counters, and the active `numerics_mode` wire tag (`strict` or `fast`, rejecting mismatched modes on load) while skipping ephemeral `MicrophysicsCache` hit/miss counters. `from_photo_bytes(bytes)` restores serialized `controls` and `job` (`read_photo_bytes` overrides them when requested), and `verify_photo_restart(n_steps)` verifies that checkpointing and restarting produces bit-identical continuation for `n_steps` under the same `numerics_mode`. `FlexMESA` `.photo` bytes remain internal and are not binary-compatible with Fortran MESA `photos/` files (`#150`, `#149`, `#153`, `#155`, `#159`, `#160`, `#161`).
 
 ```python
 import pathlib
@@ -147,15 +153,15 @@ from flexmesa import star
 model = star.StarModel.from_zams(initial_mass=1.0, initial_z=0.02)
 model.evolve(max_steps=2, use_bcyclic=True)
 
-# 1. Round-trip through an ASCII .mod file
+# 1. Round-trip through an ASCII .mod file (header does not store &kap::zbase)
 mod_text = model.to_mod_str()
-reloaded_mod = star.StarModel.from_mod_str(mod_text, eval_hydro=True)
+reloaded_mod = star.StarModel.from_mod_str(mod_text)
 max_dlnt = float(np.max(np.abs(np.asarray(model.ln_t) - np.asarray(reloaded_mod.ln_t))))
 
 with tempfile.TemporaryDirectory() as tmpdir:
     mod_path = pathlib.Path(tmpdir) / "1m_evolved.mod"
     model.write_mod_file(mod_path)
-    from_disk = star.StarModel.from_mod_file(mod_path, eval_hydro=True)
+    from_disk = star.StarModel.from_mod_file(mod_path)
 
 # 2. Round-trip through a binary photo and check n_steps continuation state hashes
 photo_bytes = model.to_photo_bytes()

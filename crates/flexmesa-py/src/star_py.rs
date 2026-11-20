@@ -55,7 +55,7 @@ macro_rules! impl_py_star_model {
             #[staticmethod]
             #[pyo3(signature = (
                 initial_mass=1.0, initial_z=0.02, initial_y=-1.0,
-                t_c=9.0e5, d_log10_p=0.02
+                t_c=3.0e5, d_log10_p=0.0
             ))]
             pub fn from_pre_ms(
                 initial_mass: f64,
@@ -78,9 +78,14 @@ macro_rules! impl_py_star_model {
             pub fn from_mod_str(text: &str) -> PyResult<Self> {
                 let (c, j) =
                     (StarControls::default(), StarJobControls::default());
-                Ok(Self {
-                    inner: read_mod_str(text, c, j).map_err(to_py_err)?,
-                })
+                let inner = read_mod_str(text, c, j).map_err(to_py_err)?;
+                Ok(Self { inner })
+            }
+
+            /// Base metallicity $Z_{\mathrm{base}}$ from `&kap` (`-1.0` default).
+            #[getter]
+            pub const fn zbase(&self) -> f64 {
+                self.inner.kap_config.zbase
             }
 
             /// Restores a [`PyStarModel`] from binary `.photo` bytes
@@ -142,7 +147,7 @@ macro_rules! impl_py_star_model {
 
             /// Sets `mesh_delta_coeff` and `varcontrol_target` on `controls`.
             #[pyo3(signature = (
-                mesh_delta_coeff=1.0, varcontrol_target=1.0e-4
+                mesh_delta_coeff=1.0, varcontrol_target=1.0e-3
             ))]
             pub fn set_evolve_controls(
                 &mut self,
@@ -268,7 +273,7 @@ macro_rules! impl_py_star_model {
                 overshoot_f: f64,
                 overshoot_f0: f64,
                 scheme: &str,
-            ) -> usize {
+            ) -> PyResult<usize> {
                 self.do_update_mixing(dt, overshoot_f, overshoot_f0, scheme)
             }
 
@@ -335,8 +340,8 @@ macro_rules! impl_py_star_model {
 
             /// Executes adaptive remeshing (`do_adjust_mesh`).
             pub fn adjust_mesh(&mut self) -> PyResult<(usize, usize)> {
-                do_adjust_mesh(&mut self.inner, &MeshFunctionConfig::default())
-                    .map_err(to_py_err)
+                let cfg = MeshFunctionConfig::from_controls(&self.inner.controls);
+                do_adjust_mesh(&mut self.inner, &cfg).map_err(to_py_err)
             }
 
             /// Computes `(dt_next, varcontrol, dt_limit_ratio)` via H211 filter.

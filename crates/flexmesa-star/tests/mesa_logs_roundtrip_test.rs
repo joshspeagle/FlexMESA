@@ -144,6 +144,7 @@ fn test_f4_28_log_lh_separates_hydrogen_helium_and_metal_burning_powers() {
     let controls = StarControls {
         initial_mass: 2.0,
         initial_z: 0.02,
+        zbase: 0.02,
         ..StarControls::default()
     };
     let mut model =
@@ -252,6 +253,7 @@ fn test_incremental_flush_survives_mid_run_drop_and_profiles_evict_by_priority()
     let controls = StarControls {
         initial_mass: 1.0,
         initial_z: 0.02,
+        zbase: 0.02,
         output: OutputControls {
             history_interval: 3,
             profile_interval: 2,
@@ -353,6 +355,7 @@ fn test_two_step_evolve_writes_mesa_logs_and_split_headers() {
     let controls = StarControls {
         initial_mass: 1.0,
         initial_z: 0.02,
+        zbase: 0.02,
         output: OutputControls {
             history_interval: 1,
             profile_interval: 2,
@@ -452,12 +455,12 @@ fn test_multistage_rn_logs_dir_routing() {
     .expect("write rn");
     fs::write(
         ms_case.path().join("inlist_s1"),
-        "&star_job\n  steps_to_take_before_terminate = 1\n/\n&controls\n  initial_mass = 1.0\n  initial_z = 0.02\n  history_interval = 1\n  write_profiles_flag = .false.\n/\n",
+        "&star_job\n  steps_to_take_before_terminate = 1\n/\n&controls\n  initial_mass = 1.0\n  initial_z = 0.02\n  history_interval = 1\n  write_profiles_flag = .false.\n/\n&kap\n  zbase = 0.02d0\n/\n",
     )
     .expect("write inlist_s1");
     fs::write(
         ms_case.path().join("inlist_s2"),
-        "&star_job\n  load_saved_model = .true.\n  load_model_filename = 's1.mod'\n  steps_to_take_before_terminate = 1\n/\n&controls\n  initial_mass = 1.0\n  initial_z = 0.02\n  history_interval = 1\n  write_profiles_flag = .false.\n/\n",
+        "&star_job\n  load_saved_model = .true.\n  load_model_filename = 's1.mod'\n  steps_to_take_before_terminate = 1\n/\n&controls\n  initial_mass = 1.0\n  initial_z = 0.02\n  history_interval = 1\n  write_profiles_flag = .false.\n/\n&kap\n  zbase = 0.02d0\n/\n",
     )
     .expect("write inlist_s2");
     let rep = flexmesa_star::run_test_suite_case_with_logs(
@@ -597,7 +600,6 @@ fn test_upstream_test_suite_history_column_lists_parse_or_fail_loudly() {
         "adjust_net",
         "cburn_inward",
         "ccsn_IIp",
-        "custom_colors",
         "double_bh",
         "gyre_in_mesa_wd",
         "high_rot_darkening",

@@ -8,16 +8,16 @@ use std::path::{Path, PathBuf};
 
 use flexmesa_binary::e2e::run_binary_test_suite_case;
 use flexmesa_binary::inlist::{
-    BinaryInlistControls, BINARY_CONTROLS_SUPPORTED, BINARY_JOB_HEADLESS_GUI,
-    BINARY_JOB_SUPPORTED,
+    BINARY_CONTROLS_SUPPORTED, BINARY_JOB_HEADLESS_GUI, BINARY_JOB_SUPPORTED,
+    BinaryInlistControls,
 };
 use flexmesa_binary::mdot_implicit::ImplicitMdotSolver;
 use flexmesa_binary::roche_deformation::RocheDeformationTables;
 use flexmesa_binary::system_rlof::eval_scheme_explicit_mdot;
 use flexmesa_schema::upstream_section_keys;
 use flexmesa_star::{
-    load_zams_model, InlistLoadOptions, StarControls, StarError,
-    StarJobControls,
+    InlistLoadOptions, StarControls, StarError, StarJobControls,
+    load_zams_model,
 };
 
 struct TempBinGuard {
@@ -52,20 +52,25 @@ fn test_binary_unsupported_unknown_and_headless_pgbinary_validation() {
     fs::create_dir_all(&unimpl).expect("mkdir");
     fs::write(
         unimpl.join("inlist"),
-        "&binary_controls\n  m1 = 2.0d0\n  terminal_interval = 5\n/\n",
+        "&binary_controls\n  m1 = 2.0d0\n  extra_binary_terminal_output_file = 'log'\n/\n",
     )
     .expect("write");
     let err = BinaryInlistControls::from_case_dir(&unimpl)
         .expect_err("unimplemented binary control must fail by default");
     assert!(matches!(err, StarError::InvalidInput(_)));
-    assert!(err.to_string().contains("terminal_interval"));
-    assert!(BinaryInlistControls::from_case_dir_with_options(
-        &unimpl,
-        InlistLoadOptions {
-            allow_unsupported_controls: true,
-        },
-    )
-    .is_ok());
+    assert!(
+        err.to_string()
+            .contains("extra_binary_terminal_output_file")
+    );
+    assert!(
+        BinaryInlistControls::from_case_dir_with_options(
+            &unimpl,
+            InlistLoadOptions {
+                allow_unsupported_controls: true,
+            },
+        )
+        .is_ok()
+    );
 
     let pg_ok = tmp.root.join("pg_ok");
     fs::create_dir_all(&pg_ok).expect("mkdir");
@@ -126,7 +131,7 @@ fn test_binary_missing_inlist2_and_missing_roche_tables_fail_loudly() {
     .expect("write inlist");
     fs::write(
         case_dir.join("inlist1"),
-        "&star_job\n/\n&controls\n  initial_mass = 10.0d0\n  max_model_number = 1\n/\n",
+        "&star_job\n/\n&kap\n  zbase = 0.02d0\n/\n&controls\n  initial_mass = 10.0d0\n  max_model_number = 1\n/\n",
     )
     .expect("write inlist1");
 
@@ -141,10 +146,10 @@ fn test_binary_missing_inlist2_and_missing_roche_tables_fail_loudly() {
         "unexpected missing inlist2 error: {err}"
     );
 
-    assert!(RocheDeformationTables::from_dir(Path::new(
-        "/nonexistent_roche_dir"
-    ))
-    .is_err());
+    assert!(
+        RocheDeformationTables::from_dir(Path::new("/nonexistent_roche_dir"))
+            .is_err()
+    );
 }
 
 #[test]
@@ -198,29 +203,40 @@ fn test_binary_option_strings_and_removed_clamps_fail_loudly() {
         1.2,
     )
     .expect("valid default solver");
-    assert!(solver
-        .evaluate_trial("Arras", 0, 10, 0.0, 0.0, -1.0, -1.0, 0.8)
-        .is_err());
+    assert!(
+        solver
+            .evaluate_trial("Arras", 0, 10, 0.0, 0.0, -1.0, -1.0, 0.8)
+            .is_err()
+    );
 
-    let donor =
-        load_zams_model(StarControls::default(), StarJobControls::default())
-            .expect("zams");
-    assert!(eval_scheme_explicit_mdot(
-        "roche_lobe",
-        &donor,
-        1.0e33,
-        1.0e11,
-        3.0e11,
-        0.0,
+    let donor = load_zams_model(
+        StarControls {
+            zbase: 0.02,
+            ..StarControls::default()
+        },
+        StarJobControls::default(),
     )
-    .is_err());
-    assert!(eval_scheme_explicit_mdot(
-        "bogus_mdot",
-        &donor,
-        1.0e33,
-        1.0e11,
-        3.0e11,
-        0.0,
-    )
-    .is_err());
+    .expect("zams");
+    assert!(
+        eval_scheme_explicit_mdot(
+            "roche_lobe",
+            &donor,
+            1.0e33,
+            1.0e11,
+            3.0e11,
+            0.0,
+        )
+        .is_err()
+    );
+    assert!(
+        eval_scheme_explicit_mdot(
+            "bogus_mdot",
+            &donor,
+            1.0e33,
+            1.0e11,
+            3.0e11,
+            0.0,
+        )
+        .is_err()
+    );
 }

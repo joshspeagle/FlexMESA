@@ -16,7 +16,7 @@ use flexmesa_star::inlist_inventory::{
 use flexmesa_star::pulse_exporters::export_pulse_by_format;
 use flexmesa_star::rn_parser::parse_rn_stages;
 use flexmesa_star::{
-    load_zams_model, StarControls, StarError, StarJobControls,
+    StarControls, StarError, StarJobControls, load_zams_model,
 };
 
 struct TempCaseGuard {
@@ -121,13 +121,15 @@ fn test_unknown_section_key_unused_and_removed_aliases_fail_loudly() {
         .expect_err("unimplemented upstream key must fail by default");
     assert!(unimpl_err.to_string().contains("photo_interval"));
 
-    assert!(InlistBundle::from_file_with_options(
-        &unimpl,
-        InlistLoadOptions {
-            allow_unsupported_controls: true,
-        },
-    )
-    .is_ok());
+    assert!(
+        InlistBundle::from_file_with_options(
+            &unimpl,
+            InlistLoadOptions {
+                allow_unsupported_controls: true,
+            },
+        )
+        .is_ok()
+    );
 
     for (tag, body, expected) in [
         (
@@ -141,14 +143,14 @@ fn test_unknown_section_key_unused_and_removed_aliases_fail_loudly() {
             "x_logical_ctrl",
         ),
         (
-            "unused_mesh_ratio",
-            "&controls\n  mesh_max_allowed_ratio = 2.0d0\n/\n",
-            "mesh_max_allowed_ratio",
+            "unused_neg_mass_frac",
+            "&controls\n  neg_mass_fraction_hold = 1.0d-4\n/\n",
+            "neg_mass_fraction_hold",
         ),
         (
-            "unused_redo",
-            "&controls\n  redo_limit = 5\n/\n",
-            "redo_limit",
+            "unused_surface_pt",
+            "&controls\n  use_other_surface_pt = .true.\n/\n",
+            "use_other_surface_pt",
         ),
     ] {
         let p = tmp.root.join(format!("inlist_{tag}"));
@@ -200,10 +202,12 @@ fn test_headless_pgstar_valid_keys_noop_and_typos_fail_loudly() {
     .expect("write valid pgstar");
     let bundle = InlistBundle::from_file(&valid)
         .expect("valid headless &pgstar must succeed in strict mode");
-    assert!(bundle
-        .validation_report
-        .pgstar_plotting_keys
-        .contains(&(String::from("pgstar"), String::from("pgstar_interval"))));
+    assert!(
+        bundle.validation_report.pgstar_plotting_keys.contains(&(
+            String::from("pgstar"),
+            String::from("pgstar_interval")
+        ))
+    );
 
     let bad = tmp.root.join("inlist_pgstar_bad");
     fs::write(
@@ -227,10 +231,15 @@ fn test_headless_pgstar_valid_keys_noop_and_typos_fail_loudly() {
     .expect("write inactive pgstar");
     let ok_inactive = InlistBundle::from_file(&inactive_stale)
         .expect("inactive pgstar must ignore stale keys");
-    assert!(ok_inactive
-        .validation_report
-        .pgstar_plotting_keys
-        .contains(&(String::from("pgstar"), String::from("pgstar_interval"))));
+    assert!(
+        ok_inactive
+            .validation_report
+            .pgstar_plotting_keys
+            .contains(&(
+                String::from("pgstar"),
+                String::from("pgstar_interval")
+            ))
+    );
 }
 
 #[test]
@@ -275,13 +284,15 @@ fn test_star_inventory_subset_of_mesa_26_4_1_and_x_ctrl_indexing() {
 
     let ctrl_rti = tmp.root.join("inlist_ctrl_rti");
     fs::write(&ctrl_rti, "&controls\n  rti_flag = .true.\n/\n").expect("write");
-    assert!(InlistBundle::from_file_with_options(
-        &ctrl_rti,
-        InlistLoadOptions {
-            allow_unsupported_controls: true,
-        },
-    )
-    .is_err());
+    assert!(
+        InlistBundle::from_file_with_options(
+            &ctrl_rti,
+            InlistLoadOptions {
+                allow_unsupported_controls: true,
+            },
+        )
+        .is_err()
+    );
 }
 
 #[test]
@@ -353,12 +364,14 @@ fn test_missing_files_stages_and_removed_clamps_behave_strictly() {
     .expect("write missing mod");
     let bundle = InlistBundle::from_file(&missing_mod).expect("parse ok");
     let mut extras = flexmesa_star::inlist_runner::DefaultStarExtras;
-    assert!(flexmesa_star::init_or_update_model_from_bundle(
-        &bundle,
-        None,
-        &mut extras,
-    )
-    .is_err());
+    assert!(
+        flexmesa_star::init_or_update_model_from_bundle(
+            &bundle,
+            None,
+            &mut extras,
+        )
+        .is_err()
+    );
 
     let empty_rn_dir = tmp.root.join("empty_rn_case");
     fs::create_dir_all(&empty_rn_dir).expect("mkdir");
@@ -384,20 +397,14 @@ fn test_missing_files_stages_and_removed_clamps_behave_strictly() {
         .expect("a non-positive retry_limit means no limit");
     assert_eq!(bneg.controls.ts_stop.retry_limit, 0);
 
-    // `redo_limit` is not used by the engine yet, so it is rejected as
-    // unsupported by default; with the opt-out its value must still parse
-    // (`binary/test_suite/double_bh/inlist1:47` sets `redo_limit = -1`).
+    // `redo_limit` is supported (`star/private/evolve.f90:2161`); non-positive
+    // values mean no limit (`binary/test_suite/double_bh/inlist1:47` sets
+    // `redo_limit = -1`).
     let neg_redo = tmp.root.join("inlist_neg_redo");
     fs::write(&neg_redo, "&controls\n  redo_limit = -1\n/\n")
         .expect("write negative redo limit");
-    assert!(InlistBundle::from_file(&neg_redo).is_err());
-    let bredo = InlistBundle::from_file_with_options(
-        &neg_redo,
-        InlistLoadOptions {
-            allow_unsupported_controls: true,
-        },
-    )
-    .expect("a non-positive redo_limit means no limit");
+    let bredo = InlistBundle::from_file(&neg_redo)
+        .expect("a non-positive redo_limit means no limit");
     assert_eq!(bredo.controls.ts_stop.redo_limit, 0);
 
     let bad_retry_fac = tmp.root.join("inlist_bad_retry_fac");
@@ -408,9 +415,14 @@ fn test_missing_files_stages_and_removed_clamps_behave_strictly() {
     .expect("write bad retry fac");
     assert!(InlistBundle::from_file(&bad_retry_fac).is_err());
 
-    let mut model =
-        load_zams_model(StarControls::default(), StarJobControls::default())
-            .expect("zams");
+    let mut model = load_zams_model(
+        StarControls {
+            zbase: 0.02,
+            ..StarControls::default()
+        },
+        StarJobControls::default(),
+    )
+    .expect("zams");
     model.controls.ts_stop.timestep_factor_for_retries = 1.2;
     assert!(matches!(
         star_evolve_step(&mut model, false, false, false),

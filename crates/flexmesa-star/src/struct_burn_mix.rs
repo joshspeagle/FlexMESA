@@ -28,14 +28,13 @@ use flexmesa_net::{
     burn_1_zone, burn_1_zone_const_density, Burn1ZoneInput,
     BurnConstDensityInput,
 };
-use flexmesa_turb::MixingType;
 use rayon::prelude::*;
 
 use crate::controls::StarError;
 use crate::hydro_vars::set_hydro_vars;
 use crate::micro::{do_eos, do_kap, resolve_model_net, set_basic_vars};
 use crate::mix_info::{
-    clean_mixing_glitches, compute_convection_sigmas,
+    apply_min_d_mix_floor, compute_convection_sigmas,
     locate_convection_boundaries,
 };
 use crate::model::StarModel;
@@ -114,7 +113,8 @@ pub fn op_split_burn_zones(
     }
 
     let ht = crate::micro::builtin_helm_table()?;
-    let rate_factors = vec![1.0_f64; net_info.num_reactions];
+    let rate_factors = crate::micro::build_rate_factors(&model.job, &net_info)?;
+    let weak_rate_factor = model.controls.weak_rate_factor;
     let eos_cfg = &model.eos_config;
 
     let outcomes: Result<Vec<SplitZoneOutcome>, StarError> = split_indices
@@ -147,7 +147,7 @@ pub fn op_split_burn_zones(
                         starting_log10_t: log_t,
                         log10_rho: log_rho,
                         rate_factors: &rate_factors,
-                        weak_rate_factor: 1.0,
+                        weak_rate_factor,
                         screening_mode,
                         stptry_in: 0.0,
                         max_steps,
@@ -184,7 +184,7 @@ pub fn op_split_burn_zones(
                         etas: &etas,
                         dxdt_source_term: None,
                         rate_factors: &rate_factors,
-                        weak_rate_factor: 1.0,
+                        weak_rate_factor,
                         reaction_qs: &[],
                         reaction_neu_qs: &[],
                         screening_mode,
@@ -232,7 +232,7 @@ pub fn op_split_burn_zones(
                 xa_after,
                 dxdt_split,
                 avg_epsnuc: avg_raw * eps_nuc_factor,
-                eps_neu_total: eps_neu * eps_nuc_factor,
+                eps_neu_total: eps_neu,
                 eps_cats: cats,
                 nstep: nstep_zone,
             })
@@ -380,42 +380,34 @@ pub(crate) fn apply_burn_avg_epsnuc(model: &mut StarModel) {
     }
 }
 
-/// Applies glitch cleanup, predictive mixing, convective boundary detection,
-/// overshooting, and Lagrangian coupling factor (`sig`) evaluation.
+/// Applies explicit `overshoot_configs` (if supplied), computes Lagrangian
+/// coupling factors (`sig`), and augments with RTI if enabled.
+///
+/// # Errors
+/// Returns [`StarError`] if explicit `overshoot_configs` fail boundary or
+/// profile evaluation.
 pub(crate) fn refresh_mixing_state(
     model: &mut StarModel,
     dt: f64,
     overshoot_configs: &[OvershootConfig],
-) {
-    let has_rot_mix = model.controls.rotation_flag
-        && (model.controls.mix_wind.am_d_mix_factor > 0.0
-            || model.controls.mix_wind.d_visc_factor > 0.0);
-    if has_rot_mix {
-        for k in 0..model.nz {
-            model.d_mix[k] = model.mlt_d[k];
-            if model.mixing_type[k] == MixingType::RotationMixing {
-                model.mixing_type[k] = if model.mlt_d[k] <= 0.0 {
-                    MixingType::NoMixing
-                } else if model.gradr[k] > model.grada[k] {
-                    MixingType::SemiconvectiveMixing
-                } else {
-                    MixingType::ThermohalineMixing
-                };
-            }
-        }
+) -> Result<(), StarError> {
+    if !overshoot_configs.is_empty() {
+        let (cz_bdy_dq, boundaries) = locate_convection_boundaries(model);
+        model.aux.mixing.cz_bdy_dq = cz_bdy_dq;
+        apply_overshooting(model, &boundaries, overshoot_configs)?;
+        apply_min_d_mix_floor(model);
     }
-    if model.controls.remove_mixing_glitches {
-        clean_mixing_glitches(model, 1.0, 0.1);
-    }
-    if model.controls.do_mix && model.controls.mix_factor > 0.0 {
-        crate::premix::apply_predictive_mixing_from_controls(model);
-    }
-    let (_cz_bdy_dq, boundaries) = locate_convection_boundaries(model);
-    apply_overshooting(model, &boundaries, overshoot_configs);
-    if has_rot_mix {
-        crate::rotation::augment_d_mix_with_rotation(model);
-    }
-    compute_convection_sigmas(model, dt, 1.0, 1.0e13);
+    let eff_mix_factor = if model.controls.do_mix {
+        model.controls.mix_factor
+    } else {
+        0.0
+    };
+    compute_convection_sigmas(
+        model,
+        dt,
+        eff_mix_factor,
+        model.controls.sig_term_limit,
+    );
     if model.controls.rti_flag
         && model.controls.do_mix
         && model.controls.mix_factor > 0.0
@@ -423,6 +415,7 @@ pub(crate) fn refresh_mixing_state(
         crate::hydro_rti::set_rti_mixing_info(model);
         crate::hydro_rti::augment_mixing_with_rti(model);
     }
+    Ok(())
 }
 
 fn run_struct_burn_mix_core(
@@ -464,7 +457,7 @@ fn run_struct_burn_mix_core(
     }
 
     if do_mix {
-        refresh_mixing_state(model, dt, overshoot_configs);
+        refresh_mixing_state(model, dt, overshoot_configs)?;
     } else {
         model.sig.fill(0.0);
     }
@@ -533,15 +526,19 @@ pub fn do_struct_burn_mix(
     };
     model.aux.step_hist.last_solver_iterations = report.iterations;
 
+    let prev_ok_mix = model.aux.mixing.okay_to_set_mixing_info;
+    model.aux.mixing.okay_to_set_mixing_info =
+        model.controls.mix_wind.recalc_mix_info_after_evolve;
     let final_res = set_hydro_vars(model, false, false);
+    model.aux.mixing.okay_to_set_mixing_info = prev_ok_mix;
     if op_split_burn {
         apply_burn_avg_epsnuc(model);
     }
     model.controls.op_split_burn = saved_op_split;
     final_res?;
 
-    if do_mix {
-        refresh_mixing_state(model, dt, overshoot_configs);
+    if do_mix && model.controls.mix_wind.recalc_mix_info_after_evolve {
+        refresh_mixing_state(model, dt, overshoot_configs)?;
     }
     Ok(report)
 }

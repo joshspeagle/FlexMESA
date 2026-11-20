@@ -120,6 +120,25 @@ def _make_rich_profile(
     return _write_mesa_log(path, hdr, cols)
 
 
+def _with_eccentricity(
+    src: pathlib.Path, dst: pathlib.Path, ecc: float
+) -> pathlib.Path:
+    """Copy ``binary_history`` ``src`` to ``dst`` with a synthetic column.
+
+    The stored MESA ``26.4.1`` binary histories lack ``eccentricity`` because
+    upstream's default ``binary_history_columns.list`` leaves it commented
+    out. The appended value is a test fixture, not a MESA output.
+    """
+    lines = src.read_text(encoding="utf-8").splitlines()
+    n_cols = len(lines[4].split())
+    out = lines[:4]
+    out.append(f"{lines[4]} {n_cols + 1:>24d}")
+    out.append(f"{lines[5]} {'eccentricity':>24s}")
+    out.extend(f"{row} {ecc:24.16E}" for row in lines[6:] if row.strip())
+    dst.write_text("\n".join(out) + "\n", encoding="utf-8")
+    return dst
+
+
 def _make_kipp_history(path: pathlib.Path) -> pathlib.Path:
     """Create a 5-step MESA history.data with mix/burn regions and tracks."""
     hdr = {
@@ -153,6 +172,8 @@ def _make_kipp_history(path: pathlib.Path) -> pathlib.Path:
         "radius": np.power(10.0, log_r),
         "log_g": np.linspace(4.25, 3.65, n_t, dtype=np.float64),
         "v_surf_km_s": np.linspace(0.0, 4.5, n_t, dtype=np.float64),
+        "delta_nu": np.linspace(18.0, 6.5, n_t, dtype=np.float64),
+        "delta_Pg": np.linspace(110.0, 68.0, n_t, dtype=np.float64),
         "log_center_Rho": np.linspace(1.6, 3.4, n_t, dtype=np.float64),
         "log_center_T": np.linspace(7.32, 8.08, n_t, dtype=np.float64),
         "log_max_T": np.linspace(7.32, 8.15, n_t, dtype=np.float64),
@@ -283,14 +304,53 @@ def test_plot_profile_kippenhahn_multiregime_and_validation_errors(
 def test_roche_l1_symmetry_and_pgbinary_orbit_geometry(
     tmp_path: pathlib.Path,
 ) -> None:
-    """xl1_fit satisfies q <-> 1/q reflection and Orbit renders binaries."""
+    """xl1_fit satisfies q <-> 1/q reflection and Orbit needs its columns."""
     plt.close("all")
     for q_val in (0.15, 0.4, 1.0, 2.5, 6.0):
         assert _roche_orbit.xl1_fit(q_val) + _roche_orbit.xl1_fit(
             1.0 / q_val
         ) == pytest.approx(1.0, abs=1.0e-12)
 
-    ref_both = REF_DIR / "binary" / "evolve_both_stars.data"
+    raw_both = REF_DIR / "binary" / "evolve_both_stars.data"
+    # Default MESA binary_history.data omits 'eccentricity' but writes 'J_orb',
+    # allowing exact Keplerian eccentricity recovery (binary_utils.f90:190-191).
+    raw_tbl, _raw_hdr = _plot_support.load_history_with_header(raw_both)
+    raw_state = _roche_orbit.extract_orbit_state(raw_tbl, 0)
+    assert raw_state["ecc"] == 0.0
+    fig_raw, ax_raw = plotting.plot_pgbinary_orbit(raw_both)
+    try:
+        assert len(ax_raw.get_lines()) >= 2
+    finally:
+        plt.close(fig_raw)
+    assert not plt.get_fignums()
+
+    # A binary history missing BOTH eccentricity and J_orb must still raise.
+    no_ecc_no_j = _write_mesa_log(
+        tmp_path / "no_ecc_no_j.data",
+        {"version_number": '"r26.4.1"'},
+        {
+            "model_number": np.array([1.0, 2.0]),
+            "star_1_mass": np.array([1.0, 1.0]),
+            "star_2_mass": np.array([0.8, 0.8]),
+            "binary_separation": np.array([5.0, 5.0]),
+            "rl_1": np.array([2.0, 2.0]),
+            "rl_2": np.array([1.8, 1.8]),
+        },
+    )
+    with pytest.raises(
+        _roche_orbit.MissingOrbitColumnsError, match="eccentricity"
+    ):
+        plotting.plot_pgbinary_orbit(no_ecc_no_j)
+    assert not plt.get_fignums()
+
+    ref_both = _with_eccentricity(raw_both, tmp_path / "both_ecc.data", 0.3)
+    tbl, _hdr = _plot_support.load_history_with_header(ref_both)
+    state = _roche_orbit.extract_orbit_state(tbl, 0)
+    assert state["ecc"] == 0.3
+    assert state["sep"] == float(tbl.columns["binary_separation"][0])
+    assert state["rl1"] == float(tbl.columns["rl_1"][0])
+    assert state["rl2"] == float(tbl.columns["rl_2"][0])
+
     orb_png = tmp_path / "orbit.png"
     fig, ax = plotting.plot_pgbinary_orbit(
         ref_both,
@@ -308,7 +368,11 @@ def test_roche_l1_symmetry_and_pgbinary_orbit_geometry(
         plt.close(fig)
 
     # Point-mass X-ray binary reference
-    ref_hmxb = REF_DIR / "binary" / "wind_fed_bhhmxb.data"
+    ref_hmxb = _with_eccentricity(
+        REF_DIR / "binary" / "wind_fed_bhhmxb.data",
+        tmp_path / "hmxb_ecc.data",
+        0.0,
+    )
     fig_bh, _ = plotting.plot_pgbinary_orbit(ref_hmxb)
     plt.close(fig_bh)
     assert not plt.get_fignums()
@@ -345,9 +409,12 @@ def test_plot_pgbinary_panels_and_summary_history_with_component_hrs(
         hr_labels = [t.get_text() for t in hr_leg.get_texts()]
         assert any("Star 1" in s for s in hr_labels)
         assert any("Star 2" in s for s in hr_labels)
-        suptitle = fig.get_suptitle()
-        assert "MESA r26.4.1" in suptitle
-        assert "within tol" in suptitle
+        # The run history here is a copy of the MESA reference, so the
+        # figure's agreement statement carries no information and is not
+        # asserted.
+        assert "MESA r26.4.1" in fig.get_suptitle()
+        # Default MESA binary_history.data supplies J_orb -> Orbit panel draws.
+        assert len(axes[0, 0].get_lines()) >= 2
     finally:
         plt.close(fig)
 
@@ -457,7 +524,7 @@ def test_pgstar_profile_panels_match_bundled_plot_info_and_rank_series(
 def test_pgstar_history_tracks_panels_and_inlist_grid_composer(
     tmp_path: pathlib.Path,
 ) -> None:
-    """All 13 track presets, History_Panels, and Grid<N> inlists render."""
+    """All 14 track presets, History_Panels, and Grid<N> inlists render."""
     plt.close("all")
     hist = _make_kipp_history(tmp_path / "history.data")
     prof = _make_rich_profile(tmp_path / "profile1.data")
@@ -548,7 +615,9 @@ def test_pgstar_history_tracks_panels_and_inlist_grid_composer(
     )
     fig_bg, bg_axes = plotting.plot_pgstar_grid(
         inlist_path=inlist_bin,
-        binary_history_path=ref_bin,
+        binary_history_path=_with_eccentricity(
+            ref_bin, tmp_path / "grid_ecc.data", 0.2
+        ),
         star1_history_path=hist,
         star2_profile_path=prof,
     )
@@ -638,7 +707,9 @@ def test_flexmesa_plot_cli_increment2_subcommands_write_figures_cleanly(
                 "plot",
                 "binary",
                 "--binary-history",
-                str(ref_bin),
+                str(
+                    _with_eccentricity(ref_bin, tmp_path / "cli_ecc.data", 0.2)
+                ),
                 "--orbit-only",
                 "--out",
                 str(out_orb),
@@ -827,8 +898,9 @@ def test_reference_provenance_subtitles_and_summary_burn_neutrino_overlay(
         finally:
             plt.close(fig_p)
 
+    ref_bin_ecc = _with_eccentricity(ref_bin, tmp_path / "prov_ecc.data", 0.2)
     fig_orb, ax_orb = plotting.plot_pgbinary_orbit(
-        ref_bin, mesa_binary_history=ref_bin
+        ref_bin_ecc, mesa_binary_history=ref_bin_ecc
     )
     try:
         assert "Ref: MESA r26.4.1" in ax_orb.get_title()

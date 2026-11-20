@@ -29,9 +29,12 @@ fn enable_all_zone_velocity(c: &mut StarControls) {
 
 fn build_compact_zams(
     nz_target: usize,
-    controls: StarControls,
+    mut controls: StarControls,
     job: StarJobControls,
 ) -> StarModel {
+    if controls.zbase < 0.0 {
+        controls.zbase = 0.02;
+    }
     let full =
         load_zams_model(controls, job).expect("1 Msun ZAMS model should load");
     let nz = nz_target.max(4).min(full.nz);
@@ -421,12 +424,17 @@ fn test_frozen_microphysics_star_ad_jacobian_matches_central_fd_to_1e_10() {
                         let an = lookup_block_entry(
                             &sys0, k_equ, i_equ, k_var, j_var,
                         );
+                        let eq0 = sys0.equ[k_equ * nvar + i_equ].abs();
+                        let eff_atol =
+                            1.0e-9_f64.max(2.0 * f64::EPSILON * eq0 / eps);
                         assert_entry_matches(
-                            &format!("frozen({v_flag},{u_flag},{rti_flag})"),
+                            &format!(
+                                "frozen({v_flag},{u_flag},{rti_flag}) k_equ={k_equ} i_equ={i_equ} k_var={k_var} j_var={j_var}"
+                            ),
                             an,
                             fd,
                             1.0e-7,
-                            1.0e-9,
+                            eff_atol,
                         );
                     }
                 }

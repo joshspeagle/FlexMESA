@@ -414,11 +414,7 @@ def collect_harness_summary(repo_root: pathlib.Path) -> dict[str, Any]:
                 sr["strict_validated"] += 1
         if rec.executed and rec.termination_matches:
             sr["reached_termination"] += 1
-            if (
-                rec.comparison is not None
-                and rec.comparison.within_final_tolerances
-                and rec.comparison.within_track_tolerances
-            ):
+            if rec.is_within_tolerances:
                 sr["within_numeric_tol"] += 1
                 within_tol = True
         if rec.verdict == "pass":
@@ -472,7 +468,7 @@ def collect_controls_summary(
         if not in_summary or not line.startswith("|"):
             continue
         cols = [c.strip() for c in line.strip("|").split("|")]
-        if len(cols) == 7 and cols[1].isdigit():
+        if len(cols) == 8 and cols[1].isdigit():
             rows.append(
                 {
                     "namelist": cols[0],
@@ -481,6 +477,20 @@ def collect_controls_summary(
                     "defaults_agree": int(cols[3]),
                     "value_mismatch": int(cols[4]),
                     "disabled_limit_none": int(cols[5]),
+                    "skipped_unparseable_rust": int(cols[6]),
+                    "unimplemented": int(cols[7]),
+                }
+            )
+        elif len(cols) == 7 and cols[1].isdigit():
+            rows.append(
+                {
+                    "namelist": cols[0],
+                    "upstream_scalars": int(cols[1]),
+                    "matched_in_flexmesa": int(cols[2]),
+                    "defaults_agree": int(cols[3]),
+                    "value_mismatch": int(cols[4]),
+                    "disabled_limit_none": int(cols[5]),
+                    "skipped_unparseable_rust": 0,
                     "unimplemented": int(cols[6]),
                 }
             )
@@ -509,6 +519,7 @@ def collect_controls_summary(
                         "defaults_agree": 0,
                         "value_mismatch": 0,
                         "disabled_limit_none": 0,
+                        "skipped_unparseable_rust": 0,
                         "unimplemented": len(names),
                     }
                 )

@@ -112,14 +112,20 @@ def _eval_helm_jax(
 ) -> tuple[jax.Array, jax.Array, jax.Array, jax.Array, jax.Array]:
     """Evaluate `HELM` EOS and derivatives in JAX at `(T, rho, abar, zbar)`."""
     ye = zbar / abar
-    temp_c = jnp.clip(temp, 1.0e3, 1.0e13)
     din_raw = ye * rho
+    off_table = (
+        (temp < 1.0e3)
+        | (temp > 1.0e13)
+        | (din_raw < 1.0e-12)
+        | (din_raw > 1.0e15)
+    )
+    temp_c = jnp.clip(temp, 1.0e3, 1.0e13)
     din_c = jnp.clip(din_raw, 1.0e-12, 1.0e15)
     rho_c = jnp.where(din_c != din_raw, din_c / ye, rho)
     t_lo, dth, d_lo, dd, fi_f, fi_dpdf, fi_ef, fi_xf = _lookup_helm_cell_jax(
         temp_c, din_c
     )
-    return eval_helm_cell_jax(
+    res, d_dlnd, d_dln_t, d_dabar, d_dzbar = eval_helm_cell_jax(
         temp_c,
         rho_c,
         abar,
@@ -132,6 +138,15 @@ def _eval_helm_jax(
         fi_dpdf,
         fi_ef,
         fi_xf,
+    )
+    mask = off_table[..., None]
+    nan_v = jnp.asarray(jnp.nan, dtype=jnp.float64)
+    return (
+        jnp.where(mask, nan_v, res),
+        jnp.where(mask, nan_v, d_dlnd),
+        jnp.where(mask, nan_v, d_dln_t),
+        jnp.where(mask, nan_v, d_dabar),
+        jnp.where(mask, nan_v, d_dzbar),
     )
 
 

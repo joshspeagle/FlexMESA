@@ -227,7 +227,14 @@ pub fn build1_pre_ms_model(
     // Inner-most shell (`pre_ms_model.f90:451-474`, using Kippenhahn & Weigert
     // Eq. 10.6 matched to `d_log10_p` so `dm[nz-2] / dm[nz-1] = O(1)` for any
     // step size `d_log10_p`).
-    let d_log10_p = job.pre_ms_d_log10_p.max(1.0e-4);
+    // `star/private/pre_ms_model.f90:431-435`: exactly zero selects
+    // `delta_logPgas = 0.004d0` (`pre_ms_model.f90:397`); any other value,
+    // negative included, is used as its absolute value.
+    let d_log10_p = if job.pre_ms_d_log10_p == 0.0 {
+        0.004
+    } else {
+        job.pre_ms_d_log10_p.abs()
+    };
     let dp_target_c = p_c * (1.0 - exp10(-0.5 * d_log10_p));
     let kw_factor = (3.0 * STANDARD_CGRAV / (8.0 * flexmesa_const::PI))
         * flexmesa_math::pow(FOUR_PI * rho_c / 3.0, 4.0 / 3.0);
@@ -393,12 +400,30 @@ pub fn build_pre_ms_model(
     controls: StarControls,
     job: StarJobControls,
 ) -> Result<StarModel, StarError> {
-    let ht = crate::micro::builtin_helm_table()?;
-    let eos_cfg = EosConfig::default();
     let kap_cfg = KapConfig {
         zbase: controls.zbase,
         ..KapConfig::default()
     };
+    build_pre_ms_model_with_configs(
+        controls,
+        job,
+        EosConfig::default(),
+        kap_cfg,
+    )
+}
+
+/// Constructs an initial $n = 1.5$ pre-main-sequence [`StarModel`] using
+/// explicit [`EosConfig`] and [`KapConfig`] settings (`star/private/pre_ms_model.f90`).
+///
+/// # Errors
+/// Returns [`StarError`] if root-finding or model construction fails.
+pub fn build_pre_ms_model_with_configs(
+    controls: StarControls,
+    job: StarJobControls,
+    eos_cfg: EosConfig,
+    kap_cfg: KapConfig,
+) -> Result<StarModel, StarError> {
+    let ht = crate::micro::builtin_helm_table()?;
 
     let (chem_id, xa_single) =
         default_basic_net_composition(controls.initial_y, controls.initial_z);
@@ -486,6 +511,7 @@ pub fn build_pre_ms_model(
     let m_total = best_shells[0].m;
     let mut model = StarModel::new(nz, chem_id, job, controls);
     model.eos_config = eos_cfg;
+    model.kap_config = kap_cfg;
     model.mstar = mstar;
     model.mstar_start = mstar;
     model.mstar_old = mstar;

@@ -5,8 +5,8 @@
 use flexmesa_chem::NuclideCatalog;
 use flexmesa_const::KEV;
 use flexmesa_rates::{
-    eval_ecapture_pair, eval_fl_epsnuc_3alf, eval_mui_coulomb,
-    eval_reaclib_handle, eval_reaclib_terms, eval_vs_coulomb,
+    compute_rev_ratio_coeff1, eval_ecapture_pair, eval_fl_epsnuc_3alf,
+    eval_mui_coulomb, eval_reaclib_handle, eval_reaclib_terms, eval_vs_coulomb,
     eval_weak_reaction_pair, eval_weaklib_one, screen_pair, set_raw_rate,
     set_raw_rates, CoulombMuiOption, CoulombVsOption, RatesCatalog,
     ScreeningMode, TFactors, WeakRateEval, DEFAULT_REACLIB_MIN_T9,
@@ -421,6 +421,18 @@ pub fn rates_eval_reaclib_screen_zones<'py>(
     })
 }
 
+/// Compute the detailed-balance first reverse coefficient `inverse_coefficients(1)`
+/// from nuclear masses `w` (`AMU`) and ground-state spins `spin`.
+#[pyfunction]
+pub fn rates_compute_rev_ratio_coeff1(
+    w_in: Vec<f64>,
+    spin_in: Vec<f64>,
+    w_out: Vec<f64>,
+    spin_out: Vec<f64>,
+) -> f64 {
+    compute_rev_ratio_coeff1(&w_in, &spin_in, &w_out, &spin_out)
+}
+
 /// Register `rates` functions on `flexmesa._rust`.
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(rates_reaction_id_by_name, m)?)?;
@@ -441,5 +453,6 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(rates_eval_ecapture_pair, m)?)?;
     m.add_function(wrap_pyfunction!(rates_weak_info_by_names, m)?)?;
     m.add_function(wrap_pyfunction!(rates_eval_weak_table_index, m)?)?;
+    m.add_function(wrap_pyfunction!(rates_compute_rev_ratio_coeff1, m)?)?;
     Ok(())
 }

@@ -244,31 +244,8 @@ def draw_history_regions(
                 q_bot = q_top
                 if q_bot >= 1.0:
                     break
-    elif (
-        show_mixing
-        and yaxis in ("mass", "q")
-        and "mass_conv_core" in tbl.columns
-    ):
-        mcc = tbl.columns["mass_conv_core"]
-        s_mass = tbl.columns.get(
-            "star_mass", np.ones(tbl.num_rows, dtype=np.float64)
-        )
-        for row_i in range(tbl.num_rows):
-            mc_val = float(mcc[row_i])
-            if not math.isfinite(mc_val) or mc_val <= 0.0:
-                continue
-            y1 = (
-                mc_val / max(float(s_mass[row_i]), 1.0e-30)
-                if yaxis == "q"
-                else mc_val
-            )
-            x0, x1 = float(x_edges[row_i]), float(x_edges[row_i + 1])
-            by_mix.setdefault(1, []).append(
-                np.array(
-                    [[x0, 0.0], [x1, 0.0], [x1, y1], [x0, y1]],
-                    dtype=np.float64,
-                )
-            )
+    # With no ``mix_type_*`` columns in the history nothing is shaded: a
+    # region is never synthesized from ``mass_conv_core``.
 
     for m_code in sorted(by_mix):
         m_name, m_hex, m_hatch = _plot_support.MIXING_STYLE[m_code]

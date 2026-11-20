@@ -12,7 +12,7 @@
 use std::io::{BufReader, Read};
 use std::path::{Path, PathBuf};
 
-use flexmesa_math::{numerics_mode, NumericsMode};
+use flexmesa_math::{NumericsMode, numerics_mode};
 use flexmesa_utils::cache_envelope::{
     read_verified_cache, write_verified_cache_atomic,
 };
@@ -23,8 +23,8 @@ use flexmesa_utils::sha256::compute_sha256_file;
 use crate::cms::table::CmsXTable;
 use crate::helm::table_io::resolve_flexmesa_data_dir;
 use crate::tables_4d::spline::{
-    validate_4d_grid_header, validate_dense_vertices, EosDtTableKind,
-    EosDtVertex, EosDtXzTable, NUM_EOS_TABLE_VALS,
+    EosDtTableKind, EosDtVertex, EosDtXzTable, NUM_EOS_TABLE_VALS,
+    validate_4d_grid_header, validate_dense_vertices,
 };
 use crate::types::EosError;
 
@@ -105,28 +105,6 @@ fn slice_cache_path(
     ))
 }
 
-fn load_or_populate_slice_cache<T>(
-    context: &'static str,
-    stem: &str,
-    source_path: &Path,
-    payload_tag: [u8; 8],
-    build_from_source: impl FnOnce() -> Result<T, EosError>,
-    encode_payload: impl FnOnce(&T) -> Result<Vec<u8>, String>,
-    decode_payload: impl FnOnce(&[u8], &str) -> Result<T, EosError>,
-) -> Result<T, EosError> {
-    let cache_root = resolve_flexmesa_cache_dir();
-    load_or_populate_slice_cache_in(
-        context,
-        stem,
-        source_path,
-        payload_tag,
-        cache_root.as_deref(),
-        build_from_source,
-        encode_payload,
-        decode_payload,
-    )
-}
-
 #[allow(clippy::too_many_arguments)]
 fn load_or_populate_slice_cache_in<T>(
     context: &'static str,
@@ -179,20 +157,39 @@ fn load_or_populate_slice_cache_in<T>(
 }
 
 /// Loads or builds a full `(Z, X)` `EosDtXzTable` slice, caching in
-/// [`resolve_flexmesa_cache_dir`] keyed by source `SHA-256`.
+/// [`resolve_flexmesa_cache_dir`] keyed by source `SHA-256` and numerics mode.
 pub fn load_or_build_dt_slice(
     mesa_data_dir: Option<&Path>,
     kind: EosDtTableKind,
     stem: &str,
 ) -> Result<EosDtXzTable, EosError> {
     let flex_dir = resolve_flexmesa_data_dir();
+    let cache_root = resolve_flexmesa_cache_dir();
+    load_or_build_dt_slice_in(
+        &flex_dir,
+        mesa_data_dir,
+        cache_root.as_deref(),
+        kind,
+        stem,
+    )
+}
+
+#[doc(hidden)]
+pub fn load_or_build_dt_slice_in(
+    flex_dir: &Path,
+    mesa_data_dir: Option<&Path>,
+    cache_root: Option<&Path>,
+    kind: EosDtTableKind,
+    stem: &str,
+) -> Result<EosDtXzTable, EosError> {
     let raw_bin = flex_dir.join("eos_4d_raw").join(format!("{stem}.raw"));
     if raw_bin.is_file() {
-        return load_or_populate_slice_cache(
+        return load_or_populate_slice_cache_in(
             "load_or_build_dt_slice",
             stem,
             &raw_bin,
             *DT_SLICE_BIN_MAGIC,
+            cache_root,
             || EosDtXzTable::from_raw_bin(&raw_bin),
             encode_dt_slice_bytes,
             decode_dt_slice_bytes,
@@ -232,11 +229,12 @@ pub fn load_or_build_dt_slice(
             ));
         };
 
-        return load_or_populate_slice_cache(
+        return load_or_populate_slice_cache_in(
             "load_or_build_dt_slice",
             stem,
             &source_path,
             *DT_SLICE_BIN_MAGIC,
+            cache_root,
             || {
                 if source_path.extension().and_then(|s| s.to_str())
                     == Some("bin")
@@ -263,19 +261,36 @@ pub fn load_or_build_dt_slice(
 }
 
 /// Loads or builds a full `CMS` `CmsXTable` slice, caching in
-/// [`resolve_flexmesa_cache_dir`] keyed by source `SHA-256`.
+/// [`resolve_flexmesa_cache_dir`] keyed by source `SHA-256` and numerics mode.
 pub fn load_or_build_cms_slice(
     mesa_data_dir: Option<&Path>,
     stem: &str,
 ) -> Result<CmsXTable, EosError> {
     let flex_dir = resolve_flexmesa_data_dir();
+    let cache_root = resolve_flexmesa_cache_dir();
+    load_or_build_cms_slice_in(
+        &flex_dir,
+        mesa_data_dir,
+        cache_root.as_deref(),
+        stem,
+    )
+}
+
+#[doc(hidden)]
+pub fn load_or_build_cms_slice_in(
+    flex_dir: &Path,
+    mesa_data_dir: Option<&Path>,
+    cache_root: Option<&Path>,
+    stem: &str,
+) -> Result<CmsXTable, EosError> {
     let raw_bin = flex_dir.join("eos_4d_raw").join(format!("{stem}.raw"));
     if raw_bin.is_file() {
-        return load_or_populate_slice_cache(
+        return load_or_populate_slice_cache_in(
             "load_or_build_cms_slice",
             stem,
             &raw_bin,
             *CMS_SLICE_BIN_MAGIC,
+            cache_root,
             || CmsXTable::from_raw_bin(&raw_bin),
             encode_cms_slice_bytes,
             decode_cms_slice_bytes,
@@ -285,11 +300,12 @@ pub fn load_or_build_cms_slice(
     if let Some(data_dir) = mesa_data_dir {
         let ascii_path =
             data_dir.join("eosCMS_data").join(format!("{stem}.data"));
-        return load_or_populate_slice_cache(
+        return load_or_populate_slice_cache_in(
             "load_or_build_cms_slice",
             stem,
             &ascii_path,
             *CMS_SLICE_BIN_MAGIC,
+            cache_root,
             || CmsXTable::from_data_file(&ascii_path),
             encode_cms_slice_bytes,
             decode_cms_slice_bytes,

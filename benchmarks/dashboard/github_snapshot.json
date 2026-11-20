@@ -101,8 +101,8 @@
     },
     {
       "phase": "Phase C",
-      "open": 13,
-      "closed": 2,
+      "open": 12,
+      "closed": 3,
       "issues": [
         {
           "number": 152,
@@ -162,7 +162,7 @@
         {
           "number": 164,
           "title": "[Audit C13] Data pipeline provenance and runtime caches",
-          "state": "open"
+          "state": "closed"
         },
         {
           "number": 166,
@@ -229,23 +229,8 @@
   ],
   "open_pull_requests": [
     {
-      "number": 248,
-      "title": "fix(data,ionization): complete #164 provenance, cache numerics-mode isolation, and clean-room CI verification",
-      "draft": false
-    },
-    {
       "number": 259,
       "title": "feat(star): port MESA 26.4.1 Newton solver, retry/redo semantics, and timestep checks (#152)",
-      "draft": true
-    },
-    {
-      "number": 275,
-      "title": "[Audit C5] Port MESA 26.4.1 element diffusion and phase separation (#156)",
-      "draft": false
-    },
-    {
-      "number": 280,
-      "title": "fix(star): follow upstream in conv_premix penetration velocities; refresh four stale baseline rows; pin a vacuous mixing test (#155)",
       "draft": false
     }
   ],

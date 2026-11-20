@@ -770,9 +770,9 @@
     "rust": {
       "tool": "cargo llvm-cov",
       "overall": {
-        "lines": 106376,
-        "covered": 78739,
-        "percent": 74.0
+        "lines": 112037,
+        "covered": 83755,
+        "percent": 74.8
       },
       "by_crate": [
         {
@@ -837,9 +837,9 @@
         },
         {
           "crate": "flexmesa-eos",
-          "lines": 9771,
-          "covered": 7704,
-          "percent": 78.8
+          "lines": 9797,
+          "covered": 7831,
+          "percent": 79.9
         },
         {
           "crate": "flexmesa-interp1d",
@@ -855,21 +855,21 @@
         },
         {
           "crate": "flexmesa-ionization",
-          "lines": 1227,
-          "covered": 804,
-          "percent": 65.5
+          "lines": 1386,
+          "covered": 1093,
+          "percent": 78.9
         },
         {
           "crate": "flexmesa-kap",
-          "lines": 3482,
-          "covered": 2343,
-          "percent": 67.3
+          "lines": 3494,
+          "covered": 2799,
+          "percent": 80.1
         },
         {
           "crate": "flexmesa-math",
           "lines": 781,
-          "covered": 623,
-          "percent": 79.8
+          "covered": 627,
+          "percent": 80.3
         },
         {
           "crate": "flexmesa-mtx",
@@ -909,9 +909,9 @@
         },
         {
           "crate": "flexmesa-star",
-          "lines": 46960,
-          "covered": 34963,
-          "percent": 74.5
+          "lines": 52424,
+          "covered": 39103,
+          "percent": 74.6
         },
         {
           "crate": "flexmesa-testing",
@@ -937,7 +937,7 @@
       "tool": "pytest --cov",
       "overall": {
         "statements": 25530,
-        "covered": 22410,
+        "covered": 22411,
         "percent": 87.8
       },
       "by_subpackage": [
@@ -1088,7 +1088,7 @@
         {
           "subpackage": "flexmesa.testing",
           "statements": 3640,
-          "covered": 2879,
+          "covered": 2880,
           "percent": 79.1
         },
         {
@@ -1313,8 +1313,8 @@
       },
       {
         "phase": "Phase C",
-        "open": 13,
-        "closed": 2,
+        "open": 12,
+        "closed": 3,
         "issues": [
           {
             "number": 152,
@@ -1374,7 +1374,7 @@
           {
             "number": 164,
             "title": "[Audit C13] Data pipeline provenance and runtime caches",
-            "state": "open"
+            "state": "closed"
           },
           {
             "number": 166,
@@ -1441,23 +1441,8 @@
     ],
     "open_pull_requests": [
       {
-        "number": 248,
-        "title": "fix(data,ionization): complete #164 provenance, cache numerics-mode isolation, and clean-room CI verification",
-        "draft": false
-      },
-      {
         "number": 259,
         "title": "feat(star): port MESA 26.4.1 Newton solver, retry/redo semantics, and timestep checks (#152)",
-        "draft": true
-      },
-      {
-        "number": 275,
-        "title": "[Audit C5] Port MESA 26.4.1 element diffusion and phase separation (#156)",
-        "draft": false
-      },
-      {
-        "number": 280,
-        "title": "fix(star): follow upstream in conv_premix penetration velocities; refresh four stale baseline rows; pin a vacuous mixing test (#155)",
         "draft": false
       }
     ],
@@ -2211,6 +2196,19 @@
       "rust_cov_pct": "74.0",
       "python_cov_pct": "87.8",
       "closed_140": "14",
+      "total_140": "34",
+      "deferred_169": "40"
+    },
+    {
+      "date_utc": "2026-11-20",
+      "commit": "e038ee0",
+      "event": "main merge",
+      "engine_ported_pct": "26.1",
+      "all_verified_pct": "1.0",
+      "cases_passing": "0",
+      "rust_cov_pct": "74.8",
+      "python_cov_pct": "87.8",
+      "closed_140": "15",
       "total_140": "34",
       "deferred_169": "40"
     }

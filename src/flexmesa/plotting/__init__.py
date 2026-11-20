@@ -16,6 +16,7 @@ from flexmesa.plotting import (
     astero_binary_plots,
     compare,
     kippenhahn,
+    live,
     pgbinary_panels,
     pgstar_coverage,
     pgstar_extra,
@@ -32,6 +33,8 @@ AASTEX_COLUMN_WIDTH_IN = style.AASTEX_COLUMN_WIDTH_IN
 AASTEX_TEXT_WIDTH_IN = style.AASTEX_TEXT_WIDTH_IN
 ColorMagnitudeSpec = pgstar_extra.ColorMagnitudeSpec
 GridPanelSpec = pgstar_grid.GridPanelSpec
+LiveEvolutionPlotter = live.LiveEvolutionPlotter
+LiveFrameRecord = live.LiveFrameRecord
 OKABE_ITO = style.OKABE_ITO
 ProfileTable = compare.ProfileTable
 TextSummarySpec = pgstar_text.TextSummarySpec
@@ -78,6 +81,7 @@ plot_text_summary = pgstar_text.plot_text_summary
 plot_trho_profile = pgstar_panels.plot_trho_profile
 resolve_case_entry = compare.resolve_case_entry
 use_mesa_plot_style = style.use_mesa_plot_style
+watch_logs = live.watch_logs
 
 __all__ = [
     "AASTEX_COLUMN_WIDTH_IN",
@@ -85,6 +89,8 @@ __all__ = [
     "OKABE_ITO",
     "ColorMagnitudeSpec",
     "GridPanelSpec",
+    "LiveEvolutionPlotter",
+    "LiveFrameRecord",
     "ProfileTable",
     "TextSummarySpec",
     "astero_binary_plots",
@@ -92,6 +98,7 @@ __all__ = [
     "figsize",
     "format_cmd_label",
     "kippenhahn",
+    "live",
     "load_profile_file",
     "mesa_rc_params",
     "parse_inlist_cmd_spec",
@@ -143,4 +150,5 @@ __all__ = [
     "stellar_plots",
     "style",
     "use_mesa_plot_style",
+    "watch_logs",
 ]

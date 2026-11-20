@@ -314,13 +314,14 @@ fn test_convective_boundaries_overshoot_diffusion_and_winds_conserve_mass() {
     set_hydro_vars(&mut model, false, false).expect("set_hydro_vars");
 
     clean_mixing_glitches(&mut model, 1.0, 0.1);
-    let (cz_bdy_dq, boundaries) = locate_convection_boundaries(&model);
-    assert_eq!(cz_bdy_dq.len(), model.nz);
-    assert_eq!(boundaries.len(), 5);
+    let n_bdy = locate_convection_boundaries(&mut model)
+        .expect("locate_convection_boundaries");
+    assert_eq!(model.aux.mixing.cz_bdy_dq.len(), model.nz);
+    assert_eq!(n_bdy, 5);
 
     let ov_cfg = OvershootConfig::default();
-    apply_overshooting(&mut model, &boundaries, &[ov_cfg])
-        .expect("apply_overshooting");
+    crate::overshoot::apply_overshoot_configs(&mut model, &[ov_cfg])
+        .expect("apply_overshoot_configs");
     let n_ov = model
         .mixing_type
         .iter()

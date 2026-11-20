@@ -348,32 +348,32 @@ impl InlistBundle {
         apply_fortran_1based(ctrl, "overshoot_zone_loc", n_ov, |i, v| mw.overshoot_sets[i].zone_loc = v, val_str)?;
         apply_fortran_1based(ctrl, "overshoot_bdy_loc", n_ov, |i, v| mw.overshoot_sets[i].bdy_loc = v, val_str)?;
         for (idx, set) in mw.overshoot_sets.iter().enumerate() {
-            let s_low = set.scheme.trim().to_ascii_lowercase();
-            if !matches!(s_low.as_str(), "" | "none" | "exponential" | "step" | "other") {
+            let s = set.scheme.trim_end();
+            if !matches!(s, "" | "none" | "exponential" | "step" | "other") {
                 return Err(StarError::InvalidInput(format!(
                     "unrecognized/unsupported '&controls::overshoot_scheme({})' = '{}'",
                     idx + 1,
                     set.scheme
                 )));
             }
-            let zt_low = set.zone_type.trim().to_ascii_lowercase();
-            if !matches!(zt_low.as_str(), "" | "any" | "burn_h" | "burn_he" | "burn_z" | "nonburn") {
+            let zt = set.zone_type.trim_end();
+            if !matches!(zt, "" | "any" | "burn_H" | "burn_He" | "burn_Z" | "nonburn") {
                 return Err(StarError::InvalidInput(format!(
                     "unrecognized '&controls::overshoot_zone_type({})' = '{}'",
                     idx + 1,
                     set.zone_type
                 )));
             }
-            let zl_low = set.zone_loc.trim().to_ascii_lowercase();
-            if !matches!(zl_low.as_str(), "" | "any" | "core" | "shell") {
+            let zl = set.zone_loc.trim_end();
+            if !matches!(zl, "" | "any" | "core" | "shell") {
                 return Err(StarError::InvalidInput(format!(
                     "unrecognized '&controls::overshoot_zone_loc({})' = '{}'",
                     idx + 1,
                     set.zone_loc
                 )));
             }
-            let bl_low = set.bdy_loc.trim().to_ascii_lowercase();
-            if !matches!(bl_low.as_str(), "" | "any" | "top" | "bottom") {
+            let bl = set.bdy_loc.trim_end();
+            if !matches!(bl, "" | "any" | "top" | "bottom") {
                 return Err(StarError::InvalidInput(format!(
                     "unrecognized '&controls::overshoot_bdy_loc({})' = '{}'",
                     idx + 1,

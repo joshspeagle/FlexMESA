@@ -427,18 +427,18 @@ fn advance_bdy_by_one_cell(
     update_model(model, fix_pgas, kc_t, kc_b)?;
 
     // Check fuel abundance increase avoidance (`conv_premix.f90:562-594`).
+    // Upstream divides by `s%dt` with no guard (`conv_premix.f90:566`); the
+    // IEEE quotient is reproduced as is.
     if let Some(iso) = zi[*i_bdy].avoid_inc_iso {
-        if model.dt > 0.0 {
-            let davg = (avg_xa[iso] - zi[*i_bdy].avg_xa[iso]) / model.dt;
-            if davg > (-zi[*i_bdy].davg_xa_dt[iso]).max(0.0) {
-                restore_model(model, fix_pgas, &sd);
-                if t_bdy {
-                    zi[*i_bdy].sel_t = false;
-                } else {
-                    zi[*i_bdy].sel_b = false;
-                }
-                return Ok(false);
+        let davg = (avg_xa[iso] - zi[*i_bdy].avg_xa[iso]) / model.dt;
+        if davg > (-zi[*i_bdy].davg_xa_dt[iso]).max(0.0) {
+            restore_model(model, fix_pgas, &sd);
+            if t_bdy {
+                zi[*i_bdy].sel_t = false;
+            } else {
+                zi[*i_bdy].sel_b = false;
             }
+            return Ok(false);
         }
     }
 

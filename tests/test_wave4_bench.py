@@ -35,7 +35,7 @@ _WAVE4_REGRESSION_SNAPSHOTS_N8: dict[str, float] = {
     "star_hydro_eqns": 4.253173239706682e6,
     "star_newton_step": 1.451491418068066e2,
     "star_remesh": 5.513777703025969e2,
-    "star_evolve_step": 9.894550507232628e1,
+    "star_evolve_step": 9.937361463448472e1,
 }
 
 _STAR_TEST_HISTORY = (

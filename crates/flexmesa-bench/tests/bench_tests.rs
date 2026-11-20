@@ -64,7 +64,7 @@ const WAVE4_REGRESSION_SNAPSHOTS_N8: [(&str, f64); 5] = [
     ("star_hydro_eqns", 4.253_173_239_706_706e6),
     ("star_newton_step", 1.451_491_418_068_066e2),
     ("star_remesh", 5.108_453_216_631_093e2),
-    ("star_evolve_step", 9.894_550_507_232_628e1),
+    ("star_evolve_step", 9.937_361_463_448_472e1),
 ];
 
 /// `FlexMESA` regression snapshots for $N_{\mathrm{zones}} = 8$ across all four

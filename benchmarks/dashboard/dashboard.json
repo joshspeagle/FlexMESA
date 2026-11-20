@@ -596,7 +596,7 @@
         "strict_validated": 0,
         "diagnostic_runs": 90,
         "reached_termination": 37,
-        "within_numeric_tol": 5,
+        "within_numeric_tol": 6,
         "passing": 0,
         "declared_gaps": 86,
         "undeclared_failures": 0
@@ -627,6 +627,11 @@
       }
     },
     "within_tol_non_pass": [
+      {
+        "suite": "star",
+        "case": "1.3M_ms_high_Z",
+        "issue": "#159"
+      },
       {
         "suite": "star",
         "case": "rsp_BEP",

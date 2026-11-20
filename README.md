@@ -22,11 +22,7 @@ Generated mechanically by `flexmesa dashboard render` from [`port_manifest.toml`
 | End-to-end MESA `26.4.1` cases passing (`90`/`8`/`8`) | 0 / 106 (102 declared gaps, 4 no reference yet, 0 undeclared failures) | [`case_table.md`](https://github.com/joshspeagle/FlexMESA/blob/main/notes/audit/case_table.md) |
 | Strict mode bit-identical across machines (`#165`) | gated in CI by scripts/check_strict_determinism.py (x86_64 vs aarch64, 1 vs 4 threads; 474,062 math vectors + uncapped star/1.3M_ms_high_Z + binary/jdot_gr_check run with unsupported controls ignored; a bit-identity check, not a comparison with MESA) | [#165](https://github.com/joshspeagle/FlexMESA/issues/165) |
 | Strict-mode kernels bit-identical to MESA `26.4.1` (`#165`) | math: 403,258/403,258 CRMATH 0 ULP (70,804 libm <= 1 ULP); 304,567/304,635 probed module hex 0 ULP (5 complete, 14 non-math probed) | [#165](https://github.com/joshspeagle/FlexMESA/issues/165) |
-<<<<<<< HEAD
-| Test line coverage (Rust `llvm-cov` / Python `pytest --cov`) | 75.0% (86,265/114,956) / 87.8% (22,448/25,569) | [`coverage_summary.json`](https://github.com/joshspeagle/FlexMESA/blob/main/benchmarks/dashboard/coverage_summary.json) |
-=======
 | Test line coverage (Rust `llvm-cov` / Python `pytest --cov`) | 75.3% (86,915/115,460) / 87.8% (22,448/25,569) | [`coverage_summary.json`](https://github.com/joshspeagle/FlexMESA/blob/main/benchmarks/dashboard/coverage_summary.json) |
->>>>>>> origin/main
 | Road-to-`v0.1.0` packages ([#140](https://github.com/joshspeagle/FlexMESA/issues/140)) & open PRs | 15 closed, 20 open; 0 open PR(s) | [`github_snapshot.json`](https://github.com/joshspeagle/FlexMESA/blob/main/benchmarks/dashboard/github_snapshot.json) |
 | Post-parity deferred backlog ([#169](https://github.com/joshspeagle/FlexMESA/issues/169)) | 42 open (41 upstream bugs, 1 enhancement, 3 `parity-pending`) | [`github_snapshot.json`](https://github.com/joshspeagle/FlexMESA/blob/main/benchmarks/dashboard/github_snapshot.json) |
 
@@ -78,12 +74,12 @@ Progress is measured by **upstream MESA `26.4.1` source lines by status**, never
 
 | Suite | `26.4.1` Cases | Stored `26.4.1` Refs | No Ref Yet | Strict-Validated | Diagnostic Runs | Reach Upstream Term | Within Numeric Tol | Verified Pass | Declared Gaps | Undeclared Failures |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| `star` | 90 | 86 | 4 | 0 | 90 | 37 | 5 | 0 | 86 | 0 |
+| `star` | 90 | 86 | 4 | 0 | 90 | 37 | 6 | 0 | 86 | 0 |
 | `binary` | 8 | 8 | 0 | 0 | 8 | 6 | 2 | 0 | 8 | 0 |
 | `astero` | 8 | 8 | 0 | 0 | 8 | 3 | 1 | 0 | 8 | 0 |
-| **Total** | **106** | **102** | **4** | **0** | **106** | **46** | **8** | **0** | **102** | **0** |
+| **Total** | **106** | **102** | **4** | **0** | **106** | **46** | **9** | **0** | **102** | **0** |
 
-- **Full per-case table**: [`notes/audit/case_table.md`](https://github.com/joshspeagle/FlexMESA/blob/main/notes/audit/case_table.md). `8` case(s) within numeric tolerance (`rsp_BEP`, `rsp_BLAP`, `rsp_Cepheid`, `rsp_RR_Lyrae`, `rsp_save_and_load_file`, `jdot_gr_check`, `jdot_ml_check`, `surface_effects`) remain governed as declared gaps under [#160](https://github.com/joshspeagle/FlexMESA/issues/160), [#161](https://github.com/joshspeagle/FlexMESA/issues/161), [#162](https://github.com/joshspeagle/FlexMESA/issues/162).
+- **Full per-case table**: [`notes/audit/case_table.md`](https://github.com/joshspeagle/FlexMESA/blob/main/notes/audit/case_table.md). `9` case(s) within numeric tolerance (`1.3M_ms_high_Z`, `rsp_BEP`, `rsp_BLAP`, `rsp_Cepheid`, `rsp_RR_Lyrae`, `rsp_save_and_load_file`, `jdot_gr_check`, `jdot_ml_check`, `surface_effects`) remain governed as declared gaps under [#159](https://github.com/joshspeagle/FlexMESA/issues/159), [#160](https://github.com/joshspeagle/FlexMESA/issues/160), [#161](https://github.com/joshspeagle/FlexMESA/issues/161), [#162](https://github.com/joshspeagle/FlexMESA/issues/162).
 - **Declared gaps by owning package**: [#161](https://github.com/joshspeagle/FlexMESA/issues/161) (27), [#159](https://github.com/joshspeagle/FlexMESA/issues/159) (20), [#154](https://github.com/joshspeagle/FlexMESA/issues/154) (13), [#157](https://github.com/joshspeagle/FlexMESA/issues/157) (9), [#162](https://github.com/joshspeagle/FlexMESA/issues/162) (9), [#160](https://github.com/joshspeagle/FlexMESA/issues/160) (7), [#170](https://github.com/joshspeagle/FlexMESA/issues/170) (7), [#158](https://github.com/joshspeagle/FlexMESA/issues/158) (6), [#231](https://github.com/joshspeagle/FlexMESA/issues/231) (2), [#151](https://github.com/joshspeagle/FlexMESA/issues/151) (1), [#171](https://github.com/joshspeagle/FlexMESA/issues/171) (1).
 - **Trajectory comparison figures ([#173](https://github.com/joshspeagle/FlexMESA/issues/173))**: `0` committed.
 

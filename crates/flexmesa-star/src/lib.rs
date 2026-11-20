@@ -60,6 +60,7 @@
     clippy::unreadable_literal
 )]
 
+pub mod accretion_xa;
 pub mod adjust_mass;
 pub mod adjust_mesh_split_merge;
 pub mod adjust_mesh_support;
@@ -89,6 +90,7 @@ pub mod inlist;
 pub mod inlist_inventory;
 pub mod inlist_populate;
 mod inlist_populate_limits;
+mod inlist_populate_micro;
 mod inlist_populate_phase5b;
 pub mod inlist_runner;
 pub mod job_controls;
@@ -182,8 +184,8 @@ mod tests_fidelity4;
 mod tests_phase3_pulse_stella;
 
 pub use adjust_mass::{
-    build_accreted_xa, do_adjust_mass, do_adjust_mass_step,
-    do_adjust_mass_with_dt,
+    build_accreted_xa, compute_delta_m, do_adjust_mass, do_adjust_mass_step,
+    do_adjust_mass_with_dt, get_xa_for_accretion,
 };
 pub use adjust_mesh_split_merge::{
     get1_grad, minmod3, preview_split_merge_amr, remesh_split_merge,
@@ -456,7 +458,13 @@ pub use struct_burn_mix::{
 };
 pub use termination::{
     check_termination_limits, check_termination_limits_with_history,
-    compute_core_masses_msun,
+    compute_core_masses_msun, do_check_limits, eval_core_infall_and_rebound_cms,
+    eval_min_gamma1, eval_phase_of_evolution, get_ejecta_mass,
+    get_remnant_mass, get_shock_mass_msun, set_phase_of_evolution,
+    LimitCheckOutcome, PHASE_C_BURN, PHASE_HE_BURN, PHASE_IAMS, PHASE_NE_BURN,
+    PHASE_O_BURN, PHASE_PREMS, PHASE_RELAX, PHASE_SI_BURN, PHASE_STARTING,
+    PHASE_TACHEB, PHASE_TAMS, PHASE_TP_AGB, PHASE_WDCS, PHASE_ZACHEB,
+    PHASE_ZAMS,
 };
 pub use timestep::{
     TimestepAction, TimestepLimitReason, TimestepReport,
@@ -465,9 +473,10 @@ pub use timestep::{
 };
 pub use timestep_limits::timestep_controller;
 pub use winds::{
-    DutchLowTScheme, WindScheme, do_set_mdot, eval_bjorklund_wind,
-    eval_blocker_wind, eval_de_jager_wind, eval_dutch_wind,
-    eval_nieuwenhuijzen_wind, eval_nugis_lamers_wind, eval_reimers_wind,
+    DutchLowTScheme, WindScheme, do_set_mdot, do_set_mdot_with_extras,
+    eval_bjorklund_wind, eval_blocker_wind, eval_de_jager_wind,
+    eval_dutch_wind, eval_nieuwenhuijzen_wind, eval_nugis_lamers_wind,
+    eval_reimers_wind, eval_rlo_wind, eval_super_eddington_wind,
     eval_van_loon_wind, eval_vink_wind, set_mdot,
 };
 pub use zams::{

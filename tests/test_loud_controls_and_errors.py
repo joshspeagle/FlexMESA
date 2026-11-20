@@ -230,9 +230,13 @@ def test_extras_missing_hooks_callback_errors_and_redo_fail_loudly(
 
     ok_star = tmp_path / "ok_star"
     ok_star.mkdir()
+    # ZAMS models start at `model_number = 1` (becoming `2` after 1 step);
+    # keep `max_model_number > 2` so step 1 does not already terminate inside
+    # `star_check_model` (`run_star_support.f90:211-212`) before
+    # `extras_check_model` runs (`max_steps_per_stage=1` caps to 1 step).
     (ok_star / "inlist").write_text(
         "&kap\n  zbase = 0.02\n/\n"
-        "&controls\n  initial_mass = 1.0\n  max_model_number = 1\n/\n",
+        "&controls\n  initial_mass = 1.0\n  max_model_number = 10\n/\n",
         encoding="utf-8",
     )
     with pytest.raises(ValueError, match="boom from python star extras"):

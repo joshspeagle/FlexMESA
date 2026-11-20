@@ -458,9 +458,76 @@ def ensure_indexed() -> memoryview:
     return mv
 
 
+def _canonical_fixed_prefix(prefix: str) -> str:
+    trimmed = prefix.strip()
+    if trimmed == "lowT_fa05_a09":
+        return "lowT_fa05_a09p"
+    if trimmed == "OP_a09":
+        return "OP_a09_nans_removed_by_hand"
+    return trimmed
+
+
+def _first_fixed_bounds(mv: memoryview, prefix: str) -> tuple[float, ...]:
+    canon = _canonical_fixed_prefix(prefix)
+    if canon not in FIXED_INDEX:
+        msg = f"Unknown fixed-metal table prefix: {prefix!r}"
+        raise ValueError(msg)
+    for _z_val, x_list in FIXED_INDEX[canon]:
+        for start, _end in x_list:
+            if mv[start] != 0:
+                return tuple(
+                    float(v) for v in struct.unpack_from("<4d", mv, start + 17)
+                )
+    msg = f"No embedded x_table slice for prefix {prefix!r}"
+    raise ValueError(msg)
+
+
+def _first_co_bounds(mv: memoryview, co_prefix: str) -> tuple[float, ...]:
+    trimmed = co_prefix.strip()
+    if trimmed not in CO_INDEX:
+        msg = f"Unknown CO table prefix: {co_prefix!r}"
+        raise ValueError(msg)
+    for _zb, _zf, x_offsets in CO_INDEX[trimmed]:
+        for start in x_offsets:
+            if mv[start] != 0:
+                return tuple(
+                    float(v) for v in struct.unpack_from("<4d", mv, start + 25)
+                )
+    msg = f"No embedded CO x_table slice for prefix {co_prefix!r}"
+    raise ValueError(msg)
+
+
+def get_kap_blend_bounds_jax(
+    kap_option: str,
+    kap_co_option: str,
+    kap_low_t_option: str,
+    *,
+    use_type2_opacities: bool,
+) -> tuple[float, float, float, float]:
+    """Return `(high_t_min, low_t_max, log_t_compton_hi, log_r_compton_lo)`."""
+    mv = ensure_indexed()
+    t1_lr_min, _t1_lr_max, t1_lt_min, t1_lt_max = _first_fixed_bounds(
+        mv, kap_option
+    )
+    _co_lr_min, _co_lr_max, co_lt_min, co_lt_max = _first_co_bounds(
+        mv, kap_co_option
+    )
+    high_t_min = co_lt_min if use_type2_opacities else t1_lt_min
+    lt_low_trim = kap_low_t_option.strip()
+    if lt_low_trim in ("kapCN", "kapcn"):
+        low_t_max = float(KAPCN_META["log_ts_np"][-1])
+    elif lt_low_trim in ("AESOPUS", "aesopus"):
+        low_t_max = float(AESOPUS_META["log_ts_np"][-1])
+    else:
+        _, _, _, low_t_max = _first_fixed_bounds(mv, lt_low_trim)
+    log_t_compton_hi = min(t1_lt_max - 0.01, co_lt_max - 0.01)
+    log_r_compton_lo = t1_lr_min + 0.01
+    return high_t_min, low_t_max, log_t_compton_hi, log_r_compton_lo
+
+
 def get_fixed_set_jax(prefix: str) -> dict[str, Any]:
     """Load and spline-fit a fixed-metal or low-T table set for JAX."""
-    canon = "lowT_fa05_a09p" if prefix == "lowT_fa05_a09" else prefix
+    canon = _canonical_fixed_prefix(prefix)
     if canon in _FIXED_CACHE:
         return _FIXED_CACHE[canon]
     mv = ensure_indexed()

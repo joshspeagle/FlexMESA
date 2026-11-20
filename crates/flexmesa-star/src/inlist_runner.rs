@@ -25,7 +25,7 @@ use crate::rsp_eos_kap::RspChemCache;
 use crate::star_job_init::{
     InitModelOutcome, init_or_update_model_from_bundle_outcome,
 };
-use crate::termination::check_termination_limits_with_history;
+use crate::termination::{LimitCheckOutcome, do_check_limits};
 
 /// Control flow directive returned by [`StarExtras`] step hooks (`keep_going`,
 /// `redo`, `retry`, `terminate` in `star/public/star_def.inc`).
@@ -409,8 +409,8 @@ pub fn run_inlist_stage_with_logs(
     let init_hr = extract_history_row(model);
     if cap == 0 {
         if job_step_cap != Some(0) {
-            if let Some(code) =
-                check_termination_limits_with_history(model, Some(&init_hr))
+            if let LimitCheckOutcome::Terminate { code, .. } =
+                do_check_limits(model, None, true)?
             {
                 termination_code = code;
             }
@@ -481,6 +481,8 @@ pub fn run_inlist_stage_with_logs(
             total_newton_iterations += step_rep.iterations;
             total_retries += step_rep.retries;
 
+            let in_step_termination =
+                model.aux.step_hist.termination_code.clone();
             let finish_dir = extras.extras_finish_step(model);
             model.mstar_start = model.mstar;
             if !model.controls.rsp_flag {
@@ -498,8 +500,8 @@ pub fn run_inlist_stage_with_logs(
             history_rows.push(hr);
 
             let mut will_terminate = false;
-            if let Some(reason) = check_term_opt {
-                termination_code = reason;
+            if let Some(code) = in_step_termination.or(check_term_opt) {
+                termination_code = code;
                 will_terminate = true;
             }
             match finish_dir {
@@ -520,8 +522,8 @@ pub fn run_inlist_stage_with_logs(
                 ExtrasDirective::KeepGoing => {}
             }
             if !will_terminate {
-                if let Some(code) =
-                    check_termination_limits_with_history(model, Some(&hr))
+                if let LimitCheckOutcome::Terminate { code, .. } =
+                    do_check_limits(model, None, false)?
                 {
                     termination_code = code;
                     will_terminate = true;

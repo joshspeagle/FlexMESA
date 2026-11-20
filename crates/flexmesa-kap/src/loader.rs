@@ -6,7 +6,7 @@
 
 use crate::loader_ascii::load_or_build_kap_tables;
 use crate::spline::fit_bicubic_not_a_knot;
-use crate::types::KapError;
+use crate::types::{KapConfig, KapError, KapLowTOption};
 use flexmesa_utils::is_bad;
 use std::sync::OnceLock;
 
@@ -384,6 +384,103 @@ pub struct KapTables {
     pub aesopus: AesopusData,
     /// `kapCN` low-$T$ table set.
     pub kap_cn: KapCnData,
+}
+
+impl KapTables {
+    /// Compute `(logT_Compton_blend_hi, logR_Compton_blend_lo)` from the loaded
+    /// Type 1 and Type 2 table headers (`setup_kap_tables` in `kap/private/load_kap.f90:65-70`).
+    ///
+    /// # Errors
+    /// Returns [`KapError::MissingTable`] if the selected Type 1 or Type 2 table set is missing.
+    pub fn compton_blend_bounds(
+        &self,
+        cfg: &KapConfig,
+    ) -> Result<(f64, f64), KapError> {
+        let fixed_prefix = cfg.kap_option.prefix();
+        let t1_x0 = self
+            .fixed_sets
+            .iter()
+            .find(|s| s.prefix == fixed_prefix)
+            .and_then(|s| s.z_tables.first())
+            .and_then(|z| z.x_tables.first())
+            .ok_or(KapError::MissingTable(
+                "missing Type 1 x_table for Compton blend bounds",
+            ))?;
+        let co_prefix = cfg.kap_co_option.prefix();
+        let co_x0 = self
+            .co_sets
+            .iter()
+            .find(|s| s.prefix == co_prefix)
+            .and_then(|s| s.z_tables.first())
+            .and_then(|z| z.x_tables.first())
+            .ok_or(KapError::MissingTable(
+                "missing Type 2 CO x_table for Compton blend bounds",
+            ))?;
+        let log_t_compton_blend_hi =
+            (t1_x0.log_t_max - 0.01).min(co_x0.log_t_max - 0.01);
+        let log_r_compton_blend_lo = t1_x0.log_r_min + 0.01;
+        Ok((log_t_compton_blend_hi, log_r_compton_blend_lo))
+    }
+
+    /// Compute `(highT_logT_min, lowT_logT_max)` from the loaded table headers
+    /// (`Get_kap_Results_blend_T` in `kap/private/kap_eval.f90:287-318`).
+    ///
+    /// # Errors
+    /// Returns [`KapError::MissingTable`] if the selected table set is missing.
+    pub fn temp_blend_bounds(
+        &self,
+        cfg: &KapConfig,
+    ) -> Result<(f64, f64), KapError> {
+        let high_t_min = if cfg.use_type2_opacities {
+            let co_prefix = cfg.kap_co_option.prefix();
+            self.co_sets
+                .iter()
+                .find(|s| s.prefix == co_prefix)
+                .and_then(|s| s.z_tables.first())
+                .and_then(|z| z.x_tables.first())
+                .ok_or(KapError::MissingTable(
+                    "missing Type 2 CO x_table for blend lower bound",
+                ))?
+                .log_t_min
+        } else {
+            let fixed_prefix = cfg.kap_option.prefix();
+            self.fixed_sets
+                .iter()
+                .find(|s| s.prefix == fixed_prefix)
+                .and_then(|s| s.z_tables.first())
+                .and_then(|z| z.x_tables.first())
+                .ok_or(KapError::MissingTable(
+                    "missing Type 1 x_table for blend lower bound",
+                ))?
+                .log_t_min
+        };
+
+        let low_t_max = match cfg.kap_low_t_option {
+            KapLowTOption::KapCn => *self
+                .kap_cn
+                .log_ts
+                .last()
+                .ok_or(KapError::MissingTable("empty kapCN logT grid"))?,
+            KapLowTOption::Aesopus => *self
+                .aesopus
+                .log_ts
+                .last()
+                .ok_or(KapError::MissingTable("empty AESOPUS logT grid"))?,
+            _ => {
+                let lt_prefix = cfg.kap_low_t_option.prefix();
+                self.fixed_sets
+                    .iter()
+                    .find(|s| s.prefix == lt_prefix)
+                    .and_then(|s| s.z_tables.first())
+                    .and_then(|z| z.x_tables.first())
+                    .ok_or(KapError::MissingTable(
+                        "missing lowT x_table for blend upper bound",
+                    ))?
+                    .log_t_max
+            }
+        };
+        Ok((high_t_min, low_t_max))
+    }
 }
 
 static KAP_TABLES: OnceLock<Result<KapTables, KapError>> = OnceLock::new();

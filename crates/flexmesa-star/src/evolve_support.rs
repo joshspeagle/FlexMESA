@@ -570,7 +570,7 @@ pub fn relax_uniform_omega(
         c.mix_factor = 0.0;
         c.mix_wind.am_d_mix_factor = 0.0;
         c.max_age = 1.0e50;
-        c.max_age_in_days = 1.0e50;
+        c.ts_stop.max_age_in_days = 1.0e50;
         c.max_age_in_seconds = None;
         c.ts_stop.max_timestep_factor = 2.0;
         c.max_model_number = None;

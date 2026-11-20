@@ -185,6 +185,8 @@ pub struct KapConfig {
     pub kap_co_option: KapCoOption,
     /// Low-temperature opacity option (`lowT_fa05_gs98` by default).
     pub kap_low_t_option: KapLowTOption,
+    /// `AESOPUS` HDF5 table filename when `kap_low_t_option` is [`KapLowTOption::Aesopus`] (`""` by default).
+    pub aesopus_filename: String,
     /// Lower $\log_{10}(T/\mathrm{K})$ boundary for the low-$T$ to high-$T$ blend (`3.80`).
     pub kap_blend_log_t_lower_bdy: f64,
     /// Upper $\log_{10}(T/\mathrm{K})$ boundary for the low-$T$ to high-$T$ blend (`3.88`).
@@ -209,10 +211,14 @@ pub struct KapConfig {
     pub kap_type2_full_off_dz: f64,
     /// Metallicity enhancement $Z - Z_{\mathrm{base}}$ above which Type 2 is enabled (`1e-2`).
     pub kap_type2_full_on_dz: f64,
-    /// Upper $\log_{10}(T/\mathrm{K})$ boundary where Compton opacity reaches full weight (`8.69`).
-    pub log_t_compton_blend_hi: f64,
-    /// Lower $\log_{10} R$ boundary where Compton opacity reaches full weight (`-7.99`).
-    pub log_r_compton_blend_lo: f64,
+    /// User floating-point control array `kap_ctrl(1..=10)` (`kap.defaults:481`).
+    pub kap_ctrl: [f64; 10],
+    /// User integer control array `kap_integer_ctrl(1..=10)` (`kap.defaults:482`).
+    pub kap_integer_ctrl: [i64; 10],
+    /// User boolean control array `kap_logical_ctrl(1..=10)` (`kap.defaults:483`).
+    pub kap_logical_ctrl: [bool; 10],
+    /// User string control array `kap_character_ctrl(1..=10)` (`kap.defaults:484`).
+    pub kap_character_ctrl: [String; 10],
 }
 
 impl Default for KapConfig {
@@ -222,6 +228,7 @@ impl Default for KapConfig {
             kap_option: KapOption::Gs98,
             kap_co_option: KapCoOption::Gs98Co,
             kap_low_t_option: KapLowTOption::LowTFa05Gs98,
+            aesopus_filename: String::new(),
             kap_blend_log_t_lower_bdy: 3.80,
             kap_blend_log_t_upper_bdy: 3.88,
             cubic_interpolation_in_x: false,
@@ -234,8 +241,10 @@ impl Default for KapConfig {
             kap_type2_full_off_x: 1.0e-3,
             kap_type2_full_off_dz: 0.001,
             kap_type2_full_on_dz: 0.01,
-            log_t_compton_blend_hi: 8.69,
-            log_r_compton_blend_lo: -7.99,
+            kap_ctrl: [0.0; 10],
+            kap_integer_ctrl: [0; 10],
+            kap_logical_ctrl: [false; 10],
+            kap_character_ctrl: std::array::from_fn(|_| String::new()),
         }
     }
 }

@@ -51,6 +51,33 @@ pub struct StepHistoryScalars {
     pub total_energy_old: f64,
     /// Previous accepted step cumulative energy error in $\mathrm{erg}$ for rollback on retry.
     pub cumulative_energy_error_old: f64,
+    /// Start-of-step optical-depth-averaged Eddington luminosity in $\mathrm{erg\,s^{-1}}$ (`prev_Ledd`, `evolve.f90:1787`).
+    pub prev_ledd: Option<f64>,
+    /// Start-of-step central temperature in K (`starting_T_center`, `evolve.f90:1784`).
+    pub starting_t_center: Option<f64>,
+    /// Super-Eddington wind rate $\dot{M}_{\mathrm{sEdd}} \ge 0$ in $\mathrm{g\,s^{-1}}$ (`super_eddington_wind_mdot`, `winds.f90:653`).
+    pub super_eddington_wind_mdot: f64,
+    /// Whether single-star RLO wind is active on the current step (`doing_rlo_wind`, `winds.f90:110`).
+    pub doing_rlo_wind: bool,
+    /// Explicit mass-change rate $\dot{M}_{\mathrm{explicit}}$ in $\mathrm{g\,s^{-1}}$ (`explicit_mstar_dot`, `winds.f90:304`).
+    pub explicit_mstar_dot: f64,
+    /// Evolutionary phase integer code (`phase_of_evolution`, `star_utils.f90:2910-2969`).
+    pub phase_of_evolution: i32,
+    /// Exact stellar age in seconds (`time`, `evolve.f90:2079-2143`).
+    pub time_sec: f64,
+    /// Previous-step stellar age in seconds (`time_old`).
+    pub time_old_sec: f64,
+    /// Whether graded `max_age` timestep reduction is currently active (`using_revised_max_yr_dt`).
+    pub using_revised_max_yr_dt: bool,
+    /// Revised maximum timestep in years for graded `max_age` approach (`revised_max_yr_dt`).
+    pub revised_max_yr_dt: f64,
+    /// Cumulative integrated extra heating in $\mathrm{erg}$ (`cumulative_extra_heating`).
+    pub cumulative_extra_heating: f64,
+    /// Canonical MESA `termination_code_str` set when `do_check_limits`
+    /// terminates an accepted step inside `star_evolve_step_with_extras`
+    /// (`star/job/run_star_support.f90:211-233`).
+    #[serde(skip)]
+    pub termination_code: Option<String>,
 }
 
 impl Default for StepHistoryScalars {
@@ -76,6 +103,18 @@ impl Default for StepHistoryScalars {
             total_energy_end: 0.0,
             total_energy_old: 0.0,
             cumulative_energy_error_old: 0.0,
+            prev_ledd: None,
+            starting_t_center: None,
+            super_eddington_wind_mdot: 0.0,
+            doing_rlo_wind: false,
+            explicit_mstar_dot: 0.0,
+            phase_of_evolution: 1,
+            time_sec: 0.0,
+            time_old_sec: 0.0,
+            using_revised_max_yr_dt: false,
+            revised_max_yr_dt: 0.0,
+            cumulative_extra_heating: 0.0,
+            termination_code: None,
         }
     }
 }
@@ -157,6 +196,12 @@ pub struct HydroAuxState {
     pub chi_rho_start: Vec<f64>,
     /// Fraction of Potekhin-Chabrier (`PC`) EOS in cell `k` (`eos_frac_PC`).
     pub eos_frac_pc: Vec<f64>,
+    /// Opacity regime blend fractions `[lowT, highT, Type2, Compton]` per cell (`kap_frac_*`).
+    #[serde(default)]
+    pub kap_frac: Vec<[f64; 4]>,
+    /// Unscaled thermal neutrino channel losses `[plas, brem, phot, pair, reco]` per cell (`nonnucneu_*`).
+    #[serde(default)]
+    pub nonnucneu_channels: Vec<[f64; 5]>,
     /// Phase-transition latent heat density derivative (`latent_ddlnRho`).
     pub latent_ddlnrho: Vec<f64>,
     /// Phase-transition latent heat temperature derivative (`latent_ddlnT`).
@@ -339,6 +384,8 @@ impl HydroAuxState {
             chi_t_start: vec![0.0; nz],
             chi_rho_start: vec![0.0; nz],
             eos_frac_pc: vec![0.0; nz],
+            kap_frac: vec![[0.0; 4]; nz],
+            nonnucneu_channels: vec![[0.0; 5]; nz],
             latent_ddlnrho: vec![0.0; nz],
             latent_ddlnt: vec![0.0; nz],
             d_eps_grav_dx: vec![0.0; nz * species],
@@ -484,6 +531,8 @@ impl HydroAuxState {
             ad.resize(nz, StarAdOrder1::ZERO);
         }
         let n_sp = nz * species;
+        self.kap_frac.resize(nz, [0.0; 4]);
+        self.nonnucneu_channels.resize(nz, [0.0; 5]);
         self.eps_nuc_categories
             .resize(nz, [0.0; flexmesa_chem::NUM_CATEGORIES]);
         self.d_eps_grav_dx.resize(n_sp, 0.0);

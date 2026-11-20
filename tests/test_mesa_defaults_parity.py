@@ -39,9 +39,12 @@ def test_mesa_defaults_parity_zero_mismatches_and_empty_allow_list() -> None:
     assert none_diff == 0, f"unexpected None active limits:\n{md_text}"
     assert unallowed == []
     assert summary.upstream_scalars == 2396
-    assert summary.matched >= 969
+    assert summary.matched >= 1229
     assert summary.agree == summary.matched
-    assert summary.skipped_unparseable_rust <= 12
+    # Baseline 12 non-scalar/computed initializers plus 8 empty-Vec
+    # xa_{surface,average}_{lower,upper}_limit{,_species} fields (#159),
+    # mirroring the 4 existing xa_central_* Vec::new() fields.
+    assert summary.skipped_unparseable_rust <= 20
     assert summary.skipped_no_rust_field >= 0
     assert (
         summary.matched

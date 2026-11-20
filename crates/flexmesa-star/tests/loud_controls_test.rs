@@ -84,6 +84,7 @@ fn test_terminal_output_keys_pass_strict_validation_and_are_recorded() {
 }
 
 #[test]
+#[allow(clippy::too_many_lines)]
 fn test_unknown_section_key_unused_and_removed_aliases_fail_loudly() {
     let tmp = TempCaseGuard::new("strict");
     let bogus_sec = tmp.root.join("inlist_bogus_sec");
@@ -151,6 +152,11 @@ fn test_unknown_section_key_unused_and_removed_aliases_fail_loudly() {
             "unused_bad_max_corr",
             "&controls\n  tol_bad_max_correction = 1.0d-2\n/\n",
             "tol_bad_max_correction",
+        ),
+        (
+            "unused_surface_pt",
+            "&controls\n  use_other_surface_pt = .true.\n/\n",
+            "use_other_surface_pt",
         ),
     ] {
         let p = tmp.root.join(format!("inlist_{tag}"));

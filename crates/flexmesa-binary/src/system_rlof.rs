@@ -381,6 +381,9 @@ pub fn eval_star_intrinsic_wind_cgs_with_extras(
         std::mem::replace(&mut star.controls.use_other_adjust_mdot, false);
     let saved_mdot = star.mstar_dot;
     let saved_rot_boost = star.aux.step_hist.rotational_mdot_boost_old;
+    let saved_sedd = star.aux.step_hist.super_eddington_wind_mdot;
+    let saved_rlo = star.aux.step_hist.doing_rlo_wind;
+    let saved_explicit = star.aux.step_hist.explicit_mstar_dot;
 
     let adapter = StarWindExtrasAdapter {
         extras: RefCell::new(extras),
@@ -394,6 +397,9 @@ pub fn eval_star_intrinsic_wind_cgs_with_extras(
     star.controls.use_other_adjust_mdot = saved_other_adj;
     star.mstar_dot = saved_mdot;
     star.aux.step_hist.rotational_mdot_boost_old = saved_rot_boost;
+    star.aux.step_hist.super_eddington_wind_mdot = saved_sedd;
+    star.aux.step_hist.doing_rlo_wind = saved_rlo;
+    star.aux.step_hist.explicit_mstar_dot = saved_explicit;
     res?;
 
     if do_enhance && wind_cgs < 0.0 {
@@ -673,6 +679,7 @@ pub fn prepare_coupled_mdots_with_extras(
         if retained > 0.0 && donor.nz > 0 && donor.species == acc.species {
             acc.controls.accrete_same_as_surface = false;
             acc.controls.accrete_given_mass_fractions = true;
+            acc.controls.mix_wind.num_accretion_species = donor.iso_names.len();
             acc.controls
                 .accretion_species_id
                 .clone_from(&donor.iso_names);
@@ -882,6 +889,9 @@ pub fn evolve_single_star_without_term_rewind(
         star.controls.max_model_number.take(),
         std::mem::replace(&mut star.controls.max_age, 1.0e36),
         star.controls.max_age_in_seconds.take(),
+        std::mem::replace(&mut star.controls.ts_stop.max_age_in_days, -1.0),
+        std::mem::replace(&mut star.controls.ts_stop.when_to_stop_rtol, 1.0e99),
+        std::mem::replace(&mut star.controls.ts_stop.when_to_stop_atol, 1.0e99),
         std::mem::take(&mut star.controls.xa_central_lower_limit),
         std::mem::take(&mut star.controls.xa_central_upper_limit),
         std::mem::replace(&mut star.controls.stop_near_zams, false),
@@ -919,6 +929,9 @@ pub fn evolve_single_star_without_term_rewind(
         star.controls.max_model_number,
         star.controls.max_age,
         star.controls.max_age_in_seconds,
+        star.controls.ts_stop.max_age_in_days,
+        star.controls.ts_stop.when_to_stop_rtol,
+        star.controls.ts_stop.when_to_stop_atol,
         star.controls.xa_central_lower_limit,
         star.controls.xa_central_upper_limit,
         star.controls.stop_near_zams,

@@ -7,48 +7,48 @@ Generated mechanically against **MESA 26.4.1** (git tag `26.4.1`, commit `c8c202
 
 | Namelist | Upstream `26.4.1` Scalars | Matched & Compared | Agree | Value Mismatch | Active Limit Disabled (`None`) | Skipped (Non-Scalar/Computed Rust) | Skipped (No Rust Field) |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| star &controls | 1444 | 849 | 849 | 0 | 0 | 17 | 578 |
-| star &star_job | 455 | 88 | 88 | 0 | 0 | 1 | 366 |
+| star &controls | 1444 | 971 | 971 | 0 | 0 | 17 | 456 |
+| star &star_job | 455 | 93 | 93 | 0 | 0 | 1 | 361 |
 | binary &binary_controls + &binary_job | 209 | 145 | 145 | 0 | 0 | 1 | 63 |
 | astero &astero_search_controls | 150 | 75 | 75 | 0 | 0 | 1 | 74 |
-| eos &eos | 102 | 54 | 54 | 0 | 0 | 0 | 48 |
-| kap &kap | 36 | 16 | 16 | 0 | 0 | 0 | 20 |
-| **Total** | **2396** | **1227** | **1227** | **0** | **0** | **20** | **1149** |
+| eos &eos | 102 | 60 | 60 | 0 | 0 | 0 | 42 |
+| kap &kap | 36 | 21 | 21 | 0 | 0 | 0 | 15 |
+| **Total** | **2396** | **1365** | **1365** | **0** | **0** | **20** | **1011** |
 
-Denominator: `1227 / 2396` upstream MESA `26.4.1` scalar/1-slot defaults matched and compared (`1227` agree, `0` value mismatches, `0` `None`-disabled active limits); `20` skipped due to non-scalar/computed Rust initializers; `1149` skipped with no Rust field in `FlexMESA` (plus `11` multi-subscript array-only upstream controls outside the scalar denominator).
+Denominator: `1365 / 2396` upstream MESA `26.4.1` scalar/1-slot defaults matched and compared (`1365` agree, `0` value mismatches, `0` `None`-disabled active limits); `20` skipped due to non-scalar/computed Rust initializers; `1011` skipped with no Rust field in `FlexMESA` (plus `11` multi-subscript array-only upstream controls outside the scalar denominator).
 
 ## Skipped Controls with Rust Fields (Non-Scalar / Computed Initializers)
 
 | Namelist | Control | Upstream `26.4.1` Source | Upstream Default | `FlexMESA` Source | Rust Initializer | Skip Reason |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| star &controls | `accretion_species_id` | `star/defaults/controls.defaults:5647` | `''` | `crates/flexmesa-star/src/controls_defaults.rs:94` | `Vec::new()` | empty Vec initializer |
-| star &controls | `accretion_species_xa` | `star/defaults/controls.defaults:5648` | `0` | `crates/flexmesa-star/src/controls_defaults.rs:95` | `Vec::new()` | empty Vec initializer |
-| star &controls | `dX_decreases_only` | `star/defaults/controls.defaults:9948` | `.true.` | `crates/flexmesa-star/src/controls_timestep_stop.rs:510` | `vec![true; MAX_DX_LIMIT_CTRLS]` | computed/non-scalar Rust initializer |
-| star &controls | `dX_div_X_at_high_T_hard_limit` | `star/defaults/controls.defaults:10001` | `1d99` | `crates/flexmesa-star/src/controls_timestep_stop.rs:515` | `vec![1.0e99; MAX_DX_LIMIT_CTRLS]` | computed/non-scalar Rust initializer |
-| star &controls | `dX_div_X_at_high_T_limit` | `star/defaults/controls.defaults:10000` | `1d99` | `crates/flexmesa-star/src/controls_timestep_stop.rs:514` | `vec![1.0e99; MAX_DX_LIMIT_CTRLS]` | computed/non-scalar Rust initializer |
-| star &controls | `dX_div_X_at_high_T_limit_lgT_min` | `star/defaults/controls.defaults:10002` | `1d99` | `crates/flexmesa-star/src/controls_timestep_stop.rs:516` | `vec![1.0e99; MAX_DX_LIMIT_CTRLS]` | computed/non-scalar Rust initializer |
-| star &controls | `dX_div_X_hard_limit` | `star/defaults/controls.defaults:9988` | `1d99` | `crates/flexmesa-star/src/controls_timestep_stop.rs:513` | `vec![1.0e99; MAX_DX_LIMIT_CTRLS]` | computed/non-scalar Rust initializer |
-| star &controls | `dX_div_X_limit` | `star/defaults/controls.defaults:9976` | `0.9d0` | `crates/flexmesa-star/src/controls_timestep_stop.rs:512` | `<local:dx_div_x_limit>` | local variable initializer |
-| star &controls | `dX_div_X_limit_min_X` | `star/defaults/controls.defaults:9963` | `1d-3` | `crates/flexmesa-star/src/controls_timestep_stop.rs:511` | `<local:dx_div_x_limit_min_x>` | local variable initializer |
-| star &controls | `dX_hard_limit` | `star/defaults/controls.defaults:9937` | `1d99` | `crates/flexmesa-star/src/controls_timestep_stop.rs:509` | `vec![1.0e99; MAX_DX_LIMIT_CTRLS]` | computed/non-scalar Rust initializer |
-| star &controls | `dX_limit` | `star/defaults/controls.defaults:9927` | `1d99` | `crates/flexmesa-star/src/controls_timestep_stop.rs:508` | `vec![1.0e99; MAX_DX_LIMIT_CTRLS]` | computed/non-scalar Rust initializer |
-| star &controls | `dX_limit_min_X` | `star/defaults/controls.defaults:9916` | `1d99` | `crates/flexmesa-star/src/controls_timestep_stop.rs:507` | `vec![1.0e99; MAX_DX_LIMIT_CTRLS]` | computed/non-scalar Rust initializer |
-| star &controls | `dX_limit_species` | `star/defaults/controls.defaults:9905` | `'h1'` | `crates/flexmesa-star/src/controls_timestep_stop.rs:506` | `<local:dx_limit_species>` | local variable initializer |
-| star &controls | `xa_central_lower_limit` | `star/defaults/controls.defaults:1144` | `0` | `crates/flexmesa-star/src/controls_defaults.rs:108` | `Vec::new()` | empty Vec initializer |
-| star &controls | `xa_central_lower_limit_species` | `star/defaults/controls.defaults:1143` | `''` | `crates/flexmesa-star/src/controls_defaults.rs:107` | `Vec::new()` | empty Vec initializer |
-| star &controls | `xa_central_upper_limit` | `star/defaults/controls.defaults:1165` | `0` | `crates/flexmesa-star/src/controls_defaults.rs:110` | `Vec::new()` | empty Vec initializer |
-| star &controls | `xa_central_upper_limit_species` | `star/defaults/controls.defaults:1164` | `''` | `crates/flexmesa-star/src/controls_defaults.rs:109` | `Vec::new()` | empty Vec initializer |
-| star &star_job | `required_termination_code_string` | `star/defaults/star_job.defaults:250` | `''` | `crates/flexmesa-star/src/job_controls.rs:804` | `Vec::new()` | empty Vec initializer |
+| star &controls | `accretion_species_id` | `star/defaults/controls.defaults:5647` | `''` | `crates/flexmesa-star/src/controls_defaults.rs:99` | `Vec::new()` | empty Vec initializer |
+| star &controls | `accretion_species_xa` | `star/defaults/controls.defaults:5648` | `0` | `crates/flexmesa-star/src/controls_defaults.rs:100` | `Vec::new()` | empty Vec initializer |
+| star &controls | `dX_div_X_limit` | `star/defaults/controls.defaults:9976` | `0.9d0` | `crates/flexmesa-star/src/controls_timestep_stop.rs:650` | `<local:dx_div_x_limit>` | local variable initializer |
+| star &controls | `dX_div_X_limit_min_X` | `star/defaults/controls.defaults:9963` | `1d-3` | `crates/flexmesa-star/src/controls_timestep_stop.rs:649` | `<local:dx_div_x_limit_min_x>` | local variable initializer |
+| star &controls | `dX_limit_species` | `star/defaults/controls.defaults:9905` | `'h1'` | `crates/flexmesa-star/src/controls_timestep_stop.rs:644` | `<local:dx_limit_species>` | local variable initializer |
+| star &controls | `xa_average_lower_limit` | `star/defaults/controls.defaults:1218` | `0` | `crates/flexmesa-star/src/controls_timestep_stop.rs:860` | `Vec::new()` | empty Vec initializer |
+| star &controls | `xa_average_lower_limit_species` | `star/defaults/controls.defaults:1217` | `''` | `crates/flexmesa-star/src/controls_timestep_stop.rs:859` | `Vec::new()` | empty Vec initializer |
+| star &controls | `xa_average_upper_limit` | `star/defaults/controls.defaults:1233` | `0` | `crates/flexmesa-star/src/controls_timestep_stop.rs:862` | `Vec::new()` | empty Vec initializer |
+| star &controls | `xa_average_upper_limit_species` | `star/defaults/controls.defaults:1232` | `''` | `crates/flexmesa-star/src/controls_timestep_stop.rs:861` | `Vec::new()` | empty Vec initializer |
+| star &controls | `xa_central_lower_limit` | `star/defaults/controls.defaults:1144` | `0` | `crates/flexmesa-star/src/controls_defaults.rs:113` | `Vec::new()` | empty Vec initializer |
+| star &controls | `xa_central_lower_limit_species` | `star/defaults/controls.defaults:1143` | `''` | `crates/flexmesa-star/src/controls_defaults.rs:112` | `Vec::new()` | empty Vec initializer |
+| star &controls | `xa_central_upper_limit` | `star/defaults/controls.defaults:1165` | `0` | `crates/flexmesa-star/src/controls_defaults.rs:115` | `Vec::new()` | empty Vec initializer |
+| star &controls | `xa_central_upper_limit_species` | `star/defaults/controls.defaults:1164` | `''` | `crates/flexmesa-star/src/controls_defaults.rs:114` | `Vec::new()` | empty Vec initializer |
+| star &controls | `xa_surface_lower_limit` | `star/defaults/controls.defaults:1182` | `0` | `crates/flexmesa-star/src/controls_timestep_stop.rs:856` | `Vec::new()` | empty Vec initializer |
+| star &controls | `xa_surface_lower_limit_species` | `star/defaults/controls.defaults:1181` | `''` | `crates/flexmesa-star/src/controls_timestep_stop.rs:855` | `Vec::new()` | empty Vec initializer |
+| star &controls | `xa_surface_upper_limit` | `star/defaults/controls.defaults:1203` | `0` | `crates/flexmesa-star/src/controls_timestep_stop.rs:858` | `Vec::new()` | empty Vec initializer |
+| star &controls | `xa_surface_upper_limit_species` | `star/defaults/controls.defaults:1202` | `''` | `crates/flexmesa-star/src/controls_timestep_stop.rs:857` | `Vec::new()` | empty Vec initializer |
+| star &star_job | `required_termination_code_string` | `star/defaults/star_job.defaults:250` | `''` | `crates/flexmesa-star/src/job_controls.rs:824` | `Vec::new()` | empty Vec initializer |
 | binary &binary_controls + &binary_job | `inlist_names` | `binary/defaults/binary_job.defaults:55` | `'inlist1'` | `crates/flexmesa-binary/src/inlist.rs:340` | `[String::from("inlist1"), String::from("inlist2")]` | non-uniform array initializer |
 | astero &astero_search_controls | `l0_n_obs` | `astero/defaults/astero_search.defaults:289` | `-1` | `crates/flexmesa-astero/src/inlist_astero.rs:317` | `Vec::new()` | empty Vec initializer |
 
 ## star &controls
 
-All `849` matched scalar defaults agree with MESA `26.4.1` (`17` skipped as non-scalar/computed Rust initializers; `578` have no Rust field).
+All `971` matched scalar defaults agree with MESA `26.4.1` (`17` skipped as non-scalar/computed Rust initializers; `456` have no Rust field).
 
 ## star &star_job
 
-All `88` matched scalar defaults agree with MESA `26.4.1` (`1` skipped as non-scalar/computed Rust initializers; `366` have no Rust field).
+All `93` matched scalar defaults agree with MESA `26.4.1` (`1` skipped as non-scalar/computed Rust initializers; `361` have no Rust field).
 
 ## binary &binary_controls + &binary_job
 
@@ -60,8 +60,8 @@ All `75` matched scalar defaults agree with MESA `26.4.1` (`1` skipped as non-sc
 
 ## eos &eos
 
-All `54` matched scalar defaults agree with MESA `26.4.1` (`0` skipped as non-scalar/computed Rust initializers; `48` have no Rust field).
+All `60` matched scalar defaults agree with MESA `26.4.1` (`0` skipped as non-scalar/computed Rust initializers; `42` have no Rust field).
 
 ## kap &kap
 
-All `16` matched scalar defaults agree with MESA `26.4.1` (`0` skipped as non-scalar/computed Rust initializers; `20` have no Rust field).
+All `21` matched scalar defaults agree with MESA `26.4.1` (`0` skipped as non-scalar/computed Rust initializers; `15` have no Rust field).

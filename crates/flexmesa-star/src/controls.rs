@@ -31,16 +31,8 @@ pub struct StarControls {
     pub max_model_number: Option<usize>,
     /// Maximum stellar age in years (`max_age`, `<= 0` disables).
     pub max_age: f64,
-    /// Maximum stellar age in days (`max_age_in_days`, `<= 0` disables).
-    pub max_age_in_days: f64,
     /// Maximum stellar age in seconds (`max_age_in_seconds`).
     pub max_age_in_seconds: Option<f64>,
-    /// Number of final steps adjusted to land on `max_age` (`num_adjusted_dt_steps_before_max_age`).
-    pub num_adjusted_dt_steps_before_max_age: usize,
-    /// Target $\Delta t$ in years when approaching `max_age` (`dt_years_for_steps_before_max_age`).
-    pub dt_years_for_steps_before_max_age: f64,
-    /// Per-step reduction factor for `max_years_for_timestep` near `max_age` (`reduction_factor_for_max_timestep`).
-    pub reduction_factor_for_max_timestep: f64,
     /// Maximum cumulative retries across a run (`max_number_retries`, `< 0` disables).
     pub max_number_retries: isize,
     /// Maximum cumulative retries during relaxation (`relax_max_number_retries`).
@@ -81,12 +73,30 @@ pub struct StarControls {
     pub tau_factor: f64,
     /// Opacity multiplicative factor (`1.0`).
     pub opacity_factor: f64,
+    /// Use analytic electron-scattering opacity $\kappa = 0.2(1 + X)$ (`use_simple_es_for_kap`).
+    #[serde(default)]
+    pub use_simple_es_for_kap: bool,
+    /// Evaluate opacity using start-of-step `xa_start` composition (`use_starting_composition_for_kap`).
+    #[serde(default)]
+    pub use_starting_composition_for_kap: bool,
+    /// Upper clamp on Rosseland opacity (`opacity_max`, `<= 0` disables; `-1.0` default).
+    #[serde(default = "default_neg_one")]
+    pub opacity_max: f64,
+    /// Lower clamp on Rosseland opacity (`opacity_min`, `<= 0` disables; `-1.0` default).
+    #[serde(default = "default_neg_one")]
+    pub opacity_min: f64,
     /// Minimum temperature for thermal neutrino evaluation ($\mathrm{K}$).
     pub min_t_for_neu: f64,
     /// Thermal neutrino multiplicative factor (`1.0`).
     pub non_nuc_neu_factor: f64,
     /// Maximum $\log_{10}(T/\mathrm{K})$ above which network $T$ is clipped (`max_logT_for_net`).
     pub max_logt_for_net: f64,
+    /// Lower $\log_{10}(T/\mathrm{K})$ strong-rate zero threshold (`net_logTcut_lo`, `-1.0` default).
+    #[serde(default = "default_neg_one")]
+    pub net_logtcut_lo: f64,
+    /// Upper $\log_{10}(T/\mathrm{K})$ strong-rate smooth cutoff threshold (`net_logTcut_lim`, `-1.0` default).
+    #[serde(default = "default_neg_one")]
+    pub net_logtcut_lim: f64,
     /// Maximum mean atomic mass $\bar{A}$ for nuclear burning (`max_abar_for_burning`).
     pub max_abar_for_burning: f64,
     /// Whether operator-split 1-zone burning is active (`op_split_burn`).
@@ -95,7 +105,16 @@ pub struct StarControls {
     pub eps_nuc_factor: f64,
     /// Nuclear abundance rate multiplicative factor (`1.0`).
     pub dxdt_nuc_factor: f64,
-    /// Plasma screening prescription (`ScreeningMode::Extended` default).
+    /// Global weak-reaction rate multiplier (`weak_rate_factor`, `1.0` default).
+    #[serde(default = "default_one")]
+    pub weak_rate_factor: f64,
+    /// Global reaction neutrino $Q_\nu$ multiplier (`reaction_neuQs_factor`, `1.0` default).
+    #[serde(default = "default_one")]
+    pub reaction_neuqs_factor: f64,
+    /// Magnitude cap on $|\epsilon_{\mathrm{nuc}}|$ before `eps_nuc_factor` (`max_abs_eps_nuc`, `1e99` default).
+    #[serde(default = "default_max_abs_eps_nuc")]
+    pub max_abs_eps_nuc: f64,
+    /// Plasma screening prescription (`ScreeningMode::Chugunov` default).
     pub screening_mode: ScreeningMode,
     /// Whether to compute the Brunt-Väisälä composition term $B$ (`calculate_Brunt_B`, `true` default, `controls.defaults:7915`).
     pub calculate_brunt_b: bool,
@@ -691,8 +710,6 @@ pub struct StarControls {
     pub iwind_tolerance: f64,
     /// Relaxation weight for implicit stellar wind fixed-point/secant loop (`iwind_lambda`, `1.0` default).
     pub iwind_lambda: f64,
-    /// Retry when converged $|v| > c$ (`retry_for_v_above_clight`, `true` default).
-    pub retry_for_v_above_clight: bool,
     /// Overshooting, predictive mixing, premixing, wind, `eps_mdot`, and mesh controls.
     pub mix_wind: crate::controls_mix_wind::MixWindControls,
     /// Core-boundary thresholds, extended stopping criteria, and timestep limits.
@@ -711,4 +728,16 @@ impl StarControls {
                 && (model_number as isize)
                     >= self.steps_before_use_velocity_time_centering)
     }
+}
+
+const fn default_neg_one() -> f64 {
+    -1.0
+}
+
+const fn default_one() -> f64 {
+    1.0
+}
+
+const fn default_max_abs_eps_nuc() -> f64 {
+    1.0e99
 }

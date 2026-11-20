@@ -13,15 +13,15 @@
         "upstream_lines": 120509,
         "absent": 18480,
         "stub": 15482,
-        "partial": 55505,
-        "ported_unverified": 31042,
+        "partial": 61424,
+        "ported_unverified": 25123,
         "kernel_reference_vectors": 0,
         "case_level_evidence": 0,
-        "ported_total": 31042,
+        "ported_total": 25123,
         "verified_total": 0,
-        "pct_ported": 25.8,
+        "pct_ported": 20.8,
         "pct_verified": 0.0,
-        "rust_lines": 64536,
+        "rust_lines": 66113,
         "python_jax_lines": 3869
       },
       {
@@ -55,7 +55,7 @@
         "verified_total": 0,
         "pct_ported": 18.7,
         "pct_verified": 0.0,
-        "rust_lines": 11742,
+        "rust_lines": 11751,
         "python_jax_lines": 1244
       },
       {
@@ -89,8 +89,8 @@
         "verified_total": 0,
         "pct_ported": 0.0,
         "pct_verified": 0.0,
-        "rust_lines": 14235,
-        "python_jax_lines": 9848
+        "rust_lines": 14303,
+        "python_jax_lines": 9867
       },
       {
         "module": "kap",
@@ -106,8 +106,8 @@
         "verified_total": 0,
         "pct_ported": 0.0,
         "pct_verified": 0.0,
-        "rust_lines": 4862,
-        "python_jax_lines": 3248
+        "rust_lines": 4975,
+        "python_jax_lines": 3359
       },
       {
         "module": "net",
@@ -123,7 +123,7 @@
         "verified_total": 0,
         "pct_ported": 0.0,
         "pct_verified": 0.0,
-        "rust_lines": 10347,
+        "rust_lines": 10386,
         "python_jax_lines": 728
       },
       {
@@ -140,7 +140,7 @@
         "verified_total": 0,
         "pct_ported": 0.0,
         "pct_verified": 0.0,
-        "rust_lines": 3466,
+        "rust_lines": 3469,
         "python_jax_lines": 1478
       },
       {
@@ -455,8 +455,8 @@
       "upstream_panel_modules": 46
     },
     "infrastructure_lines": {
-      "rust_bridge_testing_bench": 18867,
-      "python_testing_bench": 14198
+      "rust_bridge_testing_bench": 18855,
+      "python_testing_bench": 14193
     }
   },
   "numerics": {
@@ -608,7 +608,7 @@
         "strict_validated": 0,
         "diagnostic_runs": 8,
         "reached_termination": 6,
-        "within_numeric_tol": 1,
+        "within_numeric_tol": 2,
         "passing": 0,
         "declared_gaps": 8,
         "undeclared_failures": 0
@@ -654,6 +654,11 @@
       },
       {
         "suite": "binary",
+        "case": "jdot_gr_check",
+        "issue": "#160"
+      },
+      {
+        "suite": "binary",
         "case": "jdot_ml_check",
         "issue": "#160"
       },
@@ -684,22 +689,22 @@
     {
       "namelist": "star &controls",
       "upstream_scalars": 1444,
-      "matched_in_flexmesa": 849,
-      "defaults_agree": 849,
+      "matched_in_flexmesa": 835,
+      "defaults_agree": 835,
       "value_mismatch": 0,
       "disabled_limit_none": 0,
       "skipped_unparseable_rust": 17,
-      "unimplemented": 578
+      "unimplemented": 592
     },
     {
       "namelist": "star &star_job",
       "upstream_scalars": 455,
-      "matched_in_flexmesa": 88,
-      "defaults_agree": 88,
+      "matched_in_flexmesa": 93,
+      "defaults_agree": 93,
       "value_mismatch": 0,
       "disabled_limit_none": 0,
       "skipped_unparseable_rust": 1,
-      "unimplemented": 366
+      "unimplemented": 361
     },
     {
       "namelist": "binary &binary_controls + &binary_job",
@@ -724,22 +729,22 @@
     {
       "namelist": "eos &eos",
       "upstream_scalars": 102,
-      "matched_in_flexmesa": 54,
-      "defaults_agree": 54,
+      "matched_in_flexmesa": 60,
+      "defaults_agree": 60,
       "value_mismatch": 0,
       "disabled_limit_none": 0,
       "skipped_unparseable_rust": 0,
-      "unimplemented": 48
+      "unimplemented": 42
     },
     {
       "namelist": "kap &kap",
       "upstream_scalars": 36,
-      "matched_in_flexmesa": 16,
-      "defaults_agree": 16,
+      "matched_in_flexmesa": 21,
+      "defaults_agree": 21,
       "value_mismatch": 0,
       "disabled_limit_none": 0,
       "skipped_unparseable_rust": 0,
-      "unimplemented": 20
+      "unimplemented": 15
     },
     {
       "namelist": "star &pgstar",
@@ -1166,7 +1171,7 @@
         "issues": "#143, #160"
       },
       {
-        "location": "crates/flexmesa-eos/tests/mesa_26_4_1_component_oracles_test.rs:201",
+        "location": "crates/flexmesa-eos/tests/mesa_26_4_1_component_oracles_test.rs:308",
         "reason": "declared gap (#161): Skye/HELM operation order; 12 d_dlnT channels on skye_co_liq and eosdt_skye_helm_blend miss the original tolerance, largest eosdt_skye_helm_blend gamma3 rel_err 8.028e-6 >= 1.0e-7 (see DECLARED_DLNT_RESIDUALS)",
         "issues": "#161"
       },

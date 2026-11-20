@@ -439,6 +439,144 @@ pub struct TimestepStopControls {
     pub adjust_j_q_hard_limit: f64,
     /// Enable custom `other_timestep_limit` hook (`use_other_timestep_limit`, `false` default).
     pub use_other_timestep_limit: bool,
+
+    // --- Upstream `do_check_limits`, Target-Hitting & `max_age` Approach (`do_one_utils.f90`, `evolve.f90`) ---
+    /// Relative tolerance for target-hitting `redo` on stopping limits (`when_to_stop_rtol`, `1e99` disabled).
+    pub when_to_stop_rtol: f64,
+    /// Absolute tolerance for target-hitting `redo` on stopping limits (`when_to_stop_atol`, `1e99` disabled).
+    pub when_to_stop_atol: f64,
+    /// Maximum stellar age in days (`max_age_in_days`, `-1` disabled).
+    pub max_age_in_days: f64,
+    /// Number of equal-$\Delta t$ approach steps before `max_age` (`num_adjusted_dt_steps_before_max_age`, `0` disabled).
+    pub num_adjusted_dt_steps_before_max_age: usize,
+    /// Step size in years for graded approach before `max_age` (`dt_years_for_steps_before_max_age`, `1e6` default).
+    pub dt_years_for_steps_before_max_age: f64,
+    /// Shrink factor applied when approaching `max_age` (`reduction_factor_for_max_timestep`, `0.98` default).
+    pub reduction_factor_for_max_timestep: f64,
+    /// Upper limit on `abs(cumulative_energy_error / total_energy)` (`max_abs_rel_run_E_err`, `-1` disabled).
+    pub max_abs_rel_run_e_err: f64,
+    /// Trigger step retry if `abs(v)` exceeds `clight` (`retry_for_v_above_clight`, `true` default).
+    pub retry_for_v_above_clight: bool,
+    /// Upper limit on maximum interior $\Omega / \Omega_{\mathrm{crit}}$ (`omega_div_omega_crit_limit`, `-1` disabled).
+    pub omega_div_omega_crit_limit: f64,
+    /// Upper limit on $v_{\mathrm{conv}}/c_s$ at peak nuclear burning (`peak_burn_vconv_div_cs_limit`, `1e99` default).
+    pub peak_burn_vconv_div_cs_limit: f64,
+    /// Upper limit on maximum specific entropy in $k_{\mathrm{B}}$/baryon (`max_entropy_upper_limit`, `1e99` default).
+    pub max_entropy_upper_limit: f64,
+    /// Lower limit on maximum specific entropy in $k_{\mathrm{B}}$/baryon (`max_entropy_lower_limit`, `-1e99` default).
+    pub max_entropy_lower_limit: f64,
+    /// Upper limit on central specific entropy in $k_{\mathrm{B}}$/baryon (`center_entropy_upper_limit`, `1e99` default).
+    pub center_entropy_upper_limit: f64,
+    /// Lower limit on central specific entropy in $k_{\mathrm{B}}$/baryon (`center_entropy_lower_limit`, `-1e99` default).
+    pub center_entropy_lower_limit: f64,
+    /// Lower limit on $\max_k \log_{10} T_k$ (`log_max_temp_lower_limit`, `-99` default).
+    pub log_max_temp_lower_limit: f64,
+    /// Lower limit on central $^4\mathrm{He}$ mass fraction (`HB_limit`, `0` disabled).
+    pub hb_limit: f64,
+    /// Upper limit on unbound ejecta mass in $M_\odot$ (`ejecta_mass_max_limit`, `1e99` default).
+    pub ejecta_mass_max_limit: f64,
+    /// Lower limit on envelope mass `xmstar` in grams (`xmstar_min_limit`, `0` disabled).
+    pub xmstar_min_limit: f64,
+    /// Upper limit on envelope mass `xmstar` in grams (`xmstar_max_limit`, `0` disabled).
+    pub xmstar_max_limit: f64,
+    /// Lower limit on `(star_mass - he_core_mass) / initial_mass` (`envelope_fraction_left_limit`, `0` disabled).
+    pub envelope_fraction_left_limit: f64,
+    /// Upper limit on Fe-core mass in $M_\odot$ (`fe_core_mass_limit`, `1e99` default).
+    pub fe_core_mass_limit: f64,
+    /// Upper limit on neutron-rich core mass in $M_\odot$ (`neutron_rich_core_mass_limit`, `1e99` default).
+    pub neutron_rich_core_mass_limit: f64,
+    /// Upper limit on $|\log_{10} L_{\mathrm{H}} - \log_{10} L_{\mathrm{surf}}|$ (`abs_diff_lg_LH_lg_Ls_limit`, `-1` disabled).
+    pub abs_diff_lg_lh_lg_ls_limit: f64,
+    /// Lower limit on large frequency separation $\Delta\nu$ in $\mu\mathrm{Hz}$ (`delta_nu_lower_limit`, `0` disabled).
+    pub delta_nu_lower_limit: f64,
+    /// Upper limit on large frequency separation $\Delta\nu$ in $\mu\mathrm{Hz}$ (`delta_nu_upper_limit`, `0` disabled).
+    pub delta_nu_upper_limit: f64,
+    /// Lower limit on g-mode period spacing $\Delta\Pi_1$ in seconds (`delta_Pg_lower_limit`, `0` disabled).
+    pub delta_pg_lower_limit: f64,
+    /// Upper limit on g-mode period spacing $\Delta\Pi_1$ in seconds (`delta_Pg_upper_limit`, `0` disabled).
+    pub delta_pg_upper_limit: f64,
+    /// Lower limit on photosphere mass in $M_\odot$ (`photosphere_m_lower_limit`, `-1e99` default).
+    pub photosphere_m_lower_limit: f64,
+    /// Upper limit on photosphere mass in $M_\odot$ (`photosphere_m_upper_limit`, `1e99` default).
+    pub photosphere_m_upper_limit: f64,
+    /// Lower limit on photosphere radius in $R_\odot$ (`photosphere_r_lower_limit`, `-1e99` default).
+    pub photosphere_r_lower_limit: f64,
+    /// Upper limit on photosphere radius in $R_\odot$ (`photosphere_r_upper_limit`, `1e99` default).
+    pub photosphere_r_upper_limit: f64,
+    /// Lower limit on `(photosphere_m - M_center/Msun)` in $M_\odot$ (`photosphere_m_sub_M_center_limit`, `-1e99` default).
+    pub photosphere_m_sub_m_center_limit: f64,
+    /// Lower limit on $\log_{10} T(1)$ (`log_Tsurf_lower_limit`, `-1e99` default).
+    pub log_tsurf_lower_limit: f64,
+    /// Upper limit on $\log_{10} T(1)$ (`log_Tsurf_upper_limit`, `1e99` default).
+    pub log_tsurf_upper_limit: f64,
+    /// Lower limit on $\log_{10} P_{\mathrm{eos}}(1)$ (`log_Psurf_lower_limit`, `-1e99` default).
+    pub log_psurf_lower_limit: f64,
+    /// Lower limit on $\log_{10} \rho(1)$ (`log_Dsurf_lower_limit`, `-1e99` default).
+    pub log_dsurf_lower_limit: f64,
+    /// Upper limit on $\log_{10} \rho(1)$ (`log_Dsurf_upper_limit`, `1e99` default).
+    pub log_dsurf_upper_limit: f64,
+    /// Lower limit on $\log_{10}(r(1)/R_\odot)$ (`log_Rsurf_lower_limit`, `-1e99` default).
+    pub log_rsurf_lower_limit: f64,
+    /// Lower limit on central $Y_e$ (`center_Ye_lower_limit`, `-1` disabled).
+    pub center_ye_lower_limit: f64,
+    /// Upper limit on non-Fe core rebound velocity in $\mathrm{cm\,s^{-1}}$ (`non_fe_core_rebound_limit`, `1e99` default).
+    pub non_fe_core_rebound_limit: f64,
+    /// Upper limit on surface $v / c_s$ (`v_div_csound_surf_limit`, `1e99` default).
+    pub v_div_csound_surf_limit: f64,
+    /// Upper limit on maximum $|v / c_s|$ (`v_div_csound_max_limit`, `1e99` default).
+    pub v_div_csound_max_limit: f64,
+    /// Lower limit on minimum $\Gamma_1$ (`gamma1_limit`, `-1` disabled).
+    pub gamma1_limit: f64,
+    /// Lower limit on minimum $P_{\mathrm{gas}} / P$ below `Pgas_div_P_limit_max_q` (`Pgas_div_P_limit`, `0` disabled).
+    pub pgas_div_p_limit: f64,
+    /// Maximum $q$ included in `Pgas_div_P_limit` check (`Pgas_div_P_limit_max_q`, `0.95` default).
+    pub pgas_div_p_limit_max_q: f64,
+    /// Lower limit on $L_{\mathrm{nuc}} / L_{\mathrm{phot}}$ (`Lnuc_div_L_lower_limit`, `-1e99` default).
+    pub lnuc_div_l_lower_limit: f64,
+    /// Upper limit on $L_{\mathrm{nuc}} / L_{\mathrm{phot}}$ (`Lnuc_div_L_upper_limit`, `1e99` default).
+    pub lnuc_div_l_upper_limit: f64,
+    /// Lower limit on $v_{\mathrm{surf}} / v_{\mathrm{KH}}$ (`v_surf_div_v_kh_lower_limit`, `-1e99` default).
+    pub v_surf_div_v_kh_lower_limit: f64,
+    /// Upper limit on surface speed in $\mathrm{km\,s^{-1}}$ (`v_surf_kms_limit`, `1e99` default).
+    pub v_surf_kms_limit: f64,
+    /// Upper limit on cumulative extra heating in $\mathrm{erg}$ (`stop_when_reach_this_cumulative_extra_heating`, `0` disabled).
+    pub stop_when_reach_this_cumulative_extra_heating: f64,
+    /// Upper limit on shock mass in $M_\odot$ (`shock_mass_upper_limit`, `-1` disabled).
+    pub shock_mass_upper_limit: f64,
+    /// Surface abundance lower-limit species names (`xa_surface_lower_limit_species(1..)`).
+    pub xa_surface_lower_limit_species: Vec<String>,
+    /// Surface abundance lower-limit thresholds (`xa_surface_lower_limit(1..)`).
+    pub xa_surface_lower_limit: Vec<f64>,
+    /// Surface abundance upper-limit species names (`xa_surface_upper_limit_species(1..)`).
+    pub xa_surface_upper_limit_species: Vec<String>,
+    /// Surface abundance upper-limit thresholds (`xa_surface_upper_limit(1..)`).
+    pub xa_surface_upper_limit: Vec<f64>,
+    /// Star-averaged abundance lower-limit species names (`xa_average_lower_limit_species(1..)`).
+    pub xa_average_lower_limit_species: Vec<String>,
+    /// Star-averaged abundance lower-limit thresholds (`xa_average_lower_limit(1..)`).
+    pub xa_average_lower_limit: Vec<f64>,
+    /// Star-averaged abundance upper-limit species names (`xa_average_upper_limit_species(1..)`).
+    pub xa_average_upper_limit_species: Vec<String>,
+    /// Star-averaged abundance upper-limit thresholds (`xa_average_upper_limit(1..)`).
+    pub xa_average_upper_limit: Vec<f64>,
+    /// Stop when `phase_of_evolution == phase_PreMS` (`stop_at_phase_PreMS`).
+    pub stop_at_phase_prems: bool,
+    /// Stop when `phase_of_evolution == phase_ZAMS` (`stop_at_phase_ZAMS`).
+    pub stop_at_phase_zams: bool,
+    /// Stop when `phase_of_evolution == phase_IAMS` (`stop_at_phase_IAMS`).
+    pub stop_at_phase_iams: bool,
+    /// Stop when `phase_of_evolution == phase_TAMS` (`stop_at_phase_TAMS`).
+    pub stop_at_phase_tams: bool,
+    /// Stop when `phase_of_evolution == phase_He_Burn` (`stop_at_phase_He_Burn`).
+    pub stop_at_phase_he_burn: bool,
+    /// Stop when `phase_of_evolution == phase_ZACHeB` (`stop_at_phase_ZACHeB`).
+    pub stop_at_phase_zacheb: bool,
+    /// Stop when `phase_of_evolution == phase_TACHeB` (`stop_at_phase_TACHeB`).
+    pub stop_at_phase_tacheb: bool,
+    /// Stop when `phase_of_evolution == phase_Si_Burn` (`stop_at_phase_Si_Burn`).
+    pub stop_at_phase_si_burn: bool,
+    /// Stop when `phase_of_evolution == phase_WDCS` (`stop_at_phase_WDCS`).
+    pub stop_at_phase_wdcs: bool,
 }
 
 impl Default for TimestepStopControls {
@@ -663,6 +801,74 @@ impl Default for TimestepStopControls {
             adjust_j_q_limit: f64::from(0.99_f32),
             adjust_j_q_hard_limit: f64::from(0.98_f32),
             use_other_timestep_limit: false,
+            when_to_stop_rtol: 1.0e99,
+            when_to_stop_atol: 1.0e99,
+            max_age_in_days: -1.0,
+            num_adjusted_dt_steps_before_max_age: 0,
+            dt_years_for_steps_before_max_age: 1.0e6,
+            reduction_factor_for_max_timestep: 0.98,
+            max_abs_rel_run_e_err: -1.0,
+            retry_for_v_above_clight: true,
+            omega_div_omega_crit_limit: -1.0,
+            peak_burn_vconv_div_cs_limit: 1.0e99,
+            max_entropy_upper_limit: 1.0e99,
+            max_entropy_lower_limit: -1.0e99,
+            center_entropy_upper_limit: 1.0e99,
+            center_entropy_lower_limit: -1.0e99,
+            log_max_temp_lower_limit: -99.0,
+            hb_limit: 0.0,
+            ejecta_mass_max_limit: 1.0e99,
+            xmstar_min_limit: 0.0,
+            xmstar_max_limit: 0.0,
+            envelope_fraction_left_limit: 0.0,
+            fe_core_mass_limit: 1.0e99,
+            neutron_rich_core_mass_limit: 1.0e99,
+            abs_diff_lg_lh_lg_ls_limit: -1.0,
+            delta_nu_lower_limit: 0.0,
+            delta_nu_upper_limit: 0.0,
+            delta_pg_lower_limit: 0.0,
+            delta_pg_upper_limit: 0.0,
+            photosphere_m_lower_limit: -1.0e99,
+            photosphere_m_upper_limit: 1.0e99,
+            photosphere_r_lower_limit: -1.0e99,
+            photosphere_r_upper_limit: 1.0e99,
+            photosphere_m_sub_m_center_limit: -1.0e99,
+            log_tsurf_lower_limit: -1.0e99,
+            log_tsurf_upper_limit: 1.0e99,
+            log_psurf_lower_limit: -1.0e99,
+            log_dsurf_lower_limit: -1.0e99,
+            log_dsurf_upper_limit: 1.0e99,
+            log_rsurf_lower_limit: -1.0e99,
+            center_ye_lower_limit: -1.0,
+            non_fe_core_rebound_limit: 1.0e99,
+            v_div_csound_surf_limit: 1.0e99,
+            v_div_csound_max_limit: 1.0e99,
+            gamma1_limit: -1.0,
+            pgas_div_p_limit: 0.0,
+            pgas_div_p_limit_max_q: 0.95,
+            lnuc_div_l_lower_limit: -1.0e99,
+            lnuc_div_l_upper_limit: 1.0e99,
+            v_surf_div_v_kh_lower_limit: -1.0e99,
+            v_surf_kms_limit: 1.0e99,
+            stop_when_reach_this_cumulative_extra_heating: 0.0,
+            shock_mass_upper_limit: -1.0,
+            xa_surface_lower_limit_species: Vec::new(),
+            xa_surface_lower_limit: Vec::new(),
+            xa_surface_upper_limit_species: Vec::new(),
+            xa_surface_upper_limit: Vec::new(),
+            xa_average_lower_limit_species: Vec::new(),
+            xa_average_lower_limit: Vec::new(),
+            xa_average_upper_limit_species: Vec::new(),
+            xa_average_upper_limit: Vec::new(),
+            stop_at_phase_prems: false,
+            stop_at_phase_zams: false,
+            stop_at_phase_iams: false,
+            stop_at_phase_tams: false,
+            stop_at_phase_he_burn: false,
+            stop_at_phase_zacheb: false,
+            stop_at_phase_tacheb: false,
+            stop_at_phase_si_burn: false,
+            stop_at_phase_wdcs: false,
         }
     }
 }

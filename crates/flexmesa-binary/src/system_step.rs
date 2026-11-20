@@ -44,7 +44,11 @@ enum SingleTrialOutcome {
         ts_ctrl: BinaryTimestepControls,
     },
     CutDt(f64),
-    RetryWithJReduction(f64),
+    /// Upstream `retry` raised inside `binary_evolve_step`: the next `dt` is
+    /// the carried value times `timestep_factor_for_retries`, and also times
+    /// `dt_reduction_factor_for_j` when `have_to_reduce_timestep_due_to_j`
+    /// is set.
+    RetryStep(f64),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -316,16 +320,20 @@ impl BinarySystem {
                 };
                 loop {
                     if redo_idx > 0 {
-                        let saved_mtr = self.mtransfer_rate;
-                        let live_cf = self.change_factor;
+                        // `binary/private/binary_evolve.f90:596, 616-617`:
+                        // `binary_set_current_to_old` restores
+                        // `mtransfer_rate_old` and `change_factor_old` when
+                        // `num_tries == 0`. Only `check_implicit_rlo`
+                        // increments `num_tries` (`binary_mdot.f90:76`) and
+                        // it is not called in explicit mode
+                        // (`binary_evolve.f90:407-415`), so an explicit redo
+                        // starts again from the old values.
                         self.restore_snapshot(&pre_step_snap)?;
                         self.apply_retry_holds(&retry_holds);
-                        self.mtransfer_rate = saved_mtr;
-                        self.change_factor = live_cf;
                         explicit_trial_mdot = if self.ignore_rlof_flag {
                             0.0
                         } else {
-                            saved_mtr
+                            self.mtransfer_rate
                         };
                     }
                     match self.run_single_trial(
@@ -437,17 +445,10 @@ impl BinarySystem {
                                     );
                                 }
                                 TrialDecision::Redo => {
+                                    // Upstream's `step_loop` has no limit on
+                                    // redos (`binary/private/
+                                    // run_binary_support.f90:385-660`).
                                     redo_idx += 1;
-                                    if redo_idx > 200 {
-                                        self.restore_snapshot(&pre_step_snap)?;
-                                        return Err(
-                                            StarError::ConvergenceFailure(
-                                                String::from(
-                                                    "explicit binary redo loop exceeded 200 iterations",
-                                                ),
-                                            ),
-                                        );
-                                    }
                                 }
                                 TrialDecision::Retry => {
                                     let next_dt = self.compute_retry_dt(
@@ -496,9 +497,7 @@ impl BinarySystem {
                             }
                             break;
                         }
-                        Ok(SingleTrialOutcome::RetryWithJReduction(
-                            dt_used,
-                        )) => {
+                        Ok(SingleTrialOutcome::RetryStep(dt_used)) => {
                             self.counters.num_dt_cuts += 1;
                             dt_try = self.compute_retry_dt(
                                 dt_used,
@@ -606,7 +605,7 @@ impl BinarySystem {
                         }
                         (dt_used, ts_ctrl)
                     }
-                    Ok(SingleTrialOutcome::RetryWithJReduction(dt_used)) => {
+                    Ok(SingleTrialOutcome::RetryStep(dt_used)) => {
                         self.counters.num_dt_cuts += 1;
                         let next_dt = self.compute_retry_dt(
                             dt_used,
@@ -939,12 +938,15 @@ impl BinarySystem {
         pre_step_snap: &crate::system_rlof::BinaryStepSnapshot,
         cause: Option<StarError>,
     ) -> Result<f64, StarError> {
-        let mut fac = retry_factor_base;
+        // The star retry scales `dt` by `timestep_factor_for_retries` first;
+        // `set_star_timesteps` then multiplies the result by
+        // `dt_reduction_factor_for_j` (`binary/private/
+        // binary_timestep.f90:86-95`).
+        let mut next_dt = cur_dt * retry_factor_base;
         if self.have_to_reduce_timestep_due_to_j {
-            fac *= self.controls.dt_reduction_factor_for_j;
+            next_dt *= self.controls.dt_reduction_factor_for_j;
             self.have_to_reduce_timestep_due_to_j = false;
         }
-        let next_dt = cur_dt * fac;
         let next_retries = outer_retry + 1;
         let exhausted = (max_outer_retries > 0
             && next_retries > max_outer_retries)
@@ -1290,10 +1292,14 @@ impl BinarySystem {
         // sets `have_to_reduce_timestep_due_to_j = .true.` + returns `retry`
         // (multiplying `timestep_factor_for_retries * dt_reduction_factor_for_j`)
         // when `J_orb <= 0`.
-        let j_cur = j_old + last_jb.jdot_total * dt_used;
+        // `binary_evolve.f90:321`: `jdot*time_step*secyer` with
+        // `time_step = dt/secyer` (`binary_evolve.f90:276`,
+        // `star/private/evolve.f90:1931`).
+        let time_step_yr = dt_used / SECYER;
+        let j_cur = j_old + last_jb.jdot_total * time_step_yr * SECYER;
         if j_cur <= 0.0 || !j_cur.is_finite() {
             self.have_to_reduce_timestep_due_to_j = true;
-            return Ok(SingleTrialOutcome::RetryWithJReduction(dt_used));
+            return Ok(SingleTrialOutcome::RetryStep(dt_used));
         }
 
         // `binary/private/binary_evolve.f90:330-340`: eccentricity is held
@@ -1312,10 +1318,15 @@ impl BinarySystem {
                 p_old,
                 e_old,
             )?;
-            let e_next = (e_old + eb.edot_total * dt_used).clamp(
-                self.controls.min_eccentricity,
-                self.controls.max_eccentricity,
-            );
+            // `binary_evolve.f90:332-334`: same `time_step*secyer` product,
+            // then two separate limit tests (not a clamp).
+            let mut e_next = e_old + eb.edot_total * time_step_yr * SECYER;
+            if e_next < self.controls.min_eccentricity {
+                e_next = self.controls.min_eccentricity;
+            }
+            if e_next > self.controls.max_eccentricity {
+                e_next = self.controls.max_eccentricity;
+            }
             (e_next, eb)
         };
         let dj_non_ls_accum = (last_jb.jdot_total - last_jb.jdot_ls) * dt_used;
@@ -1334,7 +1345,9 @@ impl BinarySystem {
             self.eccentricity,
         );
         if !gap_new[0].is_finite() || !gap_new[1].is_finite() {
-            return Ok(SingleTrialOutcome::CutDt(0.5 * dt_used));
+            // `binary_evolve.f90:372-381` returns `retry`, so the star's
+            // `timestep_factor_for_retries` applies (no J reduction flag).
+            return Ok(SingleTrialOutcome::RetryStep(dt_used));
         }
         self.rl = rl_new;
         self.rl_relative_gap = gap_new;

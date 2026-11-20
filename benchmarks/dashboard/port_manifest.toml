@@ -6551,8 +6551,13 @@ module = "star"
 upstream_lines = 1624
 upstream_sha256 = "aa005fd513ef41b49b39594d08d495ab9286857c4633773195afe810df546159"
 status = "partial"
-flexmesa_files = ["crates/flexmesa-star/src/adjust_mass.rs"]
-notes = "seeded from coverage-map.md (partial): quick. Three-region `do_adjust_mass` and `j_rot` remap present; `set_D_omega`, `angular_momentum_removed` bookkeeping, `set_xa` for accreted composition via `get_xa_for_accretion` not found (3/18 routine names)"
+flexmesa_files = ["crates/flexmesa-star/src/adjust_mass.rs", "crates/flexmesa-star/src/accretion_xa.rs"]
+notes = "updated for #159: compute_delta_m, revise_q_and_dq, set_xa, get_xa_for_accretion, set_omega_adjust_mass, adjust_j_lost, smooth_outer_xa, verbatim #263 crossing-step clamp; set_D_omega, xa_removed/angular_momentum_removed fields, and use_other_j_for_adjust_J_lost not ported"
+[files.routine_map]
+"do_adjust_mass" = "crates/flexmesa-star/src/adjust_mass.rs::do_adjust_mass_step"
+"compute_prev_mesh_dm" = "crates/flexmesa-star/src/adjust_mass.rs::do_adjust_mass_step"
+"compute_delta_m" = "crates/flexmesa-star/src/adjust_mass.rs::compute_delta_m"
+"get_xa_for_accretion" = "crates/flexmesa-star/src/accretion_xa.rs::get_xa_for_accretion"
 
 [[files]]
 upstream_path = "star/private/adjust_mesh.f90"
@@ -6700,7 +6705,9 @@ upstream_lines = 1544
 upstream_sha256 = "4c2ea8db6b0de26687eacbd46aa268185fe2740838d1d8d64ae55217f19e9950"
 status = "partial"
 flexmesa_files = ["crates/flexmesa-star/src/termination.rs"]
-notes = "seeded from coverage-map.md (partial): quick. `do_check_limits` stop conditions partly present with `Option` limits; terminal/log output and `do_one_check_model` flow absent"
+notes = "updated for #159: full do_check_limits, compare_to_target (when_to_stop_rtol/atol), all 13 stop_at_phase_* checks, verbatim #264/#265; terminal/log formatting not ported"
+[files.routine_map]
+"do_check_limits" = "crates/flexmesa-star/src/termination.rs::do_check_limits"
 
 [[files]]
 upstream_path = "star/private/element_diffusion.f90"
@@ -7909,9 +7916,12 @@ upstream_lines = 706
 upstream_sha256 = "1d768f3e5185e8cec478b8917b858e274b9fec9b148100d6b80895a538acacde"
 status = "ported_unverified"
 flexmesa_files = ["crates/flexmesa-star/src/winds.rs", "crates/flexmesa-star/src/winds_driver.rs"]
-notes = "seeded from coverage-map.md (ported): deep-ish. 10/14 names; all listed schemes; non-upstream scheme fallback (C1-20)"
+notes = "updated for #159: all wind schemes + 'other', eval_super_eddington_wind (0.5*vesc2, prev_Ledd), eval_rlo_wind, T_center taper, envelope/He-layer limits, dt ramp, and surface-averaged v_div_v_crit boost shared with flexmesa-binary"
 [files.routine_map]
 "set_mdot" = "crates/flexmesa-star/src/winds_driver.rs::set_mdot"
+"do_set_mdot" = "crates/flexmesa-star/src/winds_driver.rs::do_set_mdot"
+"eval_super_eddington_wind" = "crates/flexmesa-star/src/winds_driver.rs::eval_super_eddington_wind"
+"eval_rlo_wind" = "crates/flexmesa-star/src/winds_driver.rs::eval_rlo_wind"
 
 [[files]]
 upstream_path = "star/private/write_model.f90"

@@ -19,9 +19,11 @@ use crate::inlist_runner::{DefaultStarExtras, ExtrasDirective, StarExtras};
 use crate::model::StarModel;
 use crate::solver::HenyeySolverReport;
 use crate::struct_burn_mix::{do_struct_burn_mix, refresh_mixing_state};
-use crate::termination::check_termination_limits;
+use crate::termination::{LimitCheckOutcome, do_check_limits};
 use crate::timestep::TimestepAction;
-use crate::timestep_limits::timestep_controller_with_extras;
+use crate::timestep_limits::{
+    timestep_controller, timestep_controller_with_extras,
+};
 use crate::winds::do_set_mdot_with_extras;
 
 /// Diagnostic report returned by a single evolutionary step.
@@ -94,6 +96,7 @@ pub fn restore_from_old(model: &mut StarModel) -> Result<(), StarError> {
         model.teff = model.aux.step_hist.teff_old;
     }
     model.mstar_dot = model.aux.step_hist.mstar_dot_old;
+    model.aux.step_hist.time_sec = model.aux.step_hist.time_old_sec;
     model.aux.total_energy = model.aux.step_hist.total_energy_old;
     model.aux.cumulative_energy_error =
         model.aux.step_hist.cumulative_energy_error_old;
@@ -162,14 +165,17 @@ pub fn star_evolve_step_with_extras(
 
 fn check_max_age_reached_reason(model: &StarModel) -> Option<String> {
     let c = &model.controls;
-    if c.max_age > 0.0 && model.time_sec >= c.max_age * SECYER {
+    let time_sec = model.aux.step_hist.time_sec;
+    if c.max_age > 0.0 && time_sec >= c.max_age * SECYER {
         return Some(String::from("max_age"));
     }
-    if c.max_age_in_days > 0.0 && model.time_sec >= c.max_age_in_days * SECDAY {
+    if c.ts_stop.max_age_in_days > 0.0
+        && time_sec >= c.ts_stop.max_age_in_days * SECDAY
+    {
         return Some(String::from("max_age_in_days"));
     }
     if c.max_age_in_seconds
-        .is_some_and(|s| s > 0.0 && model.time_sec >= s)
+        .is_some_and(|s| s > 0.0 && time_sec >= s)
     {
         return Some(String::from("max_age_in_seconds"));
     }
@@ -177,7 +183,7 @@ fn check_max_age_reached_reason(model: &StarModel) -> Option<String> {
 }
 
 fn exceeds_clight_velocity(model: &StarModel) -> bool {
-    if !model.controls.retry_for_v_above_clight {
+    if !model.controls.ts_stop.retry_for_v_above_clight {
         return false;
     }
     (model.controls.v_flag && model.v.iter().any(|v| v.abs() > CLIGHT))
@@ -192,13 +198,13 @@ pub(crate) fn star_evolve_step_outcome_with_extras(
     use_bcyclic: bool,
     extras: &mut dyn StarExtras,
 ) -> Result<(EvolveStepReport, Option<String>), StarError> {
+    model.aux.step_hist.termination_code = None;
     let retry_fac = model.controls.ts_stop.timestep_factor_for_retries;
     if !(retry_fac.is_finite() && retry_fac > 0.0 && retry_fac < 1.0) {
         return Err(StarError::InvalidInput(format!(
             "timestep_factor_for_retries must be in (0, 1), got {retry_fac}"
         )));
     }
-
     if model.controls.rsp_flag {
         if model.dt_next > 0.0 {
             model.dt = model.dt_next;
@@ -218,6 +224,8 @@ pub(crate) fn star_evolve_step_outcome_with_extras(
         model.num_retries += retries;
         model.time_sec = model.aux.rsp.time_sec;
         model.star_age = model.aux.rsp.time_sec / SECYER;
+        model.aux.step_hist.time_old_sec = model.aux.rsp.time_old_sec;
+        model.aux.step_hist.time_sec = model.aux.rsp.time_sec;
         model.dt_next = model.aux.rsp.rsp_dt;
         model.dt_old = model.dt;
         model.doing_first_model_of_run = false;
@@ -258,9 +266,7 @@ pub(crate) fn star_evolve_step_outcome_with_extras(
         ));
     }
 
-    if model.time_sec == 0.0 && model.star_age != 0.0 {
-        model.time_sec = model.star_age * SECYER;
-    }
+    sync_time_sec_from_age(model);
     if model.doing_first_model_of_run {
         model.aux.step_hist.timestep_hold = 0;
     }
@@ -321,6 +327,7 @@ pub(crate) fn star_evolve_step_outcome_with_extras(
     snapshot_step_start_extras(model);
     model.aux.okay_to_set_mlt_vc = true;
     model.aux.step_hist.mstar_dot_old = prev_mstar_dot_old;
+    model.aux.step_hist.time_old_sec = model.aux.step_hist.time_sec;
     model.dt_old = prev_dt_old;
     let rsp2_e_old = if model.controls.rsp2_flag {
         crate::rsp_driver::rsp_total_energy_integrals(model).0
@@ -328,6 +335,7 @@ pub(crate) fn star_evolve_step_outcome_with_extras(
         0.0
     };
 
+    let pre_step_time_sec = model.aux.step_hist.time_sec;
     let prev_dt_limit_ratio_old = model.dt_limit_ratio_old;
     let prev_rot_boost_old = model.aux.step_hist.rotational_mdot_boost_old;
     let prev_was_in_limit = model.aux.step_hist.was_in_implicit_wind_limit;
@@ -337,26 +345,33 @@ pub(crate) fn star_evolve_step_outcome_with_extras(
         dt_limit_ratio_old: prev_dt_limit_ratio_old,
         rot_boost_old: prev_rot_boost_old,
         was_in_limit: prev_was_in_limit,
+        time_sec: pre_step_time_sec,
+        time_old_sec: model.aux.step_hist.time_old_sec,
+        phase_of_evolution: model.aux.step_hist.phase_of_evolution,
+        using_revised_max_yr_dt: model.aux.step_hist.using_revised_max_yr_dt,
+        revised_max_yr_dt: model.aux.step_hist.revised_max_yr_dt,
+        max_years_for_timestep: model.controls.max_years_for_timestep,
     };
 
     // Clip `dt_next_in` against `max_age*` (`evolve.f90:1899-1915, 550-555`).
     if model.controls.max_age > 0.0
-        && (model.time_sec + dt_next_in) > model.controls.max_age * SECYER
+        && (pre_step_time_sec + dt_next_in) > model.controls.max_age * SECYER
     {
         dt_next_in =
-            (model.controls.max_age * SECYER - model.time_sec).max(0.0);
+            (model.controls.max_age * SECYER - pre_step_time_sec).max(0.0);
     } else if let Some(max_sec) = model
         .controls
         .max_age_in_seconds
-        .filter(|&s| s > 0.0 && (model.time_sec + dt_next_in) > s)
+        .filter(|&s| s > 0.0 && (pre_step_time_sec + dt_next_in) > s)
     {
-        dt_next_in = (max_sec - model.time_sec).max(0.0);
-    } else if model.controls.max_age_in_days > 0.0
-        && (model.time_sec + dt_next_in)
-            > model.controls.max_age_in_days * SECDAY
+        dt_next_in = (max_sec - pre_step_time_sec).max(0.0);
+    } else if model.controls.ts_stop.max_age_in_days > 0.0
+        && (pre_step_time_sec + dt_next_in)
+            > model.controls.ts_stop.max_age_in_days * SECDAY
     {
-        dt_next_in =
-            (model.controls.max_age_in_days * SECDAY - model.time_sec).max(0.0);
+        dt_next_in = (model.controls.ts_stop.max_age_in_days * SECDAY
+            - pre_step_time_sec)
+            .max(0.0);
     }
     if dt_next_in <= 0.0 {
         let _ = restore_attempt_state(model, pre_remesh_model.take(), saved);
@@ -413,7 +428,14 @@ pub(crate) fn star_evolve_step_outcome_with_extras(
         model.step_retry_cnt = retries;
         model.solver_first_try_of_step = first_try;
         model.why_tlim_neg_x = false;
-
+        // `set_start_of_step_info` (`star/private/evolve.f90:1784-1787`):
+        // snapshot start-of-step `starting_T_center` and optical-depth-averaged
+        // `prev_Ledd` before evaluating `set_mdot`.
+        if model.nz > 0 {
+            model.aux.step_hist.starting_t_center = Some(model.t[model.nz - 1]);
+            model.aux.step_hist.prev_ledd =
+                Some(crate::report_utils::eval_ledd_erg_s(model));
+        }
         if model.controls.use_other_adjust_mdot {
             let prev_rot_boost = model.aux.step_hist.rotational_mdot_boost_old;
             do_set_mdot_with_extras(model, extras)?;
@@ -525,8 +547,11 @@ pub(crate) fn star_evolve_step_outcome_with_extras(
         if let Ok(ref rep) = attempt {
             if rep.converged && !force_outer_retry {
                 model.model_number = target_mod;
-                model.time_sec = model.time_old_sec + dt_try;
-                model.star_age = model.time_sec / SECYER;
+                model.aux.step_hist.time_old_sec = pre_step_time_sec;
+                model.aux.step_hist.time_sec = pre_step_time_sec + dt_try;
+                model.time_old_sec = pre_step_time_sec;
+                model.time_sec = pre_step_time_sec + dt_try;
+                model.star_age = model.aux.step_hist.time_sec / SECYER;
                 model.dt = dt_try;
                 update_step_energy_conservation(model, dt_try);
 
@@ -542,13 +567,11 @@ pub(crate) fn star_evolve_step_outcome_with_extras(
                         SECYER * model.controls.max_years_for_timestep;
                 }
 
-                let mut pending_check_term: Option<String> = None;
-                match extras.extras_check_model(model) {
-                    ExtrasDirective::KeepGoing => {}
-                    ExtrasDirective::Terminate(reason) => {
-                        pending_check_term = Some(reason);
-                    }
-                    ExtrasDirective::Error(msg) => {
+                // Upstream runs `do_check_limits` before `extras_check_model`
+                // and `pick_next_timestep` (`run_star_support.f90:211-213`).
+                let limit_outcome = match do_check_limits(model, None, false) {
+                    Ok(out) => out,
+                    Err(e) => {
                         model.model_number -= 1;
                         restore_attempt_state(
                             model,
@@ -556,65 +579,79 @@ pub(crate) fn star_evolve_step_outcome_with_extras(
                             saved,
                         )?;
                         model.dt = dt_prev;
-                        return Err(StarError::ConvergenceFailure(msg));
+                        return Err(e);
                     }
-                    ExtrasDirective::Redo => {
-                        model.model_number -= 1;
-                        requested_redo = true;
-                    }
-                    ExtrasDirective::Retry => {
-                        model.model_number -= 1;
-                        ts_retry_reason =
-                            Some(String::from("extras_check_model retry"));
-                    }
-                }
-
-                if !requested_redo && ts_retry_reason.is_none() {
-                    let (ts_action, ts_rep, ts_extra_redo) =
-                        timestep_controller_with_extras(model, extras)?;
-                    if ts_extra_redo {
-                        model.model_number -= 1;
-                        requested_redo = true;
-                    } else {
-                        if crate::step_trace::enabled(model.model_number) {
-                            let mut jl =
-                                crate::step_trace::JsonLine::new("star_step");
-                            jl.field_usize("model", model.model_number);
-                            jl.field_f64("dt", dt_try);
-                            jl.field_usize("retries", retries);
-                            jl.field_str("action", &format!("{ts_action:?}"));
-                            jl.field_f64("dt_next", ts_rep.dt_next);
-                            jl.field_str(
-                                "reason",
-                                &format!("{:?}", ts_rep.reason),
-                            );
-                            jl.field_f64("varcontrol", ts_rep.varcontrol);
-                            jl.field_f64("mdot", model.mstar_dot);
-                            jl.emit();
+                };
+                match limit_outcome {
+                    LimitCheckOutcome::Redo { dt_new, .. } => {
+                        let max_redos = model.controls.ts_stop.redo_limit;
+                        redo_cnt += 1;
+                        if max_redos > 0 && redo_cnt > max_redos {
+                            let terminated_model = model.model_number;
+                            model.model_number -= 1;
+                            restore_attempt_state(
+                                model,
+                                pre_remesh_model.take(),
+                                saved,
+                            )?;
+                            model.dt = dt_prev;
+                            return Err(StarError::Terminated {
+                                model_number: terminated_model,
+                                reason: String::from("redo_limit"),
+                            });
                         }
-                        match ts_action {
-                            TimestepAction::KeepGoing => {
-                                return Ok((
-                                    finalize_accepted_step(
-                                        model,
-                                        rep,
-                                        ts_rep.varcontrol,
-                                        ts_rep.dt_next,
-                                        dt_try,
-                                        rsp2_e_old,
-                                        retries,
-                                        num_splits,
-                                        num_merges,
-                                    ),
-                                    pending_check_term,
-                                ));
+                        if !(dt_new.is_finite() && dt_new > 0.0) {
+                            let terminated_model = model.model_number;
+                            model.model_number -= 1;
+                            restore_attempt_state(
+                                model,
+                                pre_remesh_model.take(),
+                                saved,
+                            )?;
+                            model.dt = dt_prev;
+                            return Err(StarError::Terminated {
+                                model_number: terminated_model,
+                                reason: String::from("dt_is_zero"),
+                            });
+                        }
+                        model.num_redos += 1;
+                        model.model_number -= 1;
+                        restore_attempt_state(model, None, saved)?;
+                        dt_try = dt_new;
+                        first_try = false;
+                        continue;
+                    }
+                    LimitCheckOutcome::Retry { reason } => {
+                        model.model_number -= 1;
+                        ts_retry_reason = Some(reason);
+                    }
+                    LimitCheckOutcome::Terminate { code, .. } => {
+                        model.aux.step_hist.termination_code =
+                            Some(code.clone());
+                        let (_, ts_rep) = timestep_controller(model);
+                        return Ok((
+                            finalize_accepted_step(
+                                model,
+                                rep,
+                                ts_rep.varcontrol,
+                                ts_rep.dt_next,
+                                dt_try,
+                                rsp2_e_old,
+                                retries,
+                                num_splits,
+                                num_merges,
+                            ),
+                            Some(code),
+                        ));
+                    }
+                    LimitCheckOutcome::KeepGoing => {
+                        let mut pending_check_term: Option<String> = None;
+                        match extras.extras_check_model(model) {
+                            ExtrasDirective::KeepGoing => {}
+                            ExtrasDirective::Terminate(reason) => {
+                                pending_check_term = Some(reason);
                             }
-                            TimestepAction::Retry(reason) => {
-                                model.model_number -= 1;
-                                ts_retry_reason = Some(reason);
-                            }
-                            TimestepAction::Terminate(reason) => {
-                                let terminated_model = model.model_number;
+                            ExtrasDirective::Error(msg) => {
                                 model.model_number -= 1;
                                 restore_attempt_state(
                                     model,
@@ -622,10 +659,90 @@ pub(crate) fn star_evolve_step_outcome_with_extras(
                                     saved,
                                 )?;
                                 model.dt = dt_prev;
-                                return Err(StarError::Terminated {
-                                    model_number: terminated_model,
-                                    reason,
-                                });
+                                return Err(StarError::ConvergenceFailure(msg));
+                            }
+                            ExtrasDirective::Redo => {
+                                model.model_number -= 1;
+                                requested_redo = true;
+                            }
+                            ExtrasDirective::Retry => {
+                                model.model_number -= 1;
+                                ts_retry_reason = Some(String::from(
+                                    "extras_check_model retry",
+                                ));
+                            }
+                        }
+
+                        if !requested_redo && ts_retry_reason.is_none() {
+                            let (ts_action, ts_rep, ts_extra_redo) =
+                                timestep_controller_with_extras(model, extras)?;
+                            if ts_extra_redo {
+                                model.model_number -= 1;
+                                requested_redo = true;
+                            } else {
+                                if crate::step_trace::enabled(
+                                    model.model_number,
+                                ) {
+                                    let mut jl =
+                                        crate::step_trace::JsonLine::new(
+                                            "star_step",
+                                        );
+                                    jl.field_usize("model", model.model_number);
+                                    jl.field_f64("dt", dt_try);
+                                    jl.field_usize("retries", retries);
+                                    jl.field_str(
+                                        "action",
+                                        &format!("{ts_action:?}"),
+                                    );
+                                    jl.field_f64("dt_next", ts_rep.dt_next);
+                                    jl.field_str(
+                                        "reason",
+                                        &format!("{:?}", ts_rep.reason),
+                                    );
+                                    jl.field_f64(
+                                        "varcontrol",
+                                        ts_rep.varcontrol,
+                                    );
+                                    jl.field_f64("mdot", model.mstar_dot);
+                                    jl.emit();
+                                }
+                                match ts_action {
+                                    TimestepAction::KeepGoing => {
+                                        return Ok((
+                                            finalize_accepted_step(
+                                                model,
+                                                rep,
+                                                ts_rep.varcontrol,
+                                                ts_rep.dt_next,
+                                                dt_try,
+                                                rsp2_e_old,
+                                                retries,
+                                                num_splits,
+                                                num_merges,
+                                            ),
+                                            pending_check_term,
+                                        ));
+                                    }
+                                    TimestepAction::Retry(reason) => {
+                                        model.model_number -= 1;
+                                        ts_retry_reason = Some(reason);
+                                    }
+                                    TimestepAction::Terminate(reason) => {
+                                        let terminated_model =
+                                            model.model_number;
+                                        model.model_number -= 1;
+                                        restore_attempt_state(
+                                            model,
+                                            pre_remesh_model.take(),
+                                            saved,
+                                        )?;
+                                        model.dt = dt_prev;
+                                        return Err(StarError::Terminated {
+                                            model_number: terminated_model,
+                                            reason,
+                                        });
+                                    }
+                                }
                             }
                         }
                     }
@@ -860,6 +977,38 @@ struct PreAttemptScalars {
     dt_limit_ratio_old: f64,
     rot_boost_old: f64,
     was_in_limit: bool,
+    time_sec: f64,
+    time_old_sec: f64,
+    phase_of_evolution: i32,
+    using_revised_max_yr_dt: bool,
+    revised_max_yr_dt: f64,
+    max_years_for_timestep: f64,
+}
+
+fn sync_time_sec_from_age(model: &mut StarModel) {
+    let expected = model.star_age * SECYER;
+    let cur = model.aux.step_hist.time_sec;
+    let tol = 1.0e-12 * model.star_age.abs().max(1.0);
+    if (cur == 0.0 && model.star_age != 0.0)
+        || ((cur / SECYER) - model.star_age).abs() > tol
+    {
+        model.aux.step_hist.time_sec = expected;
+        model.aux.step_hist.time_old_sec = expected;
+    }
+    model.time_sec = model.aux.step_hist.time_sec;
+    model.time_old_sec = model.aux.step_hist.time_old_sec;
+}
+
+fn is_at_or_past_max_age(model: &StarModel) -> bool {
+    let time_sec = model.aux.step_hist.time_sec;
+    let ts = &model.controls.ts_stop;
+    (model.controls.max_age > 0.0
+        && time_sec >= model.controls.max_age * SECYER)
+        || (ts.max_age_in_days > 0.0 && time_sec >= ts.max_age_in_days * SECDAY)
+        || model
+            .controls
+            .max_age_in_seconds
+            .is_some_and(|lim| lim > 0.0 && time_sec >= lim)
 }
 
 fn restore_attempt_state(
@@ -886,74 +1035,15 @@ fn restore_attempt_state(
     model.dt_limit_ratio_old = saved.dt_limit_ratio_old;
     model.aux.step_hist.rotational_mdot_boost_old = saved.rot_boost_old;
     model.aux.step_hist.was_in_implicit_wind_limit = saved.was_in_limit;
+    model.aux.step_hist.time_sec = saved.time_sec;
+    model.aux.step_hist.time_old_sec = saved.time_old_sec;
+    model.time_sec = saved.time_sec;
+    model.time_old_sec = saved.time_old_sec;
+    model.aux.step_hist.phase_of_evolution = saved.phase_of_evolution;
+    model.aux.step_hist.using_revised_max_yr_dt = saved.using_revised_max_yr_dt;
+    model.aux.step_hist.revised_max_yr_dt = saved.revised_max_yr_dt;
+    model.controls.max_years_for_timestep = saved.max_years_for_timestep;
     Ok(restored_remesh)
-}
-
-fn apply_pick_next_timestep_age_clipping(
-    model: &mut StarModel,
-    dt_next: &mut f64,
-) {
-    // `pick_next_timestep` (`star/private/evolve.f90:2079-2143`)
-    if model.time_sec < 0.0 && model.time_sec + *dt_next > 0.0 {
-        *dt_next = -model.time_sec;
-    } else if model.controls.max_age > 0.0
-        && (model.time_sec + *dt_next) > model.controls.max_age * SECYER
-    {
-        *dt_next = (model.controls.max_age * SECYER - model.time_sec).max(0.0);
-    } else if model.controls.max_age_in_days > 0.0
-        && (model.time_sec + *dt_next) > model.controls.max_age_in_days * SECDAY
-    {
-        *dt_next =
-            (model.controls.max_age_in_days * SECDAY - model.time_sec).max(0.0);
-    } else if let Some(max_sec) = model
-        .controls
-        .max_age_in_seconds
-        .filter(|&s| s > 0.0 && (model.time_sec + *dt_next) > s)
-    {
-        *dt_next = (max_sec - model.time_sec).max(0.0);
-    } else if model.controls.num_adjusted_dt_steps_before_max_age > 0
-        && model.controls.max_years_for_timestep > 0.0
-    {
-        let remaining_years = if model.controls.max_age > 0.0 {
-            model.controls.max_age - model.star_age
-        } else if model.controls.max_age_in_days > 0.0 {
-            (model.controls.max_age_in_days * SECDAY - model.time_sec) / SECYER
-        } else if let Some(max_sec) =
-            model.controls.max_age_in_seconds.filter(|&s| s > 0.0)
-        {
-            (max_sec - model.time_sec) / SECYER
-        } else {
-            1.0e99
-        };
-        let n = (remaining_years / model.controls.max_years_for_timestep
-            + 1.0e-6)
-            .floor();
-        let j = model.controls.num_adjusted_dt_steps_before_max_age as f64;
-        if remaining_years <= model.controls.max_years_for_timestep {
-            model.controls.max_years_for_timestep = remaining_years;
-            *dt_next = model.controls.max_years_for_timestep * SECYER;
-        } else if n <= j
-            && model.controls.dt_years_for_steps_before_max_age > 0.0
-        {
-            let prev_max_years = model.controls.max_years_for_timestep;
-            let dt_step_yr = model.controls.dt_years_for_steps_before_max_age;
-            let i = (remaining_years / dt_step_yr + 1.0e-6).floor();
-            model.controls.max_years_for_timestep =
-                if (i + 1.0e-9) * dt_step_yr < remaining_years {
-                    remaining_years / (i + 1.0)
-                } else {
-                    remaining_years / i.max(1.0)
-                };
-            let min_max = prev_max_years
-                * model.controls.reduction_factor_for_max_timestep;
-            if model.controls.max_years_for_timestep < min_max {
-                model.controls.max_years_for_timestep = min_max;
-            }
-            if *dt_next / SECYER > model.controls.max_years_for_timestep {
-                *dt_next = model.controls.max_years_for_timestep * SECYER;
-            }
-        }
-    }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -974,7 +1064,6 @@ fn finalize_accepted_step(
     if model.controls.rsp.max_timestep > 0.0 {
         dt_next = dt_next.min(model.controls.rsp.max_timestep);
     }
-    apply_pick_next_timestep_age_clipping(model, &mut dt_next);
 
     if model.controls.rsp2_flag {
         model.aux.rsp.time_old_sec = model.aux.rsp.time_sec;
@@ -986,6 +1075,7 @@ fn finalize_accepted_step(
         model.aux.total_energy = etot;
         update_rsp2_cycle_stats(model, dt_try, &mut dt_next);
     }
+    apply_max_age_to_dt_next(model, &mut dt_next);
     model.dt_next = dt_next;
     model.dt_old = dt_try;
     model.aux.step_hist.mstar_dot_old = model.mstar_dot;
@@ -1003,6 +1093,79 @@ fn finalize_accepted_step(
         num_merges,
         varcontrol,
         converged: true,
+    }
+}
+
+/// Applies `pick_next_timestep` `max_age` clipping and graded timestep approach
+/// (`star/private/evolve.f90:2079-2143`).
+fn apply_max_age_to_dt_next(model: &mut StarModel, dt_next: &mut f64) {
+    let time_sec = model.aux.step_hist.time_sec;
+    let max_age = model.controls.max_age;
+    let max_days = model.controls.ts_stop.max_age_in_days;
+    let max_sec = model.controls.max_age_in_seconds;
+    if time_sec < 0.0 && time_sec + *dt_next > 0.0 {
+        *dt_next = -time_sec;
+    } else if max_age > 0.0 && time_sec + *dt_next > max_age * SECYER {
+        *dt_next = (max_age * SECYER - time_sec).max(0.0);
+    } else if max_days > 0.0 && time_sec + *dt_next > max_days * SECDAY {
+        *dt_next = (max_days * SECDAY - time_sec).max(0.0);
+    } else if max_sec.is_some_and(|lim| lim > 0.0 && time_sec + *dt_next > lim)
+    {
+        if let Some(lim) = max_sec {
+            *dt_next = (lim - time_sec).max(0.0);
+        }
+    } else if model.controls.ts_stop.num_adjusted_dt_steps_before_max_age > 0
+        && model.controls.max_years_for_timestep > 0.0
+    {
+        let remaining_years = if max_age > 0.0 {
+            max_age - model.star_age
+        } else if max_days > 0.0 {
+            (max_days * SECDAY - time_sec) / SECYER
+        } else if let Some(lim) = max_sec.filter(|&v| v > 0.0) {
+            (lim - time_sec) / SECYER
+        } else {
+            1.0e99
+        };
+        if model.aux.step_hist.using_revised_max_yr_dt {
+            model.controls.max_years_for_timestep =
+                model.aux.step_hist.revised_max_yr_dt;
+        }
+        let cur_max_yr = model.controls.max_years_for_timestep;
+        let n_f = (remaining_years / cur_max_yr + 1.0e-6).floor();
+        let j_f =
+            model.controls.ts_stop.num_adjusted_dt_steps_before_max_age as f64;
+        if remaining_years <= cur_max_yr {
+            model.controls.max_years_for_timestep = remaining_years;
+            model.aux.step_hist.using_revised_max_yr_dt = true;
+            model.aux.step_hist.revised_max_yr_dt = remaining_years;
+            *dt_next = remaining_years * SECYER;
+        } else if n_f <= j_f {
+            let prev_max_yr = cur_max_yr;
+            let dt_y = model.controls.ts_stop.dt_years_for_steps_before_max_age;
+            let mut new_max_yr = if dt_y > 0.0 {
+                let i_f = (remaining_years / dt_y + 1.0e-6).floor();
+                if (i_f + 1.0e-9) * dt_y < remaining_years {
+                    remaining_years / (i_f + 1.0)
+                } else if i_f > 0.0 {
+                    remaining_years / i_f
+                } else {
+                    remaining_years
+                }
+            } else {
+                prev_max_yr
+            };
+            let min_max = prev_max_yr
+                * model.controls.ts_stop.reduction_factor_for_max_timestep;
+            if new_max_yr < min_max {
+                new_max_yr = min_max;
+            }
+            model.controls.max_years_for_timestep = new_max_yr;
+            model.aux.step_hist.using_revised_max_yr_dt = true;
+            model.aux.step_hist.revised_max_yr_dt = new_max_yr;
+            if *dt_next / SECYER > new_max_yr {
+                *dt_next = new_max_yr * SECYER;
+            }
+        }
     }
 }
 
@@ -1066,31 +1229,33 @@ pub fn star_evolve(
 ) -> Result<Vec<EvolveStepReport>, StarError> {
     let mut reports = Vec::with_capacity(max_steps);
     for _ in 0..max_steps {
+        sync_time_sec_from_age(model);
         if let Some(max_mod) = model.controls.max_model_number {
             if model.model_number >= max_mod {
                 break;
             }
         }
-        let max_age = model.controls.max_age;
-        if max_age > 0.0 && model.star_age >= max_age * (1.0 - 1.0e-12) {
+        if is_at_or_past_max_age(model) {
             break;
         }
-        match star_evolve_step(model, do_remesh, op_split_burn, use_bcyclic) {
-            Ok(rep) => {
-                reports.push(rep);
-                if check_termination_limits(model).is_some() {
-                    break;
-                }
-            }
-            Err(StarError::Terminated { ref reason, .. })
-                if matches!(
-                    reason.as_str(),
-                    "max_age" | "max_age_in_days" | "max_age_in_seconds"
-                ) =>
-            {
-                break;
-            }
+        let rep = match star_evolve_step(
+            model,
+            do_remesh,
+            op_split_burn,
+            use_bcyclic,
+        ) {
+            Ok(rep) => rep,
+            Err(StarError::Terminated { .. }) => break,
             Err(e) => return Err(e),
+        };
+        reports.push(rep);
+        if model.aux.step_hist.termination_code.is_some()
+            || matches!(
+                do_check_limits(model, None, false)?,
+                LimitCheckOutcome::Terminate { .. }
+            )
+        {
+            break;
         }
     }
     Ok(reports)

@@ -493,8 +493,12 @@ pub fn compute_power_categories(model: &StarModel) -> PowerCategories {
         }
     }
 
+    // Matches `set_power_info` in `star/private/report.f90:62-113`:
+    // `L_by_category` is always populated before checking `eps_nuc_factor == 0`.
     let mut l_by_category_lsun = [0.0_f64; NUM_CATEGORIES];
-    // Matches `set_power_info` in `star/private/report.f90:76-113`.
+    for (dst, &erg) in l_by_category_lsun.iter_mut().zip(&cat_erg) {
+        *dst = erg / L_SUN;
+    }
     let (
         power_nuc_burn,
         power_nuc_neutrinos,
@@ -505,15 +509,12 @@ pub fn compute_power_categories(model: &StarModel) -> PowerCategories {
     ) = if model.controls.eps_nuc_factor == 0.0 {
         (0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
     } else {
-        for (dst, &erg) in l_by_category_lsun.iter_mut().zip(&cat_erg) {
-            *dst = erg / L_SUN;
-        }
         let p_nuc = l_nuc_erg / L_SUN;
         let p_nuc_neu = l_nuc_neu_erg / L_SUN;
-        let lh = (cat_erg[CAT_PP] + cat_erg[CAT_CNO]) / L_SUN;
-        let lhe = cat_erg[CAT_3ALF] / L_SUN;
+        let lh = l_by_category_lsun[CAT_PP] + l_by_category_lsun[CAT_CNO];
+        let lhe = l_by_category_lsun[CAT_3ALF];
         let lz = p_nuc - (lh + lhe);
-        let lphoto = cat_erg[CAT_PHOTO] / L_SUN;
+        let lphoto = l_by_category_lsun[CAT_PHOTO];
         (p_nuc, p_nuc_neu, lh, lhe, lz, lphoto)
     };
     let power_non_nuc_neu = if model.controls.non_nuc_neu_factor == 0.0 {

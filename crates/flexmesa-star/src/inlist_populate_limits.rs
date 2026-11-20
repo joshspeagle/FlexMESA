@@ -94,7 +94,6 @@ impl InlistBundle {
             relax_use_gold_tolerances,
             do_solver_damping_for_neg_xa,
             scale_max_correction_for_negative_surf_lum,
-            retry_for_v_above_clight,
             convergence_ignore_equl_residuals, convergence_ignore_alpha_rti_residuals,
             use_gold_tolerances, use_gold2_tolerances,
         ]);
@@ -127,36 +126,14 @@ impl InlistBundle {
             c.max_model_number = if v < 0 { None } else { Some(v as usize) };
         }
         ctrl.try_f64_into("controls", &mut c.max_age, "max_age")?;
-        ctrl.try_f64_into("controls", &mut c.max_age_in_days, "max_age_in_days")?;
         if let Some(v) = ctrl.try_get_f64("controls", "max_age_in_seconds")? {
             c.max_age_in_seconds = (v > 0.0).then_some(v);
         }
-        ctrl.try_usize_into(
-            "controls",
-            &mut c.num_adjusted_dt_steps_before_max_age,
-            "num_adjusted_dt_steps_before_max_age",
-            0,
-        )?;
-        ctrl.try_f64_into(
-            "controls",
-            &mut c.dt_years_for_steps_before_max_age,
-            "dt_years_for_steps_before_max_age",
-        )?;
-        ctrl.try_f64_into(
-            "controls",
-            &mut c.reduction_factor_for_max_timestep,
-            "reduction_factor_for_max_timestep",
-        )?;
         ctrl.try_isize_into("controls", &mut c.max_number_retries, "max_number_retries")?;
         ctrl.try_isize_into("controls", &mut c.relax_max_number_retries, "relax_max_number_retries")?;
         ctrl.try_f64_into("controls", &mut c.max_years_for_timestep, "max_years_for_timestep")?;
         ctrl.try_bool_into("controls", &mut c.stop_near_zams, "stop_near_zams")?;
-        if let Some(v) = ctrl.try_get_f64("controls", "lnuc_div_l_zams_limit")? {
-            c.lnuc_div_l_zams_limit = v;
-            if ctrl.try_get_bool("controls", "stop_near_zams")?.is_none() {
-                c.stop_near_zams = true;
-            }
-        }
+        ctrl.try_f64_into("controls", &mut c.lnuc_div_l_zams_limit, "lnuc_div_l_zams_limit")?;
         c.xa_central_lower_limit_species = ctrl.try_get_indexed_strings("controls", "xa_central_lower_limit_species")?;
         c.xa_central_lower_limit = ctrl.try_get_indexed_f64s("controls", "xa_central_lower_limit")?;
         c.xa_central_upper_limit_species = ctrl.try_get_indexed_strings("controls", "xa_central_upper_limit_species")?;

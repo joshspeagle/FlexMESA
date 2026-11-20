@@ -1248,8 +1248,8 @@
       },
       {
         "phase": "Phase A",
-        "open": 2,
-        "closed": 2,
+        "open": 1,
+        "closed": 3,
         "issues": [
           {
             "number": 142,
@@ -1269,7 +1269,7 @@
           {
             "number": 168,
             "title": "[Audit A6] Profile a real evolution and measure what fast math, batching and waste removal each buy",
-            "state": "open"
+            "state": "closed"
           }
         ]
       },
@@ -1307,7 +1307,7 @@
       },
       {
         "phase": "Phase C",
-        "open": 13,
+        "open": 14,
         "closed": 3,
         "issues": [
           {
@@ -1389,6 +1389,11 @@
             "number": 295,
             "title": "[JAX] Rust-versus-JAX consistency tests expected to fail while the JAX engine is frozen",
             "state": "open"
+          },
+          {
+            "number": 299,
+            "title": "[Audit C8/C12] Wire remaining photo/log I/O and test-harness driver controls",
+            "state": "open"
           }
         ]
       },
@@ -1438,7 +1443,28 @@
         "issues": []
       }
     ],
-    "open_pull_requests": [],
+    "open_pull_requests": [
+      {
+        "number": 297,
+        "title": "fix(star): face radiation pressure from the face temperature in do1_mlt_2; evolve-step bench on 64 zones (#291, #295)",
+        "draft": false
+      },
+      {
+        "number": 298,
+        "title": "feat(harness): upgrade A2 case table and refresh strict MESA 26.4.1 baseline",
+        "draft": false
+      },
+      {
+        "number": 300,
+        "title": "test(math): bound asinh(sinh(x)) by its derived rounding error instead of a fixed 1e-14",
+        "draft": false
+      },
+      {
+        "number": 301,
+        "title": "ci: shard Rust and Python tests, build tests without LTO, stop coverage on ordinary pull requests",
+        "draft": false
+      }
+    ],
     "deferred_169": [
       {
         "number": 175,
@@ -2323,6 +2349,19 @@
       "python_cov_pct": "87.8",
       "closed_140": "15",
       "total_140": "35",
+      "deferred_169": "42"
+    },
+    {
+      "date_utc": "2026-11-20",
+      "commit": "ff8132b",
+      "event": "main merge",
+      "engine_ported_pct": "30.2",
+      "all_verified_pct": "1.0",
+      "cases_passing": "0",
+      "rust_cov_pct": "75.3",
+      "python_cov_pct": "87.8",
+      "closed_140": "16",
+      "total_140": "36",
       "deferred_169": "42"
     }
   ]

@@ -86,20 +86,22 @@ _FAMILY_SPECS: dict[tuple[str, str], tuple[str, str, str, str]] = {
         "22-category nuclear specific power breakdown from profileN.data.",
     ),
     ("pgstar", "Mixing"): (
-        "partial",
+        "equivalent",
         "plot_mixing_profile, plot_profile_panels",
         "#173",
         (
-            "log_D_mix by mixing_type plus conv/ovr/semi/thrm. The rotational "
-            "curves of star/private/pgstar_mixing_ds.f90:344-411 (D_ST, "
-            "D_visc, D_DSI, D_SH, D_SSI, D_ES, D_GSF) are not drawn."
+            "log_D_mix by mixing_type plus conv/ovr/semi/thrm and rotational "
+            "diffusion curves (D_ST, D_visc, D_DSI, D_SH, D_SSI, D_ES, D_GSF)."
         ),
     ),
     ("pgstar", "Dynamo"): (
-        "absent",
-        "-",
-        "#158",
-        "Magnetic/rotational interior diagnostics await rotation port.",
+        "equivalent",
+        "plot_dynamo_profile, plot_pgstar_grid",
+        "#173",
+        (
+            "Radial log B_phi, log B_r, log Omega, and log(j/1e20) profiles "
+            "from saved profileN.data (physics generation tracked in #158)."
+        ),
     ),
     ("pgstar", "Mode_Prop"): (
         "equivalent",
@@ -135,10 +137,13 @@ _FAMILY_SPECS: dict[tuple[str, str], tuple[str, str, str, str]] = {
         ),
     ),
     ("pgstar", "rti"): (
-        "absent",
-        "-",
+        "equivalent",
+        "plot_rti_history, plot_pgstar_grid",
         "#173",
-        "Rayleigh-Taylor mixing diagnostic not yet implemented.",
+        (
+            "Rayleigh-Taylor instability mass spans from rti_type_*, "
+            "mix_type_* == 6, or profile mixing_type/alpha_RTI."
+        ),
     ),
     ("pgstar", "TRho"): (
         "equivalent",
@@ -219,22 +224,31 @@ _FAMILY_SPECS: dict[tuple[str, str], tuple[str, str, str, str]] = {
         "Logarithmic Kiel diagram (inverted log_Teff and log_g).",
     ),
     ("pgstar", "dPg_dnu"): (
-        "absent",
-        "-",
-        "#170",
-        "Gravity-mode period spacing diagram awaits GYRE/ADIPLS ports.",
+        "equivalent",
+        "plot_dpg_dnu, plot_history_track, plot_pgstar_grid",
+        "#173",
+        (
+            "Gravity-mode period spacing delta_Pg vs delta_nu track from "
+            "saved history.data (pulsation physics tracked in #170)."
+        ),
     ),
     ("pgstar", "Network"): (
-        "absent",
-        "-",
+        "equivalent",
+        "plot_network_chart, plot_pgstar_grid",
         "#173",
-        "Isochrone / nuclide abundance grid plot not yet implemented.",
+        (
+            "N-vs-Z chart of nuclides shaded by mass-averaged log10 X_i via "
+            "flexmesa.chem."
+        ),
     ),
     ("pgstar", "Production"): (
-        "absent",
-        "-",
+        "equivalent",
+        "plot_production_profile, plot_pgstar_grid",
         "#173",
-        "Yield production factor panel not yet implemented.",
+        (
+            "Stable-isotope production factors log10(X/X_init) vs A via "
+            "flexmesa.chem.get_stable_mass_frac."
+        ),
     ),
     ("pgstar", "Profile_Panels<N>"): (
         "equivalent",
@@ -255,25 +269,30 @@ _FAMILY_SPECS: dict[tuple[str, str], tuple[str, str, str, str]] = {
         "Multi-row dual-axis history column stack vs model_number or age.",
     ),
     ("pgstar", "Color_magnitude<N>"): (
-        "absent",
-        "-",
+        "equivalent",
+        "plot_color_magnitude, plot_pgstar_grid",
         "#173",
-        "Photometric CMD panels not yet wired to plotting.",
+        (
+            "Photometric color-magnitude tracks from abs_mag_*/bc_* columns "
+            "and Color_magnitude<N> inlists."
+        ),
     ),
     ("pgstar", "Text_Summary<N>"): (
-        "partial",
-        "plot_case_comparison",
+        "equivalent",
+        "plot_text_summary, plot_pgstar_grid, plot_case_comparison",
         "#173",
-        "Provenance and tolerance summary banner in figure title.",
+        (
+            "2D Text_Summary<N> key-value table from history.data and inlist "
+            "layouts (star/private/pgstar_summary.f90)."
+        ),
     ),
     ("pgstar", "Grid<N>"): (
-        "partial",
+        "equivalent",
         "plot_pgstar_grid, plot_case_comparison",
         "#173",
         (
-            "GridSpec composer for &pgstar Grid<N>_* inlists. Text_Summary "
-            "cells are rejected, so upstream's default Grid1, Grid2 and Grid4 "
-            "(star/defaults/pgstar.defaults:6842, 6952, 7194) do not render."
+            "GridSpec composer for &pgstar Grid<N>_* inlists, including "
+            "upstream default Grid1..4 with Text_Summary<N> cells."
         ),
     ),
     ("pgbinary", "Summary_History"): (
@@ -301,39 +320,40 @@ _FAMILY_SPECS: dict[tuple[str, str], tuple[str, str, str, str]] = {
         "Multi-panel orbital period, RLOF filling, mdot, and custom stacks.",
     ),
     ("pgbinary", "Text_Summary<N>"): (
-        "partial",
-        "plot_pgbinary_panels, plot_case_comparison",
-        "#160",
-        "Binary provenance and residual tolerance banner in title.",
+        "equivalent",
+        "plot_pgbinary_text_summary, plot_text_summary, plot_pgstar_grid",
+        "#173",
+        (
+            "Binary 2D Text_Summary<N> table from binary_history.data and "
+            "pgbinary inlists (binary/private/pgbinary_summary.f90)."
+        ),
     ),
     ("pgbinary", "Grid<N>"): (
-        "partial",
+        "equivalent",
         "plot_pgstar_grid, plot_pgbinary_panels, plot_case_comparison",
         "#173",
         (
-            "GridSpec composer for &pgbinary Grid<N>_* inlists. Text_Summary "
-            "cells are rejected, so upstream's default Grid1 "
-            "(binary/defaults/pgbinary.defaults:2273) does not render."
+            "GridSpec composer for &pgbinary Grid<N>_* inlists, including "
+            "upstream default Grid1/2/4 with Text_Summary<N> and Star<N> cells."
         ),
     ),
     ("pgbinary", "Star<N>"): (
-        "partial",
-        "plot_pgbinary_panels, plot_pgstar_grid",
+        "equivalent",
+        "plot_pgbinary_star, plot_pgstar_grid, plot_pgbinary_panels",
         "#173",
         (
-            "Star1/Star2 cells limited to the panels the grid dispatcher "
-            "accepts; upstream embeds any pgstar window of either star."
+            "Embeds any supported pgstar window or nested Grid<N> of Star 1 "
+            "or Star 2, with point-mass banner support."
         ),
     ),
     ("pgbinary", "Orbit"): (
-        "partial",
+        "equivalent",
         "plot_pgbinary_orbit, plot_pgbinary_panels",
         "#173",
         (
-            "2D orbits, CoM, and Roche/stellar equipotentials. Needs the "
-            "eccentricity column, which upstream's default "
-            "binary_history_columns.list leaves commented out, so default "
-            "saved histories raise an error."
+            "2D orbits, CoM, and Roche/stellar equipotentials from "
+            "eccentricity or exact Keplerian J_orb inversion for default "
+            "binary histories."
         ),
     ),
     ("astero_pgstar", "echelle"): (

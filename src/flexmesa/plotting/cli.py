@@ -14,10 +14,14 @@ from flexmesa import _dispatch
 from flexmesa.plotting import (
     compare,
     kippenhahn,
+    live,
     pgbinary_panels,
+    pgstar_extra,
     pgstar_grid,
+    pgstar_nucleosyn,
     pgstar_panels,
     pgstar_summary,
+    pgstar_text,
 )
 from flexmesa.testing import case_manifest, harness_runner
 
@@ -27,6 +31,9 @@ _PROFILE_MODES: tuple[str, ...] = (
     "power",
     "abundance",
     "mixing",
+    "dynamo",
+    "network",
+    "production",
     "summary",
     "summary_burn",
 )
@@ -272,7 +279,7 @@ def _build_plot_parser() -> argparse.ArgumentParser:
     p_trk.add_argument(
         "--preset",
         default=None,
-        help="Named pgstar track preset (HR, TRho, TmaxRho, logg_Teff, ...).",
+        help="Named pgstar track preset (HR, TRho, TmaxRho, dPg_dnu, ...).",
     )
     p_trk.add_argument("--x", default=None, help="Horizontal column name.")
     p_trk.add_argument("--y", default=None, help="Vertical column name.")
@@ -307,6 +314,12 @@ def _build_plot_parser() -> argparse.ArgumentParser:
         default=1,
         help="1-based Grid<N> index when reading --inlist (default 1).",
     )
+    p_grd.add_argument(
+        "--namelist",
+        default=None,
+        choices=("pgstar", "pgbinary"),
+        help="Optional namelist group override ('pgstar' or 'pgbinary').",
+    )
     p_grd.add_argument("--rows", type=int, default=None, help="Grid row count.")
     p_grd.add_argument(
         "--cols", type=int, default=None, help="Grid column count."
@@ -319,6 +332,12 @@ def _build_plot_parser() -> argparse.ArgumentParser:
     )
     p_grd.add_argument(
         "--profile", default=None, help="Path to star profileN.data."
+    )
+    p_grd.add_argument(
+        "--profiles",
+        nargs="*",
+        default=None,
+        help="Optional sequence of profileN.data files for Kipp/rti cells.",
     )
     p_grd.add_argument(
         "--mesa-profile", default=None, help="Optional reference profileN.data."
@@ -338,6 +357,12 @@ def _build_plot_parser() -> argparse.ArgumentParser:
         "--star2-history", default=None, help="Optional Star 2 history.data."
     )
     p_grd.add_argument(
+        "--star1-profile", default=None, help="Optional Star 1 profileN.data."
+    )
+    p_grd.add_argument(
+        "--star2-profile", default=None, help="Optional Star 2 profileN.data."
+    )
+    p_grd.add_argument(
         "--title", default="", help="Optional grid figure title."
     )
     p_grd.add_argument(
@@ -345,6 +370,194 @@ def _build_plot_parser() -> argparse.ArgumentParser:
         default="pgstar_grid.png",
         help="Output figure path (default 'pgstar_grid.png').",
     )
+
+    p_rti = sub.add_parser(
+        "rti",
+        help="Plot Rayleigh-Taylor Instability (rti) evolution panel.",
+    )
+    p_rti.add_argument(
+        "--history",
+        default=None,
+        help="Path to history.data with rti_type_*/mix_type_* columns.",
+    )
+    p_rti.add_argument(
+        "--profiles",
+        nargs="*",
+        default=None,
+        help="Optional sequence of profileN.data files.",
+    )
+    p_rti.add_argument(
+        "--mesa-history",
+        default=None,
+        help="Optional MESA 26.4.1 reference history.data.",
+    )
+    p_rti.add_argument(
+        "--xaxis",
+        choices=("model_number", "star_age"),
+        default="model_number",
+        help="Horizontal axis variable (default 'model_number').",
+    )
+    p_rti.add_argument(
+        "--age-units",
+        choices=("yr", "Myr", "s"),
+        default="yr",
+        help="Units when --xaxis star_age (default 'yr').",
+    )
+    p_rti.add_argument(
+        "--log-xaxis",
+        action="store_true",
+        help="Use log10(star_age) on horizontal axis.",
+    )
+    p_rti.add_argument(
+        "--time-from-present",
+        action="store_true",
+        help="Measure age relative to final model.",
+    )
+    p_rti.add_argument(
+        "--out",
+        default="rti.png",
+        help="Output figure path (default 'rti.png').",
+    )
+
+    p_cmd = sub.add_parser(
+        "cmd",
+        help="Plot photometric Color_magnitude<N> diagram from history.data.",
+    )
+    p_cmd.add_argument("history_path", help="Path to history.data.")
+    p_cmd.add_argument(
+        "--x1", default=None, help="Primary horizontal magnitude/BC column."
+    )
+    p_cmd.add_argument(
+        "--x2", default=None, help="Subtracted horizontal column for color."
+    )
+    p_cmd.add_argument(
+        "--y",
+        default=None,
+        help="Comma-separated vertical panels ('y1' or 'y1-y2').",
+    )
+    p_cmd.add_argument(
+        "--inlist",
+        default=None,
+        help="Optional &pgstar namelist defining Color_magnitude<N>_*.",
+    )
+    p_cmd.add_argument(
+        "--panel-index",
+        type=int,
+        default=1,
+        help="1-based Color_magnitude<N> index (default 1).",
+    )
+    p_cmd.add_argument(
+        "--mesa-history",
+        default=None,
+        help="Optional reference history.data overlay.",
+    )
+    p_cmd.add_argument(
+        "--out",
+        default="color_magnitude.png",
+        help="Output figure path (default 'color_magnitude.png').",
+    )
+
+    p_txt = sub.add_parser(
+        "text-summary",
+        help="Render a Text_Summary<N> diagnostic table from history output.",
+    )
+    p_txt.add_argument(
+        "history_path", help="Path to history.data or binary_history.data."
+    )
+    p_txt.add_argument(
+        "--binary",
+        action="store_true",
+        help="Use pgbinary Text_Summary default layout.",
+    )
+    p_txt.add_argument(
+        "--inlist",
+        default=None,
+        help="Optional &pgstar or &pgbinary namelist defining Text_Summary<N>.",
+    )
+    p_txt.add_argument(
+        "--summary-index",
+        type=int,
+        default=1,
+        help="1-based Text_Summary<N> index (default 1).",
+    )
+    p_txt.add_argument(
+        "--mesa-history",
+        default=None,
+        help="Optional reference history.data for provenance label.",
+    )
+    p_txt.add_argument(
+        "--title", default="", help="Optional summary panel title."
+    )
+    p_txt.add_argument(
+        "--out",
+        default="text_summary.png",
+        help="Output figure path (default 'text_summary.png').",
+    )
+
+    p_w = sub.add_parser(
+        "watch",
+        help="Watch a live LOGS/ run directory and emit updated frames.",
+    )
+    p_w.add_argument(
+        "logs_dir",
+        help="Directory holding history.data (or LOGS/ / binary_history.data).",
+    )
+    p_w.add_argument(
+        "--out-dir",
+        default="live_frames",
+        help="Output directory for live frames (default 'live_frames').",
+    )
+    p_w.add_argument(
+        "--panels",
+        default="HR,TRho",
+        help="Comma-separated panel list when --inlist is omitted.",
+    )
+    p_w.add_argument(
+        "--inlist",
+        default=None,
+        help="Optional &pgstar or &pgbinary namelist defining Grid<N>_*.",
+    )
+    p_w.add_argument(
+        "--grid-index",
+        type=int,
+        default=1,
+        help="1-based Grid<N> index when reading --inlist (default 1).",
+    )
+    p_w.add_argument(
+        "--binary",
+        action="store_true",
+        help="Watch binary_history.data and LOGS1/LOGS2 outputs.",
+    )
+    p_w.add_argument(
+        "--poll-interval",
+        type=float,
+        default=0.5,
+        help="Polling interval in seconds (default 0.5).",
+    )
+    p_w.add_argument(
+        "--max-frames",
+        type=int,
+        default=None,
+        help="Optional cap on emitted frames before exiting.",
+    )
+    p_w.add_argument(
+        "--max-wait",
+        type=float,
+        default=None,
+        help="Optional wall-clock timeout in seconds.",
+    )
+    p_w.add_argument(
+        "--prefix",
+        default="frame_",
+        help="Filename prefix for emitted frames (default 'frame_').",
+    )
+    p_w.add_argument(
+        "--dpi",
+        type=int,
+        default=150,
+        help="Raster resolution for live frames (default 150).",
+    )
+    p_w.add_argument("--title", default="", help="Optional figure title.")
     return parser
 
 
@@ -391,6 +604,24 @@ def _render_profile(
             profile_path,
             ref_profile_path=ref_profile_path,
             xaxis=xaxis or "mass",
+            save_path=out_path,
+        )
+    elif panel == "dynamo":
+        fig, _ = pgstar_extra.plot_dynamo_profile(
+            profile_path,
+            ref_profile_path=ref_profile_path,
+            xaxis=xaxis or "mass",
+            save_path=out_path,
+        )
+    elif panel == "network":
+        fig, _ = pgstar_nucleosyn.plot_network_chart(
+            profile_path,
+            save_path=out_path,
+        )
+    elif panel == "production":
+        fig, _ = pgstar_nucleosyn.plot_production_profile(
+            profile_path,
+            ref_profile_path=ref_profile_path,
             save_path=out_path,
         )
     elif panel == "summary":
@@ -595,19 +826,114 @@ def _handle_grid(ns: argparse.Namespace) -> int:
         num_cols=ns.cols,
         inlist_path=ns.inlist,
         grid_index=ns.grid_index,
+        namelist_name=ns.namelist,
         history_path=ns.history,
         ref_history_path=ns.mesa_history,
         profile_path=ns.profile,
         ref_profile_path=ns.mesa_profile,
+        profile_paths=ns.profiles,
         binary_history_path=ns.binary_history,
         ref_binary_history_path=ns.mesa_binary_history,
         star1_history_path=ns.star1_history,
         star2_history_path=ns.star2_history,
+        star1_profile_path=ns.star1_profile,
+        star2_profile_path=ns.star2_profile,
         title=ns.title,
         save_path=ns.out,
     )
     plt.close(fig)
     print(f"Wrote grid figure: {ns.out}")
+    return 0
+
+
+def _handle_rti(ns: argparse.Namespace) -> int:
+    fig, _ = pgstar_extra.plot_rti_history(
+        history_path=ns.history,
+        profile_paths=ns.profiles,
+        ref_history_path=ns.mesa_history,
+        xaxis=ns.xaxis,
+        age_units=ns.age_units,
+        log_xaxis=bool(ns.log_xaxis),
+        time_from_present=bool(ns.time_from_present),
+        save_path=ns.out,
+    )
+    plt.close(fig)
+    print(f"Wrote RTI figure: {ns.out}")
+    return 0
+
+
+def _handle_cmd(ns: argparse.Namespace) -> int:
+    panels_arg: list[tuple[str, str | None]] | None = None
+    if ns.y is not None:
+        panels_arg = []
+        for tok in str(ns.y).split(","):
+            clean = tok.strip()
+            if not clean:
+                continue
+            parts = [p.strip() for p in clean.split("-", 1)]
+            panels_arg.append(
+                (parts[0], parts[1] if len(parts) == 2 and parts[1] else None)
+            )
+    fig, _ = pgstar_extra.plot_color_magnitude(
+        ns.history_path,
+        xaxis1=ns.x1,
+        xaxis2=ns.x2,
+        panels=panels_arg,
+        ref_history_path=ns.mesa_history,
+        inlist_path=ns.inlist,
+        panel_index=ns.panel_index,
+        save_path=ns.out,
+    )
+    plt.close(fig)
+    print(f"Wrote Color-Magnitude figure: {ns.out}")
+    return 0
+
+
+def _handle_text_summary(ns: argparse.Namespace) -> int:
+    layout = None
+    eff_title = ns.title
+    if ns.inlist is not None:
+        spec = pgstar_text.parse_inlist_text_summary_spec(
+            ns.inlist,
+            summary_index=ns.summary_index,
+            namelist_name="pgbinary" if ns.binary else None,
+        )
+        layout = spec.layout
+        eff_title = eff_title or spec.title
+    fig, _ = pgstar_text.plot_text_summary(
+        ns.history_path,
+        layout=layout,
+        is_binary=bool(ns.binary),
+        ref_history_path=ns.mesa_history,
+        title=eff_title,
+        save_path=ns.out,
+    )
+    plt.close(fig)
+    print(f"Wrote Text_Summary figure: {ns.out}")
+    return 0
+
+
+def _handle_watch(ns: argparse.Namespace) -> int:
+    panel_list = (
+        None
+        if ns.inlist is not None
+        else [p.strip() for p in str(ns.panels).split(",") if p.strip()]
+    )
+    frames = live.watch_logs(
+        ns.logs_dir,
+        ns.out_dir,
+        panels=panel_list,
+        inlist_path=ns.inlist,
+        grid_index=ns.grid_index,
+        is_binary=bool(ns.binary),
+        poll_interval_sec=float(ns.poll_interval),
+        max_frames=ns.max_frames,
+        max_wait_sec=ns.max_wait,
+        file_prefix=ns.prefix,
+        dpi=int(ns.dpi),
+        title=ns.title,
+    )
+    print(f"Wrote {len(frames)} live frame(s) to: {ns.out_dir}")
     return 0
 
 
@@ -629,6 +955,10 @@ def main(argv: list[str] | None = None) -> int:
         "binary": _handle_binary,
         "track": _handle_track,
         "grid": _handle_grid,
+        "rti": _handle_rti,
+        "cmd": _handle_cmd,
+        "text-summary": _handle_text_summary,
+        "watch": _handle_watch,
     }
     return handlers[str(ns.subcommand)](ns)
 

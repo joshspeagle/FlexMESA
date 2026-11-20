@@ -24,6 +24,7 @@ import numpy as np
 from flexmesa import _rust
 from flexmesa.data import fetch
 from flexmesa.plotting import _compare_panels, style
+from flexmesa.schema import namelist
 from flexmesa.testing import golden, history_compare
 
 if TYPE_CHECKING:
@@ -502,3 +503,34 @@ def plot_profile_pair(
             zorder=3,
         )
     return drawn
+
+
+def load_plotting_namelist_blocks(
+    inlist_path: pathlib.Path | str,
+    *,
+    namelist_name: str | None = None,
+) -> list[namelist.NamelistBlock]:
+    """Parse ``&pgstar``/``&pgbinary`` inlists or raw MESA ``.defaults`` files.
+
+    Upstream ``star/defaults/pgstar.defaults`` and
+    ``binary/defaults/pgbinary.defaults`` omit ``&namelist`` / ``/`` delimiters;
+    when no leading ``&`` header line is present, this helper wraps the raw
+    assignments in ``&pgstar`` or ``&pgbinary`` before parsing.
+    """
+    path = pathlib.Path(inlist_path)
+    text = path.read_text(encoding="utf-8")
+    has_header = any(
+        line.lstrip().startswith("&") for line in text.splitlines()
+    )
+    if has_header:
+        blocks = namelist.parse_namelist_text(text)
+        if blocks:
+            return blocks
+    fname = path.name.lower()
+    if "pgbinary" in fname:
+        fallback = "pgbinary"
+    elif "pgstar" in fname:
+        fallback = "pgstar"
+    else:
+        fallback = namelist_name or "pgstar"
+    return namelist.parse_namelist_text(f"&{fallback}\n{text}\n/\n")

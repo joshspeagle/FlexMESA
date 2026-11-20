@@ -101,7 +101,7 @@
     },
     {
       "phase": "Phase C",
-      "open": 12,
+      "open": 13,
       "closed": 3,
       "issues": [
         {
@@ -178,6 +178,11 @@
           "number": 231,
           "title": "[Audit C17] Port the remaining upstream per-case extras to test-side hooks",
           "state": "open"
+        },
+        {
+          "number": 295,
+          "title": "[JAX] Rust-versus-JAX consistency tests expected to fail while the JAX engine is frozen",
+          "state": "open"
         }
       ]
     },
@@ -227,13 +232,7 @@
       "issues": []
     }
   ],
-  "open_pull_requests": [
-    {
-      "number": 292,
-      "title": "fix(star,binary): resolve #152, #153, and #159 audit code, precision, and test findings",
-      "draft": false
-    }
-  ],
+  "open_pull_requests": [],
   "deferred_169": [
     {
       "number": 175,

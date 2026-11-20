@@ -769,9 +769,9 @@
     "rust": {
       "tool": "cargo llvm-cov",
       "overall": {
-        "lines": 114918,
-        "covered": 86044,
-        "percent": 74.9
+        "lines": 115460,
+        "covered": 86915,
+        "percent": 75.3
       },
       "by_crate": [
         {
@@ -794,15 +794,15 @@
         },
         {
           "crate": "flexmesa-bench",
-          "lines": 3569,
+          "lines": 3572,
           "covered": 2419,
-          "percent": 67.8
+          "percent": 67.7
         },
         {
           "crate": "flexmesa-binary",
-          "lines": 7933,
-          "covered": 5217,
-          "percent": 65.8
+          "lines": 8080,
+          "covered": 5357,
+          "percent": 66.3
         },
         {
           "crate": "flexmesa-chem",
@@ -854,9 +854,9 @@
         },
         {
           "crate": "flexmesa-ionization",
-          "lines": 1924,
-          "covered": 1619,
-          "percent": 84.1
+          "lines": 1983,
+          "covered": 1680,
+          "percent": 84.7
         },
         {
           "crate": "flexmesa-kap",
@@ -908,9 +908,9 @@
         },
         {
           "crate": "flexmesa-star",
-          "lines": 54748,
-          "covered": 40849,
-          "percent": 74.6
+          "lines": 55081,
+          "covered": 41519,
+          "percent": 75.4
         },
         {
           "crate": "flexmesa-testing",
@@ -1307,7 +1307,7 @@
       },
       {
         "phase": "Phase C",
-        "open": 12,
+        "open": 13,
         "closed": 3,
         "issues": [
           {
@@ -1384,6 +1384,11 @@
             "number": 231,
             "title": "[Audit C17] Port the remaining upstream per-case extras to test-side hooks",
             "state": "open"
+          },
+          {
+            "number": 295,
+            "title": "[JAX] Rust-versus-JAX consistency tests expected to fail while the JAX engine is frozen",
+            "state": "open"
           }
         ]
       },
@@ -1433,13 +1438,7 @@
         "issues": []
       }
     ],
-    "open_pull_requests": [
-      {
-        "number": 292,
-        "title": "fix(star,binary): resolve #152, #153, and #159 audit code, precision, and test findings",
-        "draft": false
-      }
-    ],
+    "open_pull_requests": [],
     "deferred_169": [
       {
         "number": 175,
@@ -2298,6 +2297,32 @@
       "python_cov_pct": "87.8",
       "closed_140": "15",
       "total_140": "34",
+      "deferred_169": "42"
+    },
+    {
+      "date_utc": "2026-11-20",
+      "commit": "32028cd",
+      "event": "main merge",
+      "engine_ported_pct": "30.2",
+      "all_verified_pct": "1.0",
+      "cases_passing": "0",
+      "rust_cov_pct": "75.0",
+      "python_cov_pct": "87.8",
+      "closed_140": "15",
+      "total_140": "34",
+      "deferred_169": "42"
+    },
+    {
+      "date_utc": "2026-11-20",
+      "commit": "e0e987f",
+      "event": "main merge",
+      "engine_ported_pct": "30.2",
+      "all_verified_pct": "1.0",
+      "cases_passing": "0",
+      "rust_cov_pct": "75.3",
+      "python_cov_pct": "87.8",
+      "closed_140": "15",
+      "total_140": "35",
       "deferred_169": "42"
     }
   ]

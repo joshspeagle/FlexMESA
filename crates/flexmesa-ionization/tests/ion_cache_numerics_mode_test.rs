@@ -22,8 +22,13 @@ fn write_minimal_ion_ascii_table(path: &Path, x: f64, z: f64) {
     let mut out = String::from(
         "version X Z num_logTs logT_min logT_max del_logT num_logQs logQ_min logQ_max del_logQ\n",
     );
-    let _ =
-        writeln!(out, "1 {x:.2} {z:.2} 4 3.00 3.18 0.06 4 -6.00 -5.73 0.09\n");
+    // Header version 51 matches every MESA 26.4.1 data/ionization_data table
+    // and satisfies min_version = 49 (ionization/public/ionization_def.f90:91)
+    // now enforced by IonTableGrid::from_data_dir.
+    let _ = writeln!(
+        out,
+        "51 {x:.2} {z:.2} 4 3.00 3.18 0.06 4 -6.00 -5.73 0.09\n"
+    );
     for iq in 0..4_u32 {
         let lq = -6.00 + f64::from(iq) * 0.09;
         out.push_str("logQ\n");

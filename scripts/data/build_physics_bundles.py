@@ -27,6 +27,7 @@ import struct
 import subprocess
 import tarfile
 import tempfile
+import tomllib
 
 import numpy as np
 
@@ -488,6 +489,199 @@ def build_kap_full_bundle(
         return archive_sha, unpacked_sha, size_bytes
 
 
+def _load_sha_manifest(tsv_path: pathlib.Path) -> dict[str, tuple[str, int]]:
+    """Read a `# sha256/size/relpath` TSV into `{relpath: (sha, size)}`."""
+    entries: dict[str, tuple[str, int]] = {}
+    for line in tsv_path.read_text(encoding="utf-8").splitlines():
+        s = line.strip()
+        if not s or s.startswith("#"):
+            continue
+        sha, sz_s, rel = s.split("\t")
+        entries[rel] = (sha.lower(), int(sz_s))
+    return entries
+
+
+def verify_unpacked_physics_bundles(
+    mesa_dir: pathlib.Path,
+    repo_root: pathlib.Path,
+    *,
+    stage_dir: pathlib.Path | None = None,
+) -> dict[str, dict[str, object]]:
+    """Verify converter outputs from `mesa_dir` against pinned SHA-256 records.
+
+    Rebuilds `nets.bin`, `helm_table_full.bin`, `kap_tables_full.bin`, and all
+    116 unpacked EOS `.raw` slices (`eos_opal_scvh`, `eos_cms`, `eos_free_eos`)
+    in a temporary staging directory and checks every byte size and `SHA-256`
+    digest against `src/flexmesa/data/bundles.toml`,
+    `src/flexmesa/data/bundle_hashes/*.sha256.tsv`, and
+    `crates/flexmesa-net/data/nets.bin`.
+
+    Raises:
+        ValueError: If any converted artifact differs from its pinned digest or
+            size.
+    """
+    from flexmesa import _rust
+
+    data_pkg = repo_root / "src" / "flexmesa" / "data"
+    raw_toml = tomllib.loads(
+        (data_pkg / "bundles.toml").read_text(encoding="utf-8")
+    )
+    by_name = {str(b["name"]): b for b in raw_toml["bundles"]}
+    bh_dir = data_pkg / "bundle_hashes"
+
+    own_tmp = stage_dir is None
+    work_dir = (
+        pathlib.Path(tempfile.mkdtemp(prefix="flexmesa_physics_verify_"))
+        if stage_dir is None
+        else stage_dir
+    )
+    work_dir.mkdir(parents=True, exist_ok=True)
+    mismatches: list[str] = []
+    summary: dict[str, dict[str, object]] = {}
+    try:
+        # 1. Embedded nets.bin
+        nets_out = work_dir / "nets.bin"
+        nets_sha = build_nets_bin(mesa_dir, nets_out)
+        nets_sz = nets_out.stat().st_size
+        committed_nets = (
+            repo_root / "crates" / "flexmesa-net" / "data" / "nets.bin"
+        )
+        pinned_nets_sha = sha256_file(committed_nets)
+        pinned_nets_sz = committed_nets.stat().st_size
+        if (nets_sha, nets_sz) != (pinned_nets_sha, pinned_nets_sz):
+            mismatches.append(
+                f"nets.bin: built ({nets_sha}, {nets_sz}) != "
+                f"committed ({pinned_nets_sha}, {pinned_nets_sz})"
+            )
+        summary["nets"] = {
+            "sha256": nets_sha,
+            "size_bytes": nets_sz,
+            "matched": (nets_sha, nets_sz) == (pinned_nets_sha, pinned_nets_sz),
+        }
+
+        # 2. helm_full (FMHELM01)
+        helm_out = work_dir / "helm_table_full.bin"
+        convert_helm_ascii_to_full(
+            mesa_dir / "data" / "eosDT_data" / "helm_table.dat", helm_out
+        )
+        helm_sha = sha256_file(helm_out)
+        helm_sz = helm_out.stat().st_size
+        helm_pin = (
+            str(by_name["helm_full"]["unpacked_sha256"]).lower(),
+            int(by_name["helm_full"]["unpacked_size_bytes"]),
+        )
+        helm_tsv = _load_sha_manifest(bh_dir / "helm_full.sha256.tsv").get(
+            "helm_table_full.bin"
+        )
+        if (helm_sha, helm_sz) != helm_pin or (helm_sha, helm_sz) != helm_tsv:
+            mismatches.append(
+                f"helm_full: built ({helm_sha}, {helm_sz}) != "
+                f"pinned {helm_pin} / tsv {helm_tsv}"
+            )
+        summary["helm_full"] = {
+            "sha256": helm_sha,
+            "size_bytes": helm_sz,
+            "matched": (helm_sha, helm_sz) == helm_pin
+            and (helm_sha, helm_sz) == helm_tsv,
+        }
+
+        # 3. kap_full (FMKAP001)
+        kap_dir = mesa_dir / "data" / "kap_data"
+        aes_out = work_dir / "aesopus_section.bin"
+        kap_out = work_dir / "kap_tables_full.bin"
+        convert_aesopus_hdf5_to_section(kap_dir / "AESOPUS_AGSS09.h5", aes_out)
+        _rust.kap_build_full_tables_bin(
+            str(kap_dir), str(aes_out), str(kap_out)
+        )
+        kap_sha = sha256_file(kap_out)
+        kap_sz = kap_out.stat().st_size
+        kap_pin = (
+            str(by_name["kap_full"]["unpacked_sha256"]).lower(),
+            int(by_name["kap_full"]["unpacked_size_bytes"]),
+        )
+        kap_tsv = _load_sha_manifest(bh_dir / "kap_full.sha256.tsv").get(
+            "kap_full/kap_tables_full.bin"
+        )
+        if (kap_sha, kap_sz) != kap_pin or (kap_sha, kap_sz) != kap_tsv:
+            mismatches.append(
+                f"kap_full: built ({kap_sha}, {kap_sz}) != "
+                f"pinned {kap_pin} / tsv {kap_tsv}"
+            )
+        summary["kap_full"] = {
+            "sha256": kap_sha,
+            "size_bytes": kap_sz,
+            "matched": (kap_sha, kap_sz) == kap_pin
+            and (kap_sha, kap_sz) == kap_tsv,
+        }
+
+        # 4-6. Unpacked 4D EOS slices (OPAL/SCVH, CMS, FreeEOS)
+        eos_specs = (
+            (
+                "eos_opal_scvh",
+                [
+                    mesa_dir / "data" / "eosDT_data" / f"{stem}.data"
+                    for stem in sorted(OPAL_SCVH_STEMS)
+                ],
+                convert_dt_ascii_to_raw,
+            ),
+            (
+                "eos_cms",
+                sorted(
+                    (mesa_dir / "data" / "eosCMS_data").glob("mesa-CMS_*.data")
+                ),
+                convert_cms_ascii_to_raw,
+            ),
+            (
+                "eos_free_eos",
+                sorted(
+                    (mesa_dir / "data" / "eosFreeEOS_data").glob(
+                        "mesa-FreeEOS_*.data"
+                    )
+                ),
+                convert_dt_ascii_to_raw,
+            ),
+        )
+        for bundle_name, src_files, conv_fn in eos_specs:
+            tsv = _load_sha_manifest(bh_dir / f"{bundle_name}.sha256.tsv")
+            bad_count = 0
+            total_sz = 0
+            seen_rels: set[str] = set()
+            for src in src_files:
+                rel = f"eos_4d_raw/{src.stem}.raw"
+                seen_rels.add(rel)
+                dst = work_dir / rel
+                conv_fn(src, dst)
+                got = (sha256_file(dst), dst.stat().st_size)
+                total_sz += got[1]
+                if got != tsv.get(rel):
+                    bad_count += 1
+                    mismatches.append(
+                        f"{bundle_name} {rel}: built {got} != {tsv.get(rel)}"
+                    )
+            if seen_rels != set(tsv.keys()):
+                bad_count += 1
+                mismatches.append(
+                    f"{bundle_name}: file set differs "
+                    f"({len(seen_rels)} built vs {len(tsv)} pinned)"
+                )
+            summary[bundle_name] = {
+                "files": len(src_files),
+                "total_size_bytes": total_sz,
+                "mismatches": bad_count,
+                "matched": bad_count == 0,
+            }
+    finally:
+        if own_tmp:
+            shutil.rmtree(work_dir, ignore_errors=True)
+
+    if mismatches:
+        raise ValueError(
+            "Unpacked physics converter verification failed:\n"
+            + "\n".join(mismatches[:20])
+        )
+    return summary
+
+
 def main() -> int:
     """CLI entry point for building physics bundles from `$MESA_DIR`."""
     parser = argparse.ArgumentParser(description=__doc__)
@@ -530,12 +724,27 @@ def main() -> int:
         default=None,
         help="Optional local $FLEXMESA_DATA_DIR to update kap_tables_full.bin.",
     )
+    parser.add_argument(
+        "--verify-unpacked",
+        action="store_true",
+        help=(
+            "Rebuild unpacked physics artifacts in a temp dir and verify "
+            "every SHA-256 and byte size against bundles.toml and "
+            "bundle_hashes/*.sha256.tsv."
+        ),
+    )
     args = parser.parse_args()
 
     if not args.mesa_dir or not (args.mesa_dir / "data").is_dir():
         raise SystemExit(
             "Provide a valid MESA 26.4.1 tree via --mesa-dir or $MESA_DIR."
         )
+
+    if args.verify_unpacked:
+        results = verify_unpacked_physics_bundles(args.mesa_dir, args.repo_root)
+        for name, info in results.items():
+            print(f"verified {name}: {info}")
+        return 0
 
     nets_out = args.repo_root / "crates" / "flexmesa-net" / "data" / "nets.bin"
     nets_sha = build_nets_bin(args.mesa_dir, nets_out)

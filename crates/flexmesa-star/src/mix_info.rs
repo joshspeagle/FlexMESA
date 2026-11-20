@@ -1374,15 +1374,19 @@ fn build_conv_boundary(
 /// across all faces `0..nz` (`get_convection_sigmas` in
 /// `star/private/mix_info.f90:1384-1558`), including high-$T_c$ boundary
 /// tapering (`sig_min_factor_for_high_Tcenter`).
+///
+/// # Errors
+/// Returns [`StarError::InvalidInput`] where upstream calls `mesa_error` on
+/// inconsistent mixing-boundary flags (`mix_info.f90:1474, 1482, 1488`).
 pub fn compute_convection_sigmas(
     model: &mut StarModel,
     dt: f64,
     mix_factor: f64,
     sig_term_limit: f64,
-) {
+) -> Result<(), StarError> {
     let nz = model.nz;
     if nz == 0 {
-        return;
+        return Ok(());
     }
     if model.aux.mixing.sig_raw.len() != nz {
         model.aux.mixing.resize(nz);
@@ -1391,7 +1395,7 @@ pub fn compute_convection_sigmas(
     model.aux.mixing.sig_raw.fill(0.0);
     if mix_factor <= 0.0 {
         model.sig.fill(0.0);
-        return;
+        return Ok(());
     }
 
     let xmstar = model.xmstar;
@@ -1419,7 +1423,7 @@ pub fn compute_convection_sigmas(
         .copied()
         .fold(f64::NEG_INFINITY, f64::max);
     if max_sig < 1.0 {
-        return;
+        return Ok(());
     }
 
     for k in 0..nz {
@@ -1444,7 +1448,7 @@ pub fn compute_convection_sigmas(
     let tc = model.t[nz - 1];
     let full_off = mw.tcenter_max_for_sig_min_factor_full_off;
     if tc <= full_off || dt <= 0.0 {
-        return;
+        return Ok(());
     }
     let full_on = mw.tcenter_min_for_sig_min_factor_full_on;
     let mut limit = mw.sig_min_factor_for_high_tcenter;
@@ -1454,39 +1458,46 @@ pub fn compute_convection_sigmas(
     }
     let n_bdy = model.aux.mixing.mix_bdy_loc.len();
     if limit >= 1.0 || n_bdy == 0 {
-        return;
+        return Ok(());
     }
 
+    // Boundaries run from centre to surface (`mix_info.f90:1460-1491`).
+    // Upstream aborts on inconsistent boundary flags; needing a boundary past
+    // the last one, which upstream would read out of bounds, is the same error.
+    let bad = |which: u8| {
+        StarError::InvalidInput(format!(
+            "get_convection_sigmas: bad mix bdy info {which}"
+        ))
+    };
     let (mut kbot, mut qbot, mut bdy) = if model.aux.mixing.top_mix_bdy[0] {
         (nz - 1, 0.0_f64, 0_usize)
-    } else if n_bdy >= 2 {
+    } else {
         let kb = model.aux.mixing.mix_bdy_loc[0];
         (kb, model.q[kb], 1_usize)
-    } else {
-        return;
     };
     if bdy >= n_bdy || !model.aux.mixing.top_mix_bdy[bdy] {
-        return;
+        return Err(bad(1));
     }
     let mut ktop = model.aux.mixing.mix_bdy_loc[bdy];
     let mut qtop = model.q[ktop];
     taper_sig_region(model, dt, limit, ktop, kbot, qtop, qbot);
 
-    while bdy + 2 < n_bdy {
+    while bdy + 1 < n_bdy {
         bdy += 1;
         if model.aux.mixing.top_mix_bdy[bdy] {
-            break;
+            return Err(bad(2));
         }
         kbot = model.aux.mixing.mix_bdy_loc[bdy];
         qbot = model.q[kbot];
         bdy += 1;
-        if !model.aux.mixing.top_mix_bdy[bdy] {
-            break;
+        if bdy >= n_bdy || !model.aux.mixing.top_mix_bdy[bdy] {
+            return Err(bad(3));
         }
         ktop = model.aux.mixing.mix_bdy_loc[bdy];
         qtop = model.q[ktop];
         taper_sig_region(model, dt, limit, ktop, kbot, qtop, qbot);
     }
+    Ok(())
 }
 
 fn taper_sig_region(

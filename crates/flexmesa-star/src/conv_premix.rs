@@ -205,13 +205,8 @@ fn advance_bdy(
             break;
         }
 
-        let accepted = advance_bdy_by_one_cell(
-            model,
-            fix_pgas,
-            zi,
-            i_bdy,
-            t_bdy,
-        )?;
+        let accepted =
+            advance_bdy_by_one_cell(model, fix_pgas, zi, i_bdy, t_bdy)?;
         if accepted {
             n_advanced += 1;
         }
@@ -474,7 +469,7 @@ fn init_zone_info(model: &StarModel) -> Result<Vec<ZoneInfo>, StarError> {
     let mut zi = create_zone_info(model, 0, nz - 1)?;
 
     for z in &mut zi {
-        set_penetration_velocities(model, z);
+        set_penetration_velocities(model, z)?;
         set_burn_data(model, z);
         set_abund_data(model, z);
         z.dt_t = 0.0;
@@ -549,7 +544,7 @@ fn update_zone_info(
         zi[*i_bdy].vc_b = model.mlt_vc[kc_b];
     }
 
-    set_penetration_velocities(model, &mut zi[*i_bdy]);
+    set_penetration_velocities(model, &mut zi[*i_bdy])?;
 
     // Truncate or delete an adjacent zone we encroached into (`conv_premix.f90:804-868`).
     if t_bdy && *i_bdy + 1 < zi.len() {
@@ -596,7 +591,7 @@ fn update_zone_info(
                 zn.sel_b = false;
             }
 
-            set_penetration_velocities(model, zn);
+            set_penetration_velocities(model, zn)?;
             set_burn_data(model, zn);
             zn.avg_xa.clone_from(&old.avg_xa);
             zn.davg_xa_dt.clone_from(&old.davg_xa_dt);
@@ -610,67 +605,57 @@ fn update_zone_info(
 
 /// Computes Castellani (1971) convective boundary penetration velocities
 /// (`set_penetration_velocities_` in `star/private/conv_premix.f90:948-1016`).
-fn set_penetration_velocities(model: &StarModel, zi: &mut ZoneInfo) {
+///
+/// # Errors
+/// Returns [`StarError::InvalidInput`] when the top boundary cell is the
+/// innermost cell, where upstream reads `mlt_mixing_length(nz+1)` past the end
+/// of the array (`conv_premix.f90:996`).
+fn set_penetration_velocities(
+    model: &StarModel,
+    zi: &mut ZoneInfo,
+) -> Result<(), StarError> {
     let nz = model.nz;
+    let mixing_length = &model.aux.mixing.mlt_mixing_length;
 
-    // Bottom boundary (`conv_premix.f90:966-985`).
+    // Bottom boundary (`conv_premix.f90:966-981`).
     if zi.kc_b < nz - 1 {
         let mu_i = model.mu[zi.kc_b];
         let mu_e = model.mu[zi.kc_b + 1];
         let kf = zi.kc_b;
-        let lam = mixing_length_at(model, kf);
-        if lam > 0.0 {
-            let z_s = if mu_e - mu_i > f64::EPSILON {
-                (zi.vc_b * zi.vc_b
-                    / (2.0 * model.grav[kf] * (1.0 - mu_i / mu_e)))
-                    .min(lam)
-            } else {
-                lam
-            };
-            zi.vp_b = zi.vc_b * z_s / lam;
+        let z_s = if mu_e - mu_i > f64::EPSILON {
+            (zi.vc_b * zi.vc_b / (2.0 * model.grav[kf] * (1.0 - mu_i / mu_e)))
+                .min(mixing_length[kf])
         } else {
-            zi.vp_b = zi.vc_b;
-        }
+            mixing_length[kf]
+        };
+        zi.vp_b = zi.vc_b * z_s / mixing_length[kf];
     } else {
         zi.vp_b = zi.vc_b;
     }
 
-    // Top boundary (`conv_premix.f90:991-1010`).
+    // Top boundary (`conv_premix.f90:991-1006`).
     if zi.kc_t > 0 {
         let mu_i = model.mu[zi.kc_t];
         let mu_e = model.mu[zi.kc_t - 1];
         let kf = zi.kc_t + 1;
-        let lam = mixing_length_at(model, kf);
-        if lam > 0.0 {
-            let z_s = if mu_i - mu_e > f64::EPSILON {
-                (zi.vc_t * zi.vc_t
-                    / (2.0 * model.grav[kf] * (1.0 - mu_e / mu_i)))
-                    .min(lam)
-            } else {
-                lam
-            };
-            zi.vp_t = zi.vc_t * z_s / lam;
-        } else {
-            zi.vp_t = zi.vc_t;
+        if kf >= nz {
+            return Err(StarError::InvalidInput(format!(
+                "conv_premix: top boundary cell {} is the innermost cell; \
+                 upstream reads mlt_mixing_length past the array here",
+                zi.kc_t
+            )));
         }
+        let z_s = if mu_i - mu_e > f64::EPSILON {
+            (zi.vc_t * zi.vc_t / (2.0 * model.grav[kf] * (1.0 - mu_e / mu_i)))
+                .min(mixing_length[kf])
+        } else {
+            mixing_length[kf]
+        };
+        zi.vp_t = zi.vc_t * z_s / mixing_length[kf];
     } else {
         zi.vp_t = zi.vc_t;
     }
-}
-
-fn mixing_length_at(model: &StarModel, kf: usize) -> f64 {
-    let lam = model
-        .aux
-        .mixing
-        .mlt_mixing_length
-        .get(kf)
-        .copied()
-        .unwrap_or(0.0);
-    if lam > 0.0 {
-        lam
-    } else {
-        model.scale_height[kf] * model.controls.mixing_length_alpha
-    }
+    Ok(())
 }
 
 fn set_burn_data(model: &StarModel, zi: &mut ZoneInfo) {
@@ -856,11 +841,7 @@ fn save_model(
     }
 }
 
-fn restore_model(
-    model: &mut StarModel,
-    fix_pgas: &mut [bool],
-    sd: &SavedData,
-) {
+fn restore_model(model: &mut StarModel, fix_pgas: &mut [bool], sd: &SavedData) {
     let len_u = sd.fix_pgas.len();
     fix_pgas[sd.fix_pgas_lo..(sd.fix_pgas_lo + len_u)]
         .copy_from_slice(&sd.fix_pgas);

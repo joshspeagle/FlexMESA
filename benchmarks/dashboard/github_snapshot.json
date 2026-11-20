@@ -69,8 +69,8 @@
     },
     {
       "phase": "Phase B",
-      "open": 2,
-      "closed": 3,
+      "open": 1,
+      "closed": 4,
       "issues": [
         {
           "number": 147,
@@ -85,7 +85,7 @@
         {
           "number": 149,
           "title": "[Audit B3] Defaults parity with upstream `*.defaults`",
-          "state": "open"
+          "state": "closed"
         },
         {
           "number": 150,
@@ -234,29 +234,19 @@
       "draft": false
     },
     {
-      "number": 256,
-      "title": "Wire &eos/&kap controls, dynamic opacity bounds, #176 HELM-edge blend, and star microphysics (#161)",
-      "draft": false
-    },
-    {
       "number": 259,
       "title": "feat(star): port MESA 26.4.1 Newton solver, retry/redo semantics, and timestep checks (#152)",
       "draft": true
     },
     {
-      "number": 261,
-      "title": "Resolve #149 reopen audit findings: denominator reporting, from_mod_str zbase, and baseline movement causes",
+      "number": 275,
+      "title": "[Audit C5] Port MESA 26.4.1 element diffusion and phase separation (#156)",
       "draft": false
     },
     {
-      "number": 262,
-      "title": "Port MESA 26.4.1 convective boundaries, mixing, overshoot, predictive mixing, and convective premixing",
-      "draft": true
-    },
-    {
-      "number": 269,
-      "title": "feat(star,binary): align winds, mass adjustment, and stop conditions with MESA 26.4.1 (#159)",
-      "draft": true
+      "number": 280,
+      "title": "fix(star): follow upstream in conv_premix penetration velocities; refresh four stale baseline rows; pin a vacuous mixing test (#155)",
+      "draft": false
     }
   ],
   "deferred_169": [
@@ -273,7 +263,7 @@
       "title": "[Deferred bug] HELM-edge EOS blend derivative arguments are swapped",
       "state": "open",
       "kind": "upstream-bug",
-      "parity_pending": true,
+      "parity_pending": false,
       "needs_confirmation": false
     },
     {
@@ -497,7 +487,7 @@
       "title": "[Deferred bug] do_adjust_mass omits new_xmstar update when clamping min_star_mass_for_loss or max_star_mass_for_gain",
       "state": "open",
       "kind": "upstream-bug",
-      "parity_pending": true,
+      "parity_pending": false,
       "needs_confirmation": false
     },
     {
@@ -513,7 +503,7 @@
       "title": "[Deferred bug] do_check_limits and history compute v_surf_div_v_kh with mixed units (cm/s * yr / Rsun)",
       "state": "open",
       "kind": "upstream-bug",
-      "parity_pending": true,
+      "parity_pending": false,
       "needs_confirmation": false
     },
     {
@@ -535,6 +525,46 @@
     {
       "number": 268,
       "title": "[Deferred bug] get_convection_sigmas negates dX when xm1 <= x00, disabling high-Tc sigma limiting for downward gradients",
+      "state": "open",
+      "kind": "upstream-bug",
+      "parity_pending": false,
+      "needs_confirmation": false
+    },
+    {
+      "number": 271,
+      "title": "[Deferred bug] phase_separation.f90 out-of-bounds and uninitialized boundary reads",
+      "state": "open",
+      "kind": "upstream-bug",
+      "parity_pending": false,
+      "needs_confirmation": false
+    },
+    {
+      "number": 272,
+      "title": "[Deferred bug] element_diffusion.f90 reads xa(:, 0) when nzlo == 1 and D_mix(1) > D_mix_ignore_diffusion",
+      "state": "open",
+      "kind": "upstream-bug",
+      "parity_pending": false,
+      "needs_confirmation": false
+    },
+    {
+      "number": 273,
+      "title": "[Deferred bug] element_diffusion.f90 returns without setting ierr on invalid diffusion_class_representative",
+      "state": "open",
+      "kind": "upstream-bug",
+      "parity_pending": false,
+      "needs_confirmation": false
+    },
+    {
+      "number": 274,
+      "title": "[Deferred bug] set_donor_star swaps mdot_lo/mdot_hi on a donor switch but leaves implicit_function_lo/hi unswapped",
+      "state": "open",
+      "kind": "upstream-bug",
+      "parity_pending": false,
+      "needs_confirmation": false
+    },
+    {
+      "number": 277,
+      "title": "[Deferred bug] predictive_mix::eval_mixing_coeffs leaves rho, eta, lnPgas/Peos, mu, and phase stale during trial opacity and MLT evaluation",
       "state": "open",
       "kind": "upstream-bug",
       "parity_pending": false,

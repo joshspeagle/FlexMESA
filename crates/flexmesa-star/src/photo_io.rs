@@ -11,7 +11,7 @@ use crate::model::StarModel;
 const PHOTO_MAGIC: &[u8; 8] = b"FMPHOTO2";
 
 /// Binary `.photo` format version written by the generated `serde` encoder.
-pub const PHOTO_FORMAT_VERSION: u32 = 26;
+pub const PHOTO_FORMAT_VERSION: u32 = 27;
 
 /// Computes a deterministic 64-bit FNV-1a checksum of `.photo` restart bytes
 /// (`./ck` in upstream MESA `test_suite_helpers`).
@@ -98,8 +98,9 @@ pub fn load_photo_bytes(bytes: &[u8]) -> Result<StarModel, StarError> {
              mode cannot be loaded while active mode is \"{active_mode}\""
         )));
     }
-    bin_codec::from_bytes(payload)
-        .map_err(|e| StarError::IoError(format!("photo decode failed: {e}")))
+    let model: StarModel = bin_codec::from_bytes(payload)
+        .map_err(|e| StarError::IoError(format!("photo decode failed: {e}")))?;
+    Ok(model)
 }
 
 /// Restores a [`StarModel`] from binary `.photo` restart bytes and applies the

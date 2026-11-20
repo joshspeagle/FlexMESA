@@ -925,7 +925,6 @@ fn test_coupled_double_bh_35_steps_preserves_star_controls() {
 }
 
 #[test]
-#[ignore = "unverified uncapped binary campaign; tracked in #143 and #160"]
 fn test_uncapped_jdot_ls_check_campaign() {
     let Some(suite_dir) = resolve_suite_dir() else {
         return;

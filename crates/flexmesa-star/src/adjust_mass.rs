@@ -11,8 +11,8 @@ pub use crate::accretion_xa::{build_accreted_xa, get_xa_for_accretion};
 use crate::controls::StarError;
 use crate::core_boundaries::dominant_species_index;
 use crate::eps_mdot::{
-    calculate_eps_mdot_with_change, eval_specific_kinetic_energy_profile,
-    eval_specific_total_energy_profile, PrevMassState,
+    PrevMassState, calculate_eps_mdot_with_change,
+    eval_specific_kinetic_energy_profile, eval_specific_total_energy_profile,
 };
 use crate::hydro_vars::set_hydro_vars;
 use crate::mesh_remap::normalize_and_assign_remapped_xa;
@@ -192,14 +192,7 @@ pub fn do_adjust_mass_step(
     }
 
     do_adjust_mass_core(
-        model,
-        old_mstar,
-        new_mstar,
-        old_xmstar,
-        new_xmstar,
-        delta_m,
-        dt,
-        None,
+        model, old_mstar, new_mstar, old_xmstar, new_xmstar, delta_m, dt, None,
         None,
     )
 }
@@ -249,11 +242,8 @@ fn revise_q_and_dq_upstream(
     } else {
         let lnt_lim_a = LN10 * mw.max_logt_for_k_below_const_q;
         let lnt_lim_b = LN10 * mw.max_logt_for_k_const_mass;
-        let lnt_max = model
-            .ln_t
-            .iter()
-            .copied()
-            .fold(f64::NEG_INFINITY, f64::max);
+        let lnt_max =
+            model.ln_t.iter().copied().fold(f64::NEG_INFINITY, f64::max);
         let lnt_a = lnt_max.min(lnt_lim_a);
         let lnt_b = lnt_max.min(lnt_lim_b);
         let max_q_a = mold_o_mnew;
@@ -474,6 +464,7 @@ fn do_adjust_mass_core(
     } else {
         0
     };
+    model.k_below_just_added = k_below_just_added + 1;
 
     // Build exterior mass coordinates `rxm_old`, `rxm_new` (`adjust_mass.f90:397-419`).
     let mmax = old_mstar.max(new_mstar);
@@ -777,13 +768,7 @@ fn set_omega_adjust_mass(
     let k_end = k_const_mass.min(nz - 1);
     for k in k0..=k_end {
         set1_omega(
-            model,
-            k,
-            &old_xout,
-            &new_xout,
-            mmax,
-            &old_dmbar,
-            &new_dmbar,
+            model, k, &old_xout, &new_xout, mmax, &old_dmbar, &new_dmbar,
             &old_j_rot,
         )?;
     }
@@ -807,8 +792,8 @@ fn set_omega_adjust_mass(
             let outer_total: f64 =
                 (0..outer_end).map(|k| model.j_rot[k] * new_dmbar[k]).sum();
             let bdy_total = goal_total - (inner_total + outer_total);
-            let bdy_dm =
-                new_dmbar[k_below_just_added - 1] + new_dmbar[k_below_just_added];
+            let bdy_dm = new_dmbar[k_below_just_added - 1]
+                + new_dmbar[k_below_just_added];
             let bdy_j = bdy_total / bdy_dm;
             if !bdy_j.is_finite() || bdy_j <= 0.0 {
                 return Err(StarError::ConvergenceFailure(format!(
@@ -1028,6 +1013,7 @@ fn adjust_j_lost(
         )));
     }
     let qlast = model.q[last_k];
+    model.adjust_j_q = qlast;
     let mut dm00 = 0.0_f64;
     let mut denom = 0.0_f64;
     for k in 0..last_k {

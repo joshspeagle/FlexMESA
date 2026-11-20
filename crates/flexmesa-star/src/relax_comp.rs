@@ -187,7 +187,8 @@ pub fn relax_composition_with_henyey(
     model.controls.use_gold2_tolerances = false;
     model.controls.steps_before_use_gold_tolerances = -1;
     model.controls.steps_before_use_gold2_tolerances = -1;
-    model.controls.max_newton_iters = saved_controls.max_newton_iters.max(60);
+    model.controls.solver_max_tries_before_reject =
+        saved_controls.solver_max_tries_before_reject.max(60);
     model.mstar_dot = 0.0;
 
     if let Some(z_end) = tz {

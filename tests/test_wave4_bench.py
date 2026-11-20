@@ -29,17 +29,19 @@ from flexmesa import bench, star
 # outputs; `star_hydro_eqns`, `star_newton_step`, and `star_evolve_step`
 # shifted under #141 when `neu` #193 and `num` #194 were aligned to MESA
 # 26.4.1, all five shifted under #149 when `&controls`, microphysics, and
-# mesh-function defaults were aligned to MESA 26.4.1, and `star_micro_vars`,
+# mesh-function defaults were aligned to MESA 26.4.1, `star_micro_vars`,
 # `star_hydro_eqns`, and `star_newton_step` shifted under #155 when
 # `remove_mixing_singletons` (`mix_info.f90:1026-1072`) switched the isolated
-# `k = 2` convective singleton on the coarse `N = 8` grid to radiative; tracked
-# in #146).
+# `k = 2` convective singleton on the coarse `N = 8` grid to radiative, and
+# `star_hydro_eqns`, `star_newton_step`, and `star_evolve_step` shifted under
+# #152 when `set_xscale_info` and Newton step/equilibration semantics were
+# aligned to MESA 26.4.1; tracked in #146).
 _WAVE4_REGRESSION_SNAPSHOTS_N8: dict[str, float] = {
     "star_micro_vars": 2.500111893102388e2,
-    "star_hydro_eqns": 4.243492123572694e6,
-    "star_newton_step": 6.383737350497265,
+    "star_hydro_eqns": 4.243485684423328e6,
+    "star_newton_step": 6.383773435545090,
     "star_remesh": 5.513777703025969e2,
-    "star_evolve_step": 1.005971756200643e2,
+    "star_evolve_step": 1.005928065548472e2,
 }
 
 _STAR_TEST_HISTORY = (

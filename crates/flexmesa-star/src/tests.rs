@@ -2,7 +2,7 @@
 //! Unit tests for `flexmesa-star` (Waves 4.1, 4.2, and 4.3).
 
 use super::*;
-use flexmesa_const::{MixingType, M_SUN, SECYER};
+use flexmesa_const::{M_SUN, MixingType, SECYER};
 
 #[test]
 fn test_star_ad_order1_shifts_and_chain_rule_match_analytic_derivatives() {
@@ -247,7 +247,7 @@ fn test_solve_henyey_step_converges_on_perturbed_model() {
         initial_mass: 1.0,
         initial_z: 0.02,
         zbase: 0.02,
-        max_newton_iters: 25,
+        solver_max_tries_before_reject: 25,
         ..StarControls::default()
     };
     let job = StarJobControls {
@@ -267,7 +267,11 @@ fn test_solve_henyey_step_converges_on_perturbed_model() {
         report_bcyclic.converged,
         "expected bcyclic convergence, got {report_bcyclic:?}"
     );
-    assert!(report_bcyclic.residual_norm <= model.controls.tol_residual_norm);
+    let (tol_rn, _, _, _) = crate::solver::active_solver_tolerances(
+        &model,
+        report_bcyclic.iterations,
+    );
+    assert!(report_bcyclic.residual_norm <= tol_rn);
 
     let report_thomas = solve_henyey_step(&mut model_thomas, false, false)
         .expect("solve thomas");
@@ -493,8 +497,8 @@ fn test_tdc_mlt_vc_old_preserved_across_pre_step_remesh_and_mod_roundtrip() {
         okay_to_remesh: true,
         ..StarControls::default()
     };
-    let mut model =
-        load_zams_model(controls, StarJobControls::default()).expect("4 Msun ZAMS");
+    let mut model = load_zams_model(controls, StarJobControls::default())
+        .expect("4 Msun ZAMS");
     set_hydro_vars(&mut model, false, false).expect("init hydro");
     star_evolve_step(&mut model, false, false, true).expect("step 1");
     assert!(model.aux.have_mlt_vc);
@@ -542,11 +546,8 @@ fn test_tdc_mlt_vc_old_preserved_across_pre_step_remesh_and_mod_roundtrip() {
     model.mlt_vc.fill(0.0);
     model.aux.have_mlt_vc = true;
     let mod_txt = write_mod_string(&model).expect("write radiative .mod");
-    let reloaded = read_mod_str(
-        &mod_txt,
-        model.controls.clone(),
-        model.job.clone(),
-    )
-    .expect("read radiative .mod");
+    let reloaded =
+        read_mod_str(&mod_txt, model.controls.clone(), model.job.clone())
+            .expect("read radiative .mod");
     assert!(reloaded.aux.have_mlt_vc);
 }

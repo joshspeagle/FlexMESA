@@ -1601,16 +1601,16 @@ mod tests {
 
         let donor = load_zams_model(
             StarControls {
-                initial_mass: 1.5,
+                initial_mass: 1.0,
                 zbase: 0.02,
                 ..StarControls::default()
             },
             StarJobControls::default(),
         )
-        .expect("1.5 Msun ZAMS");
+        .expect("1.0 Msun ZAMS");
         let bctrl = BinaryInlistControls {
-            m1_msun: 1.5,
-            m2_msun: 1.0,
+            m1_msun: 1.0,
+            m2_msun: 0.8,
             initial_period_in_days: 5.0,
             mdot_scheme: String::from("roche_lobe"),
             max_tries_to_achieve: 1,
@@ -1627,7 +1627,7 @@ mod tests {
             seen_models: Vec::new(),
         };
         let _ = sys
-            .try_step_with_extras(100.0 * SECYER, &mut extras)
+            .try_step_with_extras(SECYER, &mut extras)
             .expect("step succeeds after outer retry on final-try redo");
         assert_eq!(extras.calls, 3);
         assert_eq!(extras.seen_models, vec![1, 1, 1]);

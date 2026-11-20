@@ -184,7 +184,7 @@ pub fn eval_dx_nuc_drop_ratio(
 
 /// Evaluates the Söderlind & Wang (2006) H211PI digital control timestep
 /// multiplier $f_{\mathrm{dt}} = \Delta t_{n+1} / \Delta t_n$ (`filter_dt_next`
-/// in `timestep.f90:2367-2416`).
+/// in `timestep.f90:2362-2427`).
 #[must_use]
 pub fn eval_h211_factor(
     dt_limit_ratio: f64,
@@ -196,11 +196,13 @@ pub fn eval_h211_factor(
 ) -> (f64, bool, bool) {
     let ratio_curr = dt_limit_ratio.max(1.0e-10);
     let raw_factor = if dt_limit_ratio_old > 0.0 && dt_old > 0.0 && dt > 0.0 {
-        let ratio_prev = dt_limit_ratio_old.max(1.0e-10);
-        let dt_ratio = (dt / dt_old).max(1.0e-10);
-        let r_n = filter_limit(1.0 / ratio_curr).max(1.0e-4);
-        let r_nm1 = filter_limit(1.0 / ratio_prev).max(1.0e-4);
-        filter_limit(flexmesa_math::pow(r_n * r_nm1 / dt_ratio, 0.25))
+        let ratio = filter_limit(1.0 / ratio_curr);
+        let ratio_prev = filter_limit(1.0 / dt_limit_ratio_old);
+        filter_limit(
+            flexmesa_math::pow(ratio, 0.25)
+                * flexmesa_math::pow(ratio_prev, 0.25)
+                * flexmesa_math::pow(dt / dt_old, -0.25),
+        )
     } else {
         1.0 / ratio_curr
     };

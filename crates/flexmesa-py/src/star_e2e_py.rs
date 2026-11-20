@@ -7,19 +7,18 @@ use std::path::Path;
 
 use flexmesa_astero::run_astero_test_suite_case_with_options;
 use flexmesa_binary::{
-    run_binary_test_suite_case_with_extras, BinaryCaseRunReport,
-    BinaryLogsOptions,
+    BinaryCaseRunReport, BinaryLogsOptions,
+    run_binary_test_suite_case_with_extras,
 };
 use flexmesa_star::inlist_runner::{
-    run_test_suite_case_with_extras, StarLogsOptions,
+    StarLogsOptions, run_test_suite_case_with_extras,
 };
 use flexmesa_star::{
-    build_rsp_envelope_model, eval_astero_scaling_dnu_numax_uhz,
-    eval_linear_oscillation_modes, eval_rsp_lina_modes,
-    eval_target_mode_frequency_and_growth, parse_rn_stages,
-    verify_photo_restart_parity, CaseRunReport, InlistBundle,
-    InlistLoadOptions, LinearOscillationMode, RnStage, StarControls,
-    StarJobControls,
+    CaseRunReport, InlistBundle, InlistLoadOptions, LinearOscillationMode,
+    RnStage, StarControls, StarJobControls, build_rsp_envelope_model,
+    eval_astero_scaling_dnu_numax_uhz, eval_linear_oscillation_modes,
+    eval_rsp_lina_modes, eval_target_mode_frequency_and_growth,
+    parse_rn_stages, verify_photo_restart_parity,
 };
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList};
@@ -39,8 +38,9 @@ pub fn star_copy_cleaned_case(
 ) -> PyResult<()> {
     let (src, dst) = (Path::new(src_dir), Path::new(dst_dir));
     match suite.trim().to_ascii_lowercase().as_str() {
-        "star" => flexmesa_star::copy_cleaned_star_case(src, dst)
-            .map_err(to_py_err),
+        "star" => {
+            flexmesa_star::copy_cleaned_star_case(src, dst).map_err(to_py_err)
+        }
         "binary" => flexmesa_binary::copy_cleaned_binary_case(src, dst)
             .map_err(to_py_err),
         "astero" => flexmesa_astero::copy_cleaned_astero_case(src, dst)
@@ -147,7 +147,11 @@ pub fn star_parse_inlist_bundle<'py>(
     )?;
     dict.set_item("op_split_burn", bundle.controls.op_split_burn)?;
     dict.set_item("op_split_burn_min_t", bundle.controls.op_split_burn_min_t)?;
-    dict.set_item("max_newton_iters", bundle.controls.max_newton_iters)?;
+    dict.set_item(
+        "solver_max_tries_before_reject",
+        bundle.controls.solver_max_tries_before_reject,
+    )?;
+    dict.set_item("max_tries1", bundle.controls.max_tries1)?;
     dict.set_item("use_other_cgrav", bundle.controls.use_other_cgrav)?;
     let sections: Vec<String> = bundle.sections.keys().cloned().collect();
     dict.set_item("sections", sections)?;
@@ -445,8 +449,7 @@ pub fn star_build_rsp_envelope_model(
         create_rsp_model: true,
         ..Default::default()
     };
-    let inner =
-        build_rsp_envelope_model(controls, job).map_err(to_py_err)?;
+    let inner = build_rsp_envelope_model(controls, job).map_err(to_py_err)?;
     Ok(PyStarModel { inner })
 }
 

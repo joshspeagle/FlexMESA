@@ -49,7 +49,7 @@
       "checked_values": 7,
       "zero_ulp_values": 7,
       "max_ulp": 0,
-      "issue": "#152",
+      "issue": "#144",
       "notes": "All 7 tested test_square1+2 entries at 0 ULP."
     },
     {
@@ -82,7 +82,7 @@
       "checked_values": 0,
       "zero_ulp_values": 0,
       "max_ulp": 0,
-      "issue": "#152",
+      "issue": "#144",
       "notes": "570 upstream num Brent/Newton/ODE test printouts await direct TSV harness mapping."
     },
     {
@@ -269,7 +269,7 @@
       "checked_values": 0,
       "zero_ulp_values": 0,
       "max_ulp": 0,
-      "issue": "#152",
+      "issue": "#140",
       "notes": "386 upstream star/test console values (plus 240 history_exact_hex cells) tracked under stellar parity issues."
     },
     {

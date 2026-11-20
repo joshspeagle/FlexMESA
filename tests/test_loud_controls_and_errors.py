@@ -247,17 +247,42 @@ def test_extras_missing_hooks_callback_errors_and_redo_fail_loudly(
             extras=_BadStarExtras(),
         )
 
-    class _RedoStarExtras:
+    class _OnceRedoStarExtras:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def extras_check_model(self, _state: dict[str, object]) -> str:
+            self.calls += 1
+            return "redo" if self.calls == 1 else "keep_going"
+
+    redo_star = tmp_path / "redo_star"
+    redo_star.mkdir()
+    (redo_star / "inlist").write_text(
+        "&kap\n  zbase = 0.02\n/\n"
+        "&controls\n  initial_mass = 1.0\n  redo_limit = 2\n/\n",
+        encoding="utf-8",
+    )
+    once_redo = _OnceRedoStarExtras()
+    rep_once = star.run_test_suite_case(
+        redo_star,
+        skip_optional=True,
+        max_steps_per_stage=1,
+        extras=once_redo,
+    )
+    assert once_redo.calls == 2
+    assert rep_once["total_steps"] == 1
+
+    class _AlwaysRedoStarExtras:
         def extras_check_model(self, _state: dict[str, object]) -> str:
             return "redo"
 
-    with pytest.raises(ValueError, match=r"#152"):
-        star.run_test_suite_case(
-            ok_star,
-            skip_optional=True,
-            max_steps_per_stage=1,
-            extras=_RedoStarExtras(),
-        )
+    rep_lim = star.run_test_suite_case(
+        redo_star,
+        skip_optional=True,
+        max_steps_per_stage=1,
+        extras=_AlwaysRedoStarExtras(),
+    )
+    assert rep_lim["termination_code"] == "redo_limit"
 
     class _BadBinaryExtras:
         def finish_step(self, _state: dict[str, object]) -> str:

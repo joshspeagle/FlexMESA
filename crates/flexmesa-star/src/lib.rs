@@ -168,6 +168,7 @@ pub mod rsp_turb_partials;
 pub mod rsp_zone_micro;
 pub mod solver;
 pub mod solver_norms;
+pub mod solver_support;
 pub mod star_ad;
 pub mod star_job_init;
 pub mod stella;
@@ -242,7 +243,7 @@ pub use evolve::{
     star_evolve_step_with_extras,
 };
 pub use evolve_support::{
-    apply_step_pre_physics, eval_total_energy_integrals,
+    apply_step_pre_physics, eval_total_energy_integrals, relax_uniform_omega,
     remesh_star_before_step, update_step_energy_conservation,
 };
 pub use history::{

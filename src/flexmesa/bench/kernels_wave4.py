@@ -503,13 +503,18 @@ def bench_star_evolve_step(
 ) -> _h.BenchRecord:
     """Benchmark full structure + burn + mix step (`star_evolve_step`)."""
     base = make_wave4_zams_model(nz)
+    dt = float(base.dt)
+    base.evolve_step(do_remesh=False, op_split_burn=False, use_bcyclic=True)
+    base.dt = dt
+    base.eval_hydro_vars()
+    base.save_start_values()
+    base.save_old_values()
     lnd0 = base.lnd.copy()
     lnt0 = base.ln_t.copy()
     lnr0 = base.ln_r.copy()
     lum0 = base.lum.copy()
     dq0 = base.dq.copy()
     xa0 = base.xa.copy()
-    dt = float(base.dt)
 
     def _run(op_split: bool, use_bcyc: bool) -> _ArrF64:
         base.set_primary_state(lnd0, lnt0, lnr0, lum0, dq0, xa0)

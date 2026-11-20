@@ -84,6 +84,7 @@ fn test_terminal_output_keys_pass_strict_validation_and_are_recorded() {
 }
 
 #[test]
+#[allow(clippy::too_many_lines)]
 fn test_unknown_section_key_unused_and_removed_aliases_fail_loudly() {
     let tmp = TempCaseGuard::new("strict");
     let bogus_sec = tmp.root.join("inlist_bogus_sec");
@@ -146,6 +147,11 @@ fn test_unknown_section_key_unused_and_removed_aliases_fail_loudly() {
             "unused_neg_mass_frac",
             "&controls\n  neg_mass_fraction_hold = 1.0d-4\n/\n",
             "neg_mass_fraction_hold",
+        ),
+        (
+            "unused_bad_max_corr",
+            "&controls\n  tol_bad_max_correction = 1.0d-2\n/\n",
+            "tol_bad_max_correction",
         ),
         (
             "unused_surface_pt",
@@ -397,9 +403,9 @@ fn test_missing_files_stages_and_removed_clamps_behave_strictly() {
         .expect("a non-positive retry_limit means no limit");
     assert_eq!(bneg.controls.ts_stop.retry_limit, 0);
 
-    // `redo_limit` is supported (`star/private/evolve.f90:2161`); non-positive
-    // values mean no limit (`binary/test_suite/double_bh/inlist1:47` sets
-    // `redo_limit = -1`).
+    // Upstream applies `redo_limit` only when positive and accepts negative
+    // sentinels (`star/private/evolve.f90:2161`; `binary/test_suite/double_bh/inlist1:47`
+    // sets `redo_limit = -1`).
     let neg_redo = tmp.root.join("inlist_neg_redo");
     fs::write(&neg_redo, "&controls\n  redo_limit = -1\n/\n")
         .expect("write negative redo limit");

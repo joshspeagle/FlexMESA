@@ -302,8 +302,13 @@ pub(crate) fn init_or_update_model_from_bundle_outcome(
         model.star_age = job.initial_age;
         model.star_age_old = job.initial_age;
     }
-    if job.set_initial_model_number {
+    model.time_sec = model.star_age * SECYER;
+    model.time_old_sec = model.star_age_old * SECYER;
+    if job.set_initial_model_number && !is_restart {
         model.model_number = job.initial_model_number;
+        model.init_model_number = model.model_number as isize;
+    } else if !is_restart {
+        model.init_model_number = model.model_number as isize;
     }
     if job.set_initial_dt {
         if job.years_for_initial_dt > 0.0 {
@@ -420,6 +425,14 @@ pub(crate) fn init_or_update_model_from_bundle_outcome(
         .unwrap_or(true);
     if did_create_pre_ms && model.mstar / M_SUN >= 0.3 && relax_rad_core {
         crate::evolve_support::relax_pre_ms_to_radiative_core(&mut model)?;
+    }
+    model.m_center_old = model.m_center;
+    model.r_center_old = model.r_center;
+    model.l_center_old = model.l_center;
+    model.v_center_old = model.v_center;
+    if !is_restart {
+        // Match `star/private/init.f90:1120` (`s% doing_first_model_of_run = .true.`).
+        model.doing_first_model_of_run = true;
     }
     extras.extras_startup(&mut model, false)?;
 

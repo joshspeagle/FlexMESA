@@ -59,9 +59,7 @@ pub fn set_mlt_vars(model: &mut StarModel) -> Result<(), StarError> {
     if model.aux.mixing.mlt_mixing_type.len() != nz {
         model.aux.mixing.resize(nz);
     }
-    if model.aux.doing_struct_burn_mix {
-        model.aux.solver_mlt_eval_count += 1;
-    } else {
+    if !model.aux.doing_struct_burn_mix {
         model.aux.solver_mlt_eval_count = 0;
         model.aux.fixed_gradr_sticky.fill(false);
     }

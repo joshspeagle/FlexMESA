@@ -123,6 +123,11 @@ pub fn eval_convective_envelope_mass_and_size(star: &StarModel) -> (f64, f64) {
 
 /// Synchronizes a stellar model uniformly to orbital period `period_sec` (s) at
 /// startup (`do_initial_orbit_sync_{1,2}` in `run_binary_support.f90:319-340`).
+///
+/// When rotation is already enabled on the star, relaxes $\Omega$ smoothly via
+/// [`flexmesa_star::relax_uniform_omega`] (`star_relax_uniform_omega` with
+/// upstream defaults `num_steps_to_relax_rotation = 100`,
+/// `relax_omega_max_yrs_dt = 1e9`), matching MESA `26.4.1`.
 pub fn apply_initial_orbit_sync(
     star: &mut StarModel,
     period_sec: f64,
@@ -130,9 +135,14 @@ pub fn apply_initial_orbit_sync(
     if period_sec <= 0.0 {
         return Ok(());
     }
-    star.controls.rotation_flag = true;
-    apply_uniform_rotation(star, 2.0 * PI / period_sec);
-    update_rotation_distortion_factors(star);
+    let target_omega = 2.0 * PI / period_sec;
+    if star.controls.rotation_flag {
+        flexmesa_star::relax_uniform_omega(star, target_omega, 100, 1.0e9)?;
+    } else {
+        star.controls.rotation_flag = true;
+        apply_uniform_rotation(star, target_omega);
+        update_rotation_distortion_factors(star);
+    }
     Ok(())
 }
 

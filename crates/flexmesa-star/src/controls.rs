@@ -33,6 +33,10 @@ pub struct StarControls {
     pub max_age: f64,
     /// Maximum stellar age in seconds (`max_age_in_seconds`).
     pub max_age_in_seconds: Option<f64>,
+    /// Maximum cumulative retries across a run (`max_number_retries`, `< 0` disables).
+    pub max_number_retries: isize,
+    /// Maximum cumulative retries during relaxation (`relax_max_number_retries`).
+    pub relax_max_number_retries: isize,
     /// Maximum timestep in years (`max_years_for_timestep`, `<= 0` disables).
     pub max_years_for_timestep: f64,
     /// Minimum timestep limit in seconds (`min_timestep_limit`).
@@ -124,18 +128,24 @@ pub struct StarControls {
     pub okay_to_remesh: bool,
     /// Mesh spacing multiplier `mesh_delta_coeff` (`1.0` default, `0.5` in `star/test`).
     pub mesh_delta_coeff: f64,
-    /// Structural variation target `varcontrol_target` (`1e-4` default, `1e-3` in `star/test`).
+    /// Structural variation target `varcontrol_target` (`1e-3` default).
     pub varcontrol_target: f64,
-    /// Maximum Newton iterations per step (`max_tries1`).
-    pub max_newton_iters: usize,
+    /// Maximum Newton iterations before rejecting a normal step (`solver_max_tries_before_reject`, `25` default).
+    pub solver_max_tries_before_reject: usize,
+    /// Maximum Newton iterations on the first model of a run (`max_tries1`, `250` default).
+    pub max_tries1: usize,
+    /// Maximum Newton iterations on step retries 1..=5 (`max_tries_for_retry`, `25` default).
+    pub max_tries_for_retry: usize,
+    /// Maximum Newton iterations after 5 retries (`max_tries_after_5_retries`, `35` default).
+    pub max_tries_after_5_retries: usize,
+    /// Maximum Newton iterations after 10 retries (`max_tries_after_10_retries`, `50` default).
+    pub max_tries_after_10_retries: usize,
+    /// Maximum Newton iterations after 20 retries (`max_tries_after_20_retries`, `75` default).
+    pub max_tries_after_20_retries: usize,
     /// Convergence tolerance on mean scaled correction (`tol_correction_norm`).
     pub tol_correction_norm: f64,
     /// Convergence tolerance on maximum scaled correction (`tol_max_correction`).
     pub tol_max_correction: f64,
-    /// Legacy fallback convergence tolerance on mean residual (`tol_residual_norm`).
-    pub tol_residual_norm: f64,
-    /// Legacy fallback convergence tolerance on maximum residual (`tol_max_residual`).
-    pub tol_max_residual: f64,
     /// Whether hydrodynamic face velocity $v_k$ is an active variable (`v_flag`).
     pub v_flag: bool,
     /// Whether Riemann cell velocity $u_k$ is an active variable (`u_flag`).
@@ -578,6 +588,128 @@ pub struct StarControls {
     pub gold2_tol_residual_norm3: f64,
     /// Stage-3 gold2 max residual tolerance (`gold2_tol_max_residual3`).
     pub gold2_tol_max_residual3: f64,
+    /// Minimum Newton iterations per hydro solve (`solver_itermin`, `2` default).
+    pub solver_itermin: usize,
+    /// Iteration count before reducing `min_corr_coeff` (`solver_itermin_until_reduce_min_corr_coeff`, `8` default).
+    pub solver_itermin_until_reduce_min_corr_coeff: usize,
+    /// Reduced `min_corr_coeff` after `solver_itermin_until_reduce_min_corr_coeff` (`solver_reduced_min_corr_coeff`, `0.1` default).
+    pub solver_reduced_min_corr_coeff: f64,
+    /// Maximum consecutive iterations with `coeff < 1` before rejecting (`tiny_corr_coeff_limit`, `100` default).
+    pub tiny_corr_coeff_limit: usize,
+    /// Target norm ceiling for step scaling (`scale_correction_norm`, `0.1` default).
+    pub scale_correction_norm: f64,
+    /// Multiplier on `scale_correction_norm` rejecting excessive average corrections (`corr_param_factor`, `10.0` default).
+    pub corr_param_factor: f64,
+    /// Maximum correction ceiling before scaling (`scale_max_correction`, `1e99` default).
+    pub scale_max_correction: f64,
+    /// Bypass `corr_param_factor * scale_correction_norm` rejection (`ignore_too_large_correction`).
+    pub ignore_too_large_correction: bool,
+    /// Minimum line-search damping coefficient on retries (`corr_coeff_limit`, `1e-2` default).
+    pub corr_coeff_limit: f64,
+    /// Multiplier defining a tiny line-search damping factor (`tiny_corr_factor`, `2.0` default).
+    pub tiny_corr_factor: f64,
+    /// Allow `scale_max_correction` to damp below `min_corr_coeff` (`ignore_min_corr_coeff_for_scale_max_correction`).
+    pub ignore_min_corr_coeff_for_scale_max_correction: bool,
+    /// Maximum iteration-to-iteration increase factor in `correction_norm` (`corr_norm_jump_limit`, `1e99` default).
+    pub corr_norm_jump_limit: f64,
+    /// Maximum iteration-to-iteration increase factor in `max_correction` (`max_corr_jump_limit`, `1e12` default).
+    pub max_corr_jump_limit: f64,
+    /// Maximum iteration-to-iteration increase factor in `residual_norm` (`resid_norm_jump_limit`, `1e99` default).
+    pub resid_norm_jump_limit: f64,
+    /// Maximum iteration-to-iteration increase factor in `max_residual` (`max_resid_jump_limit`, `1e12` default).
+    pub max_resid_jump_limit: f64,
+    /// Peak temperature threshold (K) relaxing correction tolerances (`tol_correction_high_T_limit`, `1e9` default).
+    pub tol_correction_high_t_limit: f64,
+    /// High-$T$ `tol_correction_norm` (`tol_correction_norm_high_T`, `3e-3` default).
+    pub tol_correction_norm_high_t: f64,
+    /// High-$T$ `tol_max_correction` (`tol_max_correction_high_T`, `3e-1` default).
+    pub tol_max_correction_high_t: f64,
+    /// Extreme peak temperature threshold (K) relaxing correction tolerances (`tol_correction_extreme_T_limit`, `6e9` default).
+    pub tol_correction_extreme_t_limit: f64,
+    /// Extreme-$T$ `tol_correction_norm` (`tol_correction_norm_extreme_T`, `8e-3` default).
+    pub tol_correction_norm_extreme_t: f64,
+    /// Extreme-$T$ `tol_max_correction` (`tol_max_correction_extreme_T`, `8e-1` default).
+    pub tol_max_correction_extreme_t: f64,
+    /// Fallback ceiling on `max_correction` when out of tries (`tol_bad_max_correction`, `0.0` default).
+    pub tol_bad_max_correction: f64,
+    /// Maximum consecutive steps accepted via `tol_bad_max_correction` (`bad_max_correction_series_limit`, `2` default).
+    pub bad_max_correction_series_limit: usize,
+    /// Enable gold tolerances during relaxation (`relax_use_gold_tolerances`).
+    pub relax_use_gold_tolerances: bool,
+    /// Solver iteration timestep limit during relaxation (`relax_solver_iters_timestep_limit`, `0` default).
+    pub relax_solver_iters_timestep_limit: isize,
+    /// Relaxation override for `tol_correction_norm` (`relax_tol_correction_norm`, `0.0` default).
+    pub relax_tol_correction_norm: f64,
+    /// Relaxation override for `tol_max_correction` (`relax_tol_max_correction`, `0.0` default).
+    pub relax_tol_max_correction: f64,
+    /// Relaxation override for `tol_residual_norm1` (`relax_tol_residual_norm1`, `0.0` default).
+    pub relax_tol_residual_norm1: f64,
+    /// Relaxation override for `tol_max_residual1` (`relax_tol_max_residual1`, `0.0` default).
+    pub relax_tol_max_residual1: f64,
+    /// Relaxation override for `iter_for_resid_tol2` (`relax_iter_for_resid_tol2`, `3` default).
+    pub relax_iter_for_resid_tol2: usize,
+    /// Relaxation override for `tol_residual_norm2` (`relax_tol_residual_norm2`, `0.0` default).
+    pub relax_tol_residual_norm2: f64,
+    /// Relaxation override for `tol_max_residual2` (`relax_tol_max_residual2`, `0.0` default).
+    pub relax_tol_max_residual2: f64,
+    /// Relaxation override for `iter_for_resid_tol3` (`relax_iter_for_resid_tol3`, `0` default).
+    pub relax_iter_for_resid_tol3: usize,
+    /// Relaxation override for `tol_residual_norm3` (`relax_tol_residual_norm3`, `0.0` default).
+    pub relax_tol_residual_norm3: f64,
+    /// Relaxation override for `tol_max_residual3` (`relax_tol_max_residual3`, `0.0` default).
+    pub relax_tol_max_residual3: f64,
+    /// Relaxation override for `maxT_for_gold_tolerances` (`relax_maxT_for_gold_tolerances`, `-1.0` default).
+    pub relax_maxt_for_gold_tolerances: f64,
+    /// Hard negative abundance rejection floor (`min_xa_hard_limit`, `-1e-5` default).
+    pub min_xa_hard_limit: f64,
+    /// High-$T_c$ negative abundance rejection floor (`min_xa_hard_limit_for_highT`, `-3e-5` default).
+    pub min_xa_hard_limit_for_hight: f64,
+    /// Central $\log_{10} T$ up to which `min_xa_hard_limit` applies (`logT_max_for_min_xa_hard_limit`, `9.49` default).
+    pub logt_max_for_min_xa_hard_limit: f64,
+    /// Central $\log_{10} T$ above which `min_xa_hard_limit_for_highT` applies (`logT_min_for_min_xa_hard_limit_for_highT`, `9.51` default).
+    pub logt_min_for_min_xa_hard_limit_for_hight: f64,
+    /// Hard abundance sum error limit $|\sum X_i - 1|$ (`sum_xa_hard_limit`, `5e-4` default).
+    pub sum_xa_hard_limit: f64,
+    /// High-$T_c$ hard abundance sum error limit (`sum_xa_hard_limit_for_highT`, `1e-3` default).
+    pub sum_xa_hard_limit_for_hight: f64,
+    /// Central $\log_{10} T$ up to which `sum_xa_hard_limit` applies (`logT_max_for_sum_xa_hard_limit`, `9.40` default).
+    pub logt_max_for_sum_xa_hard_limit: f64,
+    /// Central $\log_{10} T$ above which `sum_xa_hard_limit_for_highT` applies (`logT_min_for_sum_xa_hard_limit_for_highT`, `9.44` default).
+    pub logt_min_for_sum_xa_hard_limit_for_hight: f64,
+    /// Uniformly damp Newton corrections to prevent negative mass fractions (`do_solver_damping_for_neg_xa`, `true` default).
+    pub do_solver_damping_for_neg_xa: bool,
+    /// Scale Newton correction to prevent negative surface luminosity (`scale_max_correction_for_negative_surf_lum`).
+    pub scale_max_correction_for_negative_surf_lum: bool,
+    /// Maximum fractional drop in surface luminosity when `scale_max_correction_for_negative_surf_lum` is active (`max_frac_for_negative_surf_lum`, `0.8_f32` default).
+    pub max_frac_for_negative_surf_lum: f64,
+    /// Maximum $|\Delta\log_{10} T|$ allowed in `set_vars_for_solver` (`hydro_mtx_max_allowed_abs_dlogT`, `99.0` default).
+    pub hydro_mtx_max_allowed_abs_dlogt: f64,
+    /// Maximum $|\Delta\log_{10}\rho|$ allowed in `set_vars_for_solver` (`hydro_mtx_max_allowed_abs_dlogRho`, `99.0` default).
+    pub hydro_mtx_max_allowed_abs_dlogrho: f64,
+    /// Minimum $\log_{10} T$ gating `hydro_mtx_max_allowed_*` (`min_logT_for_hydro_mtx_max_allowed`, `-1e99` default).
+    pub min_logt_for_hydro_mtx_max_allowed: f64,
+    /// Maximum $\log_{10} T$ allowed in `set_vars_for_solver` (`hydro_mtx_max_allowed_logT`, `12.0` default).
+    pub hydro_mtx_max_allowed_logt: f64,
+    /// Maximum $\log_{10}\rho$ allowed in `set_vars_for_solver` (`hydro_mtx_max_allowed_logRho`, `12.0` default).
+    pub hydro_mtx_max_allowed_logrho: f64,
+    /// Minimum $\log_{10} T$ allowed in `set_vars_for_solver` (`hydro_mtx_min_allowed_logT`, `1.0` default).
+    pub hydro_mtx_min_allowed_logt: f64,
+    /// Minimum $\log_{10}\rho$ allowed in `set_vars_for_solver` (`hydro_mtx_min_allowed_logRho`, `-1e2` default).
+    pub hydro_mtx_min_allowed_logrho: f64,
+    /// Abundance floor below which `check1_chem` clips species to zero (`xa_clip_limit`, `1e-99` default).
+    pub xa_clip_limit: f64,
+    /// Specific energy floor in `RTI_check_after_converge` (`RTI_energy_floor`, `0.0` default).
+    pub rti_energy_floor: f64,
+    /// Maximum forced solver iterations for accreted surface entropy changes (`max_num_surf_revisions`, `1` default).
+    pub max_num_surf_revisions: usize,
+    /// Relative surface $\ln S$ change threshold triggering extra accretion iteration (`max_abs_rel_change_surf_lnS`, `5e-4` default).
+    pub max_abs_rel_change_surf_lns: f64,
+    /// Maximum iterations for implicit stellar wind convergence (`max_tries_for_implicit_wind`, `0` default).
+    pub max_tries_for_implicit_wind: usize,
+    /// Relative convergence tolerance for implicit stellar wind (`iwind_tolerance`, `1e-3` default).
+    pub iwind_tolerance: f64,
+    /// Relaxation weight for implicit stellar wind fixed-point/secant loop (`iwind_lambda`, `1.0` default).
+    pub iwind_lambda: f64,
     /// Overshooting, predictive mixing, premixing, wind, `eps_mdot`, and mesh controls.
     pub mix_wind: crate::controls_mix_wind::MixWindControls,
     /// Core-boundary thresholds, extended stopping criteria, and timestep limits.

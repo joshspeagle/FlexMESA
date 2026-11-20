@@ -68,7 +68,7 @@ reason = "12/14 gs98 and CO-enhanced channels match at 0 ULP (log10kap = 1 ULP);
 [[gaps]]
 module = "mtx"
 status = "partial_0_ulp"
-issue = "#152"
+issue = "#144"
 max_declared_ulp = 0
 min_zero_ulp_count = 7
 expect_nonzero_ulp = false
@@ -113,7 +113,7 @@ reason = "3,636/3,639 outputs (all 2,763 raw rates, 12 screening, 845/846 weak, 
 [[gaps]]
 module = "num"
 status = "unported_hex_harness"
-issue = "#152"
+issue = "#144"
 reason = "570 upstream num Brent/Newton/ODE test printouts await direct TSV harness mapping."
 
 [[gaps]]
@@ -152,5 +152,5 @@ reason = "92 upstream bundled ADIPLS pulsation eigenfrequency outputs tracked un
 [[gaps]]
 module = "star"
 status = "unported_hex_harness"
-issue = "#152"
+issue = "#140"
 reason = "386 upstream star/test console values (plus 240 history_exact_hex cells) tracked under stellar parity issues."

@@ -13,15 +13,15 @@
         "upstream_lines": 120509,
         "absent": 17759,
         "stub": 6378,
-        "partial": 60672,
-        "ported_unverified": 30729,
+        "partial": 54753,
+        "ported_unverified": 36648,
         "kernel_reference_vectors": 4971,
         "case_level_evidence": 0,
-        "ported_total": 35700,
+        "ported_total": 41619,
         "verified_total": 4971,
-        "pct_ported": 29.6,
+        "pct_ported": 34.5,
         "pct_verified": 4.1,
-        "rust_lines": 79157,
+        "rust_lines": 82435,
         "python_jax_lines": 3869
       },
       {
@@ -55,7 +55,7 @@
         "verified_total": 0,
         "pct_ported": 18.7,
         "pct_verified": 0.0,
-        "rust_lines": 11751,
+        "rust_lines": 11772,
         "python_jax_lines": 1244
       },
       {
@@ -455,8 +455,8 @@
       "upstream_panel_modules": 46
     },
     "infrastructure_lines": {
-      "rust_bridge_testing_bench": 19276,
-      "python_testing_bench": 14202
+      "rust_bridge_testing_bench": 19288,
+      "python_testing_bench": 14207
     }
   },
   "numerics": {
@@ -595,7 +595,7 @@
         "no_reference_yet": 4,
         "strict_validated": 0,
         "diagnostic_runs": 90,
-        "reached_termination": 36,
+        "reached_termination": 37,
         "within_numeric_tol": 5,
         "passing": 0,
         "declared_gaps": 86,
@@ -669,15 +669,14 @@
       }
     ],
     "gaps_by_issue": {
-      "#152": 30,
-      "#161": 17,
-      "#154": 12,
+      "#161": 27,
+      "#159": 20,
+      "#154": 13,
+      "#157": 9,
       "#162": 9,
-      "#157": 8,
       "#160": 7,
       "#170": 7,
-      "#158": 4,
-      "#159": 4,
+      "#158": 6,
       "#231": 2,
       "#151": 1,
       "#171": 1
@@ -688,12 +687,12 @@
     {
       "namelist": "star &controls",
       "upstream_scalars": 1444,
-      "matched_in_flexmesa": 958,
-      "defaults_agree": 958,
+      "matched_in_flexmesa": 1094,
+      "defaults_agree": 1094,
       "value_mismatch": 0,
       "disabled_limit_none": 0,
       "skipped_unparseable_rust": 17,
-      "unimplemented": 469
+      "unimplemented": 333
     },
     {
       "namelist": "star &star_job",
@@ -1107,7 +1106,7 @@
     }
   },
   "skips": {
-    "rust_ignore_count": 17,
+    "rust_ignore_count": 16,
     "rust_ignores": [
       {
         "location": "crates/flexmesa-astero/tests/astero_suite.rs:422",
@@ -1135,42 +1134,37 @@
         "issues": "#143, #162"
       },
       {
-        "location": "crates/flexmesa-binary/tests/tier5_coupled_suite.rs:928",
+        "location": "crates/flexmesa-binary/tests/tier5_coupled_suite.rs:987",
         "reason": "unverified uncapped binary campaign; tracked in #143 and #160",
         "issues": "#143, #160"
       },
       {
-        "location": "crates/flexmesa-binary/tests/tier5_coupled_suite.rs:988",
+        "location": "crates/flexmesa-binary/tests/tier5_coupled_suite.rs:995",
         "reason": "unverified uncapped binary campaign; tracked in #143 and #160",
         "issues": "#143, #160"
       },
       {
-        "location": "crates/flexmesa-binary/tests/tier5_coupled_suite.rs:996",
+        "location": "crates/flexmesa-binary/tests/tier5_coupled_suite.rs:1004",
         "reason": "unverified uncapped binary campaign; tracked in #143 and #160",
         "issues": "#143, #160"
       },
       {
-        "location": "crates/flexmesa-binary/tests/tier5_coupled_suite.rs:1005",
+        "location": "crates/flexmesa-binary/tests/tier5_coupled_suite.rs:1012",
         "reason": "unverified uncapped binary campaign; tracked in #143 and #160",
         "issues": "#143, #160"
       },
       {
-        "location": "crates/flexmesa-binary/tests/tier5_coupled_suite.rs:1013",
+        "location": "crates/flexmesa-binary/tests/tier5_coupled_suite.rs:1020",
         "reason": "unverified uncapped binary campaign; tracked in #143 and #160",
         "issues": "#143, #160"
       },
       {
-        "location": "crates/flexmesa-binary/tests/tier5_coupled_suite.rs:1021",
+        "location": "crates/flexmesa-binary/tests/tier5_coupled_suite.rs:1027",
         "reason": "unverified uncapped binary campaign; tracked in #143 and #160",
         "issues": "#143, #160"
       },
       {
-        "location": "crates/flexmesa-binary/tests/tier5_coupled_suite.rs:1028",
-        "reason": "unverified uncapped binary campaign; tracked in #143 and #160",
-        "issues": "#143, #160"
-      },
-      {
-        "location": "crates/flexmesa-binary/tests/tier5_coupled_suite.rs:1036",
+        "location": "crates/flexmesa-binary/tests/tier5_coupled_suite.rs:1035",
         "reason": "unverified uncapped binary campaign; tracked in #143 and #160",
         "issues": "#143, #160"
       },

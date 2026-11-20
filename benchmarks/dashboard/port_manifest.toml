@@ -6774,7 +6774,7 @@ upstream_lines = 2403
 upstream_sha256 = "101795067cd3ba193a0289d55fc2412f49c5251d38bd5240b51e68c2e868e748"
 status = "partial"
 flexmesa_files = ["crates/flexmesa-star/src/evolve.rs", "crates/flexmesa-star/src/evolve_support.rs", "crates/flexmesa-star/src/mdot_redo.rs"]
-notes = "seeded from coverage-map.md (partial): deep. Step/retry loop, implicit-mdot redo (`select_mdot_action`), energy-conservation accounting present. Missing: `do_step_part1` pieces (adjust_net, remove shells, `do_mesh` variants), redo (`prepare_to_redo`) as a driver action, `report_problems`, most `other_*` hooks, `set_age` details; non-upstream retry factors (C1-20)"
+notes = "updated for #152: retry/redo flow, restore_mesh_on_retry, select_mdot_action (#139), max_age* clipping, min_timestep_limit/max_number_retries/redo_limit terminations, and do_adjust_mesh wiring (#153). Still missing: adjust_net, remove_shells, and remaining other_* hooks (#154, #159)"
 
 [[files]]
 upstream_path = "star/private/evolve_support.f90"
@@ -6782,8 +6782,8 @@ module = "star"
 upstream_lines = 305
 upstream_sha256 = "075e367c470a7e2450e26ab861634e8e706fe40de2dce8b1469657d15a970253"
 status = "partial"
-flexmesa_files = ["crates/flexmesa-star/src/evolve.rs"]
-notes = "seeded from coverage-map.md (partial): quick. Generation bookkeeping re-implemented"
+flexmesa_files = ["crates/flexmesa-star/src/evolve.rs", "crates/flexmesa-star/src/evolve_support.rs"]
+notes = "updated for #152: new_generation, set_current_to_old / restore_from_old (M/R/L/v_center, time_sec, mlt_vc), and prepare_for_new_step / prepare_for_new_try; output_to_file photo/history hooks live in inlist_runner.rs"
 
 [[files]]
 upstream_path = "star/private/gravity_darkening.f90"
@@ -7816,9 +7816,17 @@ upstream_path = "star/private/solver_support.f90"
 module = "star"
 upstream_lines = 1547
 upstream_sha256 = "f0e4afc3f21cda8eef650aa9a33cf2c1e535bd8bf297929f3c486561f164ecc1"
-status = "partial"
-flexmesa_files = ["crates/flexmesa-star/src/hydro_eqns.rs", "crates/flexmesa-star/src/solver.rs", "crates/flexmesa-star/src/solver_norms.rs"]
-notes = "seeded from coverage-map.md (partial): deep-ish. x-scale and norms present; `Bdomain`, `force_another_iteration`, `edit_lnR` absent"
+status = "ported_unverified"
+flexmesa_files = ["crates/flexmesa-star/src/hydro_eqns.rs", "crates/flexmesa-star/src/solver.rs", "crates/flexmesa-star/src/solver_norms.rs", "crates/flexmesa-star/src/solver_support.rs"]
+notes = "updated for #152: set_xscale_info, sizequ (#177), sizeB (#251), Bdomain, set_vars_for_solver (edit_lnR, min_xa_hard_limit, sum_xa_hard_limit, #252), and check_after_converge"
+[files.routine_map]
+"Bdomain" = "crates/flexmesa-star/src/solver_support.rs::apply_bdomain"
+"eval_equations" = "crates/flexmesa-star/src/hydro_eqns.rs::eval_henyey_equations_into"
+"force_another_iteration" = "crates/flexmesa-star/src/solver_support.rs::force_another_iteration"
+"inspectB" = "crates/flexmesa-star/src/solver.rs::solve_henyey_step"
+"set_xscale_info" = "crates/flexmesa-star/src/hydro_eqns.rs::compute_x_scale_into"
+"sizeB" = "crates/flexmesa-star/src/solver_norms.rs::compute_model_correction_norms_in_solver"
+"sizequ" = "crates/flexmesa-star/src/solver_norms.rs::compute_residual_norms_with_argmax"
 
 [[files]]
 upstream_path = "star/private/star_bcyclic.f90"
@@ -7871,9 +7879,11 @@ upstream_path = "star/private/star_solver.f90"
 module = "star"
 upstream_lines = 1940
 upstream_sha256 = "517a4a50c6790c57c4035bcf7d7bd04ad08e610d5d65467e3b3a86fa54e7aa88"
-status = "partial"
-flexmesa_files = ["crates/flexmesa-star/src/solver.rs"]
-notes = "seeded from coverage-map.md (partial): deep (C1-17). Newton loop and gold tolerances present; line search and iteration control are not upstream's"
+status = "ported_unverified"
+flexmesa_files = ["crates/flexmesa-star/src/solver.rs", "crates/flexmesa-star/src/solver_support.rs"]
+notes = "updated for #152: do_solver_work, adjust_correction (quadratic/cubic backtracking via block_multiply_xa), apply_coeff, retry max_tries schedule, solver_itermin, tiny_corr_coeff_limit, and high-T correction tolerance relaxation"
+[files.routine_map]
+"solver" = "crates/flexmesa-star/src/solver.rs::solve_henyey_step"
 
 [[files]]
 upstream_path = "star/private/star_utils.f90"
@@ -7922,9 +7932,13 @@ upstream_path = "star/private/timestep.f90"
 module = "star"
 upstream_lines = 2432
 upstream_sha256 = "1a4419ba2e0122a462c824534aa17596902b3cc7ff62d2a3091acbadde1b8378"
-status = "partial"
+status = "ported_unverified"
 flexmesa_files = ["crates/flexmesa-star/src/timestep.rs", "crates/flexmesa-star/src/timestep_checks.rs", "crates/flexmesa-star/src/timestep_limits.rs"]
-notes = "seeded from coverage-map.md (partial): deep-ish. Controller/H211 filter and ~25 of 41 limiters present by control name; missing `check_dYe_highT_change`, `check_dlog_eps_nuc_change`, `check_adjust_J_q`, `check_dX_div_X_cntr`, `check_lgL_nuc_cat_change`, Ne/O/Si centre checks"
+notes = "updated for #152: H211 and first-order dt controller plus all timestep.f90 limiters including check_dYe_highT_change, check_dlog_eps_nuc_change, check_adjust_J_q, check_dX_div_X_cntr, check_lgL_nuc_cat_change, Ne/O/Si center checks, #177 X/Y check_dX, and #253 guard"
+[files.routine_map]
+"check_change" = "crates/flexmesa-star/src/timestep_checks.rs::check_change"
+"check_integer_limit" = "crates/flexmesa-star/src/timestep_checks.rs::check_integer_limit"
+"timestep_controller" = "crates/flexmesa-star/src/timestep_limits.rs::timestep_controller"
 
 [[files]]
 upstream_path = "star/private/turb_info.f90"

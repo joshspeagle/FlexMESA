@@ -271,15 +271,20 @@ pub(crate) fn timestep_controller_with_extras(
         let ts = &c.ts_stop;
         let sh = &model.aux.step_hist;
 
-        let solver_lim = if model.aux.doing_relax
-            && c.relax_solver_iters_timestep_limit > 0
+        // `star/private/timestep.f90:436-440`: start from
+        // `solver_iters_timestep_limit` (which `star/private/relax.f90:3999-4000`
+        // replaces with `relax_solver_iters_timestep_limit` while relaxing when
+        // that control is nonzero), then let the gold limit override it.
+        let mut solver_lim = if model.aux.doing_relax
+            && c.relax_solver_iters_timestep_limit != 0
         {
             c.relax_solver_iters_timestep_limit
-        } else if model.using_gold_tolerances {
-            ts.gold_solver_iters_timestep_limit
         } else {
             ts.solver_iters_timestep_limit
         };
+        if model.using_gold_tolerances {
+            solver_lim = ts.gold_solver_iters_timestep_limit;
+        }
         let solver_iters = if model.used_extra_iter_in_solver_for_accretion {
             sh.last_solver_iterations.saturating_sub(1)
         } else {

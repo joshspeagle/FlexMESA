@@ -1,0 +1,77 @@
+{
+  "reference": {
+    "mesa_release": "26.4.1",
+    "mesa_version_header": "r26.4.1",
+    "compiler": "gfortran 15.2.0",
+    "mesa_sdk_version": "x86_64-linux-26.6.1",
+    "omp_num_threads": 4
+  },
+  "setup": {
+    "donor_model": "unrelaxed ZAMS (initial_z = 0.02, Zbase = 0.02)",
+    "mdot_scheme": "Ritter",
+    "max_tries_to_achieve": 20,
+    "terminate_if_initial_overflow": false,
+    "use_radiation_corrected_transfer_rate": false,
+    "step1_initial_dt_yr": 1000.0,
+    "step2_fr_hard": 1e-05,
+    "step2_min_dt_yr": 10000.0,
+    "max_number_retries_cap_for_1p5_case": 40
+  },
+  "mesa_26_4_1_runs": [
+    {
+      "case": "original_1p5_1p0_0p45d",
+      "m1_msun": 1.5,
+      "m2_msun": 1.0,
+      "initial_period_days": 0.45,
+      "mesa_version": "r26.4.1",
+      "compiler": "gfortran 15.2.0",
+      "mesa_sdk_version": "x86_64-linux-26.6.1",
+      "run_date": "20261120",
+      "termination_code": "max_number_retries",
+      "models_completed": 1,
+      "step1_age_yr": 125.0,
+      "step1_rl_relative_overflow_1": -0.004906112169127044,
+      "step1_lg_mtransfer_rate": -98.99999999999999,
+      "step1_retries_logged": 1,
+      "solver_retries_reported": 24,
+      "give_up_in_solver_count": 17,
+      "hydro_mtx_bound_retry_count": 7,
+      "fr_hard_retry_count": 15,
+      "min_reported_dt_sec": 18.36894080042839
+    },
+    {
+      "case": "replacement_2p0_1p5_0p5045d",
+      "m1_msun": 2.0,
+      "m2_msun": 1.5,
+      "initial_period_days": 0.5045,
+      "mesa_version": "r26.4.1",
+      "compiler": "gfortran 15.2.0",
+      "mesa_sdk_version": "x86_64-linux-26.6.1",
+      "run_date": "20261120",
+      "termination_code": "min_timestep_limit",
+      "models_completed": 1,
+      "step1_age_yr": 1000.0,
+      "step1_rl_relative_overflow_1": -0.0026194755585847575,
+      "step1_lg_mtransfer_rate": -12.887706031057544,
+      "step1_retries_logged": 0,
+      "solver_retries_reported": 0,
+      "give_up_in_solver_count": 7,
+      "hydro_mtx_bound_retry_count": 0,
+      "fr_hard_retry_count": 52,
+      "min_reported_dt_sec": 5.474370956548569e-07
+    }
+  ],
+  "flexmesa_probe_on_original_1p5": {
+    "step1_dt_sec": 3945000000.0,
+    "step1_retries": 1,
+    "step1_solver_calls": 6,
+    "step2_dt_sec": 9.184,
+    "step2_retries": 16,
+    "step2_solver_calls": 42,
+    "step3_dt_sec": 0.01794,
+    "step3_retries": 17,
+    "step3_solver_calls": 52,
+    "binary_counters_test_wall_sec": 58.34,
+    "checkpoint_child_process_restart_test_status": "timeout_120s"
+  }
+}

@@ -368,7 +368,93 @@ fn build_plan_for_given_dq(
     })
 }
 
-/// Evaluates `cell_specific_PE` (`star/private/star_utils.f90:2224-2277`).
+/// Pure IEEE-754 double-double (`~106`-bit significand, zero FMA, zero
+/// `unsafe`) used to match upstream `real(qp)` intermediates in
+/// `cell_specific_PE_qp` and `cell_specific_KE_qp`
+/// (`star/private/star_utils.f90:2184-2277`).
+#[derive(Clone, Copy)]
+struct Dd {
+    hi: f64,
+    lo: f64,
+}
+
+impl Dd {
+    #[inline]
+    const fn from_f64(x: f64) -> Self {
+        Self { hi: x, lo: 0.0 }
+    }
+
+    #[inline]
+    fn quick_two_sum(a: f64, b: f64) -> (f64, f64) {
+        let s = a + b;
+        let e = b - (s - a);
+        (s, e)
+    }
+
+    #[inline]
+    fn two_sum(a: f64, b: f64) -> (f64, f64) {
+        let s = a + b;
+        let v = s - a;
+        let e = (a - (s - v)) + (b - v);
+        (s, e)
+    }
+
+    /// Veltkamp-Dekker error-free product without FMA (strict-mode safe).
+    #[inline]
+    fn two_prod(a: f64, b: f64) -> (f64, f64) {
+        const SPLIT: f64 = 134_217_729.0; // 2^27 + 1
+        let p = a * b;
+        let ta = SPLIT * a;
+        let a_hi = ta - (ta - a);
+        let a_lo = a - a_hi;
+        let tb = SPLIT * b;
+        let b_hi = tb - (tb - b);
+        let b_lo = b - b_hi;
+        let err = ((a_hi * b_hi - p) + a_hi * b_lo + a_lo * b_hi) + a_lo * b_lo;
+        (p, err)
+    }
+
+    #[inline]
+    fn add(self, rhs: Self) -> Self {
+        let (s1, s2) = Self::two_sum(self.hi, rhs.hi);
+        let (t1, t2) = Self::two_sum(self.lo, rhs.lo);
+        let (c, e) = Self::quick_two_sum(s1, s2 + t1);
+        let (hi, lo) = Self::quick_two_sum(c, e + t2);
+        Self { hi, lo }
+    }
+
+    #[inline]
+    fn sub(self, rhs: Self) -> Self {
+        self.add(Self {
+            hi: -rhs.hi,
+            lo: -rhs.lo,
+        })
+    }
+
+    #[inline]
+    fn mul(self, rhs: Self) -> Self {
+        let (p1, p2) = Self::two_prod(self.hi, rhs.hi);
+        let p2 = p2 + (self.hi * rhs.lo + self.lo * rhs.hi);
+        let (hi, lo) = Self::quick_two_sum(p1, p2);
+        Self { hi, lo }
+    }
+
+    #[inline]
+    fn div(self, rhs: Self) -> Self {
+        let q1 = self.hi / rhs.hi;
+        let r1 = self.sub(rhs.mul(Self::from_f64(q1)));
+        let q2 = r1.hi / rhs.hi;
+        let r2 = r1.sub(rhs.mul(Self::from_f64(q2)));
+        let q3 = r2.hi / rhs.hi;
+        let (s, e) = Self::quick_two_sum(q1, q2);
+        Self { hi: s, lo: e }.add(Self::from_f64(q3))
+    }
+}
+
+/// Evaluates `cell_specific_PE` (`star/private/star_utils.f90:2224-2277`),
+/// accumulating the intermediate gravitational potentials in double-double
+/// precision to match upstream `cell_specific_PE_qp` before rounding back to
+/// `f64`.
 #[must_use]
 pub fn cell_specific_pe(model: &StarModel, k: usize) -> f64 {
     let nz = model.nz;
@@ -385,17 +471,30 @@ pub fn cell_specific_pe(model: &StarModel, k: usize) -> f64 {
     } else {
         (model.r[k + 1], model.m_grav[k + 1], model.cgrav[k + 1])
     };
-    let gravp1 = if rp1 <= 0.0 { 0.0 } else { -gp1 * mp1 / rp1 };
+    let gravp1 = if rp1 <= 0.0 {
+        Dd::from_f64(0.0)
+    } else {
+        Dd::from_f64(-gp1)
+            .mul(Dd::from_f64(mp1))
+            .div(Dd::from_f64(rp1))
+    };
     let r00 = model.r[k];
     let grav00 = if r00 <= 0.0 {
-        0.0
+        Dd::from_f64(0.0)
     } else {
-        -model.cgrav[k] * model.m_grav[k] / r00
+        Dd::from_f64(-model.cgrav[k])
+            .mul(Dd::from_f64(model.m_grav[k]))
+            .div(Dd::from_f64(r00))
     };
-    0.5 * mbar * (gravp1 + grav00)
+    Dd::from_f64(0.5)
+        .mul(Dd::from_f64(mbar))
+        .mul(gravp1.add(grav00))
+        .hi
 }
 
-/// Evaluates `cell_specific_KE` (`star/private/star_utils.f90:2176-2221`).
+/// Evaluates `cell_specific_KE` (`star/private/star_utils.f90:2176-2221`),
+/// accumulating the intermediate velocity squares in double-double precision
+/// to match upstream `cell_specific_KE_qp` before rounding back to `f64`.
 #[must_use]
 pub fn cell_specific_ke(model: &StarModel, k: usize) -> f64 {
     let nz = model.nz;
@@ -408,17 +507,20 @@ pub fn cell_specific_ke(model: &StarModel, k: usize) -> f64 {
         1.0
     };
     if model.controls.u_flag {
-        let v0 = model.u[k];
-        0.5 * mbar * (v0 * v0)
+        let v0 = Dd::from_f64(model.u[k]);
+        Dd::from_f64(0.5)
+            .mul(Dd::from_f64(mbar))
+            .mul(v0.mul(v0))
+            .hi
     } else if model.controls.v_flag {
-        let v0 = model.v[k];
-        let v1 = if k + 1 < nz {
+        let v0 = Dd::from_f64(model.v[k]);
+        let v1 = Dd::from_f64(if k + 1 < nz {
             model.v[k + 1]
         } else {
             model.v_center
-        };
-        let v2 = 0.5 * (v0 * v0 + v1 * v1);
-        0.5 * mbar * v2
+        });
+        let v2 = Dd::from_f64(0.5).mul(v0.mul(v0).add(v1.mul(v1)));
+        Dd::from_f64(0.5).mul(Dd::from_f64(mbar)).mul(v2).hi
     } else {
         0.0
     }

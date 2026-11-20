@@ -624,8 +624,10 @@ pub fn profile_star_case(
                     }
                     let hr = extract_history_row(&model);
                     let mut will_terminate = false;
-                    if let Some(code) =
-                        check_termination_limits_with_history(&model, Some(&hr))
+                    if let Ok(flexmesa_star::LimitCheckOutcome::Terminate {
+                        code,
+                        ..
+                    }) = check_termination_limits_with_history(&model, Some(&hr))
                     {
                         termination_code = code;
                         will_terminate = true;

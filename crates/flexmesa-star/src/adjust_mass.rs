@@ -5,7 +5,6 @@
 //! `star/private/adjust_mass.f90`.
 
 use flexmesa_const::{LN10, M_SUN, SECYER};
-use flexmesa_num::neumaier_sum;
 
 pub use crate::accretion_xa::{build_accreted_xa, get_xa_for_accretion};
 use crate::controls::StarError;
@@ -14,13 +13,15 @@ use crate::eps_mdot::{
     PrevMassState, calculate_eps_mdot_with_change,
     eval_specific_kinetic_energy_profile, eval_specific_total_energy_profile,
 };
+use crate::hydro_rotation::{
+    DEFAULT_W_DIV_WCRIT_MAX2, eval_i_rot, w_div_w_roche_jrot,
+    w_div_w_roche_omega,
+};
 use crate::hydro_vars::set_hydro_vars;
 use crate::mesh_remap::normalize_and_assign_remapped_xa;
 use crate::micro::{do_eos, set_basic_vars};
 use crate::model::StarModel;
-use crate::rotation::{
-    conserve_shell_j_rot_and_distortion, eval_omega_crit, eval_rotation_fp_ft,
-};
+use crate::rotation::conserve_shell_j_rot_and_distortion;
 
 fn sync_enclosed_mass_from_dm(model: &mut StarModel, dm_target: &[f64]) {
     model.dm.copy_from_slice(dm_target);
@@ -210,7 +211,12 @@ fn revise_q_and_dq_upstream(
     let mold_o_mnew = old_xmstar / new_xmstar;
     let dq_acc = delta_m / new_xmstar;
 
-    let sum_dq_init = neumaier_sum(&model.dq);
+    // Initial `dq` renormalization (`adjust_mass.f90:661-676`): plain
+    // left-to-right sum matching upstream strict-mode arithmetic.
+    let mut sum_dq_init = 0.0_f64;
+    for &d in &model.dq {
+        sum_dq_init += d;
+    }
     if !sum_dq_init.is_finite() || sum_dq_init <= 0.0 {
         return Err(StarError::ConvergenceFailure(format!(
             "revise_q_and_dq: invalid initial sum(dq)={sum_dq_init}"
@@ -320,8 +326,12 @@ fn revise_q_and_dq_upstream(
         *val *= mold_o_mnew;
     }
 
-    // Renormalize `dq` (`adjust_mass.f90:791-806`).
-    let sum_dq = neumaier_sum(&dq);
+    // Renormalize `dq` (`adjust_mass.f90:791-806`): plain left-to-right sum
+    // matching upstream strict-mode arithmetic.
+    let mut sum_dq = 0.0_f64;
+    for &d in &dq {
+        sum_dq += d;
+    }
     if !sum_dq.is_finite() || sum_dq <= 0.0 {
         return Err(StarError::ConvergenceFailure(format!(
             "revise_q_and_dq: invalid renorm sum(dq)={sum_dq}"
@@ -332,26 +342,17 @@ fn revise_q_and_dq_upstream(
         *val *= inv_sum;
     }
 
-    // Set `q` from `dq` and close `dq[nz-1] = q[nz-1]` (`adjust_mass.f90:813-826`).
-    // Accumulate with Neumaier compensation so `dq[nz - 1]` closes to machine
-    // precision (`sum(dq) == 1.0`) without dumping naive-sum drift into cell `nz - 1`.
+    // Set `q` from `dq` and close `dq[nz-1] = q[nz-1]` (`adjust_mass.f90:813-826`)
+    // using upstream's plain left-to-right running sum.
     model.dq = dq;
     model.q.resize(nz, 0.0);
     model.q[0] = 1.0;
-    let mut sum_hi = model.dq[0];
-    let mut sum_lo = 0.0_f64;
+    let mut sumdq = model.dq[0];
     for k in 1..(nz - 1) {
-        model.q[k] = 1.0 - (sum_hi + sum_lo);
-        let d = model.dq[k];
-        let t = sum_hi + d;
-        if sum_hi.abs() >= d.abs() {
-            sum_lo += (sum_hi - t) + d;
-        } else {
-            sum_lo += (d - t) + sum_hi;
-        }
-        sum_hi = t;
+        model.q[k] = 1.0 - sumdq;
+        sumdq += model.dq[k];
     }
-    model.q[nz - 1] = 1.0 - (sum_hi + sum_lo);
+    model.q[nz - 1] = 1.0 - sumdq;
     model.dq[nz - 1] = model.q[nz - 1];
     model.set_xqs();
 
@@ -673,48 +674,37 @@ fn remap_xa_cells(
 }
 
 fn set1_irot(model: &mut StarModel, k: usize, jrot_known: bool) {
-    let r00 = model.r[k].max(1.0e5);
-    let m_k = model.m[k].max(1.0e20);
-    let cgrav_k = model.cgrav[k];
-    let max_w = model.controls.mix_wind.w_div_wcrit_max.clamp(0.0, 0.99);
-    let om_c = eval_omega_crit(cgrav_k, m_k, r00, 0.0, 0.0, 0.99);
-
-    let i_rot_k = if jrot_known {
-        let j_target = model.j_rot[k];
-        let mut ir = model
-            .aux
-            .i_rot
-            .get(k)
-            .copied()
-            .filter(|&v| v > 0.0)
-            .unwrap_or_else(|| (2.0 / 3.0) * r00 * r00);
-        for _ in 0..12 {
-            let om = j_target / ir.max(1.0e-30);
-            let w = if om_c > 0.0 {
-                (om.abs() / om_c).min(max_w)
-            } else {
-                0.0
-            };
-            let (_, _, i_r2) = eval_rotation_fp_ft(w, 0.75, 0.95);
-            let ir_new = (i_r2 * r00 * r00).max(1.0e-30);
-            let rel = (ir_new - ir).abs() / ir_new;
-            ir = ir_new;
-            if rel < 1.0e-14 {
-                break;
-            }
-        }
-        ir
+    // Verbatim port of `set1_irot` (`star/private/adjust_mass.f90:1232-1257`):
+    // `r00 = get_r_from_xh(s, k)` (`star/private/star_utils.f90:429-440`),
+    // `w_div_w_roche_{jrot,omega}`, and `eval_i_rot`
+    // (`star/private/hydro_rotation.f90:55-226, 874-920`).
+    // Solver-variable `w_div_wc_flag` and `simple_i_rot_flag` default to
+    // `.false.` (`controls.defaults:4074, 4188`; full `w_div_wc_flag` solver
+    // variable support is tracked under `#158`).
+    let r00 = flexmesa_math::exp(model.ln_r[k]);
+    let max_w = model.controls.mix_wind.w_div_wcrit_max;
+    let w_div_wcrit_roche = if jrot_known {
+        w_div_w_roche_jrot(
+            r00,
+            model.m[k],
+            model.j_rot[k],
+            model.cgrav[k],
+            max_w,
+            DEFAULT_W_DIV_WCRIT_MAX2,
+            false,
+        )
     } else {
-        let om = model.omega[k];
-        let w = if om_c > 0.0 {
-            (om.abs() / om_c).min(max_w)
-        } else {
-            0.0
-        };
-        let (_, _, i_r2) = eval_rotation_fp_ft(w, 0.75, 0.95);
-        (i_r2 * r00 * r00).max(1.0e-30)
+        w_div_w_roche_omega(
+            r00,
+            model.m[k],
+            model.omega[k],
+            model.cgrav[k],
+            max_w,
+            DEFAULT_W_DIV_WCRIT_MAX2,
+            false,
+        )
     };
-
+    let i_rot_k = eval_i_rot(r00, w_div_wcrit_roche, false);
     if k < model.aux.i_rot.len() {
         model.aux.i_rot[k] = i_rot_k;
     }
@@ -782,8 +772,7 @@ fn set_omega_adjust_mass(
             for k in 0..outer_end {
                 model.j_rot[k] = acc_j;
                 set1_irot(model, k, true);
-                model.omega[k] =
-                    model.j_rot[k] / model.aux.i_rot[k].max(1.0e-30);
+                model.omega[k] = model.j_rot[k] / model.aux.i_rot[k];
             }
             let goal_total = old_j_tot + delta_m * acc_j;
             let inner_total: f64 = ((k_below_just_added + 1)..nz)
@@ -803,8 +792,7 @@ fn set_omega_adjust_mass(
             for k in (k_below_just_added - 1)..=k_below_just_added {
                 model.j_rot[k] = bdy_j;
                 set1_irot(model, k, true);
-                model.omega[k] =
-                    model.j_rot[k] / model.aux.i_rot[k].max(1.0e-30);
+                model.omega[k] = model.j_rot[k] / model.aux.i_rot[k];
             }
         } else {
             // Default (`adjust_mass.f90:1199-1205`): assign old surface angular
@@ -934,7 +922,7 @@ fn set1_omega(
 
     model.j_rot[k] = j_tot / new_point_dmbar;
     set1_irot(model, k, true);
-    model.omega[k] = model.j_rot[k] / model.aux.i_rot[k].max(1.0e-30);
+    model.omega[k] = model.j_rot[k] / model.aux.i_rot[k];
     Ok(())
 }
 
@@ -1027,7 +1015,7 @@ fn adjust_j_lost(
         for k in 0..last_k {
             model.j_rot[k] *= frac * (model.q[k] - qlast) + 1.0;
             set1_irot(model, k, true);
-            model.omega[k] = model.j_rot[k] / model.aux.i_rot[k].max(1.0e-30);
+            model.omega[k] = model.j_rot[k] / model.aux.i_rot[k];
         }
     }
     Ok(())

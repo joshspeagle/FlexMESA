@@ -826,3 +826,98 @@ fn test_make_gradr_sticky_tracks_solver_iter_not_line_search_eval_count() {
         "solver_iter=4 (> 3) must latch radiative faces into fixed_gradr_sticky"
     );
 }
+
+#[test]
+fn test_check_dx_hard_limit_retries_without_positivity_guard() {
+    // Upstream `star/private/timestep.f90:580-581, 603-605` tests
+    // `delta_X > dX_hard_limit(i)` and `delta_X_div_X > dX_div_X_hard_limit(i)`
+    // without requiring `dX_hard_limit > 0` or `X > 0`.
+    let mut m = load_zams_model(
+        StarControls {
+            initial_mass: 1.0,
+            zbase: 0.02,
+            ..StarControls::default()
+        },
+        StarJobControls::default(),
+    )
+    .expect("1 Msun ZAMS");
+    m.doing_first_model_of_run = false;
+    m.d_mix.fill(0.0);
+    m.mixing_type.fill(flexmesa_const::MixingType::NoMixing);
+    m.save_old_values();
+    m.dt = 100.0;
+
+    let ic12 = m.iso_names.iter().position(|s| s == "c12").expect("c12");
+    m.xa_old[ic12] = 0.02;
+    m.xa[ic12] = 0.019; // delta_X = 0.001 > 0.0
+
+    // `dX_hard_limit = 0.0` (< 1.0 so slot is active) must trigger retry.
+    m.controls.ts_stop.dx_limit_species[0] = String::from("c12");
+    m.controls.ts_stop.dx_limit_min_x[0] = 0.001;
+    m.controls.ts_stop.dx_hard_limit[0] = 0.0;
+    let (act_dx, _) = timestep_controller(&mut m);
+    assert!(
+        matches!(act_dx, TimestepAction::Retry(ref msg) if msg == "dX c12 hard limit"),
+        "expected dX hard-limit retry when dx_hard_limit == 0.0, got {act_dx:?}"
+    );
+
+    // Disable dX hard limit (`>= 1.0`) and set `dX_div_X_hard_limit = 0.0`.
+    m.controls.ts_stop.dx_hard_limit[0] = 1.0e99;
+    m.controls.ts_stop.dx_div_x_limit_min_x[0] = 0.001;
+    m.controls.ts_stop.dx_div_x_hard_limit[0] = 0.0;
+    let (act_dxx, _) = timestep_controller(&mut m);
+    assert!(
+        matches!(act_dxx, TimestepAction::Retry(ref msg) if msg == "dX_div_X c12 hard limit"),
+        "expected dX_div_X hard-limit retry when dx_div_x_hard_limit == 0.0, got {act_dxx:?}"
+    );
+}
+
+#[test]
+fn test_gold_solver_iters_timestep_limit_overrides_relax_limit() {
+    // Upstream `star/private/timestep.f90:436-440` and `relax.f90:3999-4000`:
+    // during relaxation `relax_solver_iters_timestep_limit` replaces
+    // `solver_iters_timestep_limit`, and `using_gold_tolerances` overrides that
+    // with `gold_solver_iters_timestep_limit`.
+    let mut m = load_zams_model(
+        StarControls {
+            initial_mass: 1.0,
+            zbase: 0.02,
+            ..StarControls::default()
+        },
+        StarJobControls::default(),
+    )
+    .expect("1 Msun ZAMS");
+    m.doing_first_model_of_run = false;
+    m.save_old_values();
+    m.dt = 100.0;
+    m.controls.ts_stop.use_dt_low_pass_controller = false;
+    m.controls.ts_stop.min_timestep_factor = 0.0;
+    m.controls.ts_stop.max_timestep_factor = 0.0;
+    m.controls.ts_stop.solver_iters_timestep_limit = 20;
+    m.controls.relax_solver_iters_timestep_limit = 50;
+    m.controls.ts_stop.gold_solver_iters_timestep_limit = 5;
+    m.aux.doing_relax = true;
+    m.aux.step_hist.last_solver_iterations = 10;
+
+    // Without gold tolerances: effective limit = 50 -> ratio = 10/50 - 0.05 = 0.15 <= 1 -> 0.
+    m.using_gold_tolerances = false;
+    let (act_relax, rep_relax) = timestep_controller(&mut m);
+    assert_eq!(act_relax, TimestepAction::KeepGoing);
+    assert_eq!(rep_relax.dt_limit_ratio, 0.0);
+
+    // With gold tolerances: gold overrides relax -> effective limit = 5
+    // -> ratio = 10/5 - 0.05 = 1.95 (exact closed-form upstream `check_integer_limit`).
+    m.using_gold_tolerances = true;
+    let (act_gold, rep_gold) = timestep_controller(&mut m);
+    assert_eq!(act_gold, TimestepAction::KeepGoing);
+    assert!(
+        (rep_gold.dt_limit_ratio - 1.95).abs() <= 1.0e-14,
+        "expected dt_limit_ratio = 1.95, got {}",
+        rep_gold.dt_limit_ratio
+    );
+    assert!(
+        (rep_gold.dt_next - 100.0 * 1.0 / 1.95).abs() <= 1.0e-12,
+        "expected dt_next = 100/1.95, got {}",
+        rep_gold.dt_next
+    );
+}

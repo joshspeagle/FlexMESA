@@ -46,8 +46,9 @@ pub fn eval_rlobe_ad<const N: usize>(
 /// Corresponds to `set_angular_momentum_j` in `binary_utils.f90:195-198`.
 #[must_use]
 pub fn eval_rl_relative_gap(r: f64, rl: f64, eccentricity: f64) -> f64 {
-    let rl_peri = rl * (1.0 - eccentricity);
-    (r - rl_peri) / rl_peri
+    // Upstream divides twice, `/ rl / (1 - e)`, not by the product
+    // (`binary_utils.f90:195-198`, `binary_evolve.f90:367-370`).
+    (r - rl * (1.0 - eccentricity)) / rl / (1.0 - eccentricity)
 }
 
 /// Computes the orbital separation $a$ (cm) from orbital period $P$ (s) and
@@ -105,8 +106,10 @@ pub fn separation_from_j_orb(
     eccentricity: f64,
 ) -> f64 {
     let j_over_m1m2 = j_orb / (m1 * m2);
-    let one_minus_e2 = 1.0 - eccentricity * eccentricity;
-    j_over_m1m2 * j_over_m1m2 * (m1 + m2) / (STANDARD_CGRAV * one_minus_e2)
+    // `binary_evolve.f90:354-355`: `... / standard_cgrav * 1 / (1 - pow2(e))`
+    // evaluated left to right, so the two divisions are separate.
+    j_over_m1m2 * j_over_m1m2 * (m1 + m2) / STANDARD_CGRAV * 1.0
+        / (1.0 - eccentricity * eccentricity)
 }
 
 /// Evaluates the critical relative Roche-lobe overflow gap at which a contact

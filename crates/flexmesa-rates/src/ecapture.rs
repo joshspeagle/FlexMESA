@@ -34,8 +34,10 @@ pub fn eval_mui_coulomb(
     match which_mui {
         CoulombMuiOption::None => 0.0,
         CoulombMuiOption::Dcw1973 => {
-            // `eval_coulomb.f90:102-107`
-            let gam = game * zbar * flexmesa_math::pow(z, 2.0 / 3.0);
+            // `rates/private/eval_coulomb.f90:95`:
+            // `gamma = pow(Z,2d0/3d0) * cc% zbar * cc% gamma_e`, in that
+            // order.
+            let gam = flexmesa_math::pow(z, 2.0 / 3.0) * zbar * game;
             let zr = z / zbar;
             let zr_m13 = flexmesa_math::pow(zr, -ONE_THIRD);
             -zr * (gam * (0.9 + (0.2843 - 0.054 * zr_m13) * zr_m13)
@@ -234,9 +236,9 @@ pub fn eval_ecapture_pair(
                     fd_complete(5, y),
                 );
                 let ie_v = (f4 - 2.0 * zeta * f3 + zeta * zeta * f2)
-                    / flexmesa_math::powi(beta, 5);
+                    / flexmesa_math::pow5(beta);
                 let je_v = (f5 - 2.0 * zeta * f4 + zeta * zeta * f3)
-                    / flexmesa_math::powi(beta, 6);
+                    / flexmesa_math::pow6(beta);
                 (ie_v, je_v)
             }
         } else if zeta < beta {
@@ -266,7 +268,7 @@ pub fn eval_ecapture_pair(
             let c0 = beta * beta * (beta - zeta) * (beta - zeta);
             let ie_v = ((f4_1 - 2.0 * zeta * f3_1 + zeta * zeta * f2_1)
                 - (f4_2 + c3 * f3_2 + c2 * f2_2 + c1 * f1_2 + c0 * f0_2))
-                / flexmesa_math::powi(beta, 5);
+                / flexmesa_math::pow5(beta);
 
             let d4 = 3.0 * zeta - 5.0 * beta;
             let d3 =
@@ -278,8 +280,9 @@ pub fn eval_ecapture_pair(
                 * (5.0 * beta - 2.0 * zeta)
                 * (beta - zeta)
                 * (beta - zeta);
-            let d0 =
-                -beta * beta * (beta - zeta) * (beta - zeta) * (beta - zeta);
+            // `rates/private/eval_psi.f90:151`:
+            // `c0 = -beta*beta*pow3(beta-zeta)`.
+            let d0 = -beta * beta * flexmesa_math::pow3(beta - zeta);
             let je_v = ((f5_1 - 2.0 * zeta * f4_1 + zeta * zeta * f3_1)
                 - (f5_2
                     + d4 * f4_2
@@ -287,7 +290,7 @@ pub fn eval_ecapture_pair(
                     + d2 * f2_2
                     + d1 * f1_2
                     + d0 * f0_2))
-                / flexmesa_math::powi(beta, 6);
+                / flexmesa_math::pow6(beta);
             (ie_v, je_v)
         };
 

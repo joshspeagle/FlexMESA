@@ -36,8 +36,7 @@ use flexmesa_star::model_io::{
 };
 use flexmesa_star::paquette_coeffs::paquette_coefficients;
 use flexmesa_star::phase_separation::{
-    apply_phase_sep_mixing_types, blouin_delta_xne, blouin_delta_xo,
-    do_phase_separation_step,
+    blouin_delta_xne, blouin_delta_xo, do_phase_separation_step,
 };
 use flexmesa_star::primary_state::PrimaryStateBuffer;
 use flexmesa_star::{
@@ -908,16 +907,141 @@ fn test_phase_separation_co_and_one_match_mesa_26_4_1_oracles() {
             );
         }
 
-        // Verify turb_info.f90:143-159 mixing types after phase separation
-        apply_phase_sep_mixing_types(&mut model);
+        // Verify turb_info.f90:143-159 mixing types persist through set_hydro_vars
+        // (even when stale non-zero `sig` is present before the call).
+        model.sig.fill(1.0e25);
+        set_hydro_vars(&mut model, false, false)
+            .expect("set_hydro_vars after phase_separation");
         assert_eq!(model.mixing_type[nz - 1], MixingType::Crystallized);
+        assert_eq!(model.d_mix[nz - 1], 0.0);
+        assert_eq!(model.mlt_d[nz - 1], 0.0);
+        assert_eq!(model.conv_vel[nz - 1], 0.0);
+        assert_eq!(model.sig[nz - 1], 0.0);
+        assert_eq!(model.gradt[nz - 1], model.gradr[nz - 1]);
         assert!(
             model
                 .mixing_type
                 .contains(&MixingType::PhaseSeparationMixing),
-            "{cid}: expected at least one PhaseSeparationMixing zone"
+            "{cid}: expected at least one PhaseSeparationMixing zone after set_hydro_vars"
+        );
+        for k in 0..nz {
+            if matches!(
+                model.mixing_type[k],
+                MixingType::Crystallized | MixingType::PhaseSeparationMixing
+            ) {
+                assert_eq!(model.d_mix[k], 0.0, "{cid}: d_mix[{k}] must be 0");
+                assert_eq!(model.mlt_d[k], 0.0, "{cid}: mlt_d[{k}] must be 0");
+                assert_eq!(
+                    model.conv_vel[k], 0.0,
+                    "{cid}: conv_vel[{k}] must be 0"
+                );
+                assert_eq!(model.sig[k], 0.0, "{cid}: sig[{k}] must be 0");
+                assert_eq!(
+                    model.gradt[k], model.gradr[k],
+                    "{cid}: gradt[{k}] must equal gradr[{k}]"
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn test_phase_sep_brunt_b_mode_rejection_and_unconditional_solid_shutoff() {
+    // 1. Loud rejection when calculate_brunt_b == false (`phase_separation.f90:375-377`),
+    //    both when phase_separation_mixing_use_brunt is true and false.
+    for use_brunt in [true, false] {
+        let mut m_no_brunt = build_wd_phase_sep_model(false);
+        m_no_brunt.controls.calculate_brunt_b = false;
+        m_no_brunt.controls.diffusion.phase_separation_mixing_use_brunt =
+            use_brunt;
+        let err = do_phase_separation_step(&mut m_no_brunt, 1.0e13)
+            .expect_err("calculate_brunt_b = false must fail loudly");
+        assert!(
+            matches!(err, StarError::InvalidInput(_)),
+            "use_brunt={use_brunt}: expected InvalidInput, got {err:?}"
         );
     }
+
+    // 2. Default `phase_separation_mixing_use_brunt = true` (Ledoux/Brunt-B
+    //    stability stopping) conserves species mass, updates shared `micro.rs`
+    //    EOS/kap aux buffers, and stops at `brunt_B + grada_face - gradr > 0`.
+    let mut m_brunt = build_wd_phase_sep_model(false);
+    m_brunt.controls.diffusion.phase_separation_mixing_use_brunt = true;
+    let nz = m_brunt.nz;
+    let sp = m_brunt.species;
+    let catalog = NuclideCatalog::builtin_ref();
+    let ic12 = m_brunt.net_iso[catalog.get_by_name("c12").unwrap().chem_id]
+        .expect("c12");
+    let io16 = m_brunt.net_iso[catalog.get_by_name("o16").unwrap().chem_id]
+        .expect("o16");
+    let m_c12_before: f64 =
+        (0..nz).map(|k| m_brunt.dm[k] * m_brunt.xa[k * sp + ic12]).sum();
+    let m_o16_before: f64 =
+        (0..nz).map(|k| m_brunt.dm[k] * m_brunt.xa[k * sp + io16]).sum();
+    m_brunt.aux.kap_frac.fill([0.0; 4]);
+    m_brunt.aux.dln_e_dxa_for_partials.fill(0.0);
+
+    do_phase_separation_step(&mut m_brunt, 1.0e13)
+        .expect("phase_separation_mixing_use_brunt = true must succeed");
+
+    let m_c12_after: f64 =
+        (0..nz).map(|k| m_brunt.dm[k] * m_brunt.xa[k * sp + ic12]).sum();
+    let m_o16_after: f64 =
+        (0..nz).map(|k| m_brunt.dm[k] * m_brunt.xa[k * sp + io16]).sum();
+    assert_close("brunt_mode/c12_mass", m_c12_after, m_c12_before, 1.0e-12, 0.0);
+    assert_close("brunt_mode/o16_mass", m_o16_after, m_o16_before, 1.0e-12, 0.0);
+    assert!(m_brunt.aux.crystal_core_boundary_mass > 0.0);
+    assert!(
+        m_brunt.aux.phase_sep_mixing_mass
+            > m_brunt.aux.crystal_core_boundary_mass
+    );
+    assert!(
+        m_brunt
+            .aux
+            .eps_phase_separation
+            .iter()
+            .all(|v| v.is_finite()),
+        "eps_phase_separation must be finite"
+    );
+    assert!(
+        m_brunt.aux.kap_frac.iter().any(|f| f.iter().any(|&v| v != 0.0)),
+        "shared do_kap_range must populate aux.kap_frac"
+    );
+    // At the top of the mixed layer (`ktop`), Brunt-B stability must hold.
+    let ktop = (1..nz)
+        .find(|&k| m_brunt.m[k] <= m_brunt.aux.phase_sep_mixing_mass)
+        .expect("locate mixed layer top");
+    let alfa = m_brunt.dq[ktop - 1] / (m_brunt.dq[ktop - 1] + m_brunt.dq[ktop]);
+    let grada_f = alfa * m_brunt.grada[ktop] + (1.0 - alfa) * m_brunt.grada[ktop - 1];
+    assert!(
+        m_brunt.brunt_b[ktop] + grada_f - m_brunt.gradr[ktop] > 0.0,
+        "Brunt-B stability must hold at ktop={ktop}: B={}, grada={}, gradr={}",
+        m_brunt.brunt_b[ktop],
+        grada_f,
+        m_brunt.gradr[ktop]
+    );
+
+    // 3. Unconditional solid-core mixing shutoff when `do_phase_separation = false`
+    //    (`star/private/turb_info.f90:144-152`): `set_hydro_vars` must still mark
+    //    crystallized zones (`phase > 0.5 && mu > 1.7`) as `Crystallized` with
+    //    `d_mix == 0`, `sig == 0`, `gradt == gradr` even with sentinel boundary masses.
+    let mut m_off = build_wd_phase_sep_model(false);
+    m_off.controls.do_phase_separation = false;
+    m_off.aux.crystal_core_boundary_mass = -1.0;
+    m_off.aux.phase_sep_mixing_mass = -1.0;
+    m_off.sig.fill(1.0e25);
+    set_hydro_vars(&mut m_off, false, false)
+        .expect("set_hydro_vars with do_phase_separation = false");
+    assert_eq!(
+        m_off.mixing_type[nz - 1],
+        MixingType::Crystallized,
+        "solid CO core must stay Crystallized even with do_phase_separation = false"
+    );
+    assert_eq!(m_off.d_mix[nz - 1], 0.0);
+    assert_eq!(m_off.mlt_d[nz - 1], 0.0);
+    assert_eq!(m_off.conv_vel[nz - 1], 0.0);
+    assert_eq!(m_off.sig[nz - 1], 0.0);
+    assert_eq!(m_off.gradt[nz - 1], m_off.gradr[nz - 1]);
 }
 
 #[test]

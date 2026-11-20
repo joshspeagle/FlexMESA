@@ -490,7 +490,7 @@ reason = "Accreting CO WD carbon ignition times out (#152, #159)."
 suite = "star"
 case = "wd_cool_0.6M"
 issue = "#152"
-reason = "White-dwarf cooling with phase separation and full-net diffusion reaches 5.92 Gyr (center_c12 diff -1.3e-6) before hitting the 300 s wall-time cap at step 180 with 3 remaining ignored controls (prune_bad_cz_min_hp_height, photo_interval, required_termination_code_string; #152, #155)."
+reason = "White-dwarf cooling with phase separation and full-net diffusion reaches 8.16 Gyr (center_c12 diff -1.3e-6, log_center_Rho diff -1.6e-4) before hitting the 300 s wall-time cap at step 196 with 3 remaining ignored controls (prune_bad_cz_min_hp_height, photo_interval, required_termination_code_string; #152, #155)."
 
 [[gaps]]
 suite = "star"

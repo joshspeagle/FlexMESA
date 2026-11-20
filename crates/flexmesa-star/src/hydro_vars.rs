@@ -6,7 +6,9 @@
 //! `star/private/hydro_vars.f90`).
 
 use flexmesa_const::{MixingType, CLIGHT, CRAD, FOUR_PI};
-use flexmesa_eos::{I_CHI_RHO, I_CHI_T, I_CP, I_GRAD_AD, I_LN_E, I_LN_PGAS};
+use flexmesa_eos::{
+    I_CHI_RHO, I_CHI_T, I_CP, I_GRAD_AD, I_LN_E, I_LN_PGAS, I_PHASE,
+};
 use flexmesa_turb::{
     set_mlt, set_semiconvection, set_tdc, set_thermohaline, DrivingSpecies,
     MltInputs, MltOption, MltParams, SemiconvectionInputs,
@@ -209,6 +211,19 @@ fn eval_face_mlt(
     };
     let lambda_f = hp_f * alpha_mlt;
 
+    // Upstream crystallization and phase-separation no-mixing guards
+    // (`star/private/turb_info.f90:143-159`): enforced unconditionally even
+    // when `do_phase_separation = .false.` (uninitialized boundary sentinels
+    // default to `-1.0`, so positive checks prevent spurious matches).
+    let crystal_pad = model.controls.mix_wind.min_dq * model.m[0] * 0.5;
+    let phase_k = model.eos_res.get(k).map_or(0.0, |r| r[I_PHASE]);
+    let m_cryst = model.aux.crystal_core_boundary_mass;
+    let m_mix = model.aux.phase_sep_mixing_mass;
+    let is_solid_no_mix = (phase_k > 0.5 && model.mu[k] > 1.7)
+        || (m_cryst > 0.0 && m_cryst + crystal_pad > model.m[k]);
+    let is_phase_sep_no_mix =
+        !is_solid_no_mix && m_mix > 0.0 && model.m[k] <= m_mix;
+
     let sticky_no_conv = model.aux.doing_struct_burn_mix
         && model
             .aux
@@ -217,7 +232,23 @@ fn eval_face_mlt(
             .copied()
             .unwrap_or(false);
     let (mut grad_t_f, mut conv_vel_f, mut d_f, mut gamma_val, mut mix_type) =
-        if alpha_mlt <= 0.0 || sticky_no_conv {
+        if is_solid_no_mix {
+            (
+                gradr_f,
+                StarAdOrder1::ZERO,
+                StarAdOrder1::ZERO,
+                0.0,
+                MixingType::Crystallized,
+            )
+        } else if is_phase_sep_no_mix {
+            (
+                gradr_f,
+                StarAdOrder1::ZERO,
+                StarAdOrder1::ZERO,
+                0.0,
+                MixingType::PhaseSeparationMixing,
+            )
+        } else if alpha_mlt <= 0.0 || sticky_no_conv {
             (
                 gradr_f,
                 StarAdOrder1::ZERO,
@@ -459,8 +490,16 @@ fn eval_face_mlt(
     model.scale_height_ad[k] = hp_f;
     model.gradr[k] = gradr_f.val;
     model.gradr_ad[k] = gradr_f;
-    model.gradl[k] = gradl_f.val;
-    model.gradl_ad[k] = gradl_f;
+    if is_solid_no_mix || is_phase_sep_no_mix {
+        // `set_no_mixing` (`star/private/turb_info.f90:321-322`) zeroes gradL
+        // and prevents stale diffusive coupling `sig` on crystallized/mixed faces.
+        model.gradl[k] = 0.0;
+        model.gradl_ad[k] = StarAdOrder1::ZERO;
+        model.sig[k] = 0.0;
+    } else {
+        model.gradl[k] = gradl_f.val;
+        model.gradl_ad[k] = gradl_f;
+    }
     model.gradt[k] = grad_t_f.val;
     model.gradt_ad[k] = grad_t_f;
     if model.aux.okay_to_set_mlt_vc {

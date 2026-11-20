@@ -22,7 +22,7 @@ Progress is measured by **upstream MESA `26.4.1` source lines by status**, never
 
 | Module | Upstream LOC | Absent | Stub | Partial | Ported (unverified) | Kernel ref. vectors | Case-level evidence | Rust LOC | Python/JAX LOC | % Ported | % Verified |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| `star` | 120,509 | 17,759 | 8,904 | 63,170 | 25,705 | 4,971 | 0 | 74,093 | 3,869 | 25.5% | 4.1% |
+| `star` | 120,509 | 17,759 | 8,904 | 63,170 | 25,705 | 4,971 | 0 | 74,107 | 3,869 | 25.5% | 4.1% |
 | `star_data` | 4,870 | 34 | 0 | 4,836 | 0 | 0 | 0 | 0 | 0 | 0.0% | 0.0% |
 | `binary` | 11,638 | 2,885 | 0 | 6,572 | 2,181 | 0 | 0 | 11,751 | 1,244 | 18.7% | 0.0% |
 | `astero` | 7,935 | 2,185 | 0 | 5,750 | 0 | 0 | 0 | 5,764 | 1,288 | 0.0% | 0.0% |
@@ -48,8 +48,8 @@ Progress is measured by **upstream MESA `26.4.1` source lines by status**, never
 | `adipls` | 30,923 | 30,923 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0.0% | 0.0% |
 | `stella` | 62,117 | 62,117 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0.0% | 0.0% |
 | `plotting` | 35,732 | 35,732 | 0 | 0 | 0 | 0 | 0 | 0 | 7,761 | 0.0% | 0.0% |
-| **Subtotal: star + star_data + binary + astero** | 144,952 | 22,863 | 8,904 | 80,328 | 27,886 | 4,971 | 0 | 91,608 | 6,401 | 22.7% | 3.4% |
-| **Total (all 26 modules)** | 497,703 | 247,888 | 8,904 | 204,494 | 31,446 | 4,971 | 0 | 161,715 | 52,760 | 7.3% | 1.0% |
+| **Subtotal: star + star_data + binary + astero** | 144,952 | 22,863 | 8,904 | 80,328 | 27,886 | 4,971 | 0 | 91,622 | 6,401 | 22.7% | 3.4% |
+| **Total (all 26 modules)** | 497,703 | 247,888 | 8,904 | 204,494 | 31,446 | 4,971 | 0 | 161,729 | 52,760 | 7.3% | 1.0% |
 
 *Notes*: `star_data` state structs reside in `crates/flexmesa-star`. Bridge, testing, and benchmark infrastructure account for an additional `19,273` Rust lines (`flexmesa-py`, `flexmesa-testing`, `flexmesa-bench`) and `14,193` Python lines (`flexmesa.testing`, `flexmesa.bench`). For plotting ([#173](https://github.com/joshspeagle/FlexMESA/issues/173)), `flexmesa.plotting` currently provides `25` `plot_*` builders against `46` upstream `pgstar`/`pgbinary` panel modules.
 

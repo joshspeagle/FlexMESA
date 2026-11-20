@@ -253,19 +253,19 @@
       "verdict": "declared gap (#155)",
       "executed": true,
       "run_status": "ok",
-      "observed_termination": "xa_central_lower_limit(h1)",
+      "observed_termination": "xa_central_lower_limit",
       "termination_matches": true,
       "steps": 201,
       "retries": 0,
-      "wall_time_sec": 0.0,
-      "peak_rss_gb": 0.0,
+      "wall_time_sec": 106.303,
+      "peak_rss_gb": 3.7527,
       "known_gap_issue": "#155",
       "known_gap_reason": "Predictive convective core mixing controls (predictive_zone_type/loc, predictive_bdy_loc) and solver energy-error controls remain unported (#155, #152), shortening main-sequence age relative to MESA 26.4.1.",
       "is_undeclared_failure": false,
       "is_stale_known_gap": false,
       "controls_ignored": true,
-      "n_controls_ignored": 9,
-      "strict_rejection": "ValueError: invalid star input: control \"<inlist>\" at line 1: unsupported control(s) (9): &controls::max_abs_rel_run_e_err, &controls::photo_interval, &controls::predictive_bdy_loc, &controls::predictive_zone_loc, &controls::predictive_zone_type, &controls::threshold_for_smooth_brunt_b, &controls::threshold_for_smooth_gradl_composition_term, &controls::warn_when_large_rel_run_e_err, &star_job::required_termination_code_string (pass --allow-unsupported-controls / allow_unsupported_controls=tru...",
+      "n_controls_ignored": 8,
+      "strict_rejection": "ValueError: invalid star input: control \"<inlist>\" at line 1: unsupported control(s) (8): &controls::photo_interval, &controls::predictive_bdy_loc, &controls::predictive_zone_loc, &controls::predictive_zone_type, &controls::threshold_for_smooth_brunt_b, &controls::threshold_for_smooth_gradl_composition_term, &controls::warn_when_large_rel_run_e_err, &star_job::required_termination_code_string (pass --allow-unsupported-controls / allow_unsupported_controls=true to opt out)",
       "comparison": {
         "independent_var": "star_age",
         "ref_rows": 44,
@@ -325,7 +325,7 @@
           {
             "column": "log_LH",
             "max_abs_diff": 0.03482136333199304,
-            "median_abs_diff": 0.014358153218534953,
+            "median_abs_diff": 0.014358153218534841,
             "x_at_max": 779456668.2692466,
             "tolerance": null,
             "within_tolerance": true
@@ -436,7 +436,7 @@
           "log_center_Rho"
         ],
         "first_diverging_step": 31,
-        "first_diverging_x": 152441373.2698477
+        "first_diverging_x": 152441373.26984772
       },
       "error_message": ""
     },
@@ -10890,43 +10890,43 @@
       "run_status": "timeout",
       "observed_termination": "timeout",
       "termination_matches": false,
-      "steps": 180,
+      "steps": 196,
       "retries": 0,
-      "wall_time_sec": 0.0,
-      "peak_rss_gb": 0.0,
+      "wall_time_sec": 300.114,
+      "peak_rss_gb": 2.404,
       "known_gap_issue": "#152",
-      "known_gap_reason": "White-dwarf cooling with phase separation and full-net diffusion reaches 5.92 Gyr (center_c12 diff -1.3e-6) before hitting the 300 s wall-time cap at step 180 with 5 remaining ignored controls (when_to_stop_*, prune_bad_cz_min_hp_height, photo_interval, required_termination_code_string; #152, #155, #159).",
+      "known_gap_reason": "White-dwarf cooling with phase separation and full-net diffusion reaches 8.16 Gyr (center_c12 diff -1.3e-6, log_center_Rho diff -1.6e-4) before hitting the 300 s wall-time cap at step 196 with 3 remaining ignored controls (prune_bad_cz_min_hp_height, photo_interval, required_termination_code_string; #152, #155).",
       "is_undeclared_failure": false,
       "is_stale_known_gap": false,
       "controls_ignored": true,
-      "n_controls_ignored": 5,
-      "strict_rejection": "ValueError: invalid star input: control \"<inlist>\" at line 1: unsupported control(s) (5): &controls::photo_interval, &controls::prune_bad_cz_min_hp_height, &controls::when_to_stop_atol, &controls::when_to_stop_rtol, &star_job::required_termination_code_string (pass --allow-unsupported-controls / allow_unsupported_controls=true to opt out)",
+      "n_controls_ignored": 3,
+      "strict_rejection": "ValueError: invalid star input: control \"<inlist>\" at line 1: unsupported control(s) (3): &controls::photo_interval, &controls::prune_bad_cz_min_hp_height, &star_job::required_termination_code_string (pass --allow-unsupported-controls / allow_unsupported_controls=true to opt out)",
       "comparison": {
         "independent_var": "star_age",
         "ref_rows": 23,
-        "run_rows": 180,
+        "run_rows": 196,
         "overlap_min": 100.0,
-        "overlap_max": 5922200441.98596,
+        "overlap_max": 8161942158.357681,
         "ref_span": 9805874135.657417,
         "final_diffs": {
-          "star_age": -3883673743.6714573,
-          "rel_star_age": -0.39605584062580784,
-          "num_zones": -48.0,
-          "log_dt": 0.18182940477156784,
+          "star_age": -1643932027.299736,
+          "rel_star_age": -0.1676476769102582,
+          "num_zones": -29.0,
+          "log_dt": 0.04621747492632444,
           "star_mass": 0.0,
           "mass_conv_core": 0.0,
-          "log_LH": 2.5414048202585215,
+          "log_LH": 1.285946916507024,
           "log_LHe": 0.0,
-          "he_core_mass": -7.190365393427989e-06,
-          "co_core_mass": 0.0008772747677947557,
-          "log_Teff": 0.09066003321589067,
-          "log_L": 0.3676745767432621,
-          "log_R": 0.002517221939850378,
-          "log_g": -0.0050344438797012,
-          "log_center_T": 0.30792440214716876,
-          "log_center_Rho": -0.0004945965242546535,
+          "he_core_mass": -2.407908510138057e-06,
+          "co_core_mass": 0.00048050258794696266,
+          "log_Teff": 0.040716801163784844,
+          "log_L": 0.16449367090200262,
+          "log_R": 0.0008132331234320667,
+          "log_g": -0.0016264662468650215,
+          "log_center_T": 0.14515728727920507,
+          "log_center_Rho": -0.0001579314668935794,
           "center_h1": -8.302914199355937e-25,
-          "center_he4": -2.2211672395122633e-25,
+          "center_he4": -2.2191561372420155e-25,
           "center_c12": -1.3465830090153563e-06,
           "num_retries": 4.0,
           "num_iters": 0.0
@@ -10936,7 +10936,6 @@
           "rel_star_age",
           "log_L",
           "log_Teff",
-          "log_R",
           "log_center_T"
         ],
         "track_deviations": [
@@ -10958,97 +10957,97 @@
           },
           {
             "column": "log_LH",
-            "max_abs_diff": 0.1711869035258895,
-            "median_abs_diff": 0.009098975453457836,
-            "x_at_max": 6004448.795537663,
+            "max_abs_diff": 0.17118690352588928,
+            "median_abs_diff": 0.012587674972664331,
+            "x_at_max": 6004448.795537664,
             "tolerance": null,
             "within_tolerance": true
           },
           {
             "column": "log_LHe",
-            "max_abs_diff": 25.63860663845705,
+            "max_abs_diff": 25.638606638457006,
             "median_abs_diff": 0.0,
-            "x_at_max": 399450549.3811956,
+            "x_at_max": 399450549.3811958,
             "tolerance": null,
             "within_tolerance": true
           },
           {
             "column": "he_core_mass",
             "max_abs_diff": 2.382146121027162e-06,
-            "median_abs_diff": 3.166033307189231e-07,
-            "x_at_max": 20045570.809291337,
+            "median_abs_diff": 3.567794906178534e-07,
+            "x_at_max": 20045570.809291344,
             "tolerance": null,
             "within_tolerance": true
           },
           {
             "column": "co_core_mass",
-            "max_abs_diff": 0.00019619217929556232,
-            "median_abs_diff": 4.524105582087712e-05,
-            "x_at_max": 4479661827.99422,
+            "max_abs_diff": 0.000421564824894749,
+            "median_abs_diff": 5.3519824392167514e-05,
+            "x_at_max": 7396352669.415377,
             "tolerance": null,
             "within_tolerance": true
           },
           {
             "column": "log_Teff",
             "max_abs_diff": 0.017935129075106637,
-            "median_abs_diff": 0.001962045781332522,
-            "x_at_max": 5247141.700039867,
+            "median_abs_diff": 0.0016622043127558772,
+            "x_at_max": 5247141.700039868,
             "tolerance": 0.002,
             "within_tolerance": false
           },
           {
             "column": "log_L",
-            "max_abs_diff": 0.07854633052936522,
-            "median_abs_diff": 0.00798583276492204,
-            "x_at_max": 5247141.700039867,
+            "max_abs_diff": 0.0785463305293651,
+            "median_abs_diff": 0.00681970280050459,
+            "x_at_max": 5247141.700039868,
             "tolerance": 0.005,
             "within_tolerance": false
           },
           {
             "column": "log_R",
             "max_abs_diff": 0.0034029071144694445,
-            "median_abs_diff": 0.0001310388971437204,
-            "x_at_max": 5247141.700039867,
+            "median_abs_diff": 0.00011353175423600703,
+            "x_at_max": 5247141.700039868,
             "tolerance": 0.005,
             "within_tolerance": true
           },
           {
             "column": "log_g",
             "max_abs_diff": 0.006805814228939333,
-            "median_abs_diff": 0.00026207779428810696,
-            "x_at_max": 5247141.700039867,
+            "median_abs_diff": 0.00022706350847201406,
+            "x_at_max": 5247141.700039868,
             "tolerance": null,
             "within_tolerance": true
           },
           {
             "column": "log_center_T",
             "max_abs_diff": 0.009998661473143322,
-            "median_abs_diff": 0.003159989529529117,
-            "x_at_max": 2075928025.9953494,
+            "median_abs_diff": 0.0029367909947048965,
+            "x_at_max": 2075928025.9953492,
             "tolerance": 0.002,
             "within_tolerance": false
           },
           {
             "column": "log_center_Rho",
             "max_abs_diff": 0.0015240677336345598,
-            "median_abs_diff": 4.0045008850686514e-05,
-            "x_at_max": 5247141.700039867,
+            "median_abs_diff": 3.063386571700022e-05,
+            "x_at_max": 5247141.700039868,
             "tolerance": 0.005,
             "within_tolerance": true
           },
           {
             "column": "center_h1",
-            "max_abs_diff": 6.178240584138228e-32,
-            "median_abs_diff": 6.982521996430972e-42,
-            "x_at_max": 675205475.3004951,
+            "max_abs_diff": 6.17824058413823e-32,
+            "median_abs_diff": 3.536387402706942e-42,
+            "x_at_max": 675205475.3004954,
             "tolerance": null,
             "within_tolerance": true
           },
           {
             "column": "center_he4",
             "max_abs_diff": 2.045842727065785e-23,
-            "median_abs_diff": 3.603013728548455e-24,
-            "x_at_max": 1057735.5289377414,
+            "median_abs_diff": 3.603013676163161e-24,
+            "x_at_max": 1057735.5289377412,
             "tolerance": null,
             "within_tolerance": true
           },
@@ -11056,7 +11055,7 @@
             "column": "center_c12",
             "max_abs_diff": 0.062120594238261134,
             "median_abs_diff": 1.3465830089598452e-06,
-            "x_at_max": 2075928025.9953494,
+            "x_at_max": 2075928025.9953492,
             "tolerance": null,
             "within_tolerance": true
           }
@@ -11070,9 +11069,9 @@
           "log_center_Rho"
         ],
         "first_diverging_step": 38,
-        "first_diverging_x": 509837.3499892658
+        "first_diverging_x": 509837.3499892657
       },
-      "error_message": "warning: --allow-unsupported-controls active; continuing past: unsupported control(s) (5): &controls::photo_interval, &controls::prune_bad_cz_min_hp_height, &controls::when_to_stop_atol, &controls::when_to_stop_rtol, &star_job::required_termination_code_string (pass --allow-unsupported-controls / allow_unsupported_controls=true to opt out)"
+      "error_message": "warning: --allow-unsupported-controls active; continuing past: unsupported control(s) (3): &controls::photo_interval, &controls::prune_bad_cz_min_hp_height, &star_job::required_termination_code_string (pass --allow-unsupported-controls / allow_unsupported_controls=true to opt out)"
     },
     {
       "suite": "star",
@@ -11087,8 +11086,8 @@
       "termination_matches": true,
       "steps": 123,
       "retries": 0,
-      "wall_time_sec": 0.0,
-      "peak_rss_gb": 0.0,
+      "wall_time_sec": 102.9357,
+      "peak_rss_gb": 2.4082,
       "known_gap_issue": "#161",
       "known_gap_reason": "White-dwarf element diffusion reaches upstream Teff_lower_limit (rel_star_age -1.4%, center_c12 diff +1.9e-6) in diagnostic mode with 3 ignored controls (atm_T_tau_opacity, photo_interval, required_termination_code_string) pending atmosphere/solver parity (#161, #152).",
       "is_undeclared_failure": false,
@@ -11100,12 +11099,12 @@
         "independent_var": "star_age",
         "ref_rows": 153,
         "run_rows": 123,
-        "overlap_min": 432972870.3559428,
-        "overlap_max": 1230981808.425174,
+        "overlap_min": 432972870.35594285,
+        "overlap_max": 1230981808.4251742,
         "ref_span": 816149101.6944962,
         "final_diffs": {
-          "star_age": -17963956.573108196,
-          "rel_star_age": -0.01438329595771751,
+          "star_age": -17963956.573107958,
+          "rel_star_age": -0.01438329595771732,
           "num_zones": 3.0,
           "log_dt": 0.020798220936947942,
           "star_mass": 0.0,
@@ -11152,8 +11151,8 @@
           },
           {
             "column": "log_LH",
-            "max_abs_diff": 0.1171701451324636,
-            "median_abs_diff": 0.08336327170538693,
+            "max_abs_diff": 0.11717014513246315,
+            "median_abs_diff": 0.08336327170538738,
             "x_at_max": 498960723.57765394,
             "tolerance": null,
             "within_tolerance": true
@@ -11161,7 +11160,7 @@
           {
             "column": "log_LHe",
             "max_abs_diff": 8.808445499271997,
-            "median_abs_diff": 0.012506542073097648,
+            "median_abs_diff": 0.012506542073108307,
             "x_at_max": 834199622.4231919,
             "tolerance": null,
             "within_tolerance": true
@@ -11184,16 +11183,16 @@
           },
           {
             "column": "log_Teff",
-            "max_abs_diff": 0.0019834339063162787,
-            "median_abs_diff": 0.0003799992964823584,
+            "max_abs_diff": 0.001983433906318055,
+            "median_abs_diff": 0.00037999929648258046,
             "x_at_max": 439064321.47114706,
             "tolerance": 0.002,
             "within_tolerance": true
           },
           {
             "column": "log_L",
-            "max_abs_diff": 0.008400654068632107,
-            "median_abs_diff": 0.00204592283346261,
+            "max_abs_diff": 0.00840065406863899,
+            "median_abs_diff": 0.002045922833463054,
             "x_at_max": 439064321.47114706,
             "tolerance": 0.005,
             "within_tolerance": false
@@ -11217,7 +11216,7 @@
           {
             "column": "log_center_T",
             "max_abs_diff": 0.001383005764965084,
-            "median_abs_diff": 0.00046221848503291696,
+            "median_abs_diff": 0.0004622184850320288,
             "x_at_max": 1227096664.6275613,
             "tolerance": 0.002,
             "within_tolerance": true
@@ -11232,9 +11231,9 @@
           },
           {
             "column": "center_h1",
-            "max_abs_diff": 8.977188339441131e-32,
+            "max_abs_diff": 8.977188339441153e-32,
             "median_abs_diff": 0.0,
-            "x_at_max": 1143876751.9654899,
+            "x_at_max": 1143876751.96549,
             "tolerance": null,
             "within_tolerance": true
           },
@@ -11242,7 +11241,7 @@
             "column": "center_he4",
             "max_abs_diff": 1.6916462538466172e-23,
             "median_abs_diff": 1.5038151791273638e-23,
-            "x_at_max": 1228981786.023998,
+            "x_at_max": 1228981786.0239983,
             "tolerance": null,
             "within_tolerance": true
           },
@@ -11250,7 +11249,7 @@
             "column": "center_c12",
             "max_abs_diff": 2.0759185981322759e-07,
             "median_abs_diff": 1.5403736619568065e-08,
-            "x_at_max": 1228981786.023998,
+            "x_at_max": 1228981786.0239983,
             "tolerance": null,
             "within_tolerance": true
           }
@@ -11264,7 +11263,7 @@
           "log_center_Rho"
         ],
         "first_diverging_step": 1423,
-        "first_diverging_x": 437954090.51747423
+        "first_diverging_x": 437954090.5174744
       },
       "error_message": ""
     },

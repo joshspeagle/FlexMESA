@@ -23,9 +23,7 @@ use crate::hydro_work::{
 };
 use crate::mesh_adjust::{plan_mesh, remap_onto_dq, MeshFunctionConfig};
 use crate::model::StarModel;
-use crate::phase_separation::{
-    apply_phase_sep_mixing_types, do_phase_separation_step,
-};
+use crate::phase_separation::do_phase_separation_step;
 use crate::premix::do_conv_premix;
 use crate::primary_state::PrimaryStateBuffer;
 use crate::riemann_ad::eval_u_flag_total_energy_rates_ad;
@@ -137,7 +135,6 @@ pub fn apply_step_pre_physics(
     if model.controls.do_phase_separation {
         do_phase_separation_step(model, dt)?;
         set_hydro_vars(model, false, false)?;
-        apply_phase_sep_mixing_types(model);
         need_hydro_refresh = false;
     } else {
         model.aux.crystal_core_boundary_mass = -1.0;
@@ -152,9 +149,6 @@ pub fn apply_step_pre_physics(
         }
         do_element_diffusion_step(model, dt)?;
         set_hydro_vars(model, false, false)?;
-        if model.controls.do_phase_separation {
-            apply_phase_sep_mixing_types(model);
-        }
         finish_element_diffusion(model, dt);
     } else {
         model.aux.step_hist.num_diffusion_solver_steps = 0;

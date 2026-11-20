@@ -9,29 +9,19 @@
 //! only the two-component Blouin `'CO'` and `'ONe'` diagrams; three-component
 //! Medin-Cumming phase tables are absent from upstream `26.4.1`.
 
-use flexmesa_chem::{get_composition_info, NuclideCatalog};
-use flexmesa_const::{
-    AVO, CLIGHT, CRAD, FOUR_PI, KERG, LN10, MixingType, QE,
-};
-use flexmesa_eos::{
-    eos_dt_get, eos_dt_get_rho, I_CHI_RHO, I_CHI_T, I_CP, I_CV, I_ETA,
-    I_FRAC_PC, I_GAMMA1, I_GAMMA3, I_GRAD_AD, I_LATENT_DDLNRHO,
-    I_LATENT_DDLNT, I_LN_E, I_LN_FREE_E, I_LN_PGAS, I_LN_S, I_MU, I_PHASE,
-};
-use flexmesa_kap::get_kap_results;
+use flexmesa_chem::NuclideCatalog;
+use flexmesa_const::{CLIGHT, CRAD, FOUR_PI, MixingType};
+use flexmesa_eos::{eos_dt_get, I_LN_PGAS, I_PHASE};
+use flexmesa_utils::is_bad;
 
 use crate::job_controls::StarError;
-use crate::micro::builtin_helm_table;
+use crate::micro::{builtin_helm_table, do_eos_fix_pgas_range, do_kap_range};
 use crate::model::StarModel;
 use crate::star_ad::{StarAdExt, StarAdOrder1};
 
 /// EOS phase boundary (`0.9`) separating liquid (`<= 0.9`) and solid (`> 0.9`)
 /// zones (`star/private/phase_separation.f90:34`).
 pub const EOS_PHASE_BOUNDARY: f64 = 0.9;
-
-/// Constant-`Pgas` density inversion tolerances matching `micro.f90:334`.
-const LOGRHO_TOL: f64 = 1.0e-8;
-const LOGPGAS_TOL: f64 = 1.0e-8;
 
 /// Evaluates the Blouin et al. (2021a) oxygen mass-fraction enrichment
 /// $\Delta X_{\mathrm{O}}$ upon crystallization of a C/O mixture
@@ -461,7 +451,6 @@ fn mix_outward(
 /// unsmoothed Brassard Brunt-B (`brunt.f90:231-313`), and interior face
 /// `grada_face`/`gradr` over zones `kc_t..=kc_b`
 /// (`star/private/phase_separation.f90:333-398`).
-#[allow(clippy::too_many_lines)]
 fn update_model_range(
     model: &mut StarModel,
     kc_t: usize,
@@ -477,183 +466,24 @@ fn update_model_range(
         return Ok(());
     }
 
-    let ht = builtin_helm_table()?;
-    let catalog = NuclideCatalog::builtin_ref();
-    let iso_z: Vec<usize> = model
-        .chem_id
-        .iter()
-        .map(|&cid| catalog.get_by_id(cid).map_or(0, |n| n.z))
-        .collect();
+    // 1. Constant-(Pgas, T) EOS solve over kc_t..=kc_hi via shared `micro.rs`
+    //    helper (`phase_separation.f90:355-361`, `micro.f90:321-545`).
+    do_eos_fix_pgas_range(model, kc_t, kc_hi)?;
 
-    // 1. Constant-(Pgas, T) EOS solve over kc_t..=kc_hi (micro.f90:321-385).
-    for k in kc_t..=kc_hi {
-        let xa_k = &model.xa[k * species..(k + 1) * species];
-        let comp = get_composition_info(catalog, &model.chem_id, xa_k, false)
-            .map_err(|e| {
-                StarError::MicrophysicsError(format!(
-                    "phase_separation composition error at zone {k}: {e}"
-                ))
-            })?;
-        model.abar[k] = comp.abar;
-        model.zbar[k] = comp.zbar;
-        model.z2bar[k] = comp.z2bar;
-        model.z53bar[k] = comp.z53bar;
-        model.ye[k] = comp.ye;
-        model.xh_mass[k] = comp.xh.clamp(0.0, 1.0);
-        model.yhe_mass[k] = comp.xhe.clamp(0.0, 1.0);
-        model.z_mass[k] = comp.xz.clamp(0.0, 1.0);
-
-        let log_t = model.ln_t[k] / LN10;
-        let log_rho_guess = model.lnd[k] / LN10;
-        let target_ln_pgas = model.ln_pgas[k];
-
-        let inv = eos_dt_get_rho(
-            ht,
-            &model.chem_id,
-            xa_k,
-            log_t,
-            I_LN_PGAS as isize,
-            target_ln_pgas,
-            log_rho_guess,
-            LOGRHO_TOL,
-            LOGPGAS_TOL,
-            20,
-            &model.eos_config,
-        )
-        .map_err(|e| {
-            StarError::MicrophysicsError(format!(
-                "phase_separation constant-Pgas EOS failed at zone {k}: {e}"
-            ))
-        })?;
-
-        let lnd_k = inv.log10_result * LN10;
-        let rho_k = inv.linear_result;
-        let t_k = model.t[k];
-        model.lnd[k] = lnd_k;
-        model.rho[k] = rho_k;
-        let out = inv.eos;
-
-        let ln_pgas = out.res[I_LN_PGAS];
-        let pgas = flexmesa_math::exp(ln_pgas);
-        let prad = CRAD * flexmesa_math::pow4(t_k) / 3.0;
-        let peos = pgas + prad;
-        let ln_peos = flexmesa_math::log(peos);
-
-        let d_lnpgas_dlnd = out.d_dlnd[I_LN_PGAS];
-        let d_lnpgas_dlnt = out.d_dln_t[I_LN_PGAS];
-        let alfa_rad = prad / peos;
-        let beta_gas = pgas / peos;
-        let d_lnpeos_dlnd = beta_gas * d_lnpgas_dlnd;
-        let d_lnpeos_dlnt = beta_gas * d_lnpgas_dlnt + 4.0 * alfa_rad;
-
-        let ln_e = out.res[I_LN_E];
-        let energy = flexmesa_math::exp(ln_e);
-        let ln_s = out.res[I_LN_S];
-        let entropy = flexmesa_math::exp(ln_s);
-        let gamma1 = out.res[I_GAMMA1];
-        let csound = (gamma1 * peos / rho_k).max(0.0).sqrt();
-
-        let a_e = flexmesa_math::pow(
-            3.0 / (FOUR_PI * AVO * rho_k * model.zbar[k].max(1.0e-10)
-                / model.abar[k]),
-            1.0 / 3.0,
-        );
-        let gam = model.z53bar[k] * QE * QE / (a_e * KERG * t_k);
-
-        model.pgas[k] = pgas;
-        model.ln_pgas[k] = ln_pgas;
-        model.prad[k] = prad;
-        model.peos[k] = peos;
-        model.ln_peos[k] = ln_peos;
-        model.energy[k] = energy;
-        model.ln_e[k] = ln_e;
-        model.entropy[k] = entropy;
-        model.ln_s[k] = ln_s;
-        model.grada[k] = out.res[I_GRAD_AD];
-        model.cv[k] = out.res[I_CV];
-        model.cp[k] = out.res[I_CP];
-        model.chi_rho[k] = out.res[I_CHI_RHO];
-        model.chi_t[k] = out.res[I_CHI_T];
-        model.gamma1[k] = gamma1;
-        model.gamma3[k] = out.res[I_GAMMA3];
-        model.eta[k] = out.res[I_ETA];
-        model.gam[k] = gam;
-        model.mu[k] = out.res[I_MU];
-        model.lnfree_e[k] = out.res[I_LN_FREE_E];
-        model.csound[k] = csound;
-
-        model.aux.eos_frac_pc[k] = out.res[I_FRAC_PC];
-        model.aux.latent_ddlnt[k] = out.res[I_LATENT_DDLNT];
-        model.aux.latent_ddlnrho[k] = out.res[I_LATENT_DDLNRHO];
-
-        model.ln_peos_ad[k] = StarAdOrder1::from_dlnd_dlnt_00(
-            ln_peos,
-            d_lnpeos_dlnd,
-            d_lnpeos_dlnt,
-        );
-        model.ln_e_ad[k] = StarAdOrder1::from_dlnd_dlnt_00(
-            ln_e,
-            out.d_dlnd[I_LN_E],
-            out.d_dln_t[I_LN_E],
-        );
-        model.ln_s_ad[k] = StarAdOrder1::from_dlnd_dlnt_00(
-            ln_s,
-            out.d_dlnd[I_LN_S],
-            out.d_dln_t[I_LN_S],
-        );
-        model.eos_res[k] = out.res;
-        model.eos_d_dlnd[k] = out.d_dlnd;
-        model.eos_d_dlnt[k] = out.d_dln_t;
-    }
-
-    // 2. Opacities over kc_t..=kc_hi (phase_separation.f90:365-366).
-    let kap_factor = model.controls.opacity_factor;
-    for k in kc_t..=kc_hi {
-        let xa_k = &model.xa[k * species..(k + 1) * species];
-        let mut xc = 0.0;
-        let mut xn = 0.0;
-        let mut xo = 0.0;
-        let mut xne = 0.0;
-        for (&z_iso, &xj) in iso_z.iter().zip(xa_k.iter()) {
-            match z_iso {
-                6 => xc += xj,
-                7 => xn += xj,
-                8 => xo += xj,
-                10 => xne += xj,
-                _ => {}
-            }
-        }
-        let out = get_kap_results(
-            &model.kap_config,
-            model.zbar[k],
-            model.xh_mass[k],
-            model.z_mass[k],
-            xc,
-            xn,
-            xo,
-            xne,
-            flexmesa_math::log10(model.rho[k]),
-            flexmesa_math::log10(model.t[k]),
-            model.lnfree_e[k],
-            model.eos_d_dlnd[k][I_LN_FREE_E],
-            model.eos_d_dlnt[k][I_LN_FREE_E],
-            model.eta[k],
-            model.eos_d_dlnd[k][I_ETA],
-            model.eos_d_dlnt[k][I_ETA],
-        )
-        .map_err(|e| {
-            StarError::MicrophysicsError(format!(
-                "phase_separation opacity failed at zone {k}: {e}"
-            ))
-        })?;
-        model.opacity[k] = out.kap * kap_factor;
-        model.d_opacity_dlnd[k] = out.kap * out.dlnkap_dln_rho * kap_factor;
-        model.d_opacity_dlnt[k] = out.kap * out.dlnkap_dln_t * kap_factor;
-    }
+    // 2. Opacities over kc_t..=kc_hi via shared `micro.rs` helper
+    //    (`phase_separation.f90:365-370`, `micro.f90:548-664`).
+    do_kap_range(model, kc_t, kc_hi)?;
 
     // 3. Unsmoothed Brunt-B (Brassard finite-difference EOS at face (rho, T),
-    //    matching brunt.f90:231-313).
+    //    matching `phase_separation.f90:373-383` and `brunt.f90:231-315`).
     if do_brunt {
+        if !model.controls.calculate_brunt_b {
+            return Err(StarError::InvalidInput(String::from(
+                "phase separation requires calculate_Brunt_B = .true. \
+                 (`star/private/phase_separation.f90:375-377`)",
+            )));
+        }
+        let ht = builtin_helm_table()?;
         for k in kc_t..=kc_hi {
             if k == 0 {
                 unsmoothed_brunt_b[0] = 0.0;
@@ -666,7 +496,16 @@ fn update_model_range(
             let chi_t_face = alfa * model.chi_t[k] + beta * model.chi_t[k - 1];
             let chi_rho_face =
                 alfa * model.chi_rho[k] + beta * model.chi_rho[k - 1];
-            let prad_face = CRAD * t_face * t_face * t_face * t_face / 3.0;
+            let log_t_face = flexmesa_math::log10(t_face);
+            let log_rho_face = flexmesa_math::log10(rho_face);
+            if is_bad(log_t_face) || is_bad(log_rho_face) {
+                return Err(StarError::MicrophysicsError(format!(
+                    "phase_separation brunt_B non-finite face state at face {k} \
+                     (logT={log_t_face}, logRho={log_rho_face})"
+                )));
+            }
+            let prad_face =
+                ((((CRAD * t_face) * t_face) * t_face) * t_face) / 3.0;
 
             let xa_k = &model.xa[k * species..(k + 1) * species];
             let xa_km1 = &model.xa[(k - 1) * species..k * species];

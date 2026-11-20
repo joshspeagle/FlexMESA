@@ -280,18 +280,22 @@ class MakeSdbStarExtras:
     `star/test_suite/make_sdb/src/run_star_extras.f90:38-180`.
     """
 
-    def extras_startup(self, state: dict[str, Any], _restart: bool) -> None:
-        """Check initial `h_env_mass < x_ctrl(1)` wind shutoff (`:57-76`)."""
+    def extras_startup(
+        self, state: dict[str, Any], _restart: bool
+    ) -> dict[str, float] | None:
+        """Turn off winds when initial `h_env_mass < x_ctrl(1)` (`:57-76`)."""
         h_upper_limit = float(state["x_ctrl"][0])
         h_env_mass = float(state["star_mass"]) - float(state["he_core_mass"])
         if h_env_mass < h_upper_limit:
-            raise NotImplementedError(
-                "make_sdb: extras_startup zeroes s% Reimers_scaling_factor and "
-                "s% Blocker_scaling_factor (:73-74), which "
-                "PyStarExtrasAdapter updates do not expose (#159, #231)"
-            )
+            return {
+                "reimers_scaling_factor": 0.0,
+                "blocker_scaling_factor": 0.0,
+            }
+        return None
 
-    def extras_check_model(self, state: dict[str, Any]) -> str:
+    def extras_check_model(
+        self, state: dict[str, Any]
+    ) -> str | tuple[str, dict[str, float]]:
         """Retry below `h_lower_limit` or shut off winds inside target window
         (`:92-117`).
         """
@@ -306,10 +310,12 @@ class MakeSdbStarExtras:
             and float(state["reimers_scaling_factor"]) > 0.0
         ):
             return "retry"
-        raise NotImplementedError(
-            "make_sdb: extras_check_model zeroes s% Reimers_scaling_factor and "
-            "s% Blocker_scaling_factor (:113-114), which PyStarExtrasAdapter "
-            "updates do not expose (#159, #231)"
+        return (
+            "keep_going",
+            {
+                "reimers_scaling_factor": 0.0,
+                "blocker_scaling_factor": 0.0,
+            },
         )
 
     def extras_finish_step(self, _state: dict[str, Any]) -> str:

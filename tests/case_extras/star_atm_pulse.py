@@ -233,9 +233,11 @@ class TTauGradrStarExtras:
                 break
         return math.sqrt(_helpers.fdiv(t_rms, float(n)))
 
-    def extras_check_model(self, state: dict[str, Any]) -> str:
-        """Evaluate `T_rms` against `x_ctrl(1)` and guard 10-step cycling
-        (`:100-149`).
+    def extras_check_model(
+        self, state: dict[str, Any]
+    ) -> str | tuple[str, dict[str, Any]]:
+        """Evaluate `T_rms` against `x_ctrl(1)` and cycle `atm_T_tau_relation`
+        every 10 models (`:100-149`).
         """
         t_rms = self.compute_t_rms(state)
         self.last_t_rms = t_rms
@@ -245,11 +247,7 @@ class TTauGradrStarExtras:
             next_rel = cycle_atm_t_tau_relation(
                 str(state["atm_t_tau_relation"])
             )
-            raise NotImplementedError(
-                f"T_tau_gradr: extras_check_model cycles s% atm_T_tau_relation "
-                f"to {next_rel!r} (:133-147), which PyStarExtrasAdapter "
-                "updates do not expose (#161, #231)"
-            )
+            return ("keep_going", {"atm_t_tau_relation": next_rel})
         return "keep_going"
 
     def extra_profile_columns(

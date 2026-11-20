@@ -229,39 +229,48 @@ class MakeCoWdStarExtras:
         self._lxtra1 = False
         self._lxtra2 = False
 
-    def extras_startup(self, state: dict[str, Any], restart: bool) -> None:
-        """Set `lxtra(1:2)` and guard part-3 diffusion toggle (`:56-78`)."""
+    def extras_startup(
+        self, state: dict[str, Any], restart: bool
+    ) -> dict[str, bool] | None:
+        """Set `lxtra(1:2)` and toggle part-3 diffusion (`:56-78`)."""
         self._lxtra1 = False
         self._lxtra2 = bool(restart)
         if int(state["x_integer_ctrl"][0]) == 3:
-            _ = float(state["power_he_burn"]) > 1.0e3
-            raise NotImplementedError(
-                "make_co_wd: extras_startup mutates s% do_element_diffusion "
-                "(:70-76), which flexmesa-star StarExtras updates do not "
-                "expose (#158)"
-            )
+            return {
+                "do_element_diffusion": not (
+                    float(state["power_he_burn"]) > 1.0e3
+                )
+            }
+        return None
 
     def extras_check_model(
         self, state: dict[str, Any]
-    ) -> str | tuple[str, str]:
-        """Check `L_by_category(icc) > 1d4` and part-3 diffusion toggle
+    ) -> str | tuple[str, Any] | dict[str, Any]:
+        """Check `L_by_category(icc) > 1d4` and toggle part-3 diffusion
         (`:94-128`).
         """
-        result: str | tuple[str, str] = "keep_going"
-        if float(state["l_by_category_icc"]) > 1.0e4:
-            result = (
-                "terminate",
-                "Carbon has ignited in the interior and will produce an ONe "
-                "WD.",
-            )
+        ignited = float(state["l_by_category_icc"]) > 1.0e4
+        updates: dict[str, bool] | None = None
         if int(state["x_integer_ctrl"][0]) == 3:
-            _ = float(state["power_he_burn"]) > 1.0e3
-            raise NotImplementedError(
-                "make_co_wd: extras_check_model mutates "
-                "s% do_element_diffusion (:120-126), which flexmesa-star "
-                "StarExtras updates do not expose (#158)"
+            updates = {
+                "do_element_diffusion": not (
+                    float(state["power_he_burn"]) > 1.0e3
+                )
+            }
+        if ignited:
+            msg = (
+                "Carbon has ignited in the interior and will produce an ONe WD."
             )
-        return result
+            if updates is not None:
+                return {
+                    "action": "terminate",
+                    "message": msg,
+                    "updates": updates,
+                }
+            return ("terminate", msg)
+        if updates is not None:
+            return ("keep_going", updates)
+        return "keep_going"
 
     def extras_finish_step(self, state: dict[str, Any]) -> str:
         """Scan part-2 envelope cut and require `#153` when triggered

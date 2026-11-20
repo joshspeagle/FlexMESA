@@ -651,12 +651,16 @@ pub fn solve_henyey_step(
 
                 if let Err(e) = eq_res {
                     // `star/private/star_solver.f90:819` tests
-                    // `s% model_number == 1`. Upstream sets `model_number =
-                    // model_number_old + 1` before the solve
-                    // (`star/private/evolve.f90:2012`); here the counter is
-                    // advanced only after a converged step, so the step in
-                    // progress is `model_number + 1`.
-                    if alam > eff_min_coeff && model.model_number + 1 == 1 {
+                    // `s% model_number == 1`, the first step of a newly
+                    // created model (upstream creates models at 0 and sets
+                    // `model_number = model_number_old + 1` before the
+                    // solve, `star/private/init.f90:367, 485, 676`,
+                    // `star/private/evolve.f90:2012`). Here the counter
+                    // advances after a converged step and new models start
+                    // at 0 or, from `pre_ms.rs`, at 1, so the first step is
+                    // seen as 0 or 1. For a model that starts at 0 this also
+                    // admits its second step.
+                    if alam > eff_min_coeff && model.model_number <= 1 {
                         alam = (alam / 10.0).max(eff_min_coeff);
                         continue;
                     }

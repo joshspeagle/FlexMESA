@@ -215,6 +215,21 @@ impl InlistBundle {
             am_nu_gsf_factor, am_nu_st_factor, am_nu_visc_factor,
             am_sig_term_limit,
             adjust_j_fraction, min_q_for_adjust_j_lost, min_j_div_delta_j,
+            mass_change_full_on_dt, mass_change_full_off_dt,
+            max_t_center_for_any_mass_loss, max_t_center_for_full_mass_loss,
+            wind_h_envelope_limit, wind_h_he_envelope_limit, wind_he_layer_limit,
+            rlo_scaling_factor, rlo_wind_min_l, rlo_wind_max_teff,
+            rlo_wind_roche_lobe_radius, rlo_wind_base_mdot, rlo_wind_scale_height,
+            roche_lobe_xfer_full_on, roche_lobe_xfer_full_off,
+            accretion_h2, accretion_he3,
+            z_fraction_li, z_fraction_be, z_fraction_b, z_fraction_c,
+            z_fraction_n, z_fraction_o, z_fraction_f, z_fraction_ne,
+            z_fraction_na, z_fraction_mg, z_fraction_al, z_fraction_si,
+            z_fraction_p, z_fraction_s, z_fraction_cl, z_fraction_ar,
+            z_fraction_k, z_fraction_ca, z_fraction_sc, z_fraction_ti,
+            z_fraction_v, z_fraction_cr, z_fraction_mn, z_fraction_fe,
+            z_fraction_co, z_fraction_ni, z_fraction_cu, z_fraction_zn,
+            smooth_outer_xa_big, smooth_outer_xa_small,
         ]);
         map_bools!("controls", ctrl, mw, [
             limit_overshoot_hp_using_size_of_convection_zone,
@@ -224,6 +239,7 @@ impl InlistBundle {
             remove_embedded_semiconvection,
             no_wind_if_no_rotation, use_accreted_material_j,
             premix_omega, do_adjust_j_lost, skip_rotation_in_convection_zones,
+            accretion_dump_missing_metals_into_heaviest,
             merge_if_dlnr_too_small,
             merge_if_dr_div_drstar_too_small,
             merge_if_dr_div_cs_too_small,
@@ -265,6 +281,10 @@ impl InlistBundle {
             )));
         }
         ctrl.try_usize_into("controls", &mut mw.max_mdot_redo_cnt, "max_mdot_redo_cnt", 0)?;
+        ctrl.try_usize_into("controls", &mut mw.num_accretion_species, "num_accretion_species", 0)?;
+        if let Some(v) = ctrl.try_get_i64("controls", "accretion_zfracs")? {
+            mw.accretion_zfracs = v as i32;
+        }
         ctrl.try_usize_into(
             "controls",
             &mut mw.num_cells_for_smooth_gradl_composition_term,
@@ -439,6 +459,32 @@ impl InlistBundle {
             hard_limit_for_rel_error_in_energy_conservation,
             dt_div_min_dr_div_cs_limit, dt_div_min_dr_div_cs_hard_limit,
             dt_div_dt_cell_collapse_limit, dt_div_dt_cell_collapse_hard_limit,
+            when_to_stop_rtol, when_to_stop_atol,
+            max_age_in_days, dt_years_for_steps_before_max_age,
+            reduction_factor_for_max_timestep,
+            max_abs_rel_run_e_err, omega_div_omega_crit_limit,
+            peak_burn_vconv_div_cs_limit,
+            max_entropy_upper_limit, max_entropy_lower_limit,
+            center_entropy_upper_limit, center_entropy_lower_limit,
+            log_max_temp_lower_limit, hb_limit, ejecta_mass_max_limit,
+            xmstar_min_limit, xmstar_max_limit, envelope_fraction_left_limit,
+            fe_core_mass_limit, neutron_rich_core_mass_limit,
+            abs_diff_lg_lh_lg_ls_limit,
+            delta_nu_lower_limit, delta_nu_upper_limit,
+            delta_pg_lower_limit, delta_pg_upper_limit,
+            photosphere_m_lower_limit, photosphere_m_upper_limit,
+            photosphere_r_lower_limit, photosphere_r_upper_limit,
+            photosphere_m_sub_m_center_limit,
+            log_tsurf_lower_limit, log_tsurf_upper_limit,
+            log_psurf_lower_limit, log_dsurf_lower_limit, log_dsurf_upper_limit,
+            log_rsurf_lower_limit,
+            center_ye_lower_limit, non_fe_core_rebound_limit,
+            v_div_csound_surf_limit, v_div_csound_max_limit,
+            gamma1_limit, pgas_div_p_limit, pgas_div_p_limit_max_q,
+            lnuc_div_l_lower_limit, lnuc_div_l_upper_limit,
+            v_surf_div_v_kh_lower_limit, v_surf_kms_limit,
+            stop_when_reach_this_cumulative_extra_heating,
+            shock_mass_upper_limit,
         ]);
         if !(ts.timestep_factor_for_retries.is_finite()
             && ts.timestep_factor_for_retries > 0.0
@@ -453,7 +499,25 @@ impl InlistBundle {
             use_dt_low_pass_controller,
             never_skip_hard_limits, relax_hard_limits_after_retry,
             delta_lg_xh_drop_only, delta_lg_xhe_drop_only, delta_lg_xc_drop_only,
+            retry_for_v_above_clight,
+            stop_at_phase_prems, stop_at_phase_zams, stop_at_phase_iams,
+            stop_at_phase_tams, stop_at_phase_he_burn, stop_at_phase_zacheb,
+            stop_at_phase_tacheb, stop_at_phase_si_burn, stop_at_phase_wdcs,
         ]);
+        ctrl.try_usize_into(
+            "controls",
+            &mut ts.num_adjusted_dt_steps_before_max_age,
+            "num_adjusted_dt_steps_before_max_age",
+            0,
+        )?;
+        ts.xa_surface_lower_limit_species = ctrl.try_get_indexed_strings("controls", "xa_surface_lower_limit_species")?;
+        ts.xa_surface_lower_limit = ctrl.try_get_indexed_f64s("controls", "xa_surface_lower_limit")?;
+        ts.xa_surface_upper_limit_species = ctrl.try_get_indexed_strings("controls", "xa_surface_upper_limit_species")?;
+        ts.xa_surface_upper_limit = ctrl.try_get_indexed_f64s("controls", "xa_surface_upper_limit")?;
+        ts.xa_average_lower_limit_species = ctrl.try_get_indexed_strings("controls", "xa_average_lower_limit_species")?;
+        ts.xa_average_lower_limit = ctrl.try_get_indexed_f64s("controls", "xa_average_lower_limit")?;
+        ts.xa_average_upper_limit_species = ctrl.try_get_indexed_strings("controls", "xa_average_upper_limit_species")?;
+        ts.xa_average_upper_limit = ctrl.try_get_indexed_f64s("controls", "xa_average_upper_limit")?;
         map_opt_f64s!("controls", ctrl, ts, [
             non_fe_core_infall_limit, power_h_burn_upper_limit,
             power_h_burn_lower_limit, power_he_burn_lower_limit,
@@ -466,8 +530,8 @@ impl InlistBundle {
         ctrl.try_usize_into("controls", &mut ts.neg_mass_fraction_hold, "neg_mass_fraction_hold", 0)?;
         // Upstream applies these limits only when positive and accepts any
         // integer (`star/private/evolve.f90:2161,2214`), so a non-positive
-        // value is stored as 0, meaning no limit. Upstream's own
-        // Upstream binary/star inlists can set `redo_limit = -1` for unlimited redos.
+        // value is stored as 0, meaning no limit. Upstream binary/star inlists
+        // can set `redo_limit = -1` for unlimited redos.
         if let Some(v) = ctrl.try_get_i64("controls", "retry_limit")? {
             ts.retry_limit = if v <= 0 { 0 } else { v as usize };
         }

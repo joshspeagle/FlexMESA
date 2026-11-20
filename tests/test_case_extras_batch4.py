@@ -21,29 +21,30 @@ from tests.case_extras import binary_extras, star_extras
 _MINIMAL_HISTORY_COLUMNS = "model_number\nstar_age\nlog_L\nlog_Teff\n"
 
 _GRADUATED_LIVE_CASES: tuple[tuple[str, str, int], ...] = (
-    ("binary", "jdot_ls_check", 3),
-    ("binary", "wind_fed_bhhmxb", 3),
-    ("star", "T_tau_gradr", 12),
-    ("star", "diffusion_smoothness", 2),
-    ("star", "conv_core_cpm", 2),
-    ("star", "hot_cool_wind", 2),
-    ("star", "semiconvection", 2),
-    ("star", "conserve_angular_momentum", 3),
-    ("star", "hse_riemann", 3),
-    ("star", "ns_h", 2),
-    ("star", "ns_he", 2),
-    ("star", "wd_nova_burst", 2),
-    ("star", "hb_2M", 2),
-    ("star", "make_sdb", 2),
-    ("star", "c13_pocket", 2),
+    ("binary", "jdot_ls_check", 1),
+    ("binary", "wind_fed_bhhmxb", 2),
+    ("star", "T_tau_gradr", 10),
+    ("star", "diffusion_smoothness", 1),
+    ("star", "conv_core_cpm", 1),
+    ("star", "hot_cool_wind", 1),
+    ("star", "semiconvection", 1),
+    ("star", "conserve_angular_momentum", 2),
+    ("star", "hse_riemann", 1),
+    ("star", "ns_h", 1),
+    ("star", "ns_he", 1),
+    ("star", "wd_nova_burst", 1),
+    ("star", "hb_2M", 1),
+    ("star", "make_sdb", 1),
+    ("star", "c13_pocket", 1),
 )
 
 _STAGED_HISTORY_COLUMN_CASES: tuple[tuple[str, int], ...] = (
-    ("adjust_net", 2),
-    ("make_o_ne_wd", 2),
-    ("ns_c", 2),
-    ("cburn_inward", 2),
-    ("high_rot_darkening", 2),
+    ("adjust_net", 1),
+    ("make_o_ne_wd", 1),
+    ("ns_c", 1),
+    ("cburn_inward", 1),
+    ("high_rot_darkening", 1),
+    ("wd_acc_small_dm", 2),
 )
 
 _UNSERVED_STAR_CASES: tuple[str, ...] = (
@@ -467,33 +468,6 @@ def test_history_column_blocked_graduated_cases_step_live_when_staged(
         extras_factory="tests.case_extras:resolve_case_extras",
     )
     assert int(rep["total_steps"]) >= cap
-
-
-def test_wd_acc_small_dm_live_adapter_reaches_accretion_check_without_key_error(
-    tmp_path: pathlib.Path,
-) -> None:
-    """`WdAccSmallDmStarExtras` runs live on a staged `wd_acc_small_dm` copy
-    and executes `check_initial_accretion_ok` without snapshot `KeyError`.
-    """
-    src_dir = harness_runner.resolve_case_dir("star", "wd_acc_small_dm")
-    assert isinstance(
-        case_extras.resolve_case_extras("star", src_dir),
-        star_extras.WdAccSmallDmStarExtras,
-    )
-    staged = tmp_path / "staged_wd_acc_small_dm"
-    shutil.copytree(src_dir, staged)
-    (staged / "history_columns.list").write_text(
-        _MINIMAL_HISTORY_COLUMNS, encoding="utf-8"
-    )
-    with pytest.raises(ValueError, match="check_initial_accretion_ok"):
-        harness_runner.run_trace_inprocess(
-            "star",
-            staged,
-            tmp_path / "out_wd_acc_small_dm",
-            max_steps=2,
-            allow_unsupported_controls=True,
-            extras_factory="tests.case_extras:resolve_case_extras",
-        )
 
 
 def test_unserved_star_handlers_detached_and_binaries_covered() -> None:

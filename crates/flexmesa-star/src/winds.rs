@@ -7,10 +7,13 @@
 use flexmesa_const::{CLIGHT, FOUR_PI, L_SUN, M_SUN, R_SUN};
 
 pub use crate::adjust_mass::{
-    build_accreted_xa, do_adjust_mass, do_adjust_mass_step,
-    do_adjust_mass_with_dt,
+    build_accreted_xa, compute_delta_m, do_adjust_mass, do_adjust_mass_step,
+    do_adjust_mass_with_dt, get_xa_for_accretion,
 };
-pub use crate::winds_driver::{do_set_mdot, do_set_mdot_with_extras, set_mdot};
+pub use crate::winds_driver::{
+    do_set_mdot, do_set_mdot_with_extras, eval_rlo_wind,
+    eval_super_eddington_wind, set_mdot,
+};
 
 /// Stellar wind mass-loss prescription (`cool_wind_RGB_scheme`,
 /// `cool_wind_AGB_scheme`, and `hot_wind_scheme` in `winds.f90`).
@@ -37,6 +40,8 @@ pub enum WindScheme {
     /// Composite Dutch wind (`'Dutch'`: Vink / Nugis-Lamers WR at high
     /// $T_{\mathrm{eff}}$ blended with cool wind below $10^4\,\mathrm{K}$).
     Dutch,
+    /// User-supplied `other_wind` hook (`'other'`, `winds.f90:319`).
+    Other,
 }
 
 impl WindScheme {
@@ -44,7 +49,8 @@ impl WindScheme {
     #[must_use]
     pub fn parse_name(name: &str) -> Option<Self> {
         match name.trim().to_ascii_lowercase().as_str() {
-            "" | "none" => Some(Self::None),
+            "" => Some(Self::None),
+            "other" => Some(Self::Other),
             "reimers" => Some(Self::Reimers),
             "blocker" => Some(Self::Blocker),
             "vink" => Some(Self::Vink),
@@ -106,7 +112,7 @@ pub fn eval_reimers_wind(
     if eta <= 0.0 || l_surf <= 0.0 || m_surf <= 0.0 || r_surf <= 0.0 {
         return 0.0;
     }
-    eta * 4.0e-13 * (l_surf / L_SUN) * (r_surf / R_SUN) / (m_surf / M_SUN)
+    (4.0e-13 * (l_surf * r_surf / m_surf) / (L_SUN * R_SUN / M_SUN)) * eta
 }
 
 /// Evaluates the Blöcker (1995) wind mass-loss rate $w$ in
@@ -123,10 +129,11 @@ pub fn eval_blocker_wind(
         return 0.0;
     }
     let w_reimers_1 = eval_reimers_wind(l_surf, m_surf, r_surf, 1.0);
-    eta * 4.83e-9
+    w_reimers_1
+        * eta
+        * 4.83e-9
         * flexmesa_math::pow(m_surf / M_SUN, -2.1)
         * flexmesa_math::pow(l_surf / L_SUN, 2.7)
-        * w_reimers_1
 }
 
 /// Evaluates the Vink, de Koter & Lamers (2001) line-driven hot-star wind rate
@@ -164,25 +171,34 @@ pub fn eval_vink_wind(
     let log_l_1e5 = flexmesa_math::log10(l_surf / L_SUN / 1.0e5);
     let log_m_30 = flexmesa_math::log10(m_surf / M_SUN / 30.0);
 
-    let vinf_hot = 2.6 * flexmesa_math::pow(z_rat, 0.13);
-    let log_t_4e4 = flexmesa_math::log10(t_surf / 4.0e4);
-    let log_w1 = -6.697 + 2.194 * log_l_1e5
-        - 1.313 * log_m_30
-        - 1.226 * flexmesa_math::log10(vinf_hot / 2.0)
-        + 0.933 * log_t_4e4
-        - 10.92 * log_t_4e4 * log_t_4e4
-        + 0.85 * log_z_rat;
+    let w1 = if alpha > 0.0 {
+        let vinf_hot = 2.6 * flexmesa_math::pow(z_rat, 0.13);
+        let log_t_4e4 = flexmesa_math::log10(t_surf / 4.0e4);
+        let log_w1 = -6.697 + 2.194 * log_l_1e5
+            - 1.313 * log_m_30
+            - 1.226 * flexmesa_math::log10(vinf_hot / 2.0)
+            + 0.933 * log_t_4e4
+            - 10.92 * log_t_4e4 * log_t_4e4
+            + 0.85 * log_z_rat;
+        flexmesa_math::exp10(log_w1)
+    } else {
+        0.0
+    };
 
-    let vinf_cool = 1.3 * flexmesa_math::pow(z_rat, 0.13);
-    let log_t_2e4 = flexmesa_math::log10(t_surf / 2.0e4);
-    let log_w2 = -6.688 + 2.210 * log_l_1e5
-        - 1.339 * log_m_30
-        - 1.601 * flexmesa_math::log10(vinf_cool / 2.0)
-        + 1.07 * log_t_2e4
-        + 0.85 * log_z_rat;
+    let w2 = if alpha < 1.0 {
+        let vinf_cool = 1.3 * flexmesa_math::pow(z_rat, 0.13);
+        let log_t_2e4 = flexmesa_math::log10(t_surf / 2.0e4);
+        let log_w2 = -6.688 + 2.210 * log_l_1e5
+            - 1.339 * log_m_30
+            - 1.601 * flexmesa_math::log10(vinf_cool / 2.0)
+            + 1.07 * log_t_2e4
+            + 0.85 * log_z_rat;
+        flexmesa_math::exp10(log_w2)
+    } else {
+        0.0
+    };
 
-    eta * (alpha * flexmesa_math::exp10(log_w1)
-        + (1.0 - alpha) * flexmesa_math::exp10(log_w2))
+    (alpha * w1 + (1.0 - alpha) * w2) * eta
 }
 
 /// Evaluates the Björklund et al. (2023) radiation-driven O-star wind rate $w$
@@ -300,30 +316,35 @@ pub fn eval_dutch_wind(
     low_t_scheme: DutchLowTScheme,
     eta: f64,
 ) -> f64 {
-    if eta <= 0.0 || l_surf <= 0.0 || m_surf <= 0.0 || t_surf <= 0.0 {
+    if eta == 0.0 || l_surf <= 0.0 || m_surf <= 0.0 || t_surf <= 0.0 {
         return 0.0;
     }
-    let w_high = if x_surf < 0.4 {
-        eval_nugis_lamers_wind(l_surf, y_surf, z_surf, eta)
-    } else {
-        eval_vink_wind(l_surf, m_surf, t_surf, z_surf, eta)
+    let eval_high = || {
+        if x_surf < 0.4 {
+            eval_nugis_lamers_wind(l_surf, y_surf, z_surf, 1.0)
+        } else {
+            eval_vink_wind(l_surf, m_surf, t_surf, z_surf, 1.0)
+        }
     };
-    let w_low = match low_t_scheme {
-        DutchLowTScheme::DeJager => eval_de_jager_wind(l_surf, t_surf, eta),
-        DutchLowTScheme::VanLoon => eval_van_loon_wind(l_surf, t_surf, eta),
+    let eval_low = || match low_t_scheme {
+        DutchLowTScheme::DeJager => eval_de_jager_wind(l_surf, t_surf, 1.0),
+        DutchLowTScheme::VanLoon => eval_van_loon_wind(l_surf, t_surf, 1.0),
         DutchLowTScheme::Nieuwenhuijzen => {
-            eval_nieuwenhuijzen_wind(l_surf, m_surf, r_surf, eta)
+            eval_nieuwenhuijzen_wind(l_surf, m_surf, r_surf, 1.0)
         }
     };
     let (t_low, t_high) = (10_000.0, 11_000.0);
-    if t_surf >= t_high {
-        w_high
+    let w = if t_surf >= t_high {
+        eval_high()
     } else if t_surf <= t_low {
-        w_low
+        eval_low()
     } else {
+        let w_low = eval_low();
+        let w_high = eval_high();
         let alfa = (t_surf - t_low) / (t_high - t_low);
         (1.0 - alfa) * w_low + alfa * w_high
-    }
+    };
+    eta * w
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -341,7 +362,7 @@ pub(crate) fn eval_scheme_rate(
     eta: f64,
 ) -> f64 {
     match scheme {
-        WindScheme::None => 0.0,
+        WindScheme::None | WindScheme::Other => 0.0,
         WindScheme::Reimers => eval_reimers_wind(l1, m1, r1, eta),
         WindScheme::Blocker => eval_blocker_wind(l1, m1, r1, eta),
         WindScheme::Vink => eval_vink_wind(l1, m1, t1, z, eta),

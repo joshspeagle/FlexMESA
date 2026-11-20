@@ -212,14 +212,22 @@ pub fn setup_sources_and_others(
         model.aux.d_extra_heat_dlnt.get(k).copied().unwrap_or(0.0),
     );
 
-    let eps_wd = model
-        .aux
-        .eps_wd_sedimentation
-        .get(k)
-        .copied()
-        .unwrap_or(0.0);
-    let eps_diff = model.aux.eps_diffusion.get(k).copied().unwrap_or(0.0);
-    let diff_heat = if eps_wd == 0.0 { eps_diff } else { eps_wd };
+    let diff_heat = if model.controls.do_element_diffusion {
+        if model.controls.diffusion.do_wd_sedimentation_heating {
+            model
+                .aux
+                .eps_wd_sedimentation
+                .get(k)
+                .copied()
+                .unwrap_or(0.0)
+        } else if model.controls.diffusion.do_diffusion_heating {
+            model.aux.eps_diffusion.get(k).copied().unwrap_or(0.0)
+        } else {
+            0.0
+        }
+    } else {
+        0.0
+    };
     let premix_heat =
         if model.controls.do_conv_premix && model.controls.do_premix_heating {
             model.aux.eps_pre_mix.get(k).copied().unwrap_or(0.0)

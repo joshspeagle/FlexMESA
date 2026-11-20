@@ -331,6 +331,34 @@ pub struct HydroAuxState {
     /// White-dwarf solid-core boundary mass in grams (`crystal_core_boundary_mass`
     /// in `star/private/phase_separation.f90:70, 121` and `mesh_plan.f90:965`).
     pub crystal_core_boundary_mass: f64,
+    /// Outer mass coordinate mixed by phase separation in grams
+    /// (`phase_sep_mixing_mass` in `phase_separation.f90:66, 226` and
+    /// `turb_info.f90:154`).
+    pub phase_sep_mixing_mass: f64,
+    /// Cumulative element diffusion invocations (`diffusion_call_number`).
+    pub diffusion_call_number: usize,
+    /// Element diffusion velocities per species and face (`edv`, cm/s,
+    /// `len = nz * species`).
+    pub edv: Vec<f64>,
+    /// Face ambipolar electric field from element diffusion (`E_field`,
+    /// statV/cm, `len = nz`).
+    pub e_field: Vec<f64>,
+    /// Face gravitational field from element diffusion
+    /// (`g_field_element_diffusion`, cm/s^2, `len = nz`).
+    pub g_field_element_diffusion: Vec<f64>,
+    /// Species self-diffusion coefficients (`diffusion_D_self`, cm^2/s,
+    /// `len = nz * species`).
+    pub diffusion_d_self: Vec<f64>,
+    /// Species typical ionic charges (`typical_charge`, `len = nz * species`).
+    pub typical_charge: Vec<f64>,
+    /// Species radiative-levitation velocities (`v_rad`, cm/s,
+    /// `len = nz * species`).
+    pub v_rad: Vec<f64>,
+    /// Species radiative accelerations (`g_rad`, cm/s^2, `len = nz * species`).
+    pub g_rad: Vec<f64>,
+    /// Per-step species abundance changes from element diffusion
+    /// (`diffusion_dX`, `len = nz * species`).
+    pub diffusion_dx: Vec<f64>,
     /// Cumulative mesh adjustment invocations (`mesh_call_number`).
     pub mesh_call_number: usize,
     /// Cumulative `remesh_split_merge` split count (`num_hydro_splits`).
@@ -440,7 +468,17 @@ impl HydroAuxState {
             fixed_gradr_sticky: vec![false; nz],
             mixing: crate::mixing_state::MixingAuxState::new(nz),
             step_hist: StepHistoryScalars::default(),
-            crystal_core_boundary_mass: 0.0,
+            crystal_core_boundary_mass: -1.0,
+            phase_sep_mixing_mass: -1.0,
+            diffusion_call_number: 0,
+            edv: vec![0.0; nz * species],
+            e_field: vec![0.0; nz],
+            g_field_element_diffusion: vec![0.0; nz],
+            diffusion_d_self: vec![0.0; nz * species],
+            typical_charge: vec![0.0; nz * species],
+            v_rad: vec![0.0; nz * species],
+            g_rad: vec![0.0; nz * species],
+            diffusion_dx: vec![0.0; nz * species],
             mesh_call_number: 0,
             num_hydro_splits: 0,
             num_hydro_merges: 0,
@@ -501,6 +539,8 @@ impl HydroAuxState {
             &mut self.omega_old,
             &mut self.j_rot_old,
             &mut self.eps_mdot_old,
+            &mut self.e_field,
+            &mut self.g_field_element_diffusion,
         ] {
             v.resize(nz, 0.0);
         }
@@ -529,6 +569,12 @@ impl HydroAuxState {
         self.d_eps_grav_dx.resize(n_sp, 0.0);
         self.dln_e_dxa_for_partials.resize(n_sp, 0.0);
         self.dln_peos_dxa_for_partials.resize(n_sp, 0.0);
+        self.edv.resize(n_sp, 0.0);
+        self.diffusion_d_self.resize(n_sp, 0.0);
+        self.typical_charge.resize(n_sp, 0.0);
+        self.v_rad.resize(n_sp, 0.0);
+        self.g_rad.resize(n_sp, 0.0);
+        self.diffusion_dx.resize(n_sp, 0.0);
         self.fixed_gradr_sticky.resize(nz, false);
         self.mixing.resize(nz);
         self.rsp.resize(nz);

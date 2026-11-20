@@ -9,10 +9,10 @@ Instead of capping steps or loosening checks to force green runs, unfinished or 
 
 | Suite | Target Cases | Stored `26.4.1` Refs | `no_reference_yet` | Strict-Validated | Diagnostic Runs | Reach Upstream Term | Declared Gaps | Verified Pass |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| `star` | 90 | 86 | 4 | 0 | 90 | 37 | 86 | 0 |
+| `star` | 90 | 86 | 4 | 0 | 90 | 36 | 86 | 0 |
 | `binary` | 8 | 8 | 0 | 0 | 8 | 6 | 8 | 0 |
 | `astero` | 8 | 8 | 0 | 0 | 8 | 3 | 8 | 0 |
-| **Total** | **106** | **102** | **4** | **0** | **106** | **46** | **102** | **0** |
+| **Total** | **106** | **102** | **4** | **0** | **106** | **45** | **102** | **0** |
 
 `Strict-Validated` counts cases whose unmodified inlists pass strict control validation (`#147`). `Diagnostic Runs` counts cases that strict validation rejects and that were rerun with the unsupported controls ignored; their numbers show where the engine stands and can never count as a pass (`DECISIONS #26`). `Reach Upstream Term` counts runs of either kind.
 
@@ -34,14 +34,13 @@ Cases lacking a committed MESA `26.4.1` baseline report `no reference yet` and c
 
 | Tracking Issue | Declared Case Count | Primary Focus |
 | :--- | ---: | :--- |
-| [#152](https://github.com/joshspeagle/FlexMESA/issues/152) | 27 | Align `evolve.rs`, Newton solver control, and retry loops |
-| [#161](https://github.com/joshspeagle/FlexMESA/issues/161) | 16 | Restore upstream EOS, opacity, network, and atm control paths |
+| [#152](https://github.com/joshspeagle/FlexMESA/issues/152) | 30 | Align `evolve.rs`, Newton solver control, and retry loops |
+| [#161](https://github.com/joshspeagle/FlexMESA/issues/161) | 17 | Restore upstream EOS, opacity, network, and atm control paths |
 | [#154](https://github.com/joshspeagle/FlexMESA/issues/154) | 12 | Align `timestep.rs` and `star` mass-change `do_adjust_mass` |
 | [#162](https://github.com/joshspeagle/FlexMESA/issues/162) | 9 | Align `astero` search and chi-squared drivers |
 | [#157](https://github.com/joshspeagle/FlexMESA/issues/157) | 8 | Restore MLT/TDC controls and remove non-upstream fallbacks |
 | [#160](https://github.com/joshspeagle/FlexMESA/issues/160) | 7 | Align coupled `BinarySystem` step ordering, tides, and RLOF |
 | [#170](https://github.com/joshspeagle/FlexMESA/issues/170) | 7 | Integrate bundled `GYRE` oscillation eigensolver |
-| [#156](https://github.com/joshspeagle/FlexMESA/issues/156) | 4 | Port full Burgers element diffusion and radiative levitation |
 | [#158](https://github.com/joshspeagle/FlexMESA/issues/158) | 4 | Align shellular rotation solver variables and Spruit-Tayler |
 | [#159](https://github.com/joshspeagle/FlexMESA/issues/159) | 4 | Align stellar wind schemes and rotational wind boosts |
 | [#231](https://github.com/joshspeagle/FlexMESA/issues/231) | 2 | Open #140 parity sub-issue |
@@ -53,7 +52,7 @@ Cases lacking a committed MESA `26.4.1` baseline report `no reference yet` and c
 | Suite | Case | Issue | Expected Term | Baseline Outcome | Mechanism |
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | `star` | `1.3M_ms_high_Z` | [#152](https://github.com/joshspeagle/FlexMESA/issues/152) | `log_L_upper_limit` | `log_L_upper_limit` (152 steps; diagnostic (3 controls ignored)) | Newton iteration and retry/timestep control differences (audit M-1, #152). |
-| `star` | `1.5M_with_diffusion` | [#156](https://github.com/joshspeagle/FlexMESA/issues/156) | `xa_central_lower_limit` | `xa_central_lower_limit(h1)` (209 steps; diagnostic (22 controls ignored)) | Atomic diffusion shortens main-sequence age relative to MESA 26.4.1. |
+| `star` | `1.5M_with_diffusion` | [#152](https://github.com/joshspeagle/FlexMESA/issues/152) | `xa_central_lower_limit` | `timeout` (236 steps; diagnostic (3 controls ignored)) | With predictive mixing (#155) and multi-species Burgers diffusion (#156) active, the 1.5 Msun model tracks MESA 26.4.1 within every column tolerance across the 1.18 Gyr overlap (max log_Teff diff 5.9e-5, log_L diff 2.4e-4, center_h1 diff 1.6e-4, 236 steps) before hitting the 300 s wall-time cap with 3 remaining ignored controls (photo_interval, warn_when_large_rel_run_e_err, required_termination_code_string; #152). |
 | `star` | `12M_pre_ms_to_core_collapse` | [#152](https://github.com/joshspeagle/FlexMESA/issues/152) | `fe_core_infall_limit` | `timeout` (7 steps; diagnostic (46 controls ignored)) | Core-collapse evolution exceeds wall-time guard with unported solver and high-T rate controls (#152, #161). |
 | `star` | `15M_dynamo` | [#158](https://github.com/joshspeagle/FlexMESA/issues/158) | `xa_central_lower_limit` | `timeout` (1008 steps; diagnostic (2 controls ignored)) | Spruit-Tayler dynamo and rotational mixing time out. |
 | `star` | `16M_conv_premix` | [#152](https://github.com/joshspeagle/FlexMESA/issues/152) | `xa_central_lower_limit` | `xa_central_lower_limit` (370 steps; diagnostic (4 controls ignored)) | Diagnostic run reaches xa_central_lower_limit(h1) (-0.112% rel_star_age, 370 steps) with 5 unsupported non-mixing controls (max_abs_rel_run_e_err, photo/termination controls; #152, #159). |
@@ -79,7 +78,7 @@ Cases lacking a committed MESA `26.4.1` baseline report `no reference yet` and c
 | `star` | `conv_core_cpm` | [#159](https://github.com/joshspeagle/FlexMESA/issues/159) | `xa_central_lower_limit` | `xa_central_lower_limit` (92 steps; diagnostic (2 controls ignored)) | Diagnostic run reaches xa_central_lower_limit(h1) (-0.181% rel_star_age, 92 steps matching MESA 26.4.1) with 2 unsupported non-mixing controls (photo_interval, required_termination_code_string; #159, #152). |
 | `star` | `custom_colors` | [#159](https://github.com/joshspeagle/FlexMESA/issues/159) | `xa_central_lower_limit` | `error` (0 steps; diagnostic (3 controls ignored)) | Case history_columns.list requests unported phase_of_evolution and colors columns. |
 | `star` | `custom_rates` | [#161](https://github.com/joshspeagle/FlexMESA/issues/161) | `log_center_temp_upper_limit` | `error` (0 steps; diagnostic (8 controls ignored)) | Custom rate table evolution fails to converge after retries (#161, #152). |
-| `star` | `diffusion_smoothness` | [#156](https://github.com/joshspeagle/FlexMESA/issues/156) | `max_age` | `max_age` (27 steps; diagnostic (11 controls ignored)) | Atomic diffusion profile and age depart from MESA 26.4.1. |
+| `star` | `diffusion_smoothness` | [#152](https://github.com/joshspeagle/FlexMESA/issues/152) | `max_age` | `max_age` (27 steps; diagnostic (2 controls ignored)) | Diagnostic run reaches exact max_age (3.0 Gyr, within_final_tolerances = true, num_zones -1) with 2 ignored controls (photo_interval, required_termination_code_string) and one early-MS log_center_Rho track deviation (7.91e-3 vs 5e-3) pending solver/timestep parity (#152). |
 | `star` | `extended_convective_penetration` | [#231](https://github.com/joshspeagle/FlexMESA/issues/231) | `xa_central_lower_limit` | `error` (0 steps; diagnostic (4 controls ignored)) | Case uses custom overshoot_scheme(1) = 'other' hook (null_other_overshooting_scheme errors until #231 wires other_overshooting_scheme) plus unsupported photo/termination controls (#231, #159). |
 | `star` | `gyre_in_mesa_bcep` | [#170](https://github.com/joshspeagle/FlexMESA/issues/170) | `xa_central_lower_limit` | `xa_central_lower_limit(h1)` (47 steps; diagnostic (3 controls ignored)) | Depends on bundled GYRE oscillation solver (#170) and solver/control parity (#152). |
 | `star` | `gyre_in_mesa_envelope` | [#170](https://github.com/joshspeagle/FlexMESA/issues/170) | `max_model_number` | `steps_to_take_before_terminate` (53 steps; diagnostic (2 controls ignored)) | Depends on bundled GYRE oscillation solver (#170) and solver/control parity (#152). |
@@ -132,8 +131,8 @@ Cases lacking a committed MESA `26.4.1` baseline report `no reference yet` and c
 | `star` | `wd_acc_small_dm` | [#159](https://github.com/joshspeagle/FlexMESA/issues/159) | `max_age` | `error` (0 steps; diagnostic (6 controls ignored)) | Case history_columns.list requests unported mass-adjustment logxq_below_const_q column. |
 | `star` | `wd_aic` | [#152](https://github.com/joshspeagle/FlexMESA/issues/152) | `PASS: A=20 electron captures have started a thermal runaway in the core` | `error` (0 steps; diagnostic (9 controls ignored)) | Accretion-induced collapse WD fails to converge on dt floor (#152, #159). |
 | `star` | `wd_c_core_ignition` | [#152](https://github.com/joshspeagle/FlexMESA/issues/152) | `power_nuc_burn_upper_limit` | `power_nuc_burn_upper_limit` (1 steps; diagnostic (5 controls ignored)) | Accreting CO WD carbon ignition times out (#152, #159). |
-| `star` | `wd_cool_0.6M` | [#156](https://github.com/joshspeagle/FlexMESA/issues/156) | `log_center_temp_lower_limit` | `timeout` (234 steps; diagnostic (8 controls ignored)) | White-dwarf cooling exceeds wall-time guard at step 283 with unported sedimentation/diffusion heating and solver controls (#156, #152). |
-| `star` | `wd_diffusion` | [#156](https://github.com/joshspeagle/FlexMESA/issues/156) | `Teff_lower_limit` | `Teff_lower_limit` (283 steps; diagnostic (6 controls ignored)) | White-dwarf element diffusion reaches upstream Teff_lower_limit in diagnostic mode but misses strict tolerances with unported cgs/full-net diffusion and opacity controls (#156, #161). |
+| `star` | `wd_cool_0.6M` | [#152](https://github.com/joshspeagle/FlexMESA/issues/152) | `log_center_temp_lower_limit` | `timeout` (182 steps; diagnostic (2 controls ignored)) | White-dwarf cooling with phase separation and full-net diffusion reaches 6.10 Gyr (center_c12 diff -1.6e-6, log_center_Rho diff -4.6e-4) before hitting the 300 s wall-time cap at step 182 with 2 remaining ignored controls (photo_interval, required_termination_code_string; #152). |
+| `star` | `wd_diffusion` | [#161](https://github.com/joshspeagle/FlexMESA/issues/161) | `Teff_lower_limit` | `Teff_lower_limit` (125 steps; diagnostic (3 controls ignored)) | White-dwarf element diffusion reaches upstream Teff_lower_limit (rel_star_age +0.029%, center_c12 diff -2.3e-7, log_Teff diff +2.9e-4, log_center_Rho diff -6.9e-6, 2 failed final columns) in diagnostic mode with 3 ignored controls (atm_T_tau_opacity, photo_interval, required_termination_code_string) pending atmosphere/solver parity (#161, #152). |
 | `star` | `wd_he_shell_ignition` | [#152](https://github.com/joshspeagle/FlexMESA/issues/152) | `power_he_burn_upper_limit` | `error` (0 steps; diagnostic (5 controls ignored)) | Accreting WD He-shell ignition fails to converge on dt floor (#152, #159). |
 | `star` | `wd_nova_burst` | [#152](https://github.com/joshspeagle/FlexMESA/issues/152) | `extras_check_model` | `timeout` (564 steps; diagnostic (10 controls ignored)) | Classical nova burst fails or times out under non-upstream solver/mass-change control (#152, #159). |
 | `star` | `wd_stable_h_burn` | [#152](https://github.com/joshspeagle/FlexMESA/issues/152) | `star_mass_max_limit` | `error` (0 steps; diagnostic (8 controls ignored)) | Stable H-burning accreting WD fails to converge on dt floor (#152, #159). |

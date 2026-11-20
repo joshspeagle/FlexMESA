@@ -186,13 +186,19 @@ fn test_do_set_mdot_bjorklund_dutch_and_rotational_boost_match_analytic_laws() {
         .expect("load 4 Msun ZAMS");
     set_hydro_vars(&mut model, false, false).expect("set_hydro_vars");
 
-    model.controls.mix_wind.min_star_mass_for_loss = 5.0;
-    let mdot_gated = do_set_mdot(&mut model).expect("gated mdot");
-    assert_eq!(mdot_gated, 0.0);
-
-    model.controls.mix_wind.min_star_mass_for_loss = -1.0;
+    // `min_star_mass_for_loss` is enforced in `compute_delta_m` / `do_adjust_mass_step`
+    // (`star/private/adjust_mass.f90:49-54`), not inside `do_set_mdot`.
     let mdot_no_rot = do_set_mdot(&mut model).expect("non-rot mdot");
     assert!(mdot_no_rot < 0.0 && mdot_no_rot.is_finite());
+
+    let mut m_gated = model.clone();
+    m_gated.controls.mix_wind.min_star_mass_for_loss = 5.0;
+    let mdot_before_gate = do_set_mdot(&mut m_gated).expect("mdot before gate");
+    assert!(mdot_before_gate < 0.0);
+    do_adjust_mass_step(&mut m_gated, 1.0e3 * SECYER)
+        .expect("gated adjust_mass");
+    assert_eq!(m_gated.mstar_dot, 0.0);
+    assert_eq!(m_gated.mstar, model.mstar);
 
     let omega_crit = eval_omega_crit(
         model.cgrav[0],
@@ -204,9 +210,13 @@ fn test_do_set_mdot_bjorklund_dutch_and_rotational_boost_match_analytic_laws() {
     );
     model.controls.rotation_flag = true;
     model.controls.mix_wind.mdot_omega_power = 0.43;
-    model.omega[0] = 0.5 * omega_crit;
+    model.omega.fill(0.5 * omega_crit);
+    let surf_rot = flexmesa_star::report_utils::eval_surf_avg_rotation_info(&model);
+    let expected_boost = flexmesa_math::pow(
+        (1.0 - surf_rot.v_div_v_crit).max(1.0e-22),
+        -0.43,
+    );
     let mdot_rot = do_set_mdot(&mut model).expect("rotational mdot");
-    let expected_boost = flexmesa_math::pow(0.5_f64, -0.43);
     assert!(mdot_rot < mdot_no_rot);
     assert!(rel_err(mdot_rot / mdot_no_rot, expected_boost) < 1.0e-12);
     assert!(
@@ -230,6 +240,7 @@ fn test_do_adjust_mass_step_and_eps_mdot_conserve_accreted_species_and_angular_m
         zbase: 0.02,
         ..Default::default()
     };
+    ctrl.mix_wind.accretion_zfracs = 3; // GS98
     ctrl.mix_wind.use_accreted_material_j = true;
     ctrl.mix_wind.accreted_material_j = 1.0e17;
     ctrl.mix_wind.eps_mdot_factor = 1.0;
@@ -249,10 +260,10 @@ fn test_do_adjust_mass_step_and_eps_mdot_conserve_accreted_species_and_angular_m
     let dm_before = model.dm.clone();
     let m_h1_before = species_total_masses(&model)[0];
     let j_tot_before: f64 = model
-        .dm
+        .dm_bar
         .iter()
         .zip(&model.j_rot)
-        .map(|(dm, j)| dm * j)
+        .map(|(dm_b, j)| dm_b * j)
         .sum();
 
     let mdot = do_set_mdot(&mut model).expect("set accretion mdot");
@@ -268,10 +279,10 @@ fn test_do_adjust_mass_step_and_eps_mdot_conserve_accreted_species_and_angular_m
     );
     let m_h1_after = species_total_masses(&model)[0];
     let j_tot_after: f64 = model
-        .dm
+        .dm_bar
         .iter()
         .zip(&model.j_rot)
-        .map(|(dm, j)| dm * j)
+        .map(|(dm_b, j)| dm_b * j)
         .sum();
     assert!(rel_err(m_h1_after - m_h1_before, 0.40 * dm_total) < 1.0e-11);
     assert!(rel_err(j_tot_after - j_tot_before, 1.0e17 * dm_total) < 1.0e-11);

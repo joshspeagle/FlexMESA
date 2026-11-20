@@ -684,6 +684,110 @@ pub struct MixWindControls {
     pub tdc_num_outermost_cells_forced_nonturbulent: usize,
     /// Dump diagnostic snapshots during `do_conv_premix` (`conv_premix_dump_snapshots`, `false` default).
     pub conv_premix_dump_snapshots: bool,
+
+    // --- Upstream Wind Gates & RLO Wind (`winds.f90:104-285, 661-703`) ---
+    /// Timestep in seconds above which wind scheme mass loss is at full strength (`mass_change_full_on_dt`, `1e-99` default).
+    pub mass_change_full_on_dt: f64,
+    /// Timestep in seconds below which wind scheme mass loss is zero (`mass_change_full_off_dt`, `1e-99` default).
+    pub mass_change_full_off_dt: f64,
+    /// Central temperature in K above which wind mass loss is zero (`max_T_center_for_any_mass_loss`, `2e9` default).
+    pub max_t_center_for_any_mass_loss: f64,
+    /// Central temperature in K below which wind mass loss is unattenuated (`max_T_center_for_full_mass_loss`, `1e9` default).
+    pub max_t_center_for_full_mass_loss: f64,
+    /// Minimum H-rich envelope mass in $M_\odot$ for wind loss (`wind_H_envelope_limit`, `-1` disabled).
+    pub wind_h_envelope_limit: f64,
+    /// Minimum H+He envelope mass in $M_\odot$ for wind loss (`wind_H_He_envelope_limit`, `-1` disabled).
+    pub wind_h_he_envelope_limit: f64,
+    /// Minimum He-layer mass in $M_\odot$ for wind loss (`wind_He_layer_limit`, `-1` disabled).
+    pub wind_he_layer_limit: f64,
+    /// Scaling factor for single-star RLO wind (`rlo_scaling_factor`, `0` default).
+    pub rlo_scaling_factor: f64,
+    /// Minimum luminosity in $L_\odot$ for RLO wind (`rlo_wind_min_L`, `1e-6` default).
+    pub rlo_wind_min_l: f64,
+    /// Maximum $T_{\mathrm{eff}}$ in K for RLO wind (`rlo_wind_max_Teff`, `1e99` default).
+    pub rlo_wind_max_teff: f64,
+    /// Roche-lobe radius in $R_\odot$ for RLO wind (`rlo_wind_roche_lobe_radius`, `0.40` default).
+    pub rlo_wind_roche_lobe_radius: f64,
+    /// Base RLO wind mass-loss rate in $M_\odot\,\mathrm{yr}^{-1}$ (`rlo_wind_base_mdot`, `1e-3` default).
+    pub rlo_wind_base_mdot: f64,
+    /// Scale height in $R_\odot$ for exponential RLO wind (`rlo_wind_scale_height`, `0.1` default; `<= 0` uses surface pressure scale height).
+    pub rlo_wind_scale_height: f64,
+    /// Radius-to-Roche-lobe ratio below which accretion transfer is unattenuated (`roche_lobe_xfer_full_on`, `0.5` default).
+    pub roche_lobe_xfer_full_on: f64,
+    /// Radius-to-Roche-lobe ratio above which accretion transfer is shut off (`roche_lobe_xfer_full_off`, `1.0` default).
+    pub roche_lobe_xfer_full_off: f64,
+
+    // --- Accretion Composition & Outer Composition Smoothing (`adjust_xyz.f90`, `adjust_mass.f90`) ---
+    /// Number of explicitly specified accretion species (`num_accretion_species`, `0` default).
+    pub num_accretion_species: usize,
+    /// Accreted $^2\mathrm{H}$ mass fraction when `accretion_h1 > 0` (`accretion_h2`, `0` default).
+    pub accretion_h2: f64,
+    /// Accreted $^3\mathrm{He}$ mass fraction when `accretion_he4 > 0` (`accretion_he3`, `0` default).
+    pub accretion_he3: f64,
+    /// Standard metal-distribution selector for accretion (`accretion_zfracs`, `-1` errors loudly on nonzero metals per `adjust_xyz.f90:1069-1079`, `0` uses `z_fraction_*`, `1..=10` uses solar scale).
+    pub accretion_zfracs: i32,
+    /// Dump unrepresented metal mass fractions into the heaviest net species (`accretion_dump_missing_metals_into_heaviest`, `true` default).
+    pub accretion_dump_missing_metals_into_heaviest: bool,
+    /// Relative Li mass fraction in metals for `accretion_zfracs == 0` (`z_fraction_li`).
+    pub z_fraction_li: f64,
+    /// Relative Be mass fraction in metals (`z_fraction_be`).
+    pub z_fraction_be: f64,
+    /// Relative B mass fraction in metals (`z_fraction_b`).
+    pub z_fraction_b: f64,
+    /// Relative C mass fraction in metals (`z_fraction_c`).
+    pub z_fraction_c: f64,
+    /// Relative N mass fraction in metals (`z_fraction_n`).
+    pub z_fraction_n: f64,
+    /// Relative O mass fraction in metals (`z_fraction_o`).
+    pub z_fraction_o: f64,
+    /// Relative F mass fraction in metals (`z_fraction_f`).
+    pub z_fraction_f: f64,
+    /// Relative Ne mass fraction in metals (`z_fraction_ne`).
+    pub z_fraction_ne: f64,
+    /// Relative Na mass fraction in metals (`z_fraction_na`).
+    pub z_fraction_na: f64,
+    /// Relative Mg mass fraction in metals (`z_fraction_mg`).
+    pub z_fraction_mg: f64,
+    /// Relative Al mass fraction in metals (`z_fraction_al`).
+    pub z_fraction_al: f64,
+    /// Relative Si mass fraction in metals (`z_fraction_si`).
+    pub z_fraction_si: f64,
+    /// Relative P mass fraction in metals (`z_fraction_p`).
+    pub z_fraction_p: f64,
+    /// Relative S mass fraction in metals (`z_fraction_s`).
+    pub z_fraction_s: f64,
+    /// Relative Cl mass fraction in metals (`z_fraction_cl`).
+    pub z_fraction_cl: f64,
+    /// Relative Ar mass fraction in metals (`z_fraction_ar`).
+    pub z_fraction_ar: f64,
+    /// Relative K mass fraction in metals (`z_fraction_k`).
+    pub z_fraction_k: f64,
+    /// Relative Ca mass fraction in metals (`z_fraction_ca`).
+    pub z_fraction_ca: f64,
+    /// Relative Sc mass fraction in metals (`z_fraction_sc`).
+    pub z_fraction_sc: f64,
+    /// Relative Ti mass fraction in metals (`z_fraction_ti`).
+    pub z_fraction_ti: f64,
+    /// Relative V mass fraction in metals (`z_fraction_v`).
+    pub z_fraction_v: f64,
+    /// Relative Cr mass fraction in metals (`z_fraction_cr`).
+    pub z_fraction_cr: f64,
+    /// Relative Mn mass fraction in metals (`z_fraction_mn`).
+    pub z_fraction_mn: f64,
+    /// Relative Fe mass fraction in metals (`z_fraction_fe`).
+    pub z_fraction_fe: f64,
+    /// Relative Co mass fraction in metals (`z_fraction_co`).
+    pub z_fraction_co: f64,
+    /// Relative Ni mass fraction in metals (`z_fraction_ni`).
+    pub z_fraction_ni: f64,
+    /// Relative Cu mass fraction in metals (`z_fraction_cu`).
+    pub z_fraction_cu: f64,
+    /// Relative Zn mass fraction in metals (`z_fraction_zn`).
+    pub z_fraction_zn: f64,
+    /// Outer mass fraction smoothed during mass change (`smooth_outer_xa_big`, `-1` disabled).
+    pub smooth_outer_xa_big: f64,
+    /// Inner smoothing boundary mass fraction during mass change (`smooth_outer_xa_small`, `-1` disabled).
+    pub smooth_outer_xa_small: f64,
 }
 
 impl Default for MixWindControls {
@@ -981,6 +1085,56 @@ impl Default for MixWindControls {
             tdc_num_innermost_cells_forced_nonturbulent: 0,
             tdc_num_outermost_cells_forced_nonturbulent: 0,
             conv_premix_dump_snapshots: false,
+            mass_change_full_on_dt: 1.0e-99,
+            mass_change_full_off_dt: 1.0e-99,
+            max_t_center_for_any_mass_loss: 2.0e9,
+            max_t_center_for_full_mass_loss: 1.0e9,
+            wind_h_envelope_limit: -1.0,
+            wind_h_he_envelope_limit: -1.0,
+            wind_he_layer_limit: -1.0,
+            rlo_scaling_factor: 0.0,
+            rlo_wind_min_l: 1.0e-6,
+            rlo_wind_max_teff: 1.0e99,
+            rlo_wind_roche_lobe_radius: 0.40,
+            rlo_wind_base_mdot: 1.0e-3,
+            rlo_wind_scale_height: 1.0e-1,
+            roche_lobe_xfer_full_on: 0.5,
+            roche_lobe_xfer_full_off: 1.0,
+            num_accretion_species: 0,
+            accretion_h2: 0.0,
+            accretion_he3: 0.0,
+            accretion_zfracs: -1,
+            accretion_dump_missing_metals_into_heaviest: true,
+            z_fraction_li: 0.0,
+            z_fraction_be: 0.0,
+            z_fraction_b: 0.0,
+            z_fraction_c: 0.0,
+            z_fraction_n: 0.0,
+            z_fraction_o: 0.0,
+            z_fraction_f: 0.0,
+            z_fraction_ne: 0.0,
+            z_fraction_na: 0.0,
+            z_fraction_mg: 0.0,
+            z_fraction_al: 0.0,
+            z_fraction_si: 0.0,
+            z_fraction_p: 0.0,
+            z_fraction_s: 0.0,
+            z_fraction_cl: 0.0,
+            z_fraction_ar: 0.0,
+            z_fraction_k: 0.0,
+            z_fraction_ca: 0.0,
+            z_fraction_sc: 0.0,
+            z_fraction_ti: 0.0,
+            z_fraction_v: 0.0,
+            z_fraction_cr: 0.0,
+            z_fraction_mn: 0.0,
+            z_fraction_fe: 0.0,
+            z_fraction_co: 0.0,
+            z_fraction_ni: 0.0,
+            z_fraction_cu: 0.0,
+            z_fraction_zn: 0.0,
+            smooth_outer_xa_big: -1.0,
+            smooth_outer_xa_small: -1.0,
         }
     }
 }

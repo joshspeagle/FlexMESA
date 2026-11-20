@@ -21,7 +21,7 @@
         "verified_total": 0,
         "pct_ported": 25.0,
         "pct_verified": 0.0,
-        "rust_lines": 67772,
+        "rust_lines": 71166,
         "python_jax_lines": 3869
       },
       {
@@ -55,7 +55,7 @@
         "verified_total": 0,
         "pct_ported": 18.7,
         "pct_verified": 0.0,
-        "rust_lines": 11721,
+        "rust_lines": 11734,
         "python_jax_lines": 1244
       },
       {
@@ -689,12 +689,12 @@
     {
       "namelist": "star &controls",
       "upstream_scalars": 1444,
-      "matched_in_flexmesa": 784,
-      "defaults_agree": 784,
+      "matched_in_flexmesa": 894,
+      "defaults_agree": 894,
       "value_mismatch": 0,
       "disabled_limit_none": 0,
-      "skipped_unparseable_rust": 9,
-      "unimplemented": 651
+      "skipped_unparseable_rust": 17,
+      "unimplemented": 533
     },
     {
       "namelist": "star &star_job",

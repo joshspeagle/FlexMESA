@@ -395,7 +395,7 @@ impl StarModel {
             &self.mlt_vc,
         );
         if self.sig.iter().all(|&s| s == 0.0) {
-            crate::hydro_vars::update_sig_from_d_mix(self);
+            crate::hydro_vars::update_sig_from_d_mix(self)?;
         }
         if self.controls.rti_flag {
             crate::hydro_rti::set_rti_mixing_info(self);

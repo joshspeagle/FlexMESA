@@ -36,15 +36,15 @@ Progress is measured by **upstream MESA `26.4.1` source lines by status**, never
 | `star_data` | 4,870 | 34 | 0 | 4,836 | 0 | 0 | 0 | 0 | 0 | 0.0% | 0.0% |
 | `binary` | 11,638 | 2,885 | 0 | 6,572 | 2,181 | 0 | 0 | 11,751 | 1,244 | 18.7% | 0.0% |
 | `astero` | 7,935 | 2,185 | 0 | 5,750 | 0 | 0 | 0 | 5,764 | 1,288 | 0.0% | 0.0% |
-| `eos` | 28,666 | 7,656 | 0 | 21,010 | 0 | 0 | 0 | 14,303 | 9,867 | 0.0% | 0.0% |
-| `kap` | 22,430 | 13,652 | 0 | 8,778 | 0 | 0 | 0 | 4,975 | 3,359 | 0.0% | 0.0% |
+| `eos` | 28,666 | 7,656 | 0 | 21,010 | 0 | 0 | 0 | 14,334 | 9,867 | 0.0% | 0.0% |
+| `kap` | 22,430 | 13,652 | 0 | 8,778 | 0 | 0 | 0 | 4,990 | 3,359 | 0.0% | 0.0% |
 | `net` | 13,452 | 0 | 0 | 13,452 | 0 | 0 | 0 | 10,386 | 728 | 0.0% | 0.0% |
 | `rates` | 17,217 | 192 | 0 | 17,025 | 0 | 0 | 0 | 3,469 | 1,478 | 0.0% | 0.0% |
 | `neu` | 2,184 | 352 | 0 | 0 | 1,832 | 0 | 0 | 1,948 | 2,673 | 83.9% | 0.0% |
 | `atm` | 6,853 | 2,468 | 0 | 4,385 | 0 | 0 | 0 | 2,476 | 984 | 0.0% | 0.0% |
 | `turb` | 2,033 | 0 | 0 | 681 | 1,352 | 0 | 0 | 2,268 | 2,368 | 66.5% | 0.0% |
 | `chem` | 4,195 | 373 | 0 | 3,822 | 0 | 0 | 0 | 2,338 | 930 | 0.0% | 0.0% |
-| `ionization` | 3,859 | 2,226 | 0 | 1,633 | 0 | 0 | 0 | 3,123 | 1,033 | 0.0% | 0.0% |
+| `ionization` | 3,859 | 2,226 | 0 | 1,633 | 0 | 0 | 0 | 3,348 | 1,033 | 0.0% | 0.0% |
 | `colors` | 3,823 | 428 | 0 | 3,395 | 0 | 0 | 0 | 2,453 | 1,500 | 0.0% | 0.0% |
 | `num` | 20,045 | 845 | 0 | 19,200 | 0 | 0 | 0 | 4,300 | 3,587 | 0.0% | 0.0% |
 | `mtx` | 5,802 | 430 | 0 | 5,372 | 0 | 0 | 0 | 4,173 | 1,768 | 0.0% | 0.0% |
@@ -59,7 +59,7 @@ Progress is measured by **upstream MESA `26.4.1` source lines by status**, never
 | `stella` | 62,117 | 62,117 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0.0% | 0.0% |
 | `plotting` | 35,732 | 35,732 | 0 | 0 | 0 | 0 | 0 | 0 | 12,095 | 0.0% | 0.0% |
 | **Subtotal: star + star_data + binary + astero** | 144,952 | 22,863 | 6,378 | 77,830 | 32,910 | 4,971 | 0 | 96,612 | 6,401 | 26.1% | 3.4% |
-| **Total (all 26 modules)** | 497,703 | 247,888 | 6,378 | 201,996 | 36,470 | 4,971 | 0 | 166,740 | 57,094 | 8.3% | 1.0% |
+| **Total (all 26 modules)** | 497,703 | 247,888 | 6,378 | 201,996 | 36,470 | 4,971 | 0 | 167,011 | 57,094 | 8.3% | 1.0% |
 
 *Notes*: `star_data` state structs reside in `crates/flexmesa-star`. Bridge, testing, and benchmark infrastructure account for an additional `19,258` Rust lines (`flexmesa-py`, `flexmesa-testing`, `flexmesa-bench`) and `14,202` Python lines (`flexmesa.testing`, `flexmesa.bench`). For plotting ([#173](https://github.com/joshspeagle/FlexMESA/issues/173)), `flexmesa.plotting` currently provides `34` `plot_*` builders against `46` upstream `pgstar`/`pgbinary` panel modules.
 

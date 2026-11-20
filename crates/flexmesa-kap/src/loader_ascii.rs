@@ -14,7 +14,7 @@ use crate::types::KapError;
 use flexmesa_utils::cache_envelope::{
     read_verified_cache, write_verified_cache_atomic,
 };
-use flexmesa_utils::sha256::{compute_sha256_file, Sha256Hasher};
+use flexmesa_utils::sha256::{Sha256Hasher, compute_sha256_file};
 use flexmesa_utils::{
     is_bad, resolve_flexmesa_cache_dir, resolve_flexmesa_data_dir,
 };
@@ -87,9 +87,8 @@ pub fn find_kap_bundle_dir() -> PathBuf {
 /// [`build_full_kap_tables_bytes`] in deterministic order (`1,150` files in
 /// MESA `26.4.1`: `1,008` fixed/low-T, `7` `Freedman11`, `120` Type-2 CO,
 /// `kR_Z_fCN.data`, and `14` `kapCN` `kR_Z*.data` files).
-pub(crate) fn kap_source_relpaths(
-    kap_dir: &Path,
-) -> Result<Vec<String>, KapError> {
+#[doc(hidden)]
+pub fn kap_source_relpaths(kap_dir: &Path) -> Result<Vec<String>, KapError> {
     let mut rels = Vec::with_capacity(1152);
     for &prefix in FIXED_PREFIXES {
         for (iz, &z) in FIXED_ZS.iter().enumerate() {
@@ -212,7 +211,23 @@ fn compute_kap_source_sha256(
 /// tables + `aesopus_section.bin` can be found, read, or parsed, or if a
 /// runtime cache file fails verification.
 pub(crate) fn load_or_build_kap_tables() -> Result<KapTables, KapError> {
-    let full_bin_path = find_kap_bundle_dir().join("kap_tables_full.bin");
+    let bundle_dir = find_kap_bundle_dir();
+    let kap_dir = find_kap_data_dir();
+    let cache_root = resolve_flexmesa_cache_dir();
+    load_or_build_kap_tables_in(
+        &bundle_dir,
+        kap_dir.as_deref(),
+        cache_root.as_deref(),
+    )
+}
+
+#[doc(hidden)]
+pub fn load_or_build_kap_tables_in(
+    bundle_dir: &Path,
+    kap_dir: Option<&Path>,
+    cache_root: Option<&Path>,
+) -> Result<KapTables, KapError> {
+    let full_bin_path = bundle_dir.join("kap_tables_full.bin");
     if full_bin_path.is_file() {
         let bytes = fs::read(&full_bin_path).map_err(|e| {
             KapError::TableIo(format!(
@@ -223,7 +238,7 @@ pub(crate) fn load_or_build_kap_tables() -> Result<KapTables, KapError> {
         return parse_kap_tables(&bytes);
     }
 
-    if let Some(kap_dir) = find_kap_data_dir() {
+    if let Some(kap_dir) = kap_dir {
         let aes_path = kap_dir.join("aesopus_section.bin");
         if !aes_path.is_file() {
             return Err(KapError::TableIo(format!(
@@ -234,8 +249,8 @@ pub(crate) fn load_or_build_kap_tables() -> Result<KapTables, KapError> {
                 kap_dir.display()
             )));
         }
-        let source_sha = compute_kap_source_sha256(&kap_dir, &aes_path)?;
-        if let Some(cache_root) = resolve_flexmesa_cache_dir() {
+        let source_sha = compute_kap_source_sha256(kap_dir, &aes_path)?;
+        if let Some(cache_root) = cache_root {
             let cache_path = cache_root
                 .join("kap")
                 .join(format!("kap_tables_full.{}.bin", &source_sha[..16]));
@@ -249,7 +264,7 @@ pub(crate) fn load_or_build_kap_tables() -> Result<KapTables, KapError> {
                 .map_err(KapError::TableIo)?;
                 return parse_kap_tables(&payload);
             }
-            let bytes = build_full_kap_tables_bytes(&kap_dir, &aes_path)?;
+            let bytes = build_full_kap_tables_bytes(kap_dir, &aes_path)?;
             let tables = parse_kap_tables(&bytes)?;
             write_verified_cache_atomic(
                 &cache_path,
@@ -261,7 +276,7 @@ pub(crate) fn load_or_build_kap_tables() -> Result<KapTables, KapError> {
             .map_err(KapError::TableIo)?;
             return Ok(tables);
         }
-        let bytes = build_full_kap_tables_bytes(&kap_dir, &aes_path)?;
+        let bytes = build_full_kap_tables_bytes(kap_dir, &aes_path)?;
         return parse_kap_tables(&bytes);
     }
 

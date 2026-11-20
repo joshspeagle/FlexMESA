@@ -10,6 +10,7 @@ import time
 import warnings
 
 import matplotlib
+import matplotlib.collections as mpl_collections
 import matplotlib.patches as mpl_patches
 import matplotlib.pyplot as plt
 import numpy as np
@@ -1007,7 +1008,9 @@ def test_rti_profile_paths_transform_log_age_and_time_from_present(
     try:
         assert "Myr" in ax2.get_xlabel()
         assert "Model Number" not in ax2.get_xlabel()
-        segs = ax2.collections[0].get_segments()
+        coll2 = ax2.collections[0]
+        assert isinstance(coll2, mpl_collections.LineCollection)
+        segs = coll2.get_segments()
         assert segs
         assert float(segs[0][0, 0]) == pytest.approx(
             math.log10(850.0), abs=1.0e-12
@@ -1025,7 +1028,9 @@ def test_rti_profile_paths_transform_log_age_and_time_from_present(
         log_xaxis=True,
     )
     try:
-        segs3 = ax3.collections[0].get_segments()
+        coll3 = ax3.collections[0]
+        assert isinstance(coll3, mpl_collections.LineCollection)
+        segs3 = coll3.get_segments()
         prof_seg_x = float(segs3[-1][0, 0])
         assert prof_seg_x == pytest.approx(math.log10(6.5e8), abs=1.0e-12)
     finally:

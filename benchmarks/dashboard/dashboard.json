@@ -770,8 +770,8 @@
     "rust": {
       "tool": "cargo llvm-cov",
       "overall": {
-        "lines": 112037,
-        "covered": 83755,
+        "lines": 112046,
+        "covered": 83758,
         "percent": 74.8
       },
       "by_crate": [
@@ -909,8 +909,8 @@
         },
         {
           "crate": "flexmesa-star",
-          "lines": 52424,
-          "covered": 39103,
+          "lines": 52433,
+          "covered": 39106,
           "percent": 74.6
         },
         {
@@ -1443,6 +1443,11 @@
       {
         "number": 259,
         "title": "feat(star): port MESA 26.4.1 Newton solver, retry/redo semantics, and timestep checks (#152)",
+        "draft": false
+      },
+      {
+        "number": 284,
+        "title": "fix(star): follow upstream's do_eos_for_cell in the constant-Pgas density solve (#155, #156)",
         "draft": false
       }
     ],
@@ -2202,6 +2207,19 @@
     {
       "date_utc": "2026-11-20",
       "commit": "e038ee0",
+      "event": "main merge",
+      "engine_ported_pct": "26.1",
+      "all_verified_pct": "1.0",
+      "cases_passing": "0",
+      "rust_cov_pct": "74.8",
+      "python_cov_pct": "87.8",
+      "closed_140": "15",
+      "total_140": "34",
+      "deferred_169": "40"
+    },
+    {
+      "date_utc": "2026-11-20",
+      "commit": "9ca6e68",
       "event": "main merge",
       "engine_ported_pct": "26.1",
       "all_verified_pct": "1.0",

@@ -21,6 +21,7 @@ from flexmesa.plotting import (
     pgstar_grid,
     pgstar_panels,
     pgstar_summary,
+    pgstar_text,
     stellar_plots,
     style,
 )
@@ -30,10 +31,12 @@ AASTEX_TEXT_WIDTH_IN = style.AASTEX_TEXT_WIDTH_IN
 GridPanelSpec = pgstar_grid.GridPanelSpec
 OKABE_ITO = style.OKABE_ITO
 ProfileTable = compare.ProfileTable
+TextSummarySpec = pgstar_text.TextSummarySpec
 figsize = style.figsize
 load_profile_file = compare.load_profile_file
 mesa_rc_params = style.mesa_rc_params
 parse_inlist_grid_spec = pgstar_grid.parse_inlist_grid_spec
+parse_inlist_text_summary_spec = pgstar_text.parse_inlist_text_summary_spec
 plot_abundance_profile = pgstar_panels.plot_abundance_profile
 plot_binary_evolution = astero_binary_plots.plot_binary_evolution
 plot_case_comparison = compare.plot_case_comparison
@@ -46,7 +49,9 @@ plot_kippenhahn = stellar_plots.plot_kippenhahn
 plot_mixing_profile = pgstar_panels.plot_mixing_profile
 plot_pgbinary_orbit = pgbinary_panels.plot_pgbinary_orbit
 plot_pgbinary_panels = pgbinary_panels.plot_pgbinary_panels
+plot_pgbinary_star = pgbinary_panels.plot_pgbinary_star
 plot_pgbinary_summary_history = pgbinary_panels.plot_pgbinary_summary_history
+plot_pgbinary_text_summary = pgstar_text.plot_pgbinary_text_summary
 plot_pgstar_grid = pgstar_grid.plot_pgstar_grid
 plot_power_profile = pgstar_panels.plot_power_profile
 plot_profile_custom_panels = pgstar_summary.plot_profile_custom_panels
@@ -58,6 +63,7 @@ plot_summary_burn_profile = pgstar_summary.plot_summary_burn_profile
 plot_summary_history = pgstar_grid.plot_summary_history
 plot_summary_profile = pgstar_summary.plot_summary_profile
 plot_tc_rhoc_diagram = stellar_plots.plot_tc_rhoc_diagram
+plot_text_summary = pgstar_text.plot_text_summary
 plot_trho_profile = pgstar_panels.plot_trho_profile
 resolve_case_entry = compare.resolve_case_entry
 use_mesa_plot_style = style.use_mesa_plot_style
@@ -68,6 +74,7 @@ __all__ = [
     "OKABE_ITO",
     "GridPanelSpec",
     "ProfileTable",
+    "TextSummarySpec",
     "astero_binary_plots",
     "compare",
     "figsize",
@@ -75,11 +82,13 @@ __all__ = [
     "load_profile_file",
     "mesa_rc_params",
     "parse_inlist_grid_spec",
+    "parse_inlist_text_summary_spec",
     "pgbinary_panels",
     "pgstar_coverage",
     "pgstar_grid",
     "pgstar_panels",
     "pgstar_summary",
+    "pgstar_text",
     "plot_abundance_profile",
     "plot_binary_evolution",
     "plot_case_comparison",
@@ -92,7 +101,9 @@ __all__ = [
     "plot_mixing_profile",
     "plot_pgbinary_orbit",
     "plot_pgbinary_panels",
+    "plot_pgbinary_star",
     "plot_pgbinary_summary_history",
+    "plot_pgbinary_text_summary",
     "plot_pgstar_grid",
     "plot_power_profile",
     "plot_profile_custom_panels",
@@ -104,6 +115,7 @@ __all__ = [
     "plot_summary_history",
     "plot_summary_profile",
     "plot_tc_rhoc_diagram",
+    "plot_text_summary",
     "plot_trho_profile",
     "resolve_case_entry",
     "stellar_plots",

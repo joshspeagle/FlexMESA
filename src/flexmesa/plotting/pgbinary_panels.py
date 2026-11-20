@@ -777,3 +777,104 @@ def plot_pgbinary_panels(
     fig.suptitle(suptitle, fontsize=9.0)
     _compare_panels.save_figure(fig, save_path)
     return fig, axes
+
+
+def plot_pgbinary_star(
+    star_number: Literal[1, 2],
+    panel_name: str = "HR",
+    *,
+    binary_history: pathlib.Path | str | None = None,
+    star_history: pathlib.Path | str | None = None,
+    star_profile: pathlib.Path | str | None = None,
+    star_profile_paths: Sequence[pathlib.Path | str] | None = None,
+    inlist_path: pathlib.Path | str | None = None,
+    mesa_dir: pathlib.Path | str | None = None,
+    title: str = "",
+    ax: mpl_axes.Axes | None = None,
+    save_path: pathlib.Path | str | None = None,
+) -> tuple[mpl_figure.Figure, list[mpl_axes.Axes]]:
+    r"""Embed any supported ``pgstar`` window for binary component ``Star<N>``.
+
+    Implements ``do_star_plot`` (`binary/private/pgbinary_star.f90:93-615`),
+    showing component donor/accretor/detached status when ``binary_history`` is
+    provided and rendering upstream's point-mass notice when
+    ``point_mass_index == star_number``.
+
+    Args:
+        star_number: Binary component index (``1`` or ``2``).
+        panel_name: Any ``pgstar`` window identifier supported by
+            :func:`flexmesa.plotting.plot_pgstar_grid` (for example ``"HR"``,
+            ``"TRho_Profile"``, ``"Kipp"``, ``"Dynamo"``, ``"Network"``,
+            ``"Text_Summary1"``, ``"Profile_Panels1"``, or ``"Grid1"``).
+        binary_history: Optional ``binary_history.data`` providing component
+            donor/accretor status and ``point_mass_index``.
+        star_history: Optional component ``LOGS<N>/history.data``.
+        star_profile: Optional component ``LOGS<N>/profile*.data``.
+        star_profile_paths: Optional sequence of component profiles (for
+            profile Kippenhahn or ``rti`` panels).
+        inlist_path: Optional ``&pgstar`` inlist configuring custom panels.
+        mesa_dir: Optional MESA ``26.4.1`` root for ``plot_info/*.data``.
+        title: Optional custom title prefix overriding ``Star <N>``.
+        ax: Optional target ``matplotlib.axes.Axes``.
+        save_path: Optional output image path (`300 dpi`).
+
+    Returns:
+        Tuple ``(fig, axes)`` where ``axes`` lists the rendered ``Axes``.
+    """
+    from flexmesa.plotting import _grid_dispatch
+
+    if star_number not in (1, 2):
+        raise ValueError(f"star_number must be 1 or 2, got {star_number!r}")
+
+    role_suffix = ""
+    if binary_history is not None:
+        b_tbl, _ = _plot_support.load_history_with_header(binary_history)
+        role_suffix = f" ({_role_tag(b_tbl, star_number)})"
+
+    standalone = ax is None
+    fig, target_ax = style.init_ax(ax, "double", 0.72)
+    try:
+        rendered = _grid_dispatch.dispatch_grid_cell(
+            target_ax,
+            f"Star{star_number}:{panel_name}",
+            history_path=None,
+            ref_history_path=None,
+            profile_path=None,
+            ref_profile_path=None,
+            profile_paths=None,
+            binary_history_path=binary_history,
+            ref_binary_history_path=None,
+            star1_history_path=star_history if star_number == 1 else None,
+            star2_history_path=star_history if star_number == 2 else None,
+            star1_profile_path=star_profile if star_number == 1 else None,
+            star2_profile_path=star_profile if star_number == 2 else None,
+            star1_profile_paths=(
+                star_profile_paths if star_number == 1 else None
+            ),
+            star2_profile_paths=(
+                star_profile_paths if star_number == 2 else None
+            ),
+            inlist_path=inlist_path,
+            star1_inlist_path=inlist_path if star_number == 1 else None,
+            star2_inlist_path=inlist_path if star_number == 2 else None,
+            mesa_dir=mesa_dir,
+        )
+    except Exception:
+        if standalone:
+            plt.close(fig)
+        raise
+
+    if title or role_suffix:
+        if standalone and len(rendered) > 1:
+            fig.suptitle(
+                f"{title or f'Star {star_number}'}{role_suffix}", fontsize=9.4
+            )
+        elif rendered:
+            cur_t = rendered[0].get_title()
+            if title:
+                rendered[0].set_title(f"{title}{role_suffix}", fontsize=8.8)
+            elif role_suffix and role_suffix not in cur_t:
+                rendered[0].set_title(f"{cur_t}{role_suffix}", fontsize=8.8)
+
+    _compare_panels.save_figure(fig, save_path)
+    return fig, rendered

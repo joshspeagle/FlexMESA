@@ -454,6 +454,7 @@ def plot_history_panels(
     *,
     ref_history_path: pathlib.Path | str | None = None,
     xaxis: str = "model_number",
+    axes: Sequence[mpl_axes.Axes] | None = None,
     save_path: pathlib.Path | str | None = None,
 ) -> tuple[mpl_figure.Figure, np.ndarray]:
     r"""Plot stacked ``History_Panels<N>`` from arbitrary history columns.
@@ -477,6 +478,15 @@ def plot_history_panels(
         )
     if xaxis not in tbl.columns:
         raise KeyError(f"xaxis column {xaxis!r} not found in history")
+    for item in panels:
+        y_col, y2_col = (item, None) if isinstance(item, str) else item
+        if y_col not in tbl.columns:
+            raise KeyError(f"history column {y_col!r} not found in history")
+        if y2_col is not None and y2_col not in tbl.columns:
+            raise KeyError(
+                f"secondary history column {y2_col!r} not found in history"
+            )
+
     x_raw = tbl.columns[xaxis]
     scale, x_lbl = _compare_panels.age_scale_and_label(
         xaxis, _compare_panels.max_finite_abs(x_raw)
@@ -488,23 +498,31 @@ def plot_history_panels(
         else None
     )
 
-    style.use_mesa_plot_style()
     n_rows = len(panels)
-    fig, raw_axes = plt.subplots(
-        n_rows,
-        1,
-        sharex=True,
-        figsize=style.figsize("single", 0.48 * max(n_rows, 2)),
-        constrained_layout=True,
-    )
-    axes = np.atleast_1d(raw_axes)
+    standalone = axes is None
+    if axes is not None:
+        if len(axes) != n_rows:
+            raise ValueError(f"expected {n_rows} target axes, got {len(axes)}")
+        axes_arr = np.asarray(list(axes), dtype=object)
+        fig_cand = axes[0].get_figure()
+        if not isinstance(fig_cand, mpl_figure.Figure):
+            raise TypeError("target axes must belong to a Figure")
+        fig = fig_cand
+    else:
+        style.use_mesa_plot_style()
+        fig, raw_axes = plt.subplots(
+            n_rows,
+            1,
+            sharex=True,
+            figsize=style.figsize("single", 0.48 * max(n_rows, 2)),
+            constrained_layout=True,
+        )
+        axes_arr = np.atleast_1d(raw_axes)
     palette = tuple(style.OKABE_ITO.values())
 
     for idx, item in enumerate(panels):
         y_col, y2_col = (item, None) if isinstance(item, str) else item
-        if y_col not in tbl.columns:
-            raise KeyError(f"history column {y_col!r} not found in history")
-        ax_i = axes[idx]
+        ax_i = axes_arr[idx]
         c_left = palette[idx % len(palette)]
         if (
             ref_tbl is not None
@@ -526,10 +544,6 @@ def plot_history_panels(
         )
         ax_i.set_ylabel(y_col)
         if y2_col is not None:
-            if y2_col not in tbl.columns:
-                raise KeyError(
-                    f"secondary history column {y2_col!r} not found in history"
-                )
             ax_r = ax_i.twinx()
             c_right = palette[(idx + 1) % len(palette)]
             if (
@@ -561,17 +575,32 @@ def plot_history_panels(
             )
         else:
             ax_i.legend(loc="best", frameon=False, fontsize=6.8)
+        if idx < n_rows - 1:
+            ax_i.tick_params(labelbottom=False)
 
-    axes[-1].set_xlabel("Model Number" if xaxis == "model_number" else x_lbl)
-    if ref_tbl is not None:
-        prov = _plot_support.format_history_provenance(
-            tbl, ref_tbl, ref_path=ref_history_path, ref_hdr=ref_hdr
-        )
-        fig.suptitle(f"History Panels\n{prov}", fontsize=8.6)
+    axes_arr[-1].set_xlabel(
+        "Model Number" if xaxis == "model_number" else x_lbl
+    )
+    if standalone:
+        if ref_tbl is not None:
+            prov = _plot_support.format_history_provenance(
+                tbl, ref_tbl, ref_path=ref_history_path, ref_hdr=ref_hdr
+            )
+            fig.suptitle(f"History Panels\n{prov}", fontsize=8.6)
+        else:
+            fig.suptitle("History Panels", fontsize=9.0)
     else:
-        fig.suptitle("History Panels", fontsize=9.0)
+        _plot_support.set_history_panel_title(
+            axes_arr[0],
+            "History Panels",
+            tbl,
+            ref_tbl,
+            ref_path=ref_history_path,
+            ref_hdr=ref_hdr,
+            standalone=False,
+        )
     _compare_panels.save_figure(fig, save_path)
-    return fig, axes
+    return fig, axes_arr
 
 
 def parse_inlist_grid_spec(
@@ -599,6 +628,7 @@ def plot_pgstar_grid(
     num_cols: int | None = None,
     inlist_path: pathlib.Path | str | None = None,
     grid_index: int = 1,
+    namelist_name: str | None = None,
     history_path: pathlib.Path | str | None = None,
     ref_history_path: pathlib.Path | str | None = None,
     profile_path: pathlib.Path | str | None = None,
@@ -610,20 +640,27 @@ def plot_pgstar_grid(
     star2_history_path: pathlib.Path | str | None = None,
     star1_profile_path: pathlib.Path | str | None = None,
     star2_profile_path: pathlib.Path | str | None = None,
+    star1_profile_paths: Sequence[pathlib.Path | str] | None = None,
+    star2_profile_paths: Sequence[pathlib.Path | str] | None = None,
+    star1_inlist_path: pathlib.Path | str | None = None,
+    star2_inlist_path: pathlib.Path | str | None = None,
     mesa_dir: pathlib.Path | str | None = None,
     title: str = "",
     save_path: pathlib.Path | str | None = None,
 ) -> tuple[mpl_figure.Figure, list[mpl_axes.Axes]]:
     r"""Compose a multi-panel ``Grid<N>`` dashboard (`pgstar` / `pgbinary`).
 
-    Implements ``Grid_plot`` from ``star/private/pgstar_grid.f90:50-260`` and
-    ``binary/private/pgbinary_grid.f90:32-260`` via ``matplotlib.gridspec``.
+    Implements ``Grid_plot`` from ``star/private/pgstar_grid.f90:504-1018``
+    and ``binary/private/pgbinary_grid.f90:275-572`` via
+    ``matplotlib.gridspec``, supporting ``Text_Summary<N>``,
+    ``Profile_Panels<N>``, ``History_Panels<N>``, ``Star1``/``Star2``, and
+    nested ``Grid<N>`` cells.
     """
     inlist_title = ""
     resolved_specs: list[GridPanelSpec] = []
     if inlist_path is not None:
         r_cnt, c_cnt, inlist_title, parsed_specs = parse_inlist_grid_spec(
-            inlist_path, grid_index=grid_index
+            inlist_path, grid_index=grid_index, namelist_name=namelist_name
         )
         eff_rows = r_cnt if num_rows is None else num_rows
         eff_cols = c_cnt if num_cols is None else num_cols
@@ -674,7 +711,11 @@ def plot_pgstar_grid(
             )
 
     style.use_mesa_plot_style()
-    aspect = max(0.50, 0.56 * eff_rows / max(eff_cols, 1) * 1.4)
+    min_rspan = max(1, min(s.rowspan for s in resolved_specs))
+    min_cspan = max(1, min(s.colspan for s in resolved_specs))
+    vis_rows = float(eff_rows) / float(min_rspan)
+    vis_cols = max(1.0, float(eff_cols) / float(min_cspan))
+    aspect = max(0.55, min(1.38, 0.56 * vis_rows / vis_cols * 1.4))
     fig = plt.figure(
         figsize=style.figsize("double", aspect), constrained_layout=True
     )
@@ -690,7 +731,7 @@ def plot_pgstar_grid(
             )
         cell_ax = fig.add_subplot(gs[spec.row : r_end, spec.col : c_end])
         try:
-            _grid_dispatch.dispatch_grid_cell(
+            cell_axes = _grid_dispatch.dispatch_grid_cell(
                 cell_ax,
                 spec.name,
                 history_path=history_path,
@@ -704,12 +745,17 @@ def plot_pgstar_grid(
                 star2_history_path=star2_history_path,
                 star1_profile_path=star1_profile_path,
                 star2_profile_path=star2_profile_path,
+                star1_profile_paths=star1_profile_paths,
+                star2_profile_paths=star2_profile_paths,
+                inlist_path=inlist_path,
+                star1_inlist_path=star1_inlist_path,
+                star2_inlist_path=star2_inlist_path,
                 mesa_dir=mesa_dir,
             )
         except Exception:
             plt.close(fig)
             raise
-        created_axes.append(cell_ax)
+        created_axes.extend(cell_axes)
 
     eff_title = title or inlist_title
     if eff_title:

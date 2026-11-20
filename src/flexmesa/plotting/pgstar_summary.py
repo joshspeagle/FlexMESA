@@ -312,6 +312,7 @@ def plot_profile_custom_panels(
     *,
     ref_profile_path: pathlib.Path | str | None = None,
     xaxis: str = "mass",
+    axes: Sequence[mpl_axes.Axes] | None = None,
     save_path: pathlib.Path | str | None = None,
 ) -> tuple[mpl_figure.Figure, np.ndarray]:
     r"""Plot stacked ``Profile_Panels<N>`` from arbitrary profile columns.
@@ -325,6 +326,8 @@ def plot_profile_custom_panels(
             ``(y_col, other_y_col)`` plotted on shared ``xaxis``.
         ref_profile_path: Optional MESA ``26.4.1`` ``profileN.data`` overlay.
         xaxis: Shared horizontal profile coordinate (default ``"mass"``).
+        axes: Optional pre-created stack of ``len(panels)`` ``Axes`` (for
+            embedding inside ``Grid<N>`` or ``Star<N>`` cells).
         save_path: Optional output image path (`300 dpi`).
 
     Returns:
@@ -350,25 +353,42 @@ def plot_profile_custom_panels(
         else None
     )
 
-    style.use_mesa_plot_style()
     n_rows = len(panels)
-    fig, raw_axes = plt.subplots(
-        n_rows,
-        1,
-        sharex=True,
-        figsize=style.figsize("single", 0.48 * max(n_rows, 2)),
-        constrained_layout=True,
-    )
-    axes = np.atleast_1d(raw_axes)
-    colors = pgstar_panels.SERIES_COLORS
-
-    for idx, item in enumerate(panels):
+    for item in panels:
         y_col, y2_col = (item, None) if isinstance(item, str) else item
         if y_col not in prof.columns:
             raise KeyError(
                 f"profile column {y_col!r} not found in profileN.data"
             )
-        ax_i = axes[idx]
+        if y2_col is not None and y2_col not in prof.columns:
+            raise KeyError(
+                f"secondary profile column {y2_col!r} missing in profile"
+            )
+
+    standalone = axes is None
+    if axes is not None:
+        if len(axes) != n_rows:
+            raise ValueError(f"expected {n_rows} target axes, got {len(axes)}")
+        axes_arr = np.asarray(list(axes), dtype=object)
+        fig_cand = axes[0].get_figure()
+        if not isinstance(fig_cand, mpl_figure.Figure):
+            raise TypeError("target axes must belong to a Figure")
+        fig = fig_cand
+    else:
+        style.use_mesa_plot_style()
+        fig, raw_axes = plt.subplots(
+            n_rows,
+            1,
+            sharex=True,
+            figsize=style.figsize("single", 0.48 * max(n_rows, 2)),
+            constrained_layout=True,
+        )
+        axes_arr = np.atleast_1d(raw_axes)
+    colors = pgstar_panels.SERIES_COLORS
+
+    for idx, item in enumerate(panels):
+        y_col, y2_col = (item, None) if isinstance(item, str) else item
+        ax_i = axes_arr[idx]
         _plot_support.plot_profile_pair(
             ax_i,
             prof,
@@ -382,10 +402,6 @@ def plot_profile_custom_panels(
         )
         ax_i.set_ylabel(y_col)
         if y2_col is not None:
-            if y2_col not in prof.columns:
-                raise KeyError(
-                    f"secondary profile column {y2_col!r} missing in profile"
-                )
             ax_r = ax_i.twinx()
             _plot_support.plot_profile_pair(
                 ax_r,
@@ -405,11 +421,18 @@ def plot_profile_custom_panels(
         else:
             ax_i.legend(loc="best", frameon=False, fontsize=6.8)
         _plot_support.draw_xaxis_mixing_bar(ax_i, x_run, prof)
+        if idx < n_rows - 1:
+            ax_i.tick_params(labelbottom=False)
+        if rev_x and not ax_i.xaxis_inverted():
+            ax_i.invert_xaxis()
 
-    if rev_x and not axes[-1].xaxis_inverted():
-        axes[-1].invert_xaxis()
-    axes[-1].set_xlabel(x_label)
-    p_sub = _plot_support.format_profile_subtitle(prof, ref_prof)
-    fig.suptitle(f"Profile Panels ({p_sub})", fontsize=8.8)
+    axes_arr[-1].set_xlabel(x_label)
+    if standalone:
+        p_sub = _plot_support.format_profile_subtitle(prof, ref_prof)
+        fig.suptitle(f"Profile Panels ({p_sub})", fontsize=8.8)
+    else:
+        _plot_support.set_profile_panel_title(
+            axes_arr[0], "Profile Panels", prof, ref_prof, standalone=False
+        )
     _compare_panels.save_figure(fig, save_path)
-    return fig, axes
+    return fig, axes_arr

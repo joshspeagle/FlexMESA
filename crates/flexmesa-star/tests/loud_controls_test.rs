@@ -148,9 +148,9 @@ fn test_unknown_section_key_unused_and_removed_aliases_fail_loudly() {
             "conv_premix_time_factor",
         ),
         (
-            "unused_redo",
-            "&controls\n  redo_limit = 5\n/\n",
-            "redo_limit",
+            "unused_surface_pt",
+            "&controls\n  use_other_surface_pt = .true.\n/\n",
+            "use_other_surface_pt",
         ),
     ] {
         let p = tmp.root.join(format!("inlist_{tag}"));
@@ -397,20 +397,14 @@ fn test_missing_files_stages_and_removed_clamps_behave_strictly() {
         .expect("a non-positive retry_limit means no limit");
     assert_eq!(bneg.controls.ts_stop.retry_limit, 0);
 
-    // `redo_limit` is not used by the engine yet, so it is rejected as
-    // unsupported by default; with the opt-out its value must still parse
-    // (`binary/test_suite/double_bh/inlist1:47` sets `redo_limit = -1`).
+    // `redo_limit` is supported (`star/private/evolve.f90:2161`); non-positive
+    // values mean no limit (`binary/test_suite/double_bh/inlist1:47` sets
+    // `redo_limit = -1`).
     let neg_redo = tmp.root.join("inlist_neg_redo");
     fs::write(&neg_redo, "&controls\n  redo_limit = -1\n/\n")
         .expect("write negative redo limit");
-    assert!(InlistBundle::from_file(&neg_redo).is_err());
-    let bredo = InlistBundle::from_file_with_options(
-        &neg_redo,
-        InlistLoadOptions {
-            allow_unsupported_controls: true,
-        },
-    )
-    .expect("a non-positive redo_limit means no limit");
+    let bredo = InlistBundle::from_file(&neg_redo)
+        .expect("a non-positive redo_limit means no limit");
     assert_eq!(bredo.controls.ts_stop.redo_limit, 0);
 
     let bad_retry_fac = tmp.root.join("inlist_bad_retry_fac");

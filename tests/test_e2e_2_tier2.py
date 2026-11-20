@@ -45,6 +45,7 @@ def test_accretion_composition_and_super_eddington_nova_wind() -> None:
             "  accrete_same_as_surface = .false.\n"
             "  accretion_h1 = 0.70\n"
             "  accretion_he4 = 0.28\n"
+            "  accretion_zfracs = 4\n"
             "  super_eddington_scaling_factor = 1.0\n"
             "  max_model_number = 2\n"
             "/\n",

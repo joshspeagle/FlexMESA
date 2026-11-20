@@ -232,6 +232,11 @@
       "number": 259,
       "title": "feat(star): port MESA 26.4.1 Newton solver, retry/redo semantics, and timestep checks (#152)",
       "draft": false
+    },
+    {
+      "number": 284,
+      "title": "fix(star): follow upstream's do_eos_for_cell in the constant-Pgas density solve (#155, #156)",
+      "draft": false
     }
   ],
   "deferred_169": [

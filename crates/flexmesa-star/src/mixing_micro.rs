@@ -15,7 +15,8 @@ use rayon::prelude::*;
 
 use crate::controls::StarError;
 use crate::micro::{
-    builtin_helm_table, eval_kap_for_range, store_eos_for_cell,
+    builtin_helm_table, eval_kap_for_range, solve_fix_pgas_cell,
+    store_eos_for_cell,
 };
 use crate::model::StarModel;
 use crate::star_ad::StarAdOrder1;
@@ -80,7 +81,11 @@ pub(crate) fn eval_uniform_xa_eos_kap_range(
                 xa_mx,
                 ln_t[k] / LN10,
                 I_LN_PGAS as isize,
-                ln_pgas[k],
+                // `solve_eos_given_PgasT` receives `lnPgas/ln10` and
+                // multiplies by `ln10` again
+                // (`star/private/predictive_mix.f90:901-905`,
+                // `star/private/eos_support.f90:343`).
+                (ln_pgas[k] / LN10) * LN10,
                 lnd[k] / LN10,
                 LOG_RHO_TOL_PGAS_T,
                 LOG_RHO_TOL_PGAS_T * LN10,
@@ -204,36 +209,16 @@ pub(crate) fn eval_eos_kap_range_by_mode(
         let ln_t = &model.ln_t;
         let lnd = &model.lnd;
         let ln_pgas = &model.ln_pgas;
+        let t = &model.t;
         let pt_results: Vec<(usize, f64, f64, EosEvalOutput)> = pt_cells
             .par_iter()
             .map(|&k| -> Result<(usize, f64, f64, EosEvalOutput), StarError> {
                 let xa_k = &xa[k * species..(k + 1) * species];
-                let inv = eos_dt_get_rho(
-                    ht,
-                    chem_id,
-                    xa_k,
-                    ln_t[k] / LN10,
-                    I_LN_PGAS as isize,
-                    ln_pgas[k],
-                    lnd[k] / LN10,
-                    LOG_RHO_TOL_PGAS_T,
-                    LOG_RHO_TOL_PGAS_T * LN10,
-                    MAX_ITER_FOR_SOLVE,
+                let (lnd_out, rho_out, eos) = solve_fix_pgas_cell(
+                    ht, chem_id, xa_k, k, ln_t[k], t[k], ln_pgas[k], lnd[k],
                     eos_cfg,
-                )
-                .map_err(|e| {
-                    StarError::MicrophysicsError(format!(
-                        "solve_eos_given_PgasT failed at zone {k}: {e}"
-                    ))
-                })?;
-                if inv.log10_result < -25.0 {
-                    return Err(StarError::MicrophysicsError(format!(
-                        "do_eos_for_cell failed at zone {k}: logRho ({}) < -25",
-                        inv.log10_result
-                    )));
-                }
-                let lnd_out = inv.log10_result * LN10;
-                Ok((k, lnd_out, flexmesa_math::exp(lnd_out), inv.eos))
+                )?;
+                Ok((k, lnd_out, rho_out, eos))
             })
             .collect::<Result<Vec<_>, _>>()?;
         for (k, lnd_new, rho_new, out) in pt_results {

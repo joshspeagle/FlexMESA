@@ -31,7 +31,6 @@ from flexmesa.plotting import (
     pgstar_panels,
     style,
 )
-from flexmesa.schema import namelist
 from flexmesa.testing import history_compare
 
 _RTI_INDEX_RE = re.compile(r"^rti_type_(\d+)$")
@@ -446,14 +445,17 @@ def _collect_rti_segments_from_profiles(
                 else (age_yr * 1.0e-6 if age_units == "Myr" else age_yr)
             )
         m_arr = prof.columns["mass"]
-        if "mixing_type" in prof.columns:
-            active = np.rint(prof.columns["mixing_type"]).astype(np.int64) == 6
-        elif "alpha_RTI" in prof.columns:
-            active = prof.columns["alpha_RTI"] > 0.0
-        else:
+        has_mt = "mixing_type" in prof.columns
+        has_arti = "alpha_RTI" in prof.columns
+        if not (has_mt or has_arti):
             raise KeyError(
                 f"rti profile {p_path} requires 'mixing_type' or 'alpha_RTI'"
             )
+        active = np.zeros(m_arr.size, dtype=bool)
+        if has_mt:
+            active |= np.rint(prof.columns["mixing_type"]).astype(np.int64) == 6
+        if has_arti:
+            active |= prof.columns["alpha_RTI"] > 0.0
         order = np.argsort(m_arr, kind="mergesort")
         ms, acts = m_arr[order], active[order]
         xs_all.append(xv)
@@ -697,7 +699,8 @@ def plot_rti_history(
         )
     else:
         ax.set_title("Rayleigh-Taylor Instability")
-    ax.legend(loc="best", frameon=False, fontsize=6.6, ncol=2)
+    if ax.get_legend_handles_labels()[0]:
+        ax.legend(loc="best", frameon=False, fontsize=6.6, ncol=2)
     _compare_panels.save_figure(fig, save_path)
     return fig, ax
 
@@ -730,10 +733,9 @@ def parse_inlist_cmd_spec(
     """Parse ``Color_magnitude<N>_*`` controls from an ``inlist`` file."""
     if not 1 <= panel_index <= 9:
         raise ValueError(f"panel_index must be in 1..9, got {panel_index!r}")
-    text = pathlib.Path(inlist_path).read_text(encoding="utf-8")
-    blocks = namelist.parse_namelist_text(text)
-    if not blocks:
-        blocks = namelist.parse_namelist_text(f"&pgstar\n{text}\n/\n")
+    blocks = _plot_support.load_plotting_namelist_blocks(
+        inlist_path, namelist_name="pgstar"
+    )
     prefix = f"color_magnitude{panel_index}_"
     x1 = x2 = title = ""
     x_rev = False

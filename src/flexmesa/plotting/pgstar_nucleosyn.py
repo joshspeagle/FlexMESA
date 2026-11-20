@@ -229,7 +229,7 @@ def plot_network_chart(
             ax.text(
                 float(min_n) - 0.75,
                 float(zv),
-                chem.element_name(zv),
+                chem.element_name(zv).capitalize(),
                 ha="right",
                 va="center",
                 fontsize=6.2,
@@ -496,7 +496,7 @@ def plot_production_profile(
             ax.text(
                 float(xs[0]),
                 yloc,
-                chem.element_name(zv),
+                chem.element_name(zv).capitalize(),
                 ha="center",
                 va="bottom",
                 fontsize=6.4,

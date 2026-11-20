@@ -26,7 +26,6 @@ from flexmesa.plotting import (
     pgstar_text,
     stellar_plots,
 )
-from flexmesa.schema import namelist
 
 _NUMBERED_PANEL_RE = re.compile(r"^([a-z_]+)([1-9])$")
 
@@ -114,24 +113,6 @@ _DEFAULT_BINARY_HISTORY_PANELS: tuple[tuple[str, str | None], ...] = (
 )
 
 
-def _load_namelist_blocks(
-    inlist_path: pathlib.Path | str, namelist_name: str | None = None
-) -> list[namelist.NamelistBlock]:
-    """Parse ``&pgstar``/``&pgbinary`` inlists or raw ``.defaults`` files."""
-    path = pathlib.Path(inlist_path)
-    text = path.read_text(encoding="utf-8")
-    blocks = namelist.parse_namelist_text(text)
-    if not blocks:
-        fname = path.name.lower()
-        fallback = (
-            namelist_name
-            if namelist_name is not None
-            else ("pgbinary" if "pgbinary" in fname else "pgstar")
-        )
-        blocks = namelist.parse_namelist_text(f"&{fallback}\n{text}\n/\n")
-    return blocks
-
-
 def parse_grid_namelist(
     inlist_path: pathlib.Path | str,
     *,
@@ -139,7 +120,9 @@ def parse_grid_namelist(
     namelist_name: str | None,
 ) -> tuple[int, int, str, list[tuple[str, int, int, int, int]]]:
     """Extract ``(num_rows, num_cols, title, cells)`` from ``inlist_path``."""
-    blocks = _load_namelist_blocks(inlist_path, namelist_name=namelist_name)
+    blocks = _plot_support.load_plotting_namelist_blocks(
+        inlist_path, namelist_name=namelist_name
+    )
     prefix = f"grid{grid_index}_"
     num_rows = num_cols = num_plots = 0
     title = ""
@@ -247,7 +230,7 @@ def _parse_stacked_panel_spec(
     """Parse ``Profile_Panels<N>`` or ``History_Panels<N>`` rows from inlist."""
     if inlist_path is None:
         return None, []
-    blocks = _load_namelist_blocks(
+    blocks = _plot_support.load_plotting_namelist_blocks(
         inlist_path, namelist_name="pgbinary" if is_binary else None
     )
     xaxis_name: str | None = None
@@ -306,7 +289,7 @@ def _parse_history_track_spec(
     rev_x, rev_y = True, False
     if inlist_path is None:
         return x_col, y_col, rev_x, rev_y
-    blocks = _load_namelist_blocks(
+    blocks = _plot_support.load_plotting_namelist_blocks(
         inlist_path, namelist_name="pgbinary" if is_binary else None
     )
     prefix = f"history_track{track_index}_"

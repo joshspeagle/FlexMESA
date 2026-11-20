@@ -21,7 +21,6 @@ import matplotlib.figure as mpl_figure
 import matplotlib.patches as mpl_patches
 
 from flexmesa.plotting import _compare_panels, _plot_support, style
-from flexmesa.schema import namelist
 from flexmesa.testing import history_compare
 
 # Default star Text_Summary1 layout (8 rows x 4 cols) from
@@ -135,16 +134,9 @@ def parse_inlist_text_summary_spec(
         raise ValueError(
             f"summary_index must be in 1..9, got {summary_index!r}"
         )
-    text = pathlib.Path(inlist_path).read_text(encoding="utf-8")
-    blocks = namelist.parse_namelist_text(text)
-    if not blocks:
-        fname = pathlib.Path(inlist_path).name.lower()
-        fallback_blk = (
-            namelist_name
-            if namelist_name is not None
-            else ("pgbinary" if "pgbinary" in fname else "pgstar")
-        )
-        blocks = namelist.parse_namelist_text(f"&{fallback_blk}\n{text}\n/\n")
+    blocks = _plot_support.load_plotting_namelist_blocks(
+        inlist_path, namelist_name=namelist_name
+    )
     prefix = f"text_summary{summary_index}_"
     num_rows = 0
     num_cols = 0

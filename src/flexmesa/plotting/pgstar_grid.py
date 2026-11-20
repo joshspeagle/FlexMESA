@@ -718,14 +718,17 @@ def plot_pgstar_grid(
             )
 
     style.use_mesa_plot_style()
-    min_rspan = max(1, min(s.rowspan for s in resolved_specs))
-    min_cspan = max(1, min(s.colspan for s in resolved_specs))
-    vis_rows = float(eff_rows) / float(min_rspan)
-    vis_cols = max(1.0, float(eff_cols) / float(min_cspan))
-    aspect = max(0.55, min(1.38, 0.56 * vis_rows / vis_cols * 1.4))
-    fig = plt.figure(
-        figsize=style.figsize("double", aspect), constrained_layout=True
+    min_col_frac = min(
+        float(s.colspan) / float(eff_cols) for s in resolved_specs
     )
+    min_row_frac = min(
+        float(s.rowspan) / float(eff_rows) for s in resolved_specs
+    )
+    width_in = min(
+        13.5, max(style.AASTEX_TEXT_WIDTH_IN, 2.65 / max(min_col_frac, 0.1))
+    )
+    height_in = min(11.0, max(4.2, 2.35 / max(min_row_frac, 0.1)))
+    fig = plt.figure(figsize=(width_in, height_in), constrained_layout=True)
     gs = mpl_gridspec.GridSpec(eff_rows, eff_cols, figure=fig)
 
     created_axes: list[mpl_axes.Axes] = []

@@ -159,16 +159,20 @@ STOCK_EXTRAS_DIGESTS: frozenset[str] = frozenset(
 #   `Hb2MStarExtras`, `TTauGradrStarExtras`, `WdAccSmallDmStarExtras`,
 #   `WdAicStarExtras` and `WdNovaBurstStarExtras` are detached for the same
 #   reason: upstream sets `how_many_extra_profile_columns = 1` in each
-#   (`hb_2M/src/run_star_extras.f90:198`, `T_tau_gradr/...:183`,
-#   `wd_acc_small_dm/...:194`, `wd_aic/...:210`, `wd_nova_burst/...:162`).
+#   (`star/test_suite/hb_2M/src/run_star_extras.f90:198`,
+#   `star/test_suite/T_tau_gradr/src/run_star_extras.f90:183`,
+#   `star/test_suite/wd_acc_small_dm/src/run_star_extras.f90:194`,
+#   `star/test_suite/wd_aic/src/run_star_extras.f90:210`,
+#   `star/test_suite/wd_nova_burst/src/run_star_extras.f90:162`).
 # - `#231` (custom termination codes): `C13PocketStarExtras`,
 #   `PisnStarExtras` and `WdAicStarExtras` set `termination_code_str(t_xtra*)`
-#   (`c13_pocket/src/run_star_extras.f90:416-417, 442-443`,
-#   `pisn/...:227-228`, `wd_aic/...:149-150, 158-162, 169-170`) and the case
+#   (`star/test_suite/c13_pocket/src/run_star_extras.f90:416`,
+#   `star/test_suite/pisn/src/run_star_extras.f90:227`,
+#   `star/test_suite/wd_aic/src/run_star_extras.f90:149`) and the case
 #   manifest requires those strings; the adapter reports only the hook name.
 # - `#152` (extras retry): `MakeSdbStarExtras` returns `retry`
-#   (`make_sdb/src/run_star_extras.f90:108-111`), which the step driver does
-#   not implement.
+#   (`star/test_suite/make_sdb/src/run_star_extras.f90:108`), which the step
+#   driver does not implement.
 # - `#170` (bundled GYRE pulsation): `GyreInMesaStarExtras`.
 # - `#172` (CCSN/STELLA + per-cell `alpha_mlt`): `CcsnIIpStarExtras`
 #   (`#154`/`#155`/`#158`/`#172`).

@@ -720,8 +720,8 @@ def test_batch2_live_py_star_extras_adapter_execution_and_loud_key_error(
     assert rep["total_steps"] == 4
 
     # `hb_2M` stays detached: upstream sets `how_many_extra_profile_columns = 1`
-    # (`hb_2M/src/run_star_extras.f90:198`) and the adapter does not call
-    # `extra_profile_columns` (`#231`).
+    # (`star/test_suite/hb_2M/src/run_star_extras.f90:198`) and the adapter
+    # does not call `extra_profile_columns` (`#231`).
     hb_dir = harness_runner.resolve_case_dir("star", "hb_2M")
     assert case_extras.resolve_case_extras("star", hb_dir) is None
 

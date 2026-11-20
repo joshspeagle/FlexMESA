@@ -650,8 +650,13 @@ pub fn solve_henyey_step(
                 });
 
                 if let Err(e) = eq_res {
-                    // `star/private/star_solver.f90:819`.
-                    if alam > eff_min_coeff && model.model_number == 1 {
+                    // `star/private/star_solver.f90:819` tests
+                    // `s% model_number == 1`. Upstream sets `model_number =
+                    // model_number_old + 1` before the solve
+                    // (`star/private/evolve.f90:2012`); here the counter is
+                    // advanced only after a converged step, so the step in
+                    // progress is `model_number + 1`.
+                    if alam > eff_min_coeff && model.model_number + 1 == 1 {
                         alam = (alam / 10.0).max(eff_min_coeff);
                         continue;
                     }

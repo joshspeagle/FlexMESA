@@ -575,22 +575,20 @@ pub fn do_solve_diffusion(
     }
     nzlo = nbound;
 
+    // `diffusion.f90:241-248` calls `get_limit_coeffs` unconditionally.
     let mut limit_coeffs_face = vec![0.0_f64; nz];
-    if nzhi > nzlo {
-        let k_max = get_limit_coeffs(
-            nzlo,
-            nzhi,
-            inp.gamma_full_on,
-            inp.gamma_full_off,
-            inp.t_full_on,
-            inp.t_full_off,
-            inp.gamma,
-            inp.t,
-            inp.phase,
-            &mut limit_coeffs_face,
-        );
-        nzhi = k_max;
-    }
+    nzhi = get_limit_coeffs(
+        nzlo,
+        nzhi,
+        inp.gamma_full_on,
+        inp.gamma_full_off,
+        inp.t_full_on,
+        inp.t_full_off,
+        inp.gamma,
+        inp.t,
+        inp.phase,
+        &mut limit_coeffs_face,
+    );
 
     if nzhi <= nzlo {
         return Ok(SolveDiffusionStats {

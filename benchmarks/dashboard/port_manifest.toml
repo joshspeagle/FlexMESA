@@ -6685,7 +6685,7 @@ status = "kernel_reference_vectors"
 flexmesa_files = ["crates/flexmesa-star/src/diffusion.rs"]
 evidence_artifacts = ["benchmarks/fortran_mesa/diffusion_oracles/mesa_26_4_1_diffusion_oracles.tsv"]
 evidence_tests = ["crates/flexmesa-star/tests/diffusion_phase_sep_156_test.rs"]
-notes = "updated for #156: do_solve_diffusion (BE_solve + block-tridiagonal Rosenbrock solve_with_isolve across all 7 solvers), get_timescale, get_dx_dt, get_eqn_matrix_entries, positivity, set_diffusion_classes, adjust_timestep verified against MESA 26.4.1 Fortran oracles"
+notes = "updated for #156: do_solve_diffusion tested against MESA 26.4.1 hex oracles for BE_solve (be_thoul_solar, be_cgs_caplan_wd) and all 7 Rosenbrock isolve solvers (ros2, rose2, ros3p, ros3pl, rodas3, rodas4, rodasp on the 12-zone solar profile): exact steps_used, X_final rtol=1e-12 (atol=1e-14), v_total/E_field/g_field rtol=1e-11 (atol=1e-25)"
 [files.routine_map]
 "do_solve_diffusion" = "crates/flexmesa-star/src/diffusion.rs::do_solve_diffusion"
 "set_diffusion_classes" = "crates/flexmesa-star/src/diffusion.rs::set_diffusion_classes"
@@ -6697,7 +6697,7 @@ upstream_lines = 1746
 upstream_sha256 = "f303dfdb628e5fdb8ba4a6e1b9de3851313fd2a55d745865eb6af7b9395d2809"
 status = "partial"
 flexmesa_files = ["crates/flexmesa-star/src/diffusion_procs.rs"]
-notes = "updated for #156: fixup, fix_single_point_extremes, fix_negative_masses, fix_species_conservation, smooth_x, get1_dx_dm, redistribute_mass, get_limit_coeffs, setup_struct_info, and set_new_xa ported; calc_g_rad_mombarg/calc_g_rad_hu/update_rad_accel_face fail loudly pending op_mono (C10 / #161)"
+notes = "updated for #156: fixup, fix_single_point_extremes, fix_negative_masses, fix_species_conservation, smooth_x, get1_dx_dm, redistribute_mass, get_limit_coeffs, setup_struct_info (#288 2-zone smoothing guard), and set_new_xa ported; calc_g_rad_mombarg/calc_g_rad_hu/update_rad_accel_face fail loudly pending op_mono (#286)"
 
 [[files]]
 upstream_path = "star/private/diffusion_support.f90"
@@ -6708,7 +6708,7 @@ status = "kernel_reference_vectors"
 flexmesa_files = ["crates/flexmesa-star/src/diffusion_support.rs"]
 evidence_artifacts = ["benchmarks/fortran_mesa/diffusion_oracles/mesa_26_4_1_diffusion_oracles.tsv"]
 evidence_tests = ["crates/flexmesa-star/tests/diffusion_phase_sep_156_test.rs"]
-notes = "updated for #156: get_matrix_coeffs, do1_solve_thoul_hu, solve_burgers_cgs_no_thermal, solve_burgers_cgs_with_thermal, get_sm_coeffs, lam_sm, get_cbf_coeffs, get_dstar_ocp, kappa_cbf, and bitsafe_erf_fit verified across all 8 transport/Burgers regimes against MESA 26.4.1 Fortran oracles"
+notes = "updated for #156: get_matrix_coeffs tested across all 8 transport/Burgers regimes (pure_coulomb, paquette, sm thoul/cgs low/blend/high eta, caplan blend/pure) against MESA 26.4.1 hex oracles (AD_face rtol=1e-12; E/g_field, v_*, GT_face, D_self, SIG_face, sigma_lnC rtol=1e-11, atol=1e-25..1e-30); get_Dstar_OCP tested at rtol=1e-14 on 3 (Gamma, kappa) points"
 [files.routine_map]
 "get_matrix_coeffs" = "crates/flexmesa-star/src/diffusion_support.rs::get_matrix_coeffs"
 
@@ -6730,7 +6730,7 @@ upstream_lines = 582
 upstream_sha256 = "2c6236cad67e3f5f3fb72208e01a8b99b10e5a86cda8a0e2bc0f986abf7a43f9"
 status = "ported_unverified"
 flexmesa_files = ["crates/flexmesa-star/src/element_diffusion.rs"]
-notes = "updated for #156: do_element_diffusion_step and finish_element_diffusion (eps_diffusion, eps_WD_sedimentation, #272 loud guard, #273 verbatim early return); radiative levitation (op_mono) fails loudly pending C10"
+notes = "updated for #156: do_element_diffusion_step and finish_element_diffusion (eps_diffusion, eps_WD_sedimentation, loud diffusion_dump_call_number stop, #272/#287 OOB guards, #273 verbatim early return); radiative levitation (op_mono) fails loudly pending #286"
 [files.routine_map]
 "do_element_diffusion" = "crates/flexmesa-star/src/element_diffusion.rs::do_element_diffusion_step"
 "finish_element_diffusion" = "crates/flexmesa-star/src/element_diffusion.rs::finish_element_diffusion"
@@ -7131,7 +7131,7 @@ status = "kernel_reference_vectors"
 flexmesa_files = ["crates/flexmesa-star/src/paquette_coeffs.rs"]
 evidence_artifacts = ["benchmarks/fortran_mesa/diffusion_oracles/mesa_26_4_1_diffusion_oracles.tsv"]
 evidence_tests = ["crates/flexmesa-star/tests/diffusion_phase_sep_156_test.rs"]
-notes = "updated for #156: full Paquette et al. (1986) 1,600-coefficient spline tables (compile-time const arrays, no heap init/free required) verified across 4 psi regimes against MESA 26.4.1 Fortran oracles"
+notes = "updated for #156: full Paquette et al. (1986) 1,600-coefficient spline tables tested against MESA 26.4.1 hex oracles across 4 psi regimes (Ddiff, Kdiff, Zdiff, Zdiff1, Zdiff2, Ath at rtol=1e-13, atol=1e-30)"
 [files.routine_map]
 "paquette_coefficients" = "crates/flexmesa-star/src/paquette_coeffs.rs::paquette_coefficients"
 "initialise_collision_integrals" = "crates/flexmesa-star/src/paquette_coeffs.rs::paquette_coefficients"
@@ -7450,7 +7450,7 @@ status = "kernel_reference_vectors"
 flexmesa_files = ["crates/flexmesa-star/src/phase_separation.rs"]
 evidence_artifacts = ["benchmarks/fortran_mesa/diffusion_oracles/mesa_26_4_1_diffusion_oracles.tsv"]
 evidence_tests = ["crates/flexmesa-star/tests/diffusion_phase_sep_156_test.rs"]
-notes = "updated for #156: Blouin et al. (2021a,b) CO and ONe phase diagrams, EOS phase > 0.9 front, constant-Pgas Skye updates with Skye_use_ion_offsets = false, mix_outward, eps_phase_separation, and #271 OOB guards verified against MESA 26.4.1 Fortran oracles (Medin-Cumming 3-component tables are absent from upstream 26.4.1)"
+notes = "updated for #156: blouin_delta_xo/xne tested at rtol=1e-14 (atol=1e-16) on 5 X_in points; 8-zone WD do_phase_separation_step (blouin_co, blouin_one, blouin_co_brunt via set_mlt_vars_range) tested against MESA 26.4.1 hex oracles: crystal/mixing masses and lnd/lnPgas/X_* rtol=1e-12, eps_phase_sep rtol=1e-8, grada_face rtol=1e-7, phase_init rtol=1e-5, gradr rtol=1e-11 after factoring out hydro_vars::do1_mlt_2 Prad_face discrepancy (#291); #271 OOB guards (Medin-Cumming 3-component tables absent from 26.4.1)"
 [files.routine_map]
 "do_phase_separation" = "crates/flexmesa-star/src/phase_separation.rs::do_phase_separation_step"
 

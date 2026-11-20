@@ -884,7 +884,7 @@ pub fn get1_gradient_coeffs(
                     "solve_burgers_cgs_with_thermal failed at zone {k}: {err}"
                 ))
             })?;
-        } else if eta > eta_off || (eta_off - eta_on) == 0.0 {
+        } else if eta > eta_off {
             solve_burgers_cgs_no_thermal(
                 m + 1,
                 m,

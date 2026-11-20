@@ -317,28 +317,34 @@ def plot_dpg_dnu(
     return fig, out_ax
 
 
-def _rti_xaxis_values(
-    tbl: history_compare.HistoryTable,
+def _transform_rti_xaxis_array(
+    raw_x: np.ndarray,
     xaxis: Literal["model_number", "star_age"],
     *,
     age_units: Literal["yr", "Myr", "s"],
     time_from_present: bool,
     log_xaxis: bool,
+    t_now_raw: float | None = None,
 ) -> tuple[np.ndarray, str]:
-    if xaxis not in tbl.columns:
-        raise KeyError(f"rti panel requires {xaxis!r} column in history.data")
-    xv = np.array(tbl.columns[xaxis], dtype=np.float64, copy=True)
+    """Transform raw ``model_number`` or ``star_age`` values and build label."""
+    xv = np.array(raw_x, dtype=np.float64, copy=True)
     if xaxis == "model_number":
         return xv, "Model Number"
+    scale = 1.0
     unit_tag = "yr"
     if age_units == "s":
-        xv = xv * constants.SECYER
+        scale = constants.SECYER
         unit_tag = "s"
     elif age_units == "Myr":
-        xv = xv * 1.0e-6
+        scale = 1.0e-6
         unit_tag = "Myr"
+    xv = xv * scale
     if time_from_present:
-        t_now = float(xv[-1])
+        t_now = (
+            float(t_now_raw) * scale
+            if t_now_raw is not None
+            else (float(xv[-1]) if xv.size > 0 else 0.0)
+        )
         xv = np.abs(t_now - xv) if log_xaxis else (xv - t_now)
     if log_xaxis:
         xv = np.log10(np.maximum(np.abs(xv), 1.0e-50))
@@ -356,6 +362,25 @@ def _rti_xaxis_values(
         else f"Stellar Age [{unit_tag}]"
     )
     return xv, lbl
+
+
+def _rti_xaxis_values(
+    tbl: history_compare.HistoryTable,
+    xaxis: Literal["model_number", "star_age"],
+    *,
+    age_units: Literal["yr", "Myr", "s"],
+    time_from_present: bool,
+    log_xaxis: bool,
+) -> tuple[np.ndarray, str]:
+    if xaxis not in tbl.columns:
+        raise KeyError(f"rti panel requires {xaxis!r} column in history.data")
+    return _transform_rti_xaxis_array(
+        tbl.columns[xaxis],
+        xaxis,
+        age_units=age_units,
+        time_from_present=time_from_present,
+        log_xaxis=log_xaxis,
+    )
 
 
 def _collect_rti_segments_from_history(
@@ -426,24 +451,21 @@ def _collect_rti_segments_from_profiles(
     xaxis: Literal["model_number", "star_age"],
     *,
     age_units: Literal["yr", "Myr", "s"],
-) -> tuple[list[np.ndarray], list[float], list[float]]:
+    time_from_present: bool,
+    log_xaxis: bool,
+    t_now_raw: float | None = None,
+) -> tuple[list[np.ndarray], list[float], list[float], str]:
     """Extract RTI spans from profiles (`mixing_type == 6` or `alpha_RTI`)."""
-    segs: list[np.ndarray] = []
-    xs_all: list[float] = []
-    m_max_all: list[float] = []
+    loaded: list[tuple[float, float, list[tuple[float, float]]]] = []
     for p_path in profile_paths:
         prof = compare.load_profile_file(p_path)
         if "mass" not in prof.columns:
             raise KeyError(f"rti profile {p_path} requires 'mass' column")
-        if xaxis == "model_number":
-            xv = float(prof.header.get("model_number", 0.0))
-        else:
-            age_yr = float(prof.header.get("star_age", 0.0))
-            xv = (
-                age_yr * constants.SECYER
-                if age_units == "s"
-                else (age_yr * 1.0e-6 if age_units == "Myr" else age_yr)
-            )
+        raw_x = (
+            float(prof.header.get("model_number", 0.0))
+            if xaxis == "model_number"
+            else float(prof.header.get("star_age", 0.0))
+        )
         m_arr = prof.columns["mass"]
         has_mt = "mixing_type" in prof.columns
         has_arti = "alpha_RTI" in prof.columns
@@ -458,8 +480,7 @@ def _collect_rti_segments_from_profiles(
             active |= prof.columns["alpha_RTI"] > 0.0
         order = np.argsort(m_arr, kind="mergesort")
         ms, acts = m_arr[order], active[order]
-        xs_all.append(xv)
-        m_max_all.append(float(ms[-1]))
+        spans: list[tuple[float, float]] = []
         in_run = False
         run_bot = 0.0
         for idx in range(ms.size):
@@ -470,16 +491,37 @@ def _collect_rti_segments_from_profiles(
                 in_run = False
                 run_top = float(ms[idx - 1])
                 if run_top > run_bot:
-                    segs.append(
-                        np.array(
-                            [[xv, run_bot], [xv, run_top]], dtype=np.float64
-                        )
-                    )
+                    spans.append((run_bot, run_top))
         if in_run and float(ms[-1]) > run_bot:
+            spans.append((run_bot, float(ms[-1])))
+        loaded.append((raw_x, float(ms[-1]), spans))
+
+    raw_arr = np.asarray([item[0] for item in loaded], dtype=np.float64)
+    eff_t_now = (
+        t_now_raw
+        if t_now_raw is not None
+        else (float(np.nanmax(raw_arr)) if raw_arr.size > 0 else 0.0)
+    )
+    x_trans, x_lbl = _transform_rti_xaxis_array(
+        raw_arr,
+        xaxis,
+        age_units=age_units,
+        time_from_present=time_from_present,
+        log_xaxis=log_xaxis,
+        t_now_raw=eff_t_now,
+    )
+    segs: list[np.ndarray] = []
+    xs_all: list[float] = []
+    m_max_all: list[float] = []
+    for xv_f, (_rx, m_top, spans) in zip(x_trans, loaded, strict=True):
+        xv = float(xv_f)
+        xs_all.append(xv)
+        m_max_all.append(m_top)
+        for run_bot, run_top in spans:
             segs.append(
-                np.array([[xv, run_bot], [xv, float(ms[-1])]], dtype=np.float64)
+                np.array([[xv, run_bot], [xv, run_top]], dtype=np.float64)
             )
-    return segs, xs_all, m_max_all
+    return segs, xs_all, m_max_all, x_lbl
 
 
 def plot_rti_history(
@@ -573,9 +615,26 @@ def plot_rti_history(
     prof_xs: list[float] = []
     prof_mmax: list[float] = []
     if profile_paths:
-        p_segs, prof_xs, prof_mmax = _collect_rti_segments_from_profiles(
-            profile_paths, xaxis, age_units=age_units
+        t_anchor = (
+            float(tbl.columns["star_age"][-1])
+            if tbl is not None
+            and xaxis == "star_age"
+            and "star_age" in tbl.columns
+            and tbl.num_rows > 0
+            else None
         )
+        p_segs, prof_xs, prof_mmax, prof_xlbl = (
+            _collect_rti_segments_from_profiles(
+                profile_paths,
+                xaxis,
+                age_units=age_units,
+                time_from_present=time_from_present,
+                log_xaxis=log_xaxis,
+                t_now_raw=t_anchor,
+            )
+        )
+        if tbl is None:
+            x_lbl = prof_xlbl
         segs.extend(p_segs)
         has_rti_src = True
 
@@ -746,6 +805,9 @@ def parse_inlist_cmd_spec(
     oy2: dict[int, str] = {}
     y_rev: dict[int, bool] = {}
     oy_rev: dict[int, bool] = {}
+    # Upstream defaults in star/defaults/pgstar.defaults:5299, 5312 are .false.
+    default_y_rev = False
+    default_oy_rev = False
 
     for blk in blocks:
         if blk.name.lower() != "pgstar":
@@ -764,6 +826,12 @@ def parse_inlist_cmd_spec(
                     oy1.clear()
                 elif tail == "other_yaxis2_name":
                     oy2.clear()
+                elif tail == "yaxis_reversed":
+                    y_rev.clear()
+                    default_y_rev = bool(asg.value)
+                elif tail == "other_yaxis_reversed":
+                    oy_rev.clear()
+                    default_oy_rev = bool(asg.value)
                 continue
             sub_i = (
                 int(asg.subscript)
@@ -806,8 +874,8 @@ def parse_inlist_cmd_spec(
                 y2.get(idx, "").strip(),
                 oa1,
                 oy2.get(idx, "").strip(),
-                y_rev.get(idx, True),
-                oy_rev.get(idx, True),
+                y_rev.get(idx, default_y_rev),
+                oy_rev.get(idx, default_oy_rev),
             )
         )
     if not x1 or not rows:

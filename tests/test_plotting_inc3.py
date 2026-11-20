@@ -976,3 +976,184 @@ def test_plot_cli_increment3_subcommands_render_png_files(
         assert p.is_file() and p.stat().st_size > 2_000
     assert (tmp_path / "cli_live" / "frame_latest.png").is_file()
     assert not plt.get_fignums()
+
+
+def test_rti_profile_paths_transform_log_age_and_time_from_present(
+    tmp_path: pathlib.Path,
+) -> None:
+    """Profile-only and combined RTI plots apply log/age/t_now transforms."""
+    plt.close("all")
+    hist = _make_full_history(tmp_path / "hist.data", include_rti=True)
+    prof = _make_full_profile(tmp_path / "prof.data", model_number=10)
+
+    # Combined history + profile with log_xaxis: profile at 8.5e8 yr maps to
+    # log10(8.5e8) ~ 8.929 inside history span [6.0, 9.18], not raw 8.5e8.
+    fig1, ax1 = plotting.plot_rti_history(
+        hist, profile_paths=[prof], xaxis="star_age", log_xaxis=True
+    )
+    try:
+        assert ax1.get_xlim()[1] < 12.0
+    finally:
+        plt.close(fig1)
+
+    # Profile-only with age_units="Myr" and log_xaxis=True updates xlabel and
+    # places the RTI segment at log10(850.0).
+    fig2, ax2 = plotting.plot_rti_history(
+        profile_paths=[prof],
+        xaxis="star_age",
+        age_units="Myr",
+        log_xaxis=True,
+    )
+    try:
+        assert "Myr" in ax2.get_xlabel()
+        assert "Model Number" not in ax2.get_xlabel()
+        segs = ax2.collections[0].get_segments()
+        assert segs
+        assert float(segs[0][0, 0]) == pytest.approx(
+            math.log10(850.0), abs=1.0e-12
+        )
+    finally:
+        plt.close(fig2)
+
+    # Combined history + profile with time_from_present anchors t_now to
+    # terminal history age (1.5e9 yr -> |1.5e9 - 8.5e8| = 6.5e8 yr).
+    fig3, ax3 = plotting.plot_rti_history(
+        hist,
+        profile_paths=[prof],
+        xaxis="star_age",
+        time_from_present=True,
+        log_xaxis=True,
+    )
+    try:
+        segs3 = ax3.collections[0].get_segments()
+        prof_seg_x = float(segs3[-1][0, 0])
+        assert prof_seg_x == pytest.approx(math.log10(6.5e8), abs=1.0e-12)
+    finally:
+        plt.close(fig3)
+    assert not plt.get_fignums()
+
+
+def test_pgbinary_inlist_star_subpanels_ignore_outer_pgbinary_block(
+    tmp_path: pathlib.Path,
+) -> None:
+    """Star1/Star2 cells inside &pgbinary never read &pgbinary sub-configs."""
+    plt.close("all")
+    hist = _make_full_history(tmp_path / "star_history.data")
+    prof = _make_full_profile(tmp_path / "star_profile1.data")
+    ref_bin = REF_DIR / "binary" / "evolve_both_stars.data"
+
+    inl_bin = tmp_path / "inlist_pgbinary_star"
+    inl_bin.write_text(
+        "&pgbinary\n"
+        "  Grid1_num_rows = 1\n"
+        "  Grid1_num_cols = 2\n"
+        "  Grid1_num_plots = 2\n"
+        "  Grid1_plot_name(1) = 'Star1'\n"
+        "  Grid1_plot_row(1) = 1\n"
+        "  Grid1_plot_col(1) = 1\n"
+        "  Grid1_plot_name(2) = 'Star2'\n"
+        "  Grid1_plot_row(2) = 1\n"
+        "  Grid1_plot_col(2) = 2\n"
+        "  Star1_plot_name = 'Grid1'\n"
+        "  Star2_plot_name = 'Text_Summary1'\n"
+        "  Text_Summary1_num_rows = 2\n"
+        "  Text_Summary1_num_cols = 1\n"
+        "  Text_Summary1_name(1,1) = 'period_days'\n"
+        "  Text_Summary1_name(2,1) = 'rl_relative_overflow_1'\n"
+        "/\n",
+        encoding="utf-8",
+    )
+    fig, axes = plotting.plot_pgstar_grid(
+        inlist_path=inl_bin,
+        grid_index=1,
+        binary_history_path=ref_bin,
+        star1_history_path=hist,
+        star1_profile_path=prof,
+        star2_history_path=hist,
+    )
+    try:
+        # Star1:Grid1 expands to 4 pgstar default cells; Star2:Text_Summary1
+        # renders Star 2's pgstar Text_Summary1 (not binary period_days).
+        assert len(axes) == 5
+        ts_text = " ".join(t.get_text() for t in axes[-1].texts)
+        assert "model_number" in ts_text
+        assert "period_days" not in ts_text
+    finally:
+        plt.close(fig)
+    assert not plt.get_fignums()
+
+
+def test_live_plotter_after_evolve_rerenders_after_late_row_flush(
+    tmp_path: pathlib.Path,
+) -> None:
+    """extras_after_evolve re-renders when step N flushes after finish_step."""
+    plt.close("all")
+    logs_dir = tmp_path / "LOGS"
+    out_dir = tmp_path / "frames"
+    _make_full_history(logs_dir / "history.data", n_rows=3)
+
+    plotter = plotting.LiveEvolutionPlotter(
+        out_dir,
+        logs_dir=logs_dir,
+        panels=("HR", "Text_Summary1"),
+        file_cnt=2,
+        dpi=90,
+    )
+    # Emulate run_star_support.f90:734-743 where extras_finish_step runs on
+    # model 4 while only 3 rows have been flushed to LOGS/history.data.
+    assert plotter.extras_finish_step({"model_number": 4}) == "keep_going"
+    assert len(plotter.frames) == 1
+    assert plotter.frames[-1].model_number == 4
+    assert plotter.frames[-1].num_rows == 3
+
+    # Now model 4 flushes to disk before extras_after_evolve runs.
+    _make_full_history(logs_dir / "history.data", n_rows=4)
+    plotter.extras_after_evolve({"model_number": 4})
+    assert len(plotter.frames) == 2
+    assert plotter.frames[-1].model_number == 4
+    assert plotter.frames[-1].num_rows == 4
+
+    # Calling extras_after_evolve again with no new rows does not duplicate.
+    plotter.extras_after_evolve({"model_number": 4})
+    assert len(plotter.frames) == 2
+    assert not plt.get_fignums()
+
+
+def test_parse_inlist_cmd_spec_honors_slice_reversals_and_false_default(
+    tmp_path: pathlib.Path,
+) -> None:
+    """Color_magnitude inlist parser matches MESA .false. default & slices."""
+    inl_default = tmp_path / "cmd_default"
+    inl_default.write_text(
+        "&pgstar\n"
+        "  Color_magnitude1_xaxis1_name = 'abs_mag_B'\n"
+        "  Color_magnitude1_xaxis2_name = 'abs_mag_V'\n"
+        "  Color_magnitude1_num_panels = 2\n"
+        "  Color_magnitude1_yaxis1_name(1) = 'abs_mag_V'\n"
+        "  Color_magnitude1_yaxis1_name(2) = 'abs_mag_I'\n"
+        "/\n",
+        encoding="utf-8",
+    )
+    spec_def = plotting.parse_inlist_cmd_spec(inl_default, panel_index=1)
+    assert spec_def.panels[0][4] is False
+    assert spec_def.panels[0][5] is False
+    assert spec_def.panels[1][4] is False
+
+    inl_slice = tmp_path / "cmd_slice"
+    inl_slice.write_text(
+        "&pgstar\n"
+        "  Color_magnitude1_xaxis1_name = 'abs_mag_B'\n"
+        "  Color_magnitude1_num_panels = 2\n"
+        "  Color_magnitude1_yaxis1_name(1) = 'abs_mag_V'\n"
+        "  Color_magnitude1_yaxis1_name(2) = 'abs_mag_I'\n"
+        "  Color_magnitude1_yaxis_reversed(:) = .true.\n"
+        "  Color_magnitude1_yaxis_reversed(1) = .false.\n"
+        "  Color_magnitude1_other_yaxis_reversed(:) = .true.\n"
+        "/\n",
+        encoding="utf-8",
+    )
+    spec_sl = plotting.parse_inlist_cmd_spec(inl_slice, panel_index=1)
+    assert spec_sl.panels[0][4] is False
+    assert spec_sl.panels[1][4] is True
+    assert spec_sl.panels[0][5] is True
+    assert spec_sl.panels[1][5] is True

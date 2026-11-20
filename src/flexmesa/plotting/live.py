@@ -280,6 +280,7 @@ class LiveEvolutionPlotter:
         self._on_frame = on_frame
         self._frames: list[LiveFrameRecord] = []
         self._last_rendered_model: int | None = None
+        self._last_rendered_rows: int = 0
         self._step_calls = 0
 
     @property
@@ -344,7 +345,25 @@ class LiveEvolutionPlotter:
         self._resolve_logs_from_state(state, binary_hint=self._is_binary)
         raw_model = state.get("model_number")
         model_no = int(raw_model) if raw_model is not None else None
-        if model_no is None or model_no != self._last_rendered_model:
+        cur_rows = 0
+        if self._logs_dir is not None:
+            logs = _discover_log_paths(
+                self._logs_dir, is_binary=self._is_binary
+            )
+            primary_hist = (
+                logs.binary_history_path
+                if self._is_binary
+                else logs.history_path
+            )
+            if primary_hist is None and logs.binary_history_path is not None:
+                primary_hist = logs.binary_history_path
+            if primary_hist is not None:
+                cur_rows, _ = _inspect_history_progress(primary_hist)
+        if (
+            model_no is None
+            or model_no != self._last_rendered_model
+            or cur_rows > self._last_rendered_rows
+        ):
             self.render_now(model_number=model_no)
 
     def extras_binary_after_evolve(self, state: dict[str, Any]) -> None:
@@ -443,6 +462,7 @@ class LiveEvolutionPlotter:
         )
         self._frames.append(rec)
         self._last_rendered_model = eff_model
+        self._last_rendered_rows = num_rows
         if self._on_frame is not None:
             self._on_frame(rec)
         return rec

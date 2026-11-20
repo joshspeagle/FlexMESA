@@ -527,9 +527,10 @@ def load_plotting_namelist_blocks(
         if blocks:
             return blocks
     fname = path.name.lower()
-    fallback = (
-        namelist_name
-        if namelist_name is not None
-        else ("pgbinary" if "pgbinary" in fname else "pgstar")
-    )
+    if "pgbinary" in fname:
+        fallback = "pgbinary"
+    elif "pgstar" in fname:
+        fallback = "pgstar"
+    else:
+        fallback = namelist_name or "pgstar"
     return namelist.parse_namelist_text(f"&{fallback}\n{text}\n/\n")

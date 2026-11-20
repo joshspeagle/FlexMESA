@@ -230,15 +230,16 @@ def _parse_stacked_panel_spec(
     """Parse ``Profile_Panels<N>`` or ``History_Panels<N>`` rows from inlist."""
     if inlist_path is None:
         return None, []
+    target_nl = "pgbinary" if is_binary else "pgstar"
     blocks = _plot_support.load_plotting_namelist_blocks(
-        inlist_path, namelist_name="pgbinary" if is_binary else None
+        inlist_path, namelist_name=target_nl
     )
     xaxis_name: str | None = None
     num_panels = 0
     y_left: dict[int, str] = {}
     y_right: dict[int, str] = {}
     for blk in blocks:
-        if blk.name.lower() not in ("pgstar", "pgbinary"):
+        if blk.name.lower() != target_nl:
             continue
         for asg in blk.assignments:
             k_low = asg.name.lower()
@@ -289,12 +290,13 @@ def _parse_history_track_spec(
     rev_x, rev_y = True, False
     if inlist_path is None:
         return x_col, y_col, rev_x, rev_y
+    target_nl = "pgbinary" if is_binary else "pgstar"
     blocks = _plot_support.load_plotting_namelist_blocks(
-        inlist_path, namelist_name="pgbinary" if is_binary else None
+        inlist_path, namelist_name=target_nl
     )
     prefix = f"history_track{track_index}_"
     for blk in blocks:
-        if blk.name.lower() not in ("pgstar", "pgbinary"):
+        if blk.name.lower() != target_nl:
             continue
         for asg in blk.assignments:
             k_low = asg.name.lower()
@@ -585,6 +587,7 @@ def dispatch_grid_cell(
     fam_stem = num_match.group(1) if num_match else low
     fam_idx = int(num_match.group(2)) if num_match else 1
     is_bin_ctx = binary_history_path is not None and history_path is None
+    target_nl = "pgbinary" if is_bin_ctx else "pgstar"
 
     if fam_stem == "text_summary":
         h_src = (
@@ -602,7 +605,7 @@ def dispatch_grid_cell(
                 ts_spec = pgstar_text.parse_inlist_text_summary_spec(
                     inlist_path,
                     summary_index=fam_idx,
-                    namelist_name="pgbinary" if is_bin_ctx else None,
+                    namelist_name=target_nl,
                 )
                 ts_layout = ts_spec.layout
                 ts_title = ts_spec.title
@@ -855,7 +858,7 @@ def dispatch_grid_cell(
                 sr, sc, _st, s_cells = parse_grid_namelist(
                     inlist_path,
                     grid_index=fam_idx,
-                    namelist_name="pgbinary" if is_bin_ctx else None,
+                    namelist_name=target_nl,
                 )
             except ValueError:
                 d_key = ("pgbinary" if is_bin_ctx else "pgstar", fam_idx)

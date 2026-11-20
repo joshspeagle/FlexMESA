@@ -1,5 +1,5 @@
-case,strict_steps,fast_steps,strict_evolve_wall_sec,fast_evolve_wall_sec,wall_speedup_strict_over_fast,strict_us_per_zone_step,fast_us_per_zone_step,zone_step_speedup_strict_over_fast,rel_star_age_diff,max_track_log_L_diff,max_track_log_Teff_diff,max_track_log_cntr_Rho_diff
-1.3M_ms_high_Z,346,346,54.136436,39.315741,1.376966,176.118742,127.903487,1.376966,0.000000,0.000000,0.000000,0.000000
-low_z,201,201,21.143338,16.715939,1.264861,133.915218,105.873474,1.264861,-0.000000,0.000000,0.000000,0.000000
-high_z,328,328,136.698419,92.005058,1.485771,371.082936,249.747030,1.485835,-0.000030,0.004565,0.000482,0.023382
-make_metals,1112,1083,131.981255,101.862273,1.295683,79.762886,62.850789,1.269083,-0.000068,0.008167,0.007108,0.045459
+case,n_controls_ignored,strict_steps,fast_steps,strict_total_newton_iterations,fast_total_newton_iterations,strict_evolve_wall_sec,strict_evolve_wall_sec_range,fast_evolve_wall_sec,fast_evolve_wall_sec_range,wall_speedup_strict_over_fast,strict_us_per_zone_step,fast_us_per_zone_step,zone_step_speedup_strict_over_fast,strict_ms_per_newton_iter,fast_ms_per_newton_iter,newton_iter_speedup_strict_over_fast,rel_star_age_diff,max_track_log_L_diff,max_track_log_Teff_diff,max_track_log_cntr_Rho_diff
+1.3M_ms_high_Z,2,219,219,2108,2100,59.606852,0.084980,44.372189,1.057989,1.343338,282.679128,210.430366,1.343338,28.276495,21.129614,1.338240,0.000000,0.000000,0.000000,0.000000
+semiconvection,2,293,293,1993,2024,169.868351,0.385952,149.301450,0.692061,1.137754,355.988279,312.886809,1.137754,85.232489,73.765539,1.155451,0.000000,0.000000,0.000000,0.000000
+low_z,3,181,181,1675,1676,26.759592,0.255665,20.709078,0.479823,1.292167,184.292175,142.622537,1.292167,15.975876,12.356252,1.292939,0.000000,0.000000,0.000000,0.000000
+make_metals,2,477,416,3356,3117,103.891344,0.541963,66.852040,2.121893,1.554049,158.454526,117.213130,1.351850,30.956896,21.447558,1.443376,0.000057,0.000990,0.007997,0.045960

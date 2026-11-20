@@ -16,8 +16,8 @@ _AUDIT_MD = _REPO_ROOT / "notes" / "audit" / "evolution_profile_26_4_1.md"
 _DOCS_MD = _REPO_ROOT / "docs" / "benchmarks" / "evolution-profiling.md"
 _EXPECTED_CASES: tuple[str, ...] = (
     "1.3M_ms_high_Z",
+    "semiconvection",
     "low_z",
-    "high_z",
     "make_metals",
 )
 
@@ -59,6 +59,15 @@ def test_provenance_declares_hardware_toolchains_and_four_cases() -> None:
     assert "Fortran" in str(tc["gfortran"])
     assert "rustc" in str(tc["rustc"])
     assert int(tc["omp_num_threads"]) == int(tc["rayon_num_threads"])
+
+    tp = cast(dict[str, Any], prov["timing_protocol"])
+    assert int(tp["matched_repeats_per_engine"]) == 3
+    assert tp["history_output_every_repeat"] is True
+    assert tp["batch_experiment_protocol"] == "smoke: 60 steps"
+
+    bf = cast(dict[str, Any], prov["build_flags"])
+    assert "opt-level=3" in str(bf["flexmesa_cargo_profile"])
+    assert "-O2" in str(bf["mesa_fortran_flags"])
 
 
 def test_profile_artifacts_and_reports_contain_zero_forbidden_tokens() -> None:
@@ -102,6 +111,17 @@ def test_phase_breakdown_shares_sum_to_hundred_percent_and_count_calls() -> (
     )
     for c in cases:
         assert int(c["steps_taken"]) > 100
+        assert int(c["repeats"]) == 3
+        assert c["history_output_every_repeat"] is True
+        assert len(cast(list[float], c["evolve_wall_sec_samples"])) == 3
+        assert float(c["evolve_wall_sec_min"]) <= float(c["evolve_wall_sec"])
+        assert float(c["evolve_wall_sec"]) <= float(c["evolve_wall_sec_max"])
+        assert int(c["n_controls_ignored"]) >= 1
+        assert str(c["run_mode"]) == (
+            f"diagnostic ({int(c['n_controls_ignored'])} controls ignored)"
+        )
+        assert int(c["total_newton_iterations"]) >= int(c["steps_taken"])
+        assert float(c["wall_ms_per_newton_iter"]) > 0.0
         assert float(c["evolve_wall_sec"]) > 0.0
         ph = cast(dict[str, Any], c["phases"])
         total_pct = sum(float(ph[k]) for k in share_keys)
@@ -127,14 +147,27 @@ def test_mesa_26_4_1_and_strict_vs_fast_records_align_across_cases() -> None:
 
     for m in mesa:
         assert m["mesa_version_number"] == "r26.4.1"
+        assert int(m["repeats"]) == 3
+        assert m["history_output_every_repeat"] is True
+        assert len(cast(list[float], m["rn_wall_sec_samples"])) == 3
+        assert (
+            len(cast(list[float], m["mesa_internal_evolve_sec_samples"])) == 3
+        )
         assert int(m["steps_taken"]) > 100
+        assert int(m["total_newton_iterations"]) >= int(m["steps_taken"])
         assert float(m["mesa_internal_evolve_sec"]) > 0.0
         assert float(m["evolve_wall_us_per_zone_step"]) > 0.0
+        assert float(m["evolve_wall_ms_per_newton_iter"]) > 0.0
+        assert float(m["rn_wall_ms_per_newton_iter"]) > 0.0
 
     for r in svf:
         assert r["comparison"] == "fast_vs_strict_only"
+        assert int(r["repeats"]) == 3
+        assert int(r["n_controls_ignored"]) >= 1
         assert float(r["strict_evolve_wall_sec"]) > 0.0
         assert float(r["fast_evolve_wall_sec"]) > 0.0
+        assert float(r["strict_ms_per_newton_iter"]) > 0.0
+        assert float(r["fast_ms_per_newton_iter"]) > 0.0
         td = cast(dict[str, Any], r["trajectory_diff"])
         assert abs(float(td["rel_star_age_diff"])) < 0.05
 
@@ -154,6 +187,8 @@ def test_waste_removal_batching_and_accelerator_estimates_validate() -> None:
     assert len(cast(list[Any], waste["head_component_breakdown"])) == 4
 
     batch = _read_json("batch_scaling_rust.json")
+    assert batch["pool_2_threads"]["protocol_label"] == "smoke: 60 steps"
+    assert batch["pool_8_threads"]["protocol_label"] == "smoke: 60 steps"
     pts_2t = cast(list[dict[str, Any]], batch["pool_2_threads"]["points"])
     pts_8t = cast(list[dict[str, Any]], batch["pool_8_threads"]["points"])
     assert [int(p["n_stars"]) for p in pts_2t] == [1, 2, 4, 8, 16]
@@ -172,3 +207,10 @@ def test_rendered_evolution_profile_reports_are_up_to_date() -> None:
     expected_audit, expected_docs = mod.render_reports(_PROF_DIR)
     assert _AUDIT_MD.read_text("utf-8") == expected_audit
     assert _DOCS_MD.read_text("utf-8") == expected_docs
+    for text in (expected_audit, expected_docs):
+        assert "diagnostic (2 controls ignored)" in text
+        assert "diagnostic (3 controls ignored)" in text
+        assert "smoke: 60 steps" in text
+        assert "6.0x" in text
+        assert "ms / Newton-iter" in text
+        assert "What Was Not Verified" in text

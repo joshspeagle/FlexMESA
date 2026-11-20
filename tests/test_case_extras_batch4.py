@@ -47,41 +47,28 @@ _STAGED_HISTORY_COLUMN_CASES: tuple[tuple[str, int], ...] = (
     ("wd_acc_small_dm", 2),
 )
 
-_UNSERVED_STAR_CASES: tuple[str, ...] = (
-    "1.4M_ms_op_mono",
-    "12M_pre_ms_to_core_collapse",
-    "15M_dynamo",
-    "1M_pre_ms_to_wd",
-    "1M_thermohaline",
-    "20M_pre_ms_to_core_collapse",
-    "20M_z2m2_high_rotation",
-    "accreted_material_j",
-    "carbon_kh",
-    "ccsn_IIp",
-    "check_pulse_atm",
-    "conductive_flame",
-    "extended_convective_penetration",
-    "gyre_in_mesa_bcep",
-    "gyre_in_mesa_envelope",
-    "gyre_in_mesa_ms",
-    "gyre_in_mesa_rsg",
-    "gyre_in_mesa_spb",
-    "gyre_in_mesa_wd",
-    "low_z",
-    "magnetic_braking",
-    "make_co_wd",
-    "make_env",
-    "make_pre_ccsn_13bvn",
-    "other_physics_hooks",
-    "ppisn",
-    "radiative_levitation",
-    "relax_composition_j_entropy",
-    "simplex_solar_calibration",
-    "split_burn_big_net",
-    "tzo",
-    "wd_cool_0.6M",
-    "wd_diffusion",
-    "zams_to_cc_80",
+_BATCH4_GRADUATED_STAR_CASES: tuple[str, ...] = (
+    "T_tau_gradr",
+    "adjust_net",
+    "c13_pocket",
+    "cburn_inward",
+    "conserve_angular_momentum",
+    "conv_core_cpm",
+    "diffusion_smoothness",
+    "hb_2M",
+    "high_rot_darkening",
+    "hot_cool_wind",
+    "hse_riemann",
+    "make_o_ne_wd",
+    "make_sdb",
+    "ns_c",
+    "ns_h",
+    "ns_he",
+    "pisn",
+    "semiconvection",
+    "wd_acc_small_dm",
+    "wd_aic",
+    "wd_nova_burst",
 )
 
 
@@ -471,29 +458,38 @@ def test_history_column_blocked_graduated_cases_step_live_when_staged(
 
 
 def test_unserved_star_handlers_detached_and_binaries_covered() -> None:
-    """Capability-blocked star handlers remain detached (`unported`), and zero
-    binary manifest cases remain `unported`.
+    """Every star case still marked `unported` in `extras_status.toml` stays
+    detached, all Batch-4 graduated star cases are `ported`, and zero binary
+    manifest cases remain `unported`.
     """
-    for case in _UNSERVED_STAR_CASES:
-        case_dir = harness_runner.resolve_case_dir("star", case)
-        assert case_extras.match_case_extras("star", case_dir) is not None
-        assert case_extras.resolve_case_extras("star", case_dir) is None
-        assert case_extras.classify_case_extras("star", case_dir) == "unported"
-
     ledger_path = (
         pathlib.Path(__file__).resolve().parents[1]
         / "benchmarks/history_harness/extras_status.toml"
     )
     ledger = tomllib.loads(ledger_path.read_text(encoding="utf-8"))
+
+    star_unported = [
+        c["case"]
+        for c in ledger["cases"]
+        if c["suite"] == "star" and c["status"] == "unported"
+    ]
+    for case in star_unported:
+        case_dir = harness_runner.resolve_case_dir("star", case)
+        assert case_extras.match_case_extras("star", case_dir) is not None
+        assert case_extras.resolve_case_extras("star", case_dir) is None
+        assert case_extras.classify_case_extras("star", case_dir) == "unported"
+
     binary_unported = [
         c["case"]
         for c in ledger["cases"]
         if c["suite"] == "binary" and c["status"] == "unported"
     ]
     assert binary_unported == []
+
     star_ported = [
         c["case"]
         for c in ledger["cases"]
         if c["suite"] == "star" and c["status"] == "ported"
     ]
-    assert len(star_ported) == 34
+    assert len(star_ported) >= 34
+    assert set(_BATCH4_GRADUATED_STAR_CASES) <= set(star_ported)

@@ -138,6 +138,12 @@ TRACK_PRESETS: dict[str, TrackPreset] = {
         r"$L / L_\odot$",
         r"$R / R_\odot$",
     ),
+    "dpg_dnu": TrackPreset(
+        ("delta_nu",),
+        ("delta_Pg",),
+        r"$\Delta\nu$ [$\mu\mathrm{Hz}$]",
+        r"$\Delta\Pi_g$ [$\mathrm{s}$]",
+    ),
 }
 
 _STAR_SUMMARY_HISTORY_COLS: tuple[tuple[str, str, str], ...] = (
@@ -202,7 +208,8 @@ def plot_history_track(
 
     Implements ``do_Hist_Track`` (`star/private/pgstar_hist_track.f90:53-280`)
     and named ``pgstar`` track presets (`HR`, `TRho`, `TmaxRho`, `logg_Teff`,
-    `logg_logT`, `logL_R`, `logL_v`, `L_Teff`, `L_R`, `L_v`, `R_Teff`, `R_L`).
+    `logg_logT`, `logL_R`, `logL_v`, `L_Teff`, `L_R`, `L_v`, `R_Teff`, `R_L`,
+    `dPg_dnu`).
 
     Args:
         history_path: Path to ``history.data`` or ``binary_history.data``.

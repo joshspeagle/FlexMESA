@@ -19,6 +19,8 @@ from flexmesa.plotting import (
     compare,
     kippenhahn,
     pgbinary_panels,
+    pgstar_extra,
+    pgstar_nucleosyn,
     pgstar_panels,
     pgstar_summary,
     pgstar_text,
@@ -524,6 +526,8 @@ def dispatch_grid_cell(
         "power": pgstar_panels.plot_power_profile,
         "abundance": pgstar_panels.plot_abundance_profile,
         "mixing": pgstar_panels.plot_mixing_profile,
+        "dynamo": pgstar_extra.plot_dynamo_profile,
+        "production": pgstar_nucleosyn.plot_production_profile,
         "summary_profile": pgstar_summary.plot_summary_profile,
         "summary_burn": pgstar_summary.plot_summary_burn_profile,
     }
@@ -531,6 +535,23 @@ def dispatch_grid_cell(
         if profile_path is None:
             raise ValueError(f"{raw} requires profile_path")
         prof_map[low](profile_path, ref_profile_path=ref_profile_path, ax=ax)
+        return [ax]
+
+    if low == "network":
+        if profile_path is None:
+            raise ValueError("Network requires profile_path")
+        pgstar_nucleosyn.plot_network_chart(profile_path, ax=ax)
+        return [ax]
+
+    if low == "rti":
+        if history_path is None and not profile_paths:
+            raise ValueError("rti requires history_path or profile_paths")
+        pgstar_extra.plot_rti_history(
+            history_path=history_path,
+            profile_paths=profile_paths,
+            ref_history_path=ref_history_path,
+            ax=ax,
+        )
         return [ax]
 
     if low == "mode_prop":
@@ -746,6 +767,100 @@ def dispatch_grid_cell(
             axes=sub_axes_h,
         )
         return sub_axes_h
+
+    if fam_stem == "color_magnitude" or low.startswith("color_magnitude:"):
+        h_src = history_path or binary_history_path
+        if h_src is None:
+            raise ValueError(f"{raw} requires history_path")
+        r_src = (
+            ref_history_path
+            if history_path is not None
+            else (ref_history_path or ref_binary_history_path)
+        )
+        if ":" in raw:
+            parts = raw.split(":")
+            if len(parts) != 3:
+                raise ValueError(
+                    "expected 'Color_magnitude:<x1[-x2]>:<y1[-y2],...>', "
+                    f"got {raw!r}"
+                )
+            x_toks = [t.strip() for t in parts[1].split("-", 1)]
+            cx1 = x_toks[0]
+            cx2 = x_toks[1] if len(x_toks) == 2 and x_toks[1] else None
+            c_rows: list[tuple[str, str | None]] = []
+            for r_tok in parts[2].split(","):
+                r_clean = r_tok.strip()
+                if not r_clean:
+                    continue
+                y_toks = [t.strip() for t in r_clean.split("-", 1)]
+                c_rows.append(
+                    (
+                        y_toks[0],
+                        y_toks[1] if len(y_toks) == 2 and y_toks[1] else None,
+                    )
+                )
+            if not c_rows:
+                raise ValueError(f"{raw}: no y columns specified")
+            if len(c_rows) == 1:
+                pgstar_extra.plot_color_magnitude(
+                    h_src,
+                    cx1,
+                    cx2,
+                    c_rows,
+                    ref_history_path=r_src,
+                    axes=[ax],
+                )
+                return [ax]
+            fig, sub_gs = _split_cell_subgrid(ax, len(c_rows), 1)
+            sub_axes_c: list[mpl_axes.Axes] = []
+            for r_i in range(len(c_rows)):
+                share_ax = sub_axes_c[0] if sub_axes_c else None
+                sub_axes_c.append(
+                    fig.add_subplot(sub_gs[r_i, 0], sharex=share_ax)
+                )
+            pgstar_extra.plot_color_magnitude(
+                h_src,
+                cx1,
+                cx2,
+                c_rows,
+                ref_history_path=r_src,
+                axes=sub_axes_c,
+            )
+            return sub_axes_c
+
+        n_cmd_rows = 1
+        use_inlist: pathlib.Path | str | None = None
+        if inlist_path is not None:
+            try:
+                cmd_spec = pgstar_extra.parse_inlist_cmd_spec(
+                    inlist_path, panel_index=fam_idx
+                )
+                n_cmd_rows = len(cmd_spec.panels)
+                use_inlist = inlist_path
+            except ValueError:
+                use_inlist = None
+        if n_cmd_rows == 1:
+            pgstar_extra.plot_color_magnitude(
+                h_src,
+                ref_history_path=r_src,
+                inlist_path=use_inlist,
+                panel_index=fam_idx,
+                axes=[ax],
+            )
+            return [ax]
+        fig, sub_gs = _split_cell_subgrid(ax, n_cmd_rows, 1)
+        sub_axes_c2: list[mpl_axes.Axes] = []
+        for r_i in range(n_cmd_rows):
+            share_ax = sub_axes_c2[0] if sub_axes_c2 else None
+            sub_axes_c2.append(fig.add_subplot(sub_gs[r_i, 0], sharex=share_ax))
+        pgstar_extra.plot_color_magnitude(
+            h_src,
+            ref_history_path=r_src,
+            inlist_path=use_inlist,
+            panel_index=fam_idx,
+            axes=sub_axes_c2,
+        )
+        return sub_axes_c2
 
     if fam_stem == "grid":
         if _depth >= 2:

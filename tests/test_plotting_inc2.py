@@ -172,6 +172,8 @@ def _make_kipp_history(path: pathlib.Path) -> pathlib.Path:
         "radius": np.power(10.0, log_r),
         "log_g": np.linspace(4.25, 3.65, n_t, dtype=np.float64),
         "v_surf_km_s": np.linspace(0.0, 4.5, n_t, dtype=np.float64),
+        "delta_nu": np.linspace(18.0, 6.5, n_t, dtype=np.float64),
+        "delta_Pg": np.linspace(110.0, 68.0, n_t, dtype=np.float64),
         "log_center_Rho": np.linspace(1.6, 3.4, n_t, dtype=np.float64),
         "log_center_T": np.linspace(7.32, 8.08, n_t, dtype=np.float64),
         "log_max_T": np.linspace(7.32, 8.15, n_t, dtype=np.float64),
@@ -522,7 +524,7 @@ def test_pgstar_profile_panels_match_bundled_plot_info_and_rank_series(
 def test_pgstar_history_tracks_panels_and_inlist_grid_composer(
     tmp_path: pathlib.Path,
 ) -> None:
-    """All 13 track presets, History_Panels, and Grid<N> inlists render."""
+    """All 14 track presets, History_Panels, and Grid<N> inlists render."""
     plt.close("all")
     hist = _make_kipp_history(tmp_path / "history.data")
     prof = _make_rich_profile(tmp_path / "profile1.data")

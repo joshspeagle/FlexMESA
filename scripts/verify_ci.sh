@@ -48,6 +48,8 @@ export JAX_COMPILATION_CACHE_DIR="${JAX_COMPILATION_CACHE_DIR:-${XDG_CACHE_HOME:
 
 echo "[verify_ci] 1/5 Verifying data-v1 physics & MESA test bundles..."
 "$PYTHON_BIN" "$REPO_ROOT/src/flexmesa/data/fetch.py" fetch --include-test-inputs
+"$PYTHON_BIN" "$REPO_ROOT/src/flexmesa/data/fetch.py" verify --include-test-inputs
+"$PYTHON_BIN" "$REPO_ROOT/src/flexmesa/data/fetch.py" clean-cache --purge-legacy-in-data
 
 CLEAN_CWD="$(mktemp -d)"
 SITE_OUT=""
@@ -74,17 +76,20 @@ test -f "$REPO_ROOT/rust-toolchain.toml"
 "$RUFF_BIN" format --check --line-length 80 "$REPO_ROOT/src" "$REPO_ROOT/tests" \
   "$REPO_ROOT/scripts/docs" \
   "$REPO_ROOT/scripts/audit/diff_mesa_defaults.py" \
+  "$REPO_ROOT/scripts/data/build_physics_bundles.py" \
   "$REPO_ROOT/scripts/check_strict_determinism.py" \
   "$REPO_ROOT/scripts/mesa_reference/measure_mesa_spread.py"
 "$RUFF_BIN" check "$REPO_ROOT/src" "$REPO_ROOT/tests" \
   "$REPO_ROOT/scripts/docs" \
   "$REPO_ROOT/scripts/audit/diff_mesa_defaults.py" \
+  "$REPO_ROOT/scripts/data/build_physics_bundles.py" \
   "$REPO_ROOT/scripts/check_strict_determinism.py" \
   "$REPO_ROOT/scripts/mesa_reference/measure_mesa_spread.py"
 "$MYPY_BIN" --python-executable "$PYTHON_BIN" --config-file "$REPO_ROOT/pyproject.toml" --strict \
   "$REPO_ROOT/src" "$REPO_ROOT/tests" \
   "$REPO_ROOT/scripts/docs" \
   "$REPO_ROOT/scripts/audit/diff_mesa_defaults.py" \
+  "$REPO_ROOT/scripts/data/build_physics_bundles.py" \
   "$REPO_ROOT/scripts/check_strict_determinism.py" \
   "$REPO_ROOT/scripts/mesa_reference/measure_mesa_spread.py"
 PYTHONPATH="$REPO_ROOT/src" "$PYTHON_BIN" -m flexmesa.testing.known_gaps_gate \

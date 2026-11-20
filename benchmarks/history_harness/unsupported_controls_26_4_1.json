@@ -10,7 +10,7 @@
     "total_cases": 106,
     "strict_pass_cases": 0,
     "strict_fail_cases": 106,
-    "distinct_unsupported_controls": 253,
+    "distinct_unsupported_controls": 210,
     "distinct_unknown_controls": 0,
     "cases_with_headless_plotting": 78,
     "distinct_headless_plotting_keys": 895
@@ -46,11 +46,11 @@
     {
       "section": "controls",
       "upstream_keys": 1448,
-      "supported_keys": 1085,
-      "unused_keys": 20,
+      "supported_keys": 1142,
+      "unused_keys": 24,
       "headless_gui_keys": 0,
-      "terminal_output_keys": 10,
-      "unimplemented_upstream_keys": 333
+      "terminal_output_keys": 13,
+      "unimplemented_upstream_keys": 269
     },
     {
       "section": "binary_job",
@@ -1062,62 +1062,6 @@
       ]
     },
     {
-      "section": "controls",
-      "key": "diffusion_atol_for_isolve",
-      "category": "unimplemented",
-      "case_count": 6,
-      "cases": [
-        "star/1.5M_with_diffusion",
-        "star/diffusion_smoothness",
-        "star/gyre_in_mesa_wd",
-        "star/make_co_wd",
-        "star/radiative_levitation",
-        "star/simplex_solar_calibration"
-      ]
-    },
-    {
-      "section": "controls",
-      "key": "diffusion_isolve_solver",
-      "category": "unimplemented",
-      "case_count": 6,
-      "cases": [
-        "star/1.5M_with_diffusion",
-        "star/diffusion_smoothness",
-        "star/gyre_in_mesa_wd",
-        "star/make_co_wd",
-        "star/radiative_levitation",
-        "star/simplex_solar_calibration"
-      ]
-    },
-    {
-      "section": "controls",
-      "key": "diffusion_maxsteps_for_isolve",
-      "category": "unimplemented",
-      "case_count": 6,
-      "cases": [
-        "star/1.5M_with_diffusion",
-        "star/diffusion_smoothness",
-        "star/gyre_in_mesa_wd",
-        "star/make_co_wd",
-        "star/radiative_levitation",
-        "star/simplex_solar_calibration"
-      ]
-    },
-    {
-      "section": "controls",
-      "key": "diffusion_rtol_for_isolve",
-      "category": "unimplemented",
-      "case_count": 6,
-      "cases": [
-        "star/1.5M_with_diffusion",
-        "star/diffusion_smoothness",
-        "star/gyre_in_mesa_wd",
-        "star/make_co_wd",
-        "star/radiative_levitation",
-        "star/simplex_solar_calibration"
-      ]
-    },
-    {
       "section": "astero_search_controls",
       "key": "avg_age_sigma_limit",
       "category": "unimplemented",
@@ -1313,58 +1257,6 @@
       ]
     },
     {
-      "section": "controls",
-      "key": "diffusion_class_a_max",
-      "category": "unimplemented",
-      "case_count": 5,
-      "cases": [
-        "star/1.5M_with_diffusion",
-        "star/diffusion_smoothness",
-        "star/make_o_ne_wd",
-        "star/radiative_levitation",
-        "star/simplex_solar_calibration"
-      ]
-    },
-    {
-      "section": "controls",
-      "key": "diffusion_class_representative",
-      "category": "unimplemented",
-      "case_count": 5,
-      "cases": [
-        "star/1.5M_with_diffusion",
-        "star/diffusion_smoothness",
-        "star/make_o_ne_wd",
-        "star/radiative_levitation",
-        "star/simplex_solar_calibration"
-      ]
-    },
-    {
-      "section": "controls",
-      "key": "diffusion_num_classes",
-      "category": "unimplemented",
-      "case_count": 5,
-      "cases": [
-        "star/1.5M_with_diffusion",
-        "star/diffusion_smoothness",
-        "star/make_o_ne_wd",
-        "star/radiative_levitation",
-        "star/simplex_solar_calibration"
-      ]
-    },
-    {
-      "section": "controls",
-      "key": "diffusion_use_isolve",
-      "category": "unimplemented",
-      "case_count": 5,
-      "cases": [
-        "star/1.5M_with_diffusion",
-        "star/diffusion_smoothness",
-        "star/gyre_in_mesa_wd",
-        "star/make_co_wd",
-        "star/simplex_solar_calibration"
-      ]
-    },
-    {
       "section": "star_job",
       "key": "num_steps_to_relax_rotation",
       "category": "unimplemented",
@@ -1391,30 +1283,6 @@
       ]
     },
     {
-      "section": "controls",
-      "key": "diffusion_calculates_ionization",
-      "category": "unimplemented",
-      "case_count": 4,
-      "cases": [
-        "star/1.5M_with_diffusion",
-        "star/diffusion_smoothness",
-        "star/radiative_levitation",
-        "star/simplex_solar_calibration"
-      ]
-    },
-    {
-      "section": "controls",
-      "key": "diffusion_use_full_net",
-      "category": "unimplemented",
-      "case_count": 4,
-      "cases": [
-        "star/gyre_in_mesa_wd",
-        "star/make_co_wd",
-        "star/wd_cool_0.6M",
-        "star/wd_diffusion"
-      ]
-    },
-    {
       "section": "star_job",
       "key": "dlogtau_factor",
       "category": "unimplemented",
@@ -1424,72 +1292,6 @@
         "star/pisn",
         "star/wd_he_shell_ignition",
         "star/wd_stable_h_burn"
-      ]
-    },
-    {
-      "section": "controls",
-      "key": "diffusion_dt_limit",
-      "category": "unimplemented",
-      "case_count": 3,
-      "cases": [
-        "star/1.5M_with_diffusion",
-        "star/radiative_levitation",
-        "star/simplex_solar_calibration"
-      ]
-    },
-    {
-      "section": "controls",
-      "key": "diffusion_t_full_off",
-      "category": "unimplemented",
-      "case_count": 3,
-      "cases": [
-        "star/1.5M_with_diffusion",
-        "star/radiative_levitation",
-        "star/simplex_solar_calibration"
-      ]
-    },
-    {
-      "section": "controls",
-      "key": "diffusion_t_full_on",
-      "category": "unimplemented",
-      "case_count": 3,
-      "cases": [
-        "star/1.5M_with_diffusion",
-        "star/radiative_levitation",
-        "star/simplex_solar_calibration"
-      ]
-    },
-    {
-      "section": "controls",
-      "key": "diffusion_use_cgs_solver",
-      "category": "unimplemented",
-      "case_count": 3,
-      "cases": [
-        "star/gyre_in_mesa_wd",
-        "star/make_co_wd",
-        "star/wd_diffusion"
-      ]
-    },
-    {
-      "section": "controls",
-      "key": "diffusion_v_max",
-      "category": "unimplemented",
-      "case_count": 3,
-      "cases": [
-        "star/gyre_in_mesa_wd",
-        "star/make_co_wd",
-        "star/radiative_levitation"
-      ]
-    },
-    {
-      "section": "controls",
-      "key": "show_diffusion_info",
-      "category": "unimplemented",
-      "case_count": 3,
-      "cases": [
-        "star/make_co_wd",
-        "star/make_o_ne_wd",
-        "star/wd_diffusion"
       ]
     },
     {
@@ -1646,46 +1448,6 @@
       "cases": [
         "star/check_pulse_atm",
         "star/tzo"
-      ]
-    },
-    {
-      "section": "controls",
-      "key": "diffusion_min_dq_at_surface",
-      "category": "unimplemented",
-      "case_count": 2,
-      "cases": [
-        "star/make_o_ne_wd",
-        "star/radiative_levitation"
-      ]
-    },
-    {
-      "section": "controls",
-      "key": "diffusion_min_x_hard_limit",
-      "category": "unimplemented",
-      "case_count": 2,
-      "cases": [
-        "star/make_co_wd",
-        "star/radiative_levitation"
-      ]
-    },
-    {
-      "section": "controls",
-      "key": "do_diffusion_heating",
-      "category": "unimplemented",
-      "case_count": 2,
-      "cases": [
-        "star/simplex_solar_calibration",
-        "star/wd_cool_0.6M"
-      ]
-    },
-    {
-      "section": "controls",
-      "key": "do_wd_sedimentation_heating",
-      "category": "unimplemented",
-      "case_count": 2,
-      "cases": [
-        "star/gyre_in_mesa_wd",
-        "star/wd_cool_0.6M"
       ]
     },
     {
@@ -2075,213 +1837,6 @@
       "case_count": 1,
       "cases": [
         "star/ccsn_IIp"
-      ]
-    },
-    {
-      "section": "controls",
-      "key": "d_mix_ignore_diffusion",
-      "category": "unimplemented",
-      "case_count": 1,
-      "cases": [
-        "star/1.5M_with_diffusion"
-      ]
-    },
-    {
-      "section": "controls",
-      "key": "diffusion_ad_boost_factor",
-      "category": "unimplemented",
-      "case_count": 1,
-      "cases": [
-        "star/radiative_levitation"
-      ]
-    },
-    {
-      "section": "controls",
-      "key": "diffusion_ad_dm_full_off",
-      "category": "unimplemented",
-      "case_count": 1,
-      "cases": [
-        "star/radiative_levitation"
-      ]
-    },
-    {
-      "section": "controls",
-      "key": "diffusion_ad_dm_full_on",
-      "category": "unimplemented",
-      "case_count": 1,
-      "cases": [
-        "star/radiative_levitation"
-      ]
-    },
-    {
-      "section": "controls",
-      "key": "diffusion_dt_div_timescale",
-      "category": "unimplemented",
-      "case_count": 1,
-      "cases": [
-        "star/radiative_levitation"
-      ]
-    },
-    {
-      "section": "controls",
-      "key": "diffusion_max_iters_per_substep",
-      "category": "unimplemented",
-      "case_count": 1,
-      "cases": [
-        "star/radiative_levitation"
-      ]
-    },
-    {
-      "section": "controls",
-      "key": "diffusion_max_retries_per_substep",
-      "category": "unimplemented",
-      "case_count": 1,
-      "cases": [
-        "star/radiative_levitation"
-      ]
-    },
-    {
-      "section": "controls",
-      "key": "diffusion_max_t_for_radaccel",
-      "category": "unimplemented",
-      "case_count": 1,
-      "cases": [
-        "star/radiative_levitation"
-      ]
-    },
-    {
-      "section": "controls",
-      "key": "diffusion_max_z_for_radaccel",
-      "category": "unimplemented",
-      "case_count": 1,
-      "cases": [
-        "star/radiative_levitation"
-      ]
-    },
-    {
-      "section": "controls",
-      "key": "diffusion_min_dq_ratio_at_surface",
-      "category": "unimplemented",
-      "case_count": 1,
-      "cases": [
-        "star/radiative_levitation"
-      ]
-    },
-    {
-      "section": "controls",
-      "key": "diffusion_min_t_at_surface",
-      "category": "unimplemented",
-      "case_count": 1,
-      "cases": [
-        "star/radiative_levitation"
-      ]
-    },
-    {
-      "section": "controls",
-      "key": "diffusion_min_z_for_radaccel",
-      "category": "unimplemented",
-      "case_count": 1,
-      "cases": [
-        "star/radiative_levitation"
-      ]
-    },
-    {
-      "section": "controls",
-      "key": "diffusion_nsmooth_typical_charge",
-      "category": "unimplemented",
-      "case_count": 1,
-      "cases": [
-        "star/radiative_levitation"
-      ]
-    },
-    {
-      "section": "controls",
-      "key": "diffusion_screening_for_radaccel",
-      "category": "unimplemented",
-      "case_count": 1,
-      "cases": [
-        "star/radiative_levitation"
-      ]
-    },
-    {
-      "section": "controls",
-      "key": "diffusion_tol_correction_max",
-      "category": "unimplemented",
-      "case_count": 1,
-      "cases": [
-        "star/radiative_levitation"
-      ]
-    },
-    {
-      "section": "controls",
-      "key": "diffusion_tol_correction_norm",
-      "category": "unimplemented",
-      "case_count": 1,
-      "cases": [
-        "star/radiative_levitation"
-      ]
-    },
-    {
-      "section": "controls",
-      "key": "diffusion_upwind_abs_v_limit",
-      "category": "unimplemented",
-      "case_count": 1,
-      "cases": [
-        "star/radiative_levitation"
-      ]
-    },
-    {
-      "section": "controls",
-      "key": "diffusion_use_iben_macdonald",
-      "category": "unimplemented",
-      "case_count": 1,
-      "cases": [
-        "star/radiative_levitation"
-      ]
-    },
-    {
-      "section": "controls",
-      "key": "diffusion_vlimit",
-      "category": "unimplemented",
-      "case_count": 1,
-      "cases": [
-        "star/radiative_levitation"
-      ]
-    },
-    {
-      "section": "controls",
-      "key": "diffusion_vlimit_dm_full_off",
-      "category": "unimplemented",
-      "case_count": 1,
-      "cases": [
-        "star/radiative_levitation"
-      ]
-    },
-    {
-      "section": "controls",
-      "key": "diffusion_vlimit_dm_full_on",
-      "category": "unimplemented",
-      "case_count": 1,
-      "cases": [
-        "star/radiative_levitation"
-      ]
-    },
-    {
-      "section": "controls",
-      "key": "diffusion_x_total_atol",
-      "category": "unimplemented",
-      "case_count": 1,
-      "cases": [
-        "star/radiative_levitation"
-      ]
-    },
-    {
-      "section": "controls",
-      "key": "diffusion_x_total_rtol",
-      "category": "unimplemented",
-      "case_count": 1,
-      "cases": [
-        "star/radiative_levitation"
       ]
     },
     {
@@ -3107,6 +2662,11 @@
         "section": "star_job",
         "key": "show_timestep_limit_counts_when_terminate",
         "case_count": 6
+      },
+      {
+        "section": "controls",
+        "key": "show_diffusion_info",
+        "case_count": 3
       },
       {
         "section": "eos",
@@ -7672,19 +7232,6 @@
         "inlist_1.5M_with_diffusion_header"
       ],
       "unsupported_controls": [
-        "controls::d_mix_ignore_diffusion::unimplemented",
-        "controls::diffusion_atol_for_isolve::unimplemented",
-        "controls::diffusion_calculates_ionization::unimplemented",
-        "controls::diffusion_class_a_max::unimplemented",
-        "controls::diffusion_class_representative::unimplemented",
-        "controls::diffusion_dt_limit::unimplemented",
-        "controls::diffusion_isolve_solver::unimplemented",
-        "controls::diffusion_maxsteps_for_isolve::unimplemented",
-        "controls::diffusion_num_classes::unimplemented",
-        "controls::diffusion_rtol_for_isolve::unimplemented",
-        "controls::diffusion_t_full_off::unimplemented",
-        "controls::diffusion_t_full_on::unimplemented",
-        "controls::diffusion_use_isolve::unimplemented",
         "controls::photo_interval::unimplemented",
         "controls::warn_when_large_rel_run_e_err::unimplemented",
         "star_job::required_termination_code_string::unused"
@@ -8356,15 +7903,6 @@
         "inlist_diffusion_smoothness_header"
       ],
       "unsupported_controls": [
-        "controls::diffusion_atol_for_isolve::unimplemented",
-        "controls::diffusion_calculates_ionization::unimplemented",
-        "controls::diffusion_class_a_max::unimplemented",
-        "controls::diffusion_class_representative::unimplemented",
-        "controls::diffusion_isolve_solver::unimplemented",
-        "controls::diffusion_maxsteps_for_isolve::unimplemented",
-        "controls::diffusion_num_classes::unimplemented",
-        "controls::diffusion_rtol_for_isolve::unimplemented",
-        "controls::diffusion_use_isolve::unimplemented",
         "controls::photo_interval::unimplemented",
         "star_job::required_termination_code_string::unused"
       ],
@@ -8517,15 +8055,6 @@
       ],
       "unsupported_controls": [
         "controls::atm_t_tau_opacity::unimplemented",
-        "controls::diffusion_atol_for_isolve::unimplemented",
-        "controls::diffusion_isolve_solver::unimplemented",
-        "controls::diffusion_maxsteps_for_isolve::unimplemented",
-        "controls::diffusion_rtol_for_isolve::unimplemented",
-        "controls::diffusion_use_cgs_solver::unimplemented",
-        "controls::diffusion_use_full_net::unimplemented",
-        "controls::diffusion_use_isolve::unimplemented",
-        "controls::diffusion_v_max::unimplemented",
-        "controls::do_wd_sedimentation_heating::unimplemented",
         "controls::photo_interval::unimplemented",
         "controls::x_logical_ctrl::unused"
       ],
@@ -8784,17 +8313,7 @@
       ],
       "unsupported_controls": [
         "controls::atm_t_tau_opacity::unimplemented",
-        "controls::diffusion_atol_for_isolve::unimplemented",
-        "controls::diffusion_isolve_solver::unimplemented",
-        "controls::diffusion_maxsteps_for_isolve::unimplemented",
-        "controls::diffusion_min_x_hard_limit::unimplemented",
-        "controls::diffusion_rtol_for_isolve::unimplemented",
-        "controls::diffusion_use_cgs_solver::unimplemented",
-        "controls::diffusion_use_full_net::unimplemented",
-        "controls::diffusion_use_isolve::unimplemented",
-        "controls::diffusion_v_max::unimplemented",
         "controls::photo_interval::unimplemented",
-        "controls::show_diffusion_info::unimplemented",
         "star_job::filename_of_special_rate::unimplemented",
         "star_job::max_dt_for_relax_entropy::unimplemented",
         "star_job::max_steps_to_relax_entropy::unimplemented",
@@ -8810,6 +8329,7 @@
       "headless_plotting_keys_count": 29,
       "terminal_output_keys": [
         "controls::num_trace_history_values",
+        "controls::show_diffusion_info",
         "controls::terminal_interval",
         "controls::trace_history_value_name",
         "controls::write_header_frequency",
@@ -8892,12 +8412,7 @@
       ],
       "unsupported_controls": [
         "controls::atm_t_tau_opacity::unimplemented",
-        "controls::diffusion_class_a_max::unimplemented",
-        "controls::diffusion_class_representative::unimplemented",
-        "controls::diffusion_min_dq_at_surface::unimplemented",
-        "controls::diffusion_num_classes::unimplemented",
         "controls::photo_interval::unimplemented",
-        "controls::show_diffusion_info::unimplemented",
         "star_job::filename_of_special_rate::unimplemented",
         "star_job::required_termination_code_string::unused"
       ],
@@ -8905,6 +8420,7 @@
       "headless_plotting_keys_count": 255,
       "terminal_output_keys": [
         "controls::num_trace_history_values",
+        "controls::show_diffusion_info",
         "controls::terminal_interval",
         "controls::trace_history_value_name",
         "controls::write_header_frequency",
@@ -9233,42 +8749,6 @@
         "inlist_radiative_levitation_header"
       ],
       "unsupported_controls": [
-        "controls::diffusion_ad_boost_factor::unimplemented",
-        "controls::diffusion_ad_dm_full_off::unimplemented",
-        "controls::diffusion_ad_dm_full_on::unimplemented",
-        "controls::diffusion_atol_for_isolve::unimplemented",
-        "controls::diffusion_calculates_ionization::unimplemented",
-        "controls::diffusion_class_a_max::unimplemented",
-        "controls::diffusion_class_representative::unimplemented",
-        "controls::diffusion_dt_div_timescale::unimplemented",
-        "controls::diffusion_dt_limit::unimplemented",
-        "controls::diffusion_isolve_solver::unimplemented",
-        "controls::diffusion_max_iters_per_substep::unimplemented",
-        "controls::diffusion_max_retries_per_substep::unimplemented",
-        "controls::diffusion_max_t_for_radaccel::unimplemented",
-        "controls::diffusion_max_z_for_radaccel::unimplemented",
-        "controls::diffusion_maxsteps_for_isolve::unimplemented",
-        "controls::diffusion_min_dq_at_surface::unimplemented",
-        "controls::diffusion_min_dq_ratio_at_surface::unimplemented",
-        "controls::diffusion_min_t_at_surface::unimplemented",
-        "controls::diffusion_min_x_hard_limit::unimplemented",
-        "controls::diffusion_min_z_for_radaccel::unimplemented",
-        "controls::diffusion_nsmooth_typical_charge::unimplemented",
-        "controls::diffusion_num_classes::unimplemented",
-        "controls::diffusion_rtol_for_isolve::unimplemented",
-        "controls::diffusion_screening_for_radaccel::unimplemented",
-        "controls::diffusion_t_full_off::unimplemented",
-        "controls::diffusion_t_full_on::unimplemented",
-        "controls::diffusion_tol_correction_max::unimplemented",
-        "controls::diffusion_tol_correction_norm::unimplemented",
-        "controls::diffusion_upwind_abs_v_limit::unimplemented",
-        "controls::diffusion_use_iben_macdonald::unimplemented",
-        "controls::diffusion_v_max::unimplemented",
-        "controls::diffusion_vlimit::unimplemented",
-        "controls::diffusion_vlimit_dm_full_off::unimplemented",
-        "controls::diffusion_vlimit_dm_full_on::unimplemented",
-        "controls::diffusion_x_total_atol::unimplemented",
-        "controls::diffusion_x_total_rtol::unimplemented",
         "controls::high_logt_op_mono_full_off::unimplemented",
         "controls::high_logt_op_mono_full_on::unimplemented",
         "controls::op_mono_min_x_to_include::unimplemented",
@@ -9613,19 +9093,6 @@
         "inlist_solar_header"
       ],
       "unsupported_controls": [
-        "controls::diffusion_atol_for_isolve::unimplemented",
-        "controls::diffusion_calculates_ionization::unimplemented",
-        "controls::diffusion_class_a_max::unimplemented",
-        "controls::diffusion_class_representative::unimplemented",
-        "controls::diffusion_dt_limit::unimplemented",
-        "controls::diffusion_isolve_solver::unimplemented",
-        "controls::diffusion_maxsteps_for_isolve::unimplemented",
-        "controls::diffusion_num_classes::unimplemented",
-        "controls::diffusion_rtol_for_isolve::unimplemented",
-        "controls::diffusion_t_full_off::unimplemented",
-        "controls::diffusion_t_full_on::unimplemented",
-        "controls::diffusion_use_isolve::unimplemented",
-        "controls::do_diffusion_heating::unimplemented",
         "controls::photo_interval::unimplemented",
         "controls::use_other_mesh_functions::unimplemented",
         "star_job::set_cumulative_energy_error_each_step_if_age_less_than::unimplemented"
@@ -9868,9 +9335,6 @@
         "inlist_wd_cool_0.6M_header"
       ],
       "unsupported_controls": [
-        "controls::diffusion_use_full_net::unimplemented",
-        "controls::do_diffusion_heating::unimplemented",
-        "controls::do_wd_sedimentation_heating::unimplemented",
         "controls::photo_interval::unimplemented",
         "star_job::required_termination_code_string::unused"
       ],
@@ -9893,16 +9357,14 @@
       ],
       "unsupported_controls": [
         "controls::atm_t_tau_opacity::unimplemented",
-        "controls::diffusion_use_cgs_solver::unimplemented",
-        "controls::diffusion_use_full_net::unimplemented",
         "controls::photo_interval::unimplemented",
-        "controls::show_diffusion_info::unimplemented",
         "star_job::required_termination_code_string::unused"
       ],
       "unknown_controls": [],
       "headless_plotting_keys_count": 11,
       "terminal_output_keys": [
         "controls::num_trace_history_values",
+        "controls::show_diffusion_info",
         "controls::terminal_interval",
         "controls::trace_history_value_name",
         "controls::write_header_frequency",

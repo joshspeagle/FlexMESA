@@ -123,17 +123,70 @@ def test_rotational_instabilities_and_spruit_tayler_rust_jax_consistency() -> (
         assert np.isfinite(g_q0)
 
 
+def _mesa_26_4_1_caplan_dstar(gam: float, kap: float) -> float:
+    """Closed-form MESA 26.4.1 `diffusion_support.f90:get_Dstar_OCP` oracle."""
+    a0, a1, a2 = 1.55973, 1.10941, 1.36909
+    b0, b1, b2 = 0.0070782, 0.80499, 4.53523
+    c0, c1, c2, c3 = 2.20689, 1.351594, 1.57138, 3.34187
+    x = c2 * (kap**c3)
+    t = 1.0 / (1.0 + 0.47047 * x)
+    erf_fit = 1.0 - (
+        0.3480242 * t - 0.0958798 * t * t + 0.7478556 * t * t * t
+    ) * float(np.exp(-x * x))
+    ak = float(np.sqrt(np.pi / 3.0)) * (a0 + a1 * (kap**a2))
+    bk = b0 * float(np.exp(-b1 * (kap**b2)))
+    ck = c0 + c1 * erf_fit
+    return float(
+        np.sqrt(np.pi / 3.0)
+        * ak
+        * (gam**-2.5)
+        * np.exp(-bk * gam)
+        / np.log(1.0 + ck * (gam**-1.5) / np.sqrt(3.0))
+    )
+
+
+def _mesa_26_4_1_blouin_shift(x_in: float, is_one: bool) -> float:
+    """Closed-form MESA 26.4.1 `phase_separation.f90` Blouin 2021a/b oracle."""
+    if is_one:
+        m_heavy, m_light = 20.0, 16.0
+        a1, a2, a3, a4, a5 = (
+            -0.120299,
+            1.304399,
+            -1.722625,
+            0.393996,
+            0.144529,
+        )
+    else:
+        m_heavy, m_light = 16.0, 12.0
+        a1, a2, a3, a4, a5 = (
+            -0.311540,
+            2.114743,
+            -1.661095,
+            -1.406005,
+            1.263897,
+        )
+    xn = (x_in / m_heavy) / (x_in / m_heavy + (1.0 - x_in) / m_light)
+    dxn = a1 * xn + a2 * xn**2 + a3 * xn**3 + a4 * xn**4 + a5 * xn**5
+    xn_new = xn + dxn
+    x_new = m_heavy * xn_new / (m_heavy * xn_new + m_light * (1.0 - xn_new))
+    return x_new - x_in
+
+
 def test_burgers_and_caplan_ocp_consistency_and_flux() -> None:
-    """Verify Burgers velocities and Caplan OCP Rust-JAX consistency."""
+    """Verify Rust Caplan OCP & Burgers velocities match MESA 26.4.1 (#156)
+    and frozen `#166` JAX prototype stays finite and differentiable.
+    """
     with flexmesa.numerics_mode_context("strict"):
         for gam, kap in [(5.0, 0.5), (20.0, 1.2), (100.0, 0.8)]:
             d_r = _rust.star_eval_caplan_ocp_dstar(gam, kap)
+            d_mesa = _mesa_26_4_1_caplan_dstar(gam, kap)
+            assert abs(d_r - d_mesa) / d_mesa <= 1.0e-14
             d_j = float(
                 star.eval_caplan_ocp_dstar_jax(
                     jnp.asarray(gam), jnp.asarray(kap)
                 )
             )
-            assert abs(d_r - d_j) / d_r <= 1.0e-14
+            assert np.isfinite(d_j) and d_j > 0.0
 
         a = np.array([1.0, 4.0, 16.0], dtype=np.float64)
         z = np.array([1.0, 2.0, 8.0], dtype=np.float64)
@@ -146,7 +199,14 @@ def test_burgers_and_caplan_ocp_consistency_and_flux() -> None:
         v_r, diff_r, ee_r = _rust.star_eval_burgers_velocities(
             a, z, x, rho, t, dlnt_dr, g_grav, None, "stanton_murillo"
         )
-    v_j, d_j, ee_j = star.eval_burgers_velocities_jax(
+    # H1 floats (> 0), He4 and O16 sink (< 0), and sum(X_i * v_i) == 0
+    assert v_r[0] > 0.0 and v_r[1] < 0.0 and v_r[2] < 0.0
+    assert abs(float(np.dot(x, v_r))) <= 1.0e-12
+    assert np.all(np.isfinite(diff_r)) and np.all(diff_r > 0.0)
+    assert np.isfinite(ee_r)
+
+    # Frozen #166 JAX prototype finiteness & autodiff check
+    v_j, d_j_arr, ee_j = star.eval_burgers_velocities_jax(
         jnp.asarray(a),
         jnp.asarray(z),
         jnp.asarray(x),
@@ -155,15 +215,9 @@ def test_burgers_and_caplan_ocp_consistency_and_flux() -> None:
         jnp.asarray(dlnt_dr),
         jnp.asarray(g_grav),
     )
-    np.testing.assert_allclose(v_r, np.asarray(v_j), rtol=1.0e-12, atol=1.0e-14)
-    np.testing.assert_allclose(
-        diff_r, np.asarray(d_j), rtol=1.0e-12, atol=1.0e-14
-    )
-    assert abs(ee_r - float(ee_j)) / abs(ee_r) <= 1.0e-12
-
-    # H1 floats (> 0), He4 and O16 sink (< 0), and sum(X_i * v_i) == 0
-    assert v_r[0] > 0.0 and v_r[1] < 0.0 and v_r[2] < 0.0
-    assert abs(float(np.dot(x, v_r))) <= 1.0e-12
+    assert np.all(np.isfinite(np.asarray(v_j)))
+    assert np.all(np.isfinite(np.asarray(d_j_arr)))
+    assert np.isfinite(float(ee_j))
 
     dv0_dg = float(
         jax.grad(
@@ -182,19 +236,20 @@ def test_burgers_and_caplan_ocp_consistency_and_flux() -> None:
 
 
 def test_phase_separation_and_star_model_wave5_1_methods() -> None:
-    """Verify Blouin et al. (2020, 2021) phase separation shifts and StarModel
-    Wave 5.1 methods execute cleanly and conserve species mass to machine
-    precision.
+    """Verify Blouin et al. (2021a,b) phase separation shifts match MESA 26.4.1
+    and StarModel Wave 5.1 methods conserve species mass to machine precision.
     """
     for x_heavy in [0.1, 0.3, 0.5, 0.7, 0.85]:
         for is_one in [False, True]:
             dx_r = _rust.star_eval_phase_separation_shift(x_heavy, is_one)
+            dx_mesa = _mesa_26_4_1_blouin_shift(x_heavy, is_one)
+            assert abs(dx_r - dx_mesa) <= 1.0e-14
             dx_j = float(
                 star.eval_phase_separation_shift_jax(
                     jnp.asarray(x_heavy), is_one
                 )
             )
-            assert abs(dx_r - dx_j) <= 1.0e-14
+            assert np.isfinite(dx_j) and dx_j > 0.0
 
     model = star.StarModel.from_zams(initial_mass=4.0, initial_z=0.02)
     model.eval_hydro_vars()

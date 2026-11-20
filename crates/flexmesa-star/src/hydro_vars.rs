@@ -292,9 +292,10 @@ pub(crate) fn do1_mlt_2(
 
     let crystal_pad = mw.min_dq * model.m[0] * 0.5;
     let phase_k = model.eos_res.get(k).map_or(0.0, |r| r[I_PHASE]);
+    let m_cryst = model.aux.crystal_core_boundary_mass;
+    let m_mix = model.aux.phase_sep_mixing_mass;
     if (phase_k > 0.5 && model.mu[k] > 1.7)
-        || (model.aux.mixing.crystal_core_boundary_mass + crystal_pad
-            > model.m[k])
+        || (m_cryst > 0.0 && m_cryst + crystal_pad > model.m[k])
     {
         set_no_mixing_face(
             model,
@@ -308,7 +309,7 @@ pub(crate) fn do1_mlt_2(
         return Ok(false);
     }
 
-    if model.m[k] <= model.aux.mixing.phase_sep_mixing_mass {
+    if m_mix > 0.0 && model.m[k] <= m_mix {
         set_no_mixing_face(
             model,
             k,
@@ -872,6 +873,12 @@ fn set_no_mixing_face(
     model.aux.mixing.mlt_mixing_length[k] =
         (scale_height_ad * mixing_length_alpha).val;
     model.aux.mixing.l_conv[k] = 0.0;
+    if matches!(
+        mix_type,
+        MixingType::Crystallized | MixingType::PhaseSeparationMixing
+    ) {
+        model.sig[k] = 0.0;
+    }
 }
 
 /// Evaluates implicit superadiabaticity reduction (`set_superad_reduction` in

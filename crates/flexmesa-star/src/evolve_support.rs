@@ -11,7 +11,9 @@ use flexmesa_turb::MltOption;
 
 use crate::controls::{EnergyEqnOption, StarError};
 use crate::conv_premix::do_conv_premix;
-use crate::diffusion::{DiffusionScheme, do_element_diffusion};
+use crate::element_diffusion::{
+    do_element_diffusion_step, finish_element_diffusion,
+};
 use crate::hydro_energy::{
     setup_d_turbulent_energy_dt, setup_dl_dm, setup_sources_and_others,
 };
@@ -22,7 +24,7 @@ use crate::hydro_work::{
 };
 use crate::mesh_adjust::{MeshFunctionConfig, do_adjust_mesh};
 use crate::model::StarModel;
-use crate::premix::do_phase_separation;
+use crate::phase_separation::do_phase_separation_step;
 use crate::primary_state::PrimaryStateBuffer;
 use crate::riemann_ad::eval_u_flag_total_energy_rates_ad;
 use crate::rotation::{
@@ -118,11 +120,11 @@ pub fn apply_step_pre_physics(
     let nz = model.nz;
     model.aux.mixing.okay_to_set_mixing_info = true;
     model.aux.mixing.have_new_cz_bdy_info = false;
-    model.aux.mixing.phase_sep_mixing_mass = -1.0;
+    model.aux.phase_sep_mixing_mass = -1.0;
     model.aux.mixing.gradt_excess_alpha_old =
         model.aux.mixing.gradt_excess_alpha;
     model.aux.mixing.crystal_core_boundary_mass_old =
-        model.aux.mixing.crystal_core_boundary_mass;
+        model.aux.crystal_core_boundary_mass;
     if !model.controls.rsp_flag {
         crate::hydro_vars::set_gradt_excess_alpha(model);
     }
@@ -157,42 +159,26 @@ pub fn apply_step_pre_physics(
     }
 
     if model.controls.do_phase_separation {
-        let is_one = match model
-            .controls
-            .phase_separation_option
-            .trim()
-            .to_ascii_lowercase()
-            .as_str()
-        {
-            "co" => false,
-            "one" => true,
-            other => {
-                return Err(StarError::InvalidInput(format!(
-                    "unrecognized '&controls::phase_separation_option' = '{other}' (expected 'CO' or 'ONe')"
-                )));
-            }
-        };
-        model.aux.eps_phase_separation =
-            do_phase_separation(model, dt, 175.0, is_one)?;
+        do_phase_separation_step(model, dt)?;
         set_hydro_vars(model, false, false)?;
     } else {
-        model.aux.mixing.crystal_core_boundary_mass = -1.0;
+        model.aux.crystal_core_boundary_mass = -1.0;
+        model.aux.phase_sep_mixing_mass = -1.0;
         model.aux.eps_phase_separation.fill(0.0);
     }
 
     // Lock mixing info before element diffusion and `do_struct_burn_mix`
     // (`star/private/evolve.f90:632`).
     model.aux.mixing.okay_to_set_mixing_info = false;
-    let mut need_hydro_refresh = false;
 
     if model.controls.do_element_diffusion {
-        let (_, eps_wd) =
-            do_element_diffusion(model, dt, DiffusionScheme::Paquette)?;
-        model.aux.eps_wd_sedimentation = eps_wd;
-        need_hydro_refresh = true;
+        do_element_diffusion_step(model, dt)?;
+        set_hydro_vars(model, false, false)?;
+        finish_element_diffusion(model, dt);
     } else {
         model.aux.step_hist.num_diffusion_solver_steps = 0;
         model.aux.step_hist.num_diffusion_solver_iters = 0;
+        model.aux.eps_diffusion.fill(0.0);
         model.aux.eps_wd_sedimentation.fill(0.0);
     }
 
@@ -237,10 +223,6 @@ pub fn apply_step_pre_physics(
             crate::rotation::sync_post_henyey_rotation(model, dt);
         }
         let _ = set_rotation_mixing_info(model);
-        need_hydro_refresh = true;
-    }
-
-    if need_hydro_refresh {
         set_hydro_vars(model, false, false)?;
     }
     Ok(())

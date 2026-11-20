@@ -13,10 +13,10 @@ use flexmesa_const::{
     AVO, CRAD, FOUR_PI, FOUR_THIRDS_PI, KERG, LN10, ONE_THIRD, QE,
 };
 use flexmesa_eos::{
-    eos_dt_get_zones_with_logs, EosEvalOutput, HelmTable, I_CHI_RHO, I_CHI_T,
-    I_CP, I_CV, I_ETA, I_FRAC_PC, I_GAMMA1, I_GAMMA3, I_GRAD_AD,
-    I_LATENT_DDLNRHO, I_LATENT_DDLNT, I_LN_E, I_LN_FREE_E, I_LN_PGAS, I_LN_S,
-    I_MU, NUM_EOS_BASIC_RESULTS,
+    eos_dt_get_rho, eos_dt_get_zones_with_logs, EosEvalOutput, HelmTable,
+    I_CHI_RHO, I_CHI_T, I_CP, I_CV, I_ETA, I_FRAC_PC, I_GAMMA1, I_GAMMA3,
+    I_GRAD_AD, I_LATENT_DDLNRHO, I_LATENT_DDLNT, I_LN_E, I_LN_FREE_E,
+    I_LN_PGAS, I_LN_S, I_MU, NUM_EOS_BASIC_RESULTS,
 };
 use flexmesa_kap::get_kap_results;
 use flexmesa_net::NetGeneralInfo;
@@ -306,46 +306,11 @@ pub(crate) fn builtin_helm_table() -> Result<&'static HelmTable, StarError> {
         .map_err(|e| StarError::MicrophysicsError(e.to_string()))
 }
 
-/// Evaluates `eosDT_get` across all `nz` zones in parallel and populates
-/// cell-centered thermodynamic quantities, composition partial derivatives
-/// (`dln_e_dxa_for_partials`, `dln_peos_dxa_for_partials`), and `StarAdOrder1`
-/// variables (`do_eos_for_cell` and `store_eos_for_cell` in
-/// `star/private/micro.f90:292-545` and `star/private/eos_support.f90:44-101`).
-///
-/// # Errors
-/// Returns [`StarError::MicrophysicsError`] if EOS evaluation fails or yields
-/// non-physical thermodynamic derivatives in any zone.
-pub fn do_eos(model: &mut StarModel) -> Result<(), StarError> {
+/// Ensures EOS-populated auxiliary buffers on `model.aux` match `nz` and
+/// `nz * species`.
+fn ensure_eos_aux_len(model: &mut StarModel) {
     let nz = model.nz;
-    let mut log_rho_zones = Vec::with_capacity(nz);
-    let mut log_t_zones = Vec::with_capacity(nz);
-    for k in 0..nz {
-        let log_rho = model.lnd[k] / LN10;
-        let log_t = model.ln_t[k] / LN10;
-        if log_rho < -25.0 {
-            return Err(StarError::MicrophysicsError(format!(
-                "do_eos failed at zone {k}: logRho ({log_rho}) < -25"
-            )));
-        }
-        log_rho_zones.push(log_rho);
-        log_t_zones.push(log_t);
-    }
-
-    let ht = builtin_helm_table()?;
-    let eos_outputs = eos_dt_get_zones_with_logs(
-        ht,
-        &model.rho,
-        &log_rho_zones,
-        &model.t,
-        &log_t_zones,
-        &model.chem_id,
-        &model.xa,
-        &model.eos_config,
-    )
-    .map_err(|e| StarError::MicrophysicsError(format!("do_eos failed: {e}")))?;
-
-    let species = model.species;
-    let n_sp = nz * species;
+    let n_sp = nz * model.species;
     if model.aux.eos_frac_pc.len() != nz {
         model.aux.eos_frac_pc.resize(nz, 0.0);
     }
@@ -361,45 +326,22 @@ pub fn do_eos(model: &mut StarModel) -> Result<(), StarError> {
     if model.aux.dln_peos_dxa_for_partials.len() != n_sp {
         model.aux.dln_peos_dxa_for_partials.resize(n_sp, 0.0);
     }
-
-    for (k, out) in eos_outputs.into_iter().enumerate() {
-        store_eos_for_cell(model, k, &out)?;
-    }
-    Ok(())
 }
 
-/// Validates and writes an [`EosEvalOutput`] into all cell-centered EOS fields
-/// of `model` at cell `k` (`store_eos_for_cell` in
-/// `star/private/micro.f90:428-545`).
+/// Validates and stores one zone's EOS output (`store_eos_for_cell` in
+/// `star/private/micro.f90:360-545`).
 ///
 /// # Errors
-/// Returns [`StarError::MicrophysicsError`] if any EOS output or derivative is
-/// non-finite, $T$ or $\rho$ exceeds $10^{15}$, or any thermodynamic quantity
-/// (`gamma1`, `grada`, `csound`, `chiT`, `chiRho`, `Cv`, `Cp`) is non-positive.
+/// Returns [`StarError::MicrophysicsError`] if any thermodynamic output or
+/// derivative is non-finite, out of physical range (`T, rho > 1e15`), or
+/// non-positive (`cs^2 < 0`, `gamma1`, `grada`, `csound`, `chiT`, `chiRho`,
+/// `Cv`, `Cp`).
 pub(crate) fn store_eos_for_cell(
     model: &mut StarModel,
     k: usize,
     out: &EosEvalOutput,
 ) -> Result<(), StarError> {
-    let nz = model.nz;
-    let species = model.species;
-    let n_sp = nz * species;
-    if model.aux.eos_frac_pc.len() != nz {
-        model.aux.eos_frac_pc.resize(nz, 0.0);
-    }
-    if model.aux.latent_ddlnt.len() != nz {
-        model.aux.latent_ddlnt.resize(nz, 0.0);
-    }
-    if model.aux.latent_ddlnrho.len() != nz {
-        model.aux.latent_ddlnrho.resize(nz, 0.0);
-    }
-    if model.aux.dln_e_dxa_for_partials.len() != n_sp {
-        model.aux.dln_e_dxa_for_partials.resize(n_sp, 0.0);
-    }
-    if model.aux.dln_peos_dxa_for_partials.len() != n_sp {
-        model.aux.dln_peos_dxa_for_partials.resize(n_sp, 0.0);
-    }
-
+    ensure_eos_aux_len(model);
     for i in 0..NUM_EOS_BASIC_RESULTS {
         if is_bad(out.res[i] + out.d_dlnd[i] + out.d_dln_t[i]) {
             return Err(StarError::MicrophysicsError(format!(
@@ -499,6 +441,7 @@ pub(crate) fn store_eos_for_cell(
     model.aux.eos_frac_pc[k] = out.res[I_FRAC_PC];
     model.aux.latent_ddlnt[k] = out.res[I_LATENT_DDLNT];
     model.aux.latent_ddlnrho[k] = out.res[I_LATENT_DDLNRHO];
+    let species = model.species;
     let sp_base = k * species;
     for j in 0..species {
         let [d_lnpgas_dxa, d_lne_dxa] =
@@ -527,6 +470,132 @@ pub(crate) fn store_eos_for_cell(
     model.eos_res[k] = out.res;
     model.eos_d_dlnd[k] = out.d_dlnd;
     model.eos_d_dlnt[k] = out.d_dln_t;
+    Ok(())
+}
+
+/// Evaluates constant-`(Pgas, T)` EOS (`fix_Pgas = .true.`) over zones
+/// `k_lo..=k_hi`, updating composition moments, `lnd`/`rho`, and all
+/// cell-centered thermodynamic fields through [`store_eos_for_cell`]
+/// (`set_eos_with_mask` / `do_eos_for_cell` in `star/private/micro.f90:321-385`).
+///
+/// # Errors
+/// Returns [`StarError::MicrophysicsError`] if composition evaluation,
+/// density inversion, `logRho >= -25`, or thermodynamic validation fails.
+pub(crate) fn do_eos_fix_pgas_range(
+    model: &mut StarModel,
+    k_lo: usize,
+    k_hi: usize,
+) -> Result<(), StarError> {
+    const LOGRHO_TOL: f64 = 1.0e-8;
+    const LOGPGAS_TOL: f64 = 1.0e-8;
+
+    let nz = model.nz;
+    if nz == 0 || k_lo >= nz || k_lo > k_hi {
+        return Ok(());
+    }
+    let k_end = k_hi.min(nz - 1);
+    let species = model.species;
+    let ht = builtin_helm_table()?;
+    let catalog = NuclideCatalog::builtin_ref();
+    ensure_eos_aux_len(model);
+
+    for k in k_lo..=k_end {
+        let xa_k = &model.xa[k * species..(k + 1) * species];
+        let comp = get_composition_info(catalog, &model.chem_id, xa_k, true)
+            .map_err(|e| {
+                StarError::MicrophysicsError(format!(
+                    "do_eos_fix_pgas_range composition error at zone {k}: {e}"
+                ))
+            })?;
+        model.abar[k] = comp.abar;
+        model.zbar[k] = comp.zbar;
+        model.z2bar[k] = comp.z2bar;
+        model.z53bar[k] = comp.z53bar;
+        model.ye[k] = comp.ye;
+        let xh = comp.xh.clamp(0.0, 1.0);
+        let xhe = comp.xhe.clamp(0.0, 1.0);
+        model.xh_mass[k] = xh;
+        model.yhe_mass[k] = xhe;
+        model.z_mass[k] = (1.0 - (xh + xhe)).clamp(0.0, 1.0);
+
+        let log_t = model.ln_t[k] / LN10;
+        let log_rho_guess = model.lnd[k] / LN10;
+        let target_ln_pgas = model.ln_pgas[k];
+
+        let inv = eos_dt_get_rho(
+            ht,
+            &model.chem_id,
+            xa_k,
+            log_t,
+            I_LN_PGAS as isize,
+            target_ln_pgas,
+            log_rho_guess,
+            LOGRHO_TOL,
+            LOGPGAS_TOL,
+            20,
+            &model.eos_config,
+        )
+        .map_err(|e| {
+            StarError::MicrophysicsError(format!(
+                "do_eos_fix_pgas_range constant-Pgas EOS failed at zone {k}: {e}"
+            ))
+        })?;
+
+        if inv.log10_result < -25.0 {
+            return Err(StarError::MicrophysicsError(format!(
+                "do_eos_fix_pgas_range failed at zone {k}: logRho ({}) < -25",
+                inv.log10_result
+            )));
+        }
+        model.lnd[k] = inv.log10_result * LN10;
+        model.rho[k] = inv.linear_result;
+        store_eos_for_cell(model, k, &inv.eos)?;
+    }
+    Ok(())
+}
+
+/// Evaluates `eosDT_get` across all `nz` zones in parallel and populates
+/// cell-centered thermodynamic quantities, composition partial derivatives
+/// (`dln_e_dxa_for_partials`, `dln_peos_dxa_for_partials`), and `StarAdOrder1`
+/// variables (`do_eos_for_cell` and `store_eos_for_cell` in
+/// `star/private/micro.f90:292-545` and `star/private/eos_support.f90:44-101`).
+///
+/// # Errors
+/// Returns [`StarError::MicrophysicsError`] if EOS evaluation fails or yields
+/// non-physical thermodynamic derivatives in any zone.
+pub fn do_eos(model: &mut StarModel) -> Result<(), StarError> {
+    let nz = model.nz;
+    let mut log_rho_zones = Vec::with_capacity(nz);
+    let mut log_t_zones = Vec::with_capacity(nz);
+    for k in 0..nz {
+        let log_rho = model.lnd[k] / LN10;
+        let log_t = model.ln_t[k] / LN10;
+        if log_rho < -25.0 {
+            return Err(StarError::MicrophysicsError(format!(
+                "do_eos failed at zone {k}: logRho ({log_rho}) < -25"
+            )));
+        }
+        log_rho_zones.push(log_rho);
+        log_t_zones.push(log_t);
+    }
+
+    let ht = builtin_helm_table()?;
+    let eos_outputs = eos_dt_get_zones_with_logs(
+        ht,
+        &model.rho,
+        &log_rho_zones,
+        &model.t,
+        &log_t_zones,
+        &model.chem_id,
+        &model.xa,
+        &model.eos_config,
+    )
+    .map_err(|e| StarError::MicrophysicsError(format!("do_eos failed: {e}")))?;
+
+    ensure_eos_aux_len(model);
+    for (k, out) in eos_outputs.iter().enumerate() {
+        store_eos_for_cell(model, k, out)?;
+    }
     Ok(())
 }
 
@@ -642,8 +711,8 @@ pub fn do_kap(model: &mut StarModel) -> Result<(), StarError> {
 /// `k_lo..=k_hi`, updating `opacity`, `d_opacity_dlnd`, `d_opacity_dlnt`, and
 /// `aux.kap_frac` in deterministic index order without touching `tau`.
 ///
-/// Shared by [`do_kap`], `predictive_mix::eval_mixing_coeffs`, and
-/// `conv_premix::update_model`.
+/// Shared by [`do_kap`], `predictive_mix::eval_mixing_coeffs`,
+/// `conv_premix::update_model`, and `phase_separation::update_model_range`.
 ///
 /// # Errors
 /// Returns [`StarError::InvalidInput`] if `use_other_kap` is active without a
@@ -660,9 +729,10 @@ pub(crate) fn eval_kap_for_range(
         )));
     }
     let nz = model.nz;
-    if nz == 0 || k_lo > k_hi || k_hi >= nz {
+    if nz == 0 || k_lo >= nz || k_lo > k_hi {
         return Ok(());
     }
+    let k_end = k_hi.min(nz - 1);
     let species = model.species;
     if model.aux.kap_frac.len() != nz {
         model.aux.kap_frac.resize(nz, [0.0; 4]);
@@ -714,7 +784,7 @@ pub(crate) fn eval_kap_for_range(
     let chem_id = &model.chem_id;
 
     let kap_results: Result<Vec<(f64, f64, f64, [f64; 4])>, StarError> =
-        (k_lo..=k_hi)
+        (k_lo..=k_end)
             .into_par_iter()
             .map(|k| {
                 let (xa_k, zbar_k, xh_k, xhe_k, z_k) = if use_start_comp {
@@ -871,7 +941,6 @@ pub(crate) fn eval_kap_for_range(
         model.d_opacity_dlnt[k] = dlnt;
         model.aux.kap_frac[k] = fracs;
     }
-
     Ok(())
 }
 

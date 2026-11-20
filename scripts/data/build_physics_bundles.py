@@ -8,20 +8,18 @@ an extracted MESA `26.4.1` tree (`$MESA_DIR`, Zenodo record `19722306`):
 1. `crates/flexmesa-net/data/nets.bin` (`FNET0001` map of `.net` and `add_*`)
 2. `helm_table_full.bin.zst` (`FMHLM001` 9-jet `HELM` grid)
 3. `kap_tables_full_v2.bin.zst` (`FMKAP001` full opacity table bundle)
-4. `eos_opal_scvh_raw.tar.zst` (`FMDTRW01` `OPAL/SCVH` 4D EOS slices)
-5. `eos_free_eos_raw.tar.zst` (`FMDTRW01` `FreeEOS` 4D EOS slices)
-6. `eos_cms_raw.tar.zst` (`FMCMSR01` `CMS` H/He 4D EOS slices)
+4. `eos_opal_scvh_raw_v1.tar.zst` (`FMDTRW01` `OPAL/SCVH` 4D EOS slices)
+5. `eos_free_eos_raw_v1.tar.zst` (`FMDTRW01` `FreeEOS` 4D EOS slices)
+6. `eos_cms_raw_v1.tar.zst` (`FMCMSR01` `CMS` H/He 4D EOS slices)
 
-Every `.tar.zst` bundle embeds a `SHA256SUMS.tsv` manifest of unpacked member
-hashes, and an external `<bundle>.sha256.tsv` manifest is written alongside the
-archive (`N1-10`, `#141`).
+Every `.tar.zst` bundle writes a deterministic `<bundle>.sha256.tsv` manifest of
+unpacked member hashes alongside the archive (`N1-10`, `#141`).
 """
 
 from __future__ import annotations
 
 import argparse
 import hashlib
-import io
 import os
 import pathlib
 import shutil
@@ -38,6 +36,24 @@ HELM_FULL_MAGIC = b"FMHELM01"
 NET_BUNDLE_MAGIC = b"FNET0001"
 HELM_IMAX = 2701
 HELM_JMAX = 1001
+OPAL_SCVH_STEMS: tuple[str, ...] = (
+    "mesa-eosDT_00z00x",
+    "mesa-eosDT_00z20x",
+    "mesa-eosDT_00z40x",
+    "mesa-eosDT_00z60x",
+    "mesa-eosDT_00z80x",
+    "mesa-eosDT_00z100x",
+    "mesa-eosDT_02z00x",
+    "mesa-eosDT_02z20x",
+    "mesa-eosDT_02z40x",
+    "mesa-eosDT_02z60x",
+    "mesa-eosDT_02z80x",
+    "mesa-eosDT_04z00x",
+    "mesa-eosDT_04z20x",
+    "mesa-eosDT_04z40x",
+    "mesa-eosDT_04z60x",
+    "mesa-eosDT_04z80x",
+)
 
 
 def sha256_file(path: pathlib.Path) -> str:
@@ -71,50 +87,71 @@ def build_nets_bin(mesa_dir: pathlib.Path, out_path: pathlib.Path) -> str:
     return sha256_file(out_path)
 
 
-def _parse_header_tokens(lines: list[str]) -> tuple[list[str], list[str]]:
-    """Return `(header_names, header_vals)` from a MESA EOS ASCII table."""
-    non_empty = [ln.strip() for ln in lines[:12] if ln.strip()]
-    return non_empty[0].split(), non_empty[1].split()
+def _extract_header_and_body_lines(
+    src: pathlib.Path,
+) -> tuple[list[str], list[str]]:
+    """Return `(11_header_value_tokens, body_lines)` from a MESA EOS `.data`.
+
+    Upstream MESA `.data` headers format multi-word labels with spaces
+    (`num logTs`, `logT min`, `eos/private/eosdt_load_tables.f90:275-282`), so
+    header metadata is parsed positionally from the second non-empty line.
+    """
+    lines = src.read_text(encoding="utf-8").splitlines()
+    non_empty_indices = [idx for idx, ln in enumerate(lines) if ln.strip()]
+    if len(non_empty_indices) < 2:
+        raise ValueError(f"{src.name}: missing 2-line MESA EOS header")
+    vals = lines[non_empty_indices[1]].replace("D", "E").split()
+    if len(vals) < 11:
+        raise ValueError(
+            f"{src.name}: expected >= 11 header values, got {len(vals)}"
+        )
+    body = lines[non_empty_indices[1] + 1 :]
+    return vals, body
 
 
 def convert_dt_ascii_to_raw(src: pathlib.Path, dst: pathlib.Path) -> None:
-    """Convert one `mesa-EOS5_*` or `mesa-FreeEOS_*` `.data` file to `.raw`.
+    """Convert one `mesa-eosDT_*` or `mesa-FreeEOS_*` `.data` file to `.raw`.
 
     Writes the 84-byte `FMDTRW01` header (`magic`, `version`, `X`, `Z`,
     `num_logTs`, `logT_min`, `logT_max`, `del_logT`, `num_logQs`, `logQ_min`,
-    `logQ_max`, `del_logQ`) followed by `num_logQs * num_logTs` cells of 16
-    little-endian `float64` values in `(iq, it)` block order.
+    `logQ_max`, `del_logQ`) followed by `num_logQs * num_logTs` cells of the 16
+    EOS columns (`parts[1:17]`, ignoring trailing FreeEOS diagnostic columns) in
+    little-endian `float64` `(iq, it)` block order.
     """
-    lines = src.read_text(encoding="utf-8").splitlines()
-    names, vals = _parse_header_tokens(lines)
-    hdr = dict(zip(names, vals, strict=True))
-    version = int(hdr["version"])
-    x_val = float(hdr["X"])
-    z_val = float(hdr["Z"])
-    n_lt = int(hdr["num_logTs"])
-    lt_min = float(hdr["logT_min"])
-    lt_max = float(hdr["logT_max"])
-    d_lt = float(hdr["del_logT"])
-    n_lq = int(hdr["num_logQs"])
-    lq_min = float(hdr["logQ_min"])
-    lq_max = float(hdr["logQ_max"])
-    d_lq = float(hdr["del_logQ"])
+    vals, body = _extract_header_and_body_lines(src)
+    version = int(float(vals[0]))
+    x_val = float(vals[1])
+    z_val = float(vals[2])
+    n_lt = int(float(vals[3]))
+    lt_min = float(vals[4])
+    lt_max = float(vals[5])
+    d_lt = float(vals[6])
+    n_lq = int(float(vals[7]))
+    lq_min = float(vals[8])
+    lq_max = float(vals[9])
+    d_lq = float(vals[10])
 
+    target_rows = n_lq * n_lt
     numeric_rows: list[list[float]] = []
-    for ln in lines[4:]:
+    for ln in body:
         s = ln.strip()
         if not s or s.startswith("logQ") or s.startswith("logT"):
             continue
         parts = s.split()
-        if len(parts) == 17:
-            # Data row: logT + 16 EOS columns
+        if len(parts) >= 17:
+            # Data row: logT + 16 EOS columns (+5 trailing cols in FreeEOS).
+            # Stop at n_lq * n_lt matching upstream `do iQ=1,ep% num_logQs` in
+            # `eos/private/eosdt_load_tables.f90:328-344` (`mesa-FreeEOS_04z50x`
+            # carries unreferenced rows past `logQ_max = 3.23`).
             numeric_rows.append(
-                [float(tok.replace("D", "E")) for tok in parts[1:]]
+                [float(tok.replace("D", "E")) for tok in parts[1:17]]
             )
+            if len(numeric_rows) == target_rows:
+                break
     arr = np.asarray(numeric_rows, dtype="<f8")
-    if arr.shape != (n_lq * n_lt, 16):
+    if arr.shape != (target_rows, 16):
         raise ValueError(
-            f"{src.name}: expected ({n_lq * n_lt}, 16), got {arr.shape}"
+            f"{src.name}: expected ({target_rows}, 16), got {arr.shape}"
         )
     if not np.all(np.isfinite(arr)):
         raise ValueError(f"{src.name}: contains non-finite values")
@@ -141,30 +178,28 @@ def convert_dt_ascii_to_raw(src: pathlib.Path, dst: pathlib.Path) -> None:
 
 def convert_cms_ascii_to_raw(src: pathlib.Path, dst: pathlib.Path) -> None:
     """Convert one `mesa-CMS_*.data` file to 76-byte `FMCMSR01` `.raw`."""
-    lines = src.read_text(encoding="utf-8").splitlines()
-    names, vals = _parse_header_tokens(lines)
-    hdr = dict(zip(names, vals, strict=True))
-    version = int(hdr["version"])
-    x_val = float(hdr["X"])
-    n_lt = int(hdr["num_logTs"])
-    lt_min = float(hdr["logT_min"])
-    lt_max = float(hdr["logT_max"])
-    d_lt = float(hdr["del_logT"])
-    n_lr = int(hdr["num_logRhos"])
-    lr_min = float(hdr["logRho_min"])
-    lr_max = float(hdr["logRho_max"])
-    d_lr = float(hdr["del_logRho"])
+    vals, body = _extract_header_and_body_lines(src)
+    version = int(float(vals[0]))
+    x_val = float(vals[1])
+    n_lt = int(float(vals[3]))
+    lt_min = float(vals[4])
+    lt_max = float(vals[5])
+    d_lt = float(vals[6])
+    n_lr = int(float(vals[7]))
+    lr_min = float(vals[8])
+    lr_max = float(vals[9])
+    d_lr = float(vals[10])
 
     numeric_rows: list[list[float]] = []
-    for ln in lines[4:]:
+    for ln in body:
         s = ln.strip()
         if not s or s.startswith("logT") or s.startswith("logRho"):
             continue
         parts = s.split()
-        if len(parts) == 18:
-            # Data row: logRho, logQ, + 16 EOS columns
+        if len(parts) >= 18:
+            # Data row: logT, logRho, + 16 EOS columns (+ dsp, dse in CMS)
             numeric_rows.append(
-                [float(tok.replace("D", "E")) for tok in parts[2:]]
+                [float(tok.replace("D", "E")) for tok in parts[2:18]]
             )
     arr = np.asarray(numeric_rows, dtype="<f8")
     if arr.shape != (n_lt * n_lr, 16):
@@ -248,7 +283,9 @@ def pack_deterministic_tar_zst(
     manifest_out: pathlib.Path,
     level: int = 19,
 ) -> str:
-    """Write a deterministic `.tar.zst` with `rel_files` + `SHA256SUMS.tsv`."""
+    """Write a deterministic `.tar.zst` and external `.sha256.tsv` manifest."""
+    if not rel_files:
+        raise ValueError(f"{out_archive.name}: refusing to pack 0 member files")
     rel_sorted = sorted(rel_files)
     manifest_lines = ["# sha256\tsize_bytes\trelpath"]
     for rel in rel_sorted:
@@ -274,15 +311,6 @@ def pack_deterministic_tar_zst(
                 ti.mode = 0o644
                 with fp.open("rb") as fh:
                     tf.addfile(ti, fh)
-            ti_m = tarfile.TarInfo(name="SHA256SUMS.tsv")
-            ti_m.size = len(manifest_bytes)
-            ti_m.mtime = 0
-            ti_m.uid = 0
-            ti_m.gid = 0
-            ti_m.uname = ""
-            ti_m.gname = ""
-            ti_m.mode = 0o644
-            tf.addfile(ti_m, io.BytesIO(manifest_bytes))
         return compress_zst(tar_path, out_archive, level=level)
     finally:
         tar_path.unlink(missing_ok=True)
@@ -555,11 +583,13 @@ def main() -> int:
 
     with tempfile.TemporaryDirectory(prefix="flexmesa_eos_raw_") as tmp:
         stage = pathlib.Path(tmp)
+        dt_dir = args.mesa_dir / "data" / "eosDT_data"
         dt_rels: list[str] = []
-        for p in sorted(
-            (args.mesa_dir / "data" / "eosDT_data").glob("mesa-EOS5_*.data")
-        ):
-            rel = f"eos_4d_raw/{p.stem}.raw"
+        for stem in sorted(OPAL_SCVH_STEMS):
+            p = dt_dir / f"{stem}.data"
+            if not p.is_file():
+                raise FileNotFoundError(f"Missing OPAL/SCVH table: {p}")
+            rel = f"eos_4d_raw/{stem}.raw"
             convert_dt_ascii_to_raw(p, stage / rel)
             dt_rels.append(rel)
         dt_sha = pack_deterministic_tar_zst(
@@ -570,12 +600,17 @@ def main() -> int:
         )
         print(f"eos_opal_scvh_raw_v1.tar.zst: sha256={dt_sha}")
 
-        fe_rels: list[str] = []
-        for p in sorted(
+        fe_files = sorted(
             (args.mesa_dir / "data" / "eosFreeEOS_data").glob(
                 "mesa-FreeEOS_*.data"
             )
-        ):
+        )
+        if len(fe_files) != 89:
+            raise ValueError(
+                f"Expected 89 FreeEOS .data files, found {len(fe_files)}"
+            )
+        fe_rels: list[str] = []
+        for p in fe_files:
             rel = f"eos_4d_raw/{p.stem}.raw"
             convert_dt_ascii_to_raw(p, stage / rel)
             fe_rels.append(rel)
@@ -587,10 +622,15 @@ def main() -> int:
         )
         print(f"eos_free_eos_raw_v1.tar.zst: sha256={fe_sha}")
 
-        cms_rels: list[str] = []
-        for p in sorted(
+        cms_files = sorted(
             (args.mesa_dir / "data" / "eosCMS_data").glob("mesa-CMS_*.data")
-        ):
+        )
+        if len(cms_files) != 11:
+            raise ValueError(
+                f"Expected 11 CMS .data files, found {len(cms_files)}"
+            )
+        cms_rels: list[str] = []
+        for p in cms_files:
             rel = f"eos_4d_raw/{p.stem}.raw"
             convert_cms_ascii_to_raw(p, stage / rel)
             cms_rels.append(rel)

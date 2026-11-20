@@ -16,7 +16,7 @@ Generated mechanically by `flexmesa harness` from `benchmarks/history_harness/ca
 | Cases accepted by strict control validation (`#147`) | 0 (0 took at least one step) |
 | Cases rejected by strict validation and rerun as diagnostic (unsupported controls ignored; never a pass) | 106 (75 took at least one step) |
 | Strict runs reaching upstream termination | 0 |
-| Diagnostic runs reaching upstream termination | 47 |
+| Diagnostic runs reaching upstream termination | 46 |
 | Acceptance passes against MESA `26.4.1` (`pass`) | 0 |
 | Interim `0b2e6bb` comparisons within manifest tolerance | 0 |
 | Declared known gaps (`known_gaps.toml`) | 102 |
@@ -30,7 +30,7 @@ Generated mechanically by `flexmesa harness` from `benchmarks/history_harness/ca
 | :--- | :--- | :--- | :--- | :--- | :--- | ---: | ---: | :--- | ---: | :--- | :--- |
 | `star` | `1.3M_ms_high_Z` | `mesa_26_4_1` | `log_L_upper_limit` | diagnostic (2 controls ignored) | `log_L_upper_limit` | 219 | -0.01% | `log_center_Rho`: 1.161e-02 | 85 | #159 | declared gap (#159) |
 | `star` | `1.4M_ms_op_mono` | `no_reference_yet` | `max_model_number` | diagnostic (7 controls ignored) | `max_model_number` | 10 | - | - | - | - | no reference yet |
-| `star` | `1.5M_with_diffusion` | `mesa_26_4_1` | `xa_central_lower_limit` | diagnostic (22 controls ignored) | `xa_central_lower_limit(h1)` | 209 | -51.25% | `log_center_Rho`: 2.983e-01 | 47 | #156 | declared gap (#156) |
+| `star` | `1.5M_with_diffusion` | `mesa_26_4_1` | `xa_central_lower_limit` | diagnostic (3 controls ignored) | `timeout` | 236 | -44.35% | `log_center_Rho`: 5.618e-04 | - | #159 | declared gap (#159) |
 | `star` | `12M_pre_ms_to_core_collapse` | `mesa_26_4_1` | `fe_core_infall_limit` | diagnostic (46 controls ignored) | `timeout` | 7 | -0.00% | `log_center_Rho`: 6.824e-03 | 2594 | #161 | declared gap (#161) |
 | `star` | `15M_dynamo` | `mesa_26_4_1` | `xa_central_lower_limit` | diagnostic (2 controls ignored) | `timeout` | 1008 | -18.33% | - | - | #158 | declared gap (#158) |
 | `star` | `16M_conv_premix` | `mesa_26_4_1` | `xa_central_lower_limit` | diagnostic (4 controls ignored) | `xa_central_lower_limit` | 378 | -0.06% | `log_center_Rho`: 2.386e-01 | 82 | #159 | declared gap (#159) |
@@ -56,7 +56,7 @@ Generated mechanically by `flexmesa harness` from `benchmarks/history_harness/ca
 | `star` | `conv_core_cpm` | `mesa_26_4_1` | `xa_central_lower_limit` | diagnostic (2 controls ignored) | `xa_central_lower_limit` | 92 | -0.20% | `log_center_Rho`: 1.364e-03 | - | #159 | declared gap (#159) |
 | `star` | `custom_colors` | `mesa_26_4_1` | `xa_central_lower_limit` | diagnostic (3 controls ignored) | - | 0 | - | - | - | #159 | declared gap (#159) |
 | `star` | `custom_rates` | `mesa_26_4_1` | `log_center_temp_upper_limit` | diagnostic (8 controls ignored) | - | 0 | - | - | - | #161 | declared gap (#161) |
-| `star` | `diffusion_smoothness` | `mesa_26_4_1` | `max_age` | diagnostic (11 controls ignored) | `max_age` | 27 | +15.96% | `log_center_Rho`: 7.841e-03 | 4 | #156 | declared gap (#156) |
+| `star` | `diffusion_smoothness` | `mesa_26_4_1` | `max_age` | diagnostic (2 controls ignored) | `max_age` | 27 | +0.00% | `log_center_Rho`: 7.911e-03 | 4 | #159 | declared gap (#159) |
 | `star` | `extended_convective_penetration` | `mesa_26_4_1` | `xa_central_lower_limit` | diagnostic (4 controls ignored) | - | 0 | - | - | - | #231 | declared gap (#231) |
 | `star` | `gyre_in_mesa_bcep` | `mesa_26_4_1` | `xa_central_lower_limit` | diagnostic (3 controls ignored) | `xa_central_lower_limit(h1)` | 47 | +0.55% | `log_center_Rho`: 5.003e-02 | 3 | #170 | declared gap (#170) |
 | `star` | `gyre_in_mesa_envelope` | `mesa_26_4_1` | `max_model_number` | diagnostic (2 controls ignored) | `steps_to_take_before_terminate` | 53 | +0.61% | - | - | #170 | declared gap (#170) |
@@ -112,8 +112,8 @@ Generated mechanically by `flexmesa harness` from `benchmarks/history_harness/ca
 | `star` | `wd_acc_small_dm` | `mesa_26_4_1` | `max_age` | diagnostic (6 controls ignored) | - | 0 | - | - | - | #159 | declared gap (#159) |
 | `star` | `wd_aic` | `mesa_26_4_1` | `PASS: A=20 electron captures have started a thermal runaway in the core` | diagnostic (9 controls ignored) | - | 0 | - | - | - | #161 | declared gap (#161) |
 | `star` | `wd_c_core_ignition` | `mesa_26_4_1` | `power_nuc_burn_upper_limit` | diagnostic (3 controls ignored) | `power_nuc_burn_upper_limit` | 1 | -84.31% | - | - | #159 | declared gap (#159) |
-| `star` | `wd_cool_0.6M` | `mesa_26_4_1` | `log_center_temp_lower_limit` | diagnostic (8 controls ignored) | `timeout` | 234 | -99.23% | `log_L`: 1.967e-01 | 30 | #156 | declared gap (#156) |
-| `star` | `wd_diffusion` | `mesa_26_4_1` | `Teff_lower_limit` | diagnostic (6 controls ignored) | `Teff_lower_limit` | 283 | +6.55% | `log_L`: 2.184e-01 | 1407 | #156 | declared gap (#156) |
+| `star` | `wd_cool_0.6M` | `mesa_26_4_1` | `log_center_temp_lower_limit` | diagnostic (2 controls ignored) | `timeout` | 182 | -37.75% | `log_L`: 6.110e-02 | 39 | #159 | declared gap (#159) |
+| `star` | `wd_diffusion` | `mesa_26_4_1` | `Teff_lower_limit` | diagnostic (3 controls ignored) | `Teff_lower_limit` | 125 | +0.03% | `log_L`: 6.532e-03 | 1435 | #161 | declared gap (#161) |
 | `star` | `wd_he_shell_ignition` | `mesa_26_4_1` | `power_he_burn_upper_limit` | diagnostic (5 controls ignored) | - | 0 | - | - | - | #159 | declared gap (#159) |
 | `star` | `wd_nova_burst` | `mesa_26_4_1` | `extras_check_model` | diagnostic (10 controls ignored) | `timeout` | 564 | -100.00% | `log_L`: 3.706e+00 | 1 | #159 | declared gap (#159) |
 | `star` | `wd_stable_h_burn` | `mesa_26_4_1` | `star_mass_max_limit` | diagnostic (8 controls ignored) | - | 0 | - | - | - | #159 | declared gap (#159) |

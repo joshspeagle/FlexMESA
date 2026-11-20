@@ -73,12 +73,12 @@ def test_zams_adjust_mesh_conserves_species_mass_and_total_dq() -> None:
 
 
 def test_photo_checkpoint_v22_header_and_restart_bit_identity() -> None:
-    """Verify FMPHOTO2 header version (v26 since #152) and restart parity."""
+    """Verify FMPHOTO2 header version (v27 since #152) and restart parity."""
     model = star.StarModel.from_zams(initial_mass=1.0, initial_z=0.02)
     photo_bytes = model.to_photo_bytes()
     assert photo_bytes[:8] == b"FMPHOTO2"
     (version,) = struct.unpack("<I", photo_bytes[8:12])
-    assert version == 26
+    assert version == 27
 
     reloaded = star.StarModel.from_photo_bytes(photo_bytes)
     assert reloaded.nz == model.nz

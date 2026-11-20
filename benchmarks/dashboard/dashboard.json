@@ -21,7 +21,7 @@
         "verified_total": 4971,
         "pct_ported": 25.5,
         "pct_verified": 4.1,
-        "rust_lines": 70699,
+        "rust_lines": 74093,
         "python_jax_lines": 3869
       },
       {
@@ -55,7 +55,7 @@
         "verified_total": 0,
         "pct_ported": 18.7,
         "pct_verified": 0.0,
-        "rust_lines": 11721,
+        "rust_lines": 11734,
         "python_jax_lines": 1244
       },
       {
@@ -669,7 +669,7 @@
       }
     ],
     "gaps_by_issue": {
-      "#152": 24,
+      "#152": 25,
       "#161": 17,
       "#154": 12,
       "#162": 9,
@@ -678,7 +678,7 @@
       "#160": 7,
       "#170": 7,
       "#158": 4,
-      "#159": 4,
+      "#159": 3,
       "#151": 1,
       "#171": 1
     },
@@ -688,12 +688,12 @@
     {
       "namelist": "star &controls",
       "upstream_scalars": 1444,
-      "matched_in_flexmesa": 789,
-      "defaults_agree": 789,
+      "matched_in_flexmesa": 899,
+      "defaults_agree": 899,
       "value_mismatch": 0,
       "disabled_limit_none": 0,
-      "skipped_unparseable_rust": 9,
-      "unimplemented": 646
+      "skipped_unparseable_rust": 17,
+      "unimplemented": 528
     },
     {
       "namelist": "star &star_job",

@@ -6,14 +6,26 @@
 use crate::model::StarModel;
 
 fn eval_cell_ke(model: &StarModel, k: usize) -> f64 {
-    let vel = if model.controls.u_flag {
-        model.u[k]
+    // Matches `cell_specific_KE_qp` (`star/private/star_utils.f90:2184-2221`).
+    let mc = if model.controls.use_mass_corrections {
+        model.aux.mass_correction.get(k).copied().unwrap_or(1.0)
+    } else {
+        1.0
+    };
+    if model.controls.u_flag {
+        let v0 = model.u[k];
+        0.5 * mc * v0 * v0
     } else if model.controls.v_flag {
-        model.v[k]
+        let v0 = model.v[k];
+        let v1 = if k + 1 < model.nz {
+            model.v[k + 1]
+        } else {
+            model.v_center
+        };
+        0.5 * mc * (0.5 * (v0 * v0 + v1 * v1))
     } else {
         0.0
-    };
-    0.5 * vel * vel
+    }
 }
 
 /// Computes the cell-centered specific kinetic energy profile
@@ -113,15 +125,20 @@ pub fn compute_leak_frac(
         return leak;
     }
 
+    // `eps_mdot.f90:579-585`: `grad_r_sub_grad_a(nz) = grad_r_sub_grad_a(nz-1)`.
+    let mut grad_r_sub_grad_a = vec![0.0_f64; nz];
+    if nz >= 2 {
+        for k in 0..(nz - 1) {
+            let grad_t_mid = 0.5 * (model.gradt[k] + model.gradt[k + 1]);
+            grad_r_sub_grad_a[k] = model.grada[k] - grad_t_mid;
+        }
+        grad_r_sub_grad_a[nz - 1] = grad_r_sub_grad_a[nz - 2];
+    } else {
+        grad_r_sub_grad_a[0] = model.grada[0] - model.gradt[0];
+    }
+
     for k in 0..nz {
-        let grad_t_mid = if k + 1 < nz {
-            0.5 * (model.gradt[k] + model.gradt[k + 1])
-        } else if nz >= 2 {
-            0.5 * (model.gradt[nz - 2] + model.gradt[nz - 1])
-        } else {
-            model.gradt[0]
-        };
-        let grad_diff = (model.grada[k] - grad_t_mid).abs();
+        let grad_diff = grad_r_sub_grad_a[k].abs();
         let flux_bar = if k == 0 {
             mass_flux[0]
         } else {

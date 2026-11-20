@@ -595,6 +595,9 @@ class PyRspBuildContext:
     def eval_lina(self, teff_k: float, l_lsun: float, n_modes: int = 3) -> tuple[list[float], list[float]]: ...  # noqa: E501
 
 def star_solve_gyre_mesa_modes_full(gyre_content: str, l: int = 0, omega_min: float = 0.5, omega_max: float = 12.0, n_freq: int = 400) -> list[tuple[int, int, int, int, float, list[float], list[float]]]: ...  # noqa: E501
+def star_extras_snapshot(model: RustStarModel, case_dir: str = "", include_history: bool = True) -> dict[str, Any]: ...  # noqa: E501
+def star_apply_extras_updates(model: RustStarModel, updates: dict[str, Any]) -> None: ...  # noqa: E501
+def binary_extras_snapshot(bin: RustBinarySystem, case_dir: str = "") -> dict[str, Any]: ...  # noqa: E501
 def star_verify_photo_restart(model: Any, n_steps: int = 1) -> tuple[int, int]: ...  # noqa: E501
 def star_copy_cleaned_case(src_dir: str, dst_dir: str, suite: str = "star") -> None: ...  # noqa: E501
 def star_parse_inlist_bundle(inlist_path: str, allow_unsupported_controls: bool = False) -> dict[str, Any]: ...  # noqa: E501

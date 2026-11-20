@@ -119,31 +119,87 @@ STOCK_EXTRAS_DIGESTS: frozenset[str] = frozenset(
 
 # Star handlers that have been run through `PyStarExtrasAdapter` on their own
 # case without failing on state the adapter does not provide. A handler not
-# listed here is written but cannot run yet: its hooks read snapshot keys that
-# `build_star_snapshot` (`crates/flexmesa-py/src/extras_py.rs`) does not
-# supply, or need an engine capability that does not exist. Attaching such a
-# handler stops a run that otherwise takes steps, so `resolve_case_extras`
-# does not attach it and the case stays `unported` (it runs with default
-# no-op hooks and can never count as a pass, `DECISIONS #32`). Add a handler
-# here in the pull request that makes it runnable, with the harness rows of
-# its cases regenerated.
+# listed here is written but cannot run yet because its hooks require an
+# unported engine or `StarExtras` capability:
+# - `#152` (solver/timestep/state hooks): `CarbonKhStarExtras` (`ergs_error`,
+#   `cv_start`, `de_drho_start`), `MagneticBrakingStarExtras`
+#   (`other_timestep_limit`), `TzoStarExtras` (`star_set_v_flag`, center mass
+#   and luminosity mutation).
+# - `#153` (mesh/surface-cut hooks): `MakeCoWdStarExtras`
+#   (`star_remove_surface_at_cell_k`), `PreMs1MToWdStarExtras`
+#   (`other_mesh_delta_coeff_factor`).
+# - `#154` (startup/relax/build-model hooks): `MakeEnvStarExtras`
+#   (`create_env`), `RelaxCompositionJEntropyStarExtras` (`initial_mass`
+#   mutation before model build).
+# - `#155` (per-cell MLT/overshoot/rotation diffusivity hooks):
+#   `PreMs12MCoreCollapseStarExtras`, `PreMs20MCoreCollapseStarExtras`,
+#   `SplitBurnBigNetStarExtras`, `MakePreCcsn13bvnStarExtras` (per-cell
+#   `alpha_mlt(1:nz)`), `ExtendedConvectivePenetrationStarExtras`
+#   (`other_adjust_mlt_gradT_fraction`, `other_overshooting_scheme`),
+#   `Dynamo15MStarExtras`, `Thermohaline1MStarExtras` (`D_ES`/`D_ST`/`nu_ST`
+#   arrays not yet publicly exposed on `StarModel`).
+# - `#156` (element diffusion electric/gravity fields): `WdDiffusionStarExtras`
+#   (`e_field`, `g_field_element_diffusion`).
+# - `#158` / `#159` (mutable `other_adjust_mdot` / rotation-distortion hooks):
+#   `AccretedMaterialJStarExtras` (`accreted_material_j` mutation inside
+#   `other_adjust_mdot`), `PpisnStarExtras` (`other_kap_get`,
+#   `other_eval_fp_ft`, `other_before_struct_burn_mix`, `#152`/`#159`/`#161`).
+# - `#161` (opacity/surface-PT/other-physics hooks): `ConductiveFlameStarExtras`
+#   (`other_surface_PT`, `#154`), `MsOpMonoStarExtras` (`op_mono` tables),
+#   `RadiativeLevitationStarExtras` (`set_op_mono_factors`),
+#   `OtherPhysicsHooksStarExtras` (`other_kap_get`, `other_eos_results`,
+#   `other_overshooting_scheme`, `#152`/`#153`/`#155`/`#161`).
+# - `#162` (pulse export & simplex calibration): `CheckPulseAtmStarExtras`
+#   (`star_export_pulse_data('FGONG')`, `atm_T_tau_opacity`, `#161`),
+#   `SimplexSolarCalibrationStarExtras` (`star_simplex_procs`, `#153`).
+# - `#163` / `#231` (extra profile/header hooks): `LowZStarExtras`
+#   (`extra_history_header_items`, `extra_profile_header_items`),
+#   `HighRotation20MZ2m2StarExtras` and `WdCool06MStarExtras` (only implement
+#   `extra_profile_columns`, which `StarExtras` does not yet wire).
+# - `#170` (bundled GYRE pulsation): `GyreInMesaStarExtras`.
+# - `#172` (CCSN/STELLA + per-cell `alpha_mlt`): `CcsnIIpStarExtras`
+#   (`#154`/`#155`/`#158`/`#172`).
+#
+# Attaching an unserved handler stops a run that otherwise takes steps, so
+# `resolve_case_extras` leaves it detached and the case stays `unported` (it
+# runs with default no-op hooks and never counts as a pass, `DECISIONS #32`).
 ADAPTER_SERVED_STAR_HANDLERS: frozenset[str] = frozenset(
     {
-        "CheckRedoStarExtras",
+        "AdjustNetStarExtras",
+        "C13PocketStarExtras",
+        "CburnInwardStarExtras",
         "CepheidBlueLoopStarExtras",
+        "CheckRedoStarExtras",
+        "ConserveAngularMomentumStarExtras",
+        "ConvCoreCpmStarExtras",
+        "DiffusionSmoothnessStarExtras",
+        "Hb2MStarExtras",
+        "HighRotDarkeningStarExtras",
+        "HotCoolWindStarExtras",
+        "HseRiemannStarExtras",
+        "MakeONeWdStarExtras",
+        "MakeSdbStarExtras",
+        "NeutronStarEnvStarExtras",
+        "PisnStarExtras",
         "RCrBStarExtras",
+        "SemiconvectionStarExtras",
+        "TTauGradrStarExtras",
+        "WdAccSmallDmStarExtras",
+        "WdAicStarExtras",
+        "WdNovaBurstStarExtras",
     }
 )
 
 # Binary handlers whose snapshot keys are supplied by `build_binary_snapshot`
-# (`crates/flexmesa-py/src/extras_py.rs`). Handlers outside this set are
-# matched by `match_case_extras` and left detached by `resolve_case_extras`
-# until their snapshot fields land (`DECISIONS #32`).
+# (`crates/flexmesa-py/src/extras_py.rs`). All 5 custom binary handlers in the
+# MESA 26.4.1 manifest are now adapter-served (`DECISIONS #32`).
 ADAPTER_SERVED_BINARY_HANDLERS: frozenset[str] = frozenset(
     {
         "DoubleBhBinaryExtras",
         "JdotGrCheckBinaryExtras",
+        "JdotLsCheckBinaryExtras",
         "JdotMlCheckBinaryExtras",
+        "WindFedBhHmxbBinaryExtras",
     }
 )
 

@@ -53,6 +53,7 @@ def plot_pgbinary_orbit(
     *,
     model_number: int | None = None,
     row_index: int = -1,
+    eccentricity: float | None = None,
     mesa_binary_history: pathlib.Path | str | None = None,
     show_roche_lobes: bool = True,
     show_stars: bool = True,
@@ -62,13 +63,18 @@ def plot_pgbinary_orbit(
     r"""Plot 2D binary orbital paths and Roche geometry (`pgbinary_orbit.f90`).
 
     Implements ``orbit_panel`` from ``binary/private/pgbinary_orbit.f90:63-296``
-    strictly from saved ``binary_history.data`` rows.
+    strictly from saved ``binary_history.data`` rows. When ``eccentricity`` is
+    omitted from ``binary_history_columns.list``, recovers exact Keplerian
+    eccentricity from ``J_orb``, ``star_1_mass``, ``star_2_mass``, and
+    ``binary_separation`` (`binary/private/binary_utils.f90:190-191`).
 
     Args:
         binary_history: Path to ``binary_history.data``.
         model_number: Optional ``model_number`` selecting the snapshot row.
         row_index: Row index used when ``model_number`` is ``None`` (default
             ``-1``, terminal model).
+        eccentricity: Optional explicit orbital eccentricity override in
+            ``[0, 1)``.
         mesa_binary_history: Optional MESA ``26.4.1`` ``binary_history.data``
             for dashed reference overlay.
         show_roche_lobes: Draw critical Roche-lobe equipotential contours.
@@ -80,15 +86,15 @@ def plot_pgbinary_orbit(
     Returns:
         Tuple ``(fig, ax)`` of ``Figure`` and equal-aspect ``Axes``.
     """
-    standalone = ax is None
-    fig, ax = style.init_ax(ax, "single", 0.95)
     run_tbl, _ = _plot_support.load_history_with_header(binary_history)
     r_idx = _roche_orbit.select_row_index(run_tbl, model_number, row_index)
-    run_state = _roche_orbit.extract_orbit_state(run_tbl, r_idx)
+    run_state = _roche_orbit.extract_orbit_state(
+        run_tbl, r_idx, eccentricity=eccentricity
+    )
 
     ref_tbl: history_compare.HistoryTable | None = None
     ref_hdr: dict[str, Any] | None = None
-    xmax = 0.6
+    ref_state: dict[str, float] | None = None
     if mesa_binary_history is not None:
         ref_tbl, ref_hdr = _plot_support.load_history_with_header(
             mesa_binary_history
@@ -99,7 +105,14 @@ def plot_pgbinary_orbit(
             else round(run_state["model_number"])
         )
         m_idx = _roche_orbit.select_row_index(ref_tbl, target_mod, row_index)
-        ref_state = _roche_orbit.extract_orbit_state(ref_tbl, m_idx)
+        ref_state = _roche_orbit.extract_orbit_state(
+            ref_tbl, m_idx, eccentricity=eccentricity
+        )
+
+    standalone = ax is None
+    fig, ax = style.init_ax(ax, "single", 0.95)
+    xmax = 0.6
+    if ref_state is not None:
         xmax = max(
             xmax,
             _roche_orbit.draw_orbit_geometry(

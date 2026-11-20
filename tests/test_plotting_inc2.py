@@ -310,12 +310,36 @@ def test_roche_l1_symmetry_and_pgbinary_orbit_geometry(
         ) == pytest.approx(1.0, abs=1.0e-12)
 
     raw_both = REF_DIR / "binary" / "evolve_both_stars.data"
-    # A history without eccentricity is an error, never a circular orbit.
+    # Default MESA binary_history.data omits 'eccentricity' but writes 'J_orb',
+    # allowing exact Keplerian eccentricity recovery (binary_utils.f90:190-191).
+    raw_tbl, _raw_hdr = _plot_support.load_history_with_header(raw_both)
+    raw_state = _roche_orbit.extract_orbit_state(raw_tbl, 0)
+    assert raw_state["ecc"] == 0.0
+    fig_raw, ax_raw = plotting.plot_pgbinary_orbit(raw_both)
+    try:
+        assert len(ax_raw.get_lines()) >= 2
+    finally:
+        plt.close(fig_raw)
+    assert not plt.get_fignums()
+
+    # A binary history missing BOTH eccentricity and J_orb must still raise.
+    no_ecc_no_j = _write_mesa_log(
+        tmp_path / "no_ecc_no_j.data",
+        {"version_number": '"r26.4.1"'},
+        {
+            "model_number": np.array([1.0, 2.0]),
+            "star_1_mass": np.array([1.0, 1.0]),
+            "star_2_mass": np.array([0.8, 0.8]),
+            "binary_separation": np.array([5.0, 5.0]),
+            "rl_1": np.array([2.0, 2.0]),
+            "rl_2": np.array([1.8, 1.8]),
+        },
+    )
     with pytest.raises(
         _roche_orbit.MissingOrbitColumnsError, match="eccentricity"
     ):
-        plotting.plot_pgbinary_orbit(raw_both)
-    plt.close("all")
+        plotting.plot_pgbinary_orbit(no_ecc_no_j)
+    assert not plt.get_fignums()
 
     ref_both = _with_eccentricity(raw_both, tmp_path / "both_ecc.data", 0.3)
     tbl, _hdr = _plot_support.load_history_with_header(ref_both)
@@ -387,9 +411,8 @@ def test_plot_pgbinary_panels_and_summary_history_with_component_hrs(
         # figure's agreement statement carries no information and is not
         # asserted.
         assert "MESA r26.4.1" in fig.get_suptitle()
-        orbit_text = " ".join(t.get_text() for t in axes[0, 0].texts)
-        assert "Orbit not drawn" in orbit_text
-        assert "eccentricity" in orbit_text
+        # Default MESA binary_history.data supplies J_orb -> Orbit panel draws.
+        assert len(axes[0, 0].get_lines()) >= 2
     finally:
         plt.close(fig)
 

@@ -599,3 +599,193 @@ fn test_sizeb_flailing_check_reproduces_upstream_260_never_fires() {
         "upstream #260 overwrites abs_max_corr1 before comparison so flailing never fires"
     );
 }
+
+#[test]
+fn test_rejected_trial_reverts_max_timestep_hi_t_limit_mutations() {
+    struct RejectOnceExtras {
+        calls: usize,
+        saw_second_try_max_timestep: f64,
+        saw_second_try_dt: f64,
+    }
+    impl StarExtras for RejectOnceExtras {
+        fn extras_check_model(
+            &mut self,
+            model: &mut StarModel,
+        ) -> ExtrasDirective {
+            self.calls += 1;
+            if self.calls == 1 {
+                // First trial crossed `max_timestep_hi_t_limit` and mutated both
+                // `max_years_for_timestep` and `ts_stop.max_timestep`; disable
+                // the trigger and request a Retry so `prepare_to_retry` runs.
+                assert!(
+                    (model.controls.max_years_for_timestep - 0.01).abs()
+                        < 1.0e-12
+                );
+                assert!(
+                    (model.controls.ts_stop.max_timestep - 0.01 * SECYER).abs()
+                        < 1.0e-6
+                );
+                model.controls.ts_stop.max_timestep_hi_t_limit = 1.0e30;
+                ExtrasDirective::Retry
+            } else {
+                self.saw_second_try_max_timestep =
+                    model.controls.ts_stop.max_timestep;
+                self.saw_second_try_dt = model.dt;
+                ExtrasDirective::KeepGoing
+            }
+        }
+    }
+
+    let mut model = load_zams_model(
+        StarControls {
+            initial_mass: 1.0,
+            zbase: 0.02,
+            ..StarControls::default()
+        },
+        StarJobControls::default(),
+    )
+    .expect("1.0 Msun ZAMS should load");
+    let orig_max_years = 1.0e6;
+    let orig_max_dt = 0.0;
+    model.controls.max_years_for_timestep = orig_max_years;
+    model.controls.ts_stop.max_timestep = orig_max_dt;
+    model.controls.ts_stop.max_timestep_hi_t_limit = 1.0e5;
+    model.controls.ts_stop.hi_t_max_years_for_timestep = 0.01;
+    model.controls.max_number_retries = 10;
+    model.dt_next = 10.0 * SECYER;
+
+    let mut extras = RejectOnceExtras {
+        calls: 0,
+        saw_second_try_max_timestep: -1.0,
+        saw_second_try_dt: -1.0,
+    };
+    let rep = star_evolve_step_with_extras(
+        &mut model,
+        false,
+        false,
+        true,
+        &mut extras,
+    )
+    .expect("retry step should succeed");
+    assert!(rep.converged);
+    assert_eq!(extras.calls, 2);
+    assert!(
+        (model.controls.max_years_for_timestep - orig_max_years).abs()
+            < 1.0e-12,
+        "max_years_for_timestep must revert after rejected hi_t trial"
+    );
+    assert!(
+        (extras.saw_second_try_max_timestep - orig_max_years * SECYER).abs()
+            < 1.0e-3,
+        "prepare_to_retry must compute ts_stop.max_timestep from restored max_years_for_timestep, got {}",
+        extras.saw_second_try_max_timestep
+    );
+    assert!(
+        extras.saw_second_try_dt > 0.05 * SECYER,
+        "retry dt must not be clamped to rejected hi_t_max_years_for_timestep (0.01 yr), got {} s",
+        extras.saw_second_try_dt
+    );
+}
+
+#[test]
+fn test_redo_trial_reverts_max_timestep_hi_t_limit_mutations() {
+    struct RedoOnceExtras {
+        calls: usize,
+        saw_second_try_max_timestep: f64,
+    }
+    impl StarExtras for RedoOnceExtras {
+        fn extras_check_model(
+            &mut self,
+            model: &mut StarModel,
+        ) -> ExtrasDirective {
+            self.calls += 1;
+            if self.calls == 1 {
+                assert!(
+                    (model.controls.ts_stop.max_timestep - 0.01 * SECYER).abs()
+                        < 1.0e-6
+                );
+                model.controls.ts_stop.max_timestep_hi_t_limit = 1.0e30;
+                ExtrasDirective::Redo
+            } else {
+                self.saw_second_try_max_timestep =
+                    model.controls.ts_stop.max_timestep;
+                ExtrasDirective::KeepGoing
+            }
+        }
+    }
+    let mut redo_model = load_zams_model(
+        StarControls {
+            initial_mass: 1.0,
+            zbase: 0.02,
+            ..StarControls::default()
+        },
+        StarJobControls::default(),
+    )
+    .expect("1.0 Msun ZAMS should load");
+    redo_model.controls.max_years_for_timestep = -1.0;
+    redo_model.controls.ts_stop.max_timestep = 0.0;
+    redo_model.controls.ts_stop.max_timestep_hi_t_limit = 1.0e5;
+    redo_model.controls.ts_stop.hi_t_max_years_for_timestep = 0.01;
+    let mut redo_extras = RedoOnceExtras {
+        calls: 0,
+        saw_second_try_max_timestep: -1.0,
+    };
+    let redo_rep = star_evolve_step_with_extras(
+        &mut redo_model,
+        false,
+        false,
+        true,
+        &mut redo_extras,
+    )
+    .expect("redo step should succeed");
+    assert!(redo_rep.converged);
+    assert_eq!(redo_extras.calls, 2);
+    assert_eq!(redo_extras.saw_second_try_max_timestep, 0.0);
+    assert_eq!(redo_model.controls.max_years_for_timestep, -1.0);
+    assert_eq!(redo_model.controls.ts_stop.max_timestep, 0.0);
+}
+
+#[test]
+fn test_relax_uniform_omega_restores_all_timestamps_and_hits_target_on_early_exit()
+ {
+    let mut model = load_zams_model(
+        StarControls {
+            initial_mass: 1.0,
+            zbase: 0.02,
+            ..StarControls::default()
+        },
+        StarJobControls::default(),
+    )
+    .expect("1.0 Msun ZAMS should load");
+    let target_omega = 1.0e-5;
+    // Start within 5e-5 relative of `target_omega` so `done` triggers on step 1
+    // even with `num_steps = 5`.
+    let start_omega = target_omega * (1.0 - 5.0e-5);
+    model.controls.rotation_flag = true;
+    model.controls.okay_to_remesh = false;
+    model.omega.fill(start_omega);
+    model.star_age = 1.0e8;
+    model.star_age_old = 9.999_9e7;
+    model.time_sec = model.star_age * SECYER;
+    model.time_old_sec = model.star_age_old * SECYER;
+    model.aux.step_hist.time_sec = model.time_sec;
+    model.aux.step_hist.time_old_sec = model.time_old_sec;
+
+    let saved_time_sec = model.time_sec;
+    let saved_time_old_sec = model.time_old_sec;
+
+    flexmesa_star::relax_uniform_omega(&mut model, target_omega, 5, 1.0e-3)
+        .expect("relax_uniform_omega should succeed");
+
+    assert_eq!(model.time_sec, saved_time_sec);
+    assert_eq!(model.time_old_sec, saved_time_old_sec);
+    assert_eq!(model.aux.step_hist.time_sec, saved_time_sec);
+    assert_eq!(model.aux.step_hist.time_old_sec, saved_time_old_sec);
+    assert!(
+        model
+            .omega
+            .iter()
+            .all(|&w| (w - target_omega).abs() <= 1.0e-18),
+        "early exit must apply exact target_omega rather than interpolated fraction"
+    );
+}

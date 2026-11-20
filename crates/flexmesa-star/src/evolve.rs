@@ -351,6 +351,7 @@ pub(crate) fn star_evolve_step_outcome_with_extras(
         using_revised_max_yr_dt: model.aux.step_hist.using_revised_max_yr_dt,
         revised_max_yr_dt: model.aux.step_hist.revised_max_yr_dt,
         max_years_for_timestep: model.controls.max_years_for_timestep,
+        max_timestep: model.controls.ts_stop.max_timestep,
     };
 
     // Clip `dt_next_in` against `max_age*` (`evolve.f90:1899-1915, 550-555`).
@@ -830,16 +831,6 @@ pub(crate) fn star_evolve_step_outcome_with_extras(
             });
         }
 
-        if model.controls.max_years_for_timestep > 0.0 {
-            model.controls.ts_stop.max_timestep =
-                SECYER * model.controls.max_years_for_timestep;
-        }
-        if model.controls.ts_stop.max_timestep > 0.0
-            && next_dt > model.controls.ts_stop.max_timestep
-        {
-            next_dt = model.controls.ts_stop.max_timestep;
-        }
-
         let restore_snap = if model.controls.mix_wind.restore_mesh_on_retry
             && !model.controls.rsp_flag
         {
@@ -850,6 +841,16 @@ pub(crate) fn star_evolve_step_outcome_with_extras(
         if restore_attempt_state(model, restore_snap, saved)? {
             num_splits = 0;
             num_merges = 0;
+        }
+
+        if model.controls.max_years_for_timestep > 0.0 {
+            model.controls.ts_stop.max_timestep =
+                SECYER * model.controls.max_years_for_timestep;
+        }
+        if model.controls.ts_stop.max_timestep > 0.0
+            && next_dt > model.controls.ts_stop.max_timestep
+        {
+            next_dt = model.controls.ts_stop.max_timestep;
         }
 
         model.num_retries += 1;
@@ -983,6 +984,7 @@ struct PreAttemptScalars {
     using_revised_max_yr_dt: bool,
     revised_max_yr_dt: f64,
     max_years_for_timestep: f64,
+    max_timestep: f64,
 }
 
 fn sync_time_sec_from_age(model: &mut StarModel) {
@@ -1043,6 +1045,7 @@ fn restore_attempt_state(
     model.aux.step_hist.using_revised_max_yr_dt = saved.using_revised_max_yr_dt;
     model.aux.step_hist.revised_max_yr_dt = saved.revised_max_yr_dt;
     model.controls.max_years_for_timestep = saved.max_years_for_timestep;
+    model.controls.ts_stop.max_timestep = saved.max_timestep;
     Ok(restored_remesh)
 }
 

@@ -68,7 +68,6 @@ fn model_scalar_copy_to_buf(dst: &mut PrimaryStateBuffer, src: &StarModel) {
             l_center_old,
             v_center,
             v_center_old,
-            bad_max_corr_cnt,
             tau_base,
             teff
         ]
@@ -105,7 +104,6 @@ fn model_scalar_copy_from_buf(dst: &mut StarModel, src: &PrimaryStateBuffer) {
             l_center_old,
             v_center,
             v_center_old,
-            bad_max_corr_cnt,
             tau_base,
             teff
         ]
@@ -348,7 +346,6 @@ pub struct PrimaryStateBuffer {
     pub(crate) l_center_old: f64,
     pub(crate) v_center: f64,
     pub(crate) v_center_old: f64,
-    pub(crate) bad_max_corr_cnt: usize,
     pub(crate) tau_base: f64,
     pub(crate) teff: f64,
 
@@ -495,7 +492,6 @@ macro_rules! make_empty_buf {
             extra_grav_if_nonzero: None,
             model_number: 0,
             init_model_number: 0,
-            bad_max_corr_cnt: 0,
             solver_mlt_eval_count: 0,
             k_const_mass: 0,
             $( $v: Vec::new(), )+
@@ -912,14 +908,7 @@ impl PrimaryStateBuffer {
             ]
         );
         let a = &mut model.aux;
-        copy_scalars!(
-            a,
-            self,
-            [
-                doing_struct_burn_mix,
-                solver_mlt_eval_count
-            ]
-        );
+        copy_scalars!(a, self, [doing_struct_burn_mix, solver_mlt_eval_count]);
         self.mixing.restore_post_hydro(&mut a.mixing);
         clone_vecs!(
             a,

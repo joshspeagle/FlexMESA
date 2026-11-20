@@ -10,6 +10,7 @@ use flexmesa_const::MixingType;
 use flexmesa_turb::MltOption;
 
 use crate::controls::{EnergyEqnOption, StarError};
+use crate::conv_premix::do_conv_premix;
 use crate::diffusion::{DiffusionScheme, do_element_diffusion};
 use crate::hydro_energy::{
     setup_d_turbulent_energy_dt, setup_dl_dm, setup_sources_and_others,
@@ -21,7 +22,6 @@ use crate::hydro_work::{
 };
 use crate::mesh_adjust::{MeshFunctionConfig, do_adjust_mesh};
 use crate::model::StarModel;
-use crate::conv_premix::do_conv_premix;
 use crate::premix::do_phase_separation;
 use crate::primary_state::PrimaryStateBuffer;
 use crate::riemann_ad::eval_u_flag_total_energy_rates_ad;
@@ -501,6 +501,10 @@ pub(crate) fn relax_pre_ms_to_radiative_core(
     (
         model.star_age,
         model.star_age_old,
+        model.time_sec,
+        model.time_old_sec,
+        model.aux.step_hist.time_sec,
+        model.aux.step_hist.time_old_sec,
         model.model_number,
         model.num_retries,
         model.num_redos,
@@ -508,11 +512,13 @@ pub(crate) fn relax_pre_ms_to_radiative_core(
         model.total_num_solver_calls,
         model.micro_cache_hits,
         model.micro_cache_misses,
-    ) = (0.0, 0.0, 1, 0, 0, 0, 0, 0, 0);
+    ) = (0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1, 0, 0, 0, 0, 0, 0);
     model.aux.cumulative_energy_error = 0.0;
     set_hydro_vars(model, false, false)?;
     model.save_start_values()?;
+    snapshot_step_start_extras(model);
     model.save_old_values();
+    snapshot_step_old_extras(model);
     Ok(())
 }
 
@@ -546,6 +552,9 @@ pub fn relax_uniform_omega(
     let saved_age = model.star_age;
     let saved_age_old = model.star_age_old;
     let saved_time_sec = model.time_sec;
+    let saved_time_old_sec = model.time_old_sec;
+    let saved_hist_time_sec = model.aux.step_hist.time_sec;
+    let saved_hist_time_old_sec = model.aux.step_hist.time_old_sec;
     let saved_model_number = model.model_number;
     let saved_num_retries = model.num_retries;
     let saved_num_redos = model.num_redos;
@@ -606,12 +615,15 @@ pub fn relax_uniform_omega(
             break;
         }
         let frac = ((step_idx as f64) / (num_steps as f64)).clamp(0.0, 1.0);
-        let this_step_omega =
-            frac * target_omega + (1.0 - frac) * starting_omega;
         let cur_omega = model.omega.first().copied().unwrap_or(0.0);
         let done = step_idx > num_steps + 50
             || (cur_omega - target_omega).abs()
                 < 1.0e-4 * target_omega.abs().max(1.0e-10);
+        let this_step_omega = if done {
+            target_omega
+        } else {
+            frac * target_omega + (1.0 - frac) * starting_omega
+        };
         crate::relax::apply_uniform_rotation(model, this_step_omega);
         crate::rotation::update_rotation_distortion_factors(model);
         if done {
@@ -625,6 +637,9 @@ pub fn relax_uniform_omega(
     model.star_age = saved_age;
     model.star_age_old = saved_age_old;
     model.time_sec = saved_time_sec;
+    model.time_old_sec = saved_time_old_sec;
+    model.aux.step_hist.time_sec = saved_hist_time_sec;
+    model.aux.step_hist.time_old_sec = saved_hist_time_old_sec;
     model.model_number = saved_model_number;
     model.num_retries = saved_num_retries;
     model.num_redos = saved_num_redos;
@@ -642,6 +657,13 @@ pub fn relax_uniform_omega(
     step_err?;
     set_hydro_vars(model, false, false)?;
     model.save_start_values()?;
+    snapshot_step_start_extras(model);
     model.save_old_values();
+    snapshot_step_old_extras(model);
+    // Restore pre-relaxation `*_old` timestamps after `save_old_values`
+    // (`restore_stuff` in `star/private/relax.f90:4280-4281`).
+    model.star_age_old = saved_age_old;
+    model.time_old_sec = saved_time_old_sec;
+    model.aux.step_hist.time_old_sec = saved_hist_time_old_sec;
     Ok(())
 }

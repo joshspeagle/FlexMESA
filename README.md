@@ -32,7 +32,7 @@ Progress is measured by **upstream MESA `26.4.1` source lines by status**, never
 
 | Module | Upstream LOC | Absent | Stub | Partial | Ported (unverified) | Kernel ref. vectors | Case-level evidence | Rust LOC | Python/JAX LOC | % Ported | % Verified |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| `star` | 120,509 | 18,480 | 12,956 | 53,007 | 36,066 | 0 | 0 | 74,476 | 3,869 | 29.9% | 0.0% |
+| `star` | 120,509 | 18,480 | 12,956 | 53,007 | 36,066 | 0 | 0 | 74,487 | 3,869 | 29.9% | 0.0% |
 | `star_data` | 4,870 | 34 | 0 | 4,836 | 0 | 0 | 0 | 0 | 0 | 0.0% | 0.0% |
 | `binary` | 11,638 | 2,885 | 0 | 6,572 | 2,181 | 0 | 0 | 11,772 | 1,244 | 18.7% | 0.0% |
 | `astero` | 7,935 | 2,185 | 0 | 5,750 | 0 | 0 | 0 | 5,764 | 1,288 | 0.0% | 0.0% |
@@ -58,8 +58,8 @@ Progress is measured by **upstream MESA `26.4.1` source lines by status**, never
 | `adipls` | 30,923 | 30,923 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0.0% | 0.0% |
 | `stella` | 62,117 | 62,117 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0.0% | 0.0% |
 | `plotting` | 35,732 | 35,732 | 0 | 0 | 0 | 0 | 0 | 0 | 12,095 | 0.0% | 0.0% |
-| **Subtotal: star + star_data + binary + astero** | 144,952 | 23,584 | 12,956 | 70,165 | 38,247 | 0 | 0 | 92,012 | 6,401 | 26.4% | 0.0% |
-| **Total (all 26 modules)** | 497,703 | 248,609 | 12,956 | 194,331 | 41,807 | 0 | 0 | 162,140 | 57,094 | 8.4% | 0.0% |
+| **Subtotal: star + star_data + binary + astero** | 144,952 | 23,584 | 12,956 | 70,165 | 38,247 | 0 | 0 | 92,023 | 6,401 | 26.4% | 0.0% |
+| **Total (all 26 modules)** | 497,703 | 248,609 | 12,956 | 194,331 | 41,807 | 0 | 0 | 162,151 | 57,094 | 8.4% | 0.0% |
 
 *Notes*: `star_data` state structs reside in `crates/flexmesa-star`. Bridge, testing, and benchmark infrastructure account for an additional `19,270` Rust lines (`flexmesa-py`, `flexmesa-testing`, `flexmesa-bench`) and `14,207` Python lines (`flexmesa.testing`, `flexmesa.bench`). For plotting ([#173](https://github.com/joshspeagle/FlexMESA/issues/173)), `flexmesa.plotting` currently provides `34` `plot_*` builders against `46` upstream `pgstar`/`pgbinary` panel modules.
 

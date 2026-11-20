@@ -100,8 +100,6 @@ pub struct StarModel {
     pub v_center: f64,
     /// Previous-step inner boundary core velocity in $\mathrm{cm\,s^{-1}}$ (`v_center_old`).
     pub v_center_old: f64,
-    /// Consecutive steps accepted via `tol_bad_max_correction` (`bad_max_corr_cnt`).
-    pub bad_max_corr_cnt: usize,
     /// 1-based zone index below newly accreted material (`k_below_just_added`, `1` when none).
     pub k_below_just_added: usize,
     /// Reference surface entropy $\ln s_0$ for accretion revision checks (`surf_lnS`).
@@ -192,7 +190,7 @@ pub struct StarModel {
     /// Start-of-step total nuclear energy rate $\epsilon_{\mathrm{nuc}}$ (`eps_nuc_start`, intra-step).
     #[serde(skip)]
     pub eps_nuc_start: Vec<f64>,
-    /// Start-of-step integrated nuclear luminosity by category in $L_\odot$ (`luminosity_by_category_start`, intra-step).
+    /// Start-of-step integrated nuclear luminosity by category in $\mathrm{erg\,s^{-1}}$ (`luminosity_by_category_start`, intra-step).
     #[serde(skip)]
     pub lum_by_category_start: Vec<[f64; flexmesa_chem::NUM_CATEGORIES]>,
     /// Start-of-step species mass fractions (`xa_start`).
@@ -491,7 +489,6 @@ impl StarModel {
             l_center_old: 0.0,
             v_center: 0.0,
             v_center_old: 0.0,
-            bad_max_corr_cnt: 0,
             k_below_just_added: 1,
             surf_lns: 0.0,
             num_surf_revisions: 0,

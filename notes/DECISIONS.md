@@ -58,6 +58,7 @@ Scope and the `v0.1.0` definition are in [`SCOPE.md`](SCOPE.md). Work is tracked
 | 41 | Upstream MESA 26.4.1 Element Diffusion, Blouin CO/ONe Phase Separation, Loud `op_mono` Rejection, and Deferred-Bug Guards (`#156`, `#271`, `#272`, `#273`) | In force | below |
 | 42 | Unconditional MESA 26.4.1 Newton Solver, Retry/Redo Semantics, and Deferred Upstream Bugs (`#152`, `#139`, `#177`, `#251`-`#253`, `#260`) | In force | below |
 | 43 | Undefined Upstream Reads Become Loud Errors; Rust-versus-JAX Comparisons Are Tracked Expected Failures While JAX Is Frozen (`#169`, `#295`) | In force | below |
+| 45 | Sharded CI Jobs, a Non-LTO `ci` Test Profile, and Coverage Off Ordinary Pull Requests | In force | below |
 
 ## Pre-audit decisions still in force
 
@@ -574,3 +575,21 @@ The text of these four entries predates the audit of 2026-11-16. The decisions s
   - *Substituting zero or the nearest valid element for an undefined read*: The run continues with a value upstream does not define.
   - *Reproducing what the reference build happens to read*: Depends on the compiler, the allocator and the run.
   - *Loosening Rust-versus-JAX bounds, or editing the frozen JAX code to follow each Rust change*: The first hides the difference; the second is the work `#166` defers.
+
+---
+
+## DECISIONS #45: Sharded CI Jobs, a Non-LTO `ci` Test Profile, and Coverage Off Ordinary Pull Requests
+
+- **Date**: 2026-11-20
+- **Decision**:
+  1. **Rust tests in four shards under `--profile ci`**: `ci.yml` runs `cargo test` as four parallel jobs by package (`flexmesa-star`, `flexmesa-astero`, `flexmesa-binary`, and the rest of the workspace), with Clippy and rustdoc in their own job. The shards build with a new `[profile.ci]` in `Cargo.toml`, which is `release` without link-time optimisation. Measured on one run before the change: 11 minutes building and 21 minutes running in a single 34-minute job, with three packages accounting for 19 of the 21.
+  2. **Python tests in three shards**: `scripts/ci/pytest_shard.py` assigns every collected test file to exactly one shard, balanced by the wall times in `scripts/ci/pytest_durations.json`; `tests/test_ci_shards.py` checks that the shards partition the files. A file missing from the table is still run.
+  3. **Harness job split in two**: the harness unit suite and the uncapped trajectory subset run as separate jobs.
+  4. **Aggregate jobs keep the old names**: `Safe Rust Workspace & Golden Oracles` and `Python, PyO3 & JAX Parity Suite` remain as jobs that pass only when all their shards pass.
+  5. **Coverage only when the dashboard machinery changes**: the pull-request path filter in `dashboard.yml` no longer lists `benchmarks/dashboard/**`. Every pull request regenerates `dashboard.json`, so that entry ran both coverage jobs (about 85 minutes of instrumented tests) on every pull request, although their results are used only on `main`. This restores what `DECISIONS #24` chose.
+- **Why**: Continuous-integration time is the main delay in each change. The same tests run; only how they are grouped and linked changes.
+- **Limits**: Tests no longer run under fat link-time optimisation. The jobs that install the Python extension with the release profile (history harness, strict determinism on two architectures) still exercise that build. `scripts/verify_ci.sh` and the documented local command keep `--release`.
+- **Alternatives Rejected**:
+  - *`cargo nextest` with a build archive*: runs each test in its own process, which repeats table loading that tests in one binary now share; not measured, so not adopted.
+  - *`pytest-xdist`*: tests already use four threads each, and shared on-disk caches make in-job parallelism a correctness risk.
+  - *Dropping or shortening slow tests*: a separate change, one test at a time, with its own evidence.

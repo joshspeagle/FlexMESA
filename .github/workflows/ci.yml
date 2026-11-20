@@ -25,8 +25,8 @@ env:
   FLEXMESA_REQUIRE_ZERO_SKIPS: "1"
 
 jobs:
-  rust:
-    name: Safe Rust Workspace & Golden Oracles
+  rust-lint:
+    name: Rust Clippy & rustdoc
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -44,15 +44,65 @@ jobs:
           cargo clippy --workspace --all-targets -- -D warnings
           RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps --exclude flexmesa-py
 
-      - name: Run Safe Rust unit, integration, and doc tests
-        run: |
-          cargo test --workspace --exclude flexmesa-py --release
-          cargo test --workspace --exclude flexmesa-py --doc
+  # The Rust tests run as four shards by package. Together the shards cover
+  # exactly `--workspace --exclude flexmesa-py`: three name one package each
+  # and `rest` excludes those three. They build with `--profile ci`
+  # (`Cargo.toml`): the release profile without link-time optimisation.
+  rust-tests:
+    name: Safe Rust Tests (${{ matrix.shard }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - shard: star
+            packages: "-p flexmesa-star"
+          - shard: astero
+            packages: "-p flexmesa-astero"
+          - shard: binary
+            packages: "-p flexmesa-binary"
+          - shard: rest
+            packages: >-
+              --workspace --exclude flexmesa-py --exclude flexmesa-star
+              --exclude flexmesa-astero --exclude flexmesa-binary
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-  python-jax:
-    name: Python, PyO3 & JAX Parity Suite
+      - name: Set up Rust toolchain and verified data bundles
+        uses: ./.github/actions/setup-flexmesa
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          install-python-pkg: "false"
+          rust-cache-key: ci-tests-${{ matrix.shard }}
+
+      - name: Run Safe Rust unit, integration, and doc tests (${{ matrix.shard }})
+        run: cargo test ${{ matrix.packages }} --profile ci
+
+  rust:
+    name: Safe Rust Workspace & Golden Oracles
+    if: always()
+    needs: [rust-lint, rust-tests]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require Clippy, rustdoc and every Rust test shard to pass
+        run: |
+          test "${{ needs.rust-lint.result }}" = "success"
+          test "${{ needs.rust-tests.result }}" = "success"
+
+  # The Python suite runs as three shards. `scripts/ci/pytest_shard.py`
+  # assigns every collected test file to exactly one shard
+  # (`tests/test_ci_shards.py` checks this).
+  python-jax-tests:
+    name: Python, PyO3 & JAX Tests (shard ${{ matrix.shard }}/3)
     runs-on: ubuntu-latest
     timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -65,14 +115,19 @@ jobs:
           release: "false"
           cache-jax: "true"
 
-      - name: Run Python, PyO3, and JAX parity tests
+      - name: Run Python, PyO3, and JAX parity tests (shard ${{ matrix.shard }}/3)
         run: |
-          pytest src tests \
-            --ignore=tests/test_docs_snippets.py \
-            --ignore=tests/test_mesa_paper_figures.py \
-            --ignore=tests/test_history_harness.py \
-            --ignore-glob="tests/test_e2e_*.py" \
-            -v
+          pytest $(python scripts/ci/pytest_shard.py --index ${{ matrix.shard }} --total 3) -v --durations=15
+
+  python-jax:
+    name: Python, PyO3 & JAX Parity Suite
+    if: always()
+    needs: python-jax-tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require every Python shard to pass
+        run: test "${{ needs.python-jax-tests.result }}" = "success"
 
   e2e:
     name: Upstream MESA End-to-End Suites
@@ -172,8 +227,8 @@ jobs:
           mkdocs build --strict --site-dir site
           pytest tests/test_docs_snippets.py tests/test_mesa_paper_figures.py tests/test_dashboard.py -v
 
-  history-harness:
-    name: Upstream History Harness (PR Subset)
+  history-harness-unit:
+    name: History Harness Unit Suite
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -189,7 +244,22 @@ jobs:
 
       - name: Run harness unit suite and verify generated case table
         run: |
-          pytest tests/test_history_harness.py -v
+          pytest tests/test_history_harness.py -v --durations=15
+
+  history-harness:
+    name: Upstream History Harness (PR Subset)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up FlexMESA (release)
+        uses: ./.github/actions/setup-flexmesa
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          pip-spec: '-e ".[test]"'
+          release: "true"
 
       - name: Run PR uncapped trajectory subset
         run: |

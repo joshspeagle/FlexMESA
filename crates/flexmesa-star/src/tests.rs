@@ -315,7 +315,8 @@ fn test_convective_boundaries_overshoot_diffusion_and_winds_conserve_mass() {
     assert_eq!(boundaries.len(), 5);
 
     let ov_cfg = OvershootConfig::default();
-    apply_overshooting(&mut model, &boundaries, &[ov_cfg]);
+    apply_overshooting(&mut model, &boundaries, &[ov_cfg])
+        .expect("apply_overshooting");
     let n_ov = model
         .mixing_type
         .iter()

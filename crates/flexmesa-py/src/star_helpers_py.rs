@@ -229,15 +229,16 @@ impl PyStarModel {
         overshoot_f: f64,
         overshoot_f0: f64,
         scheme: &str,
-    ) -> usize {
+    ) -> PyResult<usize> {
         clean_mixing_glitches(&mut self.inner, 1.0, 0.1);
         let (_cz_dq, bdy) = locate_convection_boundaries(&self.inner);
         let cfgs = build_overshoot_configs(overshoot_f, overshoot_f0, scheme);
         if !cfgs.is_empty() {
-            apply_overshooting(&mut self.inner, &bdy, &cfgs);
+            apply_overshooting(&mut self.inner, &bdy, &cfgs)
+                .map_err(to_py_err)?;
         }
         compute_convection_sigmas(&mut self.inner, dt, 1.0, 1.0e10);
-        bdy.len()
+        Ok(bdy.len())
     }
 
     /// Helper for `PyStarModel::run_omega_mix`.

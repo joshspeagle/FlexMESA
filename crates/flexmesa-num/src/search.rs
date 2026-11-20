@@ -166,7 +166,28 @@ pub fn find0(x1: f64, y1: f64, x2: f64, y2: f64) -> Result<f64, NumError> {
             "y1 and y2 must bracket zero in find0",
         ));
     }
-    Ok(x1 - y1 * (x2 - x1) / (y2 - y1))
+    // Verbatim `num/public/num_lib.f90:521-533`.
+    let a = (x1 * y2) - (x2 * y1);
+    let b = y2 - y1;
+    let mut x = if (a.abs() >= b.abs() * 1.0e99
+        && ((y1 >= 0.0 && y2 <= 0.0) || (y1 <= 0.0 && y2 >= 0.0)))
+        || b == 0.0
+    {
+        f64::midpoint(x1, x2)
+    } else {
+        a / b
+    };
+    if y1 * y2 <= 0.0 {
+        let hi = x1.max(x2);
+        let lo = x1.min(x2);
+        if x > hi {
+            x = hi;
+        }
+        if x < lo {
+            x = lo;
+        }
+    }
+    Ok(x)
 }
 
 /// Finds the root of the quadratic polynomial passing through $(x_1, y_1)$,

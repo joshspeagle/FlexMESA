@@ -769,8 +769,8 @@
     "rust": {
       "tool": "cargo llvm-cov",
       "overall": {
-        "lines": 112046,
-        "covered": 83758,
+        "lines": 112078,
+        "covered": 83788,
         "percent": 74.8
       },
       "by_crate": [
@@ -908,8 +908,8 @@
         },
         {
           "crate": "flexmesa-star",
-          "lines": 52433,
-          "covered": 39106,
+          "lines": 52465,
+          "covered": 39136,
           "percent": 74.6
         },
         {
@@ -1433,18 +1433,7 @@
         "issues": []
       }
     ],
-    "open_pull_requests": [
-      {
-        "number": 259,
-        "title": "feat(star): port MESA 26.4.1 Newton solver, retry/redo semantics, and timestep checks (#152)",
-        "draft": false
-      },
-      {
-        "number": 284,
-        "title": "fix(star): follow upstream's do_eos_for_cell in the constant-Pgas density solve (#155, #156)",
-        "draft": false
-      }
-    ],
+    "open_pull_requests": [],
     "deferred_169": [
       {
         "number": 175,
@@ -1467,7 +1456,7 @@
         "title": "[Deferred bug] Step control: `check_dX` species test always true; `sizequ` double-counts chemistry residuals",
         "state": "open",
         "kind": "upstream-bug",
-        "parity_pending": true,
+        "parity_pending": false,
         "needs_confirmation": false
       },
       {
@@ -1651,7 +1640,7 @@
         "title": "[Deferred bug] sizeB accumulates sum_xa_corr across zones and adds qualifying species a second time",
         "state": "open",
         "kind": "upstream-bug",
-        "parity_pending": true,
+        "parity_pending": false,
         "needs_confirmation": false
       },
       {
@@ -1667,7 +1656,7 @@
         "title": "[Deferred bug] check_dX indexes dX_decreases_only by species slot j instead of dX_limit_species slot i",
         "state": "open",
         "kind": "upstream-bug",
-        "parity_pending": true,
+        "parity_pending": false,
         "needs_confirmation": false
       },
       {
@@ -2216,6 +2205,19 @@
       "commit": "9ca6e68",
       "event": "main merge",
       "engine_ported_pct": "26.1",
+      "all_verified_pct": "1.0",
+      "cases_passing": "0",
+      "rust_cov_pct": "74.8",
+      "python_cov_pct": "87.8",
+      "closed_140": "15",
+      "total_140": "34",
+      "deferred_169": "40"
+    },
+    {
+      "date_utc": "2026-11-20",
+      "commit": "486c9d6",
+      "event": "main merge",
+      "engine_ported_pct": "30.2",
       "all_verified_pct": "1.0",
       "cases_passing": "0",
       "rust_cov_pct": "74.8",

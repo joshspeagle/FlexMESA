@@ -435,13 +435,8 @@ fn close_gaps(model: &mut StarModel, mix_type: MixingType, min_gap: f64) {
         } else if model.mixing_type[k] == mix_type {
             let ktop = k;
             let rtop = model.r[ktop];
-            let grav_k = if model.grav[ktop] > 0.0 {
-                model.grav[ktop]
-            } else {
-                model.cgrav[ktop] * model.m_grav[ktop]
-                    / (model.r[ktop] * model.r[ktop]).max(1.0)
-            };
-            let hp = model.peos[ktop] / (model.rho[ktop] * grav_k);
+            let hp =
+                model.peos[ktop] / (model.rho[ktop] * model.grav[ktop]);
             if rtop - rbot < hp * min_gap {
                 if kbot < nz - 1 {
                     let cdc_avg = (model.aux.mixing.cdc[ktop]
@@ -506,13 +501,8 @@ fn remove_thermohaline_dropouts(
             } else {
                 let ktop = k + 1;
                 let rtop = model.r[ktop];
-                let grav_k = if model.grav[ktop] > 0.0 {
-                    model.grav[ktop]
-                } else {
-                    model.cgrav[ktop] * model.m_grav[ktop]
-                        / (model.r[ktop] * model.r[ktop]).max(1.0)
-                };
-                let hp = model.peos[ktop] / (model.rho[ktop] * grav_k);
+                let hp = model.peos[ktop]
+                    / (model.rho[ktop] * model.grav[ktop]);
                 let q_upper = model.q[ktop - 1];
                 let q_lower = model.q[kbot + 1];
                 if rtop - rbot < hp * min_dropout_hp

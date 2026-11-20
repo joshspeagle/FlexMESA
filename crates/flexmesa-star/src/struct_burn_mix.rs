@@ -407,7 +407,7 @@ pub(crate) fn refresh_mixing_state(
         dt,
         eff_mix_factor,
         model.controls.sig_term_limit,
-    );
+    )?;
     if model.controls.rti_flag
         && model.controls.do_mix
         && model.controls.mix_factor > 0.0

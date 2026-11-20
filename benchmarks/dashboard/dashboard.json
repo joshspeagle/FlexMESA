@@ -21,7 +21,7 @@
         "verified_total": 0,
         "pct_ported": 25.0,
         "pct_verified": 0.0,
-        "rust_lines": 71224,
+        "rust_lines": 71218,
         "python_jax_lines": 3869
       },
       {
@@ -455,7 +455,7 @@
       "upstream_panel_modules": 46
     },
     "infrastructure_lines": {
-      "rust_bridge_testing_bench": 19257,
+      "rust_bridge_testing_bench": 19258,
       "python_testing_bench": 14202
     }
   },
@@ -771,15 +771,15 @@
     "rust": {
       "tool": "cargo llvm-cov",
       "overall": {
-        "lines": 95354,
-        "covered": 69937,
-        "percent": 73.3
+        "lines": 106376,
+        "covered": 78739,
+        "percent": 74.0
       },
       "by_crate": [
         {
           "crate": "flexmesa-astero",
-          "lines": 4046,
-          "covered": 1456,
+          "lines": 4047,
+          "covered": 1457,
           "percent": 36.0
         },
         {
@@ -802,15 +802,15 @@
         },
         {
           "crate": "flexmesa-binary",
-          "lines": 7925,
-          "covered": 5225,
-          "percent": 65.9
+          "lines": 7923,
+          "covered": 5234,
+          "percent": 66.1
         },
         {
           "crate": "flexmesa-chem",
           "lines": 908,
-          "covered": 632,
-          "percent": 69.6
+          "covered": 633,
+          "percent": 69.7
         },
         {
           "crate": "flexmesa-colors",
@@ -838,9 +838,9 @@
         },
         {
           "crate": "flexmesa-eos",
-          "lines": 9724,
-          "covered": 7717,
-          "percent": 79.4
+          "lines": 9771,
+          "covered": 7704,
+          "percent": 78.8
         },
         {
           "crate": "flexmesa-interp1d",
@@ -862,9 +862,9 @@
         },
         {
           "crate": "flexmesa-kap",
-          "lines": 3402,
-          "covered": 2239,
-          "percent": 65.8
+          "lines": 3482,
+          "covered": 2343,
+          "percent": 67.3
         },
         {
           "crate": "flexmesa-math",
@@ -880,9 +880,9 @@
         },
         {
           "crate": "flexmesa-net",
-          "lines": 7667,
-          "covered": 6655,
-          "percent": 86.8
+          "lines": 7690,
+          "covered": 6722,
+          "percent": 87.4
         },
         {
           "crate": "flexmesa-neu",
@@ -892,15 +892,15 @@
         },
         {
           "crate": "flexmesa-num",
-          "lines": 2860,
-          "covered": 2452,
+          "lines": 2877,
+          "covered": 2467,
           "percent": 85.7
         },
         {
           "crate": "flexmesa-rates",
           "lines": 2292,
-          "covered": 2084,
-          "percent": 90.9
+          "covered": 2098,
+          "percent": 91.5
         },
         {
           "crate": "flexmesa-schema",
@@ -910,9 +910,9 @@
         },
         {
           "crate": "flexmesa-star",
-          "lines": 36104,
-          "covered": 26346,
-          "percent": 73.0
+          "lines": 46960,
+          "covered": 34963,
+          "percent": 74.5
         },
         {
           "crate": "flexmesa-testing",
@@ -923,23 +923,23 @@
         {
           "crate": "flexmesa-turb",
           "lines": 1093,
-          "covered": 903,
-          "percent": 82.6
+          "covered": 900,
+          "percent": 82.3
         },
         {
           "crate": "flexmesa-utils",
           "lines": 1200,
-          "covered": 802,
-          "percent": 66.8
+          "covered": 792,
+          "percent": 66.0
         }
       ]
     },
     "python": {
       "tool": "pytest --cov",
       "overall": {
-        "statements": 23744,
-        "covered": 20925,
-        "percent": 88.1
+        "statements": 25530,
+        "covered": 22410,
+        "percent": 87.8
       },
       "by_subpackage": [
         {
@@ -968,8 +968,8 @@
         },
         {
           "subpackage": "flexmesa.bench",
-          "statements": 1370,
-          "covered": 1365,
+          "statements": 1375,
+          "covered": 1370,
           "percent": 99.6
         },
         {
@@ -1004,8 +1004,8 @@
         },
         {
           "subpackage": "flexmesa.eos",
-          "statements": 3506,
-          "covered": 3341,
+          "statements": 3510,
+          "covered": 3345,
           "percent": 95.3
         },
         {
@@ -1028,9 +1028,9 @@
         },
         {
           "subpackage": "flexmesa.kap",
-          "statements": 1413,
-          "covered": 1363,
-          "percent": 96.5
+          "statements": 1469,
+          "covered": 1409,
+          "percent": 95.9
         },
         {
           "subpackage": "flexmesa.math",
@@ -1064,9 +1064,9 @@
         },
         {
           "subpackage": "flexmesa.plotting",
-          "statements": 2516,
-          "covered": 2282,
-          "percent": 90.7
+          "statements": 4235,
+          "covered": 3708,
+          "percent": 87.6
         },
         {
           "subpackage": "flexmesa.rates",
@@ -1083,13 +1083,13 @@
         {
           "subpackage": "flexmesa.star",
           "statements": 1303,
-          "covered": 1262,
-          "percent": 96.9
+          "covered": 1265,
+          "percent": 97.1
         },
         {
           "subpackage": "flexmesa.testing",
-          "statements": 3638,
-          "covered": 2878,
+          "statements": 3640,
+          "covered": 2879,
           "percent": 79.1
         },
         {
@@ -1282,8 +1282,8 @@
       },
       {
         "phase": "Phase B",
-        "open": 2,
-        "closed": 3,
+        "open": 1,
+        "closed": 4,
         "issues": [
           {
             "number": 147,
@@ -1298,7 +1298,7 @@
           {
             "number": 149,
             "title": "[Audit B3] Defaults parity with upstream `*.defaults`",
-            "state": "open"
+            "state": "closed"
           },
           {
             "number": 150,
@@ -1447,29 +1447,19 @@
         "draft": false
       },
       {
-        "number": 256,
-        "title": "Wire &eos/&kap controls, dynamic opacity bounds, #176 HELM-edge blend, and star microphysics (#161)",
-        "draft": false
-      },
-      {
         "number": 259,
         "title": "feat(star): port MESA 26.4.1 Newton solver, retry/redo semantics, and timestep checks (#152)",
         "draft": true
       },
       {
-        "number": 261,
-        "title": "Resolve #149 reopen audit findings: denominator reporting, from_mod_str zbase, and baseline movement causes",
+        "number": 275,
+        "title": "[Audit C5] Port MESA 26.4.1 element diffusion and phase separation (#156)",
         "draft": false
       },
       {
-        "number": 262,
-        "title": "Port MESA 26.4.1 convective boundaries, mixing, overshoot, predictive mixing, and convective premixing",
-        "draft": true
-      },
-      {
-        "number": 269,
-        "title": "feat(star,binary): align winds, mass adjustment, and stop conditions with MESA 26.4.1 (#159)",
-        "draft": true
+        "number": 280,
+        "title": "fix(star): follow upstream in conv_premix penetration velocities; refresh four stale baseline rows; pin a vacuous mixing test (#155)",
+        "draft": false
       }
     ],
     "deferred_169": [
@@ -1486,7 +1476,7 @@
         "title": "[Deferred bug] HELM-edge EOS blend derivative arguments are swapped",
         "state": "open",
         "kind": "upstream-bug",
-        "parity_pending": true,
+        "parity_pending": false,
         "needs_confirmation": false
       },
       {
@@ -1710,7 +1700,7 @@
         "title": "[Deferred bug] do_adjust_mass omits new_xmstar update when clamping min_star_mass_for_loss or max_star_mass_for_gain",
         "state": "open",
         "kind": "upstream-bug",
-        "parity_pending": true,
+        "parity_pending": false,
         "needs_confirmation": false
       },
       {
@@ -1726,7 +1716,7 @@
         "title": "[Deferred bug] do_check_limits and history compute v_surf_div_v_kh with mixed units (cm/s * yr / Rsun)",
         "state": "open",
         "kind": "upstream-bug",
-        "parity_pending": true,
+        "parity_pending": false,
         "needs_confirmation": false
       },
       {
@@ -1748,6 +1738,46 @@
       {
         "number": 268,
         "title": "[Deferred bug] get_convection_sigmas negates dX when xm1 <= x00, disabling high-Tc sigma limiting for downward gradients",
+        "state": "open",
+        "kind": "upstream-bug",
+        "parity_pending": false,
+        "needs_confirmation": false
+      },
+      {
+        "number": 271,
+        "title": "[Deferred bug] phase_separation.f90 out-of-bounds and uninitialized boundary reads",
+        "state": "open",
+        "kind": "upstream-bug",
+        "parity_pending": false,
+        "needs_confirmation": false
+      },
+      {
+        "number": 272,
+        "title": "[Deferred bug] element_diffusion.f90 reads xa(:, 0) when nzlo == 1 and D_mix(1) > D_mix_ignore_diffusion",
+        "state": "open",
+        "kind": "upstream-bug",
+        "parity_pending": false,
+        "needs_confirmation": false
+      },
+      {
+        "number": 273,
+        "title": "[Deferred bug] element_diffusion.f90 returns without setting ierr on invalid diffusion_class_representative",
+        "state": "open",
+        "kind": "upstream-bug",
+        "parity_pending": false,
+        "needs_confirmation": false
+      },
+      {
+        "number": 274,
+        "title": "[Deferred bug] set_donor_star swaps mdot_lo/mdot_hi on a donor switch but leaves implicit_function_lo/hi unswapped",
+        "state": "open",
+        "kind": "upstream-bug",
+        "parity_pending": false,
+        "needs_confirmation": false
+      },
+      {
+        "number": 277,
+        "title": "[Deferred bug] predictive_mix::eval_mixing_coeffs leaves rho, eta, lnPgas/Peos, mu, and phase stale during trial opacity and MLT evaluation",
         "state": "open",
         "kind": "upstream-bug",
         "parity_pending": false,
@@ -2171,6 +2201,19 @@
       "closed_140": "13",
       "total_140": "34",
       "deferred_169": "35"
+    },
+    {
+      "date_utc": "2026-11-20",
+      "commit": "8b3e430",
+      "event": "main merge",
+      "engine_ported_pct": "22.3",
+      "all_verified_pct": "0.0",
+      "cases_passing": "0",
+      "rust_cov_pct": "74.0",
+      "python_cov_pct": "87.8",
+      "closed_140": "14",
+      "total_140": "34",
+      "deferred_169": "40"
     }
   ]
 }

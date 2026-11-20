@@ -328,7 +328,7 @@ fn test_convective_boundaries_overshoot_diffusion_and_winds_conserve_mass() {
         .count();
     assert!(n_ov > 0);
 
-    compute_convection_sigmas(&mut model, 1.0e8, 1.0, 1.0e10);
+    compute_convection_sigmas(&mut model, 1.0e8, 1.0, 1.0e10).unwrap();
     let dxdt_mix = eval_dxdt_mix(&model);
     for j in 0..model.species {
         let net_mass_rate: f64 = (0..model.nz)

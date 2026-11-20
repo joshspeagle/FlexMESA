@@ -335,8 +335,8 @@ fn test_mix_info_glitches_prune_bad_cz_min_d_mix_and_high_tc_sigma_taper() {
     m_hi.controls.sig_term_limit = 1.0e99;
     let mut m_lo = m_hi.clone();
     m_lo.controls.mix_wind.sig_min_factor_for_high_tcenter = 1.0;
-    update_sig_from_d_mix(&mut m_hi);
-    update_sig_from_d_mix(&mut m_lo);
+    update_sig_from_d_mix(&mut m_hi).unwrap();
+    update_sig_from_d_mix(&mut m_lo).unwrap();
     assert!(m_lo.sig[k_core] > 0.0);
     assert!(
         (m_hi.sig[k_core] / m_lo.sig[k_core] - 1.0e-4).abs() < 1.0e-6,
@@ -555,7 +555,7 @@ fn test_retry_rollback_preserves_alpha_mlt_and_boundaries_across_nz_change() {
 
     // Trigger `Tc > 2.8e9` path in `compute_convection_sigmas`; must not OOB.
     model.t[orig_nz - 1] = 3.0e9;
-    compute_convection_sigmas(&mut model, 1.0e8, 1.0, 1.0e10);
+    compute_convection_sigmas(&mut model, 1.0e8, 1.0, 1.0e10).unwrap();
 
     // Simulate a failed attempt that merged zones (`nz` shrank) then rolled
     // back; `alpha_mlt` in the restored tail must match pre-attempt values.

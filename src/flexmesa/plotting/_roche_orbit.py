@@ -13,6 +13,7 @@ import matplotlib.axes as mpl_axes
 import matplotlib.colors as mpl_colors
 import numpy as np
 
+from flexmesa import constants
 from flexmesa.plotting import style
 from flexmesa.testing import history_compare
 
@@ -147,9 +148,8 @@ def select_row_index(
     return max(0, min(idx, tbl.num_rows - 1))
 
 
-#: ``binary_history`` columns the Orbit panel cannot be drawn without.
+#: ``binary_history`` geometric columns the Orbit panel cannot be drawn without.
 ORBIT_REQUIRED_COLUMNS: tuple[str, ...] = (
-    "eccentricity",
     "binary_separation",
     "rl_1",
     "rl_2",
@@ -160,9 +160,72 @@ class MissingOrbitColumnsError(ValueError):
     """Raised when ``binary_history`` lacks a column the Orbit panel needs."""
 
 
+def _resolve_eccentricity(
+    tbl: history_compare.HistoryTable,
+    idx: int,
+    *,
+    m1_msun: float,
+    m2_msun: float,
+    sep_rsun: float,
+    eccentricity: float | None = None,
+) -> float:
+    """Resolve orbital eccentricity from ``eccentricity`` or ``J_orb``.
+
+    Upstream's default ``binary/defaults/binary_history_columns.list`` leaves
+    ``eccentricity`` commented out while writing ``J_orb``. When
+    ``eccentricity`` is absent, invert MESA's exact Keplerian relation
+    (``binary/private/binary_utils.f90:190-191``,
+    ``binary/private/binary_evolve.f90:354-355``) rather than assuming a
+    circular orbit.
+    """
+    if eccentricity is not None:
+        ecc = float(eccentricity)
+        if not (math.isfinite(ecc) and 0.0 <= ecc < 1.0):
+            raise ValueError(
+                f"Orbit panel: eccentricity {ecc!r} outside [0, 1)"
+            )
+        return ecc
+    if "eccentricity" in tbl.columns:
+        ecc = float(tbl.columns["eccentricity"][idx])
+        if not (math.isfinite(ecc) and 0.0 <= ecc < 1.0):
+            raise ValueError(
+                f"Orbit panel: eccentricity {ecc!r} outside [0, 1)"
+            )
+        return ecc
+    if "J_orb" in tbl.columns:
+        j_orb = float(tbl.columns["J_orb"][idx])
+        if not (math.isfinite(j_orb) and j_orb > 0.0):
+            raise ValueError(f"Orbit panel: J_orb {j_orb!r} not > 0")
+        m1_g = m1_msun * constants.MSUN
+        m2_g = m2_msun * constants.MSUN
+        a_cm = sep_rsun * constants.RSUN
+        one_minus_e2 = (
+            (j_orb / (m1_g * m2_g)) ** 2
+            * (m1_g + m2_g)
+            / (constants.STANDARD_CGRAV * a_cm)
+        )
+        if (
+            not math.isfinite(one_minus_e2)
+            or one_minus_e2 <= 0.0
+            or one_minus_e2 > 1.0 + 1.0e-9
+        ):
+            raise ValueError(
+                f"Orbit panel: J_orb={j_orb!r} implies non-physical "
+                f"1 - e^2 = {one_minus_e2!r}"
+            )
+        e2 = max(0.0, 1.0 - one_minus_e2)
+        return 0.0 if e2 <= 1.0e-12 else math.sqrt(e2)
+    raise MissingOrbitColumnsError(
+        "Orbit panel requires 'eccentricity' or 'J_orb' in "
+        "binary_history.data; enable one in binary_history_columns.list"
+    )
+
+
 def extract_orbit_state(
     tbl: history_compare.HistoryTable,
     idx: int,
+    *,
+    eccentricity: float | None = None,
 ) -> dict[str, float]:
     """Extract orbital and Roche state at ``idx`` from ``binary_history``."""
     if "star_1_mass" not in tbl.columns or "star_2_mass" not in tbl.columns:
@@ -171,10 +234,10 @@ def extract_orbit_state(
         )
     m1 = float(tbl.columns["star_1_mass"][idx])
     m2 = float(tbl.columns["star_2_mass"][idx])
-    # Upstream's Orbit window reads ``b% eccentricity``, ``b% separation``
-    # and ``b% rl`` from memory (``binary/private/pgbinary_orbit.f90:102``).
-    # A saved history either carries those columns or the panel cannot be
-    # drawn; no value is substituted for a missing or non-finite one.
+    if not (math.isfinite(m1) and m1 > 0.0 and math.isfinite(m2) and m2 > 0.0):
+        raise ValueError(
+            f"Orbit panel: non-positive component masses ({m1!r}, {m2!r})"
+        )
     absent = [c for c in ORBIT_REQUIRED_COLUMNS if c not in tbl.columns]
     if absent:
         raise MissingOrbitColumnsError(
@@ -182,16 +245,21 @@ def extract_orbit_state(
             + ", ".join(repr(c) for c in absent)
             + "; enable them in binary_history_columns.list"
         )
-    ecc = float(tbl.columns["eccentricity"][idx])
     sep = float(tbl.columns["binary_separation"][idx])
     rl1 = float(tbl.columns["rl_1"][idx])
     rl2 = float(tbl.columns["rl_2"][idx])
-    if not (math.isfinite(ecc) and 0.0 <= ecc < 1.0):
-        raise ValueError(f"Orbit panel: eccentricity {ecc!r} outside [0, 1)")
     if not (math.isfinite(sep) and sep > 0.0):
         raise ValueError(f"Orbit panel: binary_separation {sep!r} not > 0")
     if not (math.isfinite(rl1) and math.isfinite(rl2)):
         raise ValueError("Orbit panel: non-finite rl_1 or rl_2")
+    ecc = _resolve_eccentricity(
+        tbl,
+        idx,
+        m1_msun=m1,
+        m2_msun=m2,
+        sep_rsun=sep,
+        eccentricity=eccentricity,
+    )
 
     def _star_r(star_i: int, rl_val: float) -> float:
         r_col = f"star_{star_i}_radius"
@@ -203,7 +271,8 @@ def extract_orbit_state(
         if ov_col in tbl.columns and rl_val > 0.0:
             ov = float(tbl.columns[ov_col][idx])
             if math.isfinite(ov) and abs(ov) < 1.0e50:
-                return max(rl_val * (1.0 + ov), 0.0)
+                # binary/private/binary_evolve.f90:367-370
+                return max(rl_val * (1.0 - ecc) * (1.0 + ov), 0.0)
         return 0.0
 
     pm_idx = (

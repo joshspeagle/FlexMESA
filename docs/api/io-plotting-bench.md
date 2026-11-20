@@ -104,9 +104,17 @@ print(
 
 ::: flexmesa.plotting.pgstar_summary
 
+::: flexmesa.plotting.pgstar_text
+
+::: flexmesa.plotting.pgstar_extra
+
+::: flexmesa.plotting.pgstar_nucleosyn
+
 ::: flexmesa.plotting.pgbinary_panels
 
 ::: flexmesa.plotting.pgstar_grid
+
+::: flexmesa.plotting.live
 
 ::: flexmesa.plotting.pgstar_coverage
 

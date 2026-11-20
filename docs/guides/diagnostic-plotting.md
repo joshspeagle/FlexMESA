@@ -155,21 +155,28 @@ print(
 
 Every file-based diagnostic and comparison builder in `flexmesa.plotting` reads strictly from saved ASCII outputs (`history.data`, `binary_history.data`, `profileN.data`, bundled MESA `26.4.1` `data/star_data/plot_info/*.data` guide curves, and stored MESA `26.4.1` references in `benchmarks/history_harness/reference_histories/`) without recomputing physics inside plotting code (`#173`). Whenever a reference file is supplied, the figure title or subtitle records the reference provenance alongside the candidate run.
 
-- **Kippenhahn Evolution Diagrams (`plotting.plot_history_kippenhahn`, `plotting.plot_profile_kippenhahn`)**: Renders convective, overshoot, semiconvective, thermohaline, rotational, Rayleigh-Taylor, and leftover-convective mixing zones, signed nuclear burning and neutrino cooling regions, core mass boundaries (`he_core_mass` through `fe_core_mass`), and optional right-axis luminosities across `mass`, `q`, or `radius` versus `model_number` or `star_age` (including `log_xaxis` and `time_from_present`).
-- **Radial `pgstar` Profile Panels (`plotting.pgstar_panels`, `plotting.pgstar_summary`)**: Ports `TRho_Profile` (`plotting.plot_trho_profile`), 22-category nuclear reaction `Power` (`plotting.plot_power_profile`), ranked multi-isotope `Abundance` (`plotting.plot_abundance_profile`), log-diffusivity `Mixing` (`plotting.plot_mixing_profile`), normalized `Summary_Profile` (`plotting.plot_summary_profile`), `Summary_Burn` (`plotting.plot_summary_burn_profile`), and dual-axis `Profile_Panels<N>` (`plotting.plot_profile_custom_panels`).
-- **Evolutionary Tracks, History Summaries & `Grid<N>` Composer (`plotting.pgstar_grid`)**: Ports `History_Track<N>` plus all 13 named two-column presets (`plotting.plot_history_track` and `plotting.TRACK_PRESETS`, including `HR`, `TRho`, `TmaxRho`, `logg_Teff`, `logg_logT`, and `logL_Teff`), `Summary_History` (`plotting.plot_summary_history`), `History_Panels<N>` (`plotting.plot_history_panels`), and multi-panel `Grid<N>` layouts (`plotting.plot_pgstar_grid` and `plotting.parse_inlist_grid_spec`).
-- **Interacting Binary `pgbinary` Panels (`plotting.pgbinary_panels`)**: Ports 2D Keplerian orbit and dimensionless Roche-lobe equipotential snapshots (`plotting.plot_pgbinary_orbit`), normalized `Summary_History` (`plotting.plot_pgbinary_summary_history`), and synchronized 6-panel binary diagnostics with donor/accretor HR tracks (`plotting.plot_pgbinary_panels`).
+- **Kippenhahn & RTI Evolution Diagrams (`plotting.plot_history_kippenhahn`, `plotting.plot_profile_kippenhahn`, `plotting.plot_rti_history`)**: Renders convective, overshoot, semiconvective, thermohaline, rotational, Rayleigh-Taylor, and leftover-convective mixing zones, signed nuclear burning and neutrino cooling regions, core mass boundaries (`he_core_mass` through `fe_core_mass`), and optional right-axis luminosities across `mass`, `q`, or `radius` versus `model_number` or `star_age` (including `log_xaxis` and `time_from_present`), plus dedicated Rayleigh-Taylor Instability (`rti`) tracks from `rti_type_*`, `mix_type_* == 6`, or profile `mixing_type`/`alpha_RTI`.
+- **Radial `pgstar` Profile & Nucleosynthesis Panels (`plotting.pgstar_panels`, `plotting.pgstar_summary`, `plotting.pgstar_extra`, `plotting.pgstar_nucleosyn`)**: Ports `TRho_Profile` (`plotting.plot_trho_profile`), 22-category nuclear reaction `Power` (`plotting.plot_power_profile`), ranked multi-isotope `Abundance` (`plotting.plot_abundance_profile`), log-diffusivity `Mixing` with all seven rotational diffusion curves (`D_ST`, `D_visc`, `D_DSI`, `D_SH`, `D_SSI`, `D_ES`, `D_GSF`; `plotting.plot_mixing_profile`), magnetic and rotational `Dynamo` (`plotting.plot_dynamo_profile`), `Network` chart of nuclides (`plotting.plot_network_chart`), stable-isotope `Production` factors (`plotting.plot_production_profile`), normalized `Summary_Profile` (`plotting.plot_summary_profile`), `Summary_Burn` (`plotting.plot_summary_burn_profile`), and dual-axis `Profile_Panels<N>` (`plotting.plot_profile_custom_panels`).
+- **Evolutionary Tracks, Photometric CMDs, Text Summaries & `Grid<N>` Composer (`plotting.pgstar_grid`, `plotting.pgstar_text`, `plotting.pgstar_extra`)**: Ports `History_Track<N>` plus all 14 named two-column presets (`plotting.plot_history_track`, `plotting.plot_dpg_dnu`, and `pgstar_grid.TRACK_PRESETS`, including `HR`, `TRho`, `TmaxRho`, `logg_Teff`, `logg_logT`, `logL_Teff`, and `dPg_dnu`), `Color_magnitude<N>` (`plotting.plot_color_magnitude`, `plotting.parse_inlist_cmd_spec`), `Summary_History` (`plotting.plot_summary_history`), `History_Panels<N>` (`plotting.plot_history_panels`), `Text_Summary<N>` (`plotting.plot_text_summary`, `plotting.plot_pgbinary_text_summary`, `plotting.parse_inlist_text_summary_spec`), and multi-panel `Grid<N>` layouts (`plotting.plot_pgstar_grid` and `plotting.parse_inlist_grid_spec`), including upstream's default `Grid1`, `Grid2`, `Grid3`, and `Grid4`.
+- **Interacting Binary `pgbinary` Panels (`plotting.pgbinary_panels`)**: Ports 2D Keplerian orbit and dimensionless Roche-lobe equipotential snapshots (`plotting.plot_pgbinary_orbit`), arbitrary component window embedding for `Star1`/`Star2` (`plotting.plot_pgbinary_star`), normalized `Summary_History` (`plotting.plot_pgbinary_summary_history`), binary `Text_Summary<N>` (`plotting.plot_pgbinary_text_summary`), and synchronized 6-panel binary diagnostics with donor/accretor HR tracks (`plotting.plot_pgbinary_panels`).
 
-From the command line, `flexmesa plot` exposes subcommands for every saved-output workflow:
+From the command line, `flexmesa plot` exposes subcommands for every saved-output and live-watch workflow:
 
 ```bash
 flexmesa plot compare 1.3M_ms_high_Z --out compare_1.3M.png
 flexmesa plot compare evolve_both_stars --flexmesa-dir out_binary/ --out compare_bin.png
 flexmesa plot profile LOGS/profile1.data --panel trho --out trho_profile1.png
+flexmesa plot profile LOGS/profile1.data --panel dynamo --out dynamo_profile1.png
+flexmesa plot profile LOGS/profile1.data --panel network --out network_profile1.png
+flexmesa plot profile LOGS/profile1.data --panel production --out production_profile1.png
 flexmesa plot kipp --history LOGS/history.data --yaxis mass --show-luminosities --out kipp.png
-flexmesa plot binary binary_history.data --mode panels --out pgbinary_panels.png
-flexmesa plot track LOGS/history.data --preset HR --mesa-history ref_history.data --out hr_track.png
+flexmesa plot rti --history LOGS/history.data --out rti.png
+flexmesa plot binary --binary-history binary_history.data --out pgbinary_panels.png
+flexmesa plot track LOGS/history.data --preset dPg_dnu --out dpg_dnu.png
+flexmesa plot cmd LOGS/history.data --x1 abs_mag_B --x2 abs_mag_V --y abs_mag_V --out cmd.png
+flexmesa plot text-summary LOGS/history.data --out text_summary.png
 flexmesa plot grid --inlist inlist_pgstar --history LOGS/history.data --profile LOGS/profile1.data --out grid1.png
+flexmesa plot watch LOGS/ --out-dir live_frames/ --panels HR,TRho,Text_Summary1 --poll-interval 1.0
 ```
 
 In Python, call the corresponding builders directly to inspect or customize `(fig, ax)` / `(fig, axes)` objects:
@@ -201,13 +208,58 @@ fig_trk, _ = plotting.plot_history_track(
 )
 plt.close(fig_trk)
 
+fig_ts, _ = plotting.plot_text_summary(ref_star)
+plt.close(fig_ts)
+
+fig_orb, _ = plotting.plot_pgbinary_orbit(ref_bin)
+plt.close(fig_orb)
+
 fig_sum, _ = plotting.plot_pgbinary_summary_history(
     ref_bin, mesa_binary_history=ref_bin
 )
 plt.close(fig_sum)
-print("Rendered comparison, Kippenhahn, track, and binary summary figures:", axes_cmp.shape)
+print("Rendered comparison, Kippenhahn, track, text-summary, orbit, and binary summary figures:", axes_cmp.shape)
 ```
 
-`plotting.plot_pgbinary_orbit` needs the `eccentricity`, `binary_separation`, `rl_1` and `rl_2` columns in `binary_history.data` and raises an error when one is absent. MESA's default `binary_history_columns.list` leaves `eccentricity` commented out, so enable it before a run whose orbit you want to draw. The 6-panel `plotting.plot_pgbinary_panels` figure states in its orbit cell that the orbit was not drawn in that situation. Kippenhahn mixing zones are shaded only from the `mix_type_*` history columns; a history without them shows none.
+`plotting.plot_pgbinary_orbit` requires `binary_separation`, `rl_1`, and `rl_2` plus orbital eccentricity information. When `eccentricity` is present in `binary_history.data`, it is read directly. When `eccentricity` is omitted (the upstream default in `binary/defaults/binary_history_columns.list`), `plot_pgbinary_orbit` recovers the exact Keplerian eccentricity from `J_orb`, `star_1_mass`, `star_2_mass`, and `binary_separation` (`binary/private/binary_utils.f90:190-191`) without assuming a circular orbit. If neither `eccentricity` nor `J_orb` is available, `plot_pgbinary_orbit` raises `MissingOrbitColumnsError` and the 6-panel `plotting.plot_pgbinary_panels` figure notes in its orbit cell that the orbit was not drawn. Kippenhahn mixing zones are shaded only from the `mix_type_*` history columns; a history without them shows none.
 
-For the full mapping of upstream `pgstar.defaults`, `pgbinary.defaults`, and `astero_pgstar.defaults` windows (`pgstar_coverage.PGSTAR_COVERAGE`) onto `flexmesa.plotting` builders, see the [PGSTAR & PGBINARY Coverage Report](../benchmarks/pgstar-coverage.md) and the [I/O, Plotting & Benchmark API Reference](../api/io-plotting-bench.md).
+---
+
+## 5. Live-Evolution Plotting (`LiveEvolutionPlotter` & `watch_logs`)
+
+To emit updated figures while an evolution runs without X11 or PGPLOT, attach `plotting.LiveEvolutionPlotter` as an `extras` object (implementing `extras_startup`, `extras_finish_step`, and `extras_after_evolve` for single stars, plus `extras_binary_startup`, `finish_step`, and `extras_binary_after_evolve` for binaries) or poll an active `LOGS/` directory with `plotting.watch_logs` (or `flexmesa plot watch`). Every frame is written atomically via temporary file rename (with an optional `frame_latest.png` copy), and each Matplotlib figure is closed inside a `finally` block so long runs leak zero figures:
+
+```python
+import pathlib
+import shutil
+import tempfile
+from flexmesa import plotting
+from flexmesa.testing import case_manifest
+
+ref_star = (
+    case_manifest.repo_root()
+    / "benchmarks"
+    / "history_harness"
+    / "reference_histories"
+    / "star"
+    / "1.3M_ms_high_Z.data"
+)
+
+with tempfile.TemporaryDirectory() as tmp:
+    logs_dir = pathlib.Path(tmp) / "LOGS"
+    out_dir = pathlib.Path(tmp) / "frames"
+    logs_dir.mkdir(parents=True)
+    shutil.copyfile(ref_star, logs_dir / "history.data")
+
+    plotter = plotting.LiveEvolutionPlotter(
+        out_dir,
+        logs_dir=logs_dir,
+        panels=("HR", "TRho", "Text_Summary1"),
+        file_cnt=1,
+        dpi=100,
+    )
+    assert plotter.extras_finish_step({"model_number": 1}) == "keep_going"
+    print(f"Emitted {len(plotter.frames)} live frame(s), latest={plotter.frames[0].latest_path.name}")
+```
+
+For the full mapping of upstream `pgstar.defaults`, `pgbinary.defaults`, and `astero_pgstar.defaults` windows (`pgstar_coverage.build_pgstar_coverage_report`) onto `flexmesa.plotting` builders, see the [PGSTAR & PGBINARY Coverage Report](../benchmarks/pgstar-coverage.md) and the [I/O, Plotting & Benchmark API Reference](../api/io-plotting-bench.md).

@@ -703,7 +703,7 @@ pub fn solve_henyey_step(
                     let a2 = (-alam2 * rhs1 / (alam * alam)
                         + alam * rhs2 / (alam2 * alam2))
                         / denom;
-                    if a1 == 0.0 {
+                    let raw = if a1 == 0.0 {
                         -slope / (2.0 * a2)
                     } else {
                         let disc = a2 * a2 - 3.0 * a1 * slope;
@@ -714,10 +714,13 @@ pub fn solve_henyey_step(
                         } else {
                             -slope / (a2 + disc.sqrt())
                         }
-                    }
+                    };
+                    // `star_solver.f90:926`: upper clamp applies only in the
+                    // cubic (`!first_time`) branch, not on the first backtrack.
+                    raw.min(alam * alam_factor)
                 };
                 let tmplam = if tmplam_raw.is_finite() {
-                    tmplam_raw.min(alam * alam_factor)
+                    tmplam_raw
                 } else {
                     alam * alam_factor
                 };

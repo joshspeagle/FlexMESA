@@ -24,11 +24,11 @@ To guarantee convergence across 80 orders of magnitude in $Y$, `set_tdc` searche
 
 1. **Bisection Bracketing**: Narrows the bracket $[Z_{\mathrm{lb}}, Z_{\mathrm{ub}}]$ until $Z_{\mathrm{ub}} - Z_{\mathrm{lb}} < 1.0$.
 2. **Damped Newton-Raphson Refinement**: Iterates $Z_{n+1} = Z_n - Q(Z_n) / Q'(Z_n)$ with midpoint bracket clamping whenever a trial step exits $[Z_{\mathrm{lb}}, Z_{\mathrm{ub}}]$, terminating when $|Q| / \mathrm{scale} \le 10^{-8}$ or $|\Delta Z| < 10^{-13}$.
-3. **Partial Derivatives of the Root**: The Safe Rust engine runs the Newton iteration on a nested dual number (`AutoDiffRealTdc`, upstream's `auto_diff_real_tdc`) that carries the value, its derivative with respect to $Z$, the structure partials and the mixed second partials. Each update $Z + (-Q / Q')$ therefore carries structure partials forward, and the returned $Y$ has the partials of the last update, as in `turb/private/tdc.f90:253-345`. They approach the Implicit Function Theorem result
+3. **Partial Derivatives of the Root**: Both the Safe Rust engine and the Python twin (`flexmesa.turb.tdc_dual.AutoDiffRealTdc`) run the Newton iteration on a nested dual number (`AutoDiffRealTdc`, upstream's `auto_diff_real_tdc`) that carries the value, its derivative with respect to $Z$, the structure partials and the mixed second partials (and the JAX benchmark kernel propagates `jax.jvp` through the same bisection-stopped Newton updates). Each update $Z + (-Q / Q')$ therefore carries structure partials forward, and the returned $Y$ has the partials of the last update, as in `turb/private/tdc.f90:253-345`. They approach the Implicit Function Theorem result
 
    $$\frac{\partial Y^*}{\partial \theta} = -\left(\frac{\partial Q}{\partial Y}\bigg|_{Y^*}\right)^{-1} \frac{\partial Q}{\partial \theta}\bigg|_{Y^*}$$
 
-   as the iteration converges, and differ from it by an amount of the order of the last Newton correction. The derived JAX layer applies the Implicit Function Theorem at the converged root.
+   as the iteration converges, and differ from it by an amount of the order of the last Newton correction.
 
 ![Steady-state Cox MLT vs. transient Kuhfuss TDC temperature gradient and Implicit Function Theorem sensitivity](../assets/figures/turb_mlt_tdc_comparison.png)
 

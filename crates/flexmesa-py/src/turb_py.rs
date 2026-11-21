@@ -2,9 +2,10 @@
 //! Tier B (`turb`) `PyO3` bindings for Mixing-Length Theory (`MLT`) and
 //! Time-Dependent Convection (`TDC`).
 //!
-//! Exposes scalar `f64` (`set_mlt_f64`) and parallel multi-zone `DualOrder1<6>`
-//! batch (`set_mlt_batch`, `set_tdc_batch`) evaluators with Implicit Function
-//! Theorem root sensitivities and persistent 4-thread `rayon` execution.
+//! Exposes scalar `f64` (`set_mlt_f64`, `turb_set_tdc_f64`) and parallel
+//! multi-zone `DualOrder1<6>` batch (`set_mlt_batch`, `set_tdc_batch`)
+//! evaluators with `AutoDiffRealTdc` Newton-iteration sensitivities and
+//! persistent 4-thread `rayon` execution.
 //!
 //! # Physical Conventions
 //! - Temperature gradients ($\nabla_{\mathrm{rad}}, \nabla_{\mathrm{ad}},
@@ -140,8 +141,8 @@ fn eval_mlt_zone(s_frac: f64) -> [f64; 4] {
 /// Evaluates Kuhfuss (1986) TDC with `DualOrder1<6>` sensitivities at `s_frac`.
 ///
 /// Solves the bracketed Newton-bisection root over $Z = \ln|Y|$ and propagates
-/// analytical derivatives via the Implicit Function Theorem, returning
-/// `[grad_t, d, conv_vel, d_grad_t_d_gradr]`.
+/// structure partials through the Newton iteration on `AutoDiffRealTdc`,
+/// returning `[grad_t, d, conv_vel, d_grad_t_d_gradr]`.
 #[inline]
 fn eval_tdc_zone(s_frac: f64) -> [f64; 4] {
     let t_val = 1.0e5 * (1.0 + 0.2 * s_frac);
@@ -235,17 +236,15 @@ fn set_tdc_batch<'py>(
 ///
 /// `params` holds, in order, `conv_vel_start`, `mixing_length_alpha`,
 /// `tdc_alpha_d`, `tdc_alpha_r`, `tdc_alpha_pt`, `tdc_alpha_c`,
-/// `tdc_alpha_s`, `dt`, `cgrav`, `m`, `scale` and `max_conv_vel`. A
-/// thirteenth entry is accepted for callers that still pass a bracket seed
-/// and is not used: upstream's search takes none
-/// (`turb/private/tdc.f90:219-250`, #321). `inputs` holds, in order, `chi_t`, `chi_rho`, `gradr`,
-/// `r`, `p`, `t`, `rho`, `dv`, `cp`, `opacity`, `scale_height`, `gradl`,
-/// `grada`, `eq_div_w`, `grav` and `energy` (CGS units).
+/// `tdc_alpha_s`, `dt`, `cgrav`, `m`, `scale` and `max_conv_vel`. `inputs`
+/// holds, in order, `chi_t`, `chi_rho`, `gradr`, `r`, `p`, `t`, `rho`, `dv`,
+/// `cp`, `opacity`, `scale_height`, `gradl`, `grada`, `eq_div_w`, `grav` and
+/// `energy` (CGS units).
 ///
 /// Returns `(gamma, grad_t, y_face, conv_vel, d, num_iters)`.
 #[pyfunction]
 fn turb_set_tdc_f64(
-    params: [f64; 13],
+    params: [f64; 12],
     include_mlt_corr_to_tdc: bool,
     use_tdc_enthalpy_flux_limiter: bool,
     inputs: [f64; 16],

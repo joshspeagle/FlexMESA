@@ -168,13 +168,15 @@ Brent's method (`safe_root_with_brackets`), 1D/multi-D Newton-Raphson, adaptive 
 
 ## Turbulent Convection & Mixing (`flexmesa.turb`)
 
-Local Mixing Length Theory (`set_mlt`, Cox & Giuli 1968, Henyey 1965, Mihalas 1978), implicit Kuhfuss (1986) Time-Dependent Convection (`set_tdc`, with partial derivatives carried through the Newton iteration on `AutoDiffRealTdc` in Safe Rust and taken from the Implicit Function Theorem in the JAX layer), Langer (1983) semiconvection (`set_semiconvection`), and Kippenhahn (1980) / Brown (2013) thermohaline mixing (`set_thermohaline`).
+Local Mixing Length Theory (`set_mlt`, Cox & Giuli 1968, Henyey 1965, Mihalas 1978), implicit Kuhfuss (1986) Time-Dependent Convection (`set_tdc`, carrying partial derivatives through the Newton iteration on `AutoDiffRealTdc` in both Safe Rust and Python/JAX, matching `turb/private/tdc.f90:253-345`), Langer (1983) semiconvection (`set_semiconvection`), and Kippenhahn (1980) / Brown (2013) thermohaline mixing (`set_thermohaline`).
 
 ::: flexmesa.turb.types
 
 ::: flexmesa.turb.mlt
 
 ::: flexmesa.turb.tdc
+
+::: flexmesa.turb.tdc_dual
 
 ::: flexmesa.turb.tdc_search
 

@@ -153,7 +153,7 @@ Cases lacking a committed MESA `26.4.1` baseline report `no reference yet` and c
 | `astero` | `fast_simplex` | [#162](https://github.com/joshspeagle/FlexMESA/issues/162) | `xtra1` | `astero_simplex_samples=5_best_chi2=1.237052e4_term=max_age` (1248 steps; diagnostic (4 controls ignored)) | Asteroseismic simplex optimizer and in-house pulsation scaffolding (#162, #171). |
 | `astero` | `surface_effects` | [#162](https://github.com/joshspeagle/FlexMESA/issues/162) | `max_model_number` | `max_model_number` (1 steps; diagnostic (1 controls ignored)) | Asteroseismic surface-effects starting model and ADIPLS scaffolding (#162, #171). |
 
-## Declared Test-Suite Gaps (`[[test_gaps]]`, 25 Markers)
+## Declared Test-Suite Gaps (`[[test_gaps]]`, 24 Markers)
 
 Every Rust `#[ignore]` and Python `xfail`/`skip` marker in the repository is tracked bijectively in `benchmarks/history_harness/known_gaps.toml` (`#144`):
 
@@ -183,7 +183,6 @@ Every Rust `#[ignore]` and Python `xfail`/`skip` marker in the repository is tra
 | `python_xfail` | `tests/test_star_wave5_1.py` | `test_caplan_ocp_dstar_jax_matches_rust` | `physics_gap` | [#295](https://github.com/joshspeagle/FlexMESA/issues/295) | Rust eval_caplan_ocp_dstar follows MESA 26.4.1 get_Dstar_OCP (diffusion_support.f90:1716-1743, #156); the frozen JAX twin keeps its earlier expression, so the relative difference is 0.87 to 0.996 at the three test points against a bound of 1.0e-14. |
 | `python_xfail` | `tests/test_star_wave5_1.py` | `test_burgers_velocities_jax_match_rust` | `physics_gap` | [#295](https://github.com/joshspeagle/FlexMESA/issues/295) | Rust eval_burgers_velocities follows MESA 26.4.1 element diffusion (#156); the frozen JAX twin keeps its earlier expressions, so velocities differ by up to 0.72 relative, diffusion coefficients by up to a factor of 56, and the electric field by 0.54 relative, against bounds of 1.0e-12. |
 | `python_xfail` | `tests/test_star_wave5_1.py` | `test_phase_separation_shift_jax_matches_rust` | `physics_gap` | [#295](https://github.com/joshspeagle/FlexMESA/issues/295) | Rust eval_phase_separation_shift follows the MESA 26.4.1 Blouin fits (phase_separation.f90, #156); the frozen JAX twin keeps its earlier expression, so the shift differs by 0.017 to 0.089 in mass fraction against a bound of 1.0e-14. |
-| `python_xfail` | `tests/test_bench.py` | `test_wave1_turb_tdc_stages_agree` | `physics_gap` | [#295](https://github.com/joshspeagle/FlexMESA/issues/295) | Rust set_tdc carries the TDC root's partials through the Newton iteration as MESA 26.4.1 does (turb/private/tdc.f90:253-345, #321); the Python stages apply the implicit function theorem at the converged root, so the sensitivities differ by 6.5e-11 (4 zones) and 2.2e-9 (8 zones) against a bound of 1.0e-12. |
 
 ## Level-2 Module Hex Reference Gaps (`benchmarks/module_hex/`)
 

@@ -12,7 +12,7 @@ Generated mechanically by `flexmesa dashboard render` from [`port_manifest.toml`
 | End-to-end MESA `26.4.1` cases passing (`90`/`8`/`8`) | 0 / 106 (102 declared gaps, 4 no reference yet, 0 undeclared failures) | [`case_table.md`](https://github.com/joshspeagle/FlexMESA/blob/main/notes/audit/case_table.md) |
 | Strict mode bit-identical across machines (`#165`) | gated in CI by scripts/check_strict_determinism.py (x86_64 vs aarch64, 1 vs 4 threads; 474,062 math vectors + uncapped star/1.3M_ms_high_Z + binary/jdot_gr_check run with unsupported controls ignored; a bit-identity check, not a comparison with MESA) | [#165](https://github.com/joshspeagle/FlexMESA/issues/165) |
 | Strict-mode kernels bit-identical to MESA `26.4.1` (`#165`) | math: 403,258/403,258 CRMATH 0 ULP (70,804 libm <= 1 ULP); 304,567/304,635 probed module hex 0 ULP (5 complete, 14 non-math probed) | [#165](https://github.com/joshspeagle/FlexMESA/issues/165) |
-| Test line coverage (Rust `llvm-cov` / Python `pytest --cov`) | 75.3% (87,207/115,825) / 87.5% (22,707/25,940) | [`coverage_summary.json`](https://github.com/joshspeagle/FlexMESA/blob/main/benchmarks/dashboard/coverage_summary.json) |
+| Test line coverage (Rust `llvm-cov` / Python `pytest --cov`) | 75.3% (87,206/115,810) / 87.6% (22,804/26,043) | [`coverage_summary.json`](https://github.com/joshspeagle/FlexMESA/blob/main/benchmarks/dashboard/coverage_summary.json) |
 | Road-to-`v0.1.0` packages ([#140](https://github.com/joshspeagle/FlexMESA/issues/140)) & open PRs | 16 closed, 20 open; 0 open PR(s) | [`github_snapshot.json`](https://github.com/joshspeagle/FlexMESA/blob/main/benchmarks/dashboard/github_snapshot.json) |
 | Post-parity deferred backlog ([#169](https://github.com/joshspeagle/FlexMESA/issues/169)) | 43 open (42 upstream bugs, 1 enhancement, 3 `parity-pending`) | [`github_snapshot.json`](https://github.com/joshspeagle/FlexMESA/blob/main/benchmarks/dashboard/github_snapshot.json) |
 
@@ -117,8 +117,8 @@ Full scalar diff: [`notes/audit/defaults_diff_26_4_1.md`](https://github.com/jos
 
 ### 5. Test & Code Health
 
-- **Rust workspace line coverage (`cargo llvm-cov`)**: **75.3%** (`87,207` / `115,825` lines across `26` crates).
-- **Python package statement coverage (`pytest --cov`)**: **87.5%** (`22,707` / `25,940` statements across `27` subpackages).
+- **Rust workspace line coverage (`cargo llvm-cov`)**: **75.3%** (`87,206` / `115,810` lines across `26` crates).
+- **Python package statement coverage (`pytest --cov`)**: **87.6%** (`22,804` / `26,043` statements across `27` subpackages).
 - **Ignored / skipped tests**: `16` Rust `#[ignore]` ([#143](https://github.com/joshspeagle/FlexMESA/issues/143), [#160](https://github.com/joshspeagle/FlexMESA/issues/160), [#161](https://github.com/joshspeagle/FlexMESA/issues/161), [#162](https://github.com/joshspeagle/FlexMESA/issues/162)) and `8` Python `xfail`/`skip` ([#156](https://github.com/joshspeagle/FlexMESA/issues/156), [#161](https://github.com/joshspeagle/FlexMESA/issues/161), [#291](https://github.com/joshspeagle/FlexMESA/issues/291), [#295](https://github.com/joshspeagle/FlexMESA/issues/295); `0` unlinked).
 - **Static & documentation gates**: `cargo clippy --all-targets -- -D warnings`, `RUSTDOCFLAGS='-D warnings' cargo doc`, `ruff check`, `ruff format --check`, `mypy --strict`, `mkdocs build --strict`, and MESA `26.4.1` `file:line` citation resolution enforced in CI.
 
@@ -148,7 +148,7 @@ Full scalar diff: [`notes/audit/defaults_diff_26_4_1.md`](https://github.com/jos
 | `flexmesa-num` | 2,877 | 2,468 | 85.8% |
 | `flexmesa-rates` | 2,292 | 2,098 | 91.5% |
 | `flexmesa-schema` | 808 | 669 | 82.8% |
-| `flexmesa-star` | 55,081 | 41,520 | 75.4% |
+| `flexmesa-star` | 55,066 | 41,519 | 75.4% |
 | `flexmesa-testing` | 253 | 197 | 77.9% |
 | `flexmesa-turb` | 1,093 | 903 | 82.6% |
 | `flexmesa-utils` | 1,200 | 792 | 66.0% |
@@ -181,7 +181,7 @@ Full scalar diff: [`notes/audit/defaults_diff_26_4_1.md`](https://github.com/jos
 | `flexmesa.rates` | 496 | 484 | 97.6% |
 | `flexmesa.schema` | 137 | 112 | 81.8% |
 | `flexmesa.star` | 1,303 | 1,265 | 97.1% |
-| `flexmesa.testing` | 4,009 | 3,134 | 78.2% |
+| `flexmesa.testing` | 4,112 | 3,231 | 78.6% |
 | `flexmesa.turb` | 912 | 801 | 87.8% |
 | `flexmesa.utils` | 86 | 80 | 93.0% |
 

@@ -68,7 +68,9 @@ def _run_worker(argv: list[str]) -> int:
     payload = {
         "termination_code": rep.get("termination_code", ""),
         "total_steps": int(rep.get("total_steps", 0)),
-        "total_retries": int(rep.get("total_retries", 0)),
+        "total_retries": int(
+            rep.get("total_retries", rep.get("binary_retries", 0))
+        ),
         "rss_gb": harness_runner.proc_rss_gb(os.getpid()),
     }
     pathlib.Path(ns.meta_json).write_text(

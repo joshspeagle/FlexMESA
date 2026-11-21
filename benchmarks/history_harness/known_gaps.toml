@@ -9,14 +9,14 @@
 [[gaps]]
 suite = "star"
 case = "1.3M_ms_high_Z"
-issue = "#159"
-reason = "Diagnostic run reaches exact MESA 26.4.1 log_L_upper_limit (219 steps, 0 retries, -0.0083% rel_star_age, all final tolerances pass) with 2 unsupported non-solver controls (photo_interval, required_termination_code_string; #159)."
+issue = "#299"
+reason = "Diagnostic run reaches exact MESA 26.4.1 log_L_upper_limit (219 steps, 0 retries, -0.0083% rel_star_age, all final tolerances pass) with 2 unsupported non-solver controls (photo_interval, required_termination_code_string; #299)."
 
 [[gaps]]
 suite = "star"
 case = "1.5M_with_diffusion"
-issue = "#159"
-reason = "With predictive mixing (#155) and multi-species Burgers diffusion (#156) active, the 1.5 Msun model tracks MESA 26.4.1 within every column tolerance across the 1.18 Gyr overlap (max log_Teff diff 5.9e-5, log_L diff 2.4e-4, center_h1 diff 1.6e-4, 236 steps) before hitting the 300 s wall-time cap with 3 remaining ignored controls (photo_interval, warn_when_large_rel_run_e_err, required_termination_code_string; #159, #168)."
+issue = "#299"
+reason = "With predictive mixing (#155) and multi-species Burgers diffusion (#156) active, the 1.5 Msun model tracks MESA 26.4.1 within every column tolerance across 250 steps (num_zones max track diff 0.46%) before hitting the 300 s wall-time cap with 3 remaining ignored controls (photo_interval, warn_when_large_rel_run_e_err, required_termination_code_string; #299, #144)."
 
 [[gaps]]
 suite = "star"
@@ -33,26 +33,26 @@ reason = "Spruit-Tayler dynamo and rotational mixing time out."
 [[gaps]]
 suite = "star"
 case = "16M_conv_premix"
-issue = "#159"
-reason = "Diagnostic run reaches xa_central_lower_limit (378 steps, 3 retries matching MESA 26.4.1, -0.056% rel_star_age) with 4 unsupported non-solver controls (photo_digits, photo_interval, pause_before_terminate, required_termination_code_string; #159)."
+issue = "#299"
+reason = "Diagnostic run reaches xa_central_lower_limit (378 steps, 3 retries matching MESA 26.4.1, -0.056% rel_star_age) with 4 unsupported non-solver controls (photo_digits, photo_interval, pause_before_terminate, required_termination_code_string; #299)."
 
 [[gaps]]
 suite = "star"
 case = "16M_predictive_mix"
-issue = "#159"
-reason = "Diagnostic run reaches xa_central_lower_limit (377 steps, 3 retries matching MESA 26.4.1, -0.0035% rel_star_age, all final tolerances pass) with 4 unsupported non-solver controls (photo_digits, photo_interval, pause_before_terminate, required_termination_code_string; #159)."
+issue = "#299"
+reason = "Diagnostic run reaches xa_central_lower_limit (377 steps, 3 retries matching MESA 26.4.1, -0.0035% rel_star_age, all final tolerances pass) with 4 unsupported non-solver controls (photo_digits, photo_interval, pause_before_terminate, required_termination_code_string; #299)."
 
 [[gaps]]
 suite = "star"
 case = "1M_pre_ms_to_wd"
 issue = "#154"
-reason = "Multi-stage pre-MS-to-WD campaign exceeds 300 s wall-time guard with 2 unsupported controls (photo_interval, required_termination_code_string; #154, #159)."
+reason = "Multi-stage pre-MS-to-WD campaign exceeds 300 s wall-time guard with 2 unsupported controls (photo_interval, required_termination_code_string; #154, #299)."
 
 [[gaps]]
 suite = "star"
 case = "1M_thermohaline"
 issue = "#158"
-reason = "Exceeds 300 s wall-time guard (1,863 steps) with 7 unsupported rotation/photo controls (change_d_omega_flag, near_zams_relax_initial_surface_rotation_v, new_d_omega_flag, num_steps_to_relax_rotation, photo_digits, photo_interval, required_termination_code_string; #158, #159)."
+reason = "Exceeds 300 s wall-time guard (2,039 steps) with 7 unsupported rotation/photo controls (change_d_omega_flag, near_zams_relax_initial_surface_rotation_v, new_d_omega_flag, num_steps_to_relax_rotation, photo_digits, photo_interval, required_termination_code_string; #158, #299)."
 
 [[gaps]]
 suite = "star"
@@ -69,20 +69,20 @@ reason = "Case history_columns.list requests unported MLT++ gradT_excess_alpha c
 [[gaps]]
 suite = "star"
 case = "5M_cepheid_blue_loop"
-issue = "#159"
-reason = "Diagnostic run reaches extras_check_model (237 steps, 2 retries, +0.013% rel_star_age, all final tolerances pass) with 2 unsupported controls (photo_interval, required_termination_code_string; #159, #231)."
+issue = "#299"
+reason = "Diagnostic run reaches extras_check_model (237 steps, 2 retries, +0.013% rel_star_age, all final tolerances pass) with 2 unsupported controls (photo_interval, required_termination_code_string; #299, #231)."
 
 [[gaps]]
 suite = "star"
 case = "7M_prems_to_AGB"
 issue = "#161"
-reason = "Multi-stage pre-MS-to-AGB campaign has 3 unsupported controls (atm_t_tau_opacity, photo_interval, required_termination_code_string; #161, #159)."
+reason = "Multi-stage pre-MS-to-AGB campaign has 3 unsupported controls (atm_t_tau_opacity, photo_interval, required_termination_code_string; #161, #299)."
 
 [[gaps]]
 suite = "star"
 case = "R_CrB_star"
 issue = "#161"
-reason = "Diagnostic run reaches Teff_lower_limit (165 steps vs MESA 167, 7 retries vs MESA 8) with 3 unsupported controls (photo_interval, filename_of_special_rate, required_termination_code_string; #161, #159)."
+reason = "Diagnostic run reaches Teff_lower_limit (165 steps vs MESA 167, 7 retries vs MESA 8) with 3 unsupported controls (photo_interval, filename_of_special_rate, required_termination_code_string; #161, #299)."
 
 [[gaps]]
 suite = "star"
@@ -94,7 +94,7 @@ reason = "T(tau) atmosphere gradr reconstruction departs from MESA 26.4.1."
 suite = "star"
 case = "accreted_material_j"
 issue = "#158"
-reason = "Without the unported use_other_adjust_mdot extras hook the 20 Msun model never accretes and diverges from MESA 26.4.1 by step 1; under upstream varcontrol_target and TDC/mesh defaults it evolves into post-He burning and exceeds the wall-time guard (#158, #159, #152)."
+reason = "Without the unported use_other_adjust_mdot extras hook the 20 Msun model never accretes and diverges from MESA 26.4.1 by step 1; under upstream varcontrol_target and TDC/mesh defaults it evolves into post-He burning and exceeds the wall-time guard (#158, #299, #152)."
 
 [[gaps]]
 suite = "star"
@@ -106,13 +106,13 @@ reason = "Case inlist enables okay_to_reduce_gradT_excess and requests unported 
 suite = "star"
 case = "c13_pocket"
 issue = "#161"
-reason = "AGB third-dredge-up C13-pocket evolution hits memory/wall-time guard with 5 unsupported atmosphere/opacity and photo controls (#161, #159)."
+reason = "AGB third-dredge-up C13-pocket evolution hits memory/wall-time guard with 5 unsupported atmosphere/opacity and photo controls (#161, #299)."
 
 [[gaps]]
 suite = "star"
 case = "carbon_kh"
 issue = "#161"
-reason = "Carbon Kelvin-Helmholtz contraction requires unbundled minimal.net and unsupported atmosphere/photo controls (#161, #159)."
+reason = "Carbon Kelvin-Helmholtz contraction requires unbundled minimal.net and unsupported atmosphere/photo controls (#161, #299)."
 
 [[gaps]]
 suite = "star"
@@ -135,8 +135,8 @@ reason = "Atmosphere boundary reconstruction departs from MESA 26.4.1 (#161, #16
 [[gaps]]
 suite = "star"
 case = "check_redo"
-issue = "#159"
-reason = "Diagnostic run executes test-side CheckRedoStarExtras redo and reaches exact MESA 26.4.1 xa_central_lower_limit (108 steps, 0 retries, -0.0098% rel_star_age, all final tolerances pass); strict mode blocked only by photo_interval (#159)."
+issue = "#299"
+reason = "Diagnostic run executes test-side CheckRedoStarExtras redo and reaches exact MESA 26.4.1 xa_central_lower_limit (108 steps, 0 retries, -0.0098% rel_star_age, all final tolerances pass); strict mode blocked only by photo_interval (#299)."
 
 [[gaps]]
 suite = "star"
@@ -148,18 +148,18 @@ reason = "Case uses unported use_other_build_initial_model and use_other_surface
 suite = "star"
 case = "conserve_angular_momentum"
 issue = "#158"
-reason = "Diagnostic run reaches he_core_mass_limit (441 steps, 0 retries) with 4 unsupported rotational/photo controls (change_d_omega_flag, new_d_omega_flag, photo_interval, required_termination_code_string; #158, #159)."
+reason = "Diagnostic run reaches he_core_mass_limit (449 steps vs MESA 537, 0 retries matching MESA) with 4 unsupported rotational/photo controls (change_d_omega_flag, new_d_omega_flag, photo_interval, required_termination_code_string; #158, #299)."
 
 [[gaps]]
 suite = "star"
 case = "conv_core_cpm"
-issue = "#159"
-reason = "Diagnostic run reaches xa_central_lower_limit(h1) (-0.181% rel_star_age, 92 steps matching MESA 26.4.1) with 2 unsupported non-mixing controls (photo_interval, required_termination_code_string; #159, #152)."
+issue = "#299"
+reason = "Diagnostic run reaches xa_central_lower_limit(h1) (-0.201% rel_star_age, 92 steps matching MESA 26.4.1) with 2 unsupported non-mixing controls (photo_interval, required_termination_code_string; #299, #152)."
 
 [[gaps]]
 suite = "star"
 case = "custom_colors"
-issue = "#159"
+issue = "#299"
 reason = "Case history_columns.list requests unported phase_of_evolution and colors columns."
 
 [[gaps]]
@@ -171,14 +171,14 @@ reason = "Custom rate table evolution fails to converge after retries (#161, #15
 [[gaps]]
 suite = "star"
 case = "diffusion_smoothness"
-issue = "#159"
-reason = "Diagnostic run reaches exact max_age (3.0 Gyr, within_final_tolerances = true, num_zones -1) with 2 ignored controls (photo_interval, required_termination_code_string) and one early-MS log_center_Rho track deviation (7.91e-3 vs 5e-3; #159)."
+issue = "#299"
+reason = "Diagnostic run reaches exact max_age (36 steps matching MESA 26.4.1, 0 retries, within_final_tolerances = true, num_zones max track diff 0.09%) with 2 ignored controls (photo_interval, required_termination_code_string) and one early-MS log_center_Rho track deviation (#299)."
 
 [[gaps]]
 suite = "star"
 case = "extended_convective_penetration"
 issue = "#231"
-reason = "Case uses custom overshoot_scheme(1) = 'other' hook (null_other_overshooting_scheme errors until #231 wires other_overshooting_scheme) plus unsupported photo/termination controls (#231, #159)."
+reason = "Case uses custom overshoot_scheme(1) = 'other' hook (null_other_overshooting_scheme errors until #231 wires other_overshooting_scheme) plus unsupported photo/termination controls (#231, #299)."
 
 [[gaps]]
 suite = "star"
@@ -219,14 +219,14 @@ reason = "Case history_columns.list requests unported MLT++ gradT_excess_alpha c
 [[gaps]]
 suite = "star"
 case = "hb_2M"
-issue = "#159"
-reason = "Diagnostic run reaches xa_central_lower_limit(he4) with 2 unsupported controls (photo_interval, required_termination_code_string) but exceeds the 300 s default harness wall-time guard in baseline_run_26_4_1.json (#159, #168)."
+issue = "#299"
+reason = "Diagnostic run (explicit --timeout-sec 720, 372.8 s wall time) reaches xa_central_lower_limit (190 steps matching MESA 26.4.1, 1 retry matching MESA, +0.177% rel_star_age, mass_conv_core final +5.71e-3 Msun / median track 3.14e-3 Msun / max track 9.71e-2 Msun) with 2 unsupported controls (photo_interval, required_termination_code_string; #299, #144)."
 
 [[gaps]]
 suite = "star"
 case = "high_mass"
 issue = "#157"
-reason = "Diagnostic run reaches upstream xa_central_lower_limit (98 steps, 0 retries, +0.039% rel_star_age) with 2 unsupported controls (photo_interval, required_termination_code_string) and unported MLT++/TDC controls (#157, #159)."
+reason = "Diagnostic run reaches upstream xa_central_lower_limit (98 steps, 0 retries, +0.039% rel_star_age) with 2 unsupported controls (photo_interval, required_termination_code_string) and unported MLT++/TDC controls (#157, #299)."
 
 [[gaps]]
 suite = "star"
@@ -238,31 +238,31 @@ reason = "Case history_columns.list requests unported gravity-darkening grav_dar
 suite = "star"
 case = "high_z"
 issue = "#161"
-reason = "Diagnostic run reaches xa_central_lower_limit (446 steps vs MESA 445, +0.024% rel_star_age) with 3 unsupported controls (atm_t_tau_opacity, photo_interval, required_termination_code_string; #161, #159)."
+reason = "Diagnostic run reaches xa_central_lower_limit (445 steps and 0 retries matching MESA 26.4.1, +0.003% rel_star_age, all final tolerances pass) with 3 unsupported controls (atm_t_tau_opacity, photo_interval, required_termination_code_string; #161, #299)."
 
 [[gaps]]
 suite = "star"
 case = "hot_cool_wind"
-issue = "#159"
-reason = "Multi-wind track has 3 unsupported controls (atm_t_tau_opacity, photo_interval, required_termination_code_string; #159, #161)."
+issue = "#299"
+reason = "Multi-wind track has 3 unsupported controls (atm_t_tau_opacity, photo_interval, required_termination_code_string; #299, #161)."
 
 [[gaps]]
 suite = "star"
 case = "hse_riemann"
 issue = "#151"
-reason = "Riemann hydro energy accounting and max_age_in_seconds stop condition (#151, #159)."
+reason = "Riemann hydro energy accounting and max_age_in_seconds stop condition (#151, #299)."
 
 [[gaps]]
 suite = "star"
 case = "irradiated_planet"
 issue = "#154"
-reason = "Planetary initial model and column-depth irradiation relaxation (#154, #159)."
+reason = "Planetary initial model and column-depth irradiation relaxation (#154, #299)."
 
 [[gaps]]
 suite = "star"
 case = "low_z"
 issue = "#161"
-reason = "Diagnostic run reaches xa_central_lower_limit (181 steps, 0 retries, +0.0084% rel_star_age) with 3 unsupported controls (atm_t_tau_opacity, photo_interval, required_termination_code_string; #161, #159)."
+reason = "Diagnostic run reaches xa_central_lower_limit (181 steps, 0 retries, +0.0084% rel_star_age) with 3 unsupported controls (atm_t_tau_opacity, photo_interval, required_termination_code_string; #161, #299)."
 
 [[gaps]]
 suite = "star"
@@ -292,7 +292,7 @@ reason = "Envelope initial-model construction and boundary relaxation (#154)."
 suite = "star"
 case = "make_he_wd"
 issue = "#154"
-reason = "Mass-removal stage skips unported do_relax_mass (#154), leaving an unrelaxed bare_he_core.mod that terminates at min_timestep_limit (step 6, 52 retries) once non-upstream solver acceptance hacks were removed (#154, #159)."
+reason = "Mass-removal stage skips unported do_relax_mass (#154), leaving an unrelaxed bare_he_core.mod that terminates at min_timestep_limit (step 6, 52 retries) once non-upstream solver acceptance hacks were removed (#154, #299)."
 
 [[gaps]]
 suite = "star"
@@ -346,19 +346,19 @@ reason = "Case history_columns.list requests unported MLT++ gradT_excess_alpha c
 suite = "star"
 case = "ns_h"
 issue = "#161"
-reason = "Neutron-star H envelope burning fails to converge in surface equ_L with unported microphysics and accretion controls (#161, #159, #152)."
+reason = "Neutron-star H envelope burning fails to converge in surface equ_L with unported microphysics and accretion controls (#161, #299, #152)."
 
 [[gaps]]
 suite = "star"
 case = "ns_he"
 issue = "#161"
-reason = "Neutron-star He envelope burning hits max_model_number instead of power_nuc_burn_upper_limit (#161, #159)."
+reason = "Neutron-star He envelope burning hits max_model_number instead of power_nuc_burn_upper_limit (#161, #299)."
 
 [[gaps]]
 suite = "star"
 case = "other_physics_hooks"
 issue = "#231"
-reason = "Case requires custom overshoot_scheme = 'other', use_other_mesh_functions, and photo controls (#231, #159)."
+reason = "Case requires custom overshoot_scheme = 'other', use_other_mesh_functions, and photo controls (#231, #299)."
 
 [[gaps]]
 suite = "star"
@@ -369,8 +369,8 @@ reason = "Case history_columns.list requests unported hydro shock_mass and pair-
 [[gaps]]
 suite = "star"
 case = "ppisn"
-issue = "#159"
-reason = "Case requires custom other_wind hook alongside unported massive-star retry and net controls (#159, #152, #161)."
+issue = "#299"
+reason = "Case requires custom other_wind hook alongside unported massive-star retry and net controls (#299, #152, #161)."
 
 [[gaps]]
 suite = "star"
@@ -429,8 +429,8 @@ reason = "Diagnostic run reaches upstream termination within tolerances via test
 [[gaps]]
 suite = "star"
 case = "semiconvection"
-issue = "#159"
-reason = "Diagnostic run reaches exact MESA 26.4.1 xa_central_lower_limit (293 steps, 0 retries, 0.0 rel_star_age, all final tolerances pass); strict mode blocked only by 2 unsupported controls (photo_interval, required_termination_code_string; #159)."
+issue = "#299"
+reason = "Diagnostic run reaches exact MESA 26.4.1 xa_central_lower_limit (293 steps, 0 retries, 0.0 rel_star_age, all final tolerances pass); strict mode blocked only by 2 unsupported controls (photo_interval, required_termination_code_string; #299)."
 
 [[gaps]]
 suite = "star"
@@ -453,8 +453,8 @@ reason = "Case history_columns.list requests unported starspot cz_bot_radius col
 [[gaps]]
 suite = "star"
 case = "timing"
-issue = "#159"
-reason = "Diagnostic run reaches exact MESA 26.4.1 xa_central_lower_limit (50 steps, 0 retries, -0.0059% rel_star_age, all final tolerances pass); strict mode blocked only by 2 unsupported controls (photo_interval, first_model_for_timing; #159)."
+issue = "#299"
+reason = "Diagnostic run reaches exact MESA 26.4.1 xa_central_lower_limit (50 steps, 0 retries, -0.0059% rel_star_age, all final tolerances pass); strict mode blocked only by 2 unsupported controls (photo_interval, first_model_for_timing; #299)."
 
 [[gaps]]
 suite = "star"
@@ -471,50 +471,50 @@ reason = "Case history_columns.list requests unported colors add_abs_mag and hyd
 [[gaps]]
 suite = "star"
 case = "wd_acc_small_dm"
-issue = "#159"
+issue = "#299"
 reason = "Case history_columns.list requests unported mass-adjustment logxq_below_const_q column."
 
 [[gaps]]
 suite = "star"
 case = "wd_aic"
 issue = "#161"
-reason = "Accretion-induced collapse WD requires unbundled wd_aic.net and unsupported accretion/photo controls (#161, #159)."
+reason = "Accretion-induced collapse WD requires unbundled wd_aic.net and unsupported accretion/photo controls (#161, #299)."
 
 [[gaps]]
 suite = "star"
 case = "wd_c_core_ignition"
-issue = "#159"
-reason = "Diagnostic run hits power_nuc_burn_upper_limit at step 1 (23 retries) with 3 unsupported controls (atm_t_tau_opacity, photo_interval, required_termination_code_string; #159, #161)."
+issue = "#299"
+reason = "Diagnostic run hits power_nuc_burn_upper_limit at step 1 (23 retries) with 3 unsupported controls (atm_t_tau_opacity, photo_interval, required_termination_code_string; #299, #161)."
 
 [[gaps]]
 suite = "star"
 case = "wd_cool_0.6M"
-issue = "#159"
-reason = "White-dwarf cooling with phase separation and full-net diffusion reaches 6.10 Gyr (center_c12 diff -1.6e-6, log_center_Rho diff -4.6e-4) before hitting the 300 s wall-time cap at step 182 with 2 remaining ignored controls (photo_interval, required_termination_code_string; #159, #168)."
+issue = "#299"
+reason = "White-dwarf cooling with phase separation and full-net diffusion reaches 202 steps (10 retries, num_zones max track diff 1.12%) before hitting the 300 s wall-time cap with 2 remaining ignored controls (photo_interval, required_termination_code_string; #299, #144)."
 
 [[gaps]]
 suite = "star"
 case = "wd_diffusion"
 issue = "#161"
-reason = "White-dwarf element diffusion reaches upstream Teff_lower_limit (rel_star_age -1.48%, center_c12 diff +2.0e-6, log_Teff diff +4.3e-3, log_center_Rho diff -6.0e-5, 4 failed final columns) in diagnostic mode with 3 ignored controls (atm_T_tau_opacity, photo_interval, required_termination_code_string) pending atmosphere/solver parity (#161, #152)."
+reason = "White-dwarf element diffusion reaches upstream Teff_lower_limit (137 steps vs MESA 153, 1 retry vs MESA 2, rel_star_age -0.319%) in diagnostic mode with 3 ignored controls (atm_T_tau_opacity, photo_interval, required_termination_code_string) pending atmosphere/solver parity (#161, #152)."
 
 [[gaps]]
 suite = "star"
 case = "wd_he_shell_ignition"
-issue = "#159"
-reason = "Accreting WD He-shell ignition awaits full accretion-species and mass-change relaxation controls (#159, #154)."
+issue = "#299"
+reason = "Accreting WD He-shell ignition awaits full accretion-species and mass-change relaxation controls (#299, #154)."
 
 [[gaps]]
 suite = "star"
 case = "wd_nova_burst"
-issue = "#159"
-reason = "Classical nova burst exceeds 300 s wall-time guard with unported accretion/nova controls (#159, #231)."
+issue = "#299"
+reason = "Classical nova burst drops ignored controls from 10 to 5 (381 steps, 15 retries, +0.225% rel_star_age) before hitting the 300 s wall-time guard (#299, #144, #231)."
 
 [[gaps]]
 suite = "star"
 case = "wd_stable_h_burn"
-issue = "#159"
-reason = "Stable H-burning accreting WD awaits full accretion-species and mass-change relaxation controls (#159, #154)."
+issue = "#299"
+reason = "Stable H-burning accreting WD awaits full accretion-species and mass-change relaxation controls (#299, #154)."
 
 [[gaps]]
 suite = "star"
@@ -526,7 +526,7 @@ reason = "80 Msun core-collapse evolution hits the 300 s wall-time guard with un
 suite = "binary"
 case = "double_bh"
 issue = "#161"
-reason = "Component history_columns.list requests unported gradT_excess_alpha/hydro/colors columns (#157, #161) and coupled binary orbit (#160)."
+reason = "Component history_columns.list requests unported gradT_excess_alpha/hydro/colors columns (#157, #161), 1 unsupported control remains, and coupled binary orbit awaits #160."
 
 [[gaps]]
 suite = "binary"
@@ -538,7 +538,7 @@ reason = "Coupled two-star binary RLOF evolution reaches accretor_overflow_termi
 suite = "binary"
 case = "jdot_gr_check"
 issue = "#160"
-reason = "Binary orbit and masses match MESA 26.4.1 within tolerance; component inlist1 sets save_model_when_terminate (#150) and LOGS1 log_center_T/log_center_Rho exceed star tolerances (#161)."
+reason = "Binary orbit and masses match MESA 26.4.1 within tolerance; component inlist1 sets 1 unsupported star control and LOGS1 initial dt shifts the model 1-5 coarsening cascade in star_age past rel_num_zones = 2% (#160, #161)."
 
 [[gaps]]
 suite = "binary"
@@ -550,7 +550,7 @@ reason = "Coupled binary spin-orbit synchronization age differs from MESA 26.4.1
 suite = "binary"
 case = "jdot_ml_check"
 issue = "#160"
-reason = "Coupled binary mass-loss orbital evolution differs from MESA 26.4.1."
+reason = "Binary orbit and masses match MESA 26.4.1 within tolerance; component inlist1 sets 1 unsupported star control and LOGS1 max rel_num_zones (3.74%) exceeds rel_num_zones = 2% (#160, #161)."
 
 [[gaps]]
 suite = "binary"
@@ -568,7 +568,7 @@ reason = "Explicit RLOF star+point-mass age and component masses differ from MES
 suite = "binary"
 case = "wind_fed_bhhmxb"
 issue = "#160"
-reason = "All binary controls and BH Eddington/wind-budget extras checks pass; component inlist1 sets 2 unsupported star controls (#150, #159) and implicit RLOF exceeds 300 s budget (#152, #160)."
+reason = "All binary controls and BH Eddington/wind-budget extras checks pass; component inlist1 sets 2 unsupported star controls (#299, #160) and implicit RLOF exceeds 300 s budget (#160, #144)."
 
 [[gaps]]
 suite = "astero"

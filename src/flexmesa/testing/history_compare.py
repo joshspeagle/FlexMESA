@@ -26,9 +26,99 @@ COLUMN_ALIASES: dict[str, str] = {
     "log_cntr_Rho": "log_center_Rho",
 }
 SKIP_ALONG_TRACK: frozenset[str] = frozenset(
-    {"model_number", "num_zones", "num_retries", "num_iters", "log_dt", "stage"}
+    {"model_number", "num_retries", "num_iters", "log_dt", "stage"}
 )
+DISCRETE_TRACK_COLUMNS: frozenset[str] = frozenset({"num_zones"})
 SENTINEL_ABS_THRESHOLD: float = 0.99e99
+
+
+@dataclasses.dataclass(frozen=True)
+class HistoryRunStats:
+    """Step, retry, and Newton iteration statistics extracted from a history.
+
+    Attributes:
+        steps: Evolutionary steps spanned by the final stage, or ``None`` if
+            ``model_number`` is absent.
+        retries: Cumulative ``num_retries`` at the final logged step, or
+            ``None`` if ``num_retries`` is absent.
+        iters_sum: Sum of per-step ``num_iters`` across all logged rows, or
+            ``None`` if ``num_iters`` is absent. Equals cumulative Newton
+            iterations across the stage when ``iters_rows == steps``.
+        mean_iters: Mean per-step ``num_iters`` across logged rows, or
+            ``None`` if ``num_iters`` is absent.
+        iters_rows: Number of logged rows averaged in ``mean_iters`` and
+            summed in ``iters_sum`` (``0`` when ``num_iters`` is absent).
+    """
+
+    steps: int | None = None
+    retries: int | None = None
+    iters_sum: int | None = None
+    mean_iters: float | None = None
+    iters_rows: int = 0
+
+
+def extract_history_run_stats(
+    tbl: HistoryTable,
+    suite: str,
+) -> HistoryRunStats:
+    """Extract final-stage step, retry, and iteration counts from ``tbl``.
+
+    Args:
+        tbl: Loaded ``HistoryTable`` for a single evolutionary stage.
+        suite: Upstream suite name (``"star"``, ``"binary"``, or ``"astero"``).
+
+    Returns:
+        ``HistoryRunStats`` populated from ``model_number``, ``num_retries``,
+        and ``num_iters`` where present.
+    """
+    steps: int | None = None
+    if "model_number" in tbl.columns and tbl.num_rows > 0:
+        m_arr = tbl.columns["model_number"]
+        if math.isfinite(float(m_arr[0])) and math.isfinite(float(m_arr[-1])):
+            m0 = round(float(m_arr[0]))
+            m1 = round(float(m_arr[-1]))
+            if suite == "binary":
+                steps = m1
+            elif tbl.num_rows == 1:
+                steps = 1
+            elif m0 <= 1:
+                steps = m1
+            elif (
+                tbl.num_rows >= 3
+                and round(float(m_arr[1])) - m0 == m0
+                and round(float(m_arr[2])) - round(float(m_arr[1])) == m0
+            ):
+                # Run started at model_number = 0 with history_interval == m0.
+                steps = m1
+            else:
+                steps = m1 - m0 + 1
+
+    retries: int | None = None
+    if "num_retries" in tbl.columns and tbl.num_rows > 0:
+        r_end = float(tbl.columns["num_retries"][-1])
+        if math.isfinite(r_end) and abs(r_end) < SENTINEL_ABS_THRESHOLD:
+            retries = round(r_end)
+
+    iters_sum: int | None = None
+    mean_iters: float | None = None
+    iters_rows = 0
+    if "num_iters" in tbl.columns and tbl.num_rows > 0:
+        i_arr = tbl.columns["num_iters"]
+        valid = i_arr[
+            np.isfinite(i_arr) & (np.abs(i_arr) < SENTINEL_ABS_THRESHOLD)
+        ]
+        if valid.size > 0:
+            iters_sum = round(float(np.sum(valid)))
+            mean_iters = round(float(np.mean(valid)), 2)
+            iters_rows = int(valid.size)
+
+    return HistoryRunStats(
+        steps=steps,
+        retries=retries,
+        iters_sum=iters_sum,
+        mean_iters=mean_iters,
+        iters_rows=iters_rows,
+    )
 
 
 @dataclasses.dataclass(frozen=True)
@@ -65,7 +155,11 @@ class TrackDeviation:
             occurs (in ``yr`` for ``star_age``/``age`` or dimensionless step).
         tolerance: Configured track tolerance if constrained, else ``None``.
         within_tolerance: True when ``tolerance is None`` or all compared
-            samples are finite, non-sentinel, and ``max_abs_diff <= tolerance``.
+            samples are finite, non-sentinel, and within the configured
+            absolute (``<col>``) or relative (``rel_<col>``) tolerance.
+        max_rel_diff: Maximum relative difference ``max |run - ref| / |ref|``
+            on the interior common grid when ``|ref| > 0`` everywhere on the
+            grid, else ``None``.
     """
 
     column: str
@@ -74,6 +168,7 @@ class TrackDeviation:
     x_at_max: float
     tolerance: float | None
     within_tolerance: bool
+    max_rel_diff: float | None = None
 
 
 @dataclasses.dataclass(frozen=True)
@@ -255,6 +350,43 @@ def _is_bad_value(val: float) -> bool:
     return not math.isfinite(val) or abs(val) >= SENTINEL_ABS_THRESHOLD
 
 
+def _resolve_track_tolerance(
+    col: str,
+    track_tolerances: dict[str, float],
+) -> tuple[float | None, bool, str]:
+    """Resolve absolute ``<col>`` or relative ``rel_<col>`` track tolerance."""
+    if col in track_tolerances:
+        return track_tolerances[col], False, col
+    rel_key = f"rel_{col}"
+    if rel_key in track_tolerances:
+        return track_tolerances[rel_key], True, rel_key
+    return None, False, col
+
+
+def _compare_scalar_track_tol(
+    tol_key: str,
+    tol: float,
+    run_cols: dict[str, np.ndarray],
+    ref_cols: dict[str, np.ndarray],
+) -> bool:
+    """Evaluate a single-point (``ref_span == 0``) track tolerance."""
+    is_rel = tol_key.startswith("rel_")
+    raw_col = tol_key[4:] if is_rel else tol_key
+    if raw_col not in run_cols or raw_col not in ref_cols:
+        return False
+    r_val = float(run_cols[raw_col][-1])
+    ref_val = float(ref_cols[raw_col][-1])
+    if _is_bad_value(r_val) or _is_bad_value(ref_val):
+        return False
+    diff = abs(r_val - ref_val)
+    if is_rel:
+        if abs(ref_val) > 0.0:
+            diff /= abs(ref_val)
+        else:
+            diff = 0.0 if r_val == 0.0 else float("inf")
+    return math.isfinite(diff) and diff <= tol
+
+
 def compare_histories(
     ref: HistoryTable,
     run: HistoryTable,
@@ -317,13 +449,28 @@ def compare_histories(
         if col in ("model_number", xcol):
             continue
         final_diffs[col] = float(run.columns[col][-1] - ref.columns[col][-1])
+    if "num_zones" in shared_cols:
+        ref_nz_end = float(ref.columns["num_zones"][-1])
+        run_nz_end = float(run.columns["num_zones"][-1])
+        if abs(ref_nz_end) > 0.0:
+            final_diffs["rel_num_zones"] = (run_nz_end - ref_nz_end) / abs(
+                ref_nz_end
+            )
+        else:
+            final_diffs["rel_num_zones"] = (
+                0.0 if run_nz_end == 0.0 else float("inf")
+            )
 
     failed_final: list[str] = []
     for col, tol in spec.final_tolerances.items():
         if col not in final_diffs:
             failed_final.append(col)
             continue
-        raw_col = xcol if col == f"rel_{xcol}" else col
+        raw_col = (
+            xcol
+            if col == f"rel_{xcol}"
+            else (col[4:] if col.startswith("rel_") else col)
+        )
         run_end = (
             float(run.columns[raw_col][-1]) if raw_col in run.columns else 0.0
         )
@@ -354,27 +501,57 @@ def compare_histories(
         ref_in = ref_x[(ref_x > lo) & (ref_x < hi)]
         run_in = run_x[(run_x > lo) & (run_x < hi)]
         grid = np.unique(np.concatenate([lin_grid, ref_in, run_in]))
+        ref_overlap_mask = (ref_x >= lo) & (ref_x <= hi)
+        ref_node_grid = ref_x[ref_overlap_mask]
         for col in interp_names:
-            ref_interp = np.interp(grid, ref_x, ref_cols[col])
-            run_interp = np.interp(grid, run_x, run_cols[col])
+            if col in DISCRETE_TRACK_COLUMNS and ref_node_grid.size >= 2:
+                col_grid = ref_node_grid
+                ref_interp = ref_cols[col][ref_overlap_mask]
+                run_interp = np.interp(col_grid, run_x, run_cols[col])
+            else:
+                col_grid = grid
+                ref_interp = np.interp(col_grid, ref_x, ref_cols[col])
+                run_interp = np.interp(col_grid, run_x, run_cols[col])
             abs_d = np.abs(run_interp - ref_interp)
             has_bad = bool(
                 not np.all(np.isfinite(abs_d))
                 or np.any(np.abs(run_cols[col]) >= SENTINEL_ABS_THRESHOLD)
             )
+            pos_ref = bool(
+                col_grid.size > 0
+                and np.all(np.isfinite(ref_interp))
+                and np.all(np.abs(ref_interp) > 0.0)
+            )
+            max_rel: float | None = None
             if has_bad:
                 max_d = float("inf")
                 med_d = float("nan")
-                x_max = float(grid[0]) if grid.size > 0 else lo
+                x_max = float(col_grid[0]) if col_grid.size > 0 else lo
+                if pos_ref:
+                    max_rel = float("inf")
             else:
                 idx_max = int(np.argmax(abs_d))
                 max_d = float(abs_d[idx_max])
                 med_d = float(np.median(abs_d))
-                x_max = float(grid[idx_max])
-            tol_opt = spec.track_tolerances.get(col)
-            ok = tol_opt is None or (not has_bad and max_d <= tol_opt)
+                x_max = float(col_grid[idx_max])
+                if pos_ref:
+                    max_rel = float(np.max(abs_d / np.abs(ref_interp)))
+            tol_opt, is_rel, tol_key = _resolve_track_tolerance(
+                col, spec.track_tolerances
+            )
+            if tol_opt is None:
+                ok = True
+            elif is_rel:
+                ok = (
+                    not has_bad
+                    and max_rel is not None
+                    and math.isfinite(max_rel)
+                    and max_rel <= tol_opt
+                )
+            else:
+                ok = not has_bad and max_d <= tol_opt
             if not ok:
-                failed_track.append(col)
+                failed_track.append(tol_key)
             deviations.append(
                 TrackDeviation(
                     column=col,
@@ -383,20 +560,19 @@ def compare_histories(
                     x_at_max=x_max,
                     tolerance=tol_opt,
                     within_tolerance=ok,
+                    max_rel_diff=max_rel,
                 )
             )
-        for col in spec.track_tolerances:
-            if col not in run_cols and col not in failed_track:
-                failed_track.append(col)
+        for tol_key in spec.track_tolerances:
+            raw_col = tol_key[4:] if tol_key.startswith("rel_") else tol_key
+            if raw_col not in run_cols and tol_key not in failed_track:
+                failed_track.append(tol_key)
     elif ref_span == 0.0 and span_ok:
-        for col, tol in spec.track_tolerances.items():
-            if col not in run.columns or col not in ref.columns:
-                failed_track.append(col)
-                continue
-            r_val = float(run.columns[col][-1])
-            d_val = abs(r_val - float(ref.columns[col][-1]))
-            if not math.isfinite(d_val) or _is_bad_value(r_val) or d_val > tol:
-                failed_track.append(col)
+        for tol_key, tol in spec.track_tolerances.items():
+            if not _compare_scalar_track_tol(
+                tol_key, tol, run.columns, ref.columns
+            ):
+                failed_track.append(tol_key)
     else:
         failed_track.extend(spec.track_tolerances.keys())
 
@@ -411,19 +587,57 @@ def compare_histories(
         raw_x = run.columns[xcol]
         in_range = (raw_x >= lo) & (raw_x <= hi)
         exceed_mask = np.zeros(run.num_rows, dtype=bool)
-        for col, tol in spec.track_tolerances.items():
-            if col not in ref_bounds or col not in run.columns:
+        for tol_key, tol in spec.track_tolerances.items():
+            is_rel = tol_key.startswith("rel_")
+            raw_col = tol_key[4:] if is_rel else tol_key
+            if raw_col not in ref_bounds or raw_col not in run.columns:
                 exceed_mask |= in_range
                 continue
-            r_arr = run.columns[col]
-            lo_b, hi_b = ref_bounds[col]
+            if raw_col in DISCRETE_TRACK_COLUMNS and ref_node_grid.size >= 2:
+                ref_lo_d = ref_bounds[raw_col][0][ref_overlap_mask]
+                ref_hi_d = ref_bounds[raw_col][1][ref_overlap_mask]
+                run_at_ref = np.interp(ref_node_grid, run_x, run_cols[raw_col])
+                dist_d = np.maximum(
+                    0.0,
+                    np.maximum(ref_lo_d - run_at_ref, run_at_ref - ref_hi_d),
+                )
+                if is_rel:
+                    scale_d = np.minimum(np.abs(ref_lo_d), np.abs(ref_hi_d))
+                    metric_d = np.where(
+                        scale_d > 0.0,
+                        dist_d / np.where(scale_d > 0.0, scale_d, 1.0),
+                        np.where(dist_d > 0.0, np.inf, 0.0),
+                    )
+                else:
+                    metric_d = dist_d
+                bad_ref = (
+                    ~np.isfinite(metric_d)
+                    | (np.abs(run_at_ref) >= SENTINEL_ABS_THRESHOLD)
+                    | (metric_d > tol)
+                )
+                for bad_x in ref_node_grid[bad_ref]:
+                    pos = int(np.searchsorted(raw_x, bad_x, side="left"))
+                    if pos < run.num_rows:
+                        exceed_mask[pos] = True
+                continue
+            r_arr = run.columns[raw_col]
+            lo_b, hi_b = ref_bounds[raw_col]
             ref_lo = np.interp(raw_x, ref_x, lo_b)
             ref_hi = np.interp(raw_x, ref_x, hi_b)
             dist = np.maximum(0.0, np.maximum(ref_lo - r_arr, r_arr - ref_hi))
+            if is_rel:
+                scale = np.minimum(np.abs(ref_lo), np.abs(ref_hi))
+                metric = np.where(
+                    scale > 0.0,
+                    dist / np.where(scale > 0.0, scale, 1.0),
+                    np.where(dist > 0.0, np.inf, 0.0),
+                )
+            else:
+                metric = dist
             bad_pt = (
-                ~np.isfinite(dist)
+                ~np.isfinite(metric)
                 | (np.abs(r_arr) >= SENTINEL_ABS_THRESHOLD)
-                | (dist > tol)
+                | (metric > tol)
             )
             exceed_mask |= in_range & bad_pt
         hit_indices = np.flatnonzero(exceed_mask)
@@ -491,14 +705,26 @@ def re_evaluate_comparison(
     seen_cols: set[str] = set()
     for d in comp.track_deviations:
         seen_cols.add(d.column)
-        tol_opt = spec.track_tolerances.get(d.column)
+        tol_opt, is_rel, tol_key = _resolve_track_tolerance(
+            d.column, spec.track_tolerances
+        )
         bad_d = (
             not math.isfinite(d.max_abs_diff)
             or abs(d.max_abs_diff) >= SENTINEL_ABS_THRESHOLD
         )
-        ok = tol_opt is None or (not bad_d and d.max_abs_diff <= tol_opt)
+        if tol_opt is None:
+            ok = True
+        elif is_rel:
+            ok = (
+                not bad_d
+                and d.max_rel_diff is not None
+                and math.isfinite(d.max_rel_diff)
+                and d.max_rel_diff <= tol_opt
+            )
+        else:
+            ok = not bad_d and d.max_abs_diff <= tol_opt
         if not ok:
-            failed_track.append(d.column)
+            failed_track.append(tol_key)
         new_devs.append(
             TrackDeviation(
                 column=d.column,
@@ -507,21 +733,23 @@ def re_evaluate_comparison(
                 x_at_max=d.x_at_max,
                 tolerance=tol_opt,
                 within_tolerance=ok,
+                max_rel_diff=d.max_rel_diff,
             )
         )
     if has_overlap:
-        for col in spec.track_tolerances:
-            if col not in seen_cols and col not in failed_track:
-                failed_track.append(col)
+        for tol_key in spec.track_tolerances:
+            raw_col = tol_key[4:] if tol_key.startswith("rel_") else tol_key
+            if raw_col not in seen_cols and tol_key not in failed_track:
+                failed_track.append(tol_key)
     elif comp.ref_span == 0.0 and span_ok:
-        for col, tol in spec.track_tolerances.items():
-            d_val = comp.final_diffs.get(col, float("inf"))
+        for tol_key, tol in spec.track_tolerances.items():
+            d_val = comp.final_diffs.get(tol_key, float("inf"))
             if (
                 not math.isfinite(d_val)
                 or abs(d_val) >= SENTINEL_ABS_THRESHOLD
                 or abs(d_val) > tol
             ):
-                failed_track.append(col)
+                failed_track.append(tol_key)
     else:
         for col in spec.track_tolerances:
             if col not in failed_track:
@@ -551,6 +779,20 @@ def _json_safe_float(val: float | None) -> float | str | None:
     return val
 
 
+def _track_dev_to_dict(d: TrackDeviation) -> dict[str, Any]:
+    out: dict[str, Any] = {
+        "column": d.column,
+        "max_abs_diff": _json_safe_float(d.max_abs_diff),
+        "median_abs_diff": _json_safe_float(d.median_abs_diff),
+        "x_at_max": _json_safe_float(d.x_at_max),
+        "tolerance": _json_safe_float(d.tolerance),
+        "within_tolerance": d.within_tolerance,
+    }
+    if d.max_rel_diff is not None:
+        out["max_rel_diff"] = _json_safe_float(d.max_rel_diff)
+    return out
+
+
 def comparison_to_dict(comp: HistoryComparison) -> dict[str, Any]:
     """Serialize a ``HistoryComparison`` into a strict JSON-safe dictionary."""
     return {
@@ -566,15 +808,7 @@ def comparison_to_dict(comp: HistoryComparison) -> dict[str, Any]:
         "within_final_tolerances": comp.within_final_tolerances,
         "failed_final_columns": list(comp.failed_final_columns),
         "track_deviations": [
-            {
-                "column": d.column,
-                "max_abs_diff": _json_safe_float(d.max_abs_diff),
-                "median_abs_diff": _json_safe_float(d.median_abs_diff),
-                "x_at_max": _json_safe_float(d.x_at_max),
-                "tolerance": _json_safe_float(d.tolerance),
-                "within_tolerance": d.within_tolerance,
-            }
-            for d in comp.track_deviations
+            _track_dev_to_dict(d) for d in comp.track_deviations
         ],
         "within_track_tolerances": comp.within_track_tolerances,
         "failed_track_columns": list(comp.failed_track_columns),
@@ -614,6 +848,7 @@ def comparison_from_dict(raw: dict[str, Any]) -> HistoryComparison:
             x_at_max=_restore_json_float(d["x_at_max"]),
             tolerance=_restore_json_opt_float(d.get("tolerance")),
             within_tolerance=bool(d["within_tolerance"]),
+            max_rel_diff=_restore_json_opt_float(d.get("max_rel_diff")),
         )
         for d in raw.get("track_deviations", ())
     )

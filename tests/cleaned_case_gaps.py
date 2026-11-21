@@ -27,7 +27,7 @@ class DeclaredStop:
 
 DECLARED_STAR_STOPS: dict[str, DeclaredStop] = {
     "extended_convective_penetration": DeclaredStop(
-        r"overshoot_scheme", "#155"
+        r"overshoot_scheme", "#231"
     ),
     "make_env": DeclaredStop(r"missing saved model 'start\.mod'", "#154"),
     "custom_rates": DeclaredStop(r"unknown net file 'nco\.net'", "#161"),

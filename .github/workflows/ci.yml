@@ -148,11 +148,11 @@ jobs:
             test "$r" = "success" || test "$r" = "skipped"
           done
 
-  # The Python suite runs as five shards. `scripts/ci/pytest_shard.py`
+  # The Python suite, including the end-to-end files, runs as six shards. `scripts/ci/pytest_shard.py`
   # assigns every collected test file to exactly one shard
   # (`tests/test_ci_shards.py` checks this).
   python-jax-tests:
-    name: Python, PyO3 & JAX Tests (shard ${{ matrix.shard }}/5)
+    name: Python, PyO3 & JAX Tests (shard ${{ matrix.shard }}/6)
     needs: changes
     if: needs.changes.outputs.python == 'true'
     runs-on: ubuntu-latest
@@ -160,7 +160,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4, 5]
+        shard: [1, 2, 3, 4, 5, 6]
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -173,9 +173,9 @@ jobs:
           release: "false"
           cache-jax: "true"
 
-      - name: Run Python, PyO3, and JAX parity tests (shard ${{ matrix.shard }}/5)
+      - name: Run Python, PyO3, and JAX parity tests (shard ${{ matrix.shard }}/6)
         run: |
-          pytest $(python scripts/ci/pytest_shard.py --index ${{ matrix.shard }} --total 5) -v --durations=15
+          pytest $(python scripts/ci/pytest_shard.py --index ${{ matrix.shard }} --total 6) -v --durations=15
 
   python-jax:
     name: Python, PyO3 & JAX Parity Suite
@@ -189,27 +189,6 @@ jobs:
           test "${{ needs.changes.result }}" = "success"
           r="${{ needs.python-jax-tests.result }}"
           test "$r" = "success" || test "$r" = "skipped"
-
-  e2e:
-    name: Upstream MESA End-to-End Suites
-    needs: changes
-    if: needs.changes.outputs.python == 'true'
-    runs-on: ubuntu-latest
-    timeout-minutes: 45
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Set up FlexMESA (debug + JAX cache)
-        uses: ./.github/actions/setup-flexmesa
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          pip-spec: '-e ".[test]"'
-          release: "false"
-          cache-jax: "true"
-
-      - name: Run upstream MESA Tier 1-5 and dev_cases E2E suites
-        run: pytest tests/test_e2e_*.py -v
 
   docs:
     name: Ruff, Figures, MkDocs (Strict) & Snippets

@@ -73,7 +73,8 @@ def select(paths: list[str], event: str) -> dict[str, bool]:
     Returns:
         A mapping from each name in ``GROUPS`` to whether it runs.
         ``rust`` is Clippy, rustdoc and the Rust test shards; ``python`` is
-        the Python shards, the harness unit suite and the end-to-end suite;
+        the Python shards (which include the end-to-end files) and the
+        harness unit suite;
         ``engine_runs`` is the history-harness subset and the two
         strict-determinism jobs.
     """

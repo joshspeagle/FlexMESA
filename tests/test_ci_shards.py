@@ -25,7 +25,7 @@ def test_ci_python_shards_partition_every_collected_test_file() -> None:
     files = shard.discover_test_files(REPO_ROOT)
     assert "tests/test_ci_shards.py" in files
     assert "tests/test_history_harness.py" not in files
-    assert not [f for f in files if f.startswith("tests/test_e2e_")]
+    assert "tests/test_e2e_0_runner.py" in files
     on_disk = {
         p.relative_to(REPO_ROOT).as_posix()
         for pattern in ("test_*.py", "*_test.py")
@@ -40,7 +40,6 @@ def test_ci_python_shards_partition_every_collected_test_file() -> None:
             "tests/test_mesa_paper_figures.py",
             "tests/test_history_harness.py",
         }
-        or f.startswith("tests/test_e2e_")
     }
     assert set(files) == on_disk - ignored
 

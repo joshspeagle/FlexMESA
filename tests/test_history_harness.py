@@ -652,7 +652,9 @@ def test_flexmesa_trace_and_harness_run_cli_smoke(
     assert payload["summary"]["strict_validated_cases"] == 0
     assert "diagnostic (" in md_out.read_text(encoding="utf-8")
 
-    # Undeclared failure under --gate must return exit code 1.
+    # Undeclared failure under --gate must return exit code 1. `timing` is
+    # the shortest uncapped star case (50 steps); the reference below is
+    # deliberately wrong, so the run fails on termination and history.
     custom_manifest = tmp_path / "custom_manifest.toml"
     custom_gaps = tmp_path / "empty_gaps.toml"
     (tmp_path / "ref_fail.tsv").write_text(
@@ -664,7 +666,7 @@ def test_flexmesa_trace_and_harness_run_cli_smoke(
         '[defaults.star]\nindependent_var = "star_age"\n'
         "[defaults.star.final_tolerances]\nlog_L = 0.01\n"
         "[defaults.star.track_tolerances]\nlog_L = 0.01\n"
-        '[[cases]]\nsuite = "star"\ncase = "custom_colors"\n'
+        '[[cases]]\nsuite = "star"\ncase = "timing"\n'
         'reference_status = "mesa_26_4_1"\nreference_path = "ref_fail.tsv"\n'
         'required_termination = "max_age"\n',
         encoding="utf-8",
@@ -679,7 +681,7 @@ def test_flexmesa_trace_and_harness_run_cli_smoke(
             "--known-gaps",
             str(custom_gaps),
             "--cases",
-            "custom_colors",
+            "timing",
             "--gate",
         ]
     )

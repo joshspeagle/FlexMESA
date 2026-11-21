@@ -37,65 +37,63 @@ pie showData
 ### Modules
 
 ```mermaid
-flowchart LR
+flowchart TB
     subgraph Foundations["Foundations"]
-        const["const<br/>100% ported<br/>100% started"]:::ported
-        utils["utils<br/>0% ported<br/>57% started"]:::partial
-        math["math<br/>0% ported<br/>61% started"]:::partial
-        auto_diff["auto_diff<br/>0% ported<br/>88% started"]:::partial
-        mtx["mtx<br/>0% ported<br/>93% started"]:::partial
-        interp_1d["interp_1d<br/>0% ported<br/>67% started"]:::partial
-        interp_2d["interp_2d<br/>1% ported<br/>51% started"]:::partial
-        num["num<br/>0% ported<br/>96% started"]:::partial
+        direction TB
+        const["<b>const</b><br/>100% ported<br/>100% started"]:::ported
+        utils["<b>utils</b><br/>0% ported<br/>57% started"]:::partial
+        math["<b>math</b><br/>0% ported<br/>61% started"]:::partial
+        auto_diff["<b>auto_diff</b><br/>0% ported<br/>88% started"]:::partial
+        mtx["<b>mtx</b><br/>0% ported<br/>93% started"]:::partial
+        interp_1d["<b>interp_1d</b><br/>0% ported<br/>67% started"]:::partial
+        interp_2d["<b>interp_2d</b><br/>1% ported<br/>51% started"]:::partial
+        num["<b>num</b><br/>0% ported<br/>96% started"]:::partial
+        const ~~~ interp_1d
+        utils ~~~ interp_2d
+        math ~~~ num
     end
     subgraph Microphysics["Microphysics"]
-        chem["chem<br/>0% ported<br/>91% started"]:::partial
-        eos["eos<br/>0% ported<br/>73% started"]:::partial
-        kap["kap<br/>0% ported<br/>39% started"]:::started
-        rates["rates<br/>0% ported<br/>99% started"]:::partial
-        net["net<br/>0% ported<br/>100% started"]:::partial
-        neu["neu<br/>84% ported<br/>84% started"]:::ported
-        atm["atm<br/>0% ported<br/>64% started"]:::partial
-        turb["turb<br/>67% ported<br/>100% started"]:::ported
-        ionization["ionization<br/>0% ported<br/>42% started"]:::started
-        colors["colors<br/>0% ported<br/>89% started"]:::partial
+        direction TB
+        chem["<b>chem</b><br/>0% ported<br/>91% started"]:::partial
+        eos["<b>eos</b><br/>0% ported<br/>73% started"]:::partial
+        kap["<b>kap</b><br/>0% ported<br/>39% started"]:::started
+        rates["<b>rates</b><br/>0% ported<br/>99% started"]:::partial
+        net["<b>net</b><br/>0% ported<br/>100% started"]:::partial
+        neu["<b>neu</b><br/>84% ported<br/>84% started"]:::ported
+        atm["<b>atm</b><br/>0% ported<br/>64% started"]:::partial
+        turb["<b>turb</b><br/>67% ported<br/>100% started"]:::ported
+        ionization["<b>ionization</b><br/>0% ported<br/>42% started"]:::started
+        colors["<b>colors</b><br/>0% ported<br/>89% started"]:::partial
+        chem ~~~ neu
+        eos ~~~ atm
+        kap ~~~ turb
+        rates ~~~ ionization
+        net ~~~ colors
     end
     subgraph Stellar_evolution["Stellar evolution"]
-        star_data["star_data<br/>0% ported<br/>99% started"]:::partial
-        star["star<br/>35% ported<br/>85% started"]:::partial
-        binary["binary<br/>19% ported<br/>75% started"]:::partial
-        astero["astero<br/>0% ported<br/>72% started"]:::partial
+        direction TB
+        star_data["<b>star_data</b><br/>0% ported<br/>99% started"]:::partial
+        star["<b>star</b><br/>35% ported<br/>85% started"]:::partial
+        binary["<b>binary</b><br/>19% ported<br/>75% started"]:::partial
+        astero["<b>astero</b><br/>0% ported<br/>72% started"]:::partial
     end
     subgraph Bundled_codes_and_plotting["Bundled codes and plotting"]
-        gyre["gyre<br/>0% ported<br/>0% started"]:::absent
-        adipls["adipls<br/>0% ported<br/>0% started"]:::absent
-        stella["stella<br/>0% ported<br/>0% started"]:::absent
-        plotting["plotting<br/>0% ported<br/>0% started"]:::absent
+        direction TB
+        gyre["<b>gyre</b><br/>0% ported<br/>0% started"]:::absent
+        adipls["<b>adipls</b><br/>0% ported<br/>0% started"]:::absent
+        stella["<b>stella</b><br/>0% ported<br/>0% started"]:::absent
+        plotting["<b>plotting</b><br/>0% ported<br/>0% started"]:::absent
     end
-    const --> math
-    math --> auto_diff
-    utils --> mtx
-    mtx --> num
-    interp_1d --> interp_2d
-    chem --> eos
-    eos --> kap
-    chem --> rates
-    rates --> net
-    eos --> net
-    star_data --> star
-    star --> binary
-    star --> astero
-    gyre --> astero
-    adipls --> astero
     Foundations --> Microphysics
     Microphysics --> Stellar_evolution
+    Stellar_evolution ~~~ Bundled_codes_and_plotting
     classDef ported fill:#1a7f37,color:#ffffff,stroke:#57606a
     classDef partial fill:#f2cc60,color:#000000,stroke:#57606a
     classDef started fill:#fff8c5,color:#000000,stroke:#57606a
     classDef absent fill:#d0d7de,color:#000000,stroke:#57606a
 ```
 
-Colour: green = at least half ported; yellow = at least half started; pale = started; grey = not started. Arrows point from a module to what builds on it. Percentages are shares of upstream lines from the port manifest.
+Colour: green = at least half ported; yellow = at least half started; pale = started; grey = not started. An arrow runs from a group to the group built on it. Percentages are shares of upstream lines from the port manifest.
 
 | Module | Progress | Ported | Started | Upstream lines |
 | :--- | :--- | ---: | ---: | ---: |

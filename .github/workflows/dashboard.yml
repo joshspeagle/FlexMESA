@@ -156,6 +156,94 @@ jobs:
 
   refresh-dashboard:
     name: Refresh GitHub Snapshot & Progress Dashboard on main
+    # Runs straight after a merge with the coverage numbers already committed;
+    # `refresh-coverage` below updates those when the coverage jobs finish
+    # (DECISIONS #47).
+    if: >-
+      github.event_name != 'pull_request' &&
+      github.actor != 'github-actions[bot]' &&
+      (github.event_name != 'push' ||
+       !startsWith(github.event.head_commit.message, 'chore(dashboard): auto-refresh'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    outputs:
+      pushed: ${{ steps.push_dash.outputs.pushed }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install Rust toolchain from rust-toolchain.toml
+        run: |
+          rustup toolchain install --no-self-update
+          rustc --version --verbose
+
+      - name: Cache Rust cargo target and registry
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install FlexMESA
+        run: |
+          python -m pip install --upgrade pip "maturin==1.16.0"
+          python -m pip install --no-build-isolation -e .
+
+      - name: Cache FlexMESA data-v1 and MESA test bundles
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/flexmesa
+          key: flexmesa-data-v1-${{ hashFiles('src/flexmesa/data/bundles.toml') }}
+
+      - name: Fetch MESA 26.4.1 test-inputs bundle
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          command -v zstd >/dev/null || (sudo apt-get update && sudo apt-get install -y zstd)
+          python3 src/flexmesa/data/fetch.py fetch --include-test-inputs
+          echo "FLEXMESA_DATA_DIR=$HOME/.cache/flexmesa/data" >> "$GITHUB_ENV"
+          echo "MESA_DIR=$HOME/.cache/flexmesa/mesa_test_inputs" >> "$GITHUB_ENV"
+
+      - name: Refresh dashboard onto latest main and push if changed
+        id: push_dash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TRIGGER_SHA="$(git rev-parse --short "${{ github.sha }}")"
+          DATE_UTC="$(date -u +%Y-%m-%d)"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          PUSHED="false"
+          for attempt in 1 2 3; do
+            git fetch origin main
+            git checkout -f -B main origin/main
+            PYTHONPATH=src python3 -m flexmesa.cli dashboard sync-github --repo "${{ github.repository }}"
+            if [ "${{ github.event_name }}" = "push" ]; then
+              PYTHONPATH=src python3 -m flexmesa.cli dashboard record-history --date-utc "$DATE_UTC" --commit "$TRIGGER_SHA" --event "main merge"
+            fi
+            PYTHONPATH=src python3 -m flexmesa.cli dashboard render
+            PYTHONPATH=src python3 -m flexmesa.cli dashboard check
+            if [ -z "$(git status --porcelain)" ]; then
+              echo "Dashboard already matches latest main."
+              break
+            fi
+            git add README.md docs/index.md docs/benchmarks/progress-dashboard.md benchmarks/dashboard/
+            git commit -m "chore(dashboard): auto-refresh generated progress dashboard"
+            if git push origin HEAD:main; then
+              PUSHED="true"
+              break
+            fi
+            echo "Non-fast-forward push on attempt $attempt; retrying on updated origin/main..."
+          done
+          echo "pushed=$PUSHED" >> "$GITHUB_OUTPUT"
+
+  refresh-coverage:
+    name: Refresh Coverage Numbers in the Dashboard on main
     needs:
       - coverage-rust
       - coverage-python
@@ -216,8 +304,6 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          TRIGGER_SHA="$(git rev-parse --short "${{ github.sha }}")"
-          DATE_UTC="$(date -u +%Y-%m-%d)"
           RUST_JSON="${{ runner.temp }}/cov/rust_cov.json"
           PY_JSON="${{ runner.temp }}/cov/python_cov.json"
           git config user.name "github-actions[bot]"
@@ -228,10 +314,6 @@ jobs:
             git fetch origin main
             git checkout -f -B main origin/main
             PYTHONPATH=src python3 -m flexmesa.cli dashboard collect-coverage --rust-json "$RUST_JSON" --python-json "$PY_JSON"
-            PYTHONPATH=src python3 -m flexmesa.cli dashboard sync-github --repo "${{ github.repository }}"
-            if [ "${{ github.event_name }}" = "push" ]; then
-              PYTHONPATH=src python3 -m flexmesa.cli dashboard record-history --date-utc "$DATE_UTC" --commit "$TRIGGER_SHA" --event "main merge"
-            fi
             PYTHONPATH=src python3 -m flexmesa.cli dashboard render
             PYTHONPATH=src python3 -m flexmesa.cli dashboard check
             if [ -z "$(git status --porcelain)" ]; then
@@ -239,7 +321,7 @@ jobs:
               break
             fi
             git add README.md docs/index.md docs/benchmarks/progress-dashboard.md benchmarks/dashboard/
-            git commit -m "chore(dashboard): auto-refresh generated progress dashboard"
+            git commit -m "chore(dashboard): auto-refresh coverage numbers"
             if git push origin HEAD:main; then
               PUSHED="true"
               break
@@ -251,4 +333,9 @@ jobs:
   redeploy-pages:
     if: needs.refresh-dashboard.outputs.pushed == 'true'
     needs: refresh-dashboard
+    uses: ./.github/workflows/docs.yml
+
+  redeploy-pages-after-coverage:
+    if: needs.refresh-coverage.outputs.pushed == 'true'
+    needs: refresh-coverage
     uses: ./.github/workflows/docs.yml

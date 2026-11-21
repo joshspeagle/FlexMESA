@@ -8,6 +8,7 @@ page (`docs/benchmarks/progress-dashboard.md`), which keeps the full tables.
 
 from __future__ import annotations
 
+import itertools
 from typing import Any
 from urllib.parse import quote
 
@@ -50,25 +51,6 @@ MODULE_GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ),
     ("Stellar evolution", ("star_data", "star", "binary", "astero")),
     ("Bundled codes and plotting", ("gyre", "adipls", "stella", "plotting")),
-)
-
-# Arrows point from a module to one that builds on it.
-_EDGES: tuple[tuple[str, str], ...] = (
-    ("const", "math"),
-    ("math", "auto_diff"),
-    ("utils", "mtx"),
-    ("mtx", "num"),
-    ("interp_1d", "interp_2d"),
-    ("chem", "eos"),
-    ("eos", "kap"),
-    ("chem", "rates"),
-    ("rates", "net"),
-    ("eos", "net"),
-    ("star_data", "star"),
-    ("star", "binary"),
-    ("star", "astero"),
-    ("gyre", "astero"),
-    ("adipls", "astero"),
 )
 
 _BAR_WIDTH = 20
@@ -165,24 +147,45 @@ def _mermaid_pie(total: dict[str, Any]) -> list[str]:
     ]
 
 
+_MAP_ROW = 5
+
+
 def _mermaid_map(by_module: dict[str, dict[str, Any]]) -> list[str]:
-    lines = ["```mermaid", "flowchart LR"]
+    """Module map laid out top to bottom so it fits a README column.
+
+    Each group is a box whose modules sit in rows of `_MAP_ROW`; invisible
+    links (`~~~`) fix the row order. Arrows run between groups only, which
+    keeps the drawing narrow enough to read at GitHub's README width.
+    """
+    lines = ["```mermaid", "flowchart TB"]
+    gids: list[str] = []
     for title, modules in MODULE_GROUPS:
         gid = title.replace(" ", "_")
+        gids.append(gid)
         lines.append(f'    subgraph {gid}["{title}"]')
+        lines.append("        direction TB")
         for mod in modules:
             row = by_module[mod]
             _, ported, started = _shares(row)
             lines.append(
-                f'        {mod}["{mod}<br/>{ported:.0f}% ported<br/>'
+                f'        {mod}["<b>{mod}</b><br/>{ported:.0f}% ported<br/>'
                 f'{started:.0f}% started"]:::{_css_class(row)}'
             )
+        rows = [
+            modules[i : i + _MAP_ROW] for i in range(0, len(modules), _MAP_ROW)
+        ]
+        for upper, lower in itertools.pairwise(rows):
+            lines.extend(
+                f"        {a} ~~~ {b}"
+                for a, b in zip(upper, lower, strict=False)
+            )
         lines.append("    end")
-    lines.extend(f"    {a} --> {b}" for a, b in _EDGES)
+    # The first three groups build on one another. The last group (bundled
+    # codes and plotting) is only placed below, without an arrow.
+    lines.extend(f"    {a} --> {b}" for a, b in itertools.pairwise(gids[:3]))
+    lines.append(f"    {gids[2]} ~~~ {gids[3]}")
     lines.extend(
         [
-            "    Foundations --> Microphysics",
-            "    Microphysics --> Stellar_evolution",
             "    classDef ported fill:#1a7f37,color:#ffffff,stroke:#57606a",
             "    classDef partial fill:#f2cc60,color:#000000,stroke:#57606a",
             "    classDef started fill:#fff8c5,color:#000000,stroke:#57606a",
@@ -287,8 +290,8 @@ def render_readme_dashboard(
         *_mermaid_map(by_module),
         "",
         "Colour: green = at least half ported; yellow = at least half "
-        "started; pale = started; grey = not started. Arrows point from a "
-        "module to what builds on it. Percentages are shares of upstream "
+        "started; pale = started; grey = not started. An arrow runs from a "
+        "group to the group built on it. Percentages are shares of upstream "
         "lines from the port manifest.",
         "",
         "| Module | Progress | Ported | Started | Upstream lines |",

@@ -418,6 +418,8 @@ fn test_adjust_mass_limits_crossing_clamp_263_omega_and_smooth_outer_xa() {
     // Independent Paxton et al. (2019) `eval_i_rot(r0_before, w_roche)` check:
     // at slow rotation `w = omega / sqrt(G*M/r^3) << 1`, `rpsi/re ~ 1 - w^2/6`
     // so `w_roche ~ omega / sqrt(G*M/r^3)` and `i_rot ~ (2/3)*r0^2*(1 + (8/15)*w^2)`.
+    // The neglected terms are of order `w^4` (`w ~ 0.028` here); the measured
+    // difference is `5.8e-6`.
     let w_approx = omega_surf_old
         / (rot_acc.cgrav[0] * m0_after / (r0_before * r0_before * r0_before))
             .sqrt();
@@ -426,7 +428,7 @@ fn test_adjust_mass_limits_crossing_clamp_263_omega_and_smooth_outer_xa() {
         * r0_before
         * (1.0 + (8.0 / 15.0) * w_approx * w_approx);
     assert!(
-        rel_err(rot_acc.j_rot[0], i_rot_approx * omega_surf_old) < 1.0e-4,
+        rel_err(rot_acc.j_rot[0], i_rot_approx * omega_surf_old) < 1.0e-5,
         "default accretion should give j_rot[0] = i_rot * omega_old ({:.6e}), got {:.6e}",
         i_rot_approx * omega_surf_old,
         rot_acc.j_rot[0]

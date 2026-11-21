@@ -61,6 +61,7 @@ Scope and the `v0.1.0` definition are in [`SCOPE.md`](SCOPE.md). Work is tracked
 | 44 | Along-Track `num_zones` and `hb_2M` `mass_conv_core` Manifest Tolerances, A2 Table Upgrades, and `hb_2M` Timeout Budget (`#152`, `#153`, `#155`, `#156`, `#159`) | In force | below |
 | 45 | Sharded CI Jobs, a Non-LTO `ci` Test Profile, and Coverage Off Ordinary Pull Requests | In force | below |
 | 46 | Upstream `real(qp)` Is IEEE-754 `binary128` in Software (`flexmesa_math::Quad`), Not Double-Double | In force | below |
+| 48 | Pull-Request CI Runs Only the Job Groups a Change Can Affect; the Gate Smoke Test Uses the Shortest Case | In force | below |
 
 ## Pre-audit decisions still in force
 
@@ -621,3 +622,16 @@ The text of these four entries predates the audit of 2026-11-16. The decisions s
   - *Keep double-double*: not the arithmetic upstream runs.
   - *An external crate (`rug`, `f128`, `softfloat` bindings)*: adds C code or `unsafe`, against `#![forbid(unsafe_code)]`, for about 500 lines of integer arithmetic.
   - *Rust's native `f128`*: not available on the stable toolchain the workspace builds with.
+
+## DECISIONS #48: Pull-Request CI Runs Only the Job Groups a Change Can Affect; the Gate Smoke Test Uses the Shortest Case
+
+- **Date**: 2026-11-21
+- **Decision**:
+  1. **Job selection by changed paths**: a `changes` job in `ci.yml` runs `scripts/ci/select_jobs.py` on the pull request's changed files. Every job group runs unless all changed files are documentation (`docs/`, `notes/`, top-level `*.md`, `mkdocs.yml`, rule files), Python tests (`tests/**/*.py`, not `tests/fixtures/`), or Rust tests (`crates/<crate>/tests/**/*.rs`). A documentation-only change runs the `docs` job alone; a Python-test change adds the Python shards, the harness unit suite and the end-to-end suite; a Rust-test change adds Clippy, rustdoc and the Rust shards. The history-harness subset and the two strict-determinism jobs run only when something outside those classes changes. A push to `main` and a manual run always run everything. The aggregate jobs accept a skipped shard only when the `changes` job itself succeeded.
+  2. **Gate smoke test on `star/timing`**: `test_flexmesa_trace_and_harness_run_cli_smoke` checks that an undeclared failure makes `harness run --gate` return 1. It did so by running `star/custom_colors` uncapped against a deliberately wrong reference, which took 572 of the test's 601 seconds. It now uses `star/timing` (50 steps), giving the same verdict (`fail (undeclared)`) and exit code in about 20 seconds.
+  3. **Two harness workers**: the pull-request harness subset runs with `--jobs 2`.
+- **Why**: Continuous-integration time is the main delay in each change. A test-only or documentation-only change cannot alter what the skipped jobs measure, and `main` still runs everything after the merge, so a wrong skip is caught there.
+- **Limits**: A job skipped on a pull request is first exercised on `main`. The path classes are deliberately narrow: `benchmarks/`, `scripts/`, workflows, fixtures and all library code run everything.
+- **Alternatives Rejected**:
+  - *Per-crate selection of Rust shards*: crates depend on one another and read files under `benchmarks/` and `tests/fixtures/`; not worth the risk yet.
+  - *Capping the gate smoke run with `--max-steps`*: a capped run is reported as a smoke run, not as a failure, so it would not exercise the gate.

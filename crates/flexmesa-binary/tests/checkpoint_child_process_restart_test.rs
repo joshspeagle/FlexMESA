@@ -82,7 +82,10 @@ fn run_child_binary(in_path: &Path, out_path: &Path) {
         BinarySystem::load_checkpoint(in_path).expect("child load_checkpoint");
     assert_eq!(sys.model_number, 3);
     assert!(sys.counters.num_implicit_trials >= 1);
-    assert_eq!(sys.controls.fr_hard.to_bits(), 1.0e-5_f64.to_bits());
+    assert_eq!(
+        sys.controls.initial_period_in_days.to_bits(),
+        0.5045_f64.to_bits()
+    );
     advance_binary_steps_four_to_six(&mut sys);
     sys.save_checkpoint(out_path)
         .expect("child save_checkpoint");

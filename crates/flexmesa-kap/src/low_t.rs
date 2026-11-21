@@ -10,8 +10,9 @@ use flexmesa_interp2d::interp_evbicub_prevalidated_db;
 use flexmesa_math::{exp10, safe_log10};
 use flexmesa_num::binary_search;
 
-/// Evaluate `AESOPUS` low-$T$ opacity at `(Zref, X, XC, XN, XO, logRho, logT)`
-/// (`AESOPUS_get` in `kap/private/kap_aesopus.f90`).
+/// Evaluate bundled `AESOPUS_AGSS09` low-$T$ opacity at
+/// `(Zref, X, XC, XN, XO, logRho, logT)` (`AESOPUS_get` in
+/// `kap/private/kap_aesopus.f90`).
 ///
 /// Returns `(kap, dlnkap_dln_rho, dlnkap_dln_t)`.
 ///
@@ -27,6 +28,28 @@ pub fn aesopus_get(
     log_t: f64,
 ) -> Result<(f64, f64, f64), KapError> {
     let ka = &kap_tables()?.aesopus;
+    aesopus_get_with_data(ka, zref, x, xc, xn, xo, log_rho, log_t)
+}
+
+/// Evaluate an explicit [`AesopusData`] low-$T$ opacity table at
+/// `(Zref, X, XC, XN, XO, logRho, logT)` (`AESOPUS_get` in
+/// `kap/private/kap_aesopus.f90:327-350`).
+///
+/// Returns `(kap, dlnkap_dln_rho, dlnkap_dln_t)`.
+///
+/// # Errors
+/// Returns [`KapError`] if `(logR, logT)` lies outside `ka`'s bounds or
+/// interpolation fails.
+pub fn aesopus_get_with_data(
+    ka: &AesopusData,
+    zref: f64,
+    x: f64,
+    xc: f64,
+    xn: f64,
+    xo: f64,
+    log_rho: f64,
+    log_t: f64,
+) -> Result<(f64, f64, f64), KapError> {
     let log_r = log_rho - 3.0 * log_t + 18.0;
     let res = aesopus_interp(ka, zref, x, xc, xn, xo, log_r, log_t)?;
     let kap = exp10(res[0]);
@@ -73,6 +96,12 @@ fn aesopus_interp(
         );
     }
 
+    // `kap/private/kap_aesopus.f90:374-380`: require at least 3 Z values for Z interpolation
+    if num_zs < 3 {
+        return Err(KapError::TableIo(format!(
+            "AESOPUS_interp: insufficient number of Z values for interpolation (need >= 3, got {num_zs})"
+        )));
+    }
     // 1-based binary_search in Fortran returns iZ in 1..=num_Zs-1; in 0-based: 0..=num_zs-2
     let iz = binary_search(&ka.zs, zref, None)
         .unwrap_or(0)

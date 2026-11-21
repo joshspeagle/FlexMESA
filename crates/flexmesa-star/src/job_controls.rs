@@ -583,6 +583,11 @@ pub struct StarJobControls {
     /// Multipliers for special rate factors (`special_rate_factor(1..)`, `1.0` default).
     #[serde(default)]
     pub special_rate_factor: Vec<f64>,
+    /// Optional 1D rate-table filenames overriding reactions named in
+    /// `reaction_for_special_factor(1..)` (`filename_of_special_rate(1..)`,
+    /// `star/defaults/star_job.defaults:2465`, `star/private/net.f90:735`).
+    #[serde(default)]
+    pub filename_of_special_rate: Vec<String>,
     /// Use Fushiki & Lamb (1987) pycnonuclear triple-alpha rate (`use_3a_fl87`, `false` default).
     #[serde(default)]
     pub use_3a_fl87: bool,
@@ -763,6 +768,7 @@ impl Default for StarJobControls {
             num_special_rate_factors: 0,
             reaction_for_special_factor: vec![String::new(); 50],
             special_rate_factor: vec![1.0; 50],
+            filename_of_special_rate: vec![String::new(); 50],
             use_3a_fl87: false,
             use_suzuki_weak_rates: false,
             change_v_flag: false,

@@ -45,6 +45,7 @@ struct CachedMicroKey {
     num_special_rate_factors: usize,
     reaction_for_special_factor: Vec<String>,
     special_rate_factor_bits: Vec<u64>,
+    filename_of_special_rate: Vec<String>,
     op_split_burn: bool,
     doing_split: bool,
     mstar_bits: u64,
@@ -102,6 +103,7 @@ impl Default for CachedMicroKey {
             num_special_rate_factors: 0,
             reaction_for_special_factor: Vec::new(),
             special_rate_factor_bits: Vec::new(),
+            filename_of_special_rate: Vec::new(),
             op_split_burn: false,
             doing_split: false,
             mstar_bits: 0,
@@ -196,6 +198,7 @@ impl CachedMicroKey {
             || self.chem_id != model.chem_id
             || self.net_name != j.net_name
             || self.reaction_for_special_factor != j.reaction_for_special_factor
+            || self.filename_of_special_rate != j.filename_of_special_rate
             || self.special_rate_factor_bits.len()
                 != j.special_rate_factor.len()
             || !self
@@ -255,6 +258,8 @@ impl CachedMicroKey {
         self.num_special_rate_factors = j.num_special_rate_factors;
         self.reaction_for_special_factor
             .clone_from(&j.reaction_for_special_factor);
+        self.filename_of_special_rate
+            .clone_from(&j.filename_of_special_rate);
         self.special_rate_factor_bits.clear();
         self.special_rate_factor_bits
             .extend(j.special_rate_factor.iter().map(|v| v.to_bits()));

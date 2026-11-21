@@ -431,6 +431,48 @@ pub fn eval_reaclib_terms(
     (lam_sum, dlam_sum, rlam_sum, drlam_sum)
 }
 
+/// Evaluates the detailed-balance reverse-to-forward multiplier
+/// $\lambda_{\mathrm{rev}} / \lambda_{\mathrm{fwd}}$ for a single REACLIB term
+/// at temperature $T_9 = T / 10^9\,\mathrm{K}$ (`compute_some_inverse_lambdas`
+/// with `lambda = 1, ln_lambda = 0` in `rates/private/reaclib_eval.f90:144-222`,
+/// called by `eval_table_reverse` in `rates/private/raw_rates.f90:880-920`).
+#[must_use]
+pub fn eval_reaclib_inverse_ratio(term: &ReaclibTerm, t9: f64) -> f64 {
+    const LAM_MAX: f64 = 1.0e99;
+
+    let mut indx = get_partition_fcn_indx(t9);
+    if indx >= 24 {
+        indx = 23;
+    }
+    let qratio = if indx < 1 {
+        1.0
+    } else {
+        let m = indx - 1;
+        let p0 = term.inv_part[m];
+        let p1 = term.inv_part[m + 1];
+        if p0 > 0.0 && p1 > 0.0 {
+            let dt = TPART[m + 1] - TPART[m];
+            let tfac = (t9 - TPART[m]) / dt;
+            let a = p1 / p0;
+            p0 * flexmesa_math::pow(a, tfac)
+        } else {
+            1.0
+        }
+    };
+
+    let ln_t9 = flexmesa_math::log(t9);
+    let t9i = 1.0 / t9;
+    let ln1 = term.inv_c1
+        + term.inv_c2 * t9i
+        + 1.5 * f64::from(term.inv_exp) * ln_t9;
+    let fac1 = if ln1 < MAX_LN_LAMBDA {
+        flexmesa_math::exp(ln1)
+    } else {
+        LAM_MAX
+    };
+    fac1 * qratio
+}
+
 /// Computes the detailed-balance first reverse coefficient
 /// `inverse_coefficients(1)` from nuclear masses `w` (`AMU`) and ground-state
 /// spins `spin` (`rates/private/reaclib_support.f90:217-257` and

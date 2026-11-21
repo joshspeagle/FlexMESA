@@ -135,10 +135,10 @@ fn validate_terminal_debug_bounds(
 impl InlistBundle {
     pub(crate) fn populate_eos_and_kap_configs(
         &mut self,
-        allow_unsupported_controls: bool,
+        _allow_unsupported_controls: bool,
     ) -> Result<(), StarError> {
         self.populate_eos_section()?;
-        self.populate_kap_section(allow_unsupported_controls)?;
+        self.populate_kap_section()?;
         self.populate_star_micro_controls()
     }
 
@@ -478,10 +478,7 @@ impl InlistBundle {
     }
 
     #[allow(clippy::too_many_lines)]
-    fn populate_kap_section(
-        &mut self,
-        allow_unsupported_controls: bool,
-    ) -> Result<(), StarError> {
+    fn populate_kap_section(&mut self) -> Result<(), StarError> {
         let Some(kap) = self.sections.get("kap") else {
             return Ok(());
         };
@@ -575,28 +572,25 @@ impl InlistBundle {
             kcfg.aesopus_filename = s.trim().to_owned();
         }
         if kcfg.kap_low_t_option == KapLowTOption::Aesopus {
-            let fname = kcfg.aesopus_filename.trim();
+            let fname = kcfg.aesopus_filename.trim().to_owned();
             if fname.is_empty() {
                 return Err(StarError::InvalidInput(String::from(
                     "failed to specify '&kap::aesopus_filename' when kap_lowT_prefix = 'AESOPUS'",
                 )));
             }
-            if Path::new(fname).file_name().and_then(|s| s.to_str())
-                != Some("AESOPUS_AGSS09.h5")
-            {
-                if allow_unsupported_controls {
-                    self.validation_report.unsupported_controls.push((
-                        String::from("kap"),
-                        format!("aesopus_filename={fname}"),
-                    ));
-                    kcfg.aesopus_filename.clear();
-                    kcfg.kap_low_t_option = KapLowTOption::LowTFa05Gs98;
+            let local = self.case_dir.join(&fname);
+            let resolved =
+                if !Path::new(&fname).is_absolute() && local.is_file() {
+                    local.to_string_lossy().into_owned()
                 } else {
-                    return Err(StarError::InvalidInput(format!(
-                        "unsupported '&kap::aesopus_filename' = '{fname}': only bundled 'AESOPUS_AGSS09.h5' is supported"
-                    )));
-                }
+                    fname.clone()
+                };
+            if !flexmesa_kap::aesopus_source_exists(&resolved) {
+                return Err(StarError::InvalidInput(format!(
+                    "cannot open '&kap::aesopus_filename' = '{fname}'"
+                )));
             }
+            kcfg.aesopus_filename = resolved;
         }
 
         if let Some(v) = kap.try_get_f64("kap", "kap_blend_logt_upper_bdy")? {
@@ -725,11 +719,19 @@ impl InlistBundle {
                     || sj.indexed.contains_key("reaction_for_special_factor");
             let has_fac = sj.scalars.contains_key("special_rate_factor")
                 || sj.indexed.contains_key("special_rate_factor");
-            if job.num_special_rate_factors > 0 || has_rxn || has_fac {
+            let has_fname = sj.scalars.contains_key("filename_of_special_rate")
+                || sj.indexed.contains_key("filename_of_special_rate");
+            if job.num_special_rate_factors > 0
+                || has_rxn
+                || has_fac
+                || has_fname
+            {
                 let mut rxns: Vec<String> =
                     vec![String::new(); MAX_NUM_SPECIAL_RATE_FACTORS];
                 let mut facs: Vec<f64> =
                     vec![1.0_f64; MAX_NUM_SPECIAL_RATE_FACTORS];
+                let mut fnames: Vec<String> =
+                    vec![String::new(); MAX_NUM_SPECIAL_RATE_FACTORS];
                 if !job.reaction_for_special_factor.is_empty() {
                     for (dst, src) in
                         rxns.iter_mut().zip(&job.reaction_for_special_factor)
@@ -742,6 +744,13 @@ impl InlistBundle {
                         facs.iter_mut().zip(&job.special_rate_factor)
                     {
                         *dst = src;
+                    }
+                }
+                if !job.filename_of_special_rate.is_empty() {
+                    for (dst, src) in
+                        fnames.iter_mut().zip(&job.filename_of_special_rate)
+                    {
+                        dst.clone_from(src);
                     }
                 }
                 apply_micro_indexed_slice(
@@ -760,16 +769,58 @@ impl InlistBundle {
                     &mut facs,
                     extract_f64,
                 )?;
+                apply_micro_indexed_slice(
+                    "star_job",
+                    sj,
+                    "filename_of_special_rate",
+                    true,
+                    &mut fnames,
+                    extract_string,
+                )?;
+                for i in 0..MAX_NUM_SPECIAL_RATE_FACTORS {
+                    let trimmed = fnames[i].trim().to_owned();
+                    if trimmed.is_empty() {
+                        fnames[i].clear();
+                        continue;
+                    }
+                    let local = self.case_dir.join(&trimmed);
+                    let resolved = if !Path::new(&trimmed).is_absolute()
+                        && local.is_file()
+                    {
+                        local.to_string_lossy().into_owned()
+                    } else {
+                        trimmed
+                    };
+                    if !rxns[i].trim().is_empty()
+                        && !flexmesa_rates::RateTable1D::exists(
+                            &resolved,
+                            Some(&self.case_dir),
+                        )
+                    {
+                        return Err(StarError::InvalidInput(format!(
+                            "cannot open '&star_job::filename_of_special_rate({})' = '{}' for reaction '{}'",
+                            i + 1,
+                            resolved,
+                            rxns[i].trim()
+                        )));
+                    }
+                    fnames[i] = resolved;
+                }
                 let mut keep = job.num_special_rate_factors;
                 for i in 0..MAX_NUM_SPECIAL_RATE_FACTORS {
-                    if !rxns[i].is_empty() || facs[i] != 1.0 {
+                    if !rxns[i].is_empty()
+                        || facs[i] != 1.0
+                        || !fnames[i].is_empty()
+                    {
                         keep = keep.max(i + 1);
                     }
                 }
                 rxns.truncate(keep);
                 facs.truncate(keep);
+                fnames.truncate(keep);
                 job.reaction_for_special_factor = rxns;
                 job.special_rate_factor = facs;
+                job.filename_of_special_rate = fnames;
             }
         }
 

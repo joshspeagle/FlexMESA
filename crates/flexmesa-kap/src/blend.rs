@@ -2,14 +2,14 @@
 //! Radiative opacity regime blending (`Get_kap_Results_blend_T`,
 //! `Get_kap_highT_Results`, `Get_kap_lowT_Results` in `kap/private/kap_eval.f90`).
 
+use crate::aesopus_h5::resolve_aesopus_data;
 use crate::co::get1_kap_co_results;
 use crate::fixed::get1_kap_fixed_metal_results;
 use crate::loader::kap_tables;
-use crate::low_t::{aesopus_get, kapcn_get};
+use crate::low_t::{aesopus_get_with_data, kapcn_get};
 use crate::types::{KapConfig, KapError, KapLowTOption};
 use flexmesa_autodiff::AutoDiffReal2VarOrder1;
 use flexmesa_math::{exp10, safe_log10};
-use std::path::Path;
 
 const KAP_MIN_LOG_RHO: f64 = -40.0;
 const KAP_CN_ZC: f64 = 0.1644;
@@ -256,21 +256,15 @@ pub fn get_kap_low_t_results(
             kapcn_get(zbase, x, fc, fn_val, log_rho, log_t)
         }
         KapLowTOption::Aesopus => {
-            let fname = cfg.aesopus_filename.trim();
-            if !fname.is_empty()
-                && Path::new(fname).file_name().and_then(|s| s.to_str())
-                    != Some("AESOPUS_AGSS09.h5")
-            {
-                return Err(KapError::InvalidOption(format!(
-                    "unsupported AESOPUS_filename '{fname}': only bundled 'AESOPUS_AGSS09.h5' is supported"
-                )));
-            }
             if cfg.zbase < 0.0 {
                 return Err(KapError::InvalidComposition(
                     "must supply zbase >= 0 for AESOPUS lowT opacities",
                 ));
             }
-            aesopus_get(cfg.zbase, x, xc, xn, xo, log_rho, log_t)
+            let ka = resolve_aesopus_data(&cfg.aesopus_filename)?;
+            aesopus_get_with_data(
+                &ka, cfg.zbase, x, xc, xn, xo, log_rho, log_t,
+            )
         }
         _ => {
             let (lk, dlk_dr, dlk_dt) = get1_kap_fixed_metal_results(

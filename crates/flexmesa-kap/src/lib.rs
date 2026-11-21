@@ -42,11 +42,13 @@
     clippy::unreadable_literal
 )]
 
+pub mod aesopus_h5;
 pub mod blend;
 pub mod co;
 pub(crate) mod co_find;
 pub mod compton;
 pub mod conduction;
+pub(crate) mod deflate;
 pub mod eval;
 pub mod fixed;
 pub mod loader;
@@ -56,6 +58,10 @@ pub mod low_t;
 pub mod spline;
 pub mod types;
 
+pub use aesopus_h5::{
+    aesopus_source_exists, load_aesopus_hdf5_bytes, load_aesopus_hdf5_file,
+    resolve_aesopus_data, AesopusRef,
+};
 pub use co::get1_kap_co_results;
 pub use compton::compton_opacity;
 pub use conduction::{
@@ -67,7 +73,7 @@ pub use eval::{
     get_kap_results, get_kap_results_blend_t, kap_get, kap_get_zones,
 };
 pub use fixed::get1_kap_fixed_metal_results;
-pub use low_t::{aesopus_get, kapcn_get};
+pub use low_t::{aesopus_get, aesopus_get_with_data, kapcn_get};
 pub use types::{
     KapCoOption, KapConfig, KapError, KapEvalOutput, KapLowTOption, KapOption,
     I_FRAC_COMPTON, I_FRAC_HIGH_T, I_FRAC_LOW_T, I_FRAC_TYPE2, NUM_KAP_FRACS,

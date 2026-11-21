@@ -35,6 +35,7 @@ DT_RAW_MAGIC = b"FMDTRW01"
 CMS_RAW_MAGIC = b"FMCMSR01"
 HELM_FULL_MAGIC = b"FMHELM01"
 NET_BUNDLE_MAGIC = b"FNET0001"
+SPECIAL_RATE_BUNDLE_MAGIC = b"FMRT0001"
 HELM_IMAX = 2701
 HELM_JMAX = 1001
 OPAL_SCVH_STEMS: tuple[str, ...] = (
@@ -83,6 +84,63 @@ def build_nets_bin(mesa_dir: pathlib.Path, out_path: pathlib.Path) -> str:
         buf.extend(nb)
         buf.extend(struct.pack("<I", len(raw)))
         buf.extend(raw)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_bytes(bytes(buf))
+    return sha256_file(out_path)
+
+
+def build_special_rate_tables_bin(
+    mesa_dir: pathlib.Path, out_path: pathlib.Path
+) -> str:
+    """Build `FMRT0001` `special_rate_tables.bin` from MESA `rate_tables`."""
+    rt_dir = mesa_dir / "data" / "rates_data" / "rate_tables"
+    if not rt_dir.is_dir():
+        raise FileNotFoundError(f"Missing MESA rate_tables directory: {rt_dir}")
+    entries: list[tuple[str, list[float], list[float]]] = []
+    for p in sorted(rt_dir.iterdir(), key=lambda item: item.name):
+        if (
+            not p.is_file()
+            or p.suffix not in (".dat", ".txt")
+            or p.name in ("rate_list.txt", "weak_rate_list.txt")
+        ):
+            continue
+        lines = p.read_text(encoding="utf-8", errors="replace").splitlines()
+        it = iter(lines)
+        n_rows: int | None = None
+        for line in it:
+            s = line.strip()
+            if not s or s.startswith("#") or s.startswith("!"):
+                continue
+            tok = s.split()[0]
+            try:
+                val = int(tok)
+            except ValueError:
+                continue
+            if val > 0:
+                n_rows = val
+                break
+        if n_rows is None:
+            raise ValueError(f"{p.name}: missing integer row count header")
+        t8s: list[float] = []
+        rates: list[float] = []
+        for _ in range(n_rows):
+            row = next(it).strip().split()
+            if len(row) < 2:
+                raise ValueError(f"{p.name}: expected >= 2 columns")
+            t8 = float(row[0].replace("D", "E").replace("d", "e"))
+            rate = float(row[1].replace("D", "E").replace("d", "e"))
+            t8s.append(t8)
+            rates.append(rate)
+        entries.append((p.name, t8s, rates))
+
+    buf = bytearray(SPECIAL_RATE_BUNDLE_MAGIC)
+    buf.extend(struct.pack("<I", len(entries)))
+    for name, t8s, rates in entries:
+        nb = name.encode("utf-8")
+        buf.extend(struct.pack("<II", len(nb), len(t8s)))
+        buf.extend(nb)
+        buf.extend(np.asarray(t8s, dtype="<f8").tobytes())
+        buf.extend(np.asarray(rates, dtype="<f8").tobytes())
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_bytes(bytes(buf))
     return sha256_file(out_path)
@@ -709,6 +767,11 @@ def main() -> int:
         help="Only rebuild crates/flexmesa-net/data/nets.bin.",
     )
     parser.add_argument(
+        "--special-rates-only",
+        action="store_true",
+        help="Only rebuild crates/flexmesa-rates/data/special_rate_tables.bin.",
+    )
+    parser.add_argument(
         "--helm-only",
         action="store_true",
         help="Rebuild nets.bin and helm_table_full.bin.zst.",
@@ -744,6 +807,21 @@ def main() -> int:
         results = verify_unpacked_physics_bundles(args.mesa_dir, args.repo_root)
         for name, info in results.items():
             print(f"verified {name}: {info}")
+        return 0
+
+    if args.special_rates_only:
+        srt_out = (
+            args.repo_root
+            / "crates"
+            / "flexmesa-rates"
+            / "data"
+            / "special_rate_tables.bin"
+        )
+        srt_sha = build_special_rate_tables_bin(args.mesa_dir, srt_out)
+        print(
+            f"special_rate_tables.bin: sha256={srt_sha} "
+            f"bytes={srt_out.stat().st_size}"
+        )
         return 0
 
     nets_out = args.repo_root / "crates" / "flexmesa-net" / "data" / "nets.bin"

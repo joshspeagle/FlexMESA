@@ -9,18 +9,18 @@ use std::cell::RefCell;
 use std::collections::VecDeque;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, Mutex, OnceLock};
+use std::sync::{Arc, Mutex, OnceLock, Weak};
 
 /// Maximum number of `FreeEOS` `(ix, iz)` slices retained simultaneously in RAM.
 ///
-/// All 16 `OPAL/SCVH` slices (`~0.8 GiB`) are cached permanently via `OnceLock`,
-/// while 36 `FreeEOS` slices (`~2.8 GiB` max) cover the entire `Z in {0.00, 0.02, 0.04}`
-/// grid (`33` slices) plus high-$Z$ C/O core slices with true LRU promotion so
-/// concurrent multi-star evolution experiences zero cache thrashing while staying
-/// well under GitHub Actions' `16 GiB` runner memory budget.
-const MAX_CACHED_FREE_TABLES: usize = 36;
+/// Each full `(logQ, logT)` slice occupies `~78.75 MiB`: caching all 16
+/// `OPAL/SCVH` slices requires `~1.26 GiB`, while capping `FreeEOS` at 24 slices
+/// (`~1.89 GiB` max) keeps peak resident memory comfortably below subprocess
+/// RSS limits when high-$Z$ C/O core slices are loaded alongside `OPAL/SCVH`.
+const MAX_CACHED_FREE_TABLES: usize = 24;
 
-/// Thread-local `FreeEOS` fast-path capacity (`8` slices = one full `(2 Z x 4 X)` cubic stencil).
+/// Thread-local `FreeEOS` fast-path capacity (`12` weak handles covering one
+/// full `(2 Z x 4 X)` cubic stencil plus adjacent interior cells).
 const TL_FREE_CACHE_CAP: usize = 12;
 
 static NEXT_SET_ID: AtomicU64 = AtomicU64::new(1);
@@ -28,7 +28,7 @@ static NEXT_SET_ID: AtomicU64 = AtomicU64::new(1);
 type TlFreeKey = (u64, usize, usize);
 
 thread_local! {
-    static TL_FREE_CACHE: RefCell<VecDeque<(TlFreeKey, Arc<EosDtXzTable>)>> =
+    static TL_FREE_CACHE: RefCell<VecDeque<(TlFreeKey, Weak<EosDtXzTable>)>> =
         RefCell::new(VecDeque::with_capacity(TL_FREE_CACHE_CAP));
 }
 
@@ -147,10 +147,13 @@ pub struct EosDtTableSet {
     pub free_xz: DtXzInfo,
     /// Optional root MESA `data` directory for raw ASCII `.data` loading.
     pub data_dir: Option<PathBuf>,
-    /// Lock-free `[iz][ix]` slots for all 16 `OPAL/SCVH` slices (`~0.8 GiB` total).
+    /// Lock-free `[iz][ix]` slots for all 16 `OPAL/SCVH` slices (`~1.26 GiB` total).
     opal_tables: Vec<Vec<OnceLock<Arc<EosDtXzTable>>>>,
     /// True-LRU cache of `(ix_1based, iz_1based)` `FreeEOS` slices (`MAX_CACHED_FREE_TABLES`).
     free_tables: Mutex<VecDeque<((usize, usize), Arc<EosDtXzTable>)>>,
+    /// Serializes slice cache misses across Rayon workers so duplicate slices
+    /// are never decoded simultaneously in RAM.
+    load_lock: Mutex<()>,
 }
 
 static BUILTIN_DT_TABLES: OnceLock<EosDtTableSet> = OnceLock::new();
@@ -186,6 +189,7 @@ impl EosDtTableSet {
             free_tables: Mutex::new(VecDeque::with_capacity(
                 MAX_CACHED_FREE_TABLES,
             )),
+            load_lock: Mutex::new(()),
         }
     }
 
@@ -210,6 +214,13 @@ impl EosDtTableSet {
             if let Some(tbl) = slot.get() {
                 return Ok(Arc::clone(tbl));
             }
+            let _load_guard = self
+                .load_lock
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            if let Some(tbl) = slot.get() {
+                return Ok(Arc::clone(tbl));
+            }
             let stem =
                 eosdt_table_stem(kind, &self.opal_xz, ix_1based, iz_1based);
             let loaded = Arc::new(load_or_build_dt_slice(
@@ -222,32 +233,24 @@ impl EosDtTableSet {
         }
 
         let tl_key = (self.set_id, ix_1based, iz_1based);
-        if let Some(hit) = TL_FREE_CACHE.with(|tl| {
-            let mut cache = tl.borrow_mut();
-            if let Some(pos) = cache.iter().position(|(k, _)| *k == tl_key) {
-                if pos > 0 {
-                    let entry = cache.remove(pos)?;
-                    let arc = Arc::clone(&entry.1);
-                    cache.push_front(entry);
-                    return Some(arc);
-                }
-                return cache.front().map(|(_, tbl)| Arc::clone(tbl));
-            }
-            None
-        }) {
+        if let Some(hit) = Self::lookup_tl_free(tl_key) {
             return Ok(hit);
         }
 
         let key = (ix_1based, iz_1based);
-        if let Ok(mut guard) = self.free_tables.lock() {
-            if let Some(pos) = guard.iter().position(|(k, _)| *k == key) {
-                if let Some(entry) = guard.remove(pos) {
-                    let arc = Arc::clone(&entry.1);
-                    guard.push_front(entry);
-                    Self::record_tl_free(tl_key, &arc);
-                    return Ok(arc);
-                }
-            }
+        if let Some(hit) = self.lookup_free_lru(key) {
+            Self::record_tl_free(tl_key, &hit);
+            return Ok(hit);
+        }
+
+        let load_guard = self
+            .load_lock
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if let Some(hit) = self.lookup_free_lru(key) {
+            drop(load_guard);
+            Self::record_tl_free(tl_key, &hit);
+            return Ok(hit);
         }
 
         let stem = eosdt_table_stem(kind, &self.free_xz, ix_1based, iz_1based);
@@ -256,11 +259,17 @@ impl EosDtTableSet {
             kind,
             &stem,
         )?);
-        if let Ok(mut guard) = self.free_tables.lock() {
+        {
+            let mut guard = self
+                .free_tables
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
             if let Some(pos) = guard.iter().position(|(k, _)| *k == key) {
                 if let Some(entry) = guard.remove(pos) {
                     let arc = Arc::clone(&entry.1);
                     guard.push_front(entry);
+                    drop(guard);
+                    drop(load_guard);
                     Self::record_tl_free(tl_key, &arc);
                     return Ok(arc);
                 }
@@ -270,17 +279,91 @@ impl EosDtTableSet {
                 let _ = guard.pop_back();
             }
         }
+        drop(load_guard);
         Self::record_tl_free(tl_key, &loaded);
         Ok(loaded)
+    }
+
+    fn lookup_tl_free(tl_key: TlFreeKey) -> Option<Arc<EosDtXzTable>> {
+        TL_FREE_CACHE.with(|tl| {
+            let mut cache = tl.borrow_mut();
+            let pos = cache.iter().position(|(k, _)| *k == tl_key)?;
+            let entry = cache.remove(pos)?;
+            let arc = entry.1.upgrade()?;
+            cache.push_front((tl_key, entry.1));
+            Some(arc)
+        })
+    }
+
+    fn lookup_free_lru(&self, key: (usize, usize)) -> Option<Arc<EosDtXzTable>> {
+        let mut guard = self
+            .free_tables
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let pos = guard.iter().position(|(k, _)| *k == key)?;
+        let entry = guard.remove(pos)?;
+        let arc = Arc::clone(&entry.1);
+        guard.push_front(entry);
+        Some(arc)
     }
 
     fn record_tl_free(tl_key: TlFreeKey, tbl: &Arc<EosDtXzTable>) {
         TL_FREE_CACHE.with(|tl| {
             let mut cache = tl.borrow_mut();
-            cache.push_front((tl_key, Arc::clone(tbl)));
+            if let Some(pos) = cache.iter().position(|(k, _)| *k == tl_key) {
+                let _ = cache.remove(pos);
+            }
+            cache.push_front((tl_key, Arc::downgrade(tbl)));
             while cache.len() > TL_FREE_CACHE_CAP {
                 let _ = cache.pop_back();
             }
         });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn dummy_table() -> Arc<EosDtXzTable> {
+        Arc::new(EosDtXzTable {
+            version: 51,
+            x: 0.70,
+            z: 0.02,
+            num_log_ts: 0,
+            log_t_min: 0.0,
+            log_t_max: 0.0,
+            del_log_t: 0.02,
+            num_log_qs: 0,
+            log_q_min: 0.0,
+            log_q_max: 0.0,
+            del_log_q: 0.03,
+            dense: None,
+        })
+    }
+
+    #[test]
+    fn test_tl_free_cache_uses_weak_refs_and_deduplicates_keys() {
+        let set_id = u64::MAX - 1;
+        let key = (set_id, 1, 1);
+        let strong = dummy_table();
+        let probe = Arc::downgrade(&strong);
+
+        EosDtTableSet::record_tl_free(key, &strong);
+        EosDtTableSet::record_tl_free(key, &strong);
+        let count_for_key = TL_FREE_CACHE.with(|tl| {
+            tl.borrow().iter().filter(|(k, _)| *k == key).count()
+        });
+        assert_eq!(count_for_key, 1);
+
+        let hit = EosDtTableSet::lookup_tl_free(key);
+        assert!(hit.is_some());
+        drop(hit);
+        drop(strong);
+
+        // Once all strong Arc owners are dropped, the thread-local Weak
+        // handle must not keep the table alive and lookup must return None.
+        assert_eq!(probe.strong_count(), 0);
+        assert!(EosDtTableSet::lookup_tl_free(key).is_none());
     }
 }

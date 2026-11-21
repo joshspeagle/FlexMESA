@@ -29,6 +29,11 @@ use crate::search_methods::{
     write_sample_file, write_search_results_table,
 };
 
+/// Sentinel $\chi^2$ returned to optimization drivers when an evolutionary
+/// track finishes without accepting any model (`simplex_f = 1d99` in
+/// `astero/private/astero_run_support.f90:745,751`).
+pub(crate) const FAILED_TRACK_CHI2: f64 = 1.0e99;
+
 /// Complete multi-track optimization report returned by [`run_star_astero`].
 #[derive(Debug, Clone)]
 pub struct AsteroSearchReport {
@@ -42,6 +47,8 @@ pub struct AsteroSearchReport {
     pub best_chi2: f64,
     /// Total Henyey evolutionary steps taken across all tracks.
     pub total_steps: usize,
+    /// Termination code of the track that achieved `best_chi2`, if any.
+    pub best_termination: Option<String>,
     /// Termination code of the last evaluated track.
     pub last_termination: String,
     /// Final model of the last evaluated track (for restart parity checks).
@@ -54,7 +61,6 @@ struct AsteroTrackExtras<'a> {
     sample_number: usize,
     case_dir: &'a Path,
     best_sample: Option<AsteroSampleResult>,
-    fallback_model: Option<(f64, StarModel)>,
     prev_model: Option<StarModel>,
     entered_warm: bool,
     entered_hot: bool,
@@ -221,14 +227,6 @@ impl StarExtras for AsteroTrackExtras<'_> {
         }
         if let Some(reason) = self.check_limits(model, dnu_uhz) {
             return ExtrasDirective::Terminate(String::from(reason));
-        }
-        let pre_score = chi2_sp + chi2_dnu;
-        if self
-            .fallback_model
-            .as_ref()
-            .is_none_or(|(best_pre, _)| pre_score < *best_pre)
-        {
-            self.fallback_model = Some((pre_score, model.clone()));
         }
         if chi2_sp > self.ctrl.chi2_spectroscopic_limit
             || (self.ctrl.delta_nu > 0.0
@@ -413,6 +411,42 @@ pub fn run_single_astero_track(
     )
 }
 
+/// Builds a zeroed failed-track sample sentinel with `chi2 = 1.0e99`
+/// matching upstream `zero_best_info` and `simplex_f = 1d99` when a track
+/// finishes without accepting any model (`astero_run_support.f90:241-246,749-753`).
+pub(crate) fn failed_sample_result(
+    model: &StarModel,
+    params: AsteroParamSet,
+    sample_number: usize,
+) -> AsteroSampleResult {
+    let hr = extract_history_row(model);
+    AsteroSampleResult {
+        sample_number,
+        params,
+        model_number: model.model_number,
+        age_yr: model.star_age,
+        teff: model.teff.max(1.0),
+        logg: hr.log_g,
+        log_l: hr.log_l,
+        log_r: hr.log_r,
+        feh: 0.0,
+        delta_nu_uhz: 0.0,
+        nu_max_uhz: 0.0,
+        a_div_r: 0.0,
+        correction_r: 0.0,
+        chi2: FAILED_TRACK_CHI2,
+        chi2_seismo: FAILED_TRACK_CHI2,
+        chi2_spectro: FAILED_TRACK_CHI2,
+        chi2_radial: FAILED_TRACK_CHI2,
+        chi2_r010: 0.0,
+        chi2_r02: 0.0,
+        model_freqs: [Vec::new(), Vec::new(), Vec::new(), Vec::new()],
+        model_freqs_corr: [Vec::new(), Vec::new(), Vec::new(), Vec::new()],
+        model_inertias: [Vec::new(), Vec::new(), Vec::new(), Vec::new()],
+        model_orders: [Vec::new(), Vec::new(), Vec::new(), Vec::new()],
+    }
+}
+
 /// Evolves one stellar track for `params`, optionally streaming `LOGS/history.data` (`#143`).
 pub fn run_single_astero_track_with_logs(
     base_bundle: &InlistBundle,
@@ -435,7 +469,6 @@ pub fn run_single_astero_track_with_logs(
         sample_number,
         case_dir,
         best_sample: None,
-        fallback_model: None,
         prev_model: None,
         entered_warm: false,
         entered_hot: false,
@@ -456,12 +489,9 @@ pub fn run_single_astero_track_with_logs(
     if let Some(err) = extras.eval_error.take() {
         return Err(err);
     }
-    let best = if let Some(s) = extras.best_sample {
-        s
-    } else {
-        let fb_mod = extras.fallback_model.as_ref().map_or(&model, |(_, m)| m);
-        eval_model_astero_sample(fb_mod, ctrl, params, sample_number, case_dir)?
-    };
+    let best = extras
+        .best_sample
+        .unwrap_or_else(|| failed_sample_result(&model, params, sample_number));
     Ok((best, stage, model))
 }
 
@@ -543,15 +573,19 @@ pub fn run_star_astero_with_options(
     let want_logs = logs_opts.output_root.is_some()
         || logs_opts.explicit_history_file.is_some();
     let mut best_chi2_seen = f64::INFINITY;
-    let (mut samples, mut total_steps) = (Vec::new(), 0usize);
+    let mut best_termination: Option<String> = None;
+    let mut copied_any_log = false;
+    let (mut samples, mut total_steps, mut tracks_evaluated) =
+        (Vec::new(), 0usize, 0usize);
     let (mut last_termination, mut last_model) = (String::new(), None);
     let mut eval_param_set = |p: AsteroParamSet| -> Result<f64, StarError> {
-        if samples.len() >= track_cap {
-            return Ok(1.0e99);
+        if tracks_evaluated >= track_cap {
+            return Ok(FAILED_TRACK_CHI2);
         }
-        let s_num = samples.len() + 1;
+        tracks_evaluated += 1;
+        let next_sample_num = samples.len() + 1;
         let sample_hist_path =
-            out_dir.join(format!("sample_{s_num:04}_history.data"));
+            out_dir.join(format!("sample_{tracks_evaluated:04}_history.data"));
         let trial_logs = if want_logs {
             StarLogsOptions {
                 output_root: None,
@@ -562,23 +596,25 @@ pub fn run_star_astero_with_options(
         } else {
             StarLogsOptions::default()
         };
-        let (sample, stage, m) = run_single_astero_track_with_logs(
+        let (mut sample, stage, m) = run_single_astero_track_with_logs(
             &base_bundle,
             active_ctrl,
             p,
-            s_num,
+            next_sample_num,
             max_steps_per_stage,
             case_dir,
             trial_logs,
         )?;
         total_steps += stage.steps_taken;
-        last_termination = stage.termination_code;
+        let stage_term = stage.termination_code;
+        last_termination.clone_from(&stage_term);
         let c2 = sample.chi2;
-        if want_logs
-            && (c2 < best_chi2_seen || samples.is_empty())
+        let accepted = c2.is_finite() && c2 < 1.0e90;
+        let should_copy_log = want_logs
             && sample_hist_path.is_file()
-        {
-            best_chi2_seen = best_chi2_seen.min(c2);
+            && ((accepted && c2 < best_chi2_seen) || !copied_any_log);
+        if should_copy_log {
+            copied_any_log = true;
             if let Some(exp_dst) = logs_opts.explicit_history_file {
                 if let Some(parent) = exp_dst.parent() {
                     fs::create_dir_all(parent).map_err(|e| {
@@ -613,9 +649,28 @@ pub fn run_star_astero_with_options(
             }
         }
         last_model = Some(m);
-        write_sample_file(&out_dir, &sample)?;
-        samples.push(sample);
-        Ok(c2)
+        if accepted {
+            if c2 < best_chi2_seen {
+                best_chi2_seen = c2;
+                best_termination = Some(stage_term);
+            }
+            sample.sample_number = next_sample_num;
+            write_sample_file(&out_dir, &sample)?;
+            samples.push(sample);
+            Ok(c2)
+        } else {
+            // Upstream `eval1` / `simplex_f` (`astero_run_support.f90:241-246,749-753`):
+            // unaccepted uncapped tracks return `1d99` without incrementing
+            // `sample_number` or writing sample files. Bounded smoke runs still
+            // record the sentinel entry so smoke diagnostics report a track.
+            if max_steps_per_stage.is_some() {
+                if best_termination.is_none() {
+                    best_termination = Some(stage_term);
+                }
+                samples.push(sample);
+            }
+            Ok(FAILED_TRACK_CHI2)
+        }
     };
 
     let st = active_ctrl.search_type.trim().to_ascii_lowercase();
@@ -678,6 +733,7 @@ pub fn run_star_astero_with_options(
         best_sample_idx,
         best_chi2,
         total_steps,
+        best_termination,
         last_termination,
         last_model,
     })

@@ -283,15 +283,18 @@ fn assert_tridiagonal_jacobian_matches_fd(
             };
             let eps_scaled = delta / x_sc;
 
-            let perturb_x = |sgn: f64, sink: Option<usize>| {
+            let perturb_x_with_p_surf = |sgn: f64, sink: Option<usize>| {
                 let mut m = base_model.clone();
                 m.aux.doing_struct_burn_mix = true;
                 m.xa[k_var * m.species + j_sp] += sgn * delta;
                 if let Some(s) = sink {
                     m.xa[k_var * m.species + s] -= sgn * delta;
                 }
-                eval_henyey_equations(&mut m, true).expect("chem fd")
+                let sys = eval_henyey_equations(&mut m, true).expect("chem fd");
+                (sys, flexmesa_math::exp(m.ln_peos_surf_ad.val))
             };
+            let perturb_x =
+                |sgn: f64, sink: Option<usize>| perturb_x_with_p_surf(sgn, sink).0;
             let (sys_p, sys_m) = (perturb_x(1.0, None), perturb_x(-1.0, None));
             for k_equ in 0..nz {
                 if k_equ.abs_diff(k_var) > 1 {
@@ -314,10 +317,19 @@ fn assert_tridiagonal_jacobian_matches_fd(
                 let j_var_sink = nvar_hydro + idx_sink;
                 let x_sc_sink = sys0.x_scale[k_var * nvar + j_var_sink];
 
-                let (simplex_plus, simplex_minus) = (
-                    perturb_x(1.0, Some(idx_sink)),
-                    perturb_x(-1.0, Some(idx_sink)),
+                let (
+                    (simplex_plus, simplex_plus_p_surf),
+                    (simplex_minus, simplex_minus_p_surf),
+                ) = (
+                    perturb_x_with_p_surf(1.0, Some(idx_sink)),
+                    perturb_x_with_p_surf(-1.0, Some(idx_sink)),
                 );
+                // Divisor of the surface momentum residual
+                // (`hydro_momentum.rs::do1_momentum_eqn`, `k == 0`).
+                let p_cell_0 =
+                    flexmesa_star::eval_cell_peos_time_centered_ad(&m0, 0, false)
+                        .0
+                        .val;
                 for k_equ in 0..nz {
                     if k_equ.abs_diff(k_var) > 1 {
                         continue;
@@ -349,14 +361,34 @@ fn assert_tridiagonal_jacobian_matches_fd(
                         let fd_dir = (simplex_plus.equ[k_equ * nvar + i_equ]
                             - simplex_minus.equ[k_equ * nvar + i_equ])
                             / (2.0 * eps_scaled);
-                        let an_dir = a_j - a_sink * (x_sc / x_sc_sink);
+                        let mut an_dir = a_j - a_sink * (x_sc / x_sc_sink);
+                        if k_var == 0
+                            && k_equ == 0
+                            && i_equ == m0.layout.i_dv_dt
+                            && use_surf_mom_bc
+                        {
+                            // Upstream's surface momentum equation takes the
+                            // pressure above cell 1 from `P_surf_ad`
+                            // (`star/private/hydro_momentum.f90:495-496`),
+                            // which carries no composition partials, so the
+                            // analytic block omits
+                            // `d(residual)/d(P_surf) * d(P_surf)/d(xa)`. The
+                            // finite difference includes it, because the
+                            // atmosphere is re-evaluated with the perturbed
+                            // surface opacity. Add the omitted term to the
+                            // analytic side, from a central difference of
+                            // `P_surf` alone, so the remaining entries are
+                            // compared at full strength.
+                            an_dir += -(simplex_plus_p_surf
+                                - simplex_minus_p_surf)
+                                / (2.0 * eps_scaled)
+                                / p_cell_0;
+                        }
                         let eq0 = sys0.equ[k_equ * nvar + i_equ].abs();
                         let eff_atol =
                             abs_tol.max(2.0 * f64::EPSILON * eq0 / eps_scaled);
-                        let zone_rtol = if k_var == 0 {
-                            rel_tol.max(5.0e-2)
-                        } else if k_var == 1 || k_equ < 2 {
-                            rel_tol.max(7.0e-3)
+                        let zone_rtol = if k_var <= 1 || k_equ < 2 {
+                            rel_tol.max(2.0e-3)
                         } else if m0.eos_config.use_free_eos
                             || m0.eos_config.use_opal_scvh
                             || m0.eos_config.use_skye

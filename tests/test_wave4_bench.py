@@ -45,13 +45,18 @@ from flexmesa import bench, star
 # (`star_utils.f90:3838-3843`). Under #291 `star_evolve_step` also moved from
 # the 8-zone grid (1.005928065548472e2) to `MIN_EVOLVE_STEP_ZONES = 64` zones
 # (8.895997453722753e2), because the 8-zone fixture no longer converges at
-# the model's timestep; tracked in #146).
+# the model's timestep; tracked in #146). Under #340 (`eval_face_dm_bar` at
+# `k = nz - 1` matching `star/private/hydro_momentum.f90:191-196` and
+# `dt_limit_ratio_old = 0.0` matching `star/private/init.f90:509, 696`),
+# `star_hydro_eqns` (4.262783875690212e6 -> 4.262780484077989e6),
+# `star_newton_step` (2.210834731068863e5 -> 2.263803560298164e5), and
+# `star_evolve_step` (8.895997453722753e2 -> 8.895028893306655e2) shifted.
 _WAVE4_REGRESSION_SNAPSHOTS_N8: dict[str, float] = {
     "star_micro_vars": 2.499330102887365e2,
-    "star_hydro_eqns": 4.262783875690212e6,
-    "star_newton_step": 2.210834731068863e5,
+    "star_hydro_eqns": 4.262780484077989e6,
+    "star_newton_step": 2.263803560298164e5,
     "star_remesh": 5.513777703025969e2,
-    "star_evolve_step": 8.895997453722753e2,
+    "star_evolve_step": 8.895028893306655e2,
 }
 
 # Bound on the cross-stage (Rust against JAX) relative difference.
@@ -121,8 +126,8 @@ def test_wave4_bench_kernels_return_positive_throughput() -> None:
         assert rec.stage1.median_us > 0.0
         assert rec.stage2.median_us > 0.0
         assert rec.stage3.median_us > 0.0
-        if rec.workload != "star_micro_vars":
-            # `star_micro_vars` is checked on its own below (#295).
+        if rec.workload not in {"star_micro_vars", "star_hydro_eqns"}:
+            # Checked on their own below (#295).
             assert rec.max_rel_err < _WAVE4_CROSS_STAGE_BOUND
         assert np.isfinite(rec.checksum)
         snap = _WAVE4_REGRESSION_SNAPSHOTS_N8[rec.workload]
@@ -145,6 +150,21 @@ def test_wave4_bench_kernels_return_positive_throughput() -> None:
 def test_wave4_star_micro_vars_rust_matches_frozen_jax() -> None:
     """`star_micro_vars` Rust and JAX stages agree to the cross-stage bound."""
     rec = bench.bench_star_micro_vars(8, n_warmup=1, n_repeats=3)
+    assert rec.max_rel_err < _WAVE4_CROSS_STAGE_BOUND
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason=(
+        "#295: Rust eval_face_dm_bar at k = nz - 1 uses 0.5*(dm[k-1] + dm[k]) "
+        "(MESA 26.4.1 star/private/hydro_momentum.f90:191-196, #340); "
+        "frozen JAX eval_hydro_residuals_jax still uses dm_bar[nz - 1] "
+        "(measured max_rel_err 9.73e-3)."
+    ),
+)
+def test_wave4_star_hydro_eqns_rust_matches_frozen_jax() -> None:
+    """`star_hydro_eqns` Rust and JAX stages agree to the cross-stage bound."""
+    rec = bench.bench_star_hydro_eqns(8, n_warmup=1, n_repeats=3)
     assert rec.max_rel_err < _WAVE4_CROSS_STAGE_BOUND
 
 

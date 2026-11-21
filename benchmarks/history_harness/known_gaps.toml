@@ -811,6 +811,24 @@ reason = "Rust do1_mlt_2 takes the face radiation pressure from the face tempera
 
 [[test_gaps]]
 kind = "python_xfail"
+file = "tests/test_wave4_bench.py"
+test_name = "test_wave4_star_hydro_eqns_rust_matches_frozen_jax"
+issue = "#295"
+role = "physics_gap"
+expect_fail_when_run = true
+reason = "Rust eval_face_dm_bar at k = nz - 1 uses 0.5*(dm[k-1] + dm[k]) (MESA 26.4.1 star/private/hydro_momentum.f90:191-196, #340); frozen JAX eval_hydro_residuals_jax still uses dm_bar[nz - 1], so the cross-stage difference is 9.73e-3 against a 1.0e-10 bound."
+
+[[test_gaps]]
+kind = "python_xfail"
+file = "tests/test_star_wave4_2.py"
+test_name = "test_eval_equations_rust_jax_residual_consistency"
+issue = "#295"
+role = "physics_gap"
+expect_fail_when_run = true
+reason = "Rust eval_face_dm_bar at k = nz - 1 uses 0.5*(dm[k-1] + dm[k]) (MESA 26.4.1 star/private/hydro_momentum.f90:191-196, #340); frozen JAX eval_hydro_residuals_jax still uses dm_bar[nz - 1], so zone nz - 1 momentum residual differs by 1.12e-5 against rtol=1e-13, atol=1e-13."
+
+[[test_gaps]]
+kind = "python_xfail"
 file = "tests/test_wave5_bench.py"
 test_name = "test_wave5_diff_rot_rust_matches_frozen_jax"
 issue = "#295"

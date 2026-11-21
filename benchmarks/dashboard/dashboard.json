@@ -21,7 +21,7 @@
         "verified_total": 4971,
         "pct_ported": 34.5,
         "pct_verified": 4.1,
-        "rust_lines": 83886,
+        "rust_lines": 83935,
         "python_jax_lines": 3869
       },
       {
@@ -1463,7 +1463,13 @@
         "issues": []
       }
     ],
-    "open_pull_requests": [],
+    "open_pull_requests": [
+      {
+        "number": 320,
+        "title": "test(star): explain the finer-mesh hydro Jacobian differences and run the test on 6, 12 and 24 zones (#307)",
+        "draft": false
+      }
+    ],
     "deferred_169": [
       {
         "number": 175,
@@ -1806,6 +1812,14 @@
         "title": "[Deferred bug] neumaier_sum adds the compensator before the error term, losing it when large terms cancel",
         "state": "open",
         "kind": "upstream-bug",
+        "parity_pending": false,
+        "needs_confirmation": false
+      },
+      {
+        "number": 322,
+        "title": "[Deferred enhancement] calc_MLT: series for the cubic root near marginal convection",
+        "state": "open",
+        "kind": "enhancement",
         "parity_pending": false,
         "needs_confirmation": false
       }
@@ -2474,6 +2488,19 @@
       "closed_140": "16",
       "total_140": "36",
       "deferred_169": "43"
+    },
+    {
+      "date_utc": "2026-11-21",
+      "commit": "f171cca",
+      "event": "main merge",
+      "engine_ported_pct": "30.2",
+      "all_verified_pct": "1.0",
+      "cases_passing": "0",
+      "rust_cov_pct": "75.3",
+      "python_cov_pct": "87.6",
+      "closed_140": "16",
+      "total_140": "36",
+      "deferred_169": "44"
     }
   ]
 }

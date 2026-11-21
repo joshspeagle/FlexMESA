@@ -237,7 +237,13 @@
       "issues": []
     }
   ],
-  "open_pull_requests": [],
+  "open_pull_requests": [
+    {
+      "number": 320,
+      "title": "test(star): explain the finer-mesh hydro Jacobian differences and run the test on 6, 12 and 24 zones (#307)",
+      "draft": false
+    }
+  ],
   "deferred_169": [
     {
       "number": 175,
@@ -580,6 +586,14 @@
       "title": "[Deferred bug] neumaier_sum adds the compensator before the error term, losing it when large terms cancel",
       "state": "open",
       "kind": "upstream-bug",
+      "parity_pending": false,
+      "needs_confirmation": false
+    },
+    {
+      "number": 322,
+      "title": "[Deferred enhancement] calc_MLT: series for the cubic root near marginal convection",
+      "state": "open",
+      "kind": "enhancement",
       "parity_pending": false,
       "needs_confirmation": false
     }

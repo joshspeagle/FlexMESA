@@ -65,6 +65,7 @@ pub mod adjust_mass;
 pub mod adjust_mesh_split_merge;
 pub mod adjust_mesh_support;
 pub mod case_staging;
+pub mod cell_energy;
 pub mod controls;
 mod controls_defaults;
 pub mod controls_diffusion;

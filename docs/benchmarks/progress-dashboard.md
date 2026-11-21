@@ -22,7 +22,7 @@ Progress is measured by **upstream MESA `26.4.1` source lines by status**, never
 
 | Module | Upstream LOC | Absent | Stub | Partial | Ported (unverified) | Kernel ref. vectors | Case-level evidence | Rust LOC | Python/JAX LOC | % Ported | % Verified |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| `star` | 120,509 | 17,759 | 6,378 | 54,753 | 36,648 | 4,971 | 0 | 83,227 | 3,869 | 34.5% | 4.1% |
+| `star` | 120,509 | 17,759 | 6,378 | 54,753 | 36,648 | 4,971 | 0 | 83,292 | 3,869 | 34.5% | 4.1% |
 | `star_data` | 4,870 | 34 | 0 | 4,836 | 0 | 0 | 0 | 0 | 0 | 0.0% | 0.0% |
 | `binary` | 11,638 | 2,885 | 0 | 6,572 | 2,181 | 0 | 0 | 11,979 | 1,244 | 18.7% | 0.0% |
 | `astero` | 7,935 | 2,185 | 0 | 5,750 | 0 | 0 | 0 | 5,764 | 1,288 | 0.0% | 0.0% |
@@ -48,8 +48,8 @@ Progress is measured by **upstream MESA `26.4.1` source lines by status**, never
 | `adipls` | 30,923 | 30,923 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0.0% | 0.0% |
 | `stella` | 62,117 | 62,117 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0.0% | 0.0% |
 | `plotting` | 35,732 | 35,732 | 0 | 0 | 0 | 0 | 0 | 0 | 12,095 | 0.0% | 0.0% |
-| **Subtotal: star + star_data + binary + astero** | 144,952 | 22,863 | 6,378 | 71,911 | 38,829 | 4,971 | 0 | 100,970 | 6,401 | 30.2% | 3.4% |
-| **Total (all 26 modules)** | 497,703 | 247,888 | 6,378 | 196,077 | 42,389 | 4,971 | 0 | 172,762 | 57,169 | 9.5% | 1.0% |
+| **Subtotal: star + star_data + binary + astero** | 144,952 | 22,863 | 6,378 | 71,911 | 38,829 | 4,971 | 0 | 101,035 | 6,401 | 30.2% | 3.4% |
+| **Total (all 26 modules)** | 497,703 | 247,888 | 6,378 | 196,077 | 42,389 | 4,971 | 0 | 172,827 | 57,169 | 9.5% | 1.0% |
 
 *Notes*: `star_data` state structs reside in `crates/flexmesa-star`. Bridge, testing, and benchmark infrastructure account for an additional `19,425` Rust lines (`flexmesa-py`, `flexmesa-testing`, `flexmesa-bench`) and `15,089` Python lines (`flexmesa.testing`, `flexmesa.bench`). For plotting ([#173](https://github.com/joshspeagle/FlexMESA/issues/173)), `flexmesa.plotting` currently provides `34` `plot_*` builders against `46` upstream `pgstar`/`pgbinary` panel modules.
 

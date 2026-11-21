@@ -1481,9 +1481,9 @@
     ],
     "open_pull_requests": [
       {
-        "number": 334,
-        "title": "ci(dashboard): give dashboard and coverage Pages deployments distinct artifact names",
-        "draft": false
+        "number": 346,
+        "title": "fix(autodiff): DualOrder1 evaluates upstream's expression for each operation (#339)",
+        "draft": true
       }
     ],
     "deferred_169": [
@@ -2659,6 +2659,19 @@
     {
       "date_utc": "2026-11-21",
       "commit": "a9009d6",
+      "event": "main merge",
+      "engine_ported_pct": "30.2",
+      "all_verified_pct": "1.0",
+      "cases_passing": "0",
+      "rust_cov_pct": "75.5",
+      "python_cov_pct": "87.6",
+      "closed_140": "16",
+      "total_140": "36",
+      "deferred_169": "45"
+    },
+    {
+      "date_utc": "2026-11-21",
+      "commit": "7defc98",
       "event": "main merge",
       "engine_ported_pct": "30.2",
       "all_verified_pct": "1.0",

@@ -552,10 +552,6 @@ pub(crate) fn do1_mlt_2(
                     .controls
                     .rsp2
                     .use_tdc_enthalpy_flux_limiter,
-                // Upstream's `bracket_plus_Newton_search` always starts from
-                // the full `[Zlb, Zub]` interval and takes no seed
-                // (`turb/private/tdc.f90:219-250`); #321.
-                y_face_guess: 0.0,
             };
             let mut tdc_in = TdcInputs {
                 chi_t: chi_t_f,

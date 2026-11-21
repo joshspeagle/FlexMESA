@@ -64,6 +64,7 @@ Scope and the `v0.1.0` definition are in [`SCOPE.md`](SCOPE.md). Work is tracked
 | 47 | Pull Requests Do Not Carry the Generated Dashboard; `main` Regenerates It; the README View Is Compact | In force | below |
 | 48 | Pull-Request CI Runs Only the Job Groups a Change Can Affect; the Gate Smoke Test Uses the Shortest Case | In force | below |
 | 49 | CI Compiles Through `sccache`; Rust Tests in Seven Shards and Python Tests in Five | In force | below |
+| 50 | The TDC Newton Solver Runs on a Translation of `auto_diff_real_tdc`; No Bracket Seed (`#321`) | In force | below |
 
 ## Pre-audit decisions still in force
 
@@ -664,3 +665,16 @@ The text of these four entries predates the audit of 2026-11-16. The decisions s
 - **Alternatives Rejected**:
   - *Keeping workspace crates in the cargo `target` cache*: cargo decides freshness from file modification times, which a fresh checkout resets; restoring times from git can make a changed file look older than a cached artifact and reuse a stale build.
   - *One job that builds the extension and hands it to the others*: adds a three-minute wait before any test job starts, which cancels the saving.
+
+## DECISIONS #50: The TDC Newton Solver Runs on a Translation of `auto_diff_real_tdc`; No Bracket Seed (`#321`)
+
+- **Date**: 2026-11-21
+- **Decision**:
+  1. **Nested dual number**: `flexmesa_turb::tdc_dual::AutoDiffRealTdc<N>` holds a value, its derivative with respect to the Newton variable $Z$, `N` structure partials and `N` mixed partials, with each operation evaluating the formula of the upstream routine of the same name (`auto_diff/private/auto_diff_real_tdc_module.f90`). `bracket_plus_newton_search` iterates on it, so the returned $Y$ carries the partials of the last Newton update (`turb/private/tdc.f90:253-345`). The implicit-function-theorem step that replaced this before is removed.
+  2. **No seed**: `TdcParams::y_face_guess` and the seeded bracket are removed. Upstream starts every search from `[-100, 100]`.
+  3. **Real operands**: upstream has separate routines for a real operand (`mul_self_real`, `div_self_real`, and so on). The solver code is generic over the scalar type and promotes reals with `from_f64`, so it uses the two-dual routine. Values are the same; a partial can differ from upstream's in the last place.
+- **Why**: MESA's Jacobian contains the partials its Newton iteration produces, which equal the implicit-function-theorem partials only at full convergence. The iteration may stop after one update from a bisection bracket of width one in $Z$, so the difference is not negligible, and it changes the solver path.
+- **Limits**: Item 3 means the structure partials are not bit-identical to upstream's wherever a real operand is involved. The derived JAX layer still applies the implicit function theorem (`src/flexmesa/turb/tdc.py`), and its seed argument remains.
+- **Alternatives Rejected**:
+  - *Keeping the implicit function theorem*: more accurate as a derivative, but not what MESA does.
+  - *A non-generic copy of `compute_Q`, `eval_xis` and `eval_Af` using the real-operand routines*: would make the partials bit-faithful at the cost of two copies of the physics; left for when a hex reference for the partials exists.

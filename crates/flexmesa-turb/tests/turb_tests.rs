@@ -238,7 +238,6 @@ fn test_compare_tdc_and_cox_mlt_golden_parity() {
         max_conv_vel: 1.0e99,
         include_mlt_corr_to_tdc: true,
         use_tdc_enthalpy_flux_limiter: false,
-        y_face_guess: 0.0,
     };
     let tdc_inp = TdcInputs {
         chi_t: 1.0,
@@ -357,7 +356,6 @@ fn test_tdc_dt_sweep_31_golden_rows() {
             max_conv_vel: 1.0e99,
             include_mlt_corr_to_tdc: true,
             use_tdc_enthalpy_flux_limiter: false,
-            y_face_guess: 0.0,
         };
         let res = set_tdc(&params, &inp).unwrap();
         assert_f64_rel_eq(res.output.grad_t, expected_grad_t, 1.0e-12);

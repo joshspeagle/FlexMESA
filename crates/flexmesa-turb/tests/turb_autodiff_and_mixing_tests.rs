@@ -5,7 +5,7 @@
 //! 1. All six geometric MLT options (`Cox`, `TDC`, `Henyey`, `ML1`, `ML2`,
 //!    `Mihalas`) and `DualOrder1` forward-mode automatic differentiation
 //!    against centered finite differences.
-//! 2. `DualOrder1` Implicit Function Theorem derivatives for `set_tdc`
+//! 2. `DualOrder1` derivatives of `set_tdc`
 //!    (including the quintic enthalpy flux limiter) against centered finite
 //!    differences.
 //! 3. Both Langer (1985) semiconvection prescriptions (`Langer_85` and
@@ -166,7 +166,6 @@ fn test_tdc_autodiff_implicit_function_theorem_matches_finite_difference() {
         max_conv_vel: 1.0e99,
         include_mlt_corr_to_tdc: true,
         use_tdc_enthalpy_flux_limiter: true,
-        y_face_guess: 0.01,
     };
 
     let c = DualOrder1::<2>::constant;

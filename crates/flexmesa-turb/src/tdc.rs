@@ -9,17 +9,16 @@
 //! over $Z = \ln|Y| \in [-100, 100]$ using bisection bracketing followed by
 //! damped Newton-Raphson refinement (`bracket_plus_newton_search`).
 //!
-//! # Derivative Propagation (Implicit Function Theorem)
-//! At a converged root $Y^*$ where $Q(Y^*, \mathbf{p}) = 0$, the first-order
-//! sensitivity with respect to stellar structure parameters $\mathbf{p}$ is
-//! given by the Implicit Function Theorem:
-//! $$\frac{\partial Y^*}{\partial \mathbf{p}} =
-//!   -\left(\frac{\partial Q}{\partial Y}\right)^{-1}
-//!   \left.\frac{\partial Q}{\partial \mathbf{p}}\right|_{Y^*},$$
-//! matching the derivative computed by upstream MESA's nested hyper-dual type
-//! `auto_diff_real_tdc` while keeping the inner 1D root-finder strictly 1D.
+//! # Derivative Propagation
+//! The Newton iteration runs on upstream's nested dual number
+//! ([`AutoDiffRealTdc`](crate::tdc_dual::AutoDiffRealTdc), `auto_diff_real_tdc`),
+//! so the returned $Y$ carries the structure partials of the last Newton
+//! update (`turb/private/tdc.f90:253-345`). These approach the
+//! implicit-function-theorem partials
+//! $-(\partial Q/\partial Y)^{-1}\,\partial Q/\partial\mathbf{p}$ as the
+//! iteration converges and differ from them by an amount of the order of the
+//! last correction.
 
-use flexmesa_autodiff::AutoDiffReal1VarOrder1;
 use flexmesa_const::{MixingType, BOLTZ_SIGMA, CLIGHT, CRAD, PI, SQRT_2_DIV_3};
 
 use crate::mlt::{set_mlt, MltInputs, MltParams};
@@ -27,7 +26,8 @@ use crate::tdc_search::{
     af_bisection_search, bracket_plus_newton_search, dq_dz_bisection_search,
 };
 use crate::tdc_support::{compute_q, set_y, TdcInfo, X_ALFAS};
-use crate::{TurbError, TurbOutput, TurbResult, TurbScalar};
+use crate::tdc_dual::TdcLift;
+use crate::{TurbError, TurbOutput, TurbResult};
 
 /// Non-differentiable configuration parameters for [`set_tdc`].
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -64,9 +64,6 @@ pub struct TdcParams {
     pub include_mlt_corr_to_tdc: bool,
     /// Enable Wuchterl & Feuchtinger (1998) quintic enthalpy flux limiter.
     pub use_tdc_enthalpy_flux_limiter: bool,
-    /// Optional positive superadiabaticity seed $Y_{\mathrm{face,guess}}$ for
-    /// local bracketing ($\le 0$ disables seeding).
-    pub y_face_guess: f64,
 }
 
 /// Differentiable thermodynamic and structure inputs for [`set_tdc`].
@@ -126,7 +123,7 @@ pub struct TdcOutput<T> {
 /// # Errors
 /// Returns [`TurbError`] if `mixing_length_alpha == 0`, `dt <= 0`, or the TDC
 /// root-finder fails to converge.
-pub fn set_tdc<T: TurbScalar>(
+pub fn set_tdc<T: TdcLift>(
     params: &TdcParams,
     inp: &TdcInputs<T>,
 ) -> TurbResult<TdcOutput<T>> {
@@ -225,7 +222,6 @@ pub fn set_tdc<T: TurbScalar>(
         params.scale,
         -100.0,
         100.0,
-        params.y_face_guess,
     )?;
 
     if conv_vel.val() > params.max_conv_vel {
@@ -268,31 +264,25 @@ pub fn set_tdc<T: TurbScalar>(
 
 /// Solves for `(conv_vel, Y_face, num_iters)` (`get_TDC_solution` in
 /// `tdc.f90`).
-fn get_tdc_solution<T: TurbScalar>(
+fn get_tdc_solution<T: TdcLift>(
     info: &TdcInfo<T>,
     scale: f64,
     zlb: f64,
     zub: f64,
-    y_face_guess: f64,
 ) -> TurbResult<(T, T, usize)> {
     let info_p = info.to_primal();
     let info_z = info.to_z_dual();
+    let info_t = info.to_tdc();
     let (q0, _) = compute_q(&info_p, 0.0);
     let y_is_positive = q0 > 0.0;
 
     let mut num_iters = 0_usize;
     let y_sol: T = if y_is_positive {
-        let (y_star, iters) = bracket_plus_newton_search(
-            &info_p,
-            &info_z,
-            scale,
-            true,
-            zlb,
-            zub,
-            y_face_guess,
+        let (y_star, iters) = bracket_plus_newton_search::<T>(
+            &info_p, &info_t, scale, true, zlb, zub,
         )?;
         num_iters = iters;
-        lift_implicit_root(info, &info_z, y_star)
+        y_star
     } else {
         let rad_y = (info.l - info.l0 * info.gradl) / info.l0;
         if info.a0.val() < 1.0e-10 {
@@ -317,27 +307,27 @@ fn get_tdc_solution<T: TurbScalar>(
                     // checks `ierr /= 0` and then searches `[Z1, Z0]`
                     // (`turb/private/tdc.f90:185-189`).
                     } else if let Ok((y_star, iters)) =
-                        bracket_plus_newton_search(
-                            &info_p, &info_z, scale, false, zlb, z1, 0.0,
+                        bracket_plus_newton_search::<T>(
+                            &info_p, &info_t, scale, false, zlb, z1,
                         )
                     {
                         num_iters = iters;
-                        lift_implicit_root(info, &info_z, y_star)
+                        y_star
                     } else {
-                        let (y_star, iters) = bracket_plus_newton_search(
-                            &info_p, &info_z, scale, false, z1, z0, 0.0,
+                        let (y_star, iters) = bracket_plus_newton_search::<T>(
+                            &info_p, &info_t, scale, false, z1, z0,
                         )?;
                         num_iters = iters;
-                        lift_implicit_root(info, &info_z, y_star)
+                        y_star
                     }
                 } else {
                     let (q_y0, _) = compute_q(&info_p, set_y(false, z0));
                     if q_y0 > 0.0 {
-                        let (y_star, iters) = bracket_plus_newton_search(
-                            &info_p, &info_z, scale, false, zlb, z0, 0.0,
+                        let (y_star, iters) = bracket_plus_newton_search::<T>(
+                            &info_p, &info_t, scale, false, zlb, z0,
                         )?;
                         num_iters = iters;
-                        lift_implicit_root(info, &info_z, y_star)
+                        y_star
                     } else {
                         rad_y
                     }
@@ -349,25 +339,4 @@ fn get_tdc_solution<T: TurbScalar>(
     let (_, af) = compute_q(info, y_sol);
     let conv_vel = T::from_f64(SQRT_2_DIV_3) * af;
     Ok((conv_vel, y_sol, num_iters))
-}
-
-/// Propagates structure derivatives into a converged scalar root $Y^*$ via the
-/// Implicit Function Theorem
-/// $\nabla_{\mathbf{p}} Y^* = -(\partial Q / \partial Y)^{-1}
-/// \nabla_{\mathbf{p}} Q|_{Y^*}$.
-fn lift_implicit_root<T: TurbScalar>(
-    info: &TdcInfo<T>,
-    info_z: &TdcInfo<AutoDiffReal1VarOrder1>,
-    y_star: f64,
-) -> T {
-    let (q_dual_y, _) =
-        compute_q(info_z, AutoDiffReal1VarOrder1::independent(y_star, 0));
-    let dq_dy = q_dual_y.d1[0];
-    let y_const = T::from_f64(y_star);
-    if dq_dy == 0.0 || !dq_dy.is_finite() {
-        return y_const;
-    }
-    let (q_p, _) = compute_q(info, y_const);
-    let zero_val_q_p = q_p - T::from_f64(q_p.val());
-    y_const - zero_val_q_p / T::from_f64(dq_dy)
 }

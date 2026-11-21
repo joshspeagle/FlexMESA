@@ -56,7 +56,7 @@ print("PCR solution norm:", float(jnp.linalg.norm(sol)))
 
 ### How does `FlexMESA` differentiate iterative solvers (`set_mlt`, `set_tdc`, `eos_pt_get`) without differentiating through the iteration loop?
 
-Propagating 33-variable or 70-variable dual numbers through every bracket-search and Newton-Raphson iteration is expensive (the measured `turb_tdc` timings are in the [Wave 1 benchmark report](../design/wave-1-benchmark-report.md)). `FlexMESA` instead converges the scalar root $y^*$ in plain `f64` and applies the **Implicit Function Theorem** once at the converged root $Q(y^*, \theta) = 0$:
+Propagating 33-variable or 70-variable dual numbers through every bracket-search and Newton-Raphson iteration is expensive (the measured `turb_tdc` timings are in the [Wave 1 benchmark report](../design/wave-1-benchmark-report.md)). The derived JAX layer instead converges the scalar root $y^*$ in plain `f64` and applies the **Implicit Function Theorem** once at the converged root $Q(y^*, \theta) = 0$ (the Safe Rust Time-Dependent Convection solver follows MESA and carries the partials through its Newton iteration):
 
 $$\frac{\partial y^*}{\partial \theta} = -\left(\frac{\partial Q}{\partial y}\right)^{-1} \frac{\partial Q}{\partial \theta}$$
 

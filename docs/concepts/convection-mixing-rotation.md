@@ -24,11 +24,11 @@ To guarantee convergence across 80 orders of magnitude in $Y$, `set_tdc` searche
 
 1. **Bisection Bracketing**: Narrows the bracket $[Z_{\mathrm{lb}}, Z_{\mathrm{ub}}]$ until $Z_{\mathrm{ub}} - Z_{\mathrm{lb}} < 1.0$.
 2. **Damped Newton-Raphson Refinement**: Iterates $Z_{n+1} = Z_n - Q(Z_n) / Q'(Z_n)$ with midpoint bracket clamping whenever a trial step exits $[Z_{\mathrm{lb}}, Z_{\mathrm{ub}}]$, terminating when $|Q| / \mathrm{scale} \le 10^{-8}$ or $|\Delta Z| < 10^{-13}$.
-3. **Implicit Function Theorem Differentiation**: Once $Z^*$ converges in scalar `f64`, all partial derivatives of $(\nabla_T, v_{\mathrm{conv}}, D_{\mathrm{mix}})$ with respect to the 12 shell inputs $\theta = (\chi_T, \chi_\rho, C_P, g, H_P, \rho, P, T, \kappa, \nabla_r, \nabla_{\mathrm{ad}}, \nabla_L)$ are computed in a single analytical pass at $Y^* = \exp(Z^*)$:
+3. **Partial Derivatives of the Root**: The Safe Rust engine runs the Newton iteration on a nested dual number (`AutoDiffRealTdc`, upstream's `auto_diff_real_tdc`) that carries the value, its derivative with respect to $Z$, the structure partials and the mixed second partials. Each update $Z + (-Q / Q')$ therefore carries structure partials forward, and the returned $Y$ has the partials of the last update, as in `turb/private/tdc.f90:253-345`. They approach the Implicit Function Theorem result
 
-   $$\frac{\partial Y^*}{\partial \theta} = -\left(\frac{\partial Q}{\partial Y}\bigg|_{Y^*}\right)^{-1} \frac{\partial Q}{\partial \theta}\bigg|_{Y^*}.$$
+   $$\frac{\partial Y^*}{\partial \theta} = -\left(\frac{\partial Q}{\partial Y}\bigg|_{Y^*}\right)^{-1} \frac{\partial Q}{\partial \theta}\bigg|_{Y^*}$$
 
-Applying the Implicit Function Theorem at the converged scalar root rather than propagating a 70-component dual number through every intermediate Newton iteration avoids redundant derivative arithmetic inside the root loop; the measured `turb_tdc` timings against MESA `26.4.1` are in the [Wave 1 benchmark report](../design/wave-1-benchmark-report.md).
+   as the iteration converges, and differ from it by an amount of the order of the last Newton correction. The derived JAX layer applies the Implicit Function Theorem at the converged root.
 
 ![Steady-state Cox MLT vs. transient Kuhfuss TDC temperature gradient and Implicit Function Theorem sensitivity](../assets/figures/turb_mlt_tdc_comparison.png)
 

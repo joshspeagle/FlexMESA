@@ -759,8 +759,8 @@
     "rust": {
       "tool": "cargo llvm-cov",
       "overall": {
-        "lines": 115460,
-        "covered": 86915,
+        "lines": 115825,
+        "covered": 87207,
         "percent": 75.3
       },
       "by_crate": [
@@ -784,15 +784,15 @@
         },
         {
           "crate": "flexmesa-bench",
-          "lines": 3572,
-          "covered": 2419,
-          "percent": 67.7
+          "lines": 3643,
+          "covered": 2435,
+          "percent": 66.8
         },
         {
           "crate": "flexmesa-binary",
-          "lines": 8080,
-          "covered": 5357,
-          "percent": 66.3
+          "lines": 8087,
+          "covered": 5379,
+          "percent": 66.5
         },
         {
           "crate": "flexmesa-chem",
@@ -851,14 +851,14 @@
         {
           "crate": "flexmesa-kap",
           "lines": 3494,
-          "covered": 2809,
-          "percent": 80.4
+          "covered": 2805,
+          "percent": 80.3
         },
         {
           "crate": "flexmesa-math",
-          "lines": 781,
-          "covered": 627,
-          "percent": 80.3
+          "lines": 1068,
+          "covered": 881,
+          "percent": 82.5
         },
         {
           "crate": "flexmesa-mtx",
@@ -899,7 +899,7 @@
         {
           "crate": "flexmesa-star",
           "lines": 55081,
-          "covered": 41519,
+          "covered": 41520,
           "percent": 75.4
         },
         {
@@ -911,8 +911,8 @@
         {
           "crate": "flexmesa-turb",
           "lines": 1093,
-          "covered": 900,
-          "percent": 82.3
+          "covered": 903,
+          "percent": 82.6
         },
         {
           "crate": "flexmesa-utils",
@@ -925,9 +925,9 @@
     "python": {
       "tool": "pytest --cov",
       "overall": {
-        "statements": 25569,
-        "covered": 22448,
-        "percent": 87.8
+        "statements": 25940,
+        "covered": 22707,
+        "percent": 87.5
       },
       "by_subpackage": [
         {
@@ -956,8 +956,8 @@
         },
         {
           "subpackage": "flexmesa.bench",
-          "statements": 1380,
-          "covered": 1375,
+          "statements": 1382,
+          "covered": 1377,
           "percent": 99.6
         },
         {
@@ -1053,7 +1053,7 @@
         {
           "subpackage": "flexmesa.plotting",
           "statements": 4235,
-          "covered": 3708,
+          "covered": 3709,
           "percent": 87.6
         },
         {
@@ -1076,9 +1076,9 @@
         },
         {
           "subpackage": "flexmesa.testing",
-          "statements": 3640,
-          "covered": 2878,
-          "percent": 79.1
+          "statements": 4009,
+          "covered": 3134,
+          "percent": 78.2
         },
         {
           "subpackage": "flexmesa.turb",
@@ -1099,27 +1099,27 @@
     "rust_ignore_count": 16,
     "rust_ignores": [
       {
-        "location": "crates/flexmesa-astero/tests/astero_suite.rs:422",
+        "location": "crates/flexmesa-astero/tests/astero_suite.rs:432",
         "reason": "unverified uncapped astero campaign; tracked in #143 and #162",
         "issues": "#143, #162"
       },
       {
-        "location": "crates/flexmesa-astero/tests/astero_suite.rs:428",
+        "location": "crates/flexmesa-astero/tests/astero_suite.rs:438",
         "reason": "unverified uncapped astero campaign; tracked in #143 and #162",
         "issues": "#143, #162"
       },
       {
-        "location": "crates/flexmesa-astero/tests/astero_suite.rs:434",
+        "location": "crates/flexmesa-astero/tests/astero_suite.rs:444",
         "reason": "unverified uncapped astero campaign; tracked in #143 and #162",
         "issues": "#143, #162"
       },
       {
-        "location": "crates/flexmesa-astero/tests/astero_suite.rs:440",
+        "location": "crates/flexmesa-astero/tests/astero_suite.rs:450",
         "reason": "unverified uncapped astero campaign; tracked in #143 and #162",
         "issues": "#143, #162"
       },
       {
-        "location": "crates/flexmesa-astero/tests/astero_suite.rs:446",
+        "location": "crates/flexmesa-astero/tests/astero_suite.rs:456",
         "reason": "unverified uncapped astero campaign; tracked in #143 and #162",
         "issues": "#143, #162"
       },
@@ -1463,28 +1463,7 @@
         "issues": []
       }
     ],
-    "open_pull_requests": [
-      {
-        "number": 297,
-        "title": "fix(star): face radiation pressure from the face temperature in do1_mlt_2; evolve-step bench on 64 zones (#291, #295)",
-        "draft": false
-      },
-      {
-        "number": 298,
-        "title": "feat(harness): upgrade A2 case table and refresh strict MESA 26.4.1 baseline",
-        "draft": false
-      },
-      {
-        "number": 300,
-        "title": "test(math): bound asinh(sinh(x)) by its derived rounding error instead of a fixed 1e-14",
-        "draft": false
-      },
-      {
-        "number": 301,
-        "title": "ci: shard Rust and Python tests, build tests without LTO, stop coverage on ordinary pull requests",
-        "draft": false
-      }
-    ],
+    "open_pull_requests": [],
     "deferred_169": [
       {
         "number": 175,
@@ -2380,6 +2359,19 @@
       "cases_passing": "0",
       "rust_cov_pct": "75.3",
       "python_cov_pct": "87.8",
+      "closed_140": "16",
+      "total_140": "36",
+      "deferred_169": "42"
+    },
+    {
+      "date_utc": "2026-11-21",
+      "commit": "4a4b688",
+      "event": "main merge",
+      "engine_ported_pct": "30.2",
+      "all_verified_pct": "1.0",
+      "cases_passing": "0",
+      "rust_cov_pct": "75.3",
+      "python_cov_pct": "87.5",
       "closed_140": "16",
       "total_140": "36",
       "deferred_169": "42"

@@ -128,3 +128,48 @@ def test_ci_job_selection_runs_everything_unless_change_is_narrow() -> None:
         ["crates/flexmesa-star/tests/rsp2_test.rs", "tests/unit/test_x.py"],
         "pull_request",
     ) == {"rust": True, "python": True, "engine_runs": False}
+
+
+def _load_cargo_shard_module() -> types.ModuleType:
+    path = REPO_ROOT / "scripts" / "ci" / "cargo_test_shard.py"
+    spec = importlib.util.spec_from_file_location("cargo_test_shard", path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_ci_cargo_shards_partition_every_test_target() -> None:
+    """Each Rust test target, or test of a split binary, is in one shard."""
+    shard = _load_cargo_shard_module()
+    for package in ("flexmesa-star", "flexmesa-binary", "flexmesa-astero"):
+        targets = shard.discover_targets(package, REPO_ROOT)
+        on_disk = {
+            p.stem
+            for p in (REPO_ROOT / "crates" / package / "tests").glob("*.rs")
+        }
+        assert set(targets) == on_disk | {shard.LIB, shard.DOC}
+        split = {
+            t: [f"mod_a::case_{i}" for i in range(7)]
+            for t in targets
+            if (package, t) in shard.SPLIT_BY_TEST
+        }
+        expected = {t for t in targets if t not in split} | {
+            f"{t}::{name}" for t, names in split.items() for name in names
+        }
+        for total in (1, 2, 3, 5):
+            shards = shard.plan(package, targets, split, {}, total)
+            assert len(shards) == total
+            flat = [u for s in shards for u in s]
+            assert len(flat) == len(set(flat))
+            assert set(flat) == expected
+    # Every split binary named in the script exists.
+    for package, target in shard.SPLIT_BY_TEST:
+        assert (
+            REPO_ROOT / "crates" / package / "tests" / f"{target}.rs"
+        ).is_file()
+    # The assignment does not depend on dictionary order.
+    weights = {"a": 3.0, "b": 3.0, "c": 1.0, "d": 1.0}
+    assert shard.assign(weights, 2) == shard.assign(
+        dict(reversed(list(weights.items()))), 2
+    )

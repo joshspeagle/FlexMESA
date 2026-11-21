@@ -1,0 +1,46 @@
+{
+ "flexmesa-astero": {
+  "astero_suite": 60.0,
+  "astero_suite::test_all_eight_astero_cases_bounded_eight_steps_pass": 40.0,
+  "astero_suite::test_just_call_my_extras_astero_adipls_runs_as_plain_star_run": 190.0,
+  "astero_suite::test_just_call_my_extras_astero_gyre_runs_as_plain_star_run": 190.0,
+  "astero_suite::test_just_call_my_extras_surface_effects_runs_as_plain_star_run": 10.0,
+  "lib": 0.0,
+  "loud_controls_test": 0.0
+ },
+ "flexmesa-binary": {
+  "binary_counters_test": 57.7,
+  "binary_determinism_test": 57.0,
+  "binary_history_numerics_mode_test": 11.5,
+  "binary_logs_roundtrip_test": 12.4,
+  "checkpoint_child_process_restart_test": 50.0,
+  "lib": 11.6,
+  "loud_controls_test": 9.9,
+  "phase5c_lifecycle_extras": 40.1,
+  "tier5_coupled_suite": 216.5
+ },
+ "flexmesa-star": {
+  "diffusion_phase_sep_156_test": 9.8,
+  "history_numerics_mode_test": 9.6,
+  "lib": 18.9,
+  "loud_controls_test": 9.2,
+  "mesa_logs_roundtrip_test": 10.8,
+  "mesh_planner_153_test": 24.6,
+  "micro_controls_161_test": 0.0,
+  "micro_wiring_161_test": 9.9,
+  "mixing_boundaries_155_test": 26.2,
+  "newton_retry_semantics_152_test": 13.9,
+  "phase5a_hydro_solver_test": 10.2,
+  "phase5a_solver_norms_and_burn_test": 27.5,
+  "phase5b_fidelity2_test": 26.6,
+  "primary_state_and_micro_cache_test": 11.8,
+  "rsp2_test": 15.5,
+  "rsp_build_lina_test": 51.8,
+  "rsp_crossing_test": 71.1,
+  "rsp_hyd_step_test": 48.0,
+  "rsp_io_eos_test": 12.8,
+  "step_trace_jsonl_test": 10.1,
+  "wave5_integration_test": 13.7,
+  "winds_mass_stops_159_test": 20.5
+ }
+}

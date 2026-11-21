@@ -63,6 +63,7 @@ Scope and the `v0.1.0` definition are in [`SCOPE.md`](SCOPE.md). Work is tracked
 | 46 | Upstream `real(qp)` Is IEEE-754 `binary128` in Software (`flexmesa_math::Quad`), Not Double-Double | In force | below |
 | 47 | Pull Requests Do Not Carry the Generated Dashboard; `main` Regenerates It; the README View Is Compact | In force | below |
 | 48 | Pull-Request CI Runs Only the Job Groups a Change Can Affect; the Gate Smoke Test Uses the Shortest Case | In force | below |
+| 49 | CI Compiles Through `sccache`; Rust Tests in Seven Shards and Python Tests in Five | In force | below |
 
 ## Pre-audit decisions still in force
 
@@ -648,3 +649,17 @@ The text of these four entries predates the audit of 2026-11-16. The decisions s
 - **Alternatives Rejected**:
   - *Per-crate selection of Rust shards*: crates depend on one another and read files under `benchmarks/` and `tests/fixtures/`; not worth the risk yet.
   - *Capping the gate smoke run with `--max-steps`*: a capped run is reported as a smoke run, not as a failure, so it would not exercise the gate.
+
+## DECISIONS #49: CI Compiles Through `sccache`; Rust Tests in Seven Shards and Python Tests in Five
+
+- **Date**: 2026-11-21
+- **Decision**:
+  1. **`sccache` in the shared setup action**: `.github/actions/setup-flexmesa` routes `rustc` through `sccache` with the GitHub Actions cache as its store. A job log showed the existing cargo cache restoring 50 MB, which is third-party dependencies only, so every job compiled all workspace crates again: about 140 seconds of each 196-second setup step for the Python extension, and 50 to 100 seconds in each Rust test shard.
+  2. **Rust tests in seven shards**: `flexmesa-star`, `flexmesa-binary` and `flexmesa-astero` are each split in two by `scripts/ci/cargo_test_shard.py`, which places whole test binaries by measured wall time. Two binaries that dominate their crate (`astero_suite`, 394 s; `tier5_coupled_suite`, 217 s) are split by individual test, using the names the built binary reports. One `astero` test ran three complete cases in sequence and took 470 of that binary's seconds; it is now three tests, one per case, with the same assertion. `tests/test_ci_shards.py` checks that every target lands in exactly one shard.
+  3. **Python tests in five shards** instead of three, with the same sharding script. This amends item 2 of `DECISIONS #45`.
+  4. **Dashboard jobs queue separately**: `dashboard.yml` no longer serialises whole runs on `main`; the quick refresh, each coverage job and the coverage commit have their own queues, so a refresh does not wait for an earlier merge's coverage (completes `DECISIONS #47`).
+- **Why**: After `DECISIONS #48` each job was about 3 minutes of setup and 4 to 9 minutes of tests. The same tests run; they are grouped into more jobs and compiled less often.
+- **Limits**: A cached compile is keyed by a hash of the compiler, flags and inputs, so it cannot be stale, but linking and link-time optimisation are not cached, so the release builds gain less. If the cache service limits requests, `sccache` compiles normally. More jobs use more runner minutes for the same wall time.
+- **Alternatives Rejected**:
+  - *Keeping workspace crates in the cargo `target` cache*: cargo decides freshness from file modification times, which a fresh checkout resets; restoring times from git can make a changed file look older than a cached artifact and reuse a stale build.
+  - *One job that builds the extension and hands it to the others*: adds a three-minute wait before any test job starts, which cancels the saving.

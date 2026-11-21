@@ -60,6 +60,20 @@ runs:
         rustup toolchain install --no-self-update
         rustc --version --verbose
 
+    # sccache stores each compiled crate under a hash of its inputs, so a
+    # hit can never be a stale build. `Swatinem/rust-cache` below keeps
+    # only third-party dependencies; without sccache every job recompiles
+    # all workspace crates (DECISIONS #49).
+    - name: Set up sccache
+      uses: mozilla-actions/sccache-action@v0.0.11
+
+    - name: Route rustc through sccache
+      shell: bash
+      run: |
+        echo "SCCACHE_GHA_ENABLED=true" >> "$GITHUB_ENV"
+        echo "RUSTC_WRAPPER=sccache" >> "$GITHUB_ENV"
+        echo "CARGO_INCREMENTAL=0" >> "$GITHUB_ENV"
+
     - name: Cache Rust cargo target and registry
       uses: Swatinem/rust-cache@v2
       with:

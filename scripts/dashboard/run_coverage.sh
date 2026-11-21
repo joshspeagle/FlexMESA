@@ -28,7 +28,7 @@ case "$MODE" in
       --summary-only \
       --output-path "$OUT_JSON" \
       -- \
-      --skip test_just_call_my_extras_cases_run_as_plain_star_runs \
+      --skip test_just_call_my_extras_ \
       --skip test_all_pinned_raw_eos_slices_fit_without_non_finite_entries \
       --skip test_all_eight_astero_cases_bounded_eight_steps_pass \
       --skip test_surface_effects_case_recovers_synthetic_targets_and_bison_solar_fits \

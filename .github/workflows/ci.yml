@@ -74,10 +74,13 @@ jobs:
           cargo clippy --workspace --all-targets -- -D warnings
           RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps --exclude flexmesa-py
 
-  # The Rust tests run as four shards by package. Together the shards cover
-  # exactly `--workspace --exclude flexmesa-py`: three name one package each
-  # and `rest` excludes those three. They build with `--profile ci`
-  # (`Cargo.toml`): the release profile without link-time optimisation.
+  # The Rust tests run as seven shards. `star`, `astero` and `binary` are
+  # each split in two by `scripts/ci/cargo_test_shard.py`, which assigns
+  # every test target of the package to exactly one shard
+  # (`tests/test_ci_shards.py` checks this); `rest` is every other package.
+  # Together the shards cover exactly `--workspace --exclude flexmesa-py`.
+  # They build with `--profile ci` (`Cargo.toml`): the release profile
+  # without link-time optimisation.
   rust-tests:
     name: Safe Rust Tests (${{ matrix.shard }})
     needs: changes
@@ -88,12 +91,24 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - shard: star
-            packages: "-p flexmesa-star"
-          - shard: astero
-            packages: "-p flexmesa-astero"
-          - shard: binary
-            packages: "-p flexmesa-binary"
+          - shard: star 1/2
+            package: flexmesa-star
+            index: 1
+          - shard: star 2/2
+            package: flexmesa-star
+            index: 2
+          - shard: astero 1/2
+            package: flexmesa-astero
+            index: 1
+          - shard: astero 2/2
+            package: flexmesa-astero
+            index: 2
+          - shard: binary 1/2
+            package: flexmesa-binary
+            index: 1
+          - shard: binary 2/2
+            package: flexmesa-binary
+            index: 2
           - shard: rest
             packages: >-
               --workspace --exclude flexmesa-py --exclude flexmesa-star
@@ -107,10 +122,15 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           install-python-pkg: "false"
-          rust-cache-key: ci-tests-${{ matrix.shard }}
+          rust-cache-key: ci-tests-${{ matrix.package || 'rest' }}
 
       - name: Run Safe Rust unit, integration, and doc tests (${{ matrix.shard }})
-        run: cargo test ${{ matrix.packages }} --profile ci
+        run: |
+          if [ -n "${{ matrix.package }}" ]; then
+            python3 scripts/ci/cargo_test_shard.py --package "${{ matrix.package }}" --index "${{ matrix.index }}" --total 2
+          else
+            cargo test ${{ matrix.packages }} --profile ci
+          fi
 
   rust:
     name: Safe Rust Workspace & Golden Oracles
@@ -128,11 +148,11 @@ jobs:
             test "$r" = "success" || test "$r" = "skipped"
           done
 
-  # The Python suite runs as three shards. `scripts/ci/pytest_shard.py`
+  # The Python suite runs as five shards. `scripts/ci/pytest_shard.py`
   # assigns every collected test file to exactly one shard
   # (`tests/test_ci_shards.py` checks this).
   python-jax-tests:
-    name: Python, PyO3 & JAX Tests (shard ${{ matrix.shard }}/3)
+    name: Python, PyO3 & JAX Tests (shard ${{ matrix.shard }}/5)
     needs: changes
     if: needs.changes.outputs.python == 'true'
     runs-on: ubuntu-latest
@@ -140,7 +160,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3]
+        shard: [1, 2, 3, 4, 5]
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -153,9 +173,9 @@ jobs:
           release: "false"
           cache-jax: "true"
 
-      - name: Run Python, PyO3, and JAX parity tests (shard ${{ matrix.shard }}/3)
+      - name: Run Python, PyO3, and JAX parity tests (shard ${{ matrix.shard }}/5)
         run: |
-          pytest $(python scripts/ci/pytest_shard.py --index ${{ matrix.shard }} --total 3) -v --durations=15
+          pytest $(python scripts/ci/pytest_shard.py --index ${{ matrix.shard }} --total 5) -v --durations=15
 
   python-jax:
     name: Python, PyO3 & JAX Parity Suite

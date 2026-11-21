@@ -194,3 +194,57 @@ def test_eos_oracles_driver_and_table_record_mesa_26_4_1_provenance() -> None:
         if line and not line.startswith("#")
     }
     assert prefixes == {"DFERMI", "ALFA", "HELM", "EOS", "INV", "IERR"}
+
+
+def test_new_mesa_26_4_1_oracles_record_provenance() -> None:
+    """`turb_tdc`, `eps_mdot`, and `net` oracle suites record provenance."""
+    forbidden_tokens: tuple[str, ...] = (
+        "/" + "home/",
+        "/" + "tmp/",
+        "/" + "mnt/",
+        "." + "venvs",
+        "file" + "://",
+        "\u2014",
+        "*" * 7,
+    )
+    required_headers: tuple[str, ...] = (
+        "# mesa_version: r26.4.1",
+        "# mesa_git_commit: c8c202662922a22b3efefa824473ad615c623afd",
+        "# mesasdk_version: x86_64-linux-26.6.1",
+        "# math_backend: CRMATH",
+        "# compiler: GCC version",
+        "# fflags: -march=x86-64",
+    )
+    specs: tuple[tuple[str, str, str], ...] = (
+        (
+            "turb_tdc_oracles",
+            "gen_turb_tdc_oracles.f90",
+            "mesa_26_4_1_turb_tdc_oracles.tsv",
+        ),
+        (
+            "eps_mdot_oracles",
+            "gen_eps_mdot_oracles.f90",
+            "mesa_26_4_1_eps_mdot_oracles.tsv",
+        ),
+        (
+            "net_oracles",
+            "gen_net_oracles.f90",
+            "mesa_26_4_1_net_oracles.tsv",
+        ),
+    )
+    for folder, driver, tsv_name in specs:
+        oracles_dir = _REPO_ROOT / "benchmarks" / "fortran_mesa" / folder
+        for rel_name in ("Makefile", "README.md", driver, tsv_name):
+            path = oracles_dir / rel_name
+            assert path.is_file(), f"Missing oracle file: {path}"
+            content = path.read_text("utf-8")
+            for token in forbidden_tokens:
+                assert token not in content, (
+                    f"Forbidden token {token!r} in "
+                    f"{path.relative_to(_REPO_ROOT)}"
+                )
+        tsv_text = (oracles_dir / tsv_name).read_text("utf-8")
+        for expected_header in required_headers:
+            assert expected_header in tsv_text, (
+                f"Missing {expected_header!r} in {folder}/{tsv_name}"
+            )

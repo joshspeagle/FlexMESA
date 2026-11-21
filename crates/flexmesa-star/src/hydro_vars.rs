@@ -578,12 +578,14 @@ pub(crate) fn do1_mlt_2(
                     ))
                 })?
                 .output;
+            // Upstream `set_TDC` (`turb/public/turb.f90:114-130`) keeps `Gamma`
+            // local and does not modify `Get_results`'s `Gamma = 0`
+            // (`star/private/turb_support.f90:288,328-334`).
             mix_type = tdc_out.mixing_type;
             grad_t_f = tdc_out.grad_t;
             y_face_f = tdc_out.y_face;
             conv_vel_f = tdc_out.conv_vel;
             d_f = tdc_out.d;
-            gamma_f = tdc_out.gamma;
 
             if model.controls.mix_wind.use_superad_reduction {
                 let (gamma_factor, gradr_scaled) = eval_superad_reduction(
@@ -610,7 +612,6 @@ pub(crate) fn do1_mlt_2(
                     y_face_f = tdc_out2.y_face;
                     conv_vel_f = tdc_out2.conv_vel;
                     d_f = tdc_out2.d;
-                    gamma_f = tdc_out2.gamma;
                 }
             }
         } else if gradr_ad.val > gradl_f.val {

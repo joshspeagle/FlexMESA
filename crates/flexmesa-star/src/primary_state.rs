@@ -468,6 +468,7 @@ pub struct PrimaryStateBuffer {
     pub(crate) j_rot_old: Vec<f64>,
     pub(crate) eps_mdot_old: Vec<f64>,
     pub(crate) solver_mlt_eval_count: usize,
+    pub(crate) opacity_start_surf: f64,
     pub(crate) crystal_core_boundary_mass: f64,
     pub(crate) phase_sep_mixing_mass: f64,
     pub(crate) diffusion_call_number: usize,
@@ -487,7 +488,7 @@ macro_rules! make_empty_buf {
             layout: VarLayout::new(0, false, false),
             eos_config: EosConfig::default(),
             kap_config: KapConfig::default(),
-            dt_limit_ratio_old: 1.0,
+            dt_limit_ratio_old: 0.0,
             mixing: crate::mixing_state::MixingPrimarySnapshot::default(),
             step_hist: StepHistoryScalars::default(),
             rsp: RspState::new(0),
@@ -539,7 +540,8 @@ impl PrimaryStateBuffer {
                 total_energy, total_internal_energy_start,
                 cumulative_energy_error,
                 non_epsnuc_energy_change_from_split_burn,
-                crystal_core_boundary_mass, phase_sep_mixing_mass
+                crystal_core_boundary_mass, phase_sep_mixing_mass,
+                opacity_start_surf
             ],
             falses: [
                 doing_first_model_of_run, doing_relax, doing_struct_burn_mix,
@@ -648,6 +650,7 @@ impl PrimaryStateBuffer {
                 cumulative_energy_error,
                 non_epsnuc_energy_change_from_split_burn,
                 solver_mlt_eval_count,
+                opacity_start_surf,
                 crystal_core_boundary_mass,
                 phase_sep_mixing_mass,
                 diffusion_call_number
@@ -823,7 +826,8 @@ impl PrimaryStateBuffer {
                     non_epsnuc_energy_change_from_split_burn,
                     crystal_core_boundary_mass,
                     phase_sep_mixing_mass,
-                    diffusion_call_number
+                    diffusion_call_number,
+                    opacity_start_surf
                 ]
             );
             a.doing_struct_burn_mix = false;
@@ -925,6 +929,7 @@ impl PrimaryStateBuffer {
             [
                 doing_struct_burn_mix,
                 solver_mlt_eval_count,
+                opacity_start_surf,
                 crystal_core_boundary_mass,
                 phase_sep_mixing_mass,
                 diffusion_call_number

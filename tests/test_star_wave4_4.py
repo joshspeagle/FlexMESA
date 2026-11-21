@@ -129,7 +129,9 @@ def test_varcontrol_and_h211_timestep_filter_rust_vs_jax() -> None:
             pre.dt,
             pre.dt_old,
             ratio_rust,
-            dt_limit_ratio_old=1.0,
+            # Matches Rust initial `dt_limit_ratio_old = 0.0`
+            # (`star/private/init.f90:509, 696`, #340).
+            dt_limit_ratio_old=0.0,
             max_timestep_factor=1.2,
             min_timestep_factor=0.5,
         )

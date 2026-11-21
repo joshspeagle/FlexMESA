@@ -51,6 +51,28 @@ impl AtmTTauRelation {
     }
 }
 
+/// Grey $T(\tau)$ atmosphere opacity prescription (`atm_T_tau_opacity` in
+/// `star/defaults/controls.defaults:4440` and `star/private/atm_support.f90:278-341`).
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    Default,
+    PartialEq,
+    Eq,
+    serde::Serialize,
+    serde::Deserialize,
+)]
+pub enum AtmTTauOpacity {
+    /// Constant opacity equal to outer-cell `opacity[0]` (`'fixed'`).
+    #[default]
+    Fixed,
+    /// Uniform atmosphere opacity iterated to consistency with EOS and kap (`'iterated'`).
+    Iterated,
+    /// Depth-varying opacity integrated inward via `dopri5` (`'varying'`).
+    Varying,
+}
+
 /// Structured diagnostic payload returned inside [`StarError::StepFailure`].
 #[derive(Debug, Clone, PartialEq)]
 pub struct StepFailureInfo {
@@ -627,6 +649,14 @@ pub struct StarJobControls {
     pub set_initial_model_number: bool,
     /// Initial model number (`initial_model_number`).
     pub initial_model_number: usize,
+    /// Whether to reset cumulative retries on initial model load
+    /// (`set_initial_number_retries`, `true` default in `star/defaults/star_job.defaults:633`).
+    #[serde(default = "default_true")]
+    pub set_initial_number_retries: bool,
+    /// Initial cumulative retry count when `set_initial_number_retries = true`
+    /// (`initial_number_retries`, `0` default in `star/defaults/star_job.defaults:634`).
+    #[serde(default)]
+    pub initial_number_retries: usize,
     /// Whether to set initial timestep (`set_initial_dt`).
     pub set_initial_dt: bool,
     /// Initial timestep in years (`years_for_initial_dt`).
@@ -784,6 +814,8 @@ impl Default for StarJobControls {
             initial_age: 0.0,
             set_initial_model_number: false,
             initial_model_number: 0,
+            set_initial_number_retries: true,
+            initial_number_retries: 0,
             set_initial_dt: false,
             years_for_initial_dt: -1.0,
             seconds_for_initial_dt: -1.0,
@@ -832,4 +864,8 @@ impl Default for StarJobControls {
             profile_starting_model: false,
         }
     }
+}
+
+const fn default_true() -> bool {
+    true
 }

@@ -186,10 +186,6 @@ pub struct RspConfig {
     pub max_logt_for_opacity_factor_on: f64,
     /// Upper $\log_{10} T$ bound where `opacity_factor` turns off (`-1.0`).
     pub max_logt_for_opacity_factor_off: f64,
-    /// Relative tolerance for grey $T(\tau)$ iteration (`1e-4`).
-    pub atm_t_tau_errtol: f64,
-    /// Maximum iterations for grey $T(\tau)$ opacity solve (`50`).
-    pub atm_t_tau_max_iters: usize,
     /// Maximum per-step timestep growth factor (`1.2` in `controls.defaults`).
     pub max_timestep_factor: f64,
     /// Hard upper bound on timestep in $\mathrm{s}$ (`0.0` disables).
@@ -288,8 +284,6 @@ impl Default for RspConfig {
             min_logt_for_opacity_factor_on: -1.0,
             max_logt_for_opacity_factor_on: -1.0,
             max_logt_for_opacity_factor_off: -1.0,
-            atm_t_tau_errtol: 1.0e-7,
-            atm_t_tau_max_iters: 50,
             max_timestep_factor: 1.2,
             max_timestep: 0.0,
             force_timestep: 0.0,
@@ -494,7 +488,6 @@ pub(crate) fn populate_rsp_inlist(
         ("min_logt_for_opacity_factor_on", &mut r.min_logt_for_opacity_factor_on),
         ("max_logt_for_opacity_factor_on", &mut r.max_logt_for_opacity_factor_on),
         ("max_logt_for_opacity_factor_off", &mut r.max_logt_for_opacity_factor_off),
-        ("atm_t_tau_errtol", &mut r.atm_t_tau_errtol),
         ("max_timestep_factor", &mut r.max_timestep_factor),
         ("max_timestep", &mut r.max_timestep),
         ("force_timestep", &mut r.force_timestep),
@@ -525,7 +518,6 @@ pub(crate) fn populate_rsp_inlist(
         ("rsp_max_iters_per_try", &mut r.max_iters_per_try),
         ("rsp_max_retries_per_step", &mut r.max_retries_per_step),
         ("rsp_map_zone_interval", &mut r.map_zone_interval),
-        ("atm_t_tau_max_iters", &mut r.atm_t_tau_max_iters),
     ] {
         ctrl.try_usize_into("controls", dst, k, 0)?;
     }

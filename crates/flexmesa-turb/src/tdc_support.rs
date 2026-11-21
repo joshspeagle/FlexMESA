@@ -243,9 +243,13 @@ pub fn eval_xis<T: TurbScalar>(info: &TdcInfo<T>, y: T) -> (T, T, T) {
 
     let mut scale = one;
     if y.val() > 0.0 && info.use_tdc_enthalpy_flux_limiter {
-        let factor = info.mixing_length_alpha * info.tdc_alpha_s * X_ALFAS
-            / SQRT_2_DIV_3;
-        let x = (info.cp * info.t / info.h) * T::from_f64(factor) * y;
+        // `turb/private/tdc_support.f90`, `eval_xis`: left to right.
+        let x = (info.cp * info.t / info.h)
+            * T::from_f64(info.mixing_length_alpha)
+            * T::from_f64(info.tdc_alpha_s)
+            * T::from_f64(X_ALFAS)
+            * y
+            / T::from_f64(SQRT_2_DIV_3);
         let fl = flux_limiter_function(x);
         if x.val().abs() >= 0.95 {
             scale = fl / x;
@@ -264,11 +268,10 @@ pub fn eval_xis<T: TurbScalar>(info: &TdcInfo<T>, y: T) -> (T, T, T) {
         s0_pref * y + info.eq_div_w
     };
 
-    let d0 = T::from_f64(info.tdc_alpha_d * X_CEDE / info.mixing_length_alpha)
-        / info.hp;
-    let gammar_div_alfa =
-        T::from_f64(info.tdc_alpha_r * x_gammar / info.mixing_length_alpha)
-            / info.hp;
+    // Upstream divides by the product `mixing_length_alpha*Hp`.
+    let alpha_hp = T::from_f64(info.mixing_length_alpha) * info.hp;
+    let d0 = T::from_f64(info.tdc_alpha_d * X_CEDE) / alpha_hp;
+    let gammar_div_alfa = T::from_f64(info.tdc_alpha_r * x_gammar) / alpha_hp;
     let dr0 =
         T::from_f64(4.0 * BOLTZ_SIGMA) * gammar_div_alfa.pow2() * info.t.pow3()
             / (info.rho.pow2() * info.cp * info.kap);

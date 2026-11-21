@@ -21,7 +21,7 @@
         "verified_total": 4971,
         "pct_ported": 34.5,
         "pct_verified": 4.1,
-        "rust_lines": 84048,
+        "rust_lines": 84120,
         "python_jax_lines": 3869
       },
       {
@@ -72,7 +72,7 @@
         "verified_total": 0,
         "pct_ported": 0.0,
         "pct_verified": 0.0,
-        "rust_lines": 5764,
+        "rust_lines": 5994,
         "python_jax_lines": 1288
       },
       {
@@ -191,8 +191,8 @@
         "verified_total": 0,
         "pct_ported": 66.5,
         "pct_verified": 0.0,
-        "rust_lines": 2787,
-        "python_jax_lines": 2368
+        "rust_lines": 2790,
+        "python_jax_lines": 3116
       },
       {
         "module": "chem",
@@ -259,7 +259,7 @@
         "verified_total": 0,
         "pct_ported": 0.0,
         "pct_verified": 0.0,
-        "rust_lines": 4644,
+        "rust_lines": 4647,
         "python_jax_lines": 3587
       },
       {
@@ -455,14 +455,14 @@
       "upstream_panel_modules": 46
     },
     "infrastructure_lines": {
-      "rust_bridge_testing_bench": 19424,
-      "python_testing_bench": 15460
+      "rust_bridge_testing_bench": 19423,
+      "python_testing_bench": 15615
     }
   },
   "numerics": {
     "has_165_ci": true,
     "strict_cross_machine_identical": "gated in CI by scripts/check_strict_determinism.py (x86_64 vs aarch64, 1 vs 4 threads; 474,062 math vectors + uncapped star/1.3M_ms_high_Z + binary/jdot_gr_check run with unsupported controls ignored; a bit-identity check, not a comparison with MESA)",
-    "strict_kernels_bit_identical": "math: 403,258/403,258 CRMATH 0 ULP (70,804 libm <= 1 ULP); 304,567/304,635 probed module hex 0 ULP (5 complete, 14 non-math probed)",
+    "strict_kernels_bit_identical": "math: 403,258/403,258 CRMATH 0 ULP (70,804 libm <= 1 ULP); 304,624/304,751 probed module hex 0 ULP (5 complete, 15 non-math probed)",
     "total_upstream_hex_values": 348321,
     "modules": [
       {
@@ -538,7 +538,7 @@
       {
         "module": "net",
         "upstream_exact_values": 140,
-        "exact_strict_compared": "0"
+        "exact_strict_compared": "55/116 0 ULP (max 66 ULP, 124 total)"
       },
       {
         "module": "ionization",
@@ -553,7 +553,7 @@
       {
         "module": "turb",
         "upstream_exact_values": 136,
-        "exact_strict_compared": "38/62 0 ULP (max 6 ULP, 71 total)"
+        "exact_strict_compared": "40/62 0 ULP (max 6 ULP, 71 total)"
       },
       {
         "module": "star_data",
@@ -1184,13 +1184,8 @@
         "issues": "#161"
       }
     ],
-    "python_xfail_or_skip_count": 9,
+    "python_xfail_or_skip_count": 8,
     "python_skips": [
-      {
-        "location": "tests/test_bench.py:102",
-        "reason": "pytest.mark.xfail( strict=True, reason=( \"#295: Rust set_tdc carries the root's partials through the Newton \" \"iteration as MESA 26.4.1 does (turb/private/tdc.f90:253-345, #321); \" \"the Python stages apply the implicit function theorem at the \" \"converged root.\" ), )",
-        "issues": "#295, #321"
-      },
       {
         "location": "tests/test_eos_wave3a3.py:200",
         "reason": "pytest.mark.xfail( strict=True, reason=( \"declared gap (#161): Rust strict PC and Skye derivatives differ \" \"from MESA 26.4.1 beyond the base tolerances (largest measured: \" \"pc_co_liq d_dlnT 7.1e-6, skye_co_liq d_dlnT 1.3e-6)\" ), )",
@@ -1473,7 +1468,18 @@
         "issues": []
       }
     ],
-    "open_pull_requests": [],
+    "open_pull_requests": [
+      {
+        "number": 334,
+        "title": "ci(dashboard): give dashboard and coverage Pages deployments distinct artifact names",
+        "draft": false
+      },
+      {
+        "number": 343,
+        "title": "fix(star): wire atm_T_tau_opacity ('iterated'/'varying'), fix center dm_bar, dt_limit_ratio_old, and .mod retry reset (Closes #340)",
+        "draft": false
+      }
+    ],
     "deferred_169": [
       {
         "number": 175,
@@ -1824,6 +1830,14 @@
         "title": "[Deferred enhancement] calc_MLT: series for the cubic root near marginal convection",
         "state": "open",
         "kind": "enhancement",
+        "parity_pending": false,
+        "needs_confirmation": false
+      },
+      {
+        "number": 330,
+        "title": "[Deferred bug] calc_MLT never assigns its ierr output, and its bare returns leave other outputs unassigned",
+        "state": "open",
+        "kind": "upstream-bug",
         "parity_pending": false,
         "needs_confirmation": false
       }
@@ -2583,6 +2597,58 @@
       "closed_140": "16",
       "total_140": "36",
       "deferred_169": "44"
+    },
+    {
+      "date_utc": "2026-11-21",
+      "commit": "ba2c12c",
+      "event": "main merge",
+      "engine_ported_pct": "30.2",
+      "all_verified_pct": "1.0",
+      "cases_passing": "0",
+      "rust_cov_pct": "75.5",
+      "python_cov_pct": "87.6",
+      "closed_140": "16",
+      "total_140": "36",
+      "deferred_169": "44"
+    },
+    {
+      "date_utc": "2026-11-21",
+      "commit": "7bae492",
+      "event": "main merge",
+      "engine_ported_pct": "30.2",
+      "all_verified_pct": "1.0",
+      "cases_passing": "0",
+      "rust_cov_pct": "75.5",
+      "python_cov_pct": "87.6",
+      "closed_140": "16",
+      "total_140": "36",
+      "deferred_169": "44"
+    },
+    {
+      "date_utc": "2026-11-21",
+      "commit": "d1fe407",
+      "event": "main merge",
+      "engine_ported_pct": "30.2",
+      "all_verified_pct": "1.0",
+      "cases_passing": "0",
+      "rust_cov_pct": "75.5",
+      "python_cov_pct": "87.6",
+      "closed_140": "16",
+      "total_140": "36",
+      "deferred_169": "45"
+    },
+    {
+      "date_utc": "2026-11-21",
+      "commit": "b5d4ba2",
+      "event": "main merge",
+      "engine_ported_pct": "30.2",
+      "all_verified_pct": "1.0",
+      "cases_passing": "0",
+      "rust_cov_pct": "75.5",
+      "python_cov_pct": "87.6",
+      "closed_140": "16",
+      "total_140": "36",
+      "deferred_169": "45"
     }
   ]
 }

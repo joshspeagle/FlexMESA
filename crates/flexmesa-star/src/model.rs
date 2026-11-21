@@ -475,7 +475,7 @@ impl StarModel {
             dt: 1.0e3 * SECYER,
             dt_next: 1.0e3 * SECYER,
             dt_old: 1.0e3 * SECYER,
-            dt_limit_ratio_old: 1.0,
+            dt_limit_ratio_old: 0.0,
             mstar,
             mstar_start: mstar,
             mstar_old: mstar,

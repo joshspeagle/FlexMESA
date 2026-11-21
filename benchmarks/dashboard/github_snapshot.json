@@ -237,7 +237,18 @@
       "issues": []
     }
   ],
-  "open_pull_requests": [],
+  "open_pull_requests": [
+    {
+      "number": 334,
+      "title": "ci(dashboard): give dashboard and coverage Pages deployments distinct artifact names",
+      "draft": false
+    },
+    {
+      "number": 343,
+      "title": "fix(star): wire atm_T_tau_opacity ('iterated'/'varying'), fix center dm_bar, dt_limit_ratio_old, and .mod retry reset (Closes #340)",
+      "draft": false
+    }
+  ],
   "deferred_169": [
     {
       "number": 175,
@@ -588,6 +599,14 @@
       "title": "[Deferred enhancement] calc_MLT: series for the cubic root near marginal convection",
       "state": "open",
       "kind": "enhancement",
+      "parity_pending": false,
+      "needs_confirmation": false
+    },
+    {
+      "number": 330,
+      "title": "[Deferred bug] calc_MLT never assigns its ierr output, and its bare returns leave other outputs unassigned",
+      "state": "open",
+      "kind": "upstream-bug",
       "parity_pending": false,
       "needs_confirmation": false
     }

@@ -278,4 +278,102 @@ mod tests {
         let r010_interp = interpolate_ratio_r010(mid_f, &l0_freqs[1..], &r02);
         assert!((r010_interp - 9.0 / 135.0).abs() < 1.0e-12);
     }
+
+    #[test]
+    fn test_simplex_budget_preserves_unclamped_first_param_and_itermax() {
+        let mut pts: Vec<(f64, f64)> = Vec::new();
+        let (x_best, f_best, evals) = optimize::try_simplex_minimize_with_budget(
+            &[1.00, 1.70],
+            &[1.24, 1.50],
+            &[1.32, 1.90],
+            2,
+            5,
+            1.0e-10,
+            1.0e-10,
+            0.0,
+            0.0,
+            false,
+            false,
+            1_074_698_122,
+            |x| {
+                pts.push((x[0], x[1]));
+                // Mirrors upstream 7-eval simplex trajectory where expand
+                // fails with 1e99 and inside contraction succeeds.
+                let val = if x[0] < 0.97 {
+                    search_driver::FAILED_TRACK_CHI2
+                } else {
+                    flexmesa_math::pow2(x[0] - 0.98)
+                        + flexmesa_math::pow2(x[1] - 1.80)
+                        + 0.046
+                };
+                Ok(val)
+            },
+        )
+        .expect("simplex with enforce_bounds=false succeeds");
+        assert!((pts[0].0 - 1.00).abs() < 1.0e-15);
+        assert!((pts[0].1 - 1.70).abs() < 1.0e-15);
+        assert!((pts[1].0 - 1.02).abs() < 1.0e-15);
+        assert!((pts[2].1 - 1.80).abs() < 1.0e-15);
+        // Iter 1 does reflect + expand (5 evals); Iter 2 runs because
+        // `num_evals == 5 <= max_evals` (`mod_simplex.f90:127`), taking 7 evals.
+        assert_eq!(evals, 7);
+        assert!((x_best[0] - 0.98).abs() < 1.0e-12);
+        assert!((x_best[1] - 1.80).abs() < 1.0e-12);
+        assert!((f_best - 0.046).abs() < 1.0e-12);
+    }
+
+    #[test]
+    fn test_astero_pass_logic_accepts_limit_num_and_failed_track_scores_1e99() {
+        assert!(e2e::is_astero_search_passed(
+            true,
+            "limit_num_chi2_too_big",
+            true,
+            true
+        ));
+        assert!(e2e::is_astero_search_passed(
+            true,
+            "chi2_search_limit2",
+            true,
+            true
+        ));
+        assert!(e2e::is_astero_search_passed(true, "max_age", true, true));
+        assert!(!e2e::is_astero_search_passed(
+            true,
+            "max_steps_cap",
+            true,
+            true
+        ));
+        assert!(!e2e::is_astero_search_passed(
+            true,
+            "min_timestep_limit",
+            true,
+            true
+        ));
+        assert!(!e2e::is_astero_search_passed(
+            true,
+            "limit_num_chi2_too_big",
+            false,
+            true
+        ));
+        assert!(!e2e::is_astero_search_passed(
+            false,
+            "limit_num_chi2_too_big",
+            true,
+            true
+        ));
+
+        let ctrl = flexmesa_star::StarControls::default();
+        let job = flexmesa_star::StarJobControls::default();
+        let model = flexmesa_star::load_zams_model(ctrl, job)
+            .expect("1 Msun ZAMS for sentinel check");
+        let failed = search_driver::failed_sample_result(
+            &model,
+            AsteroSearchControls::default().first_params(),
+            1,
+        );
+        assert_eq!(failed.chi2, 1.0e99);
+        assert_eq!(failed.chi2_seismo, 1.0e99);
+        assert_eq!(failed.chi2_spectro, 1.0e99);
+        assert!(failed.model_freqs.iter().all(Vec::is_empty));
+    }
 }

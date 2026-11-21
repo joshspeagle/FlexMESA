@@ -15,8 +15,10 @@ import typing
 
 from flexmesa import auto_diff as _ad
 from flexmesa import constants as _const
+from flexmesa.turb import tdc_dual as _tdc_dual
 
 type ScalarOrDual = float | _ad.DualOrder1
+type TdcScalar = float | _ad.DualOrder1 | _tdc_dual.AutoDiffRealTdc
 
 
 class _OptionEnum(enum.Enum):
@@ -238,100 +240,372 @@ class MltInputs:
     gradl: ScalarOrDual
 
 
-def val_of(x: ScalarOrDual) -> float:
-    """Extract primal `float` value from `float` or `DualOrder1`."""
+def val_of(x: TdcScalar) -> float:
+    """Extract primal `float` value from a scalar or dual input."""
+    if isinstance(x, _tdc_dual.AutoDiffRealTdc):
+        return x.val
     if isinstance(x, _ad.DualOrder1):
         return float(x.val)
     return float(x)
 
 
-def const_like(proto: ScalarOrDual, v: float) -> ScalarOrDual:
+@typing.overload
+def const_like(proto: float, v: float) -> float: ...
+
+
+@typing.overload
+def const_like(proto: _ad.DualOrder1, v: float) -> _ad.DualOrder1: ...
+
+
+@typing.overload
+def const_like(
+    proto: _tdc_dual.AutoDiffRealTdc, v: float
+) -> _tdc_dual.AutoDiffRealTdc: ...
+
+
+@typing.overload
+def const_like(proto: ScalarOrDual, v: float) -> ScalarOrDual: ...
+
+
+@typing.overload
+def const_like(proto: TdcScalar, v: float) -> TdcScalar: ...
+
+
+def const_like(proto: TdcScalar, v: float) -> TdcScalar:
     """Construct a constant matching the type/arity of `proto`."""
+    if isinstance(proto, _tdc_dual.AutoDiffRealTdc):
+        return _tdc_dual.AutoDiffRealTdc.constant(v, proto.num_vars)
     if isinstance(proto, _ad.DualOrder1):
         return _ad.DualOrder1.constant(v, num_vars=int(proto.d1.shape[-1]))
     return float(v)
 
 
-def with_val_like(x: ScalarOrDual, new_val: float) -> ScalarOrDual:
+@typing.overload
+def with_val_like(x: float, new_val: float) -> float: ...
+
+
+@typing.overload
+def with_val_like(x: _ad.DualOrder1, new_val: float) -> _ad.DualOrder1: ...
+
+
+@typing.overload
+def with_val_like(
+    x: _tdc_dual.AutoDiffRealTdc, new_val: float
+) -> _tdc_dual.AutoDiffRealTdc: ...
+
+
+@typing.overload
+def with_val_like(x: ScalarOrDual, new_val: float) -> ScalarOrDual: ...
+
+
+@typing.overload
+def with_val_like(x: TdcScalar, new_val: float) -> TdcScalar: ...
+
+
+def with_val_like(x: TdcScalar, new_val: float) -> TdcScalar:
     """Replace the primal value of `x` while preserving its derivatives."""
+    if isinstance(x, _tdc_dual.AutoDiffRealTdc):
+        return x.with_val(new_val)
     if isinstance(x, _ad.DualOrder1):
         return _ad.DualOrder1(val=float(new_val), d1=x.d1)
     return float(new_val)
 
 
-def s_abs(x: ScalarOrDual) -> ScalarOrDual:
-    """Evaluate $|x|$ for `float` or `DualOrder1`."""
-    if isinstance(x, _ad.DualOrder1):
+@typing.overload
+def s_abs(x: float) -> float: ...
+
+
+@typing.overload
+def s_abs(x: _ad.DualOrder1) -> _ad.DualOrder1: ...
+
+
+@typing.overload
+def s_abs(x: _tdc_dual.AutoDiffRealTdc) -> _tdc_dual.AutoDiffRealTdc: ...
+
+
+@typing.overload
+def s_abs(x: ScalarOrDual) -> ScalarOrDual: ...
+
+
+@typing.overload
+def s_abs(x: TdcScalar) -> TdcScalar: ...
+
+
+def s_abs(x: TdcScalar) -> TdcScalar:
+    """Evaluate $|x|$ for `float`, `DualOrder1`, or `AutoDiffRealTdc`."""
+    if isinstance(x, (_ad.DualOrder1, _tdc_dual.AutoDiffRealTdc)):
         return x.abs()
     return abs(x)
 
 
-def s_sqrt(x: ScalarOrDual) -> ScalarOrDual:
-    """Evaluate $\\sqrt{x}$ for `float` or `DualOrder1`."""
-    if isinstance(x, _ad.DualOrder1):
+@typing.overload
+def s_sqrt(x: float) -> float: ...
+
+
+@typing.overload
+def s_sqrt(x: _ad.DualOrder1) -> _ad.DualOrder1: ...
+
+
+@typing.overload
+def s_sqrt(x: _tdc_dual.AutoDiffRealTdc) -> _tdc_dual.AutoDiffRealTdc: ...
+
+
+@typing.overload
+def s_sqrt(x: ScalarOrDual) -> ScalarOrDual: ...
+
+
+@typing.overload
+def s_sqrt(x: TdcScalar) -> TdcScalar: ...
+
+
+def s_sqrt(x: TdcScalar) -> TdcScalar:
+    """Evaluate $\\sqrt{x}$ for `float`, `DualOrder1`, or `AutoDiffRealTdc`."""
+    if isinstance(x, (_ad.DualOrder1, _tdc_dual.AutoDiffRealTdc)):
         return x.sqrt()
     return math.sqrt(x)
 
 
-def s_exp(x: ScalarOrDual) -> ScalarOrDual:
-    """Evaluate $\\exp(x)$ for `float` or `DualOrder1`."""
-    if isinstance(x, _ad.DualOrder1):
+@typing.overload
+def s_exp(x: float) -> float: ...
+
+
+@typing.overload
+def s_exp(x: _ad.DualOrder1) -> _ad.DualOrder1: ...
+
+
+@typing.overload
+def s_exp(x: _tdc_dual.AutoDiffRealTdc) -> _tdc_dual.AutoDiffRealTdc: ...
+
+
+@typing.overload
+def s_exp(x: ScalarOrDual) -> ScalarOrDual: ...
+
+
+@typing.overload
+def s_exp(x: TdcScalar) -> TdcScalar: ...
+
+
+def s_exp(x: TdcScalar) -> TdcScalar:
+    """Evaluate $\\exp(x)$ for `float`, `DualOrder1`, or `AutoDiffRealTdc`."""
+    if isinstance(x, (_ad.DualOrder1, _tdc_dual.AutoDiffRealTdc)):
         return x.exp()
     return math.exp(x)
 
 
-def s_log(x: ScalarOrDual) -> ScalarOrDual:
-    """Evaluate $\\ln(x)$ for `float` or `DualOrder1`."""
-    if isinstance(x, _ad.DualOrder1):
+@typing.overload
+def s_log(x: float) -> float: ...
+
+
+@typing.overload
+def s_log(x: _ad.DualOrder1) -> _ad.DualOrder1: ...
+
+
+@typing.overload
+def s_log(x: _tdc_dual.AutoDiffRealTdc) -> _tdc_dual.AutoDiffRealTdc: ...
+
+
+@typing.overload
+def s_log(x: ScalarOrDual) -> ScalarOrDual: ...
+
+
+@typing.overload
+def s_log(x: TdcScalar) -> TdcScalar: ...
+
+
+def s_log(x: TdcScalar) -> TdcScalar:
+    """Evaluate $\\ln(x)$ for `float`, `DualOrder1`, or `AutoDiffRealTdc`."""
+    if isinstance(x, (_ad.DualOrder1, _tdc_dual.AutoDiffRealTdc)):
         return x.log()
     return math.log(x)
 
 
-def s_powf(x: ScalarOrDual, p: float) -> ScalarOrDual:
-    """Evaluate $x^p$ for `float` or `DualOrder1`."""
-    if isinstance(x, _ad.DualOrder1):
+@typing.overload
+def s_powf(x: float, p: float) -> float: ...
+
+
+@typing.overload
+def s_powf(x: _ad.DualOrder1, p: float) -> _ad.DualOrder1: ...
+
+
+@typing.overload
+def s_powf(
+    x: _tdc_dual.AutoDiffRealTdc, p: float
+) -> _tdc_dual.AutoDiffRealTdc: ...
+
+
+@typing.overload
+def s_powf(x: ScalarOrDual, p: float) -> ScalarOrDual: ...
+
+
+@typing.overload
+def s_powf(x: TdcScalar, p: float) -> TdcScalar: ...
+
+
+def s_powf(x: TdcScalar, p: float) -> TdcScalar:
+    """Evaluate $x^p$ for `float`, `DualOrder1`, or `AutoDiffRealTdc`."""
+    if isinstance(x, (_ad.DualOrder1, _tdc_dual.AutoDiffRealTdc)):
         return x.powf(p)
     return math.pow(x, p)
 
 
-def s_pow2(x: ScalarOrDual) -> ScalarOrDual:
-    """Evaluate $x^2$ for `float` or `DualOrder1`."""
-    if isinstance(x, _ad.DualOrder1):
+@typing.overload
+def s_pow2(x: float) -> float: ...
+
+
+@typing.overload
+def s_pow2(x: _ad.DualOrder1) -> _ad.DualOrder1: ...
+
+
+@typing.overload
+def s_pow2(x: _tdc_dual.AutoDiffRealTdc) -> _tdc_dual.AutoDiffRealTdc: ...
+
+
+@typing.overload
+def s_pow2(x: ScalarOrDual) -> ScalarOrDual: ...
+
+
+@typing.overload
+def s_pow2(x: TdcScalar) -> TdcScalar: ...
+
+
+def s_pow2(x: TdcScalar) -> TdcScalar:
+    """Evaluate $x^2$ for `float`, `DualOrder1`, or `AutoDiffRealTdc`."""
+    if isinstance(x, (_ad.DualOrder1, _tdc_dual.AutoDiffRealTdc)):
         return x.pow2()
     return x * x
 
 
-def s_pow3(x: ScalarOrDual) -> ScalarOrDual:
-    """Evaluate $x^3$ for `float` or `DualOrder1`."""
-    if isinstance(x, _ad.DualOrder1):
+@typing.overload
+def s_pow3(x: float) -> float: ...
+
+
+@typing.overload
+def s_pow3(x: _ad.DualOrder1) -> _ad.DualOrder1: ...
+
+
+@typing.overload
+def s_pow3(x: _tdc_dual.AutoDiffRealTdc) -> _tdc_dual.AutoDiffRealTdc: ...
+
+
+@typing.overload
+def s_pow3(x: ScalarOrDual) -> ScalarOrDual: ...
+
+
+@typing.overload
+def s_pow3(x: TdcScalar) -> TdcScalar: ...
+
+
+def s_pow3(x: TdcScalar) -> TdcScalar:
+    """Evaluate $x^3$ for `float`, `DualOrder1`, or `AutoDiffRealTdc`."""
+    if isinstance(x, (_ad.DualOrder1, _tdc_dual.AutoDiffRealTdc)):
         return x.pow3()
     return x * x * x
 
 
-def s_pow4(x: ScalarOrDual) -> ScalarOrDual:
-    """Evaluate $x^4$ for `float` or `DualOrder1`."""
-    if isinstance(x, _ad.DualOrder1):
+@typing.overload
+def s_pow4(x: float) -> float: ...
+
+
+@typing.overload
+def s_pow4(x: _ad.DualOrder1) -> _ad.DualOrder1: ...
+
+
+@typing.overload
+def s_pow4(x: _tdc_dual.AutoDiffRealTdc) -> _tdc_dual.AutoDiffRealTdc: ...
+
+
+@typing.overload
+def s_pow4(x: ScalarOrDual) -> ScalarOrDual: ...
+
+
+@typing.overload
+def s_pow4(x: TdcScalar) -> TdcScalar: ...
+
+
+def s_pow4(x: TdcScalar) -> TdcScalar:
+    """Evaluate $x^4$ for `float`, `DualOrder1`, or `AutoDiffRealTdc`."""
+    if isinstance(x, (_ad.DualOrder1, _tdc_dual.AutoDiffRealTdc)):
         return x.pow4()
     x2 = x * x
     return x2 * x2
 
 
-def s_tanh(x: ScalarOrDual) -> ScalarOrDual:
-    """Evaluate $\\tanh(x)$ for `float` or `DualOrder1`."""
-    if isinstance(x, _ad.DualOrder1):
+@typing.overload
+def s_tanh(x: float) -> float: ...
+
+
+@typing.overload
+def s_tanh(x: _ad.DualOrder1) -> _ad.DualOrder1: ...
+
+
+@typing.overload
+def s_tanh(x: _tdc_dual.AutoDiffRealTdc) -> _tdc_dual.AutoDiffRealTdc: ...
+
+
+@typing.overload
+def s_tanh(x: ScalarOrDual) -> ScalarOrDual: ...
+
+
+@typing.overload
+def s_tanh(x: TdcScalar) -> TdcScalar: ...
+
+
+def s_tanh(x: TdcScalar) -> TdcScalar:
+    """Evaluate $\\tanh(x)$ for `float`, `DualOrder1`, or `AutoDiffRealTdc`."""
+    if isinstance(x, (_ad.DualOrder1, _tdc_dual.AutoDiffRealTdc)):
         return x.tanh()
     return math.tanh(x)
 
 
-def s_tan(x: ScalarOrDual) -> ScalarOrDual:
-    """Evaluate $\\tan(x)$ for `float` or `DualOrder1`."""
-    if isinstance(x, _ad.DualOrder1):
+@typing.overload
+def s_tan(x: float) -> float: ...
+
+
+@typing.overload
+def s_tan(x: _ad.DualOrder1) -> _ad.DualOrder1: ...
+
+
+@typing.overload
+def s_tan(x: _tdc_dual.AutoDiffRealTdc) -> _tdc_dual.AutoDiffRealTdc: ...
+
+
+@typing.overload
+def s_tan(x: ScalarOrDual) -> ScalarOrDual: ...
+
+
+@typing.overload
+def s_tan(x: TdcScalar) -> TdcScalar: ...
+
+
+def s_tan(x: TdcScalar) -> TdcScalar:
+    """Evaluate $\\tan(x)$ for `float`, `DualOrder1`, or `AutoDiffRealTdc`."""
+    if isinstance(x, (_ad.DualOrder1, _tdc_dual.AutoDiffRealTdc)):
         return x.tan()
     return math.tan(x)
 
 
-def s_atan(x: ScalarOrDual) -> ScalarOrDual:
-    """Evaluate $\\arctan(x)$ for `float` or `DualOrder1`."""
-    if isinstance(x, _ad.DualOrder1):
+@typing.overload
+def s_atan(x: float) -> float: ...
+
+
+@typing.overload
+def s_atan(x: _ad.DualOrder1) -> _ad.DualOrder1: ...
+
+
+@typing.overload
+def s_atan(x: _tdc_dual.AutoDiffRealTdc) -> _tdc_dual.AutoDiffRealTdc: ...
+
+
+@typing.overload
+def s_atan(x: ScalarOrDual) -> ScalarOrDual: ...
+
+
+@typing.overload
+def s_atan(x: TdcScalar) -> TdcScalar: ...
+
+
+def s_atan(x: TdcScalar) -> TdcScalar:
+    """Evaluate $\\arctan(x)$ for scalar or dual inputs."""
+    if isinstance(x, (_ad.DualOrder1, _tdc_dual.AutoDiffRealTdc)):
         return x.atan()
     return math.atan(x)

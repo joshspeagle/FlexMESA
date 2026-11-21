@@ -242,11 +242,6 @@
       "number": 334,
       "title": "ci(dashboard): give dashboard and coverage Pages deployments distinct artifact names",
       "draft": false
-    },
-    {
-      "number": 343,
-      "title": "fix(star): wire atm_T_tau_opacity ('iterated'/'varying'), fix center dm_bar, dt_limit_ratio_old, and .mod retry reset (Closes #340)",
-      "draft": false
     }
   ],
   "deferred_169": [

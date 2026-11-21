@@ -996,7 +996,7 @@ fn test_uncapped_jdot_gr_check_campaign() {
 fn test_uncapped_star_plus_point_mass_explicit_mdot_campaign() {
     let (rep, _) =
         assert_slow_uncapped_case("star_plus_point_mass_explicit_mdot");
-    assert_eq!(rep.termination_code, "xa_central_lower_limit(h1)");
+    assert_eq!(rep.termination_code, "xa_central_lower_limit");
     assert!(rep.final_m1_msun < 5.0 && rep.final_m2_msun > 10.0);
 }
 
@@ -1004,7 +1004,7 @@ fn test_uncapped_star_plus_point_mass_explicit_mdot_campaign() {
 #[ignore = "unverified uncapped binary campaign; tracked in #143 and #160"]
 fn test_uncapped_star_plus_point_mass_campaign() {
     let (rep, _) = assert_slow_uncapped_case("star_plus_point_mass");
-    assert_eq!(rep.termination_code, "xa_central_lower_limit(h1)");
+    assert_eq!(rep.termination_code, "xa_central_lower_limit");
     assert!(rep.final_m1_msun < 5.0 && rep.final_m2_msun > 10.0);
 }
 
@@ -1027,7 +1027,7 @@ fn test_uncapped_evolve_both_stars_campaign() {
 #[ignore = "unverified uncapped binary campaign; tracked in #143 and #160"]
 fn test_uncapped_wind_fed_bhhmxb_campaign() {
     let (rep, extras) = assert_slow_uncapped_case("wind_fed_bhhmxb");
-    assert_eq!(rep.termination_code, "xa_central_lower_limit(h1)");
+    assert_eq!(rep.termination_code, "xa_central_lower_limit");
     assert!(extras.max_rel_err() <= 1.0e-15);
 }
 

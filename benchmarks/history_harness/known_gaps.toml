@@ -729,8 +729,8 @@ file = "crates/flexmesa-binary/tests/tier5_coupled_suite.rs"
 test_name = "test_uncapped_double_bh_campaign"
 issue = "#160"
 role = "campaign"
-expect_fail_when_run = true
-reason = "Uncapped double-BH core-He implicit rotational-wind campaign currently fails under #160 (T2-9); gate fails if it passes while ignored."
+expect_fail_when_run = false
+reason = "Long-running uncapped double-BH campaign tracked under #160. The test passed in the scheduled campaign run on aaa29e9 (issue #257). It asserts the test-side oracle's termination and both final masses above 20 Msun, with no comparison against MESA 26.4.1; the harness row for binary/double_bh is still a declared gap."
 
 [[test_gaps]]
 kind = "rust_ignore"
@@ -739,8 +739,8 @@ file = "crates/flexmesa-astero/tests/astero_suite.rs"
 test_name = "test_example_astero_uncapped"
 issue = "#162"
 role = "campaign"
-expect_fail_when_run = false
-reason = "Long-running uncapped astero campaign (~241 s; terminates at chi2_search_limit2 with best_chi2 = 2.92 after #161 &eos/&kap control wiring), tracked under #162 and scheduled campaign CI."
+expect_fail_when_run = true
+reason = "The uncapped example_astero track now stops on limit_num_chi2_too_big (samples=1, best chi2 3.81, 653 steps), which the report's internal pass flag rejects; measured by the campaign run on the claude/campaign-ledger branch at main f171cca (issue #257). It ended on chi2_search_limit2 with best chi2 2.92 in the run on aaa29e9, before the quad-precision energy and eps_mdot changes of #308, #315 and #319. No MESA 26.4.1 reference exists for this case, so which ending upstream reaches is not known (#162)."
 
 [[test_gaps]]
 kind = "rust_ignore"
@@ -769,8 +769,8 @@ file = "crates/flexmesa-astero/tests/astero_suite.rs"
 test_name = "test_fast_simplex_uncapped"
 issue = "#162"
 role = "campaign"
-expect_fail_when_run = false
-reason = "Long-running uncapped astero simplex campaign tracked under #162 and scheduled campaign CI."
+expect_fail_when_run = true
+reason = "The uncapped astero simplex search returns the error 'star terminated at model 251: max_age' from one sample's star run instead of a search result; measured by the scheduled campaign run on aaa29e9 (issue #257). The test passed in the run on 986a6aa, before the star solver and stop-condition changes of #259, #262, #269 and #285. No MESA 26.4.1 reference exists for this case (#162)."
 
 [[test_gaps]]
 kind = "rust_ignore"

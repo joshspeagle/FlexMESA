@@ -65,6 +65,7 @@ Scope and the `v0.1.0` definition are in [`SCOPE.md`](SCOPE.md). Work is tracked
 | 48 | Pull-Request CI Runs Only the Job Groups a Change Can Affect; the Gate Smoke Test Uses the Shortest Case | In force | below |
 | 49 | CI Compiles Through `sccache`; Rust Tests in Seven Shards and Python Tests in Five | In force | below |
 | 50 | The TDC Newton Solver Runs on a Translation of `auto_diff_real_tdc`; No Bracket Seed (`#321`) | In force | below |
+| 51 | The Scheduled Campaign Saves a Baseline Candidate; the Baseline May Be Refreshed From It (`#257`) | In force | below |
 
 ## Pre-audit decisions still in force
 
@@ -678,3 +679,16 @@ The text of these four entries predates the audit of 2026-11-16. The decisions s
 - **Alternatives Rejected**:
   - *Keeping the implicit function theorem*: more accurate as a derivative, but not what MESA does.
   - *A non-generic copy of `compute_Q`, `eval_xis` and `eval_Af` using the real-operand routines*: would make the partials bit-faithful at the cost of two copies of the physics; left for when a hex reference for the partials exists.
+
+## DECISIONS #51: The Scheduled Campaign Saves a Baseline Candidate; the Baseline May Be Refreshed From It (`#257`)
+
+- **Date**: 2026-11-21
+- **Decision**:
+  1. **Candidate in the artifact**: the full-harness job of `campaign.yml` passes `--save-baseline` and uploads `baseline_candidate.json` with its other outputs. It is the timing-normalised regression snapshot of all 106 cases for the commit the campaign ran on.
+  2. **Refreshing from it**: `scripts/ci/merge_baseline_candidate.py` merges a candidate into `benchmarks/history_harness/baseline_run_26_4_1.json` row by row. A committed row is kept when its run ended on a termination condition other than the time budget and the candidate run of that case ended on the time budget; every other row is taken from the candidate. The pull request names the campaign run and lists the cases whose termination or run status changed. `flexmesa harness run --update-baseline` on a subset remains the way to update rows in a pull request that changes trajectories.
+- **Why**: Only about twenty cases run on the review machine, so the rows of the other cases went stale as engine changes merged, and the scheduled gate then compared against rows no current build produces. The campaign already runs every case on the hardware the gate uses.
+- **Limits**: GitHub runners are slower than the machine many committed rows came from: in the first refresh 22 cases that had reached a termination condition ended on the 300-second budget on the runner, and their rows were kept. A kept row can predate later engine changes, so it is refreshed only by a run on a machine fast enough to finish the case. Rows that end on the budget in both files record however many steps the runner reached, and move at each refresh.
+- **Alternatives Rejected**:
+  - *Leaving the rows to whoever can run all cases locally*: kept the gate red for two days on rows nobody could regenerate here.
+  - *Replacing the whole file with the candidate*: would turn 22 rows that record a reached termination condition into budget timeouts.
+  - *Letting the campaign commit the baseline itself*: a regression would then overwrite the snapshot it should be measured against.

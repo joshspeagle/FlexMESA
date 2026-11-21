@@ -344,7 +344,7 @@
         "verified_total": 0,
         "pct_ported": 0.0,
         "pct_verified": 0.0,
-        "rust_lines": 2011,
+        "rust_lines": 2600,
         "python_jax_lines": 577
       },
       {

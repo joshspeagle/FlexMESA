@@ -82,7 +82,7 @@ jobs:
 
   rust:
     name: Safe Rust Workspace & Golden Oracles
-    if: always()
+    if: ${{ !cancelled() }}
     needs: [rust-lint, rust-tests]
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -121,7 +121,7 @@ jobs:
 
   python-jax:
     name: Python, PyO3 & JAX Parity Suite
-    if: always()
+    if: ${{ !cancelled() }}
     needs: python-jax-tests
     runs-on: ubuntu-latest
     timeout-minutes: 5

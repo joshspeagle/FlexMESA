@@ -237,13 +237,7 @@
       "issues": []
     }
   ],
-  "open_pull_requests": [
-    {
-      "number": 320,
-      "title": "test(star): explain the finer-mesh hydro Jacobian differences and run the test on 6, 12 and 24 zones (#307)",
-      "draft": false
-    }
-  ],
+  "open_pull_requests": [],
   "deferred_169": [
     {
       "number": 175,

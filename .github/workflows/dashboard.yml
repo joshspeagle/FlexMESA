@@ -21,8 +21,12 @@ permissions:
   pages: write
   id-token: write
 
+# Runs on `main` are not serialised as a whole: a workflow-level group made
+# each merge's dashboard refresh wait for the previous merge's coverage jobs
+# (over an hour). Each push gets its own group here, and the jobs below carry
+# their own groups instead (DECISIONS #47).
 concurrency:
-  group: dashboard-${{ github.event_name }}-${{ github.ref }}
+  group: dashboard-${{ github.event_name }}-${{ github.ref }}-${{ github.event_name == 'pull_request' && 'pr' || github.sha }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
@@ -40,6 +44,9 @@ jobs:
       github.actor != 'github-actions[bot]' &&
       (github.event_name != 'push' ||
        !startsWith(github.event.head_commit.message, 'chore(dashboard): auto-refresh'))
+    concurrency:
+      group: dashboard-coverage-rust-${{ github.event_name }}-${{ github.ref }}
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     timeout-minutes: 150
     steps:
@@ -93,6 +100,9 @@ jobs:
       github.actor != 'github-actions[bot]' &&
       (github.event_name != 'push' ||
        !startsWith(github.event.head_commit.message, 'chore(dashboard): auto-refresh'))
+    concurrency:
+      group: dashboard-coverage-python-${{ github.event_name }}-${{ github.ref }}
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     timeout-minutes: 35
     steps:
@@ -164,6 +174,9 @@ jobs:
       github.actor != 'github-actions[bot]' &&
       (github.event_name != 'push' ||
        !startsWith(github.event.head_commit.message, 'chore(dashboard): auto-refresh'))
+    concurrency:
+      group: dashboard-push-to-main
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     timeout-minutes: 15
     outputs:
@@ -248,6 +261,9 @@ jobs:
       - coverage-rust
       - coverage-python
     if: github.event_name != 'pull_request'
+    concurrency:
+      group: dashboard-push-coverage-to-main
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     timeout-minutes: 15
     outputs:

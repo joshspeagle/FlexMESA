@@ -353,11 +353,21 @@ fn assert_uncapped_case_passes(case_name: &str) {
 // as plain star runs (`astero/private/astero_run_support.f90:171-174`). Their
 // upstream `run_star_extras.f90` (the ADIPLS/GYRE frequency checks and the
 // `freqs.dat` output) is not ported, so this covers the star run only.
+// One test per case, so the three runs can go in parallel and be placed in
+// different CI shards (`scripts/ci/cargo_test_shard.py`).
 #[test]
-fn test_just_call_my_extras_cases_run_as_plain_star_runs() {
-    for case_name in ["astero_adipls", "astero_gyre", "surface_effects"] {
-        assert_uncapped_case_passes(case_name);
-    }
+fn test_just_call_my_extras_astero_adipls_runs_as_plain_star_run() {
+    assert_uncapped_case_passes("astero_adipls");
+}
+
+#[test]
+fn test_just_call_my_extras_astero_gyre_runs_as_plain_star_run() {
+    assert_uncapped_case_passes("astero_gyre");
+}
+
+#[test]
+fn test_just_call_my_extras_surface_effects_runs_as_plain_star_run() {
+    assert_uncapped_case_passes("surface_effects");
 }
 
 #[test]

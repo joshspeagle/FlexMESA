@@ -22,7 +22,7 @@ Progress is measured by **upstream MESA `26.4.1` source lines by status**, never
 
 | Module | Upstream LOC | Absent | Stub | Partial | Ported (unverified) | Kernel ref. vectors | Case-level evidence | Rust LOC | Python/JAX LOC | % Ported | % Verified |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| `star` | 120,509 | 17,759 | 6,378 | 54,753 | 36,648 | 4,971 | 0 | 84,048 | 3,869 | 34.5% | 4.1% |
+| `star` | 120,509 | 17,759 | 6,378 | 54,753 | 36,648 | 4,971 | 0 | 84,049 | 3,869 | 34.5% | 4.1% |
 | `star_data` | 4,870 | 34 | 0 | 4,836 | 0 | 0 | 0 | 0 | 0 | 0.0% | 0.0% |
 | `binary` | 11,638 | 2,885 | 0 | 6,572 | 2,181 | 0 | 0 | 11,979 | 1,244 | 18.7% | 0.0% |
 | `astero` | 7,935 | 2,185 | 0 | 5,750 | 0 | 0 | 0 | 5,764 | 1,288 | 0.0% | 0.0% |
@@ -32,7 +32,7 @@ Progress is measured by **upstream MESA `26.4.1` source lines by status**, never
 | `rates` | 17,217 | 192 | 0 | 17,025 | 0 | 0 | 0 | 3,469 | 1,478 | 0.0% | 0.0% |
 | `neu` | 2,184 | 352 | 0 | 0 | 1,832 | 0 | 0 | 1,948 | 2,673 | 83.9% | 0.0% |
 | `atm` | 6,853 | 2,468 | 0 | 4,385 | 0 | 0 | 0 | 2,476 | 984 | 0.0% | 0.0% |
-| `turb` | 2,033 | 0 | 0 | 681 | 1,352 | 0 | 0 | 2,787 | 2,368 | 66.5% | 0.0% |
+| `turb` | 2,033 | 0 | 0 | 681 | 1,352 | 0 | 0 | 2,779 | 3,116 | 66.5% | 0.0% |
 | `chem` | 4,195 | 373 | 0 | 3,822 | 0 | 0 | 0 | 2,361 | 930 | 0.0% | 0.0% |
 | `ionization` | 3,859 | 2,226 | 0 | 1,633 | 0 | 0 | 0 | 4,152 | 1,033 | 0.0% | 0.0% |
 | `colors` | 3,823 | 428 | 0 | 3,395 | 0 | 0 | 0 | 2,453 | 1,500 | 0.0% | 0.0% |
@@ -48,10 +48,10 @@ Progress is measured by **upstream MESA `26.4.1` source lines by status**, never
 | `adipls` | 30,923 | 30,923 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0.0% | 0.0% |
 | `stella` | 62,117 | 62,117 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0.0% | 0.0% |
 | `plotting` | 35,732 | 35,732 | 0 | 0 | 0 | 0 | 0 | 0 | 12,095 | 0.0% | 0.0% |
-| **Subtotal: star + star_data + binary + astero** | 144,952 | 22,863 | 6,378 | 71,911 | 38,829 | 4,971 | 0 | 101,791 | 6,401 | 30.2% | 3.4% |
-| **Total (all 26 modules)** | 497,703 | 247,888 | 6,378 | 196,077 | 42,389 | 4,971 | 0 | 174,525 | 57,169 | 9.5% | 1.0% |
+| **Subtotal: star + star_data + binary + astero** | 144,952 | 22,863 | 6,378 | 71,911 | 38,829 | 4,971 | 0 | 101,792 | 6,401 | 30.2% | 3.4% |
+| **Total (all 26 modules)** | 497,703 | 247,888 | 6,378 | 196,077 | 42,389 | 4,971 | 0 | 174,518 | 57,917 | 9.5% | 1.0% |
 
-*Notes*: `star_data` state structs reside in `crates/flexmesa-star`. Bridge, testing, and benchmark infrastructure account for an additional `19,424` Rust lines (`flexmesa-py`, `flexmesa-testing`, `flexmesa-bench`) and `15,653` Python lines (`flexmesa.testing`, `flexmesa.bench`). For plotting ([#173](https://github.com/joshspeagle/FlexMESA/issues/173)), `flexmesa.plotting` currently provides `34` `plot_*` builders against `46` upstream `pgstar`/`pgbinary` panel modules.
+*Notes*: `star_data` state structs reside in `crates/flexmesa-star`. Bridge, testing, and benchmark infrastructure account for an additional `19,423` Rust lines (`flexmesa-py`, `flexmesa-testing`, `flexmesa-bench`) and `15,615` Python lines (`flexmesa.testing`, `flexmesa.bench`). For plotting ([#173](https://github.com/joshspeagle/FlexMESA/issues/173)), `flexmesa.plotting` currently provides `34` `plot_*` builders against `46` upstream `pgstar`/`pgbinary` panel modules.
 
 ### 2. Verification & Numerics Status
 
@@ -119,7 +119,7 @@ Full scalar diff: [`notes/audit/defaults_diff_26_4_1.md`](https://github.com/jos
 
 - **Rust workspace line coverage (`cargo llvm-cov`)**: **75.5%** (`87,943` / `116,472` lines across `26` crates).
 - **Python package statement coverage (`pytest --cov`)**: **87.6%** (`22,801` / `26,043` statements across `27` subpackages).
-- **Ignored / skipped tests**: `16` Rust `#[ignore]` ([#143](https://github.com/joshspeagle/FlexMESA/issues/143), [#160](https://github.com/joshspeagle/FlexMESA/issues/160), [#161](https://github.com/joshspeagle/FlexMESA/issues/161), [#162](https://github.com/joshspeagle/FlexMESA/issues/162)) and `9` Python `xfail`/`skip` ([#156](https://github.com/joshspeagle/FlexMESA/issues/156), [#161](https://github.com/joshspeagle/FlexMESA/issues/161), [#291](https://github.com/joshspeagle/FlexMESA/issues/291), [#295](https://github.com/joshspeagle/FlexMESA/issues/295), [#321](https://github.com/joshspeagle/FlexMESA/issues/321); `0` unlinked).
+- **Ignored / skipped tests**: `16` Rust `#[ignore]` ([#143](https://github.com/joshspeagle/FlexMESA/issues/143), [#160](https://github.com/joshspeagle/FlexMESA/issues/160), [#161](https://github.com/joshspeagle/FlexMESA/issues/161), [#162](https://github.com/joshspeagle/FlexMESA/issues/162)) and `8` Python `xfail`/`skip` ([#156](https://github.com/joshspeagle/FlexMESA/issues/156), [#161](https://github.com/joshspeagle/FlexMESA/issues/161), [#291](https://github.com/joshspeagle/FlexMESA/issues/291), [#295](https://github.com/joshspeagle/FlexMESA/issues/295); `0` unlinked).
 - **Static & documentation gates**: `cargo clippy --all-targets -- -D warnings`, `RUSTDOCFLAGS='-D warnings' cargo doc`, `ruff check`, `ruff format --check`, `mypy --strict`, `mkdocs build --strict`, and MESA `26.4.1` `file:line` citation resolution enforced in CI.
 
 #### Rust Line Coverage by Crate (`cargo llvm-cov`)
@@ -263,4 +263,5 @@ Full scalar diff: [`notes/audit/defaults_diff_26_4_1.md`](https://github.com/jos
 | `2026-11-21` | `fbbec5a` | main merge | 30.2% | 1.0% | 0/106 | 75.5% | 87.6% | 16/36 | 44 |
 | `2026-11-21` | `0363593` | main merge | 30.2% | 1.0% | 0/106 | 75.5% | 87.6% | 16/36 | 44 |
 | `2026-11-21` | `ba2c12c` | main merge | 30.2% | 1.0% | 0/106 | 75.5% | 87.6% | 16/36 | 44 |
+| `2026-11-21` | `7bae492` | main merge | 30.2% | 1.0% | 0/106 | 75.5% | 87.6% | 16/36 | 44 |
 <!-- END GENERATED DASHBOARD -->

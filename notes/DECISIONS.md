@@ -60,6 +60,7 @@ Scope and the `v0.1.0` definition are in [`SCOPE.md`](SCOPE.md). Work is tracked
 | 43 | Undefined Upstream Reads Become Loud Errors; Rust-versus-JAX Comparisons Are Tracked Expected Failures While JAX Is Frozen (`#169`, `#295`) | In force | below |
 | 44 | Along-Track `num_zones` and `hb_2M` `mass_conv_core` Manifest Tolerances, A2 Table Upgrades, and `hb_2M` Timeout Budget (`#152`, `#153`, `#155`, `#156`, `#159`) | In force | below |
 | 45 | Sharded CI Jobs, a Non-LTO `ci` Test Profile, and Coverage Off Ordinary Pull Requests | In force | below |
+| 46 | Upstream `real(qp)` Is IEEE-754 `binary128` in Software (`flexmesa_math::Quad`), Not Double-Double | In force | below |
 
 ## Pre-audit decisions still in force
 
@@ -608,3 +609,15 @@ The text of these four entries predates the audit of 2026-11-16. The decisions s
   - *`cargo nextest` with a build archive*: runs each test in its own process, which repeats table loading that tests in one binary now share; not measured, so not adopted.
   - *`pytest-xdist`*: tests already use four threads each, and shared on-disk caches make in-job parallelism a correctness risk.
   - *Dropping or shortening slow tests*: a separate change, one test at a time, with its own evidence.
+
+## DECISIONS #46: Upstream `real(qp)` Is IEEE-754 `binary128` in Software (`flexmesa_math::Quad`), Not Double-Double
+
+- **Date**: 2026-11-21
+- **Decision**: Upstream `real(qp)` arithmetic is translated with `flexmesa_math::Quad`, a software IEEE-754 `binary128` type (113-bit significand, round to nearest with ties to even, gradual underflow). It provides the operations upstream applies to `real(qp)` values: `+`, `-`, `*`, `/`, integer powers in the multiplication order of `libgcc`'s `__powitf2`, `abs`, comparisons, and exact conversion from and correctly rounded conversion to `f64`. The type lives in `flexmesa-math` because `flexmesa-net`, `flexmesa-mtx` and `flexmesa-star` all need it and that crate is below all of them.
+- **Why**: MESA `26.4.1` sets `qp = selected_real_kind(33, 4931)` (`const/public/const_def.f90`), which `gfortran` on `x86_64` implements as `binary128` through `libgcc`'s soft-float routines. The three double-double helpers now in the tree (`flexmesa-net/src/f64x2.rs`, and private types in `flexmesa-star/src/mesh_remap.rs` and `rsp_grid.rs`) carry about 106 bits with a different rounding rule, so they can give a different `f64` after the final conversion. The project lead ruled on 2026-11-20 that quad precision is reproduced rather than approximated.
+- **Evidence**: 5,055 test vectors generated with exact rational arithmetic (`crates/flexmesa-math/tests/data/gen_binary128_vectors.py`) pass in `Quad`, and the same file agrees with GCC 13.3 `__float128` on `x86_64` (`check_binary128_vectors_gcc.c`). This checks the arithmetic, not any MESA result.
+- **Limits**: This entry adds the type only. The existing double-double call sites are replaced one at a time in later pull requests, each with a harness comparison, because the replacement can change trajectories. Functions upstream never applies to `real(qp)` (`sqrt`, `exp`, `log`, ...) are not provided.
+- **Alternatives Rejected**:
+  - *Keep double-double*: not the arithmetic upstream runs.
+  - *An external crate (`rug`, `f128`, `softfloat` bindings)*: adds C code or `unsafe`, against `#![forbid(unsafe_code)]`, for about 500 lines of integer arithmetic.
+  - *Rust's native `f128`*: not available on the stable toolchain the workspace builds with.

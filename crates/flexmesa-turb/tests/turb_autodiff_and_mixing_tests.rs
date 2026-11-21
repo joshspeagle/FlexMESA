@@ -5,7 +5,7 @@
 //! 1. All six geometric MLT options (`Cox`, `TDC`, `Henyey`, `ML1`, `ML2`,
 //!    `Mihalas`) and `DualOrder1` forward-mode automatic differentiation
 //!    against centered finite differences.
-//! 2. `DualOrder1` Implicit Function Theorem derivatives for `set_tdc`
+//! 2. `DualOrder1` derivatives of `set_tdc`
 //!    (including the quintic enthalpy flux limiter) against centered finite
 //!    differences.
 //! 3. Both Langer (1985) semiconvection prescriptions (`Langer_85` and

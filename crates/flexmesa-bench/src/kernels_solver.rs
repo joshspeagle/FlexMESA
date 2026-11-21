@@ -6,7 +6,7 @@
 //! 2. `bench_turb_mlt`: Cox (1968) Mixing-Length Theory (`set_mlt`) with
 //!    6-variable `DualOrder1<6>` sensitivities.
 //! 3. `bench_turb_tdc`: Kuhfuss (1986) 1D Time-Dependent Convection (`set_tdc`)
-//!    with Implicit Function Theorem `DualOrder1<6>` sensitivities.
+//!    with `DualOrder1<6>` sensitivities.
 
 use flexmesa_autodiff::DualOrder1;
 use flexmesa_const::{KERG, LSUN, MP, MSUN, RSUN, STANDARD_CGRAV};
@@ -203,7 +203,7 @@ fn eval_mlt_zone(s_frac: f64) -> [f64; 4] {
 }
 
 /// Evaluates Kuhfuss (1986) 1D Time-Dependent Convection (`set_tdc`) with
-/// 6-variable Implicit Function Theorem `DualOrder1<6>` sensitivities at
+/// 6-variable `DualOrder1<6>` sensitivities at
 /// normalized shell coordinate `s_frac` $\in [0, 1]$, returning
 /// `[grad_t, d, conv_vel, d_grad_t_d_gradr]`.
 #[inline]
@@ -285,7 +285,7 @@ pub fn bench_turb_mlt(
 }
 
 /// Benchmarks Kuhfuss 1D Time-Dependent Convection (`set_tdc`) with
-/// `DualOrder1<6>` Implicit Function Theorem sensitivities across Stages 0..3.
+/// `DualOrder1<6>` sensitivities across Stages 0..3.
 ///
 /// # Arguments
 /// * `grid` - Stellar thermodynamic profile across `n_zones` shells.

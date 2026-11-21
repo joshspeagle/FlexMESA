@@ -145,7 +145,7 @@ A case passes only when upstream's unmodified inlists run to upstream's stopping
 
 - Packages under [#140](https://github.com/joshspeagle/FlexMESA/issues/140): **16 closed**, 20 open.
 - Open pull requests: 0.
-- Deferred upstream issues ([#169](https://github.com/joshspeagle/FlexMESA/issues/169)): 42 open.
+- Deferred upstream issues ([#169](https://github.com/joshspeagle/FlexMESA/issues/169)): 43 open.
 - Test line coverage: Rust 75.3%, Python 87.5%.
 <!-- END GENERATED DASHBOARD -->
 

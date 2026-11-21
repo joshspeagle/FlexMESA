@@ -574,6 +574,14 @@
       "kind": "upstream-bug",
       "parity_pending": true,
       "needs_confirmation": false
+    },
+    {
+      "number": 314,
+      "title": "[Deferred bug] neumaier_sum adds the compensator before the error term, losing it when large terms cancel",
+      "state": "open",
+      "kind": "upstream-bug",
+      "parity_pending": false,
+      "needs_confirmation": false
     }
   ]
 }

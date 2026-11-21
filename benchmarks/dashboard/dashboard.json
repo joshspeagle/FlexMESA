@@ -259,7 +259,7 @@
         "verified_total": 0,
         "pct_ported": 0.0,
         "pct_verified": 0.0,
-        "rust_lines": 4300,
+        "rust_lines": 4641,
         "python_jax_lines": 3587
       },
       {
@@ -1800,6 +1800,14 @@
         "kind": "upstream-bug",
         "parity_pending": true,
         "needs_confirmation": false
+      },
+      {
+        "number": 314,
+        "title": "[Deferred bug] neumaier_sum adds the compensator before the error term, losing it when large terms cancel",
+        "state": "open",
+        "kind": "upstream-bug",
+        "parity_pending": false,
+        "needs_confirmation": false
       }
     ]
   },
@@ -2414,6 +2422,19 @@
       "closed_140": "16",
       "total_140": "36",
       "deferred_169": "42"
+    },
+    {
+      "date_utc": "2026-11-21",
+      "commit": "ca49f4c",
+      "event": "main merge",
+      "engine_ported_pct": "30.2",
+      "all_verified_pct": "1.0",
+      "cases_passing": "0",
+      "rust_cov_pct": "75.3",
+      "python_cov_pct": "87.5",
+      "closed_140": "16",
+      "total_140": "36",
+      "deferred_169": "43"
     }
   ]
 }

@@ -181,6 +181,7 @@ jobs:
     timeout-minutes: 15
     outputs:
       pushed: ${{ steps.push_dash.outputs.pushed }}
+      pushed_sha: ${{ steps.push_dash.outputs.pushed_sha }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -232,6 +233,7 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
           PUSHED="false"
+          PUSHED_SHA=""
           for attempt in 1 2 3; do
             git fetch origin main
             git checkout -f -B main origin/main
@@ -249,11 +251,13 @@ jobs:
             git commit -m "chore(dashboard): auto-refresh generated progress dashboard"
             if git push origin HEAD:main; then
               PUSHED="true"
+              PUSHED_SHA="$(git rev-parse HEAD)"
               break
             fi
             echo "Non-fast-forward push on attempt $attempt; retrying on updated origin/main..."
           done
           echo "pushed=$PUSHED" >> "$GITHUB_OUTPUT"
+          echo "pushed_sha=$PUSHED_SHA" >> "$GITHUB_OUTPUT"
 
   refresh-coverage:
     name: Refresh Coverage Numbers in the Dashboard on main
@@ -268,6 +272,7 @@ jobs:
     timeout-minutes: 15
     outputs:
       pushed: ${{ steps.push_dash.outputs.pushed }}
+      pushed_sha: ${{ steps.push_dash.outputs.pushed_sha }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -326,6 +331,7 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
           PUSHED="false"
+          PUSHED_SHA=""
           for attempt in 1 2 3; do
             git fetch origin main
             git checkout -f -B main origin/main
@@ -340,18 +346,26 @@ jobs:
             git commit -m "chore(dashboard): auto-refresh coverage numbers"
             if git push origin HEAD:main; then
               PUSHED="true"
+              PUSHED_SHA="$(git rev-parse HEAD)"
               break
             fi
             echo "Non-fast-forward push on attempt $attempt; retrying on updated origin/main..."
           done
           echo "pushed=$PUSHED" >> "$GITHUB_OUTPUT"
+          echo "pushed_sha=$PUSHED_SHA" >> "$GITHUB_OUTPUT"
 
   redeploy-pages:
     if: needs.refresh-dashboard.outputs.pushed == 'true'
     needs: refresh-dashboard
     uses: ./.github/workflows/docs.yml
+    with:
+      artifact_name: github-pages-dashboard
+      checkout_ref: ${{ needs.refresh-dashboard.outputs.pushed_sha }}
 
   redeploy-pages-after-coverage:
     if: needs.refresh-coverage.outputs.pushed == 'true'
     needs: refresh-coverage
     uses: ./.github/workflows/docs.yml
+    with:
+      artifact_name: github-pages-coverage
+      checkout_ref: ${{ needs.refresh-coverage.outputs.pushed_sha }}

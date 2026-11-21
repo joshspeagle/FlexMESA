@@ -53,13 +53,15 @@ fn test_eps_grav_time_centering_pc_blending_and_latent_heat_match_fortran() {
 
     // 1. Standard uncentered eps_grav vs default time-centered eps_grav
     model.controls.use_time_centered_eps_grav = false;
-    let std_uncentered = eval_eps_grav_std_cell(&model, k);
+    let std_uncentered =
+        eval_eps_grav_std_cell(&model, k).expect("eval_eps_grav_std_cell");
     model.controls.use_time_centered_eps_grav = true;
     model.aux.cp_start[k] = model.cp[k] * 1.10;
     model.aux.grada_start[k] = model.grada[k] * 0.95;
     model.aux.chi_t_start[k] = model.chi_t[k] * 1.05;
     model.aux.chi_rho_start[k] = model.chi_rho[k] * 0.98;
-    let tc = eval_eps_grav_std_cell(&model, k);
+    let tc =
+        eval_eps_grav_std_cell(&model, k).expect("eval_eps_grav_std_cell tc");
 
     let dlnd_dt = (model.lnd[k] - model.lnd_start[k]) / model.dt;
     let dlnt_dt = (model.ln_t[k] - model.ln_t_start[k]) / model.dt;
@@ -80,11 +82,15 @@ fn test_eps_grav_time_centering_pc_blending_and_latent_heat_match_fortran() {
     model.lnd[k] = orig_lnd + eps;
     model.rho[k] = flexmesa_math::exp(model.lnd[k]);
     crate::micro::do_eos(&mut model).expect("do_eos +eps");
-    let tc_p = eval_eps_grav_std_cell(&model, k).val;
+    let tc_p = eval_eps_grav_std_cell(&model, k)
+        .expect("eval_eps_grav_std_cell +eps")
+        .val;
     model.lnd[k] = orig_lnd - eps;
     model.rho[k] = flexmesa_math::exp(model.lnd[k]);
     crate::micro::do_eos(&mut model).expect("do_eos -eps");
-    let tc_m = eval_eps_grav_std_cell(&model, k).val;
+    let tc_m = eval_eps_grav_std_cell(&model, k)
+        .expect("eval_eps_grav_std_cell -eps")
+        .val;
     model.lnd[k] = orig_lnd;
     model.rho[k] = flexmesa_math::exp(orig_lnd);
     crate::micro::do_eos(&mut model).expect("do_eos restore");
@@ -96,7 +102,8 @@ fn test_eps_grav_time_centering_pc_blending_and_latent_heat_match_fortran() {
     // 2. Latent heat terms
     model.aux.latent_ddlnrho[k] = 2.5e12;
     model.aux.latent_ddlnt[k] = -1.8e12;
-    let with_lat = eval_eps_grav_std_cell(&model, k);
+    let with_lat =
+        eval_eps_grav_std_cell(&model, k).expect("eval_eps_grav_std_cell lat");
     let expected_lat = tc.val
         - (dlnd_dt * model.aux.latent_ddlnrho[k]
             + dlnt_dt * model.aux.latent_ddlnt[k]);
@@ -113,10 +120,11 @@ fn test_eps_grav_time_centering_pc_blending_and_latent_heat_match_fortran() {
     let base = k * model.species;
     model.aux.dln_e_dxa_for_partials[base] = 0.5;
     model.aux.dln_peos_dxa_for_partials[base] = -0.3;
-    eval_eps_grav(&mut model);
+    eval_eps_grav(&mut model).expect("eval_eps_grav");
 
     let eg_lns = eval_eps_grav_lns_cell(&model, k);
-    let eg_std = eval_eps_grav_std_cell(&model, k);
+    let eg_std =
+        eval_eps_grav_std_cell(&model, k).expect("eval_eps_grav_std_cell");
     let blended_expected = eg_lns.val * 0.4 + eg_std.val * 0.6;
     assert!(
         (model.eps_grav_ad[k].val - blended_expected).abs()
@@ -450,4 +458,345 @@ fn test_hydro_chem_eqns_op_split_do_burn_do_mix_and_mix_factor() {
     let full = eval_henyey_equations(&mut model, true)
         .expect("eval_henyey_equations succeeds");
     assert_eq!(full.equ.len(), model.nz * nvar);
+}
+
+#[test]
+fn test_eval_eps_grav_composition_finite_difference_partials_and_d_eps_grav_dx() {
+    use crate::star_ad::I_LNT_00;
+    use flexmesa_const::LN10;
+    use flexmesa_eos::{
+        eos_dt_get_zones_with_logs, HelmTable, I_LN_E,
+    };
+
+    let mut model = build_solar_test_model(false);
+    // Use pure HELM so smooth analytic EOS partials support tight FD checks.
+    model.eos_config.use_free_eos = false;
+    model.eos_config.use_opal_scvh = false;
+    model.eos_config.use_skye = false;
+    model.eos_config.use_pc = false;
+    model.eos_config.use_cms = false;
+    crate::micro::set_basic_vars(&mut model).expect("set_basic_vars");
+    crate::micro::do_eos(&mut model).expect("do_eos");
+    model.save_start_values().expect("save_start_values");
+
+    let k = model.nz / 2;
+    let sp = model.species;
+    let base = k * sp;
+    let i_h1 = model
+        .iso_names
+        .iter()
+        .position(|n| n == "h1")
+        .expect("h1 species");
+    let i_he4 = model
+        .iso_names
+        .iter()
+        .position(|n| n == "he4")
+        .expect("he4 species");
+
+    // Shift density, temperature, and convert 5% H1 -> He4 (burning heats).
+    model.lnd[k] += 0.02;
+    model.ln_t[k] += 0.015;
+    model.xa[base + i_h1] -= 0.05;
+    model.xa[base + i_he4] += 0.05;
+    crate::micro::set_basic_vars(&mut model).expect("set_basic_vars pert");
+    crate::micro::do_eos(&mut model).expect("do_eos pert");
+
+    // Compare against direct `eos_dt_get` evaluations for both theta = 1.0
+    // (uncentered) and theta = 0.5 (time-centered).
+    let ht = HelmTable::builtin().expect("builtin HELM table");
+    let xa_start_k = model.xa_start[base..base + sp].to_vec();
+    let xa_k = model.xa[base..base + sp].to_vec();
+    let e_xa_start = flexmesa_math::exp(
+        eos_dt_get_zones_with_logs(
+            ht,
+            &[model.rho[k]],
+            &[model.lnd[k] / LN10],
+            &[model.t[k]],
+            &[model.ln_t[k] / LN10],
+            &model.chem_id,
+            &xa_start_k,
+            &model.eos_config,
+        )
+        .expect("eos at xa_start")[0]
+            .res[I_LN_E],
+    );
+    let rho_s = flexmesa_math::exp(model.lnd_start[k]);
+    let t_s = flexmesa_math::exp(model.ln_t_start[k]);
+    let e_dt_start = flexmesa_math::exp(
+        eos_dt_get_zones_with_logs(
+            ht,
+            &[rho_s],
+            &[model.lnd_start[k] / LN10],
+            &[t_s],
+            &[model.ln_t_start[k] / LN10],
+            &model.chem_id,
+            &xa_k,
+            &model.eos_config,
+        )
+        .expect("eos at DT_start")[0]
+            .res[I_LN_E],
+    );
+
+    let de_uncentered = model.energy[k] - e_xa_start;
+    let de_centered =
+        0.5 * de_uncentered + 0.5 * (e_dt_start - model.energy_start[k]);
+    // Converting H1 -> He4 lowers internal energy per gram (`de < 0`),
+    // releasing positive composition heating (`-de / dt > 0`).
+    assert!(de_uncentered < 0.0);
+    assert!(de_centered < 0.0);
+
+    for (time_centered, expected_comp) in [
+        (false, -de_uncentered / model.dt),
+        (true, -de_centered / model.dt),
+    ] {
+        model.controls.use_time_centered_eps_grav = time_centered;
+        model.controls.include_composition_in_eps_grav = false;
+        let eg_no_comp = eval_eps_grav_std_cell(&model, k)
+            .expect("eval_eps_grav_std_cell without comp");
+
+        model.controls.include_composition_in_eps_grav = true;
+        let eg_with_comp = eval_eps_grav_std_cell(&model, k)
+            .expect("eval_eps_grav_std_cell with comp");
+        let comp_ad = eg_with_comp - eg_no_comp;
+
+        assert!(
+            comp_ad.val > 0.0,
+            "H->He composition heating must be positive (tc={time_centered})"
+        );
+        assert!(
+            (comp_ad.val - expected_comp).abs() / expected_comp.abs().max(1.0)
+                < 1.0e-12,
+            "comp val mismatch (tc={time_centered}): got {}, expected {}",
+            comp_ad.val,
+            expected_comp
+        );
+
+        // Central finite-difference verification of d(comp_term)/d(lnd) and
+        // d(comp_term)/d(lnT).
+        let eps = 1.0e-6;
+        let eval_comp_val = |m: &mut StarModel| -> f64 {
+            crate::micro::set_basic_vars(m).expect("basic");
+            crate::micro::do_eos(m).expect("eos");
+            m.controls.include_composition_in_eps_grav = false;
+            let a = eval_eps_grav_std_cell(m, k).expect("no comp").val;
+            m.controls.include_composition_in_eps_grav = true;
+            let b = eval_eps_grav_std_cell(m, k).expect("with comp").val;
+            b - a
+        };
+
+        let mut mp = model.clone();
+        let mut mm = model.clone();
+        mp.lnd[k] += eps;
+        mm.lnd[k] -= eps;
+        let fd_dlnd =
+            (eval_comp_val(&mut mp) - eval_comp_val(&mut mm)) / (2.0 * eps);
+        assert!(
+            (comp_ad.d1[I_LND_00] - fd_dlnd).abs()
+                / fd_dlnd.abs().max(1.0e-12)
+                < 1.0e-5,
+            "comp d/dlnd mismatch (tc={time_centered}): an={}, fd={}",
+            comp_ad.d1[I_LND_00],
+            fd_dlnd
+        );
+
+        let mut tp = model.clone();
+        let mut tm = model.clone();
+        tp.ln_t[k] += eps;
+        tm.ln_t[k] -= eps;
+        let fd_dlnt =
+            (eval_comp_val(&mut tp) - eval_comp_val(&mut tm)) / (2.0 * eps);
+        assert!(
+            (comp_ad.d1[I_LNT_00] - fd_dlnt).abs()
+                / fd_dlnt.abs().max(1.0e-12)
+                < 1.0e-5,
+            "comp d/dlnT mismatch (tc={time_centered}): an={}, fd={}",
+            comp_ad.d1[I_LNT_00],
+            fd_dlnt
+        );
+    }
+
+    // Reverse composition change (He4 -> H1) must produce negative heating.
+    model.xa[base + i_h1] = model.xa_start[base + i_h1] + 0.05;
+    model.xa[base + i_he4] = model.xa_start[base + i_he4] - 0.05;
+    crate::micro::set_basic_vars(&mut model).expect("set_basic_vars rev");
+    crate::micro::do_eos(&mut model).expect("do_eos rev");
+    model.controls.include_composition_in_eps_grav = false;
+    let eg_rev_no = eval_eps_grav_std_cell(&model, k).expect("rev no comp");
+    model.controls.include_composition_in_eps_grav = true;
+    let eg_rev_yes = eval_eps_grav_std_cell(&model, k).expect("rev with comp");
+    assert!(eg_rev_yes.val - eg_rev_no.val < 0.0);
+
+    // Verify exact `d_eps_grav_dx` formula (`eps_grav.f90:302-305`) and that
+    // pure `do_lnS_eps_grav` zeroes `d_eps_grav_dx`.
+    eval_eps_grav(&mut model).expect("eval_eps_grav std");
+    let dxh_lnd = model.lnd[k] - model.lnd_start[k];
+    for j in 0..sp {
+        let expected = -model.energy[k] * model.aux.dln_e_dxa_for_partials[base + j]
+            / model.dt
+            + (model.peos[k] / model.rho[k])
+                * model.aux.dln_peos_dxa_for_partials[base + j]
+                * dxh_lnd
+                / model.dt;
+        assert!(
+            (model.aux.d_eps_grav_dx[base + j] - expected).abs()
+                <= 1.0e-14 * expected.abs().max(1.0),
+            "d_eps_grav_dx[{j}] mismatch: got {}, expected {}",
+            model.aux.d_eps_grav_dx[base + j],
+            expected
+        );
+    }
+
+    model.aux.eos_frac_pc[k] = 1.0;
+    model.gam[k] = model.controls.gamma_ln_s_eps_grav_full_on + 10.0;
+    eval_eps_grav(&mut model).expect("eval_eps_grav lns");
+    assert!(
+        model.aux.d_eps_grav_dx[base..base + sp]
+            .iter()
+            .all(|&v| v == 0.0),
+        "pure do_lnS_eps_grav must zero d_eps_grav_dx"
+    );
+}
+
+#[test]
+fn test_fix_d_eos_dxa_partials_populates_skye_ideal_and_skips_below_threshold_or_helm() {
+    use flexmesa_const::LN10;
+    use flexmesa_eos::{
+        eos_dt_get_zones_with_logs, HelmTable, I_FRAC_IDEAL, I_FRAC_PC,
+        I_FRAC_SKYE, I_LN_E, I_LN_PGAS,
+    };
+
+    let mut model = build_solar_test_model(false);
+    // Force Skye EOS (with HELM fallback outside Skye's domain) and place one
+    // interior zone squarely inside Skye's dense plasma domain (`logRho = 5`,
+    // `logT = 7.5`) so `eos_frac_Skye == 1.0` and raw `do_eos` yields zero
+    // analytic composition partials.
+    model.eos_config.use_free_eos = false;
+    model.eos_config.use_opal_scvh = false;
+    model.eos_config.use_cms = false;
+    model.eos_config.use_pc = false;
+    model.eos_config.use_skye = true;
+    let k = model.nz / 2;
+    model.lnd[k] = 5.0 * LN10;
+    model.ln_t[k] = 7.5 * LN10;
+    crate::micro::set_basic_vars(&mut model).expect("set_basic_vars skye");
+    crate::micro::do_eos(&mut model).expect("do_eos skye");
+    model.save_start_values().expect("save_start_values skye");
+
+    let sp = model.species;
+    let i_h1 = model
+        .iso_names
+        .iter()
+        .position(|n| n == "h1")
+        .expect("h1 species");
+    let i_he4 = model
+        .iso_names
+        .iter()
+        .position(|n| n == "he4")
+        .expect("he4 species");
+
+    let base = k * sp;
+    let frac = model.eos_res[k][I_FRAC_PC]
+        + model.eos_res[k][I_FRAC_SKYE]
+        + model.eos_res[k][I_FRAC_IDEAL];
+    assert!(
+        frac > 0.99,
+        "expected Skye/PC/ideal fraction > 0.99 at logRho=5, logT=7.5, got {frac}"
+    );
+
+    // Sub-threshold change (`5e-5 < 1e-4`) must be skipped.
+    model.xa[base + i_h1] -= 5.0e-5;
+    model.xa[base + i_he4] += 5.0e-5;
+    crate::micro::set_basic_vars(&mut model).expect("basic sub-thresh");
+    crate::micro::do_eos(&mut model).expect("eos sub-thresh");
+    let raw_dlne = model.aux.dln_e_dxa_for_partials[base + i_h1];
+    let raw_dlnp = model.aux.dln_peos_dxa_for_partials[base + i_h1];
+    assert_eq!(raw_dlne, 0.0);
+    assert_eq!(raw_dlnp, 0.0);
+    crate::micro::fix_d_eos_dxa_partials(&mut model)
+        .expect("fix_d_eos_dxa_partials sub-thresh");
+    assert_eq!(model.aux.dln_e_dxa_for_partials[base + i_h1], 0.0);
+    assert_eq!(model.aux.dln_peos_dxa_for_partials[base + i_h1], 0.0);
+
+    // Above-threshold change (`dxa = -0.02` on h1, `+0.02` on he4) must
+    // populate exact finite-difference partials (`hydro_eqns.f90:480-485`).
+    let dxa_h1 = -0.02;
+    let dxa_he4 = 0.02;
+    model.xa[base + i_h1] = model.xa_start[base + i_h1] + dxa_h1;
+    model.xa[base + i_he4] = model.xa_start[base + i_he4] + dxa_he4;
+    crate::micro::set_basic_vars(&mut model).expect("basic active");
+    crate::micro::do_eos(&mut model).expect("eos active");
+    crate::micro::fix_d_eos_dxa_partials(&mut model)
+        .expect("fix_d_eos_dxa_partials active");
+
+    let ht = HelmTable::builtin().expect("builtin HELM");
+    let xa_s = model.xa_start[base..base + sp].to_vec();
+    let mut xa_s_h1 = xa_s.clone();
+    xa_s_h1[i_h1] += dxa_h1;
+    let out_s = &eos_dt_get_zones_with_logs(
+        ht,
+        &[model.rho[k]],
+        &[model.lnd[k] / LN10],
+        &[model.t[k]],
+        &[model.ln_t[k] / LN10],
+        &model.chem_id,
+        &xa_s,
+        &model.eos_config,
+    )
+    .expect("eos xa_start")[0];
+    let out_h1 = &eos_dt_get_zones_with_logs(
+        ht,
+        &[model.rho[k]],
+        &[model.lnd[k] / LN10],
+        &[model.t[k]],
+        &[model.ln_t[k] / LN10],
+        &model.chem_id,
+        &xa_s_h1,
+        &model.eos_config,
+    )
+    .expect("eos xa_start_1")[0];
+    let exp_dlne_h1 = out_h1.d_dxa[i_h1][1]
+        + frac * (out_h1.res[I_LN_E] - out_s.res[I_LN_E]) / dxa_h1;
+    let exp_dlnp_h1 = model.pgas[k] * out_h1.d_dxa[i_h1][0] / model.peos[k]
+        + frac
+            * (model.pgas[k] / model.peos[k])
+            * (out_h1.res[I_LN_PGAS] - out_s.res[I_LN_PGAS])
+            / dxa_h1;
+    assert!(exp_dlne_h1.abs() > 1.0e-3);
+    assert!(exp_dlnp_h1.abs() > 1.0e-3);
+    assert!(
+        (model.aux.dln_e_dxa_for_partials[base + i_h1] - exp_dlne_h1).abs()
+            <= 1.0e-12 * exp_dlne_h1.abs()
+    );
+    assert!(
+        (model.aux.dln_peos_dxa_for_partials[base + i_h1] - exp_dlnp_h1).abs()
+            <= 1.0e-12 * exp_dlnp_h1.abs()
+    );
+    // Unchanged species (`|dxa| == 0`) remain untouched.
+    for j in 0..sp {
+        if j != i_h1 && j != i_he4 {
+            assert_eq!(model.aux.dln_e_dxa_for_partials[base + j], 0.0);
+        }
+    }
+
+    // Pure HELM zone (`frac_without_dxa == 0`) must leave analytic partials
+    // bit-for-bit untouched even when `|dxa| >= 1e-4`.
+    let mut helm_model = build_solar_test_model(false);
+    helm_model.eos_config.use_free_eos = false;
+    helm_model.eos_config.use_opal_scvh = false;
+    helm_model.eos_config.use_skye = false;
+    helm_model.eos_config.use_pc = false;
+    helm_model.eos_config.use_cms = false;
+    crate::micro::set_basic_vars(&mut helm_model).expect("basic helm");
+    crate::micro::do_eos(&mut helm_model).expect("eos helm");
+    helm_model.save_start_values().expect("save_start helm");
+    helm_model.xa[base + i_h1] -= 0.02;
+    helm_model.xa[base + i_he4] += 0.02;
+    crate::micro::set_basic_vars(&mut helm_model).expect("basic helm pert");
+    crate::micro::do_eos(&mut helm_model).expect("eos helm pert");
+    let before_e = helm_model.aux.dln_e_dxa_for_partials.clone();
+    let before_p = helm_model.aux.dln_peos_dxa_for_partials.clone();
+    crate::micro::fix_d_eos_dxa_partials(&mut helm_model)
+        .expect("fix_d_eos_dxa_partials helm");
+    assert_eq!(helm_model.aux.dln_e_dxa_for_partials, before_e);
+    assert_eq!(helm_model.aux.dln_peos_dxa_for_partials, before_p);
 }

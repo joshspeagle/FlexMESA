@@ -21,7 +21,7 @@
         "verified_total": 4971,
         "pct_ported": 34.5,
         "pct_verified": 4.1,
-        "rust_lines": 84120,
+        "rust_lines": 84772,
         "python_jax_lines": 3869
       },
       {
@@ -664,8 +664,8 @@
       }
     ],
     "gaps_by_issue": {
-      "#161": 27,
-      "#299": 20,
+      "#161": 25,
+      "#299": 21,
       "#154": 13,
       "#157": 9,
       "#162": 9,
@@ -674,6 +674,7 @@
       "#158": 6,
       "#231": 2,
       "#151": 1,
+      "#152": 1,
       "#171": 1
     },
     "comparison_figures_count": 0
@@ -682,22 +683,22 @@
     {
       "namelist": "star &controls",
       "upstream_scalars": 1444,
-      "matched_in_flexmesa": 1094,
-      "defaults_agree": 1094,
+      "matched_in_flexmesa": 1096,
+      "defaults_agree": 1096,
       "value_mismatch": 0,
       "disabled_limit_none": 0,
       "skipped_unparseable_rust": 17,
-      "unimplemented": 333
+      "unimplemented": 331
     },
     {
       "namelist": "star &star_job",
       "upstream_scalars": 455,
-      "matched_in_flexmesa": 93,
-      "defaults_agree": 93,
+      "matched_in_flexmesa": 95,
+      "defaults_agree": 95,
       "value_mismatch": 0,
       "disabled_limit_none": 0,
       "skipped_unparseable_rust": 1,
-      "unimplemented": 361
+      "unimplemented": 359
     },
     {
       "namelist": "binary &binary_controls + &binary_job",
@@ -1184,7 +1185,7 @@
         "issues": "#161"
       }
     ],
-    "python_xfail_or_skip_count": 8,
+    "python_xfail_or_skip_count": 10,
     "python_skips": [
       {
         "location": "tests/test_eos_wave3a3.py:200",
@@ -1202,6 +1203,11 @@
         "issues": "#291, #295"
       },
       {
+        "location": "tests/test_star_wave4_2.py:35",
+        "reason": "pytest.mark.xfail( strict=True, reason=( \"#295: Rust eval_face_dm_bar at k = nz - 1 uses 0.5*(dm[k-1] + dm[k]) \" \"(MESA 26.4.1 star/private/hydro_momentum.f90:191-196, #340); \" \"frozen JAX eval_hydro_residuals_jax still uses dm_bar[nz - 1], so \" \"zone nz - 1 momentum residual differs by 1.12e-5 against \" \"rtol=1e-13, atol=1e-13.\" ), )",
+        "issues": "#295, #340"
+      },
+      {
         "location": "tests/test_star_wave5_1.py:231",
         "reason": "pytest.mark.xfail( strict=True, reason=( \"#295: Rust eval_caplan_ocp_dstar follows MESA 26.4.1 \" \"get_Dstar_OCP (#156); the frozen JAX twin keeps its earlier \" \"expression.\" ), )",
         "issues": "#156, #295"
@@ -1217,9 +1223,14 @@
         "issues": "#156, #295"
       },
       {
-        "location": "tests/test_wave4_bench.py:136",
+        "location": "tests/test_wave4_bench.py:141",
         "reason": "pytest.mark.xfail( strict=True, reason=( \"#295: Rust do1_mlt_2 takes the face radiation pressure from the \" \"face temperature (MESA 26.4.1 star_utils.f90:3838-3843, #291); \" \"the frozen JAX face-MLT twin still interpolates the cell values \" \"(measured max_rel_err 8.9e-3).\" ), )",
         "issues": "#291, #295"
+      },
+      {
+        "location": "tests/test_wave4_bench.py:156",
+        "reason": "pytest.mark.xfail( strict=True, reason=( \"#295: Rust eval_face_dm_bar at k = nz - 1 uses 0.5*(dm[k-1] + dm[k]) \" \"(MESA 26.4.1 star/private/hydro_momentum.f90:191-196, #340); \" \"frozen JAX eval_hydro_residuals_jax still uses dm_bar[nz - 1] \" \"(measured max_rel_err 9.73e-3).\" ), )",
+        "issues": "#295, #340"
       },
       {
         "location": "tests/test_wave5_bench.py:84",
@@ -1472,11 +1483,6 @@
       {
         "number": 334,
         "title": "ci(dashboard): give dashboard and coverage Pages deployments distinct artifact names",
-        "draft": false
-      },
-      {
-        "number": 343,
-        "title": "fix(star): wire atm_T_tau_opacity ('iterated'/'varying'), fix center dm_bar, dt_limit_ratio_old, and .mod retry reset (Closes #340)",
         "draft": false
       }
     ],
@@ -2640,6 +2646,19 @@
     {
       "date_utc": "2026-11-21",
       "commit": "b5d4ba2",
+      "event": "main merge",
+      "engine_ported_pct": "30.2",
+      "all_verified_pct": "1.0",
+      "cases_passing": "0",
+      "rust_cov_pct": "75.5",
+      "python_cov_pct": "87.6",
+      "closed_140": "16",
+      "total_140": "36",
+      "deferred_169": "45"
+    },
+    {
+      "date_utc": "2026-11-21",
+      "commit": "a9009d6",
       "event": "main merge",
       "engine_ported_pct": "30.2",
       "all_verified_pct": "1.0",

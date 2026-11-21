@@ -109,6 +109,7 @@ pub mod mesh;
 pub mod mesh_adjust;
 pub mod mesh_functions;
 pub mod mesh_plan;
+pub mod mass_utils;
 pub mod mesh_remap;
 pub mod micro;
 pub mod micro_cache;

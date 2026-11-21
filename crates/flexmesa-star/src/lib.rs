@@ -237,7 +237,8 @@ pub use eps_grav::{
     eval_eps_grav, eval_eps_grav_lns_cell, eval_eps_grav_std_cell,
 };
 pub use eps_mdot::{
-    PrevMassState, calculate_eps_mdot, calculate_eps_mdot_with_change,
+    AdjustMassRecord, EpsMdotSurface, calculate_eps_mdot,
+    eval_total_energy_profile, total_energy_profile_before_adjust_mass,
     eval_cell_specific_total_energy, eval_specific_total_energy_profile,
     find_mass_flux,
 };

@@ -7,11 +7,13 @@
 use flexmesa_const::{LN10, M_SUN, SECYER};
 
 pub use crate::accretion_xa::{build_accreted_xa, get_xa_for_accretion};
+use flexmesa_math::Quad;
+
 use crate::controls::StarError;
 use crate::core_boundaries::dominant_species_index;
 use crate::eps_mdot::{
-    PrevMassState, calculate_eps_mdot_with_change,
-    eval_specific_kinetic_energy_profile, eval_specific_total_energy_profile,
+    AdjustMassRecord, calculate_eps_mdot,
+    total_energy_profile_before_adjust_mass,
 };
 use crate::hydro_rotation::{
     DEFAULT_W_DIV_WCRIT_MAX2, eval_i_rot, w_div_w_roche_jrot,
@@ -198,17 +200,39 @@ pub fn do_adjust_mass_step(
     )
 }
 
+/// `q1/q2` with `q1 = xqB_new - xqA` and `q2 = max(1d-99, xqB_old - xqA)`,
+/// both formed in `real(dp)` and divided in `real(qp)`
+/// (`adjust_mass.f90:740-743`).
+fn qfrac_qp(xq_b_new: f64, xq_a: f64, xq_b_old: f64) -> Quad {
+    Quad::from(xq_b_new - xq_a) / Quad::from((xq_b_old - xq_a).max(1.0e-99))
+}
+
+/// Result of [`revise_q_and_dq_upstream`].
+struct RevisedMesh {
+    /// Zero-based first cell of the middle region (upstream `kA - 1`).
+    k_a: usize,
+    /// Zero-based first cell of the constant-mass region (upstream `kB - 1`).
+    k_b: usize,
+    /// New cell masses `dq * new_xmstar` in grams.
+    dm_target: Vec<f64>,
+    /// `adjust_mass_{outer,mid,inner}_frac_sub1`.
+    frac_sub1: [f64; 3],
+}
+
 fn revise_q_and_dq_upstream(
     model: &mut StarModel,
     old_xmstar: f64,
     new_xmstar: f64,
     delta_m: f64,
     explicit_ka_kb: Option<(usize, usize)>,
-) -> Result<(usize, usize, Vec<f64>), StarError> {
+) -> Result<RevisedMesh, StarError> {
     let nz = model.nz;
     let mw = &model.controls.mix_wind;
 
-    let mold_o_mnew = old_xmstar / new_xmstar;
+    // `mold_o_mnew_qp = q1/q2`, `mold_o_mnew = mold_o_mnew_qp`
+    // (`adjust_mass.f90:653-656`).
+    let mold_o_mnew_qp = Quad::from(old_xmstar) / Quad::from(new_xmstar);
+    let mold_o_mnew = mold_o_mnew_qp.to_f64();
     let dq_acc = delta_m / new_xmstar;
 
     // Initial `dq` renormalization (`adjust_mass.f90:661-676`): plain
@@ -230,7 +254,7 @@ fn revise_q_and_dq_upstream(
         xq[k] = xq[k - 1] + dq[k - 1];
     }
 
-    let (k_a, k_b, qfrac) = if let Some((ka_in, kb_in)) = explicit_ka_kb {
+    let (k_a, k_b, qfrac_qp_final) = if let Some((ka_in, kb_in)) = explicit_ka_kb {
         let ka = ka_in.clamp(1, nz.saturating_sub(2));
         let mut kb = kb_in.clamp(ka + 1, nz - 1);
         let xq_a = xq[ka];
@@ -238,8 +262,8 @@ fn revise_q_and_dq_upstream(
         loop {
             let xq_b_old = xq[kb];
             let xq_b_new = dq_acc + xq_b_old * mold_o_mnew;
-            qf = (xq_b_new - xq_a) / (xq_b_old - xq_a).max(1.0e-99);
-            if qf > 0.0 || kb + 1 >= nz {
+            qf = qfrac_qp(xq_b_new, xq_a, xq_b_old);
+            if qf.to_f64() > 0.0 || kb + 1 >= nz {
                 break;
             }
             kb += 1;
@@ -286,13 +310,14 @@ fn revise_q_and_dq_upstream(
         let mut xq_b_old = xq[kb];
         let mut xq_b_new = dq_acc + xq_b_old * mold_o_mnew;
         let qf = loop {
-            let qf_cur = (xq_b_new - xq_a) / (xq_b_old - xq_a).max(1.0e-99);
+            let qf_qp = qfrac_qp(xq_b_new, xq_a, xq_b_old);
+            let qf_cur = qf_qp.to_f64();
             if kb + 1 >= nz {
-                break qf_cur;
+                break qf_qp;
             }
             if kb - ka > 10 {
                 if qf_cur > 0.67 && qf_cur < 1.50 {
-                    break qf_cur;
+                    break qf_qp;
                 }
                 if qf_cur > 0.50
                     && qf_cur < 2.00
@@ -301,7 +326,7 @@ fn revise_q_and_dq_upstream(
                 {
                     // `adjust_mass.f90:753`: `kB = max(1, kB-5)` (0-based `max(0, kb-5)`).
                     kb = kb.saturating_sub(5);
-                    break qf_cur;
+                    break qf_qp;
                 }
             }
             kb += 1;
@@ -311,6 +336,8 @@ fn revise_q_and_dq_upstream(
         (ka, kb, qf)
     };
 
+    // `qfrac = qfrac_qp` (`adjust_mass.f90:743-744`).
+    let qfrac = qfrac_qp_final.to_f64();
     if !qfrac.is_finite() || qfrac <= 0.0 {
         return Err(StarError::ConvergenceFailure(format!(
             "revise_q_and_dq: non-positive qfrac={qfrac} at kA={k_a}, kB={k_b}"
@@ -337,10 +364,25 @@ fn revise_q_and_dq_upstream(
             "revise_q_and_dq: invalid renorm sum(dq)={sum_dq}"
         )));
     }
-    let inv_sum = 1.0 / sum_dq;
+    // `frac_qp = q1/q2` with `q1 = 1d0`, `q2 = sumdq`; `frac = frac_qp`
+    // (`adjust_mass.f90:796-799`).
+    let frac_qp = Quad::ONE / Quad::from(sum_dq);
+    let inv_sum = frac_qp.to_f64();
     for val in &mut dq {
         *val *= inv_sum;
     }
+
+    // `adjust_mass_{outer,mid,inner}_frac_sub1` (`adjust_mass.f90:773-776,
+    // 808-810`): `frac_qp*adjust_mass_*_frac*new_xmstar/old_xmstar - 1.0_qp`,
+    // stored in `real(dp)` fields.
+    let sub1 = |adjust: Quad| {
+        (frac_qp * adjust * new_xmstar / old_xmstar - Quad::ONE).to_f64()
+    };
+    let frac_sub1 = [
+        sub1(Quad::ONE),
+        sub1(qfrac_qp_final),
+        sub1(mold_o_mnew_qp),
+    ];
 
     // Set `q` from `dq` and close `dq[nz-1] = q[nz-1]` (`adjust_mass.f90:813-826`)
     // using upstream's plain left-to-right running sum.
@@ -358,7 +400,12 @@ fn revise_q_and_dq_upstream(
 
     let dm_target: Vec<f64> =
         model.dq.iter().map(|&d| d * new_xmstar).collect();
-    Ok((k_a, k_b, dm_target))
+    Ok(RevisedMesh {
+        k_a,
+        k_b,
+        dm_target,
+        frac_sub1,
+    })
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -405,34 +452,11 @@ fn do_adjust_mass_core(
         do_eos(model)?;
     }
     let prev_dm_raw = model.dm.clone();
-    let (
-        prev_r,
-        prev_m_grav,
-        prev_energy,
-        prev_peos,
-        prev_rho,
-        prev_te,
-        prev_ke,
-    ) = if need_eps_mdot {
-        (
-            model.r.clone(),
-            model.m_grav.clone(),
-            model.energy.clone(),
-            model.peos.clone(),
-            model.rho.clone(),
-            eval_specific_total_energy_profile(model),
-            eval_specific_kinetic_energy_profile(model),
-        )
+    // `save_for_eps_mdot` (`adjust_mass.f90:75-95, 204`).
+    let total_energy_profile_before = if need_eps_mdot {
+        total_energy_profile_before_adjust_mass(model)?
     } else {
-        (
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-        )
+        Vec::new()
     };
 
     let xa_old = model.xa.clone();
@@ -442,7 +466,12 @@ fn do_adjust_mass_core(
     model.xmstar = new_xmstar;
     model.mstar = model.xmstar + model.m_center;
 
-    let (_k_a, k_b, dm_target) = revise_q_and_dq_upstream(
+    let RevisedMesh {
+        k_a,
+        k_b,
+        dm_target,
+        frac_sub1,
+    } = revise_q_and_dq_upstream(
         model,
         old_xmstar,
         new_xmstar,
@@ -487,17 +516,6 @@ fn do_adjust_mass_core(
         } else {
             rxm_new[k] = rxm_new[k - 1] + new_cell_mass[k - 1];
         }
-    }
-
-    let mut change_in_dm = vec![0.0_f64; nz];
-    let mut prev_mesh_dm = vec![0.0_f64; nz];
-    for k in 0..nz {
-        change_in_dm[k] = if k < k_b {
-            new_cell_mass[k] - prev_dm_raw[k]
-        } else {
-            0.0
-        };
-        prev_mesh_dm[k] = prev_dm_raw[k].max(1.0e-99);
     }
 
     sync_enclosed_mass_from_dm(model, &dm_target);
@@ -592,17 +610,19 @@ fn do_adjust_mass_core(
             model.j_rot.clone_from(&j_rot_after_remap);
             conserve_shell_j_rot_and_distortion(model);
         }
-        let prev = PrevMassState {
-            dm: &prev_mesh_dm,
-            r: &prev_r,
-            m_grav: &prev_m_grav,
-            energy: &prev_energy,
-            peos: &prev_peos,
-            rho: &prev_rho,
-            te: &prev_te,
-            ke: &prev_ke,
+        // `calculate_eps_mdot` (`evolve.f90:596`), with what
+        // `save_for_eps_mdot` and `revise_q_and_dq` left for it. The indices
+        // are upstream's one-based `kA` and `kB`.
+        let record = AdjustMassRecord {
+            dm_before: prev_dm_raw.clone(),
+            total_energy_profile_before,
+            outer_frac_sub1: frac_sub1[0],
+            mid_frac_sub1: frac_sub1[1],
+            inner_frac_sub1: frac_sub1[2],
+            k_below_const_q: k_a + 1,
+            k_const_mass: k_b + 1,
         };
-        calculate_eps_mdot_with_change(model, &prev, &change_in_dm, dt);
+        calculate_eps_mdot(model, &record, dt)?;
     } else {
         model.eps_mdot.fill(0.0);
     }

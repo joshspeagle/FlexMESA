@@ -9,11 +9,21 @@ scaffolding tags (``#170``, ``#171``), and library-extras tracking (``#148``).
 from __future__ import annotations
 
 import dataclasses
+import json
 import pathlib
 import re
 
+import numpy as np
+
 from flexmesa.data import fetch
 from flexmesa.testing import case_manifest, history_compare
+
+MASS_LOSS_AUGMENT_COLUMNS: tuple[str, ...] = (
+    "log_abs_mdot",
+    "star_mdot",
+    "lg_wind_mdot_1",
+    "lg_wind_mdot_2",
+)
 
 
 @dataclasses.dataclass(frozen=True)
@@ -40,6 +50,10 @@ class TraceRunOutcome:
             strict run named before stopping (``0`` when unknown).
         strict_rejection: Message of the strict run that stopped on
             unsupported controls, when this outcome is its diagnostic rerun.
+        iters: Cumulative Newton solver iterations across logged final-stage
+            steps, or ``None`` when ``num_iters`` is unavailable.
+        mean_iters: Mean Newton solver iterations per logged final-stage step,
+            or ``None`` when ``num_iters`` is unavailable.
     """
 
     suite: str
@@ -55,6 +69,8 @@ class TraceRunOutcome:
     controls_ignored: bool = False
     n_controls_ignored: int = 0
     strict_rejection: str = ""
+    iters: int | None = None
+    mean_iters: float | None = None
 
 
 _UNSUPPORTED_COUNT_RE = re.compile(
@@ -137,6 +153,13 @@ class CaseHarnessRecord:
         dataclasses.field(default_factory=dict)
     )
     has_component_error: bool = False
+    iters: int | None = None
+    mean_iters: float | None = None
+    mesa_steps: int | None = None
+    mesa_retries: int | None = None
+    mesa_iters: int | None = None
+    mesa_mean_iters: float | None = None
+    mesa_iters_rows: int = 0
 
     @property
     def is_within_tolerances(self) -> bool:
@@ -222,6 +245,171 @@ def resolve_binary_component_reference_paths(
     return found
 
 
+def resolve_full_reference_history_path(
+    suite: str,
+    case: str,
+    root_dir: pathlib.Path | None = None,
+) -> pathlib.Path | None:
+    """Locate the un-thinned MESA ``26.4.1`` history file in ``runs/``.
+
+    Only consults the host ``mesa_histories`` cache when ``root_dir`` is
+    ``None`` or matches the repository root so hermetic tests under temporary
+    directories remain isolated.
+
+    Args:
+        suite: Suite name (``"star"``, ``"binary"``, or ``"astero"``).
+        case: Upstream test-case directory name.
+        root_dir: Optional root directory override.
+
+    Returns:
+        Path to the full MESA ``history.data`` or ``binary_history.data`` file
+        if available, else ``None``.
+    """
+    repo = case_manifest.repo_root()
+    if root_dir is not None and root_dir.resolve() != repo.resolve():
+        search_roots = [root_dir]
+    else:
+        search_roots = [repo, fetch.resolve_mesa_histories_dir()]
+
+    for sroot in search_roots:
+        case_root = sroot / "runs" / suite / case
+        if not case_root.is_dir():
+            continue
+        if suite == "binary":
+            cand = case_root / "binary_history.data"
+            if cand.is_file():
+                return cand
+            continue
+        result_json = case_root / "case_result.json"
+        if result_json.is_file():
+            try:
+                raw = json.loads(result_json.read_text(encoding="utf-8"))
+                hfiles = raw.get("history_files", [])
+                if isinstance(hfiles, list) and hfiles:
+                    cand = case_root / str(hfiles[-1])
+                    if cand.is_file():
+                        return cand
+            except (OSError, ValueError):
+                pass
+        cand = case_root / "LOGS" / "history.data"
+        if cand.is_file():
+            return cand
+    return None
+
+
+def _augment_ref_with_mass_loss_columns(
+    ref_tbl: history_compare.HistoryTable,
+    spec: case_manifest.CaseManifestEntry,
+    expected_ver: str,
+    root_dir: pathlib.Path | None,
+) -> history_compare.HistoryTable:
+    """Merge mass-loss columns from full cached MESA ``26.4.1`` runs."""
+    if spec.reference_status != "mesa_26_4_1":
+        return ref_tbl
+    if all(col in ref_tbl.columns for col in MASS_LOSS_AUGMENT_COLUMNS):
+        return ref_tbl
+    full_path = resolve_full_reference_history_path(
+        spec.suite, spec.case, root_dir=root_dir
+    )
+    if full_path is None:
+        return ref_tbl
+    try:
+        full_tbl = history_compare.load_history_file(full_path)
+    except (OSError, ValueError):
+        return ref_tbl
+    if (
+        not full_tbl.provenance_comment
+        and full_tbl.mesa_version_number != expected_ver
+    ):
+        return ref_tbl
+    if full_tbl.num_rows != ref_tbl.num_rows:
+        return ref_tbl
+    if (
+        "model_number" in ref_tbl.columns
+        and "model_number" in full_tbl.columns
+        and not np.array_equal(
+            ref_tbl.columns["model_number"], full_tbl.columns["model_number"]
+        )
+    ):
+        return ref_tbl
+    extra = {
+        col: full_tbl.columns[col]
+        for col in MASS_LOSS_AUGMENT_COLUMNS
+        if col in full_tbl.columns and col not in ref_tbl.columns
+    }
+    if not extra:
+        return ref_tbl
+    merged_cols = dict(ref_tbl.columns)
+    merged_cols.update(extra)
+    return dataclasses.replace(ref_tbl, columns=merged_cols)
+
+
+def extract_reference_run_stats(
+    spec: case_manifest.CaseManifestEntry,
+    *,
+    root_dir: pathlib.Path | None = None,
+    ref_tbl: history_compare.HistoryTable | None = None,
+) -> history_compare.HistoryRunStats:
+    """Extract MESA ``26.4.1`` step, retry, and iteration counts for ``spec``.
+
+    For ``binary`` cases whose ``binary_history.data`` omits ``num_retries``
+    or ``num_iters``, supplements missing fields from ``LOGS1/history.data``
+    when available.
+    """
+    if spec.reference_status == "no_reference_yet" or not spec.reference_path:
+        return history_compare.HistoryRunStats()
+    tbl = ref_tbl
+    if tbl is None:
+        try:
+            ref_file = resolve_reference_history_path(
+                spec.reference_path, root_dir=root_dir
+            )
+            tbl = history_compare.load_history_file(ref_file)
+        except (FileNotFoundError, OSError, ValueError):
+            return history_compare.HistoryRunStats()
+
+    stats = history_compare.extract_history_run_stats(tbl, spec.suite)
+    if spec.suite == "binary" and (
+        stats.retries is None or stats.iters_sum is None
+    ):
+        comp_refs = resolve_binary_component_reference_paths(
+            spec.case, root_dir=root_dir
+        )
+        logs1 = comp_refs.get("LOGS1")
+        if logs1 is not None:
+            try:
+                c_tbl = history_compare.load_history_file(logs1)
+                c_stats = history_compare.extract_history_run_stats(
+                    c_tbl, "star"
+                )
+                stats = history_compare.HistoryRunStats(
+                    steps=stats.steps,
+                    retries=(
+                        stats.retries
+                        if stats.retries is not None
+                        else c_stats.retries
+                    ),
+                    iters_sum=(
+                        stats.iters_sum
+                        if stats.iters_sum is not None
+                        else c_stats.iters_sum
+                    ),
+                    mean_iters=(
+                        stats.mean_iters
+                        if stats.mean_iters is not None
+                        else c_stats.mean_iters
+                    ),
+                    iters_rows=(
+                        stats.iters_rows
+                        if stats.iters_sum is not None
+                        else c_stats.iters_rows
+                    ),
+                )
+            except (OSError, ValueError):
+                pass
+    return stats
+
+
 def _sanitize_error_message(msg: str) -> str:
     if not msg:
         return ""
@@ -252,14 +440,18 @@ def evaluate_case_record(
         dict[str, history_compare.HistoryComparison] | None
     ) = None,
     precomputed_has_component_error: bool = False,
+    precomputed_mesa_stats: history_compare.HistoryRunStats | None = None,
 ) -> CaseHarnessRecord:
     """Combine manifest metadata, run outcome, and comparison into a verdict."""
     gap = known_gaps.get(spec.key)
     gap_issue = gap.issue if gap is not None else ""
     gap_reason = gap.reason if gap is not None else ""
     base = case_manifest.repo_root() if root_dir is None else root_dir
+    mesa_stats = precomputed_mesa_stats
 
     if outcome is None:
+        if mesa_stats is None:
+            mesa_stats = extract_reference_run_stats(spec, root_dir=base)
         if spec.reference_status == "no_reference_yet":
             verdict = "no reference yet"
         elif spec.reference_status == "interim_0b2e6bb":
@@ -284,6 +476,11 @@ def evaluate_case_record(
             known_gap_issue=gap_issue,
             known_gap_reason=gap_reason,
             comparison=None,
+            mesa_steps=mesa_stats.steps,
+            mesa_retries=mesa_stats.retries,
+            mesa_iters=mesa_stats.iters_sum,
+            mesa_mean_iters=mesa_stats.mean_iters,
+            mesa_iters_rows=mesa_stats.iters_rows,
         )
 
     term_ok = case_manifest.termination_matches(
@@ -295,6 +492,8 @@ def evaluate_case_record(
         else None
     )
     comp_err = _sanitize_error_message(outcome.error_message)
+    run_iters = outcome.iters
+    run_mean_iters = outcome.mean_iters
 
     if (
         comp is None
@@ -320,15 +519,44 @@ def evaluate_case_record(
                 f"{spec.reference_path}: missing independent_var "
                 f"{spec.independent_var!r}"
             )
+        if mesa_stats is None:
+            mesa_stats = extract_reference_run_stats(
+                spec, root_dir=base, ref_tbl=ref_tbl
+            )
+        ref_tbl = _augment_ref_with_mass_loss_columns(
+            ref_tbl, spec, expected_ver, base
+        )
         if outcome.history_path is not None:
             try:
                 run_tbl = history_compare.load_history_file(
                     outcome.history_path
                 )
+                if run_iters is None:
+                    r_stats = history_compare.extract_history_run_stats(
+                        run_tbl, spec.suite
+                    )
+                    run_iters = r_stats.iters_sum
+                    run_mean_iters = r_stats.mean_iters
                 comp = history_compare.compare_histories(ref_tbl, run_tbl, spec)
             except (OSError, ValueError, KeyError) as err:
                 err_s = _sanitize_error_message(str(err))
                 comp_err = f"{comp_err}; compare error: {err_s}".strip("; ")
+    elif mesa_stats is None:
+        mesa_stats = extract_reference_run_stats(spec, root_dir=base)
+    if (
+        run_iters is None
+        and outcome.history_path is not None
+        and outcome.history_path.is_file()
+    ):
+        try:
+            r_tbl = history_compare.load_history_file(outcome.history_path)
+            r_stats = history_compare.extract_history_run_stats(
+                r_tbl, spec.suite
+            )
+            run_iters = r_stats.iters_sum
+            run_mean_iters = r_stats.mean_iters
+        except (OSError, ValueError):
+            pass
 
     comp_map: dict[str, history_compare.HistoryComparison] = {}
     has_comp_err = precomputed_has_component_error
@@ -476,4 +704,15 @@ def evaluate_case_record(
         strict_rejection=_sanitize_error_message(outcome.strict_rejection),
         component_comparisons=comp_map,
         has_component_error=has_comp_err,
+        iters=run_iters,
+        mean_iters=run_mean_iters,
+        mesa_steps=mesa_stats.steps if mesa_stats is not None else None,
+        mesa_retries=mesa_stats.retries if mesa_stats is not None else None,
+        mesa_iters=mesa_stats.iters_sum if mesa_stats is not None else None,
+        mesa_mean_iters=(
+            mesa_stats.mean_iters if mesa_stats is not None else None
+        ),
+        mesa_iters_rows=(
+            mesa_stats.iters_rows if mesa_stats is not None else 0
+        ),
     )

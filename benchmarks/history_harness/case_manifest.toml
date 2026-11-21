@@ -32,6 +32,7 @@ log_Teff = 0.002
 log_R = 0.005
 log_center_T = 0.002
 log_center_Rho = 0.005
+rel_num_zones = 0.02
 
 [defaults.binary]
 independent_var = "age"
@@ -63,6 +64,7 @@ log_g = 0.001
 log_L = 0.005
 log_Teff = 0.002
 log_g = 0.002
+rel_num_zones = 0.02
 
 [[cases]]
 suite = "star"
@@ -266,6 +268,7 @@ log_R = 0.001
 log_L = 0.005
 log_Teff = 0.002
 log_R = 0.005
+rel_num_zones = 0.02
 
 [[cases]]
 suite = "star"
@@ -348,6 +351,12 @@ case = "hb_2M"
 reference_status = "mesa_26_4_1"
 reference_path = "benchmarks/history_harness/reference_histories/star/hb_2M.data"
 required_termination = "xa_central_lower_limit"
+
+[cases.final_tolerances]
+mass_conv_core = 0.001
+
+[cases.track_tolerances]
+mass_conv_core = 0.002
 
 [[cases]]
 suite = "star"
@@ -641,6 +650,23 @@ case = "starspots"
 reference_status = "mesa_26_4_1"
 reference_path = "thinned/star/starspots.data"
 required_termination = "max_age"
+# Reference history omits num_zones.
+inherit_default_tolerances = false
+
+[cases.final_tolerances]
+rel_star_age = 0.001
+log_L = 0.001
+log_Teff = 0.0005
+log_R = 0.001
+log_center_T = 0.001
+log_center_Rho = 0.002
+
+[cases.track_tolerances]
+log_L = 0.005
+log_Teff = 0.002
+log_R = 0.005
+log_center_T = 0.002
+log_center_Rho = 0.005
 
 [[cases]]
 suite = "star"

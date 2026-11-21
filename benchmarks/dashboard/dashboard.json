@@ -21,7 +21,7 @@
         "verified_total": 4971,
         "pct_ported": 34.5,
         "pct_verified": 4.1,
-        "rust_lines": 83227,
+        "rust_lines": 83224,
         "python_jax_lines": 3869
       },
       {
@@ -455,8 +455,8 @@
       "upstream_panel_modules": 46
     },
     "infrastructure_lines": {
-      "rust_bridge_testing_bench": 19425,
-      "python_testing_bench": 14216
+      "rust_bridge_testing_bench": 19417,
+      "python_testing_bench": 15080
     }
   },
   "numerics": {
@@ -595,8 +595,8 @@
         "no_reference_yet": 4,
         "strict_validated": 0,
         "diagnostic_runs": 90,
-        "reached_termination": 37,
-        "within_numeric_tol": 6,
+        "reached_termination": 38,
+        "within_numeric_tol": 5,
         "passing": 0,
         "declared_gaps": 86,
         "undeclared_failures": 0
@@ -608,7 +608,7 @@
         "strict_validated": 0,
         "diagnostic_runs": 8,
         "reached_termination": 6,
-        "within_numeric_tol": 2,
+        "within_numeric_tol": 0,
         "passing": 0,
         "declared_gaps": 8,
         "undeclared_failures": 0
@@ -627,11 +627,6 @@
       }
     },
     "within_tol_non_pass": [
-      {
-        "suite": "star",
-        "case": "1.3M_ms_high_Z",
-        "issue": "#159"
-      },
       {
         "suite": "star",
         "case": "rsp_BEP",
@@ -658,16 +653,6 @@
         "issue": "#161"
       },
       {
-        "suite": "binary",
-        "case": "jdot_gr_check",
-        "issue": "#160"
-      },
-      {
-        "suite": "binary",
-        "case": "jdot_ml_check",
-        "issue": "#160"
-      },
-      {
         "suite": "astero",
         "case": "surface_effects",
         "issue": "#162"
@@ -675,7 +660,7 @@
     ],
     "gaps_by_issue": {
       "#161": 27,
-      "#159": 20,
+      "#299": 20,
       "#154": 13,
       "#157": 9,
       "#162": 9,
@@ -1194,7 +1179,7 @@
         "issues": "#161"
       }
     ],
-    "python_xfail_or_skip_count": 5,
+    "python_xfail_or_skip_count": 2,
     "python_skips": [
       {
         "location": "tests/test_eos_wave3a3.py:200",
@@ -1205,21 +1190,6 @@
         "location": "tests/test_eos_wave3b1.py:395",
         "reason": "pytest.mark.xfail( strict=True, reason=( \"declared gap (#161): Python eos.eos_dt_get_t does not yet expose \" \"logT_tol/other_tol (eos/test/test_output:395 tol=1e-5 stops one \" \"Newton step earlier at 4.8009613155595554)\" ), )",
         "issues": "#161"
-      },
-      {
-        "location": "tests/test_star_wave4_1.py:83",
-        "reason": "pytest.mark.xfail( strict=True, reason=( \"#295: Rust computes the face radiation pressure from the face \" \"temperature (#291); the frozen JAX twin still interpolates it \" \"from the two cell values.\" ), )",
-        "issues": "#291, #295"
-      },
-      {
-        "location": "tests/test_wave4_bench.py:136",
-        "reason": "pytest.mark.xfail( strict=True, reason=( \"#295: Rust do1_mlt_2 takes the face radiation pressure from the \" \"face temperature (MESA 26.4.1 star_utils.f90:3838-3843, #291); \" \"the frozen JAX face-MLT twin still interpolates the cell values \" \"(measured max_rel_err 8.9e-3).\" ), )",
-        "issues": "#291, #295"
-      },
-      {
-        "location": "tests/test_wave5_bench.py:84",
-        "reason": "pytest.mark.xfail( strict=True, reason=( \"#295: Rust eval_caplan_ocp_dstar follows MESA 26.4.1 get_Dstar_OCP \" \"(diffusion_support.f90:1716-1743, #156); the frozen JAX twin \" \"eval_caplan_ocp_dstar_jax keeps its earlier fit (max_rel_err about \" \"5.4e-5).\" ), )",
-        "issues": "#156, #295"
       }
     ],
     "unlinked_locations": []

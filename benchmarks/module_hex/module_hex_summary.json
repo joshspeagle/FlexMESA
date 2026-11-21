@@ -93,7 +93,7 @@
       "checked_values": 22,
       "zero_ulp_values": 22,
       "max_ulp": 0,
-      "issue": "#153",
+      "issue": "#144",
       "notes": "test3 (interp_pm asc/desc) & test1 (interp_m3q asc/desc) values."
     },
     {
@@ -104,7 +104,7 @@
       "checked_values": 4,
       "zero_ulp_values": 4,
       "max_ulp": 0,
-      "issue": "#153",
+      "issue": "#144",
       "notes": "All 4 midpoint bicubic spline coefficients at 0 ULP."
     },
     {

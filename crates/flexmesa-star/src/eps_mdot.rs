@@ -587,3 +587,119 @@ pub fn calculate_eps_mdot(
         mdot_adiabatic_surface: -mdot_adiabatic_surface,
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::mass_utils::one_based;
+
+    /// Builds the inputs of `leak_control` for a small mesh and returns
+    /// `(sum_j accumulated(j)*dm(j) + mdot_adiabatic_surface,
+    ///   sum_j eps_mdot_per_total_mass(j)*dm(j)*total_mass_through_cell(j))`.
+    ///
+    /// Upstream's own debug check compares these two (`eps_mdot.f90:667-674`):
+    /// redistributing the heating between cells must not change its total.
+    fn leak_totals(
+        dm_new: &[f64],
+        dm_old: &[f64],
+        eps: &[f64],
+        leak: &[f64],
+    ) -> (f64, f64) {
+        let nz = dm_new.len();
+        let dm = one_based(dm_new);
+        let prev = one_based(dm_old);
+        let mut change = zero_slot(nz);
+        let mut mass_flux = zero_slot(nz + 1);
+        for j in (1..=nz).rev() {
+            change[j] = dm[j] - prev[j];
+            mass_flux[j] = mass_flux[j + 1] + change[j];
+        }
+        let zero = Quad::ZERO;
+        let mut tmtc = zero_slot(nz);
+        for j in 1..=nz {
+            let inflow = if mass_flux[j] > zero { mass_flux[j] } else { zero };
+            let outflow = if mass_flux[j + 1] < zero {
+                mass_flux[j + 1]
+            } else {
+                zero
+            };
+            tmtc[j] = prev[j] + inflow - outflow;
+        }
+        let ci = make_compressed_intersect(&dm, &prev, nz);
+        let mut eps1 = vec![0.0];
+        eps1.extend_from_slice(eps);
+        let mut leak1 = vec![0.0];
+        leak1.extend_from_slice(leak);
+        let (acc, mdot_ad) = leak_control(
+            nz,
+            &mass_flux,
+            &dm,
+            &ci.mesh_intersects,
+            &ci.ranges,
+            &tmtc,
+            &eps1,
+            &leak1,
+        );
+        let redistributed: f64 = (1..=nz)
+            .map(|j| acc[j] * dm_new[j - 1])
+            .sum::<f64>()
+            + mdot_ad;
+        let original: f64 = (1..=nz)
+            .map(|j| eps1[j] * dm_new[j - 1] * tmtc[j].to_f64())
+            .sum();
+        (redistributed, original)
+    }
+
+    #[test]
+    fn test_leak_control_with_full_leak_keeps_each_cells_heating() {
+        // `leak_frac == 1` everywhere: nothing is carried along, so each
+        // cell keeps `eps * total_mass_through_cell`.
+        let (got, want) = leak_totals(
+            &[1.0, 1.5, 1.5, 1.0],
+            &[2.0, 1.75, 1.5, 1.0],
+            &[3.0, -2.0, 0.5, 0.25],
+            &[1.0, 1.0, 1.0, 1.0],
+        );
+        assert!((got - want).abs() <= 1.0e-14 * want.abs(), "{got} {want}");
+    }
+
+    #[test]
+    fn test_leak_control_conserves_total_heating_for_mass_loss() {
+        let (got, want) = leak_totals(
+            &[1.0, 1.5, 1.5, 1.0],
+            &[2.0, 1.75, 1.5, 1.0],
+            &[3.0, -2.0, 0.5, 0.25],
+            &[0.25, 0.5, 1.0, 1.0],
+        );
+        assert!((got - want).abs() <= 1.0e-13 * want.abs(), "{got} {want}");
+    }
+
+    #[test]
+    fn test_leak_control_conserves_total_heating_for_accretion() {
+        let (got, want) = leak_totals(
+            &[1.0, 1.0, 1.5, 1.0],
+            &[0.25, 0.5, 1.5, 1.0],
+            &[3.0, -2.0, 0.5, 0.25],
+            &[0.25, 0.5, 0.75, 1.0],
+        );
+        assert!((got - want).abs() <= 1.0e-13 * want.abs(), "{got} {want}");
+    }
+
+    #[test]
+    fn test_interpolate_onto_faces_matches_upstream_weights() {
+        // Interior face j: beta = dm(j-1)/(dm(j-1)+dm(j)), alpha = 1 - beta,
+        // value = alpha*vec(j-1) + beta*vec(j) (`eps_mdot.f90:56-60`).
+        let dm = one_based(&[1.0, 3.0, 4.0]);
+        let vec = [10.0, 20.0, 40.0];
+        assert_eq!(interpolate_onto_faces(&vec, &dm, 3, 1), 10.0);
+        assert_eq!(interpolate_onto_faces(&vec, &dm, 3, 4), 40.0);
+        assert_eq!(
+            interpolate_onto_faces(&vec, &dm, 3, 2),
+            0.75 * 10.0 + 0.25 * 20.0
+        );
+        assert_eq!(
+            interpolate_onto_faces(&vec, &dm, 3, 3),
+            (1.0 - 3.0 / 7.0) * 20.0 + (3.0 / 7.0) * 40.0
+        );
+    }
+}

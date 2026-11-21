@@ -99,8 +99,14 @@ pub fn do_adjust_mass(
     )
 }
 
-/// Executes 3-region mass adjustment and, when `dt > 0`, evaluates
-/// `model.eps_mdot` via [`crate::eps_mdot::calculate_eps_mdot_with_change`].
+/// Executes 3-region mass adjustment for an explicit `delta_m` and, when
+/// `dt > 0`, evaluates `model.eps_mdot` via
+/// [`crate::eps_mdot::calculate_eps_mdot`].
+///
+/// This entry point has no upstream counterpart: it takes the mass change
+/// and the two region boundaries directly. `calculate_eps_mdot` reads
+/// `mstar_dot` as upstream does (`eps_mdot.f90:510`), so `model.mstar_dot`
+/// is set to `delta_m / dt` here.
 ///
 /// # Errors
 /// Returns [`StarError`] if `xm_new <= 0`, accretion composition is invalid,
@@ -117,6 +123,9 @@ pub fn do_adjust_mass_with_dt(
     if delta_m == 0.0 || nz < 3 {
         model.eps_mdot.fill(0.0);
         return Ok(());
+    }
+    if dt > 0.0 {
+        model.mstar_dot = delta_m / dt;
     }
     let old_xmstar = model.xmstar;
     let new_xmstar = old_xmstar + delta_m;

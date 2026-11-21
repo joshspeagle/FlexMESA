@@ -21,7 +21,7 @@
         "verified_total": 4971,
         "pct_ported": 34.5,
         "pct_verified": 4.1,
-        "rust_lines": 83292,
+        "rust_lines": 83259,
         "python_jax_lines": 3869
       },
       {
@@ -123,7 +123,7 @@
         "verified_total": 0,
         "pct_ported": 0.0,
         "pct_verified": 0.0,
-        "rust_lines": 10386,
+        "rust_lines": 10057,
         "python_jax_lines": 728
       },
       {
@@ -259,7 +259,7 @@
         "verified_total": 0,
         "pct_ported": 0.0,
         "pct_verified": 0.0,
-        "rust_lines": 4641,
+        "rust_lines": 4644,
         "python_jax_lines": 3587
       },
       {
@@ -344,7 +344,7 @@
         "verified_total": 0,
         "pct_ported": 0.0,
         "pct_verified": 0.0,
-        "rust_lines": 2600,
+        "rust_lines": 2629,
         "python_jax_lines": 577
       },
       {
@@ -1465,11 +1465,6 @@
     ],
     "open_pull_requests": [
       {
-        "number": 315,
-        "title": "fix(net,star): use binary128 for the reaction-network sums and the RSP shell volume, replacing two double-double types",
-        "draft": false
-      },
-      {
         "number": 317,
         "title": "feat(star): translate mass_utils.f90 in real(qp) (not yet wired into eps_mdot)",
         "draft": false
@@ -2450,6 +2445,19 @@
     {
       "date_utc": "2026-11-21",
       "commit": "7d8f040",
+      "event": "main merge",
+      "engine_ported_pct": "30.2",
+      "all_verified_pct": "1.0",
+      "cases_passing": "0",
+      "rust_cov_pct": "75.3",
+      "python_cov_pct": "87.6",
+      "closed_140": "16",
+      "total_140": "36",
+      "deferred_169": "43"
+    },
+    {
+      "date_utc": "2026-11-21",
+      "commit": "b1a7813",
       "event": "main merge",
       "engine_ported_pct": "30.2",
       "all_verified_pct": "1.0",

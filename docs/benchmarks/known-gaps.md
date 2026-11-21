@@ -186,7 +186,7 @@ Every Rust `#[ignore]` and Python `xfail`/`skip` marker in the repository is tra
 
 ## Level-2 Module Hex Reference Gaps (`benchmarks/module_hex/`)
 
-- **Checked vs MESA `26.4.1` `raw_bits_hex`**: `304,622` / `304,751` outputs at `0 ULP` across `16` probed modules (`5` modules complete at `0 ULP`; `348,321` total captured upstream values).
+- **Checked vs MESA `26.4.1` `raw_bits_hex`**: `304,624` / `304,751` outputs at `0 ULP` across `16` probed modules (`5` modules complete at `0 ULP`; `348,321` total captured upstream values).
 
 | Module | Status | Checked / Expected | 0 ULP | Max ULP | Issue | Notes |
 | :--- | :--- | ---: | ---: | ---: | :--- | :--- |
@@ -208,7 +208,7 @@ Every Rust `#[ignore]` and Python `xfail`/`skip` marker in the repository is tra
 | `net` | `nonzero_ulp` | 116 / 124 | 55 | 66 | [#161](https://github.com/joshspeagle/FlexMESA/issues/161) | 55/116 net_get outputs at 0 ULP across 7 networks (max_ulp=66); 8 one-zone burn rows remain unchecked. |
 | `ionization` | `nonzero_ulp` | 31 / 31 | 28 | 10,652,452 | [#161](https://github.com/joshspeagle/FlexMESA/issues/161) | 28/28 eval_ionization channels at 0 ULP; 3 Fe56-in-He4 table offsets. |
 | `atm` | `nonzero_ulp` | 39 / 39 | 15 | 7,863,114 | [#161](https://github.com/joshspeagle/FlexMESA/issues/161) | All 39 computed atm outputs across 7 tables, 5 T(tau) varying, 2 T(tau) uniform, and irradiated atmospheres. |
-| `turb` | `nonzero_ulp` | 62 / 71 | 38 | 6 | [#157](https://github.com/joshspeagle/FlexMESA/issues/157) | 31-step check_TDC gradT and conv_vel outputs. |
+| `turb` | `nonzero_ulp` | 62 / 71 | 40 | 6 | [#157](https://github.com/joshspeagle/FlexMESA/issues/157) | 31-step check_TDC gradT and conv_vel outputs. |
 | `sample` | `zero_values_in_mesa_reference` | 0 / 0 | 0 | 0 | none | Upstream sample package has no test/ directory in MESA 26.4.1. |
 | `star_data` | `zero_values_in_mesa_reference` | 0 / 0 | 0 | 0 | none | Upstream star_data/test emits zero floating-point values in exact_tested_values.tsv. |
 | `gyre` | `unported_hex_harness` | 0 / 136 | 0 | 0 | [#170](https://github.com/joshspeagle/FlexMESA/issues/170) | 136 upstream bundled GYRE pulsation eigenfrequency outputs tracked under #170. |

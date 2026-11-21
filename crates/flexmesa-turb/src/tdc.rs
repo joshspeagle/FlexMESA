@@ -165,11 +165,14 @@ pub fn set_tdc<T: TdcLift>(
     };
     let gamma = set_mlt(&mlt_params, &mlt_inp)?.gamma;
 
+    // Left to right, as `turb/public/turb.f90:158` is written.
     let c0 = T::from_f64(
-        params.tdc_alpha_c * params.mixing_length_alpha * X_ALFAS * 4.0 * PI,
+        params.tdc_alpha_c * params.mixing_length_alpha * X_ALFAS,
     ) * inp.rho
         * inp.t
         * inp.cp
+        * T::from_f64(4.0)
+        * T::from_f64(PI)
         * inp.r.pow2();
     let l0 = T::from_f64(
         (16.0 * PI * CRAD * CLIGHT / 3.0) * params.cgrav * params.m,
@@ -217,20 +220,25 @@ pub fn set_tdc<T: TdcLift>(
         let one = T::from_f64(1.0);
         let num = info.l - info.l0 * info.gradl;
         y_face = if params.include_mlt_corr_to_tdc {
+            // `turb/public/turb.f90:187-191`, left to right.
             num / (info.l0
                 + info.c0
-                    * T::from_f64(SQRT_2_DIV_3 * params.max_conv_vel)
+                    * T::from_f64(SQRT_2_DIV_3)
+                    * T::from_f64(params.max_conv_vel)
                     * (info.gamma / (one + info.gamma)))
         } else {
             num / (info.l0
-                + info.c0 * T::from_f64(SQRT_2_DIV_3 * params.max_conv_vel))
+                + info.c0
+                    * T::from_f64(SQRT_2_DIV_3)
+                    * T::from_f64(params.max_conv_vel))
         };
     }
 
     let grad_t = y_face + inp.gradl;
-    let d = conv_vel
-        * inp.scale_height
-        * T::from_f64(params.mixing_length_alpha / 3.0);
+    // `turb/public/turb.f90:196`: `conv_vel*scale_height*mixing_length_alpha/3d0`.
+    let d = conv_vel * inp.scale_height
+        * T::from_f64(params.mixing_length_alpha)
+        / T::from_f64(3.0);
     let mixing_type = if conv_vel.val() > 0.0 {
         MixingType::ConvectiveMixing
     } else {

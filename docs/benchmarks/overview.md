@@ -33,7 +33,7 @@ End-to-end evolutionary parity against MESA `26.4.1` currently stands at **0 / 1
 | **Model Atmospheres** | `atm_table` (`4096`) | MESA `r26.4.1` (all stages) | `1954.16` | `255.46` (`7.65x`) | `367.99` (`5.31x`) | MESA `atm_eval_table`; pre-validated bicubic spline lookup |
 | **4D Tabulated EOS** | `eos_4d` (`4096`) | MESA `r26.4.1` (all stages) | `2697.28` | `839.76` (`3.21x`) | `333.70` (`8.08x`) | MESA `eosDT_get`; sorted `patch_lut` + stack 16-channel blend |
 | **Analytical `Skye` EOS** | `eos_skye` (`4096`) | MESA `r26.4.1` (all stages) | `16540.28` | `9525.61` (`1.74x`) | `4202.59` (`3.94x`) | MESA `eosDT_get_component`; `OnceLock<NuclideCatalog>` + AD |
-| **Nuclear Networks** | `net_eval` (`4096`) | MESA `r26.4.1` (all stages) | `26085.18` | `5411.82` (`4.82x`) | `5210.01` (`5.01x`) | MESA `net_get`; `F64x2` lanes + thread-local buffers |
+| **Nuclear Networks** | `net_eval` (`4096`) | MESA `r26.4.1` (all stages) | `26085.18` | `5411.82` (`4.82x`) | `5210.01` (`5.01x`) | MESA `net_get`; `real(qp)` sums + thread-local buffers |
 | **2D Bicubic Spline** | `interp_2d` (`4096`) | MESA `r26.4.1` (all stages) | `41.69` | `70.69` (`0.59x`) | `318.67` (`0.13x`) | MESA `interp_evbicub_db`; Fortran 4t faster; printed checksums identical |
 | **1D Hydro Equations** | `star_hydro_eqns` (`1024`) | MESA `r26.4.1` (all stages) | `2962.80` | `13814.92` (`0.21x`) | `541.21` (`5.47x`) | MESA `eval_equ`; Fortran 4t faster; `1.60e-5` checksum diff |
 | **1D Stellar Evolution** | `star_evolve_step` (`1024`) | MESA `r26.4.1` (all stages) | `235422.09` | `59578.93` (`3.95x`) | `66017.92` (`3.57x`) | Unequal `dt = 100 s` vs `base.dt`; checksum diff `7.48e-6` |

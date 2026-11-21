@@ -10,7 +10,7 @@ use flexmesa_rates::{
     WeakRateEval, DEFAULT_REACLIB_MIN_T9,
 };
 
-use crate::f64x2::F64x2;
+use flexmesa_math::Quad;
 use crate::types::{
     NetGeneralInfo, IC12, IHE4, IN14, INE20, NUM_CATEGORIES, NUM_RVS,
 };
@@ -341,8 +341,8 @@ pub fn get_weaklib_rates(
 pub fn do_in_out(
     g: &NetGeneralInfo,
     w: &mut NetWorkState,
-    dydt: &mut [[F64x2; NUM_RVS]],
-    eps_nuc_mev: &mut [F64x2; NUM_RVS],
+    dydt: &mut [[Quad; NUM_RVS]],
+    eps_nuc_mev: &mut [Quad; NUM_RVS],
     i: usize,
     r_in: f64,
     n_in: usize,
@@ -388,8 +388,8 @@ pub fn do_in_out(
 pub fn do_in_out_neu(
     g: &NetGeneralInfo,
     w: &mut NetWorkState,
-    dydt: &mut [[F64x2; NUM_RVS]],
-    eps_nuc_mev: &mut [F64x2; NUM_RVS],
+    dydt: &mut [[Quad; NUM_RVS]],
+    eps_nuc_mev: &mut [Quad; NUM_RVS],
     i: usize,
     r_in: f64,
     n_in: usize,
@@ -460,9 +460,9 @@ pub fn do_in_out_neu(
     }
 
     let q_net = q - qneu;
-    eps_nuc_mev[0].add_assign_f64(rvs[0] * q_net);
-    eps_nuc_mev[1].add_assign_f64(rvs[1] * q_net - rvs[0] * dqneu_dt);
-    eps_nuc_mev[2].add_assign_f64(rvs[2] * q_net - rvs[0] * dqneu_drho);
+    eps_nuc_mev[0] += rvs[0] * q_net;
+    eps_nuc_mev[1] += rvs[1] * q_net - rvs[0] * dqneu_dt;
+    eps_nuc_mev[2] += rvs[2] * q_net - rvs[0] * dqneu_drho;
 
     w.eps_nuc_categories[icat] += rvs[0] * q_net;
     w.eps_neu_total += rvs[0] * qneu;
@@ -477,7 +477,7 @@ pub fn do_in_out_neu(
 fn do_signed_iso(
     ni: usize,
     w: &mut NetWorkState,
-    dydt: &mut [[F64x2; NUM_RVS]],
+    dydt: &mut [[Quad; NUM_RVS]],
     signed_c: f64,
     i1: usize,
     rvs: &[f64; NUM_RVS],
@@ -496,7 +496,7 @@ fn do_signed_iso(
         return;
     }
     for j in 0..NUM_RVS {
-        dydt[r1][j].add_assign_f64(signed_c * rvs[j]);
+        dydt[r1][j] += signed_c * rvs[j];
     }
     if just_dydt {
         return;
@@ -513,8 +513,8 @@ fn do_signed_iso(
 pub fn update_special_rates(
     g: &NetGeneralInfo,
     w: &mut NetWorkState,
-    dydt: &mut [[F64x2; NUM_RVS]],
-    eps_nuc_mev: &mut [F64x2; NUM_RVS],
+    dydt: &mut [[Quad; NUM_RVS]],
+    eps_nuc_mev: &mut [Quad; NUM_RVS],
     i: usize,
     temp: f64,
     den: f64,

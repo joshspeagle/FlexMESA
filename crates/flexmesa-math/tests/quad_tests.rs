@@ -177,3 +177,25 @@ proptest! {
         prop_assert_eq!(x.powi(3).to_bits(), (x * (x * x)).to_bits());
     }
 }
+
+#[test]
+fn test_quad_mixed_f64_operands_are_promoted_exactly() {
+    let q = Quad::from(3.5_f64) / Quad::from(7.0_f64);
+    for x in [0.1_f64, -2.5e300, 4.9e-324, 1.0, 0.0] {
+        let p = Quad::from(x);
+        assert_eq!((q + x).to_bits(), (q + p).to_bits());
+        assert_eq!((q - x).to_bits(), (q - p).to_bits());
+        assert_eq!((q * x).to_bits(), (q * p).to_bits());
+        let mut r = q;
+        r += x;
+        r -= x;
+        r *= x;
+        assert_eq!(r.to_bits(), (((q + p) - p) * p).to_bits());
+        if x != 0.0 {
+            assert_eq!((q / x).to_bits(), (q / p).to_bits());
+            let mut d = q;
+            d /= x;
+            assert_eq!(d.to_bits(), (q / p).to_bits());
+        }
+    }
+}

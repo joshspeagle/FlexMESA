@@ -617,7 +617,7 @@ def _render_overview(
             "Nuclear Networks",
             "net_eval",
             4096,
-            "MESA `net_get`; `F64x2` lanes + thread-local buffers",
+            "MESA `net_get`; `real(qp)` sums + thread-local buffers",
         ),
         (
             "2D Bicubic Spline",

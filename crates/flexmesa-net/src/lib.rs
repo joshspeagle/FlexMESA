@@ -6,7 +6,7 @@
 //! `net_eval.f90`, `net_derivs.f90`, `net_derivs_support.f90`, `net_screen.f90`,
 //! `net_approx21.f90`, `net_burn.f90`, `net_burn_support.f90`, and
 //! `net_burn_const_p.f90`) into Safe Rust (`#![forbid(unsafe_code)]`) with
-//! IEEE-754 `f64` and `F64x2` extended-precision accumulation.
+//! IEEE-754 `f64` and `Quad` extended-precision accumulation.
 
 #![forbid(unsafe_code)]
 #![allow(
@@ -53,7 +53,6 @@ pub(crate) mod burn_stepper;
 pub mod derivs;
 pub mod derivs_paired;
 pub mod derivs_support;
-pub mod f64x2;
 pub mod initialize;
 pub mod parser;
 pub mod reaction_synth;
@@ -82,7 +81,7 @@ pub use derivs::{
     eval_net, eval_net_with_work, get_derivs, with_thread_local_work,
 };
 pub use derivs_support::NetWorkState;
-pub use f64x2::F64x2;
+pub use flexmesa_math::Quad;
 pub use initialize::{global_logttab, global_ttab};
 pub use parser::{builtin_net_files, ParsedNetDef};
 pub use reaction_synth::synthesize_reaction_info;

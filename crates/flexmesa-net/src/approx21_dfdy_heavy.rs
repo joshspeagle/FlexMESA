@@ -3,7 +3,7 @@
 //! (`net/private/net_approx21.f90` lines 1407–1544 and 2374–2652).
 
 use crate::approx21::Approx21Indices;
-use crate::f64x2::F64x2;
+use flexmesa_math::Quad;
 
 /// Populates the `crx`, `fe52`, `fe54`, `fe56`, `co56`, `ni56`, `neut`, and
 /// `prot` entries of `dydt` for `approx21_dydt`.
@@ -18,14 +18,14 @@ pub(crate) fn approx21_dydt_iron_group(
     nf: f64,
     dydt: &mut [f64],
 ) {
-    let m2 = |a: f64, b: f64| F64x2::from_f64(a * b);
-    let m3 = |a: f64, b: f64, c: f64| F64x2::from_f64(a * b * c);
-    let m4 = |a: f64, b: f64, c: f64, d: f64| F64x2::from_f64(a * b * c * d);
+    let m2 = |a: f64, b: f64| Quad::from_f64(a * b);
+    let m3 = |a: f64, b: f64, c: f64| Quad::from_f64(a * b * c);
+    let m4 = |a: f64, b: f64, c: f64, d: f64| Quad::from_f64(a * b * c * d);
     let m5 = |a: f64, b: f64, c: f64, d: f64, e: f64| {
-        F64x2::from_f64(a * b * c * d * e)
+        Quad::from_f64(a * b * c * d * e)
     };
     let m6 = |a: f64, b: f64, c: f64, d: f64, e: f64, f: f64| {
-        F64x2::from_f64(a * b * c * d * e * f)
+        Quad::from_f64(a * b * c * d * e * f)
     };
 
     let q_crx = m3(y[idx.ife56], fe56ec_fake_factor, ratd[idx.irn56ec]);

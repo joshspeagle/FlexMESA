@@ -37,7 +37,7 @@ use flexmesa_eos::{
 use flexmesa_kap::{get_kap_results, kap_get, KapConfig};
 use flexmesa_math::{exp10, safe_log10};
 use flexmesa_net::{
-    eval_net_with_work, net_get, with_thread_local_work, F64x2, NetGeneralInfo,
+    eval_net_with_work, net_get, with_thread_local_work, Quad, NetGeneralInfo,
     NUM_RVS,
 };
 use flexmesa_rates::{
@@ -314,7 +314,7 @@ pub fn bench_net_eval(
 
     let eval_fast = |k: usize| -> [f64; 4] {
         let (eps, deps_dt, deps_dr, _) = with_thread_local_work(&g, |w| {
-            let mut dydt = [[F64x2::ZERO; NUM_RVS]; 32];
+            let mut dydt = [[Quad::ZERO; NUM_RVS]; 32];
             eval_net_with_work(
                 &g,
                 w,

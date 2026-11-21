@@ -19,7 +19,7 @@ use flexmesa_utils::is_bad;
 use crate::burn::collect_aion;
 use crate::burn_stepper::tableau_for;
 use crate::derivs::{eval_net_with_work, with_thread_local_work};
-use crate::f64x2::F64x2;
+use flexmesa_math::Quad;
 use crate::types::{NetError, NetGeneralInfo, NUM_RVS};
 
 /// Configuration inputs for [`burn_1_zone_const_p`].
@@ -115,7 +115,7 @@ pub fn burn_1_zone_const_p(
     let nuclides = NuclideCatalog::builtin_ref();
     let aion = collect_aion(nuclides, &g.chem_id)?;
     let mut x_buf = vec![0.0_f64; num_isos];
-    let mut dydt_buf = vec![[F64x2::ZERO; NUM_RVS]; num_isos];
+    let mut dydt_buf = vec![[Quad::ZERO; NUM_RVS]; num_isos];
 
     let mut ending_rho = 0.0_f64;
     let mut ending_lns = 0.0_f64;

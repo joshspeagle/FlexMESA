@@ -585,3 +585,32 @@ impl PartialOrd for Quad {
         })
     }
 }
+
+// Mixed `real(qp)` and `real(dp)` arithmetic. Fortran converts the `real(dp)`
+// operand to `real(qp)`, which is exact, and then applies the `real(qp)`
+// operation; these impls do the same.
+macro_rules! impl_quad_f64_ops {
+    ($($trait:ident $method:ident $assign_trait:ident $assign_method:ident;)*) => {$(
+        impl $trait<f64> for Quad {
+            type Output = Self;
+            #[inline]
+            fn $method(self, rhs: f64) -> Self {
+                $trait::$method(self, Self::from_f64(rhs))
+            }
+        }
+
+        impl $assign_trait<f64> for Quad {
+            #[inline]
+            fn $assign_method(&mut self, rhs: f64) {
+                *self = $trait::$method(*self, Self::from_f64(rhs));
+            }
+        }
+    )*};
+}
+
+impl_quad_f64_ops! {
+    Add add AddAssign add_assign;
+    Sub sub SubAssign sub_assign;
+    Mul mul MulAssign mul_assign;
+    Div div DivAssign div_assign;
+}

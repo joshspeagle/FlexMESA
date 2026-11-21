@@ -5,7 +5,7 @@
 use flexmesa_const::{AVO, QCONV};
 
 use crate::derivs_support::NetWorkState;
-use crate::f64x2::F64x2;
+use flexmesa_math::Quad;
 use crate::types::{NetGeneralInfo, NUM_RVS};
 
 fn poly_y_term(c: u8, y: f64) -> (f64, f64) {
@@ -22,8 +22,8 @@ fn poly_y_term(c: u8, y: f64) -> (f64, f64) {
 pub(crate) fn get_general_1_to_1_derivs(
     g: &NetGeneralInfo,
     w: &mut NetWorkState,
-    dydt: &mut [[F64x2; NUM_RVS]],
-    eps_nuc_mev: &mut [F64x2; NUM_RVS],
+    dydt: &mut [[Quad; NUM_RVS]],
+    eps_nuc_mev: &mut [Quad; NUM_RVS],
     i: usize,
     symbolic: bool,
     just_dydt: bool,
@@ -48,8 +48,8 @@ pub(crate) fn get_general_1_to_1_derivs(
     let (d_f, d_ysf_dy1) = poly_y_term(rxn.in_num[0], w.y[i1]);
     let (d_r, d_ysr_dy2) = poly_y_term(rxn.out_num[0], w.y[i2]);
 
-    let b_f = F64x2::from_f64(w.rate_screened[i]) * d_f;
-    let b_r = F64x2::from_f64(w.rate_screened[r_i]) * d_r;
+    let b_f = Quad::from_f64(w.rate_screened[i]) * d_f;
+    let b_r = Quad::from_f64(w.rate_screened[r_i]) * d_r;
     let b = b_f - b_r;
     dydt[i1][0] -= b * c1;
     dydt[i2][0] += b * c2;
@@ -78,8 +78,8 @@ pub(crate) fn get_general_1_to_1_derivs(
         (1, (w.rate_screened_dt[i], w.rate_screened_dt[r_i])),
         (2, (w.rate_screened_drho[i], w.rate_screened_drho[r_i])),
     ] {
-        let bf_d = F64x2::from_f64(rf) * d_f;
-        let br_d = F64x2::from_f64(rr) * d_r;
+        let bf_d = Quad::from_f64(rf) * d_f;
+        let br_d = Quad::from_f64(rr) * d_r;
         let b_d = bf_d - br_d;
         dydt[i1][rv_idx] -= b_d * c1;
         dydt[i2][rv_idx] += b_d * c2;
@@ -102,8 +102,8 @@ pub(crate) fn get_general_1_to_1_derivs(
 pub(crate) fn get_general_2_to_1_derivs(
     g: &NetGeneralInfo,
     w: &mut NetWorkState,
-    dydt: &mut [[F64x2; NUM_RVS]],
-    eps_nuc_mev: &mut [F64x2; NUM_RVS],
+    dydt: &mut [[Quad; NUM_RVS]],
+    eps_nuc_mev: &mut [Quad; NUM_RVS],
     i: usize,
     symbolic: bool,
     just_dydt: bool,
@@ -134,8 +134,8 @@ pub(crate) fn get_general_2_to_1_derivs(
     let d_ysf_dy2 = ys1 * dy2;
     let (d_r, d_ysr_dy3) = poly_y_term(rxn.out_num[0], w.y[i3]);
 
-    let b_f = F64x2::from_f64(w.rate_screened[i]) * d_f;
-    let b_r = F64x2::from_f64(w.rate_screened[r_i]) * d_r;
+    let b_f = Quad::from_f64(w.rate_screened[i]) * d_f;
+    let b_r = Quad::from_f64(w.rate_screened[r_i]) * d_r;
     let b = b_f - b_r;
     dydt[i1][0] -= b * c1;
     dydt[i2][0] -= b * c2;
@@ -165,8 +165,8 @@ pub(crate) fn get_general_2_to_1_derivs(
         (1, (w.rate_screened_dt[i], w.rate_screened_dt[r_i])),
         (2, (w.rate_screened_drho[i], w.rate_screened_drho[r_i])),
     ] {
-        let bf_d = F64x2::from_f64(rf) * d_f;
-        let br_d = F64x2::from_f64(rr) * d_r;
+        let bf_d = Quad::from_f64(rf) * d_f;
+        let br_d = Quad::from_f64(rr) * d_r;
         let b_d = bf_d - br_d;
         dydt[i1][rv_idx] -= b_d * c1;
         dydt[i2][rv_idx] -= b_d * c2;
@@ -193,8 +193,8 @@ pub(crate) fn get_general_2_to_1_derivs(
 pub(crate) fn get_general_2_to_2_derivs(
     g: &NetGeneralInfo,
     w: &mut NetWorkState,
-    dydt: &mut [[F64x2; NUM_RVS]],
-    eps_nuc_mev: &mut [F64x2; NUM_RVS],
+    dydt: &mut [[Quad; NUM_RVS]],
+    eps_nuc_mev: &mut [Quad; NUM_RVS],
     i: usize,
     symbolic: bool,
     just_dydt: bool,
@@ -232,8 +232,8 @@ pub(crate) fn get_general_2_to_2_derivs(
     let d_ysr_dy3 = dy3 * ys4;
     let d_ysr_dy4 = ys3 * dy4;
 
-    let b_f = F64x2::from_f64(w.rate_screened[i]) * d_f;
-    let b_r = F64x2::from_f64(w.rate_screened[r_i]) * d_r;
+    let b_f = Quad::from_f64(w.rate_screened[i]) * d_f;
+    let b_r = Quad::from_f64(w.rate_screened[r_i]) * d_r;
     let b = b_f - b_r;
     dydt[i1][0] -= b * c1;
     dydt[i2][0] -= b * c2;
@@ -264,8 +264,8 @@ pub(crate) fn get_general_2_to_2_derivs(
         (1, (w.rate_screened_dt[i], w.rate_screened_dt[r_i])),
         (2, (w.rate_screened_drho[i], w.rate_screened_drho[r_i])),
     ] {
-        let bf_d = F64x2::from_f64(rf) * d_f;
-        let br_d = F64x2::from_f64(rr) * d_r;
+        let bf_d = Quad::from_f64(rf) * d_f;
+        let br_d = Quad::from_f64(rr) * d_r;
         let b_d = bf_d - br_d;
         dydt[i1][rv_idx] -= b_d * c1;
         dydt[i2][rv_idx] -= b_d * c2;
@@ -296,8 +296,8 @@ pub(crate) fn get_general_2_to_2_derivs(
 pub(crate) fn get_basic_2_to_2_derivs(
     g: &NetGeneralInfo,
     w: &mut NetWorkState,
-    dydt: &mut [[F64x2; NUM_RVS]],
-    eps_nuc_mev: &mut [F64x2; NUM_RVS],
+    dydt: &mut [[Quad; NUM_RVS]],
+    eps_nuc_mev: &mut [Quad; NUM_RVS],
     i: usize,
     symbolic: bool,
     just_dydt: bool,
@@ -326,8 +326,8 @@ pub(crate) fn get_basic_2_to_2_derivs(
     let d_f = y1 * y2;
     let d_r = y3 * y4;
 
-    let b_f = F64x2::from_f64(w.rate_screened[i]) * d_f;
-    let b_r = F64x2::from_f64(w.rate_screened[r_i]) * d_r;
+    let b_f = Quad::from_f64(w.rate_screened[i]) * d_f;
+    let b_r = Quad::from_f64(w.rate_screened[r_i]) * d_r;
     let b = b_f - b_r;
     dydt[i1][0] -= b;
     dydt[i2][0] -= b;
@@ -356,8 +356,8 @@ pub(crate) fn get_basic_2_to_2_derivs(
         (1, (w.rate_screened_dt[i], w.rate_screened_dt[r_i])),
         (2, (w.rate_screened_drho[i], w.rate_screened_drho[r_i])),
     ] {
-        let bf_d = F64x2::from_f64(rf) * d_f;
-        let br_d = F64x2::from_f64(rr) * d_r;
+        let bf_d = Quad::from_f64(rf) * d_f;
+        let br_d = Quad::from_f64(rr) * d_r;
         let b_d = bf_d - br_d;
         dydt[i1][rv_idx] -= b_d;
         dydt[i2][rv_idx] -= b_d;
@@ -391,8 +391,8 @@ pub(crate) fn get_basic_2_to_2_derivs(
 pub(crate) fn get_basic_2_to_1_derivs(
     g: &NetGeneralInfo,
     w: &mut NetWorkState,
-    dydt: &mut [[F64x2; NUM_RVS]],
-    eps_nuc_mev: &mut [F64x2; NUM_RVS],
+    dydt: &mut [[Quad; NUM_RVS]],
+    eps_nuc_mev: &mut [Quad; NUM_RVS],
     i: usize,
     symbolic: bool,
     just_dydt: bool,
@@ -419,8 +419,8 @@ pub(crate) fn get_basic_2_to_1_derivs(
     let d_f = y1 * y2;
     let d_r = y3;
 
-    let b_f = F64x2::from_f64(w.rate_screened[i]) * d_f;
-    let b_r = F64x2::from_f64(w.rate_screened[r_i]) * d_r;
+    let b_f = Quad::from_f64(w.rate_screened[i]) * d_f;
+    let b_r = Quad::from_f64(w.rate_screened[r_i]) * d_r;
     let b = b_f - b_r;
     dydt[i1][0] -= b;
     dydt[i2][0] -= b;
@@ -448,8 +448,8 @@ pub(crate) fn get_basic_2_to_1_derivs(
         (1, (w.rate_screened_dt[i], w.rate_screened_dt[r_i])),
         (2, (w.rate_screened_drho[i], w.rate_screened_drho[r_i])),
     ] {
-        let bf_d = F64x2::from_f64(rf) * d_f;
-        let br_d = F64x2::from_f64(rr) * d_r;
+        let bf_d = Quad::from_f64(rf) * d_f;
+        let br_d = Quad::from_f64(rr) * d_r;
         let b_d = bf_d - br_d;
         dydt[i1][rv_idx] -= b_d;
         dydt[i2][rv_idx] -= b_d;

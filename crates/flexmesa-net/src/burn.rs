@@ -14,7 +14,7 @@ use flexmesa_utils::is_bad;
 
 use crate::burn_stepper::netint;
 use crate::derivs::{eval_net_with_work, with_thread_local_work};
-use crate::f64x2::F64x2;
+use flexmesa_math::Quad;
 use crate::types::{NetError, NetGeneralInfo, NUM_RVS};
 
 /// Configuration and history inputs for [`burn_1_zone`].
@@ -82,7 +82,7 @@ pub struct Burn1ZoneOutput {
 pub(crate) struct OneZoneStepBuf {
     pub(crate) last_eval: Option<([f64; NUM_CATEGORIES], f64)>,
     pub(crate) x_buf: Vec<f64>,
-    pub(crate) dydt_buf: Vec<[F64x2; NUM_RVS]>,
+    pub(crate) dydt_buf: Vec<[Quad; NUM_RVS]>,
 }
 
 impl OneZoneStepBuf {
@@ -90,7 +90,7 @@ impl OneZoneStepBuf {
         Self {
             last_eval: None,
             x_buf: vec![0.0_f64; species],
-            dydt_buf: vec![[F64x2::ZERO; NUM_RVS]; species],
+            dydt_buf: vec![[Quad::ZERO; NUM_RVS]; species],
         }
     }
 }

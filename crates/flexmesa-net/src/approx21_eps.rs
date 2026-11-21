@@ -8,7 +8,7 @@ use flexmesa_const::{AVO, CLIGHT, QCONV};
 use crate::approx21::Approx21Indices;
 use crate::approx21_special::get_qs_rfe56ec;
 pub use crate::approx21_special::{global_approx21_qs, Approx21ReactionQs};
-use crate::f64x2::F64x2;
+use flexmesa_math::Quad;
 use crate::types::{NetGeneralInfo, NUM_CATEGORIES};
 
 const CAT_PP: usize = 0;
@@ -70,13 +70,13 @@ pub fn approx21_eps_info(
     let qs = global_approx21_qs().with_neuqs_factor(g.reaction_neuqs_factor);
     let (qtotal_rfe56ec, qneu_rfe56ec) = get_qs_rfe56ec(g);
 
-    let mut xx = F64x2::ZERO;
+    let mut xx = Quad::ZERO;
     for i in 0..g.num_isos {
-        xx += F64x2::from_f64(dydt[i]) * F64x2::from_f64(g.mion[i]);
+        xx += Quad::from_f64(dydt[i]) * Quad::from_f64(g.mion[i]);
     }
-    let avo_c2 = F64x2::from_f64(AVO)
-        * F64x2::from_f64(CLIGHT)
-        * F64x2::from_f64(CLIGHT);
+    let avo_c2 = Quad::from_f64(AVO)
+        * Quad::from_f64(CLIGHT)
+        * Quad::from_f64(CLIGHT);
     let eps_total = (-avo_c2 * xx).to_f64();
 
     let fe56ec_fake_factor = if temp >= g.min_t_for_fe56ec_fake_factor {
@@ -85,13 +85,13 @@ pub fn approx21_eps_info(
         0.0
     };
 
-    let m2 = |a1: f64, a2: f64| F64x2::from_f64(a1) * F64x2::from_f64(a2);
-    let m3 = |a1: f64, a2: f64, a3: f64| m2(a1, a2) * F64x2::from_f64(a3);
+    let m2 = |a1: f64, a2: f64| Quad::from_f64(a1) * Quad::from_f64(a2);
+    let m3 = |a1: f64, a2: f64, a3: f64| m2(a1, a2) * Quad::from_f64(a3);
     let m4 = |a1: f64, a2: f64, a3: f64, a4: f64| {
-        m3(a1, a2, a3) * F64x2::from_f64(a4)
+        m3(a1, a2, a3) * Quad::from_f64(a4)
     };
     let m5 = |a1: f64, a2: f64, a3: f64, a4: f64, a5: f64| {
-        m4(a1, a2, a3, a4) * F64x2::from_f64(a5)
+        m4(a1, a2, a3, a4) * Quad::from_f64(a5)
     };
 
     let mut eps_neu_q =
@@ -139,20 +139,20 @@ pub fn approx21_eps_info(
             rate[idx.irn56ec],
         );
     }
-    let eps_neu = (eps_neu_q * F64x2::from_f64(QCONV)).to_f64();
+    let eps_neu = (eps_neu_q * Quad::from_f64(QCONV)).to_f64();
 
     if !do_eps_nuc_categories {
         return (eps_total, eps_neu);
     }
 
-    let mut cat_q = [F64x2::ZERO; NUM_CATEGORIES];
+    let mut cat_q = [Quad::ZERO; NUM_CATEGORIES];
     let mut add = |q: f64, ys: &[f64], rat_id: usize, eps_id: usize| {
-        let mut prod = F64x2::from_f64(1.0);
+        let mut prod = Quad::from_f64(1.0);
         for &v in ys {
-            prod *= F64x2::from_f64(v);
+            prod *= Quad::from_f64(v);
         }
-        let val2 = prod * F64x2::from_f64(rate[rat_id]);
-        cat_q[eps_id] += F64x2::from_f64(q) * val2;
+        let val2 = prod * Quad::from_f64(rate[rat_id]);
+        cat_q[eps_id] += Quad::from_f64(q) * val2;
     };
 
     add(
@@ -451,7 +451,7 @@ pub fn approx21_eps_info(
     }
 
     for k in 0..NUM_CATEGORIES {
-        eps_nuc_categories[k] = (cat_q[k] * F64x2::from_f64(QCONV)).to_f64();
+        eps_nuc_categories[k] = (cat_q[k] * Quad::from_f64(QCONV)).to_f64();
     }
 
     (eps_total, eps_neu)

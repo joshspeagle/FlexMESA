@@ -283,7 +283,7 @@ mod tests {
     use flexmesa_eos::I_LN_E;
 
     use super::*;
-    use crate::{F64x2, NUM_RVS};
+    use crate::{Quad, NUM_RVS};
 
     #[test]
     fn test_burn_1_zone_const_density_first_law_energy_and_jacobian_parity() {
@@ -410,7 +410,7 @@ mod tests {
                     eos.d_dln_t[I_ETA],
                 ));
             let d_cv_dlnt = eos.d_dln_t[I_CV];
-            let mut dydt_buf = vec![[F64x2::ZERO; NUM_RVS]; species];
+            let mut dydt_buf = vec![[Quad::ZERO; NUM_RVS]; species];
             let mut f = vec![0.0; nvar];
             let mut dfdy = vec![0.0; nvar * nvar];
             with_thread_local_work(&g, |w| {

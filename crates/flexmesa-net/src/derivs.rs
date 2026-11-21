@@ -16,7 +16,7 @@ use crate::derivs_support::{
     do_in_out, do_in_out_neu, get_weaklib_rates, update_special_rates,
     NetWorkState,
 };
-use crate::f64x2::F64x2;
+use flexmesa_math::Quad;
 use crate::screen::screen_net;
 use crate::types::{
     NetError, NetEvalResult, NetGeneralInfo, ReaclibKind, IH1, IPROTON,
@@ -129,15 +129,15 @@ pub fn eval_net(
         return Ok(res);
     }
 
-    let mut stack_dydt = [[F64x2::ZERO; NUM_RVS]; 128];
+    let mut stack_dydt = [[Quad::ZERO; NUM_RVS]; 128];
     let mut heap_dydt = Vec::new();
-    let dydt: &mut [[F64x2; NUM_RVS]] = if ni <= 128 {
+    let dydt: &mut [[Quad; NUM_RVS]] = if ni <= 128 {
         &mut stack_dydt[..ni]
     } else {
-        heap_dydt.resize(ni, [F64x2::ZERO; NUM_RVS]);
+        heap_dydt.resize(ni, [Quad::ZERO; NUM_RVS]);
         &mut heap_dydt[..]
     };
-    let mut eps_nuc_mev = [F64x2::ZERO; NUM_RVS];
+    let mut eps_nuc_mev = [Quad::ZERO; NUM_RVS];
     get_derivs(
         g, &mut w, dydt, &mut eps_nuc_mev, temp, rho, abar, zbar,
         rate_factors, use_3a_fl87, symbolic, just_dxdt,
@@ -222,7 +222,7 @@ pub fn with_thread_local_work<R>(
 #[rustfmt::skip]
 #[allow(clippy::too_many_arguments)]
 pub fn eval_net_with_work(
-    g: &NetGeneralInfo, w: &mut NetWorkState, dydt: &mut [[F64x2; NUM_RVS]],
+    g: &NetGeneralInfo, w: &mut NetWorkState, dydt: &mut [[Quad; NUM_RVS]],
     just_dxdt: bool, x: &[f64], mut temp: f64, mut log_t: f64,
     rho: f64, log_rho: f64, abar: f64, zbar: f64, z2bar: f64, ye: f64,
     eta: f64, d_eta_dln_t: f64, d_eta_dln_rho: f64,
@@ -232,7 +232,7 @@ pub fn eval_net_with_work(
 ) -> Result<(f64, f64, f64, f64), NetError> {
     w.reset(g);
     let ni = g.num_isos;
-    dydt[..ni].fill([F64x2::ZERO; NUM_RVS]);
+    dydt[..ni].fill([Quad::ZERO; NUM_RVS]);
     eval_net_setup(
         g, w, x, &mut temp, &mut log_t, rho, abar, zbar, z2bar, ye, eta,
         d_eta_dln_t, d_eta_dln_rho, rate_factors, weak_rate_factor,
@@ -260,10 +260,10 @@ pub fn eval_net_with_work(
         }
         for i in 0..ni {
             let a_i = aion[i];
-            dydt[i][0] = F64x2::from_f64(res.dxdt[i] / a_i);
+            dydt[i][0] = Quad::from_f64(res.dxdt[i] / a_i);
             if !just_dxdt {
-                dydt[i][1] = F64x2::from_f64(res.d_dxdt_dt[i] / a_i);
-                dydt[i][2] = F64x2::from_f64(res.d_dxdt_drho[i] / a_i);
+                dydt[i][1] = Quad::from_f64(res.d_dxdt_dt[i] / a_i);
+                dydt[i][2] = Quad::from_f64(res.d_dxdt_drho[i] / a_i);
                 w.d_eps_nuc_dy[i] = res.d_eps_nuc_dx[i] * a_i / QCONV;
                 for (j, &a_j) in aion[..ni].iter().enumerate() {
                     w.d_dydt_dy[i * ni + j] =
@@ -286,7 +286,7 @@ pub fn eval_net_with_work(
         &mut w.rate_screened_drho[..g.num_reactions],
         screening_mode, zbar, abar, z2bar,
     )?;
-    let mut eps_nuc_mev = [F64x2::ZERO; NUM_RVS];
+    let mut eps_nuc_mev = [Quad::ZERO; NUM_RVS];
     get_derivs(
         g, w, &mut dydt[..ni], &mut eps_nuc_mev, temp, rho, abar, zbar,
         rate_factors, use_3a_fl87, false, just_dxdt,
@@ -304,8 +304,8 @@ pub fn eval_net_with_work(
 pub fn get_derivs(
     g: &NetGeneralInfo,
     w: &mut NetWorkState,
-    dydt: &mut [[F64x2; NUM_RVS]],
-    eps_nuc_mev: &mut [F64x2; NUM_RVS],
+    dydt: &mut [[Quad; NUM_RVS]],
+    eps_nuc_mev: &mut [Quad; NUM_RVS],
     temp: f64,
     den: f64,
     abar: f64,
@@ -421,8 +421,8 @@ pub fn get_derivs(
 fn get1_derivs(
     g: &NetGeneralInfo,
     w: &mut NetWorkState,
-    dydt: &mut [[F64x2; NUM_RVS]],
-    eps_nuc_mev: &mut [F64x2; NUM_RVS],
+    dydt: &mut [[Quad; NUM_RVS]],
+    eps_nuc_mev: &mut [Quad; NUM_RVS],
     i: usize,
     temp: f64,
     den: f64,

@@ -10,7 +10,7 @@ use flexmesa_eos::{EosConfig, HelmTable};
 use flexmesa_net::{
     builtin_net_files, burn_1_zone, burn_1_zone_const_density,
     burn_1_zone_const_p, eval_net_with_work, net_get, with_thread_local_work,
-    Burn1ZoneInput, BurnConstDensityInput, BurnConstPInput, F64x2, NetError,
+    Burn1ZoneInput, BurnConstDensityInput, BurnConstPInput, Quad, NetError,
     NetGeneralInfo, NUM_RVS,
 };
 use flexmesa_num::RosenbrockVariant;
@@ -475,12 +475,12 @@ pub fn net_eval_zones<'py>(
     let rf_vec = vec![1.0_f64; g.num_reactions];
     let out_arr =
         crate::eval_batch_2d::<4, _>(py, nz, parallel, 8, move |k| {
-            let mut stack_dydt = [[F64x2::ZERO; NUM_RVS]; 32];
+            let mut stack_dydt = [[Quad::ZERO; NUM_RVS]; 32];
             let mut heap_dydt = Vec::new();
-            let dydt: &mut [[F64x2; NUM_RVS]] = if g.num_isos <= 32 {
+            let dydt: &mut [[Quad; NUM_RVS]] = if g.num_isos <= 32 {
                 &mut stack_dydt[..g.num_isos]
             } else {
-                heap_dydt.resize(g.num_isos, [F64x2::ZERO; NUM_RVS]);
+                heap_dydt.resize(g.num_isos, [Quad::ZERO; NUM_RVS]);
                 &mut heap_dydt[..]
             };
             match with_thread_local_work(&g, |w| {

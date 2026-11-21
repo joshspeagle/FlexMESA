@@ -4,6 +4,7 @@
 //! and `EOP` volume root-finder (`star/private/rsp_lina.f90:1170-1204`, `star/private/rsp_relax_env.f90:36-124`),
 //! and `StarModel` synchronization helpers (`star/private/rsp_def.f90:513-622, 778-861`, `star/private/rsp.f90:154-201`).
 
+use flexmesa_math::Quad;
 use flexmesa_const::{MixingType, CRAD, PI};
 
 use crate::controls::StarError;
@@ -192,50 +193,16 @@ impl<'de> serde::Deserialize<'de> for MesaRanmar {
     }
 }
 
-/// Evaluates `t1 * (r_out^3 - r_in^3)` in 106-bit Dekker/Knuth double-double
-/// precision to eliminate thin-shell cancellation (`real(qp)` in
-/// `rsp_def.f90:572-580, 845-851` and `rsp_step.f90:1098-1114`).
+/// Evaluates `q4 = q1*(q2**3 - q3**3)` in `real(qp)`, converted to `real(dp)`
+/// on assignment (`rsp_step.f90:762-771`; the same expression in
+/// `rsp_def.f90:572-580, 845-851`), which removes thin-shell cancellation.
+/// `q2**3` is two `real(qp)` multiplications, as in [`Quad::powi`].
 #[must_use]
 pub(crate) fn vol_shell_qp(t1: f64, r_out: f64, r_in: f64) -> f64 {
-    #[inline]
-    fn two_sum(a: f64, b: f64) -> (f64, f64) {
-        let s = a + b;
-        let v = s - a;
-        (s, (a - (s - v)) + (b - v))
-    }
-    #[inline]
-    fn split_f64(a: f64) -> (f64, f64) {
-        let c = 134_217_729.0 * a;
-        let hi = c - (c - a);
-        (hi, a - hi)
-    }
-    #[inline]
-    fn two_prod(a: f64, b: f64) -> (f64, f64) {
-        let p = a * b;
-        let (ah, al) = split_f64(a);
-        let (bh, bl) = split_f64(b);
-        let err = ((ah * bh - p) + ah * bl + al * bh) + al * bl;
-        (p, err)
-    }
-    #[inline]
-    fn dd_mul(a: (f64, f64), b: (f64, f64)) -> (f64, f64) {
-        let (p, e) = two_prod(a.0, b.0);
-        two_sum(p, e + a.0 * b.1 + a.1 * b.0)
-    }
-    #[inline]
-    fn dd_sub(a: (f64, f64), b: (f64, f64)) -> (f64, f64) {
-        let (s, e) = two_sum(a.0, -b.0);
-        let (t, f) = two_sum(a.1, -b.1);
-        let (hi, lo1) = two_sum(s, e + t);
-        two_sum(hi, lo1 + f)
-    }
-    let q2 = (r_out, 0.0);
-    let q3 = (r_in, 0.0);
-    let q2_3 = dd_mul(dd_mul(q2, q2), q2);
-    let q3_3 = dd_mul(dd_mul(q3, q3), q3);
-    let diff = dd_sub(q2_3, q3_3);
-    let res = dd_mul((t1, 0.0), diff);
-    res.0 + res.1
+    let q1 = Quad::from_f64(t1);
+    let q2 = Quad::from_f64(r_out);
+    let q3 = Quad::from_f64(r_in);
+    (q1 * (q2.powi(3) - q3.powi(3))).to_f64()
 }
 
 /// 1-based center-to-surface (`1..=nzn`) Smolec envelope arrays (`rsp_build.f90:70-76`).

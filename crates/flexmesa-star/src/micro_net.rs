@@ -8,7 +8,7 @@ use flexmesa_const::{LN10, QCONV};
 use flexmesa_eos::I_ETA;
 use flexmesa_math::exp10;
 use flexmesa_net::derivs::{eval_net_with_work, with_thread_local_work};
-use flexmesa_net::f64x2::F64x2;
+use flexmesa_math::Quad;
 use flexmesa_net::types::NUM_RVS;
 use flexmesa_net::NetGeneralInfo;
 use flexmesa_utils::is_bad;
@@ -204,12 +204,12 @@ pub fn do_net(
                 let log_rho = lnd_slice[k] / LN10;
                 let xa_k = &xa_slice[k * species..(k + 1) * species];
 
-                let mut stack_dydt = [[F64x2::ZERO; NUM_RVS]; 128];
+                let mut stack_dydt = [[Quad::ZERO; NUM_RVS]; 128];
                 let mut heap_dydt = Vec::new();
-                let dydt: &mut [[F64x2; NUM_RVS]] = if species <= 128 {
+                let dydt: &mut [[Quad; NUM_RVS]] = if species <= 128 {
                     &mut stack_dydt[..species]
                 } else {
-                    heap_dydt.resize(species, [F64x2::ZERO; NUM_RVS]);
+                    heap_dydt.resize(species, [Quad::ZERO; NUM_RVS]);
                     &mut heap_dydt[..]
                 };
 

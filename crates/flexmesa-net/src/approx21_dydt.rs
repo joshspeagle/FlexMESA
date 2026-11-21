@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
 //! Hardwired `approx21` and `approx21_plus_co56` molar abundance derivatives
-//! (`approx21_dydt` with `F64x2` double-double accumulation in
+//! (`approx21_dydt` with `Quad` (`real(qp)`) accumulation in
 //! `net/private/net_approx21.f90` lines 926–1544).
 
 use crate::approx21::Approx21Indices;
 use crate::approx21_dfdy_heavy::approx21_dydt_iron_group;
-use crate::f64x2::F64x2;
+use flexmesa_math::Quad;
 
 #[inline]
 fn eval_fe56ec_fake_factor(
@@ -50,15 +50,15 @@ pub fn approx21_dydt(
     let nf = f64::from(fe56ec_n_neut);
     dydt.fill(0.0);
 
-    // Helper closures using F64x2 to match Fortran real(qp)
-    let m2 = |a: f64, b: f64| F64x2::from_f64(a * b);
-    let m3 = |a: f64, b: f64, c: f64| F64x2::from_f64(a * b * c);
-    let m4 = |a: f64, b: f64, c: f64, d: f64| F64x2::from_f64(a * b * c * d);
+    // Helper closures using Quad to match Fortran real(qp)
+    let m2 = |a: f64, b: f64| Quad::from_f64(a * b);
+    let m3 = |a: f64, b: f64, c: f64| Quad::from_f64(a * b * c);
+    let m4 = |a: f64, b: f64, c: f64, d: f64| Quad::from_f64(a * b * c * d);
     let m5 = |a: f64, b: f64, c: f64, d: f64, e: f64| {
-        F64x2::from_f64(a * b * c * d * e)
+        Quad::from_f64(a * b * c * d * e)
     };
     let m6 = |a: f64, b: f64, c: f64, d: f64, e: f64, f: f64| {
-        F64x2::from_f64(a * b * c * d * e * f)
+        Quad::from_f64(a * b * c * d * e * f)
     };
 
     // h1 (lines 960–969)

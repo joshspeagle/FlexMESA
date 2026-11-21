@@ -25,8 +25,38 @@ env:
   FLEXMESA_REQUIRE_ZERO_SKIPS: "1"
 
 jobs:
+  # Decides which job groups this run needs (`scripts/ci/select_jobs.py`,
+  # `DECISIONS #48`). Everything runs on `main` and on any pull request that
+  # touches more than documentation or test files.
+  changes:
+    name: Select Jobs From Changed Paths
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      rust: ${{ steps.select.outputs.rust }}
+      python: ${{ steps.select.outputs.python }}
+      engine_runs: ${{ steps.select.outputs.engine_runs }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Classify changed paths
+        id: select
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            git diff --name-only "origin/${{ github.base_ref }}...HEAD" > changed.txt
+          else
+            : > changed.txt
+          fi
+          cat changed.txt
+          python3 scripts/ci/select_jobs.py --event "${{ github.event_name }}" --paths-file changed.txt | tee -a "$GITHUB_OUTPUT"
+
   rust-lint:
     name: Rust Clippy & rustdoc
+    needs: changes
+    if: needs.changes.outputs.rust == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -50,6 +80,8 @@ jobs:
   # (`Cargo.toml`): the release profile without link-time optimisation.
   rust-tests:
     name: Safe Rust Tests (${{ matrix.shard }})
+    needs: changes
+    if: needs.changes.outputs.rust == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     strategy:
@@ -83,20 +115,26 @@ jobs:
   rust:
     name: Safe Rust Workspace & Golden Oracles
     if: ${{ !cancelled() }}
-    needs: [rust-lint, rust-tests]
+    needs: [changes, rust-lint, rust-tests]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - name: Require Clippy, rustdoc and every Rust test shard to pass
         run: |
-          test "${{ needs.rust-lint.result }}" = "success"
-          test "${{ needs.rust-tests.result }}" = "success"
+          # "skipped" means the change cannot affect Rust (see `changes`),
+          # which is only believed when the selection job itself succeeded.
+          test "${{ needs.changes.result }}" = "success"
+          for r in "${{ needs.rust-lint.result }}" "${{ needs.rust-tests.result }}"; do
+            test "$r" = "success" || test "$r" = "skipped"
+          done
 
   # The Python suite runs as three shards. `scripts/ci/pytest_shard.py`
   # assigns every collected test file to exactly one shard
   # (`tests/test_ci_shards.py` checks this).
   python-jax-tests:
     name: Python, PyO3 & JAX Tests (shard ${{ matrix.shard }}/3)
+    needs: changes
+    if: needs.changes.outputs.python == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 35
     strategy:
@@ -122,15 +160,20 @@ jobs:
   python-jax:
     name: Python, PyO3 & JAX Parity Suite
     if: ${{ !cancelled() }}
-    needs: python-jax-tests
+    needs: [changes, python-jax-tests]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - name: Require every Python shard to pass
-        run: test "${{ needs.python-jax-tests.result }}" = "success"
+        run: |
+          test "${{ needs.changes.result }}" = "success"
+          r="${{ needs.python-jax-tests.result }}"
+          test "$r" = "success" || test "$r" = "skipped"
 
   e2e:
     name: Upstream MESA End-to-End Suites
+    needs: changes
+    if: needs.changes.outputs.python == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -229,6 +272,8 @@ jobs:
 
   history-harness-unit:
     name: History Harness Unit Suite
+    needs: changes
+    if: needs.changes.outputs.python == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -248,6 +293,8 @@ jobs:
 
   history-harness:
     name: Upstream History Harness (PR Subset)
+    needs: changes
+    if: needs.changes.outputs.engine_runs == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -267,6 +314,7 @@ jobs:
           mkdir -p "$OUT_DIR"
           flexmesa harness run \
             --preset pr-ci \
+            --jobs 2 \
             --timeout-sec 480 \
             --max-rss-gb 6.0 \
             --work-dir "$OUT_DIR/logs" \
@@ -284,6 +332,8 @@ jobs:
 
   strict-determinism:
     name: Strict Cross-Machine & Thread Determinism (${{ matrix.os }})
+    needs: changes
+    if: needs.changes.outputs.engine_runs == 'true'
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
     strategy:

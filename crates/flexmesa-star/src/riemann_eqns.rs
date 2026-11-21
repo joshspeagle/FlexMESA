@@ -281,15 +281,7 @@ pub fn eval_u_flag_total_energy_rates_ad(
     dt: f64,
 ) -> StarAdOrder1 {
     let de_dt = (model.ln_e_ad[k].exp() - model.energy_start[k]) / dt;
-    let mc = if model.controls.use_mass_corrections {
-        model.aux.mass_correction.get(k).copied().unwrap_or(1.0)
-    } else {
-        1.0
-    };
-
-    let u_00 = StarAdOrder1::variable(model.u[k], I_V_00);
-    let u_st = model.u_start.get(k).copied().unwrap_or(model.u[k]);
-    let dke_dt = (u_00 * u_00 - u_st * u_st) * (0.5 * mc / dt);
+    let dke_dt = crate::hydro_work::eval_dke_dt_ad(model, k, dt);
     let dpe_dt = crate::hydro_work::eval_cell_dpe_dt_ad(model, k, dt);
 
     let work_00 = eval1_work_u_flag_ad(model, k);

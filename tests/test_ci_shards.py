@@ -67,3 +67,64 @@ def test_ci_python_shards_place_unknown_files_and_balance_known_ones() -> None:
     parts = shard.assign_shards(files, durations, 2)
     assert sorted(parts[0] + parts[1]) == files
     assert parts[0] == ["tests/test_a.py"]
+
+
+def _load_select_module() -> types.ModuleType:
+    path = REPO_ROOT / "scripts" / "ci" / "select_jobs.py"
+    spec = importlib.util.spec_from_file_location("select_jobs", path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_ci_job_selection_runs_everything_unless_change_is_narrow() -> None:
+    """Only documentation and test-only pull requests skip job groups."""
+    sel = _load_select_module()
+    everything = {"rust": True, "python": True, "engine_runs": True}
+    nothing = {"rust": False, "python": False, "engine_runs": False}
+
+    # A push to main or a manual run always runs every group.
+    assert sel.select(["docs/index.md"], "push") == everything
+    assert sel.select(["docs/index.md"], "workflow_dispatch") == everything
+    # An empty diff is treated as unknown.
+    assert sel.select([], "pull_request") == everything
+
+    # Anything outside the three narrow classes runs every group.
+    for path in (
+        "crates/flexmesa-star/src/hydro_vars.rs",
+        "crates/flexmesa-star/Cargo.toml",
+        "Cargo.lock",
+        "src/flexmesa/cli.py",
+        "pyproject.toml",
+        "benchmarks/history_harness/known_gaps.toml",
+        "scripts/ci/select_jobs.py",
+        ".github/workflows/ci.yml",
+        "tests/fixtures/zams.mod",
+        "tests/conftest.txt",
+        "crates/flexmesa-math/tests/data/binary128_vectors.tsv",
+    ):
+        assert sel.select([path, "docs/index.md"], "pull_request") == (
+            everything
+        ), path
+
+    assert (
+        sel.select(
+            ["docs/index.md", "notes/DECISIONS.md", "README.md", "mkdocs.yml"],
+            "pull_request",
+        )
+        == nothing
+    )
+    assert sel.select(["tests/test_bench.py"], "pull_request") == {
+        "rust": False,
+        "python": True,
+        "engine_runs": False,
+    }
+    assert sel.select(
+        ["crates/flexmesa-star/tests/rsp2_test.rs", "README.md"],
+        "pull_request",
+    ) == {"rust": True, "python": False, "engine_runs": False}
+    assert sel.select(
+        ["crates/flexmesa-star/tests/rsp2_test.rs", "tests/unit/test_x.py"],
+        "pull_request",
+    ) == {"rust": True, "python": True, "engine_runs": False}

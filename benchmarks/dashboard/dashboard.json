@@ -1179,7 +1179,7 @@
         "issues": "#161"
       }
     ],
-    "python_xfail_or_skip_count": 5,
+    "python_xfail_or_skip_count": 8,
     "python_skips": [
       {
         "location": "tests/test_eos_wave3a3.py:200",
@@ -1195,6 +1195,21 @@
         "location": "tests/test_star_wave4_1.py:83",
         "reason": "pytest.mark.xfail( strict=True, reason=( \"#295: Rust computes the face radiation pressure from the face \" \"temperature (#291); the frozen JAX twin still interpolates it \" \"from the two cell values.\" ), )",
         "issues": "#291, #295"
+      },
+      {
+        "location": "tests/test_star_wave5_1.py:231",
+        "reason": "pytest.mark.xfail( strict=True, reason=( \"#295: Rust eval_caplan_ocp_dstar follows MESA 26.4.1 \" \"get_Dstar_OCP (#156); the frozen JAX twin keeps its earlier \" \"expression.\" ), )",
+        "issues": "#156, #295"
+      },
+      {
+        "location": "tests/test_star_wave5_1.py:256",
+        "reason": "pytest.mark.xfail( strict=True, reason=( \"#295: Rust eval_burgers_velocities follows MESA 26.4.1 element \" \"diffusion (#156); the frozen JAX twin keeps its earlier \" \"expressions.\" ), )",
+        "issues": "#156, #295"
+      },
+      {
+        "location": "tests/test_star_wave5_1.py:297",
+        "reason": "pytest.mark.xfail( strict=True, reason=( \"#295: Rust eval_phase_separation_shift follows the MESA 26.4.1 \" \"Blouin fits (#156); the frozen JAX twin keeps its earlier \" \"expression.\" ), )",
+        "issues": "#156, #295"
       },
       {
         "location": "tests/test_wave4_bench.py:136",

@@ -31,6 +31,9 @@ pub struct AccurateReal {
 /// `num/public/accurate_sum.f90:80-95`).
 #[inline]
 pub fn neumaier_sum_qp(sum: &mut Quad, compensator: &mut Quad, summand: Quad) {
+    // Upstream's left-to-right order adds the compensator before the error
+    // term, which loses it when large terms cancel. Reproduced as written;
+    // see deferred issue #314.
     let provisional = *sum + summand;
     if sum.abs() >= summand.abs() {
         *compensator = *compensator + (*sum - provisional) + summand;

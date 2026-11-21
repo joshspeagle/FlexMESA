@@ -191,7 +191,7 @@
         "verified_total": 0,
         "pct_ported": 66.5,
         "pct_verified": 0.0,
-        "rust_lines": 2779,
+        "rust_lines": 2790,
         "python_jax_lines": 3116
       },
       {
@@ -462,7 +462,7 @@
   "numerics": {
     "has_165_ci": true,
     "strict_cross_machine_identical": "gated in CI by scripts/check_strict_determinism.py (x86_64 vs aarch64, 1 vs 4 threads; 474,062 math vectors + uncapped star/1.3M_ms_high_Z + binary/jdot_gr_check run with unsupported controls ignored; a bit-identity check, not a comparison with MESA)",
-    "strict_kernels_bit_identical": "math: 403,258/403,258 CRMATH 0 ULP (70,804 libm <= 1 ULP); 304,622/304,751 probed module hex 0 ULP (5 complete, 15 non-math probed)",
+    "strict_kernels_bit_identical": "math: 403,258/403,258 CRMATH 0 ULP (70,804 libm <= 1 ULP); 304,624/304,751 probed module hex 0 ULP (5 complete, 15 non-math probed)",
     "total_upstream_hex_values": 348321,
     "modules": [
       {
@@ -553,7 +553,7 @@
       {
         "module": "turb",
         "upstream_exact_values": 136,
-        "exact_strict_compared": "38/62 0 ULP (max 6 ULP, 71 total)"
+        "exact_strict_compared": "40/62 0 ULP (max 6 ULP, 71 total)"
       },
       {
         "module": "star_data",
@@ -1475,8 +1475,8 @@
         "draft": false
       },
       {
-        "number": 338,
-        "title": "fix(turb): group the set_tdc products as turb.f90 and tdc_support.f90 do (#337)",
+        "number": 343,
+        "title": "fix(star): wire atm_T_tau_opacity ('iterated'/'varying'), fix center dm_bar, dt_limit_ratio_old, and .mod retry reset (Closes #340)",
         "draft": false
       }
     ],
@@ -2627,6 +2627,19 @@
     {
       "date_utc": "2026-11-21",
       "commit": "d1fe407",
+      "event": "main merge",
+      "engine_ported_pct": "30.2",
+      "all_verified_pct": "1.0",
+      "cases_passing": "0",
+      "rust_cov_pct": "75.5",
+      "python_cov_pct": "87.6",
+      "closed_140": "16",
+      "total_140": "36",
+      "deferred_169": "45"
+    },
+    {
+      "date_utc": "2026-11-21",
+      "commit": "b5d4ba2",
       "event": "main merge",
       "engine_ported_pct": "30.2",
       "all_verified_pct": "1.0",

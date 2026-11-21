@@ -310,6 +310,9 @@ pub(crate) fn init_or_update_model_from_bundle_outcome(
     } else if !is_restart {
         model.init_model_number = model.model_number as isize;
     }
+    if job.set_initial_number_retries && !is_restart {
+        model.num_retries = job.initial_number_retries;
+    }
     if job.set_initial_dt {
         if job.years_for_initial_dt > 0.0 {
             model.dt = job.years_for_initial_dt * SECYER;

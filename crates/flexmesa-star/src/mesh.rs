@@ -386,6 +386,7 @@ impl StarModel {
         self.xa_start.clone_from(&self.xa);
         self.xa_sub_xa_start.clear();
         self.xh_start.clone_from(&self.xh);
+        self.aux.opacity_start_surf = self.opacity.first().copied().unwrap_or(0.0);
         self.aux.save_start(
             &self.cp,
             &self.grada,

@@ -9,6 +9,8 @@
 //!
 //! # Module Organization
 //!
+//! - [`accurate_sum`]: Neumaier compensated summation in `real(qp)`
+//!   (`accurate_real`, `num/public/accurate_sum.f90`).
 //! - [`search`]: Knuth `two_sum`, Neumaier compensated summation, monotonic
 //!   `binary_search`, index permutation `qsort_index`, and quadratic
 //!   interpolation/extrema solvers (`find0`, `find0_quadratic`,
@@ -48,6 +50,7 @@
     clippy::too_many_lines
 )]
 
+pub mod accurate_sum;
 pub mod bobyqa;
 pub mod brent;
 pub mod newton;
@@ -61,6 +64,7 @@ mod rosenbrock_coeffs;
 pub mod search;
 pub mod simplex;
 
+pub use accurate_sum::{neumaier_sum_qp, AccurateReal};
 pub use bobyqa::{bobyqa, BobyqaResult};
 pub use brent::{
     brent_global_min, brent_local_min, brent_safe_zero, glomin, local_min,

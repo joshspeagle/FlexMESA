@@ -10,6 +10,10 @@ use flexmesa_star::{
     eval_henyey_equations, load_zams_model, set_hydro_vars,
 };
 
+/// Zone counts of the compact fixture the Jacobian comparisons run on. The
+/// 12- and 24-zone meshes reach regimes the 6-zone mesh does not (#307).
+const FIXTURE_ZONES: [usize; 3] = [6, 12, 24];
+
 fn usize_to_f64(n: usize) -> f64 {
     f64::from(u32::try_from(n).expect("small test zone index fits in u32"))
 }
@@ -116,6 +120,43 @@ fn assert_entry_matches(label: &str, an: f64, fd: f64, rtol: f64, atol: f64) {
         diff <= atol || (scale > 0.0 && diff / scale <= rtol),
         "{label}: analytic={an:.10e}, fd={fd:.10e}, diff={diff:.3e}"
     );
+}
+
+/// Bound on the error of a central difference of the temperature-gradient
+/// residual at face `k` caused by rounding inside `calc_MLT`.
+///
+/// Upstream evaluates the convective efficiency factor as
+/// `Zeta = exp(3d0*log(Gamma) - log(Bcubed))` (`turb/private/mlt.f90:164`) and
+/// then `gradT = (1d0 - Zeta)*gradr + Zeta*gradL` (`mlt.f90:183`). For very
+/// efficient convection `Zeta` is within `1/Gamma` of one, so the exponent is a
+/// difference of two numbers near `3 ln(Gamma)` whose rounding error is a few
+/// units in the last place of `3 ln(Gamma)`. That error reaches `gradT`
+/// multiplied by `gradr - gradL`, and the residual `gradT*dlnP - dlnT`
+/// (`star/private/hydro_temperature.f90:55-75`) multiplied by `dlnP`. The
+/// analytic derivative does not carry this error; the finite difference does,
+/// once in each of its two evaluations. On the 12-zone fixture at face 5
+/// (`Gamma = 8.5e8`, `gradr - gradL = 2.3e5`) central differences of `gradT`
+/// alone scatter by 0.01 to 0.9 per cent as the step is varied (#307).
+fn mlt_zeta_fd_noise(
+    m0: &StarModel,
+    k: usize,
+    i_equ: usize,
+    eps_scaled: f64,
+) -> f64 {
+    if i_equ != m0.layout.i_equ_l || k == 0 || m0.mlt_gamma[k] <= 1.0 {
+        return 0.0;
+    }
+    let p_cell = flexmesa_star::eval_cell_peos_time_centered_ad(m0, k, false).0.val;
+    let p_above =
+        flexmesa_star::eval_cell_peos_time_centered_ad(m0, k - 1, true).0.val;
+    let dln_p = (p_above - p_cell).abs() / p_cell.min(p_above);
+    // Four units in the last place of the exponent for each evaluation: one
+    // for each logarithm, and two for the error `Gamma` and `Bcubed` already
+    // carry, which the factor of three multiplies.
+    let exponent_error =
+        4.0 * f64::EPSILON * 3.0 * flexmesa_math::log(m0.mlt_gamma[k]);
+    let grad_t_error = exponent_error * (m0.gradr[k] - m0.gradl[k]).abs();
+    2.0 * grad_t_error * dln_p / (2.0 * eps_scaled)
 }
 
 fn freeze_microphysics_tangents(m: &mut StarModel) {
@@ -244,7 +285,8 @@ fn assert_tridiagonal_jacobian_matches_fd(
                     let fd_uncertainty = 2.0 * (fd - fd_half).abs();
                     let eff_atol = abs_tol
                         .max(2.0 * f64::EPSILON * eq0 / eps_scaled)
-                        + fd_uncertainty;
+                        + fd_uncertainty
+                        + mlt_zeta_fd_noise(&m0, k_equ, i_equ, eps_scaled);
                     assert_entry_matches(
                         &format!(
                             "hydro k_equ={k_equ} i_equ={i_equ} k_var={k_var} j_var={j_var}"
@@ -291,7 +333,8 @@ fn assert_tridiagonal_jacobian_matches_fd(
                     m.xa[k_var * m.species + s] -= sgn * delta;
                 }
                 let sys = eval_henyey_equations(&mut m, true).expect("chem fd");
-                (sys, flexmesa_math::exp(m.ln_peos_surf_ad.val))
+                let p_surf = flexmesa_math::exp(m.ln_peos_surf_ad.val);
+                (sys, p_surf, m.energy)
             };
             let perturb_x =
                 |sgn: f64, sink: Option<usize>| perturb_x_with_p_surf(sgn, sink).0;
@@ -318,8 +361,8 @@ fn assert_tridiagonal_jacobian_matches_fd(
                 let x_sc_sink = sys0.x_scale[k_var * nvar + j_var_sink];
 
                 let (
-                    (simplex_plus, simplex_plus_p_surf),
-                    (simplex_minus, simplex_minus_p_surf),
+                    (simplex_plus, simplex_plus_p_surf, energy_plus),
+                    (simplex_minus, simplex_minus_p_surf, energy_minus),
                 ) = (
                     perturb_x_with_p_surf(1.0, Some(idx_sink)),
                     perturb_x_with_p_surf(-1.0, Some(idx_sink)),
@@ -384,6 +427,43 @@ fn assert_tridiagonal_jacobian_matches_fd(
                                 / (2.0 * eps_scaled)
                                 / p_cell_0;
                         }
+                        let dedt_form = u_flag_only
+                            || m0.controls.energy_eqn_option
+                                == EnergyEqnOption::Dedt;
+                        if dedt_form
+                            && i_equ == m0.layout.i_dlne_dt
+                            && k_equ == k_var
+                            && m0.dt > 0.0
+                        {
+                            // The `dedt` form of the energy equation takes
+                            // its composition partial from the equation of
+                            // state, `-scal*(energy/dt)*dlnE_dxa_for_partials`
+                            // (`star/private/hydro_energy.f90:491-496`). That
+                            // partial does not follow the full composition
+                            // dependence of the tabulated components: on the
+                            // 12-zone fixture it differs from a central
+                            // difference of the specific energy by up to 0.5
+                            // per cent when the metal fraction changes, and
+                            // that difference accounts for the whole mismatch
+                            // in this entry to seven digits (#307). This test
+                            // checks how the equation is assembled, so the
+                            // difference between the two is moved to the
+                            // analytic side here. The accuracy of the
+                            // equation-of-state partial itself belongs to the
+                            // equation-of-state tests.
+                            let sp = m0.species;
+                            let dlne =
+                                |j: usize| m0.aux.dln_e_dxa_for_partials[k_equ * sp + j];
+                            let an_de = m0.energy[k_equ]
+                                * x_sc
+                                * (dlne(j_sp) - dlne(idx_sink));
+                            let fd_de = (energy_plus[k_equ] - energy_minus[k_equ])
+                                / (2.0 * eps_scaled);
+                            an_dir += -flexmesa_star::hydro_energy::set_energy_eqn_scal(
+                                &m0, k_equ,
+                            ) / m0.dt
+                                * (fd_de - an_de);
+                        }
                         let eq0 = sys0.equ[k_equ * nvar + i_equ].abs();
                         let eff_atol =
                             abs_tol.max(2.0 * f64::EPSILON * eq0 / eps_scaled);
@@ -415,6 +495,12 @@ fn assert_tridiagonal_jacobian_matches_fd(
 
 #[test]
 fn test_frozen_microphysics_star_ad_jacobian_matches_central_fd_to_1e_10() {
+    for nz in FIXTURE_ZONES {
+        frozen_microphysics_star_ad_jacobian_matches_central_fd_to_1e_10_at(nz);
+    }
+}
+
+fn frozen_microphysics_star_ad_jacobian_matches_central_fd_to_1e_10_at(nz: usize) {
     for (v_flag, u_flag, rti_flag) in [
         (false, false, false),
         (true, false, false),
@@ -432,7 +518,7 @@ fn test_frozen_microphysics_star_ad_jacobian_matches_central_fd_to_1e_10() {
         };
         enable_all_zone_velocity(&mut controls);
         let mut base =
-            build_compact_zams(6, controls, StarJobControls::default());
+            build_compact_zams(nz, controls, StarJobControls::default());
         base.dt = 5.0;
         for k in 0..base.nz {
             if v_flag {
@@ -514,8 +600,13 @@ fn test_frozen_microphysics_star_ad_jacobian_matches_central_fd_to_1e_10() {
 }
 
 #[test]
-fn test_coupled_hydro_chem_jacobian_matches_central_fd_across_sinks_and_spherical_v_flag()
- {
+fn test_coupled_hydro_chem_jacobian_matches_central_fd_across_sinks_and_spherical_v_flag() {
+    for nz in FIXTURE_ZONES {
+        coupled_hydro_chem_jacobian_matches_central_fd_across_sinks_and_spherical_v_flag_at(nz);
+    }
+}
+
+fn coupled_hydro_chem_jacobian_matches_central_fd_across_sinks_and_spherical_v_flag_at(nz: usize) {
     // 1. Analytical `HELM` radiative envelope (`alpha_MLT = 0`): strict `2e-5`
     //    relative gate across all zones and both `Dedt` / `EpsGrav` forms.
     for opt in [EnergyEqnOption::Dedt, EnergyEqnOption::EpsGrav] {
@@ -527,7 +618,7 @@ fn test_coupled_hydro_chem_jacobian_matches_central_fd_across_sinks_and_spherica
             ..StarControls::default()
         };
         let mut model =
-            build_compact_zams(6, controls, StarJobControls::default());
+            build_compact_zams(nz, controls, StarJobControls::default());
         set_pure_helm(&mut model);
         set_hydro_vars(&mut model, false, false).expect("helm hydro vars");
         model.save_start_values().expect("save_start_values");
@@ -555,7 +646,7 @@ fn test_coupled_hydro_chem_jacobian_matches_central_fd_across_sinks_and_spherica
     };
     enable_all_zone_velocity(&mut controls_v);
     let mut model_v =
-        build_compact_zams(6, controls_v, StarJobControls::default());
+        build_compact_zams(nz, controls_v, StarJobControls::default());
     set_pure_helm(&mut model_v);
     model_v.dt = 20.0;
     for k in 0..model_v.nz {
@@ -580,6 +671,12 @@ fn test_coupled_hydro_chem_jacobian_matches_central_fd_across_sinks_and_spherica
 
 #[test]
 fn test_coupled_u_flag_hllc_jacobian_across_all_outer_bcs_and_chem_rti() {
+    for nz in FIXTURE_ZONES {
+        coupled_u_flag_hllc_jacobian_across_all_outer_bcs_and_chem_rti_at(nz);
+    }
+}
+
+fn coupled_u_flag_hllc_jacobian_across_all_outer_bcs_and_chem_rti_at(nz: usize) {
     for bc_mode in 0..5 {
         let mut c = StarControls {
             u_flag: true,
@@ -606,7 +703,7 @@ fn test_coupled_u_flag_hllc_jacobian_across_all_outer_bcs_and_chem_rti() {
             }
         }
         let include_chem = bc_mode == 0;
-        let mut model = build_compact_zams(6, c, StarJobControls::default());
+        let mut model = build_compact_zams(nz, c, StarJobControls::default());
         model.dt = if include_chem { 0.05 } else { 5.0 };
         let u_amp = if include_chem { 0.0 } else { 2.0e5 };
         for k in 0..model.nz {

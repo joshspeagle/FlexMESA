@@ -334,7 +334,12 @@ def test_category_partition_and_decay_utilities() -> None:
     assert chem.category_id("pp") == 1
     assert chem.category_id("cno") == 2
     assert chem.category_id("tri_alpha") == 3
+    # Upstream `chem/public/chem_def.f90:437-439`: `ipnhe4 = 20`, `iphoto = 21`.
+    assert chem.category_id("pnhe4") == 20
+    assert chem.category_id("photo") == 21
     assert chem.category_name(1) == "pp"
+    assert chem.category_name(20) == "pnhe4"
+    assert chem.category_name(21) == "photo"
     assert chem.get_partition_fcn_indx(0.05) == 0
     assert chem.get_partition_fcn_indx(0.12) == 1
 

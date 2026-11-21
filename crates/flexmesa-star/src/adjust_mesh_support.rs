@@ -315,8 +315,11 @@ pub fn set_delta_gval_max_with_controls(
         (mw.mesh_dlog_cc_dlogp_extra, 16),
         (mw.mesh_dlog_co_dlogp_extra, 17),
         (mw.mesh_dlog_oo_dlogp_extra, 18),
-        (mw.mesh_dlog_pnhe4_dlogp_extra, 20),
-        (mw.mesh_dlog_photo_dlogp_extra, 19),
+        // Upstream `chem/public/chem_def.f90:437-439` and
+        // `star/private/adjust_mesh_support.f90:147-148`:
+        // `ipnhe4 = 20` (0-based 19), `iphoto = 21` (0-based 20).
+        (mw.mesh_dlog_pnhe4_dlogp_extra, 19),
+        (mw.mesh_dlog_photo_dlogp_extra, 20),
     ];
     for (extra, cat) in category_extras {
         do1_dlog_eps_dlogp_coef(
@@ -513,4 +516,77 @@ pub fn check_validity(model: &StarModel) -> Result<(), StarError> {
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use flexmesa_chem::{category_id, NUM_CATEGORIES};
+    use flexmesa_const::LN10;
+
+    use super::set_delta_gval_max_with_controls;
+    use crate::controls::{StarControls, StarJobControls};
+    use crate::controls_mix_wind::MixWindControls;
+    use crate::model::StarModel;
+
+    /// Verify `mesh_dlog_pnhe4_dlogp_extra` targets `ipnhe4 = 20` (0-based 19)
+    /// and `mesh_dlog_photo_dlogp_extra` targets `iphoto = 21` (0-based 20)
+    /// (`chem/public/chem_def.f90:437-439`, `adjust_mesh_support.f90:147-148`).
+    #[test]
+    fn test_mesh_dlog_pnhe4_and_photo_target_mesa_category_indices() {
+        let mut model = StarModel::new(
+            3,
+            vec![2, 7],
+            StarJobControls::default(),
+            StarControls::default(),
+        );
+        model.ln_peos = vec![10.0 * LN10, 10.1 * LN10, 10.2 * LN10];
+        model.aux.eps_nuc_categories = vec![[0.0; NUM_CATEGORIES]; 3];
+
+        // Put a steep burning gradient strictly in `ipnhe4` (0-based slot 19).
+        let i_pnhe4 = category_id("pnhe4") - 1;
+        let i_photo = category_id("photo") - 1;
+        assert_eq!(i_pnhe4, 19);
+        assert_eq!(i_photo, 20);
+        model.aux.eps_nuc_categories[0][i_pnhe4] = 1.0e4;
+        model.aux.eps_nuc_categories[1][i_pnhe4] = 1.0e7;
+        model.aux.eps_nuc_categories[2][i_pnhe4] = 1.0e10;
+
+        let mw_base = MixWindControls {
+            mesh_dlog_eps_min_for_extra: 2.0,
+            mesh_dlog_eps_dlogp_full_off: 0.5,
+            mesh_dlog_eps_dlogp_full_on: 1.0,
+            mesh_delta_coeff_factor_smooth_iters: 0,
+            mesh_dlog_pnhe4_dlogp_extra: 1.0,
+            mesh_dlog_photo_dlogp_extra: 1.0,
+            ..MixWindControls::default()
+        };
+
+        // Activating only `mesh_dlog_photo_dlogp_extra` must not refine a pure `pnhe4` gradient.
+        let mut mw_photo_only = mw_base.clone();
+        mw_photo_only.mesh_dlog_photo_dlogp_extra = 0.2;
+        let dg_photo = set_delta_gval_max_with_controls(
+            &model,
+            &mw_photo_only,
+            &model.xa,
+        )
+        .expect("photo only");
+        assert!(
+            dg_photo.iter().all(|&v| (v - 1.0).abs() < 1.0e-12),
+            "photo extra must ignore slot 19 (pnhe4): {dg_photo:?}"
+        );
+
+        // Activating `mesh_dlog_pnhe4_dlogp_extra` must refine slot 19 (`pnhe4`).
+        let mut mw_pnhe4_only = mw_base;
+        mw_pnhe4_only.mesh_dlog_pnhe4_dlogp_extra = 0.2;
+        let dg_pnhe4 = set_delta_gval_max_with_controls(
+            &model,
+            &mw_pnhe4_only,
+            &model.xa,
+        )
+        .expect("pnhe4 only");
+        assert!(
+            dg_pnhe4[1] < 0.25 && dg_pnhe4[2] < 0.25,
+            "pnhe4 extra must refine slot 19 (pnhe4): {dg_pnhe4:?}"
+        );
+    }
 }

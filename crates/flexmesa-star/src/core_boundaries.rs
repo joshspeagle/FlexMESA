@@ -15,8 +15,9 @@ const CAT_PP: usize = 0;
 const CAT_CNO: usize = 1;
 /// Category index for triple-alpha He burning (`"tri_alpha"`, `CATEGORY_NAME[2]`).
 const CAT_3ALF: usize = 2;
-/// Category index for photodisintegration (`"photo"`, `CATEGORY_NAME[19]`).
-const CAT_PHOTO: usize = 19;
+/// Category index for photodisintegration (`"photo"`, `CATEGORY_NAME[20]`,
+/// `iphoto = 21` in `chem/public/chem_def.f90:439`).
+const CAT_PHOTO: usize = 20;
 
 /// Sub-cell interpolated thermodynamic and kinematic properties at a single
 /// composition core boundary (`set_core_info` and `get_info_at_q` in
@@ -556,4 +557,41 @@ pub fn snapshot_step_history_old(model: &mut StarModel) {
     sh.power_nuc_burn_old = powers.power_nuc_burn;
     sh.total_energy_old = model.aux.total_energy;
     sh.cumulative_energy_error_old = model.aux.cumulative_energy_error;
+}
+
+#[cfg(test)]
+mod tests {
+    use flexmesa_chem::{category_id, NUM_CATEGORIES};
+
+    use super::{compute_power_categories, CAT_PHOTO};
+    use crate::controls::{StarControls, StarJobControls};
+    use crate::model::StarModel;
+    use flexmesa_const::L_SUN;
+
+    /// Verify `CAT_PHOTO` tracks `iphoto = 21` (0-based 20) from
+    /// `chem/public/chem_def.f90:437-439`, distinct from `ipnhe4 = 20` (0-based 19).
+    #[test]
+    fn test_compute_power_categories_reads_power_photo_from_iphoto_slot() {
+        assert_eq!(CAT_PHOTO, 20);
+        assert_eq!(CAT_PHOTO, category_id("photo") - 1);
+        assert_eq!(category_id("pnhe4") - 1, 19);
+
+        let mut model = StarModel::new(
+            2,
+            vec![2, 7],
+            StarJobControls::default(),
+            StarControls::default(),
+        );
+        model.dm = vec![0.5, 0.5];
+        model.aux.eps_nuc_categories = vec![[0.0; NUM_CATEGORIES]; 2];
+        for k in 0..2 {
+            model.aux.eps_nuc_categories[k][19] = 100.0 * L_SUN; // ipnhe4
+            model.aux.eps_nuc_categories[k][20] = -25.0 * L_SUN; // iphoto
+            model.eps_nuc[k] = 75.0 * L_SUN;
+        }
+        let powers = compute_power_categories(&model);
+        assert!((powers.power_photo - (-25.0)).abs() < 1.0e-12);
+        assert!((powers.l_by_category_lsun[19] - 100.0).abs() < 1.0e-12);
+        assert!((powers.l_by_category_lsun[20] - (-25.0)).abs() < 1.0e-12);
+    }
 }

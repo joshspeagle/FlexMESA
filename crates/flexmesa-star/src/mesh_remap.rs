@@ -1170,6 +1170,7 @@ pub(crate) fn execute_adjust_mesh_from_plan(
     let dpdr_drhodr_old = model.aux.dpdr_drhodr_info.clone();
     let j_rot_old = model.j_rot.clone();
     let omega_old = model.omega.clone();
+    let w_div_wc_old = model.aux.w_div_wc.clone();
     let i_rot_old = model.aux.i_rot.clone();
     let fp_rot_old = model.aux.fp_rot.clone();
     let ft_rot_old = model.aux.ft_rot.clone();
@@ -1596,14 +1597,29 @@ pub(crate) fn execute_adjust_mesh_from_plan(
     model.set_m_grav_and_grav();
 
     let mut untouched_rot = vec![false; nz];
-    let mut j_target = vec![0.0; nz];
     if model.controls.rotation_flag {
+        let max_w = model.controls.mix_wind.w_div_wcrit_max;
+        let max_w2 = model.controls.mix_wind.w_div_wcrit_max2;
         for k in 0..nz {
             let ko = comes_from[k];
             let face_unchanged = unchanged_face_for_vel(k, &cell_type)
                 && model.ln_r[k] == lnr_old[ko];
-            let jr = if face_unchanged {
-                j_rot_old[ko]
+            untouched_rot[k] = face_unchanged;
+            if face_unchanged {
+                model.j_rot[k] = j_rot_old[ko];
+                model.omega[k] = omega_old[ko];
+                if let Some(&w) = w_div_wc_old.get(ko) {
+                    model.aux.w_div_wc[k] = w;
+                }
+                if let Some(&ir) = i_rot_old.get(ko) {
+                    model.aux.i_rot[k] = ir;
+                }
+                if let Some(&fp) = fp_rot_old.get(ko) {
+                    model.aux.fp_rot[k] = fp;
+                }
+                if let Some(&ft) = ft_rot_old.get(ko) {
+                    model.aux.ft_rot[k] = ft;
+                }
             } else {
                 let (j_tot, dq_s) = adjust1_control_volume(
                     k + 1,
@@ -1618,35 +1634,24 @@ pub(crate) fn execute_adjust_mesh_from_plan(
                     true,
                     false,
                 )?;
-                if dq_s > 0.0 { j_tot / dq_s } else { 0.0 }
-            };
-            model.j_rot[k] = jr;
-            j_target[k] = jr;
-            untouched_rot[k] = face_unchanged;
-            model.omega[k] = omega_old[ko];
-            if face_unchanged {
-                if let Some(&ir) = i_rot_old.get(ko) {
-                    model.aux.i_rot[k] = ir;
-                }
-                if let Some(&fp) = fp_rot_old.get(ko) {
-                    model.aux.fp_rot[k] = fp;
-                }
-                if let Some(&ft) = ft_rot_old.get(ko) {
-                    model.aux.ft_rot[k] = ft;
-                }
-            }
-        }
-        crate::rotation::conserve_shell_j_rot_and_distortion(model);
-        for k in 0..nz {
-            let ko = comes_from[k];
-            if untouched_rot[k] {
-                model.omega[k] = omega_old[ko];
-                model.j_rot[k] = j_rot_old[ko];
-                if let Some(&ir) = i_rot_old.get(ko) {
-                    model.aux.i_rot[k] = ir;
-                }
-            } else {
-                model.j_rot[k] = j_target[k];
+                let jr = if dq_s > 0.0 { j_tot / dq_s } else { 0.0 };
+                // Verbatim `adjust1_omega` (`star/private/mesh_adjust.f90:2097-2103`):
+                // compute `w_div_w_crit_roche` from `j_rot`, update `i_rot` from
+                // `xh` (`ln_r`), and set `omega = j_rot / i_rot`.
+                model.j_rot[k] = jr;
+                let r00 = flexmesa_math::exp(model.ln_r[k]);
+                model.aux.w_div_wc[k] =
+                    crate::hydro_rotation::w_div_w_roche_jrot(
+                        r00,
+                        model.m[k],
+                        model.j_rot[k],
+                        model.cgrav[k],
+                        max_w,
+                        max_w2,
+                        false,
+                    );
+                crate::hydro_rotation::update1_i_rot_from_xh(model, k);
+                model.omega[k] = model.j_rot[k] / model.aux.i_rot[k];
             }
         }
     }
@@ -1819,8 +1824,12 @@ pub(crate) fn execute_adjust_mesh_from_plan(
             if untouched_rot[k] {
                 model.omega[k] = omega_old[ko];
                 model.j_rot[k] = j_rot_old[ko];
-            } else {
-                model.j_rot[k] = j_target[k];
+                if let Some(&w) = w_div_wc_old.get(ko) {
+                    model.aux.w_div_wc[k] = w;
+                }
+                if let Some(&ir) = i_rot_old.get(ko) {
+                    model.aux.i_rot[k] = ir;
+                }
             }
         }
     }

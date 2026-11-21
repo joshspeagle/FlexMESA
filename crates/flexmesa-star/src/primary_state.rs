@@ -11,7 +11,9 @@ use flexmesa_eos::EosConfig;
 use flexmesa_kap::KapConfig;
 
 use crate::controls::{StarError, VarLayout};
-use crate::hydro_state::{StepHistoryScalars, TidalDeformationHandle};
+use crate::hydro_state::{
+    BinaryOtherTorqueHandle, StepHistoryScalars, TidalDeformationHandle,
+};
 use crate::model::StarModel;
 use crate::rsp_def::RspState;
 use crate::star_ad::{StarAdExt, StarAdOrder1};
@@ -461,6 +463,10 @@ pub struct PrimaryStateBuffer {
     pub(crate) d_ft_rot_dlnr: Vec<f64>,
     pub(crate) i_rot: Vec<f64>,
     pub(crate) d_i_rot_dlnr: Vec<f64>,
+    pub(crate) am_nu_non_rot: Vec<f64>,
+    pub(crate) am_nu_rot: Vec<f64>,
+    pub(crate) am_nu_omega: Vec<f64>,
+    pub(crate) am_nu_j: Vec<f64>,
     pub(crate) brunt_n2_composition_term: Vec<f64>,
     pub(crate) smoothed_brunt_b: Vec<f64>,
     pub(crate) mass_correction: Vec<f64>,
@@ -476,6 +482,8 @@ pub struct PrimaryStateBuffer {
     pub(crate) step_hist: StepHistoryScalars,
     pub(crate) rsp: RspState,
     pub(crate) tidal_deformation: Option<TidalDeformationHandle>,
+    pub(crate) binary_other_torque: Option<BinaryOtherTorqueHandle>,
+    pub(crate) binary_other_torque_implicit: Option<BinaryOtherTorqueHandle>,
     pub(crate) extra_grav_if_nonzero: Option<Vec<StarAdOrder1>>,
 }
 
@@ -492,6 +500,8 @@ macro_rules! make_empty_buf {
             step_hist: StepHistoryScalars::default(),
             rsp: RspState::new(0),
             tidal_deformation: None,
+            binary_other_torque: None,
+            binary_other_torque_implicit: None,
             extra_grav_if_nonzero: None,
             model_number: 0,
             init_model_number: 0,
@@ -527,7 +537,8 @@ impl PrimaryStateBuffer {
                 source_plus_alpha_rti, source_minus_alpha_rti, alpha_rti,
                 alpha_rti_start, alpha_rti_old, u_face_start, p_face_start,
                 w_div_wc, fp_rot, d_fp_rot_dlnr, ft_rot, d_ft_rot_dlnr, i_rot,
-                d_i_rot_dlnr, brunt_n2_composition_term, smoothed_brunt_b,
+                d_i_rot_dlnr, am_nu_non_rot, am_nu_rot, am_nu_omega, am_nu_j,
+                brunt_n2_composition_term, smoothed_brunt_b,
                 mass_correction, omega_old, j_rot_old, eps_mdot_old,
                 fixed_gradr_sticky
             ],
@@ -697,6 +708,10 @@ impl PrimaryStateBuffer {
                 d_ft_rot_dlnr,
                 i_rot,
                 d_i_rot_dlnr,
+                am_nu_non_rot,
+                am_nu_rot,
+                am_nu_omega,
+                am_nu_j,
                 brunt_n2_composition_term,
                 smoothed_brunt_b,
                 mass_correction,
@@ -706,7 +721,9 @@ impl PrimaryStateBuffer {
                 fixed_gradr_sticky,
                 step_hist,
                 rsp,
-                tidal_deformation
+                tidal_deformation,
+                binary_other_torque,
+                binary_other_torque_implicit
             ]
         );
         let has_nonzero = a
@@ -872,7 +889,9 @@ impl PrimaryStateBuffer {
                     eps_mdot_old,
                     step_hist,
                     rsp,
-                    tidal_deformation
+                    tidal_deformation,
+                    binary_other_torque,
+                    binary_other_torque_implicit
                 ]
             );
             a.solver_mlt_eval_count = 0;
@@ -943,6 +962,10 @@ impl PrimaryStateBuffer {
                 d_ft_rot_dlnr,
                 i_rot,
                 d_i_rot_dlnr,
+                am_nu_non_rot,
+                am_nu_rot,
+                am_nu_omega,
+                am_nu_j,
                 smoothed_brunt_b,
                 fixed_gradr_sticky
             ]
@@ -1059,6 +1082,10 @@ impl PrimaryStateBuffer {
                 d_ft_rot_dlnr,
                 i_rot,
                 d_i_rot_dlnr,
+                am_nu_non_rot,
+                am_nu_rot,
+                am_nu_omega,
+                am_nu_j,
                 brunt_n2_composition_term,
                 smoothed_brunt_b,
                 mass_correction,

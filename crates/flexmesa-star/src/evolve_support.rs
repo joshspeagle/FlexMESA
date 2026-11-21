@@ -27,9 +27,7 @@ use crate::model::StarModel;
 use crate::phase_separation::do_phase_separation_step;
 use crate::primary_state::PrimaryStateBuffer;
 use crate::riemann_ad::eval_u_flag_total_energy_rates_ad;
-use crate::rotation::{
-    conserve_shell_j_rot_and_distortion, set_rotation_mixing_info,
-};
+use crate::rotation::conserve_shell_j_rot_and_distortion;
 
 /// Evaluates domain-integrated `(e_int, e_grav, e_kin, e_rot, e_turb, e_tot)`
 /// in $\mathrm{erg}$ (`eval_total_energy_integrals` in
@@ -108,14 +106,32 @@ pub fn eval_total_energy_integrals(
 
 /// Applies pre-solver operator-split physics (`do_conv_premix`,
 /// `do_phase_separation`, `do_element_diffusion`, uniform extra heating, and
-/// `solve_omega_mix`) corresponding to `do_step_part2` and `check_for_extra_heat`
-/// in `star/private/evolve.f90:605-665,1646-1681`.
+/// `do_solve_omega_mix`) corresponding to `do_step_part2` and
+/// `check_for_extra_heat` in `star/private/evolve.f90:605-665,1646-1681`.
 ///
 /// # Errors
-/// Returns [`StarError`] if refreshing hydrodynamic/microphysics state fails.
+/// Returns [`StarError`] if refreshing hydrodynamic/microphysics state or
+/// pre-step `premix_omega` transport fails.
 pub fn apply_step_pre_physics(
     model: &mut StarModel,
     dt: f64,
+) -> Result<(), StarError> {
+    let mut extras = crate::inlist_runner::DefaultStarExtras;
+    apply_step_pre_physics_with_extras(model, dt, &mut extras)
+}
+
+/// Runs pre-step operator-split physics hooks with custom
+/// [`crate::inlist_runner::StarExtras`] callbacks (`other_torque`, `other_torque_implicit`) forwarded into
+/// `do_solve_omega_mix_with_extras` when `premix_omega` is enabled
+/// (`star/private/evolve.f90:648-655`).
+///
+/// # Errors
+/// Returns [`StarError`] if refreshing hydrodynamic/microphysics state or
+/// pre-step `premix_omega` transport fails.
+pub fn apply_step_pre_physics_with_extras(
+    model: &mut StarModel,
+    dt: f64,
+    extras: &mut dyn crate::inlist_runner::StarExtras,
 ) -> Result<(), StarError> {
     let nz = model.nz;
     model.aux.mixing.okay_to_set_mixing_info = true;
@@ -220,10 +236,25 @@ pub fn apply_step_pre_physics(
     if model.controls.rotation_flag {
         conserve_shell_j_rot_and_distortion(model);
         if model.controls.mix_wind.premix_omega && dt > 0.0 {
-            crate::rotation::sync_post_henyey_rotation(model, dt);
+            match crate::omega_mix::do_solve_omega_mix_with_extras(
+                model,
+                0.5 * dt,
+                extras,
+            )? {
+                crate::omega_mix::OmegaMixOutcome::KeepGoing => {}
+                crate::omega_mix::OmegaMixOutcome::Retry(msg) => {
+                    return Err(StarError::ConvergenceFailure(msg));
+                }
+                crate::omega_mix::OmegaMixOutcome::Terminate(msg) => {
+                    return Err(StarError::Terminated {
+                        model_number: model.model_number,
+                        reason: msg,
+                    });
+                }
+            }
+            crate::hydro_rotation::set_rotation_info(model, false);
+            set_hydro_vars(model, false, false)?;
         }
-        let _ = set_rotation_mixing_info(model);
-        set_hydro_vars(model, false, false)?;
     }
     Ok(())
 }

@@ -16,8 +16,7 @@ use crate::eps_mdot::{
     total_energy_profile_before_adjust_mass,
 };
 use crate::hydro_rotation::{
-    DEFAULT_W_DIV_WCRIT_MAX2, eval_i_rot, w_div_w_roche_jrot,
-    w_div_w_roche_omega,
+    eval_i_rot, w_div_w_roche_jrot, w_div_w_roche_omega,
 };
 use crate::hydro_vars::set_hydro_vars;
 use crate::mesh_remap::normalize_and_assign_remapped_xa;
@@ -707,11 +706,9 @@ fn set1_irot(model: &mut StarModel, k: usize, jrot_known: bool) {
     // `r00 = get_r_from_xh(s, k)` (`star/private/star_utils.f90:429-440`),
     // `w_div_w_roche_{jrot,omega}`, and `eval_i_rot`
     // (`star/private/hydro_rotation.f90:55-226, 874-920`).
-    // Solver-variable `w_div_wc_flag` and `simple_i_rot_flag` default to
-    // `.false.` (`controls.defaults:4074, 4188`; full `w_div_wc_flag` solver
-    // variable support is tracked under `#158`).
     let r00 = flexmesa_math::exp(model.ln_r[k]);
     let max_w = model.controls.mix_wind.w_div_wcrit_max;
+    let max_w2 = model.controls.mix_wind.w_div_wcrit_max2;
     let w_div_wcrit_roche = if jrot_known {
         w_div_w_roche_jrot(
             r00,
@@ -719,7 +716,7 @@ fn set1_irot(model: &mut StarModel, k: usize, jrot_known: bool) {
             model.j_rot[k],
             model.cgrav[k],
             max_w,
-            DEFAULT_W_DIV_WCRIT_MAX2,
+            max_w2,
             false,
         )
     } else {
@@ -729,11 +726,18 @@ fn set1_irot(model: &mut StarModel, k: usize, jrot_known: bool) {
             model.omega[k],
             model.cgrav[k],
             max_w,
-            DEFAULT_W_DIV_WCRIT_MAX2,
+            max_w2,
             false,
         )
     };
-    let i_rot_k = eval_i_rot(r00, w_div_wcrit_roche, false);
+    if k < model.aux.w_div_wc.len() {
+        model.aux.w_div_wc[k] = w_div_wcrit_roche;
+    }
+    let i_rot_k = eval_i_rot(
+        r00,
+        w_div_wcrit_roche,
+        model.controls.mix_wind.simple_i_rot_flag,
+    );
     if k < model.aux.i_rot.len() {
         model.aux.i_rot[k] = i_rot_k;
     }

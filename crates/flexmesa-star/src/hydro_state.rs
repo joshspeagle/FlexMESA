@@ -39,6 +39,8 @@ pub struct StepHistoryScalars {
     pub num_diffusion_solver_steps: usize,
     /// Element diffusion solver iterations taken on the current step (`num_diffusion_solver_iters`).
     pub num_diffusion_solver_iters: usize,
+    /// Maximum substeps taken by `do_solve_omega_mix` on the current step (`num_rotation_solver_steps`).
+    pub num_rotation_solver_steps: usize,
     /// Model-number ceiling below which $\Delta t$ is held non-increasing (`timestep_hold`).
     pub timestep_hold: usize,
     /// Model number at which the most recent step retry occurred (`model_number_for_last_retry`).
@@ -97,6 +99,7 @@ impl Default for StepHistoryScalars {
             burn_max_num_substeps: 0,
             num_diffusion_solver_steps: 0,
             num_diffusion_solver_iters: 0,
+            num_rotation_solver_steps: 0,
             timestep_hold: 0,
             model_number_for_last_retry: None,
             error_in_energy_conservation: 0.0,
@@ -161,6 +164,54 @@ pub struct TidalDeformationHandle(pub std::sync::Arc<dyn TidalDeformationHook>);
 impl std::fmt::Debug for TidalDeformationHandle {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str("TidalDeformationHandle(..)")
+    }
+}
+
+/// Acyclic callback trait allowing `flexmesa-binary` (or custom Rust callers)
+/// to populate `extra_jdot`, `extra_omegadot`, and implicit torque derivatives
+/// inside `do_solve_omega_mix` (`binary_other_torque` /
+/// `binary_other_torque_implicit` in `star/private/solve_omega_mix.f90:90-97,
+/// 210-217`).
+pub trait BinaryOtherTorqueHook: Send + Sync {
+    /// Populates torque arrays on `model.aux` for the active step or Newton
+    /// iteration.
+    ///
+    /// # Errors
+    /// Returns [`crate::controls::StarError`] if torque evaluation fails.
+    fn apply(
+        &self,
+        model: &mut crate::model::StarModel,
+    ) -> Result<(), crate::controls::StarError>;
+}
+
+/// Cloneable reference-counted handle wrapping a [`BinaryOtherTorqueHook`].
+#[derive(Clone)]
+pub struct BinaryOtherTorqueHandle(
+    pub std::sync::Arc<dyn BinaryOtherTorqueHook>,
+);
+
+impl BinaryOtherTorqueHandle {
+    /// Wraps a [`BinaryOtherTorqueHook`] implementation in a handle.
+    #[must_use]
+    pub fn new(hook: impl BinaryOtherTorqueHook + 'static) -> Self {
+        Self(std::sync::Arc::new(hook))
+    }
+
+    /// Invokes the underlying torque hook.
+    ///
+    /// # Errors
+    /// Propagates any [`crate::controls::StarError`] returned by the hook.
+    pub fn apply(
+        &self,
+        model: &mut crate::model::StarModel,
+    ) -> Result<(), crate::controls::StarError> {
+        self.0.apply(model)
+    }
+}
+
+impl std::fmt::Debug for BinaryOtherTorqueHandle {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("BinaryOtherTorqueHandle(..)")
     }
 }
 
@@ -296,6 +347,40 @@ pub struct HydroAuxState {
     /// Optional binary Roche tidal distortion hook (`use_tidal_deformation`).
     #[serde(skip)]
     pub tidal_deformation: Option<TidalDeformationHandle>,
+    /// Non-rotational angular momentum viscosity $\nu_{\mathrm{AM,non-rot},k}$ in $\mathrm{cm^2\,s^{-1}}$ (`am_nu_non_rot`).
+    pub am_nu_non_rot: Vec<f64>,
+    /// Rotational angular momentum viscosity $\nu_{\mathrm{AM,rot},k}$ in $\mathrm{cm^2\,s^{-1}}$ (`am_nu_rot`).
+    pub am_nu_rot: Vec<f64>,
+    /// $\Omega$-gradient angular momentum viscosity $\nu_{\mathrm{AM},\Omega,k}$ in $\mathrm{cm^2\,s^{-1}}$ (`am_nu_omega`).
+    pub am_nu_omega: Vec<f64>,
+    /// $j$-gradient angular momentum viscosity $\nu_{\mathrm{AM},j,k}$ in $\mathrm{cm^2\,s^{-1}}$ (`am_nu_j`).
+    pub am_nu_j: Vec<f64>,
+    /// Cell-centered $\Omega$-gradient Lagrangian diffusion coefficient $\sigma_{\mathrm{AM},\Omega,k}$ (`am_sig_omega`).
+    pub am_sig_omega: Vec<f64>,
+    /// Cell-centered $j$-gradient Lagrangian diffusion coefficient $\sigma_{\mathrm{AM},j,k}$ (`am_sig_j`).
+    pub am_sig_j: Vec<f64>,
+    /// Extra specific angular momentum torque $\dot{j}_{\mathrm{extra},k}$ in $\mathrm{cm^2\,s^{-2}}$ (`extra_jdot`).
+    pub extra_jdot: Vec<f64>,
+    /// Extra angular acceleration $\dot{\Omega}_{\mathrm{extra},k}$ in $\mathrm{rad\,s^{-2}}$ (`extra_omegadot`).
+    pub extra_omegadot: Vec<f64>,
+    /// Implicit torque Jacobian partial $\partial\dot{j}_{\mathrm{extra},k}/\partial\Omega_{k-1}$ (`d_extra_jdot_domega_m1`).
+    pub d_extra_jdot_domega_m1: Vec<f64>,
+    /// Implicit torque Jacobian partial $\partial\dot{j}_{\mathrm{extra},k}/\partial\Omega_k$ (`d_extra_jdot_domega_00`).
+    pub d_extra_jdot_domega_00: Vec<f64>,
+    /// Implicit torque Jacobian partial $\partial\dot{j}_{\mathrm{extra},k}/\partial\Omega_{k+1}$ (`d_extra_jdot_domega_p1`).
+    pub d_extra_jdot_domega_p1: Vec<f64>,
+    /// Implicit torque Jacobian partial $\partial\dot{\Omega}_{\mathrm{extra},k}/\partial\Omega_{k-1}$ (`d_extra_omegadot_domega_m1`).
+    pub d_extra_omegadot_domega_m1: Vec<f64>,
+    /// Implicit torque Jacobian partial $\partial\dot{\Omega}_{\mathrm{extra},k}/\partial\Omega_k$ (`d_extra_omegadot_domega_00`).
+    pub d_extra_omegadot_domega_00: Vec<f64>,
+    /// Implicit torque Jacobian partial $\partial\dot{\Omega}_{\mathrm{extra},k}/\partial\Omega_{k+1}$ (`d_extra_omegadot_domega_p1`).
+    pub d_extra_omegadot_domega_p1: Vec<f64>,
+    /// Optional binary explicit torque hook (`binary_other_torque`).
+    #[serde(skip)]
+    pub binary_other_torque: Option<BinaryOtherTorqueHandle>,
+    /// Optional binary implicit torque hook (`binary_other_torque_implicit`).
+    #[serde(skip)]
+    pub binary_other_torque_implicit: Option<BinaryOtherTorqueHandle>,
     /// Brunt-Väisälä composition buoyancy term $N_{\mu,k}^2$ in $\mathrm{s^{-2}}$ (`brunt_N2_composition_term`).
     pub brunt_n2_composition_term: Vec<f64>,
     /// Binomial-smoothed Ledoux composition buoyancy term $B_{\mathrm{smooth},k}$ (`smoothed_brunt_B`).
@@ -456,6 +541,22 @@ impl HydroAuxState {
             i_rot: vec![0.0; nz],
             d_i_rot_dlnr: vec![0.0; nz],
             tidal_deformation: None,
+            am_nu_non_rot: vec![0.0; nz],
+            am_nu_rot: vec![0.0; nz],
+            am_nu_omega: vec![0.0; nz],
+            am_nu_j: vec![0.0; nz],
+            am_sig_omega: vec![0.0; nz],
+            am_sig_j: vec![0.0; nz],
+            extra_jdot: vec![0.0; nz],
+            extra_omegadot: vec![0.0; nz],
+            d_extra_jdot_domega_m1: vec![0.0; nz],
+            d_extra_jdot_domega_00: vec![0.0; nz],
+            d_extra_jdot_domega_p1: vec![0.0; nz],
+            d_extra_omegadot_domega_m1: vec![0.0; nz],
+            d_extra_omegadot_domega_00: vec![0.0; nz],
+            d_extra_omegadot_domega_p1: vec![0.0; nz],
+            binary_other_torque: None,
+            binary_other_torque_implicit: None,
             brunt_n2_composition_term: vec![0.0; nz],
             smoothed_brunt_b: vec![0.0; nz],
             mass_correction: vec![1.0; nz],
@@ -537,6 +638,20 @@ impl HydroAuxState {
             &mut self.d_ft_rot_dlnr,
             &mut self.i_rot,
             &mut self.d_i_rot_dlnr,
+            &mut self.am_nu_non_rot,
+            &mut self.am_nu_rot,
+            &mut self.am_nu_omega,
+            &mut self.am_nu_j,
+            &mut self.am_sig_omega,
+            &mut self.am_sig_j,
+            &mut self.extra_jdot,
+            &mut self.extra_omegadot,
+            &mut self.d_extra_jdot_domega_m1,
+            &mut self.d_extra_jdot_domega_00,
+            &mut self.d_extra_jdot_domega_p1,
+            &mut self.d_extra_omegadot_domega_m1,
+            &mut self.d_extra_omegadot_domega_00,
+            &mut self.d_extra_omegadot_domega_p1,
             &mut self.brunt_n2_composition_term,
             &mut self.smoothed_brunt_b,
             &mut self.omega_old,

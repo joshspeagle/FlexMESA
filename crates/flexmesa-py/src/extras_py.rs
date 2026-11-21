@@ -392,6 +392,7 @@ fn set_star_control_scalars(
     d.set_item("use_other_wind", c.use_other_wind)?;
     d.set_item("use_other_adjust_mdot", c.use_other_adjust_mdot)?;
     d.set_item("use_other_torque", c.use_other_torque)?;
+    d.set_item("use_other_torque_implicit", c.use_other_torque_implicit)?;
     d.set_item("use_other_energy", c.use_other_energy)?;
     d.set_item("use_other_kap", c.use_other_kap)?;
     d.set_item("use_other_surface_pt", c.use_other_surface_pt)?;

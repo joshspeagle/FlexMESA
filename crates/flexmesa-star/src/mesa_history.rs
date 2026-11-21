@@ -1311,6 +1311,9 @@ fn eval_scalar_column(
                 0
             })
         }
+        "rotation_solver_steps" => {
+            MesaCellValue::Int(sh.num_rotation_solver_steps as i64)
+        }
         "diffusion_solver_steps" => {
             MesaCellValue::Int(sh.num_diffusion_solver_steps as i64)
         }

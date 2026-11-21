@@ -168,6 +168,7 @@ impl Default for StarControls {
             use_other_wind: false,
             use_other_adjust_mdot: false,
             use_other_torque: false,
+            use_other_torque_implicit: false,
             use_other_energy: false,
             use_other_eps_grav: false,
             use_other_neu: false,

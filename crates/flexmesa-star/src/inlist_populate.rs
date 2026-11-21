@@ -402,6 +402,7 @@ impl InlistBundle {
             accrete_given_mass_fractions, do_element_diffusion, do_conv_premix,
             do_phase_separation, do_phase_separation_heating, use_other_cgrav,
             use_other_alpha_mlt, use_other_wind, use_other_adjust_mdot, use_other_torque,
+            use_other_torque_implicit,
             use_other_energy, use_other_eps_grav, use_other_neu, use_other_kap,
             use_other_surface_pt, use_other_momentum_implicit,
             include_l_in_velocity_time_centering,

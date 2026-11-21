@@ -10,7 +10,7 @@ use crate::adjust_mass::do_adjust_mass_step;
 use crate::controls::{StarError, StepFailureInfo};
 pub use crate::evolve_support::snapshot_step_old_extras;
 use crate::evolve_support::{
-    apply_step_pre_physics, eval_total_energy_integrals,
+    apply_step_pre_physics_with_extras, eval_total_energy_integrals,
     remesh_star_before_step, snapshot_step_start_extras,
     update_step_energy_conservation,
 };
@@ -429,6 +429,7 @@ pub(crate) fn star_evolve_step_outcome_with_extras(
         model.step_retry_cnt = retries;
         model.solver_first_try_of_step = first_try;
         model.why_tlim_neg_x = false;
+        model.aux.step_hist.num_rotation_solver_steps = 0;
         // `set_start_of_step_info` (`star/private/evolve.f90:1784-1787`):
         // snapshot start-of-step `starting_T_center` and optical-depth-averaged
         // `prev_Ledd` before evaluating `set_mdot`.
@@ -492,7 +493,7 @@ pub(crate) fn star_evolve_step_outcome_with_extras(
                     if model.mstar_dot != 0.0 && !model.controls.rsp_flag {
                         refresh_mixing_state(model, dt_try.max(1.0), &[])?;
                     }
-                    apply_step_pre_physics(model, dt_try)
+                    apply_step_pre_physics_with_extras(model, dt_try, extras)
                 })
                 .and_then(|()| {
                     do_struct_burn_mix(
@@ -511,7 +512,36 @@ pub(crate) fn star_evolve_step_outcome_with_extras(
                             "velocity exceeded clight at model {target_mod}"
                         )));
                     }
-                    crate::rotation::sync_post_henyey_rotation(model, dt_try);
+                    if model.controls.rotation_flag {
+                        crate::hydro_rotation::set_i_rot(model, false);
+                        crate::hydro_rotation::set_omega(model);
+                        let dt_omega = if model.controls.mix_wind.premix_omega {
+                            0.5 * dt_try
+                        } else {
+                            dt_try
+                        };
+                        match crate::omega_mix::do_solve_omega_mix_with_extras(
+                            model, dt_omega, extras,
+                        ) {
+                            Ok(crate::omega_mix::OmegaMixOutcome::KeepGoing) => {
+                                crate::hydro_rotation::set_rotation_info(
+                                    model, false,
+                                );
+                            }
+                            Ok(crate::omega_mix::OmegaMixOutcome::Retry(msg)) => {
+                                break Err(StarError::ConvergenceFailure(msg));
+                            }
+                            Ok(crate::omega_mix::OmegaMixOutcome::Terminate(
+                                msg,
+                            )) => {
+                                break Err(StarError::Terminated {
+                                    model_number: target_mod,
+                                    reason: msg,
+                                });
+                            }
+                            Err(e) => break Err(e),
+                        }
+                    }
                     match mdot_redo
                         .select_action_with_extras(model, dt_try, extras)
                     {

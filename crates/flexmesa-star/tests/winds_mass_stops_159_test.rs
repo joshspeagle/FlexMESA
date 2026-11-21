@@ -1827,10 +1827,10 @@ fn test_mass_stopping_limits_check_termination_outcomes_and_set1_irot() {
     // `set_omega_adjust_mass` / `set1_irot` (`adjust_mass.rs:402, 535`).
     m_rot0.reconstruct_ln_r_from_lnd_and_dm();
     m_rot0.save_old_values();
-    let r0_before_zero = flexmesa_math::exp(m_rot0.ln_r[0]);
     m_rot0.mstar_dot = 5.0e-4 * M_SUN / SECYER;
     do_adjust_mass_step(&mut m_rot0, 0.5 * SECYER).expect("adjust mass zero omega");
-    let spherical_0 = (2.0 / 3.0) * (r0_before_zero * r0_before_zero);
+    let r0_after_zero = flexmesa_math::exp(m_rot0.ln_r[0]);
+    let spherical_0 = (2.0 / 3.0) * (r0_after_zero * r0_after_zero);
     assert!(
         rel_err(m_rot0.aux.i_rot[0], spherical_0) < 1.0e-13,
         "set1_irot zero-omega expected spherical (2/3)r^2={spherical_0:.12e}, got {:.12e}",

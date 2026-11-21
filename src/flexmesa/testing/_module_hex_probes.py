@@ -601,7 +601,6 @@ def _probe_turb(hex_root: pathlib.Path) -> ProbeOutcome:
             m,
             scale,
             1e99,  # max_conv_vel
-            0.0,  # y_face_guess (unset)
         ]
         _, grad_t, _, conv_vel, _, _ = _rust.turb_set_tdc_f64(
             params, True, False, inputs

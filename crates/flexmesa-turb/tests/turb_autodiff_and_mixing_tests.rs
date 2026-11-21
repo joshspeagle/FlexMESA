@@ -380,3 +380,157 @@ fn test_semiconvection_and_thermohaline_prescriptions() {
         1.0e-6,
     );
 }
+
+#[test]
+fn test_mlt_early_returns_and_tdc_unconditional_cox_mlt() {
+    let t = 1.0e5;
+    let rho = 1.0e-5;
+    let grav = 1.0e4;
+    let cp = 2.5 * KERG / MP;
+    let p = rho * t * KERG / MP;
+    let lambda = p / (rho * grav);
+    let grada = 0.4;
+    let gradl = 0.4;
+
+    // 1. `f1 <= 0` bare return (`turb/private/mlt.f90:140`): optically thin
+    //    Mihalas (`ff4 = 2`, tiny `omega` so `a0 < 2/9`) returns Ok with the
+    //    caller's no-mixing baseline (`turb_support.f90:283-288`, #330).
+    let thin_params = MltParams {
+        option: MltOption::Mihalas,
+        mixing_length_alpha: 1.0,
+        henyey_nu: 0.0,
+        henyey_y: 0.0,
+        max_conv_vel: 1.0e99,
+    };
+    let thin_inp = MltInputs {
+        chi_t: 1.0,
+        chi_rho: 1.0,
+        cp,
+        grav,
+        lambda: 1.0e-3,
+        rho: 1.0e-10,
+        p: 1.0,
+        t: 1.0e5,
+        opacity: 1.0e-3,
+        gradr: 0.4 + 1.0e-12,
+        grada,
+        gradl,
+    };
+    let thin_out = set_mlt(&thin_params, &thin_inp).unwrap();
+    assert_eq!(thin_out.gamma, 0.0);
+    assert_eq!(thin_out.grad_t, thin_inp.gradr);
+    assert_eq!(thin_out.y_face, thin_inp.gradr - thin_inp.gradl);
+    assert_eq!(thin_out.conv_vel, 0.0);
+    assert_eq!(thin_out.d, 0.0);
+    assert_eq!(thin_out.mixing_type, MixingType::NoMixing);
+
+    // 2. Zero `lambda` (`delta == 0`, `Bcubed == 0` with `gradr > gradl`) has
+    //    no non-upstream `delta <= 0` shortcut and never returns `Err` (#330):
+    //    it exits at `Gamma <= 0` (`mlt.f90:145`) or `is_bad(Zeta)`
+    //    (`mlt.f90:169`) with the caller's radiative `gradT` and `NoMixing`.
+    let zero_lam_inp = MltInputs {
+        chi_t: 1.0,
+        chi_rho: 1.0,
+        cp,
+        grav,
+        lambda: 0.0,
+        rho,
+        p,
+        t,
+        opacity: 1.0,
+        gradr: 0.45,
+        grada,
+        gradl,
+    };
+    let zero_lam_out = set_mlt(&MltParams::cox(2.0), &zero_lam_inp).unwrap();
+    assert_eq!(zero_lam_out.grad_t, zero_lam_inp.gradr);
+    assert_eq!(zero_lam_out.y_face, zero_lam_inp.gradr - zero_lam_inp.gradl);
+    assert_eq!(zero_lam_out.mixing_type, MixingType::NoMixing);
+
+    // 3. `set_tdc` calls `set_MLT('Cox', ...)` unconditionally even when
+    //    `include_mlt_corr_to_tdc = false` (`turb/public/turb.f90:142-145`),
+    //    and rejects `mixing_length_alpha == 0` or `dt <= 0`
+    //    (`turb/private/tdc.f90:65-67`).
+    let r = RSUN;
+    let m = MSUN;
+    let cgrav = STANDARD_CGRAV;
+    let g_sol = m * cgrav / pow2(r);
+    let hp = p / (rho * g_sol);
+    let gradr = 0.45;
+    let lum = 64.0 * PI * BOLTZ_SIGMA * pow4(t) * g_sol * pow2(r) * gradr
+        / (3.0 * p);
+    let base_tdc_params = TdcParams {
+        conv_vel_start: 1.0e4,
+        mixing_length_alpha: 2.0,
+        tdc_alpha_d: 1.0,
+        tdc_alpha_r: 0.0,
+        tdc_alpha_pt: 0.0,
+        tdc_alpha_c: 1.0,
+        tdc_alpha_s: 1.0,
+        dt: 1.0e4,
+        cgrav,
+        m,
+        scale: lum * 1.0e-3,
+        max_conv_vel: 1.0e99,
+        include_mlt_corr_to_tdc: false,
+        use_tdc_enthalpy_flux_limiter: false,
+    };
+    let base_tdc_inp = TdcInputs {
+        chi_t: 1.0,
+        chi_rho: 1.0,
+        gradr,
+        r,
+        p,
+        t,
+        rho,
+        dv: 0.0,
+        cp,
+        opacity: 1.0,
+        scale_height: hp,
+        gradl,
+        grada,
+        eq_div_w: 0.0,
+        grav: g_sol,
+        energy: 0.0,
+    };
+    let tdc_no_corr = set_tdc(&base_tdc_params, &base_tdc_inp).unwrap();
+    let cox_ref = set_mlt(
+        &MltParams::cox(2.0),
+        &MltInputs {
+            chi_t: 1.0,
+            chi_rho: 1.0,
+            cp,
+            grav: g_sol,
+            lambda: 2.0 * hp,
+            rho,
+            p,
+            t,
+            opacity: 1.0,
+            gradr,
+            grada,
+            gradl,
+        },
+    )
+    .unwrap();
+    assert_eq!(tdc_no_corr.output.gamma.to_bits(), cox_ref.gamma.to_bits());
+    assert!(tdc_no_corr.output.gamma > 0.0);
+
+    let zero_alpha_err = set_tdc(
+        &TdcParams {
+            mixing_length_alpha: 0.0,
+            ..base_tdc_params
+        },
+        &base_tdc_inp,
+    );
+    assert!(zero_alpha_err.is_err());
+
+    let bad_dt_err = set_tdc(
+        &TdcParams {
+            dt: 0.0,
+            ..base_tdc_params
+        },
+        &base_tdc_inp,
+    );
+    assert!(bad_dt_err.is_err());
+    let _ = lambda;
+}

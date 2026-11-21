@@ -32,6 +32,12 @@ def set_mlt(
 ) -> _types.TurbOutput:
     """Evaluate local Mixing-Length Theory (`calc_MLT` in `mlt.f90`).
 
+    Matches upstream `turb/private/mlt.f90:53-181`, where each bare `return`
+    (`f1 <= 0`, `Gamma <= 0`, `is_bad(Zeta)`) leaves unwritten outputs at the
+    caller's no-mixing baseline (`star/private/turb_support.f90:283-288`) with
+    `ierr = 0`. Explicit input validation on degenerate inputs is deferred to
+    `#330`.
+
     Args:
         params: Non-differentiable MLT configuration parameters (`MltParams`).
         inp: Thermodynamic and structure inputs (`MltInputs`) with `float` or
@@ -41,24 +47,7 @@ def set_mlt(
     Returns:
         `TurbOutput` containing `(gamma, grad_t, y_face, conv_vel, d,
         mixing_type)`.
-
-    Raises:
-        ValueError: If an intermediate quantity (`Zeta`) is `NaN` or `Inf`.
     """
-    if (
-        params.mixing_length_alpha <= 0.0
-        or not math.isfinite(params.mixing_length_alpha)
-        or _types.val_of(inp.t) <= 0.0
-        or _types.val_of(inp.rho) <= 0.0
-        or _types.val_of(inp.p) <= 0.0
-        or _types.val_of(inp.cp) <= 0.0
-        or _types.val_of(inp.opacity) <= 0.0
-        or not math.isfinite(_types.val_of(inp.gradr))
-        or not math.isfinite(_types.val_of(inp.gradl))
-        or not math.isfinite(_types.val_of(inp.grada))
-    ):
-        msg = "Invalid or non-positive thermodynamic input in set_mlt"
-        raise ValueError(msg)
     # Extract the twelve thermodynamic and structural state variables so that
     # pure-float evaluations can be dispatched directly to compiled Safe Rust
     # (`flexmesa._rust.set_mlt_f64`) while preserving forward-mode DualOrder1
@@ -163,13 +152,13 @@ def set_mlt(
             f0 = f if _types.val_of(f0_sq) <= 0.0 else _types.s_sqrt(f0_sq)
 
         # Cardano depressed cubic root for a0 * Gamma^3 + Gamma^2 + Gamma
-        # - a0 * B^3 = 0 (`set_MLT` in `turb/private/mlt.f90`).
+        # - a0 * B^3 = 0 (`calc_MLT` in `turb/private/mlt.f90:127-145`).
         f1_arg = f + f0
         if _types.val_of(f1_arg) <= 0.0:
             return _types.TurbOutput(
                 gamma=zero,
-                grad_t=zero,
-                y_face=zero,
+                grad_t=inp.gradr,
+                y_face=inp.gradr - inp.gradl,
                 conv_vel=zero,
                 d=zero,
                 mixing_type=_const.MixingType.NO_MIXING,
@@ -180,34 +169,61 @@ def set_mlt(
         if _types.val_of(gamma) <= 0.0:
             return _types.TurbOutput(
                 gamma=gamma,
-                grad_t=zero,
-                y_face=zero,
+                grad_t=inp.gradr,
+                y_face=inp.gradr - inp.gradl,
                 conv_vel=zero,
                 d=zero,
                 mixing_type=_const.MixingType.NO_MIXING,
             )
 
-        conv_vel = (
-            params.mixing_length_alpha
-            * _types.s_sqrt(q * inp.p / (8.0 * inp.rho))
-            * gamma
-            / a_val
-        )
+        if isinstance(a_val, float) and a_val == 0.0:
+            num_vc = (
+                params.mixing_length_alpha
+                * _types.s_sqrt(q * inp.p / (8.0 * inp.rho))
+                * gamma
+            )
+            num_vc_v = _types.val_of(num_vc)
+            conv_vel: _types.ScalarOrDual = (
+                math.nan
+                if num_vc_v == 0.0
+                else math.copysign(math.inf, num_vc_v)
+            )
+        else:
+            conv_vel = (
+                params.mixing_length_alpha
+                * _types.s_sqrt(q * inp.p / (8.0 * inp.rho))
+                * gamma
+                / a_val
+            )
         if _types.val_of(conv_vel) > params.max_conv_vel:
             conv_vel = _types.with_val_like(conv_vel, params.max_conv_vel)
         d = conv_vel * inp.lambda_ / 3.0
-        zeta = _types.s_exp(3.0 * _types.s_log(gamma) - _types.s_log(b_cubed))
+        if isinstance(b_cubed, float) and b_cubed <= 0.0:
+            zeta: _types.ScalarOrDual = math.inf if b_cubed == 0.0 else math.nan
+        else:
+            try:
+                zeta = _types.s_exp(
+                    3.0 * _types.s_log(gamma) - _types.s_log(b_cubed)
+                )
+            except OverflowError:
+                zeta = _types.const_like(proto, math.inf)
     else:
         gamma = _types.const_like(proto, -1.0e99)
         zeta = zero
         conv_vel = zero
         d = zero
 
-    # Validate that convective fraction Zeta = (Gamma / B)^3 is finite and
-    # clamp to [0, 1] before blending the radiative and Ledoux gradients.
+    # Bare `return` in `turb/private/mlt.f90:169` leaves `gradT`, `Y_face`, and
+    # `mixing_type` at the caller's no-mixing baseline (`#330`).
     if not math.isfinite(_types.val_of(zeta)):
-        msg = "NaN or Inf encountered in MLT Zeta"
-        raise ValueError(msg)
+        return _types.TurbOutput(
+            gamma=gamma,
+            grad_t=inp.gradr,
+            y_face=inp.gradr - inp.gradl,
+            conv_vel=conv_vel,
+            d=d,
+            mixing_type=_const.MixingType.NO_MIXING,
+        )
     if _types.val_of(zeta) > 1.0:
         zeta = one
 

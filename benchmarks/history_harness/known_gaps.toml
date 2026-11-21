@@ -852,12 +852,3 @@ issue = "#295"
 role = "physics_gap"
 expect_fail_when_run = true
 reason = "Rust eval_phase_separation_shift follows the MESA 26.4.1 Blouin fits (phase_separation.f90, #156); the frozen JAX twin keeps its earlier expression, so the shift differs by 0.017 to 0.089 in mass fraction against a bound of 1.0e-14."
-
-[[test_gaps]]
-kind = "python_xfail"
-file = "tests/test_bench.py"
-test_name = "test_wave1_turb_tdc_stages_agree"
-issue = "#295"
-role = "physics_gap"
-expect_fail_when_run = true
-reason = "Rust set_tdc carries the TDC root's partials through the Newton iteration as MESA 26.4.1 does (turb/private/tdc.f90:253-345, #321); the Python stages apply the implicit function theorem at the converged root, so the sensitivities differ by 6.5e-11 (4 zones) and 2.2e-9 (8 zones) against a bound of 1.0e-12."

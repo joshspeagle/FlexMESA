@@ -237,7 +237,13 @@
       "issues": []
     }
   ],
-  "open_pull_requests": [],
+  "open_pull_requests": [
+    {
+      "number": 334,
+      "title": "ci(dashboard): give dashboard and coverage Pages deployments distinct artifact names",
+      "draft": false
+    }
+  ],
   "deferred_169": [
     {
       "number": 175,

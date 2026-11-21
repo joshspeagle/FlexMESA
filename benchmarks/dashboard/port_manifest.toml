@@ -6763,9 +6763,14 @@ upstream_lines = 706
 upstream_sha256 = "ae8d77ffde6c7ea332188388cce48a3589fce1778001c09ca34e23058a4d9f59"
 status = "ported_unverified"
 flexmesa_files = ["crates/flexmesa-star/src/eps_mdot.rs"]
-notes = "seeded from coverage-map.md (ported): quick. 4/6 routine names, comparable size"
+notes = "translated statement by statement in real(qp) (#318). Not ported: the other_accreting_state hook, the RSP and RSP2 energy terms (explicit error), and storing mdot_acoustic_surface, mdot_adiabatic_surface and the after-adjust-mass energy totals on the model."
 [files.routine_map]
 "calculate_eps_mdot" = "crates/flexmesa-star/src/eps_mdot.rs::calculate_eps_mdot"
+"find_mass_flux" = "crates/flexmesa-star/src/eps_mdot.rs::calculate_eps_mdot"
+"interpolate_onto_faces" = "crates/flexmesa-star/src/eps_mdot.rs::interpolate_onto_faces"
+"set_leak_frac" = "crates/flexmesa-star/src/eps_mdot.rs::set_leak_frac"
+"leak_control" = "crates/flexmesa-star/src/eps_mdot.rs::leak_control"
+"leak" = "crates/flexmesa-star/src/eps_mdot.rs::leak"
 
 [[files]]
 upstream_path = "star/private/evolve.f90"
@@ -6977,8 +6982,18 @@ module = "star"
 upstream_lines = 594
 upstream_sha256 = "63cd54cdd99040ff5f742760cde585f2b56a3848836c01671a1e1cb617657b72"
 status = "partial"
-flexmesa_files = ["crates/flexmesa-star/src/core_boundaries.rs", "crates/flexmesa-star/src/eps_mdot.rs"]
-notes = "seeded from coverage-map.md (partial): quick. 2/9 names"
+flexmesa_files = ["crates/flexmesa-star/src/mass_utils.rs"]
+notes = "translated statement by statement in real(qp) (#317); used by eps_mdot.rs since #318. Status not yet raised from partial."
+[files.routine_map]
+"reconstruct_m" = "crates/flexmesa-star/src/mass_utils.rs::reconstruct_m"
+"reconstruct_xm" = "crates/flexmesa-star/src/mass_utils.rs::reconstruct_xm"
+"accurate_mass_difference" = "crates/flexmesa-star/src/mass_utils.rs::accurate_mass_difference"
+"make_compressed_intersect" = "crates/flexmesa-star/src/mass_utils.rs::make_compressed_intersect"
+"find_i_ranges" = "crates/flexmesa-star/src/mass_utils.rs::find_i_ranges"
+"prepare_pass_fraction" = "crates/flexmesa-star/src/mass_utils.rs::prepare_pass_fraction"
+"compute_pass_fraction" = "crates/flexmesa-star/src/mass_utils.rs::compute_pass_fraction"
+"find_j_ranges" = "crates/flexmesa-star/src/mass_utils.rs::find_j_ranges"
+"integrate_conserved" = "crates/flexmesa-star/src/mass_utils.rs::integrate_conserved"
 
 [[files]]
 upstream_path = "star/private/mesh_adjust.f90"

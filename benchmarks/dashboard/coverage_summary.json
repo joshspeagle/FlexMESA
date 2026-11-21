@@ -2,9 +2,9 @@
   "rust": {
     "tool": "cargo llvm-cov",
     "overall": {
-      "lines": 116133,
-      "covered": 87603,
-      "percent": 75.4
+      "lines": 116472,
+      "covered": 87943,
+      "percent": 75.5
     },
     "by_crate": [
       {
@@ -27,8 +27,8 @@
       },
       {
         "crate": "flexmesa-bench",
-        "lines": 3643,
-        "covered": 2435,
+        "lines": 3642,
+        "covered": 2434,
         "percent": 66.8
       },
       {
@@ -141,8 +141,8 @@
       },
       {
         "crate": "flexmesa-star",
-        "lines": 55358,
-        "covered": 41839,
+        "lines": 55357,
+        "covered": 41838,
         "percent": 75.6
       },
       {
@@ -153,9 +153,9 @@
       },
       {
         "crate": "flexmesa-turb",
-        "lines": 1093,
-        "covered": 903,
-        "percent": 82.6
+        "lines": 1434,
+        "covered": 1245,
+        "percent": 86.8
       },
       {
         "crate": "flexmesa-utils",
@@ -169,7 +169,7 @@
     "tool": "pytest --cov",
     "overall": {
       "statements": 26043,
-      "covered": 22804,
+      "covered": 22803,
       "percent": 87.6
     },
     "by_subpackage": [
@@ -320,7 +320,7 @@
       {
         "subpackage": "flexmesa.testing",
         "statements": 4112,
-        "covered": 3231,
+        "covered": 3230,
         "percent": 78.6
       },
       {

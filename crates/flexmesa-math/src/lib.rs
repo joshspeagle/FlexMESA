@@ -35,6 +35,7 @@ mod fast_ops;
 pub mod io;
 pub mod mode;
 pub mod pre_z;
+pub mod quad;
 pub mod trig;
 pub mod vector_eval;
 
@@ -48,6 +49,7 @@ pub use mode::{
     ParseNumericsModeError,
 };
 pub use pre_z::{pre_z, PrecompInt, MAX_PRECOMP_INTS};
+pub use quad::Quad;
 pub use trig::{
     acos, acosh, acospi, asin, asinh, asinpi, atan, atan2, atanh, atanpi, cos,
     cosh, cospi, sin, sin_cos, sinh, sinpi, tan, tanh, tanpi,

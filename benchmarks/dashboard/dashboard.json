@@ -21,7 +21,7 @@
         "verified_total": 4971,
         "pct_ported": 34.5,
         "pct_verified": 4.1,
-        "rust_lines": 83938,
+        "rust_lines": 83934,
         "python_jax_lines": 3869
       },
       {
@@ -191,7 +191,7 @@
         "verified_total": 0,
         "pct_ported": 66.5,
         "pct_verified": 0.0,
-        "rust_lines": 2261,
+        "rust_lines": 2787,
         "python_jax_lines": 2368
       },
       {
@@ -455,7 +455,7 @@
       "upstream_panel_modules": 46
     },
     "infrastructure_lines": {
-      "rust_bridge_testing_bench": 19425,
+      "rust_bridge_testing_bench": 19424,
       "python_testing_bench": 15460
     }
   },
@@ -1179,8 +1179,13 @@
         "issues": "#161"
       }
     ],
-    "python_xfail_or_skip_count": 8,
+    "python_xfail_or_skip_count": 9,
     "python_skips": [
+      {
+        "location": "tests/test_bench.py:102",
+        "reason": "pytest.mark.xfail( strict=True, reason=( \"#295: Rust set_tdc carries the root's partials through the Newton \" \"iteration as MESA 26.4.1 does (turb/private/tdc.f90:253-345, #321); \" \"the Python stages apply the implicit function theorem at the \" \"converged root.\" ), )",
+        "issues": "#295, #321"
+      },
       {
         "location": "tests/test_eos_wave3a3.py:200",
         "reason": "pytest.mark.xfail( strict=True, reason=( \"declared gap (#161): Rust strict PC and Skye derivatives differ \" \"from MESA 26.4.1 beyond the base tolerances (largest measured: \" \"pc_co_liq d_dlnT 7.1e-6, skye_co_liq d_dlnT 1.3e-6)\" ), )",
@@ -2512,6 +2517,19 @@
     {
       "date_utc": "2026-11-21",
       "commit": "3195d37",
+      "event": "main merge",
+      "engine_ported_pct": "30.2",
+      "all_verified_pct": "1.0",
+      "cases_passing": "0",
+      "rust_cov_pct": "75.4",
+      "python_cov_pct": "87.6",
+      "closed_140": "16",
+      "total_140": "36",
+      "deferred_169": "44"
+    },
+    {
+      "date_utc": "2026-11-21",
+      "commit": "5f955f5",
       "event": "main merge",
       "engine_ported_pct": "30.2",
       "all_verified_pct": "1.0",

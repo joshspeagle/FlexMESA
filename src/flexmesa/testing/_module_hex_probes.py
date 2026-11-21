@@ -23,6 +23,7 @@ from flexmesa import (
     interp_2d,
     ionization,
     kap,
+    net,
 )
 
 # Tuple: (expected_outputs, checked, zero_ulp_values, max_ulp, note).
@@ -1103,6 +1104,197 @@ def _probe_auto_diff(hex_root: pathlib.Path) -> ProbeOutcome:
     )
 
 
+def _net_test_composition(
+    net_name: str, iso_names: Sequence[str]
+) -> np.ndarray:
+    """Build upstream `net/test/src/test_net_support.f90` abundances."""
+    idx = {name: i for i, name in enumerate(iso_names)}
+    xin = np.zeros(len(iso_names), dtype=np.float64)
+    if net_name in ("basic.net", "pp_extras.net"):
+        xin[idx["h1"]] = float(np.float32(0.655186))
+        xin[idx["he4"]] = 0.31002164
+        xin[idx["c12"]] = 0.002725e-1
+        xin[idx["n14"]] = 0.203101e-1 + 0.612124e-6 + 0.109305e-2 + 0.356004e-4
+        xin[idx["o16"]] = 0.094000e-1
+        xin[idx["ne20"]] = 0.162163e-2
+        xin[idx["mg24"]] = 0.658226e-25
+        xin[idx["he3"]] = 0.201852e-2
+        if net_name == "pp_extras.net":
+            xin[idx["h2"]] = 0.632956e-17
+            xin[idx["li7"]] = 0.664160e-15
+            xin[idx["be7"]] = 0.103866e-15
+    elif net_name == "o18_and_ne22.net":
+        xin[idx["h1"]] = float(np.float32(0.655186))
+        xin[idx["he4"]] = 0.31002164
+        xin[idx["c12"]] = 0.002725e-1
+        xin[idx["n14"]] = 0.203101e-1 + 0.612124e-6 + 0.109305e-2
+        xin[idx["o16"]] = 0.094000e-1
+        xin[idx["o18"]] = 1.0e-20
+        xin[idx["ne20"]] = 0.162163e-2
+        xin[idx["mg24"]] = 0.658226e-25
+        xin[idx["ne22"]] = 0.201852e-2
+    elif net_name == "cno_extras.net":
+        xin[idx["h1"]] = 0.173891680788e-1
+        xin[idx["he4"]] = 0.963245225401
+        xin[idx["c12"]] = 0.238935745993e-3
+        xin[idx["n14"]] = 0.134050688300e-1
+        xin[idx["o16"]] = 0.268791618452e-3
+        xin[idx["ne20"]] = 0.180001692845e-2
+        xin[idx["mg24"]] = 0.353667702698e-2
+        xin[idx["c13"]] = 0.717642727071e-4
+        xin[idx["n13"]] = 0.370732258156e-9
+        xin[idx["n15"]] = 0.450484708137e-6
+        xin[idx["o14"]] = 0.100000000000e-49
+        xin[idx["o15"]] = 0.874815374966e-10
+        xin[idx["f17"]] = 0.100000000000e-49
+        xin[idx["f18"]] = 0.100000000000e-49
+        xin[idx["ne18"]] = 0.100000000000e-49
+        xin[idx["ne19"]] = 0.100000000000e-49
+        xin[idx["mg22"]] = 0.439011547696e-4
+    elif net_name in ("approx21.net", "approx21_plus_co56.net"):
+        xin[idx["fe56"]] = 8.0387021484318166e-1
+        xin[idx["fe54"]] = 1.6096648736760832e-1
+        xin[idx["cr56"]] = 2.9480945535920525e-2
+        xin[idx["he4"]] = 4.8624637161320565e-3
+        xin[idx["ni56"]] = 2.8376270731890360e-4
+        xin[idx["si28"]] = 1.5018628906135739e-4
+        xin[idx["s32"]] = 1.1613271635573457e-4
+        xin[idx["prot"]] = 1.1139431633673653e-4
+        xin[idx["ca40"]] = 5.3688377473494185e-5
+        xin[idx["ar36"]] = 5.2702831822567062e-5
+        xin[idx["fe52"]] = 3.7866504131935185e-5
+        xin[idx["cr48"]] = 5.8401123037667974e-6
+        xin[idx["neut"]] = 4.9141227703118397e-6
+        xin[idx["ti44"]] = 1.5085038561154746e-6
+        xin[idx["o16"]] = 9.5384019609049255e-7
+        xin[idx["mg24"]] = 6.3808207717725580e-7
+        xin[idx["c12"]] = 2.9048656673991868e-7
+        xin[idx["ne20"]] = 9.6468865023609427e-9
+        xin[idx["he3"]] = 4.6203603862263096e-80
+        xin[idx["n14"]] = 7.5867472225841235e-99
+    elif net_name == "approx21_cr60_plus_co56.net":
+        xin[idx["he4"]] = 3.4555392534813939e-1
+        xin[idx["o16"]] = 1.9367778420430937e-1
+        xin[idx["h1"]] = 1.9052931367172501e-1
+        xin[idx["si28"]] = 9.1023936032064601e-2
+        xin[idx["ni56"]] = 5.8492459653295005e-2
+        xin[idx["s32"]] = 4.1416642476999908e-2
+        xin[idx["ne20"]] = 2.0927782332477558e-2
+        xin[idx["c12"]] = 2.0589617104448312e-2
+        xin[idx["mg24"]] = 1.8975914108406104e-2
+        xin[idx["ar36"]] = 7.0600338785939956e-3
+        xin[idx["ca40"]] = 4.9182171981353726e-3
+        xin[idx["fe52"]] = 3.1618820806005280e-3
+        xin[idx["n14"]] = 1.9878460082760952e-3
+        xin[idx["fe56"]] = 7.1668776621130190e-4
+        xin[idx["co56"]] = 4.4974971099921181e-4
+        xin[idx["fe54"]] = 3.3432423890988422e-4
+        xin[idx["cr48"]] = 1.7602626907769762e-4
+        xin[idx["he3"]] = 5.1650097191631545e-6
+        xin[idx["ti44"]] = 2.6452422203389906e-6
+        xin[idx["cr60"]] = 4.7653353095937982e-8
+        xin[idx["prot"]] = 1.2739022407246250e-11
+        xin[idx["neut"]] = 0.0
+    else:
+        raise ValueError(f"Unsupported net probe network: {net_name}")
+    xin = np.where(xin < 1.0e-99, 1.0e-99, xin)
+    xin[idx["mg24"]] += 1.0 - float(np.sum(xin))
+    return xin
+
+
+def _probe_net(hex_root: pathlib.Path) -> ProbeOutcome:
+    rows = load_tsv_rows(hex_root, "net")
+    cat_map = {chem.category_name(c): c - 1 for c in range(1, 25)}
+    blocks: tuple[tuple[str, int, int], ...] = (
+        ("basic.net", 0, 10),
+        ("o18_and_ne22.net", 10, 20),
+        ("pp_extras.net", 20, 30),
+        ("cno_extras.net", 30, 40),
+        ("approx21.net", 40, 84),
+        ("approx21_plus_co56.net", 84, 126),
+        ("approx21_cr60_plus_co56.net", 126, 130),
+    )
+    ulps: list[int] = []
+    for net_name, start, end in blocks:
+        info = net.get_net_info(net_name)
+        xin = _net_test_composition(net_name, info.iso_names)
+        comp = chem.composition_info(list(info.chem_id), xin, backend="rust")
+        lt = raw_hex_to_float64(rows[start]["raw_bits_hex"])
+        lr = raw_hex_to_float64(rows[start + 1]["raw_bits_hex"])
+        if net_name == "approx21_cr60_plus_co56.net":
+            # `test_net_do_one.f90:89-102` sets T,Rho from 9.6,6.0 first.
+            temp = float(_rust.exp10(9.6))
+            rho = float(_rust.exp10(6.0))
+            eta = -22.590260158215202
+        else:
+            temp = float(_rust.exp10(lt))
+            rho = float(_rust.exp10(lr))
+            eta = 0.0
+        out = _rust.net_eval(
+            net_name,
+            xin,
+            temp,
+            lt,
+            rho,
+            lr,
+            comp.abar,
+            comp.zbar,
+            comp.z2bar,
+            comp.ye,
+            eta,
+            0.0,
+            0.0,
+            None,
+            1.0,
+            "extended",
+            False,
+        )
+        eps_nuc, deps_dr, deps_dt = out[0], out[1], out[2]
+        cats, rate_raw = out[8], out[10]
+        if net_name == "approx21_cr60_plus_co56.net":
+            rxn_map = {name: j for j, name in enumerate(info.reaction_names)}
+            for off_idx, rxn_name in (
+                (start + 2, "rco56ec_to_fe56"),
+                (start + 3, "rni56ec_to_co56"),
+            ):
+                ulps.append(
+                    ulp_distance(
+                        float(rate_raw[rxn_map[rxn_name]]),
+                        rows[off_idx]["raw_bits_hex"],
+                    )
+                )
+            continue
+        vals = (
+            float(_rust.log10(eps_nuc)),
+            float(eps_nuc),
+            float(deps_dt * temp / eps_nuc),
+            float(deps_dr * rho / eps_nuc),
+        )
+        ref_slice = rows[start + 2 : end]
+        for j in range(4):
+            ulps.append(ulp_distance(vals[j], ref_slice[j]["raw_bits_hex"]))
+        for k in range(4, len(ref_slice), 2):
+            cname = ref_slice[k]["label"].strip()
+            cval = float(cats[cat_map[cname]])
+            ulps.append(
+                ulp_distance(
+                    float(_rust.log10(cval)), ref_slice[k]["raw_bits_hex"]
+                )
+            )
+            ulps.append(ulp_distance(cval, ref_slice[k + 1]["raw_bits_hex"]))
+    checked, zeros, max_u = _summarize_ulps(ulps)
+    return (
+        124,
+        checked,
+        zeros,
+        max_u,
+        (
+            f"{zeros}/{checked} net_get outputs at 0 ULP across 7 networks "
+            f"(max_ulp={max_u}); 8 one-zone burn rows remain unchecked."
+        ),
+    )
+
+
 MODULE_PROBES: dict[str, ProbeFn] = {
     "const": _probe_const,
     "binary": _probe_binary,
@@ -1119,4 +1311,5 @@ MODULE_PROBES: dict[str, ProbeFn] = {
     "neu": _probe_neu,
     "rates": _probe_rates,
     "atm": _probe_atm,
+    "net": _probe_net,
 }

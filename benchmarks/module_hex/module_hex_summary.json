@@ -3,10 +3,10 @@
   "total_packages_in_install": 26,
   "packages_with_test_dir": 25,
   "total_exact_values_captured": 348321,
-  "modules_with_executable_probes": 15,
+  "modules_with_executable_probes": 16,
   "modules_passing_0_ulp": 5,
-  "total_values_checked": 304635,
-  "total_values_0_ulp": 304567,
+  "total_values_checked": 304751,
+  "total_values_0_ulp": 304622,
   "modules": [
     {
       "module": "const",
@@ -175,14 +175,14 @@
     },
     {
       "module": "net",
-      "status": "unported_hex_harness",
+      "status": "nonzero_ulp",
       "upstream_exact_values": 140,
-      "expected_outputs": 140,
-      "checked_values": 0,
-      "zero_ulp_values": 0,
-      "max_ulp": 0,
+      "expected_outputs": 124,
+      "checked_values": 116,
+      "zero_ulp_values": 55,
+      "max_ulp": 66,
       "issue": "#161",
-      "notes": "140 upstream nuclear reaction network burn printouts await direct TSV harness mapping."
+      "notes": "55/116 net_get outputs at 0 ULP across 7 networks (max_ulp=66); 8 one-zone burn rows remain unchecked."
     },
     {
       "module": "ionization",

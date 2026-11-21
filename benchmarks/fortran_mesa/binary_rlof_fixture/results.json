@@ -32,7 +32,7 @@
       "step1_age_yr": 125.0,
       "step1_rl_relative_overflow_1": -0.004906112169127044,
       "step1_lg_mtransfer_rate": -98.99999999999999,
-      "step1_retries_logged": 1,
+      "step1_retries_logged": 3,
       "solver_retries_reported": 24,
       "give_up_in_solver_count": 17,
       "hydro_mtx_bound_retry_count": 7,

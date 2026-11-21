@@ -243,8 +243,11 @@ pub use eps_mdot::{
     find_mass_flux,
 };
 pub use evolve::{
-    EvolveStepReport, restore_from_old, star_evolve, star_evolve_step,
-    star_evolve_step_with_extras,
+    EvolveStepReport, StarPickTimestepOutcome, StarStepAttemptOutcome,
+    StarStepConverged, StarStepPart1State, restore_from_old, star_evolve,
+    star_evolve_step, star_evolve_step_part1, star_evolve_step_part2,
+    star_evolve_step_with_extras, star_finalize_terminated_step,
+    star_pick_next_timestep_after_step,
 };
 pub use evolve_support::{
     apply_step_pre_physics, eval_total_energy_integrals, relax_uniform_omega,

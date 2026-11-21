@@ -10,11 +10,12 @@
 use std::cell::RefCell;
 
 use flexmesa_const::{MSUN, RSUN, SECYER};
-use flexmesa_star::inlist_runner::StarExtras;
+use flexmesa_star::inlist_runner::{DefaultStarExtras, StarExtras};
 use flexmesa_star::winds::do_set_mdot_with_extras;
 use flexmesa_star::{
     EvolveStepReport, PrimaryStateBuffer, StarError, StarModel,
-    eval_photosphere_info, star_evolve_step,
+    StarStepAttemptOutcome, eval_photosphere_info, star_evolve_step,
+    star_evolve_step_part1, star_evolve_step_part2,
 };
 
 use crate::edd_wind::{
@@ -874,6 +875,53 @@ pub fn star_exceeds_delta_mdot_hard_limit(star: &StarModel) -> bool {
     let denom = mw.delta_mdot_atol.max(0.0) * (MSUN / SECYER)
         + mw.delta_mdot_rtol.max(0.0) * mdot.abs().max(mdot_old.abs());
     denom > 0.0 && (mdot - mdot_old).abs() / denom > hard_lim
+}
+
+/// Advances a single [`StarModel`] through ONE non-looping
+/// `star_evolve_step_part1` + `star_evolve_step_part2` attempt at trial
+/// timestep `dt_try` (s) (`binary/private/run_binary_support.f90:456, 503`,
+/// `star/private/evolve.f90:282-730`), returning
+/// [`StarStepAttemptOutcome::Retry`] directly to the coupled binary outer
+/// loop on solver failure rather than swallowing retries internally.
+pub fn evolve_single_star_attempt(
+    star: &mut StarModel,
+    dt_try: f64,
+    first_try: bool,
+    allow_remesh: bool,
+) -> Result<StarStepAttemptOutcome, StarError> {
+    let saved_age_limits = (
+        std::mem::replace(&mut star.controls.max_age, 1.0e36),
+        star.controls.max_age_in_seconds.take(),
+        std::mem::replace(&mut star.controls.ts_stop.max_age_in_days, -1.0),
+    );
+    let saved_other_wind =
+        std::mem::replace(&mut star.controls.use_other_wind, false);
+    star.dt = dt_try;
+    star.dt_next = dt_try;
+    let do_remesh = allow_remesh
+        && star.controls.okay_to_remesh
+        && star.controls.mesh_delta_coeff > 0.0
+        && dt_try >= star.controls.mix_wind.remesh_dt_limit;
+    let op_split = star.controls.op_split_burn;
+    let mut extras = DefaultStarExtras;
+    let res = star_evolve_step_part1(star, first_try, do_remesh, &mut extras)
+        .and_then(|part1| {
+            star_evolve_step_part2(
+                star,
+                part1,
+                first_try,
+                op_split,
+                true,
+                &mut extras,
+            )
+        });
+    star.controls.use_other_wind = saved_other_wind;
+    (
+        star.controls.max_age,
+        star.controls.max_age_in_seconds,
+        star.controls.ts_stop.max_age_in_days,
+    ) = saved_age_limits;
+    res
 }
 
 /// Advances a single [`StarModel`] through `star_evolve_step` at trial timestep

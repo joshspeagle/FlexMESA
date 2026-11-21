@@ -55,7 +55,7 @@ fn advance_binary_steps_four_to_six(sys: &mut BinarySystem) {
 fn run_child_star(in_path: &Path, out_path: &Path) {
     let bytes = fs::read(in_path).expect("child read star .photo");
     let mut model = load_photo_bytes(&bytes).expect("child load_photo_bytes");
-    assert_eq!(model.model_number, 4);
+    assert_eq!(model.model_number, 3);
     assert_eq!(
         model.controls.mixing_length_alpha.to_bits(),
         1.93_f64.to_bits()
@@ -67,12 +67,12 @@ fn run_child_star(in_path: &Path, out_path: &Path) {
     assert!(model.job.set_initial_age);
     assert_eq!(model.job.initial_age.to_bits(), 125.0_f64.to_bits());
 
-    for step in 5..=7 {
+    for step in 4..=6 {
         let rep = star_evolve_step(&mut model, true, true, true)
             .unwrap_or_else(|e| panic!("child star step {step} failed: {e}"));
         assert!(rep.converged, "child star step {step} did not converge");
     }
-    assert_eq!(model.model_number, 7);
+    assert_eq!(model.model_number, 6);
     fs::write(out_path, write_photo_bytes(&model))
         .expect("child write star output .photo");
 }

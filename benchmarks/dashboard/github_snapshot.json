@@ -237,13 +237,7 @@
       "issues": []
     }
   ],
-  "open_pull_requests": [
-    {
-      "number": 317,
-      "title": "feat(star): translate mass_utils.f90 in real(qp) (not yet wired into eps_mdot)",
-      "draft": false
-    }
-  ],
+  "open_pull_requests": [],
   "deferred_169": [
     {
       "number": 175,

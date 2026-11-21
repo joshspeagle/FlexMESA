@@ -29,8 +29,10 @@ const CAT_BURN_FE: usize = 15;
 const CAT_CC: usize = 16;
 const CAT_CO: usize = 17;
 const CAT_OO: usize = 18;
-const CAT_PHOTO: usize = 19;
-const CAT_PNHE4: usize = 20;
+// Upstream `chem/public/chem_def.f90:437-439`: `ipnhe4 = 20`, `iphoto = 21`
+// (0-based indices `19` and `20`).
+const CAT_PNHE4: usize = 19;
+const CAT_PHOTO: usize = 20;
 const CAT_NI56_CO56: usize = 21;
 const CAT_CO56_FE56: usize = 22;
 const CAT_OTHER: usize = 23;

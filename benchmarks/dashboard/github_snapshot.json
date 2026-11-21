@@ -242,6 +242,11 @@
       "number": 334,
       "title": "ci(dashboard): give dashboard and coverage Pages deployments distinct artifact names",
       "draft": false
+    },
+    {
+      "number": 338,
+      "title": "fix(turb): group the set_tdc products as turb.f90 and tdc_support.f90 do (#337)",
+      "draft": false
     }
   ],
   "deferred_169": [
@@ -594,6 +599,14 @@
       "title": "[Deferred enhancement] calc_MLT: series for the cubic root near marginal convection",
       "state": "open",
       "kind": "enhancement",
+      "parity_pending": false,
+      "needs_confirmation": false
+    },
+    {
+      "number": 330,
+      "title": "[Deferred bug] calc_MLT never assigns its ierr output, and its bare returns leave other outputs unassigned",
+      "state": "open",
+      "kind": "upstream-bug",
       "parity_pending": false,
       "needs_confirmation": false
     }

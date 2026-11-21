@@ -21,7 +21,7 @@
         "verified_total": 4971,
         "pct_ported": 34.5,
         "pct_verified": 4.1,
-        "rust_lines": 84049,
+        "rust_lines": 84120,
         "python_jax_lines": 3869
       },
       {
@@ -72,7 +72,7 @@
         "verified_total": 0,
         "pct_ported": 0.0,
         "pct_verified": 0.0,
-        "rust_lines": 5764,
+        "rust_lines": 5994,
         "python_jax_lines": 1288
       },
       {
@@ -259,7 +259,7 @@
         "verified_total": 0,
         "pct_ported": 0.0,
         "pct_verified": 0.0,
-        "rust_lines": 4644,
+        "rust_lines": 4647,
         "python_jax_lines": 3587
       },
       {
@@ -1473,6 +1473,11 @@
         "number": 334,
         "title": "ci(dashboard): give dashboard and coverage Pages deployments distinct artifact names",
         "draft": false
+      },
+      {
+        "number": 338,
+        "title": "fix(turb): group the set_tdc products as turb.f90 and tdc_support.f90 do (#337)",
+        "draft": false
       }
     ],
     "deferred_169": [
@@ -1825,6 +1830,14 @@
         "title": "[Deferred enhancement] calc_MLT: series for the cubic root near marginal convection",
         "state": "open",
         "kind": "enhancement",
+        "parity_pending": false,
+        "needs_confirmation": false
+      },
+      {
+        "number": 330,
+        "title": "[Deferred bug] calc_MLT never assigns its ierr output, and its bare returns leave other outputs unassigned",
+        "state": "open",
+        "kind": "upstream-bug",
         "parity_pending": false,
         "needs_confirmation": false
       }
@@ -2610,6 +2623,19 @@
       "closed_140": "16",
       "total_140": "36",
       "deferred_169": "44"
+    },
+    {
+      "date_utc": "2026-11-21",
+      "commit": "d1fe407",
+      "event": "main merge",
+      "engine_ported_pct": "30.2",
+      "all_verified_pct": "1.0",
+      "cases_passing": "0",
+      "rust_cov_pct": "75.5",
+      "python_cov_pct": "87.6",
+      "closed_140": "16",
+      "total_140": "36",
+      "deferred_169": "45"
     }
   ]
 }

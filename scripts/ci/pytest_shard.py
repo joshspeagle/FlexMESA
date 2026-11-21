@@ -23,12 +23,11 @@ import pathlib
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]
 DURATIONS_PATH = pathlib.Path(__file__).with_name("pytest_durations.json")
 DEFAULT_SECONDS = 10.0
-# Files run by other CI jobs (`ci.yml`: docs, history-harness and e2e jobs).
+# Files run by other CI jobs (`ci.yml`: docs and history-harness jobs).
 IGNORED_GLOBS = (
     "tests/test_docs_snippets.py",
     "tests/test_mesa_paper_figures.py",
     "tests/test_history_harness.py",
-    "tests/test_e2e_*.py",
 )
 
 

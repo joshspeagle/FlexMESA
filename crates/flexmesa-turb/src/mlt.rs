@@ -204,6 +204,9 @@ pub fn set_mlt<T: TurbScalar>(
             }
         };
 
+        // The closed form is used for every `delta > 0`, as upstream does
+        // (`turb/private/mlt.f90:132-151`); a small-`delta` series is a
+        // deferred enhancement (#322).
         // Solve cubic efficiency equation:
         // a0 * Gamma^3 + Gamma^2 + Gamma - a0 * B^3 = 0, with delta = a0 * B^3.
         let b_cubed = (a_val.pow2() / a0) * (inp.gradr - inp.gradl);
@@ -217,16 +220,6 @@ pub fn set_mlt<T: TurbScalar>(
                 d: zero,
                 mixing_type: MixingType::NoMixing,
             });
-        } else if delta.val() <= 1.0e-6 {
-            // Exact 3-term small-delta cubic expansion:
-            // Gamma(delta) = delta * (1 - delta + (2 - a0) * delta^2) + O(delta^4),
-            // Zeta(delta) = Gamma^3 / B^3 = a0 * delta^2 * (Gamma / delta)^3,
-            // avoiding Cardano cube-root cancellation below delta ~ 1e-11 while
-            // preserving smooth DualOrder1 tangents across all efficiency A.
-            let poly = one - delta + (T::from_f64(2.0) - a0) * delta.pow2();
-            let g = delta * poly;
-            let z = a0 * delta.pow2() * poly * poly.pow2();
-            (g, z)
         } else {
             let f = T::from_f64(-2.0)
                 + T::from_f64(9.0) * a0

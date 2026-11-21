@@ -124,6 +124,7 @@ jobs:
             --work-dir "$OUT_DIR/logs" \
             --markdown-out "$OUT_DIR/case_table.md" \
             --json-out "$OUT_DIR/case_table.json" \
+            --save-baseline "$OUT_DIR/baseline_candidate.json" \
             --gate
 
       - name: Upload full campaign harness artifacts

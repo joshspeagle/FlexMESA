@@ -6,6 +6,7 @@ from __future__ import annotations
 import jax
 import jax.numpy as jnp
 import numpy as np
+import pytest
 
 from flexmesa import constants, star
 
@@ -79,6 +80,29 @@ def test_star_mod_and_photo_self_roundtrip() -> None:
     np.testing.assert_array_equal(from_photo.xa, model.xa)
 
 
+@pytest.mark.xfail(
+    strict=True,
+    reason=(
+        "#295: Rust computes the face radiation pressure from the face "
+        "temperature (#291); the frozen JAX twin still interpolates it "
+        "from the two cell values."
+    ),
+)
+def test_star_jax_face_gradr_and_gradt_match_rust() -> None:
+    """Compare frozen JAX face `gradr` and `gradt` with Rust on a ZAMS model.
+
+    The bounds are the ones the combined grid-and-MLT test used before `#291`;
+    the measured maximum relative differences are `3.8e-4` (`gradr`) and
+    `3.2e-4` (`gradt` from zone 200 inward).
+    """
+    model = star.StarModel.from_zams(initial_mass=4.0, initial_z=0.02)
+    mlt_jax = model.eval_face_mlt_jax()
+    np.testing.assert_allclose(mlt_jax["gradr"], model.gradr, rtol=1.0e-12)
+    np.testing.assert_allclose(
+        mlt_jax["gradt"][200:], model.gradt[200:], rtol=1.0e-6
+    )
+
+
 def test_star_jax_grid_and_face_mlt_match_rust_and_differentiate() -> None:
     """Verify JAX staggered grid, optical depth, and face MLT match Rust."""
     model = star.StarModel.from_zams(initial_mass=4.0, initial_z=0.02)
@@ -113,14 +137,9 @@ def test_star_jax_grid_and_face_mlt_match_rust_and_differentiate() -> None:
     np.testing.assert_allclose(
         mlt_jax["scale_height"], model.scale_height, rtol=1.0e-12
     )
-    np.testing.assert_allclose(mlt_jax["gradr"], model.gradr, rtol=1.0e-12)
     np.testing.assert_allclose(mlt_jax["gradl"], model.gradl, rtol=1.0e-12)
     np.testing.assert_allclose(
         mlt_jax["brunt_b"], model.brunt_b, rtol=1.0e-11, atol=1.0e-14
-    )
-    # Interior zones match closely between JAX and Safe Rust
-    np.testing.assert_allclose(
-        mlt_jax["gradt"][200:], model.gradt[200:], rtol=1.0e-6
     )
 
     # Verify JAX forward-mode AD through `eval_face_mlt_and_brunt_jax`

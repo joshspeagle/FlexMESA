@@ -31,6 +31,10 @@ import numpy.typing as npt
 from flexmesa import _rust, star
 from flexmesa.bench import harness as _h
 
+MIN_EVOLVE_STEP_ZONES = 64
+"""Smallest grid on which `bench_star_evolve_step` runs (mirrors the Rust
+constant of the same name in `crates/flexmesa-bench/src/kernels_wave4.rs`)."""
+
 type _ArrF64 = npt.NDArray[np.float64]
 
 
@@ -501,8 +505,13 @@ def bench_star_remesh(
 def bench_star_evolve_step(
     nz: int, n_warmup: int = 2, n_repeats: int = 7
 ) -> _h.BenchRecord:
-    """Benchmark full structure + burn + mix step (`star_evolve_step`)."""
-    base = make_wave4_zams_model(nz)
+    """Benchmark full structure + burn + mix step (`star_evolve_step`).
+
+    The kernel runs on at least `MIN_EVOLVE_STEP_ZONES` zones: the resampled
+    ZAMS fixture is too far from equilibrium on coarser grids to take a step
+    at the model's own timestep.
+    """
+    base = make_wave4_zams_model(max(nz, MIN_EVOLVE_STEP_ZONES))
     dt = float(base.dt)
     base.evolve_step(do_remesh=False, op_split_burn=False, use_bcyclic=True)
     base.dt = dt

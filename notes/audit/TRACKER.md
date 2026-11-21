@@ -43,6 +43,7 @@ week or more.
 | C15 | #166 | JAX contract: derived, differentiable and batched; validated against Rust strict mode | N1-23 to N1-27, T1-11 | C14 | M |
 | C16 | #220 | Level-2 exact-hex probes for the remaining `math` and `auto_diff` values | none (module-hex gate; opened after #166 closed) | C14 | S to M |
 | C17 | #231 | Port the remaining upstream per-case extras to test-side hooks | none (split out of #148; `DECISIONS #32`) | B1 (order from #147) | L |
+| C18 | #295 | Rust-versus-JAX consistency tests expected to fail while the JAX engine is frozen (tracking register) | none (opened under the project lead's ruling of 2026-11-20) | C15 | S |
 | A6 | #168 | Profile a real evolution; measure fast math, batching and waste removal | N1-9, N1-17, N1-18, G1-5 | none; B4 and C14 for later parts | S to M |
 | D1 | #170 | Port GYRE | F3-15, F3-16 | A0, A2, C14, C1 to C3 | L |
 | D2 | #171 | Port ADIPLS | F3-15 | A0, A2, C14, C11 | L |

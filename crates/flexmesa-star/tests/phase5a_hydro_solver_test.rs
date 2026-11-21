@@ -213,6 +213,9 @@ fn assert_tridiagonal_jacobian_matches_fd(
                 eval_henyey_equations(&mut m, include_chem).expect("hydro fd")
             };
             let (sys_p, sys_m) = (perturb_h(1.0), perturb_h(-1.0));
+            // A second central difference at half the step measures how far
+            // the finite difference itself can be trusted for this entry.
+            let (half_plus, half_minus) = (perturb_h(0.5), perturb_h(-0.5));
             for k_equ in 0..nz {
                 if k_equ.abs_diff(k_var) > 1 {
                     continue;
@@ -229,8 +232,19 @@ fn assert_tridiagonal_jacobian_matches_fd(
                     } else {
                         rel_tol
                     };
-                    let eff_atol =
-                        abs_tol.max(2.0 * f64::EPSILON * eq0 / eps_scaled);
+                    // The two step sizes differ by the truncation error
+                    // the full step carries beyond the half step (3/4 of
+                    // it for a smooth residual) plus any evaluation noise,
+                    // so twice their difference bounds the error of `fd`.
+                    // The analytic entry cannot be checked more tightly
+                    // than the reference it is compared with.
+                    let fd_half = (half_plus.equ[k_equ * nvar + i_equ]
+                        - half_minus.equ[k_equ * nvar + i_equ])
+                        / eps_scaled;
+                    let fd_uncertainty = 2.0 * (fd - fd_half).abs();
+                    let eff_atol = abs_tol
+                        .max(2.0 * f64::EPSILON * eq0 / eps_scaled)
+                        + fd_uncertainty;
                     assert_entry_matches(
                         &format!(
                             "hydro k_equ={k_equ} i_equ={i_equ} k_var={k_var} j_var={j_var}"

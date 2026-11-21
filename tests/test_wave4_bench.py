@@ -37,14 +37,25 @@ from flexmesa import bench, star
 # `k = 2` convective singleton on the coarse `N = 8` grid to radiative, and
 # `star_hydro_eqns`, `star_newton_step`, and `star_evolve_step` shifted under
 # #152 when `set_xscale_info` and Newton step/equilibration semantics were
-# aligned to MESA 26.4.1 (`DECISIONS #42`); tracked in #146).
+# aligned to MESA 26.4.1 (`DECISIONS #42`), and `star_micro_vars`
+# (2.500111893102388e2 -> 2.499330102887365e2), `star_hydro_eqns`
+# (4.243485684423328e6 -> 4.262783875690212e6) and `star_newton_step`
+# (6.383773435545090 -> 2.210834731068863e5) shifted under #291 when the
+# face radiation pressure in `do1_mlt_2` was changed to `crad*T_face^4/3`
+# (`star_utils.f90:3838-3843`). Under #291 `star_evolve_step` also moved from
+# the 8-zone grid (1.005928065548472e2) to `MIN_EVOLVE_STEP_ZONES = 64` zones
+# (8.895997453722753e2), because the 8-zone fixture no longer converges at
+# the model's timestep; tracked in #146).
 _WAVE4_REGRESSION_SNAPSHOTS_N8: dict[str, float] = {
-    "star_micro_vars": 2.500111893102388e2,
-    "star_hydro_eqns": 4.243485684423328e6,
-    "star_newton_step": 6.383773435545090,
+    "star_micro_vars": 2.499330102887365e2,
+    "star_hydro_eqns": 4.262783875690212e6,
+    "star_newton_step": 2.210834731068863e5,
     "star_remesh": 5.513777703025969e2,
-    "star_evolve_step": 1.005928065548472e2,
+    "star_evolve_step": 8.895997453722753e2,
 }
+
+# Bound on the cross-stage (Rust against JAX) relative difference.
+_WAVE4_CROSS_STAGE_BOUND = 1.0e-10
 
 _STAR_TEST_HISTORY = (
     pathlib.Path(__file__).resolve().parent
@@ -102,12 +113,17 @@ def test_wave4_bench_kernels_return_positive_throughput() -> None:
     workloads = {r.workload for r in records}
     assert workloads == set(_WAVE4_REGRESSION_SNAPSHOTS_N8)
     for rec in records:
-        assert rec.n_zones == 8
+        if rec.workload == "star_evolve_step":
+            assert rec.n_zones == bench.kernels_wave4.MIN_EVOLVE_STEP_ZONES
+        else:
+            assert rec.n_zones == 8
         assert rec.stage0.median_us > 0.0
         assert rec.stage1.median_us > 0.0
         assert rec.stage2.median_us > 0.0
         assert rec.stage3.median_us > 0.0
-        assert rec.max_rel_err < 1.0e-10
+        if rec.workload != "star_micro_vars":
+            # `star_micro_vars` is checked on its own below (#295).
+            assert rec.max_rel_err < _WAVE4_CROSS_STAGE_BOUND
         assert np.isfinite(rec.checksum)
         snap = _WAVE4_REGRESSION_SNAPSHOTS_N8[rec.workload]
         rel_err = abs(rec.checksum - snap) / abs(snap)
@@ -115,6 +131,21 @@ def test_wave4_bench_kernels_return_positive_throughput() -> None:
             f"{rec.workload} (N=8) regression snapshot {rec.checksum:.15e} "
             f"!= {snap:.15e} (rel {rel_err:.3e})"
         )
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason=(
+        "#295: Rust do1_mlt_2 takes the face radiation pressure from the "
+        "face temperature (MESA 26.4.1 star_utils.f90:3838-3843, #291); "
+        "the frozen JAX face-MLT twin still interpolates the cell values "
+        "(measured max_rel_err 8.9e-3)."
+    ),
+)
+def test_wave4_star_micro_vars_rust_matches_frozen_jax() -> None:
+    """`star_micro_vars` Rust and JAX stages agree to the cross-stage bound."""
+    rec = bench.bench_star_micro_vars(8, n_warmup=1, n_repeats=3)
+    assert rec.max_rel_err < _WAVE4_CROSS_STAGE_BOUND
 
 
 def test_zams_catalog_masses_initialize_without_error() -> None:

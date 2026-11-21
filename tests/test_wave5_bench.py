@@ -9,10 +9,11 @@ Checks that:
 2. JAX validated against Rust strict at tolerance `< 1.0e-12` at `n_zones = 8`
    and `< 2.0e-14` at `n_zones = 128` for `w5_binary_rlof` and
    `w5_astero_seism`, `< 5.0e-12` (`n_zones = 8`) / `< 5.0e-11`
-   (`n_zones = 128`) near the `s ~ 0.435` zero crossing of `w5_riemann_rsp2`,
-   and `< 5.0e-4` for `w5_diff_rot` (where Rust `eval_caplan_ocp_dstar` matches
-   MESA `26.4.1` `get_Dstar_OCP` under `#156` while `src/flexmesa/star/`
-   remains frozen under `#166`).
+   (`n_zones = 128`) near the `s ~ 0.435` zero crossing of `w5_riemann_rsp2`.
+   `w5_diff_rot` keeps the `1.0e-12` / `2.0e-14` bounds in a separate test
+   that is expected to fail (`#295`): Rust `eval_caplan_ocp_dstar` follows
+   MESA `26.4.1` `get_Dstar_OCP` (`#156`) while the frozen JAX twin keeps
+   its earlier fit.
 3. At `n_zones = 8` and `n_zones = 128`, outputs match self-generated FlexMESA
    regression snapshots (not upstream MESA outputs; `w5_diff_rot` shifted in
    `642da54` from `3.082380424983001e5` to `2.551374595308515e3` at `N=8` and
@@ -24,6 +25,7 @@ Checks that:
 from __future__ import annotations
 
 import numpy as np
+import pytest
 
 from flexmesa import bench
 
@@ -43,13 +45,8 @@ def test_wave5_bench_kernels_match_snapshots() -> None:
         if rec.workload == "w5_riemann_rsp2":
             assert rec.max_rel_err < (5.0e-12 if rec.n_zones == 8 else 5.0e-11)
         elif rec.workload == "w5_diff_rot":
-            # Rust `eval_caplan_ocp_dstar` matches MESA 26.4.1 `get_Dstar_OCP`
-            # (`diffusion_support.f90:1716-1743`, #156), while the frozen #166
-            # prototype `eval_caplan_ocp_dstar_jax` in `jax_diffusion_rot.py`
-            # retains its pre-#156 placeholder fit (`1.22 + 0.405 * kap**1.77`).
-            # That frozen-JAX delta produces a measured max_rel_err of ~5.4e-5
-            # on the benchmark checksum; tighten once #166 unfreezes JAX.
-            assert rec.max_rel_err < 5.0e-4
+            # Checked on its own below (#295).
+            pass
         elif rec.n_zones == 8:
             assert rec.max_rel_err < 1.0e-12
         else:
@@ -82,3 +79,19 @@ def test_wave5_bench_kernels_match_snapshots() -> None:
         assert rel < 1.0e-8, (
             f"{name} N=128 regression snapshot {actual} != {snap}"
         )
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason=(
+        "#295: Rust eval_caplan_ocp_dstar follows MESA 26.4.1 get_Dstar_OCP "
+        "(diffusion_support.f90:1716-1743, #156); the frozen JAX twin "
+        "eval_caplan_ocp_dstar_jax keeps its earlier fit (max_rel_err about "
+        "5.4e-5)."
+    ),
+)
+def test_wave5_diff_rot_rust_matches_frozen_jax() -> None:
+    """`w5_diff_rot` Rust and JAX stages agree to the validation bounds."""
+    for nz, bound in ((8, 1.0e-12), (128, 2.0e-14)):
+        rec = bench.bench_w5_diff_rot(nz, n_warmup=1, n_repeats=3)
+        assert rec.max_rel_err < bound

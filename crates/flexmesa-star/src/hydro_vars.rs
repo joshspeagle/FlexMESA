@@ -194,8 +194,8 @@ pub(crate) fn do1_mlt_2(
     let prad_00 = (CRAD / 3.0) * t_00.pow4();
     let p_00 = pgas_00 + prad_00;
 
-    let (rho_f, t_f, prad_f, p_f) = if k == 0 {
-        (rho_00, t_00, prad_00, p_00)
+    let (rho_f, t_f, p_f) = if k == 0 {
+        (rho_00, t_00, p_00)
     } else {
         let km1 = k - 1;
         let rho_m1 = StarAdOrder1::from_dlnd_dlnt_m1(
@@ -216,10 +216,13 @@ pub(crate) fn do1_mlt_2(
         (
             rho_00 * alfa + rho_m1 * beta_w,
             t_00 * alfa + t_m1 * beta_w,
-            prad_00 * alfa + prad_m1 * beta_w,
             p_00 * alfa + p_m1 * beta_w,
         )
     };
+    // `get_Prad_face = crad*pow4(get_T_face(s,k))/3d0`
+    // (`star/private/star_utils.f90:3838-3843`): the face radiation pressure
+    // comes from the face temperature, not from the cell pressures.
+    let prad_f = CRAD * t_f.pow4() / 3.0;
 
     let kap_f = model.interp_cell_ad_to_face(
         &model.opacity,

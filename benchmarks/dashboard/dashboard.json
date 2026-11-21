@@ -21,7 +21,7 @@
         "verified_total": 4971,
         "pct_ported": 34.5,
         "pct_verified": 4.1,
-        "rust_lines": 83224,
+        "rust_lines": 83227,
         "python_jax_lines": 3869
       },
       {
@@ -455,8 +455,8 @@
       "upstream_panel_modules": 46
     },
     "infrastructure_lines": {
-      "rust_bridge_testing_bench": 19417,
-      "python_testing_bench": 15080
+      "rust_bridge_testing_bench": 19425,
+      "python_testing_bench": 15089
     }
   },
   "numerics": {
@@ -1179,7 +1179,7 @@
         "issues": "#161"
       }
     ],
-    "python_xfail_or_skip_count": 2,
+    "python_xfail_or_skip_count": 5,
     "python_skips": [
       {
         "location": "tests/test_eos_wave3a3.py:200",
@@ -1190,6 +1190,21 @@
         "location": "tests/test_eos_wave3b1.py:395",
         "reason": "pytest.mark.xfail( strict=True, reason=( \"declared gap (#161): Python eos.eos_dt_get_t does not yet expose \" \"logT_tol/other_tol (eos/test/test_output:395 tol=1e-5 stops one \" \"Newton step earlier at 4.8009613155595554)\" ), )",
         "issues": "#161"
+      },
+      {
+        "location": "tests/test_star_wave4_1.py:83",
+        "reason": "pytest.mark.xfail( strict=True, reason=( \"#295: Rust computes the face radiation pressure from the face \" \"temperature (#291); the frozen JAX twin still interpolates it \" \"from the two cell values.\" ), )",
+        "issues": "#291, #295"
+      },
+      {
+        "location": "tests/test_wave4_bench.py:136",
+        "reason": "pytest.mark.xfail( strict=True, reason=( \"#295: Rust do1_mlt_2 takes the face radiation pressure from the \" \"face temperature (MESA 26.4.1 star_utils.f90:3838-3843, #291); \" \"the frozen JAX face-MLT twin still interpolates the cell values \" \"(measured max_rel_err 8.9e-3).\" ), )",
+        "issues": "#291, #295"
+      },
+      {
+        "location": "tests/test_wave5_bench.py:84",
+        "reason": "pytest.mark.xfail( strict=True, reason=( \"#295: Rust eval_caplan_ocp_dstar follows MESA 26.4.1 get_Dstar_OCP \" \"(diffusion_support.f90:1716-1743, #156); the frozen JAX twin \" \"eval_caplan_ocp_dstar_jax keeps its earlier fit (max_rel_err about \" \"5.4e-5).\" ), )",
+        "issues": "#156, #295"
       }
     ],
     "unlinked_locations": []

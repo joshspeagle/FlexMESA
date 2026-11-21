@@ -18,12 +18,12 @@ from flexmesa import constants, star
 
 
 def _make_pre_ms_model() -> star.StarModel:
-    """Create and initialize a 1 Msun coarse pre-MS model for solver tests."""
+    """Create and initialize a 159-zone 1 Msun pre-MS model for solver tests."""
     model = star.StarModel.from_pre_ms(
         initial_mass=1.0,
         initial_z=0.02,
         t_c=9.0e5,
-        d_log10_p=0.15,
+        d_log10_p=0.05,
     )
     model.dt = 10.0 * float(constants.SECYER)
     model.eval_hydro_vars()

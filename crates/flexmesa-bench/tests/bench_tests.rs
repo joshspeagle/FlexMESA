@@ -69,13 +69,22 @@ const WAVE3B_REGRESSION_SNAPSHOTS_N8: [(&str, f64); 5] = [
 /// singleton on the coarse `N = 8` grid to radiative (`gradt = gradr`), and
 /// `star_hydro_eqns`, `star_newton_step`, and `star_evolve_step` shifted under
 /// `#152` when `set_xscale_info` and Newton step/equilibration semantics were
-/// aligned to MESA `26.4.1` (`DECISIONS #42`); tracked in `#146`).
+/// aligned to MESA `26.4.1` (`DECISIONS #42`), and `star_micro_vars`
+/// (`2.500_111_893_102_388e2` -> `2.499_330_102_887_365e2`), `star_hydro_eqns`
+/// (`4.243_485_684_423_352e6` -> `4.262_783_875_690_237e6`) and
+/// `star_newton_step` (`6.383_773_435_545_09` -> `2.210_834_729_000_362e5`)
+/// shifted under `#291` when the face radiation pressure in `do1_mlt_2` was
+/// changed to `crad*T_face^4/3` (`star_utils.f90:3838-3843`). Under `#291`
+/// `star_evolve_step` also moved from the 8-zone grid
+/// (`1.005_928_065_548_472e2`) to `MIN_EVOLVE_STEP_ZONES = 64` zones
+/// (`8.895_997_453_722_767e2`), because the 8-zone fixture no longer
+/// converges at the model's timestep; tracked in `#146`).
 const WAVE4_REGRESSION_SNAPSHOTS_N8: [(&str, f64); 5] = [
-    ("star_micro_vars", 2.500_111_893_102_388e2),
-    ("star_hydro_eqns", 4.243_485_684_423_352e6),
-    ("star_newton_step", 6.383_773_435_545_09),
+    ("star_micro_vars", 2.499_330_102_887_365e2),
+    ("star_hydro_eqns", 4.262_783_875_690_237e6),
+    ("star_newton_step", 2.210_834_729_000_362e5),
     ("star_remesh", 5.108_453_216_631_093e2),
-    ("star_evolve_step", 1.005_928_065_548_472e2),
+    ("star_evolve_step", 8.895_997_453_722_767e2),
 ];
 
 /// `FlexMESA` regression snapshots for $N_{\mathrm{zones}} = 8$ across all four

@@ -261,8 +261,8 @@ reason = "Planetary initial model and column-depth irradiation relaxation (#154,
 [[gaps]]
 suite = "star"
 case = "low_z"
-issue = "#161"
-reason = "Diagnostic run reaches xa_central_lower_limit (181 steps, 0 retries, +0.0204% rel_star_age) with 3 unsupported controls (atm_t_tau_opacity, photo_interval, required_termination_code_string; #161, #299)."
+issue = "#299"
+reason = "Diagnostic run reaches exact MESA 26.4.1 xa_central_lower_limit (181 steps, 0 retries, +1.72e-12 rel_star_age, 0 num_zones/num_iters diff across all reference models, all final tolerances pass) with 2 unsupported non-solver controls (photo_interval, required_termination_code_string; #299)."
 
 [[gaps]]
 suite = "star"
@@ -495,8 +495,8 @@ reason = "White-dwarf cooling with phase separation and full-net diffusion reach
 [[gaps]]
 suite = "star"
 case = "wd_diffusion"
-issue = "#161"
-reason = "White-dwarf element diffusion reaches upstream Teff_lower_limit (137 steps vs MESA 153, 1 retry vs MESA 2, rel_star_age -1.501%) in diagnostic mode with 3 ignored controls (atm_T_tau_opacity, photo_interval, required_termination_code_string) pending atmosphere/solver parity (#161, #152)."
+issue = "#152"
+reason = "White-dwarf element diffusion reaches upstream Teff_lower_limit (156 steps vs MESA 153, 2 retries matching MESA 2, rel_star_age -0.594%, exact Model 1407 retry/iter/zone/dt parity) in diagnostic mode with 2 ignored controls (photo_interval, required_termination_code_string) pending remaining solver/diffusion parity (#152, #156, #299)."
 
 [[gaps]]
 suite = "star"
@@ -808,6 +808,24 @@ issue = "#295"
 role = "physics_gap"
 expect_fail_when_run = true
 reason = "Rust do1_mlt_2 takes the face radiation pressure from the face temperature (MESA 26.4.1 star_utils.f90:3838-3843, #291); the frozen JAX face-MLT twin still interpolates the cell values, so the cross-stage difference is 8.9e-3 against a 1.0e-10 bound."
+
+[[test_gaps]]
+kind = "python_xfail"
+file = "tests/test_wave4_bench.py"
+test_name = "test_wave4_star_hydro_eqns_rust_matches_frozen_jax"
+issue = "#295"
+role = "physics_gap"
+expect_fail_when_run = true
+reason = "Rust eval_face_dm_bar at k = nz - 1 uses 0.5*(dm[k-1] + dm[k]) (MESA 26.4.1 star/private/hydro_momentum.f90:191-196, #340); frozen JAX eval_hydro_residuals_jax still uses dm_bar[nz - 1], so the cross-stage difference is 9.73e-3 against a 1.0e-10 bound."
+
+[[test_gaps]]
+kind = "python_xfail"
+file = "tests/test_star_wave4_2.py"
+test_name = "test_eval_equations_rust_jax_residual_consistency"
+issue = "#295"
+role = "physics_gap"
+expect_fail_when_run = true
+reason = "Rust eval_face_dm_bar at k = nz - 1 uses 0.5*(dm[k-1] + dm[k]) (MESA 26.4.1 star/private/hydro_momentum.f90:191-196, #340); frozen JAX eval_hydro_residuals_jax still uses dm_bar[nz - 1], so zone nz - 1 momentum residual differs by 1.12e-5 against rtol=1e-13, atol=1e-13."
 
 [[test_gaps]]
 kind = "python_xfail"

@@ -164,7 +164,7 @@ pub fn eval_face_dm_bar(model: &StarModel, k: usize) -> f64 {
         return if k == 0 {
             0.5 * model.dm[0]
         } else {
-            model.dm_bar[k]
+            0.5 * (model.dm[k - 1] + model.dm[k])
         };
     }
     let mc_00 = model.aux.mass_correction.get(k).copied().unwrap_or(1.0);

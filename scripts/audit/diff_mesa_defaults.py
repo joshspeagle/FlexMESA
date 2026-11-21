@@ -75,6 +75,9 @@ ENUM_VALUE_MAP: dict[str, str] = {
     "AtmTTauRelation::SolarHopf": "solar_Hopf",
     "AtmTTauRelation::KrishnaSwamy": "Krishna_Swamy",
     "AtmTTauRelation::TrampedachSolar": "Trampedach_solar",
+    "AtmTTauOpacity::Fixed": "fixed",
+    "AtmTTauOpacity::Iterated": "iterated",
+    "AtmTTauOpacity::Varying": "varying",
     "EnergyEqnOption::Dedt": "dedt",
     "EnergyEqnOption::EpsGrav": "eps_grav",
     "KapOption::Gn93": "gn93",
@@ -407,12 +410,7 @@ def _classify_unparsed_rust_expr(expr: str) -> str:
 STRUCT_PREFIX_MAP: dict[str, str] = {
     "RspConfig": "rsp_",
 }
-UNPREFIXED_STRUCT_FIELDS: frozenset[tuple[str, str]] = frozenset(
-    {
-        ("RspConfig", "atm_t_tau_errtol"),
-        ("RspConfig", "atm_t_tau_max_iters"),
-    }
-)
+UNPREFIXED_STRUCT_FIELDS: frozenset[tuple[str, str]] = frozenset()
 SKIP_DEFAULT_STRUCTS: frozenset[str] = frozenset({"Rsp2Config"})
 
 

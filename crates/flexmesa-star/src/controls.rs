@@ -8,8 +8,8 @@ use flexmesa_rates::ScreeningMode;
 use flexmesa_turb::{MltOption, SemiconvectionOption, ThermohalineOption};
 
 pub use crate::job_controls::{
-    AtmOption, AtmTTauRelation, EnergyEqnOption, StarError, StarJobControls,
-    StepFailureInfo, VarLayout,
+    AtmOption, AtmTTauOpacity, AtmTTauRelation, EnergyEqnOption, StarError,
+    StarJobControls, StepFailureInfo, VarLayout,
 };
 
 /// Evolutionary and physics controls (`&controls` namelist in
@@ -69,6 +69,18 @@ pub struct StarControls {
     pub atm_table: String,
     /// Grey $T(\tau)$ relation (`AtmTTauRelation::Eddington` default).
     pub atm_t_tau_relation: AtmTTauRelation,
+    /// Grey $T(\tau)$ opacity prescription (`atm_T_tau_opacity`, `AtmTTauOpacity::Fixed` default).
+    #[serde(default)]
+    pub atm_t_tau_opacity: AtmTTauOpacity,
+    /// Error tolerance for `'iterated'` and `'varying'` $T(\tau)$ atmospheres (`atm_T_tau_errtol`, `1e-7` default).
+    #[serde(default = "default_atm_t_tau_errtol")]
+    pub atm_t_tau_errtol: f64,
+    /// Maximum opacity iterations for `'iterated'` $T(\tau)$ atmospheres (`atm_T_tau_max_iters`, `50` default).
+    #[serde(default = "default_atm_t_tau_max_iters")]
+    pub atm_t_tau_max_iters: usize,
+    /// Maximum ODE steps for `'varying'` $T(\tau)$ atmospheres (`atm_T_tau_max_steps`, `500` default).
+    #[serde(default = "default_atm_t_tau_max_steps")]
+    pub atm_t_tau_max_steps: usize,
     /// Optical depth multiplicative factor $\tau_{\mathrm{factor}}$ (`1.0`).
     pub tau_factor: f64,
     /// Opacity multiplicative factor (`1.0`).
@@ -742,4 +754,16 @@ const fn default_one() -> f64 {
 
 const fn default_max_abs_eps_nuc() -> f64 {
     1.0e99
+}
+
+const fn default_atm_t_tau_errtol() -> f64 {
+    1.0e-7
+}
+
+const fn default_atm_t_tau_max_iters() -> usize {
+    50
+}
+
+const fn default_atm_t_tau_max_steps() -> usize {
+    500
 }

@@ -451,3 +451,47 @@ fn test_hydro_chem_eqns_op_split_do_burn_do_mix_and_mix_factor() {
         .expect("eval_henyey_equations succeeds");
     assert_eq!(full.equ.len(), model.nz * nvar);
 }
+
+#[test]
+fn test_eval_face_dm_bar_innermost_zone_uses_symmetric_half_sum() {
+    let mut model = build_solar_test_model(false);
+    let nz = model.nz;
+    assert!(nz >= 4);
+    let k_last = nz - 1;
+    // Set distinct cell masses at the innermost two zones so the cell-centered
+    // `dm_bar[nz - 1] = 0.5 * dm[nz - 2] + dm[nz - 1]` differs strictly from
+    // the momentum-face `0.5 * (dm[nz - 2] + dm[nz - 1])` (`hydro_momentum.f90:191-196`).
+    model.dm[k_last - 1] = 3.0e30;
+    model.dm[k_last] = 1.0e30;
+    model.dm_bar[k_last] = 0.5 * model.dm[k_last - 1] + model.dm[k_last];
+    model.controls.use_mass_corrections = false;
+
+    let expected_last = 0.5 * (model.dm[k_last - 1] + model.dm[k_last]);
+    let got_last = crate::hydro_momentum::eval_face_dm_bar(&model, k_last);
+    assert!(
+        (got_last - expected_last).abs() <= 1.0e-15 * expected_last,
+        "eval_face_dm_bar(nz - 1) must be 0.5 * (dm[nz-2] + dm[nz-1]) = {expected_last}, got {got_last}"
+    );
+    assert!(
+        (got_last - model.dm_bar[k_last]).abs() > 0.1 * expected_last,
+        "face dm_bar at k = nz - 1 must differ from cell-centered dm_bar[nz - 1]"
+    );
+
+    // Surface face (`k = 0`) and interior face (`k = nz / 2`).
+    let got_surf = crate::hydro_momentum::eval_face_dm_bar(&model, 0);
+    assert!((got_surf - 0.5 * model.dm[0]).abs() <= 1.0e-15 * model.dm[0]);
+    let k_mid = nz / 2;
+    let exp_mid = 0.5 * (model.dm[k_mid - 1] + model.dm[k_mid]);
+    let got_mid = crate::hydro_momentum::eval_face_dm_bar(&model, k_mid);
+    assert!((got_mid - exp_mid).abs() <= 1.0e-15 * exp_mid);
+
+    // With `use_mass_corrections = true`: `0.5 * (mc[k-1]*dm[k-1] + mc[k]*dm[k])`.
+    model.controls.use_mass_corrections = true;
+    model.aux.mass_correction.resize(nz, 1.0);
+    model.aux.mass_correction[k_last - 1] = 1.02;
+    model.aux.mass_correction[k_last] = 1.08;
+    let exp_mc = 0.5
+        * (1.02 * model.dm[k_last - 1] + 1.08 * model.dm[k_last]);
+    let got_mc = crate::hydro_momentum::eval_face_dm_bar(&model, k_last);
+    assert!((got_mc - exp_mc).abs() <= 1.0e-15 * exp_mc);
+}

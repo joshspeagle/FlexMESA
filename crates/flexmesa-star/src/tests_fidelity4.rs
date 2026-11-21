@@ -211,3 +211,165 @@ fn test_relax_from_profile_files_interpolates_j_and_entropy() {
     assert_eq!(model.j_rot.len(), model.nz);
     let _ = std::fs::remove_dir_all(&tmp_dir);
 }
+
+#[test]
+fn test_mod_load_resets_num_retries_by_default_and_initializes_dt_limit_ratio_old_zero()
+{
+    use crate::inlist::InlistBundle;
+    use crate::inlist_runner::DefaultStarExtras;
+    use crate::star_job_init::{
+        init_or_update_model_from_bundle_outcome, InitModelOutcome,
+    };
+    use crate::timestep::eval_h211_factor;
+
+    let controls = StarControls {
+        initial_mass: 1.0,
+        zbase: 0.02,
+        ..StarControls::default()
+    };
+    let mut src_model =
+        load_zams_model(controls.clone(), StarJobControls::default())
+            .expect("1 Msun ZAMS should load");
+    src_model.num_retries = 7;
+    let mod_text = write_mod_string(&src_model).expect("write_mod_string");
+
+    // 1. Default `StarJobControls` (`set_initial_number_retries = true`,
+    //    `initial_number_retries = 0`) resets `.mod` `num_retries` to 0 and
+    //    sets `dt_limit_ratio_old = 0.0` (`init.f90:509,696`,
+    //    `run_star_support.f90:2009-2012`).
+    let loaded_default =
+        read_mod_str(&mod_text, controls.clone(), StarJobControls::default())
+            .expect("read_mod_str default");
+    assert_eq!(loaded_default.num_retries, 0);
+    assert_eq!(loaded_default.dt_limit_ratio_old, 0.0);
+
+    // 2. Custom `initial_number_retries` is applied when enabled.
+    let job_custom = StarJobControls {
+        set_initial_number_retries: true,
+        initial_number_retries: 3,
+        ..StarJobControls::default()
+    };
+    let loaded_custom = read_mod_str(&mod_text, controls.clone(), job_custom)
+        .expect("read_mod_str custom");
+    assert_eq!(loaded_custom.num_retries, 3);
+
+    // 3. `set_initial_number_retries = false` preserves `.mod` header count.
+    let job_preserve = StarJobControls {
+        set_initial_number_retries: false,
+        initial_number_retries: 0,
+        ..StarJobControls::default()
+    };
+    let loaded_preserved =
+        read_mod_str(&mod_text, controls.clone(), job_preserve)
+            .expect("read_mod_str preserve");
+    assert_eq!(loaded_preserved.num_retries, 7);
+
+    // 4. First step after `.mod` load (`dt_limit_ratio_old == 0.0`) uses
+    //    the 1st-order rule `1 / dt_limit_ratio` rather than H211b with a
+    //    fabricated `1.0` prior ratio (`timestep.f90:261-278`).
+    let ratio = 1.25;
+    let (fac_zero, _, _) = eval_h211_factor(
+        ratio,
+        loaded_default.dt_limit_ratio_old,
+        loaded_default.dt,
+        loaded_default.dt_old,
+        1.2,
+        0.5,
+    );
+    let (fac_one, _, _) = eval_h211_factor(
+        ratio,
+        1.0,
+        loaded_default.dt,
+        loaded_default.dt_old,
+        1.2,
+        0.5,
+    );
+    assert!(
+        (fac_zero - 1.0 / ratio).abs() <= 1.0e-15,
+        "first step with dt_limit_ratio_old=0.0 must use 1/ratio = {}, got {}",
+        1.0 / ratio,
+        fac_zero
+    );
+    assert!(
+        (fac_zero - fac_one).abs() > 0.1,
+        "dt_limit_ratio_old=0.0 must differ sharply from H211b with prior ratio 1.0"
+    );
+
+    // 5. Inlist parsing + `star_job_init` respects `set_initial_number_retries`
+    //    on fresh load (`is_restart = false`) and preserves `num_retries` on
+    //    photo restart (`is_restart = true`).
+    let tmp_dir = std::env::temp_dir().join(format!(
+        "flexmesa_retry_reset_test_{}",
+        std::process::id()
+    ));
+    let _ = std::fs::remove_dir_all(&tmp_dir);
+    std::fs::create_dir_all(&tmp_dir).expect("create temp dir");
+    let mod_path = tmp_dir.join("seed.mod");
+    std::fs::write(&mod_path, &mod_text).expect("write seed.mod");
+
+    let inlist_preserve = tmp_dir.join("inlist_preserve");
+    std::fs::write(
+        &inlist_preserve,
+        "&star_job\n\
+           load_saved_model = .true.\n\
+           load_model_filename = 'seed.mod'\n\
+           set_initial_number_retries = .false.\n\
+           initial_number_retries = 4\n\
+         /\n\
+         &kap\n\
+           Zbase = 0.02d0\n\
+         /\n",
+    )
+    .expect("write inlist_preserve");
+    let bundle_preserve = InlistBundle::from_file(&inlist_preserve)
+        .expect("inlist_preserve strict parse");
+    assert_eq!(
+        bundle_preserve
+            .validation_report
+            .unsupported_controls
+            .len(),
+        0
+    );
+    assert!(!bundle_preserve.job.set_initial_number_retries);
+    assert_eq!(bundle_preserve.job.initial_number_retries, 4);
+
+    let mut extras = DefaultStarExtras;
+    let out_preserve = init_or_update_model_from_bundle_outcome(
+        &bundle_preserve,
+        None,
+        &mut extras,
+    )
+    .expect("init preserve");
+    let InitModelOutcome::Model(m_preserve) = out_preserve else {
+        panic!("expected Model outcome");
+    };
+    assert_eq!(m_preserve.num_retries, 7);
+
+    // On restart (`existing = Some(...)`), `set_initial_number_retries = true`
+    // does NOT clobber the resumed model's `num_retries`.
+    let inlist_restart = tmp_dir.join("inlist_restart");
+    std::fs::write(
+        &inlist_restart,
+        "&star_job\n\
+           set_initial_number_retries = .true.\n\
+           initial_number_retries = 0\n\
+         /\n\
+         &kap\n\
+           Zbase = 0.02d0\n\
+         /\n",
+    )
+    .expect("write inlist_restart");
+    let bundle_restart = InlistBundle::from_file(&inlist_restart)
+        .expect("inlist_restart strict parse");
+    let out_restart = init_or_update_model_from_bundle_outcome(
+        &bundle_restart,
+        Some(*m_preserve),
+        &mut extras,
+    )
+    .expect("init restart");
+    let InitModelOutcome::Model(m_restart) = out_restart else {
+        panic!("expected Model outcome");
+    };
+    assert_eq!(m_restart.num_retries, 7);
+    let _ = std::fs::remove_dir_all(&tmp_dir);
+}

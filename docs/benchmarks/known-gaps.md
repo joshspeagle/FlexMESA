@@ -187,7 +187,7 @@ Every Rust `#[ignore]` and Python `xfail`/`skip` marker in the repository is tra
 
 ## Level-2 Module Hex Reference Gaps (`benchmarks/module_hex/`)
 
-- **Checked vs MESA `26.4.1` `raw_bits_hex`**: `304,567` / `304,635` outputs at `0 ULP` across `15` probed modules (`5` modules complete at `0 ULP`; `348,321` total captured upstream values).
+- **Checked vs MESA `26.4.1` `raw_bits_hex`**: `304,622` / `304,751` outputs at `0 ULP` across `16` probed modules (`5` modules complete at `0 ULP`; `348,321` total captured upstream values).
 
 | Module | Status | Checked / Expected | 0 ULP | Max ULP | Issue | Notes |
 | :--- | :--- | ---: | ---: | ---: | :--- | :--- |
@@ -206,7 +206,7 @@ Every Rust `#[ignore]` and Python `xfail`/`skip` marker in the repository is tra
 | `kap` | `nonzero_ulp` | 21 / 21 | 13 | 1,459,407,697 | [#161](https://github.com/joshspeagle/FlexMESA/issues/161) | 12/14 gs98+CO channels at 0 ULP; AESOPUS and log10 1-ULP gap. |
 | `rates` | `nonzero_ulp` | 3,639 / 3,639 | 3,636 | 29 | [#161](https://github.com/joshspeagle/FlexMESA/issues/161) | 3,636/3,639 rates outputs at 0 ULP (all 2,763 raw rates, 12 screening, 845/846 weak, 4 Coulomb, 4 Suzuki/weaklib, pycno, r3, 4 rev_c1); 3 Fermi-Dirac ecapture within 29 ULP. |
 | `neu` | `pass_0_ulp` | 300,000 / 300,000 | 300,000 | 0 | none | All 10,000 records (300,000 outputs) of neu at 0 ULP. |
-| `net` | `unported_hex_harness` | 0 / 140 | 0 | 0 | [#161](https://github.com/joshspeagle/FlexMESA/issues/161) | 140 upstream nuclear reaction network burn printouts await direct TSV harness mapping. |
+| `net` | `nonzero_ulp` | 116 / 124 | 55 | 66 | [#161](https://github.com/joshspeagle/FlexMESA/issues/161) | 55/116 net_get outputs at 0 ULP across 7 networks (max_ulp=66); 8 one-zone burn rows remain unchecked. |
 | `ionization` | `nonzero_ulp` | 31 / 31 | 28 | 10,652,452 | [#161](https://github.com/joshspeagle/FlexMESA/issues/161) | 28/28 eval_ionization channels at 0 ULP; 3 Fe56-in-He4 table offsets. |
 | `atm` | `nonzero_ulp` | 39 / 39 | 15 | 7,863,114 | [#161](https://github.com/joshspeagle/FlexMESA/issues/161) | All 39 computed atm outputs across 7 tables, 5 T(tau) varying, 2 T(tau) uniform, and irradiated atmospheres. |
 | `turb` | `nonzero_ulp` | 62 / 71 | 38 | 6 | [#157](https://github.com/joshspeagle/FlexMESA/issues/157) | 31-step check_TDC gradT and conv_vel outputs. |

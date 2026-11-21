@@ -43,6 +43,7 @@
 pub mod mlt;
 pub mod semiconvection;
 pub mod tdc;
+pub mod tdc_dual;
 pub(crate) mod tdc_search;
 pub(crate) mod tdc_support;
 pub mod thermohaline;

@@ -229,7 +229,6 @@ fn eval_tdc_zone(s_frac: f64) -> [f64; 4] {
         max_conv_vel: 1.0e99,
         include_mlt_corr_to_tdc: true,
         use_tdc_enthalpy_flux_limiter: false,
-        y_face_guess: 0.0,
     };
     let inp = TdcInputs {
         chi_t: c6(1.0),

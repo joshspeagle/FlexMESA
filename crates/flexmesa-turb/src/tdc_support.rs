@@ -87,6 +87,40 @@ pub struct TdcInfo<T> {
     pub h: T,
 }
 
+impl<T: crate::tdc_dual::TdcLift> TdcInfo<T> {
+    /// Lifts every structure quantity into the Newton solver's dual number
+    /// (`convert` in `turb/private/tdc_support.f90:424-430`).
+    #[must_use]
+    pub fn to_tdc(&self) -> TdcInfo<T::Tdc> {
+        TdcInfo {
+            include_mlt_corr_to_tdc: self.include_mlt_corr_to_tdc,
+            use_tdc_enthalpy_flux_limiter: self.use_tdc_enthalpy_flux_limiter,
+            mixing_length_alpha: self.mixing_length_alpha,
+            tdc_alpha_c: self.tdc_alpha_c,
+            tdc_alpha_s: self.tdc_alpha_s,
+            tdc_alpha_d: self.tdc_alpha_d,
+            tdc_alpha_r: self.tdc_alpha_r,
+            tdc_alpha_pt: self.tdc_alpha_pt,
+            dt: self.dt,
+            a0: self.a0.convert(),
+            c0: self.c0.convert(),
+            l: self.l.convert(),
+            l0: self.l0.convert(),
+            gradl: self.gradl.convert(),
+            grada: self.grada.convert(),
+            t: self.t.convert(),
+            rho: self.rho.convert(),
+            dv: self.dv.convert(),
+            cp: self.cp.convert(),
+            kap: self.kap.convert(),
+            hp: self.hp.convert(),
+            gamma: self.gamma.convert(),
+            eq_div_w: self.eq_div_w.convert(),
+            h: self.h.convert(),
+        }
+    }
+}
+
 impl<T: TurbScalar> TdcInfo<T> {
     /// Projects `self` to a pure `f64` primal structure for fast bracket and
     /// line-search evaluations.

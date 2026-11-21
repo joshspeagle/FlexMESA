@@ -11,15 +11,11 @@
 //!   negative-$Y$ branch where $A_f(Z) > 0$.
 //! - [`af_bisection_search`]: Locates the largest $Z$ on the negative-$Y$
 //!   branch before $A_f(Z)$ vanishes.
-//! - [`bracket_plus_newton_search`]: Combines optional seeded bracketing,
-//!   bisection narrowing, and damped Newton-Raphson refinement with bound
-//!   clamping.
-//! - [`try_seeded_positive_y_bracket`]: Narrows the search interval to a
-//!   $\pm 3$ window in $Z$ around $\ln(Y_{\mathrm{face,guess}})$ when a valid
-//!   positive seed is provided and brackets the root.
+//! - [`bracket_plus_newton_search`]: Bisection narrowing followed by Newton
+//!   refinement with bound clamping, on upstream's nested dual number so the
+//!   root carries its structure partials.
 //!
 //! # Numerical Guarantees
-//! - All inner evaluations use IEEE-754 double precision (`f64`).
 //! - Bisection tolerances (`1.0` for `q_bisection_search`, `1e-4` for
 //!   `dq_dz_bisection_search` and `af_bisection_search`) and Newton tolerances
 //!   (`CORR_TOL = 1e-13`, `RES_TOL = 1e-8`) match upstream MESA (`tdc.f90` and
@@ -29,11 +25,11 @@
 //!   line-search halvings until $|Q(Z_{\mathrm{new}})| < |Q(Z)|$.
 
 use flexmesa_autodiff::AutoDiffReal1VarOrder1;
-use flexmesa_math::{exp, log};
 use flexmesa_utils::is_bad;
 
+use crate::tdc_dual::TdcLift;
 use crate::tdc_support::{compute_q, set_y, TdcInfo};
-use crate::{TurbError, TurbResult};
+use crate::{TurbError, TurbResult, TurbScalar};
 
 /// Bisection search narrowing a bracket $[Z_{\mathrm{lb}}, Z_{\mathrm{ub}}]$
 /// where $Q(Y(Z))$ changes sign to width $< 1.0$ (`Q_bisection_search` in
@@ -188,96 +184,114 @@ pub fn af_bisection_search(
     Ok(lb)
 }
 
-/// Bisection + damped Newton search for $Q(Y(Z)) = 0$ on a monotone interval
-/// (`bracket_plus_Newton_search` in `tdc.f90`).
+/// Bisection to a bracket narrower than one in $Z$, then Newton iterations
+/// that refine the root and give it its structure partials
+/// (`bracket_plus_Newton_search` in `turb/private/tdc.f90:219-380`).
 ///
-/// First attempts to narrow $[Z_{\mathrm{lb}}, Z_{\mathrm{ub}}]$ using
-/// [`try_seeded_positive_y_bracket`], then bisects the bracket to width $< 1.0$
-/// via [`q_bisection_search`], and finally refines $Z$ with damped
-/// Newton-Raphson steps until $|Q(Z)| / \text{scale} \le 10^{-8}$ or
-/// $|\Delta Z| < 10^{-13}$.
+/// The iterate $Z$ is an [`AutoDiffRealTdc`](crate::tdc_dual::AutoDiffRealTdc)
+/// number with `d1val1 = 1`. Each update `Z + (-Q / dQdZ)` carries the
+/// structure partials of the correction, so the partials of the returned
+/// $Y$ are those of the last update, evaluated at the iterates upstream
+/// evaluates them at. They equal the implicit-function-theorem partials only
+/// in the limit of a fully converged iteration. The loop cannot leave before
+/// one update has been applied (`have_derivatives`).
 ///
 /// # Errors
-/// Returns [`TurbError::TdcConvergenceFailure`] if bracketing or Newton
-/// refinement fails to converge within 200 iterations.
-pub fn bracket_plus_newton_search(
+/// Returns [`TurbError::TdcConvergenceFailure`] if the bracket does not
+/// contain a sign change, `dQ/dZ` is not finite or is below `1e-99` in size, or
+/// the iteration does not converge in 200 steps (upstream `ierr = 1`).
+pub fn bracket_plus_newton_search<T: TdcLift>(
     info_p: &TdcInfo<f64>,
-    info_z: &TdcInfo<AutoDiffReal1VarOrder1>,
+    info: &TdcInfo<T::Tdc>,
     scale: f64,
     y_is_positive: bool,
     zlb: f64,
     zub: f64,
-    y_face_guess: f64,
-) -> TurbResult<(f64, usize)> {
-    const CORR_TOL: f64 = 1.0e-13;
-    const RES_TOL: f64 = 1.0e-8;
+) -> TurbResult<(T, usize)> {
+    const CORRECTION_TOLERANCE: f64 = 1.0e-13;
+    const RESIDUAL_TOLERANCE: f64 = 1.0e-8;
     const MAX_ITER: usize = 200;
-    const MAX_LINE_ITER: usize = 5;
+    const MAX_LINE_SEARCH_ITER: usize = 5;
 
-    let mut lb = zlb;
-    let mut ub = zub;
-    try_seeded_positive_y_bracket(
-        info_p,
-        y_is_positive,
-        zlb,
-        zub,
-        &mut lb,
-        &mut ub,
-        y_face_guess,
-    );
+    let lift = |v: f64| <T::Tdc as TurbScalar>::from_f64(v);
 
-    let mut z = q_bisection_search(info_p, y_is_positive, &mut lb, &mut ub)?;
+    // Bisect to a narrow interval around the root (`tdc.f90:262-268`).
+    let (mut lb_val, mut ub_val) = (zlb, zub);
+    let z_start =
+        q_bisection_search(info_p, y_is_positive, &mut lb_val, &mut ub_val)?;
+    let mut lower_bound_z = lift(lb_val);
+    let mut upper_bound_z = lift(ub_val);
+
+    // `Z%d1val1 = 1d0` (`tdc.f90:272`).
+    let mut z = T::with_d1val1(lift(z_start), 1.0);
+    let mut z_new = z;
+    let mut y = set_y(y_is_positive, z);
     let mut converged = false;
     let mut have_derivatives = false;
-    let mut iter_taken = 0_usize;
+    let mut iter_taken = MAX_ITER + 1;
 
     for iter in 1..=MAX_ITER {
-        iter_taken = iter;
-        let y = set_y(y_is_positive, AutoDiffReal1VarOrder1::independent(z, 0));
-        let (q, _) = compute_q(info_z, y);
-        if is_bad(q.val) {
-            return Err(TurbError::TdcConvergenceFailure("NaN/Inf in Q(Z)"));
-        }
+        y = set_y(y_is_positive, z);
+        let (q, _) = compute_q(info, y);
 
-        if q.val.abs() / scale <= RES_TOL && have_derivatives {
+        if q.val().abs() / scale <= RESIDUAL_TOLERANCE && have_derivatives {
             converged = true;
+            iter_taken = iter;
             break;
         }
 
-        let dq_dz = q.d1[0];
-        if (q.val > 0.0 && dq_dz < 0.0) || (q.val <= 0.0 && dq_dz >= 0.0) {
-            lb = z;
+        // `Q(Y)` is monotonic, so each iterate tightens one bound
+        // (`tdc.f90:296-305`).
+        let dq_dz = T::differentiate_1(q);
+        if q.val() > 0.0 && dq_dz.val() < 0.0 {
+            lower_bound_z = z;
+        } else if (q.val() > 0.0 && dq_dz.val() > 0.0)
+            || (q.val() < 0.0 && dq_dz.val() < 0.0)
+        {
+            upper_bound_z = z;
         } else {
-            ub = z;
+            lower_bound_z = z;
         }
 
-        if is_bad(dq_dz) || dq_dz.abs() < 1.0e-99 {
+        if is_bad(dq_dz.val()) || dq_dz.val().abs() < 1.0e-99 {
             return Err(TurbError::TdcConvergenceFailure("Singular dQ/dZ"));
         }
 
-        let mut correction = -q.val / dq_dz;
-        let mut z_new = z;
-        for _ in 1..=MAX_LINE_ITER {
-            if correction.abs() < CORR_TOL && have_derivatives {
+        let mut correction = -q / dq_dz;
+
+        // Line search against steps that are too large (`tdc.f90:315-337`).
+        for _ in 1..=MAX_LINE_SEARCH_ITER {
+            if correction.val().abs() < CORRECTION_TOLERANCE && have_derivatives
+            {
                 converged = true;
                 break;
             }
+
             z_new = z + correction;
             have_derivatives = true;
-            if z_new > ub {
-                z_new = 0.5 * (z + ub);
-            } else if z_new < lb {
-                z_new = 0.5 * (z + lb);
+
+            // A step past a bound went too far in the right direction; take
+            // the midpoint to that bound instead.
+            if z_new.val() > upper_bound_z.val() {
+                z_new = (z + upper_bound_z) / lift(2.0);
+            } else if z_new.val() < lower_bound_z.val() {
+                z_new = (z + lower_bound_z) / lift(2.0);
             }
-            let (qc, _) = compute_q(info_p, set_y(y_is_positive, z_new));
-            if is_bad(qc) || qc.abs() >= q.val.abs() {
-                correction *= 0.5;
-            } else {
+
+            y = set_y(y_is_positive, z_new);
+            let (qc, _) = compute_q(info, y);
+            if qc.val().abs() < q.val().abs() {
                 break;
             }
+            correction = lift(0.5) * correction;
         }
+
+        // `Z_new%d1val1 = 1d0; Z = Z_new` (`tdc.f90:341-342`).
+        z_new = T::with_d1val1(z_new, 1.0);
         z = z_new;
+        y = set_y(y_is_positive, z);
         if converged {
+            iter_taken = iter;
             break;
         }
     }
@@ -288,41 +302,5 @@ pub fn bracket_plus_newton_search(
         ));
     }
 
-    let y_final = if y_is_positive { exp(z) } else { -exp(z) };
-    Ok((y_final, iter_taken))
-}
-
-/// Narrows $[Z_{\mathrm{lb}}, Z_{\mathrm{ub}}]$ to a $\pm 3$ window around
-/// $\ln(Y_{\mathrm{face,guess}})$ when valid (`try_seeded_positive_Y_bracket`
-/// in `tdc.f90`).
-///
-/// If $Y > 0$, `y_face_guess > 0`, and the $\pm 3$ window around
-/// $Z_{\mathrm{seed}} = \ln(Y_{\mathrm{face,guess}})$ lies within
-/// $[Z_{\mathrm{lb}}, Z_{\mathrm{ub}}]$ with a sign change in $Q$, updates
-/// `lower_bound_z` and `upper_bound_z` in place.
-pub fn try_seeded_positive_y_bracket(
-    info_p: &TdcInfo<f64>,
-    y_is_positive: bool,
-    zlb: f64,
-    zub: f64,
-    lower_bound_z: &mut f64,
-    upper_bound_z: &mut f64,
-    y_face_guess: f64,
-) {
-    const HALF_WIDTH: f64 = 3.0;
-    if !y_is_positive || is_bad(y_face_guess) || y_face_guess <= 0.0 {
-        return;
-    }
-    let z_seed = log(y_face_guess);
-    if is_bad(z_seed) || z_seed < zlb || z_seed > zub {
-        return;
-    }
-    let seed_lb = zlb.max(z_seed - HALF_WIDTH);
-    let seed_ub = zub.min(z_seed + HALF_WIDTH);
-    let (q_lb, _) = compute_q(info_p, set_y(y_is_positive, seed_lb));
-    let (q_ub, _) = compute_q(info_p, set_y(y_is_positive, seed_ub));
-    if !is_bad(q_lb) && !is_bad(q_ub) && q_lb * q_ub <= 0.0 {
-        *lower_bound_z = seed_lb;
-        *upper_bound_z = seed_ub;
-    }
+    Ok((T::unconvert(y), iter_taken))
 }

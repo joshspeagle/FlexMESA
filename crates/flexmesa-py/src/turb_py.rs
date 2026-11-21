@@ -164,7 +164,6 @@ fn eval_tdc_zone(s_frac: f64) -> [f64; 4] {
         max_conv_vel: 1.0e99,
         include_mlt_corr_to_tdc: true,
         use_tdc_enthalpy_flux_limiter: false,
-        y_face_guess: 0.0,
     };
     let inp: TdcInputs<DualOrder1<6>> = TdcInputs {
         chi_t: DualOrder1::constant(1.0),
@@ -236,8 +235,10 @@ fn set_tdc_batch<'py>(
 ///
 /// `params` holds, in order, `conv_vel_start`, `mixing_length_alpha`,
 /// `tdc_alpha_d`, `tdc_alpha_r`, `tdc_alpha_pt`, `tdc_alpha_c`,
-/// `tdc_alpha_s`, `dt`, `cgrav`, `m`, `scale`, `max_conv_vel` and
-/// `y_face_guess`. `inputs` holds, in order, `chi_t`, `chi_rho`, `gradr`,
+/// `tdc_alpha_s`, `dt`, `cgrav`, `m`, `scale` and `max_conv_vel`. A
+/// thirteenth entry is accepted for callers that still pass a bracket seed
+/// and is not used: upstream's search takes none
+/// (`turb/private/tdc.f90:219-250`, #321). `inputs` holds, in order, `chi_t`, `chi_rho`, `gradr`,
 /// `r`, `p`, `t`, `rho`, `dv`, `cp`, `opacity`, `scale_height`, `gradl`,
 /// `grada`, `eq_div_w`, `grav` and `energy` (CGS units).
 ///
@@ -264,7 +265,6 @@ fn turb_set_tdc_f64(
         max_conv_vel: params[11],
         include_mlt_corr_to_tdc,
         use_tdc_enthalpy_flux_limiter,
-        y_face_guess: params[12],
     };
     let inp = TdcInputs::<f64> {
         chi_t: inputs[0],

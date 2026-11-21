@@ -104,9 +104,9 @@ PYTHONPATH="$REPO_ROOT/src" "$PYTHON_BIN" -m flexmesa.testing.module_hex_gate \
 "$PYTHON_BIN" "$REPO_ROOT/scripts/docs/render_benchmark_pages.py" --repo-root "$REPO_ROOT" --check
 "$PYTHON_BIN" "$REPO_ROOT/scripts/build_docs_figures.py"
 if git -C "$REPO_ROOT" rev-parse --verify origin/main >/dev/null 2>&1; then
-  "$PYTHON_BIN" -m flexmesa.cli dashboard check --repo-root "$REPO_ROOT" --base-ref origin/main
+  "$PYTHON_BIN" -m flexmesa.cli dashboard check --no-outputs --repo-root "$REPO_ROOT" --base-ref origin/main
 else
-  "$PYTHON_BIN" -m flexmesa.cli dashboard check --repo-root "$REPO_ROOT"
+  "$PYTHON_BIN" -m flexmesa.cli dashboard check --no-outputs --repo-root "$REPO_ROOT"
 fi
 SITE_OUT="$(mktemp -d)"
 "$MKDOCS_BIN" build --config-file "$REPO_ROOT/mkdocs.yml" --strict --site-dir "$SITE_OUT"

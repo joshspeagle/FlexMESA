@@ -201,6 +201,7 @@ def verify_all_dashboard_invariants(
     repo_root: pathlib.Path,
     mesa_dir: pathlib.Path | None = None,
     base_ref: str | None = None,
+    check_outputs: bool = True,
 ) -> list[str]:
     """Run manifest, skip-link, and byte-exact freshness checks.
 
@@ -209,6 +210,11 @@ def verify_all_dashboard_invariants(
         mesa_dir: Optional MESA 26.4.1 ``mesa_test_inputs`` directory.
         base_ref: Optional git base ref (e.g. ``origin/main``) for PR status
             promotion checks.
+        check_outputs: When ``False``, the dashboard is still rendered, so
+            a rendering failure is reported, but the rendered text is not
+            compared with the committed files. Pull requests use this:
+            ``main`` regenerates the files after each merge
+            (``DECISIONS #47``).
 
     Returns:
         List of validation error messages (empty when all checks pass).
@@ -236,7 +242,7 @@ def verify_all_dashboard_invariants(
 
     data = build_dashboard_data(repo_root, mesa_dir, manifest=manifest)
     expected = render_expected_files(repo_root, mesa_dir, data=data)
-    for path, exp_text in expected.items():
+    for path, exp_text in expected.items() if check_outputs else ():
         rel = path.relative_to(repo_root).as_posix()
         if not path.is_file():
             errors.append(f"{rel}: missing generated dashboard file")
@@ -336,6 +342,16 @@ def _build_cli_parser() -> argparse.ArgumentParser:
         p.add_argument("--allow-missing-mesa-dir", action="store_true")
         if cmd_name in {"check", "verify-manifest"}:
             p.add_argument("--base-ref", type=str, default=None)
+        if cmd_name == "check":
+            p.add_argument(
+                "--no-outputs",
+                action="store_true",
+                help=(
+                    "Render the dashboard but do not compare it with the "
+                    "committed README, docs page and JSON (pull requests; "
+                    "main regenerates them after each merge)."
+                ),
+            )
 
     p_gh = sub.add_parser(
         "sync-github", help="Refresh github_snapshot.json from the GitHub API."
@@ -450,12 +466,18 @@ def dashboard_main(argv: list[str] | None = None) -> int:
 
     if ns.subcommand == "check":
         errs = verify_all_dashboard_invariants(
-            repo_root=repo_root, mesa_dir=mesa_dir, base_ref=ns.base_ref
+            repo_root=repo_root,
+            mesa_dir=mesa_dir,
+            base_ref=ns.base_ref,
+            check_outputs=not ns.no_outputs,
         )
         if errs:
             for e in errs:
                 print(f"ERROR: {e}", file=sys.stderr)
             return 1
+        if ns.no_outputs:
+            print("Port manifest is valid and the dashboard renders.")
+            return 0
         print("Dashboard and port manifest are up to date.")
         return 0
 

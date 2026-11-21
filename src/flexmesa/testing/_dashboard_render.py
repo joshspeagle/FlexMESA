@@ -6,7 +6,7 @@ from __future__ import annotations
 from typing import Any
 
 from flexmesa.data import fetch
-from flexmesa.testing import case_manifest, port_manifest
+from flexmesa.testing import _dashboard_readme, case_manifest, port_manifest
 
 BEGIN_MARKER = "<!-- BEGIN GENERATED DASHBOARD -->"
 END_MARKER = "<!-- END GENERATED DASHBOARD -->"
@@ -529,7 +529,11 @@ def _render_shared_sections(data: dict[str, Any], detailed: bool) -> list[str]:
 
 def render_readme_block(data: dict[str, Any]) -> str:
     """Render the marked dashboard block embedded in ``README.md``."""
-    body = "\n".join(_render_shared_sections(data, detailed=False))
+    body = "\n".join(
+        _dashboard_readme.render_readme_dashboard(
+            data, summarize_headline(data)
+        )
+    )
     return f"{BEGIN_MARKER}\n{body}\n{END_MARKER}"
 
 

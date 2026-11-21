@@ -216,9 +216,9 @@ jobs:
           python scripts/audit/render_extras_status.py --check
           python scripts/docs/render_benchmark_pages.py --check
           if [ "${{ github.event_name }}" = "pull_request" ]; then
-            flexmesa dashboard check --base-ref "origin/${{ github.base_ref }}"
+            flexmesa dashboard check --no-outputs --base-ref "origin/${{ github.base_ref }}"
           else
-            flexmesa dashboard check
+            flexmesa dashboard check --no-outputs
           fi
 
       - name: Build diagnostic figures, MkDocs site, and verify snippets

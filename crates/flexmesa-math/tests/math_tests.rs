@@ -343,6 +343,65 @@ fn test_safe_guards_and_io_helpers_handle_edge_cases() {
     );
 }
 
+/// Rounding-error bound for `asinh(sinh(x)) - x` under the strict formula
+/// `log(y + sqrt(1 + y*y))` (`crmath_r_dp.f90:385-391`).
+///
+/// With `eps = f64::EPSILON`, `y = sinh(x)`, `s = sqrt(1 + y*y)` and
+/// `z = y + s`:
+///
+/// - `sinh` rounded toward zero has relative error at most `eps`, which
+///   changes `asinh(y)` by at most `eps * |y| / s <= eps`;
+/// - `1 + y*y` (two roundings) and its square root (one more) leave `s` with
+///   relative error at most `eps`, an absolute error of `eps * s`;
+/// - the sum `y + s` adds a relative error of `eps / 2`, so `z` has relative
+///   error at most `eps * s / z + eps / 2`, and `log(z)` moves by the same
+///   amount;
+/// - `log` rounded toward zero adds at most `eps * |x|`.
+///
+/// The total is below `eps * (s / z + |x| + 2)`. For `x >= 0` the ratio
+/// `s / z` is below one. For `x < 0` the sum `y + s` cancels and `s / z`
+/// grows like `2 * y * y`, which is the loss of accuracy upstream's formula
+/// has for negative arguments.
+fn asinh_of_sinh_error_bound(x: f64) -> f64 {
+    let y = sinh(x);
+    let s = (1.0 + y * y).sqrt();
+    let z = y + s;
+    f64::EPSILON * (s / z + x.abs() + 2.0)
+}
+
+/// Check `asinh(sinh(x))` against the derived bound at fixed arguments,
+/// including the negative argument that exceeded the earlier fixed `1e-14`
+/// bound in CI (`x = -9.679719701869262 / 4`).
+#[test]
+fn test_asinh_of_sinh_meets_derived_bound_at_fixed_arguments() {
+    let fixed = [
+        -9.679_719_701_869_262 * 0.25,
+        -2.5,
+        -2.0,
+        -1.0,
+        -0.5,
+        -1.0e-3,
+        0.0,
+        1.0e-3,
+        0.5,
+        1.0,
+        2.0,
+        2.5,
+        -5.0,
+        5.0,
+        -10.0,
+        10.0,
+    ];
+    for x in fixed {
+        let err = (asinh(sinh(x)) - x).abs();
+        let bound = asinh_of_sinh_error_bound(x);
+        assert!(err <= bound, "x = {x:e}: error {err:e} exceeds {bound:e}");
+        if x >= 0.0 {
+            assert!(bound < 3.0e-15, "x = {x:e}: bound {bound:e}");
+        }
+    }
+}
+
 proptest! {
     /// Verify Pythagorean trigonometric and hyperbolic identities across
     /// `[-10, 10]`.
@@ -359,7 +418,10 @@ proptest! {
         let x_small = x * 0.25;
         let hyp = pow2(cosh(x_small)) - pow2(sinh(x_small));
         prop_assert!((hyp - 1.0).abs() < 1.0e-13);
-        prop_assert!((asinh(sinh(x_small)) - x_small).abs() < 1.0e-14);
+        prop_assert!(
+            (asinh(sinh(x_small)) - x_small).abs()
+                <= asinh_of_sinh_error_bound(x_small)
+        );
         let x_pos = x_small.abs() + 0.1;
         prop_assert!((acosh(cosh(x_pos)) - x_pos).abs() < 1.0e-13);
     }

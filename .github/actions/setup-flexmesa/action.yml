@@ -30,6 +30,10 @@ inputs:
     description: Whether to cache persistent JAX XLA compilation artifacts.
     required: false
     default: "false"
+  rust-cache-key:
+    description: Extra key separating this job's cargo cache from other jobs.
+    required: false
+    default: ""
   fetch-args:
     description: Arguments passed to src/flexmesa/data/fetch.py.
     required: false
@@ -58,6 +62,8 @@ runs:
 
     - name: Cache Rust cargo target and registry
       uses: Swatinem/rust-cache@v2
+      with:
+        key: ${{ inputs.rust-cache-key }}
 
     - name: Cache FlexMESA data-v1, test inputs, and module hex bundles
       uses: actions/cache@v4

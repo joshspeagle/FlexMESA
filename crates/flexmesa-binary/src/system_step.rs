@@ -297,6 +297,14 @@ impl BinarySystem {
         let tracing = flexmesa_star::step_trace::enabled(target_model);
         let mut outer_retry = 0_usize;
         let mut star_limit_redo_cnt = 0_usize;
+        // Upstream remeshes once per step in `prepare_for_new_step`
+        // (`star/private/evolve.f90:1882-1889`) before `new_generation`
+        // stores the old model (`evolve.f90:1895`), and a retry or redo
+        // restores that stored model with `set_current_to_old`
+        // (`evolve.f90:401`). A retry therefore starts from the remeshed
+        // model, never from the mesh of the previous step.
+        let mut post_mesh_snap: Option<crate::system_rlof::BinaryStepSnapshot> =
+            None;
         let mut pending_star_redo_dt: Option<f64> = None;
 
         loop {
@@ -304,13 +312,17 @@ impl BinarySystem {
                 // Star limit-hitting redo (`do_one_utils.f90:1436-1437`,
                 // `run_binary_support.f90:585-603`): restore pre-step state
                 // and repeat at halved `dt` without counting an outer retry.
-                self.restore_snapshot(&pre_step_snap)?;
+                self.restore_snapshot(
+                    post_mesh_snap.as_ref().unwrap_or(&pre_step_snap),
+                )?;
                 self.apply_retry_holds(&retry_holds);
                 dt_try = redo_dt;
             } else if outer_retry > 0 {
                 self.counters.num_retries += 1;
                 self.record_retry_holds(&mut retry_holds);
-                self.restore_snapshot(&pre_step_snap)?;
+                self.restore_snapshot(
+                    post_mesh_snap.as_ref().unwrap_or(&pre_step_snap),
+                )?;
                 self.apply_retry_holds(&retry_holds);
             }
             if tracing {
@@ -322,6 +334,20 @@ impl BinarySystem {
                 );
             }
 
+            // Remesh once per step, before either branch (see `post_mesh_snap`).
+            if outer_retry == 0 && star_limit_redo_cnt == 0 {
+                self.refresh_tidal_deformation_hooks(false)?;
+                if self.donor.controls.mesh_delta_coeff > 0.0 {
+                    let _ = remesh_star_before_step(&mut self.donor, dt_try)?;
+                }
+                if let BinaryCompanion::Star(ref mut s2) = self.companion {
+                    if s2.controls.mesh_delta_coeff > 0.0 {
+                        let _ = remesh_star_before_step(s2, dt_try)?;
+                    }
+                }
+                self.refresh_tidal_deformation_hooks(false)?;
+                post_mesh_snap = Some(self.capture_snapshot());
+            }
             if !implicit_mode {
                 let mut redo_idx = 0_usize;
                 let mut explicit_trial_mdot = if self.ignore_rlof_flag {
@@ -339,7 +365,9 @@ impl BinarySystem {
                         // it is not called in explicit mode
                         // (`binary_evolve.f90:407-415`), so an explicit redo
                         // starts again from the old values.
-                        self.restore_snapshot(&pre_step_snap)?;
+                        self.restore_snapshot(
+                            post_mesh_snap.as_ref().unwrap_or(&pre_step_snap),
+                        )?;
                         self.apply_retry_holds(&retry_holds);
                         explicit_trial_mdot = if self.ignore_rlof_flag {
                             0.0
@@ -350,7 +378,6 @@ impl BinarySystem {
                     match self.run_single_trial(
                         explicit_trial_mdot,
                         dt_try,
-                        outer_retry == 0 && redo_idx == 0,
                         extras,
                     ) {
                         Ok(SingleTrialOutcome::Completed {
@@ -588,18 +615,6 @@ impl BinarySystem {
             }
 
             // Implicit RLOF branch (`run_binary_support.f90:417-652`).
-            if outer_retry == 0 && star_limit_redo_cnt == 0 {
-                self.refresh_tidal_deformation_hooks(false)?;
-                if self.donor.controls.mesh_delta_coeff > 0.0 {
-                    let _ = remesh_star_before_step(&mut self.donor, dt_try)?;
-                }
-                if let BinaryCompanion::Star(ref mut s2) = self.companion {
-                    if s2.controls.mesh_delta_coeff > 0.0 {
-                        let _ = remesh_star_before_step(s2, dt_try)?;
-                    }
-                }
-                self.refresh_tidal_deformation_hooks(false)?;
-            }
             let mut trial_snap = self.capture_snapshot();
             let mut solver = ImplicitMdotSolver::from_controls(
                 &self.controls,
@@ -632,7 +647,7 @@ impl BinarySystem {
                 }
                 self.counters.num_implicit_trials += 1;
                 let (dt_used, ts_ctrl) = match self
-                    .run_single_trial(trial_mdot, dt_try, false, extras)
+                    .run_single_trial(trial_mdot, dt_try, extras)
                 {
                     Ok(SingleTrialOutcome::Completed { dt_used, ts_ctrl }) => {
                         if try_idx > 1 && dt_used < 0.999_999 * dt_try {
@@ -1189,7 +1204,6 @@ impl BinarySystem {
         &mut self,
         trial_mdot: f64,
         dt_try: f64,
-        allow_remesh: bool,
         extras: &mut dyn BinaryExtras,
     ) -> Result<SingleTrialOutcome, StarError> {
         let doing_first_model_of_run = self.model_number == 0;
@@ -1249,7 +1263,7 @@ impl BinarySystem {
         let dt_used = evolve_single_star_without_term_rewind(
             &mut self.donor,
             dt_try,
-            allow_remesh,
+            false,
         )?
         .dt;
         let extra_w_d =
@@ -1265,7 +1279,7 @@ impl BinarySystem {
             let rep_a = evolve_single_star_without_term_rewind(
                 s2,
                 dt_used,
-                allow_remesh,
+                false,
             )?;
             if rep_a.dt < 0.999_999 * dt_used {
                 return Ok(SingleTrialOutcome::CutDt(rep_a.dt));

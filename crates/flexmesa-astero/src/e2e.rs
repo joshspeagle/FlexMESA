@@ -245,6 +245,10 @@ fn run_astero_search_case(
     }
     let runtime_sec = t0.elapsed().as_secs_f64();
     let term_tail = search_rep.last_termination.as_str();
+    let effective_term = search_rep
+        .best_termination
+        .as_deref()
+        .unwrap_or(term_tail);
     let stage = StageRunReport {
         inlist_name: String::from("inlist"),
         steps_taken: search_rep.total_steps,
@@ -260,11 +264,12 @@ fn run_astero_search_case(
         final_history: hr,
         history_rows: vec![hr],
     };
-    let passed = assertions_passed
-        && term_tail != "max_steps_cap"
-        && !term_tail.starts_with("limit_num_")
-        && max_steps_per_stage.is_none()
-        && (!verify_restart || photo_restart_verified);
+    let passed = is_astero_search_passed(
+        assertions_passed,
+        effective_term,
+        max_steps_per_stage.is_none(),
+        !verify_restart || photo_restart_verified,
+    );
     Ok(build_case_report(
         case_name,
         passed,
@@ -275,6 +280,32 @@ fn run_astero_search_case(
         photo_restart_verified,
         assertions_passed,
     ))
+}
+
+/// Evaluates whether an asteroseismic search run completed cleanly.
+///
+/// Upstream `astero/private/extras_support.f90:492-502,521-528` treats
+/// `limit_num_chi2_too_big` ("have reached too many bad chi2 limit") as a
+/// normal early-stopping condition once a track passes its $\chi^2$ minimum,
+/// so `limit_num_*` is accepted while step caps and abnormal solver stops
+/// remain failures.
+pub(crate) fn is_astero_search_passed(
+    assertions_passed: bool,
+    effective_term: &str,
+    uncapped: bool,
+    restart_ok: bool,
+) -> bool {
+    let abnormal_termination = matches!(
+        effective_term,
+        "max_steps_cap"
+            | "min_timestep_limit"
+            | "max_number_retries"
+            | "redo_limit"
+            | "dt_is_zero"
+            | "varcontrol_target < min_allowed_varcontrol_target"
+            | "invalid dt_next in timestep_controller"
+    );
+    assertions_passed && !abnormal_termination && uncapped && restart_ok
 }
 
 fn build_case_report(

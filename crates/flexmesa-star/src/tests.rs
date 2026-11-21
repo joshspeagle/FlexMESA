@@ -552,3 +552,59 @@ fn test_tdc_mlt_vc_old_preserved_across_pre_step_remesh_and_mod_roundtrip() {
             .expect("read radiative .mod");
     assert!(reloaded.aux.have_mlt_vc);
 }
+
+#[test]
+fn test_verify_photo_restart_parity_succeeds_after_max_age_termination() {
+    use crate::inlist_runner::verify_photo_restart_parity;
+
+    let controls = StarControls {
+        initial_mass: 1.0,
+        initial_z: 0.02,
+        zbase: 0.02,
+        okay_to_remesh: false,
+        ..StarControls::default()
+    };
+    let mut base = load_zams_model(controls, StarJobControls::default())
+        .expect("1 Msun ZAMS");
+    set_hydro_vars(&mut base, false, false).expect("init hydro");
+    star_evolve_step(&mut base, false, false, true).expect("step 1");
+    assert!(base.star_age > 0.0);
+
+    // 1. Model sitting at `max_age` with `dt_next = 0.0` (clipped by
+    // `pick_next_timestep`): direct `star_evolve_step` returns `Terminated`,
+    // while `verify_photo_restart_parity` clears age caps on its clones.
+    let mut at_max_age = base.clone();
+    at_max_age.controls.max_age = at_max_age.star_age;
+    at_max_age.dt_next = 0.0;
+    let mut direct = at_max_age.clone();
+    let direct_err = star_evolve_step(&mut direct, false, false, true)
+        .expect_err("direct step at max_age must terminate");
+    assert!(
+        matches!(
+            direct_err,
+            StarError::Terminated { ref reason, .. } if reason == "max_age"
+        ),
+        "unexpected direct error at max_age: {direct_err:?}"
+    );
+    let (c1, c2) = verify_photo_restart_parity(&at_max_age, 1)
+        .expect("photo restart parity must succeed at max_age");
+    assert_eq!(c1, c2);
+    assert_eq!(at_max_age.controls.max_age, at_max_age.star_age);
+
+    // 2. Model sitting at `max_age_in_days` with positive `dt_next` (clipped
+    // in `prepare_for_new_step`).
+    let mut at_max_days = base.clone();
+    at_max_days.controls.ts_stop.max_age_in_days =
+        at_max_days.aux.step_hist.time_sec / flexmesa_const::SECDAY;
+    let (d1, d2) = verify_photo_restart_parity(&at_max_days, 1)
+        .expect("photo restart parity must succeed at max_age_in_days");
+    assert_eq!(d1, d2);
+
+    // 3. Model sitting at `max_age_in_seconds`.
+    let mut at_max_secs = base;
+    at_max_secs.controls.max_age_in_seconds =
+        Some(at_max_secs.aux.step_hist.time_sec);
+    let (s1, s2) = verify_photo_restart_parity(&at_max_secs, 1)
+        .expect("photo restart parity must succeed at max_age_in_seconds");
+    assert_eq!(s1, s2);
+}

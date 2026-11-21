@@ -72,7 +72,9 @@ pub fn perm_uniform(n: usize, seed: &mut i32) -> Vec<usize> {
 /// Configuration parameters for [`nm_simplex`] matching upstream `NM_simplex`.
 #[derive(Debug, Clone, Copy)]
 pub struct SimplexConfig {
-    /// Maximum function evaluations (`evaluation_max`).
+    /// Maximum Nelder-Mead iterations (`iter_max` in `mod_simplex.f90:52,127`).
+    pub max_iters: usize,
+    /// Maximum function evaluations (`fcn_calls_max` in `mod_simplex.f90:52,127`).
     pub max_evals: usize,
     /// Relative simplex diameter convergence tolerance (`x_atol` / `x_rtol`).
     pub x_tol: f64,
@@ -100,6 +102,7 @@ pub struct SimplexConfig {
 impl Default for SimplexConfig {
     fn default() -> Self {
         Self {
+            max_iters: 20_000,
             max_evals: 20_000,
             x_tol: 1e-10,
             f_tol: 0.0,
@@ -246,7 +249,7 @@ where
         {
             break;
         }
-        if num_iters > config.max_evals || num_evals > config.max_evals {
+        if num_iters > config.max_iters || num_evals > config.max_evals {
             break;
         }
 

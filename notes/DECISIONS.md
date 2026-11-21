@@ -61,6 +61,7 @@ Scope and the `v0.1.0` definition are in [`SCOPE.md`](SCOPE.md). Work is tracked
 | 44 | Along-Track `num_zones` and `hb_2M` `mass_conv_core` Manifest Tolerances, A2 Table Upgrades, and `hb_2M` Timeout Budget (`#152`, `#153`, `#155`, `#156`, `#159`) | In force | below |
 | 45 | Sharded CI Jobs, a Non-LTO `ci` Test Profile, and Coverage Off Ordinary Pull Requests | In force | below |
 | 46 | Upstream `real(qp)` Is IEEE-754 `binary128` in Software (`flexmesa_math::Quad`), Not Double-Double | In force | below |
+| 47 | Pull Requests Do Not Carry the Generated Dashboard; `main` Regenerates It; the README View Is Compact | In force | below |
 | 48 | Pull-Request CI Runs Only the Job Groups a Change Can Affect; the Gate Smoke Test Uses the Shortest Case | In force | below |
 
 ## Pre-audit decisions still in force
@@ -622,6 +623,18 @@ The text of these four entries predates the audit of 2026-11-16. The decisions s
   - *Keep double-double*: not the arithmetic upstream runs.
   - *An external crate (`rug`, `f128`, `softfloat` bindings)*: adds C code or `unsafe`, against `#![forbid(unsafe_code)]`, for about 500 lines of integer arithmetic.
   - *Rust's native `f128`*: not available on the stable toolchain the workspace builds with.
+
+## DECISIONS #47: Pull Requests Do Not Carry the Generated Dashboard; `main` Regenerates It; the README View Is Compact
+
+- **Date**: 2026-11-21
+- **Decision**:
+  1. **No dashboard files in pull requests**: a pull request no longer has to commit `README.md`'s dashboard block, `docs/benchmarks/progress-dashboard.md`, `docs/index.md`'s summary or `benchmarks/dashboard/dashboard.json`. The pull-request and `main` CI jobs run `flexmesa dashboard check --no-outputs`, which validates the port manifest and requires the dashboard to render, without comparing the result with the committed files. The `refresh-dashboard` job in `dashboard.yml` already renders and commits those files on `main` after every merge, and still runs the full comparison after writing them. This amends item 2 of `DECISIONS #24`; the rest of that entry stands.
+  2. **Compact README view**: the README block is badges, one headline sentence, a status chart, a module map and two short tables (`src/flexmesa/testing/_dashboard_readme.py`). The full tables stay on the documentation page. All of it is computed from the same data.
+- **Why**: Every pull request changed the same generated files, so each merge made every other open pull request stale and forced its CI to run again. With several pull requests open this roughly doubled the waiting. The project lead approved the change on 2026-11-21 and asked for a shorter, more visual README dashboard with badges.
+- **Limits**: Between a merge and the bot's refresh commit, the dashboard on `main` describes the previous commit. The refresh no longer waits for the coverage jobs: `refresh-dashboard` runs straight after the merge with the coverage numbers already committed, and `refresh-coverage` updates those numbers in a second commit when the coverage jobs finish, so coverage shown on `main` can be one merge behind for about an hour and a half. A hand edit of a dashboard number in a pull request is not rejected in that pull request, and is overwritten by the next refresh. Other generated files (`notes/audit/case_table.md`, the known-gaps page, the harness baseline) are still committed by the pull request that changes their inputs.
+- **Alternatives Rejected**:
+  - *Keep the byte-exact gate on pull requests*: the cost described above.
+  - *Hand-typed percentages for the README*: against `#174`; every number shown comes from the port manifest, the case table, or the coverage summary.
 
 ## DECISIONS #48: Pull-Request CI Runs Only the Job Groups a Change Can Affect; the Gate Smoke Test Uses the Shortest Case
 

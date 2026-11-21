@@ -10,6 +10,7 @@ from flexmesa.data import fetch
 from flexmesa.testing import (
     _dashboard_collect,
     _dashboard_coverage,
+    _dashboard_render,
     _port_parsers,
     dashboard,
     port_manifest,
@@ -281,13 +282,35 @@ def test_port_manifest_promotion_and_base_metadata_immutability() -> None:
     assert not errs_raise_ok
 
 
-def test_dashboard_freshness_gate_matches_committed_outputs() -> None:
-    """Committed README, docs dashboard, and JSON must match a fresh render."""
+def test_dashboard_renders_and_manifest_invariants_hold() -> None:
+    """The dashboard must render and the port manifest must be valid.
+
+    The committed README, docs page and JSON are not compared here: `main`
+    regenerates them after each merge (`DECISIONS #47`), so a pull request
+    does not carry them. The comparison itself is exercised by
+    `test_dashboard_freshness_gate_detects_hand_edited_readme_number`.
+    """
     mesa_dir = fetch.resolve_mesa_test_inputs_dir()
     errs = dashboard.verify_all_dashboard_invariants(
-        repo_root=REPO_ROOT, mesa_dir=mesa_dir
+        repo_root=REPO_ROOT, mesa_dir=mesa_dir, check_outputs=False
     )
     assert not errs
+
+
+def test_readme_dashboard_is_compact_and_covers_every_module() -> None:
+    """The README view stays short and names each manifest module once."""
+    mesa_dir = fetch.resolve_mesa_test_inputs_dir()
+    data = dashboard.build_dashboard_data(REPO_ROOT, mesa_dir)
+    block = _dashboard_render.render_readme_block(data)
+    lines = block.splitlines()
+    assert len(lines) <= 160
+    for row in data["module_coverage"]["rows"]:
+        mod = row["module"]
+        assert sum(1 for ln in lines if ln.startswith(f"| `{mod}` | `")) == 1
+    assert block.count("```mermaid") == 2
+    assert "img.shields.io/badge/engine%20ported-" in block
+    hh = _dashboard_render.summarize_headline(data)["hh_tot"]
+    assert f"**{hh['passing']} / {hh['total']}**" in block
 
 
 def test_dashboard_freshness_gate_detects_hand_edited_readme_number(

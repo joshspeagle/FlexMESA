@@ -92,11 +92,11 @@ Progress is measured by **upstream MESA `26.4.1` source lines by status**, never
 | Suite | `26.4.1` Cases | Stored `26.4.1` Refs | No Ref Yet | Strict-Validated | Diagnostic Runs | Reach Upstream Term | Within Numeric Tol | Verified Pass | Declared Gaps | Undeclared Failures |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
 | `star` | 90 | 86 | 4 | 0 | 90 | 37 | 5 | 0 | 86 | 0 |
-| `binary` | 8 | 8 | 0 | 0 | 8 | 6 | 0 | 0 | 8 | 0 |
+| `binary` | 8 | 8 | 0 | 0 | 8 | 6 | 1 | 0 | 8 | 0 |
 | `astero` | 8 | 8 | 0 | 0 | 8 | 3 | 1 | 0 | 8 | 0 |
-| **Total** | **106** | **102** | **4** | **0** | **106** | **46** | **6** | **0** | **102** | **0** |
+| **Total** | **106** | **102** | **4** | **0** | **106** | **46** | **7** | **0** | **102** | **0** |
 
-- **Full per-case table**: [`notes/audit/case_table.md`](https://github.com/joshspeagle/FlexMESA/blob/main/notes/audit/case_table.md). `6` case(s) within numeric tolerance (`rsp_BEP`, `rsp_BLAP`, `rsp_Cepheid`, `rsp_RR_Lyrae`, `rsp_save_and_load_file`, `surface_effects`) remain governed as declared gaps under [#161](https://github.com/joshspeagle/FlexMESA/issues/161), [#162](https://github.com/joshspeagle/FlexMESA/issues/162).
+- **Full per-case table**: [`notes/audit/case_table.md`](https://github.com/joshspeagle/FlexMESA/blob/main/notes/audit/case_table.md). `7` case(s) within numeric tolerance (`rsp_BEP`, `rsp_BLAP`, `rsp_Cepheid`, `rsp_RR_Lyrae`, `rsp_save_and_load_file`, `evolve_both_stars`, `surface_effects`) remain governed as declared gaps under [#160](https://github.com/joshspeagle/FlexMESA/issues/160), [#161](https://github.com/joshspeagle/FlexMESA/issues/161), [#162](https://github.com/joshspeagle/FlexMESA/issues/162).
 - **Declared gaps by owning package**: [#161](https://github.com/joshspeagle/FlexMESA/issues/161) (27), [#299](https://github.com/joshspeagle/FlexMESA/issues/299) (20), [#154](https://github.com/joshspeagle/FlexMESA/issues/154) (13), [#157](https://github.com/joshspeagle/FlexMESA/issues/157) (9), [#162](https://github.com/joshspeagle/FlexMESA/issues/162) (9), [#160](https://github.com/joshspeagle/FlexMESA/issues/160) (7), [#170](https://github.com/joshspeagle/FlexMESA/issues/170) (7), [#158](https://github.com/joshspeagle/FlexMESA/issues/158) (6), [#231](https://github.com/joshspeagle/FlexMESA/issues/231) (2), [#151](https://github.com/joshspeagle/FlexMESA/issues/151) (1), [#171](https://github.com/joshspeagle/FlexMESA/issues/171) (1).
 - **Trajectory comparison figures ([#173](https://github.com/joshspeagle/FlexMESA/issues/173))**: `0` committed.
 
@@ -260,4 +260,5 @@ Full scalar diff: [`notes/audit/defaults_diff_26_4_1.md`](https://github.com/jos
 | `2026-11-21` | `3195d37` | main merge | 30.2% | 1.0% | 0/106 | 75.4% | 87.6% | 16/36 | 44 |
 | `2026-11-21` | `5f955f5` | main merge | 30.2% | 1.0% | 0/106 | 75.4% | 87.6% | 16/36 | 44 |
 | `2026-11-21` | `d9d6453` | main merge | 30.2% | 1.0% | 0/106 | 75.4% | 87.6% | 16/36 | 44 |
+| `2026-11-21` | `fbbec5a` | main merge | 30.2% | 1.0% | 0/106 | 75.5% | 87.6% | 16/36 | 44 |
 <!-- END GENERATED DASHBOARD -->

@@ -608,7 +608,7 @@
         "strict_validated": 0,
         "diagnostic_runs": 8,
         "reached_termination": 6,
-        "within_numeric_tol": 0,
+        "within_numeric_tol": 1,
         "passing": 0,
         "declared_gaps": 8,
         "undeclared_failures": 0
@@ -651,6 +651,11 @@
         "suite": "star",
         "case": "rsp_save_and_load_file",
         "issue": "#161"
+      },
+      {
+        "suite": "binary",
+        "case": "evolve_both_stars",
+        "issue": "#160"
       },
       {
         "suite": "astero",
@@ -2548,6 +2553,19 @@
       "all_verified_pct": "1.0",
       "cases_passing": "0",
       "rust_cov_pct": "75.4",
+      "python_cov_pct": "87.6",
+      "closed_140": "16",
+      "total_140": "36",
+      "deferred_169": "44"
+    },
+    {
+      "date_utc": "2026-11-21",
+      "commit": "fbbec5a",
+      "event": "main merge",
+      "engine_ported_pct": "30.2",
+      "all_verified_pct": "1.0",
+      "cases_passing": "0",
+      "rust_cov_pct": "75.5",
       "python_cov_pct": "87.6",
       "closed_140": "16",
       "total_140": "36",

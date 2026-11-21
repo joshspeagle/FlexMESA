@@ -1463,7 +1463,18 @@
         "issues": []
       }
     ],
-    "open_pull_requests": [],
+    "open_pull_requests": [
+      {
+        "number": 315,
+        "title": "fix(net,star): use binary128 for the reaction-network sums and the RSP shell volume, replacing two double-double types",
+        "draft": false
+      },
+      {
+        "number": 317,
+        "title": "feat(star): translate mass_utils.f90 in real(qp) (not yet wired into eps_mdot)",
+        "draft": false
+      }
+    ],
     "deferred_169": [
       {
         "number": 175,
@@ -2432,6 +2443,19 @@
       "cases_passing": "0",
       "rust_cov_pct": "75.3",
       "python_cov_pct": "87.5",
+      "closed_140": "16",
+      "total_140": "36",
+      "deferred_169": "43"
+    },
+    {
+      "date_utc": "2026-11-21",
+      "commit": "7d8f040",
+      "event": "main merge",
+      "engine_ported_pct": "30.2",
+      "all_verified_pct": "1.0",
+      "cases_passing": "0",
+      "rust_cov_pct": "75.3",
+      "python_cov_pct": "87.6",
       "closed_140": "16",
       "total_140": "36",
       "deferred_169": "43"

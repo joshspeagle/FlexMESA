@@ -14,91 +14,45 @@ use crate::star_ad::{
     I_V_P1,
 };
 
-/// Evaluates the cell-specific gravitational potential energy rate $de_{\mathrm{pot}}/dt$
-/// in $\mathrm{erg\,g^{-1}\,s^{-1}}$ for cell `k` (`cell_specific_PE_qp` and
-/// `cell_start_specific_PE_qp` in `star/private/star_utils.f90:2245-2338`).
+/// Evaluates the cell-specific gravitational potential energy rate
+/// $de_{\mathrm{pot}}/dt$ in $\mathrm{erg\,g^{-1}\,s^{-1}}$ for cell `k` as
+/// `dpe_dt_ad` (`setup_de_dt_and_friends`, `star/private/hydro_energy.f90:455-458`),
+/// with the value and partials from [`crate::cell_energy::get_dke_dt_dpe_dt`].
 #[must_use]
 pub fn eval_cell_dpe_dt_ad(
     model: &StarModel,
     k: usize,
     dt: f64,
 ) -> StarAdOrder1 {
-    let mc = if model.controls.use_mass_corrections {
-        model.aux.mass_correction.get(k).copied().unwrap_or(1.0)
-    } else {
-        1.0
-    };
-    let r_00 = StarAdOrder1::variable(model.ln_r[k], I_LNR_00)
-        .exp()
-        .max(StarAdOrder1::ONE);
-    let grav00 = -(model.cgrav[k] * model.m_grav[k]) / r_00;
-    let gravp1 = if k + 1 < model.nz {
-        let r_p1 = StarAdOrder1::variable(model.ln_r[k + 1], I_LNR_P1)
-            .exp()
-            .max(StarAdOrder1::ONE);
-        -(model.cgrav[k + 1] * model.m_grav[k + 1]) / r_p1
-    } else if model.r_center > 0.0 {
-        StarAdOrder1::constant(
-            -model.cgrav[model.nz - 1] * model.m_center / model.r_center,
-        )
-    } else {
-        StarAdOrder1::ZERO
-    };
-    let pe_ad = (grav00 + gravp1) * (0.5 * mc);
-
-    let rs_00 = flexmesa_math::exp(
-        model.ln_r_start.get(k).copied().unwrap_or(model.ln_r[k]),
-    )
-    .max(1.0);
-    let grav00_s = -model.cgrav[k] * model.m_grav[k] / rs_00;
-    let gravp1_s = if k + 1 < model.nz {
-        let rs_p1 = flexmesa_math::exp(
-            model
-                .ln_r_start
-                .get(k + 1)
-                .copied()
-                .unwrap_or(model.ln_r[k + 1]),
-        )
-        .max(1.0);
-        -model.cgrav[k + 1] * model.m_grav[k + 1] / rs_p1
-    } else if model.r_center > 0.0 {
-        -model.cgrav[model.nz - 1] * model.m_center / model.r_center
-    } else {
-        0.0
-    };
-    let pe_start = 0.5 * mc * (grav00_s + gravp1_s);
-    (pe_ad - pe_start) / dt
+    let rates = crate::cell_energy::get_dke_dt_dpe_dt(model, k, dt);
+    let mut dpe_dt_ad = StarAdOrder1::constant(rates.dpe_dt);
+    dpe_dt_ad.d1[I_LNR_00] = rates.d_dpedt_dlnr00;
+    dpe_dt_ad.d1[I_LNR_P1] = rates.d_dpedt_dlnrp1;
+    dpe_dt_ad
 }
 
-/// Evaluates the face-velocity kinetic energy rate $de_K/dt$ in
-/// $\mathrm{erg\,g^{-1}\,s^{-1}}$ for `v_flag` cell `k` (`cell_specific_KE_qp` in
-/// `star/private/star_utils.f90:2215-2228`).
+/// Evaluates the kinetic energy rate $de_K/dt$ in
+/// $\mathrm{erg\,g^{-1}\,s^{-1}}$ for cell `k` as `dke_dt_ad`
+/// (`setup_de_dt_and_friends`, `star/private/hydro_energy.f90:450-453`), for
+/// either `v_flag` or `u_flag`, with the value and partials from
+/// [`crate::cell_energy::get_dke_dt_dpe_dt`].
+#[must_use]
+pub fn eval_dke_dt_ad(model: &StarModel, k: usize, dt: f64) -> StarAdOrder1 {
+    let rates = crate::cell_energy::get_dke_dt_dpe_dt(model, k, dt);
+    let mut dke_dt_ad = StarAdOrder1::constant(rates.dke_dt);
+    dke_dt_ad.d1[I_V_00] = rates.d_dkedt_dv00;
+    dke_dt_ad.d1[I_V_P1] = rates.d_dkedt_dvp1;
+    dke_dt_ad
+}
+
+/// `v_flag` name for [`eval_dke_dt_ad`], kept for existing callers.
 #[must_use]
 pub fn eval_v_flag_dke_dt_ad(
     model: &StarModel,
     k: usize,
     dt: f64,
 ) -> StarAdOrder1 {
-    let mc = if model.controls.use_mass_corrections {
-        model.aux.mass_correction.get(k).copied().unwrap_or(1.0)
-    } else {
-        1.0
-    };
-    let v_00 = StarAdOrder1::variable(model.v[k], I_V_00);
-    let v_p1 = if k + 1 < model.nz {
-        StarAdOrder1::variable(model.v[k + 1], I_V_P1)
-    } else {
-        StarAdOrder1::constant(model.v_center)
-    };
-    let vs_00 = model.v_start.get(k).copied().unwrap_or(model.v[k]);
-    let vs_p1 = if k + 1 < model.nz {
-        model.v_start.get(k + 1).copied().unwrap_or(model.v[k + 1])
-    } else {
-        model.v_center
-    };
-    let ke_ad = (v_00 * v_00 + v_p1 * v_p1) * (0.25 * mc);
-    let ke_start = 0.25 * mc * (vs_00 * vs_00 + vs_p1 * vs_p1);
-    (ke_ad - ke_start) / dt
+    eval_dke_dt_ad(model, k, dt)
 }
 
 /// Evaluates spherical volume-flux rate $A_k v_{c,k}$ in $\mathrm{cm^3\,s^{-1}}$

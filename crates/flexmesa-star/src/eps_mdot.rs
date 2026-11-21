@@ -6,26 +6,8 @@
 use crate::model::StarModel;
 
 fn eval_cell_ke(model: &StarModel, k: usize) -> f64 {
-    // Matches `cell_specific_KE_qp` (`star/private/star_utils.f90:2184-2221`).
-    let mc = if model.controls.use_mass_corrections {
-        model.aux.mass_correction.get(k).copied().unwrap_or(1.0)
-    } else {
-        1.0
-    };
-    if model.controls.u_flag {
-        let v0 = model.u[k];
-        0.5 * mc * v0 * v0
-    } else if model.controls.v_flag {
-        let v0 = model.v[k];
-        let v1 = if k + 1 < model.nz {
-            model.v[k + 1]
-        } else {
-            model.v_center
-        };
-        0.5 * mc * (0.5 * (v0 * v0 + v1 * v1))
-    } else {
-        0.0
-    }
+    // `cell_specific_KE` (`star/private/star_utils.f90:2176-2221`).
+    crate::cell_energy::cell_specific_ke(model, k)
 }
 
 /// Computes the cell-centered specific kinetic energy profile
@@ -49,24 +31,15 @@ pub fn eval_cell_specific_total_energy(model: &StarModel, k: usize) -> f64 {
     if k >= nz {
         return 0.0;
     }
-    let mc = if model.controls.use_mass_corrections {
-        model.aux.mass_correction.get(k).copied().unwrap_or(1.0)
-    } else {
-        1.0
-    };
-    let grav_00 = if model.r[k] > 0.0 {
-        -model.cgrav[k] * model.m_grav[k] / model.r[k]
-    } else {
-        0.0
-    };
-    let (r_p1, m_p1, g_p1) = if k + 1 < nz {
-        (model.r[k + 1], model.m_grav[k + 1], model.cgrav[k + 1])
-    } else {
-        (model.r_center, model.m_center, model.cgrav[k])
-    };
-    let grav_p1 = if r_p1 > 0.0 { -g_p1 * m_p1 / r_p1 } else { 0.0 };
-    let e_grav = 0.5 * mc * (grav_00 + grav_p1);
-    model.energy[k] + e_grav + eval_cell_ke(model, k)
+    // `cell_specific_total_energy` (`star/private/star_utils.f90:2396-2408`):
+    // internal energy, then kinetic energy when a velocity variable exists,
+    // then potential energy, added in that order.
+    let mut cell_total = model.energy[k];
+    if model.controls.v_flag || model.controls.u_flag {
+        cell_total += crate::cell_energy::cell_specific_ke(model, k);
+    }
+    cell_total += crate::cell_energy::cell_specific_pe(model, k);
+    cell_total
 }
 
 /// Computes the specific total energy profile $e_{\mathrm{tot},k}$

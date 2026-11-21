@@ -131,28 +131,24 @@ pub struct MltInputs<T> {
 ///
 /// Supports both scalar `f64` and `DualOrder1<N>` inputs via [`TurbScalar`].
 ///
+/// Upstream `turb/private/mlt.f90:53-181` never assigns `ierr`, and
+/// `star/private/turb_support.f90:282-298` initializes the outputs to the
+/// radiative no-mixing state (`Gamma = 0`, `gradT = gradr`,
+/// `Y_face = gradr - gradL`, `conv_vel = 0`, `D = 0`, `mixing_type = no_mixing`,
+/// `ierr = 0`) before calling `set_MLT`. Each bare `return` in `calc_MLT`
+/// (`f1 <= 0` at `mlt.f90:140`, `Gamma <= 0` at `mlt.f90:145`, and
+/// `is_bad(Zeta)` at `mlt.f90:169`) therefore returns `Ok` with whichever
+/// outputs have already been written and the caller's no-mixing baseline for
+/// the rest. Adding explicit input validation on degenerate MLT inputs is
+/// deferred to `#330`.
+///
 /// # Errors
-/// Returns [`TurbError::InvalidParameter`] if an intermediate quantity is
-/// non-finite (`NaN` or `Inf`).
+/// Currently always returns `Ok` (`ierr = 0`), matching upstream `calc_MLT`'s
+/// effective runtime behavior (`#330`).
 pub fn set_mlt<T: TurbScalar>(
     params: &MltParams,
     inp: &MltInputs<T>,
 ) -> TurbResult<TurbOutput<T>> {
-    if params.mixing_length_alpha <= 0.0
-        || is_bad(params.mixing_length_alpha)
-        || inp.t.val() <= 0.0
-        || inp.rho.val() <= 0.0
-        || inp.p.val() <= 0.0
-        || inp.cp.val() <= 0.0
-        || inp.opacity.val() <= 0.0
-        || is_bad(inp.gradr.val())
-        || is_bad(inp.gradl.val())
-        || is_bad(inp.grada.val())
-    {
-        return Err(TurbError::InvalidParameter(
-            "invalid or non-positive thermodynamic input in set_mlt",
-        ));
-    }
     let zero = T::from_f64(0.0);
     let one = T::from_f64(1.0);
 
@@ -204,14 +200,30 @@ pub fn set_mlt<T: TurbScalar>(
             }
         };
 
-        // The closed form is used for every `delta > 0`, as upstream does
-        // (`turb/private/mlt.f90:132-151`); a small-`delta` series is a
-        // deferred enhancement (#322).
+        // The closed form is always evaluated, with no small-`delta` series
+        // (`#322`) and no `delta <= 0` shortcut (`turb/private/mlt.f90:122-145`).
         // Solve cubic efficiency equation:
         // a0 * Gamma^3 + Gamma^2 + Gamma - a0 * B^3 = 0, with delta = a0 * B^3.
         let b_cubed = (a_val.pow2() / a0) * (inp.gradr - inp.gradl);
         let delta = a0 * b_cubed;
-        let (gamma_val, zeta_val) = if delta.val() <= 0.0 {
+        let f = T::from_f64(-2.0)
+            + T::from_f64(9.0) * a0
+            + T::from_f64(27.0) * a0 * a0 * delta;
+        let f0 = if f.val() > 1.0e100 {
+            f
+        } else {
+            let term = T::from_f64(-1.0) + T::from_f64(3.0) * a0;
+            let f0_sq = f.pow2() + T::from_f64(4.0) * term * term * term;
+            if f0_sq.val() <= 0.0 {
+                f
+            } else {
+                f0_sq.sqrt()
+            }
+        };
+        let f1_arg = f + f0;
+        // Bare `return` in `turb/private/mlt.f90:140` before any output is
+        // written; caller baseline is `turb_support.f90:283-288`.
+        if f1_arg.val() <= 0.0 {
             return Ok(TurbOutput {
                 gamma: zero,
                 grad_t: inp.gradr,
@@ -220,50 +232,23 @@ pub fn set_mlt<T: TurbScalar>(
                 d: zero,
                 mixing_type: MixingType::NoMixing,
             });
-        } else {
-            let f = T::from_f64(-2.0)
-                + T::from_f64(9.0) * a0
-                + T::from_f64(27.0) * a0 * a0 * delta;
-            let f0 = if f.val() > 1.0e100 {
-                f
-            } else {
-                let term = T::from_f64(-1.0) + T::from_f64(3.0) * a0;
-                let f0_sq = f.pow2() + T::from_f64(4.0) * term * term * term;
-                if f0_sq.val() <= 0.0 {
-                    f
-                } else {
-                    f0_sq.sqrt()
-                }
-            };
-            let f1_arg = f + f0;
-            if f1_arg.val() <= 0.0 {
-                return Ok(TurbOutput {
-                    gamma: zero,
-                    grad_t: inp.gradr,
-                    y_face: inp.gradr - inp.gradl,
-                    conv_vel: zero,
-                    d: zero,
-                    mixing_type: MixingType::NoMixing,
-                });
-            }
-            let f1 = f1_arg.powf(ONE_THIRD);
-            let f2 =
-                T::from_f64(2.0 * TWO_13) * (one - T::from_f64(3.0) * a0) / f1;
-            let g = (T::from_f64(FOUR_13) * f1 + f2 - T::from_f64(2.0))
-                / (T::from_f64(6.0) * a0);
-            if g.val() <= 0.0 {
-                return Ok(TurbOutput {
-                    gamma: zero,
-                    grad_t: inp.gradr,
-                    y_face: inp.gradr - inp.gradl,
-                    conv_vel: zero,
-                    d: zero,
-                    mixing_type: MixingType::NoMixing,
-                });
-            }
-            let z = (T::from_f64(3.0) * g.log() - b_cubed.log()).exp();
-            (g, z)
-        };
+        }
+        let f1 = f1_arg.powf(ONE_THIRD);
+        let f2 = T::from_f64(2.0 * TWO_13) * (one - T::from_f64(3.0) * a0) / f1;
+        let gamma_val = (T::from_f64(FOUR_13) * f1 + f2 - T::from_f64(2.0))
+            / (T::from_f64(6.0) * a0);
+        // Bare `return` in `turb/private/mlt.f90:145` after `Gamma` was
+        // assigned at line 143; remaining outputs keep caller baseline.
+        if gamma_val.val() <= 0.0 {
+            return Ok(TurbOutput {
+                gamma: gamma_val,
+                grad_t: inp.gradr,
+                y_face: inp.gradr - inp.gradl,
+                conv_vel: zero,
+                d: zero,
+                mixing_type: MixingType::NoMixing,
+            });
+        }
 
         let mut vc = T::from_f64(params.mixing_length_alpha)
             * (q * inp.p / (T::from_f64(8.0) * inp.rho)).sqrt()
@@ -273,13 +258,25 @@ pub fn set_mlt<T: TurbScalar>(
             vc = vc.with_val(params.max_conv_vel);
         }
         let d_val = vc * inp.lambda / T::from_f64(3.0);
+        let zeta_val =
+            (T::from_f64(3.0) * gamma_val.log() - b_cubed.log()).exp();
         (gamma_val, zeta_val, vc, d_val)
     } else {
         (T::from_f64(-1.0e99), zero, zero, zero)
     };
 
+    // Bare `return` in `turb/private/mlt.f90:169` after `Gamma`, `conv_vel`,
+    // and `D` were assigned; `gradT`, `Y_face`, and `mixing_type` keep the
+    // caller's no-mixing baseline (`turb_support.f90:283-288`, `#330`).
     if is_bad(zeta.val()) {
-        return Err(TurbError::InvalidParameter("NaN or Inf in MLT Zeta"));
+        return Ok(TurbOutput {
+            gamma,
+            grad_t: inp.gradr,
+            y_face: inp.gradr - inp.gradl,
+            conv_vel,
+            d,
+            mixing_type: MixingType::NoMixing,
+        });
     }
     if zeta.val() > 1.0 {
         zeta = one;

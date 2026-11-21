@@ -21,7 +21,7 @@
 
 use flexmesa_const::{MixingType, BOLTZ_SIGMA, CLIGHT, CRAD, PI, SQRT_2_DIV_3};
 
-use crate::mlt::{set_mlt, MltInputs, MltParams};
+use crate::mlt::{set_mlt, MltInputs, MltOption, MltParams};
 use crate::tdc_search::{
     af_bisection_search, bracket_plus_newton_search, dq_dz_bisection_search,
 };
@@ -120,6 +120,11 @@ pub struct TdcOutput<T> {
 /// Evaluates Time-Dependent Convection (`set_TDC` in `turb/public/turb.f90` and
 /// `get_TDC_solution` in `turb/private/tdc.f90`).
 ///
+/// Calls `set_MLT('Cox', ...)` unconditionally before packing `TdcInfo`
+/// (`turb/public/turb.f90:142-145`) and enforces upstream's
+/// `mixing_length_alpha == 0` / `dt <= 0` guard in `get_TDC_solution`
+/// (`turb/private/tdc.f90:65-67`).
+///
 /// # Errors
 /// Returns [`TurbError`] if `mixing_length_alpha == 0`, `dt <= 0`, or the TDC
 /// root-finder fails to converge.
@@ -127,27 +132,6 @@ pub fn set_tdc<T: TdcLift>(
     params: &TdcParams,
     inp: &TdcInputs<T>,
 ) -> TurbResult<TdcOutput<T>> {
-    if params.mixing_length_alpha <= 0.0
-        || params.dt <= 0.0
-        || params.scale <= 0.0
-        || params.mixing_length_alpha.is_nan()
-        || params.dt.is_nan()
-        || params.scale.is_nan()
-        || inp.t.val() <= 0.0
-        || inp.rho.val() <= 0.0
-        || inp.p.val() <= 0.0
-        || inp.cp.val() <= 0.0
-        || inp.opacity.val() <= 0.0
-        || inp.scale_height.val() <= 0.0
-        || inp.gradr.val().is_nan()
-        || inp.gradl.val().is_nan()
-        || inp.grada.val().is_nan()
-    {
-        return Err(TurbError::InvalidParameter(
-            "invalid or non-positive parameter in set_tdc",
-        ));
-    }
-
     let l = T::from_f64(64.0 * PI * BOLTZ_SIGMA)
         * inp.t.pow4()
         * inp.grav
@@ -155,27 +139,31 @@ pub fn set_tdc<T: TdcLift>(
         * inp.gradr
         / (T::from_f64(3.0) * inp.p * inp.opacity);
 
-    let gamma = if params.include_mlt_corr_to_tdc {
-        let lambda = T::from_f64(params.mixing_length_alpha) * inp.scale_height;
-        let mlt_params = MltParams::cox(params.mixing_length_alpha);
-        let mlt_inp = MltInputs {
-            chi_t: inp.chi_t,
-            chi_rho: inp.chi_rho,
-            cp: inp.cp,
-            grav: inp.grav,
-            lambda,
-            rho: inp.rho,
-            p: inp.p,
-            t: inp.t,
-            opacity: inp.opacity,
-            gradr: inp.gradr,
-            grada: inp.grada,
-            gradl: inp.gradl,
-        };
-        set_mlt(&mlt_params, &mlt_inp)?.gamma
-    } else {
-        T::from_f64(0.0)
+    // Upstream `turb/public/turb.f90:141-145` always calls `set_MLT('Cox', ...)`
+    // before packing `TdcInfo`.
+    let lambda = T::from_f64(params.mixing_length_alpha) * inp.scale_height;
+    let mlt_params = MltParams {
+        option: MltOption::Cox,
+        mixing_length_alpha: params.mixing_length_alpha,
+        henyey_nu: 0.0,
+        henyey_y: 0.0,
+        max_conv_vel: 1.0e99,
     };
+    let mlt_inp = MltInputs {
+        chi_t: inp.chi_t,
+        chi_rho: inp.chi_rho,
+        cp: inp.cp,
+        grav: inp.grav,
+        lambda,
+        rho: inp.rho,
+        p: inp.p,
+        t: inp.t,
+        opacity: inp.opacity,
+        gradr: inp.gradr,
+        grada: inp.grada,
+        gradl: inp.gradl,
+    };
+    let gamma = set_mlt(&mlt_params, &mlt_inp)?.gamma;
 
     let c0 = T::from_f64(
         params.tdc_alpha_c * params.mixing_length_alpha * X_ALFAS * 4.0 * PI,
@@ -270,6 +258,13 @@ fn get_tdc_solution<T: TdcLift>(
     zlb: f64,
     zub: f64,
 ) -> TurbResult<(T, T, usize)> {
+    // Upstream guard in `turb/private/tdc.f90:65-67`.
+    if info.mixing_length_alpha == 0.0 || info.dt <= 0.0 {
+        return Err(TurbError::InvalidParameter(
+            "bad call to TDC get_TDC_solution: mixing_length_alpha == 0 or dt <= 0",
+        ));
+    }
+
     let info_p = info.to_primal();
     let info_z = info.to_z_dual();
     let info_t = info.to_tdc();

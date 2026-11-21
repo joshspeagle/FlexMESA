@@ -379,4 +379,25 @@ mod tests {
             }
         }
     }
+
+    /// Verify 1-based category IDs and 0-based `CATEGORY_NAME` slots match
+    /// upstream `chem/public/chem_def.f90:414-446` (`ipnhe4 = 20`, `iphoto = 21`).
+    #[test]
+    fn test_category_indices_match_mesa_chem_def() {
+        assert_eq!(NUM_CATEGORIES, 24);
+        assert_eq!(CATEGORY_NAME[19], "pnhe4");
+        assert_eq!(CATEGORY_NAME[20], "photo");
+        assert_eq!(category_id("pnhe4"), 20);
+        assert_eq!(category_id("photo"), 21);
+        assert_eq!(category_name(20), Some("pnhe4"));
+        assert_eq!(category_name(21), Some("photo"));
+        assert_eq!(category_id("other"), 24);
+        assert_eq!(category_name(24), Some("other"));
+        assert_eq!(category_name(0), None);
+        assert_eq!(category_name(NUM_CATEGORIES + 1), None);
+        for id in 1..=NUM_CATEGORIES {
+            let name = category_name(id).expect("valid category id");
+            assert_eq!(category_id(name), id);
+        }
+    }
 }

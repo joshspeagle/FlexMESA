@@ -21,7 +21,7 @@
         "verified_total": 4971,
         "pct_ported": 34.5,
         "pct_verified": 4.1,
-        "rust_lines": 83934,
+        "rust_lines": 84048,
         "python_jax_lines": 3869
       },
       {
@@ -123,7 +123,7 @@
         "verified_total": 0,
         "pct_ported": 0.0,
         "pct_verified": 0.0,
-        "rust_lines": 10057,
+        "rust_lines": 10413,
         "python_jax_lines": 728
       },
       {
@@ -208,7 +208,7 @@
         "verified_total": 0,
         "pct_ported": 0.0,
         "pct_verified": 0.0,
-        "rust_lines": 2338,
+        "rust_lines": 2361,
         "python_jax_lines": 930
       },
       {
@@ -456,13 +456,13 @@
     },
     "infrastructure_lines": {
       "rust_bridge_testing_bench": 19424,
-      "python_testing_bench": 15460
+      "python_testing_bench": 15653
     }
   },
   "numerics": {
     "has_165_ci": true,
     "strict_cross_machine_identical": "gated in CI by scripts/check_strict_determinism.py (x86_64 vs aarch64, 1 vs 4 threads; 474,062 math vectors + uncapped star/1.3M_ms_high_Z + binary/jdot_gr_check run with unsupported controls ignored; a bit-identity check, not a comparison with MESA)",
-    "strict_kernels_bit_identical": "math: 403,258/403,258 CRMATH 0 ULP (70,804 libm <= 1 ULP); 304,567/304,635 probed module hex 0 ULP (5 complete, 14 non-math probed)",
+    "strict_kernels_bit_identical": "math: 403,258/403,258 CRMATH 0 ULP (70,804 libm <= 1 ULP); 304,622/304,751 probed module hex 0 ULP (5 complete, 15 non-math probed)",
     "total_upstream_hex_values": 348321,
     "modules": [
       {
@@ -538,7 +538,7 @@
       {
         "module": "net",
         "upstream_exact_values": 140,
-        "exact_strict_compared": "0"
+        "exact_strict_compared": "55/116 0 ULP (max 66 ULP, 124 total)"
       },
       {
         "module": "ionization",
@@ -931,7 +931,7 @@
       "tool": "pytest --cov",
       "overall": {
         "statements": 26043,
-        "covered": 22803,
+        "covered": 22801,
         "percent": 87.6
       },
       "by_subpackage": [
@@ -1082,8 +1082,8 @@
         {
           "subpackage": "flexmesa.testing",
           "statements": 4112,
-          "covered": 3230,
-          "percent": 78.6
+          "covered": 3228,
+          "percent": 78.5
         },
         {
           "subpackage": "flexmesa.turb",
@@ -1473,7 +1473,13 @@
         "issues": []
       }
     ],
-    "open_pull_requests": [],
+    "open_pull_requests": [
+      {
+        "number": 334,
+        "title": "ci(dashboard): give dashboard and coverage Pages deployments distinct artifact names",
+        "draft": false
+      }
+    ],
     "deferred_169": [
       {
         "number": 175,
@@ -2561,6 +2567,32 @@
     {
       "date_utc": "2026-11-21",
       "commit": "fbbec5a",
+      "event": "main merge",
+      "engine_ported_pct": "30.2",
+      "all_verified_pct": "1.0",
+      "cases_passing": "0",
+      "rust_cov_pct": "75.5",
+      "python_cov_pct": "87.6",
+      "closed_140": "16",
+      "total_140": "36",
+      "deferred_169": "44"
+    },
+    {
+      "date_utc": "2026-11-21",
+      "commit": "0363593",
+      "event": "main merge",
+      "engine_ported_pct": "30.2",
+      "all_verified_pct": "1.0",
+      "cases_passing": "0",
+      "rust_cov_pct": "75.5",
+      "python_cov_pct": "87.6",
+      "closed_140": "16",
+      "total_140": "36",
+      "deferred_169": "44"
+    },
+    {
+      "date_utc": "2026-11-21",
+      "commit": "ba2c12c",
       "event": "main merge",
       "engine_ported_pct": "30.2",
       "all_verified_pct": "1.0",

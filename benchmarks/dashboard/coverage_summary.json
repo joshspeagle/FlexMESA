@@ -169,7 +169,7 @@
     "tool": "pytest --cov",
     "overall": {
       "statements": 26043,
-      "covered": 22803,
+      "covered": 22801,
       "percent": 87.6
     },
     "by_subpackage": [
@@ -320,8 +320,8 @@
       {
         "subpackage": "flexmesa.testing",
         "statements": 4112,
-        "covered": 3230,
-        "percent": 78.6
+        "covered": 3228,
+        "percent": 78.5
       },
       {
         "subpackage": "flexmesa.turb",

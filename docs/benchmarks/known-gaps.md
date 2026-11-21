@@ -153,7 +153,7 @@ Cases lacking a committed MESA `26.4.1` baseline report `no reference yet` and c
 | `astero` | `fast_simplex` | [#162](https://github.com/joshspeagle/FlexMESA/issues/162) | `xtra1` | `astero_simplex_samples=5_best_chi2=1.237052e4_term=max_age` (1248 steps; diagnostic (4 controls ignored)) | Asteroseismic simplex optimizer and in-house pulsation scaffolding (#162, #171). |
 | `astero` | `surface_effects` | [#162](https://github.com/joshspeagle/FlexMESA/issues/162) | `max_model_number` | `max_model_number` (1 steps; diagnostic (1 controls ignored)) | Asteroseismic surface-effects starting model and ADIPLS scaffolding (#162, #171). |
 
-## Declared Test-Suite Gaps (`[[test_gaps]]`, 25 Markers)
+## Declared Test-Suite Gaps (`[[test_gaps]]`, 24 Markers)
 
 Every Rust `#[ignore]` and Python `xfail`/`skip` marker in the repository is tracked bijectively in `benchmarks/history_harness/known_gaps.toml` (`#144`):
 
@@ -183,11 +183,10 @@ Every Rust `#[ignore]` and Python `xfail`/`skip` marker in the repository is tra
 | `python_xfail` | `tests/test_star_wave5_1.py` | `test_caplan_ocp_dstar_jax_matches_rust` | `physics_gap` | [#295](https://github.com/joshspeagle/FlexMESA/issues/295) | Rust eval_caplan_ocp_dstar follows MESA 26.4.1 get_Dstar_OCP (diffusion_support.f90:1716-1743, #156); the frozen JAX twin keeps its earlier expression, so the relative difference is 0.87 to 0.996 at the three test points against a bound of 1.0e-14. |
 | `python_xfail` | `tests/test_star_wave5_1.py` | `test_burgers_velocities_jax_match_rust` | `physics_gap` | [#295](https://github.com/joshspeagle/FlexMESA/issues/295) | Rust eval_burgers_velocities follows MESA 26.4.1 element diffusion (#156); the frozen JAX twin keeps its earlier expressions, so velocities differ by up to 0.72 relative, diffusion coefficients by up to a factor of 56, and the electric field by 0.54 relative, against bounds of 1.0e-12. |
 | `python_xfail` | `tests/test_star_wave5_1.py` | `test_phase_separation_shift_jax_matches_rust` | `physics_gap` | [#295](https://github.com/joshspeagle/FlexMESA/issues/295) | Rust eval_phase_separation_shift follows the MESA 26.4.1 Blouin fits (phase_separation.f90, #156); the frozen JAX twin keeps its earlier expression, so the shift differs by 0.017 to 0.089 in mass fraction against a bound of 1.0e-14. |
-| `python_xfail` | `tests/test_bench.py` | `test_wave1_turb_tdc_stages_agree` | `physics_gap` | [#295](https://github.com/joshspeagle/FlexMESA/issues/295) | Rust set_tdc carries the TDC root's partials through the Newton iteration as MESA 26.4.1 does (turb/private/tdc.f90:253-345, #321); the Python stages apply the implicit function theorem at the converged root, so the sensitivities differ by 6.5e-11 (4 zones) and 2.2e-9 (8 zones) against a bound of 1.0e-12. |
 
 ## Level-2 Module Hex Reference Gaps (`benchmarks/module_hex/`)
 
-- **Checked vs MESA `26.4.1` `raw_bits_hex`**: `304,567` / `304,635` outputs at `0 ULP` across `15` probed modules (`5` modules complete at `0 ULP`; `348,321` total captured upstream values).
+- **Checked vs MESA `26.4.1` `raw_bits_hex`**: `304,622` / `304,751` outputs at `0 ULP` across `16` probed modules (`5` modules complete at `0 ULP`; `348,321` total captured upstream values).
 
 | Module | Status | Checked / Expected | 0 ULP | Max ULP | Issue | Notes |
 | :--- | :--- | ---: | ---: | ---: | :--- | :--- |
@@ -206,7 +205,7 @@ Every Rust `#[ignore]` and Python `xfail`/`skip` marker in the repository is tra
 | `kap` | `nonzero_ulp` | 21 / 21 | 13 | 1,459,407,697 | [#161](https://github.com/joshspeagle/FlexMESA/issues/161) | 12/14 gs98+CO channels at 0 ULP; AESOPUS and log10 1-ULP gap. |
 | `rates` | `nonzero_ulp` | 3,639 / 3,639 | 3,636 | 29 | [#161](https://github.com/joshspeagle/FlexMESA/issues/161) | 3,636/3,639 rates outputs at 0 ULP (all 2,763 raw rates, 12 screening, 845/846 weak, 4 Coulomb, 4 Suzuki/weaklib, pycno, r3, 4 rev_c1); 3 Fermi-Dirac ecapture within 29 ULP. |
 | `neu` | `pass_0_ulp` | 300,000 / 300,000 | 300,000 | 0 | none | All 10,000 records (300,000 outputs) of neu at 0 ULP. |
-| `net` | `unported_hex_harness` | 0 / 140 | 0 | 0 | [#161](https://github.com/joshspeagle/FlexMESA/issues/161) | 140 upstream nuclear reaction network burn printouts await direct TSV harness mapping. |
+| `net` | `nonzero_ulp` | 116 / 124 | 55 | 66 | [#161](https://github.com/joshspeagle/FlexMESA/issues/161) | 55/116 net_get outputs at 0 ULP across 7 networks (max_ulp=66); 8 one-zone burn rows remain unchecked. |
 | `ionization` | `nonzero_ulp` | 31 / 31 | 28 | 10,652,452 | [#161](https://github.com/joshspeagle/FlexMESA/issues/161) | 28/28 eval_ionization channels at 0 ULP; 3 Fe56-in-He4 table offsets. |
 | `atm` | `nonzero_ulp` | 39 / 39 | 15 | 7,863,114 | [#161](https://github.com/joshspeagle/FlexMESA/issues/161) | All 39 computed atm outputs across 7 tables, 5 T(tau) varying, 2 T(tau) uniform, and irradiated atmospheres. |
 | `turb` | `nonzero_ulp` | 62 / 71 | 38 | 6 | [#157](https://github.com/joshspeagle/FlexMESA/issues/157) | 31-step check_TDC gradT and conv_vel outputs. |

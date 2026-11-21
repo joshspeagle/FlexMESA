@@ -124,9 +124,12 @@ reason = "391 upstream EOS diagnostic table/blend printouts await direct TSV har
 
 [[gaps]]
 module = "net"
-status = "unported_hex_harness"
+status = "nonzero_ulp"
 issue = "#161"
-reason = "140 upstream nuclear reaction network burn printouts await direct TSV harness mapping."
+max_declared_ulp = 66
+min_zero_ulp_count = 55
+expect_nonzero_ulp = true
+reason = "55/116 net_get outputs match at 0 ULP across 7 upstream nets (0 ULP on approx21_cr60_plus_co56 weak rates; max 66 ULP on approx21 category subtotals); 8 one-zone burn rows remain unchecked."
 
 [[gaps]]
 module = "atm"

@@ -84,7 +84,7 @@ Upstream MESA's `auto_diff` module uses preprocessor templates to generate fixed
 
 Whenever a microphysics module solves a nonlinear root equation $Q(Y, \theta) = 0$ for an internal state variable $Y^*(\theta)$ given stellar shell inputs $\theta$ (such as the superadiabaticity $Y = \nabla_T - \nabla_L$ in Kuhfuss 1986 Time-Dependent Convection or log-density $\log_{10}\rho$ in $(P_{\mathrm{gas}}, T)$ equation-of-state inversion), differentiating through the $K$ bisection and Newton-Raphson iterations wastes $(K - 1)$ full Jacobian evaluations and degrades near bracket boundaries where clamping occurs.
 
-Instead, the derived JAX layer converges $Y^*$ using pure scalar `f64` arithmetic and applies the **Implicit Function Theorem** once at the converged root $Y^*$ (the Safe Rust Time-Dependent Convection solver is the exception: it carries partials through the Newton iteration as MESA does, see [Convection, Mixing and Rotation](convection-mixing-rotation.md)):
+Instead, the derived JAX layer converges $Y^*$ using pure scalar `f64` arithmetic and applies the **Implicit Function Theorem** once at the converged root $Y^*$ (Time-Dependent Convection is the exception: both Safe Rust and Python/JAX carry partials through the Newton iteration as MESA does, see [Convection, Mixing and Rotation](convection-mixing-rotation.md)):
 
 $$\frac{\partial Y^*}{\partial \theta} = -\left(\frac{\partial Q}{\partial Y}\bigg|_{Y^*, \theta}\right)^{-1} \frac{\partial Q}{\partial \theta}\bigg|_{Y^*, \theta}.$$
 

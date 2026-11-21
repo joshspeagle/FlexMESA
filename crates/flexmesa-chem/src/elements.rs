@@ -87,13 +87,15 @@ pub const MAIN_ISO_NAME: [&str; MAX_EL_Z + 1] = [
     "ds281", "rg281", "cn285",
 ];
 
-/// Nuclear reaction category names (`1..=24` in 1-based Fortran indexing).
+/// Nuclear reaction category names (`1..=24` in 1-based Fortran indexing,
+/// matching `chem/public/chem_def.f90:414-446, 2603-2635`, where
+/// `ipnhe4 = 20` and `iphoto = 21`, i.e., 0-based indices `19` and `20`).
 #[rustfmt::skip]
 pub const CATEGORY_NAME: [&str; NUM_CATEGORIES] = [
     "pp", "cno", "tri_alpha", "c_alpha", "n_alpha", "o_alpha", "ne_alpha",
     "na_alpha", "mg_alpha", "si_alpha", "s_alpha", "ar_alpha", "ca_alpha",
     "ti_alpha", "cr_alpha", "fe_co_ni", "c12_c12", "c12_o16", "o16_o16",
-    "photo", "pnhe4", "ni56_co56", "co56_fe56", "other",
+    "pnhe4", "photo", "ni56_co56", "co56_fe56", "other",
 ];
 
 /// Return the 1-based element ID ($Z \in [1, 112]$) for a short symbol.

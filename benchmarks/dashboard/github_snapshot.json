@@ -247,6 +247,16 @@
       "number": 298,
       "title": "feat(harness): upgrade A2 case table and refresh strict MESA 26.4.1 baseline",
       "draft": false
+    },
+    {
+      "number": 300,
+      "title": "test(math): bound asinh(sinh(x)) by its derived rounding error instead of a fixed 1e-14",
+      "draft": false
+    },
+    {
+      "number": 301,
+      "title": "ci: shard Rust and Python tests, build tests without LTO, stop coverage on ordinary pull requests",
+      "draft": false
     }
   ],
   "deferred_169": [

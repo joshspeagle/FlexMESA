@@ -1443,6 +1443,16 @@
         "number": 298,
         "title": "feat(harness): upgrade A2 case table and refresh strict MESA 26.4.1 baseline",
         "draft": false
+      },
+      {
+        "number": 300,
+        "title": "test(math): bound asinh(sinh(x)) by its derived rounding error instead of a fixed 1e-14",
+        "draft": false
+      },
+      {
+        "number": 301,
+        "title": "ci: shard Rust and Python tests, build tests without LTO, stop coverage on ordinary pull requests",
+        "draft": false
       }
     ],
     "deferred_169": [
@@ -2329,6 +2339,19 @@
       "python_cov_pct": "87.8",
       "closed_140": "15",
       "total_140": "35",
+      "deferred_169": "42"
+    },
+    {
+      "date_utc": "2026-11-20",
+      "commit": "ff8132b",
+      "event": "main merge",
+      "engine_ported_pct": "30.2",
+      "all_verified_pct": "1.0",
+      "cases_passing": "0",
+      "rust_cov_pct": "75.3",
+      "python_cov_pct": "87.8",
+      "closed_140": "16",
+      "total_140": "36",
       "deferred_169": "42"
     }
   ]

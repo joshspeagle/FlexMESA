@@ -787,14 +787,15 @@ pub fn solve_henyey_step(
                 if !skip_eval_f {
                     solver_dx.clone_from(&dxsave);
                 }
-                if crate::step_trace::enabled(model.model_number) {
+                let trace_model = model.model_number + 1;
+                if crate::step_trace::enabled(trace_model) {
                     if let Some((k_max, _, eq_name, var_name, v_max)) =
                         worst_residual_site(model, &sys)
                     {
                         let mut jl = crate::step_trace::JsonLine::new(
                             "solver_line_search_failed",
                         );
-                        jl.field_usize("model", model.model_number);
+                        jl.field_usize("model", trace_model);
                         jl.field_f64("dt", model.dt);
                         jl.field_usize("iter", iter);
                         jl.field_f64("rnorm", residual_norm);
@@ -835,7 +836,8 @@ pub fn solve_henyey_step(
             resid_norm_min = resid_norm_min.min(residual_norm);
             max_resid_min = max_resid_min.min(max_residual);
 
-            if crate::step_trace::enabled(model.model_number) {
+            let trace_model = model.model_number + 1;
+            if crate::step_trace::enabled(trace_model) {
                 let (kz, eqi, eq_n, var_n, vmax) = worst_residual_site(
                     model, &sys,
                 )
@@ -843,7 +845,7 @@ pub fn solve_henyey_step(
                 let (ckz, cvi) = corr_argmax.unwrap_or((0, 0));
                 let cvar_n = model.layout.variable_name(cvi, &model.iso_names);
                 let mut jl = crate::step_trace::JsonLine::new("solver_iter");
-                jl.field_usize("model", model.model_number);
+                jl.field_usize("model", trace_model);
                 jl.field_usize("iter", iter);
                 jl.field_f64("coeff", coeff);
                 jl.field_f64("rnorm", residual_norm);
@@ -951,7 +953,8 @@ pub fn solve_henyey_step(
         }
     }
 
-    if crate::step_trace::enabled(model.model_number) {
+    let trace_model = model.model_number + 1;
+    if crate::step_trace::enabled(trace_model) {
         if let Some((k_max, i_max, eq_name, var_name, v_max)) =
             worst_residual_site(model, &sys)
         {
@@ -962,7 +965,7 @@ pub fn solve_henyey_step(
                 iter_used.max(1),
             );
             let mut jl = crate::step_trace::JsonLine::new("solver");
-            jl.field_usize("model", model.model_number);
+            jl.field_usize("model", trace_model);
             jl.field_f64("dt", model.dt);
             jl.field_usize("nz", sys.nz);
             jl.field_bool("converged", passed_tol_tests);

@@ -51,7 +51,7 @@ jobs:
     timeout-minutes: 150
     steps:
       - name: Checkout triggering commit
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Install Rust toolchain from rust-toolchain.toml with llvm-tools-preview
         run: |
@@ -69,7 +69,7 @@ jobs:
           shared-key: llvm-cov
 
       - name: Cache FlexMESA data-v1 and MESA test bundles
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.cache/flexmesa
           key: flexmesa-data-v1-${{ hashFiles('src/flexmesa/data/bundles.toml') }}
@@ -88,7 +88,7 @@ jobs:
           bash scripts/dashboard/run_coverage.sh rust "${{ runner.temp }}/rust_cov.json"
 
       - name: Upload Rust coverage JSON summary
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: rust-llvm-cov-summary
           if-no-files-found: error
@@ -107,10 +107,10 @@ jobs:
     timeout-minutes: 35
     steps:
       - name: Checkout triggering commit
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: "3.12"
           cache: "pip"
@@ -124,13 +124,13 @@ jobs:
         uses: Swatinem/rust-cache@v2
 
       - name: Cache FlexMESA data-v1 and MESA test bundles
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.cache/flexmesa
           key: flexmesa-data-v1-${{ hashFiles('src/flexmesa/data/bundles.toml') }}
 
       - name: Cache persistent JAX XLA compilation artifacts
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.cache/flexmesa-jax
           key: flexmesa-jax-${{ runner.os }}-py312-${{ hashFiles('pyproject.toml', 'src/flexmesa/**/*.py') }}
@@ -158,7 +158,7 @@ jobs:
           bash scripts/dashboard/run_coverage.sh python "${{ runner.temp }}/python_cov.json"
 
       - name: Upload Python coverage JSON summary
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: python-pytest-cov-summary
           if-no-files-found: error
@@ -184,12 +184,12 @@ jobs:
       pushed_sha: ${{ steps.push_dash.outputs.pushed_sha }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: "3.12"
           cache: "pip"
@@ -208,7 +208,7 @@ jobs:
           python -m pip install --no-build-isolation -e .
 
       - name: Cache FlexMESA data-v1 and MESA test bundles
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.cache/flexmesa
           key: flexmesa-data-v1-${{ hashFiles('src/flexmesa/data/bundles.toml') }}
@@ -275,12 +275,12 @@ jobs:
       pushed_sha: ${{ steps.push_dash.outputs.pushed_sha }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: "3.12"
           cache: "pip"
@@ -299,7 +299,7 @@ jobs:
           python -m pip install --no-build-isolation -e .
 
       - name: Cache FlexMESA data-v1 and MESA test bundles
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.cache/flexmesa
           key: flexmesa-data-v1-${{ hashFiles('src/flexmesa/data/bundles.toml') }}
@@ -314,7 +314,7 @@ jobs:
           echo "MESA_DIR=$HOME/.cache/flexmesa/mesa_test_inputs" >> "$GITHUB_ENV"
 
       - name: Download Rust and Python coverage JSON artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           pattern: "*-cov-summary"
           merge-multiple: true

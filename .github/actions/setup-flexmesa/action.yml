@@ -44,7 +44,7 @@ runs:
   steps:
     - name: Set up Python
       if: inputs.install-python-pkg == 'true'
-      uses: actions/setup-python@v5
+      uses: actions/setup-python@v7
       with:
         python-version: ${{ inputs.python-version }}
         cache: "pip"
@@ -80,14 +80,14 @@ runs:
         key: ${{ inputs.rust-cache-key }}
 
     - name: Cache FlexMESA data-v1, test inputs, and module hex bundles
-      uses: actions/cache@v4
+      uses: actions/cache@v6
       with:
         path: ~/.cache/flexmesa
         key: flexmesa-data-v1-${{ hashFiles('src/flexmesa/data/bundles.toml') }}
 
     - name: Cache persistent JAX XLA compilation artifacts
       if: inputs.cache-jax == 'true'
-      uses: actions/cache@v4
+      uses: actions/cache@v6
       with:
         path: ~/.cache/flexmesa-jax
         key: >-

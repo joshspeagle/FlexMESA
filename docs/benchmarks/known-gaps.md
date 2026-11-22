@@ -194,12 +194,12 @@ Every Rust `#[ignore]` and Python `xfail`/`skip` marker in the repository is tra
 | `const` | `pass_0_ulp` | 23 / 23 | 23 | 0 | none | All 23 CGS constants of the Rust `flexmesa-const` crate. |
 | `utils` | `zero_values_in_mesa_reference` | 0 / 0 | 0 | 0 | none | Upstream utils/test emits zero floating-point values in exact_tested_values.tsv. |
 | `math` | `pass_0_ulp` | 99 / 99 | 99 | 0 | none | All 99 CRMATH evaluations (33 functions at x={0.1,0.2,0.4}) of math. |
-| `mtx` | `partial_0_ulp` | 7 / 22 | 7 | 0 | [#144](https://github.com/joshspeagle/FlexMESA/issues/144) | All 7 tested test_square1+2 entries at 0 ULP. |
+| `mtx` | `partial_0_ulp` | 7 / 22 | 7 | 0 | [#365](https://github.com/joshspeagle/FlexMESA/issues/365) | All 7 tested test_square1+2 entries at 0 ULP. |
 | `auto_diff` | `pass_0_ulp` | 387 / 387 | 387 | 0 | none | All 387 auto_diff RHS outputs at 0 ULP (paired with 387 analytical LHS values across 774 TSV entries). |
 | `forum` | `zero_values_in_mesa_reference` | 0 / 0 | 0 | 0 | none | Upstream forum/test emits zero floating-point values in exact_tested_values.tsv. |
-| `num` | `unported_hex_harness` | 0 / 570 | 0 | 0 | [#144](https://github.com/joshspeagle/FlexMESA/issues/144) | 570 upstream num Brent/Newton/ODE test printouts await direct TSV harness mapping. |
-| `interp_1d` | `partial_0_ulp` | 22 / 234 | 22 | 0 | [#144](https://github.com/joshspeagle/FlexMESA/issues/144) | test3 (interp_pm asc/desc) & test1 (interp_m3q asc/desc) values. |
-| `interp_2d` | `partial_0_ulp` | 4 / 104 | 4 | 0 | [#144](https://github.com/joshspeagle/FlexMESA/issues/144) | All 4 midpoint bicubic spline coefficients at 0 ULP. |
+| `num` | `unported_hex_harness` | 0 / 570 | 0 | 0 | [#365](https://github.com/joshspeagle/FlexMESA/issues/365) | 570 upstream num Brent/Newton/ODE test printouts await direct TSV harness mapping. |
+| `interp_1d` | `partial_0_ulp` | 22 / 234 | 22 | 0 | [#365](https://github.com/joshspeagle/FlexMESA/issues/365) | test3 (interp_pm asc/desc) & test1 (interp_m3q asc/desc) values. |
+| `interp_2d` | `partial_0_ulp` | 4 / 104 | 4 | 0 | [#365](https://github.com/joshspeagle/FlexMESA/issues/365) | All 4 midpoint bicubic spline coefficients at 0 ULP. |
 | `chem` | `partial_0_ulp` | 286 / 1,102 | 286 | 0 | [#161](https://github.com/joshspeagle/FlexMESA/issues/161) | 286 Lodders (2003) isotopic atom percents. |
 | `colors` | `nonzero_ulp` | 10 / 234 | 4 | 13 | [#161](https://github.com/joshspeagle/FlexMESA/issues/161) | Group 1 solar bolometric and UBVRIJM outputs. |
 | `eos` | `unported_hex_harness` | 0 / 391 | 0 | 0 | [#161](https://github.com/joshspeagle/FlexMESA/issues/161) | 391 upstream EOS diagnostic table/blend printouts await direct TSV harness mapping. |

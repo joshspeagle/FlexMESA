@@ -242,11 +242,6 @@
       "number": 347,
       "title": "fix(star,eos): port eval_eps_grav_composition & fix_d_eos_dxa_partials and bound EosDtTableSet RSS (Closes #341)",
       "draft": false
-    },
-    {
-      "number": 348,
-      "title": "ci: move every GitHub action to its Node 24 major",
-      "draft": false
     }
   ],
   "deferred_169": [

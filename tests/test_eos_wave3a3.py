@@ -197,24 +197,13 @@ def test_skye_alfa_simple_default_bounds_match_mesa_26_4_1_real4() -> None:
         )
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "declared gap (#161): Rust strict PC and Skye derivatives differ "
-        "from MESA 26.4.1 beyond the base tolerances (largest measured: "
-        "pc_co_liq d_dlnT 7.1e-6, skye_co_liq d_dlnT 1.3e-6)"
-    ),
-)
 def test_pc_and_skye_rust_strict_match_mesa_26_4_1_at_base_tolerance() -> None:
     """Rust strict `PC` and `Skye` against MESA `26.4.1` with no allowances.
 
-    The test below this one lets known differences through with wider
-    derivative tolerances for some cases. This one applies the same base
-    tolerances as the Rust tests to every case (`crates/flexmesa-eos/tests/
-    wave3a3_pc_tests.rs`: `1.0e-11` on values, `5.0e-9` on derivatives;
-    `wave3a3_skye_inverse_tests.rs`: `1.0e-11` and `1.0e-8`), so the
-    differences are a declared gap and this test starts passing only when
-    they are gone.
+    Applies the same base tolerances as the Rust tests to every case
+    (`crates/flexmesa-eos/tests/wave3a3_pc_tests.rs`: `1.0e-11` on values,
+    `5.0e-9` on derivatives; `wave3a3_skye_inverse_tests.rs`: `1.0e-11` and
+    `1.0e-8`).
     """
     cids, xa_c, ab_c, zb_c = _oracle_7sp_composition(0.0, 1.0, 0.0)
     _, xa_co, ab_co, zb_co = _oracle_7sp_composition(0.0, 0.5, 0.5)
@@ -285,10 +274,8 @@ def test_pc_and_skye_rust_strict_match_mesa_26_4_1_at_base_tolerance() -> None:
 def test_pc_and_skye_oracle_cases_match_mesa_26_4_1_across_backends() -> None:
     """Verify all 7 `PC`, 6 `Skye`, and 3 blend cases against MESA `26.4.1`.
 
-    The derivative tolerances here are wide enough to let known differences
-    from MESA through (measured: up to `7.1e-6` for `PC`, `1.3e-6` for
-    `skye_co_liq`). Those differences are a declared gap: the strict test
-    above applies the base tolerances and is expected to fail (`#161`).
+    Rust strict passes at the base tolerances in the test above; the wider
+    derivative tolerances here accommodate the derived JAX layer (`#295`).
     """
     cids, xa_c, ab_c, zb_c = _oracle_7sp_composition(0.0, 1.0, 0.0)
     _, xa_co, ab_co, zb_co = _oracle_7sp_composition(0.0, 0.5, 0.5)
@@ -497,6 +484,15 @@ def test_pc_and_skye_oracle_cases_match_mesa_26_4_1_across_backends() -> None:
             )
 
 
+@pytest.mark.xfail(
+    strict=True,
+    reason=(
+        "#295: Rust PC uses the MESA 26.4.1 EXCOR7 bicubic spline table "
+        "(pc_eos.f90:1895, create_EXCOR7_table.f90 THETA > 0.005; #161), "
+        "whereas the frozen JAX twin keeps analytical EXCOR7 (THETA > 0.04), "
+        "differing by up to 2.17e-6 on res and 4.35e-5 on derivatives."
+    ),
+)
 def test_eval_pc_eos_and_zones_match_across_rust_and_jax() -> None:
     """Verify `eval_pc_eos` and `eval_pc_eos_zones` across liquid/solid WDs.
 
@@ -944,36 +940,6 @@ def test_neutron_bearing_multispecies_buckets_and_multizone_dispatch() -> None:
         )
         _assert_unfloored(np.asarray(sk_j.res), np.asarray(sk_r.res), rtol=1e-6)
 
-        pc_r = eos.eval_pc_eos(
-            rho,
-            temp,
-            ab_9,
-            zb_9,
-            cids_9,
-            xa_9,
-            mass_fraction_limit=0.0,
-            backend="rust",
-        )
-        pc_j = eos.eval_pc_eos(
-            r_j,
-            t_j,
-            ab_j,
-            zb_j,
-            cids_9,
-            xa_9j,
-            mass_fraction_limit=0.0,
-            backend="jax",
-        )
-        _assert_unfloored(
-            np.asarray(pc_j.res), np.asarray(pc_r.res), rtol=1.0e-11
-        )
-        _assert_unfloored(
-            np.asarray(pc_j.d_dlnd), np.asarray(pc_r.d_dlnd), rtol=5.0e-9
-        )
-        _assert_unfloored(
-            np.asarray(pc_j.d_dln_t), np.asarray(pc_r.d_dln_t), rtol=5.0e-9
-        )
-
     dt_r = eos.eos_dt_get(1.0e6, 1.0e7, cids_9, xa_9, backend="rust")
     dt_j = eos.eos_dt_get(
         jnp.float64(1.0e6), jnp.float64(1.0e7), cids_9, xa_9j, backend="jax"
@@ -1007,14 +973,6 @@ def test_neutron_bearing_multispecies_buckets_and_multizone_dispatch() -> None:
         jnp.asarray(xa_20),
     )
 
-    pc_z_r = eos.eval_pc_eos_zones(
-        r_20, t_20, ab_20, zb_20, xa_20, z_35, w_35, backend="rust"
-    )
-    pc_z_j = eos.eval_pc_eos_zones(*z_args_j, z_35j, w_35j, backend="jax")
-    _assert_unfloored(
-        np.asarray(pc_z_j.res), np.asarray(pc_z_r.res), rtol=1.0e-11
-    )
-
     sk_z_r = eos.eval_skye_eos_zones(
         r_20,
         t_20,
@@ -1040,3 +998,87 @@ def test_neutron_bearing_multispecies_buckets_and_multizone_dispatch() -> None:
     )
     assert pc_0.res.shape == (0, eos.NUM_EOS_BASIC_RESULTS)
     assert sk_0.res.shape == (0, eos.NUM_EOS_BASIC_RESULTS)
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason=(
+        "#295: Rust PC uses the MESA 26.4.1 EXCOR7 bicubic spline table "
+        "(pc_eos.f90:1895, create_EXCOR7_table.f90 THETA > 0.005; #161), "
+        "whereas the frozen JAX twin keeps analytical EXCOR7 (THETA > 0.04), "
+        "differing by up to 3.72e-6 on res and 9.93e-8 on derivatives across "
+        "the 9- and 35-species PC mixtures."
+    ),
+)
+def test_pc_multispecies_buckets_rust_matches_frozen_jax() -> None:
+    """Rust `PC` matches the frozen JAX twin on 9- and 35-species mixtures."""
+    names_9 = ("neut", "h1", "he4", "c12", "n14", "o16", "ne20", "mg24", "si28")
+    cids_9 = [int(chem.get_nuclide_index(n) or 0) for n in names_9]
+    assert all(c > 0 for c in cids_9)
+    xa_9 = np.array(
+        [0.05, 0.02, 0.13, 0.25, 0.03, 0.30, 0.10, 0.07, 0.05], dtype=np.float64
+    )
+    comp_9 = chem.get_composition_info(cids_9, xa_9)
+    ab_9, zb_9 = float(comp_9.abar), float(comp_9.zbar)
+    ab_j, zb_j, xa_9j = jnp.float64(ab_9), jnp.float64(zb_9), jnp.asarray(xa_9)
+
+    for rho, temp in [(1.0e5, 1.0e8), (1.0e7, 2.0e6)]:
+        r_j, t_j = jnp.float64(rho), jnp.float64(temp)
+        pc_r = eos.eval_pc_eos(
+            rho,
+            temp,
+            ab_9,
+            zb_9,
+            cids_9,
+            xa_9,
+            mass_fraction_limit=0.0,
+            backend="rust",
+        )
+        pc_j = eos.eval_pc_eos(
+            r_j,
+            t_j,
+            ab_j,
+            zb_j,
+            cids_9,
+            xa_9j,
+            mass_fraction_limit=0.0,
+            backend="jax",
+        )
+        _assert_unfloored(
+            np.asarray(pc_j.res), np.asarray(pc_r.res), rtol=1.0e-11
+        )
+        _assert_unfloored(
+            np.asarray(pc_j.d_dlnd), np.asarray(pc_r.d_dlnd), rtol=5.0e-9
+        )
+        _assert_unfloored(
+            np.asarray(pc_j.d_dln_t), np.asarray(pc_r.d_dln_t), rtol=5.0e-9
+        )
+
+    cids_35 = list(range(1, 36))
+    xa_35 = np.full(35, 1.0 / 35.0, dtype=np.float64)
+    comp_35 = chem.get_composition_info(cids_35, xa_35)
+    infos_35 = [chem.get_nuclide_info(c) for c in cids_35]
+    z_35 = np.array([float(inf.z) for inf in infos_35], dtype=np.float64)
+    w_35 = np.array([inf.w for inf in infos_35], dtype=np.float64)
+    z_35j, w_35j = jnp.asarray(z_35), jnp.asarray(w_35)
+
+    nz = 20
+    r_20, t_20 = np.geomspace(1.0e4, 1.0e7, nz), np.geomspace(2.0e6, 5.0e7, nz)
+    ab_20 = np.full(nz, float(comp_35.abar), dtype=np.float64)
+    zb_20 = np.full(nz, float(comp_35.zbar), dtype=np.float64)
+    xa_20 = np.tile(xa_35, (nz, 1))
+    z_args_j = (
+        jnp.asarray(r_20),
+        jnp.asarray(t_20),
+        jnp.asarray(ab_20),
+        jnp.asarray(zb_20),
+        jnp.asarray(xa_20),
+    )
+
+    pc_z_r = eos.eval_pc_eos_zones(
+        r_20, t_20, ab_20, zb_20, xa_20, z_35, w_35, backend="rust"
+    )
+    pc_z_j = eos.eval_pc_eos_zones(*z_args_j, z_35j, w_35j, backend="jax")
+    _assert_unfloored(
+        np.asarray(pc_z_j.res), np.asarray(pc_z_r.res), rtol=1.0e-11
+    )

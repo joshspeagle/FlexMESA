@@ -8,6 +8,7 @@ pub mod coulomb_screen;
 pub mod elect;
 pub mod eosfi;
 pub mod excor;
+pub mod excor_table;
 pub mod ferinv;
 pub mod melange;
 

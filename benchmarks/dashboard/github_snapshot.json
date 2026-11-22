@@ -101,7 +101,7 @@
     },
     {
       "phase": "Phase C",
-      "open": 14,
+      "open": 15,
       "closed": 3,
       "issues": [
         {
@@ -188,6 +188,11 @@
           "number": 299,
           "title": "[Audit C8/C12] Wire remaining photo/log I/O and test-harness driver controls",
           "state": "open"
+        },
+        {
+          "number": 365,
+          "title": "[Audit] Level-2 module-hex probe wiring for interp_1d, interp_2d, mtx and num",
+          "state": "open"
         }
       ]
     },
@@ -237,7 +242,18 @@
       "issues": []
     }
   ],
-  "open_pull_requests": [],
+  "open_pull_requests": [
+    {
+      "number": 364,
+      "title": "feat(star,binary,astero): wire photo/log/driver controls and promote 3 strict passes (#299)",
+      "draft": false
+    },
+    {
+      "number": 367,
+      "title": "feat(mtx,star,binary): upstream do_block_multiply_xa and rho = dm/dV reset before each step (#358, #363)",
+      "draft": true
+    }
+  ],
   "deferred_169": [
     {
       "number": 175,
@@ -597,6 +613,14 @@
       "state": "open",
       "kind": "upstream-bug",
       "parity_pending": false,
+      "needs_confirmation": false
+    },
+    {
+      "number": 362,
+      "title": "[Deferred bug] do_block_multiply_xa pairs the wrong off-diagonal blocks with x, so the solver's line-search slope is not grad(f)\u00b7soln",
+      "state": "open",
+      "kind": "upstream-bug",
+      "parity_pending": true,
       "needs_confirmation": false
     }
   ]

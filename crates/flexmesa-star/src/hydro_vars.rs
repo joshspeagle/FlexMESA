@@ -43,8 +43,10 @@ use crate::star_ad::{
 /// any face.
 pub fn set_mlt_vars(model: &mut StarModel) -> Result<(), StarError> {
     if model.controls.rotation_flag && !model.aux.doing_struct_burn_mix {
-        if model.aux.solver_mlt_eval_count > 0 {
-            crate::rotation::conserve_shell_j_rot_and_distortion(model);
+        if model.j_rot.iter().any(|&j| j != 0.0)
+            || model.omega.iter().all(|&w| w == 0.0)
+        {
+            crate::hydro_rotation::set_rotation_info(model, false);
         } else {
             update_rotation_distortion_factors(model);
         }

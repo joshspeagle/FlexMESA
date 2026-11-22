@@ -67,7 +67,12 @@ def parse_mesa_run(
 
     term_match = re.search(r"termination code:\s*(\S+)", log_text)
     solver_ret_match = re.search(r"solver retries\s+(\d+)", log_text)
-    step1_retries = len(re.findall(r"retry:\s+.*?\s+1\s*$", log_text, re.M))
+    # Upstream `prepare_for_retry` (`star/private/evolve.f90:2225-2234`) logs
+    # `retry: <reason> <k> <model>` when `retry_message` is set (solver retry)
+    # and `retry <model>` (without a colon) for binary RLOF / `fr_hard` cuts.
+    step1_retries = len(
+        re.findall(r"^[ \t]*retry(?::[^\n]*?)?[ \t]+1[ \t]*$", log_text, re.M)
+    )
     fr_hard_retries = len(
         re.findall(r"retry because of fr_hard limit", log_text)
     )

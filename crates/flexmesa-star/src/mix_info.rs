@@ -227,7 +227,7 @@ pub fn set_mixing_info_with_skip(
     // `D_mix /= 0 && D_mix_non_rotation < D_mix_rotation`.
     if model.controls.rotation_flag {
         let d_mix_rotation =
-            crate::rotation_mix::compute_and_add_rotation_d_mix(model);
+            crate::rotation_mix::update_rotation_mixing_info(model)?;
         for k in 1..nz {
             if model.d_mix[k] < 1.0e-10 {
                 model.d_mix[k] = 0.0;

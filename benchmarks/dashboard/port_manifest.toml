@@ -6888,8 +6888,8 @@ module = "star"
 upstream_lines = 922
 upstream_sha256 = "6c45474eba5219b2c42f3985912a57a8065e298ddef27c431eac84ed6d963625"
 status = "partial"
-flexmesa_files = ["crates/flexmesa-star/src/rotation.rs"]
-notes = "seeded from coverage-map.md (partial): quick. `fp/ft`, `omega_crit`, shell `j_rot` conservation; `w_div_wc` as a variable, `set_i_rot` with deformation, `set_rotation_info` flow largely absent (3/26 names)"
+flexmesa_files = ["crates/flexmesa-star/src/hydro_rotation.rs", "crates/flexmesa-star/src/rotation.rs"]
+notes = "updated for #158: w_div_w_roche_jrot/omega, eval_i_rot, eval_fp_ft_single, set1_i_rot, update1_i_rot_from_xh, set_i_rot, set_omega, set_rotation_info, get1_am_sig, get_rotation_sigmas, total_angular_momentum; remaining w_div_wc/j_rot_flag solver variable routines tracked in #158"
 
 [[files]]
 upstream_path = "star/private/hydro_rsp2.f90"
@@ -7047,12 +7047,12 @@ module = "star"
 upstream_lines = 2438
 upstream_sha256 = "99b856783b44304e0d739ee3adbb065537f266a116a188ae3480b2415a4908a0"
 status = "partial"
-flexmesa_files = ["crates/flexmesa-star/src/hydro_rti.rs", "crates/flexmesa-star/src/mix_info.rs", "crates/flexmesa-star/src/mixing_state.rs", "crates/flexmesa-star/src/rotation.rs"]
-notes = "Ported under #155: verbatim set_mixing_info ordering, glitch/gap/singleton/dropout/embedded-semiconvection cleanup, do_mix_envelope, set_cz_boundary_info, set_cz_bdy_mass, locate_{convection,mixing}_boundaries, min_D_mix, D_mix_zero_region, and get_convection_sigmas (reproducing #268). Remaining: do_smoothing_by_mass (#158) and custom other_D_mix/other_after_set_mixing_info hooks (#231)."
+flexmesa_files = ["crates/flexmesa-star/src/hydro_rti.rs", "crates/flexmesa-star/src/mix_info.rs", "crates/flexmesa-star/src/mixing_state.rs", "crates/flexmesa-star/src/rotation.rs", "crates/flexmesa-star/src/rotation_mix.rs"]
+notes = "Ported under #155: verbatim set_mixing_info ordering, glitch/gap/singleton/dropout/embedded-semiconvection cleanup, do_mix_envelope, set_cz_boundary_info, set_cz_bdy_mass, locate_{convection,mixing}_boundaries, min_D_mix, D_mix_zero_region, and get_convection_sigmas (reproducing #268); updated under #158 with update_rotation_mixing_info (am_nu_omega, am_nu_j). Remaining: do_smoothing_by_mass (#158) and custom other_D_mix/other_after_set_mixing_info hooks (#231)."
 [files.routine_map]
 "set_mixing_info" = "crates/flexmesa-star/src/mix_info.rs::set_mixing_info"
 "set_RTI_mixing_info" = "crates/flexmesa-star/src/hydro_rti.rs::set_rti_mixing_info"
-"update_rotation_mixing_info" = "crates/flexmesa-star/src/rotation.rs::set_rotation_mixing_info"
+"update_rotation_mixing_info" = "crates/flexmesa-star/src/rotation_mix.rs::update_rotation_mixing_info"
 "set_dPdr_dRhodr_info" = "crates/flexmesa-star/src/hydro_rti.rs::set_dpdr_drhodr_info"
 "get_convection_sigmas" = "crates/flexmesa-star/src/mix_info.rs::compute_convection_sigmas"
 "set_dxdt_mix" = "crates/flexmesa-star/src/mix_info.rs::eval_dxdt_mix"
@@ -7822,9 +7822,11 @@ upstream_path = "star/private/solve_omega_mix.f90"
 module = "star"
 upstream_lines = 669
 upstream_sha256 = "054f71eeabf92c11334548346743c2c2b75aeaabd1b5c723103d4a053c0f9b87"
-status = "partial"
-flexmesa_files = ["crates/flexmesa-star/src/omega_mix.rs", "crates/flexmesa-star/src/rotation_mix.rs"]
-notes = "seeded from coverage-map.md (partial): quick. Implicit tridiagonal omega diffusion; substep control and torques simplified"
+status = "ported_unverified"
+flexmesa_files = ["crates/flexmesa-star/src/omega_mix.rs"]
+notes = "updated for #158: Quad (binary128) port of do_solve_omega_mix, solve_tridiag, min_mixing_timescale, create_matrix_and_rhs (am_sig_j/d2irot), adaptive substepping (4..20), recalc_mixing_info_each_substep, other_torque/other_torque_implicit/binary_other_torque hooks, and angular_momentum_error_retry/warn"
+[files.routine_map]
+"do_solve_omega_mix" = "crates/flexmesa-star/src/omega_mix.rs::do_solve_omega_mix_with_extras"
 
 [[files]]
 upstream_path = "star/private/solver_support.f90"

@@ -10,7 +10,7 @@
     "total_cases": 106,
     "strict_pass_cases": 0,
     "strict_fail_cases": 106,
-    "distinct_unsupported_controls": 207,
+    "distinct_unsupported_controls": 205,
     "distinct_unknown_controls": 0,
     "cases_with_headless_plotting": 78,
     "distinct_headless_plotting_keys": 895
@@ -46,11 +46,11 @@
     {
       "section": "controls",
       "upstream_keys": 1448,
-      "supported_keys": 1144,
+      "supported_keys": 1154,
       "unused_keys": 24,
       "headless_gui_keys": 0,
       "terminal_output_keys": 13,
-      "unimplemented_upstream_keys": 267
+      "unimplemented_upstream_keys": 257
     },
     {
       "section": "binary_job",
@@ -1709,24 +1709,6 @@
       "case_count": 1,
       "cases": [
         "star/tzo"
-      ]
-    },
-    {
-      "section": "controls",
-      "key": "angular_momentum_error_retry",
-      "category": "unimplemented",
-      "case_count": 1,
-      "cases": [
-        "star/ppisn"
-      ]
-    },
-    {
-      "section": "controls",
-      "key": "angular_momentum_error_warn",
-      "category": "unimplemented",
-      "case_count": 1,
-      "cases": [
-        "star/ppisn"
       ]
     },
     {
@@ -8620,8 +8602,6 @@
         "inlist_pulses_header"
       ],
       "unsupported_controls": [
-        "controls::angular_momentum_error_retry::unimplemented",
-        "controls::angular_momentum_error_warn::unimplemented",
         "controls::fill_arrays_with_nans::unimplemented",
         "controls::initial_he3::unimplemented",
         "controls::photo_interval::unimplemented",

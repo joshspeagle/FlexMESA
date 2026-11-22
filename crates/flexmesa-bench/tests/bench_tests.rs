@@ -85,13 +85,22 @@ const WAVE3B_REGRESSION_SNAPSHOTS_N8: [(&str, f64); 5] = [
 /// (`4.262_783_875_690_237e6` -> `4.262_780_484_078_014e6`),
 /// `star_newton_step` (`2.210_834_729_000_362e5` -> `2.263_803_558_180_566e5`),
 /// and `star_evolve_step` (`8.895_997_453_722_767e2` ->
-/// `8.895_028_893_306_655e2`) shifted.
+/// `8.895_028_893_306_655e2`) shifted. Under `#342` (ZAMS `interp_q` matching
+/// `star/private/star_utils.f90:729-752, 1232-1265`, 8-decimal ZAMS index
+/// masses matching `star/private/init_model.f90:210, 254, 444-446`, and
+/// initial ZAMS `model_number = 0` matching `star/private/init.f90:367`),
+/// `star_micro_vars` (`2.499_330_102_887_365e2` -> `2.253_780_782_165_539e2`),
+/// `star_hydro_eqns` (`4.262_780_484_078_014e6` -> `1.742_907_215_943_594e6`),
+/// `star_newton_step` (`2.263_803_558_180_566e5` -> `8.653_548_256_546_203e5`),
+/// `star_remesh` (`5.108_453_216_631_093e2` -> `7.086_334_744_875_726e2`), and
+/// `star_evolve_step` (`8.895_028_893_306_655e2` -> `8.843_428_194_210_911e2`)
+/// shifted.
 const WAVE4_REGRESSION_SNAPSHOTS_N8: [(&str, f64); 5] = [
-    ("star_micro_vars", 2.499_330_102_887_365e2),
-    ("star_hydro_eqns", 4.262_780_484_078_014e6),
-    ("star_newton_step", 2.263_803_558_180_566e5),
-    ("star_remesh", 5.108_453_216_631_093e2),
-    ("star_evolve_step", 8.895_028_893_306_655e2),
+    ("star_micro_vars", 2.253_780_782_165_539e2),
+    ("star_hydro_eqns", 1.742_907_215_943_594e6),
+    ("star_newton_step", 8.653_548_256_546_203e5),
+    ("star_remesh", 7.086_334_744_875_726e2),
+    ("star_evolve_step", 8.843_428_194_210_911e2),
 ];
 
 /// `FlexMESA` regression snapshots for $N_{\mathrm{zones}} = 8$ across all four

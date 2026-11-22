@@ -341,7 +341,9 @@ pub fn eval_rotational_mixing_zone(
     }
 }
 
-/// Updates shellular distortion (`fp_rot`, `ft_rot`, `i_rot`) across faces (`hydro_rotation.f90`).
+/// Updates shellular distortion (`fp_rot`, `ft_rot`, `i_rot`) and `j_rot`
+/// across faces from `omega` (`use_xh_to_update_i_rot_and_j_rot` + `eval_fp_ft`
+/// in `star/private/hydro_rotation.f90:382-397, 537-586`).
 pub fn update_rotation_distortion_factors(model: &mut StarModel) {
     let nz = model.nz;
     if nz == 0 {
@@ -362,69 +364,45 @@ pub fn update_rotation_distortion_factors(model: &mut StarModel) {
         }
         return;
     }
-    let max_w = model.controls.mix_wind.w_div_wcrit_max.clamp(0.0, 0.99);
+    let max_w = model.controls.mix_wind.w_div_wcrit_max;
+    let max_w2 = model.controls.mix_wind.w_div_wcrit_max2;
     let tidal = model.aux.tidal_deformation.clone();
     for k in 0..nz {
-        let (r_k, m_k, om_k) = (
-            model.r[k].max(1.0e5),
-            model.m_grav[k].max(1.0e20),
-            model.omega[k],
+        let r_k = model.r[k];
+        let om_k = model.omega[k];
+        model.aux.w_div_wc[k] = crate::hydro_rotation::w_div_w_roche_omega(
+            r_k,
+            model.m[k],
+            om_k,
+            model.cgrav[k],
+            max_w,
+            max_w2,
+            false,
         );
-        let (fp_s, ft_s, i_rot_s) = if om_k.abs() > 0.0 {
-            let om_c =
-                eval_omega_crit(model.cgrav[k], m_k, r_k, 0.0, 0.0, 0.99);
-            let w = if om_c > 0.0 {
-                (om_k.abs() / om_c).min(max_w)
-            } else {
-                0.0
-            };
-            let (fp, ft, i_r2) = eval_rotation_fp_ft(w, 0.75, 0.95);
-            (fp, ft, i_r2 * r_k * r_k)
-        } else {
-            let fp0 = if model.aux.fp_rot[k] > 0.0 {
-                model.aux.fp_rot[k]
-            } else {
-                1.0
-            };
-            let ft0 = if model.aux.ft_rot[k] > 0.0 {
-                model.aux.ft_rot[k]
-            } else {
-                1.0
-            };
-            let ir0 = if model.aux.i_rot[k] > 0.0 {
-                model.aux.i_rot[k]
-            } else {
-                (2.0 / 3.0) * r_k * r_k
-            };
-            (fp0, ft0, ir0)
-        };
+        crate::hydro_rotation::set1_i_rot(model, k, r_k);
+        let (fp_s, ft_s) =
+            crate::hydro_rotation::eval_fp_ft_single(model.aux.w_div_wc[k]);
         if let Some(ref hook) = tidal {
             let td = hook.0.eval_shell(k, r_k, om_k);
-            let (f_sw, f_1m) = (
-                td.f_switch.clamp(0.0, 1.0),
-                1.0 - td.f_switch.clamp(0.0, 1.0),
-            );
-            model.aux.fp_rot[k] = (f_sw * td.fp + f_1m * fp_s).clamp(0.05, 2.0);
+            let f_sw = td.f_switch;
+            let f_1m = 1.0 - f_sw;
+            model.aux.fp_rot[k] = f_sw * td.fp + f_1m * fp_s;
             model.aux.d_fp_rot_dlnr[k] = f_sw * td.d_fp_dlnr;
-            model.aux.ft_rot[k] = (f_sw * td.ft + f_1m * ft_s).clamp(0.05, 2.0);
+            model.aux.ft_rot[k] = f_sw * td.ft + f_1m * ft_s;
             model.aux.d_ft_rot_dlnr[k] = f_sw * td.d_ft_dlnr;
-            model.aux.i_rot[k] =
-                (f_sw * td.i_rot + f_1m * i_rot_s).max(1.0e-30);
-            model.aux.d_i_rot_dlnr[k] =
-                f_sw * td.d_irot_dlnr + f_1m * (2.0 * i_rot_s);
         } else {
             model.aux.fp_rot[k] = fp_s;
             model.aux.d_fp_rot_dlnr[k] = 0.0;
             model.aux.ft_rot[k] = ft_s;
             model.aux.d_ft_rot_dlnr[k] = 0.0;
-            model.aux.i_rot[k] = i_rot_s;
-            model.aux.d_i_rot_dlnr[k] = 2.0 * i_rot_s;
         }
         model.j_rot[k] = model.aux.i_rot[k] * om_k;
     }
 }
 
-/// Recomputes $(f_P, f_T, i_{\mathrm{rot}})$ and $\Omega_k = j_{\mathrm{rot},k} / i_{\mathrm{rot},k}$.
+/// Recomputes $(w/w_{\mathrm{crit}}, i_{\mathrm{rot}}, \Omega, f_P, f_T)$
+/// preserving shell `j_rot` (`set_rotation_info` in
+/// `star/private/hydro_rotation.f90:537-586`).
 pub fn conserve_shell_j_rot_and_distortion(model: &mut StarModel) {
     let nz = model.nz;
     if !model.controls.rotation_flag
@@ -436,38 +414,7 @@ pub fn conserve_shell_j_rot_and_distortion(model: &mut StarModel) {
         update_rotation_distortion_factors(model);
         return;
     }
-    let j_target = model.j_rot.clone();
-    for _ in 0..25 {
-        let mut max_rel = 0.0_f64;
-        for k in 0..nz {
-            let ir = model
-                .aux
-                .i_rot
-                .get(k)
-                .copied()
-                .filter(|&v| v > 0.0)
-                .unwrap_or_else(|| {
-                    (2.0 / 3.0) * flexmesa_math::pow2(model.r[k].max(1.0))
-                });
-            let om_new = j_target[k] / ir;
-            let scale = om_new.abs().max(model.omega[k].abs());
-            if scale > 0.0 {
-                max_rel = max_rel.max((om_new - model.omega[k]).abs() / scale);
-            }
-            model.omega[k] = om_new;
-        }
-        update_rotation_distortion_factors(model);
-        if max_rel < 1.0e-15 {
-            break;
-        }
-    }
-    for k in 0..nz {
-        model.omega[k] = j_target[k] / model.aux.i_rot[k].max(1.0e-30);
-        model.j_rot[k] = j_target[k];
-        let (r_k, m_k) = (model.r[k].max(1.0e5), model.m_grav[k].max(1.0e20));
-        model.grav[k] =
-            model.aux.fp_rot[k] * model.cgrav[k] * m_k / (r_k * r_k);
-    }
+    crate::hydro_rotation::set_rotation_info(model, false);
 }
 
 /// Augments `model.d_mix` with Heger et al. (2000) and Spruit (2002) diffusivities.

@@ -11,8 +11,9 @@ Evaluates the Three-Tier Hybrid Architecture across Stages 0..3 for:
    Stage 0, 4-thread `rayon` Stage 1) and `@jax.jit` / `@jax.jit(vmap)`
    (Stages 2..3).
 3. `bench_turb_tdc`: Kuhfuss 1D Time-Dependent Convection (`set_tdc`) with
-   Implicit Function Theorem sensitivities across `flexmesa._rust.set_tdc_batch`
-   (Stages 0..1) and `@jax.jit` / `@jax.jit(vmap)` (Stages 2..3).
+   Newton-iteration sensitivities matching upstream `auto_diff_real_tdc` across
+   `flexmesa._rust.set_tdc_batch` (Stages 0..1) and `@jax.jit` /
+   `@jax.jit(vmap)` (Stages 2..3).
 """
 
 from __future__ import annotations

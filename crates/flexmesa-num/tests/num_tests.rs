@@ -619,6 +619,47 @@ fn test_brent_all_ten_minimization_and_five_root_functions() {
     }
 }
 
+/// Verifies `nm_simplex` honors `max_iters` separately from `max_evals`
+/// (`mod_simplex.f90:127`) and leaves `x_first` unclamped when
+/// `enforce_bounds == false` (`mod_simplex.f90:218-236`).
+#[test]
+fn test_nm_simplex_respects_max_iters_and_unclamped_initial_vertex() {
+    let mut visited: Vec<[f64; 2]> = Vec::new();
+    let cfg = SimplexConfig {
+        max_iters: 2,
+        max_evals: 5,
+        x_tol: 1e-10,
+        f_tol: 0.0,
+        enforce_bounds: false,
+        ..SimplexConfig::default()
+    };
+    let res = nm_simplex(
+        2,
+        &[1.24, 1.50],
+        &[1.32, 1.90],
+        &[1.00, 1.70],
+        &cfg,
+        |x| {
+            visited.push([x[0], x[1]]);
+            let d0 = x[0] - 0.98;
+            let d1 = x[1] - 1.80;
+            Ok(d0 * d0 + d1 * d1)
+        },
+    )
+    .expect("nm_simplex succeeds");
+    // Initial simplex vertices match mod_simplex.f90:218-236 without clamping:
+    // x_first = (1.00, 1.70), +0.25*(1.32-1.24)=+0.02, +0.25*(1.90-1.50)=+0.10.
+    assert!((visited[0][0] - 1.00).abs() < 1e-15);
+    assert!((visited[0][1] - 1.70).abs() < 1e-15);
+    assert!((visited[1][0] - 1.02).abs() < 1e-15);
+    assert!((visited[1][1] - 1.70).abs() < 1e-15);
+    assert!((visited[2][0] - 1.00).abs() < 1e-15);
+    assert!((visited[2][1] - 1.80).abs() < 1e-15);
+    // Iteration loop stops after 2 revisions (num_iters == 3 > max_iters == 2).
+    assert!(res.num_iters <= 3);
+    assert!(res.f_min < 1e-12);
+}
+
 proptest! {
     #![proptest_config(ProptestConfig::with_cases(100))]
 

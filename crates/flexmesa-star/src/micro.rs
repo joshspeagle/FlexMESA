@@ -8,15 +8,20 @@ use std::collections::HashMap;
 use std::path::Path;
 use std::sync::{Arc, Mutex, OnceLock};
 
-use flexmesa_chem::{get_composition_info, NuclideCatalog};
+use flexmesa_chem::{
+    get_composition_info, get_composition_info_from_props, NuclideCatalog,
+    SpeciesProps,
+};
 use flexmesa_const::{
     AVO, CRAD, FOUR_PI, FOUR_THIRDS_PI, KERG, LN10, ONE_THIRD, QE,
 };
 use flexmesa_eos::{
-    eos_dt_get_rho, eos_dt_get_zones_with_logs, EosEvalOutput, HelmTable,
-    I_CHI_RHO, I_CHI_T, I_CP, I_CV, I_ETA, I_FRAC_PC, I_GAMMA1, I_GAMMA3,
-    I_GRAD_AD, I_LATENT_DDLNRHO, I_LATENT_DDLNT, I_LN_E, I_LN_FREE_E,
-    I_LN_PGAS, I_LN_S, I_MU, NUM_EOS_BASIC_RESULTS,
+    eos_dt_get_from_weights_with_tables, eos_dt_get_rho,
+    eos_dt_get_zones_with_logs, CmsTableSet, EosConfig, EosDtTableSet,
+    EosEvalOutput, HelmTable, I_CHI_RHO, I_CHI_T, I_CP, I_CV, I_ETA,
+    I_FRAC_IDEAL, I_FRAC_PC, I_FRAC_SKYE, I_GAMMA1, I_GAMMA3, I_GRAD_AD,
+    I_LATENT_DDLNRHO, I_LATENT_DDLNT, I_LN_E, I_LN_FREE_E, I_LN_PGAS, I_LN_S,
+    I_MU, NUM_EOS_BASIC_RESULTS,
 };
 use flexmesa_kap::get_kap_results;
 use flexmesa_net::NetGeneralInfo;
@@ -656,6 +661,275 @@ pub fn do_eos(model: &mut StarModel) -> Result<(), StarError> {
     ensure_eos_aux_len(model);
     for (k, out) in eos_outputs.iter().enumerate() {
         store_eos_for_cell(model, k, out)?;
+    }
+    Ok(())
+}
+
+/// Pre-extracted nuclide weights and EOS table references for repeated
+/// single-zone `get_eos` calls (`star/private/eos_support.f90:44-101`).
+pub(crate) struct EosZoneContext {
+    ht: &'static HelmTable,
+    dt_tables: &'static EosDtTableSet,
+    cms_tables: &'static CmsTableSet,
+    props: SpeciesProps,
+    z_int: Vec<usize>,
+    azion: Vec<f64>,
+    acmi: Vec<f64>,
+    a_baryon: Vec<f64>,
+}
+
+impl EosZoneContext {
+    /// Builds an [`EosZoneContext`] for `chem_id` using the built-in EOS
+    /// tables and nuclide catalog.
+    pub(crate) fn new(chem_id: &[usize]) -> Result<Self, StarError> {
+        let ht = builtin_helm_table()?;
+        let catalog = NuclideCatalog::builtin_ref();
+        let props =
+            SpeciesProps::from_catalog(catalog, chem_id).map_err(|e| {
+                StarError::MicrophysicsError(format!(
+                    "get_eos composition catalog error: {e}"
+                ))
+            })?;
+        let n = chem_id.len();
+        let mut z_int = Vec::with_capacity(n);
+        let mut azion = Vec::with_capacity(n);
+        let mut acmi = Vec::with_capacity(n);
+        let mut a_baryon = Vec::with_capacity(n);
+        for &cid in chem_id {
+            let nuc = catalog.get_by_id(cid).ok_or_else(|| {
+                StarError::MicrophysicsError(format!(
+                    "get_eos unknown chem_id {cid}"
+                ))
+            })?;
+            z_int.push(nuc.z as usize);
+            azion.push(nuc.z as f64);
+            acmi.push(nuc.w);
+            a_baryon.push(nuc.z_plus_n as f64);
+        }
+        Ok(Self {
+            ht,
+            dt_tables: EosDtTableSet::builtin(),
+            cms_tables: CmsTableSet::builtin(),
+            props,
+            z_int,
+            azion,
+            acmi,
+            a_baryon,
+        })
+    }
+
+    /// Evaluates single-zone `get_eos` at explicit `(xa, rho, log_rho, t, log_t)`
+    /// (`get_eos` in `star/private/eos_support.f90:44-101`).
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn eval_cell(
+        &self,
+        k: usize,
+        xa: &[f64],
+        rho: f64,
+        log_rho: f64,
+        t: f64,
+        log_t: f64,
+        cfg: &EosConfig,
+    ) -> Result<EosEvalOutput, StarError> {
+        // `star/private/eos_support.f90:70-76`: hard lower logRho cutoff.
+        if log_rho < -25.0 {
+            return Err(StarError::MicrophysicsError(format!(
+                "get_eos failed at zone {k}: logRho ({log_rho}) < -25"
+            )));
+        }
+        let comp = get_composition_info_from_props(&self.props, xa, true);
+        eos_dt_get_from_weights_with_tables(
+            self.ht,
+            self.dt_tables,
+            self.cms_tables,
+            comp.xh,
+            comp.xz,
+            rho,
+            log_rho,
+            t,
+            log_t,
+            comp.abar,
+            comp.zbar,
+            xa,
+            &self.z_int,
+            &self.azion,
+            &self.acmi,
+            &self.a_baryon,
+            cfg,
+        )
+        .map_err(|e| {
+            StarError::MicrophysicsError(format!(
+                "get_eos failed at zone {k}: {e}"
+            ))
+        })
+    }
+}
+
+/// Minimum composition change `|xa(j, k) - xa_start(j, k)|` required before
+/// `fix_d_eos_dxa_partials` evaluates finite-difference EOS composition
+/// partials (`dxa_threshold` in `star/private/hydro_eqns.f90:400`).
+const FIX_DXA_THRESHOLD: f64 = 1.0e-4;
+
+/// Revises `dln_e_dxa_for_partials` and `dln_peos_dxa_for_partials` via
+/// finite differences for zones using EOS components that lack analytic
+/// composition derivatives (`PC`, `Skye`, `ideal`)
+/// (`fix_d_eos_dxa_partials` in `star/private/hydro_eqns.f90:131-137, 373-544`).
+///
+/// For each zone `k` with `frac_without_dxa = eos_frac_PC + eos_frac_Skye +
+/// eos_frac_ideal > 0` and each species `j` with
+/// `|xa(j, k) - xa_start(j, k)| >= 1e-4`, evaluates the EOS at `xa_start` and
+/// at `xa_start` with species `j` shifted by `dxa = xa(j, k) - xa_start(j, k)`,
+/// combining analytic `dres_dxa` with the `frac_without_dxa`-weighted finite
+/// difference. On a perturbed-composition EOS failure or non-finite
+/// `res(i_lnPgas)`, zeroes both partial arrays for cell `k` without error
+/// (`star/private/hydro_eqns.f90:462-469`).
+///
+/// # Errors
+/// Returns [`StarError::MicrophysicsError`] if `get_eos` fails at `xa_start` or
+/// if any revised composition partial is non-finite (`check_dxa` in
+/// `star/private/hydro_eqns.f90:529-544`).
+pub fn fix_d_eos_dxa_partials(model: &mut StarModel) -> Result<(), StarError> {
+    let nz = model.nz;
+    let species = model.species;
+    if nz == 0
+        || species == 0
+        || model.xa_start.len() != nz * species
+        || model.eos_res.len() != nz
+    {
+        return Ok(());
+    }
+    ensure_eos_aux_len(model);
+
+    let mut active_zones: Vec<(usize, f64)> = Vec::new();
+    for k in 0..nz {
+        // `star/private/hydro_eqns.f90:410`.
+        let frac_without_dxa = model.eos_res[k][I_FRAC_PC]
+            + model.eos_res[k][I_FRAC_SKYE]
+            + model.eos_res[k][I_FRAC_IDEAL];
+        if frac_without_dxa <= 0.0 {
+            continue;
+        }
+        let base = k * species;
+        let xa_k = &model.xa[base..base + species];
+        let xa_start_k = &model.xa_start[base..base + species];
+        if xa_start_k.iter().all(|&x| x == 0.0) {
+            continue;
+        }
+        let has_large_dxa = xa_k
+            .iter()
+            .zip(xa_start_k.iter())
+            .any(|(&x, &xs)| (x - xs).abs() >= FIX_DXA_THRESHOLD);
+        if has_large_dxa {
+            active_zones.push((k, frac_without_dxa));
+        }
+    }
+    if active_zones.is_empty() {
+        return Ok(());
+    }
+
+    let ctx = EosZoneContext::new(&model.chem_id)?;
+    let updates: Result<Vec<(usize, Vec<f64>, Vec<f64>)>, StarError> =
+        active_zones
+            .into_par_iter()
+            .map(|(k, frac_without_dxa)| {
+                let base = k * species;
+                let xa_k = &model.xa[base..base + species];
+                let xa_start_k = &model.xa_start[base..base + species];
+                let rho = model.rho[k];
+                let log_rho = model.lnd[k] / LN10;
+                let t = model.t[k];
+                let log_t = model.ln_t[k] / LN10;
+                let pgas = model.pgas[k];
+                let peos = model.peos[k];
+
+                // `star/private/hydro_eqns.f90:441-451`: baseline EOS at
+                // `xa_start(:, k)` is invariant across species `j`.
+                let base_eos = ctx.eval_cell(
+                    k,
+                    xa_start_k,
+                    rho,
+                    log_rho,
+                    t,
+                    log_t,
+                    &model.eos_config,
+                )?;
+                let lne_with_xa_start = base_eos.res[I_LN_E];
+                let lnpgas_with_xa_start = base_eos.res[I_LN_PGAS];
+
+                let mut dln_e_k =
+                    model.aux.dln_e_dxa_for_partials[base..base + species]
+                        .to_vec();
+                let mut dln_p_k =
+                    model.aux.dln_peos_dxa_for_partials[base..base + species]
+                        .to_vec();
+                let mut xa_start_1 = xa_start_k.to_vec();
+
+                for j in 0..species {
+                    let dxa = xa_k[j] - xa_start_k[j];
+                    if dxa.abs() < FIX_DXA_THRESHOLD {
+                        continue;
+                    }
+                    // `star/private/hydro_eqns.f90:455-473`.
+                    xa_start_1.copy_from_slice(xa_start_k);
+                    xa_start_1[j] = xa_start_k[j] + dxa;
+                    let pert = ctx.eval_cell(
+                        k,
+                        &xa_start_1,
+                        rho,
+                        log_rho,
+                        t,
+                        log_t,
+                        &model.eos_config,
+                    );
+                    let out = match pert {
+                        Ok(out) if !is_bad(out.res[I_LN_PGAS]) => out,
+                        _ => {
+                            // `star/private/hydro_eqns.f90:462-469`: punt
+                            // silently by zeroing cell partials.
+                            dln_e_k.fill(0.0);
+                            dln_p_k.fill(0.0);
+                            return Ok((k, dln_e_k, dln_p_k));
+                        }
+                    };
+                    let [d_lnpgas_dxa, d_lne_dxa] =
+                        out.d_dxa.get(j).copied().unwrap_or([0.0, 0.0]);
+
+                    // `star/private/hydro_eqns.f90:480-485`.
+                    let dlne = d_lne_dxa
+                        + frac_without_dxa
+                            * (out.res[I_LN_E] - lne_with_xa_start)
+                            / dxa;
+                    if is_bad(dlne) {
+                        return Err(StarError::MicrophysicsError(format!(
+                            "fix_d_eos_dxa_partials: bad dlnE_dxa_for_partials \
+                             ({dlne}) at zone {k}, species {j}"
+                        )));
+                    }
+                    dln_e_k[j] = dlne;
+
+                    let dlnp = pgas * d_lnpgas_dxa / peos
+                        + frac_without_dxa
+                            * (pgas / peos)
+                            * (out.res[I_LN_PGAS] - lnpgas_with_xa_start)
+                            / dxa;
+                    if is_bad(dlnp) {
+                        return Err(StarError::MicrophysicsError(format!(
+                            "fix_d_eos_dxa_partials: bad dlnPeos_dxa_for_partials \
+                             ({dlnp}) at zone {k}, species {j}"
+                        )));
+                    }
+                    dln_p_k[j] = dlnp;
+                }
+                Ok((k, dln_e_k, dln_p_k))
+            })
+            .collect();
+
+    for (k, dln_e_k, dln_p_k) in updates? {
+        let base = k * species;
+        model.aux.dln_e_dxa_for_partials[base..base + species]
+            .copy_from_slice(&dln_e_k);
+        model.aux.dln_peos_dxa_for_partials[base..base + species]
+            .copy_from_slice(&dln_p_k);
     }
     Ok(())
 }

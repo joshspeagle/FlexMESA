@@ -160,13 +160,18 @@ impl<const N: usize> Div for DualOrder1<N> {
     #[inline]
     #[allow(clippy::suspicious_arithmetic_impl)]
     fn div(self, rhs: Self) -> Self::Output {
-        let inv_y = 1.0 / rhs.val;
-        self.make_binary_operator(
-            rhs,
-            self.val * inv_y,
-            inv_y,
-            -self.val * inv_y * inv_y,
-        )
+        // `div_self`: value `x*powm1(y)`, derivative
+        // `(dx*y - x*dy)*powm1(pow2(y))`. The two- and four-variable types
+        // write the same product with the factors exchanged.
+        let q0 = 1.0 / (rhs.val * rhs.val);
+        let mut d1 = [0.0; N];
+        for ((slot, &dx), &dy) in d1.iter_mut().zip(&self.d1).zip(&rhs.d1) {
+            *slot = (dx * rhs.val - self.val * dy) * q0;
+        }
+        Self {
+            val: self.val * (1.0 / rhs.val),
+            d1,
+        }
     }
 }
 
@@ -186,6 +191,24 @@ impl<const N: usize> Div<DualOrder1<N>> for f64 {
     #[inline]
     #[allow(clippy::suspicious_arithmetic_impl)]
     fn div(self, rhs: DualOrder1<N>) -> Self::Output {
-        rhs.powm1() * self
+        // `div_real_self`: value `z*powm1(x)`. The array and one-variable
+        // types evaluate `-dx*z*powm1(pow2(x))`; the two- and four-variable
+        // types evaluate `q0 = z*powm1(pow2(x))` and then `-q0*dx`.
+        let inv_x2 = 1.0 / (rhs.val * rhs.val);
+        let mut d1 = [0.0; N];
+        if N == 2 || N == 4 {
+            let q0 = self * inv_x2;
+            for (slot, &dx) in d1.iter_mut().zip(&rhs.d1) {
+                *slot = -q0 * dx;
+            }
+        } else {
+            for (slot, &dx) in d1.iter_mut().zip(&rhs.d1) {
+                *slot = -dx * self * inv_x2;
+            }
+        }
+        DualOrder1 {
+            val: self * (1.0 / rhs.val),
+            d1,
+        }
     }
 }

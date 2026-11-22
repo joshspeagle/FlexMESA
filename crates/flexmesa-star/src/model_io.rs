@@ -430,7 +430,16 @@ pub fn read_mod_str(
         (r_center, l_center, v_center);
     model.aux.total_energy = total_energy;
     model.aux.cumulative_energy_error = cum_energy_err;
-    (model.model_number, model.num_retries) = (model_number, num_retries);
+    // `star/defaults/star_job.defaults:633-634` and
+    // `star/job/run_star_support.f90:2009-2012`: `set_initial_number_retries`
+    // defaults to `true`, resetting `num_retries` to `initial_number_retries`
+    // (`0`) on `.mod` load unless explicitly disabled.
+    let eff_num_retries = if model.job.set_initial_number_retries {
+        model.job.initial_number_retries
+    } else {
+        num_retries
+    };
+    (model.model_number, model.num_retries) = (model_number, eff_num_retries);
     (model.star_age, model.teff) = (star_age, teff);
     let init_dt = dt_yrs.unwrap_or(1000.0) * SECYER;
     (model.dt, model.dt_next, model.dt_old) = (init_dt, init_dt, init_dt);

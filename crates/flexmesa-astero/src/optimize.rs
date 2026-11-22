@@ -94,6 +94,44 @@ pub fn try_simplex_minimize_with_options<F>(
     enforce_bounds: bool,
     adaptive_random_search: bool,
     seed: i32,
+    eval_fn: F,
+) -> Result<(Vec<f64>, f64, usize), StarError>
+where
+    F: FnMut(&[f64]) -> Result<f64, StarError>,
+{
+    try_simplex_minimize_with_budget(
+        x_first,
+        x_lower,
+        x_upper,
+        max_evals,
+        max_evals,
+        x_atol,
+        x_rtol,
+        chi2_tol,
+        centroid_weight_power,
+        enforce_bounds,
+        adaptive_random_search,
+        seed,
+        eval_fn,
+    )
+}
+
+/// Fallible Nelder-Mead minimization with explicit `max_iters` and `max_evals`
+/// matching `NM_simplex` (`num/private/mod_simplex.f90:30-257`).
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn try_simplex_minimize_with_budget<F>(
+    x_first: &[f64],
+    x_lower: &[f64],
+    x_upper: &[f64],
+    max_iters: usize,
+    max_evals: usize,
+    x_atol: f64,
+    x_rtol: f64,
+    chi2_tol: f64,
+    centroid_weight_power: f64,
+    enforce_bounds: bool,
+    adaptive_random_search: bool,
+    seed: i32,
     mut eval_fn: F,
 ) -> Result<(Vec<f64>, f64, usize), StarError>
 where
@@ -104,6 +142,7 @@ where
         return Ok((Vec::new(), 0.0, 0));
     }
     let cfg = SimplexConfig {
+        max_iters,
         max_evals,
         x_tol: x_rtol.max(x_atol).max(1.0e-12),
         f_tol: chi2_tol.max(0.0),
@@ -116,26 +155,30 @@ where
         seed,
         centroid_weight_power,
     };
-    let x_init: Vec<f64> = (0..n)
-        .map(|i| x_first[i].clamp(x_lower[i], x_upper[i]))
-        .collect();
+    // Upstream `num/private/mod_simplex.f90:218-236` sets `simplex(:, n+1) = x_first`
+    // without clamping when `enforce_bounds == false` (allowing initial trial
+    // coordinates outside `[x_lower, x_upper]` while using the span for scale).
+    let x_init: Vec<f64> = if enforce_bounds {
+        (0..n)
+            .map(|i| x_first[i].clamp(x_lower[i], x_upper[i]))
+            .collect()
+    } else {
+        x_first[..n].to_vec()
+    };
     let mut best_x = x_init.clone();
     let mut best_f = f64::INFINITY;
     let mut evals = 0usize;
     let mut cb_err: Option<StarError> = None;
     let res =
         nm_simplex(n, &x_lower[..n], &x_upper[..n], &x_init, &cfg, |x_try| {
-            if evals >= max_evals {
-                return Ok(best_f.min(1.0e99));
-            }
-            let x_clamped: Vec<f64> = if enforce_bounds {
+            let x_eval: Vec<f64> = if enforce_bounds {
                 (0..n)
                     .map(|i| x_try[i].clamp(x_lower[i], x_upper[i]))
                     .collect()
             } else {
                 x_try[..n].to_vec()
             };
-            let f = match eval_fn(&x_clamped) {
+            let f = match eval_fn(&x_eval) {
                 Ok(v) => v,
                 Err(e) => {
                     cb_err = Some(e);
@@ -147,7 +190,7 @@ where
             evals += 1;
             if f < best_f {
                 best_f = f;
-                best_x = x_clamped;
+                best_x = x_eval;
             }
             Ok(f)
         });

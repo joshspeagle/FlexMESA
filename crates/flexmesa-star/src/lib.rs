@@ -208,8 +208,8 @@ pub use adjust_mesh_support::{
     check_validity, get_gval_info, get_gval_info_with_controls,
 };
 pub use controls::{
-    AtmOption, AtmTTauRelation, EnergyEqnOption, StarControls, StarError,
-    StarJobControls, StepFailureInfo, VarLayout,
+    AtmOption, AtmTTauOpacity, AtmTTauRelation, EnergyEqnOption, StarControls,
+    StarError, StarJobControls, StepFailureInfo, VarLayout,
 };
 pub use controls_diffusion::{DiffusionControls, MAX_NUM_DIFFUSION_CLASSES};
 pub use controls_mix_wind::{

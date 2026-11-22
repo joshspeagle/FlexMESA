@@ -14,7 +14,7 @@ use crate::inlist_astero::{
     AsteroParamSet, AsteroSearchControls, AsteroSearchParam,
 };
 use crate::optimize::{
-    try_bobyqa_minimize, try_newuoa_minimize, try_simplex_minimize_with_options,
+    try_bobyqa_minimize, try_newuoa_minimize, try_simplex_minimize_with_budget,
 };
 use crate::sample_eval::AsteroSampleResult;
 use crate::scaling::eval_radial_delta_nu_ols;
@@ -125,11 +125,13 @@ pub(crate) fn run_simplex_driver(
     let x_first: Vec<f64> = active.iter().map(|(_, p)| p.first).collect();
     let x_lower: Vec<f64> = active.iter().map(|(_, p)| p.min).collect();
     let x_upper: Vec<f64> = active.iter().map(|(_, p)| p.max).collect();
+    let max_iters = ctrl.simplex_itermax.max(1);
     let max_evals = ctrl.simplex_fcn_calls_max.max(1);
-    let _ = try_simplex_minimize_with_options(
+    let _ = try_simplex_minimize_with_budget(
         &x_first,
         &x_lower,
         &x_upper,
+        max_iters,
         max_evals,
         ctrl.simplex_x_atol,
         ctrl.simplex_x_rtol,

@@ -1,11 +1,12 @@
 # SPDX-License-Identifier: LGPL-3.0-or-later
 """XLA-compilable JAX `float64` Time-Dependent Convection kernel (`tdc_fast`).
 
-Provides fixed-step bisection + Newton-Raphson root-finding in $Z = \\ln Y$ via
-`jax.lax.fori_loop` coupled with Implicit Function Theorem differentiation
-(`jax.grad`) so Stages 2 (`@jax.jit`) and 3 (`jax.jit(jax.vmap)`) of
-`bench_turb_tdc` execute on the XLA device with compact HLO graphs and exact
-iterate agreement with `set_tdc`.
+Provides fixed-step bisection + damped Newton-Raphson root-finding in
+$Z = \\ln Y$ via `jax.lax.fori_loop` with forward-mode differentiation
+(`jax.jvp`) carried through the Newton updates (stopping gradients across the
+initial bisection bracket), matching upstream `auto_diff_real_tdc`
+(`turb/private/tdc.f90:253-345`) so Stages 2 (`@jax.jit`) and 3
+(`jax.jit(jax.vmap)`) of `bench_turb_tdc` match Rust `set_tdc`.
 """
 
 from __future__ import annotations
@@ -72,94 +73,18 @@ def _eval_q_and_af_given_gamma(
     return q, af
 
 
-def _eval_q_and_af_jax(
-    y: jax.Array,
-    gradr: jax.Array,
-    t_val: jax.Array,
-    rho_val: jax.Array,
-    p_val: jax.Array,
-    hp_val: jax.Array,
-    cp_val: jax.Array,
-    grav_val: jax.Array,
-) -> tuple[jax.Array, jax.Array]:
-    """Evaluates TDC luminosity residual $Q(Y, \\nabla_r)$ and speed $A_f$.
-
-    Args:
-        y: Dimensionless superadiabaticity $Y = \\nabla_T - \\nabla_L$.
-        gradr: Radiative temperature gradient $\\nabla_r$ (dimensionless).
-        t_val: Temperature $T$ in $\\mathrm{K}$.
-        rho_val: Mass density $\\rho$ in $\\mathrm{g\\,cm^{-3}}$.
-        p_val: Total pressure $P$ in $\\mathrm{dyn\\,cm^{-2}}$.
-        hp_val: Pressure scale height $H_P$ in $\\mathrm{cm}$.
-        cp_val: Specific heat $C_P$ in $\\mathrm{erg\\,g^{-1}\\,K^{-1}}$.
-        grav_val: Local gravity $g$ in $\\mathrm{cm\\,s^{-2}}$.
-
-    Returns:
-        Two-tuple `(q, af)` of luminosity residual $Q(Y)$ in
-        $\\mathrm{erg\\,s^{-1}}$ and final scaled convective speed $A_f$ in
-        $\\mathrm{cm\\,s^{-1}}$.
-    """
-    one = jnp.float64(1.0)
-    g04 = jnp.float64(0.40)
-    gamma = _turb.set_mlt_jax(
-        one,
-        one,
-        cp_val,
-        grav_val,
-        2.0 * hp_val,
-        rho_val,
-        p_val,
-        t_val,
-        one,
-        gradr,
-        g04,
-        g04,
-        2.0,
-    )[0]
-    r_sq = jnp.float64(_const.RSUN * _const.RSUN)
-    c0 = (
-        jnp.float64(2.0 * X_ALFAS * 4.0 * _const.PI)
-        * rho_val
-        * t_val
-        * cp_val
-        * r_sq
-    )
-    t4 = (t_val * t_val) * (t_val * t_val)
-    l0 = (
-        jnp.float64(
-            (16.0 * _const.PI * _const.CRAD * _const.CLIGHT / 3.0)
-            * _const.STANDARD_CGRAV
-            * _const.MSUN
-        )
-        * t4
-        / p_val
-    )
-    lum = (
-        jnp.float64(64.0 * _const.PI * _const.BOLTZ_SIGMA / 3.0)
-        * t4
-        * grav_val
-        * r_sq
-        * gradr
-        / p_val
-    )
-    return _eval_q_and_af_given_gamma(
-        y, gamma, lum, c0, l0, hp_val, cp_val, t_val
-    )
-
-
 def eval_tdc_point_jax(s_frac: jax.Array) -> jax.Array:
     """Computes `[grad_t, d, conv_vel, d_grad_t_d_gradr]` in JAX `float64`.
 
     Narrows the logarithmic superadiabaticity bracket $Z = \\ln Y \\in [-100,
-    100]$ to width $< 1.0$ via 8 bisection steps (`jax.lax.fori_loop`), refines
-    $Z^*$ via 20 damped Newton-Raphson iterations with the exact MESA residual
+    100]$ to width $< 1.0$ via 8 bisection steps (`jax.lax.fori_loop`), then
+    refines $Z^*$ via up to 20 damped Newton-Raphson iterations with the 5-step
+    backtracking line search and the MESA residual
     ($|Q| / \\mathrm{scale} \\le 10^{-8}$) and step ($|\\Delta Z| < 10^{-13}$)
-    convergence latches, and propagates $\\partial \\nabla_T / \\partial
-    \\nabla_r$ at the converged root $Y^* = \\exp(Z^*)$ via the Implicit
-    Function Theorem:
-    $$\\frac{\\partial Y^*}{\\partial \\nabla_r} =
-      -\\left(\\frac{\\partial Q}{\\partial Y}\\right)^{-1}
-      \\frac{\\partial Q}{\\partial \\nabla_r}.$$
+    convergence latches. Forward-mode `jax.jvp` propagates
+    $\\partial Y / \\partial \\nabla_r$ through the Newton updates from the
+    zero-derivative bisection bracket, matching upstream `auto_diff_real_tdc`
+    (`turb/private/tdc.f90:253-345`).
 
     Args:
         s_frac: Normalized radial shell coordinate $s \\in [0, 1]$ (`float64`
@@ -179,25 +104,8 @@ def eval_tdc_point_jax(s_frac: jax.Array) -> jax.Array:
     gradr_val = 0.42 + 0.08 * s_frac
     scale_val = jnp.float64(70.0 * _const.LSUN * 1.0e-3)
 
-    # Hoist loop-invariant MLT efficiency and luminosity prefactors outside
-    # the bisection and Newton-Raphson root-finding loops.
     one = jnp.float64(1.0)
     g04 = jnp.float64(0.40)
-    gamma0 = _turb.set_mlt_jax(
-        one,
-        one,
-        cp_val,
-        grav_val,
-        2.0 * hp_val,
-        rho_val,
-        p_val,
-        t_val,
-        one,
-        gradr_val,
-        g04,
-        g04,
-        2.0,
-    )[0]
     r_sq = jnp.float64(_const.RSUN * _const.RSUN)
     c0 = (
         jnp.float64(2.0 * X_ALFAS * 4.0 * _const.PI)
@@ -216,24 +124,46 @@ def eval_tdc_point_jax(s_frac: jax.Array) -> jax.Array:
         * t4
         / p_val
     )
-    lum0 = (
-        jnp.float64(64.0 * _const.PI * _const.BOLTZ_SIGMA / 3.0)
-        * t4
-        * grav_val
-        * r_sq
-        * gradr_val
-        / p_val
-    )
 
-    def _q_of_z(z: jax.Array) -> jax.Array:
+    def _q_of_z(
+        z: jax.Array, gamma_g: jax.Array, lum_g: jax.Array
+    ) -> jax.Array:
         return _eval_q_and_af_given_gamma(
-            jnp.exp(z), gamma0, lum0, c0, l0, hp_val, cp_val, t_val
+            jnp.exp(z), gamma_g, lum_g, c0, l0, hp_val, cp_val, t_val
         )[0]
 
-    def _q_of_y_gr(y: jax.Array, gr: jax.Array) -> jax.Array:
-        return _eval_q_and_af_jax(
-            y, gr, t_val, rho_val, p_val, hp_val, cp_val, grav_val
+    vg_fn = jax.value_and_grad(_q_of_z, argnums=0)
+
+    def _gamma_and_lum(gr: jax.Array) -> tuple[jax.Array, jax.Array]:
+        gamma_g = _turb.set_mlt_jax(
+            one,
+            one,
+            cp_val,
+            grav_val,
+            2.0 * hp_val,
+            rho_val,
+            p_val,
+            t_val,
+            one,
+            gr,
+            g04,
+            g04,
+            2.0,
         )[0]
+        lum_g = (
+            jnp.float64(64.0 * _const.PI * _const.BOLTZ_SIGMA / 3.0)
+            * t4
+            * grav_val
+            * r_sq
+            * gr
+            / p_val
+        )
+        return gamma_g, lum_g
+
+    # Bisection runs on primal values with zero structure partials, matching
+    # `Q_bisection_search` and `lift(lb_val)` / `lift(ub_val)` / `lift(z_start)`
+    # (`turb/private/tdc.f90:253-261`).
+    gamma0, lum0 = _gamma_and_lum(gradr_val)
 
     def _bisect_step(
         _: int,
@@ -241,7 +171,7 @@ def eval_tdc_point_jax(s_frac: jax.Array) -> jax.Array:
     ) -> tuple[jax.Array, jax.Array, jax.Array, jax.Array]:
         lb_s, ub_s, q_lb_s, q_ub_s = state
         z_mid = 0.5 * (lb_s + ub_s)
-        q_mid = _q_of_z(z_mid)
+        q_mid = _q_of_z(z_mid, gamma0, lum0)
         same_ub = q_mid * q_ub_s > 0.0
         ub_n = jnp.where(same_ub, z_mid, ub_s)
         q_ub_n = jnp.where(same_ub, q_mid, q_ub_s)
@@ -251,49 +181,81 @@ def eval_tdc_point_jax(s_frac: jax.Array) -> jax.Array:
 
     lb0 = jnp.float64(-100.0)
     ub0 = jnp.float64(100.0)
-    lb, ub, _, _ = jax.lax.fori_loop(
-        0, 8, _bisect_step, (lb0, ub0, _q_of_z(lb0), _q_of_z(ub0))
-    )
-
-    vg_fn = jax.value_and_grad(_q_of_z)
-
-    def _newton_step(
-        _: int,
-        state: tuple[jax.Array, jax.Array, jax.Array, jax.Array, jax.Array],
-    ) -> tuple[jax.Array, jax.Array, jax.Array, jax.Array, jax.Array]:
-        z_s, lb_s, ub_s, conv_s, have_d = state
-        qv, dq_dz = vg_fn(z_s)
-        conv_res = (jnp.abs(qv) / scale_val <= 1.0e-8) & have_d
-        conv_now = conv_s | conv_res
-        move_lb = ((qv > 0.0) & (dq_dz < 0.0)) | ((qv <= 0.0) & (dq_dz >= 0.0))
-        lb_n = jnp.where(conv_now, lb_s, jnp.where(move_lb, z_s, lb_s))
-        ub_n = jnp.where(conv_now, ub_s, jnp.where(move_lb, ub_s, z_s))
-        corr = -qv / dq_dz
-        conv_now = conv_now | ((jnp.abs(corr) < 1.0e-13) & have_d)
-        z_try = z_s + corr
-        z_try = jnp.where(
-            z_try > ub_n,
-            0.5 * (z_s + ub_n),
-            jnp.where(z_try < lb_n, 0.5 * (z_s + lb_n), z_try),
-        )
-        z_n = jnp.where(conv_now, z_s, z_try)
-        return z_n, lb_n, ub_n, conv_now, jnp.bool_(True)
-
-    z_init = 0.5 * (lb + ub)
-    z_star, _, _, _, _ = jax.lax.fori_loop(
+    lb_b, ub_b, _, _ = jax.lax.fori_loop(
         0,
-        20,
-        _newton_step,
-        (z_init, lb, ub, jnp.bool_(False), jnp.bool_(False)),
+        8,
+        _bisect_step,
+        (lb0, ub0, _q_of_z(lb0, gamma0, lum0), _q_of_z(ub0, gamma0, lum0)),
     )
+    lb_init = jax.lax.stop_gradient(lb_b)
+    ub_init = jax.lax.stop_gradient(ub_b)
+    z_init = jax.lax.stop_gradient(0.5 * (lb_b + ub_b))
 
-    y_star = jnp.exp(z_star)
+    def _solve_y_from_gradr(gr: jax.Array) -> jax.Array:
+        gamma_g, lum_g = _gamma_and_lum(gr)
+
+        def _newton_step(
+            _: int,
+            state: tuple[jax.Array, jax.Array, jax.Array, jax.Array, jax.Array],
+        ) -> tuple[jax.Array, jax.Array, jax.Array, jax.Array, jax.Array]:
+            z_s, lb_s, ub_s, conv_s, have_d = state
+            qv, dq_dz = vg_fn(z_s, gamma_g, lum_g)
+            conv_res = (jnp.abs(qv) / scale_val <= 1.0e-8) & have_d
+            stop_before = conv_s | conv_res
+
+            move_ub = ((qv > 0.0) & (dq_dz > 0.0)) | (
+                (qv < 0.0) & (dq_dz < 0.0)
+            )
+            lb_n = jnp.where(stop_before, lb_s, jnp.where(move_ub, lb_s, z_s))
+            ub_n = jnp.where(stop_before, ub_s, jnp.where(move_ub, z_s, ub_s))
+            corr0 = -qv / dq_dz
+
+            def _line_step(
+                __: int,
+                lstate: tuple[
+                    jax.Array, jax.Array, jax.Array, jax.Array, jax.Array
+                ],
+            ) -> tuple[jax.Array, jax.Array, jax.Array, jax.Array, jax.Array]:
+                corr_l, z_new_l, done_l, conv_l, hd_l = lstate
+                hit_corr = (jnp.abs(corr_l) < 1.0e-13) & hd_l
+                conv_next = conv_l | (~done_l & hit_corr)
+                skip = done_l | hit_corr
+                z_try = z_s + corr_l
+                z_try = jnp.where(
+                    z_try > ub_n,
+                    0.5 * (z_s + ub_n),
+                    jnp.where(z_try < lb_n, 0.5 * (z_s + lb_n), z_try),
+                )
+                qc = _q_of_z(z_try, gamma_g, lum_g)
+                accept = jnp.abs(qc) < jnp.abs(qv)
+                z_new_next = jnp.where(skip, z_new_l, z_try)
+                hd_next = jnp.where(skip, hd_l, jnp.bool_(True))
+                done_next = skip | accept
+                corr_next = jnp.where(done_next, corr_l, 0.5 * corr_l)
+                return corr_next, z_new_next, done_next, conv_next, hd_next
+
+            _, z_new_f, _, conv_f, hd_f = jax.lax.fori_loop(
+                0,
+                5,
+                _line_step,
+                (corr0, z_s, stop_before, stop_before, have_d),
+            )
+            z_n = jnp.where(stop_before, z_s, z_new_f)
+            return z_n, lb_n, ub_n, conv_f, hd_f
+
+        z_star, _, _, _, _ = jax.lax.fori_loop(
+            0,
+            20,
+            _newton_step,
+            (z_init, lb_init, ub_init, jnp.bool_(False), jnp.bool_(False)),
+        )
+        return jnp.exp(z_star)
+
+    y_star, dy_dgr = jax.jvp(_solve_y_from_gradr, (gradr_val,), (one,))
     _, af_star = _eval_q_and_af_given_gamma(
         y_star, gamma0, lum0, c0, l0, hp_val, cp_val, t_val
     )
-    dq_dy, dq_dgr = jax.grad(_q_of_y_gr, argnums=(0, 1))(y_star, gradr_val)
-    dy_dgr = -dq_dgr / dq_dy
-    grad_t = y_star + 0.40
+    grad_t = y_star + g04
     conv_vel = jnp.float64(_const.SQRT_2_DIV_3) * af_star
     d_val = conv_vel * hp_val * jnp.float64(2.0 / 3.0)
     return jnp.stack([grad_t, d_val, conv_vel, dy_dgr])

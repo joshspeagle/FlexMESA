@@ -66,6 +66,7 @@ Scope and the `v0.1.0` definition are in [`SCOPE.md`](SCOPE.md). Work is tracked
 | 49 | CI Compiles Through `sccache`; Rust Tests in Seven Shards and Python Tests in Five | In force | below |
 | 50 | The TDC Newton Solver Runs on a Translation of `auto_diff_real_tdc`; No Bracket Seed (`#321`) | In force | below |
 | 51 | The Scheduled Campaign Saves a Baseline Candidate; the Baseline May Be Refreshed From It (`#257`) | In force | below |
+| 52 | `DualOrder1<N>` Evaluates Upstream's Expression for Each Operation, in One of Two Forms Chosen by `N` (`#339`) | In force | below |
 
 ## Pre-audit decisions still in force
 
@@ -675,10 +676,11 @@ The text of these four entries predates the audit of 2026-11-16. The decisions s
   2. **No seed**: `TdcParams::y_face_guess` and the seeded bracket are removed. Upstream starts every search from `[-100, 100]`.
   3. **Real operands**: upstream has separate routines for a real operand (`mul_self_real`, `div_self_real`, and so on). The solver code is generic over the scalar type and promotes reals with `from_f64`, so it uses the two-dual routine. Values are the same; a partial can differ from upstream's in the last place.
 - **Why**: MESA's Jacobian contains the partials its Newton iteration produces, which equal the implicit-function-theorem partials only at full convergence. The iteration may stop after one update from a bisection bracket of width one in $Z$, so the difference is not negligible, and it changes the solver path.
-- **Limits**: Item 3 means the structure partials are not bit-identical to upstream's wherever a real operand is involved. The derived JAX layer still applies the implicit function theorem (`src/flexmesa/turb/tdc.py`), and its seed argument remains.
+- **Limits**: Item 3 means the structure partials are not bit-identical to upstream's wherever a real operand is involved. (Follow-up in `#321`: `src/flexmesa/turb/{tdc,tdc_dual,tdc_search}.py`, `src/flexmesa/bench/tdc_fast.py`, and `crates/flexmesa-py/src/turb_py.rs` (`[f64; 12]`) now also follow the nested-dual / Newton-update scheme with no bracket seed, clearing `test_wave1_turb_tdc_stages_agree` from `known_gaps.toml`; `set_mlt` early returns and `set_tdc` unconditional Cox MLT / `get_TDC_solution` checks align with `turb/private/mlt.f90:53-181`, `turb/public/turb.f90:114-204`, and `#330`.)
 - **Alternatives Rejected**:
   - *Keeping the implicit function theorem*: more accurate as a derivative, but not what MESA does.
   - *A non-generic copy of `compute_Q`, `eval_xis` and `eval_Af` using the real-operand routines*: would make the partials bit-faithful at the cost of two copies of the physics; left for when a hex reference for the partials exists.
+- **Later measurement (`#339`)**: with `DualOrder1` following upstream's expressions (decision 52), all 1,024 partials in the MESA `26.4.1` `set_TDC` table match at 0 ULP, so the limit in item 3 was not observed in that table.
 
 ## DECISIONS #51: The Scheduled Campaign Saves a Baseline Candidate; the Baseline May Be Refreshed From It (`#257`)
 
@@ -692,3 +694,18 @@ The text of these four entries predates the audit of 2026-11-16. The decisions s
   - *Leaving the rows to whoever can run all cases locally*: kept the gate red for two days on rows nobody could regenerate here.
   - *Replacing the whole file with the candidate*: would turn 22 rows that record a reached termination condition into budget timeouts.
   - *Letting the campaign commit the baseline itself*: a regression would then overwrite the snapshot it should be measured against.
+
+## DECISIONS #52: `DualOrder1<N>` Evaluates Upstream's Expression for Each Operation, in One of Two Forms Chosen by `N` (`#339`)
+
+- **Date**: 2026-11-21
+- **Decision**:
+  1. **One expression per operation**: every method and operator of `flexmesa_autodiff::DualOrder1<N>` evaluates the expression of the upstream routine of the same name, in the same order, for the value and for the derivative. The generic rule `d1 = dx * f'(x)` is no longer used where it groups the factors differently.
+  2. **Two forms**: upstream's generated modules come in two forms that round differently. `auto_diff_real_star_order1`, `auto_diff_real_15var_order1` and `auto_diff_real_1var_order1` write each derivative as one expression evaluated left to right (`3.0_dp*x%d1Array*pow2(x%val)`). `auto_diff_real_2var_order1` and `auto_diff_real_4var_order1` factor common terms first (`q0 = 3.0_dp*pow2(x%val)`, then `q0*x%d1val1`). `DualOrder1<N>` uses the factored form for `N == 2` and `N == 4` and the left-to-right form for every other `N`.
+  3. **No added guards**: `safe_sqrt`, `safe_log` and `safe_log10` guard the value only, as upstream does. Their derivatives are `NaN` or infinite at `x == 0`.
+  4. **Values that are products upstream**: `log10`, `safe_log10` and `log2` of a dual are `log(x)` times a reciprocal constant; `exp10` is `pow(10, x)`; `sinpi`, `cospi` and `tanpi` take `sin`, `cos` and `tan` of `pi*x`; `asinpi`, `acospi` and `atanpi` multiply by `powm1(pi)`; `dim` is `-0.5*y + 0.5*x + 0.5*Abs(x - y)`. `sgn` and `Heaviside` follow `auto_diff/private/support_functions.f90:48-68`.
+- **Why**: the Jacobian the solver builds is made of these derivatives, and the Newton corrections follow from it. Against the MESA `26.4.1` hex table for `set_TDC`, 802 of 1,024 partials matched before this decision and all 1,024 match after it.
+- **Limits**: the form is chosen from `N`, not from the upstream type each call site corresponds to. A Rust call site that uses `DualOrder1<2>` or `DualOrder1<4>` where upstream uses the star type (or the reverse) gets the other form; call sites were not audited. The second-order and third-order types still use the shared scalar kernels and were not compared with their upstream modules. Only the `set_TDC` table tests the left-to-right form against MESA output.
+- **Alternatives Rejected**:
+  - *A separate Rust type per upstream type*: exact by construction, but every generic kernel would need a second instantiation and the engine a wide rename.
+  - *Keeping the generic chain rule*: simpler, and not what MESA computes.
+  - *Keeping the guards on `safe_sqrt` and `safe_log`*: hides a `NaN` that MESA would produce at the same point.

@@ -4,7 +4,8 @@
 Provides the Kuhfuss (1986) / Smolec time-dependent convection velocity
 evolution (`eval_xis`, `eval_af`), Wuchterl & Feuchtinger (1998) quintic
 smootherstep enthalpy flux limiter (`flux_limiter_function`), and luminosity
-residual evaluation (`compute_q`) generic over `float` and `DualOrder1`.
+residual evaluation (`compute_q`) generic over `float`, `DualOrder1`, and
+`AutoDiffRealTdc`.
 """
 
 from __future__ import annotations
@@ -16,6 +17,7 @@ from typing import Final
 
 from flexmesa import auto_diff as _ad
 from flexmesa import constants as _const
+from flexmesa.turb import tdc_dual as _tdc_dual
 from flexmesa.turb import types as _types
 
 X_ALFAS: Final[float] = 0.5 * _const.SQRT_2_DIV_3
@@ -24,7 +26,14 @@ X_ALFAP: Final[float] = 2.0 / 3.0
 
 
 @dataclasses.dataclass(frozen=True)
-class TdcInfo:
+class TdcInfo[
+    S: (
+        float,
+        _ad.DualOrder1,
+        _types.ScalarOrDual,
+        _tdc_dual.AutoDiffRealTdc,
+    )
+]:
     """Internal state container for TDC evaluations independent of $Y$.
 
     Matches `tdc_info` in `turb/private/tdc_support.f90`.
@@ -69,31 +78,64 @@ class TdcInfo:
     tdc_alpha_r: float
     tdc_alpha_pt: float
     dt: float
-    a0: _types.ScalarOrDual
-    c0: _types.ScalarOrDual
-    lum: _types.ScalarOrDual
-    l0: _types.ScalarOrDual
-    gradl: _types.ScalarOrDual
-    grada: _types.ScalarOrDual
-    t: _types.ScalarOrDual
-    rho: _types.ScalarOrDual
-    dv: _types.ScalarOrDual
-    cp: _types.ScalarOrDual
-    kap: _types.ScalarOrDual
-    hp: _types.ScalarOrDual
-    gamma: _types.ScalarOrDual
-    eq_div_w: _types.ScalarOrDual
-    h: _types.ScalarOrDual
+    a0: S
+    c0: S
+    lum: S
+    l0: S
+    gradl: S
+    grada: S
+    t: S
+    rho: S
+    dv: S
+    cp: S
+    kap: S
+    hp: S
+    gamma: S
+    eq_div_w: S
+    h: S
 
-    def _map_scalars(
+    def _scalar_fields(self) -> tuple[S, ...]:
+        """Return all 15 differentiable scalar fields as a tuple."""
+        return (
+            self.a0,
+            self.c0,
+            self.lum,
+            self.l0,
+            self.gradl,
+            self.grada,
+            self.t,
+            self.rho,
+            self.dv,
+            self.cp,
+            self.kap,
+            self.hp,
+            self.gamma,
+            self.eq_div_w,
+            self.h,
+        )
+
+    def _map_scalars[
+        U: (
+            float,
+            _ad.DualOrder1,
+            _types.ScalarOrDual,
+            _tdc_dual.AutoDiffRealTdc,
+        )
+    ](
         self,
-        fn: collections.abc.Callable[
-            [_types.ScalarOrDual], _types.ScalarOrDual
-        ],
-    ) -> TdcInfo:
+        fn: collections.abc.Callable[[S], U],
+    ) -> TdcInfo[U]:
         """Project all 15 differentiable fields via a scalar callable."""
-        return dataclasses.replace(
-            self,
+        return TdcInfo(
+            include_mlt_corr_to_tdc=self.include_mlt_corr_to_tdc,
+            use_tdc_enthalpy_flux_limiter=self.use_tdc_enthalpy_flux_limiter,
+            mixing_length_alpha=self.mixing_length_alpha,
+            tdc_alpha_c=self.tdc_alpha_c,
+            tdc_alpha_s=self.tdc_alpha_s,
+            tdc_alpha_d=self.tdc_alpha_d,
+            tdc_alpha_r=self.tdc_alpha_r,
+            tdc_alpha_pt=self.tdc_alpha_pt,
+            dt=self.dt,
             a0=fn(self.a0),
             c0=fn(self.c0),
             lum=fn(self.lum),
@@ -111,37 +153,85 @@ class TdcInfo:
             h=fn(self.h),
         )
 
-    def to_primal(self) -> TdcInfo:
+    def to_primal(self) -> TdcInfo[float]:
         """Project all differentiable fields to primal `float` scalars.
 
         Returns:
-            A `TdcInfo` instance with `float` fields for scalar bisection and
-            line-search evaluations.
+            A `TdcInfo[float]` instance for scalar bisection evaluations.
         """
         return self._map_scalars(_types.val_of)
 
-    def to_z_dual(self) -> TdcInfo:
+    def to_z_dual(self) -> TdcInfo[_ad.DualOrder1]:
         """Project all differentiable fields to 1D constant `DualOrder1`.
 
         Returns:
-            A `TdcInfo` instance whose scalar fields are 1-variable dual
-            constants for 1D differentiation with respect to $Z = \\ln|Y|$.
+            A `TdcInfo[DualOrder1]` instance whose scalar fields are 1-variable
+            dual constants for 1D differentiation with respect to $Z = \\ln|Y|$.
         """
         return self._map_scalars(_to_const_dual1)
 
+    def to_tdc(self) -> tuple[TdcInfo[_tdc_dual.AutoDiffRealTdc], bool]:
+        """Lift every structure field into `AutoDiffRealTdc` (`convert`).
 
-def _to_const_dual1(x: _types.ScalarOrDual) -> _ad.DualOrder1:
+        Returns:
+            Two-tuple `(info_tdc, has_dual)` where `info_tdc` carries every
+            field as an `AutoDiffRealTdc` of common arity `N` (`N = 0` when all
+            fields are plain `float`), and `has_dual` is `True` if any input
+            field was a `DualOrder1`.
+
+        Raises:
+            ValueError: If two `DualOrder1` fields disagree in arity.
+        """
+        num_vars = 0
+        has_dual = False
+        for field in self._scalar_fields():
+            if isinstance(field, _ad.DualOrder1):
+                n = int(field.d1.shape[-1])
+                if has_dual and n != num_vars:
+                    msg = (
+                        f"Mismatched DualOrder1 arities in TdcInfo: "
+                        f"{num_vars} vs {n}"
+                    )
+                    raise ValueError(msg)
+                num_vars = n
+                has_dual = True
+            elif isinstance(field, _tdc_dual.AutoDiffRealTdc):
+                n = field.num_vars
+                if has_dual and n != num_vars:
+                    msg = (
+                        f"Mismatched AutoDiffRealTdc arities in TdcInfo: "
+                        f"{num_vars} vs {n}"
+                    )
+                    raise ValueError(msg)
+                num_vars = n
+                has_dual = n > 0
+
+        def _lift(x: S) -> _tdc_dual.AutoDiffRealTdc:
+            if isinstance(x, _tdc_dual.AutoDiffRealTdc):
+                return x
+            return _tdc_dual.AutoDiffRealTdc.convert(x, num_vars)
+
+        return self._map_scalars(_lift), has_dual
+
+
+def _to_const_dual1(x: _types.TdcScalar) -> _ad.DualOrder1:
     """Wrap the primal value of `x` as a 1-variable constant `DualOrder1`."""
     return _ad.DualOrder1.constant(_types.val_of(x), num_vars=1)
 
 
-def set_y(y_is_positive: bool, z: _types.ScalarOrDual) -> _types.ScalarOrDual:
+def set_y[
+    S: (
+        float,
+        _ad.DualOrder1,
+        _types.ScalarOrDual,
+        _tdc_dual.AutoDiffRealTdc,
+    )
+](y_is_positive: bool, z: S) -> S:
     """Map logarithmic coordinate $Z = \\ln|Y|$ to $Y = \\pm \\exp(Z)$.
 
     Args:
         y_is_positive: Sign flag (`True` for $Y > 0$, `False` for $Y < 0$).
-        z: Dimensionless logarithmic superadiabaticity $Z = \\ln|Y|$ (`float`
-            or `DualOrder1`).
+        z: Dimensionless logarithmic superadiabaticity $Z = \\ln|Y|$.
 
     Returns:
         Dimensionless superadiabaticity $Y = \\pm \\exp(Z)$.
@@ -150,11 +240,18 @@ def set_y(y_is_positive: bool, z: _types.ScalarOrDual) -> _types.ScalarOrDual:
     return exp_z if y_is_positive else -exp_z
 
 
-def safe_tanh(x: _types.ScalarOrDual) -> _types.ScalarOrDual:
+def safe_tanh[
+    S: (
+        float,
+        _ad.DualOrder1,
+        _types.ScalarOrDual,
+        _tdc_dual.AutoDiffRealTdc,
+    )
+](x: S) -> S:
     """Evaluate numerically safe hyperbolic tangent clamping $|x| > 50$.
 
     Args:
-        x: Dimensionless input argument (`float` or `DualOrder1`).
+        x: Dimensionless input argument.
 
     Returns:
         Dimensionless clamped $\\tanh(x)$ matching `safe_tanh` in
@@ -168,7 +265,14 @@ def safe_tanh(x: _types.ScalarOrDual) -> _types.ScalarOrDual:
     return _types.s_tanh(x)
 
 
-def flux_limiter_function(x: _types.ScalarOrDual) -> _types.ScalarOrDual:
+def flux_limiter_function[
+    S: (
+        float,
+        _ad.DualOrder1,
+        _types.ScalarOrDual,
+        _tdc_dual.AutoDiffRealTdc,
+    )
+](x: S) -> S:
     """Evaluate Wuchterl & Feuchtinger (1998) $C^2$ quintic smootherstep.
 
     Args:
@@ -191,10 +295,17 @@ def flux_limiter_function(x: _types.ScalarOrDual) -> _types.ScalarOrDual:
     return x + (1.0 - x) * p
 
 
-def eval_xis(
-    info: TdcInfo,
-    y: _types.ScalarOrDual,
-) -> tuple[_types.ScalarOrDual, _types.ScalarOrDual, _types.ScalarOrDual]:
+def eval_xis[
+    S: (
+        float,
+        _ad.DualOrder1,
+        _types.ScalarOrDual,
+        _tdc_dual.AutoDiffRealTdc,
+    )
+](
+    info: TdcInfo[S],
+    y: S,
+) -> tuple[S, S, S]:
     """Evaluate $(\\xi_0, \\xi_1, \\xi_2)$ of the TDC velocity equation.
 
     Args:
@@ -216,7 +327,7 @@ def eval_xis(
         * info.grada
     )
     if info.use_tdc_enthalpy_flux_limiter:
-        scale: _types.ScalarOrDual = _types.const_like(y, 1.0)
+        scale: S = _types.const_like(y, 1.0)
         if _types.val_of(y) > 0.0:
             factor = (
                 info.mixing_length_alpha
@@ -247,13 +358,20 @@ def eval_xis(
     return s0, -(dr0 + pt0 * dv_dt), -d0
 
 
-def eval_af(
+def eval_af[
+    S: (
+        float,
+        _ad.DualOrder1,
+        _types.ScalarOrDual,
+        _tdc_dual.AutoDiffRealTdc,
+    )
+](
     dt: float,
-    a0: _types.ScalarOrDual,
-    xi0: _types.ScalarOrDual,
-    xi1: _types.ScalarOrDual,
-    xi2: _types.ScalarOrDual,
-) -> _types.ScalarOrDual:
+    a0: S,
+    xi0: S,
+    xi1: S,
+    xi2: S,
+) -> S:
     """Evaluate final scaled convective speed $A_f(\\Delta t)$ (`eval_Af`).
 
     Args:
@@ -298,10 +416,17 @@ def eval_af(
     return a0
 
 
-def compute_q(
-    info: TdcInfo,
-    y: _types.ScalarOrDual,
-) -> tuple[_types.ScalarOrDual, _types.ScalarOrDual]:
+def compute_q[
+    S: (
+        float,
+        _ad.DualOrder1,
+        _types.ScalarOrDual,
+        _tdc_dual.AutoDiffRealTdc,
+    )
+](
+    info: TdcInfo[S],
+    y: S,
+) -> tuple[S, S]:
     """Evaluate luminosity residual $Q(Y)$ and final speed $A_f$ (`compute_Q`).
 
     Args:

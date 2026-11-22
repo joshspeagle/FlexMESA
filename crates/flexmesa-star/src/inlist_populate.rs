@@ -7,7 +7,9 @@
 use flexmesa_rates::ScreeningMode;
 use flexmesa_turb::{MltOption, SemiconvectionOption, ThermohalineOption};
 
-use crate::controls::{AtmOption, AtmTTauRelation, EnergyEqnOption, StarError};
+use crate::controls::{
+    AtmOption, AtmTTauOpacity, AtmTTauRelation, EnergyEqnOption, StarError,
+};
 use crate::inlist::{InlistBundle, SectionControls};
 
 macro_rules! map_bools {
@@ -199,7 +201,8 @@ impl InlistBundle {
             create_initial_model, create_rsp_model,
             load_saved_model, save_model_when_terminate, save_photo_when_terminate,
             save_pulse_data_when_terminate,
-            auto_extend_net, set_initial_age, set_initial_model_number, set_initial_dt,
+            auto_extend_net, set_initial_age, set_initial_model_number,
+            set_initial_number_retries, set_initial_dt,
             set_initial_cumulative_energy_error, set_uniform_initial_composition,
             relax_initial_to_xaccrete, set_initial_v_center, set_initial_l_center,
             new_rti_flag, pgstar_flag,
@@ -271,6 +274,7 @@ impl InlistBundle {
             }
         }
         sj.try_usize_into("star_job", &mut j.initial_model_number, "initial_model_number", 0)?;
+        sj.try_usize_into("star_job", &mut j.initial_number_retries, "initial_number_retries", 0)?;
         if let Some(v) = sj.try_get_i64("star_job", "initial_zfracs")? {
             if !(1..=10).contains(&v) {
                 return Err(StarError::InvalidInput(format!(
@@ -519,6 +523,21 @@ impl InlistBundle {
                 }
             };
         }
+        if let Some(s) = ctrl.try_get_str("controls", "atm_t_tau_opacity")? {
+            c.atm_t_tau_opacity = match s.trim().to_ascii_lowercase().as_str() {
+                "fixed" => AtmTTauOpacity::Fixed,
+                "iterated" => AtmTTauOpacity::Iterated,
+                "varying" => AtmTTauOpacity::Varying,
+                other => {
+                    return Err(StarError::InvalidInput(format!(
+                        "unrecognized '&controls::atm_t_tau_opacity' option '{other}' (`star/private/atm_support.f90:336-340`)"
+                    )));
+                }
+            };
+        }
+        ctrl.try_f64_into("controls", &mut c.atm_t_tau_errtol, "atm_t_tau_errtol")?;
+        ctrl.try_usize_into("controls", &mut c.atm_t_tau_max_iters, "atm_t_tau_max_iters", 0)?;
+        ctrl.try_usize_into("controls", &mut c.atm_t_tau_max_steps, "atm_t_tau_max_steps", 0)?;
         if let Some(s) = ctrl.try_get_str("controls", "screening_mode")? {
             c.screening_mode = match s.trim().to_ascii_lowercase().as_str() {
                 "no_screening" | "" => ScreeningMode::NoScreening,

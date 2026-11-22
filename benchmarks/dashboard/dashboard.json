@@ -21,7 +21,7 @@
         "verified_total": 5640,
         "pct_ported": 35.1,
         "pct_verified": 4.7,
-        "rust_lines": 87640,
+        "rust_lines": 87972,
         "python_jax_lines": 3869
       },
       {
@@ -55,7 +55,7 @@
         "verified_total": 0,
         "pct_ported": 18.7,
         "pct_verified": 0.0,
-        "rust_lines": 12379,
+        "rust_lines": 12393,
         "python_jax_lines": 1244
       },
       {
@@ -72,7 +72,7 @@
         "verified_total": 0,
         "pct_ported": 0.0,
         "pct_verified": 0.0,
-        "rust_lines": 6044,
+        "rust_lines": 6053,
         "python_jax_lines": 1288
       },
       {
@@ -593,32 +593,32 @@
         "total": 90,
         "mesa_26_4_1_ref": 86,
         "no_reference_yet": 4,
-        "strict_validated": 0,
-        "diagnostic_runs": 90,
-        "reached_termination": 37,
-        "within_numeric_tol": 5,
-        "passing": 0,
-        "declared_gaps": 86,
+        "strict_validated": 42,
+        "diagnostic_runs": 48,
+        "reached_termination": 39,
+        "within_numeric_tol": 6,
+        "passing": 1,
+        "declared_gaps": 85,
         "undeclared_failures": 0
       },
       "binary": {
         "total": 8,
         "mesa_26_4_1_ref": 8,
         "no_reference_yet": 0,
-        "strict_validated": 0,
-        "diagnostic_runs": 8,
+        "strict_validated": 7,
+        "diagnostic_runs": 1,
         "reached_termination": 6,
-        "within_numeric_tol": 1,
-        "passing": 0,
-        "declared_gaps": 8,
+        "within_numeric_tol": 2,
+        "passing": 2,
+        "declared_gaps": 6,
         "undeclared_failures": 0
       },
       "astero": {
         "total": 8,
         "mesa_26_4_1_ref": 8,
         "no_reference_yet": 0,
-        "strict_validated": 0,
-        "diagnostic_runs": 8,
+        "strict_validated": 1,
+        "diagnostic_runs": 7,
         "reached_termination": 3,
         "within_numeric_tol": 1,
         "passing": 0,
@@ -653,28 +653,26 @@
         "issue": "#161"
       },
       {
-        "suite": "binary",
-        "case": "evolve_both_stars",
-        "issue": "#160"
-      },
-      {
         "suite": "astero",
         "case": "surface_effects",
         "issue": "#162"
       }
     ],
     "gaps_by_issue": {
-      "#161": 24,
-      "#299": 22,
-      "#154": 13,
+      "#161": 28,
+      "#154": 16,
       "#157": 9,
       "#162": 9,
-      "#160": 7,
       "#170": 7,
       "#158": 6,
-      "#231": 2,
+      "#155": 5,
+      "#160": 5,
+      "#152": 4,
+      "#156": 3,
+      "#231": 3,
       "#151": 1,
-      "#152": 1,
+      "#153": 1,
+      "#159": 1,
       "#171": 1
     },
     "comparison_figures_count": 0
@@ -683,22 +681,22 @@
     {
       "namelist": "star &controls",
       "upstream_scalars": 1444,
-      "matched_in_flexmesa": 1106,
-      "defaults_agree": 1106,
+      "matched_in_flexmesa": 1110,
+      "defaults_agree": 1110,
       "value_mismatch": 0,
       "disabled_limit_none": 0,
       "skipped_unparseable_rust": 17,
-      "unimplemented": 321
+      "unimplemented": 317
     },
     {
       "namelist": "star &star_job",
       "upstream_scalars": 455,
-      "matched_in_flexmesa": 96,
-      "defaults_agree": 96,
+      "matched_in_flexmesa": 97,
+      "defaults_agree": 97,
       "value_mismatch": 0,
       "disabled_limit_none": 0,
       "skipped_unparseable_rust": 1,
-      "unimplemented": 358
+      "unimplemented": 357
     },
     {
       "namelist": "binary &binary_controls + &binary_job",
@@ -1105,62 +1103,62 @@
     "rust_ignore_count": 12,
     "rust_ignores": [
       {
-        "location": "crates/flexmesa-astero/tests/astero_suite.rs:432",
+        "location": "crates/flexmesa-astero/tests/astero_suite.rs:454",
         "reason": "unverified uncapped astero campaign; tracked in #143 and #162",
         "issues": "#143, #162"
       },
       {
-        "location": "crates/flexmesa-astero/tests/astero_suite.rs:438",
+        "location": "crates/flexmesa-astero/tests/astero_suite.rs:460",
         "reason": "unverified uncapped astero campaign; tracked in #143 and #162",
         "issues": "#143, #162"
       },
       {
-        "location": "crates/flexmesa-astero/tests/astero_suite.rs:444",
+        "location": "crates/flexmesa-astero/tests/astero_suite.rs:466",
         "reason": "unverified uncapped astero campaign; tracked in #143 and #162",
         "issues": "#143, #162"
       },
       {
-        "location": "crates/flexmesa-astero/tests/astero_suite.rs:450",
+        "location": "crates/flexmesa-astero/tests/astero_suite.rs:472",
         "reason": "unverified uncapped astero campaign; tracked in #143 and #162",
         "issues": "#143, #162"
       },
       {
-        "location": "crates/flexmesa-astero/tests/astero_suite.rs:456",
+        "location": "crates/flexmesa-astero/tests/astero_suite.rs:478",
         "reason": "unverified uncapped astero campaign; tracked in #143 and #162",
         "issues": "#143, #162"
       },
       {
-        "location": "crates/flexmesa-binary/tests/tier5_coupled_suite.rs:987",
+        "location": "crates/flexmesa-binary/tests/tier5_coupled_suite.rs:1045",
         "reason": "unverified uncapped binary campaign; tracked in #143 and #160",
         "issues": "#143, #160"
       },
       {
-        "location": "crates/flexmesa-binary/tests/tier5_coupled_suite.rs:995",
+        "location": "crates/flexmesa-binary/tests/tier5_coupled_suite.rs:1053",
         "reason": "unverified uncapped binary campaign; tracked in #143 and #160",
         "issues": "#143, #160"
       },
       {
-        "location": "crates/flexmesa-binary/tests/tier5_coupled_suite.rs:1004",
+        "location": "crates/flexmesa-binary/tests/tier5_coupled_suite.rs:1062",
         "reason": "unverified uncapped binary campaign; tracked in #143 and #160",
         "issues": "#143, #160"
       },
       {
-        "location": "crates/flexmesa-binary/tests/tier5_coupled_suite.rs:1012",
+        "location": "crates/flexmesa-binary/tests/tier5_coupled_suite.rs:1070",
         "reason": "unverified uncapped binary campaign; tracked in #143 and #160",
         "issues": "#143, #160"
       },
       {
-        "location": "crates/flexmesa-binary/tests/tier5_coupled_suite.rs:1020",
+        "location": "crates/flexmesa-binary/tests/tier5_coupled_suite.rs:1078",
         "reason": "unverified uncapped binary campaign; tracked in #143 and #160",
         "issues": "#143, #160"
       },
       {
-        "location": "crates/flexmesa-binary/tests/tier5_coupled_suite.rs:1027",
+        "location": "crates/flexmesa-binary/tests/tier5_coupled_suite.rs:1085",
         "reason": "unverified uncapped binary campaign; tracked in #143 and #160",
         "issues": "#143, #160"
       },
       {
-        "location": "crates/flexmesa-binary/tests/tier5_coupled_suite.rs:1035",
+        "location": "crates/flexmesa-binary/tests/tier5_coupled_suite.rs:1093",
         "reason": "unverified uncapped binary campaign; tracked in #143 and #160",
         "issues": "#143, #160"
       }
@@ -1333,8 +1331,8 @@
       },
       {
         "phase": "Phase C",
-        "open": 15,
-        "closed": 3,
+        "open": 14,
+        "closed": 4,
         "issues": [
           {
             "number": 152,
@@ -1419,7 +1417,7 @@
           {
             "number": 299,
             "title": "[Audit C8/C12] Wire remaining photo/log I/O and test-harness driver controls",
-            "state": "open"
+            "state": "closed"
           },
           {
             "number": 365,
@@ -1475,11 +1473,6 @@
       }
     ],
     "open_pull_requests": [
-      {
-        "number": 364,
-        "title": "feat(star,binary,astero): wire photo/log/driver controls and promote 3 strict passes (#299)",
-        "draft": false
-      },
       {
         "number": 367,
         "title": "feat(mtx,star,binary): upstream do_block_multiply_xa and rho = dm/dV reset before each step (#358, #363)",
@@ -2843,6 +2836,19 @@
       "rust_cov_pct": "76.2",
       "python_cov_pct": "87.7",
       "closed_140": "17",
+      "total_140": "37",
+      "deferred_169": "46"
+    },
+    {
+      "date_utc": "2026-11-22",
+      "commit": "eef96a8",
+      "event": "main merge",
+      "engine_ported_pct": "30.7",
+      "all_verified_pct": "1.1",
+      "cases_passing": "3",
+      "rust_cov_pct": "76.2",
+      "python_cov_pct": "87.7",
+      "closed_140": "18",
       "total_140": "37",
       "deferred_169": "46"
     }

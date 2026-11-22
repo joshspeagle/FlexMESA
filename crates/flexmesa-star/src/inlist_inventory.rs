@@ -161,8 +161,12 @@ pub const STAR_JOB_SUPPORTED: &[&str] = &[
     "relax_z",
     "remove_initial_center_by_temperature",
     "remove_surface_by_relax_to_star_cut",
+    "required_termination_code_string",
     "save_model_filename",
     "save_model_when_terminate",
+    "save_photo_filename",
+    "save_photo_number",
+    "save_photo_when_terminate",
     "seconds_for_initial_dt",
     "set_initial_age",
     "set_initial_cumulative_energy_error",
@@ -197,10 +201,7 @@ pub const STAR_JOB_UNUSED: &[&str] = &[
     "h_he_net",
     "pre_ms_relax_num_steps",
     "relax_initial_to_xaccrete",
-    "required_termination_code_string",
     "save_model_number",
-    "save_photo_filename",
-    "save_photo_when_terminate",
     "save_pulse_data_filename",
     "save_pulse_data_when_terminate",
     "set_initial_l_center",
@@ -215,20 +216,35 @@ pub const STAR_JOB_HEADLESS_GUI: &[&str] = &[
 ];
 
 /// `&star_job` keys whose only upstream use is to gate text written to the
-/// terminal (`DECISIONS #26`). Accepted and recorded; `FlexMESA` does not
-/// print MESA's terminal log.
+/// terminal, wall-clock timing reports, or interactive terminal/PGSTAR pause
+/// prompts (`DECISIONS #26`). Accepted and recorded; `FlexMESA` does not
+/// print MESA's terminal log or pause for interactive input.
 ///
-/// Upstream uses at MESA `26.4.1`, all in `star/job/run_star_support.f90`:
-/// `show_log_description_at_start` (`:444`),
-/// `show_retry_counts_when_terminate` (`:807`),
-/// `show_timestep_limit_counts_when_terminate` (`:815`),
-/// `show_net_reactions_info` (`:2750`), `show_net_species_info` (`:2769`).
+/// Upstream uses at MESA `26.4.1`:
+/// - `first_model_for_timing`: `star/defaults/star_job.defaults:2880-2891`,
+///   `star/job/run_star_support.f90:527-538,858-863,1159-1257,2195-2196`
+///   (starts wall-clock timers printed to stdout by `show_times`).
+/// - `pause_before_terminate`: `star/defaults/star_job.defaults:31-40`,
+///   `star/job/run_star_support.f90:875-878` (interactive RETURN prompt to
+///   inspect PGSTAR windows before exit).
+/// - `show_log_description_at_start`: `star/job/run_star_support.f90:444`.
+/// - `show_retry_counts_when_terminate`: `star/job/run_star_support.f90:807`.
+/// - `show_timestep_limit_counts_when_terminate`:
+///   `star/job/run_star_support.f90:815`.
+/// - `show_net_reactions_info`: `star/job/run_star_support.f90:2750`.
+/// - `show_net_species_info`: `star/job/run_star_support.f90:2769`.
+/// - `warn_run_star_extras`: `star/defaults/star_job.defaults:2994-3004`,
+///   `star/job/other_extras.f90:38-204` (disables legacy Fortran null-pointer
+///   hook warning).
 pub const STAR_JOB_TERMINAL_OUTPUT: &[&str] = &[
+    "first_model_for_timing",
+    "pause_before_terminate",
     "show_log_description_at_start",
     "show_net_reactions_info",
     "show_net_species_info",
     "show_retry_counts_when_terminate",
     "show_timestep_limit_counts_when_terminate",
+    "warn_run_star_extras",
 ];
 
 /// `&controls` keys whose only upstream use is to gate or format text written
@@ -236,6 +252,11 @@ pub const STAR_JOB_TERMINAL_OUTPUT: &[&str] = &[
 /// not print MESA's terminal log.
 ///
 /// Upstream uses at MESA `26.4.1`:
+/// - `extra_terminal_output_file`: `star/defaults/controls.defaults:115-127`,
+///   `star/private/do_one_utils.f90:120-131,234-245`,
+///   `star/private/star_utils.f90:3525-3546`, and
+///   `star/private/profile.f90:673,716` (mirrors terminal header, summary, and
+///   profile save lines; open errors do not set `ierr`).
 /// - `terminal_interval`: `star/private/do_one_utils.f90:519-520`, and the
 ///   `mod(model_number, terminal_interval) == 0` guards on `write` in
 ///   `star/private/evolve.f90:63`, `star/private/relax.f90`,
@@ -245,6 +266,9 @@ pub const STAR_JOB_TERMINAL_OUTPUT: &[&str] = &[
 ///   `star/private/do_one_utils.f90:448-495` (saved and restored around
 ///   relaxation in `star/private/init.f90:915-916,1121` and
 ///   `star/private/remove_shells.f90:1195-1388`).
+/// - `report_solver_progress`: `star/defaults/controls.defaults:11456-11463`,
+///   `star/private/star_solver.f90:194,260-277,304-329,516,568-579,786-787,827-829,1724-1788`,
+///   and `star/private/rsp_step.f90:216,308,354-363`.
 /// - `terminal_show_age_units`, `terminal_show_timestep_units`,
 ///   `terminal_show_log_age`, `terminal_show_log_dt`:
 ///   `star/private/do_one_utils.f90:153-209,268-284`.
@@ -252,8 +276,15 @@ pub const STAR_JOB_TERMINAL_OUTPUT: &[&str] = &[
 ///   `star/private/adjust_mesh_split_merge.f90:158`.
 /// - `trace_split_merge_amr`:
 ///   `star/private/adjust_mesh_split_merge.f90:129-153,181-209`.
+/// - `warning_limit_for_max_residual`:
+///   `star/defaults/controls.defaults:11632-11639`,
+///   `star/private/star_solver.f90:615-617` (saved and restored around init
+///   and relaxation in `star/private/init.f90:918-919,1122` and
+///   `star/private/relax.f90:3988,4172,4230`).
 pub const CONTROLS_TERMINAL_OUTPUT: &[&str] = &[
+    "extra_terminal_output_file",
     "num_trace_history_values",
+    "report_solver_progress",
     "show_diffusion_info",
     "show_diffusion_substep_info",
     "show_diffusion_timing",
@@ -265,6 +296,7 @@ pub const CONTROLS_TERMINAL_OUTPUT: &[&str] = &[
     "terminal_show_timestep_units",
     "trace_history_value_name",
     "trace_split_merge_amr",
+    "warning_limit_for_max_residual",
     "write_header_frequency",
 ];
 
@@ -1163,6 +1195,9 @@ pub const CONTROLS_SUPPORTED: &[&str] = &[
     "phase_separation_mixing_use_brunt",
     "phase_separation_no_diffusion",
     "phase_separation_option",
+    "photo_digits",
+    "photo_directory",
+    "photo_interval",
     "photosphere_m_lower_limit",
     "photosphere_m_sub_m_center_limit",
     "photosphere_m_upper_limit",
@@ -1531,6 +1566,7 @@ pub const CONTROLS_SUPPORTED: &[&str] = &[
     "vink_scaling_factor",
     "w_div_wcrit_max",
     "w_div_wcrit_max2",
+    "warn_when_large_rel_run_e_err",
     "weak_rate_factor",
     "when_to_stop_atol",
     "when_to_stop_rtol",
@@ -1543,6 +1579,7 @@ pub const CONTROLS_SUPPORTED: &[&str] = &[
     "x_character_ctrl",
     "x_ctrl",
     "x_integer_ctrl",
+    "x_logical_ctrl",
     "xa_average_lower_limit",
     "xa_average_lower_limit_species",
     "xa_average_upper_limit",
@@ -1619,7 +1656,6 @@ pub const CONTROLS_UNUSED: &[&str] = &[
     "use_other_momentum_implicit",
     "use_other_neu",
     "use_other_surface_pt",
-    "x_logical_ctrl",
 ];
 
 /// Copies a single-star case directory `src_case` to `dst_case` and strips
@@ -1644,6 +1680,7 @@ pub fn copy_cleaned_star_case(
                 is_include_key(sec, key)
                     || inv.star_job_supported.contains(key)
                     || inv.star_job_headless_gui_flags.contains(key)
+                    || inv.star_job_terminal_output.contains(key)
             }
             "eos" => {
                 is_include_key(sec, key)
@@ -1656,7 +1693,9 @@ pub fn copy_cleaned_star_case(
                     || inv.kap_terminal_output.contains(key)
             }
             "controls" => {
-                is_include_key(sec, key) || inv.controls_supported.contains(key)
+                is_include_key(sec, key)
+                    || inv.controls_supported.contains(key)
+                    || inv.controls_terminal_output.contains(key)
             }
             "pgstar" => {
                 is_include_key(sec, key)

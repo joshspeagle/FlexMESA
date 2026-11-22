@@ -1,11 +1,17 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
-//! History and radial profile output controls on [`crate::StarControls::output`]
-//! corresponding to `star/defaults/controls.defaults:216-857, 1794, 3489, 4883-4900, 7844-7877`.
+//! Photo, history, and radial profile output controls on [`crate::StarControls::output`]
+//! corresponding to `star/defaults/controls.defaults:185-857, 1794, 3489, 4883-4900, 7844-7877`.
 
-/// History, radial profile, and report-averaging controls (`&controls` namelist
+/// Photo, history, radial profile, and report-averaging controls (`&controls` namelist
 /// in `star_data/private/star_controls.inc` and `star/defaults/controls.defaults`).
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct OutputControls {
+    /// Directory for binary `.photo` restart checkpoints (`photo_directory`, `'photos'` default, `star/defaults/controls.defaults:192`).
+    pub photo_directory: String,
+    /// Step interval for saving periodic restart photos when `mod(model_number, photo_interval) == 0` (`photo_interval`, `50` default, `<= 0` disables, `star/defaults/controls.defaults:203`, `star/private/evolve.f90:2342-2343`).
+    pub photo_interval: isize,
+    /// Number of trailing `model_number` digits in periodic restart photo names (`photo_digits`, `3` default, `star/defaults/controls.defaults:213`, `star/private/star_utils.f90:329-351`).
+    pub photo_digits: usize,
     /// Directory for `history.data`, `profiles.index`, and `profileN.data` (`log_directory`, `'LOGS'` default, `controls.defaults:223`).
     pub log_directory: String,
     /// Enable writing `star_history_name` (`do_history_file`, `true` default, `controls.defaults:233`).
@@ -86,11 +92,16 @@ pub struct OutputControls {
     pub min_abs_u_div_cs_for_dt_div_min_dr_div_cs_limit: f64,
     /// Minimum $|\Delta u| / c_s$ jump filter for `min_dr_div_cs` (`min_abs_du_div_cs_for_dt_div_min_dr_div_cs_limit`, `0.01` default, `controls.defaults:10735`).
     pub min_abs_du_div_cs_for_dt_div_min_dr_div_cs_limit: f64,
+    /// Relative cumulative energy error threshold emitting a warning (`warn_when_large_rel_run_E_err`, `0.1` default, `controls.defaults:11618`).
+    pub warn_when_large_rel_run_e_err: f64,
 }
 
 impl Default for OutputControls {
     fn default() -> Self {
         Self {
+            photo_directory: String::from("photos"),
+            photo_interval: 50,
+            photo_digits: 3,
             log_directory: String::from("LOGS"),
             do_history_file: true,
             history_interval: 5,
@@ -131,6 +142,7 @@ impl Default for OutputControls {
             max_q_for_dt_div_min_dr_div_cs_limit: 0.995,
             min_abs_u_div_cs_for_dt_div_min_dr_div_cs_limit: 0.8,
             min_abs_du_div_cs_for_dt_div_min_dr_div_cs_limit: 0.01,
+            warn_when_large_rel_run_e_err: 0.1,
         }
     }
 }

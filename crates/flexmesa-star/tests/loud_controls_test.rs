@@ -10,8 +10,9 @@ use flexmesa_schema::upstream_section_keys;
 use flexmesa_star::evolve::star_evolve_step;
 use flexmesa_star::inlist::{InlistBundle, InlistLoadOptions};
 use flexmesa_star::inlist_inventory::{
-    CONTROLS_SUPPORTED, CONTROLS_UNUSED, EOS_SUPPORTED, KAP_SUPPORTED,
-    STAR_JOB_HEADLESS_GUI, STAR_JOB_SUPPORTED, STAR_JOB_UNUSED,
+    CONTROLS_SUPPORTED, CONTROLS_TERMINAL_OUTPUT, CONTROLS_UNUSED,
+    EOS_SUPPORTED, KAP_SUPPORTED, STAR_JOB_HEADLESS_GUI, STAR_JOB_SUPPORTED,
+    STAR_JOB_TERMINAL_OUTPUT, STAR_JOB_UNUSED,
 };
 use flexmesa_star::pulse_exporters::export_pulse_by_format;
 use flexmesa_star::rn_parser::parse_rn_stages;
@@ -52,10 +53,16 @@ fn test_terminal_output_keys_pass_strict_validation_and_are_recorded() {
     let term = tmp.root.join("inlist_terminal_output");
     fs::write(
         &term,
-        "&star_job\n  show_log_description_at_start = .false.\n/\n\
+        "&star_job\n  show_log_description_at_start = .false.\n  \
+         pause_before_terminate = .false.\n  \
+         first_model_for_timing = 5\n  \
+         warn_run_star_extras = .false.\n/\n\
          &controls\n  initial_mass = 1.0d0\n  terminal_interval = 10\n  \
          write_header_frequency = 10\n  num_trace_history_values = 1\n  \
-         trace_history_value_name(1) = 'rel_E_err'\n/\n",
+         trace_history_value_name(1) = 'rel_E_err'\n  \
+         extra_terminal_output_file = 'log1'\n  \
+         report_solver_progress = .true.\n  \
+         warning_limit_for_max_residual = 1d99\n/\n",
     )
     .expect("write");
     let term_bundle = InlistBundle::from_file(&term)
@@ -74,10 +81,16 @@ fn test_terminal_output_keys_pass_strict_validation_and_are_recorded() {
         .collect();
     for key in [
         "show_log_description_at_start",
+        "pause_before_terminate",
+        "first_model_for_timing",
+        "warn_run_star_extras",
         "terminal_interval",
         "write_header_frequency",
         "num_trace_history_values",
         "trace_history_value_name",
+        "extra_terminal_output_file",
+        "report_solver_progress",
+        "warning_limit_for_max_residual",
     ] {
         assert!(recorded.contains(&key), "{key} not recorded: {recorded:?}");
     }
@@ -115,12 +128,12 @@ fn test_unknown_section_key_unused_and_removed_aliases_fail_loudly() {
     let unimpl = tmp.root.join("inlist_unimpl");
     fs::write(
         &unimpl,
-        "&controls\n  initial_mass = 1.0d0\n  photo_interval = 10\n/\n",
+        "&controls\n  initial_mass = 1.0d0\n  fgong_ivers = 300\n/\n",
     )
     .expect("write");
     let unimpl_err = InlistBundle::from_file(&unimpl)
         .expect_err("unimplemented upstream key must fail by default");
-    assert!(unimpl_err.to_string().contains("photo_interval"));
+    assert!(unimpl_err.to_string().contains("fgong_ivers"));
 
     assert!(
         InlistBundle::from_file_with_options(
@@ -135,13 +148,13 @@ fn test_unknown_section_key_unused_and_removed_aliases_fail_loudly() {
     for (tag, body, expected) in [
         (
             "unused_job",
-            "&star_job\n  required_termination_code_string = 'x'\n/\n",
-            "required_termination_code_string",
+            "&star_job\n  pre_ms_relax_num_steps = 5\n/\n",
+            "pre_ms_relax_num_steps",
         ),
         (
-            "unused_x_logical",
-            "&controls\n  x_logical_ctrl(1) = .true.\n/\n",
-            "x_logical_ctrl",
+            "unused_rsp_map",
+            "&controls\n  rsp_map_filename = 'map.data'\n/\n",
+            "rsp_map_filename",
         ),
         (
             "unused_neg_mass_frac",
@@ -254,9 +267,11 @@ fn test_star_inventory_subset_of_mesa_26_4_1_and_x_ctrl_indexing() {
         ("star_job", STAR_JOB_SUPPORTED),
         ("star_job", STAR_JOB_UNUSED),
         ("star_job", STAR_JOB_HEADLESS_GUI),
+        ("star_job", STAR_JOB_TERMINAL_OUTPUT),
         ("eos", EOS_SUPPORTED),
         ("kap", KAP_SUPPORTED),
         ("controls", CONTROLS_SUPPORTED),
+        ("controls", CONTROLS_TERMINAL_OUTPUT),
         ("controls", CONTROLS_UNUSED),
     ] {
         let upstream = upstream_section_keys(sec)
@@ -281,12 +296,13 @@ fn test_star_inventory_subset_of_mesa_26_4_1_and_x_ctrl_indexing() {
     let x_one = tmp.root.join("inlist_x_one");
     fs::write(
         &x_one,
-        "&controls\n  x_ctrl(1) = 3.5d0\n  x_integer_ctrl(2) = 7\n/\n",
+        "&controls\n  x_ctrl(1) = 3.5d0\n  x_integer_ctrl(2) = 7\n  x_logical_ctrl(3) = .true.\n/\n",
     )
     .expect("write");
     let bundle = InlistBundle::from_file(&x_one).expect("valid x_ctrl(1)");
     assert!((bundle.controls.x_ctrl[0] - 3.5).abs() < 1.0e-12);
     assert_eq!(bundle.controls.x_integer_ctrl[1], 7);
+    assert!(bundle.controls.x_logical_ctrl[2]);
 
     let ctrl_rti = tmp.root.join("inlist_ctrl_rti");
     fs::write(&ctrl_rti, "&controls\n  rti_flag = .true.\n/\n").expect("write");

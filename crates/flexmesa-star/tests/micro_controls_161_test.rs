@@ -289,9 +289,9 @@ fn test_kap_namelist_rejects_unbundled_tables_hooks_and_invalid_type2_bounds() {
             "aesopus_filename",
         ),
         (
-            "aesopus_rcrb",
-            "&kap\n  kap_lowT_prefix = 'AESOPUS'\n  AESOPUS_filename = 'AESOPUS_GS98_RCrB.h5'\n/\n",
-            "AESOPUS_GS98_RCrB.h5",
+            "aesopus_nonexistent",
+            "&kap\n  kap_lowT_prefix = 'AESOPUS'\n  AESOPUS_filename = 'AESOPUS_NONEXISTENT_TEST.h5'\n/\n",
+            "AESOPUS_NONEXISTENT_TEST.h5",
         ),
         (
             "custom_prefix",
@@ -341,4 +341,165 @@ fn test_kap_namelist_rejects_unbundled_tables_hooks_and_invalid_type2_bounds() {
             "{tag}: expected '{needle}' in '{err}'"
         );
     }
+
+    // Missing AESOPUS_filename must STILL fail loudly even with allow_unsupported_controls = true
+    let bad_path = tmp.root.join("inlist_aesopus_allow_unsupported");
+    fs::write(
+        &bad_path,
+        "&kap\n  kap_lowT_prefix = 'AESOPUS'\n  AESOPUS_filename = 'AESOPUS_NONEXISTENT_TEST.h5'\n/\n",
+    )
+    .expect("write inlist");
+    let err = InlistBundle::from_file_in_case_dir_with_options(
+        &tmp.root,
+        "inlist_aesopus_allow_unsupported",
+        flexmesa_star::inlist::InlistLoadOptions {
+            allow_unsupported_controls: true,
+        },
+    )
+    .expect_err("missing AESOPUS_filename must not silently downgrade");
+    assert!(err.to_string().contains("AESOPUS_NONEXISTENT_TEST.h5"));
+}
+
+#[test]
+fn test_star_job_filename_of_special_rate_and_custom_aesopus_inlist() {
+    let tmp = TempCaseGuard::new("rcrb_special_rate_aesopus");
+
+    // 1. Built-in special rate tables resolve cleanly and wire into resolve_model_net
+    let bundle = tmp
+        .load_inlist(
+            "inlist_special",
+            r"
+&star_job
+  num_special_rate_factors = 2
+  reaction_for_special_factor(1) = 'r_c12_ag_o16'
+  special_rate_factor(1) = 1.0d0
+  filename_of_special_rate(1) = 'c12ag_deboer_sigma_0p0_2000_Tgrid.dat'
+  reaction_for_special_factor(2) = 'r_he4_he4_he4_to_c12'
+  special_rate_factor(2) = 1.0d0
+  filename_of_special_rate(2) = 'r_he4_he4_he4_to_c12_cf88.txt'
+/
+",
+        )
+        .expect("parse filename_of_special_rate");
+    assert_eq!(bundle.job.num_special_rate_factors, 2);
+    assert_eq!(
+        bundle.job.filename_of_special_rate,
+        vec![
+            "c12ag_deboer_sigma_0p0_2000_Tgrid.dat",
+            "r_he4_he4_he4_to_c12_cf88.txt",
+        ]
+    );
+    assert_eq!(bundle.validation_report.unsupported_controls.len(), 0);
+
+    // 2. Case-dir local special rate file resolves to case_dir path
+    fs::write(
+        tmp.root.join("local_rate.dat"),
+        "# custom local rate\n3\n0.1 1.0e-12\n1.0 2.0e-10\n10.0 5.0e-8\n",
+    )
+    .expect("write local rate");
+    let local_bundle = tmp
+        .load_inlist(
+            "inlist_local_rate",
+            "&star_job\n  num_special_rate_factors = 1\n  reaction_for_special_factor(1) = 'r_c12_ag_o16'\n  filename_of_special_rate(1) = 'local_rate.dat'\n/\n",
+        )
+        .expect("load local rate inlist");
+    assert!(local_bundle.job.filename_of_special_rate[0]
+        .ends_with("local_rate.dat"));
+
+    // 3. Missing special rate file fails loudly
+    let err = tmp
+        .load_inlist(
+            "inlist_missing_rate",
+            "&star_job\n  num_special_rate_factors = 1\n  reaction_for_special_factor(1) = 'r_c12_ag_o16'\n  filename_of_special_rate(1) = 'missing_special_rate_xyz.dat'\n/\n",
+        )
+        .expect_err("missing filename_of_special_rate must fail loudly");
+    assert!(err.to_string().contains("missing_special_rate_xyz.dat"));
+
+    // 4. Custom AESOPUS HDF5 file in case_dir stays KapLowTOption::Aesopus
+    if let Some(rcrb_dir) = flexmesa_utils::require_mesa_test_input_path(
+        "star/test_suite/R_CrB_star",
+    ) {
+        let rcrb_bundle = InlistBundle::from_file_in_case_dir_with_options(
+            &rcrb_dir,
+            "inlist_R_CrB_star_header",
+            flexmesa_star::inlist::InlistLoadOptions {
+                allow_unsupported_controls: true,
+            },
+        )
+        .expect("load R_CrB_star inlist");
+        assert_eq!(
+            rcrb_bundle.kap_config.kap_low_t_option,
+            KapLowTOption::Aesopus
+        );
+        assert!(rcrb_bundle
+            .kap_config
+            .aesopus_filename
+            .ends_with("AESOPUS_GS98_RCrB.h5"));
+        assert_eq!(
+            rcrb_bundle.job.filename_of_special_rate,
+            vec![
+                "c12ag_deboer_sigma_0p0_2000_Tgrid.dat",
+                "r_he4_he4_he4_to_c12_cf88.txt",
+            ]
+        );
+    }
+}
+
+#[test]
+fn test_filename_of_special_rate_wires_resolve_model_net_and_invalidates_micro_cache() {
+    let mut model = flexmesa_star::zams::load_zams_model(
+        flexmesa_star::StarControls::default(),
+        flexmesa_star::StarJobControls::default(),
+    )
+    .expect("load zams");
+    // Heat core into He-burning regime so c12(a,g)o16 and 3a are active
+    model.kap_config.zbase = 0.02;
+    model.controls.zbase = 0.02;
+    let nz = model.nz;
+    let sp = model.species;
+    let ihe4 = model.iso_names.iter().position(|n| n == "he4").unwrap();
+    let ic12 = model.iso_names.iter().position(|n| n == "c12").unwrap();
+    for k in (nz - 5)..nz {
+        model.ln_t[k] = 18.890_684_555_543_35; // ln(1.6e8 K)
+        model.lnd[k] = 9.210_340_371_976_184; // ln(1.0e4 g cm^-3)
+        for j in 0..sp {
+            model.xa[k * sp + j] = 0.0;
+        }
+        model.xa[k * sp + ihe4] = 0.5;
+        model.xa[k * sp + ic12] = 0.5;
+    }
+
+    let net_base = flexmesa_star::micro::resolve_model_net(&model)
+        .expect("resolve base net");
+    flexmesa_star::hydro_vars::set_hydro_vars(&mut model, false, false)
+        .expect("set_hydro_vars base");
+    let eps_base = model.eps_nuc[nz - 1];
+
+    model.job.num_special_rate_factors = 2;
+    model.job.reaction_for_special_factor = vec![
+        String::from("r_c12_ag_o16"),
+        String::from("r_he4_he4_he4_to_c12"),
+    ];
+    model.job.special_rate_factor = vec![1.0, 1.0];
+    model.job.filename_of_special_rate = vec![
+        String::from("c12ag_deboer_sigma_0p0_2000_Tgrid.dat"),
+        String::from("r_he4_he4_he4_to_c12_cf88.txt"),
+    ];
+
+    let net_override = flexmesa_star::micro::resolve_model_net(&model)
+        .expect("resolve overridden net");
+    assert_ne!(net_base.identity_id, net_override.identity_id);
+
+    // Must invalidate MicrophysicsCache and recompute eps_nuc with overridden tables
+    flexmesa_star::hydro_vars::set_hydro_vars(&mut model, false, false)
+        .expect("set_hydro_vars override");
+    let eps_override = model.eps_nuc[nz - 1];
+    assert!(
+        eps_base > 0.0 && eps_override > 0.0,
+        "eps_base={eps_base:e} eps_override={eps_override:e}"
+    );
+    assert!(
+        ((eps_override - eps_base) / eps_base).abs() > 1.0e-3,
+        "MicrophysicsCache failed to invalidate or override rate table: base={eps_base:e} ov={eps_override:e}"
+    );
 }

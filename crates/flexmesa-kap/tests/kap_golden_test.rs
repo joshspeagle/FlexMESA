@@ -619,7 +619,7 @@ fn test_gn93_low_t_blend_bounds_and_aesopus_validation_match_mesa_26_4_1() {
     let cfg_bad_aes = KapConfig {
         zbase: 0.02,
         kap_low_t_option: KapLowTOption::Aesopus,
-        aesopus_filename: String::from("AESOPUS_GS98_RCrB.h5"),
+        aesopus_filename: String::from("AESOPUS_NONEXISTENT_TEST.h5"),
         ..KapConfig::default()
     };
     let err = get_kap_results(
@@ -640,6 +640,139 @@ fn test_gn93_low_t_blend_bounds_and_aesopus_validation_match_mesa_26_4_1() {
         0.0,
         0.0,
     )
-    .expect_err("unbundled AESOPUS_filename must fail loudly");
-    assert!(err.to_string().contains("AESOPUS_GS98_RCrB.h5"));
+    .expect_err("missing AESOPUS_filename must fail loudly");
+    assert!(err.to_string().contains("AESOPUS_NONEXISTENT_TEST.h5"));
+}
+
+#[test]
+fn test_aesopus_hdf5_loader_reads_rcrb_table_and_evaluates_opacities() {
+    let Some(h5_path) = flexmesa_utils::require_mesa_test_input_path(
+        "star/test_suite/R_CrB_star/AESOPUS_GS98_RCrB.h5",
+    ) else {
+        return;
+    };
+    let ka = flexmesa_kap::load_aesopus_hdf5_file(&h5_path)
+        .expect("load AESOPUS_GS98_RCrB.h5");
+    assert_eq!(ka.zs.len(), 4);
+    assert_eq!(ka.log_rs.len(), 19);
+    assert_eq!(ka.log_ts.len(), 67);
+    assert_rel_close(ka.zs[0], 0.0006, 1.0e-6, "RCrB Zs[0]");
+    assert_rel_close(ka.zs[2], 0.006, 1.0e-6, "RCrB Zs[2]");
+    assert_rel_close(ka.zs[3], 0.02, 1.0e-6, "RCrB Zs[3]");
+    assert_rel_close(ka.log_ts[0], 3.20, 1.0e-5, "RCrB logTs[0]");
+    assert_rel_close(ka.log_ts[66], 4.50, 1.0e-5, "RCrB logTs[66]");
+    assert_eq!(ka.ts[0].xs.len(), 1);
+    assert_eq!(ka.ts[0].xs[0], 0.0);
+
+    let cfg_rcrb = KapConfig {
+        zbase: 0.006,
+        use_type2_opacities: true,
+        kap_low_t_option: KapLowTOption::Aesopus,
+        aesopus_filename: h5_path.to_string_lossy().into_owned(),
+        kap_blend_log_t_lower_bdy: 4.1,
+        kap_blend_log_t_upper_bdy: 4.2,
+        ..KapConfig::default()
+    };
+    let (_, low_t_max) = kap_tables()
+        .expect("kap tables")
+        .temp_blend_bounds(&cfg_rcrb)
+        .expect("temp_blend_bounds");
+    assert_rel_close(low_t_max, 4.50, 1.0e-5, "RCrB low_t_max");
+
+    let out_rcrb = get_kap_results(
+        &cfg_rcrb,
+        2.3,
+        0.0,
+        0.097,
+        0.081,
+        0.0042,
+        0.010,
+        0.0006,
+        -8.5,
+        3.78,
+        -0.7,
+        0.0,
+        0.0,
+        -10.0,
+        0.0,
+        0.0,
+    )
+    .expect("eval AESOPUS_GS98_RCrB.h5");
+    assert!(out_rcrb.kap.is_finite() && out_rcrb.kap > 0.0);
+    assert!(out_rcrb.dlnkap_dln_rho.is_finite());
+    assert!(out_rcrb.dlnkap_dln_t.is_finite());
+    assert_rel_close(out_rcrb.kap_fracs[I_FRAC_LOW_T], 1.0, 1.0e-12, "RCrB lowT frac");
+
+    // Verify custom GS98 RCrB table gives distinct opacity from bundled AGSS09
+    let cfg_agss = KapConfig {
+        aesopus_filename: String::from("AESOPUS_AGSS09.h5"),
+        ..cfg_rcrb
+    };
+    let out_agss = get_kap_results(
+        &cfg_agss,
+        2.3,
+        0.0,
+        0.097,
+        0.081,
+        0.0042,
+        0.010,
+        0.0006,
+        -8.5,
+        3.78,
+        -0.7,
+        0.0,
+        0.0,
+        -10.0,
+        0.0,
+        0.0,
+    )
+    .expect("eval bundled AESOPUS_AGSS09.h5");
+    assert!(
+        ((out_rcrb.kap - out_agss.kap) / out_agss.kap).abs() > 1.0e-3,
+        "RCrB ({}) should differ from AGSS09 ({})",
+        out_rcrb.kap,
+        out_agss.kap
+    );
+}
+
+#[test]
+fn test_aesopus_hdf5_loader_matches_bundled_agss09_bit_for_bit() {
+    let mesa_h5 = flexmesa_utils::resolve_mesa_test_inputs_dir()
+        .join("data")
+        .join("kap_data")
+        .join("AESOPUS_AGSS09.h5");
+    if !mesa_h5.is_file() {
+        return;
+    }
+    let parsed = flexmesa_kap::load_aesopus_hdf5_file(&mesa_h5)
+        .expect("parse AESOPUS_AGSS09.h5");
+    let bundled = &kap_tables().expect("kap tables").aesopus;
+
+    assert_eq!(parsed.zsun.to_bits(), bundled.zsun.to_bits());
+    assert_eq!(parsed.fco_ref.to_bits(), bundled.fco_ref.to_bits());
+    assert_eq!(parsed.fc_ref.to_bits(), bundled.fc_ref.to_bits());
+    assert_eq!(parsed.fn_ref.to_bits(), bundled.fn_ref.to_bits());
+    assert_eq!(parsed.zs, bundled.zs);
+    assert_eq!(parsed.log_rs, bundled.log_rs);
+    assert_eq!(parsed.log_ts, bundled.log_ts);
+    assert_eq!(parsed.ts.len(), bundled.ts.len());
+    for (iz, (p_ts, b_ts)) in parsed.ts.iter().zip(&bundled.ts).enumerate() {
+        assert_eq!(p_ts.xs, b_ts.xs, "Z[{iz}] xs mismatch");
+        assert_eq!(p_ts.fcos, b_ts.fcos, "Z[{iz}] fcos mismatch");
+        assert_eq!(p_ts.fcs, b_ts.fcs, "Z[{iz}] fcs mismatch");
+        assert_eq!(p_ts.fns, b_ts.fns, "Z[{iz}] fns mismatch");
+        assert_eq!(p_ts.slices.len(), b_ts.slices.len());
+        for (is, (ps, bs)) in p_ts.slices.iter().zip(&b_ts.slices).enumerate() {
+            let pr = ps.raw_f32.as_ref().expect("parsed slice");
+            let br = bs.raw_f32.as_ref().expect("bundled slice");
+            assert_eq!(pr.len(), br.len(), "Z[{iz}] slice[{is}] len mismatch");
+            for (k, (&pv, &bv)) in pr.iter().zip(br).enumerate() {
+                assert_eq!(
+                    pv.to_bits(),
+                    bv.to_bits(),
+                    "Z[{iz}] slice[{is}][{k}] bit mismatch: {pv} != {bv}"
+                );
+            }
+        }
+    }
 }

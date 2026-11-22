@@ -81,8 +81,8 @@ reason = "Multi-stage pre-MS-to-AGB campaign has 3 unsupported controls (atm_t_t
 [[gaps]]
 suite = "star"
 case = "R_CrB_star"
-issue = "#161"
-reason = "Diagnostic run reaches Teff_lower_limit (160 steps vs MESA 167, 6 retries vs MESA 8) with 3 unsupported controls (photo_interval, filename_of_special_rate, required_termination_code_string; #161, #299)."
+issue = "#299"
+reason = "Diagnostic run reaches Teff_lower_limit (168 steps vs MESA 167, 9 retries vs MESA 8, -0.029% rel_star_age, all final and track tolerances pass) with 2 unsupported controls (photo_interval, required_termination_code_string; #299)."
 
 [[gaps]]
 suite = "star"

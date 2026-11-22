@@ -96,6 +96,7 @@ pub const STAR_JOB_SUPPORTED: &[&str] = &[
     "create_pre_main_sequence_model",
     "create_rsp_model",
     "filename_for_profile_when_terminate",
+    "filename_of_special_rate",
     "history_columns_file",
     "initial_age",
     "initial_h1",

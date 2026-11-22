@@ -467,6 +467,7 @@ dependencies = [
  "flexmesa-eos",
  "flexmesa-interp1d",
  "flexmesa-math",
+ "flexmesa-utils",
  "serde",
 ]
 

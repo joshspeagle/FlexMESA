@@ -10,7 +10,10 @@ use flexmesa_chem::NuclideCatalog;
 use flexmesa_const::{LN10, MEV2GR};
 use flexmesa_interp1d::{interp_m3q, CubicCoeffs};
 use flexmesa_math::exp10;
-use flexmesa_rates::{eval_reaction_raw, RatesCatalog, ReactionInfo, TFactors};
+use flexmesa_rates::{
+    eval_reaction_raw, eval_reaction_raw_with_overrides, RateTable1D,
+    RatesCatalog, ReactionInfo, TFactors,
+};
 use rayon::prelude::*;
 
 use crate::parser::ParsedNetDef;
@@ -287,13 +290,45 @@ impl NetGeneralInfo {
         net_filename: &str,
         search_dir: Option<&std::path::Path>,
     ) -> Result<Self, NetError> {
+        Self::from_name_or_dir_with_rate_overrides(
+            net_filename,
+            search_dir,
+            &[],
+        )
+    }
+
+    /// Compiles and initializes a [`NetGeneralInfo`] from an embedded `.net`
+    /// file name or a case-local file in `search_dir`, overriding raw rate
+    /// tables for the specified `(reaction_name, table)` entries
+    /// (`read_rates_from_files` in `star/private/net.f90:735`).
+    ///
+    /// # Errors
+    /// Returns [`NetError`] if the `.net` file cannot be parsed, an override
+    /// reaction name is unrecognized, or rate-table spline construction fails.
+    pub fn from_name_or_dir_with_rate_overrides(
+        net_filename: &str,
+        search_dir: Option<&std::path::Path>,
+        rate_overrides: &[(String, Arc<RateTable1D>)],
+    ) -> Result<Self, NetError> {
         let parsed =
             ParsedNetDef::parse_from_name_or_dir(net_filename, search_dir)?;
-        Self::from_parsed(parsed)
+        Self::from_parsed_with_rate_overrides(parsed, rate_overrides)
     }
 
     /// Compiles and initializes a [`NetGeneralInfo`] from a [`ParsedNetDef`].
     pub fn from_parsed(parsed: ParsedNetDef) -> Result<Self, NetError> {
+        Self::from_parsed_with_rate_overrides(parsed, &[])
+    }
+
+    /// Compiles and initializes a [`NetGeneralInfo`] from a [`ParsedNetDef`]
+    /// with optional per-reaction 1D rate table overrides.
+    ///
+    /// Overridden reactions and their reverse detailed-balance partners bypass
+    /// the process-wide `RATTAB_CACHE` so global defaults are never mutated.
+    pub fn from_parsed_with_rate_overrides(
+        parsed: ParsedNetDef,
+        rate_overrides: &[(String, Arc<RateTable1D>)],
+    ) -> Result<Self, NetError> {
         let nuclides = NuclideCatalog::builtin_ref();
         let max_chem_id = 7856_usize;
         let mut net_iso = vec![0_usize; max_chem_id + 1];
@@ -493,7 +528,11 @@ impl NetGeneralInfo {
             .map(|(i, r)| (r.id, i + 1))
             .collect();
 
-        let rattab_splines = build_rate_tables(&ordered_reactions)?;
+        let rattab_splines = build_rate_tables_with_overrides(
+            &ordered_reactions,
+            &rev_map,
+            rate_overrides,
+        )?;
         let identity_id = compute_net_identity_id(
             &parsed.net_filename,
             &chem_id,
@@ -502,6 +541,7 @@ impl NetGeneralInfo {
             parsed.add_co56_to_approx21,
             parsed.approx21_ye_iso,
             parsed.fe56ec_n_neut,
+            rate_overrides,
         );
 
         let mut info = Self {
@@ -636,6 +676,7 @@ fn compute_net_identity_id(
     add_co56_to_approx21: bool,
     approx21_ye_iso: usize,
     fe56ec_n_neut: i32,
+    rate_overrides: &[(String, Arc<RateTable1D>)],
 ) -> u64 {
     let mut h = 0xcbf2_9ce4_8422_2325_u64;
     fnv1a_update(&mut h, &(net_filename.len() as u64).to_le_bytes());
@@ -655,12 +696,94 @@ fn compute_net_identity_id(
     fnv1a_update(&mut h, &[flags]);
     fnv1a_update(&mut h, &(approx21_ye_iso as u64).to_le_bytes());
     fnv1a_update(&mut h, &fe56ec_n_neut.to_le_bytes());
+    if !rate_overrides.is_empty() {
+        let mut sorted: Vec<(&str, u64)> = rate_overrides
+            .iter()
+            .map(|(n, t)| (n.as_str(), t.content_fingerprint()))
+            .collect();
+        sorted.sort_unstable_by(|a, b| a.0.cmp(b.0));
+        fnv1a_update(&mut h, &(sorted.len() as u64).to_le_bytes());
+        for (name, fp) in sorted {
+            fnv1a_update(&mut h, &(name.len() as u64).to_le_bytes());
+            fnv1a_update(&mut h, name.as_bytes());
+            fnv1a_update(&mut h, &fp.to_le_bytes());
+        }
+    }
     h
 }
 
-fn build_rate_tables(
+fn build_rate_tables_with_overrides(
     reactions: &[ReactionInfo],
+    rev_map: &HashMap<usize, usize>,
+    rate_overrides: &[(String, Arc<RateTable1D>)],
 ) -> Result<Vec<Arc<Vec<CubicCoeffs>>>, NetError> {
+    let cat = RatesCatalog::builtin();
+    let mut override_map: HashMap<String, Arc<RateTable1D>> =
+        HashMap::with_capacity(rate_overrides.len());
+    for (name, tbl) in rate_overrides {
+        let trimmed = name.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        let known_in_net = reactions.iter().any(|r| r.name == trimmed);
+        if !known_in_net && cat.reaction_id_by_name(trimmed).is_none() {
+            return Err(NetError::InvalidReactionOrIso(format!(
+                "unknown reaction '{trimmed}' in filename_of_special_rate"
+            )));
+        }
+        override_map.insert(trimmed.to_string(), Arc::clone(tbl));
+    }
+
+    let id_to_name: HashMap<usize, &str> = reactions
+        .iter()
+        .map(|r| (r.id, r.name.as_str()))
+        .collect();
+    let override_infos: Vec<(&str, &ReactionInfo)> = override_map
+        .keys()
+        .filter_map(|name| {
+            reactions
+                .iter()
+                .find(|r| r.name == *name)
+                .or_else(|| {
+                    cat.reaction_id_by_name(name)
+                        .and_then(|id| cat.reaction_by_id(id).ok())
+                })
+                .map(|info| (name.as_str(), info))
+        })
+        .collect();
+
+    let find_reverse_name = |rxn: &ReactionInfo| -> Option<String> {
+        if let Some(&r_id) = rev_map.get(&rxn.id) {
+            if let Some(&r_name) = id_to_name.get(&r_id) {
+                return Some(r_name.to_string());
+            }
+        }
+        if !override_map.is_empty() {
+            for &(ov_name, ov_info) in &override_infos {
+                if reactions_are_stoichiometric_reverses(rxn, ov_info) {
+                    return Some(ov_name.to_string());
+                }
+            }
+        }
+        None
+    };
+
+    let mut custom_indices: Vec<(usize, Option<String>)> = Vec::new();
+    let mut default_rxns: Vec<&ReactionInfo> = Vec::new();
+    for (idx, rxn) in reactions.iter().enumerate() {
+        let rev_name = find_reverse_name(rxn);
+        let needs_custom = !override_map.is_empty()
+            && (override_map.contains_key(&rxn.name)
+                || rev_name
+                    .as_deref()
+                    .is_some_and(|rn| override_map.contains_key(rn)));
+        if needs_custom {
+            custom_indices.push((idx, rev_name));
+        } else {
+            default_rxns.push(rxn);
+        }
+    }
+
     let cache_mutex = RATTAB_CACHE.get_or_init(|| Mutex::new(HashMap::new()));
     let mut uncached = Vec::new();
     {
@@ -669,16 +792,15 @@ fn build_rate_tables(
                 "rate table cache mutex poisoned: {e}"
             ))
         })?;
-        for rxn in reactions {
+        for rxn in &default_rxns {
             if !guard.contains_key(&rxn.name) {
-                uncached.push(rxn.clone());
+                uncached.push((*rxn).clone());
             }
         }
     }
     if !uncached.is_empty() {
         let logttab = global_logttab();
         let ttab = global_ttab();
-        let cat = RatesCatalog::builtin();
         let built: Vec<(String, Arc<Vec<CubicCoeffs>>)> = uncached
             .par_iter()
             .map(|rxn| {
@@ -712,6 +834,47 @@ fn build_rate_tables(
             guard.insert(name, arc_c);
         }
     }
+
+    let custom_built: HashMap<usize, Arc<Vec<CubicCoeffs>>> =
+        if custom_indices.is_empty() {
+            HashMap::new()
+        } else {
+            let logttab = global_logttab();
+            let ttab = global_ttab();
+            custom_indices
+                .par_iter()
+                .map(|(rxn_idx, rev_name)| {
+                    let rxn = &reactions[*rxn_idx];
+                    let mut y = Vec::with_capacity(NRATTAB);
+                    for idx in 0..NRATTAB {
+                        let tf = TFactors::from_log_t(logttab[idx], ttab[idx]);
+                        let rate = eval_reaction_raw_with_overrides(
+                            cat,
+                            rxn,
+                            ttab[idx],
+                            &tf,
+                            &override_map,
+                            rev_name.as_deref(),
+                        )
+                        .map_err(|e| {
+                            NetError::IntegrationError(format!(
+                                "failed to evaluate overridden reaction '{}': {e}",
+                                rxn.name
+                            ))
+                        })?;
+                        y.push(rate);
+                    }
+                    let coeffs = interp_m3q(logttab, &y).map_err(|e| {
+                        NetError::IntegrationError(format!(
+                            "failed to spline overridden reaction '{}': {e}",
+                            rxn.name
+                        ))
+                    })?;
+                    Ok((*rxn_idx, Arc::new(coeffs)))
+                })
+                .collect::<Result<HashMap<_, _>, NetError>>()?
+        };
+
     let guard = cache_mutex.lock().map_err(|e| {
         NetError::IntegrationError(format!(
             "rate table cache mutex poisoned: {e}"
@@ -719,11 +882,16 @@ fn build_rate_tables(
     })?;
     reactions
         .iter()
-        .map(|rxn| {
-            guard
-                .get(&rxn.name)
-                .map(Arc::clone)
-                .ok_or_else(|| NetError::MissingReaction(rxn.name.clone()))
+        .enumerate()
+        .map(|(idx, rxn)| {
+            if let Some(arc_c) = custom_built.get(&idx) {
+                Ok(Arc::clone(arc_c))
+            } else {
+                guard
+                    .get(&rxn.name)
+                    .map(Arc::clone)
+                    .ok_or_else(|| NetError::MissingReaction(rxn.name.clone()))
+            }
         })
         .collect()
 }
@@ -1054,5 +1222,92 @@ mod tests {
             paired > 0,
             "h_burn.net (add_isos_and_reactions) should pair forward/reverse reactions"
         );
+    }
+
+    #[test]
+    fn test_net_rate_overrides_update_forward_and_reverse_without_polluting_cache() {
+        use std::sync::Arc;
+        use flexmesa_rates::RateTable1D;
+
+        let g_default =
+            NetGeneralInfo::from_name("co_burn.net").expect("default co_burn");
+        let c12_tbl = Arc::new(
+            RateTable1D::resolve_and_load(
+                "c12ag_deboer_sigma_0p0_2000_Tgrid.dat",
+                None,
+            )
+            .expect("deboer c12ag"),
+        );
+        let a3_tbl = Arc::new(
+            RateTable1D::resolve_and_load(
+                "r_he4_he4_he4_to_c12_cf88.txt",
+                None,
+            )
+            .expect("cf88 3a"),
+        );
+        let g_override = NetGeneralInfo::from_name_or_dir_with_rate_overrides(
+            "co_burn.net",
+            None,
+            &[
+                (String::from("r_c12_ag_o16"), Arc::clone(&c12_tbl)),
+                (String::from("r_he4_he4_he4_to_c12"), Arc::clone(&a3_tbl)),
+            ],
+        )
+        .expect("overridden co_burn");
+        assert_ne!(g_default.identity_id, g_override.identity_id);
+
+        let log_t = 8.4_f64;
+        let temp = exp10(log_t);
+        let rho = 1.0e4_f64;
+        let eval_raw = |g: &NetGeneralInfo| -> Vec<f64> {
+            let rf = vec![1.0; g.num_reactions];
+            let mut r = vec![0.0; g.num_reactions];
+            let mut dt = vec![0.0; g.num_reactions];
+            let mut dr = vec![0.0; g.num_reactions];
+            g.eval_raw_rates_from_tables(
+                0.5, log_t, temp, rho, &rf, &mut r, &mut dt, &mut dr,
+            )
+            .expect("eval_raw");
+            r
+        };
+
+        let raw_def = eval_raw(&g_default);
+        let raw_ov = eval_raw(&g_override);
+
+        let ic12 = g_override.reaction_index_by_name("r_c12_ag_o16").unwrap() - 1;
+        let io16 = g_override.reaction_index_by_name("r_o16_ga_c12").unwrap() - 1;
+        let i3a = g_override
+            .reaction_index_by_name("r_he4_he4_he4_to_c12")
+            .unwrap()
+            - 1;
+        let ir3a = g_override
+            .reaction_index_by_name("r_c12_to_he4_he4_he4")
+            .unwrap()
+            - 1;
+
+        assert!(
+            ((raw_ov[ic12] - raw_def[ic12]) / raw_def[ic12]).abs() > 1.0e-2,
+            "r_c12_ag_o16 should reflect deboer override"
+        );
+        assert!(
+            ((raw_ov[io16] - raw_def[io16]) / raw_def[io16]).abs() > 1.0e-2,
+            "r_o16_ga_c12 reverse should reflect detailed balance of deboer override"
+        );
+        assert!(
+            ((raw_ov[i3a] - raw_def[i3a]) / raw_def[i3a]).abs() > 1.0e-3,
+            "r_he4_he4_he4_to_c12 should reflect cf88 override"
+        );
+        assert!(
+            ((raw_ov[ir3a] - raw_def[ir3a]) / raw_def[ir3a]).abs() > 1.0e-3,
+            "r_c12_to_he4_he4_he4 reverse should reflect detailed balance of cf88 override"
+        );
+
+        // Reloading default co_burn.net must still match exact original rates
+        let g_after = NetGeneralInfo::from_name("co_burn.net")
+            .expect("reload default co_burn");
+        let raw_after = eval_raw(&g_after);
+        for (a, b) in raw_def.iter().zip(&raw_after) {
+            assert_eq!(a.to_bits(), b.to_bits());
+        }
     }
 }

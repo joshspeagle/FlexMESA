@@ -26,6 +26,7 @@ use flexmesa_eos::{
 use flexmesa_kap::get_kap_results;
 use flexmesa_net::NetGeneralInfo;
 use flexmesa_neu::{neu_get, NeuFlags, NeuResult};
+use flexmesa_rates::RateTable1D;
 use flexmesa_utils::is_bad;
 use rayon::prelude::*;
 
@@ -35,7 +36,17 @@ use crate::model::StarModel;
 use crate::star_ad::{StarAdExt, StarAdOrder1};
 
 static BASIC_NET_INFO: OnceLock<NetGeneralInfo> = OnceLock::new();
-type NetCacheKey = (String, u64, u64, u64, u64, u64, bool, bool);
+type NetCacheKey = (
+    String,
+    u64,
+    u64,
+    u64,
+    u64,
+    u64,
+    bool,
+    bool,
+    Vec<(String, String)>,
+);
 static NET_CACHE: OnceLock<Mutex<HashMap<NetCacheKey, Arc<NetGeneralInfo>>>> =
     OnceLock::new();
 
@@ -81,6 +92,7 @@ pub fn get_or_load_net_with_fe56ec(
         1.0,
         false,
         false,
+        &[],
     )
 }
 
@@ -95,6 +107,7 @@ fn get_or_load_net_with_star_params(
     reaction_neuqs_factor: f64,
     use_3a_fl87: bool,
     use_suzuki_weak_rates: bool,
+    special_rate_files: &[(String, String)],
 ) -> Result<Arc<NetGeneralInfo>, StarError> {
     let key = net_name.trim();
     let cache_key = (
@@ -106,6 +119,7 @@ fn get_or_load_net_with_star_params(
         reaction_neuqs_factor.to_bits(),
         use_3a_fl87,
         use_suzuki_weak_rates,
+        special_rate_files.to_vec(),
     );
     let cache = NET_CACHE.get_or_init(|| Mutex::new(HashMap::new()));
     if let Ok(guard) = cache.lock() {
@@ -113,12 +127,27 @@ fn get_or_load_net_with_star_params(
             return Ok(Arc::clone(info));
         }
     }
-    let mut loaded = NetGeneralInfo::from_name_or_dir(key, search_dir)
-        .map_err(|e| {
-            StarError::MicrophysicsError(format!(
-                "failed to load network '{key}': {e}"
-            ))
-        })?;
+    let mut rate_overrides: Vec<(String, Arc<RateTable1D>)> =
+        Vec::with_capacity(special_rate_files.len());
+    for (rxn_name, file_name) in special_rate_files {
+        let tbl = RateTable1D::resolve_and_load(file_name, search_dir)
+            .map_err(|e| {
+                StarError::MicrophysicsError(format!(
+                    "failed to load filename_of_special_rate '{file_name}' for '{rxn_name}': {e}"
+                ))
+            })?;
+        rate_overrides.push((rxn_name.clone(), Arc::new(tbl)));
+    }
+    let mut loaded = NetGeneralInfo::from_name_or_dir_with_rate_overrides(
+        key,
+        search_dir,
+        &rate_overrides,
+    )
+    .map_err(|e| {
+        StarError::MicrophysicsError(format!(
+            "failed to load network '{key}': {e}"
+        ))
+    })?;
     // `star/private/net.f90:685,741-748` and `net/public/net_def.f90:588-606`:
     // unconditionally assign `s% net_logTcut_{lo,lim}` and `s% fe56ec_*`
     // (overriding standalone `net_def` defaults despite the stale `<= 0`
@@ -149,6 +178,23 @@ pub fn resolve_model_net(
 ) -> Result<Arc<NetGeneralInfo>, StarError> {
     let c = &model.controls;
     let j = &model.job;
+    // `star/private/net.f90:735` -> `rates/public/rates_lib.f90:135-150`:
+    // every slot with non-empty `(reaction_for_special_factor(i),
+    // filename_of_special_rate(i))` overrides that reaction's raw rate table.
+    let special_rate_files: Vec<(String, String)> = j
+        .reaction_for_special_factor
+        .iter()
+        .zip(&j.filename_of_special_rate)
+        .filter_map(|(rxn, fname)| {
+            let r = rxn.trim();
+            let f = fname.trim();
+            if r.is_empty() || f.is_empty() {
+                None
+            } else {
+                Some((r.to_string(), f.to_string()))
+            }
+        })
+        .collect();
     let net_info = get_or_load_net_with_star_params(
         &j.net_name,
         None,
@@ -159,6 +205,7 @@ pub fn resolve_model_net(
         c.reaction_neuqs_factor,
         j.use_3a_fl87,
         j.use_suzuki_weak_rates,
+        &special_rate_files,
     )?;
     if net_info.num_isos != model.species {
         return Err(StarError::MicrophysicsError(format!(

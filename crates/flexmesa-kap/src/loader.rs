@@ -461,11 +461,13 @@ impl KapTables {
                 .log_ts
                 .last()
                 .ok_or(KapError::MissingTable("empty kapCN logT grid"))?,
-            KapLowTOption::Aesopus => *self
-                .aesopus
-                .log_ts
-                .last()
-                .ok_or(KapError::MissingTable("empty AESOPUS logT grid"))?,
+            KapLowTOption::Aesopus => {
+                let ka =
+                    crate::aesopus_h5::resolve_aesopus_data(&cfg.aesopus_filename)?;
+                *ka.log_ts
+                    .last()
+                    .ok_or(KapError::MissingTable("empty AESOPUS logT grid"))?
+            }
             _ => {
                 let lt_prefix = cfg.kap_low_t_option.prefix();
                 self.fixed_sets

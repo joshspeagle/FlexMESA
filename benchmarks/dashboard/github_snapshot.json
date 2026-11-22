@@ -249,11 +249,6 @@
       "draft": false
     },
     {
-      "number": 366,
-      "title": "fix(benchmarks): cite open #365 for module-hex gaps left on closed #144",
-      "draft": false
-    },
-    {
       "number": 367,
       "title": "feat(mtx,star,binary): upstream do_block_multiply_xa and rho = dm/dV reset before each step (#358, #363)",
       "draft": true

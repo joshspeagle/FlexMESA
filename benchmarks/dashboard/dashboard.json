@@ -1481,11 +1481,6 @@
         "draft": false
       },
       {
-        "number": 366,
-        "title": "fix(benchmarks): cite open #365 for module-hex gaps left on closed #144",
-        "draft": false
-      },
-      {
         "number": 367,
         "title": "feat(mtx,star,binary): upstream do_block_multiply_xa and rho = dm/dV reset before each step (#358, #363)",
         "draft": true
@@ -2837,6 +2832,19 @@
       "closed_140": "17",
       "total_140": "36",
       "deferred_169": "45"
+    },
+    {
+      "date_utc": "2026-11-22",
+      "commit": "c6ab776",
+      "event": "main merge",
+      "engine_ported_pct": "30.7",
+      "all_verified_pct": "1.1",
+      "cases_passing": "0",
+      "rust_cov_pct": "76.2",
+      "python_cov_pct": "87.7",
+      "closed_140": "17",
+      "total_140": "37",
+      "deferred_169": "46"
     }
   ]
 }

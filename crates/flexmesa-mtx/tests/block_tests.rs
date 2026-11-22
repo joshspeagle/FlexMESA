@@ -59,6 +59,7 @@ use proptest::prelude::*;
 ///   bit, including its block pairing (deferred bug `#362`).
 /// - Harwell-Boeing `RUA` serialization and parsing round-trips all blocks.
 #[test]
+#[allow(clippy::too_many_lines)]
 fn test_block_tridiagonal_25x20_and_hb_roundtrip() {
     let nvar = 25;
     let nz = 20;
@@ -142,10 +143,10 @@ fn test_block_tridiagonal_25x20_and_hb_roundtrip() {
         for j in 0..nvar {
             let mut b = col_dot(&dblk, k, k, j);
             if k > 0 {
-                b = col_dot(&ublk, k, k, j) + b;
+                b += col_dot(&ublk, k, k, j);
             }
             if k + 1 < nz {
-                b = col_dot(&lblk, k, k + 1, j) + b;
+                b += col_dot(&lblk, k, k + 1, j);
             }
             assert_eq!(xa[k * nvar + j].to_bits(), b.to_bits(), "k={k} j={j}");
         }

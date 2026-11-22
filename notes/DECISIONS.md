@@ -38,7 +38,7 @@ Scope and the `v0.1.0` definition are in [`SCOPE.md`](SCOPE.md). Work is tracked
 | 21 | Packages Are Closed on Evidence by the Authoring Agent | In force; replaces the "ready for verification" hand-off in decision 17 | below |
 | 22 | Upstream Reference Pinned to MESA Release 26.4.1 and Release-Upgrade Policy | In force; supersedes the pre-rebaseline test-input bundle in decision 13 | below |
 | 23 | Single-Source Strict/Fast Numerics Layer, Vendored `crlibm` FFI Exception, and Platform-Intrinsic `RN` Routing (`#165`, `#196`, `#198`) | In force | below |
-| 24 | Evidence-Gated Port Manifest and Script-Generated Progress Dashboard (`#174`) | In force | below |
+| 24 | Evidence-Gated Port Manifest and Script-Generated Progress Dashboard (`#174`) | In force; coverage scheduling amended by decision 53 | below |
 | 25 | Headless Validation and No-Op Behavior for `&pgstar`, `&pgbinary` and `&astero_pgstar_controls` (`#147`, `#173`) | In force | below |
 | 26 | Diagnostic Harness Runs and Terminal-Output Controls (`#147`) | In force | below |
 | 27 | Baseline Regression Check in the History Harness (`#143`, `#144`) | In force | below |
@@ -67,6 +67,7 @@ Scope and the `v0.1.0` definition are in [`SCOPE.md`](SCOPE.md). Work is tracked
 | 50 | The TDC Newton Solver Runs on a Translation of `auto_diff_real_tdc`; No Bracket Seed (`#321`) | In force | below |
 | 51 | The Scheduled Campaign Saves a Baseline Candidate; the Baseline May Be Refreshed From It (`#257`) | In force | below |
 | 52 | `DualOrder1<N>` Evaluates Upstream's Expression for Each Operation, in One of Two Forms Chosen by `N` (`#339`) | In force | below |
+| 53 | Dashboard Coverage Runs Daily When `main` Has Changed, in Seven Instrumented Shards Built With the `ci` Profile (`#345`) | In force | below |
 
 ## Pre-audit decisions still in force
 
@@ -709,3 +710,17 @@ The text of these four entries predates the audit of 2026-11-16. The decisions s
   - *A separate Rust type per upstream type*: exact by construction, but every generic kernel would need a second instantiation and the engine a wide rename.
   - *Keeping the generic chain rule*: simpler, and not what MESA computes.
   - *Keeping the guards on `safe_sqrt` and `safe_log`*: hides a `NaN` that MESA would produce at the same point.
+
+## DECISIONS #53: Dashboard Coverage Runs Daily When `main` Has Changed, in Seven Instrumented Shards Built With the `ci` Profile (`#345`)
+
+- **Date**: 2026-11-22
+- **Decision**:
+  1. **When**: `dashboard.yml` no longer measures coverage on pushes to `main`. A daily schedule runs a gate job that compares `main` with the commit recorded in `benchmarks/dashboard/coverage_commit.txt`, which `refresh-coverage` writes with the numbers it commits. Coverage runs only if `crates/`, `src/`, `tests/`, `scripts/ci/`, `scripts/dashboard/`, the Cargo files, `pyproject.toml`, the toolchain file or the workflow differ. A failed run leaves the commit unchanged, so the next day retries. Pull requests that touch the dashboard machinery and manual runs always measure. This applies to Rust and Python coverage alike.
+  2. **How, for Rust**: seven jobs, the same groups as the `Safe Rust Tests` CI shards (`scripts/ci/cargo_test_shard.py` for `star`, `astero` and `binary`, and the rest of the workspace), each instrumented through `cargo llvm-cov show-env` and built with the `ci` profile instead of `--release`. Each writes an LCOV report; `scripts/dashboard/merge_lcov.py` takes their union line by line into the summary format the dashboard already reads.
+- **Why**: one serial job under `--release` (fat LTO, one codegen unit) reached the 150-minute limit on every run after 2026-11-21, and each push to `main` queued another such run behind the last. The coverage numbers inform the dashboard and gate nothing.
+- **Limits**: line totals now come from LCOV records rather than from `cargo llvm-cov`'s own summary. On a test crate set the two agreed to 0.3 percentage points overall and about 2% per crate, so the dashboard's Rust figures move slightly once. Doctests are not measured, as before. The dashboard can show coverage up to a day older than `main`.
+- **Alternatives Rejected**:
+  - *Keep one job and raise its time limit*: hours per run, and runs queue faster than they finish.
+  - *Merge raw profile data across shards*: needs every shard's instrumented binaries in one place; the per-line union gives the same answer for line coverage.
+  - *A daily run whether or not `main` changed*: wastes a run on quiet days.
+

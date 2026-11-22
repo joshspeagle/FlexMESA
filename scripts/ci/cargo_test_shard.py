@@ -18,6 +18,10 @@ A target missing from that table gets ``DEFAULT_SECONDS``, so a new test file
 is still run; the table only affects balance, never coverage. The table may
 also give a time for one test of a split binary, under the key
 ``<binary>::<test name>``; other tests of that binary share its time equally.
+
+``--skip NAME`` (repeatable) is passed to every test harness invocation as
+``-- --skip NAME``. The dashboard's coverage job uses it to leave out long
+evolution tests under instrumentation; CI's own test shards do not pass it.
 """
 
 from __future__ import annotations
@@ -107,7 +111,10 @@ def plan(
     return assign(weights, total)
 
 
-def _cargo(args: list[str]) -> None:
+def _cargo(args: list[str], skips: list[str] | None = None) -> None:
+    harness = [arg for name in (skips or []) for arg in ("--skip", name)]
+    if harness:
+        args = [*args, *([] if "--" in args else ["--"]), *harness]
     cmd = ["cargo", "test", *args]
     print("+ " + " ".join(cmd), flush=True)
     subprocess.run(cmd, check=True, cwd=REPO_ROOT)
@@ -149,6 +156,13 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--index", type=int, required=True, help="1-based")
     parser.add_argument("--total", type=int, required=True)
     parser.add_argument("--profile", default="ci")
+    parser.add_argument(
+        "--skip",
+        action="append",
+        default=[],
+        metavar="NAME",
+        help="Test name filter passed to the harness as --skip (repeatable).",
+    )
     ns = parser.parse_args(argv)
     if not 1 <= ns.index <= ns.total:
         parser.error("--index must be between 1 and --total")
@@ -177,7 +191,7 @@ def main(argv: list[str] | None = None) -> int:
         elif unit != DOC and "::" not in unit:
             whole.extend(["--test", unit])
     if whole:
-        _cargo(["-p", ns.package, *profile, *whole])
+        _cargo(["-p", ns.package, *profile, *whole], ns.skip)
     for target in split_tests:
         prefix = f"{target}::"
         names = [u[len(prefix) :] for u in mine if u.startswith(prefix)]
@@ -192,10 +206,11 @@ def main(argv: list[str] | None = None) -> int:
                     "--",
                     "--exact",
                     *names,
-                ]
+                ],
+                ns.skip,
             )
     if DOC in mine:
-        _cargo(["-p", ns.package, *profile, "--doc"])
+        _cargo(["-p", ns.package, *profile, "--doc"], ns.skip)
     return 0
 
 

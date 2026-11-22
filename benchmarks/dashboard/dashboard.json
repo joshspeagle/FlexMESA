@@ -327,7 +327,7 @@
         "verified_total": 0,
         "pct_ported": 0.0,
         "pct_verified": 0.0,
-        "rust_lines": 2799,
+        "rust_lines": 3127,
         "python_jax_lines": 1234
       },
       {
@@ -765,16 +765,16 @@
     "rust": {
       "tool": "cargo llvm-cov",
       "overall": {
-        "lines": 116472,
-        "covered": 87943,
-        "percent": 75.5
+        "lines": 117456,
+        "covered": 88983,
+        "percent": 75.8
       },
       "by_crate": [
         {
           "crate": "flexmesa-astero",
-          "lines": 4047,
-          "covered": 1457,
-          "percent": 36.0
+          "lines": 4225,
+          "covered": 1618,
+          "percent": 38.3
         },
         {
           "crate": "flexmesa-atm",
@@ -802,9 +802,9 @@
         },
         {
           "crate": "flexmesa-chem",
-          "lines": 908,
-          "covered": 633,
-          "percent": 69.7
+          "lines": 924,
+          "covered": 662,
+          "percent": 71.6
         },
         {
           "crate": "flexmesa-colors",
@@ -874,9 +874,9 @@
         },
         {
           "crate": "flexmesa-net",
-          "lines": 7545,
-          "covered": 6623,
-          "percent": 87.8
+          "lines": 7820,
+          "covered": 6971,
+          "percent": 89.1
         },
         {
           "crate": "flexmesa-neu",
@@ -886,9 +886,9 @@
         },
         {
           "crate": "flexmesa-num",
-          "lines": 3047,
-          "covered": 2638,
-          "percent": 86.6
+          "lines": 3048,
+          "covered": 2623,
+          "percent": 86.1
         },
         {
           "crate": "flexmesa-rates",
@@ -904,9 +904,9 @@
         },
         {
           "crate": "flexmesa-star",
-          "lines": 55357,
-          "covered": 41838,
-          "percent": 75.6
+          "lines": 55891,
+          "covered": 42356,
+          "percent": 75.8
         },
         {
           "crate": "flexmesa-testing",
@@ -916,9 +916,9 @@
         },
         {
           "crate": "flexmesa-turb",
-          "lines": 1434,
-          "covered": 1245,
-          "percent": 86.8
+          "lines": 1414,
+          "covered": 1244,
+          "percent": 88.0
         },
         {
           "crate": "flexmesa-utils",
@@ -931,9 +931,9 @@
     "python": {
       "tool": "pytest --cov",
       "overall": {
-        "statements": 26043,
-        "covered": 22801,
-        "percent": 87.6
+        "statements": 26315,
+        "covered": 23068,
+        "percent": 87.7
       },
       "by_subpackage": [
         {
@@ -962,8 +962,8 @@
         },
         {
           "subpackage": "flexmesa.bench",
-          "statements": 1382,
-          "covered": 1377,
+          "statements": 1388,
+          "covered": 1383,
           "percent": 99.6
         },
         {
@@ -1082,15 +1082,15 @@
         },
         {
           "subpackage": "flexmesa.testing",
-          "statements": 4112,
-          "covered": 3228,
-          "percent": 78.5
+          "statements": 4241,
+          "covered": 3356,
+          "percent": 79.1
         },
         {
           "subpackage": "flexmesa.turb",
-          "statements": 912,
-          "covered": 801,
-          "percent": 87.8
+          "statements": 1049,
+          "covered": 934,
+          "percent": 89.0
         },
         {
           "subpackage": "flexmesa.utils",
@@ -1481,9 +1481,9 @@
     ],
     "open_pull_requests": [
       {
-        "number": 346,
-        "title": "fix(autodiff): DualOrder1 evaluates upstream's expression for each operation (#339)",
-        "draft": true
+        "number": 347,
+        "title": "fix(star,eos): port eval_eps_grav_composition & fix_d_eos_dxa_partials and bound EosDtTableSet RSS (Closes #341)",
+        "draft": false
       }
     ],
     "deferred_169": [
@@ -2672,6 +2672,32 @@
     {
       "date_utc": "2026-11-21",
       "commit": "7defc98",
+      "event": "main merge",
+      "engine_ported_pct": "30.2",
+      "all_verified_pct": "1.0",
+      "cases_passing": "0",
+      "rust_cov_pct": "75.5",
+      "python_cov_pct": "87.6",
+      "closed_140": "16",
+      "total_140": "36",
+      "deferred_169": "45"
+    },
+    {
+      "date_utc": "2026-11-22",
+      "commit": "c3f7d00",
+      "event": "main merge",
+      "engine_ported_pct": "30.2",
+      "all_verified_pct": "1.0",
+      "cases_passing": "0",
+      "rust_cov_pct": "75.5",
+      "python_cov_pct": "87.6",
+      "closed_140": "16",
+      "total_140": "36",
+      "deferred_169": "45"
+    },
+    {
+      "date_utc": "2026-11-22",
+      "commit": "8c82649",
       "event": "main merge",
       "engine_ported_pct": "30.2",
       "all_verified_pct": "1.0",

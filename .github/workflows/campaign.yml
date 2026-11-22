@@ -41,7 +41,7 @@ jobs:
     timeout-minutes: 25
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up FlexMESA (release)
         uses: ./.github/actions/setup-flexmesa
@@ -82,7 +82,7 @@ jobs:
 
       - name: Upload gate reports
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: campaign-gate-reports
           retention-days: 30
@@ -99,7 +99,7 @@ jobs:
     timeout-minutes: 300
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up FlexMESA (release)
         uses: ./.github/actions/setup-flexmesa
@@ -129,7 +129,7 @@ jobs:
 
       - name: Upload full campaign harness artifacts
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: campaign-history-harness-artifacts
           retention-days: 30
@@ -142,7 +142,7 @@ jobs:
     timeout-minutes: 180
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up FlexMESA (release)
         uses: ./.github/actions/setup-flexmesa
@@ -183,7 +183,7 @@ jobs:
 
       - name: Upload Rust --ignored logs and gate report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: campaign-rust-ignored-artifacts
           retention-days: 30
@@ -200,7 +200,7 @@ jobs:
         os: [ubuntu-latest, macos-latest]
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up FlexMESA (release)
         uses: ./.github/actions/setup-flexmesa
@@ -215,7 +215,7 @@ jobs:
           python scripts/check_strict_determinism.py --json-out "$OUT_JSON"
 
       - name: Upload uncapped strict digest
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: campaign-strict-${{ runner.os }}-${{ runner.arch }}
           retention-days: 30
@@ -229,15 +229,15 @@ jobs:
     timeout-minutes: 10
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: "3.12"
 
       - name: Download uncapped strict digests
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           pattern: campaign-strict-*
           merge-multiple: true
@@ -259,10 +259,10 @@ jobs:
     timeout-minutes: 20
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: "3.12"
 
@@ -288,7 +288,7 @@ jobs:
 
       - name: Upload Fortran harness and spread dry-run artifacts
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: campaign-fortran-check
           retention-days: 30
@@ -309,7 +309,7 @@ jobs:
     timeout-minutes: 10
     steps:
       - name: Download campaign artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           path: ${{ runner.temp }}/campaign-artifacts
 

@@ -32,7 +32,7 @@ reason = "Upstream astero/test emits zero floating-point values in exact_tested_
 [[gaps]]
 module = "interp_1d"
 status = "partial_0_ulp"
-issue = "#144"
+issue = "#365"
 max_declared_ulp = 0
 min_zero_ulp_count = 22
 expect_nonzero_ulp = false
@@ -68,7 +68,7 @@ reason = "12/14 gs98 and CO-enhanced channels match at 0 ULP (log10kap = 1 ULP);
 [[gaps]]
 module = "mtx"
 status = "partial_0_ulp"
-issue = "#144"
+issue = "#365"
 max_declared_ulp = 0
 min_zero_ulp_count = 7
 expect_nonzero_ulp = false
@@ -77,7 +77,7 @@ reason = "All 7 tested test_square1 and test_square2 dense LU entries match at 0
 [[gaps]]
 module = "interp_2d"
 status = "partial_0_ulp"
-issue = "#144"
+issue = "#365"
 max_declared_ulp = 0
 min_zero_ulp_count = 4
 expect_nonzero_ulp = false
@@ -113,7 +113,7 @@ reason = "3,636/3,639 outputs (all 2,763 raw rates, 12 screening, 845/846 weak, 
 [[gaps]]
 module = "num"
 status = "unported_hex_harness"
-issue = "#144"
+issue = "#365"
 reason = "570 upstream num Brent/Newton/ODE test printouts await direct TSV harness mapping."
 
 [[gaps]]

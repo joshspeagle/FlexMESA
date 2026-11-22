@@ -13,15 +13,15 @@
         "upstream_lines": 120509,
         "absent": 17759,
         "stub": 6378,
-        "partial": 54753,
-        "ported_unverified": 36648,
+        "partial": 54084,
+        "ported_unverified": 37317,
         "kernel_reference_vectors": 4971,
         "case_level_evidence": 0,
-        "ported_total": 41619,
+        "ported_total": 42288,
         "verified_total": 4971,
-        "pct_ported": 34.5,
+        "pct_ported": 35.1,
         "pct_verified": 4.1,
-        "rust_lines": 86367,
+        "rust_lines": 87496,
         "python_jax_lines": 3869
       },
       {
@@ -455,7 +455,7 @@
       "upstream_panel_modules": 46
     },
     "infrastructure_lines": {
-      "rust_bridge_testing_bench": 19423,
+      "rust_bridge_testing_bench": 19424,
       "python_testing_bench": 15615
     }
   },
@@ -683,12 +683,12 @@
     {
       "namelist": "star &controls",
       "upstream_scalars": 1444,
-      "matched_in_flexmesa": 1096,
-      "defaults_agree": 1096,
+      "matched_in_flexmesa": 1106,
+      "defaults_agree": 1106,
       "value_mismatch": 0,
       "disabled_limit_none": 0,
       "skipped_unparseable_rust": 17,
-      "unimplemented": 331
+      "unimplemented": 321
     },
     {
       "namelist": "star &star_job",
@@ -1483,7 +1483,7 @@
       {
         "number": 352,
         "title": "fix(autodiff): the order-2 and order-3 dual types evaluate upstream's expression for each operation (#349)",
-        "draft": true
+        "draft": false
       }
     ],
     "deferred_169": [
@@ -2756,6 +2756,19 @@
       "cases_passing": "0",
       "rust_cov_pct": "75.8",
       "python_cov_pct": "87.7",
+      "closed_140": "16",
+      "total_140": "36",
+      "deferred_169": "45"
+    },
+    {
+      "date_utc": "2026-11-22",
+      "commit": "d97b204",
+      "event": "main merge",
+      "engine_ported_pct": "30.7",
+      "all_verified_pct": "1.0",
+      "cases_passing": "0",
+      "rust_cov_pct": "75.8",
+      "python_cov_pct": "87.6",
       "closed_140": "16",
       "total_140": "36",
       "deferred_169": "45"

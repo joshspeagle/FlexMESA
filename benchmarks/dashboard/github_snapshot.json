@@ -241,7 +241,7 @@
     {
       "number": 352,
       "title": "fix(autodiff): the order-2 and order-3 dual types evaluate upstream's expression for each operation (#349)",
-      "draft": true
+      "draft": false
     }
   ],
   "deferred_169": [

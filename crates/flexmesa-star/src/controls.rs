@@ -166,6 +166,9 @@ pub struct StarControls {
     pub rotation_flag: bool,
     /// Whether nonlinear pulsation (`RSP_flag`) is active.
     pub rsp_flag: bool,
+    /// Reset `ln rho` to `dm / dV` before each step when neither `u_flag`
+    /// nor `RSP_flag` is set (`set_rho_to_dm_div_dV`, `.true.` default).
+    pub set_rho_to_dm_div_dv: bool,
     /// Whether turbulent pulsation energy (`RSP2_flag`) is active.
     pub rsp2_flag: bool,
     /// Whether element diffusion (`do_element_diffusion`) is active.

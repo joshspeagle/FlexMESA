@@ -18,6 +18,7 @@ use crate::hydro_vars::set_hydro_vars;
 use crate::inlist_runner::{DefaultStarExtras, ExtrasDirective, StarExtras};
 use crate::model::StarModel;
 use crate::solver::HenyeySolverReport;
+use crate::star_utils::set_rho_to_dm_div_dv_for_new_step;
 use crate::struct_burn_mix::{do_struct_burn_mix, refresh_mixing_state};
 use crate::termination::{LimitCheckOutcome, do_check_limits};
 use crate::timestep::TimestepAction;
@@ -290,6 +291,13 @@ pub fn star_evolve_step_part1(
             model_number: model.model_number,
             reason: String::from("min_timestep_limit"),
         });
+    }
+    // The `rho = dm/dV` reset of `prepare_for_new_step`
+    // (`star/private/evolve.f90:1854-1857`) belongs with the per-step remesh,
+    // which a caller passing `do_remesh = false` (the binary step loop) runs
+    // itself, in upstream's order, before calling this function.
+    if first_try && do_remesh {
+        set_rho_to_dm_div_dv_for_new_step(model)?;
     }
 
     let has_prev_generation = !model.lnd_old.is_empty();
@@ -906,6 +914,8 @@ pub(crate) fn star_evolve_step_outcome_with_extras(
             reason: String::from("min_timestep_limit"),
         });
     }
+    // `prepare_for_new_step` (`star/private/evolve.f90:1854-1857`).
+    set_rho_to_dm_div_dv_for_new_step(model)?;
 
     let has_prev_generation = !model.lnd_old.is_empty();
     let prev_dt_old = model.dt_old;

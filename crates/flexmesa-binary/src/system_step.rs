@@ -8,6 +8,7 @@
 
 use flexmesa_const::{LSUN, MSUN, PI, SECYER};
 use flexmesa_star::inlist_runner::DefaultStarExtras;
+use flexmesa_star::star_utils::set_rho_to_dm_div_dv_for_new_step;
 use flexmesa_star::{
     LimitCheckOutcome, StarError, StarModel, StarPickTimestepOutcome,
     StarStepAttemptOutcome, StarStepConverged, compute_core_masses_msun,
@@ -329,6 +330,24 @@ impl BinarySystem {
         // `restore_mesh_on_retry` is enabled (`evolve.f90:2192-2209`).
         let mut post_mesh_snap: Option<crate::system_rlof::BinaryStepSnapshot> =
             None;
+        // `prepare_for_new_step` stores `prev_mesh_xh` right after the
+        // `rho = dm/dV` reset and before the remesh (`evolve.f90:1854-1872`),
+        // and `restore_mesh_on_retry` restores that model
+        // (`evolve.f90:2192-2209`), so it carries the reset density.
+        let mut pre_mesh_snap: Option<crate::system_rlof::BinaryStepSnapshot> =
+            None;
+        let restore_pre_mesh = (self
+            .donor
+            .controls
+            .mix_wind
+            .restore_mesh_on_retry
+            && !self.donor.controls.rsp_flag)
+            || matches!(
+                &self.companion,
+                BinaryCompanion::Star(s2)
+                    if s2.controls.mix_wind.restore_mesh_on_retry
+                        && !s2.controls.rsp_flag
+            );
         let mut pending_star_redo_dt: Option<f64> = None;
 
         loop {
@@ -343,20 +362,8 @@ impl BinarySystem {
                 dt_try = redo_dt;
                 first_try = false;
             } else if outer_retry > 0 {
-                let restore_pre_mesh = (self
-                    .donor
-                    .controls
-                    .mix_wind
-                    .restore_mesh_on_retry
-                    && !self.donor.controls.rsp_flag)
-                    || matches!(
-                        &self.companion,
-                        BinaryCompanion::Star(s2)
-                            if s2.controls.mix_wind.restore_mesh_on_retry
-                                && !s2.controls.rsp_flag
-                    );
                 let snap = if restore_pre_mesh {
-                    &pre_step_snap
+                    pre_mesh_snap.as_ref().unwrap_or(&pre_step_snap)
                 } else {
                     post_mesh_snap.as_ref().unwrap_or(&pre_step_snap)
                 };
@@ -374,6 +381,23 @@ impl BinarySystem {
 
             // Remesh once per step, before either branch (see `post_mesh_snap`).
             if outer_retry == 0 && star_limit_redo_cnt == 0 {
+                // `prepare_for_new_step` resets `rho = dm/dV` on the first try
+                // of each step, before the remesh (`evolve.f90:1854-1857`).
+                if let Err(e) =
+                    set_rho_to_dm_div_dv_for_new_step(&mut self.donor)
+                {
+                    self.restore_snapshot(&pre_step_snap)?;
+                    return Err(e);
+                }
+                if let BinaryCompanion::Star(ref mut s2) = self.companion {
+                    if let Err(e) = set_rho_to_dm_div_dv_for_new_step(s2) {
+                        self.restore_snapshot(&pre_step_snap)?;
+                        return Err(e);
+                    }
+                }
+                if restore_pre_mesh {
+                    pre_mesh_snap = Some(self.capture_snapshot());
+                }
                 self.refresh_tidal_deformation_hooks(false)?;
                 if self.donor.controls.mesh_delta_coeff > 0.0 {
                     self.donor.aux.okay_to_set_mlt_vc = false;

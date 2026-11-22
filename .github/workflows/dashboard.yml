@@ -12,6 +12,11 @@ on:
       - "src/flexmesa/testing/*dashboard*"
       - "src/flexmesa/testing/*port*"
       - ".github/workflows/dashboard.yml"
+  # Coverage runs once a day, and only when `main` has changed in a way that
+  # can move it since the last coverage numbers were committed (#345,
+  # DECISIONS #53). 09:23 UTC is outside the busiest hours for runners.
+  schedule:
+    - cron: "23 9 * * *"
   workflow_dispatch:
 
 permissions:
@@ -38,54 +43,143 @@ env:
   FLEXMESA_REQUIRE_ZERO_SKIPS: "1"
 
 jobs:
-  coverage-rust:
-    name: Rust Line Coverage (cargo llvm-cov)
-    if: >-
-      github.actor != 'github-actions[bot]' &&
-      (github.event_name != 'push' ||
-       !startsWith(github.event.head_commit.message, 'chore(dashboard): auto-refresh'))
+  coverage-gate:
+    name: Decide Whether Coverage Needs to Run
+    # Pull requests that touch the dashboard machinery and manual runs always
+    # measure coverage. The daily schedule measures it only when files that
+    # can change it differ from the commit recorded in
+    # `benchmarks/dashboard/coverage_commit.txt` by the last successful
+    # refresh. A failed run does not advance that commit, so it is retried
+    # the next day. Pushes to `main` no longer run coverage.
+    if: github.event_name != 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      run: ${{ steps.decide.outputs.run }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Compare main with the commit the coverage numbers measured
+        id: decide
+        run: |
+          if [ "${{ github.event_name }}" != "schedule" ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          RECORDED="$(cat benchmarks/dashboard/coverage_commit.txt 2>/dev/null || true)"
+          if [ -z "$RECORDED" ] || ! git cat-file -e "$RECORDED^{commit}" 2>/dev/null; then
+            echo "No usable recorded coverage commit; running coverage."
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if git diff --quiet "$RECORDED" HEAD -- crates src tests scripts/ci \
+              scripts/dashboard Cargo.toml Cargo.lock pyproject.toml \
+              rust-toolchain.toml .github/workflows/dashboard.yml; then
+            echo "Nothing that affects coverage changed since $RECORDED; skipping."
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "Coverage inputs changed since $RECORDED; running coverage."
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  coverage-rust-shard:
+    name: Rust Line Coverage (${{ matrix.shard }})
+    # The same seven groups as the `Safe Rust Tests` CI jobs, instrumented
+    # with `cargo llvm-cov` and built with the `ci` profile (#345).
+    needs: coverage-gate
+    if: needs.coverage-gate.outputs.run == 'true'
     concurrency:
-      group: dashboard-coverage-rust-${{ github.event_name }}-${{ github.ref }}
+      group: dashboard-coverage-rust-${{ matrix.id }}-${{ github.event_name }}-${{ github.ref }}
       cancel-in-progress: false
     runs-on: ubuntu-latest
-    timeout-minutes: 150
+    timeout-minutes: 75
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - shard: star 1/2
+            id: star-1
+            package: flexmesa-star
+            index: 1
+          - shard: star 2/2
+            id: star-2
+            package: flexmesa-star
+            index: 2
+          - shard: astero 1/2
+            id: astero-1
+            package: flexmesa-astero
+            index: 1
+          - shard: astero 2/2
+            id: astero-2
+            package: flexmesa-astero
+            index: 2
+          - shard: binary 1/2
+            id: binary-1
+            package: flexmesa-binary
+            index: 1
+          - shard: binary 2/2
+            id: binary-2
+            package: flexmesa-binary
+            index: 2
+          - shard: rest
+            id: rest
+            package: rest
+            index: 1
     steps:
-      - name: Checkout triggering commit
+      - name: Checkout repository
         uses: actions/checkout@v7
 
-      - name: Install Rust toolchain from rust-toolchain.toml with llvm-tools-preview
-        run: |
-          rustup toolchain install --no-self-update --component llvm-tools-preview
-          rustc --version --verbose
+      - name: Set up Rust toolchain and verified data bundles
+        uses: ./.github/actions/setup-flexmesa
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          install-python-pkg: "false"
+          rust-cache-key: llvm-cov-${{ matrix.id }}
+
+      - name: Add llvm-tools-preview
+        run: rustup component add llvm-tools-preview
 
       - name: Install cargo-llvm-cov
         uses: taiki-e/install-action@v2
         with:
           tool: cargo-llvm-cov
 
-      - name: Cache Rust cargo target and registry
-        uses: Swatinem/rust-cache@v2
-        with:
-          shared-key: llvm-cov
-
-      - name: Cache FlexMESA data-v1 and MESA test bundles
-        uses: actions/cache@v6
-        with:
-          path: ~/.cache/flexmesa
-          key: flexmesa-data-v1-${{ hashFiles('src/flexmesa/data/bundles.toml') }}
-
-      - name: Fetch verified data-v1 physics and MESA test bundles
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Run instrumented shard (${{ matrix.shard }})
         run: |
-          command -v zstd >/dev/null || (sudo apt-get update && sudo apt-get install -y zstd)
-          python3 src/flexmesa/data/fetch.py fetch --include-test-inputs
-          echo "FLEXMESA_DATA_DIR=$HOME/.cache/flexmesa/data" >> "$GITHUB_ENV"
-          echo "MESA_DIR=$HOME/.cache/flexmesa/mesa_test_inputs" >> "$GITHUB_ENV"
+          bash scripts/dashboard/run_coverage.sh rust-shard \
+            "${{ matrix.package }}" "${{ matrix.index }}" 2 \
+            "${{ runner.temp }}/rust-${{ matrix.id }}.lcov"
 
-      - name: Run cargo llvm-cov across Safe Rust workspace
+      - name: Upload shard LCOV report
+        uses: actions/upload-artifact@v7
+        with:
+          name: rust-cov-lcov-${{ matrix.id }}
+          if-no-files-found: error
+          path: ${{ runner.temp }}/rust-${{ matrix.id }}.lcov
+
+  coverage-rust:
+    name: Rust Line Coverage (cargo llvm-cov)
+    needs: coverage-rust-shard
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Download shard LCOV reports
+        uses: actions/download-artifact@v8
+        with:
+          pattern: rust-cov-lcov-*
+          merge-multiple: true
+          path: ${{ runner.temp }}/lcov
+
+      - name: Merge shard reports into the llvm-cov summary
         run: |
-          bash scripts/dashboard/run_coverage.sh rust "${{ runner.temp }}/rust_cov.json"
+          python3 scripts/dashboard/merge_lcov.py \
+            --out "${{ runner.temp }}/rust_cov.json" "${{ runner.temp }}"/lcov/*.lcov
 
       - name: Upload Rust coverage JSON summary
         uses: actions/upload-artifact@v7
@@ -96,10 +190,8 @@ jobs:
 
   coverage-python:
     name: Python Line Coverage (pytest --cov)
-    if: >-
-      github.actor != 'github-actions[bot]' &&
-      (github.event_name != 'push' ||
-       !startsWith(github.event.head_commit.message, 'chore(dashboard): auto-refresh'))
+    needs: coverage-gate
+    if: needs.coverage-gate.outputs.run == 'true'
     concurrency:
       group: dashboard-coverage-python-${{ github.event_name }}-${{ github.ref }}
       cancel-in-progress: false
@@ -170,7 +262,7 @@ jobs:
     # `refresh-coverage` below updates those when the coverage jobs finish
     # (DECISIONS #47).
     if: >-
-      github.event_name != 'pull_request' &&
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch') &&
       github.actor != 'github-actions[bot]' &&
       (github.event_name != 'push' ||
        !startsWith(github.event.head_commit.message, 'chore(dashboard): auto-refresh'))
@@ -336,6 +428,9 @@ jobs:
             git fetch origin main
             git checkout -f -B main origin/main
             PYTHONPATH=src python3 -m flexmesa.cli dashboard collect-coverage --rust-json "$RUST_JSON" --python-json "$PY_JSON"
+            # The commit these numbers measured; the daily gate compares main
+            # with it (#345).
+            echo "${{ github.sha }}" > benchmarks/dashboard/coverage_commit.txt
             PYTHONPATH=src python3 -m flexmesa.cli dashboard render
             PYTHONPATH=src python3 -m flexmesa.cli dashboard check
             if [ -z "$(git status --porcelain)" ]; then

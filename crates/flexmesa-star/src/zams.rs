@@ -6,7 +6,6 @@ use std::sync::OnceLock;
 
 use flexmesa_chem::NuclideCatalog;
 use flexmesa_const::{M_SUN, SECYER};
-use flexmesa_interp1d::{interp_pm, interp_value};
 
 use crate::controls::{StarControls, StarError, StarJobControls};
 use crate::model::StarModel;
@@ -16,11 +15,20 @@ const BUILTIN_ZAMS_BYTES: &[u8] =
 
 static BUILTIN_ZAMS_CATALOG: OnceLock<ZamsCatalog> = OnceLock::new();
 
+/// Rounds a ZAMS model header mass to the 8-decimal catalog index-table value
+/// (`star/private/init_model.f90:210, 254, 444-446`).
+fn round_zams_index_mass(m_msun: f64) -> f64 {
+    format!("{m_msun:.8}").parse::<f64>().unwrap_or(m_msun)
+}
+
 /// Single pre-computed ZAMS model entry from `zams_z2m2_y28.data`.
 #[derive(Debug, Clone)]
 pub struct ZamsEntry {
-    /// Stellar mass in solar masses ($M_\odot$).
+    /// Model header stellar mass in solar masses ($M_\odot$).
     pub m_msun: f64,
+    /// 8-decimal index-table stellar mass in solar masses ($M_\odot$) used by
+    /// upstream `get1_zams_model` / `get1_mass` (`star/private/init_model.f90:210, 254, 444-446`).
+    pub index_m_msun: f64,
     /// Number of Lagrangian zones (`nz`).
     pub nz: usize,
     /// Number of nuclear species (`species = 8` for `basic.net`).
@@ -147,6 +155,7 @@ impl ZamsCatalog {
             }
             models.push(ZamsEntry {
                 m_msun,
+                index_m_msun: round_zams_index_mass(m_msun),
                 nz,
                 species,
                 chem_id: chem_id.clone(),
@@ -191,10 +200,25 @@ impl ZamsCatalog {
                 break;
             }
         }
+        let mut index_masses: Vec<f64> = Vec::new();
         for line in lines.by_ref() {
             let t = line.trim();
-            if t == "1" || t.starts_with("-1.") {
+            if t == "1"
+                || t.starts_with("-1.")
+                || t.starts_with("-1 ")
+                || t == "-1"
+            {
                 break;
+            }
+            if t.is_empty() {
+                continue;
+            }
+            if let Some(tok) = t.split_whitespace().next() {
+                if let Ok(m_idx) = parse_fortran_f64(tok) {
+                    if m_idx > 0.0 {
+                        index_masses.push(m_idx);
+                    }
+                }
             }
         }
 
@@ -289,8 +313,19 @@ impl ZamsCatalog {
                             }
                             xa.extend_from_slice(&row_xa);
                         }
+                        let index_m_msun = index_masses
+                            .get(models.len())
+                            .copied()
+                            .filter(|&m_idx| (m_idx - m_msun).abs() <= 1.0e-4)
+                            .or_else(|| {
+                                index_masses.iter().copied().find(|&m_idx| {
+                                    (m_idx - m_msun).abs() <= 1.0e-4
+                                })
+                            })
+                            .unwrap_or_else(|| round_zams_index_mass(m_msun));
                         models.push(ZamsEntry {
                             m_msun,
+                            index_m_msun,
                             nz,
                             species,
                             chem_id,
@@ -358,32 +393,87 @@ pub fn yrs_for_init_timestep(m_msun: f64) -> f64 {
     }
 }
 
-fn mid_q_from_dq(dq: &[f64]) -> Vec<f64> {
+/// Computes top-down outer-face enclosed mass fractions $q_k$ matching
+/// `set_qs` in `star/private/star_utils.f90:729-752`.
+fn face_q_from_dq(dq: &[f64]) -> Vec<f64> {
     let nz = dq.len();
     if nz == 0 {
         return Vec::new();
     }
     let mut q = vec![0.0; nz];
     q[0] = 1.0;
-    for k in 1..nz.saturating_sub(1) {
+    let mut okay = true;
+    for k in 1..nz {
         q[k] = q[k - 1] - dq[k - 1];
+        if q[k] < 0.0 || q[k] > 1.0 {
+            okay = false;
+            break;
+        }
     }
-    if nz >= 2 {
-        q[nz - 1] = dq[nz - 1];
+    if okay {
+        return q;
     }
-    for k in 0..nz {
-        q[k] -= 0.5 * dq[k];
+    let mut midq = 0_usize;
+    let mut max_dq = dq[0];
+    for (k, &val) in dq.iter().enumerate().skip(1) {
+        if val > max_dq {
+            max_dq = val;
+            midq = k;
+        }
+    }
+    let mut dqsum1 = 0.0;
+    for k in 0..=midq {
+        q[k] = 1.0 - dqsum1;
+        dqsum1 += dq[k];
+    }
+    let mut dqsum2 = 0.0;
+    for k in (midq + 1..nz).rev() {
+        dqsum2 += dq[k];
+        q[k] = dqsum2;
     }
     q
 }
 
-/// Interpolates cell-centered or face-centered profile `v1` from grid `dq1`
-/// onto grid `dq2` using monotone piecewise cubic interpolation (`interp_pm`)
-/// in mid-zone enclosed mass fraction $q_{\mathrm{mid},k} = q_k - \tfrac{1}{2}\Delta q_k$
-/// (`interp_q` in `star/private/init_model.f90:397-468`).
+/// Binary search on a decreasing array `vec` returning `k` in `0..vec.len()-1`
+/// with `vec[k] >= val > vec[k + 1]` (`binary_search` in
+/// `num/public/num_binary_search.dek:23-53`).
+fn binary_search_decreasing(vec: &[f64], val: f64) -> Option<usize> {
+    let n = vec.len();
+    if n <= 1 || val > vec[0] {
+        return None;
+    }
+    if val == vec[0] {
+        return Some(0);
+    }
+    if val <= vec[n - 1] {
+        return Some(n - 1);
+    }
+    let mut first = 0_usize;
+    let mut last = n - 2;
+    while first <= last {
+        let mid = (first + last) / 2;
+        if vec[mid] >= val {
+            if val > vec[mid + 1] {
+                return Some(mid);
+            }
+            first = mid + 1;
+        } else {
+            if mid == 0 {
+                break;
+            }
+            last = mid - 1;
+        }
+    }
+    None
+}
+
+/// Interpolates profile `v1` from grid `dq1` onto grid `dq2` using upstream
+/// piecewise-linear interpolation on top-down outer-face enclosed mass
+/// fraction $q_k$ (`set_qs` and `interp_q` in
+/// `star/private/star_utils.f90:729-752, 1232-1265`).
 ///
 /// # Errors
-/// Returns [`StarError`] if spline construction fails.
+/// Returns [`StarError`] if `dq1`/`v1` lengths are invalid or bracketing fails.
 pub fn interp_q(
     dq1: &[f64],
     v1: &[f64],
@@ -399,30 +489,27 @@ pub fn interp_q(
     if nz2 == 0 {
         return Ok(Vec::new());
     }
-    let q1 = mid_q_from_dq(dq1);
-    let q2 = mid_q_from_dq(dq2);
-
-    // Reverse to strictly increasing x for interp_pm
-    let mut x_inc: Vec<f64> = q1.into_iter().rev().collect();
-    let y_inc: Vec<f64> = v1.iter().copied().rev().collect();
-    // Ensure strictly increasing abscissae in case of tiny duplicate dq
-    for i in 1..x_inc.len() {
-        if x_inc[i] <= x_inc[i - 1] {
-            x_inc[i] = x_inc[i - 1] + 1.0e-15;
-        }
-    }
-
-    let coeffs = interp_pm(&x_inc, &y_inc).map_err(|e| {
-        StarError::InvalidInput(format!("interp_pm error: {e}"))
-    })?;
+    let q1 = face_q_from_dq(dq1);
+    let q2 = face_q_from_dq(dq2);
 
     let mut out = Vec::with_capacity(nz2);
-    for &xq in &q2 {
-        let x_clamped = xq.clamp(x_inc[0], x_inc[nz1 - 1]);
-        let val = interp_value(&x_inc, &coeffs, x_clamped).map_err(|e| {
-            StarError::InvalidInput(format!("interp_value error: {e}"))
-        })?;
-        out.push(val);
+    for &qval in &q2 {
+        if qval <= q1[nz1 - 1] {
+            out.push(v1[nz1 - 1]);
+            continue;
+        }
+        let Some(k) = binary_search_decreasing(&q1, qval) else {
+            return Err(StarError::InvalidInput(format!(
+                "interp_q binary_search failed for qval={qval}"
+            )));
+        };
+        if k >= nz1 - 1 || !(qval <= q1[k] && qval > q1[k + 1]) {
+            return Err(StarError::InvalidInput(format!(
+                "interp_q bracket invalid at k={k} for qval={qval}"
+            )));
+        }
+        let alfa = (qval - q1[k + 1]) / dq1[k];
+        out.push(alfa * v1[k] + (1.0 - alfa) * v1[k + 1]);
     }
     Ok(out)
 }
@@ -445,21 +532,22 @@ pub fn load_zams_model_from_catalog(
             "empty ZAMS catalog",
         )));
     }
-    let m_min = catalog.models.first().unwrap().m_msun;
-    let m_max = catalog.models.last().unwrap().m_msun;
+    let m_min = catalog.models.first().unwrap().index_m_msun;
+    let m_max = catalog.models.last().unwrap().index_m_msun;
     if m_target < m_min * (1.0 - 1.0e-7) || m_target > m_max * (1.0 + 1.0e-7) {
         return Err(StarError::InvalidInput(format!(
             "initial_mass={m_target} outside ZAMS catalog range [{m_min}, {m_max}] without create_initial_model (#154)"
         )));
     }
 
-    // Locate bracketing models m1 <= m_target <= m2 (`init_model.f90:209-243`)
+    // Locate bracketing models m1 <= m_target <= m2 using index-table masses
+    // (`star/private/init_model.f90:209-243`).
     let (idx1, idx2) = if m_target <= m_min * (1.0 + 1.0e-7) {
         (0, 0)
     } else {
         let mut i1 = 0;
         for (i, entry) in catalog.models.iter().enumerate() {
-            if entry.m_msun <= m_target * (1.0 + 1.0e-9) {
+            if entry.index_m_msun <= m_target * (1.0 + 1.0e-9) {
                 i1 = i;
             } else {
                 break;
@@ -476,18 +564,20 @@ pub fn load_zams_model_from_catalog(
     let mut model = StarModel::new(nz, e1.chem_id.clone(), job, controls);
     model.dq.clone_from(&e1.dq);
 
-    if idx1 == idx2 || (m_target - e1.m_msun).abs() <= 1.0e-7 * e1.m_msun {
+    if idx1 == idx2
+        || (m_target - e1.index_m_msun).abs() <= 1.0e-7 * e1.index_m_msun
+    {
         model.lnd.clone_from(&e1.lnd);
         model.ln_t.clone_from(&e1.ln_t);
         model.ln_r.clone_from(&e1.ln_r);
         model.lum.clone_from(&e1.lum);
         model.xa.clone_from(&e1.xa);
     } else {
-        // Upstream MESA `get1_mass`:
-        // alfa = (log(m) - log(m2)) / (log(m1) - log(m2)), beta = 1 - alfa
-        let alfa = (flexmesa_math::log(m_target)
-            - flexmesa_math::log(e2.m_msun))
-            / (flexmesa_math::log(e1.m_msun) - flexmesa_math::log(e2.m_msun));
+        // Upstream MESA `get1_mass` (`star/private/init_model.f90:210, 254, 444-446`):
+        // uses 8-decimal index-table masses m1, m2 for log-mass interpolation.
+        let lnm1 = flexmesa_math::log(e1.index_m_msun);
+        let lnm2 = flexmesa_math::log(e2.index_m_msun);
+        let alfa = (flexmesa_math::log(m_target) - lnm2) / (lnm1 - lnm2);
         let beta = 1.0 - alfa;
 
         let lnd2 = interp_q(&e2.dq, &e2.lnd, &e1.dq)?;
@@ -528,7 +618,8 @@ pub fn load_zams_model_from_catalog(
     model.mstar = m_target * M_SUN;
     (model.xmstar, model.mstar_start, model.mstar_old) =
         (model.mstar, model.mstar, model.mstar);
-    (model.model_number, model.star_age) = (1, 0.0);
+    // Upstream `alloc_star_data` initializes `model_number = 0` (`star/private/init.f90:367`).
+    (model.model_number, model.star_age) = (0, 0.0);
     let dt_sec = yrs_for_init_timestep(m_target) * SECYER;
     (model.dt, model.dt_next, model.dt_old) = (dt_sec, dt_sec, 0.0);
     model.finish_init_model()?;
@@ -573,6 +664,7 @@ mod zams_catalog_tests {
             assert_eq!(parsed.models.len(), cat.models.len());
             for (a, b) in cat.models.iter().zip(parsed.models.iter()) {
                 assert!((a.m_msun - b.m_msun).abs() <= 1.0e-14 * a.m_msun);
+                assert_eq!(a.index_m_msun.to_bits(), b.index_m_msun.to_bits());
                 assert_eq!(a.nz, b.nz);
                 assert_eq!(a.lnd, b.lnd);
                 assert_eq!(a.ln_t, b.ln_t);
@@ -599,6 +691,7 @@ mod zams_catalog_tests {
             };
             let model = load_zams_model(controls, StarJobControls::default())
                 .expect("load_zams_model across 0.13..=300 Msun");
+            assert_eq!(model.model_number, 0);
             assert!(model.nz >= 1980);
             assert!(
                 (model.mstar - m_msun * M_SUN).abs() <= 1.0e-12 * model.mstar
@@ -610,5 +703,87 @@ mod zams_catalog_tests {
             assert!(r_rsun.is_finite() && r_rsun > prev_r);
             (prev_l, prev_r) = (l_lsun, r_rsun);
         }
+    }
+
+    #[test]
+    fn test_interp_q_uses_piecewise_linear_top_down_face_q_without_outer_clamp()
+    {
+        // Outer zones with tiny dq ~ 1e-12 must match upstream linear face-q
+        // interpolation (`star/private/star_utils.f90:729-733, 1232-1265`)
+        // without artificial abscissa shifting.
+        let dq1 = [1.0e-12, 2.0e-12, 0.5 - 3.0e-12, 0.5];
+        let v1 = [10.0, 20.0, 40.0, 80.0];
+        let dq2 = [0.5e-12, 1.5e-12, 0.25, 0.75 - 2.0e-12];
+        let out = interp_q(&dq1, &v1, &dq2).expect("interp_q");
+        assert_eq!(out.len(), dq2.len());
+        // k=0: q2[0] = 1.0 falls in [q1[1], q1[0]] where q1[1] = 1.0 - dq1[0],
+        // so upstream's `(1.0 - q1[1]) / dq1[0]` reflects IEEE-754 rounding
+        // when dq1[0] ~ 1e-12 (`star_utils.f90:729-733, 1256`).
+        let q1_1 = 1.0 - dq1[0];
+        let alfa0 = (1.0 - q1_1) / dq1[0];
+        let expected0 = alfa0 * v1[0] + (1.0 - alfa0) * v1[1];
+        assert_eq!(out[0].to_bits(), expected0.to_bits());
+        // Exact binary-representable dq1[0] gives exact v1[0] at k=0.
+        let out_exact = interp_q(&[0.25, 0.75], &[10.0, 20.0], &[0.25, 0.75])
+            .expect("interp_q exact");
+        assert_eq!(out_exact[0], 10.0);
+        // k=1: q2[1] = 1 - 0.5e-12 lies halfway in [q1[1], q1[0]]
+        let alfa1 = ((1.0 - dq2[0]) - q1_1) / dq1[0];
+        let expected1 = alfa1 * v1[0] + (1.0 - alfa1) * v1[1];
+        assert!((out[1] - expected1).abs() <= 1.0e-14);
+        // k=2: q2[2] = 1 - 2e-12 lies halfway in [q1[2], q1[1]]
+        let q1_2 = q1_1 - dq1[1];
+        let alfa2 = ((1.0 - dq2[0] - dq2[1]) - q1_2) / dq1[1];
+        let expected2 = alfa2 * v1[1] + (1.0 - alfa2) * v1[2];
+        assert!((out[2] - expected2).abs() <= 1.0e-14);
+        // k=3: q2[3] = 0.75 - 2e-12 > q1[3] = 0.5, lies inside [q1[3], q1[2]]
+        let q2_3 = (1.0 - dq2[0] - dq2[1]) - dq2[2];
+        let q1_3 = q1_2 - dq1[2];
+        let alfa3 = (q2_3 - q1_3) / dq1[2];
+        let expected3 = alfa3 * v1[2] + (1.0 - alfa3) * v1[3];
+        assert!((out[3] - expected3).abs() <= 1.0e-14);
+
+        // Center clamp (`qval <= q1[nz1 - 1]` -> `v1[nz1 - 1]`)
+        let dq_center = [0.6, 0.4];
+        let out_c = interp_q(&dq1, &v1, &dq_center).expect("interp_q center");
+        assert_eq!(out_c[1], v1[3]);
+    }
+
+    #[test]
+    fn test_zams_1p5_msun_uses_8_decimal_index_masses_and_model_number_zero() {
+        let cat = ZamsCatalog::builtin();
+        let e1 = &cat.models[10];
+        let e2 = &cat.models[11];
+        assert_eq!(e1.index_m_msun, 1.25892541);
+        assert_eq!(e2.index_m_msun, 1.58489319);
+        assert_eq!(e1.nz, 2402);
+        assert_eq!(e2.nz, 2490);
+
+        let model = load_zams_model(
+            StarControls {
+                initial_mass: 1.5,
+                initial_z: 0.02,
+                zbase: 0.02,
+                ..StarControls::default()
+            },
+            StarJobControls::default(),
+        )
+        .expect("1.5 Msun ZAMS");
+        assert_eq!(model.model_number, 0);
+        assert_eq!(model.nz, 2402);
+
+        // Verify exact bit-for-bit match against upstream formula with
+        // 8-decimal index-table masses (`init_model.f90:210, 254, 444-446`)
+        // and `interp_q` (`star_utils.f90:729-733, 1256`), matching MESA
+        // 26.4.1 Model 0 zone 1 (`lnd = -17.37923774243046`).
+        let lnm1 = flexmesa_math::log(1.25892541);
+        let lnm2 = flexmesa_math::log(1.58489319);
+        let alfa = (flexmesa_math::log(1.5) - lnm2) / (lnm1 - lnm2);
+        let beta = 1.0 - alfa;
+        let alfa_q0 = (1.0 - (1.0 - e2.dq[0])) / e2.dq[0];
+        let e2_lnd0 = alfa_q0 * e2.lnd[0] + (1.0 - alfa_q0) * e2.lnd[1];
+        let expected_lnd0 = alfa * e1.lnd[0] + beta * e2_lnd0;
+        assert_eq!(model.lnd[0].to_bits(), expected_lnd0.to_bits());
+        assert!((model.lnd[0] - (-17.379237742430462)).abs() <= 1.0e-15);
     }
 }

@@ -82,23 +82,78 @@ fn test_binary_fr_hard_retries_match_mesa_26_4_1_and_counters_survive() {
 }
 
 /// MESA `26.4.1` on the original `(1.5, 1.0, 0.45 d)` fixture (case
-/// `original_1p5_1p0_0p45d`): the `1e3 yr` attempt at model 1 fails and is
-/// cut to `125 yr` with one logged retry.
+/// `original_1p5_1p0_0p45d`):
 ///
-/// Model 2 under `fr_hard = 1e-5` is not asserted here. MESA never completes
-/// it (15 `fr_hard` retries and 24 solver retries before its
-/// `max_number_retries = 40`); `FlexMESA` also never completes it, but with
-/// 31 `fr_hard` retries and no solver retries, so the solver behaviour on
-/// that model still differs from MESA.
+/// - Model 1 starts from the `1e3 yr` attempt (`nz = 2402`), hits 1
+///   `hydro_mtx_max_allowed_logT` solver retry at `1e3 yr`, then 2 RLOF
+///   `ExceededMaxTries` retries at `500 yr` and `250 yr`, and converges at
+///   `125 yr` with `s% num_retries = 3` and `44` donor solver calls.
+/// - Model 2 under `fr_hard = 1e-5`, `dt >= 1e4 yr`, and
+///   `max_number_retries = 40` terminates with `max_number_retries`
+///   (`s% num_retries = 41`, `82` total donor solver calls, exact
+///   `2402 -> 1505` remesh). With exact `block_multiply_xa`, `FlexMESA` takes
+///   `18` solver retries + `21` `fr_hard` retries + `2` RLOF retries = `41`
+///   (vs MESA's `24` solver + `15` `fr_hard` + `2` RLOF = `41` due to
+///   upstream `mtx/private/mtx_support.f90:763-776`'s off-by-one slope
+///   product on 6 calls).
 #[test]
 fn test_binary_original_fixture_matches_mesa_26_4_1_first_model() {
     let mut sys = common::build_rlof_binary_original();
-    let _ = sys
+    assert_eq!(sys.donor.model_number, 0);
+    assert_eq!(sys.donor.nz, 2402);
+
+    let (dt1, _) = sys
         .try_step_with_extras(1.0e3 * SECYER, &mut DefaultBinaryExtras)
         .expect("step 1");
     assert_eq!(sys.model_number, 1);
+    assert_eq!(sys.donor.model_number, 1);
     assert_eq!(sys.binary_age_yr, 125.0, "MESA step1_age_yr = 125.0");
-    assert_eq!(sys.counters.num_retries, 1, "MESA step1_retries_logged = 1");
+    assert_eq!(sys.counters.num_retries, 3, "MESA step1 s% num_retries = 3");
+    assert_eq!(sys.donor.num_retries, 3, "MESA step1 donor num_retries = 3");
+    assert_eq!(
+        sys.donor.total_num_solver_calls, 44,
+        "MESA step1 total donor solver calls = 44"
+    );
+
+    // Model 2 under `fr_hard = 1e-5`, `dt >= 1e4 yr`, `max_number_retries = 40`.
+    sys.controls.fr_hard = 1.0e-5;
+    sys.donor.controls.max_number_retries = 40;
+    let dt2 = dt1.max(1.0e4 * SECYER);
+    let err = sys
+        .try_step_with_extras(dt2, &mut DefaultBinaryExtras)
+        .expect_err("MESA 26.4.1 stops on max_number_retries in model 2");
+    assert!(
+        matches!(
+            err,
+            StarError::Terminated {
+                model_number: 2,
+                ref reason
+            } if reason == "max_number_retries"
+        ),
+        "expected StarError::Terminated(model_number=2, max_number_retries), got {err:?}"
+    );
+    assert_eq!(sys.model_number, 1, "failed step 2 must restore model_number");
+    assert_eq!(
+        sys.donor.model_number, 1,
+        "failed step 2 must restore donor model_number"
+    );
+    assert_eq!(
+        sys.counters.num_retries, 41,
+        "MESA model 2 stops at num_retries = 41 (> max_number_retries = 40)"
+    );
+    assert_eq!(
+        sys.donor.num_retries, 41,
+        "donor.num_retries must match outer retries across rollbacks"
+    );
+    assert_eq!(
+        sys.donor.total_num_solver_calls, 82,
+        "MESA model 2 stops after 82 total donor solver calls"
+    );
+    assert!(
+        sys.counters.num_hard_limit_retries >= 15,
+        "expected >= 15 fr_hard retries on model 2, got {}",
+        sys.counters.num_hard_limit_retries
+    );
 }
 
 #[test]

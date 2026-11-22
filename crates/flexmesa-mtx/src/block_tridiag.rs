@@ -264,8 +264,14 @@ pub fn block_dble_mv(
     Ok(())
 }
 
-/// Evaluates the left block-tridiagonal product $b = x^{\top} A$ matching
-/// upstream `do_block_multiply_xa`.
+/// Evaluates upstream `do_block_multiply_xa` (`mtx/private/mtx_support.f90:746-781`),
+/// documented upstream as the left product $b = x^{\top} A$.
+///
+/// Upstream pairs the off-diagonal blocks with $x$ as
+/// $b_k = x_k D_k + [k > 0]\, x_k U_k + [k < n_z - 1]\, x_{k+1} L_k$, not as
+/// the true left product $x_k D_k + x_{k-1} U_{k-1} + x_{k+1} L_{k+1}$. The
+/// star solver uses this for the line-search slope (`star_solver.f90:425`),
+/// so it is reproduced as written (deferred upstream bug `#362`).
 ///
 /// # Errors
 ///
@@ -287,21 +293,20 @@ pub fn block_multiply_xa(
     }
     let mut tmp = vec![0.0; nvar];
     for k in 0..nz {
-        let d_k = &dblk[k * blk_sz..(k + 1) * blk_sz];
+        let blk = k * blk_sz..(k + 1) * blk_sz;
         let x_k = &vec_x[k * nvar..(k + 1) * nvar];
         let b_k = &mut out_b[k * nvar..(k + 1) * nvar];
-        multiply_xa(nvar, d_k, x_k, b_k)?;
+        multiply_xa(nvar, &dblk[blk.clone()], x_k, b_k)?;
+        // Upstream bug #362: `ublk(k)` with `x(k)` (mtx_support.f90:763-769).
         if k > 0 {
-            let u_km1 = &ublk[(k - 1) * blk_sz..k * blk_sz];
-            let x_km1 = &vec_x[(k - 1) * nvar..k * nvar];
             tmp.copy_from_slice(b_k);
-            multiply_xa_plus_c(nvar, u_km1, x_km1, &tmp, b_k)?;
+            multiply_xa_plus_c(nvar, &ublk[blk.clone()], x_k, &tmp, b_k)?;
         }
+        // Upstream bug #362: `lblk(k)` with `x(k+1)` (mtx_support.f90:770-776).
         if k + 1 < nz {
-            let l_kp1 = &lblk[(k + 1) * blk_sz..(k + 2) * blk_sz];
             let x_kp1 = &vec_x[(k + 1) * nvar..(k + 2) * nvar];
             tmp.copy_from_slice(b_k);
-            multiply_xa_plus_c(nvar, l_kp1, x_kp1, &tmp, b_k)?;
+            multiply_xa_plus_c(nvar, &lblk[blk], x_kp1, &tmp, b_k)?;
         }
     }
     Ok(())

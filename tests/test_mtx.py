@@ -217,11 +217,16 @@ def test_block_tridiagonal_and_jax_autodiff_match_oracles() -> None:
     prod_np = mtx.block_dble_mv(lblk, dblk, ublk, x_np)
     np.testing.assert_allclose(prod_np, rhs, rtol=1e-12, atol=1e-12)
 
-    # 2. Verify bilinear identity <b, A x> == <b^T A, x> for block_multiply_xa.
-    xa_np = mtx.block_multiply_xa(lblk, dblk, ublk, rhs)
-    np.testing.assert_allclose(
-        np.sum(rhs * prod_np), np.sum(xa_np * x_np), rtol=1e-12, atol=1e-12
-    )
+    # 2. Verify block_multiply_xa evaluates upstream do_block_multiply_xa
+    #    (mtx/private/mtx_support.f90:746-781), which pairs ublk(k) with x(k)
+    #    and lblk(k) with x(k+1) (deferred upstream bug #362), on both
+    #    backends.
+    expected = np.einsum("ki,kij->kj", rhs, dblk)
+    expected[1:] += np.einsum("ki,kij->kj", rhs[1:], ublk[1:])
+    expected[:-1] += np.einsum("ki,kij->kj", rhs[1:], lblk[:-1])
+    for backend in ("rust", "jax"):
+        xa = mtx.block_multiply_xa(lblk, dblk, ublk, rhs, backend=backend)
+        np.testing.assert_allclose(xa, expected, rtol=1e-12, atol=1e-12)
 
     # 3. Verify JAX PCR block-tridiagonal solver matches NumPy/Rust in float64.
     x_jax = mtx.solve_block_tridiagonal_jax(

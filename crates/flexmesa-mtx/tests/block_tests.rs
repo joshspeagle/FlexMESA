@@ -10,8 +10,9 @@
 //! 1. **Coupled $25 \times 20$ Block-Tridiagonal System**: Matches the scale of
 //!    upstream `test_block_tridiagonal.f90` ($N_{\mathrm{var}} = 25$,
 //!    $N_z = 20$), verifying forward-backward block Thomas solve residuals,
-//!    LU-factored block matrix-vector multiplication, bilinear duality
-//!    $b^{\top}(A x) = (b^{\top} A) x$, and Harwell-Boeing `RUA` text I/O.
+//!    LU-factored block matrix-vector multiplication, upstream's
+//!    `do_block_multiply_xa` product (deferred bug `#362`), and
+//!    Harwell-Boeing `RUA` text I/O.
 //! 2. **Implicit Forward-Mode Autodiff**: Verifies `solve_dense_dual` against
 //!    centered finite differences to $< 10^{-9}$.
 //! 3. **Property-Based Verification**: Compares `solve_block_tridiagonal` and
@@ -54,8 +55,8 @@ use proptest::prelude::*;
 ///   $\|A x - b\|_\infty / \|b\|_\infty < 10^{-12}$.
 /// - Reconstructing $A x$ from LU-factored diagonal blocks agrees to
 ///   $< 10^{-12}$.
-/// - Left multiplication $b^{\top} A$ satisfies
-///   $b^{\top} (A x) = (b^{\top} A) x$.
+/// - `block_multiply_xa` reproduces upstream `do_block_multiply_xa` bit for
+///   bit, including its block pairing (deferred bug `#362`).
 /// - Harwell-Boeing `RUA` serialization and parsing round-trips all blocks.
 #[test]
 fn test_block_tridiagonal_25x20_and_hb_roundtrip() {
@@ -123,12 +124,37 @@ fn test_block_tridiagonal_25x20_and_hb_roundtrip() {
         assert!((prod_lu[idx] - prod[idx]).abs() < 1e-12);
     }
 
-    // Verify left product block_multiply_xa: x^T (A y) == (x^T A) y
+    // Verify block_multiply_xa evaluates upstream `do_block_multiply_xa`
+    // (`mtx/private/mtx_support.f90:746-781`) exactly: for each zone and
+    // column j, the diagonal dot product, then `+ x(k) U(k)` for k > 1, then
+    // `+ x(k+1) L(k)` for k < nz, each as `dot_product(...) + c(j)`. Upstream
+    // pairs the off-diagonal blocks this way (deferred upstream bug #362).
     let mut xa = vec![0.0; nz * nvar];
     block_multiply_xa(nvar, nz, &lblk, &dblk, &ublk, &rhs, &mut xa).unwrap();
+    let col_dot = |blk: &[f64], k_blk: usize, k_x: usize, j: usize| -> f64 {
+        let mut sum = 0.0;
+        for i in 0..nvar {
+            sum += rhs[k_x * nvar + i] * blk[k_blk * blk_sz + i * nvar + j];
+        }
+        sum
+    };
+    for k in 0..nz {
+        for j in 0..nvar {
+            let mut b = col_dot(&dblk, k, k, j);
+            if k > 0 {
+                b = col_dot(&ublk, k, k, j) + b;
+            }
+            if k + 1 < nz {
+                b = col_dot(&lblk, k, k + 1, j) + b;
+            }
+            assert_eq!(xa[k * nvar + j].to_bits(), b.to_bits(), "k={k} j={j}");
+        }
+    }
+    // Upstream's pairing is not the true left product, so the bilinear
+    // identity x^T (A y) == (x^T A) y does not hold for this system.
     let dot_1: f64 = rhs.iter().zip(prod.iter()).map(|(u, v)| u * v).sum();
     let dot_2: f64 = xa.iter().zip(x.iter()).map(|(u, v)| u * v).sum();
-    assert!((dot_1 - dot_2).abs() < 1e-11);
+    assert!((dot_1 - dot_2).abs() > 1e-6);
 
     // Verify Harwell-Boeing text serialization and parsing roundtrip
     let nvar_s = 3;

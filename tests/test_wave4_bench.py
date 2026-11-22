@@ -50,13 +50,23 @@ from flexmesa import bench, star
 # `dt_limit_ratio_old = 0.0` matching `star/private/init.f90:509, 696`),
 # `star_hydro_eqns` (4.262783875690212e6 -> 4.262780484077989e6),
 # `star_newton_step` (2.210834731068863e5 -> 2.263803560298164e5), and
-# `star_evolve_step` (8.895997453722753e2 -> 8.895028893306655e2) shifted.
+# `star_evolve_step` (8.895997453722753e2 -> 8.895028893306655e2) shifted. Under
+# #342 (ZAMS `interp_q` matching
+# `star/private/star_utils.f90:729-752, 1232-1265`, 8-decimal ZAMS index
+# masses matching `star/private/init_model.f90:210, 254, 444-446`, and initial
+# ZAMS `model_number = 0` matching `star/private/init.f90:367`),
+# `star_micro_vars`
+# (2.499330102887365e2 -> 2.253780782165544e2), `star_hydro_eqns`
+# (4.262780484077989e6 -> 1.742907215943596e6), `star_newton_step`
+# (2.263803560298164e5 -> 8.653548156900340e5), `star_remesh`
+# (5.513777703025969e2 -> 5.455218449741383e2), and `star_evolve_step`
+# (8.895028893306655e2 -> 8.843428194210857e2) shifted.
 _WAVE4_REGRESSION_SNAPSHOTS_N8: dict[str, float] = {
-    "star_micro_vars": 2.499330102887365e2,
-    "star_hydro_eqns": 4.262780484077989e6,
-    "star_newton_step": 2.263803560298164e5,
-    "star_remesh": 5.513777703025969e2,
-    "star_evolve_step": 8.895028893306655e2,
+    "star_micro_vars": 2.253780782165544e2,
+    "star_hydro_eqns": 1.742907215943596e6,
+    "star_newton_step": 8.653548156900340e5,
+    "star_remesh": 5.455218449741383e2,
+    "star_evolve_step": 8.843428194210857e2,
 }
 
 # Bound on the cross-stage (Rust against JAX) relative difference.

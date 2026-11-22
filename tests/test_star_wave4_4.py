@@ -150,17 +150,17 @@ def test_varcontrol_and_h211_timestep_filter_rust_vs_jax() -> None:
 
 
 def test_star_test_4msun_zams_evolution_and_history_profile() -> None:
-    """Verify `star/test` (`inlist_test_r`: 4 Msun ZAMS evolved to step 6)."""
+    """Verify `star/test` (`inlist_test_r`: 4 Msun ZAMS evolved to step 5)."""
     zams = star.StarModel.from_zams(initial_mass=4.0, initial_z=0.02)
     zams.set_evolve_controls(mesh_delta_coeff=0.5, varcontrol_target=1.0e-3)
-    assert zams.model_number == 1
+    assert zams.model_number == 0
 
-    # Evolve 5 steps from model_number=1 to model_number=6 (`max_model_number`).
+    # Evolve 5 steps from model_number=0 to model_number=5 (`max_model_number`).
     reports = zams.evolve(
         max_steps=5, do_remesh=False, op_split_burn=True, use_bcyclic=True
     )
     assert len(reports) == 5
-    assert zams.model_number == 6
+    assert zams.model_number == 5
     assert all(r.converged for r in reports)
     assert zams.star_age > 0.0
     assert reports[1].dt == pytest.approx(reports[0].dt_next, rel=1.0e-14)
@@ -168,7 +168,7 @@ def test_star_test_4msun_zams_evolution_and_history_profile() -> None:
 
     # Check physical ZAMS locus for 4 Msun (`log_Teff ~ 4.18`, `log_L ~ 2.38`).
     h = zams.history_row()
-    assert h.model_number == 6
+    assert h.model_number == 5
     assert 4.10 < h.log_teff < 4.25
     assert 2.25 < h.log_l < 2.50
     assert 7.35 < h.log_center_t < 7.50

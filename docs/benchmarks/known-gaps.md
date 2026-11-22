@@ -154,16 +154,14 @@ Cases lacking a committed MESA `26.4.1` baseline report `no reference yet` and c
 | `astero` | `fast_simplex` | [#162](https://github.com/joshspeagle/FlexMESA/issues/162) | `xtra1` | `astero_simplex_samples=5_best_chi2=1.237052e4_term=max_age` (1248 steps; diagnostic (4 controls ignored)) | Asteroseismic simplex optimizer and in-house pulsation scaffolding (#162, #171). |
 | `astero` | `surface_effects` | [#162](https://github.com/joshspeagle/FlexMESA/issues/162) | `max_model_number` | `max_model_number` (1 steps; diagnostic (1 controls ignored)) | Asteroseismic surface-effects starting model and ADIPLS scaffolding (#162, #171). |
 
-## Declared Test-Suite Gaps (`[[test_gaps]]`, 26 Markers)
+## Declared Test-Suite Gaps (`[[test_gaps]]`, 24 Markers)
 
 Every Rust `#[ignore]` and Python `xfail`/`skip` marker in the repository is tracked bijectively in `benchmarks/history_harness/known_gaps.toml` (`#144`):
 
 | Kind | File | Test | Role | Issue | Reason |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| `rust_ignore` | `crates/flexmesa-eos/tests/mesa_26_4_1_component_oracles_test.rs` | `test_skye_and_blend_third_order_hermite_derivatives_match_mesa_26_4_1` | `physics_gap` | [#161](https://github.com/joshspeagle/FlexMESA/issues/161) | Skye/HELM operation order causes 10 d_dlnT channels to exceed 5.0e-11 (max rel_err 1.101e-6); gate fails if it passes while ignored. |
 | `rust_ignore` | `crates/flexmesa-eos/tests/wave3a3_pc_tests.rs` | `test_pc_liquid_and_transition_regimes_match_mesa_26_4_1_unwidened` | `physics_gap` | [#161](https://github.com/joshspeagle/FlexMESA/issues/161) | PC evaluates analytical EXCOR7 whereas MESA pc_eos.f90:1895 interpolates EXCOR7.data via bicubic splines (use_EXCOR7_table = .true.); 9 entries exceed 1.0e-11/5.0e-9 (max rel_err 7.123e-6). |
 | `rust_ignore` | `crates/flexmesa-eos/tests/wave3a3_pc_solid_tests.rs` | `test_pc_solid_and_blend_regimes_match_mesa_26_4_1_unwidened` | `physics_gap` | [#161](https://github.com/joshspeagle/FlexMESA/issues/161) | PC evaluates analytical EXCOR7 whereas MESA pc_eos.f90:1895 interpolates EXCOR7.data via bicubic splines; solid/blend derivatives differ up to 2.513e-6 >= 5.0e-9. |
-| `rust_ignore` | `crates/flexmesa-eos/tests/wave3a3_skye_inverse_tests.rs` | `test_skye_liquid_and_blend_match_mesa_26_4_1_unwidened` | `physics_gap` | [#161](https://github.com/joshspeagle/FlexMESA/issues/161) | Skye/HELM operation order on liquid and blend cases causes derivative channels to exceed 1.0e-12/1.0e-11/1.0e-8 (max rel_err 1.101e-6). |
 | `rust_ignore` | `crates/flexmesa-binary/tests/tier5_coupled_suite.rs` | `test_uncapped_jdot_gr_check_campaign` | `campaign` | [#160](https://github.com/joshspeagle/FlexMESA/issues/160) | Long-running uncapped binary campaign; full MESA 26.4.1 trajectory comparison tracked under #160 and scheduled campaign CI. |
 | `rust_ignore` | `crates/flexmesa-binary/tests/tier5_coupled_suite.rs` | `test_uncapped_star_plus_point_mass_explicit_mdot_campaign` | `campaign` | [#160](https://github.com/joshspeagle/FlexMESA/issues/160) | Long-running uncapped explicit-RLOF binary campaign tracked under #160 and scheduled campaign CI. |
 | `rust_ignore` | `crates/flexmesa-binary/tests/tier5_coupled_suite.rs` | `test_uncapped_star_plus_point_mass_campaign` | `campaign` | [#160](https://github.com/joshspeagle/FlexMESA/issues/160) | Long-running uncapped implicit-RLOF binary campaign tracked under #160 and scheduled campaign CI. |

@@ -89,7 +89,9 @@ SOLVER_EDITS: list[tuple[str, str]] = [
     ),
 ]
 # The NEWTON record goes before the anchor, so it is handled separately.
-NEWTON_ANCHOR = "               f = 0d0\n               call adjust_correction( &\n"
+NEWTON_ANCHOR = (
+    "               f = 0d0\n               call adjust_correction( &\n"
+)
 NEWTON_TEXT = (
     f"               write(*,'(A,1X,I0,1X,I0,3(1X,{HEX}))') "
     "'LSTRACE NEWTON', s% model_number, iter, "
@@ -119,17 +121,28 @@ def _patch(path: pathlib.Path, edits: list[tuple[str, str]]) -> None:
     for anchor, insert in edits:
         count = text.count(anchor)
         if count != 1:
-            raise SystemExit(f"{path.name}: anchor found {count} times:\n{anchor}")
+            raise SystemExit(
+                f"{path.name}: anchor found {count} times:\n{anchor}"
+            )
         text = text.replace(anchor, anchor + insert)
     if path.name == "star_solver.f90":
+        count = text.count(NEWTON_ANCHOR)
+        if count != 1:
+            raise SystemExit(f"{path.name}: NEWTON anchor found {count} times")
         text = text.replace(NEWTON_ANCHOR, NEWTON_TEXT + NEWTON_ANCHOR)
     path.write_text(text, encoding="utf-8")
 
 
-def _sdk_env(mesasdk_root: pathlib.Path, mesa_dir: pathlib.Path) -> dict[str, str]:
+def _sdk_env(
+    mesasdk_root: pathlib.Path, mesa_dir: pathlib.Path
+) -> dict[str, str]:
     """Returns the environment of a shell that sourced ``mesasdk_init.sh``."""
     out = subprocess.run(
-        ["bash", "-c", f'source "{mesasdk_root}/bin/mesasdk_init.sh" && env -0'],
+        [
+            "bash",
+            "-c",
+            f'source "{mesasdk_root}/bin/mesasdk_init.sh" && env -0',
+        ],
         env={**os.environ, "MESASDK_ROOT": str(mesasdk_root)},
         capture_output=True,
         check=True,
@@ -157,7 +170,9 @@ def build_overlay(mesa_dir: pathlib.Path, overlay: pathlib.Path) -> None:
 
 def _hdr(work: pathlib.Path) -> list[str]:
     """Returns provenance header lines read from ``binary_history.data``."""
-    lines = (work / "binary_history.data").read_text(encoding="utf-8").splitlines()
+    lines = (
+        (work / "binary_history.data").read_text(encoding="utf-8").splitlines()
+    )
     names = lines[1].split()
     vals = [v.strip('"') for v in lines[2].split()]
     h = dict(zip(names, vals, strict=False))
@@ -187,8 +202,9 @@ def write_tables(work: pathlib.Path) -> None:
     calls = [r[1:] for r in recs if r[0] == "CALL"]
     first_call = next(i for i, r in enumerate(recs) if r[0] == "CALL")
     model1 = [
-        r for r in recs[first_call:] if r[0] in ("CALL", "NEWTON", "FOLD", "TRY")
-        and r[1] == "1"
+        r
+        for r in recs[first_call:]
+        if r[0] in ("CALL", "NEWTON", "FOLD", "TRY") and r[1] == "1"
     ]
     n_species = len(next(iter(xa.values())))
 
@@ -225,6 +241,8 @@ def main() -> None:
     parser.add_argument("--scratch", type=pathlib.Path, required=True)
     args = parser.parse_args()
     mesa_dir = args.mesa_dir.resolve()
+    args.scratch = args.scratch.resolve()
+    args.mesasdk_root = args.mesasdk_root.resolve()
     if any(args.scratch.iterdir()) if args.scratch.exists() else False:
         raise SystemExit("--scratch must be empty or absent")
     overlay = args.scratch / "mesa_overlay"
@@ -235,20 +253,28 @@ def main() -> None:
     subprocess.run(["bash", "./export"], cwd=star, env=env, check=True)
     pristine = (mesa_dir / "lib" / "libstar.a").read_bytes()
     if MARKER.encode() in pristine:
-        raise SystemExit("pristine libstar.a carries the instrumentation marker")
+        raise SystemExit(
+            "pristine libstar.a carries the instrumentation marker"
+        )
 
     work = args.scratch / "work"
     shutil.copytree(mesa_dir / "binary" / "work", work, symlinks=True)
     for name in ("inlist", "inlist_project", "inlist1", "inlist2"):
         shutil.copy2(FIXTURE_DIR / name, work / name)
     shutil.copy2(
-        FIXTURE_DIR / "run_binary_extras.f90", work / "src" / "run_binary_extras.f90"
+        FIXTURE_DIR / "run_binary_extras.f90",
+        work / "src" / "run_binary_extras.f90",
     )
     subprocess.run(["bash", "./mk"], cwd=work, env=env, check=True)
     with (work / "run.log").open("w", encoding="utf-8") as log:
         subprocess.run(
-            ["bash", "./rn"], cwd=work, env=env, stdout=log, stderr=subprocess.STDOUT,
-            check=False, timeout=1800,
+            ["bash", "./rn"],
+            cwd=work,
+            env=env,
+            stdout=log,
+            stderr=subprocess.STDOUT,
+            check=False,
+            timeout=1800,
         )
     write_tables(work)
 

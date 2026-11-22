@@ -809,6 +809,18 @@ def test_helm_ideal_edge_blend_matches_mesa_26_4_1_across_rust_and_jax() -> (
     )
     assert bool(jnp.all(jnp.isnan(out_off.res)))
 
+
+@pytest.mark.xfail(
+    strict=True,
+    reason=(
+        "#295: AutoDiffReal2VarOrder3 evaluates MESA 26.4.1's auto_diff "
+        "expressions (#349), which moves the cancellation-dominated de_dd "
+        "of the Rust ideal-gas EOS by a few ULPs of its 5.7e10 terms; the "
+        "JAX twin keeps its own rounding."
+    ),
+)
+def test_helm_ideal_edge_skip_blend_rust_and_jax_agree() -> None:
+    """Rust and JAX agree on the `F2-6` off-table ideal-gas skip blend."""
     cids_sol, xa_sol = _solar_composition()
     with flexmesa.numerics_mode_context("strict"):
         t_lo = float(flexmesa._rust.exp10(2.95))

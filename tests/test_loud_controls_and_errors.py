@@ -124,7 +124,7 @@ def test_python_inlist_and_runner_loud_failures_and_opt_out() -> None:
 
         unimpl = root / "inlist_unimpl"
         unimpl.write_text(
-            "&controls\n  initial_mass = 1.0\n  photo_interval = 5\n/\n",
+            "&controls\n  initial_mass = 1.0\n  fgong_ivers = 1\n/\n",
             encoding="utf-8",
         )
         with pytest.raises(ValueError, match="unsupported control"):
@@ -133,6 +133,13 @@ def test_python_inlist_and_runner_loud_failures_and_opt_out() -> None:
             unimpl, allow_unsupported_controls=True
         )
         assert bundle["initial_mass"] == 1.0
+
+        photo_ok = root / "inlist_photo_ok"
+        photo_ok.write_text(
+            "&controls\n  initial_mass = 1.0\n  photo_interval = 5\n/\n",
+            encoding="utf-8",
+        )
+        assert star.parse_inlist_bundle(photo_ok)["initial_mass"] == 1.0
 
         pg_ok = root / "inlist_pgstar_ok"
         pg_ok.write_text(

@@ -8,9 +8,9 @@
   },
   "summary": {
     "total_cases": 106,
-    "strict_pass_cases": 0,
-    "strict_fail_cases": 106,
-    "distinct_unsupported_controls": 204,
+    "strict_pass_cases": 50,
+    "strict_fail_cases": 56,
+    "distinct_unsupported_controls": 190,
     "distinct_unknown_controls": 0,
     "cases_with_headless_plotting": 78,
     "distinct_headless_plotting_keys": 895
@@ -19,11 +19,11 @@
     {
       "section": "star_job",
       "upstream_keys": 455,
-      "supported_keys": 114,
-      "unused_keys": 16,
+      "supported_keys": 118,
+      "unused_keys": 13,
       "headless_gui_keys": 3,
-      "terminal_output_keys": 5,
-      "unimplemented_upstream_keys": 317
+      "terminal_output_keys": 8,
+      "unimplemented_upstream_keys": 313
     },
     {
       "section": "eos",
@@ -46,11 +46,11 @@
     {
       "section": "controls",
       "upstream_keys": 1448,
-      "supported_keys": 1155,
-      "unused_keys": 24,
+      "supported_keys": 1160,
+      "unused_keys": 23,
       "headless_gui_keys": 0,
-      "terminal_output_keys": 13,
-      "unimplemented_upstream_keys": 256
+      "terminal_output_keys": 16,
+      "unimplemented_upstream_keys": 249
     },
     {
       "section": "binary_job",
@@ -81,218 +81,6 @@
     }
   ],
   "unsupported_controls": [
-    {
-      "section": "controls",
-      "key": "photo_interval",
-      "category": "unimplemented",
-      "case_count": 95,
-      "cases": [
-        "astero/astero_adipls",
-        "astero/astero_gyre",
-        "astero/example_astero",
-        "astero/fast_from_file",
-        "astero/fast_newuoa",
-        "astero/fast_scan_grid",
-        "astero/fast_simplex",
-        "astero/surface_effects",
-        "star/1.3M_ms_high_Z",
-        "star/1.4M_ms_op_mono",
-        "star/1.5M_with_diffusion",
-        "star/12M_pre_ms_to_core_collapse",
-        "star/15M_dynamo",
-        "star/16M_conv_premix",
-        "star/16M_predictive_mix",
-        "star/1M_pre_ms_to_wd",
-        "star/1M_thermohaline",
-        "star/20M_pre_ms_to_core_collapse",
-        "star/20M_z2m2_high_rotation",
-        "star/5M_cepheid_blue_loop",
-        "star/7M_prems_to_AGB",
-        "star/R_CrB_star",
-        "star/T_tau_gradr",
-        "star/accreted_material_j",
-        "star/adjust_net",
-        "star/c13_pocket",
-        "star/carbon_kh",
-        "star/cburn_inward",
-        "star/ccsn_IIp",
-        "star/check_pulse_atm",
-        "star/check_redo",
-        "star/conductive_flame",
-        "star/conserve_angular_momentum",
-        "star/conv_core_cpm",
-        "star/custom_rates",
-        "star/diffusion_smoothness",
-        "star/extended_convective_penetration",
-        "star/gyre_in_mesa_bcep",
-        "star/gyre_in_mesa_envelope",
-        "star/gyre_in_mesa_ms",
-        "star/gyre_in_mesa_rsg",
-        "star/gyre_in_mesa_spb",
-        "star/gyre_in_mesa_wd",
-        "star/hb_2M",
-        "star/high_mass",
-        "star/high_z",
-        "star/hot_cool_wind",
-        "star/hse_riemann",
-        "star/irradiated_planet",
-        "star/low_z",
-        "star/magnetic_braking",
-        "star/make_brown_dwarf",
-        "star/make_co_wd",
-        "star/make_env",
-        "star/make_he_wd",
-        "star/make_metals",
-        "star/make_o_ne_wd",
-        "star/make_planets",
-        "star/make_pre_ccsn_13bvn",
-        "star/make_sdb",
-        "star/make_zams",
-        "star/make_zams_low_mass",
-        "star/make_zams_ultra_high_mass",
-        "star/ns_c",
-        "star/ns_h",
-        "star/ns_he",
-        "star/other_physics_hooks",
-        "star/pisn",
-        "star/ppisn",
-        "star/radiative_levitation",
-        "star/rsp_BEP",
-        "star/rsp_BLAP",
-        "star/rsp_Cepheid",
-        "star/rsp_Delta_Scuti",
-        "star/rsp_RR_Lyrae",
-        "star/rsp_Type_II_Cepheid",
-        "star/rsp_check_2nd_crossing",
-        "star/rsp_gyre",
-        "star/rsp_save_and_load_file",
-        "star/semiconvection",
-        "star/simplex_solar_calibration",
-        "star/split_burn_big_net",
-        "star/starspots",
-        "star/timing",
-        "star/twin_studies",
-        "star/tzo",
-        "star/wd_acc_small_dm",
-        "star/wd_aic",
-        "star/wd_c_core_ignition",
-        "star/wd_cool_0.6M",
-        "star/wd_diffusion",
-        "star/wd_he_shell_ignition",
-        "star/wd_nova_burst",
-        "star/wd_stable_h_burn",
-        "star/zams_to_cc_80"
-      ]
-    },
-    {
-      "section": "star_job",
-      "key": "required_termination_code_string",
-      "category": "unused",
-      "case_count": 77,
-      "cases": [
-        "astero/astero_adipls",
-        "astero/astero_gyre",
-        "astero/example_astero",
-        "astero/fast_from_file",
-        "astero/fast_newuoa",
-        "astero/fast_scan_grid",
-        "astero/fast_simplex",
-        "star/1.3M_ms_high_Z",
-        "star/1.5M_with_diffusion",
-        "star/12M_pre_ms_to_core_collapse",
-        "star/15M_dynamo",
-        "star/16M_conv_premix",
-        "star/16M_predictive_mix",
-        "star/1M_pre_ms_to_wd",
-        "star/1M_thermohaline",
-        "star/20M_pre_ms_to_core_collapse",
-        "star/20M_z2m2_high_rotation",
-        "star/5M_cepheid_blue_loop",
-        "star/7M_prems_to_AGB",
-        "star/R_CrB_star",
-        "star/T_tau_gradr",
-        "star/accreted_material_j",
-        "star/adjust_net",
-        "star/c13_pocket",
-        "star/carbon_kh",
-        "star/cburn_inward",
-        "star/ccsn_IIp",
-        "star/check_pulse_atm",
-        "star/conductive_flame",
-        "star/conserve_angular_momentum",
-        "star/conv_core_cpm",
-        "star/custom_rates",
-        "star/diffusion_smoothness",
-        "star/extended_convective_penetration",
-        "star/gyre_in_mesa_bcep",
-        "star/gyre_in_mesa_envelope",
-        "star/gyre_in_mesa_ms",
-        "star/gyre_in_mesa_spb",
-        "star/hb_2M",
-        "star/high_mass",
-        "star/high_z",
-        "star/hot_cool_wind",
-        "star/hse_riemann",
-        "star/irradiated_planet",
-        "star/low_z",
-        "star/magnetic_braking",
-        "star/make_brown_dwarf",
-        "star/make_co_wd",
-        "star/make_env",
-        "star/make_he_wd",
-        "star/make_metals",
-        "star/make_o_ne_wd",
-        "star/make_planets",
-        "star/make_sdb",
-        "star/make_zams",
-        "star/make_zams_low_mass",
-        "star/make_zams_ultra_high_mass",
-        "star/ns_c",
-        "star/ns_h",
-        "star/ns_he",
-        "star/pisn",
-        "star/ppisn",
-        "star/radiative_levitation",
-        "star/relax_composition_j_entropy",
-        "star/semiconvection",
-        "star/split_burn_big_net",
-        "star/starspots",
-        "star/twin_studies",
-        "star/tzo",
-        "star/wd_aic",
-        "star/wd_c_core_ignition",
-        "star/wd_cool_0.6M",
-        "star/wd_diffusion",
-        "star/wd_he_shell_ignition",
-        "star/wd_nova_burst",
-        "star/wd_stable_h_burn",
-        "star/zams_to_cc_80"
-      ]
-    },
-    {
-      "section": "controls",
-      "key": "x_logical_ctrl",
-      "category": "unused",
-      "case_count": 16,
-      "cases": [
-        "star/12M_pre_ms_to_core_collapse",
-        "star/15M_dynamo",
-        "star/20M_pre_ms_to_core_collapse",
-        "star/gyre_in_mesa_bcep",
-        "star/gyre_in_mesa_envelope",
-        "star/gyre_in_mesa_ms",
-        "star/gyre_in_mesa_rsg",
-        "star/gyre_in_mesa_spb",
-        "star/gyre_in_mesa_wd",
-        "star/hse_riemann",
-        "star/magnetic_braking",
-        "star/make_env",
-        "star/ppisn",
-        "star/twin_studies",
-        "star/tzo",
-        "star/zams_to_cc_80"
-      ]
-    },
     {
       "section": "star_job",
       "key": "new_d_omega_flag",
@@ -477,38 +265,6 @@
       ]
     },
     {
-      "section": "controls",
-      "key": "photo_digits",
-      "category": "unimplemented",
-      "case_count": 8,
-      "cases": [
-        "star/12M_pre_ms_to_core_collapse",
-        "star/16M_conv_premix",
-        "star/16M_predictive_mix",
-        "star/1M_thermohaline",
-        "star/20M_pre_ms_to_core_collapse",
-        "star/make_pre_ccsn_13bvn",
-        "star/starspots",
-        "star/zams_to_cc_80"
-      ]
-    },
-    {
-      "section": "controls",
-      "key": "warning_limit_for_max_residual",
-      "category": "unimplemented",
-      "case_count": 8,
-      "cases": [
-        "star/ccsn_IIp",
-        "star/make_brown_dwarf",
-        "star/make_planets",
-        "star/ns_c",
-        "star/ns_h",
-        "star/ns_he",
-        "star/wd_aic",
-        "star/wd_nova_burst"
-      ]
-    },
-    {
       "section": "star_job",
       "key": "dump_missing_metals_into_heaviest",
       "category": "unimplemented",
@@ -541,21 +297,6 @@
     },
     {
       "section": "controls",
-      "key": "extra_terminal_output_file",
-      "category": "unimplemented",
-      "case_count": 7,
-      "cases": [
-        "binary/evolve_both_stars",
-        "binary/jdot_gr_check",
-        "binary/jdot_ls_check",
-        "binary/jdot_ml_check",
-        "binary/star_plus_point_mass",
-        "binary/star_plus_point_mass_explicit_mdot",
-        "binary/wind_fed_bhhmxb"
-      ]
-    },
-    {
-      "section": "controls",
       "key": "max_safe_logt_for_rates",
       "category": "unimplemented",
       "case_count": 7,
@@ -567,36 +308,6 @@
         "star/split_burn_big_net",
         "star/twin_studies",
         "star/zams_to_cc_80"
-      ]
-    },
-    {
-      "section": "controls",
-      "key": "report_solver_progress",
-      "category": "unimplemented",
-      "case_count": 7,
-      "cases": [
-        "star/cburn_inward",
-        "star/ccsn_IIp",
-        "star/ns_h",
-        "star/ns_he",
-        "star/ppisn",
-        "star/starspots",
-        "star/tzo"
-      ]
-    },
-    {
-      "section": "controls",
-      "key": "warn_when_large_rel_run_e_err",
-      "category": "unimplemented",
-      "case_count": 7,
-      "cases": [
-        "star/1.5M_with_diffusion",
-        "star/carbon_kh",
-        "star/ccsn_IIp",
-        "star/make_he_wd",
-        "star/ppisn",
-        "star/starspots",
-        "star/tzo"
       ]
     },
     {
@@ -1251,17 +962,6 @@
     },
     {
       "section": "star_job",
-      "key": "first_model_for_timing",
-      "category": "unimplemented",
-      "case_count": 3,
-      "cases": [
-        "star/1.4M_ms_op_mono",
-        "star/c13_pocket",
-        "star/timing"
-      ]
-    },
-    {
-      "section": "star_job",
       "key": "initial_model_relax_num_steps",
       "category": "unimplemented",
       "case_count": 3,
@@ -1636,32 +1336,12 @@
     },
     {
       "section": "star_job",
-      "key": "pause_before_terminate",
-      "category": "unimplemented",
-      "case_count": 2,
-      "cases": [
-        "star/16M_conv_premix",
-        "star/16M_predictive_mix"
-      ]
-    },
-    {
-      "section": "star_job",
       "key": "relax_core_years_for_dt",
       "category": "unimplemented",
       "case_count": 2,
       "cases": [
         "star/make_planets",
         "star/tzo"
-      ]
-    },
-    {
-      "section": "star_job",
-      "key": "save_photo_when_terminate",
-      "category": "unused",
-      "case_count": 2,
-      "cases": [
-        "star/extended_convective_penetration",
-        "star/make_sdb"
       ]
     },
     {
@@ -1844,15 +1524,6 @@
       "case_count": 1,
       "cases": [
         "star/radiative_levitation"
-      ]
-    },
-    {
-      "section": "controls",
-      "key": "photo_directory",
-      "category": "unimplemented",
-      "case_count": 1,
-      "cases": [
-        "star/twin_studies"
       ]
     },
     {
@@ -2433,15 +2104,6 @@
     },
     {
       "section": "star_job",
-      "key": "save_photo_filename",
-      "category": "unused",
-      "case_count": 1,
-      "cases": [
-        "star/make_sdb"
-      ]
-    },
-    {
-      "section": "star_job",
       "key": "save_pulse_data_when_terminate",
       "category": "unused",
       "case_count": 1,
@@ -2502,15 +2164,6 @@
       "cases": [
         "star/wd_aic"
       ]
-    },
-    {
-      "section": "star_job",
-      "key": "warn_run_star_extras",
-      "category": "unimplemented",
-      "case_count": 1,
-      "cases": [
-        "star/extended_convective_penetration"
-      ]
     }
   ],
   "terminal_output_controls": {
@@ -2562,6 +2215,21 @@
         "case_count": 12
       },
       {
+        "section": "controls",
+        "key": "warning_limit_for_max_residual",
+        "case_count": 8
+      },
+      {
+        "section": "controls",
+        "key": "extra_terminal_output_file",
+        "case_count": 7
+      },
+      {
+        "section": "controls",
+        "key": "report_solver_progress",
+        "case_count": 7
+      },
+      {
         "section": "star_job",
         "key": "show_retry_counts_when_terminate",
         "case_count": 6
@@ -2577,6 +2245,11 @@
         "case_count": 3
       },
       {
+        "section": "star_job",
+        "key": "first_model_for_timing",
+        "case_count": 3
+      },
+      {
         "section": "eos",
         "key": "logt_hi",
         "case_count": 2
@@ -2584,6 +2257,11 @@
       {
         "section": "eos",
         "key": "logt_lo",
+        "case_count": 2
+      },
+      {
+        "section": "star_job",
+        "key": "pause_before_terminate",
         "case_count": 2
       },
       {
@@ -2599,6 +2277,11 @@
       {
         "section": "star_job",
         "key": "show_net_species_info",
+        "case_count": 1
+      },
+      {
+        "section": "star_job",
+        "key": "warn_run_star_extras",
         "case_count": 1
       }
     ]
@@ -7091,14 +6774,11 @@
     {
       "suite": "star",
       "case": "1.3M_ms_high_Z",
-      "strict_ok": false,
+      "strict_ok": true,
       "entry_files": [
         "inlist_1.3M_ms_high_Z_header"
       ],
-      "unsupported_controls": [
-        "controls::photo_interval::unimplemented",
-        "star_job::required_termination_code_string::unused"
-      ],
+      "unsupported_controls": [],
       "unknown_controls": [],
       "headless_plotting_keys_count": 77,
       "terminal_output_keys": [
@@ -7119,31 +6799,26 @@
         "controls::high_logt_op_mono_full_off::unimplemented",
         "controls::high_logt_op_mono_full_on::unimplemented",
         "controls::op_mono_method::unimplemented",
-        "controls::photo_interval::unimplemented",
         "controls::report_ierr::unimplemented",
-        "controls::use_op_mono_alt_get_kap::unimplemented",
-        "star_job::first_model_for_timing::unimplemented"
+        "controls::use_op_mono_alt_get_kap::unimplemented"
       ],
       "unknown_controls": [],
       "headless_plotting_keys_count": 27,
       "terminal_output_keys": [
         "controls::terminal_interval",
         "controls::write_header_frequency",
+        "star_job::first_model_for_timing",
         "star_job::show_log_description_at_start"
       ]
     },
     {
       "suite": "star",
       "case": "1.5M_with_diffusion",
-      "strict_ok": false,
+      "strict_ok": true,
       "entry_files": [
         "inlist_1.5M_with_diffusion_header"
       ],
-      "unsupported_controls": [
-        "controls::photo_interval::unimplemented",
-        "controls::warn_when_large_rel_run_e_err::unimplemented",
-        "star_job::required_termination_code_string::unused"
-      ],
+      "unsupported_controls": [],
       "unknown_controls": [],
       "headless_plotting_keys_count": 19,
       "terminal_output_keys": [
@@ -7165,14 +6840,10 @@
         "controls::d_omega_mixing_across_convection_boundary::unimplemented",
         "controls::d_omega_mixing_rate::unimplemented",
         "controls::max_safe_logt_for_rates::unimplemented",
-        "controls::photo_digits::unimplemented",
-        "controls::photo_interval::unimplemented",
         "controls::warn_rates_for_high_temp::unimplemented",
-        "controls::x_logical_ctrl::unused",
         "star_job::change_d_omega_flag::unimplemented",
         "star_job::dump_missing_metals_into_heaviest::unimplemented",
-        "star_job::new_d_omega_flag::unimplemented",
-        "star_job::required_termination_code_string::unused"
+        "star_job::new_d_omega_flag::unimplemented"
       ],
       "unknown_controls": [],
       "headless_plotting_keys_count": 263,
@@ -7200,11 +6871,8 @@
         "inlist_15M_dynamo_header"
       ],
       "unsupported_controls": [
-        "controls::photo_interval::unimplemented",
-        "controls::x_logical_ctrl::unused",
         "star_job::change_d_omega_flag::unimplemented",
-        "star_job::new_d_omega_flag::unimplemented",
-        "star_job::required_termination_code_string::unused"
+        "star_job::new_d_omega_flag::unimplemented"
       ],
       "unknown_controls": [],
       "headless_plotting_keys_count": 17,
@@ -7218,16 +6886,11 @@
     {
       "suite": "star",
       "case": "16M_conv_premix",
-      "strict_ok": false,
+      "strict_ok": true,
       "entry_files": [
         "inlist_16M_conv_premix_header"
       ],
-      "unsupported_controls": [
-        "controls::photo_digits::unimplemented",
-        "controls::photo_interval::unimplemented",
-        "star_job::pause_before_terminate::unimplemented",
-        "star_job::required_termination_code_string::unused"
-      ],
+      "unsupported_controls": [],
       "unknown_controls": [],
       "headless_plotting_keys_count": 1,
       "terminal_output_keys": [
@@ -7235,22 +6898,18 @@
         "controls::terminal_interval",
         "controls::trace_history_value_name",
         "controls::write_header_frequency",
+        "star_job::pause_before_terminate",
         "star_job::show_log_description_at_start"
       ]
     },
     {
       "suite": "star",
       "case": "16M_predictive_mix",
-      "strict_ok": false,
+      "strict_ok": true,
       "entry_files": [
         "inlist_16M_predictive_mix_header"
       ],
-      "unsupported_controls": [
-        "controls::photo_digits::unimplemented",
-        "controls::photo_interval::unimplemented",
-        "star_job::pause_before_terminate::unimplemented",
-        "star_job::required_termination_code_string::unused"
-      ],
+      "unsupported_controls": [],
       "unknown_controls": [],
       "headless_plotting_keys_count": 1,
       "terminal_output_keys": [
@@ -7258,6 +6917,7 @@
         "controls::terminal_interval",
         "controls::trace_history_value_name",
         "controls::write_header_frequency",
+        "star_job::pause_before_terminate",
         "star_job::show_log_description_at_start"
       ]
     },
@@ -7273,11 +6933,9 @@
         "inlist_to_wd_header"
       ],
       "unsupported_controls": [
-        "controls::photo_interval::unimplemented",
         "controls::use_other_mesh_delta_coeff_factor::unimplemented",
         "star_job::change_d_omega_flag::unimplemented",
-        "star_job::new_d_omega_flag::unimplemented",
-        "star_job::required_termination_code_string::unused"
+        "star_job::new_d_omega_flag::unimplemented"
       ],
       "unknown_controls": [],
       "headless_plotting_keys_count": 18,
@@ -7297,13 +6955,10 @@
         "inlist_1M_thermohaline_header"
       ],
       "unsupported_controls": [
-        "controls::photo_digits::unimplemented",
-        "controls::photo_interval::unimplemented",
         "star_job::change_d_omega_flag::unimplemented",
         "star_job::near_zams_relax_initial_surface_rotation_v::unimplemented",
         "star_job::new_d_omega_flag::unimplemented",
-        "star_job::num_steps_to_relax_rotation::unimplemented",
-        "star_job::required_termination_code_string::unused"
+        "star_job::num_steps_to_relax_rotation::unimplemented"
       ],
       "unknown_controls": [],
       "headless_plotting_keys_count": 66,
@@ -7326,14 +6981,10 @@
         "controls::d_omega_mixing_across_convection_boundary::unimplemented",
         "controls::d_omega_mixing_rate::unimplemented",
         "controls::max_safe_logt_for_rates::unimplemented",
-        "controls::photo_digits::unimplemented",
-        "controls::photo_interval::unimplemented",
         "controls::warn_rates_for_high_temp::unimplemented",
-        "controls::x_logical_ctrl::unused",
         "star_job::change_d_omega_flag::unimplemented",
         "star_job::dump_missing_metals_into_heaviest::unimplemented",
-        "star_job::new_d_omega_flag::unimplemented",
-        "star_job::required_termination_code_string::unused"
+        "star_job::new_d_omega_flag::unimplemented"
       ],
       "unknown_controls": [],
       "headless_plotting_keys_count": 263,
@@ -7360,7 +7011,6 @@
       ],
       "unsupported_controls": [
         "controls::max_safe_logt_for_rates::unimplemented",
-        "controls::photo_interval::unimplemented",
         "controls::smooth_am_nu_rot::unimplemented",
         "controls::smooth_d_omega::unimplemented",
         "controls::smooth_d_st::unimplemented",
@@ -7370,8 +7020,7 @@
         "star_job::dump_missing_metals_into_heaviest::unimplemented",
         "star_job::near_zams_relax_omega_div_omega_crit::unimplemented",
         "star_job::new_d_omega_flag::unimplemented",
-        "star_job::num_steps_to_relax_rotation::unimplemented",
-        "star_job::required_termination_code_string::unused"
+        "star_job::num_steps_to_relax_rotation::unimplemented"
       ],
       "unknown_controls": [],
       "headless_plotting_keys_count": 295,
@@ -7387,14 +7036,11 @@
     {
       "suite": "star",
       "case": "5M_cepheid_blue_loop",
-      "strict_ok": false,
+      "strict_ok": true,
       "entry_files": [
         "inlist_cepheid_blue_loop_header"
       ],
-      "unsupported_controls": [
-        "controls::photo_interval::unimplemented",
-        "star_job::required_termination_code_string::unused"
-      ],
+      "unsupported_controls": [],
       "unknown_controls": [],
       "headless_plotting_keys_count": 20,
       "terminal_output_keys": [
@@ -7407,14 +7053,11 @@
     {
       "suite": "star",
       "case": "7M_prems_to_AGB",
-      "strict_ok": false,
+      "strict_ok": true,
       "entry_files": [
         "inlist_7M_prems_to_AGB_header"
       ],
-      "unsupported_controls": [
-        "controls::photo_interval::unimplemented",
-        "star_job::required_termination_code_string::unused"
-      ],
+      "unsupported_controls": [],
       "unknown_controls": [],
       "headless_plotting_keys_count": 20,
       "terminal_output_keys": [
@@ -7428,14 +7071,11 @@
     {
       "suite": "star",
       "case": "R_CrB_star",
-      "strict_ok": false,
+      "strict_ok": true,
       "entry_files": [
         "inlist_R_CrB_star_header"
       ],
-      "unsupported_controls": [
-        "controls::photo_interval::unimplemented",
-        "star_job::required_termination_code_string::unused"
-      ],
+      "unsupported_controls": [],
       "unknown_controls": [],
       "headless_plotting_keys_count": 122,
       "terminal_output_keys": [
@@ -7446,14 +7086,11 @@
     {
       "suite": "star",
       "case": "T_tau_gradr",
-      "strict_ok": false,
+      "strict_ok": true,
       "entry_files": [
         "inlist_T_tau_gradr_header"
       ],
-      "unsupported_controls": [
-        "controls::photo_interval::unimplemented",
-        "star_job::required_termination_code_string::unused"
-      ],
+      "unsupported_controls": [],
       "unknown_controls": [],
       "headless_plotting_keys_count": 0,
       "terminal_output_keys": [
@@ -7465,14 +7102,11 @@
     {
       "suite": "star",
       "case": "accreted_material_j",
-      "strict_ok": false,
+      "strict_ok": true,
       "entry_files": [
         "inlist_accreted_material_j_header"
       ],
-      "unsupported_controls": [
-        "controls::photo_interval::unimplemented",
-        "star_job::required_termination_code_string::unused"
-      ],
+      "unsupported_controls": [],
       "unknown_controls": [],
       "headless_plotting_keys_count": 24,
       "terminal_output_keys": [
@@ -7492,12 +7126,10 @@
       ],
       "unsupported_controls": [
         "controls::max_dt_yrs_for_velocity_logt_lower_bound::unimplemented",
-        "controls::photo_interval::unimplemented",
         "star_job::enable_adaptive_network::unimplemented",
         "star_job::min_x_for_add::unimplemented",
         "star_job::min_x_for_keep::unimplemented",
-        "star_job::min_x_for_n::unimplemented",
-        "star_job::required_termination_code_string::unused"
+        "star_job::min_x_for_n::unimplemented"
       ],
       "unknown_controls": [],
       "headless_plotting_keys_count": 68,
@@ -7517,10 +7149,7 @@
         "inlist_c13_pocket_header"
       ],
       "unsupported_controls": [
-        "controls::atm_off_table_option::unimplemented",
-        "controls::photo_interval::unimplemented",
-        "star_job::first_model_for_timing::unimplemented",
-        "star_job::required_termination_code_string::unused"
+        "controls::atm_off_table_option::unimplemented"
       ],
       "unknown_controls": [],
       "headless_plotting_keys_count": 100,
@@ -7528,7 +7157,8 @@
         "controls::num_trace_history_values",
         "controls::terminal_interval",
         "controls::trace_history_value_name",
-        "controls::write_header_frequency"
+        "controls::write_header_frequency",
+        "star_job::first_model_for_timing"
       ]
     },
     {
@@ -7539,10 +7169,7 @@
         "inlist_carbon_kh_header"
       ],
       "unsupported_controls": [
-        "controls::photo_interval::unimplemented",
-        "controls::warn_when_large_rel_run_e_err::unimplemented",
         "star_job::auto_extend_net::unused",
-        "star_job::required_termination_code_string::unused",
         "star_job::set_cumulative_energy_error_at_step::unimplemented"
       ],
       "unknown_controls": [],
@@ -7556,19 +7183,16 @@
     {
       "suite": "star",
       "case": "cburn_inward",
-      "strict_ok": false,
+      "strict_ok": true,
       "entry_files": [
         "inlist_cburn_inward_header"
       ],
-      "unsupported_controls": [
-        "controls::photo_interval::unimplemented",
-        "controls::report_solver_progress::unimplemented",
-        "star_job::required_termination_code_string::unused"
-      ],
+      "unsupported_controls": [],
       "unknown_controls": [],
       "headless_plotting_keys_count": 66,
       "terminal_output_keys": [
         "controls::num_trace_history_values",
+        "controls::report_solver_progress",
         "controls::terminal_interval",
         "controls::trace_history_value_name",
         "controls::write_header_frequency",
@@ -7590,8 +7214,6 @@
       "unsupported_controls": [
         "controls::base_of_inject_extra_ergs_sec::unimplemented",
         "controls::inject_until_reach_model_with_total_energy::unimplemented",
-        "controls::photo_interval::unimplemented",
-        "controls::report_solver_progress::unimplemented",
         "controls::rti_c_x0_frac::unimplemented",
         "controls::rti_c_x_factor::unimplemented",
         "controls::rti_d_mix_floor::unimplemented",
@@ -7606,8 +7228,6 @@
         "controls::start_time_for_inject_extra_ergs_sec::unimplemented",
         "controls::total_mass_for_inject_extra_ergs_sec::unimplemented",
         "controls::warn_rates_for_high_temp::unimplemented",
-        "controls::warn_when_large_rel_run_e_err::unimplemented",
-        "controls::warning_limit_for_max_residual::unimplemented",
         "star_job::fallback_check_total_energy::unimplemented",
         "star_job::limit_initial_dt::unimplemented",
         "star_job::new_v_center::unimplemented",
@@ -7615,7 +7235,6 @@
         "star_job::remove_fallback_at_each_step::unimplemented",
         "star_job::remove_fallback_speed_limit::unimplemented",
         "star_job::remove_initial_center_by_entropy::unimplemented",
-        "star_job::required_termination_code_string::unused",
         "star_job::set_initial_l_center::unused",
         "star_job::set_initial_v_center::unused"
       ],
@@ -7623,9 +7242,11 @@
       "headless_plotting_keys_count": 100,
       "terminal_output_keys": [
         "controls::num_trace_history_values",
+        "controls::report_solver_progress",
         "controls::terminal_interval",
         "controls::terminal_show_age_units",
         "controls::trace_history_value_name",
+        "controls::warning_limit_for_max_residual",
         "controls::write_header_frequency",
         "star_job::show_log_description_at_start"
       ]
@@ -7639,9 +7260,7 @@
       ],
       "unsupported_controls": [
         "controls::add_atmosphere_to_pulse_data::unimplemented",
-        "controls::fgong_ivers::unimplemented",
-        "controls::photo_interval::unimplemented",
-        "star_job::required_termination_code_string::unused"
+        "controls::fgong_ivers::unimplemented"
       ],
       "unknown_controls": [],
       "headless_plotting_keys_count": 0,
@@ -7654,13 +7273,11 @@
     {
       "suite": "star",
       "case": "check_redo",
-      "strict_ok": false,
+      "strict_ok": true,
       "entry_files": [
         "inlist"
       ],
-      "unsupported_controls": [
-        "controls::photo_interval::unimplemented"
-      ],
+      "unsupported_controls": [],
       "unknown_controls": [],
       "headless_plotting_keys_count": 3,
       "terminal_output_keys": [
@@ -7680,12 +7297,10 @@
         "inlist_conductive_flame_header"
       ],
       "unsupported_controls": [
-        "controls::photo_interval::unimplemented",
         "controls::use_other_surface_pt::unused",
         "controls::warn_rates_for_high_temp::unimplemented",
         "controls::warn_when_large_virial_thm_rel_err::unimplemented",
-        "star_job::initial_model_relax_num_steps::unimplemented",
-        "star_job::required_termination_code_string::unused"
+        "star_job::initial_model_relax_num_steps::unimplemented"
       ],
       "unknown_controls": [],
       "headless_plotting_keys_count": 109,
@@ -7706,10 +7321,8 @@
         "inlist_conserve_J_header"
       ],
       "unsupported_controls": [
-        "controls::photo_interval::unimplemented",
         "star_job::change_d_omega_flag::unimplemented",
-        "star_job::new_d_omega_flag::unimplemented",
-        "star_job::required_termination_code_string::unused"
+        "star_job::new_d_omega_flag::unimplemented"
       ],
       "unknown_controls": [],
       "headless_plotting_keys_count": 0,
@@ -7724,14 +7337,11 @@
     {
       "suite": "star",
       "case": "conv_core_cpm",
-      "strict_ok": false,
+      "strict_ok": true,
       "entry_files": [
         "inlist_conv_core_cpm_header"
       ],
-      "unsupported_controls": [
-        "controls::photo_interval::unimplemented",
-        "star_job::required_termination_code_string::unused"
-      ],
+      "unsupported_controls": [],
       "unknown_controls": [],
       "headless_plotting_keys_count": 87,
       "terminal_output_keys": [
@@ -7773,12 +7383,10 @@
         "inlist_NCO_flash_header"
       ],
       "unsupported_controls": [
-        "controls::photo_interval::unimplemented",
         "star_job::electron_coulomb_corrections::unimplemented",
         "star_job::ion_coulomb_corrections::unimplemented",
         "star_job::rate_cache_suffix::unimplemented",
-        "star_job::rate_tables_dir::unimplemented",
-        "star_job::required_termination_code_string::unused"
+        "star_job::rate_tables_dir::unimplemented"
       ],
       "unknown_controls": [],
       "headless_plotting_keys_count": 48,
@@ -7797,14 +7405,11 @@
     {
       "suite": "star",
       "case": "diffusion_smoothness",
-      "strict_ok": false,
+      "strict_ok": true,
       "entry_files": [
         "inlist_diffusion_smoothness_header"
       ],
-      "unsupported_controls": [
-        "controls::photo_interval::unimplemented",
-        "star_job::required_termination_code_string::unused"
-      ],
+      "unsupported_controls": [],
       "unknown_controls": [],
       "headless_plotting_keys_count": 24,
       "terminal_output_keys": [
@@ -7817,35 +7422,27 @@
     {
       "suite": "star",
       "case": "extended_convective_penetration",
-      "strict_ok": false,
+      "strict_ok": true,
       "entry_files": [
         "inlist_extended_convective_penetration_header"
       ],
-      "unsupported_controls": [
-        "controls::photo_interval::unimplemented",
-        "star_job::required_termination_code_string::unused",
-        "star_job::save_photo_when_terminate::unused",
-        "star_job::warn_run_star_extras::unimplemented"
-      ],
+      "unsupported_controls": [],
       "unknown_controls": [],
       "headless_plotting_keys_count": 14,
       "terminal_output_keys": [
         "controls::terminal_interval",
-        "star_job::show_log_description_at_start"
+        "star_job::show_log_description_at_start",
+        "star_job::warn_run_star_extras"
       ]
     },
     {
       "suite": "star",
       "case": "gyre_in_mesa_bcep",
-      "strict_ok": false,
+      "strict_ok": true,
       "entry_files": [
         "inlist_gyre_in_mesa_bcep_header"
       ],
-      "unsupported_controls": [
-        "controls::photo_interval::unimplemented",
-        "controls::x_logical_ctrl::unused",
-        "star_job::required_termination_code_string::unused"
-      ],
+      "unsupported_controls": [],
       "unknown_controls": [],
       "headless_plotting_keys_count": 0,
       "terminal_output_keys": [
@@ -7859,17 +7456,13 @@
     {
       "suite": "star",
       "case": "gyre_in_mesa_envelope",
-      "strict_ok": false,
+      "strict_ok": true,
       "entry_files": [
         "inlist_tams_header",
         "inlist_remove_center_header",
         "inlist_pulse_header"
       ],
-      "unsupported_controls": [
-        "controls::photo_interval::unimplemented",
-        "controls::x_logical_ctrl::unused",
-        "star_job::required_termination_code_string::unused"
-      ],
+      "unsupported_controls": [],
       "unknown_controls": [],
       "headless_plotting_keys_count": 5,
       "terminal_output_keys": [
@@ -7883,15 +7476,11 @@
     {
       "suite": "star",
       "case": "gyre_in_mesa_ms",
-      "strict_ok": false,
+      "strict_ok": true,
       "entry_files": [
         "inlist_gyre_in_mesa_ms_header"
       ],
-      "unsupported_controls": [
-        "controls::photo_interval::unimplemented",
-        "controls::x_logical_ctrl::unused",
-        "star_job::required_termination_code_string::unused"
-      ],
+      "unsupported_controls": [],
       "unknown_controls": [],
       "headless_plotting_keys_count": 0,
       "terminal_output_keys": [
@@ -7905,14 +7494,11 @@
     {
       "suite": "star",
       "case": "gyre_in_mesa_rsg",
-      "strict_ok": false,
+      "strict_ok": true,
       "entry_files": [
         "inlist_gyre_in_mesa_rsg_header"
       ],
-      "unsupported_controls": [
-        "controls::photo_interval::unimplemented",
-        "controls::x_logical_ctrl::unused"
-      ],
+      "unsupported_controls": [],
       "unknown_controls": [],
       "headless_plotting_keys_count": 59,
       "terminal_output_keys": [
@@ -7926,15 +7512,11 @@
     {
       "suite": "star",
       "case": "gyre_in_mesa_spb",
-      "strict_ok": false,
+      "strict_ok": true,
       "entry_files": [
         "inlist_gyre_in_mesa_spb_header"
       ],
-      "unsupported_controls": [
-        "controls::photo_interval::unimplemented",
-        "controls::x_logical_ctrl::unused",
-        "star_job::required_termination_code_string::unused"
-      ],
+      "unsupported_controls": [],
       "unknown_controls": [],
       "headless_plotting_keys_count": 0,
       "terminal_output_keys": [
@@ -7948,14 +7530,11 @@
     {
       "suite": "star",
       "case": "gyre_in_mesa_wd",
-      "strict_ok": false,
+      "strict_ok": true,
       "entry_files": [
         "inlist_pulse_wd_header"
       ],
-      "unsupported_controls": [
-        "controls::photo_interval::unimplemented",
-        "controls::x_logical_ctrl::unused"
-      ],
+      "unsupported_controls": [],
       "unknown_controls": [],
       "headless_plotting_keys_count": 28,
       "terminal_output_keys": [
@@ -7969,14 +7548,11 @@
     {
       "suite": "star",
       "case": "hb_2M",
-      "strict_ok": false,
+      "strict_ok": true,
       "entry_files": [
         "inlist_hb_2M_header"
       ],
-      "unsupported_controls": [
-        "controls::photo_interval::unimplemented",
-        "star_job::required_termination_code_string::unused"
-      ],
+      "unsupported_controls": [],
       "unknown_controls": [],
       "headless_plotting_keys_count": 29,
       "terminal_output_keys": [
@@ -7990,14 +7566,11 @@
     {
       "suite": "star",
       "case": "high_mass",
-      "strict_ok": false,
+      "strict_ok": true,
       "entry_files": [
         "inlist_high_mass_header"
       ],
-      "unsupported_controls": [
-        "controls::photo_interval::unimplemented",
-        "star_job::required_termination_code_string::unused"
-      ],
+      "unsupported_controls": [],
       "unknown_controls": [],
       "headless_plotting_keys_count": 41,
       "terminal_output_keys": [
@@ -8034,14 +7607,11 @@
     {
       "suite": "star",
       "case": "high_z",
-      "strict_ok": false,
+      "strict_ok": true,
       "entry_files": [
         "inlist_high_z_header"
       ],
-      "unsupported_controls": [
-        "controls::photo_interval::unimplemented",
-        "star_job::required_termination_code_string::unused"
-      ],
+      "unsupported_controls": [],
       "unknown_controls": [],
       "headless_plotting_keys_count": 0,
       "terminal_output_keys": [
@@ -8055,14 +7625,11 @@
     {
       "suite": "star",
       "case": "hot_cool_wind",
-      "strict_ok": false,
+      "strict_ok": true,
       "entry_files": [
         "inlist_hot_cool_wind_header"
       ],
-      "unsupported_controls": [
-        "controls::photo_interval::unimplemented",
-        "star_job::required_termination_code_string::unused"
-      ],
+      "unsupported_controls": [],
       "unknown_controls": [],
       "headless_plotting_keys_count": 0,
       "terminal_output_keys": [
@@ -8076,15 +7643,11 @@
     {
       "suite": "star",
       "case": "hse_riemann",
-      "strict_ok": false,
+      "strict_ok": true,
       "entry_files": [
         "inlist_finish_header"
       ],
-      "unsupported_controls": [
-        "controls::photo_interval::unimplemented",
-        "controls::x_logical_ctrl::unused",
-        "star_job::required_termination_code_string::unused"
-      ],
+      "unsupported_controls": [],
       "unknown_controls": [],
       "headless_plotting_keys_count": 67,
       "terminal_output_keys": [
@@ -8108,11 +7671,9 @@
         "controls::atm_irradiated_opacity::unimplemented",
         "controls::atm_irradiated_p_surf::unimplemented",
         "controls::atm_irradiated_t_eq::unimplemented",
-        "controls::photo_interval::unimplemented",
         "star_job::dlogtau_factor::unimplemented",
         "star_job::relax_irradiation_max_yrs_dt::unimplemented",
-        "star_job::relax_irradiation_min_steps::unimplemented",
-        "star_job::required_termination_code_string::unused"
+        "star_job::relax_irradiation_min_steps::unimplemented"
       ],
       "unknown_controls": [],
       "headless_plotting_keys_count": 0,
@@ -8127,14 +7688,11 @@
     {
       "suite": "star",
       "case": "low_z",
-      "strict_ok": false,
+      "strict_ok": true,
       "entry_files": [
         "inlist_low_Z_header"
       ],
-      "unsupported_controls": [
-        "controls::photo_interval::unimplemented",
-        "star_job::required_termination_code_string::unused"
-      ],
+      "unsupported_controls": [],
       "unknown_controls": [],
       "headless_plotting_keys_count": 0,
       "terminal_output_keys": [
@@ -8154,14 +7712,11 @@
         "inlist_braking_header"
       ],
       "unsupported_controls": [
-        "controls::photo_interval::unimplemented",
-        "controls::x_logical_ctrl::unused",
         "star_job::change_d_omega_flag::unimplemented",
         "star_job::near_zams_relax_omega_div_omega_crit::unimplemented",
         "star_job::new_d_omega_flag::unimplemented",
         "star_job::num_steps_to_relax_rotation::unimplemented",
-        "star_job::relax_omega_max_yrs_dt::unimplemented",
-        "star_job::required_termination_code_string::unused"
+        "star_job::relax_omega_max_yrs_dt::unimplemented"
       ],
       "unknown_controls": [],
       "headless_plotting_keys_count": 56,
@@ -8176,21 +7731,18 @@
     {
       "suite": "star",
       "case": "make_brown_dwarf",
-      "strict_ok": false,
+      "strict_ok": true,
       "entry_files": [
         "inlist_make_brown_dwarf_header"
       ],
-      "unsupported_controls": [
-        "controls::photo_interval::unimplemented",
-        "controls::warning_limit_for_max_residual::unimplemented",
-        "star_job::required_termination_code_string::unused"
-      ],
+      "unsupported_controls": [],
       "unknown_controls": [],
       "headless_plotting_keys_count": 19,
       "terminal_output_keys": [
         "controls::num_trace_history_values",
         "controls::terminal_interval",
         "controls::trace_history_value_name",
+        "controls::warning_limit_for_max_residual",
         "controls::write_header_frequency",
         "star_job::show_log_description_at_start"
       ]
@@ -8207,14 +7759,12 @@
         "inlist_settle_header"
       ],
       "unsupported_controls": [
-        "controls::photo_interval::unimplemented",
         "star_job::max_dt_for_relax_entropy::unimplemented",
         "star_job::max_steps_to_relax_entropy::unimplemented",
         "star_job::num_timescales_for_relax_entropy::unimplemented",
         "star_job::remove_surface_do_entropy::unimplemented",
         "star_job::remove_surface_do_jrot::unimplemented",
         "star_job::remove_surface_turn_off_energy_sources_and_sinks::unimplemented",
-        "star_job::required_termination_code_string::unused",
         "star_job::timescale_for_relax_composition::unimplemented",
         "star_job::timescale_for_relax_entropy::unimplemented"
       ],
@@ -8232,15 +7782,11 @@
     {
       "suite": "star",
       "case": "make_env",
-      "strict_ok": false,
+      "strict_ok": true,
       "entry_files": [
         "inlist_env_header"
       ],
-      "unsupported_controls": [
-        "controls::photo_interval::unimplemented",
-        "controls::x_logical_ctrl::unused",
-        "star_job::required_termination_code_string::unused"
-      ],
+      "unsupported_controls": [],
       "unknown_controls": [],
       "headless_plotting_keys_count": 0,
       "terminal_output_keys": [
@@ -8260,10 +7806,7 @@
         "inlist_evolve_header"
       ],
       "unsupported_controls": [
-        "controls::photo_interval::unimplemented",
-        "controls::warn_when_large_rel_run_e_err::unimplemented",
-        "star_job::lg_max_abs_mdot::unimplemented",
-        "star_job::required_termination_code_string::unused"
+        "star_job::lg_max_abs_mdot::unimplemented"
       ],
       "unknown_controls": [],
       "headless_plotting_keys_count": 0,
@@ -8278,14 +7821,11 @@
     {
       "suite": "star",
       "case": "make_metals",
-      "strict_ok": false,
+      "strict_ok": true,
       "entry_files": [
         "inlist_make_metals_header"
       ],
-      "unsupported_controls": [
-        "controls::photo_interval::unimplemented",
-        "star_job::required_termination_code_string::unused"
-      ],
+      "unsupported_controls": [],
       "unknown_controls": [],
       "headless_plotting_keys_count": 0,
       "terminal_output_keys": [
@@ -8297,15 +7837,12 @@
     {
       "suite": "star",
       "case": "make_o_ne_wd",
-      "strict_ok": false,
+      "strict_ok": true,
       "entry_files": [
         "inlist_o_ne_wd_header",
         "inlist_settle_envelope_header"
       ],
-      "unsupported_controls": [
-        "controls::photo_interval::unimplemented",
-        "star_job::required_termination_code_string::unused"
-      ],
+      "unsupported_controls": [],
       "unknown_controls": [],
       "headless_plotting_keys_count": 255,
       "terminal_output_keys": [
@@ -8327,13 +7864,10 @@
         "inlist_evolve_header"
       ],
       "unsupported_controls": [
-        "controls::photo_interval::unimplemented",
         "controls::warn_when_large_virial_thm_rel_err::unimplemented",
-        "controls::warning_limit_for_max_residual::unimplemented",
         "star_job::dlg_core_mass_per_step::unimplemented",
         "star_job::initial_model_relax_num_steps::unimplemented",
-        "star_job::relax_core_years_for_dt::unimplemented",
-        "star_job::required_termination_code_string::unused"
+        "star_job::relax_core_years_for_dt::unimplemented"
       ],
       "unknown_controls": [],
       "headless_plotting_keys_count": 0,
@@ -8341,6 +7875,7 @@
         "controls::num_trace_history_values",
         "controls::terminal_interval",
         "controls::trace_history_value_name",
+        "controls::warning_limit_for_max_residual",
         "controls::write_header_frequency",
         "star_job::show_log_description_at_start"
       ]
@@ -8348,14 +7883,11 @@
     {
       "suite": "star",
       "case": "make_pre_ccsn_13bvn",
-      "strict_ok": false,
+      "strict_ok": true,
       "entry_files": [
         "inlist_to_cc_header"
       ],
-      "unsupported_controls": [
-        "controls::photo_digits::unimplemented",
-        "controls::photo_interval::unimplemented"
-      ],
+      "unsupported_controls": [],
       "unknown_controls": [],
       "headless_plotting_keys_count": 324,
       "terminal_output_keys": [
@@ -8374,12 +7906,8 @@
         "inlist_make_sdb_header"
       ],
       "unsupported_controls": [
-        "controls::photo_interval::unimplemented",
         "star_job::extra_mass_retained_by_remove_h_env::unimplemented",
-        "star_job::lg_max_abs_mdot::unimplemented",
-        "star_job::required_termination_code_string::unused",
-        "star_job::save_photo_filename::unused",
-        "star_job::save_photo_when_terminate::unused"
+        "star_job::lg_max_abs_mdot::unimplemented"
       ],
       "unknown_controls": [],
       "headless_plotting_keys_count": 5,
@@ -8393,14 +7921,11 @@
     {
       "suite": "star",
       "case": "make_zams",
-      "strict_ok": false,
+      "strict_ok": true,
       "entry_files": [
         "inlist_zams_header"
       ],
-      "unsupported_controls": [
-        "controls::photo_interval::unimplemented",
-        "star_job::required_termination_code_string::unused"
-      ],
+      "unsupported_controls": [],
       "unknown_controls": [],
       "headless_plotting_keys_count": 72,
       "terminal_output_keys": [
@@ -8413,14 +7938,11 @@
     {
       "suite": "star",
       "case": "make_zams_low_mass",
-      "strict_ok": false,
+      "strict_ok": true,
       "entry_files": [
         "inlist_zams_header"
       ],
-      "unsupported_controls": [
-        "controls::photo_interval::unimplemented",
-        "star_job::required_termination_code_string::unused"
-      ],
+      "unsupported_controls": [],
       "unknown_controls": [],
       "headless_plotting_keys_count": 0,
       "terminal_output_keys": [
@@ -8438,10 +7960,8 @@
         "inlist_zams_ultra_high_mass_header"
       ],
       "unsupported_controls": [
-        "controls::photo_interval::unimplemented",
         "star_job::change_mass_years_for_dt::unimplemented",
-        "star_job::dlgm_per_step::unimplemented",
-        "star_job::required_termination_code_string::unused"
+        "star_job::dlgm_per_step::unimplemented"
       ],
       "unknown_controls": [],
       "headless_plotting_keys_count": 0,
@@ -8455,19 +7975,16 @@
     {
       "suite": "star",
       "case": "ns_c",
-      "strict_ok": false,
+      "strict_ok": true,
       "entry_files": [
         "inlist_to_c_flash_header"
       ],
-      "unsupported_controls": [
-        "controls::photo_interval::unimplemented",
-        "controls::warning_limit_for_max_residual::unimplemented",
-        "star_job::required_termination_code_string::unused"
-      ],
+      "unsupported_controls": [],
       "unknown_controls": [],
       "headless_plotting_keys_count": 254,
       "terminal_output_keys": [
         "controls::terminal_interval",
+        "controls::warning_limit_for_max_residual",
         "controls::write_header_frequency",
         "star_job::show_log_description_at_start"
       ]
@@ -8475,24 +7992,21 @@
     {
       "suite": "star",
       "case": "ns_h",
-      "strict_ok": false,
+      "strict_ok": true,
       "entry_files": [
         "inlist_add_he_layer_header",
         "inlist_to_steady_h_burn_header"
       ],
-      "unsupported_controls": [
-        "controls::photo_interval::unimplemented",
-        "controls::report_solver_progress::unimplemented",
-        "controls::warning_limit_for_max_residual::unimplemented",
-        "star_job::required_termination_code_string::unused"
-      ],
+      "unsupported_controls": [],
       "unknown_controls": [],
       "headless_plotting_keys_count": 58,
       "terminal_output_keys": [
         "controls::num_trace_history_values",
+        "controls::report_solver_progress",
         "controls::terminal_interval",
         "controls::terminal_show_age_units",
         "controls::trace_history_value_name",
+        "controls::warning_limit_for_max_residual",
         "controls::write_header_frequency",
         "star_job::show_log_description_at_start"
       ]
@@ -8505,8 +8019,6 @@
         "inlist_to_flash_header"
       ],
       "unsupported_controls": [
-        "controls::photo_interval::unimplemented",
-        "controls::report_solver_progress::unimplemented",
         "controls::solver_test_partials_dx_0::unimplemented",
         "controls::solver_test_partials_equ_name::unimplemented",
         "controls::solver_test_partials_iter_number::unimplemented",
@@ -8514,17 +8026,17 @@
         "controls::solver_test_partials_k_high::unimplemented",
         "controls::solver_test_partials_k_low::unimplemented",
         "controls::solver_test_partials_sink_name::unimplemented",
-        "controls::solver_test_partials_var_name::unimplemented",
-        "controls::warning_limit_for_max_residual::unimplemented",
-        "star_job::required_termination_code_string::unused"
+        "controls::solver_test_partials_var_name::unimplemented"
       ],
       "unknown_controls": [],
       "headless_plotting_keys_count": 64,
       "terminal_output_keys": [
         "controls::num_trace_history_values",
+        "controls::report_solver_progress",
         "controls::terminal_interval",
         "controls::terminal_show_age_units",
         "controls::trace_history_value_name",
+        "controls::warning_limit_for_max_residual",
         "controls::write_header_frequency",
         "star_job::show_log_description_at_start"
       ]
@@ -8537,7 +8049,6 @@
         "inlist_other_physics_hooks_header"
       ],
       "unsupported_controls": [
-        "controls::photo_interval::unimplemented",
         "controls::use_other_mesh_functions::unimplemented"
       ],
       "unknown_controls": [],
@@ -8561,14 +8072,12 @@
         "controls::d_omega_mixing_across_convection_boundary::unimplemented",
         "controls::d_omega_mixing_rate::unimplemented",
         "controls::max_safe_logt_for_rates::unimplemented",
-        "controls::photo_interval::unimplemented",
         "controls::warn_rates_for_high_temp::unimplemented",
         "star_job::change_d_omega_flag::unimplemented",
         "star_job::change_initial_d_omega_flag::unimplemented",
         "star_job::dlogtau_factor::unimplemented",
         "star_job::dump_missing_metals_into_heaviest::unimplemented",
-        "star_job::new_d_omega_flag::unimplemented",
-        "star_job::required_termination_code_string::unused"
+        "star_job::new_d_omega_flag::unimplemented"
       ],
       "unknown_controls": [],
       "headless_plotting_keys_count": 288,
@@ -8595,13 +8104,9 @@
       "unsupported_controls": [
         "controls::fill_arrays_with_nans::unimplemented",
         "controls::initial_he3::unimplemented",
-        "controls::photo_interval::unimplemented",
-        "controls::report_solver_progress::unimplemented",
         "controls::use_other_eval_fp_ft::unimplemented",
         "controls::use_other_kap::unused",
         "controls::warn_rates_for_high_temp::unimplemented",
-        "controls::warn_when_large_rel_run_e_err::unimplemented",
-        "controls::x_logical_ctrl::unused",
         "star_job::adv_net::unused",
         "star_job::change_w_div_wc_flag::unimplemented",
         "star_job::max_dt_for_relax_entropy::unimplemented",
@@ -8609,7 +8114,6 @@
         "star_job::new_w_div_wc_flag::unimplemented",
         "star_job::num_timescales_for_relax_entropy::unimplemented",
         "star_job::relax_omega_max_yrs_dt::unimplemented",
-        "star_job::required_termination_code_string::unused",
         "star_job::timescale_for_relax_composition::unimplemented",
         "star_job::timescale_for_relax_entropy::unimplemented"
       ],
@@ -8617,6 +8121,7 @@
       "headless_plotting_keys_count": 76,
       "terminal_output_keys": [
         "controls::num_trace_history_values",
+        "controls::report_solver_progress",
         "controls::terminal_interval",
         "controls::trace_history_value_name"
       ]
@@ -8632,9 +8137,7 @@
         "controls::high_logt_op_mono_full_off::unimplemented",
         "controls::high_logt_op_mono_full_on::unimplemented",
         "controls::op_mono_min_x_to_include::unimplemented",
-        "controls::photo_interval::unimplemented",
-        "controls::use_op_mono_alt_get_kap::unimplemented",
-        "star_job::required_termination_code_string::unused"
+        "controls::use_op_mono_alt_get_kap::unimplemented"
       ],
       "unknown_controls": [],
       "headless_plotting_keys_count": 14,
@@ -8649,13 +8152,11 @@
     {
       "suite": "star",
       "case": "relax_composition_j_entropy",
-      "strict_ok": false,
+      "strict_ok": true,
       "entry_files": [
         "inlist_relax_composition_j_entropy_header"
       ],
-      "unsupported_controls": [
-        "star_job::required_termination_code_string::unused"
-      ],
+      "unsupported_controls": [],
       "unknown_controls": [],
       "headless_plotting_keys_count": 0,
       "terminal_output_keys": [
@@ -8678,8 +8179,7 @@
         "colors::make_csv::unimplemented",
         "colors::stellar_atm::unimplemented",
         "colors::use_colors::unimplemented",
-        "colors::vega_sed::unimplemented",
-        "controls::photo_interval::unimplemented"
+        "colors::vega_sed::unimplemented"
       ],
       "unknown_controls": [],
       "headless_plotting_keys_count": 75,
@@ -8707,8 +8207,7 @@
         "colors::make_csv::unimplemented",
         "colors::stellar_atm::unimplemented",
         "colors::use_colors::unimplemented",
-        "colors::vega_sed::unimplemented",
-        "controls::photo_interval::unimplemented"
+        "colors::vega_sed::unimplemented"
       ],
       "unknown_controls": [],
       "headless_plotting_keys_count": 76,
@@ -8735,8 +8234,7 @@
         "colors::make_csv::unimplemented",
         "colors::stellar_atm::unimplemented",
         "colors::use_colors::unimplemented",
-        "colors::vega_sed::unimplemented",
-        "controls::photo_interval::unimplemented"
+        "colors::vega_sed::unimplemented"
       ],
       "unknown_controls": [],
       "headless_plotting_keys_count": 75,
@@ -8765,7 +8263,6 @@
         "colors::stellar_atm::unimplemented",
         "colors::use_colors::unimplemented",
         "colors::vega_sed::unimplemented",
-        "controls::photo_interval::unimplemented",
         "controls::rsp_map_columns_filename::unused",
         "controls::rsp_map_filename::unused",
         "controls::rsp_map_first_period::unused",
@@ -8800,8 +8297,7 @@
         "colors::make_csv::unimplemented",
         "colors::stellar_atm::unimplemented",
         "colors::use_colors::unimplemented",
-        "colors::vega_sed::unimplemented",
-        "controls::photo_interval::unimplemented"
+        "colors::vega_sed::unimplemented"
       ],
       "unknown_controls": [],
       "headless_plotting_keys_count": 75,
@@ -8829,8 +8325,7 @@
         "colors::make_csv::unimplemented",
         "colors::stellar_atm::unimplemented",
         "colors::use_colors::unimplemented",
-        "colors::vega_sed::unimplemented",
-        "controls::photo_interval::unimplemented"
+        "colors::vega_sed::unimplemented"
       ],
       "unknown_controls": [],
       "headless_plotting_keys_count": 14,
@@ -8858,8 +8353,7 @@
         "colors::make_csv::unimplemented",
         "colors::stellar_atm::unimplemented",
         "colors::use_colors::unimplemented",
-        "colors::vega_sed::unimplemented",
-        "controls::photo_interval::unimplemented"
+        "colors::vega_sed::unimplemented"
       ],
       "unknown_controls": [],
       "headless_plotting_keys_count": 0,
@@ -8884,8 +8378,7 @@
         "colors::make_csv::unimplemented",
         "colors::stellar_atm::unimplemented",
         "colors::use_colors::unimplemented",
-        "colors::vega_sed::unimplemented",
-        "controls::photo_interval::unimplemented"
+        "colors::vega_sed::unimplemented"
       ],
       "unknown_controls": [],
       "headless_plotting_keys_count": 20,
@@ -8915,7 +8408,6 @@
         "colors::stellar_atm::unimplemented",
         "colors::use_colors::unimplemented",
         "colors::vega_sed::unimplemented",
-        "controls::photo_interval::unimplemented",
         "controls::rsp_map_columns_filename::unused",
         "controls::rsp_map_filename::unused",
         "controls::rsp_map_first_period::unused",
@@ -8946,14 +8438,11 @@
     {
       "suite": "star",
       "case": "semiconvection",
-      "strict_ok": false,
+      "strict_ok": true,
       "entry_files": [
         "inlist_semiconvection_header"
       ],
-      "unsupported_controls": [
-        "controls::photo_interval::unimplemented",
-        "star_job::required_termination_code_string::unused"
-      ],
+      "unsupported_controls": [],
       "unknown_controls": [],
       "headless_plotting_keys_count": 1,
       "terminal_output_keys": [
@@ -8972,7 +8461,6 @@
         "inlist_solar_header"
       ],
       "unsupported_controls": [
-        "controls::photo_interval::unimplemented",
         "controls::use_other_mesh_functions::unimplemented",
         "star_job::set_cumulative_energy_error_each_step_if_age_less_than::unimplemented"
       ],
@@ -8996,12 +8484,10 @@
         "controls::d_omega_mixing_across_convection_boundary::unimplemented",
         "controls::d_omega_mixing_rate::unimplemented",
         "controls::max_safe_logt_for_rates::unimplemented",
-        "controls::photo_interval::unimplemented",
         "controls::warn_rates_for_high_temp::unimplemented",
         "star_job::change_initial_d_omega_flag::unimplemented",
         "star_job::dump_missing_metals_into_heaviest::unimplemented",
-        "star_job::new_d_omega_flag::unimplemented",
-        "star_job::required_termination_code_string::unused"
+        "star_job::new_d_omega_flag::unimplemented"
       ],
       "unknown_controls": [],
       "headless_plotting_keys_count": 258,
@@ -9025,20 +8511,16 @@
       "unsupported_controls": [
         "controls::do_starspots::unimplemented",
         "controls::fspot::unimplemented",
-        "controls::photo_digits::unimplemented",
-        "controls::photo_interval::unimplemented",
-        "controls::report_solver_progress::unimplemented",
-        "controls::warn_when_large_rel_run_e_err::unimplemented",
         "controls::xspot::unimplemented",
         "star_job::mesa_dir::unimplemented",
         "star_job::pre_ms_check_radiative_core_lnuc_div_l_limit::unimplemented",
         "star_job::pre_ms_check_radiative_core_min_mass::unimplemented",
-        "star_job::required_termination_code_string::unused",
         "star_job::save_pulse_data_when_terminate::unused"
       ],
       "unknown_controls": [],
       "headless_plotting_keys_count": 17,
       "terminal_output_keys": [
+        "controls::report_solver_progress",
         "controls::terminal_interval",
         "controls::write_header_frequency"
       ]
@@ -9046,14 +8528,11 @@
     {
       "suite": "star",
       "case": "timing",
-      "strict_ok": false,
+      "strict_ok": true,
       "entry_files": [
         "inlist_timing_header"
       ],
-      "unsupported_controls": [
-        "controls::photo_interval::unimplemented",
-        "star_job::first_model_for_timing::unimplemented"
-      ],
+      "unsupported_controls": [],
       "unknown_controls": [],
       "headless_plotting_keys_count": 0,
       "terminal_output_keys": [
@@ -9061,6 +8540,7 @@
         "controls::terminal_interval",
         "controls::trace_history_value_name",
         "controls::write_header_frequency",
+        "star_job::first_model_for_timing",
         "star_job::show_log_description_at_start"
       ]
     },
@@ -9076,16 +8556,12 @@
         "controls::d_omega_mixing_across_convection_boundary::unimplemented",
         "controls::d_omega_mixing_rate::unimplemented",
         "controls::max_safe_logt_for_rates::unimplemented",
-        "controls::photo_directory::unimplemented",
-        "controls::photo_interval::unimplemented",
         "controls::warn_rates_for_high_temp::unimplemented",
-        "controls::x_logical_ctrl::unused",
         "star_job::change_d_omega_flag::unimplemented",
         "star_job::dump_missing_metals_into_heaviest::unimplemented",
         "star_job::near_zams_relax_omega_div_omega_crit::unimplemented",
         "star_job::new_d_omega_flag::unimplemented",
-        "star_job::num_steps_to_relax_rotation::unimplemented",
-        "star_job::required_termination_code_string::unused"
+        "star_job::num_steps_to_relax_rotation::unimplemented"
       ],
       "unknown_controls": [],
       "headless_plotting_keys_count": 255,
@@ -9110,23 +8586,19 @@
         "controls::add_atmosphere_to_pulse_data::unimplemented",
         "controls::add_center_point_to_pulse_data::unimplemented",
         "controls::add_double_points_to_pulse_data::unimplemented",
-        "controls::photo_interval::unimplemented",
         "controls::report_ierr::unimplemented",
-        "controls::report_solver_progress::unimplemented",
-        "controls::warn_when_large_rel_run_e_err::unimplemented",
         "controls::write_pulse_data_with_profile::unimplemented",
-        "controls::x_logical_ctrl::unused",
         "star_job::change_mass_years_for_dt::unimplemented",
         "star_job::dlg_core_mass_per_step::unimplemented",
         "star_job::dlgm_per_step::unimplemented",
         "star_job::dump_missing_metals_into_heaviest::unimplemented",
-        "star_job::relax_core_years_for_dt::unimplemented",
-        "star_job::required_termination_code_string::unused"
+        "star_job::relax_core_years_for_dt::unimplemented"
       ],
       "unknown_controls": [],
       "headless_plotting_keys_count": 334,
       "terminal_output_keys": [
         "controls::num_trace_history_values",
+        "controls::report_solver_progress",
         "controls::terminal_interval",
         "controls::trace_history_value_name",
         "controls::write_header_frequency"
@@ -9135,13 +8607,11 @@
     {
       "suite": "star",
       "case": "wd_acc_small_dm",
-      "strict_ok": false,
+      "strict_ok": true,
       "entry_files": [
         "inlist_wd_acc_small_dm_header"
       ],
-      "unsupported_controls": [
-        "controls::photo_interval::unimplemented"
-      ],
+      "unsupported_controls": [],
       "unknown_controls": [],
       "headless_plotting_keys_count": 55,
       "terminal_output_keys": [
@@ -9160,11 +8630,8 @@
         "inlist_wd_aic_header"
       ],
       "unsupported_controls": [
-        "controls::photo_interval::unimplemented",
-        "controls::warning_limit_for_max_residual::unimplemented",
         "star_job::electron_coulomb_corrections::unimplemented",
         "star_job::ion_coulomb_corrections::unimplemented",
-        "star_job::required_termination_code_string::unused",
         "star_job::set_cumulative_energy_error_at_step::unimplemented",
         "star_job::special_weak_states_file::unimplemented",
         "star_job::special_weak_transitions_file::unimplemented",
@@ -9176,6 +8643,7 @@
         "controls::num_trace_history_values",
         "controls::terminal_interval",
         "controls::trace_history_value_name",
+        "controls::warning_limit_for_max_residual",
         "controls::write_header_frequency",
         "star_job::show_log_description_at_start"
       ]
@@ -9183,14 +8651,11 @@
     {
       "suite": "star",
       "case": "wd_c_core_ignition",
-      "strict_ok": false,
+      "strict_ok": true,
       "entry_files": [
         "inlist_wd_c_core_ignition_header"
       ],
-      "unsupported_controls": [
-        "controls::photo_interval::unimplemented",
-        "star_job::required_termination_code_string::unused"
-      ],
+      "unsupported_controls": [],
       "unknown_controls": [],
       "headless_plotting_keys_count": 15,
       "terminal_output_keys": [
@@ -9204,14 +8669,11 @@
     {
       "suite": "star",
       "case": "wd_cool_0.6M",
-      "strict_ok": false,
+      "strict_ok": true,
       "entry_files": [
         "inlist_wd_cool_0.6M_header"
       ],
-      "unsupported_controls": [
-        "controls::photo_interval::unimplemented",
-        "star_job::required_termination_code_string::unused"
-      ],
+      "unsupported_controls": [],
       "unknown_controls": [],
       "headless_plotting_keys_count": 17,
       "terminal_output_keys": [
@@ -9225,14 +8687,11 @@
     {
       "suite": "star",
       "case": "wd_diffusion",
-      "strict_ok": false,
+      "strict_ok": true,
       "entry_files": [
         "inlist_wd_diff_header"
       ],
-      "unsupported_controls": [
-        "controls::photo_interval::unimplemented",
-        "star_job::required_termination_code_string::unused"
-      ],
+      "unsupported_controls": [],
       "unknown_controls": [],
       "headless_plotting_keys_count": 11,
       "terminal_output_keys": [
@@ -9252,9 +8711,7 @@
         "inlist_he_shell_ignition_header"
       ],
       "unsupported_controls": [
-        "controls::photo_interval::unimplemented",
-        "star_job::dlogtau_factor::unimplemented",
-        "star_job::required_termination_code_string::unused"
+        "star_job::dlogtau_factor::unimplemented"
       ],
       "unknown_controls": [],
       "headless_plotting_keys_count": 17,
@@ -9275,10 +8732,7 @@
         "inlist_wd_nova_burst_header"
       ],
       "unsupported_controls": [
-        "controls::photo_interval::unimplemented",
-        "controls::warning_limit_for_max_residual::unimplemented",
-        "star_job::auto_extend_net::unused",
-        "star_job::required_termination_code_string::unused"
+        "star_job::auto_extend_net::unused"
       ],
       "unknown_controls": [],
       "headless_plotting_keys_count": 11,
@@ -9286,6 +8740,7 @@
         "controls::num_trace_history_values",
         "controls::terminal_interval",
         "controls::trace_history_value_name",
+        "controls::warning_limit_for_max_residual",
         "controls::write_header_frequency",
         "star_job::show_log_description_at_start"
       ]
@@ -9298,10 +8753,8 @@
         "inlist_wd_stable_h_burn_header"
       ],
       "unsupported_controls": [
-        "controls::photo_interval::unimplemented",
         "star_job::dlgm_per_step::unimplemented",
-        "star_job::dlogtau_factor::unimplemented",
-        "star_job::required_termination_code_string::unused"
+        "star_job::dlogtau_factor::unimplemented"
       ],
       "unknown_controls": [],
       "headless_plotting_keys_count": 0,
@@ -9323,14 +8776,10 @@
         "controls::d_omega_mixing_across_convection_boundary::unimplemented",
         "controls::d_omega_mixing_rate::unimplemented",
         "controls::max_safe_logt_for_rates::unimplemented",
-        "controls::photo_digits::unimplemented",
-        "controls::photo_interval::unimplemented",
         "controls::warn_rates_for_high_temp::unimplemented",
-        "controls::x_logical_ctrl::unused",
         "star_job::change_d_omega_flag::unimplemented",
         "star_job::dump_missing_metals_into_heaviest::unimplemented",
-        "star_job::new_d_omega_flag::unimplemented",
-        "star_job::required_termination_code_string::unused"
+        "star_job::new_d_omega_flag::unimplemented"
       ],
       "unknown_controls": [],
       "headless_plotting_keys_count": 263,
@@ -9372,18 +8821,17 @@
     {
       "suite": "binary",
       "case": "evolve_both_stars",
-      "strict_ok": false,
+      "strict_ok": true,
       "entry_files": [
         "inlist",
         "inlist1",
         "inlist2"
       ],
-      "unsupported_controls": [
-        "controls::extra_terminal_output_file::unimplemented"
-      ],
+      "unsupported_controls": [],
       "unknown_controls": [],
       "headless_plotting_keys_count": 84,
       "terminal_output_keys": [
+        "controls::extra_terminal_output_file",
         "controls::terminal_interval",
         "controls::write_header_frequency",
         "star_job::show_log_description_at_start"
@@ -9392,17 +8840,16 @@
     {
       "suite": "binary",
       "case": "jdot_gr_check",
-      "strict_ok": false,
+      "strict_ok": true,
       "entry_files": [
         "inlist",
         "inlist1"
       ],
-      "unsupported_controls": [
-        "controls::extra_terminal_output_file::unimplemented"
-      ],
+      "unsupported_controls": [],
       "unknown_controls": [],
       "headless_plotting_keys_count": 1,
       "terminal_output_keys": [
+        "controls::extra_terminal_output_file",
         "controls::terminal_interval",
         "controls::write_header_frequency",
         "star_job::show_log_description_at_start"
@@ -9411,17 +8858,16 @@
     {
       "suite": "binary",
       "case": "jdot_ls_check",
-      "strict_ok": false,
+      "strict_ok": true,
       "entry_files": [
         "inlist",
         "inlist1"
       ],
-      "unsupported_controls": [
-        "controls::extra_terminal_output_file::unimplemented"
-      ],
+      "unsupported_controls": [],
       "unknown_controls": [],
       "headless_plotting_keys_count": 0,
       "terminal_output_keys": [
+        "controls::extra_terminal_output_file",
         "controls::terminal_interval",
         "controls::write_header_frequency",
         "star_job::show_log_description_at_start"
@@ -9430,17 +8876,16 @@
     {
       "suite": "binary",
       "case": "jdot_ml_check",
-      "strict_ok": false,
+      "strict_ok": true,
       "entry_files": [
         "inlist",
         "inlist1"
       ],
-      "unsupported_controls": [
-        "controls::extra_terminal_output_file::unimplemented"
-      ],
+      "unsupported_controls": [],
       "unknown_controls": [],
       "headless_plotting_keys_count": 0,
       "terminal_output_keys": [
+        "controls::extra_terminal_output_file",
         "controls::terminal_interval",
         "controls::write_header_frequency",
         "star_job::show_log_description_at_start"
@@ -9449,17 +8894,16 @@
     {
       "suite": "binary",
       "case": "star_plus_point_mass",
-      "strict_ok": false,
+      "strict_ok": true,
       "entry_files": [
         "inlist",
         "inlist1"
       ],
-      "unsupported_controls": [
-        "controls::extra_terminal_output_file::unimplemented"
-      ],
+      "unsupported_controls": [],
       "unknown_controls": [],
       "headless_plotting_keys_count": 85,
       "terminal_output_keys": [
+        "controls::extra_terminal_output_file",
         "controls::terminal_interval",
         "controls::write_header_frequency",
         "star_job::show_log_description_at_start"
@@ -9468,17 +8912,16 @@
     {
       "suite": "binary",
       "case": "star_plus_point_mass_explicit_mdot",
-      "strict_ok": false,
+      "strict_ok": true,
       "entry_files": [
         "inlist",
         "inlist1"
       ],
-      "unsupported_controls": [
-        "controls::extra_terminal_output_file::unimplemented"
-      ],
+      "unsupported_controls": [],
       "unknown_controls": [],
       "headless_plotting_keys_count": 0,
       "terminal_output_keys": [
+        "controls::extra_terminal_output_file",
         "controls::terminal_interval",
         "controls::write_header_frequency",
         "star_job::show_log_description_at_start"
@@ -9487,17 +8930,16 @@
     {
       "suite": "binary",
       "case": "wind_fed_bhhmxb",
-      "strict_ok": false,
+      "strict_ok": true,
       "entry_files": [
         "inlist",
         "inlist1"
       ],
-      "unsupported_controls": [
-        "controls::extra_terminal_output_file::unimplemented"
-      ],
+      "unsupported_controls": [],
       "unknown_controls": [],
       "headless_plotting_keys_count": 0,
       "terminal_output_keys": [
+        "controls::extra_terminal_output_file",
         "controls::terminal_interval",
         "controls::write_header_frequency",
         "star_job::show_log_description_at_start"
@@ -9513,9 +8955,7 @@
         "inlist_astero_search_controls"
       ],
       "unsupported_controls": [
-        "astero_search_controls::do_redistribute_mesh::unimplemented",
-        "controls::photo_interval::unimplemented",
-        "star_job::required_termination_code_string::unused"
+        "astero_search_controls::do_redistribute_mesh::unimplemented"
       ],
       "unknown_controls": [],
       "headless_plotting_keys_count": 0,
@@ -9530,15 +8970,12 @@
     {
       "suite": "astero",
       "case": "astero_gyre",
-      "strict_ok": false,
+      "strict_ok": true,
       "entry_files": [
         "inlist_astero_gyre_header",
         "inlist_astero_search_controls"
       ],
-      "unsupported_controls": [
-        "controls::photo_interval::unimplemented",
-        "star_job::required_termination_code_string::unused"
-      ],
+      "unsupported_controls": [],
       "unknown_controls": [],
       "headless_plotting_keys_count": 0,
       "terminal_output_keys": [
@@ -9609,9 +9046,7 @@
         "astero_search_controls::write_gyre_for_best_model::unimplemented",
         "astero_search_controls::write_gyre_for_each_model::unimplemented",
         "astero_search_controls::write_profile_for_best_model::unimplemented",
-        "astero_search_controls::y_frac_he3::unused",
-        "controls::photo_interval::unimplemented",
-        "star_job::required_termination_code_string::unused"
+        "astero_search_controls::y_frac_he3::unused"
       ],
       "unknown_controls": [],
       "headless_plotting_keys_count": 173,
@@ -9675,9 +9110,7 @@
         "astero_search_controls::write_gyre_for_each_model::unimplemented",
         "astero_search_controls::write_profile_for_best_model::unimplemented",
         "astero_search_controls::y_frac_he3::unused",
-        "controls::photo_interval::unimplemented",
-        "star_job::pre_ms_relax_num_steps::unused",
-        "star_job::required_termination_code_string::unused"
+        "star_job::pre_ms_relax_num_steps::unused"
       ],
       "unknown_controls": [],
       "headless_plotting_keys_count": 173,
@@ -9741,9 +9174,7 @@
         "astero_search_controls::write_gyre_for_each_model::unimplemented",
         "astero_search_controls::write_profile_for_best_model::unimplemented",
         "astero_search_controls::y_frac_he3::unused",
-        "controls::photo_interval::unimplemented",
-        "star_job::pre_ms_relax_num_steps::unused",
-        "star_job::required_termination_code_string::unused"
+        "star_job::pre_ms_relax_num_steps::unused"
       ],
       "unknown_controls": [],
       "headless_plotting_keys_count": 173,
@@ -9808,9 +9239,7 @@
         "astero_search_controls::write_gyre_for_each_model::unimplemented",
         "astero_search_controls::write_profile_for_best_model::unimplemented",
         "astero_search_controls::y_frac_he3::unused",
-        "controls::photo_interval::unimplemented",
-        "star_job::pre_ms_relax_num_steps::unused",
-        "star_job::required_termination_code_string::unused"
+        "star_job::pre_ms_relax_num_steps::unused"
       ],
       "unknown_controls": [],
       "headless_plotting_keys_count": 173,
@@ -9879,9 +9308,7 @@
         "astero_search_controls::write_gyre_for_each_model::unimplemented",
         "astero_search_controls::write_profile_for_best_model::unimplemented",
         "astero_search_controls::y_frac_he3::unused",
-        "controls::photo_interval::unimplemented",
-        "star_job::pre_ms_relax_num_steps::unused",
-        "star_job::required_termination_code_string::unused"
+        "star_job::pre_ms_relax_num_steps::unused"
       ],
       "unknown_controls": [],
       "headless_plotting_keys_count": 173,
@@ -9931,8 +9358,7 @@
         "astero_search_controls::write_best_model_data_for_each_sample::unimplemented",
         "astero_search_controls::write_fgong_for_best_model::unimplemented",
         "astero_search_controls::write_fgong_for_each_model::unimplemented",
-        "astero_search_controls::write_profile_for_best_model::unimplemented",
-        "controls::photo_interval::unimplemented"
+        "astero_search_controls::write_profile_for_best_model::unimplemented"
       ],
       "unknown_controls": [],
       "headless_plotting_keys_count": 36,

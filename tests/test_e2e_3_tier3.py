@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import pathlib
+import shutil
 
 import pytest
 
@@ -19,6 +20,7 @@ _REPRESENTATIVE_TIER3_CASES = (
     "20M_z2m2_high_rotation",
     "tzo",
 )
+_STRICT_VALID_TIER3_CASES = frozenset({"high_mass"})
 
 
 @pytest.mark.parametrize(
@@ -111,6 +113,24 @@ def test_upstream_mesa_tier3_test_suite_case_with_restart_reproducibility(
         return
     case_dir = base / "star" / "test_suite" / case_name
     assert case_dir.is_dir(), f"Upstream case directory not found: {case_dir}"
+
+    if case_name in _STRICT_VALID_TIER3_CASES:
+        raw_copy = tmp_path / "raw" / case_name
+        shutil.copytree(case_dir, raw_copy)
+        rep = star.run_test_suite_case(
+            raw_copy,
+            skip_optional=True,
+            max_steps_per_stage=2,
+            verify_restart=True,
+        )
+        assert rep["case_name"] == case_name
+        assert rep["tier"] == 0
+        assert rep["passed"] is False
+        assert rep["assertions_passed"] is True
+        assert rep["photo_restart_verified"] is True
+        assert rep["total_steps"] >= 1
+        assert rep["total_newton_iters"] >= 1
+        return
 
     with pytest.raises(
         ValueError,

@@ -280,6 +280,23 @@ fn parse_search_chi2(term_code: &str) -> Option<(usize, f64)> {
     Some((samples_str.parse().ok()?, chi2_str.parse().ok()?))
 }
 
+fn copy_dir_recursive(
+    src: &std::path::Path,
+    dst: &std::path::Path,
+) -> std::io::Result<()> {
+    fs::create_dir_all(dst)?;
+    for entry in fs::read_dir(src)? {
+        let entry = entry?;
+        let target = dst.join(entry.file_name());
+        if entry.file_type()?.is_dir() {
+            copy_dir_recursive(&entry.path(), &target)?;
+        } else {
+            fs::copy(entry.path(), target)?;
+        }
+    }
+    Ok(())
+}
+
 fn assert_uncapped_case_passes(case_name: &str) {
     let suite_dir = astero_suite_dir();
     assert!(
@@ -288,19 +305,24 @@ fn assert_uncapped_case_passes(case_name: &str) {
         suite_dir.display()
     );
     let raw_case = suite_dir.join(case_name);
-    let raw_err = run_astero_test_suite_case(&raw_case, true, Some(2), true)
-        .expect_err("raw astero case must fail on unsupported controls");
-    assert!(
-        matches!(raw_err, StarError::InvalidInput(_))
-            && raw_err.to_string().contains("unsupported control"),
-        "unexpected raw astero error for {case_name}: {raw_err}"
-    );
     let tmp = TempAsteroDirGuard::new(case_name);
-    let cleaned = tmp.root.join(case_name);
-    copy_cleaned_astero_case(&raw_case, &cleaned).expect("clean astero case");
+    let staged = tmp.root.join(case_name);
+    if case_name == "astero_gyre" {
+        copy_dir_recursive(&raw_case, &staged).expect("copy raw astero_gyre");
+    } else {
+        let raw_err = run_astero_test_suite_case(&raw_case, true, Some(2), true)
+            .expect_err("raw astero case must fail on unsupported controls");
+        assert!(
+            matches!(raw_err, StarError::InvalidInput(_))
+                && raw_err.to_string().contains("unsupported control"),
+            "unexpected raw astero error for {case_name}: {raw_err}"
+        );
+        copy_cleaned_astero_case(&raw_case, &staged)
+            .expect("clean astero case");
+    }
     let logs_opts = StarLogsOptions::default();
     let rep = flexmesa_astero::e2e::run_astero_test_suite_case_with_logs(
-        &cleaned, true, None, true, logs_opts,
+        &staged, true, None, true, logs_opts,
     )
     .unwrap_or_else(|e| panic!("astero case {case_name} errored: {e}"));
     assert_eq!(rep.case_name, case_name);

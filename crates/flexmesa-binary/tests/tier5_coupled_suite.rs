@@ -754,6 +754,56 @@ fn test_brott_2011_wind_regimes_are_positive_and_continuous() {
     assert!(w_wr > w_hot);
 }
 
+fn copy_dir_verbatim(src: &std::path::Path, dst: &std::path::Path) {
+    fs::create_dir_all(dst).expect("create verbatim copy dir");
+    for entry in fs::read_dir(src).expect("read src case dir") {
+        let entry = entry.expect("dir entry");
+        let ty = entry.file_type().expect("file type");
+        let dst_path = dst.join(entry.file_name());
+        if ty.is_dir() {
+            copy_dir_verbatim(&entry.path(), &dst_path);
+        } else if ty.is_file() {
+            fs::copy(entry.path(), &dst_path).expect("copy case file");
+        }
+    }
+}
+
+fn assert_non_double_bh_raw_cases_pass_strict(suite_dir: &std::path::Path) {
+    // Issue #299: `extra_terminal_output_file` is classified as terminal-only
+    // (`DECISIONS #26`), so all 7 non-`double_bh` binary cases pass strict
+    // validation without cleaning.
+    for &case_name in &BINARY_CASES {
+        if case_name == "double_bh" {
+            continue;
+        }
+        let raw_dir = suite_dir.join(case_name);
+        let bctrl = BinaryInlistControls::from_case_dir(&raw_dir)
+            .expect("raw binary controls");
+        let active_inlists: &[String] = if bctrl.evolve_both_stars {
+            &bctrl.inlist_names
+        } else {
+            &bctrl.inlist_names[..1]
+        };
+        for name in active_inlists {
+            if name.trim().is_empty() {
+                continue;
+            }
+            let bundle = InlistBundle::from_file_in_case_dir(&raw_dir, name)
+                .unwrap_or_else(|e| {
+                    panic!(
+                        "raw {case_name}/{name} must pass strict validation: {e}"
+                    )
+                });
+            assert_eq!(
+                bundle.validation_report.unsupported_controls.len(),
+                0,
+                "raw {case_name}/{name} has unsupported controls: {:?}",
+                bundle.validation_report.unsupported_controls
+            );
+        }
+    }
+}
+
 #[test]
 fn test_recursive_binary_inlists_and_all_8_cases_capped_4_steps() {
     let Some(suite_dir) = resolve_suite_dir() else {
@@ -780,16 +830,15 @@ fn test_recursive_binary_inlists_and_all_8_cases_capped_4_steps() {
             && raw_dbh_err.to_string().contains("unsupported control"),
         "unexpected raw double_bh error: {raw_dbh_err}"
     );
-    let suite_err =
-        run_binary_test_suite_case(&suite_dir.join("jdot_gr_check"), Some(4))
-            .expect_err(
-                "raw $MESA_DIR binary case must reject unsupported controls",
-            );
-    assert!(
-        matches!(suite_err, StarError::InvalidInput(_))
-            && suite_err.to_string().contains("unsupported control"),
-        "unexpected raw case error: {suite_err}"
+    assert_non_double_bh_raw_cases_pass_strict(&suite_dir);
+    let raw_gr_tmp = TempDirGuard::new("raw_gr_strict");
+    let raw_gr_dir = raw_gr_tmp.root.join("jdot_gr_check");
+    copy_dir_verbatim(&suite_dir.join("jdot_gr_check"), &raw_gr_dir);
+    let raw_gr_rep = run_binary_test_suite_case(&raw_gr_dir, Some(4)).expect(
+        "unmodified jdot_gr_check copy must pass strict validation (#299)",
     );
+    assert_eq!(raw_gr_rep.total_steps, 4);
+    assert_eq!(raw_gr_rep.termination_code, "MaxStepsCap");
 
     let tmp = TempDirGuard::new("all8");
     let cleaned_suite = tmp.root.join("binary").join("test_suite");
@@ -930,25 +979,34 @@ fn test_uncapped_jdot_ls_check_campaign() {
         return;
     };
     let raw_cdir = suite_dir.join("jdot_ls_check");
-    let raw_err = run_binary_test_suite_case(&raw_cdir, None)
-        .expect_err("raw jdot_ls_check must fail on unsupported controls");
-    assert!(
-        matches!(raw_err, StarError::InvalidInput(_))
-            && raw_err.to_string().contains("unsupported control"),
-        "unexpected raw jdot_ls_check error: {raw_err}"
+    let raw_b1 = InlistBundle::from_file_in_case_dir(&raw_cdir, "inlist1")
+        .expect("raw jdot_ls_check/inlist1 must pass strict validation (#299)");
+    assert_eq!(
+        raw_b1.validation_report.unsupported_controls.len(),
+        0,
+        "unexpected unsupported controls: {:?}",
+        raw_b1.validation_report.unsupported_controls
     );
-    let tmp = TempDirGuard::new("jdot_ls");
-    let cdir = tmp.root.join("jdot_ls_check");
-    copy_cleaned_binary_case(&raw_cdir, &cdir).expect("clean jdot_ls_check");
+    assert!(
+        raw_b1.validation_report.terminal_output_keys.contains(&(
+            String::from("controls"),
+            String::from("extra_terminal_output_file")
+        )),
+        "expected extra_terminal_output_file in terminal_output_keys: {:?}",
+        raw_b1.validation_report.terminal_output_keys
+    );
+    let tmp = TempDirGuard::new("jdot_ls_raw");
+    let staged_raw = tmp.root.join("jdot_ls_check");
+    copy_dir_verbatim(&raw_cdir, &staged_raw);
     let mut extras = JdotLsCheckExtras::default();
     let rep = run_binary_test_suite_case_with_extras(
-        &cdir,
+        &staged_raw,
         None,
         BinaryLogsOptions::default(),
         InlistLoadOptions::default(),
         &mut extras,
     )
-    .expect("uncapped jdot_ls_check");
+    .expect("uncapped unmodified jdot_ls_check");
     assert!(rep.passed, "uncapped jdot_ls_check failed: {rep:?}");
     assert_eq!(rep.termination_code, "max_age");
     assert!(rep.total_steps >= 100);

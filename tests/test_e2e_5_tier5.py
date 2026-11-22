@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import math
 import pathlib
+import shutil
 
 import pytest
 
@@ -214,8 +215,23 @@ def test_e2e_5_tier5_star_and_binary_suites_execution(
     clean_root = tmp_path / "mesa"
     assert (base / "star" / "test_suite").is_dir()
     star_cases = ("check_redo", "other_physics_hooks", "timing")
+    strict_star_cases = frozenset({"check_redo", "timing"})
     for case_name in star_cases:
         raw_case = base / "star" / "test_suite" / case_name
+        if case_name in strict_star_cases:
+            raw_copy = tmp_path / "strict_star" / case_name
+            shutil.copytree(raw_case, raw_copy)
+            rep = star.run_test_suite_case(
+                raw_copy,
+                skip_optional=True,
+                max_steps_per_stage=2,
+                verify_restart=True,
+                extras=resolve_case_extras("star", raw_case),
+            )
+            assert rep["tier"] == 0
+            assert rep["assertions_passed"] is True
+            assert rep["photo_restart_verified"] is True
+            continue
         with pytest.raises(
             ValueError,
             match=r"(unsupported|unknown|unrecognized).*control",
@@ -240,35 +256,29 @@ def test_e2e_5_tier5_star_and_binary_suites_execution(
             max_steps_per_stage=2,
             verify_restart=True,
         )
-    for case_name in ("check_redo", "timing"):
-        raw_case = base / "star" / "test_suite" / case_name
-        rep = star.run_test_suite_case(
-            star_root / case_name,
-            skip_optional=True,
-            max_steps_per_stage=2,
-            verify_restart=True,
-            extras=resolve_case_extras("star", raw_case),
-        )
-        assert rep["tier"] == 0
-        assert rep["assertions_passed"] is True
-        assert rep["photo_restart_verified"] is True
 
     assert (base / "binary" / "test_suite").is_dir()
+    strict_bin_cases = frozenset(_BINARY_CASES) - frozenset({"double_bh"})
+    strict_bin_root = tmp_path / "strict_binary"
     for case_name in _BINARY_CASES:
         raw_case = base / "binary" / "test_suite" / case_name
-        with pytest.raises(
-            ValueError,
-            match=r"(unsupported|unknown|unrecognized).*control",
-        ):
-            binary.run_binary_test_suite_case(
-                raw_case,
-                max_steps_cap=4,
-                extras=resolve_case_extras("binary", raw_case),
-            )
-        clean_case = clean_root / "binary" / "test_suite" / case_name
-        star.copy_cleaned_case(raw_case, clean_case, suite="binary")
+        if case_name in strict_bin_cases:
+            run_case = strict_bin_root / case_name
+            shutil.copytree(raw_case, run_case)
+        else:
+            with pytest.raises(
+                ValueError,
+                match=r"(unsupported|unknown|unrecognized).*control",
+            ):
+                binary.run_binary_test_suite_case(
+                    raw_case,
+                    max_steps_cap=4,
+                    extras=resolve_case_extras("binary", raw_case),
+                )
+            run_case = clean_root / "binary" / "test_suite" / case_name
+            star.copy_cleaned_case(raw_case, run_case, suite="binary")
         brep = binary.run_binary_test_suite_case(
-            clean_case,
+            run_case,
             max_steps_cap=4,
             extras=resolve_case_extras("binary", raw_case),
         )
@@ -281,14 +291,13 @@ def test_e2e_5_tier5_star_and_binary_suites_execution(
         ("jdot_ml_check", 1.0e-4),
     ):
         raw_case = base / "binary" / "test_suite" / case_name
-        clean_case = clean_root / "binary" / "test_suite" / case_name
         trace_out = tmp_path / f"trace_{case_name}"
         harness_runner.run_trace_inprocess(
             "binary",
-            clean_case,
+            strict_bin_root / case_name,
             trace_out,
             max_steps=4,
-            allow_unsupported_controls=True,
+            allow_unsupported_controls=False,
             extras=resolve_case_extras("binary", raw_case),
         )
         parsed = _rust.mesa_read_log_file(

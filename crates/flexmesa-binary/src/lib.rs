@@ -229,17 +229,31 @@ mod tests {
             flexmesa_utils::require_mesa_test_input_path("binary/test_suite")
         {
             let err = run_binary_test_suite_case(
-                &bin_suite.join("jdot_gr_check"),
+                &bin_suite.join("double_bh"),
                 Some(4),
             )
             .expect_err(
-                "raw $MESA_DIR binary case must reject unsupported controls",
+                "raw $MESA_DIR double_bh must reject unsupported controls",
             );
             let msg = err.to_string();
             assert!(
                 matches!(err, flexmesa_star::StarError::InvalidInput(_))
-                    && msg.contains("unsupported control"),
+                    && msg.contains("unsupported control")
+                    && msg.contains("set_cumulative_energy_error_at_step"),
                 "unexpected binary case error: {msg}"
+            );
+            let gr_dir = bin_suite.join("jdot_gr_check");
+            let gr_b1 = flexmesa_star::InlistBundle::from_file_in_case_dir(
+                &gr_dir, "inlist1",
+            )
+            .expect(
+                "raw jdot_gr_check/inlist1 must pass strict validation (#299)",
+            );
+            assert_eq!(
+                gr_b1.validation_report.unsupported_controls.len(),
+                0,
+                "unexpected unsupported controls in raw jdot_gr_check: {:?}",
+                gr_b1.validation_report.unsupported_controls
             );
         }
     }

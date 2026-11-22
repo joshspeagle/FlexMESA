@@ -49,6 +49,12 @@ case "$MODE" in
     # partitions exactly as in CI. The `ci` profile (no LTO, 16 codegen
     # units) replaces `--release` (fat LTO, one codegen unit).
     eval "$(cargo llvm-cov show-env --sh)"
+    # Coverage counters are plain memory shared by all threads, so worker
+    # threads that run the same code contend for the same cache lines. On
+    # one instrumented test binary, four rayon threads took 682 s of CPU and
+    # 178 s wall against 69 s and 55 s with one (#345). Line coverage does
+    # not depend on the thread count; cargo still runs tests in parallel.
+    export RAYON_NUM_THREADS=1
     cargo llvm-cov clean --workspace
     if [ "$PACKAGE" = "rest" ]; then
       SKIP_ARGS=()

@@ -327,7 +327,7 @@
         "verified_total": 0,
         "pct_ported": 0.0,
         "pct_verified": 0.0,
-        "rust_lines": 3127,
+        "rust_lines": 5834,
         "python_jax_lines": 1234
       },
       {
@@ -1102,7 +1102,7 @@
     }
   },
   "skips": {
-    "rust_ignore_count": 16,
+    "rust_ignore_count": 14,
     "rust_ignores": [
       {
         "location": "crates/flexmesa-astero/tests/astero_suite.rs:432",
@@ -1165,11 +1165,6 @@
         "issues": "#143, #160"
       },
       {
-        "location": "crates/flexmesa-eos/tests/mesa_26_4_1_component_oracles_test.rs:308",
-        "reason": "declared gap (#161): Skye/HELM operation order; 12 d_dlnT channels on skye_co_liq and eosdt_skye_helm_blend miss the original tolerance, largest eosdt_skye_helm_blend gamma3 rel_err 8.028e-6 >= 1.0e-7 (see DECLARED_DLNT_RESIDUALS)",
-        "issues": "#161"
-      },
-      {
         "location": "crates/flexmesa-eos/tests/wave3a3_pc_solid_tests.rs:256",
         "reason": "declared gap (#161): PC analytical EXCOR7 vs MESA pc_eos.f90:1895 use_EXCOR7_table spline on solid/blend cases; largest pc_co_sol dE_dRho d_dlnT rel_err 2.513e-6 >= 5.0e-9",
         "issues": "#161"
@@ -1178,14 +1173,9 @@
         "location": "crates/flexmesa-eos/tests/wave3a3_pc_tests.rs:132",
         "reason": "declared gap (#161): PC analytical EXCOR7 vs MESA pc_eos.f90:1895 use_EXCOR7_table spline; 9 entries exceed 1.0e-11/5.0e-9, largest pc_co_liq dE_dRho d_dlnT rel_err 7.123e-6",
         "issues": "#161"
-      },
-      {
-        "location": "crates/flexmesa-eos/tests/wave3a3_skye_inverse_tests.rs:369",
-        "reason": "declared gap (#161): Skye/HELM operation order on skye_c12_liq, skye_c12_liq_ion, skye_co_liq, and eosdt_skye_helm_blend (max rel_err 1.101e-6 >= 1.0e-11; see DECLARED_SKYE_RESIDUALS)",
-        "issues": "#161"
       }
     ],
-    "python_xfail_or_skip_count": 10,
+    "python_xfail_or_skip_count": 11,
     "python_skips": [
       {
         "location": "tests/test_eos_wave3a3.py:200",
@@ -1196,6 +1186,11 @@
         "location": "tests/test_eos_wave3b1.py:395",
         "reason": "pytest.mark.xfail( strict=True, reason=( \"declared gap (#161): Python eos.eos_dt_get_t does not yet expose \" \"logT_tol/other_tol (eos/test/test_output:395 tol=1e-5 stops one \" \"Newton step earlier at 4.8009613155595554)\" ), )",
         "issues": "#161"
+      },
+      {
+        "location": "tests/test_eos_wave3b1.py:813",
+        "reason": "pytest.mark.xfail( strict=True, reason=( \"#295: AutoDiffReal2VarOrder3 evaluates MESA 26.4.1's auto_diff \" \"expressions (#349), which moves the cancellation-dominated de_dd \" \"of the Rust ideal-gas EOS by a few ULPs of its 5.7e10 terms; the \" \"JAX twin keeps its own rounding.\" ), )",
+        "issues": "#295, #349"
       },
       {
         "location": "tests/test_star_wave4_1.py:83",
@@ -1479,13 +1474,7 @@
         "issues": []
       }
     ],
-    "open_pull_requests": [
-      {
-        "number": 352,
-        "title": "fix(autodiff): the order-2 and order-3 dual types evaluate upstream's expression for each operation (#349)",
-        "draft": false
-      }
-    ],
+    "open_pull_requests": [],
     "deferred_169": [
       {
         "number": 175,
@@ -2763,6 +2752,19 @@
     {
       "date_utc": "2026-11-22",
       "commit": "d97b204",
+      "event": "main merge",
+      "engine_ported_pct": "30.7",
+      "all_verified_pct": "1.0",
+      "cases_passing": "0",
+      "rust_cov_pct": "75.8",
+      "python_cov_pct": "87.6",
+      "closed_140": "16",
+      "total_140": "36",
+      "deferred_169": "45"
+    },
+    {
+      "date_utc": "2026-11-22",
+      "commit": "f0b9899",
       "event": "main merge",
       "engine_ported_pct": "30.7",
       "all_verified_pct": "1.0",

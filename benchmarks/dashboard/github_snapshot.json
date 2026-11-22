@@ -237,13 +237,7 @@
       "issues": []
     }
   ],
-  "open_pull_requests": [
-    {
-      "number": 352,
-      "title": "fix(autodiff): the order-2 and order-3 dual types evaluate upstream's expression for each operation (#349)",
-      "draft": false
-    }
-  ],
+  "open_pull_requests": [],
   "deferred_169": [
     {
       "number": 175,

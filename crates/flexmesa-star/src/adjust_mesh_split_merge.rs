@@ -1216,16 +1216,31 @@ pub fn remesh_split_merge(
     model.set_dm_bar();
     model.set_m_grav_and_grav();
 
-    let j_saved = model.j_rot.clone();
     if model.controls.rotation_flag {
+        // Verbatim `amr` post-split/merge rotation update
+        // (`star/private/adjust_mesh_split_merge.f90:165-174`).
+        let max_w = model.controls.mix_wind.w_div_wcrit_max;
+        let max_w2 = model.controls.mix_wind.w_div_wcrit_max2;
+        for k in 0..nz {
+            let r00 = flexmesa_math::exp(model.ln_r[k]);
+            model.aux.w_div_wc[k] = crate::hydro_rotation::w_div_w_roche_jrot(
+                r00,
+                model.m[k],
+                model.j_rot[k],
+                model.cgrav[k],
+                max_w,
+                max_w2,
+                false,
+            );
+            crate::hydro_rotation::update1_i_rot_from_xh(model, k);
+            model.omega[k] = model.j_rot[k] / model.aux.i_rot[k];
+        }
         let new_j = total_angular_momentum(model);
         if old_j.abs() > 0.0 && ((old_j - new_j) / old_j).abs() > 1.0e-14 {
             return Err(StarError::InvalidInput(format!(
                 "angular momentum conservation error in remesh_split_merge: old_J={old_j}, new_J={new_j}"
             )));
         }
-        crate::rotation::conserve_shell_j_rot_and_distortion(model);
-        model.j_rot.clone_from(&j_saved);
     }
 
     if num_split + num_merge > 0 {
@@ -1234,9 +1249,6 @@ pub fn remesh_split_merge(
         let hydro_res = set_hydro_vars(model, false, false);
         model.aux.okay_to_set_mlt_vc = prev_okay_mlt_vc;
         hydro_res?;
-        if model.controls.rotation_flag {
-            model.j_rot.clone_from(&j_saved);
-        }
         model.save_start_values()?;
         model.save_old_values();
         model.star_age_old = age_old;

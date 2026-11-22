@@ -354,6 +354,8 @@ pub struct StarControls {
     pub use_other_adjust_mdot: bool,
     /// Enable custom `other_torque` hook (`use_other_torque`).
     pub use_other_torque: bool,
+    /// Enable custom `other_torque_implicit` hook (`use_other_torque_implicit`).
+    pub use_other_torque_implicit: bool,
     /// Enable custom `other_energy` hook (`use_other_energy`).
     pub use_other_energy: bool,
     /// Enable custom `other_eps_grav` hook (`use_other_eps_grav`).

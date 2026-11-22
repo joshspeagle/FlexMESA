@@ -148,6 +148,43 @@ pub trait StarExtras {
     fn other_torque(&self, _m: &StarModel) -> Option<Vec<f64>> {
         None
     }
+    /// Populates `model.aux.extra_jdot` and/or `model.aux.extra_omegadot`
+    /// inside `do_solve_omega_mix` when `use_other_torque` is enabled
+    /// (`other_torque` in `star/private/solve_omega_mix.f90:81-88`).
+    ///
+    /// By default delegates to [`Self::other_torque`] and copies any returned
+    /// profile into `model.aux.extra_jdot`.
+    ///
+    /// # Errors
+    /// Returns [`StarError`] if evaluating or validating the torque fails.
+    fn apply_other_torque(&mut self, m: &mut StarModel) -> Result<(), StarError> {
+        if let Some(jdot) = self.other_torque(m) {
+            if jdot.len() != m.nz {
+                return Err(StarError::InvalidInput(format!(
+                    "other_torque returned {} values for nz = {}",
+                    jdot.len(),
+                    m.nz
+                )));
+            }
+            m.aux.extra_jdot.resize(m.nz, 0.0);
+            m.aux.extra_jdot[..m.nz].copy_from_slice(&jdot);
+        }
+        Ok(())
+    }
+    /// Populates implicit torque sources (`extra_jdot`, `extra_omegadot`) and
+    /// their $\Omega$-partials (`d_extra_{jdot,omegadot}_domega_{m1,00,p1}`)
+    /// inside each Newton iteration of `do_solve_omega_mix` when
+    /// `use_other_torque_implicit` is enabled
+    /// (`other_torque_implicit` in `star/private/solve_omega_mix.f90:201-208`).
+    ///
+    /// # Errors
+    /// Returns [`StarError`] to trigger an outer-step retry (`solve_omega_mix.f90:204-206`).
+    fn other_torque_implicit(
+        &mut self,
+        _m: &mut StarModel,
+    ) -> Result<(), StarError> {
+        Ok(())
+    }
     /// Custom extra specific energy generation $\epsilon_{\mathrm{extra}}(k)$ ($\mathrm{erg\,g^{-1}\,s^{-1}}$).
     fn other_energy(&self, _m: &StarModel) -> Option<Vec<f64>> {
         None
@@ -445,21 +482,6 @@ pub fn run_inlist_stage_with_logs(
             }
             if model.controls.use_other_alpha_mlt {
                 extras.other_alpha_mlt(model);
-            }
-            if model.controls.use_other_torque {
-                if let Some(jdot) = extras.other_torque(model) {
-                    if jdot.len() != model.nz {
-                        return Err(StarError::InvalidInput(format!(
-                            "other_torque returned {} values for nz = {}",
-                            jdot.len(),
-                            model.nz
-                        )));
-                    }
-                    for (j_k, &dj_k) in model.j_rot.iter_mut().zip(jdot.iter())
-                    {
-                        *j_k = (*j_k + dj_k * model.dt).max(1.0e10);
-                    }
-                }
             }
 
             let (step_rep, check_term_opt) =

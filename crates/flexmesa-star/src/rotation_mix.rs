@@ -1,17 +1,17 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
 //! Array-level Heger, Langer & Woosley (2000) and Spruit (2002) rotational
-//! instability diffusivities (`rotation_mix_info.f90:493-1345`) and stiffness-capped
-//! substepped angular-momentum transport (`solve_omega_mix.f90`).
+//! instability diffusivities (`rotation_mix_info.f90:493-1345`) and
+//! `update_rotation_mixing_info` (`mix_info.f90:1561-1740`).
 
 use flexmesa_const::{
     MixingType, CLIGHT, CRAD, FOUR_PI, L_SUN, M_SUN, PI, R_SUN,
 };
 
+use crate::controls::StarError;
 use crate::model::StarModel;
 use crate::rotation::{
     conserve_shell_j_rot_and_distortion, eval_spruit_tayler_dynamo, RI_CRIT_DSI,
 };
-use crate::struct_burn_mix::ScalarTridiagFactor;
 
 fn for_each_unstable_block(
     unstable: &[bool],
@@ -459,205 +459,145 @@ pub(crate) fn eval_d_mix_non_rotation_vec(model: &StarModel) -> Vec<f64> {
         .collect()
 }
 
-/// Evaluates rotational chemical diffusivities, adds them to `model.d_mix`,
-/// and returns `d_mix_rotation` (`update_rotation_mixing_info` in
-/// `star/private/mix_info.f90:287-301`).
-pub(crate) fn compute_and_add_rotation_d_mix(model: &mut StarModel) -> Vec<f64> {
+/// Evaluates rotational chemical diffusivities and angular-momentum viscosities
+/// (`am_nu_non_rot`, `am_nu_rot`, `am_nu_omega`, `am_nu_j`), sets
+/// `model.d_mix[k] = d_mix_non_rotation[k] + d_mix_rotation[k]`, and returns
+/// `d_mix_rotation` (`update_rotation_mixing_info` in
+/// `star/private/mix_info.f90:1561-1740`).
+///
+/// # Errors
+/// Returns [`StarError::ConvergenceFailure`] if any face yields a negative or
+/// non-finite `am_nu_omega` or `am_nu_j`.
+pub(crate) fn update_rotation_mixing_info(
+    model: &mut StarModel,
+) -> Result<Vec<f64>, StarError> {
     let nz = model.nz;
     let mut d_mix_rotation = vec![0.0; nz];
-    let mw = model.controls.mix_wind.clone();
-    if !model.controls.rotation_flag
-        || (mw.am_d_mix_factor <= 0.0 && mw.d_visc_factor <= 0.0)
-    {
-        return d_mix_rotation;
+    model.aux.am_nu_non_rot.resize(nz, 0.0);
+    model.aux.am_nu_rot.resize(nz, 0.0);
+    model.aux.am_nu_omega.resize(nz, 0.0);
+    model.aux.am_nu_j.resize(nz, 0.0);
+    model.aux.am_nu_non_rot[..nz].fill(0.0);
+    model.aux.am_nu_rot[..nz].fill(0.0);
+    model.aux.am_nu_omega[..nz].fill(0.0);
+    model.aux.am_nu_j[..nz].fill(0.0);
+    if !model.controls.rotation_flag || nz == 0 {
+        return Ok(d_mix_rotation);
     }
+    if model.aux.mixing.d_mix_non_rotation.len() != nz {
+        model.aux.mixing.d_mix_non_rotation =
+            eval_d_mix_non_rotation_vec(model);
+    }
+
+    let mw = model.controls.mix_wind.clone();
     let diffs = eval_heger_rot_diffusivities(model);
+
     for k in 0..nz {
-        let d_rot_k = mw.d_visc_factor.max(0.0) * diffs.d_visc[k]
-            + mw.am_d_mix_factor.max(0.0)
-                * (mw.d_dsi_factor * diffs.d_dsi[k]
-                    + mw.d_sh_factor * diffs.d_sh[k]
-                    + mw.d_ssi_factor * diffs.d_ssi[k]
-                    + mw.d_es_factor * diffs.d_es[k]
-                    + mw.d_gsf_factor * diffs.d_gsf[k]
-                    + mw.d_st_factor * diffs.d_st[k]);
-        d_mix_rotation[k] = d_rot_k;
-        if d_rot_k > 0.0 {
-            model.d_mix[k] += d_rot_k;
-        }
-    }
-    d_mix_rotation
-}
-
-pub(crate) fn augment_d_mix_with_rotation(model: &mut StarModel) {
-    let d_non_rot = model.d_mix.clone();
-    let d_mix_rotation = compute_and_add_rotation_d_mix(model);
-    for k in 0..model.nz {
-        if model.d_mix[k] != 0.0 && d_non_rot[k] < d_mix_rotation[k] {
-            model.mixing_type[k] = MixingType::RotationMixing;
-        }
-    }
-}
-
-pub(crate) fn solve_omega_transport(model: &mut StarModel, dt_transport: f64) {
-    let nz = model.nz;
-    if !model.controls.rotation_flag || nz < 2 || dt_transport <= 0.0 {
-        return;
-    }
-    let mw = model.controls.mix_wind.clone();
-    let diffs = eval_heger_rot_diffusivities(model);
-    let f_nu =
-        |am: f64, d: f64| if am < 0.0 { d.max(0.0) } else { am.max(0.0) };
-    let nu_omega: Vec<f64> = (0..nz)
-        .map(|k| {
-            let d_rot_chem = mw.d_visc_factor.max(0.0) * diffs.d_visc[k]
+        let d_rot_k = if mw.am_d_mix_factor > 0.0 || mw.d_visc_factor > 0.0 {
+            mw.d_visc_factor.max(0.0) * diffs.d_visc[k]
                 + mw.am_d_mix_factor.max(0.0)
                     * (mw.d_dsi_factor * diffs.d_dsi[k]
                         + mw.d_sh_factor * diffs.d_sh[k]
                         + mw.d_ssi_factor * diffs.d_ssi[k]
                         + mw.d_es_factor * diffs.d_es[k]
                         + mw.d_gsf_factor * diffs.d_gsf[k]
-                        + mw.d_st_factor * diffs.d_st[k]);
-            let d_non_rot = match model.mixing_type[k] {
-                MixingType::NoMixing => 0.0,
-                _ => (model.d_mix[k] - d_rot_chem).max(0.0),
-            };
-            let nu_rot = f_nu(mw.am_nu_dsi_factor, mw.d_dsi_factor)
-                * diffs.d_dsi[k]
-                + f_nu(mw.am_nu_sh_factor, mw.d_sh_factor) * diffs.d_sh[k]
-                + f_nu(mw.am_nu_ssi_factor, mw.d_ssi_factor) * diffs.d_ssi[k]
-                + f_nu(mw.am_nu_es_factor, mw.d_es_factor) * diffs.d_es[k]
-                + f_nu(mw.am_nu_gsf_factor, mw.d_gsf_factor) * diffs.d_gsf[k]
-                + f_nu(mw.am_nu_st_factor, mw.d_st_factor) * diffs.nu_st[k]
-                + f_nu(mw.am_nu_visc_factor, mw.d_visc_factor)
-                    * diffs.d_visc[k];
-            (mw.am_nu_factor.max(0.0)
-                * (mw.am_nu_non_rotation_factor.max(0.0) * d_non_rot + nu_rot))
-                .max(0.0)
-        })
-        .collect();
-    if nu_omega.iter().all(|&v| v <= 0.0) {
-        return;
-    }
-
-    let i_rot: Vec<f64> = (0..nz)
-        .map(|k| {
-            model
-                .aux
-                .i_rot
-                .get(k)
-                .copied()
-                .filter(|&v| v > 0.0)
-                .unwrap_or_else(|| {
-                    (2.0 / 3.0) * flexmesa_math::pow2(model.r[k].max(1.0))
-                })
-        })
-        .collect();
-    let j_tot_before: f64 = (0..nz)
-        .map(|k| model.dm_bar[k] * i_rot[k] * model.omega[k])
-        .sum();
-    let sig_cap = mw.am_sig_term_limit.clamp(1.0e4, 1.0e10);
-    let dm_eff = |k: usize| {
-        if model.dm_bar[k] > 0.0 {
-            model.dm_bar[k]
-        } else {
-            0.5 * model.dm[k].max(1.0e-30)
-        }
-    };
-
-    let mut c_omega = vec![0.0; nz - 1];
-    for (k, c_om_k) in c_omega.iter_mut().enumerate() {
-        let (nu_0, nu_1) = (nu_omega[k].max(0.0), nu_omega[k + 1].max(0.0));
-        let nu_cell = 2.0 * nu_0 * nu_1 / (nu_0 + nu_1).max(1.0e-99);
-        let r_mid = 0.5 * (model.r[k] + model.r[k + 1]);
-        let area_rho = FOUR_PI * r_mid * r_mid * model.rho[k];
-        let am_sig_raw =
-            (area_rho * area_rho * nu_cell) / model.dm[k].max(1.0e-99);
-        let am_sig_max = sig_cap
-            * model.xmstar.max(1.0)
-            * model.dq[k].min(model.dq[k + 1]).max(1.0e-30)
-            / dt_transport;
-        let denom_min = (dm_eff(k) * i_rot[k])
-            .min(dm_eff(k + 1) * i_rot[k + 1])
-            .max(1.0e-99);
-        *c_om_k =
-            (am_sig_raw.min(am_sig_max) * 0.5 * (i_rot[k] + i_rot[k + 1]))
-                .min(sig_cap * denom_min / dt_transport);
-    }
-
-    let dt_min = (0..nz).fold(1.0e99_f64, |acc, k| {
-        let t_m1 = if k > 0 {
-            c_omega[k - 1] * (model.omega[k - 1] - model.omega[k])
+                        + mw.d_st_factor * diffs.d_st[k])
         } else {
             0.0
         };
-        let t_00 = if k + 1 < nz {
-            c_omega[k] * (model.omega[k] - model.omega[k + 1])
-        } else {
-            0.0
-        };
-        let d2om = (t_m1 - t_00).abs() / dm_eff(k).max(1.0e-99);
-        acc.min(
-            model.omega[k].abs().max(1.0e-12) * i_rot[k] / d2om.max(1.0e-50),
-        )
-    });
-    let steps = ((dt_transport / (0.5 * dt_min).max(1.0e-6 * dt_transport))
-        .ceil() as usize)
-        .clamp(4, 20);
-    let dt_sub = dt_transport / (steps as f64);
-
-    let (mut dl, mut d, mut du) = (vec![0.0; nz], vec![1.0; nz], vec![0.0; nz]);
-    for k in 0..nz {
-        let f_k = dt_sub / (dm_eff(k) * i_rot[k]).max(1.0e-99);
-        let c_m1 = if k > 0 { c_omega[k - 1] } else { 0.0 };
-        let c_00 = if k + 1 < nz { c_omega[k] } else { 0.0 };
-        dl[k] = -f_k * c_m1;
-        d[k] = 1.0 + f_k * (c_m1 + c_00);
-        du[k] = -f_k * c_00;
+        d_mix_rotation[k] = d_rot_k;
+        model.d_mix[k] = model.aux.mixing.d_mix_non_rotation[k] + d_rot_k;
     }
 
-    let factor = ScalarTridiagFactor::factor(&dl, &d, &du);
-    let (mut rhs, mut d_omega, mut d_prime) =
-        (vec![0.0; nz], vec![0.0; nz], vec![0.0; nz]);
-    for _ in 0..steps {
-        for (k, r_k) in rhs.iter_mut().enumerate() {
-            let f_k = dt_sub / (dm_eff(k) * i_rot[k]).max(1.0e-99);
-            let t_m1 = if k > 0 {
-                c_omega[k - 1] * (model.omega[k - 1] - model.omega[k])
-            } else {
-                0.0
-            };
-            let t_00 = if k + 1 < nz {
-                c_omega[k] * (model.omega[k] - model.omega[k + 1])
-            } else {
-                0.0
-            };
-            *r_k = f_k * (t_m1 - t_00);
-        }
-        factor.solve_into(&dl, &rhs, &mut d_omega, &mut d_prime);
-        if d_omega.iter().all(|dw| dw.is_finite()) {
-            for (k, &dw) in d_omega.iter().enumerate().skip(1) {
-                model.omega[k] += dw;
-            }
-            model.omega[0] = model.omega[1];
-        } else {
-            break;
-        }
-    }
-    let j_tot_after: f64 = (0..nz)
-        .map(|k| model.dm_bar[k] * i_rot[k] * model.omega[k])
-        .sum();
-    let scale = if j_tot_before.abs() > 0.0
-        && j_tot_after.abs() > 1.0e-30
-        && j_tot_before * j_tot_after > 0.0
-    {
-        j_tot_before / j_tot_after
+    let am_nu_dsi = if mw.am_nu_dsi_factor < 0.0 {
+        mw.d_dsi_factor
     } else {
-        1.0
+        mw.am_nu_dsi_factor
     };
-    for (k, &ir) in i_rot.iter().enumerate() {
-        model.omega[k] *= scale;
-        model.j_rot[k] = ir * model.omega[k];
+    let am_nu_sh = if mw.am_nu_sh_factor < 0.0 {
+        mw.d_sh_factor
+    } else {
+        mw.am_nu_sh_factor
+    };
+    let am_nu_ssi = if mw.am_nu_ssi_factor < 0.0 {
+        mw.d_ssi_factor
+    } else {
+        mw.am_nu_ssi_factor
+    };
+    let am_nu_es = if mw.am_nu_es_factor < 0.0 {
+        mw.d_es_factor
+    } else {
+        mw.am_nu_es_factor
+    };
+    let am_nu_gsf = if mw.am_nu_gsf_factor < 0.0 {
+        mw.d_gsf_factor
+    } else {
+        mw.am_nu_gsf_factor
+    };
+    let am_nu_st = if mw.am_nu_st_factor < 0.0 {
+        mw.d_st_factor
+    } else {
+        mw.am_nu_st_factor
+    };
+    let am_nu_visc = if mw.am_nu_visc_factor < 0.0 {
+        mw.d_visc_factor
+    } else {
+        mw.am_nu_visc_factor
+    };
+
+    for k in 0..nz {
+        let non_rot = mw.am_nu_factor
+            * mw.am_nu_non_rotation_factor
+            * model.aux.mixing.d_mix_non_rotation[k];
+        let rot = (mw.am_nu_factor
+            * (am_nu_visc * diffs.d_visc[k]
+                + am_nu_dsi * diffs.d_dsi[k]
+                + am_nu_sh * diffs.d_sh[k]
+                + am_nu_ssi * diffs.d_ssi[k]
+                + am_nu_es * diffs.d_es[k]
+                + am_nu_gsf * diffs.d_gsf[k]
+                + am_nu_st * diffs.nu_st[k]))
+            .max(0.0);
+        let nu_omega = mw.am_nu_omega_non_rot_factor * non_rot
+            + mw.am_nu_omega_rot_factor * rot;
+        if nu_omega < 0.0 || !nu_omega.is_finite() {
+            return Err(StarError::ConvergenceFailure(format!(
+                "update_rotation_mixing_info: invalid am_nu_omega[{k}] = {nu_omega:.6e}"
+            )));
+        }
+        let nu_j = mw.am_nu_j_non_rot_factor * non_rot
+            + mw.am_nu_j_rot_factor * rot;
+        if nu_j < 0.0 || !nu_j.is_finite() {
+            return Err(StarError::ConvergenceFailure(format!(
+                "update_rotation_mixing_info: invalid am_nu_j[{k}] = {nu_j:.6e}"
+            )));
+        }
+        model.aux.am_nu_non_rot[k] = non_rot;
+        model.aux.am_nu_rot[k] = rot;
+        model.aux.am_nu_omega[k] = nu_omega;
+        model.aux.am_nu_j[k] = nu_j;
+    }
+
+    Ok(d_mix_rotation)
+}
+
+pub(crate) fn augment_d_mix_with_rotation(model: &mut StarModel) {
+    let nz = model.nz;
+    model.aux.mixing.d_mix_non_rotation.resize(nz, 0.0);
+    model
+        .aux
+        .mixing
+        .d_mix_non_rotation
+        .copy_from_slice(&model.d_mix[..nz]);
+    let Ok(d_mix_rotation) = update_rotation_mixing_info(model) else {
+        return;
+    };
+    for k in 0..nz {
+        if model.d_mix[k] != 0.0
+            && model.aux.mixing.d_mix_non_rotation[k] < d_mix_rotation[k]
+        {
+            model.mixing_type[k] = MixingType::RotationMixing;
+        }
     }
 }
 
@@ -666,18 +606,33 @@ pub(crate) fn sync_post_henyey_rotation(model: &mut StarModel, dt: f64) {
     if !model.controls.rotation_flag || nz == 0 || model.j_rot.len() != nz {
         return;
     }
-    if dt <= 0.0 {
-        conserve_shell_j_rot_and_distortion(model);
+    conserve_shell_j_rot_and_distortion(model);
+    if dt <= 0.0 || nz < 2 {
         return;
     }
-    conserve_shell_j_rot_and_distortion(model);
-    if nz >= 2 && model.controls.mix_wind.am_nu_factor > 0.0 {
-        let dt_tr = if model.controls.mix_wind.premix_omega {
-            0.5 * dt
-        } else {
-            dt
-        };
-        solve_omega_transport(model, dt_tr);
-        conserve_shell_j_rot_and_distortion(model);
+    let mw = &model.controls.mix_wind;
+    let d_mix_changed = model.aux.mixing.d_mix_non_rotation.len() != nz
+        || (mw.am_d_mix_factor <= 0.0
+            && mw.d_visc_factor <= 0.0
+            && model.d_mix[..nz] != model.aux.mixing.d_mix_non_rotation[..nz]);
+    let nu_unpopulated = model.aux.am_nu_omega.len() != nz
+        || (model.aux.am_nu_omega.iter().all(|&v| v == 0.0)
+            && model.aux.am_nu_j.iter().all(|&v| v == 0.0)
+            && model.d_mix.iter().any(|&v| v > 0.0));
+    if d_mix_changed || nu_unpopulated {
+        model.aux.mixing.d_mix_non_rotation.resize(nz, 0.0);
+        model
+            .aux
+            .mixing
+            .d_mix_non_rotation
+            .copy_from_slice(&model.d_mix[..nz]);
+        let _ = update_rotation_mixing_info(model);
     }
+    let dt_tr = if model.controls.mix_wind.premix_omega {
+        0.5 * dt
+    } else {
+        dt
+    };
+    let _ = crate::omega_mix::do_solve_omega_mix(model, dt_tr);
+    crate::hydro_rotation::set_rotation_info(model, false);
 }

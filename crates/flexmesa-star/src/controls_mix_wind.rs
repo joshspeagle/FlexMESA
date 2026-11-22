@@ -514,6 +514,10 @@ pub struct MixWindControls {
     pub delta_mdot_hard_limit: f64,
     /// Upper cap on shellular $\Omega / \Omega_{\mathrm{crit,Roche}}$ in distortion factors (`w_div_wcrit_max`, `0.89` default).
     pub w_div_wcrit_max: f64,
+    /// Smooth sigmoid upper asymptote on $\Omega / \Omega_{\mathrm{crit,Roche}}$ when `w_div_wc_flag` is active (`w_div_wcrit_max2`, `0.90` default).
+    pub w_div_wcrit_max2: f64,
+    /// Use spherical $i_{\mathrm{rot}} = \tfrac{2}{3} r^2$ instead of the Paxton et al. (2019) Roche fit (`simple_i_rot_flag`, `false` default).
+    pub simple_i_rot_flag: bool,
     /// Mean-molecular-weight barrier scale factor in rotational instabilities (`am_gradmu_factor`, `0.05` default).
     pub am_gradmu_factor: f64,
     /// Dynamical shear instability scale factor (`D_DSI_factor`, `0.0` default).
@@ -548,8 +552,22 @@ pub struct MixWindControls {
     pub am_nu_st_factor: f64,
     /// Kinematic shear angular-momentum viscosity factor (`am_nu_visc_factor`, `1.0` default).
     pub am_nu_visc_factor: f64,
+    /// Rotational viscosity weight in `am_nu_omega` (`am_nu_omega_rot_factor`, `1.0` default).
+    pub am_nu_omega_rot_factor: f64,
+    /// Non-rotational viscosity weight in `am_nu_omega` (`am_nu_omega_non_rot_factor`, `1.0` default).
+    pub am_nu_omega_non_rot_factor: f64,
+    /// Rotational viscosity weight in `am_nu_j` (`am_nu_j_rot_factor`, `0.0` default).
+    pub am_nu_j_rot_factor: f64,
+    /// Non-rotational viscosity weight in `am_nu_j` (`am_nu_j_non_rot_factor`, `0.0` default).
+    pub am_nu_j_non_rot_factor: f64,
     /// Dimensionless tridiagonal stiffness cap for `solve_omega_mix` (`am_sig_term_limit`, `1e13` default).
     pub am_sig_term_limit: f64,
+    /// Relative total angular momentum conservation error warning threshold in `solve_omega_mix` (`angular_momentum_error_warn`, `5e-6` default).
+    pub angular_momentum_error_warn: f64,
+    /// Relative total angular momentum conservation error retry threshold in `solve_omega_mix` (`angular_momentum_error_retry`, `1e-6` default).
+    pub angular_momentum_error_retry: f64,
+    /// Recompute rotational mixing coefficients after each substep of `solve_omega_mix` (`recalc_mixing_info_each_substep`, `false` default).
+    pub recalc_mixing_info_each_substep: bool,
     /// Strang-split half-step angular-momentum transport before and after Henyey (`premix_omega`, `true` default).
     pub premix_omega: bool,
     /// Remove surface angular momentum deficit after mass loss (`do_adjust_J_lost`, `true` default).
@@ -1000,6 +1018,8 @@ impl Default for MixWindControls {
             delta_mdot_limit: -1.0,
             delta_mdot_hard_limit: -1.0,
             w_div_wcrit_max: 0.89,
+            w_div_wcrit_max2: 0.90,
+            simple_i_rot_flag: false,
             am_gradmu_factor: 0.05,
             d_dsi_factor: 0.0,
             d_sh_factor: 0.0,
@@ -1017,7 +1037,14 @@ impl Default for MixWindControls {
             am_nu_gsf_factor: -1.0,
             am_nu_st_factor: -1.0,
             am_nu_visc_factor: 1.0,
+            am_nu_omega_rot_factor: 1.0,
+            am_nu_omega_non_rot_factor: 1.0,
+            am_nu_j_rot_factor: 0.0,
+            am_nu_j_non_rot_factor: 0.0,
             am_sig_term_limit: 1.0e13,
+            angular_momentum_error_warn: 5.0e-6,
+            angular_momentum_error_retry: 1.0e-6,
+            recalc_mixing_info_each_substep: false,
             premix_omega: true,
             do_adjust_j_lost: true,
             adjust_j_fraction: 1.0,

@@ -32,7 +32,9 @@ pub fn eval_surf_avg_w_div_w_crit(model: &mut StarModel) -> f64 {
     if !model.controls.rotation_flag || nz < 2 {
         return 0.0;
     }
-    conserve_shell_j_rot_and_distortion(model);
+    if model.j_rot.iter().any(|&j| j != 0.0) {
+        conserve_shell_j_rot_and_distortion(model);
+    }
 
     let tau_min = model.controls.mix_wind.surf_avg_tau_min.max(0.0);
     let tau_max = model.controls.mix_wind.surf_avg_tau.max(tau_min + 1.0e-6);

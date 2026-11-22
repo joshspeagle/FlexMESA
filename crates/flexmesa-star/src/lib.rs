@@ -250,8 +250,9 @@ pub use evolve::{
     star_pick_next_timestep_after_step,
 };
 pub use evolve_support::{
-    apply_step_pre_physics, eval_total_energy_integrals, relax_uniform_omega,
-    remesh_star_before_step, update_step_energy_conservation,
+    apply_step_pre_physics, apply_step_pre_physics_with_extras,
+    eval_total_energy_integrals, relax_uniform_omega, remesh_star_before_step,
+    update_step_energy_conservation,
 };
 pub use history::{
     HistoryRow, extract_history_row, format_history_header, format_history_row,
@@ -271,13 +272,19 @@ pub use hydro_momentum::{
     eval_cell_peos_time_centered_ad, eval_face_dm_bar, expected_hse_grav_term,
     expected_non_hse_term,
 };
+pub use hydro_rotation::{
+    eval_fp_ft_single, eval_i_rot, get1_am_sig, get_rotation_sigmas,
+    set1_i_rot, set_i_rot, set_omega, set_rotation_info,
+    total_angular_momentum, update1_i_rot_from_xh,
+    use_xh_to_update_i_rot_and_j_rot, w_div_w_roche_jrot, w_div_w_roche_omega,
+};
 pub use hydro_rti::{
     do1_dalpha_rti_dt_eqn, eval_alpha_rti_sources, set_dpdr_drhodr_info,
     set_rti_mixing_info,
 };
 pub use hydro_state::{
-    HydroAuxState, TidalDeformationHandle, TidalDeformationHook,
-    TidalShellDeformation,
+    BinaryOtherTorqueHandle, BinaryOtherTorqueHook, HydroAuxState,
+    TidalDeformationHandle, TidalDeformationHook, TidalShellDeformation,
 };
 pub use hydro_temperature::{interp_p_point_ad, set_rsp_lsurf_bc};
 pub use hydro_vars::{
@@ -349,6 +356,9 @@ pub use model_io::{
     PHOTO_FORMAT_VERSION, STAR_DEF_VERSION, compute_photo_checksum,
     load_photo_bytes, photo_numerics_mode, read_mod_str, read_photo_bytes,
     try_write_photo_bytes, write_mod_string, write_photo_bytes,
+};
+pub use omega_mix::{
+    OmegaMixOutcome, do_solve_omega_mix, do_solve_omega_mix_with_extras,
 };
 pub use overshoot::{
     add_overshooting, apply_overshoot_configs, eval_conv_bdy_hp,

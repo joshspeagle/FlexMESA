@@ -8,7 +8,7 @@ Generated mechanically against **MESA 26.4.1** (git tag `26.4.1`, commit `c8c202
 - **Total manifest cases scanned**: `106`
 - **Cases passing strict `#147` validation**: `0`
 - **Cases rejected by strict `#147` validation**: `106`
-- **Distinct unsupported physics/solver controls encountered**: `208`
+- **Distinct unsupported physics/solver controls encountered**: `206`
 - **Distinct unknown/misspelled controls encountered**: `0`
 - **Cases using headless plotting controls (`#173` / `DECISIONS #25`)**: `78` (`895` distinct keys)
 
@@ -19,7 +19,7 @@ Generated mechanically against **MESA 26.4.1** (git tag `26.4.1`, commit `c8c202
 | `&star_job` | 455 | 113 | 16 | 3 | 5 | 318 |
 | `&eos` | 102 | 91 | 0 | 0 | 9 | 2 |
 | `&kap` | 51 | 39 | 0 | 0 | 10 | 2 |
-| `&controls` | 1448 | 1144 | 24 | 0 | 13 | 267 |
+| `&controls` | 1448 | 1154 | 24 | 0 | 13 | 257 |
 | `&binary_job` | 37 | 22 | 0 | 1 | 1 | 13 |
 | `&binary_controls` | 176 | 124 | 0 | 0 | 2 | 50 |
 | `&astero_search_controls` | 153 | 88 | 3 | 0 | 0 | 62 |
@@ -238,7 +238,7 @@ Per `DECISIONS #25` (matching upstream `USE_PGSTAR = NO`), keys in `&pgstar`, `&
 | `star` | `ns_he` | `fail_unsupported` | 12 | 0 | 64 |
 | `star` | `other_physics_hooks` | `fail_unsupported` | 2 | 0 | 0 |
 | `star` | `pisn` | `fail_unsupported` | 12 | 0 | 288 |
-| `star` | `ppisn` | `fail_unsupported` | 22 | 0 | 76 |
+| `star` | `ppisn` | `fail_unsupported` | 20 | 0 | 76 |
 | `star` | `radiative_levitation` | `fail_unsupported` | 6 | 0 | 14 |
 | `star` | `relax_composition_j_entropy` | `fail_unsupported` | 1 | 0 | 0 |
 | `star` | `rsp_BEP` | `fail_unsupported` | 8 | 0 | 75 |

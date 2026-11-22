@@ -4,7 +4,9 @@
 //! polynomial fits `rpsi_from_re_factor`, `re_from_rpsi_factor`, `A`, `B`, `C`,
 //! and `sigmoid`) matching `star/private/hydro_rotation.f90:51-226, 874-920`.
 
-use flexmesa_const::{ONE_SIXTH, ONE_THIRD, TWO_THIRDS};
+use flexmesa_const::{FOUR_PI, ONE_SIXTH, ONE_THIRD, TWO_THIRDS};
+
+use crate::model::StarModel;
 
 /// Exponent in `log(1 - w^5.626)` (`log_term_power` in `hydro_rotation.f90:51`).
 pub const LOG_TERM_POWER: f64 = 5.626;
@@ -251,6 +253,259 @@ pub fn eval_i_rot(
         let a = 1.0 - 0.1076 * w4 - 0.2336 * w6 - 0.5583 * lg_one_sub_w4;
         TWO_THIRDS * flexmesa_math::pow2(re) * b / a
     }
+}
+
+/// Evaluates single-star Roche distortion factors $(f_P, f_T)$ without
+/// artificial floors (`eval_fp_ft` in `star/private/hydro_rotation.f90:775-788`;
+/// Fabry, Marchant & Sana 2022, Eqs. A.10 and A.11).
+#[must_use]
+pub fn eval_fp_ft_single(w_div_w_crit_roche: f64) -> (f64, f64) {
+    let w = w_div_w_crit_roche.abs();
+    let w2 = flexmesa_math::pow2(w);
+    let w4 = flexmesa_math::pow4(w);
+    let w6 = flexmesa_math::pow6(w);
+    let w_log_term =
+        flexmesa_math::log(1.0 - flexmesa_math::pow(w, LOG_TERM_POWER));
+    let a_omega = 1.0 + 0.3293 * w4 - 0.4926 * w6 - 0.5560 * w_log_term;
+    let fp = (1.0 - TWO_THIRDS * w2 - 0.2133 * w4 - 0.1068 * w6) / a_omega;
+    let ft = (1.0 - 0.07955 * w4 - 0.2322 * w6) / a_omega;
+    (fp, ft)
+}
+
+/// Updates `model.aux.i_rot[k]` and `model.aux.d_i_rot_dlnr[k]` at face `k`
+/// for volume-equivalent radius `r` ($\mathrm{cm}$), blending optional binary
+/// tidal deformation (`set1_i_rot` in `star/private/hydro_rotation.f90:317-336`).
+pub fn set1_i_rot(model: &mut StarModel, k: usize, r: f64) {
+    let w = model.aux.w_div_wc.get(k).copied().unwrap_or(0.0);
+    let i_rot_single =
+        eval_i_rot(r, w, model.controls.mix_wind.simple_i_rot_flag);
+    if let Some(ref hook) = model.aux.tidal_deformation {
+        let td = hook.0.eval_shell(k, r, model.omega[k]);
+        let f_sw = td.f_switch;
+        let f_1m = 1.0 - f_sw;
+        model.aux.i_rot[k] = f_sw * td.i_rot + f_1m * i_rot_single;
+        model.aux.d_i_rot_dlnr[k] =
+            f_sw * td.d_irot_dlnr + f_1m * (2.0 * i_rot_single);
+    } else {
+        model.aux.i_rot[k] = i_rot_single;
+        model.aux.d_i_rot_dlnr[k] = 2.0 * i_rot_single;
+    }
+}
+
+/// Updates `model.aux.i_rot[k]` using `r00 = exp(ln_r[k])`
+/// (`update1_i_rot_from_xh` in `star/private/hydro_rotation.f90:308-315` and
+/// `get_r_from_xh` in `star/private/star_utils.f90:429-440`).
+pub fn update1_i_rot_from_xh(model: &mut StarModel, k: usize) {
+    let r00 = flexmesa_math::exp(model.ln_r[k]);
+    set1_i_rot(model, k, r00);
+}
+
+/// Updates `w_div_wc` (unless `skip_w_div_w_crit_roche`) from `j_rot` via
+/// [`w_div_w_roche_jrot`] and recomputes `i_rot` across all faces
+/// (`set_i_rot` in `star/private/hydro_rotation.f90:229-245`).
+pub fn set_i_rot(model: &mut StarModel, skip_w_div_w_crit_roche: bool) {
+    let nz = model.nz;
+    if nz == 0 {
+        return;
+    }
+    if model.aux.w_div_wc.len() != nz || model.aux.i_rot.len() != nz {
+        model.aux.resize(nz, model.species);
+    }
+    let max_w = model.controls.mix_wind.w_div_wcrit_max;
+    let max_w2 = model.controls.mix_wind.w_div_wcrit_max2;
+    for k in 0..nz {
+        if !skip_w_div_w_crit_roche {
+            model.aux.w_div_wc[k] = w_div_w_roche_jrot(
+                model.r[k],
+                model.m[k],
+                model.j_rot[k],
+                model.cgrav[k],
+                max_w,
+                max_w2,
+                false,
+            );
+        }
+        let r_k = model.r[k];
+        set1_i_rot(model, k, r_k);
+    }
+}
+
+/// Sets face angular velocity `omega[k] = j_rot[k] / i_rot[k]` across all
+/// faces (`set_omega` in `star/private/hydro_rotation.f90:277-287`).
+pub fn set_omega(model: &mut StarModel) {
+    let nz = model.nz;
+    for k in 0..nz {
+        model.omega[k] = model.j_rot[k] / model.aux.i_rot[k];
+    }
+}
+
+/// Updates `w_div_wc`, `i_rot`, and `j_rot = i_rot * omega` from `ln_r` and
+/// `omega` (`use_xh_to_update_i_rot_and_j_rot` in
+/// `star/private/hydro_rotation.f90:382-397`).
+pub fn use_xh_to_update_i_rot_and_j_rot(model: &mut StarModel) {
+    let nz = model.nz;
+    if nz == 0 {
+        return;
+    }
+    if model.aux.w_div_wc.len() != nz || model.aux.i_rot.len() != nz {
+        model.aux.resize(nz, model.species);
+    }
+    let max_w = model.controls.mix_wind.w_div_wcrit_max;
+    let max_w2 = model.controls.mix_wind.w_div_wcrit_max2;
+    for k in 0..nz {
+        let r00 = flexmesa_math::exp(model.ln_r[k]);
+        model.aux.w_div_wc[k] = w_div_w_roche_omega(
+            r00,
+            model.m[k],
+            model.omega[k],
+            model.cgrav[k],
+            max_w,
+            max_w2,
+            false,
+        );
+        update1_i_rot_from_xh(model, k);
+    }
+    for k in 0..nz {
+        model.j_rot[k] = model.aux.i_rot[k] * model.omega[k];
+    }
+}
+
+/// Updates `i_rot`, `omega` (from `j_rot`), and Roche distortion factors
+/// `fp_rot` and `ft_rot` across all faces (`set_rotation_info` in
+/// `star/private/hydro_rotation.f90:537-586`).
+pub fn set_rotation_info(
+    model: &mut StarModel,
+    skip_w_div_w_crit_roche: bool,
+) {
+    let nz = model.nz;
+    if !model.controls.rotation_flag || nz == 0 {
+        return;
+    }
+    set_i_rot(model, skip_w_div_w_crit_roche);
+    set_omega(model);
+    let tidal = model.aux.tidal_deformation.clone();
+    for k in 0..nz {
+        let (fp_s, ft_s) = eval_fp_ft_single(model.aux.w_div_wc[k]);
+        if let Some(ref hook) = tidal {
+            let td = hook.0.eval_shell(k, model.r[k], model.omega[k]);
+            let f_sw = td.f_switch;
+            let f_1m = 1.0 - f_sw;
+            model.aux.fp_rot[k] = f_sw * td.fp + f_1m * fp_s;
+            model.aux.d_fp_rot_dlnr[k] = f_sw * td.d_fp_dlnr;
+            model.aux.ft_rot[k] = f_sw * td.ft + f_1m * ft_s;
+            model.aux.d_ft_rot_dlnr[k] = f_sw * td.d_ft_dlnr;
+        } else {
+            model.aux.fp_rot[k] = fp_s;
+            model.aux.d_fp_rot_dlnr[k] = 0.0;
+            model.aux.ft_rot[k] = ft_s;
+            model.aux.d_ft_rot_dlnr[k] = 0.0;
+        }
+    }
+}
+
+/// Computes cell-centered angular momentum diffusion coefficients `am_sig`
+/// ($\mathrm{g\,s^{-1}}$) from face viscosities `am_nu` ($\mathrm{cm^2\,s^{-1}}$)
+/// over 0-based range `nzlo..nzhi`, applying upstream's `am_sig_term_limit`
+/// stiffness bound without artificial caps (`get1_am_sig` in
+/// `star/private/hydro_rotation.f90:437-490`).
+pub fn get1_am_sig(
+    model: &StarModel,
+    nzlo: usize,
+    nzhi: usize,
+    am_nu: &[f64],
+    am_sig: &mut [f64],
+    dt: f64,
+) {
+    let nz = model.nz;
+    if nz == 0 || nzlo >= nzhi || nzhi > nz {
+        return;
+    }
+    let xmstar = model.xmstar;
+    let sig_term_limit = model.controls.mix_wind.am_sig_term_limit;
+
+    let mut nz2 = nzhi;
+    if nzhi == nz {
+        let k = nz - 1;
+        let d_val = 0.0_f64;
+        let r = 0.5 * model.r[k];
+        let s1 = FOUR_PI * r * r * model.rho[k];
+        am_sig[k] = s1 * s1 * d_val / model.dm[k];
+        nz2 = nz - 1;
+    }
+    for k in nzlo..nz2 {
+        let am_nu_e00 = am_nu[k].max(0.0);
+        let am_nu_ep1 = am_nu[k + 1].max(0.0);
+        // Meynet, Maeder, & Mowlavi, A&A 416, 1023-1036, 2004, eqn 51 with f = 1/2.
+        let d_val =
+            2.0 * (am_nu_e00 * am_nu_ep1) / (am_nu_e00 + am_nu_ep1).max(1.0e-99);
+        let r = 0.5 * (model.r[k] + model.r[k + 1]);
+        let s1 = FOUR_PI * r * r * model.rho[k];
+        am_sig[k] = s1 * s1 * d_val / model.dm[k];
+    }
+
+    for k in nzlo..nzhi {
+        let dmbar = if k + 1 < nz {
+            xmstar * model.dq[k].min(model.dq[k + 1])
+        } else {
+            xmstar * model.dq[k]
+        };
+        let siglim = sig_term_limit * dmbar / dt;
+        if am_sig[k] > siglim {
+            am_sig[k] = siglim;
+        }
+    }
+}
+
+/// Computes `model.aux.am_sig_j` and `model.aux.am_sig_omega` over 0-based
+/// range `nzlo..nzhi`, limiting the sum `am_nu_j + am_nu_omega` before
+/// splitting (`get_rotation_sigmas` in `star/private/hydro_rotation.f90:399-435`).
+pub fn get_rotation_sigmas(
+    model: &mut StarModel,
+    nzlo: usize,
+    nzhi: usize,
+    dt: f64,
+) {
+    let nz = model.nz;
+    if nz == 0 || nzlo >= nzhi || nzhi > nz {
+        return;
+    }
+    if model.aux.am_nu_j.len() != nz
+        || model.aux.am_nu_omega.len() != nz
+        || model.aux.am_sig_j.len() != nz
+        || model.aux.am_sig_omega.len() != nz
+    {
+        model.aux.resize(nz, model.species);
+    }
+
+    let am_nu_j = model.aux.am_nu_j.clone();
+    let mut am_sig_j = model.aux.am_sig_j.clone();
+    get1_am_sig(model, nzlo, nzhi, &am_nu_j, &mut am_sig_j, dt);
+
+    let am_nu: Vec<f64> = (0..nz)
+        .map(|k| model.aux.am_nu_j[k] + model.aux.am_nu_omega[k])
+        .collect();
+    let mut am_sig = vec![0.0_f64; nz];
+    get1_am_sig(model, nzlo, nzhi, &am_nu, &mut am_sig, dt);
+
+    for k in 0..nz {
+        model.aux.am_sig_j[k] = am_sig_j[k];
+        model.aux.am_sig_omega[k] = (am_sig[k] - am_sig_j[k]).max(0.0);
+    }
+}
+
+/// Returns total stellar angular momentum $\sum_{k=0}^{\mathrm{nz}-1} \overline{\Delta m}_k j_{\mathrm{rot},k}$
+/// in $\mathrm{g\,cm^2\,s^{-1}}$ (`total_angular_momentum` in
+/// `star/private/star_utils.f90:1838-1846`).
+#[must_use]
+pub fn total_angular_momentum(model: &StarModel) -> f64 {
+    if !model.controls.rotation_flag {
+        return 0.0;
+    }
+    let mut j_tot = 0.0_f64;
+    for k in 0..model.nz {
+        j_tot += model.dm_bar[k] * model.j_rot[k];
+    }
+    j_tot
 }
 
 #[cfg(test)]

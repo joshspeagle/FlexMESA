@@ -7,15 +7,15 @@ Generated mechanically against **MESA 26.4.1** (git tag `26.4.1`, commit `c8c202
 
 | Namelist | Upstream `26.4.1` Scalars | Matched & Compared | Agree | Value Mismatch | Active Limit Disabled (`None`) | Skipped (Non-Scalar/Computed Rust) | Skipped (No Rust Field) |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| star &controls | 1444 | 1096 | 1096 | 0 | 0 | 17 | 331 |
+| star &controls | 1444 | 1106 | 1106 | 0 | 0 | 17 | 321 |
 | star &star_job | 455 | 95 | 95 | 0 | 0 | 1 | 359 |
 | binary &binary_controls + &binary_job | 209 | 145 | 145 | 0 | 0 | 1 | 63 |
 | astero &astero_search_controls | 150 | 75 | 75 | 0 | 0 | 1 | 74 |
 | eos &eos | 102 | 60 | 60 | 0 | 0 | 0 | 42 |
 | kap &kap | 36 | 21 | 21 | 0 | 0 | 0 | 15 |
-| **Total** | **2396** | **1492** | **1492** | **0** | **0** | **20** | **884** |
+| **Total** | **2396** | **1502** | **1502** | **0** | **0** | **20** | **874** |
 
-Denominator: `1492 / 2396` upstream MESA `26.4.1` scalar/1-slot defaults matched and compared (`1492` agree, `0` value mismatches, `0` `None`-disabled active limits); `20` skipped due to non-scalar/computed Rust initializers; `884` skipped with no Rust field in `FlexMESA` (plus `11` multi-subscript array-only upstream controls outside the scalar denominator).
+Denominator: `1502 / 2396` upstream MESA `26.4.1` scalar/1-slot defaults matched and compared (`1502` agree, `0` value mismatches, `0` `None`-disabled active limits); `20` skipped due to non-scalar/computed Rust initializers; `874` skipped with no Rust field in `FlexMESA` (plus `11` multi-subscript array-only upstream controls outside the scalar denominator).
 
 ## Skipped Controls with Rust Fields (Non-Scalar / Computed Initializers)
 
@@ -44,7 +44,7 @@ Denominator: `1492 / 2396` upstream MESA `26.4.1` scalar/1-slot defaults matched
 
 ## star &controls
 
-All `1096` matched scalar defaults agree with MESA `26.4.1` (`17` skipped as non-scalar/computed Rust initializers; `331` have no Rust field).
+All `1106` matched scalar defaults agree with MESA `26.4.1` (`17` skipped as non-scalar/computed Rust initializers; `321` have no Rust field).
 
 ## star &star_job
 

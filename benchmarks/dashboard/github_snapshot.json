@@ -242,11 +242,6 @@
       "number": 352,
       "title": "fix(autodiff): the order-2 and order-3 dual types evaluate upstream's expression for each operation (#349)",
       "draft": true
-    },
-    {
-      "number": 353,
-      "title": "fix(binary,star): align binary RLOF retries/counters and ZAMS interp_q/model_number with MESA 26.4.1 (Closes #342)",
-      "draft": false
     }
   ],
   "deferred_169": [

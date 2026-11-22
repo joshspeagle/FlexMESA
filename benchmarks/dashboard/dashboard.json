@@ -21,7 +21,7 @@
         "verified_total": 4971,
         "pct_ported": 34.5,
         "pct_verified": 4.1,
-        "rust_lines": 85613,
+        "rust_lines": 86367,
         "python_jax_lines": 3869
       },
       {
@@ -55,7 +55,7 @@
         "verified_total": 0,
         "pct_ported": 18.7,
         "pct_verified": 0.0,
-        "rust_lines": 11979,
+        "rust_lines": 12379,
         "python_jax_lines": 1244
       },
       {
@@ -1223,12 +1223,12 @@
         "issues": "#156, #295"
       },
       {
-        "location": "tests/test_wave4_bench.py:141",
+        "location": "tests/test_wave4_bench.py:151",
         "reason": "pytest.mark.xfail( strict=True, reason=( \"#295: Rust do1_mlt_2 takes the face radiation pressure from the \" \"face temperature (MESA 26.4.1 star_utils.f90:3838-3843, #291); \" \"the frozen JAX face-MLT twin still interpolates the cell values \" \"(measured max_rel_err 8.9e-3).\" ), )",
         "issues": "#291, #295"
       },
       {
-        "location": "tests/test_wave4_bench.py:156",
+        "location": "tests/test_wave4_bench.py:166",
         "reason": "pytest.mark.xfail( strict=True, reason=( \"#295: Rust eval_face_dm_bar at k = nz - 1 uses 0.5*(dm[k-1] + dm[k]) \" \"(MESA 26.4.1 star/private/hydro_momentum.f90:191-196, #340); \" \"frozen JAX eval_hydro_residuals_jax still uses dm_bar[nz - 1] \" \"(measured max_rel_err 9.73e-3).\" ), )",
         "issues": "#295, #340"
       },
@@ -1484,11 +1484,6 @@
         "number": 352,
         "title": "fix(autodiff): the order-2 and order-3 dual types evaluate upstream's expression for each operation (#349)",
         "draft": true
-      },
-      {
-        "number": 353,
-        "title": "fix(binary,star): align binary RLOF retries/counters and ZAMS interp_q/model_number with MESA 26.4.1 (Closes #342)",
-        "draft": false
       }
     ],
     "deferred_169": [
@@ -2742,6 +2737,19 @@
     {
       "date_utc": "2026-11-22",
       "commit": "5b937c9",
+      "event": "main merge",
+      "engine_ported_pct": "30.2",
+      "all_verified_pct": "1.0",
+      "cases_passing": "0",
+      "rust_cov_pct": "75.8",
+      "python_cov_pct": "87.7",
+      "closed_140": "16",
+      "total_140": "36",
+      "deferred_169": "45"
+    },
+    {
+      "date_utc": "2026-11-22",
+      "commit": "a3ddf16",
       "event": "main merge",
       "engine_ported_pct": "30.2",
       "all_verified_pct": "1.0",

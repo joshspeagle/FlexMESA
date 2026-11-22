@@ -268,8 +268,9 @@ pub fn block_dble_mv(
 /// documented upstream as the left product $b = x^{\top} A$.
 ///
 /// Upstream pairs the off-diagonal blocks with $x$ as
-/// $b_k = x_k D_k + [k > 0]\, x_k U_k + [k < n_z - 1]\, x_{k+1} L_k$, not as
-/// the true left product $x_k D_k + x_{k-1} U_{k-1} + x_{k+1} L_{k+1}$. The
+/// $b_k = x_k D_k + x_k U_k + x_{k+1} L_k$, where the $U$ term is present for
+/// $k > 0$ and the $L$ term for $k < n_z - 1$, not as the true left product
+/// $x_k D_k + x_{k-1} U_{k-1} + x_{k+1} L_{k+1}$. The
 /// star solver uses this for the line-search slope (`star_solver.f90:425`),
 /// so it is reproduced as written (deferred upstream bug `#362`).
 ///

@@ -67,6 +67,7 @@ Scope and the `v0.1.0` definition are in [`SCOPE.md`](SCOPE.md). Work is tracked
 | 50 | The TDC Newton Solver Runs on a Translation of `auto_diff_real_tdc`; No Bracket Seed (`#321`) | In force | below |
 | 51 | The Scheduled Campaign Saves a Baseline Candidate; the Baseline May Be Refreshed From It (`#257`) | In force | below |
 | 52 | `DualOrder1<N>` Evaluates Upstream's Expression for Each Operation, in One of Two Forms Chosen by `N` (`#339`) | In force | below |
+| 54 | The Second- and Third-Order Dual Types Are Generated From Upstream's `auto_diff` Modules by a Script (`#349`) | In force | below |
 
 ## Pre-audit decisions still in force
 
@@ -709,3 +710,17 @@ The text of these four entries predates the audit of 2026-11-16. The decisions s
   - *A separate Rust type per upstream type*: exact by construction, but every generic kernel would need a second instantiation and the engine a wide rename.
   - *Keeping the generic chain rule*: simpler, and not what MESA computes.
   - *Keeping the guards on `safe_sqrt` and `safe_log`*: hides a `NaN` that MESA would produce at the same point.
+
+## DECISIONS #54: The Second- and Third-Order Dual Types Are Generated From Upstream's `auto_diff` Modules by a Script (`#349`)
+
+- **Date**: 2026-11-22
+- **Decision**:
+  1. **Generated, not hand-written**: `crates/flexmesa-autodiff/src/order2_gen.rs` and `order3_gen.rs` are produced by `scripts/autodiff/translate_mesa_dual.py` from `auto_diff/private/auto_diff_real_2var_order2_module.f90` and `_order3_module.f90` at tag `26.4.1`. Each Rust function keeps the upstream routine's name, temporaries, their order and every parenthesis. The files are committed; regenerating needs a MESA checkout and is not part of the build.
+  2. **One source for arithmetic**: every operator and method of `AutoDiffReal2VarOrder2` and `AutoDiffReal2VarOrder3`, including `make_unary_operator` and `make_binary_operator`, calls the generated routine of the same upstream name. Comparison, assignment and `integer`-operand routines are not translated: the Rust types compare on `val`, and integers are converted to `f64` before the real-operand routine, which is what upstream's `_int` routines compute.
+  3. **Support functions**: `sgn` and `Heaviside` follow `support_functions.f90:48-68`; `Abs`, `sqrt`, `Max` and `Min` map to the `f64` methods.
+- **Why**: the upstream modules are about 5,000 lines of machine-generated straight-line code. A hand translation would be slow and error-prone, and the generic chain rule it replaced rounded differently: with the generated routines, two Skye comparisons against MESA `26.4.1` that needed 65 widened per-entry tolerances pass at their original tolerances.
+- **Limits**: the script assumes each routine is straight-line assignments, which holds at the tag; it stops with an error on any other statement. The shared scalar kernels in `kernels.rs` and `kernels3.rs` remain for `apply_unary`, which takes caller-supplied derivatives and has no upstream counterpart.
+- **Alternatives Rejected**:
+  - *Translate by hand*: about 130 routines of up to 30 temporaries each.
+  - *Generate at build time*: would make the build depend on a MESA checkout.
+

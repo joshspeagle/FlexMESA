@@ -321,3 +321,21 @@ fn test_helm_runtime_cache_is_bit_identical_between_strict_and_fast_modes() {
 
     let _ = fs::remove_dir_all(&root);
 }
+
+#[test]
+fn test_excor7_table_cache_isolates_strict_and_fast_modes() {
+    use flexmesa_eos::pc::excor_table::Excor7Table;
+
+    let fast_ptr: *const Excor7Table =
+        with_numerics_mode(NumericsMode::Fast, || {
+            std::ptr::from_ref(Excor7Table::global())
+        });
+    let strict_ptr: *const Excor7Table =
+        with_numerics_mode(NumericsMode::Strict, || {
+            std::ptr::from_ref(Excor7Table::global())
+        });
+    assert_ne!(
+        fast_ptr, strict_ptr,
+        "Strict and Fast EXCOR7 OnceLock caches must remain isolated"
+    );
+}

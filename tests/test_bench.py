@@ -12,6 +12,8 @@ from __future__ import annotations
 import math
 from collections.abc import Sequence
 
+import pytest
+
 from flexmesa import bench
 
 _WAVE1_REGRESSION_SNAPSHOTS_N8: tuple[tuple[str, float], ...] = (
@@ -140,7 +142,28 @@ def test_wave3a_four_stage_benchmarks_match_snapshots() -> None:
         _WAVE3A_REGRESSION_SNAPSHOTS_N8,
         max_stage_rel_err=2.0e-9,
         max_chk_rel_err=1.0e-13,
+        stage_check_elsewhere=frozenset({"eos_pc"}),
     )
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason=(
+        "#295: Rust PC uses the MESA 26.4.1 EXCOR7 bicubic spline table "
+        "(eos/private/pc_eos.f90:1895, create_EXCOR7_table.f90:136 "
+        "THETA > 0.005; #161), whereas the frozen JAX twin keeps analytical "
+        "EXCOR7 (THETA > 0.04); measured cross-stage max_rel_err is "
+        "3.716e-9 against 2.0e-9."
+    ),
+)
+def test_wave3a_eos_pc_stages_agree() -> None:
+    """The `eos_pc` workload agrees across Stages 0..3 to 2.0e-9."""
+    for n_zones in (4, 8):
+        rec = bench.bench_eos_pc(n_zones, n_warmup=1, n_repeats=3)
+        assert rec.max_rel_err <= 2.0e-9, (
+            f"workload {rec.workload} (N={rec.n_zones}) "
+            f"cross-stage rel_err {rec.max_rel_err:.3e} > 2.0e-9"
+        )
 
 
 def test_wave3b_four_stage_benchmarks_match_snapshots() -> None:

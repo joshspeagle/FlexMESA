@@ -289,21 +289,65 @@ def eos_dt_get_t(
     use_cms: bool = False,
     use_free_eos: bool = True,
     use_opal_scvh: bool = True,
+    logt_tol: float | None = None,
+    other_tol: float | None = None,
 ) -> EosInverseOutput:
-    """Solve for $T$ given $\\rho$ and `res[which_other]`."""
-    return _call_inv_solver(
-        _rust.eos_eval_dt_get_t,
-        rho,
-        which_other,
-        other_value,
-        chem_id,
-        xa,
-        log_t_guess,
-        use_skye,
-        use_pc,
-        use_cms,
-        use_free_eos,
-        use_opal_scvh,
+    """Solve for $T$ given $\\rho$ and `res[which_other]`.
+
+    Args:
+        rho: Mass density $\\rho$ in `g cm^-3`.
+        which_other: Target channel index (`0..26`, `-1` for
+            $E_{\\mathrm{gas}}$, or `-2` for $\\log_{10} P_{\\mathrm{total}}$).
+        other_value: Target value for `res[which_other]`.
+        chem_id: 1-based MESA nuclide identifiers of length `N_species`.
+        xa: Species mass fractions of shape `(N_species,)`.
+        log_t_guess: Initial guess for $\\log_{10}(T / \\mathrm{K})$.
+        use_skye: Whether `Skye` is enabled.
+        use_pc: Whether `PC` is enabled when `Skye` is disabled.
+        use_cms: Whether `CMS` H/He EOS is enabled.
+        use_free_eos: Whether `FreeEOS` 4D tables are enabled.
+        use_opal_scvh: Whether `OPAL/SCVH` 4D tables are enabled.
+        logt_tol: Optional stopping tolerance on $\\log_{10} T$ (defaults to
+            `1.0e-12` when `None`).
+        other_tol: Optional stopping tolerance on the residual (defaults to
+            `1.0e-12` when `None`).
+
+    Returns:
+        [`EosInverseOutput`] with the solved temperature and 26-channel EOS.
+    """
+    if logt_tol is None and other_tol is None:
+        return _call_inv_solver(
+            _rust.eos_eval_dt_get_t,
+            rho,
+            which_other,
+            other_value,
+            chem_id,
+            xa,
+            log_t_guess,
+            use_skye,
+            use_pc,
+            use_cms,
+            use_free_eos,
+            use_opal_scvh,
+        )
+    xa_c = np.ascontiguousarray(xa, np.float64)
+    cids = [int(c) for c in chem_id]
+    return _pack_inv(
+        _rust.eos_eval_dt_get_t(
+            float(rho),
+            int(which_other),
+            float(other_value),
+            cids,
+            xa_c,
+            float(log_t_guess),
+            bool(use_skye),
+            bool(use_pc),
+            bool(use_cms),
+            bool(use_free_eos),
+            bool(use_opal_scvh),
+            None if logt_tol is None else float(logt_tol),
+            None if other_tol is None else float(other_tol),
+        )
     )
 
 

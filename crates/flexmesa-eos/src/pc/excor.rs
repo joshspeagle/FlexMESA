@@ -2,16 +2,63 @@
 //! equation of state.
 //!
 //! Reference: Tanaka & Ichimaru (1985-1987), Ichimaru (1993); upstream
-//! Fortran MESA `eos/private/pc_eos.f90` lines 1844-2083.
+//! Fortran MESA `eos/private/pc_eos.f90` lines 1844-2162 (`use_EXCOR7_table = .true.`)
+//! and `eos/private/pc_support.f90` (`get_EXCOR7`).
 
 use flexmesa_autodiff::AutoDiffReal2VarOrder1;
 
 use crate::pc::coulomb_ion::PcIonContrib;
+use crate::pc::excor_table::{
+    get_excor7, J_CVXC, J_FXC, J_PDRXC, J_PDTXC, J_PXC, J_SXC, J_UXC,
+};
 
 /// Evaluate `EXCOR7(RS, GAME)` for the electron exchange-correlation
-/// contribution per electron (`pc_eos.f90` lines 1844-2083).
+/// contribution per electron (`pc_eos.f90:1895-2135`).
+///
+/// Mirrors MESA `26.4.1`'s `use_EXCOR7_table = .true.`: queries the cached
+/// `351 x 601` bicubic spline table (`get_excor7`) and falls back to the
+/// analytical Tanaka & Ichimaru formula (`excor7_analytic`) when `(ln RS,
+/// ln GAME)` lies outside the table domain (`skip = .true.`).
 #[must_use]
 pub fn excor7(
+    rs: AutoDiffReal2VarOrder1,
+    game: AutoDiffReal2VarOrder1,
+) -> PcIonContrib {
+    if let Some(interp) = get_excor7(rs.val, game.val) {
+        let dln_rs_dt = rs.d1[0] / rs.val;
+        let dln_game_dt = game.d1[0] / game.val;
+        let dln_rs_drho = rs.d1[1] / rs.val;
+        let dln_game_drho = game.d1[1] / game.val;
+
+        let make_ad = |k: usize| AutoDiffReal2VarOrder1 {
+            val: interp.fval[k],
+            d1: [
+                interp.df_dln_rs[k] * dln_rs_dt
+                    + interp.df_dln_game[k] * dln_game_dt,
+                interp.df_dln_rs[k] * dln_rs_drho
+                    + interp.df_dln_game[k] * dln_game_drho,
+            ],
+        };
+
+        return PcIonContrib {
+            f: make_ad(J_FXC),
+            u: make_ad(J_UXC),
+            p: make_ad(J_PXC),
+            s: make_ad(J_SXC),
+            cv: make_ad(J_CVXC),
+            pdt: make_ad(J_PDTXC),
+            pdr: make_ad(J_PDRXC),
+        };
+    }
+
+    excor7_analytic(rs, game)
+}
+
+/// Evaluate the analytical Tanaka & Ichimaru `EXCOR7(RS, GAME)` fallback used
+/// when `(ln RS, ln GAME)` lies outside the `EXCOR7` spline table bounds
+/// (`pc_eos.f90:1913-2083`, `THETA > 0.04`).
+#[must_use]
+pub fn excor7_analytic(
     rs: AutoDiffReal2VarOrder1,
     game: AutoDiffReal2VarOrder1,
 ) -> PcIonContrib {

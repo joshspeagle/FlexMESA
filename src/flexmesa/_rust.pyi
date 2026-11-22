@@ -268,7 +268,8 @@ def eos_eval_dt_get_t(
     rho: float, which_other: int, other_value: float, chem_id: list[int],
     xa: _ArrF64, log_t_guess: float = 6.0, use_skye: bool = True,
     use_pc: bool = False, use_cms: bool = False, use_free_eos: bool = True,
-    use_opal_scvh: bool = True,
+    use_opal_scvh: bool = True, logt_tol: float | None = None,
+    other_tol: float | None = None,
 ) -> tuple[float, float, _ArrF64, _ArrF64, _ArrF64]: ...
 def eos_eval_dt_get_rho(
     temp: float, which_other: int, other_value: float, chem_id: list[int],

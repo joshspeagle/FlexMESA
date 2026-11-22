@@ -4,6 +4,7 @@
 //! polynomial fits `rpsi_from_re_factor`, `re_from_rpsi_factor`, `A`, `B`, `C`,
 //! and `sigmoid`) matching `star/private/hydro_rotation.f90:51-226, 874-920`.
 
+use flexmesa_autodiff::{AutoDiffReal1VarOrder1, AutoDiffReal2VarOrder1};
 use flexmesa_const::{FOUR_PI, ONE_SIXTH, ONE_THIRD, TWO_THIRDS};
 
 use crate::model::StarModel;
@@ -231,6 +232,40 @@ pub fn w_div_w_roche_jrot(
 }
 
 /// Evaluates the shell specific moment of inertia $i_{\mathrm{rot}}$
+/// ($\mathrm{cm^2}$) together with its exact first-order partial derivatives
+/// $\partial i_{\mathrm{rot}} / \partial (\omega/\omega_{\mathrm{crit}})$
+/// (`d1[0]`, `i_w_div_wc_00`) and $\partial i_{\mathrm{rot}} / \partial \ln r$
+/// (`d1[1]`, `i_lnR_00`), mirroring `eval_i_rot` in
+/// `star/private/hydro_rotation.f90:181-226` using [`AutoDiffReal2VarOrder1`]
+/// so division via `powm1` matches upstream bit-for-bit.
+#[must_use]
+pub fn eval_i_rot_dual(
+    r00: f64,
+    w_div_w_crit_roche: f64,
+    simple_i_rot_flag: bool,
+) -> AutoDiffReal2VarOrder1 {
+    if simple_i_rot_flag {
+        let val = TWO_THIRDS * r00 * r00;
+        AutoDiffReal2VarOrder1::new(val, [0.0, 2.0 * val])
+    } else {
+        // Compute i_rot following Paxton et al. 2019 (ApJS, 243, 10) in
+        // upstream's exact `auto_diff_real_2var_order1` operation order
+        // (`star/private/hydro_rotation.f90:204-224`).
+        let w = AutoDiffReal2VarOrder1::new(w_div_w_crit_roche, [1.0, 0.0]);
+        let r = AutoDiffReal2VarOrder1::new(r00, [0.0, r00]);
+        let w2 = w.pow2();
+        let w4 = w.pow4();
+        let w6 = w.pow6();
+        let lg_one_sub_w4 = (1.0 - w4).log();
+        let re = r * (1.0 + w2 / 6.0 - 0.0002507 * w4 + 0.06075 * w6);
+        let b = 1.0 + w2 / 5.0 - 0.2735 * w4 - 0.4327 * w6
+            - ((3.0 / 2.0) * 0.5583) * lg_one_sub_w4;
+        let a = 1.0 - 0.1076 * w4 - 0.2336 * w6 - 0.5583 * lg_one_sub_w4;
+        TWO_THIRDS * re.pow2() * b / a
+    }
+}
+
+/// Evaluates the shell specific moment of inertia $i_{\mathrm{rot}}$
 /// ($\mathrm{cm^2}$) following Paxton et al. (2019, ApJS 243, 10), matching
 /// `eval_i_rot` in `star/private/hydro_rotation.f90:181-226`.
 #[must_use]
@@ -239,20 +274,27 @@ pub fn eval_i_rot(
     w_div_w_crit_roche: f64,
     simple_i_rot_flag: bool,
 ) -> f64 {
-    if simple_i_rot_flag {
-        TWO_THIRDS * r00 * r00
-    } else {
-        let w = w_div_w_crit_roche;
-        let w2 = flexmesa_math::pow2(w);
-        let w4 = flexmesa_math::pow4(w);
-        let w6 = flexmesa_math::pow6(w);
-        let lg_one_sub_w4 = flexmesa_math::log(1.0 - w4);
-        let re = r00 * (1.0 + w2 / 6.0 - 0.0002507 * w4 + 0.06075 * w6);
-        let b = 1.0 + w2 / 5.0 - 0.2735 * w4 - 0.4327 * w6
-            - (3.0 / 2.0) * 0.5583 * lg_one_sub_w4;
-        let a = 1.0 - 0.1076 * w4 - 0.2336 * w6 - 0.5583 * lg_one_sub_w4;
-        TWO_THIRDS * flexmesa_math::pow2(re) * b / a
-    }
+    eval_i_rot_dual(r00, w_div_w_crit_roche, simple_i_rot_flag).val
+}
+
+/// Evaluates single-star Roche distortion factors $(f_P, f_T)$ and their
+/// derivatives with respect to $|\omega/\omega_{\mathrm{crit}}|$
+/// (`d1[0]`, `i_w_div_wc_00`), matching `eval_fp_ft` in
+/// `star/private/hydro_rotation.f90:775-804` using [`AutoDiffReal1VarOrder1`]
+/// (Fabry, Marchant & Sana 2022, Eqs. A.10 and A.11).
+#[must_use]
+pub fn eval_fp_ft_single_dual(
+    w_div_w_crit_roche: f64,
+) -> (AutoDiffReal1VarOrder1, AutoDiffReal1VarOrder1) {
+    let w = AutoDiffReal1VarOrder1::new(w_div_w_crit_roche.abs(), [1.0]);
+    let w2 = w.pow2();
+    let w4 = w.pow4();
+    let w6 = w.pow6();
+    let w_log_term = (1.0 - w.powf(LOG_TERM_POWER)).log();
+    let a_omega = 1.0 + 0.3293 * w4 - 0.4926 * w6 - 0.5560 * w_log_term;
+    let fp = (1.0 - TWO_THIRDS * w2 - 0.2133 * w4 - 0.1068 * w6) / a_omega;
+    let ft = (1.0 - 0.07955 * w4 - 0.2322 * w6) / a_omega;
+    (fp, ft)
 }
 
 /// Evaluates single-star Roche distortion factors $(f_P, f_T)$ without
@@ -260,16 +302,8 @@ pub fn eval_i_rot(
 /// Fabry, Marchant & Sana 2022, Eqs. A.10 and A.11).
 #[must_use]
 pub fn eval_fp_ft_single(w_div_w_crit_roche: f64) -> (f64, f64) {
-    let w = w_div_w_crit_roche.abs();
-    let w2 = flexmesa_math::pow2(w);
-    let w4 = flexmesa_math::pow4(w);
-    let w6 = flexmesa_math::pow6(w);
-    let w_log_term =
-        flexmesa_math::log(1.0 - flexmesa_math::pow(w, LOG_TERM_POWER));
-    let a_omega = 1.0 + 0.3293 * w4 - 0.4926 * w6 - 0.5560 * w_log_term;
-    let fp = (1.0 - TWO_THIRDS * w2 - 0.2133 * w4 - 0.1068 * w6) / a_omega;
-    let ft = (1.0 - 0.07955 * w4 - 0.2322 * w6) / a_omega;
-    (fp, ft)
+    let (fp, ft) = eval_fp_ft_single_dual(w_div_w_crit_roche);
+    (fp.val, ft.val)
 }
 
 /// Updates `model.aux.i_rot[k]` and `model.aux.d_i_rot_dlnr[k]` at face `k`
@@ -277,18 +311,18 @@ pub fn eval_fp_ft_single(w_div_w_crit_roche: f64) -> (f64, f64) {
 /// tidal deformation (`set1_i_rot` in `star/private/hydro_rotation.f90:317-336`).
 pub fn set1_i_rot(model: &mut StarModel, k: usize, r: f64) {
     let w = model.aux.w_div_wc.get(k).copied().unwrap_or(0.0);
-    let i_rot_single =
-        eval_i_rot(r, w, model.controls.mix_wind.simple_i_rot_flag);
+    let ir_single =
+        eval_i_rot_dual(r, w, model.controls.mix_wind.simple_i_rot_flag);
     if let Some(ref hook) = model.aux.tidal_deformation {
         let td = hook.0.eval_shell(k, r, model.omega[k]);
         let f_sw = td.f_switch;
         let f_1m = 1.0 - f_sw;
-        model.aux.i_rot[k] = f_sw * td.i_rot + f_1m * i_rot_single;
+        model.aux.i_rot[k] = f_sw * td.i_rot + f_1m * ir_single.val;
         model.aux.d_i_rot_dlnr[k] =
-            f_sw * td.d_irot_dlnr + f_1m * (2.0 * i_rot_single);
+            f_sw * td.d_irot_dlnr + f_1m * ir_single.d1[1];
     } else {
-        model.aux.i_rot[k] = i_rot_single;
-        model.aux.d_i_rot_dlnr[k] = 2.0 * i_rot_single;
+        model.aux.i_rot[k] = ir_single.val;
+        model.aux.d_i_rot_dlnr[k] = ir_single.d1[1];
     }
 }
 

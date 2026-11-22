@@ -3,9 +3,8 @@
 //! [`AutoDiffReal2VarOrder2`].
 //!
 //! Relational operators (`PartialEq`, `PartialOrd`) compare the primal value
-//! `val`. Linear scaling (`Neg`, `Mul<f64>`, `Div<f64>`) scales all six
-//! components directly so large first derivatives never evaluate `0.0 * Inf`
-//! via `pow2(d1val)`.
+//! `val`. Arithmetic evaluates the expression of the upstream routine of the same
+//! name (`order2_gen`, `#349`).
 
 use core::cmp::Ordering;
 use core::ops::{Add, Div, Mul, Neg, Sub};
@@ -49,177 +48,241 @@ impl PartialOrd<f64> for AutoDiffReal2VarOrder2 {
     }
 }
 
-/// Unary negation $-x$ negating all six components directly without squaring
-/// first derivatives.
+/// `unary_minus_self`.
 impl Neg for AutoDiffReal2VarOrder2 {
     type Output = Self;
     #[inline]
     fn neg(self) -> Self::Output {
-        Self::new(
-            -self.val,
-            -self.d1val1,
-            -self.d1val2,
-            -self.d2val1,
-            -self.d1val1_d1val2,
-            -self.d2val2,
-        )
+        crate::order2_gen::unary_minus_self(self)
     }
 }
 
-/// Hyperdual addition $x + y$ summing all six components elementwise.
+/// `add_self`.
 impl Add for AutoDiffReal2VarOrder2 {
     type Output = Self;
     #[inline]
     fn add(self, rhs: Self) -> Self::Output {
-        Self::new(
-            self.val + rhs.val,
-            self.d1val1 + rhs.d1val1,
-            self.d1val2 + rhs.d1val2,
-            self.d2val1 + rhs.d2val1,
-            self.d1val1_d1val2 + rhs.d1val1_d1val2,
-            self.d2val2 + rhs.d2val2,
-        )
+        crate::order2_gen::add_self(self, rhs)
     }
 }
 
-/// Hyperdual-scalar addition $x + c$ shifting `val` while preserving partials.
+/// `add_self_real`.
 impl Add<f64> for AutoDiffReal2VarOrder2 {
     type Output = Self;
     #[inline]
     fn add(self, rhs: f64) -> Self::Output {
-        Self {
-            val: self.val + rhs,
-            ..self
-        }
+        crate::order2_gen::add_self_real(self, rhs)
     }
 }
 
-/// Scalar-hyperdual addition $c + x$ shifting `val` while preserving partials.
+/// `add_real_self`.
 impl Add<AutoDiffReal2VarOrder2> for f64 {
     type Output = AutoDiffReal2VarOrder2;
     #[inline]
     fn add(self, rhs: AutoDiffReal2VarOrder2) -> Self::Output {
-        rhs + self
+        crate::order2_gen::add_real_self(self, rhs)
     }
 }
 
-/// Hyperdual subtraction $x - y$ subtracting all six components elementwise.
+/// `sub_self`.
 impl Sub for AutoDiffReal2VarOrder2 {
     type Output = Self;
     #[inline]
     fn sub(self, rhs: Self) -> Self::Output {
-        Self::new(
-            self.val - rhs.val,
-            self.d1val1 - rhs.d1val1,
-            self.d1val2 - rhs.d1val2,
-            self.d2val1 - rhs.d2val1,
-            self.d1val1_d1val2 - rhs.d1val1_d1val2,
-            self.d2val2 - rhs.d2val2,
-        )
+        crate::order2_gen::sub_self(self, rhs)
     }
 }
 
-/// Hyperdual-scalar subtraction $x - c$ shifting `val` while preserving
-/// partials.
+/// `sub_self_real`.
 impl Sub<f64> for AutoDiffReal2VarOrder2 {
     type Output = Self;
     #[inline]
     fn sub(self, rhs: f64) -> Self::Output {
-        Self {
-            val: self.val - rhs,
-            ..self
-        }
+        crate::order2_gen::sub_self_real(self, rhs)
     }
 }
 
-/// Scalar-hyperdual subtraction $c - x$ negating all partial derivatives.
+/// `sub_real_self`.
 impl Sub<AutoDiffReal2VarOrder2> for f64 {
     type Output = AutoDiffReal2VarOrder2;
     #[inline]
-    #[allow(clippy::suspicious_arithmetic_impl)]
     fn sub(self, rhs: AutoDiffReal2VarOrder2) -> Self::Output {
-        (-rhs) + self
+        crate::order2_gen::sub_real_self(self, rhs)
     }
 }
 
-/// Hyperdual multiplication $x y$ via the second-order product rule.
+/// `mul_self`.
 impl Mul for AutoDiffReal2VarOrder2 {
     type Output = Self;
     #[inline]
     fn mul(self, rhs: Self) -> Self::Output {
-        self.make_binary_operator(
-            rhs,
-            self.val * rhs.val,
-            rhs.val,
-            self.val,
-            0.0,
-            1.0,
-            0.0,
-        )
+        crate::order2_gen::mul_self(self, rhs)
     }
 }
 
-/// Hyperdual-scalar multiplication $c x$ scaling all six components directly.
+/// `mul_self_real`.
 impl Mul<f64> for AutoDiffReal2VarOrder2 {
     type Output = Self;
     #[inline]
     fn mul(self, rhs: f64) -> Self::Output {
-        Self::new(
-            self.val * rhs,
-            self.d1val1 * rhs,
-            self.d1val2 * rhs,
-            self.d2val1 * rhs,
-            self.d1val1_d1val2 * rhs,
-            self.d2val2 * rhs,
-        )
+        crate::order2_gen::mul_self_real(self, rhs)
     }
 }
 
-/// Scalar-hyperdual multiplication $c x$ scaling all six components directly.
+/// `mul_real_self`.
 impl Mul<AutoDiffReal2VarOrder2> for f64 {
     type Output = AutoDiffReal2VarOrder2;
     #[inline]
     fn mul(self, rhs: AutoDiffReal2VarOrder2) -> Self::Output {
-        rhs * self
+        crate::order2_gen::mul_real_self(self, rhs)
     }
 }
 
-/// Hyperdual division $x / y$ via the second-order quotient rule.
+/// `div_self`.
 impl Div for AutoDiffReal2VarOrder2 {
     type Output = Self;
     #[inline]
-    #[allow(clippy::suspicious_arithmetic_impl)]
     fn div(self, rhs: Self) -> Self::Output {
-        let inv_y = 1.0 / rhs.val;
-        let inv_y2 = inv_y * inv_y;
-        self.make_binary_operator(
-            rhs,
-            self.val * inv_y,
-            inv_y,
-            -self.val * inv_y2,
-            0.0,
-            -inv_y2,
-            2.0 * self.val * inv_y2 * inv_y,
-        )
+        crate::order2_gen::div_self(self, rhs)
     }
 }
 
-/// Hyperdual-scalar division $x / c$ scaling all six components by $1 / c$.
+/// `div_self_real`.
 impl Div<f64> for AutoDiffReal2VarOrder2 {
     type Output = Self;
     #[inline]
-    #[allow(clippy::suspicious_arithmetic_impl)]
     fn div(self, rhs: f64) -> Self::Output {
-        self * (1.0 / rhs)
+        crate::order2_gen::div_self_real(self, rhs)
     }
 }
 
-/// Scalar-hyperdual division $c / y = c y^{-1}$.
+/// `div_real_self`.
 impl Div<AutoDiffReal2VarOrder2> for f64 {
     type Output = AutoDiffReal2VarOrder2;
     #[inline]
-    #[allow(clippy::suspicious_arithmetic_impl)]
     fn div(self, rhs: AutoDiffReal2VarOrder2) -> Self::Output {
-        rhs.powm1() * self
+        crate::order2_gen::div_real_self(self, rhs)
+    }
+}
+
+impl AutoDiffReal2VarOrder2 {
+    /// `pow_self`: $x^{y}$ for a dual exponent.
+    #[must_use]
+    #[inline]
+    pub fn pow(self, other: Self) -> Self {
+        crate::order2_gen::pow_self(self, other)
+    }
+
+    /// `pow_self_real`: $x^{p}$ for a constant exponent.
+    #[must_use]
+    #[inline]
+    pub fn powf(self, p: f64) -> Self {
+        crate::order2_gen::pow_self_real(self, p)
+    }
+
+    /// `pow_self_int`: the exponent is converted to `real(dp)` and the
+    /// expression is that of `pow_self_real`.
+    #[must_use]
+    #[inline]
+    pub fn powi(self, n: i32) -> Self {
+        self.powf(f64::from(n))
+    }
+
+    /// `pow_real_self`: $b^{x}$ for a constant base.
+    #[must_use]
+    #[inline]
+    pub fn rpow(self, base: f64) -> Self {
+        crate::order2_gen::pow_real_self(base, self)
+    }
+
+    /// `pow2_self`.
+    #[must_use]
+    #[inline]
+    pub fn pow2(self) -> Self {
+        crate::order2_gen::pow2_self(self)
+    }
+
+    /// `pow3_self`.
+    #[must_use]
+    #[inline]
+    pub fn pow3(self) -> Self {
+        crate::order2_gen::pow3_self(self)
+    }
+
+    /// `pow4_self`.
+    #[must_use]
+    #[inline]
+    pub fn pow4(self) -> Self {
+        crate::order2_gen::pow4_self(self)
+    }
+
+    /// `pow5_self`.
+    #[must_use]
+    #[inline]
+    pub fn pow5(self) -> Self {
+        crate::order2_gen::pow5_self(self)
+    }
+
+    /// `pow6_self`.
+    #[must_use]
+    #[inline]
+    pub fn pow6(self) -> Self {
+        crate::order2_gen::pow6_self(self)
+    }
+
+    /// `pow7_self`.
+    #[must_use]
+    #[inline]
+    pub fn pow7(self) -> Self {
+        crate::order2_gen::pow7_self(self)
+    }
+
+    /// `pow8_self`.
+    #[must_use]
+    #[inline]
+    pub fn pow8(self) -> Self {
+        crate::order2_gen::pow8_self(self)
+    }
+
+    /// `max_self`.
+    #[must_use]
+    #[inline]
+    pub fn max(self, other: Self) -> Self {
+        crate::order2_gen::max_self(self, other)
+    }
+
+    /// `max_self_real`.
+    #[must_use]
+    #[inline]
+    pub fn max_scalar(self, c: f64) -> Self {
+        crate::order2_gen::max_self_real(self, c)
+    }
+
+    /// `min_self`.
+    #[must_use]
+    #[inline]
+    pub fn min(self, other: Self) -> Self {
+        crate::order2_gen::min_self(self, other)
+    }
+
+    /// `min_self_real`.
+    #[must_use]
+    #[inline]
+    pub fn min_scalar(self, c: f64) -> Self {
+        crate::order2_gen::min_self_real(self, c)
+    }
+
+    /// `dim_self`.
+    #[must_use]
+    #[inline]
+    pub fn dim(self, other: Self) -> Self {
+        crate::order2_gen::dim_self(self, other)
+    }
+
+    /// `dim_self_real`.
+    #[must_use]
+    #[inline]
+    pub fn dim_scalar(self, c: f64) -> Self {
+        crate::order2_gen::dim_self_real(self, c)
     }
 }

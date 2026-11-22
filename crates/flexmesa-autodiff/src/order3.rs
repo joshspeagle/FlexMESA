@@ -6,10 +6,8 @@
 //! first, second, and third partial derivatives of the specific Helmholtz free
 //! energy $F(T, \rho)$ in a single forward pass.
 
-use flexmesa_math::{pow2, pow3};
 
 #[allow(clippy::wildcard_imports)]
-use crate::kernels3::*;
 use crate::order1::DualOrder1;
 use crate::order2::AutoDiffReal2VarOrder2;
 
@@ -47,12 +45,12 @@ pub struct AutoDiffReal2VarOrder3 {
 }
 
 macro_rules! unary3_method {
-    ($name:ident, $kernel:path, $doc:expr) => {
+    ($name:ident, $kernel:ident, $doc:expr) => {
         #[doc = $doc]
         #[must_use]
         #[inline]
         pub fn $name(self) -> Self {
-            self.apply_unary($kernel)
+            crate::order3_gen::$kernel(self)
         }
     };
 }
@@ -120,33 +118,7 @@ impl AutoDiffReal2VarOrder3 {
         z_d2x: f64,
         z_d3x: f64,
     ) -> Self {
-        let q0 = pow2(self.d1val1);
-        let q1 = self.d1val2 * z_d2x;
-        let q2 = pow2(self.d1val2);
-        let q3 = self.d1val1 * z_d2x;
-        let q4 = 2.0 * self.d1val1_d1val2;
-        Self {
-            val: z_val,
-            d1val1: self.d1val1 * z_d1x,
-            d1val2: self.d1val2 * z_d1x,
-            d2val1: q0 * z_d2x + self.d2val1 * z_d1x,
-            d1val1_d1val2: q1 * self.d1val1 + self.d1val1_d1val2 * z_d1x,
-            d2val2: q2 * z_d2x + self.d2val2 * z_d1x,
-            d3val1: 3.0 * q3 * self.d2val1
-                + self.d3val1 * z_d1x
-                + z_d3x * pow3(self.d1val1),
-            d2val1_d1val2: q0 * self.d1val2 * z_d3x
-                + q1 * self.d2val1
-                + q3 * q4
-                + self.d2val1_d1val2 * z_d1x,
-            d1val1_d2val2: q1 * q4
-                + q2 * self.d1val1 * z_d3x
-                + q3 * self.d2val2
-                + self.d1val1_d2val2 * z_d1x,
-            d3val2: 3.0 * q1 * self.d2val2
-                + self.d3val2 * z_d1x
-                + z_d3x * pow3(self.d1val2),
-        }
+        crate::order3_gen::make_unary_operator(self, z_val, z_d1x, z_d2x, z_d3x)
     }
 
     /// Apply the third-order binary chain rule matching MESA's
@@ -168,93 +140,7 @@ impl AutoDiffReal2VarOrder3 {
         z_d1x_d2y: f64,
         z_d3y: f64,
     ) -> Self {
-        let q0 = pow2(self.d1val1);
-        let q1 = pow2(other.d1val1);
-        let q2 = self.d1val1 * z_d1x_d1y;
-        let q3 = 2.0 * q2;
-        let q4 = self.d1val2 * z_d2x;
-        let q5 = other.d1val2 * z_d1x_d1y;
-        let q6 = self.d1val2 * z_d1x_d1y;
-        let q7 = other.d1val2 * z_d2y;
-        let q8 = pow2(self.d1val2);
-        let q9 = pow2(other.d1val2);
-        let q10 = 2.0 * q5;
-        let q11 = self.d1val1 * z_d2x;
-        let q12 = 3.0 * self.d2val1;
-        let q13 = 3.0 * other.d2val1;
-        let q14 = other.d1val1 * z_d1x_d1y;
-        let q15 = other.d1val1 * z_d2y;
-        let q16 = q1 * z_d1x_d2y;
-        let q17 = q0 * z_d2x_d1y;
-        let q18 = 2.0 * self.d1val1_d1val2;
-        let q19 = 2.0 * other.d1val1_d1val2;
-        let q20 = 2.0 * self.d1val1 * other.d1val1;
-        let q21 = self.d1val2 * z_d2x_d1y;
-        let q22 = other.d1val2 * z_d1x_d2y;
-        let q23 = q9 * z_d1x_d2y;
-        let q24 = q8 * z_d2x_d1y;
-        let q25 = 3.0 * self.d2val2;
-        let q26 = 3.0 * other.d2val2;
-        Self {
-            val: z_val,
-            d1val1: self.d1val1 * z_d1x + other.d1val1 * z_d1y,
-            d1val2: self.d1val2 * z_d1x + other.d1val2 * z_d1y,
-            d2val1: q0 * z_d2x
-                + q1 * z_d2y
-                + q3 * other.d1val1
-                + self.d2val1 * z_d1x
-                + other.d2val1 * z_d1y,
-            d1val1_d1val2: (q4 + q5) * self.d1val1
-                + (q6 + q7) * other.d1val1
-                + self.d1val1_d1val2 * z_d1x
-                + other.d1val1_d1val2 * z_d1y,
-            d2val2: q10 * self.d1val2
-                + q8 * z_d2x
-                + q9 * z_d2y
-                + self.d2val2 * z_d1x
-                + other.d2val2 * z_d1y,
-            d3val1: 3.0 * q16 * self.d1val1
-                + 3.0 * q17 * other.d1val1
-                + q12 * (q11 + q14)
-                + q13 * (q15 + q2)
-                + self.d3val1 * z_d1x
-                + other.d3val1 * z_d1y
-                + z_d3x * pow3(self.d1val1)
-                + z_d3y * pow3(other.d1val1),
-            d2val1_d1val2: q0 * self.d1val2 * z_d3x
-                + q1 * other.d1val2 * z_d3y
-                + (q11 + q14) * q18
-                + q15 * q19
-                + q16 * self.d1val2
-                + q17 * other.d1val2
-                + q20 * (q21 + q22)
-                + q3 * other.d1val1_d1val2
-                + (q4 + q5) * self.d2val1
-                + (q6 + q7) * other.d2val1
-                + self.d2val1_d1val2 * z_d1x
-                + other.d2val1_d1val2 * z_d1y,
-            d1val1_d2val2: 2.0 * q21 * self.d1val1 * other.d1val2
-                + 2.0 * q22 * self.d1val2 * other.d1val1
-                + q10 * self.d1val1_d1val2
-                + (q11 + q14) * self.d2val2
-                + (q15 + q2) * other.d2val2
-                + q18 * q4
-                + q19 * (q6 + q7)
-                + q23 * self.d1val1
-                + q24 * other.d1val1
-                + q8 * self.d1val1 * z_d3x
-                + q9 * other.d1val1 * z_d3y
-                + self.d1val1_d2val2 * z_d1x
-                + other.d1val1_d2val2 * z_d1y,
-            d3val2: 3.0 * q23 * self.d1val2
-                + 3.0 * q24 * other.d1val2
-                + q25 * (q4 + q5)
-                + q26 * (q6 + q7)
-                + self.d3val2 * z_d1x
-                + other.d3val2 * z_d1y
-                + z_d3x * pow3(self.d1val2)
-                + z_d3y * pow3(other.d1val2),
-        }
+        crate::order3_gen::make_binary_operator(self, other, z_val, z_d1x, z_d1y, z_d2x, z_d1x_d1y, z_d2y, z_d3x, z_d2x_d1y, z_d1x_d2y, z_d3y)
     }
 
     /// Substitute `(x, y)` into the bivariate Taylor jet `self` (`make_binop`).
@@ -344,48 +230,42 @@ impl AutoDiffReal2VarOrder3 {
         DualOrder1::new(self.val, [self.d1val1, self.d1val2])
     }
 
-    unary3_method!(sign, unary3_sign, "Compute $\\operatorname{sgn}(x)$.");
-    unary3_method!(abs, unary3_abs, "Compute $|x|$.");
-    unary3_method!(sqrt, unary3_sqrt, "Compute $\\sqrt{x}$.");
-    unary3_method!(
-        safe_sqrt,
-        unary3_safe_sqrt,
+    unary3_method!(sign, sign_self, "Compute $\\operatorname{sgn}(x)$.");
+    unary3_method!(abs, abs_self, "Compute $|x|$.");
+    unary3_method!(sqrt, sqrt_self, "Compute $\\sqrt{x}$.");
+    unary3_method!(safe_sqrt, safe_sqrt_self,
         "Compute $\\sqrt{\\max(x, 0)}$."
     );
-    unary3_method!(exp, unary3_exp, "Compute $\\exp(x)$.");
-    unary3_method!(expm1, unary3_expm1, "Compute $e^{x} - 1$.");
-    unary3_method!(exp10, unary3_exp10, "Compute $10^{x}$.");
-    unary3_method!(powm1, unary3_powm1, "Compute $x^{-1}$.");
-    unary3_method!(log, unary3_log, "Compute $\\ln(x)$.");
-    unary3_method!(
-        safe_log,
-        unary3_safe_log,
+    unary3_method!(exp, exp_self, "Compute $\\exp(x)$.");
+    unary3_method!(expm1, expm1_self, "Compute $e^{x} - 1$.");
+    unary3_method!(exp10, exp10_self, "Compute $10^{x}$.");
+    unary3_method!(powm1, powm1_self, "Compute $x^{-1}$.");
+    unary3_method!(log, log_self, "Compute $\\ln(x)$.");
+    unary3_method!(safe_log, safe_log_self,
         "Compute $\\operatorname{safe\\_log}(x)$."
     );
-    unary3_method!(log1p, unary3_log1p, "Compute $\\ln(1 + x)$.");
-    unary3_method!(log10, unary3_log10, "Compute $\\log_{10}(x)$.");
-    unary3_method!(
-        safe_log10,
-        unary3_safe_log10,
+    unary3_method!(log1p, log1p_self, "Compute $\\ln(1 + x)$.");
+    unary3_method!(log10, log10_self, "Compute $\\log_{10}(x)$.");
+    unary3_method!(safe_log10, safe_log10_self,
         "Compute $\\operatorname{safe\\_log10}(x)$."
     );
-    unary3_method!(log2, unary3_log2, "Compute $\\log_{2}(x)$.");
-    unary3_method!(sin, unary3_sin, "Compute $\\sin(x)$.");
-    unary3_method!(cos, unary3_cos, "Compute $\\cos(x)$.");
-    unary3_method!(tan, unary3_tan, "Compute $\\tan(x)$.");
-    unary3_method!(sinpi, unary3_sinpi, "Compute $\\sin(\\pi x)$.");
-    unary3_method!(cospi, unary3_cospi, "Compute $\\cos(\\pi x)$.");
-    unary3_method!(tanpi, unary3_tanpi, "Compute $\\tan(\\pi x)$.");
-    unary3_method!(sinh, unary3_sinh, "Compute $\\sinh(x)$.");
-    unary3_method!(cosh, unary3_cosh, "Compute $\\cosh(x)$.");
-    unary3_method!(tanh, unary3_tanh, "Compute $\\tanh(x)$.");
-    unary3_method!(asin, unary3_asin, "Compute $\\arcsin(x)$.");
-    unary3_method!(acos, unary3_acos, "Compute $\\arccos(x)$.");
-    unary3_method!(atan, unary3_atan, "Compute $\\arctan(x)$.");
-    unary3_method!(asinpi, unary3_asinpi, "Compute $\\arcsin(x) / \\pi$.");
-    unary3_method!(acospi, unary3_acospi, "Compute $\\arccos(x) / \\pi$.");
-    unary3_method!(atanpi, unary3_atanpi, "Compute $\\arctan(x) / \\pi$.");
-    unary3_method!(asinh, unary3_asinh, "Compute $\\operatorname{arsinh}(x)$.");
-    unary3_method!(acosh, unary3_acosh, "Compute $\\operatorname{arcosh}(x)$.");
-    unary3_method!(atanh, unary3_atanh, "Compute $\\operatorname{artanh}(x)$.");
+    unary3_method!(log2, log2_self, "Compute $\\log_{2}(x)$.");
+    unary3_method!(sin, sin_self, "Compute $\\sin(x)$.");
+    unary3_method!(cos, cos_self, "Compute $\\cos(x)$.");
+    unary3_method!(tan, tan_self, "Compute $\\tan(x)$.");
+    unary3_method!(sinpi, sinpi_self, "Compute $\\sin(\\pi x)$.");
+    unary3_method!(cospi, cospi_self, "Compute $\\cos(\\pi x)$.");
+    unary3_method!(tanpi, tanpi_self, "Compute $\\tan(\\pi x)$.");
+    unary3_method!(sinh, sinh_self, "Compute $\\sinh(x)$.");
+    unary3_method!(cosh, cosh_self, "Compute $\\cosh(x)$.");
+    unary3_method!(tanh, tanh_self, "Compute $\\tanh(x)$.");
+    unary3_method!(asin, asin_self, "Compute $\\arcsin(x)$.");
+    unary3_method!(acos, acos_self, "Compute $\\arccos(x)$.");
+    unary3_method!(atan, atan_self, "Compute $\\arctan(x)$.");
+    unary3_method!(asinpi, asinpi_self, "Compute $\\arcsin(x) / \\pi$.");
+    unary3_method!(acospi, acospi_self, "Compute $\\arccos(x) / \\pi$.");
+    unary3_method!(atanpi, atanpi_self, "Compute $\\arctan(x) / \\pi$.");
+    unary3_method!(asinh, asinh_self, "Compute $\\operatorname{arsinh}(x)$.");
+    unary3_method!(acosh, acosh_self, "Compute $\\operatorname{arcosh}(x)$.");
+    unary3_method!(atanh, atanh_self, "Compute $\\operatorname{artanh}(x)$.");
 }

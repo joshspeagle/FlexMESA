@@ -20,7 +20,9 @@ also give a time for one test of a split binary, under the key
 ``<binary>::<test name>``; other tests of that binary share its time equally.
 
 ``--skip NAME`` (repeatable) is passed to every test harness invocation as
-``-- --skip NAME``. The dashboard's coverage job uses it to leave out long
+``-- --skip NAME``, and removes by substring the tests of a split binary that
+it names (those run with ``--exact``, under which libtest matches ``--skip``
+exactly). The dashboard's coverage job uses it to leave out long
 evolution tests under instrumentation; CI's own test shards do not pass it.
 """
 
@@ -195,6 +197,10 @@ def main(argv: list[str] | None = None) -> int:
     for target in split_tests:
         prefix = f"{target}::"
         names = [u[len(prefix) :] for u in mine if u.startswith(prefix)]
+        # These tests run with `--exact`, which makes libtest match `--skip`
+        # exactly too; drop skipped tests here by substring, as `--skip`
+        # matches without `--exact`.
+        names = [n for n in names if not any(k in n for k in ns.skip)]
         if names:
             _cargo(
                 [

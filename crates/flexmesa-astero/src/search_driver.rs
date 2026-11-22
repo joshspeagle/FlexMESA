@@ -91,16 +91,10 @@ impl AsteroTrackExtras<'_> {
         None
     }
 
-    fn check_limits(
-        &self,
-        model: &StarModel,
-        dnu_uhz: f64,
-    ) -> Option<&'static str> {
-        if self.ctrl.eval_chi2_at_target_age_only
-            && model.star_age >= self.ctrl.age_target
-        {
-            return Some("age_target");
-        }
+    /// `final_checks` age stops (`astero/private/extras_support.f90:503-513`),
+    /// tested after the model's chi^2 has been evaluated and the best sample
+    /// saved (`:491-495`).
+    fn final_age_stop(&self, model: &StarModel) -> Option<&'static str> {
         if self.ctrl.include_age_in_chi2_spectro
             && self
                 .ctrl
@@ -109,6 +103,23 @@ impl AsteroTrackExtras<'_> {
         {
             return Some("max_age_for_chi2");
         }
+        if self.ctrl.eval_chi2_at_target_age_only
+            && model.star_age >= self.ctrl.age_target
+        {
+            return Some("age_target");
+        }
+        None
+    }
+
+    fn check_limits(
+        &self,
+        model: &StarModel,
+        dnu_uhz: f64,
+    ) -> Option<&'static str> {
+        // Upstream `check_limits` tests only the `delta_nu` and constraint
+        // limits (`astero/private/extras_support.f90:621-667`). The age stops
+        // are in `final_checks`, after the model's chi^2 has been saved; see
+        // `final_age_stop`.
         let check1 = |val: f64, tgt: f64, sig: f64, coeff: f64| -> bool {
             if coeff == 0.0 || sig <= 0.0 {
                 return false;
@@ -326,7 +337,11 @@ impl StarExtras for AsteroTrackExtras<'_> {
                 self.bad_count = 0;
             }
         }
-        if let Some(reason) = self.check_limits(model, sample.delta_nu_uhz) {
+        // `final_checks` (`extras_support.f90:503-513`): the age stops come
+        // after the model's chi^2 has been saved. Upstream tests the
+        // `delta_nu` and constraint limits only once per model, before the
+        // chi^2 evaluation (`:211-212`), so they are not repeated here.
+        if let Some(reason) = self.final_age_stop(model) {
             return ExtrasDirective::Terminate(String::from(reason));
         }
         ExtrasDirective::KeepGoing

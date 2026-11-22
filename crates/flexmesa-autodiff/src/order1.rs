@@ -6,9 +6,12 @@
 //! ($N = 4$), and `auto_diff_real_star_order1` ($N = 33$) into a single
 //! zero-allocation stack-allocated type.
 
-use flexmesa_math::heaviside;
-
-use crate::kernels;
+use flexmesa_const::{LN10, PI};
+use flexmesa_math::{
+    acos, acosh, asin, asinh, atan, atanh, cos, cosh, exp, expm1, log, log1p,
+    pow, pow2, pow3, pow4, pow5, pow6, pow7, pow8, powm1, safe_log, sin, sinh,
+    tan, tanh,
+};
 
 /// First-order forward-mode dual number with `N` partial derivatives.
 ///
@@ -31,26 +34,6 @@ pub struct DualOrder1<const N: usize> {
     pub val: f64,
     /// First-order partial derivatives $[\partial f / \partial x_{0}, \dots]$.
     pub d1: [f64; N],
-}
-
-macro_rules! unary_method {
-    ($name:ident, $kernel:path, $doc:expr) => {
-        #[doc = $doc]
-        #[must_use]
-        #[inline]
-        pub fn $name(self) -> Self {
-            self.apply_unary($kernel)
-        }
-    };
-    ($name:ident, pown $n:literal, $doc:expr) => {
-        #[doc = $doc]
-        #[must_use]
-        #[inline]
-        pub fn $name(self) -> Self {
-            let (v, d1, _) = kernels::unary_pown(self.val, $n);
-            self.make_unary_operator(v, d1)
-        }
-    };
 }
 
 impl<const N: usize> DualOrder1<N> {
@@ -142,162 +125,484 @@ impl<const N: usize> DualOrder1<N> {
         self.make_unary_operator(z_val, z_d1x)
     }
 
-    unary_method!(
-        sign,
-        kernels::unary_sign,
-        "Compute $\\operatorname{sgn}(x)$."
-    );
-    unary_method!(abs, kernels::unary_abs, "Compute $|x|$.");
-    unary_method!(sqrt, kernels::unary_sqrt, "Compute $\\sqrt{x}$.");
-    unary_method!(
-        safe_sqrt,
-        kernels::unary_safe_sqrt,
-        "Compute $\\sqrt{\\max(x, 0)}$."
-    );
-    unary_method!(exp, kernels::unary_exp, "Compute $\\exp(x)$.");
-    unary_method!(expm1, kernels::unary_expm1, "Compute $e^{x} - 1$.");
-    unary_method!(exp10, kernels::unary_exp10, "Compute $10^{x}$.");
-    unary_method!(powm1, kernels::unary_powm1, "Compute $x^{-1}$.");
-    unary_method!(log, kernels::unary_log, "Compute $\\ln(x)$.");
-    unary_method!(
-        safe_log,
-        kernels::unary_safe_log,
-        "Compute $\\operatorname{safe\\_log}(x)$."
-    );
-    unary_method!(log1p, kernels::unary_log1p, "Compute $\\ln(1 + x)$.");
-    unary_method!(log10, kernels::unary_log10, "Compute $\\log_{10}(x)$.");
-    unary_method!(
-        safe_log10,
-        kernels::unary_safe_log10,
-        "Compute $\\operatorname{safe\\_log10}(x)$."
-    );
-    unary_method!(log2, kernels::unary_log2, "Compute $\\log_{2}(x)$.");
-    unary_method!(sin, kernels::unary_sin, "Compute $\\sin(x)$.");
-    unary_method!(cos, kernels::unary_cos, "Compute $\\cos(x)$.");
-    unary_method!(tan, kernels::unary_tan, "Compute $\\tan(x)$.");
-    unary_method!(sinpi, kernels::unary_sinpi, "Compute $\\sin(\\pi x)$.");
-    unary_method!(cospi, kernels::unary_cospi, "Compute $\\cos(\\pi x)$.");
-    unary_method!(tanpi, kernels::unary_tanpi, "Compute $\\tan(\\pi x)$.");
-    unary_method!(sinh, kernels::unary_sinh, "Compute $\\sinh(x)$.");
-    unary_method!(cosh, kernels::unary_cosh, "Compute $\\cosh(x)$.");
-    unary_method!(tanh, kernels::unary_tanh, "Compute $\\tanh(x)$.");
-    unary_method!(asin, kernels::unary_asin, "Compute $\\arcsin(x)$.");
-    unary_method!(acos, kernels::unary_acos, "Compute $\\arccos(x)$.");
-    unary_method!(atan, kernels::unary_atan, "Compute $\\arctan(x)$.");
-    unary_method!(
-        asinpi,
-        kernels::unary_asinpi,
-        "Compute $\\arcsin(x) / \\pi$."
-    );
-    unary_method!(
-        acospi,
-        kernels::unary_acospi,
-        "Compute $\\arccos(x) / \\pi$."
-    );
-    unary_method!(
-        atanpi,
-        kernels::unary_atanpi,
-        "Compute $\\arctan(x) / \\pi$."
-    );
-    unary_method!(
-        asinh,
-        kernels::unary_asinh,
-        "Compute $\\operatorname{arsinh}(x)$."
-    );
-    unary_method!(
-        acosh,
-        kernels::unary_acosh,
-        "Compute $\\operatorname{arcosh}(x)$."
-    );
-    unary_method!(
-        atanh,
-        kernels::unary_atanh,
-        "Compute $\\operatorname{artanh}(x)$."
-    );
-    unary_method!(pow2, pown 2, "Compute $x^{2}$.");
-    unary_method!(pow3, pown 3, "Compute $x^{3}$.");
-    unary_method!(pow4, pown 4, "Compute $x^{4}$.");
-    unary_method!(pow5, pown 5, "Compute $x^{5}$.");
-    unary_method!(pow6, pown 6, "Compute $x^{6}$.");
-    unary_method!(pow7, pown 7, "Compute $x^{7}$.");
-    unary_method!(pow8, pown 8, "Compute $x^{8}$.");
+    /// Whether `N` selects one of upstream's types whose generated code
+    /// factors common terms out of the derivative
+    /// (`auto_diff_real_2var_order1` and `auto_diff_real_4var_order1`).
+    ///
+    /// The one-variable type and the array types (`auto_diff_real_star_order1`,
+    /// `auto_diff_real_15var_order1`) write each derivative as one expression
+    /// evaluated left to right. The two forms round differently.
+    const FACTORED: bool = N == 2 || N == 4;
 
-    /// Raise `self` to a dual-number power `other` ($x^{y}$).
+    /// Derivative of the form upstream writes as `a*dx*b`.
+    ///
+    /// The array and one-variable types evaluate `(a*dx)*b`; the two- and
+    /// four-variable types evaluate `q = a*b` once and then `q*dx`.
+    #[inline]
+    fn scaled(self, val: f64, a: f64, b: f64) -> Self {
+        let mut d1 = [0.0; N];
+        if Self::FACTORED {
+            let q = a * b;
+            for (slot, &dx) in d1.iter_mut().zip(&self.d1) {
+                *slot = q * dx;
+            }
+        } else {
+            for (slot, &dx) in d1.iter_mut().zip(&self.d1) {
+                *slot = a * dx * b;
+            }
+        }
+        Self { val, d1 }
+    }
+
+    /// `sign_self`: $\operatorname{sgn}(x)$ with zero derivatives.
+    #[must_use]
+    #[inline]
+    pub fn sign(self) -> Self {
+        Self::constant(sgn(self.val))
+    }
+
+    /// `abs_self`: $|x|$ with derivative `dx*sgn(x)`.
+    #[must_use]
+    #[inline]
+    pub fn abs(self) -> Self {
+        self.make_unary_operator(self.val.abs(), sgn(self.val))
+    }
+
+    /// `sqrt_self`: `q0 = sqrt(x)`, derivative `0.5*dx*powm1(q0)`.
+    #[must_use]
+    #[inline]
+    pub fn sqrt(self) -> Self {
+        let q0 = self.val.sqrt();
+        self.scaled(q0, 0.5, powm1(q0))
+    }
+
+    /// `safe_sqrt_self`: `q0 = sqrt(x*Heaviside(x))`, derivative
+    /// `0.5*q0*dx*powm1(x)`.
+    ///
+    /// At `x == 0` upstream's expression is `0*dx*Inf`, which is `NaN`; that
+    /// is reproduced.
+    #[must_use]
+    #[inline]
+    pub fn safe_sqrt(self) -> Self {
+        let q0 = (self.val * heaviside(self.val)).sqrt();
+        self.scaled(q0, 0.5 * q0, powm1(self.val))
+    }
+
+    /// `exp_self`: `q0 = exp(x)`, derivative `q0*dx`.
+    #[must_use]
+    #[inline]
+    pub fn exp(self) -> Self {
+        let q0 = exp(self.val);
+        self.make_unary_operator(q0, q0)
+    }
+
+    /// `expm1_self`: value `expm1(x)`, derivative `dx*exp(x)`.
+    #[must_use]
+    #[inline]
+    pub fn expm1(self) -> Self {
+        self.make_unary_operator(expm1(self.val), exp(self.val))
+    }
+
+    /// `exp10_self`: `q0 = pow(10, x)`, derivative `q0*dx*ln10`.
+    #[must_use]
+    #[inline]
+    pub fn exp10(self) -> Self {
+        let q0 = pow(10.0, self.val);
+        self.scaled(q0, q0, LN10)
+    }
+
+    /// `powm1_self`: value `powm1(x)`, derivative `-dx*powm1(pow2(x))`.
+    #[must_use]
+    #[inline]
+    pub fn powm1(self) -> Self {
+        self.make_unary_operator(powm1(self.val), -powm1(pow2(self.val)))
+    }
+
+    /// `log_self`: value `log(x)`, derivative `dx*powm1(x)`.
+    #[must_use]
+    #[inline]
+    pub fn log(self) -> Self {
+        self.make_unary_operator(log(self.val), powm1(self.val))
+    }
+
+    /// `safe_log_self`: value `safe_log(x)`, derivative `dx*powm1(x)` with no
+    /// guard, as upstream.
+    #[must_use]
+    #[inline]
+    pub fn safe_log(self) -> Self {
+        self.make_unary_operator(safe_log(self.val), powm1(self.val))
+    }
+
+    /// `log1p_self`: value `log1p(x)`, derivative `dx*powm1(x + 1)`.
+    #[must_use]
+    #[inline]
+    pub fn log1p(self) -> Self {
+        self.make_unary_operator(log1p(self.val), powm1(self.val + 1.0))
+    }
+
+    /// `log10_self`: `q0 = powm1(ln10)`, value `q0*log(x)`, derivative
+    /// `q0*dx*powm1(x)`.
+    ///
+    /// The value is a product, not the correctly rounded base-10 logarithm.
+    #[must_use]
+    #[inline]
+    pub fn log10(self) -> Self {
+        let q0 = powm1(LN10);
+        self.scaled(q0 * log(self.val), q0, powm1(self.val))
+    }
+
+    /// `safe_log10_self`: `q0 = powm1(ln10)`, value `q0*safe_log(x)`,
+    /// derivative `q0*dx*powm1(x)` with no guard, as upstream.
+    #[must_use]
+    #[inline]
+    pub fn safe_log10(self) -> Self {
+        let q0 = powm1(LN10);
+        self.scaled(q0 * safe_log(self.val), q0, powm1(self.val))
+    }
+
+    /// `log2_self`: `q0 = powm1(log(2))`, value `q0*log(x)`, derivative
+    /// `q0*dx*powm1(x)`.
+    #[must_use]
+    #[inline]
+    pub fn log2(self) -> Self {
+        let q0 = powm1(log(2.0));
+        self.scaled(q0 * log(self.val), q0, powm1(self.val))
+    }
+
+    /// `sin_self`: value `sin(x)`, derivative `dx*cos(x)`.
+    #[must_use]
+    #[inline]
+    pub fn sin(self) -> Self {
+        self.make_unary_operator(sin(self.val), cos(self.val))
+    }
+
+    /// `cos_self`: value `cos(x)`, derivative `-dx*sin(x)`.
+    #[must_use]
+    #[inline]
+    pub fn cos(self) -> Self {
+        self.make_unary_operator(cos(self.val), -sin(self.val))
+    }
+
+    /// `tan_self`: `q0 = tan(x)`, derivative `dx*(pow2(q0) + 1)`.
+    #[must_use]
+    #[inline]
+    pub fn tan(self) -> Self {
+        let q0 = tan(self.val);
+        self.make_unary_operator(q0, pow2(q0) + 1.0)
+    }
+
+    /// `sinpi_self`: `q0 = pi*x`, value `sin(q0)`, derivative
+    /// `pi*dx*cos(q0)`.
+    #[must_use]
+    #[inline]
+    pub fn sinpi(self) -> Self {
+        let q0 = PI * self.val;
+        self.scaled(sin(q0), PI, cos(q0))
+    }
+
+    /// `cospi_self`: `q0 = pi*x`, value `cos(q0)`, derivative
+    /// `-pi*dx*sin(q0)`.
+    #[must_use]
+    #[inline]
+    pub fn cospi(self) -> Self {
+        let q0 = PI * self.val;
+        self.scaled(cos(q0), -PI, sin(q0))
+    }
+
+    /// `tanpi_self`: `q0 = tan(pi*x)`, derivative `pi*dx*(pow2(q0) + 1)`.
+    #[must_use]
+    #[inline]
+    pub fn tanpi(self) -> Self {
+        let q0 = tan(PI * self.val);
+        self.scaled(q0, PI, pow2(q0) + 1.0)
+    }
+
+    /// `sinh_self`: value `sinh(x)`, derivative `dx*cosh(x)`.
+    #[must_use]
+    #[inline]
+    pub fn sinh(self) -> Self {
+        self.make_unary_operator(sinh(self.val), cosh(self.val))
+    }
+
+    /// `cosh_self`: value `cosh(x)`, derivative `dx*sinh(x)`.
+    #[must_use]
+    #[inline]
+    pub fn cosh(self) -> Self {
+        self.make_unary_operator(cosh(self.val), sinh(self.val))
+    }
+
+    /// `tanh_self`: `q0 = tanh(x)`, derivative `-dx*(pow2(q0) - 1)`.
+    #[must_use]
+    #[inline]
+    pub fn tanh(self) -> Self {
+        let q0 = tanh(self.val);
+        self.make_unary_operator(q0, -(pow2(q0) - 1.0))
+    }
+
+    /// `asin_self`: derivative `dx*powm1(sqrt(1 - pow2(x)))`.
+    #[must_use]
+    #[inline]
+    pub fn asin(self) -> Self {
+        let q0 = powm1((1.0 - pow2(self.val)).sqrt());
+        self.make_unary_operator(asin(self.val), q0)
+    }
+
+    /// `acos_self`: derivative `-dx*powm1(sqrt(1 - pow2(x)))`.
+    #[must_use]
+    #[inline]
+    pub fn acos(self) -> Self {
+        let q0 = powm1((1.0 - pow2(self.val)).sqrt());
+        self.make_unary_operator(acos(self.val), -q0)
+    }
+
+    /// `atan_self`: derivative `dx*powm1(pow2(x) + 1)`.
+    #[must_use]
+    #[inline]
+    pub fn atan(self) -> Self {
+        self.make_unary_operator(atan(self.val), powm1(pow2(self.val) + 1.0))
+    }
+
+    /// `asinpi_self`: `q0 = powm1(pi)`, value `q0*asin(x)`, derivative
+    /// `q0*dx*powm1(sqrt(1 - pow2(x)))`.
+    #[must_use]
+    #[inline]
+    pub fn asinpi(self) -> Self {
+        let q0 = powm1(PI);
+        let b = powm1((1.0 - pow2(self.val)).sqrt());
+        self.scaled(q0 * asin(self.val), q0, b)
+    }
+
+    /// `acospi_self`: `q0 = powm1(pi)`, value `q0*acos(x)`, derivative
+    /// `-q0*dx*powm1(sqrt(1 - pow2(x)))`.
+    #[must_use]
+    #[inline]
+    pub fn acospi(self) -> Self {
+        let q0 = powm1(PI);
+        let b = powm1((1.0 - pow2(self.val)).sqrt());
+        self.scaled(q0 * acos(self.val), -q0, b)
+    }
+
+    /// `atanpi_self`: value `powm1(pi)*atan(x)`, derivative
+    /// `dx*powm1(pi*pow2(x) + pi)`.
+    #[must_use]
+    #[inline]
+    pub fn atanpi(self) -> Self {
+        self.make_unary_operator(
+            powm1(PI) * atan(self.val),
+            powm1(PI * pow2(self.val) + PI),
+        )
+    }
+
+    /// `asinh_self`: derivative `dx*powm1(sqrt(pow2(x) + 1))`.
+    #[must_use]
+    #[inline]
+    pub fn asinh(self) -> Self {
+        let q0 = powm1((pow2(self.val) + 1.0).sqrt());
+        self.make_unary_operator(asinh(self.val), q0)
+    }
+
+    /// `acosh_self`: derivative `dx*powm1(sqrt(pow2(x) - 1))`.
+    #[must_use]
+    #[inline]
+    pub fn acosh(self) -> Self {
+        let q0 = powm1((pow2(self.val) - 1.0).sqrt());
+        self.make_unary_operator(acosh(self.val), q0)
+    }
+
+    /// `atanh_self`: derivative `-dx*powm1(pow2(x) - 1)`.
+    #[must_use]
+    #[inline]
+    pub fn atanh(self) -> Self {
+        self.make_unary_operator(atanh(self.val), -powm1(pow2(self.val) - 1.0))
+    }
+
+    /// `pow2_self`: derivative `2*dx*x`.
+    #[must_use]
+    #[inline]
+    pub fn pow2(self) -> Self {
+        self.scaled(pow2(self.val), 2.0, self.val)
+    }
+
+    /// `pow3_self`: derivative `3*dx*pow2(x)`.
+    #[must_use]
+    #[inline]
+    pub fn pow3(self) -> Self {
+        self.scaled(pow3(self.val), 3.0, pow2(self.val))
+    }
+
+    /// `pow4_self`: derivative `4*dx*pow3(x)`.
+    #[must_use]
+    #[inline]
+    pub fn pow4(self) -> Self {
+        self.scaled(pow4(self.val), 4.0, pow3(self.val))
+    }
+
+    /// `pow5_self`: derivative `5*dx*pow4(x)`.
+    #[must_use]
+    #[inline]
+    pub fn pow5(self) -> Self {
+        self.scaled(pow5(self.val), 5.0, pow4(self.val))
+    }
+
+    /// `pow6_self`: derivative `6*dx*pow5(x)`.
+    #[must_use]
+    #[inline]
+    pub fn pow6(self) -> Self {
+        self.scaled(pow6(self.val), 6.0, pow5(self.val))
+    }
+
+    /// `pow7_self`: derivative `7*dx*pow6(x)`.
+    #[must_use]
+    #[inline]
+    pub fn pow7(self) -> Self {
+        self.scaled(pow7(self.val), 7.0, pow6(self.val))
+    }
+
+    /// `pow8_self`: derivative `8*dx*pow7(x)`.
+    #[must_use]
+    #[inline]
+    pub fn pow8(self) -> Self {
+        self.scaled(pow8(self.val), 8.0, pow7(self.val))
+    }
+
+    /// `pow_self`: $x^{y}$ for a dual exponent.
+    ///
+    /// The array and one-variable types evaluate
+    /// `(dx*y + x*dy*log(x))*pow(x, y - 1)`; the two- and four-variable types
+    /// evaluate `q0*(q1*dy + dx*y)` with `q0 = pow(x, y - 1)` and
+    /// `q1 = x*log(x)`.
     #[must_use]
     #[inline]
     pub fn pow(self, other: Self) -> Self {
-        let (v, d1x, d1y, _, _, _) = kernels::binary_pow(self.val, other.val);
-        self.make_binary_operator(other, v, d1x, d1y)
+        let x = self.val;
+        let y = other.val;
+        let q0 = pow(x, y - 1.0);
+        let lnx = log(x);
+        let mut d1 = [0.0; N];
+        if Self::FACTORED {
+            let q1 = x * lnx;
+            for ((slot, &dx), &dy) in
+                d1.iter_mut().zip(&self.d1).zip(&other.d1)
+            {
+                *slot = q0 * (q1 * dy + dx * y);
+            }
+        } else {
+            for ((slot, &dx), &dy) in
+                d1.iter_mut().zip(&self.d1).zip(&other.d1)
+            {
+                *slot = (dx * y + x * dy * lnx) * q0;
+            }
+        }
+        Self { val: pow(x, y), d1 }
     }
 
-    /// Raise `self` to a constant `f64` exponent $p$.
+    /// `pow_self_real`: value `pow(x, y)`, derivative `dx*y*pow(x, y - 1)`.
     #[must_use]
     #[inline]
     pub fn powf(self, p: f64) -> Self {
-        let (v, d1, _) = kernels::unary_pow_scalar(self.val, p);
-        self.make_unary_operator(v, d1)
+        self.scaled(pow(self.val, p), p, pow(self.val, p - 1.0))
     }
 
-    /// Raise `self` to a constant integer exponent $n$.
+    /// `pow_self_int`: the integer exponent is converted to `real(dp)` and
+    /// the expression is that of `pow_self_real`.
     #[must_use]
     #[inline]
     pub fn powi(self, n: i32) -> Self {
         self.powf(f64::from(n))
     }
 
-    /// Raise a constant positive scalar `base` to the dual exponent `self`
-    /// ($b^{x}$).
+    /// `pow_real_self`: `q0 = pow(z, x)`, derivative `q0*dx*log(z)`.
     #[must_use]
     #[inline]
     pub fn rpow(self, base: f64) -> Self {
-        let (v, d1, _) = kernels::unary_rpow_scalar(base, self.val);
-        self.make_unary_operator(v, d1)
+        let q0 = pow(base, self.val);
+        self.scaled(q0, q0, log(base))
     }
 
-    /// Compute $\max(x, y)$ using MESA's symmetric Heaviside subgradient.
+    /// `max_self`: derivative `dx*Heaviside(x - y) + dy*Heaviside(-x + y)`.
     #[must_use]
     #[inline]
     pub fn max(self, other: Self) -> Self {
         let q0 = heaviside(self.val - other.val);
-        let q1 = heaviside(other.val - self.val);
+        let q1 = heaviside(-self.val + other.val);
         self.make_binary_operator(other, self.val.max(other.val), q0, q1)
     }
 
-    /// Compute $\max(x, c)$ with a scalar constant $c$.
+    /// `max_self_real`: derivative `dx*Heaviside(x - y)`.
     #[must_use]
     #[inline]
     pub fn max_scalar(self, c: f64) -> Self {
         self.make_unary_operator(self.val.max(c), heaviside(self.val - c))
     }
 
-    /// Compute $\min(x, y)$ using MESA's symmetric Heaviside subgradient.
+    /// `min_self`: derivative `dx*Heaviside(-x + y) + dy*Heaviside(x - y)`.
     #[must_use]
     #[inline]
     pub fn min(self, other: Self) -> Self {
-        let q0 = heaviside(other.val - self.val);
+        let q0 = heaviside(-self.val + other.val);
         let q1 = heaviside(self.val - other.val);
         self.make_binary_operator(other, self.val.min(other.val), q0, q1)
     }
 
-    /// Compute $\min(x, c)$ with a scalar constant $c$.
+    /// `min_self_real`: derivative `dx*Heaviside(-x + y)`.
     #[must_use]
     #[inline]
     pub fn min_scalar(self, c: f64) -> Self {
-        self.make_unary_operator(self.val.min(c), heaviside(c - self.val))
+        self.make_unary_operator(self.val.min(c), heaviside(-self.val + c))
     }
 
-    /// Compute positive difference $\operatorname{dim}(x, y) = \max(x - y, 0)$.
+    /// `dim_self`: `q0 = x - y`, value `-0.5*y + 0.5*x + 0.5*Abs(q0)`,
+    /// derivative `-0.5*dy + 0.5*dx + 0.5*(dx - dy)*sgn(q0)`.
     #[must_use]
     #[inline]
     pub fn dim(self, other: Self) -> Self {
-        (self - other).max_scalar(0.0)
+        let q0 = self.val - other.val;
+        let s = sgn(q0);
+        let mut d1 = [0.0; N];
+        for ((slot, &dx), &dy) in d1.iter_mut().zip(&self.d1).zip(&other.d1) {
+            *slot = -0.5 * dy + 0.5 * dx + 0.5 * (dx - dy) * s;
+        }
+        Self {
+            val: -0.5 * other.val + 0.5 * self.val + 0.5 * q0.abs(),
+            d1,
+        }
     }
 
-    /// Compute positive difference $\operatorname{dim}(x, c) = \max(x - c, 0)$.
+    /// `dim_self_real`: `q0 = x - y`, value `-0.5*y + 0.5*x + 0.5*Abs(q0)`,
+    /// derivative `0.5*dx*(sgn(q0) + 1)`.
     #[must_use]
     #[inline]
     pub fn dim_scalar(self, c: f64) -> Self {
-        (self - c).max_scalar(0.0)
+        let q0 = self.val - c;
+        self.scaled(
+            -0.5 * c + 0.5 * self.val + 0.5 * q0.abs(),
+            0.5,
+            sgn(q0) + 1.0,
+        )
+    }
+}
+
+/// `sgn` in `auto_diff/private/support_functions.f90:48-57`.
+#[inline]
+fn sgn(x: f64) -> f64 {
+    if x < 0.0 {
+        -1.0
+    } else if x == 0.0 {
+        0.0
+    } else {
+        1.0
+    }
+}
+
+/// `Heaviside` in `auto_diff/private/support_functions.f90:59-68`.
+#[inline]
+fn heaviside(x: f64) -> f64 {
+    if x < 0.0 {
+        0.0
+    } else if x == 0.0 {
+        0.5
+    } else {
+        1.0
     }
 }
 

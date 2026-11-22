@@ -4,7 +4,7 @@
 //! and bit-identical photo restart verification (`verify_photo_restart_parity`).
 
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 use crate::case_staging::TempCaseStaging;
@@ -20,6 +20,7 @@ use crate::model_io::{
     compute_photo_checksum, load_photo_bytes, write_mod_string,
     write_photo_bytes,
 };
+use crate::photo_io::try_write_photo_bytes;
 use crate::rn_parser::{RnStage, parse_rn_stages};
 use crate::rsp_eos_kap::RspChemCache;
 use crate::star_job_init::{
@@ -239,6 +240,157 @@ pub trait StarExtras {
 pub struct DefaultStarExtras;
 impl StarExtras for DefaultStarExtras {}
 
+/// Formats the restart `.photo` leaf filename for `model_number` and
+/// `photo_digits`, matching `get_name_for_restart_file` and
+/// `get_string_for_model_number('x', n, num_digits, num)`
+/// (`star/private/star_utils.f90:329-351`).
+///
+/// Wraps `val = model_number % 10^photo_digits`. When `val == 0` (such as
+/// `model_number == 1000` with `photo_digits == 3`), returns the full
+/// `model_number` without the `'x'` prefix; otherwise returns `'x'` followed
+/// by `val` zero-padded to `photo_digits` digits.
+#[must_use]
+pub fn photo_restart_filename(
+    model_number: usize,
+    photo_digits: usize,
+) -> String {
+    let digits = photo_digits.max(1);
+    let modulus = u32::try_from(digits)
+        .ok()
+        .and_then(|d| 10_u128.checked_pow(d));
+    let val = match modulus {
+        Some(m) => (model_number as u128) % m,
+        None => model_number as u128,
+    };
+    if val == 0 {
+        model_number.to_string()
+    } else {
+        format!("x{val:0digits$}")
+    }
+}
+
+/// Checks whether `termination_code` satisfies
+/// `&star_job::required_termination_code_string(1:9)`, matching
+/// `termination_code_string_okay` (`star/job/run_star_support.f90:828-843`).
+///
+/// Returns `true` when `termination_code` is empty (`s% termination_code == 0`
+/// at `:831`), when all entries of `required` are empty (`:833-834`), or when
+/// any non-empty trimmed entry matches `termination_code` (including
+/// species-parameterized limits such as `xa_central_lower_limit(h1)` matching
+/// `xa_central_lower_limit`).
+#[must_use]
+pub fn termination_code_string_okay(
+    required: &[String],
+    termination_code: &str,
+) -> bool {
+    let term = termination_code.trim();
+    if term.is_empty() {
+        return true;
+    }
+    let mut any_non_empty = false;
+    for raw in required {
+        let req = raw.trim();
+        if req.is_empty() {
+            continue;
+        }
+        any_non_empty = true;
+        if term == req
+            || term
+                .strip_prefix(req)
+                .is_some_and(|rest| rest.starts_with('('))
+        {
+            return true;
+        }
+    }
+    !any_non_empty
+}
+
+/// Checks whether `abs(cumulative_energy_error / total_energy_end)` exceeds
+/// `warn_when_large_rel_run_E_err`, matching
+/// `star/job/run_star_support.f90:699-705`.
+#[must_use]
+pub fn rel_run_e_err_exceeds_warn_limit(model: &StarModel) -> Option<f64> {
+    let tot = model.aux.step_hist.total_energy_end;
+    if tot == 0.0 {
+        return None;
+    }
+    let rel_err = (model.aux.cumulative_energy_error / tot).abs();
+    if rel_err > model.controls.output.warn_when_large_rel_run_e_err {
+        Some(rel_err)
+    } else {
+        None
+    }
+}
+
+/// Writes a binary `.photo` checkpoint inside `case_dir` using
+/// [`try_write_photo_bytes`], matching `star_write_photo`
+/// (`star/public/star_lib.f90:492-502`), `output`
+/// (`star/private/evolve_support.f90:243-272`), and `output_to_file`
+/// (`star/private/evolve_support.f90:275-303`).
+///
+/// When `explicit_filename` is empty, writes
+/// `<case_dir>/<photo_directory>/<photo_restart_filename(model_number, photo_digits)>`.
+/// When `explicit_filename` is non-empty, writes `<case_dir>/<explicit_filename>`.
+/// Returns `Ok(None)` if `case_dir` no longer exists (for example, when an
+/// in-memory benchmark caller already dropped its temporary staging directory).
+fn write_photo_to_case_dir(
+    model: &StarModel,
+    case_dir: &Path,
+    explicit_filename: &str,
+) -> Result<Option<PathBuf>, StarError> {
+    if !case_dir.exists() {
+        return Ok(None);
+    }
+    if !case_dir.is_dir() {
+        return Err(StarError::IoError(format!(
+            "photo output case_dir '{}' is not a directory",
+            case_dir.display()
+        )));
+    }
+    let trimmed_explicit = explicit_filename.trim();
+    let out_path = if trimmed_explicit.is_empty() {
+        let photo_dir = model.controls.output.photo_directory.trim();
+        if photo_dir.is_empty() {
+            return Err(StarError::InvalidInput(String::from(
+                "'&controls::photo_directory' must be non-empty when writing photos",
+            )));
+        }
+        let dir_path = case_dir.join(photo_dir);
+        fs::create_dir_all(&dir_path).map_err(|e| {
+            StarError::IoError(format!(
+                "failed to create photo_directory {}: {e}",
+                dir_path.display()
+            ))
+        })?;
+        let leaf = photo_restart_filename(
+            model.model_number,
+            model.controls.output.photo_digits,
+        );
+        dir_path.join(leaf)
+    } else {
+        let target = case_dir.join(trimmed_explicit);
+        if let Some(parent) = target.parent() {
+            if !parent.as_os_str().is_empty() && !parent.exists() {
+                fs::create_dir_all(parent).map_err(|e| {
+                    StarError::IoError(format!(
+                        "failed to create parent directory for {}: {e}",
+                        target.display()
+                    ))
+                })?;
+            }
+        }
+        target
+    };
+    let bytes = try_write_photo_bytes(model)?;
+    fs::write(&out_path, bytes).map_err(|e| {
+        StarError::IoError(format!(
+            "failed to write photo {}: {e}",
+            out_path.display()
+        ))
+    })?;
+    Ok(Some(out_path))
+}
+
 fn write_mod_if_missing(
     model: &StarModel,
     out_path: &Path,
@@ -428,6 +580,7 @@ pub fn run_inlist_stage_with_logs(
         (0, 0, 0);
     let mut history_rows = Vec::new();
     let mut termination_code = String::from("max_steps_cap");
+    let mut last_default_photo_model: Option<usize> = None;
 
     let job_step_cap = (model.job.steps_to_take_before_terminate >= 0)
         .then_some(model.job.steps_to_take_before_terminate as usize);
@@ -570,6 +723,35 @@ pub fn run_inlist_stage_with_logs(
                     &extra_cols,
                 )?;
             }
+            // Periodic restart photo output (`star/private/evolve.f90:2340-2361`).
+            let photo_interval = model.controls.output.photo_interval;
+            if photo_interval > 0
+                && model.model_number.is_multiple_of(photo_interval as usize)
+            {
+                write_photo_to_case_dir(model, &bundle.case_dir, "")?;
+                last_default_photo_model = Some(model.model_number);
+            }
+            // Mid-run `save_photo_number` save (`star/job/run_star_support.f90:263,1276-1281`).
+            if !is_terminating
+                && model.job.save_photo_number >= 0
+                && model.model_number == model.job.save_photo_number as usize
+            {
+                let fname = model.job.save_photo_filename.trim();
+                if !fname.is_empty()
+                    || last_default_photo_model != Some(model.model_number)
+                {
+                    write_photo_to_case_dir(model, &bundle.case_dir, fname)?;
+                    if fname.is_empty() {
+                        last_default_photo_model = Some(model.model_number);
+                    }
+                }
+            }
+            if let Some(rel_err) = rel_run_e_err_exceeds_warn_limit(model) {
+                eprintln!(
+                    "WARNING: rel_run_E_err  {}  {:.16e}",
+                    model.model_number, rel_err
+                );
+            }
             if will_terminate {
                 break;
             }
@@ -587,21 +769,26 @@ pub fn run_inlist_stage_with_logs(
             | "varcontrol_target < min_allowed_varcontrol_target"
             | "invalid dt_next in timestep_controller"
     );
-    let req_codes: Vec<&str> = model
-        .job
-        .required_termination_code_string
-        .iter()
-        .map(|s| s.trim())
-        .filter(|s| !s.is_empty())
-        .collect();
-    let term_str_ok = req_codes.is_empty()
-        || req_codes.iter().any(|&req| {
-            termination_code == req
-                || termination_code
-                    .strip_prefix(req)
-                    .is_some_and(|rest| rest.starts_with('('))
-        });
+    let term_str_ok = termination_code_string_okay(
+        &model.job.required_termination_code_string,
+        &termination_code,
+    );
 
+    // Termination photo save (`star/job/run_star_support.f90:789-790,823,1276-1281`).
+    let save_photo_at_end = (model.job.save_photo_when_terminate
+        && term_str_ok)
+        || (model.job.save_photo_number >= 0
+            && model.model_number == model.job.save_photo_number as usize);
+    if !abnormal_termination && save_photo_at_end {
+        let fname = model.job.save_photo_filename.trim();
+        if !fname.is_empty()
+            || last_default_photo_model != Some(model.model_number)
+        {
+            write_photo_to_case_dir(model, &bundle.case_dir, fname)?;
+        }
+    }
+
+    // Termination model save (`star/job/run_star_support.f90:791-792,823,1270-1274`).
     if !abnormal_termination
         && term_str_ok
         && model.job.save_model_when_terminate
@@ -795,6 +982,7 @@ pub fn run_test_suite_case_with_extras(
     let (mut total_steps, mut total_newton, mut total_retries) = (0, 0, 0);
     let mut photo_restart_verified = false;
     let mut terminated_in_init = false;
+    let mut all_required_terminations_ok = true;
 
     for stage in &rn_stages {
         match stage {
@@ -825,6 +1013,22 @@ pub fn run_test_suite_case_with_extras(
                 let bundle = InlistBundle::from_file_in_case_dir_with_options(
                     case_dir, inlist, load_opts,
                 )?;
+                // Remove stale stage output `.mod` before execution so a
+                // `required_termination_code_string` mismatch cannot mask a
+                // withheld save (`star/test_suite/test_suite_helpers:22`).
+                if bundle.job.save_model_when_terminate {
+                    if let Some(out_name) = output_mod {
+                        let out_path = case_dir.join(out_name);
+                        if out_path.is_file() {
+                            fs::remove_file(&out_path).map_err(|e| {
+                                StarError::IoError(format!(
+                                    "failed to remove stale {}: {e}",
+                                    out_path.display()
+                                ))
+                            })?;
+                        }
+                    }
+                }
 
                 let mut model = match init_or_update_model_from_bundle_outcome(
                     &bundle,
@@ -834,6 +1038,12 @@ pub fn run_test_suite_case_with_extras(
                     InitModelOutcome::Model(m) => *m,
                     InitModelOutcome::Terminate(reason) => {
                         terminated_in_init = true;
+                        if !termination_code_string_okay(
+                            &bundle.job.required_termination_code_string,
+                            &reason,
+                        ) {
+                            all_required_terminations_ok = false;
+                        }
                         stage_reports.push(StageRunReport {
                             inlist_name: bundle.entry_inlist.clone(),
                             steps_taken: 0,
@@ -871,12 +1081,22 @@ pub fn run_test_suite_case_with_extras(
                         | "varcontrol_target < min_allowed_varcontrol_target"
                         | "invalid dt_next in timestep_controller"
                 );
+                let stage_term_ok = termination_code_string_okay(
+                    &model.job.required_termination_code_string,
+                    &rep.termination_code,
+                );
+                if !stage_term_ok {
+                    all_required_terminations_ok = false;
+                }
+                let is_capped_smoke = max_steps_per_stage.is_some()
+                    && rep.termination_code == "max_steps_cap";
+                let stage_term_mismatch = !stage_term_ok && !is_capped_smoke;
                 if verify_restart && !photo_restart_verified && !stage_abnormal
                 {
                     let (c1, c2) = verify_photo_restart_parity(&model, 1)?;
                     photo_restart_verified = c1 == c2;
                 }
-                if !stage_abnormal {
+                if !stage_abnormal && !stage_term_mismatch {
                     if let Some(out_name) = output_mod {
                         let out_path = case_dir.join(out_name);
                         write_mod_if_missing(&model, &out_path)?;
@@ -887,7 +1107,7 @@ pub fn run_test_suite_case_with_extras(
                 total_retries += rep.total_retries;
                 stage_reports.push(rep);
                 current_model = Some(model);
-                if stage_abnormal {
+                if stage_abnormal || stage_term_mismatch {
                     break;
                 }
             }
@@ -922,6 +1142,7 @@ pub fn run_test_suite_case_with_extras(
         && !abnormal_termination;
     let passed = assertions_passed
         && reached_terminal_stop
+        && all_required_terminations_ok
         && (terminated_in_init || !verify_restart || photo_restart_verified);
 
     Ok(CaseRunReport {

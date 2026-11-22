@@ -159,3 +159,10 @@ Standalone Fortran 2008 reference generators compiled against upstream MESA
   Coulomb chemical-potential shift, REACLIB detailed-balance, pycnonuclear
   $3\alpha$, and `weaklib` / `Suzuki2016` reference tables (`185` rows;
   `make -C benchmarks/fortran_mesa/rates_oracles MESA_DIR=/path/to/mesa MESASDK_ROOT=/path/to/mesasdk generate clean`).
+- `omega_mix_oracles/`: Shellular Roche distortion (`eval_i_rot`, `set1_i_rot`,
+  `eval_fp_ft`, `w_div_w_roche_{omega,jrot}`, `roche_a`/`roche_c`,
+  `get_rotation_sigmas`) and `real(qp)` angular momentum transport
+  (`do_solve_omega_mix` across diffusive shear, pure-$j$ diffusion, $10^{13}$
+  stiffness, explicit and nonlinear 3-point implicit torques, adaptive
+  substepping, and conservation-error retry) reference tables (`4,758` rows;
+  `make -C benchmarks/fortran_mesa/omega_mix_oracles MESA_DIR=/path/to/mesa MESASDK_ROOT=/path/to/mesasdk generate clean`).

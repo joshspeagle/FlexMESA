@@ -166,6 +166,15 @@ pub fn run_astero_test_suite_case_with_options(
         "inlist",
         inlist_opts,
     )?;
+    // Upstream `astero/private/astero_run_support.f90:115-174` reads and
+    // checks `&astero_search_controls` before testing
+    // `astero_just_call_my_extras_check_model`.
+    if staging.staged_dir.join("inlist_astero_search_controls").is_file() {
+        let _ = parse_astero_search_controls_with_options(
+            staging.staged_dir.as_path(),
+            inlist_opts,
+        )?;
+    }
     // `astero/private/astero_run_support.f90:171-174,239`: with
     // `astero_just_call_my_extras_check_model` the search is skipped and
     // `eval1` calls `run1_star` once; `astero/private/extras_support.f90:898-900`

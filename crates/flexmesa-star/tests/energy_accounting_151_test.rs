@@ -448,12 +448,12 @@ fn test_adjust_mass_records_phase1_mdot_energy_accounting() {
     assert!(model.eps_mdot.iter().all(|&v| v == 0.0));
 }
 
-/// Verifies `.photo` v29 roundtrip preserves `have_initial_energy_integrals`,
+/// Verifies `.photo` v30 roundtrip preserves `have_initial_energy_integrals`,
 /// `total_energy_initial`, `cumulative_energy_error`, and bit-exact restart
 /// parity (`photo_out.f90:69-70`).
 #[test]
-fn test_photo_v29_preserves_initial_energy_integrals_and_restart_parity() {
-    assert_eq!(PHOTO_FORMAT_VERSION, 29);
+fn test_photo_v30_preserves_initial_energy_integrals_and_restart_parity() {
+    assert_eq!(PHOTO_FORMAT_VERSION, 30);
     let mut model = solar_zams(EnergyEqnOption::Dedt);
     model.dt = 1.0e5 * SECYER;
     model.dt_next = model.dt;
@@ -463,7 +463,7 @@ fn test_photo_v29_preserves_initial_energy_integrals_and_restart_parity() {
     assert_ne!(model.aux.step_hist.total_energy_initial, 0.0);
 
     let bytes = write_photo_bytes(&model);
-    let loaded = load_photo_bytes(&bytes).expect("load_photo_bytes v29");
+    let loaded = load_photo_bytes(&bytes).expect("load_photo_bytes v30");
     assert!(loaded.aux.step_hist.have_initial_energy_integrals);
     assert_eq!(
         loaded.aux.step_hist.total_energy_initial.to_bits(),

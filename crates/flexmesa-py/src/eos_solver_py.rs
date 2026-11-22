@@ -268,7 +268,9 @@ pub fn eos_eval_cms<'py>(
     use_pc=false,
     use_cms=false,
     use_free_eos=true,
-    use_opal_scvh=true
+    use_opal_scvh=true,
+    logt_tol=None,
+    other_tol=None
 ))]
 #[allow(clippy::too_many_arguments)]
 pub fn eos_eval_dt_get_t<'py>(
@@ -284,6 +286,8 @@ pub fn eos_eval_dt_get_t<'py>(
     use_cms: bool,
     use_free_eos: bool,
     use_opal_scvh: bool,
+    logt_tol: Option<f64>,
+    other_tol: Option<f64>,
 ) -> PyResult<PyInvTuple<'py>> {
     let xa_s = xa
         .as_slice()
@@ -307,8 +311,8 @@ pub fn eos_eval_dt_get_t<'py>(
         which_other,
         other_value,
         log_t_guess,
-        1.0e-12,
-        1.0e-12,
+        logt_tol.unwrap_or(1.0e-12),
+        other_tol.unwrap_or(1.0e-12),
         100,
         &cfg,
     )

@@ -58,7 +58,7 @@ def test_case_manifest_covers_all_106_mesa_26_4_1_cases_and_known_gaps() -> (
         by_key[("star", "1.3M_ms_high_Z")].required_termination
         == "log_L_upper_limit"
     )
-    assert gaps[("star", "hb_2M")].issue == "#299"
+    assert gaps[("star", "hb_2M")].issue == "#155"
 
     root = case_manifest.repo_root()
     for entry in manifest.cases:
@@ -617,7 +617,8 @@ def test_flexmesa_trace_and_harness_run_cli_smoke(
     # so the library must not produce it.
     assert not (ast_out / "freqs.dat").exists()
 
-    # Smoke harness run writes Markdown + JSON with full 106-case counts.
+    # Smoke harness run on a case with remaining unsupported controls writes
+    # Markdown + JSON with full 106-case counts and diagnostic fallback labels.
     md_out = tmp_path / "smoke_table.md"
     js_out = tmp_path / "smoke_table.json"
     rc_h = cli.main(
@@ -625,7 +626,7 @@ def test_flexmesa_trace_and_harness_run_cli_smoke(
             "harness",
             "run",
             "--cases",
-            "wd_cool_0.6M",
+            "conserve_angular_momentum",
             "--max-steps",
             "2",
             "--timeout-sec",

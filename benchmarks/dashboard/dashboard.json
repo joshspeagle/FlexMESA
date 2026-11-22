@@ -14,14 +14,14 @@
         "absent": 17759,
         "stub": 6378,
         "partial": 54084,
-        "ported_unverified": 37317,
-        "kernel_reference_vectors": 4971,
+        "ported_unverified": 36648,
+        "kernel_reference_vectors": 5640,
         "case_level_evidence": 0,
         "ported_total": 42288,
-        "verified_total": 4971,
+        "verified_total": 5640,
         "pct_ported": 35.1,
-        "pct_verified": 4.1,
-        "rust_lines": 87606,
+        "pct_verified": 4.7,
+        "rust_lines": 87640,
         "python_jax_lines": 3869
       },
       {
@@ -89,8 +89,8 @@
         "verified_total": 0,
         "pct_ported": 0.0,
         "pct_verified": 0.0,
-        "rust_lines": 14768,
-        "python_jax_lines": 9867
+        "rust_lines": 15552,
+        "python_jax_lines": 9911
       },
       {
         "module": "kap",
@@ -455,7 +455,7 @@
       "upstream_panel_modules": 46
     },
     "infrastructure_lines": {
-      "rust_bridge_testing_bench": 19424,
+      "rust_bridge_testing_bench": 19428,
       "python_testing_bench": 15615
     }
   },
@@ -765,166 +765,166 @@
     "rust": {
       "tool": "cargo llvm-cov",
       "overall": {
-        "lines": 118615,
-        "covered": 89924,
-        "percent": 75.8
+        "lines": 122763,
+        "covered": 93498,
+        "percent": 76.2
       },
       "by_crate": [
         {
           "crate": "flexmesa-astero",
-          "lines": 4254,
-          "covered": 1618,
-          "percent": 38.0
+          "lines": 4187,
+          "covered": 1632,
+          "percent": 39.0
         },
         {
           "crate": "flexmesa-atm",
-          "lines": 1603,
-          "covered": 1332,
-          "percent": 83.1
+          "lines": 1584,
+          "covered": 1382,
+          "percent": 87.2
         },
         {
           "crate": "flexmesa-autodiff",
-          "lines": 1513,
-          "covered": 559,
-          "percent": 36.9
+          "lines": 3599,
+          "covered": 1651,
+          "percent": 45.9
         },
         {
           "crate": "flexmesa-bench",
-          "lines": 3642,
-          "covered": 2434,
-          "percent": 66.8
+          "lines": 3538,
+          "covered": 2376,
+          "percent": 67.2
         },
         {
           "crate": "flexmesa-binary",
-          "lines": 8087,
-          "covered": 5379,
-          "percent": 66.5
+          "lines": 8305,
+          "covered": 5496,
+          "percent": 66.2
         },
         {
           "crate": "flexmesa-chem",
-          "lines": 924,
-          "covered": 662,
-          "percent": 71.6
+          "lines": 911,
+          "covered": 671,
+          "percent": 73.7
         },
         {
           "crate": "flexmesa-colors",
-          "lines": 1297,
-          "covered": 888,
+          "lines": 1275,
+          "covered": 873,
           "percent": 68.5
         },
         {
           "crate": "flexmesa-const",
           "lines": 19,
-          "covered": 0,
-          "percent": 0.0
+          "covered": 19,
+          "percent": 100.0
         },
         {
           "crate": "flexmesa-crlibm-sys",
           "lines": 78,
-          "covered": 36,
-          "percent": 46.2
+          "covered": 78,
+          "percent": 100.0
         },
         {
           "crate": "flexmesa-data",
-          "lines": 986,
-          "covered": 675,
-          "percent": 68.5
+          "lines": 948,
+          "covered": 666,
+          "percent": 70.3
         },
         {
           "crate": "flexmesa-eos",
-          "lines": 10132,
-          "covered": 8112,
-          "percent": 80.1
+          "lines": 9988,
+          "covered": 8166,
+          "percent": 81.8
         },
         {
           "crate": "flexmesa-interp1d",
-          "lines": 683,
-          "covered": 579,
-          "percent": 84.8
+          "lines": 668,
+          "covered": 565,
+          "percent": 84.6
         },
         {
           "crate": "flexmesa-interp2d",
-          "lines": 1711,
-          "covered": 1321,
-          "percent": 77.2
+          "lines": 1691,
+          "covered": 1303,
+          "percent": 77.1
         },
         {
           "crate": "flexmesa-ionization",
-          "lines": 1983,
-          "covered": 1680,
-          "percent": 84.7
+          "lines": 1931,
+          "covered": 1661,
+          "percent": 86.0
         },
         {
           "crate": "flexmesa-kap",
-          "lines": 3494,
-          "covered": 2805,
-          "percent": 80.3
+          "lines": 4884,
+          "covered": 3725,
+          "percent": 76.3
         },
         {
           "crate": "flexmesa-math",
-          "lines": 1074,
-          "covered": 887,
-          "percent": 82.6
+          "lines": 1070,
+          "covered": 909,
+          "percent": 85.0
         },
         {
           "crate": "flexmesa-mtx",
-          "lines": 2783,
-          "covered": 2460,
+          "lines": 2766,
+          "covered": 2446,
           "percent": 88.4
         },
         {
           "crate": "flexmesa-net",
-          "lines": 7820,
-          "covered": 6971,
-          "percent": 89.1
+          "lines": 7926,
+          "covered": 7099,
+          "percent": 89.6
         },
         {
           "crate": "flexmesa-neu",
-          "lines": 1022,
-          "covered": 983,
-          "percent": 96.2
+          "lines": 1020,
+          "covered": 989,
+          "percent": 97.0
         },
         {
           "crate": "flexmesa-num",
-          "lines": 3048,
-          "covered": 2623,
-          "percent": 86.1
+          "lines": 2991,
+          "covered": 2603,
+          "percent": 87.0
         },
         {
           "crate": "flexmesa-rates",
-          "lines": 2292,
-          "covered": 2098,
-          "percent": 91.5
+          "lines": 2728,
+          "covered": 2457,
+          "percent": 90.1
         },
         {
           "crate": "flexmesa-schema",
-          "lines": 808,
-          "covered": 669,
-          "percent": 82.8
+          "lines": 790,
+          "covered": 660,
+          "percent": 83.5
         },
         {
           "crate": "flexmesa-star",
-          "lines": 56495,
-          "covered": 42920,
-          "percent": 76.0
+          "lines": 57082,
+          "covered": 43886,
+          "percent": 76.9
         },
         {
           "crate": "flexmesa-testing",
-          "lines": 253,
-          "covered": 197,
+          "lines": 249,
+          "covered": 194,
           "percent": 77.9
         },
         {
           "crate": "flexmesa-turb",
-          "lines": 1414,
-          "covered": 1244,
-          "percent": 88.0
+          "lines": 1378,
+          "covered": 1207,
+          "percent": 87.6
         },
         {
           "crate": "flexmesa-utils",
-          "lines": 1200,
-          "covered": 792,
-          "percent": 66.0
+          "lines": 1157,
+          "covered": 784,
+          "percent": 67.8
         }
       ]
     },
@@ -932,8 +932,8 @@
       "tool": "pytest --cov",
       "overall": {
         "statements": 26315,
-        "covered": 23065,
-        "percent": 87.6
+        "covered": 23068,
+        "percent": 87.7
       },
       "by_subpackage": [
         {
@@ -1083,7 +1083,7 @@
         {
           "subpackage": "flexmesa.testing",
           "statements": 4241,
-          "covered": 3353,
+          "covered": 3356,
           "percent": 79.1
         },
         {
@@ -1102,7 +1102,7 @@
     }
   },
   "skips": {
-    "rust_ignore_count": 14,
+    "rust_ignore_count": 12,
     "rust_ignores": [
       {
         "location": "crates/flexmesa-astero/tests/astero_suite.rs:432",
@@ -1163,32 +1163,27 @@
         "location": "crates/flexmesa-binary/tests/tier5_coupled_suite.rs:1035",
         "reason": "unverified uncapped binary campaign; tracked in #143 and #160",
         "issues": "#143, #160"
-      },
-      {
-        "location": "crates/flexmesa-eos/tests/wave3a3_pc_solid_tests.rs:256",
-        "reason": "declared gap (#161): PC analytical EXCOR7 vs MESA pc_eos.f90:1895 use_EXCOR7_table spline on solid/blend cases; largest pc_co_sol dE_dRho d_dlnT rel_err 2.513e-6 >= 5.0e-9",
-        "issues": "#161"
-      },
-      {
-        "location": "crates/flexmesa-eos/tests/wave3a3_pc_tests.rs:132",
-        "reason": "declared gap (#161): PC analytical EXCOR7 vs MESA pc_eos.f90:1895 use_EXCOR7_table spline; 9 entries exceed 1.0e-11/5.0e-9, largest pc_co_liq dE_dRho d_dlnT rel_err 7.123e-6",
-        "issues": "#161"
       }
     ],
-    "python_xfail_or_skip_count": 11,
+    "python_xfail_or_skip_count": 12,
     "python_skips": [
       {
-        "location": "tests/test_eos_wave3a3.py:200",
-        "reason": "pytest.mark.xfail( strict=True, reason=( \"declared gap (#161): Rust strict PC and Skye derivatives differ \" \"from MESA 26.4.1 beyond the base tolerances (largest measured: \" \"pc_co_liq d_dlnT 7.1e-6, skye_co_liq d_dlnT 1.3e-6)\" ), )",
-        "issues": "#161"
+        "location": "tests/test_bench.py:149",
+        "reason": "pytest.mark.xfail( strict=True, reason=( \"#295: Rust PC uses the MESA 26.4.1 EXCOR7 bicubic spline table \" \"(eos/private/pc_eos.f90:1895, create_EXCOR7_table.f90:136 \" \"THETA > 0.005; #161), whereas the frozen JAX twin keeps analytical \" \"EXCOR7 (THETA > 0.04); measured cross-stage max_rel_err is \" \"3.716e-9 against 2.0e-9.\" ), )",
+        "issues": "#161, #295"
       },
       {
-        "location": "tests/test_eos_wave3b1.py:395",
-        "reason": "pytest.mark.xfail( strict=True, reason=( \"declared gap (#161): Python eos.eos_dt_get_t does not yet expose \" \"logT_tol/other_tol (eos/test/test_output:395 tol=1e-5 stops one \" \"Newton step earlier at 4.8009613155595554)\" ), )",
-        "issues": "#161"
+        "location": "tests/test_eos_wave3a3.py:487",
+        "reason": "pytest.mark.xfail( strict=True, reason=( \"#295: Rust PC uses the MESA 26.4.1 EXCOR7 bicubic spline table \" \"(pc_eos.f90:1895, create_EXCOR7_table.f90 THETA > 0.005; #161), \" \"whereas the frozen JAX twin keeps analytical EXCOR7 (THETA > 0.04), \" \"differing by up to 2.17e-6 on res and 4.35e-5 on derivatives.\" ), )",
+        "issues": "#161, #295"
       },
       {
-        "location": "tests/test_eos_wave3b1.py:813",
+        "location": "tests/test_eos_wave3a3.py:1003",
+        "reason": "pytest.mark.xfail( strict=True, reason=( \"#295: Rust PC uses the MESA 26.4.1 EXCOR7 bicubic spline table \" \"(pc_eos.f90:1895, create_EXCOR7_table.f90 THETA > 0.005; #161), \" \"whereas the frozen JAX twin keeps analytical EXCOR7 (THETA > 0.04), \" \"differing by up to 3.72e-6 on res and 9.93e-8 on derivatives across \" \"the 9- and 35-species PC mixtures.\" ), )",
+        "issues": "#161, #295"
+      },
+      {
+        "location": "tests/test_eos_wave3b1.py:807",
         "reason": "pytest.mark.xfail( strict=True, reason=( \"#295: AutoDiffReal2VarOrder3 evaluates MESA 26.4.1's auto_diff \" \"expressions (#349), which moves the cancellation-dominated de_dd \" \"of the Rust ideal-gas EOS by a few ULPs of its 5.7e10 terms; the \" \"JAX twin keeps its own rounding.\" ), )",
         "issues": "#295, #349"
       },
@@ -1279,8 +1274,8 @@
       },
       {
         "phase": "Phase A",
-        "open": 1,
-        "closed": 3,
+        "open": 0,
+        "closed": 4,
         "issues": [
           {
             "number": 142,
@@ -1290,7 +1285,7 @@
           {
             "number": 144,
             "title": "[Audit A3] CI that runs real campaigns, and a declared-known-gaps mechanism",
-            "state": "open"
+            "state": "closed"
           },
           {
             "number": 146,
@@ -1338,7 +1333,7 @@
       },
       {
         "phase": "Phase C",
-        "open": 14,
+        "open": 15,
         "closed": 3,
         "issues": [
           {
@@ -1425,6 +1420,11 @@
             "number": 299,
             "title": "[Audit C8/C12] Wire remaining photo/log I/O and test-harness driver controls",
             "state": "open"
+          },
+          {
+            "number": 365,
+            "title": "[Audit] Level-2 module-hex probe wiring for interp_1d, interp_2d, mtx and num",
+            "state": "open"
           }
         ]
       },
@@ -1474,7 +1474,18 @@
         "issues": []
       }
     ],
-    "open_pull_requests": [],
+    "open_pull_requests": [
+      {
+        "number": 364,
+        "title": "feat(star,binary,astero): wire photo/log/driver controls and promote 3 strict passes (#299)",
+        "draft": false
+      },
+      {
+        "number": 367,
+        "title": "feat(mtx,star,binary): upstream do_block_multiply_xa and rho = dm/dV reset before each step (#358, #363)",
+        "draft": true
+      }
+    ],
     "deferred_169": [
       {
         "number": 175,
@@ -1834,6 +1845,14 @@
         "state": "open",
         "kind": "upstream-bug",
         "parity_pending": false,
+        "needs_confirmation": false
+      },
+      {
+        "number": 362,
+        "title": "[Deferred bug] do_block_multiply_xa pairs the wrong off-diagonal blocks with x, so the solver's line-search slope is not grad(f)\u00b7soln",
+        "state": "open",
+        "kind": "upstream-bug",
+        "parity_pending": true,
         "needs_confirmation": false
       }
     ]
@@ -2787,6 +2806,45 @@
       "closed_140": "16",
       "total_140": "36",
       "deferred_169": "45"
+    },
+    {
+      "date_utc": "2026-11-22",
+      "commit": "2dff765",
+      "event": "main merge",
+      "engine_ported_pct": "30.7",
+      "all_verified_pct": "1.1",
+      "cases_passing": "0",
+      "rust_cov_pct": "75.8",
+      "python_cov_pct": "87.6",
+      "closed_140": "17",
+      "total_140": "36",
+      "deferred_169": "45"
+    },
+    {
+      "date_utc": "2026-11-22",
+      "commit": "92994ac",
+      "event": "main merge",
+      "engine_ported_pct": "30.7",
+      "all_verified_pct": "1.1",
+      "cases_passing": "0",
+      "rust_cov_pct": "75.8",
+      "python_cov_pct": "87.6",
+      "closed_140": "17",
+      "total_140": "36",
+      "deferred_169": "45"
+    },
+    {
+      "date_utc": "2026-11-22",
+      "commit": "c6ab776",
+      "event": "main merge",
+      "engine_ported_pct": "30.7",
+      "all_verified_pct": "1.1",
+      "cases_passing": "0",
+      "rust_cov_pct": "76.2",
+      "python_cov_pct": "87.7",
+      "closed_140": "17",
+      "total_140": "37",
+      "deferred_169": "46"
     }
   ]
 }

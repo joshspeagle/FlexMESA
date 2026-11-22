@@ -190,10 +190,13 @@ def test_optional_upstream_mesa_dir_inlists_and_mods_parse() -> None:
                         assert "entry_inlist" in bundle
                     except ValueError as exc:
                         msg = str(exc).lower()
+                        # `semiconvection/inlist_to_ZAMS:38` places
+                        # `use_Type2_opacities` under `&controls` not `&kap`.
                         assert (
                             "unsupported" in msg
                             or "unknown namelist section" in msg
                             or "unknown control" in msg
+                            or "unknown/misspelled control" in msg
                             or "unknown scalar control" in msg
                             or "missing" in msg
                         ), f"unexpected parse failure on {inlist_file}: {exc}"

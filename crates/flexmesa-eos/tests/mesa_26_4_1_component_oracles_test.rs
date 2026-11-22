@@ -192,7 +192,14 @@ fn test_all_fifteen_pc_skye_and_blend_cases_against_compiled_mesa_26_4_1() {
         let (chem_id, xa, abar, zbar) = &comps[c_idx];
         let out = eval_pc_eos(&pc_cfg, rho, temp, *abar, *zbar, chem_id, xa)
             .expect(cid);
-        common::assert_eos_against_mesa(cid, &out, 1.0e-6, 1.0e-5, &[], false);
+        common::assert_eos_against_mesa(
+            cid,
+            &out,
+            1.0e-11,
+            5.0e-9,
+            &[],
+            false,
+        );
     }
 
     let (cid_c, xa_c, _, _) = &comps[0];
@@ -209,8 +216,8 @@ fn test_all_fifteen_pc_skye_and_blend_cases_against_compiled_mesa_26_4_1() {
     common::assert_eos_against_mesa(
         "eosdt_pc_helm_blend",
         &out,
-        1.0e-6,
-        1.0e-5,
+        1.0e-11,
+        5.0e-9,
         &[],
         false,
     );

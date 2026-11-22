@@ -6889,7 +6889,7 @@ upstream_lines = 922
 upstream_sha256 = "6c45474eba5219b2c42f3985912a57a8065e298ddef27c431eac84ed6d963625"
 status = "partial"
 flexmesa_files = ["crates/flexmesa-star/src/hydro_rotation.rs", "crates/flexmesa-star/src/rotation.rs"]
-notes = "updated for #158: w_div_w_roche_jrot/omega, eval_i_rot, eval_fp_ft_single, set1_i_rot, update1_i_rot_from_xh, set_i_rot, set_omega, set_rotation_info, get1_am_sig, get_rotation_sigmas, total_angular_momentum; remaining w_div_wc/j_rot_flag solver variable routines tracked in #158"
+notes = "updated for #158: w_div_w_roche_jrot/omega, roche_a/c, eval_i_rot/eval_i_rot_dual, eval_fp_ft_single/eval_fp_ft_single_dual, set1_i_rot, update1_i_rot_from_xh, set_i_rot, set_omega, set_rotation_info, get1_am_sig, get_rotation_sigmas, and total_angular_momentum match MESA 26.4.1 hex oracles at 0 ULP in omega_mix_158_test.rs; file stays partial while remaining w_div_wc/j_rot_flag solver routines (compute_j_fluxes_and_extra_jdot, set_uniform_omega, set_i_rot_from_omega_and_j_rot, use_xh_to_update_i_rot) are unported"
 
 [[files]]
 upstream_path = "star/private/hydro_rsp2.f90"
@@ -7822,9 +7822,11 @@ upstream_path = "star/private/solve_omega_mix.f90"
 module = "star"
 upstream_lines = 669
 upstream_sha256 = "054f71eeabf92c11334548346743c2c2b75aeaabd1b5c723103d4a053c0f9b87"
-status = "ported_unverified"
+status = "kernel_reference_vectors"
 flexmesa_files = ["crates/flexmesa-star/src/omega_mix.rs"]
-notes = "updated for #158: Quad (binary128) port of do_solve_omega_mix, solve_tridiag, min_mixing_timescale, create_matrix_and_rhs (am_sig_j/d2irot), adaptive substepping (4..20), recalc_mixing_info_each_substep, other_torque/other_torque_implicit/binary_other_torque hooks, and angular_momentum_error_retry/warn"
+evidence_artifacts = ["benchmarks/fortran_mesa/omega_mix_oracles/mesa_26_4_1_omega_mix_oracles.tsv"]
+evidence_tests = ["crates/flexmesa-star/tests/omega_mix_158_test.rs"]
+notes = "updated for #158: Quad (binary128) port of do_solve_omega_mix, solve_tridiag, min_mixing_timescale, create_matrix_and_rhs (am_sig_j/d2irot), adaptive substepping (4..20), recalc_mixing_info_each_substep, other_torque/other_torque_implicit/binary_other_torque hooks, and angular_momentum_error_retry/warn verified at 0 ULP (bit-exact) across all 12 MESA 26.4.1 hex oracle regimes (diffusive shear, pure-j, mixed omega+j, 1e13 stiffness, explicit extra_jdot/extra_omegadot, 3-point nonlinear implicit torque with all 6 derivatives, adaptive substepping, max_iters retry, conservation retry triggered/passed, and simple_i_rot_flag)"
 [files.routine_map]
 "do_solve_omega_mix" = "crates/flexmesa-star/src/omega_mix.rs::do_solve_omega_mix_with_extras"
 

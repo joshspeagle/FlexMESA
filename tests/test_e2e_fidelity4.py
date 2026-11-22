@@ -9,6 +9,7 @@ relaxation loops (`relax.rs`), and 106-case active MESA `test_suite` plus
 from __future__ import annotations
 
 import pathlib
+import shutil
 
 import pytest
 
@@ -63,17 +64,21 @@ def test_fidelity4_representative_multi_tier_physical_e2e_execution(
     ):
         cdir = star_ts / cname
         assert cdir.is_dir(), f"Missing upstream case directory: {cdir}"
-        with pytest.raises(
-            ValueError,
-            match=r"(unsupported|unknown|unrecognized).*control",
-        ):
-            star.run_test_suite_case(
-                cdir, max_steps_per_stage=2, verify_restart=True
-            )
-        clean_dir = tmp_path / cname
-        star.copy_cleaned_case(cdir, clean_dir, suite="star")
+        if cname == "gyre_in_mesa_ms":
+            run_dir = tmp_path / "raw" / cname
+            shutil.copytree(cdir, run_dir)
+        else:
+            with pytest.raises(
+                ValueError,
+                match=r"(unsupported|unknown|unrecognized).*control",
+            ):
+                star.run_test_suite_case(
+                    cdir, max_steps_per_stage=2, verify_restart=True
+                )
+            run_dir = tmp_path / cname
+            star.copy_cleaned_case(cdir, run_dir, suite="star")
         rep = star.run_test_suite_case(
-            clean_dir, max_steps_per_stage=2, verify_restart=True
+            run_dir, max_steps_per_stage=2, verify_restart=True
         )
         assert rep["tier"] == 0
         assert rep["passed"] is False

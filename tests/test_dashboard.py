@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import dataclasses
 import pathlib
+import re
 
 from flexmesa.data import fetch
 from flexmesa.testing import (
@@ -44,6 +45,7 @@ def test_port_manifest_matches_mesa_26_4_1_and_verified_evidence() -> None:
         "star/private/diffusion_support.f90",
         "star/private/paquette_coeffs.f90",
         "star/private/phase_separation.f90",
+        "star/private/solve_omega_mix.f90",
     }
     assert {e.upstream_path for e in verified_entries} == (
         expected_kernel_verified
@@ -332,7 +334,12 @@ def test_dashboard_freshness_gate_detects_hand_edited_readme_number(
             (fake_root / sub / child.name).symlink_to(child)
 
     readme_fresh = expected[REPO_ROOT / "README.md"]
-    tampered = readme_fresh.replace("0 / 106", "1 / 106", 1)
+    tampered = re.sub(
+        r"(\d+) / 106",
+        lambda m: f"{int(m.group(1)) + 1} / 106",
+        readme_fresh,
+        count=1,
+    )
     assert tampered != readme_fresh
     (fake_root / "README.md").write_text(tampered, encoding="utf-8")
 

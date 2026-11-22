@@ -1481,14 +1481,14 @@
     ],
     "open_pull_requests": [
       {
-        "number": 350,
-        "title": "ci(dashboard): measure coverage daily when main has changed, in seven instrumented shards with the ci profile (#345)",
-        "draft": false
-      },
-      {
         "number": 352,
         "title": "fix(autodiff): the order-2 and order-3 dual types evaluate upstream's expression for each operation (#349)",
         "draft": true
+      },
+      {
+        "number": 353,
+        "title": "fix(binary,star): align binary RLOF retries/counters and ZAMS interp_q/model_number with MESA 26.4.1 (Closes #342)",
+        "draft": false
       }
     ],
     "deferred_169": [
@@ -2729,6 +2729,19 @@
     {
       "date_utc": "2026-11-22",
       "commit": "9b2d1f7",
+      "event": "main merge",
+      "engine_ported_pct": "30.2",
+      "all_verified_pct": "1.0",
+      "cases_passing": "0",
+      "rust_cov_pct": "75.8",
+      "python_cov_pct": "87.7",
+      "closed_140": "16",
+      "total_140": "36",
+      "deferred_169": "45"
+    },
+    {
+      "date_utc": "2026-11-22",
+      "commit": "5b937c9",
       "event": "main merge",
       "engine_ported_pct": "30.2",
       "all_verified_pct": "1.0",

@@ -215,13 +215,15 @@ def test_upstream_tier2_test_suite_case_and_restart_reproducibility(
     e2e.copy_cleaned_case(case_dir, clean_dir, suite="star")
     gap = cleaned_case_gaps.DECLARED_STAR_STOPS.get(case_name)
     if gap is not None:
-        with pytest.raises(ValueError, match=gap.message_pattern):
-            e2e.run_test_suite_case(
+        cleaned_case_gaps.assert_declared_stop(
+            gap,
+            lambda: e2e.run_test_suite_case(
                 clean_dir,
                 skip_optional=True,
                 max_steps_per_stage=2,
                 verify_restart=True,
-            )
+            ),
+        )
         return
     rep = e2e.run_test_suite_case(
         clean_dir,

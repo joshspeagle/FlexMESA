@@ -7,11 +7,13 @@
 //! `binary/private/binary_irradiation.f90:33-60`).
 
 use flexmesa_const::{LSUN, MSUN, PI, SECYER};
+use flexmesa_star::inlist_runner::DefaultStarExtras;
 use flexmesa_star::{
-    LimitCheckOutcome, StarError, StarModel, compute_core_masses_msun,
-    do_check_limits,
-    eval_photosphere_info, eval_total_energy_integrals,
-    remesh_star_before_step, set_hydro_vars, sync_post_henyey_rotation,
+    LimitCheckOutcome, StarError, StarModel, StarPickTimestepOutcome,
+    StarStepAttemptOutcome, StarStepConverged, compute_core_masses_msun,
+    do_check_limits, eval_photosphere_info, eval_total_energy_integrals,
+    remesh_star_before_step, set_hydro_vars, star_finalize_terminated_step,
+    star_pick_next_timestep_after_step, sync_post_henyey_rotation,
 };
 
 use crate::extras::{BinaryExtras, BinaryExtrasAction, DefaultBinaryExtras};
@@ -30,8 +32,7 @@ use crate::system_jdot::{
 };
 use crate::system_rlof::{
     blend_explicit_mdot, eval_scheme_explicit_mdot_with_steps,
-    evolve_single_star_without_term_rewind, prepare_coupled_mdots_with_extras,
-    star_exceeds_delta_mdot_hard_limit,
+    evolve_single_star_attempt, prepare_coupled_mdots_with_extras,
 };
 use crate::timestep::{
     B_TLIM_COMP, BinaryHardLimitViolation, BinaryTimestepControls,
@@ -43,13 +44,25 @@ enum SingleTrialOutcome {
     Completed {
         dt_used: f64,
         ts_ctrl: BinaryTimestepControls,
+        donor_conv: StarStepConverged,
+        acc_conv: Option<StarStepConverged>,
     },
     CutDt(f64),
+    /// Single-attempt stellar solver failure (`star_evolve_step_part2 = retry`).
+    StarSolverRetry {
+        dt_used: f64,
+        cause: Option<Box<StarError>>,
+    },
     /// Upstream `retry` raised inside `binary_evolve_step`: the next `dt` is
     /// the carried value times `timestep_factor_for_retries`, and also times
     /// `dt_reduction_factor_for_j` when `have_to_reduce_timestep_due_to_j`
     /// is set.
     RetryStep(f64),
+}
+
+enum StarTimestepsResult {
+    KeepGoing,
+    Retry { is_dmdot_hard: bool },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -238,6 +251,16 @@ impl BinarySystem {
         self.have_to_reduce_timestep_due_to_j = false;
         self.maybe_switch_donor_at_step_start()?;
 
+        self.donor.step_retry_cnt = 0;
+        if let BinaryCompanion::Star(ref mut s2) = self.companion {
+            s2.step_retry_cnt = 0;
+        }
+        let mut star_target_mods = [0_usize; 2];
+        let d_idx_init = (self.donor_i - 1).min(1);
+        star_target_mods[d_idx_init] = self.donor.model_number + 1;
+        if let BinaryCompanion::Star(ref s2) = self.companion {
+            star_target_mods[1 - d_idx_init] = s2.model_number + 1;
+        }
         let pre_step_snap = self.capture_snapshot();
         let mut retry_holds = [(None, 0_usize); 2];
         let s2_min = match &self.companion {
@@ -256,7 +279,6 @@ impl BinarySystem {
                 "timestep_factor_for_retries must be in (0, 1), got {retry_factor_base}"
             )));
         }
-        let max_outer_retries = self.donor.controls.ts_stop.retry_limit;
 
         let check_cut_dt = |dt_cut: f64,
                             cur_dt: f64|
@@ -296,13 +318,15 @@ impl BinarySystem {
         let doing_first_model_of_run = pre_step_snap.model_number == 0;
         let tracing = flexmesa_star::step_trace::enabled(target_model);
         let mut outer_retry = 0_usize;
+        let mut first_try = true;
         let mut star_limit_redo_cnt = 0_usize;
         // Upstream remeshes once per step in `prepare_for_new_step`
         // (`star/private/evolve.f90:1882-1889`) before `new_generation`
         // stores the old model (`evolve.f90:1895`), and a retry or redo
         // restores that stored model with `set_current_to_old`
         // (`evolve.f90:401`). A retry therefore starts from the remeshed
-        // model, never from the mesh of the previous step.
+        // model, never from the mesh of the previous step, unless
+        // `restore_mesh_on_retry` is enabled (`evolve.f90:2192-2209`).
         let mut post_mesh_snap: Option<crate::system_rlof::BinaryStepSnapshot> =
             None;
         let mut pending_star_redo_dt: Option<f64> = None;
@@ -317,12 +341,26 @@ impl BinarySystem {
                 )?;
                 self.apply_retry_holds(&retry_holds);
                 dt_try = redo_dt;
+                first_try = false;
             } else if outer_retry > 0 {
-                self.counters.num_retries += 1;
-                self.record_retry_holds(&mut retry_holds);
-                self.restore_snapshot(
-                    post_mesh_snap.as_ref().unwrap_or(&pre_step_snap),
-                )?;
+                let restore_pre_mesh = (self
+                    .donor
+                    .controls
+                    .mix_wind
+                    .restore_mesh_on_retry
+                    && !self.donor.controls.rsp_flag)
+                    || matches!(
+                        &self.companion,
+                        BinaryCompanion::Star(s2)
+                            if s2.controls.mix_wind.restore_mesh_on_retry
+                                && !s2.controls.rsp_flag
+                    );
+                let snap = if restore_pre_mesh {
+                    &pre_step_snap
+                } else {
+                    post_mesh_snap.as_ref().unwrap_or(&pre_step_snap)
+                };
+                self.restore_snapshot(snap)?;
                 self.apply_retry_holds(&retry_holds);
             }
             if tracing {
@@ -338,11 +376,22 @@ impl BinarySystem {
             if outer_retry == 0 && star_limit_redo_cnt == 0 {
                 self.refresh_tidal_deformation_hooks(false)?;
                 if self.donor.controls.mesh_delta_coeff > 0.0 {
-                    let _ = remesh_star_before_step(&mut self.donor, dt_try)?;
+                    self.donor.aux.okay_to_set_mlt_vc = false;
+                    let remesh_res =
+                        remesh_star_before_step(&mut self.donor, dt_try);
+                    if let Err(e) = remesh_res {
+                        self.donor.aux.okay_to_set_mlt_vc = true;
+                        return Err(e);
+                    }
                 }
                 if let BinaryCompanion::Star(ref mut s2) = self.companion {
                     if s2.controls.mesh_delta_coeff > 0.0 {
-                        let _ = remesh_star_before_step(s2, dt_try)?;
+                        s2.aux.okay_to_set_mlt_vc = false;
+                        let remesh_res = remesh_star_before_step(s2, dt_try);
+                        if let Err(e) = remesh_res {
+                            s2.aux.okay_to_set_mlt_vc = true;
+                            return Err(e);
+                        }
                     }
                 }
                 self.refresh_tidal_deformation_hooks(false)?;
@@ -375,14 +424,18 @@ impl BinarySystem {
                             self.mtransfer_rate
                         };
                     }
+                    let attempt_first_try = first_try && redo_idx == 0;
                     match self.run_single_trial(
                         explicit_trial_mdot,
                         dt_try,
+                        attempt_first_try,
                         extras,
                     ) {
                         Ok(SingleTrialOutcome::Completed {
                             dt_used,
                             ts_ctrl,
+                            donor_conv,
+                            acc_conv,
                         }) => {
                             self.mtransfer_rate = if self.ignore_rlof_flag {
                                 0.0
@@ -469,10 +522,26 @@ impl BinarySystem {
                             }
                             let mut dmdot_hard = false;
                             if decision == TrialDecision::KeepGoing {
-                                dmdot_hard = self.any_star_exceeds_dmdot_hard();
-                                if dmdot_hard {
-                                    self.counters.num_hard_limit_retries += 1;
-                                    decision = TrialDecision::Retry;
+                                match self.pick_star_next_timesteps(
+                                    &donor_conv,
+                                    acc_conv.as_ref(),
+                                    outer_retry,
+                                ) {
+                                    Ok(StarTimestepsResult::KeepGoing) => {}
+                                    Ok(StarTimestepsResult::Retry {
+                                        is_dmdot_hard,
+                                    }) => {
+                                        if is_dmdot_hard {
+                                            dmdot_hard = true;
+                                            self.counters
+                                                .num_hard_limit_retries += 1;
+                                        }
+                                        decision = TrialDecision::Retry;
+                                    }
+                                    Err(e) => {
+                                        self.restore_snapshot(&pre_step_snap)?;
+                                        return Err(e);
+                                    }
                                 }
                             }
 
@@ -486,6 +555,11 @@ impl BinarySystem {
                                     );
                                 }
                                 TrialDecision::Terminate(reason) => {
+                                    self.finalize_terminated_star_steps(
+                                        &donor_conv,
+                                        acc_conv.as_ref(),
+                                        outer_retry,
+                                    );
                                     self.last_termination_reason = Some(reason);
                                     return self.finish_accepted_step(
                                         dt_used,
@@ -530,28 +604,34 @@ impl BinarySystem {
                                     // Upstream's `step_loop` has no limit on
                                     // binary-extras redos (`binary/private/
                                     // run_binary_support.f90:385-660`).
+                                    first_try = false;
                                     redo_idx += 1;
                                 }
                                 TrialDecision::Retry => {
-                                    let next_dt = self.compute_retry_dt(
+                                    let prev_outer = outer_retry;
+                                    let next_dt = self.prepare_outer_retry(
                                         dt_used,
+                                        None,
                                         retry_factor_base,
                                         dt_floor,
-                                        outer_retry,
-                                        max_outer_retries,
+                                        &mut outer_retry,
+                                        &mut first_try,
+                                        &mut retry_holds,
+                                        star_target_mods,
+                                        target_model,
                                         &pre_step_snap,
+                                        None,
                                     )?;
                                     if tracing {
                                         emit_hard_limit_retry_trace(
                                             target_model,
-                                            outer_retry,
+                                            prev_outer,
                                             dt_used,
                                             next_dt,
                                             dmdot_hard,
                                         );
                                     }
                                     dt_try = next_dt;
-                                    outer_retry += 1;
                                     break;
                                 }
                             }
@@ -559,50 +639,78 @@ impl BinarySystem {
                         Ok(SingleTrialOutcome::CutDt(dt_cut)) => {
                             self.counters.num_dt_cuts += 1;
                             self.have_to_reduce_timestep_due_to_j = false;
-                            dt_try = match check_cut_dt(dt_cut, dt_try) {
+                            let cut_dt = match check_cut_dt(dt_cut, dt_try) {
                                 Ok(d) => d,
                                 Err(e) => {
                                     self.restore_snapshot(&pre_step_snap)?;
                                     return Err(e);
                                 }
                             };
-                            outer_retry += 1;
-                            if max_outer_retries > 0
-                                && outer_retry > max_outer_retries
-                            {
-                                self.restore_snapshot(&pre_step_snap)?;
-                                return Err(StarError::ConvergenceFailure(
-                                    format!(
-                                        "BinarySystem::try_step exceeded retry_limit ({max_outer_retries})"
-                                    ),
-                                ));
-                            }
+                            dt_try = self.prepare_outer_retry(
+                                dt_try,
+                                Some(cut_dt),
+                                retry_factor_base,
+                                dt_floor,
+                                &mut outer_retry,
+                                &mut first_try,
+                                &mut retry_holds,
+                                star_target_mods,
+                                target_model,
+                                &pre_step_snap,
+                                None,
+                            )?;
+                            break;
+                        }
+                        Ok(SingleTrialOutcome::StarSolverRetry {
+                            dt_used,
+                            cause,
+                        }) => {
+                            dt_try = self.prepare_outer_retry(
+                                dt_used,
+                                None,
+                                retry_factor_base,
+                                dt_floor,
+                                &mut outer_retry,
+                                &mut first_try,
+                                &mut retry_holds,
+                                star_target_mods,
+                                target_model,
+                                &pre_step_snap,
+                                cause.map(|b| *b),
+                            )?;
                             break;
                         }
                         Ok(SingleTrialOutcome::RetryStep(dt_used)) => {
                             self.counters.num_dt_cuts += 1;
-                            dt_try = self.compute_retry_dt(
+                            dt_try = self.prepare_outer_retry(
                                 dt_used,
+                                None,
                                 retry_factor_base,
                                 dt_floor,
-                                outer_retry,
-                                max_outer_retries,
+                                &mut outer_retry,
+                                &mut first_try,
+                                &mut retry_holds,
+                                star_target_mods,
+                                target_model,
                                 &pre_step_snap,
+                                None,
                             )?;
-                            outer_retry += 1;
                             break;
                         }
                         Err(e) if is_binary_trial_retriable(&e) => {
-                            dt_try = self.compute_retry_dt_with_cause(
+                            dt_try = self.prepare_outer_retry(
                                 dt_try,
+                                None,
                                 retry_factor_base,
                                 dt_floor,
-                                outer_retry,
-                                max_outer_retries,
+                                &mut outer_retry,
+                                &mut first_try,
+                                &mut retry_holds,
+                                star_target_mods,
+                                target_model,
                                 &pre_step_snap,
                                 Some(e),
                             )?;
-                            outer_retry += 1;
                             break;
                         }
                         Err(e) => {
@@ -646,89 +754,142 @@ impl BinarySystem {
                     self.change_factor = 2.0 * self.controls.max_change_factor;
                 }
                 self.counters.num_implicit_trials += 1;
-                let (dt_used, ts_ctrl) = match self
-                    .run_single_trial(trial_mdot, dt_try, extras)
-                {
-                    Ok(SingleTrialOutcome::Completed { dt_used, ts_ctrl }) => {
+                let attempt_first_try = first_try && try_idx == 1;
+                let (dt_used, ts_ctrl, donor_conv, acc_conv) = match self
+                    .run_single_trial(
+                        trial_mdot,
+                        dt_try,
+                        attempt_first_try,
+                        extras,
+                    ) {
+                    Ok(SingleTrialOutcome::Completed {
+                        dt_used,
+                        ts_ctrl,
+                        donor_conv,
+                        acc_conv,
+                    }) => {
                         if try_idx > 1 && dt_used < 0.999_999 * dt_try {
                             self.counters.num_dt_cuts += 1;
-                            let next_dt = match check_cut_dt(dt_used, dt_try) {
+                            let cut_dt = match check_cut_dt(dt_used, dt_try) {
                                 Ok(d) => d,
                                 Err(e) => {
                                     self.restore_snapshot(&pre_step_snap)?;
                                     return Err(e);
                                 }
                             };
-                            dt_try = next_dt;
-                            outer_retry += 1;
-                            if max_outer_retries > 0
-                                && outer_retry > max_outer_retries
-                            {
-                                self.restore_snapshot(&pre_step_snap)?;
-                                return Err(StarError::ConvergenceFailure(
-                                    format!(
-                                        "BinarySystem::try_step exceeded retry_limit ({max_outer_retries})"
-                                    ),
-                                ));
-                            }
+                            dt_try = self.prepare_outer_retry(
+                                dt_try,
+                                Some(cut_dt),
+                                retry_factor_base,
+                                dt_floor,
+                                &mut outer_retry,
+                                &mut first_try,
+                                &mut retry_holds,
+                                star_target_mods,
+                                target_model,
+                                &pre_step_snap,
+                                None,
+                            )?;
                             break;
                         }
-                        (dt_used, ts_ctrl)
+                        (dt_used, ts_ctrl, donor_conv, acc_conv)
+                    }
+                    Ok(SingleTrialOutcome::StarSolverRetry {
+                        dt_used,
+                        cause,
+                    }) => {
+                        if tracing {
+                            emit_implicit_trial_trace(
+                                target_model,
+                                outer_retry,
+                                try_idx,
+                                trial_mdot,
+                                Some(dt_used),
+                                None,
+                                "star_retry",
+                                cause
+                                    .as_deref()
+                                    .map(ToString::to_string)
+                                    .as_deref(),
+                            );
+                        }
+                        dt_try = self.prepare_outer_retry(
+                            dt_used,
+                            None,
+                            retry_factor_base,
+                            dt_floor,
+                            &mut outer_retry,
+                            &mut first_try,
+                            &mut retry_holds,
+                            star_target_mods,
+                            target_model,
+                            &pre_step_snap,
+                            cause.map(|b| *b),
+                        )?;
+                        break;
                     }
                     Ok(SingleTrialOutcome::RetryStep(dt_used)) => {
                         self.counters.num_dt_cuts += 1;
-                        let next_dt = self.compute_retry_dt(
+                        let prev_outer = outer_retry;
+                        let next_dt = self.prepare_outer_retry(
                             dt_used,
+                            None,
                             retry_factor_base,
                             dt_floor,
-                            outer_retry,
-                            max_outer_retries,
+                            &mut outer_retry,
+                            &mut first_try,
+                            &mut retry_holds,
+                            star_target_mods,
+                            target_model,
                             &pre_step_snap,
+                            None,
                         )?;
                         if tracing {
                             emit_dt_cut_trace(
                                 target_model,
-                                outer_retry,
+                                prev_outer,
                                 try_idx,
                                 dt_try,
                                 next_dt,
                             );
                         }
                         dt_try = next_dt;
-                        outer_retry += 1;
                         break;
                     }
                     Ok(SingleTrialOutcome::CutDt(dt_cut)) => {
                         self.counters.num_dt_cuts += 1;
                         self.have_to_reduce_timestep_due_to_j = false;
-                        let next_dt = match check_cut_dt(dt_cut, dt_try) {
+                        let prev_outer = outer_retry;
+                        let cut_dt = match check_cut_dt(dt_cut, dt_try) {
                             Ok(d) => d,
                             Err(e) => {
                                 self.restore_snapshot(&pre_step_snap)?;
                                 return Err(e);
                             }
                         };
+                        let next_dt = self.prepare_outer_retry(
+                            dt_try,
+                            Some(cut_dt),
+                            retry_factor_base,
+                            dt_floor,
+                            &mut outer_retry,
+                            &mut first_try,
+                            &mut retry_holds,
+                            star_target_mods,
+                            target_model,
+                            &pre_step_snap,
+                            None,
+                        )?;
                         if tracing {
                             emit_dt_cut_trace(
                                 target_model,
-                                outer_retry,
+                                prev_outer,
                                 try_idx,
                                 dt_try,
                                 next_dt,
                             );
                         }
                         dt_try = next_dt;
-                        outer_retry += 1;
-                        if max_outer_retries > 0
-                            && outer_retry > max_outer_retries
-                        {
-                            self.restore_snapshot(&pre_step_snap)?;
-                            return Err(StarError::ConvergenceFailure(
-                                format!(
-                                    "BinarySystem::try_step exceeded retry_limit ({max_outer_retries})"
-                                ),
-                            ));
-                        }
                         break;
                     }
                     Err(e) => {
@@ -748,20 +909,23 @@ impl BinarySystem {
                             self.restore_snapshot(&pre_step_snap)?;
                             return Err(e);
                         }
-                        dt_try = self.compute_retry_dt_with_cause(
+                        dt_try = self.prepare_outer_retry(
                             dt_try,
+                            None,
                             retry_factor_base,
                             dt_floor,
-                            outer_retry,
-                            max_outer_retries,
+                            &mut outer_retry,
+                            &mut first_try,
+                            &mut retry_holds,
+                            star_target_mods,
+                            target_model,
                             &pre_step_snap,
                             Some(e),
                         )?;
-                        outer_retry += 1;
                         break;
                     }
                 };
-                if try_idx == 1 && dt_used < 0.999_999 * dt_try {
+                if try_idx == 1 && dt_used != dt_try {
                     dt_try = dt_used;
                 }
 
@@ -904,10 +1068,23 @@ impl BinarySystem {
                 }
                 let mut dmdot_hard = false;
                 if decision == TrialDecision::KeepGoing {
-                    dmdot_hard = self.any_star_exceeds_dmdot_hard();
-                    if dmdot_hard {
-                        self.counters.num_hard_limit_retries += 1;
-                        decision = TrialDecision::Retry;
+                    match self.pick_star_next_timesteps(
+                        &donor_conv,
+                        acc_conv.as_ref(),
+                        outer_retry,
+                    ) {
+                        Ok(StarTimestepsResult::KeepGoing) => {}
+                        Ok(StarTimestepsResult::Retry { is_dmdot_hard }) => {
+                            if is_dmdot_hard {
+                                dmdot_hard = true;
+                                self.counters.num_hard_limit_retries += 1;
+                            }
+                            decision = TrialDecision::Retry;
+                        }
+                        Err(e) => {
+                            self.restore_snapshot(&pre_step_snap)?;
+                            return Err(e);
+                        }
                     }
                 }
 
@@ -924,6 +1101,11 @@ impl BinarySystem {
                         if self.mtransfer_rate > 0.0 {
                             self.mtransfer_rate = 0.0;
                         }
+                        self.finalize_terminated_star_steps(
+                            &donor_conv,
+                            acc_conv.as_ref(),
+                            outer_retry,
+                        );
                         self.last_termination_reason = Some(reason);
                         return self.finish_accepted_step(
                             dt_used,
@@ -952,21 +1134,26 @@ impl BinarySystem {
                                 });
                             }
                             pending_star_redo_dt = Some(dt_new);
+                            first_try = false;
                             break;
                         }
                         if try_idx > max_tries {
-                            let next_dt = self.compute_retry_dt(
+                            dt_try = self.prepare_outer_retry(
                                 dt_used,
+                                None,
                                 retry_factor_base,
                                 dt_floor,
-                                outer_retry,
-                                max_outer_retries,
+                                &mut outer_retry,
+                                &mut first_try,
+                                &mut retry_holds,
+                                star_target_mods,
+                                target_model,
                                 &pre_step_snap,
+                                None,
                             )?;
-                            dt_try = next_dt;
-                            outer_retry += 1;
                             break;
                         }
+                        first_try = false;
                         if next_mdot_candidate > 0.0 && self.point_mass_i == 0 {
                             let live_cf = self.change_factor;
                             self.restore_snapshot(&trial_snap)?;
@@ -982,25 +1169,30 @@ impl BinarySystem {
                         }
                     }
                     TrialDecision::Retry => {
-                        let next_dt = self.compute_retry_dt(
+                        let prev_outer = outer_retry;
+                        let next_dt = self.prepare_outer_retry(
                             dt_used,
+                            None,
                             retry_factor_base,
                             dt_floor,
-                            outer_retry,
-                            max_outer_retries,
+                            &mut outer_retry,
+                            &mut first_try,
+                            &mut retry_holds,
+                            star_target_mods,
+                            target_model,
                             &pre_step_snap,
+                            None,
                         )?;
                         if tracing && dmdot_hard {
                             emit_hard_limit_retry_trace(
                                 target_model,
-                                outer_retry,
+                                prev_outer,
                                 dt_used,
                                 next_dt,
                                 dmdot_hard,
                             );
                         }
                         dt_try = next_dt;
-                        outer_retry += 1;
                         break;
                     }
                 }
@@ -1008,62 +1200,208 @@ impl BinarySystem {
         }
     }
 
-    fn compute_retry_dt(
-        &mut self,
-        cur_dt: f64,
-        retry_factor_base: f64,
-        dt_floor: f64,
-        outer_retry: usize,
-        max_outer_retries: usize,
-        pre_step_snap: &crate::system_rlof::BinaryStepSnapshot,
-    ) -> Result<f64, StarError> {
-        self.compute_retry_dt_with_cause(
-            cur_dt,
-            retry_factor_base,
-            dt_floor,
-            outer_retry,
-            max_outer_retries,
-            pre_step_snap,
-            None,
-        )
-    }
-
+    /// Executes upstream `star_prepare_to_retry` + `binary_prepare_to_retry` +
+    /// `set_star_timesteps` J-reduction (`binary/private/run_binary_support.f90:604-615, 650`,
+    /// `star/private/evolve.f90:2176-2277`, `binary/private/binary_timestep.f90:86-95`),
+    /// advancing `step_retry_cnt` and `num_retries`, enforcing `retry_limit`,
+    /// `min_timestep_limit`, and `max_number_retries`, updating
+    /// `model_number_for_last_retry` and `timestep_hold`, and clearing `first_try`.
     #[allow(clippy::too_many_arguments)]
-    fn compute_retry_dt_with_cause(
+    fn prepare_outer_retry(
         &mut self,
         cur_dt: f64,
+        explicit_next_dt: Option<f64>,
         retry_factor_base: f64,
         dt_floor: f64,
-        outer_retry: usize,
-        max_outer_retries: usize,
+        outer_retry: &mut usize,
+        first_try: &mut bool,
+        retry_holds: &mut [(Option<usize>, usize); 2],
+        star_target_mods: [usize; 2],
+        target_model: usize,
         pre_step_snap: &crate::system_rlof::BinaryStepSnapshot,
         cause: Option<StarError>,
     ) -> Result<f64, StarError> {
-        // The star retry scales `dt` by `timestep_factor_for_retries` first;
-        // `set_star_timesteps` then multiplies the result by
-        // `dt_reduction_factor_for_j` (`binary/private/
-        // binary_timestep.f90:86-95`).
-        let mut next_dt = cur_dt * retry_factor_base;
-        if self.have_to_reduce_timestep_due_to_j {
-            next_dt *= self.controls.dt_reduction_factor_for_j;
-            self.have_to_reduce_timestep_due_to_j = false;
+        let next_retries = *outer_retry + 1;
+        self.donor.step_retry_cnt = next_retries;
+        if let BinaryCompanion::Star(ref mut s2) = self.companion {
+            s2.step_retry_cnt = next_retries;
         }
-        let next_retries = outer_retry + 1;
-        let exhausted = (max_outer_retries > 0
-            && next_retries > max_outer_retries)
-            || !next_dt.is_finite()
-            || next_dt <= 0.0
-            || (dt_floor > 0.0 && next_dt < dt_floor);
-        if exhausted {
+
+        // `star/private/evolve.f90:2213-2218`: check per-step `retry_limit`.
+        let donor_retry_limit = self.donor.controls.ts_stop.retry_limit;
+        let acc_retry_limit = match &self.companion {
+            BinaryCompanion::PointMass { .. } => 0,
+            BinaryCompanion::Star(s2) => s2.controls.ts_stop.retry_limit,
+        };
+        let hit_retry_limit = (donor_retry_limit > 0
+            && next_retries > donor_retry_limit)
+            || (acc_retry_limit > 0 && next_retries > acc_retry_limit);
+        if hit_retry_limit {
             self.restore_snapshot(pre_step_snap)?;
+            self.apply_retry_holds(retry_holds);
             if let Some(err) = cause {
                 return Err(err);
             }
+            let lim = if donor_retry_limit > 0
+                && next_retries > donor_retry_limit
+            {
+                donor_retry_limit
+            } else {
+                acc_retry_limit
+            };
+            return Err(StarError::ConvergenceFailure(format!(
+                "BinarySystem::try_step exceeded retry_limit ({lim})"
+            )));
+        }
+
+        // `evolve.f90:2222-2224` + `binary_timestep.f90:86-95`.
+        let mut next_dt = if let Some(dt_cut) = explicit_next_dt {
+            self.have_to_reduce_timestep_due_to_j = false;
+            dt_cut
+        } else {
+            let mut d = cur_dt * retry_factor_base;
+            if self.have_to_reduce_timestep_due_to_j {
+                d *= self.controls.dt_reduction_factor_for_j;
+                self.have_to_reduce_timestep_due_to_j = false;
+            }
+            d
+        };
+
+        // `star/private/evolve.f90:2240-2248`: check `min_timestep_limit`.
+        if !next_dt.is_finite()
+            || next_dt <= 0.0
+            || (dt_floor > 0.0 && next_dt <= dt_floor)
+        {
+            self.restore_snapshot(pre_step_snap)?;
+            self.apply_retry_holds(retry_holds);
             return Err(StarError::ConvergenceFailure(format!(
                 "BinarySystem::try_step exhausted outer timestep retries (retry {next_retries}, next_dt={next_dt:.3e} s, min_timestep_limit={dt_floor:.3e} s)"
             )));
         }
+
+        // `star/private/evolve.f90:2250-2255`: cap `next_dt` by `max_timestep`.
+        let cap_star_max_dt = |s: &mut StarModel, dt_val: &mut f64| {
+            if s.controls.max_years_for_timestep > 0.0 {
+                s.controls.ts_stop.max_timestep =
+                    SECYER * s.controls.max_years_for_timestep;
+            }
+            if s.controls.ts_stop.max_timestep > 0.0
+                && *dt_val > s.controls.ts_stop.max_timestep
+            {
+                *dt_val = s.controls.ts_stop.max_timestep;
+            }
+        };
+        cap_star_max_dt(&mut self.donor, &mut next_dt);
+        if let BinaryCompanion::Star(ref mut s2) = self.companion {
+            cap_star_max_dt(s2, &mut next_dt);
+        }
+
+        // `star/private/evolve.f90:2259-2266`: increment `num_retries` and
+        // enforce `max_number_retries` (`relax_max_number_retries` if relaxing).
+        self.counters.num_retries += 1;
+        let bump_and_check_max_retries = |s: &mut StarModel| -> bool {
+            s.num_retries += 1;
+            let max_num = if s.aux.doing_relax {
+                s.controls.relax_max_number_retries
+            } else {
+                s.controls.max_number_retries
+            };
+            usize::try_from(max_num).is_ok_and(|lim| s.num_retries > lim)
+        };
+        let mut exceeded_max_retries =
+            bump_and_check_max_retries(&mut self.donor);
+        if let BinaryCompanion::Star(ref mut s2) = self.companion {
+            exceeded_max_retries |= bump_and_check_max_retries(s2);
+        }
+        if exceeded_max_retries {
+            self.restore_snapshot(pre_step_snap)?;
+            self.apply_retry_holds(retry_holds);
+            return Err(StarError::Terminated {
+                model_number: target_model,
+                reason: String::from("max_number_retries"),
+            });
+        }
+
+        // `star/private/evolve.f90:2268-2275`: update retry hold metadata on
+        // each evolved star so subsequent attempts on `target_mod` engage retry
+        // line search (`min_corr_coeff = 0.01`) and `timestep_hold`.
+        let d_idx = (self.donor_i - 1).min(1);
+        let update_hold = |s: &mut StarModel, star_target: usize| {
+            s.aux.step_hist.model_number_for_last_retry = Some(star_target);
+            let hold_span = if s.why_tlim_neg_x {
+                s.controls
+                    .ts_stop
+                    .retry_hold
+                    .max(s.controls.ts_stop.neg_mass_fraction_hold)
+            } else {
+                s.controls.ts_stop.retry_hold
+            };
+            s.aux.step_hist.timestep_hold = star_target + hold_span;
+        };
+        update_hold(&mut self.donor, star_target_mods[d_idx]);
+        if let BinaryCompanion::Star(ref mut s2) = self.companion {
+            update_hold(s2, star_target_mods[1 - d_idx]);
+        }
+        self.record_retry_holds(retry_holds);
+
+        *outer_retry = next_retries;
+        *first_try = false;
         Ok(next_dt)
+    }
+
+    fn pick_star_next_timesteps(
+        &mut self,
+        donor_conv: &StarStepConverged,
+        acc_conv: Option<&StarStepConverged>,
+        outer_retry: usize,
+    ) -> Result<StarTimestepsResult, StarError> {
+        let mut star_extras = DefaultStarExtras;
+        match star_pick_next_timestep_after_step(
+            &mut self.donor,
+            donor_conv,
+            outer_retry,
+            &mut star_extras,
+        )? {
+            StarPickTimestepOutcome::KeepGoing(_) => {}
+            StarPickTimestepOutcome::Retry { reason, .. } => {
+                return Ok(StarTimestepsResult::Retry {
+                    is_dmdot_hard: reason == "delta_mdot_hard_limit",
+                });
+            }
+        }
+        if let (BinaryCompanion::Star(ref mut s2), Some(conv_a)) =
+            (&mut self.companion, acc_conv)
+        {
+            match star_pick_next_timestep_after_step(
+                s2,
+                conv_a,
+                outer_retry,
+                &mut star_extras,
+            )? {
+                StarPickTimestepOutcome::KeepGoing(_) => {}
+                StarPickTimestepOutcome::Retry { reason, .. } => {
+                    return Ok(StarTimestepsResult::Retry {
+                        is_dmdot_hard: reason == "delta_mdot_hard_limit",
+                    });
+                }
+            }
+        }
+        Ok(StarTimestepsResult::KeepGoing)
+    }
+
+    fn finalize_terminated_star_steps(
+        &mut self,
+        donor_conv: &StarStepConverged,
+        acc_conv: Option<&StarStepConverged>,
+        outer_retry: usize,
+    ) {
+        let _ =
+            star_finalize_terminated_step(&mut self.donor, donor_conv, outer_retry);
+        if let (BinaryCompanion::Star(ref mut s2), Some(conv_a)) =
+            (&mut self.companion, acc_conv)
+        {
+            let _ = star_finalize_terminated_step(s2, conv_a, outer_retry);
+        }
     }
 
     fn check_hard_limits(
@@ -1079,15 +1417,6 @@ impl BinarySystem {
             self.controls.fe_hard,
             self.controls.fdm_hard,
         )
-    }
-
-    fn any_star_exceeds_dmdot_hard(&self) -> bool {
-        star_exceeds_delta_mdot_hard_limit(&self.donor)
-            || matches!(
-                &self.companion,
-                BinaryCompanion::Star(s2)
-                    if star_exceeds_delta_mdot_hard_limit(s2)
-            )
     }
 
     /// Evaluates `adjust_irradiation` (`binary/private/binary_irradiation.f90:33-60`).
@@ -1204,6 +1533,7 @@ impl BinarySystem {
         &mut self,
         trial_mdot: f64,
         dt_try: f64,
+        first_try: bool,
         extras: &mut dyn BinaryExtras,
     ) -> Result<SingleTrialOutcome, StarError> {
         let doing_first_model_of_run = self.model_number == 0;
@@ -1260,12 +1590,21 @@ impl BinarySystem {
         )?;
 
         refresh_star_irradiation_heat(&mut self.donor);
-        let dt_used = evolve_single_star_without_term_rewind(
+        let donor_conv = match evolve_single_star_attempt(
             &mut self.donor,
             dt_try,
+            first_try,
             false,
-        )?
-        .dt;
+        )? {
+            StarStepAttemptOutcome::Converged(conv) => conv,
+            StarStepAttemptOutcome::Retry { cause, .. } => {
+                return Ok(SingleTrialOutcome::StarSolverRetry {
+                    dt_used: dt_try,
+                    cause,
+                });
+            }
+        };
+        let dt_used = donor_conv.dt;
         let extra_w_d =
             (self.donor.mstar_dot - acct.component_mdot[0]).min(0.0);
         if extra_w_d < 0.0 {
@@ -1275,14 +1614,21 @@ impl BinarySystem {
             acct.mdot_system_wind[0] += extra_w_d - dw_tr;
             acct.component_mdot[0] = self.donor.mstar_dot;
         }
+        let mut acc_conv: Option<StarStepConverged> = None;
         if let BinaryCompanion::Star(ref mut s2) = self.companion {
-            let rep_a = evolve_single_star_without_term_rewind(
-                s2,
-                dt_used,
-                false,
-            )?;
-            if rep_a.dt < 0.999_999 * dt_used {
-                return Ok(SingleTrialOutcome::CutDt(rep_a.dt));
+            let conv_a = match evolve_single_star_attempt(
+                s2, dt_used, first_try, false,
+            )? {
+                StarStepAttemptOutcome::Converged(conv) => conv,
+                StarStepAttemptOutcome::Retry { cause, .. } => {
+                    return Ok(SingleTrialOutcome::StarSolverRetry {
+                        dt_used,
+                        cause,
+                    });
+                }
+            };
+            if conv_a.dt < 0.999_999 * dt_used {
+                return Ok(SingleTrialOutcome::CutDt(conv_a.dt));
             }
             let extra_w_a = (s2.mstar_dot - acct.component_mdot[1]).min(0.0);
             if extra_w_a < 0.0 {
@@ -1292,6 +1638,7 @@ impl BinarySystem {
                 acct.mdot_system_wind[1] += extra_w_a - dw_tr;
                 acct.component_mdot[1] = s2.mstar_dot;
             }
+            acc_conv = Some(conv_a);
         }
 
         let am_rem_d = eval_star_am_removed_post_step(&self.donor);
@@ -1547,7 +1894,12 @@ impl BinarySystem {
             fe_limit: c.fe_limit,
             fdm: c.fdm,
         };
-        Ok(SingleTrialOutcome::Completed { dt_used, ts_ctrl })
+        Ok(SingleTrialOutcome::Completed {
+            dt_used,
+            ts_ctrl,
+            donor_conv,
+            acc_conv,
+        })
     }
 
     fn finish_accepted_step(

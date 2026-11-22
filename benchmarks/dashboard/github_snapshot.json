@@ -239,11 +239,6 @@
   ],
   "open_pull_requests": [
     {
-      "number": 350,
-      "title": "ci(dashboard): measure coverage daily when main has changed, in seven instrumented shards with the ci profile (#345)",
-      "draft": false
-    },
-    {
       "number": 352,
       "title": "fix(autodiff): the order-2 and order-3 dual types evaluate upstream's expression for each operation (#349)",
       "draft": true

@@ -21,7 +21,7 @@
         "verified_total": 4971,
         "pct_ported": 34.5,
         "pct_verified": 4.1,
-        "rust_lines": 85613,
+        "rust_lines": 86367,
         "python_jax_lines": 3869
       },
       {
@@ -55,7 +55,7 @@
         "verified_total": 0,
         "pct_ported": 18.7,
         "pct_verified": 0.0,
-        "rust_lines": 11979,
+        "rust_lines": 12379,
         "python_jax_lines": 1244
       },
       {
@@ -765,16 +765,16 @@
     "rust": {
       "tool": "cargo llvm-cov",
       "overall": {
-        "lines": 117456,
-        "covered": 88983,
+        "lines": 118615,
+        "covered": 89924,
         "percent": 75.8
       },
       "by_crate": [
         {
           "crate": "flexmesa-astero",
-          "lines": 4225,
+          "lines": 4254,
           "covered": 1618,
-          "percent": 38.3
+          "percent": 38.0
         },
         {
           "crate": "flexmesa-atm",
@@ -784,9 +784,9 @@
         },
         {
           "crate": "flexmesa-autodiff",
-          "lines": 1322,
-          "covered": 458,
-          "percent": 34.6
+          "lines": 1513,
+          "covered": 559,
+          "percent": 36.9
         },
         {
           "crate": "flexmesa-bench",
@@ -832,9 +832,9 @@
         },
         {
           "crate": "flexmesa-eos",
-          "lines": 9797,
-          "covered": 7836,
-          "percent": 80.0
+          "lines": 10132,
+          "covered": 8112,
+          "percent": 80.1
         },
         {
           "crate": "flexmesa-interp1d",
@@ -904,9 +904,9 @@
         },
         {
           "crate": "flexmesa-star",
-          "lines": 55891,
-          "covered": 42356,
-          "percent": 75.8
+          "lines": 56495,
+          "covered": 42920,
+          "percent": 76.0
         },
         {
           "crate": "flexmesa-testing",
@@ -932,8 +932,8 @@
       "tool": "pytest --cov",
       "overall": {
         "statements": 26315,
-        "covered": 23068,
-        "percent": 87.7
+        "covered": 23065,
+        "percent": 87.6
       },
       "by_subpackage": [
         {
@@ -1083,7 +1083,7 @@
         {
           "subpackage": "flexmesa.testing",
           "statements": 4241,
-          "covered": 3356,
+          "covered": 3353,
           "percent": 79.1
         },
         {
@@ -1223,12 +1223,12 @@
         "issues": "#156, #295"
       },
       {
-        "location": "tests/test_wave4_bench.py:141",
+        "location": "tests/test_wave4_bench.py:151",
         "reason": "pytest.mark.xfail( strict=True, reason=( \"#295: Rust do1_mlt_2 takes the face radiation pressure from the \" \"face temperature (MESA 26.4.1 star_utils.f90:3838-3843, #291); \" \"the frozen JAX face-MLT twin still interpolates the cell values \" \"(measured max_rel_err 8.9e-3).\" ), )",
         "issues": "#291, #295"
       },
       {
-        "location": "tests/test_wave4_bench.py:156",
+        "location": "tests/test_wave4_bench.py:166",
         "reason": "pytest.mark.xfail( strict=True, reason=( \"#295: Rust eval_face_dm_bar at k = nz - 1 uses 0.5*(dm[k-1] + dm[k]) \" \"(MESA 26.4.1 star/private/hydro_momentum.f90:191-196, #340); \" \"frozen JAX eval_hydro_residuals_jax still uses dm_bar[nz - 1] \" \"(measured max_rel_err 9.73e-3).\" ), )",
         "issues": "#295, #340"
       },
@@ -1480,11 +1480,6 @@
       }
     ],
     "open_pull_requests": [
-      {
-        "number": 350,
-        "title": "ci(dashboard): measure coverage daily when main has changed, in seven instrumented shards with the ci profile (#345)",
-        "draft": false
-      },
       {
         "number": 352,
         "title": "fix(autodiff): the order-2 and order-3 dual types evaluate upstream's expression for each operation (#349)",
@@ -2729,6 +2724,32 @@
     {
       "date_utc": "2026-11-22",
       "commit": "9b2d1f7",
+      "event": "main merge",
+      "engine_ported_pct": "30.2",
+      "all_verified_pct": "1.0",
+      "cases_passing": "0",
+      "rust_cov_pct": "75.8",
+      "python_cov_pct": "87.7",
+      "closed_140": "16",
+      "total_140": "36",
+      "deferred_169": "45"
+    },
+    {
+      "date_utc": "2026-11-22",
+      "commit": "5b937c9",
+      "event": "main merge",
+      "engine_ported_pct": "30.2",
+      "all_verified_pct": "1.0",
+      "cases_passing": "0",
+      "rust_cov_pct": "75.8",
+      "python_cov_pct": "87.7",
+      "closed_140": "16",
+      "total_140": "36",
+      "deferred_169": "45"
+    },
+    {
+      "date_utc": "2026-11-22",
+      "commit": "a3ddf16",
       "event": "main merge",
       "engine_ported_pct": "30.2",
       "all_verified_pct": "1.0",

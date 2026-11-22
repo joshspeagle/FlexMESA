@@ -7,9 +7,7 @@
 //! derivatives $(\partial_{1}, \partial_{2}, \partial_{11}, \partial_{12},
 //! \partial_{22})$ in a single forward pass.
 
-use flexmesa_math::{heaviside, pow2};
 
-use crate::kernels;
 
 /// Two-variable second-order forward-mode hyperdual number.
 ///
@@ -51,21 +49,12 @@ pub struct AutoDiffReal2VarOrder2 {
 }
 
 macro_rules! unary_method {
-    ($name:ident, $kernel:path, $doc:expr) => {
+    ($name:ident, $kernel:ident, $doc:expr) => {
         #[doc = $doc]
         #[must_use]
         #[inline]
         pub fn $name(self) -> Self {
-            self.apply_unary($kernel)
-        }
-    };
-    ($name:ident, pown $n:literal, $doc:expr) => {
-        #[doc = $doc]
-        #[must_use]
-        #[inline]
-        pub fn $name(self) -> Self {
-            let (v, d1, d2) = kernels::unary_pown(self.val, $n);
-            self.make_unary_operator(v, d1, d2)
+            crate::order2_gen::$kernel(self)
         }
     };
 }
@@ -123,15 +112,7 @@ impl AutoDiffReal2VarOrder2 {
         z_d1x: f64,
         z_d2x: f64,
     ) -> Self {
-        Self {
-            val: z_val,
-            d1val1: self.d1val1 * z_d1x,
-            d1val2: self.d1val2 * z_d1x,
-            d2val1: self.d2val1 * z_d1x + z_d2x * pow2(self.d1val1),
-            d1val1_d1val2: self.d1val1 * self.d1val2 * z_d2x
-                + self.d1val1_d1val2 * z_d1x,
-            d2val2: self.d2val2 * z_d1x + z_d2x * pow2(self.d1val2),
-        }
+        crate::order2_gen::make_unary_operator(self, z_val, z_d1x, z_d2x)
     }
 
     /// Apply the second-order binary chain rule matching MESA's
@@ -149,29 +130,7 @@ impl AutoDiffReal2VarOrder2 {
         z_d1x_d1y: f64,
         z_d2y: f64,
     ) -> Self {
-        let q0 = self.d1val1 * z_d1x_d1y;
-        let q1 = self.d1val2 * z_d1x_d1y;
-        Self {
-            val: z_val,
-            d1val1: self.d1val1 * z_d1x + other.d1val1 * z_d1y,
-            d1val2: self.d1val2 * z_d1x + other.d1val2 * z_d1y,
-            d2val1: 2.0 * q0 * other.d1val1
-                + self.d2val1 * z_d1x
-                + other.d2val1 * z_d1y
-                + z_d2x * pow2(self.d1val1)
-                + z_d2y * pow2(other.d1val1),
-            d1val1_d1val2: q0 * other.d1val2
-                + q1 * other.d1val1
-                + self.d1val1 * self.d1val2 * z_d2x
-                + self.d1val1_d1val2 * z_d1x
-                + other.d1val1 * other.d1val2 * z_d2y
-                + other.d1val1_d1val2 * z_d1y,
-            d2val2: 2.0 * q1 * other.d1val2
-                + self.d2val2 * z_d1x
-                + other.d2val2 * z_d1y
-                + z_d2x * pow2(self.d1val2)
-                + z_d2y * pow2(other.d1val2),
-        }
+        crate::order2_gen::make_binary_operator(self, other, z_val, z_d1x, z_d1y, z_d2x, z_d1x_d1y, z_d2y)
     }
 
     /// Propagate a scalar derivative kernel `(f(x), f'(x), f''(x))` through
@@ -199,178 +158,56 @@ impl AutoDiffReal2VarOrder2 {
         Self::new(self.d1val2, self.d1val1_d1val2, self.d2val2, 0.0, 0.0, 0.0)
     }
 
-    unary_method!(
-        sign,
-        kernels::unary_sign,
+    unary_method!(sign, sign_self,
         "Compute $\\operatorname{sgn}(x)$."
     );
-    unary_method!(abs, kernels::unary_abs, "Compute $|x|$.");
-    unary_method!(sqrt, kernels::unary_sqrt, "Compute $\\sqrt{x}$.");
-    unary_method!(
-        safe_sqrt,
-        kernels::unary_safe_sqrt,
+    unary_method!(abs, abs_self, "Compute $|x|$.");
+    unary_method!(sqrt, sqrt_self, "Compute $\\sqrt{x}$.");
+    unary_method!(safe_sqrt, safe_sqrt_self,
         "Compute $\\sqrt{\\max(x, 0)}$."
     );
-    unary_method!(exp, kernels::unary_exp, "Compute $\\exp(x)$.");
-    unary_method!(expm1, kernels::unary_expm1, "Compute $e^{x} - 1$.");
-    unary_method!(exp10, kernels::unary_exp10, "Compute $10^{x}$.");
-    unary_method!(powm1, kernels::unary_powm1, "Compute $x^{-1}$.");
-    unary_method!(log, kernels::unary_log, "Compute $\\ln(x)$.");
-    unary_method!(
-        safe_log,
-        kernels::unary_safe_log,
+    unary_method!(exp, exp_self, "Compute $\\exp(x)$.");
+    unary_method!(expm1, expm1_self, "Compute $e^{x} - 1$.");
+    unary_method!(exp10, exp10_self, "Compute $10^{x}$.");
+    unary_method!(powm1, powm1_self, "Compute $x^{-1}$.");
+    unary_method!(log, log_self, "Compute $\\ln(x)$.");
+    unary_method!(safe_log, safe_log_self,
         "Compute $\\operatorname{safe\\_log}(x)$."
     );
-    unary_method!(log1p, kernels::unary_log1p, "Compute $\\ln(1 + x)$.");
-    unary_method!(log10, kernels::unary_log10, "Compute $\\log_{10}(x)$.");
-    unary_method!(
-        safe_log10,
-        kernels::unary_safe_log10,
+    unary_method!(log1p, log1p_self, "Compute $\\ln(1 + x)$.");
+    unary_method!(log10, log10_self, "Compute $\\log_{10}(x)$.");
+    unary_method!(safe_log10, safe_log10_self,
         "Compute $\\operatorname{safe\\_log10}(x)$."
     );
-    unary_method!(log2, kernels::unary_log2, "Compute $\\log_{2}(x)$.");
-    unary_method!(sin, kernels::unary_sin, "Compute $\\sin(x)$.");
-    unary_method!(cos, kernels::unary_cos, "Compute $\\cos(x)$.");
-    unary_method!(tan, kernels::unary_tan, "Compute $\\tan(x)$.");
-    unary_method!(sinpi, kernels::unary_sinpi, "Compute $\\sin(\\pi x)$.");
-    unary_method!(cospi, kernels::unary_cospi, "Compute $\\cos(\\pi x)$.");
-    unary_method!(tanpi, kernels::unary_tanpi, "Compute $\\tan(\\pi x)$.");
-    unary_method!(sinh, kernels::unary_sinh, "Compute $\\sinh(x)$.");
-    unary_method!(cosh, kernels::unary_cosh, "Compute $\\cosh(x)$.");
-    unary_method!(tanh, kernels::unary_tanh, "Compute $\\tanh(x)$.");
-    unary_method!(asin, kernels::unary_asin, "Compute $\\arcsin(x)$.");
-    unary_method!(acos, kernels::unary_acos, "Compute $\\arccos(x)$.");
-    unary_method!(atan, kernels::unary_atan, "Compute $\\arctan(x)$.");
-    unary_method!(
-        asinpi,
-        kernels::unary_asinpi,
+    unary_method!(log2, log2_self, "Compute $\\log_{2}(x)$.");
+    unary_method!(sin, sin_self, "Compute $\\sin(x)$.");
+    unary_method!(cos, cos_self, "Compute $\\cos(x)$.");
+    unary_method!(tan, tan_self, "Compute $\\tan(x)$.");
+    unary_method!(sinpi, sinpi_self, "Compute $\\sin(\\pi x)$.");
+    unary_method!(cospi, cospi_self, "Compute $\\cos(\\pi x)$.");
+    unary_method!(tanpi, tanpi_self, "Compute $\\tan(\\pi x)$.");
+    unary_method!(sinh, sinh_self, "Compute $\\sinh(x)$.");
+    unary_method!(cosh, cosh_self, "Compute $\\cosh(x)$.");
+    unary_method!(tanh, tanh_self, "Compute $\\tanh(x)$.");
+    unary_method!(asin, asin_self, "Compute $\\arcsin(x)$.");
+    unary_method!(acos, acos_self, "Compute $\\arccos(x)$.");
+    unary_method!(atan, atan_self, "Compute $\\arctan(x)$.");
+    unary_method!(asinpi, asinpi_self,
         "Compute $\\arcsin(x) / \\pi$."
     );
-    unary_method!(
-        acospi,
-        kernels::unary_acospi,
+    unary_method!(acospi, acospi_self,
         "Compute $\\arccos(x) / \\pi$."
     );
-    unary_method!(
-        atanpi,
-        kernels::unary_atanpi,
+    unary_method!(atanpi, atanpi_self,
         "Compute $\\arctan(x) / \\pi$."
     );
-    unary_method!(
-        asinh,
-        kernels::unary_asinh,
+    unary_method!(asinh, asinh_self,
         "Compute $\\operatorname{arsinh}(x)$."
     );
-    unary_method!(
-        acosh,
-        kernels::unary_acosh,
+    unary_method!(acosh, acosh_self,
         "Compute $\\operatorname{arcosh}(x)$."
     );
-    unary_method!(
-        atanh,
-        kernels::unary_atanh,
+    unary_method!(atanh, atanh_self,
         "Compute $\\operatorname{artanh}(x)$."
     );
-    unary_method!(pow2, pown 2, "Compute $x^{2}$.");
-    unary_method!(pow3, pown 3, "Compute $x^{3}$.");
-    unary_method!(pow4, pown 4, "Compute $x^{4}$.");
-    unary_method!(pow5, pown 5, "Compute $x^{5}$.");
-    unary_method!(pow6, pown 6, "Compute $x^{6}$.");
-    unary_method!(pow7, pown 7, "Compute $x^{7}$.");
-    unary_method!(pow8, pown 8, "Compute $x^{8}$.");
-
-    /// Raise `self` to a hyperdual power `other` ($x^{y}$).
-    #[must_use]
-    #[inline]
-    pub fn pow(self, other: Self) -> Self {
-        let (v, d1x, d1y, d2x, d1x_d1y, d2y) =
-            kernels::binary_pow(self.val, other.val);
-        self.make_binary_operator(other, v, d1x, d1y, d2x, d1x_d1y, d2y)
-    }
-
-    /// Raise `self` to a constant `f64` exponent $p$.
-    #[must_use]
-    #[inline]
-    pub fn powf(self, p: f64) -> Self {
-        let (v, d1, d2) = kernels::unary_pow_scalar(self.val, p);
-        self.make_unary_operator(v, d1, d2)
-    }
-
-    /// Raise `self` to a constant integer exponent $n$.
-    #[must_use]
-    #[inline]
-    pub fn powi(self, n: i32) -> Self {
-        self.powf(f64::from(n))
-    }
-
-    /// Raise a constant positive scalar `base` to the hyperdual exponent
-    /// `self` ($b^{x}$).
-    #[must_use]
-    #[inline]
-    pub fn rpow(self, base: f64) -> Self {
-        let (v, d1, d2) = kernels::unary_rpow_scalar(base, self.val);
-        self.make_unary_operator(v, d1, d2)
-    }
-
-    /// Compute $\max(x, y)$ using MESA's symmetric Heaviside subgradient.
-    #[must_use]
-    #[inline]
-    pub fn max(self, other: Self) -> Self {
-        let q0 = heaviside(self.val - other.val);
-        let q1 = heaviside(other.val - self.val);
-        self.make_binary_operator(
-            other,
-            self.val.max(other.val),
-            q0,
-            q1,
-            0.0,
-            0.0,
-            0.0,
-        )
-    }
-
-    /// Compute $\max(x, c)$ with a scalar constant $c$.
-    #[must_use]
-    #[inline]
-    pub fn max_scalar(self, c: f64) -> Self {
-        self.make_unary_operator(self.val.max(c), heaviside(self.val - c), 0.0)
-    }
-
-    /// Compute $\min(x, y)$ using MESA's symmetric Heaviside subgradient.
-    #[must_use]
-    #[inline]
-    pub fn min(self, other: Self) -> Self {
-        let q0 = heaviside(other.val - self.val);
-        let q1 = heaviside(self.val - other.val);
-        self.make_binary_operator(
-            other,
-            self.val.min(other.val),
-            q0,
-            q1,
-            0.0,
-            0.0,
-            0.0,
-        )
-    }
-
-    /// Compute $\min(x, c)$ with a scalar constant $c$.
-    #[must_use]
-    #[inline]
-    pub fn min_scalar(self, c: f64) -> Self {
-        self.make_unary_operator(self.val.min(c), heaviside(c - self.val), 0.0)
-    }
-
-    /// Compute positive difference $\operatorname{dim}(x, y) = \max(x - y, 0)$.
-    #[must_use]
-    #[inline]
-    pub fn dim(self, other: Self) -> Self {
-        (self - other).max_scalar(0.0)
-    }
-
-    /// Compute positive difference $\operatorname{dim}(x, c) = \max(x - c, 0)$.
-    #[must_use]
-    #[inline]
-    pub fn dim_scalar(self, c: f64) -> Self {
-        (self - c).max_scalar(0.0)
-    }
 }

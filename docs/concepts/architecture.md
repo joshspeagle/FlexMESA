@@ -80,6 +80,8 @@ Upstream MESA's `auto_diff` module uses preprocessor templates to generate fixed
 3. **Third-Order Two-Variable Hyperdual Numbers (`AutoDiffReal2VarOrder3` / `Hyperdual3`)**:
    Propagates all 10 partial derivatives up to third order ($\partial_\rho^{a} \partial_T^{b} F$ for $0 \le a + b \le 3$) of the specific Helmholtz free energy $F(\rho, T)$ in a single forward pass. Because pressure $P_{\mathrm{gas}} \propto \partial_\rho F$, entropy $s = -\partial_T F$, and specific heats/adiabatic indices ($c_V, c_P, \chi_\rho, \chi_T, \Gamma_1, \Gamma_3, \nabla_{\mathrm{ad}}$) depend on second derivatives of $F$, third-order hyperdual numbers yield exact first derivatives of all thermodynamic quantities ($\partial c_V / \partial T$, $\partial \Gamma_1 / \partial \rho$) with zero finite-difference truncation error.
 
+   Both higher-order types evaluate each operation with the expression of the MESA routine of the same name. Those expressions are generated from `auto_diff/private/auto_diff_real_2var_order2_module.f90` and `_order3_module.f90` by `scripts/autodiff/translate_mesa_dual.py`, which keeps upstream's temporaries and order of operations (`DECISIONS #54`).
+
 ---
 
 ## 3. Implicit Function Theorem Differentiation (`@jax.custom_vjp`)

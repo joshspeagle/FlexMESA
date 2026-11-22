@@ -26,9 +26,12 @@ pub mod kernels3;
 pub mod order1;
 mod order1_ops;
 pub mod order2;
+mod order2_gen;
 mod order2_ops;
 pub mod order3;
+mod order3_gen;
 mod order3_ops;
+mod support;
 
 pub use order1::DualOrder1;
 pub use order2::AutoDiffReal2VarOrder2;

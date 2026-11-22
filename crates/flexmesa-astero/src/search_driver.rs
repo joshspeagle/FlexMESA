@@ -111,6 +111,47 @@ impl AsteroTrackExtras<'_> {
         None
     }
 
+    /// `save_best_info` followed by `final_checks`
+    /// (`astero/private/extras_support.f90:491-529`).
+    fn save_best_and_final_checks(
+        &mut self,
+        model: &StarModel,
+        sample: &AsteroSampleResult,
+    ) -> ExtrasDirective {
+        if self
+            .best_sample
+            .as_ref()
+            .is_none_or(|b| sample.chi2 < b.chi2)
+        {
+            self.best_sample = Some(sample.clone());
+            self.bad_count = 0;
+        } else if let Some(best) = &self.best_sample {
+            if best.chi2 <= self.ctrl.chi2_search_limit1
+                && sample.chi2 >= self.ctrl.chi2_search_limit2
+            {
+                return ExtrasDirective::Terminate(String::from(
+                    "chi2_search_limit2",
+                ));
+            }
+            if sample.chi2 >= self.ctrl.chi2_relative_increase_limit * best.chi2
+            {
+                if let Some(reason) = self.check_too_many_bad() {
+                    return ExtrasDirective::Terminate(String::from(reason));
+                }
+            } else {
+                self.bad_count = 0;
+            }
+        }
+        // `final_checks` (`extras_support.f90:503-513`): the age stops come
+        // after the model's chi^2 has been saved. Upstream tests the
+        // `delta_nu` and constraint limits only once per model, before the
+        // chi^2 evaluation (`:211-212`), so they are not repeated here.
+        if let Some(reason) = self.final_age_stop(model) {
+            return ExtrasDirective::Terminate(String::from(reason));
+        }
+        ExtrasDirective::KeepGoing
+    }
+
     fn check_limits(
         &self,
         model: &StarModel,
@@ -239,6 +280,31 @@ impl StarExtras for AsteroTrackExtras<'_> {
         if let Some(reason) = self.check_limits(model, dnu_uhz) {
             return ExtrasDirective::Terminate(String::from(reason));
         }
+        // `chi2_seismo_fraction <= 0` (`extras_support.f90:266-280`): no
+        // frequencies are needed, and the model is scored and saved before,
+        // and without, the spectroscopic and `delta_nu` limits below.
+        if self.ctrl.weights.chi2_seismo_fraction <= 0.0 {
+            let sample = match eval_model_astero_sample(
+                model,
+                self.ctrl,
+                self.params,
+                self.sample_number,
+                self.case_dir,
+            ) {
+                Ok(s) => s,
+                Err(e) => {
+                    self.eval_error = Some(e);
+                    return ExtrasDirective::Terminate(String::from(
+                        "AsteroSampleEvalError",
+                    ));
+                }
+            };
+            if sample.chi2 < self.ctrl.chi2_radial_limit && !checking_age {
+                model.controls.max_years_for_timestep =
+                    self.ctrl.max_yrs_dt_when_warm;
+            }
+            return self.save_best_and_final_checks(model, &sample);
+        }
         if chi2_sp > self.ctrl.chi2_spectroscopic_limit
             || (self.ctrl.delta_nu > 0.0
                 && self.ctrl.delta_nu_sigma > 0.0
@@ -313,38 +379,7 @@ impl StarExtras for AsteroTrackExtras<'_> {
             };
             Self::set_max_years_dt(model, dt_hot);
         }
-        if self
-            .best_sample
-            .as_ref()
-            .is_none_or(|b| sample.chi2 < b.chi2)
-        {
-            self.best_sample = Some(sample.clone());
-            self.bad_count = 0;
-        } else if let Some(best) = &self.best_sample {
-            if best.chi2 <= self.ctrl.chi2_search_limit1
-                && sample.chi2 >= self.ctrl.chi2_search_limit2
-            {
-                return ExtrasDirective::Terminate(String::from(
-                    "chi2_search_limit2",
-                ));
-            }
-            if sample.chi2 >= self.ctrl.chi2_relative_increase_limit * best.chi2
-            {
-                if let Some(reason) = self.check_too_many_bad() {
-                    return ExtrasDirective::Terminate(String::from(reason));
-                }
-            } else {
-                self.bad_count = 0;
-            }
-        }
-        // `final_checks` (`extras_support.f90:503-513`): the age stops come
-        // after the model's chi^2 has been saved. Upstream tests the
-        // `delta_nu` and constraint limits only once per model, before the
-        // chi^2 evaluation (`:211-212`), so they are not repeated here.
-        if let Some(reason) = self.final_age_stop(model) {
-            return ExtrasDirective::Terminate(String::from(reason));
-        }
-        ExtrasDirective::KeepGoing
+        self.save_best_and_final_checks(model, &sample)
     }
 }
 

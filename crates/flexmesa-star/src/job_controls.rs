@@ -568,10 +568,23 @@ pub struct StarJobControls {
     pub save_model_filename: String,
     /// Model number at which to save a `.mod` file (`save_model_number`, `< 0` disables).
     pub save_model_number: isize,
-    /// Whether to save a `.photo` restart file on termination (`save_photo_when_terminate`).
+    /// Whether to save a `.photo` restart file on normal termination when
+    /// `required_termination_code_string` is satisfied
+    /// (`save_photo_when_terminate`, `.true.` default,
+    /// `star/defaults/star_job.defaults:270`,
+    /// `star/job/run_star_support.f90:789-790`).
     pub save_photo_when_terminate: bool,
-    /// Output `.photo` filename on termination (`save_photo_filename`).
+    /// Optional explicit output `.photo` filename; when empty, writes
+    /// `<photo_directory>/<get_name_for_restart_file(model_number, photo_digits)>`
+    /// (`save_photo_filename`, `''` default,
+    /// `star/defaults/star_job_dev.defaults:118`,
+    /// `star/public/star_lib.f90:492-502`).
     pub save_photo_filename: String,
+    /// Specific model number at which to save a `.photo` checkpoint
+    /// (`save_photo_number`, `-1` default = disabled,
+    /// `star/defaults/star_job_dev.defaults:117`,
+    /// `star/job/run_star_support.f90:1276-1281`).
+    pub save_photo_number: isize,
     /// Whether to export pulsation data on termination (`save_pulse_data_when_terminate`).
     pub save_pulse_data_when_terminate: bool,
     /// Output pulsation filename on termination (`save_pulse_data_filename`).
@@ -783,6 +796,7 @@ impl Default for StarJobControls {
             save_model_number: -111,
             save_photo_when_terminate: true,
             save_photo_filename: String::new(),
+            save_photo_number: -1,
             save_pulse_data_when_terminate: false,
             save_pulse_data_filename: String::from("undefined"),
             pulse_data_format: String::from("FGONG"),

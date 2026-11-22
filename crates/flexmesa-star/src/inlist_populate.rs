@@ -226,6 +226,20 @@ impl InlistBundle {
             h_he_net, co_net, adv_net,
             history_columns_file, profile_columns_file, filename_for_profile_when_terminate,
         ]);
+        if let Some(list) = sj.indexed.get("required_termination_code_string") {
+            for (sub, _) in list {
+                let idx = sub.trim().parse::<usize>().map_err(|_| {
+                    StarError::InvalidInput(format!(
+                        "invalid subscript '({sub})' for '&star_job::required_termination_code_string'"
+                    ))
+                })?;
+                if idx == 0 || idx > 9 {
+                    return Err(StarError::InvalidInput(format!(
+                        "subscript '({idx})' out of 1-based bounds (1..=9) for '&star_job::required_termination_code_string'"
+                    )));
+                }
+            }
+        }
         let codes = sj.try_get_indexed_strings(
             "star_job",
             "required_termination_code_string",
@@ -237,6 +251,13 @@ impl InlistBundle {
             j.saved_model_name = s.to_string();
         }
         sj.try_isize_into("star_job", &mut j.save_model_number, "save_model_number")?;
+        sj.try_isize_into("star_job", &mut j.save_photo_number, "save_photo_number")?;
+        // Type-check `&star_job` terminal/timing keys accepted under `DECISIONS #26`
+        // (`star/job/run_star_support.f90:527-538,875-878`,
+        // `star/job/other_extras.f90:38-204`).
+        let _ = sj.try_get_bool("star_job", "pause_before_terminate")?;
+        let _ = sj.try_get_i64("star_job", "first_model_for_timing")?;
+        let _ = sj.try_get_bool("star_job", "warn_run_star_extras")?;
         if let Some(b) = sj.try_any_bool("star_job", &["change_net", "change_initial_net"])? {
             j.change_net = b;
         }
@@ -614,6 +635,7 @@ impl InlistBundle {
             ctrl,
             o,
             [
+                photo_directory,
                 log_directory,
                 star_history_name,
                 star_history_header_name,
@@ -661,6 +683,7 @@ impl InlistBundle {
                 max_q_for_dt_div_min_dr_div_cs_limit,
                 min_abs_u_div_cs_for_dt_div_min_dr_div_cs_limit,
                 min_abs_du_div_cs_for_dt_div_min_dr_div_cs_limit,
+                warn_when_large_rel_run_e_err,
             ]
         );
         ctrl.try_usize_into(
@@ -669,6 +692,29 @@ impl InlistBundle {
             "min_k_for_dt_div_min_dr_div_cs_limit",
             1,
         )?;
+        ctrl.try_isize_into(
+            "controls",
+            &mut o.photo_interval,
+            "photo_interval",
+        )?;
+        ctrl.try_usize_into(
+            "controls",
+            &mut o.photo_digits,
+            "photo_digits",
+            1,
+        )?;
+        if o.photo_digits > 18 {
+            return Err(StarError::InvalidInput(format!(
+                "'&controls::photo_digits' must be in 1..=18, got {}",
+                o.photo_digits
+            )));
+        }
+        // Type-check `&controls` terminal-output keys accepted under `DECISIONS #26`
+        // (`star/private/do_one_utils.f90:120-131,234-245`,
+        // `star/private/star_solver.f90:194,615-617`, `star/private/rsp_step.f90:216`).
+        let _ = ctrl.try_get_str("controls", "extra_terminal_output_file")?;
+        let _ = ctrl.try_get_bool("controls", "report_solver_progress")?;
+        let _ = ctrl.try_get_f64("controls", "warning_limit_for_max_residual")?;
         ctrl.try_usize_into(
             "controls",
             &mut o.history_interval,

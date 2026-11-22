@@ -21,7 +21,7 @@
         "verified_total": 4971,
         "pct_ported": 35.1,
         "pct_verified": 4.1,
-        "rust_lines": 87496,
+        "rust_lines": 87606,
         "python_jax_lines": 3869
       },
       {
@@ -106,7 +106,7 @@
         "verified_total": 0,
         "pct_ported": 0.0,
         "pct_verified": 0.0,
-        "rust_lines": 4990,
+        "rust_lines": 6992,
         "python_jax_lines": 3359
       },
       {
@@ -123,7 +123,7 @@
         "verified_total": 0,
         "pct_ported": 0.0,
         "pct_verified": 0.0,
-        "rust_lines": 10413,
+        "rust_lines": 10668,
         "python_jax_lines": 728
       },
       {
@@ -140,7 +140,7 @@
         "verified_total": 0,
         "pct_ported": 0.0,
         "pct_verified": 0.0,
-        "rust_lines": 3469,
+        "rust_lines": 4102,
         "python_jax_lines": 1478
       },
       {
@@ -664,8 +664,8 @@
       }
     ],
     "gaps_by_issue": {
-      "#161": 25,
-      "#299": 21,
+      "#161": 24,
+      "#299": 22,
       "#154": 13,
       "#157": 9,
       "#162": 9,
@@ -693,12 +693,12 @@
     {
       "namelist": "star &star_job",
       "upstream_scalars": 455,
-      "matched_in_flexmesa": 95,
-      "defaults_agree": 95,
+      "matched_in_flexmesa": 96,
+      "defaults_agree": 96,
       "value_mismatch": 0,
       "disabled_limit_none": 0,
       "skipped_unparseable_rust": 1,
-      "unimplemented": 359
+      "unimplemented": 358
     },
     {
       "namelist": "binary &binary_controls + &binary_job",
@@ -2765,6 +2765,19 @@
     {
       "date_utc": "2026-11-22",
       "commit": "f0b9899",
+      "event": "main merge",
+      "engine_ported_pct": "30.7",
+      "all_verified_pct": "1.0",
+      "cases_passing": "0",
+      "rust_cov_pct": "75.8",
+      "python_cov_pct": "87.6",
+      "closed_140": "16",
+      "total_140": "36",
+      "deferred_169": "45"
+    },
+    {
+      "date_utc": "2026-11-22",
+      "commit": "17ce9c2",
       "event": "main merge",
       "engine_ported_pct": "30.7",
       "all_verified_pct": "1.0",

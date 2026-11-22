@@ -496,7 +496,7 @@ reason = "White-dwarf cooling with phase separation and full-net diffusion reach
 suite = "star"
 case = "wd_diffusion"
 issue = "#152"
-reason = "White-dwarf element diffusion reaches upstream Teff_lower_limit (148 steps vs MESA 153, 2 retries matching MESA 2, rel_star_age -0.331%, first diverging step 1423) in diagnostic mode with 2 ignored controls (photo_interval, required_termination_code_string) pending remaining solver/diffusion parity (#152, #156, #299)."
+reason = "White-dwarf element diffusion reaches upstream Teff_lower_limit (149 steps vs MESA 153, 2 retries matching MESA 2, rel_star_age -0.006%, first diverging step 1423) in diagnostic mode with 2 ignored controls (photo_interval, required_termination_code_string) pending remaining solver/diffusion parity (#152, #156, #299)."
 
 [[gaps]]
 suite = "star"

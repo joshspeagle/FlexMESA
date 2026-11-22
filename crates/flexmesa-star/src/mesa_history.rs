@@ -364,6 +364,12 @@ const SUPPORTED_SCALAR_COLUMNS: &[&str] = &[
     "center_Rho",
     "center_P",
     "total_entropy",
+    "total_internal_energy_after_adjust_mass",
+    "total_gravitational_energy_after_adjust_mass",
+    "total_radial_kinetic_energy_after_adjust_mass",
+    "total_rotational_kinetic_energy_after_adjust_mass",
+    "total_turbulent_energy_after_adjust_mass",
+    "total_energy_after_adjust_mass",
     "total_internal_energy",
     "total_gravitational_energy",
     "total_radial_kinetic_energy",
@@ -385,9 +391,19 @@ const SUPPORTED_SCALAR_COLUMNS: &[&str] = &[
     "log_avg_abs_v",
     "max_abs_v",
     "log_max_abs_v",
+    "total_eps_grav",
+    "work_outward_at_surface",
+    "work_inward_at_center",
+    "total_nuclear_heating",
+    "total_non_nuc_neu_cooling",
+    "total_irradiation_heating",
+    "total_WD_sedimentation_heating",
+    "total_extra_heating",
+    "total_energy_sources_and_sinks",
     "error_in_energy_conservation",
     "rel_error_in_energy_conservation",
     "log_rel_error_in_energy_conservation",
+    "tot_E_equ_err",
     "tot_E_err",
     "rel_E_err",
     "abs_rel_E_err",
@@ -1734,6 +1750,28 @@ fn eval_scalar_column(
         "total_entropy" => MesaCellValue::Float(
             (0..nz).map(|k| model.dm[k] * model.entropy[k]).sum(),
         ),
+        "total_internal_energy_after_adjust_mass" => {
+            MesaCellValue::Float(sh.total_internal_energy_after_adjust_mass)
+        }
+        "total_gravitational_energy_after_adjust_mass" => MesaCellValue::Float(
+            sh.total_gravitational_energy_after_adjust_mass,
+        ),
+        "total_radial_kinetic_energy_after_adjust_mass" => {
+            MesaCellValue::Float(
+                sh.total_radial_kinetic_energy_after_adjust_mass,
+            )
+        }
+        "total_rotational_kinetic_energy_after_adjust_mass" => {
+            MesaCellValue::Float(
+                sh.total_rotational_kinetic_energy_after_adjust_mass,
+            )
+        }
+        "total_turbulent_energy_after_adjust_mass" => {
+            MesaCellValue::Float(sh.total_turbulent_energy_after_adjust_mass)
+        }
+        "total_energy_after_adjust_mass" => {
+            MesaCellValue::Float(sh.total_energy_after_adjust_mass)
+        }
         "total_internal_energy" | "tot_IE" => {
             MesaCellValue::Float(ctx.energies_erg.0)
         }
@@ -1770,6 +1808,35 @@ fn eval_scalar_column(
             MesaCellValue::Float(safe_log10(e_end.abs()))
         }
 
+        "total_eps_grav" => MesaCellValue::Float(sh.total_eps_grav),
+        "work_outward_at_surface" => {
+            MesaCellValue::Float(sh.work_outward_at_surface)
+        }
+        "work_inward_at_center" => {
+            MesaCellValue::Float(sh.work_inward_at_center)
+        }
+        "total_nuclear_heating" => {
+            MesaCellValue::Float(sh.total_nuclear_heating)
+        }
+        "total_non_nuc_neu_cooling" => {
+            MesaCellValue::Float(sh.total_non_nuc_neu_cooling)
+        }
+        "total_irradiation_heating" => {
+            MesaCellValue::Float(sh.total_irradiation_heating)
+        }
+        "total_WD_sedimentation_heating" => MesaCellValue::Float(
+            if model.controls.do_element_diffusion {
+                sh.total_wd_sedimentation_heating
+            } else {
+                0.0
+            },
+        ),
+        "total_extra_heating" => MesaCellValue::Float(sh.total_extra_heating),
+        "total_energy_sources_and_sinks" => {
+            MesaCellValue::Float(sh.total_energy_sources_and_sinks)
+        }
+        "tot_E_equ_err" => MesaCellValue::Float(sh.tot_e_equ_err),
+
         "error_in_energy_conservation" | "tot_E_err" => {
             MesaCellValue::Float(sh.error_in_energy_conservation)
         }
@@ -1785,17 +1852,13 @@ fn eval_scalar_column(
         } else {
             (sh.error_in_energy_conservation / e_end).abs()
         }),
-        "log_rel_error_in_energy_conservation" => {
-            MesaCellValue::Float(safe_log10(
-                (sh.error_in_energy_conservation / e_end.abs().max(1.0e-99))
-                    .abs(),
-            ))
+        "log_rel_error_in_energy_conservation" | "log_rel_E_err" => {
+            MesaCellValue::Float(if e_end == 0.0 {
+                0.0
+            } else {
+                safe_log10((sh.error_in_energy_conservation / e_end).abs())
+            })
         }
-        "log_rel_E_err" => MesaCellValue::Float(if e_end == 0.0 {
-            0.0
-        } else {
-            safe_log10((sh.error_in_energy_conservation / e_end).abs())
-        }),
         "cumulative_energy_error" => {
             MesaCellValue::Float(model.aux.cumulative_energy_error)
         }
@@ -2562,21 +2625,29 @@ fn eval_scalar_column(
         }
         // `star/private/evolve.f90:1173-1174` & `history.f90:1875-1880`.
         "virial_thm_P_avg" => {
-            let virial: f64 = (0..nz)
-                .map(|k| {
-                    3.0 * model.dm[k] * model.peos[k]
-                        / model.rho[k].max(1.0e-99)
-                })
-                .sum();
+            let virial = if sh.virial_thm_p_avg == 0.0 {
+                (0..nz)
+                    .map(|k| {
+                        3.0 * model.dm[k] * model.peos[k]
+                            / model.rho[k].max(1.0e-99)
+                    })
+                    .sum()
+            } else {
+                sh.virial_thm_p_avg
+            };
             MesaCellValue::Float(virial)
         }
         "virial_thm_rel_err" => {
-            let virial: f64 = (0..nz)
-                .map(|k| {
-                    3.0 * model.dm[k] * model.peos[k]
-                        / model.rho[k].max(1.0e-99)
-                })
-                .sum();
+            let virial = if sh.virial_thm_p_avg == 0.0 {
+                (0..nz)
+                    .map(|k| {
+                        3.0 * model.dm[k] * model.peos[k]
+                            / model.rho[k].max(1.0e-99)
+                    })
+                    .sum()
+            } else {
+                sh.virial_thm_p_avg
+            };
             MesaCellValue::Float(if virial == 0.0 {
                 0.0
             } else {

@@ -540,6 +540,7 @@ pub fn do_struct_burn_mix(
     if op_split_burn {
         apply_burn_avg_epsnuc(model);
     }
+    model.aux.step_hist.used_op_split_burn = op_split_burn;
     model.controls.op_split_burn = saved_op_split;
     final_res?;
 

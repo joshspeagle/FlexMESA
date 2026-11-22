@@ -420,11 +420,20 @@ pub(crate) fn timestep_controller_with_extras(
             match check_mass_mdot_courant_and_energy(model, skip_hard_limit) {
                 Ok(t) => t,
                 Err(m) => {
-                    return retry_rep(
-                        m,
-                        dt_done,
-                        TimestepLimitReason::CourantOrCollapse,
-                    );
+                    let why = if m
+                        == "hard_limit_for_rel_error_in_energy_conservation"
+                    {
+                        TimestepLimitReason::EnergyConservation
+                    } else if m == "delta_lg_star_mass_hard_limit"
+                        || m == "delta_mdot_hard_limit"
+                    {
+                        TimestepLimitReason::MassChange
+                    } else if m == "check_adjust_J_q" {
+                        TimestepLimitReason::StructuralChange
+                    } else {
+                        TimestepLimitReason::CourantOrCollapse
+                    };
+                    return retry_rep(m, dt_done, why);
                 }
             };
         let r_burn =

@@ -211,7 +211,10 @@ pub fn do1_riemann_momentum_eqn(
     sys.save_eqn_residual(&model.layout, k, model.layout.i_dv_dt, &resid);
 }
 
-fn eval1_work_u_flag_ad(model: &StarModel, f_idx: usize) -> StarAdOrder1 {
+pub(crate) fn eval1_work_u_flag_ad(
+    model: &StarModel,
+    f_idx: usize,
+) -> StarAdOrder1 {
     if f_idx >= model.nz {
         let p_in = model.peos_start.last().copied().unwrap_or(0.0);
         return StarAdOrder1::constant(

@@ -355,6 +355,8 @@ impl Default for StarControls {
             iwind_lambda: 1.0,
             min_chem_eqn_scale: 1.0,
             dedt_eqn_r_scale: 1.0e8,
+            include_rotation_in_total_energy: false,
+            absolute_cumulative_energy_err: true,
             mix_wind: crate::controls_mix_wind::MixWindControls::default(),
             ts_stop:
                 crate::controls_timestep_stop::TimestepStopControls::default(),

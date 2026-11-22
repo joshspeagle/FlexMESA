@@ -6,102 +6,218 @@
 //! `star/private/evolve.f90:605-665,1101-1373,1646-1681` and
 //! `star/private/star_utils.f90:2452-2612`.
 
-use flexmesa_const::MixingType;
+use flexmesa_const::{LN10, MixingType};
 use flexmesa_turb::MltOption;
 
-use crate::controls::{EnergyEqnOption, StarError};
+use crate::cell_energy::{
+    cell_rsp2_eturb, cell_specific_ke, cell_specific_pe,
+    cell_specific_rotational_energy, cell_specific_total_energy,
+};
+use crate::controls::StarError;
 use crate::conv_premix::do_conv_premix;
 use crate::element_diffusion::{
     do_element_diffusion_step, finish_element_diffusion,
 };
-use crate::hydro_energy::{
-    setup_d_turbulent_energy_dt, setup_dl_dm, setup_sources_and_others,
-};
 use crate::hydro_vars::set_hydro_vars;
-use crate::hydro_work::{
-    eval_cell_dpe_dt_ad, eval_v_flag_dke_dt_ad, eval_v_flag_dwork_dm_ad,
-    eval_v_flag_simple_pdv_dm_ad,
-};
 use crate::mesh_adjust::{MeshFunctionConfig, do_adjust_mesh};
 use crate::model::StarModel;
 use crate::phase_separation::do_phase_separation_step;
 use crate::primary_state::PrimaryStateBuffer;
-use crate::riemann_ad::eval_u_flag_total_energy_rates_ad;
 use crate::rotation::conserve_shell_j_rot_and_distortion;
+
+/// Evaluates `eval_deltaM_total_energy_integrals`
+/// (`star/private/star_utils.f90:2439-2522`) over zero-based zones
+/// `klo..khi` up to mass `delta_m` ($\mathrm{g}$), returning
+/// `(profile, (e_int, e_grav, e_kin, e_rot, e_turb, e_tot))` in $\mathrm{erg}$.
+///
+/// Uses [`crate::cell_energy::cell_specific_pe`] and
+/// [`crate::cell_energy::cell_specific_ke`] (`real(qp)` arithmetic via
+/// [`flexmesa_math::Quad`]) and matches upstream's exact addition order and
+/// `include_rotation_in_total_energy`, `RSP2`, `TDC`, and `RSP` rules.
+#[must_use]
+pub fn eval_delta_m_total_energy_integrals(
+    model: &StarModel,
+    klo: usize,
+    khi: usize,
+    delta_m: f64,
+    save_profile: bool,
+) -> (Vec<f64>, (f64, f64, f64, f64, f64, f64)) {
+    let nz = model.nz;
+    let mut profile = if save_profile {
+        vec![0.0_f64; nz]
+    } else {
+        Vec::new()
+    };
+    let (
+        mut total_internal_energy,
+        mut total_gravitational_energy,
+        mut total_radial_kinetic_energy,
+        mut total_rotational_kinetic_energy,
+        mut total_turbulent_energy,
+    ) = (0.0_f64, 0.0_f64, 0.0_f64, 0.0_f64, 0.0_f64);
+
+    if khi > nz || klo >= khi {
+        return (profile, (0.0, 0.0, 0.0, 0.0, 0.0, 0.0));
+    }
+
+    let tdc_turb = model.controls.mlt_option == MltOption::Tdc
+        && model.controls.tdc_include_eturb_in_energy_equation;
+
+    // Matches `star/private/star_utils.f90:2467-2514` verbatim (upstream tests
+    // `sum_dm` against `deltaM` and clips `dm` if `sum_dm + dm > deltaM`
+    // without incrementing `sum_dm`).
+    let sum_dm = 0.0_f64;
+    for k in klo..khi {
+        if sum_dm >= delta_m {
+            break;
+        }
+        let mut cell_total = 0.0_f64;
+        let mut dm = model.dm[k];
+        if sum_dm + dm > delta_m {
+            dm = delta_m - sum_dm;
+        }
+        let mut cell1 = dm * model.energy[k];
+        cell_total += cell1;
+        total_internal_energy += cell1;
+
+        if model.controls.v_flag || model.controls.u_flag {
+            cell1 = dm * cell_specific_ke(model, k);
+            cell_total += cell1;
+            total_radial_kinetic_energy += cell1;
+        }
+
+        cell1 = dm * cell_specific_pe(model, k);
+        cell_total += cell1;
+        total_gravitational_energy += cell1;
+
+        if model.controls.rotation_flag {
+            cell1 = dm * cell_specific_rotational_energy(model, k);
+            total_rotational_kinetic_energy += cell1;
+            if model.controls.include_rotation_in_total_energy {
+                cell_total += cell1;
+            }
+        }
+
+        if model.controls.rsp2_flag {
+            cell1 = dm * cell_rsp2_eturb(model, k);
+            cell_total += cell1;
+            total_turbulent_energy += cell1;
+        } else if tdc_turb {
+            let vc_00 = model.mlt_vc.get(k).copied().unwrap_or(0.0);
+            let tdc_eturb_cell = if k + 1 < nz {
+                let vc_p1 = model.mlt_vc.get(k + 1).copied().unwrap_or(0.0);
+                0.75 * (flexmesa_math::pow2(vc_00) + flexmesa_math::pow2(vc_p1))
+            } else {
+                0.75 * flexmesa_math::pow2(vc_00)
+            };
+            cell1 = dm * tdc_eturb_cell;
+            cell_total += cell1;
+            total_turbulent_energy += cell1;
+        }
+
+        if model.controls.rsp_flag {
+            cell1 = dm * model.aux.rsp.et_rsp.get(k).copied().unwrap_or(0.0);
+            cell_total += cell1;
+            total_turbulent_energy += cell1;
+        }
+
+        if save_profile {
+            profile[k] = cell_total;
+        }
+    }
+
+    let mut sum_total = total_internal_energy
+        + total_gravitational_energy
+        + total_radial_kinetic_energy
+        + total_turbulent_energy;
+    if model.controls.include_rotation_in_total_energy {
+        sum_total += total_rotational_kinetic_energy;
+    }
+
+    (
+        profile,
+        (
+            total_internal_energy,
+            total_gravitational_energy,
+            total_radial_kinetic_energy,
+            total_rotational_kinetic_energy,
+            total_turbulent_energy,
+            sum_total,
+        ),
+    )
+}
 
 /// Evaluates domain-integrated `(e_int, e_grav, e_kin, e_rot, e_turb, e_tot)`
 /// in $\mathrm{erg}$ (`eval_total_energy_integrals` in
-/// `star/private/star_utils.f90:2452-2612`).
+/// `star/private/star_utils.f90:2582-2599`).
 #[must_use]
 pub fn eval_total_energy_integrals(
     model: &StarModel,
 ) -> (f64, f64, f64, f64, f64, f64) {
-    let nz = model.nz;
-    let (mut e_int, mut e_grav, mut e_kin, mut e_rot, mut e_turb) =
-        (0.0_f64, 0.0_f64, 0.0_f64, 0.0_f64, 0.0_f64);
-    let use_mc = model.controls.use_mass_corrections;
-    let tdc_turb = model.controls.mlt_option == MltOption::Tdc
-        && model.controls.tdc_include_eturb_in_energy_equation;
+    eval_delta_m_total_energy_integrals(model, 0, model.nz, model.mstar, false)
+        .1
+}
 
-    for k in 0..nz {
-        let dm = model.dm[k];
-        let mc = if use_mc {
-            model.aux.mass_correction.get(k).copied().unwrap_or(1.0)
-        } else {
-            1.0
-        };
-        e_int += dm * model.energy[k];
-        let grav_00 = -model.cgrav[k] * model.m_grav[k] / model.r[k].max(1.0);
-        let grav_p1 = if k + 1 < nz {
-            -model.cgrav[k + 1] * model.m_grav[k + 1] / model.r[k + 1].max(1.0)
-        } else if model.r_center > 0.0 {
-            -model.cgrav[nz - 1] * model.m_center / model.r_center
-        } else {
-            0.0
-        };
-        e_grav += dm * 0.5 * mc * (grav_00 + grav_p1);
-        if model.controls.u_flag {
-            e_kin += dm * 0.5 * mc * model.u[k] * model.u[k];
-        } else if model.controls.v_flag {
-            let v_p1 = if k + 1 < nz {
-                model.v[k + 1]
-            } else {
-                model.v_center
-            };
-            e_kin += dm * 0.25 * mc * (model.v[k] * model.v[k] + v_p1 * v_p1);
-        }
-        if model.controls.rotation_flag {
-            let i_rot = model.aux.i_rot.get(k).copied().unwrap_or(0.0);
-            let omega = model.omega.get(k).copied().unwrap_or(0.0);
-            e_rot += dm * 0.5 * i_rot * omega * omega;
-        }
-        if model.controls.rsp2_flag {
-            let et_k = if model.layout.i_w.is_some() {
-                model.aux.rsp.et_rsp.get(k).copied().unwrap_or(0.0)
-            } else {
-                model.aux.etrb.get(k).copied().unwrap_or(0.0)
-            };
-            e_turb += dm * et_k.max(0.0);
-        } else if tdc_turb {
-            let vc_00 = model.mlt_vc.get(k).copied().unwrap_or(0.0);
-            let vc_p1 = if k + 1 < nz {
-                model.mlt_vc.get(k + 1).copied().unwrap_or(0.0)
-            } else {
-                0.0
-            };
-            e_turb += dm * 0.75 * (vc_00 * vc_00 + vc_p1 * vc_p1);
-        } else if model.controls.rsp_flag {
-            e_turb += dm * model.aux.rsp.et_rsp.get(k).copied().unwrap_or(0.0);
-        }
+/// Captures beginning-of-Phase-1 (post-remesh) total-energy integrals,
+/// surface cell specific total energy, and initial-model energy integrals,
+/// while zeroing per-attempt energy accumulators
+/// (`do_step_part1` in `star/private/evolve.f90:430-453`).
+pub fn record_start_of_step_energy_integrals(model: &mut StarModel) {
+    let (e_int, e_grav, e_kin, e_rot, e_turb, e_tot) =
+        eval_total_energy_integrals(model);
+    let surf_e = if model.nz > 0 {
+        cell_specific_total_energy(model, 0)
+    } else {
+        0.0
+    };
+    model.aux.total_energy = e_tot;
+    model.aux.non_epsnuc_energy_change_from_split_burn = 0.0;
+    let sh = &mut model.aux.step_hist;
+    sh.total_internal_energy_old = e_int;
+    sh.total_gravitational_energy_old = e_grav;
+    sh.total_radial_kinetic_energy_old = e_kin;
+    sh.total_rotational_kinetic_energy_old = e_rot;
+    sh.total_turbulent_energy_old = e_turb;
+    sh.total_energy_old = e_tot;
+    sh.surface_cell_specific_total_energy_old = surf_e;
+    if !sh.have_initial_energy_integrals {
+        sh.total_internal_energy_initial = e_int;
+        sh.total_gravitational_energy_initial = e_grav;
+        sh.total_radial_kinetic_energy_initial = e_kin;
+        sh.total_rotational_kinetic_energy_initial = e_rot;
+        sh.total_turbulent_energy_initial = e_turb;
+        sh.total_energy_initial = e_tot;
+        sh.have_initial_energy_integrals = true;
     }
-    (
-        e_int,
-        e_grav,
-        e_kin,
-        e_rot,
-        e_turb,
-        e_int + e_grav + e_kin + e_turb,
-    )
+    sh.total_energy_before_adjust_mass = 0.0;
+    sh.total_internal_energy_after_adjust_mass = 0.0;
+    sh.total_gravitational_energy_after_adjust_mass = 0.0;
+    sh.total_radial_kinetic_energy_after_adjust_mass = 0.0;
+    sh.total_rotational_kinetic_energy_after_adjust_mass = 0.0;
+    sh.total_turbulent_energy_after_adjust_mass = 0.0;
+    sh.total_energy_after_adjust_mass = 0.0;
+    sh.energy_change_from_do_adjust_mass_and_calculate_eps_mdot = 0.0;
+    sh.mdot_acoustic_surface = 0.0;
+    sh.mdot_adiabatic_surface = 0.0;
+    sh.work_outward_at_surface = 0.0;
+    sh.work_inward_at_center = 0.0;
+    sh.tot_e_equ_err = 0.0;
+    sh.used_op_split_burn = false;
+}
+
+/// Captures beginning-of-Phase-2 total-energy integrals after Phase 1
+/// operator-split updates (`save_start_values` in
+/// `star/private/struct_burn_mix.f90:348-354`).
+pub fn record_phase2_start_energy_integrals(model: &mut StarModel) {
+    let (e_int, e_grav, e_kin, e_rot, e_turb, e_tot) =
+        eval_total_energy_integrals(model);
+    model.aux.total_internal_energy_start = e_int;
+    let sh = &mut model.aux.step_hist;
+    sh.total_gravitational_energy_start = e_grav;
+    sh.total_radial_kinetic_energy_start = e_kin;
+    sh.total_rotational_kinetic_energy_start = e_rot;
+    sh.total_turbulent_energy_start = e_turb;
+    sh.total_energy_start = e_tot;
 }
 
 /// Applies pre-solver operator-split physics (`do_conv_premix`,
@@ -259,79 +375,235 @@ pub fn apply_step_pre_physics_with_extras(
     Ok(())
 }
 
-/// Evaluates end-of-step total energy integrals and updates
-/// `error_in_energy_conservation` and `cumulative_energy_error`
-/// (`okay_energy_conservation` in `star/private/evolve.f90:1101-1373`).
+/// Evaluates end-of-step total-energy integrals and updates
+/// `error_in_energy_conservation` and `cumulative_energy_error` for both
+/// `dedt` and `eps_grav` energy formulations (`okay_energy_conservation` in
+/// `star/private/evolve.f90:1101-1373`).
+///
+/// Computes the global total-energy balance:
+/// $$\Delta E_{\mathrm{err}} = E_{\mathrm{end}} - \left(E_{\mathrm{old}} + S_{\mathrm{phase1}} + S_{\mathrm{phase2}}\right)$$
+/// across Phase 1 operator-split updates (`adjust_mass`, `conv_premix`,
+/// `phase_separation`, `element_diffusion`, `op_split_burn`) and Phase 2
+/// solver sources, sinks, radiation, and surface/center mechanical work.
 pub fn update_step_energy_conservation(model: &mut StarModel, dt: f64) {
-    if model.controls.rsp_flag || model.controls.rsp2_flag {
+    if model.controls.rsp_flag {
         return;
     }
-    let (_, _, _, _, _, e_tot) = eval_total_energy_integrals(model);
-    model.aux.total_energy = e_tot;
-    model.aux.step_hist.total_energy_end = e_tot;
+    let nz = model.nz;
+    let (e_int, e_grav, e_kin, e_rot, e_turb, e_end) =
+        eval_total_energy_integrals(model);
 
-    if model.controls.energy_eqn_option == EnergyEqnOption::EpsGrav || dt <= 0.0
-    {
+    model.aux.total_energy = e_end;
+    model.aux.step_hist.total_internal_energy_end = e_int;
+    model.aux.step_hist.total_gravitational_energy_end = e_grav;
+    model.aux.step_hist.total_radial_kinetic_energy_end = e_kin;
+    model.aux.step_hist.total_rotational_kinetic_energy_end = e_rot;
+    model.aux.step_hist.total_turbulent_energy_end = e_turb;
+    model.aux.step_hist.total_energy_end = e_end;
+
+    if dt <= 0.0 || nz == 0 {
+        model.aux.step_hist.total_energy_sources_and_sinks = 0.0;
         model.aux.step_hist.error_in_energy_conservation = 0.0;
         model.aux.cumulative_energy_error =
             model.aux.step_hist.cumulative_energy_error_old;
         return;
     }
 
-    let nz = model.nz;
-    let v_flag_only = model.controls.v_flag && !model.controls.u_flag;
-    let u_flag_only = model.controls.u_flag && !model.controls.v_flag;
-    let vel_tc = model.controls.is_velocity_time_centered(model.model_number)
-        && model.dt > 0.0
-        && !model.ln_r_start.is_empty();
-    let simple_pdv = vel_tc
-        && model
-            .controls
-            .use_p_d_1_div_rho_form_of_work_when_time_centering_velocity;
+    let dot_dm = |vals: &[f64]| -> f64 {
+        let mut s = 0.0_f64;
+        for k in 0..nz {
+            s += model.dm[k] * vals.get(k).copied().unwrap_or(0.0);
+        }
+        s
+    };
 
-    let mut err_erg = 0.0_f64;
-    for k in 0..nz {
-        let dl_dm = setup_dl_dm(model, k).val;
-        let sources = setup_sources_and_others(model, k).0.val;
-        let d_eturb_dt = setup_d_turbulent_energy_dt(model, k).val;
-        let e_start_k = model
-            .energy_start
-            .get(k)
-            .copied()
-            .unwrap_or(model.energy[k]);
-
-        let d_mech_int_dt = if u_flag_only {
-            eval_u_flag_total_energy_rates_ad(model, k, dt).val
-        } else if v_flag_only {
-            let de_dt = (model.energy[k] - e_start_k) / dt;
-            if simple_pdv {
-                eval_v_flag_simple_pdv_dm_ad(model, k, false, vel_tc).0.val
-                    + de_dt
-            } else {
-                eval_v_flag_dwork_dm_ad(model, k, false, vel_tc).0.val
-                    + eval_v_flag_dke_dt_ad(model, k, dt).val
-                    + eval_cell_dpe_dt_ad(model, k, dt).val
-                    + de_dt
-            }
+    // `evolve.f90:1164-1171`
+    let (total_energy_change_from_mdot, total_eps_mdot) =
+        if model.mstar_dot == 0.0 {
+            (0.0, 0.0)
         } else {
-            let de_dt = (model.energy[k] - e_start_k) / dt;
-            if simple_pdv {
-                eval_v_flag_simple_pdv_dm_ad(model, k, false, vel_tc).0.val
-                    + de_dt
-            } else {
-                eval_v_flag_dwork_dm_ad(model, k, false, vel_tc).0.val
-                    + eval_cell_dpe_dt_ad(model, k, dt).val
-                    + de_dt
-            }
+            (
+                model.mstar_dot
+                    * dt
+                    * model.aux.step_hist.surface_cell_specific_total_energy_old,
+                dt * dot_dm(&model.eps_mdot),
+            )
         };
 
-        err_erg +=
-            dt * model.dm[k] * (d_mech_int_dt + d_eturb_dt + dl_dm - sources);
+    // `evolve.f90:1173-1174`
+    let mut virial = 0.0_f64;
+    for k in 0..nz {
+        virial += model.dm[k] * model.peos[k] / model.rho[k];
     }
+    let virial_thm_p_avg = 3.0 * virial;
 
-    model.aux.step_hist.error_in_energy_conservation = err_erg;
-    model.aux.cumulative_energy_error =
-        model.aux.step_hist.cumulative_energy_error_old + err_erg;
+    // `evolve.f90:1176-1181`
+    let total_eps_grav = if model.controls.u_flag {
+        0.0
+    } else {
+        let mut s = 0.0_f64;
+        for k in 0..nz {
+            s += model.dm[k] * model.eps_grav_ad[k].val;
+        }
+        dt * s
+    };
+
+    // `evolve.f90:1220-1235`
+    let using_op_split_burn =
+        model.controls.op_split_burn || model.aux.step_hist.used_op_split_burn;
+    let total_nuclear_heating = if model.controls.eps_nuc_factor == 0.0
+        || model.controls.nonlocal_nico_decay_heat
+    {
+        0.0
+    } else if using_op_split_burn {
+        let mut sum = 0.0_f64;
+        for k in 0..nz {
+            let t_start_k = flexmesa_math::exp(
+                model.ln_t_start.get(k).copied().unwrap_or(model.ln_t[k]),
+            );
+            if t_start_k >= model.controls.op_split_burn_min_t {
+                let burn_eps = model
+                    .aux
+                    .burn_avg_epsnuc
+                    .get(k)
+                    .copied()
+                    .unwrap_or(model.eps_nuc[k]);
+                sum += dt * model.dm[k] * burn_eps;
+            } else {
+                sum += dt * model.dm[k] * model.eps_nuc[k];
+            }
+        }
+        sum
+    } else {
+        dt * dot_dm(&model.eps_nuc)
+    };
+
+    // `evolve.f90:1241-1244`
+    let mut neu_sum = 0.0_f64;
+    for k in 0..nz {
+        let neu_start = model
+            .non_nuc_neu_start
+            .get(k)
+            .copied()
+            .unwrap_or(model.non_nuc_neu[k]);
+        neu_sum += (model.non_nuc_neu[k] + neu_start) * model.dm[k];
+    }
+    let total_non_nuc_neu_cooling = dt * 0.5 * neu_sum;
+    let total_irradiation_heating = dt * dot_dm(&model.aux.irradiation_heat);
+
+    // `evolve.f90:1247-1269`
+    let total_wd_sedimentation_heating = if model.controls.do_element_diffusion
+        && model.controls.diffusion.do_wd_sedimentation_heating
+    {
+        dt * dot_dm(&model.aux.eps_wd_sedimentation)
+    } else {
+        0.0
+    };
+
+    let total_energy_from_diffusion = if model.controls.do_element_diffusion
+        && model.controls.diffusion.do_diffusion_heating
+    {
+        dt * dot_dm(&model.aux.eps_diffusion)
+    } else {
+        0.0
+    };
+
+    let total_energy_from_pre_mixing = if model.controls.do_conv_premix {
+        dt * dot_dm(&model.aux.eps_pre_mix)
+    } else {
+        0.0
+    };
+
+    let total_energy_from_phase_separation =
+        if model.controls.do_phase_separation {
+            dt * dot_dm(&model.aux.eps_phase_separation)
+        } else {
+            0.0
+        };
+
+    // `evolve.f90:1271-1288`
+    let phase2_total_energy_from_mdot = dt * dot_dm(&model.eps_mdot);
+    let total_extra_heating = dt * dot_dm(&model.aux.extra_heat);
+    let phase2_work = dt
+        * (model.aux.step_hist.work_outward_at_surface
+            - model.aux.step_hist.work_inward_at_center);
+
+    let l_theta = if model
+        .controls
+        .is_velocity_time_centered(model.model_number)
+        && model.controls.include_l_in_velocity_time_centering
+        && model.ln_t[0] / LN10
+            <= model
+                .controls
+                .max_logt_for_include_p_and_l_in_velocity_time_centering
+    {
+        model.controls.l_theta_for_velocity_time_centering
+    } else {
+        1.0
+    };
+    let l_start_0 = model.lum_start.first().copied().unwrap_or(model.lum[0]);
+    let l_surf = l_theta * model.lum[0] + (1.0 - l_theta) * l_start_0;
+    let total_radiation = dt * (l_surf - model.l_center);
+
+    // `evolve.f90:1310-1336` (exact upstream term order, without algebraic
+    // cancellation of Phase 1 / Phase 2 operator-split terms).
+    let phase1_total_energy_from_mdot = model
+        .aux
+        .step_hist
+        .energy_change_from_do_adjust_mass_and_calculate_eps_mdot
+        + model.aux.step_hist.mdot_adiabatic_surface;
+
+    let phase1_sources_and_sinks = phase1_total_energy_from_mdot
+        + total_energy_from_pre_mixing
+        + total_energy_from_phase_separation
+        + total_wd_sedimentation_heating
+        + total_energy_from_diffusion
+        + model.aux.non_epsnuc_energy_change_from_split_burn;
+
+    let phase2_sources_and_sinks = -total_energy_from_pre_mixing
+        - total_energy_from_phase_separation
+        - total_wd_sedimentation_heating
+        - total_energy_from_diffusion
+        + phase2_total_energy_from_mdot
+        + total_nuclear_heating
+        - total_non_nuc_neu_cooling
+        + total_irradiation_heating
+        + total_extra_heating
+        - total_radiation
+        - phase2_work;
+
+    let total_energy_sources_and_sinks =
+        phase1_sources_and_sinks + phase2_sources_and_sinks;
+
+    // `evolve.f90:1356-1365`
+    let error_in_energy_conservation = e_end
+        - (model.aux.step_hist.total_energy_old
+            + total_energy_sources_and_sinks);
+
+    let cumulative_energy_error = if model.controls.absolute_cumulative_energy_err
+    {
+        model.aux.step_hist.cumulative_energy_error_old
+            + error_in_energy_conservation.abs()
+    } else {
+        model.aux.step_hist.cumulative_energy_error_old
+            + error_in_energy_conservation
+    };
+
+    model.aux.cumulative_energy_error = cumulative_energy_error;
+    let sh = &mut model.aux.step_hist;
+    sh.total_energy_change_from_mdot = total_energy_change_from_mdot;
+    sh.total_eps_mdot = total_eps_mdot;
+    sh.virial_thm_p_avg = virial_thm_p_avg;
+    sh.total_eps_grav = total_eps_grav;
+    sh.total_nuclear_heating = total_nuclear_heating;
+    sh.total_non_nuc_neu_cooling = total_non_nuc_neu_cooling;
+    sh.total_irradiation_heating = total_irradiation_heating;
+    sh.total_wd_sedimentation_heating = total_wd_sedimentation_heating;
+    sh.total_energy_from_diffusion = total_energy_from_diffusion;
+    sh.total_energy_from_phase_separation = total_energy_from_phase_separation;
+    sh.total_extra_heating = total_extra_heating;
+    sh.total_energy_sources_and_sinks = total_energy_sources_and_sinks;
+    sh.error_in_energy_conservation = error_in_energy_conservation;
 }
 
 /// Evaluates enclosed nuclear luminosity by reaction category (`erg/s`) from

@@ -410,6 +410,12 @@ impl StarModel {
         if self.controls.rti_flag {
             crate::hydro_rti::set_dpdr_drhodr_info(self);
         }
+        // `save_start_values` (`star/private/struct_burn_mix.f90:348-354`):
+        // record beginning-of-Phase-2 total energy integrals when radii are
+        // initialized.
+        if self.nz > 0 && self.r[..self.nz].iter().all(|&v| v > 0.0) {
+            crate::evolve_support::record_phase2_start_energy_integrals(self);
+        }
         Ok(())
     }
 

@@ -393,6 +393,70 @@ pub fn set_energy_eqn_scal(model: &StarModel, k: usize) -> f64 {
     scal * dt / model.energy_start[k].max(1.0)
 }
 
+/// Evaluates `(work_outward_at_surface, work_inward_at_center)` in
+/// $\mathrm{erg\,s^{-1}}$ matching `setup_dwork_dm`, `eval1_work`, and
+/// `eval_simple_PdV_work` (`star/private/hydro_energy.f90:176-177, 640-655,
+/// 769, 872`).
+#[must_use]
+pub fn eval_surface_and_center_work(model: &StarModel) -> (f64, f64) {
+    let nz = model.nz;
+    if nz == 0 {
+        return (0.0, 0.0);
+    }
+    let u_flag_only = model.controls.u_flag && !model.controls.v_flag;
+    let vel_tc = model.controls.is_velocity_time_centered(model.model_number)
+        && model.dt > 0.0
+        && !model.ln_r_start.is_empty();
+    let simple_pdv = !u_flag_only
+        && vel_tc
+        && model
+            .controls
+            .use_p_d_1_div_rho_form_of_work_when_time_centering_velocity;
+    let skip_peos = !u_flag_only
+        && model.controls.energy_eqn_option == EnergyEqnOption::EpsGrav;
+
+    let p_in = model.peos_start.get(nz - 1).copied().unwrap_or(0.0);
+    let work_inward_at_center = FOUR_PI
+        * flexmesa_math::pow2(model.r_center)
+        * p_in
+        * model.v_center;
+
+    let work_outward_at_surface = if u_flag_only {
+        crate::riemann_eqns::eval1_work_u_flag_ad(model, 0).val
+    } else if simple_pdv {
+        let av_00 =
+            crate::hydro_work::eval1_a_times_v_face_v_flag_ad(model, 0, vel_tc)
+                .val;
+        let mut p_tot = if skip_peos {
+            0.0
+        } else {
+            crate::hydro_momentum::eval_cell_peos_time_centered_ad(
+                model, 0, false,
+            )
+            .0
+            .val
+        };
+        if model.controls.use_pvsc_art_visc {
+            p_tot += eval_pvsc_cell_ad(model, 0).val;
+        }
+        if model.controls.rsp2_flag && model.controls.rsp2.alfap != 0.0 {
+            p_tot +=
+                crate::rsp2_ad::eval_rsp2_ptrb_cell_ad(model, 0, false).val;
+        }
+        p_tot * av_00
+    } else if model.dt <= 0.0
+        && !(model.controls.v_flag || model.controls.u_flag)
+    {
+        0.0
+    } else {
+        crate::hydro_work::eval1_work_v_flag_ad(model, 0, skip_peos, vel_tc)
+            .0
+            .val
+    };
+
+    (work_outward_at_surface, work_inward_at_center)
+}
+
 /// Energy conservation equation for cell `k` (`do1_energy_eqn` in
 /// `star/private/hydro_energy.f90:36-879`).
 pub fn do1_energy_eqn(
@@ -401,6 +465,18 @@ pub fn do1_energy_eqn(
     include_chem: bool,
     sys: &mut HenyeySystem,
 ) {
+    let _ = do1_energy_eqn_with_ergs_error(model, k, include_chem, sys);
+}
+
+/// Evaluates [`do1_energy_eqn`] and returns the cell unscaled energy residual
+/// `ergs_error(k) = -dm(k) * dt * resid_ad%val` in $\mathrm{erg}$
+/// (`star/private/hydro_energy.f90:114`).
+pub(crate) fn do1_energy_eqn_with_ergs_error(
+    model: &StarModel,
+    k: usize,
+    include_chem: bool,
+    sys: &mut HenyeySystem,
+) -> f64 {
     let dl_dm = setup_dl_dm(model, k);
     let (sources, doing_op_split_burn) = setup_sources_and_others(model, k);
     let d_eturb_dt = setup_d_turbulent_energy_dt(model, k);
@@ -510,6 +586,7 @@ pub fn do1_energy_eqn(
         }
     };
 
+    let ergs_error_k = -model.dm[k] * model.dt * esum.val;
     let scal = set_energy_eqn_scal(model, k);
     let resid = esum * scal;
     let i_equ = model.layout.i_dlne_dt;
@@ -576,4 +653,5 @@ pub fn do1_energy_eqn(
             sys.add_partial(k, i_equ, k, ivar, d_equ_dx);
         }
     }
+    ergs_error_k
 }

@@ -379,8 +379,8 @@ pub fn get_surf_p_t_kap(
         ATM_T_TAU_EDDINGTON,
         eos_cb,
         kap_cb,
-        model.controls.rsp.atm_t_tau_errtol,
-        model.controls.rsp.atm_t_tau_max_iters,
+        model.controls.atm_t_tau_errtol,
+        model.controls.atm_t_tau_max_iters,
         true,
         teff,
     )

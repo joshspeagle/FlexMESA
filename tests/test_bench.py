@@ -12,8 +12,6 @@ from __future__ import annotations
 import math
 from collections.abc import Sequence
 
-import pytest
-
 from flexmesa import bench
 
 _WAVE1_REGRESSION_SNAPSHOTS_N8: tuple[tuple[str, float], ...] = (
@@ -99,15 +97,6 @@ def test_wave1_four_stage_benchmarks_match_snapshots() -> None:
     )
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "#295: Rust set_tdc carries the root's partials through the Newton "
-        "iteration as MESA 26.4.1 does (turb/private/tdc.f90:253-345, #321); "
-        "the Python stages apply the implicit function theorem at the "
-        "converged root."
-    ),
-)
 def test_wave1_turb_tdc_stages_agree() -> None:
     """The `turb_tdc` workload agrees across Stages 0..3 to 1e-12."""
     for n_zones in (4, 8):

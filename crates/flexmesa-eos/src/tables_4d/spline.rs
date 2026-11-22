@@ -14,7 +14,6 @@ use crate::types::{
 use flexmesa_const::{LN10, ONE_SIXTH};
 use flexmesa_interp2d::{interp_mkbicub_db, BicubicBc};
 use flexmesa_utils::is_bad;
-use rayon::prelude::*;
 
 pub use crate::tables_4d::table_io::DT_RAW_BIN_MAGIC;
 
@@ -416,8 +415,12 @@ pub(crate) fn build_4d_slice_vertices(
         }
     }
 
+    // Fit the 16 quantities sequentially: callers reach `EosDtTableSet::get_table`
+    // while holding `load_lock` inside outer global-pool `rayon` zone loops,
+    // so nesting another global-pool `into_par_iter()` here risks work-stealing
+    // re-entrancy self-deadlock on the same mutex.
     let fitted: Vec<Vec<[f64; 4]>> = (0..NUM_EOS_TABLE_VALS)
-        .into_par_iter()
+        .into_iter()
         .map(|v| {
             let z_slice = &raw_vars[v * ngrid..(v + 1) * ngrid];
             interp_mkbicub_db(

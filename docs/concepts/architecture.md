@@ -73,6 +73,8 @@ Upstream MESA's `auto_diff` module uses preprocessor templates to generate fixed
    $$u = (v, \nabla v) \in \mathbb{R} \times \mathbb{R}^N, \qquad \phi(u) = \left(\phi(v),\, \phi'(v)\,\nabla v\right).$$
 
    Because `N` is parameterized via Rust const generics (`DualOrder1<1>` for 1D splines and scalar root-finders, `DualOrder1<4>` for thermal neutrinos, `DualOrder1<6>` and `DualOrder1<12>` for convective mixing, and `StarAdOrder1` for 3-shell stellar stencils), each routine propagates only its active local independent variables rather than a 33-element stellar tangent vector.
+
+   The formula above gives the mathematical result. The rounding follows upstream: each operation evaluates the expression of the MESA routine of the same name (`auto_diff/private/auto_diff_real_star_order1_module.f90` and its siblings), in the same order. Upstream's two- and four-variable types factor common terms before multiplying by the tangent and the other types do not, so `DualOrder1<2>` and `DualOrder1<4>` use the factored form and every other `N` the left-to-right form (`DECISIONS #52`). `log10` of a dual is `log(x)` times `1/ln(10)`, as upstream computes it, and `safe_sqrt`, `safe_log` and `safe_log10` guard the value only.
 2. **Second-Order Dual Numbers (`AutoDiffReal2VarOrder2` / `DualOrder2`)**:
    Propagates the exact value $f$, gradient $(\partial_x f, \partial_y f)$, and symmetric Hessian $(\partial_{xx} f, \partial_{xy} f, \partial_{yy} f)$ in a single forward pass for 2D thermodynamic and opacity tables parameterized by $(\log_{10} T, \log_{10}\rho)$.
 3. **Third-Order Two-Variable Hyperdual Numbers (`AutoDiffReal2VarOrder3` / `Hyperdual3`)**:
@@ -84,7 +86,7 @@ Upstream MESA's `auto_diff` module uses preprocessor templates to generate fixed
 
 Whenever a microphysics module solves a nonlinear root equation $Q(Y, \theta) = 0$ for an internal state variable $Y^*(\theta)$ given stellar shell inputs $\theta$ (such as the superadiabaticity $Y = \nabla_T - \nabla_L$ in Kuhfuss 1986 Time-Dependent Convection or log-density $\log_{10}\rho$ in $(P_{\mathrm{gas}}, T)$ equation-of-state inversion), differentiating through the $K$ bisection and Newton-Raphson iterations wastes $(K - 1)$ full Jacobian evaluations and degrades near bracket boundaries where clamping occurs.
 
-Instead, the derived JAX layer converges $Y^*$ using pure scalar `f64` arithmetic and applies the **Implicit Function Theorem** once at the converged root $Y^*$ (the Safe Rust Time-Dependent Convection solver is the exception: it carries partials through the Newton iteration as MESA does, see [Convection, Mixing and Rotation](convection-mixing-rotation.md)):
+Instead, the derived JAX layer converges $Y^*$ using pure scalar `f64` arithmetic and applies the **Implicit Function Theorem** once at the converged root $Y^*$ (Time-Dependent Convection is the exception: both Safe Rust and Python/JAX carry partials through the Newton iteration as MESA does, see [Convection, Mixing and Rotation](convection-mixing-rotation.md)):
 
 $$\frac{\partial Y^*}{\partial \theta} = -\left(\frac{\partial Q}{\partial Y}\bigg|_{Y^*, \theta}\right)^{-1} \frac{\partial Q}{\partial \theta}\bigg|_{Y^*, \theta}.$$
 

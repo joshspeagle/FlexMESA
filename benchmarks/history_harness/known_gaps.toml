@@ -261,8 +261,8 @@ reason = "Planetary initial model and column-depth irradiation relaxation (#154,
 [[gaps]]
 suite = "star"
 case = "low_z"
-issue = "#161"
-reason = "Diagnostic run reaches xa_central_lower_limit (181 steps, 0 retries, +0.0204% rel_star_age) with 3 unsupported controls (atm_t_tau_opacity, photo_interval, required_termination_code_string; #161, #299)."
+issue = "#299"
+reason = "Diagnostic run reaches exact MESA 26.4.1 xa_central_lower_limit (181 steps, 0 retries, +1.72e-12 rel_star_age, 0 num_zones/num_iters diff across all reference models, all final tolerances pass) with 2 unsupported non-solver controls (photo_interval, required_termination_code_string; #299)."
 
 [[gaps]]
 suite = "star"
@@ -495,8 +495,8 @@ reason = "White-dwarf cooling with phase separation and full-net diffusion reach
 [[gaps]]
 suite = "star"
 case = "wd_diffusion"
-issue = "#161"
-reason = "White-dwarf element diffusion reaches upstream Teff_lower_limit (137 steps vs MESA 153, 1 retry vs MESA 2, rel_star_age -1.501%) in diagnostic mode with 3 ignored controls (atm_T_tau_opacity, photo_interval, required_termination_code_string) pending atmosphere/solver parity (#161, #152)."
+issue = "#152"
+reason = "White-dwarf element diffusion reaches upstream Teff_lower_limit (149 steps vs MESA 153, 2 retries matching MESA 2, rel_star_age -0.006%, first diverging step 1423) in diagnostic mode with 2 ignored controls (photo_interval, required_termination_code_string) pending remaining solver/diffusion parity (#152, #156, #299)."
 
 [[gaps]]
 suite = "star"
@@ -739,8 +739,8 @@ file = "crates/flexmesa-astero/tests/astero_suite.rs"
 test_name = "test_example_astero_uncapped"
 issue = "#162"
 role = "campaign"
-expect_fail_when_run = true
-reason = "The uncapped example_astero track now stops on limit_num_chi2_too_big (samples=1, best chi2 3.81, 653 steps), which the report's internal pass flag rejects; measured by the campaign run on the claude/campaign-ledger branch at main f171cca (issue #257). It ended on chi2_search_limit2 with best chi2 2.92 in the run on aaa29e9, before the quad-precision energy and eps_mdot changes of #308, #315 and #319. No MESA 26.4.1 reference exists for this case, so which ending upstream reaches is not known (#162)."
+expect_fail_when_run = false
+reason = "Long-running uncapped astero campaign tracked under #162 and #171. Passes locally after removing the non-upstream limit_num_* pass rejection (samples=1, best chi2 3.81, 653 steps, ending on limit_num_chi2_too_big because best chi2 3.81 exceeds chi2_search_limit1 = 3.0). MESA 26.4.1 (mesa-histories-v1) finishes in 737 steps with best chi2 2.8005 at model 734 and ends on chi2_search_limit2; the astero/example_astero history-harness row remains a declared gap under #162 and #171."
 
 [[test_gaps]]
 kind = "rust_ignore"
@@ -749,8 +749,8 @@ file = "crates/flexmesa-astero/tests/astero_suite.rs"
 test_name = "test_fast_from_file_uncapped"
 issue = "#162"
 role = "campaign"
-expect_fail_when_run = true
-reason = "Since the defaults change in PR #228 every track of the uncapped astero from_file search stops on limit_num_chi2_too_big (samples=2, best chi2 6.81), which the report's internal pass flag rejects; measured by the campaign run on 986a6aa (issue #257). No MESA 26.4.1 reference exists for this case, so whether upstream stops the same way is not known (#162)."
+expect_fail_when_run = false
+reason = "Long-running uncapped astero from_file campaign tracked under #162 and #171. Passes locally after removing the non-upstream limit_num_* pass rejection (samples=2, best chi2 1.038, 522 steps, ending on limit_num_chi2_too_big). MESA 26.4.1 (mesa-histories-v1) likewise terminates both tracks (2/2, 1016 total steps, best chi2 1.0266) on have reached too many bad chi2 limit; the astero/fast_from_file history-harness row remains a declared gap under #162 and #171."
 
 [[test_gaps]]
 kind = "rust_ignore"
@@ -759,8 +759,8 @@ file = "crates/flexmesa-astero/tests/astero_suite.rs"
 test_name = "test_fast_scan_grid_uncapped"
 issue = "#162"
 role = "campaign"
-expect_fail_when_run = true
-reason = "Since the defaults change in PR #228 every track of the uncapped astero scan_grid search stops on limit_num_chi2_too_big (samples=4, best chi2 2.80), which the report's internal pass flag rejects; measured by the campaign run on 986a6aa (issue #257). No MESA 26.4.1 reference exists for this case, so whether upstream stops the same way is not known (#162)."
+expect_fail_when_run = false
+reason = "Long-running uncapped astero scan_grid campaign tracked under #162 and #171. Passes locally after removing the non-upstream limit_num_* pass rejection (samples=4, best chi2 1.380, 896 steps, ending on limit_num_chi2_too_big). MESA 26.4.1 (mesa-histories-v1) likewise terminates all four tracks (4/4, 1765 total steps, best chi2 0.5724) on have reached too many bad chi2 limit; the astero/fast_scan_grid history-harness row remains a declared gap under #162 and #171."
 
 [[test_gaps]]
 kind = "rust_ignore"
@@ -769,8 +769,8 @@ file = "crates/flexmesa-astero/tests/astero_suite.rs"
 test_name = "test_fast_simplex_uncapped"
 issue = "#162"
 role = "campaign"
-expect_fail_when_run = true
-reason = "The uncapped astero simplex search returns the error 'star terminated at model 251: max_age' from one sample's star run instead of a search result; measured by the scheduled campaign run on aaa29e9 (issue #257). The test passed in the run on 986a6aa, before the star solver and stop-condition changes of #259, #262, #269 and #285. No MESA 26.4.1 reference exists for this case (#162)."
+expect_fail_when_run = false
+reason = "Long-running uncapped astero simplex campaign tracked under #162 and #171. Passes locally after fixing verify_photo_restart_parity age-stop clearing, removing x_first clamping under enforce_bounds = false, returning 1e99 on unaccepted tracks, and accepting limit_num_chi2_too_big (samples=5, best chi2 0.04318, 1861 steps). MESA 26.4.1 (mesa-histories-v1) evaluates 7 tracks (6 recorded samples, 1 max_age trial, 2724 total steps, best chi2 0.04606); the astero/fast_simplex history-harness row remains a declared gap under #162 and #171."
 
 [[test_gaps]]
 kind = "rust_ignore"
@@ -808,6 +808,24 @@ issue = "#295"
 role = "physics_gap"
 expect_fail_when_run = true
 reason = "Rust do1_mlt_2 takes the face radiation pressure from the face temperature (MESA 26.4.1 star_utils.f90:3838-3843, #291); the frozen JAX face-MLT twin still interpolates the cell values, so the cross-stage difference is 8.9e-3 against a 1.0e-10 bound."
+
+[[test_gaps]]
+kind = "python_xfail"
+file = "tests/test_wave4_bench.py"
+test_name = "test_wave4_star_hydro_eqns_rust_matches_frozen_jax"
+issue = "#295"
+role = "physics_gap"
+expect_fail_when_run = true
+reason = "Rust eval_face_dm_bar at k = nz - 1 uses 0.5*(dm[k-1] + dm[k]) (MESA 26.4.1 star/private/hydro_momentum.f90:191-196, #340); frozen JAX eval_hydro_residuals_jax still uses dm_bar[nz - 1], so the cross-stage difference is 9.73e-3 against a 1.0e-10 bound."
+
+[[test_gaps]]
+kind = "python_xfail"
+file = "tests/test_star_wave4_2.py"
+test_name = "test_eval_equations_rust_jax_residual_consistency"
+issue = "#295"
+role = "physics_gap"
+expect_fail_when_run = true
+reason = "Rust eval_face_dm_bar at k = nz - 1 uses 0.5*(dm[k-1] + dm[k]) (MESA 26.4.1 star/private/hydro_momentum.f90:191-196, #340); frozen JAX eval_hydro_residuals_jax still uses dm_bar[nz - 1], so zone nz - 1 momentum residual differs by 1.12e-5 against rtol=1e-13, atol=1e-13."
 
 [[test_gaps]]
 kind = "python_xfail"
@@ -852,12 +870,3 @@ issue = "#295"
 role = "physics_gap"
 expect_fail_when_run = true
 reason = "Rust eval_phase_separation_shift follows the MESA 26.4.1 Blouin fits (phase_separation.f90, #156); the frozen JAX twin keeps its earlier expression, so the shift differs by 0.017 to 0.089 in mass fraction against a bound of 1.0e-14."
-
-[[test_gaps]]
-kind = "python_xfail"
-file = "tests/test_bench.py"
-test_name = "test_wave1_turb_tdc_stages_agree"
-issue = "#295"
-role = "physics_gap"
-expect_fail_when_run = true
-reason = "Rust set_tdc carries the TDC root's partials through the Newton iteration as MESA 26.4.1 does (turb/private/tdc.f90:253-345, #321); the Python stages apply the implicit function theorem at the converged root, so the sensitivities differ by 6.5e-11 (4 zones) and 2.2e-9 (8 zones) against a bound of 1.0e-12."

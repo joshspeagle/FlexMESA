@@ -237,7 +237,23 @@
       "issues": []
     }
   ],
-  "open_pull_requests": [],
+  "open_pull_requests": [
+    {
+      "number": 347,
+      "title": "fix(star,eos): port eval_eps_grav_composition & fix_d_eos_dxa_partials and bound EosDtTableSet RSS (Closes #341)",
+      "draft": false
+    },
+    {
+      "number": 350,
+      "title": "ci(dashboard): measure coverage daily when main has changed, in seven instrumented shards with the ci profile (#345)",
+      "draft": false
+    },
+    {
+      "number": 352,
+      "title": "fix(autodiff): the order-2 and order-3 dual types evaluate upstream's expression for each operation (#349)",
+      "draft": true
+    }
+  ],
   "deferred_169": [
     {
       "number": 175,
@@ -588,6 +604,14 @@
       "title": "[Deferred enhancement] calc_MLT: series for the cubic root near marginal convection",
       "state": "open",
       "kind": "enhancement",
+      "parity_pending": false,
+      "needs_confirmation": false
+    },
+    {
+      "number": 330,
+      "title": "[Deferred bug] calc_MLT never assigns its ierr output, and its bare returns leave other outputs unassigned",
+      "state": "open",
+      "kind": "upstream-bug",
       "parity_pending": false,
       "needs_confirmation": false
     }

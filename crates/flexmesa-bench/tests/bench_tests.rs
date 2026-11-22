@@ -78,13 +78,20 @@ const WAVE3B_REGRESSION_SNAPSHOTS_N8: [(&str, f64); 5] = [
 /// `star_evolve_step` also moved from the 8-zone grid
 /// (`1.005_928_065_548_472e2`) to `MIN_EVOLVE_STEP_ZONES = 64` zones
 /// (`8.895_997_453_722_767e2`), because the 8-zone fixture no longer
-/// converges at the model's timestep; tracked in `#146`).
+/// converges at the model's timestep; tracked in `#146`). Under `#340`
+/// (`eval_face_dm_bar` at `k = nz - 1` matching
+/// `star/private/hydro_momentum.f90:191-196` and `dt_limit_ratio_old = 0.0`
+/// matching `star/private/init.f90:509, 696`), `star_hydro_eqns`
+/// (`4.262_783_875_690_237e6` -> `4.262_780_484_078_014e6`),
+/// `star_newton_step` (`2.210_834_729_000_362e5` -> `2.263_803_558_180_566e5`),
+/// and `star_evolve_step` (`8.895_997_453_722_767e2` ->
+/// `8.895_028_893_306_655e2`) shifted.
 const WAVE4_REGRESSION_SNAPSHOTS_N8: [(&str, f64); 5] = [
     ("star_micro_vars", 2.499_330_102_887_365e2),
-    ("star_hydro_eqns", 4.262_783_875_690_237e6),
-    ("star_newton_step", 2.210_834_729_000_362e5),
+    ("star_hydro_eqns", 4.262_780_484_078_014e6),
+    ("star_newton_step", 2.263_803_558_180_566e5),
     ("star_remesh", 5.108_453_216_631_093e2),
-    ("star_evolve_step", 8.895_997_453_722_767e2),
+    ("star_evolve_step", 8.895_028_893_306_655e2),
 ];
 
 /// `FlexMESA` regression snapshots for $N_{\mathrm{zones}} = 8$ across all four

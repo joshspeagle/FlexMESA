@@ -12,6 +12,7 @@ from __future__ import annotations
 import jax
 import jax.numpy as jnp
 import numpy as np
+import pytest
 
 import flexmesa
 from flexmesa import constants, star
@@ -31,6 +32,16 @@ def _make_pre_ms_model() -> star.StarModel:
     return model
 
 
+@pytest.mark.xfail(
+    strict=True,
+    reason=(
+        "#295: Rust eval_face_dm_bar at k = nz - 1 uses 0.5*(dm[k-1] + dm[k]) "
+        "(MESA 26.4.1 star/private/hydro_momentum.f90:191-196, #340); "
+        "frozen JAX eval_hydro_residuals_jax still uses dm_bar[nz - 1], so "
+        "zone nz - 1 momentum residual differs by 1.12e-5 against "
+        "rtol=1e-13, atol=1e-13."
+    ),
+)
 def test_eval_equations_rust_jax_residual_consistency() -> None:
     """Verify Rust (`strict`) and JAX hydrostatic Henyey residuals match."""
     with flexmesa.numerics_mode_context("strict"):

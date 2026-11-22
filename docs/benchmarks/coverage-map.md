@@ -12,7 +12,7 @@ Progress is tracked by **upstream MESA `26.4.1` lines promoted to verified statu
 | Core engines (`star` + `star_data` + `binary` + `astero`) | 144,952 | 39,498 (27.2%) | 4,971 (3.4%) | Excludes stub (`6,378`) and partial (`71,242`) lines |
 | All `26` MESA `26.4.1` modules (incl. `gyre`, `adipls`, `stella`, `plotting`) | 497,703 | 43,058 (8.7%) | 4,971 (1.0%) | Full `v0.1.0` target denominator (`notes/SCOPE.md`) |
 | Pre-rebaseline non-plotting `star`+`binary`+`astero` audit (`0b2e6bb`) | 134,940 | 21,493 `PORTED` (16%) / 66,685 `PARTIAL` (49%) | unverified pre-audit | `17%` `STUB` (23,259 LOC), `17%` `ABSENT` (23,503 LOC) |
-| `math` strict-mode scalar vectors (`#165`) | 474,062 vectors | math: 403,258/403,258 CRMATH 0 ULP (70,804 libm <= 1 ULP); 304,567/304,635 probed module hex 0 ULP (5 complete, 14 non-math probed) | gated in CI by scripts/check_strict_determinism.py (x86_64 vs aarch64, 1 vs 4 threads; 474,062 math vectors + uncapped star/1.3M_ms_high_Z + binary/jdot_gr_check run with unsupported controls ignored; a bit-identity check, not a comparison with MESA) | 14 / 23 remaining module suites marked verified in manifest |
+| `math` strict-mode scalar vectors (`#165`) | 474,062 vectors | math: 403,258/403,258 CRMATH 0 ULP (70,804 libm <= 1 ULP); 304,624/304,751 probed module hex 0 ULP (5 complete, 15 non-math probed) | gated in CI by scripts/check_strict_determinism.py (x86_64 vs aarch64, 1 vs 4 threads; 474,062 math vectors + uncapped star/1.3M_ms_high_Z + binary/jdot_gr_check run with unsupported controls ignored; a bit-identity check, not a comparison with MESA) | 15 / 23 remaining module suites marked verified in manifest |
 | End-to-end `test_suite` cases | 106 cases | 106 in manifest | **0 / 106** passing | 102 declared gaps, 4 `no_reference_yet` |
 
 ## Per-Module Port Status (`26` MESA `26.4.1` Modules)
@@ -50,12 +50,12 @@ Progress is tracked by **upstream MESA `26.4.1` lines promoted to verified statu
 
 ## Namelist Controls & Defaults Alignment
 
-Compared against MESA `26.4.1` `.defaults` schemas, **323 / 1,444** `&controls` keys (`22.4%`) and **361 / 455** `&star_job` keys (`79.3%`) are currently unimplemented (details in [`notes/audit/defaults_diff_26_4_1.md`](https://github.com/joshspeagle/FlexMESA/blob/main/notes/audit/defaults_diff_26_4_1.md); loud rejection of unsupported keys is tracked in `#147` and default alignment in `#149`):
+Compared against MESA `26.4.1` `.defaults` schemas, **321 / 1,444** `&controls` keys (`22.2%`) and **359 / 455** `&star_job` keys (`78.9%`) are currently unimplemented (details in [`notes/audit/defaults_diff_26_4_1.md`](https://github.com/joshspeagle/FlexMESA/blob/main/notes/audit/defaults_diff_26_4_1.md); loud rejection of unsupported keys is tracked in `#147` and default alignment in `#149`):
 
 | Namelist | Upstream Scalars | Matched in FlexMESA | Defaults Agree | Value Mismatch | Disabled (`none`/limit) | Non-Scalar Rust | Unimplemented |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| `star &controls` | 1,444 | 1,104 | 1,104 | 0 | 0 | 17 | 323 |
-| `star &star_job` | 455 | 93 | 93 | 0 | 0 | 1 | 361 |
+| `star &controls` | 1,444 | 1,106 | 1,106 | 0 | 0 | 17 | 321 |
+| `star &star_job` | 455 | 95 | 95 | 0 | 0 | 1 | 359 |
 | `binary &binary_controls + &binary_job` | 209 | 145 | 145 | 0 | 0 | 1 | 63 |
 | `astero &astero_search_controls` | 150 | 75 | 75 | 0 | 0 | 1 | 74 |
 | `eos &eos` | 102 | 60 | 60 | 0 | 0 | 0 | 42 |

@@ -2,34 +2,68 @@
 //! Composition grid metadata (`DtXzInfo`) and lazy-loaded 4D table collection (`EosDtTableSet`).
 
 use crate::helm::table_io::resolve_mesa_data_dir;
-use crate::tables_4d::slice_cache::load_or_build_dt_slice;
+use crate::tables_4d::slice_cache::{
+    load_or_build_dt_slice_with_cache_path, reload_verified_dt_slice_streaming,
+};
 use crate::tables_4d::spline::{EosDtTableKind, EosDtXzTable};
 use crate::types::EosError;
 use std::cell::RefCell;
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, Mutex, OnceLock};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::{Arc, Mutex, OnceLock, Weak};
 
-/// Maximum number of `FreeEOS` `(ix, iz)` slices retained simultaneously in RAM.
+/// Maximum number of 4D EOS `(kind, ix, iz)` slices (`OPAL/SCVH` and `FreeEOS`
+/// combined) retained simultaneously in RAM.
 ///
-/// All 16 `OPAL/SCVH` slices (`~0.8 GiB`) are cached permanently via `OnceLock`,
-/// while 36 `FreeEOS` slices (`~2.8 GiB` max) cover the entire `Z in {0.00, 0.02, 0.04}`
-/// grid (`33` slices) plus high-$Z$ C/O core slices with true LRU promotion so
-/// concurrent multi-star evolution experiences zero cache thrashing while staying
-/// well under GitHub Actions' `16 GiB` runner memory budget.
-const MAX_CACHED_FREE_TABLES: usize = 36;
+/// Each full `(logQ, logT)` slice occupies `~78.75 MiB`: capping the unified
+/// Clock-LRU pool at `52` slices limits resident 4D table memory to `~4.00 GiB`
+/// regardless of whether a run uses `OPAL/SCVH`, `FreeEOS`, or both, fitting
+/// cleanly inside the `5.5-6.0 GiB` budget alongside `HELM` and solver buffers
+/// while holding the full active `fix_d_eos_dxa_partials` working set.
+const MAX_CACHED_4D_TABLES: usize = 52;
 
-/// Thread-local `FreeEOS` fast-path capacity (`8` slices = one full `(2 Z x 4 X)` cubic stencil).
-const TL_FREE_CACHE_CAP: usize = 12;
+/// Thread-local fast-path capacity (`16` weak handles covering stacked
+/// `FreeEOS` and `OPAL/SCVH` `(2 Z x 4 X)` cubic stencils).
+const TL_SLICE_CACHE_CAP: usize = 16;
 
 static NEXT_SET_ID: AtomicU64 = AtomicU64::new(1);
 
-type TlFreeKey = (u64, usize, usize);
+type SliceKey = (EosDtTableKind, usize, usize);
+type TlSliceKey = (u64, EosDtTableKind, usize, usize);
+
+#[derive(Debug)]
+struct CachedDtEntry {
+    table: Arc<EosDtXzTable>,
+    referenced: AtomicBool,
+}
+
+impl CachedDtEntry {
+    fn new(table: Arc<EosDtXzTable>) -> Arc<Self> {
+        Arc::new(Self {
+            table,
+            referenced: AtomicBool::new(true),
+        })
+    }
+}
 
 thread_local! {
-    static TL_FREE_CACHE: RefCell<VecDeque<(TlFreeKey, Arc<EosDtXzTable>)>> =
-        RefCell::new(VecDeque::with_capacity(TL_FREE_CACHE_CAP));
+    static TL_SLICE_CACHE: RefCell<VecDeque<(TlSliceKey, Weak<CachedDtEntry>)>> =
+        RefCell::new(VecDeque::with_capacity(TL_SLICE_CACHE_CAP));
+}
+
+fn evict_clock_lru(
+    queue: &mut VecDeque<(SliceKey, Arc<CachedDtEntry>)>,
+    target_len: usize,
+) {
+    while queue.len() > target_len {
+        let Some((k, entry)) = queue.pop_back() else {
+            break;
+        };
+        if entry.referenced.swap(false, Ordering::Relaxed) {
+            queue.push_front((k, entry));
+        }
+    }
 }
 
 /// Composition $(X, Z)$ grid layout for a 4D tabulated EOS (`DT_xz_Info`).
@@ -137,7 +171,8 @@ pub fn eosdt_relative_data_path(
     }
 }
 
-/// Collection of `OPAL/SCVH` and `FreeEOS` 4D tables with lock-free `OPAL` and LRU `FreeEOS` caching.
+/// Collection of `OPAL/SCVH` and `FreeEOS` 4D tables backed by a unified
+/// Clock-LRU slice cache and weak thread-local fast-path handles.
 #[derive(Debug)]
 pub struct EosDtTableSet {
     set_id: u64,
@@ -147,10 +182,15 @@ pub struct EosDtTableSet {
     pub free_xz: DtXzInfo,
     /// Optional root MESA `data` directory for raw ASCII `.data` loading.
     pub data_dir: Option<PathBuf>,
-    /// Lock-free `[iz][ix]` slots for all 16 `OPAL/SCVH` slices (`~0.8 GiB` total).
-    opal_tables: Vec<Vec<OnceLock<Arc<EosDtXzTable>>>>,
-    /// True-LRU cache of `(ix_1based, iz_1based)` `FreeEOS` slices (`MAX_CACHED_FREE_TABLES`).
-    free_tables: Mutex<VecDeque<((usize, usize), Arc<EosDtXzTable>)>>,
+    /// Unified Clock-LRU cache of `(kind, ix_1based, iz_1based)` slices
+    /// capped at `MAX_CACHED_4D_TABLES`.
+    slices: Mutex<VecDeque<(SliceKey, Arc<CachedDtEntry>)>>,
+    /// Derived cache paths already SHA-256-verified in this table set for
+    /// low-overhead streaming reload after Clock-LRU eviction.
+    verified_cache_paths: Mutex<HashMap<SliceKey, PathBuf>>,
+    /// Serializes slice cache misses across Rayon workers so duplicate slices
+    /// are never decoded simultaneously in RAM.
+    load_lock: Mutex<()>,
 }
 
 static BUILTIN_DT_TABLES: OnceLock<EosDtTableSet> = OnceLock::new();
@@ -171,21 +211,14 @@ impl EosDtTableSet {
     }
 
     fn load_builtin() -> Self {
-        let opal_xz = DtXzInfo::opal_scvh();
-        let opal_tables = opal_xz
-            .xs_for_z
-            .iter()
-            .map(|xs| (0..xs.len()).map(|_| OnceLock::new()).collect())
-            .collect();
         Self {
             set_id: NEXT_SET_ID.fetch_add(1, Ordering::Relaxed),
-            opal_xz,
+            opal_xz: DtXzInfo::opal_scvh(),
             free_xz: DtXzInfo::free_eos(),
             data_dir: resolve_mesa_data_dir(),
-            opal_tables,
-            free_tables: Mutex::new(VecDeque::with_capacity(
-                MAX_CACHED_FREE_TABLES,
-            )),
+            slices: Mutex::new(VecDeque::with_capacity(MAX_CACHED_4D_TABLES)),
+            verified_cache_paths: Mutex::new(HashMap::new()),
+            load_lock: Mutex::new(()),
         }
     }
 
@@ -196,91 +229,236 @@ impl EosDtTableSet {
         ix_1based: usize,
         iz_1based: usize,
     ) -> Result<Arc<EosDtXzTable>, EosError> {
-        if kind == EosDtTableKind::OpalScvh {
-            let slot = self
-                .opal_tables
-                .get(iz_1based.wrapping_sub(1))
-                .and_then(|row| row.get(ix_1based.wrapping_sub(1)))
-                .ok_or_else(|| EosError::InvalidState {
-                    context: "EosDtTableSet::get_table",
-                    detail: format!(
-                        "invalid OPAL/SCVH indices (ix={ix_1based}, iz={iz_1based})"
-                    ),
-                })?;
-            if let Some(tbl) = slot.get() {
-                return Ok(Arc::clone(tbl));
+        let xz = match kind {
+            EosDtTableKind::OpalScvh => &self.opal_xz,
+            EosDtTableKind::FreeEos => &self.free_xz,
+        };
+        let valid_idx = ix_1based >= 1
+            && iz_1based >= 1
+            && xz
+                .xs_for_z
+                .get(iz_1based - 1)
+                .is_some_and(|row| ix_1based <= row.len());
+        if !valid_idx {
+            return Err(EosError::InvalidState {
+                context: "EosDtTableSet::get_table",
+                detail: format!(
+                    "invalid {kind:?} indices (ix={ix_1based}, iz={iz_1based})"
+                ),
+            });
+        }
+
+        let tl_key = (self.set_id, kind, ix_1based, iz_1based);
+        if let Some(hit) = Self::lookup_tl_slice(tl_key) {
+            return Ok(Arc::clone(&hit.table));
+        }
+
+        let key = (kind, ix_1based, iz_1based);
+        if let Some(hit) = self.lookup_slice_cache(key) {
+            Self::record_tl_slice(tl_key, &hit);
+            return Ok(Arc::clone(&hit.table));
+        }
+
+        let load_guard = self
+            .load_lock
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if let Some(hit) = self.lookup_slice_cache(key) {
+            drop(load_guard);
+            Self::record_tl_slice(tl_key, &hit);
+            return Ok(Arc::clone(&hit.table));
+        }
+
+        let verified_path = self
+            .verified_cache_paths
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .get(&key)
+            .cloned();
+        let reloaded = if let Some(ref cache_file) = verified_path {
+            if let Ok(tbl) = reload_verified_dt_slice_streaming(cache_file) {
+                Some(tbl)
+            } else {
+                let _ = self
+                    .verified_cache_paths
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+                    .remove(&key);
+                None
             }
-            let stem =
-                eosdt_table_stem(kind, &self.opal_xz, ix_1based, iz_1based);
-            let loaded = Arc::new(load_or_build_dt_slice(
+        } else {
+            None
+        };
+
+        let loaded = if let Some(tbl) = reloaded {
+            tbl
+        } else {
+            let stem = eosdt_table_stem(kind, xz, ix_1based, iz_1based);
+            let (tbl, new_cache_path) = load_or_build_dt_slice_with_cache_path(
                 self.data_dir.as_deref(),
                 kind,
                 &stem,
-            )?);
-            let _ = slot.set(Arc::clone(&loaded));
-            return Ok(slot.get().map_or(loaded, Arc::clone));
-        }
-
-        let tl_key = (self.set_id, ix_1based, iz_1based);
-        if let Some(hit) = TL_FREE_CACHE.with(|tl| {
-            let mut cache = tl.borrow_mut();
-            if let Some(pos) = cache.iter().position(|(k, _)| *k == tl_key) {
-                if pos > 0 {
-                    let entry = cache.remove(pos)?;
-                    let arc = Arc::clone(&entry.1);
-                    cache.push_front(entry);
-                    return Some(arc);
-                }
-                return cache.front().map(|(_, tbl)| Arc::clone(tbl));
+            )?;
+            if let Some(cache_file) = new_cache_path {
+                let _ = self
+                    .verified_cache_paths
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+                    .insert(key, cache_file);
             }
-            None
-        }) {
-            return Ok(hit);
-        }
+            tbl
+        };
 
-        let key = (ix_1based, iz_1based);
-        if let Ok(mut guard) = self.free_tables.lock() {
+        let entry = CachedDtEntry::new(Arc::new(loaded));
+        {
+            let mut guard = self
+                .slices
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
             if let Some(pos) = guard.iter().position(|(k, _)| *k == key) {
-                if let Some(entry) = guard.remove(pos) {
-                    let arc = Arc::clone(&entry.1);
-                    guard.push_front(entry);
-                    Self::record_tl_free(tl_key, &arc);
-                    return Ok(arc);
+                if let Some((k, existing)) = guard.remove(pos) {
+                    existing.referenced.store(true, Ordering::Relaxed);
+                    guard.push_front((k, Arc::clone(&existing)));
+                    drop(guard);
+                    drop(load_guard);
+                    Self::record_tl_slice(tl_key, &existing);
+                    return Ok(Arc::clone(&existing.table));
                 }
             }
+            evict_clock_lru(&mut guard, MAX_CACHED_4D_TABLES.saturating_sub(1));
+            guard.push_front((key, Arc::clone(&entry)));
         }
-
-        let stem = eosdt_table_stem(kind, &self.free_xz, ix_1based, iz_1based);
-        let loaded = Arc::new(load_or_build_dt_slice(
-            self.data_dir.as_deref(),
-            kind,
-            &stem,
-        )?);
-        if let Ok(mut guard) = self.free_tables.lock() {
-            if let Some(pos) = guard.iter().position(|(k, _)| *k == key) {
-                if let Some(entry) = guard.remove(pos) {
-                    let arc = Arc::clone(&entry.1);
-                    guard.push_front(entry);
-                    Self::record_tl_free(tl_key, &arc);
-                    return Ok(arc);
-                }
-            }
-            guard.push_front((key, Arc::clone(&loaded)));
-            while guard.len() > MAX_CACHED_FREE_TABLES {
-                let _ = guard.pop_back();
-            }
-        }
-        Self::record_tl_free(tl_key, &loaded);
-        Ok(loaded)
+        drop(load_guard);
+        Self::record_tl_slice(tl_key, &entry);
+        Ok(Arc::clone(&entry.table))
     }
 
-    fn record_tl_free(tl_key: TlFreeKey, tbl: &Arc<EosDtXzTable>) {
-        TL_FREE_CACHE.with(|tl| {
+    fn lookup_tl_slice(tl_key: TlSliceKey) -> Option<Arc<CachedDtEntry>> {
+        TL_SLICE_CACHE.with(|tl| {
             let mut cache = tl.borrow_mut();
-            cache.push_front((tl_key, Arc::clone(tbl)));
-            while cache.len() > TL_FREE_CACHE_CAP {
+            let pos = cache.iter().position(|(k, _)| *k == tl_key)?;
+            let (_, weak) = cache.remove(pos)?;
+            let entry = weak.upgrade()?;
+            if !entry.referenced.load(Ordering::Relaxed) {
+                entry.referenced.store(true, Ordering::Relaxed);
+            }
+            cache.push_front((tl_key, weak));
+            Some(entry)
+        })
+    }
+
+    fn lookup_slice_cache(&self, key: SliceKey) -> Option<Arc<CachedDtEntry>> {
+        let mut guard = self
+            .slices
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let pos = guard.iter().position(|(k, _)| *k == key)?;
+        let (k, entry) = guard.remove(pos)?;
+        if !entry.referenced.load(Ordering::Relaxed) {
+            entry.referenced.store(true, Ordering::Relaxed);
+        }
+        let cloned = Arc::clone(&entry);
+        guard.push_front((k, entry));
+        Some(cloned)
+    }
+
+    fn record_tl_slice(tl_key: TlSliceKey, entry: &Arc<CachedDtEntry>) {
+        TL_SLICE_CACHE.with(|tl| {
+            let mut cache = tl.borrow_mut();
+            if let Some(pos) = cache.iter().position(|(k, _)| *k == tl_key) {
+                let _ = cache.remove(pos);
+            }
+            cache.push_front((tl_key, Arc::downgrade(entry)));
+            while cache.len() > TL_SLICE_CACHE_CAP {
                 let _ = cache.pop_back();
             }
         });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn dummy_table() -> Arc<EosDtXzTable> {
+        Arc::new(EosDtXzTable {
+            version: 51,
+            x: 0.70,
+            z: 0.02,
+            num_log_ts: 0,
+            log_t_min: 0.0,
+            log_t_max: 0.0,
+            del_log_t: 0.02,
+            num_log_qs: 0,
+            log_q_min: 0.0,
+            log_q_max: 0.0,
+            del_log_q: 0.03,
+            dense: None,
+        })
+    }
+
+    #[test]
+    fn test_tl_slice_cache_uses_weak_refs_marks_referenced_and_deduplicates_keys(
+    ) {
+        let set_id = u64::MAX - 1;
+        let key = (set_id, EosDtTableKind::FreeEos, 1, 1);
+        let entry = CachedDtEntry::new(dummy_table());
+        entry.referenced.store(false, Ordering::Relaxed);
+        let probe = Arc::downgrade(&entry);
+
+        EosDtTableSet::record_tl_slice(key, &entry);
+        EosDtTableSet::record_tl_slice(key, &entry);
+        let count_for_key = TL_SLICE_CACHE
+            .with(|tl| tl.borrow().iter().filter(|(k, _)| *k == key).count());
+        assert_eq!(count_for_key, 1);
+
+        let hit = EosDtTableSet::lookup_tl_slice(key);
+        assert!(hit.is_some());
+        assert!(entry.referenced.load(Ordering::Relaxed));
+        drop(hit);
+        drop(entry);
+
+        // Once all strong Arc owners are dropped, the thread-local Weak
+        // handle must not keep the entry alive and lookup must return None.
+        assert_eq!(probe.strong_count(), 0);
+        assert!(EosDtTableSet::lookup_tl_slice(key).is_none());
+    }
+
+    #[test]
+    fn test_clock_lru_protects_tl_referenced_hot_slice_from_eviction() {
+        let mut queue: VecDeque<(SliceKey, Arc<CachedDtEntry>)> =
+            VecDeque::new();
+        let k_cold_1 = (EosDtTableKind::FreeEos, 1, 1);
+        let k_cold_2 = (EosDtTableKind::FreeEos, 2, 1);
+        let k_hot = (EosDtTableKind::FreeEos, 3, 1);
+
+        let e_cold_1 = CachedDtEntry::new(dummy_table());
+        let e_cold_2 = CachedDtEntry::new(dummy_table());
+        let e_hot = CachedDtEntry::new(dummy_table());
+
+        // Clear initial referenced flags so only a subsequent TLS hit marks e_hot.
+        e_cold_1.referenced.store(false, Ordering::Relaxed);
+        e_cold_2.referenced.store(false, Ordering::Relaxed);
+        e_hot.referenced.store(false, Ordering::Relaxed);
+
+        // Place e_hot at the back of the global queue (oldest position).
+        queue.push_front((k_hot, Arc::clone(&e_hot)));
+        queue.push_front((k_cold_1, e_cold_1));
+        queue.push_front((k_cold_2, e_cold_2));
+
+        // Simulate a thread-local fast-path hit setting referenced without
+        // mutating queue order.
+        let tl_key = (u64::MAX - 2, EosDtTableKind::FreeEos, 3, 1);
+        EosDtTableSet::record_tl_slice(tl_key, &e_hot);
+        assert!(EosDtTableSet::lookup_tl_slice(tl_key).is_some());
+
+        evict_clock_lru(&mut queue, 2);
+        let remaining: Vec<SliceKey> = queue.iter().map(|(k, _)| *k).collect();
+        assert_eq!(remaining.len(), 2);
+        assert!(remaining.contains(&k_hot));
+        assert!(!remaining.contains(&k_cold_1));
+
+        // Clock sweep clears the second-chance bit on the surviving hot slice.
+        assert!(!e_hot.referenced.load(Ordering::Relaxed));
     }
 }

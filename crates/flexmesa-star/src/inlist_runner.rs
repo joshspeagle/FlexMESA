@@ -644,6 +644,21 @@ pub fn verify_photo_restart_parity(
     n_verify_steps: usize,
 ) -> Result<(u64, u64), StarError> {
     let mut continued = model.clone();
+    // Clear age-stop limits on the cloned parity models so a model that ended
+    // at `max_age`, `max_age_in_days`, or `max_age_in_seconds` can still take
+    // `n_verify_steps` continuation steps instead of immediately returning
+    // `StarError::Terminated`.
+    continued.controls.max_age = -1.0;
+    continued.controls.ts_stop.max_age_in_days = -1.0;
+    continued.controls.max_age_in_seconds = None;
+    continued.controls.ts_stop.num_adjusted_dt_steps_before_max_age = 0;
+    continued.aux.step_hist.using_revised_max_yr_dt = false;
+    if continued.dt_next <= 0.0 {
+        let fallback_dt = continued.dt.max(continued.dt_old);
+        if fallback_dt > 0.0 {
+            continued.dt_next = fallback_dt;
+        }
+    }
     let do_remesh = continued.controls.okay_to_remesh
         && continued.controls.mesh_delta_coeff > 0.0;
     let op_split = continued.controls.op_split_burn;

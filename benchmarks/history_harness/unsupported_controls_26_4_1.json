@@ -10,7 +10,7 @@
     "total_cases": 106,
     "strict_pass_cases": 0,
     "strict_fail_cases": 106,
-    "distinct_unsupported_controls": 208,
+    "distinct_unsupported_controls": 206,
     "distinct_unknown_controls": 0,
     "cases_with_headless_plotting": 78,
     "distinct_headless_plotting_keys": 895
@@ -19,11 +19,11 @@
     {
       "section": "star_job",
       "upstream_keys": 455,
-      "supported_keys": 111,
+      "supported_keys": 113,
       "unused_keys": 16,
       "headless_gui_keys": 3,
       "terminal_output_keys": 5,
-      "unimplemented_upstream_keys": 320
+      "unimplemented_upstream_keys": 318
     },
     {
       "section": "eos",
@@ -46,11 +46,11 @@
     {
       "section": "controls",
       "upstream_keys": 1448,
-      "supported_keys": 1152,
+      "supported_keys": 1154,
       "unused_keys": 24,
       "headless_gui_keys": 0,
       "terminal_output_keys": 13,
-      "unimplemented_upstream_keys": 259
+      "unimplemented_upstream_keys": 257
     },
     {
       "section": "binary_job",
@@ -264,45 +264,6 @@
         "star/wd_cool_0.6M",
         "star/wd_diffusion",
         "star/wd_he_shell_ignition",
-        "star/wd_nova_burst",
-        "star/wd_stable_h_burn",
-        "star/zams_to_cc_80"
-      ]
-    },
-    {
-      "section": "controls",
-      "key": "atm_t_tau_opacity",
-      "category": "unimplemented",
-      "case_count": 31,
-      "cases": [
-        "astero/fast_from_file",
-        "astero/fast_newuoa",
-        "astero/fast_scan_grid",
-        "astero/fast_simplex",
-        "star/12M_pre_ms_to_core_collapse",
-        "star/20M_pre_ms_to_core_collapse",
-        "star/20M_z2m2_high_rotation",
-        "star/7M_prems_to_AGB",
-        "star/c13_pocket",
-        "star/check_pulse_atm",
-        "star/gyre_in_mesa_wd",
-        "star/high_z",
-        "star/hot_cool_wind",
-        "star/low_z",
-        "star/make_co_wd",
-        "star/make_env",
-        "star/make_o_ne_wd",
-        "star/make_pre_ccsn_13bvn",
-        "star/ns_c",
-        "star/ns_h",
-        "star/ns_he",
-        "star/pisn",
-        "star/split_burn_big_net",
-        "star/twin_studies",
-        "star/tzo",
-        "star/wd_acc_small_dm",
-        "star/wd_c_core_ignition",
-        "star/wd_diffusion",
         "star/wd_nova_burst",
         "star/wd_stable_h_burn",
         "star/zams_to_cc_80"
@@ -2530,15 +2491,6 @@
       "case_count": 1,
       "cases": [
         "star/ccsn_IIp"
-      ]
-    },
-    {
-      "section": "star_job",
-      "key": "set_initial_number_retries",
-      "category": "unimplemented",
-      "case_count": 1,
-      "cases": [
-        "star/pisn"
       ]
     },
     {
@@ -7236,7 +7188,6 @@
         "inlist_to_cc_header"
       ],
       "unsupported_controls": [
-        "controls::atm_t_tau_opacity::unimplemented",
         "controls::d_omega_mixing_across_convection_boundary::unimplemented",
         "controls::d_omega_mixing_rate::unimplemented",
         "controls::max_safe_logt_for_rates::unimplemented",
@@ -7399,7 +7350,6 @@
         "inlist_to_cc_header"
       ],
       "unsupported_controls": [
-        "controls::atm_t_tau_opacity::unimplemented",
         "controls::d_omega_mixing_across_convection_boundary::unimplemented",
         "controls::d_omega_mixing_rate::unimplemented",
         "controls::max_safe_logt_for_rates::unimplemented",
@@ -7437,7 +7387,6 @@
         "inlist_to_end_core_he_burn_header"
       ],
       "unsupported_controls": [
-        "controls::atm_t_tau_opacity::unimplemented",
         "controls::max_safe_logt_for_rates::unimplemented",
         "controls::photo_interval::unimplemented",
         "controls::smooth_am_nu_rot::unimplemented",
@@ -7491,7 +7440,6 @@
         "inlist_7M_prems_to_AGB_header"
       ],
       "unsupported_controls": [
-        "controls::atm_t_tau_opacity::unimplemented",
         "controls::photo_interval::unimplemented",
         "star_job::required_termination_code_string::unused"
       ],
@@ -7599,7 +7547,6 @@
       ],
       "unsupported_controls": [
         "controls::atm_off_table_option::unimplemented",
-        "controls::atm_t_tau_opacity::unimplemented",
         "controls::photo_interval::unimplemented",
         "star_job::first_model_for_timing::unimplemented",
         "star_job::required_termination_code_string::unused"
@@ -7721,7 +7668,6 @@
       ],
       "unsupported_controls": [
         "controls::add_atmosphere_to_pulse_data::unimplemented",
-        "controls::atm_t_tau_opacity::unimplemented",
         "controls::fgong_ivers::unimplemented",
         "controls::photo_interval::unimplemented",
         "star_job::required_termination_code_string::unused"
@@ -8036,7 +7982,6 @@
         "inlist_pulse_wd_header"
       ],
       "unsupported_controls": [
-        "controls::atm_t_tau_opacity::unimplemented",
         "controls::photo_interval::unimplemented",
         "controls::x_logical_ctrl::unused"
       ],
@@ -8123,7 +8068,6 @@
         "inlist_high_z_header"
       ],
       "unsupported_controls": [
-        "controls::atm_t_tau_opacity::unimplemented",
         "controls::photo_interval::unimplemented",
         "star_job::required_termination_code_string::unused"
       ],
@@ -8145,7 +8089,6 @@
         "inlist_hot_cool_wind_header"
       ],
       "unsupported_controls": [
-        "controls::atm_t_tau_opacity::unimplemented",
         "controls::photo_interval::unimplemented",
         "star_job::required_termination_code_string::unused"
       ],
@@ -8218,7 +8161,6 @@
         "inlist_low_Z_header"
       ],
       "unsupported_controls": [
-        "controls::atm_t_tau_opacity::unimplemented",
         "controls::photo_interval::unimplemented",
         "star_job::required_termination_code_string::unused"
       ],
@@ -8294,7 +8236,6 @@
         "inlist_settle_header"
       ],
       "unsupported_controls": [
-        "controls::atm_t_tau_opacity::unimplemented",
         "controls::photo_interval::unimplemented",
         "star_job::filename_of_special_rate::unimplemented",
         "star_job::max_dt_for_relax_entropy::unimplemented",
@@ -8326,7 +8267,6 @@
         "inlist_env_header"
       ],
       "unsupported_controls": [
-        "controls::atm_t_tau_opacity::unimplemented",
         "controls::photo_interval::unimplemented",
         "controls::x_logical_ctrl::unused",
         "star_job::required_termination_code_string::unused"
@@ -8393,7 +8333,6 @@
         "inlist_settle_envelope_header"
       ],
       "unsupported_controls": [
-        "controls::atm_t_tau_opacity::unimplemented",
         "controls::photo_interval::unimplemented",
         "star_job::filename_of_special_rate::unimplemented",
         "star_job::required_termination_code_string::unused"
@@ -8445,7 +8384,6 @@
         "inlist_to_cc_header"
       ],
       "unsupported_controls": [
-        "controls::atm_t_tau_opacity::unimplemented",
         "controls::photo_digits::unimplemented",
         "controls::photo_interval::unimplemented"
       ],
@@ -8553,7 +8491,6 @@
         "inlist_to_c_flash_header"
       ],
       "unsupported_controls": [
-        "controls::atm_t_tau_opacity::unimplemented",
         "controls::photo_interval::unimplemented",
         "controls::warning_limit_for_max_residual::unimplemented",
         "star_job::required_termination_code_string::unused"
@@ -8575,7 +8512,6 @@
         "inlist_to_steady_h_burn_header"
       ],
       "unsupported_controls": [
-        "controls::atm_t_tau_opacity::unimplemented",
         "controls::photo_interval::unimplemented",
         "controls::report_solver_progress::unimplemented",
         "controls::warning_limit_for_max_residual::unimplemented",
@@ -8600,7 +8536,6 @@
         "inlist_to_flash_header"
       ],
       "unsupported_controls": [
-        "controls::atm_t_tau_opacity::unimplemented",
         "controls::photo_interval::unimplemented",
         "controls::report_solver_progress::unimplemented",
         "controls::solver_test_partials_dx_0::unimplemented",
@@ -8654,7 +8589,6 @@
         "inlist_finish_header"
       ],
       "unsupported_controls": [
-        "controls::atm_t_tau_opacity::unimplemented",
         "controls::d_omega_mixing_across_convection_boundary::unimplemented",
         "controls::d_omega_mixing_rate::unimplemented",
         "controls::max_safe_logt_for_rates::unimplemented",
@@ -8666,8 +8600,7 @@
         "star_job::dump_missing_metals_into_heaviest::unimplemented",
         "star_job::filename_of_special_rate::unimplemented",
         "star_job::new_d_omega_flag::unimplemented",
-        "star_job::required_termination_code_string::unused",
-        "star_job::set_initial_number_retries::unimplemented"
+        "star_job::required_termination_code_string::unused"
       ],
       "unknown_controls": [],
       "headless_plotting_keys_count": 288,
@@ -9094,7 +9027,6 @@
         "inlist_big_net_header"
       ],
       "unsupported_controls": [
-        "controls::atm_t_tau_opacity::unimplemented",
         "controls::d_omega_mixing_across_convection_boundary::unimplemented",
         "controls::d_omega_mixing_rate::unimplemented",
         "controls::max_safe_logt_for_rates::unimplemented",
@@ -9175,7 +9107,6 @@
         "inlist_star2_header"
       ],
       "unsupported_controls": [
-        "controls::atm_t_tau_opacity::unimplemented",
         "controls::d_omega_mixing_across_convection_boundary::unimplemented",
         "controls::d_omega_mixing_rate::unimplemented",
         "controls::max_safe_logt_for_rates::unimplemented",
@@ -9213,7 +9144,6 @@
         "controls::add_atmosphere_to_pulse_data::unimplemented",
         "controls::add_center_point_to_pulse_data::unimplemented",
         "controls::add_double_points_to_pulse_data::unimplemented",
-        "controls::atm_t_tau_opacity::unimplemented",
         "controls::photo_interval::unimplemented",
         "controls::report_ierr::unimplemented",
         "controls::report_solver_progress::unimplemented",
@@ -9244,7 +9174,6 @@
         "inlist_wd_acc_small_dm_header"
       ],
       "unsupported_controls": [
-        "controls::atm_t_tau_opacity::unimplemented",
         "controls::photo_interval::unimplemented"
       ],
       "unknown_controls": [],
@@ -9293,7 +9222,6 @@
         "inlist_wd_c_core_ignition_header"
       ],
       "unsupported_controls": [
-        "controls::atm_t_tau_opacity::unimplemented",
         "controls::photo_interval::unimplemented",
         "star_job::required_termination_code_string::unused"
       ],
@@ -9336,7 +9264,6 @@
         "inlist_wd_diff_header"
       ],
       "unsupported_controls": [
-        "controls::atm_t_tau_opacity::unimplemented",
         "controls::photo_interval::unimplemented",
         "star_job::required_termination_code_string::unused"
       ],
@@ -9382,7 +9309,6 @@
         "inlist_wd_nova_burst_header"
       ],
       "unsupported_controls": [
-        "controls::atm_t_tau_opacity::unimplemented",
         "controls::photo_interval::unimplemented",
         "controls::warning_limit_for_max_residual::unimplemented",
         "star_job::auto_extend_net::unused",
@@ -9406,7 +9332,6 @@
         "inlist_wd_stable_h_burn_header"
       ],
       "unsupported_controls": [
-        "controls::atm_t_tau_opacity::unimplemented",
         "controls::photo_interval::unimplemented",
         "star_job::dlgm_per_step::unimplemented",
         "star_job::dlogtau_factor::unimplemented",
@@ -9429,7 +9354,6 @@
         "inlist_to_cc_header"
       ],
       "unsupported_controls": [
-        "controls::atm_t_tau_opacity::unimplemented",
         "controls::d_omega_mixing_across_convection_boundary::unimplemented",
         "controls::d_omega_mixing_rate::unimplemented",
         "controls::max_safe_logt_for_rates::unimplemented",
@@ -9787,7 +9711,6 @@
         "astero_search_controls::write_gyre_for_each_model::unimplemented",
         "astero_search_controls::write_profile_for_best_model::unimplemented",
         "astero_search_controls::y_frac_he3::unused",
-        "controls::atm_t_tau_opacity::unimplemented",
         "controls::photo_interval::unimplemented",
         "star_job::pre_ms_relax_num_steps::unused",
         "star_job::required_termination_code_string::unused"
@@ -9854,7 +9777,6 @@
         "astero_search_controls::write_gyre_for_each_model::unimplemented",
         "astero_search_controls::write_profile_for_best_model::unimplemented",
         "astero_search_controls::y_frac_he3::unused",
-        "controls::atm_t_tau_opacity::unimplemented",
         "controls::photo_interval::unimplemented",
         "star_job::pre_ms_relax_num_steps::unused",
         "star_job::required_termination_code_string::unused"
@@ -9922,7 +9844,6 @@
         "astero_search_controls::write_gyre_for_each_model::unimplemented",
         "astero_search_controls::write_profile_for_best_model::unimplemented",
         "astero_search_controls::y_frac_he3::unused",
-        "controls::atm_t_tau_opacity::unimplemented",
         "controls::photo_interval::unimplemented",
         "star_job::pre_ms_relax_num_steps::unused",
         "star_job::required_termination_code_string::unused"
@@ -9994,7 +9915,6 @@
         "astero_search_controls::write_gyre_for_each_model::unimplemented",
         "astero_search_controls::write_profile_for_best_model::unimplemented",
         "astero_search_controls::y_frac_he3::unused",
-        "controls::atm_t_tau_opacity::unimplemented",
         "controls::photo_interval::unimplemented",
         "star_job::pre_ms_relax_num_steps::unused",
         "star_job::required_termination_code_string::unused"

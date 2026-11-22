@@ -20,7 +20,7 @@
 //!   $a_0 \Gamma^3 + \Gamma^2 + \Gamma - a_0 B^3 = 0$.
 //! - [`tdc`]: Kuhfuss (1986) / Smolec time-dependent convection (`set_tdc`)
 //!   with bisection-bracketed Newton root-finding over $Z = \ln|Y|$ and
-//!   Implicit Function Theorem derivative propagation.
+//!   [`tdc_dual::AutoDiffRealTdc`] Newton-iteration derivative propagation.
 //! - [`semiconvection`]: Langer, El Eid, & Fricke (1985) semiconvective
 //!   diffusivity and quadratic radiative/semiconvective flux partitioning.
 //! - [`thermohaline`]: Kippenhahn et al. (1980), Traxler et al. (2011), and

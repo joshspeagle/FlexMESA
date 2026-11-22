@@ -410,6 +410,11 @@ pub struct HydroAuxState {
     /// at solve exit for post-solve rotation conservation and reset by the
     /// post-solve `set_mlt_vars` pass.
     pub solver_mlt_eval_count: usize,
+    /// Start-of-step outermost-zone Rosseland opacity $\kappa_{\mathrm{start},1}$
+    /// (`s% opacity_start(1)` in `star/private/atm_support.f90:303`) used as the
+    /// initial guess for `'iterated'` $T(\tau)$ atmospheres during solver iterations.
+    #[serde(default)]
+    pub opacity_start_surf: f64,
     /// Per-face sticky radiative latch (`fixed_gradr_for_rest_of_solver_iters` in `turb_info.f90:56-61`).
     pub fixed_gradr_sticky: Vec<bool>,
     /// Auxiliary mixing, MLT, convective-boundary, and Brunt-smoothing state.
@@ -569,6 +574,7 @@ impl HydroAuxState {
             j_rot_old: vec![0.0; nz],
             eps_mdot_old: vec![0.0; nz],
             solver_mlt_eval_count: 0,
+            opacity_start_surf: 0.0,
             fixed_gradr_sticky: vec![false; nz],
             mixing: crate::mixing_state::MixingAuxState::new(nz),
             step_hist: StepHistoryScalars::default(),

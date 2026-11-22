@@ -6,19 +6,16 @@ equation
 $$Q(Y) = (L - L_0 \\nabla_L) - L_0 Y
   - c_0 A_f(Y_{\\mathrm{env}}) Y_{\\mathrm{env}} = 0$$
 over $Z = \\ln|Y| \\in [-100, 100]$ using bisection bracketing followed by
-damped Newton-Raphson refinement (`bracket_plus_newton_search`), and
-propagates first-order structure derivatives via the Implicit Function Theorem
-$$\\frac{\\partial Y^*}{\\partial \\mathbf{p}} =
-  -\\left(\\frac{\\partial Q}{\\partial Y}\\right)^{-1}
-  \\left.\\frac{\\partial Q}{\\partial \\mathbf{p}}\\right|_{Y^*}.$$
+damped Newton-Raphson refinement (`bracket_plus_newton_search`). The Newton
+iteration runs on `AutoDiffRealTdc` (upstream's `auto_diff_real_tdc`), so the
+returned $Y$ carries the structure partials of the last Newton update
+(`turb/private/tdc.f90:253-345`).
 """
 
 from __future__ import annotations
 
 import dataclasses
-import math
 
-from flexmesa import auto_diff as _ad
 from flexmesa import constants as _const
 from flexmesa.turb import mlt as _mlt
 from flexmesa.turb import tdc_search as _search
@@ -50,8 +47,6 @@ class TdcParams:
             correction $\\Gamma / (1 + \\Gamma)$.
         use_tdc_enthalpy_flux_limiter: Enable Wuchterl & Feuchtinger (1998)
             quintic enthalpy flux limiter.
-        y_face_guess: Optional positive superadiabaticity seed ($\\le 0$
-            disables seeding).
     """
 
     conv_vel_start: float = 0.0
@@ -68,7 +63,6 @@ class TdcParams:
     max_conv_vel: float = 1.0e99
     include_mlt_corr_to_tdc: bool = True
     use_tdc_enthalpy_flux_limiter: bool = False
-    y_face_guess: float = 0.0
 
 
 @dataclasses.dataclass(frozen=True)
@@ -132,6 +126,11 @@ def set_tdc(
 ) -> TdcOutput:
     """Evaluate Time-Dependent Convection (`set_TDC` in `turb/public/turb.f90`).
 
+    Calls `set_mlt` with Cox MLT unconditionally before packing `TdcInfo`
+    (`turb/public/turb.f90:142-145`) and enforces upstream's
+    `mixing_length_alpha == 0` / `dt <= 0` guard in `get_TDC_solution`
+    (`turb/private/tdc.f90:65-67`).
+
     Args:
         params: Non-differentiable configuration parameters (`TdcParams`).
         inp: Differentiable thermodynamic inputs (`TdcInputs`) with `float`
@@ -144,26 +143,6 @@ def set_tdc(
         ValueError: If `mixing_length_alpha == 0` or `dt <= 0`.
         RuntimeError: If the TDC root solver fails to converge.
     """
-    if (
-        params.mixing_length_alpha <= 0.0
-        or params.dt <= 0.0
-        or params.scale <= 0.0
-        or math.isnan(params.mixing_length_alpha)
-        or math.isnan(params.dt)
-        or math.isnan(params.scale)
-        or _types.val_of(inp.t) <= 0.0
-        or _types.val_of(inp.rho) <= 0.0
-        or _types.val_of(inp.p) <= 0.0
-        or _types.val_of(inp.cp) <= 0.0
-        or _types.val_of(inp.opacity) <= 0.0
-        or _types.val_of(inp.scale_height) <= 0.0
-        or math.isnan(_types.val_of(inp.gradr))
-        or math.isnan(_types.val_of(inp.gradl))
-        or math.isnan(_types.val_of(inp.grada))
-    ):
-        msg = "Invalid or non-positive parameter in set_tdc"
-        raise ValueError(msg)
-
     proto = inp.gradr
     lum = (
         (64.0 * _const.PI * _const.BOLTZ_SIGMA)
@@ -174,26 +153,31 @@ def set_tdc(
         / (3.0 * inp.p * inp.opacity)
     )
 
-    if params.include_mlt_corr_to_tdc:
-        lambda_ = params.mixing_length_alpha * inp.scale_height
-        mlt_params = _types.MltParams.cox(params.mixing_length_alpha)
-        mlt_inp = _types.MltInputs(
-            chi_t=inp.chi_t,
-            chi_rho=inp.chi_rho,
-            cp=inp.cp,
-            grav=inp.grav,
-            lambda_=lambda_,
-            rho=inp.rho,
-            p=inp.p,
-            t=inp.t,
-            opacity=inp.opacity,
-            gradr=inp.gradr,
-            grada=inp.grada,
-            gradl=inp.gradl,
-        )
-        gamma = _mlt.set_mlt(mlt_params, mlt_inp).gamma
-    else:
-        gamma = _types.const_like(proto, 0.0)
+    # Upstream `turb/public/turb.f90:141-145` always calls `set_MLT('Cox', ...)`
+    # before packing `TdcInfo`.
+    lambda_ = params.mixing_length_alpha * inp.scale_height
+    mlt_params = _types.MltParams(
+        option=_types.MltOption.COX,
+        mixing_length_alpha=params.mixing_length_alpha,
+        henyey_nu=0.0,
+        henyey_y=0.0,
+        max_conv_vel=1.0e99,
+    )
+    mlt_inp = _types.MltInputs(
+        chi_t=inp.chi_t,
+        chi_rho=inp.chi_rho,
+        cp=inp.cp,
+        grav=inp.grav,
+        lambda_=lambda_,
+        rho=inp.rho,
+        p=inp.p,
+        t=inp.t,
+        opacity=inp.opacity,
+        gradr=inp.gradr,
+        grada=inp.grada,
+        gradl=inp.gradl,
+    )
+    gamma = _mlt.set_mlt(mlt_params, mlt_inp).gamma
 
     c0 = (
         (
@@ -220,7 +204,7 @@ def set_tdc(
     a0 = _types.const_like(proto, params.conv_vel_start / _const.SQRT_2_DIV_3)
     h = inp.energy + inp.p / inp.rho
 
-    info = _support.TdcInfo(
+    info: _support.TdcInfo[_types.ScalarOrDual] = _support.TdcInfo(
         include_mlt_corr_to_tdc=params.include_mlt_corr_to_tdc,
         use_tdc_enthalpy_flux_limiter=params.use_tdc_enthalpy_flux_limiter,
         mixing_length_alpha=params.mixing_length_alpha,
@@ -248,7 +232,7 @@ def set_tdc(
     )
 
     conv_vel, y_face, num_iters = _get_tdc_solution(
-        info, params.scale, -100.0, 100.0, params.y_face_guess
+        info, params.scale, -100.0, 100.0
     )
 
     if _types.val_of(conv_vel) > params.max_conv_vel:
@@ -287,37 +271,46 @@ def set_tdc(
 
 
 def _get_tdc_solution(
-    info: _support.TdcInfo,
+    info: _support.TdcInfo[_types.ScalarOrDual],
     scale: float,
     zlb: float,
     zub: float,
-    y_face_guess: float,
 ) -> tuple[_types.ScalarOrDual, _types.ScalarOrDual, int]:
     """Solve for `(conv_vel, y_face, num_iters)` (`get_TDC_solution`)."""
+    # Upstream guard in `turb/private/tdc.f90:65-67`.
+    if info.mixing_length_alpha == 0.0 or info.dt <= 0.0:
+        msg = (
+            "bad call to TDC get_TDC_solution: "
+            "mixing_length_alpha == 0 or dt <= 0"
+        )
+        raise ValueError(msg)
+
     info_p = info.to_primal()
     info_z = info.to_z_dual()
+    info_t, has_dual = info.to_tdc()
     q0, _ = _support.compute_q(info_p, 0.0)
-    y_is_positive = _types.val_of(q0) > 0.0
+    y_is_positive = q0 > 0.0
 
     num_iters = 0
+    y_sol: _types.ScalarOrDual
     if y_is_positive:
-        y_star, num_iters = _search.bracket_plus_newton_search(
-            info_p, info_z, scale, True, zlb, zub, y_face_guess
+        y_tdc, num_iters = _search.bracket_plus_newton_search(
+            info_p, info_t, scale, True, zlb, zub
         )
-        y_sol = _lift_implicit_root(info, info_z, y_star)
+        y_sol = y_tdc.unconvert(is_dual=has_dual)
     else:
         rad_y = (info.lum - info.l0 * info.gradl) / info.l0
         if _types.val_of(info.a0) < 1.0e-10:
             y_sol = rad_y
         else:
             _, af_lb = _support.compute_q(info_p, _support.set_y(False, zlb))
-            if _types.val_of(af_lb) == 0.0:
+            if af_lb == 0.0:
                 y_sol = rad_y
             else:
                 _, af_ub = _support.compute_q(
                     info_p, _support.set_y(False, zub)
                 )
-                if _types.val_of(af_ub) > 0.0:
+                if af_ub > 0.0:
                     z0 = zub
                 else:
                     z0 = _search.af_bisection_search(info_p, zlb, zub)
@@ -327,53 +320,34 @@ def _get_tdc_solution(
                     q1, _ = _support.compute_q(
                         info_p, _support.set_y(False, z1)
                     )
-                    if _types.val_of(q1) < 0.0:
+                    if q1 < 0.0:
                         y_sol = rad_y
                     else:
                         try:
-                            y_star, num_iters = (
+                            y_tdc, num_iters = (
                                 _search.bracket_plus_newton_search(
-                                    info_p, info_z, scale, False, zlb, z1, 0.0
+                                    info_p, info_t, scale, False, zlb, z1
                                 )
                             )
                         except RuntimeError:
-                            y_star, num_iters = (
+                            y_tdc, num_iters = (
                                 _search.bracket_plus_newton_search(
-                                    info_p, info_z, scale, False, z1, z0, 0.0
+                                    info_p, info_t, scale, False, z1, z0
                                 )
                             )
-                        y_sol = _lift_implicit_root(info, info_z, y_star)
+                        y_sol = y_tdc.unconvert(is_dual=has_dual)
                 else:
                     q_y0, _ = _support.compute_q(
                         info_p, _support.set_y(False, z0)
                     )
-                    if _types.val_of(q_y0) > 0.0:
-                        y_star, num_iters = _search.bracket_plus_newton_search(
-                            info_p, info_z, scale, False, zlb, z0, 0.0
+                    if q_y0 > 0.0:
+                        y_tdc, num_iters = _search.bracket_plus_newton_search(
+                            info_p, info_t, scale, False, zlb, z0
                         )
-                        y_sol = _lift_implicit_root(info, info_z, y_star)
+                        y_sol = y_tdc.unconvert(is_dual=has_dual)
                     else:
                         y_sol = rad_y
 
     _, af = _support.compute_q(info, y_sol)
     conv_vel = _const.SQRT_2_DIV_3 * af
     return conv_vel, y_sol, num_iters
-
-
-def _lift_implicit_root(
-    info: _support.TdcInfo,
-    info_z: _support.TdcInfo,
-    y_star: float,
-) -> _types.ScalarOrDual:
-    """Propagate structure derivatives into $Y^*$ via the implicit theorem."""
-    q_dual_y, _ = _support.compute_q(
-        info_z, _ad.DualOrder1.independent(y_star, index=0, num_vars=1)
-    )
-    assert isinstance(q_dual_y, _ad.DualOrder1)
-    dq_dy = float(q_dual_y.d1[0])
-    y_const = _types.const_like(info.lum, y_star)
-    if dq_dy == 0.0 or not math.isfinite(dq_dy):
-        return y_const
-    q_p, _ = _support.compute_q(info, y_const)
-    zero_val_q_p = q_p - _types.val_of(q_p)
-    return y_const - zero_val_q_p / dq_dy

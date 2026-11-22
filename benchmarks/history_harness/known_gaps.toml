@@ -625,16 +625,6 @@ reason = "Asteroseismic surface-effects starting model and ADIPLS scaffolding (#
 [[test_gaps]]
 kind = "rust_ignore"
 crate = "flexmesa-eos"
-file = "crates/flexmesa-eos/tests/mesa_26_4_1_component_oracles_test.rs"
-test_name = "test_skye_and_blend_third_order_hermite_derivatives_match_mesa_26_4_1"
-issue = "#161"
-role = "physics_gap"
-expect_fail_when_run = true
-reason = "Skye/HELM operation order causes 10 d_dlnT channels to exceed 5.0e-11 (max rel_err 1.101e-6); gate fails if it passes while ignored."
-
-[[test_gaps]]
-kind = "rust_ignore"
-crate = "flexmesa-eos"
 file = "crates/flexmesa-eos/tests/wave3a3_pc_tests.rs"
 test_name = "test_pc_liquid_and_transition_regimes_match_mesa_26_4_1_unwidened"
 issue = "#161"
@@ -651,16 +641,6 @@ issue = "#161"
 role = "physics_gap"
 expect_fail_when_run = true
 reason = "PC evaluates analytical EXCOR7 whereas MESA pc_eos.f90:1895 interpolates EXCOR7.data via bicubic splines; solid/blend derivatives differ up to 2.513e-6 >= 5.0e-9."
-
-[[test_gaps]]
-kind = "rust_ignore"
-crate = "flexmesa-eos"
-file = "crates/flexmesa-eos/tests/wave3a3_skye_inverse_tests.rs"
-test_name = "test_skye_liquid_and_blend_match_mesa_26_4_1_unwidened"
-issue = "#161"
-role = "physics_gap"
-expect_fail_when_run = true
-reason = "Skye/HELM operation order on liquid and blend cases causes derivative channels to exceed 1.0e-12/1.0e-11/1.0e-8 (max rel_err 1.101e-6)."
 
 [[test_gaps]]
 kind = "rust_ignore"

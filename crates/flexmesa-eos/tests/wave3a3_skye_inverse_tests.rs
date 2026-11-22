@@ -20,56 +20,6 @@ use flexmesa_eos::{
     I_LN_FREE_E, I_LN_PGAS, I_LN_S, I_MU,
 };
 
-/// Declared residuals against compiled MESA `26.4.1` (`#161`) where `Skye` and
-/// `Skye+HELM` partial derivatives exceed the pre-existing `1.0e-12` /
-/// `1.0e-11` / `1.0e-8` tolerances pending operation-order alignment. All
-/// solid/phase-transition cases (`skye_co_sol_ogata`, `skye_co_sol_pc`,
-/// `skye_c12_phase`) pass at `1.0e-9` with zero allowances.
-const DECLARED_SKYE_RESIDUALS: [(&str, usize, usize, f64); 42] = [
-    ("skye_c12_liq", 6, 1, 1.3e-10),               // grad_ad d_dlnd 8.141e-11 (1.0e-12)
-    ("skye_c12_liq", 6, 2, 1.8e-10),               // grad_ad d_dlnT 1.182e-10 (1.0e-12)
-    ("skye_c12_liq", 9, 1, 3.4e-12),               // Cp      d_dlnd 2.258e-12 (1.0e-12)
-    ("skye_c12_liq", 10, 1, 3.8e-12),              // Cv      d_dlnd 2.467e-12 (1.0e-12)
-    ("skye_c12_liq", 10, 2, 1.6e-12),              // Cv      d_dlnT 1.042e-12 (1.0e-12)
-    ("skye_c12_liq", 11, 2, 3.7e-12),              // dE_dRho d_dlnT 2.467e-12 (1.0e-12)
-    ("skye_c12_liq", 12, 1, 3.7e-12),              // dS_dT   d_dlnd 2.466e-12 (1.0e-12)
-    ("skye_c12_liq", 13, 2, 3.7e-12),              // dS_dRho d_dlnT 2.466e-12 (1.0e-12)
-    ("skye_c12_liq", 14, 2, 5.1e-11),              // gamma1  d_dlnT 3.369e-11 (1.0e-12)
-    ("skye_c12_liq", 15, 1, 2.7e-11),              // gamma3  d_dlnd 1.778e-11 (1.0e-12)
-    ("skye_c12_liq", 15, 2, 1.7e-10),              // gamma3  d_dlnT 1.084e-10 (1.0e-12)
-    ("skye_c12_liq_ion", 6, 1, 1.3e-10),           // grad_ad d_dlnd 8.141e-11 (1.0e-12)
-    ("skye_c12_liq_ion", 6, 2, 1.8e-10),           // grad_ad d_dlnT 1.182e-10 (1.0e-12)
-    ("skye_c12_liq_ion", 9, 1, 3.4e-12),           // Cp      d_dlnd 2.258e-12 (1.0e-12)
-    ("skye_c12_liq_ion", 10, 1, 3.8e-12),          // Cv      d_dlnd 2.467e-12 (1.0e-12)
-    ("skye_c12_liq_ion", 10, 2, 1.6e-12),          // Cv      d_dlnT 1.042e-12 (1.0e-12)
-    ("skye_c12_liq_ion", 11, 2, 3.7e-12),          // dE_dRho d_dlnT 2.467e-12 (1.0e-12)
-    ("skye_c12_liq_ion", 12, 1, 3.7e-12),          // dS_dT   d_dlnd 2.466e-12 (1.0e-12)
-    ("skye_c12_liq_ion", 13, 2, 3.7e-12),          // dS_dRho d_dlnT 2.466e-12 (1.0e-12)
-    ("skye_c12_liq_ion", 14, 2, 5.1e-11),          // gamma1  d_dlnT 3.369e-11 (1.0e-12)
-    ("skye_c12_liq_ion", 15, 1, 2.7e-11),          // gamma3  d_dlnd 1.778e-11 (1.0e-12)
-    ("skye_c12_liq_ion", 15, 2, 1.7e-10),          // gamma3  d_dlnT 1.084e-10 (1.0e-12)
-    ("skye_co_liq", 6, 1, 4.8e-10),                // grad_ad d_dlnd 3.185e-10 (1.0e-11)
-    ("skye_co_liq", 6, 2, 2.0e-6),                 // grad_ad d_dlnT 1.317e-6  (1.0e-11)
-    ("skye_co_liq", 9, 2, 1.7e-6),                 // Cp      d_dlnT 1.101e-6  (1.0e-11)
-    ("skye_co_liq", 10, 2, 1.7e-6),                // Cv      d_dlnT 1.082e-6  (1.0e-11)
-    ("skye_co_liq", 12, 2, 2.0e-6),                // dS_dT   d_dlnT 1.023e-6  (1.0e-11)
-    ("skye_co_liq", 14, 2, 1.4e-6),                // gamma1  d_dlnT 9.177e-7  (1.0e-11)
-    ("skye_co_liq", 15, 1, 1.6e-11),               // gamma3  d_dlnd 1.024e-11 (1.0e-11)
-    ("skye_co_liq", 15, 2, 2.0e-6),                // gamma3  d_dlnT 1.321e-6  (1.0e-11)
-    ("eosdt_skye_helm_blend", 6, 2, 5.8e-6),       // grad_ad d_dlnT 3.814e-6  (1.0e-8)
-    ("eosdt_skye_helm_blend", 9, 2, 3.4e-7),       // Cp      d_dlnT 2.262e-7  (1.0e-8)
-    ("eosdt_skye_helm_blend", 10, 2, 6.4e-7),      // Cv      d_dlnT 4.244e-7  (1.0e-8)
-    ("eosdt_skye_helm_blend", 12, 2, 3.9e-7),      // dS_dT   d_dlnT 2.554e-7  (1.0e-8)
-    ("eosdt_skye_helm_blend", 14, 2, 3.0e-6),      // gamma1  d_dlnT 1.950e-6  (1.0e-8)
-    ("eosdt_skye_helm_blend", 15, 2, 1.3e-5),      // gamma3  d_dlnT 8.028e-6  (1.0e-8)
-    ("eosdt_skye_helm_blend_ion", 6, 2, 5.8e-6),   // grad_ad d_dlnT 3.814e-6  (1.0e-8)
-    ("eosdt_skye_helm_blend_ion", 9, 2, 3.4e-7),   // Cp      d_dlnT 2.262e-7  (1.0e-8)
-    ("eosdt_skye_helm_blend_ion", 10, 2, 6.4e-7),  // Cv      d_dlnT 4.244e-7  (1.0e-8)
-    ("eosdt_skye_helm_blend_ion", 12, 2, 3.9e-7),  // dS_dT   d_dlnT 2.554e-7  (1.0e-8)
-    ("eosdt_skye_helm_blend_ion", 14, 2, 3.0e-6),  // gamma1  d_dlnT 1.950e-6  (1.0e-8)
-    ("eosdt_skye_helm_blend_ion", 15, 2, 1.3e-5),  // gamma3  d_dlnT 8.028e-6  (1.0e-8)
-];
-
 fn make_comp(
     y_in: f64,
     xc_in: f64,
@@ -85,7 +35,7 @@ fn make_comp(
     (chem_id, xa, comp.abar, comp.zbar)
 }
 
-fn run_skye_liquid_and_ion_offset_cases(allow_declared: bool) {
+fn run_skye_liquid_and_ion_offset_cases() {
     let ht = HelmTable::builtin().expect("builtin HELM table");
     let (chem_id, xa, abar, zbar) = make_comp(0.0, 1.0, 0.0);
 
@@ -102,8 +52,8 @@ fn run_skye_liquid_and_ion_offset_cases(allow_declared: bool) {
         &out1,
         1.0e-12,
         1.0e-12,
-        &DECLARED_SKYE_RESIDUALS,
-        allow_declared,
+        &[],
+        false,
     );
 
     // 2. skye_c12_liq_ion (use_ion_offsets = true; MESA 26.4.1 #192)
@@ -115,8 +65,8 @@ fn run_skye_liquid_and_ion_offset_cases(allow_declared: bool) {
         &out2,
         1.0e-12,
         1.0e-12,
-        &DECLARED_SKYE_RESIDUALS,
-        allow_declared,
+        &[],
+        false,
     );
 
     // 3. skye_co_liq
@@ -138,8 +88,8 @@ fn run_skye_liquid_and_ion_offset_cases(allow_declared: bool) {
         &out3,
         1.0e-11,
         1.0e-11,
-        &DECLARED_SKYE_RESIDUALS,
-        allow_declared,
+        &[],
+        false,
     );
 
     // 4. eosdt_skye_helm_blend (Skye + HELM with 4D tables disabled)
@@ -159,8 +109,8 @@ fn run_skye_liquid_and_ion_offset_cases(allow_declared: bool) {
         &out_blend,
         1.0e-8,
         1.0e-8,
-        &DECLARED_SKYE_RESIDUALS,
-        allow_declared,
+        &[],
+        false,
     );
 
     // 5. eosdt_skye_helm_blend_ion (default Skye_use_ion_offsets = true)
@@ -172,14 +122,14 @@ fn run_skye_liquid_and_ion_offset_cases(allow_declared: bool) {
         &out_blend_ion,
         1.0e-8,
         1.0e-8,
-        &DECLARED_SKYE_RESIDUALS,
-        allow_declared,
+        &[],
+        false,
     );
 }
 
 #[test]
 fn test_skye_liquid_and_ion_offset_regimes_match_mesa_26_4_1_oracle() {
-    run_skye_liquid_and_ion_offset_cases(true);
+    run_skye_liquid_and_ion_offset_cases();
 }
 
 #[test]
@@ -363,12 +313,6 @@ fn test_skye_alfa_blend_and_inverse_solvers_match_mesa_26_4_1_oracle() {
     assert_eq!(gam.res[I_DS_DRHO], 0.0);
     assert_eq!(gam.d_dlnd[I_LN_S], 0.0);
     assert_eq!(gam.d_dln_t[I_LN_S], 0.0);
-}
-
-#[test]
-#[ignore = "declared gap (#161): Skye/HELM operation order on skye_c12_liq, skye_c12_liq_ion, skye_co_liq, and eosdt_skye_helm_blend (max rel_err 1.101e-6 >= 1.0e-11; see DECLARED_SKYE_RESIDUALS)"]
-fn test_skye_liquid_and_blend_match_mesa_26_4_1_unwidened() {
-    run_skye_liquid_and_ion_offset_cases(false);
 }
 
 #[test]

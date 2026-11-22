@@ -15,36 +15,6 @@ use flexmesa_eos::{
 };
 use flexmesa_math::exp10;
 
-/// Declared unfloored relative residuals against compiled MESA `26.4.1` (`#161`):
-/// `(case, channel, col, rtol_bound)` entries whose `d_dlnT` (`col 2`) misses
-/// the `5.0e-12`..`1.0e-7` tolerances after `#165` put the `HelmTable` grid on
-/// `CRMATH` `exp10`. The `#[ignore]` test below enforces the unwidened bounds.
-const DECLARED_DLNT_RESIDUALS: [(&str, usize, usize, f64); 23] = [
-    ("skye_c12_liq", 6, 1, 1.3e-10), // grad_ad d_dlnd 8.141e-11 (5.0e-12)
-    ("skye_c12_liq", 6, 2, 1.8e-10), // grad_ad d_dlnT 1.182e-10 (5.0e-12)
-    ("skye_c12_liq", 14, 2, 5.1e-11), // gamma1  d_dlnT 3.369e-11 (5.0e-12)
-    ("skye_c12_liq", 15, 1, 2.7e-11), // gamma3  d_dlnd 1.778e-11 (5.0e-12)
-    ("skye_c12_liq", 15, 2, 1.7e-10), // gamma3  d_dlnT 1.084e-10 (5.0e-12)
-    ("skye_c12_liq_ion", 6, 1, 1.3e-10), // grad_ad d_dlnd 8.141e-11 (5.0e-12)
-    ("skye_c12_liq_ion", 6, 2, 1.8e-10), // grad_ad d_dlnT 1.182e-10 (5.0e-12)
-    ("skye_c12_liq_ion", 14, 2, 5.1e-11), // gamma1  d_dlnT 3.369e-11 (5.0e-12)
-    ("skye_c12_liq_ion", 15, 1, 2.7e-11), // gamma3  d_dlnd 1.778e-11 (5.0e-12)
-    ("skye_c12_liq_ion", 15, 2, 1.7e-10), // gamma3  d_dlnT 1.084e-10 (5.0e-12)
-    ("skye_co_liq", 6, 1, 4.8e-10),  // grad_ad d_dlnd 3.185e-10 (5.0e-11)
-    ("skye_co_liq", 6, 2, 2.0e-6),   // grad_ad d_dlnT 1.317e-6  (5.0e-11)
-    ("skye_co_liq", 9, 2, 1.7e-6),   // Cp      d_dlnT 1.101e-6  (5.0e-11)
-    ("skye_co_liq", 10, 2, 1.7e-6),  // Cv      d_dlnT 1.082e-6  (5.0e-11)
-    ("skye_co_liq", 12, 2, 2.0e-6),  // dS_dT   d_dlnT 1.023e-6  (5.0e-11)
-    ("skye_co_liq", 14, 2, 1.4e-6),  // gamma1  d_dlnT 9.177e-7  (5.0e-11)
-    ("skye_co_liq", 15, 2, 2.0e-6),  // gamma3  d_dlnT 1.321e-6  (5.0e-11)
-    ("eosdt_skye_helm_blend", 6, 2, 5.8e-6), // grad_ad d_dlnT 3.814e-6  (1.0e-7)
-    ("eosdt_skye_helm_blend", 9, 2, 3.4e-7), // Cp      d_dlnT 2.262e-7  (1.0e-7)
-    ("eosdt_skye_helm_blend", 10, 2, 6.4e-7), // Cv      d_dlnT 4.244e-7  (1.0e-7)
-    ("eosdt_skye_helm_blend", 12, 2, 3.9e-7), // dS_dT   d_dlnT 2.554e-7  (1.0e-7)
-    ("eosdt_skye_helm_blend", 14, 2, 3.0e-6), // gamma1  d_dlnT 1.950e-6  (1.0e-7)
-    ("eosdt_skye_helm_blend", 15, 2, 1.3e-5), // gamma3  d_dlnT 8.028e-6  (1.0e-7)
-];
-
 fn make_comp(
     he_frac: f64,
     carbon_frac: f64,
@@ -60,7 +30,7 @@ fn make_comp(
     (chem_id, xa, comp.abar, comp.zbar)
 }
 
-fn run_skye_and_blend_suite(allow_declared_residuals: bool) {
+fn run_skye_and_blend_suite() {
     let ht = HelmTable::builtin().expect("builtin HELM table");
     let comps = [make_comp(0.0, 1.0, 0.0), make_comp(0.0, 0.5, 0.5)];
     let skye_cases = [
@@ -133,8 +103,8 @@ fn run_skye_and_blend_suite(allow_declared_residuals: bool) {
             &out,
             tol,
             tol,
-            &DECLARED_DLNT_RESIDUALS,
-            allow_declared_residuals,
+            &[],
+            false,
         );
     }
 
@@ -154,8 +124,8 @@ fn run_skye_and_blend_suite(allow_declared_residuals: bool) {
         &out,
         1.0e-7,
         1.0e-7,
-        &DECLARED_DLNT_RESIDUALS,
-        allow_declared_residuals,
+        &[],
+        false,
     );
 }
 
@@ -245,7 +215,7 @@ fn test_all_fifteen_pc_skye_and_blend_cases_against_compiled_mesa_26_4_1() {
         false,
     );
 
-    run_skye_and_blend_suite(true);
+    run_skye_and_blend_suite();
 }
 
 #[test]
@@ -302,10 +272,4 @@ fn test_helm_ideal_edge_blend_matches_mesa_26_4_1_swapped_alfa_partials() {
         &[],
         false,
     );
-}
-
-#[test]
-#[ignore = "declared gap (#161): Skye/HELM operation order; 12 d_dlnT channels on skye_co_liq and eosdt_skye_helm_blend miss the original tolerance, largest eosdt_skye_helm_blend gamma3 rel_err 8.028e-6 >= 1.0e-7 (see DECLARED_DLNT_RESIDUALS)"]
-fn test_skye_and_blend_third_order_hermite_derivatives_match_mesa_26_4_1() {
-    run_skye_and_blend_suite(false);
 }

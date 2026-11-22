@@ -14,14 +14,14 @@
         "absent": 17759,
         "stub": 6378,
         "partial": 54084,
-        "ported_unverified": 37317,
-        "kernel_reference_vectors": 4971,
+        "ported_unverified": 36648,
+        "kernel_reference_vectors": 5640,
         "case_level_evidence": 0,
         "ported_total": 42288,
-        "verified_total": 4971,
+        "verified_total": 5640,
         "pct_ported": 35.1,
-        "pct_verified": 4.1,
-        "rust_lines": 87606,
+        "pct_verified": 4.7,
+        "rust_lines": 87640,
         "python_jax_lines": 3869
       },
       {
@@ -89,8 +89,8 @@
         "verified_total": 0,
         "pct_ported": 0.0,
         "pct_verified": 0.0,
-        "rust_lines": 14768,
-        "python_jax_lines": 9867
+        "rust_lines": 15552,
+        "python_jax_lines": 9911
       },
       {
         "module": "kap",
@@ -455,7 +455,7 @@
       "upstream_panel_modules": 46
     },
     "infrastructure_lines": {
-      "rust_bridge_testing_bench": 19424,
+      "rust_bridge_testing_bench": 19428,
       "python_testing_bench": 15615
     }
   },
@@ -1102,7 +1102,7 @@
     }
   },
   "skips": {
-    "rust_ignore_count": 14,
+    "rust_ignore_count": 12,
     "rust_ignores": [
       {
         "location": "crates/flexmesa-astero/tests/astero_suite.rs:432",
@@ -1163,32 +1163,27 @@
         "location": "crates/flexmesa-binary/tests/tier5_coupled_suite.rs:1035",
         "reason": "unverified uncapped binary campaign; tracked in #143 and #160",
         "issues": "#143, #160"
-      },
-      {
-        "location": "crates/flexmesa-eos/tests/wave3a3_pc_solid_tests.rs:256",
-        "reason": "declared gap (#161): PC analytical EXCOR7 vs MESA pc_eos.f90:1895 use_EXCOR7_table spline on solid/blend cases; largest pc_co_sol dE_dRho d_dlnT rel_err 2.513e-6 >= 5.0e-9",
-        "issues": "#161"
-      },
-      {
-        "location": "crates/flexmesa-eos/tests/wave3a3_pc_tests.rs:132",
-        "reason": "declared gap (#161): PC analytical EXCOR7 vs MESA pc_eos.f90:1895 use_EXCOR7_table spline; 9 entries exceed 1.0e-11/5.0e-9, largest pc_co_liq dE_dRho d_dlnT rel_err 7.123e-6",
-        "issues": "#161"
       }
     ],
-    "python_xfail_or_skip_count": 11,
+    "python_xfail_or_skip_count": 12,
     "python_skips": [
       {
-        "location": "tests/test_eos_wave3a3.py:200",
-        "reason": "pytest.mark.xfail( strict=True, reason=( \"declared gap (#161): Rust strict PC and Skye derivatives differ \" \"from MESA 26.4.1 beyond the base tolerances (largest measured: \" \"pc_co_liq d_dlnT 7.1e-6, skye_co_liq d_dlnT 1.3e-6)\" ), )",
-        "issues": "#161"
+        "location": "tests/test_bench.py:149",
+        "reason": "pytest.mark.xfail( strict=True, reason=( \"#295: Rust PC uses the MESA 26.4.1 EXCOR7 bicubic spline table \" \"(eos/private/pc_eos.f90:1895, create_EXCOR7_table.f90:136 \" \"THETA > 0.005; #161), whereas the frozen JAX twin keeps analytical \" \"EXCOR7 (THETA > 0.04); measured cross-stage max_rel_err is \" \"3.716e-9 against 2.0e-9.\" ), )",
+        "issues": "#161, #295"
       },
       {
-        "location": "tests/test_eos_wave3b1.py:395",
-        "reason": "pytest.mark.xfail( strict=True, reason=( \"declared gap (#161): Python eos.eos_dt_get_t does not yet expose \" \"logT_tol/other_tol (eos/test/test_output:395 tol=1e-5 stops one \" \"Newton step earlier at 4.8009613155595554)\" ), )",
-        "issues": "#161"
+        "location": "tests/test_eos_wave3a3.py:487",
+        "reason": "pytest.mark.xfail( strict=True, reason=( \"#295: Rust PC uses the MESA 26.4.1 EXCOR7 bicubic spline table \" \"(pc_eos.f90:1895, create_EXCOR7_table.f90 THETA > 0.005; #161), \" \"whereas the frozen JAX twin keeps analytical EXCOR7 (THETA > 0.04), \" \"differing by up to 2.17e-6 on res and 4.35e-5 on derivatives.\" ), )",
+        "issues": "#161, #295"
       },
       {
-        "location": "tests/test_eos_wave3b1.py:813",
+        "location": "tests/test_eos_wave3a3.py:1003",
+        "reason": "pytest.mark.xfail( strict=True, reason=( \"#295: Rust PC uses the MESA 26.4.1 EXCOR7 bicubic spline table \" \"(pc_eos.f90:1895, create_EXCOR7_table.f90 THETA > 0.005; #161), \" \"whereas the frozen JAX twin keeps analytical EXCOR7 (THETA > 0.04), \" \"differing by up to 3.72e-6 on res and 9.93e-8 on derivatives across \" \"the 9- and 35-species PC mixtures.\" ), )",
+        "issues": "#161, #295"
+      },
+      {
+        "location": "tests/test_eos_wave3b1.py:807",
         "reason": "pytest.mark.xfail( strict=True, reason=( \"#295: AutoDiffReal2VarOrder3 evaluates MESA 26.4.1's auto_diff \" \"expressions (#349), which moves the cancellation-dominated de_dd \" \"of the Rust ideal-gas EOS by a few ULPs of its 5.7e10 terms; the \" \"JAX twin keeps its own rounding.\" ), )",
         "issues": "#295, #349"
       },
@@ -1279,8 +1274,8 @@
       },
       {
         "phase": "Phase A",
-        "open": 1,
-        "closed": 3,
+        "open": 0,
+        "closed": 4,
         "issues": [
           {
             "number": 142,
@@ -1290,7 +1285,7 @@
           {
             "number": 144,
             "title": "[Audit A3] CI that runs real campaigns, and a declared-known-gaps mechanism",
-            "state": "open"
+            "state": "closed"
           },
           {
             "number": 146,
@@ -2785,6 +2780,19 @@
       "rust_cov_pct": "75.8",
       "python_cov_pct": "87.6",
       "closed_140": "16",
+      "total_140": "36",
+      "deferred_169": "45"
+    },
+    {
+      "date_utc": "2026-11-22",
+      "commit": "2dff765",
+      "event": "main merge",
+      "engine_ported_pct": "30.7",
+      "all_verified_pct": "1.1",
+      "cases_passing": "0",
+      "rust_cov_pct": "75.8",
+      "python_cov_pct": "87.6",
+      "closed_140": "17",
       "total_140": "36",
       "deferred_169": "45"
     }

@@ -24,6 +24,9 @@ MASS_LOSS_AUGMENT_COLUMNS: tuple[str, ...] = (
     "lg_wind_mdot_1",
     "lg_wind_mdot_2",
 )
+AUGMENT_REFERENCE_COLUMNS: tuple[str, ...] = (
+    MASS_LOSS_AUGMENT_COLUMNS + history_compare.ENERGY_ERROR_COLUMNS
+)
 
 
 @dataclasses.dataclass(frozen=True)
@@ -303,10 +306,10 @@ def _augment_ref_with_mass_loss_columns(
     expected_ver: str,
     root_dir: pathlib.Path | None,
 ) -> history_compare.HistoryTable:
-    """Merge mass-loss columns from full cached MESA ``26.4.1`` runs."""
+    """Merge mass-loss and energy columns from cached MESA ``26.4.1`` runs."""
     if spec.reference_status != "mesa_26_4_1":
         return ref_tbl
-    if all(col in ref_tbl.columns for col in MASS_LOSS_AUGMENT_COLUMNS):
+    if all(col in ref_tbl.columns for col in AUGMENT_REFERENCE_COLUMNS):
         return ref_tbl
     full_path = resolve_full_reference_history_path(
         spec.suite, spec.case, root_dir=root_dir
@@ -334,7 +337,7 @@ def _augment_ref_with_mass_loss_columns(
         return ref_tbl
     extra = {
         col: full_tbl.columns[col]
-        for col in MASS_LOSS_AUGMENT_COLUMNS
+        for col in AUGMENT_REFERENCE_COLUMNS
         if col in full_tbl.columns and col not in ref_tbl.columns
     }
     if not extra:

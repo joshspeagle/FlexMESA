@@ -14,16 +14,18 @@
 )]
 
 use flexmesa_const::{M_SUN, SECYER};
+use flexmesa_star::inlist::InlistBundle;
+use flexmesa_star::inlist_runner::DefaultStarExtras;
 use flexmesa_star::{
     EnergyEqnOption, HistoryColumnSpec, MesaCellValue, PHOTO_FORMAT_VERSION,
-    StarControls, StarJobControls, StarModel, cell_specific_ke,
+    StarControls, StarError, StarJobControls, StarModel, cell_specific_ke,
     cell_specific_pe, cell_specific_rotational_energy,
     cell_specific_total_energy, do_adjust_mass_step, do_struct_burn_mix,
     eval_delta_m_total_energy_integrals, eval_total_energy_integrals,
-    evaluate_star_history_row, load_photo_bytes, load_zams_model,
-    record_start_of_step_energy_integrals, set_hydro_vars, star_evolve_step,
-    update_step_energy_conservation, verify_photo_restart_parity,
-    write_photo_bytes,
+    evaluate_star_history_row, init_or_update_model_from_bundle,
+    load_photo_bytes, load_zams_model, record_start_of_step_energy_integrals,
+    set_hydro_vars, star_evolve_step, update_step_energy_conservation,
+    verify_photo_restart_parity, write_photo_bytes,
 };
 use flexmesa_turb::MltOption;
 
@@ -475,3 +477,72 @@ fn test_photo_v29_preserves_initial_energy_integrals_and_restart_parity() {
         verify_photo_restart_parity(&model, 1).expect("restart parity");
     assert_eq!(c1, c2);
 }
+
+struct TempInlistGuard {
+    root: std::path::PathBuf,
+}
+
+impl TempInlistGuard {
+    fn new(tag: &str) -> Self {
+        static SEQ: std::sync::atomic::AtomicU64 =
+            std::sync::atomic::AtomicU64::new(0);
+        let id = SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let root = std::env::temp_dir().join(format!(
+            "flexmesa_star_151_{tag}_{}_{id}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).expect("create temp inlist dir");
+        Self { root }
+    }
+}
+
+impl Drop for TempInlistGuard {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.root);
+    }
+}
+
+/// Verifies `&controls` namelist wiring for
+/// `include_rotation_in_total_energy` and `absolute_cumulative_energy_err`
+/// plus strict rejection of malformed boolean inputs.
+#[test]
+fn test_inlist_loads_energy_accounting_controls() {
+    let tmp = TempInlistGuard::new("controls");
+    let valid = tmp.root.join("inlist_energy_controls");
+    std::fs::write(
+        &valid,
+        "&kap\n\
+           Zbase = 0.02d0\n\
+         /\n\
+         &controls\n\
+           initial_mass = 1.0d0\n\
+           include_rotation_in_total_energy = .true.\n\
+           absolute_cumulative_energy_err = .false.\n\
+         /\n",
+    )
+    .expect("write valid inlist");
+    let bundle = InlistBundle::from_file(&valid).expect("parse valid inlist");
+    assert_eq!(bundle.validation_report.unsupported_controls.len(), 0);
+    let mut extras = DefaultStarExtras;
+    let model = init_or_update_model_from_bundle(&bundle, None, &mut extras)
+        .expect("init model from bundle");
+    assert!(model.controls.include_rotation_in_total_energy);
+    assert!(!model.controls.absolute_cumulative_energy_err);
+
+    for (tag, key) in [
+        ("bad_rot", "include_rotation_in_total_energy"),
+        ("bad_abs", "absolute_cumulative_energy_err"),
+    ] {
+        let bad = tmp.root.join(format!("inlist_{tag}"));
+        std::fs::write(
+            &bad,
+            format!("&controls\n  {key} = 'not_a_bool'\n/\n"),
+        )
+        .expect("write malformed inlist");
+        let err = InlistBundle::from_file(&bad)
+            .expect_err("malformed boolean control must fail");
+        assert!(matches!(err, StarError::InvalidInput(_)));
+    }
+}
+

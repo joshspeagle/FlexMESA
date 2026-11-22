@@ -247,10 +247,7 @@ fn test_set_tdc_values_and_d1_partials_against_mesa_26_4_1_hex() {
                 if u == 0 {
                     val_exact += 1;
                 }
-                assert!(
-                    u <= 12 && rel <= 2.0e-15,
-                    "{cid} {name}: ulp={u}, rel={rel:.3e}"
-                );
+                assert_eq!(u, 0, "{cid} {name}: ulp={u}, rel={rel:.3e}");
                 max_val_ulp = max_val_ulp.max(u);
                 max_val_rel = max_val_rel.max(rel);
             }
@@ -322,24 +319,16 @@ fn test_set_tdc_values_and_d1_partials_against_mesa_26_4_1_hex() {
             }
         }
 
-        // Pin measured 0-ULP counts and tolerances (`DECISIONS #50`):
-        // - Scalar values: 118/128 at 0 ULP, max_ulp=12, max_rel=1.847e-15.
-        // - Y_face.d1: 260/512 at 0 ULP.
-        // - conv_vel.d1: 339/512 at 0 ULP.
-        // - Non-cancelled check_tdc partials: max_rel=4.603e-15 (<= 32 ULPs).
-        // - Near-cancelled / noise partials:
-        //   * check_tdc Y_face_d1[r]: rel up to 1.795e-10 (scaled <= 9.604e-14)
-        //   * check_tdc conv_vel_d1[Cp]: rel up to 1.290e-6 (~1e-10 cancellation, scaled <= 9.604e-14)
-        //   * check_tdc j16..j30 radY Y_face_d1[P,T,opacity]: ~1e-16 roundoff around analytic 0
-        //   * compare_tdc_cox_0: 1e5 sensitivity in L - L0*gradL gives max scaled=9.213e-11
+        // Every output value and every partial derivative matches MESA 26.4.1
+        // bit for bit (128 values, 512 `Y_face` partials, 512 `conv_vel`
+        // partials).
         assert_eq!(val_total, 128);
-        assert!(val_exact >= 118, "val_exact regression: {val_exact}/128");
-        assert!(max_val_ulp <= 12);
-        assert!(max_val_rel <= 2.0e-15);
+        assert_eq!(val_exact, 128, "val_exact regression: {val_exact}/128");
+        assert_eq!(max_val_ulp, 0);
         assert_eq!(y_d1_total, 512);
         assert_eq!(v_d1_total, 512);
-        assert!(y_d1_exact >= 260, "y_d1_exact regression: {y_d1_exact}/512");
-        assert!(v_d1_exact >= 339, "v_d1_exact regression: {v_d1_exact}/512");
+        assert_eq!(y_d1_exact, 512, "y_d1_exact regression: {y_d1_exact}/512");
+        assert_eq!(v_d1_exact, 512, "v_d1_exact regression: {v_d1_exact}/512");
         assert!(max_non_cancelled_rel <= 5.0e-15);
         assert!(max_check_tdc_scaled <= 1.0e-13);
         assert!(max_cox_scaled <= 1.0e-10);

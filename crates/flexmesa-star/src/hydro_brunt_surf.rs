@@ -4,14 +4,17 @@
 //! conditions (`eval_surf_bc` in `star/private/hydro_vars.f90`).
 
 use flexmesa_atm::{
-    atm_teff, eval_t_tau_uniform, eval_table, get_table_alfa_beta,
-    get_table_base, AtmEosCallbackResult, AtmError, AtmEvalOutput,
-    AtmKapCallbackResult,
+    AtmEosCallbackResult, AtmError, AtmEvalOutput, AtmKapCallbackResult,
+    atm_teff, eval_t_tau_uniform, eval_t_tau_varying, eval_table,
+    get_table_alfa_beta, get_table_base,
 };
-use flexmesa_const::{CLIGHT, CRAD, FOUR_PI, L_SUN, M_SUN, PI};
-use flexmesa_eos::{eos_dt_get, I_LN_PGAS};
+use flexmesa_const::{CLIGHT, CRAD, FOUR_PI, L_SUN, LN10, M_SUN, PI};
+use flexmesa_eos::{
+    I_ETA, I_LN_FREE_E, I_LN_PGAS, eos_dt_get, eos_dt_get_rho,
+};
+use flexmesa_kap::get_kap_results;
 
-use crate::controls::{AtmOption, StarError};
+use crate::controls::{AtmOption, AtmTTauOpacity, StarError};
 use crate::model::StarModel;
 use crate::star_ad::{
     StarAdExt, StarAdOrder1, I_LND_00, I_LNR_00, I_LNT_00, I_L_00,
@@ -430,6 +433,10 @@ fn blend_surf_ad(
     }
 }
 
+/// Evaluates surface $(P_{\mathrm{surf}}, T_{\mathrm{surf}})$ and partials for
+/// `atm_option = 'T_tau'` across `'fixed'`, `'iterated'`, and `'varying'`
+/// opacity prescriptions (`get_T_tau`, `eos_proc`, and `kap_proc` in
+/// `star/private/atm_support.f90:218-392, 1176-1287`).
 #[allow(clippy::too_many_arguments)]
 fn eval_grey_t_tau_surf(
     model: &StarModel,
@@ -441,51 +448,212 @@ fn eval_grey_t_tau_surf(
     teff: f64,
 ) -> Result<(StarAdOrder1, StarAdOrder1), StarError> {
     let k0 = model.opacity[0].max(1.0e-10);
-    let (kap_surf, dlnkap_dlnd, dlnkap_dlnt) = (
-        k0,
-        model.d_opacity_dlnd[0] / k0,
-        model.d_opacity_dlnt[0] / k0,
-    );
-
     let relation_id = model.controls.atm_t_tau_relation.id();
+    let errtol = model.controls.atm_t_tau_errtol;
 
-    let dummy_eos =
-        |_lnp: f64, _lnt: f64| -> Result<AtmEosCallbackResult, AtmError> {
+    if model.controls.atm_t_tau_opacity == AtmTTauOpacity::Fixed {
+        let (kap_surf, dlnkap_dlnd, dlnkap_dlnt) = (
+            k0,
+            model.d_opacity_dlnd[0] / k0,
+            model.d_opacity_dlnt[0] / k0,
+        );
+        let dummy_eos =
+            |_lnp: f64, _lnt: f64| -> Result<AtmEosCallbackResult, AtmError> {
+                Err(AtmError::InvalidArgument {
+                    context: "eval_surf_bc",
+                    detail: String::from("unused callback when max_iters == 0"),
+                })
+            };
+        let dummy_kap = |_lnrho: f64,
+                         _lnt: f64,
+                         _eos: &AtmEosCallbackResult|
+         -> Result<AtmKapCallbackResult, AtmError> {
             Err(AtmError::InvalidArgument {
                 context: "eval_surf_bc",
                 detail: String::from("unused callback when max_iters == 0"),
             })
         };
-    let dummy_kap = |_lnrho: f64,
-                     _lnt: f64,
-                     _eos: &AtmEosCallbackResult|
+        let atm_out = eval_t_tau_uniform(
+            tau_surf,
+            l_surf,
+            r_surf,
+            m_surf,
+            cgrav,
+            kap_surf,
+            model.controls.pextra_factor,
+            relation_id,
+            dummy_eos,
+            dummy_kap,
+            errtol,
+            0,
+            false,
+            teff,
+        )
+        .map_err(|e| {
+            StarError::MicrophysicsError(format!(
+                "eval_t_tau_uniform failed: {e}"
+            ))
+        })?;
+        return Ok(atm_out_to_ad(&atm_out, dlnkap_dlnd, dlnkap_dlnt));
+    }
+
+    // Live EOS and opacity callbacks matching `eos_proc` and `kap_proc` in
+    // `star/private/atm_support.f90:1176-1287`.
+    let chem = crate::rsp_eos_kap::RspChemCache::from_model_zone0(model)?;
+    let ht = crate::micro::builtin_helm_table()?;
+    let eos_cb =
+        |ln_p: f64, ln_t: f64| -> Result<AtmEosCallbackResult, AtmError> {
+            let t = flexmesa_math::exp(ln_t);
+            let p = flexmesa_math::exp(ln_p);
+            let prad = CRAD * flexmesa_math::pow4(t) / 3.0;
+            let pgas = (p - prad).max(1.0e-99);
+            let rho_guess =
+                crate::rsp_eos_inv::eval1_gamma_pt_get_rho(&chem, p, t)
+                    .max(1.0e-40);
+            let inv = eos_dt_get_rho(
+                ht,
+                &chem.chem_id,
+                &chem.xa,
+                ln_t / LN10,
+                I_LN_PGAS as isize,
+                flexmesa_math::log(pgas),
+                flexmesa_math::log10(rho_guess),
+                1.0e-11,
+                1.0e-11 * LN10,
+                100,
+                &model.eos_config,
+            )
+            .map_err(|e| AtmError::CallbackError {
+                context: "eval_grey_t_tau_surf::eos_proc",
+                detail: e.to_string(),
+            })?;
+            Ok(AtmEosCallbackResult {
+                ln_rho: inv.log10_result * LN10,
+                res: inv.eos.res,
+                dres_dln_rho: inv.eos.d_dlnd,
+                dres_dln_t: inv.eos.d_dln_t,
+            })
+        };
+    let use_simple_es = model.controls.use_simple_es_for_kap;
+    let opacity_max = model.controls.opacity_max;
+    let opacity_min = model.controls.opacity_min;
+    let kap_cb = |ln_rho: f64,
+                  ln_t: f64,
+                  eos_res: &AtmEosCallbackResult|
      -> Result<AtmKapCallbackResult, AtmError> {
-        Err(AtmError::InvalidArgument {
-            context: "eval_surf_bc",
-            detail: String::from("unused callback when max_iters == 0"),
+        let log_rho = ln_rho / LN10;
+        let log_t = ln_t / LN10;
+        let (kap_raw, mut dlnkap_dln_rho, mut dlnkap_dln_t) = if use_simple_es {
+            (0.2 * (1.0 + chem.x), 0.0, 0.0)
+        } else {
+            let ko = get_kap_results(
+                &model.kap_config,
+                chem.zbar,
+                chem.x,
+                chem.z,
+                chem.xc,
+                chem.xn,
+                chem.xo,
+                chem.xne,
+                log_rho,
+                log_t,
+                eos_res.res[I_LN_FREE_E],
+                eos_res.dres_dln_rho[I_LN_FREE_E],
+                eos_res.dres_dln_t[I_LN_FREE_E],
+                eos_res.res[I_ETA],
+                eos_res.dres_dln_rho[I_ETA],
+                eos_res.dres_dln_t[I_ETA],
+            )
+            .map_err(|e| AtmError::CallbackError {
+                context: "eval_grey_t_tau_surf::kap_proc",
+                detail: e.to_string(),
+            })?;
+            (ko.kap, ko.dlnkap_dln_rho, ko.dlnkap_dln_t)
+        };
+        let f = crate::rsp_eos_kap::effective_opacity_factor(
+            &model.controls,
+            log_t,
+        );
+        let mut kap = kap_raw * f;
+        if opacity_max > 0.0 && kap > opacity_max {
+            kap = opacity_max;
+            dlnkap_dln_rho = 0.0;
+            dlnkap_dln_t = 0.0;
+        }
+        if opacity_min > 0.0 && kap < opacity_min {
+            kap = opacity_min;
+            dlnkap_dln_rho = 0.0;
+            dlnkap_dln_t = 0.0;
+        }
+        if !(kap.is_finite() && kap > 0.0) {
+            return Err(AtmError::CallbackError {
+                context: "eval_grey_t_tau_surf::kap_proc",
+                detail: format!("bad opacity {kap} at logRho={log_rho}, logT={log_t}"),
+            });
+        }
+        Ok(AtmKapCallbackResult {
+            kap,
+            dlnkap_dln_rho,
+            dlnkap_dln_t,
         })
     };
 
-    let atm_out = eval_t_tau_uniform(
-        tau_surf,
-        l_surf,
-        r_surf,
-        m_surf,
-        cgrav,
-        kap_surf,
-        1.0,
-        relation_id,
-        dummy_eos,
-        dummy_kap,
-        1.0e-4,
-        0,
-        false,
-        teff,
-    )
-    .map_err(|e| {
-        StarError::MicrophysicsError(format!("eval_t_tau_uniform failed: {e}"))
-    })?;
+    let atm_out = match model.controls.atm_t_tau_opacity {
+        AtmTTauOpacity::Fixed => unreachable!("handled above"),
+        AtmTTauOpacity::Iterated => {
+            // `star/private/atm_support.f90:301-306`: start iterations from
+            // `opacity_start(1)` during solver iterations for consistency.
+            let in_solver_iter = model.aux.doing_struct_burn_mix
+                && model.aux.solver_mlt_eval_count > 0;
+            let kap_guess =
+                if in_solver_iter && model.aux.opacity_start_surf > 0.0 {
+                    model.aux.opacity_start_surf
+                } else {
+                    k0
+                }
+                .max(1.0e-10);
+            eval_t_tau_uniform(
+                tau_surf,
+                l_surf,
+                r_surf,
+                m_surf,
+                cgrav,
+                kap_guess,
+                model.controls.pextra_factor,
+                relation_id,
+                eos_cb,
+                kap_cb,
+                errtol,
+                model.controls.atm_t_tau_max_iters,
+                false,
+                teff,
+            )
+            .map_err(|e| {
+                StarError::MicrophysicsError(format!(
+                    "eval_t_tau_uniform (iterated) failed: {e}"
+                ))
+            })?
+        }
+        AtmTTauOpacity::Varying => eval_t_tau_varying(
+            tau_surf,
+            l_surf,
+            r_surf,
+            m_surf,
+            cgrav,
+            relation_id,
+            eos_cb,
+            kap_cb,
+            errtol,
+            model.controls.atm_t_tau_max_steps,
+            false,
+            teff,
+        )
+        .map_err(|e| {
+            StarError::MicrophysicsError(format!(
+                "eval_t_tau_varying failed: {e}"
+            ))
+        })?,
+    };
 
-    let (lnp_ad, lnt_ad) = atm_out_to_ad(&atm_out, dlnkap_dlnd, dlnkap_dlnt);
-    Ok((lnp_ad, lnt_ad))
+    Ok(atm_out_to_ad(&atm_out, 0.0, 0.0))
 }

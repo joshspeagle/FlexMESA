@@ -614,7 +614,21 @@ pub fn eval_henyey_equations_into(
     sys: &mut HenyeySystem,
 ) -> Result<(), StarError> {
     set_hydro_vars(model, false, !include_chem)?;
-    eval_eps_grav(model);
+    // `star/private/hydro_eqns.f90:131-137`: revise EOS composition partials
+    // for PC/Skye/ideal zones before assembling energy and momentum equations.
+    crate::micro::fix_d_eos_dxa_partials(model)?;
+    // `star/private/hydro_eqns.f90:227-230` and
+    // `star/private/hydro_energy.f90:394-416`: evaluate `eps_grav` only when
+    // the energy equation uses the `eps_grav` form; zero it otherwise.
+    let uses_eps_grav = (!model.controls.u_flag || model.controls.v_flag)
+        && model.controls.energy_eqn_option
+            == crate::controls::EnergyEqnOption::EpsGrav;
+    if uses_eps_grav {
+        eval_eps_grav(model)?;
+    } else {
+        model.eps_grav_ad.fill(StarAdOrder1::ZERO);
+        model.aux.d_eps_grav_dx.fill(0.0);
+    }
     assemble_henyey_system(model, include_chem, sys)
 }
 

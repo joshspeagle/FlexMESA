@@ -435,3 +435,178 @@ fn test_do_kap_multi_isotope_cno_and_nugis_lamers_and_omega_mix() {
         .expect("do_phase_separation");
     assert_eq!(eps_ps.len(), model.nz);
 }
+
+#[test]
+fn test_eval_surf_bc_t_tau_opacity_fixed_iterated_varying_and_inlist() {
+    use crate::controls::{AtmTTauOpacity, StarError};
+    use crate::inlist::InlistBundle;
+
+    // 1. Inlist parsing accepts fixed/iterated/varying + tuning controls with 0
+    //    unsupported controls, and rejects invalid `atm_T_tau_opacity` loudly.
+    let tmp_dir = std::env::temp_dir().join(format!(
+        "flexmesa_atm_t_tau_opacity_test_{}",
+        std::process::id()
+    ));
+    let _ = std::fs::remove_dir_all(&tmp_dir);
+    std::fs::create_dir_all(&tmp_dir).expect("create temp dir");
+
+    for (raw, expected) in [
+        ("fixed", AtmTTauOpacity::Fixed),
+        ("iterated", AtmTTauOpacity::Iterated),
+        ("varying", AtmTTauOpacity::Varying),
+    ] {
+        let p = tmp_dir.join(format!("inlist_{raw}"));
+        std::fs::write(
+            &p,
+            format!(
+                "&controls\n\
+                   atm_option = 'T_tau'\n\
+                   atm_T_tau_relation = 'Eddington'\n\
+                   atm_T_tau_opacity = '{raw}'\n\
+                   atm_T_tau_errtol = 1.0d-8\n\
+                   atm_T_tau_max_iters = 60\n\
+                   atm_T_tau_max_steps = 400\n\
+                 /\n"
+            ),
+        )
+        .expect("write inlist");
+        let bundle = InlistBundle::from_file(&p)
+            .expect("atm_T_tau_opacity inlist must pass strict validation");
+        assert_eq!(bundle.validation_report.unsupported_controls.len(), 0);
+        assert_eq!(bundle.controls.atm_t_tau_opacity, expected);
+        assert!((bundle.controls.atm_t_tau_errtol - 1.0e-8).abs() <= 1.0e-20);
+        assert_eq!(bundle.controls.atm_t_tau_max_iters, 60);
+        assert_eq!(bundle.controls.atm_t_tau_max_steps, 400);
+    }
+
+    let bad = tmp_dir.join("inlist_bad");
+    std::fs::write(&bad, "&controls\n  atm_T_tau_opacity = 'bogus'\n/\n")
+        .expect("write bad inlist");
+    let err = InlistBundle::from_file(&bad)
+        .expect_err("invalid atm_T_tau_opacity must fail loudly");
+    assert!(matches!(err, StarError::InvalidInput(_)));
+    let _ = std::fs::remove_dir_all(&tmp_dir);
+
+    // 2. Dispatch across Fixed, Iterated, and Varying on a 1 Msun ZAMS model.
+    let mut model =
+        load_zams_model(solar_zams_controls(), StarJobControls::default())
+            .expect("load 1 Msun ZAMS");
+    model.controls.atm_option = AtmOption::TTau;
+    set_hydro_vars(&mut model, false, false).expect("set_hydro_vars");
+
+    // Fixed mode: respects `pextra_factor` and exposes explicit opacity partials.
+    model.controls.atm_t_tau_opacity = AtmTTauOpacity::Fixed;
+    model.controls.pextra_factor = 1.0;
+    eval_surf_bc(&mut model).expect("eval_surf_bc fixed pextra=1");
+    let lnp_fixed_p1 = model.ln_peos_surf_ad.val;
+    let lnt_fixed = model.ln_t_surf_ad.val;
+    assert!(model.ln_peos_surf_ad.d1[I_LND_00].abs() > 0.0);
+    assert!(model.ln_peos_surf_ad.d1[I_LNT_00].abs() > 0.0);
+
+    model.controls.pextra_factor = 200.0;
+    eval_surf_bc(&mut model).expect("eval_surf_bc fixed pextra=200");
+    assert!(
+        model.ln_peos_surf_ad.val > lnp_fixed_p1,
+        "larger pextra_factor must increase fixed T(tau) surface pressure"
+    );
+    model.controls.pextra_factor = 1.0;
+
+    // Perturb `opacity[0]` so Fixed and Iterated diverge sharply.
+    let kap_orig = model.opacity[0];
+    model.opacity[0] = kap_orig * 3.0;
+    eval_surf_bc(&mut model).expect("eval_surf_bc fixed perturbed kap");
+    let lnp_fixed_perturbed = model.ln_peos_surf_ad.val;
+
+    // Iterated mode: solves kap self-consistently, zeroing direct (lnd, lnT)
+    // cell-0 opacity partials, and matches `ln_r`/`L` central finite differences.
+    model.controls.atm_t_tau_opacity = AtmTTauOpacity::Iterated;
+    model.aux.opacity_start_surf = kap_orig;
+    model.aux.doing_struct_burn_mix = true;
+    model.aux.solver_mlt_eval_count = 1;
+    eval_surf_bc(&mut model).expect("eval_surf_bc iterated in solver iter");
+    let lnp_iter_ad = model.ln_peos_surf_ad;
+    let lnt_iter_ad = model.ln_t_surf_ad;
+    assert_eq!(lnp_iter_ad.d1[I_LND_00], 0.0);
+    assert_eq!(lnp_iter_ad.d1[I_LNT_00], 0.0);
+    assert!((lnt_iter_ad.val - lnt_fixed).abs() <= 1.0e-12);
+    assert!(
+        (lnp_iter_ad.val - lnp_fixed_perturbed).abs() > 0.5,
+        "iterated T(tau) must converge to self-consistent kap instead of perturbed opacity[0]"
+    );
+
+    let eps = 1.0e-5;
+    let lnr0 = model.ln_r[0];
+    model.ln_r[0] = lnr0 + eps;
+    model.r[0] = flexmesa_math::exp(model.ln_r[0]);
+    eval_surf_bc(&mut model).expect("iterated +lnr");
+    let lnp_rp = model.ln_peos_surf_ad.val;
+    model.ln_r[0] = lnr0 - eps;
+    model.r[0] = flexmesa_math::exp(model.ln_r[0]);
+    eval_surf_bc(&mut model).expect("iterated -lnr");
+    let lnp_rm = model.ln_peos_surf_ad.val;
+    model.ln_r[0] = lnr0;
+    model.r[0] = flexmesa_math::exp(lnr0);
+    let fd_iter_lnr = (lnp_rp - lnp_rm) / (2.0 * eps);
+    assert!(
+        (lnp_iter_ad.d1[I_LNR_00] - fd_iter_lnr).abs()
+            <= 1.0e-4 * fd_iter_lnr.abs().max(1.0),
+        "iterated dlnP/dlnR analytic={} vs fd={}",
+        lnp_iter_ad.d1[I_LNR_00],
+        fd_iter_lnr
+    );
+
+    // Varying mode: integrates dP/dtau = g/kap(P, T) via `eval_t_tau_varying`.
+    // Upstream `atm_t_tau_varying.f90:173-186` finite-differences in `lnTeff`
+    // at fixed `g`, so `dlnP/dL`, `dlnT/dL`, and `dlnT/dlnR` match central
+    // finite differences while `dlnP/dlnR == -2 * L * dlnP/dL`.
+    model.aux.doing_struct_burn_mix = false;
+    model.aux.solver_mlt_eval_count = 0;
+    model.opacity[0] = kap_orig;
+    model.controls.atm_t_tau_opacity = AtmTTauOpacity::Varying;
+    eval_surf_bc(&mut model).expect("eval_surf_bc varying");
+    let lnp_var_ad = model.ln_peos_surf_ad;
+    let lnt_var_ad = model.ln_t_surf_ad;
+    assert_eq!(lnp_var_ad.d1[I_LND_00], 0.0);
+    assert_eq!(lnp_var_ad.d1[I_LNT_00], 0.0);
+    assert!(lnp_var_ad.val.is_finite());
+    assert!(
+        (lnp_var_ad.val - lnp_iter_ad.val).abs() > 1.0e-3,
+        "varying opacity integration must differ from uniform iterated opacity"
+    );
+
+    let l0 = model.lum[0];
+    let dl = l0 * eps;
+    model.lum[0] = l0 + dl;
+    eval_surf_bc(&mut model).expect("varying +L");
+    let lnp_lp = model.ln_peos_surf_ad.val;
+    let lnt_lp = model.ln_t_surf_ad.val;
+    model.lum[0] = l0 - dl;
+    eval_surf_bc(&mut model).expect("varying -L");
+    let lnp_lm = model.ln_peos_surf_ad.val;
+    let lnt_lm = model.ln_t_surf_ad.val;
+    model.lum[0] = l0;
+    let fd_var_lnp_l = (lnp_lp - lnp_lm) / (2.0 * dl);
+    let fd_var_lnt_l = (lnt_lp - lnt_lm) / (2.0 * dl);
+    assert!(
+        (lnp_var_ad.d1[I_L_00] - fd_var_lnp_l).abs()
+            <= 1.0e-3 * fd_var_lnp_l.abs().max(1.0e-30),
+        "varying dlnP/dL analytic={} vs fd={}",
+        lnp_var_ad.d1[I_L_00],
+        fd_var_lnp_l
+    );
+    assert!(
+        (lnt_var_ad.d1[I_L_00] - fd_var_lnt_l).abs()
+            <= 1.0e-4 * fd_var_lnt_l.abs().max(1.0e-30),
+        "varying dlnT/dL analytic={} vs fd={}",
+        lnt_var_ad.d1[I_L_00],
+        fd_var_lnt_l
+    );
+    let exp_dlnp_dlnr = -2.0 * l0 * lnp_var_ad.d1[I_L_00];
+    assert!(
+        (lnp_var_ad.d1[I_LNR_00] - exp_dlnp_dlnr).abs()
+            <= 1.0e-12 * exp_dlnp_dlnr.abs().max(1.0),
+        "varying dlnP/dlnR={} must equal -2*L*dlnP/dL={}",
+        lnp_var_ad.d1[I_LNR_00],
+        exp_dlnp_dlnr
+    );
+}

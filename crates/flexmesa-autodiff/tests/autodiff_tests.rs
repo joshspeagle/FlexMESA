@@ -102,12 +102,21 @@ fn test_auto_diff_2var_order1_unary_operators_match_mesa_test_suite() {
     check_2var_order1(x1.log(), 0.0, 1.0, 0.0);
     check_2var_order1(x1.safe_log(), 0.0, 1.0, 0.0);
 
-    // Domain-safe guards at x <= 0 avoid 0.0 * Inf = NaN contamination.
+    // `safe_sqrt_self` and `safe_log10_self` guard the value only. Upstream's
+    // derivative expressions (`q1 = 0.5*q0*powm1(x)` and
+    // `q1 = powm1(ln10)*powm1(x)` in
+    // `auto_diff/private/auto_diff_real_2var_order1_module.f90`) are
+    // evaluated as written, so they are `NaN` or infinite at `x == 0`.
     let x0 = AutoDiffReal2VarOrder1::new(0.0, [1.0, 0.0]);
-    check_2var_order1(x0.safe_sqrt(), 0.0, 0.0, 0.0);
+    let sqrt0 = x0.safe_sqrt();
+    assert_eq!(sqrt0.val, 0.0);
+    assert!(sqrt0.d1[0].is_nan() && sqrt0.d1[1].is_nan());
     let x_neg = AutoDiffReal2VarOrder1::new(-4.0, [1.0, 0.0]);
     check_2var_order1(x_neg.safe_sqrt(), 0.0, 0.0, 0.0);
-    check_2var_order1(x0.safe_log10(), -99.0, 0.0, 0.0);
+    let log0 = x0.safe_log10();
+    assert_allclose(&[log0.val], &[-99.0], TOL, TOL);
+    assert_eq!(log0.d1[0], f64::INFINITY);
+    assert!(log0.d1[1].is_nan());
 
     // Trigonometric and hyperbolic functions at x = pi.
     let x_pi = AutoDiffReal2VarOrder1::new(PI, [1.0, 0.0]);

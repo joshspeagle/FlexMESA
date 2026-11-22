@@ -1262,7 +1262,9 @@ pub fn set_hydro_vars(
 
     if model.controls.rsp2_flag {
         eval_surf_bc(model)?;
-        crate::eps_grav::eval_eps_grav(model);
+        if !model.aux.doing_struct_burn_mix {
+            crate::eps_grav::eval_eps_grav(model)?;
+        }
         crate::rsp2_ad::update_rsp2_vars_ad(model);
         let alpha = model.controls.mixing_length_alpha;
         for k in 0..nz {
@@ -1320,7 +1322,9 @@ pub fn set_hydro_vars(
         }
     }
     eval_surf_bc(model)?;
-    crate::eps_grav::eval_eps_grav(model);
+    if !model.aux.doing_struct_burn_mix {
+        crate::eps_grav::eval_eps_grav(model)?;
+    }
     if model.controls.u_flag {
         crate::riemann_ad::do_uface_and_pface(model)?;
     }

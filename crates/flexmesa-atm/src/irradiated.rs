@@ -39,6 +39,14 @@ fn eval_irradiated_data(
     let t4 =
         0.75 * (t4_int * (tau + 2.0 / 3.0) + t4_eq * (f_1 + f_2 + 2.0 / 3.0));
     let ln_t = 0.25 * flexmesa_math::log(t4);
+    if !ln_t.is_finite() {
+        return Err(AtmError::CallbackError {
+            context: "eval_irradiated_data",
+            detail: format!(
+                "non-finite lnT={ln_t} (T4={t4}, x={x}, tau={tau})"
+            ),
+        });
+    }
 
     if skip_partials {
         return Ok(AtmIrradiatedOutput {
@@ -108,7 +116,10 @@ fn eval_irradiated_data(
 /// (`eval_irradiated` in `atm_irradiated.f90`).
 ///
 /// # Errors
-/// Returns [`AtmError`] if $L, R, M \le 0$, callbacks fail, or opacity iteration does not converge.
+/// Returns [`AtmError`] if $L, R, M, G, P_{\mathrm{surf}}, \kappa_{\mathrm{guess}} \le 0$,
+/// $T_{\mathrm{eq}} < 0$, $\gamma < 0$, $\kappa_v < 0$ (or $\le 0$ when $\gamma = 0$),
+/// `errtol <= 0` when `max_iters > 0`, any input is non-finite, callbacks fail,
+/// or opacity iteration does not converge.
 #[allow(clippy::too_many_arguments)]
 pub fn eval_irradiated<E, K>(
     l: f64,
@@ -134,10 +145,64 @@ where
         &AtmEosCallbackResult,
     ) -> Result<AtmKapCallbackResult, AtmError>,
 {
-    if l <= 0.0 || r <= 0.0 || m <= 0.0 {
+    if !l.is_finite()
+        || !r.is_finite()
+        || !m.is_finite()
+        || l <= 0.0
+        || r <= 0.0
+        || m <= 0.0
+    {
         return Err(AtmError::InvalidArgument {
             context: "eval_irradiated",
-            detail: "require L, R, M > 0".to_string(),
+            detail: format!(
+                "require finite L, R, M > 0, got L={l}, R={r}, M={m}"
+            ),
+        });
+    }
+    if !cgrav.is_finite() || cgrav <= 0.0 {
+        return Err(AtmError::InvalidArgument {
+            context: "eval_irradiated",
+            detail: format!("require finite cgrav > 0, got {cgrav}"),
+        });
+    }
+    if !t_eq.is_finite() || t_eq < 0.0 {
+        return Err(AtmError::InvalidArgument {
+            context: "eval_irradiated",
+            detail: format!("require finite T_eq >= 0, got {t_eq}"),
+        });
+    }
+    if !p_surf.is_finite() || p_surf <= 0.0 {
+        return Err(AtmError::InvalidArgument {
+            context: "eval_irradiated",
+            detail: format!("require finite P_surf > 0, got {p_surf}"),
+        });
+    }
+    if !kap_guess.is_finite() || kap_guess <= 0.0 {
+        return Err(AtmError::InvalidArgument {
+            context: "eval_irradiated",
+            detail: format!("require finite kap_guess > 0, got {kap_guess}"),
+        });
+    }
+    if !gamma.is_finite() || gamma < 0.0 {
+        return Err(AtmError::InvalidArgument {
+            context: "eval_irradiated",
+            detail: format!("require finite gamma >= 0, got {gamma}"),
+        });
+    }
+    if !kap_v.is_finite() || kap_v < 0.0 || (gamma == 0.0 && kap_v <= 0.0) {
+        return Err(AtmError::InvalidArgument {
+            context: "eval_irradiated",
+            detail: format!(
+                "require finite kap_v >= 0 (and > 0 when gamma == 0), got kap_v={kap_v}, gamma={gamma}"
+            ),
+        });
+    }
+    if max_iters > 0 && (!errtol.is_finite() || errtol <= 0.0) {
+        return Err(AtmError::InvalidArgument {
+            context: "eval_irradiated",
+            detail: format!(
+                "require finite errtol > 0 when max_iters > 0, got {errtol}"
+            ),
         });
     }
     let (t_int, g) = eval_teff_g(l, r, m, cgrav);
@@ -168,6 +233,12 @@ where
         let kap_prev = kap;
         let kap_res = kap_proc(eos_res.ln_rho, out.ln_t, &eos_res)?;
         kap = kap_res.kap;
+        if !kap.is_finite() || kap <= 0.0 {
+            return Err(AtmError::CallbackError {
+                context: "eval_irradiated",
+                detail: format!("kap_proc returned invalid opacity {kap}"),
+            });
+        }
 
         let err = (kap_prev - kap).abs() / (errtol + errtol * kap);
         last_eos = Some(eos_res);
@@ -205,9 +276,23 @@ where
         let kap_res = last_kap.as_ref().unwrap();
         let chi_rho = eos_res.res[I_CHI_RHO];
         let chi_t = eos_res.res[I_CHI_T];
+        if !chi_rho.is_finite() || chi_rho == 0.0 {
+            return Err(AtmError::CallbackError {
+                context: "eval_irradiated",
+                detail: format!("invalid chi_rho={chi_rho} in partial fixup"),
+            });
+        }
         let dlnkap_dlnt_p =
             kap_res.dlnkap_dln_t - kap_res.dlnkap_dln_rho * chi_t / chi_rho;
         let denom = 1.0 - dlnkap_dlnt_p * out.dln_t_dln_kap;
+        if !denom.is_finite() || denom == 0.0 {
+            return Err(AtmError::CallbackError {
+                context: "eval_irradiated",
+                detail: format!(
+                    "singular implicit partial denominator {denom}"
+                ),
+            });
+        }
         out.dln_t_dl /= denom;
         out.dln_t_dln_r /= denom;
         out.dln_t_dln_m /= denom;

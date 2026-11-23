@@ -79,9 +79,6 @@ DECLARED_STAR_STOPS: dict[str, DeclaredStop] = {
     "make_env": DeclaredStop(r"missing saved model 'start\.mod'", "#154"),
     "custom_rates": DeclaredStop(r"unknown net file 'nco\.net'", "#161"),
     "carbon_kh": DeclaredStop(r"unknown net file 'minimal\.net'", "#161"),
-    "irradiated_planet": DeclaredStop(
-        r"atm_option' option 'irradiated_grey'", "#154"
-    ),
     "wd_aic": DeclaredStop(r"unknown net file 'wd_aic\.net'", "#161"),
     "tzo": DeclaredStop(r"dutch_wind_lowt_scheme' option 'other'", "#161"),
 }

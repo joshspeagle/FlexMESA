@@ -8,7 +8,8 @@ use flexmesa_rates::ScreeningMode;
 use flexmesa_turb::{MltOption, SemiconvectionOption, ThermohalineOption};
 
 use crate::controls::{
-    AtmOption, AtmTTauOpacity, AtmTTauRelation, EnergyEqnOption, StarError,
+    AtmIrradiatedOpacity, AtmOption, AtmTTauOpacity, AtmTTauRelation,
+    EnergyEqnOption, StarError,
 };
 use crate::inlist::{InlistBundle, SectionControls};
 
@@ -531,6 +532,7 @@ impl InlistBundle {
             c.atm_option = match s.trim().to_ascii_lowercase().as_str() {
                 "t_tau" => AtmOption::TTau,
                 "table" => AtmOption::Table,
+                "irradiated_grey" => AtmOption::IrradiatedGrey,
                 other => {
                     return Err(StarError::InvalidInput(format!(
                         "unrecognized/unsupported '&controls::atm_option' option '{other}' (`star/private/atm_support.f90:900-930`)"
@@ -578,6 +580,72 @@ impl InlistBundle {
         ctrl.try_f64_into("controls", &mut c.atm_t_tau_errtol, "atm_t_tau_errtol")?;
         ctrl.try_usize_into("controls", &mut c.atm_t_tau_max_iters, "atm_t_tau_max_iters", 0)?;
         ctrl.try_usize_into("controls", &mut c.atm_t_tau_max_steps, "atm_t_tau_max_steps", 0)?;
+        if let Some(s) = ctrl.try_get_str("controls", "atm_irradiated_opacity")? {
+            c.atm_irradiated_opacity = match s.trim().to_ascii_lowercase().as_str() {
+                "fixed" => AtmIrradiatedOpacity::Fixed,
+                "iterated" => AtmIrradiatedOpacity::Iterated,
+                other => {
+                    return Err(StarError::InvalidInput(format!(
+                        "unrecognized '&controls::atm_irradiated_opacity' option '{other}' (`star/private/atm_support.f90:790-826`)"
+                    )));
+                }
+            };
+        }
+        ctrl.try_f64_into("controls", &mut c.atm_irradiated_errtol, "atm_irradiated_errtol")?;
+        ctrl.try_usize_into("controls", &mut c.atm_irradiated_max_iters, "atm_irradiated_max_iters", 0)?;
+        ctrl.try_f64_into("controls", &mut c.atm_irradiated_t_eq, "atm_irradiated_t_eq")?;
+        ctrl.try_f64_into(
+            "controls",
+            &mut c.atm_irradiated_kap_v_div_kap_th,
+            "atm_irradiated_kap_v_div_kap_th",
+        )?;
+        ctrl.try_f64_into("controls", &mut c.atm_irradiated_kap_v, "atm_irradiated_kap_v")?;
+        ctrl.try_f64_into("controls", &mut c.atm_irradiated_p_surf, "atm_irradiated_p_surf")?;
+        if !c.atm_irradiated_errtol.is_finite() || c.atm_irradiated_errtol <= 0.0 {
+            return Err(StarError::InvalidInput(format!(
+                "'&controls::atm_irradiated_errtol' must be > 0, got {}",
+                c.atm_irradiated_errtol
+            )));
+        }
+        if !c.atm_irradiated_t_eq.is_finite() || c.atm_irradiated_t_eq < 0.0 {
+            return Err(StarError::InvalidInput(format!(
+                "'&controls::atm_irradiated_t_eq' must be >= 0, got {}",
+                c.atm_irradiated_t_eq
+            )));
+        }
+        if !c.atm_irradiated_kap_v_div_kap_th.is_finite() || c.atm_irradiated_kap_v_div_kap_th < 0.0 {
+            return Err(StarError::InvalidInput(format!(
+                "'&controls::atm_irradiated_kap_v_div_kap_th' must be >= 0, got {}",
+                c.atm_irradiated_kap_v_div_kap_th
+            )));
+        }
+        if !c.atm_irradiated_kap_v.is_finite() || c.atm_irradiated_kap_v < 0.0 {
+            return Err(StarError::InvalidInput(format!(
+                "'&controls::atm_irradiated_kap_v' must be >= 0, got {}",
+                c.atm_irradiated_kap_v
+            )));
+        }
+        if !c.atm_irradiated_p_surf.is_finite() || c.atm_irradiated_p_surf <= 0.0 {
+            return Err(StarError::InvalidInput(format!(
+                "'&controls::atm_irradiated_p_surf' must be > 0, got {}",
+                c.atm_irradiated_p_surf
+            )));
+        }
+        if c.atm_option == AtmOption::IrradiatedGrey {
+            if c.atm_irradiated_kap_v_div_kap_th == 0.0 && c.atm_irradiated_kap_v <= 0.0 {
+                return Err(StarError::InvalidInput(format!(
+                    "'&controls::atm_irradiated_kap_v' must be > 0 when atm_irradiated_kap_v_div_kap_th == 0, got {}",
+                    c.atm_irradiated_kap_v
+                )));
+            }
+            if c.atm_irradiated_opacity == AtmIrradiatedOpacity::Iterated
+                && c.atm_irradiated_max_iters == 0
+            {
+                return Err(StarError::InvalidInput(String::from(
+                    "'&controls::atm_irradiated_max_iters' must be > 0 when atm_irradiated_opacity == 'iterated'",
+                )));
+            }
+        }
         if let Some(s) = ctrl.try_get_str("controls", "screening_mode")? {
             c.screening_mode = match s.trim().to_ascii_lowercase().as_str() {
                 "no_screening" | "" => ScreeningMode::NoScreening,

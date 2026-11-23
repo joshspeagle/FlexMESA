@@ -528,6 +528,91 @@ def _render_mass_loss_section(
     return out
 
 
+def _pick_energy_error_column(
+    rec: harness_runner.CaseHarnessRecord,
+) -> tuple[history_compare.HistoryComparison, str] | None:
+    if rec.comparison is None:
+        return None
+    comp = rec.comparison
+    dev_cols = {d.column for d in comp.track_deviations}
+    for cand in history_compare.ENERGY_ERROR_COLUMNS:
+        if (
+            cand in comp.final_run_values
+            or cand in comp.final_ref_values
+            or cand in comp.final_diffs
+            or cand in dev_cols
+        ):
+            return comp, cand
+    return None
+
+
+def _fmt_energy_metric(val: float | None, *, is_log: bool) -> str:
+    if is_log:
+        if val is None:
+            return "-"
+        if not math.isfinite(val):
+            return "non-finite"
+        return f"{val:.3f}"
+    return _fmt_signed_sci(val)
+
+
+def _render_energy_conservation_section(
+    records: list[harness_runner.CaseHarnessRecord],
+) -> list[str]:
+    """Render mechanical ``log_rel_run_E_err`` comparisons (#151)."""
+    selected: list[
+        tuple[
+            harness_runner.CaseHarnessRecord,
+            history_compare.HistoryComparison,
+            str,
+        ]
+    ] = []
+    for rec in records:
+        picked = _pick_energy_error_column(rec)
+        if picked is not None:
+            comp, col = picked
+            selected.append((rec, comp, col))
+    if not selected:
+        return []
+    out: list[str] = [
+        "",
+        "## Energy Conservation Track Comparisons "
+        "(`log_rel_run_E_err`, `#151`)",
+        "",
+        "Generated mechanically from `baseline_run_26_4_1.json` / harness "
+        "comparisons against MESA `26.4.1` reference histories (`#151`). "
+        "`log_rel_run_E_err` values are `log10(|cumulative_energy_error / "
+        "total_energy_end|)` in `dex`.",
+        "",
+        "| Suite | Case | Run Mode | Observed Term | Steps (MESA) | "
+        "Col | FlexMESA Final | MESA 26.4.1 Final | Final Diff | "
+        "Max Track Diff | Median Track Diff | Declared Gap |",
+        "| :--- | :--- | :--- | :--- | ---: | :--- | ---: | ---: | ---: | "
+        "---: | ---: | :--- |",
+    ]
+    for rec, comp, col in selected:
+        obs_term = (
+            f"`{rec.observed_termination}`" if rec.observed_termination else "-"
+        )
+        gap_str = rec.known_gap_issue if rec.known_gap_issue else "-"
+        is_log = col.startswith("log_")
+        run_fin = comp.final_run_values.get(col)
+        ref_fin = comp.final_ref_values.get(col)
+        fin_diff = comp.final_diffs.get(col)
+        dev = _find_track_dev(rec, col)
+        out.append(
+            f"| `{rec.suite}` | `{rec.case}` | {rec.run_mode} | {obs_term} | "
+            f"{_fmt_steps_pair(rec)} | `{col}` | "
+            f"{_fmt_energy_metric(run_fin, is_log=is_log)} | "
+            f"{_fmt_energy_metric(ref_fin, is_log=is_log)} | "
+            f"{_fmt_signed_sci(fin_diff)} | "
+            f"{_fmt_abs_sci(dev.max_abs_diff if dev else None)} | "
+            f"{_fmt_abs_sci(dev.median_abs_diff if dev else None)} | "
+            f"{gap_str} |"
+        )
+    return out
+
+
 def _fmt_final_age_diff(rec: harness_runner.CaseHarnessRecord) -> str:
     if rec.comparison is None:
         return "-"
@@ -701,6 +786,7 @@ def render_case_table_markdown(
 
     lines.extend(_render_convective_core_section(manifest, records))
     lines.extend(_render_mass_loss_section(records))
+    lines.extend(_render_energy_conservation_section(records))
     lines.append("")
     return "\n".join(lines)
 

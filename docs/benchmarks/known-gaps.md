@@ -39,13 +39,12 @@ Cases lacking a committed MESA `26.4.1` baseline report `no reference yet` and c
 | [#157](https://github.com/joshspeagle/FlexMESA/issues/157) | 9 | Restore MLT/TDC controls and remove non-upstream fallbacks |
 | [#162](https://github.com/joshspeagle/FlexMESA/issues/162) | 9 | Align `astero` search and chi-squared drivers |
 | [#170](https://github.com/joshspeagle/FlexMESA/issues/170) | 7 | Integrate bundled `GYRE` oscillation eigensolver |
+| [#152](https://github.com/joshspeagle/FlexMESA/issues/152) | 5 | Align `evolve.rs`, Newton solver control, and retry loops |
 | [#155](https://github.com/joshspeagle/FlexMESA/issues/155) | 5 | Align convective boundaries, overshooting, CPM, and pred. mix |
 | [#158](https://github.com/joshspeagle/FlexMESA/issues/158) | 5 | Align shellular rotation solver variables and Spruit-Tayler |
 | [#160](https://github.com/joshspeagle/FlexMESA/issues/160) | 5 | Align coupled `BinarySystem` step ordering, tides, and RLOF |
-| [#152](https://github.com/joshspeagle/FlexMESA/issues/152) | 4 | Align `evolve.rs`, Newton solver control, and retry loops |
 | [#156](https://github.com/joshspeagle/FlexMESA/issues/156) | 3 | Port full Burgers element diffusion and radiative levitation |
 | [#231](https://github.com/joshspeagle/FlexMESA/issues/231) | 3 | Open #140 parity sub-issue |
-| [#151](https://github.com/joshspeagle/FlexMESA/issues/151) | 1 | Port multi-step `relax.f90` model relaxation routines |
 | [#153](https://github.com/joshspeagle/FlexMESA/issues/153) | 1 | Port upstream `mesh_adjust.f90` remeshing planner |
 | [#159](https://github.com/joshspeagle/FlexMESA/issues/159) | 1 | Align stellar wind schemes and rotational wind boosts |
 | [#171](https://github.com/joshspeagle/FlexMESA/issues/171) | 1 | Integrate bundled `ADIPLS` oscillation eigensolver |
@@ -93,7 +92,7 @@ Cases lacking a committed MESA `26.4.1` baseline report `no reference yet` and c
 | `star` | `high_rot_darkening` | [#158](https://github.com/joshspeagle/FlexMESA/issues/158) | `xa_central_lower_limit` | `error` (0 steps; diagnostic (5 controls ignored)) | Case history_columns.list requests unported gravity-darkening grav_dark_L_polar column. |
 | `star` | `high_z` | [#161](https://github.com/joshspeagle/FlexMESA/issues/161) | `xa_central_lower_limit` | `xa_central_lower_limit` (444 steps; strict) | Strict run reaches xa_central_lower_limit (445 steps and 0 retries matching MESA 26.4.1, all final tolerances pass) with num_zones (2.74%) and track deviations from step 3 (#161, #153). |
 | `star` | `hot_cool_wind` | [#161](https://github.com/joshspeagle/FlexMESA/issues/161) | `log_L_upper_limit` | `timeout` (512 steps; strict) | Strict run diverges from step 2 under fixed T(tau) opacity and enters AGB solver retries (789 steps, 135 retries vs MESA 570 steps, 28 retries), exceeding the 900 s wall-time cap (#161, #152, #159). |
-| `star` | `hse_riemann` | [#151](https://github.com/joshspeagle/FlexMESA/issues/151) | `max_age` | `max_age` (2011 steps; strict) | Riemann hydro energy accounting (#151). |
+| `star` | `hse_riemann` | [#152](https://github.com/joshspeagle/FlexMESA/issues/152) | `max_age` | `max_age` (2011 steps; strict) | Strict run reaches max_age (2011 steps, 0 retries, final diffs within 1e-8 under #151 energy conservation limits) with a step-2 log_center_Rho (6.419e-03) and mean-iteration (2.0 vs MESA 4.3) deviation during initial u_flag Riemann hydro AMR remeshing (#152, #153). |
 | `star` | `irradiated_planet` | [#154](https://github.com/joshspeagle/FlexMESA/issues/154) | `max_age` | `error` (30 steps; diagnostic (3 controls ignored)) | Planetary initial model and column-depth irradiation relaxation (#154). |
 | `star` | `low_z` | [#152](https://github.com/joshspeagle/FlexMESA/issues/152) | `xa_central_lower_limit` | `xa_central_lower_limit` (181 steps; strict) | Strict run reaches exact MESA 26.4.1 xa_central_lower_limit (181 steps, 0 retries, 0 num_zones diff, all final tolerances pass) with track deviations from step 395 (#152). |
 | `star` | `magnetic_braking` | [#157](https://github.com/joshspeagle/FlexMESA/issues/157) | `xa_central_lower_limit` | `error` (0 steps; strict) | Case history_columns.list requests unported MLT++ gradT_excess_alpha column (#157) and rotational retry/physics controls (#152, #158). |

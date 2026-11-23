@@ -49,8 +49,68 @@ pub struct StepHistoryScalars {
     pub error_in_energy_conservation: f64,
     /// End-of-step total energy in $\mathrm{erg}$ (`total_energy_end`).
     pub total_energy_end: f64,
-    /// Previous accepted step total energy in $\mathrm{erg}$ for rollback on retry.
+    /// End-of-step total internal energy in $\mathrm{erg}$ (`total_internal_energy_end`).
+    pub total_internal_energy_end: f64,
+    /// End-of-step total gravitational energy in $\mathrm{erg}$ (`total_gravitational_energy_end`).
+    pub total_gravitational_energy_end: f64,
+    /// End-of-step total radial kinetic energy in $\mathrm{erg}$ (`total_radial_kinetic_energy_end`).
+    pub total_radial_kinetic_energy_end: f64,
+    /// End-of-step total rotational kinetic energy in $\mathrm{erg}$ (`total_rotational_kinetic_energy_end`).
+    pub total_rotational_kinetic_energy_end: f64,
+    /// End-of-step total turbulent energy in $\mathrm{erg}$ (`total_turbulent_energy_end`).
+    pub total_turbulent_energy_end: f64,
+    /// Start-of-step (beginning of Phase 1, post-remesh) total energy in $\mathrm{erg}$ (`total_energy_old`).
     pub total_energy_old: f64,
+    /// Start-of-step surface cell specific total energy in $\mathrm{erg\,g^{-1}}$ (`surface_cell_specific_total_energy_old`).
+    pub surface_cell_specific_total_energy_old: f64,
+    /// Whether initial-model total energy integrals have been captured (`have_initial_energy_integrals`, `photo_out.f90:70`).
+    pub have_initial_energy_integrals: bool,
+    /// Initial-model total energy in $\mathrm{erg}$ (`total_energy_initial`, `photo_out.f90:70`).
+    pub total_energy_initial: f64,
+    /// Total energy before `do_adjust_mass` in $\mathrm{erg}$ (`total_energy_before_adjust_mass`, `adjust_mass.f90:89`).
+    pub total_energy_before_adjust_mass: f64,
+    /// Total internal energy after `do_adjust_mass` in $\mathrm{erg}$ (`total_internal_energy_after_adjust_mass`, `eps_mdot.f90:672`).
+    pub total_internal_energy_after_adjust_mass: f64,
+    /// Total gravitational energy after `do_adjust_mass` in $\mathrm{erg}$ (`total_gravitational_energy_after_adjust_mass`).
+    pub total_gravitational_energy_after_adjust_mass: f64,
+    /// Total radial kinetic energy after `do_adjust_mass` in $\mathrm{erg}$ (`total_radial_kinetic_energy_after_adjust_mass`).
+    pub total_radial_kinetic_energy_after_adjust_mass: f64,
+    /// Total rotational kinetic energy after `do_adjust_mass` in $\mathrm{erg}$ (`total_rotational_kinetic_energy_after_adjust_mass`).
+    pub total_rotational_kinetic_energy_after_adjust_mass: f64,
+    /// Total turbulent energy after `do_adjust_mass` in $\mathrm{erg}$ (`total_turbulent_energy_after_adjust_mass`).
+    pub total_turbulent_energy_after_adjust_mass: f64,
+    /// Total energy after `do_adjust_mass` in $\mathrm{erg}$ (`total_energy_after_adjust_mass`, `eps_mdot.f90:677`).
+    pub total_energy_after_adjust_mass: f64,
+    /// Net total-energy change across `do_adjust_mass` + `calculate_eps_mdot` in $\mathrm{erg}$ (`evolve.f90:600-603`).
+    pub energy_change_from_do_adjust_mass_and_calculate_eps_mdot: f64,
+    /// Surface acoustic work rate from mass change in $\mathrm{erg\,s^{-1}}$ (`mdot_acoustic_surface`, `eps_mdot.f90:614`).
+    pub mdot_acoustic_surface: f64,
+    /// Surface adiabatic leakage term from mass change (`mdot_adiabatic_surface`, `eps_mdot.f90:662`).
+    pub mdot_adiabatic_surface: f64,
+    /// Mechanical work power outward across the surface face in $\mathrm{erg\,s^{-1}}$ (`work_outward_at_surface`, `hydro_energy.f90:769, 872`).
+    pub work_outward_at_surface: f64,
+    /// Mechanical work power inward across the inner boundary in $\mathrm{erg\,s^{-1}}$ (`work_inward_at_center`, `hydro_energy.f90:177, 644`).
+    pub work_inward_at_center: f64,
+    /// Virial pressure integral `3 * sum(dm * Peos / rho)` in $\mathrm{erg}$ (`virial_thm_P_avg`, `evolve.f90:1173-1174`).
+    pub virial_thm_p_avg: f64,
+    /// Integrated gravothermal heating `dt * dot_product(dm, eps_grav)` in $\mathrm{erg}$ (`total_eps_grav`, `evolve.f90:1176`).
+    pub total_eps_grav: f64,
+    /// Integrated nuclear heating in $\mathrm{erg}$ (`total_nuclear_heating`, `evolve.f90:1220-1235`).
+    pub total_nuclear_heating: f64,
+    /// Integrated thermal neutrino cooling in $\mathrm{erg}$ (`total_non_nuc_neu_cooling`, `evolve.f90:1241-1242`).
+    pub total_non_nuc_neu_cooling: f64,
+    /// Integrated irradiation heating in $\mathrm{erg}$ (`total_irradiation_heating`, `evolve.f90:1243-1244`).
+    pub total_irradiation_heating: f64,
+    /// Integrated white-dwarf sedimentation heating in $\mathrm{erg}$ (`total_WD_sedimentation_heating`, `evolve.f90:1248-1251`).
+    pub total_wd_sedimentation_heating: f64,
+    /// Integrated extra heating in $\mathrm{erg}$ (`total_extra_heating`, `evolve.f90:1274`).
+    pub total_extra_heating: f64,
+    /// Total combined Phase 1 + Phase 2 energy sources and sinks in $\mathrm{erg}$ (`total_energy_sources_and_sinks`, `evolve.f90:1335-1336`).
+    pub total_energy_sources_and_sinks: f64,
+    /// Sum of unscaled per-cell energy equation residuals `sum(ergs_error(1:nz))` in $\mathrm{erg}$ (`tot_E_equ_err`, `hydro_energy.f90:114`, `history.f90:1908-1909`).
+    pub tot_e_equ_err: f64,
+    /// Whether operator-split burning was active on the most recent solve (`struct_burn_mix`).
+    pub used_op_split_burn: bool,
     /// Previous accepted step cumulative energy error in $\mathrm{erg}$ for rollback on retry.
     pub cumulative_energy_error_old: f64,
     /// Start-of-step optical-depth-averaged Eddington luminosity in $\mathrm{erg\,s^{-1}}$ (`prev_Ledd`, `evolve.f90:1787`).
@@ -104,7 +164,37 @@ impl Default for StepHistoryScalars {
             model_number_for_last_retry: None,
             error_in_energy_conservation: 0.0,
             total_energy_end: 0.0,
+            total_internal_energy_end: 0.0,
+            total_gravitational_energy_end: 0.0,
+            total_radial_kinetic_energy_end: 0.0,
+            total_rotational_kinetic_energy_end: 0.0,
+            total_turbulent_energy_end: 0.0,
             total_energy_old: 0.0,
+            surface_cell_specific_total_energy_old: 0.0,
+            have_initial_energy_integrals: false,
+            total_energy_initial: 0.0,
+            total_energy_before_adjust_mass: 0.0,
+            total_internal_energy_after_adjust_mass: 0.0,
+            total_gravitational_energy_after_adjust_mass: 0.0,
+            total_radial_kinetic_energy_after_adjust_mass: 0.0,
+            total_rotational_kinetic_energy_after_adjust_mass: 0.0,
+            total_turbulent_energy_after_adjust_mass: 0.0,
+            total_energy_after_adjust_mass: 0.0,
+            energy_change_from_do_adjust_mass_and_calculate_eps_mdot: 0.0,
+            mdot_acoustic_surface: 0.0,
+            mdot_adiabatic_surface: 0.0,
+            work_outward_at_surface: 0.0,
+            work_inward_at_center: 0.0,
+            virial_thm_p_avg: 0.0,
+            total_eps_grav: 0.0,
+            total_nuclear_heating: 0.0,
+            total_non_nuc_neu_cooling: 0.0,
+            total_irradiation_heating: 0.0,
+            total_wd_sedimentation_heating: 0.0,
+            total_extra_heating: 0.0,
+            total_energy_sources_and_sinks: 0.0,
+            tot_e_equ_err: 0.0,
+            used_op_split_burn: false,
             cumulative_energy_error_old: 0.0,
             prev_ledd: None,
             starting_t_center: None,
@@ -119,6 +209,22 @@ impl Default for StepHistoryScalars {
             cumulative_extra_heating: 0.0,
             termination_code: None,
         }
+    }
+}
+
+impl StepHistoryScalars {
+    /// Zeros per-step `adjust_mass` and `calculate_eps_mdot` energy scalars.
+    pub(crate) fn clear_adjust_mass_energy_fields(&mut self) {
+        self.total_energy_before_adjust_mass = 0.0;
+        self.total_internal_energy_after_adjust_mass = 0.0;
+        self.total_gravitational_energy_after_adjust_mass = 0.0;
+        self.total_radial_kinetic_energy_after_adjust_mass = 0.0;
+        self.total_rotational_kinetic_energy_after_adjust_mass = 0.0;
+        self.total_turbulent_energy_after_adjust_mass = 0.0;
+        self.total_energy_after_adjust_mass = 0.0;
+        self.energy_change_from_do_adjust_mass_and_calculate_eps_mdot = 0.0;
+        self.mdot_acoustic_surface = 0.0;
+        self.mdot_adiabatic_surface = 0.0;
     }
 }
 

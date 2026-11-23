@@ -172,17 +172,32 @@ impl SedCube {
             self.logg_grid.len(),
             self.meta_grid.len(),
         );
+        let kx_limit = if nx < 2 || is_dummy_axis(&self.teff_grid) {
+            1
+        } else {
+            2
+        };
+        let ky_limit = if ny < 2 || is_dummy_axis(&self.logg_grid) {
+            1
+        } else {
+            2
+        };
+        let kz_limit = if nz < 2 || is_dummy_axis(&self.meta_grid) {
+            1
+        } else {
+            2
+        };
         let (dx_t, dy_t, dz_t) =
             (T::from_f64(dx), T::from_f64(dy), T::from_f64(dz));
 
-        for kz in 0..2 {
+        for kz in 0..kz_limit {
             let (wz, wzd, k) = (hz[kz], hzd[kz], iz + kz);
             let (km, kp, span_z) = Self::diff_stencil(k, nz, &self.meta_grid);
-            for ky in 0..2 {
+            for ky in 0..ky_limit {
                 let (wy, wyd, j) = (hy[ky], hyd[ky], iy + ky);
                 let (jm, jp, span_y) =
                     Self::diff_stencil(j, ny, &self.logg_grid);
-                for kx in 0..2 {
+                for kx in 0..kx_limit {
                     let (wx, wxd, i) = (hx[kx], hxd[kx], ix + kx);
                     let (im, ip, span_x) =
                         Self::diff_stencil(i, nx, &self.teff_grid);
@@ -238,6 +253,9 @@ impl SedCube {
         grid: &[f64],
         val: T,
     ) -> (usize, [T; 2], [T; 2], f64) {
+        if grid.len() < 2 || is_dummy_axis(grid) {
+            return (0, [T::one(), T::zero()], [T::zero(), T::zero()], 0.0);
+        }
         let (idx, t) = find_interval(grid, val);
         let dx = grid[idx + 1] - grid[idx];
         (idx, [h00(t), h01(t)], [h10(t), h11(t)], dx)
@@ -283,15 +301,18 @@ impl SedCube {
         let (tx, ty, tz) =
             (tx.clamp(0.0, 1.0), ty.clamp(0.0, 1.0), tz.clamp(0.0, 1.0));
 
+        let ix1 = (ix + 1).min(self.teff_grid.len().saturating_sub(1));
+        let iy1 = (iy + 1).min(self.logg_grid.len().saturating_sub(1));
+        let iz1 = (iz + 1).min(self.meta_grid.len().saturating_sub(1));
         let rows = [
             self.sed_at(ix, iy, iz),
-            self.sed_at(ix, iy, iz + 1),
-            self.sed_at(ix, iy + 1, iz),
-            self.sed_at(ix, iy + 1, iz + 1),
-            self.sed_at(ix + 1, iy, iz),
-            self.sed_at(ix + 1, iy, iz + 1),
-            self.sed_at(ix + 1, iy + 1, iz),
-            self.sed_at(ix + 1, iy + 1, iz + 1),
+            self.sed_at(ix, iy, iz1),
+            self.sed_at(ix, iy1, iz),
+            self.sed_at(ix, iy1, iz1),
+            self.sed_at(ix1, iy, iz),
+            self.sed_at(ix1, iy, iz1),
+            self.sed_at(ix1, iy1, iz),
+            self.sed_at(ix1, iy1, iz1),
         ];
 
         let scale = (r / d) * (r / d);

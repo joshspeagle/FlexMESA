@@ -11,7 +11,7 @@ use crate::case_staging::TempCaseStaging;
 use crate::controls::StarError;
 use crate::evolve::{star_evolve_step, star_evolve_step_outcome_with_extras};
 use crate::evolve_support::snapshot_step_start_extras;
-use crate::history::{HistoryRow, extract_history_row};
+use crate::history::{extract_history_row, HistoryRow};
 use crate::hydro_vars::set_hydro_vars;
 use crate::inlist::{InlistBundle, InlistLoadOptions};
 use crate::mesa_profile::{StarLogsWriter, StarStepLogExtras};
@@ -21,12 +21,12 @@ use crate::model_io::{
     write_photo_bytes,
 };
 use crate::photo_io::try_write_photo_bytes;
-use crate::rn_parser::{RnStage, parse_rn_stages};
+use crate::rn_parser::{parse_rn_stages, RnStage};
 use crate::rsp_eos_kap::RspChemCache;
 use crate::star_job_init::{
-    InitModelOutcome, init_or_update_model_from_bundle_outcome,
+    init_or_update_model_from_bundle_outcome, InitModelOutcome,
 };
-use crate::termination::{LimitCheckOutcome, do_check_limits};
+use crate::termination::{do_check_limits, LimitCheckOutcome};
 
 /// Control flow directive returned by [`StarExtras`] step hooks (`keep_going`,
 /// `redo`, `retry`, `terminate` in `star/public/star_def.inc`).
@@ -159,7 +159,10 @@ pub trait StarExtras {
     ///
     /// # Errors
     /// Returns [`StarError`] if evaluating or validating the torque fails.
-    fn apply_other_torque(&mut self, m: &mut StarModel) -> Result<(), StarError> {
+    fn apply_other_torque(
+        &mut self,
+        m: &mut StarModel,
+    ) -> Result<(), StarError> {
         if let Some(jdot) = self.other_torque(m) {
             if jdot.len() != m.nz {
                 return Err(StarError::InvalidInput(format!(
@@ -721,6 +724,12 @@ pub fn run_inlist_stage_with_logs(
     mut logs_writer: Option<&mut StarLogsWriter>,
 ) -> Result<StageRunReport, StarError> {
     let _net_dir_guard = crate::micro::NetSearchDirGuard::new(&bundle.case_dir);
+    if logs_writer.is_none() && model.controls.colors.use_colors {
+        let _ = crate::mesa_history::load_star_colors_context(
+            model,
+            Some(&bundle.case_dir),
+        )?;
+    }
     install_star_aux_hooks(extras, model);
     let t0 = Instant::now();
     let (mut steps_taken, mut total_newton_iterations, mut total_retries) =
@@ -972,7 +981,10 @@ pub fn verify_photo_restart_parity(
     continued.controls.max_age = -1.0;
     continued.controls.ts_stop.max_age_in_days = -1.0;
     continued.controls.max_age_in_seconds = None;
-    continued.controls.ts_stop.num_adjusted_dt_steps_before_max_age = 0;
+    continued
+        .controls
+        .ts_stop
+        .num_adjusted_dt_steps_before_max_age = 0;
     continued.aux.step_hist.using_revised_max_yr_dt = false;
     if continued.dt_next <= 0.0 {
         let fallback_dt = continued.dt.max(continued.dt_old);

@@ -48,6 +48,8 @@
 pub mod filters_data;
 /// 3D cubic Hermite, trilinear, and 4-NN SED interpolation kernels.
 pub mod interp;
+/// Dynamic runtime path resolution, filter/Vega/atmosphere loaders, and CSV writer.
+pub mod loader;
 /// Bolometric, synthetic filter, and 10-column history photometry evaluators.
 pub mod photometry;
 /// 4D `Kurucz2003all` SED cube container and binary parser.
@@ -70,6 +72,9 @@ pub use filters_data::{
     NUM_COLORS_OUT, NUM_JOHNSON_FILTERS,
 };
 pub use interp::{h00, h01, h10, h11};
+pub use loader::{
+    ColorsContext, ColorsEvalOutput, ColorsLoadConfig, LoadedFilter,
+};
 pub use photometry::{
     calculate_bolometric_phot, calculate_synthetic, calculate_synthetic_flux,
     compute_ab_zero_point, compute_st_zero_point, compute_vega_zero_point,

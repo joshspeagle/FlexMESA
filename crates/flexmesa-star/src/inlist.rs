@@ -4,7 +4,7 @@
 //! Resolves `read_extra_<section>_inlist(1..5)` and
 //! `extra_<section>_inlist_name(1..5)` (along with legacy un-subscripted
 //! `read_extra_<section>_inlist1..5`) across `&star_job`, `&eos`, `&kap`,
-//! `&controls`, `&pgstar`, `&binary_job`, `&binary_controls`, `&pgbinary`,
+//! `&colors`, `&controls`, `&pgstar`, `&binary_job`, `&binary_controls`, `&pgbinary`,
 //! `&astero_search_controls`, and `&astero_pgstar_controls`, and maps parsed
 //! values into [`StarJobControls`], [`StarControls`], [`EosConfig`], and
 //! [`KapConfig`].
@@ -520,6 +520,16 @@ impl InlistBundle {
                         &empty,
                         &empty,
                         &inv.kap_terminal_output,
+                    );
+                }
+                "colors" => {
+                    report.validate_implemented_section_with_terminal_output(
+                        sec,
+                        &keys,
+                        &inv.colors_supported,
+                        &inv.colors_unused,
+                        &empty,
+                        &inv.colors_terminal_output,
                     );
                 }
                 "controls" => {

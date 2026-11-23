@@ -7,28 +7,30 @@ use std::fmt::Write as _;
 use std::fs::{self, File, OpenOptions};
 use std::io::{BufWriter, Write};
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
-use flexmesa_chem::{NuclideCatalog, category_id, category_name};
-use flexmesa_const::{
-    FOUR_PI, L_SUN, LN10, M_SUN, PI, R_SUN, SECDAY, SECYER,
+use flexmesa_chem::{category_id, category_name, NuclideCatalog};
+use flexmesa_colors::{
+    ColorsContext, ColorsError, ColorsEvalOutput, ColorsLoadConfig,
 };
+use flexmesa_const::{FOUR_PI, LN10, L_SUN, M_SUN, PI, R_SUN, SECDAY, SECYER};
 use flexmesa_schema::strip_fortran_comment;
 
 use crate::controls::StarError;
 use crate::core_boundaries::CoreBoundaryInfo;
 use crate::model::StarModel;
 use crate::report_utils::{
-    MESA_REF_VERSION_NUMBER, STAR_LOG_COL_WIDTH, StepReportContext,
     center_avg_x_by_name, center_avg_x_slot, center_value, center_value_by,
     csound_face_at, equatorial_and_polar_r_cm, eval_astero_report_scalars,
     eval_conv_time_scales, eval_history_burning_regions,
     eval_history_mixing_regions, eval_ledd_erg_s, eval_shock_info,
     eval_surface_w_div_w_kep, eval_upstream_omega_crit, format_mesa_dbl,
     format_mesa_header_str, get_lrad_div_ledd, gravity_darkening_l_coeff,
-    gravity_darkening_teff_coeff, iso_slot_for_chem_id, parse_quoted_include_arg,
-    push_mesa_6line_header, resolve_iso_slot, safe_log10, star_avg_x_slot,
-    surface_avg_x_by_name, surface_avg_x_slot, write_mesa_dbl_width,
-    write_mesa_int_width,
+    gravity_darkening_teff_coeff, iso_slot_for_chem_id,
+    parse_quoted_include_arg, push_mesa_6line_header, resolve_iso_slot,
+    safe_log10, star_avg_x_slot, surface_avg_x_by_name, surface_avg_x_slot,
+    write_mesa_dbl_width, write_mesa_int_width, StepReportContext,
+    MESA_REF_VERSION_NUMBER, STAR_LOG_COL_WIDTH,
 };
 
 /// Active column declarations from upstream MESA `26.4.1`
@@ -173,6 +175,14 @@ pub enum HistoryColumnSpec {
     BurnRelrType(usize),
     /// `burn_relr_top_<ii>` from `burn_relr_regions <N>`.
     BurnRelrTop(usize),
+    /// `&colors` bolometric magnitude (`Mag_bol`, `colors_history.f90:102-103`).
+    ColorBolMag(Arc<ColorsContext>),
+    /// `&colors` bolometric flux in $\mathrm{erg\,s^{-1}\,cm^{-2}}$ (`Flux_bol`).
+    ColorBolFlux(Arc<ColorsContext>),
+    /// `&colors` normalized nearest-grid distance (`Interp_rad`).
+    ColorInterpRad(Arc<ColorsContext>),
+    /// `&colors` synthetic magnitude for passband at 0-based index `idx`.
+    ColorBand(Arc<ColorsContext>, usize),
 }
 
 impl HistoryColumnSpec {
@@ -216,6 +226,34 @@ impl HistoryColumnSpec {
             Self::BurnQtop(ii) => format!("burn_qtop_{ii}"),
             Self::BurnRelrType(ii) => format!("burn_relr_type_{ii}"),
             Self::BurnRelrTop(ii) => format!("burn_relr_top_{ii}"),
+            Self::ColorBolMag(_) => String::from("Mag_bol"),
+            Self::ColorBolFlux(_) => String::from("Flux_bol"),
+            Self::ColorInterpRad(_) => String::from("Interp_rad"),
+            Self::ColorBand(ctx, idx) => ctx
+                .filters
+                .get(*idx)
+                .map_or_else(|| String::from("unknown"), |f| f.name.clone()),
+        }
+    }
+
+    #[inline]
+    const fn is_colors(&self) -> bool {
+        matches!(
+            self,
+            Self::ColorBolMag(_)
+                | Self::ColorBolFlux(_)
+                | Self::ColorInterpRad(_)
+                | Self::ColorBand(_, _)
+        )
+    }
+
+    const fn colors_context(&self) -> Option<&Arc<ColorsContext>> {
+        match self {
+            Self::ColorBolMag(ctx)
+            | Self::ColorBolFlux(ctx)
+            | Self::ColorInterpRad(ctx)
+            | Self::ColorBand(ctx, _) => Some(ctx),
+            _ => None,
         }
     }
 }
@@ -1024,14 +1062,49 @@ fn parse_history_columns_inner(
     Ok(())
 }
 
+/// Validates and loads the configured [`ColorsContext`] from
+/// `model.controls.colors` when `use_colors = true` (`colors/public/colors_lib.f90`).
+///
+/// # Errors
+/// Returns [`StarError::IoError`] if configured filter, Vega, or atmosphere
+/// files are missing/unreadable, or [`StarError::InvalidInput`] if `&colors`
+/// controls or table contents are invalid.
+pub fn load_star_colors_context(
+    model: &StarModel,
+    case_dir: Option<&Path>,
+) -> Result<Option<Arc<ColorsContext>>, StarError> {
+    let cc = &model.controls.colors;
+    if !cc.use_colors {
+        return Ok(None);
+    }
+    let cfg = ColorsLoadConfig {
+        instrument: &cc.instrument,
+        stellar_atm: &cc.stellar_atm,
+        vega_sed: &cc.vega_sed,
+        mag_system: &cc.mag_system,
+        distance: cc.distance,
+        z_over_x_ref: cc.z_over_x_ref,
+        make_csv: cc.make_csv,
+        sed_per_model: cc.sed_per_model,
+        colors_results_directory: &cc.colors_results_directory,
+    };
+    let loaded = ColorsContext::load(&cfg, case_dir).map_err(|e| match e {
+        ColorsError::IoError { .. } => StarError::IoError(e.to_string()),
+        other => StarError::InvalidInput(other.to_string()),
+    })?;
+    Ok(Some(Arc::new(loaded)))
+}
+
 /// Resolves the active `history_columns.list` for `model` in `case_dir`
-/// (`set_history_columns` in `star/private/history_specs.f90:108-120, 714-781`).
+/// (`set_history_columns` in `star/private/history_specs.f90:108-120, 714-781`),
+/// appending `&colors` photometry columns when `use_colors = true`
+/// (`star/private/history.f90:262-303`).
 pub fn resolve_star_history_columns(
     model: &StarModel,
     case_dir: Option<&Path>,
 ) -> Result<Vec<HistoryColumnSpec>, StarError> {
     let requested = model.job.history_columns_file.trim();
-    if !requested.is_empty() {
+    let mut specs = if !requested.is_empty() {
         let path = match case_dir {
             Some(d) => d.join(requested),
             None => PathBuf::from(requested),
@@ -1042,13 +1115,8 @@ pub fn resolve_star_history_columns(
                 path.display()
             ))
         })?;
-        return parse_star_history_columns(
-            &text,
-            path.parent().or(case_dir),
-            model,
-        );
-    }
-    if let Some(d) = case_dir {
+        parse_star_history_columns(&text, path.parent().or(case_dir), model)?
+    } else if let Some(d) = case_dir {
         let local = d.join("history_columns.list");
         if local.is_file() {
             let text = fs::read_to_string(&local).map_err(|e| {
@@ -1057,14 +1125,31 @@ pub fn resolve_star_history_columns(
                     local.display()
                 ))
             })?;
-            return parse_star_history_columns(&text, Some(d), model);
+            parse_star_history_columns(&text, Some(d), model)?
+        } else {
+            parse_star_history_columns(
+                DEFAULT_STAR_HISTORY_COLUMNS_TEXT,
+                case_dir,
+                model,
+            )?
+        }
+    } else {
+        parse_star_history_columns(
+            DEFAULT_STAR_HISTORY_COLUMNS_TEXT,
+            case_dir,
+            model,
+        )?
+    };
+
+    if let Some(c_ctx) = load_star_colors_context(model, case_dir)? {
+        specs.push(HistoryColumnSpec::ColorBolMag(Arc::clone(&c_ctx)));
+        specs.push(HistoryColumnSpec::ColorBolFlux(Arc::clone(&c_ctx)));
+        specs.push(HistoryColumnSpec::ColorInterpRad(Arc::clone(&c_ctx)));
+        for idx in 0..c_ctx.filters.len() {
+            specs.push(HistoryColumnSpec::ColorBand(Arc::clone(&c_ctx), idx));
         }
     }
-    parse_star_history_columns(
-        DEFAULT_STAR_HISTORY_COLUMNS_TEXT,
-        case_dir,
-        model,
-    )
+    Ok(specs)
 }
 
 /// Returns the default 60 [`HistoryColumnSpec`] items of MESA `26.4.1`.
@@ -1879,13 +1964,13 @@ fn eval_scalar_column(
         "total_irradiation_heating" => {
             MesaCellValue::Float(sh.total_irradiation_heating)
         }
-        "total_WD_sedimentation_heating" => MesaCellValue::Float(
-            if model.controls.do_element_diffusion {
+        "total_WD_sedimentation_heating" => {
+            MesaCellValue::Float(if model.controls.do_element_diffusion {
                 sh.total_wd_sedimentation_heating
             } else {
                 0.0
-            },
-        ),
+            })
+        }
         "total_extra_heating" => MesaCellValue::Float(sh.total_extra_heating),
         "total_energy_sources_and_sinks" => {
             MesaCellValue::Float(sh.total_energy_sources_and_sinks)
@@ -2268,7 +2353,11 @@ fn eval_scalar_column(
             MesaCellValue::Float(if model.controls.rotation_flag && nz > 0 {
                 center_value_by(model, nz, |k| {
                     let wc = eval_upstream_omega_crit(model, k);
-                    if wc > 0.0 { model.omega[k] / wc } else { 0.0 }
+                    if wc > 0.0 {
+                        model.omega[k] / wc
+                    } else {
+                        0.0
+                    }
                 })
                 .min(1.0)
             } else {
@@ -2848,8 +2937,7 @@ fn eval_scalar_column(
         "logxq_below_const_q" => {
             let k1 = model.aux.k_below_const_q;
             MesaCellValue::Float(if k1 > 0 && nz > 0 {
-                let sum_dq: f64 =
-                    model.dq[..(k1 - 1).min(nz)].iter().sum();
+                let sum_dq: f64 = model.dq[..(k1 - 1).min(nz)].iter().sum();
                 safe_log10(sum_dq)
             } else {
                 0.0
@@ -2886,18 +2974,9 @@ fn eval_scalar_column(
         // `star/private/history.f90:2336-2370`,
         // `star/private/star_utils.f90:1328-1485`, and
         // `star_data/public/star_data_step_work.inc:781`.
-        "shock_mass"
-        | "shock_q"
-        | "shock_radius"
-        | "shock_velocity"
-        | "shock_csound"
-        | "shock_lgT"
-        | "shock_lgRho"
-        | "shock_lgP"
-        | "shock_gamma1"
-        | "shock_entropy"
-        | "shock_tau"
-        | "shock_k"
+        "shock_mass" | "shock_q" | "shock_radius" | "shock_velocity"
+        | "shock_csound" | "shock_lgT" | "shock_lgRho" | "shock_lgP"
+        | "shock_gamma1" | "shock_entropy" | "shock_tau" | "shock_k"
         | "shock_pre_lgRho" => {
             let info = eval_shock_info(model);
             if name == "shock_k" {
@@ -3077,6 +3156,7 @@ pub fn evaluate_star_history_row_with_ctx(
     let max_b_all = max_burn.max(max_burn_relr);
     let burn_regs = eval_history_burning_regions(model, max_b_all);
     let mut astero_cache = None;
+    let mut colors_cache: Option<ColorsEvalOutput> = None;
 
     let nz = model.nz;
     specs
@@ -3176,10 +3256,140 @@ pub fn evaluate_star_history_row_with_ctx(
                 HistoryColumnSpec::BurnRelrTop(ii) => {
                     MesaCellValue::Float(burn_regs[ii - 1].2)
                 }
+                HistoryColumnSpec::ColorBolMag(c_ctx) => {
+                    let out = get_or_eval_colors(
+                        model,
+                        ctx,
+                        c_ctx,
+                        &mut colors_cache,
+                    );
+                    MesaCellValue::Float(out.mag_bol)
+                }
+                HistoryColumnSpec::ColorBolFlux(c_ctx) => {
+                    let out = get_or_eval_colors(
+                        model,
+                        ctx,
+                        c_ctx,
+                        &mut colors_cache,
+                    );
+                    MesaCellValue::Float(out.flux_bol)
+                }
+                HistoryColumnSpec::ColorInterpRad(c_ctx) => {
+                    let out = get_or_eval_colors(
+                        model,
+                        ctx,
+                        c_ctx,
+                        &mut colors_cache,
+                    );
+                    MesaCellValue::Float(out.interp_rad)
+                }
+                HistoryColumnSpec::ColorBand(c_ctx, idx) => {
+                    let out = get_or_eval_colors(
+                        model,
+                        ctx,
+                        c_ctx,
+                        &mut colors_cache,
+                    );
+                    MesaCellValue::Float(
+                        out.filter_mags.get(*idx).copied().unwrap_or(-1.0),
+                    )
+                }
             };
             (sp.column_name(), val)
         })
         .collect()
+}
+
+fn eval_photosphere_xz(
+    model: &StarModel,
+    ctx: &StepReportContext,
+) -> (f64, f64) {
+    if model.nz == 0 || model.species == 0 || model.xa.is_empty() {
+        let z = model.controls.initial_z.max(0.0);
+        let y = if model.controls.initial_y >= 0.0 {
+            model.controls.initial_y
+        } else {
+            0.24 + 2.0 * z
+        };
+        let x = (1.0 - y - z).max(0.0);
+        return (x, z);
+    }
+    let k = ctx.phot.cell_k_1based.saturating_sub(1).min(model.nz - 1);
+    let cell = model.cell_xa(k);
+    let mut x = 0.0;
+    for iso in ["h1", "h2"] {
+        if let Ok((_, Some(j))) = resolve_iso_slot(model, iso) {
+            x += cell.get(j).copied().unwrap_or(0.0);
+        }
+    }
+    let mut y = 0.0;
+    for iso in ["he3", "he4"] {
+        if let Ok((_, Some(j))) = resolve_iso_slot(model, iso) {
+            y += cell.get(j).copied().unwrap_or(0.0);
+        }
+    }
+    let z = (1.0 - x - y).max(0.0);
+    (x, z)
+}
+
+fn eval_colors_for_model(
+    model: &StarModel,
+    ctx: &StepReportContext,
+    c_ctx: &ColorsContext,
+    write_csv: bool,
+) -> Result<ColorsEvalOutput, StarError> {
+    let t_eff = if model.nz > 0 { model.t[0] } else { model.teff };
+    let r_cm = model.r.first().copied().unwrap_or(0.0);
+    let g_surf = {
+        let g0 = model.grav.first().copied().unwrap_or(0.0);
+        if g0 > 0.0 {
+            g0
+        } else if r_cm > 0.0 {
+            let m0 = model.m.first().copied().unwrap_or(model.mstar);
+            let cgrav0 = model
+                .cgrav
+                .first()
+                .copied()
+                .unwrap_or(flexmesa_const::STANDARD_CGRAV);
+            cgrav0 * m0 / (r_cm * r_cm)
+        } else {
+            1.0
+        }
+    };
+    let log_g = flexmesa_math::log10(g_surf.max(1.0e-99));
+    let (phot_x, phot_z) = eval_photosphere_xz(model, ctx);
+    c_ctx
+        .eval_and_maybe_write_csv(
+            t_eff,
+            log_g,
+            phot_x,
+            phot_z,
+            r_cm,
+            model.model_number,
+            write_csv,
+        )
+        .map_err(|e| match e {
+            ColorsError::IoError { .. } => StarError::IoError(e.to_string()),
+            other => StarError::InvalidInput(other.to_string()),
+        })
+}
+
+fn get_or_eval_colors<'a>(
+    model: &StarModel,
+    ctx: &StepReportContext,
+    c_ctx: &ColorsContext,
+    cache: &'a mut Option<ColorsEvalOutput>,
+) -> &'a ColorsEvalOutput {
+    cache.get_or_insert_with(|| {
+        eval_colors_for_model(model, ctx, c_ctx, false).unwrap_or_else(|_| {
+            ColorsEvalOutput {
+                mag_bol: 99.0,
+                flux_bol: 0.0,
+                interp_rad: 0.0,
+                filter_mags: vec![-1.0; c_ctx.filters.len()],
+            }
+        })
+    })
 }
 
 pub(crate) fn validate_extra_header_items(
@@ -3241,10 +3451,8 @@ pub fn format_star_history_file_header_with_extras(
     ));
     hdr_items.push(("compiler", format_mesa_header_str("rustc")));
     hdr_items.push(("build", format_mesa_header_str("flexmesa")));
-    hdr_items.push((
-        "MESA_SDK_version",
-        format_mesa_header_str("flexmesa-0.1"),
-    ));
+    hdr_items
+        .push(("MESA_SDK_version", format_mesa_header_str("flexmesa-0.1")));
     hdr_items.push((
         "math_backend",
         format_mesa_header_str(flexmesa_math::numerics_mode().as_str()),
@@ -3319,6 +3527,7 @@ pub struct IncrementalHistoryWriter {
     path: PathBuf,
     header_path: Option<PathBuf>,
     specs: Vec<HistoryColumnSpec>,
+    colors_specs: Vec<HistoryColumnSpec>,
     writer: Option<BufWriter<File>>,
     rows_written: usize,
     last_model_number: Option<usize>,
@@ -3339,10 +3548,15 @@ impl IncrementalHistoryWriter {
         header_path: Option<PathBuf>,
         specs: Vec<HistoryColumnSpec>,
     ) -> Self {
+        // Place `&colors` columns after `extra_cols` in `history.data`,
+        // matching `star/private/history.f90:472-483, 572-581`.
+        let (colors_specs, regular_specs): (Vec<_>, Vec<_>) =
+            specs.into_iter().partition(HistoryColumnSpec::is_colors);
         Self {
             path,
             header_path,
-            specs,
+            specs: regular_specs,
+            colors_specs,
             writer: None,
             rows_written: 0,
             last_model_number: None,
@@ -3445,8 +3659,15 @@ impl IncrementalHistoryWriter {
                     ))
                 })?;
             }
-            let extra_names: Vec<&str> =
-                extra_cols.iter().map(|(k, _)| k.as_str()).collect();
+            let color_names: Vec<String> = self
+                .colors_specs
+                .iter()
+                .map(HistoryColumnSpec::column_name)
+                .collect();
+            let mut extra_names: Vec<&str> =
+                Vec::with_capacity(extra_cols.len() + color_names.len());
+            extra_names.extend(extra_cols.iter().map(|(k, _)| k.as_str()));
+            extra_names.extend(color_names.iter().map(String::as_str));
             let hdr = format_star_history_file_header_with_extras(
                 model,
                 &self.specs,
@@ -3495,7 +3716,31 @@ impl IncrementalHistoryWriter {
         }
 
         let row = evaluate_star_history_row_with_ctx(model, &self.specs, ctx);
-        let line = format_star_history_data_line_with_extra(&row, extra_cols);
+        let line = if let Some(c_ctx) = self
+            .colors_specs
+            .first()
+            .and_then(HistoryColumnSpec::colors_context)
+        {
+            let out = eval_colors_for_model(model, ctx, c_ctx, true)?;
+            let mut tail: Vec<(String, f64)> =
+                Vec::with_capacity(extra_cols.len() + self.colors_specs.len());
+            tail.extend(extra_cols.iter().cloned());
+            for sp in &self.colors_specs {
+                let val = match sp {
+                    HistoryColumnSpec::ColorBolMag(_) => out.mag_bol,
+                    HistoryColumnSpec::ColorBolFlux(_) => out.flux_bol,
+                    HistoryColumnSpec::ColorInterpRad(_) => out.interp_rad,
+                    HistoryColumnSpec::ColorBand(_, idx) => {
+                        out.filter_mags.get(*idx).copied().unwrap_or(-1.0)
+                    }
+                    _ => 0.0,
+                };
+                tail.push((sp.column_name(), val));
+            }
+            format_star_history_data_line_with_extra(&row, &tail)
+        } else {
+            format_star_history_data_line_with_extra(&row, extra_cols)
+        };
         if let Some(ref mut bw) = self.writer {
             bw.write_all(line.as_bytes()).map_err(|e| {
                 StarError::IoError(format!(

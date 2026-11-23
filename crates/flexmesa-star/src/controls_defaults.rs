@@ -375,6 +375,7 @@ impl Default for StarControls {
                 crate::controls_timestep_stop::TimestepStopControls::default(),
             output: crate::controls_output::OutputControls::default(),
             diffusion: crate::controls_diffusion::DiffusionControls::default(),
+            colors: crate::controls::ColorsControls::default(),
         }
     }
 }

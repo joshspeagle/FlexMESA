@@ -166,12 +166,14 @@ pub fn do_adjust_mass_step(
 ) -> Result<(), StarError> {
     let nz = model.nz;
     if dt <= 0.0 || nz < 3 {
+        model.aux.k_below_const_q = 1;
         model.aux.k_const_mass = 0;
         model.eps_mdot.fill(0.0);
         return Ok(());
     }
     let mut delta_m = compute_delta_m(model, dt)?;
     if delta_m == 0.0 {
+        model.aux.k_below_const_q = 1;
         model.aux.k_const_mass = 0;
         model.eps_mdot.fill(0.0);
         return Ok(());
@@ -438,6 +440,7 @@ fn do_adjust_mass_core(
         }
     }
     if delta_m == 0.0 || nz < 3 {
+        model.aux.k_below_const_q = 1;
         model.aux.k_const_mass = 0;
         model.eps_mdot.fill(0.0);
         return Ok(());
@@ -486,6 +489,9 @@ fn do_adjust_mass_core(
         delta_m,
         explicit_ka_kb,
     )?;
+    // `star/private/adjust_mass.f90:828-829` (1-based `k_below_const_q`;
+    // `k_const_mass` remains 0-based on `HydroAuxState` for `hydro_vars`).
+    model.aux.k_below_const_q = k_a + 1;
     model.aux.k_const_mass = k_b;
 
     // `k_below_just_added` (`adjust_mass.f90:360-370`, 0-based).

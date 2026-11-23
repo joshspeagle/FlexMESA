@@ -215,6 +215,10 @@ impl std::fmt::Debug for BinaryOtherTorqueHandle {
     }
 }
 
+const fn default_k_below_const_q() -> usize {
+    1
+}
+
 /// Auxiliary hydrodynamic, thermodynamic, and heating state vectors for
 /// `flexmesa-star` (`star_data_step_work.inc`).
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -300,6 +304,10 @@ pub struct HydroAuxState {
     pub have_mlt_vc: bool,
     /// Whether MLT/TDC evaluations may overwrite `mlt_vc` (`okay_to_set_mlt_vc` in `evolve.f90:321`).
     pub okay_to_set_mlt_vc: bool,
+    /// 1-based inner boundary zone index below constant-$q$ shell (`k_below_const_q`
+    /// in `star/private/init.f90:383` and `star/private/adjust_mass.f90:828`).
+    #[serde(default = "default_k_below_const_q")]
+    pub k_below_const_q: usize,
     /// Constant-mass inner boundary zone index during mass adjustment (`k_const_mass`).
     pub k_const_mass: usize,
     /// Rayleigh-Taylor instability face kinematic diffusivity $\eta_{\mathrm{RTI},k}$ (`eta_RTI`).
@@ -523,6 +531,7 @@ impl HydroAuxState {
             mlt_vc_old: vec![0.0; nz],
             have_mlt_vc: false,
             okay_to_set_mlt_vc: true,
+            k_below_const_q: 1,
             k_const_mass: 0,
             eta_rti: vec![0.0; nz],
             etamid_rti: vec![0.0; nz],

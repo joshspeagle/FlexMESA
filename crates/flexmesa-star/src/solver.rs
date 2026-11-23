@@ -391,6 +391,95 @@ fn build_step_failure_info(
     }
 }
 
+/// Layout of `model` for the step dump's `NAMES` and `EQNAMES` records.
+fn stepdump_names(
+    model: &StarModel,
+    nvar: usize,
+) -> (Vec<String>, Vec<String>, usize, usize, usize) {
+    let l = &model.layout;
+    (
+        (0..nvar).map(|i| l.variable_name(i, &model.iso_names)).collect(),
+        (0..nvar).map(|i| l.equation_name(i, &model.iso_names)).collect(),
+        l.nvar_hydro,
+        model.species,
+        model.nz,
+    )
+}
+
+/// 1-based `(zone, index)` of an argmax as upstream prints it, `-1` if none.
+fn stepdump_loc(loc: Option<(usize, usize)>) -> [i64; 2] {
+    loc.map_or([-1, -1], |(k, j)| [k as i64 + 1, j as i64 + 1])
+}
+
+/// Writes the `CALL` record and, at the first call of a model, the `STATE`
+/// and `EQU` records (`star_solver.f90:274-282`, `#372`).
+fn stepdump_call(
+    model: &StarModel,
+    sys: &HenyeySystem,
+    residual_norm: f64,
+    max_residual: f64,
+    loc: Option<(usize, usize)>,
+) {
+    let dump_model = model.model_number + 1;
+    crate::stepdump::record(
+        dump_model,
+        || stepdump_names(model, sys.nvar),
+        |buf, id, new_model| {
+            crate::stepdump::push_line(
+                buf,
+                "CALL",
+                id,
+                dump_model,
+                &[],
+                &[model.dt, residual_norm, max_residual],
+                &stepdump_loc(loc),
+            );
+            if !new_model {
+                return;
+            }
+            let nvh = model.layout.nvar_hydro;
+            let sp = model.species;
+            for k in 0..model.nz {
+                let mut row: Vec<f64> = model.xh[k * nvh..(k + 1) * nvh].to_vec();
+                row.extend_from_slice(&model.xa[k * sp..(k + 1) * sp]);
+                crate::stepdump::push_line(
+                    buf, "STATE", id, dump_model, &[k as i64 + 1], &row, &[],
+                );
+                crate::stepdump::push_line(
+                    buf,
+                    "EQU",
+                    id,
+                    dump_model,
+                    &[k as i64 + 1],
+                    &sys.equ[k * sys.nvar..(k + 1) * sys.nvar],
+                    &[],
+                );
+            }
+        },
+    );
+}
+
+/// Writes one step-dump record of the Newton loop (`#372`).
+fn stepdump_line(
+    model: &StarModel,
+    nvar: usize,
+    tag: &str,
+    ints: &[i64],
+    vals: &[f64],
+    tail: &[i64],
+) {
+    let dump_model = model.model_number + 1;
+    crate::stepdump::record(
+        dump_model,
+        || stepdump_names(model, nvar),
+        |buf, id, _| {
+            crate::stepdump::push_line(
+                buf, tag, id, dump_model, ints, vals, tail,
+            );
+        },
+    );
+}
+
 /// Executes a single implicit damped Newton-Raphson Henyey solve
 /// (`do_solver_converge` and `do_solver_work` in
 /// `star/private/struct_burn_mix.f90:359-799` and
@@ -481,7 +570,7 @@ pub fn solve_henyey_step(
         return Err(e);
     }
 
-    let (mut residual_norm, mut max_residual, _) =
+    let (mut residual_norm, mut max_residual, init_resid_loc) =
         compute_residual_norms_with_argmax(model, sys.nvar, &sys.equ);
     if !residual_norm.is_finite() || !max_residual.is_finite() {
         model.aux.doing_struct_burn_mix = saved_doing_sbm;
@@ -497,6 +586,10 @@ pub fn solve_henyey_step(
             None,
             String::from("solver failure: initial sizequ returned NaN or Inf"),
         ))));
+    }
+
+    if crate::stepdump::active() {
+        stepdump_call(model, &sys, residual_norm, max_residual, init_resid_loc);
     }
 
     let corr_param_factor = if model.controls.corr_param_factor == 0.0 {
@@ -582,6 +675,16 @@ pub fn solve_henyey_step(
                     &soln,
                     Some((iter, tol_mc, &mut flailing)),
                 );
+            if crate::stepdump::active() {
+                stepdump_line(
+                    model,
+                    sys.nvar,
+                    "CORR",
+                    &[iter as i64],
+                    &[cn_raw, mc_raw],
+                    &stepdump_loc(corr_argmax),
+                );
+            }
             correction_norm = cn_raw.abs();
             max_correction = mc_raw.abs();
             corr_norm_min = corr_norm_min.min(correction_norm);
@@ -666,6 +769,17 @@ pub fn solve_henyey_step(
                 }
             }
 
+            if crate::stepdump::active() {
+                stepdump_line(
+                    model,
+                    sys.nvar,
+                    "NEWTON",
+                    &[iter as i64],
+                    &[min_corr_coeff, correction_factor, slope],
+                    &[],
+                );
+            }
+
             // `adjust_correction` (`star/private/star_solver.f90:737-951`).
             let skip_eval_f = min_corr_coeff == 1.0;
             let need_dxsave = !skip_eval_f
@@ -685,6 +799,16 @@ pub fn solve_henyey_step(
                 }
                 f0
             };
+            if crate::stepdump::active() {
+                stepdump_line(
+                    model,
+                    sys.nvar,
+                    "FOLD",
+                    &[iter as i64],
+                    &[fold],
+                    &[],
+                );
+            }
 
             let eff_min_coeff = min_corr_coeff.min(correction_factor);
             let mut alam = correction_factor;
@@ -694,7 +818,7 @@ pub fn solve_henyey_step(
             let mut accepted_coeff: Option<f64> = None;
             let mut adjust_err = String::new();
 
-            for _adj_iter in 1..=1000_usize {
+            for adj_iter in 1..=1000_usize {
                 let coeff_try = eff_min_coeff.max(alam);
                 apply_coeff(
                     sys.nvar,
@@ -761,6 +885,16 @@ pub fn solve_henyey_step(
 
                 let f_target =
                     (0.5 * fold).max(fold + 1.0e-2 * coeff_try * slope);
+                if crate::stepdump::active() {
+                    stepdump_line(
+                        model,
+                        trial_sys.nvar,
+                        "TRY",
+                        &[iter as i64, adj_iter as i64],
+                        &[alam, coeff_try, f, f_target],
+                        &[],
+                    );
+                }
                 if f <= f_target || alam <= eff_min_coeff {
                     std::mem::swap(&mut sys, &mut trial_sys);
                     accepted_coeff = Some(coeff_try);
@@ -823,8 +957,18 @@ pub fn solve_henyey_step(
                 tiny_corr_cnt += 1;
             }
 
-            let (rn_raw, mr_raw, _) =
+            let (rn_raw, mr_raw, resid_loc) =
                 compute_residual_norms_with_argmax(model, sys.nvar, &sys.equ);
+            if crate::stepdump::active() {
+                stepdump_line(
+                    model,
+                    sys.nvar,
+                    "RESID",
+                    &[iter as i64],
+                    &[coeff, rn_raw, mr_raw],
+                    &stepdump_loc(resid_loc),
+                );
+            }
             if !rn_raw.is_finite() || !mr_raw.is_finite() {
                 failure_detail = String::from(
                     "residual_norm or max_residual is a bad number (NaN or Inf)",

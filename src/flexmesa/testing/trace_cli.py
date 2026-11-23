@@ -19,6 +19,7 @@ from flexmesa.testing import (
     case_manifest,
     case_report,
     harness_runner,
+    stepdump_compare,
 )
 
 
@@ -167,7 +168,29 @@ def _build_trace_parser() -> argparse.ArgumentParser:
         default=None,
         help="Optional resident-memory ceiling in GB.",
     )
+    parser.add_argument(
+        "--compare",
+        default=None,
+        metavar="MESA_STEPDUMP",
+        help=(
+            "MESA 26.4.1 step dump (benchmarks/fortran_mesa/stepdumps) to "
+            "compare with: runs the case with FlexMESA's step dump on for "
+            "the same number of models and reports the first record that "
+            "differs (#372)."
+        ),
+    )
     return parser
+
+
+def _stepdump_steps(mesa_dump: pathlib.Path) -> int:
+    """Returns the models per star recorded in a MESA step dump's header."""
+    with mesa_dump.open(encoding="utf-8") as fh:
+        for line in fh:
+            if not line.startswith("#"):
+                break
+            if line.startswith("# steps_per_star:"):
+                return int(line.split(":", 1)[1])
+    raise ValueError(f"{mesa_dump}: no steps_per_star header line")
 
 
 def trace_main(argv: list[str] | None = None) -> int:
@@ -185,6 +208,16 @@ def trace_main(argv: list[str] | None = None) -> int:
 
     ns = _build_trace_parser().parse_args(cli_args)
     eff_mode = harness_runner.resolve_effective_numerics_mode(ns.numerics_mode)
+    flex_dump: pathlib.Path | None = None
+    if ns.compare is not None:
+        steps = _stepdump_steps(pathlib.Path(ns.compare))
+        flex_dump = pathlib.Path(ns.out) / "flexmesa.stepdump"
+        flex_dump.parent.mkdir(parents=True, exist_ok=True)
+        flex_dump.unlink(missing_ok=True)
+        os.environ["FLEXMESA_STEPDUMP"] = str(flex_dump)
+        os.environ["FLEXMESA_STEPDUMP_STEPS"] = str(steps)
+        if ns.max_steps is None:
+            ns.max_steps = steps
     case_dir = harness_runner.resolve_case_dir(
         ns.suite, ns.case, mesa_dir=ns.mesa_dir
     )
@@ -212,6 +245,15 @@ def trace_main(argv: list[str] | None = None) -> int:
     )
     if outcome.error_message and outcome.status != "ok":
         print(f"error: {outcome.error_message}", file=sys.stderr)
+    if flex_dump is not None:
+        if not flex_dump.exists():
+            print("error: FlexMESA wrote no step dump", file=sys.stderr)
+            return 1
+        print(
+            stepdump_compare.compare_files(pathlib.Path(ns.compare), flex_dump),
+            end="",
+        )
+        return 0
     return 0 if outcome.status == "ok" else 1
 
 

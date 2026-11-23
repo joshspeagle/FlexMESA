@@ -176,6 +176,7 @@ pub mod star_ad;
 pub mod star_job_init;
 pub mod stella;
 pub mod step_trace;
+pub mod stepdump;
 pub mod struct_burn_mix;
 pub mod termination;
 pub mod timestep;

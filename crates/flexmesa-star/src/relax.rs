@@ -40,8 +40,53 @@ pub fn apply_planetary_core(
     model.set_m_grav_and_grav();
 }
 
-/// Applies uniform composition overrides (`set_uniform_initial_composition`) or
-/// $(Y, Z)$ relaxation (`relax_y`, `relax_z`) to `model.xa` (`relax.f90`).
+/// `set_uniform_initial_composition` (`star/job/run_star_support.f90:2198-2234`):
+/// replaces every zone's mass fractions with the uniform mixture that
+/// `star_set_standard_composition` builds from `initial_h1`, `initial_h2`,
+/// `initial_he3`, `initial_he4` and `initial_zfracs`
+/// (`star/private/adjust_xyz.f90:891-907`, `get_xa_for_standard_metals` at
+/// `adjust_xyz.f90:991-1093`, `set_composition` at `adjust_xyz.f90:849-888`).
+///
+/// # Errors
+/// Returns [`StarError::InvalidInput`] when `get_xa_for_standard_metals`
+/// fails or the mass fractions do not add to 1 within `1e-6`
+/// (`adjust_xyz.f90:871-876`).
+pub fn set_uniform_initial_composition(
+    model: &mut StarModel,
+    job: &StarJobControls,
+) -> Result<(), StarError> {
+    let xa = crate::accretion_xa::standard_metals_xa(
+        &model.chem_id,
+        &model.controls.mix_wind,
+        job.initial_h1,
+        job.initial_h2,
+        job.initial_he3,
+        job.initial_he4,
+        job.initial_zfracs,
+        job.dump_missing_metals_into_heaviest,
+    )
+    .map_err(|e| {
+        StarError::InvalidInput(format!("set_uniform_initial_composition: {e}"))
+    })?;
+    let species = model.species;
+    if xa.len() != species {
+        return Err(StarError::InvalidInput(String::from(
+            "set_composition requires number of species to match current model",
+        )));
+    }
+    if (1.0 - xa.iter().sum::<f64>()).abs() > 1.0e-6 {
+        return Err(StarError::InvalidInput(String::from(
+            "set_composition requires new mass fractions to add to 1",
+        )));
+    }
+    for k in 0..model.nz {
+        model.cell_xa_mut(k).copy_from_slice(&xa);
+    }
+    Ok(())
+}
+
+/// Applies $(Y, Z)$ relaxation (`relax_y`, `relax_z`) to `model.xa`
+/// (`relax.f90`).
 pub fn apply_composition_relaxation(
     model: &mut StarModel,
     job: &StarJobControls,
@@ -53,49 +98,6 @@ pub fn apply_composition_relaxation(
     let he4_id = catalog.get_nuclide_index("he4").unwrap_or(4);
 
     model.aux.doing_relax = true;
-    if job.set_uniform_initial_composition {
-        let h1 = job.initial_h1.max(0.0);
-        let h2 = job.initial_h2.max(0.0);
-        let he3 = job.initial_he3.max(0.0);
-        let he4 = job.initial_he4.max(0.0);
-        let z_rem = (1.0 - (h1 + h2 + he3 + he4)).max(0.0);
-        let metal_count = model
-            .chem_id
-            .iter()
-            .filter(|&&id| {
-                id != h1_id && id != h2_id && id != he3_id && id != he4_id
-            })
-            .count()
-            .max(1);
-
-        for k in 0..model.nz {
-            let species = model.species;
-            for j in 0..species {
-                let cid = model.chem_id[j];
-                model.xa[k * species + j] = if cid == h1_id {
-                    h1
-                } else if cid == h2_id {
-                    h2
-                } else if cid == he3_id {
-                    he3
-                } else if cid == he4_id {
-                    he4
-                } else {
-                    z_rem / (metal_count as f64)
-                };
-            }
-            let row = model.cell_xa_mut(k);
-            let s: f64 = row.iter().sum();
-            if s > 0.0 {
-                for v in row.iter_mut() {
-                    *v /= s;
-                }
-            }
-        }
-        model.aux.doing_relax = false;
-        return;
-    }
-
     if job.relax_y || job.relax_z {
         let target_z = job
             .relax_z

@@ -241,6 +241,17 @@ impl<const N: usize> Neg for AutoDiffRealTdc<N> {
 }
 
 impl<const N: usize> TurbScalar for AutoDiffRealTdc<N> {
+    /// `div_self_real` (`auto_diff/private/auto_diff_real_tdc_module.f90:1342-1352`).
+    fn div_real(self, c: f64) -> Self {
+        let q0 = powm1(c);
+        Self {
+            val: q0 * self.val,
+            d1val1: q0 * self.d1val1,
+            d1_array: array::from_fn(|i| q0 * self.d1_array[i]),
+            d1val1_d1_array: array::from_fn(|i| q0 * self.d1val1_d1_array[i]),
+        }
+    }
+
     fn from_f64(v: f64) -> Self {
         Self {
             val: v,

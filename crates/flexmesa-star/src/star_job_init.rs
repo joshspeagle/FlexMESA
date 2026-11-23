@@ -21,6 +21,7 @@ use crate::relax::{
     excise_core_by_temperature, relax_core_boundary, relax_from_profile_files,
     relax_irradiation_to_target, relax_mass_to_target,
     relax_tau_factor_to_target, relax_to_remove_h_env,
+    set_uniform_initial_composition,
 };
 use crate::relax_driver::{do_relax_num_steps, do_relax_to_radiative_core};
 use crate::zams::load_zams_model;
@@ -309,6 +310,11 @@ pub(crate) fn init_or_update_model_from_bundle_outcome(
 
     extras.extras_controls(&mut model)?;
 
+    // `do_star_job_controls_before` sets `s% tau_base` from the atmosphere
+    // controls (`star/job/run_star_support.f90:1546`).
+    model.tau_base =
+        crate::hydro_brunt_surf::get_atm_tau_base(&model.controls)?;
+
     // `model_builder` relaxes a newly built model before the `&star_job`
     // controls applied after loading (`star/private/init.f90:1077-1118`,
     // `star/job/run_star_support.f90:1653-1699`).
@@ -339,6 +345,10 @@ pub(crate) fn init_or_update_model_from_bundle_outcome(
     }
 
     // 2. Composition and external profile relaxation
+    // (`star/job/run_star_support.f90:2198-2234`).
+    if job.set_uniform_initial_composition {
+        set_uniform_initial_composition(&mut model, &job)?;
+    }
     apply_composition_relaxation(&mut model, &job);
     relax_from_profile_files(&mut model, &bundle.case_dir)?;
 

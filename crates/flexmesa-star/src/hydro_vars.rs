@@ -8,7 +8,7 @@
 
 use flexmesa_const::{MixingType, CLIGHT, CRAD, FOUR_PI, LN10};
 use flexmesa_eos::{
-    I_CHI_RHO, I_CHI_T, I_CP, I_GRAD_AD, I_LN_E, I_LN_PGAS, I_PHASE,
+    I_CHI_RHO, I_CHI_T, I_CP, I_GRAD_AD, I_LN_E, I_PHASE,
 };
 use flexmesa_turb::{
     set_mlt, set_semiconvection, set_tdc, set_thermohaline, MltInputs,
@@ -22,9 +22,7 @@ use crate::micro_cache::MicrophysicsCache;
 use crate::mixing_state::driving_species_for_cid;
 use crate::model::StarModel;
 use crate::rotation::update_rotation_distortion_factors;
-use crate::star_ad::{
-    StarAdExt, StarAdOrder1, I_LND_00, I_LNR_00, I_LNT_00, I_L_00,
-};
+use crate::star_ad::{StarAdExt, StarAdOrder1, I_LNR_00, I_L_00};
 
 /// Evaluates face-centered radiative, adiabatic, Ledoux, and actual temperature
 /// gradients ($\nabla_{\mathrm{rad}}, \nabla_{\mathrm{ad}}, \nabla_L, \nabla_T$),
@@ -142,43 +140,6 @@ pub(crate) fn switch_to_radiative(model: &mut StarModel, k: usize) {
         model.gradt[k] - model.aux.mixing.grada_face[k];
 }
 
-/// Wraps cell `k`'s EOS total pressure `model.peos[k]` as a cell-centered
-/// [`StarAdOrder1`] (`wrap_Peos_00` in
-/// `star/private/auto_diff_support.f90:562-570`).
-#[inline]
-fn wrap_peos_cell(model: &StarModel, k: usize) -> StarAdOrder1 {
-    let peos_k = model.peos[k];
-    if peos_k > 0.0 {
-        let d_lnd = model.ln_peos_ad[k].d1[I_LND_00];
-        let d_lnt = model.ln_peos_ad[k].d1[I_LNT_00];
-        let (chi_rho, chi_t) = if d_lnd != 0.0 || d_lnt != 0.0 {
-            (d_lnd, d_lnt)
-        } else {
-            let pgas = flexmesa_math::exp(model.ln_pgas[k]);
-            let t = model.t[k];
-            let prad = ((((CRAD * t) * t) * t) * t) / 3.0;
-            (
-                pgas * model.eos_d_dlnd[k][I_LN_PGAS] / peos_k,
-                (pgas * model.eos_d_dlnt[k][I_LN_PGAS] + 4.0 * prad) / peos_k,
-            )
-        };
-        return StarAdOrder1::from_dlnd_dlnt_00(
-            peos_k,
-            peos_k * chi_rho,
-            peos_k * chi_t,
-        );
-    }
-    let t_00 = StarAdOrder1::from_dlnd_dlnt_00(model.t[k], 0.0, model.t[k]);
-    let pgas_00 = StarAdOrder1::from_dlnd_dlnt_00(
-        model.ln_pgas[k],
-        model.eos_d_dlnd[k][I_LN_PGAS],
-        model.eos_d_dlnt[k][I_LN_PGAS],
-    )
-    .exp();
-    let prad_00 = (CRAD / 3.0) * t_00.pow4();
-    pgas_00 + prad_00
-}
-
 /// Wraps cell `k`'s specific internal energy `model.energy[k]` as a
 /// cell-centered [`StarAdOrder1`] (`wrap_e_00` in
 /// `star/private/auto_diff_support.f90:528-536`).
@@ -247,7 +208,9 @@ pub(crate) fn do1_mlt_2(
     let rho_00 =
         StarAdOrder1::from_dlnd_dlnt_00(model.rho[k], model.rho[k], 0.0);
     let t_00 = StarAdOrder1::from_dlnd_dlnt_00(model.t[k], 0.0, model.t[k]);
-    let p_00 = wrap_peos_cell(model, k);
+    // `get_Peos_face` (`star/private/star_utils.f90:3846-3856`) from
+    // `wrap_Peos_00`/`wrap_Peos_m1` (`auto_diff_support.f90:550-570`).
+    let p_00 = crate::hydro_momentum::wrap_peos_00(model, k);
 
     let (rho_f, t_f, p_f) = if k == 0 {
         (rho_00, t_00, p_00)
@@ -260,7 +223,7 @@ pub(crate) fn do1_mlt_2(
         );
         let t_m1 =
             StarAdOrder1::from_dlnd_dlnt_m1(model.t[km1], 0.0, model.t[km1]);
-        let p_m1 = wrap_peos_cell(model, km1).shift_m1();
+        let p_m1 = crate::hydro_momentum::wrap_peos_m1(model, k);
         (
             rho_00 * alfa + rho_m1 * beta_w,
             t_00 * alfa + t_m1 * beta_w,

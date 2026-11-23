@@ -659,6 +659,7 @@ impl InlistBundle {
                 }
             };
         }
+        ctrl.try_bool_into("controls", &mut c.no_dedt_form_during_relax, "no_dedt_form_during_relax")?;
         if let Some(s) = ctrl.try_get_str("controls", "energy_eqn_option")? {
             c.energy_eqn_option = match s.trim().to_ascii_lowercase().as_str() {
                 "dedt" => EnergyEqnOption::Dedt,

@@ -169,6 +169,14 @@ pub trait TurbScalar:
     #[must_use]
     fn with_val(self, new_val: f64) -> Self;
 
+    /// Divides by the real constant `c` as upstream `div_self_real` does
+    /// (`auto_diff/private/auto_diff_real_star_order1_module.f90:1078-1084`):
+    /// value and every derivative multiplied by `powm1(c)`. Dividing by
+    /// `from_f64(c)` instead applies the quotient rule, whose derivatives
+    /// round differently.
+    #[must_use]
+    fn div_real(self, c: f64) -> Self;
+
     /// Evaluates $|x|$.
     #[must_use]
     fn abs(self) -> Self;
@@ -218,6 +226,11 @@ impl TurbScalar for f64 {
     #[inline]
     fn from_f64(v: f64) -> Self {
         v
+    }
+
+    #[inline]
+    fn div_real(self, c: f64) -> Self {
+        (1.0 / c) * self
     }
 
     #[inline]
@@ -290,6 +303,12 @@ impl<const N: usize> TurbScalar for DualOrder1<N> {
     #[inline]
     fn from_f64(v: f64) -> Self {
         Self::constant(v)
+    }
+
+    #[inline]
+    fn div_real(self, c: f64) -> Self {
+        // `Div<f64>` multiplies the value and partials by `1/c`.
+        self / c
     }
 
     #[inline]

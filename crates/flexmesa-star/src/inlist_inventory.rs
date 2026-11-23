@@ -1167,6 +1167,7 @@ pub const CONTROLS_SUPPORTED: &[&str] = &[
     "neutron_rich_core_mass_limit",
     "never_skip_hard_limits",
     "nieuwenhuijzen_scaling_factor",
+    "no_dedt_form_during_relax",
     "no_mlt_below_shock",
     "no_wind_if_no_rotation",
     "non_fe_core_infall_limit",

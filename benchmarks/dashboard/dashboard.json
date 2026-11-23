@@ -21,7 +21,7 @@
         "verified_total": 5640,
         "pct_ported": 35.1,
         "pct_verified": 4.7,
-        "rust_lines": 91997,
+        "rust_lines": 93866,
         "python_jax_lines": 3869
       },
       {
@@ -72,7 +72,7 @@
         "verified_total": 0,
         "pct_ported": 0.0,
         "pct_verified": 0.0,
-        "rust_lines": 6053,
+        "rust_lines": 6104,
         "python_jax_lines": 1288
       },
       {
@@ -89,7 +89,7 @@
         "verified_total": 0,
         "pct_ported": 0.0,
         "pct_verified": 0.0,
-        "rust_lines": 15732,
+        "rust_lines": 15780,
         "python_jax_lines": 9911
       },
       {
@@ -106,7 +106,7 @@
         "verified_total": 0,
         "pct_ported": 0.0,
         "pct_verified": 0.0,
-        "rust_lines": 6992,
+        "rust_lines": 6999,
         "python_jax_lines": 3359
       },
       {
@@ -123,7 +123,7 @@
         "verified_total": 0,
         "pct_ported": 0.0,
         "pct_verified": 0.0,
-        "rust_lines": 10668,
+        "rust_lines": 10819,
         "python_jax_lines": 728
       },
       {
@@ -140,7 +140,7 @@
         "verified_total": 0,
         "pct_ported": 0.0,
         "pct_verified": 0.0,
-        "rust_lines": 4102,
+        "rust_lines": 4137,
         "python_jax_lines": 1478
       },
       {
@@ -174,7 +174,7 @@
         "verified_total": 0,
         "pct_ported": 0.0,
         "pct_verified": 0.0,
-        "rust_lines": 2561,
+        "rust_lines": 2710,
         "python_jax_lines": 984
       },
       {
@@ -191,7 +191,7 @@
         "verified_total": 0,
         "pct_ported": 66.5,
         "pct_verified": 0.0,
-        "rust_lines": 2790,
+        "rust_lines": 2822,
         "python_jax_lines": 3116
       },
       {
@@ -225,7 +225,7 @@
         "verified_total": 0,
         "pct_ported": 0.0,
         "pct_verified": 0.0,
-        "rust_lines": 4152,
+        "rust_lines": 4535,
         "python_jax_lines": 1033
       },
       {
@@ -242,7 +242,7 @@
         "verified_total": 0,
         "pct_ported": 0.0,
         "pct_verified": 0.0,
-        "rust_lines": 2453,
+        "rust_lines": 2505,
         "python_jax_lines": 1500
       },
       {
@@ -455,14 +455,14 @@
       "upstream_panel_modules": 46
     },
     "infrastructure_lines": {
-      "rust_bridge_testing_bench": 19428,
+      "rust_bridge_testing_bench": 19427,
       "python_testing_bench": 17253
     }
   },
   "numerics": {
     "has_165_ci": true,
     "strict_cross_machine_identical": "gated in CI by scripts/check_strict_determinism.py (x86_64 vs aarch64, 1 vs 4 threads; 474,062 math vectors + uncapped star/1.3M_ms_high_Z + binary/jdot_gr_check run with unsupported controls ignored; a bit-identity check, not a comparison with MESA)",
-    "strict_kernels_bit_identical": "math: 403,258/403,258 CRMATH 0 ULP (70,804 libm <= 1 ULP); 304,624/304,751 probed module hex 0 ULP (5 complete, 15 non-math probed)",
+    "strict_kernels_bit_identical": "math: 403,258/403,258 CRMATH 0 ULP (70,804 libm <= 1 ULP); 304,660/304,751 probed module hex 0 ULP (8 complete, 15 non-math probed)",
     "total_upstream_hex_values": 348321,
     "modules": [
       {
@@ -513,7 +513,7 @@
       {
         "module": "colors",
         "upstream_exact_values": 234,
-        "exact_strict_compared": "4/10 0 ULP (max 13 ULP, 234 total)"
+        "exact_strict_compared": "10/234 (0 ULP partial)"
       },
       {
         "module": "eos",
@@ -528,7 +528,7 @@
       {
         "module": "rates",
         "upstream_exact_values": 3685,
-        "exact_strict_compared": "3,636/3,639 0 ULP (max 29 ULP, 3,639 total)"
+        "exact_strict_compared": "3,639/3,639 (0 ULP)"
       },
       {
         "module": "neu",
@@ -543,12 +543,12 @@
       {
         "module": "ionization",
         "upstream_exact_values": 41,
-        "exact_strict_compared": "28/31 0 ULP (max 10,652,452 ULP, 31 total)"
+        "exact_strict_compared": "31/31 (0 ULP)"
       },
       {
         "module": "atm",
         "upstream_exact_values": 90,
-        "exact_strict_compared": "15/39 0 ULP (max 7,863,114 ULP, 39 total)"
+        "exact_strict_compared": "39/39 (0 ULP)"
       },
       {
         "module": "turb",
@@ -593,10 +593,10 @@
         "total": 90,
         "mesa_26_4_1_ref": 86,
         "no_reference_yet": 4,
-        "strict_validated": 45,
-        "diagnostic_runs": 45,
-        "reached_termination": 42,
-        "within_numeric_tol": 6,
+        "strict_validated": 43,
+        "diagnostic_runs": 47,
+        "reached_termination": 49,
+        "within_numeric_tol": 8,
         "passing": 1,
         "declared_gaps": 85,
         "undeclared_failures": 0
@@ -627,6 +627,16 @@
       }
     },
     "within_tol_non_pass": [
+      {
+        "suite": "star",
+        "case": "carbon_kh",
+        "issue": "#161"
+      },
+      {
+        "suite": "star",
+        "case": "hb_2M",
+        "issue": "#155"
+      },
       {
         "suite": "star",
         "case": "rsp_BEP",
@@ -680,12 +690,12 @@
     {
       "namelist": "star &controls",
       "upstream_scalars": 1444,
-      "matched_in_flexmesa": 1120,
-      "defaults_agree": 1120,
+      "matched_in_flexmesa": 1121,
+      "defaults_agree": 1121,
       "value_mismatch": 0,
       "disabled_limit_none": 0,
       "skipped_unparseable_rust": 17,
-      "unimplemented": 307
+      "unimplemented": 306
     },
     {
       "namelist": "star &star_job",
@@ -1167,17 +1177,22 @@
         "issues": "#154"
       }
     ],
-    "python_xfail_or_skip_count": 17,
+    "python_xfail_or_skip_count": 20,
     "python_skips": [
       {
-        "location": "tests/test_bench.py:149",
+        "location": "tests/test_bench.py:142",
+        "reason": "pytest.mark.xfail( strict=True, reason=( \"#295: Rust Fe56He4Table uses MESA 26.4.1 fvbicub_db implicit f32 \" \"basis scalars (interp_2d/private/bicub_db.f:1371-1575; #413), \" \"whereas the frozen JAX twin keeps f64 basis scalars; measured \" \"cross-stage max_rel_err is 3.250e-8 against 1.0e-12.\" ), )",
+        "issues": "#295, #413"
+      },
+      {
+        "location": "tests/test_bench.py:175",
         "reason": "pytest.mark.xfail( strict=True, reason=( \"#295: Rust PC uses the MESA 26.4.1 EXCOR7 bicubic spline table \" \"(eos/private/pc_eos.f90:1895, create_EXCOR7_table.f90:136 \" \"THETA > 0.005; #161), whereas the frozen JAX twin keeps analytical \" \"EXCOR7 (THETA > 0.04); measured cross-stage max_rel_err is \" \"3.716e-9 against 2.0e-9.\" ), )",
         "issues": "#161, #295"
       },
       {
-        "location": "tests/test_e2e_2_tier2.py:201",
-        "reason": "pytest.mark.xfail( strict=True, reason=( \"#414: the first pre-MS relax step of make_co_wd does not converge \" \"(min_timestep_limit) where MESA 26.4.1's retry does, so the run \" \"stops before the stage with unported controls.\" ), )",
-        "issues": "#414"
+        "location": "tests/test_bench.py:208",
+        "reason": "pytest.mark.xfail( strict=True, reason=( \"#295: Rust table_atm uses MESA 26.4.1 interp_2d/private/bicub_db.f \" \"implicit f32 fvbicub_db basis scalars in strict mode (#420, #161), \" \"whereas the frozen JAX twin keeps pure f64 basis scalars per \" \"DECISIONS #43; measured cross-stage max_rel_err is 6.897e-8 (N=4) \" \"and 4.705e-6 (N=8) against 5.0e-12.\" ), )",
+        "issues": "#43, #161, #295, #420"
       },
       {
         "location": "tests/test_eos_wave3a3.py:487",
@@ -1193,6 +1208,16 @@
         "location": "tests/test_eos_wave3b1.py:807",
         "reason": "pytest.mark.xfail( strict=True, reason=( \"#295: AutoDiffReal2VarOrder3 evaluates MESA 26.4.1's auto_diff \" \"expressions (#349), which moves the cancellation-dominated de_dd \" \"of the Rust ideal-gas EOS by a few ULPs of its 5.7e10 terms; the \" \"JAX twin keeps its own rounding.\" ), )",
         "issues": "#295, #349"
+      },
+      {
+        "location": "tests/test_ionization.py:89",
+        "reason": "pytest.mark.xfail( strict=True, reason=( \"#295: Rust Fe56He4Table uses MESA 26.4.1 fvbicub_db implicit f32 \" \"basis scalars (interp_2d/private/bicub_db.f:1371-1575; #413), \" \"whereas the frozen JAX twin keeps f64 basis scalars; measured \" \"max abs diff is 4.680e-9 against rtol=1e-15, atol=1e-15.\" ), )",
+        "issues": "#295, #413"
+      },
+      {
+        "location": "tests/test_ionization.py:162",
+        "reason": "pytest.mark.xfail( strict=True, reason=( \"#295: Rust Fe56He4Table uses MESA 26.4.1 fvbicub_db implicit f32 \" \"basis scalars (interp_2d/private/bicub_db.f:1371-1575; #413), \" \"whereas the frozen JAX twin keeps f64 basis scalars; measured \" \"max_rel_err is 5.969e-8 on value and 4.434e-5 on derivatives.\" ), )",
+        "issues": "#295, #413"
       },
       {
         "location": "tests/test_star_wave4_1.py:94",
@@ -1360,8 +1385,8 @@
       },
       {
         "phase": "Phase C",
-        "open": 18,
-        "closed": 8,
+        "open": 16,
+        "closed": 11,
         "issues": [
           {
             "number": 152,
@@ -1476,7 +1501,7 @@
           {
             "number": 414,
             "title": "[Parity] make_co_wd: first pre-MS relax step does not converge where MESA's retry does (surface zones)",
-            "state": "open"
+            "state": "closed"
           },
           {
             "number": 422,
@@ -1486,11 +1511,16 @@
           {
             "number": 423,
             "title": "[Parity] Post-relax pre-MS starting model is hotter than MESA's (log_Teff +0.016 dex at model 1; 6 cases now first diverge at model 1)",
-            "state": "open"
+            "state": "closed"
           },
           {
             "number": 424,
             "title": "[Parity] Peos value sources and MLT/Pturb face forms on the strict path (wrap_Peos, get_Peos_face, r_start)",
+            "state": "closed"
+          },
+          {
+            "number": 436,
+            "title": "[Audit C3] star_job init departures: restart flag for staged models, initial_y after load, set_initial_dt, remaining relax stand-ins",
             "state": "open"
           }
         ]
@@ -1543,63 +1573,8 @@
     ],
     "open_pull_requests": [
       {
-        "number": 379,
-        "title": "Port Wave 1 history columns and pure-StarModel siblings (#374)",
-        "draft": true
-      },
-      {
-        "number": 380,
-        "title": "Port case-local .net search order and weaklib-only reaction synthesis (#375)",
-        "draft": true
-      },
-      {
-        "number": 403,
-        "title": "fix(net): resolve MESA 26.4.1 eps_nuc AUX parity divergences (0 ULP)",
-        "draft": true
-      },
-      {
-        "number": 405,
-        "title": "fix(star): align change_model_network with MESA 26.4.1 and triage post-#377 STATE composition",
-        "draft": true
-      },
-      {
-        "number": 406,
-        "title": "fix(kap): match MESA 26.4.1 opacity AUX step-dump parity at 0 ULP (#404)",
-        "draft": true
-      },
-      {
-        "number": 411,
-        "title": "feat(star): add upstream set_z/set_y and composition-relax helpers (#408)",
-        "draft": true
-      },
-      {
-        "number": 417,
-        "title": "Fix MLT gradT and mlt_vc divergences against MESA 26.4.1 (#393)",
-        "draft": true
-      },
-      {
-        "number": 418,
-        "title": "fix(rates,ionization,colors): match MESA 26.4.1 strict module hex probes at 0 ULP (#413)",
-        "draft": true
-      },
-      {
-        "number": 419,
-        "title": "fix(star): match MESA 26.4.1 area precedence in element diffusion (#407)",
-        "draft": true
-      },
-      {
-        "number": 425,
-        "title": "Fix Skye, HELM, and blend EOS arithmetic parity to 0 ULP (#421)",
-        "draft": true
-      },
-      {
-        "number": 427,
-        "title": "fix(atm,eos): align table_atm fvbicub_db and linear (Pgas, T) EOS inversion to 38/39 0-ULP parity (#420)",
-        "draft": true
-      },
-      {
-        "number": 431,
-        "title": "fix(star,turb,astero): model-1 Jacobian as upstream; tau_base and astero composition order (#424, #423, #414)",
+        "number": 439,
+        "title": "feat(astero): set_param and set_constraint_value as test-side case hooks; honest extras ledger (#429)",
         "draft": true
       }
     ],
@@ -2015,6 +1990,22 @@
       {
         "number": 415,
         "title": "[Deferred bug] relax_to_radiative_core computes a 1000-yr timestep cap but never applies it (relax.f90:3447, 3483-3485)",
+        "state": "open",
+        "kind": "upstream-bug",
+        "parity_pending": false,
+        "needs_confirmation": false
+      },
+      {
+        "number": 438,
+        "title": "[Deferred bug] astero set_constraint_value 'Rcz' returns val unset when no convective boundary is found (run_star_extras.f90:96-105)",
+        "state": "open",
+        "kind": "upstream-bug",
+        "parity_pending": false,
+        "needs_confirmation": false
+      },
+      {
+        "number": 440,
+        "title": "[Deferred bug] relax_composition_adjust_model discards the terminate from a failed adjust_xa (relax.f90:469-474)",
         "state": "open",
         "kind": "upstream-bug",
         "parity_pending": false,
@@ -3231,6 +3222,19 @@
       "closed_140": "23",
       "total_140": "45",
       "deferred_169": "52"
+    },
+    {
+      "date_utc": "2026-11-23",
+      "commit": "21b7a74",
+      "event": "main merge",
+      "engine_ported_pct": "30.7",
+      "all_verified_pct": "1.1",
+      "cases_passing": "4",
+      "rust_cov_pct": "76.2",
+      "python_cov_pct": "87.7",
+      "closed_140": "26",
+      "total_140": "46",
+      "deferred_169": "54"
     }
   ]
 }

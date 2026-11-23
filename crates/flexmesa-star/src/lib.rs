@@ -372,10 +372,7 @@ pub use phase_separation::{
     blouin_delta_xo, do_phase_separation, do_phase_separation_step,
     eval_phase_separation_shift,
 };
-pub use pre_ms::{
-    PreMsShell, build_pre_ms_model, build1_pre_ms_model,
-    default_basic_net_composition,
-};
+pub use pre_ms::{build_pre_ms_model, build_pre_ms_model_with_configs};
 pub use premix::{
     add_predictive_mixing, apply_predictive_mixing_from_controls,
     do_conv_premix,

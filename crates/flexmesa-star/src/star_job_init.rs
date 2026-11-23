@@ -139,6 +139,7 @@ pub(crate) fn init_or_update_model_from_bundle_outcome(
             job.clone(),
             bundle.eos_config,
             bundle.kap_config.clone(),
+            Some(&bundle.case_dir),
         )?
     } else if job.use_other_build_initial_model {
         extras.other_build_initial_model(bundle)?.ok_or_else(|| {
@@ -207,7 +208,12 @@ pub(crate) fn init_or_update_model_from_bundle_outcome(
     extras.extras_controls(&mut model)?;
 
     // 1. Reaction network switching (`change_net` / `change_initial_net`)
-    if job.change_net && !job.new_net_name.is_empty() {
+    // A pre-MS model is already built on `new_net_name` (`pre_ms_change_net`,
+    // `star/job/run_star_support.f90:1661-1667`), and `change_net` returns
+    // when the new name equals `s% net_name` (`star/private/adjust_xyz.f90:93`).
+    let pre_ms_on_new_net = did_create_pre_ms
+        && model.job.net_name.trim() == job.new_net_name.trim();
+    if job.change_net && !job.new_net_name.is_empty() && !pre_ms_on_new_net {
         change_model_network(
             &mut model,
             &job.new_net_name,

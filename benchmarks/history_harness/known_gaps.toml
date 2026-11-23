@@ -154,7 +154,7 @@ reason = "Strict run reaches xa_central_lower_limit(h1) (91 steps vs MESA 92, 0 
 suite = "star"
 case = "custom_colors"
 issue = "#161"
-reason = "Strict validation rejects unported &colors and relaxation controls, and history_columns.list requests unported phase_of_evolution and colors columns (#161). With the controls ignored, the run stops at model 1 (min_timestep_limit) because the first pre-MS step at upstream's dt = 1e-5 yr does not converge from FlexMESA's pre-MS model (#154)."
+reason = "Strict validation rejects unported &colors and relaxation controls, and history_columns.list requests unported phase_of_evolution and colors columns (#161)."
 
 [[gaps]]
 suite = "star"
@@ -603,6 +603,16 @@ reason = "Asteroseismic surface-effects starting model and ADIPLS scaffolding (#
 # Declared test-level known gaps in this same single ledger (#144).
 # Every Rust #[ignore] attribute and Python @pytest.mark.{xfail,skip,skipif}
 # decorator must appear bijectively here and cite an open GitHub issue.
+
+[[test_gaps]]
+kind = "rust_ignore"
+crate = "flexmesa-star"
+file = "crates/flexmesa-star/src/tests.rs"
+test_name = "test_solve_henyey_step_converges_on_perturbed_model"
+issue = "#154"
+role = "physics_gap"
+expect_fail_when_run = true
+reason = "With the upstream pre-MS builder (build_pre_ms_model, star/private/pre_ms_model.f90), a forced 10-yr step on this coarse 1 Msun pre-MS model (pre_ms_d_log10_P = 0.15, 46 zones) ends in a singular block-tridiagonal matrix at zone 27 (equ_L); it converged only on the previous stand-in builder's model. This setup has not been run in MESA."
 
 [[test_gaps]]
 kind = "rust_ignore"

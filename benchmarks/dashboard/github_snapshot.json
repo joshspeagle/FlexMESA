@@ -69,8 +69,8 @@
     },
     {
       "phase": "Phase B",
-      "open": 1,
-      "closed": 4,
+      "open": 0,
+      "closed": 5,
       "issues": [
         {
           "number": 147,
@@ -95,14 +95,14 @@
         {
           "number": 151,
           "title": "[Audit B5] Energy accounting as upstream does it",
-          "state": "open"
+          "state": "closed"
         }
       ]
     },
     {
       "phase": "Phase C",
-      "open": 15,
-      "closed": 3,
+      "open": 17,
+      "closed": 4,
       "issues": [
         {
           "number": 152,
@@ -193,6 +193,21 @@
           "number": 365,
           "title": "[Audit] Level-2 module-hex probe wiring for interp_1d, interp_2d, mtx and num",
           "state": "open"
+        },
+        {
+          "number": 372,
+          "title": "[Parity] First-divergence pipeline: MESA 26.4.1 per-step state and solver dumps, and flexmesa trace --compare",
+          "state": "closed"
+        },
+        {
+          "number": 381,
+          "title": "[Parity] set_qs and normalize_dqs depart from upstream; every model read from a file is renormalized",
+          "state": "open"
+        },
+        {
+          "number": 385,
+          "title": "[Parity] adjust_mass composition remap differs from MESA by 1-2 ULP; H1-conservation test needs #377",
+          "state": "open"
         }
       ]
     },
@@ -244,24 +259,34 @@
   ],
   "open_pull_requests": [
     {
-      "number": 370,
-      "title": "feat(star,testing): upstream MESA 26.4.1 global total-energy accounting (#151)",
-      "draft": false
-    },
-    {
-      "number": 373,
-      "title": "feat(star,testing,benchmarks): MESA 26.4.1 step dumps and flexmesa trace --compare (#372)",
-      "draft": true
-    },
-    {
-      "number": 377,
-      "title": "Port upstream ZAMS 4-point mass interpolation without xa clamping (#360)",
-      "draft": true
-    },
-    {
       "number": 378,
       "title": "Wire atm_option = irradiated_grey and atm_irradiated_* controls (#376)",
       "draft": true
+    },
+    {
+      "number": 379,
+      "title": "Port Wave 1 history columns and pure-StarModel siblings (#374)",
+      "draft": true
+    },
+    {
+      "number": 380,
+      "title": "Port case-local .net search order and weaklib-only reaction synthesis (#375)",
+      "draft": true
+    },
+    {
+      "number": 384,
+      "title": "fix(star): set_qs and normalize_dqs follow upstream; models read from file are not renormalized (#381)",
+      "draft": true
+    },
+    {
+      "number": 387,
+      "title": "fix(star): adjust_mass composition remap as upstream set_xa/set1_xa (#385)",
+      "draft": true
+    },
+    {
+      "number": 389,
+      "title": "feat(star,testing,data): AUX step-dump record and mesa-stepdumps-v2 (#388)",
+      "draft": false
     }
   ],
   "deferred_169": [
@@ -628,6 +653,14 @@
     {
       "number": 362,
       "title": "[Deferred bug] do_block_multiply_xa pairs the wrong off-diagonal blocks with x, so the solver's line-search slope is not grad(f)\u00b7soln",
+      "state": "open",
+      "kind": "upstream-bug",
+      "parity_pending": false,
+      "needs_confirmation": false
+    },
+    {
+      "number": 386,
+      "title": "[Deferred bug] set1_xa's overshoot clip increases dm instead of reducing it (adjust_mass.f90:1040)",
       "state": "open",
       "kind": "upstream-bug",
       "parity_pending": false,

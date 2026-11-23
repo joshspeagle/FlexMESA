@@ -727,6 +727,14 @@ pub struct StarControls {
     pub iwind_tolerance: f64,
     /// Relaxation weight for implicit stellar wind fixed-point/secant loop (`iwind_lambda`, `1.0` default).
     pub iwind_lambda: f64,
+    /// Include rotational kinetic energy in `total_energy` and energy accounting
+    /// (`include_rotation_in_total_energy`, `star/defaults/controls.defaults:9399`, `false` default).
+    #[serde(default)]
+    pub include_rotation_in_total_energy: bool,
+    /// Accumulate `abs(error_in_energy_conservation)` in `cumulative_energy_error`
+    /// (`absolute_cumulative_energy_err`, `star/defaults/controls.defaults:11629`, `true` default).
+    #[serde(default = "default_true")]
+    pub absolute_cumulative_energy_err: bool,
     /// Overshooting, predictive mixing, premixing, wind, `eps_mdot`, and mesh controls.
     pub mix_wind: crate::controls_mix_wind::MixWindControls,
     /// Core-boundary thresholds, extended stopping criteria, and timestep limits.
@@ -747,6 +755,10 @@ impl StarControls {
                 && (model_number as isize)
                     >= self.steps_before_use_velocity_time_centering)
     }
+}
+
+const fn default_true() -> bool {
+    true
 }
 
 const fn default_neg_one() -> f64 {

@@ -80,6 +80,10 @@ print(
 
 ::: flexmesa.testing.trace_cli
 
+`flexmesa.testing.stepdump_compare` compares a FlexMESA step dump with a MESA `26.4.1` step dump record by record and reports the first difference: the step, solver record, zone and variable, with its ULP distance (`flexmesa trace <suite> <case> --compare <dump>`, `#372`).
+
+::: flexmesa.testing.stepdump_compare
+
 ::: flexmesa.testing.known_gaps_gate
 
 ::: flexmesa.testing.module_hex_gate

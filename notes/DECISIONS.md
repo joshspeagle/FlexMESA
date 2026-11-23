@@ -70,6 +70,8 @@ Scope and the `v0.1.0` definition are in [`SCOPE.md`](SCOPE.md). Work is tracked
 | 53 | Dashboard Coverage Runs Daily When `main` Has Changed, in Seven Instrumented Shards Built With the `ci` Profile (`#345`) | In force | below |
 | 54 | The Second- and Third-Order Dual Types Are Generated From Upstream's `auto_diff` Modules by a Script (`#349`) | In force | below |
 | 55 | The Binary Step Loop Resets `rho = dm/dV` Before Remeshing, and Retries Restore the Reset Model (`#363`) | In force | below |
+| 56 | Upstream MESA `26.4.1` Global Total-Energy Accounting (`#151`) | In force | below |
+| 57 | The Scheduled Campaign Gives Each Case 600 Seconds (`#382`) | In force | below |
 
 ## Pre-audit decisions still in force
 
@@ -751,4 +753,27 @@ The text of these four entries predates the audit of 2026-11-16. The decisions s
 - **Alternatives Rejected**:
   - *Run the reset on every attempt in `star_evolve_step_part1`*: it also gives MESA's model-1 counts, because the reset is idempotent on a restored model. But it runs after the binary loop's remesh, which changes the remeshed density on the first try, and it moves upstream's once-per-step call into the retry path.
   - *Recapture the pre-step snapshot after the reset*: the error path would then restore a model the caller never had.
+
+## DECISIONS #56: Upstream MESA `26.4.1` Global Total-Energy Accounting (`#151`)
+
+- **Date**: 2026-11-22
+- **Decision**:
+  1. **Global total-energy conservation (`okay_energy_conservation`)**: Replace solver-residual energy accounting and the hardcoded `0.0` `eps_grav` bypass with MESA `26.4.1`'s global total-energy balance across `eval_total_energy_integrals` (`star/private/star_utils.f90:2439-2612`), Phase 1 + Phase 2 `okay_energy_conservation` (`star/private/evolve.f90:1101-1373`), surface and center work (`star/private/hydro_energy.f90:176-177, 640-655, 769, 872`), and `mdot` energy bookkeeping (`star/private/eps_mdot.f90:494-678`), accumulating `error_in_energy_conservation = total_energy_end - (total_energy_old + total_energy_sources_and_sinks)` for both `dedt` and `eps_grav`.
+  2. **Verbatim upstream formulas and controls**: Preserve upstream expressions verbatim, including `cell_specific_rotational_energy = 0.5 * (e_p1 + e_00)` with `e = i_rot * omega^2` (`star_utils.f90:2328-2339`), `+ mdot_adiabatic_surface` (`evolve.f90:1312`), `include_rotation_in_total_energy = false` (`controls.defaults:9399`), and `absolute_cumulative_energy_err = true` (`controls.defaults:11629`).
+  3. **Checkpoint persistence**: Persist `total_energy_initial`, `have_initial_energy_integrals`, and `StepHistoryScalars` energy diagnostics across `.photo` restarts (`star/private/photo_out.f90:69-70`), bumping `PHOTO_FORMAT_VERSION` from `29` to `30`.
+- **Why**: Summing only Henyey solver residuals misses non-solver energy drift (operator-split burning, `adjust_mass`, remeshing, composition updates, `eps_grav` form discrepancy) and breaks upstream agreement with `rel_E_err`, `log_rel_run_E_err`, and `hard_limit_for_rel_error_in_energy_conservation` retry triggers.
+- **Limits**: In `eval_delta_m_total_energy_integrals`, upstream leaves `sum_dm = 0` (`star_utils.f90:2467-2514`); FlexMESA reproduces this verbatim.
+- **Alternatives Rejected**:
+  - *Keeping solver-residual accounting for `dedt` or returning `0.0` for `eps_grav`*: hides genuine drift and broke energy conservation agreement.
+  - *Altering `evolve.f90:1312` or `star_utils.f90:2335` formulas before MESA fixes them*: violates verbatim MESA `26.4.1` behavior.
+
+## DECISIONS #57: The Scheduled Campaign Gives Each Case 600 Seconds (`#382`)
+
+- **Date**: 2026-11-23 (project lead)
+- **Decision**: the per-case time budget of the scheduled history-harness campaign is 600 s, for every case (was 300 s). `campaign.yml` defaults to `case_timeout_sec = 600` and its full-harness job may run 355 minutes (GitHub-hosted jobs stop at 360). Local full campaigns use `--jobs 2 --timeout-sec 600 --max-rss-gb 5.5`.
+- **Why**: six cases reach upstream's own termination only after more than 300 s on the local campaign machine, on `main` and on #367 alike (paired strict runs at `--timeout-sec 900`): `binary/evolve_both_stars` (a strict pass), `binary/jdot_ml_check`, `star/1.5M_with_diffusion`, `star/hb_2M`, `star/wd_cool_0.6M` and `star/7M_prems_to_AGB`, at 330 to 510 s. Their committed baseline rows record the termination, so at 300 s the scheduled gate reported lost terminations and the number of passing cases depended on the budget rather than on the physics.
+- **Limits**: GitHub runners are slower than the local machine (`DECISIONS #51`), so some of these cases may still end on the budget there; `DECISIONS #51` keeps their committed rows in that case. A full campaign takes longer: each case that ends on the budget now costs up to 600 s.
+- **Alternatives Rejected**:
+  - *A per-case budget in `case_manifest.toml`*: bounds campaign time more tightly, but adds a field the harness, the gate and the baseline would all have to carry, for six cases.
+  - *Declaring the six cases as known gaps at 300 s*: would stop counting `evolve_both_stars` as passing although it reaches MESA's termination within tolerances, and would make the declared gaps depend on machine speed.
 

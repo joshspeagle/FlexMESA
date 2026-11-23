@@ -195,11 +195,12 @@ pub fn eval1_work_v_flag_ad(
                         .exp();
                 rho_00 * alfa + rho_m1 * beta
             };
+            // `mlt_Pturb_factor*pow2(mlt_vc_old(k))*get_rho_face(s,k)/3d0`
+            // (`star/private/hydro_energy.f90:760`).
             rho_face
-                * ((1.0 / 3.0)
-                    * model.controls.mlt_pturb_factor
-                    * vc_old
-                    * vc_old)
+                * (model.controls.mlt_pturb_factor
+                    * flexmesa_math::pow2(vc_old))
+                / 3.0
         } else {
             StarAdOrder1::ZERO
         }

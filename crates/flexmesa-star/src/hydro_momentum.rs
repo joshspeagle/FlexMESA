@@ -27,13 +27,13 @@
 //!   `force_zero_v` bounds (`velocity_q_upper_bound`, `velocity_tau_lower_bound`,
 //!   `velocity_logt_lower_bound`) and optional velocity time-centering.
 
-use flexmesa_const::LN10;
+use flexmesa_const::{FOUR_PI, LN10};
 
 use crate::hydro_energy::{eval_face_area_time_centered_ad, eval_pvsc_cell_ad};
 use crate::hydro_eqns::HenyeySystem;
 use crate::model::StarModel;
 use crate::star_ad::{
-    StarAdExt, StarAdOrder1, I_LND_00, I_LND_M1, I_LNR_00, I_V_00, I_V_M1,
+    StarAdExt, StarAdOrder1, I_LND_00, I_LND_M1, I_LNR_00, I_LNT_00, I_V_00, I_V_M1,
     I_V_P1,
 };
 
@@ -128,14 +128,93 @@ pub fn eval_surf_momentum_bc_pressure_ad(model: &StarModel) -> StarAdOrder1 {
                     model.ln_t.first().copied().unwrap_or(0.0)
                 }),
             );
+        // `P_bc_ad = Radiation_Pressure(s% T_start(1))`
+        // (`star/private/hydro_eqns.f90:761`, `eos/public/eos_lib.f90:91`:
+        // `crad*T*T*T*T/3d0`).
         StarAdOrder1::constant(
-            (flexmesa_const::CRAD / 3.0) * flexmesa_math::pow4(t_s0),
+            flexmesa_const::CRAD * t_s0 * t_s0 * t_s0 * t_s0 / 3.0,
         )
     } else if model.controls.use_fixed_psurf_outer_bc {
         StarAdOrder1::constant(model.controls.fixed_psurf)
     } else {
         model.ln_peos_surf_ad.exp()
     }
+}
+
+/// `wrap_Peos_00` (`star/private/auto_diff_support.f90:562-570`): value
+/// `Peos(k)` with partials `Peos*chiRho_for_partials` and
+/// `Peos*chiT_for_partials` (`star/private/micro.f90:497-498`), which
+/// `ln_peos_ad` carries as its `lnd_00` and `lnT_00` partials.
+#[must_use]
+#[inline]
+pub fn wrap_peos_00(model: &StarModel, k: usize) -> StarAdOrder1 {
+    let p = model.peos[k];
+    let lp = &model.ln_peos_ad[k];
+    StarAdOrder1::from_dlnd_dlnt_00(p, p * lp.d1[I_LND_00], p * lp.d1[I_LNT_00])
+}
+
+/// `wrap_Peos_m1` (`star/private/auto_diff_support.f90:550-560`) for face
+/// `k >= 1`: cell `k - 1` in the `m1` slots.
+#[must_use]
+#[inline]
+pub fn wrap_peos_m1(model: &StarModel, k: usize) -> StarAdOrder1 {
+    let p = model.peos[k - 1];
+    let lp = &model.ln_peos_ad[k - 1];
+    StarAdOrder1::from_dlnd_dlnt_m1(p, p * lp.d1[I_LND_00], p * lp.d1[I_LNT_00])
+}
+
+/// `wrap_r_00` (`star/private/auto_diff_support.f90:923-930`): value `r(k)`
+/// with partial `r(k)` on `lnR(k)`.
+#[must_use]
+#[inline]
+pub fn wrap_r_00(model: &StarModel, k: usize) -> StarAdOrder1 {
+    let r = model.r[k];
+    let mut out = StarAdOrder1::constant(r);
+    out.d1[I_LNR_00] = r;
+    out
+}
+
+/// `get_area_info_opt_time_center` (`star/private/star_utils.f90:3658-3675`):
+/// face area and `1/r^2`, time-centered with `r_start(k)` when
+/// `using_velocity_time_centering`.
+#[must_use]
+pub fn get_area_info_opt_time_center(
+    model: &StarModel,
+    k: usize,
+) -> (StarAdOrder1, StarAdOrder1) {
+    let r_00 = wrap_r_00(model, k);
+    let r2_00 = r_00.pow2();
+    if model.controls.is_velocity_time_centered(model.model_number_old) {
+        // `r_start(k)` is saved from `r(k) = exp(lnR(k))` at the start of the
+        // step; `ln_r_start` holds that `lnR(k)`.
+        let r_start = flexmesa_math::exp(model.ln_r_start[k]);
+        let area = FOUR_PI * (r2_00 + r_00 * r_start + r_start * r_start) / 3.0;
+        let inv_r2 = 1.0 / (r_00 * r_start);
+        (area, inv_r2)
+    } else {
+        let area = FOUR_PI * r2_00;
+        let inv_r2 = 1.0 / r2_00;
+        (area, inv_r2)
+    }
+}
+
+/// `expected_HSE_grav_term` (`star/private/hydro_momentum.f90:327-357`):
+/// returns `(grav, area)` with `grav = -cgrav*m_grav*inv_R2[*fp_rot]`.
+#[must_use]
+pub fn expected_hse_grav_and_area(
+    model: &StarModel,
+    k: usize,
+) -> (StarAdOrder1, StarAdOrder1) {
+    let (area, inv_r2) = get_area_info_opt_time_center(model, k);
+    let grav = if model.controls.rotation_flag
+        && model.controls.use_gravity_rotation_correction
+    {
+        let fp = model.aux.fp_rot.get(k).copied().unwrap_or(1.0);
+        -(model.cgrav[k] * model.m_grav[k] * inv_r2 * fp)
+    } else {
+        -(model.cgrav[k] * model.m_grav[k] * inv_r2)
+    };
+    (grav, area)
 }
 
 /// Evaluates total EOS pressure $P_{\mathrm{eos}}$ in cell `k` with optional
@@ -147,13 +226,15 @@ pub fn eval_cell_peos_time_centered_ad(
     shift_m1: bool,
 ) -> (StarAdOrder1, f64) {
     let p_theta = eval_p_theta(model, k);
+    // `Peos_ad = wrap_peos_00(s, k)`; `Peos_ad = alfa*Peos_ad +
+    // beta*s% Peos_start(k)` (`star/private/star_utils.f90:3400-3403`).
     let peos_ad = if shift_m1 {
-        model.ln_peos_ad[k].shift_m1().exp()
+        wrap_peos_m1(model, k + 1)
     } else {
-        model.ln_peos_ad[k].exp()
+        wrap_peos_00(model, k)
     };
     let peos_start = model.peos_start.get(k).copied().unwrap_or(model.peos[k]);
-    (peos_ad * p_theta + peos_start * (1.0 - p_theta), p_theta)
+    (p_theta * peos_ad + (1.0 - p_theta) * peos_start, p_theta)
 }
 
 /// Evaluates face control-volume mass $\Delta m_{\mathrm{face},k}$ including
@@ -196,28 +277,25 @@ pub fn expected_hse_grav_term(
     -(model.cgrav[k] * model.m_grav[k] * fp) / r2
 }
 
-/// Evaluates Rayleigh-Taylor instability (`RTI`) momentum diffusion and source
-/// terms at interior face `1 <= k < nz - 1` (`setup_RTI_terms` in
-/// `star/private/hydro_momentum.f90:250-284`).
+/// `setup_RTI_terms` (`star/private/hydro_momentum.f90:250-277`): `RTI`
+/// momentum diffusion and density-kick terms at face `k`, in $\mathrm{cm\,s^{-2}}$.
 #[must_use]
 fn setup_rti_momentum_terms(
     model: &StarModel,
     k: usize,
-    area: StarAdOrder1,
-    dm_face: f64,
+    dm_div_a: StarAdOrder1,
 ) -> StarAdOrder1 {
-    if k == 0
+    if !model.controls.rti_flag
+        || k == 0
         || k + 1 >= model.nz
-        || !model.controls.rti_flag
         || !(model.controls.v_flag || model.controls.u_flag)
     {
         return StarAdOrder1::ZERO;
     }
     let dvdt_diffusion = if model.controls.dudt_rti_diffusion_factor > 0.0 {
         let fac = model.controls.dudt_rti_diffusion_factor;
-        let sig_m1 =
-            model.aux.sigmid_rti.get(k - 1).copied().unwrap_or(0.0) * fac;
-        let sig_00 = model.aux.sigmid_rti.get(k).copied().unwrap_or(0.0) * fac;
+        let sigm1 = fac * model.aux.sigmid_rti.get(k - 1).copied().unwrap_or(0.0);
+        let sig00 = fac * model.aux.sigmid_rti.get(k).copied().unwrap_or(0.0);
         let v_val = |idx: usize| {
             if model.controls.v_flag {
                 model.v[idx]
@@ -228,8 +306,7 @@ fn setup_rti_momentum_terms(
         let v_00 = StarAdOrder1::variable(v_val(k), I_V_00);
         let v_m1 = StarAdOrder1::variable(v_val(k - 1), I_V_M1);
         let v_p1 = StarAdOrder1::variable(v_val(k + 1), I_V_P1);
-        ((v_p1 - v_00) * sig_00 - (v_00 - v_m1) * sig_m1)
-            / model.dm_bar[k].max(1.0e-30)
+        (sig00 * (v_p1 - v_00) - sigm1 * (v_00 - v_m1)) / model.dm_bar[k]
     } else {
         StarAdOrder1::ZERO
     };
@@ -238,11 +315,9 @@ fn setup_rti_momentum_terms(
         && model.controls.dlnddt_rti_diffusion_factor > 0.0
         && model.dt > 0.0
     {
-        let f = area
-            * (model.controls.dlnddt_rti_diffusion_factor * eta_k
-                / dm_face.max(1.0e-30));
-        let rho_00 = StarAdOrder1::variable(model.lnd[k], I_LND_00).exp();
-        let rho_m1 = StarAdOrder1::variable(model.lnd[k - 1], I_LND_M1).exp();
+        let f = model.controls.dlnddt_rti_diffusion_factor * eta_k / dm_div_a;
+        let rho_00 = wrap_d_00(model, k);
+        let rho_m1 = wrap_d_m1(model, k);
         f * (rho_00 - rho_m1) / model.dt
     } else {
         StarAdOrder1::ZERO
@@ -250,15 +325,31 @@ fn setup_rti_momentum_terms(
     dvdt_diffusion + dvdt_kick
 }
 
-/// Evaluates all non-HSE acceleration and momentum-flux terms at face `k`
-/// (`expected_non_HSE_term` in `star/private/hydro_momentum.f90:374-461`).
+/// `wrap_d_00` (`star/private/auto_diff_support.f90:268-276`).
 #[must_use]
-pub fn expected_non_hse_term(
-    model: &StarModel,
-    k: usize,
-    area: StarAdOrder1,
-    dm_face: f64,
-) -> StarAdOrder1 {
+#[inline]
+pub fn wrap_d_00(model: &StarModel, k: usize) -> StarAdOrder1 {
+    StarAdOrder1::from_dlnd_dlnt_00(model.rho[k], model.rho[k], 0.0)
+}
+
+/// `wrap_d_m1` (`star/private/auto_diff_support.f90:257-266`): zero at the
+/// surface face.
+#[must_use]
+#[inline]
+pub fn wrap_d_m1(model: &StarModel, k: usize) -> StarAdOrder1 {
+    if k == 0 {
+        return StarAdOrder1::ZERO;
+    }
+    StarAdOrder1::from_dlnd_dlnt_m1(model.rho[k - 1], model.rho[k - 1], 0.0)
+}
+
+/// `other_ad = extra_ad - accel_ad + drag + Uq_ad` at face `k`
+/// (`expected_non_HSE_term` in `star/private/hydro_momentum.f90:363-433`).
+/// Artificial viscosity and `RSP2` turbulent pressure enter `Ptot`
+/// ([`calc_ptot_ad_tw`]); MLT turbulent pressure and the `RTI` terms are
+/// separate terms of the residual (`hydro_momentum.f90:110-111`).
+#[must_use]
+pub fn expected_non_hse_term(model: &StarModel, k: usize) -> StarAdOrder1 {
     let mut non_hse = model
         .aux
         .extra_grav
@@ -282,7 +373,8 @@ pub fn expected_non_hse_term(
             && model.controls.drag_coefficient > 0.0
             && model.q[k] > model.controls.min_q_for_drag
         {
-            non_hse = non_hse - v_00 * (model.controls.drag_coefficient / dt);
+            // `drag = -s% drag_coefficient*v_00/s% dt` (`hydro_momentum.f90:410`).
+            non_hse = non_hse + -(model.controls.drag_coefficient * v_00 / dt);
         }
     }
 
@@ -292,33 +384,28 @@ pub fn expected_non_hse_term(
         }
     }
 
-    if k > 0 && model.controls.use_pvsc_art_visc && model.controls.v_flag {
-        let pvsc_00 = eval_pvsc_cell_ad(model, k);
-        let pvsc_m1 = eval_pvsc_cell_ad(model, k - 1).shift_m1();
-        non_hse = non_hse - (area / dm_face.max(1.0e-30)) * (pvsc_m1 - pvsc_00);
-    }
+    non_hse
+}
 
-    if k > 0 && model.controls.rsp2_flag && model.controls.rsp2.alfap != 0.0 {
-        let ptrb_00 = crate::rsp2_ad::eval_rsp2_ptrb_cell_ad(model, k, false);
-        let ptrb_m1 =
-            crate::rsp2_ad::eval_rsp2_ptrb_cell_ad(model, k - 1, true);
-        non_hse = non_hse - (area / dm_face.max(1.0e-30)) * (ptrb_m1 - ptrb_00);
-    }
-
-    if k > 0 && model.controls.mlt_pturb_factor > 0.0 {
-        let pturb_00 = eval_mlt_pturb_cell_ad(model, k, false);
-        let pturb_m1 = eval_mlt_pturb_cell_ad(model, k - 1, true);
-        if pturb_00.val > 0.0 || pturb_m1.val > 0.0 {
-            non_hse =
-                non_hse - (area / dm_face.max(1.0e-30)) * (pturb_m1 - pturb_00);
+/// `calc_Ptot_ad_tw` with `skip_mlt_Pturb = .true.`
+/// (`star/private/star_utils.f90:3375-3438`, called from
+/// `get_dPtot_face_info`, `hydro_momentum.f90:470-478`) for cell `cell`,
+/// placed in the `m1` slots when `shift_m1`.
+#[must_use]
+pub fn calc_ptot_ad_tw(model: &StarModel, cell: usize, shift_m1: bool) -> StarAdOrder1 {
+    let (peos_ad, _) = eval_cell_peos_time_centered_ad(model, cell, shift_m1);
+    let mut pvsc_ad = StarAdOrder1::ZERO;
+    if model.controls.use_pvsc_art_visc && model.controls.v_flag {
+        pvsc_ad = eval_pvsc_cell_ad(model, cell);
+        if shift_m1 {
+            pvsc_ad = pvsc_ad.shift_m1();
         }
     }
-
-    if k > 0 && model.controls.rti_flag {
-        non_hse = non_hse + setup_rti_momentum_terms(model, k, area, dm_face);
+    let mut ptrb_ad = StarAdOrder1::ZERO;
+    if model.controls.rsp2_flag {
+        ptrb_ad = crate::rsp2_ad::eval_rsp2_ptrb_cell_ad(model, cell, shift_m1);
     }
-
-    non_hse
+    peos_ad + pvsc_ad + ptrb_ad
 }
 
 /// Hydrostatic / hydrodynamic momentum equation at face `k` (`do1_momentum_eqn`
@@ -327,25 +414,57 @@ pub fn do1_momentum_eqn(model: &StarModel, k: usize, sys: &mut HenyeySystem) {
     if k == 0 && !has_surf_momentum_bc(&model.controls) {
         return;
     }
-    let (r2, area) = eval_time_centered_hse_geom_ad(model, k);
+    // `get1_momentum_eqn` (`star/private/hydro_momentum.f90:62-118`).
     let dm_face = eval_face_dm_bar(model, k);
-    let g_hse = expected_hse_grav_term(model, k, r2);
-    let non_hse = expected_non_hse_term(model, k, area, dm_face);
-    let dp_expected = (g_hse + non_hse) * (dm_face / area);
+    // `setup_HSE`
+    let (grav_ad, area_ad) = expected_hse_grav_and_area(model, k);
+    let dm_div_a_ad = dm_face / area_ad;
+    // `setup_non_HSE`
+    let other_ad = expected_non_hse_term(model, k);
+    // `setup_dPtot` (`get_dPtot_face_info`, `hydro_momentum.f90:446-526`)
+    let ptot00_ad = calc_ptot_ad_tw(model, k, false);
+    let ptotm1_ad = if k == 0 {
+        eval_surf_momentum_bc_pressure_ad(model)
+    } else {
+        calc_ptot_ad_tw(model, k - 1, true)
+    };
+    let dptot_ad = ptotm1_ad - ptot00_ad;
+    let (alfa, beta) = if k == 0 { (1.0, 0.0) } else { model.get_face_weights(k) };
+    let ptotavg_ad = if k == 0 {
+        ptot00_ad
+    } else {
+        alfa * ptot00_ad + beta * ptotm1_ad
+    };
+    let iptotavg_ad = 1.0 / ptotavg_ad;
+    // `setup_d_mlt_Pturb`
+    let vc_old = model.aux.mlt_vc_old.get(k).copied().unwrap_or(0.0);
+    let d_mlt_pturb_ad = if model.controls.mlt_pturb_factor > 0.0 && vc_old > 0.0 {
+        let rho_00 = wrap_d_00(model, k);
+        let rho_m1 = wrap_d_m1(model, k);
+        model.controls.mlt_pturb_factor * flexmesa_math::pow2(vc_old) * (rho_m1 - rho_00)
+            / 3.0
+    } else {
+        StarAdOrder1::ZERO
+    };
+    // `setup_RTI_terms`
+    let rti_terms_ad = setup_rti_momentum_terms(model, k, dm_div_a_ad);
+
+    let other_dm_div_a_ad = other_ad * dm_div_a_ad;
+    let grav_dm_div_a_ad = grav_ad * dm_div_a_ad;
+    let rti_terms_dm_div_a_ad = rti_terms_ad * dm_div_a_ad;
+    // `residual_sum_ad = other_dm_div_A_ad + grav_dm_div_A_ad - dPtot_ad -
+    // d_mlt_Pturb_ad + RTI_terms_dm_div_A_ad` is evaluated in
+    // `auto_diff_real_star_order1` and only then assigned to the accurate
+    // type, whose compensator is then zero (`set_acc_adr`,
+    // `num/public/accurate_sum_auto_diff_star_order1.f90`).
+    let resid1_ad = other_dm_div_a_ad + grav_dm_div_a_ad - dptot_ad - d_mlt_pturb_ad
+        + rti_terms_dm_div_a_ad;
+    let resid = resid1_ad * iptotavg_ad;
 
     let i_equ = model.layout.i_dv_dt;
     if k == 0 {
-        let (p_0, p_theta_0) = eval_cell_peos_time_centered_ad(model, 0, false);
-        let mut p_tot_0 = p_0;
-        if model.controls.use_pvsc_art_visc && model.controls.v_flag {
-            p_tot_0 = p_tot_0 + eval_pvsc_cell_ad(model, 0);
-        }
-        if model.controls.rsp2_flag && model.controls.rsp2.alfap != 0.0 {
-            p_tot_0 = p_tot_0
-                + crate::rsp2_ad::eval_rsp2_ptrb_cell_ad(model, 0, false);
-        }
-        let p_surf = eval_surf_momentum_bc_pressure_ad(model);
-        let resid = (dp_expected - (p_surf - p_tot_0)) / p_0;
+        let p_theta_0 = eval_p_theta(model, 0);
+        let p_0 = ptotavg_ad;
         sys.save_eqn_residual(&model.layout, 0, i_equ, &resid);
         if sys.nvar > model.layout.nvar_hydro && model.species > 0 {
             let p_0_val = p_0.val.max(1.0e-30);
@@ -371,13 +490,9 @@ pub fn do1_momentum_eqn(model: &StarModel, k: usize, sys: &mut HenyeySystem) {
             }
         }
     } else {
-        let (p_00, p_theta_00) =
-            eval_cell_peos_time_centered_ad(model, k, false);
-        let (p_m1, p_theta_m1) =
-            eval_cell_peos_time_centered_ad(model, k - 1, true);
-        let (alfa, beta) = model.get_face_weights(k);
-        let p_avg = p_00 * alfa + p_m1 * beta;
-        let resid = (dp_expected - (p_m1 - p_00)) / p_avg;
+        let p_theta_00 = eval_p_theta(model, k);
+        let p_theta_m1 = eval_p_theta(model, k - 1);
+        let p_avg = ptotavg_ad;
         sys.save_eqn_residual(&model.layout, k, i_equ, &resid);
 
         if sys.nvar > model.layout.nvar_hydro && model.species > 0 {

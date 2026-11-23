@@ -278,11 +278,17 @@ fn get_grad_t(
     let (r, l, t, p, rho, m) = (pt.r, pt.l, pt.t, pt.p, pt.rho, pt.m);
     let grada = pt.grada;
     let ptot = p;
-    let pr = CRAD * pow4(t) / 3.0;
+    // Upstream `get_gradT` evaluates `Get_results` on
+    // `auto_diff_real_star_order1` values, whose division is `x*powm1(y)`
+    // (`auto_diff/private/auto_diff_real_star_order1_module.f90:1073,1083,
+    // 1091`); the same arithmetic is done here in `StarAdOrder1`
+    // (`star/private/turb_support.f90:253-262`).
+    let ad = StarAdOrder1::constant;
+    let pr = (CRAD * ad(t).pow4() / 3.0).val;
     let pg = ptot - pr;
-    let beta = pg / ptot;
+    let beta = (ad(pg) / ad(ptot)).val;
     let lambda = mixing_length_alpha * scale_height;
-    let grav = cgrav * m / pow2(r);
+    let grav = (cgrav * m / ad(r).pow2()).val;
     let gradl = if c.use_ledoux_criterion {
         grada + gradl_composition_term
     } else {
@@ -318,18 +324,18 @@ fn get_grad_t(
             max_conv_vel,
         };
         let mut mlt_in = MltInputs {
-            chi_t: pt.chi_t,
-            chi_rho: pt.chi_rho,
-            cp: pt.cp,
-            grav,
-            lambda,
-            rho,
-            p: ptot,
-            t,
-            opacity,
-            gradr,
-            grada,
-            gradl,
+            chi_t: ad(pt.chi_t),
+            chi_rho: ad(pt.chi_rho),
+            cp: ad(pt.cp),
+            grav: ad(grav),
+            lambda: ad(lambda),
+            rho: ad(rho),
+            p: ad(ptot),
+            t: ad(t),
+            opacity: ad(opacity),
+            gradr: ad(gradr),
+            grada: ad(grada),
+            gradl: ad(gradl),
         };
         let out = set_mlt(&mlt_params, &mlt_in).map_err(|e| {
             StarError::MicrophysicsError(format!(
@@ -337,8 +343,8 @@ fn get_grad_t(
             ))
         })?;
         convecting = out.mixing_type != MixingType::NoMixing;
-        grad_t = out.grad_t;
-        d = out.d;
+        grad_t = out.grad_t.val;
+        d = out.d.val;
         if c.mix_wind.use_superad_reduction {
             let (gamma_factor, gradr_scaled) = eval_superad_reduction(
                 &c.mix_wind,
@@ -350,7 +356,7 @@ fn get_grad_t(
                 StarAdOrder1::constant(gradl),
             );
             if gamma_factor.val > 1.0 {
-                mlt_in.gradr = gradr_scaled.val;
+                mlt_in.gradr = ad(gradr_scaled.val);
                 let out2 = set_mlt(&mlt_params, &mlt_in).map_err(|e| {
                     StarError::MicrophysicsError(format!(
                         "ierr from set_MLT when using superad_reduction in \
@@ -358,8 +364,8 @@ fn get_grad_t(
                     ))
                 })?;
                 convecting = out2.mixing_type != MixingType::NoMixing;
-                grad_t = out2.grad_t;
-                d = out2.d;
+                grad_t = out2.grad_t.val;
+                d = out2.d.val;
             }
         }
     }
@@ -375,27 +381,27 @@ fn get_grad_t(
             m,
         };
         let sc_in = SemiconvectionInputs {
-            l,
-            lambda,
-            t,
-            p: ptot,
-            pr,
-            beta,
-            opacity,
-            rho,
-            cp: pt.cp,
-            gradr,
-            grada,
-            gradl,
+            l: ad(l),
+            lambda: ad(lambda),
+            t: ad(t),
+            p: ad(ptot),
+            pr: ad(pr),
+            beta: ad(beta),
+            opacity: ad(opacity),
+            rho: ad(rho),
+            cp: ad(pt.cp),
+            gradr: ad(gradr),
+            grada: ad(grada),
+            gradl: ad(gradl),
         };
         let sc = set_semiconvection(&sc_params, &sc_in).map_err(|e| {
             StarError::MicrophysicsError(format!(
                 "ierr from set_semiconvection in pre-MS eval_gradT: {e}"
             ))
         })?;
-        d = sc.d;
+        d = sc.d.val;
         if sc.mixing_type != MixingType::NoMixing {
-            grad_t = sc.grad_t;
+            grad_t = sc.grad_t.val;
         }
     }
 

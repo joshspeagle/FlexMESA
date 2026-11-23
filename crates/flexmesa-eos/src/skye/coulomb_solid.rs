@@ -116,7 +116,8 @@ pub fn ocp_solid_harmonic_free_energy(
     };
     let u0 = -CM * gami;
     let e0 = (1.5 * U1) * tpt;
-    let f = u0 + f_therm + e0;
+    // Match `Fth = F + E0; F = U0 + Fth` (`eos/private/skye_coulomb_solid.f90:138-139`).
+    let f = u0 + (f_therm + e0);
     f - 3.0 * tpt.log() + 1.5 * gami.log() + 1.323515
 }
 
@@ -191,8 +192,9 @@ pub fn ocp_solid_screening_free_energy_correction(
 #[must_use]
 pub fn delta_g_ogata93(x2: f64, rz: f64) -> f64 {
     let rm1 = rz - 1.0;
+    // Match `0.5d0 * pow2(Rz - 1d0)` (`eos/private/skye_coulomb_solid.f90:234`).
     let cr =
-        0.05 * (rm1 * rm1) / ((1.0 + 0.64 * rm1) * (1.0 + 0.5 * rm1 * rm1));
+        0.05 * (rm1 * rm1) / ((1.0 + 0.64 * rm1) * (1.0 + 0.5 * (rm1 * rm1)));
     let sq = x2.sqrt();
     cr / (1.0
         + (sq * (sq - 0.3) * (sq - 0.7) * (sq - 1.0)) * 27.0 * rm1

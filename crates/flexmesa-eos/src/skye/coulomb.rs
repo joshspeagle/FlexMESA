@@ -257,7 +257,9 @@ pub fn nonideal_corrections(
         z321,
     );
 
-    let kt = temp * (KERG / (abar * AMU));
+    // Left-to-right matches Fortran `kT = temp * kerg / (abar * amu)`
+    // (`eos/private/skye_coulomb.f90:119`).
+    let kt = (temp * KERG) / (abar * AMU);
     let df_liq = (df_liq_0 + f_phase_independent) * kt;
     let df_sol = (df_sol_0 + f_phase_independent) * kt;
 

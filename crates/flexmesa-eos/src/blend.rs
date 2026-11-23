@@ -200,10 +200,10 @@ pub fn blend_eos_results(
         (alpha_in, d_alpha0_dlnd, d_alpha0_dlnt)
     } else {
         let alpha0 = alpha_in;
-        let a2 = alpha0 * alpha0;
-        let a3 = a2 * alpha0;
-        let a = -a3 * (-10.0 + alpha0 * (15.0 - 6.0 * alpha0));
-        let big_a = 30.0 * (alpha0 - 1.0) * (alpha0 - 1.0) * a2;
+        let alfa3 = -alpha0 * alpha0 * alpha0;
+        let a = alfa3 * (-10.0 + alpha0 * (15.0 - 6.0 * alpha0));
+        // Left-to-right `* alpha0 * alpha0` matches `eosdt_support.f90:206`.
+        let big_a = 30.0 * (alpha0 - 1.0) * (alpha0 - 1.0) * alpha0 * alpha0;
         (a, big_a * d_alpha0_dlnd, big_a * d_alpha0_dlnt)
     };
 

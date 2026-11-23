@@ -9,7 +9,7 @@
 //! `(nz, nvar, nvar)` using 3-cell stencil forward-mode automatic
 //! differentiation ([`StarAdOrder1`]).
 
-use flexmesa_const::FOUR_PI;
+use flexmesa_const::{FOUR_PI, PI};
 
 use crate::controls::{StarError, VarLayout};
 use crate::eps_grav::eval_eps_grav;
@@ -330,26 +330,44 @@ pub fn do_surf_bc_eqns(model: &StarModel, sys: &mut HenyeySystem) {
     if model.nz == 0 {
         return;
     }
-    let r_0 = StarAdOrder1::variable(model.ln_r[0], I_LNR_00).exp();
-    let fp_0 = if model.controls.rotation_flag
-        && model.controls.use_gravity_rotation_correction
-    {
-        model.aux.fp_rot.first().copied().unwrap_or(1.0)
+    // `get_PT_bc_ad` (`star/private/hydro_eqns.f90:843-911`): the offsets of
+    // the boundary pressure and temperature to the cell center are reals,
+    // with their partials set explicitly.
+    let offset_p_to_cell_center = !model.controls.use_momentum_outer_bc;
+    let offset_t_to_cell_center = !(model.controls.use_other_surface_pt
+        || model.controls.rsp2_flag
+        || model.controls.use_rsp_l_eqn_outer_bc);
+    let r = model.r[0];
+    let dp0 = if offset_p_to_cell_center {
+        model.cgrav[0] * model.m_grav[0] * model.dm[0]
+            / (8.0 * PI * flexmesa_math::pow4(r))
     } else {
-        1.0
+        0.0
     };
-    let mc_0 = if model.controls.use_mass_corrections {
-        model.aux.mass_correction.first().copied().unwrap_or(1.0)
+    let mut dp_0 = StarAdOrder1::constant(dp0);
+    if offset_p_to_cell_center {
+        dp_0.d1[I_LNR_00] = -4.0 * dp0;
+    }
+    let (t_1, peos_1, gradt_1) = (model.t[0], model.peos[0], model.gradt[0]);
+    let dt0 = if offset_t_to_cell_center {
+        dp0 * gradt_1 * t_1 / peos_1
     } else {
-        1.0
+        0.0
     };
-    let dp_0 = if model.controls.use_momentum_outer_bc {
-        StarAdOrder1::ZERO
-    } else {
-        (model.cgrav[0] * model.m_grav[0] * fp_0 * model.dm[0] * mc_0
-            / (2.0 * FOUR_PI))
-            / r_0.pow4()
-    };
+    let mut dt_0 = StarAdOrder1::constant(dt0);
+    if offset_t_to_cell_center {
+        let g = &model.gradt_ad[0].d1;
+        let lp = &model.ln_peos_ad[0].d1;
+        let dpinv_dlnt = -lp[I_LNT_00] / peos_1;
+        let dpinv_dlnd = -lp[I_LND_00] / peos_1;
+        dt_0.d1[I_LNR_00] = -4.0 * dt0 + dp0 * g[I_LNR_00] * t_1 / peos_1;
+        dt_0.d1[I_LNT_00] = dt0
+            + dp0 * g[I_LNT_00] * t_1 / peos_1
+            + dp0 * gradt_1 * t_1 * dpinv_dlnt;
+        dt_0.d1[I_LND_00] = dp0 * g[I_LND_00] * t_1 / peos_1
+            + dp0 * gradt_1 * t_1 * dpinv_dlnd;
+        dt_0.d1[I_L_00] = dp0 * g[I_L_00] * t_1 / peos_1;
+    }
 
     if model.controls.use_compression_outer_bc && model.nz >= 2 {
         let lnd_0 = StarAdOrder1::variable(model.lnd[0], I_LND_00);
@@ -399,13 +417,6 @@ pub fn do_surf_bc_eqns(model: &StarModel, sys: &mut HenyeySystem) {
             && model.controls.rsp2.use_l_eqn_at_surface);
     if !skip_surf_t_bc {
         let lnt_0 = StarAdOrder1::variable(model.ln_t[0], I_LNT_00);
-        let t_0 = lnt_0.exp();
-        let peos_0 = model.ln_peos_ad[0].exp();
-        let dt_0 = if model.controls.rsp2_flag {
-            StarAdOrder1::ZERO
-        } else {
-            dp_0 * model.gradt_ad[0] * (t_0 / peos_0)
-        };
         let t_surf = model.ln_t_surf_ad.exp();
         let ln_t_bc = (t_surf + dt_0).max(StarAdOrder1::constant(1.0)).ln();
         let denom_t = if lnt_0.val > 1.0 {

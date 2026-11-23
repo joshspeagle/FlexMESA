@@ -281,7 +281,10 @@ pub fn eval_surf_bc(model: &mut StarModel) -> Result<(), StarError> {
         model.ln_t_surf_ad =
             StarAdOrder1::constant(flexmesa_math::log(t_start_0));
         let p_rad_0 =
-            ((CRAD / 3.0) * flexmesa_math::pow4(t_start_0)).max(1.0e-30);
+            // `Radiation_Pressure(s% T_start(1))` (`star/private/hydro_eqns.f90:761`,
+            // `eos/public/eos_lib.f90:91`: `crad*T*T*T*T/3d0`).
+            (CRAD * t_start_0 * t_start_0 * t_start_0 * t_start_0 / 3.0)
+                .max(1.0e-30);
         model.ln_peos_surf_ad =
             StarAdOrder1::constant(flexmesa_math::log(p_rad_0));
         return Ok(());
@@ -451,7 +454,9 @@ fn atm_eos_proc(
 ) -> Result<AtmEosCallbackResult, AtmError> {
     let t = flexmesa_math::exp(ln_t);
     let p = flexmesa_math::exp(ln_p);
-    let prad = CRAD * flexmesa_math::pow4(t) / 3.0;
+    // `Prad = radiation_pressure(T)` (`star/private/atm_support.f90:1208`,
+    // `eos/public/eos_lib.f90:91`: `crad*T*T*T*T/3d0`).
+    let prad = CRAD * t * t * t * t / 3.0;
     let pgas = (p - prad).max(1.0e-99);
     let rho_guess =
         crate::rsp_eos_inv::eval1_gamma_pt_get_rho(chem, p, t).max(1.0e-40);

@@ -21,7 +21,7 @@
         "verified_total": 5640,
         "pct_ported": 35.1,
         "pct_verified": 4.7,
-        "rust_lines": 89820,
+        "rust_lines": 91997,
         "python_jax_lines": 3869
       },
       {
@@ -89,7 +89,7 @@
         "verified_total": 0,
         "pct_ported": 0.0,
         "pct_verified": 0.0,
-        "rust_lines": 15552,
+        "rust_lines": 15558,
         "python_jax_lines": 9911
       },
       {
@@ -593,9 +593,9 @@
         "total": 90,
         "mesa_26_4_1_ref": 86,
         "no_reference_yet": 4,
-        "strict_validated": 46,
-        "diagnostic_runs": 44,
-        "reached_termination": 38,
+        "strict_validated": 45,
+        "diagnostic_runs": 45,
+        "reached_termination": 42,
         "within_numeric_tol": 6,
         "passing": 1,
         "declared_gaps": 85,
@@ -690,12 +690,12 @@
     {
       "namelist": "star &star_job",
       "upstream_scalars": 455,
-      "matched_in_flexmesa": 97,
-      "defaults_agree": 97,
+      "matched_in_flexmesa": 112,
+      "defaults_agree": 112,
       "value_mismatch": 0,
       "disabled_limit_none": 0,
       "skipped_unparseable_rust": 1,
-      "unimplemented": 357
+      "unimplemented": 342
     },
     {
       "namelist": "binary &binary_controls + &binary_job",
@@ -1099,7 +1099,7 @@
     }
   },
   "skips": {
-    "rust_ignore_count": 12,
+    "rust_ignore_count": 13,
     "rust_ignores": [
       {
         "location": "crates/flexmesa-astero/tests/astero_suite.rs:454",
@@ -1160,14 +1160,24 @@
         "location": "crates/flexmesa-binary/tests/tier5_coupled_suite.rs:1093",
         "reason": "unverified uncapped binary campaign; tracked in #143 and #160",
         "issues": "#143, #160"
+      },
+      {
+        "location": "crates/flexmesa-star/src/tests.rs:245",
+        "reason": "10-yr step on a coarse (d_log10_P = 0.15) pre-MS model ends singular with the upstream pre-MS builder; setup not run in MESA; tracked in #154",
+        "issues": "#154"
       }
     ],
-    "python_xfail_or_skip_count": 14,
+    "python_xfail_or_skip_count": 17,
     "python_skips": [
       {
         "location": "tests/test_bench.py:149",
         "reason": "pytest.mark.xfail( strict=True, reason=( \"#295: Rust PC uses the MESA 26.4.1 EXCOR7 bicubic spline table \" \"(eos/private/pc_eos.f90:1895, create_EXCOR7_table.f90:136 \" \"THETA > 0.005; #161), whereas the frozen JAX twin keeps analytical \" \"EXCOR7 (THETA > 0.04); measured cross-stage max_rel_err is \" \"3.716e-9 against 2.0e-9.\" ), )",
         "issues": "#161, #295"
+      },
+      {
+        "location": "tests/test_e2e_2_tier2.py:201",
+        "reason": "pytest.mark.xfail( strict=True, reason=( \"#414: the first pre-MS relax step of make_co_wd does not converge \" \"(min_timestep_limit) where MESA 26.4.1's retry does, so the run \" \"stops before the stage with unported controls.\" ), )",
+        "issues": "#414"
       },
       {
         "location": "tests/test_eos_wave3a3.py:487",
@@ -1195,12 +1205,22 @@
         "issues": "#295, #340"
       },
       {
+        "location": "tests/test_star_wave4_2.py:166",
+        "reason": "pytest.mark.xfail( strict=True, reason=( \"#154: with the upstream pre-MS builder (pre_ms_model.f90) the \" \"forced 10-yr step on the unrelaxed 1 Msun model (d_log10_P = 0.05) \" \"converges in 19 iterations against this test's own bound of 10; \" \"upstream relaxes a new pre-MS model first (init.f90:1077-1109, \" \"#402) and never runs this setup.\" ), )",
+        "issues": "#154, #402"
+      },
+      {
         "location": "tests/test_star_wave4_3.py:152",
         "reason": "pytest.mark.xfail( strict=True, reason=( \"#154: FlexMESA's pre-MS model differs from upstream \" \"build_pre_ms_model (measured on the 7 Msun custom_colors model: \" \"initial residual norm 2.95e-5 against MESA 26.4.1's 1.89e-5 at the \" \"upstream first-step dt, star/private/init.f90:1007). This test \" \"forces a 10-yr coupled step on a 4 Msun pre-MS model, which with \" \"upstream's do_block_multiply_xa (#358) ends in a singular \" \"block-tridiagonal matrix at the second Newton iteration; this 4 \" \"Msun setup has not been run in MESA\" ), )",
         "issues": "#154, #358"
       },
       {
-        "location": "tests/test_star_wave4_4.py:92",
+        "location": "tests/test_star_wave4_4.py:31",
+        "reason": "pytest.mark.xfail( strict=True, reason=( \"#295: the Rust pre-MS model is now upstream's build_pre_ms_model \" \"(#154); at its 4 Msun inputs the frozen JAX eval_mesh_gval_jax \" \"(max/abs, not smooth) fails check_grads: JVP 322.85 against \" \"numerical 227.43 at rtol=1e-5.\" ), )",
+        "issues": "#154, #295"
+      },
+      {
+        "location": "tests/test_star_wave4_4.py:101",
         "reason": "pytest.mark.xfail( strict=True, reason=( \"#154: FlexMESA's pre-MS model differs from upstream \" \"build_pre_ms_model (measured on the 7 Msun custom_colors model: \" \"initial residual norm 2.95e-5 against MESA 26.4.1's 1.89e-5 at the \" \"upstream first-step dt, star/private/init.f90:1007). This test \" \"forces a 10-yr coupled step on a 4 Msun pre-MS model, which with \" \"upstream's do_block_multiply_xa (#358) ends in a singular \" \"block-tridiagonal matrix at the second Newton iteration; this 4 \" \"Msun setup has not been run in MESA\" ), )",
         "issues": "#154, #358"
       },
@@ -1340,8 +1360,8 @@
       },
       {
         "phase": "Phase C",
-        "open": 17,
-        "closed": 6,
+        "open": 18,
+        "closed": 8,
         "issues": [
           {
             "number": 152,
@@ -1451,11 +1471,26 @@
           {
             "number": 402,
             "title": "[Audit C3] Pre-MS relax phase: port do_internal_evolve and do_relax_num_steps (init.f90:1077-1118)",
-            "state": "open"
+            "state": "closed"
           },
           {
             "number": 414,
             "title": "[Parity] make_co_wd: first pre-MS relax step does not converge where MESA's retry does (surface zones)",
+            "state": "open"
+          },
+          {
+            "number": 422,
+            "title": "[Parity] Strict arithmetic follows auto_diff division (powm1): pre-MS builder MLT and Prad in hydro_vars (#154)",
+            "state": "closed"
+          },
+          {
+            "number": 423,
+            "title": "[Parity] Post-relax pre-MS starting model is hotter than MESA's (log_Teff +0.016 dex at model 1; 6 cases now first diverge at model 1)",
+            "state": "open"
+          },
+          {
+            "number": 424,
+            "title": "[Parity] Peos value sources and MLT/Pturb face forms on the strict path (wrap_Peos, get_Peos_face, r_start)",
             "state": "open"
           }
         ]
@@ -1518,21 +1553,6 @@
         "draft": true
       },
       {
-        "number": 392,
-        "title": "fix(star): model_number is model_number_old + 1 before the solve, as upstream (#359)",
-        "draft": true
-      },
-      {
-        "number": 396,
-        "title": "fix(star,eos): pre-main-sequence builder as upstream build_pre_ms_model (#154)",
-        "draft": true
-      },
-      {
-        "number": 401,
-        "title": "feat(star): create_initial_model as upstream build_initial_model (#154)",
-        "draft": true
-      },
-      {
         "number": 403,
         "title": "fix(net): resolve MESA 26.4.1 eps_nuc AUX parity divergences (0 ULP)",
         "draft": true
@@ -1553,11 +1573,6 @@
         "draft": true
       },
       {
-        "number": 416,
-        "title": "feat(star): pre-MS and create_initial_model relax phase via do_internal_evolve (#402)",
-        "draft": true
-      },
-      {
         "number": 417,
         "title": "Fix MLT gradT and mlt_vc divergences against MESA 26.4.1 (#393)",
         "draft": true
@@ -1570,6 +1585,21 @@
       {
         "number": 419,
         "title": "fix(star): match MESA 26.4.1 area precedence in element diffusion (#407)",
+        "draft": true
+      },
+      {
+        "number": 425,
+        "title": "Fix Skye, HELM, and blend EOS arithmetic parity to 0 ULP (#421)",
+        "draft": true
+      },
+      {
+        "number": 426,
+        "title": "Fix 4D EOS RSS spikes, slim Rust-only trace workers, and show Peak RSS (#412)",
+        "draft": true
+      },
+      {
+        "number": 427,
+        "title": "fix(atm,eos): align table_atm fvbicub_db and linear (Pgas, T) EOS inversion to 38/39 0-ULP parity (#420)",
         "draft": true
       }
     ],
@@ -3161,6 +3191,32 @@
       "python_cov_pct": "87.7",
       "closed_140": "21",
       "total_140": "42",
+      "deferred_169": "52"
+    },
+    {
+      "date_utc": "2026-11-23",
+      "commit": "54e1a65",
+      "event": "main merge",
+      "engine_ported_pct": "30.7",
+      "all_verified_pct": "1.1",
+      "cases_passing": "4",
+      "rust_cov_pct": "76.2",
+      "python_cov_pct": "87.7",
+      "closed_140": "22",
+      "total_140": "43",
+      "deferred_169": "52"
+    },
+    {
+      "date_utc": "2026-11-23",
+      "commit": "5799a16",
+      "event": "main merge",
+      "engine_ported_pct": "30.7",
+      "all_verified_pct": "1.1",
+      "cases_passing": "4",
+      "rust_cov_pct": "76.2",
+      "python_cov_pct": "87.7",
+      "closed_140": "23",
+      "total_140": "45",
       "deferred_169": "52"
     }
   ]

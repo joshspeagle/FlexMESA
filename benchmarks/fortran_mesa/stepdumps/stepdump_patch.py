@@ -24,6 +24,8 @@ Records, one per line, each starting with the record type and the star id:
 * ``STATE id model k xh(1:nvar_hydro) xa(1:species)``: per zone, at the first
   solver call of each model.
 * ``DM id model k dm``: per zone, the cell mass (g) at that call.
+* ``AUX id model k Peos opacity gradT gradr grada eps_nuc mlt_vc chiRho chiT
+  Cp``: per zone, quantities the equations read, at that call.
 * ``EQU id model k equ(1:nvar)``: per zone, the residuals at that call.
 * ``CORR id model iter correction_norm max_correction k j``: each Newton
   iteration, after ``sizeB`` (``star_solver.f90:359``).
@@ -48,11 +50,27 @@ import sys
 
 MARKER = "FLEXMESA_STEPDUMP"
 HEX = "Z16.16"
+# Per-zone quantities the equations read, at the first call of each model.
+AUX_NAMES = (
+    "Peos",
+    "opacity",
+    "gradT",
+    "gradr",
+    "grada",
+    "eps_nuc",
+    "mlt_vc",
+    "chiRho",
+    "chiT",
+    "Cp",
+)
 
 
 def _h(name: str) -> str:
     """Returns the Fortran expression giving ``name``'s IEEE-754 bits."""
     return f"transfer({name}, 0_8)"
+
+
+AUX_ITEMS = ", ".join(_h(f"s% {v}(sd_k)") for v in AUX_NAMES)
 
 
 def _w(fmt_tail: str, tag: str, args: str, indent: int) -> str:
@@ -98,6 +116,9 @@ EDITS: list[tuple[str, str, str]] = [
         f"                     write(sd_u,'(A,1X,I0,1X,I0,"
         f"1X,I0,1X,{HEX})') 'DM', s% id, s% model_number, sd_k, "
         f"{_h('s% dm(sd_k)')}\n"
+        f"                     write(sd_u,'(A,1X,I0,1X,I0,"
+        f"1X,I0,10(1X,{HEX}))') 'AUX', s% id, s% model_number, sd_k, "
+        f"{AUX_ITEMS}\n"
         f"                     write(sd_u,'(A,1X,I0,1X,I0,"
         f"1X,I0,999(1X,{HEX}))') 'EQU', s% id, s% model_number, sd_k, "
         f"({_h('s% equ(sd_j,sd_k)')}, sd_j=1,nvar)\n"

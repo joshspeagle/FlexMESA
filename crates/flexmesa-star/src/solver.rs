@@ -454,6 +454,28 @@ fn stepdump_call(
                     &[model.dm[k]],
                     &[],
                 );
+                // Same order as the MESA overlay's AUX record.
+                let aux = [
+                    model.peos[k],
+                    model.opacity[k],
+                    model.gradt[k],
+                    model.gradr[k],
+                    model.grada[k],
+                    model.eps_nuc[k],
+                    model.mlt_vc[k],
+                    model.chi_rho[k],
+                    model.chi_t[k],
+                    model.cp[k],
+                ];
+                crate::stepdump::push_line(
+                    buf,
+                    "AUX",
+                    id,
+                    dump_model,
+                    &[k as i64 + 1],
+                    &aux,
+                    &[],
+                );
                 crate::stepdump::push_line(
                     buf,
                     "EQU",

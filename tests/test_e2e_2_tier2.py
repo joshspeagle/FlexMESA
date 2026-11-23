@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import pathlib
 import tempfile
+from typing import Any
 
 import numpy as np
 import pytest
@@ -213,24 +214,20 @@ def test_upstream_tier2_test_suite_case_and_restart_reproducibility(
 
     clean_dir = tmp_path / case_name
     e2e.copy_cleaned_case(case_dir, clean_dir, suite="star")
+
+    def run() -> dict[str, Any]:
+        return e2e.run_test_suite_case(
+            clean_dir,
+            skip_optional=True,
+            max_steps_per_stage=2,
+            verify_restart=True,
+        )
+
     gap = cleaned_case_gaps.DECLARED_STAR_STOPS.get(case_name)
     if gap is not None:
-        cleaned_case_gaps.assert_declared_stop(
-            gap,
-            lambda: e2e.run_test_suite_case(
-                clean_dir,
-                skip_optional=True,
-                max_steps_per_stage=2,
-                verify_restart=True,
-            ),
-        )
+        cleaned_case_gaps.assert_declared_stop(gap, run)
         return
-    rep = e2e.run_test_suite_case(
-        clean_dir,
-        skip_optional=True,
-        max_steps_per_stage=2,
-        verify_restart=True,
-    )
+    rep = run()
     assert rep["case_name"] == case_name
     assert rep["tier"] == 0
     if case_name == "make_co_wd":

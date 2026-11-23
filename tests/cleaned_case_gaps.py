@@ -30,15 +30,22 @@ class DeclaredStop:
 
     Attributes:
         message_pattern: Regular expression the raised ``ValueError`` must
-            match. Unused when ``termination_code`` is set.
+            match, or ``None`` when ``termination_code`` is set.
         issue: Open issue of the package that restores upstream behaviour.
         termination_code: Exact termination code the run must return with,
             for a case that stops without raising.
     """
 
-    message_pattern: str
+    message_pattern: str | None
     issue: str
     termination_code: str | None = None
+
+    def __post_init__(self) -> None:
+        """Checks that exactly one of the two stop forms is given."""
+        if (self.message_pattern is None) == (self.termination_code is None):
+            raise ValueError(
+                "set exactly one of message_pattern and termination_code"
+            )
 
 
 def assert_declared_stop(
@@ -60,6 +67,7 @@ def assert_declared_stop(
             f"{rep['termination_code']!r}"
         )
         return
+    assert gap.message_pattern is not None
     with pytest.raises(ValueError, match=gap.message_pattern):
         run()
 
@@ -82,6 +90,6 @@ DECLARED_STAR_STOPS: dict[str, DeclaredStop] = {
     # collapses to min_timestep_limit in the first step, where MESA's run
     # continues (#154).
     "custom_colors": DeclaredStop(
-        "", "#154", termination_code="min_timestep_limit"
+        None, "#154", termination_code="min_timestep_limit"
     ),
 }

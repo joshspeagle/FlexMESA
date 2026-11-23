@@ -383,17 +383,16 @@ impl BinarySystem {
             if outer_retry == 0 && star_limit_redo_cnt == 0 {
                 // `prepare_for_new_step` resets `rho = dm/dV` on the first try
                 // of each step, before the remesh (`evolve.f90:1854-1857`).
-                if let Err(e) =
-                    set_rho_to_dm_div_dv_for_new_step(&mut self.donor)
-                {
+                let reset = set_rho_to_dm_div_dv_for_new_step(&mut self.donor)
+                    .and_then(|()| match self.companion {
+                        BinaryCompanion::Star(ref mut s2) => {
+                            set_rho_to_dm_div_dv_for_new_step(s2)
+                        }
+                        BinaryCompanion::PointMass { .. } => Ok(()),
+                    });
+                if let Err(e) = reset {
                     self.restore_snapshot(&pre_step_snap)?;
                     return Err(e);
-                }
-                if let BinaryCompanion::Star(ref mut s2) = self.companion {
-                    if let Err(e) = set_rho_to_dm_div_dv_for_new_step(s2) {
-                        self.restore_snapshot(&pre_step_snap)?;
-                        return Err(e);
-                    }
                 }
                 if restore_pre_mesh {
                     pre_mesh_snap = Some(self.capture_snapshot());

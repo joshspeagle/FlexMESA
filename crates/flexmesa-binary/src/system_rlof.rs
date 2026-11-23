@@ -909,8 +909,6 @@ pub fn evolve_single_star_attempt(
         && dt_try >= star.controls.mix_wind.remesh_dt_limit;
     let op_split = star.controls.op_split_burn;
     let mut extras = DefaultStarExtras;
-    // With `allow_remesh = false` the binary step loop has already prepared
-    // the step (reset and remesh, `DECISIONS #55`); otherwise part 1 does.
     let res = star_evolve_step_part1(
         star,
         first_try,

@@ -243,7 +243,7 @@ def main() -> None:
     mesa_dir = args.mesa_dir.resolve()
     args.scratch = args.scratch.resolve()
     args.mesasdk_root = args.mesasdk_root.resolve()
-    if any(args.scratch.iterdir()) if args.scratch.exists() else False:
+    if args.scratch.exists() and any(args.scratch.iterdir()):
         raise SystemExit("--scratch must be empty or absent")
     overlay = args.scratch / "mesa_overlay"
     build_overlay(mesa_dir, overlay)

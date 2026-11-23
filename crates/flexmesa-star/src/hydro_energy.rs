@@ -355,7 +355,9 @@ pub fn eval_face_area_time_centered_ad(
     let r = lnr_ad.exp();
     if time_center {
         let rs = flexmesa_math::exp(lnr_start);
-        (r * r + r * rs + rs * rs) * (FOUR_PI / 3.0)
+        // `area = 4d0*pi*(r2_00 + r_00*s% r_start(k) + s% r_start(k)**2)/3d0`
+        // (`star/private/star_utils.f90:3669`).
+        FOUR_PI * (r * r + r * rs + rs * rs) / 3.0
     } else {
         r * r * FOUR_PI
     }

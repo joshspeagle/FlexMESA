@@ -128,8 +128,11 @@ pub fn eval_surf_momentum_bc_pressure_ad(model: &StarModel) -> StarAdOrder1 {
                     model.ln_t.first().copied().unwrap_or(0.0)
                 }),
             );
+        // `P_bc_ad = Radiation_Pressure(s% T_start(1))`
+        // (`star/private/hydro_eqns.f90:761`, `eos/public/eos_lib.f90:91`:
+        // `crad*T*T*T*T/3d0`).
         StarAdOrder1::constant(
-            (flexmesa_const::CRAD / 3.0) * flexmesa_math::pow4(t_s0),
+            flexmesa_const::CRAD * t_s0 * t_s0 * t_s0 * t_s0 / 3.0,
         )
     } else if model.controls.use_fixed_psurf_outer_bc {
         StarAdOrder1::constant(model.controls.fixed_psurf)

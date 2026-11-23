@@ -9,10 +9,10 @@ Instead of capping steps or loosening checks to force green runs, unfinished or 
 
 | Suite | Target Cases | Stored `26.4.1` Refs | `no_reference_yet` | Strict-Validated | Diagnostic Runs | Reach Upstream Term | Declared Gaps | Verified Pass |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| `star` | 90 | 86 | 4 | 46 | 44 | 39 | 85 | 1 |
+| `star` | 90 | 86 | 4 | 46 | 44 | 40 | 85 | 1 |
 | `binary` | 8 | 8 | 0 | 7 | 1 | 6 | 5 | 3 |
 | `astero` | 8 | 8 | 0 | 1 | 7 | 3 | 8 | 0 |
-| **Total** | **106** | **102** | **4** | **54** | **52** | **48** | **98** | **4** |
+| **Total** | **106** | **102** | **4** | **54** | **52** | **49** | **98** | **4** |
 
 `Strict-Validated` counts cases whose unmodified inlists pass strict control validation (`#147`). `Diagnostic Runs` counts cases that strict validation rejects and that were rerun with the unsupported controls ignored; their numbers show where the engine stands and can never count as a pass (`DECISIONS #26`). `Reach Upstream Term` counts runs of either kind.
 
@@ -93,7 +93,7 @@ Cases lacking a committed MESA `26.4.1` baseline report `no reference yet` and c
 | `star` | `high_z` | [#161](https://github.com/joshspeagle/FlexMESA/issues/161) | `xa_central_lower_limit` | `xa_central_lower_limit` (444 steps; strict) | Strict run reaches xa_central_lower_limit (445 steps and 0 retries matching MESA 26.4.1, all final tolerances pass) with num_zones (2.74%) and track deviations from step 3 (#161, #153). |
 | `star` | `hot_cool_wind` | [#161](https://github.com/joshspeagle/FlexMESA/issues/161) | `log_L_upper_limit` | `timeout` (512 steps; strict) | Strict run diverges from step 2 under fixed T(tau) opacity and enters AGB solver retries (789 steps, 135 retries vs MESA 570 steps, 28 retries), exceeding the 900 s wall-time cap (#161, #152, #159). |
 | `star` | `hse_riemann` | [#152](https://github.com/joshspeagle/FlexMESA/issues/152) | `max_age` | `max_age` (2011 steps; strict) | Strict run reaches max_age (2011 steps, 0 retries, final diffs within 1e-8 under #151 energy conservation limits) with a step-2 log_center_Rho (6.419e-03) and mean-iteration (2.0 vs MESA 4.3) deviation during initial u_flag Riemann hydro AMR remeshing (#152, #153). |
-| `star` | `irradiated_planet` | [#154](https://github.com/joshspeagle/FlexMESA/issues/154) | `max_age` | `error` (30 steps; diagnostic (3 controls ignored)) | Planetary initial model and column-depth irradiation relaxation (#154). |
+| `star` | `irradiated_planet` | [#154](https://github.com/joshspeagle/FlexMESA/issues/154) | `max_age` | `max_age` (124 steps; diagnostic (3 controls ignored)) | Diagnostic run (3 ignored &star_job controls: dlogtau_factor, relax_irradiation_max_yrs_dt, relax_irradiation_min_steps) reaches max_age in 124 steps (MESA 127, 0 retries, 0 num_zones diff) with log_L/log_Teff deviations from step 86; needs planetary initial model and column-depth irradiation relaxation (#154). |
 | `star` | `low_z` | [#152](https://github.com/joshspeagle/FlexMESA/issues/152) | `xa_central_lower_limit` | `xa_central_lower_limit` (181 steps; strict) | Strict run reaches exact MESA 26.4.1 xa_central_lower_limit (181 steps, 0 retries, 0 num_zones diff, all final tolerances pass) with track deviations from step 395 (#152). |
 | `star` | `magnetic_braking` | [#157](https://github.com/joshspeagle/FlexMESA/issues/157) | `xa_central_lower_limit` | `error` (0 steps; strict) | Case history_columns.list requests unported MLT++ gradT_excess_alpha column (#157) and rotational retry/physics controls (#152, #158). |
 | `star` | `make_brown_dwarf` | [#154](https://github.com/joshspeagle/FlexMESA/issues/154) | `max_age` | `error` (0 steps; strict) | Fails loudly at sub-grid initial_mass without create_initial_model polytrope integration (#154). |

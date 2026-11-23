@@ -45,6 +45,11 @@ impl AsteroSearchParam {
     }
 }
 
+/// Number of `constraint_name(i)` slots read from `&astero_search_controls`
+/// (upstream `max_constraints = 100`, `astero/public/astero_def.f90:107`;
+/// the test cases use at most 9).
+pub const MAX_CONSTRAINTS: usize = 10;
+
 /// Spectroscopic observable constraint (`*_target`, `*_sigma`, `include_*_in_chi2_spectro`).
 #[derive(Debug, Clone, Copy, Default)]
 pub struct SpectroConstraint {
@@ -87,26 +92,6 @@ pub struct AsteroSearchControls {
     pub weights: AsteroChi2Weights,
     /// Whether to log limit-rejection diagnostics (`trace_limits`).
     pub trace_limits: bool,
-    /// Effective temperature $T_{\mathrm{eff}}$ (K) constraint.
-    pub teff: SpectroConstraint,
-    /// Surface gravity $\log g$ (cgs) constraint.
-    pub logg: SpectroConstraint,
-    /// Luminosity $\log(L/L_\odot)$ constraint.
-    pub log_l: SpectroConstraint,
-    /// Surface metallicity $[\mathrm{Fe/H}]$ constraint.
-    pub feh: SpectroConstraint,
-    /// Log photospheric radius $\log(R/R_\odot)$ constraint.
-    pub log_r: SpectroConstraint,
-    /// Linear photospheric radius $R/R_\odot$ constraint.
-    pub radius: SpectroConstraint,
-    /// Surface $[\mathrm{M/H}]$ constraint.
-    pub m_h: SpectroConstraint,
-    /// Surface $(Z/X)$ constraint.
-    pub surface_z_div_x: SpectroConstraint,
-    /// Surface helium mass fraction $Y_{\mathrm{surf}}$ constraint.
-    pub surface_he: SpectroConstraint,
-    /// Convective envelope base radius $R_{\mathrm{cz}}/R_\odot$ constraint.
-    pub rcz: SpectroConstraint,
     /// Solar reference $(Z/X)_\odot$.
     pub z_div_x_solar: f64,
     /// Number of observed target modes per spherical degree $l \in \{0, 1, 2, 3\}$.
@@ -300,16 +285,6 @@ impl Default for AsteroSearchControls {
         Self {
             weights: AsteroChi2Weights::default(),
             trace_limits: false,
-            teff: SpectroConstraint::default(),
-            logg: SpectroConstraint::default(),
-            log_l: SpectroConstraint::default(),
-            feh: SpectroConstraint::default(),
-            log_r: SpectroConstraint::default(),
-            radius: SpectroConstraint::default(),
-            m_h: SpectroConstraint::default(),
-            surface_z_div_x: SpectroConstraint::default(),
-            surface_he: SpectroConstraint::default(),
-            rcz: SpectroConstraint::default(),
             z_div_x_solar: 0.02293,
             nl: [0; 4],
             freq_target: [Vec::new(), Vec::new(), Vec::new(), Vec::new()],

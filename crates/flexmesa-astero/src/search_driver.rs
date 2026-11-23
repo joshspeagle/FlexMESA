@@ -18,11 +18,11 @@ use flexmesa_star::model::StarModel;
 use flexmesa_star::star_job_init::init_or_update_model_from_bundle;
 
 use crate::inlist_astero::{
-    AsteroParamSet, AsteroSearchControls, SpectroConstraint,
+    AsteroParamSet, AsteroSearchControls, MAX_CONSTRAINTS,
 };
 use crate::sample_eval::{
-    eval_convective_envelope_base_rsun, eval_model_astero_sample,
-    eval_spectro_and_delta_nu_chi2, AsteroSampleResult,
+    eval_model_astero_sample, eval_spectro_and_delta_nu_chi2,
+    AsteroSampleResult,
 };
 use crate::search_methods::{
     build_scan_grid_params, run_powell_driver, run_simplex_driver,
@@ -55,8 +55,10 @@ pub struct AsteroSearchReport {
     pub last_model: Option<StarModel>,
 }
 
-struct AsteroTrackExtras<'a> {
+struct AsteroTrackExtras<'a, 'h> {
     ctrl: &'a AsteroSearchControls,
+    /// The case's own `set_constraint_value` (and `set_param`).
+    hooks: Option<&'h mut dyn AsteroCaseHooks>,
     params: AsteroParamSet,
     sample_number: usize,
     case_dir: &'a Path,
@@ -69,12 +71,38 @@ struct AsteroTrackExtras<'a> {
     eval_error: Option<StarError>,
 }
 
-impl AsteroTrackExtras<'_> {
+impl AsteroTrackExtras<'_, '_> {
     fn set_max_years_dt(model: &mut StarModel, max_yrs: f64) {
         let yrs = max_yrs.max(1.0);
         model.controls.max_years_for_timestep = yrs;
         model.dt = model.dt.min(yrs * SECYER);
         model.dt_next = model.dt_next.min(yrs * SECYER);
+    }
+
+    /// `constraint_value(i)` for every named constraint, from the case's
+    /// `set_constraint_value` (`astero/private/extras_support.f90:204-209`);
+    /// unnamed slots are `NaN` and never read.
+    fn eval_constraint_values(
+        &mut self,
+        model: &StarModel,
+    ) -> Result<[f64; MAX_CONSTRAINTS], StarError> {
+        let mut values = [f64::NAN; MAX_CONSTRAINTS];
+        for (i, raw) in self.ctrl.constraint_names.iter().enumerate() {
+            let name = raw.trim();
+            if name.is_empty() {
+                continue;
+            }
+            let hook = self.hooks.as_deref_mut().ok_or_else(|| {
+                StarError::InvalidInput(format!(
+                    "astero constraint '{name}' needs the case's \
+                     set_constraint_value from its run_star_extras.f90 \
+                     (astero/private/extras_support.f90:204-209), but no \
+                     case hook was supplied"
+                ))
+            })?;
+            values[i] = hook.set_constraint_value(model, self.ctrl, name)?;
+        }
+        Ok(values)
     }
 
     fn check_too_many_bad(&mut self) -> Option<&'static str> {
@@ -154,9 +182,9 @@ impl AsteroTrackExtras<'_> {
 
     fn check_limits(
         &self,
-        model: &StarModel,
         dnu_uhz: f64,
-    ) -> Option<&'static str> {
+        values: &[f64; MAX_CONSTRAINTS],
+    ) -> Option<String> {
         // Upstream `check_limits` tests only the `delta_nu` and constraint
         // limits (`astero/private/extras_support.f90:621-667`). The age stops
         // are in `final_checks`, after the model's chi^2 has been saved; see
@@ -176,39 +204,23 @@ impl AsteroTrackExtras<'_> {
                 self.ctrl.sigmas_coeff_for_delta_nu_limit,
             )
         {
-            return Some("delta_nu_limit");
+            return Some(String::from("delta_nu_limit"));
         }
-        let hr = extract_history_row(model);
-        let x = model.xh_mass.first().copied().unwrap_or(0.70).max(1.0e-10);
-        let y = model.yhe_mass.first().copied().unwrap_or(0.28);
-        let z_div_x = (1.0 - x - y).clamp(1.0e-99, 1.0) / x;
-        let feh = flexmesa_math::log10(
-            z_div_x / self.ctrl.z_div_x_solar.max(1.0e-30),
-        );
-        let r_rsun = model.surface_r_rsun().max(1.0e-30);
-        let rcz = eval_convective_envelope_base_rsun(model);
-        let checks: [(SpectroConstraint, f64, &'static str); 10] = [
-            (self.ctrl.teff, model.teff.max(1.0), "Teff_limit"),
-            (self.ctrl.logg, hr.log_g, "logg_limit"),
-            (self.ctrl.log_l, hr.log_l, "logL_limit"),
-            (self.ctrl.feh, feh, "FeH_limit"),
-            (self.ctrl.m_h, feh, "M_H_limit"),
-            (self.ctrl.log_r, hr.log_r, "logR_limit"),
-            (self.ctrl.radius, r_rsun, "R_limit"),
-            (self.ctrl.surface_z_div_x, z_div_x, "surface_Z_div_X_limit"),
-            (self.ctrl.surface_he, y, "surface_He_limit"),
-            (self.ctrl.rcz, rcz, "Rcz_limit"),
-        ];
-        for (c, v, name) in checks {
-            if check1(v, c.target, c.sigma, c.sigmas_coeff) {
-                return Some(name);
+        // `do i = 1, max_constraints` (`extras_support.f90:645-663`).
+        for (i, c) in self.ctrl.indexed_constraints.iter().enumerate() {
+            let name = self.ctrl.constraint_names[i].trim();
+            if name.is_empty() {
+                continue;
+            }
+            if check1(values[i], c.target, c.sigma, c.sigmas_coeff) {
+                return Some(format!("{name}_limit"));
             }
         }
         None
     }
 }
 
-impl StarExtras for AsteroTrackExtras<'_> {
+impl StarExtras for AsteroTrackExtras<'_, '_> {
     fn extras_start_step(&mut self, model: &mut StarModel) -> ExtrasDirective {
         let checking_age = self.ctrl.eval_chi2_at_target_age_only
             || self.ctrl.include_age_in_chi2_spectro;
@@ -250,8 +262,6 @@ impl StarExtras for AsteroTrackExtras<'_> {
         {
             return ExtrasDirective::KeepGoing;
         }
-        let (chi2_sp, chi2_dnu, dnu_uhz) =
-            eval_spectro_and_delta_nu_chi2(model, self.ctrl);
         if !checking_age {
             let next_dt = if self.entered_hot {
                 self.ctrl.max_yrs_dt_when_hot
@@ -277,8 +287,21 @@ impl StarExtras for AsteroTrackExtras<'_> {
         {
             return ExtrasDirective::KeepGoing;
         }
-        if let Some(reason) = self.check_limits(model, dnu_uhz) {
-            return ExtrasDirective::Terminate(String::from(reason));
+        // Constraint values are set before `check_limits`
+        // (`astero/private/extras_support.f90:204-212`).
+        let values = match self.eval_constraint_values(model) {
+            Ok(v) => v,
+            Err(e) => {
+                self.eval_error = Some(e);
+                return ExtrasDirective::Terminate(String::from(
+                    "AsteroConstraintError",
+                ));
+            }
+        };
+        let (chi2_sp, chi2_dnu, dnu_uhz) =
+            eval_spectro_and_delta_nu_chi2(model, self.ctrl, &values);
+        if let Some(reason) = self.check_limits(dnu_uhz, &values) {
+            return ExtrasDirective::Terminate(reason);
         }
         // `chi2_seismo_fraction <= 0` (`extras_support.f90:266-280`): no
         // frequencies are needed, and the model is scored and saved before,
@@ -287,6 +310,7 @@ impl StarExtras for AsteroTrackExtras<'_> {
             let sample = match eval_model_astero_sample(
                 model,
                 self.ctrl,
+                &values,
                 self.params,
                 self.sample_number,
                 self.case_dir,
@@ -332,6 +356,7 @@ impl StarExtras for AsteroTrackExtras<'_> {
         let sample = match eval_model_astero_sample(
             model,
             self.ctrl,
+            &values,
             self.params,
             self.sample_number,
             self.case_dir,
@@ -383,14 +408,16 @@ impl StarExtras for AsteroTrackExtras<'_> {
     }
 }
 
-/// A case's own `set_param` from its `run_star_extras.f90` (for example
-/// `astero/test_suite/fast_newuoa/src/run_star_extras.f90:115-183`).
+/// A case's own `set_param` and `set_constraint_value` from its
+/// `run_star_extras.f90` (for example
+/// `astero/test_suite/fast_newuoa/src/run_star_extras.f90:58-184`).
 ///
-/// Upstream `astero_extras_controls` calls it for every named search
+/// Upstream `astero_extras_controls` calls `set_param` for every named search
 /// parameter, in index order, before the model is loaded or built
-/// (`astero/private/extras_support.f90:974-988`). It is case code, so it is
-/// supplied by the caller (test-side extras) and never by this crate.
-pub trait AsteroSetParam {
+/// (`astero/private/extras_support.f90:974-988`). Both routines are case
+/// code, so they are supplied by the caller (test-side extras) and never by
+/// this crate.
+pub trait AsteroCaseHooks {
     /// Applies parameter `name` (as written in `param_name(i)`) with value
     /// `val` to the run's `&star_job` and `&controls` in `bundle`.
     ///
@@ -404,6 +431,21 @@ pub trait AsteroSetParam {
         name: &str,
         val: f64,
     ) -> Result<(), StarError>;
+
+    /// The case's `set_constraint_value` (for example
+    /// `astero/test_suite/fast_newuoa/src/run_star_extras.f90:58-112`):
+    /// the current value of constraint `name` (as written in
+    /// `constraint_name(i)`) for `model`. Upstream calls it for every named
+    /// constraint before `check_limits` (`extras_support.f90:204-209`).
+    ///
+    /// # Errors
+    /// Returns [`StarError`] when the case's routine fails (`ierr /= 0`).
+    fn set_constraint_value(
+        &mut self,
+        model: &StarModel,
+        ctrl: &AsteroSearchControls,
+        name: &str,
+    ) -> Result<f64, StarError>;
 }
 
 /// Value of the search parameter named `name` in `params`, by the slot the
@@ -426,7 +468,7 @@ fn apply_params_to_bundle(
     bundle: &mut InlistBundle,
     ctrl: &AsteroSearchControls,
     params: &AsteroParamSet,
-    mut set_param: Option<&mut dyn AsteroSetParam>,
+    mut set_param: Option<&mut dyn AsteroCaseHooks>,
 ) -> Result<(), StarError> {
     // `astero_extras_controls` calls the case's `set_param` for every named
     // parameter in index order (`astero/private/extras_support.f90:974-988`).
@@ -495,7 +537,7 @@ pub(crate) fn failed_sample_result(
         logg: hr.log_g,
         log_l: hr.log_l,
         log_r: hr.log_r,
-        feh: 0.0,
+        constraint_values: [f64::NAN; MAX_CONSTRAINTS],
         delta_nu_uhz: 0.0,
         nu_max_uhz: 0.0,
         a_div_r: 0.0,
@@ -523,7 +565,7 @@ pub fn run_single_astero_track_with_logs(
     case_dir: &Path,
     logs_opts: StarLogsOptions<'_>,
 ) -> Result<(AsteroSampleResult, StageRunReport, StarModel), StarError> {
-    run_single_astero_track_with_set_param(
+    run_single_astero_track_with_case_hooks(
         base_bundle,
         ctrl,
         params,
@@ -536,13 +578,13 @@ pub fn run_single_astero_track_with_logs(
 }
 
 /// [`run_single_astero_track_with_logs`] with the case's `set_param` hook
-/// ([`AsteroSetParam`]).
+/// ([`AsteroCaseHooks`]).
 ///
 /// # Errors
 /// Returns [`StarError`] when a named search parameter has no hook, the hook
 /// fails, or the track fails.
 #[allow(clippy::too_many_arguments)]
-pub fn run_single_astero_track_with_set_param(
+pub fn run_single_astero_track_with_case_hooks(
     base_bundle: &InlistBundle,
     ctrl: &AsteroSearchControls,
     params: AsteroParamSet,
@@ -550,16 +592,24 @@ pub fn run_single_astero_track_with_set_param(
     max_steps_cap: Option<usize>,
     case_dir: &Path,
     logs_opts: StarLogsOptions<'_>,
-    set_param: Option<&mut dyn AsteroSetParam>,
+    mut set_param: Option<&mut dyn AsteroCaseHooks>,
 ) -> Result<(AsteroSampleResult, StageRunReport, StarModel), StarError> {
     let mut bundle = base_bundle.clone();
-    apply_params_to_bundle(&mut bundle, ctrl, &params, set_param)?;
+    apply_params_to_bundle(
+        &mut bundle,
+        ctrl,
+        &params,
+        set_param
+            .as_mut()
+            .map(|h| &mut **h as &mut dyn AsteroCaseHooks),
+    )?;
     if let Some(cap) = max_steps_cap {
         bundle.controls.max_model_number =
             Some(bundle.controls.max_model_number.map_or(cap, |m| m.min(cap)));
     }
     let mut extras = AsteroTrackExtras {
         ctrl,
+        hooks: set_param,
         params,
         sample_number,
         case_dir,
@@ -634,7 +684,7 @@ pub fn run_star_astero_with_options(
     logs_opts: StarLogsOptions<'_>,
     inlist_opts: InlistLoadOptions,
 ) -> Result<AsteroSearchReport, StarError> {
-    run_star_astero_with_set_param(
+    run_star_astero_with_case_hooks(
         case_dir,
         entry_inlist,
         max_steps_per_stage,
@@ -646,19 +696,19 @@ pub fn run_star_astero_with_options(
 }
 
 /// [`run_star_astero_with_options`] with the case's `set_param` hook
-/// ([`AsteroSetParam`]), called for every track.
+/// ([`AsteroCaseHooks`]), called for every track.
 ///
 /// # Errors
 /// Returns [`StarError`] when a named search parameter has no hook, the hook
 /// fails, or a track fails.
-pub fn run_star_astero_with_set_param(
+pub fn run_star_astero_with_case_hooks(
     case_dir: &Path,
     entry_inlist: &str,
     max_steps_per_stage: Option<usize>,
     ctrl: &AsteroSearchControls,
     logs_opts: StarLogsOptions<'_>,
     inlist_opts: InlistLoadOptions,
-    mut set_param: Option<&mut dyn AsteroSetParam>,
+    mut set_param: Option<&mut dyn AsteroCaseHooks>,
 ) -> Result<AsteroSearchReport, StarError> {
     let base_bundle = InlistBundle::from_file_in_case_dir_with_options(
         case_dir,
@@ -717,7 +767,7 @@ pub fn run_star_astero_with_set_param(
         } else {
             StarLogsOptions::default()
         };
-        let (mut sample, stage, m) = run_single_astero_track_with_set_param(
+        let (mut sample, stage, m) = run_single_astero_track_with_case_hooks(
             &base_bundle,
             active_ctrl,
             p,
@@ -727,7 +777,7 @@ pub fn run_star_astero_with_set_param(
             trial_logs,
             set_param
                 .as_mut()
-                .map(|h| &mut **h as &mut dyn AsteroSetParam),
+                .map(|h| &mut **h as &mut dyn AsteroCaseHooks),
         )?;
         total_steps += stage.steps_taken;
         let stage_term = stage.termination_code;

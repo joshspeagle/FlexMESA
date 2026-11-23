@@ -231,9 +231,15 @@ def classify_case_extras(suite: str, case_dir: pathlib.Path | str) -> str:
         `"unported"` otherwise. An unported case runs with default no-op
         hooks, so its upstream extras logic is not executed. A case whose
         handler is written but not in `ADAPTER_SERVED_STAR_HANDLERS` or
-        `ADAPTER_SERVED_BINARY_HANDLERS` is `"unported"`.
+        `ADAPTER_SERVED_BINARY_HANDLERS` is `"unported"`, as is one whose
+        attached handler lists `unported_routines`.
     """
-    if resolve_case_extras(suite, case_dir) is not None:
+    handler = resolve_case_extras(suite, case_dir)
+    if handler is not None:
+        # An attached handler that still skips routines with case logic
+        # (for example an astero case's `extras_after_evolve`) is unported.
+        if getattr(handler, "unported_routines", ()):
+            return "unported"
         return "ported"
     if extras_source_digest(case_dir) in STOCK_EXTRAS_DIGESTS:
         return "stock"

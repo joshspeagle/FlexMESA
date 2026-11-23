@@ -344,7 +344,8 @@ def run_trace_inprocess(
 
     Raises:
         ValueError: If ``max_steps < 0``, ``numerics_mode`` is invalid,
-            ``suite`` is unknown, or ``"astero"`` extras lack ``set_param``.
+            ``suite`` is unknown, or ``"astero"`` extras lack ``set_param``
+            or ``set_constraint_value``.
     """
     if max_steps is not None and max_steps < 0:
         raise ValueError(f"max_steps must be non-negative, got {max_steps}")

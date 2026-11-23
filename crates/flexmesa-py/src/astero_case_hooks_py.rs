@@ -1,34 +1,46 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
-//! PyO3 adapter for an `astero` case's own `set_param` (its
-//! `run_star_extras.f90`), supplied by test-side extras.
+//! PyO3 adapter for an `astero` case's own `set_param` and
+//! `set_constraint_value` (its `run_star_extras.f90`), supplied by test-side
+//! extras.
 //!
 //! The Python object implements
 //! `set_param(snapshot: dict, name: str, val: float) -> dict | None`. The
 //! snapshot holds the `astero_def` values a `set_param` reads and the current
 //! `&star_job` composition fields; the returned dictionary lists the
 //! `&star_job` / `&controls` assignments to make, applied in order.
+//!
+//! It also implements
+//! `set_constraint_value(snapshot: dict, name: str) -> float | str`. The
+//! snapshot holds the model values the routine reads (`surface_h1`,
+//! `surface_he3`, `surface_he4`, `mixing_type`, `r`, `Rsun`,
+//! `Z_div_X_solar`). Returning the string `"star_get_history_output"` asks for
+//! `star_get_history_output(s, name, ierr)`, the routine's `case default`.
 
-use flexmesa_astero::{AsteroSearchControls, AsteroSetParam};
+use flexmesa_astero::{AsteroCaseHooks, AsteroSearchControls};
 use flexmesa_star::controls::StarError;
 use flexmesa_star::inlist::InlistBundle;
+use flexmesa_star::model::StarModel;
+use flexmesa_star::report_utils::surface_avg_x_slot;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
 
 /// Wraps a Python object exposing `set_param(snapshot, name, val)`.
-pub struct PyAsteroSetParamAdapter {
+pub struct PyAsteroCaseHooksAdapter {
     py_obj: Py<PyAny>,
 }
 
-impl PyAsteroSetParamAdapter {
+impl PyAsteroCaseHooksAdapter {
     /// Builds the adapter.
     ///
     /// # Errors
     /// Returns `ValueError` when `obj` has no `set_param` method.
     pub fn new(py: Python<'_>, obj: Py<PyAny>) -> PyResult<Self> {
-        if !obj.bind(py).hasattr("set_param")? {
+        let o = obj.bind(py);
+        if !o.hasattr("set_param")? || !o.hasattr("set_constraint_value")? {
             return Err(PyValueError::new_err(
-                "astero extras must implement set_param(snapshot, name, val)",
+                "astero extras must implement set_param(snapshot, name, val) \
+                 and set_constraint_value(snapshot, name)",
             ));
         }
         Ok(Self { py_obj: obj })
@@ -118,7 +130,72 @@ fn apply_updates(
     Ok(())
 }
 
-impl AsteroSetParam for PyAsteroSetParamAdapter {
+/// Model values `set_constraint_value` reads.
+fn build_constraint_snapshot<'py>(
+    py: Python<'py>,
+    model: &StarModel,
+    ctrl: &AsteroSearchControls,
+) -> PyResult<Bound<'py, PyDict>> {
+    let slot = |iso: &str| {
+        model
+            .iso_names
+            .iter()
+            .position(|n| n.eq_ignore_ascii_case(iso))
+    };
+    let snap = PyDict::new(py);
+    // `s% surface_h1 = surface_avg_x(s, h1)` and the same for `he3`, `he4`
+    // (`star/private/report.f90:260-264`).
+    snap.set_item("surface_h1", surface_avg_x_slot(model, slot("h1")))?;
+    snap.set_item("surface_he3", surface_avg_x_slot(model, slot("he3")))?;
+    snap.set_item("surface_he4", surface_avg_x_slot(model, slot("he4")))?;
+    let mixing_type: Vec<i32> =
+        model.mixing_type.iter().map(|&m| m as i32).collect();
+    snap.set_item("mixing_type", mixing_type)?;
+    snap.set_item("r", model.r[..model.nz].to_vec())?;
+    snap.set_item("Rsun", flexmesa_const::RSUN)?;
+    snap.set_item("Z_div_X_solar", ctrl.z_div_x_solar)?;
+    Ok(snap)
+}
+
+impl AsteroCaseHooks for PyAsteroCaseHooksAdapter {
+    fn set_constraint_value(
+        &mut self,
+        model: &StarModel,
+        ctrl: &AsteroSearchControls,
+        name: &str,
+    ) -> Result<f64, StarError> {
+        let history = Python::attach(|py| -> Result<Option<f64>, StarError> {
+            let to_err = |e: &PyErr| {
+                StarError::InvalidInput(format!(
+                    "set_constraint_value: {}",
+                    format_py_err(py, e)
+                ))
+            };
+            let snap = build_constraint_snapshot(py, model, ctrl)
+                .map_err(|e| to_err(&e))?;
+            let res = self
+                .py_obj
+                .bind(py)
+                .call_method1("set_constraint_value", (snap, name))
+                .map_err(|e| to_err(&e))?;
+            if let Ok(tag) = res.extract::<String>() {
+                if tag == "star_get_history_output" {
+                    return Ok(None);
+                }
+                return Err(StarError::InvalidInput(format!(
+                    "set_constraint_value: unexpected string '{tag}'"
+                )));
+            }
+            res.extract::<f64>().map(Some).map_err(|e| to_err(&e))
+        })?;
+        match history {
+            Some(v) => Ok(v),
+            // `case default`: `star_get_history_output`, with
+            // `mesa_error` when it fails.
+            None => flexmesa_star::star_get_history_output(model, name),
+        }
+    }
+
     fn set_param(
         &mut self,
         bundle: &mut InlistBundle,
@@ -153,15 +230,15 @@ impl AsteroSetParam for PyAsteroSetParamAdapter {
 }
 
 /// Wraps optional test-side astero extras for
-/// `run_astero_test_suite_case_with_set_param`.
+/// `run_astero_test_suite_case_with_case_hooks`.
 ///
 /// # Errors
 /// Returns `ValueError` when `extras` has no `set_param` method.
 pub fn adapter_from_extras(
     py: Python<'_>,
     extras: Option<Py<PyAny>>,
-) -> PyResult<Option<PyAsteroSetParamAdapter>> {
+) -> PyResult<Option<PyAsteroCaseHooksAdapter>> {
     extras
-        .map(|obj| PyAsteroSetParamAdapter::new(py, obj))
+        .map(|obj| PyAsteroCaseHooksAdapter::new(py, obj))
         .transpose()
 }

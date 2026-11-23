@@ -49,14 +49,14 @@ pub mod surface_corr;
 pub use e2e::{
     run_astero_test_suite_case, run_astero_test_suite_case_with_logs,
     run_astero_test_suite_case_with_options,
-    run_astero_test_suite_case_with_set_param, TempCaseStaging,
+    run_astero_test_suite_case_with_case_hooks, TempCaseStaging,
 };
 pub use inlist_astero::{
     parse_astero_search_controls, parse_astero_search_controls_with_options,
     supported_astero_control_inventory, validate_astero_sections,
     AsteroControlInventory, AsteroParamSet, AsteroSearchControls,
     AsteroSearchParam, SpectroConstraint, ASTERO_SEARCH_CONTROLS_SUPPORTED,
-    ASTERO_SEARCH_CONTROLS_UNUSED,
+    ASTERO_SEARCH_CONTROLS_UNUSED, MAX_CONSTRAINTS,
 };
 pub use inlist_parser::{
     copy_cleaned_astero_case, validate_astero_sections_with_pgstar,
@@ -83,9 +83,9 @@ pub use scaling::{
 };
 pub use search_driver::{
     run_single_astero_track, run_single_astero_track_with_logs,
-    run_single_astero_track_with_set_param, run_star_astero,
+    run_single_astero_track_with_case_hooks, run_star_astero,
     run_star_astero_with_logs, run_star_astero_with_options,
-    run_star_astero_with_set_param, AsteroSetParam,
+    run_star_astero_with_case_hooks, AsteroCaseHooks,
     AsteroSearchReport,
 };
 pub use surface_corr::{

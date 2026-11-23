@@ -82,9 +82,69 @@ def _search_set_param(
     return upd
 
 
-class SearchSetParamAsteroExtras:
-    """`set_param` of `fast_newuoa`, `example_astero`, `fast_scan_grid` and
-    `fast_simplex` (see `_search_set_param`)."""
+# `case default` of `set_constraint_value`: the adapter evaluates
+# `star_get_history_output(s, name, ierr)` and fails on `ierr /= 0`.
+STAR_GET_HISTORY_OUTPUT = "star_get_history_output"
+
+# `convective_mixing` (`const/public/const_def.f90`).
+_CONVECTIVE_MIXING = 1
+
+
+def _search_set_constraint_value(snap: dict[str, Any], name: str) -> Any:
+    """`set_constraint_value`, byte-identical in the five search cases.
+
+    `astero/test_suite/fast_newuoa/src/run_star_extras.f90:58-112`, also
+    `example_astero` (`:58-112`), `fast_scan_grid` (`:64-118`),
+    `fast_simplex` (`:65-119`) and `fast_from_file` (`:65-119`).
+
+    Returns:
+        The constraint value, or `STAR_GET_HISTORY_OUTPUT` for the
+        `case default` branch.
+
+    Raises:
+        ValueError: For `Rcz` when no zone matches: upstream leaves `val`
+            (`intent(out)`) unset, which has no defined value
+            (`DECISIONS #43`, deferred #438).
+    """
+    x = max(snap["surface_h1"], 1.0e-10)
+    y = snap["surface_he3"] + snap["surface_he4"]
+    z = max(1.0e-99, min(1.0, 1 - x - y))
+    if name == "M_H":
+        return _rust.log10(z / x / snap["Z_div_X_solar"])
+    if name == "surface_Z_div_X":
+        return z / x
+    if name == "surface_He":
+        return y
+    if name == "Rcz":
+        mixing_type, r, rsun = snap["mixing_type"], snap["r"], snap["Rsun"]
+        # `do i = 1, s% nz-1`: locate the bottom of the solar convective zone.
+        for i in range(len(r) - 1):
+            if (
+                mixing_type[i + 1] != _CONVECTIVE_MIXING
+                and mixing_type[i] == _CONVECTIVE_MIXING
+            ):
+                if r[i + 1] > 0.25 * rsun and r[i] < 0.9 * rsun:
+                    return r[i] / rsun
+        raise ValueError(
+            "set_constraint_value('Rcz'): no convective-zone base between "
+            "0.25 and 0.9 Rsun, so upstream leaves val unset "
+            "(astero/test_suite/fast_newuoa/src/run_star_extras.f90:96-105)"
+        )
+    return STAR_GET_HISTORY_OUTPUT
+
+
+class SearchAsteroExtras:
+    """`set_param` and `set_constraint_value` of `fast_newuoa`,
+    `example_astero`, `fast_scan_grid` and `fast_simplex` (see
+    `_search_set_param` and `_search_set_constraint_value`).
+
+    Attributes:
+        unported_routines: Names of the case's other extras routines that
+            hold case logic this handler does not execute.
+    """
+
+    def __init__(self, unported_routines: tuple[str, ...] = ()) -> None:
+        self.unported_routines = unported_routines
 
     def set_param(
         self, snap: dict[str, Any], name: str, val: float
@@ -92,8 +152,12 @@ class SearchSetParamAsteroExtras:
         """Return the assignments `set_param(name, val)` makes."""
         return _search_set_param(snap, name, val)
 
+    def set_constraint_value(self, snap: dict[str, Any], name: str) -> Any:
+        """Return `set_constraint_value(name)`."""
+        return _search_set_constraint_value(snap, name)
 
-class FastFromFileAsteroExtras:
+
+class FastFromFileAsteroExtras(SearchAsteroExtras):
     """`set_param` of fast_from_file: the shared cases plus `semiconv`,
     `thermohal` and `diffusion`.
 
@@ -115,34 +179,116 @@ class FastFromFileAsteroExtras:
         return _search_set_param(snap, name, val)
 
 
-# SHA-256 of the normalized `set_param` subroutine text (see
-# `tests.case_extras.normalize_fortran`). The `set_param` of `astero_adipls`,
-# `astero_gyre` and `surface_effects` is empty (`ierr = 0`) and those cases
-# set `astero_just_call_my_extras_check_model`, so they get no handler.
+# Each routine of a `run_star_extras.f90`, from normalized source (see
+# `tests.case_extras.normalize_fortran`).
+_ROUTINE_RE = re.compile(
+    r"(?:integer |logical |real\(dp\) )?(subroutine|function) (\w+)\(.*?"
+    r"end \1 \2"
+)
+
+# SHA-256 of the normalized `set_param` subroutine. The `set_param` of
+# `astero_adipls`, `astero_gyre` and `surface_effects` is empty (`ierr = 0`)
+# and those cases set `astero_just_call_my_extras_check_model`, so they get
+# no handler.
 _SEARCH_SET_PARAM_DIGEST = (
     "ac14ad22a14892d35288d639531e9e47efb717d24af7d5d5d69f9237866c8e1a"
 )
 _FAST_FROM_FILE_SET_PARAM_DIGEST = (
     "a9e686db34f01d5aeb10baa26a6c21509996e93a94445559fe54625357168a92"
 )
+# `set_constraint_value`, identical in the five search cases.
+_SEARCH_SET_CONSTRAINT_VALUE_DIGEST = (
+    "4ff0c53d1c35875075d88a074967cf93e99c756f7ba010b714b9446c0fc4be29"
+)
+
+# Routines read and found to hold no case logic: pointer set-up, the shared
+# `test_suite_startup` / `test_suite_after_evolve` testhub and timing
+# helpers, `keep_going`, and zero extra columns or header items
+# (`astero/test_suite/fast_newuoa/src/run_star_extras.f90:38-55, 187-211,
+# 214-297`; `astero/test_suite/fast_simplex/src/run_star_extras.f90:38-62,
+# 322-377`).
+_STOCK_ROUTINE_DIGESTS: dict[str, frozenset[str]] = {
+    "extras_controls": frozenset(
+        {
+            "8c4491a51bdb7e6095c4a3aedcf0209de6ed66e7e15d115b09f7191072d59d3b",
+            "1bb2eb4578bf6b02d8a40bb39eaa4f7601fa0130d5ede1a9f1c44e66bab2d68f",
+        }
+    ),
+    "extras_startup": frozenset(
+        {"945bc8b7e365406c7f0fd5b9586324b868fdc676346914f7394876aab22f30f6"}
+    ),
+    "extras_after_evolve": frozenset(
+        {"46b2cec598812053b1b8bce308bba93fa4d7807fd850038773a78becb15f1b4b"}
+    ),
+    "extras_check_model": frozenset(
+        {
+            "0f8ffc1f59541485197e392a04c13581e4cb341d57c3ed32c7ac4659ae43d01d",
+            "3c867eb2541d822c6cc5a98b2bd567dea1c7c46041d68251631cac261075796d",
+        }
+    ),
+    "extras_finish_step": frozenset(
+        {"68db5ddf03a81fa38d8d47f145337a68c8b64bc2f369ede17c3ff4c7bc1c940b"}
+    ),
+    "how_many_extra_history_columns": frozenset(
+        {"90d8c21456f037612416160a5d81adaf65b71f9d8221fbc5481319c77573dbb3"}
+    ),
+    "data_for_extra_history_columns": frozenset(
+        {"01288ef1cc03754d84fe38a8e7bb503ddceb5305aef9bab2f9adbd74d41db7ec"}
+    ),
+    "how_many_extra_profile_columns": frozenset(
+        {"294e7adcf638b1d7511d2cda6b4c43a441fb2c2f9229210c52c2f19661ac7248"}
+    ),
+    "data_for_extra_profile_columns": frozenset(
+        {"978902d5eebc99f1f38df1a5f1d46c13a57f66533c2b97350580801030de27d7"}
+    ),
+    "how_many_extra_history_header_items": frozenset(
+        {"36dcb7dbcbf792f2fbdf8c3f64ddd00e9910316da76942a32b7d112158ba8736"}
+    ),
+    "data_for_extra_history_header_items": frozenset(
+        {"7d4b010584bd8c9f5fda7536042e31a92d02d513574242f6d2aa3df9acb48a65"}
+    ),
+    "how_many_extra_profile_header_items": frozenset(
+        {"eab88cc387da727099835c262f5b229be401824329952b39ab58ec977d89a634"}
+    ),
+    "data_for_extra_profile_header_items": frozenset(
+        {"45e7b422878397546196a7a2c25d8b29cd75e1973536c9ed5201b1efb136b700"}
+    ),
+}
 
 
 def match_astero_extras(norm_star: str, digest: Any) -> Any:
-    """Match an astero case's `set_param` from normalized Fortran source.
+    """Match an astero case's extras from normalized Fortran source.
+
+    A handler is returned when the case's `set_param` and
+    `set_constraint_value` are ported. Every other routine whose digest is
+    not a reviewed no-logic template is listed in the handler's
+    `unported_routines`, so the ledger keeps the case `unported`.
 
     Args:
         norm_star: Normalized `run_star_extras.f90` text.
         digest: Callable returning the SHA-256 hex digest of a string.
 
     Returns:
-        A handler implementing `set_param`, or `None`.
+        A handler implementing `set_param` and `set_constraint_value`, or
+        `None`.
     """
-    m = _SET_PARAM_RE.search(norm_star)
-    if m is None:
+    routines = {
+        m.group(2): digest(m.group(0)) for m in _ROUTINE_RE.finditer(norm_star)
+    }
+    if (
+        routines.get("set_constraint_value")
+        != _SEARCH_SET_CONSTRAINT_VALUE_DIGEST
+    ):
         return None
-    d = digest(m.group(0))
-    if d == _SEARCH_SET_PARAM_DIGEST:
-        return SearchSetParamAsteroExtras()
-    if d == _FAST_FROM_FILE_SET_PARAM_DIGEST:
-        return FastFromFileAsteroExtras()
+    unported = tuple(
+        name
+        for name, d in routines.items()
+        if name not in ("set_param", "set_constraint_value")
+        and d not in _STOCK_ROUTINE_DIGESTS.get(name, frozenset())
+    )
+    set_param = routines.get("set_param")
+    if set_param == _SEARCH_SET_PARAM_DIGEST:
+        return SearchAsteroExtras(unported)
+    if set_param == _FAST_FROM_FILE_SET_PARAM_DIGEST:
+        return FastFromFileAsteroExtras(unported)
     return None

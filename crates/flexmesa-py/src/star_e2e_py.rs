@@ -6,7 +6,7 @@
 use std::path::Path;
 
 use flexmesa_astero::{
-    run_astero_test_suite_case_with_set_param, AsteroSetParam,
+    run_astero_test_suite_case_with_case_hooks, AsteroCaseHooks,
 };
 use flexmesa_binary::{
     BinaryCaseRunReport, BinaryLogsOptions,
@@ -309,21 +309,21 @@ pub fn star_run_astero_test_suite_case<'py>(
     extras: Option<Py<PyAny>>,
 ) -> PyResult<Bound<'py, PyDict>> {
     let mut set_param =
-        crate::astero_set_param_py::adapter_from_extras(py, extras)?;
+        crate::astero_case_hooks_py::adapter_from_extras(py, extras)?;
     let dir = Path::new(case_dir).to_path_buf();
     let load_opts = InlistLoadOptions {
         allow_unsupported_controls,
     };
     let rep = py
         .detach(|| {
-            run_astero_test_suite_case_with_set_param(
+            run_astero_test_suite_case_with_case_hooks(
                 &dir,
                 skip_optional,
                 max_steps_per_stage,
                 verify_restart,
                 StarLogsOptions::default(),
                 load_opts,
-                set_param.as_mut().map(|a| a as &mut dyn AsteroSetParam),
+                set_param.as_mut().map(|a| a as &mut dyn AsteroCaseHooks),
             )
         })
         .map_err(to_py_err)?;

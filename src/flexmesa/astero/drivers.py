@@ -380,7 +380,9 @@ def run_astero_test_suite_case(
         allow_unsupported_controls: When ``True``, bypass strict failure on
             unread, unused, or unimplemented upstream MESA controls.
         extras: Optional test-side object implementing the case's own
-            ``set_param(snapshot, name, val)`` from its ``run_star_extras.f90``.
+            ``set_param(snapshot, name, val)`` and
+            ``set_constraint_value(snapshot, name)`` from its
+            ``run_star_extras.f90``.
             A search case with named parameters fails without it.
 
     Returns:

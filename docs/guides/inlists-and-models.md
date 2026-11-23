@@ -229,7 +229,7 @@ flexmesa trace binary jdot_gr_check --out ./bin_out --timeout-sec 600 --max-rss-
 flexmesa trace astero surface_effects --out ./astero_out --allow-unsupported-controls
 ```
 
-The astero search cases (`fast_newuoa`, `fast_simplex`, `fast_scan_grid`, `fast_from_file` and `example_astero`) take their search parameters through the case's own `set_param` from `run_star_extras.f90`, which lives in test-side extras. Trace them with `--extras-factory tests.case_extras:resolve_case_extras`; without it, the search stops with an error that names the missing `set_param` hook.
+The astero search cases (`fast_newuoa`, `fast_simplex`, `fast_scan_grid`, `fast_from_file` and `example_astero`) take their search parameters and constraint values through the case's own `set_param` and `set_constraint_value` from `run_star_extras.f90`, which live in test-side extras. Trace them with `--extras-factory tests.case_extras:resolve_case_extras`; without it, the search stops with an error that names the missing hook.
 
 Unmodified upstream inlists set controls that are not yet ported. Without `--allow-unsupported-controls` each command stops and prints the full list of unsupported controls. With the flag the same list is printed as a warning and the run continues past them, so the resulting trajectory is exploratory and is never counted as parity evidence.
 

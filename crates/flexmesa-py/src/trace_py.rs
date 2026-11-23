@@ -6,7 +6,7 @@ use std::collections::HashSet;
 use std::path::Path;
 
 use flexmesa_astero::{
-    run_astero_test_suite_case_with_set_param, AsteroSetParam,
+    run_astero_test_suite_case_with_case_hooks, AsteroCaseHooks,
 };
 use flexmesa_binary::{
     run_binary_test_suite_case_with_extras, BinaryLogsOptions,
@@ -192,7 +192,7 @@ pub fn trace_astero_case<'py>(
 ) -> PyResult<Bound<'py, PyDict>> {
     let mode = parse_opt_mode(numerics_mode)?;
     let mut set_param =
-        crate::astero_set_param_py::adapter_from_extras(py, extras)?;
+        crate::astero_case_hooks_py::adapter_from_extras(py, extras)?;
     let load_opts = InlistLoadOptions {
         allow_unsupported_controls,
     };
@@ -205,14 +205,14 @@ pub fn trace_astero_case<'py>(
                     respect_intervals,
                     write_profiles,
                 );
-                run_astero_test_suite_case_with_set_param(
+                run_astero_test_suite_case_with_case_hooks(
                     Path::new(case_dir),
                     skip_optional,
                     max_steps_per_stage,
                     false,
                     opts,
                     load_opts,
-                    set_param.as_mut().map(|a| a as &mut dyn AsteroSetParam),
+                    set_param.as_mut().map(|a| a as &mut dyn AsteroCaseHooks),
                 )
             })
         })

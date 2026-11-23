@@ -748,6 +748,11 @@ pub struct StarControls {
 impl StarControls {
     /// Returns `true` when velocity time-centering is active at `model_number`
     /// (`star/private/evolve.f90:386-388`).
+    ///
+    /// Upstream evaluates the threshold on the first try of a step, before
+    /// `prepare_for_new_try` advances `model_number` (`evolve.f90:401-402,
+    /// 2012`), so callers pass the previous generation's number,
+    /// `StarModel::model_number_old`.
     #[must_use]
     pub fn is_velocity_time_centered(&self, model_number: usize) -> bool {
         self.using_velocity_time_centering

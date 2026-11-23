@@ -186,7 +186,9 @@ impl MdotRedoState {
     /// Initializes the redo state before the first `do_adjust_mass_step` try of a
     /// timestep (`setup_for_implicit_mdot_loop` in `evolve.f90:747-785`).
     pub fn setup(model: &mut StarModel) -> Self {
-        let has_prev_generation = !model.lnd_old.is_empty();
+        // Upstream tests `s% generations == 2` (`star/private/evolve.f90:768`),
+        // true during every step once `new_generation` has run.
+        let has_prev_generation = model.generations == 2;
         Self::setup_with_generation(model, has_prev_generation)
     }
 

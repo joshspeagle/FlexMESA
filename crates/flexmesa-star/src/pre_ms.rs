@@ -515,7 +515,10 @@ pub fn build_pre_ms_model_with_configs(
     model.mstar = mstar;
     model.mstar_start = mstar;
     model.mstar_old = mstar;
-    model.model_number = 1;
+    // A newly created model is model 0 (`set_starting_star_data`,
+    // `star/private/init.f90:676`); `build_pre_ms_model` does not change it
+    // (`star/private/pre_ms_model.f90`), so the first step computes model 1.
+    model.model_number = 0;
     model.star_age = 0.0;
     // `create_star` sets `dt_next = 1d-5*secyer` after `build_pre_ms_model`
     // (`star/private/init.f90:1007`); the first step takes it as `dt`.

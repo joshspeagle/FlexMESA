@@ -52,8 +52,24 @@ pub struct StarModel {
     pub kap_config: KapConfig,
 
     // --- Scalar Evolutionary State ---
-    /// Current evolutionary step counter (`model_number`).
+    /// Current evolutionary step counter (`model_number`). During a step it
+    /// is already the number of the model being computed,
+    /// `model_number_old + 1` (`prepare_for_new_try`,
+    /// `star/private/evolve.f90:2012, 2017`).
     pub model_number: usize,
+    /// Model number of the previous generation (`model_number_old`), stored
+    /// by `new_generation` (`star/private/evolve_support.f90:80`) through
+    /// [`StarModel::save_old_values`].
+    #[serde(default)]
+    pub model_number_old: usize,
+    /// Number of stored model generations (`generations`): `0` before a model
+    /// exists (`star/private/init.f90:665`), `1` after a model is built or
+    /// loaded (`star/private/init.f90:965-1033`,
+    /// `star/private/read_model.f90:438, 463`), and `2` once
+    /// `prepare_for_new_step` has stored the previous model
+    /// (`star/private/evolve.f90:1897`).
+    #[serde(default)]
+    pub generations: u8,
     /// Starting model number at load or `set_initial_model_number` (`init_model_number`).
     pub init_model_number: isize,
     /// Whether the upcoming step is the first evolutionary step of a run (`doing_first_model_of_run`).
@@ -466,6 +482,8 @@ impl StarModel {
             eos_config: EosConfig::default(),
             kap_config,
             model_number: 0,
+            model_number_old: 0,
+            generations: 0,
             init_model_number: 0,
             doing_first_model_of_run: true,
             star_age: 0.0,

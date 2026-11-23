@@ -349,7 +349,12 @@ pub fn star_evolve_step_part1(
         };
 
     snapshot_step_old_extras(model);
+    // `new_generation` stores `model_number_old = model_number`
+    // (`star/private/evolve_support.f90:80`); a retry enters with
+    // `model_number` restored to the pre-step value, so this is idempotent.
     model.save_old_values();
+    // `prepare_for_new_step` (`star/private/evolve.f90:1897`).
+    model.generations = 2;
     record_start_of_step_energy_integrals(model);
     snapshot_step_start_extras(model);
     model.aux.okay_to_set_mlt_vc = true;
@@ -404,8 +409,8 @@ pub fn star_evolve_step_part1(
                 .max(0.0);
         }
         if dt_next_in <= 0.0 {
-            let _ = restore_attempt_state(model, pre_remesh_model.take(), saved);
-            model.dt = dt_prev;
+            let _ =
+                abandon_step(model, pre_remesh_model.take(), saved, dt_prev);
             let reason = check_max_age_reached_reason(model)
                 .unwrap_or_else(|| String::from("dt_is_zero"));
             return Err(StarError::Terminated {
@@ -468,6 +473,10 @@ pub fn star_evolve_step_part1(
     model.solver_first_try_of_step = first_try;
     model.why_tlim_neg_x = false;
     model.aux.step_hist.num_rotation_solver_steps = 0;
+    // `prepare_for_new_try` (`star/private/evolve.f90:2012, 2017`): every
+    // check inside the step sees the number of the model being computed.
+    let target_mod = model.model_number_old + 1;
+    model.model_number = target_mod;
 
     // `set_start_of_step_info` (`star/private/evolve.f90:1784-1787`)
     if model.nz > 0 {
@@ -475,6 +484,32 @@ pub fn star_evolve_step_part1(
         model.aux.step_hist.prev_ledd =
             Some(crate::report_utils::eval_ledd_erg_s(model));
     }
+    if let Err(e) = set_step_mdot(model, explicit_step_mdot, extras) {
+        model.model_number = model.model_number_old;
+        return Err(e);
+    }
+
+    Ok(StarStepPart1State {
+        dt_try,
+        dt_prev,
+        has_prev_generation,
+        rsp2_e_old,
+        num_splits,
+        num_merges,
+        pre_remesh_model,
+        saved,
+        target_mod,
+    })
+}
+
+/// Evaluates the step's `mstar_dot` (`set_mdot` and `other_adjust_mdot`,
+/// `star/private/evolve.f90:426-427`), restoring the explicit rate when the
+/// `other_adjust_mdot` hook declines.
+fn set_step_mdot(
+    model: &mut StarModel,
+    explicit_step_mdot: f64,
+    extras: &mut dyn StarExtras,
+) -> Result<(), StarError> {
     if model.controls.use_other_adjust_mdot {
         let prev_rot_boost = model.aux.step_hist.rotational_mdot_boost_old;
         do_set_mdot_with_extras(model, extras)?;
@@ -489,19 +524,7 @@ pub fn star_evolve_step_part1(
     } else {
         do_set_mdot_with_extras(model, extras)?;
     }
-
-    let target_mod = model.model_number + 1;
-    Ok(StarStepPart1State {
-        dt_try,
-        dt_prev,
-        has_prev_generation,
-        rsp2_e_old,
-        num_splits,
-        num_merges,
-        pre_remesh_model,
-        saved,
-        target_mod,
-    })
+    Ok(())
 }
 
 fn run_post_henyey_omega_mix(
@@ -652,8 +675,12 @@ pub fn star_evolve_step_part2(
     };
 
     if matches!(&attempt, Err(e) if !e.is_retriable()) {
-        restore_attempt_state(model, state.pre_remesh_model.take(), saved)?;
-        model.dt = state.dt_prev;
+        abandon_step(
+            model,
+            state.pre_remesh_model.take(),
+            saved,
+            state.dt_prev,
+        )?;
         return Err(attempt.expect_err("matched non-retriable StarError above"));
     }
 
@@ -665,23 +692,22 @@ pub fn star_evolve_step_part2(
             model.time_sec = saved.time_sec + dt_try;
             model.star_age = model.aux.step_hist.time_sec / SECYER;
             model.dt = dt_try;
-            // Evaluate global energy accounting at the step's active
-            // `model_number` (`target_mod - 1`) before incrementing so
-            // `is_velocity_time_centered` matches `hydro_energy::setup_dl_dm`.
+            // Global energy accounting (`star/private/evolve.f90:1079-1590`)
+            // runs at the in-step `model_number`; velocity time-centering is
+            // keyed on `model_number_old` there and in `setup_dL_dm`.
             update_step_energy_conservation(model, dt_try);
             if let Some(reason) = non_finite_energy_error_reason(model) {
-                restore_attempt_state(
+                abandon_step(
                     model,
                     state.pre_remesh_model.take(),
                     saved,
+                    state.dt_prev,
                 )?;
-                model.dt = state.dt_prev;
                 return Err(StarError::Terminated {
                     model_number: target_mod,
                     reason: String::from(reason),
                 });
             }
-            model.model_number = target_mod;
 
             if model.controls.ts_stop.max_timestep_hi_t_limit > 0.0
                 && model.controls.max_years_for_timestep
@@ -712,8 +738,7 @@ pub fn star_evolve_step_part2(
             jl.field_str("why", &why);
             jl.emit();
         }
-        restore_attempt_state(model, None, saved)?;
-        model.dt = state.dt_prev;
+        abandon_step(model, None, saved, state.dt_prev)?;
         model.why_tlim_neg_x = why_tlim_neg_x;
         return Ok(StarStepAttemptOutcome::Retry {
             reason: why,
@@ -733,8 +758,7 @@ pub fn star_evolve_step_part2(
         jl.field_str("why", &why);
         jl.emit();
     }
-    restore_attempt_state(model, None, saved)?;
-    model.dt = state.dt_prev;
+    abandon_step(model, None, saved, state.dt_prev)?;
     model.why_tlim_neg_x = why_tlim_neg_x;
     Ok(StarStepAttemptOutcome::Retry {
         reason: why,
@@ -871,6 +895,7 @@ pub(crate) fn star_evolve_step_outcome_with_extras(
         let prev_dt_old = model.dt_old;
         snapshot_step_old_extras(model);
         model.save_old_values();
+        model.generations = 2;
         model.dt_old = prev_dt_old;
         model.aux.rsp.time_old_sec = model.aux.rsp.time_sec;
         let (e_old, _) = crate::rsp_driver::rsp_total_energy_integrals(model);
@@ -992,7 +1017,11 @@ pub(crate) fn star_evolve_step_outcome_with_extras(
     };
 
     snapshot_step_old_extras(model);
+    // `new_generation` stores `model_number_old = model_number`
+    // (`star/private/evolve_support.f90:80`).
     model.save_old_values();
+    // `prepare_for_new_step` (`star/private/evolve.f90:1897`).
+    model.generations = 2;
     record_start_of_step_energy_integrals(model);
     snapshot_step_start_extras(model);
     model.aux.okay_to_set_mlt_vc = true;
@@ -1045,8 +1074,7 @@ pub(crate) fn star_evolve_step_outcome_with_extras(
             .max(0.0);
     }
     if dt_next_in <= 0.0 {
-        let _ = restore_attempt_state(model, pre_remesh_model.take(), saved);
-        model.dt = dt_prev;
+        let _ = abandon_step(model, pre_remesh_model.take(), saved, dt_prev);
         let reason = check_max_age_reached_reason(model)
             .unwrap_or_else(|| String::from("dt_is_zero"));
         return Err(StarError::Terminated {
@@ -1089,7 +1117,7 @@ pub(crate) fn star_evolve_step_outcome_with_extras(
 
     let dt_floor = model.controls.min_timestep_limit.max(0.0);
     let max_retries = model.controls.ts_stop.retry_limit;
-    let target_mod = model.model_number + 1;
+    let target_mod = model.model_number_old + 1;
     let mut retries = 0_usize;
     let mut redo_cnt = 0_usize;
     let mut first_try = true;
@@ -1100,6 +1128,10 @@ pub(crate) fn star_evolve_step_outcome_with_extras(
         model.solver_first_try_of_step = first_try;
         model.why_tlim_neg_x = false;
         model.aux.step_hist.num_rotation_solver_steps = 0;
+        // `prepare_for_new_try` (`star/private/evolve.f90:2012, 2017`): every
+        // try, including retries and redos, computes model
+        // `model_number_old + 1`, and every check inside the step sees it.
+        model.model_number = target_mod;
         // `set_start_of_step_info` (`star/private/evolve.f90:1784-1787`):
         // snapshot start-of-step `starting_T_center` and optical-depth-averaged
         // `prev_Ledd` before evaluating `set_mdot`.
@@ -1108,19 +1140,9 @@ pub(crate) fn star_evolve_step_outcome_with_extras(
             model.aux.step_hist.prev_ledd =
                 Some(crate::report_utils::eval_ledd_erg_s(model));
         }
-        if model.controls.use_other_adjust_mdot {
-            let prev_rot_boost = model.aux.step_hist.rotational_mdot_boost_old;
-            do_set_mdot_with_extras(model, extras)?;
-            if let Some(adj_mdot) =
-                extras.other_adjust_mdot(model, model.mstar_dot)?
-            {
-                model.mstar_dot = adj_mdot;
-            } else {
-                model.mstar_dot = explicit_step_mdot;
-                model.aux.step_hist.rotational_mdot_boost_old = prev_rot_boost;
-            }
-        } else {
-            do_set_mdot_with_extras(model, extras)?;
+        if let Err(e) = set_step_mdot(model, explicit_step_mdot, extras) {
+            model.model_number = model.model_number_old;
+            return Err(e);
         }
 
         let mut mdot_redo =
@@ -1228,23 +1250,22 @@ pub(crate) fn star_evolve_step_outcome_with_extras(
                 model.time_sec = pre_step_time_sec + dt_try;
                 model.star_age = model.aux.step_hist.time_sec / SECYER;
                 model.dt = dt_try;
-                // Evaluate global energy accounting at the step's active
-                // `model_number` (`target_mod - 1`) before incrementing so
-                // `is_velocity_time_centered` matches `hydro_energy::setup_dl_dm`.
+                // Global energy accounting (`evolve.f90:1079-1590`) runs at
+                // the in-step `model_number`; velocity time-centering is
+                // keyed on `model_number_old` there and in `setup_dL_dm`.
                 update_step_energy_conservation(model, dt_try);
                 if let Some(reason) = non_finite_energy_error_reason(model) {
-                    restore_attempt_state(
+                    abandon_step(
                         model,
                         pre_remesh_model.take(),
                         saved,
+                        dt_prev,
                     )?;
-                    model.dt = dt_prev;
                     return Err(StarError::Terminated {
                         model_number: target_mod,
                         reason: String::from(reason),
                     });
                 }
-                model.model_number = target_mod;
                 if model.controls.ts_stop.max_timestep_hi_t_limit > 0.0
                     && model.controls.max_years_for_timestep
                         != model
@@ -1266,13 +1287,12 @@ pub(crate) fn star_evolve_step_outcome_with_extras(
                     match do_check_limits(model, None, false) {
                         Ok(out) => out,
                         Err(e) => {
-                            model.model_number -= 1;
-                            restore_attempt_state(
+                            abandon_step(
                                 model,
                                 pre_remesh_model.take(),
                                 saved,
+                                dt_prev,
                             )?;
-                            model.dt = dt_prev;
                             return Err(e);
                         }
                     };
@@ -1281,42 +1301,36 @@ pub(crate) fn star_evolve_step_outcome_with_extras(
                         let max_redos = model.controls.ts_stop.redo_limit;
                         redo_cnt += 1;
                         if max_redos > 0 && redo_cnt > max_redos {
-                            let terminated_model = model.model_number;
-                            model.model_number -= 1;
-                            restore_attempt_state(
+                            abandon_step(
                                 model,
                                 pre_remesh_model.take(),
                                 saved,
+                                dt_prev,
                             )?;
-                            model.dt = dt_prev;
                             return Err(StarError::Terminated {
-                                model_number: terminated_model,
+                                model_number: target_mod,
                                 reason: String::from("redo_limit"),
                             });
                         }
                         if !(dt_new.is_finite() && dt_new > 0.0) {
-                            let terminated_model = model.model_number;
-                            model.model_number -= 1;
-                            restore_attempt_state(
+                            abandon_step(
                                 model,
                                 pre_remesh_model.take(),
                                 saved,
+                                dt_prev,
                             )?;
-                            model.dt = dt_prev;
                             return Err(StarError::Terminated {
-                                model_number: terminated_model,
+                                model_number: target_mod,
                                 reason: String::from("dt_is_zero"),
                             });
                         }
                         model.num_redos += 1;
-                        model.model_number -= 1;
                         restore_attempt_state(model, None, saved)?;
                         dt_try = dt_new;
                         first_try = false;
                         continue;
                     }
                     LimitCheckOutcome::Retry { reason } => {
-                        model.model_number -= 1;
                         ts_retry_reason = Some(reason);
                     }
                     LimitCheckOutcome::Terminate { code, .. } => {
@@ -1346,21 +1360,18 @@ pub(crate) fn star_evolve_step_outcome_with_extras(
                                 pending_check_term = Some(reason);
                             }
                             ExtrasDirective::Error(msg) => {
-                                model.model_number -= 1;
-                                restore_attempt_state(
+                                abandon_step(
                                     model,
                                     pre_remesh_model.take(),
                                     saved,
+                                    dt_prev,
                                 )?;
-                                model.dt = dt_prev;
                                 return Err(StarError::ConvergenceFailure(msg));
                             }
                             ExtrasDirective::Redo => {
-                                model.model_number -= 1;
                                 requested_redo = true;
                             }
                             ExtrasDirective::Retry => {
-                                model.model_number -= 1;
                                 ts_retry_reason = Some(String::from(
                                     "extras_check_model retry",
                                 ));
@@ -1371,7 +1382,6 @@ pub(crate) fn star_evolve_step_outcome_with_extras(
                             let (ts_action, ts_rep, ts_extra_redo) =
                                 timestep_controller_with_extras(model, extras)?;
                             if ts_extra_redo {
-                                model.model_number -= 1;
                                 requested_redo = true;
                             } else {
                                 if crate::step_trace::enabled(
@@ -1418,21 +1428,17 @@ pub(crate) fn star_evolve_step_outcome_with_extras(
                                         ));
                                     }
                                     TimestepAction::Retry(reason) => {
-                                        model.model_number -= 1;
                                         ts_retry_reason = Some(reason);
                                     }
                                     TimestepAction::Terminate(reason) => {
-                                        let terminated_model =
-                                            model.model_number;
-                                        model.model_number -= 1;
-                                        restore_attempt_state(
+                                        abandon_step(
                                             model,
                                             pre_remesh_model.take(),
                                             saved,
+                                            dt_prev,
                                         )?;
-                                        model.dt = dt_prev;
                                         return Err(StarError::Terminated {
-                                            model_number: terminated_model,
+                                            model_number: target_mod,
                                             reason,
                                         });
                                     }
@@ -1451,8 +1457,7 @@ pub(crate) fn star_evolve_step_outcome_with_extras(
             if model.controls.ts_stop.redo_limit > 0
                 && redo_cnt > model.controls.ts_stop.redo_limit
             {
-                restore_attempt_state(model, pre_remesh_model.take(), saved)?;
-                model.dt = dt_prev;
+                abandon_step(model, pre_remesh_model.take(), saved, dt_prev)?;
                 return Err(StarError::Terminated {
                     model_number: target_mod,
                     reason: String::from("redo_limit"),
@@ -1466,8 +1471,7 @@ pub(crate) fn star_evolve_step_outcome_with_extras(
         // Fail immediately on non-retriable configuration, I/O, or termination
         // errors without burning retry budget or shrinking `dt`.
         if matches!(&attempt, Err(e) if !e.is_retriable()) {
-            restore_attempt_state(model, pre_remesh_model.take(), saved)?;
-            model.dt = dt_prev;
+            abandon_step(model, pre_remesh_model.take(), saved, dt_prev)?;
             return Err(
                 attempt.expect_err("matched non-retriable StarError above")
             );
@@ -1499,8 +1503,7 @@ pub(crate) fn star_evolve_step_outcome_with_extras(
 
         retries = next_retries;
         if hit_retry_limit {
-            restore_attempt_state(model, pre_remesh_model.take(), saved)?;
-            model.dt = dt_prev;
+            abandon_step(model, pre_remesh_model.take(), saved, dt_prev)?;
             return Err(StarError::StepFailure(Box::new(
                 build_exhausted_step_failure(
                     attempt,
@@ -1516,8 +1519,7 @@ pub(crate) fn star_evolve_step_outcome_with_extras(
         }
 
         if hit_min_dt {
-            restore_attempt_state(model, pre_remesh_model.take(), saved)?;
-            model.dt = dt_prev;
+            abandon_step(model, pre_remesh_model.take(), saved, dt_prev)?;
             return Err(StarError::Terminated {
                 model_number: target_mod,
                 reason: String::from("min_timestep_limit"),
@@ -1555,8 +1557,7 @@ pub(crate) fn star_evolve_step_outcome_with_extras(
         if max_num_retries >= 0
             && (model.num_retries as isize) > max_num_retries
         {
-            restore_attempt_state(model, pre_remesh_model.take(), saved)?;
-            model.dt = dt_prev;
+            abandon_step(model, pre_remesh_model.take(), saved, dt_prev)?;
             return Err(StarError::Terminated {
                 model_number: target_mod,
                 reason: String::from("max_number_retries"),
@@ -1704,6 +1705,23 @@ fn is_at_or_past_max_age(model: &StarModel) -> bool {
             .controls
             .max_age_in_seconds
             .is_some_and(|lim| lim > 0.0 && time_sec >= lim)
+}
+
+/// Abandons the step: restores the pre-step state, the previous `dt` and the
+/// pre-step `model_number` (`model_number_old`). Upstream leaves
+/// `model_number_old + 1` in place when it terminates inside a step
+/// (`star/private/evolve.f90:2012`); here a failed or terminated step returns
+/// the model as it was before the step, so its counter is restored with it.
+fn abandon_step(
+    model: &mut StarModel,
+    snap: Option<crate::PrimaryStateBuffer>,
+    saved: PreAttemptScalars,
+    dt_prev: f64,
+) -> Result<bool, StarError> {
+    let restored_remesh = restore_attempt_state(model, snap, saved)?;
+    model.dt = dt_prev;
+    model.model_number = model.model_number_old;
+    Ok(restored_remesh)
 }
 
 fn restore_attempt_state(

@@ -560,6 +560,8 @@ pub fn read_mod_str(
         crate::micro::set_basic_vars(&mut model)?;
         model.save_start_values()?;
         model.save_old_values();
+        // `star/private/read_model.f90:438, 463`.
+        model.generations = 1;
     } else {
         model.finish_init_model()?;
         if (saved_dq.iter().sum::<f64>() - 1.0).abs() <= 1.0e-12 {

@@ -101,11 +101,13 @@ where
         let h1 = x[i + 1] - x[i];
         let h2 = x[i + 2] - x[i + 1];
         let h12 = h1 + h2;
-        let w_outer = h12 / 6.0;
-        let c0 = T::from_f64(w_outer * (2.0 * h1 - h2) / h1);
-        let c1 = T::from_f64(w_outer * (h12 * h12) / (h1 * h2));
-        let c2 = T::from_f64(w_outer * (2.0 * h2 - h1) / h2);
-        sum = sum + y_at(i) * c0 + y_at(i + 1) * c1 + y_at(i + 2) * c2;
+        let f0 = y_at(i);
+        let f1 = y_at(i + 1);
+        let f2 = y_at(i + 2);
+        let t0 = (f0 * T::from_f64(2.0 * h1 - h2)).div_f64(h1);
+        let t1 = (f1 * T::from_f64(h12 * h12)).div_f64(h1 * h2);
+        let t2 = (f2 * T::from_f64(2.0 * h2 - h1)).div_f64(h2);
+        sum = sum + T::from_f64(h12 / 6.0) * (t0 + t1 + t2);
         i += 2;
     }
     if n.is_multiple_of(2) {
@@ -227,7 +229,7 @@ pub fn find_interval<T: RealScalar>(x: &[f64], val: T) -> (usize, T) {
     if dx.abs() < 1.0e-30 {
         (lo, T::zero())
     } else {
-        let t = (val - T::from_f64(x[lo])) / T::from_f64(dx);
+        let t = (val - T::from_f64(x[lo])).div_f64(dx);
         (lo, t)
     }
 }
@@ -286,8 +288,10 @@ pub fn compute_interp_radius(
         let min_v = grid.iter().copied().fold(f64::INFINITY, f64::min);
         let max_v = grid.iter().copied().fold(f64::NEG_INFINITY, f64::max);
         let range = (max_v - min_v).max(1.0e-12);
+        let norm_val = (val - min_v) / range;
         let nearest = grid[nearest_1d_idx(grid, val)];
-        let d = (val - nearest) / range;
+        let grid_val = (nearest - min_v) / range;
+        let d = norm_val - grid_val;
         d * d
     };
     (axis_dist_sq(t_grid, teff)

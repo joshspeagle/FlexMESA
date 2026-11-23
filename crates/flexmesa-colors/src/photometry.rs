@@ -118,7 +118,7 @@ pub fn calculate_synthetic_flux<T: RealScalar>(
             flux: int_filt,
         });
     }
-    Ok(int_flux / T::from_f64(int_filt))
+    Ok(int_flux.div_f64(int_filt))
 }
 
 /// Computes the synthetic filter magnitude
@@ -164,7 +164,7 @@ pub fn calculate_synthetic<T: RealScalar>(
             flux: syn_flux.val(),
         });
     }
-    Ok(T::from_f64(-2.5) * (syn_flux / T::from_f64(zero_point_flux)).log10())
+    Ok(T::from_f64(-2.5) * syn_flux.div_f64(zero_point_flux).log10())
 }
 
 /// Computes the Vega photon-counting zero-point flux for a filter curve
@@ -345,24 +345,38 @@ impl SedCube {
 
         let mut bol_flux = T::zero();
         let mut int_flux = [T::zero(); NUM_JOHNSON_FILTERS];
-        // Accumulate bolometric and photon-weighted filter integrals in one
-        // fused pass over all precomputed non-uniform Simpson panels.
-        for (p, &[c0_f, c1_f, c2_f]) in self.simpson_panels.iter().enumerate() {
-            let i = 2 * p;
-            let (c0, c1, c2) =
-                (T::from_f64(c0_f), T::from_f64(c1_f), T::from_f64(c2_f));
+        // Accumulate bolometric and photon-weighted filter integrals matching
+        // `colors_utils.f90:simpson_integration` and `synthetic.f90` term order.
+        let mut i = 0usize;
+        while i + 2 < n {
+            let h1 = w[i + 1] - w[i];
+            let h2 = w[i + 2] - w[i + 1];
+            let h12 = h1 + h2;
+            let w_outer = T::from_f64(h12 / 6.0);
+            let k0 = T::from_f64(2.0 * h1 - h2);
+            let k1 = T::from_f64(h12 * h12);
+            let k2 = T::from_f64(2.0 * h2 - h1);
+            let h12_prod = h1 * h2;
+
             let f0 = cleaned_flux_at(w, fluxes, i);
             let f1 = cleaned_flux_at(w, fluxes, i + 1);
             let f2 = cleaned_flux_at(w, fluxes, i + 2);
-            bol_flux = bol_flux + f0 * c0 + f1 * c1 + f2 * c2;
+            let b0 = (f0 * k0).div_f64(h1);
+            let b1 = (f1 * k1).div_f64(h12_prod);
+            let b2 = (f2 * k2).div_f64(h2);
+            bol_flux = bol_flux + w_outer * (b0 + b1 + b2);
 
             for (f_idx, acc) in int_flux.iter_mut().enumerate() {
-                let fw = &self.filters_weighted_on_sed_grid[f_idx];
-                let y0 = f0 * T::from_f64(fw[i]);
-                let y1 = f1 * T::from_f64(fw[i + 1]);
-                let y2 = f2 * T::from_f64(fw[i + 2]);
-                *acc = *acc + y0 * c0 + y1 * c1 + y2 * c2;
+                let fg = &self.filters_on_sed_grid[f_idx];
+                let y0 = (f0 * T::from_f64(fg[i])) * T::from_f64(w[i]);
+                let y1 = (f1 * T::from_f64(fg[i + 1])) * T::from_f64(w[i + 1]);
+                let y2 = (f2 * T::from_f64(fg[i + 2])) * T::from_f64(w[i + 2]);
+                let s0 = (y0 * k0).div_f64(h1);
+                let s1 = (y1 * k1).div_f64(h12_prod);
+                let s2 = (y2 * k2).div_f64(h2);
+                *acc = *acc + w_outer * (s0 + s1 + s2);
             }
+            i += 2;
         }
         if n.is_multiple_of(2) {
             let dx = T::from_f64(0.5 * (w[n - 1] - w[n - 2]));
@@ -370,9 +384,11 @@ impl SedCube {
             let f_prev = cleaned_flux_at(w, fluxes, n - 2);
             bol_flux = bol_flux + dx * (f_last + f_prev);
             for (f_idx, acc) in int_flux.iter_mut().enumerate() {
-                let fw = &self.filters_weighted_on_sed_grid[f_idx];
-                let y_last = f_last * T::from_f64(fw[n - 1]);
-                let y_prev = f_prev * T::from_f64(fw[n - 2]);
+                let fg = &self.filters_on_sed_grid[f_idx];
+                let y_last =
+                    (f_last * T::from_f64(fg[n - 1])) * T::from_f64(w[n - 1]);
+                let y_prev =
+                    (f_prev * T::from_f64(fg[n - 2])) * T::from_f64(w[n - 2]);
                 *acc = *acc + dx * (y_last + y_prev);
             }
         }
@@ -385,9 +401,8 @@ impl SedCube {
         for (f_idx, &iflux) in int_flux.iter().enumerate() {
             let zp = JOHNSON_FILTERS[f_idx].zero_point(mag_system);
             let norm = self.filter_norm_integrals[f_idx];
-            let syn_flux = iflux / T::from_f64(norm);
-            out[3 + f_idx] =
-                T::from_f64(-2.5) * (syn_flux / T::from_f64(zp)).log10();
+            let syn_flux = iflux.div_f64(norm);
+            out[3 + f_idx] = T::from_f64(-2.5) * syn_flux.div_f64(zp).log10();
         }
         Ok(out)
     }

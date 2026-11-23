@@ -21,7 +21,7 @@
         "verified_total": 5640,
         "pct_ported": 35.1,
         "pct_verified": 4.7,
-        "rust_lines": 89240,
+        "rust_lines": 89243,
         "python_jax_lines": 3869
       },
       {
@@ -608,9 +608,9 @@
         "strict_validated": 7,
         "diagnostic_runs": 1,
         "reached_termination": 6,
-        "within_numeric_tol": 2,
-        "passing": 2,
-        "declared_gaps": 6,
+        "within_numeric_tol": 3,
+        "passing": 3,
+        "declared_gaps": 5,
         "undeclared_failures": 0
       },
       "astero": {
@@ -667,7 +667,7 @@
       "#152": 5,
       "#155": 5,
       "#158": 5,
-      "#160": 5,
+      "#160": 4,
       "#156": 3,
       "#231": 3,
       "#153": 1,
@@ -1185,7 +1185,7 @@
         "issues": "#295, #349"
       },
       {
-        "location": "tests/test_star_wave4_1.py:83",
+        "location": "tests/test_star_wave4_1.py:94",
         "reason": "pytest.mark.xfail( strict=True, reason=( \"#295: Rust computes the face radiation pressure from the face \" \"temperature (#291); the frozen JAX twin still interpolates it \" \"from the two cell values.\" ), )",
         "issues": "#291, #295"
       },
@@ -1498,11 +1498,6 @@
     ],
     "open_pull_requests": [
       {
-        "number": 377,
-        "title": "Port upstream ZAMS 4-point mass interpolation without xa clamping (#360)",
-        "draft": true
-      },
-      {
         "number": 378,
         "title": "Wire atm_option = irradiated_grey and atm_irradiated_* controls (#376)",
         "draft": true
@@ -1521,6 +1516,16 @@
         "number": 384,
         "title": "fix(star): set_qs and normalize_dqs follow upstream; models read from file are not renormalized (#381)",
         "draft": true
+      },
+      {
+        "number": 387,
+        "title": "fix(star): adjust_mass composition remap as upstream set_xa/set1_xa (#385)",
+        "draft": true
+      },
+      {
+        "number": 389,
+        "title": "feat(star,testing,data): AUX step-dump record and mesa-stepdumps-v2 (#388)",
+        "draft": false
       }
     ],
     "deferred_169": [
@@ -1887,6 +1892,14 @@
       {
         "number": 362,
         "title": "[Deferred bug] do_block_multiply_xa pairs the wrong off-diagonal blocks with x, so the solver's line-search slope is not grad(f)\u00b7soln",
+        "state": "open",
+        "kind": "upstream-bug",
+        "parity_pending": false,
+        "needs_confirmation": false
+      },
+      {
+        "number": 386,
+        "title": "[Deferred bug] set1_xa's overshoot clip increases dm instead of reducing it (adjust_mass.f90:1040)",
         "state": "open",
         "kind": "upstream-bug",
         "parity_pending": false,
@@ -2973,6 +2986,19 @@
       "closed_140": "19",
       "total_140": "40",
       "deferred_169": "46"
+    },
+    {
+      "date_utc": "2026-11-23",
+      "commit": "b9e57eb",
+      "event": "main merge",
+      "engine_ported_pct": "30.7",
+      "all_verified_pct": "1.1",
+      "cases_passing": "4",
+      "rust_cov_pct": "76.2",
+      "python_cov_pct": "87.7",
+      "closed_140": "19",
+      "total_140": "40",
+      "deferred_169": "47"
     }
   ]
 }

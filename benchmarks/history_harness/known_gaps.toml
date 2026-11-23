@@ -27,8 +27,8 @@ reason = "Core-collapse evolution exceeds wall-time guard with unported high-T o
 [[gaps]]
 suite = "star"
 case = "15M_dynamo"
-issue = "#158"
-reason = "Spruit-Tayler dynamo and rotational mixing time out."
+issue = "#154"
+reason = "Stops at model 1 (min_timestep_limit): from FlexMESA's pre-MS model the first step at upstream's dt = 1e-5 yr does not converge (surface dv_dt residual 0.43 at the first Newton iteration), because the pre-MS structure differs from upstream build_pre_ms_model (#154). The Spruit-Tayler dynamo and rotational mixing are also unported (#158)."
 
 [[gaps]]
 suite = "star"
@@ -154,7 +154,7 @@ reason = "Strict run reaches xa_central_lower_limit(h1) (91 steps vs MESA 92, 0 
 suite = "star"
 case = "custom_colors"
 issue = "#161"
-reason = "Strict validation rejects unported &colors and relaxation controls, and history_columns.list requests unported phase_of_evolution and colors columns (#161)."
+reason = "Strict validation rejects unported &colors and relaxation controls, and history_columns.list requests unported phase_of_evolution and colors columns (#161). With the controls ignored, the run stops at model 1 (min_timestep_limit) because the first pre-MS step at upstream's dt = 1e-5 yr does not converge from FlexMESA's pre-MS model (#154)."
 
 [[gaps]]
 suite = "star"
@@ -243,8 +243,8 @@ reason = "Strict run diverges from step 2 under fixed T(tau) opacity and enters 
 [[gaps]]
 suite = "star"
 case = "hse_riemann"
-issue = "#151"
-reason = "Riemann hydro energy accounting (#151)."
+issue = "#152"
+reason = "Strict run reaches max_age (2011 steps, 0 retries, final diffs within 1e-8 under #151 energy conservation limits) with a step-2 log_center_Rho (6.419e-03) and mean-iteration (2.0 vs MESA 4.3) deviation during initial u_flag Riemann hydro AMR remeshing (#152, #153)."
 
 [[gaps]]
 suite = "star"
@@ -310,7 +310,7 @@ reason = "Fails loudly at sub-grid planetary initial_mass without create_initial
 suite = "star"
 case = "make_sdb"
 issue = "#154"
-reason = "sdB envelope relaxation and He-core ignition time out (#154, #152)."
+reason = "Stops at model 1 (min_timestep_limit): relax_initial_mass_to_remove_H_env is a homologous rescale (relax.rs relax_to_remove_h_env), not upstream's mass-loss relaxation with extra_mass_retained_by_remove_h_env and lg_max_abs_mdot (star_relax_mass_to_remove_H_env, star/public/star_lib.f90:1271, called at star/job/run_star_support.f90:2475), so the first step starts far from equilibrium and its Newton iterations diverge (#154)."
 
 [[gaps]]
 suite = "star"
@@ -830,3 +830,21 @@ issue = "#295"
 role = "physics_gap"
 expect_fail_when_run = true
 reason = "Rust PC uses the MESA 26.4.1 EXCOR7 bicubic spline table (eos/private/pc_eos.f90:1895, create_EXCOR7_table.f90:136 THETA > 0.005; #161), whereas the frozen JAX twin keeps analytical EXCOR7 (THETA > 0.04); measured cross-stage max_rel_err is 3.716e-9 against 2.0e-9."
+
+[[test_gaps]]
+kind = "python_xfail"
+file = "tests/test_star_wave4_3.py"
+test_name = "test_step_struct_burn_mix_coupled_and_op_split"
+issue = "#154"
+role = "physics_gap"
+expect_fail_when_run = true
+reason = "FlexMESA's pre-MS model differs from upstream build_pre_ms_model (measured on the 7 Msun custom_colors model: initial residual norm 2.95e-5 against MESA 26.4.1's 1.89e-5 at the upstream first-step dt, star/private/init.f90:1007). This test forces a 10-yr coupled step on a 4 Msun pre-MS model, which with upstream's do_block_multiply_xa (#358) ends in a singular block-tridiagonal matrix at the second Newton iteration; it converged only with the previous, non-upstream product. This 4 Msun setup has not been run in MESA."
+
+[[test_gaps]]
+kind = "python_xfail"
+file = "tests/test_star_wave4_4.py"
+test_name = "test_varcontrol_and_h211_timestep_filter_rust_vs_jax"
+issue = "#154"
+role = "physics_gap"
+expect_fail_when_run = true
+reason = "FlexMESA's pre-MS model differs from upstream build_pre_ms_model (measured on the 7 Msun custom_colors model: initial residual norm 2.95e-5 against MESA 26.4.1's 1.89e-5 at the upstream first-step dt, star/private/init.f90:1007). This test forces a 10-yr coupled step on a 4 Msun pre-MS model, which with upstream's do_block_multiply_xa (#358) ends in a singular block-tridiagonal matrix at the second Newton iteration; it converged only with the previous, non-upstream product. This 4 Msun setup has not been run in MESA."

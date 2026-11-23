@@ -166,6 +166,9 @@ pub struct StarControls {
     pub rotation_flag: bool,
     /// Whether nonlinear pulsation (`RSP_flag`) is active.
     pub rsp_flag: bool,
+    /// Reset `ln rho` to `dm / dV` before each step when neither `u_flag`
+    /// nor `RSP_flag` is set (`set_rho_to_dm_div_dV`, `.true.` default).
+    pub set_rho_to_dm_div_dv: bool,
     /// Whether turbulent pulsation energy (`RSP2_flag`) is active.
     pub rsp2_flag: bool,
     /// Whether element diffusion (`do_element_diffusion`) is active.
@@ -724,6 +727,14 @@ pub struct StarControls {
     pub iwind_tolerance: f64,
     /// Relaxation weight for implicit stellar wind fixed-point/secant loop (`iwind_lambda`, `1.0` default).
     pub iwind_lambda: f64,
+    /// Include rotational kinetic energy in `total_energy` and energy accounting
+    /// (`include_rotation_in_total_energy`, `star/defaults/controls.defaults:9399`, `false` default).
+    #[serde(default)]
+    pub include_rotation_in_total_energy: bool,
+    /// Accumulate `abs(error_in_energy_conservation)` in `cumulative_energy_error`
+    /// (`absolute_cumulative_energy_err`, `star/defaults/controls.defaults:11629`, `true` default).
+    #[serde(default = "default_true")]
+    pub absolute_cumulative_energy_err: bool,
     /// Overshooting, predictive mixing, premixing, wind, `eps_mdot`, and mesh controls.
     pub mix_wind: crate::controls_mix_wind::MixWindControls,
     /// Core-boundary thresholds, extended stopping criteria, and timestep limits.
@@ -744,6 +755,10 @@ impl StarControls {
                 && (model_number as isize)
                     >= self.steps_before_use_velocity_time_centering)
     }
+}
+
+const fn default_true() -> bool {
+    true
 }
 
 const fn default_neg_one() -> f64 {

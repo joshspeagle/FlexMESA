@@ -91,11 +91,18 @@ fn test_binary_fr_hard_retries_match_mesa_26_4_1_and_counters_survive() {
 /// - Model 2 under `fr_hard = 1e-5`, `dt >= 1e4 yr`, and
 ///   `max_number_retries = 40` terminates with `max_number_retries`
 ///   (`s% num_retries = 41`, `82` total donor solver calls, exact
-///   `2402 -> 1505` remesh). With exact `block_multiply_xa`, `FlexMESA` takes
-///   `18` solver retries + `21` `fr_hard` retries + `2` RLOF retries = `41`
-///   (vs MESA's `24` solver + `15` `fr_hard` + `2` RLOF = `41` due to
-///   upstream `mtx/private/mtx_support.f90:763-776`'s off-by-one slope
-///   product on 6 calls).
+///   `2402 -> 1505` remesh). Model 2 alone has `38` retries in both codes,
+///   split as `23` solver retries (`6` bound + `17` give-up) and `15`
+///   `fr_hard` retries in MESA
+///   (`benchmarks/fortran_mesa/binary_rlof_fixture/README.md`), and `22`
+///   solver and `16` `fr_hard` retries here. The split differs because the
+///   first model-2 solver call already starts about `5e-5` relative away in
+///   `residual_norm` (`instrumented/solver_calls_26_4_1.tsv`).
+///
+/// Model 1 depends on the `rho = dm/dV` reset of `prepare_for_new_step`
+/// (`star/private/evolve.f90:1854-1857`, #363): without it the donor starts
+/// its first solve from the interpolated ZAMS density and model 1 ends at
+/// `0.122 yr` after `13` retries.
 #[test]
 fn test_binary_original_fixture_matches_mesa_26_4_1_first_model() {
     let mut sys = common::build_rlof_binary_original();

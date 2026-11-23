@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import pathlib
 import shutil
+from typing import Any
 
 import pytest
 
@@ -145,22 +146,20 @@ def test_upstream_mesa_tier3_test_suite_case_with_restart_reproducibility(
 
     clean_dir = tmp_path / case_name
     star.copy_cleaned_case(case_dir, clean_dir, suite="star")
+
+    def run() -> dict[str, Any]:
+        return star.run_test_suite_case(
+            clean_dir,
+            skip_optional=True,
+            max_steps_per_stage=2,
+            verify_restart=True,
+        )
+
     gap = cleaned_case_gaps.DECLARED_STAR_STOPS.get(case_name)
     if gap is not None:
-        with pytest.raises(ValueError, match=gap.message_pattern):
-            star.run_test_suite_case(
-                clean_dir,
-                skip_optional=True,
-                max_steps_per_stage=2,
-                verify_restart=True,
-            )
+        cleaned_case_gaps.assert_declared_stop(gap, run)
         return
-    rep = star.run_test_suite_case(
-        clean_dir,
-        skip_optional=True,
-        max_steps_per_stage=2,
-        verify_restart=True,
-    )
+    rep = run()
     assert rep["case_name"] == case_name
     assert rep["tier"] == 0
     assert rep["termination_code"] == "max_steps_cap"

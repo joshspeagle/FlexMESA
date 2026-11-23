@@ -23,6 +23,15 @@ _REPRESENTATIVE_TIER2_CASES = (
 )
 
 
+@pytest.mark.xfail(
+    strict=True,
+    reason=(
+        "#445: this synthetic setup (never run in MESA) relied on the removed "
+        "relax_initial_mass_to_remove_h_env stand-in; with upstream "
+        "star_relax_mass_to_remove_H_env the 0.6 Msun ZAMS start has no He "
+        "core and final_log_tc is 5.10 against the asserted > 6.0."
+    ),
+)
 def test_accretion_composition_and_super_eddington_nova_wind() -> None:
     """Verify accretion composition and super-Eddington nova wind execution on
     a synthetic white dwarf accretion configuration (`wd_nova_burst`).
@@ -70,6 +79,24 @@ def test_accretion_composition_and_super_eddington_nova_wind() -> None:
         assert rep["final_log_tc"] > 6.0
 
 
+_MAKE_O_NE_WD_SYNTHETIC_INLIST = (
+    "&star_job\n"
+    "  relax_initial_mass_to_remove_h_env = .true.\n"
+    "  new_mass = 1.10\n"
+    "/\n"
+    "&kap\n"
+    "  zbase = 0.02\n"
+    "/\n"
+    "&controls\n"
+    "  initial_mass = 1.10\n"
+    "  initial_z = 0.02\n"
+    "  do_phase_separation = .true.\n"
+    "  phase_separation_option = 'ONe'\n"
+    "  max_model_number = 2\n"
+    "/\n"
+)
+
+
 @pytest.mark.parametrize(
     "case_name,inlist_body",
     [
@@ -90,23 +117,6 @@ def test_accretion_composition_and_super_eddington_nova_wind() -> None:
             "  max_model_number = 2\n"
             "/\n",
         ),
-        (
-            "make_o_ne_wd",
-            "&star_job\n"
-            "  relax_initial_mass_to_remove_h_env = .true.\n"
-            "  new_mass = 1.10\n"
-            "/\n"
-            "&kap\n"
-            "  zbase = 0.02\n"
-            "/\n"
-            "&controls\n"
-            "  initial_mass = 1.10\n"
-            "  initial_z = 0.02\n"
-            "  do_phase_separation = .true.\n"
-            "  phase_separation_option = 'ONe'\n"
-            "  max_model_number = 2\n"
-            "/\n",
-        ),
     ],
 )
 def test_synthetic_tier2_case_runners_pass_assertions_and_restart(
@@ -116,6 +126,25 @@ def test_synthetic_tier2_case_runners_pass_assertions_and_restart(
     """Verify synthetic Tier 2 directories run to `max_model_number = 2` and
     reproduce `.photo` restarts bit-identically without library-side extras.
     """
+    _check_synthetic_tier2_case(case_name, inlist_body)
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason=(
+        "#445: this synthetic setup (never run in MESA) relied on the removed "
+        "relax_initial_mass_to_remove_h_env stand-in; with upstream "
+        "star_relax_mass_to_remove_H_env the 1.10 Msun ZAMS relax stops on "
+        "max_number_retries."
+    ),
+)
+def test_synthetic_tier2_make_o_ne_wd_runner_and_restart() -> None:
+    """Verify the synthetic make_o_ne_wd directory as the cases above."""
+    _check_synthetic_tier2_case("make_o_ne_wd", _MAKE_O_NE_WD_SYNTHETIC_INLIST)
+
+
+def _check_synthetic_tier2_case(case_name: str, inlist_body: str) -> None:
+    """Runs one synthetic Tier 2 directory (see the tests above)."""
     with tempfile.TemporaryDirectory() as tmp:
         case_dir = pathlib.Path(tmp) / case_name
         case_dir.mkdir(parents=True, exist_ok=True)

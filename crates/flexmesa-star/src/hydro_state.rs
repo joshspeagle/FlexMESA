@@ -352,8 +352,10 @@ pub struct HydroAuxState {
     /// Total integrated model energy $E_{\mathrm{tot}}$ in $\mathrm{erg}$
     /// (`total_energy` in `star_data_step_work.inc`).
     pub total_energy: f64,
-    /// Start-of-step total integrated internal energy $\sum_k \Delta m_k e_{\mathrm{start},k}$
-    /// in $\mathrm{erg}$ (`total_internal_energy_old` in `star_utils.f90:3706`).
+    /// Total internal energy in $\mathrm{erg}$ on the new mesh at the start of
+    /// the step (`total_internal_energy_old`, set by
+    /// `eval_total_energy_integrals` at `evolve.f90:420-431` and read by
+    /// `set_energy_eqn_scal`, `star_utils.f90:3693`).
     pub total_internal_energy_start: f64,
     /// Cumulative global energy conservation error in $\mathrm{erg}$
     /// (`cumulative_energy_error` in `star_data_step_work.inc`).

@@ -304,14 +304,9 @@
   ],
   "open_pull_requests": [
     {
-      "number": 439,
-      "title": "feat(astero): set_param and set_constraint_value as test-side case hooks; honest extras ledger (#429)",
+      "number": 460,
+      "title": "fix(harness): compare sparse reference histories only at their rows (#459)",
       "draft": true
-    },
-    {
-      "number": 452,
-      "title": "Train 5: 0-ULP module-hex parity (#432-#434), relax/astero ports (#429), and MESA 26.4.1 baseline",
-      "draft": false
     }
   ],
   "deferred_169": [

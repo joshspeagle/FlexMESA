@@ -11,6 +11,7 @@ import os
 import pathlib
 import sys
 import tempfile
+from typing import Any
 
 from flexmesa import _dispatch
 from flexmesa.data import fetch
@@ -19,6 +20,7 @@ from flexmesa.testing import (
     case_manifest,
     case_report,
     harness_runner,
+    harness_shards,
     stepdump_compare,
 )
 
@@ -28,6 +30,20 @@ def _non_negative_int(raw: str) -> int:
     if val < 0:
         raise argparse.ArgumentTypeError(f"must be >= 0, got {val}")
     return val
+
+
+def _positive_float(raw: str) -> float:
+    val = float(raw)
+    if not val > 0.0:
+        raise argparse.ArgumentTypeError(f"must be > 0, got {raw}")
+    return val
+
+
+def _shard_arg(raw: str) -> tuple[int, int]:
+    try:
+        return harness_shards.parse_shard(raw)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(str(exc)) from exc
 
 
 def _run_worker(argv: list[str]) -> int:
@@ -396,6 +412,30 @@ def _build_harness_parser() -> argparse.ArgumentParser:
         ),
     )
     p_run.add_argument("--timeout-sec", type=float, default=600.0)
+    p_run.add_argument(
+        "--short-budget-sec",
+        type=_positive_float,
+        default=None,
+        help=(
+            "Run the cases whose baseline row ended on the time budget with "
+            "this shorter wall-clock budget (seconds) and every other case "
+            "with --timeout-sec. The gate compares those cases as a prefix "
+            "of their baseline row, and --update-baseline keeps their "
+            "baseline row when they end on the short budget."
+        ),
+    )
+    p_run.add_argument(
+        "--shard",
+        type=_shard_arg,
+        default=None,
+        metavar="I/N",
+        help=(
+            "Run only shard I of N of the selected cases (1-based). Cases "
+            "whose baseline row ended on a time or memory budget are dealt "
+            "round-robin first, then the rest; merge the shard reports "
+            "with 'flexmesa harness merge'."
+        ),
+    )
     p_run.add_argument("--max-rss-gb", type=float, default=6.0)
     p_run.add_argument("--markdown-out", default=None)
     p_run.add_argument("--json-out", default=None)
@@ -437,17 +477,43 @@ def _build_harness_parser() -> argparse.ArgumentParser:
             "pass, or cases that regressed against the baseline run."
         ),
     )
+
+    p_merge = sub.add_parser(
+        "merge",
+        help=(
+            "Merge the --json-out reports of 'harness run --shard' into one "
+            "case table, baseline and gate verdict."
+        ),
+    )
+    p_merge.add_argument("reports", nargs="+", help="Shard --json-out files.")
+    p_merge.add_argument("--manifest", default=None)
+    p_merge.add_argument("--known-gaps", default=None)
+    p_merge.add_argument("--baseline-json", default=None)
+    p_merge.add_argument("--markdown-out", default=None)
+    p_merge.add_argument("--json-out", default=None)
+    p_merge.add_argument("--save-baseline", default=None)
+    p_merge.add_argument("--update-baseline", default=None)
+    p_merge.add_argument(
+        "--gate",
+        action="store_true",
+        help=(
+            "As for 'harness run', and also fail when the reports do not "
+            "form one complete campaign."
+        ),
+    )
     return parser
 
 
 def _baseline_regressions(
     ns: argparse.Namespace,
     records: list[harness_runner.CaseHarnessRecord],
+    short_budget: frozenset[tuple[str, str]] = frozenset(),
 ) -> list[baseline_regression.BaselineRegression]:
     """Compare a run with the baseline run (``DECISIONS #27``).
 
     Step-capped runs, runs in fast mode and runs that skip the strict
     attempt are not comparable with the baseline and return no regressions.
+    Cases in ``short_budget`` are compared as prefixes of their baseline row.
     """
     if (
         ns.max_steps is not None
@@ -463,7 +529,62 @@ def _baseline_regressions(
         if ns.baseline_json is not None:
             raise
         return []
-    return baseline_regression.find_baseline_regressions(records, base_records)
+    return baseline_regression.find_baseline_regressions(
+        records, base_records, short_budget=short_budget
+    )
+
+
+def _short_budget_keys(
+    ns: argparse.Namespace,
+    selected: list[case_manifest.CaseManifestEntry],
+) -> frozenset[tuple[str, str]]:
+    """Return the selected cases that run with ``--short-budget-sec``.
+
+    Raises:
+        FileNotFoundError: If no baseline run is available to choose from.
+    """
+    if ns.short_budget_sec is None:
+        return frozenset()
+    _, _, base_records = case_report.build_manifest_inventory_records(
+        ns.manifest, ns.known_gaps, ns.baseline_json
+    )
+    if not any(b.executed for b in base_records):
+        raise FileNotFoundError(
+            "--short-budget-sec needs a baseline run (--baseline-json)"
+        )
+    limited = baseline_regression.budget_limited_keys(base_records)
+    return frozenset(e.key for e in selected if e.key in limited)
+
+
+def _costly_keys(ns: argparse.Namespace) -> frozenset[tuple[str, str]]:
+    """Return the cases whose baseline run ended on a time or memory budget.
+
+    Returns an empty set when no baseline run is available, in which case
+    shards are dealt round-robin in manifest order.
+    """
+    try:
+        _, _, base_records = case_report.build_manifest_inventory_records(
+            ns.manifest, ns.known_gaps, ns.baseline_json
+        )
+    except FileNotFoundError:
+        if ns.baseline_json is not None:
+            raise
+        return frozenset()
+    return frozenset(
+        (b.suite, b.case)
+        for b in base_records
+        if b.executed
+        and b.run_status in baseline_regression.RESOURCE_LIMITED_STATUSES
+    )
+
+
+def _case_timeout(
+    ns: argparse.Namespace, entry: case_manifest.CaseManifestEntry
+) -> float | None:
+    """Return the wall-clock budget of one case (``--short-budget-sec``)."""
+    if entry.key in ns.short_budget_keys:
+        return float(ns.short_budget_sec)
+    return float(ns.timeout_sec)
 
 
 def _write_json_file(path_str: str, payload: dict[str, object]) -> None:
@@ -576,7 +697,7 @@ def _run_selected_entries(
                 ns.numerics_mode,
                 bool(ns.allow_unsupported_controls),
                 ns.extras_factory,
-                ns.timeout_sec,
+                _case_timeout(ns, entry),
                 ns.max_rss_gb,
                 base_dir,
             )
@@ -604,7 +725,7 @@ def _run_selected_entries(
                 ns.numerics_mode,
                 bool(ns.allow_unsupported_controls),
                 ns.extras_factory,
-                ns.timeout_sec,
+                _case_timeout(ns, entry),
                 ns.max_rss_gb,
                 base_dir,
             ): idx
@@ -694,8 +815,191 @@ def _render_harness_figures(
     return fig_links
 
 
+def _label(key: tuple[str, str]) -> str:
+    return f"{key[0]}/{key[1]}"
+
+
+def _short_budget_note(
+    short_keys: frozenset[tuple[str, str]], run_info: dict[str, Any]
+) -> str:
+    """Return the Markdown note naming the short-budget cases of a run."""
+    labels = ", ".join(f"`{_label(k)}`" for k in sorted(short_keys))
+    return (
+        f"\n> Short-budget tier: {len(short_keys)} cases whose baseline run "
+        "ended on the time budget ran with a "
+        f"{float(run_info['short_budget_sec']):g} s budget instead of "
+        f"{float(run_info['timeout_sec']):g} s, so their step counts and "
+        f"final values are those of a shorter run: {labels}.\n"
+    )
+
+
+def _report_and_gate(
+    ns: argparse.Namespace,
+    manifest: case_manifest.HarnessManifest,
+    gaps: dict[tuple[str, str], case_manifest.KnownGapSpec],
+    records: list[harness_runner.CaseHarnessRecord],
+    run_info: dict[str, Any],
+    *,
+    short_keys: frozenset[tuple[str, str]] = frozenset(),
+    fig_links: dict[tuple[str, str], str] | None = None,
+    problems: tuple[str, ...] = (),
+) -> int:
+    """Write the reports of a run or merged campaign and apply the gate.
+
+    Args:
+        ns: Parsed ``harness run`` or ``harness merge`` arguments, with the
+            run settings (``numerics_mode``, ``max_steps``,
+            ``allow_unsupported_controls``) filled in.
+        manifest: Loaded case manifest.
+        gaps: Loaded known gaps.
+        records: Records of the executed cases.
+        run_info: Run settings written as the report's ``run`` block.
+        short_keys: Cases run with the short budget.
+        fig_links: Optional comparison figure links for the Markdown table.
+        problems: Reasons the merged reports are not one complete campaign.
+
+    Returns:
+        Exit status (``1`` when ``--gate`` fails, else ``0``).
+    """
+    payload = case_report.build_report_payload(
+        manifest,
+        records,
+        gaps,
+        numerics_mode=ns.numerics_mode,
+    )
+    payload["run"] = run_info
+    if ns.markdown_out:
+        md_text = case_report.render_case_table_markdown(
+            manifest,
+            records,
+            summary=payload["summary"],
+            known_gaps=gaps,
+            figure_links=fig_links,
+        )
+        if short_keys:
+            md_text += _short_budget_note(short_keys, run_info)
+        mpath = pathlib.Path(ns.markdown_out)
+        mpath.parent.mkdir(parents=True, exist_ok=True)
+        mpath.write_text(md_text, encoding="utf-8")
+    regressions = _baseline_regressions(ns, records, short_keys)
+    payload["summary"]["regressions_vs_baseline"] = [
+        r.label for r in regressions
+    ]
+    if ns.json_out:
+        _write_json_file(ns.json_out, payload)
+    if ns.update_baseline:
+        _, _, base_records = case_report.build_manifest_inventory_records(
+            ns.manifest, ns.known_gaps, ns.update_baseline
+        )
+        merged = baseline_regression.merge_records_into_baseline(
+            records, base_records, short_budget=short_keys
+        )
+        _write_json_file(
+            ns.update_baseline,
+            case_report.build_deterministic_baseline_payload(
+                manifest, merged, gaps, numerics_mode=ns.numerics_mode
+            ),
+        )
+    if ns.save_baseline:
+        b_payload = case_report.build_deterministic_baseline_payload(
+            manifest,
+            records,
+            gaps,
+            numerics_mode=ns.numerics_mode,
+        )
+        _write_json_file(ns.save_baseline, b_payload)
+
+    summary = payload["summary"]
+    if regressions:
+        print(
+            "regressed against the baseline run: "
+            + "; ".join(r.label for r in regressions),
+            file=sys.stderr,
+        )
+    if problems:
+        print(
+            "shard reports are not one complete campaign: "
+            + "; ".join(problems),
+            file=sys.stderr,
+        )
+    if ns.gate and (
+        summary["undeclared_failures"]
+        or summary["stale_known_gaps"]
+        or regressions
+        or problems
+    ):
+        if summary["undeclared_failures"]:
+            print(
+                "undeclared failures: "
+                + ", ".join(summary["undeclared_failures"]),
+                file=sys.stderr,
+            )
+        if summary["stale_known_gaps"]:
+            print(
+                "declared gaps now passing: "
+                + ", ".join(summary["stale_known_gaps"]),
+                file=sys.stderr,
+            )
+        return 1
+    return 0
+
+
+def _handle_merge_subcommand(ns: argparse.Namespace) -> int:
+    """Merge shard reports into one campaign report (``harness merge``)."""
+    payloads = [
+        json.loads(pathlib.Path(p).read_text(encoding="utf-8"))
+        for p in ns.reports
+    ]
+    try:
+        merged = harness_shards.merge_shard_payloads(payloads)
+    except ValueError as exc:
+        print(f"cannot merge shard reports: {exc}", file=sys.stderr)
+        return 1
+    settings = merged.settings
+    if ns.save_baseline and settings["short_budget_sec"] is not None:
+        print(
+            "--save-baseline records full-budget runs; the shards used "
+            "--short-budget-sec",
+            file=sys.stderr,
+        )
+        return 1
+    ns.numerics_mode = str(settings["numerics_mode"])
+    ns.max_steps = settings["max_steps"]
+    ns.allow_unsupported_controls = bool(settings["allow_unsupported_controls"])
+    if ns.gate and ns.numerics_mode != "strict":
+        print(
+            "--gate requires strict numerics mode "
+            "(#165: only strict mode is judged against MESA)",
+            file=sys.stderr,
+        )
+        return 1
+    manifest = case_manifest.load_case_manifest(ns.manifest)
+    gaps = case_manifest.load_known_gaps(ns.known_gaps)
+    base_dir = pathlib.Path(ns.manifest).parent if ns.manifest else None
+    all_records = case_report.records_from_stored_rows(
+        manifest, gaps, merged.rows, base_dir, max_steps=ns.max_steps
+    )
+    records = [r for r in all_records if (r.suite, r.case) in merged.rows]
+    run_info = dict(settings)
+    run_info["shard"] = None
+    run_info["merged_shards"] = len(payloads)
+    run_info["short_budget_cases"] = [
+        _label(k) for k in sorted(merged.short_budget_cases)
+    ]
+    run_info["selected_cases"] = [_label((r.suite, r.case)) for r in records]
+    return _report_and_gate(
+        ns,
+        manifest,
+        gaps,
+        records,
+        run_info,
+        short_keys=merged.short_budget_cases,
+        problems=merged.problems,
+    )
+
+
 def harness_main(argv: list[str] | None = None) -> int:
-    """Execute ``flexmesa harness table|run``.
+    """Execute ``flexmesa harness table|run|merge``.
 
     Args:
         argv: CLI arguments following ``flexmesa harness``.
@@ -707,6 +1011,8 @@ def harness_main(argv: list[str] | None = None) -> int:
     ns = _build_harness_parser().parse_args(cli_args)
     if ns.subcommand == "table":
         return _handle_table_subcommand(ns)
+    if ns.subcommand == "merge":
+        return _handle_merge_subcommand(ns)
     eff_mode = harness_runner.resolve_effective_numerics_mode(ns.numerics_mode)
     ns.numerics_mode = eff_mode
     if ns.gate and eff_mode != "strict":
@@ -716,6 +1022,20 @@ def harness_main(argv: list[str] | None = None) -> int:
             file=sys.stderr,
         )
         return 1
+    if ns.short_budget_sec is not None:
+        if ns.short_budget_sec >= ns.timeout_sec:
+            print(
+                "--short-budget-sec must be shorter than --timeout-sec",
+                file=sys.stderr,
+            )
+            return 1
+        if ns.save_baseline:
+            print(
+                "--save-baseline records full-budget runs; it cannot be "
+                "combined with --short-budget-sec",
+                file=sys.stderr,
+            )
+            return 1
 
     print(
         f"[harness] upstream reference: "
@@ -725,6 +1045,23 @@ def harness_main(argv: list[str] | None = None) -> int:
     manifest = case_manifest.load_case_manifest(ns.manifest)
     gaps = case_manifest.load_known_gaps(ns.known_gaps)
     selected = _select_entries(manifest, ns.preset, ns.cases)
+    if ns.shard is not None:
+        selected = harness_shards.shard_entries(
+            selected, ns.shard[0], ns.shard[1], _costly_keys(ns)
+        )
+        print(
+            f"[harness] shard {ns.shard[0]}/{ns.shard[1]}: "
+            f"{len(selected)} cases",
+            flush=True,
+        )
+    ns.short_budget_keys = _short_budget_keys(ns, selected)
+    if ns.short_budget_keys:
+        print(
+            f"[harness] {len(ns.short_budget_keys)} cases whose baseline run "
+            f"ended on the time budget get {ns.short_budget_sec:g} s: "
+            + ", ".join(_label(k) for k in sorted(ns.short_budget_keys)),
+            flush=True,
+        )
     base_dir = pathlib.Path(ns.manifest).parent if ns.manifest else None
 
     fig_links: dict[tuple[str, str], str] | None = None
@@ -751,77 +1088,26 @@ def harness_main(argv: list[str] | None = None) -> int:
                 max_steps=ns.max_steps,
             )
 
-    payload = case_report.build_report_payload(
+    run_info: dict[str, Any] = {
+        "numerics_mode": ns.numerics_mode,
+        "max_steps": ns.max_steps,
+        "allow_unsupported_controls": bool(ns.allow_unsupported_controls),
+        "timeout_sec": ns.timeout_sec,
+        "short_budget_sec": ns.short_budget_sec,
+        "max_rss_gb": ns.max_rss_gb,
+        "shard": list(ns.shard) if ns.shard is not None else None,
+        "short_budget_cases": [_label(k) for k in sorted(ns.short_budget_keys)],
+        "selected_cases": [_label(e.key) for e in selected],
+    }
+    return _report_and_gate(
+        ns,
         manifest,
-        records,
         gaps,
-        numerics_mode=ns.numerics_mode,
+        records,
+        run_info,
+        short_keys=ns.short_budget_keys,
+        fig_links=fig_links,
     )
-    if ns.markdown_out:
-        md_text = case_report.render_case_table_markdown(
-            manifest,
-            records,
-            summary=payload["summary"],
-            known_gaps=gaps,
-            figure_links=fig_links,
-        )
-        mpath = pathlib.Path(ns.markdown_out)
-        mpath.parent.mkdir(parents=True, exist_ok=True)
-        mpath.write_text(md_text, encoding="utf-8")
-    regressions = _baseline_regressions(ns, records)
-    payload["summary"]["regressions_vs_baseline"] = [
-        r.label for r in regressions
-    ]
-    if ns.json_out:
-        _write_json_file(ns.json_out, payload)
-    if ns.update_baseline:
-        _, _, base_records = case_report.build_manifest_inventory_records(
-            ns.manifest, ns.known_gaps, ns.update_baseline
-        )
-        merged = baseline_regression.merge_records_into_baseline(
-            records, base_records
-        )
-        _write_json_file(
-            ns.update_baseline,
-            case_report.build_deterministic_baseline_payload(
-                manifest, merged, gaps, numerics_mode=ns.numerics_mode
-            ),
-        )
-    if ns.save_baseline:
-        b_payload = case_report.build_deterministic_baseline_payload(
-            manifest,
-            records,
-            gaps,
-            numerics_mode=ns.numerics_mode,
-        )
-        _write_json_file(ns.save_baseline, b_payload)
-
-    summary = payload["summary"]
-    if regressions:
-        print(
-            "regressed against the baseline run: "
-            + "; ".join(r.label for r in regressions),
-            file=sys.stderr,
-        )
-    if ns.gate and (
-        summary["undeclared_failures"]
-        or summary["stale_known_gaps"]
-        or regressions
-    ):
-        if summary["undeclared_failures"]:
-            print(
-                "undeclared failures: "
-                + ", ".join(summary["undeclared_failures"]),
-                file=sys.stderr,
-            )
-        if summary["stale_known_gaps"]:
-            print(
-                "declared gaps now passing: "
-                + ", ".join(summary["stale_known_gaps"]),
-                file=sys.stderr,
-            )
-        return 1
-    return 0
 
 
 if __name__ == "__main__":

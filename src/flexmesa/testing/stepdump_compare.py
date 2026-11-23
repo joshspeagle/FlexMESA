@@ -24,7 +24,7 @@ import pathlib
 import struct
 
 SOLVER_TAGS = ("CALL", "CORR", "NEWTON", "FOLD", "TRY", "RESID")
-ZONE_TAGS = ("STATE", "DM", "EQU")
+ZONE_TAGS = ("STATE", "DM", "AUX", "EQU")
 # Number of leading integer fields after ``tag id model`` per record type,
 # and number of trailing integer fields after the hex values.
 _LAYOUT: dict[str, tuple[int, int]] = {
@@ -36,8 +36,21 @@ _LAYOUT: dict[str, tuple[int, int]] = {
     "RESID": (1, 2),
     "STATE": (1, 0),
     "DM": (1, 0),
+    "AUX": (1, 0),
     "EQU": (1, 0),
 }
+AUX_COLUMNS = (
+    "Peos",
+    "opacity",
+    "gradT",
+    "gradr",
+    "grada",
+    "eps_nuc",
+    "mlt_vc",
+    "chiRho",
+    "chiT",
+    "Cp",
+)
 _FIELDS: dict[str, tuple[str, ...]] = {
     "CALL": ("dt", "residual_norm", "max_residual"),
     "CORR": ("correction_norm", "max_correction"),
@@ -265,6 +278,8 @@ def _fmt(bits: int) -> str:
 def _column_names(dump: StepDump, star: int, tag: str, n: int) -> list[str]:
     if tag == "DM":
         return ["dm"]
+    if tag == "AUX":
+        return list(AUX_COLUMNS)
     names = dump.names if tag == "STATE" else dump.eqnames
     # STATE holds xh(1:nvar_hydro) then xa(1:species), the order of NAMES.
     cols = names.get(star, [])

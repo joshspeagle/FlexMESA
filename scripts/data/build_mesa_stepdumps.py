@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: LGPL-3.0-or-later
-"""Build the ``mesa-stepdumps-v1.tar.zst`` bundle and its SHA-256 manifest.
+"""Build a ``mesa-stepdumps-<version>.tar.zst`` bundle and its manifest.
 
 Packs the MESA 26.4.1 step dumps written by
 ``benchmarks/fortran_mesa/stepdumps/run_stepdumps.py`` (one
@@ -11,7 +11,8 @@ Packs the MESA 26.4.1 step dumps written by
 
 Usage::
 
-    python scripts/data/build_mesa_stepdumps.py --dumps <dir> --out <archive>
+    python scripts/data/build_mesa_stepdumps.py --dumps <dir> --out <archive> \\
+        [--version v2]
 
 Prints the archive SHA-256 and the sizes for ``bundles.toml``.
 """
@@ -53,7 +54,7 @@ def _add(tf: tarfile.TarFile, rel: str, payload: bytes) -> tuple[str, int]:
     return hashlib.sha256(payload).hexdigest(), len(payload)
 
 
-def _provenance(dumps: list[pathlib.Path]) -> bytes:
+def _provenance(dumps: list[pathlib.Path], version: str) -> bytes:
     head = {}
     for line in dumps[0].read_text(encoding="utf-8").splitlines():
         if not line.startswith("#"):
@@ -61,7 +62,7 @@ def _provenance(dumps: list[pathlib.Path]) -> bytes:
         key, _, val = line[1:].partition(":")
         head[key.strip()] = val.strip()
     doc = {
-        "bundle": "mesa-stepdumps-v1",
+        "bundle": f"mesa-stepdumps-{version}",
         "mesa_version": head.get("mesa_version"),
         "compiler": head.get("compiler"),
         "mesa_sdk_version": head.get("mesa_sdk_version"),
@@ -82,6 +83,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--dumps", type=pathlib.Path, required=True)
     parser.add_argument("--out", type=pathlib.Path, required=True)
+    parser.add_argument("--version", default="v2")
     args = parser.parse_args()
     dumps = sorted(args.dumps.glob("*/*.stepdump"))
     if not dumps:
@@ -92,7 +94,7 @@ def main() -> None:
             fileobj=zfh, mode="w|", format=tarfile.PAX_FORMAT
         ) as tf:
             rel = f"{ROOT}/PROVENANCE.json"
-            rows.append((*_add(tf, rel, _provenance(dumps)), rel))
+            rows.append((*_add(tf, rel, _provenance(dumps, args.version)), rel))
             for d in dumps:
                 rel = f"{ROOT}/{d.parent.name}/{d.name}"
                 rows.append((*_add(tf, rel, d.read_bytes()), rel))

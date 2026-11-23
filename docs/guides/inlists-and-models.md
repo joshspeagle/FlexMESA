@@ -238,3 +238,11 @@ flexmesa harness table --check
 flexmesa harness run --preset pr-ci --markdown-out case_table.md --json-out case_table.json --gate
 flexmesa harness run --cases star/1.3M_ms_high_Z --update-baseline benchmarks/history_harness/baseline_run_26_4_1.json
 ```
+
+Two options shorten a full campaign. Strict mode is bit-identical across machines, so only outcomes cut off by a time or memory budget depend on the machine. `--short-budget-sec S` gives the cases whose baseline row ended on the time budget a budget of `S` seconds and every other case `--timeout-sec`. Such a run reproduces the start of the baseline trajectory unless the engine changed, so for those cases `--gate` fails only when the case takes no steps, ends (other than on upstream's termination condition) before the baseline's step count, or first leaves a track tolerance at an earlier model than the baseline. `--update-baseline` keeps their baseline row when they end on the short budget, and `--save-baseline` is refused because a candidate must record full-budget runs. `--shard I/N` runs one of `N` disjoint parts of the selected cases (cases whose baseline row ended on a budget are spread first), and `harness merge` combines the shard reports into one case table, one baseline and one gate verdict, failing the gate when a shard or case is missing (`#389`):
+
+```bash
+flexmesa harness run --preset all --numerics-mode strict --jobs 2 --timeout-sec 600 --short-budget-sec 120 --max-rss-gb 5.5 --markdown-out case_table.md --json-out case_table.json --update-baseline benchmarks/history_harness/baseline_run_26_4_1.json --gate
+flexmesa harness run --preset all --shard 1/8 --json-out shard_1.json
+flexmesa harness merge shard_*.json --markdown-out case_table.md --json-out case_table.json --save-baseline baseline_candidate.json --gate
+```

@@ -1096,6 +1096,26 @@ def test_extras_status_ledger_covers_every_case_and_is_current() -> None:
     assert mod.main(["--check"]) == 0
 
 
+def test_binary_references_fall_back_to_the_bundle_for_another_root(
+    tmp_path: pathlib.Path,
+) -> None:
+    """A root other than this checkout still finds the bundle's references.
+
+    A harness run whose manifest root is another checkout must keep the
+    binary LOGS1/LOGS2 tracks and the full MESA history (#409).
+    """
+    other_root = tmp_path / "other_checkout"
+    other_root.mkdir()
+    comp_paths = harness_runner.resolve_binary_component_reference_paths(
+        "double_bh", root_dir=other_root
+    )
+    assert set(comp_paths) == {"LOGS1", "LOGS2"}
+    full = harness_runner.resolve_full_reference_history_path(
+        "binary", "double_bh", root_dir=other_root
+    )
+    assert full is not None and full.name == "binary_history.data"
+
+
 def test_binary_harness_compares_component_logs1_and_logs2_tracks(
     tmp_path: pathlib.Path,
 ) -> None:

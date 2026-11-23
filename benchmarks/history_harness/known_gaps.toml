@@ -865,15 +865,6 @@ reason = "Rust PC uses the MESA 26.4.1 EXCOR7 bicubic spline table (eos/private/
 [[test_gaps]]
 kind = "python_xfail"
 file = "tests/test_star_wave4_3.py"
-test_name = "test_stellar_winds_rust_jax_consistency_and_mass_adjustment"
-issue = "#385"
-role = "physics_gap"
-expect_fail_when_run = true
-reason = "With dq as upstream (set_qs/normalize_dqs, star/private/star_utils.f90:669-752, no renormalization in the mesh sync, #381), the H1 conservation identity after apply_wind_and_adjust_mass misses its rtol = 1e-11 FlexMESA oracle by 1.1e-11 (2.2e-11 in CI); exact sums give the same, so it is not summation noise. The bound was set on the non-upstream renormalized mesh and has not been measured against MESA 26.4.1."
-
-[[test_gaps]]
-kind = "python_xfail"
-file = "tests/test_star_wave4_3.py"
 test_name = "test_step_struct_burn_mix_coupled_and_op_split"
 issue = "#154"
 role = "physics_gap"

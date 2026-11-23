@@ -24,10 +24,15 @@ const WAVE1_REGRESSION_SNAPSHOTS_N8: [(&str, f64); 6] = [
 ];
 
 /// `FlexMESA` regression snapshots for $N_{\mathrm{zones}} = 8$ across all four
-/// Wave 2 workloads (internal self-consistency check, tracked in #146).
+/// Wave 2 workloads (internal self-consistency check; `ion_fe56` shifted from
+/// `1.683_709_392_958_418e2` to `1.683_709_384_818_426e2` under `#413` when
+/// `Fe56He4Table` restored MESA `26.4.1`'s 10-significant-digit
+/// `z_fe56_he4.data` entries and `interp_2d/private/bicub_db.f:1371-1575`
+/// implicit `f32` `fvbicub_db` basis arithmetic across all four stages;
+/// tracked in #146).
 const WAVE2_REGRESSION_SNAPSHOTS_N8: [(&str, f64); 4] = [
     ("chem_comp", 1.687_001_493_521_061e1),
-    ("ion_fe56", 1.683_709_392_958_418e2),
+    ("ion_fe56", 1.683_709_384_818_426e2),
     ("ion_4d", 6.118_846_146_172_181e1),
     ("colors_sed", 3.608_691_732_539_108e1),
 ];

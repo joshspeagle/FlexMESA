@@ -166,29 +166,72 @@ impl Fe56He4Table {
         )
         .map_err(|e| IonError::Interp(e.to_string()))?;
         if numerics_mode() == NumericsMode::Strict {
-            let (i, j, xparam, yparam, hx, hxi, hy, hyi) =
-                herm2xy_prevalidated_db(
-                    log10_ne,
-                    log10_t,
-                    &self.log_ne,
-                    &self.log_t,
-                    self.ilinx,
-                    self.iliny,
-                )
-                .map_err(|e| IonError::Interp(e.to_string()))?;
-            let ny = self.log_t.len();
-            let c00 = self.coeffs[i * ny + j];
-            let c01 = self.coeffs[i * ny + (j + 1)];
-            let c10 = self.coeffs[(i + 1) * ny + j];
-            let c11 = self.coeffs[(i + 1) * ny + (j + 1)];
-            let (f, df_dx, df_dy) = eval_fvbicub_strict(
-                xparam, yparam, hx, hxi, hy, hyi, c00, c01, c10, c11,
-            );
+            let [f, df_dx, df_dy] =
+                self.eval_strict_val_grad(log10_ne, log10_t)?;
             ev.f = f;
             ev.df_dx = df_dx;
             ev.df_dy = df_dy;
         }
         Ok(ev)
+    }
+
+    fn eval_strict_val_grad(
+        &self,
+        log10_ne: f64,
+        log10_t: f64,
+    ) -> Result<[f64; 3], IonError> {
+        let (i, j, xparam, yparam, hx, hxi, hy, hyi) = herm2xy_prevalidated_db(
+            log10_ne,
+            log10_t,
+            &self.log_ne,
+            &self.log_t,
+            self.ilinx,
+            self.iliny,
+        )
+        .map_err(|e| IonError::Interp(e.to_string()))?;
+        let ny = self.log_t.len();
+        let c00 = self.coeffs[i * ny + j];
+        let c01 = self.coeffs[i * ny + (j + 1)];
+        let c10 = self.coeffs[(i + 1) * ny + j];
+        let c11 = self.coeffs[(i + 1) * ny + (j + 1)];
+        let (f, df_dx, df_dy) = eval_fvbicub_strict(
+            xparam, yparam, hx, hxi, hy, hyi, c00, c01, c10, c11,
+        );
+        Ok([f, df_dx, df_dy])
+    }
+
+    /// Evaluate `[f, df_dx, df_dy]` at $(\log_{10} n_e, \log_{10} T)$ without
+    /// computing second partials, honoring [`numerics_mode()`].
+    ///
+    /// In [`NumericsMode::Strict`], evaluates `fvbicub_db`'s implicit `f32`
+    /// basis scalars matching [`Fe56He4Table::eval_full`]; otherwise evaluates
+    /// the pure-`f64` bicubic formula.
+    ///
+    /// # Panics
+    /// Panics if `log10_ne` or `log10_t` is outside the table grid domain or
+    /// non-finite.
+    #[must_use]
+    pub fn eval_val_grad_prevalidated(
+        &self,
+        log10_ne: f64,
+        log10_t: f64,
+    ) -> [f64; 3] {
+        if numerics_mode() == NumericsMode::Strict {
+            return self
+                .eval_strict_val_grad(log10_ne, log10_t)
+                .expect("valid prevalidated Fe56 query");
+        }
+        let ev = interp_evbicub_prevalidated_db(
+            log10_ne,
+            log10_t,
+            &self.log_ne,
+            &self.log_t,
+            self.ilinx,
+            self.iliny,
+            &self.coeffs,
+        )
+        .expect("valid prevalidated Fe56 query");
+        [ev.f, ev.df_dx, ev.df_dy]
     }
 
     /// Evaluate the effective charge $Z(\mathrm{Fe56})$ at

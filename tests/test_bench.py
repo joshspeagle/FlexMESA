@@ -25,9 +25,12 @@ _WAVE1_REGRESSION_SNAPSHOTS_N8: tuple[tuple[str, float], ...] = (
     ("turb_tdc", 3.3187342241650115e00),
 )
 
+# Under #413, `ion_fe56` shifted from `1.6837093929584180e02` to
+# `1.6837093938883947e02` after restoring MESA `26.4.1`'s 10-significant-digit
+# `z_fe56_he4.data` entries (`fe56_he4_data_{a,b,c}.rs`).
 _WAVE2_REGRESSION_SNAPSHOTS_N8: tuple[tuple[str, float], ...] = (
     ("chem_comp", 1.6870014935210610e01),
-    ("ion_fe56", 1.6837093929584180e02),
+    ("ion_fe56", 1.6837093938883947e02),
     ("ion_4d", 6.1188461461721810e01),
     ("colors_sed", 3.6086917325391080e01),
 )
@@ -129,7 +132,30 @@ def test_wave2_four_stage_benchmarks_match_snapshots() -> None:
     records = bench.run_all_wave2_benchmarks(
         zone_counts=(4, 8), n_warmup=1, n_repeats=3
     )
-    _assert_records_match_snapshots(records, _WAVE2_REGRESSION_SNAPSHOTS_N8)
+    _assert_records_match_snapshots(
+        records,
+        _WAVE2_REGRESSION_SNAPSHOTS_N8,
+        stage_check_elsewhere=frozenset({"ion_fe56"}),
+    )
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason=(
+        "#295: Rust Fe56He4Table uses MESA 26.4.1 fvbicub_db implicit f32 "
+        "basis scalars (interp_2d/private/bicub_db.f:1371-1575; #413), "
+        "whereas the frozen JAX twin keeps f64 basis scalars; measured "
+        "cross-stage max_rel_err is 3.250e-8 against 1.0e-12."
+    ),
+)
+def test_wave2_ion_fe56_stages_agree() -> None:
+    """The `ion_fe56` workload agrees across Stages 0..3 to 1.0e-12."""
+    for n_zones in (4, 8):
+        rec = bench.bench_ion_fe56(n_zones, n_warmup=1, n_repeats=3)
+        assert rec.max_rel_err <= 1.0e-12, (
+            f"workload {rec.workload} (N={rec.n_zones}) "
+            f"cross-stage rel_err {rec.max_rel_err:.3e} > 1.0e-12"
+        )
 
 
 def test_wave3a_four_stage_benchmarks_match_snapshots() -> None:

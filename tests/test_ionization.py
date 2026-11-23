@@ -68,21 +68,38 @@ def _fe56_scalar(lne: jax.Array, lt: jax.Array) -> jax.Array:
     return z
 
 
-def test_fe56_in_he4_matches_mesa_golden_output() -> None:
-    r"""Verify `test_fe56_in_he4` against `ionization/test/test_output`.
+_FE56_GOLDEN_POINTS: tuple[tuple[float, float, float], ...] = (
+    (30.5, 7.9, 25.8953869),
+    (26.0, 7.0, 19.0993247),
+    (24.5, 6.1, 11.2318524),
+)
 
-    Checks all three golden $(\log_{10} n_e, \log_{10} T)$ test points across
-    both the Safe Rust and `@jax.jit` backends.
+
+def test_fe56_in_he4_matches_mesa_golden_output() -> None:
+    r"""Verify `test_fe56_in_he4` Rust backend against MESA golden output.
+
+    Checks all three golden $(\log_{10} n_e, \log_{10} T)$ test points on the
+    Safe Rust backend against upstream `ionization/test/test_output`.
     """
-    golden = [
-        (30.5, 7.9, 25.8953869),
-        (26.0, 7.0, 19.0993247),
-        (24.5, 6.1, 11.2318524),
-    ]
-    for lne, lt, expected in golden:
+    for lne, lt, expected in _FE56_GOLDEN_POINTS:
+        z_rust = ionization.eval_charge_of_fe56_in_he4(lne, lt, backend="rust")
+        assert np.isclose(z_rust, expected, rtol=0.0, atol=1e-7)
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason=(
+        "#295: Rust Fe56He4Table uses MESA 26.4.1 fvbicub_db implicit f32 "
+        "basis scalars (interp_2d/private/bicub_db.f:1371-1575; #413), "
+        "whereas the frozen JAX twin keeps f64 basis scalars; measured "
+        "max abs diff is 4.680e-9 against rtol=1e-15, atol=1e-15."
+    ),
+)
+def test_fe56_in_he4_golden_rust_vs_jax() -> None:
+    r"""Verify `test_fe56_in_he4` Rust vs. JAX golden point consistency."""
+    for lne, lt, _ in _FE56_GOLDEN_POINTS:
         z_rust = ionization.eval_charge_of_fe56_in_he4(lne, lt, backend="rust")
         z_jax = ionization.eval_charge_of_fe56_in_he4(lne, lt, backend="jax")
-        assert np.isclose(z_rust, expected, rtol=0.0, atol=1e-7)
         assert np.isclose(z_jax, z_rust, rtol=1e-15, atol=1e-15)
 
 
@@ -120,11 +137,11 @@ def test_eval_ionization_matches_mesa_golden_output() -> None:
 
 
 def test_fe56_in_he4_zones_rust_vs_jax_across_random_seeds() -> None:
-    r"""Verify multi-zone `Fe56`-in-`He4` Rust (`rayon`) vs. JAX across seeds.
+    r"""Verify multi-zone `Fe56`-in-`He4` Rust sequential vs. `rayon` parity.
 
     Evaluates 128 zones across 20 deterministic `np.random.default_rng(seed)`
     seeds and compares `[z, dz_dlog10_ne, dz_dlog10_t]` between sequential
-    Rust, parallel `rayon` Rust, and `@jax.jit` to `1e-14`.
+    and parallel `rayon` Rust execution to `1e-15`.
     """
     n_zones = 128
     with flexmesa.numerics_mode_context("strict"):
@@ -139,13 +156,36 @@ def test_fe56_in_he4_zones_rust_vs_jax_across_random_seeds() -> None:
             out_seq = ionization.eval_charge_of_fe56_in_he4_zones(
                 lne, lt, parallel=False, backend="rust"
             )
+            np.testing.assert_allclose(out_par, out_seq, rtol=1e-15, atol=1e-15)
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason=(
+        "#295: Rust Fe56He4Table uses MESA 26.4.1 fvbicub_db implicit f32 "
+        "basis scalars (interp_2d/private/bicub_db.f:1371-1575; #413), "
+        "whereas the frozen JAX twin keeps f64 basis scalars; measured "
+        "max_rel_err is 5.969e-8 on value and 4.434e-5 on derivatives."
+    ),
+)
+def test_fe56_in_he4_zones_rust_vs_jax_parity() -> None:
+    r"""Verify multi-zone `Fe56`-in-`He4` Rust vs. JAX across random seeds."""
+    n_zones = 128
+    with flexmesa.numerics_mode_context("strict"):
+        for seed in range(20):
+            rng = np.random.default_rng(seed)
+            lne = rng.uniform(24.1, 30.9, size=n_zones)
+            lt = rng.uniform(6.05, 7.95, size=n_zones)
+
+            out_par = ionization.eval_charge_of_fe56_in_he4_zones(
+                lne, lt, parallel=True, backend="rust"
+            )
             out_jax = np.asarray(
                 ionization.eval_charge_of_fe56_in_he4_zones(
                     jnp.asarray(lne), jnp.asarray(lt), backend="jax"
                 ),
                 dtype=np.float64,
             )
-            np.testing.assert_allclose(out_par, out_seq, rtol=1e-15, atol=1e-15)
             np.testing.assert_allclose(
                 out_par[:, 0], out_jax[:, 0], rtol=1e-14, atol=1e-14
             )

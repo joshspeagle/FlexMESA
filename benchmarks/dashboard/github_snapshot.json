@@ -244,8 +244,23 @@
   ],
   "open_pull_requests": [
     {
-      "number": 367,
-      "title": "feat(mtx,star,binary): upstream do_block_multiply_xa and rho = dm/dV reset before each step (#358, #363)",
+      "number": 370,
+      "title": "feat(star,testing): upstream MESA 26.4.1 global total-energy accounting (#151)",
+      "draft": false
+    },
+    {
+      "number": 373,
+      "title": "feat(star,testing,benchmarks): MESA 26.4.1 step dumps and flexmesa trace --compare (#372)",
+      "draft": true
+    },
+    {
+      "number": 377,
+      "title": "Port upstream ZAMS 4-point mass interpolation without xa clamping (#360)",
+      "draft": true
+    },
+    {
+      "number": 378,
+      "title": "Wire atm_option = irradiated_grey and atm_irradiated_* controls (#376)",
       "draft": true
     }
   ],
@@ -615,7 +630,7 @@
       "title": "[Deferred bug] do_block_multiply_xa pairs the wrong off-diagonal blocks with x, so the solver's line-search slope is not grad(f)\u00b7soln",
       "state": "open",
       "kind": "upstream-bug",
-      "parity_pending": true,
+      "parity_pending": false,
       "needs_confirmation": false
     }
   ]

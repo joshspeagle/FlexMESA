@@ -21,7 +21,7 @@
         "verified_total": 5640,
         "pct_ported": 35.1,
         "pct_verified": 4.7,
-        "rust_lines": 87972,
+        "rust_lines": 88195,
         "python_jax_lines": 3869
       },
       {
@@ -55,7 +55,7 @@
         "verified_total": 0,
         "pct_ported": 18.7,
         "pct_verified": 0.0,
-        "rust_lines": 12393,
+        "rust_lines": 12427,
         "python_jax_lines": 1244
       },
       {
@@ -276,8 +276,8 @@
         "verified_total": 0,
         "pct_ported": 0.0,
         "pct_verified": 0.0,
-        "rust_lines": 4173,
-        "python_jax_lines": 1768
+        "rust_lines": 4179,
+        "python_jax_lines": 1775
       },
       {
         "module": "interp_1d",
@@ -593,8 +593,8 @@
         "total": 90,
         "mesa_26_4_1_ref": 86,
         "no_reference_yet": 4,
-        "strict_validated": 42,
-        "diagnostic_runs": 48,
+        "strict_validated": 46,
+        "diagnostic_runs": 44,
         "reached_termination": 39,
         "within_numeric_tol": 6,
         "passing": 1,
@@ -660,12 +660,12 @@
     ],
     "gaps_by_issue": {
       "#161": 28,
-      "#154": 16,
+      "#154": 17,
       "#157": 9,
       "#162": 9,
       "#170": 7,
-      "#158": 6,
       "#155": 5,
+      "#158": 5,
       "#160": 5,
       "#152": 4,
       "#156": 3,
@@ -681,12 +681,12 @@
     {
       "namelist": "star &controls",
       "upstream_scalars": 1444,
-      "matched_in_flexmesa": 1110,
-      "defaults_agree": 1110,
+      "matched_in_flexmesa": 1111,
+      "defaults_agree": 1111,
       "value_mismatch": 0,
       "disabled_limit_none": 0,
       "skipped_unparseable_rust": 17,
-      "unimplemented": 317
+      "unimplemented": 316
     },
     {
       "namelist": "star &star_job",
@@ -1163,7 +1163,7 @@
         "issues": "#143, #160"
       }
     ],
-    "python_xfail_or_skip_count": 12,
+    "python_xfail_or_skip_count": 14,
     "python_skips": [
       {
         "location": "tests/test_bench.py:149",
@@ -1194,6 +1194,16 @@
         "location": "tests/test_star_wave4_2.py:35",
         "reason": "pytest.mark.xfail( strict=True, reason=( \"#295: Rust eval_face_dm_bar at k = nz - 1 uses 0.5*(dm[k-1] + dm[k]) \" \"(MESA 26.4.1 star/private/hydro_momentum.f90:191-196, #340); \" \"frozen JAX eval_hydro_residuals_jax still uses dm_bar[nz - 1], so \" \"zone nz - 1 momentum residual differs by 1.12e-5 against \" \"rtol=1e-13, atol=1e-13.\" ), )",
         "issues": "#295, #340"
+      },
+      {
+        "location": "tests/test_star_wave4_3.py:150",
+        "reason": "pytest.mark.xfail( strict=True, reason=( \"#154: FlexMESA's pre-MS model differs from upstream \" \"build_pre_ms_model (measured on the 7 Msun custom_colors model: \" \"initial residual norm 2.95e-5 against MESA 26.4.1's 1.89e-5 at the \" \"upstream first-step dt, star/private/init.f90:1007). This test \" \"forces a 10-yr coupled step on a 4 Msun pre-MS model, which with \" \"upstream's do_block_multiply_xa (#358) ends in a singular \" \"block-tridiagonal matrix at the second Newton iteration; this 4 \" \"Msun setup has not been run in MESA\" ), )",
+        "issues": "#154, #358"
+      },
+      {
+        "location": "tests/test_star_wave4_4.py:92",
+        "reason": "pytest.mark.xfail( strict=True, reason=( \"#154: FlexMESA's pre-MS model differs from upstream \" \"build_pre_ms_model (measured on the 7 Msun custom_colors model: \" \"initial residual norm 2.95e-5 against MESA 26.4.1's 1.89e-5 at the \" \"upstream first-step dt, star/private/init.f90:1007). This test \" \"forces a 10-yr coupled step on a 4 Msun pre-MS model, which with \" \"upstream's do_block_multiply_xa (#358) ends in a singular \" \"block-tridiagonal matrix at the second Newton iteration; this 4 \" \"Msun setup has not been run in MESA\" ), )",
+        "issues": "#154, #358"
       },
       {
         "location": "tests/test_star_wave5_1.py:231",
@@ -1474,8 +1484,23 @@
     ],
     "open_pull_requests": [
       {
-        "number": 367,
-        "title": "feat(mtx,star,binary): upstream do_block_multiply_xa and rho = dm/dV reset before each step (#358, #363)",
+        "number": 370,
+        "title": "feat(star,testing): upstream MESA 26.4.1 global total-energy accounting (#151)",
+        "draft": false
+      },
+      {
+        "number": 373,
+        "title": "feat(star,testing,benchmarks): MESA 26.4.1 step dumps and flexmesa trace --compare (#372)",
+        "draft": true
+      },
+      {
+        "number": 377,
+        "title": "Port upstream ZAMS 4-point mass interpolation without xa clamping (#360)",
+        "draft": true
+      },
+      {
+        "number": 378,
+        "title": "Wire atm_option = irradiated_grey and atm_irradiated_* controls (#376)",
         "draft": true
       }
     ],
@@ -1845,7 +1870,7 @@
         "title": "[Deferred bug] do_block_multiply_xa pairs the wrong off-diagonal blocks with x, so the solver's line-search slope is not grad(f)\u00b7soln",
         "state": "open",
         "kind": "upstream-bug",
-        "parity_pending": true,
+        "parity_pending": false,
         "needs_confirmation": false
       }
     ]
@@ -2855,6 +2880,32 @@
     {
       "date_utc": "2026-11-22",
       "commit": "ced60f0",
+      "event": "main merge",
+      "engine_ported_pct": "30.7",
+      "all_verified_pct": "1.1",
+      "cases_passing": "3",
+      "rust_cov_pct": "76.2",
+      "python_cov_pct": "87.7",
+      "closed_140": "17",
+      "total_140": "37",
+      "deferred_169": "46"
+    },
+    {
+      "date_utc": "2026-11-23",
+      "commit": "1c1830c",
+      "event": "main merge",
+      "engine_ported_pct": "30.7",
+      "all_verified_pct": "1.1",
+      "cases_passing": "3",
+      "rust_cov_pct": "76.2",
+      "python_cov_pct": "87.7",
+      "closed_140": "17",
+      "total_140": "37",
+      "deferred_169": "46"
+    },
+    {
+      "date_utc": "2026-11-23",
+      "commit": "5f94fbe",
       "event": "main merge",
       "engine_ported_pct": "30.7",
       "all_verified_pct": "1.1",

@@ -114,7 +114,12 @@ def block_multiply_xa(
     *,
     backend: _dispatch.Backend = "auto",
 ) -> npt.NDArray[np.float64]:
-    """Evaluates left product $b = x^{\\top} A$ for a block-tridiagonal system.
+    """Evaluates upstream `do_block_multiply_xa` for a block-tridiagonal system.
+
+    Upstream documents this as the left product $b = x^{\\top} A$ but pairs
+    the off-diagonal blocks as $b_k = x_k D_k + x_k U_k + x_{k+1} L_k$
+    (`mtx/private/mtx_support.f90:746-781`). That pairing is reproduced here
+    (deferred upstream bug #362).
 
     Args:
         lblk: Sub-diagonal blocks `(nz, nvar, nvar)` in `float64`
@@ -127,7 +132,7 @@ def block_multiply_xa(
         backend: Execution backend (``"auto"``, ``"rust"``, or ``"jax"``).
 
     Returns:
-        Row-vector product $b = x^{\\top} A$ matching the shape of `x`.
+        Upstream's product, matching the shape of `x`.
 
     Raises:
         ValueError: If block or vector dimensions do not match.
@@ -148,8 +153,10 @@ def block_multiply_xa(
 
     out: npt.NDArray[np.float64] = np.einsum("ki,kij->kj", x_2d, d_arr)
     if nz > 1:
-        out[1:] += np.einsum("ki,kij->kj", x_2d[:-1], u_arr[:-1])
-        out[:-1] += np.einsum("ki,kij->kj", x_2d[1:], l_arr[1:])
+        # Upstream pairs `ublk(k)` with `x(k)` and `lblk(k)` with `x(k+1)`
+        # (`mtx/private/mtx_support.f90:763-776`, deferred bug #362).
+        out[1:] += np.einsum("ki,kij->kj", x_2d[1:], u_arr[1:])
+        out[:-1] += np.einsum("ki,kij->kj", x_2d[1:], l_arr[:-1])
     return out.reshape(-1) if is_1d else out
 
 

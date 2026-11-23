@@ -423,7 +423,7 @@ impl InlistBundle {
         ]);
         map_bools!("controls", ctrl, c, [
             use_ledoux_criterion, calculate_brunt_b, calculate_brunt_n2,
-            op_split_burn, accrete_same_as_surface,
+            op_split_burn, accrete_same_as_surface, set_rho_to_dm_div_dv,
             accrete_given_mass_fractions, do_element_diffusion, do_conv_premix,
             do_phase_separation, do_phase_separation_heating, use_other_cgrav,
             use_other_alpha_mlt, use_other_wind, use_other_adjust_mdot, use_other_torque,

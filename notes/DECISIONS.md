@@ -69,7 +69,8 @@ Scope and the `v0.1.0` definition are in [`SCOPE.md`](SCOPE.md). Work is tracked
 | 52 | `DualOrder1<N>` Evaluates Upstream's Expression for Each Operation, in One of Two Forms Chosen by `N` (`#339`) | In force | below |
 | 53 | Dashboard Coverage Runs Daily When `main` Has Changed, in Seven Instrumented Shards Built With the `ci` Profile (`#345`) | In force | below |
 | 54 | The Second- and Third-Order Dual Types Are Generated From Upstream's `auto_diff` Modules by a Script (`#349`) | In force | below |
-| 55 | Upstream MESA `26.4.1` Global Total-Energy Accounting (`#151`) | In force | below |
+| 55 | The Binary Step Loop Resets `rho = dm/dV` Before Remeshing, and Retries Restore the Reset Model (`#363`) | In force | below |
+| 56 | Upstream MESA `26.4.1` Global Total-Energy Accounting (`#151`) | In force | below |
 
 ## Pre-audit decisions still in force
 
@@ -740,7 +741,19 @@ The text of these four entries predates the audit of 2026-11-16. The decisions s
   - *Translate by hand*: about 130 routines of up to 30 temporaries each.
   - *Generate at build time*: would make the build depend on a MESA checkout.
 
-## DECISIONS #55: Upstream MESA `26.4.1` Global Total-Energy Accounting (`#151`)
+## DECISIONS #55: The Binary Step Loop Resets `rho = dm/dV` Before Remeshing, and Retries Restore the Reset Model (`#363`)
+
+- **Date**: 2026-11-22
+- **Decision**:
+  1. **Where the reset runs**: `set_rho_to_dm_div_dv_for_new_step` (`star_utils.rs`, upstream `use_xh_to_set_rho_to_dm_div_dV`, `star/private/star_utils.f90:606-632`) runs where `prepare_for_new_step` calls it (`star/private/evolve.f90:1854-1857`): once per step, on the first try, after the `dt` checks and before the remesh. For a single star, `star_evolve_step` calls it before `remesh_star_before_step`. The binary step loop, which owns the per-step remesh of both stars, calls it for each star at the top of its once-per-step block, before remeshing. `star_evolve_step_part1` takes an explicit `prepare_new_step` argument and resets on the first try when it is true, independent of `do_remesh`. The binary loop passes `false` because it has already prepared the step.
+  2. **What a retry restores**: upstream restores retries and redos from `xh_old`, which `new_generation` writes after the reset and the remesh (`evolve.f90:1895`, `set_current_to_old` at `evolve.f90:401`), or from `prev_mesh_xh`, stored right after the reset (`evolve.f90:1859-1872`), when `restore_mesh_on_retry` is set. The binary loop's `post_mesh_snap` therefore carries the reset density, and a new `pre_mesh_snap`, taken after the reset and before the remesh, replaces the pre-step snapshot as the `restore_mesh_on_retry` source. The pre-step snapshot remains the state restored when the step returns an error.
+- **Why**: the binary loop took its retry snapshots before any step preparation. With the reset on the first try only, every retry started again from the unreset density. On the original RLOF fixture, model 1 then ended at 0.122 yr after 13 retries, where MESA ends at 125 yr after 3. With this order, the donor's `lnd lnT lnR L` at the first solver call match an instrumented MESA `26.4.1` run bit for bit in all 2402 zones, and model 1's counts match MESA's.
+- **Limits**: a caller of `star_evolve_step_part1` that passes `prepare_new_step = false` without running the reset itself skips it. The binary loop is the only such caller. `pre_mesh_snap` is captured only when a star sets `restore_mesh_on_retry`, to avoid copying both stars every step.
+- **Alternatives Rejected**:
+  - *Run the reset on every attempt in `star_evolve_step_part1`*: it also gives MESA's model-1 counts, because the reset is idempotent on a restored model. But it runs after the binary loop's remesh, which changes the remeshed density on the first try, and it moves upstream's once-per-step call into the retry path.
+  - *Recapture the pre-step snapshot after the reset*: the error path would then restore a model the caller never had.
+
+## DECISIONS #56: Upstream MESA `26.4.1` Global Total-Energy Accounting (`#151`)
 
 - **Date**: 2026-11-22
 - **Decision**:

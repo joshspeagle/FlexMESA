@@ -1401,6 +1401,7 @@ pub const CONTROLS_SUPPORTED: &[&str] = &[
     "set_min_d_mix",
     "set_min_d_mix_below_tmax",
     "set_min_d_mix_in_h_he",
+    "set_rho_to_dm_div_dv",
     "set_rsp_psurf_to_multiple_of_initial_p1",
     "shock_mass_upper_limit",
     "sig_min_factor_for_high_tcenter",

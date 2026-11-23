@@ -571,6 +571,7 @@ pub fn assemble_henyey_system(
         && has_surf_momentum_bc(&model.controls))
     .then(|| eval_surf_momentum_bc_pressure_ad(model));
 
+    let mut tot_e_equ_err = 0.0_f64;
     for k in 0..nz {
         do1_density_eqn(model, k, sys)?;
         if model.controls.u_flag && !model.controls.v_flag {
@@ -586,7 +587,12 @@ pub fn assemble_henyey_system(
         if !model.controls.rsp2_flag {
             do1_temperature_eqn(model, k, sys);
         }
-        do1_energy_eqn(model, k, include_chem, sys);
+        tot_e_equ_err += crate::hydro_energy::do1_energy_eqn_with_ergs_error(
+            model,
+            k,
+            include_chem,
+            sys,
+        );
         do1_radius_eqn(model, k, sys);
         if model.controls.rti_flag {
             crate::hydro_rti::do1_dalpha_rti_dt_eqn(model, k, sys);
@@ -595,6 +601,7 @@ pub fn assemble_henyey_system(
             do1_chem_eqns(model, k, sys);
         }
     }
+    model.aux.step_hist.tot_e_equ_err = tot_e_equ_err;
     if model.controls.rsp2_flag {
         crate::rsp2_ad::eval_and_save_rsp2_eqns(model, sys);
     }

@@ -16,7 +16,7 @@ on:
       case_timeout_sec:
         description: "Per-case timeout in seconds"
         required: false
-        default: "300"
+        default: "600"
 
 permissions:
   contents: read
@@ -92,11 +92,11 @@ jobs:
   full-history-harness:
     name: Full 106-Case Strict History Harness Campaign
     runs-on: ubuntu-latest
-    # 106 cases at up to 300 s each, twice when a strict run is rejected and
-    # rerun as diagnostic, on 2 workers. Per-case results are appended to
+    # 106 cases at up to 600 s each (DECISIONS #57), twice when a strict run is
+    # rejected and rerun as diagnostic, on 2 workers. Per-case results are appended to
     # logs/progress.jsonl as they finish, so a cancelled job still uploads
     # what it measured.
-    timeout-minutes: 300
+    timeout-minutes: 355
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
@@ -114,7 +114,7 @@ jobs:
           mkdir -p "$OUT_DIR"
           JOBS="${{ inputs.harness_jobs || '2' }}"
           MAX_RSS="${{ inputs.max_rss_gb || '5.5' }}"
-          TIMEOUT="${{ inputs.case_timeout_sec || '300' }}"
+          TIMEOUT="${{ inputs.case_timeout_sec || '600' }}"
           flexmesa harness run \
             --preset all \
             --numerics-mode strict \

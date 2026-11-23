@@ -88,24 +88,31 @@ pub fn eval_cell_pressure_for_work_ad(
     (p_ad, p_theta)
 }
 
+/// Evaluates luminosity velocity time-centering weight $\theta_L$ for cell `k`
+/// (`setup_dL_dm`, `star/private/hydro_energy.f90:211-228` and
+/// `okay_energy_conservation`, `star/private/evolve.f90:1279-1285`).
+#[must_use]
+pub(crate) fn eval_l_theta(model: &StarModel, k: usize) -> f64 {
+    let logt = model.ln_t[k] / LN10;
+    if model.controls.is_velocity_time_centered(model.model_number)
+        && model.controls.include_l_in_velocity_time_centering
+        && logt
+            <= model
+                .controls
+                .max_logt_for_include_p_and_l_in_velocity_time_centering
+    {
+        model.controls.l_theta_for_velocity_time_centering
+    } else {
+        1.0
+    }
+}
+
 /// Evaluates the luminosity divergence $dL/dm = (L_k - L_{k+1}) / \Delta m_k$
 /// with optional $\theta_L$ velocity time-centering (`setup_dL_dm` in
 /// `star/private/hydro_energy.f90:211-228`).
 #[must_use]
 pub fn setup_dl_dm(model: &StarModel, k: usize) -> StarAdOrder1 {
-    let logt = model.ln_t[k] / LN10;
-    let l_theta =
-        if model.controls.is_velocity_time_centered(model.model_number)
-            && model.controls.include_l_in_velocity_time_centering
-            && logt
-                <= model
-                    .controls
-                    .max_logt_for_include_p_and_l_in_velocity_time_centering
-        {
-            model.controls.l_theta_for_velocity_time_centering
-        } else {
-            1.0
-        };
+    let l_theta = eval_l_theta(model, k);
     let l_start_00 = model.lum_start.get(k).copied().unwrap_or(model.lum[k]);
     let lum_00 = StarAdOrder1::variable(model.lum[k], I_L_00) * l_theta
         + l_start_00 * (1.0 - l_theta);
@@ -179,13 +186,7 @@ pub fn setup_sources_and_others(
     {
         StarAdOrder1::ZERO
     } else if doing_op_split_burn {
-        let avg_eps = model
-            .aux
-            .burn_avg_epsnuc
-            .get(k)
-            .copied()
-            .filter(|&v| v != 0.0)
-            .unwrap_or(model.eps_nuc[k]);
+        let avg_eps = model.aux.burn_avg_epsnuc.get(k).copied().unwrap_or(0.0);
         StarAdOrder1::constant(avg_eps)
     } else {
         StarAdOrder1::from_dlnd_dlnt_00(
@@ -393,6 +394,56 @@ pub fn set_energy_eqn_scal(model: &StarModel, k: usize) -> f64 {
     scal * dt / model.energy_start[k].max(1.0)
 }
 
+/// Evaluates `(work_outward_at_surface, work_inward_at_center)` in
+/// $\mathrm{erg\,s^{-1}}$ matching `setup_dwork_dm`, `eval1_work`, and
+/// `eval_simple_PdV_work` (`star/private/hydro_energy.f90:176-177, 640-655,
+/// 769, 872`).
+#[must_use]
+pub fn eval_surface_and_center_work(model: &StarModel) -> (f64, f64) {
+    let nz = model.nz;
+    if nz == 0 {
+        return (0.0, 0.0);
+    }
+    let u_flag_only = model.controls.u_flag && !model.controls.v_flag;
+    let vel_tc = model.controls.is_velocity_time_centered(model.model_number)
+        && model.dt > 0.0
+        && !model.ln_r_start.is_empty();
+    let simple_pdv = !u_flag_only
+        && vel_tc
+        && model
+            .controls
+            .use_p_d_1_div_rho_form_of_work_when_time_centering_velocity;
+    let skip_peos = !u_flag_only
+        && model.controls.energy_eqn_option == EnergyEqnOption::EpsGrav;
+
+    let p_in = model.peos_start.get(nz - 1).copied().unwrap_or(0.0);
+    let work_inward_at_center = FOUR_PI
+        * flexmesa_math::pow2(model.r_center)
+        * p_in
+        * model.v_center;
+
+    let work_outward_at_surface = if u_flag_only {
+        crate::riemann_eqns::eval1_work_u_flag_ad(model, 0).val
+    } else if simple_pdv {
+        let av_00 =
+            crate::hydro_work::eval1_a_times_v_face_v_flag_ad(model, 0, vel_tc)
+                .val;
+        let (p_tot_ad, _) =
+            crate::hydro_work::eval_simple_pdv_p_tot_ad(model, 0, skip_peos);
+        p_tot_ad.val * av_00
+    } else if model.dt <= 0.0
+        && !(model.controls.v_flag || model.controls.u_flag)
+    {
+        0.0
+    } else {
+        crate::hydro_work::eval1_work_v_flag_ad(model, 0, skip_peos, vel_tc)
+            .0
+            .val
+    };
+
+    (work_outward_at_surface, work_inward_at_center)
+}
+
 /// Energy conservation equation for cell `k` (`do1_energy_eqn` in
 /// `star/private/hydro_energy.f90:36-879`).
 pub fn do1_energy_eqn(
@@ -401,6 +452,18 @@ pub fn do1_energy_eqn(
     include_chem: bool,
     sys: &mut HenyeySystem,
 ) {
+    let _ = do1_energy_eqn_with_ergs_error(model, k, include_chem, sys);
+}
+
+/// Evaluates [`do1_energy_eqn`] and returns the cell unscaled energy residual
+/// `ergs_error(k) = -dm(k) * dt * resid_ad%val` in $\mathrm{erg}$
+/// (`star/private/hydro_energy.f90:114`).
+pub(crate) fn do1_energy_eqn_with_ergs_error(
+    model: &StarModel,
+    k: usize,
+    include_chem: bool,
+    sys: &mut HenyeySystem,
+) -> f64 {
     let dl_dm = setup_dl_dm(model, k);
     let (sources, doing_op_split_burn) = setup_sources_and_others(model, k);
     let d_eturb_dt = setup_d_turbulent_energy_dt(model, k);
@@ -510,6 +573,7 @@ pub fn do1_energy_eqn(
         }
     };
 
+    let ergs_error_k = -model.dm[k] * model.dt * esum.val;
     let scal = set_energy_eqn_scal(model, k);
     let resid = esum * scal;
     let i_equ = model.layout.i_dlne_dt;
@@ -576,4 +640,5 @@ pub fn do1_energy_eqn(
             sys.add_partial(k, i_equ, k, ivar, d_equ_dx);
         }
     }
+    ergs_error_k
 }

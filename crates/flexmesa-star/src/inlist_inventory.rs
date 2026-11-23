@@ -471,6 +471,7 @@ pub const KAP_SUPPORTED: &[&str] = &[
 /// Supported `&controls` keys.
 pub const CONTROLS_SUPPORTED: &[&str] = &[
     "abs_diff_lg_lh_lg_ls_limit",
+    "absolute_cumulative_energy_err",
     "accrete_given_mass_fractions",
     "accrete_same_as_surface",
     "accreted_material_j",
@@ -895,6 +896,7 @@ pub const CONTROLS_SUPPORTED: &[&str] = &[
     "include_l_in_velocity_time_centering",
     "include_mlt_corr_to_tdc",
     "include_p_in_velocity_time_centering",
+    "include_rotation_in_total_energy",
     "include_u_in_correction_limits",
     "include_v_in_correction_limits",
     "include_w_in_correction_limits",
@@ -1406,6 +1408,7 @@ pub const CONTROLS_SUPPORTED: &[&str] = &[
     "set_min_d_mix",
     "set_min_d_mix_below_tmax",
     "set_min_d_mix_in_h_he",
+    "set_rho_to_dm_div_dv",
     "set_rsp_psurf_to_multiple_of_initial_p1",
     "shock_mass_upper_limit",
     "sig_min_factor_for_high_tcenter",

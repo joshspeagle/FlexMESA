@@ -17,27 +17,13 @@ use crate::mass_utils::{
 };
 use crate::model::StarModel;
 
-/// Evaluates the single-zone specific total energy $e_{\mathrm{tot},k} = e_k -
-/// \frac{1}{2} c_{\mathrm{mc}} \left(\frac{G m_{\mathrm{grav},k}}{r_k} +
-/// \frac{G m_{\mathrm{grav},k+1}}{r_{k+1}}\right) + \tfrac{1}{2} v_k^2$
-/// ($\mathrm{erg\,g^{-1}}$) at zone `k` (`eval_cell_section_total_energy` in
-/// `star/private/star_utils.f90:2245-2283` and `profile_getval.f90:2022-2023`).
+/// Evaluates the single-zone specific total energy $e_{\mathrm{tot},k}$
+/// ($\mathrm{erg\,g^{-1}}$) at zone `k` (`cell_specific_total_energy` in
+/// `star/private/star_utils.f90:2397-2410`).
 #[must_use]
 #[inline]
 pub fn eval_cell_specific_total_energy(model: &StarModel, k: usize) -> f64 {
-    let nz = model.nz;
-    if k >= nz {
-        return 0.0;
-    }
-    // `cell_specific_total_energy` (`star/private/star_utils.f90:2396-2408`):
-    // internal energy, then kinetic energy when a velocity variable exists,
-    // then potential energy, added in that order.
-    let mut cell_total = model.energy[k];
-    if model.controls.v_flag || model.controls.u_flag {
-        cell_total += crate::cell_energy::cell_specific_ke(model, k);
-    }
-    cell_total += crate::cell_energy::cell_specific_pe(model, k);
-    cell_total
+    crate::cell_energy::cell_specific_total_energy(model, k)
 }
 
 /// Computes the specific total energy profile $e_{\mathrm{tot},k}$
@@ -85,57 +71,26 @@ pub struct AdjustMassRecord {
 }
 
 /// The per-cell total energy in erg that both upstream profile routines
-/// build, `dm` times the specific energies added in upstream's order.
+/// build, `dm` times the specific energies added in upstream's order
+/// (`eval_deltaM_total_energy_integrals` and `eval_total_energy_profile` in
+/// `star/private/star_utils.f90:2439-2560`).
 ///
 /// `with_tdc_eturb` selects the extra turbulent term that
-/// `eval_deltaM_total_energy_integrals` adds (`star_utils.f90:2491-2502`) and
-/// `eval_total_energy_profile` does not.
+/// `eval_deltaM_total_energy_integrals` adds (`star_utils.f90:2494-2505`) and
+/// `eval_total_energy_profile` does not (`star_utils.f90:2525-2560`).
 fn total_energy_profile_impl(
     model: &StarModel,
     with_tdc_eturb: bool,
-) -> Result<Vec<f64>, crate::controls::StarError> {
-    let nz = model.nz;
-    if model.controls.rsp2_flag || model.controls.rsp_flag {
-        // Upstream adds `dm*w**2` (RSP2) or `dm*RSP_Et` (RSP) here
-        // (`star_utils.f90:2488-2490, 2503-2507, 2550-2557`).
-        return Err(crate::controls::StarError::InvalidInput(
-            "total energy profile for mass change with RSP or RSP2 is not \
-             ported (star_utils.f90:2488-2507)"
-                .to_string(),
-        ));
-    }
-    let tdc_eturb = with_tdc_eturb
-        && model.controls.mlt_option == flexmesa_turb::MltOption::Tdc
-        && model.controls.tdc_include_eturb_in_energy_equation;
-    let mut profile = vec![0.0_f64; nz];
-    for k in 0..nz {
-        let dm = model.dm[k];
-        let mut cell_total = 0.0_f64;
-        let mut cell1 = dm * model.energy[k];
-        cell_total += cell1;
-        if model.controls.v_flag || model.controls.u_flag {
-            cell1 = dm * crate::cell_energy::cell_specific_ke(model, k);
-            cell_total += cell1;
-        }
-        cell1 = dm * crate::cell_energy::cell_specific_pe(model, k);
-        cell_total += cell1;
-        // The rotational term is added only when
-        // `include_rotation_in_total_energy` is set (`star_utils.f90:2481-2486`).
-        // That control is `.false.` by default (`controls.defaults:9399`)
-        // and is not a FlexMESA control, so the term is never added.
-        if tdc_eturb {
-            let eturb = if k + 1 < nz {
-                0.75 * (flexmesa_math::pow2(model.mlt_vc[k])
-                    + flexmesa_math::pow2(model.mlt_vc[k + 1]))
-            } else {
-                0.75 * flexmesa_math::pow2(model.mlt_vc[k])
-            };
-            cell1 = dm * eturb;
-            cell_total += cell1;
-        }
-        profile[k] = cell_total;
-    }
-    Ok(profile)
+) -> Vec<f64> {
+    crate::evolve_support::eval_energy_integrals_kernel(
+        model,
+        0,
+        model.nz,
+        None,
+        with_tdc_eturb,
+        true,
+    )
+    .0
 }
 
 /// `total_energy_profile_before_adjust_mass` as `save_for_eps_mdot` fills it
@@ -148,24 +103,22 @@ fn total_energy_profile_impl(
 ///
 /// # Errors
 ///
-/// Returns `InvalidInput` for RSP or RSP2 models, whose turbulent terms are
-/// not ported here.
+/// Always returns `Ok`; retains `Result` return type for API compatibility.
 pub fn total_energy_profile_before_adjust_mass(
     model: &StarModel,
 ) -> Result<Vec<f64>, crate::controls::StarError> {
-    total_energy_profile_impl(model, true)
+    Ok(total_energy_profile_impl(model, true))
 }
 
 /// `eval_total_energy_profile` (`star_utils.f90:2525-2560`), in erg per cell.
 ///
 /// # Errors
 ///
-/// Returns `InvalidInput` for RSP or RSP2 models, whose turbulent terms are
-/// not ported here.
+/// Always returns `Ok`; retains `Result` return type for API compatibility.
 pub fn eval_total_energy_profile(
     model: &StarModel,
 ) -> Result<Vec<f64>, crate::controls::StarError> {
-    total_energy_profile_impl(model, false)
+    Ok(total_energy_profile_impl(model, false))
 }
 
 #[inline]

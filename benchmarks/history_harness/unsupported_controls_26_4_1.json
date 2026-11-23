@@ -10,7 +10,7 @@
     "total_cases": 106,
     "strict_pass_cases": 50,
     "strict_fail_cases": 56,
-    "distinct_unsupported_controls": 191,
+    "distinct_unsupported_controls": 190,
     "distinct_unknown_controls": 0,
     "cases_with_headless_plotting": 78,
     "distinct_headless_plotting_keys": 895
@@ -46,11 +46,11 @@
     {
       "section": "controls",
       "upstream_keys": 1448,
-      "supported_keys": 1159,
+      "supported_keys": 1162,
       "unused_keys": 23,
       "headless_gui_keys": 0,
       "terminal_output_keys": 16,
-      "unimplemented_upstream_keys": 250
+      "unimplemented_upstream_keys": 247
     },
     {
       "section": "binary_job",
@@ -1677,15 +1677,6 @@
       "case_count": 1,
       "cases": [
         "star/ccsn_IIp"
-      ]
-    },
-    {
-      "section": "controls",
-      "key": "set_rho_to_dm_div_dv",
-      "category": "unimplemented",
-      "case_count": 1,
-      "cases": [
-        "star/rsp_save_and_load_file"
       ]
     },
     {
@@ -8429,8 +8420,7 @@
         "controls::rsp_report_undercorrections::unimplemented",
         "controls::rsp_tol_max_resid::unused",
         "controls::rsp_trace_rsp_build_model::unimplemented",
-        "controls::rsp_write_map::unused",
-        "controls::set_rho_to_dm_div_dv::unimplemented"
+        "controls::rsp_write_map::unused"
       ],
       "unknown_controls": [],
       "headless_plotting_keys_count": 69,

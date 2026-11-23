@@ -424,7 +424,7 @@ impl InlistBundle {
         ]);
         map_bools!("controls", ctrl, c, [
             use_ledoux_criterion, calculate_brunt_b, calculate_brunt_n2,
-            op_split_burn, accrete_same_as_surface,
+            op_split_burn, accrete_same_as_surface, set_rho_to_dm_div_dv,
             accrete_given_mass_fractions, do_element_diffusion, do_conv_premix,
             do_phase_separation, do_phase_separation_heating, use_other_cgrav,
             use_other_alpha_mlt, use_other_wind, use_other_adjust_mdot, use_other_torque,
@@ -438,6 +438,7 @@ impl InlistBundle {
             include_mlt_corr_to_tdc, tdc_include_eturb_in_energy_equation,
             use_drag_energy, use_pvsc_art_visc, use_time_centered_eps_grav,
             include_composition_in_eps_grav, use_gravity_rotation_correction,
+            include_rotation_in_total_energy, absolute_cumulative_energy_err,
             use_mass_corrections, use_gradt_actual_vs_gradt_mlt_for_t_gradient_eqn,
             use_dprad_dm_form_of_t_gradient_eqn, use_flux_limiting_with_dprad_dm_form,
             use_rsp_l_eqn_outer_bc, use_momentum_outer_bc, use_zero_pgas_outer_bc,

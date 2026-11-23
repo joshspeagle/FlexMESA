@@ -883,6 +883,11 @@ pub fn star_exceeds_delta_mdot_hard_limit(star: &StarModel) -> bool {
 /// `star/private/evolve.f90:282-730`), returning
 /// [`StarStepAttemptOutcome::Retry`] directly to the coupled binary outer
 /// loop on solver failure rather than swallowing retries internally.
+///
+/// With `allow_remesh = true`, part 1 prepares the step itself (the
+/// `rho = dm/dV` reset on the first try and, when the remesh conditions
+/// hold, the remesh). With `allow_remesh = false` the caller must already
+/// have done both, as the binary step loop does (`DECISIONS #55`).
 pub fn evolve_single_star_attempt(
     star: &mut StarModel,
     dt_try: f64,
@@ -904,7 +909,13 @@ pub fn evolve_single_star_attempt(
         && dt_try >= star.controls.mix_wind.remesh_dt_limit;
     let op_split = star.controls.op_split_burn;
     let mut extras = DefaultStarExtras;
-    let res = star_evolve_step_part1(star, first_try, do_remesh, &mut extras)
+    let res = star_evolve_step_part1(
+        star,
+        first_try,
+        allow_remesh,
+        do_remesh,
+        &mut extras,
+    )
         .and_then(|part1| {
             star_evolve_step_part2(
                 star,

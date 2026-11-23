@@ -523,20 +523,11 @@ fn test_atm_linear_pt_eos_module_hex_parity() {
                 exp_t,
             );
             let got_lp = log10(exp(out_v.ln_p));
-            if tau_in > 50.0 {
-                // Sole remaining 1-ULP gap from a 3-ULP kap_get offset at
-                // step #784 (lnRho=0xc02e0ee651149051, lnT=0x4021cf2e353e3e1b).
-                assert!(
-                    ulp_distance(got_lp, f64::from_bits(exp_p)) <= 1,
-                    "Eddington tau=100 logP exceeded 1 ULP"
-                );
-            } else {
-                assert_zero_ulp(
-                    &format!("varying {rel_name} ({tau_b}) logP"),
-                    got_lp,
-                    exp_p,
-                );
-            }
+            assert_zero_ulp(
+                &format!("varying {rel_name} ({tau_b}) logP"),
+                got_lp,
+                exp_p,
+            );
         }
 
         let tid_edd = get_t_tau_id("Eddington").unwrap();

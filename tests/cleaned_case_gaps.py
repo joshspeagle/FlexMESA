@@ -10,19 +10,66 @@ gaps in ``benchmarks/history_harness/known_gaps.toml``.
 
 A test that finds a case in this table asserts the exact stop. A case that
 starts running fails that assertion, so the entry must then be removed.
+
+A stop is either an error whose message matches ``message_pattern``, or, when
+``termination_code`` is set, a run that returns with exactly that termination
+code instead of reaching the step cap.
 """
 
 from __future__ import annotations
 
 import dataclasses
+from collections.abc import Callable, Mapping
+
+import pytest
 
 
 @dataclasses.dataclass(frozen=True)
 class DeclaredStop:
-    """Expected error text for a cleaned case and the owning issue."""
+    """Expected stop of a cleaned case and the owning issue.
 
-    message_pattern: str
+    Attributes:
+        message_pattern: Regular expression the raised ``ValueError`` must
+            match, or ``None`` when ``termination_code`` is set.
+        issue: Open issue of the package that restores upstream behaviour.
+        termination_code: Exact termination code the run must return with,
+            for a case that stops without raising.
+    """
+
+    message_pattern: str | None
     issue: str
+    termination_code: str | None = None
+
+    def __post_init__(self) -> None:
+        """Checks that exactly one of the two stop forms is given."""
+        if (self.message_pattern is None) == (self.termination_code is None):
+            raise ValueError(
+                "set exactly one of message_pattern and termination_code"
+            )
+
+
+def assert_declared_stop(
+    gap: DeclaredStop, run: Callable[[], Mapping[str, object]]
+) -> None:
+    """Runs a cleaned case and asserts that it stops exactly as declared.
+
+    Args:
+        gap: Declared stop of the case.
+        run: Runs the cleaned case and returns its report.
+
+    Raises:
+        AssertionError: If the case stops differently or not at all.
+    """
+    if gap.termination_code is not None:
+        rep = run()
+        assert rep["termination_code"] == gap.termination_code, (
+            f"declared stop {gap.termination_code!r} ({gap.issue}) not hit: "
+            f"{rep['termination_code']!r}"
+        )
+        return
+    assert gap.message_pattern is not None
+    with pytest.raises(ValueError, match=gap.message_pattern):
+        run()
 
 
 DECLARED_STAR_STOPS: dict[str, DeclaredStop] = {
@@ -37,4 +84,12 @@ DECLARED_STAR_STOPS: dict[str, DeclaredStop] = {
     ),
     "wd_aic": DeclaredStop(r"unknown net file 'wd_aic\.net'", "#161"),
     "tzo": DeclaredStop(r"dutch_wind_lowt_scheme' option 'other'", "#161"),
+    # The 7 Msun pre-MS model differs from upstream's build_pre_ms_model:
+    # at the first step's dt (1e-5 yr, star/private/init.f90:1007) the
+    # initial residual norm is 2.95e-5 against MESA 26.4.1's 1.89e-5, and dt
+    # collapses to min_timestep_limit in the first step, where MESA's run
+    # continues (#154).
+    "custom_colors": DeclaredStop(
+        None, "#154", termination_code="min_timestep_limit"
+    ),
 }

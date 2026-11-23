@@ -18,6 +18,7 @@ use crate::hydro_vars::set_hydro_vars;
 use crate::inlist_runner::{DefaultStarExtras, ExtrasDirective, StarExtras};
 use crate::model::StarModel;
 use crate::solver::HenyeySolverReport;
+use crate::star_utils::set_rho_to_dm_div_dv_for_new_step;
 use crate::struct_burn_mix::{do_struct_burn_mix, refresh_mixing_state};
 use crate::termination::{LimitCheckOutcome, do_check_limits};
 use crate::timestep::TimestepAction;
@@ -241,6 +242,13 @@ pub fn star_evolve_step_with_extras(
 /// so the solver's `active_max_tries` schedule and retry line search match
 /// MESA `26.4.1`.
 ///
+/// `prepare_new_step` runs `prepare_for_new_step`'s `rho = dm/dV` reset
+/// (`star/private/evolve.f90:1854-1857`) on the first try. Pass `false`
+/// only when the caller has already run
+/// [`crate::star_utils::set_rho_to_dm_div_dv_for_new_step`] for this step,
+/// before any remesh, as the binary step loop does (`DECISIONS #55`). The
+/// reset does not depend on `do_remesh`.
+///
 /// # Errors
 /// Returns [`StarError`] if timestep controls are invalid, `dt <= 0` or below
 /// `min_timestep_limit`, remeshing fails, or `set_mdot` fails.
@@ -248,6 +256,7 @@ pub fn star_evolve_step_with_extras(
 pub fn star_evolve_step_part1(
     model: &mut StarModel,
     first_try: bool,
+    prepare_new_step: bool,
     do_remesh: bool,
     extras: &mut dyn StarExtras,
 ) -> Result<StarStepPart1State, StarError> {
@@ -290,6 +299,12 @@ pub fn star_evolve_step_part1(
             model_number: model.model_number,
             reason: String::from("min_timestep_limit"),
         });
+    }
+    // `prepare_for_new_step` (`star/private/evolve.f90:1854-1857`), unless
+    // the caller has prepared the step itself (the binary step loop resets
+    // both stars before remeshing them, `DECISIONS #55`).
+    if first_try && prepare_new_step {
+        set_rho_to_dm_div_dv_for_new_step(model)?;
     }
 
     let has_prev_generation = !model.lnd_old.is_empty();
@@ -906,6 +921,8 @@ pub(crate) fn star_evolve_step_outcome_with_extras(
             reason: String::from("min_timestep_limit"),
         });
     }
+    // `prepare_for_new_step` (`star/private/evolve.f90:1854-1857`).
+    set_rho_to_dm_div_dv_for_new_step(model)?;
 
     let has_prev_generation = !model.lnd_old.is_empty();
     let prev_dt_old = model.dt_old;

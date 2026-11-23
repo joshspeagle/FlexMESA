@@ -80,6 +80,8 @@ impl Default for StarControls {
             u_flag: false,
             rotation_flag: false,
             rsp_flag: false,
+            // `star/defaults/controls.defaults:11706`.
+            set_rho_to_dm_div_dv: true,
             rsp2_flag: false,
             do_element_diffusion: false,
             do_conv_premix: false,

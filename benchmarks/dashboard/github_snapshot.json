@@ -307,6 +307,11 @@
       "number": 460,
       "title": "fix(harness): compare sparse reference histories only at their rows (#459)",
       "draft": true
+    },
+    {
+      "number": 462,
+      "title": "fix(star): unpack_xh after conv_premix, energy-equation scale as upstream, dump max_correction sign (#444)",
+      "draft": true
     }
   ],
   "deferred_169": [

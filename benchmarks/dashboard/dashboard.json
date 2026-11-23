@@ -1616,6 +1616,11 @@
         "number": 460,
         "title": "fix(harness): compare sparse reference histories only at their rows (#459)",
         "draft": true
+      },
+      {
+        "number": 462,
+        "title": "fix(star): unpack_xh after conv_premix, energy-equation scale as upstream, dump max_correction sign (#444)",
+        "draft": true
       }
     ],
     "deferred_169": [
@@ -3313,6 +3318,19 @@
     {
       "date_utc": "2026-11-23",
       "commit": "851777e",
+      "event": "main merge",
+      "engine_ported_pct": "30.7",
+      "all_verified_pct": "1.1",
+      "cases_passing": "5",
+      "rust_cov_pct": "76.3",
+      "python_cov_pct": "87.7",
+      "closed_140": "26",
+      "total_140": "49",
+      "deferred_169": "55"
+    },
+    {
+      "date_utc": "2026-11-23",
+      "commit": "d72d62b",
       "event": "main merge",
       "engine_ported_pct": "30.7",
       "all_verified_pct": "1.1",

@@ -76,6 +76,7 @@ Scope and the `v0.1.0` definition are in [`SCOPE.md`](SCOPE.md). Work is tracked
 | 59 | A Run Cut Off by Its Budget Is Inconclusive and Is Checked as a Prefix of a Completed Baseline Row (`#447`) | In force | below |
 | 60 | ADIPLS Elementary Functions Are Correctly Rounded in Strict Mode (`#171`) | In force | below |
 | 61 | The In-House Pulsation Scaffolding Is Removed Package by Package (`#170`, `#171`) | In force | below |
+| 62 | A Reference History That Skips Models Is Compared Only at Its Own Rows (`#459`) | In force | below |
 
 ## Pre-audit decisions still in force
 
@@ -823,3 +824,14 @@ The text of these four entries predates the audit of 2026-11-16. The decisions s
 - **Why**: Several pulsation cases already match MESA's histories in the stellar-evolution part (four `gyre_in_mesa_*` cases reach upstream termination with all history rows within tolerance). Keeping the scaffolding until its replacement lands keeps that signal measured, while the manifest mark keeps the cases from passing.
 - **Alternatives Rejected**:
   - *Removing all scaffolding first*: the GYRE cases would stop at their first oscillation call, hiding the star-trajectory comparison until the port lands.
+
+## DECISIONS #62: A Reference History That Skips Models Is Compared Only at Its Own Rows (`#459`)
+
+- **Date**: 2026-11-23
+- **Decision**: When the MESA reference history's `model_number` advances by more than one between consecutive rows (the case sets `history_interval > 1`), `compare_histories` evaluates every along-track tolerance and the first diverging step only at the reference rows, interpolating the every-step FlexMESA run there, as it already did for `num_zones`. A reference written at every model keeps the dense comparison grid (uniform grid plus both tables' nodes), so a run spike between two MESA models is still caught.
+- **Why**: MESA 26.4.1 records nothing between the rows of a sparse history; the full un-thinned MESA histories have the same rows. Interpolating such a reference along straight chords compares the run with a trajectory MESA never produced, and a curved track then fails by the chord's distance from the curve. `star/diffusion_smoothness` agrees with MESA to `<= 4.9e-10` in `log_center_Rho` at all five MESA rows but failed its track tolerance at `7.87e-3` from the chord alone (`#443`). Tolerances and reference data are unchanged.
+- **Limits**: Between sparse reference rows the run is not checked; MESA gives no values there. Final-value, termination and step-count checks are unchanged.
+- **Alternatives Rejected**:
+  - *Regenerating references with `history_interval = 1`*: changes the upstream inlist used to produce the reference.
+  - *Recording the FlexMESA run at the same interval (`respect_intervals`)*: still compares chords wherever the two runs' rows fall at different ages.
+  - *Comparing at reference rows for every case*: drops the dense check for every-model references, where the chord is MESA's own step-to-step record.

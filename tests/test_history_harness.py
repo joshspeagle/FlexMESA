@@ -1552,3 +1552,153 @@ def test_extract_history_run_stats_and_rel_num_zones_and_mass_loss_tables(
     assert nz_dev_s.max_abs_diff == pytest.approx(0.0)
     assert nz_dev_s.max_rel_diff == pytest.approx(0.0)
     assert nz_comp.first_diverging_step is None
+
+
+def _make_energy_harness_fixture(
+    tmp_path: pathlib.Path,
+) -> tuple[
+    case_manifest.CaseManifestEntry,
+    pathlib.Path,
+    pathlib.Path,
+    harness_runner.TraceRunOutcome,
+]:
+    ref_file = tmp_path / "energy_ref.tsv"
+    run_file = tmp_path / "energy_run.tsv"
+    run_file.write_text(
+        "# FlexMESA run with log_rel_run_E_err\n"
+        "model_number\tstar_age\tlog_L\tlog_rel_run_E_err\n"
+        "1\t0.0\t0.000\t-10.400\n"
+        "2\t1.0e6\t0.010\t-9.050\n"
+        "3\t2.0e6\t0.020\t-8.150\n",
+        encoding="utf-8",
+    )
+    spec = case_manifest.CaseManifestEntry(
+        suite="star",
+        case="hse_riemann",
+        reference_status="mesa_26_4_1",
+        reference_path="energy_ref.tsv",
+        required_termination="max_age",
+        independent_var="star_age",
+        final_tolerances={"rel_star_age": 0.01, "log_L": 0.01},
+        track_tolerances={"log_L": 0.01},
+    )
+    outcome = harness_runner.TraceRunOutcome(
+        suite="star",
+        case="hse_riemann",
+        status="ok",
+        termination_code="max_age",
+        steps=3,
+        retries=0,
+        wall_time_sec=0.1,
+        peak_rss_gb=0.1,
+        history_path=run_file,
+    )
+    return spec, ref_file, run_file, outcome
+
+
+def test_energy_conservation_log_rel_run_e_err_section_and_roundtrip(
+    tmp_path: pathlib.Path,
+) -> None:
+    """Verify #151 log_rel_run_E_err comparison, JSON roundtrip, and table."""
+    spec, ref_file, run_file, outcome = _make_energy_harness_fixture(tmp_path)
+    ref_file.write_text(
+        "# MESA 26.4.1 reference with log_rel_run_E_err\n"
+        "model_number\tstar_age\tlog_L\tlog_rel_run_E_err\n"
+        "1\t0.0\t0.000\t-10.500\n"
+        "2\t1.0e6\t0.010\t-9.200\n"
+        "3\t2.0e6\t0.020\t-8.400\n",
+        encoding="utf-8",
+    )
+    comp = history_compare.compare_histories(
+        history_compare.load_history_file(ref_file),
+        history_compare.load_history_file(run_file),
+        spec,
+    )
+    assert comp.final_run_values["log_rel_run_E_err"] == pytest.approx(-8.15)
+    assert comp.final_ref_values["log_rel_run_E_err"] == pytest.approx(-8.40)
+    assert comp.final_diffs["log_rel_run_E_err"] == pytest.approx(0.25)
+
+    raw = history_compare.comparison_to_dict(comp)
+    json_blob = json.dumps(raw, allow_nan=False)
+    restored = history_compare.comparison_from_dict(json.loads(json_blob))
+    assert restored.final_run_values == comp.final_run_values
+    assert restored.final_ref_values == comp.final_ref_values
+    assert restored.final_diffs["log_rel_run_E_err"] == pytest.approx(0.25)
+
+    manifest = case_manifest.HarnessManifest(
+        mesa_release="26.4.1",
+        zenodo_record="19722306",
+        cases=(spec,),
+    )
+    rec = harness_runner.evaluate_case_record(
+        spec,
+        {},
+        outcome,
+        root_dir=tmp_path,
+        precomputed_comparison=restored,
+    )
+    md = case_report.render_case_table_markdown(manifest, [rec])
+    assert (
+        "## Energy Conservation Track Comparisons (`log_rel_run_E_err`, `#151`)"
+        in md
+    )
+    assert "| `star` | `hse_riemann` |" in md
+    assert "| `log_rel_run_E_err` | -8.150 | -8.400 | +2.500e-01 |" in md
+
+    # Records lacking energy-error columns omit the #151 section cleanly.
+    plain_comp = dataclasses.replace(
+        restored,
+        final_diffs={
+            k: v
+            for k, v in restored.final_diffs.items()
+            if k != "log_rel_run_E_err"
+        },
+        track_deviations=tuple(
+            d
+            for d in restored.track_deviations
+            if d.column != "log_rel_run_E_err"
+        ),
+        final_run_values={},
+        final_ref_values={},
+    )
+    rec_plain = dataclasses.replace(rec, comparison=plain_comp)
+    md_plain = case_report.render_case_table_markdown(manifest, [rec_plain])
+    assert "Energy Conservation Track Comparisons" not in md_plain
+
+
+def test_evaluate_case_record_augments_energy_columns_from_full_history(
+    tmp_path: pathlib.Path,
+) -> None:
+    """Verify full-run energy columns augment thinned MESA reference tracks."""
+    spec, ref_file, _, outcome = _make_energy_harness_fixture(tmp_path)
+    ref_file.write_text(
+        "# MESA 26.4.1 thinned reference without energy columns\n"
+        "model_number\tstar_age\tlog_L\n"
+        "1\t0.0\t0.000\n"
+        "2\t1.0e6\t0.010\n"
+        "3\t2.0e6\t0.020\n",
+        encoding="utf-8",
+    )
+    full_hist = (
+        tmp_path / "runs" / "star" / "hse_riemann" / "LOGS" / "history.data"
+    )
+    full_hist.parent.mkdir(parents=True, exist_ok=True)
+    full_hist.write_text(
+        "# MESA 26.4.1 full history with log_rel_run_E_err\n"
+        "model_number\tstar_age\tlog_L\tlog_rel_run_E_err\n"
+        "1\t0.0\t0.000\t-10.500\n"
+        "2\t1.0e6\t0.010\t-9.200\n"
+        "3\t2.0e6\t0.020\t-8.400\n",
+        encoding="utf-8",
+    )
+    rec = harness_runner.evaluate_case_record(
+        spec,
+        {},
+        outcome,
+        root_dir=tmp_path,
+    )
+    assert rec.comparison is not None
+    comp = rec.comparison
+    assert comp.final_ref_values["log_rel_run_E_err"] == pytest.approx(-8.40)
+    assert comp.final_run_values["log_rel_run_E_err"] == pytest.approx(-8.15)
+    assert comp.final_diffs["log_rel_run_E_err"] == pytest.approx(0.25)

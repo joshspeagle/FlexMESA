@@ -10,7 +10,7 @@ use crate::adjust_mass::do_adjust_mass_step;
 use crate::controls::{StarError, StepFailureInfo};
 pub use crate::evolve_support::snapshot_step_old_extras;
 use crate::evolve_support::{
-    apply_step_pre_physics_with_extras, eval_total_energy_integrals,
+    apply_step_pre_physics_with_extras, record_start_of_step_energy_integrals,
     remesh_star_before_step, snapshot_step_start_extras,
     update_step_energy_conservation,
 };
@@ -181,9 +181,27 @@ pub fn restore_from_old(model: &mut StarModel) -> Result<(), StarError> {
     model.conv_vel.clone_from(&model.aux.mlt_vc_old);
     model.aux.okay_to_set_mlt_vc = true;
     model.aux.burn_avg_epsnuc.fill(0.0);
+    record_start_of_step_energy_integrals(model);
     model.save_start_values()?;
     snapshot_step_start_extras(model);
     Ok(())
+}
+
+fn non_finite_energy_error_reason(model: &StarModel) -> Option<&'static str> {
+    let sh = &model.aux.step_hist;
+    if !sh.total_energy_sources_and_sinks.is_finite() {
+        Some(
+            "okay_energy_conservation: non-finite total_energy_sources_and_sinks",
+        )
+    } else if !sh.error_in_energy_conservation.is_finite() {
+        Some(
+            "okay_energy_conservation: non-finite error_in_energy_conservation",
+        )
+    } else if !model.aux.cumulative_energy_error.is_finite() {
+        Some("okay_energy_conservation: non-finite cumulative_energy_error")
+    } else {
+        None
+    }
 }
 
 /// Executes a single evolutionary step (`star_evolve_step` in `evolve.f90`):
@@ -330,18 +348,16 @@ pub fn star_evolve_step_part1(
             (0, 0, None)
         };
 
-    if !model.controls.rsp2_flag && model.aux.total_energy == 0.0 {
-        model.aux.total_energy = eval_total_energy_integrals(model).5;
-    }
     snapshot_step_old_extras(model);
     model.save_old_values();
+    record_start_of_step_energy_integrals(model);
     snapshot_step_start_extras(model);
     model.aux.okay_to_set_mlt_vc = true;
     model.aux.step_hist.mstar_dot_old = prev_mstar_dot_old;
     model.aux.step_hist.time_old_sec = model.aux.step_hist.time_sec;
     model.dt_old = prev_dt_old;
     let rsp2_e_old = if model.controls.rsp2_flag {
-        crate::rsp_driver::rsp_total_energy_integrals(model).0
+        model.aux.step_hist.total_energy_old
     } else {
         0.0
     };
@@ -643,14 +659,29 @@ pub fn star_evolve_step_part2(
 
     if let Ok(rep) = attempt {
         if rep.converged && !force_outer_retry {
-            model.model_number = target_mod;
             model.aux.step_hist.time_old_sec = saved.time_sec;
             model.aux.step_hist.time_sec = saved.time_sec + dt_try;
             model.time_old_sec = saved.time_sec;
             model.time_sec = saved.time_sec + dt_try;
             model.star_age = model.aux.step_hist.time_sec / SECYER;
             model.dt = dt_try;
+            // Evaluate global energy accounting at the step's active
+            // `model_number` (`target_mod - 1`) before incrementing so
+            // `is_velocity_time_centered` matches `hydro_energy::setup_dl_dm`.
             update_step_energy_conservation(model, dt_try);
+            if let Some(reason) = non_finite_energy_error_reason(model) {
+                restore_attempt_state(
+                    model,
+                    state.pre_remesh_model.take(),
+                    saved,
+                )?;
+                model.dt = state.dt_prev;
+                return Err(StarError::Terminated {
+                    model_number: target_mod,
+                    reason: String::from(reason),
+                });
+            }
+            model.model_number = target_mod;
 
             if model.controls.ts_stop.max_timestep_hi_t_limit > 0.0
                 && model.controls.max_years_for_timestep
@@ -864,10 +895,21 @@ pub(crate) fn star_evolve_step_outcome_with_extras(
             model.aux.rsp.total_energy_old = etot;
             total_radiation = 0.0;
             model.aux.cumulative_energy_error = 0.0;
+            model.aux.step_hist.cumulative_energy_error_old = 0.0;
         }
         let err_e = etot - (model.aux.rsp.total_energy_old - total_radiation);
-        model.aux.cumulative_energy_error += err_e;
+        model.aux.cumulative_energy_error =
+            crate::evolve_support::next_cumulative_energy_error(model, err_e);
         model.aux.total_energy = etot;
+        let sh = &mut model.aux.step_hist;
+        sh.total_internal_energy_end = model.aux.rsp.ethe;
+        sh.total_gravitational_energy_end = model.aux.rsp.egrv;
+        sh.total_radial_kinetic_energy_end = model.aux.rsp.ekin;
+        sh.total_rotational_kinetic_energy_end = 0.0;
+        sh.total_turbulent_energy_end = model.aux.rsp.econ;
+        sh.total_energy_end = etot;
+        sh.error_in_energy_conservation = err_e;
+        sh.total_energy_sources_and_sinks = -total_radiation;
 
         let check_term = match extras.extras_check_model(model) {
             ExtrasDirective::Terminate(reason) => Some(reason),
@@ -949,18 +991,16 @@ pub(crate) fn star_evolve_step_outcome_with_extras(
         (0, 0, None)
     };
 
-    if !model.controls.rsp2_flag && model.aux.total_energy == 0.0 {
-        model.aux.total_energy = eval_total_energy_integrals(model).5;
-    }
     snapshot_step_old_extras(model);
     model.save_old_values();
+    record_start_of_step_energy_integrals(model);
     snapshot_step_start_extras(model);
     model.aux.okay_to_set_mlt_vc = true;
     model.aux.step_hist.mstar_dot_old = prev_mstar_dot_old;
     model.aux.step_hist.time_old_sec = model.aux.step_hist.time_sec;
     model.dt_old = prev_dt_old;
     let rsp2_e_old = if model.controls.rsp2_flag {
-        crate::rsp_driver::rsp_total_energy_integrals(model).0
+        model.aux.step_hist.total_energy_old
     } else {
         0.0
     };
@@ -1182,18 +1222,35 @@ pub(crate) fn star_evolve_step_outcome_with_extras(
 
         if let Ok(ref rep) = attempt {
             if rep.converged && !force_outer_retry {
-                model.model_number = target_mod;
                 model.aux.step_hist.time_old_sec = pre_step_time_sec;
                 model.aux.step_hist.time_sec = pre_step_time_sec + dt_try;
                 model.time_old_sec = pre_step_time_sec;
                 model.time_sec = pre_step_time_sec + dt_try;
                 model.star_age = model.aux.step_hist.time_sec / SECYER;
                 model.dt = dt_try;
+                // Evaluate global energy accounting at the step's active
+                // `model_number` (`target_mod - 1`) before incrementing so
+                // `is_velocity_time_centered` matches `hydro_energy::setup_dl_dm`.
                 update_step_energy_conservation(model, dt_try);
-
+                if let Some(reason) = non_finite_energy_error_reason(model) {
+                    restore_attempt_state(
+                        model,
+                        pre_remesh_model.take(),
+                        saved,
+                    )?;
+                    model.dt = dt_prev;
+                    return Err(StarError::Terminated {
+                        model_number: target_mod,
+                        reason: String::from(reason),
+                    });
+                }
+                model.model_number = target_mod;
                 if model.controls.ts_stop.max_timestep_hi_t_limit > 0.0
                     && model.controls.max_years_for_timestep
-                        != model.controls.ts_stop.hi_t_max_years_for_timestep
+                        != model
+                            .controls
+                            .ts_stop
+                            .hi_t_max_years_for_timestep
                     && model.t.iter().copied().fold(0.0_f64, f64::max)
                         >= model.controls.ts_stop.max_timestep_hi_t_limit
                 {
@@ -1205,19 +1262,20 @@ pub(crate) fn star_evolve_step_outcome_with_extras(
 
                 // Upstream runs `do_check_limits` before `extras_check_model`
                 // and `pick_next_timestep` (`run_star_support.f90:211-213`).
-                let limit_outcome = match do_check_limits(model, None, false) {
-                    Ok(out) => out,
-                    Err(e) => {
-                        model.model_number -= 1;
-                        restore_attempt_state(
-                            model,
-                            pre_remesh_model.take(),
-                            saved,
-                        )?;
-                        model.dt = dt_prev;
-                        return Err(e);
-                    }
-                };
+                let limit_outcome =
+                    match do_check_limits(model, None, false) {
+                        Ok(out) => out,
+                        Err(e) => {
+                            model.model_number -= 1;
+                            restore_attempt_state(
+                                model,
+                                pre_remesh_model.take(),
+                                saved,
+                            )?;
+                            model.dt = dt_prev;
+                            return Err(e);
+                        }
+                    };
                 match limit_outcome {
                     LimitCheckOutcome::Redo { dt_new, .. } => {
                         let max_redos = model.controls.ts_stop.redo_limit;
@@ -1655,11 +1713,9 @@ fn restore_attempt_state(
 ) -> Result<bool, StarError> {
     let restored_remesh = if let Some(buf) = snap {
         buf.restore_into(model)?;
-        if !model.controls.rsp2_flag && model.aux.total_energy == 0.0 {
-            model.aux.total_energy = eval_total_energy_integrals(model).5;
-        }
         snapshot_step_old_extras(model);
         model.save_old_values();
+        record_start_of_step_energy_integrals(model);
         snapshot_step_start_extras(model);
         model.aux.okay_to_set_mlt_vc = true;
         model.aux.step_hist.mstar_dot_old = saved.mstar_dot_old;
@@ -1706,11 +1762,7 @@ fn finalize_accepted_step(
     if model.controls.rsp2_flag {
         model.aux.rsp.time_old_sec = model.aux.rsp.time_sec;
         model.aux.rsp.time_sec += dt_try;
-        let (etot, total_rad) =
-            crate::rsp_driver::rsp_total_energy_integrals(model);
         model.aux.rsp.total_energy_old = rsp2_e_old;
-        model.aux.cumulative_energy_error += etot - (rsp2_e_old - total_rad);
-        model.aux.total_energy = etot;
         update_rsp2_cycle_stats(model, dt_try, &mut dt_next);
     }
     apply_max_age_to_dt_next(model, &mut dt_next);

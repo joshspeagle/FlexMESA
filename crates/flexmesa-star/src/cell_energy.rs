@@ -193,6 +193,71 @@ pub fn cell_specific_ke(model: &StarModel, k: usize) -> f64 {
     cell_specific_ke_qp(model, k).ke.to_f64()
 }
 
+/// `cell_specific_rotational_energy` (`star/private/star_utils.f90:2328-2339`):
+/// face average `0.5 * (e_p1 + e_00)` with `e = i_rot * omega * omega` in
+/// $\mathrm{erg\,g^{-1}}$.
+///
+/// Reproduces MESA `26.4.1` verbatim, including the absence of an extra `0.5`
+/// factor inside `e_00` and `e_p1`.
+#[must_use]
+pub fn cell_specific_rotational_energy(model: &StarModel, k: usize) -> f64 {
+    let nz = model.nz;
+    if k >= nz {
+        return 0.0;
+    }
+    let i_00 = model.aux.i_rot.get(k).copied().unwrap_or(0.0);
+    let w_00 = model.omega.get(k).copied().unwrap_or(0.0);
+    let e_00 = i_00 * w_00 * w_00;
+    let e_p1 = if k + 1 < nz {
+        let i_p1 = model.aux.i_rot.get(k + 1).copied().unwrap_or(0.0);
+        let w_p1 = model.omega.get(k + 1).copied().unwrap_or(0.0);
+        i_p1 * w_p1 * w_p1
+    } else {
+        0.0
+    };
+    0.5 * (e_p1 + e_00)
+}
+
+/// Returns the `RSP2` cell specific turbulent energy $w_k^2$ in
+/// $\mathrm{erg\,g^{-1}}$ (`pow2(s% w(k))` in `star/private/star_utils.f90:2408, 2491`).
+#[must_use]
+pub(crate) fn cell_rsp2_eturb(model: &StarModel, k: usize) -> f64 {
+    if model.layout.i_w.is_some() {
+        model.aux.rsp.et_rsp.get(k).copied().unwrap_or(0.0)
+    } else {
+        model.aux.etrb.get(k).copied().unwrap_or(0.0)
+    }
+}
+
+/// `cell_specific_total_energy` (`star/private/star_utils.f90:2397-2410`):
+/// specific total energy of cell `k` in $\mathrm{erg\,g^{-1}}$, summing
+/// internal, radial kinetic (when `v_flag || u_flag`), gravitational potential,
+/// rotational (when `rotation_flag && include_rotation_in_total_energy`),
+/// `RSP2` (`w^2`), and `RSP` (`RSP_Et`) contributions in upstream order.
+#[must_use]
+pub fn cell_specific_total_energy(model: &StarModel, k: usize) -> f64 {
+    if k >= model.nz {
+        return 0.0;
+    }
+    let mut cell_total = model.energy[k];
+    if model.controls.v_flag || model.controls.u_flag {
+        cell_total += cell_specific_ke(model, k);
+    }
+    cell_total += cell_specific_pe(model, k);
+    if model.controls.rotation_flag
+        && model.controls.include_rotation_in_total_energy
+    {
+        cell_total += cell_specific_rotational_energy(model, k);
+    }
+    if model.controls.rsp2_flag {
+        cell_total += cell_rsp2_eturb(model, k);
+    }
+    if model.controls.rsp_flag {
+        cell_total += model.aux.rsp.et_rsp.get(k).copied().unwrap_or(0.0);
+    }
+    cell_total
+}
+
 /// Output of [`get_dke_dt_dpe_dt`], all `real(dp)`.
 #[derive(Clone, Copy, Debug)]
 pub struct DkeDpeDt {

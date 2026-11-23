@@ -19,6 +19,7 @@ from flexmesa.testing import (
     case_manifest,
     case_report,
     harness_runner,
+    stepdump_compare,
 )
 
 
@@ -167,7 +168,52 @@ def _build_trace_parser() -> argparse.ArgumentParser:
         default=None,
         help="Optional resident-memory ceiling in GB.",
     )
+    parser.add_argument(
+        "--compare",
+        default=None,
+        metavar="MESA_STEPDUMP",
+        help=(
+            "MESA 26.4.1 step dump (benchmarks/fortran_mesa/stepdumps) to "
+            "compare with: runs the case with FlexMESA's step dump on for "
+            "the same number of models and reports the first record that "
+            "differs (#372). Exit status: 0 when the records are "
+            "bit-identical, 2 when they differ, 1 when the run fails."
+        ),
+    )
+    parser.add_argument(
+        "--ignore",
+        nargs="*",
+        default=[],
+        metavar="NAME",
+        help=(
+            "With --compare: record types (EQU, DM, TRY, ...), column names "
+            "(h1, lnd, ...) or 'xa' (every species column) left out, so a "
+            "known difference does not hide the next one."
+        ),
+    )
     return parser
+
+
+def _stepdump_window(mesa_dump: pathlib.Path) -> tuple[int, int | None]:
+    """Returns the models per star and the first model number of a MESA dump.
+
+    The first model number is ``None`` when the dump starts at the first
+    model of the run.
+    """
+    steps: int | None = None
+    first: int | None = None
+    with mesa_dump.open(encoding="utf-8") as fh:
+        for line in fh:
+            if not line.startswith("#"):
+                break
+            key, _, val = line[1:].partition(":")
+            if key.strip() == "steps_per_star":
+                steps = int(val)
+            elif key.strip() == "first_model" and val.strip().isdigit():
+                first = int(val)
+    if steps is None:
+        raise ValueError(f"{mesa_dump}: no steps_per_star header line")
+    return steps, first
 
 
 def trace_main(argv: list[str] | None = None) -> int:
@@ -177,7 +223,8 @@ def trace_main(argv: list[str] | None = None) -> int:
         argv: CLI arguments following ``flexmesa trace``.
 
     Returns:
-        Exit status (``0`` on success, ``1`` on run failure/timeout/OOM).
+        Exit status (``0`` on success, ``1`` on run failure/timeout/OOM; with
+        ``--compare``, ``2`` when the step dumps differ).
     """
     cli_args = list(sys.argv[1:] if argv is None else argv)
     if cli_args and cli_args[0] == "_worker":
@@ -185,6 +232,22 @@ def trace_main(argv: list[str] | None = None) -> int:
 
     ns = _build_trace_parser().parse_args(cli_args)
     eff_mode = harness_runner.resolve_effective_numerics_mode(ns.numerics_mode)
+    flex_dump: pathlib.Path | None = None
+    if ns.compare is not None:
+        steps, first = _stepdump_window(pathlib.Path(ns.compare))
+        flex_dump = pathlib.Path(ns.out) / "flexmesa.stepdump"
+        flex_dump.parent.mkdir(parents=True, exist_ok=True)
+        flex_dump.unlink(missing_ok=True)
+        os.environ["FLEXMESA_STEPDUMP"] = str(flex_dump)
+        os.environ["FLEXMESA_STEPDUMP_STEPS"] = str(steps)
+        if first is not None:
+            os.environ["FLEXMESA_STEPDUMP_FIRST"] = str(first)
+        else:
+            os.environ.pop("FLEXMESA_STEPDUMP_FIRST", None)
+        if first is None and ns.max_steps is None:
+            # A window at the start of the run needs only its own models; a
+            # later window runs up to the timeout or --max-steps.
+            ns.max_steps = steps
     case_dir = harness_runner.resolve_case_dir(
         ns.suite, ns.case, mesa_dir=ns.mesa_dir
     )
@@ -212,6 +275,17 @@ def trace_main(argv: list[str] | None = None) -> int:
     )
     if outcome.error_message and outcome.status != "ok":
         print(f"error: {outcome.error_message}", file=sys.stderr)
+    if flex_dump is not None:
+        if not flex_dump.exists():
+            print("error: FlexMESA wrote no step dump", file=sys.stderr)
+            return 1
+        report, div = stepdump_compare.compare_files(
+            pathlib.Path(ns.compare), flex_dump, frozenset(ns.ignore)
+        )
+        print(report, end="")
+        if outcome.status != "ok":
+            return 1
+        return 0 if div is None else 2
     return 0 if outcome.status == "ok" else 1
 
 

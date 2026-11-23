@@ -393,7 +393,7 @@ def test_all_56_inversion_and_eospt_scalars_in_upstream_test_output() -> None:
 
 
 def test_get_t_logp_matches_early_stopped_upstream_iterate() -> None:
-    """Check `eos_dt_get_t` on `logP` against `test_output` `tol=1e-5` step."""
+    """Check `eos_dt_get_t` on `logP` (`othertol=1e-12`, `tol=1e-5`)."""
     _, inv_entries, _, _ = _parse_upstream_eos_test_output()
     tp_blk = dict(inv_entries[11:16])
     cids, xa = _solar_composition()
@@ -406,7 +406,7 @@ def test_get_t_logp_matches_early_stopped_upstream_iterate() -> None:
             xa,
             log_t_guess=tp_blk["guess logT"],
             logt_tol=1.0e-5,
-            other_tol=1.0e-5,
+            other_tol=1.0e-12,
         )
     np.testing.assert_allclose(
         float(inv_tp.log10_result), tp_blk["found logT"], rtol=1e-12, atol=0.0

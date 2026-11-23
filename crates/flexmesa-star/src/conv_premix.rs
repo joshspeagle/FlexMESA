@@ -120,6 +120,7 @@ struct SavedData {
 pub fn do_conv_premix(model: &mut StarModel) -> Result<usize, StarError> {
     let nz = model.nz;
     if nz < 2 || model.species == 0 {
+        model.aux.need_to_setvars = true;
         return Ok(0);
     }
 
@@ -164,6 +165,10 @@ pub fn do_conv_premix(model: &mut StarModel) -> Result<usize, StarError> {
             j_it,
         )?;
     }
+
+    // Match `star/private/conv_premix.f90:176`: downstream `set_vars_if_needed`
+    // must unpack `xh` and refresh microphysics after premixing trial updates.
+    model.aux.need_to_setvars = true;
 
     Ok(total_advanced)
 }

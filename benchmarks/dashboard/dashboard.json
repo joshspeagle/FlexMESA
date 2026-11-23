@@ -21,7 +21,7 @@
         "verified_total": 5640,
         "pct_ported": 35.1,
         "pct_verified": 4.7,
-        "rust_lines": 93866,
+        "rust_lines": 94514,
         "python_jax_lines": 3869
       },
       {
@@ -55,7 +55,7 @@
         "verified_total": 0,
         "pct_ported": 18.7,
         "pct_verified": 0.0,
-        "rust_lines": 12428,
+        "rust_lines": 12416,
         "python_jax_lines": 1244
       },
       {
@@ -72,8 +72,8 @@
         "verified_total": 0,
         "pct_ported": 0.0,
         "pct_verified": 0.0,
-        "rust_lines": 6104,
-        "python_jax_lines": 1288
+        "rust_lines": 6121,
+        "python_jax_lines": 1295
       },
       {
         "module": "eos",
@@ -106,7 +106,7 @@
         "verified_total": 0,
         "pct_ported": 0.0,
         "pct_verified": 0.0,
-        "rust_lines": 6999,
+        "rust_lines": 7147,
         "python_jax_lines": 3359
       },
       {
@@ -123,7 +123,7 @@
         "verified_total": 0,
         "pct_ported": 0.0,
         "pct_verified": 0.0,
-        "rust_lines": 10819,
+        "rust_lines": 10858,
         "python_jax_lines": 728
       },
       {
@@ -191,7 +191,7 @@
         "verified_total": 0,
         "pct_ported": 66.5,
         "pct_verified": 0.0,
-        "rust_lines": 2822,
+        "rust_lines": 2848,
         "python_jax_lines": 3116
       },
       {
@@ -455,14 +455,14 @@
       "upstream_panel_modules": 46
     },
     "infrastructure_lines": {
-      "rust_bridge_testing_bench": 19427,
-      "python_testing_bench": 17271
+      "rust_bridge_testing_bench": 19687,
+      "python_testing_bench": 17423
     }
   },
   "numerics": {
     "has_165_ci": true,
     "strict_cross_machine_identical": "gated in CI by scripts/check_strict_determinism.py (x86_64 vs aarch64, 1 vs 4 threads; 474,062 math vectors + uncapped star/1.3M_ms_high_Z + binary/jdot_gr_check run with unsupported controls ignored; a bit-identity check, not a comparison with MESA)",
-    "strict_kernels_bit_identical": "math: 403,258/403,258 CRMATH 0 ULP (70,804 libm <= 1 ULP); 304,660/304,751 probed module hex 0 ULP (8 complete, 15 non-math probed)",
+    "strict_kernels_bit_identical": "math: 403,258/403,258 CRMATH 0 ULP (70,804 libm <= 1 ULP); 304,760/304,760 probed module hex 0 ULP (10 complete, 15 non-math probed)",
     "total_upstream_hex_values": 348321,
     "modules": [
       {
@@ -523,7 +523,7 @@
       {
         "module": "kap",
         "upstream_exact_values": 54,
-        "exact_strict_compared": "13/21 0 ULP (max 1,459,407,697 ULP, 21 total)"
+        "exact_strict_compared": "21/21 (0 ULP)"
       },
       {
         "module": "rates",
@@ -538,7 +538,7 @@
       {
         "module": "net",
         "upstream_exact_values": 140,
-        "exact_strict_compared": "55/116 0 ULP (max 66 ULP, 124 total)"
+        "exact_strict_compared": "116/124 (0 ULP partial)"
       },
       {
         "module": "ionization",
@@ -553,7 +553,7 @@
       {
         "module": "turb",
         "upstream_exact_values": 136,
-        "exact_strict_compared": "40/62 0 ULP (max 6 ULP, 71 total)"
+        "exact_strict_compared": "71/71 (0 ULP)"
       },
       {
         "module": "star_data",
@@ -593,12 +593,12 @@
         "total": 90,
         "mesa_26_4_1_ref": 86,
         "no_reference_yet": 4,
-        "strict_validated": 43,
-        "diagnostic_runs": 47,
-        "reached_termination": 49,
-        "within_numeric_tol": 8,
-        "passing": 1,
-        "declared_gaps": 85,
+        "strict_validated": 46,
+        "diagnostic_runs": 44,
+        "reached_termination": 52,
+        "within_numeric_tol": 10,
+        "passing": 2,
+        "declared_gaps": 84,
         "undeclared_failures": 0
       },
       "binary": {
@@ -630,6 +630,11 @@
       {
         "suite": "star",
         "case": "carbon_kh",
+        "issue": "#161"
+      },
+      {
+        "suite": "star",
+        "case": "custom_colors",
         "issue": "#161"
       },
       {
@@ -670,7 +675,7 @@
     ],
     "gaps_by_issue": {
       "#161": 28,
-      "#154": 17,
+      "#154": 16,
       "#157": 9,
       "#162": 9,
       "#170": 7,
@@ -690,22 +695,22 @@
     {
       "namelist": "star &controls",
       "upstream_scalars": 1444,
-      "matched_in_flexmesa": 1121,
-      "defaults_agree": 1121,
+      "matched_in_flexmesa": 1123,
+      "defaults_agree": 1123,
       "value_mismatch": 0,
       "disabled_limit_none": 0,
       "skipped_unparseable_rust": 17,
-      "unimplemented": 306
+      "unimplemented": 304
     },
     {
       "namelist": "star &star_job",
       "upstream_scalars": 455,
-      "matched_in_flexmesa": 112,
-      "defaults_agree": 112,
+      "matched_in_flexmesa": 135,
+      "defaults_agree": 135,
       "value_mismatch": 0,
       "disabled_limit_none": 0,
       "skipped_unparseable_rust": 1,
-      "unimplemented": 342
+      "unimplemented": 319
     },
     {
       "namelist": "binary &binary_controls + &binary_job",
@@ -772,22 +777,22 @@
     "rust": {
       "tool": "cargo llvm-cov",
       "overall": {
-        "lines": 122763,
-        "covered": 93498,
-        "percent": 76.2
+        "lines": 127870,
+        "covered": 97612,
+        "percent": 76.3
       },
       "by_crate": [
         {
           "crate": "flexmesa-astero",
-          "lines": 4187,
-          "covered": 1632,
-          "percent": 39.0
+          "lines": 4222,
+          "covered": 1642,
+          "percent": 38.9
         },
         {
           "crate": "flexmesa-atm",
-          "lines": 1584,
-          "covered": 1382,
-          "percent": 87.2
+          "lines": 1792,
+          "covered": 1569,
+          "percent": 87.6
         },
         {
           "crate": "flexmesa-autodiff",
@@ -797,14 +802,14 @@
         },
         {
           "crate": "flexmesa-bench",
-          "lines": 3538,
-          "covered": 2376,
-          "percent": 67.2
+          "lines": 3529,
+          "covered": 2367,
+          "percent": 67.1
         },
         {
           "crate": "flexmesa-binary",
-          "lines": 8305,
-          "covered": 5496,
+          "lines": 8334,
+          "covered": 5521,
           "percent": 66.2
         },
         {
@@ -815,9 +820,9 @@
         },
         {
           "crate": "flexmesa-colors",
-          "lines": 1275,
-          "covered": 873,
-          "percent": 68.5
+          "lines": 1308,
+          "covered": 903,
+          "percent": 69.0
         },
         {
           "crate": "flexmesa-const",
@@ -839,9 +844,9 @@
         },
         {
           "crate": "flexmesa-eos",
-          "lines": 9988,
-          "covered": 8166,
-          "percent": 81.8
+          "lines": 10678,
+          "covered": 8815,
+          "percent": 82.6
         },
         {
           "crate": "flexmesa-interp1d",
@@ -857,33 +862,33 @@
         },
         {
           "crate": "flexmesa-ionization",
-          "lines": 1931,
-          "covered": 1661,
-          "percent": 86.0
+          "lines": 2072,
+          "covered": 1788,
+          "percent": 86.3
         },
         {
           "crate": "flexmesa-kap",
-          "lines": 4884,
-          "covered": 3725,
-          "percent": 76.3
+          "lines": 4876,
+          "covered": 3735,
+          "percent": 76.6
         },
         {
           "crate": "flexmesa-math",
           "lines": 1070,
-          "covered": 909,
-          "percent": 85.0
+          "covered": 922,
+          "percent": 86.2
         },
         {
           "crate": "flexmesa-mtx",
-          "lines": 2766,
-          "covered": 2446,
-          "percent": 88.4
+          "lines": 2763,
+          "covered": 2434,
+          "percent": 88.1
         },
         {
           "crate": "flexmesa-net",
-          "lines": 7926,
-          "covered": 7099,
-          "percent": 89.6
+          "lines": 8032,
+          "covered": 7224,
+          "percent": 89.9
         },
         {
           "crate": "flexmesa-neu",
@@ -899,8 +904,8 @@
         },
         {
           "crate": "flexmesa-rates",
-          "lines": 2728,
-          "covered": 2457,
+          "lines": 2752,
+          "covered": 2480,
           "percent": 90.1
         },
         {
@@ -911,9 +916,9 @@
         },
         {
           "crate": "flexmesa-star",
-          "lines": 57082,
-          "covered": 43886,
-          "percent": 76.9
+          "lines": 60740,
+          "covered": 46656,
+          "percent": 76.8
         },
         {
           "crate": "flexmesa-testing",
@@ -923,31 +928,31 @@
         },
         {
           "crate": "flexmesa-turb",
-          "lines": 1378,
-          "covered": 1207,
-          "percent": 87.6
+          "lines": 1391,
+          "covered": 1210,
+          "percent": 87.0
         },
         {
           "crate": "flexmesa-utils",
-          "lines": 1157,
-          "covered": 784,
-          "percent": 67.8
+          "lines": 1347,
+          "covered": 947,
+          "percent": 70.3
         }
       ]
     },
     "python": {
       "tool": "pytest --cov",
       "overall": {
-        "statements": 26315,
-        "covered": 23068,
+        "statements": 26872,
+        "covered": 23577,
         "percent": 87.7
       },
       "by_subpackage": [
         {
           "subpackage": "flexmesa",
-          "statements": 138,
-          "covered": 124,
-          "percent": 89.9
+          "statements": 152,
+          "covered": 128,
+          "percent": 84.2
         },
         {
           "subpackage": "flexmesa.astero",
@@ -1005,9 +1010,9 @@
         },
         {
           "subpackage": "flexmesa.eos",
-          "statements": 3510,
-          "covered": 3345,
-          "percent": 95.3
+          "statements": 3514,
+          "covered": 3338,
+          "percent": 95.0
         },
         {
           "subpackage": "flexmesa.interp_1d",
@@ -1042,8 +1047,8 @@
         {
           "subpackage": "flexmesa.mtx",
           "statements": 610,
-          "covered": 512,
-          "percent": 83.9
+          "covered": 517,
+          "percent": 84.8
         },
         {
           "subpackage": "flexmesa.net",
@@ -1084,14 +1089,14 @@
         {
           "subpackage": "flexmesa.star",
           "statements": 1303,
-          "covered": 1265,
-          "percent": 97.1
+          "covered": 1261,
+          "percent": 96.8
         },
         {
           "subpackage": "flexmesa.testing",
-          "statements": 4241,
-          "covered": 3356,
-          "percent": 79.1
+          "statements": 4780,
+          "covered": 3867,
+          "percent": 80.9
         },
         {
           "subpackage": "flexmesa.turb",
@@ -1112,62 +1117,62 @@
     "rust_ignore_count": 13,
     "rust_ignores": [
       {
-        "location": "crates/flexmesa-astero/tests/astero_suite.rs:454",
+        "location": "crates/flexmesa-astero/tests/astero_suite.rs:617",
         "reason": "unverified uncapped astero campaign; tracked in #143 and #162",
         "issues": "#143, #162"
       },
       {
-        "location": "crates/flexmesa-astero/tests/astero_suite.rs:460",
+        "location": "crates/flexmesa-astero/tests/astero_suite.rs:623",
         "reason": "unverified uncapped astero campaign; tracked in #143 and #162",
         "issues": "#143, #162"
       },
       {
-        "location": "crates/flexmesa-astero/tests/astero_suite.rs:466",
+        "location": "crates/flexmesa-astero/tests/astero_suite.rs:629",
         "reason": "unverified uncapped astero campaign; tracked in #143 and #162",
         "issues": "#143, #162"
       },
       {
-        "location": "crates/flexmesa-astero/tests/astero_suite.rs:472",
+        "location": "crates/flexmesa-astero/tests/astero_suite.rs:635",
         "reason": "unverified uncapped astero campaign; tracked in #143 and #162",
         "issues": "#143, #162"
       },
       {
-        "location": "crates/flexmesa-astero/tests/astero_suite.rs:478",
+        "location": "crates/flexmesa-astero/tests/astero_suite.rs:641",
         "reason": "unverified uncapped astero campaign; tracked in #143 and #162",
         "issues": "#143, #162"
       },
       {
-        "location": "crates/flexmesa-binary/tests/tier5_coupled_suite.rs:1045",
+        "location": "crates/flexmesa-binary/tests/tier5_coupled_suite.rs:1047",
         "reason": "unverified uncapped binary campaign; tracked in #143 and #160",
         "issues": "#143, #160"
       },
       {
-        "location": "crates/flexmesa-binary/tests/tier5_coupled_suite.rs:1053",
+        "location": "crates/flexmesa-binary/tests/tier5_coupled_suite.rs:1055",
         "reason": "unverified uncapped binary campaign; tracked in #143 and #160",
         "issues": "#143, #160"
       },
       {
-        "location": "crates/flexmesa-binary/tests/tier5_coupled_suite.rs:1062",
+        "location": "crates/flexmesa-binary/tests/tier5_coupled_suite.rs:1064",
         "reason": "unverified uncapped binary campaign; tracked in #143 and #160",
         "issues": "#143, #160"
       },
       {
-        "location": "crates/flexmesa-binary/tests/tier5_coupled_suite.rs:1070",
+        "location": "crates/flexmesa-binary/tests/tier5_coupled_suite.rs:1072",
         "reason": "unverified uncapped binary campaign; tracked in #143 and #160",
         "issues": "#143, #160"
       },
       {
-        "location": "crates/flexmesa-binary/tests/tier5_coupled_suite.rs:1078",
+        "location": "crates/flexmesa-binary/tests/tier5_coupled_suite.rs:1080",
         "reason": "unverified uncapped binary campaign; tracked in #143 and #160",
         "issues": "#143, #160"
       },
       {
-        "location": "crates/flexmesa-binary/tests/tier5_coupled_suite.rs:1085",
+        "location": "crates/flexmesa-binary/tests/tier5_coupled_suite.rs:1087",
         "reason": "unverified uncapped binary campaign; tracked in #143 and #160",
         "issues": "#143, #160"
       },
       {
-        "location": "crates/flexmesa-binary/tests/tier5_coupled_suite.rs:1093",
+        "location": "crates/flexmesa-binary/tests/tier5_coupled_suite.rs:1095",
         "reason": "unverified uncapped binary campaign; tracked in #143 and #160",
         "issues": "#143, #160"
       },
@@ -1177,7 +1182,7 @@
         "issues": "#154"
       }
     ],
-    "python_xfail_or_skip_count": 20,
+    "python_xfail_or_skip_count": 24,
     "python_skips": [
       {
         "location": "tests/test_bench.py:142",
@@ -1193,6 +1198,16 @@
         "location": "tests/test_bench.py:208",
         "reason": "pytest.mark.xfail( strict=True, reason=( \"#295: Rust table_atm uses MESA 26.4.1 interp_2d/private/bicub_db.f \" \"implicit f32 fvbicub_db basis scalars in strict mode (#420, #161), \" \"whereas the frozen JAX twin keeps pure f64 basis scalars per \" \"DECISIONS #43; measured cross-stage max_rel_err is 6.897e-8 (N=4) \" \"and 4.705e-6 (N=8) against 5.0e-12.\" ), )",
         "issues": "#43, #161, #295, #420"
+      },
+      {
+        "location": "tests/test_e2e_2_tier2.py:26",
+        "reason": "pytest.mark.xfail( strict=True, reason=( \"#445: this synthetic setup (never run in MESA) relied on the removed \" \"relax_initial_mass_to_remove_h_env stand-in; with upstream \" \"star_relax_mass_to_remove_H_env the 0.6 Msun ZAMS start has no He \" \"core and final_log_tc is 5.10 against the asserted > 6.0.\" ), )",
+        "issues": "#445"
+      },
+      {
+        "location": "tests/test_e2e_2_tier2.py:132",
+        "reason": "pytest.mark.xfail( strict=True, reason=( \"#445: this synthetic setup (never run in MESA) relied on the removed \" \"relax_initial_mass_to_remove_h_env stand-in; with upstream \" \"star_relax_mass_to_remove_H_env the 1.10 Msun ZAMS relax stops on \" \"max_number_retries.\" ), )",
+        "issues": "#445"
       },
       {
         "location": "tests/test_eos_wave3a3.py:487",
@@ -1278,6 +1293,16 @@
         "location": "tests/test_wave5_bench.py:84",
         "reason": "pytest.mark.xfail( strict=True, reason=( \"#295: Rust eval_caplan_ocp_dstar follows MESA 26.4.1 get_Dstar_OCP \" \"(diffusion_support.f90:1716-1743, #156); the frozen JAX twin \" \"eval_caplan_ocp_dstar_jax keeps its earlier fit (max_rel_err about \" \"5.4e-5).\" ), )",
         "issues": "#156, #295"
+      },
+      {
+        "location": "tests/unit/test_kap_wave3b2.py:325",
+        "reason": "pytest.mark.xfail( strict=True, reason=( \"#295: Rust kapCN and AESOPUS evaluate MESA 26.4.1 \" \"interp_2d/private/bicub_db.f implicit f32 fvbicub_db basis scalars \" \"in strict mode (#433, #161), whereas the frozen JAX twin keeps f64 \" \"basis scalars per DECISIONS #43; measured max rel diff is 2.103e-7 \" \"against rtol=1e-12.\" ), )",
+        "issues": "#43, #161, #295, #433"
+      },
+      {
+        "location": "tests/unit/test_kap_wave3b2_jax.py:102",
+        "reason": "pytest.mark.xfail( strict=True, reason=( \"#295: Rust AESOPUS evaluates MESA 26.4.1 \" \"interp_2d/private/bicub_db.f implicit f32 fvbicub_db basis scalars \" \"in strict mode (#433, #161), whereas the frozen JAX twin keeps f64 \" \"basis scalars per DECISIONS #43; measured max rel diff is 1.713e-8 \" \"against rtol=1e-12, atol=1e-12.\" ), )",
+        "issues": "#43, #161, #295, #433"
       }
     ],
     "unlinked_locations": []
@@ -1385,7 +1410,7 @@
       },
       {
         "phase": "Phase C",
-        "open": 18,
+        "open": 19,
         "closed": 11,
         "issues": [
           {
@@ -1532,6 +1557,11 @@
             "number": 451,
             "title": "[Parity] Binary step loop: binary_pick_next_timestep before star_pick_next_timestep, and why_Tlim = Tlim_binary (run_binary_support.f90:536-562)",
             "state": "open"
+          },
+          {
+            "number": 453,
+            "title": "[Extras] make_env: star_lib public API subset for case extras, and create_env as a test-side hook",
+            "state": "open"
           }
         ]
       },
@@ -1583,8 +1613,8 @@
     ],
     "open_pull_requests": [
       {
-        "number": 439,
-        "title": "feat(astero): set_param and set_constraint_value as test-side case hooks; honest extras ledger (#429)",
+        "number": 460,
+        "title": "fix(harness): compare sparse reference histories only at their rows (#459)",
         "draft": true
       }
     ],
@@ -2018,6 +2048,14 @@
         "title": "[Deferred bug] relax_composition_adjust_model discards the terminate from a failed adjust_xa (relax.f90:469-474)",
         "state": "open",
         "kind": "upstream-bug",
+        "parity_pending": false,
+        "needs_confirmation": false
+      },
+      {
+        "number": 458,
+        "title": "[Deferred enhancement] ADIPLS uses the system libm (no CRMATH), so its output depends on the machine",
+        "state": "open",
+        "kind": "enhancement",
         "parity_pending": false,
         "needs_confirmation": false
       }
@@ -3258,6 +3296,32 @@
       "closed_140": "26",
       "total_140": "48",
       "deferred_169": "54"
+    },
+    {
+      "date_utc": "2026-11-23",
+      "commit": "b7d27df",
+      "event": "main merge",
+      "engine_ported_pct": "30.7",
+      "all_verified_pct": "1.1",
+      "cases_passing": "4",
+      "rust_cov_pct": "76.3",
+      "python_cov_pct": "87.7",
+      "closed_140": "26",
+      "total_140": "49",
+      "deferred_169": "55"
+    },
+    {
+      "date_utc": "2026-11-23",
+      "commit": "851777e",
+      "event": "main merge",
+      "engine_ported_pct": "30.7",
+      "all_verified_pct": "1.1",
+      "cases_passing": "5",
+      "rust_cov_pct": "76.3",
+      "python_cov_pct": "87.7",
+      "closed_140": "26",
+      "total_140": "49",
+      "deferred_169": "55"
     }
   ]
 }

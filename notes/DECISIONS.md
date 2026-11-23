@@ -74,6 +74,8 @@ Scope and the `v0.1.0` definition are in [`SCOPE.md`](SCOPE.md). Work is tracked
 | 57 | The Scheduled Campaign Gives Each Case 600 Seconds (`#382`) | In force | below |
 | 58 | Pull-Request Campaigns May Give Budget-Limited Cases a Short Budget; the Scheduled Campaign Runs in Shards (`#390`) | In force | below |
 | 59 | A Run Cut Off by Its Budget Is Inconclusive and Is Checked as a Prefix of a Completed Baseline Row (`#447`) | In force | below |
+| 60 | ADIPLS Elementary Functions Are Correctly Rounded in Strict Mode (`#171`) | In force | below |
+| 61 | The In-House Pulsation Scaffolding Is Removed Package by Package (`#170`, `#171`) | In force | below |
 
 ## Pre-audit decisions still in force
 
@@ -803,3 +805,21 @@ The text of these four entries predates the audit of 2026-11-16. The decisions s
   - *A longer budget on GitHub runners*: the 600 s budget is global (Josh, 2026-11-23, `DECISIONS #57`).
   - *Declaring the two binary cases as known gaps*: they pass against MESA; a gap would be false.
   - *Ignoring budget-cut runs entirely*: loses the check that the part that ran still matches the baseline.
+
+## DECISIONS #60: ADIPLS Elementary Functions Are Correctly Rounded in Strict Mode (`#171`)
+
+- **Date**: 2026-11-23 (project lead)
+- **Decision**: In strict mode the ADIPLS port evaluates `pow`, `exp`, `log` and the other elementary functions through `flexmesa-math` (correctly rounded, `DECISIONS #23`), like the rest of FlexMESA. Everything else follows upstream ADIPLS exactly: order of operations, the single-precision literals in double-precision expressions, and the common-block state.
+- **Why**: MESA 26.4.1 compiles ADIPLS at `-O0` without CRMATH, so it calls the system libm directly. glibc on `x86_64` may select different implementations (for example FMA-built variants) at run time depending on the CPU, so upstream's ADIPLS output is not reproducible bit for bit across machines. Strict mode must be bit-identical across machines (Level 1), which a machine-dependent libm cannot give.
+- **Limits**: Agreement with a given MESA build is expected at the 1-ULP level on `pow`-heavy paths (crlibm agrees with glibc on about 99.97% of `pow` arguments), not bit for bit; ADIPLS module goldens record this as a declared difference. A deferred issue under `#169` records the upstream non-determinism.
+- **Alternatives Rejected**:
+  - *Emulating the reference build's glibc variant*: ties strict mode to one glibc version and CPU dispatch path, and is a large port of its own.
+  - *Platform libm in strict mode*: breaks cross-machine bit identity.
+
+## DECISIONS #61: The In-House Pulsation Scaffolding Is Removed Package by Package (`#170`, `#171`)
+
+- **Date**: 2026-11-23 (project lead)
+- **Decision**: The in-house pulsation solver (`pulse_bvp`, `pulse_bvp_recon`, `pulse_modes` and their callers) is removed piece by piece as each GYRE or ADIPLS package replaces it, not up front. Until a case's oscillation code is the upstream port, the case keeps its scaffolding mark in the case manifest and never counts as passing.
+- **Why**: Several pulsation cases already match MESA's histories in the stellar-evolution part (four `gyre_in_mesa_*` cases reach upstream termination with all history rows within tolerance). Keeping the scaffolding until its replacement lands keeps that signal measured, while the manifest mark keeps the cases from passing.
+- **Alternatives Rejected**:
+  - *Removing all scaffolding first*: the GYRE cases would stop at their first oscillation call, hiding the star-trajectory comparison until the port lands.

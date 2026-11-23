@@ -101,7 +101,7 @@
     },
     {
       "phase": "Phase C",
-      "open": 16,
+      "open": 17,
       "closed": 11,
       "issues": [
         {
@@ -237,6 +237,11 @@
         {
           "number": 436,
           "title": "[Audit C3] star_job init departures: restart flag for staged models, initial_y after load, set_initial_dt, remaining relax stand-ins",
+          "state": "open"
+        },
+        {
+          "number": 445,
+          "title": "[Tests] Synthetic tier-2 tests rely on the removed relax_initial_mass_to_remove_h_env stand-in (wd_nova_burst, make_o_ne_wd)",
           "state": "open"
         }
       ]

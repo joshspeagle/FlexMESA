@@ -681,6 +681,11 @@ def evaluate_case_record(
                 is_stale_gap = gap is not None
         elif gap is not None:
             verdict = f"declared gap ({gap.issue})"
+        elif outcome.status in ("timeout", "oom_killed"):
+            # A run cut off by its time or memory budget is inconclusive: it
+            # never counts as passing, and the baseline gate checks it as a
+            # prefix of the committed row (DECISIONS #59).
+            verdict = f"inconclusive ({outcome.status})"
         else:
             verdict = "fail (undeclared)"
             is_undeclared = True

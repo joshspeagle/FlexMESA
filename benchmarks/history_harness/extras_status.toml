@@ -197,9 +197,8 @@ digest = "a9a4c120a36a4e0b5a448cc701d92bedd1d2b848d6688acc3d866becaa8fa492"
 [[cases]]
 suite = "star"
 case = "extended_convective_penetration"
-status = "unported"
+status = "ported"
 digest = "b569c11174ef867731774b51792bad3d6314ef9e0404f4084ecb71833984e2e8"
-issue = "#231"
 
 [[cases]]
 suite = "star"

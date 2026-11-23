@@ -12,7 +12,8 @@ use flexmesa_kap::KapConfig;
 
 use crate::controls::{StarError, VarLayout};
 use crate::hydro_state::{
-    BinaryOtherTorqueHandle, StepHistoryScalars, TidalDeformationHandle,
+    BinaryOtherTorqueHandle, OtherAdjustMltGradtFractionHandle,
+    OtherOvershootingSchemeHandle, StepHistoryScalars, TidalDeformationHandle,
 };
 use crate::model::StarModel;
 use crate::rsp_def::RspState;
@@ -486,6 +487,10 @@ pub struct PrimaryStateBuffer {
     pub(crate) tidal_deformation: Option<TidalDeformationHandle>,
     pub(crate) binary_other_torque: Option<BinaryOtherTorqueHandle>,
     pub(crate) binary_other_torque_implicit: Option<BinaryOtherTorqueHandle>,
+    pub(crate) other_overshooting_scheme:
+        Option<OtherOvershootingSchemeHandle>,
+    pub(crate) other_adjust_mlt_gradt_fraction:
+        Option<OtherAdjustMltGradtFractionHandle>,
     pub(crate) extra_grav_if_nonzero: Option<Vec<StarAdOrder1>>,
 }
 
@@ -504,6 +509,8 @@ macro_rules! make_empty_buf {
             tidal_deformation: None,
             binary_other_torque: None,
             binary_other_torque_implicit: None,
+            other_overshooting_scheme: None,
+            other_adjust_mlt_gradt_fraction: None,
             extra_grav_if_nonzero: None,
             model_number: 0,
             init_model_number: 0,
@@ -729,7 +736,9 @@ impl PrimaryStateBuffer {
                 rsp,
                 tidal_deformation,
                 binary_other_torque,
-                binary_other_torque_implicit
+                binary_other_torque_implicit,
+                other_overshooting_scheme,
+                other_adjust_mlt_gradt_fraction
             ]
         );
         let has_nonzero = a
@@ -899,7 +908,9 @@ impl PrimaryStateBuffer {
                     rsp,
                     tidal_deformation,
                     binary_other_torque,
-                    binary_other_torque_implicit
+                    binary_other_torque_implicit,
+                    other_overshooting_scheme,
+                    other_adjust_mlt_gradt_fraction
                 ]
             );
             a.solver_mlt_eval_count = 0;

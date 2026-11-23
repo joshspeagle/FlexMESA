@@ -1265,6 +1265,32 @@ pub fn set_hydro_vars(
         crate::mixing_state::set_grads(model);
     }
 
+    // `other_adjust_mlt_gradT_fraction` (`star/private/hydro_vars.f90:555-560`).
+    if !model.aux.doing_struct_burn_mix
+        && model.aux.mixing.okay_to_set_mixing_info
+        && !model.controls.rsp2_flag
+    {
+        if let Some(hook) = model.aux.other_adjust_mlt_gradt_fraction.clone() {
+            hook.apply(model)?;
+            if model.aux.mixing.adjust_mlt_gradt_fraction.len() < nz {
+                return Err(StarError::InvalidInput(format!(
+                    "other_adjust_mlt_gradT_fraction left len={} < nz={nz}",
+                    model.aux.mixing.adjust_mlt_gradt_fraction.len()
+                )));
+            }
+            if let Some((k, &f)) = model.aux.mixing.adjust_mlt_gradt_fraction
+                [..nz]
+                .iter()
+                .enumerate()
+                .find(|(_, v)| !v.is_finite())
+            {
+                return Err(StarError::InvalidInput(format!(
+                    "other_adjust_mlt_gradT_fraction produced non-finite value at face {k}: {f}"
+                )));
+            }
+        }
+    }
+
     if !model.controls.rsp_flag {
         if !model.aux.doing_struct_burn_mix
             && model.aux.mixing.okay_to_set_mixing_info

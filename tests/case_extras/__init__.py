@@ -139,8 +139,7 @@ STOCK_EXTRAS_DIGESTS: frozenset[str] = frozenset(
 # - `#155` (per-cell MLT/overshoot/rotation diffusivity hooks):
 #   `PreMs12MCoreCollapseStarExtras`, `PreMs20MCoreCollapseStarExtras`,
 #   `SplitBurnBigNetStarExtras`, `MakePreCcsn13bvnStarExtras` (per-cell
-#   `alpha_mlt(1:nz)`), `ExtendedConvectivePenetrationStarExtras`
-#   (`other_adjust_mlt_gradT_fraction`, `other_overshooting_scheme`),
+#   `alpha_mlt(1:nz)`),
 #   `Dynamo15MStarExtras`, `Thermohaline1MStarExtras` (`D_ES`/`D_ST`/`nu_ST`
 #   arrays not yet publicly exposed on `StarModel`).
 # - `#156` (element diffusion electric/gravity fields): `WdDiffusionStarExtras`
@@ -182,6 +181,7 @@ ADAPTER_SERVED_STAR_HANDLERS: frozenset[str] = frozenset(
         "ConserveAngularMomentumStarExtras",
         "ConvCoreCpmStarExtras",
         "DiffusionSmoothnessStarExtras",
+        "ExtendedConvectivePenetrationStarExtras",
         "Hb2MStarExtras",
         "HighRotDarkeningStarExtras",
         "HighRotation20MZ2m2StarExtras",

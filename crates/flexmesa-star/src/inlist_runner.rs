@@ -63,8 +63,9 @@ pub trait StarExtras {
     /// Returns [`StarError`] if custom control setup fails.
     fn extras_controls(
         &mut self,
-        _model: &mut StarModel,
+        model: &mut StarModel,
     ) -> Result<(), StarError> {
+        install_star_aux_hooks(self, model);
         Ok(())
     }
 
@@ -268,6 +269,41 @@ pub trait StarExtras {
     /// Receives the staged temporary case directory path before stage execution
     /// so caller-supplied extras write auxiliary outputs inside the staged copy.
     fn set_staged_case_dir(&mut self, _case_dir: &Path) {}
+
+    /// Optional custom convective overshooting scheme handle installed onto
+    /// `model.aux.other_overshooting_scheme` (`other_overshooting_scheme` in
+    /// `star/other/other_overshooting_scheme.f90`).
+    fn other_overshooting_scheme_handle(
+        &self,
+    ) -> Option<crate::hydro_state::OtherOvershootingSchemeHandle> {
+        None
+    }
+
+    /// Optional custom `adjust_mlt_gradT_fraction` handle installed onto
+    /// `model.aux.other_adjust_mlt_gradt_fraction`
+    /// (`other_adjust_mlt_gradT_fraction` in
+    /// `star/other/other_adjust_mlt_gradt_fraction.f90`).
+    fn other_adjust_mlt_gradt_fraction_handle(
+        &self,
+    ) -> Option<crate::hydro_state::OtherAdjustMltGradtFractionHandle> {
+        None
+    }
+}
+
+/// Installs any `other_overshooting_scheme` and
+/// `other_adjust_mlt_gradT_fraction` handles exposed by `extras` onto
+/// `model.aux` without clearing handles already installed directly by
+/// `extras_controls`.
+pub fn install_star_aux_hooks<E: StarExtras + ?Sized>(
+    extras: &E,
+    model: &mut StarModel,
+) {
+    if let Some(handle) = extras.other_overshooting_scheme_handle() {
+        model.aux.other_overshooting_scheme = Some(handle);
+    }
+    if let Some(handle) = extras.other_adjust_mlt_gradt_fraction_handle() {
+        model.aux.other_adjust_mlt_gradt_fraction = Some(handle);
+    }
 }
 
 /// Default no-op [`StarExtras`] implementation (`standard_run_star_extras.inc`).
@@ -685,6 +721,7 @@ pub fn run_inlist_stage_with_logs(
     mut logs_writer: Option<&mut StarLogsWriter>,
 ) -> Result<StageRunReport, StarError> {
     let _net_dir_guard = crate::micro::NetSearchDirGuard::new(&bundle.case_dir);
+    install_star_aux_hooks(extras, model);
     let t0 = Instant::now();
     let (mut steps_taken, mut total_newton_iterations, mut total_retries) =
         (0, 0, 0);

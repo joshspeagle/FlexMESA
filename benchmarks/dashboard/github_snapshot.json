@@ -264,11 +264,6 @@
   ],
   "open_pull_requests": [
     {
-      "number": 378,
-      "title": "Wire atm_option = irradiated_grey and atm_irradiated_* controls (#376)",
-      "draft": true
-    },
-    {
       "number": 379,
       "title": "Port Wave 1 history columns and pure-StarModel siblings (#374)",
       "draft": true
@@ -301,6 +296,21 @@
     {
       "number": 401,
       "title": "feat(star): create_initial_model as upstream build_initial_model (#154)",
+      "draft": true
+    },
+    {
+      "number": 403,
+      "title": "fix(net): resolve MESA 26.4.1 eps_nuc AUX parity divergences (0 ULP)",
+      "draft": true
+    },
+    {
+      "number": 405,
+      "title": "fix(star): align change_model_network with MESA 26.4.1 and triage post-#377 STATE composition",
+      "draft": true
+    },
+    {
+      "number": 406,
+      "title": "fix(kap): match MESA 26.4.1 opacity AUX step-dump parity at 0 ULP (#404)",
       "draft": true
     }
   ],

@@ -21,7 +21,7 @@
         "verified_total": 5640,
         "pct_ported": 35.1,
         "pct_verified": 4.7,
-        "rust_lines": 89265,
+        "rust_lines": 89630,
         "python_jax_lines": 3869
       },
       {
@@ -174,7 +174,7 @@
         "verified_total": 0,
         "pct_ported": 0.0,
         "pct_verified": 0.0,
-        "rust_lines": 2476,
+        "rust_lines": 2561,
         "python_jax_lines": 984
       },
       {
@@ -595,7 +595,7 @@
         "no_reference_yet": 4,
         "strict_validated": 46,
         "diagnostic_runs": 44,
-        "reached_termination": 39,
+        "reached_termination": 40,
         "within_numeric_tol": 6,
         "passing": 1,
         "declared_gaps": 85,
@@ -680,12 +680,12 @@
     {
       "namelist": "star &controls",
       "upstream_scalars": 1444,
-      "matched_in_flexmesa": 1113,
-      "defaults_agree": 1113,
+      "matched_in_flexmesa": 1120,
+      "defaults_agree": 1120,
       "value_mismatch": 0,
       "disabled_limit_none": 0,
       "skipped_unparseable_rust": 17,
-      "unimplemented": 314
+      "unimplemented": 307
     },
     {
       "namelist": "star &star_job",
@@ -1503,11 +1503,6 @@
     ],
     "open_pull_requests": [
       {
-        "number": 378,
-        "title": "Wire atm_option = irradiated_grey and atm_irradiated_* controls (#376)",
-        "draft": true
-      },
-      {
         "number": 379,
         "title": "Port Wave 1 history columns and pure-StarModel siblings (#374)",
         "draft": true
@@ -1540,6 +1535,21 @@
       {
         "number": 401,
         "title": "feat(star): create_initial_model as upstream build_initial_model (#154)",
+        "draft": true
+      },
+      {
+        "number": 403,
+        "title": "fix(net): resolve MESA 26.4.1 eps_nuc AUX parity divergences (0 ULP)",
+        "draft": true
+      },
+      {
+        "number": 405,
+        "title": "fix(star): align change_model_network with MESA 26.4.1 and triage post-#377 STATE composition",
+        "draft": true
+      },
+      {
+        "number": 406,
+        "title": "fix(kap): match MESA 26.4.1 opacity AUX step-dump parity at 0 ULP (#404)",
         "draft": true
       }
     ],
@@ -3063,6 +3073,19 @@
     {
       "date_utc": "2026-11-23",
       "commit": "565a212",
+      "event": "main merge",
+      "engine_ported_pct": "30.7",
+      "all_verified_pct": "1.1",
+      "cases_passing": "4",
+      "rust_cov_pct": "76.2",
+      "python_cov_pct": "87.7",
+      "closed_140": "19",
+      "total_140": "41",
+      "deferred_169": "51"
+    },
+    {
+      "date_utc": "2026-11-23",
+      "commit": "72eea1e",
       "event": "main merge",
       "engine_ported_pct": "30.7",
       "all_verified_pct": "1.1",

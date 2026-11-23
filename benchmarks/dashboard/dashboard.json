@@ -456,7 +456,7 @@
     },
     "infrastructure_lines": {
       "rust_bridge_testing_bench": 19427,
-      "python_testing_bench": 17253
+      "python_testing_bench": 17271
     }
   },
   "numerics": {
@@ -1385,7 +1385,7 @@
       },
       {
         "phase": "Phase C",
-        "open": 16,
+        "open": 18,
         "closed": 11,
         "issues": [
           {
@@ -1521,6 +1521,16 @@
           {
             "number": 436,
             "title": "[Audit C3] star_job init departures: restart flag for staged models, initial_y after load, set_initial_dt, remaining relax stand-ins",
+            "state": "open"
+          },
+          {
+            "number": 445,
+            "title": "[Tests] Synthetic tier-2 tests rely on the removed relax_initial_mass_to_remove_h_env stand-in (wd_nova_burst, make_o_ne_wd)",
+            "state": "open"
+          },
+          {
+            "number": 451,
+            "title": "[Parity] Binary step loop: binary_pick_next_timestep before star_pick_next_timestep, and why_Tlim = Tlim_binary (run_binary_support.f90:536-562)",
             "state": "open"
           }
         ]
@@ -3234,6 +3244,19 @@
       "python_cov_pct": "87.7",
       "closed_140": "26",
       "total_140": "46",
+      "deferred_169": "54"
+    },
+    {
+      "date_utc": "2026-11-23",
+      "commit": "51c7bf7",
+      "event": "main merge",
+      "engine_ported_pct": "30.7",
+      "all_verified_pct": "1.1",
+      "cases_passing": "4",
+      "rust_cov_pct": "76.2",
+      "python_cov_pct": "87.7",
+      "closed_140": "26",
+      "total_140": "48",
       "deferred_169": "54"
     }
   ]

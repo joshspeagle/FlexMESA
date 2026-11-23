@@ -101,7 +101,7 @@
     },
     {
       "phase": "Phase C",
-      "open": 17,
+      "open": 18,
       "closed": 11,
       "issues": [
         {
@@ -242,6 +242,11 @@
         {
           "number": 445,
           "title": "[Tests] Synthetic tier-2 tests rely on the removed relax_initial_mass_to_remove_h_env stand-in (wd_nova_burst, make_o_ne_wd)",
+          "state": "open"
+        },
+        {
+          "number": 451,
+          "title": "[Parity] Binary step loop: binary_pick_next_timestep before star_pick_next_timestep, and why_Tlim = Tlim_binary (run_binary_support.f90:536-562)",
           "state": "open"
         }
       ]

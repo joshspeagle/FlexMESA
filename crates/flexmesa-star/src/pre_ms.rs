@@ -495,7 +495,7 @@ fn build1_pre_ms_model(
     let nz0 = usize::try_from(nz_est).ok().filter(|&n| n >= 1).ok_or_else(
         || {
             // Upstream then writes `q(nz)` out of bounds; there is no
-            // defined behaviour to reproduce (DECISIONS #43).
+            // defined behaviour to reproduce (DECISIONS #43, deferred #398).
             StarError::InvalidInput(format!(
                 "build1_pre_ms_model: estimated nz = {nz_est} < 1 \
                  (`star/private/pre_ms_model.f90:456,499-500`)"
@@ -832,7 +832,7 @@ pub fn build_pre_ms_model_with_configs(
     } else {
         // Upstream sets `ierr = -1` but continues, and
         // `get_xa_for_standard_metals` resets `ierr` and reads the unset
-        // `initial_he3`/`initial_he4`: no defined behaviour (DECISIONS #43).
+        // `initial_he3`/`initial_he4`: no defined behaviour (DECISIONS #43, deferred #397).
         return Err(StarError::InvalidInput(format!(
             "ERROR: initial_he3 ({CONTROLS_INITIAL_HE3}) is larger than \
              initial_y ({initial_y}) (`star/private/pre_ms_model.f90:101-104`)"

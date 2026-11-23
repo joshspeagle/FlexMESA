@@ -19,6 +19,9 @@ pub enum AtmOption {
     TTau,
     /// Tabulated atmosphere (`'table'`).
     Table,
+    /// Irradiated grey atmosphere (`'irradiated_grey'`, Guillot & Havel 2011;
+    /// `star/defaults/controls.defaults:4292-4297`, `star/private/atm_support.f90:93-100`).
+    IrradiatedGrey,
     /// Simple photosphere $P_0 = \tau g / \kappa$, $T = T_{\mathrm{eff}}$.
     SimplePhotosphere,
 }
@@ -71,6 +74,27 @@ pub enum AtmTTauOpacity {
     Iterated,
     /// Depth-varying opacity integrated inward via `dopri5` (`'varying'`).
     Varying,
+}
+
+/// Thermal opacity treatment for `atm_option = 'irradiated_grey'`
+/// (`atm_irradiated_opacity` in `star/defaults/controls.defaults:4524-4540`
+/// and `star/private/atm_support.f90:790-826`).
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    Default,
+    PartialEq,
+    Eq,
+    serde::Serialize,
+    serde::Deserialize,
+)]
+pub enum AtmIrradiatedOpacity {
+    /// Uniform opacity fixed to `opacity_start[0]` / `opacity[0]` (`'fixed'`).
+    #[default]
+    Fixed,
+    /// Uniform thermal opacity iterated to consistency with EOS and kap (`'iterated'`).
+    Iterated,
 }
 
 /// Structured diagnostic payload returned inside [`StarError::StepFailure`].

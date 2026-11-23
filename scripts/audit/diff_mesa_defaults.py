@@ -78,6 +78,8 @@ ENUM_VALUE_MAP: dict[str, str] = {
     "AtmTTauOpacity::Fixed": "fixed",
     "AtmTTauOpacity::Iterated": "iterated",
     "AtmTTauOpacity::Varying": "varying",
+    "AtmIrradiatedOpacity::Fixed": "fixed",
+    "AtmIrradiatedOpacity::Iterated": "iterated",
     "EnergyEqnOption::Dedt": "dedt",
     "EnergyEqnOption::EpsGrav": "eps_grav",
     "KapOption::Gn93": "gn93",

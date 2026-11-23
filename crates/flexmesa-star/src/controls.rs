@@ -8,8 +8,8 @@ use flexmesa_rates::ScreeningMode;
 use flexmesa_turb::{MltOption, SemiconvectionOption, ThermohalineOption};
 
 pub use crate::job_controls::{
-    AtmOption, AtmTTauOpacity, AtmTTauRelation, EnergyEqnOption, StarError,
-    StarJobControls, StepFailureInfo, VarLayout,
+    AtmIrradiatedOpacity, AtmOption, AtmTTauOpacity, AtmTTauRelation,
+    EnergyEqnOption, StarError, StarJobControls, StepFailureInfo, VarLayout,
 };
 
 /// Evolutionary and physics controls (`&controls` namelist in
@@ -81,6 +81,27 @@ pub struct StarControls {
     /// Maximum ODE steps for `'varying'` $T(\tau)$ atmospheres (`atm_T_tau_max_steps`, `500` default).
     #[serde(default = "default_atm_t_tau_max_steps")]
     pub atm_t_tau_max_steps: usize,
+    /// Thermal opacity treatment for `'irradiated_grey'` atmospheres (`atm_irradiated_opacity`, `'fixed'` default; `star/defaults/controls.defaults:4540`).
+    #[serde(default)]
+    pub atm_irradiated_opacity: AtmIrradiatedOpacity,
+    /// Error tolerance for `'iterated'` irradiated atmospheres (`atm_irradiated_errtol`, `1e-7` default; `star/defaults/controls.defaults:4551`).
+    #[serde(default = "default_atm_irradiated_errtol")]
+    pub atm_irradiated_errtol: f64,
+    /// Maximum opacity iterations for `'iterated'` irradiated atmospheres (`atm_irradiated_max_iters`, `50` default; `star/defaults/controls.defaults:4562`).
+    #[serde(default = "default_atm_irradiated_max_iters")]
+    pub atm_irradiated_max_iters: usize,
+    /// Equilibrium temperature $T_{\mathrm{eq}}$ ($\mathrm{K}$) from stellar irradiation (`atm_irradiated_T_eq`, `100.0` default; `star/defaults/controls.defaults:4580`).
+    #[serde(default = "default_atm_irradiated_t_eq")]
+    pub atm_irradiated_t_eq: f64,
+    /// Visible-to-thermal opacity ratio $\kappa_v / \kappa_{\mathrm{th}}$ when $> 0$ (`atm_irradiated_kap_v_div_kap_th`, `0.0` default; `star/defaults/controls.defaults:4600`).
+    #[serde(default)]
+    pub atm_irradiated_kap_v_div_kap_th: f64,
+    /// Visible stellar irradiation opacity $\kappa_v$ ($\mathrm{cm^2\,g^{-1}}$) used when `atm_irradiated_kap_v_div_kap_th == 0` (`atm_irradiated_kap_v`, `4e-3` default; `star/defaults/controls.defaults:4601`).
+    #[serde(default = "default_atm_irradiated_kap_v")]
+    pub atm_irradiated_kap_v: f64,
+    /// Surface pressure $P_{\mathrm{surf}}$ ($\mathrm{dyn\,cm^{-2}}$) for `'irradiated_grey'` (`atm_irradiated_P_surf`, `1e6` default; `star/defaults/controls.defaults:4612`).
+    #[serde(default = "default_atm_irradiated_p_surf")]
+    pub atm_irradiated_p_surf: f64,
     /// Optical depth multiplicative factor $\tau_{\mathrm{factor}}$ (`1.0`).
     pub tau_factor: f64,
     /// Opacity multiplicative factor (`1.0`).
@@ -783,4 +804,24 @@ const fn default_atm_t_tau_max_iters() -> usize {
 
 const fn default_atm_t_tau_max_steps() -> usize {
     500
+}
+
+const fn default_atm_irradiated_errtol() -> f64 {
+    1.0e-7
+}
+
+const fn default_atm_irradiated_max_iters() -> usize {
+    50
+}
+
+const fn default_atm_irradiated_t_eq() -> f64 {
+    100.0
+}
+
+const fn default_atm_irradiated_kap_v() -> f64 {
+    4.0e-3
+}
+
+const fn default_atm_irradiated_p_surf() -> f64 {
+    1.0e6
 }

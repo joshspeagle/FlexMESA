@@ -250,7 +250,7 @@ reason = "Strict run reaches max_age (2011 steps, 0 retries, final diffs within 
 suite = "star"
 case = "irradiated_planet"
 issue = "#154"
-reason = "Planetary initial model and column-depth irradiation relaxation (#154)."
+reason = "Diagnostic run (3 ignored &star_job controls: dlogtau_factor, relax_irradiation_max_yrs_dt, relax_irradiation_min_steps) reaches max_age in 124 steps (MESA 127, 0 retries, 0 num_zones diff) with log_L/log_Teff deviations from step 86; needs planetary initial model and column-depth irradiation relaxation (#154)."
 
 [[gaps]]
 suite = "star"

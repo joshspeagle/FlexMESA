@@ -19,7 +19,7 @@
     "strict_cases_taking_steps": 43,
     "diagnostic_cases_taking_steps": 31,
     "reaching_upstream_termination": 35,
-    "diagnostic_reaching_upstream_termination": 13,
+    "diagnostic_reaching_upstream_termination": 14,
     "passing_mesa_26_4_1": 4,
     "interim_within_tolerance": 0,
     "declared_known_gaps": 98,
@@ -7138,13 +7138,13 @@
       "required_termination": "max_age",
       "verdict": "declared gap (#154)",
       "executed": true,
-      "run_status": "error",
-      "observed_termination": "",
-      "termination_matches": false,
-      "steps": 30,
+      "run_status": "ok",
+      "observed_termination": "max_age",
+      "termination_matches": true,
+      "steps": 124,
       "retries": 0,
-      "iters": 79,
-      "mean_iters": 2.63,
+      "iters": 551,
+      "mean_iters": 5.86,
       "mesa_steps": 127,
       "mesa_retries": 0,
       "mesa_iters": 22,
@@ -7153,7 +7153,7 @@
       "wall_time_sec": 0.0,
       "peak_rss_gb": 0.0,
       "known_gap_issue": "#154",
-      "known_gap_reason": "Planetary initial model and column-depth irradiation relaxation (#154).",
+      "known_gap_reason": "Diagnostic run (3 ignored &star_job controls: dlogtau_factor, relax_irradiation_max_yrs_dt, relax_irradiation_min_steps) reaches max_age in 124 steps (MESA 127, 0 retries, 0 num_zones diff) with log_L/log_Teff deviations from step 86; needs planetary initial model and column-depth irradiation relaxation (#154).",
       "is_undeclared_failure": false,
       "is_stale_known_gap": false,
       "controls_ignored": true,
@@ -7162,59 +7162,56 @@
       "comparison": {
         "independent_var": "star_age",
         "ref_rows": 3,
-        "run_rows": 30,
-        "overlap_min": 291398.46585318085,
-        "overlap_max": 348371.2266506725,
+        "run_rows": 94,
+        "overlap_min": 349371.2266506725,
+        "overlap_max": 15000000000.0,
         "ref_span": 14999708601.534147,
         "final_diffs": {
-          "star_age": -14999651628.77335,
-          "rel_star_age": -0.9999767752515567,
-          "num_zones": -428.0,
-          "log_dt": -3.8923987854883455,
+          "star_age": 0.0,
+          "rel_star_age": 0.0,
+          "num_zones": 0.0,
+          "log_dt": -1.0555550530665787,
           "star_mass": 0.0,
           "log_abs_mdot": 0.0,
           "mass_conv_core": 0.0,
-          "log_LH": -0.5277894902375024,
+          "log_LH": -0.0008482993727554344,
           "log_LHe": 0.0,
           "he_core_mass": 0.0,
           "co_core_mass": 0.0,
-          "log_Teff": 1.1208494497293549,
-          "log_L": 4.880101716742694,
-          "log_R": 0.19835195891263813,
-          "log_g": -0.39670391782527625,
-          "log_center_T": 0.5426678892054921,
-          "log_center_Rho": -0.3451552466053236,
-          "center_h1": 0.0,
-          "center_he4": 0.0,
+          "log_Teff": 0.7684435689694156,
+          "log_L": 3.0729148462733766,
+          "log_R": -0.00042971480214271107,
+          "log_g": 0.0008594296042852001,
+          "log_center_T": 0.0022391579973684017,
+          "log_center_Rho": -0.0005081827817502438,
+          "center_h1": 1.1102230246251565e-16,
+          "center_he4": -5.551115123125783e-17,
           "center_c12": 0.0,
           "num_retries": 0.0,
-          "num_iters": -7.0,
-          "rel_num_zones": -0.4936562860438293
+          "num_iters": -1.0,
+          "rel_num_zones": 0.0
         },
         "within_final_tolerances": false,
         "failed_final_columns": [
-          "rel_star_age",
           "log_L",
           "log_Teff",
-          "log_R",
-          "log_center_T",
-          "log_center_Rho"
+          "log_center_T"
         ],
         "track_deviations": [
           {
             "column": "num_zones",
-            "max_abs_diff": 2.0210375991094907,
-            "median_abs_diff": 2.010545228699357,
-            "x_at_max": 348228.4377764933,
+            "max_abs_diff": 0.0,
+            "median_abs_diff": 0.0,
+            "x_at_max": 1121352705.1984122,
             "tolerance": 0.02,
             "within_tolerance": true,
-            "max_rel_diff": 0.004582633087328194
+            "max_rel_diff": 0.0
           },
           {
             "column": "star_mass",
             "max_abs_diff": 0.0,
             "median_abs_diff": 0.0,
-            "x_at_max": 291541.25472736004,
+            "x_at_max": 350508.67172862956,
             "tolerance": null,
             "within_tolerance": true,
             "max_rel_diff": 0.0
@@ -7223,33 +7220,33 @@
             "column": "log_abs_mdot",
             "max_abs_diff": 0.0,
             "median_abs_diff": 0.0,
-            "x_at_max": 291541.25472736004,
+            "x_at_max": 350508.67172862956,
             "tolerance": null,
             "within_tolerance": true,
             "max_rel_diff": 0.0
           },
           {
             "column": "mass_conv_core",
-            "max_abs_diff": 0.0,
+            "max_abs_diff": 0.0009248189016646539,
             "median_abs_diff": 0.0,
-            "x_at_max": 291541.25472736004,
+            "x_at_max": 351873.60582217807,
             "tolerance": null,
             "within_tolerance": true
           },
           {
             "column": "log_LH",
-            "max_abs_diff": 0.012806201913470261,
-            "median_abs_diff": 0.004311385494549569,
-            "x_at_max": 291541.25472736004,
+            "max_abs_diff": 0.30608685111895895,
+            "median_abs_diff": 0.020632375121696356,
+            "x_at_max": 92521946.5920851,
             "tolerance": null,
             "within_tolerance": true,
-            "max_rel_diff": 0.0005875436174451501
+            "max_rel_diff": 0.014068259251943337
           },
           {
             "column": "log_LHe",
             "max_abs_diff": 0.0,
             "median_abs_diff": 0.0,
-            "x_at_max": 291541.25472736004,
+            "x_at_max": 350508.67172862956,
             "tolerance": null,
             "within_tolerance": true,
             "max_rel_diff": 0.0
@@ -7258,7 +7255,7 @@
             "column": "he_core_mass",
             "max_abs_diff": 0.0,
             "median_abs_diff": 0.0,
-            "x_at_max": 291541.25472736004,
+            "x_at_max": 350508.67172862956,
             "tolerance": null,
             "within_tolerance": true
           },
@@ -7266,87 +7263,87 @@
             "column": "co_core_mass",
             "max_abs_diff": 0.0,
             "median_abs_diff": 0.0,
-            "x_at_max": 291541.25472736004,
+            "x_at_max": 350508.67172862956,
             "tolerance": null,
             "within_tolerance": true
           },
           {
             "column": "log_Teff",
-            "max_abs_diff": 0.026200899893011886,
-            "median_abs_diff": 0.02269077228941274,
-            "x_at_max": 291541.25472736004,
+            "max_abs_diff": 0.7676047427271808,
+            "median_abs_diff": 0.5880676807263967,
+            "x_at_max": 14962406890.654703,
             "tolerance": 0.002,
             "within_tolerance": false,
-            "max_rel_diff": 0.008769361307638748
+            "max_rel_diff": 0.40683170740498115
           },
           {
             "column": "log_L",
-            "max_abs_diff": 0.114900058926791,
-            "median_abs_diff": 0.09397161181657987,
-            "x_at_max": 291541.25472736004,
+            "max_abs_diff": 3.0697922989131,
+            "median_abs_diff": 2.3341461884200596,
+            "x_at_max": 14962406890.654703,
             "tolerance": 0.005,
             "within_tolerance": false,
-            "max_rel_diff": 0.02474981905053074
+            "max_rel_diff": 0.3249595702611719
           },
           {
             "column": "log_R",
-            "max_abs_diff": 0.005048229677371063,
-            "median_abs_diff": 0.0017263216655755143,
-            "x_at_max": 291541.25472736004,
+            "max_abs_diff": 0.12027657953764848,
+            "median_abs_diff": 0.007436143583460564,
+            "x_at_max": 110507839.01502004,
             "tolerance": 0.005,
             "within_tolerance": false,
-            "max_rel_diff": 0.006521148390002686
+            "max_rel_diff": 0.15258958466826167
           },
           {
             "column": "log_g",
-            "max_abs_diff": 0.010096459354742127,
-            "median_abs_diff": 0.0034526433311510285,
-            "x_at_max": 291541.25472736004,
+            "max_abs_diff": 0.24055315907529673,
+            "median_abs_diff": 0.01487228716692135,
+            "x_at_max": 110507839.01502004,
             "tolerance": null,
             "within_tolerance": true,
-            "max_rel_diff": 0.0034197597528218436
+            "max_rel_diff": 0.08069761029685617
           },
           {
             "column": "log_center_T",
-            "max_abs_diff": 0.0029076843562494403,
-            "median_abs_diff": 0.000984975107920949,
-            "x_at_max": 291541.25472736004,
+            "max_abs_diff": 0.17348545620389277,
+            "median_abs_diff": 0.03540867660946123,
+            "x_at_max": 157990595.0115683,
             "tolerance": 0.002,
             "within_tolerance": false,
-            "max_rel_diff": 0.0006119907855255054
+            "max_rel_diff": 0.03692880153802955
           },
           {
             "column": "log_center_Rho",
-            "max_abs_diff": 0.00789730016248763,
-            "median_abs_diff": 0.002659772115261569,
-            "x_at_max": 291541.25472736004,
+            "max_abs_diff": 0.20321655900388105,
+            "median_abs_diff": 0.01302741686792308,
+            "x_at_max": 110507839.01502004,
             "tolerance": 0.005,
             "within_tolerance": false,
-            "max_rel_diff": 0.03787629034194608
+            "max_rel_diff": 0.8895932329563131
           },
           {
             "column": "center_h1",
-            "max_abs_diff": 0.0,
-            "median_abs_diff": 0.0,
-            "x_at_max": 291541.25472736004,
+            "max_abs_diff": 1.1102230246251565e-16,
+            "median_abs_diff": 1.1102230246251565e-16,
+            "x_at_max": 350508.67172862956,
             "tolerance": null,
             "within_tolerance": true,
-            "max_rel_diff": 0.0
+            "max_rel_diff": 1.5003013846285894e-16
           },
           {
             "column": "center_he4",
-            "max_abs_diff": 0.0,
-            "median_abs_diff": 0.0,
-            "x_at_max": 291541.25472736004,
+            "max_abs_diff": 5.551115123125783e-17,
+            "median_abs_diff": 5.551115123125783e-17,
+            "x_at_max": 350508.67172862956,
             "tolerance": null,
             "within_tolerance": true,
-            "max_rel_diff": 0.0
+            "max_rel_diff": 2.313210806821031e-16
           },
           {
             "column": "center_c12",
             "max_abs_diff": 0.0,
             "median_abs_diff": 0.0,
-            "x_at_max": 291541.25472736004,
+            "x_at_max": 350508.67172862956,
             "tolerance": null,
             "within_tolerance": true,
             "max_rel_diff": 0.0
@@ -7358,13 +7355,12 @@
           "log_L",
           "log_R",
           "log_center_T",
-          "log_center_Rho",
-          "rel_num_zones"
+          "log_center_Rho"
         ],
-        "first_diverging_step": 85,
-        "first_diverging_x": 348371.2266506725
+        "first_diverging_step": 86,
+        "first_diverging_x": 349371.2266506725
       },
-      "error_message": "ValueError: invalid star input: unrecognized/unsupported '&controls::atm_option' option 'irradiated_grey' (`star/private/atm_support.f90:900-930`)"
+      "error_message": ""
     },
     {
       "suite": "star",

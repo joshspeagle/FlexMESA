@@ -262,6 +262,21 @@
       "number": 378,
       "title": "Wire atm_option = irradiated_grey and atm_irradiated_* controls (#376)",
       "draft": true
+    },
+    {
+      "number": 379,
+      "title": "Port Wave 1 history columns and pure-StarModel siblings (#374)",
+      "draft": true
+    },
+    {
+      "number": 380,
+      "title": "Port case-local .net search order and weaklib-only reaction synthesis (#375)",
+      "draft": true
+    },
+    {
+      "number": 384,
+      "title": "fix(star): set_qs and normalize_dqs follow upstream; models read from file are not renormalized (#381)",
+      "draft": true
     }
   ],
   "deferred_169": [

@@ -71,6 +71,7 @@ Scope and the `v0.1.0` definition are in [`SCOPE.md`](SCOPE.md). Work is tracked
 | 54 | The Second- and Third-Order Dual Types Are Generated From Upstream's `auto_diff` Modules by a Script (`#349`) | In force | below |
 | 55 | The Binary Step Loop Resets `rho = dm/dV` Before Remeshing, and Retries Restore the Reset Model (`#363`) | In force | below |
 | 56 | Upstream MESA `26.4.1` Global Total-Energy Accounting (`#151`) | In force | below |
+| 57 | The Scheduled Campaign Gives Each Case 600 Seconds (`#382`) | In force | below |
 
 ## Pre-audit decisions still in force
 
@@ -765,4 +766,14 @@ The text of these four entries predates the audit of 2026-11-16. The decisions s
 - **Alternatives Rejected**:
   - *Keeping solver-residual accounting for `dedt` or returning `0.0` for `eps_grav`*: hides genuine drift and broke energy conservation agreement.
   - *Altering `evolve.f90:1312` or `star_utils.f90:2335` formulas before MESA fixes them*: violates verbatim MESA `26.4.1` behavior.
+
+## DECISIONS #57: The Scheduled Campaign Gives Each Case 600 Seconds (`#382`)
+
+- **Date**: 2026-11-23 (project lead)
+- **Decision**: the per-case time budget of the scheduled history-harness campaign is 600 s, for every case (was 300 s). `campaign.yml` defaults to `case_timeout_sec = 600` and its full-harness job may run 355 minutes (GitHub-hosted jobs stop at 360). Local full campaigns use `--jobs 2 --timeout-sec 600 --max-rss-gb 5.5`.
+- **Why**: six cases reach upstream's own termination only after more than 300 s on the local campaign machine, on `main` and on #367 alike (paired strict runs at `--timeout-sec 900`): `binary/evolve_both_stars` (a strict pass), `binary/jdot_ml_check`, `star/1.5M_with_diffusion`, `star/hb_2M`, `star/wd_cool_0.6M` and `star/7M_prems_to_AGB`, at 330 to 510 s. Their committed baseline rows record the termination, so at 300 s the scheduled gate reported lost terminations and the number of passing cases depended on the budget rather than on the physics.
+- **Limits**: GitHub runners are slower than the local machine (`DECISIONS #51`), so some of these cases may still end on the budget there; `DECISIONS #51` keeps their committed rows in that case. A full campaign takes longer: each case that ends on the budget now costs up to 600 s.
+- **Alternatives Rejected**:
+  - *A per-case budget in `case_manifest.toml`*: bounds campaign time more tightly, but adds a field the harness, the gate and the baseline would all have to carry, for six cases.
+  - *Declaring the six cases as known gaps at 300 s*: would stop counting `evolve_both_stars` as passing although it reaches MESA's termination within tolerances, and would make the declared gaps depend on machine speed.
 

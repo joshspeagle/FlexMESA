@@ -363,26 +363,20 @@ fn mesa_26_4_1_net_get_hex_oracles() {
                 "{net_name} RATE must be 0 ULP (worst={}, got={:.17e}, want={:.17e})",
                 r_stats.worst_label, r_stats.worst_got, r_stats.worst_want
             );
-            assert!(
-                s_stats.max_ulp <= 24 && s_stats.max_rel <= 4.0e-15,
-                "{net_name} SCALAR max_ulp={} max_rel={:.3e} (worst={})",
-                s_stats.max_ulp,
-                s_stats.max_rel,
-                s_stats.worst_label
+            assert_eq!(
+                s_stats.max_ulp, 0,
+                "{net_name} SCALAR must be 0 ULP (worst={}, got={:.17e}, want={:.17e})",
+                s_stats.worst_label, s_stats.worst_got, s_stats.worst_want
             );
-            assert!(
-                i_stats.max_ulp <= 160 && i_stats.max_rel <= 3.5e-14,
-                "{net_name} ISO max_ulp={} max_rel={:.3e} (worst={})",
-                i_stats.max_ulp,
-                i_stats.max_rel,
-                i_stats.worst_label
+            assert_eq!(
+                i_stats.max_ulp, 0,
+                "{net_name} ISO must be 0 ULP (worst={}, got={:.17e}, want={:.17e})",
+                i_stats.worst_label, i_stats.worst_got, i_stats.worst_want
             );
-            assert!(
-                c_stats.max_ulp <= 165 && c_stats.max_rel <= 3.5e-14,
-                "{net_name} CAT max_ulp={} max_rel={:.3e} (worst={})",
-                c_stats.max_ulp,
-                c_stats.max_rel,
-                c_stats.worst_label
+            assert_eq!(
+                c_stats.max_ulp, 0,
+                "{net_name} CAT must be 0 ULP (worst={}, got={:.17e}, want={:.17e})",
+                c_stats.worst_label, c_stats.worst_got, c_stats.worst_want
             );
         }
     });

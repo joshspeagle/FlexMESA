@@ -69,8 +69,10 @@ pub(crate) fn get_general_1_to_1_derivs(
     let bf_q = b_f * q;
     let br_q = b_r * (-q);
     eps_nuc_mev[0] += bf_q + br_q;
-    w.eps_nuc_categories[icat_f] += bf_q.to_f64();
-    w.eps_nuc_categories[icat_r] += br_q.to_f64();
+    w.eps_nuc_categories[icat_f] =
+        (Quad::from_f64(w.eps_nuc_categories[icat_f]) + bf_q).to_f64();
+    w.eps_nuc_categories[icat_r] =
+        (Quad::from_f64(w.eps_nuc_categories[icat_r]) + br_q).to_f64();
     w.eps_nuc_rate[i] = bf_q.to_f64() * QCONV;
     w.eps_nuc_rate[r_i] = br_q.to_f64() * QCONV;
 
@@ -156,8 +158,10 @@ pub(crate) fn get_general_2_to_1_derivs(
     let bf_q = b_f * q;
     let br_q = b_r * (-q);
     eps_nuc_mev[0] += bf_q + br_q;
-    w.eps_nuc_categories[icat_f] += bf_q.to_f64();
-    w.eps_nuc_categories[icat_r] += br_q.to_f64();
+    w.eps_nuc_categories[icat_f] =
+        (Quad::from_f64(w.eps_nuc_categories[icat_f]) + bf_q).to_f64();
+    w.eps_nuc_categories[icat_r] =
+        (Quad::from_f64(w.eps_nuc_categories[icat_r]) + br_q).to_f64();
     w.eps_nuc_rate[i] = bf_q.to_f64() * QCONV;
     w.eps_nuc_rate[r_i] = br_q.to_f64() * QCONV;
 
@@ -255,8 +259,10 @@ pub(crate) fn get_general_2_to_2_derivs(
     let bf_q = b_f * q;
     let br_q = b_r * (-q);
     eps_nuc_mev[0] += bf_q + br_q;
-    w.eps_nuc_categories[icat_f] += bf_q.to_f64();
-    w.eps_nuc_categories[icat_r] += br_q.to_f64();
+    w.eps_nuc_categories[icat_f] =
+        (Quad::from_f64(w.eps_nuc_categories[icat_f]) + bf_q).to_f64();
+    w.eps_nuc_categories[icat_r] =
+        (Quad::from_f64(w.eps_nuc_categories[icat_r]) + br_q).to_f64();
     w.eps_nuc_rate[i] = bf_q.to_f64() * QCONV;
     w.eps_nuc_rate[r_i] = br_q.to_f64() * QCONV;
 
@@ -347,8 +353,10 @@ pub(crate) fn get_basic_2_to_2_derivs(
     let icat_f = (rxn.category as usize).saturating_sub(1);
     let icat_r = (g.reactions[r_i].category as usize).saturating_sub(1);
     eps_nuc_mev[0] += b * q;
-    w.eps_nuc_categories[icat_f] += (b_f * q).to_f64();
-    w.eps_nuc_categories[icat_r] -= (b_r * q).to_f64();
+    w.eps_nuc_categories[icat_f] =
+        (Quad::from_f64(w.eps_nuc_categories[icat_f]) + b_f * q).to_f64();
+    w.eps_nuc_categories[icat_r] =
+        (Quad::from_f64(w.eps_nuc_categories[icat_r]) - b_r * q).to_f64();
     w.eps_nuc_rate[i] = (b_f * q).to_f64() * QCONV;
     w.eps_nuc_rate[r_i] = (-b_r * q).to_f64() * QCONV;
 
@@ -439,8 +447,10 @@ pub(crate) fn get_basic_2_to_1_derivs(
     let icat_f = (rxn.category as usize).saturating_sub(1);
     let icat_r = (g.reactions[r_i].category as usize).saturating_sub(1);
     eps_nuc_mev[0] += b * q;
-    w.eps_nuc_categories[icat_f] += (b_f * q).to_f64();
-    w.eps_nuc_categories[icat_r] -= (b_r * q).to_f64();
+    w.eps_nuc_categories[icat_f] =
+        (Quad::from_f64(w.eps_nuc_categories[icat_f]) + b_f * q).to_f64();
+    w.eps_nuc_categories[icat_r] =
+        (Quad::from_f64(w.eps_nuc_categories[icat_r]) - b_r * q).to_f64();
     w.eps_nuc_rate[i] = (b_f * q).to_f64() * QCONV;
     w.eps_nuc_rate[r_i] = (-b_r * q).to_f64() * QCONV;
 

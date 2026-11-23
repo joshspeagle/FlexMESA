@@ -5,6 +5,8 @@ rotational angular momentum diffusion, and stellar winds (`flexmesa.star`).
 
 from __future__ import annotations
 
+import math
+
 import jax
 import jax.numpy as jnp
 import jax.test_util as jtu
@@ -246,12 +248,12 @@ def test_stellar_winds_rust_jax_consistency_and_mass_adjustment() -> None:
     )
 
     m_before = zams.mstar
-    m_h1_before = float(np.sum(zams.dm * zams.xa[:, 0]))
+    m_h1_before = math.fsum(zams.dm * zams.xa[:, 0])
     dt_wind = 1.0e6 * secyer
     mdot = zams.apply_wind_and_adjust_mass(scheme="Dutch", eta=10.0, dt=dt_wind)
     assert mdot < 0.0
     delta_m = zams.mstar - m_before
-    m_h1_after = float(np.sum(zams.dm * zams.xa[:, 0]))
+    m_h1_after = math.fsum(zams.dm * zams.xa[:, 0])
     np.testing.assert_allclose(delta_m, mdot * dt_wind, rtol=1.0e-11)
     # Upstream `revise_q_and_dq` (`star/private/adjust_mass.f90:661-664,
     # 792-795, 813-821`) accumulates `sumdq` left-to-right in `real(dp)`
@@ -261,12 +263,16 @@ def test_stellar_winds_rust_jax_consistency_and_mass_adjustment() -> None:
     # from total H1 mass (~5.54e33 g) amplifies that closure drift 54,334x
     # to 2.62e-10 relative error on `m_h1_after - m_h1_before`. Isolating
     # the exact `sum(dm) - mstar` closure drift preserves the strict 1e-11
-    # species-remap oracle alongside 1e-14 global H1 conservation.
+    # species-remap oracle alongside 1e-14 global H1 conservation. The mass
+    # sums are exact (`math.fsum`): with `adjust_mass` bit-identical to MESA
+    # 26.4.1 zone by zone (`tests/test_adjust_mass_385.py`), the identity holds
+    # to 3.5e-13, while pairwise `np.sum` rounding in sums of ~5.5e33 g alone
+    # reaches ~1.1e-11 of the ~1e29 g difference (#385).
     dq_ltr = 0.0
     for d in zams.dq:
         dq_ltr += float(d)
     assert dq_ltr == 1.0
-    dm_closure_drift = float(np.sum(zams.dm)) - zams.mstar
+    dm_closure_drift = math.fsum(zams.dm) - zams.mstar
     np.testing.assert_allclose(
         (m_h1_after - m_h1_before) - dm_closure_drift * float(zams.xa[-1, 0]),
         delta_m * x_surf_h1,

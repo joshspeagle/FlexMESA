@@ -102,7 +102,7 @@
     {
       "phase": "Phase C",
       "open": 18,
-      "closed": 4,
+      "closed": 5,
       "issues": [
         {
           "number": 152,
@@ -202,7 +202,7 @@
         {
           "number": 381,
           "title": "[Parity] set_qs and normalize_dqs depart from upstream; every model read from a file is renormalized",
-          "state": "open"
+          "state": "closed"
         },
         {
           "number": 385,
@@ -212,6 +212,11 @@
         {
           "number": 402,
           "title": "[Audit C3] Pre-MS relax phase: port do_internal_evolve and do_relax_num_steps (init.f90:1077-1118)",
+          "state": "open"
+        },
+        {
+          "number": 414,
+          "title": "[Parity] make_co_wd: first pre-MS relax step does not converge where MESA's retry does (surface zones)",
           "state": "open"
         }
       ]
@@ -274,14 +279,9 @@
       "draft": true
     },
     {
-      "number": 384,
-      "title": "fix(star): set_qs and normalize_dqs follow upstream; models read from file are not renormalized (#381)",
-      "draft": true
-    },
-    {
       "number": 387,
       "title": "fix(star): adjust_mass composition remap as upstream set_xa/set1_xa (#385)",
-      "draft": true
+      "draft": false
     },
     {
       "number": 392,
@@ -311,6 +311,21 @@
     {
       "number": 406,
       "title": "fix(kap): match MESA 26.4.1 opacity AUX step-dump parity at 0 ULP (#404)",
+      "draft": true
+    },
+    {
+      "number": 411,
+      "title": "feat(star): add upstream set_z/set_y and composition-relax helpers (#408)",
+      "draft": true
+    },
+    {
+      "number": 416,
+      "title": "feat(star): pre-MS and create_initial_model relax phase via do_internal_evolve (#402)",
+      "draft": true
+    },
+    {
+      "number": 417,
+      "title": "Fix MLT gradT and mlt_vc divergences against MESA 26.4.1 (#393)",
       "draft": true
     }
   ],
@@ -718,6 +733,14 @@
     {
       "number": 400,
       "title": "[Deferred bug] build_initial_model integration index can pass nzmax (create_initial_model.f90:342)",
+      "state": "open",
+      "kind": "upstream-bug",
+      "parity_pending": false,
+      "needs_confirmation": false
+    },
+    {
+      "number": 415,
+      "title": "[Deferred bug] relax_to_radiative_core computes a 1000-yr timestep cap but never applies it (relax.f90:3447, 3483-3485)",
       "state": "open",
       "kind": "upstream-bug",
       "parity_pending": false,

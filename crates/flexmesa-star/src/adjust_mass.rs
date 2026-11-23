@@ -16,7 +16,7 @@ use crate::hydro_rotation::{
     eval_i_rot, w_div_w_roche_jrot, w_div_w_roche_omega,
 };
 use crate::hydro_vars::set_hydro_vars;
-use crate::mesh_remap::normalize_and_assign_remapped_xa;
+use flexmesa_num::search::binary_search_1based;
 use crate::micro::{do_eos, set_basic_vars};
 use crate::model::StarModel;
 use crate::rotation::conserve_shell_j_rot_and_distortion;
@@ -486,7 +486,6 @@ fn do_adjust_mass_core(
         Vec::new()
     };
 
-    let xa_old = model.xa.clone();
     let starting_j_rot_surf = model.j_rot.first().copied().unwrap_or(0.0);
 
     // Update `xmstar` and `mstar` (`adjust_mass.f90:264-265`).
@@ -509,6 +508,24 @@ fn do_adjust_mass_core(
     // `k_const_mass` remains 0-based on `HydroAuxState` for `hydro_vars`).
     model.aux.k_below_const_q = k_a + 1;
     model.aux.k_const_mass = k_b;
+
+    // Save the composition down to `k_const_mass`, clamped to [0, 1] and
+    // renormalized cell by cell, before the remap reads it
+    // (`adjust_mass.f90:326-337`; `xa_old` is copied afterwards, `:372-376`).
+    // `mtot_init` is accumulated upstream but never read, so it is not kept.
+    let species = model.species;
+    for k in 0..=k_b.min(nz - 1) {
+        let cell = &mut model.xa[k * species..(k + 1) * species];
+        let mut sumx = 0.0_f64;
+        for x in cell.iter_mut() {
+            *x = x.clamp(0.0, 1.0);
+            sumx += *x;
+        }
+        for x in cell.iter_mut() {
+            *x /= sumx;
+        }
+    }
+    let xa_old = model.xa.clone();
 
     // `k_below_just_added` (`adjust_mass.f90:360-370`, 0-based).
     let k_below_just_added = if delta_m > 0.0 {
@@ -559,18 +576,19 @@ fn do_adjust_mass_core(
     };
     let x_acc = x_accreted.unwrap_or(&built_acc);
 
-    // Conservative composition remap on `0..k_b` (`set_xa`, `adjust_mass.f90:421`).
-    remap_xa_cells(
+    // Composition remap of zones 1..k_const_mass (`set_xa`,
+    // `adjust_mass.f90:421`, upstream `k_const_mass = kB`, 0-based `k_b`).
+    set_xa(
         model,
+        k_b + 1,
         &xa_old,
         x_acc,
         &rxm_old,
         &rxm_new,
         &prev_dm_raw,
         &new_cell_mass,
-        k_b,
         mmax,
-    );
+    )?;
 
     // Rotation remap (`set_omega_adjust_mass` + `adjust_J_lost`, `adjust_mass.f90:295-300, 430-452`).
     if model.controls.rotation_flag && model.j_rot.len() == nz {
@@ -674,68 +692,211 @@ fn do_adjust_mass_core(
     Ok(())
 }
 
+/// Remaps the composition of zones `1..k_const_mass` onto the revised mesh
+/// (`set_xa`, `star/private/adjust_mass.f90`); deeper zones keep `xa_old`.
+///
+/// `k_const_mass` is upstream's 1-based count (0-based zones
+/// `0..k_const_mass`). `old_xbdy` and `new_xbdy` are upstream's
+/// `old_cell_xbdy` and `new_cell_xbdy` (exterior mass at each cell's outer
+/// face), here `rxm_old` and `rxm_new`.
+///
+/// # Errors
+///
+/// Returns [`StarError::ConvergenceFailure`] where upstream's `set1_xa`
+/// sets `ierr = -1`.
 #[allow(clippy::too_many_arguments)]
-fn remap_xa_cells(
+fn set_xa(
     model: &mut StarModel,
+    k_const_mass: usize,
     xa_old: &[f64],
-    x_acc: &[f64],
-    rxm_old: &[f64],
-    rxm_new: &[f64],
+    xaccrete: &[f64],
+    old_xbdy: &[f64],
+    new_xbdy: &[f64],
     old_cell_mass: &[f64],
     new_cell_mass: &[f64],
-    k_const_mass: usize,
     mmax: f64,
-) {
+) -> Result<(), StarError> {
     let (nz, species) = (model.nz, model.species);
     if species == 0 {
-        return;
+        return Ok(());
     }
-    let mut accum = vec![0.0_f64; species];
-    let mut kk_start = 0_usize;
-    let m_top = rxm_old[0];
-
+    let k_const_mass = k_const_mass.min(nz);
+    for k in k_const_mass..nz {
+        model.xa[k * species..(k + 1) * species]
+            .copy_from_slice(&xa_old[k * species..(k + 1) * species]);
+    }
+    let mut first_err: Option<StarError> = None;
     for k in 0..k_const_mass {
-        let a0 = rxm_new[k];
-        let new_dm = new_cell_mass[k];
-        let a1 = a0 + new_dm;
-        if a1 <= m_top {
-            model.cell_xa_mut(k).copy_from_slice(&x_acc[..species]);
-            continue;
+        if let Err(e) = set1_xa(
+            model,
+            k,
+            xa_old,
+            xaccrete,
+            old_xbdy,
+            new_xbdy,
+            old_cell_mass,
+            new_cell_mass,
+            mmax,
+        ) {
+            // Upstream records the error and continues with the next cell.
+            first_err.get_or_insert(e);
         }
-        accum.fill(0.0);
-        if a0 < m_top {
-            let w_acc = (m_top - a0).min(new_dm);
-            for j in 0..species {
-                accum[j] += w_acc * x_acc[j];
+    }
+    first_err.map_or(Ok(()), Err)
+}
+
+/// One cell of [`set_xa`]: line-by-line port of `set1_xa`
+/// (`star/private/adjust_mass.f90`), with 0-based `k` and `kk`.
+#[allow(clippy::too_many_arguments)]
+fn set1_xa(
+    model: &mut StarModel,
+    k: usize,
+    xa_old: &[f64],
+    xaccrete: &[f64],
+    old_xbdy: &[f64],
+    new_xbdy: &[f64],
+    old_cell_mass: &[f64],
+    new_cell_mass: &[f64],
+    mmax: f64,
+) -> Result<(), StarError> {
+    let (nz, species) = (model.nz, model.species);
+    let fail = || {
+        StarError::ConvergenceFailure(format!(
+            "set1_xa failed for cell {}",
+            k + 1
+        ))
+    };
+    let mut msum = vec![-1.0_f64; species];
+    let mut xm_outer = new_xbdy[k];
+    let new_cell_dm = if k == nz - 1 {
+        mmax - xm_outer - model.m_center
+    } else {
+        new_cell_mass[k]
+    };
+    let xm_inner = xm_outer + new_cell_dm;
+    let mut dm_sum = 0.0_f64;
+    let mut partially_accreted_cell = false;
+    let k_outer;
+    if xm_outer < old_xbdy[0] {
+        // Some accreted material in the new cell.
+        if xm_inner <= old_xbdy[0] {
+            model.xa[k * species..(k + 1) * species]
+                .copy_from_slice(&xaccrete[..species]);
+            return Ok(());
+        }
+        let dm = new_cell_dm.min(old_xbdy[0] - xm_outer);
+        dm_sum = dm;
+        for j in 0..species {
+            msum[j] = xaccrete[j] * dm;
+        }
+        partially_accreted_cell = true;
+        xm_outer = old_xbdy[0];
+        k_outer = 0;
+    } else {
+        // New cell entirely composed of old material.
+        msum.fill(0.0);
+        if xm_outer >= old_xbdy[nz - 1] {
+            k_outer = nz - 1;
+        } else {
+            let loc = binary_search_1based(&old_xbdy[..nz], xm_outer, 0);
+            if loc == 0 || loc > nz {
+                return Err(fail());
+            }
+            k_outer = loc - 1;
+            if xm_outer < old_xbdy[k_outer] {
+                return Err(fail());
+            }
+            if k_outer < nz - 1 && old_xbdy[k_outer + 1] <= xm_outer {
+                return Err(fail());
             }
         }
-        let a_eff = a0.max(m_top);
-        while kk_start + 1 < nz && rxm_old[kk_start + 1] <= a_eff {
-            kk_start += 1;
-        }
-        for kk in kk_start..nz {
-            let b0 = rxm_old[kk];
-            if b0 >= a1 {
-                break;
-            }
-            let b1 = if kk + 1 < nz {
-                rxm_old[kk + 1]
-            } else {
-                (mmax - model.m_center).max(b0 + old_cell_mass[kk])
-            };
-            let ov = (a1.min(b1) - a_eff.max(b0)).max(0.0);
-            if ov > 0.0 {
+    }
+
+    for kk in k_outer..nz {
+        // Loop until reaching m_inner.
+        let xm0 = old_xbdy[kk];
+        if xm0 >= xm_inner {
+            if dm_sum < new_cell_dm && kk > 0 {
+                // Upstream also sets `dm_sum = new_cell_dm` here; it is not
+                // read after this exit.
+                let dm = new_cell_dm - dm_sum;
                 for j in 0..species {
-                    accum[j] += ov * xa_old[kk * species + j];
+                    msum[j] += xa_old[(kk - 1) * species + j] * dm;
                 }
             }
+            break;
         }
-        normalize_and_assign_remapped_xa(
-            &mut model.xa[k * species..(k + 1) * species],
-            &accum,
-            new_dm.max(1.0e-99),
-        );
+        let xm1 = if kk == nz - 1 {
+            mmax - model.m_center
+        } else {
+            old_xbdy[kk + 1]
+        };
+        if xm1 < xm_outer {
+            return Err(fail());
+        }
+        if xm0 >= xm_outer && xm1 <= xm_inner {
+            let mut dm = old_cell_mass[kk];
+            dm_sum += dm;
+            if dm_sum > new_cell_dm {
+                // Reproduced as written (deferred upstream bug #386): with
+                // `dm_sum > new_cell_dm` this increases `dm`.
+                dm -= new_cell_dm - dm_sum;
+                dm_sum = new_cell_dm;
+            }
+            for j in 0..species {
+                msum[j] += xa_old[kk * species + j] * dm;
+            }
+        } else if xm0 <= xm_outer && xm1 >= xm_inner {
+            let dm = if partially_accreted_cell {
+                xm_inner - xm_outer
+            } else {
+                new_cell_mass[k]
+            };
+            dm_sum += dm;
+            for j in 0..species {
+                msum[j] += xa_old[kk * species + j] * dm;
+            }
+        } else {
+            // Only the part of old cell kk that lies in new cell k.
+            let dm = if xm_inner <= xm1 {
+                let dm = new_cell_dm - dm_sum;
+                dm_sum = new_cell_dm;
+                dm
+            } else {
+                let mut dm = (xm1 - xm_outer).max(0.0);
+                if dm_sum + dm > new_cell_dm {
+                    dm = new_cell_dm - dm_sum;
+                }
+                dm_sum += dm;
+                dm
+            };
+            for j in 0..species {
+                msum[j] += xa_old[kk * species + j] * dm;
+            }
+            if dm <= 0.0 {
+                return Err(fail());
+            }
+        }
+        if dm_sum >= new_cell_dm {
+            break;
+        }
     }
+
+    let cell = &mut model.xa[k * species..(k + 1) * species];
+    for j in 0..species {
+        cell[j] = msum[j] / new_cell_mass[k];
+    }
+    let mut sumx = 0.0_f64;
+    for &x in cell.iter() {
+        sumx += x;
+    }
+    if sumx <= 0.0 {
+        return Err(fail());
+    }
+    for x in cell.iter_mut() {
+        *x /= sumx;
+    }
+    Ok(())
 }
 
 fn set1_irot(model: &mut StarModel, k: usize, jrot_known: bool) {

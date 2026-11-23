@@ -10,70 +10,106 @@ use crate::model::StarModel;
 use crate::star_ad::{StarAdExt, StarAdOrder1};
 
 impl StarModel {
-    /// Returns the index `midq` of the zone with the largest relative mass
-    /// fraction `dq[midq]`, used as the meeting point for bidirectional
-    /// surface-inward and center-outward summation (`star_utils.f90:1577`).
+    /// Returns the index `midq` of the zone with the largest `dq`: the first
+    /// maximum, as Fortran `maxloc(dq(1:nz), dim=1)` returns it
+    /// (`star/private/star_utils.f90:687, 739`).
     #[must_use]
     pub fn midq_index(&self) -> usize {
-        self.dq
-            .iter()
-            .enumerate()
-            .max_by(|(_, a), (_, b)| {
-                a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal)
-            })
-            .map_or(0, |(idx, _)| idx)
+        let mut midq = 0;
+        for k in 1..self.nz {
+            if self.dq[k] > self.dq[midq] {
+                midq = k;
+            }
+        }
+        midq
     }
 
-    /// Normalizes `dq` so $\sum_{k=0}^{nz-1} \Delta q_k = 1$ using
-    /// bidirectional summation meeting at `midq = argmax(dq)` (`normalize_dqs`
-    /// in `star/private/star_utils.f90:1577`).
+    /// Rescales `dq` so that it sums to one, summing in from both boundaries
+    /// to meet at the largest cell (`normalize_dqs`,
+    /// `star/private/star_utils.f90:669-709`).
+    ///
+    /// Upstream calls this only for new or reshaped models (pre-MS
+    /// construction, shell removal, RSP, the post-remesh `dq_old`); a model
+    /// read from a file is not renormalized (`set_qs` with
+    /// `do_normalize_dqs_as_part_of_set_qs = .false.`, `#381`).
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StarError::InvalidInput`] if any `dq` is not positive, as
+    /// upstream fails with `ierr = -1`.
     pub fn normalize_dqs(&mut self) -> Result<(), StarError> {
-        if self.nz == 0 {
+        let nz = self.nz;
+        if nz == 0 {
             return Ok(());
         }
-        let midq = self.midq_index();
-        let sum_outer0: f64 = self.dq[..midq].iter().sum();
-        let sum_inner0: f64 = self.dq[midq + 1..].iter().sum();
-        if (sum_outer0 + sum_inner0) + self.dq[midq] == 1.0 {
-            return Ok(());
+        let bad = |k: usize, dq: f64| {
+            StarError::InvalidInput(format!("normalize_dqs: bad dq({k}) = {dq:e}"))
+        };
+        let mut kmin = 0;
+        for k in 1..nz {
+            if self.dq[k] < self.dq[kmin] {
+                kmin = k;
+            }
         }
-        let sum: f64 = self.dq.iter().sum();
-        if sum <= 0.0 || !sum.is_finite() {
-            return Err(StarError::InvalidInput(format!(
-                "invalid sum(dq) = {sum}"
-            )));
-        }
-        for dq_k in &mut self.dq {
-            *dq_k /= sum;
+        if self.dq[kmin] <= 0.0 {
+            return Err(bad(kmin + 1, self.dq[kmin]));
         }
         let midq = self.midq_index();
-        let sum_outer: f64 = self.dq[..midq].iter().sum();
-        let sum_inner: f64 = self.dq[midq + 1..].iter().sum();
-        let dq_mid = 1.0 - (sum_outer + sum_inner);
-        if dq_mid > 0.0 {
-            self.dq[midq] = dq_mid;
+        // Surface inward, k = 1..midq (star_utils.f90:688-696).
+        let mut dqsum1 = 0.0_f64;
+        for k in 0..=midq {
+            dqsum1 += self.dq[k];
+            if self.dq[k] <= 0.0 {
+                return Err(bad(k + 1, self.dq[k]));
+            }
+        }
+        // Center outward, k = nz..midq+1 (star_utils.f90:697-704).
+        let mut dqsum2 = 0.0_f64;
+        for k in (midq + 1..nz).rev() {
+            dqsum2 += self.dq[k];
+            if self.dq[k] <= 0.0 {
+                return Err(bad(k + 1, self.dq[k]));
+            }
+        }
+        for k in 0..nz {
+            self.dq[k] /= dqsum1 + dqsum2;
         }
         Ok(())
     }
 
-    /// Computes enclosed mass fractions `q` from `dq` by summing inward from
-    /// the surface to `midq` and outward from the center to `midq + 1`
-    /// (`set_qs` in `star/private/star_utils.f90:712-752`).
+    /// Sets the outer-face mass fractions `q` from `dq` (`set_qs`,
+    /// `star/private/star_utils.f90:712-752`): cumulative from the surface,
+    /// `q(1) = 1`, `q(k) = q(k-1) - dq(k-1)`; only if some `q` leaves
+    /// `[0, 1]` are they redone as surface-inward and center-outward sums
+    /// meeting at the largest cell. `dq` is not renormalized
+    /// (`do_normalize_dqs_as_part_of_set_qs = .false.`, `#381`).
     pub fn set_qs(&mut self) {
         let nz = self.nz;
         if nz == 0 {
             return;
         }
-        let midq = self.midq_index();
         self.q[0] = 1.0;
-        for k in 1..=midq {
-            self.q[k] = (self.q[k - 1] - self.dq[k - 1]).max(0.0);
-        }
-        if nz >= 2 && midq + 1 < nz {
-            self.q[nz - 1] = self.dq[nz - 1];
-            for k in ((midq + 1)..(nz - 1)).rev() {
-                self.q[k] = (self.q[k + 1] + self.dq[k]).min(1.0);
+        let mut okay = true;
+        for k in 1..nz {
+            self.q[k] = self.q[k - 1] - self.dq[k - 1];
+            if self.q[k] < 0.0 || self.q[k] > 1.0 {
+                okay = false;
+                break;
             }
+        }
+        if okay {
+            return;
+        }
+        let midq = self.midq_index();
+        let mut dqsum1 = 0.0_f64;
+        for k in 0..=midq {
+            self.q[k] = 1.0 - dqsum1;
+            dqsum1 += self.dq[k];
+        }
+        let mut dqsum2 = 0.0_f64;
+        for k in (midq + 1..nz).rev() {
+            dqsum2 += self.dq[k];
+            self.q[k] = dqsum2;
         }
     }
 
@@ -165,9 +201,14 @@ impl StarModel {
     }
 
     /// Synchronizes `q`, `xq`, `dm`, `dm_bar`, `m`, `m_grav`, `r`, `rmid`,
-    /// `grav`, and `xh` after `dq` or `ln_r` changes.
+    /// `grav`, and `xh` after `dq` or `ln_r` changes. `dq` is used as it is;
+    /// callers that build a new mesh call [`Self::normalize_dqs`] first, as
+    /// upstream does (`#381`).
+    ///
+    /// # Errors
+    ///
+    /// Kept fallible for its callers; currently it does not fail.
     pub fn sync_mesh_and_pack(&mut self) -> Result<(), StarError> {
-        self.normalize_dqs()?;
         self.set_qs();
         self.set_xqs();
         self.set_m_and_dm();

@@ -101,8 +101,8 @@
     },
     {
       "phase": "Phase C",
-      "open": 18,
-      "closed": 5,
+      "open": 17,
+      "closed": 6,
       "issues": [
         {
           "number": 152,
@@ -207,7 +207,7 @@
         {
           "number": 385,
           "title": "[Parity] adjust_mass composition remap differs from MESA by 1-2 ULP; H1-conservation test needs #377",
-          "state": "open"
+          "state": "closed"
         },
         {
           "number": 402,
@@ -279,11 +279,6 @@
       "draft": true
     },
     {
-      "number": 387,
-      "title": "fix(star): adjust_mass composition remap as upstream set_xa/set1_xa (#385)",
-      "draft": false
-    },
-    {
       "number": 392,
       "title": "fix(star): model_number is model_number_old + 1 before the solve, as upstream (#359)",
       "draft": true
@@ -326,6 +321,16 @@
     {
       "number": 417,
       "title": "Fix MLT gradT and mlt_vc divergences against MESA 26.4.1 (#393)",
+      "draft": true
+    },
+    {
+      "number": 418,
+      "title": "fix(rates,ionization,colors): match MESA 26.4.1 strict module hex probes at 0 ULP (#413)",
+      "draft": true
+    },
+    {
+      "number": 419,
+      "title": "fix(star): match MESA 26.4.1 area precedence in element diffusion (#407)",
       "draft": true
     }
   ],

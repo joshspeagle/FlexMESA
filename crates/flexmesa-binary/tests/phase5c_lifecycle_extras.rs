@@ -2,19 +2,19 @@
 //! Unit and integration tests for Issue `#137` coupled binary step-lifecycle
 //! parity (`xa_sub_xa_start`, `1e-12` species normalization guard, symmetric
 //! Strang-split `premix_omega`, `am_d_mix_factor == 0` transport,
-//! `op_split_burn` + `save_start_values` ordering, multi-step
-//! `relax_composition_with_henyey`, and `BinaryExtras` custom hooks).
+//! `op_split_burn` + `save_start_values` ordering, and `BinaryExtras` custom
+//! hooks).
 
 #![forbid(unsafe_code)]
 
 use flexmesa_binary::{
     BinaryExtras, BinaryExtrasAction, BinaryInlistControls, BinarySystem,
 };
-use flexmesa_const::{LSUN, MSUN, SECYER};
+use flexmesa_const::{MSUN, SECYER};
 use flexmesa_star::{
     StarControls, StarError, StarJobControls, StarModel,
-    apply_step_pre_physics, compute_power_categories, do_struct_burn_mix,
-    load_zams_model, relax_composition_with_henyey, set_hydro_vars,
+    apply_step_pre_physics, do_struct_burn_mix,
+    load_zams_model, set_hydro_vars,
     solve_henyey_step, star_evolve_step, sync_post_henyey_rotation,
     update_rotation_distortion_factors,
 };
@@ -195,70 +195,6 @@ fn test_op_split_burn_runs_before_save_start_values_preserving_pre_burn_t_start(
         (star.ln_t_start[c_idx] - ln_t_init).abs() < 1.0e-14,
         "ln_t_start must preserve pre-burn temperature: expected {ln_t_init}, got {}",
         star.ln_t_start[c_idx]
-    );
-}
-
-#[test]
-fn test_relax_composition_with_henyey_low_metallicity_equilibration() {
-    let ctrl = StarControls {
-        initial_mass: 12.0,
-        rotation_flag: true,
-        zbase: 0.02,
-        ..StarControls::default()
-    };
-    let job = StarJobControls {
-        relax_z: true,
-        new_z: 0.00034,
-        relax_y: true,
-        new_y: 0.248_246,
-        set_surface_rotation_v: true,
-        new_surface_rotation_v: 50.0,
-        ..StarJobControls::default()
-    };
-
-    let mut init_job = job.clone();
-    init_job.relax_z = false;
-    init_job.relax_y = false;
-    let mut star = load_zams_model(ctrl, init_job).expect("12 Msun ZAMS");
-    star.job = job.clone();
-
-    relax_composition_with_henyey(&mut star, &job)
-        .expect("relax_composition_with_henyey");
-    assert_eq!(star.star_age, 0.0);
-    assert_eq!(star.model_number, 1);
-    assert_eq!(star.num_retries, 0);
-    assert_eq!(star.aux.cumulative_energy_error, 0.0);
-    assert!((star.controls.initial_z - 0.00034).abs() < 1.0e-12);
-    assert!((star.controls.initial_y - 0.248_246).abs() < 1.0e-12);
-
-    let h1_j = star
-        .iso_names
-        .iter()
-        .position(|n| n.eq_ignore_ascii_case("h1"))
-        .unwrap();
-    let he3_j = star
-        .iso_names
-        .iter()
-        .position(|n| n.eq_ignore_ascii_case("he3"));
-    let he4_j = star
-        .iso_names
-        .iter()
-        .position(|n| n.eq_ignore_ascii_case("he4"))
-        .unwrap();
-    let xa0 = star.cell_xa(0);
-    let y_surf = xa0[he4_j] + he3_j.map_or(0.0, |j| xa0[j]);
-    let z_surf = 1.0 - xa0[h1_j] - y_surf;
-    assert!((z_surf - 0.00034).abs() < 1.0e-5, "z_surf={z_surf}");
-    assert!((y_surf - 0.248_246).abs() < 1.0e-5, "y_surf={y_surf}");
-
-    let lnuc = (compute_power_categories(&star).power_nuc_burn * LSUN)
-        .abs()
-        .max(1.0);
-    let lsurf = star.lum[0].abs().max(1.0);
-    let log_ratio = flexmesa_math::log10(lnuc / lsurf).abs();
-    assert!(
-        log_ratio < 0.02,
-        "relaxed model must be near thermal equilibrium: |log10(Lnuc/L)| = {log_ratio}"
     );
 }
 

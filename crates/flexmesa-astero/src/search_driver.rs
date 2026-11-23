@@ -396,7 +396,7 @@ fn set_param(
     match name {
         "initial_mass" | "mass" => {
             job.new_mass = val;
-            job.relax_mass = true;
+            job.relax_initial_mass = true;
             bundle.controls.initial_mass = val;
         }
         "initial_y" | "y" => {

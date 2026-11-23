@@ -330,7 +330,7 @@ fn override_controls_for_relax(model: &mut StarModel) {
 
 /// `setup_before_relax` (`star/private/relax.f90:3878-3887`) with
 /// `turn_off_winds` (`star/private/relax.f90:3890-3902`).
-fn setup_before_relax(model: &mut StarModel) {
+pub(crate) fn setup_before_relax(model: &mut StarModel) {
     let c = &mut model.controls;
     c.dxdt_nuc_factor = 0.0;
     c.max_age = 1.0e50;

@@ -306,9 +306,11 @@ pub fn eval_surf_bc(model: &mut StarModel) -> Result<(), StarError> {
     if model.nz == 0 {
         return Ok(());
     }
-    let l_surf = model.lum[0].max(1.0);
-    let r_surf = model.r[0].max(1.0);
-    let m_surf = model.m_grav[0].max(1.0);
+    // `L_surf = s% L(1)`, `R_surf = s% r(1)` and `s% m(1)`, unclamped
+    // (`star/private/hydro_vars.f90:817-821, 962-966`).
+    let l_surf = model.lum[0];
+    let r_surf = model.r[0];
+    let m_surf = model.m[0];
     let cgrav = model.cgrav[0];
     let tau_surf = model.controls.tau_factor * model.tau_base;
     let teff = atm_teff(l_surf, r_surf);

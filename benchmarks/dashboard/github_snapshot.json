@@ -101,8 +101,8 @@
     },
     {
       "phase": "Phase C",
-      "open": 14,
-      "closed": 4,
+      "open": 15,
+      "closed": 3,
       "issues": [
         {
           "number": 152,
@@ -187,7 +187,7 @@
         {
           "number": 299,
           "title": "[Audit C8/C12] Wire remaining photo/log I/O and test-harness driver controls",
-          "state": "closed"
+          "state": "open"
         },
         {
           "number": 365,

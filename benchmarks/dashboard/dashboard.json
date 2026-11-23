@@ -1331,8 +1331,8 @@
       },
       {
         "phase": "Phase C",
-        "open": 14,
-        "closed": 4,
+        "open": 15,
+        "closed": 3,
         "issues": [
           {
             "number": 152,
@@ -1417,7 +1417,7 @@
           {
             "number": 299,
             "title": "[Audit C8/C12] Wire remaining photo/log I/O and test-harness driver controls",
-            "state": "closed"
+            "state": "open"
           },
           {
             "number": 365,
@@ -2849,6 +2849,19 @@
       "rust_cov_pct": "76.2",
       "python_cov_pct": "87.7",
       "closed_140": "18",
+      "total_140": "37",
+      "deferred_169": "46"
+    },
+    {
+      "date_utc": "2026-11-22",
+      "commit": "ced60f0",
+      "event": "main merge",
+      "engine_ported_pct": "30.7",
+      "all_verified_pct": "1.1",
+      "cases_passing": "3",
+      "rust_cov_pct": "76.2",
+      "python_cov_pct": "87.7",
+      "closed_140": "17",
       "total_140": "37",
       "deferred_169": "46"
     }

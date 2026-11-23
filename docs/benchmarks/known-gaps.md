@@ -10,9 +10,9 @@ Instead of capping steps or loosening checks to force green runs, unfinished or 
 | Suite | Target Cases | Stored `26.4.1` Refs | `no_reference_yet` | Strict-Validated | Diagnostic Runs | Reach Upstream Term | Declared Gaps | Verified Pass |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
 | `star` | 90 | 86 | 4 | 46 | 44 | 39 | 85 | 1 |
-| `binary` | 8 | 8 | 0 | 7 | 1 | 6 | 6 | 2 |
+| `binary` | 8 | 8 | 0 | 7 | 1 | 6 | 5 | 3 |
 | `astero` | 8 | 8 | 0 | 1 | 7 | 3 | 8 | 0 |
-| **Total** | **106** | **102** | **4** | **54** | **52** | **48** | **99** | **3** |
+| **Total** | **106** | **102** | **4** | **54** | **52** | **48** | **98** | **4** |
 
 `Strict-Validated` counts cases whose unmodified inlists pass strict control validation (`#147`). `Diagnostic Runs` counts cases that strict validation rejects and that were rerun with the unsupported controls ignored; their numbers show where the engine stands and can never count as a pass (`DECISIONS #26`). `Reach Upstream Term` counts runs of either kind.
 
@@ -39,18 +39,17 @@ Cases lacking a committed MESA `26.4.1` baseline report `no reference yet` and c
 | [#157](https://github.com/joshspeagle/FlexMESA/issues/157) | 9 | Restore MLT/TDC controls and remove non-upstream fallbacks |
 | [#162](https://github.com/joshspeagle/FlexMESA/issues/162) | 9 | Align `astero` search and chi-squared drivers |
 | [#170](https://github.com/joshspeagle/FlexMESA/issues/170) | 7 | Integrate bundled `GYRE` oscillation eigensolver |
+| [#152](https://github.com/joshspeagle/FlexMESA/issues/152) | 5 | Align `evolve.rs`, Newton solver control, and retry loops |
 | [#155](https://github.com/joshspeagle/FlexMESA/issues/155) | 5 | Align convective boundaries, overshooting, CPM, and pred. mix |
 | [#158](https://github.com/joshspeagle/FlexMESA/issues/158) | 5 | Align shellular rotation solver variables and Spruit-Tayler |
-| [#160](https://github.com/joshspeagle/FlexMESA/issues/160) | 5 | Align coupled `BinarySystem` step ordering, tides, and RLOF |
-| [#152](https://github.com/joshspeagle/FlexMESA/issues/152) | 4 | Align `evolve.rs`, Newton solver control, and retry loops |
+| [#160](https://github.com/joshspeagle/FlexMESA/issues/160) | 4 | Align coupled `BinarySystem` step ordering, tides, and RLOF |
 | [#156](https://github.com/joshspeagle/FlexMESA/issues/156) | 3 | Port full Burgers element diffusion and radiative levitation |
 | [#231](https://github.com/joshspeagle/FlexMESA/issues/231) | 3 | Open #140 parity sub-issue |
-| [#151](https://github.com/joshspeagle/FlexMESA/issues/151) | 1 | Port multi-step `relax.f90` model relaxation routines |
 | [#153](https://github.com/joshspeagle/FlexMESA/issues/153) | 1 | Port upstream `mesh_adjust.f90` remeshing planner |
 | [#159](https://github.com/joshspeagle/FlexMESA/issues/159) | 1 | Align stellar wind schemes and rotational wind boosts |
 | [#171](https://github.com/joshspeagle/FlexMESA/issues/171) | 1 | Integrate bundled `ADIPLS` oscillation eigensolver |
 
-## Complete Known-Gaps Registry (99 Cases)
+## Complete Known-Gaps Registry (98 Cases)
 
 | Suite | Case | Issue | Expected Term | Baseline Outcome | Mechanism |
 | :--- | :--- | :--- | :--- | :--- | :--- |
@@ -93,7 +92,7 @@ Cases lacking a committed MESA `26.4.1` baseline report `no reference yet` and c
 | `star` | `high_rot_darkening` | [#158](https://github.com/joshspeagle/FlexMESA/issues/158) | `xa_central_lower_limit` | `error` (0 steps; diagnostic (5 controls ignored)) | Case history_columns.list requests unported gravity-darkening grav_dark_L_polar column. |
 | `star` | `high_z` | [#161](https://github.com/joshspeagle/FlexMESA/issues/161) | `xa_central_lower_limit` | `xa_central_lower_limit` (444 steps; strict) | Strict run reaches xa_central_lower_limit (445 steps and 0 retries matching MESA 26.4.1, all final tolerances pass) with num_zones (2.74%) and track deviations from step 3 (#161, #153). |
 | `star` | `hot_cool_wind` | [#161](https://github.com/joshspeagle/FlexMESA/issues/161) | `log_L_upper_limit` | `timeout` (512 steps; strict) | Strict run diverges from step 2 under fixed T(tau) opacity and enters AGB solver retries (789 steps, 135 retries vs MESA 570 steps, 28 retries), exceeding the 900 s wall-time cap (#161, #152, #159). |
-| `star` | `hse_riemann` | [#151](https://github.com/joshspeagle/FlexMESA/issues/151) | `max_age` | `max_age` (2011 steps; strict) | Riemann hydro energy accounting (#151). |
+| `star` | `hse_riemann` | [#152](https://github.com/joshspeagle/FlexMESA/issues/152) | `max_age` | `max_age` (2011 steps; strict) | Strict run reaches max_age (2011 steps, 0 retries, final diffs within 1e-8 under #151 energy conservation limits) with a step-2 log_center_Rho (6.419e-03) and mean-iteration (2.0 vs MESA 4.3) deviation during initial u_flag Riemann hydro AMR remeshing (#152, #153). |
 | `star` | `irradiated_planet` | [#154](https://github.com/joshspeagle/FlexMESA/issues/154) | `max_age` | `error` (30 steps; diagnostic (3 controls ignored)) | Planetary initial model and column-depth irradiation relaxation (#154). |
 | `star` | `low_z` | [#152](https://github.com/joshspeagle/FlexMESA/issues/152) | `xa_central_lower_limit` | `xa_central_lower_limit` (181 steps; strict) | Strict run reaches exact MESA 26.4.1 xa_central_lower_limit (181 steps, 0 retries, 0 num_zones diff, all final tolerances pass) with track deviations from step 395 (#152). |
 | `star` | `magnetic_braking` | [#157](https://github.com/joshspeagle/FlexMESA/issues/157) | `xa_central_lower_limit` | `error` (0 steps; strict) | Case history_columns.list requests unported MLT++ gradT_excess_alpha column (#157) and rotational retry/physics controls (#152, #158). |
@@ -141,10 +140,9 @@ Cases lacking a committed MESA `26.4.1` baseline report `no reference yet` and c
 | `star` | `zams_to_cc_80` | [#161](https://github.com/joshspeagle/FlexMESA/issues/161) | `fe_core_infall_limit` | `timeout` (97 steps; diagnostic (7 controls ignored)) | 80 Msun core-collapse evolution hits the 300 s wall-time guard with unported high-T rate, opacity, and rotation controls (#161, #158). |
 | `binary` | `double_bh` | [#161](https://github.com/joshspeagle/FlexMESA/issues/161) | `extras_binary_finish_step` | `error` (0 steps; diagnostic (1 controls ignored)) | Component history_columns.list requests unported gradT_excess_alpha/hydro/colors columns (#157, #161), 1 unsupported control remains, and coupled binary orbit awaits #160. |
 | `binary` | `jdot_gr_check` | [#160](https://github.com/joshspeagle/FlexMESA/issues/160) | `extras_binary_check_model` | `extras_binary_check_model` (222 steps; strict) | Strict binary run reaches extras_binary_check_model with binary orbit and masses within tolerance, while LOGS1 initial dt shifts the model 1-5 coarsening cascade in star_age past rel_num_zones = 2% (#160, #161). |
-| `binary` | `jdot_ml_check` | [#160](https://github.com/joshspeagle/FlexMESA/issues/160) | `max_age` | `max_age` (888 steps; strict) | Strict binary run reaches max_age (888 steps vs MESA 889) with binary orbit and masses within tolerance, while LOGS1 exceeds rel_num_zones = 2% (#160, #161). |
 | `binary` | `star_plus_point_mass` | [#160](https://github.com/joshspeagle/FlexMESA/issues/160) | `xa_central_lower_limit` | `xa_central_lower_limit` (308 steps; strict) | Implicit RLOF star+point-mass age and component masses differ from MESA 26.4.1. |
-| `binary` | `star_plus_point_mass_explicit_mdot` | [#160](https://github.com/joshspeagle/FlexMESA/issues/160) | `xa_central_lower_limit` | `xa_central_lower_limit` (546 steps; strict) | Explicit RLOF star+point-mass age and component masses differ from MESA 26.4.1. |
-| `binary` | `wind_fed_bhhmxb` | [#160](https://github.com/joshspeagle/FlexMESA/issues/160) | `xa_central_lower_limit` | `timeout` (216 steps; strict) | Strict binary run passes BH Eddington and wind-budget checks, while implicit RLOF exceeds the 300 s wall-time cap with component mass and age drift (#160, #144). |
+| `binary` | `star_plus_point_mass_explicit_mdot` | [#160](https://github.com/joshspeagle/FlexMESA/issues/160) | `xa_central_lower_limit` | `xa_central_lower_limit` (567 steps; strict) | Explicit RLOF star+point-mass age and component masses differ from MESA 26.4.1. |
+| `binary` | `wind_fed_bhhmxb` | [#160](https://github.com/joshspeagle/FlexMESA/issues/160) | `xa_central_lower_limit` | `timeout` (297 steps; strict) | Strict binary run passes BH Eddington and wind-budget checks, while implicit RLOF exceeds the 300 s wall-time cap with component mass and age drift (#160, #144). |
 | `astero` | `astero_adipls` | [#171](https://github.com/joshspeagle/FlexMESA/issues/171) | `xa_central_lower_limit` | `xa_central_lower_limit` (465 steps; diagnostic (1 controls ignored)) | Depends on bundled ADIPLS (#171) and astero mode-matching driver (#162). |
 | `astero` | `astero_gyre` | [#170](https://github.com/joshspeagle/FlexMESA/issues/170) | `xa_central_lower_limit` | `xa_central_lower_limit` (465 steps; strict) | Depends on bundled GYRE (#170) and astero mode-matching driver (#162). |
 | `astero` | `example_astero` | [#162](https://github.com/joshspeagle/FlexMESA/issues/162) | `xtra1` | `astero_use_first_values_samples=1_best_chi2=2.908108e0_term=chi2_search_limit2` (1007 steps; diagnostic (51 controls ignored)) | Asteroseismic search driver and in-house pulsation scaffolding (#162, #171). |
@@ -229,7 +227,7 @@ from flexmesa.testing import case_manifest
 manifest = case_manifest.load_case_manifest()
 gaps = case_manifest.load_known_gaps()
 assert len(manifest.cases) == 106
-assert len(gaps) == 99
+assert len(gaps) == 98
 no_ref = [
     c.case for c in manifest.cases
     if c.reference_status == "no_reference_yet"

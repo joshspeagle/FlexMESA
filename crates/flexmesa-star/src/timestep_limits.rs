@@ -22,7 +22,7 @@ use crate::timestep_checks::{
 fn check_mass_mdot_courant_and_energy(
     model: &StarModel,
     skip_hard_limit: bool,
-) -> Result<(f64, f64, f64, f64), String> {
+) -> Result<(f64, f64, f64, f64), (String, TimestepLimitReason)> {
     let c = &model.controls;
     let ts = &c.ts_stop;
     let mw = &c.mix_wind;
@@ -38,7 +38,8 @@ fn check_mass_mdot_courant_and_energy(
             coeff,
             "delta_lg_star_mass_hard_limit",
             skip_hard_limit,
-        )?
+        )
+        .map_err(|m| (m, TimestepLimitReason::MassChange))?
     } else {
         0.0
     };
@@ -53,7 +54,10 @@ fn check_mass_mdot_courant_and_energy(
             let lim = mw.delta_mdot_limit * coeff;
             let hard_lim = mw.delta_mdot_hard_limit * coeff;
             if hard_lim > 0.0 && !skip_hard_limit && delta_mdot > hard_lim {
-                return Err(String::from("delta_mdot_hard_limit"));
+                return Err((
+                    String::from("delta_mdot_hard_limit"),
+                    TimestepLimitReason::MassChange,
+                ));
             }
             if lim > 0.0 {
                 let r_mdot = delta_mdot / lim;
@@ -78,7 +82,8 @@ fn check_mass_mdot_courant_and_energy(
                 coeff,
                 "check_adjust_J_q",
                 false,
-            )?
+            )
+            .map_err(|m| (m, TimestepLimitReason::StructuralChange))?
         } else {
             0.0
         };
@@ -93,7 +98,8 @@ fn check_mass_mdot_courant_and_energy(
             coeff,
             "hard_limit_for_rel_error_in_energy_conservation",
             false,
-        )?
+        )
+        .map_err(|m| (m, TimestepLimitReason::EnergyConservation))?
     } else {
         0.0
     };
@@ -102,27 +108,33 @@ fn check_mass_mdot_courant_and_energy(
     let mut r_courant = 0.0_f64;
     let dt_coll = eval_min_cell_collapse_time(model);
     if dt_coll >= 1.0e-30 {
-        r_courant = r_courant.max(check_change(
-            dt / dt_coll,
-            ts.dt_div_dt_cell_collapse_limit,
-            ts.dt_div_dt_cell_collapse_hard_limit,
-            coeff,
-            "dt_div_dt_cell_collapse",
-            skip_hard_limit,
-        )?);
+        r_courant = r_courant.max(
+            check_change(
+                dt / dt_coll,
+                ts.dt_div_dt_cell_collapse_limit,
+                ts.dt_div_dt_cell_collapse_hard_limit,
+                coeff,
+                "dt_div_dt_cell_collapse",
+                skip_hard_limit,
+            )
+            .map_err(|m| (m, TimestepLimitReason::CourantOrCollapse))?,
+        );
     }
 
     if ts.dt_div_min_dr_div_cs_limit > 0.0 {
         let (dt_x, _) = eval_min_dr_div_cs(model);
         if dt_x > 0.0 {
-            r_courant = r_courant.max(check_change(
-                dt / dt_x,
-                ts.dt_div_min_dr_div_cs_limit,
-                ts.dt_div_min_dr_div_cs_hard_limit,
-                coeff,
-                "dt_div_min_dr_div_cs",
-                skip_hard_limit,
-            )?);
+            r_courant = r_courant.max(
+                check_change(
+                    dt / dt_x,
+                    ts.dt_div_min_dr_div_cs_limit,
+                    ts.dt_div_min_dr_div_cs_hard_limit,
+                    coeff,
+                    "dt_div_min_dr_div_cs",
+                    skip_hard_limit,
+                )
+                .map_err(|m| (m, TimestepLimitReason::CourantOrCollapse))?,
+            );
         }
     }
 
@@ -419,13 +431,7 @@ pub(crate) fn timestep_controller_with_extras(
         let (r_mass, r_jq, r_erg, r_cour) =
             match check_mass_mdot_courant_and_energy(model, skip_hard_limit) {
                 Ok(t) => t,
-                Err(m) => {
-                    return retry_rep(
-                        m,
-                        dt_done,
-                        TimestepLimitReason::CourantOrCollapse,
-                    );
-                }
+                Err((m, why)) => return retry_rep(m, dt_done, why),
             };
         let r_burn =
             match check_dx_nuc_drop_full(model, skip_hard_limit, log_max_t) {

@@ -154,7 +154,7 @@ reason = "Strict run reaches xa_central_lower_limit(h1) (91 steps vs MESA 92, 0 
 suite = "star"
 case = "custom_colors"
 issue = "#161"
-reason = "Strict validation rejects unported &colors and relaxation controls, and history_columns.list requests unported phase_of_evolution and colors columns (#161). With the controls ignored, the run stops at model 1 (min_timestep_limit) because the first pre-MS step at upstream's dt = 1e-5 yr does not converge from FlexMESA's pre-MS model (#154)."
+reason = "Strict validation rejects unported &colors and relaxation controls, and history_columns.list requests unported phase_of_evolution and colors columns (#161)."
 
 [[gaps]]
 suite = "star"
@@ -243,8 +243,8 @@ reason = "Strict run diverges from step 2 under fixed T(tau) opacity and enters 
 [[gaps]]
 suite = "star"
 case = "hse_riemann"
-issue = "#151"
-reason = "Riemann hydro energy accounting (#151)."
+issue = "#152"
+reason = "Strict run reaches max_age (2011 steps, 0 retries, final diffs within 1e-8 under #151 energy conservation limits) with a step-2 log_center_Rho (6.419e-03) and mean-iteration (2.0 vs MESA 4.3) deviation during initial u_flag Riemann hydro AMR remeshing (#152, #153)."
 
 [[gaps]]
 suite = "star"
@@ -530,12 +530,6 @@ reason = "Strict binary run reaches extras_binary_check_model with binary orbit 
 
 [[gaps]]
 suite = "binary"
-case = "jdot_ml_check"
-issue = "#160"
-reason = "Strict binary run reaches max_age (888 steps vs MESA 889) with binary orbit and masses within tolerance, while LOGS1 exceeds rel_num_zones = 2% (#160, #161)."
-
-[[gaps]]
-suite = "binary"
 case = "star_plus_point_mass"
 issue = "#160"
 reason = "Implicit RLOF star+point-mass age and component masses differ from MESA 26.4.1."
@@ -603,6 +597,16 @@ reason = "Asteroseismic surface-effects starting model and ADIPLS scaffolding (#
 # Declared test-level known gaps in this same single ledger (#144).
 # Every Rust #[ignore] attribute and Python @pytest.mark.{xfail,skip,skipif}
 # decorator must appear bijectively here and cite an open GitHub issue.
+
+[[test_gaps]]
+kind = "rust_ignore"
+crate = "flexmesa-star"
+file = "crates/flexmesa-star/src/tests.rs"
+test_name = "test_solve_henyey_step_converges_on_perturbed_model"
+issue = "#154"
+role = "physics_gap"
+expect_fail_when_run = true
+reason = "With the upstream pre-MS builder (build_pre_ms_model, star/private/pre_ms_model.f90), a forced 10-yr step on this coarse 1 Msun pre-MS model (pre_ms_d_log10_P = 0.15, 46 zones) ends in a singular block-tridiagonal matrix at zone 27 (equ_L); it converged only on the previous stand-in builder's model. This setup has not been run in MESA."
 
 [[test_gaps]]
 kind = "rust_ignore"

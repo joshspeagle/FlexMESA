@@ -1613,11 +1613,12 @@ impl BinarySystem {
         )?;
 
         refresh_star_irradiation_heat(&mut self.donor);
-        let donor_conv = match evolve_single_star_attempt(
-            &mut self.donor,
-            dt_try,
-            first_try,
-            false,
+        // Step dumps label each star with MESA's `s% id`: the donor is star
+        // `donor_i` and the accretor `3 - donor_i` (#372).
+        let donor_id = self.donor_i;
+        let donor_conv = match flexmesa_star::stepdump::with_star_id(
+            donor_id,
+            || evolve_single_star_attempt(&mut self.donor, dt_try, first_try, false),
         )? {
             StarStepAttemptOutcome::Converged(conv) => conv,
             StarStepAttemptOutcome::Retry { cause, .. } => {
@@ -1639,9 +1640,9 @@ impl BinarySystem {
         }
         let mut acc_conv: Option<StarStepConverged> = None;
         if let BinaryCompanion::Star(ref mut s2) = self.companion {
-            let conv_a = match evolve_single_star_attempt(
-                s2, dt_used, first_try, false,
-            )? {
+            let conv_a = match flexmesa_star::stepdump::with_star_id(3 - donor_id, || {
+                evolve_single_star_attempt(s2, dt_used, first_try, false)
+            })? {
                 StarStepAttemptOutcome::Converged(conv) => conv,
                 StarStepAttemptOutcome::Retry { cause, .. } => {
                     return Ok(SingleTrialOutcome::StarSolverRetry {

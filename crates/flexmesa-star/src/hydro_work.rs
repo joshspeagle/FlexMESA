@@ -240,6 +240,34 @@ pub fn eval_v_flag_dwork_dm_ad(
     )
 }
 
+/// Evaluates time-centered total pressure `(P_tot, P_theta)` for `simple_pdv`
+/// work (`calc_Ptot_ad_tw` / `eval_simple_PdV_work`,
+/// `star/private/hydro_energy.f90:862-866`).
+#[must_use]
+pub(crate) fn eval_simple_pdv_p_tot_ad(
+    model: &StarModel,
+    k: usize,
+    skip_peos: bool,
+) -> (StarAdOrder1, f64) {
+    let (mut p_tot_ad, p_theta) = if skip_peos {
+        (StarAdOrder1::ZERO, 0.0)
+    } else {
+        crate::hydro_momentum::eval_cell_peos_time_centered_ad(model, k, false)
+    };
+    if model.controls.use_pvsc_art_visc {
+        p_tot_ad = p_tot_ad + eval_pvsc_cell_ad(model, k);
+    }
+    if model.controls.rsp2_flag && model.controls.rsp2.alfap != 0.0 {
+        p_tot_ad =
+            p_tot_ad + crate::rsp2_ad::eval_rsp2_ptrb_cell_ad(model, k, false);
+    }
+    if k > 0 && model.controls.mlt_pturb_factor > 0.0 {
+        p_tot_ad = p_tot_ad
+            + crate::hydro_momentum::eval_mlt_pturb_cell_ad(model, k, false);
+    }
+    (p_tot_ad, p_theta)
+}
+
 /// Evaluates `eval_simple_PdV_work` divided by $\Delta m_k$ (`P_tot * (A_k v_{c,k}
 /// - A_{k+1} v_{c,k+1}) / dm_k`) and diagonal composition prefactor `fac_dm_dxa00`
 /// (`star/private/hydro_energy.f90:830-879`).
@@ -259,22 +287,7 @@ pub fn eval_v_flag_simple_pdv_dm_ad(
     };
     let dv_dm = (av_00 - av_p1) / dm_k;
 
-    let (mut p_tot_ad, p_theta) = if skip_peos {
-        (StarAdOrder1::ZERO, 0.0)
-    } else {
-        crate::hydro_momentum::eval_cell_peos_time_centered_ad(model, k, false)
-    };
-    if model.controls.use_pvsc_art_visc {
-        p_tot_ad = p_tot_ad + eval_pvsc_cell_ad(model, k);
-    }
-    if model.controls.rsp2_flag && model.controls.rsp2.alfap != 0.0 {
-        p_tot_ad =
-            p_tot_ad + crate::rsp2_ad::eval_rsp2_ptrb_cell_ad(model, k, false);
-    }
-    if k > 0 && model.controls.mlt_pturb_factor > 0.0 {
-        p_tot_ad = p_tot_ad
-            + crate::hydro_momentum::eval_mlt_pturb_cell_ad(model, k, false);
-    }
+    let (p_tot_ad, p_theta) = eval_simple_pdv_p_tot_ad(model, k, skip_peos);
     let fac_dm_dxa00 = if skip_peos {
         0.0
     } else {

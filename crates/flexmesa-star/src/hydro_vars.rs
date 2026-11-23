@@ -888,7 +888,7 @@ fn set_no_mixing_face(
 
 /// Evaluates implicit superadiabaticity reduction (`set_superad_reduction` in
 /// `star/private/turb_support.f90:448-509`).
-fn eval_superad_reduction(
+pub(crate) fn eval_superad_reduction(
     mw: &crate::controls_mix_wind::MixWindControls,
     t_f: StarAdOrder1,
     p_f: StarAdOrder1,

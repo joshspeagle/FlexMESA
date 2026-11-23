@@ -9,6 +9,7 @@ use flexmesa_chem::{
 };
 
 use crate::controls::StarError;
+use crate::controls_mix_wind::MixWindControls;
 use crate::model::StarModel;
 
 /// Builds the accreted mass-fraction vector (`len = model.species`) matching
@@ -78,8 +79,9 @@ pub fn build_accreted_xa(model: &StarModel) -> Vec<f64> {
     get_xa_for_accretion(model).unwrap_or_else(|_| model.cell_xa(0).to_vec())
 }
 
-fn custom_zfrac_array(model: &StarModel) -> Result<[f64; NUM_CHEM_ELEMENTS], StarError> {
-    let mw = &model.controls.mix_wind;
+fn custom_zfrac_array(
+    mw: &MixWindControls,
+) -> Result<[f64; NUM_CHEM_ELEMENTS], StarError> {
     let mut zfrac = [0.0_f64; NUM_CHEM_ELEMENTS];
     // 0-based index = atomic number Z - 1 (`e_li = 3` -> 2, ..., `e_zn = 30` -> 29).
     let custom: [(usize, f64); 28] = [
@@ -135,8 +137,9 @@ fn custom_zfrac_array(model: &StarModel) -> Result<[f64; NUM_CHEM_ELEMENTS], Sta
 
 fn get_xa_for_standard_metals(model: &StarModel) -> Result<Vec<f64>, StarError> {
     let mw = &model.controls.mix_wind;
-    get_xa_for_standard_metals_with(
-        model,
+    standard_metals_xa(
+        &model.chem_id,
+        mw,
         model.controls.accretion_h1,
         mw.accretion_h2,
         mw.accretion_he3,
@@ -146,25 +149,33 @@ fn get_xa_for_standard_metals(model: &StarModel) -> Result<Vec<f64>, StarError> 
     )
 }
 
-/// Builds `xa` (`len = model.species`) for the given light-element mass
-/// fractions and solar metal mixture `which_zfracs`
-/// (`get_xa_for_standard_metals`, `star/private/adjust_xyz.f90:991-1092`).
-/// `model` supplies the net (`chem_id`, `iso_names`) and, for
-/// `which_zfracs = 0` (`Custom_zfracs`), the `z_fraction_*` controls.
+/// Builds the homogeneous mass fractions `xa` (`len = chem_id.len()`) for
+/// given `h1`, `h2`, `he3`, `he4` and the solar metal mixture `which_zfracs`
+/// (`get_xa_for_standard_metals` in `star/private/adjust_xyz.f90:991-1093`).
+///
+/// `which_zfracs = 0` (`Custom_zfracs`) takes the `z_fraction_*` controls in
+/// `mw`; `1..=10` select the tabulated solar scales; any other value is
+/// accepted only for metal-free mixtures (`adjust_xyz.f90:1065-1075`).
 ///
 /// # Errors
-/// Returns [`StarError::InvalidInput`] where upstream sets `ierr /= 0`.
-pub(crate) fn get_xa_for_standard_metals_with(
-    model: &StarModel,
+/// Returns [`StarError::InvalidInput`] for an invalid `which_zfracs` with
+/// non-zero metals, invalid custom `z_fraction_*` values, `h1` missing from
+/// the network, or a negative or non-finite result.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn standard_metals_xa(
+    chem_id: &[usize],
+    mw: &MixWindControls,
     h1_in: f64,
-    h2: f64,
-    he3: f64,
+    h2_in: f64,
+    he3_in: f64,
     he4_in: f64,
     which_zfracs: i32,
     dump_missing_into_heaviest: bool,
 ) -> Result<Vec<f64>, StarError> {
     let catalog = NuclideCatalog::builtin_ref();
     let mut h1 = h1_in;
+    let h2 = h2_in;
+    let he3 = he3_in;
     let mut he4 = he4_in;
 
     let zfrac = match which_zfracs {
@@ -173,7 +184,7 @@ pub(crate) fn get_xa_for_standard_metals_with(
                 .map_err(|e| StarError::InvalidInput(e.to_string()))?;
             solar_element_zfrac(scale, catalog)
         }
-        0 => custom_zfrac_array(model)?,
+        0 => custom_zfrac_array(mw)?,
         other => {
             if (1.0 - (h1 + h2 + he3 + he4)).abs() < 1.0e-8 {
                 if h1 > he4 {
@@ -193,7 +204,7 @@ pub(crate) fn get_xa_for_standard_metals_with(
 
     let z_init = (1.0 - (h1 + h2 + he3 + he4)).clamp(0.0, 1.0);
     let xa = get_xa(
-        model,
+        chem_id,
         catalog,
         h1,
         h2,
@@ -215,7 +226,7 @@ pub(crate) fn get_xa_for_standard_metals_with(
 
 #[allow(clippy::too_many_arguments)]
 fn get_xa(
-    model: &StarModel,
+    chem_id: &[usize],
     catalog: &NuclideCatalog,
     h1: f64,
     h2: f64,
@@ -243,24 +254,18 @@ fn get_xa(
         )));
     }
 
-    let species = model.species;
+    let species = chem_id.len();
     let mut xa = vec![0.0_f64; species];
-    let idx_h1 = model
-        .iso_names
-        .iter()
-        .position(|n| n.eq_ignore_ascii_case("h1"));
-    let idx_h2 = model
-        .iso_names
-        .iter()
-        .position(|n| n.eq_ignore_ascii_case("h2"));
-    let idx_he3 = model
-        .iso_names
-        .iter()
-        .position(|n| n.eq_ignore_ascii_case("he3"));
-    let idx_he4 = model
-        .iso_names
-        .iter()
-        .position(|n| n.eq_ignore_ascii_case("he4"));
+    // `net_iso(ih1)`, `net_iso(ih2)`, ... (`adjust_xyz.f90:1129-1141`).
+    let idx_of = |name: &str| {
+        chem_id.iter().position(|&cid| {
+            catalog.get_by_id(cid).is_some_and(|iso| iso.name == name)
+        })
+    };
+    let idx_h1 = idx_of("h1");
+    let idx_h2 = idx_of("h2");
+    let idx_he3 = idx_of("he3");
+    let idx_he4 = idx_of("he4");
 
     if let Some(i2) = idx_h2 {
         xa[i2] = h2;
@@ -283,13 +288,13 @@ fn get_xa(
 
     let ztotal = 1.0 - (h1 + h2 + he3 + he4);
     adjust_z_fractions(
-        model,
+        chem_id,
         catalog,
         ztotal,
         zfrac,
         dump_missing_into_heaviest,
         &mut xa,
-    );
+    )?;
 
     let sum_xa: f64 = xa.iter().sum();
     if sum_xa <= 0.0 || !sum_xa.is_finite() {
@@ -304,31 +309,27 @@ fn get_xa(
 }
 
 fn adjust_z_fractions(
-    model: &StarModel,
+    chem_id: &[usize],
     catalog: &NuclideCatalog,
     ztotal: f64,
     zfrac: &[f64; NUM_CHEM_ELEMENTS],
     dump_missing_into_heaviest: bool,
     xa: &mut [f64],
-) {
-    let species = model.species;
+) -> Result<(), StarError> {
+    let species = chem_id.len();
     let mut z_num = vec![0_usize; species];
     let mut weights = vec![0.0_f64; species];
     let mut names: Vec<&str> = Vec::with_capacity(species);
 
-    for j in 0..species {
-        if let Some(iso) = model
-            .chem_id
-            .get(j)
-            .and_then(|&cid| catalog.get_by_id(cid))
-            .or_else(|| catalog.get_by_name(&model.iso_names[j]))
-        {
-            z_num[j] = iso.z;
-            weights[j] = iso.w;
-            names.push(&iso.name);
-        } else {
-            names.push(&model.iso_names[j]);
-        }
+    for (j, &cid) in chem_id.iter().enumerate() {
+        let iso = catalog.get_by_id(cid).ok_or_else(|| {
+            StarError::InvalidInput(format!(
+                "adjust_z_fractions: unknown chem_id {cid}"
+            ))
+        })?;
+        z_num[j] = iso.z;
+        weights[j] = iso.w;
+        names.push(&iso.name);
     }
 
     let jskip = if dump_missing_into_heaviest {
@@ -364,7 +365,7 @@ fn adjust_z_fractions(
         }
         if frac_sum > 0.0 && z_num[j] <= NUM_CHEM_ELEMENTS {
             let iso_frac = frac / frac_sum;
-            let elem_zfrac = zfrac[z_num[j] - 1].max(0.0);
+            let elem_zfrac = zfrac[z_num[j] - 1];
             new_xa[j] = ztotal * elem_zfrac * iso_frac;
         }
     }
@@ -390,4 +391,5 @@ fn adjust_z_fractions(
             }
         }
     }
+    Ok(())
 }

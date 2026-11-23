@@ -174,9 +174,12 @@ def _header(
         "(write statements only, MESA_SKIP_OPTIONAL=t, first ./rn stage); "
         "values are IEEE-754 binary64 bit patterns in hexadecimal",
     ]
-    for inlist in sorted(case_dir.glob("inlist*")):
+    for inlist in sorted(case_dir.rglob("inlist*")):
+        if not inlist.is_file():
+            continue
         digest = hashlib.sha256(inlist.read_bytes()).hexdigest()
-        lines.append(f"# inlist_sha256: {inlist.name} {digest}")
+        rel = inlist.relative_to(case_dir)
+        lines.append(f"# inlist_sha256: {rel} {digest}")
     return lines
 
 
@@ -204,14 +207,54 @@ def run_case(
         A one-line status.
     """
     suite, case = ident.split("/", 1)
+    dest = out / suite / f"{case}.stepdump"
+    if dest.exists() and "\nDONE\n" in dest.read_text(encoding="utf-8"):
+        return f"{ident}: kept existing complete dump"
     raw = work / f"{suite}__{case}.raw"
+    case_root = _case_root(env, suite, case, work)
+    if (case_root / case).exists() and not raw.exists():
+        return f"{ident}: case copy exists in scratch, not rerun"
     run_env = {
         **env,
-        "OUT": str(work / suite),
+        "OUT": str(case_root),
         stepdump_patch.MARKER: str(raw),
         f"{stepdump_patch.MARKER}_STEPS": str(steps),
         f"{stepdump_patch.MARKER}_STOP": "1",
     }
+    if (case_root / case).exists():
+        status = "reused earlier run"
+    else:
+        status = _run(ident, run_env, timeout_sec)
+    if not raw.exists():
+        return f"{ident}: {status}, no dump"
+    return _write_dump(ident, raw, dest, case_root / case, steps, meta, status)
+
+
+def _case_root(
+    env: dict[str, str], suite: str, case: str, work: pathlib.Path
+) -> pathlib.Path:
+    """Returns the directory the case is copied into.
+
+    A case whose ``rn`` sets ``MESA_DIR=../../..`` runs only from inside a
+    MESA tree, so it is copied into the overlay's own ``star/`` (a real copy;
+    ``binary/`` and ``astero/`` are links to the pristine tree, which is never
+    written to).
+
+    Raises:
+        SystemExit: For such a case outside the star suite.
+    """
+    overlay = pathlib.Path(env["MESA_DIR"])
+    rn = overlay / suite / "test_suite" / case / "rn"
+    if "MESA_DIR=../../.." not in rn.read_text(encoding="utf-8"):
+        return work / suite
+    if suite != "star":
+        raise SystemExit(f"{suite}/{case}: rn needs a MESA tree")
+    return overlay / "star" / "stepdump_cases"
+
+
+def _run(ident: str, run_env: dict[str, str], timeout_sec: int) -> str:
+    """Runs one case through the reference runner; returns its status."""
+    suite, case = ident.split("/", 1)
     try:
         proc = subprocess.run(
             ["bash", str(RUN_CASE), suite, case],
@@ -224,12 +267,22 @@ def run_case(
         status = f"rc={proc.returncode}"
     except subprocess.TimeoutExpired:
         status = "timeout"
-    if not raw.exists():
-        return f"{ident}: {status}, no dump"
+    return status
+
+
+def _write_dump(
+    ident: str,
+    raw: pathlib.Path,
+    dest: pathlib.Path,
+    case_dir: pathlib.Path,
+    steps: int,
+    meta: dict[str, str],
+    status: str,
+) -> str:
+    """Writes the header and the raw records to ``dest``."""
     records = raw.read_text(encoding="utf-8").splitlines()
-    dest = out / suite / f"{case}.stepdump"
     dest.parent.mkdir(parents=True, exist_ok=True)
-    header = _header(work / suite / case, ident, steps, meta)
+    header = _header(case_dir, ident, steps, meta)
     dest.write_text("\n".join(header + records) + "\n", encoding="utf-8")
     done = "DONE" in records
     return f"{ident}: {status}, {len(records)} records, done={done}"
@@ -273,7 +326,10 @@ def main() -> None:
             for c in cases
         ]
         for job in futures.as_completed(jobs):
-            print(job.result(), flush=True)
+            try:
+                print(job.result(), flush=True)
+            except Exception as exc:
+                print(f"error: {exc!r}", flush=True)
 
 
 if __name__ == "__main__":

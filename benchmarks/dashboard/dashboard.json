@@ -1331,8 +1331,8 @@
       },
       {
         "phase": "Phase C",
-        "open": 14,
-        "closed": 4,
+        "open": 15,
+        "closed": 3,
         "issues": [
           {
             "number": 152,
@@ -1417,7 +1417,7 @@
           {
             "number": 299,
             "title": "[Audit C8/C12] Wire remaining photo/log I/O and test-harness driver controls",
-            "state": "closed"
+            "state": "open"
           },
           {
             "number": 365,
@@ -1477,6 +1477,11 @@
         "number": 367,
         "title": "feat(mtx,star,binary): upstream do_block_multiply_xa and rho = dm/dV reset before each step (#358, #363)",
         "draft": true
+      },
+      {
+        "number": 370,
+        "title": "feat(star,testing): upstream MESA 26.4.1 global total-energy accounting (#151)",
+        "draft": false
       }
     ],
     "deferred_169": [
@@ -2849,6 +2854,32 @@
       "rust_cov_pct": "76.2",
       "python_cov_pct": "87.7",
       "closed_140": "18",
+      "total_140": "37",
+      "deferred_169": "46"
+    },
+    {
+      "date_utc": "2026-11-22",
+      "commit": "ced60f0",
+      "event": "main merge",
+      "engine_ported_pct": "30.7",
+      "all_verified_pct": "1.1",
+      "cases_passing": "3",
+      "rust_cov_pct": "76.2",
+      "python_cov_pct": "87.7",
+      "closed_140": "17",
+      "total_140": "37",
+      "deferred_169": "46"
+    },
+    {
+      "date_utc": "2026-11-23",
+      "commit": "1c1830c",
+      "event": "main merge",
+      "engine_ported_pct": "30.7",
+      "all_verified_pct": "1.1",
+      "cases_passing": "3",
+      "rust_cov_pct": "76.2",
+      "python_cov_pct": "87.7",
+      "closed_140": "17",
       "total_140": "37",
       "deferred_169": "46"
     }

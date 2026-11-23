@@ -41,6 +41,8 @@
 
 /// Tier B/C bindings for Wave 5.4 `astero` (scaling relations, surface effects, optimization).
 pub mod astero_py;
+/// PyO3 adapter for an `astero` case's own `set_param` (test-side extras).
+pub mod astero_case_hooks_py;
 /// Tier B bindings for `atm` (surface boundary conditions, $T(\tau)$, tables).
 pub mod atm_py;
 /// Tier B/C bindings for Wave 5.3 `binary` (orbital mechanics, RLOF, tides, binary evolution).

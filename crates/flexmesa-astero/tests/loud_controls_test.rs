@@ -161,7 +161,6 @@ fn test_astero_option_strings_and_missing_files_fail_loudly() {
         "&astero_search_controls\n  correction_scheme = 'bogus'\n/\n",
         "&astero_search_controls\n  search_type = 'bogus'\n/\n",
         "&astero_search_controls\n  oscillation_code = 'bogus'\n/\n",
-        "&astero_search_controls\n  constraint_name(1) = 'bogus_c'\n/\n",
         "&astero_search_controls\n  param_name(1) = 'bogus_p'\n/\n",
     ]
     .iter()

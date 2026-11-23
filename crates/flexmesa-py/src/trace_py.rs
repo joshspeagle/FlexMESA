@@ -5,7 +5,9 @@
 use std::collections::HashSet;
 use std::path::Path;
 
-use flexmesa_astero::run_astero_test_suite_case_with_options;
+use flexmesa_astero::{
+    run_astero_test_suite_case_with_case_hooks, AsteroCaseHooks,
+};
 use flexmesa_binary::{
     run_binary_test_suite_case_with_extras, BinaryLogsOptions,
 };
@@ -171,7 +173,8 @@ pub fn trace_binary_case<'py>(
     write_profiles=false,
     is_logs_dir=true,
     numerics_mode=None,
-    allow_unsupported_controls=false
+    allow_unsupported_controls=false,
+    extras=None
 ))]
 #[allow(clippy::too_many_arguments)]
 pub fn trace_astero_case<'py>(
@@ -185,8 +188,11 @@ pub fn trace_astero_case<'py>(
     is_logs_dir: bool,
     numerics_mode: Option<&str>,
     allow_unsupported_controls: bool,
+    extras: Option<Py<PyAny>>,
 ) -> PyResult<Bound<'py, PyDict>> {
     let mode = parse_opt_mode(numerics_mode)?;
+    let mut set_param =
+        crate::astero_case_hooks_py::adapter_from_extras(py, extras)?;
     let load_opts = InlistLoadOptions {
         allow_unsupported_controls,
     };
@@ -199,13 +205,14 @@ pub fn trace_astero_case<'py>(
                     respect_intervals,
                     write_profiles,
                 );
-                run_astero_test_suite_case_with_options(
+                run_astero_test_suite_case_with_case_hooks(
                     Path::new(case_dir),
                     skip_optional,
                     max_steps_per_stage,
                     false,
                     opts,
                     load_opts,
+                    set_param.as_mut().map(|a| a as &mut dyn AsteroCaseHooks),
                 )
             })
         })

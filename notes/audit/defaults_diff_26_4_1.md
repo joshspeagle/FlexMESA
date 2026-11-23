@@ -40,7 +40,7 @@ Denominator: `1559 / 2396` upstream MESA `26.4.1` scalar/1-slot defaults matched
 | star &controls | `xa_surface_upper_limit_species` | `star/defaults/controls.defaults:1202` | `''` | `crates/flexmesa-star/src/controls_timestep_stop.rs:857` | `Vec::new()` | empty Vec initializer |
 | star &star_job | `required_termination_code_string` | `star/defaults/star_job.defaults:250` | `''` | `crates/flexmesa-star/src/job_controls.rs:1086` | `Vec::new()` | empty Vec initializer |
 | binary &binary_controls + &binary_job | `inlist_names` | `binary/defaults/binary_job.defaults:55` | `'inlist1'` | `crates/flexmesa-binary/src/inlist.rs:340` | `[String::from("inlist1"), String::from("inlist2")]` | non-uniform array initializer |
-| astero &astero_search_controls | `l0_n_obs` | `astero/defaults/astero_search.defaults:289` | `-1` | `crates/flexmesa-astero/src/inlist_astero.rs:317` | `Vec::new()` | empty Vec initializer |
+| astero &astero_search_controls | `l0_n_obs` | `astero/defaults/astero_search.defaults:289` | `-1` | `crates/flexmesa-astero/src/inlist_astero.rs:292` | `Vec::new()` | empty Vec initializer |
 
 ## star &controls
 

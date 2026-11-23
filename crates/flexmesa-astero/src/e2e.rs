@@ -17,7 +17,7 @@ use flexmesa_star::inlist_runner::{
 use flexmesa_star::rn_parser::{parse_rn_stages, RnStage};
 
 use crate::inlist_astero::parse_astero_search_controls_with_options;
-use crate::search_driver::run_star_astero_with_options;
+use crate::search_driver::{run_star_astero_with_case_hooks, AsteroCaseHooks};
 
 static ASTERO_STAGING_SEQ: AtomicU64 = AtomicU64::new(0);
 
@@ -156,6 +156,33 @@ pub fn run_astero_test_suite_case_with_options(
     logs_opts: StarLogsOptions<'_>,
     inlist_opts: InlistLoadOptions,
 ) -> Result<CaseRunReport, StarError> {
+    run_astero_test_suite_case_with_case_hooks(
+        orig_case_dir,
+        skip_optional,
+        max_steps_per_stage,
+        verify_restart,
+        logs_opts,
+        inlist_opts,
+        None,
+    )
+}
+
+/// [`run_astero_test_suite_case_with_options`] with the case's `set_param`
+/// hook ([`AsteroCaseHooks`]), which the search calls for every named
+/// parameter of every track (`astero/private/extras_support.f90:974-988`).
+///
+/// # Errors
+/// Returns [`StarError`] when a named search parameter has no hook, the hook
+/// fails, or the run fails.
+pub fn run_astero_test_suite_case_with_case_hooks(
+    orig_case_dir: &Path,
+    skip_optional: bool,
+    max_steps_per_stage: Option<usize>,
+    verify_restart: bool,
+    logs_opts: StarLogsOptions<'_>,
+    inlist_opts: InlistLoadOptions,
+    set_param: Option<&mut dyn AsteroCaseHooks>,
+) -> Result<CaseRunReport, StarError> {
     let case_name = orig_case_dir
         .file_name()
         .and_then(|s| s.to_str())
@@ -198,6 +225,7 @@ pub fn run_astero_test_suite_case_with_options(
         verify_restart,
         logs_opts,
         inlist_opts,
+        set_param,
     )
 }
 
@@ -208,19 +236,21 @@ fn run_astero_search_case(
     verify_restart: bool,
     logs_opts: StarLogsOptions<'_>,
     inlist_opts: InlistLoadOptions,
+    set_param: Option<&mut dyn AsteroCaseHooks>,
 ) -> Result<CaseRunReport, StarError> {
     let t0 = Instant::now();
     let case_dir = staging.staged_dir.as_path();
     let ctrl =
         parse_astero_search_controls_with_options(case_dir, inlist_opts)?;
 
-    let search_rep = run_star_astero_with_options(
+    let search_rep = run_star_astero_with_case_hooks(
         case_dir,
         "inlist",
         max_steps_per_stage,
         &ctrl,
         logs_opts,
         inlist_opts,
+        set_param,
     )?;
     let last_mod = search_rep.last_model.as_ref().ok_or_else(|| {
         StarError::ConvergenceFailure(format!(

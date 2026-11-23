@@ -14,7 +14,8 @@ use flexmesa_astero::{
     copy_cleaned_astero_case, eval_combined_corr, eval_cubic_corr,
     eval_kjeldsen_corr, eval_model_astero_sample, eval_power_law_corr,
     eval_sonoi_corr, interpolate_l0_inertia, parse_astero_search_controls,
-    run_astero_test_suite_case,
+    run_astero_test_suite_case, run_astero_test_suite_case_with_case_hooks,
+    AsteroCaseHooks, AsteroSearchControls, MAX_CONSTRAINTS,
 };
 
 const ASTERO_CASES: [&str; 8] = [
@@ -27,11 +28,156 @@ const ASTERO_CASES: [&str; 8] = [
     "fast_simplex",
     "surface_effects",
 ];
+use flexmesa_const::{MixingType, RSUN};
 use flexmesa_math::pow;
 use flexmesa_star::inlist::InlistBundle;
 use flexmesa_star::inlist_runner::DefaultStarExtras;
+use flexmesa_star::model::StarModel;
+use flexmesa_star::report_utils::surface_avg_x_slot;
 use flexmesa_star::star_job_init::init_or_update_model_from_bundle;
-use flexmesa_star::{StarError, StarLogsOptions};
+use flexmesa_star::{
+    star_get_history_output, InlistLoadOptions, StarError, StarLogsOptions,
+};
+
+/// Test-side port of the search cases' own `set_param`
+/// (`astero/test_suite/fast_newuoa/src/run_star_extras.f90:115-184`, identical
+/// in `example_astero:115-184`, `fast_scan_grid:121-190` and
+/// `fast_simplex:122-191`; `fast_from_file:122-199` adds `semiconv`,
+/// `thermohal` and `diffusion` at `:185-193`). The Python twin used by the
+/// harness is `tests/case_extras/astero_extras.py`.
+struct CaseSetParam {
+    fast_from_file: bool,
+}
+
+impl AsteroCaseHooks for CaseSetParam {
+    fn set_param(
+        &mut self,
+        bundle: &mut InlistBundle,
+        ctrl: &AsteroSearchControls,
+        name: &str,
+        val: f64,
+    ) -> Result<(), StarError> {
+        let (job, c) = (&mut bundle.job, &mut bundle.controls);
+        match name {
+            "initial_mass" => {
+                job.new_mass = val;
+                job.relax_mass = true;
+                c.initial_mass = val;
+            }
+            "initial_Y" => {
+                job.initial_he3 = ctrl.y_frac_he3 * val;
+                job.initial_he4 = val - job.initial_he3;
+                job.set_uniform_initial_composition = true;
+            }
+            "initial_FeH" => {
+                let z_div_x = ctrl.z_div_x_solar * flexmesa_math::exp10(val);
+                let x = if ctrl.y_depends_on_z {
+                    let cc = 1.0 + z_div_x * (1.0 + ctrl.dydz);
+                    let x = (1.0 - ctrl.y0) / cc;
+                    let y = (ctrl.y0 + z_div_x * (ctrl.dydz + ctrl.y0)) / cc;
+                    job.initial_he3 = ctrl.y_frac_he3 * y;
+                    job.initial_he4 = y - job.initial_he3;
+                    x
+                } else {
+                    let y = job.initial_he3 / ctrl.y_frac_he3;
+                    (1.0 - y) / (1.0 + z_div_x)
+                };
+                job.initial_h1 = x;
+                job.initial_h2 = 0.0;
+                job.set_uniform_initial_composition = true;
+            }
+            "alpha" => c.mixing_length_alpha = val,
+            "f_ov" => {
+                let ov = &mut c.mix_wind.overshoot_sets[0];
+                let on = val > 0.0;
+                let any = |b: bool| String::from(if b { "any" } else { "" });
+                ov.scheme = String::from(if on { "exponential" } else { "" });
+                (ov.zone_type, ov.zone_loc, ov.bdy_loc) =
+                    (any(on), any(on), any(on));
+                (ov.f, ov.f0) = if on {
+                    (val, ctrl.f0_ov_div_f_ov * val)
+                } else {
+                    (0.0, 0.0)
+                };
+            }
+            "semiconv" if self.fast_from_file => c.alpha_semiconvection = val,
+            "thermohal" if self.fast_from_file => c.thermohaline_coeff = val,
+            "diffusion" if self.fast_from_file => {
+                c.diffusion.diffusion_class_factor.fill(val);
+            }
+            other => {
+                return Err(StarError::InvalidInput(format!(
+                    "invalid name in set_param {other}"
+                )));
+            }
+        }
+        Ok(())
+    }
+
+    /// `set_constraint_value`, identical in the five search cases
+    /// (`astero/test_suite/fast_newuoa/src/run_star_extras.f90:58-112`).
+    fn set_constraint_value(
+        &mut self,
+        model: &StarModel,
+        ctrl: &AsteroSearchControls,
+        name: &str,
+    ) -> Result<f64, StarError> {
+        let slot = |iso: &str| {
+            model
+                .iso_names
+                .iter()
+                .position(|n| n.eq_ignore_ascii_case(iso))
+        };
+        let x = surface_avg_x_slot(model, slot("h1")).max(1.0e-10);
+        let y = surface_avg_x_slot(model, slot("he3"))
+            + surface_avg_x_slot(model, slot("he4"));
+        let z = (1.0 - x - y).clamp(1.0e-99, 1.0);
+        Ok(match name {
+            "M_H" => flexmesa_math::log10(z / x / ctrl.z_div_x_solar),
+            "surface_Z_div_X" => z / x,
+            "surface_He" => y,
+            "Rcz" => {
+                let conv = MixingType::ConvectiveMixing;
+                let found = (0..model.nz - 1).find(|&i| {
+                    model.mixing_type[i + 1] != conv
+                        && model.mixing_type[i] == conv
+                        && model.r[i + 1] > 0.25 * RSUN
+                        && model.r[i] < 0.9 * RSUN
+                });
+                // Upstream leaves `val` unset here: no defined behaviour
+                // (DECISIONS #43, deferred #438).
+                let Some(i) = found else {
+                    return Err(StarError::InvalidInput(String::from(
+                        "set_constraint_value('Rcz'): val left unset",
+                    )));
+                };
+                model.r[i] / RSUN
+            }
+            _ => star_get_history_output(model, name)?,
+        })
+    }
+}
+
+/// Runs a cleaned astero case with its test-side `set_param`.
+fn run_case_with_case_hooks(
+    case_dir: &std::path::Path,
+    case_name: &str,
+    max_steps: Option<usize>,
+    logs_opts: StarLogsOptions<'_>,
+) -> Result<flexmesa_star::CaseRunReport, StarError> {
+    let mut hook = CaseSetParam {
+        fast_from_file: case_name == "fast_from_file",
+    };
+    run_astero_test_suite_case_with_case_hooks(
+        case_dir,
+        true,
+        max_steps,
+        true,
+        logs_opts,
+        InlistLoadOptions::default(),
+        Some(&mut hook),
+    )
+}
 
 struct TempAsteroDirGuard {
     root: PathBuf,
@@ -142,9 +288,15 @@ fn test_surface_effects_case_recovers_synthetic_targets_and_bison_solar_fits() {
     let model = init_or_update_model_from_bundle(&bundle, None, &mut extras)
         .expect("load s1.mod");
 
-    let sample =
-        eval_model_astero_sample(&model, &ctrl, ctrl.first_params(), 1, staged)
-            .expect("eval surface_effects sample");
+    let sample = eval_model_astero_sample(
+        &model,
+        &ctrl,
+        &[f64::NAN; MAX_CONSTRAINTS],
+        ctrl.first_params(),
+        1,
+        staged,
+    )
+    .expect("eval surface_effects sample");
     let (mut obs_f, mut obs_sig, mut mod_f, mut mod_in) =
         (Vec::new(), Vec::new(), Vec::new(), Vec::new());
     for l in 0..4 {
@@ -321,10 +473,8 @@ fn assert_uncapped_case_passes(case_name: &str) {
             .expect("clean astero case");
     }
     let logs_opts = StarLogsOptions::default();
-    let rep = flexmesa_astero::e2e::run_astero_test_suite_case_with_logs(
-        &staged, true, None, true, logs_opts,
-    )
-    .unwrap_or_else(|e| panic!("astero case {case_name} errored: {e}"));
+    let rep = run_case_with_case_hooks(&staged, case_name, None, logs_opts)
+        .unwrap_or_else(|e| panic!("astero case {case_name} errored: {e}"));
     assert_eq!(rep.case_name, case_name);
     if case_name == "example_astero" {
         let (samples, best_chi2) = parse_search_chi2(&rep.termination_code)
@@ -421,12 +571,25 @@ fn test_all_eight_astero_cases_bounded_eight_steps_pass() {
         )
         .expect("clean astero suite case");
     }
+    // A search case without its `set_param` hook fails loudly instead of
+    // running with parameters nobody applied.
+    let no_hook = run_astero_test_suite_case(
+        &cleaned_suite.join("fast_newuoa"),
+        true,
+        Some(8),
+        true,
+    )
+    .expect_err("search case without set_param must fail");
+    assert!(
+        no_hook.to_string().contains("set_param hook"),
+        "unexpected error without set_param: {no_hook}"
+    );
     for &case_name in &ASTERO_CASES {
-        let rep = run_astero_test_suite_case(
+        let rep = run_case_with_case_hooks(
             &cleaned_suite.join(case_name),
-            true,
+            case_name,
             Some(8),
-            true,
+            StarLogsOptions::default(),
         )
         .unwrap_or_else(|e| {
             panic!("bounded astero case {case_name} errored: {e}")

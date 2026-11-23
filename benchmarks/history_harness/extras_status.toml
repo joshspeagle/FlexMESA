@@ -669,9 +669,8 @@ issue = "#231"
 [[cases]]
 suite = "astero"
 case = "fast_newuoa"
-status = "unported"
+status = "ported"
 digest = "9856adefa817fb9298ed7e8ebd8cfbebe662343f21ca93f1e022f98f57e314b5"
-issue = "#231"
 
 [[cases]]
 suite = "astero"

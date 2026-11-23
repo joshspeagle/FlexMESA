@@ -966,29 +966,10 @@ fn finalize_controls(c: &mut AsteroSearchControls) -> Result<(), StarError> {
     }
 
     for i in 0..10 {
-        let cs = c.indexed_constraints[i];
-        let cname = c.constraint_names[i].trim().to_ascii_lowercase();
-        match cname.as_str() {
-            "" => {}
-            "teff" => c.teff = cs,
-            "log_g" | "logg" => c.logg = cs,
-            "log_l" | "logl" => c.log_l = cs,
-            "feh" => c.feh = cs,
-            "m_h" => c.m_h = cs,
-            "log_r" | "logr" => c.log_r = cs,
-            "radius" | "r" => c.radius = cs,
-            "surface_z_div_x" => c.surface_z_div_x = cs,
-            "surface_he" => c.surface_he = cs,
-            "rcz" => c.rcz = cs,
-            "star_mass" if !cs.include && cs.sigmas_coeff == 0.0 => {}
-            other => {
-                return Err(StarError::InvalidInput(format!(
-                    "unrecognized/unsupported '&astero_search_controls::constraint_name({})' = '{}'",
-                    i + 1,
-                    other
-                )));
-            }
-        }
+        // Constraint names are not mapped here: each named constraint's value
+        // comes from the case's `set_constraint_value`
+        // (`astero/private/extras_support.f90:204-209`), which fails loudly
+        // on a name it cannot evaluate.
         let (ps, col) = (c.indexed_params[i], c.indexed_file_cols[i]);
         let pname = c.param_names[i].trim().to_ascii_lowercase();
         match pname.as_str() {

@@ -327,7 +327,7 @@ pub use mesa_history::{
     evaluate_star_history_row, format_star_history_data_line,
     format_star_history_data_line_with_extra, format_star_history_file_header,
     format_star_history_file_header_with_extra, parse_star_history_columns,
-    resolve_star_history_columns,
+    resolve_star_history_columns, star_get_history_output,
 };
 pub use mesa_log_reader::{
     MesaHeaderValue, MesaLogTable, read_mesa_log_file, read_mesa_log_str,

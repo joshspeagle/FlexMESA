@@ -411,8 +411,8 @@ fn stepdump_loc(loc: Option<(usize, usize)>) -> [i64; 2] {
     loc.map_or([-1, -1], |(k, j)| [k as i64 + 1, j as i64 + 1])
 }
 
-/// Writes the `CALL` record and, at the first call of a model, the `STATE`
-/// and `EQU` records (`star_solver.f90:274-282`, `#372`).
+/// Writes the `CALL` record and, at the first call of a model, the `STATE`,
+/// `DM` and `EQU` records (`star_solver.f90:274-282`, `#372`).
 fn stepdump_call(
     model: &StarModel,
     sys: &HenyeySystem,
@@ -444,6 +444,15 @@ fn stepdump_call(
                 row.extend_from_slice(&model.xa[k * sp..(k + 1) * sp]);
                 crate::stepdump::push_line(
                     buf, "STATE", id, dump_model, &[k as i64 + 1], &row, &[],
+                );
+                crate::stepdump::push_line(
+                    buf,
+                    "DM",
+                    id,
+                    dump_model,
+                    &[k as i64 + 1],
+                    &[model.dm[k]],
+                    &[],
                 );
                 crate::stepdump::push_line(
                     buf,

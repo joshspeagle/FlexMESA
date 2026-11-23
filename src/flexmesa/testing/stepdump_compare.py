@@ -5,8 +5,9 @@ Both sides write the record layout of
 ``benchmarks/fortran_mesa/stepdumps/stepdump_patch.py``: per star, the
 solver records of the first few models (``CALL``, ``CORR``, ``NEWTON``,
 ``FOLD``, ``TRY``, ``RESID``) and, at the first solver call of each model,
-the per-zone state (``STATE``) and residuals (``EQU``). Values are IEEE-754
-binary64 bit patterns in hexadecimal, so equality here is bitwise.
+the per-zone state (``STATE``), cell mass (``DM``) and residuals (``EQU``).
+Values are IEEE-754 binary64 bit patterns in hexadecimal, so equality here
+is bitwise.
 
 Models are aligned per star by order of appearance, not by model number, so
 that an offset in model numbering (#359) does not hide every later
@@ -23,7 +24,7 @@ import pathlib
 import struct
 
 SOLVER_TAGS = ("CALL", "CORR", "NEWTON", "FOLD", "TRY", "RESID")
-ZONE_TAGS = ("STATE", "EQU")
+ZONE_TAGS = ("STATE", "DM", "EQU")
 # Number of leading integer fields after ``tag id model`` per record type,
 # and number of trailing integer fields after the hex values.
 _LAYOUT: dict[str, tuple[int, int]] = {
@@ -34,6 +35,7 @@ _LAYOUT: dict[str, tuple[int, int]] = {
     "TRY": (2, 0),
     "RESID": (1, 2),
     "STATE": (1, 0),
+    "DM": (1, 0),
     "EQU": (1, 0),
 }
 _FIELDS: dict[str, tuple[str, ...]] = {
@@ -74,7 +76,7 @@ class ModelBlock:
     Attributes:
         model: Model number as written.
         solver: Solver records in order.
-        zones: ``(tag, zone) -> bits`` for ``STATE`` and ``EQU``.
+        zones: ``(tag, zone) -> bits`` for ``STATE``, ``DM`` and ``EQU``.
     """
 
     model: int
@@ -252,6 +254,8 @@ def _fmt(bits: int) -> str:
 
 
 def _column_names(dump: StepDump, star: int, tag: str, n: int) -> list[str]:
+    if tag == "DM":
+        return ["dm"]
     names = dump.names if tag == "STATE" else dump.eqnames
     # STATE holds xh(1:nvar_hydro) then xa(1:species), the order of NAMES.
     cols = names.get(star, [])

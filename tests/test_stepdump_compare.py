@@ -12,7 +12,12 @@ def _h(x: float) -> str:
     return f"{struct.unpack('<Q', struct.pack('<d', x))[0]:016X}"
 
 
-def _dump(lnd_zone2: float = 1.0, slope: float = 0.0, extra: str = "") -> str:
+def _dump(
+    lnd_zone2: float = 1.0,
+    slope: float = 0.0,
+    extra: str = "",
+    dm_zone1: float = 2.0e30,
+) -> str:
     return "\n".join(
         [
             "# case: star/synthetic",
@@ -21,6 +26,7 @@ def _dump(lnd_zone2: float = 1.0, slope: float = 0.0, extra: str = "") -> str:
             "EQNAMES 1 3 dlnd_dt dlnE_dt equ_h1",
             f"CALL 1 5 {_h(10.0)} {_h(1e-3)} {_h(2e-3)} 2 1",
             f"STATE 1 5 1 {_h(0.5)} {_h(2.0)} {_h(0.7)}",
+            f"DM 1 5 1 {_h(dm_zone1)}",
             f"EQU 1 5 1 {_h(1e-4)} {_h(2e-4)} {_h(0.0)}",
             f"STATE 1 5 2 {_h(lnd_zone2)} {_h(2.5)} {_h(0.7)}",
             f"EQU 1 5 2 {_h(1e-4)} {_h(2e-4)} {_h(0.0)}",
@@ -87,3 +93,16 @@ def test_ulp_distance_counts_across_zero() -> None:
     pos = struct.unpack("<Q", struct.pack("<d", 5e-324))[0]
     neg = struct.unpack("<Q", struct.pack("<d", -5e-324))[0]
     assert sc.ulp_distance(pos, neg) == 2
+
+
+def test_cell_mass_difference_is_reported_as_dm_zone_record() -> None:
+    a = sc.parse_dump(_dump())
+    b = sc.parse_dump(_dump(dm_zone1=float.fromhex("0x1.9406e7a5f0d3fp+100")))
+    div = sc.first_divergence(a, b)
+    assert div is not None
+    assert (div.kind, div.record, div.zone, div.field) == (
+        "zone",
+        "DM",
+        1,
+        "dm",
+    )

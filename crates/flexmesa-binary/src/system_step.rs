@@ -1639,9 +1639,10 @@ impl BinarySystem {
         }
         let mut acc_conv: Option<StarStepConverged> = None;
         if let BinaryCompanion::Star(ref mut s2) = self.companion {
-            let conv_a = match evolve_single_star_attempt(
-                s2, dt_used, first_try, false,
-            )? {
+            // The accretor is MESA's star 2 (`s% id`) in step dumps (#372).
+            let conv_a = match flexmesa_star::stepdump::with_star_id(2, || {
+                evolve_single_star_attempt(s2, dt_used, first_try, false)
+            })? {
                 StarStepAttemptOutcome::Converged(conv) => conv,
                 StarStepAttemptOutcome::Retry { cause, .. } => {
                     return Ok(SingleTrialOutcome::StarSolverRetry {

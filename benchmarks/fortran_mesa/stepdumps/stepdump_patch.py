@@ -21,6 +21,7 @@ Records, one per line, each starting with the record type and the star id:
   (``star_solver.f90:274``).
 * ``STATE id model k xh(1:nvar_hydro) xa(1:species)``: per zone, at the first
   solver call of each model.
+* ``DM id model k dm``: per zone, the cell mass (g) at that call.
 * ``EQU id model k equ(1:nvar)``: per zone, the residuals at that call.
 * ``CORR id model iter correction_norm max_correction k j``: each Newton
   iteration, after ``sizeB`` (``star_solver.f90:359``).
@@ -92,6 +93,9 @@ EDITS: list[tuple[str, str, str]] = [
         f"1X,I0,999(1X,{HEX}))') 'STATE', s% id, s% model_number, sd_k, "
         f"({_h('s% xh(sd_j,sd_k)')}, sd_j=1,s% nvar_hydro), "
         f"({_h('s% xa(sd_j,sd_k)')}, sd_j=1,s% species)\n"
+        f"                     write(sd_u,'(A,1X,I0,1X,I0,"
+        f"1X,I0,1X,{HEX})') 'DM', s% id, s% model_number, sd_k, "
+        f"{_h('s% dm(sd_k)')}\n"
         f"                     write(sd_u,'(A,1X,I0,1X,I0,"
         f"1X,I0,999(1X,{HEX}))') 'EQU', s% id, s% model_number, sd_k, "
         f"({_h('s% equ(sd_j,sd_k)')}, sd_j=1,nvar)\n"

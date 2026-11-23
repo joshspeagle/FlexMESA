@@ -57,6 +57,24 @@ pub fn eos_pt_get(
     log_t: f64,
     cfg: &EosConfig,
 ) -> Result<EosPtOutput, EosError> {
+    eos_pt_get_with_linear(ht, chem_id, xa, log_pgas, log_t, None, None, cfg)
+}
+
+/// Evaluates the equation of state at `(log10(P_gas), log10(T))` while
+/// optionally honoring caller-supplied linear `(P_gas, T)` (`eosPT_get` in
+/// `eos/private/eospt_eval.f90:148-263`) without `exp10(log10(...))`
+/// round-trip drift in the ideal-gas initial density guess or partials.
+#[allow(clippy::too_many_arguments)]
+pub fn eos_pt_get_with_linear(
+    ht: &HelmTable,
+    chem_id: &[usize],
+    xa: &[f64],
+    log_pgas: f64,
+    log_t: f64,
+    linear_pgas: Option<f64>,
+    linear_t: Option<f64>,
+    cfg: &EosConfig,
+) -> Result<EosPtOutput, EosError> {
     let catalog = NuclideCatalog::builtin_ref();
     let comp =
         get_composition_info(catalog, chem_id, xa, true).map_err(|e| {
@@ -65,8 +83,8 @@ pub fn eos_pt_get(
                 detail: e.to_string(),
             }
         })?;
-    let pgas = exp10(log_pgas);
-    let t = exp10(log_t);
+    let pgas = linear_pgas.unwrap_or_else(|| exp10(log_pgas));
+    let t = linear_t.unwrap_or_else(|| exp10(log_t));
 
     let rho_guess = pgas * comp.abar * MP / (KERG * t * (1.0 + comp.zbar));
     let log_rho_guess = flexmesa_math::log10(rho_guess);

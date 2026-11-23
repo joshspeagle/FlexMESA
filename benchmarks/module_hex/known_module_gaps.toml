@@ -1,7 +1,7 @@
 # Declared Level-2 module-hex gaps against upstream MESA 26.4.1 (#144).
 # Clean 0-ULP modules (const: 23/23, math: 99/99, auto_diff: 387/387,
-# binary: 5/5, neu: 300000/300000, rates: 3639/3639, ionization: 31/31) are
-# omitted here and fail if any regression occurs. Remaining packages must
+# binary: 5/5, neu: 300000/300000, rates: 3639/3639, ionization: 31/31,
+# atm: 39/39) are omitted here and fail if any regression occurs. Remaining packages must
 # declare open issues and ULP ceilings; improving a nonzero_ulp module to
 # 0 ULP fails as a stale gap.
 
@@ -113,15 +113,6 @@ max_declared_ulp = 66
 min_zero_ulp_count = 55
 expect_nonzero_ulp = true
 reason = "55/116 net_get outputs match at 0 ULP across 7 upstream nets (0 ULP on approx21_cr60_plus_co56 weak rates; max 66 ULP on approx21 category subtotals); 8 one-zone burn rows remain unchecked."
-
-[[gaps]]
-module = "atm"
-status = "nonzero_ulp"
-issue = "#161"
-max_declared_ulp = 9000000
-min_zero_ulp_count = 15
-expect_nonzero_ulp = true
-reason = "All 39 computed outputs checked: 15 at 0 ULP (20 within 2 ULP across WD tables, photosphere logT, T(tau) uniform/varying logT, and irradiated); 14 non-WD table rows differ by up to 7.86e6 ULPs (~7e-9 rel) from f64 vs f32 fvbicub_db basis terms, and 5 dopri5 T(tau) varying logP integrations differ by 117-43,905 ULPs."
 
 [[gaps]]
 module = "gyre"

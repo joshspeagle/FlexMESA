@@ -198,5 +198,28 @@ def test_wave3b_four_stage_benchmarks_match_snapshots() -> None:
         zone_counts=(4, 8), n_warmup=1, n_repeats=3
     )
     _assert_records_match_snapshots(
-        records, _WAVE3B_REGRESSION_SNAPSHOTS_N8, max_stage_rel_err=5.0e-12
+        records,
+        _WAVE3B_REGRESSION_SNAPSHOTS_N8,
+        max_stage_rel_err=5.0e-12,
+        stage_check_elsewhere=frozenset({"atm_table"}),
     )
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason=(
+        "#295: Rust table_atm uses MESA 26.4.1 interp_2d/private/bicub_db.f "
+        "implicit f32 fvbicub_db basis scalars in strict mode (#420, #161), "
+        "whereas the frozen JAX twin keeps pure f64 basis scalars per "
+        "DECISIONS #43; measured cross-stage max_rel_err is 6.897e-8 (N=4) "
+        "and 4.705e-6 (N=8) against 5.0e-12."
+    ),
+)
+def test_wave3b_atm_table_stages_agree() -> None:
+    """The `atm_table` workload agrees across Stages 0..3 to 5.0e-12."""
+    for n_zones in (4, 8):
+        rec = bench.bench_atm_table(n_zones, n_warmup=1, n_repeats=3)
+        assert rec.max_rel_err <= 5.0e-12, (
+            f"workload {rec.workload} (N={rec.n_zones}) "
+            f"cross-stage rel_err {rec.max_rel_err:.3e} > 5.0e-12"
+        )

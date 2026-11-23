@@ -330,10 +330,8 @@ fn do_safe_get_rho_t(
     let mut x = initial_guess;
     let mut absy_prev = 0.0;
     let mut x1 = 0.0;
-    let mut y1 = 0.0;
     let mut have_x1 = false;
     let mut x3 = 0.0;
-    let mut y3 = 0.0;
     let mut have_x3 = false;
 
     for i in 1..=newt_imax {
@@ -355,17 +353,25 @@ fn do_safe_get_rho_t(
         absy_prev = absy;
         if y < 0.0 {
             x1 = x;
-            y1 = y;
             have_x1 = true;
         } else {
             x3 = x;
-            y3 = y;
             have_x3 = true;
         }
         x -= y / dydx;
     }
 
-    if !(have_x1 && have_x3) {
+    let (y1, y3);
+    if have_x1 && have_x3 {
+        // `do_safe_root_with_guess` (`num/private/mod_root.f90:85-88,
+        // 131-150`): Newton sets `have_x1`/`have_x3` but never
+        // `have_y1`/`have_y3`, and `do_safe_get_Rho_T` passes `y1` and `y3`
+        // as `arg_not_provided`, so upstream evaluates `f(x1)` then `f(x3)`
+        // again before Brent. The repeat calls change `eos_calls` and which
+        // evaluation supplies the returned `res`.
+        y1 = eval_f(x1)?.0;
+        y3 = eval_f(x3)?.0;
+    } else {
         let (bx1, bx3, by1, by3) =
             look_for_brackets(initial_guess, 0.1, ntry, &mut eval_f)?;
         x1 = bx1;

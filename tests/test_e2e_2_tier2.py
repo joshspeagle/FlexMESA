@@ -20,7 +20,6 @@ from . import cleaned_case_gaps
 _REPRESENTATIVE_TIER2_CASES = (
     "irradiated_planet",
     "wd_aic",
-    "make_co_wd",
 )
 
 
@@ -150,9 +149,12 @@ def test_synthetic_tier2_case_runners_pass_assertions_and_restart(
 def test_unimplemented_create_initial_model_and_missing_hook_fail_loudly(
     tmp_path: pathlib.Path,
 ) -> None:
-    """Verify unimplemented `create_initial_model` and missing
-    `other_build_initial_model` hooks fail loudly without ZAMS fallback
-    (`#148`).
+    """Verify `create_initial_model` without a mass and a missing
+    `other_build_initial_model` hook fail loudly without ZAMS fallback
+    (`#148`, `#154`).
+
+    Upstream stops when `mass_in_gm_for_create_initial_model <= 0`
+    (`star/private/create_initial_model.f90:104-110`).
     """
     init_dir = tmp_path / "create_init"
     init_dir.mkdir(parents=True, exist_ok=True)
@@ -166,9 +168,7 @@ def test_unimplemented_create_initial_model_and_missing_hook_fail_loudly(
     )
     with pytest.raises(
         ValueError,
-        match=(
-            r"create_initial_model = \.true\. is not yet implemented \(#154\)"
-        ),
+        match=r"must set mass_in_gm_for_create_initial_model",
     ):
         e2e.run_test_suite_case(init_dir, max_steps_per_stage=2)
 
@@ -195,6 +195,28 @@ def test_upstream_tier2_test_suite_case_and_restart_reproducibility(
     copies follow declared stops or capped 2-step execution without in-library
     case overrides.
     """
+    _check_tier2_case(case_name, tmp_path)
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason=(
+        "#414: the first pre-MS relax step of make_co_wd does not converge "
+        "(min_timestep_limit) where MESA 26.4.1's retry does, so the run "
+        "stops before the stage with unported controls."
+    ),
+)
+def test_upstream_tier2_make_co_wd_fails_strictly_on_unported_controls(
+    tmp_path: pathlib.Path,
+) -> None:
+    """Verify unmodified make_co_wd fails strictly under `#147` and its
+    cleaned copy follows its declared stop.
+    """
+    _check_tier2_case("make_co_wd", tmp_path)
+
+
+def _check_tier2_case(case_name: str, tmp_path: pathlib.Path) -> None:
+    """Runs one Tier 2 case unmodified, then cleaned (see the tests above)."""
     base = known_gaps_gate.require_mesa_test_inputs_dir()
     if base is None:
         return

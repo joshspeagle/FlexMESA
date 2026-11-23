@@ -72,6 +72,7 @@ pub mod controls_diffusion;
 pub mod controls_mix_wind;
 pub mod controls_output;
 pub mod controls_timestep_stop;
+pub mod create_initial_model;
 pub mod conv_premix;
 pub mod core_boundaries;
 pub mod diffusion;
@@ -136,6 +137,7 @@ pub mod pulse_modes;
 pub mod pulse_utils;
 pub mod relax;
 pub mod relax_comp;
+pub(crate) mod relax_driver;
 pub mod report_utils;
 pub mod riemann;
 pub mod riemann_ad;
@@ -379,10 +381,7 @@ pub use phase_separation::{
     blouin_delta_xo, do_phase_separation, do_phase_separation_step,
     eval_phase_separation_shift,
 };
-pub use pre_ms::{
-    PreMsShell, build_pre_ms_model, build1_pre_ms_model,
-    default_basic_net_composition,
-};
+pub use pre_ms::{build_pre_ms_model, build_pre_ms_model_with_configs};
 pub use premix::{
     add_predictive_mixing, apply_predictive_mixing_from_controls,
     do_conv_premix,

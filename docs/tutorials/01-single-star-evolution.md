@@ -8,7 +8,7 @@ This tutorial walks through initializing and evolving single-star models in `fle
 
 A 1D stellar evolution calculation begins from a hydrostatic starting model on a discrete Lagrangian mass grid $\{dq_k\}_{k=0}^{N_{\mathrm{zones}}-1}$ ordered from the photosphere ($k = 0$, $q = 1$) to the center ($k = N_{\mathrm{zones}} - 1$, $q \to 0$). `FlexMESA` provides two primary constructors on `StarModel`:
 
-- **Pre-Main-Sequence Polytrope (`StarModel.from_pre_ms`)**: Integrates an $n = 1.5$ convective polytrope parameterized by total mass `initial_mass` ($M_\odot$), metallicity `initial_z`, and initial central temperature `t_c` ($\mathrm{K}$, typically $3 \times 10^5$ to $9 \times 10^5\,\mathrm{K}$ prior to deuterium or hydrogen ignition), and relaxes it to hydrostatic and thermal equilibrium via the coupled Henyey solver (`eval_hydro=True`).
+- **Pre-Main-Sequence Model (`StarModel.from_pre_ms`)**: Builds MESA 26.4.1's fully convective pre-main-sequence model (`build_pre_ms_model`), parameterized by total mass `initial_mass` ($M_\odot$), metallicity `initial_z`, and initial central temperature `t_c` ($\mathrm{K}$, typically $3 \times 10^5$ to $9 \times 10^5\,\mathrm{K}$ prior to deuterium or hydrogen ignition), and relaxes it to hydrostatic and thermal equilibrium via the coupled Henyey solver (`eval_hydro=True`).
 - **Zero-Age Main Sequence Interpolation (`StarModel.from_zams`)**: Interpolates log-mass profiles across the built-in 8-mass Zero-Age Main Sequence (`ZAMS`) anchor catalog ($M_\star \in [0.51, 15.0]\,M_\odot$ at $Z = 0.02$) and converges the initial thermal structure where core hydrogen burning ($\epsilon_{\mathrm{nuc}}$) balances surface radiative luminosity ($L_{\mathrm{surf}}$).
 
 ```python

@@ -57,7 +57,7 @@ $$\mathbf{L}_k\,\delta\tilde{\mathbf{x}}_{k-1} + \mathbf{D}_k\,\delta\tilde{\mat
 ### 3.1 Four Initialization Pathways (`StarModel`)
 1. **Built-In ZAMS Catalog (`StarModel.from_zams`)**: Loads or interpolates a $Z = 0.02$ Zero-Age Main Sequence model for any stellar mass $M_\star \in [0.51, 15.0]\,M_\odot$ across the 8 built-in anchor models (`0.51, 1.0, 2.0, 3.0, 4.0, 5.0, 10.0, 15.0 Msun`).
 2. **Upstream Fortran MESA `.mod` Files (`StarModel.from_mod_file`, `from_mod_str`)**: Parses and validates MESA ASCII `.mod` files (`lnd`, `lnT`, `lnR`, `L`, `dq`, and species mass fractions `xa`), with full export via `to_mod_str()` and `write_mod_file()`.
-3. **Convective Pre-Main-Sequence Polytropes (`StarModel.from_pre_ms`)**: Integrates the $n = 1.5$ convective Lane-Emden polytrope and maps it onto the requested $(M_\star, T_c, Z)$ configuration.
+3. **Pre-Main-Sequence Models (`StarModel.from_pre_ms`)**: Builds MESA 26.4.1's fully convective pre-main-sequence model (`build_pre_ms_model`, `star/private/pre_ms_model.f90`): it integrates hydrostatic equilibrium outward from the central temperature $T_c$ for a trial central density $\rho_c$ and solves for the $\rho_c$ that gives the requested mass $M_\star$.
 4. **Binary Checkpoints & Custom Arrays (`from_photo_bytes`, `set_primary_state`)**: Restores binary `.photo` restart snapshots (including `eps_mdot_old` and step-history scalars) or populates primary state arrays directly from NumPy/JAX arrays.
 
 ### 3.2 Adaptive Mesh Adjustment & 3-Region Mass Adjustment (`do_adjust_mesh`, `remesh_split_merge`, `do_adjust_mass`)

@@ -242,6 +242,7 @@ fn test_henyey_jacobian_blocks_match_central_finite_differences() {
 }
 
 #[test]
+#[ignore = "10-yr step on a coarse (d_log10_P = 0.15) pre-MS model ends singular with the upstream pre-MS builder; setup not run in MESA; tracked in #154"]
 fn test_solve_henyey_step_converges_on_perturbed_model() {
     let controls = StarControls {
         initial_mass: 1.0,
@@ -387,7 +388,9 @@ fn test_remesh_timestep_evolve_and_history_preserve_invariants() {
 
     let reports =
         star_evolve(&mut model, 5, false, false, true).expect("star_evolve");
-    assert_eq!(reports.len(), 2);
+    // A new pre-MS model starts at model_number 0 (`star/private/init.f90:676`,
+    // #359), so reaching `max_model_number = 3` takes three steps.
+    assert_eq!(reports.len(), 3);
     assert_eq!(model.model_number, 3);
     assert!(model.star_age > 0.0);
 

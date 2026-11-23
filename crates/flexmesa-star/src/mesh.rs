@@ -9,19 +9,111 @@ use crate::controls::StarError;
 use crate::model::StarModel;
 use crate::star_ad::{StarAdExt, StarAdOrder1};
 
+/// Returns the index `midq` of the largest entry of `dq`: the first maximum,
+/// as Fortran `maxloc(dq(1:nz), dim=1)` returns it
+/// (`star/private/star_utils.f90:687, 739`).
+#[must_use]
+pub(crate) fn midq_index_of(dq: &[f64]) -> usize {
+    let mut midq = 0;
+    for k in 1..dq.len() {
+        if dq[k] > dq[midq] {
+            midq = k;
+        }
+    }
+    midq
+}
+
+/// Rescales `dq` (`len = nz`) so that it sums to one, summing in from both
+/// boundaries to meet at the largest cell (`normalize_dqs`,
+/// `star/private/star_utils.f90:669-709`).
+///
+/// # Errors
+///
+/// Returns [`StarError::InvalidInput`] if any `dq` is not positive, as
+/// upstream fails with `ierr = -1`.
+pub(crate) fn normalize_dqs_slice(dq: &mut [f64]) -> Result<(), StarError> {
+    let nz = dq.len();
+    if nz == 0 {
+        return Ok(());
+    }
+    let bad = |k: usize, dq: f64| {
+        StarError::InvalidInput(format!("normalize_dqs: bad dq({k}) = {dq:e}"))
+    };
+    let mut kmin = 0;
+    for k in 1..nz {
+        if dq[k] < dq[kmin] {
+            kmin = k;
+        }
+    }
+    if dq[kmin] <= 0.0 {
+        return Err(bad(kmin + 1, dq[kmin]));
+    }
+    let midq = midq_index_of(dq);
+    // Surface inward, k = 1..midq (star_utils.f90:688-696).
+    let mut dqsum1 = 0.0_f64;
+    for k in 0..=midq {
+        dqsum1 += dq[k];
+        if dq[k] <= 0.0 {
+            return Err(bad(k + 1, dq[k]));
+        }
+    }
+    // Center outward, k = nz..midq+1 (star_utils.f90:697-704).
+    let mut dqsum2 = 0.0_f64;
+    for k in (midq + 1..nz).rev() {
+        dqsum2 += dq[k];
+        if dq[k] <= 0.0 {
+            return Err(bad(k + 1, dq[k]));
+        }
+    }
+    for v in dq.iter_mut() {
+        *v /= dqsum1 + dqsum2;
+    }
+    Ok(())
+}
+
+/// Sets the outer-face mass fractions `q` from `dq` (both `len = nz`;
+/// `set_qs`, `star/private/star_utils.f90:712-752`): cumulative from the
+/// surface, `q(1) = 1`, `q(k) = q(k-1) - dq(k-1)`; only if some `q` leaves
+/// `[0, 1]` are they redone as surface-inward and center-outward sums
+/// meeting at the largest cell. `dq` is not renormalized
+/// (`do_normalize_dqs_as_part_of_set_qs = .false.`, `#381`).
+pub(crate) fn set_qs_slice(q: &mut [f64], dq: &[f64]) {
+    let nz = dq.len();
+    if nz == 0 {
+        return;
+    }
+    q[0] = 1.0;
+    let mut okay = true;
+    for k in 1..nz {
+        q[k] = q[k - 1] - dq[k - 1];
+        if q[k] < 0.0 || q[k] > 1.0 {
+            okay = false;
+            break;
+        }
+    }
+    if okay {
+        return;
+    }
+    let midq = midq_index_of(dq);
+    let mut dqsum1 = 0.0_f64;
+    for k in 0..=midq {
+        q[k] = 1.0 - dqsum1;
+        dqsum1 += dq[k];
+    }
+    let mut dqsum2 = 0.0_f64;
+    for k in (midq + 1..nz).rev() {
+        dqsum2 += dq[k];
+        q[k] = dqsum2;
+    }
+}
+
 impl StarModel {
     /// Returns the index `midq` of the zone with the largest `dq`: the first
     /// maximum, as Fortran `maxloc(dq(1:nz), dim=1)` returns it
     /// (`star/private/star_utils.f90:687, 739`).
     #[must_use]
     pub fn midq_index(&self) -> usize {
-        let mut midq = 0;
-        for k in 1..self.nz {
-            if self.dq[k] > self.dq[midq] {
-                midq = k;
-            }
-        }
-        midq
+        midq_index_of(&self.dq[..self.nz])
     }
 
     /// Rescales `dq` so that it sums to one, summing in from both boundaries
@@ -39,42 +131,7 @@ impl StarModel {
     /// upstream fails with `ierr = -1`.
     pub fn normalize_dqs(&mut self) -> Result<(), StarError> {
         let nz = self.nz;
-        if nz == 0 {
-            return Ok(());
-        }
-        let bad = |k: usize, dq: f64| {
-            StarError::InvalidInput(format!("normalize_dqs: bad dq({k}) = {dq:e}"))
-        };
-        let mut kmin = 0;
-        for k in 1..nz {
-            if self.dq[k] < self.dq[kmin] {
-                kmin = k;
-            }
-        }
-        if self.dq[kmin] <= 0.0 {
-            return Err(bad(kmin + 1, self.dq[kmin]));
-        }
-        let midq = self.midq_index();
-        // Surface inward, k = 1..midq (star_utils.f90:688-696).
-        let mut dqsum1 = 0.0_f64;
-        for k in 0..=midq {
-            dqsum1 += self.dq[k];
-            if self.dq[k] <= 0.0 {
-                return Err(bad(k + 1, self.dq[k]));
-            }
-        }
-        // Center outward, k = nz..midq+1 (star_utils.f90:697-704).
-        let mut dqsum2 = 0.0_f64;
-        for k in (midq + 1..nz).rev() {
-            dqsum2 += self.dq[k];
-            if self.dq[k] <= 0.0 {
-                return Err(bad(k + 1, self.dq[k]));
-            }
-        }
-        for k in 0..nz {
-            self.dq[k] /= dqsum1 + dqsum2;
-        }
-        Ok(())
+        normalize_dqs_slice(&mut self.dq[..nz])
     }
 
     /// Sets the outer-face mass fractions `q` from `dq` (`set_qs`,
@@ -85,32 +142,7 @@ impl StarModel {
     /// (`do_normalize_dqs_as_part_of_set_qs = .false.`, `#381`).
     pub fn set_qs(&mut self) {
         let nz = self.nz;
-        if nz == 0 {
-            return;
-        }
-        self.q[0] = 1.0;
-        let mut okay = true;
-        for k in 1..nz {
-            self.q[k] = self.q[k - 1] - self.dq[k - 1];
-            if self.q[k] < 0.0 || self.q[k] > 1.0 {
-                okay = false;
-                break;
-            }
-        }
-        if okay {
-            return;
-        }
-        let midq = self.midq_index();
-        let mut dqsum1 = 0.0_f64;
-        for k in 0..=midq {
-            self.q[k] = 1.0 - dqsum1;
-            dqsum1 += self.dq[k];
-        }
-        let mut dqsum2 = 0.0_f64;
-        for k in (midq + 1..nz).rev() {
-            dqsum2 += self.dq[k];
-            self.q[k] = dqsum2;
-        }
+        set_qs_slice(&mut self.q[..nz], &self.dq[..nz]);
     }
 
     /// Computes exterior mass fractions `xq` (`1 - q`) from `dq` (`set_xqs` in
@@ -227,6 +259,10 @@ impl StarModel {
         crate::micro::do_neu(self)?;
         self.save_start_values()?;
         self.save_old_values();
+        // A built or loaded model is one generation
+        // (`star/private/init.f90:1006, 1009`,
+        // `star/private/read_model.f90:438, 463`).
+        self.generations = 1;
         Ok(())
     }
 
@@ -455,7 +491,11 @@ impl StarModel {
     }
 
     /// Snapshots current state into `*_old` arrays after a successful step.
+    ///
+    /// Also stores `model_number_old = model_number`, as `new_generation`
+    /// does (`star/private/evolve_support.f90:80`).
     pub fn save_old_values(&mut self) {
+        self.model_number_old = self.model_number;
         self.star_age_old = self.star_age;
         self.dt_old = self.dt;
         self.mstar_old = self.mstar;

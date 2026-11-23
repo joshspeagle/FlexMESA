@@ -81,12 +81,4 @@ DECLARED_STAR_STOPS: dict[str, DeclaredStop] = {
     "carbon_kh": DeclaredStop(r"unknown net file 'minimal\.net'", "#161"),
     "wd_aic": DeclaredStop(r"unknown net file 'wd_aic\.net'", "#161"),
     "tzo": DeclaredStop(r"dutch_wind_lowt_scheme' option 'other'", "#161"),
-    # The 7 Msun pre-MS model differs from upstream's build_pre_ms_model:
-    # at the first step's dt (1e-5 yr, star/private/init.f90:1007) the
-    # initial residual norm is 2.95e-5 against MESA 26.4.1's 1.89e-5, and dt
-    # collapses to min_timestep_limit in the first step, where MESA's run
-    # continues (#154).
-    "custom_colors": DeclaredStop(
-        None, "#154", termination_code="min_timestep_limit"
-    ),
 }

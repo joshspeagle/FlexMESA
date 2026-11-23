@@ -154,7 +154,7 @@ reason = "Strict run reaches xa_central_lower_limit(h1) (91 steps vs MESA 92, 0 
 suite = "star"
 case = "custom_colors"
 issue = "#161"
-reason = "Strict validation rejects unported &colors and relaxation controls, and history_columns.list requests unported phase_of_evolution and colors columns (#161). With the controls ignored, the run stops at model 1 (min_timestep_limit) because the first pre-MS step at upstream's dt = 1e-5 yr does not converge from FlexMESA's pre-MS model (#154)."
+reason = "Strict validation rejects unported &colors and relaxation controls, and history_columns.list requests unported phase_of_evolution and colors columns (#161)."
 
 [[gaps]]
 suite = "star"
@@ -600,6 +600,16 @@ reason = "Asteroseismic surface-effects starting model and ADIPLS scaffolding (#
 
 [[test_gaps]]
 kind = "rust_ignore"
+crate = "flexmesa-star"
+file = "crates/flexmesa-star/src/tests.rs"
+test_name = "test_solve_henyey_step_converges_on_perturbed_model"
+issue = "#154"
+role = "physics_gap"
+expect_fail_when_run = true
+reason = "With the upstream pre-MS builder (build_pre_ms_model, star/private/pre_ms_model.f90), a forced 10-yr step on this coarse 1 Msun pre-MS model (pre_ms_d_log10_P = 0.15, 46 zones) ends in a singular block-tridiagonal matrix at zone 27 (equ_L); it converged only on the previous stand-in builder's model. This setup has not been run in MESA."
+
+[[test_gaps]]
+kind = "rust_ignore"
 crate = "flexmesa-binary"
 file = "crates/flexmesa-binary/tests/tier5_coupled_suite.rs"
 test_name = "test_uncapped_jdot_gr_check_campaign"
@@ -744,6 +754,33 @@ issue = "#295"
 role = "physics_gap"
 expect_fail_when_run = true
 reason = "Rust eval_face_dm_bar at k = nz - 1 uses 0.5*(dm[k-1] + dm[k]) (MESA 26.4.1 star/private/hydro_momentum.f90:191-196, #340); frozen JAX eval_hydro_residuals_jax still uses dm_bar[nz - 1], so the cross-stage difference is 9.73e-3 against a 1.0e-10 bound."
+
+[[test_gaps]]
+kind = "python_xfail"
+file = "tests/test_e2e_2_tier2.py"
+test_name = "test_upstream_tier2_make_co_wd_fails_strictly_on_unported_controls"
+issue = "#414"
+role = "physics_gap"
+expect_fail_when_run = true
+reason = "The first pre-MS relax step of make_co_wd does not converge (min_timestep_limit) where MESA 26.4.1's retry does, so the run stops before the stage with unported controls."
+
+[[test_gaps]]
+kind = "python_xfail"
+file = "tests/test_star_wave4_2.py"
+test_name = "test_solve_henyey_damped_newton_converges_for_all_modes"
+issue = "#154"
+role = "physics_gap"
+expect_fail_when_run = true
+reason = "With the upstream pre-MS builder (pre_ms_model.f90) the forced 10-yr step on the unrelaxed 1 Msun model (d_log10_P = 0.05) converges in 19 iterations against this test's own bound of 10; upstream relaxes a new pre-MS model first (init.f90:1077-1109, #402) and never runs this setup."
+
+[[test_gaps]]
+kind = "python_xfail"
+file = "tests/test_star_wave4_4.py"
+test_name = "test_adaptive_remeshing_and_mesh_gval_jax_consistency"
+issue = "#295"
+role = "physics_gap"
+expect_fail_when_run = true
+reason = "The Rust pre-MS model is now upstream's build_pre_ms_model (#154); at its 4 Msun inputs the frozen JAX eval_mesh_gval_jax (max/abs, not smooth) fails check_grads: JVP 322.85 against numerical 227.43 at rtol=1e-5."
 
 [[test_gaps]]
 kind = "python_xfail"

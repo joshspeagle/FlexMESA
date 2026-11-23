@@ -420,7 +420,7 @@ fn stepdump_call(
     max_residual: f64,
     loc: Option<(usize, usize)>,
 ) {
-    let dump_model = model.model_number + 1;
+    let dump_model = model.model_number;
     crate::stepdump::record(
         dump_model,
         || stepdump_names(model, sys.nvar),
@@ -499,7 +499,7 @@ fn stepdump_line(
     vals: &[f64],
     tail: &[i64],
 ) {
-    let dump_model = model.model_number + 1;
+    let dump_model = model.model_number;
     crate::stepdump::record(
         dump_model,
         || stepdump_names(model, nvar),
@@ -814,9 +814,12 @@ pub fn solve_henyey_step(
 
             // `adjust_correction` (`star/private/star_solver.f90:737-951`).
             let skip_eval_f = min_corr_coeff == 1.0;
-            let need_dxsave = !skip_eval_f
-                || model.model_number <= 1
-                || model.doing_first_model_of_run;
+            // `adjust_correction` saves `dxsave` only when it evaluates `f`
+            // and calls `apply_coeff(..., just_use_dx = skip_eval_f)`
+            // (`star/private/star_solver.f90:771-779, 815`): with the line
+            // search skipped, each try (including the model-1 rescue retries)
+            // adds to the current `solver_dx`.
+            let need_dxsave = !skip_eval_f;
             if need_dxsave {
                 dxsave.clone_from(&solver_dx);
             }
@@ -878,17 +881,11 @@ pub fn solve_henyey_step(
                 });
 
                 if let Err(e) = eq_res {
-                    // `star/private/star_solver.f90:819` tests
-                    // `s% model_number == 1`, the first step of a newly
-                    // created model (upstream creates models at 0 and sets
-                    // `model_number = model_number_old + 1` before the
-                    // solve, `star/private/init.f90:367, 485, 676`,
-                    // `star/private/evolve.f90:2012`). Here the counter
-                    // advances after a converged step and new models start
-                    // at 0 or, from `pre_ms.rs`, at 1, so the first step is
-                    // seen as 0 or 1. For a model that starts at 0 this also
-                    // admits its second step.
-                    if alam > eff_min_coeff && model.model_number <= 1 {
+                    // `star/private/star_solver.f90:819`: rescue only the
+                    // first step of a newly created model. `model_number`
+                    // is already `model_number_old + 1` during the solve
+                    // (`star/private/evolve.f90:2012`).
+                    if alam > eff_min_coeff && model.model_number == 1 {
                         alam = (alam / 10.0).max(eff_min_coeff);
                         continue;
                     }
@@ -953,7 +950,7 @@ pub fn solve_henyey_step(
                 if !skip_eval_f {
                     solver_dx.clone_from(&dxsave);
                 }
-                let trace_model = model.model_number + 1;
+                let trace_model = model.model_number;
                 if crate::step_trace::enabled(trace_model) {
                     if let Some((k_max, _, eq_name, var_name, v_max)) =
                         worst_residual_site(model, &sys)
@@ -1013,7 +1010,7 @@ pub fn solve_henyey_step(
             resid_norm_min = resid_norm_min.min(residual_norm);
             max_resid_min = max_resid_min.min(max_residual);
 
-            let trace_model = model.model_number + 1;
+            let trace_model = model.model_number;
             if crate::step_trace::enabled(trace_model) {
                 let (kz, eqi, eq_n, var_n, vmax) = worst_residual_site(
                     model, &sys,
@@ -1130,7 +1127,7 @@ pub fn solve_henyey_step(
         }
     }
 
-    let trace_model = model.model_number + 1;
+    let trace_model = model.model_number;
     if crate::step_trace::enabled(trace_model) {
         if let Some((k_max, i_max, eq_name, var_name, v_max)) =
             worst_residual_site(model, &sys)

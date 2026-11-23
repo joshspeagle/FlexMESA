@@ -48,7 +48,7 @@ pub fn do1_riemann_momentum_eqn(
     let nz = model.nz;
     let dt = model.dt.max(1.0e-30);
     let using_v_tc =
-        model.controls.is_velocity_time_centered(model.model_number)
+        model.controls.is_velocity_time_centered(model.model_number_old)
             && model.dt > 0.0
             && !model.ln_r_start.is_empty();
 
@@ -222,7 +222,7 @@ pub(crate) fn eval1_work_u_flag_ad(
         );
     }
     let using_v_tc =
-        model.controls.is_velocity_time_centered(model.model_number)
+        model.controls.is_velocity_time_centered(model.model_number_old)
             && model.dt > 0.0
             && !model.ln_r_start.is_empty();
     let lnr_f = StarAdOrder1::variable(model.ln_r[f_idx], I_LNR_00);

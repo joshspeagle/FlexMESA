@@ -35,6 +35,10 @@ struct DumpState {
     nseen: [usize; MAX_IDS],
     last_model: [Option<usize>; MAX_IDS],
     named: [bool; MAX_IDS],
+    /// Star has had its `nmax` models; nothing more is written for it, as in
+    /// the MESA overlay. A relax restarts at model 0, so a later step can
+    /// repeat the last dumped model number.
+    finished: [bool; MAX_IDS],
     done: bool,
 }
 
@@ -67,6 +71,7 @@ fn dump() -> Option<&'static Mutex<DumpState>> {
             nseen: [0; MAX_IDS],
             last_model: [None; MAX_IDS],
             named: [false; MAX_IDS],
+            finished: [false; MAX_IDS],
             done: false,
         }))
     })
@@ -108,9 +113,13 @@ pub fn record(
         return;
     }
     let slot = id - 1;
+    if st.finished[slot] {
+        return;
+    }
     let mut new_model = false;
     if st.last_model[slot] != Some(model) {
         if st.nseen[slot] >= st.nmax {
+            st.finished[slot] = true;
             if !st.done {
                 st.done = true;
                 let _ = writeln!(st.file, "DONE");

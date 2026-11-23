@@ -1471,14 +1471,21 @@ fn test_wind_driver_dispatch_gates_caps_and_rotation_limits() {
         Err(StarError::InvalidInput(_))
     ));
 
-    // 2. Invalid `Dutch_wind_lowT_scheme` errors loudly (`winds.f90:588-592`).
+    // 2. Invalid `Dutch_wind_lowT_scheme` errors loudly only when `Dutch` is
+    //    active (`winds.f90:576-593`); `'other'` succeeds otherwise (`#435`).
     model.controls.hot_wind_full_on_t = 12_000.0;
     model.controls.cool_wind_full_on_t = 8_000.0;
+    model.controls.mix_wind.dutch_wind_lowt_scheme = String::from("other");
+    assert!(do_set_mdot(&mut model).is_ok());
+    model.controls.cool_wind_rgb_scheme = String::from("Dutch");
+    model.controls.mix_wind.hot_wind_scheme = String::from("Dutch");
     model.controls.mix_wind.dutch_wind_lowt_scheme = String::from("bogus");
     assert!(matches!(
         do_set_mdot(&mut model),
         Err(StarError::InvalidInput(_))
     ));
+    model.controls.cool_wind_rgb_scheme.clear();
+    model.controls.mix_wind.hot_wind_scheme.clear();
     model.controls.mix_wind.dutch_wind_lowt_scheme = String::from("de Jager");
 
     // 3. Hot/cool temperature dispatch, RGB vs AGB switch, and midpoint linear blend

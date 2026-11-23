@@ -129,6 +129,17 @@ impl InlistBundle {
         let Some(ctrl) = self.sections.get("controls") else {
             return Ok(());
         };
+        let cool_wind_uses_dutch = matches!(
+            crate::winds::WindScheme::parse_name(
+                &self.controls.cool_wind_rgb_scheme,
+            ),
+            Some(crate::winds::WindScheme::Dutch)
+        ) || matches!(
+            crate::winds::WindScheme::parse_name(
+                &self.controls.cool_wind_agb_scheme,
+            ),
+            Some(crate::winds::WindScheme::Dutch)
+        );
         let mw = &mut self.controls.mix_wind;
         map_f64s!("controls", ctrl, mw, [
             overshoot_d_min, overshoot_brunt_b_max, min_overshoot_q, overshoot_alpha,
@@ -308,7 +319,11 @@ impl InlistBundle {
                 mw.hot_wind_scheme
             )));
         }
-        if ctrl.try_get_str("controls", "dutch_wind_lowt_scheme")?.is_some()
+        let dutch_wind_active = cool_wind_uses_dutch
+            || crate::winds::WindScheme::parse_name(&mw.hot_wind_scheme)
+                == Some(crate::winds::WindScheme::Dutch);
+        if dutch_wind_active
+            && ctrl.try_get_str("controls", "dutch_wind_lowt_scheme")?.is_some()
             && crate::winds::DutchLowTScheme::parse_name(&mw.dutch_wind_lowt_scheme)
                 .is_none()
         {

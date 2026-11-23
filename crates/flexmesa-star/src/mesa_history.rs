@@ -872,6 +872,14 @@ fn parse_history_columns_inner(
                     );
                     continue;
                 }
+                // MESA 26.4.1 `do_colors`
+                // (`star/private/history_specs.f90:237-271, 456-469`) has the
+                // legacy BC loop commented out (`! TODO. below is old module`),
+                // so these four directives are valid 0-column no-ops.
+                "add_bc" | "add_abs_mag" | "add_lum_band"
+                | "add_log_lum_band" => {
+                    continue;
+                }
                 _ => {}
             }
 
@@ -989,6 +997,16 @@ fn parse_history_columns_inner(
                         HistoryColumnSpec::CenterLogEpsBurn(cid),
                     );
                     continue;
+                }
+                // Legacy individual colors columns have no filter lookup in
+                // MESA 26.4.1 (`do1_color` at `star/private/history_specs.f90:675-690`,
+                // where `colors/public/colors_lib.f90::get_bc_id_by_name` returns `-1`).
+                "bc" | "abs_mag" | "lum_band" | "log_lum_band" => {
+                    return Err(StarError::InvalidInput(format!(
+                        "history_columns.list line {line_no}: legacy colors \
+                         column '{head} {arg}' has no active filter table in \
+                         MESA 26.4.1 (get_bc_id_by_name returns -1)"
+                    )));
                 }
                 _ => {
                     if let Some(q) = parse_iso_prefix_query(&head) {

@@ -440,7 +440,7 @@ def _probe_kap(hex_root: pathlib.Path) -> ProbeOutcome:
         checked,
         zeros,
         max_u,
-        "12/14 gs98+CO channels at 0 ULP; AESOPUS and log10 1-ULP gap.",
+        "All 21 gs98, CO-enhanced, and AESOPUS outputs at 0 ULP.",
     )
 
 
@@ -537,6 +537,28 @@ def _probe_colors(hex_root: pathlib.Path) -> ProbeOutcome:
     )
 
 
+def _ad_div(a: float, b: float) -> float:
+    """Match upstream `auto_diff_real_star_order1` division `x * powm1(y)`."""
+    return a * (1.0 / b)
+
+
+def _turb_mlt_gradr(
+    p: float,
+    opacity: float,
+    lum: float,
+    pi: float,
+    boltz_sigma: float,
+    t: float,
+    grav: float,
+    r: float,
+) -> float:
+    """Evaluate `gradr = (3 P kap L) / (64 pi sigma T^4 g r^2)`."""
+    return _ad_div(
+        3.0 * p * opacity * lum,
+        64.0 * pi * boltz_sigma * (t * t * t * t) * grav * (r * r),
+    )
+
+
 def _make_turb_tdc_inputs() -> tuple[list[float], float, float, float]:
     cgrav = 6.6743000000000004e-8
     m = 5.8707400456875664e34
@@ -545,17 +567,14 @@ def _make_turb_tdc_inputs() -> tuple[list[float], float, float, float]:
     p = 5.0581587249808894e20
     t = 613193666.5178368
     opacity = 9.075017123146995e-2
-    l_val = 1.09415288158835 * (-scale)
+    l_val = 1.0941528815883500015 * (-scale)
     # Constants from the Rust crate, and `pow4(T)` as upstream's
-    # `(T*T)*(T*T)` (`turb/test/src/test_turb.f90:211`), so that no input
-    # of the 0-ULP comparison depends on the Python layer or platform math.
+    # `T*T*T*T` (`math/private/math_pown.f90:99`), so that no input of
+    # the 0-ULP comparison depends on the Python layer or platform math.
     pi, _, boltz_sigma = _rust.const_probe_values()[:3]
-    gradr = (
-        3.0
-        * p
-        * opacity
-        * l_val
-        / (64.0 * pi * boltz_sigma * ((t * t) * (t * t)) * cgrav * m)
+    gradr = _ad_div(
+        3.0 * p * opacity * l_val,
+        64.0 * pi * boltz_sigma * (t * t * t * t) * cgrav * m,
     )
     # Order of `TdcInputs` in `crates/flexmesa-turb/src/tdc.rs`.
     tdc_inp = [
@@ -573,7 +592,7 @@ def _make_turb_tdc_inputs() -> tuple[list[float], float, float, float]:
         0.252075872673435,  # gradl
         0.2520469725687274,  # grada
         0.0,  # eq_div_w
-        m * cgrav / (r * r),  # grav
+        _ad_div(m * cgrav, r * r),  # grav
         0.0,  # energy
     ]
     return tdc_inp, cgrav, m, scale
@@ -581,8 +600,69 @@ def _make_turb_tdc_inputs() -> tuple[list[float], float, float, float]:
 
 def _probe_turb(hex_root: pathlib.Path) -> ProbeOutcome:
     rows = load_tsv_rows(hex_root, "turb")
-    inputs, cgrav, m, scale = _make_turb_tdc_inputs()
+    c = _rust.const_probe_values()
+    pi, boltz_sigma = c[0], c[2]
+    msun, rsun, lsun, mp, kerg = c[8], c[9], c[10], c[16], c[22]
+    t, rho, grav, r = 1.0e5, 1.0e-5, 1.0e4, rsun
+    cp = 2.5 * kerg / mp
+    p = rho * t * kerg / mp
+    lam = _ad_div(p, rho * grav)
+    opacity, grada, gradl = 1.0, 0.4, 0.4
     ulps: list[int] = []
+
+    # 1. `check_efficient_MLT_scaling` (`turb/test/src/test_turb.f90:27-80`)
+    gradr1 = _turb_mlt_gradr(
+        p, opacity, 1.0e5 * lsun, pi, boltz_sigma, t, grav, r
+    )
+    vc1 = _rust.set_mlt_f64(
+        "Cox",
+        1.0,
+        0.0,
+        0.0,
+        1.0,
+        1.0,
+        cp,
+        grav,
+        lam,
+        rho,
+        p,
+        t,
+        opacity,
+        gradr1,
+        grada,
+        gradl,
+    )[0][3]
+    gradr2 = _turb_mlt_gradr(
+        p, opacity, 1.0e8 * lsun, pi, boltz_sigma, t, grav, r
+    )
+    vc2 = _rust.set_mlt_f64(
+        "Cox",
+        1.0,
+        0.0,
+        0.0,
+        1.0,
+        1.0,
+        cp,
+        grav,
+        lam,
+        rho,
+        p,
+        t,
+        opacity,
+        gradr2,
+        grada,
+        gradl,
+    )[0][3]
+    ulps.extend(
+        (
+            ulp_distance(vc1, rows[0]["raw_bits_hex"]),
+            ulp_distance(vc2, rows[1]["raw_bits_hex"]),
+            ulp_distance(vc2 / vc1, rows[2]["raw_bits_hex"]),
+        )
+    )
+
+    # 2. `check_TDC` (`turb/test/src/test_turb.f90:168-235`, 62 outputs)
+    inputs, cgrav, m, scale = _make_turb_tdc_inputs()
     for j in range(31):
         base = 3 + 4 * j
         # `dt` and `conv_vel_start` are read from the values MESA printed
@@ -608,14 +688,88 @@ def _probe_turb(hex_root: pathlib.Path) -> ProbeOutcome:
         )
         ulps.append(ulp_distance(grad_t, rows[base + 1]["raw_bits_hex"]))
         ulps.append(ulp_distance(conv_vel, rows[base + 3]["raw_bits_hex"]))
+
+    # 3. `compare_TDC_and_Cox_MLT` (`turb/test/src/test_turb.f90:82-166`)
+    alpha = 2.0
+    cgrav_s = constants.STANDARD_CGRAV
+    grav_s = _ad_div(msun * cgrav_s, r * r)
+    hp_s = _ad_div(p, rho * grav_s)
+    lam_s = alpha * hp_s
+    l_s = 70.0 * lsun
+    gr_s = _turb_mlt_gradr(p, opacity, l_s, pi, boltz_sigma, t, grav_s, r)
+    l_s = l_s * (1.0 + 1.0e-5) * _ad_div(grada, gr_s)
+    gr_s = _turb_mlt_gradr(p, opacity, l_s, pi, boltz_sigma, t, grav_s, r)
+    ulps.append(ulp_distance(gr_s - grada, rows[127]["raw_bits_hex"]))
+    _, _, tdc_y, tdc_vc, _, _ = _rust.turb_set_tdc_f64(
+        [
+            0.0,
+            alpha,
+            1.0,
+            0.0,
+            0.0,
+            1.0,
+            1.0,
+            1.0e40,
+            cgrav_s,
+            msun,
+            l_s * 1.0e-3,
+            1.0e99,
+        ],
+        True,
+        False,
+        [
+            1.0,
+            1.0,
+            gr_s,
+            r,
+            p,
+            t,
+            rho,
+            0.0,
+            cp,
+            opacity,
+            hp_s,
+            gradl,
+            grada,
+            0.0,
+            grav_s,
+            0.0,
+        ],
+    )
+    ulps.append(ulp_distance(tdc_y, rows[128]["raw_bits_hex"]))
+    ulps.append(ulp_distance(tdc_vc, rows[130]["raw_bits_hex"]))
+    mlt_vals, _ = _rust.set_mlt_f64(
+        "Cox",
+        alpha,
+        0.0,
+        0.0,
+        1.0,
+        1.0,
+        cp,
+        grav_s,
+        lam_s,
+        rho,
+        p,
+        t,
+        opacity,
+        gr_s,
+        grada,
+        gradl,
+    )
+    ulps.extend(
+        (
+            ulp_distance(mlt_vals[2], rows[132]["raw_bits_hex"]),
+            ulp_distance(mlt_vals[3], rows[134]["raw_bits_hex"]),
+            ulp_distance(mlt_vals[0], rows[135]["raw_bits_hex"]),
+        )
+    )
     checked, zeros, max_u = _summarize_ulps(ulps)
-    # 71 computed outputs across test_turb (excluding 65 input rows).
     return (
         71,
         checked,
         zeros,
         max_u,
-        "31-step check_TDC gradT and conv_vel outputs.",
+        "All 71 test_turb.f90 MLT and TDC outputs at 0 ULP.",
     )
 
 

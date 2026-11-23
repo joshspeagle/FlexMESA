@@ -906,3 +906,21 @@ issue = "#295"
 role = "physics_gap"
 expect_fail_when_run = true
 reason = "Rust table_atm uses MESA 26.4.1 interp_2d/private/bicub_db.f implicit f32 fvbicub_db basis scalars in strict mode (#420, #161), whereas the frozen JAX twin keeps pure f64 basis scalars per DECISIONS #43; measured cross-stage max_rel_err is 6.897e-8 (N=4) and 4.705e-6 (N=8) against 5.0e-12."
+
+[[test_gaps]]
+kind = "python_xfail"
+file = "tests/unit/test_kap_wave3b2.py"
+test_name = "test_rust_strict_vs_jax_backend_consistency_across_all_regimes"
+issue = "#295"
+role = "physics_gap"
+expect_fail_when_run = true
+reason = "Rust kapCN and AESOPUS evaluate MESA 26.4.1 interp_2d/private/bicub_db.f implicit f32 fvbicub_db basis scalars in strict mode (#433, #161), whereas the frozen JAX twin keeps pure f64 basis scalars per DECISIONS #43; measured max rel diff is 2.103e-7 against rtol=1e-12."
+
+[[test_gaps]]
+kind = "python_xfail"
+file = "tests/unit/test_kap_wave3b2_jax.py"
+test_name = "test_kapcn_knot_and_multi_zone_batch_consistency"
+issue = "#295"
+role = "physics_gap"
+expect_fail_when_run = true
+reason = "Rust AESOPUS evaluates MESA 26.4.1 interp_2d/private/bicub_db.f implicit f32 fvbicub_db basis scalars in strict mode (#433, #161), whereas the frozen JAX twin keeps pure f64 basis scalars per DECISIONS #43; measured max rel diff is 1.713e-8 against rtol=1e-12, atol=1e-12."

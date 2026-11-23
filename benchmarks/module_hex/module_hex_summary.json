@@ -4,9 +4,9 @@
   "packages_with_test_dir": 25,
   "total_exact_values_captured": 348321,
   "modules_with_executable_probes": 16,
-  "modules_passing_0_ulp": 8,
-  "total_values_checked": 304751,
-  "total_values_0_ulp": 304660,
+  "modules_passing_0_ulp": 10,
+  "total_values_checked": 304760,
+  "total_values_0_ulp": 304760,
   "modules": [
     {
       "module": "const",
@@ -142,14 +142,14 @@
     },
     {
       "module": "kap",
-      "status": "nonzero_ulp",
+      "status": "pass_0_ulp",
       "upstream_exact_values": 54,
       "expected_outputs": 21,
       "checked_values": 21,
-      "zero_ulp_values": 13,
-      "max_ulp": 1459407697,
-      "issue": "#161",
-      "notes": "12/14 gs98+CO channels at 0 ULP; AESOPUS and log10 1-ULP gap."
+      "zero_ulp_values": 21,
+      "max_ulp": 0,
+      "issue": null,
+      "notes": "All 21 gs98, CO-enhanced, and AESOPUS outputs at 0 ULP."
     },
     {
       "module": "rates",
@@ -175,14 +175,14 @@
     },
     {
       "module": "net",
-      "status": "nonzero_ulp",
+      "status": "partial_0_ulp",
       "upstream_exact_values": 140,
       "expected_outputs": 124,
       "checked_values": 116,
-      "zero_ulp_values": 55,
-      "max_ulp": 66,
+      "zero_ulp_values": 116,
+      "max_ulp": 0,
       "issue": "#161",
-      "notes": "55/116 net_get outputs at 0 ULP across 7 networks (max_ulp=66); 8 one-zone burn rows remain unchecked."
+      "notes": "116/116 net_get outputs at 0 ULP across 7 networks (max_ulp=0); 8 one-zone burn rows remain unchecked."
     },
     {
       "module": "ionization",
@@ -208,14 +208,14 @@
     },
     {
       "module": "turb",
-      "status": "nonzero_ulp",
+      "status": "pass_0_ulp",
       "upstream_exact_values": 136,
       "expected_outputs": 71,
-      "checked_values": 62,
-      "zero_ulp_values": 40,
-      "max_ulp": 6,
-      "issue": "#157",
-      "notes": "31-step check_TDC gradT and conv_vel outputs."
+      "checked_values": 71,
+      "zero_ulp_values": 71,
+      "max_ulp": 0,
+      "issue": null,
+      "notes": "All 71 test_turb.f90 MLT and TDC outputs at 0 ULP."
     },
     {
       "module": "sample",

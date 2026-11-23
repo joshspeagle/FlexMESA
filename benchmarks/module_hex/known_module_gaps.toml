@@ -1,7 +1,8 @@
 # Declared Level-2 module-hex gaps against upstream MESA 26.4.1 (#144).
 # Clean 0-ULP modules (const: 23/23, math: 99/99, auto_diff: 387/387,
 # binary: 5/5, neu: 300000/300000, rates: 3639/3639, ionization: 31/31,
-# atm: 39/39) are omitted here and fail if any regression occurs. Remaining packages must
+# atm: 39/39, kap: 21/21, turb: 71/71) are omitted here and fail if any
+# regression occurs. Remaining packages must
 # declare open issues and ULP ceilings; improving a nonzero_ulp module to
 # 0 ULP fails as a stale gap.
 
@@ -49,15 +50,6 @@ expect_nonzero_ulp = false
 reason = "All 286 Lodders (2003) atom percents match at 0 ULP; remaining 816 composition/mass rows await driver wiring."
 
 [[gaps]]
-module = "kap"
-status = "nonzero_ulp"
-issue = "#161"
-max_declared_ulp = 1600000000
-min_zero_ulp_count = 12
-expect_nonzero_ulp = true
-reason = "12/14 gs98 and CO-enhanced channels match at 0 ULP (log10kap = 1 ULP); Test 3 AESOPUS differs due to table compression/rounding."
-
-[[gaps]]
 module = "mtx"
 status = "partial_0_ulp"
 issue = "#365"
@@ -85,15 +77,6 @@ expect_nonzero_ulp = false
 reason = "All 10 tested Group 1 solar bolometric and UBVRIJM band values match at 0 ULP; remaining 224 grid/SED outputs await probe wiring."
 
 [[gaps]]
-module = "turb"
-status = "nonzero_ulp"
-issue = "#157"
-max_declared_ulp = 10
-min_zero_ulp_count = 40
-expect_nonzero_ulp = true
-reason = "40/62 TDC gradT and conv_vel outputs of the Rust kernel agree at 0 ULP; the remaining TDC iterations differ by up to 6 ULPs."
-
-[[gaps]]
 module = "num"
 status = "unported_hex_harness"
 issue = "#365"
@@ -107,12 +90,12 @@ reason = "391 upstream EOS diagnostic table/blend printouts await direct TSV har
 
 [[gaps]]
 module = "net"
-status = "nonzero_ulp"
+status = "partial_0_ulp"
 issue = "#161"
-max_declared_ulp = 66
-min_zero_ulp_count = 55
-expect_nonzero_ulp = true
-reason = "55/116 net_get outputs match at 0 ULP across 7 upstream nets (0 ULP on approx21_cr60_plus_co56 weak rates; max 66 ULP on approx21 category subtotals); 8 one-zone burn rows remain unchecked."
+max_declared_ulp = 0
+min_zero_ulp_count = 116
+expect_nonzero_ulp = false
+reason = "All 116 net_get outputs match at 0 ULP across 7 upstream nets; 8 one-zone burn rows remain unchecked."
 
 [[gaps]]
 module = "gyre"

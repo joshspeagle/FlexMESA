@@ -77,7 +77,7 @@ def _pack_kap_output(
     kap_f = float(kap)
     return KapEvalOutput(
         kap=kap_f,
-        log10_kap=float(np.log10(kap_f)),
+        log10_kap=float(_rust.safe_log10(kap_f)),
         dlnkap_dln_rho=float(dln_dr),
         dlnkap_dln_t=float(dln_dt),
         kap_fracs=np.asarray(fracs, dtype=np.float64),

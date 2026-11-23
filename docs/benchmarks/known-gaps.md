@@ -152,7 +152,7 @@ Cases lacking a committed MESA `26.4.1` baseline report `no reference yet` and c
 | `astero` | `fast_simplex` | [#162](https://github.com/joshspeagle/FlexMESA/issues/162) | `xtra1` | `astero_simplex_samples=5_best_chi2=8.210290e-2_term=limit_num_chi2_too_big` (2392 steps; diagnostic (48 controls ignored)) | Asteroseismic simplex optimizer and in-house pulsation scaffolding (#162, #171). |
 | `astero` | `surface_effects` | [#162](https://github.com/joshspeagle/FlexMESA/issues/162) | `max_model_number` | `max_model_number` (1 steps; diagnostic (30 controls ignored)) | Asteroseismic surface-effects starting model and ADIPLS scaffolding (#162, #171). |
 
-## Declared Test-Suite Gaps (`[[test_gaps]]`, 33 Markers)
+## Declared Test-Suite Gaps (`[[test_gaps]]`, 35 Markers)
 
 Every Rust `#[ignore]` and Python `xfail`/`skip` marker in the repository is tracked bijectively in `benchmarks/history_harness/known_gaps.toml` (`#144`):
 
@@ -191,10 +191,12 @@ Every Rust `#[ignore]` and Python `xfail`/`skip` marker in the repository is tra
 | `python_xfail` | `tests/test_star_wave4_3.py` | `test_step_struct_burn_mix_coupled_and_op_split` | `physics_gap` | [#154](https://github.com/joshspeagle/FlexMESA/issues/154) | FlexMESA's pre-MS model differs from upstream build_pre_ms_model (measured on the 7 Msun custom_colors model: initial residual norm 2.95e-5 against MESA 26.4.1's 1.89e-5 at the upstream first-step dt, star/private/init.f90:1007). This test forces a 10-yr coupled step on a 4 Msun pre-MS model, which with upstream's do_block_multiply_xa (#358) ends in a singular block-tridiagonal matrix at the second Newton iteration; it converged only with the previous, non-upstream product. This 4 Msun setup has not been run in MESA. |
 | `python_xfail` | `tests/test_star_wave4_4.py` | `test_varcontrol_and_h211_timestep_filter_rust_vs_jax` | `physics_gap` | [#154](https://github.com/joshspeagle/FlexMESA/issues/154) | FlexMESA's pre-MS model differs from upstream build_pre_ms_model (measured on the 7 Msun custom_colors model: initial residual norm 2.95e-5 against MESA 26.4.1's 1.89e-5 at the upstream first-step dt, star/private/init.f90:1007). This test forces a 10-yr coupled step on a 4 Msun pre-MS model, which with upstream's do_block_multiply_xa (#358) ends in a singular block-tridiagonal matrix at the second Newton iteration; it converged only with the previous, non-upstream product. This 4 Msun setup has not been run in MESA. |
 | `python_xfail` | `tests/test_bench.py` | `test_wave3b_atm_table_stages_agree` | `physics_gap` | [#295](https://github.com/joshspeagle/FlexMESA/issues/295) | Rust table_atm uses MESA 26.4.1 interp_2d/private/bicub_db.f implicit f32 fvbicub_db basis scalars in strict mode (#420, #161), whereas the frozen JAX twin keeps pure f64 basis scalars per DECISIONS #43; measured cross-stage max_rel_err is 6.897e-8 (N=4) and 4.705e-6 (N=8) against 5.0e-12. |
+| `python_xfail` | `tests/unit/test_kap_wave3b2.py` | `test_rust_strict_vs_jax_backend_consistency_across_all_regimes` | `physics_gap` | [#295](https://github.com/joshspeagle/FlexMESA/issues/295) | Rust kapCN and AESOPUS evaluate MESA 26.4.1 interp_2d/private/bicub_db.f implicit f32 fvbicub_db basis scalars in strict mode (#433, #161), whereas the frozen JAX twin keeps pure f64 basis scalars per DECISIONS #43; measured max rel diff is 2.103e-7 against rtol=1e-12. |
+| `python_xfail` | `tests/unit/test_kap_wave3b2_jax.py` | `test_kapcn_knot_and_multi_zone_batch_consistency` | `physics_gap` | [#295](https://github.com/joshspeagle/FlexMESA/issues/295) | Rust AESOPUS evaluates MESA 26.4.1 interp_2d/private/bicub_db.f implicit f32 fvbicub_db basis scalars in strict mode (#433, #161), whereas the frozen JAX twin keeps pure f64 basis scalars per DECISIONS #43; measured max rel diff is 1.713e-8 against rtol=1e-12, atol=1e-12. |
 
 ## Level-2 Module Hex Reference Gaps (`benchmarks/module_hex/`)
 
-- **Checked vs MESA `26.4.1` `raw_bits_hex`**: `304,660` / `304,751` outputs at `0 ULP` across `16` probed modules (`8` modules complete at `0 ULP`; `348,321` total captured upstream values).
+- **Checked vs MESA `26.4.1` `raw_bits_hex`**: `304,760` / `304,760` outputs at `0 ULP` across `16` probed modules (`10` modules complete at `0 ULP`; `348,321` total captured upstream values).
 
 | Module | Status | Checked / Expected | 0 ULP | Max ULP | Issue | Notes |
 | :--- | :--- | ---: | ---: | ---: | :--- | :--- |
@@ -210,13 +212,13 @@ Every Rust `#[ignore]` and Python `xfail`/`skip` marker in the repository is tra
 | `chem` | `partial_0_ulp` | 286 / 1,102 | 286 | 0 | [#161](https://github.com/joshspeagle/FlexMESA/issues/161) | 286 Lodders (2003) isotopic atom percents. |
 | `colors` | `partial_0_ulp` | 10 / 234 | 10 | 0 | [#161](https://github.com/joshspeagle/FlexMESA/issues/161) | Group 1 solar bolometric and UBVRIJM outputs. |
 | `eos` | `unported_hex_harness` | 0 / 391 | 0 | 0 | [#161](https://github.com/joshspeagle/FlexMESA/issues/161) | 391 upstream EOS diagnostic table/blend printouts await direct TSV harness mapping. |
-| `kap` | `nonzero_ulp` | 21 / 21 | 13 | 1,459,407,697 | [#161](https://github.com/joshspeagle/FlexMESA/issues/161) | 12/14 gs98+CO channels at 0 ULP; AESOPUS and log10 1-ULP gap. |
+| `kap` | `pass_0_ulp` | 21 / 21 | 21 | 0 | none | All 21 gs98, CO-enhanced, and AESOPUS outputs at 0 ULP. |
 | `rates` | `pass_0_ulp` | 3,639 / 3,639 | 3,639 | 0 | none | 3,636/3,639 rates outputs at 0 ULP (all 2,763 raw rates, 12 screening, 845/846 weak, 4 Coulomb, 4 Suzuki/weaklib, pycno, r3, 4 rev_c1); 3 Fermi-Dirac ecapture within 29 ULP. |
 | `neu` | `pass_0_ulp` | 300,000 / 300,000 | 300,000 | 0 | none | All 10,000 records (300,000 outputs) of neu at 0 ULP. |
-| `net` | `nonzero_ulp` | 116 / 124 | 55 | 66 | [#161](https://github.com/joshspeagle/FlexMESA/issues/161) | 55/116 net_get outputs at 0 ULP across 7 networks (max_ulp=66); 8 one-zone burn rows remain unchecked. |
+| `net` | `partial_0_ulp` | 116 / 124 | 116 | 0 | [#161](https://github.com/joshspeagle/FlexMESA/issues/161) | 116/116 net_get outputs at 0 ULP across 7 networks (max_ulp=0); 8 one-zone burn rows remain unchecked. |
 | `ionization` | `pass_0_ulp` | 31 / 31 | 31 | 0 | none | 28/28 eval_ionization channels at 0 ULP; 3 Fe56-in-He4 table offsets. |
 | `atm` | `pass_0_ulp` | 39 / 39 | 39 | 0 | none | All 39 computed atm outputs across 7 tables, 5 T(tau) varying, 2 T(tau) uniform, and irradiated atmospheres. |
-| `turb` | `nonzero_ulp` | 62 / 71 | 40 | 6 | [#157](https://github.com/joshspeagle/FlexMESA/issues/157) | 31-step check_TDC gradT and conv_vel outputs. |
+| `turb` | `pass_0_ulp` | 71 / 71 | 71 | 0 | none | All 71 test_turb.f90 MLT and TDC outputs at 0 ULP. |
 | `sample` | `zero_values_in_mesa_reference` | 0 / 0 | 0 | 0 | none | Upstream sample package has no test/ directory in MESA 26.4.1. |
 | `star_data` | `zero_values_in_mesa_reference` | 0 / 0 | 0 | 0 | none | Upstream star_data/test emits zero floating-point values in exact_tested_values.tsv. |
 | `gyre` | `unported_hex_harness` | 0 / 136 | 0 | 0 | [#170](https://github.com/joshspeagle/FlexMESA/issues/170) | 136 upstream bundled GYRE pulsation eigenfrequency outputs tracked under #170. |

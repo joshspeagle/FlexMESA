@@ -60,11 +60,14 @@ from flexmesa import bench, star
 # (4.262780484077989e6 -> 1.742907215943596e6), `star_newton_step`
 # (2.263803560298164e5 -> 8.653548156900340e5), `star_remesh`
 # (5.513777703025969e2 -> 5.455218449741383e2), and `star_evolve_step`
-# (8.895028893306655e2 -> 8.843428194210857e2) shifted.
+# (8.895028893306655e2 -> 8.843428194210857e2) shifted. Under #381 (`set_qs`
+# and `normalize_dqs` matching `star/private/star_utils.f90:669-752`, and no
+# renormalization of `dq` in the mesh sync), `star_newton_step`
+# (8.653548156900340e5 -> 8.653548158756559e5) shifted.
 _WAVE4_REGRESSION_SNAPSHOTS_N8: dict[str, float] = {
     "star_micro_vars": 2.253780782165544e2,
     "star_hydro_eqns": 1.742907215943596e6,
-    "star_newton_step": 8.653548156900340e5,
+    "star_newton_step": 8.653548158756559e5,
     "star_remesh": 5.455218449741383e2,
     "star_evolve_step": 8.843428194210857e2,
 }

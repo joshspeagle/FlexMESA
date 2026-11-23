@@ -97,11 +97,15 @@ const WAVE3B_REGRESSION_SNAPSHOTS_N8: [(&str, f64); 5] = [
 /// shifted. Under `#360` (removing non-upstream ZAMS `xa` renormalization and
 /// `.max(0.0)` clamping per `star/private/init_model.f90:155-397` and
 /// `star_utils.f90:1244-1265`), `star_newton_step`
-/// (`8.653_548_256_546_203e5` -> `8.653_548_285_862_873e5`) shifted.
+/// (`8.653_548_256_546_203e5` -> `8.653_548_285_862_873e5`) shifted. Under
+/// `#381` (`set_qs` and `normalize_dqs` matching
+/// `star/private/star_utils.f90:669-752`, and no renormalization of `dq` in
+/// the mesh sync), `star_newton_step` (`8.653_548_285_862_873e5` ->
+/// `8.653_548_271_013_098e5`) shifted.
 const WAVE4_REGRESSION_SNAPSHOTS_N8: [(&str, f64); 5] = [
     ("star_micro_vars", 2.253_780_782_165_539e2),
     ("star_hydro_eqns", 1.742_907_215_943_594e6),
-    ("star_newton_step", 8.653_548_285_862_873e5),
+    ("star_newton_step", 8.653_548_271_013_098e5),
     ("star_remesh", 7.086_334_744_875_726e2),
     ("star_evolve_step", 8.843_428_194_210_911e2),
 ];

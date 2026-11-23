@@ -212,6 +212,9 @@ pub fn excise_core_by_temperature(
         return Ok(());
     };
     let k_cut = raw_cut.min(model.nz - 4);
+    // Not an upstream port (#154); keeps the normalization this stand-in had
+    // through sync_mesh_and_pack before #381.
+    model.normalize_dqs()?;
     model.sync_mesh_and_pack()?;
 
     let m_c = model.m[k_cut];

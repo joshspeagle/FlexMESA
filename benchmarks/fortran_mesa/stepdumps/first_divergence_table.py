@@ -15,7 +15,9 @@ Usage::
         [--cases star/1.3M_ms_high_Z ...] [--timeout-sec 600]
 
 Runs use ``--allow-unsupported-controls`` so that every case reaches its
-first solver call; a case whose run ignores controls is marked as such.
+first solver call. A run that ignores controls does not do what its inlist
+asks (``DECISIONS #26``); the table does not mark such runs, so check a
+case's ignored controls before reading its row as a faithful run.
 """
 
 from __future__ import annotations

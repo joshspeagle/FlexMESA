@@ -164,6 +164,7 @@ def parse_dump(text: str) -> StepDump:
         The parsed dump.
     """
     dump = StepDump()
+    seen_records = False
     for line in text.splitlines():
         if not line.strip():
             continue
@@ -171,8 +172,16 @@ def parse_dump(text: str) -> StepDump:
             dump.header.append(line.lstrip("# "))
             continue
         tag = line.split(maxsplit=1)[0]
-        if tag in ("RUN", "DONE"):
+        if tag == "RUN":
+            # Each ./rn process appends its own RUN segment; only the first
+            # segment with records is compared, because the FlexMESA dump
+            # counts models over the whole trace process (#372).
+            if seen_records:
+                break
             continue
+        if tag == "DONE":
+            continue
+        seen_records = True
         if tag == "NAMES":
             p = line.split()
             star = int(p[1])
@@ -323,6 +332,22 @@ def first_divergence(
     Returns:
         The first divergence in star, model, then record order.
     """
+    for star in sorted(set(flex.blocks) - set(mesa.blocks)):
+        b = flex.blocks[star][0]
+        return Divergence(
+            star,
+            0,
+            -1,
+            b.model,
+            "missing",
+            "star",
+            None,
+            None,
+            "",
+            "none",
+            f"star {star}",
+            None,
+        )
     for star in sorted(mesa.blocks):
         a_blocks = mesa.blocks[star]
         b_blocks = flex.blocks.get(star, [])
@@ -349,6 +374,22 @@ def first_divergence(
             div = _first_solver_divergence(star, i, a, b, ignore)
             if div is not None:
                 return div
+        if len(b_blocks) > len(a_blocks):
+            b = b_blocks[len(a_blocks)]
+            return Divergence(
+                star,
+                len(a_blocks),
+                -1,
+                b.model,
+                "missing",
+                "model",
+                None,
+                None,
+                "",
+                "none",
+                str(b.model),
+                None,
+            )
     return None
 
 
@@ -363,8 +404,12 @@ def _skip_column(
     """Returns whether column ``j`` of a zone record is ignored."""
     if name in ignore:
         return True
+    # 'xa' covers every species column: the STATE mass fractions and the
+    # EQU species residuals.
     return (
-        tag == "STATE" and "xa" in ignore and j >= mesa.nvar_hydro.get(star, 0)
+        tag in ("STATE", "EQU")
+        and "xa" in ignore
+        and j >= mesa.nvar_hydro.get(star, 0)
     )
 
 
@@ -576,8 +621,8 @@ def compare_files(
     mesa_path: pathlib.Path,
     flex_path: pathlib.Path,
     ignore: frozenset[str] = frozenset(),
-) -> str:
-    """Compares two dump files and returns the report.
+) -> tuple[str, Divergence | None]:
+    """Compares two dump files.
 
     Args:
         mesa_path: MESA ``.stepdump`` file.
@@ -585,11 +630,13 @@ def compare_files(
         ignore: See :func:`first_divergence`.
 
     Returns:
-        The report text.
+        The report text and the first divergence (``None`` when the records
+        are bit-identical).
     """
     mesa = parse_dump(mesa_path.read_text(encoding="utf-8"))
     flex = parse_dump(flex_path.read_text(encoding="utf-8"))
-    report = format_report(mesa, flex, first_divergence(mesa, flex, ignore))
+    div = first_divergence(mesa, flex, ignore)
+    report = format_report(mesa, flex, div)
     if ignore:
         report = f"ignored: {', '.join(sorted(ignore))}\n" + report
-    return report
+    return report, div

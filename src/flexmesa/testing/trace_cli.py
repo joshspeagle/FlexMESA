@@ -176,7 +176,8 @@ def _build_trace_parser() -> argparse.ArgumentParser:
             "MESA 26.4.1 step dump (benchmarks/fortran_mesa/stepdumps) to "
             "compare with: runs the case with FlexMESA's step dump on for "
             "the same number of models and reports the first record that "
-            "differs (#372)."
+            "differs (#372). Exit status: 0 when the records are "
+            "bit-identical, 2 when they differ, 1 when the run fails."
         ),
     )
     parser.add_argument(
@@ -222,7 +223,8 @@ def trace_main(argv: list[str] | None = None) -> int:
         argv: CLI arguments following ``flexmesa trace``.
 
     Returns:
-        Exit status (``0`` on success, ``1`` on run failure/timeout/OOM).
+        Exit status (``0`` on success, ``1`` on run failure/timeout/OOM; with
+        ``--compare``, ``2`` when the step dumps differ).
     """
     cli_args = list(sys.argv[1:] if argv is None else argv)
     if cli_args and cli_args[0] == "_worker":
@@ -240,7 +242,9 @@ def trace_main(argv: list[str] | None = None) -> int:
         os.environ["FLEXMESA_STEPDUMP_STEPS"] = str(steps)
         if first is not None:
             os.environ["FLEXMESA_STEPDUMP_FIRST"] = str(first)
-        elif ns.max_steps is None:
+        else:
+            os.environ.pop("FLEXMESA_STEPDUMP_FIRST", None)
+        if first is None and ns.max_steps is None:
             # A window at the start of the run needs only its own models; a
             # later window runs up to the timeout or --max-steps.
             ns.max_steps = steps
@@ -275,13 +279,13 @@ def trace_main(argv: list[str] | None = None) -> int:
         if not flex_dump.exists():
             print("error: FlexMESA wrote no step dump", file=sys.stderr)
             return 1
-        print(
-            stepdump_compare.compare_files(
-                pathlib.Path(ns.compare), flex_dump, frozenset(ns.ignore)
-            ),
-            end="",
+        report, div = stepdump_compare.compare_files(
+            pathlib.Path(ns.compare), flex_dump, frozenset(ns.ignore)
         )
-        return 0
+        print(report, end="")
+        if outcome.status != "ok":
+            return 1
+        return 0 if div is None else 2
     return 0 if outcome.status == "ok" else 1
 
 

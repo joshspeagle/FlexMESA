@@ -122,3 +122,32 @@ def test_ignoring_a_record_type_skips_it_in_solver_order() -> None:
     a = sc.parse_dump(_dump())
     b = sc.parse_dump(_dump(slope=-1e-9))
     assert sc.first_divergence(a, b, frozenset({"NEWTON"})) is None
+
+
+def test_only_the_first_run_segment_with_records_is_compared() -> None:
+    later = f"RUN\nCALL 1 9 {_h(1.0)} {_h(1.0)} {_h(1.0)} 1 1\n"
+    a = sc.parse_dump(_dump() + "\n" + later)
+    b = sc.parse_dump(_dump())
+    assert [blk.model for blk in a.blocks[1]] == [5]
+    assert sc.first_divergence(a, b) is None
+
+
+def test_a_star_written_only_by_flexmesa_is_reported() -> None:
+    extra = f"CALL 2 5 {_h(10.0)} {_h(1e-3)} {_h(2e-3)} 2 1"
+    a = sc.parse_dump(_dump())
+    b = sc.parse_dump(_dump(extra=extra))
+    div = sc.first_divergence(a, b)
+    assert div is not None
+    assert (div.kind, div.record, div.star) == ("missing", "star", 2)
+
+
+def test_ignore_xa_also_skips_species_residual_columns() -> None:
+    a = sc.parse_dump(_dump())
+    b = sc.parse_dump(
+        _dump().replace(
+            f"EQU 1 5 1 {_h(1e-4)} {_h(2e-4)} {_h(0.0)}",
+            f"EQU 1 5 1 {_h(1e-4)} {_h(2e-4)} {_h(1e-9)}",
+        )
+    )
+    assert sc.first_divergence(a, b) is not None
+    assert sc.first_divergence(a, b, frozenset({"xa"})) is None

@@ -684,16 +684,6 @@ pub fn solve_henyey_step(
                     &soln,
                     Some((iter, tol_mc, &mut flailing)),
                 );
-            if crate::stepdump::active() {
-                stepdump_line(
-                    model,
-                    sys.nvar,
-                    "CORR",
-                    &[iter as i64],
-                    &[cn_raw, mc_raw],
-                    &stepdump_loc(corr_argmax),
-                );
-            }
             correction_norm = cn_raw.abs();
             max_correction = mc_raw.abs();
             corr_norm_min = corr_norm_min.min(correction_norm);
@@ -704,6 +694,17 @@ pub fn solve_henyey_step(
                     "bad result from sizeB: correction info either NaN or Inf",
                 );
                 break;
+            }
+            // Written once sizeB has succeeded, as the MESA overlay does.
+            if crate::stepdump::active() {
+                stepdump_line(
+                    model,
+                    sys.nvar,
+                    "CORR",
+                    &[iter as i64],
+                    &[cn_raw, mc_raw],
+                    &stepdump_loc(corr_argmax),
+                );
             }
 
             if !model.controls.ignore_too_large_correction
@@ -968,6 +969,13 @@ pub fn solve_henyey_step(
 
             let (rn_raw, mr_raw, resid_loc) =
                 compute_residual_norms_with_argmax(model, sys.nvar, &sys.equ);
+            if !rn_raw.is_finite() || !mr_raw.is_finite() {
+                failure_detail = String::from(
+                    "residual_norm or max_residual is a bad number (NaN or Inf)",
+                );
+                break;
+            }
+            // Written once sizequ has succeeded, as the MESA overlay does.
             if crate::stepdump::active() {
                 stepdump_line(
                     model,
@@ -977,12 +985,6 @@ pub fn solve_henyey_step(
                     &[coeff, rn_raw, mr_raw],
                     &stepdump_loc(resid_loc),
                 );
-            }
-            if !rn_raw.is_finite() || !mr_raw.is_finite() {
-                failure_detail = String::from(
-                    "residual_norm or max_residual is a bad number (NaN or Inf)",
-                );
-                break;
             }
             residual_norm = rn_raw.abs();
             max_residual = mr_raw.abs();

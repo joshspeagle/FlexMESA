@@ -213,10 +213,19 @@ def run_case(
     """
     suite, case = ident.split("/", 1)
     dest = out / suite / f"{case}.stepdump"
-    if dest.exists() and "\nDONE\n" in dest.read_text(encoding="utf-8"):
-        return f"{ident}: kept existing complete dump"
-    raw = work / f"{suite}__{case}.raw"
-    case_root = _case_root(env, suite, case, work)
+    window = f"# first_model: {meta.get('first_model', 'first of the run')}"
+    steps_line = f"# steps_per_star: {steps}"
+    if dest.exists():
+        old = dest.read_text(encoding="utf-8")
+        if window not in old or steps_line not in old:
+            raise SystemExit(f"{dest}: exists with a different window")
+        if "\nDONE\n" in old:
+            return f"{ident}: kept existing complete dump"
+    # The window is part of the raw file name, so a run with another window
+    # never reuses these records.
+    tag = f"s{steps}_f{meta.get('first_model', 'start')}"
+    raw = work / f"{suite}__{case}__{tag}.raw"
+    case_root = _case_root(env, suite, case, work / tag)
     if (case_root / case).exists() and not raw.exists():
         return f"{ident}: case copy exists in scratch, not rerun"
     run_env = {
@@ -254,7 +263,7 @@ def _case_root(
         return work / suite
     if suite != "star":
         raise SystemExit(f"{suite}/{case}: rn needs a MESA tree")
-    return overlay / "star" / "stepdump_cases"
+    return overlay / "star" / f"stepdump_cases_{work.name}"
 
 
 def _run(ident: str, run_env: dict[str, str], timeout_sec: int) -> str:

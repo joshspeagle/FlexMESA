@@ -17,6 +17,7 @@ use crate::evolve_support::{
 use crate::hydro_vars::set_hydro_vars;
 use crate::inlist_runner::{DefaultStarExtras, ExtrasDirective, StarExtras};
 use crate::model::StarModel;
+use crate::relax_driver::{RelaxHookResult, RelaxHooks};
 use crate::solver::HenyeySolverReport;
 use crate::star_utils::set_rho_to_dm_div_dv_for_new_step;
 use crate::struct_burn_mix::{do_struct_burn_mix, refresh_mixing_state};
@@ -873,7 +874,6 @@ fn exceeds_clight_velocity(model: &StarModel) -> bool {
         || (model.controls.u_flag && model.u.iter().any(|u| u.abs() > CLIGHT))
 }
 
-#[allow(clippy::too_many_lines)]
 pub(crate) fn star_evolve_step_outcome_with_extras(
     model: &mut StarModel,
     do_remesh: bool,
@@ -881,6 +881,47 @@ pub(crate) fn star_evolve_step_outcome_with_extras(
     use_bcyclic: bool,
     extras: &mut dyn StarExtras,
 ) -> Result<(EvolveStepReport, Option<String>), StarError> {
+    star_evolve_step_outcome_checked(
+        model,
+        do_remesh,
+        op_split_burn,
+        use_bcyclic,
+        extras,
+        StepChecks::Run,
+    )
+}
+
+/// Which model checks a step runs between the solve and
+/// `pick_next_timestep`.
+pub(crate) enum StepChecks<'a> {
+    /// The evolve loop of `run_star_support.f90:207-213`: `star_check_model`
+    /// (`do_check_limits`) and then `extras_check_model`.
+    Run,
+    /// The `do_internal_evolve` step loop (`star/private/relax.f90:4068-4074`):
+    /// the relax's `adjust_model` between `do_evolve_step_part1` and
+    /// `do_evolve_step_part2`, and its `check_model` in place of
+    /// `star_check_model` and `extras_check_model`.
+    Relax(&'a mut dyn RelaxHooks),
+}
+
+/// Executes one step with its retry and redo cascade, running the model
+/// checks selected by `checks` ([`star_evolve_step_outcome_with_extras`] runs
+/// [`StepChecks::Run`]).
+#[allow(clippy::too_many_lines)]
+pub(crate) fn star_evolve_step_outcome_checked(
+    model: &mut StarModel,
+    do_remesh: bool,
+    op_split_burn: bool,
+    use_bcyclic: bool,
+    extras: &mut dyn StarExtras,
+    mut checks: StepChecks<'_>,
+) -> Result<(EvolveStepReport, Option<String>), StarError> {
+    if model.controls.rsp_flag && matches!(checks, StepChecks::Relax(_)) {
+        return Err(StarError::InvalidInput(String::from(
+            "do_internal_evolve with RSP_flag (star/private/relax.f90:4068) \
+             is not ported",
+        )));
+    }
     model.aux.step_hist.termination_code = None;
     let retry_fac = model.controls.ts_stop.timestep_factor_for_retries;
     if !(retry_fac.is_finite() && retry_fac > 0.0 && retry_fac < 1.0) {
@@ -962,9 +1003,6 @@ pub(crate) fn star_evolve_step_outcome_with_extras(
     }
 
     sync_time_sec_from_age(model);
-    if model.doing_first_model_of_run {
-        model.aux.step_hist.timestep_hold = 0;
-    }
 
     let dt_prev = model.dt;
     let mut dt_next_in = if model.dt_next > 0.0 || model.dt <= 0.0 {
@@ -1125,6 +1163,11 @@ pub(crate) fn star_evolve_step_outcome_with_extras(
     loop {
         model.dt = dt_try;
         model.step_retry_cnt = retries;
+        // `do_step_part1` clears the hold on every try of the first model,
+        // retries included (`star/private/evolve.f90:355-370`).
+        if model.doing_first_model_of_run {
+            model.aux.step_hist.timestep_hold = 0;
+        }
         model.solver_first_try_of_step = first_try;
         model.why_tlim_neg_x = false;
         model.aux.step_hist.num_rotation_solver_steps = 0;
@@ -1143,6 +1186,21 @@ pub(crate) fn star_evolve_step_outcome_with_extras(
         if let Err(e) = set_step_mdot(model, explicit_step_mdot, extras) {
             model.model_number = model.model_number_old;
             return Err(e);
+        }
+        // `result = adjust_model(...)` between `do_evolve_step_part1` and
+        // `do_evolve_step_part2` (`star/private/relax.f90:4070-4071`).
+        if let StepChecks::Relax(hooks) = &mut checks {
+            let adjusted = hooks.adjust_model(model);
+            if !matches!(adjusted, Ok(RelaxHookResult::KeepGoing)) {
+                abandon_step(model, pre_remesh_model.take(), saved, dt_prev)?;
+                return Err(adjusted.err().unwrap_or_else(|| {
+                    StarError::InvalidInput(String::from(
+                        "a relax adjust_model returning other than keep_going \
+                         (star/private/relax.f90:4070) is not ported: no \
+                         ported relax needs it",
+                    ))
+                }));
+            }
         }
 
         let mut mdot_redo =
@@ -1282,9 +1340,27 @@ pub(crate) fn star_evolve_step_outcome_with_extras(
                 }
 
                 // Upstream runs `do_check_limits` before `extras_check_model`
-                // and `pick_next_timestep` (`run_star_support.f90:211-213`).
+                // and `pick_next_timestep` (`run_star_support.f90:211-213`);
+                // a relax runs its own `check_model` instead
+                // (`star/private/relax.f90:4073`).
+                let checked = match &mut checks {
+                    StepChecks::Run => do_check_limits(model, None, false),
+                    StepChecks::Relax(hooks) => {
+                        hooks.check_model(model).map(|r| match r {
+                            RelaxHookResult::KeepGoing => {
+                                LimitCheckOutcome::KeepGoing
+                            }
+                            RelaxHookResult::Terminate(code) => {
+                                LimitCheckOutcome::Terminate {
+                                    reason: code.clone(),
+                                    code,
+                                }
+                            }
+                        })
+                    }
+                };
                 let limit_outcome =
-                    match do_check_limits(model, None, false) {
+                    match checked {
                         Ok(out) => out,
                         Err(e) => {
                             abandon_step(
@@ -1336,13 +1412,22 @@ pub(crate) fn star_evolve_step_outcome_with_extras(
                     LimitCheckOutcome::Terminate { code, .. } => {
                         model.aux.step_hist.termination_code =
                             Some(code.clone());
-                        let (_, ts_rep) = timestep_controller(model);
+                        // A relax leaves the evolve loop on `terminate`
+                        // without `pick_next_timestep`
+                        // (`star/private/relax.f90:4073-4084`).
+                        let (varcontrol, dt_next) = match checks {
+                            StepChecks::Run => {
+                                let (_, ts_rep) = timestep_controller(model);
+                                (ts_rep.varcontrol, ts_rep.dt_next)
+                            }
+                            StepChecks::Relax(_) => (0.0, model.dt_next),
+                        };
                         return Ok((
                             finalize_accepted_step(
                                 model,
                                 rep,
-                                ts_rep.varcontrol,
-                                ts_rep.dt_next,
+                                varcontrol,
+                                dt_next,
                                 dt_try,
                                 rsp2_e_old,
                                 retries,
@@ -1354,7 +1439,11 @@ pub(crate) fn star_evolve_step_outcome_with_extras(
                     }
                     LimitCheckOutcome::KeepGoing => {
                         let mut pending_check_term: Option<String> = None;
-                        match extras.extras_check_model(model) {
+                        let directive = match checks {
+                            StepChecks::Run => extras.extras_check_model(model),
+                            StepChecks::Relax(_) => ExtrasDirective::KeepGoing,
+                        };
+                        match directive {
                             ExtrasDirective::KeepGoing => {}
                             ExtrasDirective::Terminate(reason) => {
                                 pending_check_term = Some(reason);

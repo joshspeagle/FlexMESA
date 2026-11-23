@@ -541,8 +541,34 @@ pub struct StarJobControls {
     pub pre_ms_log_t_surf_limit: f64,
     /// Logarithmic luminosity boost factor for pre-MS contraction (`0.0` default).
     pub pre_ms_log_lum_factor: f64,
-    /// Number of relaxation steps during pre-MS startup.
-    pub pre_ms_relax_num_steps: usize,
+    /// Steps of `do_relax_num_steps` after building a pre-MS model
+    /// (`pre_ms_relax_num_steps`, `300` default,
+    /// `star/defaults/star_job.defaults:441`; `<= 0` skips the relax).
+    pub pre_ms_relax_num_steps: isize,
+    /// Whether to relax a new pre-MS model until a radiative core starts
+    /// (`pre_ms_relax_to_start_radiative_core`, `.true.` default,
+    /// `star/defaults/star_job.defaults:453`).
+    pub pre_ms_relax_to_start_radiative_core: bool,
+    /// Declared but never read upstream
+    /// (`pre_ms_min_steps_before_check_radiative_core`, `50` default,
+    /// `star/defaults/star_job.defaults:475`).
+    pub pre_ms_min_steps_before_check_radiative_core: isize,
+    /// Start testing for the core once the minimum `conv_mx1_bot` falls
+    /// below this fractional mass (`pre_ms_check_radiative_core_start`,
+    /// `1d-6` default, `star/defaults/star_job.defaults:476`).
+    pub pre_ms_check_radiative_core_start: f64,
+    /// Stop when `conv_mx1_bot` exceeds this fractional mass
+    /// (`pre_ms_check_radiative_core_stop`, `1d-3` default,
+    /// `star/defaults/star_job.defaults:477`).
+    pub pre_ms_check_radiative_core_stop: f64,
+    /// Stop when $L_{\mathrm{nuc}}/L_{\mathrm{phot}}$ exceeds this
+    /// (`pre_ms_check_radiative_core_Lnuc_div_L_limit`, `0.1` default,
+    /// `star/defaults/star_job.defaults:478`).
+    pub pre_ms_check_radiative_core_lnuc_div_l_limit: f64,
+    /// Skip the radiative-core relax below this mass in $M_\odot$
+    /// (`pre_ms_check_radiative_core_min_mass`, `0.3` default,
+    /// `star/defaults/star_job.defaults:479`).
+    pub pre_ms_check_radiative_core_min_mass: f64,
     /// Whether to construct an isentropic initial planet/WD model (`create_initial_model`).
     pub create_initial_model: bool,
     /// Radius in cm for `create_initial_model`.
@@ -709,6 +735,11 @@ pub struct StarJobControls {
     pub set_initial_cumulative_energy_error: bool,
     /// Target cumulative energy error in erg (`new_cumulative_energy_error`).
     pub new_cumulative_energy_error: f64,
+    /// Set `cumulative_energy_error` to `new_cumulative_energy_error` at the
+    /// end of every relax (`set_cumulative_energy_error_each_relax`, `.true.`
+    /// default, `star/defaults/star_job.defaults:2374`;
+    /// `star/private/relax.f90:4153-4154`).
+    pub set_cumulative_energy_error_each_relax: bool,
     /// Whether to impose uniform initial composition (`set_uniform_initial_composition`).
     pub set_uniform_initial_composition: bool,
     /// Uniform initial $^1\mathrm{H}$ mass fraction (`initial_h1`).
@@ -807,6 +838,13 @@ impl Default for StarJobControls {
             pre_ms_log_t_surf_limit: 3.7,
             pre_ms_log_lum_factor: 0.0,
             pre_ms_relax_num_steps: 300,
+            // star/defaults/star_job.defaults:453, 475-479.
+            pre_ms_relax_to_start_radiative_core: true,
+            pre_ms_min_steps_before_check_radiative_core: 50,
+            pre_ms_check_radiative_core_start: 1.0e-6,
+            pre_ms_check_radiative_core_stop: 1.0e-3,
+            pre_ms_check_radiative_core_lnuc_div_l_limit: 0.1,
+            pre_ms_check_radiative_core_min_mass: 0.3,
             create_initial_model: false,
             radius_in_cm_for_create_initial_model: 0.0,
             mass_in_gm_for_create_initial_model: 0.0,
@@ -874,6 +912,7 @@ impl Default for StarJobControls {
             seconds_for_initial_dt: -1.0,
             set_initial_cumulative_energy_error: false,
             new_cumulative_energy_error: 0.0,
+            set_cumulative_energy_error_each_relax: true,
             set_uniform_initial_composition: false,
             initial_h1: -1.0,
             initial_h2: -1.0,

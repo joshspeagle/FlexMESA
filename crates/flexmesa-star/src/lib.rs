@@ -137,6 +137,7 @@ pub mod pulse_modes;
 pub mod pulse_utils;
 pub mod relax;
 pub mod relax_comp;
+pub(crate) mod relax_driver;
 pub mod report_utils;
 pub mod riemann;
 pub mod riemann_ad;

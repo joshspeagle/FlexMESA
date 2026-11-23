@@ -196,7 +196,14 @@ impl InlistBundle {
         };
         let j = &mut self.job;
         sj.try_bool_into("star_job", &mut j.create_pre_ms_model, "create_pre_main_sequence_model")?;
-        sj.try_usize_into("star_job", &mut j.pre_ms_relax_num_steps, "pre_ms_relax_num_steps", 0)?;
+        sj.try_isize_into("star_job", &mut j.pre_ms_relax_num_steps, "pre_ms_relax_num_steps")?;
+        sj.try_bool_into("star_job", &mut j.pre_ms_relax_to_start_radiative_core, "pre_ms_relax_to_start_radiative_core")?;
+        sj.try_isize_into("star_job", &mut j.pre_ms_min_steps_before_check_radiative_core, "pre_ms_min_steps_before_check_radiative_core")?;
+        sj.try_f64_into("star_job", &mut j.pre_ms_check_radiative_core_start, "pre_ms_check_radiative_core_start")?;
+        sj.try_f64_into("star_job", &mut j.pre_ms_check_radiative_core_stop, "pre_ms_check_radiative_core_stop")?;
+        sj.try_f64_into("star_job", &mut j.pre_ms_check_radiative_core_lnuc_div_l_limit, "pre_ms_check_radiative_core_Lnuc_div_L_limit")?;
+        sj.try_f64_into("star_job", &mut j.pre_ms_check_radiative_core_min_mass, "pre_ms_check_radiative_core_min_mass")?;
+        sj.try_bool_into("star_job", &mut j.set_cumulative_energy_error_each_relax, "set_cumulative_energy_error_each_relax")?;
         sj.try_f64_into("star_job", &mut j.center_log_p_1st_try_for_create_initial_model, "center_logP_1st_try_for_create_initial_model")?;
         map_f64s!("star_job", sj, j, [
             entropy_1st_try_for_create_initial_model,

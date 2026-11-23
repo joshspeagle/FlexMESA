@@ -148,8 +148,8 @@ fn test_unknown_section_key_unused_and_removed_aliases_fail_loudly() {
     for (tag, body, expected) in [
         (
             "unused_job",
-            "&star_job\n  pre_ms_relax_num_steps = 5\n/\n",
-            "pre_ms_relax_num_steps",
+            "&star_job\n  h_he_net = 'h_he.net'\n/\n",
+            "h_he_net",
         ),
         (
             "unused_rsp_map",

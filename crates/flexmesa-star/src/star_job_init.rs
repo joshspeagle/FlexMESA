@@ -9,6 +9,7 @@ use std::path::Path;
 use flexmesa_const::{M_SUN, R_SUN, SECYER, STANDARD_CGRAV};
 
 use crate::controls::{StarControls, StarError, StarJobControls, VarLayout};
+use crate::job_controls::{AtmOption, AtmTTauOpacity, AtmTTauRelation};
 use crate::hydro_vars::set_hydro_vars;
 use crate::inlist::InlistBundle;
 use crate::inlist_runner::StarExtras;
@@ -21,6 +22,7 @@ use crate::relax::{
     relax_irradiation_to_target, relax_mass_to_target,
     relax_tau_factor_to_target, relax_to_remove_h_env,
 };
+use crate::relax_driver::{do_relax_num_steps, do_relax_to_radiative_core};
 use crate::zams::load_zams_model;
 
 /// Resolves a `.mod` model file path against `case_dir`.
@@ -68,6 +70,93 @@ fn load_saved_mod(
         ))
     })?;
     read_mod_str(&text, controls, job)
+}
+
+/// Brings a newly built model into the state the step loop starts from, so
+/// `model_builder` can relax it (`finish_load_model` and the energy integrals,
+/// `star/private/init.f90:1031-1075`; `doing_first_model_of_run = .true.`,
+/// `star/private/init.f90:921`).
+fn prepare_new_model_for_relax(
+    model: &mut StarModel,
+    extras: &mut dyn StarExtras,
+) -> Result<(), StarError> {
+    model.layout = VarLayout::with_flags(
+        model.species,
+        model.controls.v_flag,
+        model.controls.u_flag,
+        model.controls.rsp2_flag,
+        model.controls.rti_flag,
+    );
+    model.time_sec = model.star_age * SECYER;
+    model.time_old_sec = model.star_age_old * SECYER;
+    model.init_model_number = model.model_number as isize;
+    model.doing_first_model_of_run = true;
+    model.sync_mesh_and_pack()?;
+    if model.controls.use_other_cgrav {
+        extras.other_cgrav(model)?;
+    }
+    set_hydro_vars(model, false, false)?;
+    model.save_start_values()?;
+    model.save_old_values();
+    model.m_center_old = model.m_center;
+    model.r_center_old = model.r_center;
+    model.l_center_old = model.l_center;
+    model.v_center_old = model.v_center;
+    Ok(())
+}
+
+/// The relaxes `model_builder` applies to a new pre-main-sequence model
+/// (`star/private/init.f90:1077-1109`), with the atmosphere set by
+/// `setup_for_relax_after_create_pre_ms_model` and restored by
+/// `done_relax_after_create_pre_ms_model` (`star/private/init.f90:1126-1142`).
+fn relax_after_create_pre_ms_model(
+    model: &mut StarModel,
+    extras: &mut dyn StarExtras,
+) -> Result<(), StarError> {
+    let c = &mut model.controls;
+    let saved_atm = (
+        c.atm_option,
+        c.atm_t_tau_relation,
+        c.atm_t_tau_opacity,
+        c.pextra_factor,
+    );
+    c.atm_option = AtmOption::TTau;
+    c.atm_t_tau_relation = AtmTTauRelation::Eddington;
+    c.atm_t_tau_opacity = AtmTTauOpacity::Fixed;
+    c.pextra_factor = 2.0;
+
+    let target_mstar = model.controls.initial_mass * M_SUN;
+    if model.mstar > target_mstar {
+        return Err(StarError::InvalidInput(format!(
+            "pre-MS model mass {} Msun exceeds initial_mass {}: reducing it \
+             needs do_relax_mass (star/private/init.f90:1080), which is not \
+             ported (#402)",
+            model.mstar / M_SUN,
+            model.controls.initial_mass
+        )));
+    } else if model.mstar < target_mstar {
+        return Err(StarError::InvalidInput(format!(
+            "pre-MS model mass {} Msun is below initial_mass {}: increasing it \
+             needs do_relax_mass_scale (star/private/init.f90:1087), which is \
+             not ported (#402)",
+            model.mstar / M_SUN,
+            model.controls.initial_mass
+        )));
+    }
+    let (num_steps, dt_next) = (model.job.pre_ms_relax_num_steps, model.dt_next);
+    do_relax_num_steps(model, num_steps, dt_next, extras)?;
+    if model.job.pre_ms_relax_to_start_radiative_core {
+        do_relax_to_radiative_core(model, extras)?;
+    }
+
+    let c = &mut model.controls;
+    (
+        c.atm_option,
+        c.atm_t_tau_relation,
+        c.atm_t_tau_opacity,
+        c.pextra_factor,
+    ) = saved_atm;
+    Ok(())
 }
 
 /// Outcome of model initialization (`Terminate` stops cleanly at 0 steps).
@@ -122,6 +211,7 @@ pub(crate) fn init_or_update_model_from_bundle_outcome(
     let job = bundle.job.clone();
     let controls = bundle.controls.clone();
     let mut did_create_pre_ms = false;
+    let mut did_create_initial_model = false;
     let is_restart = existing_model.is_some();
     let mut model = if let Some(prev) = existing_model {
         prev
@@ -155,18 +245,7 @@ pub(crate) fn init_or_update_model_from_bundle_outcome(
                 "you have both create_initial_model and create_pre_main_sequence_model set true",
             )));
         }
-        if job.initial_model_relax_num_steps > 0 {
-            // Upstream builds the model, then relaxes it with
-            // `do_relax_num_steps` (`star/private/relax.f90:3323-3374`), a
-            // `do_internal_evolve` loop that FlexMESA does not port yet.
-            // Failing before the build gives the same outcome sooner.
-            return Err(StarError::InvalidInput(format!(
-                "create_initial_model with initial_model_relax_num_steps = {} needs \
-                 do_relax_num_steps (star/private/relax.f90:3323), which is not yet \
-                 implemented (#154)",
-                job.initial_model_relax_num_steps
-            )));
-        }
+        did_create_initial_model = true;
         crate::create_initial_model::build_initial_model(
             controls.clone(),
             job.clone(),
@@ -228,6 +307,21 @@ pub(crate) fn init_or_update_model_from_bundle_outcome(
     model.kap_config = bundle.kap_config.clone();
 
     extras.extras_controls(&mut model)?;
+
+    // `model_builder` relaxes a newly built model before the `&star_job`
+    // controls applied after loading (`star/private/init.f90:1077-1118`,
+    // `star/job/run_star_support.f90:1653-1699`).
+    if did_create_pre_ms {
+        prepare_new_model_for_relax(&mut model, extras)?;
+        relax_after_create_pre_ms_model(&mut model, extras)?;
+    } else if did_create_initial_model
+        && model.job.initial_model_relax_num_steps > 0
+    {
+        prepare_new_model_for_relax(&mut model, extras)?;
+        let (num_steps, dt_next) =
+            (model.job.initial_model_relax_num_steps, model.dt_next);
+        do_relax_num_steps(&mut model, num_steps, dt_next, extras)?;
+    }
 
     // 1. Reaction network switching (`change_net` / `change_initial_net`)
     // A pre-MS model is already built on `new_net_name` (`pre_ms_change_net`,
@@ -445,18 +539,6 @@ pub(crate) fn init_or_update_model_from_bundle_outcome(
     }
     model.save_start_values()?;
     model.save_old_values();
-    let relax_rad_core = bundle
-        .sections
-        .get("star_job")
-        .map(|sj| {
-            sj.try_get_bool("star_job", "pre_ms_relax_to_start_radiative_core")
-        })
-        .transpose()?
-        .flatten()
-        .unwrap_or(true);
-    if did_create_pre_ms && model.mstar / M_SUN >= 0.3 && relax_rad_core {
-        crate::evolve_support::relax_pre_ms_to_radiative_core(&mut model)?;
-    }
     model.m_center_old = model.m_center;
     model.r_center_old = model.r_center;
     model.l_center_old = model.l_center;

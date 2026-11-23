@@ -1008,6 +1008,11 @@ pub fn build_pre_ms_model_with_configs(
     model.dt = 1.0e-5 * SECYER;
     model.dt_next = model.dt;
     model.dt_old = model.dt;
+    // `model_builder` (`star/private/init.f90:1042-1043`).
+    if model.controls.max_years_for_timestep > 0.0 {
+        model.dt_next =
+            model.dt_next.min(SECYER * model.controls.max_years_for_timestep);
+    }
 
     // Copy the last model (`pre_ms_model.f90:272-281`).
     for k in 0..nz {

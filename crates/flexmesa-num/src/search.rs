@@ -300,6 +300,24 @@ pub fn find_max_quadratic(
     }
     let dx1 = x2 - x1;
     let dx2 = x3 - x2;
+    if flexmesa_math::numerics_mode() == flexmesa_math::NumericsMode::Strict {
+        // Match upstream `num_lib.f90:569-574` expression order in Strict
+        // mode so `xmax` and `ymax` preserve IEEE-754 rounding.
+        let b = (y2 - y1) / dx1
+            + (y2 - y1) / (dx1 + dx2)
+            + (dx1 / dx2) * (y2 - y3) / (dx1 + dx2);
+        let c = (dx2 * y1 - dx1 * y2 - dx2 * y2 + dx1 * y3)
+            / (dx1 * dx2 * (dx1 + dx2));
+        if c >= 0.0 {
+            return Err(NumError::InvalidParameter(
+                "quadratic is not strictly concave (c >= 0)",
+            ));
+        }
+        let dxmax = -b / (2.0 * c);
+        let xmax = dxmax + x1;
+        let ymax = y1 + dxmax * (b + dxmax * c);
+        return Ok((xmax, ymax));
+    }
     let dx12 = x3 - x1;
     let b = (y2 - y1) / dx1;
     let c = ((y3 - y2) / dx2 - b) / dx12;

@@ -22,6 +22,7 @@
 //!   finite local error norms, and step-size underflow (`x + h == x`) is
 //!   detected and reported via [`NumError::ConvergenceFailed`].
 
+use crate::rk_tableau::dop853 as d8;
 use crate::rk_tableau::{A21, A3, A4, A5, A6, A7, C, D, E};
 use crate::NumError;
 
@@ -324,38 +325,338 @@ where
     })
 }
 
-/// High-precision adaptive Dormand-Prince integrator (`dop853` API in
-/// `num_lib.f90`).
+/// Estimates initial step size `h` for [`dop853`] (`hinit` in
+/// `num/private/mod_dop853.f:708-791`).
+#[allow(clippy::cast_precision_loss, clippy::too_many_arguments)]
+fn dop853_hinit<F>(
+    n: usize,
+    x: f64,
+    y: &[f64],
+    posneg: f64,
+    f0: &[f64],
+    hmax: f64,
+    atol: f64,
+    rtol: f64,
+    fcn: &mut F,
+) -> Result<f64, NumError>
+where
+    F: FnMut(f64, &[f64]) -> Result<Vec<f64>, NumError>,
+{
+    let mut dnf = 0.0_f64;
+    let mut dny = 0.0_f64;
+    for i in 0..n {
+        let sk = atol + rtol * y[i].abs();
+        let rf = f0[i] / sk;
+        let ry = y[i] / sk;
+        dnf += rf * rf;
+        dny += ry * ry;
+    }
+    let h0 = if dnf <= 1.0e-10 || dny <= 1.0e-10 {
+        1.0e-6
+    } else {
+        (dny / dnf).sqrt() * 0.01
+    };
+    let h = h0.min(hmax) * posneg;
+    let y1: Vec<f64> = (0..n).map(|i| y[i] + h * f0[i]).collect();
+    let f1 = eval_stage(n, x + h, &y1, fcn)?;
+    let mut der2 = 0.0_f64;
+    for i in 0..n {
+        let sk = atol + rtol * y[i].abs();
+        let d = (f1[i] - f0[i]) / sk;
+        der2 += d * d;
+    }
+    der2 = der2.sqrt() / h;
+    let der12 = der2.abs().max(dnf.sqrt());
+    let h1 = if der12 <= 1.0e-15 {
+        1.0e-6_f64.max(h.abs() * 1.0e-3)
+    } else {
+        flexmesa_math::pow(0.01 / der12, 1.0 / 8.0)
+    };
+    Ok((100.0 * h.abs()).min(h1).min(hmax) * posneg)
+}
+
+/// Integrates the ODE system $y'(x) = f(x, y)$ from `x0` to `x_end` using
+/// Hairer & Wanner's 12-stage Dormand-Prince 8(5,3) method (`mod_dop853.f`).
 ///
-/// Evaluates adaptive Dormand-Prince integration with tightened internal
-/// error tolerances and dense output history compatible with [`DopriResult`].
+/// Matches MESA `num/private/mod_dop853.f` step acceptance, embedded 8th/5th/3rd
+/// order error norm with Lund stabilization (`beta = 0.0`, `safe = 0.9`,
+/// `fac1 = 0.333`, `fac2 = 6.0`), and records 4th-order Hermite dense output
+/// history on accepted steps.
 ///
 /// # Errors
 ///
-/// Propagates any error from [`dopri5`].
+/// Returns [`NumError::InvalidParameter`] on invalid tolerances, or
+/// [`NumError::ConvergenceFailed`] if `max_steps` is exceeded or step size
+/// underflows.
+#[allow(clippy::cast_precision_loss, clippy::too_many_lines)]
 pub fn dop853<F>(
     x0: f64,
     x_end: f64,
     y0: &[f64],
     h0: f64,
-    hmax: f64,
+    hmax_in: f64,
     rtol: f64,
     atol: f64,
     max_steps: usize,
-    fcn: F,
+    mut fcn: F,
 ) -> Result<DopriResult, NumError>
 where
     F: FnMut(f64, &[f64]) -> Result<Vec<f64>, NumError>,
 {
-    dopri5(
-        x0,
-        x_end,
-        y0,
-        h0,
-        hmax,
-        (rtol * 0.25).max(1e-15),
-        (atol * 0.25).max(1e-15),
-        max_steps,
-        fcn,
-    )
+    const UROUND: f64 = 2.3e-16;
+    const SAFE: f64 = 0.9;
+    const FAC1: f64 = 0.333;
+    const FAC2: f64 = 6.0;
+
+    let n = y0.len();
+    if n == 0 || rtol <= 0.0 || atol <= 0.0 {
+        return Err(NumError::InvalidParameter(
+            "require y0.len() >= 1 and rtol, atol > 0 in dop853",
+        ));
+    }
+    if x0 == x_end {
+        return Ok(DopriResult {
+            y: y0.to_vec(),
+            nfcn: 0,
+            nstep: 0,
+            naccpt: 0,
+            nrejct: 0,
+            history: Vec::new(),
+        });
+    }
+
+    let facc1 = 1.0 / FAC1;
+    let facc2 = 1.0 / FAC2;
+    let expo1 = 1.0 / 8.0;
+    let posneg = (x_end - x0).signum();
+    let hmax = if hmax_in <= 0.0 {
+        (x_end - x0).abs()
+    } else {
+        hmax_in.abs()
+    };
+    let mut x = x0;
+    let mut y = y0.to_vec();
+    let mut k1 = eval_stage(n, x, &y, &mut fcn)?;
+    let mut nfcn = 1usize;
+    let mut h = if h0 == 0.0 {
+        nfcn += 1;
+        dop853_hinit(n, x, &y, posneg, &k1, hmax, atol, rtol, &mut fcn)?
+    } else {
+        h0.abs() * posneg
+    };
+
+    let nmax = if max_steps == 0 { 100_000 } else { max_steps };
+    let mut nstep = 0usize;
+    let mut naccpt = 0usize;
+    let mut nrejct = 0usize;
+    let mut reject = false;
+    let mut last = false;
+    let mut history = Vec::new();
+    let mut y1 = vec![0.0_f64; n];
+    let mut k4 = vec![0.0_f64; n];
+    let mut k5 = vec![0.0_f64; n];
+
+    loop {
+        if nstep > nmax {
+            return Err(NumError::ConvergenceFailed(
+                "dop853 exceeded max_steps",
+            ));
+        }
+        if 0.1 * h.abs() <= x.abs() * UROUND {
+            return Err(NumError::ConvergenceFailed(
+                "step size underflow in dop853",
+            ));
+        }
+        if (x + 1.01 * h - x_end) * posneg > 0.0 {
+            h = x_end - x;
+            last = true;
+        }
+        nstep += 1;
+
+        for i in 0..n {
+            y1[i] = y[i] + h * d8::A21 * k1[i];
+        }
+        let k2 = eval_stage(n, x + d8::C2 * h, &y1, &mut fcn)?;
+        for i in 0..n {
+            y1[i] = y[i] + h * (d8::A31 * k1[i] + d8::A32 * k2[i]);
+        }
+        let k3 = eval_stage(n, x + d8::C3 * h, &y1, &mut fcn)?;
+        for i in 0..n {
+            y1[i] = y[i] + h * (d8::A41 * k1[i] + d8::A43 * k3[i]);
+        }
+        let stg4 = eval_stage(n, x + d8::C4 * h, &y1, &mut fcn)?;
+        for i in 0..n {
+            y1[i] = y[i]
+                + h * (d8::A51 * k1[i] + d8::A53 * k3[i] + d8::A54 * stg4[i]);
+        }
+        let stg5 = eval_stage(n, x + d8::C5 * h, &y1, &mut fcn)?;
+        for i in 0..n {
+            y1[i] = y[i]
+                + h * (d8::A61 * k1[i] + d8::A64 * stg4[i] + d8::A65 * stg5[i]);
+        }
+        let k6 = eval_stage(n, x + d8::C6 * h, &y1, &mut fcn)?;
+        for i in 0..n {
+            y1[i] = y[i]
+                + h * (d8::A71 * k1[i]
+                    + d8::A74 * stg4[i]
+                    + d8::A75 * stg5[i]
+                    + d8::A76 * k6[i]);
+        }
+        let k7 = eval_stage(n, x + d8::C7 * h, &y1, &mut fcn)?;
+        for i in 0..n {
+            y1[i] = y[i]
+                + h * (d8::A81 * k1[i]
+                    + d8::A84 * stg4[i]
+                    + d8::A85 * stg5[i]
+                    + d8::A86 * k6[i]
+                    + d8::A87 * k7[i]);
+        }
+        let k8 = eval_stage(n, x + d8::C8 * h, &y1, &mut fcn)?;
+        for i in 0..n {
+            y1[i] = y[i]
+                + h * (d8::A91 * k1[i]
+                    + d8::A94 * stg4[i]
+                    + d8::A95 * stg5[i]
+                    + d8::A96 * k6[i]
+                    + d8::A97 * k7[i]
+                    + d8::A98 * k8[i]);
+        }
+        let k9 = eval_stage(n, x + d8::C9 * h, &y1, &mut fcn)?;
+        for i in 0..n {
+            y1[i] = y[i]
+                + h * (d8::A101 * k1[i]
+                    + d8::A104 * stg4[i]
+                    + d8::A105 * stg5[i]
+                    + d8::A106 * k6[i]
+                    + d8::A107 * k7[i]
+                    + d8::A108 * k8[i]
+                    + d8::A109 * k9[i]);
+        }
+        let k10 = eval_stage(n, x + d8::C10 * h, &y1, &mut fcn)?;
+        for i in 0..n {
+            y1[i] = y[i]
+                + h * (d8::A111 * k1[i]
+                    + d8::A114 * stg4[i]
+                    + d8::A115 * stg5[i]
+                    + d8::A116 * k6[i]
+                    + d8::A117 * k7[i]
+                    + d8::A118 * k8[i]
+                    + d8::A119 * k9[i]
+                    + d8::A1110 * k10[i]);
+        }
+        let k11 = eval_stage(n, x + d8::C11 * h, &y1, &mut fcn)?;
+        let xph = x + h;
+        for i in 0..n {
+            y1[i] = y[i]
+                + h * (d8::A121 * k1[i]
+                    + d8::A124 * stg4[i]
+                    + d8::A125 * stg5[i]
+                    + d8::A126 * k6[i]
+                    + d8::A127 * k7[i]
+                    + d8::A128 * k8[i]
+                    + d8::A129 * k9[i]
+                    + d8::A1210 * k10[i]
+                    + d8::A1211 * k11[i]);
+        }
+        let k12 = eval_stage(n, xph, &y1, &mut fcn)?;
+        nfcn += 11;
+
+        for i in 0..n {
+            k4[i] = d8::B1 * k1[i]
+                + d8::B6 * k6[i]
+                + d8::B7 * k7[i]
+                + d8::B8 * k8[i]
+                + d8::B9 * k9[i]
+                + d8::B10 * k10[i]
+                + d8::B11 * k11[i]
+                + d8::B12 * k12[i];
+            k5[i] = y[i] + h * k4[i];
+        }
+
+        let mut err = 0.0_f64;
+        let mut err2 = 0.0_f64;
+        for i in 0..n {
+            let sk = atol + rtol * y[i].abs().max(k5[i].abs());
+            let erri2 =
+                k4[i] - d8::BHH1 * k1[i] - d8::BHH2 * k9[i] - d8::BHH3 * k12[i];
+            let r2 = erri2 / sk;
+            err2 += r2 * r2;
+            let erri = d8::ER1 * k1[i]
+                + d8::ER6 * k6[i]
+                + d8::ER7 * k7[i]
+                + d8::ER8 * k8[i]
+                + d8::ER9 * k9[i]
+                + d8::ER10 * k10[i]
+                + d8::ER11 * k11[i]
+                + d8::ER12 * k12[i];
+            let r = erri / sk;
+            err += r * r;
+        }
+        let mut deno = err + 0.01 * err2;
+        if deno <= 0.0 {
+            deno = 1.0;
+        }
+        let err = h.abs() * err * (1.0 / ((n as f64) * deno)).sqrt();
+        if !err.is_finite() {
+            return Err(NumError::NonFiniteValue(
+                "non-finite local error in dop853",
+            ));
+        }
+
+        let fac11 = flexmesa_math::pow(err, expo1);
+        let fac = facc2.max(facc1.min(fac11 / SAFE));
+        let mut h_new = h / fac;
+
+        if err <= 1.0 {
+            naccpt += 1;
+            let k_next = eval_stage(n, xph, &k5, &mut fcn)?;
+            nfcn += 1;
+            let mut rc = [
+                vec![0.0; n],
+                vec![0.0; n],
+                vec![0.0; n],
+                vec![0.0; n],
+                vec![0.0; n],
+            ];
+            for i in 0..n {
+                let ydiff = k5[i] - y[i];
+                let bspl = h * k1[i] - ydiff;
+                rc[0][i] = y[i];
+                rc[1][i] = ydiff;
+                rc[2][i] = bspl;
+                rc[3][i] = ydiff - h * k_next[i] - bspl;
+            }
+            history.push((x, h, rc));
+            k1 = k_next;
+            y.copy_from_slice(&k5);
+            x = xph;
+            if last {
+                break;
+            }
+            if h_new.abs() > hmax {
+                h_new = posneg * hmax;
+            }
+            if reject {
+                h_new = posneg * h_new.abs().min(h.abs());
+            }
+            reject = false;
+        } else {
+            h_new = h / facc1.min(fac11 / SAFE);
+            reject = true;
+            if naccpt >= 1 {
+                nrejct += 1;
+            }
+            last = false;
+        }
+        h = h_new;
+    }
+
+    Ok(DopriResult {
+        y,
+        nfcn,
+        nstep,
+        naccpt,
+        nrejct,
+        history,
+    })
 }

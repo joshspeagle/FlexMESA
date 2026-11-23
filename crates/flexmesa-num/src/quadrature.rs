@@ -67,17 +67,18 @@ where
 }
 
 /// Evaluates $\int_{\min_x}^{\max_x} f(x)\,\mathrm{d}x$ via adaptive Simpson's
-/// 3/8 rule matching upstream `simp38` (`num/private/mod_integrate.f90`).
+/// 3/8 rule matching upstream `integrator` / `simp38`
+/// (`num/private/mod_integrate.f90`).
 ///
-/// Subdivides each interval $[a, b]$ into three equal sub-intervals of width
-/// $h / 3$ and applies Richardson extrapolation $(S_{\mathrm{fine}} -
-/// S_{\mathrm{coarse}}) / 15$ once $|S_{\mathrm{fine}} - S_{\mathrm{coarse}}|
-/// \le 15\,\epsilon$.
+/// Recursively bisects each interval $[a, b]$ at $(a + b)/2$ until
+/// $|S_1 - S_2| < \epsilon$ or $|S_1 - S_2| / S_1 < \epsilon$ (with `atol =
+/// rtol = eps`), returning the two-panel Simpson 3/8 sum $S_2$.
 ///
 /// # Errors
 ///
-/// Returns [`NumError::InvalidParameter`] on invalid tolerances or
-/// [`NumError::ConvergenceFailed`] if `max_steps` is exceeded.
+/// Returns [`NumError::InvalidParameter`] on invalid tolerances or bounds
+/// (`min_x > max_x`), or [`NumError::ConvergenceFailed`] if `max_steps` is
+/// exceeded.
 pub fn integrate<F>(
     mut func: F,
     min_x: f64,
@@ -88,34 +89,20 @@ pub fn integrate<F>(
 where
     F: FnMut(f64) -> f64,
 {
-    if !min_x.is_finite() || !max_x.is_finite() || eps <= 0.0 {
+    if !min_x.is_finite() || !max_x.is_finite() || min_x > max_x || eps <= 0.0 {
         return Err(NumError::InvalidParameter(
-            "bounds must be finite and eps > 0 in integrate",
+            "require finite min_x <= max_x and eps > 0 in integrate",
         ));
     }
     if min_x == max_x {
         return Ok((0.0, 0));
     }
-    let mut ncalls = 2usize;
-    let fa = func(min_x);
-    let fb = func(max_x);
-    let h = max_x - min_x;
-    let x1 = min_x + h / 3.0;
-    let x2 = min_x + 2.0 * h / 3.0;
-    let f1 = func(x1);
-    let f2 = func(x2);
-    ncalls += 2;
-    let s_whole = (h / 8.0) * (fa + 3.0 * f1 + 3.0 * f2 + fb);
-
-    let val = simp_rec(
+    let mut ncalls = 0usize;
+    let val = integrator_rec(
         &mut func,
         min_x,
         max_x,
-        fa,
-        f1,
-        f2,
-        fb,
-        s_whole,
+        eps,
         eps,
         0,
         &mut ncalls,
@@ -124,95 +111,72 @@ where
     Ok((val, ncalls))
 }
 
-/// Recursive trisection step for [`integrate`] reusing parent nodal
-/// evaluations at $a, m_1, m_2, b$ and evaluating six new interior abscissas.
-///
-/// Applies Richardson extrapolation $(S_{\mathrm{new}} - S_{\mathrm{prev}})/15$
-/// once the fine-coarse difference falls within $15\,\mathrm{tol}$.
-fn simp_rec<F: FnMut(f64) -> f64>(
+/// Evaluates the 4-point Simpson 3/8 rule on `[minx, maxx]` matching upstream
+/// `simp38` (`num/private/mod_integrate.f90:82-111`).
+fn simp38<F: FnMut(f64) -> f64>(
     f: &mut F,
-    a: f64,
-    b: f64,
-    fa: f64,
-    f1: f64,
-    f2: f64,
-    fb: f64,
-    s_prev: f64,
-    tol: f64,
+    minx: f64,
+    maxx: f64,
+    ncalls: &mut usize,
+) -> f64 {
+    let mut s = f(minx);
+    let x1 = (2.0 * minx + maxx) / 3.0;
+    s += 3.0 * f(x1);
+    let x2 = (minx + 2.0 * maxx) / 3.0;
+    s += 3.0 * f(x2);
+    s += f(maxx);
+    *ncalls += 4;
+    ((maxx - minx) / 8.0) * s
+}
+
+/// Recursive midpoint bisection driver matching upstream `integrator`
+/// (`num/private/mod_integrate.f90:30-79`).
+#[allow(clippy::manual_midpoint, clippy::too_many_arguments)]
+fn integrator_rec<F: FnMut(f64) -> f64>(
+    f: &mut F,
+    xlow: f64,
+    xhigh: f64,
+    atol: f64,
+    rtol: f64,
     depth: usize,
     ncalls: &mut usize,
     max_steps: usize,
 ) -> Result<f64, NumError> {
-    let h = b - a;
-    let m1 = a + h / 3.0;
-    let m2 = a + 2.0 * h / 3.0;
-    let a1 = a + h / 9.0;
-    let a2 = a + 2.0 * h / 9.0;
-    let b1 = m1 + h / 9.0;
-    let b2 = m1 + 2.0 * h / 9.0;
-    let c1 = m2 + h / 9.0;
-    let c2 = m2 + 2.0 * h / 9.0;
-    let fa1 = f(a1);
-    let fa2 = f(a2);
-    let fb1 = f(b1);
-    let fb2 = f(b2);
-    let fc1 = f(c1);
-    let fc2 = f(c2);
-    *ncalls += 6;
-    let s1 = ((m1 - a) / 8.0) * (fa + 3.0 * fa1 + 3.0 * fa2 + f1);
-    let s2 = ((m2 - m1) / 8.0) * (f1 + 3.0 * fb1 + 3.0 * fb2 + f2);
-    let s3 = ((b - m2) / 8.0) * (f2 + 3.0 * fc1 + 3.0 * fc2 + fb);
-    let s_new = s1 + s2 + s3;
-    if (depth >= 2 && (s_new - s_prev).abs() <= tol) || depth >= 28 {
-        return Ok(s_new + (s_new - s_prev) / 15.0);
-    }
-    if max_steps > 0 && *ncalls > max_steps {
+    if depth >= 55 || (max_steps > 0 && *ncalls > max_steps) {
         return Err(NumError::ConvergenceFailed(
             "max_steps exceeded in integrate",
         ));
     }
-    let t3 = tol / 3.0;
-    let r1 = simp_rec(
-        f,
-        a,
-        m1,
-        fa,
-        fa1,
-        fa2,
-        f1,
-        s1,
-        t3,
-        depth + 1,
-        ncalls,
-        max_steps,
-    )?;
-    let r2 = simp_rec(
-        f,
-        m1,
-        m2,
-        f1,
-        fb1,
-        fb2,
-        f2,
-        s2,
-        t3,
-        depth + 1,
-        ncalls,
-        max_steps,
-    )?;
-    let r3 = simp_rec(
-        f,
-        m2,
-        b,
-        f2,
-        fc1,
-        fc2,
-        fb,
-        s3,
-        t3,
-        depth + 1,
-        ncalls,
-        max_steps,
-    )?;
-    Ok(r1 + r2 + r3)
+    let xmid = (xhigh + xlow) / 2.0;
+    let val1 = simp38(f, xlow, xhigh, ncalls);
+    let val2 = simp38(f, xlow, xmid, ncalls) + simp38(f, xmid, xhigh, ncalls);
+    if val1 == 0.0 || val2 == 0.0 {
+        return Ok(val2);
+    }
+    let diff = (val1 - val2).abs();
+    if diff < atol || diff / val1 < rtol {
+        Ok(val2)
+    } else {
+        let left = integrator_rec(
+            f,
+            xlow,
+            xmid,
+            atol,
+            rtol,
+            depth + 1,
+            ncalls,
+            max_steps,
+        )?;
+        let right = integrator_rec(
+            f,
+            xmid,
+            xhigh,
+            atol,
+            rtol,
+            depth + 1,
+            ncalls,
+            max_steps,
+        )?;
+        Ok(left + right)
+    }
 }

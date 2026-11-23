@@ -106,14 +106,6 @@ where
             "non-finite initial residual norm in newton_solve",
         ));
     }
-    if res_norm <= config.tol_residual_norm {
-        return Ok(NewtonResult {
-            y,
-            iterations: 0,
-            residual_norm: res_norm,
-            correction_norm: 0.0,
-        });
-    }
 
     let mut neg_res = vec![0.0; n];
     let mut y_trial = vec![0.0; n];
@@ -166,9 +158,9 @@ where
         res = res_trial;
         res_norm = res_trial_norm;
 
-        if (corr_norm * coeff <= config.tol_correction_norm
-            && max_corr * coeff <= config.tol_max_correction)
-            || res_norm <= config.tol_residual_norm
+        if corr_norm * coeff <= config.tol_correction_norm
+            && max_corr * coeff <= config.tol_max_correction
+            && res_norm <= config.tol_residual_norm
         {
             return Ok(NewtonResult {
                 y,

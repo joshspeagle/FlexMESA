@@ -81,7 +81,8 @@ pub use root::{
     safe_root_with_guess, safe_root_without_brackets,
 };
 pub use rosenbrock::{
-    rosenbrock_banded, rosenbrock_dae_diag, rosenbrock_dense, RosenbrockResult,
+    rosenbrock_banded, rosenbrock_banded_autonomous, rosenbrock_dae_diag,
+    rosenbrock_dense, rosenbrock_dense_autonomous, RosenbrockResult,
 };
 pub use rosenbrock_coeffs::RosenbrockVariant;
 pub use search::{

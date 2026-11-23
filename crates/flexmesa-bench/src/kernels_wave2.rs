@@ -30,7 +30,6 @@ use flexmesa_ionization::{
     eval_ionization, Fe56He4Table, IonTableGrid, NUM_ION_VALS,
 };
 
-use crate::bicub_fast::eval_bicub_prevalidated;
 use crate::kernels_micro::bench_zone_fn;
 use crate::BenchRecord;
 
@@ -155,16 +154,7 @@ pub fn bench_ion_fe56(
             let ev = tbl.eval_full(lne[k], lt[k]).expect("valid Fe56 query");
             [ev.f, ev.df_dx, ev.df_dy]
         },
-        |k| {
-            let [f, df_dx, df_dy, _, _, _] = eval_bicub_prevalidated(
-                lne[k],
-                lt[k],
-                &tbl.log_ne,
-                &tbl.log_t,
-                &tbl.coeffs,
-            );
-            [f, df_dx, df_dy]
-        },
+        |k| tbl.eval_val_grad_prevalidated(lne[k], lt[k]),
     )
 }
 

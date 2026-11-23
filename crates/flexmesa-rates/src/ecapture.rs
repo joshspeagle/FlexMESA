@@ -13,6 +13,18 @@ use crate::types::{
     CoulombMuiOption, CoulombVsOption, RatesError, WeakRateEval,
 };
 
+/// Matches MESA `auto_diff_real_2var_order1` division (`x * powm1(y)` in
+/// `auto_diff/private/auto_diff_real_2var_order1_module.f90:1214-1245`) in
+/// `NumericsMode::Strict`.
+#[inline]
+fn ad_div(lhs: f64, rhs: f64) -> f64 {
+    if flexmesa_math::numerics_mode() == flexmesa_math::NumericsMode::Strict {
+        lhs * flexmesa_math::powm1(rhs)
+    } else {
+        lhs / rhs
+    }
+}
+
 /// Evaluates the dimensionless ion excess Coulomb chemical potential
 /// $\mu_{\mathrm{I}} / (k_{\mathrm{B}} T)$ (`do_mui_coulomb` in `rates/private/coulomb.f90`).
 #[must_use]
@@ -28,8 +40,8 @@ pub fn eval_mui_coulomb(
         return 0.0;
     }
     let ye = zbar / abar;
-    let game = 2.275e5 * flexmesa_math::pow(den * ye, ONE_THIRD) / temp;
-    let rs = 1.388 * flexmesa_math::pow(den * ye, -ONE_THIRD);
+    let game = ad_div(2.275e5 * flexmesa_math::pow(ye * den, ONE_THIRD), temp);
+    let rs = 1.388 * flexmesa_math::pow(ye * den, -ONE_THIRD);
 
     match which_mui {
         CoulombMuiOption::None => 0.0,
@@ -48,7 +60,7 @@ pub fn eval_mui_coulomb(
             let gam = game * flexmesa_math::pow(z, 5.0 / 3.0);
             let gam14 = flexmesa_math::pow(gam, 0.25);
             -0.898004 * gam + 4.0 * 0.96786 * gam14
-                - 4.0 * 0.220703 / gam14
+                - ad_div(4.0 * 0.220703, gam14)
                 - 0.86097 * flexmesa_math::log(gam)
                 - 2.52692
         }
@@ -58,11 +70,10 @@ pub fn eval_mui_coulomb(
             let a1 = -0.907347_f64;
             let a2 = 0.62849_f64;
             let a3 = -3.0_f64.sqrt() / 2.0 - a1 / a2.sqrt();
+            let ga2 = ad_div(gam, a2);
             let fii = a1
                 * ((gam * (a2 + gam)).sqrt()
-                    - a2 * flexmesa_math::log(
-                        (gam / a2).sqrt() + (1.0 + gam / a2).sqrt(),
-                    ))
+                    - a2 * flexmesa_math::log(ga2.sqrt() + (1.0 + ga2).sqrt()))
                 + 2.0 * a3 * (gam.sqrt() - flexmesa_math::atan(gam.sqrt()));
             let log_z = flexmesa_math::log(z);
             let a = 1.11 * flexmesa_math::pow(z, 0.475);
@@ -76,27 +87,35 @@ pub fn eval_mui_coulomb(
                 * flexmesa_math::pow(z, 7.0 / 3.0)
                 * (1.0 - flexmesa_math::pow(z, -ONE_THIRD)
                     + 0.2 * flexmesa_math::pow(z, -0.5));
+            let z_over_rs = ad_div(z, rs);
             let g1 = 1.0
-                + (0.78 / (21.0 + game * flexmesa_math::pow(z / rs, 3.0)))
-                    * (game / z).sqrt();
+                + ad_div(
+                    0.78,
+                    21.0 + game * flexmesa_math::pow(z_over_rs, 3.0),
+                ) * ad_div(game, z).sqrt();
             let g2 = 1.0
-                + ((z - 1.0) / 9.0)
-                    * (1.0 + 1.0 / (0.001 * z * z + 2.0 * game))
-                    * flexmesa_math::pow(rs, 3.0)
-                    / (1.0 + 6.0 * rs * rs);
-            let x = 0.014005 / rs;
-            let h1 = 1.0
-                / (1.0
-                    + flexmesa_math::pow(x / (1.0 + x * x).sqrt(), 6.0)
-                        * flexmesa_math::pow(z, -ONE_THIRD));
-            let h2 = 1.0 / (1.0 + x * x).sqrt();
-            let fie = -game
-                * (cdh * game.sqrt()
-                    + ctf * a * flexmesa_math::pow(game, nu) * g1 * h1)
-                / (1.0
-                    + (b * game.sqrt()
-                        + a * g2 * flexmesa_math::pow(game, nu) / rs)
-                        * h2);
+                + ad_div(
+                    ((z - 1.0) / 9.0)
+                        * (1.0 + ad_div(1.0, 0.001 * z * z + 2.0 * game))
+                        * flexmesa_math::pow(rs, 3.0),
+                    1.0 + 6.0 * rs * rs,
+                );
+            let x = ad_div(0.014005, rs);
+            let sq1x2 = (1.0 + x * x).sqrt();
+            let h1 = ad_div(
+                1.0,
+                1.0 + flexmesa_math::pow(ad_div(x, sq1x2), 6.0)
+                    * flexmesa_math::pow(z, -ONE_THIRD),
+            );
+            let h2 = ad_div(1.0, sq1x2);
+            let fie = ad_div(
+                -game
+                    * (cdh * game.sqrt()
+                        + ctf * a * flexmesa_math::pow(game, nu) * g1 * h1),
+                1.0 + (b * game.sqrt()
+                    + ad_div(a * g2 * flexmesa_math::pow(game, nu), rs))
+                    * h2,
+            );
             fii + fie
         }
     }
@@ -117,12 +136,12 @@ pub fn eval_vs_coulomb(
         return 0.0;
     }
     let ye = zbar / abar;
-    let rs = 1.388 * flexmesa_math::pow(den * ye, -ONE_THIRD);
+    let rs = 1.388 * flexmesa_math::pow(ye * den, -ONE_THIRD);
     match which_vs {
         CoulombVsOption::None => 0.0,
         CoulombVsOption::Throwe1983 => 2.0 * z * FINE * (FINE / PI).sqrt(),
         CoulombVsOption::Itoh2002 => {
-            let s = 0.5 * (flexmesa_math::log10(rs.max(1.0e-5)) + 3.0);
+            let s = ad_div(flexmesa_math::log10(rs.max(1.0e-5)) + 3.0, 2.0);
             let coeffs = [
                 0.0450861,
                 0.00113078,
@@ -178,9 +197,9 @@ pub fn eval_ecapture_pair(
     let (states_i, states_f, trans, z_lhs, z_rhs, q_tot) =
         cat.special_ecapture_data(lhs_name, rhs_name)?;
 
-    let kbt = 1.0e3 * KEV * t9; // MeV
+    let kbt = (1.0e3 * KEV) * t9; // MeV
     let mec2 = ME * CLIGHT * CLIGHT / MEV_TO_ERGS; // MeV
-    let beta = mec2 / kbt;
+    let beta = ad_div(mec2, kbt);
     let eta = eta_k + beta;
     if eta < 2.0 * beta {
         return Ok(WeakRateEval {
@@ -202,13 +221,15 @@ pub fn eval_ecapture_pair(
     let dmu = eval_mui_coulomb(which_mui, temp, den, zbar, abar, z_lhs)
         - eval_mui_coulomb(which_mui, temp, den, zbar, abar, z_rhs);
     let dq = dmu * kbt;
-    let f_mue = 1.0 - eval_vs_coulomb(which_vs, temp, den, zbar, abar, z_lhs);
+    let f_mue = -eval_vs_coulomb(which_vs, temp, den, zbar, abar, z_lhs) + 1.0;
     let eta_tilde = f_mue * eta;
 
-    let zpart: f64 = states_i
+    let bf: Vec<f64> = states_i
         .iter()
-        .map(|&(e, j)| (2.0 * j + 1.0) * flexmesa_math::exp(-e / kbt))
-        .sum();
+        .map(|&(e, j)| (2.0 * j + 1.0) * flexmesa_math::exp(ad_div(-e, kbt)))
+        .collect();
+    let zpart: f64 = bf.iter().sum();
+    let ppi: Vec<f64> = bf.iter().map(|&b| ad_div(b, zpart)).collect();
 
     let is_ec = (z_lhs - z_rhs) > 0.0;
     let (qx, ggm) = if is_ec {
@@ -221,9 +242,9 @@ pub fn eval_ecapture_pair(
     let mut eps_nu = 0.0;
 
     for &(si, sf, logft) in trans {
-        let (ei, ji) = states_i[si - 1];
+        let ei = states_i[si - 1].0;
         let ef = states_f[sf - 1].0;
-        let zeta = (qx + dq - ef + ei) / kbt;
+        let zeta = ad_div(qx + dq - ef + ei, kbt);
         let (ie, je) = if is_ec {
             if zeta > -beta {
                 (0.0, 0.0)
@@ -235,10 +256,12 @@ pub fn eval_ecapture_pair(
                     fd_complete(4, y),
                     fd_complete(5, y),
                 );
-                let ie_v = (f4 - 2.0 * zeta * f3 + zeta * zeta * f2)
-                    / flexmesa_math::pow5(beta);
-                let je_v = (f5 - 2.0 * zeta * f4 + zeta * zeta * f3)
-                    / flexmesa_math::pow6(beta);
+                let c3 = -2.0 * zeta;
+                let c2 = zeta * zeta;
+                let ie_v =
+                    ad_div(f4 + c3 * f3 + c2 * f2, flexmesa_math::pow5(beta));
+                let je_v =
+                    ad_div(f5 + c3 * f4 + c2 * f3, flexmesa_math::pow6(beta));
                 (ie_v, je_v)
             }
         } else if zeta < beta {
@@ -260,15 +283,22 @@ pub fn eval_ecapture_pair(
                 fd_complete(4, y2),
                 fd_complete(5, y2),
             );
+            let c3_1 = -2.0 * zeta;
+            let c2_1 = zeta * zeta;
+            let ie_base = f4_1 + c3_1 * f3_1 + c2_1 * f2_1;
+            let je_base = f5_1 + c3_1 * f4_1 + c2_1 * f3_1;
+
             let c3 = 2.0 * zeta - 4.0 * beta;
             let c2 = 6.0 * beta * beta - 6.0 * beta * zeta + zeta * zeta;
             let c1 = -2.0
                 * beta
                 * (2.0 * beta * beta - 3.0 * beta * zeta + zeta * zeta);
             let c0 = beta * beta * (beta - zeta) * (beta - zeta);
-            let ie_v = ((f4_1 - 2.0 * zeta * f3_1 + zeta * zeta * f2_1)
-                - (f4_2 + c3 * f3_2 + c2 * f2_2 + c1 * f1_2 + c0 * f0_2))
-                / flexmesa_math::pow5(beta);
+            let ie_v = ad_div(
+                ie_base
+                    - (f4_2 + c3 * f3_2 + c2 * f2_2 + c1 * f1_2 + c0 * f0_2),
+                flexmesa_math::pow5(beta),
+            );
 
             let d4 = 3.0 * zeta - 5.0 * beta;
             let d3 =
@@ -283,29 +313,34 @@ pub fn eval_ecapture_pair(
             // `rates/private/eval_psi.f90:151`:
             // `c0 = -beta*beta*pow3(beta-zeta)`.
             let d0 = -beta * beta * flexmesa_math::pow3(beta - zeta);
-            let je_v = ((f5_1 - 2.0 * zeta * f4_1 + zeta * zeta * f3_1)
-                - (f5_2
-                    + d4 * f4_2
-                    + d3 * f3_2
-                    + d2 * f2_2
-                    + d1 * f1_2
-                    + d0 * f0_2))
-                / flexmesa_math::pow6(beta);
+            let je_v = ad_div(
+                je_base
+                    - (f5_2
+                        + d4 * f4_2
+                        + d3 * f3_2
+                        + d2 * f2_2
+                        + d1 * f1_2
+                        + d0 * f0_2),
+                flexmesa_math::pow6(beta),
+            );
             (ie_v, je_v)
         };
 
         let ie_gm = ggm * ie;
         let je_gm = ggm * je;
         if ie_gm > 0.0 && je_gm > 0.0 {
-            let prob_i =
-                (2.0 * ji + 1.0) * flexmesa_math::exp(-ei / kbt) / zpart;
+            let prob_i = ppi[si - 1];
             let ln2ft = LN2 * flexmesa_math::exp10(-logft);
             lam += ie_gm * ln2ft * prob_i;
             eps_nu += mec2 * je_gm * ln2ft * prob_i;
         }
     }
 
-    let qneu = if lam > 1.0e-30 { eps_nu / lam } else { 0.0 };
+    let qneu = if lam > 1.0e-30 {
+        ad_div(eps_nu, lam)
+    } else {
+        0.0
+    };
     Ok(WeakRateEval {
         lambda: lam,
         dlambda_dln_t: 0.0,

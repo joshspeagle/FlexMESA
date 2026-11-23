@@ -21,7 +21,7 @@
         "verified_total": 5640,
         "pct_ported": 35.1,
         "pct_verified": 4.7,
-        "rust_lines": 89265,
+        "rust_lines": 89677,
         "python_jax_lines": 3869
       },
       {
@@ -174,7 +174,7 @@
         "verified_total": 0,
         "pct_ported": 0.0,
         "pct_verified": 0.0,
-        "rust_lines": 2476,
+        "rust_lines": 2561,
         "python_jax_lines": 984
       },
       {
@@ -456,7 +456,7 @@
     },
     "infrastructure_lines": {
       "rust_bridge_testing_bench": 19428,
-      "python_testing_bench": 17096
+      "python_testing_bench": 17102
     }
   },
   "numerics": {
@@ -595,7 +595,7 @@
         "no_reference_yet": 4,
         "strict_validated": 46,
         "diagnostic_runs": 44,
-        "reached_termination": 39,
+        "reached_termination": 40,
         "within_numeric_tol": 6,
         "passing": 1,
         "declared_gaps": 85,
@@ -680,12 +680,12 @@
     {
       "namelist": "star &controls",
       "upstream_scalars": 1444,
-      "matched_in_flexmesa": 1113,
-      "defaults_agree": 1113,
+      "matched_in_flexmesa": 1120,
+      "defaults_agree": 1120,
       "value_mismatch": 0,
       "disabled_limit_none": 0,
       "skipped_unparseable_rust": 17,
-      "unimplemented": 314
+      "unimplemented": 307
     },
     {
       "namelist": "star &star_job",
@@ -1162,7 +1162,7 @@
         "issues": "#143, #160"
       }
     ],
-    "python_xfail_or_skip_count": 14,
+    "python_xfail_or_skip_count": 15,
     "python_skips": [
       {
         "location": "tests/test_bench.py:149",
@@ -1200,6 +1200,11 @@
         "issues": "#154, #358"
       },
       {
+        "location": "tests/test_star_wave4_3.py:193",
+        "reason": "pytest.mark.xfail( strict=True, reason=( \"#385: with dq as upstream (no renormalization, #381), the H1 \" \"conservation identity after apply_wind_and_adjust_mass misses its \" \"rtol=1e-11 oracle by 1.1e-11 (exact sums give the same); the bound \" \"was set on the non-upstream renormalized mesh and has not been \" \"measured against MESA 26.4.1\" ), )",
+        "issues": "#381, #385"
+      },
+      {
         "location": "tests/test_star_wave4_4.py:92",
         "reason": "pytest.mark.xfail( strict=True, reason=( \"#154: FlexMESA's pre-MS model differs from upstream \" \"build_pre_ms_model (measured on the 7 Msun custom_colors model: \" \"initial residual norm 2.95e-5 against MESA 26.4.1's 1.89e-5 at the \" \"upstream first-step dt, star/private/init.f90:1007). This test \" \"forces a 10-yr coupled step on a 4 Msun pre-MS model, which with \" \"upstream's do_block_multiply_xa (#358) ends in a singular \" \"block-tridiagonal matrix at the second Newton iteration; this 4 \" \"Msun setup has not been run in MESA\" ), )",
         "issues": "#154, #358"
@@ -1220,12 +1225,12 @@
         "issues": "#156, #295"
       },
       {
-        "location": "tests/test_wave4_bench.py:151",
+        "location": "tests/test_wave4_bench.py:154",
         "reason": "pytest.mark.xfail( strict=True, reason=( \"#295: Rust do1_mlt_2 takes the face radiation pressure from the \" \"face temperature (MESA 26.4.1 star_utils.f90:3838-3843, #291); \" \"the frozen JAX face-MLT twin still interpolates the cell values \" \"(measured max_rel_err 8.9e-3).\" ), )",
         "issues": "#291, #295"
       },
       {
-        "location": "tests/test_wave4_bench.py:166",
+        "location": "tests/test_wave4_bench.py:169",
         "reason": "pytest.mark.xfail( strict=True, reason=( \"#295: Rust eval_face_dm_bar at k = nz - 1 uses 0.5*(dm[k-1] + dm[k]) \" \"(MESA 26.4.1 star/private/hydro_momentum.f90:191-196, #340); \" \"frozen JAX eval_hydro_residuals_jax still uses dm_bar[nz - 1] \" \"(measured max_rel_err 9.73e-3).\" ), )",
         "issues": "#295, #340"
       },
@@ -1341,7 +1346,7 @@
       {
         "phase": "Phase C",
         "open": 18,
-        "closed": 4,
+        "closed": 5,
         "issues": [
           {
             "number": 152,
@@ -1441,7 +1446,7 @@
           {
             "number": 381,
             "title": "[Parity] set_qs and normalize_dqs depart from upstream; every model read from a file is renormalized",
-            "state": "open"
+            "state": "closed"
           },
           {
             "number": 385,
@@ -1451,6 +1456,11 @@
           {
             "number": 402,
             "title": "[Audit C3] Pre-MS relax phase: port do_internal_evolve and do_relax_num_steps (init.f90:1077-1118)",
+            "state": "open"
+          },
+          {
+            "number": 414,
+            "title": "[Parity] make_co_wd: first pre-MS relax step does not converge where MESA's retry does (surface zones)",
             "state": "open"
           }
         ]
@@ -1503,11 +1513,6 @@
     ],
     "open_pull_requests": [
       {
-        "number": 378,
-        "title": "Wire atm_option = irradiated_grey and atm_irradiated_* controls (#376)",
-        "draft": true
-      },
-      {
         "number": 379,
         "title": "Port Wave 1 history columns and pure-StarModel siblings (#374)",
         "draft": true
@@ -1518,14 +1523,9 @@
         "draft": true
       },
       {
-        "number": 384,
-        "title": "fix(star): set_qs and normalize_dqs follow upstream; models read from file are not renormalized (#381)",
-        "draft": true
-      },
-      {
         "number": 387,
         "title": "fix(star): adjust_mass composition remap as upstream set_xa/set1_xa (#385)",
-        "draft": true
+        "draft": false
       },
       {
         "number": 392,
@@ -1540,6 +1540,36 @@
       {
         "number": 401,
         "title": "feat(star): create_initial_model as upstream build_initial_model (#154)",
+        "draft": true
+      },
+      {
+        "number": 403,
+        "title": "fix(net): resolve MESA 26.4.1 eps_nuc AUX parity divergences (0 ULP)",
+        "draft": true
+      },
+      {
+        "number": 405,
+        "title": "fix(star): align change_model_network with MESA 26.4.1 and triage post-#377 STATE composition",
+        "draft": true
+      },
+      {
+        "number": 406,
+        "title": "fix(kap): match MESA 26.4.1 opacity AUX step-dump parity at 0 ULP (#404)",
+        "draft": true
+      },
+      {
+        "number": 411,
+        "title": "feat(star): add upstream set_z/set_y and composition-relax helpers (#408)",
+        "draft": true
+      },
+      {
+        "number": 416,
+        "title": "feat(star): pre-MS and create_initial_model relax phase via do_internal_evolve (#402)",
+        "draft": true
+      },
+      {
+        "number": 417,
+        "title": "Fix MLT gradT and mlt_vc divergences against MESA 26.4.1 (#393)",
         "draft": true
       }
     ],
@@ -1947,6 +1977,14 @@
       {
         "number": 400,
         "title": "[Deferred bug] build_initial_model integration index can pass nzmax (create_initial_model.f90:342)",
+        "state": "open",
+        "kind": "upstream-bug",
+        "parity_pending": false,
+        "needs_confirmation": false
+      },
+      {
+        "number": 415,
+        "title": "[Deferred bug] relax_to_radiative_core computes a 1000-yr timestep cap but never applies it (relax.f90:3447, 3483-3485)",
         "state": "open",
         "kind": "upstream-bug",
         "parity_pending": false,
@@ -3072,6 +3110,45 @@
       "closed_140": "19",
       "total_140": "41",
       "deferred_169": "51"
+    },
+    {
+      "date_utc": "2026-11-23",
+      "commit": "72eea1e",
+      "event": "main merge",
+      "engine_ported_pct": "30.7",
+      "all_verified_pct": "1.1",
+      "cases_passing": "4",
+      "rust_cov_pct": "76.2",
+      "python_cov_pct": "87.7",
+      "closed_140": "19",
+      "total_140": "41",
+      "deferred_169": "51"
+    },
+    {
+      "date_utc": "2026-11-23",
+      "commit": "125b0ab",
+      "event": "main merge",
+      "engine_ported_pct": "30.7",
+      "all_verified_pct": "1.1",
+      "cases_passing": "4",
+      "rust_cov_pct": "76.2",
+      "python_cov_pct": "87.7",
+      "closed_140": "20",
+      "total_140": "42",
+      "deferred_169": "52"
+    },
+    {
+      "date_utc": "2026-11-23",
+      "commit": "f418498",
+      "event": "main merge",
+      "engine_ported_pct": "30.7",
+      "all_verified_pct": "1.1",
+      "cases_passing": "4",
+      "rust_cov_pct": "76.2",
+      "python_cov_pct": "87.7",
+      "closed_140": "20",
+      "total_140": "42",
+      "deferred_169": "52"
     }
   ]
 }

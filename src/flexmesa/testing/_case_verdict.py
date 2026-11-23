@@ -224,7 +224,10 @@ def resolve_binary_component_reference_paths(
     """Locate stored ``LOGS1``/``LOGS2`` component reference tracks."""
     repo = case_manifest.repo_root()
     if root_dir is not None and root_dir.resolve() != repo.resolve():
-        search_roots = [root_dir]
+        # The fetched bundle holds the binary references: keep it as the
+        # fallback for an overridden root, as `resolve_reference_history_path`
+        # does (#409).
+        search_roots = [root_dir, fetch.resolve_mesa_histories_dir()]
     else:
         search_roots = [repo, fetch.resolve_mesa_histories_dir()]
 
@@ -270,7 +273,10 @@ def resolve_full_reference_history_path(
     """
     repo = case_manifest.repo_root()
     if root_dir is not None and root_dir.resolve() != repo.resolve():
-        search_roots = [root_dir]
+        # The fetched bundle holds the binary references: keep it as the
+        # fallback for an overridden root, as `resolve_reference_history_path`
+        # does (#409).
+        search_roots = [root_dir, fetch.resolve_mesa_histories_dir()]
     else:
         search_roots = [repo, fetch.resolve_mesa_histories_dir()]
 

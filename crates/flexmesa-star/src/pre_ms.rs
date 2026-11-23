@@ -538,6 +538,9 @@ pub fn build_pre_ms_model_with_configs(
         model.cell_xa_mut(k).copy_from_slice(&xa_single);
     }
 
+    // Upstream normalizes the new pre-MS mesh before set_qs
+    // (star/private/pre_ms_model.f90:640-647, #381).
+    model.normalize_dqs()?;
     model.sync_mesh_and_pack()?;
     let mut r_inner3 = flexmesa_math::pow3(model.r_center);
     for k in (0..nz).rev() {

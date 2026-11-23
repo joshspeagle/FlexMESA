@@ -5,7 +5,7 @@
 //!
 //! Expected values are the upstream formulas evaluated by hand (exact
 //! fractions) or, for `normalize_dqs`, in Python in upstream's summation
-//! order; they are not FlexMESA output.
+//! order; they are not `FlexMESA` output.
 
 use flexmesa_star::{StarControls, StarJobControls, StarModel};
 

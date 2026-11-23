@@ -9,18 +9,17 @@
 //! and payload `SHA-256`. Corrupted cache files fail loudly rather than falling
 //! back silently.
 
+use std::fs::File;
 use std::io::{BufReader, Read};
 use std::path::{Path, PathBuf};
 
 use flexmesa_math::{numerics_mode, NumericsMode};
 use flexmesa_utils::cache_envelope::{
-    read_verified_cache, write_verified_cache_atomic,
-    CACHE_ENVELOPE_HEADER_BYTES, CACHE_ENVELOPE_MAGIC,
+    open_preverified_cache_streaming, open_verified_cache_streaming,
+    write_verified_cache_atomic,
 };
 use flexmesa_utils::sha256::compute_sha256_file;
-use flexmesa_utils::{
-    is_bad, resolve_flexmesa_cache_dir, RUNTIME_CACHE_SCHEMA_VERSION,
-};
+use flexmesa_utils::{is_bad, resolve_flexmesa_cache_dir};
 
 use crate::cms::table::CmsXTable;
 use crate::helm::table_io::resolve_flexmesa_data_dir;
@@ -118,7 +117,7 @@ fn load_or_populate_slice_cache_in<T>(
     encode_payload: impl FnOnce(&T) -> Result<Vec<u8>, String>,
     decode_payload: impl FnOnce(&[u8], &str) -> Result<T, EosError>,
 ) -> Result<T, EosError> {
-    let (loaded, _cache_path) = load_or_populate_slice_cache_in_with_path(
+    let (loaded, _cache_path) = load_or_populate_slice_cache_reader_with_path(
         context,
         stem,
         source_path,
@@ -126,13 +125,30 @@ fn load_or_populate_slice_cache_in<T>(
         cache_root,
         build_from_source,
         encode_payload,
-        decode_payload,
+        |mut reader, payload_len, label| {
+            let len = usize::try_from(payload_len).map_err(|_| {
+                map_cache_err(
+                    context,
+                    format!("{label}: runtime cache payload length overflow"),
+                )
+            })?;
+            let mut payload = vec![0_u8; len];
+            reader.read_exact(&mut payload).map_err(|e| {
+                map_cache_err(
+                    context,
+                    format!(
+                        "{label}: failed to read verified cache payload: {e}"
+                    ),
+                )
+            })?;
+            decode_payload(&payload, label)
+        },
     )?;
     Ok(loaded)
 }
 
 #[allow(clippy::too_many_arguments)]
-fn load_or_populate_slice_cache_in_with_path<T>(
+fn load_or_populate_slice_cache_reader_with_path<T>(
     context: &'static str,
     stem: &str,
     source_path: &Path,
@@ -140,7 +156,7 @@ fn load_or_populate_slice_cache_in_with_path<T>(
     cache_root: Option<&Path>,
     build_from_source: impl FnOnce() -> Result<T, EosError>,
     encode_payload: impl FnOnce(&T) -> Result<Vec<u8>, String>,
-    decode_payload: impl FnOnce(&[u8], &str) -> Result<T, EosError>,
+    decode_reader: impl FnOnce(BufReader<File>, u64, &str) -> Result<T, EosError>,
 ) -> Result<(T, Option<PathBuf>), EosError> {
     let source_sha = compute_sha256_file(source_path).map_err(|e| {
         map_cache_err(
@@ -154,14 +170,14 @@ fn load_or_populate_slice_cache_in_with_path<T>(
             slice_cache_path(cache_root, stem, &source_sha, numerics_mode());
         if cache_file.is_file() {
             let label = cache_file.display().to_string();
-            let payload = read_verified_cache(
+            let (reader, payload_len) = open_verified_cache_streaming(
                 &cache_file,
                 SLICE_CACHE_BUILDER_VERSION,
                 &payload_tag,
                 &source_sha,
             )
             .map_err(|detail| map_cache_err(context, detail))?;
-            let decoded = decode_payload(&payload, &label)?;
+            let decoded = decode_reader(reader, payload_len, &label)?;
             return Ok((decoded, Some(cache_file)));
         }
 
@@ -203,14 +219,29 @@ pub(crate) fn load_or_build_dt_slice_with_cache_path(
     kind: EosDtTableKind,
     stem: &str,
 ) -> Result<(EosDtXzTable, Option<PathBuf>), EosError> {
+    load_or_build_dt_slice_with_cache_path_with_buf(
+        mesa_data_dir,
+        kind,
+        stem,
+        None,
+    )
+}
+
+pub(crate) fn load_or_build_dt_slice_with_cache_path_with_buf(
+    mesa_data_dir: Option<&Path>,
+    kind: EosDtTableKind,
+    stem: &str,
+    reuse_dense: Option<Vec<EosDtVertex>>,
+) -> Result<(EosDtXzTable, Option<PathBuf>), EosError> {
     let flex_dir = resolve_flexmesa_data_dir();
     let cache_root = resolve_flexmesa_cache_dir();
-    load_or_build_dt_slice_with_cache_path_in(
+    load_or_build_dt_slice_with_cache_path_in_with_buf(
         &flex_dir,
         mesa_data_dir,
         cache_root.as_deref(),
         kind,
         stem,
+        reuse_dense,
     )
 }
 
@@ -239,9 +270,27 @@ pub(crate) fn load_or_build_dt_slice_with_cache_path_in(
     kind: EosDtTableKind,
     stem: &str,
 ) -> Result<(EosDtXzTable, Option<PathBuf>), EosError> {
+    load_or_build_dt_slice_with_cache_path_in_with_buf(
+        flex_dir,
+        mesa_data_dir,
+        cache_root,
+        kind,
+        stem,
+        None,
+    )
+}
+
+fn load_or_build_dt_slice_with_cache_path_in_with_buf(
+    flex_dir: &Path,
+    mesa_data_dir: Option<&Path>,
+    cache_root: Option<&Path>,
+    kind: EosDtTableKind,
+    stem: &str,
+    reuse_dense: Option<Vec<EosDtVertex>>,
+) -> Result<(EosDtXzTable, Option<PathBuf>), EosError> {
     let raw_bin = flex_dir.join("eos_4d_raw").join(format!("{stem}.raw"));
     if raw_bin.is_file() {
-        return load_or_populate_slice_cache_in_with_path(
+        return load_or_populate_slice_cache_reader_with_path(
             "load_or_build_dt_slice",
             stem,
             &raw_bin,
@@ -249,7 +298,16 @@ pub(crate) fn load_or_build_dt_slice_with_cache_path_in(
             cache_root,
             || EosDtXzTable::from_raw_bin(&raw_bin),
             encode_dt_slice_bytes,
-            decode_dt_slice_bytes,
+            |reader, payload_len, label| {
+                decode_dt_slice_from_reader(
+                    "load_or_build_dt_slice",
+                    reader,
+                    payload_len,
+                    label,
+                    reuse_dense,
+                    true,
+                )
+            },
         );
     }
 
@@ -286,7 +344,7 @@ pub(crate) fn load_or_build_dt_slice_with_cache_path_in(
             ));
         };
 
-        return load_or_populate_slice_cache_in_with_path(
+        return load_or_populate_slice_cache_reader_with_path(
             "load_or_build_dt_slice",
             stem,
             &source_path,
@@ -302,7 +360,16 @@ pub(crate) fn load_or_build_dt_slice_with_cache_path_in(
                 }
             },
             encode_dt_slice_bytes,
-            decode_dt_slice_bytes,
+            |reader, payload_len, label| {
+                decode_dt_slice_from_reader(
+                    "load_or_build_dt_slice",
+                    reader,
+                    payload_len,
+                    label,
+                    reuse_dense,
+                    true,
+                )
+            },
         );
     }
 
@@ -381,7 +448,7 @@ pub fn load_or_build_cms_slice_in(
 }
 
 const DT_SLICE_HEADER_BYTES: usize = 84;
-const STREAMING_CHUNK_VERTICES: usize = 64;
+const STREAMING_CHUNK_VERTICES: usize = 1024;
 
 fn parse_dt_slice_header(
     context: &'static str,
@@ -481,80 +548,28 @@ pub fn decode_dt_slice_bytes(
     Ok(tbl)
 }
 
-/// Reloads a previously SHA-256-verified `FMCENV01`/`FMDT4D01` cache file
-/// directly into a single `Vec<EosDtVertex>` without buffering the raw bytes
-/// or re-hashing the `.raw` source on eviction reload.
-pub(crate) fn reload_verified_dt_slice_streaming(
-    cache_file: &Path,
+/// Streams a `FMDT4D01` payload from an opened, envelope-checked `BufReader`
+/// directly into a single `Vec<EosDtVertex>` without buffering raw payload
+/// bytes in RAM, optionally reusing an evicted slice buffer to avoid kernel
+/// `mmap`/`munmap` page faults.
+fn decode_dt_slice_from_reader(
+    context: &'static str,
+    mut reader: BufReader<File>,
+    payload_len: u64,
+    label: &str,
+    reuse_dense: Option<Vec<EosDtVertex>>,
+    verify_dense: bool,
 ) -> Result<EosDtXzTable, EosError> {
-    let label = cache_file.display().to_string();
     let err = |msg: String| EosError::TableIo {
-        context: "reload_verified_dt_slice_streaming",
+        context,
         detail: format!("{label}: {msg}"),
     };
-    let file = std::fs::File::open(cache_file)
-        .map_err(|e| err(format!("failed to open cache file: {e}")))?;
-    let actual_len = file
-        .metadata()
-        .map_err(|e| err(format!("failed to stat cache file: {e}")))?
-        .len();
-    let mut reader = BufReader::with_capacity(256 * 1024, file);
-
-    let mut env_hdr = [0_u8; CACHE_ENVELOPE_HEADER_BYTES];
-    reader
-        .read_exact(&mut env_hdr)
-        .map_err(|e| err(format!("truncated FMCENV01 header: {e}")))?;
-    if &env_hdr[0..8] != CACHE_ENVELOPE_MAGIC {
-        return Err(err("invalid FMCENV01 magic".to_string()));
-    }
-    let schema_ver = u32::from_le_bytes(
-        env_hdr[8..12]
-            .try_into()
-            .map_err(|_| err("short schema version slice".to_string()))?,
-    );
-    if schema_ver != RUNTIME_CACHE_SCHEMA_VERSION {
-        return Err(err(format!(
-            "runtime cache schema version mismatch: expected \
-             {RUNTIME_CACHE_SCHEMA_VERSION}, got {schema_ver}"
-        )));
-    }
-    let builder_ver = u32::from_le_bytes(
-        env_hdr[12..16]
-            .try_into()
-            .map_err(|_| err("short builder version slice".to_string()))?,
-    );
-    if builder_ver != SLICE_CACHE_BUILDER_VERSION {
-        return Err(err(format!(
-            "runtime cache builder version mismatch: expected {SLICE_CACHE_BUILDER_VERSION}, got {builder_ver}"
-        )));
-    }
-    if &env_hdr[16..24] != DT_SLICE_BIN_MAGIC {
-        return Err(err("runtime cache payload tag mismatch".to_string()));
-    }
-    let payload_len = u64::from_le_bytes(
-        env_hdr[88..96]
-            .try_into()
-            .map_err(|_| err("short payload len slice".to_string()))?,
-    );
-    let expected_total = u64::try_from(CACHE_ENVELOPE_HEADER_BYTES)
-        .ok()
-        .and_then(|hdr| hdr.checked_add(payload_len))
-        .ok_or_else(|| err("runtime cache size overflow".to_string()))?;
-    if actual_len != expected_total {
-        return Err(err(format!(
-            "runtime cache length mismatch: expected {expected_total} bytes, got {actual_len}"
-        )));
-    }
-
     let mut dt_hdr = [0_u8; DT_SLICE_HEADER_BYTES];
     reader
         .read_exact(&mut dt_hdr)
         .map_err(|e| err(format!("truncated FMDT4D01 header: {e}")))?;
-    let (mut tbl, ngrid, expected_body) = parse_dt_slice_header(
-        "reload_verified_dt_slice_streaming",
-        &dt_hdr,
-        &label,
-    )?;
+    let (mut tbl, ngrid, expected_body) =
+        parse_dt_slice_header(context, &dt_hdr, label)?;
     let expected_payload = u64::try_from(DT_SLICE_HEADER_BYTES + expected_body)
         .map_err(|_| err("FMDT4D01 payload byte size overflow".to_string()))?;
     if payload_len != expected_payload {
@@ -563,7 +578,16 @@ pub(crate) fn reload_verified_dt_slice_streaming(
         )));
     }
 
-    let mut dense = Vec::with_capacity(ngrid);
+    let mut dense = match reuse_dense {
+        Some(mut buf) => {
+            buf.clear();
+            if buf.capacity() < ngrid {
+                buf.reserve(ngrid - buf.capacity());
+            }
+            buf
+        }
+        None => Vec::with_capacity(ngrid),
+    };
     let mut chunk_buf = vec![0_u8; STREAMING_CHUNK_VERTICES * VERTEX_BYTES];
     let mut remaining = ngrid;
     while remaining > 0 {
@@ -588,15 +612,50 @@ pub(crate) fn reload_verified_dt_slice_streaming(
         return Err(err("unexpected trailing bytes in cache file".to_string()));
     }
 
-    validate_dense_vertices(
-        "reload_verified_dt_slice_streaming",
-        &label,
-        tbl.num_log_qs,
-        tbl.num_log_ts,
-        &dense,
-    )?;
+    if verify_dense {
+        validate_dense_vertices(
+            context,
+            label,
+            tbl.num_log_qs,
+            tbl.num_log_ts,
+            &dense,
+        )?;
+    }
     tbl.dense = Some(dense);
     Ok(tbl)
+}
+
+/// Reloads a previously SHA-256-verified `FMCENV01`/`FMDT4D01` cache file
+/// directly into a single `Vec<EosDtVertex>` without buffering the raw bytes
+/// or re-hashing the `.raw` source on eviction reload.
+#[cfg_attr(not(test), allow(dead_code))]
+pub(crate) fn reload_verified_dt_slice_streaming(
+    cache_file: &Path,
+) -> Result<EosDtXzTable, EosError> {
+    reload_verified_dt_slice_streaming_with_buf(cache_file, None)
+}
+
+pub(crate) fn reload_verified_dt_slice_streaming_with_buf(
+    cache_file: &Path,
+    reuse_dense: Option<Vec<EosDtVertex>>,
+) -> Result<EosDtXzTable, EosError> {
+    let label = cache_file.display().to_string();
+    let (reader, payload_len) = open_preverified_cache_streaming(
+        cache_file,
+        SLICE_CACHE_BUILDER_VERSION,
+        DT_SLICE_BIN_MAGIC,
+    )
+    .map_err(|detail| {
+        map_cache_err("reload_verified_dt_slice_streaming", detail)
+    })?;
+    decode_dt_slice_from_reader(
+        "reload_verified_dt_slice_streaming",
+        reader,
+        payload_len,
+        &label,
+        reuse_dense,
+        false,
+    )
 }
 
 /// Reads a `FMDT4D01` binary slice file into an [`EosDtXzTable`].
@@ -1176,6 +1235,59 @@ mod tests {
             .expect_err("truncated cache must fail");
         assert!(
             err.to_string().contains("length mismatch"),
+            "unexpected err: {err}"
+        );
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_load_or_build_dt_slice_streams_and_detects_corruption() {
+        let dir = make_temp_dir("dt_streaming_hit");
+        let data_dir = dir.join("data");
+        let cache_v1 = dir.join("cache").join("v1");
+        let raw_dir = data_dir.join("eos_4d_raw");
+        std::fs::create_dir_all(&raw_dir).expect("mkdir raw");
+
+        let stem = "mesa-eosDT_stream_hit_test";
+        let raw_path = raw_dir.join(format!("{stem}.raw"));
+        std::fs::write(&raw_path, build_synthetic_dt_raw_bytes(false))
+            .expect("write raw");
+
+        let (built, maybe_cache) = load_or_build_dt_slice_with_cache_path_in(
+            &data_dir,
+            None,
+            Some(&cache_v1),
+            EosDtTableKind::OpalScvh,
+            stem,
+        )
+        .expect("cold build and cache");
+        let cache_file = maybe_cache.expect("expected cache path");
+
+        let (loaded, _same_path) = load_or_build_dt_slice_with_cache_path_in(
+            &data_dir,
+            None,
+            Some(&cache_v1),
+            EosDtTableKind::OpalScvh,
+            stem,
+        )
+        .expect("streaming verified hit");
+        assert_eq!(loaded.dense, built.dense);
+
+        let mut corrupt = std::fs::read(&cache_file).expect("read cache");
+        let tail = corrupt.len() - 1;
+        corrupt[tail] ^= 0x01;
+        std::fs::write(&cache_file, &corrupt).expect("write corrupt");
+        let err = load_or_build_dt_slice_with_cache_path_in(
+            &data_dir,
+            None,
+            Some(&cache_v1),
+            EosDtTableKind::OpalScvh,
+            stem,
+        )
+        .expect_err("corrupt first streaming hit must fail");
+        assert!(
+            err.to_string().contains("SHA-256 mismatch"),
             "unexpected err: {err}"
         );
 

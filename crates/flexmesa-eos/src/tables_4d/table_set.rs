@@ -3,9 +3,10 @@
 
 use crate::helm::table_io::resolve_mesa_data_dir;
 use crate::tables_4d::slice_cache::{
-    load_or_build_dt_slice_with_cache_path, reload_verified_dt_slice_streaming,
+    load_or_build_dt_slice_with_cache_path_with_buf,
+    reload_verified_dt_slice_streaming_with_buf,
 };
-use crate::tables_4d::spline::{EosDtTableKind, EosDtXzTable};
+use crate::tables_4d::spline::{EosDtTableKind, EosDtVertex, EosDtXzTable};
 use crate::types::EosError;
 use std::cell::RefCell;
 use std::collections::{HashMap, VecDeque};
@@ -16,12 +17,12 @@ use std::sync::{Arc, Mutex, OnceLock, Weak};
 /// Maximum number of 4D EOS `(kind, ix, iz)` slices (`OPAL/SCVH` and `FreeEOS`
 /// combined) retained simultaneously in RAM.
 ///
-/// Each full `(logQ, logT)` slice occupies `~78.75 MiB`: capping the unified
-/// Clock-LRU pool at `52` slices limits resident 4D table memory to `~4.00 GiB`
-/// regardless of whether a run uses `OPAL/SCVH`, `FreeEOS`, or both, fitting
-/// cleanly inside the `5.5-6.0 GiB` budget alongside `HELM` and solver buffers
-/// while holding the full active `fix_d_eos_dxa_partials` working set.
-const MAX_CACHED_4D_TABLES: usize = 52;
+/// Each full `(logQ, logT)` slice occupies `~78.75 MiB` (`80,631 KiB` RSS):
+/// capping the unified Clock-LRU pool at `43` slices limits resident 4D table
+/// memory to `~3.31 GiB` (`3.47 GB` in `10^6` KiB harness units), keeping pure-
+/// Rust worker RSS at `~4.11-4.13 GB` with `> 1.35 GB` headroom under `5.5 GB`
+/// while accommodating the active core/shell composition working set.
+const MAX_CACHED_4D_TABLES: usize = 43;
 
 /// Thread-local fast-path capacity (`16` weak handles covering stacked
 /// `FreeEOS` and `OPAL/SCVH` `(2 Z x 4 X)` cubic stencils).
@@ -55,14 +56,36 @@ thread_local! {
 fn evict_clock_lru(
     queue: &mut VecDeque<(SliceKey, Arc<CachedDtEntry>)>,
     target_len: usize,
-) {
+) -> Option<Vec<EosDtVertex>> {
+    let mut reclaimed_dense: Option<Vec<EosDtVertex>> = None;
     while queue.len() > target_len {
         let Some((k, entry)) = queue.pop_back() else {
             break;
         };
         if entry.referenced.swap(false, Ordering::Relaxed) {
             queue.push_front((k, entry));
+        } else if reclaimed_dense.is_none() {
+            if let Some(tbl) = Arc::into_inner(entry)
+                .and_then(|cached| Arc::into_inner(cached.table))
+            {
+                reclaimed_dense = tbl.dense;
+            }
         }
+    }
+    reclaimed_dense
+}
+
+fn evict_cold_slice_before_load(
+    slices: &Mutex<VecDeque<(SliceKey, Arc<CachedDtEntry>)>>,
+    max_cached: usize,
+) -> Option<Vec<EosDtVertex>> {
+    let mut guard = slices
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    if guard.len() >= max_cached {
+        evict_clock_lru(&mut guard, max_cached.saturating_sub(1))
+    } else {
+        None
     }
 }
 
@@ -269,6 +292,12 @@ impl EosDtTableSet {
             return Ok(Arc::clone(&hit.table));
         }
 
+        // Evict one cold slice before reading/decoding the incoming ~78.75 MiB
+        // slice so resident 4D slices never transiently peak at cap + 1, and
+        // reuse its backing Vec<EosDtVertex> to avoid page-fault overhead.
+        let mut reused_dense =
+            evict_cold_slice_before_load(&self.slices, MAX_CACHED_4D_TABLES);
+
         let verified_path = self
             .verified_cache_paths
             .lock()
@@ -276,7 +305,10 @@ impl EosDtTableSet {
             .get(&key)
             .cloned();
         let reloaded = if let Some(ref cache_file) = verified_path {
-            if let Ok(tbl) = reload_verified_dt_slice_streaming(cache_file) {
+            if let Ok(tbl) = reload_verified_dt_slice_streaming_with_buf(
+                cache_file,
+                reused_dense.take(),
+            ) {
                 Some(tbl)
             } else {
                 let _ = self
@@ -294,11 +326,13 @@ impl EosDtTableSet {
             tbl
         } else {
             let stem = eosdt_table_stem(kind, xz, ix_1based, iz_1based);
-            let (tbl, new_cache_path) = load_or_build_dt_slice_with_cache_path(
-                self.data_dir.as_deref(),
-                kind,
-                &stem,
-            )?;
+            let (tbl, new_cache_path) =
+                load_or_build_dt_slice_with_cache_path_with_buf(
+                    self.data_dir.as_deref(),
+                    kind,
+                    &stem,
+                    reused_dense.take(),
+                )?;
             if let Some(cache_file) = new_cache_path {
                 let _ = self
                     .verified_cache_paths
@@ -460,5 +494,33 @@ mod tests {
 
         // Clock sweep clears the second-chance bit on the surviving hot slice.
         assert!(!e_hot.referenced.load(Ordering::Relaxed));
+    }
+
+    #[test]
+    fn test_evict_cold_slice_before_load_drops_slot_below_capacity() {
+        let slices: Mutex<VecDeque<(SliceKey, Arc<CachedDtEntry>)>> =
+            Mutex::new(VecDeque::new());
+        let k1 = (EosDtTableKind::FreeEos, 1, 1);
+        let k2 = (EosDtTableKind::FreeEos, 2, 1);
+        let mut t1 = (*dummy_table()).clone();
+        t1.dense = Some(Vec::with_capacity(8));
+        let e1 = CachedDtEntry::new(Arc::new(t1));
+        let e2 = CachedDtEntry::new(dummy_table());
+        e1.referenced.store(false, Ordering::Relaxed);
+        e2.referenced.store(false, Ordering::Relaxed);
+        let e1_probe = Arc::downgrade(&e1);
+
+        {
+            let mut guard = slices.lock().expect("lock");
+            guard.push_front((k1, e1));
+            guard.push_front((k2, e2));
+        }
+
+        let reclaimed = evict_cold_slice_before_load(&slices, 2);
+        assert_eq!(e1_probe.strong_count(), 0);
+        assert!(reclaimed.is_some_and(|v| v.capacity() >= 8));
+        let guard = slices.lock().expect("lock");
+        assert_eq!(guard.len(), 1);
+        assert_eq!(guard[0].0, k2);
     }
 }

@@ -72,6 +72,7 @@ Scope and the `v0.1.0` definition are in [`SCOPE.md`](SCOPE.md). Work is tracked
 | 55 | The Binary Step Loop Resets `rho = dm/dV` Before Remeshing, and Retries Restore the Reset Model (`#363`) | In force | below |
 | 56 | Upstream MESA `26.4.1` Global Total-Energy Accounting (`#151`) | In force | below |
 | 57 | The Scheduled Campaign Gives Each Case 600 Seconds (`#382`) | In force | below |
+| 58 | Pull-Request Campaigns May Give Budget-Limited Cases a Short Budget; the Scheduled Campaign Runs in Shards (`#390`) | In force | below |
 
 ## Pre-audit decisions still in force
 
@@ -777,3 +778,16 @@ The text of these four entries predates the audit of 2026-11-16. The decisions s
   - *A per-case budget in `case_manifest.toml`*: bounds campaign time more tightly, but adds a field the harness, the gate and the baseline would all have to carry, for six cases.
   - *Declaring the six cases as known gaps at 300 s*: would stop counting `evolve_both_stars` as passing although it reaches MESA's termination within tolerances, and would make the declared gaps depend on machine speed.
 
+## DECISIONS #58: Pull-Request Campaigns May Give Budget-Limited Cases a Short Budget; the Scheduled Campaign Runs in Shards (`#390`)
+
+- **Date**: 2026-11-23
+- **Decision**:
+  1. **Short-budget tier**: `flexmesa harness run --short-budget-sec S` runs every case whose committed baseline row ended on the time budget (`run_status = "timeout"`) with `S` seconds and every other case with `--timeout-sec`. For those cases the gate compares the run as a prefix of the baseline row: it fails when the case takes no steps (baseline took some), ends other than on upstream's termination before the baseline's step count, or first leaves a track tolerance at an earlier model than the baseline (or inside the baseline's coordinate range when the baseline never left one). `--update-baseline` keeps the committed row when such a case ends on the short budget and replaces it when the case ends on a termination condition or an error. `--save-baseline` is refused with the short budget. Without the option nothing changes.
+  2. **Shards**: `harness run --shard I/N` runs one of `N` disjoint parts of the selected cases. Cases whose baseline row ended on a time or memory budget are dealt round-robin first, then the rest, each in manifest order. `harness merge` rebuilds the records from the shard `--json-out` reports, writes one case table and one baseline candidate, and applies the gate once; it fails the gate when a shard or a selected case is missing or a case appears twice, and refuses shards run with different settings. `campaign.yml` runs the full harness as `harness_shards` (default 8) matrix jobs plus a merge job that keeps the job name `full-history-harness`, the artifact `campaign-history-harness-artifacts` and the `baseline_candidate.json` of `DECISIONS #51`. `workflow_dispatch` on a pull request's branch runs that branch's campaign; `harness_only` skips the other jobs and `short_budget_sec` selects the short tier (no candidate is then saved).
+- **Why**: Strict mode is bit-identical across machines and thread counts, so a run of an unchanged engine reproduces a prefix of the baseline trajectory and only budget-limited outcomes depend on the machine. The cases that ended on the budget took about 65% of the last campaign's case time while showing nothing a prefix cannot show. Sharding turns one 355-minute job into parallel jobs of well under two hours.
+- **Limits**: A short-budget run does not show what happens after `S` seconds: a change that breaks such a case later in its trajectory passes the short-tier gate and is found by the next full campaign. The zero-steps rule assumes `S` covers model initialization; a case whose setup takes longer than `S` would be reported. Per-shard timing on GitHub runners is still machine-dependent, so budget-limited rows in a sharded candidate move as they did before (`DECISIONS #51`).
+- **Alternatives Rejected**:
+  - *Comparing step counts or final values of short-budget runs*: they differ from a longer run by design.
+  - *Writing short-budget rows into the baseline*: would replace a longer record of the same trajectory with a shorter one.
+  - *Skipping budget-limited cases in pull-request campaigns*: loses the check that they still evolve and do not diverge earlier.
+  - *Balancing shards by measured wall time*: the baseline normalizes wall times to zero for deterministic diffs, so there is no committed cost data.

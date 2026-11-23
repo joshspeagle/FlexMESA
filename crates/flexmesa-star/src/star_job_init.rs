@@ -147,9 +147,31 @@ pub(crate) fn init_or_update_model_from_bundle_outcome(
             ))
         })?
     } else if job.create_initial_model {
-        return Err(StarError::InvalidInput(String::from(
-            "create_initial_model = .true. is not yet implemented (#154)",
-        )));
+        // `do_load1_star` (`star/job/run_star_support.f90:1677-1699`) and
+        // `model_builder` (`star/private/init.f90:950-966, 1110-1117`).
+        if job.create_pre_ms_model {
+            return Err(StarError::InvalidInput(String::from(
+                "you have both create_initial_model and create_pre_main_sequence_model set true",
+            )));
+        }
+        if job.initial_model_relax_num_steps > 0 {
+            // Upstream builds the model, then relaxes it with
+            // `do_relax_num_steps` (`star/private/relax.f90:3323-3374`), a
+            // `do_internal_evolve` loop that FlexMESA does not port yet.
+            // Failing before the build gives the same outcome sooner.
+            return Err(StarError::InvalidInput(format!(
+                "create_initial_model with initial_model_relax_num_steps = {} needs \
+                 do_relax_num_steps (star/private/relax.f90:3323), which is not yet \
+                 implemented (#154)",
+                job.initial_model_relax_num_steps
+            )));
+        }
+        crate::create_initial_model::build_initial_model(
+            controls.clone(),
+            job.clone(),
+            bundle.eos_config,
+            bundle.kap_config.clone(),
+        )?
     } else {
         if !job.relax_z && (controls.initial_z - 0.02).abs() > 1.0e-4 {
             return Err(StarError::InvalidInput(format!(

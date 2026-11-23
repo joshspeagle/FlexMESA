@@ -549,6 +549,30 @@ pub struct StarJobControls {
     pub radius_in_cm_for_create_initial_model: f64,
     /// Mass in grams for `create_initial_model`.
     pub mass_in_gm_for_create_initial_model: f64,
+    /// First-guess $\log_{10} P_c$ for `create_initial_model`
+    /// (`center_logP_1st_try_for_create_initial_model`, `10.9` default).
+    pub center_log_p_1st_try_for_create_initial_model: f64,
+    /// First-guess entropy in units of $k_B / m_p$ for `create_initial_model`
+    /// (`entropy_1st_try_for_create_initial_model`, `11.5` default).
+    pub entropy_1st_try_for_create_initial_model: f64,
+    /// Maximum Newton tries for `create_initial_model`
+    /// (`max_tries_for_create_initial_model`, `100` default).
+    pub max_tries_for_create_initial_model: isize,
+    /// Tolerance on the relative mass error of `create_initial_model`
+    /// (`abs_e01_tolerance_for_create_initial_model`, `1d-4` default).
+    pub abs_e01_tolerance_for_create_initial_model: f64,
+    /// Tolerance on the relative radius error of `create_initial_model`
+    /// (`abs_e02_tolerance_for_create_initial_model`, `1d-4` default).
+    pub abs_e02_tolerance_for_create_initial_model: f64,
+    /// Relaxation steps after `create_initial_model`
+    /// (`initial_model_relax_num_steps`, `10` default).
+    pub initial_model_relax_num_steps: isize,
+    /// Runge-Kutta step-size accuracy for `create_initial_model`
+    /// (`initial_model_eps`, `0.05` default).
+    pub initial_model_eps: f64,
+    /// Put metals missing from the net into its heaviest isotope when building
+    /// a model (`dump_missing_metals_into_heaviest`, `.true.` default).
+    pub dump_missing_metals_into_heaviest: bool,
     /// Whether `use_other_build_initial_model` hook is enabled.
     pub use_other_build_initial_model: bool,
     /// Whether to construct a static radial stellar pulsation envelope (`create_RSP_model`).
@@ -786,6 +810,15 @@ impl Default for StarJobControls {
             create_initial_model: false,
             radius_in_cm_for_create_initial_model: 0.0,
             mass_in_gm_for_create_initial_model: 0.0,
+            // star/defaults/star_job.defaults:535-539, 549, 559, 739.
+            center_log_p_1st_try_for_create_initial_model: 10.9,
+            entropy_1st_try_for_create_initial_model: 11.5,
+            max_tries_for_create_initial_model: 100,
+            abs_e01_tolerance_for_create_initial_model: 1.0e-4,
+            abs_e02_tolerance_for_create_initial_model: 1.0e-4,
+            initial_model_relax_num_steps: 10,
+            initial_model_eps: 0.05,
+            dump_missing_metals_into_heaviest: true,
             use_other_build_initial_model: false,
             create_rsp_model: false,
             load_saved_model: false,

@@ -197,6 +197,16 @@ impl InlistBundle {
         let j = &mut self.job;
         sj.try_bool_into("star_job", &mut j.create_pre_ms_model, "create_pre_main_sequence_model")?;
         sj.try_usize_into("star_job", &mut j.pre_ms_relax_num_steps, "pre_ms_relax_num_steps", 0)?;
+        sj.try_f64_into("star_job", &mut j.center_log_p_1st_try_for_create_initial_model, "center_logP_1st_try_for_create_initial_model")?;
+        map_f64s!("star_job", sj, j, [
+            entropy_1st_try_for_create_initial_model,
+            abs_e01_tolerance_for_create_initial_model,
+            abs_e02_tolerance_for_create_initial_model,
+            initial_model_eps,
+        ]);
+        sj.try_isize_into("star_job", &mut j.max_tries_for_create_initial_model, "max_tries_for_create_initial_model")?;
+        sj.try_isize_into("star_job", &mut j.initial_model_relax_num_steps, "initial_model_relax_num_steps")?;
+        sj.try_bool_into("star_job", &mut j.dump_missing_metals_into_heaviest, "dump_missing_metals_into_heaviest")?;
         map_bools!("star_job", sj, j, [
             create_initial_model, create_rsp_model,
             load_saved_model, save_model_when_terminate, save_photo_when_terminate,

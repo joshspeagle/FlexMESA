@@ -134,16 +134,42 @@ fn custom_zfrac_array(model: &StarModel) -> Result<[f64; NUM_CHEM_ELEMENTS], Sta
 }
 
 fn get_xa_for_standard_metals(model: &StarModel) -> Result<Vec<f64>, StarError> {
-    let catalog = NuclideCatalog::builtin_ref();
     let mw = &model.controls.mix_wind;
-    let mut h1 = model.controls.accretion_h1;
-    let h2 = mw.accretion_h2;
-    let he3 = mw.accretion_he3;
-    let mut he4 = model.controls.accretion_he4;
+    get_xa_for_standard_metals_with(
+        model,
+        model.controls.accretion_h1,
+        mw.accretion_h2,
+        mw.accretion_he3,
+        model.controls.accretion_he4,
+        mw.accretion_zfracs,
+        mw.accretion_dump_missing_metals_into_heaviest,
+    )
+}
 
-    let zfrac = match mw.accretion_zfracs {
+/// Builds `xa` (`len = model.species`) for the given light-element mass
+/// fractions and solar metal mixture `which_zfracs`
+/// (`get_xa_for_standard_metals`, `star/private/adjust_xyz.f90:991-1092`).
+/// `model` supplies the net (`chem_id`, `iso_names`) and, for
+/// `which_zfracs = 0` (`Custom_zfracs`), the `z_fraction_*` controls.
+///
+/// # Errors
+/// Returns [`StarError::InvalidInput`] where upstream sets `ierr /= 0`.
+pub(crate) fn get_xa_for_standard_metals_with(
+    model: &StarModel,
+    h1_in: f64,
+    h2: f64,
+    he3: f64,
+    he4_in: f64,
+    which_zfracs: i32,
+    dump_missing_into_heaviest: bool,
+) -> Result<Vec<f64>, StarError> {
+    let catalog = NuclideCatalog::builtin_ref();
+    let mut h1 = h1_in;
+    let mut he4 = he4_in;
+
+    let zfrac = match which_zfracs {
         1..=10 => {
-            let scale = SolarScale::from_id(mw.accretion_zfracs as usize)
+            let scale = SolarScale::from_id(which_zfracs as usize)
                 .map_err(|e| StarError::InvalidInput(e.to_string()))?;
             solar_element_zfrac(scale, catalog)
         }
@@ -158,7 +184,7 @@ fn get_xa_for_standard_metals(model: &StarModel) -> Result<Vec<f64>, StarError> 
                 [0.0_f64; NUM_CHEM_ELEMENTS]
             } else {
                 return Err(StarError::InvalidInput(format!(
-                    "get_xa_for_standard_metals: invalid accretion_zfracs={other} with non-zero metals (1-(h1+h2+he3+he4)={})",
+                    "get_xa_for_standard_metals: invalid zfracs={other} with non-zero metals (1-(h1+h2+he3+he4)={})",
                     1.0 - (h1 + h2 + he3 + he4)
                 )));
             }
@@ -175,7 +201,7 @@ fn get_xa_for_standard_metals(model: &StarModel) -> Result<Vec<f64>, StarError> 
         he4,
         &zfrac,
         z_init,
-        mw.accretion_dump_missing_metals_into_heaviest,
+        dump_missing_into_heaviest,
     )?;
     for (i, &val) in xa.iter().enumerate() {
         if val < 0.0 || !val.is_finite() {

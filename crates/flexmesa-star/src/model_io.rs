@@ -542,9 +542,6 @@ pub fn read_mod_str_with_dir(
             }
         } else if t.starts_with("dt_next (seconds)") {
             model.dt_next = parse_fortran_f64(v)?;
-            if dt_yrs.is_none() {
-                model.dt = model.dt_next;
-            }
         }
     }
 
@@ -598,6 +595,11 @@ pub fn read_mod_str_with_dir(
         model.aux.mlt_vc_old.clone_from(&vc);
         model.mlt_vc = vc;
         model.aux.have_mlt_vc = true;
+        // Upstream `init.f90:541` + `read_model.f90:157-162`: keep `.mod`
+        // `mlt_vc` intact across startup `set_vars` until `set_current_to_old`.
+        model.aux.okay_to_set_mlt_vc = false;
+    } else {
+        model.aux.okay_to_set_mlt_vc = true;
     }
     if let Some(hp) = saved_hp {
         model.scale_height.clone_from(&hp);

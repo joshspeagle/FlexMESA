@@ -11,7 +11,7 @@ use std::fs;
 use std::path::Path;
 
 use flexmesa_chem::NuclideCatalog;
-use flexmesa_const::{M_SUN, PI4, STANDARD_CGRAV};
+use flexmesa_const::{M_SUN, PI4};
 
 use crate::controls::{StarError, StarJobControls};
 use crate::model::StarModel;
@@ -163,33 +163,25 @@ pub fn apply_composition_relaxation(
     model.aux.doing_relax = false;
 }
 
-/// Applies solid-body rotation $\Omega_k = \Omega_0$ and spherical shell
-/// specific angular momentum $j_{\mathrm{rot},k} = \frac{2}{3} r_k^2 \Omega_0$.
+/// Applies solid-body rotation $\Omega_k = \Omega_0$, computes shell-corrected
+/// $i_{\mathrm{rot},k}$ and $j_{\mathrm{rot},k} = i_{\mathrm{rot},k}\Omega_0$,
+/// and updates Roche distortion factors (`set_uniform_omega` in
+/// `star/private/hydro_rotation.f90:501-543`).
 pub fn apply_uniform_rotation(model: &mut StarModel, omega_0: f64) {
     model.controls.rotation_flag = true;
-    if model.omega.len() != model.nz {
-        model.omega.resize(model.nz, 0.0);
-        model.j_rot.resize(model.nz, 0.0);
+    let nz = model.nz;
+    if nz == 0 {
+        return;
     }
-    if model.aux.w_div_wc.len() != model.nz {
-        model.aux.w_div_wc.resize(model.nz, 0.0);
+    if model.omega.len() != nz {
+        model.omega.resize(nz, 0.0);
     }
-    for k in 0..model.nz {
-        model.omega[k] = omega_0;
-        model.j_rot[k] =
-            (2.0 / 3.0) * flexmesa_math::pow2(model.r[k]) * omega_0;
-        let r_k = model.r[k].max(1.0);
-        let m_k = model.m_grav[k].max(1.0);
-        let g_k = model
-            .cgrav
-            .get(k)
-            .copied()
-            .filter(|&g| g > 0.0)
-            .unwrap_or(STANDARD_CGRAV);
-        let omega_crit =
-            (g_k * m_k / flexmesa_math::pow3(r_k)).sqrt().max(1.0e-30);
-        model.aux.w_div_wc[k] = (omega_0 / omega_crit).clamp(0.0, 1.0);
+    if model.j_rot.len() != nz {
+        model.j_rot.resize(nz, 0.0);
     }
+    model.omega[..nz].fill(omega_0);
+    crate::hydro_rotation::use_xh_to_update_i_rot_and_j_rot(model);
+    crate::hydro_rotation::set_rotation_info(model, false);
 }
 
 /// Excises all interior zones hotter than `t_cut_k` (`K`) and replaces the

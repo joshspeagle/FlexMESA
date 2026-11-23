@@ -9,6 +9,7 @@ use crate::loader::kap_tables;
 use crate::low_t::{aesopus_get_with_data, kapcn_get};
 use crate::types::{KapConfig, KapError, KapLowTOption};
 use flexmesa_autodiff::AutoDiffReal2VarOrder1;
+use flexmesa_const::LN10;
 use flexmesa_math::{exp10, safe_log10};
 
 const KAP_MIN_LOG_RHO: f64 = -40.0;
@@ -73,26 +74,34 @@ pub fn get_kap_results_blend_t(
         let (f_t2, kap1, dlnkap1_dr, dlnkap1_dt) =
             get_kap_high_t_results(cfg, x, z, xc, xn, xo, xne, log_rho, log_t)?;
 
-        let log_t_ad = AutoDiffReal2VarOrder1 {
-            val: log_t,
-            d1: [0.0, 1.0],
-        };
-        let u = (log_t_ad - lower_bdy) / (upper_bdy - lower_bdy);
-        let alfa_ad = quintic_smootherstep(u);
-        let alfa = alfa_ad.val;
-        let d_alfa_dlog_t = alfa_ad.d1[1];
+        // Match `kap/private/kap_eval.f90:345-364`: plain `f64` blend factor
+        // and quintic smootherstep (direct IEEE-754 division rather than
+        // `DualOrder1::div(f64)`, which multiplies by `1.0 / denom`).
+        let alfa0 = (log_t - lower_bdy) / (upper_bdy - lower_bdy);
+        let d_alfa0_dln_t = 1.0 / (upper_bdy - lower_bdy) / LN10;
+
+        let alfa =
+            -alfa0 * alfa0 * alfa0 * (-10.0 + alfa0 * (15.0 - 6.0 * alfa0));
+        let d_alfa_dln_t = 30.0
+            * (alfa0 - 1.0)
+            * (alfa0 - 1.0)
+            * alfa0
+            * alfa0
+            * d_alfa0_dln_t;
+
         let beta = 1.0 - alfa;
-        let d_beta_dlog_t = -d_alfa_dlog_t;
+        let d_beta_dln_t = -d_alfa_dln_t;
 
         let log_kap1 = safe_log10(kap1);
         let log_kap2 = safe_log10(kap2);
+
         let log_kap = alfa * log_kap1 + beta * log_kap2;
-        let kap_blend = exp10(log_kap);
         let dlnkap_dr = alfa * dlnkap1_dr + beta * dlnkap2_dr;
         let dlnkap_dt = alfa * dlnkap1_dt
             + beta * dlnkap2_dt
-            + d_alfa_dlog_t * log_kap1
-            + d_beta_dlog_t * log_kap2;
+            + d_alfa_dln_t * log_kap1 * LN10
+            + d_beta_dln_t * log_kap2 * LN10;
+        let kap_blend = exp10(log_kap);
         (beta, alfa, f_t2, kap_blend, dlnkap_dr, dlnkap_dt)
     };
 
@@ -173,15 +182,18 @@ pub fn get_kap_high_t_results(
             / (cfg.kap_type2_full_off_x - cfg.kap_type2_full_on_x)
     };
 
+    // `kap/private/kap_eval.f90:577-588`: compute `frac_dZ` before multiplying
+    // by `frac_X`.
     let dz = z - zbase;
-    let alfa = if dz <= cfg.kap_type2_full_off_dz {
+    let frac_dz = if dz <= cfg.kap_type2_full_off_dz {
         0.0
     } else if dz >= cfg.kap_type2_full_on_dz {
-        frac_x
+        1.0
     } else {
-        frac_x * (dz - cfg.kap_type2_full_off_dz)
-            / (cfg.kap_type2_full_on_dz - cfg.kap_type2_full_off_dz)
+        (cfg.kap_type2_full_off_dz - dz)
+            / (cfg.kap_type2_full_off_dz - cfg.kap_type2_full_on_dz)
     };
+    let alfa = frac_x * frac_dz;
     let beta = 1.0 - alfa;
     let frac_type2 = alfa;
 
@@ -214,6 +226,9 @@ pub fn get_kap_high_t_results(
     };
 
     let kap = alfa * kap_alfa + beta * kap_beta;
+    if kap < 1.0e-30 {
+        return Ok((frac_type2, 1.0e-30, 0.0, 0.0));
+    }
     let dlnkap_dln_rho = (alfa * kap_alfa * dlnkap_alfa_dr
         + beta * kap_beta * dlnkap_beta_dr)
         / kap;

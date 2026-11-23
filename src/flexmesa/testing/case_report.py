@@ -329,6 +329,16 @@ def _fmt_iters_pair(rec: harness_runner.CaseHarnessRecord) -> str:
     return f"{f_str} ({m_str})"
 
 
+def _fmt_peak_rss(rec: harness_runner.CaseHarnessRecord) -> str:
+    if (
+        not rec.executed
+        or not math.isfinite(rec.peak_rss_gb)
+        or rec.peak_rss_gb <= 0.0
+    ):
+        return "-"
+    return f"{rec.peak_rss_gb:.2f} GB"
+
+
 def _fmt_num_zones_diff(rec: harness_runner.CaseHarnessRecord) -> str:
     dev = _find_track_dev(rec, "num_zones")
     if dev is not None:
@@ -744,17 +754,19 @@ def render_case_table_markdown(
         "`[total]` for FlexMESA (logged every step) followed in parentheses "
         "by MESA `26.4.1` mean iterations per logged row with `[total]` when "
         "every step was logged or `[sum/Nr]` when MESA logged `N` rows at "
-        "`history_interval > 1`. `num_zones Track Diff` reports the maximum "
-        "along-track relative and absolute zone-count deviation `rel% (abs)` "
-        "against MESA `26.4.1` (`#153`, `DECISIONS #44`).",
+        "`history_interval > 1`. `Peak RSS` reports the peak worker resident "
+        "set size (`GB` in `10^6`-KiB units; `-` in normalized deterministic "
+        "baselines or unexecuted cases). `num_zones Track Diff` reports the "
+        "maximum along-track relative and absolute zone-count deviation "
+        "`rel% (abs)` against MESA `26.4.1` (`#153`, `DECISIONS #44`).",
         "",
         "| Suite | Case | Reference Status | Required Termination | "
         "Run Mode | Observed Term | Steps (MESA) | Retries (MESA) | "
-        "Iters (MESA) | num_zones Track Diff | Final Coord Diff | "
+        "Iters (MESA) | Peak RSS | num_zones Track Diff | Final Coord Diff | "
         "Max Track Diff | First Div Step | Declared Gap | Verdict |"
         + (" Figure |" if include_figures else ""),
         "| :--- | :--- | :--- | :--- | :--- | :--- | ---: | ---: | ---: | "
-        "---: | ---: | :--- | ---: | :--- | :--- |"
+        "---: | ---: | ---: | :--- | ---: | :--- | :--- |"
         + (" :--- |" if include_figures else ""),
     ]
 
@@ -778,7 +790,8 @@ def render_case_table_markdown(
             f"| `{rec.suite}` | `{rec.case}` | `{rec.reference_status}` | "
             f"`{rec.required_termination}` | {rec.run_mode} | {obs_term} | "
             f"{_fmt_steps_pair(rec)} | {_fmt_retries_pair(rec)} | "
-            f"{_fmt_iters_pair(rec)} | {_fmt_num_zones_diff(rec)} | "
+            f"{_fmt_iters_pair(rec)} | {_fmt_peak_rss(rec)} | "
+            f"{_fmt_num_zones_diff(rec)} | "
             f"{_fmt_final_age_diff(rec)} | {_fmt_max_dev(rec)} | "
             f"{first_div} | {gap_str} | {rec.verdict} |"
             f"{fig_cell}"

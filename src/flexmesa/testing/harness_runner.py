@@ -411,9 +411,107 @@ def run_trace_inprocess(
     raise ValueError(f"unsupported suite {suite!r}")
 
 
+_RUST_WORKER_BOOTSTRAP = "\n".join(
+    [
+        "import argparse, json, os, pathlib",
+        "from flexmesa import _rust",
+        "p = argparse.ArgumentParser(prog='flexmesa-trace-worker')",
+        "p.add_argument('_tag')",
+        "p.add_argument('suite')",
+        "p.add_argument('case_dir')",
+        "p.add_argument('out_target')",
+        "p.add_argument('meta_json')",
+        "g = p.add_mutually_exclusive_group(required=True)",
+        "g.add_argument('--is-logs-dir', action='store_true')",
+        "g.add_argument('--explicit-file', action='store_true')",
+        "p.add_argument('--max-steps', type=int, default=None)",
+        "p.add_argument('--full-stages', action='store_true')",
+        "p.add_argument('--respect-intervals', action='store_true')",
+        "p.add_argument('--write-profiles', action='store_true')",
+        "p.add_argument('--numerics-mode', choices=('strict', 'fast'),",
+        "               default='strict')",
+        "p.add_argument('--allow-unsupported-controls', action='store_true')",
+        "ns = p.parse_args()",
+        "if ns.max_steps is not None and ns.max_steps < 0:",
+        "    raise ValueError(f'max_steps must be >= 0, got {ns.max_steps}')",
+        "out = pathlib.Path(ns.out_target)",
+        "(out if ns.is_logs_dir else out.parent).mkdir(",
+        "    parents=True, exist_ok=True",
+        ")",
+        "if ns.suite == 'star':",
+        "    rep = dict(_rust.trace_star_case(",
+        "        ns.case_dir, ns.out_target,",
+        "        max_steps_per_stage=ns.max_steps,",
+        "        skip_optional=not ns.full_stages,",
+        "        respect_intervals=ns.respect_intervals,",
+        "        write_profiles=ns.write_profiles,",
+        "        is_logs_dir=bool(ns.is_logs_dir),",
+        "        numerics_mode=ns.numerics_mode,",
+        "        allow_unsupported_controls=bool(",
+        "            ns.allow_unsupported_controls",
+        "        ),",
+        "        extras=None,",
+        "    ))",
+        "elif ns.suite == 'binary':",
+        "    rep = dict(_rust.trace_binary_case(",
+        "        ns.case_dir, ns.out_target,",
+        "        max_steps=ns.max_steps,",
+        "        respect_intervals=ns.respect_intervals,",
+        "        is_logs_dir=bool(ns.is_logs_dir),",
+        "        numerics_mode=ns.numerics_mode,",
+        "        allow_unsupported_controls=bool(",
+        "            ns.allow_unsupported_controls",
+        "        ),",
+        "        extras=None,",
+        "    ))",
+        "elif ns.suite == 'astero':",
+        "    rep = dict(_rust.trace_astero_case(",
+        "        ns.case_dir, ns.out_target,",
+        "        max_steps_per_stage=ns.max_steps,",
+        "        skip_optional=not ns.full_stages,",
+        "        respect_intervals=ns.respect_intervals,",
+        "        write_profiles=ns.write_profiles,",
+        "        is_logs_dir=bool(ns.is_logs_dir),",
+        "        numerics_mode=ns.numerics_mode,",
+        "        allow_unsupported_controls=bool(",
+        "            ns.allow_unsupported_controls",
+        "        ),",
+        "    ))",
+        "else:",
+        "    raise ValueError(f'unsupported suite {ns.suite!r}')",
+        "rss_kb = 0",
+        "try:",
+        "    txt = pathlib.Path(f'/proc/{os.getpid()}/status').read_text(",
+        "        encoding='utf-8'",
+        "    )",
+        "    for line in txt.splitlines():",
+        "        if line.startswith('VmRSS:'):",
+        "            parts = line.split()",
+        "            if len(parts) >= 2 and parts[1].isdigit():",
+        "                rss_kb = int(parts[1])",
+        "            break",
+        "except OSError:",
+        "    pass",
+        "payload = {",
+        "    'termination_code': rep.get('termination_code', ''),",
+        "    'total_steps': int(rep.get('total_steps', 0)),",
+        "    'total_retries': int(",
+        "        rep.get('total_retries', rep.get('binary_retries', 0))",
+        "    ),",
+        "    'rss_gb': rss_kb / 1.0e6,",
+        "}",
+        "pathlib.Path(ns.meta_json).write_text(",
+        "    json.dumps(payload, allow_nan=False), encoding='utf-8'",
+        ")",
+    ]
+)
+
+
 def _build_worker_env(
     worker_tmp: pathlib.Path,
     numerics_mode: str,
+    *,
+    rust_only: bool = False,
 ) -> dict[str, str]:
     env = os.environ.copy()
     src_root = str(pathlib.Path(__file__).resolve().parents[2])
@@ -424,6 +522,10 @@ def _build_worker_env(
     env.setdefault("JAX_PLATFORMS", "cpu")
     env.setdefault("PYTHONWARNINGS", "ignore::RuntimeWarning:runpy")
     env["FLEXMESA_NUMERICS_MODE"] = numerics_mode
+    if rust_only:
+        env["FLEXMESA_WORKER_RUST_ONLY"] = "1"
+    else:
+        env.pop("FLEXMESA_WORKER_RUST_ONLY", None)
     tmp_str = str(worker_tmp)
     env["TMPDIR"] = tmp_str
     env["TEMP"] = tmp_str
@@ -441,6 +543,22 @@ def _kill_worker_group(proc: subprocess.Popen[bytes]) -> None:
             pass
     proc.kill()
     proc.wait()
+
+
+def _has_active_extras_handler(
+    suite: str,
+    case_dir: pathlib.Path,
+    extras_factory: str | None,
+) -> bool:
+    """Return True when ``extras_factory`` resolves to a live handler."""
+    if not extras_factory or not extras_factory.strip():
+        return False
+    try:
+        factory = load_extras_factory(extras_factory)
+        return factory is not None and factory(suite, case_dir) is not None
+    except (AttributeError, ImportError, ValueError):
+        # Defer malformed factory diagnostics to the normal worker path.
+        return True
 
 
 def _run_traced_worker(
@@ -468,19 +586,37 @@ def _run_traced_worker(
         meta_json = meta_root / "result.json"
         stderr_path = meta_root / "stderr.log"
 
-        cmd = [
-            sys.executable,
-            "-m",
-            "flexmesa.testing.trace_cli",
-            "_worker",
-            suite,
-            str(case_dir),
-            str(out_target),
-            str(meta_json),
-            "--is-logs-dir" if is_logs_dir else "--explicit-file",
-            "--numerics-mode",
-            numerics_mode,
-        ]
+        use_rust_only = not _has_active_extras_handler(
+            suite, case_dir, extras_factory
+        )
+        if use_rust_only:
+            cmd = [
+                sys.executable,
+                "-c",
+                _RUST_WORKER_BOOTSTRAP,
+                "_worker",
+                suite,
+                str(case_dir),
+                str(out_target),
+                str(meta_json),
+                "--is-logs-dir" if is_logs_dir else "--explicit-file",
+                "--numerics-mode",
+                numerics_mode,
+            ]
+        else:
+            cmd = [
+                sys.executable,
+                "-m",
+                "flexmesa.testing.trace_cli",
+                "_worker",
+                suite,
+                str(case_dir),
+                str(out_target),
+                str(meta_json),
+                "--is-logs-dir" if is_logs_dir else "--explicit-file",
+                "--numerics-mode",
+                numerics_mode,
+            ]
         if max_steps is not None:
             cmd.extend(["--max-steps", str(max_steps)])
         if not skip_optional:
@@ -491,13 +627,15 @@ def _run_traced_worker(
             cmd.append("--write-profiles")
         if allow_unsupported_controls:
             cmd.append("--allow-unsupported-controls")
-        if extras_factory:
+        if not use_rust_only and extras_factory:
             cmd.extend(["--extras-factory", extras_factory])
 
         cap_kb = int(max_rss_gb * 1.0e6) if max_rss_gb is not None else None
         peak_kb = 0
         kill_status = ""
-        worker_env = _build_worker_env(worker_tmp, numerics_mode)
+        worker_env = _build_worker_env(
+            worker_tmp, numerics_mode, rust_only=use_rust_only
+        )
 
         with (
             stderr_path.open("w", encoding="utf-8") as err_fh,

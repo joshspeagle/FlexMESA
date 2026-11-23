@@ -247,6 +247,11 @@
       "number": 367,
       "title": "feat(mtx,star,binary): upstream do_block_multiply_xa and rho = dm/dV reset before each step (#358, #363)",
       "draft": true
+    },
+    {
+      "number": 370,
+      "title": "feat(star,testing): upstream MESA 26.4.1 global total-energy accounting (#151)",
+      "draft": false
     }
   ],
   "deferred_169": [

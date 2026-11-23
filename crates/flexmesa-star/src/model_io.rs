@@ -245,8 +245,24 @@ pub fn write_mod_string(model: &StarModel) -> Result<String, StarError> {
 /// Returns [`StarError::IoError`] if the `.mod` text is malformed.
 pub fn read_mod_str(
     text: &str,
+    controls: StarControls,
+    job: StarJobControls,
+) -> Result<StarModel, StarError> {
+    read_mod_str_with_dir(text, controls, job, None)
+}
+
+/// Parses a MESA `.mod` text file (`star/private/read_model.f90`), resolving
+/// any non-empty network name against `search_dir` before falling back to the
+/// built-in network bundle (`net/private/net_initialize.f90:286-302`).
+///
+/// # Errors
+/// Returns [`StarError`] if headers, zone columns, or the requested network
+/// fail validation.
+pub fn read_mod_str_with_dir(
+    text: &str,
     mut controls: StarControls,
     mut job: StarJobControls,
+    search_dir: Option<&std::path::Path>,
 ) -> Result<StarModel, StarError> {
     let mut lines = text.lines();
     let (mut m_msun, mut star_age, mut teff) =
@@ -538,9 +554,13 @@ pub fn read_mod_str(
         model.job.net_name.clone()
     };
     if !target_net.trim().is_empty() {
-        let net = crate::micro::get_or_load_net(&target_net, None)?;
+        let net = crate::micro::get_or_load_net(&target_net, search_dir)?;
         if net.chem_id != model.chem_id {
-            crate::micro::change_model_network(&mut model, &target_net, None)?;
+            crate::micro::change_model_network(
+                &mut model,
+                &target_net,
+                search_dir,
+            )?;
         }
     }
 

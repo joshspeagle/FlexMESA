@@ -5,8 +5,10 @@ The patch adds output only: it never changes an expression, a branch taken,
 or the order of any arithmetic. A record is written only when the
 environment variable ``FLEXMESA_STEPDUMP`` names an output file, and only for
 the first ``FLEXMESA_STEPDUMP_STEPS`` (default 3) distinct model numbers of
-each star. With ``FLEXMESA_STEPDUMP_STOP`` set, the run stops when the next
-model starts, after a ``DONE`` record; nothing past that point is compared.
+each star, starting at model number ``FLEXMESA_STEPDUMP_FIRST`` when that is
+set (a window later in the run). With ``FLEXMESA_STEPDUMP_STOP`` set, the run
+stops when the next model starts, after a ``DONE`` record; nothing past that
+point is compared.
 Each process appends a ``RUN`` record when it opens the file, since every
 ``./rn`` stage is a separate process. Every floating-point value is written
 as its IEEE-754 binary64 bit pattern in hexadecimal (``Z16.16``).
@@ -175,7 +177,7 @@ HELPER = f"""
          type (star_info), pointer :: s
          logical, intent(out) :: new_model
          integer, parameter :: max_ids = 16
-         integer, save :: unit = 0, nmax = 3
+         integer, save :: unit = 0, nmax = 3, first_model = -huge(1)
          logical, save :: initialised = .false., stop_when_done = .false.
          integer, save :: nseen(max_ids) = 0, last_model(max_ids) = -1
          logical, save :: named(max_ids) = .false.
@@ -194,12 +196,17 @@ HELPER = f"""
                call get_environment_variable('{MARKER}_STEPS', path, &
                   status=st)
                if (st == 0 .and. len_trim(path) > 0) read(path, *) nmax
+               call get_environment_variable('{MARKER}_FIRST', path, &
+                  status=st)
+               if (st == 0 .and. len_trim(path) > 0) read(path, *) first_model
                call get_environment_variable('{MARKER}_STOP', path, &
                   status=st)
                stop_when_done = st == 0 .and. len_trim(path) > 0
             end if
          end if
          if (unit == 0 .or. s% id < 1 .or. s% id > max_ids) return
+         ! Optional window: models before FLEXMESA_STEPDUMP_FIRST are skipped.
+         if (s% model_number < first_model) return
          if (s% model_number /= last_model(s% id)) then
             if (nseen(s% id) >= nmax) then
                ! Optional early end once the requested models are dumped;

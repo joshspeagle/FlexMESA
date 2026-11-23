@@ -7,13 +7,17 @@ Builds a private overlay of a compiled MESA 26.4.1 tree in which only
 ``stepdump_patch.py``, then runs each requested case through
 ``scripts/mesa_reference/run_mesa_case_26_4_1.sh`` (unmodified inlists,
 ``MESA_SKIP_OPTIONAL=t``, as for the stored reference histories) with the dump
-switched on. Each run stops after the first ``--steps`` models of its first
-``./rn`` stage, so a dump covers the start of that stage only.
+switched on. Each run stops after ``--steps`` models per star. By default
+these are the first models of the run, so the dump covers the start of the
+first ``./rn`` stage. With ``--first-model N`` the dump starts at model number
+``N`` instead, which reaches later in the run (and into later stages, whose
+earlier stages then run to completion first).
 
 Output, per case, ``<out>/<suite>/<case>.stepdump``: a header of ``#`` lines
-recording the MESA version, compiler and SDK (read from the case's own
-history file), the thread count, the step limit and the SHA-256 of every
-inlist, followed by the records documented in ``stepdump_patch.py``.
+recording the MESA version, compiler and SDK (``data/version_number``,
+``gfortran -dumpfullversion``, ``mesasdk_version``), the window, the thread
+count and the SHA-256 of every inlist, followed by the records documented in
+``stepdump_patch.py``.
 
 The pristine tree is never modified: the overlay holds real copies of
 ``star/``, ``lib/`` and ``include/`` and symbolic links for everything else,
@@ -170,8 +174,9 @@ def _header(
         f"# mesa_sdk_version: {meta['mesa_sdk_version']}",
         f"# omp_num_threads: {OMP_THREADS}",
         f"# steps_per_star: {steps}",
+        f"# first_model: {meta.get('first_model', 'first of the run')}",
         "# produced by: benchmarks/fortran_mesa/stepdumps/run_stepdumps.py "
-        "(write statements only, MESA_SKIP_OPTIONAL=t, first ./rn stage); "
+        "(write statements only, MESA_SKIP_OPTIONAL=t); "
         "values are IEEE-754 binary64 bit patterns in hexadecimal",
     ]
     for inlist in sorted(case_dir.rglob("inlist*")):
@@ -296,6 +301,12 @@ def main() -> None:
     parser.add_argument("--scratch", type=pathlib.Path, required=True)
     parser.add_argument("--out", type=pathlib.Path, required=True)
     parser.add_argument("--steps", type=int, default=3)
+    parser.add_argument(
+        "--first-model",
+        type=int,
+        default=None,
+        help="First model number dumped (a window later in the run).",
+    )
     parser.add_argument("--jobs", type=int, default=2)
     parser.add_argument("--timeout-sec", type=int, default=1800)
     parser.add_argument("--cases", nargs="*", default=None)
@@ -314,6 +325,9 @@ def main() -> None:
             raise SystemExit("--scratch must be empty or absent")
         build_overlay(mesa_dir, overlay, env)
     meta = build_meta(mesa_dir, env)
+    if args.first_model is not None:
+        env[f"{stepdump_patch.MARKER}_FIRST"] = str(args.first_model)
+        meta["first_model"] = str(args.first_model)
     cases = args.cases or list_cases(mesa_dir)
     work = scratch / "cases"
     work.mkdir(parents=True, exist_ok=True)

@@ -6,7 +6,8 @@
 //!
 //! Disabled unless the environment variable `FLEXMESA_STEPDUMP` names an
 //! output file. Records are written for the first `FLEXMESA_STEPDUMP_STEPS`
-//! (default 3) distinct model numbers of each star. The dump only reads
+//! (default 3) distinct model numbers of each star, from model number
+//! `FLEXMESA_STEPDUMP_FIRST` on when that is set (a window later in the run). The dump only reads
 //! solver state: it changes no value, branch or order of arithmetic.
 //!
 //! Every floating-point value is written as the upper-case hexadecimal of its
@@ -30,6 +31,7 @@ thread_local! {
 struct DumpState {
     file: File,
     nmax: usize,
+    first_model: usize,
     nseen: [usize; MAX_IDS],
     last_model: [Option<usize>; MAX_IDS],
     named: [bool; MAX_IDS],
@@ -48,6 +50,10 @@ fn dump() -> Option<&'static Mutex<DumpState>> {
             .ok()
             .and_then(|v| v.trim().parse::<usize>().ok())
             .unwrap_or(3);
+        let first_model = std::env::var("FLEXMESA_STEPDUMP_FIRST")
+            .ok()
+            .and_then(|v| v.trim().parse::<usize>().ok())
+            .unwrap_or(0);
         let mut file = OpenOptions::new()
             .create(true)
             .append(true)
@@ -57,6 +63,7 @@ fn dump() -> Option<&'static Mutex<DumpState>> {
         Some(Mutex::new(DumpState {
             file,
             nmax,
+            first_model,
             nseen: [0; MAX_IDS],
             last_model: [None; MAX_IDS],
             named: [false; MAX_IDS],
@@ -95,6 +102,9 @@ pub fn record(
     let id = CURRENT_ID.with(Cell::get);
     let Ok(mut st) = mtx.lock() else { return };
     if id == 0 || id > MAX_IDS {
+        return;
+    }
+    if model < st.first_model {
         return;
     }
     let slot = id - 1;

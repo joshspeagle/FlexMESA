@@ -303,7 +303,9 @@ def compare_zones(
     return out
 
 
-def first_divergence(mesa: StepDump, flex: StepDump) -> Divergence | None:
+def first_divergence(
+    mesa: StepDump, flex: StepDump, ignore: frozenset[str] = frozenset()
+) -> Divergence | None:
     """Returns the first difference between two dumps, or ``None``.
 
     Within each model, the zone records (the state at the first solver call)
@@ -313,6 +315,10 @@ def first_divergence(mesa: StepDump, flex: StepDump) -> Divergence | None:
     Args:
         mesa: MESA dump.
         flex: FlexMESA dump.
+        ignore: Record types (``EQU``, ``DM``, ``TRY``, ...), column names
+            (``h1``, ``lnd``, ...) or ``xa`` (every species column) left out
+            of the comparison, so that a known difference does not hide the
+            next one.
 
     Returns:
         The first divergence in star, model, then record order.
@@ -337,19 +343,42 @@ def first_divergence(mesa: StepDump, flex: StepDump) -> Divergence | None:
                     None,
                 )
             b = b_blocks[i]
-            div = _first_zone_divergence(mesa, star, i, a, b)
+            div = _first_zone_divergence(mesa, star, i, a, b, ignore)
             if div is not None:
                 return div
-            div = _first_solver_divergence(mesa, star, i, a, b)
+            div = _first_solver_divergence(star, i, a, b, ignore)
             if div is not None:
                 return div
     return None
 
 
+def _skip_column(
+    mesa: StepDump,
+    star: int,
+    tag: str,
+    j: int,
+    name: str,
+    ignore: frozenset[str],
+) -> bool:
+    """Returns whether column ``j`` of a zone record is ignored."""
+    if name in ignore:
+        return True
+    return (
+        tag == "STATE" and "xa" in ignore and j >= mesa.nvar_hydro.get(star, 0)
+    )
+
+
 def _first_zone_divergence(
-    mesa: StepDump, star: int, i: int, a: ModelBlock, b: ModelBlock
+    mesa: StepDump,
+    star: int,
+    i: int,
+    a: ModelBlock,
+    b: ModelBlock,
+    ignore: frozenset[str],
 ) -> Divergence | None:
     for tag in ZONE_TAGS:
+        if tag in ignore:
+            continue
         for k in sorted(z for (t, z) in a.zones if t == tag):
             va = a.zones[(tag, k)]
             vb = b.zones.get((tag, k))
@@ -370,6 +399,8 @@ def _first_zone_divergence(
                 )
             names = _column_names(mesa, star, tag, len(va))
             for j, (xa_, xb_) in enumerate(zip(va, vb, strict=False)):
+                if _skip_column(mesa, star, tag, j, names[j], ignore):
+                    continue
                 if xa_ != xb_:
                     return Divergence(
                         star,
@@ -404,9 +435,18 @@ def _first_zone_divergence(
 
 
 def _first_solver_divergence(
-    mesa: StepDump, star: int, i: int, a: ModelBlock, b: ModelBlock
+    star: int,
+    i: int,
+    a_block: ModelBlock,
+    b_block: ModelBlock,
+    ignore: frozenset[str],
 ) -> Divergence | None:
-    del mesa
+    a = ModelBlock(
+        a_block.model, [r for r in a_block.solver if r.tag not in ignore]
+    )
+    b = ModelBlock(
+        b_block.model, [r for r in b_block.solver if r.tag not in ignore]
+    )
     for pos, ra in enumerate(a.solver):
         if pos >= len(b.solver):
             return Divergence(
@@ -532,16 +572,24 @@ def format_report(
     return "\n".join(lines) + "\n"
 
 
-def compare_files(mesa_path: pathlib.Path, flex_path: pathlib.Path) -> str:
+def compare_files(
+    mesa_path: pathlib.Path,
+    flex_path: pathlib.Path,
+    ignore: frozenset[str] = frozenset(),
+) -> str:
     """Compares two dump files and returns the report.
 
     Args:
         mesa_path: MESA ``.stepdump`` file.
         flex_path: FlexMESA dump file.
+        ignore: See :func:`first_divergence`.
 
     Returns:
         The report text.
     """
     mesa = parse_dump(mesa_path.read_text(encoding="utf-8"))
     flex = parse_dump(flex_path.read_text(encoding="utf-8"))
-    return format_report(mesa, flex, first_divergence(mesa, flex))
+    report = format_report(mesa, flex, first_divergence(mesa, flex, ignore))
+    if ignore:
+        report = f"ignored: {', '.join(sorted(ignore))}\n" + report
+    return report

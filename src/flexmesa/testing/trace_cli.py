@@ -179,18 +179,40 @@ def _build_trace_parser() -> argparse.ArgumentParser:
             "differs (#372)."
         ),
     )
+    parser.add_argument(
+        "--ignore",
+        nargs="*",
+        default=[],
+        metavar="NAME",
+        help=(
+            "With --compare: record types (EQU, DM, TRY, ...), column names "
+            "(h1, lnd, ...) or 'xa' (every species column) left out, so a "
+            "known difference does not hide the next one."
+        ),
+    )
     return parser
 
 
-def _stepdump_steps(mesa_dump: pathlib.Path) -> int:
-    """Returns the models per star recorded in a MESA step dump's header."""
+def _stepdump_window(mesa_dump: pathlib.Path) -> tuple[int, int | None]:
+    """Returns the models per star and the first model number of a MESA dump.
+
+    The first model number is ``None`` when the dump starts at the first
+    model of the run.
+    """
+    steps: int | None = None
+    first: int | None = None
     with mesa_dump.open(encoding="utf-8") as fh:
         for line in fh:
             if not line.startswith("#"):
                 break
-            if line.startswith("# steps_per_star:"):
-                return int(line.split(":", 1)[1])
-    raise ValueError(f"{mesa_dump}: no steps_per_star header line")
+            key, _, val = line[1:].partition(":")
+            if key.strip() == "steps_per_star":
+                steps = int(val)
+            elif key.strip() == "first_model" and val.strip().isdigit():
+                first = int(val)
+    if steps is None:
+        raise ValueError(f"{mesa_dump}: no steps_per_star header line")
+    return steps, first
 
 
 def trace_main(argv: list[str] | None = None) -> int:
@@ -210,13 +232,17 @@ def trace_main(argv: list[str] | None = None) -> int:
     eff_mode = harness_runner.resolve_effective_numerics_mode(ns.numerics_mode)
     flex_dump: pathlib.Path | None = None
     if ns.compare is not None:
-        steps = _stepdump_steps(pathlib.Path(ns.compare))
+        steps, first = _stepdump_window(pathlib.Path(ns.compare))
         flex_dump = pathlib.Path(ns.out) / "flexmesa.stepdump"
         flex_dump.parent.mkdir(parents=True, exist_ok=True)
         flex_dump.unlink(missing_ok=True)
         os.environ["FLEXMESA_STEPDUMP"] = str(flex_dump)
         os.environ["FLEXMESA_STEPDUMP_STEPS"] = str(steps)
-        if ns.max_steps is None:
+        if first is not None:
+            os.environ["FLEXMESA_STEPDUMP_FIRST"] = str(first)
+        elif ns.max_steps is None:
+            # A window at the start of the run needs only its own models; a
+            # later window runs up to the timeout or --max-steps.
             ns.max_steps = steps
     case_dir = harness_runner.resolve_case_dir(
         ns.suite, ns.case, mesa_dir=ns.mesa_dir
@@ -250,7 +276,9 @@ def trace_main(argv: list[str] | None = None) -> int:
             print("error: FlexMESA wrote no step dump", file=sys.stderr)
             return 1
         print(
-            stepdump_compare.compare_files(pathlib.Path(ns.compare), flex_dump),
+            stepdump_compare.compare_files(
+                pathlib.Path(ns.compare), flex_dump, frozenset(ns.ignore)
+            ),
             end="",
         )
         return 0

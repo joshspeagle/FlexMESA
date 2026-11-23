@@ -106,3 +106,19 @@ def test_cell_mass_difference_is_reported_as_dm_zone_record() -> None:
         1,
         "dm",
     )
+
+
+def test_ignoring_a_differing_column_reveals_the_next_divergence() -> None:
+    a = sc.parse_dump(_dump())
+    b = sc.parse_dump(
+        _dump(lnd_zone2=float.fromhex("0x1.0000000000001p+0"), slope=-1e-9)
+    )
+    div = sc.first_divergence(a, b, frozenset({"lnd"}))
+    assert div is not None
+    assert (div.kind, div.record, div.field) == ("value", "NEWTON", "slope")
+
+
+def test_ignoring_a_record_type_skips_it_in_solver_order() -> None:
+    a = sc.parse_dump(_dump())
+    b = sc.parse_dump(_dump(slope=-1e-9))
+    assert sc.first_divergence(a, b, frozenset({"NEWTON"})) is None

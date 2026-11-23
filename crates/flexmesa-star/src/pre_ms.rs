@@ -517,7 +517,9 @@ pub fn build_pre_ms_model_with_configs(
     model.mstar_old = mstar;
     model.model_number = 1;
     model.star_age = 0.0;
-    model.dt = 1.0e2 * SECYER;
+    // `create_star` sets `dt_next = 1d-5*secyer` after `build_pre_ms_model`
+    // (`star/private/init.f90:1007`); the first step takes it as `dt`.
+    model.dt = 1.0e-5 * SECYER;
     model.dt_next = model.dt;
     model.dt_old = model.dt;
 

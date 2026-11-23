@@ -6,7 +6,8 @@ use flexmesa_rates::ScreeningMode;
 use flexmesa_turb::{MltOption, SemiconvectionOption, ThermohalineOption};
 
 use crate::controls::{
-    AtmOption, AtmTTauOpacity, AtmTTauRelation, EnergyEqnOption, StarControls,
+    AtmIrradiatedOpacity, AtmOption, AtmTTauOpacity, AtmTTauRelation,
+    EnergyEqnOption, StarControls,
 };
 
 impl Default for StarControls {
@@ -42,6 +43,13 @@ impl Default for StarControls {
             atm_t_tau_errtol: 1.0e-7,
             atm_t_tau_max_iters: 50,
             atm_t_tau_max_steps: 500,
+            atm_irradiated_opacity: AtmIrradiatedOpacity::Fixed,
+            atm_irradiated_errtol: 1.0e-7,
+            atm_irradiated_max_iters: 50,
+            atm_irradiated_t_eq: 100.0,
+            atm_irradiated_kap_v_div_kap_th: 0.0,
+            atm_irradiated_kap_v: 4.0e-3,
+            atm_irradiated_p_surf: 1.0e6,
             tau_factor: 1.0,
             opacity_factor: 1.0,
             use_simple_es_for_kap: false,

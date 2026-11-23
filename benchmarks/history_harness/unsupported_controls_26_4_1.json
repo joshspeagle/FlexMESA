@@ -8,9 +8,9 @@
   },
   "summary": {
     "total_cases": 106,
-    "strict_pass_cases": 53,
-    "strict_fail_cases": 53,
-    "distinct_unsupported_controls": 176,
+    "strict_pass_cases": 61,
+    "strict_fail_cases": 45,
+    "distinct_unsupported_controls": 168,
     "distinct_unknown_controls": 0,
     "cases_with_headless_plotting": 78,
     "distinct_headless_plotting_keys": 895
@@ -118,132 +118,6 @@
         "star/pisn",
         "star/twin_studies",
         "star/zams_to_cc_80"
-      ]
-    },
-    {
-      "section": "colors",
-      "key": "colors_results_directory",
-      "category": "unimplemented",
-      "case_count": 10,
-      "cases": [
-        "star/custom_colors",
-        "star/rsp_BEP",
-        "star/rsp_BLAP",
-        "star/rsp_Cepheid",
-        "star/rsp_Delta_Scuti",
-        "star/rsp_RR_Lyrae",
-        "star/rsp_Type_II_Cepheid",
-        "star/rsp_check_2nd_crossing",
-        "star/rsp_gyre",
-        "star/rsp_save_and_load_file"
-      ]
-    },
-    {
-      "section": "colors",
-      "key": "distance",
-      "category": "unimplemented",
-      "case_count": 10,
-      "cases": [
-        "star/custom_colors",
-        "star/rsp_BEP",
-        "star/rsp_BLAP",
-        "star/rsp_Cepheid",
-        "star/rsp_Delta_Scuti",
-        "star/rsp_RR_Lyrae",
-        "star/rsp_Type_II_Cepheid",
-        "star/rsp_check_2nd_crossing",
-        "star/rsp_gyre",
-        "star/rsp_save_and_load_file"
-      ]
-    },
-    {
-      "section": "colors",
-      "key": "instrument",
-      "category": "unimplemented",
-      "case_count": 10,
-      "cases": [
-        "star/custom_colors",
-        "star/rsp_BEP",
-        "star/rsp_BLAP",
-        "star/rsp_Cepheid",
-        "star/rsp_Delta_Scuti",
-        "star/rsp_RR_Lyrae",
-        "star/rsp_Type_II_Cepheid",
-        "star/rsp_check_2nd_crossing",
-        "star/rsp_gyre",
-        "star/rsp_save_and_load_file"
-      ]
-    },
-    {
-      "section": "colors",
-      "key": "make_csv",
-      "category": "unimplemented",
-      "case_count": 10,
-      "cases": [
-        "star/custom_colors",
-        "star/rsp_BEP",
-        "star/rsp_BLAP",
-        "star/rsp_Cepheid",
-        "star/rsp_Delta_Scuti",
-        "star/rsp_RR_Lyrae",
-        "star/rsp_Type_II_Cepheid",
-        "star/rsp_check_2nd_crossing",
-        "star/rsp_gyre",
-        "star/rsp_save_and_load_file"
-      ]
-    },
-    {
-      "section": "colors",
-      "key": "stellar_atm",
-      "category": "unimplemented",
-      "case_count": 10,
-      "cases": [
-        "star/custom_colors",
-        "star/rsp_BEP",
-        "star/rsp_BLAP",
-        "star/rsp_Cepheid",
-        "star/rsp_Delta_Scuti",
-        "star/rsp_RR_Lyrae",
-        "star/rsp_Type_II_Cepheid",
-        "star/rsp_check_2nd_crossing",
-        "star/rsp_gyre",
-        "star/rsp_save_and_load_file"
-      ]
-    },
-    {
-      "section": "colors",
-      "key": "use_colors",
-      "category": "unimplemented",
-      "case_count": 10,
-      "cases": [
-        "star/custom_colors",
-        "star/rsp_BEP",
-        "star/rsp_BLAP",
-        "star/rsp_Cepheid",
-        "star/rsp_Delta_Scuti",
-        "star/rsp_RR_Lyrae",
-        "star/rsp_Type_II_Cepheid",
-        "star/rsp_check_2nd_crossing",
-        "star/rsp_gyre",
-        "star/rsp_save_and_load_file"
-      ]
-    },
-    {
-      "section": "colors",
-      "key": "vega_sed",
-      "category": "unimplemented",
-      "case_count": 10,
-      "cases": [
-        "star/custom_colors",
-        "star/rsp_BEP",
-        "star/rsp_BLAP",
-        "star/rsp_Cepheid",
-        "star/rsp_Delta_Scuti",
-        "star/rsp_RR_Lyrae",
-        "star/rsp_Type_II_Cepheid",
-        "star/rsp_check_2nd_crossing",
-        "star/rsp_gyre",
-        "star/rsp_save_and_load_file"
       ]
     },
     {
@@ -1281,15 +1155,6 @@
       "cases": [
         "star/make_co_wd",
         "star/ppisn"
-      ]
-    },
-    {
-      "section": "colors",
-      "key": "mag_system",
-      "category": "unimplemented",
-      "case_count": 1,
-      "cases": [
-        "star/custom_colors"
       ]
     },
     {
@@ -7205,20 +7070,11 @@
     {
       "suite": "star",
       "case": "custom_colors",
-      "strict_ok": false,
+      "strict_ok": true,
       "entry_files": [
         "inlist_colors_header"
       ],
-      "unsupported_controls": [
-        "colors::colors_results_directory::unimplemented",
-        "colors::distance::unimplemented",
-        "colors::instrument::unimplemented",
-        "colors::mag_system::unimplemented",
-        "colors::make_csv::unimplemented",
-        "colors::stellar_atm::unimplemented",
-        "colors::use_colors::unimplemented",
-        "colors::vega_sed::unimplemented"
-      ],
+      "unsupported_controls": [],
       "unknown_controls": [],
       "headless_plotting_keys_count": 22,
       "terminal_output_keys": [
@@ -8002,19 +7858,11 @@
     {
       "suite": "star",
       "case": "rsp_BEP",
-      "strict_ok": false,
+      "strict_ok": true,
       "entry_files": [
         "inlist_rsp_BEP_header"
       ],
-      "unsupported_controls": [
-        "colors::colors_results_directory::unimplemented",
-        "colors::distance::unimplemented",
-        "colors::instrument::unimplemented",
-        "colors::make_csv::unimplemented",
-        "colors::stellar_atm::unimplemented",
-        "colors::use_colors::unimplemented",
-        "colors::vega_sed::unimplemented"
-      ],
+      "unsupported_controls": [],
       "unknown_controls": [],
       "headless_plotting_keys_count": 75,
       "terminal_output_keys": [
@@ -8030,19 +7878,11 @@
     {
       "suite": "star",
       "case": "rsp_BLAP",
-      "strict_ok": false,
+      "strict_ok": true,
       "entry_files": [
         "inlist_rsp_BLAP_header"
       ],
-      "unsupported_controls": [
-        "colors::colors_results_directory::unimplemented",
-        "colors::distance::unimplemented",
-        "colors::instrument::unimplemented",
-        "colors::make_csv::unimplemented",
-        "colors::stellar_atm::unimplemented",
-        "colors::use_colors::unimplemented",
-        "colors::vega_sed::unimplemented"
-      ],
+      "unsupported_controls": [],
       "unknown_controls": [],
       "headless_plotting_keys_count": 76,
       "terminal_output_keys": [
@@ -8057,19 +7897,11 @@
     {
       "suite": "star",
       "case": "rsp_Cepheid",
-      "strict_ok": false,
+      "strict_ok": true,
       "entry_files": [
         "inlist_rsp_Cepheid_header"
       ],
-      "unsupported_controls": [
-        "colors::colors_results_directory::unimplemented",
-        "colors::distance::unimplemented",
-        "colors::instrument::unimplemented",
-        "colors::make_csv::unimplemented",
-        "colors::stellar_atm::unimplemented",
-        "colors::use_colors::unimplemented",
-        "colors::vega_sed::unimplemented"
-      ],
+      "unsupported_controls": [],
       "unknown_controls": [],
       "headless_plotting_keys_count": 75,
       "terminal_output_keys": [
@@ -8090,13 +7922,6 @@
         "inlist_rsp_Delta_Scuti_header"
       ],
       "unsupported_controls": [
-        "colors::colors_results_directory::unimplemented",
-        "colors::distance::unimplemented",
-        "colors::instrument::unimplemented",
-        "colors::make_csv::unimplemented",
-        "colors::stellar_atm::unimplemented",
-        "colors::use_colors::unimplemented",
-        "colors::vega_sed::unimplemented",
         "controls::rsp_map_columns_filename::unused",
         "controls::rsp_map_filename::unused",
         "controls::rsp_map_first_period::unused",
@@ -8120,19 +7945,11 @@
     {
       "suite": "star",
       "case": "rsp_RR_Lyrae",
-      "strict_ok": false,
+      "strict_ok": true,
       "entry_files": [
         "inlist_rsp_RR_Lyrae_header"
       ],
-      "unsupported_controls": [
-        "colors::colors_results_directory::unimplemented",
-        "colors::distance::unimplemented",
-        "colors::instrument::unimplemented",
-        "colors::make_csv::unimplemented",
-        "colors::stellar_atm::unimplemented",
-        "colors::use_colors::unimplemented",
-        "colors::vega_sed::unimplemented"
-      ],
+      "unsupported_controls": [],
       "unknown_controls": [],
       "headless_plotting_keys_count": 75,
       "terminal_output_keys": [
@@ -8148,19 +7965,11 @@
     {
       "suite": "star",
       "case": "rsp_Type_II_Cepheid",
-      "strict_ok": false,
+      "strict_ok": true,
       "entry_files": [
         "inlist_rsp_Type_II_Cepheid_header"
       ],
-      "unsupported_controls": [
-        "colors::colors_results_directory::unimplemented",
-        "colors::distance::unimplemented",
-        "colors::instrument::unimplemented",
-        "colors::make_csv::unimplemented",
-        "colors::stellar_atm::unimplemented",
-        "colors::use_colors::unimplemented",
-        "colors::vega_sed::unimplemented"
-      ],
+      "unsupported_controls": [],
       "unknown_controls": [],
       "headless_plotting_keys_count": 14,
       "terminal_output_keys": [
@@ -8176,19 +7985,11 @@
     {
       "suite": "star",
       "case": "rsp_check_2nd_crossing",
-      "strict_ok": false,
+      "strict_ok": true,
       "entry_files": [
         "inlist_rsp_check_2nd_crossing_header"
       ],
-      "unsupported_controls": [
-        "colors::colors_results_directory::unimplemented",
-        "colors::distance::unimplemented",
-        "colors::instrument::unimplemented",
-        "colors::make_csv::unimplemented",
-        "colors::stellar_atm::unimplemented",
-        "colors::use_colors::unimplemented",
-        "colors::vega_sed::unimplemented"
-      ],
+      "unsupported_controls": [],
       "unknown_controls": [],
       "headless_plotting_keys_count": 0,
       "terminal_output_keys": [
@@ -8201,19 +8002,11 @@
     {
       "suite": "star",
       "case": "rsp_gyre",
-      "strict_ok": false,
+      "strict_ok": true,
       "entry_files": [
         "inlist_rsp_gyre_header"
       ],
-      "unsupported_controls": [
-        "colors::colors_results_directory::unimplemented",
-        "colors::distance::unimplemented",
-        "colors::instrument::unimplemented",
-        "colors::make_csv::unimplemented",
-        "colors::stellar_atm::unimplemented",
-        "colors::use_colors::unimplemented",
-        "colors::vega_sed::unimplemented"
-      ],
+      "unsupported_controls": [],
       "unknown_controls": [],
       "headless_plotting_keys_count": 20,
       "terminal_output_keys": [
@@ -8235,13 +8028,6 @@
         "inlist_rsp_load_file_header"
       ],
       "unsupported_controls": [
-        "colors::colors_results_directory::unimplemented",
-        "colors::distance::unimplemented",
-        "colors::instrument::unimplemented",
-        "colors::make_csv::unimplemented",
-        "colors::stellar_atm::unimplemented",
-        "colors::use_colors::unimplemented",
-        "colors::vega_sed::unimplemented",
         "controls::rsp_map_columns_filename::unused",
         "controls::rsp_map_filename::unused",
         "controls::rsp_map_first_period::unused",

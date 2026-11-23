@@ -44,7 +44,7 @@ _INCLUDE_PREFIX = {
     "simplex_search_controls": "simplex_search",
 }
 _KNOWN_UPSTREAM_ONLY_SECTIONS = frozenset(
-    {"simplex_search_controls", "colors", "multi_stars_job", "stella"}
+    {"simplex_search_controls", "multi_stars_job", "stella"}
 )
 
 
@@ -299,6 +299,7 @@ def load_inventories() -> InventorySets:
         "star_job": star_inv["STAR_JOB_SUPPORTED"],
         "eos": star_inv["EOS_SUPPORTED"],
         "kap": star_inv["KAP_SUPPORTED"],
+        "colors": star_inv["COLORS_SUPPORTED"],
         "controls": star_inv["CONTROLS_SUPPORTED"],
         "binary_job": bin_inv["BINARY_JOB_SUPPORTED"],
         "binary_controls": bin_inv["BINARY_CONTROLS_SUPPORTED"],
@@ -308,6 +309,7 @@ def load_inventories() -> InventorySets:
         "star_job": star_inv["STAR_JOB_UNUSED"],
         "eos": frozenset(),
         "kap": frozenset(),
+        "colors": star_inv["COLORS_UNUSED"],
         "controls": star_inv["CONTROLS_UNUSED"],
         "binary_job": frozenset(),
         "binary_controls": frozenset(),
@@ -326,6 +328,7 @@ def load_inventories() -> InventorySets:
             "star_job": star_inv["STAR_JOB_TERMINAL_OUTPUT"],
             "eos": star_inv.get("EOS_TERMINAL_OUTPUT", frozenset()),
             "kap": star_inv.get("KAP_TERMINAL_OUTPUT", frozenset()),
+            "colors": star_inv.get("COLORS_TERMINAL_OUTPUT", frozenset()),
             "controls": star_inv["CONTROLS_TERMINAL_OUTPUT"],
             "binary_job": bin_inv["BINARY_JOB_TERMINAL_OUTPUT"],
             "binary_controls": bin_inv["BINARY_CONTROLS_TERMINAL_OUTPUT"],

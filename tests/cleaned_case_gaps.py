@@ -77,9 +77,6 @@ DECLARED_STAR_STOPS: dict[str, DeclaredStop] = {
         r"overshoot_scheme", "#231"
     ),
     "make_env": DeclaredStop(r"missing saved model 'start\.mod'", "#154"),
-    "custom_rates": DeclaredStop(r"unknown net file 'nco\.net'", "#161"),
-    "carbon_kh": DeclaredStop(r"unknown net file 'minimal\.net'", "#161"),
-    "wd_aic": DeclaredStop(r"unknown net file 'wd_aic\.net'", "#161"),
     "tzo": DeclaredStop(r"dutch_wind_lowt_scheme' option 'other'", "#161"),
     # The 7 Msun pre-MS model differs from upstream's build_pre_ms_model:
     # at the first step's dt (1e-5 yr, star/private/init.f90:1007) the

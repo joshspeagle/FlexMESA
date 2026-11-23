@@ -16,12 +16,12 @@ use crate::derivs_support::{
     do_in_out, do_in_out_neu, get_weaklib_rates, update_special_rates,
     NetWorkState,
 };
-use flexmesa_math::Quad;
 use crate::screen::screen_net;
 use crate::types::{
     NetError, NetEvalResult, NetGeneralInfo, ReaclibKind, IH1, IPROTON,
     NUM_CATEGORIES, NUM_RVS, RATTAB_TEMP_LO, RATTAB_TLO,
 };
+use flexmesa_math::Quad;
 
 const MIN_Z_FOR_SWITCH_TO_PROT: i32 = 12;
 
@@ -80,7 +80,7 @@ fn eval_net_setup(
 #[allow(clippy::too_many_arguments)]
 pub fn eval_net(
     g: &NetGeneralInfo, rates_only: bool, just_dxdt: bool, x: &[f64],
-    mut temp: f64, mut log_t: f64, rho: f64, log_rho: f64,
+    temp: f64, log_t: f64, rho: f64, log_rho: f64,
     abar: f64, zbar: f64, z2bar: f64, ye: f64,
     eta: f64, d_eta_dln_t: f64, d_eta_dln_rho: f64,
     rate_factors: &[f64], weak_rate_factor: f64,
@@ -88,15 +88,37 @@ pub fn eval_net(
     use_suzuki: bool, do_ecapture: bool, symbolic: bool,
 ) -> Result<NetEvalResult, NetError> {
     let mut w = NetWorkState::new(g);
+    eval_net_result_with_work(
+        g, &mut w, rates_only, just_dxdt, x, temp, log_t, rho, log_rho, abar,
+        zbar, z2bar, ye, eta, d_eta_dln_t, d_eta_dln_rho, rate_factors,
+        weak_rate_factor, screening_mode, use_3a_fl87, use_suzuki,
+        do_ecapture, symbolic,
+    )
+}
+
+/// Evaluates `eval_net` into a reusable [`NetWorkState`] without converting
+/// `NetEvalResult` quantities back to molar `Y`-units.
+#[rustfmt::skip]
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn eval_net_result_with_work(
+    g: &NetGeneralInfo, w: &mut NetWorkState, rates_only: bool, just_dxdt: bool,
+    x: &[f64], mut temp: f64, mut log_t: f64, rho: f64, log_rho: f64,
+    abar: f64, zbar: f64, z2bar: f64, ye: f64,
+    eta: f64, d_eta_dln_t: f64, d_eta_dln_rho: f64,
+    rate_factors: &[f64], weak_rate_factor: f64,
+    screening_mode: ScreeningMode, use_3a_fl87: bool,
+    use_suzuki: bool, do_ecapture: bool, symbolic: bool,
+) -> Result<NetEvalResult, NetError> {
+    w.reset(g);
     eval_net_setup(
-        g, &mut w, x, &mut temp, &mut log_t, rho, abar, zbar, z2bar, ye, eta,
+        g, w, x, &mut temp, &mut log_t, rho, abar, zbar, z2bar, ye, eta,
         d_eta_dln_t, d_eta_dln_rho, rate_factors, weak_rate_factor,
         use_suzuki, do_ecapture,
     )?;
 
     if g.doing_approx21 {
         return eval_net_approx21_procs(
-            g, &mut w, rates_only, just_dxdt, temp, log_t, rho, log_rho, abar,
+            g, w, rates_only, just_dxdt, temp, log_t, rho, log_rho, abar,
             zbar, z2bar, ye, eta, weak_rate_factor, screening_mode,
             use_3a_fl87,
         );
@@ -139,14 +161,14 @@ pub fn eval_net(
     };
     let mut eps_nuc_mev = [Quad::ZERO; NUM_RVS];
     get_derivs(
-        g, &mut w, dydt, &mut eps_nuc_mev, temp, rho, abar, zbar,
+        g, w, dydt, &mut eps_nuc_mev, temp, rho, abar, zbar,
         rate_factors, use_3a_fl87, symbolic, just_dxdt,
     )?;
 
     res.rate_raw = w.rate_raw[..nr].to_vec();
     res.rate_screened = w.rate_screened[..nr].to_vec();
     if symbolic {
-        res.d_dxdt_dx = w.d_dydt_dy;
+        res.d_dxdt_dx = w.d_dydt_dy[..ni * ni].to_vec();
         return Ok(res);
     }
 

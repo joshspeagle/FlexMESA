@@ -1,0 +1,492 @@
+! Module  : gyre_tap_m
+! Purpose : read-only IEEE-754 hex taps inserted into an overlay copy of
+!           GYRE 8.1 (as bundled with MESA 26.4.1) to record intermediate
+!           values for the FlexMESA GYRE port oracles (#170, package G0).
+!
+! This file is NOT part of upstream GYRE. `apply_taps.py` copies it into
+! the overlay's `src/common/` directory and adds it to `libgyre_SRCS`.
+! Every tap only reads its arguments, so a tapped build computes the same
+! values as an untapped build compiled with the same flags; `run_oracles.py`
+! checks this by comparing every mode against the reference capture.
+!
+! Records are written one per line, tab separated:
+!   TAG <tab> name <tab> count <tab> hex1 hex2 ...
+! where each hex value is the 16-digit IEEE-754 bit pattern of a real(RD)
+! (complex values are written as re, im pairs) or a decimal integer.
+!
+! Controls (environment variables, read once):
+!   GYRE_TAP_FILE           output path; taps are disabled when unset/empty
+!   GYRE_TAP_MATRIX_BUILDS  number of leading bvp builds per mode-parameter
+!                           set whose blocks are dumped (default 1)
+!   GYRE_TAP_MATRIX_BLOCKS  number of evenly spaced interior blocks dumped
+!                           per dumped build (default 4; first/last included)
+!   GYRE_TAP_LAPACK_MAX     max LAPACK calls dumped per routine (default 8)
+
+module gyre_tap_m
+
+   use forum_m, only: RD
+   use ext_m
+
+   use ISO_FORTRAN_ENV
+
+   implicit none (type, external)
+
+   integer, save :: tap_unit = -1
+   logical, save :: tap_inited = .FALSE.
+   logical, save :: tap_enabled = .FALSE.
+   integer, save :: n_matrix_builds = 1
+   integer, save :: n_matrix_blocks = 4
+   integer, save :: lapack_max = 8
+
+   integer, save :: build_count = 0
+   logical, save :: mode_build = .FALSE.
+   logical, save :: dump_this_build = .FALSE.
+
+   integer, parameter :: N_LAPACK_TAGS = 8
+   character(16), parameter :: LAPACK_TAGS(N_LAPACK_TAGS) = [character(16) :: &
+      'XGETRF_FACTOR', 'XGETRF_DET', 'DGEEV', 'ZGEEV', &
+      'DGESVD', 'ZGESVD', 'DGESVX', 'ZGESVX']
+   integer, save :: lapack_count(N_LAPACK_TAGS) = 0
+   logical, save :: lapack_last = .FALSE.
+   !$OMP THREADPRIVATE (lapack_last)
+
+   interface tap_val
+      module procedure tap_r0_
+      module procedure tap_r1_
+      module procedure tap_r2_
+      module procedure tap_c0_
+      module procedure tap_c1_
+      module procedure tap_c2_
+      module procedure tap_i0_
+      module procedure tap_i1_
+      module procedure tap_xr0_
+      module procedure tap_xc0_
+   end interface tap_val
+
+   public :: tap_on
+   public :: tap_val
+   public :: tap_mark
+   public :: tap_begin_modepar
+   public :: tap_begin_build
+   public :: tap_want_block
+   public :: tap_set_mode_build
+   public :: tap_lapack_on
+   public :: tap_lapack_last
+   public :: tap_build_dumped
+   public :: tap_block
+
+   interface tap_block
+      module procedure tap_block_r_
+      module procedure tap_block_c_
+   end interface tap_block
+
+   private
+
+contains
+
+   subroutine tap_init_()
+
+      character(4096) :: path
+      character(64)   :: buf
+      integer         :: length
+      integer         :: stat
+
+      !$OMP CRITICAL (gyre_tap_init)
+      if (.NOT. tap_inited) then
+
+         call GET_ENVIRONMENT_VARIABLE('GYRE_TAP_FILE', path, length, stat)
+         if (stat == 0 .AND. length > 0) then
+            open(NEWUNIT=tap_unit, FILE=path(:length), STATUS='REPLACE', ACTION='WRITE')
+            tap_enabled = .TRUE.
+         end if
+
+         call GET_ENVIRONMENT_VARIABLE('GYRE_TAP_MATRIX_BUILDS', buf, length, stat)
+         if (stat == 0 .AND. length > 0) read(buf(:length), *) n_matrix_builds
+
+         call GET_ENVIRONMENT_VARIABLE('GYRE_TAP_MATRIX_BLOCKS', buf, length, stat)
+         if (stat == 0 .AND. length > 0) read(buf(:length), *) n_matrix_blocks
+
+         call GET_ENVIRONMENT_VARIABLE('GYRE_TAP_LAPACK_MAX', buf, length, stat)
+         if (stat == 0 .AND. length > 0) read(buf(:length), *) lapack_max
+
+         tap_inited = .TRUE.
+
+      end if
+      !$OMP END CRITICAL (gyre_tap_init)
+
+   end subroutine tap_init_
+
+   logical function tap_on()
+
+      if (.NOT. tap_inited) call tap_init_()
+      tap_on = tap_enabled
+
+   end function tap_on
+
+   !****
+
+   subroutine tap_mark(tag, name)
+
+      character(*), intent(in) :: tag
+      character(*), intent(in) :: name
+
+      if (.NOT. tap_on()) return
+
+      !$OMP CRITICAL (gyre_tap_write)
+      write(tap_unit, '(A,A,A,A,A)') tag, CHAR(9), name, CHAR(9), '0'
+      !$OMP END CRITICAL (gyre_tap_write)
+
+   end subroutine tap_mark
+
+   !****
+
+   subroutine tap_begin_modepar(l, i_md_p)
+
+      integer, intent(in) :: l
+      integer, intent(in) :: i_md_p
+
+      if (.NOT. tap_on()) return
+
+      build_count = 0
+      call tap_val('MODEPAR', 'l,i_md_p', [l, i_md_p])
+
+   end subroutine tap_begin_modepar
+
+   !****
+
+   subroutine tap_begin_build(n)
+
+      integer, intent(in) :: n
+
+      ! Called from the (serial) head of bvp build; decides whether this
+      ! build's blocks are dumped
+
+      if (.NOT. tap_on()) return
+
+      build_count = build_count + 1
+      dump_this_build = (build_count <= n_matrix_builds) .OR. mode_build
+
+      if (mode_build) then
+         call tap_val('BUILD', 'index,n,mode_build', [build_count, n, 1])
+      else
+         call tap_val('BUILD', 'index,n,mode_build', [build_count, n, 0])
+      end if
+
+      mode_build = .FALSE.
+
+   end subroutine tap_begin_build
+
+   !****
+
+   logical function tap_want_block(j, n)
+
+      integer, intent(in) :: j
+      integer, intent(in) :: n
+
+      integer :: i
+      integer :: j_s
+
+      ! Blocks j = 1..n-1; dump n_matrix_blocks evenly spaced blocks
+      ! including the first and last
+
+      tap_want_block = .FALSE.
+
+      if (.NOT. tap_on()) return
+      if (.NOT. dump_this_build) return
+
+      if (n_matrix_blocks <= 1) then
+         tap_want_block = (j == 1)
+         return
+      end if
+
+      do i = 0, n_matrix_blocks-1
+         j_s = 1 + (i*(n-2))/(n_matrix_blocks-1)
+         if (j == j_s) tap_want_block = .TRUE.
+      end do
+
+   end function tap_want_block
+
+   !****
+
+   logical function tap_build_dumped()
+
+      tap_build_dumped = tap_on() .AND. dump_this_build
+
+   end function tap_build_dumped
+
+   !****
+
+   subroutine tap_set_mode_build()
+
+      if (.NOT. tap_on()) return
+      mode_build = .TRUE.
+
+   end subroutine tap_set_mode_build
+
+   !****
+
+   logical function tap_lapack_on(tag)
+
+      character(*), intent(in) :: tag
+
+      integer :: i
+
+      tap_lapack_on = .FALSE.
+      lapack_last = .FALSE.
+      if (.NOT. tap_on()) return
+
+      !$OMP CRITICAL (gyre_tap_lapack)
+      do i = 1, N_LAPACK_TAGS
+         if (TRIM(LAPACK_TAGS(i)) == tag) then
+            if (lapack_count(i) < lapack_max) then
+               lapack_count(i) = lapack_count(i) + 1
+               tap_lapack_on = .TRUE.
+            end if
+         end if
+      end do
+      !$OMP END CRITICAL (gyre_tap_lapack)
+
+      lapack_last = tap_lapack_on
+
+   end function tap_lapack_on
+
+   !****
+
+   logical function tap_lapack_last()
+
+      ! True when the most recent tap_lapack_on call (on this thread)
+      ! selected the call for dumping
+
+      tap_lapack_last = lapack_last
+
+   end function tap_lapack_last
+
+   !****
+
+   function hex_(x) result(h)
+
+      real(RD), intent(in) :: x
+      character(16)        :: h
+
+      write(h, '(Z16.16)') TRANSFER(x, 0_INT64)
+
+   end function hex_
+
+   !****
+
+   function line_(tag, name, vals) result(line)
+
+      character(*), intent(in)  :: tag
+      character(*), intent(in)  :: name
+      real(RD), intent(in)      :: vals(:)
+      character(:), allocatable :: line
+
+      integer       :: i
+      character(32) :: cnt
+
+      write(cnt, '(I0)') SIZE(vals)
+
+      line = tag // CHAR(9) // name // CHAR(9) // TRIM(cnt) // CHAR(9)
+      do i = 1, SIZE(vals)
+         if (i > 1) line = line // ' '
+         line = line // hex_(vals(i))
+      end do
+
+   end function line_
+
+   !****
+
+   subroutine emit_(tag, name, vals)
+
+      character(*), intent(in) :: tag
+      character(*), intent(in) :: name
+      real(RD), intent(in)     :: vals(:)
+
+      character(:), allocatable :: line
+
+      line = line_(tag, name, vals)
+
+      !$OMP CRITICAL (gyre_tap_write)
+      write(tap_unit, '(A)') line
+      !$OMP END CRITICAL (gyre_tap_write)
+
+   end subroutine emit_
+
+   !****
+
+   function shape_(m, n, sfx) result(shp)
+
+      integer, intent(in)       :: m
+      integer, intent(in)       :: n
+      character(*), intent(in)  :: sfx
+      character(:), allocatable :: shp
+
+      character(64) :: buf
+
+      write(buf, '(A,I0,A,I0,A,A,A)') '[', m, 'x', n, ',colmajor', sfx, ']'
+      shp = TRIM(buf)
+
+   end function shape_
+
+   !****
+
+   subroutine tap_block_r_(j, E_l, E_r, scl)
+
+      integer, intent(in)      :: j
+      real(RD), intent(in)     :: E_l(:,:)
+      real(RD), intent(in)     :: E_r(:,:)
+      type(ext_rt), intent(in) :: scl
+
+      character(:), allocatable :: l1, l2, l3
+      character(32)             :: jt
+
+      if (.NOT. tap_on()) return
+
+      write(jt, '(A,I0)') 'j=', j
+      l1 = line_('BLOCK', TRIM(jt) // ':E_l' // shape_(SIZE(E_l, 1), SIZE(E_l, 2), ''), RESHAPE(E_l, [SIZE(E_l)]))
+      l2 = line_('BLOCK', TRIM(jt) // ':E_r' // shape_(SIZE(E_r, 1), SIZE(E_r, 2), ''), RESHAPE(E_r, [SIZE(E_r)]))
+      l3 = line_('BLOCK', TRIM(jt) // ':scl[ext:f,e]', [fraction(scl), REAL(exponent(scl), RD)])
+
+      !$OMP CRITICAL (gyre_tap_write)
+      write(tap_unit, '(A)') l1
+      write(tap_unit, '(A)') l2
+      write(tap_unit, '(A)') l3
+      !$OMP END CRITICAL (gyre_tap_write)
+
+   end subroutine tap_block_r_
+
+   !****
+
+   subroutine tap_block_c_(j, E_l, E_r, scl)
+
+      integer, intent(in)      :: j
+      complex(RD), intent(in)  :: E_l(:,:)
+      complex(RD), intent(in)  :: E_r(:,:)
+      type(ext_ct), intent(in) :: scl
+
+      character(:), allocatable :: l1, l2, l3
+      character(32)             :: jt
+      complex(RD)               :: f
+
+      if (.NOT. tap_on()) return
+
+      write(jt, '(A,I0)') 'j=', j
+      l1 = line_('BLOCK', TRIM(jt) // ':E_l' // shape_(SIZE(E_l, 1), SIZE(E_l, 2), ',reim'), reim_(E_l))
+      l2 = line_('BLOCK', TRIM(jt) // ':E_r' // shape_(SIZE(E_r, 1), SIZE(E_r, 2), ',reim'), reim_(E_r))
+      f = fraction(scl)
+      l3 = line_('BLOCK', TRIM(jt) // ':scl[ext:fre,fim,e]', [REAL(f), AIMAG(f), REAL(exponent(scl), RD)])
+
+      !$OMP CRITICAL (gyre_tap_write)
+      write(tap_unit, '(A)') l1
+      write(tap_unit, '(A)') l2
+      write(tap_unit, '(A)') l3
+      !$OMP END CRITICAL (gyre_tap_write)
+
+   end subroutine tap_block_c_
+
+   !****
+
+   function reim_(z) result(v)
+
+      complex(RD), intent(in) :: z(:,:)
+      real(RD)                :: v(2*SIZE(z))
+
+      complex(RD) :: zf(SIZE(z))
+
+      zf = RESHAPE(z, [SIZE(z)])
+      v(1::2) = REAL(zf)
+      v(2::2) = AIMAG(zf)
+
+   end function reim_
+
+   !****
+
+   subroutine tap_r0_(tag, name, x)
+      character(*), intent(in) :: tag, name
+      real(RD), intent(in)     :: x
+      if (.NOT. tap_on()) return
+      call emit_(tag, name, [x])
+   end subroutine tap_r0_
+
+   subroutine tap_r1_(tag, name, x)
+      character(*), intent(in) :: tag, name
+      real(RD), intent(in)     :: x(:)
+      if (.NOT. tap_on()) return
+      call emit_(tag, name, x)
+   end subroutine tap_r1_
+
+   subroutine tap_r2_(tag, name, x)
+      character(*), intent(in) :: tag, name
+      real(RD), intent(in)     :: x(:,:)
+      if (.NOT. tap_on()) return
+      call emit_(tag, name // shape_(SIZE(x, 1), SIZE(x, 2), ''), RESHAPE(x, [SIZE(x)]))
+   end subroutine tap_r2_
+
+   subroutine tap_c0_(tag, name, z)
+      character(*), intent(in) :: tag, name
+      complex(RD), intent(in)  :: z
+      if (.NOT. tap_on()) return
+      call emit_(tag, name, [REAL(z), AIMAG(z)])
+   end subroutine tap_c0_
+
+   subroutine tap_c1_(tag, name, z)
+      character(*), intent(in) :: tag, name
+      complex(RD), intent(in)  :: z(:)
+      real(RD)                 :: v(2*SIZE(z))
+      if (.NOT. tap_on()) return
+      v(1::2) = REAL(z)
+      v(2::2) = AIMAG(z)
+      call emit_(tag, name, v)
+   end subroutine tap_c1_
+
+   subroutine tap_c2_(tag, name, z)
+      character(*), intent(in) :: tag, name
+      complex(RD), intent(in)  :: z(:,:)
+      if (.NOT. tap_on()) return
+      call emit_(tag, name // shape_(SIZE(z, 1), SIZE(z, 2), ',reim'), reim_(z))
+   end subroutine tap_c2_
+
+   subroutine tap_i0_(tag, name, i)
+      character(*), intent(in) :: tag, name
+      integer, intent(in)      :: i
+      if (.NOT. tap_on()) return
+      call tap_i1_(tag, name, [i])
+   end subroutine tap_i0_
+
+   subroutine tap_i1_(tag, name, i)
+      character(*), intent(in)  :: tag, name
+      integer, intent(in)       :: i(:)
+      integer                   :: k
+      character(:), allocatable :: line
+      character(32)             :: buf
+      if (.NOT. tap_on()) return
+      write(buf, '(I0)') SIZE(i)
+      line = tag // CHAR(9) // name // '[int]' // CHAR(9) // TRIM(buf) // CHAR(9)
+      do k = 1, SIZE(i)
+         write(buf, '(I0)') i(k)
+         if (k > 1) line = line // ' '
+         line = line // TRIM(buf)
+      end do
+      !$OMP CRITICAL (gyre_tap_write)
+      write(tap_unit, '(A)') line
+      !$OMP END CRITICAL (gyre_tap_write)
+   end subroutine tap_i1_
+
+   subroutine tap_xr0_(tag, name, x)
+      character(*), intent(in) :: tag, name
+      type(ext_rt), intent(in) :: x
+      if (.NOT. tap_on()) return
+      ! fraction (hex) then exponent (as an exactly representable real)
+      call emit_(tag, name // '[ext:f,e]', [fraction(x), REAL(exponent(x), RD)])
+   end subroutine tap_xr0_
+
+   subroutine tap_xc0_(tag, name, x)
+      character(*), intent(in) :: tag, name
+      type(ext_ct), intent(in) :: x
+      complex(RD)              :: f
+      if (.NOT. tap_on()) return
+      f = fraction(x)
+      call emit_(tag, name // '[ext:fre,fim,e]', [REAL(f), AIMAG(f), REAL(exponent(x), RD)])
+   end subroutine tap_xc0_
+
+end module gyre_tap_m

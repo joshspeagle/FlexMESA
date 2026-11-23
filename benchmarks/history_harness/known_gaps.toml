@@ -27,8 +27,8 @@ reason = "Core-collapse evolution exceeds wall-time guard with unported high-T o
 [[gaps]]
 suite = "star"
 case = "15M_dynamo"
-issue = "#158"
-reason = "Spruit-Tayler dynamo and rotational mixing time out."
+issue = "#154"
+reason = "Stops at model 1 (min_timestep_limit): from FlexMESA's pre-MS model the first step at upstream's dt = 1e-5 yr does not converge (surface dv_dt residual 0.43 at the first Newton iteration), because the pre-MS structure differs from upstream build_pre_ms_model (#154). The Spruit-Tayler dynamo and rotational mixing are also unported (#158)."
 
 [[gaps]]
 suite = "star"
@@ -154,7 +154,7 @@ reason = "Strict run reaches xa_central_lower_limit(h1) (91 steps vs MESA 92, 0 
 suite = "star"
 case = "custom_colors"
 issue = "#161"
-reason = "Strict validation rejects unported &colors and relaxation controls, and history_columns.list requests unported phase_of_evolution and colors columns (#161)."
+reason = "Strict validation rejects unported &colors and relaxation controls, and history_columns.list requests unported phase_of_evolution and colors columns (#161). With the controls ignored, the run stops at model 1 (min_timestep_limit) because the first pre-MS step at upstream's dt = 1e-5 yr does not converge from FlexMESA's pre-MS model (#154)."
 
 [[gaps]]
 suite = "star"
@@ -310,7 +310,7 @@ reason = "Fails loudly at sub-grid planetary initial_mass without create_initial
 suite = "star"
 case = "make_sdb"
 issue = "#154"
-reason = "sdB envelope relaxation and He-core ignition time out (#154, #152)."
+reason = "Stops at model 1 (min_timestep_limit): relax_initial_mass_to_remove_H_env is a homologous rescale (relax.rs relax_to_remove_h_env), not upstream's mass-loss relaxation with extra_mass_retained_by_remove_h_env and lg_max_abs_mdot (star_relax_mass_to_remove_H_env, star/public/star_lib.f90:1271, called at star/job/run_star_support.f90:2475), so the first step starts far from equilibrium and its Newton iterations diverge (#154)."
 
 [[gaps]]
 suite = "star"

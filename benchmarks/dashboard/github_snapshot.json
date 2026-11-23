@@ -206,7 +206,7 @@
         },
         {
           "number": 385,
-          "title": "[Parity] H1 conservation after adjust_mass misses its 1e-11 oracle once dq is not renormalized (#381)",
+          "title": "[Parity] adjust_mass composition remap differs from MESA by 1-2 ULP; H1-conservation test needs #377",
           "state": "open"
         }
       ]

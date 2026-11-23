@@ -136,73 +136,63 @@ pub fn get_kap_high_t_results(
     log_rho: f64,
     log_t: f64,
 ) -> Result<(f64, f64, f64, f64), KapError> {
-    if !cfg.use_type2_opacities {
-        let (lk, dlk_dr, dlk_dt) = get1_kap_fixed_metal_results(
-            cfg,
-            cfg.kap_option.prefix(),
-            z,
-            x,
-            log_rho,
-            log_t,
-        )?;
-        return Ok((0.0, exp10(lk), dlk_dr, dlk_dt));
-    }
+    let (frac_type2, z_type1, zbase, dxc, dxo) = if cfg.use_type2_opacities {
+        let zbase = cfg.zbase;
+        if zbase < 0.0 {
+            return Err(KapError::InvalidComposition(
+                "must supply zbase for Type 2 opacities",
+            ));
+        }
+        let z_type1 = if cfg.use_zbase_for_type1 {
+            z.min(zbase)
+        } else {
+            z
+        };
+        let tables = kap_tables()?;
+        let co_prefix = cfg.kap_co_option.prefix();
+        let co_table0 = tables
+            .co_sets
+            .iter()
+            .find(|s| s.prefix == co_prefix)
+            .and_then(|s| s.z_tables.first())
+            .ok_or(KapError::MissingTable(
+                "missing CO z_table for ref zfracs",
+            ))?;
+        let (fc, fo) = (co_table0.zfrac_c, co_table0.zfrac_o);
+        let dxc = (xc - fc * zbase).max(0.0);
+        let dxo = (xo - fo * zbase).max(0.0);
 
-    let zbase = cfg.zbase;
-    if zbase < 0.0 {
-        return Err(KapError::InvalidComposition(
-            "must supply zbase for Type 2 opacities",
-        ));
-    }
+        let frac_x = if x >= cfg.kap_type2_full_off_x {
+            0.0
+        } else if x <= cfg.kap_type2_full_on_x {
+            1.0
+        } else {
+            (cfg.kap_type2_full_off_x - x)
+                / (cfg.kap_type2_full_off_x - cfg.kap_type2_full_on_x)
+        };
 
-    let z_type1 = if cfg.use_zbase_for_type1 {
-        z.min(zbase)
+        // `kap/private/kap_eval.f90:577-588`: compute `frac_dZ` before
+        // multiplying by `frac_X`.
+        let dz = z - zbase;
+        let frac_dz = if dz <= cfg.kap_type2_full_off_dz {
+            0.0
+        } else if dz >= cfg.kap_type2_full_on_dz {
+            1.0
+        } else {
+            (cfg.kap_type2_full_off_dz - dz)
+                / (cfg.kap_type2_full_off_dz - cfg.kap_type2_full_on_dz)
+        };
+        (frac_x * frac_dz, z_type1, zbase, dxc, dxo)
     } else {
-        z
+        (0.0, z, 0.0, 0.0, 0.0)
     };
 
-    let tables = kap_tables()?;
-    let co_prefix = cfg.kap_co_option.prefix();
-    let co_table0 = tables
-        .co_sets
-        .iter()
-        .find(|s| s.prefix == co_prefix)
-        .and_then(|s| s.z_tables.first())
-        .ok_or(KapError::MissingTable("missing CO z_table for ref zfracs"))?;
-    let (fc, fo) = (co_table0.zfrac_c, co_table0.zfrac_o);
-    let dxc = (xc - fc * zbase).max(0.0);
-    let dxo = (xo - fo * zbase).max(0.0);
-
-    let frac_x = if x >= cfg.kap_type2_full_off_x {
-        0.0
-    } else if x <= cfg.kap_type2_full_on_x {
-        1.0
-    } else {
-        (cfg.kap_type2_full_off_x - x)
-            / (cfg.kap_type2_full_off_x - cfg.kap_type2_full_on_x)
-    };
-
-    // `kap/private/kap_eval.f90:577-588`: compute `frac_dZ` before multiplying
-    // by `frac_X`.
-    let dz = z - zbase;
-    let frac_dz = if dz <= cfg.kap_type2_full_off_dz {
-        0.0
-    } else if dz >= cfg.kap_type2_full_on_dz {
-        1.0
-    } else {
-        (cfg.kap_type2_full_off_dz - dz)
-            / (cfg.kap_type2_full_off_dz - cfg.kap_type2_full_on_dz)
-    };
-    let alfa = frac_x * frac_dz;
+    let alfa = frac_type2;
     let beta = 1.0 - alfa;
-    let frac_type2 = alfa;
 
     let (kap_alfa, dlnkap_alfa_dr, dlnkap_alfa_dt) = if alfa > 0.0 {
         let (lk, dr, dt) =
             get1_kap_co_results(cfg, zbase, x, dxc, dxo, log_rho, log_t)?;
-        if beta == 0.0 {
-            return Ok((frac_type2, exp10(lk), dr, dt));
-        }
         (exp10(lk), dr, dt)
     } else {
         (0.0, 0.0, 0.0)
@@ -217,14 +207,14 @@ pub fn get_kap_high_t_results(
             log_rho,
             log_t,
         )?;
-        if alfa == 0.0 {
-            return Ok((frac_type2, exp10(lk), dr, dt));
-        }
         (exp10(lk), dr, dt)
     } else {
         (0.0, 0.0, 0.0)
     };
 
+    // Always execute `kap_eval.f90:679-695`'s weighted normalization even when
+    // `alfa == 0.0` or `beta == 0.0`: `(kap_i * d) / kap_i` differs by 1 ULP
+    // from bare `d`, which preserves bitwise derivative parity with `libkap.a`.
     let kap = alfa * kap_alfa + beta * kap_beta;
     if kap < 1.0e-30 {
         return Ok((frac_type2, 1.0e-30, 0.0, 0.0));

@@ -358,3 +358,156 @@ fn test_kap_blend_t_derivatives_and_type2_dz_blend_consistency() {
         assert!(kap_ht >= exp10(-30.0));
     });
 }
+
+struct BepKapZoneOracle {
+    include_conduction: bool,
+    log_rho_bits: u64,
+    log_t_bits: u64,
+    eos_bits: [u64; 6],
+    expected_kap_bits: u64,
+    expected_dr_bits: u64,
+    expected_dt_bits: u64,
+}
+
+fn mesa_bep_kap_config() -> KapConfig {
+    KapConfig {
+        kap_option: KapOption::A09,
+        kap_co_option: KapCoOption::A09Co,
+        kap_low_t_option: flexmesa_kap::KapLowTOption::LowTFa05A09p,
+        zbase: 0.01,
+        ..KapConfig::default()
+    }
+}
+
+#[test]
+fn test_kap_high_t_normalization_t2_and_beta0_matches_mesa_hex() {
+    with_numerics_mode(NumericsMode::Strict, || {
+        let mut cfg = mesa_bep_kap_config();
+
+        // Zone 36 of MESA `rsp_BEP` (`alfa = 0.0`, `beta = 1.0`, pure `a09` Type 1).
+        let lr36 = f64::from_bits(0xC020_8DE1_4E86_172E);
+        let lt36 = f64::from_bits(0x400F_E0C1_9219_4FC0);
+        for use_type2 in [true, false] {
+            cfg.use_type2_opacities = use_type2;
+            let (f_t2, kap, dr, dt) = get_kap_high_t_results(
+                &cfg, 0.70, 0.01, 0.0, 0.0, 0.0, 0.0, lr36, lt36,
+            )
+            .expect("rsp_BEP zone 36 highT eval");
+            assert_eq!(f_t2.to_bits(), 0);
+            assert_eq!(kap.to_bits(), 0x4036_BAC6_E604_2A66);
+            assert_eq!(dr.to_bits(), 0x3FCE_9364_1DC6_0DE3);
+            assert_eq!(dt.to_bits(), 0x4024_9864_F6D2_8045);
+        }
+
+        // Pure Type 2 (`beta = 0.0`) normalization matches MESA `libkap.a`.
+        cfg.use_type2_opacities = true;
+        let (f_t2_b0, kap_b0, dr_b0, dt_b0) = get_kap_high_t_results(
+            &cfg, 0.0, 0.05, 0.025, 0.0, 0.015, 0.0, -4.0, 6.5,
+        )
+        .expect("pure Type 2 highT eval");
+        assert_eq!(f_t2_b0.to_bits(), 0x3FF0_0000_0000_0000);
+        assert_eq!(kap_b0.to_bits(), 0x3FCA_1482_9482_3449);
+        assert_eq!(dr_b0.to_bits(), 0x3F92_403C_6188_BA8D);
+        assert_eq!(dt_b0.to_bits(), 0xBFBC_6D95_91A6_B8D2);
+    });
+}
+
+#[test]
+fn test_kap_high_t_normalization_bep_zones_36_and_48_matches_mesa_hex() {
+    with_numerics_mode(NumericsMode::Strict, || {
+        let mut cfg = mesa_bep_kap_config();
+        let bep_xa = [
+            0x3FE6_6666_6666_6666_u64,
+            0x3F00_2E34_A0C7_720A,
+            0x3FD2_8EDA_B750_BC55,
+            0x3F62_0A28_EB10_C4A2,
+            0x3F45_26A8_A254_F39D,
+            0x3F75_D40E_8116_0AFA,
+            0x3EE9_37C9_EE17_9CF8,
+            0x3F51_95FF_7E2C_886F,
+            0x3F16_C213_C4CC_8322,
+            0x3F45_5533_86ED_EA4D,
+        ]
+        .map(f64::from_bits);
+        let bep_net =
+            flexmesa_star::micro::get_or_load_net("o18_and_ne22.net", None)
+                .expect("load o18_and_ne22.net");
+
+        let eos36 = [
+            0xBFFC_005C_CB1E_0E9A_u64,
+            0xBFDB_5A0A_3E80_6774,
+            0x401E_9CCB_8981_E8A6,
+            0xC02F_DC4A_1866_D3A0,
+            0x3FE2_52FA_EDFD_CE52,
+            0x4018_9CCA_CE70_9056,
+        ];
+        let eos48 = [
+            0xBFD4_129C_4E17_7A70_u64,
+            0xBF9A_BA72_398E_62D8,
+            0x3FDD_7CFA_E4CA_8C7A,
+            0xC030_0574_14B3_B5CB,
+            0x3FEF_2A2C_8290_D572,
+            0xBFF0_A0C7_0097_B542,
+        ];
+
+        let oracles = [
+            BepKapZoneOracle {
+                include_conduction: true,
+                log_rho_bits: 0xC020_8DE1_4E86_172E,
+                log_t_bits: 0x400F_E0C1_9219_4FC0,
+                eos_bits: eos36,
+                expected_kap_bits: 0x4036_BAC6_E602_6023,
+                expected_dr_bits: 0x3FCE_9364_1DB9_90D8,
+                expected_dt_bits: 0x4024_9864_F6D0_FF5F,
+            },
+            BepKapZoneOracle {
+                include_conduction: false,
+                log_rho_bits: 0xC020_8DE1_4E86_172E,
+                log_t_bits: 0x400F_E0C1_9219_4FC0,
+                eos_bits: eos36,
+                expected_kap_bits: 0x4036_BAC6_E604_2A63,
+                expected_dr_bits: 0x3FCE_9364_1DC6_0DE3,
+                expected_dt_bits: 0x4024_9864_F6D2_8045,
+            },
+            BepKapZoneOracle {
+                include_conduction: true,
+                log_rho_bits: 0xC021_2292_37BF_E5D1,
+                log_t_bits: 0x4010_EEFE_7738_F006,
+                eos_bits: eos48,
+                expected_kap_bits: 0x4027_4D90_2CA4_B937,
+                expected_dr_bits: 0x3FED_844A_DAF0_BB44,
+                expected_dt_bits: 0xC00D_895E_98A2_D0AA,
+            },
+            BepKapZoneOracle {
+                include_conduction: false,
+                log_rho_bits: 0xC021_2292_37BF_E5D1,
+                log_t_bits: 0x4010_EEFE_7738_F006,
+                eos_bits: eos48,
+                expected_kap_bits: 0x4027_4D90_2CA5_0A96,
+                expected_dr_bits: 0x3FED_844A_DAF1_9212,
+                expected_dt_bits: 0xC00D_895E_98A3_4BA7,
+            },
+        ];
+
+        for oracle in oracles {
+            cfg.include_electron_conduction = oracle.include_conduction;
+            let out = flexmesa_kap::kap_get(
+                &cfg,
+                &bep_net.chem_id,
+                &bep_xa,
+                f64::from_bits(oracle.log_rho_bits),
+                f64::from_bits(oracle.log_t_bits),
+                f64::from_bits(oracle.eos_bits[0]),
+                f64::from_bits(oracle.eos_bits[1]),
+                f64::from_bits(oracle.eos_bits[2]),
+                f64::from_bits(oracle.eos_bits[3]),
+                f64::from_bits(oracle.eos_bits[4]),
+                f64::from_bits(oracle.eos_bits[5]),
+            )
+            .expect("rsp_BEP kap_get eval");
+            assert_eq!(out.kap.to_bits(), oracle.expected_kap_bits);
+            assert_eq!(out.dlnkap_dln_rho.to_bits(), oracle.expected_dr_bits);
+            assert_eq!(out.dlnkap_dln_t.to_bits(), oracle.expected_dt_bits);
+        }
+    });
+}

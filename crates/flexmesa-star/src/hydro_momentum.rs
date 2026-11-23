@@ -43,7 +43,7 @@ use crate::star_ad::{
 #[inline]
 pub fn eval_p_theta(model: &StarModel, k: usize) -> f64 {
     let logt = model.ln_t[k] / LN10;
-    if model.controls.is_velocity_time_centered(model.model_number)
+    if model.controls.is_velocity_time_centered(model.model_number_old)
         && model.controls.include_p_in_velocity_time_centering
         && logt
             <= model
@@ -89,7 +89,7 @@ pub fn eval_time_centered_hse_geom_ad(
     let lnr_k = StarAdOrder1::variable(model.ln_r[k], I_LNR_00);
     let r_k = lnr_k.exp();
     let using_v_tc =
-        model.controls.is_velocity_time_centered(model.model_number)
+        model.controls.is_velocity_time_centered(model.model_number_old)
             && (model.controls.v_flag || model.controls.u_flag)
             && model.dt > 0.0
             && !model.ln_r_start.is_empty();
@@ -456,7 +456,7 @@ pub fn do1_radius_eqn(model: &StarModel, k: usize, sys: &mut HenyeySystem) {
         -v_var / cs
     } else {
         let vel_tc =
-            model.controls.is_velocity_time_centered(model.model_number);
+            model.controls.is_velocity_time_centered(model.model_number_old);
         let v_ad = if model.controls.u_flag && !model.controls.v_flag {
             let uf_ad = model.aux.u_face_ad.get(k).copied().unwrap_or(v_var);
             if vel_tc {

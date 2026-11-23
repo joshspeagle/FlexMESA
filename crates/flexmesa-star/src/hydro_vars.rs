@@ -446,11 +446,14 @@ pub(crate) fn do1_mlt_2(
         return Ok(make_gradr_sticky);
     }
 
-    // `Get_results` (`star/private/turb_support.f90:198-510`).
+    // `Get_results` (`star/private/turb_support.f90:198-510`). Upstream picks
+    // `MLT_option` on the first try of the step, before `prepare_for_new_try`
+    // advances `model_number` (`star/private/evolve.f90:390-396, 2012`), so
+    // the threshold is tested against the previous generation's number.
     let mlt_opt = if !model.aux.doing_relax
         && model.controls.steps_before_use_tdc > 0
     {
-        if (model.model_number as isize)
+        if (model.model_number_old as isize)
             >= model.controls.steps_before_use_tdc
         {
             MltOption::Tdc
@@ -1111,7 +1114,10 @@ pub fn set_gradt_excess_alpha(model: &mut StarModel) {
     };
 
     let alpha_old = model.aux.mixing.gradt_excess_alpha_old;
-    let mut new_alpha = if model.model_number > 1 && lambda1 >= 0.0 {
+    // `star/private/turb_info.f90:501`: time smoothing once the previous
+    // model is stored (`generations > 1`, set by `prepare_for_new_step`,
+    // `star/private/evolve.f90:1897`).
+    let mut new_alpha = if model.generations > 1 && lambda1 >= 0.0 {
         let mut sm = (1.0 - mw.gradt_excess_age_fraction) * alpha
             + mw.gradt_excess_age_fraction * alpha_old;
         if mw.gradt_excess_max_change > 0.0 {

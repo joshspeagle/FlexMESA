@@ -94,7 +94,7 @@ pub fn eval_cell_pressure_for_work_ad(
 #[must_use]
 pub(crate) fn eval_l_theta(model: &StarModel, k: usize) -> f64 {
     let logt = model.ln_t[k] / LN10;
-    if model.controls.is_velocity_time_centered(model.model_number)
+    if model.controls.is_velocity_time_centered(model.model_number_old)
         && model.controls.include_l_in_velocity_time_centering
         && logt
             <= model
@@ -405,7 +405,9 @@ pub fn eval_surface_and_center_work(model: &StarModel) -> (f64, f64) {
         return (0.0, 0.0);
     }
     let u_flag_only = model.controls.u_flag && !model.controls.v_flag;
-    let vel_tc = model.controls.is_velocity_time_centered(model.model_number)
+    let vel_tc = model
+        .controls
+        .is_velocity_time_centered(model.model_number_old)
         && model.dt > 0.0
         && !model.ln_r_start.is_empty();
     let simple_pdv = !u_flag_only
@@ -471,7 +473,9 @@ pub(crate) fn do1_energy_eqn_with_ergs_error(
 
     let v_flag_only = model.controls.v_flag && !model.controls.u_flag;
     let u_flag_only = model.controls.u_flag && !model.controls.v_flag;
-    let vel_tc = model.controls.is_velocity_time_centered(model.model_number)
+    let vel_tc = model
+        .controls
+        .is_velocity_time_centered(model.model_number_old)
         && model.dt > 0.0
         && !model.ln_r_start.is_empty();
 

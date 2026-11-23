@@ -259,6 +259,10 @@ impl StarModel {
         crate::micro::do_neu(self)?;
         self.save_start_values()?;
         self.save_old_values();
+        // A built or loaded model is one generation
+        // (`star/private/init.f90:1006, 1009`,
+        // `star/private/read_model.f90:438, 463`).
+        self.generations = 1;
         Ok(())
     }
 
@@ -487,7 +491,11 @@ impl StarModel {
     }
 
     /// Snapshots current state into `*_old` arrays after a successful step.
+    ///
+    /// Also stores `model_number_old = model_number`, as `new_generation`
+    /// does (`star/private/evolve_support.f90:80`).
     pub fn save_old_values(&mut self) {
+        self.model_number_old = self.model_number;
         self.star_age_old = self.star_age;
         self.dt_old = self.dt;
         self.mstar_old = self.mstar;

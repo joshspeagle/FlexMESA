@@ -702,6 +702,9 @@ pub(crate) fn relax_pre_ms_to_radiative_core(
 ) -> Result<(), StarError> {
     let saved_ctrl = model.controls.clone();
     model.aux.doing_relax = true;
+    // `do_relax_to_radiative_core` saves `model_number`, relaxes from 0 and
+    // restores it afterwards (`star/private/relax.f90:3357, 3362, 3368`).
+    let saved_model_number = model.model_number;
     model.model_number = 0;
     let c = &mut model.controls;
     if c.mlt_option == MltOption::Tdc {
@@ -767,7 +770,21 @@ pub(crate) fn relax_pre_ms_to_radiative_core(
         model.total_num_solver_calls,
         model.micro_cache_hits,
         model.micro_cache_misses,
-    ) = (0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1, 0, 0, 0, 0, 0, 0);
+    ) = (
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        saved_model_number,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+    );
     model.aux.cumulative_energy_error = 0.0;
     set_hydro_vars(model, false, false)?;
     model.save_start_values()?;

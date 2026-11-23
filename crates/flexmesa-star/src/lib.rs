@@ -174,8 +174,10 @@ pub mod solver_norms;
 pub mod solver_support;
 pub mod star_ad;
 pub mod star_job_init;
+pub mod star_utils;
 pub mod stella;
 pub mod step_trace;
+pub mod stepdump;
 pub mod struct_burn_mix;
 pub mod termination;
 pub mod timestep;
@@ -206,6 +208,11 @@ pub use adjust_mesh_split_merge::{
 pub use adjust_mesh_support::{
     GvalInfo, OtherMeshDeltaCoeffFactorHandle, OtherMeshDeltaCoeffFactorHook,
     check_validity, get_gval_info, get_gval_info_with_controls,
+};
+pub use cell_energy::{
+    DkeDpeDt, cell_specific_ke, cell_specific_pe,
+    cell_specific_rotational_energy, cell_specific_total_energy,
+    get_dke_dt_dpe_dt,
 };
 pub use controls::{
     AtmOption, AtmTTauOpacity, AtmTTauRelation, EnergyEqnOption, StarControls,
@@ -251,8 +258,9 @@ pub use evolve::{
 };
 pub use evolve_support::{
     apply_step_pre_physics, apply_step_pre_physics_with_extras,
-    eval_total_energy_integrals, relax_uniform_omega, remesh_star_before_step,
-    update_step_energy_conservation,
+    eval_delta_m_total_energy_integrals, eval_total_energy_integrals,
+    record_start_of_step_energy_integrals, relax_uniform_omega,
+    remesh_star_before_step, update_step_energy_conservation,
 };
 pub use history::{
     HistoryRow, extract_history_row, format_history_header, format_history_row,
@@ -260,8 +268,8 @@ pub use history::{
 };
 pub use hydro_energy::{
     eval_cell_pressure_for_work_ad, eval_face_area_time_centered_ad,
-    eval_pvsc_cell_ad, setup_d_turbulent_energy_dt, setup_dl_dm,
-    setup_sources_and_others,
+    eval_pvsc_cell_ad, eval_surface_and_center_work,
+    setup_d_turbulent_energy_dt, setup_dl_dm, setup_sources_and_others,
 };
 pub use hydro_eqns::{
     HenyeySystem, compute_x_scale, do_surf_bc_eqns, do1_chem_eqns,

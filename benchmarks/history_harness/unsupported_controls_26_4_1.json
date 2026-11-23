@@ -10,7 +10,7 @@
     "total_cases": 106,
     "strict_pass_cases": 50,
     "strict_fail_cases": 56,
-    "distinct_unsupported_controls": 191,
+    "distinct_unsupported_controls": 186,
     "distinct_unknown_controls": 0,
     "cases_with_headless_plotting": 78,
     "distinct_headless_plotting_keys": 895
@@ -46,11 +46,11 @@
     {
       "section": "controls",
       "upstream_keys": 1448,
-      "supported_keys": 1159,
+      "supported_keys": 1169,
       "unused_keys": 23,
       "headless_gui_keys": 0,
       "terminal_output_keys": 16,
-      "unimplemented_upstream_keys": 250
+      "unimplemented_upstream_keys": 240
     },
     {
       "section": "binary_job",
@@ -1393,42 +1393,6 @@
     },
     {
       "section": "controls",
-      "key": "atm_irradiated_kap_v",
-      "category": "unimplemented",
-      "case_count": 1,
-      "cases": [
-        "star/irradiated_planet"
-      ]
-    },
-    {
-      "section": "controls",
-      "key": "atm_irradiated_opacity",
-      "category": "unimplemented",
-      "case_count": 1,
-      "cases": [
-        "star/irradiated_planet"
-      ]
-    },
-    {
-      "section": "controls",
-      "key": "atm_irradiated_p_surf",
-      "category": "unimplemented",
-      "case_count": 1,
-      "cases": [
-        "star/irradiated_planet"
-      ]
-    },
-    {
-      "section": "controls",
-      "key": "atm_irradiated_t_eq",
-      "category": "unimplemented",
-      "case_count": 1,
-      "cases": [
-        "star/irradiated_planet"
-      ]
-    },
-    {
-      "section": "controls",
       "key": "atm_off_table_option",
       "category": "unimplemented",
       "case_count": 1,
@@ -1677,15 +1641,6 @@
       "case_count": 1,
       "cases": [
         "star/ccsn_IIp"
-      ]
-    },
-    {
-      "section": "controls",
-      "key": "set_rho_to_dm_div_dv",
-      "category": "unimplemented",
-      "case_count": 1,
-      "cases": [
-        "star/rsp_save_and_load_file"
       ]
     },
     {
@@ -7676,10 +7631,6 @@
         "inlist_evolve_header"
       ],
       "unsupported_controls": [
-        "controls::atm_irradiated_kap_v::unimplemented",
-        "controls::atm_irradiated_opacity::unimplemented",
-        "controls::atm_irradiated_p_surf::unimplemented",
-        "controls::atm_irradiated_t_eq::unimplemented",
         "star_job::dlogtau_factor::unimplemented",
         "star_job::relax_irradiation_max_yrs_dt::unimplemented",
         "star_job::relax_irradiation_min_steps::unimplemented"
@@ -8429,8 +8380,7 @@
         "controls::rsp_report_undercorrections::unimplemented",
         "controls::rsp_tol_max_resid::unused",
         "controls::rsp_trace_rsp_build_model::unimplemented",
-        "controls::rsp_write_map::unused",
-        "controls::set_rho_to_dm_div_dv::unimplemented"
+        "controls::rsp_write_map::unused"
       ],
       "unknown_controls": [],
       "headless_plotting_keys_count": 69,

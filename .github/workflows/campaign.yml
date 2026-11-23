@@ -16,7 +16,23 @@ on:
       case_timeout_sec:
         description: "Per-case timeout in seconds"
         required: false
-        default: "300"
+        default: "600"
+      harness_shards:
+        description: "Number of parallel shards of the full harness"
+        required: false
+        default: "8"
+      short_budget_sec:
+        description: >-
+          Optional shorter budget (s) for cases whose baseline row ended on
+          the time budget; empty runs every case with case_timeout_sec and
+          saves a baseline candidate
+        required: false
+        default: ""
+      harness_only:
+        description: "Run only the full harness (for a pull request's campaign)"
+        type: boolean
+        required: false
+        default: false
 
 permissions:
   contents: read
@@ -37,6 +53,7 @@ env:
 jobs:
   known-gaps-and-hex-gates:
     name: Bijective Known-Gaps & Level-2 Module Hex Gates
+    if: ${{ !inputs.harness_only }}
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
@@ -89,14 +106,41 @@ jobs:
           if-no-files-found: ignore
           path: ${{ runner.temp }}/campaign-gates/
 
-  full-history-harness:
-    name: Full 106-Case Strict History Harness Campaign
+  # The full campaign runs as shards on separate runners (DECISIONS #45 for
+  # the CI pattern). Strict mode is bit-identical across machines, so each
+  # shard measures its cases as one job would; only budget-limited outcomes
+  # depend on the runner. `harness merge` then writes one case table and one
+  # baseline candidate (DECISIONS #51) and applies the gate once. Dispatching
+  # this workflow on a pull request's branch (the `ref` chosen when
+  # dispatching) runs that branch's campaign; `harness_only` skips the other
+  # jobs.
+  full-history-harness-plan:
+    name: Plan Full-Harness Shards
     runs-on: ubuntu-latest
-    # 106 cases at up to 300 s each, twice when a strict run is rejected and
-    # rerun as diagnostic, on 2 workers. Per-case results are appended to
-    # logs/progress.jsonl as they finish, so a cancelled job still uploads
-    # what it measured.
-    timeout-minutes: 300
+    timeout-minutes: 5
+    outputs:
+      shards: ${{ steps.plan.outputs.shards }}
+    steps:
+      - name: List shard indices
+        id: plan
+        env:
+          N_SHARDS: ${{ inputs.harness_shards || '8' }}
+        run: |
+          python3 -c "import json, os; n = int(os.environ['N_SHARDS']); assert 1 <= n <= 64, n; print('shards=' + json.dumps(list(range(1, n + 1))))" >> "$GITHUB_OUTPUT"
+
+  full-history-harness-shard:
+    name: Full Strict History Harness (shard ${{ matrix.shard }})
+    needs: full-history-harness-plan
+    runs-on: ubuntu-latest
+    # A shard runs about 1/N of the 106 cases at up to 600 s each
+    # (DECISIONS #57), twice when a strict run is rejected and rerun as
+    # diagnostic. Per-case results are appended to logs/progress.jsonl as
+    # they finish, so a cancelled shard still uploads what it measured.
+    timeout-minutes: 240
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: ${{ fromJSON(needs.full-history-harness-plan.outputs.shards) }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
@@ -107,24 +151,90 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           pip-spec: '-e ".[test]"'
           release: "true"
+          rust-cache-key: campaign-harness
 
-      - name: Execute full 106-case strict harness with RSS and time budgets
+      - name: Execute one shard of the strict harness with RSS and time budgets
+        env:
+          N_SHARDS: ${{ inputs.harness_shards || '8' }}
+          JOBS: ${{ inputs.harness_jobs || '2' }}
+          MAX_RSS: ${{ inputs.max_rss_gb || '5.5' }}
+          TIMEOUT: ${{ inputs.case_timeout_sec || '600' }}
+          SHORT_BUDGET: ${{ inputs.short_budget_sec || '' }}
         run: |
-          OUT_DIR="${{ runner.temp }}/campaign-harness"
+          OUT_DIR="${{ runner.temp }}/campaign-harness-shard"
           mkdir -p "$OUT_DIR"
-          JOBS="${{ inputs.harness_jobs || '2' }}"
-          MAX_RSS="${{ inputs.max_rss_gb || '5.5' }}"
-          TIMEOUT="${{ inputs.case_timeout_sec || '300' }}"
+          SHORT_ARGS=()
+          if [ -n "$SHORT_BUDGET" ]; then
+            SHORT_ARGS=(--short-budget-sec "$SHORT_BUDGET")
+          fi
+          # No --gate here: the merge job gates the whole campaign once.
           flexmesa harness run \
             --preset all \
             --numerics-mode strict \
+            --shard "${{ matrix.shard }}/$N_SHARDS" \
             --jobs "$JOBS" \
             --timeout-sec "$TIMEOUT" \
+            "${SHORT_ARGS[@]}" \
             --max-rss-gb "$MAX_RSS" \
             --work-dir "$OUT_DIR/logs" \
+            --json-out "$OUT_DIR/shard_${{ matrix.shard }}.json"
+
+      - name: Upload shard harness artifacts
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: campaign-history-harness-shard-${{ matrix.shard }}
+          retention-days: 30
+          if-no-files-found: ignore
+          path: ${{ runner.temp }}/campaign-harness-shard/
+
+  full-history-harness:
+    name: Full 106-Case Strict History Harness Campaign (merge and gate)
+    needs: full-history-harness-shard
+    # Merge whatever the shards measured even when one failed or was
+    # cancelled; `harness merge --gate` then fails on the missing shard.
+    if: always() && needs.full-history-harness-shard.result != 'skipped'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Set up FlexMESA (release)
+        uses: ./.github/actions/setup-flexmesa
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          pip-spec: '-e ".[test]"'
+          release: "true"
+          rust-cache-key: campaign-harness
+
+      - name: Download shard reports
+        uses: actions/download-artifact@v8
+        with:
+          pattern: campaign-history-harness-shard-*
+          path: ${{ runner.temp }}/campaign-shards
+
+      - name: Merge shards into one case table and baseline candidate, then gate
+        env:
+          SHORT_BUDGET: ${{ inputs.short_budget_sec || '' }}
+        run: |
+          OUT_DIR="${{ runner.temp }}/campaign-harness"
+          mkdir -p "$OUT_DIR"
+          shopt -s nullglob
+          REPORTS=("${{ runner.temp }}"/campaign-shards/*/shard_*.json)
+          if [ "${#REPORTS[@]}" -eq 0 ]; then
+            echo "no shard reports were uploaded" >&2
+            exit 1
+          fi
+          # A baseline candidate records full-budget runs only (DECISIONS #51).
+          CANDIDATE_ARGS=()
+          if [ -z "$SHORT_BUDGET" ]; then
+            CANDIDATE_ARGS=(--save-baseline "$OUT_DIR/baseline_candidate.json")
+          fi
+          flexmesa harness merge "${REPORTS[@]}" \
             --markdown-out "$OUT_DIR/case_table.md" \
             --json-out "$OUT_DIR/case_table.json" \
-            --save-baseline "$OUT_DIR/baseline_candidate.json" \
+            "${CANDIDATE_ARGS[@]}" \
             --gate
 
       - name: Upload full campaign harness artifacts
@@ -138,6 +248,7 @@ jobs:
 
   rust-ignored-campaign:
     name: Rust --ignored Suite & Anti-Stale-Gap Gate
+    if: ${{ !inputs.harness_only }}
     runs-on: ubuntu-latest
     timeout-minutes: 180
     steps:
@@ -192,6 +303,7 @@ jobs:
 
   strict-determinism-uncapped:
     name: Uncapped Strict Determinism (${{ matrix.os }})
+    if: ${{ !inputs.harness_only }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
     strategy:
@@ -255,6 +367,7 @@ jobs:
   # 26.4.1 is tracked in #146.
   fortran-harness-check:
     name: Tap Build & Fortran Make-Plan Check (no MESA build)
+    if: ${{ !inputs.harness_only }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:

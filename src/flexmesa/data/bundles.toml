@@ -142,6 +142,21 @@ unpacked_size_bytes = 43101866
 test_only = true
 description = "348,321 exact IEEE-754 hexadecimal and raw 64-bit reference values across all 25 MESA 26.4.1 module test suites plus DWARF compiler FP flags."
 
+[[bundles]]
+name = "mesa_stepdumps"
+archive = "mesa-stepdumps-v2.tar.zst"
+kind = "tar_zst"
+bundle_root = "data"
+target_relpath = "mesa_stepdumps"
+manifest_file = "bundle_hashes/mesa_stepdumps.sha256.tsv"
+sentinel_relpaths = ["mesa_stepdumps/PROVENANCE.json", "mesa_stepdumps/star/1.3M_ms_high_Z.stepdump", "mesa_stepdumps/binary/jdot_gr_check.stepdump", "mesa_stepdumps/astero/astero_gyre.stepdump"]
+archive_sha256 = "ce085e8c07bda3c4bfadfb65d3468715a2fa6a794df6676619bc6b2ca45afb25"
+archive_size_bytes = 70780347
+unpacked_sha256 = ""
+unpacked_size_bytes = 298437959
+test_only = true
+description = "MESA 26.4.1 solver step dumps of 95 test-suite cases (#372): per-zone xh, xa, dm, residuals and the quantities the equations read (AUX) at the first solver call, and the solver and line-search records, for the first 3 models of each case's first ./rn stage (write-statement overlay, SDK 26.6.1, gfortran 15.2.0; compare with flexmesa trace --compare)."
+
 [embedded_ionization]
 name = "ion_tables_full"
 format = "FMION001"

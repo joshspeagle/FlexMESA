@@ -69,6 +69,10 @@ Scope and the `v0.1.0` definition are in [`SCOPE.md`](SCOPE.md). Work is tracked
 | 52 | `DualOrder1<N>` Evaluates Upstream's Expression for Each Operation, in One of Two Forms Chosen by `N` (`#339`) | In force | below |
 | 53 | Dashboard Coverage Runs Daily When `main` Has Changed, in Seven Instrumented Shards Built With the `ci` Profile (`#345`) | In force | below |
 | 54 | The Second- and Third-Order Dual Types Are Generated From Upstream's `auto_diff` Modules by a Script (`#349`) | In force | below |
+| 55 | The Binary Step Loop Resets `rho = dm/dV` Before Remeshing, and Retries Restore the Reset Model (`#363`) | In force | below |
+| 56 | Upstream MESA `26.4.1` Global Total-Energy Accounting (`#151`) | In force | below |
+| 57 | The Scheduled Campaign Gives Each Case 600 Seconds (`#382`) | In force | below |
+| 58 | Pull-Request Campaigns May Give Budget-Limited Cases a Short Budget; the Scheduled Campaign Runs in Shards (`#390`) | In force | below |
 
 ## Pre-audit decisions still in force
 
@@ -739,3 +743,51 @@ The text of these four entries predates the audit of 2026-11-16. The decisions s
   - *Translate by hand*: about 130 routines of up to 30 temporaries each.
   - *Generate at build time*: would make the build depend on a MESA checkout.
 
+## DECISIONS #55: The Binary Step Loop Resets `rho = dm/dV` Before Remeshing, and Retries Restore the Reset Model (`#363`)
+
+- **Date**: 2026-11-22
+- **Decision**:
+  1. **Where the reset runs**: `set_rho_to_dm_div_dv_for_new_step` (`star_utils.rs`, upstream `use_xh_to_set_rho_to_dm_div_dV`, `star/private/star_utils.f90:606-632`) runs where `prepare_for_new_step` calls it (`star/private/evolve.f90:1854-1857`): once per step, on the first try, after the `dt` checks and before the remesh. For a single star, `star_evolve_step` calls it before `remesh_star_before_step`. The binary step loop, which owns the per-step remesh of both stars, calls it for each star at the top of its once-per-step block, before remeshing. `star_evolve_step_part1` takes an explicit `prepare_new_step` argument and resets on the first try when it is true, independent of `do_remesh`. The binary loop passes `false` because it has already prepared the step.
+  2. **What a retry restores**: upstream restores retries and redos from `xh_old`, which `new_generation` writes after the reset and the remesh (`evolve.f90:1895`, `set_current_to_old` at `evolve.f90:401`), or from `prev_mesh_xh`, stored right after the reset (`evolve.f90:1859-1872`), when `restore_mesh_on_retry` is set. The binary loop's `post_mesh_snap` therefore carries the reset density, and a new `pre_mesh_snap`, taken after the reset and before the remesh, replaces the pre-step snapshot as the `restore_mesh_on_retry` source. The pre-step snapshot remains the state restored when the step returns an error.
+- **Why**: the binary loop took its retry snapshots before any step preparation. With the reset on the first try only, every retry started again from the unreset density. On the original RLOF fixture, model 1 then ended at 0.122 yr after 13 retries, where MESA ends at 125 yr after 3. With this order, the donor's `lnd lnT lnR L` at the first solver call match an instrumented MESA `26.4.1` run bit for bit in all 2402 zones, and model 1's counts match MESA's.
+- **Limits**: a caller of `star_evolve_step_part1` that passes `prepare_new_step = false` without running the reset itself skips it. The binary loop is the only such caller. `pre_mesh_snap` is captured only when a star sets `restore_mesh_on_retry`, to avoid copying both stars every step.
+- **Alternatives Rejected**:
+  - *Run the reset on every attempt in `star_evolve_step_part1`*: it also gives MESA's model-1 counts, because the reset is idempotent on a restored model. But it runs after the binary loop's remesh, which changes the remeshed density on the first try, and it moves upstream's once-per-step call into the retry path.
+  - *Recapture the pre-step snapshot after the reset*: the error path would then restore a model the caller never had.
+
+## DECISIONS #56: Upstream MESA `26.4.1` Global Total-Energy Accounting (`#151`)
+
+- **Date**: 2026-11-22
+- **Decision**:
+  1. **Global total-energy conservation (`okay_energy_conservation`)**: Replace solver-residual energy accounting and the hardcoded `0.0` `eps_grav` bypass with MESA `26.4.1`'s global total-energy balance across `eval_total_energy_integrals` (`star/private/star_utils.f90:2439-2612`), Phase 1 + Phase 2 `okay_energy_conservation` (`star/private/evolve.f90:1101-1373`), surface and center work (`star/private/hydro_energy.f90:176-177, 640-655, 769, 872`), and `mdot` energy bookkeeping (`star/private/eps_mdot.f90:494-678`), accumulating `error_in_energy_conservation = total_energy_end - (total_energy_old + total_energy_sources_and_sinks)` for both `dedt` and `eps_grav`.
+  2. **Verbatim upstream formulas and controls**: Preserve upstream expressions verbatim, including `cell_specific_rotational_energy = 0.5 * (e_p1 + e_00)` with `e = i_rot * omega^2` (`star_utils.f90:2328-2339`), `+ mdot_adiabatic_surface` (`evolve.f90:1312`), `include_rotation_in_total_energy = false` (`controls.defaults:9399`), and `absolute_cumulative_energy_err = true` (`controls.defaults:11629`).
+  3. **Checkpoint persistence**: Persist `total_energy_initial`, `have_initial_energy_integrals`, and `StepHistoryScalars` energy diagnostics across `.photo` restarts (`star/private/photo_out.f90:69-70`), bumping `PHOTO_FORMAT_VERSION` from `29` to `30`.
+- **Why**: Summing only Henyey solver residuals misses non-solver energy drift (operator-split burning, `adjust_mass`, remeshing, composition updates, `eps_grav` form discrepancy) and breaks upstream agreement with `rel_E_err`, `log_rel_run_E_err`, and `hard_limit_for_rel_error_in_energy_conservation` retry triggers.
+- **Limits**: In `eval_delta_m_total_energy_integrals`, upstream leaves `sum_dm = 0` (`star_utils.f90:2467-2514`); FlexMESA reproduces this verbatim.
+- **Alternatives Rejected**:
+  - *Keeping solver-residual accounting for `dedt` or returning `0.0` for `eps_grav`*: hides genuine drift and broke energy conservation agreement.
+  - *Altering `evolve.f90:1312` or `star_utils.f90:2335` formulas before MESA fixes them*: violates verbatim MESA `26.4.1` behavior.
+
+## DECISIONS #57: The Scheduled Campaign Gives Each Case 600 Seconds (`#382`)
+
+- **Date**: 2026-11-23 (project lead)
+- **Decision**: the per-case time budget of the scheduled history-harness campaign is 600 s, for every case (was 300 s). `campaign.yml` defaults to `case_timeout_sec = 600` and its full-harness job may run 355 minutes (GitHub-hosted jobs stop at 360). Local full campaigns use `--jobs 2 --timeout-sec 600 --max-rss-gb 5.5`.
+- **Why**: six cases reach upstream's own termination only after more than 300 s on the local campaign machine, on `main` and on #367 alike (paired strict runs at `--timeout-sec 900`): `binary/evolve_both_stars` (a strict pass), `binary/jdot_ml_check`, `star/1.5M_with_diffusion`, `star/hb_2M`, `star/wd_cool_0.6M` and `star/7M_prems_to_AGB`, at 330 to 510 s. Their committed baseline rows record the termination, so at 300 s the scheduled gate reported lost terminations and the number of passing cases depended on the budget rather than on the physics.
+- **Limits**: GitHub runners are slower than the local machine (`DECISIONS #51`), so some of these cases may still end on the budget there; `DECISIONS #51` keeps their committed rows in that case. A full campaign takes longer: each case that ends on the budget now costs up to 600 s.
+- **Alternatives Rejected**:
+  - *A per-case budget in `case_manifest.toml`*: bounds campaign time more tightly, but adds a field the harness, the gate and the baseline would all have to carry, for six cases.
+  - *Declaring the six cases as known gaps at 300 s*: would stop counting `evolve_both_stars` as passing although it reaches MESA's termination within tolerances, and would make the declared gaps depend on machine speed.
+
+## DECISIONS #58: Pull-Request Campaigns May Give Budget-Limited Cases a Short Budget; the Scheduled Campaign Runs in Shards (`#390`)
+
+- **Date**: 2026-11-23
+- **Decision**:
+  1. **Short-budget tier**: `flexmesa harness run --short-budget-sec S` runs every case whose committed baseline row ended on the time budget (`run_status = "timeout"`) with `S` seconds and every other case with `--timeout-sec`. For those cases the gate compares the run as a prefix of the baseline row: it fails when the case takes no steps (baseline took some), ends other than on upstream's termination before the baseline's step count, or first leaves a track tolerance at an earlier model than the baseline (or inside the baseline's coordinate range when the baseline never left one). `--update-baseline` keeps the committed row when such a case ends on the short budget and replaces it when the case ends on a termination condition or an error. `--save-baseline` is refused with the short budget. Without the option nothing changes.
+  2. **Shards**: `harness run --shard I/N` runs one of `N` disjoint parts of the selected cases. Cases whose baseline row ended on a time or memory budget are dealt round-robin first, then the rest, each in manifest order. `harness merge` rebuilds the records from the shard `--json-out` reports, writes one case table and one baseline candidate, and applies the gate once; it fails the gate when a shard or a selected case is missing or a case appears twice, and refuses shards run with different settings. `campaign.yml` runs the full harness as `harness_shards` (default 8) matrix jobs plus a merge job that keeps the job name `full-history-harness`, the artifact `campaign-history-harness-artifacts` and the `baseline_candidate.json` of `DECISIONS #51`. `workflow_dispatch` on a pull request's branch runs that branch's campaign; `harness_only` skips the other jobs and `short_budget_sec` selects the short tier (no candidate is then saved).
+- **Why**: Strict mode is bit-identical across machines and thread counts, so a run of an unchanged engine reproduces a prefix of the baseline trajectory and only budget-limited outcomes depend on the machine. The cases that ended on the budget took about 65% of the last campaign's case time while showing nothing a prefix cannot show. Sharding turns one 355-minute job into parallel jobs of well under two hours.
+- **Limits**: A short-budget run does not show what happens after `S` seconds: a change that breaks such a case later in its trajectory passes the short-tier gate and is found by the next full campaign. The zero-steps rule assumes `S` covers model initialization; a case whose setup takes longer than `S` would be reported. Per-shard timing on GitHub runners is still machine-dependent, so budget-limited rows in a sharded candidate move as they did before (`DECISIONS #51`).
+- **Alternatives Rejected**:
+  - *Comparing step counts or final values of short-budget runs*: they differ from a longer run by design.
+  - *Writing short-budget rows into the baseline*: would replace a longer record of the same trajectory with a shorter one.
+  - *Skipping budget-limited cases in pull-request campaigns*: loses the check that they still evolve and do not diverge earlier.
+  - *Balancing shards by measured wall time*: the baseline normalizes wall times to zero for deterministic diffs, so there is no committed cost data.

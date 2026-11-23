@@ -528,6 +528,91 @@ def _render_mass_loss_section(
     return out
 
 
+def _pick_energy_error_column(
+    rec: harness_runner.CaseHarnessRecord,
+) -> tuple[history_compare.HistoryComparison, str] | None:
+    if rec.comparison is None:
+        return None
+    comp = rec.comparison
+    dev_cols = {d.column for d in comp.track_deviations}
+    for cand in history_compare.ENERGY_ERROR_COLUMNS:
+        if (
+            cand in comp.final_run_values
+            or cand in comp.final_ref_values
+            or cand in comp.final_diffs
+            or cand in dev_cols
+        ):
+            return comp, cand
+    return None
+
+
+def _fmt_energy_metric(val: float | None, *, is_log: bool) -> str:
+    if is_log:
+        if val is None:
+            return "-"
+        if not math.isfinite(val):
+            return "non-finite"
+        return f"{val:.3f}"
+    return _fmt_signed_sci(val)
+
+
+def _render_energy_conservation_section(
+    records: list[harness_runner.CaseHarnessRecord],
+) -> list[str]:
+    """Render mechanical ``log_rel_run_E_err`` comparisons (#151)."""
+    selected: list[
+        tuple[
+            harness_runner.CaseHarnessRecord,
+            history_compare.HistoryComparison,
+            str,
+        ]
+    ] = []
+    for rec in records:
+        picked = _pick_energy_error_column(rec)
+        if picked is not None:
+            comp, col = picked
+            selected.append((rec, comp, col))
+    if not selected:
+        return []
+    out: list[str] = [
+        "",
+        "## Energy Conservation Track Comparisons "
+        "(`log_rel_run_E_err`, `#151`)",
+        "",
+        "Generated mechanically from `baseline_run_26_4_1.json` / harness "
+        "comparisons against MESA `26.4.1` reference histories (`#151`). "
+        "`log_rel_run_E_err` values are `log10(|cumulative_energy_error / "
+        "total_energy_end|)` in `dex`.",
+        "",
+        "| Suite | Case | Run Mode | Observed Term | Steps (MESA) | "
+        "Col | FlexMESA Final | MESA 26.4.1 Final | Final Diff | "
+        "Max Track Diff | Median Track Diff | Declared Gap |",
+        "| :--- | :--- | :--- | :--- | ---: | :--- | ---: | ---: | ---: | "
+        "---: | ---: | :--- |",
+    ]
+    for rec, comp, col in selected:
+        obs_term = (
+            f"`{rec.observed_termination}`" if rec.observed_termination else "-"
+        )
+        gap_str = rec.known_gap_issue if rec.known_gap_issue else "-"
+        is_log = col.startswith("log_")
+        run_fin = comp.final_run_values.get(col)
+        ref_fin = comp.final_ref_values.get(col)
+        fin_diff = comp.final_diffs.get(col)
+        dev = _find_track_dev(rec, col)
+        out.append(
+            f"| `{rec.suite}` | `{rec.case}` | {rec.run_mode} | {obs_term} | "
+            f"{_fmt_steps_pair(rec)} | `{col}` | "
+            f"{_fmt_energy_metric(run_fin, is_log=is_log)} | "
+            f"{_fmt_energy_metric(ref_fin, is_log=is_log)} | "
+            f"{_fmt_signed_sci(fin_diff)} | "
+            f"{_fmt_abs_sci(dev.max_abs_diff if dev else None)} | "
+            f"{_fmt_abs_sci(dev.median_abs_diff if dev else None)} | "
+            f"{gap_str} |"
+        )
+    return out
+
+
 def _fmt_final_age_diff(rec: harness_runner.CaseHarnessRecord) -> str:
     if rec.comparison is None:
         return "-"
@@ -701,6 +786,7 @@ def render_case_table_markdown(
 
     lines.extend(_render_convective_core_section(manifest, records))
     lines.extend(_render_mass_loss_section(records))
+    lines.extend(_render_energy_conservation_section(records))
     lines.append("")
     return "\n".join(lines)
 
@@ -759,13 +845,42 @@ def build_manifest_inventory_records(
         if manifest_path is not None
         else None
     )
+    records = records_from_stored_rows(manifest, gaps, stored_by_key, base_dir)
+    return manifest, gaps, records
+
+
+def records_from_stored_rows(
+    manifest: case_manifest.HarnessManifest,
+    gaps: dict[tuple[str, str], case_manifest.KnownGapSpec],
+    stored_by_key: dict[tuple[str, str], dict[str, Any]],
+    base_dir: pathlib.Path | None = None,
+    *,
+    max_steps: int | None = None,
+) -> list[harness_runner.CaseHarnessRecord]:
+    """Rebuild ``CaseHarnessRecord`` entries from stored JSON case rows.
+
+    Verdicts are re-evaluated against ``manifest`` and ``gaps`` from the
+    stored measurements and comparisons; no history file is read.
+
+    Args:
+        manifest: Loaded ``HarnessManifest``.
+        gaps: Loaded ``known_gaps.toml`` mapping.
+        stored_by_key: Executed case rows (as written by
+            :func:`record_to_dict`) keyed by ``(suite, case)``.
+        base_dir: Directory against which manifest reference paths resolve.
+        max_steps: Step cap the stored runs used, or ``None`` when uncapped.
+
+    Returns:
+        One record per manifest entry, in manifest order; entries without a
+        stored row are not-executed records.
+    """
     records: list[harness_runner.CaseHarnessRecord] = []
     for entry in manifest.cases:
         stored = stored_by_key.get(entry.key)
         if stored is None:
             records.append(
                 harness_runner.evaluate_case_record(
-                    entry, gaps, None, root_dir=base_dir
+                    entry, gaps, None, max_steps=max_steps, root_dir=base_dir
                 )
             )
             continue
@@ -841,6 +956,7 @@ def build_manifest_inventory_records(
                 entry,
                 gaps,
                 outcome,
+                max_steps=max_steps,
                 root_dir=base_dir,
                 precomputed_comparison=comp,
                 precomputed_component_comparisons=ccomps,
@@ -850,4 +966,4 @@ def build_manifest_inventory_records(
                 precomputed_mesa_stats=pre_mesa,
             )
         )
-    return manifest, gaps, records
+    return records

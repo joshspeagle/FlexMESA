@@ -1444,9 +1444,9 @@ fn test_diffusion_phase_sep_guards_energy_gating_and_photo_v26_restart() {
         0.0,
     );
 
-    assert_eq!(PHOTO_FORMAT_VERSION, 29);
+    assert_eq!(PHOTO_FORMAT_VERSION, 30);
     let photo = write_photo_bytes(&wd);
-    let wd_photo = load_photo_bytes(&photo).expect("load_photo_bytes v29");
+    let wd_photo = load_photo_bytes(&photo).expect("load_photo_bytes v30");
     assert_eq!(
         wd_photo.aux.crystal_core_boundary_mass.to_bits(),
         saved_cryst.to_bits()

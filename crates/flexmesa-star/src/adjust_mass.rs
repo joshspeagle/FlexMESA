@@ -11,10 +11,7 @@ use flexmesa_math::Quad;
 
 use crate::controls::StarError;
 use crate::core_boundaries::dominant_species_index;
-use crate::eps_mdot::{
-    AdjustMassRecord, calculate_eps_mdot,
-    total_energy_profile_before_adjust_mass,
-};
+use crate::eps_mdot::{AdjustMassRecord, calculate_eps_mdot};
 use crate::hydro_rotation::{
     eval_i_rot, w_div_w_roche_jrot, w_div_w_roche_omega,
 };
@@ -121,6 +118,7 @@ pub fn do_adjust_mass_with_dt(
     let nz = model.nz;
     if delta_m == 0.0 || nz < 3 {
         model.eps_mdot.fill(0.0);
+        model.aux.step_hist.clear_adjust_mass_energy_fields();
         return Ok(());
     }
     if dt > 0.0 {
@@ -169,6 +167,7 @@ pub fn do_adjust_mass_step(
         model.aux.k_below_const_q = 1;
         model.aux.k_const_mass = 0;
         model.eps_mdot.fill(0.0);
+        model.aux.step_hist.clear_adjust_mass_energy_fields();
         return Ok(());
     }
     let mut delta_m = compute_delta_m(model, dt)?;
@@ -176,6 +175,7 @@ pub fn do_adjust_mass_step(
         model.aux.k_below_const_q = 1;
         model.aux.k_const_mass = 0;
         model.eps_mdot.fill(0.0);
+        model.aux.step_hist.clear_adjust_mass_energy_fields();
         return Ok(());
     }
 
@@ -443,6 +443,7 @@ fn do_adjust_mass_core(
         model.aux.k_below_const_q = 1;
         model.aux.k_const_mass = 0;
         model.eps_mdot.fill(0.0);
+        model.aux.step_hist.clear_adjust_mass_energy_fields();
         return Ok(());
     }
 
@@ -454,9 +455,15 @@ fn do_adjust_mass_core(
         )));
     }
 
-    let need_eps_mdot =
-        dt > 0.0 && model.controls.mix_wind.eps_mdot_factor != 0.0;
-    if need_eps_mdot {
+    // Upstream runs `save_for_eps_mdot` unconditionally (`adjust_mass.f90:204`)
+    // and `calculate_eps_mdot` whenever `mstar_dot != 0 && dt > 0`
+    // (`eps_mdot.f90:494-678`), scaling `eps_mdot` by `eps_mdot_factor` at
+    // the end (`eps_mdot.f90:666`).
+    let need_eps_mdot = dt > 0.0 && model.mstar_dot != 0.0;
+    if need_eps_mdot
+        && (model.r[..nz].iter().any(|&v| v <= 0.0)
+            || model.energy[..nz].iter().all(|&v| v == 0.0))
+    {
         model.reconstruct_ln_r_from_lnd_and_dm();
         model.set_m_grav_and_grav();
         set_basic_vars(model)?;
@@ -465,7 +472,16 @@ fn do_adjust_mass_core(
     let prev_dm_raw = model.dm.clone();
     // `save_for_eps_mdot` (`adjust_mass.f90:75-95, 204`).
     let total_energy_profile_before = if need_eps_mdot {
-        total_energy_profile_before_adjust_mass(model)?
+        let (profile, (_, _, _, _, _, e_before)) =
+            crate::evolve_support::eval_delta_m_total_energy_integrals(
+                model,
+                0,
+                nz,
+                model.mstar,
+                true,
+            );
+        model.aux.step_hist.total_energy_before_adjust_mass = e_before;
+        profile
     } else {
         Vec::new()
     };
@@ -636,9 +652,24 @@ fn do_adjust_mass_core(
             k_below_const_q: k_a + 1,
             k_const_mass: k_b + 1,
         };
-        calculate_eps_mdot(model, &record, dt)?;
+        let surface = calculate_eps_mdot(model, &record, dt)?;
+        // `eps_mdot.f90:669-677` and `evolve.f90:599-604`
+        let (e_int, e_grav, e_kin, e_rot, e_turb, e_after) =
+            crate::evolve_support::eval_total_energy_integrals(model);
+        let sh = &mut model.aux.step_hist;
+        sh.mdot_acoustic_surface = surface.mdot_acoustic_surface;
+        sh.mdot_adiabatic_surface = surface.mdot_adiabatic_surface;
+        sh.total_internal_energy_after_adjust_mass = e_int;
+        sh.total_gravitational_energy_after_adjust_mass = e_grav;
+        sh.total_radial_kinetic_energy_after_adjust_mass = e_kin;
+        sh.total_rotational_kinetic_energy_after_adjust_mass = e_rot;
+        sh.total_turbulent_energy_after_adjust_mass = e_turb;
+        sh.total_energy_after_adjust_mass = e_after;
+        sh.energy_change_from_do_adjust_mass_and_calculate_eps_mdot =
+            e_after - sh.total_energy_before_adjust_mass;
     } else {
         model.eps_mdot.fill(0.0);
+        model.aux.step_hist.clear_adjust_mass_energy_fields();
     }
     Ok(())
 }

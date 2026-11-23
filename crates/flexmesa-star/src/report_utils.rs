@@ -1629,10 +1629,26 @@ impl StepReportContext {
         let surf_rot = eval_surf_avg_rotation_info(model);
         let mix = eval_conv_and_mx_summary(model);
         let epsnuc_out = eval_epsnuc_zones(model);
-        let mut energies_erg = eval_total_energy_integrals(model);
-        if model.aux.step_hist.total_energy_end != 0.0 {
-            energies_erg.5 = model.aux.step_hist.total_energy_end;
-        }
+        let sh = &model.aux.step_hist;
+        let energies_erg = if sh.total_energy_end != 0.0
+            && (sh.total_internal_energy_end != 0.0
+                || sh.total_gravitational_energy_end != 0.0)
+        {
+            (
+                sh.total_internal_energy_end,
+                sh.total_gravitational_energy_end,
+                sh.total_radial_kinetic_energy_end,
+                sh.total_rotational_kinetic_energy_end,
+                sh.total_turbulent_energy_end,
+                sh.total_energy_end,
+            )
+        } else {
+            let mut e = eval_total_energy_integrals(model);
+            if sh.total_energy_end != 0.0 {
+                e.5 = sh.total_energy_end;
+            }
+            e
+        };
         let total_angular_momentum = if model.controls.rotation_flag {
             model
                 .dm_bar

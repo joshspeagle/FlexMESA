@@ -326,12 +326,6 @@ reason = "Pre-MS initial model construction (#154) and retry-mesh restoration (#
 
 [[gaps]]
 suite = "star"
-case = "make_zams_ultra_high_mass"
-issue = "#154"
-reason = "Pre-MS initial model construction exits after 1 step (#154)."
-
-[[gaps]]
-suite = "star"
 case = "ns_c"
 issue = "#157"
 reason = "Case history_columns.list requests unported MLT++ gradT_excess_alpha column."

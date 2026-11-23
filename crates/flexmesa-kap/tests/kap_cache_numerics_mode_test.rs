@@ -15,7 +15,10 @@ use flexmesa_kap::loader_ascii::{
     build_full_kap_tables_bytes, kap_source_relpaths,
     load_or_build_kap_tables_in,
 };
-use flexmesa_math::{NumericsMode, log10, with_numerics_mode};
+use flexmesa_kap::{
+    get_kap_results, KapCoOption, KapConfig, KapLowTOption, KapOption,
+};
+use flexmesa_math::{log10, with_numerics_mode, NumericsMode};
 
 const SAMPLE_FCN: &str = "\
 Z fC1 fC2 fC3 fC4 fC5 fC6 fC7 fN1 fN2 fN3
@@ -235,4 +238,53 @@ fn test_kap_runtime_cache_is_bit_identical_between_strict_and_fast_modes() {
     );
 
     let _ = fs::remove_dir_all(&root);
+}
+
+#[test]
+fn test_aesopus_strict_vs_fast_bicubic_mode_isolation() {
+    let cfg = KapConfig {
+        zbase: f64::from_bits(0x3f8c_ac08_3126_e979),
+        kap_option: KapOption::A09,
+        kap_co_option: KapCoOption::A09Co,
+        kap_low_t_option: KapLowTOption::Aesopus,
+        cubic_interpolation_in_x: false,
+        cubic_interpolation_in_z: false,
+        include_electron_conduction: true,
+        use_zbase_for_type1: true,
+        use_type2_opacities: true,
+        ..KapConfig::default()
+    };
+    let eval = |mode: NumericsMode| {
+        with_numerics_mode(mode, || {
+            get_kap_results(
+                &cfg,
+                f64::from_bits(0x3ff1_9c8c_58b7_9d17),
+                f64::from_bits(0x3fe5_b970_71a1_ff29),
+                f64::from_bits(0x3f94_8e4f_6fd7_6f00),
+                f64::from_bits(0x3f68_8cd7_6039_7678),
+                f64::from_bits(0x3f59_0514_6aeb_0d98),
+                f64::from_bits(0x3f83_1f9a_fd78_f97f),
+                0.0,
+                f64::from_bits(0xc020_7fd1_3769_ccb8),
+                f64::from_bits(0x400c_750b_4c2c_8ffb),
+                f64::from_bits(0xc022_6bb2_01fe_476f),
+                0.0,
+                0.0,
+                -20.0,
+                0.0,
+                0.0,
+            )
+            .expect("aesopus evaluation")
+        })
+    };
+
+    let out_strict = eval(NumericsMode::Strict);
+    let out_fast = eval(NumericsMode::Fast);
+    assert_eq!(out_strict.kap.to_bits(), 0x3f68_8c2b_f0e4_eb01);
+    assert_ne!(out_fast.kap.to_bits(), out_strict.kap.to_bits());
+    let rel_diff = (out_fast.kap - out_strict.kap).abs() / out_strict.kap;
+    assert!(
+        rel_diff < 1.0e-5,
+        "Fast f64 Hermite diverged unexpectedly: {rel_diff:.3e}"
+    );
 }

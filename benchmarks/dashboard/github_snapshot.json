@@ -101,7 +101,7 @@
     },
     {
       "phase": "Phase C",
-      "open": 18,
+      "open": 19,
       "closed": 11,
       "issues": [
         {
@@ -248,6 +248,11 @@
           "number": 451,
           "title": "[Parity] Binary step loop: binary_pick_next_timestep before star_pick_next_timestep, and why_Tlim = Tlim_binary (run_binary_support.f90:536-562)",
           "state": "open"
+        },
+        {
+          "number": 453,
+          "title": "[Extras] make_env: star_lib public API subset for case extras, and create_env as a test-side hook",
+          "state": "open"
         }
       ]
     },
@@ -302,6 +307,11 @@
       "number": 439,
       "title": "feat(astero): set_param and set_constraint_value as test-side case hooks; honest extras ledger (#429)",
       "draft": true
+    },
+    {
+      "number": 452,
+      "title": "Train 5: 0-ULP module-hex parity (#432-#434), relax/astero ports (#429), and MESA 26.4.1 baseline",
+      "draft": false
     }
   ],
   "deferred_169": [
@@ -734,6 +744,14 @@
       "title": "[Deferred bug] relax_composition_adjust_model discards the terminate from a failed adjust_xa (relax.f90:469-474)",
       "state": "open",
       "kind": "upstream-bug",
+      "parity_pending": false,
+      "needs_confirmation": false
+    },
+    {
+      "number": 458,
+      "title": "[Deferred enhancement] ADIPLS uses the system libm (no CRMATH), so its output depends on the machine",
+      "state": "open",
+      "kind": "enhancement",
       "parity_pending": false,
       "needs_confirmation": false
     }

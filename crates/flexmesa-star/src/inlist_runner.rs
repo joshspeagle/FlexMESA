@@ -575,6 +575,7 @@ pub fn run_inlist_stage_with_logs(
     max_steps_cap: Option<usize>,
     mut logs_writer: Option<&mut StarLogsWriter>,
 ) -> Result<StageRunReport, StarError> {
+    let _net_dir_guard = crate::micro::NetSearchDirGuard::new(&bundle.case_dir);
     let t0 = Instant::now();
     let (mut steps_taken, mut total_newton_iterations, mut total_retries) =
         (0, 0, 0);

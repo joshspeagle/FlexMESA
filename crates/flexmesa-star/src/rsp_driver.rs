@@ -12,7 +12,7 @@ use crate::controls::{StarError, StarJobControls};
 use crate::inlist::InlistBundle;
 use crate::inlist_runner::{DefaultStarExtras, RspBuildOutcome, StarExtras};
 use crate::model::StarModel;
-use crate::model_io::read_mod_str;
+use crate::model_io::read_mod_str_with_dir;
 use crate::rsp_build::do_rsp_build_model;
 use crate::rsp_def::RspDerivedConsts;
 use crate::rsp_eos_kap::{get_surf_p_t_kap, RspChemCache};
@@ -150,7 +150,12 @@ pub(crate) fn init_rsp_model_from_bundle(
                 mod_path.display()
             ))
         })?;
-        let mut m = read_mod_str(&text, controls.clone(), job.clone())?;
+        let mut m = read_mod_str_with_dir(
+            &text,
+            controls.clone(),
+            job.clone(),
+            Some(&bundle.case_dir),
+        )?;
         if m.controls.rsp_flag {
             m.controls.v_flag = true;
             m.eos_config = bundle.eos_config;

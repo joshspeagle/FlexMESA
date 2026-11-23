@@ -4,8 +4,9 @@
 //! reaction network (`do_net`) evaluation (`star/private/micro.f90` and
 //! `star/private/net.f90`).
 
+use std::cell::RefCell;
 use std::collections::HashMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, OnceLock};
 
 use flexmesa_chem::{
@@ -38,6 +39,7 @@ use crate::star_ad::{StarAdExt, StarAdOrder1};
 static BASIC_NET_INFO: OnceLock<NetGeneralInfo> = OnceLock::new();
 type NetCacheKey = (
     String,
+    Option<PathBuf>,
     u64,
     u64,
     u64,
@@ -50,6 +52,42 @@ type NetCacheKey = (
 static NET_CACHE: OnceLock<Mutex<HashMap<NetCacheKey, Arc<NetGeneralInfo>>>> =
     OnceLock::new();
 
+thread_local! {
+    static ACTIVE_NET_SEARCH_DIR: RefCell<Vec<PathBuf>> =
+        const { RefCell::new(Vec::new()) };
+}
+
+/// RAII guard pushing a canonicalized case directory onto the thread-local
+/// `.net` search stack used by [`resolve_model_net`].
+pub(crate) struct NetSearchDirGuard {
+    _private: (),
+}
+
+impl NetSearchDirGuard {
+    /// Enters a scoped network search directory for the current thread.
+    pub(crate) fn new(dir: &Path) -> Self {
+        let canonical = canonical_dir_path(dir);
+        ACTIVE_NET_SEARCH_DIR.with(|stack| stack.borrow_mut().push(canonical));
+        Self { _private: () }
+    }
+}
+
+impl Drop for NetSearchDirGuard {
+    fn drop(&mut self) {
+        ACTIVE_NET_SEARCH_DIR.with(|stack| {
+            let _ = stack.borrow_mut().pop();
+        });
+    }
+}
+
+fn active_net_search_dir() -> Option<PathBuf> {
+    ACTIVE_NET_SEARCH_DIR.with(|stack| stack.borrow().last().cloned())
+}
+
+fn canonical_dir_path(dir: &Path) -> PathBuf {
+    std::fs::canonicalize(dir).unwrap_or_else(|_| dir.to_path_buf())
+}
+
 /// Returns the cached [`NetGeneralInfo`] for `"basic.net"`.
 #[must_use]
 pub fn global_basic_net() -> &'static NetGeneralInfo {
@@ -59,8 +97,10 @@ pub fn global_basic_net() -> &'static NetGeneralInfo {
     })
 }
 
-/// Returns a cached [`Arc<NetGeneralInfo>`] for `net_name` (loading from the
-/// embedded 83-network bundle or optional `search_dir` on first request).
+/// Returns a cached [`Arc<NetGeneralInfo>`] for `net_name`, searching
+/// optional `search_dir` (`<dir>/<file>`, then `<dir>/nets/<file>`) before
+/// falling back to the embedded network bundle
+/// (`net/private/net_initialize.f90:286-302`).
 ///
 /// # Errors
 /// Returns [`StarError::MicrophysicsError`] if the `.net` file cannot be parsed.
@@ -109,9 +149,38 @@ fn get_or_load_net_with_star_params(
     use_suzuki_weak_rates: bool,
     special_rate_files: &[(String, String)],
 ) -> Result<Arc<NetGeneralInfo>, StarError> {
+    let canonical_dir = search_dir.map(canonical_dir_path);
+    get_or_load_net_with_canonical_dir(
+        net_name,
+        canonical_dir.as_deref(),
+        fe56ec_fake_factor,
+        min_t_for_fe56ec_fake_factor,
+        net_logtcut_lo,
+        net_logtcut_lim,
+        reaction_neuqs_factor,
+        use_3a_fl87,
+        use_suzuki_weak_rates,
+        special_rate_files,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn get_or_load_net_with_canonical_dir(
+    net_name: &str,
+    canonical_dir: Option<&Path>,
+    fe56ec_fake_factor: f64,
+    min_t_for_fe56ec_fake_factor: f64,
+    net_logtcut_lo: f64,
+    net_logtcut_lim: f64,
+    reaction_neuqs_factor: f64,
+    use_3a_fl87: bool,
+    use_suzuki_weak_rates: bool,
+    special_rate_files: &[(String, String)],
+) -> Result<Arc<NetGeneralInfo>, StarError> {
     let key = net_name.trim();
     let cache_key = (
         key.to_string(),
+        canonical_dir.map(Path::to_path_buf),
         fe56ec_fake_factor.to_bits(),
         min_t_for_fe56ec_fake_factor.to_bits(),
         net_logtcut_lo.to_bits(),
@@ -130,7 +199,7 @@ fn get_or_load_net_with_star_params(
     let mut rate_overrides: Vec<(String, Arc<RateTable1D>)> =
         Vec::with_capacity(special_rate_files.len());
     for (rxn_name, file_name) in special_rate_files {
-        let tbl = RateTable1D::resolve_and_load(file_name, search_dir)
+        let tbl = RateTable1D::resolve_and_load(file_name, canonical_dir)
             .map_err(|e| {
                 StarError::MicrophysicsError(format!(
                     "failed to load filename_of_special_rate '{file_name}' for '{rxn_name}': {e}"
@@ -140,7 +209,7 @@ fn get_or_load_net_with_star_params(
     }
     let mut loaded = NetGeneralInfo::from_name_or_dir_with_rate_overrides(
         key,
-        search_dir,
+        canonical_dir,
         &rate_overrides,
     )
     .map_err(|e| {
@@ -195,9 +264,10 @@ pub fn resolve_model_net(
             }
         })
         .collect();
-    let net_info = get_or_load_net_with_star_params(
+    let active_dir = active_net_search_dir();
+    let net_info = get_or_load_net_with_canonical_dir(
         &j.net_name,
-        None,
+        active_dir.as_deref(),
         c.fe56ec_fake_factor,
         c.min_t_for_fe56ec_fake_factor,
         c.net_logtcut_lo,

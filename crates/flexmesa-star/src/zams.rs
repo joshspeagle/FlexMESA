@@ -144,14 +144,9 @@ impl ZamsCatalog {
                 ln_r.push(row_vals[b + 2]);
                 lum.push(row_vals[b + 3]);
                 dq.push(row_vals[b + 4]);
-                let mut row_xa = row_vals[b + 5..b + 5 + species].to_vec();
-                let sum_xa: f64 = row_xa.iter().sum();
-                if sum_xa > 0.0 {
-                    for xj in &mut row_xa {
-                        *xj /= sum_xa;
-                    }
-                }
-                xa.extend_from_slice(&row_xa);
+                // Preserve catalog `xa` values without renormalization,
+                // matching upstream `read1_model` (`read_model.f90:648-650`).
+                xa.extend_from_slice(&row_vals[b + 5..b + 5 + species]);
             }
             models.push(ZamsEntry {
                 m_msun,
@@ -299,19 +294,11 @@ impl ZamsCatalog {
                             ln_r.push(parse_fortran_f64(toks[3])?);
                             lum.push(parse_fortran_f64(toks[4])?);
                             dq.push(parse_fortran_f64(toks[5])?);
-                            let mut row_xa = Vec::with_capacity(species);
-                            let mut sum_xa = 0.0;
+                            // Preserve ASCII catalog `xa` values without
+                            // renormalization (`read_model.f90:648-650`).
                             for j in 0..species {
-                                let xj = parse_fortran_f64(toks[6 + j])?;
-                                row_xa.push(xj);
-                                sum_xa += xj;
+                                xa.push(parse_fortran_f64(toks[6 + j])?);
                             }
-                            if sum_xa > 0.0 {
-                                for xj in &mut row_xa {
-                                    *xj /= sum_xa;
-                                }
-                            }
-                            xa.extend_from_slice(&row_xa);
                         }
                         let index_m_msun = index_masses
                             .get(models.len())
@@ -515,12 +502,12 @@ pub fn interp_q(
 }
 
 /// Constructs an initial [`StarModel`] by logarithmic mass interpolation in a
-/// [`ZamsCatalog`] (`get_zams_model` / `get1_mass` in
-/// `star/private/init_model.f90:65-394`).
+/// [`ZamsCatalog`] (`get_zams_model` / `get1_zams_model` / `get1_mass` in
+/// `star/private/init_model.f90:65-466`).
 ///
 /// # Errors
-/// Returns [`StarError`] if `controls.initial_mass` is outside the catalog
-/// mass range or interpolation fails.
+/// Returns [`StarError`] if the catalog is empty, `controls.initial_mass` is
+/// non-finite or non-positive, or interpolation / model initialization fails.
 pub fn load_zams_model_from_catalog(
     catalog: &ZamsCatalog,
     controls: StarControls,
@@ -532,52 +519,68 @@ pub fn load_zams_model_from_catalog(
             "empty ZAMS catalog",
         )));
     }
-    let m_min = catalog.models.first().unwrap().index_m_msun;
-    let m_max = catalog.models.last().unwrap().index_m_msun;
-    if m_target < m_min * (1.0 - 1.0e-7) || m_target > m_max * (1.0 + 1.0e-7) {
+    if !m_target.is_finite() || m_target <= 0.0 {
         return Err(StarError::InvalidInput(format!(
-            "initial_mass={m_target} outside ZAMS catalog range [{m_min}, {m_max}] without create_initial_model (#154)"
+            "invalid initial_mass={m_target} for ZAMS catalog"
         )));
     }
 
-    // Locate bracketing models m1 <= m_target <= m2 using index-table masses
-    // (`star/private/init_model.f90:209-243`).
-    let (idx1, idx2) = if m_target <= m_min * (1.0 + 1.0e-7) {
-        (0, 0)
-    } else {
-        let mut i1 = 0;
-        for (i, entry) in catalog.models.iter().enumerate() {
-            if entry.index_m_msun <= m_target * (1.0 + 1.0e-9) {
-                i1 = i;
-            } else {
-                break;
-            }
+    // Locate bracketing models matching upstream `get1_zams_model`
+    // (`star/private/init_model.f90:209-243`):
+    // - Scan in ascending mass for the first catalog entry with
+    //   `m2 >= initial_mass` (`init_model.f90:221`).
+    // - If the very first entry (`i == 0`, where `m1 == 0`) matches
+    //   (including `initial_mass <= m_min`), clamp `m1 = m2`, `in_range = false`,
+    //   and revise `initial_mass` to `m_min` (`init_model.f90:222-228`).
+    // - If the end of the catalog is reached (`initial_mass > m_max`), clamp
+    //   `m2 = m1`, `in_range = false`, and revise `initial_mass` to `m_max`
+    //   (`init_model.f90:212-220`).
+    // - Otherwise (`m_min < initial_mass <= m_max`), bracket `(i - 1, i)` so
+    //   exact interior catalog masses (`initial_mass == m2`, e.g. `1.0` or
+    //   `10.0`) interpolate onto `m1`'s grid with `alfa = 0` rather than
+    //   copying `m2` directly (`init_model.f90:221, 240-241, 443-458`).
+    let (idx1, idx2, in_range, m_effective) = match catalog
+        .models
+        .iter()
+        .position(|entry| entry.index_m_msun >= m_target)
+    {
+        Some(0) => (0, 0, false, catalog.models[0].index_m_msun),
+        Some(i2) => (i2 - 1, i2, true, m_target),
+        None => {
+            let last = catalog.models.len() - 1;
+            (last, last, false, catalog.models[last].index_m_msun)
         }
-        let i2 = (i1 + 1).min(catalog.models.len() - 1);
-        (i1, i2)
     };
     let e1 = &catalog.models[idx1];
     let e2 = &catalog.models[idx2];
 
+    let mut model_controls = controls;
+    if !in_range {
+        // Match `get1_zams_model` (`star/private/init_model.f90:217-218, 226-227`):
+        // revise `initial_mass` to the clamped edge catalog mass.
+        // Upstream `get_zams_model` (`init_model.f90:118-127`) subsequently runs
+        // `do_relax_mass` when `.not. in_range` (tracked under #154).
+        model_controls.initial_mass = m_effective;
+    }
+
     let nz = e1.nz;
     let species = e1.species;
-    let mut model = StarModel::new(nz, e1.chem_id.clone(), job, controls);
+    let mut model = StarModel::new(nz, e1.chem_id.clone(), job, model_controls);
     model.dq.clone_from(&e1.dq);
 
-    if idx1 == idx2
-        || (m_target - e1.index_m_msun).abs() <= 1.0e-7 * e1.index_m_msun
-    {
+    if idx1 == idx2 || e1.index_m_msun == e2.index_m_msun {
         model.lnd.clone_from(&e1.lnd);
         model.ln_t.clone_from(&e1.ln_t);
         model.ln_r.clone_from(&e1.ln_r);
         model.lum.clone_from(&e1.lum);
         model.xa.clone_from(&e1.xa);
     } else {
-        // Upstream MESA `get1_mass` (`star/private/init_model.f90:210, 254, 444-446`):
-        // uses 8-decimal index-table masses m1, m2 for log-mass interpolation.
+        // Upstream MESA `get1_mass` (`star/private/init_model.f90:210, 254, 443-458`):
+        // uses 8-decimal index-table masses m1, m2 for log-mass interpolation
+        // onto `m1`'s `q` grid (`alfa = 0` when `initial_mass == m2`).
         let lnm1 = flexmesa_math::log(e1.index_m_msun);
         let lnm2 = flexmesa_math::log(e2.index_m_msun);
-        let alfa = (flexmesa_math::log(m_target) - lnm2) / (lnm1 - lnm2);
+        let alfa = (flexmesa_math::log(m_effective) - lnm2) / (lnm1 - lnm2);
         let beta = 1.0 - alfa;
 
         let lnd2 = interp_q(&e2.dq, &e2.lnd, &e1.dq)?;
@@ -598,29 +601,20 @@ pub fn load_zams_model_from_catalog(
             let x2_interp = interp_q(&e2.dq, &x2_col, &e1.dq)?;
             for k in 0..nz {
                 let x1_kj = e1.xa[k * species + j];
-                model.xa[k * species + j] =
-                    (alfa * x1_kj + beta * x2_interp[k]).max(0.0);
+                // Upstream `get1_mass` (`star/private/init_model.f90:455`)
+                // blends `xa` linearly in log-mass without clamping or
+                // renormalizing cell totals (`read_model.f90:649`).
+                model.xa[k * species + j] = alfa * x1_kj + beta * x2_interp[k];
             }
         }
     }
 
-    // Normalize cell mass fractions sum(xa[k, :]) == 1
-    for k in 0..nz {
-        let row = model.cell_xa_mut(k);
-        let sum: f64 = row.iter().sum();
-        if sum > 0.0 {
-            for x in row.iter_mut() {
-                *x /= sum;
-            }
-        }
-    }
-
-    model.mstar = m_target * M_SUN;
+    model.mstar = m_effective * M_SUN;
     (model.xmstar, model.mstar_start, model.mstar_old) =
         (model.mstar, model.mstar, model.mstar);
     // Upstream `alloc_star_data` initializes `model_number = 0` (`star/private/init.f90:367`).
     (model.model_number, model.star_age) = (0, 0.0);
-    let dt_sec = yrs_for_init_timestep(m_target) * SECYER;
+    let dt_sec = yrs_for_init_timestep(m_effective) * SECYER;
     (model.dt, model.dt_next, model.dt_old) = (dt_sec, dt_sec, 0.0);
     model.finish_init_model()?;
     Ok(model)
@@ -629,7 +623,8 @@ pub fn load_zams_model_from_catalog(
 /// Loads a ZAMS [`StarModel`] from the built-in `zams_z2m2_y28` catalog.
 ///
 /// # Errors
-/// Returns [`StarError`] if `controls.initial_mass` is out of bounds.
+/// Returns [`StarError`] if `controls.initial_mass` is non-finite or
+/// non-positive, or if model initialization fails.
 pub fn load_zams_model(
     controls: StarControls,
     job: StarJobControls,
@@ -671,18 +666,26 @@ mod zams_catalog_tests {
             }
         }
 
-        let (mut prev_l, mut prev_r) = (0.0_f64, 0.0_f64);
+        // Upstream `get1_zams_model` (`star/private/init_model.f90:221-228`)
+        // clamps masses below the catalog minimum (`m_min = 0.12589254`) to
+        // entry 0 (`nz = 3777`, `initial_mass = m_min`) instead of returning an
+        // out-of-range error (replaces old non-upstream `InvalidInput` check).
         for &m_msun in &[0.08, 0.10] {
             let controls = StarControls {
                 initial_mass: m_msun,
                 initial_z: 0.02,
                 ..StarControls::default()
             };
-            let err = load_zams_model(controls, StarJobControls::default())
-                .expect_err("sub-grid ZAMS mass must fail loudly (#154)");
-            assert!(matches!(err, StarError::InvalidInput(_)));
+            let model = load_zams_model(controls, StarJobControls::default())
+                .expect("sub-grid ZAMS mass clamps to minimum entry");
+            assert_eq!(model.model_number, 0);
+            assert_eq!(model.nz, cat.models[0].nz);
+            assert_eq!(model.controls.initial_mass, cat.models[0].index_m_msun);
+            assert_eq!(model.mstar, cat.models[0].index_m_msun * M_SUN);
         }
-        for &m_msun in &[0.13, 0.2, 0.5, 1.0, 2.0, 4.0, 10.0, 50.0, 100.0, 300.0]
+        let (mut prev_l, mut prev_r) = (0.0_f64, 0.0_f64);
+        for &m_msun in
+            &[0.13, 0.2, 0.5, 1.0, 2.0, 4.0, 10.0, 50.0, 100.0, 300.0]
         {
             let controls = StarControls {
                 initial_mass: m_msun,

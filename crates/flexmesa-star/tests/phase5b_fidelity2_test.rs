@@ -516,7 +516,16 @@ fn test_conv_premix_predictive_mixing_and_extra_heat_in_evolve_step() {
     let rep_eps = star_evolve_step(&mut m_heat, false, false, true)
         .expect("evolve_step EpsGrav");
     assert!(rep_eps.converged);
-    assert_eq!(m_heat.aux.step_hist.error_in_energy_conservation, 0.0);
+    // `#151` (`star/private/evolve.f90:1356-1357`): `eps_grav` mode computes
+    // the genuine global total-energy conservation error rather than `0.0`.
+    assert!(
+        m_heat
+            .aux
+            .step_hist
+            .error_in_energy_conservation
+            .is_finite()
+    );
+    assert_ne!(m_heat.aux.step_hist.error_in_energy_conservation, 0.0);
 }
 
 #[test]

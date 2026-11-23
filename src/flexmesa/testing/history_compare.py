@@ -29,6 +29,13 @@ SKIP_ALONG_TRACK: frozenset[str] = frozenset(
     {"model_number", "num_retries", "num_iters", "log_dt", "stage"}
 )
 DISCRETE_TRACK_COLUMNS: frozenset[str] = frozenset({"num_zones"})
+ENERGY_ERROR_COLUMNS: tuple[str, ...] = (
+    "log_rel_run_E_err",
+    "log_rel_cumulative_energy_error",
+    "rel_run_E_err",
+    "log_rel_E_err",
+    "rel_E_err",
+)
 SENTINEL_ABS_THRESHOLD: float = 0.99e99
 
 
@@ -196,6 +203,11 @@ class HistoryComparison:
             or ``None`` if no column diverges.
         first_diverging_x: Coordinate value at ``first_diverging_step``, or
             ``None``.
+        ref_span: Independent-variable span of the reference history.
+        final_run_values: Selected final candidate run values (such as
+            ``log_rel_run_E_err``) captured for mechanical reporting.
+        final_ref_values: Selected final reference values (such as
+            ``log_rel_run_E_err``) captured alongside ``final_run_values``.
     """
 
     independent_var: str
@@ -212,6 +224,8 @@ class HistoryComparison:
     first_diverging_step: int | None
     first_diverging_x: float | None
     ref_span: float = 0.0
+    final_run_values: dict[str, float] = dataclasses.field(default_factory=dict)
+    final_ref_values: dict[str, float] = dataclasses.field(default_factory=dict)
 
 
 def _parse_float_fast(token: str) -> float:
@@ -449,6 +463,16 @@ def compare_histories(
         if col in ("model_number", xcol):
             continue
         final_diffs[col] = float(run.columns[col][-1] - ref.columns[col][-1])
+    final_run_values: dict[str, float] = {
+        col: float(run.columns[col][-1])
+        for col in ENERGY_ERROR_COLUMNS
+        if col in run.columns and run.num_rows > 0
+    }
+    final_ref_values: dict[str, float] = {
+        col: float(ref.columns[col][-1])
+        for col in ENERGY_ERROR_COLUMNS
+        if col in ref.columns and ref.num_rows > 0
+    }
     if "num_zones" in shared_cols:
         ref_nz_end = float(ref.columns["num_zones"][-1])
         run_nz_end = float(run.columns["num_zones"][-1])
@@ -664,6 +688,8 @@ def compare_histories(
         first_diverging_step=first_step,
         first_diverging_x=first_x,
         ref_span=ref_span,
+        final_run_values=final_run_values,
+        final_ref_values=final_ref_values,
     )
 
 
@@ -795,7 +821,7 @@ def _track_dev_to_dict(d: TrackDeviation) -> dict[str, Any]:
 
 def comparison_to_dict(comp: HistoryComparison) -> dict[str, Any]:
     """Serialize a ``HistoryComparison`` into a strict JSON-safe dictionary."""
-    return {
+    out: dict[str, Any] = {
         "independent_var": comp.independent_var,
         "ref_rows": comp.ref_rows,
         "run_rows": comp.run_rows,
@@ -815,6 +841,15 @@ def comparison_to_dict(comp: HistoryComparison) -> dict[str, Any]:
         "first_diverging_step": comp.first_diverging_step,
         "first_diverging_x": _json_safe_float(comp.first_diverging_x),
     }
+    if comp.final_run_values:
+        out["final_run_values"] = {
+            k: _json_safe_float(v) for k, v in comp.final_run_values.items()
+        }
+    if comp.final_ref_values:
+        out["final_ref_values"] = {
+            k: _json_safe_float(v) for k, v in comp.final_ref_values.items()
+        }
+    return out
 
 
 def _restore_json_float(val: Any) -> float:
@@ -885,4 +920,12 @@ def comparison_from_dict(raw: dict[str, Any]) -> HistoryComparison:
         else None,
         first_diverging_x=_restore_json_opt_float(raw.get("first_diverging_x")),
         ref_span=r_span,
+        final_run_values={
+            str(k): _restore_json_float(v)
+            for k, v in dict(raw.get("final_run_values", {})).items()
+        },
+        final_ref_values={
+            str(k): _restore_json_float(v)
+            for k, v in dict(raw.get("final_ref_values", {})).items()
+        },
     )

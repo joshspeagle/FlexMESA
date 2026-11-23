@@ -280,8 +280,8 @@ jobs:
             2>&1 | tee "$LOG_DIR/rust_benchmarks.md"
           # --no-fail-fast: without it cargo stops at the first test binary
           # with a failure and the remaining campaigns are never run.
-          cargo test -p flexmesa-binary -p flexmesa-astero --release \
-            --no-fail-fast -- --ignored --test-threads=2 --nocapture \
+          cargo test -p flexmesa-star -p flexmesa-binary -p flexmesa-astero \
+            --release --no-fail-fast -- --ignored --test-threads=2 --nocapture \
             2>&1 | tee "$LOG_DIR/campaign_ignored.log"
           set -e
           python -m flexmesa.testing.known_gaps_gate \

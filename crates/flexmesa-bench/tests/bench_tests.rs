@@ -7,9 +7,9 @@
 //! are internal regression values, not upstream MESA outputs (tracked in #146).
 
 use flexmesa_bench::{
-    BenchRecord, run_all_wave1_benchmarks, run_all_wave2_benchmarks,
+    run_all_wave1_benchmarks, run_all_wave2_benchmarks,
     run_all_wave3a_benchmarks, run_all_wave3b_benchmarks,
-    run_all_wave4_benchmarks, run_all_wave5_benchmarks,
+    run_all_wave4_benchmarks, run_all_wave5_benchmarks, BenchRecord,
 };
 
 /// `FlexMESA` regression snapshots for $N_{\mathrm{zones}} = 8$ across all six
@@ -43,13 +43,16 @@ const WAVE3A_REGRESSION_SNAPSHOTS_N8: [(&str, f64); 4] = [
 
 /// `FlexMESA` regression snapshots for $N_{\mathrm{zones}} = 8$ across all five
 /// Wave 3b microphysics workloads (internal self-consistency check, tracked in
-/// #146).
+/// #146). Under `#420` (`NumericsMode::Strict` matching MESA `26.4.1`
+/// `interp_2d/private/bicub_db.f:1371-1575` implicit `f32` `fvbicub_db` basis
+/// scalars), `atm_table` shifted from `8.985_411_175_716_764e1` to
+/// `8.985_411_168_787_93e1`.
 const WAVE3B_REGRESSION_SNAPSHOTS_N8: [(&str, f64); 5] = [
     ("eos_4d", 2.037_364_564_689_326e2),
     ("kap_fixed", 2.909_195_757_111_935),
     ("rates_screen", -1.139_188_914_724_813e2),
     ("net_eval", 9.619_649_848_151_354e1),
-    ("atm_table", 8.985_411_175_716_764e1),
+    ("atm_table", 8.985_411_168_787_93e1),
 ];
 
 /// `FlexMESA` regression snapshots for $N_{\mathrm{zones}} = 8$ across all five

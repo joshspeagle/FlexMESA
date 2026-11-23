@@ -135,10 +135,10 @@ reason = "55/116 net_get outputs match at 0 ULP across 7 upstream nets (0 ULP on
 module = "atm"
 status = "nonzero_ulp"
 issue = "#161"
-max_declared_ulp = 9000000
-min_zero_ulp_count = 15
+max_declared_ulp = 1
+min_zero_ulp_count = 38
 expect_nonzero_ulp = true
-reason = "All 39 computed outputs checked: 15 at 0 ULP (20 within 2 ULP across WD tables, photosphere logT, T(tau) uniform/varying logT, and irradiated); 14 non-WD table rows differ by up to 7.86e6 ULPs (~7e-9 rel) from f64 vs f32 fvbicub_db basis terms, and 5 dopri5 T(tau) varying logP integrations differ by 117-43,905 ULPs."
+reason = "All 39 computed outputs checked: 38 at 0 ULP (all 21 table outputs via fvbicub_db f32 basis scalars in NumericsMode::Strict, 4/5 T(tau) varying logP and 5/5 logT, both T(tau) uniform fixed and iterated cases via linear (Pgas, T) eos_pt_get_with_linear, and all 4 irradiated outputs); the sole remaining 1 ULP on Eddington tau=100 logP stems from a 3-ULP kap_get blend_T discrepancy resolved in PR #406."
 
 [[gaps]]
 module = "gyre"

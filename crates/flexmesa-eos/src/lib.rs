@@ -68,7 +68,8 @@ pub use cms::{
     CMS_XSTR, CMS_XVALS,
 };
 pub use eos_pt::{
-    eos_pt_get, eos_pt_get_pgas, eos_pt_get_t, EosPtInverseOutput, EosPtOutput,
+    eos_pt_get, eos_pt_get_pgas, eos_pt_get_t, eos_pt_get_with_linear,
+    EosPtInverseOutput, EosPtOutput,
 };
 pub use free_energy::{
     compute_derived_quantities, compute_f_ideal_ion, compute_f_rad,

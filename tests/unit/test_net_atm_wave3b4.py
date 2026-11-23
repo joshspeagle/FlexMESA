@@ -161,54 +161,57 @@ def test_atm_table_and_custom_vjp_match_golden_and_finite_differences() -> None:
     )
 
     # Central finite-difference check at Z = 0.0179 (exact GN93 Z-grid node)
+    # under `fast` mode (`f64` basis terms, exact cubic calculus; `strict` mode
+    # mirrors MESA's `f32` `fvbicub_db` basis terms).
     z_node = 0.0179
-    grad_lnt_z = jax.grad(
-        lambda lv, rv, mv: atm.eval_table_jax(
-            lv, rv, mv, cgrav, atm.ATM_TABLE_PHOTOSPHERE, z_node
-        )[0],
-        argnums=(0, 1, 2),
-    )(l_j, r_j, m_j)
-    grad_lnp_z = jax.grad(
-        lambda lv, rv, mv: atm.eval_table_jax(
-            lv, rv, mv, cgrav, atm.ATM_TABLE_PHOTOSPHERE, z_node
-        )[1],
-        argnums=(0, 1, 2),
-    )(l_j, r_j, m_j)
     eps = 1.0e-5
-    for idx_arg, (base_v, dlnt_v, dlnp_v) in enumerate(
-        [
-            (l_val, float(grad_lnt_z[0]), float(grad_lnp_z[0])),
-            (r_val, float(grad_lnt_z[1]), float(grad_lnp_z[1])),
-            (m_val, float(grad_lnt_z[2]), float(grad_lnp_z[2])),
-        ]
-    ):
-        step = eps * base_v
-        args_p = [l_val, r_val, m_val]
-        args_m = [l_val, r_val, m_val]
-        args_p[idx_arg] += step
-        args_m[idx_arg] -= step
-        lnt_p, lnp_p = atm.eval_table_jax(
-            jnp.asarray(args_p[0]),
-            jnp.asarray(args_p[1]),
-            jnp.asarray(args_p[2]),
-            cgrav,
-            atm.ATM_TABLE_PHOTOSPHERE,
-            z_node,
-        )
-        lnt_m, lnp_m = atm.eval_table_jax(
-            jnp.asarray(args_m[0]),
-            jnp.asarray(args_m[1]),
-            jnp.asarray(args_m[2]),
-            cgrav,
-            atm.ATM_TABLE_PHOTOSPHERE,
-            z_node,
-        )
-        fd_lnt = (float(lnt_p) - float(lnt_m)) / (2.0 * step)
-        fd_lnp = (float(lnp_p) - float(lnp_m)) / (2.0 * step)
-        if abs(dlnt_v) > 0.0:
-            np.testing.assert_allclose(dlnt_v, fd_lnt, rtol=1e-6)
-        if abs(dlnp_v) > 0.0:
-            np.testing.assert_allclose(dlnp_v, fd_lnp, rtol=1e-6)
+    with flexmesa.numerics_mode_context("fast"):
+        grad_lnt_z = jax.grad(
+            lambda lv, rv, mv: atm.eval_table_jax(
+                lv, rv, mv, cgrav, atm.ATM_TABLE_PHOTOSPHERE, z_node
+            )[0],
+            argnums=(0, 1, 2),
+        )(l_j, r_j, m_j)
+        grad_lnp_z = jax.grad(
+            lambda lv, rv, mv: atm.eval_table_jax(
+                lv, rv, mv, cgrav, atm.ATM_TABLE_PHOTOSPHERE, z_node
+            )[1],
+            argnums=(0, 1, 2),
+        )(l_j, r_j, m_j)
+        for idx_arg, (base_v, dlnt_v, dlnp_v) in enumerate(
+            [
+                (l_val, float(grad_lnt_z[0]), float(grad_lnp_z[0])),
+                (r_val, float(grad_lnt_z[1]), float(grad_lnp_z[1])),
+                (m_val, float(grad_lnt_z[2]), float(grad_lnp_z[2])),
+            ]
+        ):
+            step = eps * base_v
+            args_p = [l_val, r_val, m_val]
+            args_m = [l_val, r_val, m_val]
+            args_p[idx_arg] += step
+            args_m[idx_arg] -= step
+            lnt_p, lnp_p = atm.eval_table_jax(
+                jnp.asarray(args_p[0]),
+                jnp.asarray(args_p[1]),
+                jnp.asarray(args_p[2]),
+                cgrav,
+                atm.ATM_TABLE_PHOTOSPHERE,
+                z_node,
+            )
+            lnt_m, lnp_m = atm.eval_table_jax(
+                jnp.asarray(args_m[0]),
+                jnp.asarray(args_m[1]),
+                jnp.asarray(args_m[2]),
+                cgrav,
+                atm.ATM_TABLE_PHOTOSPHERE,
+                z_node,
+            )
+            fd_lnt = (float(lnt_p) - float(lnt_m)) / (2.0 * step)
+            fd_lnp = (float(lnp_p) - float(lnp_m)) / (2.0 * step)
+            if abs(dlnt_v) > 0.0:
+                np.testing.assert_allclose(dlnt_v, fd_lnt, rtol=1e-6)
+            if abs(dlnp_v) > 0.0:
+                np.testing.assert_allclose(dlnp_v, fd_lnp, rtol=1e-6)
 
 
 def test_atm_uniform_varying_and_irradiated_match_mesa_golden() -> None:

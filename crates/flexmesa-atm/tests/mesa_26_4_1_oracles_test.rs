@@ -34,7 +34,9 @@ use flexmesa_atm::{
 };
 use flexmesa_chem::NuclideCatalog;
 use flexmesa_const::{LN10, LSUN, MSUN, RSUN, STANDARD_CGRAV};
-use flexmesa_eos::{eos_pt_get, EosConfig, HelmTable, I_ETA, I_LN_FREE_E};
+use flexmesa_eos::{
+    eos_pt_get_with_linear, EosConfig, HelmTable, I_ETA, I_LN_FREE_E,
+};
 use flexmesa_kap::{kap_get, KapConfig, KapLowTOption};
 use flexmesa_math::{exp, log10, with_numerics_mode, NumericsMode};
 
@@ -114,12 +116,20 @@ fn make_eos_proc(
         let pgas = (p - prad).max(1.0e-99);
         let log_pgas = log10(pgas);
         let log_t = ln_t / LN10;
-        let pt = eos_pt_get(ht, &chem_id, &xa, log_pgas, log_t, &cfg).map_err(
-            |e| AtmError::CallbackError {
-                context: "eos_proc",
-                detail: e.to_string(),
-            },
-        )?;
+        let pt = eos_pt_get_with_linear(
+            ht,
+            &chem_id,
+            &xa,
+            log_pgas,
+            log_t,
+            Some(pgas),
+            Some(t),
+            &cfg,
+        )
+        .map_err(|e| AtmError::CallbackError {
+            context: "eos_proc",
+            detail: e.to_string(),
+        })?;
         Ok(AtmEosCallbackResult {
             ln_rho: pt.log10_rho * LN10,
             res: pt.eos.res,
@@ -415,8 +425,13 @@ fn test_all_234_mesa_26_4_1_atm_oracles_match_in_strict_mode() {
                         ("kap", res.kap),
                     ];
                     for (name, got) in pairs {
-                        assert_unfloored_rel_close(
-                            got, outs[name], 5.0e-14, &key.label,
+                        assert_eq!(
+                            ulp_distance(got, outs[name]),
+                            0,
+                            "table {} {name} nonzero ULP: got={:#018x} exp={:#018x}",
+                            key.label,
+                            got.to_bits(),
+                            outs[name].to_bits(),
                         );
                     }
                 }
@@ -496,17 +511,14 @@ fn test_all_234_mesa_26_4_1_atm_oracles_match_in_strict_mode() {
                         ("dlnP_dlnkap", res.dln_p_dln_kap),
                     ];
                     for (name, got) in pairs {
-                        if key.label.contains("pure_off_table") {
-                            assert_eq!(
-                                ulp_distance(got, outs[name]),
-                                0,
-                                "pure_off_table {name} nonzero ULP"
-                            );
-                        } else {
-                            assert_unfloored_rel_close(
-                                got, outs[name], 5.0e-14, &key.label,
-                            );
-                        }
+                        assert_eq!(
+                            ulp_distance(got, outs[name]),
+                            0,
+                            "table_blend {} {name} nonzero ULP: got={:#018x} exp={:#018x}",
+                            key.label,
+                            got.to_bits(),
+                            outs[name].to_bits(),
+                        );
                     }
                 }
                 "irradiated" => {
@@ -543,8 +555,13 @@ fn test_all_234_mesa_26_4_1_atm_oracles_match_in_strict_mode() {
                         ("dlnT_dlnkap", res.dln_t_dln_kap),
                     ];
                     for (name, got) in pairs {
-                        assert_unfloored_rel_close(
-                            got, outs[name], 1.0e-14, &key.label,
+                        assert_eq!(
+                            ulp_distance(got, outs[name]),
+                            0,
+                            "irradiated {} {name} nonzero ULP: got={:#018x} exp={:#018x}",
+                            key.label,
+                            got.to_bits(),
+                            outs[name].to_bits(),
                         );
                     }
                 }

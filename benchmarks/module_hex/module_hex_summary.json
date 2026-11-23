@@ -6,7 +6,7 @@
   "modules_with_executable_probes": 16,
   "modules_passing_0_ulp": 5,
   "total_values_checked": 304751,
-  "total_values_0_ulp": 304624,
+  "total_values_0_ulp": 304647,
   "modules": [
     {
       "module": "const",
@@ -201,8 +201,8 @@
       "upstream_exact_values": 90,
       "expected_outputs": 39,
       "checked_values": 39,
-      "zero_ulp_values": 15,
-      "max_ulp": 7863114,
+      "zero_ulp_values": 38,
+      "max_ulp": 1,
       "issue": "#161",
       "notes": "All 39 computed atm outputs across 7 tables, 5 T(tau) varying, 2 T(tau) uniform, and irradiated atmospheres."
     },

@@ -209,7 +209,6 @@ fn eval_wind_for_scheme(
     model: &StarModel,
     extras: &dyn StarExtras,
     scheme_name: &str,
-    dutch_low: DutchLowTScheme,
     l1: f64,
     m1: f64,
     r1: f64,
@@ -243,6 +242,21 @@ fn eval_wind_for_scheme(
             ))
         });
     }
+    // Validate `Dutch_wind_lowT_scheme` lazily only when `'Dutch'` is active
+    // (`star/private/winds.f90:576-593`).
+    let dutch_low = if scheme == WindScheme::Dutch {
+        DutchLowTScheme::parse_name(
+            &model.controls.mix_wind.dutch_wind_lowt_scheme,
+        )
+        .ok_or_else(|| {
+            StarError::InvalidInput(format!(
+                "unknown Dutch_wind_lowT_scheme '{}'",
+                model.controls.mix_wind.dutch_wind_lowt_scheme
+            ))
+        })?
+    } else {
+        DutchLowTScheme::DeJager
+    };
     Ok(eval_scheme_rate(
         scheme,
         dutch_low,
@@ -355,16 +369,6 @@ pub fn do_set_mdot_with_extras(
     }
 
     // 4. Separate hot and cool wind evaluations (`winds.f90:150-190, 314-409`).
-    let dutch_low = DutchLowTScheme::parse_name(
-        &model.controls.mix_wind.dutch_wind_lowt_scheme,
-    )
-    .ok_or_else(|| {
-        StarError::InvalidInput(format!(
-            "unknown Dutch_wind_lowT_scheme '{}'",
-            model.controls.mix_wind.dutch_wind_lowt_scheme
-        ))
-    })?;
-
     let hot_on = model.controls.hot_wind_full_on_t;
     let cool_on = model.controls.cool_wind_full_on_t;
     let hot_w = if t1 >= cool_on {
@@ -372,7 +376,6 @@ pub fn do_set_mdot_with_extras(
             model,
             extras,
             &model.controls.mix_wind.hot_wind_scheme,
-            dutch_low,
             l1,
             m1,
             r1,
@@ -397,7 +400,6 @@ pub fn do_set_mdot_with_extras(
             model,
             extras,
             cool_name,
-            dutch_low,
             l1,
             m1,
             r1,

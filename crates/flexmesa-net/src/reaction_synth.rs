@@ -154,6 +154,42 @@ fn pack_species(ids: &[usize]) -> (usize, [u8; 3], [u16; 3]) {
     (num, counts, isos)
 }
 
+/// Recomputes MESA's `get_Qtotal` via [`NuclideCatalog::reaction_qtotal`]
+/// (`rates/private/rates_initialize.f90`), returning `None` for
+/// missing-input or placeholder entries (`rn14ag_lite`, `r1..r9`).
+pub(crate) fn mesa_reaction_qtotal(
+    nuclides: &NuclideCatalog,
+    rxn: &ReactionInfo,
+) -> Option<f64> {
+    if rxn.name == "rn14ag_lite" || rxn.num_in == 0 || rxn.num_out == 0 {
+        return None;
+    }
+    let mut reactants = Vec::with_capacity(6);
+    for k in 0..rxn.num_in.min(3) {
+        let cid = usize::from(rxn.in_iso[k]);
+        if cid == 0 {
+            return None;
+        }
+        for _ in 0..rxn.in_num[k] {
+            reactants.push(cid);
+        }
+    }
+    let total_in = reactants.len();
+    for k in 0..rxn.num_out.min(3) {
+        let cid = usize::from(rxn.out_iso[k]);
+        if cid == 0 {
+            return None;
+        }
+        for _ in 0..rxn.out_num[k] {
+            reactants.push(cid);
+        }
+    }
+    let total_out = reactants.len() - total_in;
+    nuclides
+        .reaction_qtotal(total_in, total_out, &reactants)
+        .ok()
+}
+
 /// Synthesizes a [`ReactionInfo`] dynamically from `RatesCatalog` REACLIB handles
 /// matching `do_add_reaction_from_reaclib` and `set_reaction_info` in
 /// `rates/private/rates_initialize.f90`.
@@ -161,16 +197,20 @@ pub fn synthesize_reaction_info(
     handle: &str,
     id: usize,
 ) -> Result<ReactionInfo, NetError> {
+    let nuclides = NuclideCatalog::builtin_ref();
     let cat = RatesCatalog::builtin();
     if let Some(ir) = cat.reaction_id_by_name(handle) {
         // Return cached built-in metadata when indexed; otherwise synthesize from Reaclib.
         if let Ok(info) = cat.reaction_by_id(ir) {
-            return Ok(info.clone());
+            let mut out = info.clone();
+            if let Some(q) = mesa_reaction_qtotal(nuclides, &out) {
+                out.std_q = q;
+            }
+            return Ok(out);
         }
     }
     let reaclib_entry = cat.reaclib_terms(handle).ok();
     let (p_in, p_out, op) = parse_reaction_handle(handle)?;
-    let nuclides = NuclideCatalog::builtin_ref();
     let (is_rev, weak, weaklib_only) =
         if let Some((rev, terms)) = reaclib_entry {
             (rev, terms.first().is_some_and(|t| t.rflag == b'w'), false)
@@ -207,17 +247,12 @@ pub fn synthesize_reaction_info(
     let (num_in, in_num, in_iso) = pack_species(&p_in);
     let (num_out, out_num, out_iso) = pack_species(&p_out);
 
-    let mut std_q = 0.0_f64;
-    for k in 0..num_in {
-        if let Some(e) = nuclides.get_by_id(usize::from(in_iso[k])) {
-            std_q += f64::from(in_num[k]) * e.mass_excess;
-        }
-    }
-    for k in 0..num_out {
-        if let Some(e) = nuclides.get_by_id(usize::from(out_iso[k])) {
-            std_q -= f64::from(out_num[k]) * e.mass_excess;
-        }
-    }
+    let mut reactants = Vec::with_capacity(particles_in + particles_out);
+    reactants.extend_from_slice(&p_in);
+    reactants.extend_from_slice(&p_out);
+    let std_q = nuclides
+        .reaction_qtotal(particles_in, particles_out, &reactants)
+        .map_err(|e| NetError::InvalidReactionOrIso(e.to_string()))?;
 
     let iso_in = in_iso[num_in - 1];
     let cin1 = in_num[num_in - 1];

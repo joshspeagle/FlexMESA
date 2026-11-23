@@ -245,6 +245,7 @@ def test_rsp_and_astero_raw_cases_rejected_and_cleaned_copies_smoke(
             clean_ast,
             max_steps_per_stage=2,
             verify_restart=True,
+            extras=resolve_case_extras("astero", raw_ast),
         )
         assert ast_rep["tier"] == 0
         expected_passed = case_name == "surface_effects"

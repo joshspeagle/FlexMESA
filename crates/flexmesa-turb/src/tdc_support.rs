@@ -226,7 +226,7 @@ pub fn flux_limiter_function<T: TurbScalar>(x: T) -> T {
     } else if x.val() >= X1 {
         T::from_f64(1.0)
     } else {
-        let s = (x - T::from_f64(X0)) / T::from_f64(X1 - X0);
+        let s = (x - T::from_f64(X0)).div_real(X1 - X0);
         let p = s.pow3()
             * (T::from_f64(10.0)
                 + s * (T::from_f64(-15.0) + T::from_f64(6.0) * s));
@@ -244,23 +244,23 @@ pub fn eval_xis<T: TurbScalar>(info: &TdcInfo<T>, y: T) -> (T, T, T) {
     let mut scale = one;
     if y.val() > 0.0 && info.use_tdc_enthalpy_flux_limiter {
         // `turb/private/tdc_support.f90`, `eval_xis`: left to right.
-        let x = (info.cp * info.t / info.h)
+        let x = ((info.cp * info.t).div_ad(info.h)
             * T::from_f64(info.mixing_length_alpha)
             * T::from_f64(info.tdc_alpha_s)
             * T::from_f64(X_ALFAS)
-            * y
-            / T::from_f64(SQRT_2_DIV_3);
+            * y)
+            .div_real(SQRT_2_DIV_3);
         let fl = flux_limiter_function(x);
         if x.val().abs() >= 0.95 {
-            scale = fl / x;
+            scale = fl.div_ad(x);
         }
     }
 
     let s0_pref =
-        T::from_f64(info.tdc_alpha_s * X_ALFAS * info.mixing_length_alpha)
+        (T::from_f64(info.tdc_alpha_s * X_ALFAS * info.mixing_length_alpha)
             * info.cp
-            * info.t
-            / info.hp
+            * info.t)
+            .div_ad(info.hp)
             * info.grada;
     let s0 = if info.use_tdc_enthalpy_flux_limiter {
         s0_pref * (scale * y) + info.eq_div_w
@@ -270,13 +270,15 @@ pub fn eval_xis<T: TurbScalar>(info: &TdcInfo<T>, y: T) -> (T, T, T) {
 
     // Upstream divides by the product `mixing_length_alpha*Hp`.
     let alpha_hp = T::from_f64(info.mixing_length_alpha) * info.hp;
-    let d0 = T::from_f64(info.tdc_alpha_d * X_CEDE) / alpha_hp;
-    let gammar_div_alfa = T::from_f64(info.tdc_alpha_r * x_gammar) / alpha_hp;
-    let dr0 =
-        T::from_f64(4.0 * BOLTZ_SIGMA) * gammar_div_alfa.pow2() * info.t.pow3()
-            / (info.rho.pow2() * info.cp * info.kap);
+    let d0 = T::from_f64(info.tdc_alpha_d * X_CEDE).div_ad(alpha_hp);
+    let gammar_div_alfa =
+        T::from_f64(info.tdc_alpha_r * x_gammar).div_ad(alpha_hp);
+    let dr0 = (T::from_f64(4.0 * BOLTZ_SIGMA)
+        * gammar_div_alfa.pow2()
+        * info.t.pow3())
+    .div_ad(info.rho.pow2() * info.cp * info.kap);
     let pt0 = T::from_f64(info.tdc_alpha_pt * X_ALFAP) * info.rho;
-    let dv_dt = info.dv / T::from_f64(info.dt);
+    let dv_dt = info.dv.div_real(info.dt);
 
     (s0, -(dr0 + pt0 * dv_dt), -d0)
 }
@@ -293,7 +295,7 @@ pub fn eval_af<T: TurbScalar>(dt: f64, a0: T, xi0: T, xi1: T, xi2: T) -> T {
         let th = safe_tanh(jt4);
         let num = th * (T::from_f64(2.0) * xi0 + a0 * xi1) + a0 * j;
         let den = th * (xi1 + T::from_f64(2.0) * a0 * xi2) - j;
-        let af = num / den;
+        let af = num.div_ad(den);
         if af.val() < 0.0 {
             -af
         } else {
@@ -303,8 +305,8 @@ pub fn eval_af<T: TurbScalar>(dt: f64, a0: T, xi0: T, xi1: T, xi2: T) -> T {
         let j = j2.abs().sqrt();
         let jt4 = T::from_f64(0.25 * dt) * j;
         let y_for_atan = xi1 + T::from_f64(2.0) * a0 * xi2;
-        let atan_y = (y_for_atan / j).atan();
-        let mut root = (xi1 / j).atan() - atan_y;
+        let atan_y = y_for_atan.div_ad(j).atan();
+        let mut root = xi1.div_ad(j).atan() - atan_y;
         if root.val() > PI {
             root = root - T::from_f64(PI);
         } else if root.val() < -PI {
@@ -316,7 +318,7 @@ pub fn eval_af<T: TurbScalar>(dt: f64, a0: T, xi0: T, xi1: T, xi2: T) -> T {
         if jt4.val() < root.val() {
             let num = -xi1 + j * (jt4 + atan_y).tan();
             let den = T::from_f64(2.0) * xi2;
-            num / den
+            num.div_ad(den)
         } else {
             T::from_f64(0.0)
         }
@@ -331,7 +333,7 @@ pub fn eval_af<T: TurbScalar>(dt: f64, a0: T, xi0: T, xi1: T, xi2: T) -> T {
 #[must_use]
 pub fn compute_q<T: TurbScalar>(info: &TdcInfo<T>, y: T) -> (T, T) {
     let y_env = if y.val() > 0.0 && info.include_mlt_corr_to_tdc {
-        y * (info.gamma / (T::from_f64(1.0) + info.gamma))
+        y * info.gamma.div_ad(T::from_f64(1.0) + info.gamma)
     } else {
         y
     };

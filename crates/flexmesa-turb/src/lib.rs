@@ -169,6 +169,13 @@ pub trait TurbScalar:
     #[must_use]
     fn with_val(self, new_val: f64) -> Self;
 
+    /// Divides `self` by `rhs` using upstream `auto_diff`'s `x * powm1(y)`
+    /// (`x * (1.0 / y)`) semantics (`auto_diff_real_star_order1_module.f90:1073`
+    /// and `auto_diff_real_tdc_module.f90:1334`), so `f64` primal calls match
+    /// `DualOrder1` and upstream MESA `set_TDC` / `set_MLT` bit for bit.
+    #[must_use]
+    fn div_ad(self, rhs: Self) -> Self;
+
     /// Divides by the real constant `c` as upstream `div_self_real` does
     /// (`auto_diff/private/auto_diff_real_star_order1_module.f90:1078-1084`):
     /// value and every derivative multiplied by `powm1(c)`. Dividing by
@@ -226,6 +233,11 @@ impl TurbScalar for f64 {
     #[inline]
     fn from_f64(v: f64) -> Self {
         v
+    }
+
+    #[inline]
+    fn div_ad(self, rhs: Self) -> Self {
+        self * (1.0 / rhs)
     }
 
     #[inline]
@@ -303,6 +315,11 @@ impl<const N: usize> TurbScalar for DualOrder1<N> {
     #[inline]
     fn from_f64(v: f64) -> Self {
         Self::constant(v)
+    }
+
+    #[inline]
+    fn div_ad(self, rhs: Self) -> Self {
+        self / rhs
     }
 
     #[inline]

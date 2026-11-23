@@ -16,7 +16,7 @@ use flexmesa_star::pulse_modes::{
 };
 
 use crate::inlist_astero::{
-    AsteroParamSet, AsteroSearchControls, SpectroConstraint,
+    AsteroParamSet, AsteroSearchControls, MAX_CONSTRAINTS,
 };
 use crate::ratios_chi2::{
     eval_astero_chi2, eval_frequency_ratios_r02_with_dnu,
@@ -50,8 +50,10 @@ pub struct AsteroSampleResult {
     pub log_l: f64,
     /// Log photospheric radius $\log(R/R_\odot)$.
     pub log_r: f64,
-    /// Surface $[\mathrm{Fe/H}]$.
-    pub feh: f64,
+    /// `constraint_value(i)` from the case's `set_constraint_value`, in
+    /// `constraint_name` index order (`NaN` for unnamed slots;
+    /// `sample_constraint_value`, `astero/private/astero_run_support.f90:999`).
+    pub constraint_values: [f64; MAX_CONSTRAINTS],
     /// Model large frequency separation $\Delta\nu_{\mathrm{model}}$ ($\mu\mathrm{Hz}$).
     pub delta_nu_uhz: f64,
     /// Model frequency of maximum power $\nu_{\max,\mathrm{model}}$ ($\mu\mathrm{Hz}$).
@@ -82,83 +84,34 @@ pub struct AsteroSampleResult {
     pub model_orders: [Vec<isize>; 4],
 }
 
-/// Evaluates the radius of the convective envelope base $R_{\mathrm{cz}} / R_\odot$
-/// from the outermost convective-to-radiative boundary below the photosphere.
-#[must_use]
-pub fn eval_convective_envelope_base_rsun(model: &StarModel) -> f64 {
-    let r_surf = model.r.first().copied().unwrap_or(RSUN).max(1.0);
-    for k in 0..model.nz.saturating_sub(1) {
-        if model.r[k] > 0.995 * r_surf {
-            continue;
-        }
-        let conv_k = model.gradr.get(k).copied().unwrap_or(0.0)
-            > model.grada.get(k).copied().unwrap_or(0.4);
-        let conv_in = model.gradr.get(k + 1).copied().unwrap_or(0.0)
-            > model.grada.get(k + 1).copied().unwrap_or(0.4);
-        if conv_k && !conv_in {
-            let dr_k = model.gradr[k] - model.grada[k];
-            let dr_in = model.grada[k + 1] - model.gradr[k + 1];
-            let w = (dr_k / (dr_k + dr_in).max(1.0e-30)).clamp(0.0, 1.0);
-            let r_bcz = (1.0 - w) * model.r[k] + w * model.r[k + 1];
-            return r_bcz / RSUN;
-        }
-    }
-    0.0
-}
-
+/// Spectroscopic terms of $\chi^2$ in `constraint_name` index order, with the
+/// constraint values from the case's `set_constraint_value`
+/// (`get_chi2_spectro`, `astero/private/extras_support.f90:671-695`).
+/// Returns `(targets, sigmas, model values, Teff, log g, log L, log R)`.
 fn eval_spectro_obs(
     model: &StarModel,
     ctrl: &AsteroSearchControls,
-) -> (
-    Vec<f64>,
-    Vec<f64>,
-    Vec<f64>,
-    f64,
-    f64,
-    f64,
-    f64,
-    f64,
-    f64,
-    f64,
-    f64,
-) {
+    constraint_values: &[f64; MAX_CONSTRAINTS],
+) -> (Vec<f64>, Vec<f64>, Vec<f64>, f64, f64, f64, f64) {
     let hr = extract_history_row(model);
-    let (teff, r_rsun) =
-        (model.teff.max(1.0), model.surface_r_rsun().max(1.0e-30));
-    let x = model.xh_mass.first().copied().unwrap_or(0.70).max(1.0e-10);
-    let y = model.yhe_mass.first().copied().unwrap_or(0.28);
-    let z_div_x = (1.0 - x - y).clamp(1.0e-99, 1.0) / x;
-    let feh = flexmesa_math::log10(z_div_x / ctrl.z_div_x_solar.max(1.0e-30));
-    let rcz = eval_convective_envelope_base_rsun(model);
-    let pairs: [(SpectroConstraint, f64); 10] = [
-        (ctrl.teff, teff),
-        (ctrl.logg, hr.log_g),
-        (ctrl.log_l, hr.log_l),
-        (ctrl.feh, feh),
-        (ctrl.m_h, feh),
-        (ctrl.log_r, hr.log_r),
-        (ctrl.radius, r_rsun),
-        (ctrl.surface_z_div_x, z_div_x),
-        (ctrl.surface_he, y),
-        (ctrl.rcz, rcz),
-    ];
+    let teff = model.teff.max(1.0);
     let (mut obs, mut sig, mut mval) = (Vec::new(), Vec::new(), Vec::new());
     if ctrl.include_age_in_chi2_spectro && ctrl.age_sigma > 0.0 {
         obs.push(ctrl.age_target);
         sig.push(ctrl.age_sigma);
         mval.push(model.star_age);
     }
-    for (c, v) in pairs {
+    for (i, c) in ctrl.indexed_constraints.iter().enumerate() {
+        if ctrl.constraint_names[i].trim().is_empty() {
+            continue;
+        }
         if c.include && c.sigma > 0.0 {
             obs.push(c.target);
             sig.push(c.sigma);
-            mval.push(v);
+            mval.push(constraint_values[i]);
         }
     }
-    (
-        obs, sig, mval, teff, hr.log_g, hr.log_l, hr.log_r, feh, r_rsun,
-        z_div_x, rcz,
-    )
+    (obs, sig, mval, teff, hr.log_g, hr.log_l, hr.log_r)
 }
 
 /// Fast pre-screen returning `(chi2_spectro, chi2_delta_nu, delta_nu_uhz)` without mode solving.
@@ -166,9 +119,10 @@ fn eval_spectro_obs(
 pub fn eval_spectro_and_delta_nu_chi2(
     model: &StarModel,
     ctrl: &AsteroSearchControls,
+    constraint_values: &[f64; MAX_CONSTRAINTS],
 ) -> (f64, f64, f64) {
-    let (sp_obs, sp_sig, sp_mod, _, _, _, _, _, _, _, _) =
-        eval_spectro_obs(model, ctrl);
+    let (sp_obs, sp_sig, sp_mod, _, _, _, _) =
+        eval_spectro_obs(model, ctrl, constraint_values);
     let mut sum_sp = 0.0_f64;
     let mut n_sp = 0usize;
     for i in 0..sp_obs.len() {
@@ -248,12 +202,13 @@ pub fn parse_gyre_outer_bound(
 pub fn eval_model_astero_sample(
     model: &StarModel,
     ctrl: &AsteroSearchControls,
+    constraint_values: &[f64; MAX_CONSTRAINTS],
     params: AsteroParamSet,
     sample_number: usize,
     case_dir: &Path,
 ) -> Result<AsteroSampleResult, StarError> {
-    let (sp_obs, sp_sig, sp_mod, teff, logg, log_l, log_r, feh, _, _, _) =
-        eval_spectro_obs(model, ctrl);
+    let (sp_obs, sp_sig, sp_mod, teff, logg, log_l, log_r) =
+        eval_spectro_obs(model, ctrl, constraint_values);
     let r_phot_cm = model.surface_r_rsun().max(1.0e-30) * RSUN;
     let (_, _, tau_0) = eval_acoustic_profile(
         &model.r,
@@ -413,7 +368,7 @@ pub fn eval_model_astero_sample(
             logg,
             log_l,
             log_r,
-            feh,
+            constraint_values: *constraint_values,
             delta_nu_uhz,
             nu_max_uhz,
             a_div_r,
@@ -550,7 +505,7 @@ pub fn eval_model_astero_sample(
         logg,
         log_l,
         log_r,
-        feh,
+        constraint_values: *constraint_values,
         delta_nu_uhz,
         nu_max_uhz,
         a_div_r,

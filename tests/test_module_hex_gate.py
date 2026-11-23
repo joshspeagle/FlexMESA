@@ -37,9 +37,16 @@ def test_live_module_hex_gate_and_summary_match() -> None:
     assert by_mod["auto_diff"].status == "pass_0_ulp"
     assert by_mod["auto_diff"].checked_values == 387
     assert by_mod["auto_diff"].zero_ulp_values == 387
-    assert by_mod["turb"].checked_values == 62
+    assert by_mod["turb"].status == "pass_0_ulp"
+    assert by_mod["turb"].checked_values == 71
+    assert by_mod["turb"].zero_ulp_values == 71
     assert by_mod["ionization"].expected_outputs == 31
-    assert by_mod["kap"].expected_outputs == 21
+    assert by_mod["kap"].status == "pass_0_ulp"
+    assert by_mod["kap"].checked_values == 21
+    assert by_mod["kap"].zero_ulp_values == 21
+    assert by_mod["net"].status == "partial_0_ulp"
+    assert by_mod["net"].checked_values == 116
+    assert by_mod["net"].zero_ulp_values == 116
 
     summary_path = root / module_hex_gate.DEFAULT_SUMMARY_JSON_REL
     assert summary_path.is_file()

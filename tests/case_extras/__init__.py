@@ -14,7 +14,12 @@ import pathlib
 import re
 from typing import Any
 
-from tests.case_extras import binary_extras, rsp_extras, star_extras
+from tests.case_extras import (
+    astero_extras,
+    binary_extras,
+    rsp_extras,
+    star_extras,
+)
 
 _INCLUDE_RE = re.compile(r'include\s+[\'"]([^\'"]+)[\'"]', re.IGNORECASE)
 
@@ -226,9 +231,15 @@ def classify_case_extras(suite: str, case_dir: pathlib.Path | str) -> str:
         `"unported"` otherwise. An unported case runs with default no-op
         hooks, so its upstream extras logic is not executed. A case whose
         handler is written but not in `ADAPTER_SERVED_STAR_HANDLERS` or
-        `ADAPTER_SERVED_BINARY_HANDLERS` is `"unported"`.
+        `ADAPTER_SERVED_BINARY_HANDLERS` is `"unported"`, as is one whose
+        attached handler lists `unported_routines`.
     """
-    if resolve_case_extras(suite, case_dir) is not None:
+    handler = resolve_case_extras(suite, case_dir)
+    if handler is not None:
+        # An attached handler that still skips routines with case logic
+        # (for example an astero case's `extras_after_evolve`) is unported.
+        if getattr(handler, "unported_routines", ()):
+            return "unported"
         return "ported"
     if extras_source_digest(case_dir) in STOCK_EXTRAS_DIGESTS:
         return "stock"
@@ -244,9 +255,10 @@ def resolve_case_extras(suite: str, case_dir: pathlib.Path | str) -> Any:
 
     Returns:
         Python extras object implementing `StarExtras` or `BinaryExtras`
-        callbacks, or `None` when the upstream source uses default no-op
-        hooks or its handler cannot run through the adapter yet (see
-        `ADAPTER_SERVED_STAR_HANDLERS` and `ADAPTER_SERVED_BINARY_HANDLERS`).
+        callbacks or an astero case's `set_param`, or `None` when the
+        upstream source uses default no-op hooks or its handler cannot run
+        through the adapter yet (see `ADAPTER_SERVED_STAR_HANDLERS` and
+        `ADAPTER_SERVED_BINARY_HANDLERS`).
     """
     handler = match_case_extras(suite, case_dir)
     if handler is None:
@@ -295,4 +307,11 @@ def match_case_extras(suite: str, case_dir: pathlib.Path | str) -> Any:
         norm_bin = normalize_fortran(raw_bin)
         norm_star = normalize_fortran(raw_star) if raw_star else ""
         return binary_extras.match_binary_extras(norm_bin, norm_star)
+    if suite == "astero":
+        raw_star = load_fortran_source(root, "run_star_extras.f90")
+        if not raw_star:
+            return None
+        return astero_extras.match_astero_extras(
+            normalize_fortran(raw_star), source_sha256
+        )
     return None

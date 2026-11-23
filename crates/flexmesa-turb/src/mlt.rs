@@ -153,7 +153,7 @@ pub fn set_mlt<T: TurbScalar>(
     let one = T::from_f64(1.0);
 
     let (gamma, mut zeta, conv_vel, d) = if inp.gradr.val() > inp.gradl.val() {
-        let q = inp.chi_t / inp.chi_rho;
+        let q = inp.chi_t.div_ad(inp.chi_rho);
         let (a0, a_val) = match params.option {
             MltOption::Cox | MltOption::Tdc => {
                 let a0_c = T::from_f64(9.0 / 4.0);
@@ -162,12 +162,12 @@ pub fn set_mlt<T: TurbScalar>(
                     * inp.grav
                     * inp.lambda.pow2()
                     * inp.rho
-                    * (q * inp.rho / (T::from_f64(2.0) * inp.p)).sqrt())
+                    * ((q * inp.rho).div_ad(T::from_f64(2.0) * inp.p)).sqrt())
                 .div_real(9.0);
-                let rad_cond = T::from_f64(4.0 / 3.0 * CRAD * CLIGHT)
-                    * inp.t.pow3()
-                    / (inp.opacity * inp.rho);
-                (a0_c, conv_cond / rad_cond)
+                let rad_cond = (T::from_f64(4.0 / 3.0 * CRAD * CLIGHT)
+                    * inp.t.pow3())
+                .div_ad(inp.opacity * inp.rho);
+                (a0_c, conv_cond.div_ad(rad_cond))
             }
             MltOption::Henyey
             | MltOption::Ml1
@@ -186,9 +186,10 @@ pub fn set_mlt<T: TurbScalar>(
                     MltOption::Cox | MltOption::Tdc => unreachable!(),
                 };
                 let omega = inp.lambda * inp.rho * inp.opacity;
-                let ff4_omega2_plus_1 = T::from_f64(ff4) / omega.pow2() + one;
-                let a0_h =
-                    T::from_f64((3.0 / 16.0) * ff2 * ff3) / ff4_omega2_plus_1;
+                let ff4_omega2_plus_1 =
+                    T::from_f64(ff4).div_ad(omega.pow2()) + one;
+                let a0_h = T::from_f64((3.0 / 16.0) * ff2 * ff3)
+                    .div_ad(ff4_omega2_plus_1);
                 let a_1 = T::from_f64(4.0)
                     * inp.cp
                     * (T::from_f64(ff1) * inp.p * q * inp.rho).sqrt();
@@ -197,7 +198,7 @@ pub fn set_mlt<T: TurbScalar>(
                     * ff4_omega2_plus_1;
                 let a_num = a_1 * a_2;
                 let a_den = T::from_f64(ff3 * CRAD * CLIGHT) * inp.t.pow3();
-                (a0_h, a_num / a_den)
+                (a0_h, a_num.div_ad(a_den))
             }
         };
 
@@ -205,7 +206,7 @@ pub fn set_mlt<T: TurbScalar>(
         // (`#322`) and no `delta <= 0` shortcut (`turb/private/mlt.f90:122-145`).
         // Solve cubic efficiency equation:
         // a0 * Gamma^3 + Gamma^2 + Gamma - a0 * B^3 = 0, with delta = a0 * B^3.
-        let b_cubed = (a_val.pow2() / a0) * (inp.gradr - inp.gradl);
+        let b_cubed = (a_val.pow2().div_ad(a0)) * (inp.gradr - inp.gradl);
         let delta = a0 * b_cubed;
         let f = T::from_f64(-2.0)
             + T::from_f64(9.0) * a0
@@ -235,9 +236,10 @@ pub fn set_mlt<T: TurbScalar>(
             });
         }
         let f1 = f1_arg.powf(ONE_THIRD);
-        let f2 = T::from_f64(2.0 * TWO_13) * (one - T::from_f64(3.0) * a0) / f1;
+        let f2 = (T::from_f64(2.0 * TWO_13) * (one - T::from_f64(3.0) * a0))
+            .div_ad(f1);
         let gamma_val = (T::from_f64(FOUR_13) * f1 + f2 - T::from_f64(2.0))
-            / (T::from_f64(6.0) * a0);
+            .div_ad(T::from_f64(6.0) * a0);
         // Bare `return` in `turb/private/mlt.f90:145` after `Gamma` was
         // assigned at line 143; remaining outputs keep caller baseline.
         if gamma_val.val() <= 0.0 {
@@ -251,10 +253,10 @@ pub fn set_mlt<T: TurbScalar>(
             });
         }
 
-        let mut vc = T::from_f64(params.mixing_length_alpha)
-            * (q * inp.p / (T::from_f64(8.0) * inp.rho)).sqrt()
-            * gamma_val
-            / a_val;
+        let mut vc = (T::from_f64(params.mixing_length_alpha)
+            * ((q * inp.p).div_ad(T::from_f64(8.0) * inp.rho)).sqrt()
+            * gamma_val)
+            .div_ad(a_val);
         if vc.val() > params.max_conv_vel {
             vc = vc.with_val(params.max_conv_vel);
         }

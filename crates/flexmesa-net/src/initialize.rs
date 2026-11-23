@@ -17,6 +17,7 @@ use flexmesa_rates::{
 use rayon::prelude::*;
 
 use crate::parser::ParsedNetDef;
+use crate::reaction_synth::mesa_reaction_qtotal;
 use crate::screen::init_screening_tables;
 use crate::types::{
     NetError, NetGeneralInfo, ReaclibKind, ReactionKind, ScreenPairParams,
@@ -33,7 +34,7 @@ static RATTAB_CACHE: OnceLock<Mutex<HashMap<String, Arc<Vec<CubicCoeffs>>>>> =
 pub fn global_logttab() -> &'static [f64] {
     LOGTTAB.get_or_init(|| {
         (0..NRATTAB)
-            .map(|i| flexmesa_math::fma(i as f64, RATTAB_TSTP, RATTAB_TLO))
+            .map(|i| RATTAB_TLO + (i as f64) * RATTAB_TSTP)
             .collect()
     })
 }
@@ -342,7 +343,12 @@ impl NetGeneralInfo {
         let mut rxn_map: HashMap<usize, ReactionInfo> = parsed
             .active_reactions
             .into_values()
-            .map(|r| (r.id, r))
+            .map(|mut r| {
+                if let Some(q) = mesa_reaction_qtotal(nuclides, &r) {
+                    r.std_q = q;
+                }
+                (r.id, r)
+            })
             .collect();
         let mut reactions: Vec<ReactionInfo> =
             rxn_map.values().cloned().collect();
@@ -615,7 +621,7 @@ impl NetGeneralInfo {
             k += 1;
         }
         let dt = logtemp - logttab[k];
-        let inv_bt_ln10 = 1.0 / (btemp * LN10);
+        let bt_ln10 = btemp * LN10;
 
         for (i, rxn) in self.reactions.iter().enumerate() {
             let mut dtab = match rxn.ye_exp {
@@ -634,27 +640,15 @@ impl NetGeneralInfo {
             let ddtab = f64::from(irho) * dtab / bden;
             let c = &self.rattab_splines[i][k];
             let fac = rate_factors.get(i).copied().unwrap_or(1.0);
-            let poly = flexmesa_math::fma(
-                flexmesa_math::fma(
-                    flexmesa_math::fma(c[3], dt, c[2]),
-                    dt,
-                    c[1],
-                ),
-                dt,
-                c[0],
-            );
-            let dpoly = flexmesa_math::fma(
-                flexmesa_math::fma(1.5 * c[3], dt, c[2]),
-                2.0 * dt,
-                c[1],
-            );
-            let r = poly * dtab * fac;
-            rate_raw[i] = r;
-            rate_raw_drho[i] = poly * ddtab * fac;
+            let poly = c[0] + dt * (c[1] + dt * (c[2] + dt * c[3]));
+            let dpoly = c[1] + 2.0 * dt * (c[2] + 1.5 * dt * c[3]);
+            let r = poly * dtab;
+            rate_raw[i] = r * fac;
+            rate_raw_drho[i] = (r * ddtab / dtab) * fac;
             rate_raw_dt[i] = if logtemp >= MAX_SAFE_LOGT_FOR_RATES {
                 0.0
             } else {
-                dpoly * dtab * inv_bt_ln10 * fac
+                (dpoly * dtab / bt_ln10) * fac
             };
         }
         Ok(())

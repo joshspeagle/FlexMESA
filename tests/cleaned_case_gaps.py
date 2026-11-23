@@ -77,5 +77,7 @@ DECLARED_STAR_STOPS: dict[str, DeclaredStop] = {
         r"overshoot_scheme", "#231"
     ),
     "make_env": DeclaredStop(r"missing saved model 'start\.mod'", "#154"),
-    "tzo": DeclaredStop(r"dutch_wind_lowt_scheme' option 'other'", "#161"),
+    "tzo": DeclaredStop(
+        r"relax ended with termination code 'min_timestep_limit'", "#161"
+    ),
 }

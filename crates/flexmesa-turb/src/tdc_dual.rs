@@ -21,7 +21,9 @@ use std::array;
 use std::ops::{Add, Div, Mul, Neg, Sub};
 
 use flexmesa_autodiff::DualOrder1;
-use flexmesa_math::{atan, cos, cosh, exp, log, pow, pow2, pow3, pow4, tan, tanh};
+use flexmesa_math::{
+    atan, cos, cosh, exp, log, pow, pow2, pow3, pow4, tan, tanh,
+};
 
 use crate::TurbScalar;
 
@@ -241,6 +243,10 @@ impl<const N: usize> Neg for AutoDiffRealTdc<N> {
 }
 
 impl<const N: usize> TurbScalar for AutoDiffRealTdc<N> {
+    fn div_ad(self, rhs: Self) -> Self {
+        self / rhs
+    }
+
     /// `div_self_real` (`auto_diff/private/auto_diff_real_tdc_module.f90:1342-1352`).
     fn div_real(self, c: f64) -> Self {
         let q0 = powm1(c);
@@ -331,8 +337,7 @@ impl<const N: usize> TurbScalar for AutoDiffRealTdc<N> {
             d1val1: q0 * x.d1val1,
             d1_array: array::from_fn(|i| q0 * x.d1_array[i]),
             d1val1_d1_array: array::from_fn(|i| {
-                (-x.d1_array[i] * x.d1val1 + x.d1val1_d1_array[i] * x.val)
-                    * inv
+                (-x.d1_array[i] * x.d1val1 + x.d1val1_d1_array[i] * x.val) * inv
             }),
         }
     }

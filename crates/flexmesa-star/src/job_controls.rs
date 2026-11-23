@@ -776,18 +776,74 @@ pub struct StarJobControls {
     pub initial_he4: f64,
     /// Solar heavy-element mixture selector (`initial_zfracs`, `3` = GS98 default).
     pub initial_zfracs: i32,
-    /// Whether to relax stellar mass on startup (`relax_mass` / `relax_initial_mass`).
+    /// `relax_mass`: relax the total mass to `new_mass` with
+    /// `star_relax_mass` (`star/job/run_star_support.f90:2422-2426`).
     pub relax_mass: bool,
-    /// Target stellar mass in $M_\odot$ for `relax_mass` (`new_mass`).
+    /// `relax_initial_mass`: as `relax_mass`, later in the sequence and only
+    /// for a new run (`star/job/run_star_support.f90:2467-2471`).
+    pub relax_initial_mass: bool,
+    /// `relax_mass_scale`: relax the mass by rescaling `dm`
+    /// (`star_relax_mass_scale`, `star/job/run_star_support.f90:2480-2487`).
+    pub relax_mass_scale: bool,
+    /// `relax_initial_mass_scale`: as `relax_mass_scale`, for a new run.
+    pub relax_initial_mass_scale: bool,
+    /// Target stellar mass in $M_\odot$ (`new_mass`).
     pub new_mass: f64,
-    /// Whether to relax metal mass fraction $Z$ (`relax_z` / `change_z`).
+    /// $\log_{10}$ of the largest $|\dot M|$ in $M_\odot\,\mathrm{yr}^{-1}$
+    /// for `relax_mass`; `<= -100` picks a default by mass
+    /// (`lg_max_abs_mdot`, default `-100`).
+    pub lg_max_abs_mdot: f64,
+    /// $\Delta\log_{10} M$ per step for `relax_mass_scale`
+    /// (`dlgm_per_step`, default `1d-3`).
+    pub dlgm_per_step: f64,
+    /// Timestep in years for `relax_mass_scale`
+    /// (`change_mass_years_for_dt`, default `1`).
+    pub change_mass_years_for_dt: f64,
+    /// `relax_Z`: relax $Z$ to `new_Z` over several steps
+    /// (`star_relax_Z`, `star/job/run_star_support.f90:2395-2402`).
     pub relax_z: bool,
-    /// Target metal mass fraction $Z$ for `relax_z` (`new_z`).
+    /// `relax_initial_Z`: as `relax_Z`, for a new run.
+    pub relax_initial_z: bool,
+    /// `change_Z`: set $Z$ to `new_Z` at once (`star_set_z`,
+    /// `star/job/run_star_support.f90:2289-2298`).
+    pub change_z: bool,
+    /// `change_initial_Z`: as `change_Z`, for a new run.
+    pub change_initial_z: bool,
+    /// Lowest $q$ changed by `relax_Z` (`relax_Z_minq`, default `0`).
+    pub relax_z_minq: f64,
+    /// Highest $q$ changed by `relax_Z` (`relax_Z_maxq`, default `1`).
+    pub relax_z_maxq: f64,
+    /// Target metal mass fraction $Z$ (`new_Z`).
     pub new_z: f64,
-    /// Whether to relax helium mass fraction $Y$ (`relax_y` / `change_y`).
+    /// `relax_Y`: relax $Y$ to `new_Y` over several steps
+    /// (`star_relax_Y`, `star/job/run_star_support.f90:2413-2420`).
     pub relax_y: bool,
-    /// Target helium mass fraction $Y$ for `relax_y` (`new_y`).
+    /// `relax_initial_Y`: as `relax_Y`, for a new run.
+    pub relax_initial_y: bool,
+    /// `change_Y`: set $Y$ to `new_Y` at once (`star_set_y`,
+    /// `star/job/run_star_support.f90:2300-2308`).
+    pub change_y: bool,
+    /// `change_initial_Y`: as `change_Y`, for a new run.
+    pub change_initial_y: bool,
+    /// Lowest $q$ changed by `relax_Y` (`relax_Y_minq`, default `0`).
+    pub relax_y_minq: f64,
+    /// Highest $q$ changed by `relax_Y` (`relax_Y_maxq`, default `1`).
+    pub relax_y_maxq: f64,
+    /// Target helium mass fraction $Y$ (`new_Y`).
     pub new_y: f64,
+    /// `relax_initial_composition`: relax to the composition profile in
+    /// `relax_composition_filename` (`star/job/run_star_support.f90:2236-2239,
+    /// 2793-2845`).
+    pub relax_initial_composition: bool,
+    /// Steps for `relax_initial_composition`
+    /// (`num_steps_to_relax_composition`, default `100`).
+    pub num_steps_to_relax_composition: usize,
+    /// Composition profile file (`relax_composition_filename`).
+    pub relax_composition_filename: String,
+    /// Timescale in seconds for `relax_initial_composition`; `< 0` uses
+    /// `num_steps_to_relax_composition` (`timescale_for_relax_composition`,
+    /// default `-1`).
+    pub timescale_for_relax_composition: f64,
     /// Whether to set or relax `tau_factor` (`set_tau_factor` / `relax_tau_factor`).
     pub set_tau_factor: bool,
     /// Whether optical depth should be relaxed (`relax_tau_factor` / `relax_initial_tau_factor`).
@@ -818,8 +874,19 @@ pub struct StarJobControls {
     pub column_depth_for_irradiation: f64,
     /// Whether to relax composition to accretion abundances (`relax_initial_to_xaccrete`).
     pub relax_initial_to_xaccrete: bool,
-    /// Whether to strip the H-rich envelope on startup (`relax_initial_mass_to_remove_H_env`).
+    /// `relax_initial_mass_to_remove_H_env`: relax the mass to
+    /// `he_core_mass + extra_mass_retained_by_remove_H_env`
+    /// (`star_relax_mass_to_remove_H_env`,
+    /// `star/job/run_star_support.f90:2473-2478`).
     pub relax_initial_mass_to_remove_h_env: bool,
+    /// `relax_mass_to_remove_H_env` (`star/job/run_star_support.f90:2428-2433`).
+    pub relax_mass_to_remove_h_env: bool,
+    /// Mass kept above the He core in $M_\odot$
+    /// (`extra_mass_retained_by_remove_H_env`, default `5d-3`).
+    pub extra_mass_retained_by_remove_h_env: f64,
+    /// `remove_surface_by_relax_to_star_cut`. Not ported: it still runs the
+    /// `relax_to_remove_h_env` stand-in.
+    pub remove_surface_by_relax_to_star_cut: bool,
     /// Whether to set initial central velocity (`set_initial_v_center`).
     pub set_initial_v_center: bool,
     /// Whether to set initial central luminosity (`set_initial_L_center`).
@@ -849,6 +916,30 @@ pub struct StarJobControls {
     pub filename_for_profile_when_terminate: String,
     /// Save a priority-3 profile of the starting model before step 1 (`profile_starting_model` in `star_job.defaults:282`).
     pub profile_starting_model: bool,
+}
+
+impl StarJobControls {
+    /// Whether a `&star_job` control changes or relaxes $Z$ after the model
+    /// is loaded (`change_Z`, `change_initial_Z`, `relax_Z`,
+    /// `relax_initial_Z`).
+    #[must_use]
+    pub fn changes_z(&self) -> bool {
+        self.change_z
+            || self.change_initial_z
+            || self.relax_z
+            || self.relax_initial_z
+    }
+
+    /// Whether a `&star_job` control changes or relaxes $Y$ after the model
+    /// is loaded (`change_Y`, `change_initial_Y`, `relax_Y`,
+    /// `relax_initial_Y`).
+    #[must_use]
+    pub fn changes_y(&self) -> bool {
+        self.change_y
+            || self.change_initial_y
+            || self.relax_y
+            || self.relax_initial_y
+    }
 }
 
 impl Default for StarJobControls {
@@ -944,11 +1035,31 @@ impl Default for StarJobControls {
             initial_he4: -1.0,
             initial_zfracs: 3,
             relax_mass: false,
+            relax_initial_mass: false,
+            relax_mass_scale: false,
+            relax_initial_mass_scale: false,
             new_mass: -1.0,
+            lg_max_abs_mdot: -100.0,
+            dlgm_per_step: 1.0e-3,
+            change_mass_years_for_dt: 1.0,
             relax_z: false,
+            relax_initial_z: false,
+            change_z: false,
+            change_initial_z: false,
+            relax_z_minq: 0.0,
+            relax_z_maxq: 1.0,
             new_z: -1.0,
             relax_y: false,
+            relax_initial_y: false,
+            change_y: false,
+            change_initial_y: false,
+            relax_y_minq: 0.0,
+            relax_y_maxq: 1.0,
             new_y: -1.0,
+            relax_initial_composition: false,
+            num_steps_to_relax_composition: 100,
+            relax_composition_filename: String::new(),
+            timescale_for_relax_composition: -1.0,
             set_tau_factor: false,
             relax_tau_factor: false,
             set_to_this_tau_factor: -1.0,
@@ -965,6 +1076,9 @@ impl Default for StarJobControls {
             column_depth_for_irradiation: -1.0,
             relax_initial_to_xaccrete: false,
             relax_initial_mass_to_remove_h_env: false,
+            relax_mass_to_remove_h_env: false,
+            extra_mass_retained_by_remove_h_env: 5.0e-3,
+            remove_surface_by_relax_to_star_cut: false,
             set_initial_v_center: false,
             set_initial_l_center: false,
             change_initial_rti_flag: false,

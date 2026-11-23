@@ -138,6 +138,7 @@ pub mod pulse_utils;
 pub mod relax;
 pub mod relax_comp;
 pub(crate) mod relax_driver;
+pub(crate) mod relax_mass_comp;
 pub mod report_utils;
 pub mod riemann;
 pub mod riemann_ad;
@@ -326,7 +327,7 @@ pub use mesa_history::{
     evaluate_star_history_row, format_star_history_data_line,
     format_star_history_data_line_with_extra, format_star_history_file_header,
     format_star_history_file_header_with_extra, parse_star_history_columns,
-    resolve_star_history_columns,
+    resolve_star_history_columns, star_get_history_output,
 };
 pub use mesa_log_reader::{
     MesaHeaderValue, MesaLogTable, read_mesa_log_file, read_mesa_log_str,
@@ -415,11 +416,10 @@ pub use pulse_modes::{
     solve_gyre_mesa_modes,
 };
 pub use relax::{
-    apply_composition_relaxation, apply_planetary_core, apply_uniform_rotation,
+    apply_planetary_core, apply_uniform_rotation,
     relax_core_boundary, relax_from_profile_files, relax_irradiation_to_target,
     relax_mass_to_target, relax_tau_factor_to_target, relax_to_remove_h_env,
 };
-pub use relax_comp::relax_composition_with_henyey;
 pub use report_utils::{
     ConvAndMixSummary, MESA_REF_VERSION_NUMBER, PhotosphereInfo,
     STAR_LOG_COL_WIDTH, StepReportContext, SurfAvgRotationInfo,

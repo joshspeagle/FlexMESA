@@ -166,14 +166,14 @@ pub fn eval_net(
         res.eps_nuc_categories[k] = QCONV * w.eps_nuc_categories[k];
     }
     for i in 0..ni {
-        res.dxdt[i] = aion[i] * dydt[i][0].to_f64();
+        res.dxdt[i] = (Quad::from_f64(aion[i]) * dydt[i][0]).to_f64();
     }
     if !just_dxdt {
         for i in 0..ni {
             let a_i = aion[i];
             res.d_eps_nuc_dx[i] = QCONV * w.d_eps_nuc_dy[i] / a_i;
-            res.d_dxdt_drho[i] = a_i * dydt[i][2].to_f64();
-            res.d_dxdt_dt[i] = a_i * dydt[i][1].to_f64();
+            res.d_dxdt_drho[i] = (Quad::from_f64(a_i) * dydt[i][2]).to_f64();
+            res.d_dxdt_dt[i] = (Quad::from_f64(a_i) * dydt[i][1]).to_f64();
             for (j, &a_j) in aion.iter().enumerate() {
                 res.d_dxdt_dx[i * ni + j] = w.d_dydt_dy[i * ni + j] * a_i / a_j;
             }

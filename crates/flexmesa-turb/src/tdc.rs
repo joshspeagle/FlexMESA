@@ -22,11 +22,11 @@
 use flexmesa_const::{MixingType, BOLTZ_SIGMA, CLIGHT, CRAD, PI, SQRT_2_DIV_3};
 
 use crate::mlt::{set_mlt, MltInputs, MltOption, MltParams};
+use crate::tdc_dual::TdcLift;
 use crate::tdc_search::{
     af_bisection_search, bracket_plus_newton_search, dq_dz_bisection_search,
 };
 use crate::tdc_support::{compute_q, set_y, TdcInfo, X_ALFAS};
-use crate::tdc_dual::TdcLift;
 use crate::{TurbError, TurbOutput, TurbResult};
 
 /// Non-differentiable configuration parameters for [`set_tdc`].
@@ -132,12 +132,12 @@ pub fn set_tdc<T: TdcLift>(
     params: &TdcParams,
     inp: &TdcInputs<T>,
 ) -> TurbResult<TdcOutput<T>> {
-    let l = T::from_f64(64.0 * PI * BOLTZ_SIGMA)
+    let l = (T::from_f64(64.0 * PI * BOLTZ_SIGMA)
         * inp.t.pow4()
         * inp.grav
         * inp.r.pow2()
-        * inp.gradr
-        / (T::from_f64(3.0) * inp.p * inp.opacity);
+        * inp.gradr)
+        .div_ad(T::from_f64(3.0) * inp.p * inp.opacity);
 
     // Upstream `turb/public/turb.f90:141-145` always calls `set_MLT('Cox', ...)`
     // before packing `TdcInfo`.
@@ -166,20 +166,20 @@ pub fn set_tdc<T: TdcLift>(
     let gamma = set_mlt(&mlt_params, &mlt_inp)?.gamma;
 
     // Left to right, as `turb/public/turb.f90:158` is written.
-    let c0 = T::from_f64(
-        params.tdc_alpha_c * params.mixing_length_alpha * X_ALFAS,
-    ) * inp.rho
-        * inp.t
-        * inp.cp
-        * T::from_f64(4.0)
-        * T::from_f64(PI)
-        * inp.r.pow2();
-    let l0 = T::from_f64(
+    let c0 =
+        T::from_f64(params.tdc_alpha_c * params.mixing_length_alpha * X_ALFAS)
+            * inp.rho
+            * inp.t
+            * inp.cp
+            * T::from_f64(4.0)
+            * T::from_f64(PI)
+            * inp.r.pow2();
+    let l0 = (T::from_f64(
         (16.0 * PI * CRAD * CLIGHT / 3.0) * params.cgrav * params.m,
-    ) * inp.t.pow4()
-        / (inp.p * inp.opacity);
+    ) * inp.t.pow4())
+    .div_ad(inp.p * inp.opacity);
     let a0 = T::from_f64(params.conv_vel_start / SQRT_2_DIV_3);
-    let h = inp.energy + inp.p / inp.rho;
+    let h = inp.energy + inp.p.div_ad(inp.rho);
 
     let info = TdcInfo {
         include_mlt_corr_to_tdc: params.include_mlt_corr_to_tdc,
@@ -208,12 +208,8 @@ pub fn set_tdc<T: TdcLift>(
         h,
     };
 
-    let (mut conv_vel, mut y_face, num_iters) = get_tdc_solution(
-        &info,
-        params.scale,
-        -100.0,
-        100.0,
-    )?;
+    let (mut conv_vel, mut y_face, num_iters) =
+        get_tdc_solution(&info, params.scale, -100.0, 100.0)?;
 
     if conv_vel.val() > params.max_conv_vel {
         conv_vel = T::from_f64(params.max_conv_vel);
@@ -221,24 +217,28 @@ pub fn set_tdc<T: TdcLift>(
         let num = info.l - info.l0 * info.gradl;
         y_face = if params.include_mlt_corr_to_tdc {
             // `turb/public/turb.f90:187-191`, left to right.
-            num / (info.l0
-                + info.c0
-                    * T::from_f64(SQRT_2_DIV_3)
-                    * T::from_f64(params.max_conv_vel)
-                    * (info.gamma / (one + info.gamma)))
+            num.div_ad(
+                info.l0
+                    + info.c0
+                        * T::from_f64(SQRT_2_DIV_3)
+                        * T::from_f64(params.max_conv_vel)
+                        * (info.gamma.div_ad(one + info.gamma)),
+            )
         } else {
-            num / (info.l0
-                + info.c0
-                    * T::from_f64(SQRT_2_DIV_3)
-                    * T::from_f64(params.max_conv_vel))
+            num.div_ad(
+                info.l0
+                    + info.c0
+                        * T::from_f64(SQRT_2_DIV_3)
+                        * T::from_f64(params.max_conv_vel),
+            )
         };
     }
 
     let grad_t = y_face + inp.gradl;
     // `turb/public/turb.f90:196`: `conv_vel*scale_height*mixing_length_alpha/3d0`.
-    let d = conv_vel * inp.scale_height
-        * T::from_f64(params.mixing_length_alpha)
-        / T::from_f64(3.0);
+    let d =
+        (conv_vel * inp.scale_height * T::from_f64(params.mixing_length_alpha))
+            .div_real(3.0);
     let mixing_type = if conv_vel.val() > 0.0 {
         MixingType::ConvectiveMixing
     } else {
@@ -287,7 +287,7 @@ fn get_tdc_solution<T: TdcLift>(
         num_iters = iters;
         y_star
     } else {
-        let rad_y = (info.l - info.l0 * info.gradl) / info.l0;
+        let rad_y = (info.l - info.l0 * info.gradl).div_ad(info.l0);
         if info.a0.val() < 1.0e-10 {
             rad_y
         } else {

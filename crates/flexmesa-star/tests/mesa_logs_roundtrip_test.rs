@@ -594,8 +594,8 @@ fn test_upstream_test_suite_history_column_lists_parse_or_fail_loudly() {
         .expect("upstream MESA root")
         .to_path_buf();
 
-    // Unported columns (#161 hydro/colors):
-    let expected_unported = ["tzo"];
+    // All upstream history_columns.list files parse cleanly (#161, #435).
+    let expected_unported: [&str; 0] = [];
     let mut unexpected_failures = Vec::new();
     let mut loud_error_cases = std::collections::BTreeSet::new();
     for rel_suite in

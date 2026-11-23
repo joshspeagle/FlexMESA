@@ -661,7 +661,13 @@ pub fn eval_henyey_equations_into(
     include_chem: bool,
     sys: &mut HenyeySystem,
 ) -> Result<(), StarError> {
-    set_hydro_vars(model, false, !include_chem)?;
+    // `eval_equations` skips `set_solver_vars` before the first iteration
+    // (`star/private/solver_support.f90:108-118`); every later evaluation
+    // sets the variables, so the flag is restored here.
+    if model.aux.need_to_setvars {
+        set_hydro_vars(model, false, !include_chem)?;
+    }
+    model.aux.need_to_setvars = true;
     // `star/private/hydro_eqns.f90:131-137`: revise EOS composition partials
     // for PC/Skye/ideal zones before assembling energy and momentum equations.
     crate::micro::fix_d_eos_dxa_partials(model)?;

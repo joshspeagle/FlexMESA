@@ -872,6 +872,14 @@ fn parse_history_columns_inner(
                     );
                     continue;
                 }
+                // MESA 26.4.1 `do_colors`
+                // (`star/private/history_specs.f90:237-271, 456-469`) has the
+                // legacy BC loop commented out (`! TODO. below is old module`),
+                // so these four directives are valid 0-column no-ops.
+                "add_bc" | "add_abs_mag" | "add_lum_band"
+                | "add_log_lum_band" => {
+                    continue;
+                }
                 _ => {}
             }
 
@@ -989,6 +997,16 @@ fn parse_history_columns_inner(
                         HistoryColumnSpec::CenterLogEpsBurn(cid),
                     );
                     continue;
+                }
+                // Legacy individual colors columns have no filter lookup in
+                // MESA 26.4.1 (`do1_color` at `star/private/history_specs.f90:675-690`,
+                // where `colors/public/colors_lib.f90::get_bc_id_by_name` returns `-1`).
+                "bc" | "abs_mag" | "lum_band" | "log_lum_band" => {
+                    return Err(StarError::InvalidInput(format!(
+                        "history_columns.list line {line_no}: legacy colors \
+                         column '{head} {arg}' has no active filter table in \
+                         MESA 26.4.1 (get_bc_id_by_name returns -1)"
+                    )));
                 }
                 _ => {
                     if let Some(q) = parse_iso_prefix_query(&head) {
@@ -2981,6 +2999,31 @@ fn eval_core_infall_speeds_cms(
         }
     }
     (fe_infall, non_fe_infall)
+}
+
+/// `star_get_history_output` (`star/public/star_lib.f90:3019-3047`): the
+/// current value of history column `name` for `model`, integers converted to
+/// `f64`.
+///
+/// # Errors
+/// Returns [`StarError::InvalidInput`] when `name` is not a single history
+/// column (upstream returns `-huge` with `ierr = 1`).
+pub fn star_get_history_output(
+    model: &StarModel,
+    name: &str,
+) -> Result<f64, StarError> {
+    let specs = parse_star_history_columns(name, None, model)?;
+    if specs.len() != 1 {
+        return Err(StarError::InvalidInput(format!(
+            "star_get_history_output: '{name}' is not a single history column"
+        )));
+    }
+    let row = evaluate_star_history_row(model, &specs);
+    row.first().map(|(_, v)| v.as_f64()).ok_or_else(|| {
+        StarError::InvalidInput(format!(
+            "star_get_history_output: no value for '{name}'"
+        ))
+    })
 }
 
 /// Evaluates all `specs` for `model` at the current step (`star/private/history.f90`).

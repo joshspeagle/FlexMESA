@@ -326,12 +326,6 @@ reason = "Pre-MS initial model construction (#154) and retry-mesh restoration (#
 
 [[gaps]]
 suite = "star"
-case = "make_zams_ultra_high_mass"
-issue = "#154"
-reason = "Pre-MS initial model construction exits after 1 step (#154)."
-
-[[gaps]]
-suite = "star"
 case = "ns_c"
 issue = "#157"
 reason = "Case history_columns.list requests unported MLT++ gradT_excess_alpha column."
@@ -730,6 +724,24 @@ reason = "Long-running uncapped astero NEWUOA campaign tracked under #162 and sc
 
 [[test_gaps]]
 kind = "python_xfail"
+file = "tests/test_e2e_2_tier2.py"
+test_name = "test_accretion_composition_and_super_eddington_nova_wind"
+issue = "#445"
+role = "physics_gap"
+expect_fail_when_run = true
+reason = "This synthetic setup (never run in MESA) relied on the removed relax_initial_mass_to_remove_h_env stand-in; with upstream star_relax_mass_to_remove_H_env (star_lib.f90:1271-1287) the 0.6 Msun ZAMS start has no He core and final_log_tc is 5.10 against the asserted > 6.0."
+
+[[test_gaps]]
+kind = "python_xfail"
+file = "tests/test_e2e_2_tier2.py"
+test_name = "test_synthetic_tier2_make_o_ne_wd_runner_and_restart"
+issue = "#445"
+role = "physics_gap"
+expect_fail_when_run = true
+reason = "This synthetic setup (never run in MESA) relied on the removed relax_initial_mass_to_remove_h_env stand-in; with upstream star_relax_mass_to_remove_H_env the 1.10 Msun ZAMS relax stops on max_number_retries."
+
+[[test_gaps]]
+kind = "python_xfail"
 file = "tests/test_eos_wave3b1.py"
 test_name = "test_helm_ideal_edge_skip_blend_rust_and_jax_agree"
 issue = "#295"
@@ -906,3 +918,21 @@ issue = "#295"
 role = "physics_gap"
 expect_fail_when_run = true
 reason = "Rust table_atm uses MESA 26.4.1 interp_2d/private/bicub_db.f implicit f32 fvbicub_db basis scalars in strict mode (#420, #161), whereas the frozen JAX twin keeps pure f64 basis scalars per DECISIONS #43; measured cross-stage max_rel_err is 6.897e-8 (N=4) and 4.705e-6 (N=8) against 5.0e-12."
+
+[[test_gaps]]
+kind = "python_xfail"
+file = "tests/unit/test_kap_wave3b2.py"
+test_name = "test_rust_strict_vs_jax_backend_consistency_across_all_regimes"
+issue = "#295"
+role = "physics_gap"
+expect_fail_when_run = true
+reason = "Rust kapCN and AESOPUS evaluate MESA 26.4.1 interp_2d/private/bicub_db.f implicit f32 fvbicub_db basis scalars in strict mode (#433, #161), whereas the frozen JAX twin keeps pure f64 basis scalars per DECISIONS #43; measured max rel diff is 2.103e-7 against rtol=1e-12."
+
+[[test_gaps]]
+kind = "python_xfail"
+file = "tests/unit/test_kap_wave3b2_jax.py"
+test_name = "test_kapcn_knot_and_multi_zone_batch_consistency"
+issue = "#295"
+role = "physics_gap"
+expect_fail_when_run = true
+reason = "Rust AESOPUS evaluates MESA 26.4.1 interp_2d/private/bicub_db.f implicit f32 fvbicub_db basis scalars in strict mode (#433, #161), whereas the frozen JAX twin keeps pure f64 basis scalars per DECISIONS #43; measured max rel diff is 1.713e-8 against rtol=1e-12, atol=1e-12."

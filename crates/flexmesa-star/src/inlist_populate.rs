@@ -322,17 +322,19 @@ impl InlistBundle {
             }
             j.initial_zfracs = v as i32;
         }
-        if let Some(b) = sj.try_any_bool("star_job", &[
-            "relax_mass", "relax_initial_mass", "relax_mass_scale", "relax_initial_mass_scale",
-        ])? {
-            j.relax_mass = b;
-        }
-        if let Some(b) = sj.try_any_bool("star_job", &["relax_z", "relax_initial_z", "change_z", "change_initial_z"])? {
-            j.relax_z = b;
-        }
-        if let Some(b) = sj.try_any_bool("star_job", &["relax_y", "relax_initial_y", "change_y", "change_initial_y"])? {
-            j.relax_y = b;
-        }
+        map_bools!("star_job", sj, j, [
+            relax_mass, relax_initial_mass, relax_mass_scale, relax_initial_mass_scale,
+            relax_z, relax_initial_z, change_z, change_initial_z,
+            relax_y, relax_initial_y, change_y, change_initial_y,
+            relax_initial_composition,
+        ]);
+        map_f64s!("star_job", sj, j, [
+            lg_max_abs_mdot, dlgm_per_step, change_mass_years_for_dt,
+            relax_z_minq, relax_z_maxq, relax_y_minq, relax_y_maxq,
+            timescale_for_relax_composition,
+        ]);
+        sj.try_usize_into("star_job", &mut j.num_steps_to_relax_composition, "num_steps_to_relax_composition", 0)?;
+        map_strs!("star_job", sj, j, [relax_composition_filename]);
         if let Some(b) = sj.try_any_bool("star_job", &[
             "set_tau_factor", "set_initial_tau_factor", "relax_tau_factor",
             "relax_initial_tau_factor",
@@ -371,11 +373,11 @@ impl InlistBundle {
         }
         sj.try_f64_into("star_job", &mut j.new_irradiation_flux, "relax_to_this_irrad_flux")?;
         sj.try_f64_into("star_job", &mut j.column_depth_for_irradiation, "irrad_col_depth")?;
-        if let Some(b) = sj.try_any_bool("star_job", &[
-            "relax_initial_mass_to_remove_h_env", "remove_surface_by_relax_to_star_cut",
-        ])? {
-            j.relax_initial_mass_to_remove_h_env = b;
-        }
+        map_bools!("star_job", sj, j, [
+            relax_initial_mass_to_remove_h_env, relax_mass_to_remove_h_env,
+            remove_surface_by_relax_to_star_cut,
+        ]);
+        sj.try_f64_into("star_job", &mut j.extra_mass_retained_by_remove_h_env, "extra_mass_retained_by_remove_H_env")?;
         if let Some(b) = sj.try_any_bool("star_job", &["change_initial_rti_flag", "change_rti_flag"])? {
             j.change_initial_rti_flag = b;
         }

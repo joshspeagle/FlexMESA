@@ -99,6 +99,16 @@ def test_jax_grad_and_jacfwd_derivatives_match_analytical_and_fd() -> None:
     )
 
 
+@pytest.mark.xfail(
+    strict=True,
+    reason=(
+        "#295: Rust AESOPUS evaluates MESA 26.4.1 "
+        "interp_2d/private/bicub_db.f implicit f32 fvbicub_db basis scalars "
+        "in strict mode (#433, #161), whereas the frozen JAX twin keeps f64 "
+        "basis scalars per DECISIONS #43; measured max rel diff is 1.713e-8 "
+        "against rtol=1e-12, atol=1e-12."
+    ),
+)
 def test_kapcn_knot_and_multi_zone_batch_consistency() -> None:
     """Verify `kap_get_kapcn` knot value and `kap_get_zones` consistency."""
     with flexmesa.numerics_mode_context("strict"):

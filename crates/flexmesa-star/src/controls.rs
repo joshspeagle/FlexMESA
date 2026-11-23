@@ -37,6 +37,12 @@ pub struct StarControls {
     pub max_number_retries: isize,
     /// Maximum cumulative retries during relaxation (`relax_max_number_retries`).
     pub relax_max_number_retries: isize,
+    /// $\Delta Y$ per step of `relax_Y` (`relax_dY`, default `0.005`,
+    /// `star/defaults/controls.defaults:11670`).
+    pub relax_dy: f64,
+    /// $\Delta\ln Z$ per step of `relax_Z` (`relax_dlnZ`, default
+    /// `2.3025850929940459d-1`, `star/defaults/controls.defaults:11681`).
+    pub relax_dlnz: f64,
     /// Maximum timestep in years (`max_years_for_timestep`, `<= 0` disables).
     pub max_years_for_timestep: f64,
     /// Minimum timestep limit in seconds (`min_timestep_limit`).

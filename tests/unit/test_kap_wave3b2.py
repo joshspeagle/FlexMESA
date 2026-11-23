@@ -322,6 +322,16 @@ def test_distinct_fixed_co_aesopus_and_kapcn_tables_no_aliasing() -> None:
     assert abs(float(aes_z040[0]) - k020) / k020 > 1e-2
 
 
+@pytest.mark.xfail(
+    strict=True,
+    reason=(
+        "#295: Rust kapCN and AESOPUS evaluate MESA 26.4.1 "
+        "interp_2d/private/bicub_db.f implicit f32 fvbicub_db basis scalars "
+        "in strict mode (#433, #161), whereas the frozen JAX twin keeps f64 "
+        "basis scalars per DECISIONS #43; measured max rel diff is 2.103e-7 "
+        "against rtol=1e-12."
+    ),
+)
 def test_rust_strict_vs_jax_backend_consistency_across_all_regimes() -> None:
     """Verify `backend='rust'` (`strict`) vs `backend='jax'` (`rtol<=1e-11`)."""
     cases = [

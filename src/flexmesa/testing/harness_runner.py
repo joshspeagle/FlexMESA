@@ -344,7 +344,8 @@ def run_trace_inprocess(
 
     Raises:
         ValueError: If ``max_steps < 0``, ``numerics_mode`` is invalid,
-            ``suite`` is unknown, or custom extras are passed to ``"astero"``.
+            ``suite`` is unknown, or ``"astero"`` extras lack ``set_param``
+            or ``set_constraint_value``.
     """
     if max_steps is not None and max_steps < 0:
         raise ValueError(f"max_steps must be non-negative, got {max_steps}")
@@ -391,10 +392,6 @@ def run_trace_inprocess(
             )
         )
     if suite == "astero":
-        if resolved_extras is not None:
-            raise ValueError(
-                "astero suite does not accept custom star/binary extras"
-            )
         return dict(
             _rust.trace_astero_case(
                 c_str,
@@ -406,6 +403,7 @@ def run_trace_inprocess(
                 is_logs_dir=is_logs_dir,
                 numerics_mode=eff_mode,
                 allow_unsupported_controls=allow_unsupported_controls,
+                extras=resolved_extras,
             )
         )
     raise ValueError(f"unsupported suite {suite!r}")

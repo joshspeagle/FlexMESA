@@ -152,28 +152,34 @@ fn test_kap_aesopus_matches_fortran_golden_test_4() {
     )
     .expect("Test 4 evaluation failed");
 
-    // Note: AESOPUS calls interp_evbicub_db where upstream Fortran bicub_db.f omitted
-    // `implicit none` on local coordinates (xp, yp, cx, cy in f32), whereas FlexMESA
-    // evaluates the Hermite basis in full f64 precision (~5e-7 relative difference).
+    // In NumericsMode::Strict, AESOPUS matches upstream `interp_evbicub_db` /
+    // `fvbicub_db` (`bicub_db.f:1371-1575`), whose omitted `implicit none`
+    // evaluates local basis scalars in `f32` precision (verified at 0 ULP in
+    // `kap_module_hex_test`).
     assert_rel_close(
         out.log10_kap,
         -2.523_381_870_188_199,
-        1.0e-7,
+        1.0e-12,
         "Test 4 log10kap",
     );
     assert_rel_close(
         out.dlnkap_dln_rho,
         5.728_409_917_973_51e-1,
-        1.0e-6,
+        1.0e-12,
         "Test 4 dlnkap_dlnRho",
     );
     assert_rel_close(
         out.dlnkap_dln_t,
         8.462_557_917_457_387,
-        1.0e-6,
+        1.0e-12,
         "Test 4 dlnkap_dlnT",
     );
-    assert_rel_close(out.kap, 2.996_526_548_625_922_3e-3, 2.0e-7, "Test 4 kap");
+    assert_rel_close(
+        out.kap,
+        2.996_526_548_625_922_3e-3,
+        1.0e-12,
+        "Test 4 kap",
+    );
     assert!((out.kap_fracs[I_FRAC_LOW_T] - 1.0).abs() <= 1.0e-15);
     assert!((out.kap_fracs[I_FRAC_TYPE2] - 0.0).abs() <= 1.0e-15);
 }

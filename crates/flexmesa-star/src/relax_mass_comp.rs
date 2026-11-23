@@ -577,9 +577,22 @@ impl RelaxHooks for RelaxComposition {
             self.num_steps_to_use,
         )?;
         // Upstream sets `terminate` when `adjust_xa` returns `ierr /= 0` and
-        // then overwrites it with `keep_going`
-        // (`star/private/relax.f90:469-474`); an error here is returned.
-        let _avg_err = self.interp.apply_step(model, lambda)?;
+        // then overwrites it with `keep_going` (`star/private/relax.f90:
+        // 469-474`), so a failed `adjust_xa` is ignored. Its only failing
+        // path (`allocate(..., stat=ierr)`, `relax.f90:485-486`) returns
+        // before `xa` is touched, and `apply_step` also fails only before it
+        // changes `xa`, so the step continues with `xa` unchanged.
+        // Reproduced; deferred bug #440.
+        // `do_evolve_step_part1` starts fresh and sets the variables of the
+        // unchanged composition (`star/private/evolve.f90:319, 409`) before
+        // `adjust_model` runs.
+        crate::hydro_vars::set_hydro_vars(model, false, false)?;
+        let _ = self.interp.apply_step(model, lambda);
+        // `adjust_xa` changes `xa` without setting `need_to_setvars`, so the
+        // solve starts from the microphysics of the unchanged composition
+        // (`star/private/evolve.f90:580`,
+        // `star/private/solver_support.f90:108-118`).
+        model.aux.need_to_setvars = false;
         Ok(RelaxHookResult::KeepGoing)
     }
 

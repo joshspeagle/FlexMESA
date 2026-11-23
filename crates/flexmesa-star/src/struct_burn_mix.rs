@@ -516,8 +516,11 @@ fn run_struct_burn_mix_core(
         model.aux.csound_start,
     ) = pre_burn_start;
 
-    let do_chem =
-        (model.controls.do_burn || model.controls.do_mix) && model.species > 0;
+    // `do_chem = (s% do_burn .or. s% do_mix)` with `s% do_burn =
+    // (dxdt_nuc_factor > 0)` and `s% do_mix = (mix_factor > 0)`
+    // (`star/private/struct_burn_mix.f90:79-80, 139-144`): with both off the
+    // solve is structure-only.
+    let do_chem = (do_burn || do_mix) && model.species > 0;
     solve_henyey_step(model, do_chem, use_bcyclic)
 }
 
@@ -538,9 +541,12 @@ pub fn do_struct_burn_mix(
     model.controls.op_split_burn = op_split_burn;
     model.aux.doing_struct_burn_mix = false;
 
-    if let Err(e) = set_hydro_vars(model, false, false) {
-        model.controls.op_split_burn = saved_op_split;
-        return Err(e);
+    // `set_vars_if_needed` (`star/private/evolve.f90:580-666`).
+    if model.aux.need_to_setvars {
+        if let Err(e) = set_hydro_vars(model, false, false) {
+            model.controls.op_split_burn = saved_op_split;
+            return Err(e);
+        }
     }
     model.ln_t_start.clone_from(&model.ln_t);
     model.v_start.clone_from(&model.v);

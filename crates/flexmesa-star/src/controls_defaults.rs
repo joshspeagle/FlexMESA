@@ -73,6 +73,7 @@ impl Default for StarControls {
             calculate_brunt_n2: true,
             use_brunt_gradmux_form: false,
             energy_eqn_option: EnergyEqnOption::Dedt,
+            no_dedt_form_during_relax: true,
             okay_to_remesh: true,
             mesh_delta_coeff: 1.0,
             varcontrol_target: 1.0e-3,

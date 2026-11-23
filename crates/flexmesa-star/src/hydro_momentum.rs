@@ -462,81 +462,45 @@ pub fn do1_momentum_eqn(model: &StarModel, k: usize, sys: &mut HenyeySystem) {
     let resid = resid1_ad * iptotavg_ad;
 
     let i_equ = model.layout.i_dv_dt;
-    if k == 0 {
-        let p_theta_0 = eval_p_theta(model, 0);
-        let p_0 = ptotavg_ad;
-        sys.save_eqn_residual(&model.layout, 0, i_equ, &resid);
-        if sys.nvar > model.layout.nvar_hydro && model.species > 0 {
-            let p_0_val = p_0.val.max(1.0e-30);
-            let resid_val = resid.val;
-            for j in 0..model.species {
-                let dlnp_0 = model
-                    .aux
-                    .dln_peos_dxa_for_partials
-                    .get(j)
-                    .copied()
-                    .unwrap_or(0.0);
-                if dlnp_0 != 0.0 {
-                    let dp_0 = p_theta_0 * model.peos[0] * dlnp_0;
-                    let d_res_0 = (dp_0 - resid_val * dp_0) / p_0_val;
-                    sys.add_partial(
-                        0,
-                        i_equ,
-                        0,
-                        model.layout.chem_var_index(j),
-                        d_res_0,
-                    );
-                }
-            }
-        }
-    } else {
-        let p_theta_00 = eval_p_theta(model, k);
-        let p_theta_m1 = eval_p_theta(model, k - 1);
-        let p_avg = ptotavg_ad;
-        sys.save_eqn_residual(&model.layout, k, i_equ, &resid);
+    sys.save_eqn_residual(&model.layout, k, i_equ, &resid);
 
-        if sys.nvar > model.layout.nvar_hydro && model.species > 0 {
-            let p_avg_val = p_avg.val.max(1.0e-30);
-            let resid_val = resid.val;
-            let base_00 = k * model.species;
-            let base_m1 = (k - 1) * model.species;
-            for j in 0..model.species {
-                let dlnp_00 = model
+    // Composition partials: `get_dPtot_face_info` (`hydro_momentum.f90:470-526`,
+    // `d_Ptot_dxa(j) = alfa*Peos(k)*dlnPeos_dxa_for_partials(j,k)` from
+    // `calc_Ptot_ad_tw`, `star_utils.f90:3400-3406`) and `unpack_res18`
+    // (`hydro_momentum.f90:126-152`).
+    if sys.nvar > model.layout.nvar_hydro && model.species > 0 {
+        let sp = model.species;
+        let resid1 = resid1_ad.val;
+        let ptotavg = ptotavg_ad.val;
+        let iptotavg = 1.0 / ptotavg;
+        let d_ptot_dxa = |cell: usize, j: usize| {
+            let d = model.peos[cell]
+                * model
                     .aux
                     .dln_peos_dxa_for_partials
-                    .get(base_00 + j)
+                    .get(cell * sp + j)
                     .copied()
                     .unwrap_or(0.0);
-                let dlnp_m1 = model
-                    .aux
-                    .dln_peos_dxa_for_partials
-                    .get(base_m1 + j)
-                    .copied()
-                    .unwrap_or(0.0);
-                if dlnp_00 != 0.0 {
-                    let dp_00 = p_theta_00 * model.peos[k] * dlnp_00;
-                    let d_res_00 =
-                        (dp_00 - resid_val * alfa * dp_00) / p_avg_val;
-                    sys.add_partial(
-                        k,
-                        i_equ,
-                        k,
-                        model.layout.chem_var_index(j),
-                        d_res_00,
-                    );
-                }
-                if dlnp_m1 != 0.0 {
-                    let dp_m1 = p_theta_m1 * model.peos[k - 1] * dlnp_m1;
-                    let d_res_m1 =
-                        (-dp_m1 - resid_val * beta * dp_m1) / p_avg_val;
-                    sys.add_partial(
-                        k,
-                        i_equ,
-                        k - 1,
-                        model.layout.chem_var_index(j),
-                        d_res_m1,
-                    );
-                }
+            eval_p_theta(model, cell) * d
+        };
+        for j in 0..sp {
+            let ivar = model.layout.chem_var_index(j);
+            let d_ptot00_dxa00 = d_ptot_dxa(k, j);
+            let d_dptot_dxa00 = -d_ptot00_dxa00;
+            let d_ptotavg_dxa00 =
+                if k == 0 { d_ptot00_dxa00 } else { alfa * d_ptot00_dxa00 };
+            let d_iptotavg_dxa00 = -iptotavg * d_ptotavg_dxa00 / ptotavg;
+            let d_residual_dxa00 =
+                resid1 * d_iptotavg_dxa00 - iptotavg * d_dptot_dxa00;
+            sys.add_partial(k, i_equ, k, ivar, d_residual_dxa00);
+            if k > 0 {
+                let d_ptotm1_dxam1 = d_ptot_dxa(k - 1, j);
+                let d_dptot_dxam1 = d_ptotm1_dxam1;
+                let d_ptotavg_dxam1 = beta * d_ptotm1_dxam1;
+                let d_iptotavg_dxam1 = -iptotavg * d_ptotavg_dxam1 / ptotavg;
+                let d_residual_dxam1 =
+                    resid1 * d_iptotavg_dxam1 - iptotavg * d_dptot_dxam1;
+                sys.add_partial(k, i_equ, k - 1, ivar, d_residual_dxam1);
             }
         }
     }

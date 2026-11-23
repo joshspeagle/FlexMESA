@@ -8,7 +8,7 @@
 
 use flexmesa_const::{MixingType, CLIGHT, CRAD, FOUR_PI, LN10};
 use flexmesa_eos::{
-    I_CHI_RHO, I_CHI_T, I_CP, I_GRAD_AD, I_LN_E, I_LN_PGAS, I_PHASE,
+    I_CHI_RHO, I_CHI_T, I_CP, I_GRAD_AD, I_LN_E, I_PHASE,
 };
 use flexmesa_turb::{
     set_mlt, set_semiconvection, set_tdc, set_thermohaline, MltInputs,
@@ -187,14 +187,9 @@ pub(crate) fn do1_mlt_2(
     let rho_00 =
         StarAdOrder1::from_dlnd_dlnt_00(model.rho[k], model.rho[k], 0.0);
     let t_00 = StarAdOrder1::from_dlnd_dlnt_00(model.t[k], 0.0, model.t[k]);
-    let pgas_00 = StarAdOrder1::from_dlnd_dlnt_00(
-        model.ln_pgas[k],
-        model.eos_d_dlnd[k][I_LN_PGAS],
-        model.eos_d_dlnt[k][I_LN_PGAS],
-    )
-    .exp();
-    let prad_00 = (CRAD / 3.0) * t_00.pow4();
-    let p_00 = pgas_00 + prad_00;
+    // `get_Peos_face` (`star/private/star_utils.f90:3846-3856`) from
+    // `wrap_Peos_00`/`wrap_Peos_m1` (`auto_diff_support.f90:550-570`).
+    let p_00 = crate::hydro_momentum::wrap_peos_00(model, k);
 
     let (rho_f, t_f, p_f) = if k == 0 {
         (rho_00, t_00, p_00)
@@ -207,14 +202,7 @@ pub(crate) fn do1_mlt_2(
         );
         let t_m1 =
             StarAdOrder1::from_dlnd_dlnt_m1(model.t[km1], 0.0, model.t[km1]);
-        let pgas_m1 = StarAdOrder1::from_dlnd_dlnt_m1(
-            model.ln_pgas[km1],
-            model.eos_d_dlnd[km1][I_LN_PGAS],
-            model.eos_d_dlnt[km1][I_LN_PGAS],
-        )
-        .exp();
-        let prad_m1 = (CRAD / 3.0) * t_m1.pow4();
-        let p_m1 = pgas_m1 + prad_m1;
+        let p_m1 = crate::hydro_momentum::wrap_peos_m1(model, k);
         (
             rho_00 * alfa + rho_m1 * beta_w,
             t_00 * alfa + t_m1 * beta_w,

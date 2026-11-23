@@ -8,7 +8,8 @@ use flexmesa_rates::ScreeningMode;
 use flexmesa_turb::{MltOption, SemiconvectionOption, ThermohalineOption};
 
 use crate::controls::{
-    AtmOption, AtmTTauOpacity, AtmTTauRelation, EnergyEqnOption, StarError,
+    AtmIrradiatedOpacity, AtmOption, AtmTTauOpacity, AtmTTauRelation,
+    EnergyEqnOption, StarError,
 };
 use crate::inlist::{InlistBundle, SectionControls};
 
@@ -423,7 +424,7 @@ impl InlistBundle {
         ]);
         map_bools!("controls", ctrl, c, [
             use_ledoux_criterion, calculate_brunt_b, calculate_brunt_n2,
-            op_split_burn, accrete_same_as_surface,
+            op_split_burn, accrete_same_as_surface, set_rho_to_dm_div_dv,
             accrete_given_mass_fractions, do_element_diffusion, do_conv_premix,
             do_phase_separation, do_phase_separation_heating, use_other_cgrav,
             use_other_alpha_mlt, use_other_wind, use_other_adjust_mdot, use_other_torque,
@@ -437,6 +438,7 @@ impl InlistBundle {
             include_mlt_corr_to_tdc, tdc_include_eturb_in_energy_equation,
             use_drag_energy, use_pvsc_art_visc, use_time_centered_eps_grav,
             include_composition_in_eps_grav, use_gravity_rotation_correction,
+            include_rotation_in_total_energy, absolute_cumulative_energy_err,
             use_mass_corrections, use_gradt_actual_vs_gradt_mlt_for_t_gradient_eqn,
             use_dprad_dm_form_of_t_gradient_eqn, use_flux_limiting_with_dprad_dm_form,
             use_rsp_l_eqn_outer_bc, use_momentum_outer_bc, use_zero_pgas_outer_bc,
@@ -513,6 +515,7 @@ impl InlistBundle {
             c.atm_option = match s.trim().to_ascii_lowercase().as_str() {
                 "t_tau" => AtmOption::TTau,
                 "table" => AtmOption::Table,
+                "irradiated_grey" => AtmOption::IrradiatedGrey,
                 other => {
                     return Err(StarError::InvalidInput(format!(
                         "unrecognized/unsupported '&controls::atm_option' option '{other}' (`star/private/atm_support.f90:900-930`)"
@@ -560,6 +563,72 @@ impl InlistBundle {
         ctrl.try_f64_into("controls", &mut c.atm_t_tau_errtol, "atm_t_tau_errtol")?;
         ctrl.try_usize_into("controls", &mut c.atm_t_tau_max_iters, "atm_t_tau_max_iters", 0)?;
         ctrl.try_usize_into("controls", &mut c.atm_t_tau_max_steps, "atm_t_tau_max_steps", 0)?;
+        if let Some(s) = ctrl.try_get_str("controls", "atm_irradiated_opacity")? {
+            c.atm_irradiated_opacity = match s.trim().to_ascii_lowercase().as_str() {
+                "fixed" => AtmIrradiatedOpacity::Fixed,
+                "iterated" => AtmIrradiatedOpacity::Iterated,
+                other => {
+                    return Err(StarError::InvalidInput(format!(
+                        "unrecognized '&controls::atm_irradiated_opacity' option '{other}' (`star/private/atm_support.f90:790-826`)"
+                    )));
+                }
+            };
+        }
+        ctrl.try_f64_into("controls", &mut c.atm_irradiated_errtol, "atm_irradiated_errtol")?;
+        ctrl.try_usize_into("controls", &mut c.atm_irradiated_max_iters, "atm_irradiated_max_iters", 0)?;
+        ctrl.try_f64_into("controls", &mut c.atm_irradiated_t_eq, "atm_irradiated_t_eq")?;
+        ctrl.try_f64_into(
+            "controls",
+            &mut c.atm_irradiated_kap_v_div_kap_th,
+            "atm_irradiated_kap_v_div_kap_th",
+        )?;
+        ctrl.try_f64_into("controls", &mut c.atm_irradiated_kap_v, "atm_irradiated_kap_v")?;
+        ctrl.try_f64_into("controls", &mut c.atm_irradiated_p_surf, "atm_irradiated_p_surf")?;
+        if !c.atm_irradiated_errtol.is_finite() || c.atm_irradiated_errtol <= 0.0 {
+            return Err(StarError::InvalidInput(format!(
+                "'&controls::atm_irradiated_errtol' must be > 0, got {}",
+                c.atm_irradiated_errtol
+            )));
+        }
+        if !c.atm_irradiated_t_eq.is_finite() || c.atm_irradiated_t_eq < 0.0 {
+            return Err(StarError::InvalidInput(format!(
+                "'&controls::atm_irradiated_t_eq' must be >= 0, got {}",
+                c.atm_irradiated_t_eq
+            )));
+        }
+        if !c.atm_irradiated_kap_v_div_kap_th.is_finite() || c.atm_irradiated_kap_v_div_kap_th < 0.0 {
+            return Err(StarError::InvalidInput(format!(
+                "'&controls::atm_irradiated_kap_v_div_kap_th' must be >= 0, got {}",
+                c.atm_irradiated_kap_v_div_kap_th
+            )));
+        }
+        if !c.atm_irradiated_kap_v.is_finite() || c.atm_irradiated_kap_v < 0.0 {
+            return Err(StarError::InvalidInput(format!(
+                "'&controls::atm_irradiated_kap_v' must be >= 0, got {}",
+                c.atm_irradiated_kap_v
+            )));
+        }
+        if !c.atm_irradiated_p_surf.is_finite() || c.atm_irradiated_p_surf <= 0.0 {
+            return Err(StarError::InvalidInput(format!(
+                "'&controls::atm_irradiated_p_surf' must be > 0, got {}",
+                c.atm_irradiated_p_surf
+            )));
+        }
+        if c.atm_option == AtmOption::IrradiatedGrey {
+            if c.atm_irradiated_kap_v_div_kap_th == 0.0 && c.atm_irradiated_kap_v <= 0.0 {
+                return Err(StarError::InvalidInput(format!(
+                    "'&controls::atm_irradiated_kap_v' must be > 0 when atm_irradiated_kap_v_div_kap_th == 0, got {}",
+                    c.atm_irradiated_kap_v
+                )));
+            }
+            if c.atm_irradiated_opacity == AtmIrradiatedOpacity::Iterated
+                && c.atm_irradiated_max_iters == 0
+            {
+                return Err(StarError::InvalidInput(String::from(
+                    "'&controls::atm_irradiated_max_iters' must be > 0 when atm_irradiated_opacity == 'iterated'",
+                )));
+            }
+        }
         if let Some(s) = ctrl.try_get_str("controls", "screening_mode")? {
             c.screening_mode = match s.trim().to_ascii_lowercase().as_str() {
                 "no_screening" | "" => ScreeningMode::NoScreening,

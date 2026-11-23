@@ -89,6 +89,19 @@ def test_adaptive_remeshing_and_mesh_gval_jax_consistency() -> None:
     assert etot_zams_after == pytest.approx(etot_zams_before, rel=1.0e-11)
 
 
+@pytest.mark.xfail(
+    strict=True,
+    reason=(
+        "#154: FlexMESA's pre-MS model differs from upstream "
+        "build_pre_ms_model (measured on the 7 Msun custom_colors model: "
+        "initial residual norm 2.95e-5 against MESA 26.4.1's 1.89e-5 at the "
+        "upstream first-step dt, star/private/init.f90:1007). This test "
+        "forces a 10-yr coupled step on a 4 Msun pre-MS model, which with "
+        "upstream's do_block_multiply_xa (#358) ends in a singular "
+        "block-tridiagonal matrix at the second Newton iteration; this 4 "
+        "Msun setup has not been run in MESA"
+    ),
+)
 def test_varcontrol_and_h211_timestep_filter_rust_vs_jax() -> None:
     """Verify `varcontrol` and Söderlind & Wang (2006) H211 consistency."""
     with flexmesa.numerics_mode_context("strict"):

@@ -69,8 +69,8 @@
     },
     {
       "phase": "Phase B",
-      "open": 1,
-      "closed": 4,
+      "open": 0,
+      "closed": 5,
       "issues": [
         {
           "number": 147,
@@ -95,14 +95,14 @@
         {
           "number": 151,
           "title": "[Audit B5] Energy accounting as upstream does it",
-          "state": "open"
+          "state": "closed"
         }
       ]
     },
     {
       "phase": "Phase C",
-      "open": 15,
-      "closed": 3,
+      "open": 18,
+      "closed": 4,
       "issues": [
         {
           "number": 152,
@@ -193,6 +193,26 @@
           "number": 365,
           "title": "[Audit] Level-2 module-hex probe wiring for interp_1d, interp_2d, mtx and num",
           "state": "open"
+        },
+        {
+          "number": 372,
+          "title": "[Parity] First-divergence pipeline: MESA 26.4.1 per-step state and solver dumps, and flexmesa trace --compare",
+          "state": "closed"
+        },
+        {
+          "number": 381,
+          "title": "[Parity] set_qs and normalize_dqs depart from upstream; every model read from a file is renormalized",
+          "state": "open"
+        },
+        {
+          "number": 385,
+          "title": "[Parity] adjust_mass composition remap differs from MESA by 1-2 ULP; H1-conservation test needs #377",
+          "state": "open"
+        },
+        {
+          "number": 402,
+          "title": "[Audit C3] Pre-MS relax phase: port do_internal_evolve and do_relax_num_steps (init.f90:1077-1118)",
+          "state": "open"
         }
       ]
     },
@@ -244,14 +264,44 @@
   ],
   "open_pull_requests": [
     {
-      "number": 367,
-      "title": "feat(mtx,star,binary): upstream do_block_multiply_xa and rho = dm/dV reset before each step (#358, #363)",
+      "number": 378,
+      "title": "Wire atm_option = irradiated_grey and atm_irradiated_* controls (#376)",
       "draft": true
     },
     {
-      "number": 370,
-      "title": "feat(star,testing): upstream MESA 26.4.1 global total-energy accounting (#151)",
-      "draft": false
+      "number": 379,
+      "title": "Port Wave 1 history columns and pure-StarModel siblings (#374)",
+      "draft": true
+    },
+    {
+      "number": 380,
+      "title": "Port case-local .net search order and weaklib-only reaction synthesis (#375)",
+      "draft": true
+    },
+    {
+      "number": 384,
+      "title": "fix(star): set_qs and normalize_dqs follow upstream; models read from file are not renormalized (#381)",
+      "draft": true
+    },
+    {
+      "number": 387,
+      "title": "fix(star): adjust_mass composition remap as upstream set_xa/set1_xa (#385)",
+      "draft": true
+    },
+    {
+      "number": 392,
+      "title": "fix(star): model_number is model_number_old + 1 before the solve, as upstream (#359)",
+      "draft": true
+    },
+    {
+      "number": 396,
+      "title": "fix(star,eos): pre-main-sequence builder as upstream build_pre_ms_model (#154)",
+      "draft": true
+    },
+    {
+      "number": 401,
+      "title": "feat(star): create_initial_model as upstream build_initial_model (#154)",
+      "draft": true
     }
   ],
   "deferred_169": [
@@ -620,7 +670,47 @@
       "title": "[Deferred bug] do_block_multiply_xa pairs the wrong off-diagonal blocks with x, so the solver's line-search slope is not grad(f)\u00b7soln",
       "state": "open",
       "kind": "upstream-bug",
-      "parity_pending": true,
+      "parity_pending": false,
+      "needs_confirmation": false
+    },
+    {
+      "number": 386,
+      "title": "[Deferred bug] set1_xa's overshoot clip increases dm instead of reducing it (adjust_mass.f90:1040)",
+      "state": "open",
+      "kind": "upstream-bug",
+      "parity_pending": false,
+      "needs_confirmation": false
+    },
+    {
+      "number": 397,
+      "title": "[Deferred bug] build_pre_ms_model: initial_he3 >= initial_y sets ierr, which get_xa_for_standard_metals then overwrites (pre_ms_model.f90:108-117)",
+      "state": "open",
+      "kind": "upstream-bug",
+      "parity_pending": false,
+      "needs_confirmation": false
+    },
+    {
+      "number": 398,
+      "title": "[Deferred bug] build1_pre_ms_model: nz estimate below 1 writes out of bounds (pre_ms_model.f90:457)",
+      "state": "open",
+      "kind": "upstream-bug",
+      "parity_pending": false,
+      "needs_confirmation": false
+    },
+    {
+      "number": 399,
+      "title": "[Deferred bug] get_kap_from_rhoT returns kap unset when kap_get fails (create_initial_model.f90:440-449)",
+      "state": "open",
+      "kind": "upstream-bug",
+      "parity_pending": false,
+      "needs_confirmation": false
+    },
+    {
+      "number": 400,
+      "title": "[Deferred bug] build_initial_model integration index can pass nzmax (create_initial_model.f90:342)",
+      "state": "open",
+      "kind": "upstream-bug",
+      "parity_pending": false,
       "needs_confirmation": false
     }
   ]

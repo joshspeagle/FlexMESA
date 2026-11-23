@@ -434,6 +434,11 @@ pub(crate) fn init_or_update_model_from_bundle_outcome(
     model.r_center_old = model.r_center;
     model.l_center_old = model.l_center;
     model.v_center_old = model.v_center;
+    if job.set_initial_cumulative_energy_error && !is_restart {
+        model.aux.cumulative_energy_error = job.new_cumulative_energy_error;
+        model.aux.step_hist.cumulative_energy_error_old =
+            job.new_cumulative_energy_error;
+    }
     if !is_restart {
         // Match `star/private/init.f90:1120` (`s% doing_first_model_of_run = .true.`).
         model.doing_first_model_of_run = true;

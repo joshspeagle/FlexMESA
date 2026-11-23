@@ -8,7 +8,7 @@ Generated mechanically against **MESA 26.4.1** (git tag `26.4.1`, commit `c8c202
 - **Total manifest cases scanned**: `106`
 - **Cases passing strict `#147` validation**: `50`
 - **Cases rejected by strict `#147` validation**: `56`
-- **Distinct unsupported physics/solver controls encountered**: `191`
+- **Distinct unsupported physics/solver controls encountered**: `186`
 - **Distinct unknown/misspelled controls encountered**: `0`
 - **Cases using headless plotting controls (`#173` / `DECISIONS #25`)**: `78` (`895` distinct keys)
 
@@ -19,7 +19,7 @@ Generated mechanically against **MESA 26.4.1** (git tag `26.4.1`, commit `c8c202
 | `&star_job` | 455 | 118 | 13 | 3 | 8 | 313 |
 | `&eos` | 102 | 91 | 0 | 0 | 9 | 2 |
 | `&kap` | 51 | 39 | 0 | 0 | 10 | 2 |
-| `&controls` | 1448 | 1159 | 23 | 0 | 16 | 250 |
+| `&controls` | 1448 | 1169 | 23 | 0 | 16 | 240 |
 | `&binary_job` | 37 | 22 | 0 | 1 | 1 | 13 |
 | `&binary_controls` | 176 | 124 | 0 | 0 | 2 | 50 |
 | `&astero_search_controls` | 153 | 88 | 3 | 0 | 0 | 62 |
@@ -224,7 +224,7 @@ Per `DECISIONS #25` (matching upstream `USE_PGSTAR = NO`), keys in `&pgstar`, `&
 | `star` | `high_z` | `pass` | 0 | 0 | 0 |
 | `star` | `hot_cool_wind` | `pass` | 0 | 0 | 0 |
 | `star` | `hse_riemann` | `pass` | 0 | 0 | 67 |
-| `star` | `irradiated_planet` | `fail_unsupported` | 7 | 0 | 0 |
+| `star` | `irradiated_planet` | `fail_unsupported` | 3 | 0 | 0 |
 | `star` | `low_z` | `pass` | 0 | 0 | 0 |
 | `star` | `magnetic_braking` | `fail_unsupported` | 5 | 0 | 56 |
 | `star` | `make_brown_dwarf` | `pass` | 0 | 0 | 19 |
@@ -255,7 +255,7 @@ Per `DECISIONS #25` (matching upstream `USE_PGSTAR = NO`), keys in `&pgstar`, `&
 | `star` | `rsp_Type_II_Cepheid` | `fail_unsupported` | 7 | 0 | 14 |
 | `star` | `rsp_check_2nd_crossing` | `fail_unsupported` | 7 | 0 | 0 |
 | `star` | `rsp_gyre` | `fail_unsupported` | 7 | 0 | 20 |
-| `star` | `rsp_save_and_load_file` | `fail_unsupported` | 21 | 0 | 69 |
+| `star` | `rsp_save_and_load_file` | `fail_unsupported` | 20 | 0 | 69 |
 | `star` | `semiconvection` | `pass` | 0 | 0 | 1 |
 | `star` | `simplex_solar_calibration` | `fail_unsupported` | 2 | 0 | 0 |
 | `star` | `split_burn_big_net` | `fail_unsupported` | 7 | 0 | 258 |

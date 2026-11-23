@@ -74,11 +74,19 @@ print(
 
 ::: flexmesa.testing.baseline_regression
 
+`flexmesa.testing.harness_shards` splits a harness campaign into disjoint shards (`flexmesa harness run --shard I/N`) and checks that the shard reports form one complete campaign before `flexmesa harness merge` combines them (`#389`).
+
+::: flexmesa.testing.harness_shards
+
 ::: flexmesa.testing.port_manifest
 
 ::: flexmesa.testing.dashboard
 
 ::: flexmesa.testing.trace_cli
+
+`flexmesa.testing.stepdump_compare` compares a FlexMESA step dump with a MESA `26.4.1` step dump record by record and reports the first difference: the step, solver record, zone and variable, with its ULP distance (`flexmesa trace <suite> <case> --compare <dump>`, `#372`).
+
+::: flexmesa.testing.stepdump_compare
 
 ::: flexmesa.testing.known_gaps_gate
 

@@ -8,8 +8,8 @@ use flexmesa_rates::ScreeningMode;
 use flexmesa_turb::{MltOption, SemiconvectionOption, ThermohalineOption};
 
 pub use crate::job_controls::{
-    AtmOption, AtmTTauOpacity, AtmTTauRelation, EnergyEqnOption, StarError,
-    StarJobControls, StepFailureInfo, VarLayout,
+    AtmIrradiatedOpacity, AtmOption, AtmTTauOpacity, AtmTTauRelation,
+    EnergyEqnOption, StarError, StarJobControls, StepFailureInfo, VarLayout,
 };
 
 /// Evolutionary and physics controls (`&controls` namelist in
@@ -81,6 +81,27 @@ pub struct StarControls {
     /// Maximum ODE steps for `'varying'` $T(\tau)$ atmospheres (`atm_T_tau_max_steps`, `500` default).
     #[serde(default = "default_atm_t_tau_max_steps")]
     pub atm_t_tau_max_steps: usize,
+    /// Thermal opacity treatment for `'irradiated_grey'` atmospheres (`atm_irradiated_opacity`, `'fixed'` default; `star/defaults/controls.defaults:4540`).
+    #[serde(default)]
+    pub atm_irradiated_opacity: AtmIrradiatedOpacity,
+    /// Error tolerance for `'iterated'` irradiated atmospheres (`atm_irradiated_errtol`, `1e-7` default; `star/defaults/controls.defaults:4551`).
+    #[serde(default = "default_atm_irradiated_errtol")]
+    pub atm_irradiated_errtol: f64,
+    /// Maximum opacity iterations for `'iterated'` irradiated atmospheres (`atm_irradiated_max_iters`, `50` default; `star/defaults/controls.defaults:4562`).
+    #[serde(default = "default_atm_irradiated_max_iters")]
+    pub atm_irradiated_max_iters: usize,
+    /// Equilibrium temperature $T_{\mathrm{eq}}$ ($\mathrm{K}$) from stellar irradiation (`atm_irradiated_T_eq`, `100.0` default; `star/defaults/controls.defaults:4580`).
+    #[serde(default = "default_atm_irradiated_t_eq")]
+    pub atm_irradiated_t_eq: f64,
+    /// Visible-to-thermal opacity ratio $\kappa_v / \kappa_{\mathrm{th}}$ when $> 0$ (`atm_irradiated_kap_v_div_kap_th`, `0.0` default; `star/defaults/controls.defaults:4600`).
+    #[serde(default)]
+    pub atm_irradiated_kap_v_div_kap_th: f64,
+    /// Visible stellar irradiation opacity $\kappa_v$ ($\mathrm{cm^2\,g^{-1}}$) used when `atm_irradiated_kap_v_div_kap_th == 0` (`atm_irradiated_kap_v`, `4e-3` default; `star/defaults/controls.defaults:4601`).
+    #[serde(default = "default_atm_irradiated_kap_v")]
+    pub atm_irradiated_kap_v: f64,
+    /// Surface pressure $P_{\mathrm{surf}}$ ($\mathrm{dyn\,cm^{-2}}$) for `'irradiated_grey'` (`atm_irradiated_P_surf`, `1e6` default; `star/defaults/controls.defaults:4612`).
+    #[serde(default = "default_atm_irradiated_p_surf")]
+    pub atm_irradiated_p_surf: f64,
     /// Optical depth multiplicative factor $\tau_{\mathrm{factor}}$ (`1.0`).
     pub tau_factor: f64,
     /// Opacity multiplicative factor (`1.0`).
@@ -166,6 +187,9 @@ pub struct StarControls {
     pub rotation_flag: bool,
     /// Whether nonlinear pulsation (`RSP_flag`) is active.
     pub rsp_flag: bool,
+    /// Reset `ln rho` to `dm / dV` before each step when neither `u_flag`
+    /// nor `RSP_flag` is set (`set_rho_to_dm_div_dV`, `.true.` default).
+    pub set_rho_to_dm_div_dv: bool,
     /// Whether turbulent pulsation energy (`RSP2_flag`) is active.
     pub rsp2_flag: bool,
     /// Whether element diffusion (`do_element_diffusion`) is active.
@@ -724,6 +748,14 @@ pub struct StarControls {
     pub iwind_tolerance: f64,
     /// Relaxation weight for implicit stellar wind fixed-point/secant loop (`iwind_lambda`, `1.0` default).
     pub iwind_lambda: f64,
+    /// Include rotational kinetic energy in `total_energy` and energy accounting
+    /// (`include_rotation_in_total_energy`, `star/defaults/controls.defaults:9399`, `false` default).
+    #[serde(default)]
+    pub include_rotation_in_total_energy: bool,
+    /// Accumulate `abs(error_in_energy_conservation)` in `cumulative_energy_error`
+    /// (`absolute_cumulative_energy_err`, `star/defaults/controls.defaults:11629`, `true` default).
+    #[serde(default = "default_true")]
+    pub absolute_cumulative_energy_err: bool,
     /// Overshooting, predictive mixing, premixing, wind, `eps_mdot`, and mesh controls.
     pub mix_wind: crate::controls_mix_wind::MixWindControls,
     /// Core-boundary thresholds, extended stopping criteria, and timestep limits.
@@ -744,6 +776,10 @@ impl StarControls {
                 && (model_number as isize)
                     >= self.steps_before_use_velocity_time_centering)
     }
+}
+
+const fn default_true() -> bool {
+    true
 }
 
 const fn default_neg_one() -> f64 {
@@ -768,4 +804,24 @@ const fn default_atm_t_tau_max_iters() -> usize {
 
 const fn default_atm_t_tau_max_steps() -> usize {
     500
+}
+
+const fn default_atm_irradiated_errtol() -> f64 {
+    1.0e-7
+}
+
+const fn default_atm_irradiated_max_iters() -> usize {
+    50
+}
+
+const fn default_atm_irradiated_t_eq() -> f64 {
+    100.0
+}
+
+const fn default_atm_irradiated_kap_v() -> f64 {
+    4.0e-3
+}
+
+const fn default_atm_irradiated_p_surf() -> f64 {
+    1.0e6
 }

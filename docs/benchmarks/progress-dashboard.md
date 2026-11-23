@@ -26,7 +26,7 @@ Progress is measured by **upstream MESA `26.4.1` source lines by status**, never
 | `star_data` | 4,870 | 34 | 0 | 4,836 | 0 | 0 | 0 | 0 | 0 | 0.0% | 0.0% |
 | `binary` | 11,638 | 2,885 | 0 | 6,572 | 2,181 | 0 | 0 | 12,428 | 1,244 | 18.7% | 0.0% |
 | `astero` | 7,935 | 2,185 | 0 | 5,750 | 0 | 0 | 0 | 6,053 | 1,288 | 0.0% | 0.0% |
-| `eos` | 28,666 | 7,656 | 0 | 21,010 | 0 | 0 | 0 | 15,558 | 9,911 | 0.0% | 0.0% |
+| `eos` | 28,666 | 7,656 | 0 | 21,010 | 0 | 0 | 0 | 15,732 | 9,911 | 0.0% | 0.0% |
 | `kap` | 22,430 | 13,652 | 0 | 8,778 | 0 | 0 | 0 | 6,992 | 3,359 | 0.0% | 0.0% |
 | `net` | 13,452 | 0 | 0 | 13,452 | 0 | 0 | 0 | 10,668 | 728 | 0.0% | 0.0% |
 | `rates` | 17,217 | 192 | 0 | 17,025 | 0 | 0 | 0 | 4,102 | 1,478 | 0.0% | 0.0% |
@@ -43,15 +43,15 @@ Progress is measured by **upstream MESA `26.4.1` source lines by status**, never
 | `auto_diff` | 14,353 | 1,715 | 0 | 12,638 | 0 | 0 | 0 | 5,834 | 1,234 | 0.0% | 0.0% |
 | `math` | 936 | 368 | 0 | 568 | 0 | 0 | 0 | 2,629 | 577 | 0.0% | 0.0% |
 | `const` | 256 | 0 | 0 | 0 | 256 | 0 | 0 | 368 | 329 | 100.0% | 0.0% |
-| `utils` | 3,633 | 1,555 | 0 | 2,078 | 0 | 0 | 0 | 4,846 | 2,659 | 0.0% | 0.0% |
+| `utils` | 3,633 | 1,555 | 0 | 2,078 | 0 | 0 | 0 | 5,090 | 2,659 | 0.0% | 0.0% |
 | `gyre` | 55,708 | 55,708 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0.0% | 0.0% |
 | `adipls` | 30,923 | 30,923 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0.0% | 0.0% |
 | `stella` | 62,117 | 62,117 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0.0% | 0.0% |
 | `plotting` | 35,732 | 35,732 | 0 | 0 | 0 | 0 | 0 | 0 | 12,095 | 0.0% | 0.0% |
 | **Subtotal: star + star_data + binary + astero** | 144,952 | 22,863 | 6,378 | 71,242 | 38,829 | 5,640 | 0 | 110,478 | 6,401 | 30.7% | 3.9% |
-| **Total (all 26 modules)** | 497,703 | 247,888 | 6,378 | 195,408 | 42,389 | 5,640 | 0 | 190,458 | 57,968 | 9.7% | 1.1% |
+| **Total (all 26 modules)** | 497,703 | 247,888 | 6,378 | 195,408 | 42,389 | 5,640 | 0 | 190,876 | 57,968 | 9.7% | 1.1% |
 
-*Notes*: `star_data` state structs reside in `crates/flexmesa-star`. Bridge, testing, and benchmark infrastructure account for an additional `19,428` Rust lines (`flexmesa-py`, `flexmesa-testing`, `flexmesa-bench`) and `17,102` Python lines (`flexmesa.testing`, `flexmesa.bench`). For plotting ([#173](https://github.com/joshspeagle/FlexMESA/issues/173)), `flexmesa.plotting` currently provides `34` `plot_*` builders against `46` upstream `pgstar`/`pgbinary` panel modules.
+*Notes*: `star_data` state structs reside in `crates/flexmesa-star`. Bridge, testing, and benchmark infrastructure account for an additional `19,428` Rust lines (`flexmesa-py`, `flexmesa-testing`, `flexmesa-bench`) and `17,253` Python lines (`flexmesa.testing`, `flexmesa.bench`). For plotting ([#173](https://github.com/joshspeagle/FlexMESA/issues/173)), `flexmesa.plotting` currently provides `34` `plot_*` builders against `46` upstream `pgstar`/`pgbinary` panel modules.
 
 ### 2. Verification & Numerics Status
 
@@ -197,7 +197,7 @@ Full scalar diff: [`notes/audit/defaults_diff_26_4_1.md`](https://github.com/jos
 | Phase E | 1 | 1 | [#173](https://github.com/joshspeagle/FlexMESA/issues/173) |
 | Deferred scope | 0 | 0 | none |
 
-- **Open pull requests (12)**: [#379](https://github.com/joshspeagle/FlexMESA/pull/379) (draft), [#380](https://github.com/joshspeagle/FlexMESA/pull/380) (draft), [#403](https://github.com/joshspeagle/FlexMESA/pull/403) (draft), [#405](https://github.com/joshspeagle/FlexMESA/pull/405) (draft), [#406](https://github.com/joshspeagle/FlexMESA/pull/406) (draft), [#411](https://github.com/joshspeagle/FlexMESA/pull/411) (draft), [#417](https://github.com/joshspeagle/FlexMESA/pull/417) (draft), [#418](https://github.com/joshspeagle/FlexMESA/pull/418) (draft), [#419](https://github.com/joshspeagle/FlexMESA/pull/419) (draft), [#425](https://github.com/joshspeagle/FlexMESA/pull/425) (draft), [#426](https://github.com/joshspeagle/FlexMESA/pull/426) (draft), [#427](https://github.com/joshspeagle/FlexMESA/pull/427) (draft).
+- **Open pull requests (12)**: [#379](https://github.com/joshspeagle/FlexMESA/pull/379) (draft), [#380](https://github.com/joshspeagle/FlexMESA/pull/380) (draft), [#403](https://github.com/joshspeagle/FlexMESA/pull/403) (draft), [#405](https://github.com/joshspeagle/FlexMESA/pull/405) (draft), [#406](https://github.com/joshspeagle/FlexMESA/pull/406) (draft), [#411](https://github.com/joshspeagle/FlexMESA/pull/411) (draft), [#417](https://github.com/joshspeagle/FlexMESA/pull/417) (draft), [#418](https://github.com/joshspeagle/FlexMESA/pull/418) (draft), [#419](https://github.com/joshspeagle/FlexMESA/pull/419) (draft), [#425](https://github.com/joshspeagle/FlexMESA/pull/425) (draft), [#427](https://github.com/joshspeagle/FlexMESA/pull/427) (draft), [#431](https://github.com/joshspeagle/FlexMESA/pull/431) (draft).
 - **Post-parity deferred backlog ([#169](https://github.com/joshspeagle/FlexMESA/issues/169))**: `52` open issues (`50` `upstream-bug`, `2` `enhancement`; `3` marked `parity-pending` for upstream restoration before `v0.1.0`).
 
 ### 7. Headline History Across Merges
@@ -296,4 +296,5 @@ Full scalar diff: [`notes/audit/defaults_diff_26_4_1.md`](https://github.com/jos
 | `2026-11-23` | `d0c7711` | main merge | 30.7% | 1.1% | 4/106 | 76.2% | 87.7% | 21/42 | 52 |
 | `2026-11-23` | `54e1a65` | main merge | 30.7% | 1.1% | 4/106 | 76.2% | 87.7% | 22/43 | 52 |
 | `2026-11-23` | `5799a16` | main merge | 30.7% | 1.1% | 4/106 | 76.2% | 87.7% | 23/45 | 52 |
+| `2026-11-23` | `d9fcaf8` | main merge | 30.7% | 1.1% | 4/106 | 76.2% | 87.7% | 23/45 | 52 |
 <!-- END GENERATED DASHBOARD -->

@@ -155,8 +155,11 @@ def find_baseline_regressions(
     none, when the baseline run reached upstream's termination condition and
     this run does not, or when the baseline history was within the manifest
     tolerances and this one is not. A run cut off by its time or memory
-    budget is inconclusive and is not reported. The check must not be used
-    on step-capped runs, whose outcome differs from the baseline by design.
+    budget is inconclusive on its own; when the baseline run completed, it is
+    checked as a prefix of that row (it takes steps and does not leave a
+    track tolerance at an earlier model; DECISIONS #59). The check must not
+    be used on step-capped runs, whose outcome differs from the baseline by
+    design.
 
     A case in ``short_budget`` whose baseline row ended on the time budget
     was run with a shorter budget and is compared as a prefix of that row
@@ -189,6 +192,16 @@ def find_baseline_regressions(
                 )
             continue
         if rec.run_status in RESOURCE_LIMITED_STATUSES:
+            # Inconclusive on its own (the budget is machine-dependent). When
+            # the baseline run completed, the part that ran must still be a
+            # prefix of it (DECISIONS #59).
+            kind, detail = "", ""
+            if base.run_status not in RESOURCE_LIMITED_STATUSES:
+                kind, detail = _short_budget_regression(rec, base)
+            if kind:
+                found.append(
+                    BaselineRegression(rec.suite, rec.case, kind, detail)
+                )
             continue
         kind = ""
         detail = ""

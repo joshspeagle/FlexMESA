@@ -73,6 +73,7 @@ Scope and the `v0.1.0` definition are in [`SCOPE.md`](SCOPE.md). Work is tracked
 | 56 | Upstream MESA `26.4.1` Global Total-Energy Accounting (`#151`) | In force | below |
 | 57 | The Scheduled Campaign Gives Each Case 600 Seconds (`#382`) | In force | below |
 | 58 | Pull-Request Campaigns May Give Budget-Limited Cases a Short Budget; the Scheduled Campaign Runs in Shards (`#390`) | In force | below |
+| 59 | A Run Cut Off by Its Budget Is Inconclusive and Is Checked as a Prefix of a Completed Baseline Row (`#447`) | In force | below |
 
 ## Pre-audit decisions still in force
 
@@ -791,3 +792,14 @@ The text of these four entries predates the audit of 2026-11-16. The decisions s
   - *Writing short-budget rows into the baseline*: would replace a longer record of the same trajectory with a shorter one.
   - *Skipping budget-limited cases in pull-request campaigns*: loses the check that they still evolve and do not diverge earlier.
   - *Balancing shards by measured wall time*: the baseline normalizes wall times to zero for deterministic diffs, so there is no committed cost data.
+
+## DECISIONS #59: A Run Cut Off by Its Budget Is Inconclusive and Is Checked as a Prefix of a Completed Baseline Row (`#447`)
+
+- **Date**: 2026-11-23
+- **Decision**: A case without a declared gap whose run ends on its time or memory budget (`timeout`, `oom_killed`) gets the verdict `inconclusive (<status>)`. It never counts as passing and is not an undeclared failure. When that case's committed baseline row completed (did not end on a budget), the baseline gate compares the run as a prefix of the row with the `DECISIONS #58` rules: it fails when the run takes no steps or first leaves a track tolerance at an earlier model (or inside the baseline's coordinate range). Rows whose baseline also ended on a budget are unchanged. `campaign.yml` also runs the `flexmesa-star` `--ignored` tests, so every declared Rust ignore is executed.
+- **Why**: The first scheduled sharded campaign (`#447`) failed on `binary/evolve_both_stars` and `binary/jdot_ml_check`, which pass against MESA 26.4.1 and finish in about 490 s locally, but reached the 600 s budget on the GitHub runner. Their final columns were then compared on an incomplete run and labelled undeclared failures. Strict mode is bit-identical across machines, so only the budget outcome depends on runner speed (`DECISIONS #58`); the prefix check still catches a trajectory change within the steps that ran.
+- **Limits**: A slower engine that pushes a passing case past its budget on every machine is reported only as inconclusive, not as a failure; the case table shows it and it never counts as passing. The prefix check needs the run's history to compare; a run killed before writing one is inconclusive unless it took no steps.
+- **Alternatives Rejected**:
+  - *A longer budget on GitHub runners*: the 600 s budget is global (Josh, 2026-11-23, `DECISIONS #57`).
+  - *Declaring the two binary cases as known gaps*: they pass against MESA; a gap would be false.
+  - *Ignoring budget-cut runs entirely*: loses the check that the part that ran still matches the baseline.

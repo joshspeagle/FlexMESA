@@ -180,6 +180,107 @@ def test_short_budget_case_with_terminating_baseline_uses_default_rules(
     assert reg.kind == "lost upstream termination"
 
 
+def _completed_base(
+    baseline_records: list[Record],
+) -> tuple[Record, list[Record]]:
+    """Return a synthetic baseline row that reached upstream's termination."""
+    idx = next(i for i, r in enumerate(baseline_records) if r.executed)
+    base = dataclasses.replace(
+        baseline_records[idx],
+        run_status="ok",
+        observed_termination="max_age",
+        termination_matches=True,
+        steps=889,
+        comparison=_comparison(None),
+    )
+    records = list(baseline_records)
+    records[idx] = base
+    return base, records
+
+
+def test_budget_cut_run_of_a_completed_baseline_is_checked_as_a_prefix(
+    baseline_records: list[Record],
+) -> None:
+    """A slower machine's timeout is inconclusive unless its prefix regresses.
+
+    The baseline row completed; the run hit the time budget first (as on a
+    slower runner). It is not reported unless the part that ran stopped
+    taking steps or left a track tolerance inside the baseline's range.
+    """
+    base, records = _completed_base(baseline_records)
+    find = baseline_regression.find_baseline_regressions
+    cut = dataclasses.replace(
+        base,
+        run_status="timeout",
+        observed_termination="",
+        termination_matches=False,
+        steps=636,
+        comparison=_comparison(None),
+    )
+    assert find([cut], records) == []
+    stalled = dataclasses.replace(cut, steps=0, comparison=None)
+    (reg,) = find([stalled], records)
+    assert reg.kind == "stopped taking steps"
+    diverged = dataclasses.replace(cut, comparison=_comparison(400, 1.5))
+    (reg,) = find([diverged], records)
+    assert reg.kind == "diverges from MESA earlier"
+
+
+def test_budget_cut_run_without_a_declared_gap_is_inconclusive(
+    tmp_path: pathlib.Path,
+) -> None:
+    """A timeout of an undeclared case is labelled inconclusive, not failed.
+
+    A crash of the same case stays an undeclared failure.
+    """
+    ref = tmp_path / "ref.tsv"
+    ref.write_text(
+        "# test\nmodel_number\tstar_age\tlog_L\n1\t1.0e6\t0.0\n2\t2.0e6\t0.1\n",
+        encoding="utf-8",
+    )
+    run = tmp_path / "run.tsv"
+    run.write_text(
+        "# test\nmodel_number\tstar_age\tlog_L\n1\t1.0e6\t0.0\n",
+        encoding="utf-8",
+    )
+    spec = case_manifest.CaseManifestEntry(
+        suite="star",
+        case="demo",
+        required_termination="max_age",
+        independent_var="star_age",
+        final_tolerances={"log_L": 0.02},
+        track_tolerances={"log_L": 0.10},
+        reference_status="mesa_26_4_1",
+        reference_path="ref.tsv",
+    )
+
+    def outcome(status: str) -> harness_runner.TraceRunOutcome:
+        return harness_runner.TraceRunOutcome(
+            suite="star",
+            case="demo",
+            status=status,
+            termination_code="",
+            steps=1,
+            retries=0,
+            wall_time_sec=600.0,
+            peak_rss_gb=0.2,
+            history_path=run,
+            error_message=status,
+        )
+
+    for status in ("timeout", "oom_killed"):
+        rec = harness_runner.evaluate_case_record(
+            spec, {}, outcome(status), root_dir=tmp_path
+        )
+        assert rec.verdict == f"inconclusive ({status})"
+        assert rec.is_undeclared_failure is False
+    crashed = harness_runner.evaluate_case_record(
+        spec, {}, outcome("error"), root_dir=tmp_path
+    )
+    assert crashed.verdict == "fail (undeclared)"
+    assert crashed.is_undeclared_failure is True
+
+
 def test_update_baseline_keeps_committed_row_of_short_budget_timeouts(
     baseline_records: list[Record],
 ) -> None:

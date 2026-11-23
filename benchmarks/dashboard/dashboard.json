@@ -21,7 +21,7 @@
         "verified_total": 5640,
         "pct_ported": 35.1,
         "pct_verified": 4.7,
-        "rust_lines": 88195,
+        "rust_lines": 89240,
         "python_jax_lines": 3869
       },
       {
@@ -55,7 +55,7 @@
         "verified_total": 0,
         "pct_ported": 18.7,
         "pct_verified": 0.0,
-        "rust_lines": 12427,
+        "rust_lines": 12428,
         "python_jax_lines": 1244
       },
       {
@@ -456,7 +456,7 @@
     },
     "infrastructure_lines": {
       "rust_bridge_testing_bench": 19428,
-      "python_testing_bench": 15615
+      "python_testing_bench": 16461
     }
   },
   "numerics": {
@@ -664,13 +664,12 @@
       "#157": 9,
       "#162": 9,
       "#170": 7,
+      "#152": 5,
       "#155": 5,
       "#158": 5,
       "#160": 5,
-      "#152": 4,
       "#156": 3,
       "#231": 3,
-      "#151": 1,
       "#153": 1,
       "#159": 1,
       "#171": 1
@@ -681,12 +680,12 @@
     {
       "namelist": "star &controls",
       "upstream_scalars": 1444,
-      "matched_in_flexmesa": 1111,
-      "defaults_agree": 1111,
+      "matched_in_flexmesa": 1113,
+      "defaults_agree": 1113,
       "value_mismatch": 0,
       "disabled_limit_none": 0,
       "skipped_unparseable_rust": 17,
-      "unimplemented": 316
+      "unimplemented": 314
     },
     {
       "namelist": "star &star_job",
@@ -1309,8 +1308,8 @@
       },
       {
         "phase": "Phase B",
-        "open": 1,
-        "closed": 4,
+        "open": 0,
+        "closed": 5,
         "issues": [
           {
             "number": 147,
@@ -1335,14 +1334,14 @@
           {
             "number": 151,
             "title": "[Audit B5] Energy accounting as upstream does it",
-            "state": "open"
+            "state": "closed"
           }
         ]
       },
       {
         "phase": "Phase C",
-        "open": 15,
-        "closed": 3,
+        "open": 17,
+        "closed": 4,
         "issues": [
           {
             "number": 152,
@@ -1433,6 +1432,21 @@
             "number": 365,
             "title": "[Audit] Level-2 module-hex probe wiring for interp_1d, interp_2d, mtx and num",
             "state": "open"
+          },
+          {
+            "number": 372,
+            "title": "[Parity] First-divergence pipeline: MESA 26.4.1 per-step state and solver dumps, and flexmesa trace --compare",
+            "state": "closed"
+          },
+          {
+            "number": 381,
+            "title": "[Parity] set_qs and normalize_dqs depart from upstream; every model read from a file is renormalized",
+            "state": "open"
+          },
+          {
+            "number": 385,
+            "title": "[Parity] H1 conservation after adjust_mass misses its 1e-11 oracle once dq is not renormalized (#381)",
+            "state": "open"
           }
         ]
       },
@@ -1483,16 +1497,6 @@
       }
     ],
     "open_pull_requests": [
-      {
-        "number": 370,
-        "title": "feat(star,testing): upstream MESA 26.4.1 global total-energy accounting (#151)",
-        "draft": false
-      },
-      {
-        "number": 373,
-        "title": "feat(star,testing,benchmarks): MESA 26.4.1 step dumps and flexmesa trace --compare (#372)",
-        "draft": true
-      },
       {
         "number": 377,
         "title": "Port upstream ZAMS 4-point mass interpolation without xa clamping (#360)",
@@ -2942,6 +2946,19 @@
       "python_cov_pct": "87.7",
       "closed_140": "17",
       "total_140": "37",
+      "deferred_169": "46"
+    },
+    {
+      "date_utc": "2026-11-23",
+      "commit": "0d22aa3",
+      "event": "main merge",
+      "engine_ported_pct": "30.7",
+      "all_verified_pct": "1.1",
+      "cases_passing": "3",
+      "rust_cov_pct": "76.2",
+      "python_cov_pct": "87.7",
+      "closed_140": "19",
+      "total_140": "40",
       "deferred_169": "46"
     }
   ]

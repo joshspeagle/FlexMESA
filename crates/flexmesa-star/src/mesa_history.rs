@@ -2624,7 +2624,7 @@ fn eval_scalar_column(
             MesaCellValue::Float(if nz > 0 { model.gam[nz - 1] } else { 0.0 })
         }
         // `star/private/evolve.f90:1173-1174` & `history.f90:1875-1880`.
-        "virial_thm_P_avg" => {
+        "virial_thm_P_avg" | "virial_thm_rel_err" => {
             let virial = if sh.virial_thm_p_avg == 0.0 {
                 (0..nz)
                     .map(|k| {
@@ -2635,23 +2635,15 @@ fn eval_scalar_column(
             } else {
                 sh.virial_thm_p_avg
             };
-            MesaCellValue::Float(virial)
-        }
-        "virial_thm_rel_err" => {
-            let virial = if sh.virial_thm_p_avg == 0.0 {
-                (0..nz)
-                    .map(|k| {
-                        3.0 * model.dm[k] * model.peos[k]
-                            / model.rho[k].max(1.0e-99)
-                    })
-                    .sum()
-            } else {
-                sh.virial_thm_p_avg
-            };
-            MesaCellValue::Float(if virial == 0.0 {
-                0.0
-            } else {
-                (virial + ctx.energies_erg.1) / virial
+            MesaCellValue::Float(match name {
+                "virial_thm_P_avg" => virial,
+                _ => {
+                    if virial == 0.0 {
+                        0.0
+                    } else {
+                        (virial + ctx.energies_erg.1) / virial
+                    }
+                }
             })
         }
         // `set_conv_time_scales` in `star/private/star_utils.f90:3706-3751`

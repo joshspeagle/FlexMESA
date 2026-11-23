@@ -6,7 +6,7 @@
 //! `star/private/evolve.f90:605-665,1101-1373,1646-1681` and
 //! `star/private/star_utils.f90:2452-2612`.
 
-use flexmesa_const::{LN10, MixingType};
+use flexmesa_const::MixingType;
 use flexmesa_turb::MltOption;
 
 use crate::cell_energy::{
@@ -25,24 +25,24 @@ use crate::phase_separation::do_phase_separation_step;
 use crate::primary_state::PrimaryStateBuffer;
 use crate::rotation::conserve_shell_j_rot_and_distortion;
 
-/// Evaluates `eval_deltaM_total_energy_integrals`
-/// (`star/private/star_utils.f90:2439-2522`) over zero-based zones
-/// `klo..khi` up to mass `delta_m` ($\mathrm{g}$), returning
-/// `(profile, (e_int, e_grav, e_kin, e_rot, e_turb, e_tot))` in $\mathrm{erg}$.
-///
-/// Uses [`crate::cell_energy::cell_specific_pe`] and
-/// [`crate::cell_energy::cell_specific_ke`] (`real(qp)` arithmetic via
-/// [`flexmesa_math::Quad`]) and matches upstream's exact addition order and
-/// `include_rotation_in_total_energy`, `RSP2`, `TDC`, and `RSP` rules.
+/// Evaluates domain-integrated `(e_int, e_grav, e_kin, e_rot, e_turb, e_tot)`
+/// over zero-based zones `klo..khi` with optional mass cap `delta_m`, optional
+/// TDC turbulent energy inclusion, and optional per-cell profile recording
+/// (`eval_deltaM_total_energy_integrals` and `eval_total_energy_profile` in
+/// `star/private/star_utils.f90:2439-2560`).
 #[must_use]
-pub fn eval_delta_m_total_energy_integrals(
+pub(crate) fn eval_energy_integrals_kernel(
     model: &StarModel,
     klo: usize,
     khi: usize,
-    delta_m: f64,
+    delta_m: Option<f64>,
+    include_tdc_eturb: bool,
     save_profile: bool,
 ) -> (Vec<f64>, (f64, f64, f64, f64, f64, f64)) {
     let nz = model.nz;
+    if khi > nz || klo >= khi {
+        return (Vec::new(), (0.0, 0.0, 0.0, 0.0, 0.0, 0.0));
+    }
     let mut profile = if save_profile {
         vec![0.0_f64; nz]
     } else {
@@ -56,11 +56,8 @@ pub fn eval_delta_m_total_energy_integrals(
         mut total_turbulent_energy,
     ) = (0.0_f64, 0.0_f64, 0.0_f64, 0.0_f64, 0.0_f64);
 
-    if khi > nz || klo >= khi {
-        return (profile, (0.0, 0.0, 0.0, 0.0, 0.0, 0.0));
-    }
-
-    let tdc_turb = model.controls.mlt_option == MltOption::Tdc
+    let tdc_turb = include_tdc_eturb
+        && model.controls.mlt_option == MltOption::Tdc
         && model.controls.tdc_include_eturb_in_energy_equation;
 
     // Matches `star/private/star_utils.f90:2467-2514` verbatim (upstream tests
@@ -68,14 +65,16 @@ pub fn eval_delta_m_total_energy_integrals(
     // without incrementing `sum_dm`).
     let sum_dm = 0.0_f64;
     for k in klo..khi {
-        if sum_dm >= delta_m {
-            break;
+        let mut dm = model.dm[k];
+        if let Some(cap) = delta_m {
+            if sum_dm >= cap {
+                break;
+            }
+            if sum_dm + dm > cap {
+                dm = cap - sum_dm;
+            }
         }
         let mut cell_total = 0.0_f64;
-        let mut dm = model.dm[k];
-        if sum_dm + dm > delta_m {
-            dm = delta_m - sum_dm;
-        }
         let mut cell1 = dm * model.energy[k];
         cell_total += cell1;
         total_internal_energy += cell1;
@@ -147,6 +146,33 @@ pub fn eval_delta_m_total_energy_integrals(
     )
 }
 
+/// Evaluates `eval_deltaM_total_energy_integrals`
+/// (`star/private/star_utils.f90:2439-2522`) over zero-based zones
+/// `klo..khi` up to mass `delta_m` ($\mathrm{g}$), returning
+/// `(profile, (e_int, e_grav, e_kin, e_rot, e_turb, e_tot))` in $\mathrm{erg}$.
+///
+/// Uses [`crate::cell_energy::cell_specific_pe`] and
+/// [`crate::cell_energy::cell_specific_ke`] (`real(qp)` arithmetic via
+/// [`flexmesa_math::Quad`]) and matches upstream's exact addition order and
+/// `include_rotation_in_total_energy`, `RSP2`, `TDC`, and `RSP` rules.
+#[must_use]
+pub fn eval_delta_m_total_energy_integrals(
+    model: &StarModel,
+    klo: usize,
+    khi: usize,
+    delta_m: f64,
+    save_profile: bool,
+) -> (Vec<f64>, (f64, f64, f64, f64, f64, f64)) {
+    eval_energy_integrals_kernel(
+        model,
+        klo,
+        khi,
+        Some(delta_m),
+        true,
+        save_profile,
+    )
+}
+
 /// Evaluates domain-integrated `(e_int, e_grav, e_kin, e_rot, e_turb, e_tot)`
 /// in $\mathrm{erg}$ (`eval_total_energy_integrals` in
 /// `star/private/star_utils.f90:2582-2599`).
@@ -158,13 +184,26 @@ pub fn eval_total_energy_integrals(
         .1
 }
 
+/// Accumulates per-step `error_in_energy_conservation` into
+/// `cumulative_energy_error` (`star/private/evolve.f90:1359-1365`).
+#[must_use]
+pub(crate) fn next_cumulative_energy_error(
+    model: &StarModel,
+    err_e: f64,
+) -> f64 {
+    if model.controls.absolute_cumulative_energy_err {
+        model.aux.step_hist.cumulative_energy_error_old + err_e.abs()
+    } else {
+        model.aux.step_hist.cumulative_energy_error_old + err_e
+    }
+}
+
 /// Captures beginning-of-Phase-1 (post-remesh) total-energy integrals,
-/// surface cell specific total energy, and initial-model energy integrals,
+/// surface cell specific total energy, and initial-model energy integral,
 /// while zeroing per-attempt energy accumulators
 /// (`do_step_part1` in `star/private/evolve.f90:430-453`).
 pub fn record_start_of_step_energy_integrals(model: &mut StarModel) {
-    let (e_int, e_grav, e_kin, e_rot, e_turb, e_tot) =
-        eval_total_energy_integrals(model);
+    let (_, _, _, _, _, e_tot) = eval_total_energy_integrals(model);
     let surf_e = if model.nz > 0 {
         cell_specific_total_energy(model, 0)
     } else {
@@ -173,51 +212,17 @@ pub fn record_start_of_step_energy_integrals(model: &mut StarModel) {
     model.aux.total_energy = e_tot;
     model.aux.non_epsnuc_energy_change_from_split_burn = 0.0;
     let sh = &mut model.aux.step_hist;
-    sh.total_internal_energy_old = e_int;
-    sh.total_gravitational_energy_old = e_grav;
-    sh.total_radial_kinetic_energy_old = e_kin;
-    sh.total_rotational_kinetic_energy_old = e_rot;
-    sh.total_turbulent_energy_old = e_turb;
     sh.total_energy_old = e_tot;
     sh.surface_cell_specific_total_energy_old = surf_e;
     if !sh.have_initial_energy_integrals {
-        sh.total_internal_energy_initial = e_int;
-        sh.total_gravitational_energy_initial = e_grav;
-        sh.total_radial_kinetic_energy_initial = e_kin;
-        sh.total_rotational_kinetic_energy_initial = e_rot;
-        sh.total_turbulent_energy_initial = e_turb;
         sh.total_energy_initial = e_tot;
         sh.have_initial_energy_integrals = true;
     }
-    sh.total_energy_before_adjust_mass = 0.0;
-    sh.total_internal_energy_after_adjust_mass = 0.0;
-    sh.total_gravitational_energy_after_adjust_mass = 0.0;
-    sh.total_radial_kinetic_energy_after_adjust_mass = 0.0;
-    sh.total_rotational_kinetic_energy_after_adjust_mass = 0.0;
-    sh.total_turbulent_energy_after_adjust_mass = 0.0;
-    sh.total_energy_after_adjust_mass = 0.0;
-    sh.energy_change_from_do_adjust_mass_and_calculate_eps_mdot = 0.0;
-    sh.mdot_acoustic_surface = 0.0;
-    sh.mdot_adiabatic_surface = 0.0;
+    sh.clear_adjust_mass_energy_fields();
     sh.work_outward_at_surface = 0.0;
     sh.work_inward_at_center = 0.0;
     sh.tot_e_equ_err = 0.0;
     sh.used_op_split_burn = false;
-}
-
-/// Captures beginning-of-Phase-2 total-energy integrals after Phase 1
-/// operator-split updates (`save_start_values` in
-/// `star/private/struct_burn_mix.f90:348-354`).
-pub fn record_phase2_start_energy_integrals(model: &mut StarModel) {
-    let (e_int, e_grav, e_kin, e_rot, e_turb, e_tot) =
-        eval_total_energy_integrals(model);
-    model.aux.total_internal_energy_start = e_int;
-    let sh = &mut model.aux.step_hist;
-    sh.total_gravitational_energy_start = e_grav;
-    sh.total_radial_kinetic_energy_start = e_kin;
-    sh.total_rotational_kinetic_energy_start = e_rot;
-    sh.total_turbulent_energy_start = e_turb;
-    sh.total_energy_start = e_tot;
 }
 
 /// Applies pre-solver operator-split physics (`do_conv_premix`,
@@ -417,19 +422,6 @@ pub fn update_step_energy_conservation(model: &mut StarModel, dt: f64) {
         s
     };
 
-    // `evolve.f90:1164-1171`
-    let (total_energy_change_from_mdot, total_eps_mdot) =
-        if model.mstar_dot == 0.0 {
-            (0.0, 0.0)
-        } else {
-            (
-                model.mstar_dot
-                    * dt
-                    * model.aux.step_hist.surface_cell_specific_total_energy_old,
-                dt * dot_dm(&model.eps_mdot),
-            )
-        };
-
     // `evolve.f90:1173-1174`
     let mut virial = 0.0_f64;
     for k in 0..nz {
@@ -524,23 +516,11 @@ pub fn update_step_energy_conservation(model: &mut StarModel, dt: f64) {
     // `evolve.f90:1271-1288`
     let phase2_total_energy_from_mdot = dt * dot_dm(&model.eps_mdot);
     let total_extra_heating = dt * dot_dm(&model.aux.extra_heat);
-    let phase2_work = dt
-        * (model.aux.step_hist.work_outward_at_surface
-            - model.aux.step_hist.work_inward_at_center);
+    let (work_surf, work_center) =
+        crate::hydro_energy::eval_surface_and_center_work(model);
+    let phase2_work = dt * (work_surf - work_center);
 
-    let l_theta = if model
-        .controls
-        .is_velocity_time_centered(model.model_number)
-        && model.controls.include_l_in_velocity_time_centering
-        && model.ln_t[0] / LN10
-            <= model
-                .controls
-                .max_logt_for_include_p_and_l_in_velocity_time_centering
-    {
-        model.controls.l_theta_for_velocity_time_centering
-    } else {
-        1.0
-    };
+    let l_theta = crate::hydro_energy::eval_l_theta(model, 0);
     let l_start_0 = model.lum_start.first().copied().unwrap_or(model.lum[0]);
     let l_surf = l_theta * model.lum[0] + (1.0 - l_theta) * l_start_0;
     let total_radiation = dt * (l_surf - model.l_center);
@@ -580,27 +560,17 @@ pub fn update_step_energy_conservation(model: &mut StarModel, dt: f64) {
         - (model.aux.step_hist.total_energy_old
             + total_energy_sources_and_sinks);
 
-    let cumulative_energy_error = if model.controls.absolute_cumulative_energy_err
-    {
-        model.aux.step_hist.cumulative_energy_error_old
-            + error_in_energy_conservation.abs()
-    } else {
-        model.aux.step_hist.cumulative_energy_error_old
-            + error_in_energy_conservation
-    };
-
-    model.aux.cumulative_energy_error = cumulative_energy_error;
+    model.aux.cumulative_energy_error =
+        next_cumulative_energy_error(model, error_in_energy_conservation);
     let sh = &mut model.aux.step_hist;
-    sh.total_energy_change_from_mdot = total_energy_change_from_mdot;
-    sh.total_eps_mdot = total_eps_mdot;
+    sh.work_outward_at_surface = work_surf;
+    sh.work_inward_at_center = work_center;
     sh.virial_thm_p_avg = virial_thm_p_avg;
     sh.total_eps_grav = total_eps_grav;
     sh.total_nuclear_heating = total_nuclear_heating;
     sh.total_non_nuc_neu_cooling = total_non_nuc_neu_cooling;
     sh.total_irradiation_heating = total_irradiation_heating;
     sh.total_wd_sedimentation_heating = total_wd_sedimentation_heating;
-    sh.total_energy_from_diffusion = total_energy_from_diffusion;
-    sh.total_energy_from_phase_separation = total_energy_from_phase_separation;
     sh.total_extra_heating = total_extra_heating;
     sh.total_energy_sources_and_sinks = total_energy_sources_and_sinks;
     sh.error_in_energy_conservation = error_in_energy_conservation;

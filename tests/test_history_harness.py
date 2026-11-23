@@ -1554,20 +1554,16 @@ def test_extract_history_run_stats_and_rel_num_zones_and_mass_loss_tables(
     assert nz_comp.first_diverging_step is None
 
 
-def test_energy_conservation_log_rel_run_e_err_section_and_roundtrip(
+def _make_energy_harness_fixture(
     tmp_path: pathlib.Path,
-) -> None:
-    """Verify #151 log_rel_run_E_err comparison, JSON roundtrip, and table."""
+) -> tuple[
+    case_manifest.CaseManifestEntry,
+    pathlib.Path,
+    pathlib.Path,
+    harness_runner.TraceRunOutcome,
+]:
     ref_file = tmp_path / "energy_ref.tsv"
     run_file = tmp_path / "energy_run.tsv"
-    ref_file.write_text(
-        "# MESA 26.4.1 reference with log_rel_run_E_err\n"
-        "model_number\tstar_age\tlog_L\tlog_rel_run_E_err\n"
-        "1\t0.0\t0.000\t-10.500\n"
-        "2\t1.0e6\t0.010\t-9.200\n"
-        "3\t2.0e6\t0.020\t-8.400\n",
-        encoding="utf-8",
-    )
     run_file.write_text(
         "# FlexMESA run with log_rel_run_E_err\n"
         "model_number\tstar_age\tlog_L\tlog_rel_run_E_err\n"
@@ -1585,6 +1581,33 @@ def test_energy_conservation_log_rel_run_e_err_section_and_roundtrip(
         independent_var="star_age",
         final_tolerances={"rel_star_age": 0.01, "log_L": 0.01},
         track_tolerances={"log_L": 0.01},
+    )
+    outcome = harness_runner.TraceRunOutcome(
+        suite="star",
+        case="hse_riemann",
+        status="ok",
+        termination_code="max_age",
+        steps=3,
+        retries=0,
+        wall_time_sec=0.1,
+        peak_rss_gb=0.1,
+        history_path=run_file,
+    )
+    return spec, ref_file, run_file, outcome
+
+
+def test_energy_conservation_log_rel_run_e_err_section_and_roundtrip(
+    tmp_path: pathlib.Path,
+) -> None:
+    """Verify #151 log_rel_run_E_err comparison, JSON roundtrip, and table."""
+    spec, ref_file, run_file, outcome = _make_energy_harness_fixture(tmp_path)
+    ref_file.write_text(
+        "# MESA 26.4.1 reference with log_rel_run_E_err\n"
+        "model_number\tstar_age\tlog_L\tlog_rel_run_E_err\n"
+        "1\t0.0\t0.000\t-10.500\n"
+        "2\t1.0e6\t0.010\t-9.200\n"
+        "3\t2.0e6\t0.020\t-8.400\n",
+        encoding="utf-8",
     )
     comp = history_compare.compare_histories(
         history_compare.load_history_file(ref_file),
@@ -1610,17 +1633,7 @@ def test_energy_conservation_log_rel_run_e_err_section_and_roundtrip(
     rec = harness_runner.evaluate_case_record(
         spec,
         {},
-        harness_runner.TraceRunOutcome(
-            suite="star",
-            case="hse_riemann",
-            status="ok",
-            termination_code="max_age",
-            steps=3,
-            retries=0,
-            wall_time_sec=0.1,
-            peak_rss_gb=0.1,
-            history_path=run_file,
-        ),
+        outcome,
         root_dir=tmp_path,
         precomputed_comparison=restored,
     )
@@ -1657,7 +1670,7 @@ def test_evaluate_case_record_augments_energy_columns_from_full_history(
     tmp_path: pathlib.Path,
 ) -> None:
     """Verify full-run energy columns augment thinned MESA reference tracks."""
-    ref_file = tmp_path / "energy_ref.tsv"
+    spec, ref_file, _, outcome = _make_energy_harness_fixture(tmp_path)
     ref_file.write_text(
         "# MESA 26.4.1 thinned reference without energy columns\n"
         "model_number\tstar_age\tlog_L\n"
@@ -1678,39 +1691,10 @@ def test_evaluate_case_record_augments_energy_columns_from_full_history(
         "3\t2.0e6\t0.020\t-8.400\n",
         encoding="utf-8",
     )
-    run_file = tmp_path / "energy_run.tsv"
-    run_file.write_text(
-        "# FlexMESA run with log_rel_run_E_err\n"
-        "model_number\tstar_age\tlog_L\tlog_rel_run_E_err\n"
-        "1\t0.0\t0.000\t-10.400\n"
-        "2\t1.0e6\t0.010\t-9.050\n"
-        "3\t2.0e6\t0.020\t-8.150\n",
-        encoding="utf-8",
-    )
-    spec = case_manifest.CaseManifestEntry(
-        suite="star",
-        case="hse_riemann",
-        reference_status="mesa_26_4_1",
-        reference_path="energy_ref.tsv",
-        required_termination="max_age",
-        independent_var="star_age",
-        final_tolerances={"rel_star_age": 0.01, "log_L": 0.01},
-        track_tolerances={"log_L": 0.01},
-    )
     rec = harness_runner.evaluate_case_record(
         spec,
         {},
-        harness_runner.TraceRunOutcome(
-            suite="star",
-            case="hse_riemann",
-            status="ok",
-            termination_code="max_age",
-            steps=3,
-            retries=0,
-            wall_time_sec=0.1,
-            peak_rss_gb=0.1,
-            history_path=run_file,
-        ),
+        outcome,
         root_dir=tmp_path,
     )
     assert rec.comparison is not None

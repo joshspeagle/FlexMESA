@@ -69,7 +69,7 @@ Generated mechanically by `flexmesa harness` from `benchmarks/history_harness/ca
 | `star` | `high_rot_darkening` | `mesa_26_4_1` | `xa_central_lower_limit` | diagnostic (5 controls ignored) | - | 0 (188) | 0 (0) | - (8.7 [1629]) | - | - | - | - | #158 | declared gap (#158) |
 | `star` | `high_z` | `mesa_26_4_1` | `xa_central_lower_limit` | strict | `xa_central_lower_limit` | 445 (445) | 0 (0) | 6.3 [2788] (6.2 [287/46r]) | 2.74% (43) | +0.01% | `log_L`: 1.463e-01 | 3 | #161 | declared gap (#161) |
 | `star` | `hot_cool_wind` | `mesa_26_4_1` | `log_L_upper_limit` | strict | `timeout` | 789 (570) | 135 (28) | 7.0 [5509] (7.3 [424/58r]) | 2.41% (39) | -1.83% | `log_L`: 1.268e-01 | 2 | #161 | declared gap (#161) |
-| `star` | `hse_riemann` | `mesa_26_4_1` | `max_age` | strict | `max_age` | 2011 (2011) | 0 (0) | 2.0 [4022] (4.3 [884/203r]) | 0.00% (0) | +0.00% | `log_center_Rho`: 6.419e-03 | 2 | #151 | declared gap (#151) |
+| `star` | `hse_riemann` | `mesa_26_4_1` | `max_age` | strict | `max_age` | 2011 (2011) | 0 (0) | 2.0 [4022] (4.3 [884/203r]) | 0.00% (0) | +0.00% | `log_center_Rho`: 6.419e-03 | 2 | #152 | declared gap (#152) |
 | `star` | `irradiated_planet` | `mesa_26_4_1` | `max_age` | diagnostic (5 controls ignored) | - | 30 (127) | 0 (0) | 2.7 [80] (7.3 [22/3r]) | 0.46% (2) | -100.00% | `log_L`: 1.149e-01 | 85 | #154 | declared gap (#154) |
 | `star` | `low_z` | `mesa_26_4_1` | `xa_central_lower_limit` | strict | `xa_central_lower_limit` | 181 (181) | 0 (0) | 9.4 [1700] (9.0 [54/6r]) | 0.00% (0) | -0.00% | `log_center_Rho`: 1.706e-01 | 395 | #152 | declared gap (#152) |
 | `star` | `magnetic_braking` | `mesa_26_4_1` | `xa_central_lower_limit` | diagnostic (2 controls ignored) | - | 0 (219) | 0 (0) | - (8.3 [191/23r]) | - | - | - | - | #157 | declared gap (#157) |
@@ -176,3 +176,14 @@ Generated mechanically from `baseline_run_26_4_1.json` / harness comparisons aga
 | `binary` | `wind_fed_bhhmxb` | strict | `timeout` | 195 (393) | `star_1_mass` | +7.095e+00 | 2.607e-02 | `lg_mstar_dot_1` | +1.477e+00 | 2.998e-02 | 1.368e-04 | #160 |
 | `astero` | `fast_scan_grid` | diagnostic (4 controls ignored) | `astero_scan_grid_samples=4_best_chi2=1.379702e0_term=limit_num_chi2_too_big` | 896 (470) | `star_mass` | -2.000e-02 | 2.000e-02 | - | - | - | - | #162 |
 | `astero` | `fast_simplex` | diagnostic (4 controls ignored) | `astero_simplex_samples=5_best_chi2=1.237052e4_term=max_age` | 1248 (408) | `star_mass` | +2.650e-01 | 2.650e-01 | - | - | - | - | #162 |
+
+## Energy Conservation Track Comparisons (`log_rel_run_E_err`, `#151`)
+
+Generated mechanically from `baseline_run_26_4_1.json` / harness comparisons against MESA `26.4.1` reference histories (`#151`). `log_rel_run_E_err` values are `log10(|cumulative_energy_error / total_energy_end|)` in `dex`.
+
+| Suite | Case | Run Mode | Observed Term | Steps (MESA) | Col | FlexMESA Final | MESA 26.4.1 Final | Final Diff | Max Track Diff | Median Track Diff | Declared Gap |
+| :--- | :--- | :--- | :--- | ---: | :--- | ---: | ---: | ---: | ---: | ---: | :--- |
+| `star` | `16M_conv_premix` | strict | `xa_central_lower_limit` | 378 (378) | `log_rel_run_E_err` | -9.323 | -9.081 | -2.425e-01 | 4.327e-01 | 2.516e-03 | #155 |
+| `star` | `16M_predictive_mix` | strict | `xa_central_lower_limit` | 377 (377) | `log_rel_run_E_err` | -9.620 | -9.618 | -2.045e-03 | 4.422e-01 | 2.054e-03 | #155 |
+| `star` | `gyre_in_mesa_rsg` | strict | `max_model_number` | 20 (20) | `log_rel_run_E_err` | -10.895 | -10.967 | +7.183e-02 | 4.338e-01 | 1.426e-01 | #170 |
+| `star` | `make_metals` | strict | `xa_central_lower_limit` | 485 (511) | `log_rel_run_E_err` | -7.006 | -7.127 | +1.211e-01 | 1.674e+00 | 1.357e-01 | #154 |

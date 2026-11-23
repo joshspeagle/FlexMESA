@@ -601,10 +601,6 @@ pub fn assemble_henyey_system(
             do1_chem_eqns(model, k, sys);
         }
     }
-    let (work_surf, work_center) =
-        crate::hydro_energy::eval_surface_and_center_work(model);
-    model.aux.step_hist.work_outward_at_surface = work_surf;
-    model.aux.step_hist.work_inward_at_center = work_center;
     model.aux.step_hist.tot_e_equ_err = tot_e_equ_err;
     if model.controls.rsp2_flag {
         crate::rsp2_ad::eval_and_save_rsp2_eqns(model, sys);

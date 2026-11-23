@@ -257,9 +257,8 @@ pub use evolve::{
 pub use evolve_support::{
     apply_step_pre_physics, apply_step_pre_physics_with_extras,
     eval_delta_m_total_energy_integrals, eval_total_energy_integrals,
-    record_phase2_start_energy_integrals, record_start_of_step_energy_integrals,
-    relax_uniform_omega, remesh_star_before_step,
-    update_step_energy_conservation,
+    record_start_of_step_energy_integrals, relax_uniform_omega,
+    remesh_star_before_step, update_step_energy_conservation,
 };
 pub use history::{
     HistoryRow, extract_history_row, format_history_header, format_history_row,

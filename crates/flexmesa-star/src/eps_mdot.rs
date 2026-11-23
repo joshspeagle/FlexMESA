@@ -82,47 +82,15 @@ fn total_energy_profile_impl(
     model: &StarModel,
     with_tdc_eturb: bool,
 ) -> Vec<f64> {
-    if with_tdc_eturb {
-        return crate::evolve_support::eval_delta_m_total_energy_integrals(
-            model,
-            0,
-            model.nz,
-            model.mstar,
-            true,
-        )
-        .0;
-    }
-    let nz = model.nz;
-    let mut profile = vec![0.0_f64; nz];
-    for k in 0..nz {
-        let dm = model.dm[k];
-        let mut cell_total = 0.0_f64;
-        let mut cell1 = dm * model.energy[k];
-        cell_total += cell1;
-        if model.controls.v_flag || model.controls.u_flag {
-            cell1 = dm * crate::cell_energy::cell_specific_ke(model, k);
-            cell_total += cell1;
-        }
-        cell1 = dm * crate::cell_energy::cell_specific_pe(model, k);
-        cell_total += cell1;
-        if model.controls.rotation_flag
-            && model.controls.include_rotation_in_total_energy
-        {
-            cell1 = dm
-                * crate::cell_energy::cell_specific_rotational_energy(model, k);
-            cell_total += cell1;
-        }
-        if model.controls.rsp2_flag {
-            cell1 = dm * crate::cell_energy::cell_rsp2_eturb(model, k);
-            cell_total += cell1;
-        }
-        if model.controls.rsp_flag {
-            cell1 = dm * model.aux.rsp.et_rsp.get(k).copied().unwrap_or(0.0);
-            cell_total += cell1;
-        }
-        profile[k] = cell_total;
-    }
-    profile
+    crate::evolve_support::eval_energy_integrals_kernel(
+        model,
+        0,
+        model.nz,
+        None,
+        with_tdc_eturb,
+        true,
+    )
+    .0
 }
 
 /// `total_energy_profile_before_adjust_mass` as `save_for_eps_mdot` fills it

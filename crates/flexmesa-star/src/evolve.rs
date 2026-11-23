@@ -186,6 +186,23 @@ pub fn restore_from_old(model: &mut StarModel) -> Result<(), StarError> {
     Ok(())
 }
 
+fn non_finite_energy_error_reason(model: &StarModel) -> Option<&'static str> {
+    let sh = &model.aux.step_hist;
+    if !sh.total_energy_sources_and_sinks.is_finite() {
+        Some(
+            "okay_energy_conservation: non-finite total_energy_sources_and_sinks",
+        )
+    } else if !sh.error_in_energy_conservation.is_finite() {
+        Some(
+            "okay_energy_conservation: non-finite error_in_energy_conservation",
+        )
+    } else if !model.aux.cumulative_energy_error.is_finite() {
+        Some("okay_energy_conservation: non-finite cumulative_energy_error")
+    } else {
+        None
+    }
+}
+
 /// Executes a single evolutionary step (`star_evolve_step` in `evolve.f90`):
 /// remeshing $\to$ stellar wind mass adjustment $\to$ pre-physics hooks $\to$
 /// structure/burn/mix solve with automatic $\Delta t$ retry cascade $\to$
@@ -627,33 +644,29 @@ pub fn star_evolve_step_part2(
 
     if let Ok(rep) = attempt {
         if rep.converged && !force_outer_retry {
-            model.model_number = target_mod;
             model.aux.step_hist.time_old_sec = saved.time_sec;
             model.aux.step_hist.time_sec = saved.time_sec + dt_try;
             model.time_old_sec = saved.time_sec;
             model.time_sec = saved.time_sec + dt_try;
             model.star_age = model.aux.step_hist.time_sec / SECYER;
             model.dt = dt_try;
+            // Evaluate global energy accounting at the step's active
+            // `model_number` (`target_mod - 1`) before incrementing so
+            // `is_velocity_time_centered` matches `hydro_energy::setup_dl_dm`.
             update_step_energy_conservation(model, dt_try);
-            if !model
-                .aux
-                .step_hist
-                .error_in_energy_conservation
-                .is_finite()
-                || !model.aux.cumulative_energy_error.is_finite()
-            {
-                let why = String::from(
-                    "okay_energy_conservation: non-finite energy error",
-                );
-                model.model_number -= 1;
-                restore_attempt_state(model, None, saved)?;
+            if let Some(reason) = non_finite_energy_error_reason(model) {
+                restore_attempt_state(
+                    model,
+                    state.pre_remesh_model.take(),
+                    saved,
+                )?;
                 model.dt = state.dt_prev;
-                return Ok(StarStepAttemptOutcome::Retry {
-                    reason: why,
-                    why_tlim_neg_x: model.why_tlim_neg_x,
-                    cause: None,
+                return Err(StarError::Terminated {
+                    model_number: target_mod,
+                    reason: String::from(reason),
                 });
             }
+            model.model_number = target_mod;
 
             if model.controls.ts_stop.max_timestep_hi_t_limit > 0.0
                 && model.controls.max_years_for_timestep
@@ -871,11 +884,7 @@ pub(crate) fn star_evolve_step_outcome_with_extras(
         }
         let err_e = etot - (model.aux.rsp.total_energy_old - total_radiation);
         model.aux.cumulative_energy_error =
-            if model.controls.absolute_cumulative_energy_err {
-                model.aux.step_hist.cumulative_energy_error_old + err_e.abs()
-            } else {
-                model.aux.step_hist.cumulative_energy_error_old + err_e
-            };
+            crate::evolve_support::next_cumulative_energy_error(model, err_e);
         model.aux.total_energy = etot;
         let sh = &mut model.aux.step_hist;
         sh.total_internal_energy_end = model.aux.rsp.ethe;
@@ -1196,224 +1205,219 @@ pub(crate) fn star_evolve_step_outcome_with_extras(
 
         if let Ok(ref rep) = attempt {
             if rep.converged && !force_outer_retry {
-                model.model_number = target_mod;
                 model.aux.step_hist.time_old_sec = pre_step_time_sec;
                 model.aux.step_hist.time_sec = pre_step_time_sec + dt_try;
                 model.time_old_sec = pre_step_time_sec;
                 model.time_sec = pre_step_time_sec + dt_try;
                 model.star_age = model.aux.step_hist.time_sec / SECYER;
                 model.dt = dt_try;
+                // Evaluate global energy accounting at the step's active
+                // `model_number` (`target_mod - 1`) before incrementing so
+                // `is_velocity_time_centered` matches `hydro_energy::setup_dl_dm`.
                 update_step_energy_conservation(model, dt_try);
-                if !model
-                    .aux
-                    .step_hist
-                    .error_in_energy_conservation
-                    .is_finite()
-                    || !model.aux.cumulative_energy_error.is_finite()
+                if let Some(reason) = non_finite_energy_error_reason(model) {
+                    restore_attempt_state(
+                        model,
+                        pre_remesh_model.take(),
+                        saved,
+                    )?;
+                    model.dt = dt_prev;
+                    return Err(StarError::Terminated {
+                        model_number: target_mod,
+                        reason: String::from(reason),
+                    });
+                }
+                model.model_number = target_mod;
+                if model.controls.ts_stop.max_timestep_hi_t_limit > 0.0
+                    && model.controls.max_years_for_timestep
+                        != model
+                            .controls
+                            .ts_stop
+                            .hi_t_max_years_for_timestep
+                    && model.t.iter().copied().fold(0.0_f64, f64::max)
+                        >= model.controls.ts_stop.max_timestep_hi_t_limit
                 {
-                    model.model_number -= 1;
-                    ts_retry_reason = Some(String::from(
-                        "okay_energy_conservation: non-finite energy error",
-                    ));
-                } else {
-                    if model.controls.ts_stop.max_timestep_hi_t_limit > 0.0
-                        && model.controls.max_years_for_timestep
-                            != model
-                                .controls
-                                .ts_stop
-                                .hi_t_max_years_for_timestep
-                        && model.t.iter().copied().fold(0.0_f64, f64::max)
-                            >= model.controls.ts_stop.max_timestep_hi_t_limit
-                    {
-                        model.controls.max_years_for_timestep =
-                            model.controls.ts_stop.hi_t_max_years_for_timestep;
-                        model.controls.ts_stop.max_timestep =
-                            SECYER * model.controls.max_years_for_timestep;
+                    model.controls.max_years_for_timestep =
+                        model.controls.ts_stop.hi_t_max_years_for_timestep;
+                    model.controls.ts_stop.max_timestep =
+                        SECYER * model.controls.max_years_for_timestep;
+                }
+
+                // Upstream runs `do_check_limits` before `extras_check_model`
+                // and `pick_next_timestep` (`run_star_support.f90:211-213`).
+                let limit_outcome =
+                    match do_check_limits(model, None, false) {
+                        Ok(out) => out,
+                        Err(e) => {
+                            model.model_number -= 1;
+                            restore_attempt_state(
+                                model,
+                                pre_remesh_model.take(),
+                                saved,
+                            )?;
+                            model.dt = dt_prev;
+                            return Err(e);
+                        }
+                    };
+                match limit_outcome {
+                    LimitCheckOutcome::Redo { dt_new, .. } => {
+                        let max_redos = model.controls.ts_stop.redo_limit;
+                        redo_cnt += 1;
+                        if max_redos > 0 && redo_cnt > max_redos {
+                            let terminated_model = model.model_number;
+                            model.model_number -= 1;
+                            restore_attempt_state(
+                                model,
+                                pre_remesh_model.take(),
+                                saved,
+                            )?;
+                            model.dt = dt_prev;
+                            return Err(StarError::Terminated {
+                                model_number: terminated_model,
+                                reason: String::from("redo_limit"),
+                            });
+                        }
+                        if !(dt_new.is_finite() && dt_new > 0.0) {
+                            let terminated_model = model.model_number;
+                            model.model_number -= 1;
+                            restore_attempt_state(
+                                model,
+                                pre_remesh_model.take(),
+                                saved,
+                            )?;
+                            model.dt = dt_prev;
+                            return Err(StarError::Terminated {
+                                model_number: terminated_model,
+                                reason: String::from("dt_is_zero"),
+                            });
+                        }
+                        model.num_redos += 1;
+                        model.model_number -= 1;
+                        restore_attempt_state(model, None, saved)?;
+                        dt_try = dt_new;
+                        first_try = false;
+                        continue;
                     }
+                    LimitCheckOutcome::Retry { reason } => {
+                        model.model_number -= 1;
+                        ts_retry_reason = Some(reason);
+                    }
+                    LimitCheckOutcome::Terminate { code, .. } => {
+                        model.aux.step_hist.termination_code =
+                            Some(code.clone());
+                        let (_, ts_rep) = timestep_controller(model);
+                        return Ok((
+                            finalize_accepted_step(
+                                model,
+                                rep,
+                                ts_rep.varcontrol,
+                                ts_rep.dt_next,
+                                dt_try,
+                                rsp2_e_old,
+                                retries,
+                                num_splits,
+                                num_merges,
+                            ),
+                            Some(code),
+                        ));
+                    }
+                    LimitCheckOutcome::KeepGoing => {
+                        let mut pending_check_term: Option<String> = None;
+                        match extras.extras_check_model(model) {
+                            ExtrasDirective::KeepGoing => {}
+                            ExtrasDirective::Terminate(reason) => {
+                                pending_check_term = Some(reason);
+                            }
+                            ExtrasDirective::Error(msg) => {
+                                model.model_number -= 1;
+                                restore_attempt_state(
+                                    model,
+                                    pre_remesh_model.take(),
+                                    saved,
+                                )?;
+                                model.dt = dt_prev;
+                                return Err(StarError::ConvergenceFailure(msg));
+                            }
+                            ExtrasDirective::Redo => {
+                                model.model_number -= 1;
+                                requested_redo = true;
+                            }
+                            ExtrasDirective::Retry => {
+                                model.model_number -= 1;
+                                ts_retry_reason = Some(String::from(
+                                    "extras_check_model retry",
+                                ));
+                            }
+                        }
 
-                    // Upstream runs `do_check_limits` before `extras_check_model`
-                    // and `pick_next_timestep` (`run_star_support.f90:211-213`).
-                    let limit_outcome =
-                        match do_check_limits(model, None, false) {
-                            Ok(out) => out,
-                            Err(e) => {
+                        if !requested_redo && ts_retry_reason.is_none() {
+                            let (ts_action, ts_rep, ts_extra_redo) =
+                                timestep_controller_with_extras(model, extras)?;
+                            if ts_extra_redo {
                                 model.model_number -= 1;
-                                restore_attempt_state(
-                                    model,
-                                    pre_remesh_model.take(),
-                                    saved,
-                                )?;
-                                model.dt = dt_prev;
-                                return Err(e);
-                            }
-                        };
-                    match limit_outcome {
-                        LimitCheckOutcome::Redo { dt_new, .. } => {
-                            let max_redos = model.controls.ts_stop.redo_limit;
-                            redo_cnt += 1;
-                            if max_redos > 0 && redo_cnt > max_redos {
-                                let terminated_model = model.model_number;
-                                model.model_number -= 1;
-                                restore_attempt_state(
-                                    model,
-                                    pre_remesh_model.take(),
-                                    saved,
-                                )?;
-                                model.dt = dt_prev;
-                                return Err(StarError::Terminated {
-                                    model_number: terminated_model,
-                                    reason: String::from("redo_limit"),
-                                });
-                            }
-                            if !(dt_new.is_finite() && dt_new > 0.0) {
-                                let terminated_model = model.model_number;
-                                model.model_number -= 1;
-                                restore_attempt_state(
-                                    model,
-                                    pre_remesh_model.take(),
-                                    saved,
-                                )?;
-                                model.dt = dt_prev;
-                                return Err(StarError::Terminated {
-                                    model_number: terminated_model,
-                                    reason: String::from("dt_is_zero"),
-                                });
-                            }
-                            model.num_redos += 1;
-                            model.model_number -= 1;
-                            restore_attempt_state(model, None, saved)?;
-                            dt_try = dt_new;
-                            first_try = false;
-                            continue;
-                        }
-                        LimitCheckOutcome::Retry { reason } => {
-                            model.model_number -= 1;
-                            ts_retry_reason = Some(reason);
-                        }
-                        LimitCheckOutcome::Terminate { code, .. } => {
-                            model.aux.step_hist.termination_code =
-                                Some(code.clone());
-                            let (_, ts_rep) = timestep_controller(model);
-                            return Ok((
-                                finalize_accepted_step(
-                                    model,
-                                    rep,
-                                    ts_rep.varcontrol,
-                                    ts_rep.dt_next,
-                                    dt_try,
-                                    rsp2_e_old,
-                                    retries,
-                                    num_splits,
-                                    num_merges,
-                                ),
-                                Some(code),
-                            ));
-                        }
-                        LimitCheckOutcome::KeepGoing => {
-                            let mut pending_check_term: Option<String> = None;
-                            match extras.extras_check_model(model) {
-                                ExtrasDirective::KeepGoing => {}
-                                ExtrasDirective::Terminate(reason) => {
-                                    pending_check_term = Some(reason);
-                                }
-                                ExtrasDirective::Error(msg) => {
-                                    model.model_number -= 1;
-                                    restore_attempt_state(
-                                        model,
-                                        pre_remesh_model.take(),
-                                        saved,
-                                    )?;
-                                    model.dt = dt_prev;
-                                    return Err(StarError::ConvergenceFailure(
-                                        msg,
-                                    ));
-                                }
-                                ExtrasDirective::Redo => {
-                                    model.model_number -= 1;
-                                    requested_redo = true;
-                                }
-                                ExtrasDirective::Retry => {
-                                    model.model_number -= 1;
-                                    ts_retry_reason = Some(String::from(
-                                        "extras_check_model retry",
-                                    ));
-                                }
-                            }
-
-                            if !requested_redo && ts_retry_reason.is_none() {
-                                let (ts_action, ts_rep, ts_extra_redo) =
-                                    timestep_controller_with_extras(
-                                        model, extras,
-                                    )?;
-                                if ts_extra_redo {
-                                    model.model_number -= 1;
-                                    requested_redo = true;
-                                } else {
-                                    if crate::step_trace::enabled(
-                                        model.model_number,
-                                    ) {
-                                        let mut jl =
-                                            crate::step_trace::JsonLine::new(
-                                                "star_step",
-                                            );
-                                        jl.field_usize(
-                                            "model",
-                                            model.model_number,
+                                requested_redo = true;
+                            } else {
+                                if crate::step_trace::enabled(
+                                    model.model_number,
+                                ) {
+                                    let mut jl =
+                                        crate::step_trace::JsonLine::new(
+                                            "star_step",
                                         );
-                                        jl.field_f64("dt", dt_try);
-                                        jl.field_usize("retries", retries);
-                                        jl.field_str(
-                                            "action",
-                                            &format!("{ts_action:?}"),
-                                        );
-                                        jl.field_f64("dt_next", ts_rep.dt_next);
-                                        jl.field_str(
-                                            "reason",
-                                            &format!("{:?}", ts_rep.reason),
-                                        );
-                                        jl.field_f64(
-                                            "varcontrol",
-                                            ts_rep.varcontrol,
-                                        );
-                                        jl.field_f64("mdot", model.mstar_dot);
-                                        jl.emit();
-                                    }
-                                    match ts_action {
-                                        TimestepAction::KeepGoing => {
-                                            return Ok((
-                                                finalize_accepted_step(
-                                                    model,
-                                                    rep,
-                                                    ts_rep.varcontrol,
-                                                    ts_rep.dt_next,
-                                                    dt_try,
-                                                    rsp2_e_old,
-                                                    retries,
-                                                    num_splits,
-                                                    num_merges,
-                                                ),
-                                                pending_check_term,
-                                            ));
-                                        }
-                                        TimestepAction::Retry(reason) => {
-                                            model.model_number -= 1;
-                                            ts_retry_reason = Some(reason);
-                                        }
-                                        TimestepAction::Terminate(reason) => {
-                                            let terminated_model =
-                                                model.model_number;
-                                            model.model_number -= 1;
-                                            restore_attempt_state(
+                                    jl.field_usize("model", model.model_number);
+                                    jl.field_f64("dt", dt_try);
+                                    jl.field_usize("retries", retries);
+                                    jl.field_str(
+                                        "action",
+                                        &format!("{ts_action:?}"),
+                                    );
+                                    jl.field_f64("dt_next", ts_rep.dt_next);
+                                    jl.field_str(
+                                        "reason",
+                                        &format!("{:?}", ts_rep.reason),
+                                    );
+                                    jl.field_f64(
+                                        "varcontrol",
+                                        ts_rep.varcontrol,
+                                    );
+                                    jl.field_f64("mdot", model.mstar_dot);
+                                    jl.emit();
+                                }
+                                match ts_action {
+                                    TimestepAction::KeepGoing => {
+                                        return Ok((
+                                            finalize_accepted_step(
                                                 model,
-                                                pre_remesh_model.take(),
-                                                saved,
-                                            )?;
-                                            model.dt = dt_prev;
-                                            return Err(StarError::Terminated {
-                                                model_number: terminated_model,
-                                                reason,
-                                            });
-                                        }
+                                                rep,
+                                                ts_rep.varcontrol,
+                                                ts_rep.dt_next,
+                                                dt_try,
+                                                rsp2_e_old,
+                                                retries,
+                                                num_splits,
+                                                num_merges,
+                                            ),
+                                            pending_check_term,
+                                        ));
+                                    }
+                                    TimestepAction::Retry(reason) => {
+                                        model.model_number -= 1;
+                                        ts_retry_reason = Some(reason);
+                                    }
+                                    TimestepAction::Terminate(reason) => {
+                                        let terminated_model =
+                                            model.model_number;
+                                        model.model_number -= 1;
+                                        restore_attempt_state(
+                                            model,
+                                            pre_remesh_model.take(),
+                                            saved,
+                                        )?;
+                                        model.dt = dt_prev;
+                                        return Err(StarError::Terminated {
+                                            model_number: terminated_model,
+                                            reason,
+                                        });
                                     }
                                 }
                             }

@@ -446,6 +446,46 @@ fn run_struct_burn_mix_core(
     model.v_start.clone_from(&pre_burn_start.3);
     model.aux.csound_start.clone_from(&pre_burn_start.4);
 
+    if op_split_burn {
+        let nz = model.nz;
+        let sp = model.species;
+        if model.aux.burn_avg_epsnuc.len() != nz {
+            model.aux.burn_avg_epsnuc.resize(nz, 0.0);
+        }
+        model.aux.burn_avg_epsnuc.fill(0.0);
+        let min_t_split = model.controls.op_split_burn_min_t;
+        for k in 0..nz {
+            if model.t[k] >= min_t_split {
+                model.eps_nuc[k] = 0.0;
+                model.d_epsnuc_dlnd[k] = 0.0;
+                model.d_epsnuc_dlnt[k] = 0.0;
+                model.eps_nuc_neu_total[k] = 0.0;
+                if let Some(cats) = model.aux.eps_nuc_categories.get_mut(k) {
+                    cats.fill(0.0);
+                }
+                let base_s = k * sp;
+                let end_s = base_s + sp;
+                if end_s <= model.d_epsnuc_dx.len() {
+                    model.d_epsnuc_dx[base_s..end_s].fill(0.0);
+                }
+                if end_s <= model.dxdt_nuc.len() {
+                    model.dxdt_nuc[base_s..end_s].fill(0.0);
+                }
+                if end_s <= model.d_dxdt_nuc_dlnd.len() {
+                    model.d_dxdt_nuc_dlnd[base_s..end_s].fill(0.0);
+                }
+                if end_s <= model.d_dxdt_nuc_dlnt.len() {
+                    model.d_dxdt_nuc_dlnt[base_s..end_s].fill(0.0);
+                }
+                let base_ss = k * sp * sp;
+                let end_ss = base_ss + sp * sp;
+                if end_ss <= model.d_dxdt_nuc_dx.len() {
+                    model.d_dxdt_nuc_dx[base_ss..end_ss].fill(0.0);
+                }
+            }
+        }
+    }
+
     if op_split_burn && do_burn {
         let e_before: f64 =
             (0..model.nz).map(|k| model.energy[k] * model.dm[k]).sum();

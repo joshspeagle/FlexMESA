@@ -36,7 +36,6 @@ ENERGY_ERROR_COLUMNS: tuple[str, ...] = (
     "log_rel_E_err",
     "rel_E_err",
 )
-FINAL_VALUE_REPORT_COLUMNS: frozenset[str] = frozenset(ENERGY_ERROR_COLUMNS)
 SENTINEL_ABS_THRESHOLD: float = 0.99e99
 
 

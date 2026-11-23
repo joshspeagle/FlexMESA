@@ -88,24 +88,31 @@ pub fn eval_cell_pressure_for_work_ad(
     (p_ad, p_theta)
 }
 
+/// Evaluates luminosity velocity time-centering weight $\theta_L$ for cell `k`
+/// (`setup_dL_dm`, `star/private/hydro_energy.f90:211-228` and
+/// `okay_energy_conservation`, `star/private/evolve.f90:1279-1285`).
+#[must_use]
+pub(crate) fn eval_l_theta(model: &StarModel, k: usize) -> f64 {
+    let logt = model.ln_t[k] / LN10;
+    if model.controls.is_velocity_time_centered(model.model_number)
+        && model.controls.include_l_in_velocity_time_centering
+        && logt
+            <= model
+                .controls
+                .max_logt_for_include_p_and_l_in_velocity_time_centering
+    {
+        model.controls.l_theta_for_velocity_time_centering
+    } else {
+        1.0
+    }
+}
+
 /// Evaluates the luminosity divergence $dL/dm = (L_k - L_{k+1}) / \Delta m_k$
 /// with optional $\theta_L$ velocity time-centering (`setup_dL_dm` in
 /// `star/private/hydro_energy.f90:211-228`).
 #[must_use]
 pub fn setup_dl_dm(model: &StarModel, k: usize) -> StarAdOrder1 {
-    let logt = model.ln_t[k] / LN10;
-    let l_theta =
-        if model.controls.is_velocity_time_centered(model.model_number)
-            && model.controls.include_l_in_velocity_time_centering
-            && logt
-                <= model
-                    .controls
-                    .max_logt_for_include_p_and_l_in_velocity_time_centering
-        {
-            model.controls.l_theta_for_velocity_time_centering
-        } else {
-            1.0
-        };
+    let l_theta = eval_l_theta(model, k);
     let l_start_00 = model.lum_start.get(k).copied().unwrap_or(model.lum[k]);
     let lum_00 = StarAdOrder1::variable(model.lum[k], I_L_00) * l_theta
         + l_start_00 * (1.0 - l_theta);
@@ -179,13 +186,7 @@ pub fn setup_sources_and_others(
     {
         StarAdOrder1::ZERO
     } else if doing_op_split_burn {
-        let avg_eps = model
-            .aux
-            .burn_avg_epsnuc
-            .get(k)
-            .copied()
-            .filter(|&v| v != 0.0)
-            .unwrap_or(model.eps_nuc[k]);
+        let avg_eps = model.aux.burn_avg_epsnuc.get(k).copied().unwrap_or(0.0);
         StarAdOrder1::constant(avg_eps)
     } else {
         StarAdOrder1::from_dlnd_dlnt_00(
@@ -427,23 +428,9 @@ pub fn eval_surface_and_center_work(model: &StarModel) -> (f64, f64) {
         let av_00 =
             crate::hydro_work::eval1_a_times_v_face_v_flag_ad(model, 0, vel_tc)
                 .val;
-        let mut p_tot = if skip_peos {
-            0.0
-        } else {
-            crate::hydro_momentum::eval_cell_peos_time_centered_ad(
-                model, 0, false,
-            )
-            .0
-            .val
-        };
-        if model.controls.use_pvsc_art_visc {
-            p_tot += eval_pvsc_cell_ad(model, 0).val;
-        }
-        if model.controls.rsp2_flag && model.controls.rsp2.alfap != 0.0 {
-            p_tot +=
-                crate::rsp2_ad::eval_rsp2_ptrb_cell_ad(model, 0, false).val;
-        }
-        p_tot * av_00
+        let (p_tot_ad, _) =
+            crate::hydro_work::eval_simple_pdv_p_tot_ad(model, 0, skip_peos);
+        p_tot_ad.val * av_00
     } else if model.dt <= 0.0
         && !(model.controls.v_flag || model.controls.u_flag)
     {

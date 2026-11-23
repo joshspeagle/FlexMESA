@@ -530,7 +530,7 @@ def _render_mass_loss_section(
 
 def _pick_energy_error_column(
     rec: harness_runner.CaseHarnessRecord,
-) -> str | None:
+) -> tuple[history_compare.HistoryComparison, str] | None:
     if rec.comparison is None:
         return None
     comp = rec.comparison
@@ -542,27 +542,36 @@ def _pick_energy_error_column(
             or cand in comp.final_diffs
             or cand in dev_cols
         ):
-            return cand
+            return comp, cand
     return None
 
 
 def _fmt_energy_metric(val: float | None, *, is_log: bool) -> str:
-    if val is None:
-        return "-"
-    if not math.isfinite(val):
-        return "non-finite"
-    return f"{val:.3f}" if is_log else f"{val:+.3e}"
+    if is_log:
+        if val is None:
+            return "-"
+        if not math.isfinite(val):
+            return "non-finite"
+        return f"{val:.3f}"
+    return _fmt_signed_sci(val)
 
 
 def _render_energy_conservation_section(
     records: list[harness_runner.CaseHarnessRecord],
 ) -> list[str]:
     """Render mechanical ``log_rel_run_E_err`` comparisons (#151)."""
-    selected: list[tuple[harness_runner.CaseHarnessRecord, str]] = []
+    selected: list[
+        tuple[
+            harness_runner.CaseHarnessRecord,
+            history_compare.HistoryComparison,
+            str,
+        ]
+    ] = []
     for rec in records:
-        col = _pick_energy_error_column(rec)
-        if col is not None:
-            selected.append((rec, col))
+        picked = _pick_energy_error_column(rec)
+        if picked is not None:
+            comp, col = picked
+            selected.append((rec, comp, col))
     if not selected:
         return []
     out: list[str] = [
@@ -581,9 +590,7 @@ def _render_energy_conservation_section(
         "| :--- | :--- | :--- | :--- | ---: | :--- | ---: | ---: | ---: | "
         "---: | ---: | :--- |",
     ]
-    for rec, col in selected:
-        assert rec.comparison is not None
-        comp = rec.comparison
+    for rec, comp, col in selected:
         obs_term = (
             f"`{rec.observed_termination}`" if rec.observed_termination else "-"
         )

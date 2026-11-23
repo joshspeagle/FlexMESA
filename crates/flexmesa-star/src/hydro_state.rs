@@ -61,42 +61,12 @@ pub struct StepHistoryScalars {
     pub total_turbulent_energy_end: f64,
     /// Start-of-step (beginning of Phase 1, post-remesh) total energy in $\mathrm{erg}$ (`total_energy_old`).
     pub total_energy_old: f64,
-    /// Start-of-step total internal energy in $\mathrm{erg}$ (`total_internal_energy_old`).
-    pub total_internal_energy_old: f64,
-    /// Start-of-step total gravitational energy in $\mathrm{erg}$ (`total_gravitational_energy_old`).
-    pub total_gravitational_energy_old: f64,
-    /// Start-of-step total radial kinetic energy in $\mathrm{erg}$ (`total_radial_kinetic_energy_old`).
-    pub total_radial_kinetic_energy_old: f64,
-    /// Start-of-step total rotational kinetic energy in $\mathrm{erg}$ (`total_rotational_kinetic_energy_old`).
-    pub total_rotational_kinetic_energy_old: f64,
-    /// Start-of-step total turbulent energy in $\mathrm{erg}$ (`total_turbulent_energy_old`).
-    pub total_turbulent_energy_old: f64,
     /// Start-of-step surface cell specific total energy in $\mathrm{erg\,g^{-1}}$ (`surface_cell_specific_total_energy_old`).
     pub surface_cell_specific_total_energy_old: f64,
     /// Whether initial-model total energy integrals have been captured (`have_initial_energy_integrals`, `photo_out.f90:70`).
     pub have_initial_energy_integrals: bool,
     /// Initial-model total energy in $\mathrm{erg}$ (`total_energy_initial`, `photo_out.f90:70`).
     pub total_energy_initial: f64,
-    /// Initial-model total internal energy in $\mathrm{erg}$ (`total_internal_energy_initial`).
-    pub total_internal_energy_initial: f64,
-    /// Initial-model total gravitational energy in $\mathrm{erg}$ (`total_gravitational_energy_initial`).
-    pub total_gravitational_energy_initial: f64,
-    /// Initial-model total radial kinetic energy in $\mathrm{erg}$ (`total_radial_kinetic_energy_initial`).
-    pub total_radial_kinetic_energy_initial: f64,
-    /// Initial-model total rotational kinetic energy in $\mathrm{erg}$ (`total_rotational_kinetic_energy_initial`).
-    pub total_rotational_kinetic_energy_initial: f64,
-    /// Initial-model total turbulent energy in $\mathrm{erg}$ (`total_turbulent_energy_initial`).
-    pub total_turbulent_energy_initial: f64,
-    /// Beginning-of-Phase-2 total energy in $\mathrm{erg}$ (`total_energy_start`, `struct_burn_mix.f90:348-354`).
-    pub total_energy_start: f64,
-    /// Beginning-of-Phase-2 total gravitational energy in $\mathrm{erg}$ (`total_gravitational_energy_start`).
-    pub total_gravitational_energy_start: f64,
-    /// Beginning-of-Phase-2 total radial kinetic energy in $\mathrm{erg}$ (`total_radial_kinetic_energy_start`).
-    pub total_radial_kinetic_energy_start: f64,
-    /// Beginning-of-Phase-2 total rotational kinetic energy in $\mathrm{erg}$ (`total_rotational_kinetic_energy_start`).
-    pub total_rotational_kinetic_energy_start: f64,
-    /// Beginning-of-Phase-2 total turbulent energy in $\mathrm{erg}$ (`total_turbulent_energy_start`).
-    pub total_turbulent_energy_start: f64,
     /// Total energy before `do_adjust_mass` in $\mathrm{erg}$ (`total_energy_before_adjust_mass`, `adjust_mass.f90:89`).
     pub total_energy_before_adjust_mass: f64,
     /// Total internal energy after `do_adjust_mass` in $\mathrm{erg}$ (`total_internal_energy_after_adjust_mass`, `eps_mdot.f90:672`).
@@ -117,10 +87,6 @@ pub struct StepHistoryScalars {
     pub mdot_acoustic_surface: f64,
     /// Surface adiabatic leakage term from mass change (`mdot_adiabatic_surface`, `eps_mdot.f90:662`).
     pub mdot_adiabatic_surface: f64,
-    /// Total energy advected across surface by `mstar_dot` in $\mathrm{erg}$ (`total_energy_change_from_mdot`, `evolve.f90:1168-1169`).
-    pub total_energy_change_from_mdot: f64,
-    /// Integrated mass-change heating `dt * dot_product(dm, eps_mdot)` in $\mathrm{erg}$ (`total_eps_mdot`, `evolve.f90:1170`).
-    pub total_eps_mdot: f64,
     /// Mechanical work power outward across the surface face in $\mathrm{erg\,s^{-1}}$ (`work_outward_at_surface`, `hydro_energy.f90:769, 872`).
     pub work_outward_at_surface: f64,
     /// Mechanical work power inward across the inner boundary in $\mathrm{erg\,s^{-1}}$ (`work_inward_at_center`, `hydro_energy.f90:177, 644`).
@@ -137,10 +103,6 @@ pub struct StepHistoryScalars {
     pub total_irradiation_heating: f64,
     /// Integrated white-dwarf sedimentation heating in $\mathrm{erg}$ (`total_WD_sedimentation_heating`, `evolve.f90:1248-1251`).
     pub total_wd_sedimentation_heating: f64,
-    /// Integrated element diffusion heating in $\mathrm{erg}$ (`total_energy_from_diffusion`, `evolve.f90:1254-1257`).
-    pub total_energy_from_diffusion: f64,
-    /// Integrated phase-separation heating in $\mathrm{erg}$ (`total_energy_from_phase_separation`, `evolve.f90:1266-1269`).
-    pub total_energy_from_phase_separation: f64,
     /// Integrated extra heating in $\mathrm{erg}$ (`total_extra_heating`, `evolve.f90:1274`).
     pub total_extra_heating: f64,
     /// Total combined Phase 1 + Phase 2 energy sources and sinks in $\mathrm{erg}$ (`total_energy_sources_and_sinks`, `evolve.f90:1335-1336`).
@@ -208,24 +170,9 @@ impl Default for StepHistoryScalars {
             total_rotational_kinetic_energy_end: 0.0,
             total_turbulent_energy_end: 0.0,
             total_energy_old: 0.0,
-            total_internal_energy_old: 0.0,
-            total_gravitational_energy_old: 0.0,
-            total_radial_kinetic_energy_old: 0.0,
-            total_rotational_kinetic_energy_old: 0.0,
-            total_turbulent_energy_old: 0.0,
             surface_cell_specific_total_energy_old: 0.0,
             have_initial_energy_integrals: false,
             total_energy_initial: 0.0,
-            total_internal_energy_initial: 0.0,
-            total_gravitational_energy_initial: 0.0,
-            total_radial_kinetic_energy_initial: 0.0,
-            total_rotational_kinetic_energy_initial: 0.0,
-            total_turbulent_energy_initial: 0.0,
-            total_energy_start: 0.0,
-            total_gravitational_energy_start: 0.0,
-            total_radial_kinetic_energy_start: 0.0,
-            total_rotational_kinetic_energy_start: 0.0,
-            total_turbulent_energy_start: 0.0,
             total_energy_before_adjust_mass: 0.0,
             total_internal_energy_after_adjust_mass: 0.0,
             total_gravitational_energy_after_adjust_mass: 0.0,
@@ -236,8 +183,6 @@ impl Default for StepHistoryScalars {
             energy_change_from_do_adjust_mass_and_calculate_eps_mdot: 0.0,
             mdot_acoustic_surface: 0.0,
             mdot_adiabatic_surface: 0.0,
-            total_energy_change_from_mdot: 0.0,
-            total_eps_mdot: 0.0,
             work_outward_at_surface: 0.0,
             work_inward_at_center: 0.0,
             virial_thm_p_avg: 0.0,
@@ -246,8 +191,6 @@ impl Default for StepHistoryScalars {
             total_non_nuc_neu_cooling: 0.0,
             total_irradiation_heating: 0.0,
             total_wd_sedimentation_heating: 0.0,
-            total_energy_from_diffusion: 0.0,
-            total_energy_from_phase_separation: 0.0,
             total_extra_heating: 0.0,
             total_energy_sources_and_sinks: 0.0,
             tot_e_equ_err: 0.0,
@@ -266,6 +209,22 @@ impl Default for StepHistoryScalars {
             cumulative_extra_heating: 0.0,
             termination_code: None,
         }
+    }
+}
+
+impl StepHistoryScalars {
+    /// Zeros per-step `adjust_mass` and `calculate_eps_mdot` energy scalars.
+    pub(crate) fn clear_adjust_mass_energy_fields(&mut self) {
+        self.total_energy_before_adjust_mass = 0.0;
+        self.total_internal_energy_after_adjust_mass = 0.0;
+        self.total_gravitational_energy_after_adjust_mass = 0.0;
+        self.total_radial_kinetic_energy_after_adjust_mass = 0.0;
+        self.total_rotational_kinetic_energy_after_adjust_mass = 0.0;
+        self.total_turbulent_energy_after_adjust_mass = 0.0;
+        self.total_energy_after_adjust_mass = 0.0;
+        self.energy_change_from_do_adjust_mass_and_calculate_eps_mdot = 0.0;
+        self.mdot_acoustic_surface = 0.0;
+        self.mdot_adiabatic_surface = 0.0;
     }
 }
 

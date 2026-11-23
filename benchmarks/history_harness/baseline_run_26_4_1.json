@@ -896,6 +896,9 @@
           "center_h1": -2.85050658125104e-08,
           "center_he4": 1.1083596529459783e-07,
           "center_c12": 1.5245397099741213e-08,
+          "rel_E_err": -1.4998418667716524e-13,
+          "log_rel_E_err": -0.03816795508283377,
+          "log_rel_run_E_err": -0.24252757502341638,
           "num_retries": 0.0,
           "num_iters": -5.0,
           "rel_num_zones": -0.05066162570888469
@@ -1057,6 +1060,33 @@
             "tolerance": null,
             "within_tolerance": true,
             "max_rel_diff": 0.9360213106394237
+          },
+          {
+            "column": "rel_E_err",
+            "max_abs_diff": 9.907684849800092e-11,
+            "median_abs_diff": 2.576361236849055e-14,
+            "x_at_max": 10208366.12836403,
+            "tolerance": null,
+            "within_tolerance": true,
+            "max_rel_diff": 92.0815094550084
+          },
+          {
+            "column": "log_rel_E_err",
+            "max_abs_diff": 1.9597675672555255,
+            "median_abs_diff": 0.01145102801826603,
+            "x_at_max": 10208366.12836403,
+            "tolerance": null,
+            "within_tolerance": true,
+            "max_rel_diff": 0.16374327706035646
+          },
+          {
+            "column": "log_rel_run_E_err",
+            "max_abs_diff": 0.432671788493872,
+            "median_abs_diff": 0.00251590465354834,
+            "x_at_max": 0.0007203510787293182,
+            "tolerance": null,
+            "within_tolerance": true,
+            "max_rel_diff": 0.040128468879298405
           }
         ],
         "within_track_tolerances": false,
@@ -1069,7 +1099,17 @@
           "log_center_Rho"
         ],
         "first_diverging_step": 82,
-        "first_diverging_x": 155.53639926474168
+        "first_diverging_x": 155.53639926474168,
+        "final_run_values": {
+          "log_rel_run_E_err": -9.323472547006286,
+          "log_rel_E_err": -11.787092843547407,
+          "rel_E_err": 1.63270287108834e-12
+        },
+        "final_ref_values": {
+          "log_rel_run_E_err": -9.08094497198287,
+          "log_rel_E_err": -11.748924888464574,
+          "rel_E_err": 1.7826870577655052e-12
+        }
       },
       "error_message": ""
     },
@@ -1130,6 +1170,9 @@
           "center_h1": -1.3502923237310121e-09,
           "center_he4": 2.131609333488882e-09,
           "center_c12": 5.393862072592369e-09,
+          "rel_E_err": -1.343301339963125e-13,
+          "log_rel_E_err": -0.02629526558585127,
+          "log_rel_run_E_err": -0.002045153198084293,
           "num_retries": 0.0,
           "num_iters": 0.0,
           "rel_num_zones": 0.0009492168960607499
@@ -1286,6 +1329,33 @@
             "tolerance": null,
             "within_tolerance": true,
             "max_rel_diff": 0.9315186712081175
+          },
+          {
+            "column": "rel_E_err",
+            "max_abs_diff": 4.548870231751232e-12,
+            "median_abs_diff": 2.0125833546417012e-14,
+            "x_at_max": 9896625.045992162,
+            "tolerance": null,
+            "within_tolerance": true,
+            "max_rel_diff": 4.28038908340603
+          },
+          {
+            "column": "log_rel_E_err",
+            "max_abs_diff": 0.7233778247728733,
+            "median_abs_diff": 0.008901293173225966,
+            "x_at_max": 3916.72452513883,
+            "tolerance": null,
+            "within_tolerance": true,
+            "max_rel_diff": 0.05919270559978214
+          },
+          {
+            "column": "log_rel_run_E_err",
+            "max_abs_diff": 0.4422417129898282,
+            "median_abs_diff": 0.0020541819862085475,
+            "x_at_max": 0.0007203510787293182,
+            "tolerance": null,
+            "within_tolerance": true,
+            "max_rel_diff": 0.03749830049755443
           }
         ],
         "within_track_tolerances": false,
@@ -1297,7 +1367,17 @@
           "log_center_Rho"
         ],
         "first_diverging_step": 82,
-        "first_diverging_x": 155.53639926474168
+        "first_diverging_x": 155.53639926474168,
+        "final_run_values": {
+          "log_rel_run_E_err": -9.620453933169935,
+          "log_rel_E_err": -11.66713377067898,
+          "rel_E_err": 2.1521187405131136e-12
+        },
+        "final_ref_values": {
+          "log_rel_run_E_err": -9.618408779971851,
+          "log_rel_E_err": -11.640838505093129,
+          "rel_E_err": 2.286448874509426e-12
+        }
       },
       "error_message": ""
     },
@@ -5538,6 +5618,8 @@
           "center_h1": 0.0,
           "center_he4": -1.0659875726570789e-07,
           "center_c12": 8.931932231510953e-08,
+          "rel_E_err": -1.0359553951918496e-14,
+          "log_rel_run_E_err": 0.07182516553729812,
           "num_retries": 0.0,
           "num_iters": 0.0,
           "rel_num_zones": 0.0
@@ -5703,6 +5785,24 @@
             "tolerance": null,
             "within_tolerance": true,
             "max_rel_diff": 0.07948402359665098
+          },
+          {
+            "column": "rel_E_err",
+            "max_abs_diff": 2.093050529540039e-12,
+            "median_abs_diff": 2.2626234378709007e-14,
+            "x_at_max": 2463.652513888017,
+            "tolerance": null,
+            "within_tolerance": true,
+            "max_rel_diff": 3.9982152551031036
+          },
+          {
+            "column": "log_rel_run_E_err",
+            "max_abs_diff": 0.4337929640992346,
+            "median_abs_diff": 0.1426333681560923,
+            "x_at_max": 584.397706238323,
+            "tolerance": null,
+            "within_tolerance": true,
+            "max_rel_diff": 0.0361288107717956
           }
         ],
         "within_track_tolerances": false,
@@ -5712,7 +5812,15 @@
           "log_R"
         ],
         "first_diverging_step": 2,
-        "first_diverging_x": 185.74238461447067
+        "first_diverging_x": 185.74238461447067,
+        "final_run_values": {
+          "log_rel_run_E_err": -10.894903583594957,
+          "rel_E_err": 5.870261640294201e-13
+        },
+        "final_ref_values": {
+          "log_rel_run_E_err": -10.966728749132255,
+          "rel_E_err": 5.973857179813386e-13
+        }
       },
       "error_message": ""
     },
@@ -6944,7 +7052,7 @@
       "reference_status": "mesa_26_4_1",
       "reference_path": "benchmarks/history_harness/reference_histories/star/hse_riemann.data",
       "required_termination": "max_age",
-      "verdict": "declared gap (#151)",
+      "verdict": "declared gap (#152)",
       "executed": true,
       "run_status": "ok",
       "observed_termination": "max_age",
@@ -6960,8 +7068,8 @@
       "mesa_iters_rows": 203,
       "wall_time_sec": 0.0,
       "peak_rss_gb": 0.0,
-      "known_gap_issue": "#151",
-      "known_gap_reason": "Riemann hydro energy accounting (#151).",
+      "known_gap_issue": "#152",
+      "known_gap_reason": "Strict run reaches max_age (2011 steps, 0 retries, final diffs within 1e-8 under #151 energy conservation limits) with a step-2 log_center_Rho (6.419e-03) and mean-iteration (2.0 vs MESA 4.3) deviation during initial u_flag Riemann hydro AMR remeshing (#152, #153).",
       "is_undeclared_failure": false,
       "is_stale_known_gap": false,
       "controls_ignored": false,
@@ -7907,6 +8015,9 @@
           "center_h1": 0.0,
           "center_he4": -6.070797930360648e-06,
           "center_c12": 7.697254517874397e-05,
+          "rel_E_err": -6.83826354122322e-12,
+          "log_rel_E_err": -1.0346040903254838,
+          "log_rel_run_E_err": 0.12111315048785354,
           "num_retries": 1.0,
           "num_iters": 0.0,
           "rel_num_zones": 0.012345679012345678
@@ -8067,6 +8178,33 @@
             "tolerance": null,
             "within_tolerance": true,
             "max_rel_diff": 1.5368508320415764
+          },
+          {
+            "column": "rel_E_err",
+            "max_abs_diff": 2.5676436624509267e-08,
+            "median_abs_diff": 2.3496025681723007e-10,
+            "x_at_max": 193465458.52424788,
+            "tolerance": null,
+            "within_tolerance": true,
+            "max_rel_diff": 143700.70063836745
+          },
+          {
+            "column": "log_rel_E_err",
+            "max_abs_diff": 4.8065254567346445,
+            "median_abs_diff": 0.9475639046345199,
+            "x_at_max": 193465458.52424788,
+            "tolerance": null,
+            "within_tolerance": true,
+            "max_rel_diff": 0.3889488008548258
+          },
+          {
+            "column": "log_rel_run_E_err",
+            "max_abs_diff": 1.673519707620212,
+            "median_abs_diff": 0.13568600770069228,
+            "x_at_max": 4140.898676100714,
+            "tolerance": null,
+            "within_tolerance": true,
+            "max_rel_diff": 0.16627913156254107
           }
         ],
         "within_track_tolerances": false,
@@ -8078,7 +8216,17 @@
           "log_center_Rho"
         ],
         "first_diverging_step": 2,
-        "first_diverging_x": 1230.6557905355976
+        "first_diverging_x": 1230.6557905355976,
+        "final_run_values": {
+          "log_rel_run_E_err": -7.0063533202986426,
+          "log_rel_E_err": -12.157580838540548,
+          "rel_E_err": 6.956954475541582e-13
+        },
+        "final_ref_values": {
+          "log_rel_run_E_err": -7.127466470786496,
+          "log_rel_E_err": -11.122976748215065,
+          "rel_E_err": 7.533958988777379e-12
+        }
       },
       "error_message": ""
     },

@@ -300,7 +300,7 @@ def resolve_full_reference_history_path(
     return None
 
 
-def _augment_ref_with_mass_loss_columns(
+def _augment_ref_columns(
     ref_tbl: history_compare.HistoryTable,
     spec: case_manifest.CaseManifestEntry,
     expected_ver: str,
@@ -526,9 +526,7 @@ def evaluate_case_record(
             mesa_stats = extract_reference_run_stats(
                 spec, root_dir=base, ref_tbl=ref_tbl
             )
-        ref_tbl = _augment_ref_with_mass_loss_columns(
-            ref_tbl, spec, expected_ver, base
-        )
+        ref_tbl = _augment_ref_columns(ref_tbl, spec, expected_ver, base)
         if outcome.history_path is not None:
             try:
                 run_tbl = history_compare.load_history_file(

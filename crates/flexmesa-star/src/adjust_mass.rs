@@ -118,6 +118,7 @@ pub fn do_adjust_mass_with_dt(
     let nz = model.nz;
     if delta_m == 0.0 || nz < 3 {
         model.eps_mdot.fill(0.0);
+        model.aux.step_hist.clear_adjust_mass_energy_fields();
         return Ok(());
     }
     if dt > 0.0 {
@@ -149,19 +150,6 @@ pub fn do_adjust_mass_with_dt(
     )
 }
 
-fn clear_adjust_mass_energy_fields(model: &mut StarModel) {
-    let sh = &mut model.aux.step_hist;
-    sh.mdot_acoustic_surface = 0.0;
-    sh.mdot_adiabatic_surface = 0.0;
-    sh.total_internal_energy_after_adjust_mass = 0.0;
-    sh.total_gravitational_energy_after_adjust_mass = 0.0;
-    sh.total_radial_kinetic_energy_after_adjust_mass = 0.0;
-    sh.total_rotational_kinetic_energy_after_adjust_mass = 0.0;
-    sh.total_turbulent_energy_after_adjust_mass = 0.0;
-    sh.total_energy_after_adjust_mass = 0.0;
-    sh.energy_change_from_do_adjust_mass_and_calculate_eps_mdot = 0.0;
-}
-
 /// Applies control-driven mass adjustment (`model.mstar_dot * dt`) using
 /// upstream `compute_delta_m` (`adjust_mass.f90:36-73`), mass-limit clamps
 /// (`adjust_mass.f90:247-265`), and `revise_q_and_dq`
@@ -178,14 +166,14 @@ pub fn do_adjust_mass_step(
     if dt <= 0.0 || nz < 3 {
         model.aux.k_const_mass = 0;
         model.eps_mdot.fill(0.0);
-        clear_adjust_mass_energy_fields(model);
+        model.aux.step_hist.clear_adjust_mass_energy_fields();
         return Ok(());
     }
     let mut delta_m = compute_delta_m(model, dt)?;
     if delta_m == 0.0 {
         model.aux.k_const_mass = 0;
         model.eps_mdot.fill(0.0);
-        clear_adjust_mass_energy_fields(model);
+        model.aux.step_hist.clear_adjust_mass_energy_fields();
         return Ok(());
     }
 
@@ -452,7 +440,7 @@ fn do_adjust_mass_core(
     if delta_m == 0.0 || nz < 3 {
         model.aux.k_const_mass = 0;
         model.eps_mdot.fill(0.0);
-        clear_adjust_mass_energy_fields(model);
+        model.aux.step_hist.clear_adjust_mass_energy_fields();
         return Ok(());
     }
 
@@ -660,14 +648,8 @@ fn do_adjust_mass_core(
         };
         let surface = calculate_eps_mdot(model, &record, dt)?;
         // `eps_mdot.f90:669-677` and `evolve.f90:599-604`
-        let (_, (e_int, e_grav, e_kin, e_rot, e_turb, e_after)) =
-            crate::evolve_support::eval_delta_m_total_energy_integrals(
-                model,
-                0,
-                nz,
-                model.mstar,
-                false,
-            );
+        let (e_int, e_grav, e_kin, e_rot, e_turb, e_after) =
+            crate::evolve_support::eval_total_energy_integrals(model);
         let sh = &mut model.aux.step_hist;
         sh.mdot_acoustic_surface = surface.mdot_acoustic_surface;
         sh.mdot_adiabatic_surface = surface.mdot_adiabatic_surface;
@@ -681,7 +663,7 @@ fn do_adjust_mass_core(
             e_after - sh.total_energy_before_adjust_mass;
     } else {
         model.eps_mdot.fill(0.0);
-        clear_adjust_mass_energy_fields(model);
+        model.aux.step_hist.clear_adjust_mass_energy_fields();
     }
     Ok(())
 }

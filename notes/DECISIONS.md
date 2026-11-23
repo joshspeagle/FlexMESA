@@ -746,11 +746,10 @@ The text of these four entries predates the audit of 2026-11-16. The decisions s
 - **Decision**:
   1. **Global total-energy conservation (`okay_energy_conservation`)**: Replace solver-residual energy accounting and the hardcoded `0.0` `eps_grav` bypass with MESA `26.4.1`'s global total-energy balance across `eval_total_energy_integrals` (`star/private/star_utils.f90:2439-2612`), Phase 1 + Phase 2 `okay_energy_conservation` (`star/private/evolve.f90:1101-1373`), surface and center work (`star/private/hydro_energy.f90:176-177, 640-655, 769, 872`), and `mdot` energy bookkeeping (`star/private/eps_mdot.f90:494-678`), accumulating `error_in_energy_conservation = total_energy_end - (total_energy_old + total_energy_sources_and_sinks)` for both `dedt` and `eps_grav`.
   2. **Verbatim upstream formulas and controls**: Preserve upstream expressions verbatim, including `cell_specific_rotational_energy = 0.5 * (e_p1 + e_00)` with `e = i_rot * omega^2` (`star_utils.f90:2328-2339`), `+ mdot_adiabatic_surface` (`evolve.f90:1312`), `include_rotation_in_total_energy = false` (`controls.defaults:9399`), and `absolute_cumulative_energy_err = true` (`controls.defaults:11629`).
-  3. **Checkpoint persistence**: Persist `total_*_energy_initial`, `have_initial_energy_integrals`, and `StepHistoryScalars` energy diagnostics across `.photo` restarts (`star/private/photo_out.f90:69-70`), bumping `PHOTO_FORMAT_VERSION` from `29` to `30`.
-- **Why**: Summing only Henyey solver residuals misses non-solver energy drift (operator-split burning, `adjust_mass`, remeshing, composition updates, `eps_grav` form discrepancy) and breaks parity with upstream `rel_E_err`, `log_rel_run_E_err`, and `hard_limit_for_rel_error_in_energy_conservation` retry triggers.
+  3. **Checkpoint persistence**: Persist `total_energy_initial`, `have_initial_energy_integrals`, and `StepHistoryScalars` energy diagnostics across `.photo` restarts (`star/private/photo_out.f90:69-70`), bumping `PHOTO_FORMAT_VERSION` from `29` to `30`.
+- **Why**: Summing only Henyey solver residuals misses non-solver energy drift (operator-split burning, `adjust_mass`, remeshing, composition updates, `eps_grav` form discrepancy) and breaks upstream agreement with `rel_E_err`, `log_rel_run_E_err`, and `hard_limit_for_rel_error_in_energy_conservation` retry triggers.
 - **Limits**: In `eval_delta_m_total_energy_integrals`, upstream leaves `sum_dm = 0` (`star_utils.f90:2467-2514`); FlexMESA reproduces this verbatim.
 - **Alternatives Rejected**:
-  - *Keeping solver-residual accounting for `dedt` or returning `0.0` for `eps_grav`*: hides genuine drift and broke energy conservation parity.
-  - *Altering `evolve.f90:1312` or `star_utils.f90:2335` formulas before MESA fixes them*: violates verbatim MESA `26.4.1` parity.
-
+  - *Keeping solver-residual accounting for `dedt` or returning `0.0` for `eps_grav`*: hides genuine drift and broke energy conservation agreement.
+  - *Altering `evolve.f90:1312` or `star_utils.f90:2335` formulas before MESA fixes them*: violates verbatim MESA `26.4.1` behavior.
 

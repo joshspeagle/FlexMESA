@@ -17,15 +17,15 @@ use flexmesa_const::{M_SUN, SECYER};
 use flexmesa_star::inlist::InlistBundle;
 use flexmesa_star::inlist_runner::DefaultStarExtras;
 use flexmesa_star::{
-    EnergyEqnOption, HistoryColumnSpec, MesaCellValue, PHOTO_FORMAT_VERSION,
-    StarControls, StarError, StarJobControls, StarModel, cell_specific_ke,
-    cell_specific_pe, cell_specific_rotational_energy,
+    cell_specific_ke, cell_specific_pe, cell_specific_rotational_energy,
     cell_specific_total_energy, do_adjust_mass_step, do_struct_burn_mix,
     eval_delta_m_total_energy_integrals, eval_total_energy_integrals,
     evaluate_star_history_row, init_or_update_model_from_bundle,
     load_photo_bytes, load_zams_model, record_start_of_step_energy_integrals,
     set_hydro_vars, star_evolve_step, update_step_energy_conservation,
-    verify_photo_restart_parity, write_photo_bytes,
+    verify_photo_restart_parity, write_mod_string, write_photo_bytes,
+    EnergyEqnOption, HistoryColumnSpec, MesaCellValue, StarControls, StarError,
+    StarJobControls, StarModel, PHOTO_FORMAT_VERSION,
 };
 use flexmesa_turb::MltOption;
 
@@ -42,7 +42,9 @@ fn history_float(model: &StarModel, col: &'static str) -> f64 {
         evaluate_star_history_row(model, &[HistoryColumnSpec::Scalar(col)]);
     match row.first().map(|(_, v)| v) {
         Some(MesaCellValue::Float(v)) => *v,
-        other => panic!("expected Float for history column {col}, got {other:?}"),
+        other => {
+            panic!("expected Float for history column {col}, got {other:?}")
+        }
     }
 }
 
@@ -77,12 +79,8 @@ fn test_eval_total_energy_integrals_quad_pe_ke_rotation_tdc_rsp_and_rsp2() {
         tdc_include_eturb_in_energy_equation: true,
         ..StarControls::default()
     };
-    let mut m = StarModel::new(
-        nz,
-        vec![1],
-        StarJobControls::default(),
-        controls,
-    );
+    let mut m =
+        StarModel::new(nz, vec![1], StarJobControls::default(), controls);
     m.m_center = 0.0;
     m.r_center = 0.0;
     m.v_center = 1.0e4;
@@ -91,8 +89,9 @@ fn test_eval_total_energy_integrals_quad_pe_ke_rotation_tdc_rsp_and_rsp2() {
     m.xmstar = m.mstar;
     m.cgrav = vec![6.6743e-8; nz];
     m.m_grav = vec![1.0e31, 9.0e30, 7.0e30, 4.0e30];
-    // Include a sub-centimeter radius at the innermost zone to confirm no
-    // spurious `r.max(1.0)` clamp distorts `cell_specific_pe`.
+    // Include a sub-centimeter radius at the innermost zone and check its
+    // analytic PE directly (`-0.5 * cgrav * m_grav / r`) so no spurious
+    // `r.max(1.0)` clamp can hide behind a self-oracle.
     m.r = vec![4.0e10, 3.0e10, 2.0e10, 0.5];
     m.energy = vec![1.5e14, 2.5e14, 3.5e14, 4.5e14];
     m.v = vec![5.0e5, 4.0e5, 3.0e5, 2.0e5];
@@ -108,14 +107,44 @@ fn test_eval_total_energy_integrals_quad_pe_ke_rotation_tdc_rsp_and_rsp2() {
     let expected_rot_last =
         0.5 * (0.0 + m.aux.i_rot[nz - 1] * m.omega[nz - 1] * m.omega[nz - 1]);
     assert_eq!(cell_specific_rotational_energy(&m, 0), expected_rot_0);
-    assert_eq!(cell_specific_rotational_energy(&m, nz - 1), expected_rot_last);
+    assert_eq!(
+        cell_specific_rotational_energy(&m, nz - 1),
+        expected_rot_last
+    );
+
+    let analytic_pe_cell = |k: usize| -> f64 {
+        let g0 = m.cgrav[k];
+        let grav00 = -(g0 * m.m_grav[k] / m.r[k]);
+        let gravp1 = if k + 1 == nz {
+            0.0
+        } else {
+            -(m.cgrav[k + 1] * m.m_grav[k + 1] / m.r[k + 1])
+        };
+        0.5 * (gravp1 + grav00)
+    };
+    let analytic_ke_cell = |k: usize| -> f64 {
+        let v0 = m.v[k];
+        let v1 = if k + 1 < nz { m.v[k + 1] } else { m.v_center };
+        0.25 * (v0 * v0 + v1 * v1)
+    };
+    let analytic_rot_cell = |k: usize| -> f64 {
+        let e0 = m.aux.i_rot[k] * m.omega[k] * m.omega[k];
+        let e1 = if k + 1 < nz {
+            m.aux.i_rot[k + 1] * m.omega[k + 1] * m.omega[k + 1]
+        } else {
+            0.0
+        };
+        0.5 * (e1 + e0)
+    };
+    let inner_pe = -0.5 * 6.6743e-8 * 4.0e30 / 0.5;
+    assert!(rel_err(cell_specific_pe(&m, nz - 1), inner_pe) < 1.0e-14);
+    assert!(rel_err(cell_specific_ke(&m, 0), analytic_ke_cell(0)) < 1.0e-14);
 
     let expected_ie: f64 = (0..nz).map(|k| m.dm[k] * m.energy[k]).sum();
-    let expected_pe: f64 = (0..nz).map(|k| m.dm[k] * cell_specific_pe(&m, k)).sum();
-    let expected_ke: f64 = (0..nz).map(|k| m.dm[k] * cell_specific_ke(&m, k)).sum();
-    let expected_rot: f64 = (0..nz)
-        .map(|k| m.dm[k] * cell_specific_rotational_energy(&m, k))
-        .sum();
+    let expected_pe: f64 = (0..nz).map(|k| m.dm[k] * analytic_pe_cell(k)).sum();
+    let expected_ke: f64 = (0..nz).map(|k| m.dm[k] * analytic_ke_cell(k)).sum();
+    let expected_rot: f64 =
+        (0..nz).map(|k| m.dm[k] * analytic_rot_cell(k)).sum();
     let expected_tdc: f64 = (0..nz)
         .map(|k| {
             let e_k = if k + 1 < nz {
@@ -132,24 +161,29 @@ fn test_eval_total_energy_integrals_quad_pe_ke_rotation_tdc_rsp_and_rsp2() {
     // in slot 3 but omitted from `e_tot` (`star_utils.f90:2484-2489, 2519-2520`).
     let (ie, pe, ke, rot, turb, tot_no_rot) = eval_total_energy_integrals(&m);
     assert_eq!(ie, expected_ie);
-    assert_eq!(pe, expected_pe);
-    assert_eq!(ke, expected_ke);
+    assert!(rel_err(pe, expected_pe) < 1.0e-14);
+    assert!(rel_err(ke, expected_ke) < 1.0e-14);
     assert_eq!(rot, expected_rot);
     assert_eq!(turb, expected_tdc);
-    assert_eq!(tot_no_rot, ie + pe + ke + turb);
+    assert!(
+        rel_err(
+            tot_no_rot,
+            expected_ie + expected_pe + expected_ke + expected_tdc
+        ) < 1.0e-14
+    );
 
     // Enable `include_rotation_in_total_energy = true`: `e_rot` enters `e_tot`
     // and `cell_specific_total_energy`.
     m.controls.include_rotation_in_total_energy = true;
     let (_, _, _, rot2, _, tot_with_rot) = eval_total_energy_integrals(&m);
     assert_eq!(rot2, expected_rot);
-    assert_eq!(tot_with_rot, tot_no_rot + expected_rot);
+    assert!(rel_err(tot_with_rot, tot_no_rot + expected_rot) < 1.0e-14);
     let cell0_with_rot = cell_specific_total_energy(&m, 0);
     let expected_cell0 = m.energy[0]
-        + cell_specific_ke(&m, 0)
-        + cell_specific_pe(&m, 0)
-        + cell_specific_rotational_energy(&m, 0);
-    assert_eq!(cell0_with_rot, expected_cell0);
+        + analytic_ke_cell(0)
+        + analytic_pe_cell(0)
+        + analytic_rot_cell(0);
+    assert!(rel_err(cell0_with_rot, expected_cell0) < 1.0e-14);
 
     // `RSP2` overrides `TDC` turbulent energy (`star_utils.f90:2490-2505`),
     // and `RSP` adds `RSP_Et` independently (`star_utils.f90:2506-2510`).
@@ -160,14 +194,12 @@ fn test_eval_total_energy_integrals_quad_pe_ke_rotation_tdc_rsp_and_rsp2() {
         eval_delta_m_total_energy_integrals(&m, 0, nz, m.mstar, true);
     let expected_rsp2: f64 = (0..nz).map(|k| m.dm[k] * m.aux.etrb[k]).sum();
     assert_eq!(turb_rsp2, expected_rsp2);
-    assert_eq!(
-        prof_rsp2[0],
-        m.dm[0] * m.energy[0]
-            + m.dm[0] * cell_specific_ke(&m, 0)
-            + m.dm[0] * cell_specific_pe(&m, 0)
-            + m.dm[0] * cell_specific_rotational_energy(&m, 0)
-            + m.dm[0] * m.aux.etrb[0]
-    );
+    let expected_prof0 = m.dm[0] * m.energy[0]
+        + m.dm[0] * analytic_ke_cell(0)
+        + m.dm[0] * analytic_pe_cell(0)
+        + m.dm[0] * analytic_rot_cell(0)
+        + m.dm[0] * m.aux.etrb[0];
+    assert!(rel_err(prof_rsp2[0], expected_prof0) < 1.0e-14);
 
     m.controls.rsp2_flag = false;
     m.controls.tdc_include_eturb_in_energy_equation = false;
@@ -178,14 +210,12 @@ fn test_eval_total_energy_integrals_quad_pe_ke_rotation_tdc_rsp_and_rsp2() {
         (0..nz).map(|k| m.dm[k] * m.aux.rsp.et_rsp[k]).sum();
     assert_eq!(turb_rsp, expected_rsp);
     let cell0_rsp = cell_specific_total_energy(&m, 0);
-    assert_eq!(
-        cell0_rsp,
-        m.energy[0]
-            + cell_specific_ke(&m, 0)
-            + cell_specific_pe(&m, 0)
-            + cell_specific_rotational_energy(&m, 0)
-            + m.aux.rsp.et_rsp[0]
-    );
+    let expected_cell0_rsp = m.energy[0]
+        + analytic_ke_cell(0)
+        + analytic_pe_cell(0)
+        + analytic_rot_cell(0)
+        + m.aux.rsp.et_rsp[0];
+    assert!(rel_err(cell0_rsp, expected_cell0_rsp) < 1.0e-14);
 }
 
 /// Verifies that an unaccounted non-solver energy perturbation between Phase 1
@@ -203,8 +233,8 @@ fn test_non_solver_energy_perturbation_detected_accurately() {
     let mut clean = base.clone();
     clean.save_old_values();
     record_start_of_step_energy_integrals(&mut clean);
-    let rep_clean =
-        do_struct_burn_mix(&mut clean, dt, false, true, &[]).expect("clean sbm");
+    let rep_clean = do_struct_burn_mix(&mut clean, dt, false, true, &[])
+        .expect("clean sbm");
     assert!(rep_clean.converged);
     update_step_energy_conservation(&mut clean, dt);
     let err_clean = clean.aux.step_hist.error_in_energy_conservation;
@@ -280,7 +310,9 @@ fn test_non_solver_energy_perturbation_detected_accurately() {
     assert_eq!(rel_run_e, pert.aux.cumulative_energy_error / e_end_pert);
     assert_eq!(
         log_rel_run_e,
-        flexmesa_math::log10((pert.aux.cumulative_energy_error / e_end_pert).abs())
+        flexmesa_math::log10(
+            (pert.aux.cumulative_energy_error / e_end_pert).abs()
+        )
     );
 }
 
@@ -295,8 +327,12 @@ fn test_hard_limit_rel_energy_error_forces_retry_and_rolls_back_cumulative_err()
     // Advance past `doing_first_model_of_run` (`timestep.f90:132`) so
     // `check_rel_error_in_energy` (`timestep.f90:322-324`) is active.
     let mut base = solar_zams(EnergyEqnOption::EpsGrav);
-    base.controls.ts_stop.hard_limit_for_rel_error_in_energy_conservation = 1.0;
-    base.controls.ts_stop.limit_for_rel_error_in_energy_conservation = 1.0;
+    base.controls
+        .ts_stop
+        .hard_limit_for_rel_error_in_energy_conservation = 1.0;
+    base.controls
+        .ts_stop
+        .limit_for_rel_error_in_energy_conservation = 1.0;
     base.dt = 1.0e5 * SECYER;
     base.dt_next = base.dt;
     let warm =
@@ -328,10 +364,14 @@ fn test_hard_limit_rel_energy_error_forces_retry_and_rolls_back_cumulative_err()
     // error from `cumulative_energy_error`.
     let hard_lim = 0.5 * probe_rel_err;
     let mut model = base;
-    model.controls.ts_stop.hard_limit_for_rel_error_in_energy_conservation =
-        hard_lim;
-    model.controls.ts_stop.limit_for_rel_error_in_energy_conservation =
-        0.5 * hard_lim;
+    model
+        .controls
+        .ts_stop
+        .hard_limit_for_rel_error_in_energy_conservation = hard_lim;
+    model
+        .controls
+        .ts_stop
+        .limit_for_rel_error_in_energy_conservation = 0.5 * hard_lim;
     model.dt = dt0;
     model.dt_next = dt0;
     let initial_cum_err = 1.25e42;
@@ -375,8 +415,10 @@ fn test_hard_limit_rel_energy_error_forces_retry_and_rolls_back_cumulative_err()
 fn test_eps_grav_reports_genuine_conservation_error_and_updates_cumulative_err()
 {
     let mut model = solar_zams(EnergyEqnOption::EpsGrav);
-    model.controls.ts_stop.hard_limit_for_rel_error_in_energy_conservation =
-        1.0;
+    model
+        .controls
+        .ts_stop
+        .hard_limit_for_rel_error_in_energy_conservation = 1.0;
     model.dt = 5.0e6 * SECYER;
     model.dt_next = model.dt;
 
@@ -535,14 +577,144 @@ fn test_inlist_loads_energy_accounting_controls() {
         ("bad_abs", "absolute_cumulative_energy_err"),
     ] {
         let bad = tmp.root.join(format!("inlist_{tag}"));
-        std::fs::write(
-            &bad,
-            format!("&controls\n  {key} = 'not_a_bool'\n/\n"),
-        )
-        .expect("write malformed inlist");
+        std::fs::write(&bad, format!("&controls\n  {key} = 'not_a_bool'\n/\n"))
+            .expect("write malformed inlist");
         let err = InlistBundle::from_file(&bad)
             .expect_err("malformed boolean control must fail");
         assert!(matches!(err, StarError::InvalidInput(_)));
     }
 }
 
+/// Verifies `&star_job::set_initial_cumulative_energy_error` &
+/// `new_cumulative_energy_error` reset `cumulative_energy_error` on fresh load
+/// (including `.mod`) and preserve it on restart (`run_star_support.f90:2762-2767`).
+#[test]
+fn test_set_initial_cumulative_energy_error_startup_and_restart() {
+    let tmp = TempInlistGuard::new("cum_e_err");
+    let mut seed = solar_zams(EnergyEqnOption::Dedt);
+    seed.aux.cumulative_energy_error = 1.25e42;
+    let mod_path = tmp.root.join("seed.mod");
+    std::fs::write(
+        &mod_path,
+        write_mod_string(&seed).expect("write_mod_string"),
+    )
+    .expect("write seed.mod");
+
+    let inlist_fresh = tmp.root.join("inlist_fresh");
+    std::fs::write(
+        &inlist_fresh,
+        "&star_job\n\
+           load_saved_model = .true.\n\
+           load_model_filename = 'seed.mod'\n\
+           set_initial_cumulative_energy_error = .true.\n\
+           new_cumulative_energy_error = -4.5d38\n\
+         /\n\
+         &kap\n\
+           Zbase = 0.02d0\n\
+         /\n",
+    )
+    .expect("write inlist_fresh");
+    let bundle_fresh =
+        InlistBundle::from_file(&inlist_fresh).expect("parse fresh inlist");
+    let mut extras = DefaultStarExtras;
+    let mut model =
+        init_or_update_model_from_bundle(&bundle_fresh, None, &mut extras)
+            .expect("fresh init");
+    assert_eq!(model.aux.cumulative_energy_error, -4.5e38);
+    assert_eq!(model.aux.step_hist.cumulative_energy_error_old, -4.5e38);
+
+    // On restart (`existing_model = Some(prev)`), `set_initial_cumulative_energy_error`
+    // must preserve the carried `cumulative_energy_error`.
+    model.aux.cumulative_energy_error = 9.0e40;
+    let restarted = init_or_update_model_from_bundle(
+        &bundle_fresh,
+        Some(model),
+        &mut extras,
+    )
+    .expect("restart init");
+    assert_eq!(restarted.aux.cumulative_energy_error, 9.0e40);
+}
+
+/// Verifies non-finite global energy accounting aborts via
+/// `StarError::Terminated` instead of retrying (`evolve.f90:1337-1354, 1548-1595`).
+#[test]
+fn test_non_finite_energy_error_terminates_without_retry() {
+    let mut model = solar_zams(EnergyEqnOption::Dedt);
+    model.dt = 1.0e4 * SECYER;
+    model.dt_next = model.dt;
+    model.aux.cumulative_energy_error = f64::NAN;
+    let err = star_evolve_step(&mut model, false, false, true)
+        .expect_err("non-finite energy error must terminate");
+    match err {
+        StarError::Terminated { reason, .. } => {
+            assert!(
+                reason.contains("okay_energy_conservation: non-finite"),
+                "unexpected termination reason: {reason}"
+            );
+        }
+        other => panic!("expected StarError::Terminated, got {other:?}"),
+    }
+    assert_eq!(model.num_retries, 0);
+}
+
+/// Verifies `op_split_burn = true` with `dxdt_nuc_factor == 0` zeroes
+/// hot-zone `eps_nuc` and clears stale `burn_avg_epsnuc` (`struct_burn_mix.f90:82-98`).
+#[test]
+fn test_op_split_burn_with_zero_dxdt_nuc_factor_clears_burn_avg_and_eps_nuc() {
+    let mut model = solar_zams(EnergyEqnOption::Dedt);
+    let nz = model.nz;
+    model.controls.op_split_burn = true;
+    model.controls.op_split_burn_min_t = 1.0e5;
+    model.controls.dxdt_nuc_factor = 0.0;
+    model.aux.burn_avg_epsnuc = vec![123.0; nz];
+    model.save_start_values().expect("save_start_values");
+    model.save_old_values();
+    let rep = do_struct_burn_mix(&mut model, 10.0 * SECYER, true, true, &[])
+        .expect("op_split_burn step with dxdt_nuc_factor = 0");
+    assert!(rep.converged);
+    for k in 0..nz {
+        assert_eq!(model.aux.burn_avg_epsnuc[k], 0.0);
+        if model.t[k] >= model.controls.op_split_burn_min_t {
+            assert_eq!(model.eps_nuc[k], 0.0);
+        }
+    }
+}
+
+/// Verifies `is_velocity_time_centered` stays step-consistent across
+/// `steps_before_use_velocity_time_centering` between solver and energy accounting.
+#[test]
+fn test_velocity_time_centering_transition_step_is_consistent() {
+    let setup = |steps_before: isize| {
+        let mut m = solar_zams(EnergyEqnOption::Dedt);
+        m.controls.v_flag = false;
+        m.controls.include_l_in_velocity_time_centering = true;
+        m.controls.l_theta_for_velocity_time_centering = 0.5;
+        m.controls.steps_before_use_velocity_time_centering = steps_before;
+        m.controls
+            .max_logt_for_include_p_and_l_in_velocity_time_centering = 99.0;
+        m.model_number = 4;
+        m.dt = 1.0e5 * SECYER;
+        m.dt_next = m.dt;
+        m
+    };
+    let mut m_transition = setup(5);
+    let mut m_control = setup(-1);
+    let rep_t =
+        star_evolve_step(&mut m_transition, false, false, true).expect("step");
+    let rep_c =
+        star_evolve_step(&mut m_control, false, false, true).expect("ctrl");
+    assert!(rep_t.converged && rep_c.converged);
+    assert_eq!(m_transition.model_number, 5);
+    assert_eq!(
+        m_transition
+            .aux
+            .step_hist
+            .error_in_energy_conservation
+            .to_bits(),
+        m_control
+            .aux
+            .step_hist
+            .error_in_energy_conservation
+            .to_bits()
+    );
+}

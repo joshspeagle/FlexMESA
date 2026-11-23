@@ -22,24 +22,6 @@ use crate::model::StarModel;
 /// inversion (`eta_limit = -1d-6` in `star/private/mesh_adjust.f90:38, 1403`).
 pub const ETA_LIMIT_FOR_MESH_ADJUST: f64 = -1.0e-6;
 
-pub(crate) fn normalize_and_assign_remapped_xa(
-    dst: &mut [f64],
-    accum: &[f64],
-    dx: f64,
-) {
-    let mut sum_x = 0.0;
-    for (d, &acc) in dst.iter_mut().zip(accum.iter()) {
-        let xj = (acc / dx).clamp(0.0, 1.0);
-        *d = xj;
-        sum_x += xj;
-    }
-    if sum_x > 0.0 {
-        for d in dst {
-            *d /= sum_x;
-        }
-    }
-}
-
 /// Classification of each remeshed cell relative to the parent grid
 /// (`unchanged_type`, `split_type`, `merged_type`, `revised_type` in
 /// `star/private/adjust_mesh.f90:519-579`).

@@ -48,7 +48,8 @@ pub mod surface_corr;
 
 pub use e2e::{
     run_astero_test_suite_case, run_astero_test_suite_case_with_logs,
-    run_astero_test_suite_case_with_options, TempCaseStaging,
+    run_astero_test_suite_case_with_options,
+    run_astero_test_suite_case_with_set_param, TempCaseStaging,
 };
 pub use inlist_astero::{
     parse_astero_search_controls, parse_astero_search_controls_with_options,
@@ -82,7 +83,9 @@ pub use scaling::{
 };
 pub use search_driver::{
     run_single_astero_track, run_single_astero_track_with_logs,
-    run_star_astero, run_star_astero_with_logs, run_star_astero_with_options,
+    run_single_astero_track_with_set_param, run_star_astero,
+    run_star_astero_with_logs, run_star_astero_with_options,
+    run_star_astero_with_set_param, AsteroSetParam,
     AsteroSearchReport,
 };
 pub use surface_corr::{

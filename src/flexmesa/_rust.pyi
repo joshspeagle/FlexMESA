@@ -608,11 +608,11 @@ def star_eval_target_mode_frequency_and_growth(model: Any) -> tuple[dict[str, An
 def star_eval_astero_scaling_dnu_numax_uhz(model: Any) -> tuple[float, float]: ...  # noqa: E501
 def star_eval_rsp_lina_modes(m_msun: float, l_lsun: float, teff_k: float, x_h: float = 0.73, z_metal: float = 0.007, n_modes: int = 3) -> list[dict[str, Any]]: ...  # noqa: E501
 def star_build_rsp_envelope_model(m_msun: float, l_lsun: float, teff_k: float, x_h: float = 0.73, z_metal: float = 0.007) -> Any: ...  # noqa: E501
-def star_run_astero_test_suite_case(case_dir: str, skip_optional: bool = True, max_steps_per_stage: int | None = None, verify_restart: bool = True, allow_unsupported_controls: bool = False) -> dict[str, Any]: ...  # noqa: E501
+def star_run_astero_test_suite_case(case_dir: str, skip_optional: bool = True, max_steps_per_stage: int | None = None, verify_restart: bool = True, allow_unsupported_controls: bool = False, extras: Any = None) -> dict[str, Any]: ...  # noqa: E501
 def binary_run_test_suite_case(case_dir: str, max_steps_cap: int | None = None, allow_unsupported_controls: bool = False, extras: Any = None) -> dict[str, Any]: ...  # noqa: E501
 def trace_star_case(case_dir: str, out_target: str, max_steps_per_stage: int | None = None, skip_optional: bool = True, respect_intervals: bool = False, write_profiles: bool = False, is_logs_dir: bool = True, numerics_mode: str | None = None, allow_unsupported_controls: bool = False, extras: Any = None) -> dict[str, Any]: ...  # noqa: E501
 def trace_binary_case(case_dir: str, out_target: str, max_steps: int | None = None, respect_intervals: bool = False, is_logs_dir: bool = True, numerics_mode: str | None = None, allow_unsupported_controls: bool = False, extras: Any = None) -> dict[str, Any]: ...  # noqa: E501
-def trace_astero_case(case_dir: str, out_target: str, max_steps_per_stage: int | None = None, skip_optional: bool = True, respect_intervals: bool = False, write_profiles: bool = False, is_logs_dir: bool = True, numerics_mode: str | None = None, allow_unsupported_controls: bool = False) -> dict[str, Any]: ...  # noqa: E501
+def trace_astero_case(case_dir: str, out_target: str, max_steps_per_stage: int | None = None, skip_optional: bool = True, respect_intervals: bool = False, write_profiles: bool = False, is_logs_dir: bool = True, numerics_mode: str | None = None, allow_unsupported_controls: bool = False, extras: Any = None) -> dict[str, Any]: ...  # noqa: E501
 def mesa_read_log_file(path: str) -> dict[str, Any]: ...
 
 # fmt: on

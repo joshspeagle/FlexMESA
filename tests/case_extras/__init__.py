@@ -14,7 +14,12 @@ import pathlib
 import re
 from typing import Any
 
-from tests.case_extras import binary_extras, rsp_extras, star_extras
+from tests.case_extras import (
+    astero_extras,
+    binary_extras,
+    rsp_extras,
+    star_extras,
+)
 
 _INCLUDE_RE = re.compile(r'include\s+[\'"]([^\'"]+)[\'"]', re.IGNORECASE)
 
@@ -244,9 +249,10 @@ def resolve_case_extras(suite: str, case_dir: pathlib.Path | str) -> Any:
 
     Returns:
         Python extras object implementing `StarExtras` or `BinaryExtras`
-        callbacks, or `None` when the upstream source uses default no-op
-        hooks or its handler cannot run through the adapter yet (see
-        `ADAPTER_SERVED_STAR_HANDLERS` and `ADAPTER_SERVED_BINARY_HANDLERS`).
+        callbacks or an astero case's `set_param`, or `None` when the
+        upstream source uses default no-op hooks or its handler cannot run
+        through the adapter yet (see `ADAPTER_SERVED_STAR_HANDLERS` and
+        `ADAPTER_SERVED_BINARY_HANDLERS`).
     """
     handler = match_case_extras(suite, case_dir)
     if handler is None:
@@ -295,4 +301,11 @@ def match_case_extras(suite: str, case_dir: pathlib.Path | str) -> Any:
         norm_bin = normalize_fortran(raw_bin)
         norm_star = normalize_fortran(raw_star) if raw_star else ""
         return binary_extras.match_binary_extras(norm_bin, norm_star)
+    if suite == "astero":
+        raw_star = load_fortran_source(root, "run_star_extras.f90")
+        if not raw_star:
+            return None
+        return astero_extras.match_astero_extras(
+            normalize_fortran(raw_star), source_sha256
+        )
     return None

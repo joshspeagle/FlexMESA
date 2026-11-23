@@ -383,107 +383,72 @@ impl StarExtras for AsteroTrackExtras<'_> {
     }
 }
 
-/// `set_param` shared by the `astero` test cases that search over
-/// parameters (`astero/test_suite/fast_newuoa/src/run_star_extras.f90:115-183`;
-/// identical in `example_astero`, `fast_scan_grid` and `fast_simplex`).
-fn set_param(
-    bundle: &mut InlistBundle,
-    ctrl: &AsteroSearchControls,
-    name: &str,
-    val: f64,
-) -> Result<(), StarError> {
-    let job = &mut bundle.job;
-    match name {
-        "initial_mass" | "mass" => {
-            job.new_mass = val;
-            job.relax_mass = true;
-            bundle.controls.initial_mass = val;
-        }
-        "initial_y" | "y" => {
-            job.initial_he3 = ctrl.y_frac_he3 * val;
-            job.initial_he4 = val - job.initial_he3;
-            job.set_uniform_initial_composition = true;
-        }
-        "initial_feh" | "feh" => {
-            // (Z/X) = (Z/X)sun * 10^[Fe/H]
-            let z_div_x = ctrl.z_div_x_solar * flexmesa_math::exp10(val);
-            let x = if ctrl.y_depends_on_z {
-                let c = 1.0 + z_div_x * (1.0 + ctrl.dydz);
-                let x = (1.0 - ctrl.y0) / c;
-                let y = (ctrl.y0 + z_div_x * (ctrl.dydz + ctrl.y0)) / c;
-                job.initial_he3 = ctrl.y_frac_he3 * y;
-                job.initial_he4 = y - job.initial_he3;
-                x
-            } else {
-                // Y from the `initial_he3` set by an earlier `initial_Y`.
-                let y = job.initial_he3 / ctrl.y_frac_he3;
-                (1.0 - y) / (1.0 + z_div_x)
-            };
-            job.initial_h1 = x;
-            job.initial_h2 = 0.0;
-            job.set_uniform_initial_composition = true;
-        }
-        "alpha" => bundle.controls.mixing_length_alpha = val,
-        "f_ov" => {
-            let ov = &mut bundle.controls.mix_wind.overshoot_sets[0];
-            if val > 0.0 {
-                if ctrl.f0_ov_div_f_ov <= 0.0 {
-                    return Err(StarError::InvalidInput(format!(
-                        "astero f_ov = {val} > 0 requires f0_ov_div_f_ov > 0 (got {})",
-                        ctrl.f0_ov_div_f_ov
-                    )));
-                }
-                ov.scheme = String::from("exponential");
-                ov.zone_type = String::from("any");
-                ov.zone_loc = String::from("any");
-                ov.bdy_loc = String::from("any");
-                ov.f = val;
-                ov.f0 = ctrl.f0_ov_div_f_ov * val;
-            } else {
-                ov.scheme.clear();
-                ov.zone_type.clear();
-                ov.zone_loc.clear();
-                ov.bdy_loc.clear();
-                (ov.f, ov.f0) = (0.0, 0.0);
-            }
-        }
-        other => {
-            return Err(StarError::InvalidInput(format!(
-                "invalid name in set_param: {other}"
-            )));
-        }
-    }
-    Ok(())
+/// A case's own `set_param` from its `run_star_extras.f90` (for example
+/// `astero/test_suite/fast_newuoa/src/run_star_extras.f90:115-183`).
+///
+/// Upstream `astero_extras_controls` calls it for every named search
+/// parameter, in index order, before the model is loaded or built
+/// (`astero/private/extras_support.f90:974-988`). It is case code, so it is
+/// supplied by the caller (test-side extras) and never by this crate.
+pub trait AsteroSetParam {
+    /// Applies parameter `name` (as written in `param_name(i)`) with value
+    /// `val` to the run's `&star_job` and `&controls` in `bundle`.
+    ///
+    /// # Errors
+    /// Returns [`StarError`] when the case's `set_param` reports `ierr /= 0`
+    /// (for example an unknown `name`).
+    fn set_param(
+        &mut self,
+        bundle: &mut InlistBundle,
+        ctrl: &AsteroSearchControls,
+        name: &str,
+        val: f64,
+    ) -> Result<(), StarError>;
+}
+
+/// Value of the search parameter named `name` in `params`, by the slot the
+/// inlist parser assigned to that name (`inlist_parser.rs`).
+fn param_value(params: &AsteroParamSet, name: &str) -> Option<f64> {
+    Some(match name.to_ascii_lowercase().as_str() {
+        "initial_mass" | "mass" => params.initial_mass,
+        "initial_y" | "y" => params.initial_y,
+        "initial_feh" | "feh" => params.initial_feh,
+        "alpha" => params.alpha,
+        "f_ov" => params.f_ov,
+        "my_param1" | "semiconv" => params.my_param1,
+        "my_param2" | "thermohal" => params.my_param2,
+        "my_param3" | "diffusion" => params.my_param3,
+        _ => return None,
+    })
 }
 
 fn apply_params_to_bundle(
     bundle: &mut InlistBundle,
     ctrl: &AsteroSearchControls,
     params: &AsteroParamSet,
+    mut set_param: Option<&mut dyn AsteroSetParam>,
 ) -> Result<(), StarError> {
-    // `astero_extras_controls` calls `set_param` for every named parameter in
-    // index order (`astero/private/extras_support.f90:974-988`); `initial_FeH`
-    // reads the `initial_he3` that an earlier `initial_Y` set.
-    for name in &ctrl.param_names {
-        let pname = name.trim().to_ascii_lowercase();
-        let val = match pname.as_str() {
-            "initial_mass" | "mass" => params.initial_mass,
-            "initial_y" | "y" => params.initial_y,
-            "initial_feh" | "feh" => params.initial_feh,
-            "alpha" => params.alpha,
-            "f_ov" => params.f_ov,
-            _ => continue,
-        };
-        set_param(bundle, ctrl, &pname, val)?;
-    }
-    if ctrl.has_custom_param[0] {
-        bundle.controls.alpha_semiconvection = params.my_param1.max(0.0);
-    }
-    if ctrl.has_custom_param[1] {
-        bundle.controls.thermohaline_coeff = params.my_param2.max(0.0);
-    }
-    if ctrl.has_custom_param[2] {
-        bundle.controls.do_element_diffusion = params.my_param3 > 0.0;
+    // `astero_extras_controls` calls the case's `set_param` for every named
+    // parameter in index order (`astero/private/extras_support.f90:974-988`).
+    for raw in &ctrl.param_names {
+        let name = raw.trim();
+        if name.is_empty() {
+            continue;
+        }
+        let val = param_value(params, name).ok_or_else(|| {
+            StarError::InvalidInput(format!(
+                "astero param_name '{name}' has no parameter slot"
+            ))
+        })?;
+        let hook = set_param.as_deref_mut().ok_or_else(|| {
+            StarError::InvalidInput(format!(
+                "astero search parameter '{name}' needs the case's set_param \
+                 from its run_star_extras.f90 \
+                 (astero/private/extras_support.f90:974-988), but no \
+                 set_param hook was supplied"
+            ))
+        })?;
+        hook.set_param(bundle, ctrl, name, val)?;
     }
     if !ctrl.eval_chi2_at_target_age_only && !ctrl.include_age_in_chi2_spectro {
         bundle.controls.max_years_for_timestep =
@@ -558,8 +523,37 @@ pub fn run_single_astero_track_with_logs(
     case_dir: &Path,
     logs_opts: StarLogsOptions<'_>,
 ) -> Result<(AsteroSampleResult, StageRunReport, StarModel), StarError> {
+    run_single_astero_track_with_set_param(
+        base_bundle,
+        ctrl,
+        params,
+        sample_number,
+        max_steps_cap,
+        case_dir,
+        logs_opts,
+        None,
+    )
+}
+
+/// [`run_single_astero_track_with_logs`] with the case's `set_param` hook
+/// ([`AsteroSetParam`]).
+///
+/// # Errors
+/// Returns [`StarError`] when a named search parameter has no hook, the hook
+/// fails, or the track fails.
+#[allow(clippy::too_many_arguments)]
+pub fn run_single_astero_track_with_set_param(
+    base_bundle: &InlistBundle,
+    ctrl: &AsteroSearchControls,
+    params: AsteroParamSet,
+    sample_number: usize,
+    max_steps_cap: Option<usize>,
+    case_dir: &Path,
+    logs_opts: StarLogsOptions<'_>,
+    set_param: Option<&mut dyn AsteroSetParam>,
+) -> Result<(AsteroSampleResult, StageRunReport, StarModel), StarError> {
     let mut bundle = base_bundle.clone();
-    apply_params_to_bundle(&mut bundle, ctrl, &params)?;
+    apply_params_to_bundle(&mut bundle, ctrl, &params, set_param)?;
     if let Some(cap) = max_steps_cap {
         bundle.controls.max_model_number =
             Some(bundle.controls.max_model_number.map_or(cap, |m| m.min(cap)));
@@ -640,6 +634,32 @@ pub fn run_star_astero_with_options(
     logs_opts: StarLogsOptions<'_>,
     inlist_opts: InlistLoadOptions,
 ) -> Result<AsteroSearchReport, StarError> {
+    run_star_astero_with_set_param(
+        case_dir,
+        entry_inlist,
+        max_steps_per_stage,
+        ctrl,
+        logs_opts,
+        inlist_opts,
+        None,
+    )
+}
+
+/// [`run_star_astero_with_options`] with the case's `set_param` hook
+/// ([`AsteroSetParam`]), called for every track.
+///
+/// # Errors
+/// Returns [`StarError`] when a named search parameter has no hook, the hook
+/// fails, or a track fails.
+pub fn run_star_astero_with_set_param(
+    case_dir: &Path,
+    entry_inlist: &str,
+    max_steps_per_stage: Option<usize>,
+    ctrl: &AsteroSearchControls,
+    logs_opts: StarLogsOptions<'_>,
+    inlist_opts: InlistLoadOptions,
+    mut set_param: Option<&mut dyn AsteroSetParam>,
+) -> Result<AsteroSearchReport, StarError> {
     let base_bundle = InlistBundle::from_file_in_case_dir_with_options(
         case_dir,
         entry_inlist,
@@ -697,7 +717,7 @@ pub fn run_star_astero_with_options(
         } else {
             StarLogsOptions::default()
         };
-        let (mut sample, stage, m) = run_single_astero_track_with_logs(
+        let (mut sample, stage, m) = run_single_astero_track_with_set_param(
             &base_bundle,
             active_ctrl,
             p,
@@ -705,6 +725,9 @@ pub fn run_star_astero_with_options(
             max_steps_per_stage,
             case_dir,
             trial_logs,
+            set_param
+                .as_mut()
+                .map(|h| &mut **h as &mut dyn AsteroSetParam),
         )?;
         total_steps += stage.steps_taken;
         let stage_term = stage.termination_code;

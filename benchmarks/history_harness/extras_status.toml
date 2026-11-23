@@ -655,37 +655,32 @@ issue = "#231"
 [[cases]]
 suite = "astero"
 case = "example_astero"
-status = "unported"
+status = "ported"
 digest = "7333be5fc5a0a61015768a1d0ea4f98c8b855ce96cd954a0939be896b1587e10"
-issue = "#231"
 
 [[cases]]
 suite = "astero"
 case = "fast_from_file"
-status = "unported"
+status = "ported"
 digest = "6cf6af873b2c09888317d198d727f3c4e149914014212343caea5b6c11605d7b"
-issue = "#231"
 
 [[cases]]
 suite = "astero"
 case = "fast_newuoa"
-status = "unported"
+status = "ported"
 digest = "9856adefa817fb9298ed7e8ebd8cfbebe662343f21ca93f1e022f98f57e314b5"
-issue = "#231"
 
 [[cases]]
 suite = "astero"
 case = "fast_scan_grid"
-status = "unported"
+status = "ported"
 digest = "0d9db3000df72547d3605aab3cd6d47573adf212b607b4e2516f58e8ea56e4d1"
-issue = "#231"
 
 [[cases]]
 suite = "astero"
 case = "fast_simplex"
-status = "unported"
+status = "ported"
 digest = "0d9db3000df72547d3605aab3cd6d47573adf212b607b4e2516f58e8ea56e4d1"
-issue = "#231"
 
 [[cases]]
 suite = "astero"

@@ -367,6 +367,7 @@ def run_astero_test_suite_case(
     max_steps_per_stage: int | None = 15,
     verify_restart: bool = True,
     allow_unsupported_controls: bool = False,
+    extras: Any = None,
 ) -> dict[str, Any]:
     """Execute a single ``astero/test_suite`` case directory.
 
@@ -378,6 +379,9 @@ def run_astero_test_suite_case(
             consistency.
         allow_unsupported_controls: When ``True``, bypass strict failure on
             unread, unused, or unimplemented upstream MESA controls.
+        extras: Optional test-side object implementing the case's own
+            ``set_param(snapshot, name, val)`` from its ``run_star_extras.f90``.
+            A search case with named parameters fails without it.
 
     Returns:
         ``CaseRunReport`` dictionary.
@@ -389,5 +393,6 @@ def run_astero_test_suite_case(
             None if max_steps_per_stage is None else int(max_steps_per_stage),
             bool(verify_restart),
             bool(allow_unsupported_controls),
+            extras,
         )
     )

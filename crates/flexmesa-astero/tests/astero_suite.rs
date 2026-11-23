@@ -61,7 +61,7 @@ impl AsteroCaseHooks for CaseSetParam {
         match name {
             "initial_mass" => {
                 job.new_mass = val;
-                job.relax_mass = true;
+                job.relax_initial_mass = true;
                 c.initial_mass = val;
             }
             "initial_Y" => {

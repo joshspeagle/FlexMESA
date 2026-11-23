@@ -84,7 +84,7 @@ fn apply_updates(
         let j = &mut bundle.job;
         match key.as_str() {
             "new_mass" => j.new_mass = val.extract()?,
-            "relax_initial_mass" => j.relax_mass = val.extract()?,
+            "relax_initial_mass" => j.relax_initial_mass = val.extract()?,
             "initial_mass" => c.initial_mass = val.extract()?,
             "initial_h1" => j.initial_h1 = val.extract()?,
             "initial_h2" => j.initial_h2 = val.extract()?,

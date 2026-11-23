@@ -11,6 +11,7 @@ import subprocess
 import time
 from typing import Any
 
+import numpy as np
 import pytest
 
 from flexmesa import _rust, cli
@@ -1857,3 +1858,66 @@ def test_flexmesa_import_respects_worker_rust_only_env(
     assert harness_runner._has_active_extras_handler(
         "star", amj_dir, "bad_factory_spec"
     )
+
+
+def test_compare_histories_sparse_reference_is_judged_only_at_its_rows(
+    tmp_path: pathlib.Path,
+) -> None:
+    """A reference written every 10 models is compared at its rows (#459).
+
+    The run follows a curved track that agrees with the reference at every
+    reference row; the chord between the sparse rows departs from it by far
+    more than the tolerance, which must not count as a divergence. A run
+    that differs at a reference row must still fail.
+    """
+    ages = np.linspace(0.0, 1.0e7, 31)
+    curve = np.sin(np.pi * ages / 1.0e7)
+    ref_rows = range(0, 31, 10)
+    ref_tsv = tmp_path / "ref.tsv"
+    ref_tsv.write_text(
+        "# sparse reference\nmodel_number\tstar_age\tlog_L\n"
+        + "".join(
+            f"{i + 1}\t{float(ages[i])!r}\t{float(curve[i])!r}\n"
+            for i in ref_rows
+        ),
+        encoding="utf-8",
+    )
+    ref_tbl = history_compare.load_history_file(ref_tsv)
+
+    def run_table(
+        values: np.ndarray, name: str
+    ) -> history_compare.HistoryTable:
+        path = tmp_path / name
+        path.write_text(
+            "# run\nmodel_number\tstar_age\tlog_L\n"
+            + "".join(
+                f"{i + 1}\t{float(ages[i])!r}\t{float(values[i])!r}\n"
+                for i in range(31)
+            ),
+            encoding="utf-8",
+        )
+        return history_compare.load_history_file(path)
+
+    spec = case_manifest.CaseManifestEntry(
+        suite="star",
+        case="synthetic",
+        reference_status="mesa_26_4_1",
+        reference_path="ref.tsv",
+        required_termination="max_age",
+        independent_var="star_age",
+        final_tolerances={"rel_star_age": 0.02},
+        track_tolerances={"log_L": 1.0e-3},
+    )
+    comp = history_compare.compare_histories(
+        ref_tbl, run_table(curve, "run.tsv"), spec
+    )
+    assert comp.within_track_tolerances
+    assert comp.first_diverging_step is None
+
+    shifted = curve.copy()
+    shifted[20] += 2.0e-3
+    bad = history_compare.compare_histories(
+        ref_tbl, run_table(shifted, "bad.tsv"), spec
+    )
+    assert bad.failed_track_columns == ("log_L",)
+    assert bad.first_diverging_step == 21

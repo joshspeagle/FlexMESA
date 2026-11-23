@@ -401,6 +401,28 @@ def _compare_scalar_track_tol(
     return math.isfinite(diff) and diff <= tol
 
 
+def _reference_skips_models(ref: HistoryTable) -> bool:
+    """Return whether ``ref`` omits models, as with ``history_interval > 1``.
+
+    MESA writes a history row every ``history_interval`` models, so a
+    reference whose ``model_number`` column advances by more than one between
+    rows carries no information between those rows. A linear chord between
+    them is not MESA's trajectory, so such references are compared only at
+    their own rows (#459).
+
+    Args:
+        ref: Reference ``HistoryTable`` with arrays of shape ``(n_ref,)``.
+
+    Returns:
+        True when ``ref`` has a ``model_number`` column with at least two rows
+        and some consecutive rows differ by more than one model.
+    """
+    model = ref.columns.get("model_number")
+    if model is None or model.size < 2:
+        return False
+    return bool(np.any(np.diff(model) > 1.0))
+
+
 def compare_histories(
     ref: HistoryTable,
     run: HistoryTable,
@@ -415,7 +437,10 @@ def compare_histories(
         spec: ``CaseManifestEntry`` providing ``independent_var`` and
             tolerance dictionaries.
         num_grid: Number of uniform interior grid samples combined with interior
-            sample coordinates (default ``400``).
+            sample coordinates (default ``400``). Unused when the reference
+            skips models (``history_interval > 1``): every along-track column
+            is then compared only at the reference rows, with the run
+            interpolated there (#459), as ``num_zones`` always is.
 
     Returns:
         Populated ``HistoryComparison`` with final differences, track
@@ -516,6 +541,7 @@ def compare_histories(
         else abs(float(run_x[-1] - ref_x[0])) <= span_tol
     )
 
+    ref_sparse = _reference_skips_models(ref)
     deviations: list[TrackDeviation] = []
     failed_track: list[str] = []
     has_overlap = hi > lo and ref_x.size >= 2 and run_x.size >= 2
@@ -528,7 +554,9 @@ def compare_histories(
         ref_overlap_mask = (ref_x >= lo) & (ref_x <= hi)
         ref_node_grid = ref_x[ref_overlap_mask]
         for col in interp_names:
-            if col in DISCRETE_TRACK_COLUMNS and ref_node_grid.size >= 2:
+            if (
+                ref_sparse or col in DISCRETE_TRACK_COLUMNS
+            ) and ref_node_grid.size >= 2:
                 col_grid = ref_node_grid
                 ref_interp = ref_cols[col][ref_overlap_mask]
                 run_interp = np.interp(col_grid, run_x, run_cols[col])
@@ -617,7 +645,9 @@ def compare_histories(
             if raw_col not in ref_bounds or raw_col not in run.columns:
                 exceed_mask |= in_range
                 continue
-            if raw_col in DISCRETE_TRACK_COLUMNS and ref_node_grid.size >= 2:
+            if (
+                ref_sparse or raw_col in DISCRETE_TRACK_COLUMNS
+            ) and ref_node_grid.size >= 2:
                 ref_lo_d = ref_bounds[raw_col][0][ref_overlap_mask]
                 ref_hi_d = ref_bounds[raw_col][1][ref_overlap_mask]
                 run_at_ref = np.interp(ref_node_grid, run_x, run_cols[raw_col])

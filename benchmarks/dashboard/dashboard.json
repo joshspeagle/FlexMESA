@@ -21,7 +21,7 @@
         "verified_total": 5640,
         "pct_ported": 35.1,
         "pct_verified": 4.7,
-        "rust_lines": 89677,
+        "rust_lines": 89820,
         "python_jax_lines": 3869
       },
       {
@@ -595,7 +595,7 @@
         "no_reference_yet": 4,
         "strict_validated": 46,
         "diagnostic_runs": 44,
-        "reached_termination": 40,
+        "reached_termination": 38,
         "within_numeric_tol": 6,
         "passing": 1,
         "declared_gaps": 85,
@@ -1162,7 +1162,7 @@
         "issues": "#143, #160"
       }
     ],
-    "python_xfail_or_skip_count": 15,
+    "python_xfail_or_skip_count": 14,
     "python_skips": [
       {
         "location": "tests/test_bench.py:149",
@@ -1195,14 +1195,9 @@
         "issues": "#295, #340"
       },
       {
-        "location": "tests/test_star_wave4_3.py:150",
+        "location": "tests/test_star_wave4_3.py:152",
         "reason": "pytest.mark.xfail( strict=True, reason=( \"#154: FlexMESA's pre-MS model differs from upstream \" \"build_pre_ms_model (measured on the 7 Msun custom_colors model: \" \"initial residual norm 2.95e-5 against MESA 26.4.1's 1.89e-5 at the \" \"upstream first-step dt, star/private/init.f90:1007). This test \" \"forces a 10-yr coupled step on a 4 Msun pre-MS model, which with \" \"upstream's do_block_multiply_xa (#358) ends in a singular \" \"block-tridiagonal matrix at the second Newton iteration; this 4 \" \"Msun setup has not been run in MESA\" ), )",
         "issues": "#154, #358"
-      },
-      {
-        "location": "tests/test_star_wave4_3.py:193",
-        "reason": "pytest.mark.xfail( strict=True, reason=( \"#385: with dq as upstream (no renormalization, #381), the H1 \" \"conservation identity after apply_wind_and_adjust_mass misses its \" \"rtol=1e-11 oracle by 1.1e-11 (exact sums give the same); the bound \" \"was set on the non-upstream renormalized mesh and has not been \" \"measured against MESA 26.4.1\" ), )",
-        "issues": "#381, #385"
       },
       {
         "location": "tests/test_star_wave4_4.py:92",
@@ -1345,8 +1340,8 @@
       },
       {
         "phase": "Phase C",
-        "open": 18,
-        "closed": 5,
+        "open": 17,
+        "closed": 6,
         "issues": [
           {
             "number": 152,
@@ -1451,7 +1446,7 @@
           {
             "number": 385,
             "title": "[Parity] adjust_mass composition remap differs from MESA by 1-2 ULP; H1-conservation test needs #377",
-            "state": "open"
+            "state": "closed"
           },
           {
             "number": 402,
@@ -1523,11 +1518,6 @@
         "draft": true
       },
       {
-        "number": 387,
-        "title": "fix(star): adjust_mass composition remap as upstream set_xa/set1_xa (#385)",
-        "draft": false
-      },
-      {
         "number": 392,
         "title": "fix(star): model_number is model_number_old + 1 before the solve, as upstream (#359)",
         "draft": true
@@ -1570,6 +1560,16 @@
       {
         "number": 417,
         "title": "Fix MLT gradT and mlt_vc divergences against MESA 26.4.1 (#393)",
+        "draft": true
+      },
+      {
+        "number": 418,
+        "title": "fix(rates,ionization,colors): match MESA 26.4.1 strict module hex probes at 0 ULP (#413)",
+        "draft": true
+      },
+      {
+        "number": 419,
+        "title": "fix(star): match MESA 26.4.1 area precedence in element diffusion (#407)",
         "draft": true
       }
     ],
@@ -3134,6 +3134,32 @@
       "rust_cov_pct": "76.2",
       "python_cov_pct": "87.7",
       "closed_140": "20",
+      "total_140": "42",
+      "deferred_169": "52"
+    },
+    {
+      "date_utc": "2026-11-23",
+      "commit": "f418498",
+      "event": "main merge",
+      "engine_ported_pct": "30.7",
+      "all_verified_pct": "1.1",
+      "cases_passing": "4",
+      "rust_cov_pct": "76.2",
+      "python_cov_pct": "87.7",
+      "closed_140": "20",
+      "total_140": "42",
+      "deferred_169": "52"
+    },
+    {
+      "date_utc": "2026-11-23",
+      "commit": "d0c7711",
+      "event": "main merge",
+      "engine_ported_pct": "30.7",
+      "all_verified_pct": "1.1",
+      "cases_passing": "4",
+      "rust_cov_pct": "76.2",
+      "python_cov_pct": "87.7",
+      "closed_140": "21",
       "total_140": "42",
       "deferred_169": "52"
     }

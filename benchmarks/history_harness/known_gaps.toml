@@ -530,12 +530,6 @@ reason = "Strict binary run reaches extras_binary_check_model with binary orbit 
 
 [[gaps]]
 suite = "binary"
-case = "jdot_ml_check"
-issue = "#160"
-reason = "Strict binary run reaches max_age (888 steps vs MESA 889) with binary orbit and masses within tolerance, while LOGS1 exceeds rel_num_zones = 2% (#160, #161)."
-
-[[gaps]]
-suite = "binary"
 case = "star_plus_point_mass"
 issue = "#160"
 reason = "Implicit RLOF star+point-mass age and component masses differ from MESA 26.4.1."

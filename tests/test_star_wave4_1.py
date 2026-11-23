@@ -30,7 +30,14 @@ def test_star_zams_4msun_star_test_initialization_and_microphysics() -> None:
     ]
     np.testing.assert_allclose(model.mstar, 4.0 * constants.M_SUN, rtol=1.0e-12)
     np.testing.assert_allclose(model.dq.sum(), 1.0, rtol=1.0e-14)
-    np.testing.assert_allclose(model.xa.sum(axis=1), 1.0, rtol=1.0e-13)
+    # Upstream `read1_model` (`star/private/read_model.f90:648-650`) and
+    # `get1_mass` (`star/private/init_model.f90:455`) do not renormalize `xa`,
+    # and `set_basic_vars` (`star/private/hydro_vars.f90:749-754`) only
+    # renormalizes when `|sum(xa) - 1| > 1e-12`; raw `zams_z2m2_y28.data` at
+    # 3.981 Msun has zones up to 8.16e-13 from 1 (7.995e-13 at 4.0 Msun).
+    np.testing.assert_allclose(
+        model.xa.sum(axis=1), 1.0, atol=1.0e-12, rtol=0.0
+    )
 
     # Central zone thermodynamic and nuclear properties
     assert model.peos[-1] > 1.0e16
@@ -49,7 +56,11 @@ def test_star_zams_4msun_star_test_initialization_and_microphysics() -> None:
         model_2p5.mstar, 2.5 * constants.M_SUN, rtol=1.0e-12
     )
     np.testing.assert_allclose(model_2p5.dq.sum(), 1.0, rtol=1.0e-14)
-    np.testing.assert_allclose(model_2p5.xa.sum(axis=1), 1.0, rtol=1.0e-13)
+    # Same upstream 1e-12 threshold (`hydro_vars.f90:749-754`); raw
+    # `zams_z2m2_y28.data` at 1.995/2.512 Msun has |sum(xa) - 1| <= 9.34e-13.
+    np.testing.assert_allclose(
+        model_2p5.xa.sum(axis=1), 1.0, atol=1.0e-12, rtol=0.0
+    )
 
 
 def test_star_mod_and_photo_self_roundtrip() -> None:

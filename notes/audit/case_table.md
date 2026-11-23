@@ -16,7 +16,7 @@ Generated mechanically by `flexmesa harness` from `benchmarks/history_harness/ca
 | Cases accepted by strict control validation (`#147`) | 54 (43 took at least one step) |
 | Cases rejected by strict validation and rerun as diagnostic (unsupported controls ignored; never a pass) | 52 (31 took at least one step) |
 | Strict runs reaching upstream termination | 35 |
-| Diagnostic runs reaching upstream termination | 13 |
+| Diagnostic runs reaching upstream termination | 14 |
 | Acceptance passes against MESA `26.4.1` (`pass`) | 4 |
 | Interim `0b2e6bb` comparisons within manifest tolerance | 0 |
 | Declared known gaps (`known_gaps.toml`) | 98 |
@@ -70,7 +70,7 @@ Generated mechanically by `flexmesa harness` from `benchmarks/history_harness/ca
 | `star` | `high_z` | `mesa_26_4_1` | `xa_central_lower_limit` | strict | `xa_central_lower_limit` | 444 (445) | 1 (0) | 6.3 [2811] (6.2 [287/46r]) | 2.06% (34) | +0.02% | `log_L`: 1.506e-01 | 3 | #161 | declared gap (#161) |
 | `star` | `hot_cool_wind` | `mesa_26_4_1` | `log_L_upper_limit` | strict | `timeout` | 512 (570) | 27 (28) | 7.1 [3635] (7.3 [424/58r]) | 2.78% (43) | -1.50% | `log_L`: 1.263e-01 | 2 | #161 | declared gap (#161) |
 | `star` | `hse_riemann` | `mesa_26_4_1` | `max_age` | strict | `max_age` | 2011 (2011) | 0 (0) | 2.0 [4022] (4.3 [884/203r]) | 0.00% (0) | +0.00% | `log_center_Rho`: 6.419e-03 | 2 | #152 | declared gap (#152) |
-| `star` | `irradiated_planet` | `mesa_26_4_1` | `max_age` | diagnostic (3 controls ignored) | - | 30 (127) | 0 (0) | 2.6 [79] (7.3 [22/3r]) | 0.46% (2) | -100.00% | `log_L`: 1.149e-01 | 85 | #154 | declared gap (#154) |
+| `star` | `irradiated_planet` | `mesa_26_4_1` | `max_age` | diagnostic (3 controls ignored) | `max_age` | 124 (127) | 0 (0) | 5.9 [551] (7.3 [22/3r]) | 0.00% (0) | +0.00% | `log_L`: 3.070e+00 | 86 | #154 | declared gap (#154) |
 | `star` | `low_z` | `mesa_26_4_1` | `xa_central_lower_limit` | strict | `xa_central_lower_limit` | 181 (181) | 0 (0) | 9.4 [1701] (9.0 [54/6r]) | 0.00% (0) | -0.00% | `log_center_Rho`: 1.706e-01 | 395 | #152 | declared gap (#152) |
 | `star` | `magnetic_braking` | `mesa_26_4_1` | `xa_central_lower_limit` | strict | - | 0 (219) | 0 (0) | - (8.3 [191/23r]) | - | - | - | - | #157 | declared gap (#157) |
 | `star` | `make_brown_dwarf` | `mesa_26_4_1` | `max_age` | strict | - | 0 (238) | 0 (0) | - (3.7 [93/25r]) | - | - | - | - | #154 | declared gap (#154) |

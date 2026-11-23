@@ -74,6 +74,10 @@ print(
 
 ::: flexmesa.testing.baseline_regression
 
+`flexmesa.testing.harness_shards` splits a harness campaign into disjoint shards (`flexmesa harness run --shard I/N`) and checks that the shard reports form one complete campaign before `flexmesa harness merge` combines them (`#389`).
+
+::: flexmesa.testing.harness_shards
+
 ::: flexmesa.testing.port_manifest
 
 ::: flexmesa.testing.dashboard

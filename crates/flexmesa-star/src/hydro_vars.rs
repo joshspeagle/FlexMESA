@@ -471,7 +471,8 @@ pub(crate) fn do1_mlt_2(
         && !(model.mstar_dot.abs() > 1.0e-99 && k < model.aux.k_const_mass);
 
     let ptot_f = p_f;
-    let pr_f = (CRAD / 3.0) * t_f.pow4();
+    // `Pr = crad*pow4(T)/3d0` (`star/private/turb_support.f90:253`).
+    let pr_f = CRAD * t_f.pow4() / 3.0;
     let pg_f = ptot_f - pr_f;
     let beta_ad = pg_f / ptot_f;
     let lambda_f = scale_height_ad * mixing_length_alpha;

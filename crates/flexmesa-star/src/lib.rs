@@ -280,7 +280,7 @@ pub use hydro_eqns::{
 };
 pub use hydro_momentum::{
     eval_cell_peos_time_centered_ad, eval_face_dm_bar, expected_hse_grav_term,
-    expected_non_hse_term,
+    expected_non_hse_term, calc_ptot_ad_tw,
 };
 pub use hydro_rotation::{
     eval_fp_ft_single, eval_i_rot, get1_am_sig, get_rotation_sigmas,

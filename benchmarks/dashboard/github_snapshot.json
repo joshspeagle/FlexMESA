@@ -101,8 +101,8 @@
     },
     {
       "phase": "Phase C",
-      "open": 17,
-      "closed": 6,
+      "open": 18,
+      "closed": 8,
       "issues": [
         {
           "number": 152,
@@ -212,11 +212,26 @@
         {
           "number": 402,
           "title": "[Audit C3] Pre-MS relax phase: port do_internal_evolve and do_relax_num_steps (init.f90:1077-1118)",
-          "state": "open"
+          "state": "closed"
         },
         {
           "number": 414,
           "title": "[Parity] make_co_wd: first pre-MS relax step does not converge where MESA's retry does (surface zones)",
+          "state": "open"
+        },
+        {
+          "number": 422,
+          "title": "[Parity] Strict arithmetic follows auto_diff division (powm1): pre-MS builder MLT and Prad in hydro_vars (#154)",
+          "state": "closed"
+        },
+        {
+          "number": 423,
+          "title": "[Parity] Post-relax pre-MS starting model is hotter than MESA's (log_Teff +0.016 dex at model 1; 6 cases now first diverge at model 1)",
+          "state": "open"
+        },
+        {
+          "number": 424,
+          "title": "[Parity] Peos value sources and MLT/Pturb face forms on the strict path (wrap_Peos, get_Peos_face, r_start)",
           "state": "open"
         }
       ]
@@ -279,21 +294,6 @@
       "draft": true
     },
     {
-      "number": 392,
-      "title": "fix(star): model_number is model_number_old + 1 before the solve, as upstream (#359)",
-      "draft": true
-    },
-    {
-      "number": 396,
-      "title": "fix(star,eos): pre-main-sequence builder as upstream build_pre_ms_model (#154)",
-      "draft": true
-    },
-    {
-      "number": 401,
-      "title": "feat(star): create_initial_model as upstream build_initial_model (#154)",
-      "draft": true
-    },
-    {
       "number": 403,
       "title": "fix(net): resolve MESA 26.4.1 eps_nuc AUX parity divergences (0 ULP)",
       "draft": true
@@ -314,11 +314,6 @@
       "draft": true
     },
     {
-      "number": 416,
-      "title": "feat(star): pre-MS and create_initial_model relax phase via do_internal_evolve (#402)",
-      "draft": true
-    },
-    {
       "number": 417,
       "title": "Fix MLT gradT and mlt_vc divergences against MESA 26.4.1 (#393)",
       "draft": true
@@ -331,6 +326,21 @@
     {
       "number": 419,
       "title": "fix(star): match MESA 26.4.1 area precedence in element diffusion (#407)",
+      "draft": true
+    },
+    {
+      "number": 425,
+      "title": "Fix Skye, HELM, and blend EOS arithmetic parity to 0 ULP (#421)",
+      "draft": true
+    },
+    {
+      "number": 426,
+      "title": "Fix 4D EOS RSS spikes, slim Rust-only trace workers, and show Peak RSS (#412)",
+      "draft": true
+    },
+    {
+      "number": 427,
+      "title": "fix(atm,eos): align table_atm fvbicub_db and linear (Pgas, T) EOS inversion to 38/39 0-ULP parity (#420)",
       "draft": true
     }
   ],

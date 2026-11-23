@@ -26,7 +26,7 @@ use flexmesa_const::{CLIGHT, CRAD, FOUR_PI, L_SUN};
 use crate::hydro_eqns::HenyeySystem;
 use crate::hydro_momentum::{
     eval_cell_peos_time_centered_ad, eval_mlt_pturb_cell_ad,
-    expected_hse_grav_term,
+    expected_hse_grav_and_area, wrap_peos_00, wrap_peos_m1,
 };
 use crate::model::StarModel;
 use crate::star_ad::{
@@ -175,20 +175,45 @@ pub fn do1_temperature_eqn(
         return;
     }
 
-    let (alfa, beta) = model.get_face_weights(k);
-    let p_point = interp_p_point_ad(model, k);
-    let (r2, area) =
-        crate::hydro_momentum::eval_time_centered_hse_geom_ad(model, k);
-    let g_hse = expected_hse_grav_term(model, k, r2);
-    let dlnp_dm_qhse = g_hse / (area * p_point);
-    let dm_k = 0.5 * (model.dm[k - 1] + model.dm[k]);
-    let dln_t_theory = dlnp_dm_qhse * model.gradt_ad[k] * dm_k;
+    // `do1_dlnT_dm_eqn` (`star/private/hydro_temperature.f90:277-296`).
+    let (dlnp_dm, _p_point) = eval_dlnpdm_qhse(model, k);
 
-    let t_00 = StarAdOrder1::variable(model.ln_t[k], I_LNT_00).exp();
-    let t_m1 = StarAdOrder1::variable(model.ln_t[k - 1], I_LNT_M1).exp();
-    let t_point = t_00 * alfa + t_m1 * beta;
-    let dln_t_actual = (t_m1 - t_00) / t_point;
+    let grad_t = model.gradt_ad[k];
+    let dln_t_dm = dlnp_dm * grad_t;
 
-    let resid = dln_t_theory - dln_t_actual;
+    let t_m1 = StarAdOrder1::from_dlnd_dlnt_m1(model.t[k - 1], 0.0, model.t[k - 1]);
+    let t_00 = StarAdOrder1::from_dlnd_dlnt_00(model.t[k], 0.0, model.t[k]);
+    let d_t = t_m1 - t_00;
+    let alfa = model.dm[k - 1] / (model.dm[k - 1] + model.dm[k]);
+    let t_point = alfa * t_00 + (1.0 - alfa) * t_m1;
+    let ln_t_diff = d_t / t_point;
+    let delm = (model.dm[k] + model.dm[k - 1]) / 2.0;
+
+    let resid = delm * dln_t_dm - ln_t_diff;
     sys.save_eqn_residual(&model.layout, k, model.layout.i_equ_l, &resid);
+}
+
+/// `eval_dlnPdm_qhse` (`star/private/hydro_temperature.f90:391-458`) at
+/// interior face `k >= 1`: returns `(dlnPdm_qhse, Ppoint)`.
+///
+/// The MLT turbulent-pressure terms are added only under the dev control
+/// `include_mlt_Pturb_in_thermodynamic_gradients`
+/// (`star/defaults/controls_dev.defaults:212`, default `.false.`), which
+/// `FlexMESA` does not accept, so they are always zero here.
+fn eval_dlnpdm_qhse(model: &StarModel, k: usize) -> (StarAdOrder1, StarAdOrder1) {
+    let (grav, area) = expected_hse_grav_and_area(model, k);
+    let using_tc = model.controls.is_velocity_time_centered(model.model_number_old);
+
+    let mut p00 = wrap_peos_00(model, k);
+    if using_tc {
+        p00 = 0.5 * (p00 + model.peos_start[k]);
+    }
+    let mut pm1 = wrap_peos_m1(model, k);
+    if using_tc {
+        pm1 = 0.5 * (pm1 + model.peos_start[k - 1]);
+    }
+    let alfa = model.dq[k - 1] / (model.dq[k - 1] + model.dq[k]);
+    let p_point = alfa * p00 + (1.0 - alfa) * pm1;
+
+    (grav / (area * p_point), p_point)
 }

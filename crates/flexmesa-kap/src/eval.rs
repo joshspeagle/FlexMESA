@@ -72,14 +72,16 @@ pub fn get_kap_results(
     let log_t_compton_blend_lo = log_t_compton_blend_hi - 0.5;
     let log_r_compton_blend_hi = log_r_compton_blend_lo + 0.5;
 
-    let blend_log_t = if log_t_ad.val <= log_t_compton_blend_lo {
-        AutoDiffReal2VarOrder1::from(0.0)
-    } else if log_t_ad.val <= log_t_compton_blend_hi {
+    // `kap/private/kap_eval.f90:111-136`: return `1.0` directly when at/past
+    // the high-T / low-R Compton blend threshold.
+    let blend_log_t = if log_t_ad.val >= log_t_compton_blend_hi {
+        AutoDiffReal2VarOrder1::from(1.0)
+    } else if log_t_ad.val > log_t_compton_blend_lo {
         let u = (log_t_ad - log_t_compton_blend_lo)
             / (log_t_compton_blend_hi - log_t_compton_blend_lo);
         quintic_smootherstep(u)
     } else {
-        AutoDiffReal2VarOrder1::from(1.0)
+        AutoDiffReal2VarOrder1::from(0.0)
     };
 
     let blend_log_r = if log_r_ad.val <= log_r_compton_blend_lo {

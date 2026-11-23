@@ -5,8 +5,8 @@
 
 use flexmesa_atm::{
     atm_teff, eval_irradiated, eval_t_tau_uniform, eval_t_tau_varying,
-    eval_table, get_table_alfa_beta, get_table_base, AtmEosCallbackResult,
-    AtmError, AtmEvalOutput, AtmKapCallbackResult,
+    eval_table, get_t_tau_base, get_table_alfa_beta, get_table_base,
+    AtmEosCallbackResult, AtmError, AtmEvalOutput, AtmKapCallbackResult,
 };
 use flexmesa_const::{CLIGHT, CRAD, FOUR_PI, LN10, L_SUN, M_SUN, PI};
 use flexmesa_eos::{
@@ -249,6 +249,47 @@ pub fn do_brunt_n2(model: &mut StarModel) {
         for k in 0..nz {
             model.brunt_n2[k] *= coeff;
             model.aux.brunt_n2_composition_term[k] *= coeff;
+        }
+    }
+}
+
+/// `get_atm_tau_base` (`star/private/atm_support.f90:150-215`): the base
+/// optical depth for the `atm_option` in `controls`. `do_star_job_controls_before`
+/// stores it in `s% tau_base` before the model is loaded or built
+/// (`star/job/run_star_support.f90:1546`).
+///
+/// # Errors
+/// Returns [`StarError::MicrophysicsError`] for an unknown $T(\tau)$ relation
+/// or atmosphere table.
+pub(crate) fn get_atm_tau_base(
+    controls: &StarControls,
+) -> Result<f64, StarError> {
+    match controls.atm_option {
+        AtmOption::TTau => get_t_tau_base(controls.atm_t_tau_relation.id())
+            .map_err(|e| {
+                StarError::MicrophysicsError(format!(
+                    "Call to atm_get_T_tau_base failed in get_atm_tau_base: {e}"
+                ))
+            }),
+        AtmOption::Table => {
+            let table_id = crate::inlist_populate::atm_table_id(
+                &controls.atm_table,
+            )
+            .ok_or_else(|| {
+                StarError::MicrophysicsError(format!(
+                    "Call to get_table_id failed in get_atm_tau_base: {:?}",
+                    controls.atm_table
+                ))
+            })?;
+            get_table_base(table_id).map_err(|e| {
+                StarError::MicrophysicsError(format!(
+                    "Call to atm_get_table_base failed in get_atm_tau_base: {e}"
+                ))
+            })
+        }
+        // 'irradiated_grey' and every other option (`atm_support.f90:201-209`).
+        AtmOption::IrradiatedGrey | AtmOption::SimplePhotosphere => {
+            Ok(2.0 / 3.0)
         }
     }
 }

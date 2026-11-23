@@ -13,14 +13,15 @@ use crate::job_controls::{AtmOption, AtmTTauOpacity, AtmTTauRelation};
 use crate::hydro_vars::set_hydro_vars;
 use crate::inlist::InlistBundle;
 use crate::inlist_runner::StarExtras;
-use crate::micro::change_model_network;
+use crate::micro::{change_model_network, resolve_model_net, NetSearchDirGuard};
 use crate::model::StarModel;
-use crate::model_io::read_mod_str;
+use crate::model_io::read_mod_str_with_dir;
 use crate::relax::{
     apply_composition_relaxation, apply_uniform_rotation,
     excise_core_by_temperature, relax_core_boundary, relax_from_profile_files,
     relax_irradiation_to_target, relax_mass_to_target,
     relax_tau_factor_to_target, relax_to_remove_h_env,
+    set_uniform_initial_composition,
 };
 use crate::relax_driver::{do_relax_num_steps, do_relax_to_radiative_core};
 use crate::zams::load_zams_model;
@@ -69,7 +70,7 @@ fn load_saved_mod(
             mod_path.display()
         ))
     })?;
-    read_mod_str(&text, controls, job)
+    read_mod_str_with_dir(&text, controls, job, Some(case_dir))
 }
 
 /// Brings a newly built model into the state the step loop starts from, so
@@ -195,6 +196,7 @@ pub(crate) fn init_or_update_model_from_bundle_outcome(
     mut existing_model: Option<StarModel>,
     extras: &mut dyn StarExtras,
 ) -> Result<InitModelOutcome, StarError> {
+    let _net_dir_guard = NetSearchDirGuard::new(&bundle.case_dir);
     match crate::rsp_driver::init_rsp_model_from_bundle(
         bundle,
         &mut existing_model,
@@ -308,6 +310,11 @@ pub(crate) fn init_or_update_model_from_bundle_outcome(
 
     extras.extras_controls(&mut model)?;
 
+    // `do_star_job_controls_before` sets `s% tau_base` from the atmosphere
+    // controls (`star/job/run_star_support.f90:1546`).
+    model.tau_base =
+        crate::hydro_brunt_surf::get_atm_tau_base(&model.controls)?;
+
     // `model_builder` relaxes a newly built model before the `&star_job`
     // controls applied after loading (`star/private/init.f90:1077-1118`,
     // `star/job/run_star_support.f90:1653-1699`).
@@ -338,6 +345,10 @@ pub(crate) fn init_or_update_model_from_bundle_outcome(
     }
 
     // 2. Composition and external profile relaxation
+    // (`star/job/run_star_support.f90:2198-2234`).
+    if job.set_uniform_initial_composition {
+        set_uniform_initial_composition(&mut model, &job)?;
+    }
     apply_composition_relaxation(&mut model, &job);
     relax_from_profile_files(&mut model, &bundle.case_dir)?;
 
@@ -553,6 +564,9 @@ pub(crate) fn init_or_update_model_from_bundle_outcome(
         model.doing_first_model_of_run = true;
     }
     extras.extras_startup(&mut model, false)?;
+    if !model.job.net_name.trim().is_empty() {
+        let _ = resolve_model_net(&model)?;
+    }
 
     Ok(InitModelOutcome::Model(Box::new(model)))
 }

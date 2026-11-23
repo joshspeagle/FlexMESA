@@ -157,12 +157,13 @@ pub fn set_mlt<T: TurbScalar>(
         let (a0, a_val) = match params.option {
             MltOption::Cox | MltOption::Tdc => {
                 let a0_c = T::from_f64(9.0 / 4.0);
-                let conv_cond = inp.cp
+                // `.../9d0` divides by a real (`turb/private/mlt.f90:80`).
+                let conv_cond = (inp.cp
                     * inp.grav
                     * inp.lambda.pow2()
                     * inp.rho
-                    * (q * inp.rho / (T::from_f64(2.0) * inp.p)).sqrt()
-                    / T::from_f64(9.0);
+                    * (q * inp.rho / (T::from_f64(2.0) * inp.p)).sqrt())
+                .div_real(9.0);
                 let rad_cond = T::from_f64(4.0 / 3.0 * CRAD * CLIGHT)
                     * inp.t.pow3()
                     / (inp.opacity * inp.rho);
@@ -257,7 +258,8 @@ pub fn set_mlt<T: TurbScalar>(
         if vc.val() > params.max_conv_vel {
             vc = vc.with_val(params.max_conv_vel);
         }
-        let d_val = vc * inp.lambda / T::from_f64(3.0);
+        // `D = conv_vel*Lambda/3d0` (`turb/private/mlt.f90:153`).
+        let d_val = (vc * inp.lambda).div_real(3.0);
         let zeta_val =
             (T::from_f64(3.0) * gamma_val.log() - b_cubed.log()).exp();
         (gamma_val, zeta_val, vc, d_val)

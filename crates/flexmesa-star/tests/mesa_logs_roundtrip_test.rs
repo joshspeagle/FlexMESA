@@ -594,24 +594,8 @@ fn test_upstream_test_suite_history_column_lists_parse_or_fail_loudly() {
         .expect("upstream MESA root")
         .to_path_buf();
 
-    // Unported columns (#157 MLT++, #158 darkening/spots, #159 mass-add, #161 hydro/colors):
-    let expected_unported = [
-        "20M_z2m2_high_rotation",
-        "adjust_net",
-        "cburn_inward",
-        "ccsn_IIp",
-        "double_bh",
-        "gyre_in_mesa_wd",
-        "high_rot_darkening",
-        "magnetic_braking",
-        "make_co_wd",
-        "make_o_ne_wd",
-        "ns_c",
-        "pisn",
-        "starspots",
-        "tzo",
-        "wd_acc_small_dm",
-    ];
+    // Unported columns (#161 hydro/colors):
+    let expected_unported = ["tzo"];
     let mut unexpected_failures = Vec::new();
     let mut loud_error_cases = std::collections::BTreeSet::new();
     for rel_suite in

@@ -8,7 +8,7 @@
 
 use flexmesa_const::{MixingType, CLIGHT, CRAD, FOUR_PI, LN10};
 use flexmesa_eos::{
-    I_CHI_RHO, I_CHI_T, I_CP, I_GRAD_AD, I_LN_E, I_LN_PGAS, I_PHASE,
+    I_CHI_RHO, I_CHI_T, I_CP, I_GRAD_AD, I_LN_E, I_PHASE,
 };
 use flexmesa_turb::{
     set_mlt, set_semiconvection, set_tdc, set_thermohaline, MltInputs,
@@ -22,9 +22,7 @@ use crate::micro_cache::MicrophysicsCache;
 use crate::mixing_state::driving_species_for_cid;
 use crate::model::StarModel;
 use crate::rotation::update_rotation_distortion_factors;
-use crate::star_ad::{
-    StarAdExt, StarAdOrder1, I_LNR_00, I_L_00,
-};
+use crate::star_ad::{StarAdExt, StarAdOrder1, I_LNR_00, I_L_00};
 
 /// Evaluates face-centered radiative, adiabatic, Ledoux, and actual temperature
 /// gradients ($\nabla_{\mathrm{rad}}, \nabla_{\mathrm{ad}}, \nabla_L, \nabla_T$),
@@ -46,7 +44,7 @@ pub fn set_mlt_vars(model: &mut StarModel) -> Result<(), StarError> {
         if model.j_rot.iter().any(|&j| j != 0.0)
             || model.omega.iter().all(|&w| w == 0.0)
         {
-            crate::hydro_rotation::set_rotation_info(model, false);
+            crate::hydro_rotation::set_rotation_info(model, true);
         } else {
             update_rotation_distortion_factors(model);
         }
@@ -142,6 +140,29 @@ pub(crate) fn switch_to_radiative(model: &mut StarModel, k: usize) {
         model.gradt[k] - model.aux.mixing.grada_face[k];
 }
 
+/// Wraps cell `k`'s specific internal energy `model.energy[k]` as a
+/// cell-centered [`StarAdOrder1`] (`wrap_e_00` in
+/// `star/private/auto_diff_support.f90:528-536`).
+#[inline]
+fn wrap_e_cell(model: &StarModel, k: usize) -> StarAdOrder1 {
+    let e_k = model.energy[k];
+    if e_k != 0.0 && model.rho[k] > 0.0 && model.t[k] > 0.0 {
+        let de_drho = model.eos_d_dlnd[k][I_LN_E] * e_k / model.rho[k];
+        let cv = model.eos_d_dlnt[k][I_LN_E] * e_k / model.t[k];
+        return StarAdOrder1::from_dlnd_dlnt_00(
+            e_k,
+            de_drho * model.rho[k],
+            cv * model.t[k],
+        );
+    }
+    StarAdOrder1::from_dlnd_dlnt_00(
+        model.ln_e[k],
+        model.eos_d_dlnd[k][I_LN_E],
+        model.eos_d_dlnt[k][I_LN_E],
+    )
+    .exp()
+}
+
 /// Evaluates MLT/TDC/semiconvective/thermohaline quantities at a single face `k`
 /// (`do1_mlt_2` in `star/private/turb_info.f90:70-334` and `do1_mlt_eval` /
 /// `Get_results` in `star/private/turb_support.f90:111-510`).
@@ -187,14 +208,9 @@ pub(crate) fn do1_mlt_2(
     let rho_00 =
         StarAdOrder1::from_dlnd_dlnt_00(model.rho[k], model.rho[k], 0.0);
     let t_00 = StarAdOrder1::from_dlnd_dlnt_00(model.t[k], 0.0, model.t[k]);
-    let pgas_00 = StarAdOrder1::from_dlnd_dlnt_00(
-        model.ln_pgas[k],
-        model.eos_d_dlnd[k][I_LN_PGAS],
-        model.eos_d_dlnt[k][I_LN_PGAS],
-    )
-    .exp();
-    let prad_00 = (CRAD / 3.0) * t_00.pow4();
-    let p_00 = pgas_00 + prad_00;
+    // `get_Peos_face` (`star/private/star_utils.f90:3846-3856`) from
+    // `wrap_Peos_00`/`wrap_Peos_m1` (`auto_diff_support.f90:550-570`).
+    let p_00 = crate::hydro_momentum::wrap_peos_00(model, k);
 
     let (rho_f, t_f, p_f) = if k == 0 {
         (rho_00, t_00, p_00)
@@ -207,14 +223,7 @@ pub(crate) fn do1_mlt_2(
         );
         let t_m1 =
             StarAdOrder1::from_dlnd_dlnt_m1(model.t[km1], 0.0, model.t[km1]);
-        let pgas_m1 = StarAdOrder1::from_dlnd_dlnt_m1(
-            model.ln_pgas[km1],
-            model.eos_d_dlnd[km1][I_LN_PGAS],
-            model.eos_d_dlnt[km1][I_LN_PGAS],
-        )
-        .exp();
-        let prad_m1 = (CRAD / 3.0) * t_m1.pow4();
-        let p_m1 = pgas_m1 + prad_m1;
+        let p_m1 = crate::hydro_momentum::wrap_peos_m1(model, k);
         (
             rho_00 * alfa + rho_m1 * beta_w,
             t_00 * alfa + t_m1 * beta_w,
@@ -237,8 +246,14 @@ pub(crate) fn do1_mlt_2(
     let chi_rho_f = model.interp_eos_ad_to_face(&model.chi_rho, I_CHI_RHO, k);
     let chi_t_f = model.interp_eos_ad_to_face(&model.chi_t, I_CHI_T, k);
 
-    let lnr_k = StarAdOrder1::variable(model.ln_r[k], I_LNR_00);
-    let r_k = lnr_k.exp();
+    // `wrap_r_00` (`star/private/auto_diff_support.f90:922-929`).
+    let r_k = if model.r[k] > 0.0 {
+        let mut r_ad = StarAdOrder1::constant(model.r[k]);
+        r_ad.d1[I_LNR_00] = model.r[k];
+        r_ad
+    } else {
+        StarAdOrder1::variable(model.ln_r[k], I_LNR_00).exp()
+    };
     let lum_k = StarAdOrder1::variable(model.lum[k], I_L_00);
     let cgrav_k = model.cgrav[k];
     let m_grav_k = model.m_grav[k];
@@ -518,15 +533,28 @@ pub(crate) fn do1_mlt_2(
             } else {
                 model.mlt_vc.get(k).copied().unwrap_or(0.0)
             };
-            let e_f =
-                model.interp_eos_ad_to_face(&model.ln_e, I_LN_E, k).exp();
-            let dv_f = if model.lnd_old.len() == nz {
-                let rho_old_00 = flexmesa_math::exp(model.lnd_old[k]);
-                let rho_old_m1 = flexmesa_math::exp(model.lnd_old[k - 1]);
-                let rho_old_f =
-                    (rho_old_00 * alfa + rho_old_m1 * beta_w).max(1.0e-30);
+            let e_00 = wrap_e_cell(model, k);
+            let e_f = if k == 0 {
+                e_00
+            } else {
+                e_00 * alfa + wrap_e_cell(model, k - 1).shift_m1() * beta_w
+            };
+            let ref_lnd = if model.lnd_start.len() == nz
+                && model.lnd_start.iter().any(|&v| v != 0.0)
+            {
+                Some(&model.lnd_start)
+            } else if model.lnd_old.len() == nz {
+                Some(&model.lnd_old)
+            } else {
+                None
+            };
+            let dv_f = if let Some(lnd_ref) = ref_lnd {
+                let rho_start_00 = flexmesa_math::exp(lnd_ref[k]);
+                let rho_start_m1 = flexmesa_math::exp(lnd_ref[k - 1]);
+                let rho_start_f =
+                    (rho_start_00 * alfa + rho_start_m1 * beta_w).max(1.0e-30);
                 (StarAdOrder1::constant(1.0) / rho_f)
-                    - StarAdOrder1::constant(1.0 / rho_old_f)
+                    - StarAdOrder1::constant(1.0 / rho_start_f)
             } else {
                 StarAdOrder1::ZERO
             };

@@ -450,47 +450,14 @@ fn test_section4_partials_e2_and_build_structure() {
         assert!((dq - dq_fd).abs() <= tol, "id={id} dq={dq} dq_fd={dq_fd}");
     }
 
-    // Check table partials (skip_partials = false) against finite differences
+    // Table partials in `NumericsMode::Fast` (`f64` basis calculus) are verified
+    // in `atm_numerics_mode_test.rs`; MESA `26.4.1` `Strict` partials are
+    // verified at 0 ULP in `mesa_26_4_1_oracles_test.rs`.
     let cgrav = STANDARD_CGRAV;
     let m = MSUN;
     let r = RSUN;
     let l = LSUN;
     let teff = atm_teff(l, r);
-    let z_sol = flexmesa_atm::table::GN93_ZSOL;
-    let out =
-        eval_table(l, r, m, cgrav, ATM_TABLE_PHOTOSPHERE, z_sol, false, teff)
-            .unwrap();
-    let eps = 1.0e-5;
-    let r_p = r * (1.0 + eps);
-    let r_m = r * (1.0 - eps);
-    let out_rp = eval_table(
-        l,
-        r_p,
-        m,
-        cgrav,
-        ATM_TABLE_PHOTOSPHERE,
-        z_sol,
-        true,
-        atm_teff(l, r_p),
-    )
-    .unwrap();
-    let out_rm = eval_table(
-        l,
-        r_m,
-        m,
-        cgrav,
-        ATM_TABLE_PHOTOSPHERE,
-        z_sol,
-        true,
-        atm_teff(l, r_m),
-    )
-    .unwrap();
-    let fd_lnp_dlnr = (out_rp.ln_p - out_rm.ln_p)
-        / (flexmesa_math::log(r_p) - flexmesa_math::log(r_m));
-    let fd_lnt_dlnr = (out_rp.ln_t - out_rm.ln_t)
-        / (flexmesa_math::log(r_p) - flexmesa_math::log(r_m));
-    assert!(((out.dln_p_dln_r - fd_lnp_dlnr) / fd_lnp_dlnr).abs() < 1.0e-6);
-    assert!(((out.dln_t_dln_r - fd_lnt_dlnr) / fd_lnt_dlnr).abs() < 1.0e-6);
 
     // Check get_table_alfa_beta and get_table_base
     let (alfa, beta) =

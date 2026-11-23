@@ -245,8 +245,24 @@ pub fn write_mod_string(model: &StarModel) -> Result<String, StarError> {
 /// Returns [`StarError::IoError`] if the `.mod` text is malformed.
 pub fn read_mod_str(
     text: &str,
+    controls: StarControls,
+    job: StarJobControls,
+) -> Result<StarModel, StarError> {
+    read_mod_str_with_dir(text, controls, job, None)
+}
+
+/// Parses a MESA `.mod` text file (`star/private/read_model.f90`), resolving
+/// any non-empty network name against `search_dir` before falling back to the
+/// built-in network bundle (`net/private/net_initialize.f90:286-302`).
+///
+/// # Errors
+/// Returns [`StarError`] if headers, zone columns, or the requested network
+/// fail validation.
+pub fn read_mod_str_with_dir(
+    text: &str,
     mut controls: StarControls,
     mut job: StarJobControls,
+    search_dir: Option<&std::path::Path>,
 ) -> Result<StarModel, StarError> {
     let mut lines = text.lines();
     let (mut m_msun, mut star_age, mut teff) =
@@ -526,9 +542,6 @@ pub fn read_mod_str(
             }
         } else if t.starts_with("dt_next (seconds)") {
             model.dt_next = parse_fortran_f64(v)?;
-            if dt_yrs.is_none() {
-                model.dt = model.dt_next;
-            }
         }
     }
 
@@ -538,9 +551,13 @@ pub fn read_mod_str(
         model.job.net_name.clone()
     };
     if !target_net.trim().is_empty() {
-        let net = crate::micro::get_or_load_net(&target_net, None)?;
+        let net = crate::micro::get_or_load_net(&target_net, search_dir)?;
         if net.chem_id != model.chem_id {
-            crate::micro::change_model_network(&mut model, &target_net, None)?;
+            crate::micro::change_model_network(
+                &mut model,
+                &target_net,
+                search_dir,
+            )?;
         }
     }
 
@@ -578,6 +595,11 @@ pub fn read_mod_str(
         model.aux.mlt_vc_old.clone_from(&vc);
         model.mlt_vc = vc;
         model.aux.have_mlt_vc = true;
+        // Upstream `init.f90:541` + `read_model.f90:157-162`: keep `.mod`
+        // `mlt_vc` intact across startup `set_vars` until `set_current_to_old`.
+        model.aux.okay_to_set_mlt_vc = false;
+    } else {
+        model.aux.okay_to_set_mlt_vc = true;
     }
     if let Some(hp) = saved_hp {
         model.scale_height.clone_from(&hp);

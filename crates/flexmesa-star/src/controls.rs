@@ -157,6 +157,10 @@ pub struct StarControls {
     pub use_brunt_gradmux_form: bool,
     /// Energy equation form (`EnergyEqnOption::Dedt` default).
     pub energy_eqn_option: EnergyEqnOption,
+    /// Use the `eps_grav` form of the energy equation while relaxing
+    /// (`no_dedt_form_during_relax`, `.true.` default,
+    /// `star/defaults/controls.defaults:8005`; `star/private/hydro_energy.f90:402`).
+    pub no_dedt_form_during_relax: bool,
     /// Whether adaptive mesh adjustment is permitted (`okay_to_remesh`, `true` default).
     pub okay_to_remesh: bool,
     /// Mesh spacing multiplier `mesh_delta_coeff` (`1.0` default, `0.5` in `star/test`).

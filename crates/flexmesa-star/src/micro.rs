@@ -4,8 +4,9 @@
 //! reaction network (`do_net`) evaluation (`star/private/micro.f90` and
 //! `star/private/net.f90`).
 
+use std::cell::RefCell;
 use std::collections::HashMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, OnceLock};
 
 use flexmesa_chem::{
@@ -38,6 +39,7 @@ use crate::star_ad::{StarAdExt, StarAdOrder1};
 static BASIC_NET_INFO: OnceLock<NetGeneralInfo> = OnceLock::new();
 type NetCacheKey = (
     String,
+    Option<PathBuf>,
     u64,
     u64,
     u64,
@@ -50,6 +52,42 @@ type NetCacheKey = (
 static NET_CACHE: OnceLock<Mutex<HashMap<NetCacheKey, Arc<NetGeneralInfo>>>> =
     OnceLock::new();
 
+thread_local! {
+    static ACTIVE_NET_SEARCH_DIR: RefCell<Vec<PathBuf>> =
+        const { RefCell::new(Vec::new()) };
+}
+
+/// RAII guard pushing a canonicalized case directory onto the thread-local
+/// `.net` search stack used by [`resolve_model_net`].
+pub(crate) struct NetSearchDirGuard {
+    _private: (),
+}
+
+impl NetSearchDirGuard {
+    /// Enters a scoped network search directory for the current thread.
+    pub(crate) fn new(dir: &Path) -> Self {
+        let canonical = canonical_dir_path(dir);
+        ACTIVE_NET_SEARCH_DIR.with(|stack| stack.borrow_mut().push(canonical));
+        Self { _private: () }
+    }
+}
+
+impl Drop for NetSearchDirGuard {
+    fn drop(&mut self) {
+        ACTIVE_NET_SEARCH_DIR.with(|stack| {
+            let _ = stack.borrow_mut().pop();
+        });
+    }
+}
+
+fn active_net_search_dir() -> Option<PathBuf> {
+    ACTIVE_NET_SEARCH_DIR.with(|stack| stack.borrow().last().cloned())
+}
+
+fn canonical_dir_path(dir: &Path) -> PathBuf {
+    std::fs::canonicalize(dir).unwrap_or_else(|_| dir.to_path_buf())
+}
+
 /// Returns the cached [`NetGeneralInfo`] for `"basic.net"`.
 #[must_use]
 pub fn global_basic_net() -> &'static NetGeneralInfo {
@@ -59,8 +97,10 @@ pub fn global_basic_net() -> &'static NetGeneralInfo {
     })
 }
 
-/// Returns a cached [`Arc<NetGeneralInfo>`] for `net_name` (loading from the
-/// embedded 83-network bundle or optional `search_dir` on first request).
+/// Returns a cached [`Arc<NetGeneralInfo>`] for `net_name`, searching
+/// optional `search_dir` (`<dir>/<file>`, then `<dir>/nets/<file>`) before
+/// falling back to the embedded network bundle
+/// (`net/private/net_initialize.f90:286-302`).
 ///
 /// # Errors
 /// Returns [`StarError::MicrophysicsError`] if the `.net` file cannot be parsed.
@@ -109,9 +149,38 @@ fn get_or_load_net_with_star_params(
     use_suzuki_weak_rates: bool,
     special_rate_files: &[(String, String)],
 ) -> Result<Arc<NetGeneralInfo>, StarError> {
+    let canonical_dir = search_dir.map(canonical_dir_path);
+    get_or_load_net_with_canonical_dir(
+        net_name,
+        canonical_dir.as_deref(),
+        fe56ec_fake_factor,
+        min_t_for_fe56ec_fake_factor,
+        net_logtcut_lo,
+        net_logtcut_lim,
+        reaction_neuqs_factor,
+        use_3a_fl87,
+        use_suzuki_weak_rates,
+        special_rate_files,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn get_or_load_net_with_canonical_dir(
+    net_name: &str,
+    canonical_dir: Option<&Path>,
+    fe56ec_fake_factor: f64,
+    min_t_for_fe56ec_fake_factor: f64,
+    net_logtcut_lo: f64,
+    net_logtcut_lim: f64,
+    reaction_neuqs_factor: f64,
+    use_3a_fl87: bool,
+    use_suzuki_weak_rates: bool,
+    special_rate_files: &[(String, String)],
+) -> Result<Arc<NetGeneralInfo>, StarError> {
     let key = net_name.trim();
     let cache_key = (
         key.to_string(),
+        canonical_dir.map(Path::to_path_buf),
         fe56ec_fake_factor.to_bits(),
         min_t_for_fe56ec_fake_factor.to_bits(),
         net_logtcut_lo.to_bits(),
@@ -130,7 +199,7 @@ fn get_or_load_net_with_star_params(
     let mut rate_overrides: Vec<(String, Arc<RateTable1D>)> =
         Vec::with_capacity(special_rate_files.len());
     for (rxn_name, file_name) in special_rate_files {
-        let tbl = RateTable1D::resolve_and_load(file_name, search_dir)
+        let tbl = RateTable1D::resolve_and_load(file_name, canonical_dir)
             .map_err(|e| {
                 StarError::MicrophysicsError(format!(
                     "failed to load filename_of_special_rate '{file_name}' for '{rxn_name}': {e}"
@@ -140,7 +209,7 @@ fn get_or_load_net_with_star_params(
     }
     let mut loaded = NetGeneralInfo::from_name_or_dir_with_rate_overrides(
         key,
-        search_dir,
+        canonical_dir,
         &rate_overrides,
     )
     .map_err(|e| {
@@ -195,9 +264,10 @@ pub fn resolve_model_net(
             }
         })
         .collect();
-    let net_info = get_or_load_net_with_star_params(
+    let active_dir = active_net_search_dir();
+    let net_info = get_or_load_net_with_canonical_dir(
         &j.net_name,
-        None,
+        active_dir.as_deref(),
         c.fe56ec_fake_factor,
         c.min_t_for_fe56ec_fake_factor,
         c.net_logtcut_lo,
@@ -216,19 +286,173 @@ pub fn resolve_model_net(
     Ok(net_info)
 }
 
+#[inline]
+const fn net_composition_bucket(z: usize) -> usize {
+    match z {
+        0 => 0,   // neut
+        1 => 1,   // h
+        2 => 2,   // he
+        6 => 3,   // c
+        7 => 4,   // n
+        8 => 5,   // o
+        10 => 6,  // ne
+        12 => 7,  // mg
+        14 => 8,  // si
+        16 => 9,  // s
+        18 => 10, // ar
+        20 => 11, // ca
+        // `star/private/adjust_xyz.f90:342-343,431-432,533-536` accumulates
+        // `Z = 28` (Ni) into `total_fe`, leaving the `ni` bucket (14) zero.
+        26 | 28 => 12, // fe
+        27 => 13,      // co
+        _ => 15,       // other
+    }
+}
+
+/// Evaluate the test $\log_{10} T$ used for light-element abundance injection
+/// (`get_test_lgT` in `star/private/adjust_xyz.f90:617-627`).
+#[inline]
+fn get_test_log10_t(ln_t: &[f64], mlt_d: &[f64], nz: usize, loc: usize) -> f64 {
+    let mut lg_t = ln_t.get(loc).copied().unwrap_or(0.0) / LN10;
+    let kmax = nz.min(ln_t.len()).min(mlt_d.len());
+    for (k, &d) in mlt_d.iter().enumerate().take(kmax).skip(loc + 1) {
+        if d < 100.0 {
+            break;
+        }
+        lg_t = ln_t[k] / LN10;
+    }
+    lg_t
+}
+
+/// Remap an abundance array from the previous network onto the new network
+/// (`set_x_new` / `set_new_abundances` in `star/private/adjust_xyz.f90:203-629`
+/// and `do_clean1` in `net/private/net_eval.f90:822-850`).
+#[allow(clippy::too_many_arguments)]
+fn remap_xa_for_network(
+    nz: usize,
+    old_species: usize,
+    old_buckets: &[usize],
+    old_net_iso: &[Option<usize>],
+    old_xa: &[f64],
+    new_species: usize,
+    new_iso_names: &[String],
+    new_z: &[usize],
+    new_buckets: &[usize],
+    new_chem_id: &[usize],
+    ln_t: &[f64],
+    mlt_d: &[f64],
+    initial_z: f64,
+    adjust_abundances_for_new_isos: bool,
+) -> Result<Vec<f64>, StarError> {
+    const LGT_LO: f64 = 5.2;
+    const LGT_HI: f64 = 5.5;
+    const MAX_SUM_ABS: f64 = 10.0;
+    const XSUM_TOL: f64 = 1.0e-2;
+    const TINY_X: f64 = 1.0e-99;
+
+    let zsol = flexmesa_chem::ag89_zsol();
+    let zfrac = initial_z / zsol;
+    let mut new_xa = vec![0.0_f64; nz * new_species];
+    let last = new_species - 1;
+
+    for k in 0..nz {
+        let old_row = &old_xa[k * old_species..(k + 1) * old_species];
+        let new_row = &mut new_xa[k * new_species..(k + 1) * new_species];
+
+        let mut old_totals = [0.0_f64; 16];
+        for (j_old, &b) in old_buckets.iter().enumerate() {
+            old_totals[b] += old_row[j_old];
+        }
+
+        let lg_t = get_test_log10_t(ln_t, mlt_d, nz, k);
+        for (j, &cid) in new_chem_id.iter().enumerate() {
+            if let Some(Some(i_old)) = old_net_iso.get(cid) {
+                new_row[j] = old_row[*i_old];
+            } else if !adjust_abundances_for_new_isos {
+                new_row[j] = 0.0;
+            } else if new_z[j] > 5 {
+                let xsol = flexmesa_chem::chem_xsol(&new_iso_names[j]);
+                new_row[j] = zfrac * xsol;
+            } else if lg_t >= LGT_HI {
+                new_row[j] = 0.0;
+            } else {
+                let xsol = flexmesa_chem::chem_xsol(&new_iso_names[j]);
+                if lg_t > LGT_LO {
+                    let phase = (lg_t - LGT_LO) / (LGT_HI - LGT_LO);
+                    new_row[j] =
+                        (xsol * 0.5) * (1.0 + flexmesa_math::cospi(phase));
+                } else {
+                    new_row[j] = xsol;
+                }
+            }
+        }
+
+        let mut totals = [0.0_f64; 16];
+        for (j, &b) in new_buckets.iter().enumerate() {
+            totals[b] += new_row[j];
+        }
+
+        let mut did = [false; 16];
+        for (j, &b) in new_buckets.iter().enumerate() {
+            if totals[b] > 0.0 {
+                new_row[j] = (new_row[j] * old_totals[b]) / totals[b];
+                did[b] = true;
+            }
+        }
+
+        for (&old_total, &did_flag) in old_totals.iter().zip(&did) {
+            if old_total > 0.0 && !did_flag {
+                new_row[last] += old_total;
+            }
+        }
+
+        let pre_clean_sum: f64 = new_row.iter().sum();
+        if !pre_clean_sum.is_finite() || (pre_clean_sum - 1.0).abs() > 0.1 {
+            return Err(StarError::InvalidInput(format!(
+                "set_new_abundances sum out of range at zone {k}: {pre_clean_sum}"
+            )));
+        }
+
+        // `net/private/net_eval.f90:822-850` (`do_clean1`)
+        let abs_sum: f64 = new_row.iter().map(|v| v.abs()).sum();
+        if is_bad(abs_sum) || abs_sum > MAX_SUM_ABS {
+            return Err(StarError::InvalidInput(format!(
+                "clean1 invalid abundance sum at zone {k}: {abs_sum}"
+            )));
+        }
+        for val in &mut *new_row {
+            *val = (*val).clamp(TINY_X, 1.0);
+        }
+        let xsum: f64 = new_row.iter().sum();
+        if is_bad(xsum) || (xsum - 1.0).abs() > XSUM_TOL {
+            return Err(StarError::InvalidInput(format!(
+                "clean1 mass-fraction sum out of tolerance at zone {k}: {xsum}"
+            )));
+        }
+        for val in &mut *new_row {
+            *val /= xsum;
+        }
+    }
+
+    Ok(new_xa)
+}
+
 /// Projects `model` from its current isotope set onto `new_net_name`
-/// (`change_net` in `star/private/adjust_xyz.f90:51-59`), preserving exact
-/// mass fractions for shared isotopes and dumping any removed trace mass into
-/// the heaviest retained metal so $\sum_j X_{j,k} = 1$ in every zone.
+/// (`change_net` / `do_composition_fixup` in
+/// `star/private/adjust_xyz.f90:51-629`), initializing missing isotopes via
+/// `set_new_abundances`, conserving elemental totals, and finalizing via
+/// `clean1`.
 ///
 /// # Errors
-/// Returns [`StarError`] if `new_net_name` cannot be loaded.
+/// Returns [`StarError`] if `new_net_name` cannot be loaded or mass fractions
+/// cannot be normalized cleanly.
 pub fn change_model_network(
     model: &mut StarModel,
     new_net_name: &str,
     search_dir: Option<&Path>,
 ) -> Result<(), StarError> {
-    let net_info = get_or_load_net(new_net_name, search_dir)?;
+    let trimmed = new_net_name.trim();
+    let net_info = get_or_load_net(trimmed, search_dir)?;
     let new_chem_id = net_info.chem_id.clone();
     let new_species = new_chem_id.len();
     if new_species == 0 {
@@ -236,45 +460,88 @@ pub fn change_model_network(
             "empty species list in network '{new_net_name}'"
         )));
     }
+    // `star/private/adjust_xyz.f90:93`: `if (new_net_name == s% net_name) return`
+    if model.job.net_name.trim() == trimmed && new_chem_id == model.chem_id {
+        return Ok(());
+    }
+
     let old_species = model.species;
     let nz = model.nz;
-    let mut new_xa = vec![0.0_f64; nz * new_species];
     let mut new_net_iso = vec![None; 7857];
     let catalog = NuclideCatalog::builtin_ref();
     let mut new_iso_names = Vec::with_capacity(new_species);
+    let mut new_z = Vec::with_capacity(new_species);
+    let mut new_buckets = Vec::with_capacity(new_species);
     for (j_new, &cid) in new_chem_id.iter().enumerate() {
-        let name = catalog
-            .get_by_id(cid)
-            .map_or_else(|| format!("iso_{cid}"), |n| n.name.clone());
+        let entry = catalog.get_by_id(cid);
+        let name =
+            entry.map_or_else(|| format!("iso_{cid}"), |n| n.name.clone());
+        let z = entry.map_or(15, |n| n.z);
         new_iso_names.push(name);
+        new_z.push(z);
+        new_buckets.push(net_composition_bucket(z));
         if cid < new_net_iso.len() {
             new_net_iso[cid] = Some(j_new);
         }
     }
 
-    for k in 0..nz {
-        let mut transferred = 0.0_f64;
-        for (j_old, &cid_old) in model.chem_id.iter().enumerate() {
-            let x_val = model.xa[k * old_species + j_old].max(0.0);
-            if let Some(Some(j_new)) = new_net_iso.get(cid_old) {
-                new_xa[k * new_species + *j_new] += x_val;
-                transferred += x_val;
-            }
-        }
-        let missing = (1.0 - transferred).max(0.0);
-        if missing > 0.0 {
-            new_xa[k * new_species + (new_species - 1)] += missing;
-        }
-        let sum: f64 =
-            new_xa[k * new_species..(k + 1) * new_species].iter().sum();
-        if sum > 0.0 {
-            for j in 0..new_species {
-                new_xa[k * new_species + j] /= sum;
-            }
-        }
-    }
+    let old_buckets: Vec<usize> = model
+        .chem_id
+        .iter()
+        .map(|&cid| {
+            let z = catalog.get_by_id(cid).map_or(15, |n| n.z);
+            net_composition_bucket(z)
+        })
+        .collect();
 
-    model.job.net_name = new_net_name.trim().to_string();
+    let new_xa = remap_xa_for_network(
+        nz,
+        old_species,
+        &old_buckets,
+        &model.net_iso,
+        &model.xa,
+        new_species,
+        &new_iso_names,
+        &new_z,
+        &new_buckets,
+        &new_chem_id,
+        &model.ln_t,
+        &model.mlt_d,
+        model.controls.initial_z,
+        true,
+    )?;
+
+    // `star/private/adjust_xyz.f90:148`: `if (s% generations > 1) call do_xa(s% nz_old, s% xh_old, s% xa_old)`
+    let has_valid_xa_old = isize::try_from(model.model_number)
+        .is_ok_and(|m| m > model.init_model_number)
+        && old_species > 0
+        && model.xa_old.len() == nz * old_species
+        && model
+            .xa_old
+            .chunks_exact(old_species)
+            .all(|row| row.iter().any(|&v| v > 0.0));
+    let new_xa_old = if has_valid_xa_old {
+        remap_xa_for_network(
+            nz,
+            old_species,
+            &old_buckets,
+            &model.net_iso,
+            &model.xa_old,
+            new_species,
+            &new_iso_names,
+            &new_z,
+            &new_buckets,
+            &new_chem_id,
+            &model.ln_t_old,
+            &model.mlt_d,
+            model.controls.initial_z,
+            true,
+        )?
+    } else {
+        new_xa.clone()
+    };
+
+    model.job.net_name = trimmed.to_string();
     model.species = new_species;
     model.chem_id = new_chem_id;
     model.iso_names = new_iso_names;
@@ -287,8 +554,8 @@ pub fn change_model_network(
         model.controls.rti_flag,
     );
     model.xa.clone_from(&new_xa);
-    model.xa_start.clone_from(&new_xa);
-    model.xa_old = new_xa;
+    model.xa_start = new_xa;
+    model.xa_old = new_xa_old;
     model.d_epsnuc_dx.resize(nz * new_species, 0.0);
     model.dxdt_nuc.resize(nz * new_species, 0.0);
     model.d_dxdt_nuc_dlnd.resize(nz * new_species, 0.0);

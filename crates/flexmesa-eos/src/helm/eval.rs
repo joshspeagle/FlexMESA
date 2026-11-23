@@ -190,75 +190,89 @@ fn store_gammas_and_results(
     let deninv = 1.0 / den;
     let presinv = 1.0 / pres.val;
 
-    let chit = temp * presinv * pres.dt;
-    let dchitdd = temp * presinv * (pres.ddt - pres.dt * presinv * pres.dd);
-    let dchitdt =
-        chit * (tempinv - presinv * pres.dt) + temp * presinv * pres.dtt;
-    let dchitda = temp * presinv * (pres.dta - pres.dt * presinv * pres.da);
-    let dchitdz = temp * presinv * (pres.dtz - pres.dt * presinv * pres.dz);
+    // Match upstream eos/private/helm_gammas.dek operation-for-operation.
+    let ww = temp * presinv;
+    let yy = -ww * presinv * pres.dt;
+    let chit = ww * pres.dt;
+    let dchitdd = yy * pres.dd + ww * pres.ddt;
+    let dchitdt = yy * pres.dt + ww * pres.dtt + pres.dt * presinv;
+    let dchitda = yy * pres.da + ww * pres.dta;
+    let dchitdz = yy * pres.dz + ww * pres.dtz;
 
-    let chid = den * presinv * pres.dd;
-    let dchiddd =
-        chid * (deninv - presinv * pres.dd) + den * presinv * pres.ddd;
-    let dchiddt = den * presinv * (pres.ddt - pres.dd * presinv * pres.dt);
-    let dchidda = den * presinv * (pres.dda - pres.dd * presinv * pres.da);
-    let dchiddz = den * presinv * (pres.ddz - pres.dd * presinv * pres.dz);
+    let ww = den * presinv;
+    let yy = -ww * presinv * pres.dd;
+    let chid = ww * pres.dd;
+    let dchiddd = yy * pres.dd + ww * pres.ddd + pres.dd * presinv;
+    let dchiddt = yy * pres.dt + ww * pres.ddt;
+    let dchidda = yy * pres.da + ww * pres.dda;
+    let dchiddz = yy * pres.dz + ww * pres.ddz;
 
     let cv = ener.dt;
     if cv < 0.0 {
         return Err(-1);
     }
-    let cvinv = 1.0 / cv;
     let dcvdd = ener.ddt;
     let dcvdt = ener.dtt;
     let dcvda = ener.dta;
     let dcvdz = ener.dtz;
 
-    let x = pres.val * deninv * tempinv * cvinv * chit;
-    let dxdd =
-        x * (presinv * pres.dd - deninv - cvinv * dcvdd + dchitdd / chit);
-    let dxdt =
-        x * (presinv * pres.dt - tempinv - cvinv * dcvdt + dchitdt / chit);
-    let dxda = x * (presinv * pres.da - cvinv * dcvda + dchitda / chit);
-    let dxdz = x * (presinv * pres.dz - cvinv * dcvdz + dchitdz / chit);
+    let ww = pres.val * deninv;
+    let yy = -ww * deninv;
+    let zz = 1.0 / cv;
+    let z = tempinv * zz;
+    let xx = chit * z;
+    let x = ww * xx;
+    let dfk = xx * zz;
 
     let gam3 = x + 1.0;
-    let dgam3dd = dxdd;
-    let dgam3dt = dxdt;
-    let dgam3da = dxda;
-    let dgam3dz = dxdz;
+    let dgam3dd =
+        (pres.dd * deninv + yy) * xx + (dchitdd * z - dfk * dcvdd) * ww;
+    let dgam3dt = (pres.dt * deninv - ww * tempinv) * xx
+        + (dchitdt * z - dfk * dcvdt) * ww;
+    let dgam3da = pres.da * deninv * xx + (dchitda * z - dfk * dcvda) * ww;
+    let dgam3dz = pres.dz * deninv * xx + (dchitdz * z - dfk * dcvdz) * ww;
 
     let gam1 = chit * x + chid;
     if gam1 < 0.0 {
         return Err(-1);
     }
-    let dgam1dd = dchitdd * x + chit * dxdd + dchiddd;
-    let dgam1dt = dchitdt * x + chit * dxdt + dchiddt;
-    let dgam1da = dchitda * x + chit * dxda + dchidda;
-    let dgam1dz = dchitdz * x + chit * dxdz + dchiddz;
+    let dgam1dd = dchitdd * x + chit * dgam3dd + dchiddd;
+    let dgam1dt = dchitdt * x + chit * dgam3dt + dchiddt;
+    let dgam1da = dchitda * x + chit * dgam3da + dchidda;
+    let dgam1dz = dchitdz * x + chit * dgam3dz + dchiddz;
 
-    let nabad = x / gam1;
-    let dnabdd = (dxdd - nabad * dgam1dd) / gam1;
-    let dnabdt = (dxdt - nabad * dgam1dt) / gam1;
-    let dnabda = (dxda - nabad * dgam1da) / gam1;
-    let dnabdz = (dxdz - nabad * dgam1dz) / gam1;
+    let z = 1.0 / gam1;
+    let nabad = x * z;
+    let dnabdd = (dgam3dd - nabad * dgam1dd) * z;
+    let dnabdt = (dgam3dt - nabad * dgam1dt) * z;
+    let dnabda = (dgam3da - nabad * dgam1da) * z;
+    let dnabdz = (dgam3dz - nabad * dgam1dz) * z;
 
-    let gam2 = 1.0 / (1.0 - nabad);
-    let y = gam2 * gam2;
-    let dgam2dd = dnabdd * y;
-    let dgam2dt = dnabdt * y;
-    let dgam2da = dnabda * y;
-    let dgam2dz = dnabdz * y;
+    let ww = 1.0 - nabad;
+    let gam2 = 1.0 / ww;
+    let z = gam2 * gam2;
+    let dgam2dd = z * dnabdd;
+    let dgam2dt = z * dnabdt;
+    let dgam2da = z * dnabda;
+    let dgam2dz = z * dnabdz;
 
-    let cp = cv * gam1 / chid;
     let z = 1.0 / chid;
-    let dcpdd = cp * (cvinv * dcvdd + dgam1dd / gam1 - z * dchiddd);
-    let dcpdt = cp * (cvinv * dcvdt + dgam1dt / gam1 - z * dchiddt);
-    let dcpda = cp * (cvinv * dcvda + dgam1da / gam1 - z * dchidda);
-    let dcpdz = cp * (cvinv * dcvdz + dgam1dz / gam1 - z * dchiddz);
+    let ww = gam1 * z;
+    let yy = -ww * z * cv;
+    let zz = cv * z;
+    let cp = cv * ww;
+    let dcpdd = dcvdd * ww + zz * dgam1dd + yy * dchiddd;
+    let dcpdt = dcvdt * ww + zz * dgam1dt + yy * dchiddt;
+    let dcpda = dcvda * ww + zz * dgam1da + yy * dchidda;
+    let dcpdz = dcvdz * ww + zz * dgam1dz + yy * dchiddz;
 
-    let z_cs = 1.0 + (ener.val + CLIGHT * CLIGHT) * den / pres.val;
-    let cs = CLIGHT * (gam1 / z_cs).sqrt();
+    let x_cs = ener.val + CLIGHT * CLIGHT;
+    let z_cs = 1.0 + x_cs * den * presinv;
+    let dfk_cs = gam1 * (1.0 / z_cs);
+    if dfk_cs < 0.0 {
+        return Err(-1);
+    }
+    let cs = CLIGHT * dfk_cs.sqrt();
 
     res[H_PTOT - 1] = pres.val;
     res[H_DPD - 1] = pres.dd;

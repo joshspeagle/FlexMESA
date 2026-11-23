@@ -90,8 +90,10 @@ pub fn ocp_liquid_screening_free_energy_correction(
         + ((z_in - 1.0) / 9.0)
             * (1.0 + 1.0 / (0.001 * z2 + 2.0 * ge))
             * (rs.pow3() / (1.0 + 6.0 * rs.pow2()));
+    // Left-to-right matches Fortran `0.18d0 * xr * zm1_4`
+    // (`eos/private/skye_coulomb_liquid.f90:120`).
     let h = (1.0 + 0.2 * xr2)
-        / (1.0 + (0.18 * zm1_4) * xr + (0.37 * zm1_2) * xr2 + 0.2 * xr2);
+        / (1.0 + (0.18 * xr) * zm1_4 + (0.37 * zm1_2) * xr2 + 0.2 * xr2);
     let sq_ge = ge.sqrt();
     let ge_nu = ge.powf(nu);
     -ge * (cdh * sq_ge + (ctf * a) * ge_nu * g1 * h)
@@ -119,22 +121,26 @@ pub fn liquid_mixing_rule_correction(
         return AutoDiffReal2VarOrder3::constant(0.0);
     }
     let gami_mean = game * z53;
-    let dif0 = if rs.val < TINY {
+    let dif0 = AutoDiffReal2VarOrder3::constant(if rs.val < TINY {
         z52 - (z2mean * z2mean * z2mean / zmean).sqrt()
     } else {
         let zm = z2mean + zmean;
         z321 - (zm * zm * zm / zmean).sqrt()
-    };
+    });
+    // Mirror upstream `auto_diff_real_2var_order3` temporaries (`DifR`, `P3`,
+    // `D0`, `Q`, `R`, and AD-to-AD `pow(GAMImean, P3)` / `pow(1 + GQ, R)`) in
+    // `skye_coulomb_liquid.f90:142-177` so mixed derivatives round bit-identically.
+    let d_ad = AutoDiffReal2VarOrder3::constant(d);
     let dif_r = dif0 / z52;
     let dif_fdh = dif0 * game * (game / 3.0).sqrt();
-    let p3 = flexmesa_math::pow(d, -0.2);
+    let p3 = d_ad.powf(-0.2);
     let d0 = (2.6 * dif_r + 14.0 * dif_r * dif_r * dif_r) / (1.0 - p3);
-    let gp = d0 * gami_mean.powf(p3);
+    let gp = d0 * gami_mean.pow(p3);
     let fmix0 = dif_fdh / (1.0 + gp);
-    let q = d * d * 0.0117;
+    let q = d_ad * d_ad * 0.0117;
     let r = 1.5 / p3 - 1.0;
     let gq = q * gp;
-    fmix0 / (1.0 + gq).powf(r)
+    fmix0 / (1.0 + gq).pow(r)
 }
 
 /// Electron exchange-correlation free energy per electron per `k_B T` in

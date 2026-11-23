@@ -13,8 +13,10 @@ use flexmesa_rates::ReactionInfo;
 /// Number of rate-value slots (`[val, d_dT, d_dRho] = 3`).
 pub const NUM_RVS: usize = 3;
 
-/// Lower temperature bound $T = 10^{\mathrm{rattab\_tlo}} = 2 \times 10^5\,\mathrm{K}$.
-pub const RATTAB_TEMP_LO: f64 = 2.0e5;
+/// Lower temperature bound $T = 10^{\mathrm{rattab\_tlo}}$ evaluated by upstream
+/// MESA (`rates/public/rates_def.f90:1141,1166`) as `exp10(5.30102999566398d0)`
+/// (`0x410869FFFFFFFFE9`, `1.99999999999999331e5` K).
+pub const RATTAB_TEMP_LO: f64 = f64::from_bits(0x4108_69FF_FFFF_FFE9);
 
 /// Lower $\log_{10} T$ bound of the precomputed raw rate table
 /// (`rattab_tlo = 5.30102999566398d0` in `rates/public/rates_def.f90`).

@@ -30,7 +30,8 @@ use crate::utils::{find_interval, find_nearest_point, is_dummy_axis};
 #[must_use]
 pub fn h00<T: RealScalar>(t: T) -> T {
     let t2 = t * t;
-    T::from_f64(2.0) * t2 * t - T::from_f64(3.0) * t2 + T::one()
+    let t3 = t2 * t;
+    T::from_f64(2.0) * t3 - T::from_f64(3.0) * t2 + T::one()
 }
 
 /// Cubic Hermite tangent basis $h_{10}(t) = t^3 - 2t^2 + t$ at the left knot
@@ -39,7 +40,8 @@ pub fn h00<T: RealScalar>(t: T) -> T {
 #[must_use]
 pub fn h10<T: RealScalar>(t: T) -> T {
     let t2 = t * t;
-    t2 * t - T::from_f64(2.0) * t2 + t
+    let t3 = t2 * t;
+    t3 - T::from_f64(2.0) * t2 + t
 }
 
 /// Cubic Hermite value basis $h_{01}(t) = -2t^3 + 3t^2$ at the right knot
@@ -48,7 +50,8 @@ pub fn h10<T: RealScalar>(t: T) -> T {
 #[must_use]
 pub fn h01<T: RealScalar>(t: T) -> T {
     let t2 = t * t;
-    T::from_f64(3.0) * t2 - T::from_f64(2.0) * t2 * t
+    let t3 = t2 * t;
+    T::from_f64(-2.0) * t3 + T::from_f64(3.0) * t2
 }
 
 /// Cubic Hermite tangent basis $h_{11}(t) = t^3 - t^2$ at the right knot
@@ -57,7 +60,8 @@ pub fn h01<T: RealScalar>(t: T) -> T {
 #[must_use]
 pub fn h11<T: RealScalar>(t: T) -> T {
     let t2 = t * t;
-    t2 * t - t2
+    let t3 = t2 * t;
+    t3 - t2
 }
 
 /// Inserts candidate `(dist2, idx)` into the sorted top-4 nearest-neighbor
@@ -146,7 +150,7 @@ impl SedCube {
     }
 
     /// Evaluates the diluted 3D cubic Hermite SED directly into `result`
-    /// without heap allocation.
+    /// without heap allocation (`hermite_interp.f90:hermite_interp_vector`).
     pub fn eval_sed_hermite_into<T: RealScalar>(
         &self,
         teff: T,
@@ -158,40 +162,65 @@ impl SedCube {
     ) {
         let nlam = self.wavelengths.len();
         result[..nlam].fill(T::zero());
-        let (ix, hx, gx, ext_x) =
-            Self::axis_hermite_stencil(&self.teff_grid, teff);
-        let (iy, hy, gy, ext_y) =
-            Self::axis_hermite_stencil(&self.logg_grid, log_g);
-        let (iz, hz, gz, ext_z) =
-            Self::axis_hermite_stencil(&self.meta_grid, metallicity);
-        let sgn = [T::from_f64(-1.0), T::from_f64(1.0)];
+        let (ix, hx, hxd, dx) = Self::axis_hermite_basis(&self.teff_grid, teff);
+        let (iy, hy, hyd, dy) =
+            Self::axis_hermite_basis(&self.logg_grid, log_g);
+        let (iz, hz, hzd, dz) =
+            Self::axis_hermite_basis(&self.meta_grid, metallicity);
+        let (nx, ny, nz) = (
+            self.teff_grid.len(),
+            self.logg_grid.len(),
+            self.meta_grid.len(),
+        );
+        let (dx_t, dy_t, dz_t) =
+            (T::from_f64(dx), T::from_f64(dy), T::from_f64(dz));
 
         for kz in 0..2 {
-            let (wz, k, k_ext) = (hz[kz], iz + kz, ext_z[kz]);
+            let (wz, wzd, k) = (hz[kz], hzd[kz], iz + kz);
+            let (km, kp, span_z) = Self::diff_stencil(k, nz, &self.meta_grid);
             for ky in 0..2 {
-                let (wy, j, j_ext) = (hy[ky], iy + ky, ext_y[ky]);
-                let wy_wz = wy * wz;
-                let yz_tan =
-                    sgn[ky] * gy[1 - ky] * wz + sgn[kz] * gz[1 - kz] * wy;
+                let (wy, wyd, j) = (hy[ky], hyd[ky], iy + ky);
+                let (jm, jp, span_y) =
+                    Self::diff_stencil(j, ny, &self.logg_grid);
                 for kx in 0..2 {
-                    let (wx, i, i_ext) = (hx[kx], ix + kx, ext_x[kx]);
-                    let w_corner =
-                        (wx + sgn[kx] * gx[1 - kx]) * wy_wz + wx * yz_tan;
-                    let w_x = sgn[kx] * gx[kx] * wy_wz;
-                    let w_y = sgn[ky] * wx * gy[ky] * wz;
-                    let w_z = sgn[kz] * wx * wy * gz[kz];
+                    let (wx, wxd, i) = (hx[kx], hxd[kx], ix + kx);
+                    let (im, ip, span_x) =
+                        Self::diff_stencil(i, nx, &self.teff_grid);
 
-                    let (f_ijk, f_x) =
-                        (self.sed_at(i, j, k), self.sed_at(i_ext, j, k));
-                    let (f_y, f_z) =
-                        (self.sed_at(i, j_ext, k), self.sed_at(i, j, k_ext));
+                    let w_val = (wx * wy) * wz;
+                    let w_dx = ((wxd * wy) * wz) * dx_t;
+                    let w_dy = ((wx * wyd) * wz) * dy_t;
+                    let w_dz = ((wx * wy) * wzd) * dz_t;
+
+                    let f_ijk = self.sed_at(i, j, k);
+                    let (f_xm, f_xp) =
+                        (self.sed_at(im, j, k), self.sed_at(ip, j, k));
+                    let (f_ym, f_yp) =
+                        (self.sed_at(i, jm, k), self.sed_at(i, jp, k));
+                    let (f_zm, f_zp) =
+                        (self.sed_at(i, j, km), self.sed_at(i, j, kp));
 
                     for lam in 0..nlam {
-                        let c = w_corner * T::from_f64(f_ijk[lam])
-                            + w_x * T::from_f64(f_x[lam])
-                            + w_y * T::from_f64(f_y[lam])
-                            + w_z * T::from_f64(f_z[lam]);
-                        result[lam] = result[lam] + c;
+                        let df_dx = if span_x.abs() > 0.0 {
+                            (f_xp[lam] - f_xm[lam]) / span_x
+                        } else {
+                            0.0
+                        };
+                        let df_dy = if span_y.abs() > 0.0 {
+                            (f_yp[lam] - f_ym[lam]) / span_y
+                        } else {
+                            0.0
+                        };
+                        let df_dz = if span_z.abs() > 0.0 {
+                            (f_zp[lam] - f_zm[lam]) / span_z
+                        } else {
+                            0.0
+                        };
+                        result[lam] = result[lam]
+                            + w_val * T::from_f64(f_ijk[lam])
+                            + w_dx * T::from_f64(df_dx)
+                            + w_dy * T::from_f64(df_dy)
+                            + w_dz * T::from_f64(df_dz);
                     }
                 }
             }
@@ -203,29 +232,18 @@ impl SedCube {
         }
     }
 
-    /// Computes `(idx0, [h00, h01], [gx0, gx1], [im0, ip1])` along `grid`.
+    /// Computes `(idx0, [h00, h01], [h10, h11], dx)` along `grid`.
     #[inline]
-    fn axis_hermite_stencil<T: RealScalar>(
+    fn axis_hermite_basis<T: RealScalar>(
         grid: &[f64],
         val: T,
-    ) -> (usize, [T; 2], [T; 2], [usize; 2]) {
-        let n = grid.len();
+    ) -> (usize, [T; 2], [T; 2], f64) {
         let (idx, t) = find_interval(grid, val);
         let dx = grid[idx + 1] - grid[idx];
-        let s0 = Self::diff_stencil(idx, n, grid);
-        let s1 = Self::diff_stencil(idx + 1, n, grid);
-        (
-            idx,
-            [h00(t), h01(t)],
-            [
-                h10(t) * T::from_f64(dx * s0.2),
-                h11(t) * T::from_f64(dx * s1.2),
-            ],
-            [s0.0, s1.1],
-        )
+        (idx, [h00(t), h01(t)], [h10(t), h11(t)], dx)
     }
 
-    /// Returns `(i_minus, i_plus, 1.0 / (grid[i_plus] - grid[i_minus]))` for
+    /// Returns `(i_minus, i_plus, grid[i_plus] - grid[i_minus])` for
     /// 1D finite-difference slope evaluation at grid node `i`
     /// (`hermite_interp.f90:compute_derivatives_at_point_4d`).
     #[inline]
@@ -239,8 +257,7 @@ impl SedCube {
         } else {
             (i - 1, i)
         };
-        let span = grid[ip] - grid[im];
-        (im, ip, if span.abs() > 0.0 { 1.0 / span } else { 0.0 })
+        (im, ip, grid[ip] - grid[im])
     }
 
     /// Evaluates the diluted observed SED using log-fallback 3D trilinear

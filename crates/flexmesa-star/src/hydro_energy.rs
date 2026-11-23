@@ -462,6 +462,19 @@ pub fn do1_energy_eqn(
 /// Evaluates [`do1_energy_eqn`] and returns the cell unscaled energy residual
 /// `ergs_error(k) = -dm(k) * dt * resid_ad%val` in $\mathrm{erg}$
 /// (`star/private/hydro_energy.f90:114`).
+/// `eps_grav_form` of `setup_eps_grav` (`star/private/hydro_energy.f90:394-403`):
+/// never with `u_flag`; otherwise `energy_eqn_option = 'eps_grav'`
+/// (`star/private/hydro_eqns.f90:117-123`), or while relaxing with
+/// `no_dedt_form_during_relax`.
+#[must_use]
+pub(crate) fn eps_grav_form(model: &StarModel) -> bool {
+    if model.controls.u_flag {
+        return false;
+    }
+    model.controls.energy_eqn_option == EnergyEqnOption::EpsGrav
+        || (model.aux.doing_relax && model.controls.no_dedt_form_during_relax)
+}
+
 pub(crate) fn do1_energy_eqn_with_ergs_error(
     model: &StarModel,
     k: usize,
@@ -496,86 +509,75 @@ pub(crate) fn do1_energy_eqn_with_ergs_error(
             && model
                 .controls
                 .use_p_d_1_div_rho_form_of_work_when_time_centering_velocity;
-        match model.controls.energy_eqn_option {
-            EnergyEqnOption::EpsGrav => {
-                let dwork_dm = if simple_pdv {
+        if eps_grav_form(model) {
+            let dwork_dm = if simple_pdv {
+                crate::hydro_work::eval_v_flag_simple_pdv_dm_ad(
+                    model, k, true, vel_tc,
+                )
+                .0
+            } else {
+                crate::hydro_work::eval_v_flag_dwork_dm_ad(
+                    model, k, true, vel_tc,
+                )
+                .0
+            };
+            -dl_dm + sources - d_eturb_dt - dwork_dm + model.eps_grav_ad[k]
+        } else {
+            has_dedt_dxa = true;
+            let de_dt = (model.ln_e_ad[k].exp() - model.energy_start[k]) / dt;
+            if simple_pdv {
+                let (dwork_dm, fac_00) =
                     crate::hydro_work::eval_v_flag_simple_pdv_dm_ad(
-                        model, k, true, vel_tc,
-                    )
-                    .0
-                } else {
+                        model, k, false, vel_tc,
+                    );
+                dwork_fac_00 = fac_00;
+                -dl_dm + sources - d_eturb_dt - dwork_dm - de_dt
+            } else {
+                let (dwork_dm, f_m1, f_00, f_p1) =
                     crate::hydro_work::eval_v_flag_dwork_dm_ad(
-                        model, k, true, vel_tc,
-                    )
-                    .0
-                };
-                -dl_dm + sources - d_eturb_dt - dwork_dm + model.eps_grav_ad[k]
-            }
-            EnergyEqnOption::Dedt => {
-                has_dedt_dxa = true;
-                let de_dt =
-                    (model.ln_e_ad[k].exp() - model.energy_start[k]) / dt;
-                if simple_pdv {
-                    let (dwork_dm, fac_00) =
-                        crate::hydro_work::eval_v_flag_simple_pdv_dm_ad(
-                            model, k, false, vel_tc,
-                        );
-                    dwork_fac_00 = fac_00;
-                    -dl_dm + sources - d_eturb_dt - dwork_dm - de_dt
-                } else {
-                    let (dwork_dm, f_m1, f_00, f_p1) =
-                        crate::hydro_work::eval_v_flag_dwork_dm_ad(
-                            model, k, false, vel_tc,
-                        );
-                    dwork_fac_m1 = f_m1;
-                    dwork_fac_00 = f_00;
-                    dwork_fac_p1 = f_p1;
-                    let dke_dt =
-                        crate::hydro_work::eval_v_flag_dke_dt_ad(model, k, dt);
-                    let dpe_dt =
-                        crate::hydro_work::eval_cell_dpe_dt_ad(model, k, dt);
-                    -dl_dm + sources
-                        - d_eturb_dt
-                        - dwork_dm
-                        - dke_dt
-                        - dpe_dt
-                        - de_dt
-                }
+                        model, k, false, vel_tc,
+                    );
+                dwork_fac_m1 = f_m1;
+                dwork_fac_00 = f_00;
+                dwork_fac_p1 = f_p1;
+                let dke_dt =
+                    crate::hydro_work::eval_v_flag_dke_dt_ad(model, k, dt);
+                let dpe_dt =
+                    crate::hydro_work::eval_cell_dpe_dt_ad(model, k, dt);
+                -dl_dm + sources
+                    - d_eturb_dt
+                    - dwork_dm
+                    - dke_dt
+                    - dpe_dt
+                    - de_dt
             }
         }
+    } else if eps_grav_form(model) {
+        -dl_dm + sources - d_eturb_dt + model.eps_grav_ad[k]
     } else {
-        match model.controls.energy_eqn_option {
-            EnergyEqnOption::EpsGrav => {
-                -dl_dm + sources - d_eturb_dt + model.eps_grav_ad[k]
-            }
-            EnergyEqnOption::Dedt => {
-                has_dedt_dxa = true;
-                let de_dt =
-                    (model.ln_e_ad[k].exp() - model.energy_start[k]) / dt;
-                let simple_pdv = vel_tc
-                    && model
-                        .controls
-                        .use_p_d_1_div_rho_form_of_work_when_time_centering_velocity;
-                if simple_pdv {
-                    let (dwork_dm, fac_00) =
-                        crate::hydro_work::eval_v_flag_simple_pdv_dm_ad(
-                            model, k, false, vel_tc,
-                        );
-                    dwork_fac_00 = fac_00;
-                    -dl_dm + sources - d_eturb_dt - dwork_dm - de_dt
-                } else {
-                    let (dwork_dm, f_m1, f_00, f_p1) =
-                        crate::hydro_work::eval_v_flag_dwork_dm_ad(
-                            model, k, false, vel_tc,
-                        );
-                    dwork_fac_m1 = f_m1;
-                    dwork_fac_00 = f_00;
-                    dwork_fac_p1 = f_p1;
-                    let dpe_dt =
-                        crate::hydro_work::eval_cell_dpe_dt_ad(model, k, dt);
-                    -dl_dm + sources - d_eturb_dt - dwork_dm - dpe_dt - de_dt
-                }
-            }
+        has_dedt_dxa = true;
+        let de_dt = (model.ln_e_ad[k].exp() - model.energy_start[k]) / dt;
+        let simple_pdv = vel_tc
+            && model
+                .controls
+                .use_p_d_1_div_rho_form_of_work_when_time_centering_velocity;
+        if simple_pdv {
+            let (dwork_dm, fac_00) =
+                crate::hydro_work::eval_v_flag_simple_pdv_dm_ad(
+                    model, k, false, vel_tc,
+                );
+            dwork_fac_00 = fac_00;
+            -dl_dm + sources - d_eturb_dt - dwork_dm - de_dt
+        } else {
+            let (dwork_dm, f_m1, f_00, f_p1) =
+                crate::hydro_work::eval_v_flag_dwork_dm_ad(
+                    model, k, false, vel_tc,
+                );
+            dwork_fac_m1 = f_m1;
+            dwork_fac_00 = f_00;
+            dwork_fac_p1 = f_p1;
+            let dpe_dt = crate::hydro_work::eval_cell_dpe_dt_ad(model, k, dt);
+            -dl_dm + sources - d_eturb_dt - dwork_dm - dpe_dt - de_dt
         }
     };
 
@@ -588,9 +590,10 @@ pub(crate) fn do1_energy_eqn_with_ergs_error(
     if include_chem {
         let sp = model.species;
         let base = k * sp;
-        let active_nuc_dxa = !doing_op_split_burn
-            && model.controls.eps_nuc_factor != 0.0
-            && !model.controls.nonlocal_nico_decay_heat;
+        // `unpack_res18` (`star/private/hydro_energy.f90:477-484`).
+        let active_nuc_dxa = !(model.controls.nonlocal_nico_decay_heat
+            || doing_op_split_burn)
+            && model.controls.dxdt_nuc_factor > 0.0;
         let dlnp = |cell: usize, j: usize| {
             model
                 .aux
@@ -634,7 +637,11 @@ pub(crate) fn do1_energy_eqn_with_ergs_error(
                         -scal * dwork_fac_p1 * dlnp(k + 1, j),
                     );
                 }
-            } else if model.controls.include_composition_in_eps_grav {
+            } else if !doing_op_split_burn
+                && (model.controls.dxdt_nuc_factor > 0.0
+                    || model.controls.mix_factor > 0.0)
+            {
+                // `star/private/hydro_energy.f90:494-500`.
                 let deg_dx = model
                     .aux
                     .d_eps_grav_dx

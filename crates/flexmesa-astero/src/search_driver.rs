@@ -383,47 +383,98 @@ impl StarExtras for AsteroTrackExtras<'_> {
     }
 }
 
+/// `set_param` shared by the `astero` test cases that search over
+/// parameters (`astero/test_suite/fast_newuoa/src/run_star_extras.f90:115-183`;
+/// identical in `example_astero`, `fast_scan_grid` and `fast_simplex`).
+fn set_param(
+    bundle: &mut InlistBundle,
+    ctrl: &AsteroSearchControls,
+    name: &str,
+    val: f64,
+) -> Result<(), StarError> {
+    let job = &mut bundle.job;
+    match name {
+        "initial_mass" | "mass" => {
+            job.new_mass = val;
+            job.relax_mass = true;
+            bundle.controls.initial_mass = val;
+        }
+        "initial_y" | "y" => {
+            job.initial_he3 = ctrl.y_frac_he3 * val;
+            job.initial_he4 = val - job.initial_he3;
+            job.set_uniform_initial_composition = true;
+        }
+        "initial_feh" | "feh" => {
+            // (Z/X) = (Z/X)sun * 10^[Fe/H]
+            let z_div_x = ctrl.z_div_x_solar * flexmesa_math::exp10(val);
+            let x = if ctrl.y_depends_on_z {
+                let c = 1.0 + z_div_x * (1.0 + ctrl.dydz);
+                let x = (1.0 - ctrl.y0) / c;
+                let y = (ctrl.y0 + z_div_x * (ctrl.dydz + ctrl.y0)) / c;
+                job.initial_he3 = ctrl.y_frac_he3 * y;
+                job.initial_he4 = y - job.initial_he3;
+                x
+            } else {
+                // Y from the `initial_he3` set by an earlier `initial_Y`.
+                let y = job.initial_he3 / ctrl.y_frac_he3;
+                (1.0 - y) / (1.0 + z_div_x)
+            };
+            job.initial_h1 = x;
+            job.initial_h2 = 0.0;
+            job.set_uniform_initial_composition = true;
+        }
+        "alpha" => bundle.controls.mixing_length_alpha = val,
+        "f_ov" => {
+            let ov = &mut bundle.controls.mix_wind.overshoot_sets[0];
+            if val > 0.0 {
+                if ctrl.f0_ov_div_f_ov <= 0.0 {
+                    return Err(StarError::InvalidInput(format!(
+                        "astero f_ov = {val} > 0 requires f0_ov_div_f_ov > 0 (got {})",
+                        ctrl.f0_ov_div_f_ov
+                    )));
+                }
+                ov.scheme = String::from("exponential");
+                ov.zone_type = String::from("any");
+                ov.zone_loc = String::from("any");
+                ov.bdy_loc = String::from("any");
+                ov.f = val;
+                ov.f0 = ctrl.f0_ov_div_f_ov * val;
+            } else {
+                ov.scheme.clear();
+                ov.zone_type.clear();
+                ov.zone_loc.clear();
+                ov.bdy_loc.clear();
+                (ov.f, ov.f0) = (0.0, 0.0);
+            }
+        }
+        other => {
+            return Err(StarError::InvalidInput(format!(
+                "invalid name in set_param: {other}"
+            )));
+        }
+    }
+    Ok(())
+}
+
 fn apply_params_to_bundle(
     bundle: &mut InlistBundle,
     ctrl: &AsteroSearchControls,
     params: &AsteroParamSet,
 ) -> Result<(), StarError> {
-    bundle.controls.initial_mass = params.initial_mass;
-    let z_div_x = ctrl.z_div_x_solar * flexmesa_math::exp10(params.initial_feh);
-    let (x, y) = if ctrl.y_depends_on_z {
-        let c = 1.0 + z_div_x * (1.0 + ctrl.dydz);
-        (
-            (1.0 - ctrl.y0) / c,
-            (ctrl.y0 + z_div_x * (ctrl.dydz + ctrl.y0)) / c,
-        )
-    } else {
-        ((1.0 - params.initial_y) / (1.0 + z_div_x), params.initial_y)
-    };
-    let z = (1.0 - x - y).clamp(1.0e-4, 0.08);
-    (bundle.controls.initial_y, bundle.controls.initial_z) = (y, z);
-    (bundle.controls.zbase, bundle.kap_config.zbase) = (z, z);
-    (bundle.job.relax_y, bundle.job.new_y) = (true, y);
-    (bundle.job.relax_z, bundle.job.new_z) = (true, z);
-    if params.alpha > 0.0 {
-        bundle.controls.mixing_length_alpha = params.alpha;
-    }
-    let ov = &mut bundle.controls.mix_wind.overshoot_sets[0];
-    if params.f_ov > 0.0 {
-        if ctrl.f0_ov_div_f_ov <= 0.0 {
-            return Err(StarError::InvalidInput(format!(
-                "astero f_ov = {} > 0 requires f0_ov_div_f_ov > 0 (got {})",
-                params.f_ov, ctrl.f0_ov_div_f_ov
-            )));
-        }
-        ov.scheme = String::from("exponential");
-        ov.zone_type = String::from("any");
-        ov.zone_loc = String::from("any");
-        ov.bdy_loc = String::from("any");
-        ov.f = params.f_ov;
-        ov.f0 = ctrl.f0_ov_div_f_ov * params.f_ov;
-    } else {
-        ov.scheme.clear();
-        (ov.f, ov.f0) = (0.0, 0.0);
+    // `astero_extras_controls` calls `set_param` for every named parameter in
+    // index order (`astero/private/extras_support.f90:974-988`); `initial_FeH`
+    // reads the `initial_he3` that an earlier `initial_Y` set.
+    for name in &ctrl.param_names {
+        let pname = name.trim().to_ascii_lowercase();
+        let val = match pname.as_str() {
+            "initial_mass" | "mass" => params.initial_mass,
+            "initial_y" | "y" => params.initial_y,
+            "initial_feh" | "feh" => params.initial_feh,
+            "alpha" => params.alpha,
+            "f_ov" => params.f_ov,
+            _ => continue,
+        };
+        set_param(bundle, ctrl, &pname, val)?;
     }
     if ctrl.has_custom_param[0] {
         bundle.controls.alpha_semiconvection = params.my_param1.max(0.0);

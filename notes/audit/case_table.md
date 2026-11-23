@@ -13,10 +13,10 @@ Generated mechanically by `flexmesa harness` from `benchmarks/history_harness/ca
 | Cases awaiting `26.4.1` reference (`no reference yet`) | 4 |
 | Cases selected in this table | 106 |
 | Cases executed in this run | 106 |
-| Cases accepted by strict control validation (`#147`) | 53 (43 took at least one step) |
-| Cases rejected by strict validation and rerun as diagnostic (unsupported controls ignored; never a pass) | 53 (34 took at least one step) |
-| Strict runs reaching upstream termination | 36 |
-| Diagnostic runs reaching upstream termination | 15 |
+| Cases accepted by strict control validation (`#147`) | 51 (49 took at least one step) |
+| Cases rejected by strict validation and rerun as diagnostic (unsupported controls ignored; never a pass) | 55 (45 took at least one step) |
+| Strict runs reaching upstream termination | 40 |
+| Diagnostic runs reaching upstream termination | 18 |
 | Acceptance passes against MESA `26.4.1` (`pass`) | 4 |
 | Interim `0b2e6bb` comparisons within manifest tolerance | 0 |
 | Declared known gaps (`known_gaps.toml`) | 98 |
@@ -28,112 +28,112 @@ Generated mechanically by `flexmesa harness` from `benchmarks/history_harness/ca
 
 | Suite | Case | Reference Status | Required Termination | Run Mode | Observed Term | Steps (MESA) | Retries (MESA) | Iters (MESA) | Peak RSS | num_zones Track Diff | Final Coord Diff | Max Track Diff | First Div Step | Declared Gap | Verdict |
 | :--- | :--- | :--- | :--- | :--- | :--- | ---: | ---: | ---: | ---: | ---: | ---: | :--- | ---: | :--- | :--- |
-| `star` | `1.3M_ms_high_Z` | `mesa_26_4_1` | `log_L_upper_limit` | strict | `log_L_upper_limit` | 219 (219) | 0 (0) | 9.6 [2091] (9.6 [2100]) | - | 2.13% (20) | -0.00% | `log_center_Rho`: 1.670e-06 | 87 | #153 | declared gap (#153) |
+| `star` | `1.3M_ms_high_Z` | `mesa_26_4_1` | `log_L_upper_limit` | strict | `log_L_upper_limit` | 219 (219) | 0 (0) | 9.6 [2104] (9.6 [2100]) | - | 2.07% (20) | -0.00% | `log_center_Rho`: 4.838e-05 | 72 | #153 | declared gap (#153) |
 | `star` | `1.4M_ms_op_mono` | `no_reference_yet` | `max_model_number` | diagnostic (5 controls ignored) | `max_model_number` | 10 (-) | 0 (-) | 10.0 [100] (-) | - | - | - | - | - | - | no reference yet |
 | `star` | `1.5M_with_diffusion` | `mesa_26_4_1` | `xa_central_lower_limit` | strict | `timeout` | 427 (430) | 0 (0) | 8.8 [3767] (8.6 [378/44r]) | - | 0.00% (0) | -0.47% | `log_center_Rho`: 1.885e-02 | 421 | #156 | declared gap (#156) |
 | `star` | `12M_pre_ms_to_core_collapse` | `mesa_26_4_1` | `fe_core_infall_limit` | diagnostic (7 controls ignored) | `timeout` | 75 (325) | 0 (26) | 7.0 [529] (7.0 [2292]) | - | 5.61% (118) | -0.00% | `log_center_Rho`: 2.115e-01 | 2616 | #161 | declared gap (#161) |
-| `star` | `15M_dynamo` | `mesa_26_4_1` | `xa_central_lower_limit` | strict | - | 0 (654) | 0 (0) | - (4.5 [305/67r]) | - | - | - | - | - | #154 | declared gap (#154) |
-| `star` | `16M_conv_premix` | `mesa_26_4_1` | `xa_central_lower_limit` | strict | `xa_central_lower_limit` | 378 (378) | 3 (3) | 6.4 [2424] (6.3 [247/39r]) | - | 4.18% (80) | -0.10% | `log_center_Rho`: 2.904e-01 | 82 | #155 | declared gap (#155) |
-| `star` | `16M_predictive_mix` | `mesa_26_4_1` | `xa_central_lower_limit` | strict | `xa_central_lower_limit` | 377 (377) | 3 (3) | 5.8 [2201] (5.8 [226/39r]) | - | 0.00% (0) | +0.00% | `log_center_Rho`: 7.333e-02 | 82 | #155 | declared gap (#155) |
+| `star` | `15M_dynamo` | `mesa_26_4_1` | `xa_central_lower_limit` | diagnostic (2 controls ignored) | `timeout` | 1356 (654) | 0 (0) | 5.0 [6782] (4.5 [305/67r]) | - | final -634 | -18.18% | - | - | #154 | declared gap (#154) |
+| `star` | `16M_conv_premix` | `mesa_26_4_1` | `xa_central_lower_limit` | strict | `xa_central_lower_limit` | 378 (378) | 3 (3) | 6.4 [2422] (6.3 [247/39r]) | - | 4.18% (80) | -0.10% | `log_center_Rho`: 2.904e-01 | 82 | #155 | declared gap (#155) |
+| `star` | `16M_predictive_mix` | `mesa_26_4_1` | `xa_central_lower_limit` | strict | `xa_central_lower_limit` | 377 (377) | 3 (3) | 5.8 [2204] (5.8 [226/39r]) | - | 0.00% (0) | +0.00% | `log_center_Rho`: 7.333e-02 | 82 | #155 | declared gap (#155) |
 | `star` | `1M_pre_ms_to_wd` | `mesa_26_4_1` | `log_L_lower_limit` | diagnostic (2 controls ignored) | `timeout` | 528 (429) | 3 (10) | 3.8 [2005] (5.3 [234/44r]) | - | final +1056 | -1.01% | - | - | #154 | declared gap (#154) |
 | `star` | `1M_thermohaline` | `mesa_26_4_1` | `he_core_mass_limit` | diagnostic (4 controls ignored) | `timeout` | 1753 (3380) | 0 (0) | 6.2 [10915] (5.1 [1738/339r]) | - | 14.18% (93) | -2.73% | `log_center_Rho`: 9.646e-01 | 2 | #158 | declared gap (#158) |
 | `star` | `20M_pre_ms_to_core_collapse` | `mesa_26_4_1` | `fe_core_infall_limit` | diagnostic (7 controls ignored) | `timeout` | 88 (285) | 0 (23) | 7.7 [677] (6.4 [1827]) | - | 2.35% (44) | -0.00% | `log_center_Rho`: 7.431e-02 | 2102 | #161 | declared gap (#161) |
-| `star` | `20M_z2m2_high_rotation` | `mesa_26_4_1` | `xa_central_lower_limit` | diagnostic (10 controls ignored) | - | 0 (2744) | 0 (293) | - (6.4 [1764/276r]) | - | - | - | - | - | #157 | declared gap (#157) |
-| `star` | `5M_cepheid_blue_loop` | `mesa_26_4_1` | `star_species_mass_min_limit` | strict | `extras_check_model` | 248 (248) | 4 (4) | 6.5 [1601] (6.8 [177/26r]) | - | 1.00% (15) | +0.02% | `log_R`: 9.710e-03 | 2163 | #231 | declared gap (#231) |
-| `star` | `7M_prems_to_AGB` | `mesa_26_4_1` | `log_L_upper_limit` | strict | `log_L_upper_limit` | 766 (721) | 23 (14) | 6.3 [4848] (6.5 [480/74r]) | - | 22.15% (317) | +0.15% | `log_center_Rho`: 1.034e+00 | 125 | #161 | declared gap (#161) |
+| `star` | `20M_z2m2_high_rotation` | `mesa_26_4_1` | `xa_central_lower_limit` | diagnostic (10 controls ignored) | `timeout` | 676 (2744) | 0 (293) | 4.3 [2915] (6.4 [1764/276r]) | - | 0.98% (17) | -43.65% | `log_center_Rho`: 2.416e+00 | 2 | #157 | declared gap (#157) |
+| `star` | `5M_cepheid_blue_loop` | `mesa_26_4_1` | `star_species_mass_min_limit` | strict | `extras_check_model` | 248 (248) | 4 (4) | 6.5 [1607] (6.8 [177/26r]) | - | 0.00% (0) | -0.00% | `log_R`: 9.742e-03 | 2163 | #231 | declared gap (#231) |
+| `star` | `7M_prems_to_AGB` | `mesa_26_4_1` | `log_L_upper_limit` | strict | `log_L_upper_limit` | 717 (721) | 13 (14) | 6.5 [4654] (6.5 [480/74r]) | - | 7.44% (106) | +0.04% | `log_center_Rho`: 3.798e-01 | 92 | #161 | declared gap (#161) |
 | `star` | `R_CrB_star` | `mesa_26_4_1` | `Teff_lower_limit` | strict | `Teff_lower_limit` | 167 (167) | 8 (8) | 10.0 [1670] (10.0 [350/35r]) | - | 0.00% (0) | +0.00% | `log_R`: 2.289e-03 | - | - | pass |
-| `star` | `T_tau_gradr` | `mesa_26_4_1` | `max_model_number` | strict | `max_model_number` | 50 (50) | 1 (1) | 6.3 [316] (6.6 [73/11r]) | - | 0.45% (4) | -0.01% | `log_R`: 1.811e-02 | 13 | #161 | declared gap (#161) |
+| `star` | `T_tau_gradr` | `mesa_26_4_1` | `max_model_number` | strict | `max_model_number` | 50 (50) | 1 (1) | 6.4 [318] (6.6 [73/11r]) | - | 0.45% (4) | -0.01% | `log_R`: 1.811e-02 | 13 | #161 | declared gap (#161) |
 | `star` | `accreted_material_j` | `mesa_26_4_1` | `star_mass_max_limit` | strict | `timeout` | 608 (452) | 29 (0) | 7.7 [4698] (4.2 [195/47r]) | - | 12.31% (129) | +185445.65% | `log_L`: 5.346e-01 | 1 | #158 | declared gap (#158) |
-| `star` | `adjust_net` | `mesa_26_4_1` | `max_age` | diagnostic (5 controls ignored) | - | 0 (39) | 0 (0) | - (7.8 [39/5r]) | - | - | - | - | - | #157 | declared gap (#157) |
-| `star` | `c13_pocket` | `mesa_26_4_1` | `one thermal pulse cycle complete` | diagnostic (1 controls ignored) | `oom_killed` | 7 (1949) | 1 (2) | 7.7 [54] (6.9 [1358/196r]) | - | 1.19% (21) | -99.91% | `log_L`: 2.847e-02 | 2 | #161 | declared gap (#161) |
-| `star` | `carbon_kh` | `mesa_26_4_1` | `log_center_density_upper_limit` | diagnostic (2 controls ignored) | - | 0 (2362) | 0 (0) | - (2.0 [487/238r]) | - | - | - | - | - | #161 | declared gap (#161) |
-| `star` | `cburn_inward` | `mesa_26_4_1` | `extras_finish_step` | strict | - | 0 (459) | 0 (12) | - (7.4 [3406]) | - | - | - | - | - | #157 | declared gap (#157) |
-| `star` | `ccsn_IIp` | `mesa_26_4_1` | `extras_finish_step` | diagnostic (2 controls ignored) | - | 0 (286) | 0 (0) | - (5.3 [164/31r]) | - | - | - | - | - | #161 | declared gap (#161) |
-| `star` | `check_pulse_atm` | `mesa_26_4_1` | `max_model_number` | diagnostic (2 controls ignored) | `max_model_number` | 75 (75) | 0 (0) | 8.2 [617] (8.1 [130/16r]) | - | 0.50% (4) | -0.04% | `log_R`: 1.411e-02 | 8 | #161 | declared gap (#161) |
-| `star` | `check_redo` | `mesa_26_4_1` | `xa_central_lower_limit` | strict | `xa_central_lower_limit` | 108 (108) | 0 (0) | 8.6 [924] (8.3 [192/23r]) | - | 0.73% (7) | -0.00% | `log_center_Rho`: 8.800e-03 | 86 | #152 | declared gap (#152) |
+| `star` | `adjust_net` | `mesa_26_4_1` | `max_age` | diagnostic (5 controls ignored) | `max_age` | 39 (39) | 0 (0) | 7.4 [288] (7.8 [39/5r]) | - | 2.55% (11) | +0.00% | `log_L`: 1.994e-02 | 3 | #157 | declared gap (#157) |
+| `star` | `c13_pocket` | `mesa_26_4_1` | `one thermal pulse cycle complete` | diagnostic (1 controls ignored) | `timeout` | 496 (1949) | 1 (2) | 6.7 [3326] (6.9 [1358/196r]) | - | 1.98% (39) | -57.65% | `log_L`: 2.847e-02 | 2 | #161 | declared gap (#161) |
+| `star` | `carbon_kh` | `mesa_26_4_1` | `log_center_density_upper_limit` | diagnostic (2 controls ignored) | `log_center_density_upper_limit` | 2362 (2362) | 0 (0) | 2.0 [4848] (2.0 [487/238r]) | - | 0.00% (0) | -0.00% | `log_L`: 2.108e-03 | - | #161 | declared gap (#161) |
+| `star` | `cburn_inward` | `mesa_26_4_1` | `extras_finish_step` | strict | `timeout` | 234 (459) | 5 (12) | 10.0 [2340] (7.4 [3406]) | - | 3.81% (51) | -3.45% | `log_center_Rho`: 6.190e-02 | 14 | #157 | declared gap (#157) |
+| `star` | `ccsn_IIp` | `mesa_26_4_1` | `extras_finish_step` | diagnostic (2 controls ignored) | `redo_limit` | 0 (286) | 0 (0) | - (5.3 [164/31r]) | - | - | - | - | - | #161 | declared gap (#161) |
+| `star` | `check_pulse_atm` | `mesa_26_4_1` | `max_model_number` | diagnostic (2 controls ignored) | `max_model_number` | 75 (75) | 0 (0) | 8.2 [618] (8.1 [130/16r]) | - | 0.63% (5) | -0.04% | `log_R`: 1.409e-02 | 8 | #161 | declared gap (#161) |
+| `star` | `check_redo` | `mesa_26_4_1` | `xa_central_lower_limit` | strict | `xa_central_lower_limit` | 108 (108) | 0 (0) | 8.6 [926] (8.3 [192/23r]) | - | 0.73% (7) | -0.00% | `log_center_Rho`: 8.800e-03 | 86 | #152 | declared gap (#152) |
 | `star` | `conductive_flame` | `mesa_26_4_1` | `flame reached halfway point` | diagnostic (3 controls ignored) | - | 0 (459) | 0 (0) | - (9.9 [466/47r]) | - | - | - | - | - | #161 | declared gap (#161) |
-| `star` | `conserve_angular_momentum` | `mesa_26_4_1` | `he_core_mass_limit` | diagnostic (2 controls ignored) | `he_core_mass_limit` | 373 (537) | 2 (0) | 6.0 [2221] (6.0 [328/55r]) | - | 19.09% (292) | +2.94% | `log_L`: 8.443e-01 | 2 | #158 | declared gap (#158) |
-| `star` | `conv_core_cpm` | `mesa_26_4_1` | `xa_central_lower_limit` | strict | `xa_central_lower_limit` | 91 (92) | 0 (0) | 9.8 [893] (9.9 [908]) | - | 1.87% (16) | -1.12% | `log_center_Rho`: 1.264e-03 | - | #155 | declared gap (#155) |
-| `star` | `custom_colors` | `mesa_26_4_1` | `xa_central_lower_limit` | diagnostic (1 controls ignored) | `xa_central_lower_limit` | 682 (683) | 9 (10) | 4.9 [3371] (5.1 [3457]) | - | 2.59% (49) | -0.01% | `log_L`: 1.019e-01 | 1 | #161 | declared gap (#161) |
-| `star` | `custom_rates` | `mesa_26_4_1` | `log_center_temp_upper_limit` | diagnostic (4 controls ignored) | - | 0 (487) | 0 (0) | - (4.4 [220/50r]) | - | - | - | - | - | #161 | declared gap (#161) |
-| `star` | `diffusion_smoothness` | `mesa_26_4_1` | `max_age` | strict | `max_age` | 36 (36) | 0 (0) | 9.4 [340] (9.0 [45/5r]) | - | 0.09% (1) | +0.00% | `log_center_Rho`: 7.867e-03 | 4 | #156 | declared gap (#156) |
+| `star` | `conserve_angular_momentum` | `mesa_26_4_1` | `he_core_mass_limit` | diagnostic (2 controls ignored) | `he_core_mass_limit` | 364 (537) | 1 (0) | 6.0 [2164] (6.0 [328/55r]) | - | 19.90% (311) | +3.08% | `log_L`: 8.861e-01 | 2 | #158 | declared gap (#158) |
+| `star` | `conv_core_cpm` | `mesa_26_4_1` | `xa_central_lower_limit` | strict | `xa_central_lower_limit` | 91 (92) | 0 (0) | 9.9 [899] (9.9 [908]) | - | 1.87% (16) | -1.12% | `log_center_Rho`: 1.264e-03 | - | #155 | declared gap (#155) |
+| `star` | `custom_colors` | `mesa_26_4_1` | `xa_central_lower_limit` | diagnostic (1 controls ignored) | `xa_central_lower_limit` | 682 (683) | 10 (10) | 4.9 [3351] (5.1 [3457]) | - | 2.04% (40) | +0.01% | `log_L`: 3.978e-03 | 258 | #161 | declared gap (#161) |
+| `star` | `custom_rates` | `mesa_26_4_1` | `log_center_temp_upper_limit` | diagnostic (4 controls ignored) | `min_timestep_limit` | 455 (487) | 61 (0) | 5.0 [2267] (4.4 [220/50r]) | - | 12.81% (330) | +14.86% | `log_center_T`: 2.396e-01 | 1 | #161 | declared gap (#161) |
+| `star` | `diffusion_smoothness` | `mesa_26_4_1` | `max_age` | strict | `max_age` | 36 (36) | 0 (0) | 9.4 [337] (9.0 [45/5r]) | - | 0.09% (1) | +0.00% | `log_center_Rho`: 7.867e-03 | 4 | #156 | declared gap (#156) |
 | `star` | `extended_convective_penetration` | `mesa_26_4_1` | `xa_central_lower_limit` | strict | - | 0 (64) | 0 (0) | - (7.6 [486]) | - | - | - | - | - | #231 | declared gap (#231) |
-| `star` | `gyre_in_mesa_bcep` | `mesa_26_4_1` | `xa_central_lower_limit` | strict | `xa_central_lower_limit` | 108 (108) | 0 (0) | 8.6 [926] (8.2 [98/12r]) | - | 0.00% (0) | -0.00% | `log_center_Rho`: 3.451e-02 | 3 | #170 | declared gap (#170) |
+| `star` | `gyre_in_mesa_bcep` | `mesa_26_4_1` | `xa_central_lower_limit` | strict | `xa_central_lower_limit` | 108 (108) | 0 (0) | 8.5 [922] (8.2 [98/12r]) | - | 0.00% (0) | -0.00% | `log_center_Rho`: 3.451e-02 | 3 | #170 | declared gap (#170) |
 | `star` | `gyre_in_mesa_envelope` | `mesa_26_4_1` | `max_model_number` | strict | `steps_to_take_before_terminate` | 128 (5) | 0 (0) | 10.0 [50] (10.0 [20/2r]) | - | 18.53% (80) | -0.00% | `log_center_Rho`: 4.654e-03 | 936 | #170 | declared gap (#170) |
-| `star` | `gyre_in_mesa_ms` | `mesa_26_4_1` | `xa_central_lower_limit` | strict | `xa_central_lower_limit` | 123 (123) | 0 (0) | 9.1 [1121] (9.1 [128/14r]) | - | 0.00% (0) | +0.00% | `log_L`: 2.487e-02 | 2 | #170 | declared gap (#170) |
+| `star` | `gyre_in_mesa_ms` | `mesa_26_4_1` | `xa_central_lower_limit` | strict | `xa_central_lower_limit` | 123 (123) | 0 (0) | 9.1 [1122] (9.1 [128/14r]) | - | 0.00% (0) | +0.00% | `log_L`: 2.487e-02 | 2 | #170 | declared gap (#170) |
 | `star` | `gyre_in_mesa_rsg` | `mesa_26_4_1` | `max_model_number|extras_finish_step` | strict | `max_model_number` | 20 (20) | 0 (0) | 4.8 [95] (5.3 [16/3r]) | - | 0.00% (0) | +0.00% | `log_L`: 3.918e-02 | 2 | #170 | declared gap (#170) |
-| `star` | `gyre_in_mesa_spb` | `mesa_26_4_1` | `xa_central_lower_limit` | strict | `xa_central_lower_limit` | 103 (103) | 0 (0) | 8.6 [881] (8.5 [102/12r]) | - | 0.00% (0) | -0.00% | `log_center_Rho`: 1.076e-01 | 2 | #170 | declared gap (#170) |
-| `star` | `gyre_in_mesa_wd` | `mesa_26_4_1` | `log_Teff_lower_limit` | strict | - | 0 (209) | 0 (1) | - (3.7 [86/23r]) | - | - | - | - | - | #157 | declared gap (#157) |
-| `star` | `hb_2M` | `mesa_26_4_1` | `xa_central_lower_limit` | strict | `xa_central_lower_limit` | 191 (190) | 1 (1) | 8.8 [1683] (8.7 [1660]) | - | 8.22% (247) | +0.35% | `log_center_Rho`: 1.693e-01 | 74 | #155 | declared gap (#155) |
-| `star` | `high_mass` | `mesa_26_4_1` | `xa_central_lower_limit` | strict | `xa_central_lower_limit` | 98 (98) | 0 (0) | 8.6 [847] (8.4 [92/11r]) | - | 0.00% (0) | -0.00% | `log_R`: 1.824e-02 | 453 | #157 | declared gap (#157) |
-| `star` | `high_rot_darkening` | `mesa_26_4_1` | `xa_central_lower_limit` | diagnostic (5 controls ignored) | - | 0 (188) | 0 (0) | - (8.7 [1629]) | - | - | - | - | - | #158 | declared gap (#158) |
-| `star` | `high_z` | `mesa_26_4_1` | `xa_central_lower_limit` | strict | `xa_central_lower_limit` | 444 (445) | 0 (0) | 6.3 [2799] (6.2 [287/46r]) | - | 4.39% (66) | +0.02% | `log_L`: 1.480e-01 | 3 | #161 | declared gap (#161) |
+| `star` | `gyre_in_mesa_spb` | `mesa_26_4_1` | `xa_central_lower_limit` | strict | `xa_central_lower_limit` | 103 (103) | 0 (0) | 8.5 [877] (8.5 [102/12r]) | - | 0.00% (0) | +0.00% | `log_center_Rho`: 1.076e-01 | 2 | #170 | declared gap (#170) |
+| `star` | `gyre_in_mesa_wd` | `mesa_26_4_1` | `log_Teff_lower_limit` | strict | `log_Teff_lower_limit` | 209 (209) | 1 (1) | 3.2 [679] (3.7 [86/23r]) | - | 0.00% (0) | -0.00% | `log_L`: 3.639e-02 | 1101 | #157 | declared gap (#157) |
+| `star` | `hb_2M` | `mesa_26_4_1` | `xa_central_lower_limit` | strict | `xa_central_lower_limit` | 190 (190) | 1 (1) | 8.8 [1679] (8.7 [1660]) | - | 0.00% (0) | -0.00% | `log_center_Rho`: 4.651e-10 | - | #155 | declared gap (#155) |
+| `star` | `high_mass` | `mesa_26_4_1` | `xa_central_lower_limit` | strict | `xa_central_lower_limit` | 98 (98) | 0 (0) | 8.6 [847] (8.4 [92/11r]) | - | 0.00% (0) | +0.00% | `log_R`: 1.824e-02 | 453 | #157 | declared gap (#157) |
+| `star` | `high_rot_darkening` | `mesa_26_4_1` | `xa_central_lower_limit` | diagnostic (5 controls ignored) | `xa_central_lower_limit` | 179 (188) | 0 (0) | 8.8 [1571] (8.7 [1629]) | - | 166.38% (1559) | -3.74% | `log_center_Rho`: 2.973e-01 | 1 | #158 | declared gap (#158) |
+| `star` | `high_z` | `mesa_26_4_1` | `xa_central_lower_limit` | strict | `xa_central_lower_limit` | 443 (445) | 0 (0) | 6.3 [2799] (6.2 [287/46r]) | - | 2.55% (39) | -0.00% | `log_center_Rho`: 1.168e-01 | 3 | #161 | declared gap (#161) |
 | `star` | `hot_cool_wind` | `mesa_26_4_1` | `log_L_upper_limit` | strict | `timeout` | 512 (570) | 27 (28) | 7.1 [3635] (7.3 [424/58r]) | - | 2.78% (43) | -1.50% | `log_L`: 1.263e-01 | 2 | #161 | declared gap (#161) |
 | `star` | `hse_riemann` | `mesa_26_4_1` | `max_age` | strict | `max_age` | 2011 (2011) | 0 (0) | 2.0 [4022] (4.3 [884/203r]) | - | 0.00% (0) | +0.00% | `log_center_Rho`: 6.419e-03 | 2 | #152 | declared gap (#152) |
-| `star` | `irradiated_planet` | `mesa_26_4_1` | `max_age` | diagnostic (3 controls ignored) | `max_age` | 124 (127) | 0 (0) | 5.9 [554] (7.3 [22/3r]) | - | 0.00% (0) | +0.00% | `log_L`: 3.070e+00 | 86 | #154 | declared gap (#154) |
-| `star` | `low_z` | `mesa_26_4_1` | `xa_central_lower_limit` | strict | `xa_central_lower_limit` | 181 (181) | 0 (0) | 9.4 [1701] (9.0 [54/6r]) | - | 0.00% (0) | -0.00% | `log_center_Rho`: 1.706e-01 | 395 | #152 | declared gap (#152) |
-| `star` | `magnetic_braking` | `mesa_26_4_1` | `xa_central_lower_limit` | strict | - | 0 (219) | 0 (0) | - (8.3 [191/23r]) | - | - | - | - | - | #157 | declared gap (#157) |
-| `star` | `make_brown_dwarf` | `mesa_26_4_1` | `max_age` | strict | `max_age` | 237 (238) | 0 (0) | 3.5 [837] (3.7 [93/25r]) | - | 7.81% (42) | +0.00% | `log_L`: 9.661e-02 | 1 | #154 | declared gap (#154) |
-| `star` | `make_co_wd` | `mesa_26_4_1` | `log_L_lower_limit` | strict | - | 0 (391) | 0 (1) | - (5.3 [217/41r]) | - | - | - | - | - | #157 | declared gap (#157) |
+| `star` | `irradiated_planet` | `mesa_26_4_1` | `max_age` | diagnostic (3 controls ignored) | `max_age` | 124 (127) | 0 (0) | 5.8 [544] (7.3 [22/3r]) | - | 0.00% (0) | +0.00% | `log_L`: 3.070e+00 | 86 | #154 | declared gap (#154) |
+| `star` | `low_z` | `mesa_26_4_1` | `xa_central_lower_limit` | strict | `xa_central_lower_limit` | 181 (181) | 0 (0) | 9.4 [1700] (9.0 [54/6r]) | - | 0.00% (0) | -0.00% | `log_center_Rho`: 1.706e-01 | 395 | #152 | declared gap (#152) |
+| `star` | `magnetic_braking` | `mesa_26_4_1` | `xa_central_lower_limit` | diagnostic (5 controls ignored) | `max_model_number` | 573 (219) | 0 (0) | 3.0 [3] (8.3 [191/23r]) | - | final -63 | -99.98% | - | - | #157 | declared gap (#157) |
+| `star` | `make_brown_dwarf` | `mesa_26_4_1` | `max_age` | strict | `max_age` | 237 (238) | 0 (0) | 3.5 [840] (3.7 [93/25r]) | - | 7.05% (38) | +0.00% | `log_L`: 9.658e-02 | 1 | #154 | declared gap (#154) |
+| `star` | `make_co_wd` | `mesa_26_4_1` | `log_L_lower_limit` | strict | `timeout` | 322 (391) | 0 (1) | 5.6 [1793] (5.3 [217/41r]) | - | 22.15% (309) | -0.32% | `log_R`: 3.990e+00 | 750 | #157 | declared gap (#157) |
 | `star` | `make_env` | `mesa_26_4_1` | `max_age` | strict | - | 0 (172) | 0 (0) | - (5.2 [52/10r]) | - | - | - | - | - | #154 | declared gap (#154) |
 | `star` | `make_he_wd` | `mesa_26_4_1` | `max_age` | diagnostic (1 controls ignored) | `min_timestep_limit` | 5 (136) | 45 (0) | 30.4 [152] (3.1 [47/15r]) | - | final +315 | -100.00% | - | - | #154 | declared gap (#154) |
-| `star` | `make_metals` | `mesa_26_4_1` | `xa_central_lower_limit` | strict | `xa_central_lower_limit` | 568 (511) | 5 (4) | 6.1 [3469] (5.7 [40/7r]) | - | 0.92% (13) | +0.00% | `log_center_Rho`: 3.107e+00 | 45 | #154 | declared gap (#154) |
-| `star` | `make_o_ne_wd` | `mesa_26_4_1` | `log_L_lower_limit` | strict | - | 0 (168) | 0 (0) | - (3.9 [71/18r]) | - | - | - | - | - | #157 | declared gap (#157) |
-| `star` | `make_planets` | `mesa_26_4_1` | `max_age` | diagnostic (1 controls ignored) | `max_model_number` | 1300 (90) | 205 (1) | 6.0 [5476] (6.6 [304/46r]) | - | 5.46% (25) | -90.67% | `log_L`: 3.655e+00 | 385 | #154 | declared gap (#154) |
+| `star` | `make_metals` | `mesa_26_4_1` | `xa_central_lower_limit` | strict | `xa_central_lower_limit` | 507 (511) | 4 (4) | 6.5 [3318] (5.7 [40/7r]) | - | 0.01% (0) | +0.00% | `log_center_Rho`: 3.107e+00 | 31 | #154 | declared gap (#154) |
+| `star` | `make_o_ne_wd` | `mesa_26_4_1` | `log_L_lower_limit` | strict | `log_L_lower_limit` | 253 (168) | 0 (0) | 3.8 [637] (3.9 [71/18r]) | - | 5.24% (61) | -0.09% | `log_L`: 1.320e-01 | 1097 | #157 | declared gap (#157) |
+| `star` | `make_planets` | `mesa_26_4_1` | `max_age` | diagnostic (1 controls ignored) | `max_model_number` | 1300 (90) | 211 (1) | 4.4 [4068] (6.6 [304/46r]) | - | 5.46% (25) | -90.67% | `log_L`: 3.655e+00 | 385 | #154 | declared gap (#154) |
 | `star` | `make_pre_ccsn_13bvn` | `no_reference_yet` | `fe_core_infall_limit` | strict | `timeout` | 299 (-) | 17 (-) | 16.6 [4960] (-) | - | - | - | - | - | - | no reference yet |
 | `star` | `make_sdb` | `mesa_26_4_1` | `xa_central_upper_limit` | diagnostic (2 controls ignored) | `min_timestep_limit` | 0 (61) | 0 (0) | - (5.1 [66/13r]) | - | - | - | - | - | #154 | declared gap (#154) |
-| `star` | `make_zams` | `mesa_26_4_1` | `Lnuc_div_L_zams_limit` | strict | `Lnuc_div_L_zams_limit` | 190 (192) | 0 (1) | 3.6 [692] (3.3 [133/40r]) | - | 1.10% (9) | -0.74% | `log_center_Rho`: 5.977e-02 | 1 | #154 | declared gap (#154) |
-| `star` | `make_zams_low_mass` | `mesa_26_4_1` | `Lnuc_div_L_zams_limit` | strict | `Lnuc_div_L_zams_limit` | 196 (196) | 0 (0) | 3.5 [681] (3.4 [140/41r]) | - | 1.05% (7) | -0.22% | `log_L`: 3.103e-02 | 111 | #154 | declared gap (#154) |
+| `star` | `make_zams` | `mesa_26_4_1` | `Lnuc_div_L_zams_limit` | strict | `Lnuc_div_L_zams_limit` | 192 (192) | 1 (1) | 3.4 [659] (3.3 [133/40r]) | - | 0.00% (0) | -0.00% | `log_center_Rho`: 2.553e-02 | 106 | #154 | declared gap (#154) |
+| `star` | `make_zams_low_mass` | `mesa_26_4_1` | `Lnuc_div_L_zams_limit` | strict | `Lnuc_div_L_zams_limit` | 196 (196) | 0 (0) | 3.4 [667] (3.4 [140/41r]) | - | 0.00% (0) | +0.00% | `log_L`: 3.097e-02 | 111 | #154 | declared gap (#154) |
 | `star` | `make_zams_ultra_high_mass` | `mesa_26_4_1` | `Lnuc_div_L_zams_limit` | diagnostic (2 controls ignored) | `min_timestep_limit` | 0 (1) | 0 (0) | - (12.0 [12]) | - | - | - | - | - | #154 | declared gap (#154) |
-| `star` | `ns_c` | `mesa_26_4_1` | `power_nuc_burn_upper_limit` | strict | - | 0 (261) | 0 (26) | - (7.3 [110/15r]) | - | - | - | - | - | #157 | declared gap (#157) |
-| `star` | `ns_h` | `mesa_26_4_1` | `max_age` | strict | `max_age` | 481 (377) | 4 (2) | 5.0 [1854] (5.0 [99/20r]) | - | 41.85% (444) | +0.00% | `log_L`: 1.292e-01 | 110 | #161 | declared gap (#161) |
+| `star` | `ns_c` | `mesa_26_4_1` | `power_nuc_burn_upper_limit` | strict | `power_nuc_burn_upper_limit` | 136 (261) | 34 (26) | 8.8 [1190] (7.3 [110/15r]) | - | 22.03% (189) | +1.04% | `log_center_T`: 4.294e-01 | 2 | #157 | declared gap (#157) |
+| `star` | `ns_h` | `mesa_26_4_1` | `max_age` | strict | `max_age` | 481 (377) | 4 (2) | 5.0 [1859] (5.0 [99/20r]) | - | 41.66% (442) | +0.00% | `log_L`: 1.293e-01 | 110 | #161 | declared gap (#161) |
 | `star` | `ns_he` | `mesa_26_4_1` | `power_nuc_burn_upper_limit` | diagnostic (8 controls ignored) | `timeout` | 556 (546) | 29 (26) | 4.9 [2732] (5.6 [162/29r]) | - | 10.20% (156) | -21.98% | `log_L`: 4.958e-01 | 2 | #161 | declared gap (#161) |
 | `star` | `other_physics_hooks` | `mesa_26_4_1` | `xa_central_lower_limit` | diagnostic (1 controls ignored) | - | 0 (156) | 0 (2) | - (7.7 [1204]) | - | - | - | - | - | #231 | declared gap (#231) |
-| `star` | `pisn` | `mesa_26_4_1` | `fe_core_infall_limit|log_Rsurf_upper_limit|remnant_mass_min_limit|Star is unbound` | diagnostic (8 controls ignored) | - | 0 (332) | 0 (13) | - (6.5 [227/35r]) | - | - | - | - | - | #161 | declared gap (#161) |
+| `star` | `pisn` | `mesa_26_4_1` | `fe_core_infall_limit|log_Rsurf_upper_limit|remnant_mass_min_limit|Star is unbound` | diagnostic (8 controls ignored) | `timeout` | 344 (332) | 7 (13) | 9.4 [3220] (6.5 [227/35r]) | - | 0.19% (2) | -99.16% | `log_L`: 2.258e+00 | 168 | #161 | declared gap (#161) |
 | `star` | `ppisn` | `mesa_26_4_1` | `Successful test: evolved 100 days past first relax` | diagnostic (14 controls ignored) | - | 0 (3023) | 0 (214) | - (5.5 [16469]) | - | - | - | - | - | #154 | declared gap (#154) |
 | `star` | `radiative_levitation` | `no_reference_yet` | `max_age` | diagnostic (4 controls ignored) | - | 0 (-) | 0 (-) | - | - | - | - | - | - | - | no reference yet |
-| `star` | `relax_composition_j_entropy` | `mesa_26_4_1` | `xa_central_lower_limit` | strict | `xa_central_lower_limit` | 247 (259) | 2 (3) | 6.8 [1673] (6.2 [328/53r]) | - | 16.78% (338) | +5.16% | `log_center_Rho`: 2.665e-01 | 80 | #154 | declared gap (#154) |
+| `star` | `relax_composition_j_entropy` | `mesa_26_4_1` | `xa_central_lower_limit` | strict | `xa_central_lower_limit` | 304 (259) | 17 (3) | 7.7 [2350] (6.2 [328/53r]) | - | 13.24% (267) | +2.09% | `log_center_Rho`: 1.121e-01 | 61 | #154 | declared gap (#154) |
 | `star` | `rsp_BEP` | `mesa_26_4_1` | `extras_finish_step` | diagnostic (1 controls ignored) | `extras_finish_step` | 7255 (7255) | 0 (0) | 0.0 [0] (3.0 [2174/727r]) | - | 0.00% (0) | -0.00% | `log_L`: 1.191e-03 | - | #161 | declared gap (#161) |
 | `star` | `rsp_BLAP` | `mesa_26_4_1` | `extras_finish_step` | diagnostic (1 controls ignored) | `extras_finish_step` | 7318 (7318) | 0 (0) | 0.0 [0] (3.0 [2199/733r]) | - | 0.00% (0) | -0.00% | `log_L`: 6.993e-05 | - | #161 | declared gap (#161) |
 | `star` | `rsp_Cepheid` | `mesa_26_4_1` | `extras_finish_step` | diagnostic (1 controls ignored) | `extras_finish_step` | 7266 (7266) | 0 (0) | 0.0 [0] (3.0 [2178/728r]) | - | 0.00% (0) | -0.00% | `log_L`: 1.165e-03 | - | #161 | declared gap (#161) |
 | `star` | `rsp_Delta_Scuti` | `mesa_26_4_1` | `extras_finish_step` | diagnostic (8 controls ignored) | `extras_finish_step` | 7973 (5810) | 0 (0) | 0.0 [0] (3.2 [1890/582r]) | - | 0.00% (0) | +34.79% | `log_L`: 8.554e-04 | - | #162 | declared gap (#162) |
-| `star` | `rsp_RR_Lyrae` | `mesa_26_4_1` | `extras_finish_step` | diagnostic (1 controls ignored) | `extras_finish_step` | 7220 (7220) | 0 (0) | 0.0 [0] (2.9 [2104/723r]) | - | 0.00% (0) | +0.00% | `log_L`: 8.555e-04 | - | #161 | declared gap (#161) |
-| `star` | `rsp_Type_II_Cepheid` | `mesa_26_4_1` | `extras_finish_step` | diagnostic (1 controls ignored) | `extras_finish_step` | 14680 (14683) | 0 (0) | 0.0 [0] (3.6 [5366/1470r]) | - | 0.00% (0) | +0.04% | `log_L`: 9.512e-03 | 4387 | #162 | declared gap (#162) |
+| `star` | `rsp_RR_Lyrae` | `mesa_26_4_1` | `extras_finish_step` | diagnostic (1 controls ignored) | `extras_finish_step` | 7220 (7220) | 0 (0) | 0.0 [0] (2.9 [2104/723r]) | - | 0.00% (0) | -0.00% | `log_L`: 8.555e-04 | - | #161 | declared gap (#161) |
+| `star` | `rsp_Type_II_Cepheid` | `mesa_26_4_1` | `extras_finish_step` | diagnostic (1 controls ignored) | `extras_finish_step` | 14677 (14683) | 0 (0) | 0.0 [0] (3.6 [5366/1470r]) | - | 0.00% (0) | +0.01% | `log_L`: 9.511e-03 | 4387 | #162 | declared gap (#162) |
 | `star` | `rsp_check_2nd_crossing` | `no_reference_yet` | `other_rsp_build_model` | diagnostic (1 controls ignored) | `other_rsp_build_model` | 0 (-) | 0 (-) | - | - | - | - | - | - | - | no reference yet |
 | `star` | `rsp_gyre` | `mesa_26_4_1` | `extras_finish_step` | diagnostic (1 controls ignored) | - | 0 (6215) | 0 (0) | - (2.0 [1247/623r]) | - | - | - | - | - | #170 | declared gap (#170) |
 | `star` | `rsp_save_and_load_file` | `mesa_26_4_1` | `extras_finish_step` | diagnostic (14 controls ignored) | `extras_finish_step` | 7266 (7216) | 0 (0) | 0.0 [0] (3.0 [2167/723r]) | - | 0.00% (0) | -0.00% | `log_L`: 7.996e-07 | - | #161 | declared gap (#161) |
-| `star` | `semiconvection` | `mesa_26_4_1` | `xa_central_lower_limit` | strict | `xa_central_lower_limit` | 293 (293) | 0 (0) | 7.0 [2059] (7.1 [221/31r]) | - | 1.58% (26) | +0.00% | `log_center_Rho`: 3.221e-02 | 3 | #155 | declared gap (#155) |
+| `star` | `semiconvection` | `mesa_26_4_1` | `xa_central_lower_limit` | strict | `xa_central_lower_limit` | 293 (293) | 0 (0) | 7.2 [2108] (7.1 [221/31r]) | - | 0.56% (9) | +0.00% | `log_center_Rho`: 3.210e-02 | 3 | #155 | declared gap (#155) |
 | `star` | `simplex_solar_calibration` | `mesa_26_4_1` | `max_model_number|extras_finish_step` | diagnostic (2 controls ignored) | `timeout` | 529 (953) | 0 (0) | 5.7 [3025] (5.2 [501/97r]) | - | 19.03% (355) | +9.24% | `log_center_Rho`: 2.039e-01 | 1 | #162 | declared gap (#162) |
 | `star` | `split_burn_big_net` | `mesa_26_4_1` | `xa_central_lower_limit` | diagnostic (7 controls ignored) | `timeout` | 27 (9) | 0 (1) | 5.5 [148] (9.5 [19/2r]) | - | 3.54% (72) | +91.94% | `log_L`: 3.261e-01 | 1 | #161 | declared gap (#161) |
-| `star` | `starspots` | `mesa_26_4_1` | `max_age` | diagnostic (5 controls ignored) | - | 0 (1496) | 0 (0) | - (7.1 [10563]) | - | - | - | - | - | #158 | declared gap (#158) |
-| `star` | `timing` | `mesa_26_4_1` | `xa_central_lower_limit` | strict | `xa_central_lower_limit` | 50 (50) | 0 (0) | 7.1 [354] (7.0 [14/2r]) | - | 0.00% (0) | +0.00% | `log_center_Rho`: 1.333e-01 | 2 | #152 | declared gap (#152) |
+| `star` | `starspots` | `mesa_26_4_1` | `max_age` | diagnostic (5 controls ignored) | `timeout` | 1630 (1496) | 0 (0) | 6.4 [10474] (7.1 [10563]) | - | - | -0.98% | `log_L`: 5.774e-01 | 1 | #158 | declared gap (#158) |
+| `star` | `timing` | `mesa_26_4_1` | `xa_central_lower_limit` | strict | `xa_central_lower_limit` | 50 (50) | 0 (0) | 7.0 [349] (7.0 [14/2r]) | - | 0.12% (1) | +0.00% | `log_center_Rho`: 1.333e-01 | 2 | #152 | declared gap (#152) |
 | `star` | `twin_studies` | `mesa_26_4_1` | `forced_stop` | diagnostic (9 controls ignored) | `timeout` | 11 (80) | 84 (0) | 10.8 [119] (10.0 [90/9r]) | - | final +431 | -100.00% | - | - | #154 | declared gap (#154) |
 | `star` | `tzo` | `mesa_26_4_1` | `PASS: Have reached requested NS mass` | diagnostic (3 controls ignored) | - | 0 (467) | 0 (10) | - (10.4 [4844]) | - | - | - | - | - | #161 | declared gap (#161) |
-| `star` | `wd_acc_small_dm` | `mesa_26_4_1` | `max_age` | strict | - | 0 (89) | 0 (0) | - (4.4 [83/19r]) | - | - | - | - | - | #159 | declared gap (#159) |
-| `star` | `wd_aic` | `mesa_26_4_1` | `PASS: A=20 electron captures have started a thermal runaway in the core` | diagnostic (6 controls ignored) | - | 0 (524) | 0 (28) | - (8.4 [453/54r]) | - | - | - | - | - | #161 | declared gap (#161) |
-| `star` | `wd_c_core_ignition` | `mesa_26_4_1` | `power_nuc_burn_upper_limit` | strict | `power_nuc_burn_upper_limit` | 1 (668) | 23 (9) | 7.0 [7] (5.3 [362/68r]) | - | final -325 | -84.31% | - | - | #161 | declared gap (#161) |
-| `star` | `wd_cool_0.6M` | `mesa_26_4_1` | `log_center_temp_lower_limit` | strict | `log_center_temp_lower_limit` | 212 (219) | 0 (3) | 5.6 [1192] (5.8 [133/23r]) | - | 3.19% (44) | -0.29% | `log_L`: 7.263e-02 | 37 | #156 | declared gap (#156) |
-| `star` | `wd_diffusion` | `mesa_26_4_1` | `Teff_lower_limit` | strict | `Teff_lower_limit` | 152 (153) | 2 (2) | 5.7 [872] (5.6 [862]) | - | 2.72% (37) | -0.12% | `log_L`: 1.742e-02 | 1419 | #152 | declared gap (#152) |
-| `star` | `wd_he_shell_ignition` | `mesa_26_4_1` | `power_he_burn_upper_limit` | diagnostic (1 controls ignored) | `min_timestep_limit` | 7 (1112) | 34 (16) | 13.9 [97] (3.6 [401/112r]) | - | final -284 | -100.00% | - | - | #154 | declared gap (#154) |
+| `star` | `wd_acc_small_dm` | `mesa_26_4_1` | `max_age` | strict | `max_age` | 89 (89) | 0 (0) | 5.9 [526] (4.4 [83/19r]) | - | 0.41% (5) | +0.00% | `log_L`: 2.277e-01 | 2 | #159 | declared gap (#159) |
+| `star` | `wd_aic` | `mesa_26_4_1` | `PASS: A=20 electron captures have started a thermal runaway in the core` | diagnostic (6 controls ignored) | `timeout` | 987 (524) | 125 (28) | 7.5 [7392] (8.4 [453/54r]) | - | 7.70% (80) | +2.01% | `log_center_T`: 2.393e-01 | 3 | #161 | declared gap (#161) |
+| `star` | `wd_c_core_ignition` | `mesa_26_4_1` | `power_nuc_burn_upper_limit` | strict | `power_nuc_burn_upper_limit` | 599 (668) | 8 (9) | 4.6 [2781] (5.3 [362/68r]) | - | 1.22% (13) | -0.00% | `log_center_T`: 2.019e-01 | 2 | #161 | declared gap (#161) |
+| `star` | `wd_cool_0.6M` | `mesa_26_4_1` | `log_center_temp_lower_limit` | strict | `log_center_temp_lower_limit` | 211 (219) | 0 (3) | 5.7 [1198] (5.8 [133/23r]) | - | 5.70% (79) | -0.77% | `log_L`: 7.527e-02 | 37 | #156 | declared gap (#156) |
+| `star` | `wd_diffusion` | `mesa_26_4_1` | `Teff_lower_limit` | strict | `Teff_lower_limit` | 150 (153) | 2 (2) | 5.9 [884] (5.6 [862]) | - | 2.02% (28) | +0.05% | `log_L`: 1.556e-02 | 1436 | #152 | declared gap (#152) |
+| `star` | `wd_he_shell_ignition` | `mesa_26_4_1` | `power_he_burn_upper_limit` | diagnostic (1 controls ignored) | `min_timestep_limit` | 7 (1112) | 40 (16) | 16.4 [115] (3.6 [401/112r]) | - | final -285 | -100.00% | - | - | #154 | declared gap (#154) |
 | `star` | `wd_nova_burst` | `mesa_26_4_1` | `extras_check_model` | diagnostic (1 controls ignored) | `timeout` | 318 (480) | 17 (19) | 5.7 [1797] (6.0 [578/97r]) | - | 27.59% (527) | +0.00% | `log_L`: 4.777e+00 | 13 | #161 | declared gap (#161) |
 | `star` | `wd_stable_h_burn` | `mesa_26_4_1` | `star_mass_max_limit` | diagnostic (2 controls ignored) | `timeout` | 339 (829) | 24 (28) | 6.8 [2309] (8.5 [708/83r]) | - | 19.65% (265) | -67.96% | `log_L`: 4.490e+00 | 1 | #154 | declared gap (#154) |
 | `star` | `zams_to_cc_80` | `mesa_26_4_1` | `fe_core_infall_limit` | diagnostic (7 controls ignored) | `timeout` | 97 (182) | 0 (0) | 7.3 [713] (7.3 [1326]) | - | 13.11% (212) | -0.00% | `log_center_Rho`: 2.058e-01 | 2300 | #161 | declared gap (#161) |
-| `binary` | `double_bh` | `mesa_26_4_1` | `extras_binary_finish_step` | diagnostic (1 controls ignored) | - | 0 (1022) | 0 (6) | - | - | - | - | - | - | #161 | declared gap (#161) |
-| `binary` | `evolve_both_stars` | `mesa_26_4_1` | `accretor_overflow_terminate` | strict | `accretor_overflow_terminate` | 1295 (1295) | 0 (0) | - | - | - | +0.00% | `star_2_mass`: 1.474e-05 | - | - | pass |
-| `binary` | `jdot_gr_check` | `mesa_26_4_1` | `extras_binary_check_model` | strict | `extras_binary_check_model` | 222 (231) | 0 (0) | 4.0 [895] (3.9 [904]) | - | - | +0.05% | `star_1_mass`: 1.696e-06 | - | #160 | declared gap (#160) |
+| `binary` | `double_bh` | `mesa_26_4_1` | `extras_binary_finish_step` | diagnostic (1 controls ignored) | `timeout` | 699 (1022) | 5 (6) | - | - | - | -5.95% | `star_1_mass`: 1.682e-01 | 149 | #161 | declared gap (#161) |
+| `binary` | `evolve_both_stars` | `mesa_26_4_1` | `accretor_overflow_terminate` | strict | `accretor_overflow_terminate` | 1295 (1295) | 0 (0) | - | - | - | +0.00% | `star_2_mass`: 1.473e-05 | - | - | pass |
+| `binary` | `jdot_gr_check` | `mesa_26_4_1` | `extras_binary_check_model` | strict | `extras_binary_check_model` | 222 (231) | 0 (0) | 4.0 [889] (3.9 [904]) | - | - | +0.05% | `star_1_mass`: 1.696e-06 | - | #160 | declared gap (#160) |
 | `binary` | `jdot_ls_check` | `mesa_26_4_1` | `max_age|max_model_number` | strict | `max_age` | 259 (259) | 0 (0) | - | - | - | -0.00% | `star_1_mass`: 0.000e+00 | - | - | pass |
-| `binary` | `jdot_ml_check` | `mesa_26_4_1` | `max_age` | strict | `max_age` | 888 (889) | 0 (0) | - | - | - | -0.00% | `star_1_mass`: 2.563e-05 | - | - | pass |
-| `binary` | `star_plus_point_mass` | `mesa_26_4_1` | `xa_central_lower_limit` | strict | `xa_central_lower_limit` | 308 (309) | 6 (6) | - | - | - | +0.01% | `star_2_mass`: 4.115e-03 | 296 | #160 | declared gap (#160) |
-| `binary` | `star_plus_point_mass_explicit_mdot` | `mesa_26_4_1` | `xa_central_lower_limit` | strict | `xa_central_lower_limit` | 549 (548) | 0 (1) | - | - | - | +0.07% | `star_1_mass`: 7.198e-03 | 112 | #160 | declared gap (#160) |
+| `binary` | `jdot_ml_check` | `mesa_26_4_1` | `max_age` | strict | `max_age` | 888 (889) | 0 (0) | - | - | - | -0.00% | `star_1_mass`: 2.882e-05 | - | - | pass |
+| `binary` | `star_plus_point_mass` | `mesa_26_4_1` | `xa_central_lower_limit` | strict | `xa_central_lower_limit` | 308 (309) | 6 (6) | - | - | - | -0.02% | `star_2_mass`: 4.094e-03 | 296 | #160 | declared gap (#160) |
+| `binary` | `star_plus_point_mass_explicit_mdot` | `mesa_26_4_1` | `xa_central_lower_limit` | strict | `xa_central_lower_limit` | 540 (548) | 0 (1) | - | - | - | +0.03% | `star_2_mass`: 4.733e-03 | 112 | #160 | declared gap (#160) |
 | `binary` | `wind_fed_bhhmxb` | `mesa_26_4_1` | `xa_central_lower_limit` | strict | `timeout` | 297 (393) | 3 (4) | - | - | - | -14.98% | `star_1_mass`: 2.526e-02 | 137 | #160 | declared gap (#160) |
-| `astero` | `astero_adipls` | `mesa_26_4_1` | `xa_central_lower_limit` | diagnostic (1 controls ignored) | `xa_central_lower_limit` | 465 (465) | 0 (0) | - | - | 0.06% (1) | +0.00% | `log_L`: 5.428e-02 | 2 | #171 | declared gap (#171) |
-| `astero` | `astero_gyre` | `mesa_26_4_1` | `xa_central_lower_limit` | strict | `xa_central_lower_limit` | 465 (465) | 0 (0) | - | - | 0.06% (1) | +0.00% | `log_L`: 5.428e-02 | 2 | #170 | declared gap (#170) |
-| `astero` | `example_astero` | `mesa_26_4_1` | `xtra1` | diagnostic (51 controls ignored) | `astero_use_first_values_samples=1_best_chi2=2.933745e0_term=chi2_search_limit2` | 719 (737) | 0 (0) | - | - | 1.13% (18) | +0.01% | `log_L`: 1.288e-01 | 1 | #162 | declared gap (#162) |
-| `astero` | `fast_from_file` | `mesa_26_4_1` | `xtra1` | diagnostic (43 controls ignored) | `astero_from_file_samples=2_best_chi2=1.285688e0_term=limit_num_chi2_too_big` | 778 (508) | 0 (0) | - | - | 1.98% (10) | +2.22% | `log_L`: 4.000e-02 | 1 | #162 | declared gap (#162) |
+| `astero` | `astero_adipls` | `mesa_26_4_1` | `xa_central_lower_limit` | diagnostic (1 controls ignored) | `xa_central_lower_limit` | 465 (465) | 0 (0) | - | - | 0.13% (2) | -0.00% | `log_L`: 5.428e-02 | 2 | #171 | declared gap (#171) |
+| `astero` | `astero_gyre` | `mesa_26_4_1` | `xa_central_lower_limit` | strict | `xa_central_lower_limit` | 465 (465) | 0 (0) | - | - | 0.13% (2) | -0.00% | `log_L`: 5.428e-02 | 2 | #170 | declared gap (#170) |
+| `astero` | `example_astero` | `mesa_26_4_1` | `xtra1` | diagnostic (51 controls ignored) | `astero_use_first_values_samples=1_best_chi2=2.848146e0_term=chi2_search_limit2` | 719 (737) | 0 (0) | - | - | 0.36% (6) | +0.00% | `log_L`: 1.292e-01 | 2 | #162 | declared gap (#162) |
+| `astero` | `fast_from_file` | `mesa_26_4_1` | `xtra1` | diagnostic (43 controls ignored) | `astero_from_file_samples=2_best_chi2=1.176865e0_term=limit_num_chi2_too_big` | 780 (508) | 0 (0) | - | - | 1.80% (9) | +2.50% | `log_L`: 2.566e-03 | - | #162 | declared gap (#162) |
 | `astero` | `fast_newuoa` | `mesa_26_4_1` | `xtra1` | diagnostic (1 controls ignored) | `timeout` | 476 (479) | 0 (0) | - | - | 17.34% (79) | +0.00% | `log_g`: 1.368e+00 | 2 | #162 | declared gap (#162) |
-| `astero` | `fast_scan_grid` | `mesa_26_4_1` | `xtra1` | diagnostic (44 controls ignored) | `astero_scan_grid_samples=4_best_chi2=3.904330e-1_term=limit_num_chi2_too_big` | 1405 (470) | 0 (0) | - | - | 1.99% (10) | +6.13% | `log_L`: 8.617e-02 | 1 | #162 | declared gap (#162) |
-| `astero` | `fast_simplex` | `mesa_26_4_1` | `xtra1` | diagnostic (48 controls ignored) | `astero_simplex_samples=5_best_chi2=3.087452e-2_term=limit_num_chi2_too_big` | 2757 (408) | 0 (0) | - | - | 2.61% (12) | +12.90% | `log_L`: 5.521e-02 | 1 | #162 | declared gap (#162) |
-| `astero` | `surface_effects` | `mesa_26_4_1` | `max_model_number` | diagnostic (30 controls ignored) | `max_model_number` | 1 (1) | 0 (0) | 3.0 [3] (5.0 [5]) | - | 0.00% (0) | +0.00% | - | - | #162 | declared gap (#162) |
+| `astero` | `fast_scan_grid` | `mesa_26_4_1` | `xtra1` | diagnostic (44 controls ignored) | `astero_scan_grid_samples=4_best_chi2=4.899465e-1_term=limit_num_chi2_too_big` | 1407 (470) | 0 (0) | - | - | 2.93% (15) | +6.71% | `log_L`: 8.429e-02 | 1 | #162 | declared gap (#162) |
+| `astero` | `fast_simplex` | `mesa_26_4_1` | `xtra1` | diagnostic (48 controls ignored) | `astero_simplex_samples=5_best_chi2=8.210290e-2_term=limit_num_chi2_too_big` | 2392 (408) | 0 (0) | - | - | 0.79% (4) | +12.84% | `log_L`: 3.602e-05 | - | #162 | declared gap (#162) |
+| `astero` | `surface_effects` | `mesa_26_4_1` | `max_model_number` | diagnostic (30 controls ignored) | `max_model_number` | 1 (1) | 0 (0) | 5.0 [5] (5.0 [5]) | - | 0.00% (0) | +0.00% | - | - | #162 | declared gap (#162) |
 
 ## Convective-Core Track Comparisons (`mass_conv_core`, `#155`)
 
@@ -142,12 +142,12 @@ Generated mechanically from `baseline_run_26_4_1.json` / harness comparisons aga
 | Suite | Case | Run Mode | Observed Term | Steps (MESA) | Final Coord Diff | `mass_conv_core` Final Diff (Msun) | `mass_conv_core` Max Track Diff (Msun) | `mass_conv_core` Median Track Diff (Msun) | Declared Gap |
 | :--- | :--- | :--- | :--- | ---: | ---: | ---: | ---: | ---: | :--- |
 | `star` | `16M_conv_premix` | strict | `xa_central_lower_limit` | 378 (378) | -0.10% | -1.839e-01 | 1.598e+01 | 5.986e-03 | #155 |
-| `star` | `16M_predictive_mix` | strict | `xa_central_lower_limit` | 377 (377) | +0.00% | -4.763e-09 | 2.452e+00 | 1.760e-03 | #155 |
+| `star` | `16M_predictive_mix` | strict | `xa_central_lower_limit` | 377 (377) | +0.00% | -9.307e-09 | 2.452e+00 | 1.760e-03 | #155 |
 | `star` | `1M_thermohaline` | diagnostic (4 controls ignored) | `timeout` | 1753 (3380) | -2.73% | +0.000e+00 | 1.943e-02 | 0.000e+00 | #158 |
 | `star` | `conv_core_cpm` | strict | `xa_central_lower_limit` | 91 (92) | -1.12% | -2.924e-04 | 2.667e-03 | 5.195e-04 | #155 |
 | `star` | `extended_convective_penetration` | strict | - | 0 (64) | - | - | - | - | #231 |
-| `star` | `hb_2M` | strict | `xa_central_lower_limit` | 191 (190) | +0.35% | +1.086e-02 | 1.244e-01 | 1.592e-03 | #155 |
-| `star` | `semiconvection` | strict | `xa_central_lower_limit` | 293 (293) | +0.00% | +4.185e-04 | 5.649e-02 | 5.025e-04 | #155 |
+| `star` | `hb_2M` | strict | `xa_central_lower_limit` | 190 (190) | -0.00% | +7.347e-14 | 3.191e-10 | 1.842e-12 | #155 |
+| `star` | `semiconvection` | strict | `xa_central_lower_limit` | 293 (293) | +0.00% | -1.396e-04 | 5.185e-02 | 2.189e-04 | #155 |
 
 ## Mass-Loss Track Comparisons (`star_mass` and `mdot`, `#159`)
 
@@ -155,25 +155,31 @@ Generated mechanically from `baseline_run_26_4_1.json` / harness comparisons aga
 
 | Suite | Case | Run Mode | Observed Term | Steps (MESA) | Mass Col | Mass Final Diff (Msun) | Mass Max Track Diff (Msun) | mdot Col | mdot Final Diff | mdot Max Track Diff | mdot Median Track Diff | Declared Gap |
 | :--- | :--- | :--- | :--- | ---: | :--- | ---: | ---: | :--- | ---: | ---: | ---: | :--- |
-| `star` | `7M_prems_to_AGB` | strict | `log_L_upper_limit` | 766 (721) | `star_mass` | -9.983e-04 | 9.730e-04 | `log_abs_mdot` | -1.031e-02 | 2.581e+00 | 2.608e-03 | #161 |
+| `star` | `20M_z2m2_high_rotation` | diagnostic (10 controls ignored) | `timeout` | 676 (2744) | `star_mass` | +6.755e+00 | 9.148e-02 | `log_abs_mdot` | -1.990e+00 | 6.075e-01 | 3.386e-01 | #157 |
+| `star` | `7M_prems_to_AGB` | strict | `log_L_upper_limit` | 717 (721) | `star_mass` | -2.475e-04 | 2.498e-04 | `log_abs_mdot` | -1.419e-02 | 2.773e+00 | 2.826e-03 | #161 |
 | `star` | `accreted_material_j` | strict | `timeout` | 608 (452) | `star_mass` | -5.001e+00 | 4.988e+00 | - | - | - | - | #158 |
-| `star` | `c13_pocket` | diagnostic (1 controls ignored) | `oom_killed` | 7 (1949) | `star_mass` | +3.710e-02 | 2.930e-05 | `log_abs_mdot` | +1.244e+00 | 1.723e-01 | 1.601e-01 | #161 |
-| `star` | `diffusion_smoothness` | strict | `max_age` | 36 (36) | `star_mass` | +1.097e-10 | 4.397e-06 | `log_abs_mdot` | -9.645e-08 | 5.002e-03 | 2.548e-04 | #156 |
+| `star` | `c13_pocket` | diagnostic (1 controls ignored) | `timeout` | 496 (1949) | `star_mass` | +2.752e-02 | 8.848e-05 | `log_abs_mdot` | +5.698e-01 | 1.723e-01 | 4.922e-04 | #161 |
+| `star` | `cburn_inward` | strict | `timeout` | 234 (459) | `star_mass` | +2.910e-03 | 1.411e-05 | `log_abs_mdot` | -7.770e-02 | 7.024e-02 | 9.715e-05 | #157 |
+| `star` | `diffusion_smoothness` | strict | `max_age` | 36 (36) | `star_mass` | +1.030e-10 | 4.397e-06 | `log_abs_mdot` | -9.663e-08 | 5.002e-03 | 2.548e-04 | #156 |
 | `star` | `high_mass` | strict | `xa_central_lower_limit` | 98 (98) | `star_mass` | +0.000e+00 | 0.000e+00 | `log_abs_mdot` | +0.000e+00 | 0.000e+00 | 0.000e+00 | #157 |
-| `star` | `high_z` | strict | `xa_central_lower_limit` | 444 (445) | `star_mass` | +1.766e-04 | 1.110e-03 | `log_abs_mdot` | -1.896e-03 | 2.898e-01 | 2.551e-03 | #161 |
+| `star` | `high_rot_darkening` | diagnostic (5 controls ignored) | `xa_central_lower_limit` | 179 (188) | `star_mass` | +6.857e-03 | 2.973e-03 | `star_mdot` | +9.104e-09 | 2.058e-11 | 7.991e-12 | #158 |
+| `star` | `high_z` | strict | `xa_central_lower_limit` | 443 (445) | `star_mass` | +7.305e-04 | 1.031e-03 | `log_abs_mdot` | +1.277e-02 | 2.314e-01 | 1.874e-03 | #161 |
 | `star` | `hot_cool_wind` | strict | `timeout` | 512 (570) | `star_mass` | +4.049e-02 | 9.735e-04 | `log_abs_mdot` | -8.447e-01 | 1.954e-01 | 2.377e-03 | #161 |
-| `star` | `relax_composition_j_entropy` | strict | `xa_central_lower_limit` | 247 (259) | `star_mass` | -9.935e-03 | 3.048e-02 | `log_abs_mdot` | -1.058e-02 | 7.510e-02 | 9.265e-03 | #154 |
-| `star` | `timing` | strict | `xa_central_lower_limit` | 50 (50) | `star_mass` | +8.091e-13 | 2.918e-05 | `log_abs_mdot` | -9.943e-09 | 1.774e-01 | 7.921e-02 | #152 |
+| `star` | `make_co_wd` | strict | `timeout` | 322 (391) | `star_mass` | +2.470e+00 | 2.470e+00 | `log_abs_mdot` | +0.000e+00 | 0.000e+00 | 0.000e+00 | #157 |
+| `star` | `make_o_ne_wd` | strict | `log_L_lower_limit` | 253 (168) | `star_mass` | -3.433e-04 | 3.433e-04 | `log_abs_mdot` | +0.000e+00 | 0.000e+00 | 0.000e+00 | #157 |
+| `star` | `relax_composition_j_entropy` | strict | `xa_central_lower_limit` | 304 (259) | `star_mass` | +1.665e-02 | 3.108e-02 | `log_abs_mdot` | -4.037e-02 | 7.494e-02 | 1.382e-02 | #154 |
+| `star` | `starspots` | diagnostic (5 controls ignored) | `timeout` | 1630 (1496) | `star_mass` | -1.520e-04 | 6.222e-04 | `star_mdot` | +2.584e-13 | 1.785e-11 | 1.846e-14 | #158 |
+| `star` | `timing` | strict | `xa_central_lower_limit` | 50 (50) | `star_mass` | +0.000e+00 | 2.918e-05 | `log_abs_mdot` | -7.105e-14 | 1.774e-01 | 7.921e-02 | #152 |
 | `star` | `wd_nova_burst` | diagnostic (1 controls ignored) | `timeout` | 318 (480) | `star_mass` | +2.323e-05 | 2.323e-05 | `log_abs_mdot` | +0.000e+00 | 5.548e+00 | 0.000e+00 | #161 |
 | `star` | `wd_stable_h_burn` | diagnostic (2 controls ignored) | `timeout` | 339 (829) | `star_mass` | -6.990e-05 | 2.345e-06 | `log_abs_mdot` | +0.000e+00 | 2.037e+00 | 0.000e+00 | #154 |
-| `binary` | `double_bh` | diagnostic (1 controls ignored) | - | 0 (1022) | `star_1_mass` | - | - | - | - | - | - | #161 |
-| `binary` | `evolve_both_stars` | strict | `accretor_overflow_terminate` | 1295 (1295) | `star_1_mass` | -1.354e-07 | 1.474e-05 | `lg_mstar_dot_1` | +4.465e-03 | 4.689e+01 | 8.025e-04 | - |
+| `binary` | `double_bh` | diagnostic (1 controls ignored) | `timeout` | 699 (1022) | `star_1_mass` | +2.183e+00 | 1.682e-01 | `lg_mstar_dot_1` | +9.435e+01 | 5.082e+01 | 1.642e-02 | #161 |
+| `binary` | `evolve_both_stars` | strict | `accretor_overflow_terminate` | 1295 (1295) | `star_1_mass` | -4.984e-08 | 1.473e-05 | `lg_mstar_dot_1` | -3.969e-04 | 4.689e+01 | 3.969e-04 | - |
 | `binary` | `jdot_gr_check` | strict | `extras_binary_check_model` | 222 (231) | `star_1_mass` | +8.405e-09 | 1.696e-06 | `lg_mstar_dot_1` | +0.000e+00 | 3.960e+01 | 0.000e+00 | #160 |
-| `binary` | `jdot_ml_check` | strict | `max_age` | 888 (889) | `star_1_mass` | +1.843e-05 | 2.563e-05 | `lg_mstar_dot_1` | +9.995e-03 | 4.734e+01 | 1.183e-03 | - |
-| `binary` | `star_plus_point_mass` | strict | `xa_central_lower_limit` | 308 (309) | `star_1_mass` | -3.880e-04 | 4.115e-03 | `lg_mstar_dot_1` | +1.452e-01 | 4.527e+01 | 7.563e-04 | #160 |
-| `binary` | `star_plus_point_mass_explicit_mdot` | strict | `xa_central_lower_limit` | 549 (548) | `star_1_mass` | +4.155e-04 | 7.198e-03 | `lg_mstar_dot_1` | -1.402e-01 | 4.497e+01 | 1.924e-02 | #160 |
+| `binary` | `jdot_ml_check` | strict | `max_age` | 888 (889) | `star_1_mass` | +1.660e-05 | 2.882e-05 | `lg_mstar_dot_1` | +9.376e-03 | 4.734e+01 | 1.157e-03 | - |
+| `binary` | `star_plus_point_mass` | strict | `xa_central_lower_limit` | 308 (309) | `star_1_mass` | -3.627e-04 | 4.094e-03 | `lg_mstar_dot_1` | +2.771e-01 | 4.527e+01 | 7.077e-04 | #160 |
+| `binary` | `star_plus_point_mass_explicit_mdot` | strict | `xa_central_lower_limit` | 540 (548) | `star_1_mass` | +3.051e-04 | 4.733e-03 | `lg_mstar_dot_1` | -5.560e-02 | 4.497e+01 | 2.107e-02 | #160 |
 | `binary` | `wind_fed_bhhmxb` | strict | `timeout` | 297 (393) | `star_1_mass` | +2.189e+00 | 2.526e-02 | `lg_mstar_dot_1` | -7.052e-01 | 7.517e-02 | 8.704e-04 | #160 |
-| `astero` | `fast_scan_grid` | diagnostic (44 controls ignored) | `astero_scan_grid_samples=4_best_chi2=3.904330e-1_term=limit_num_chi2_too_big` | 1405 (470) | `star_mass` | -2.000e-02 | 2.000e-02 | - | - | - | - | #162 |
+| `astero` | `fast_scan_grid` | diagnostic (44 controls ignored) | `astero_scan_grid_samples=4_best_chi2=4.899465e-1_term=limit_num_chi2_too_big` | 1407 (470) | `star_mass` | -2.000e-02 | 2.000e-02 | - | - | - | - | #162 |
 
 ## Energy Conservation Track Comparisons (`log_rel_run_E_err`, `#151`)
 
@@ -182,23 +188,31 @@ Generated mechanically from `baseline_run_26_4_1.json` / harness comparisons aga
 | Suite | Case | Run Mode | Observed Term | Steps (MESA) | Col | FlexMESA Final | MESA 26.4.1 Final | Final Diff | Max Track Diff | Median Track Diff | Declared Gap |
 | :--- | :--- | :--- | :--- | ---: | :--- | ---: | ---: | ---: | ---: | ---: | :--- |
 | `star` | `1.5M_with_diffusion` | strict | `timeout` | 427 (430) | `log_rel_run_E_err` | -9.592 | - | - | - | - | #156 |
-| `star` | `16M_conv_premix` | strict | `xa_central_lower_limit` | 378 (378) | `log_rel_run_E_err` | -9.303 | -9.081 | -2.221e-01 | 4.311e-01 | 3.176e-03 | #155 |
-| `star` | `16M_predictive_mix` | strict | `xa_central_lower_limit` | 377 (377) | `log_rel_run_E_err` | -9.619 | -9.618 | -3.969e-04 | 4.498e-01 | 1.332e-03 | #155 |
+| `star` | `16M_conv_premix` | strict | `xa_central_lower_limit` | 378 (378) | `log_rel_run_E_err` | -9.303 | -9.081 | -2.220e-01 | 4.317e-01 | 3.157e-03 | #155 |
+| `star` | `16M_predictive_mix` | strict | `xa_central_lower_limit` | 377 (377) | `log_rel_run_E_err` | -9.618 | -9.618 | +5.435e-04 | 4.442e-01 | 9.514e-04 | #155 |
 | `star` | `1M_pre_ms_to_wd` | diagnostic (2 controls ignored) | `timeout` | 528 (429) | `log_rel_run_E_err` | -4.326 | -3.159 | -1.167e+00 | - | - | #154 |
-| `star` | `7M_prems_to_AGB` | strict | `log_L_upper_limit` | 766 (721) | `log_rel_run_E_err` | -8.124 | -7.901 | -2.223e-01 | 1.139e+00 | 7.422e-02 | #161 |
-| `star` | `gyre_in_mesa_rsg` | strict | `max_model_number` | 20 (20) | `log_rel_run_E_err` | -10.895 | -10.967 | +7.214e-02 | 4.393e-01 | 1.438e-01 | #170 |
-| `star` | `hb_2M` | strict | `xa_central_lower_limit` | 191 (190) | `log_rel_run_E_err` | -6.847 | -6.851 | +3.530e-03 | 4.728e-02 | 3.827e-05 | #155 |
-| `star` | `make_metals` | strict | `xa_central_lower_limit` | 568 (511) | `log_rel_run_E_err` | -7.201 | -7.127 | -7.344e-02 | 1.844e+00 | 1.605e-01 | #154 |
+| `star` | `7M_prems_to_AGB` | strict | `log_L_upper_limit` | 717 (721) | `log_rel_run_E_err` | -7.949 | -7.901 | -4.742e-02 | 5.461e-01 | 5.084e-02 | #161 |
+| `star` | `carbon_kh` | diagnostic (2 controls ignored) | `log_center_density_upper_limit` | 2362 (2362) | `log_rel_run_E_err` | -5.842 | -5.842 | +1.245e-07 | 8.256e+01 | 1.245e-04 | #161 |
+| `star` | `custom_rates` | diagnostic (4 controls ignored) | `min_timestep_limit` | 455 (487) | `log_rel_run_E_err` | -9.236 | -9.439 | +2.023e-01 | 4.399e-01 | 1.043e-01 | #161 |
+| `star` | `gyre_in_mesa_rsg` | strict | `max_model_number` | 20 (20) | `log_rel_run_E_err` | -10.898 | -10.967 | +6.835e-02 | 4.411e-01 | 1.392e-01 | #170 |
+| `star` | `gyre_in_mesa_wd` | strict | `log_Teff_lower_limit` | 209 (209) | `log_rel_run_E_err` | -7.551 | -7.551 | +7.299e-04 | 1.024e+00 | 4.647e-03 | #157 |
+| `star` | `hb_2M` | strict | `xa_central_lower_limit` | 190 (190) | `log_rel_run_E_err` | -6.851 | -6.851 | -6.071e-04 | 5.646e-04 | 1.464e-05 | #155 |
+| `star` | `make_co_wd` | strict | `timeout` | 322 (391) | `log_rel_run_E_err` | -7.767 | -10.019 | +2.251e+00 | 4.781e+00 | 2.378e+00 | #157 |
+| `star` | `make_metals` | strict | `xa_central_lower_limit` | 507 (511) | `log_rel_run_E_err` | -7.147 | -7.127 | -2.002e-02 | 1.843e+00 | 9.892e-02 | #154 |
+| `star` | `make_o_ne_wd` | strict | `log_L_lower_limit` | 253 (168) | `log_rel_run_E_err` | -2.419 | -2.421 | +2.190e-03 | 1.454e-02 | 2.124e-03 | #157 |
 | `star` | `make_planets` | diagnostic (1 controls ignored) | `max_model_number` | 1300 (90) | `log_rel_run_E_err` | -3.525 | -10.627 | +7.102e+00 | 9.235e+00 | 7.107e+00 | #154 |
-| `star` | `rsp_BEP` | diagnostic (1 controls ignored) | `extras_finish_step` | 7255 (7255) | `log_rel_run_E_err` | -6.666 | -6.666 | -7.152e-07 | 2.291e-01 | 1.044e-05 | #161 |
-| `star` | `rsp_BLAP` | diagnostic (1 controls ignored) | `extras_finish_step` | 7318 (7318) | `log_rel_run_E_err` | -5.719 | -5.719 | +9.721e-08 | 6.197e-01 | 9.640e-06 | #161 |
-| `star` | `rsp_Cepheid` | diagnostic (1 controls ignored) | `extras_finish_step` | 7266 (7266) | `log_rel_run_E_err` | -7.528 | -7.528 | +1.228e-06 | 2.307e-01 | 1.924e-05 | #161 |
-| `star` | `rsp_Delta_Scuti` | diagnostic (8 controls ignored) | `extras_finish_step` | 7973 (5810) | `log_rel_run_E_err` | -9.002 | -9.104 | +1.020e-01 | 3.813e-01 | 1.370e-03 | #162 |
-| `star` | `rsp_RR_Lyrae` | diagnostic (1 controls ignored) | `extras_finish_step` | 7220 (7220) | `log_rel_run_E_err` | -8.184 | -8.184 | +6.376e-06 | 2.866e-01 | 7.341e-05 | #161 |
-| `star` | `rsp_Type_II_Cepheid` | diagnostic (1 controls ignored) | `extras_finish_step` | 14680 (14683) | `log_rel_run_E_err` | -4.849 | -4.852 | +3.644e-03 | 3.030e-01 | 4.020e-03 | #162 |
-| `star` | `wd_c_core_ignition` | strict | `power_nuc_burn_upper_limit` | 1 (668) | `log_rel_run_E_err` | -4.679 | -2.112 | -2.568e+00 | - | - | #161 |
-| `star` | `wd_he_shell_ignition` | diagnostic (1 controls ignored) | `min_timestep_limit` | 7 (1112) | `log_rel_run_E_err` | -4.797 | -2.228 | -2.569e+00 | - | - | #154 |
-| `astero` | `example_astero` | diagnostic (51 controls ignored) | `astero_use_first_values_samples=1_best_chi2=2.933745e0_term=chi2_search_limit2` | 719 (737) | `log_rel_run_E_err` | -8.340 | -8.399 | +5.835e-02 | 4.353e-01 | 4.363e-02 | #162 |
-| `astero` | `fast_from_file` | diagnostic (43 controls ignored) | `astero_from_file_samples=2_best_chi2=1.285688e0_term=limit_num_chi2_too_big` | 778 (508) | `log_rel_run_E_err` | -10.205 | -10.069 | -1.365e-01 | 1.722e-01 | 9.324e-02 | #162 |
-| `astero` | `fast_scan_grid` | diagnostic (44 controls ignored) | `astero_scan_grid_samples=4_best_chi2=3.904330e-1_term=limit_num_chi2_too_big` | 1405 (470) | `log_rel_run_E_err` | -10.236 | -10.069 | -1.675e-01 | 2.308e-01 | 1.789e-01 | #162 |
-| `astero` | `fast_simplex` | diagnostic (48 controls ignored) | `astero_simplex_samples=5_best_chi2=3.087452e-2_term=limit_num_chi2_too_big` | 2757 (408) | `log_rel_run_E_err` | -10.165 | -10.053 | -1.115e-01 | 3.758e-01 | 1.479e-01 | #162 |
+| `star` | `ns_c` | strict | `power_nuc_burn_upper_limit` | 136 (261) | `log_rel_run_E_err` | -7.822 | -2.818 | -5.004e+00 | 4.985e+00 | 4.453e+00 | #157 |
+| `star` | `pisn` | diagnostic (8 controls ignored) | `timeout` | 344 (332) | `log_rel_run_E_err` | -4.282 | -3.078 | -1.204e+00 | 1.788e+00 | 9.346e-01 | #161 |
+| `star` | `rsp_BEP` | diagnostic (1 controls ignored) | `extras_finish_step` | 7255 (7255) | `log_rel_run_E_err` | -6.666 | -6.666 | +2.585e-07 | 2.279e-01 | 1.108e-05 | #161 |
+| `star` | `rsp_BLAP` | diagnostic (1 controls ignored) | `extras_finish_step` | 7318 (7318) | `log_rel_run_E_err` | -5.719 | -5.719 | +8.621e-08 | 6.188e-01 | 9.622e-06 | #161 |
+| `star` | `rsp_Cepheid` | diagnostic (1 controls ignored) | `extras_finish_step` | 7266 (7266) | `log_rel_run_E_err` | -7.528 | -7.528 | +1.295e-06 | 2.237e-01 | 1.950e-05 | #161 |
+| `star` | `rsp_Delta_Scuti` | diagnostic (8 controls ignored) | `extras_finish_step` | 7973 (5810) | `log_rel_run_E_err` | -9.002 | -9.104 | +1.020e-01 | 7.255e-01 | 1.337e-03 | #162 |
+| `star` | `rsp_RR_Lyrae` | diagnostic (1 controls ignored) | `extras_finish_step` | 7220 (7220) | `log_rel_run_E_err` | -8.184 | -8.184 | -7.196e-08 | 2.767e-01 | 6.733e-05 | #161 |
+| `star` | `rsp_Type_II_Cepheid` | diagnostic (1 controls ignored) | `extras_finish_step` | 14677 (14683) | `log_rel_run_E_err` | -4.849 | -4.852 | +3.588e-03 | 3.032e-01 | 4.023e-03 | #162 |
+| `star` | `wd_aic` | diagnostic (6 controls ignored) | `timeout` | 987 (524) | `log_rel_run_E_err` | -3.537 | -3.686 | +1.491e-01 | 8.706e+01 | 6.380e-03 | #161 |
+| `star` | `wd_c_core_ignition` | strict | `power_nuc_burn_upper_limit` | 599 (668) | `log_rel_run_E_err` | -2.111 | -2.112 | +9.225e-04 | 1.752e-01 | 3.409e-04 | #161 |
+| `star` | `wd_he_shell_ignition` | diagnostic (1 controls ignored) | `min_timestep_limit` | 7 (1112) | `log_rel_run_E_err` | -4.730 | -2.228 | -2.502e+00 | - | - | #154 |
+| `astero` | `example_astero` | diagnostic (51 controls ignored) | `astero_use_first_values_samples=1_best_chi2=2.848146e0_term=chi2_search_limit2` | 719 (737) | `log_rel_run_E_err` | -8.432 | -8.399 | -3.372e-02 | 4.408e-01 | 2.222e-02 | #162 |
+| `astero` | `fast_from_file` | diagnostic (43 controls ignored) | `astero_from_file_samples=2_best_chi2=1.176865e0_term=limit_num_chi2_too_big` | 780 (508) | `log_rel_run_E_err` | -10.177 | -10.069 | -1.085e-01 | 1.468e-01 | 5.650e-02 | #162 |
+| `astero` | `fast_scan_grid` | diagnostic (44 controls ignored) | `astero_scan_grid_samples=4_best_chi2=4.899465e-1_term=limit_num_chi2_too_big` | 1407 (470) | `log_rel_run_E_err` | -10.134 | -10.069 | -6.486e-02 | 2.265e-01 | 6.432e-02 | #162 |
+| `astero` | `fast_simplex` | diagnostic (48 controls ignored) | `astero_simplex_samples=5_best_chi2=8.210290e-2_term=limit_num_chi2_too_big` | 2392 (408) | `log_rel_run_E_err` | -10.082 | -10.053 | -2.850e-02 | 7.853e-02 | 1.612e-03 | #162 |

@@ -419,6 +419,7 @@ pub struct PrimaryStateBuffer {
     pub(crate) doing_struct_burn_mix: bool,
     pub(crate) have_mlt_vc: bool,
     pub(crate) okay_to_set_mlt_vc: bool,
+    pub(crate) k_below_const_q: usize,
     pub(crate) k_const_mass: usize,
     pub(crate) total_energy: f64,
     pub(crate) total_internal_energy_start: f64,
@@ -508,6 +509,7 @@ macro_rules! make_empty_buf {
             init_model_number: 0,
             solver_mlt_eval_count: 0,
             diffusion_call_number: 0,
+            k_below_const_q: 1,
             k_const_mass: 0,
             $( $v: Vec::new(), )+
             $( $z: 0.0, )+
@@ -655,6 +657,7 @@ impl PrimaryStateBuffer {
                 doing_struct_burn_mix,
                 have_mlt_vc,
                 okay_to_set_mlt_vc,
+                k_below_const_q,
                 k_const_mass,
                 total_energy,
                 total_internal_energy_start,
@@ -836,6 +839,7 @@ impl PrimaryStateBuffer {
                     doing_relax,
                     have_mlt_vc,
                     okay_to_set_mlt_vc,
+                    k_below_const_q,
                     k_const_mass,
                     total_energy,
                     total_internal_energy_start,

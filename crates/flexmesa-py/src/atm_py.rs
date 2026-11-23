@@ -11,7 +11,9 @@ use flexmesa_atm::{
     ATM_TABLE_PHOTOSPHERE,
 };
 use flexmesa_const::LN10;
-use flexmesa_eos::{eos_pt_get, EosConfig, HelmTable, I_ETA, I_LN_FREE_E};
+use flexmesa_eos::{
+    eos_pt_get_with_linear, EosConfig, HelmTable, I_ETA, I_LN_FREE_E,
+};
 use flexmesa_kap::{kap_get, KapConfig, KapLowTOption};
 use numpy::{PyArray1, PyArray2, PyArrayMethods, PyReadonlyArray1};
 use pyo3::exceptions::PyValueError;
@@ -81,13 +83,20 @@ fn eval_eos_callback(
     let pgas = (p - prad).max(1.0e-99);
     let log_pgas = flexmesa_math::log10(pgas);
     let log_t = ln_t / LN10;
-    let pt =
-        eos_pt_get(ht, chem_id, xa, log_pgas, log_t, eos_cfg).map_err(|e| {
-            AtmError::CallbackError {
-                context: "eos_proc",
-                detail: e.to_string(),
-            }
-        })?;
+    let pt = eos_pt_get_with_linear(
+        ht,
+        chem_id,
+        xa,
+        log_pgas,
+        log_t,
+        Some(pgas),
+        Some(t),
+        eos_cfg,
+    )
+    .map_err(|e| AtmError::CallbackError {
+        context: "eos_proc",
+        detail: e.to_string(),
+    })?;
     Ok(AtmEosCallbackResult {
         ln_rho: pt.log10_rho * LN10,
         res: pt.eos.res,

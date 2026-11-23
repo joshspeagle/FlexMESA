@@ -161,21 +161,53 @@ impl ParsedNetDef {
         filename: &str,
         search_dir: Option<&Path>,
     ) -> Result<(), NetError> {
-        let files = builtin_net_files();
-        let owned_src;
-        let src: &str = if let Some(s) = files.get(filename) {
-            s.as_str()
-        } else if let Some(dir) = search_dir {
-            let p = dir.join(filename);
-            owned_src = fs::read_to_string(&p)
-                .map_err(|_| NetError::UnknownNetFile(filename.to_string()))?;
-            owned_src.as_str()
-        } else if Path::new(filename).exists() {
-            owned_src = fs::read_to_string(filename)
-                .map_err(|_| NetError::UnknownNetFile(filename.to_string()))?;
-            owned_src.as_str()
-        } else {
+        self.read_net_file_with_depth(filename, search_dir, 0)
+    }
+
+    fn read_net_file_with_depth(
+        &mut self,
+        filename: &str,
+        search_dir: Option<&Path>,
+        depth: usize,
+    ) -> Result<(), NetError> {
+        const MAX_NET_INCLUDE_DEPTH: usize = 32;
+        let trimmed = filename.trim();
+        if trimmed.is_empty() {
             return Err(NetError::UnknownNetFile(filename.to_string()));
+        }
+        if depth > MAX_NET_INCLUDE_DEPTH {
+            return Err(NetError::ParseError(format!(
+                "net include depth exceeded {MAX_NET_INCLUDE_DEPTH} while reading '{trimmed}'"
+            )));
+        }
+        // Upstream MESA `net/private/net_initialize.f90:286-302`
+        // (`do_read_net_file`): resolve `<dir>/<file>`, then
+        // `<dir>/nets/<file>`, then built-in `data/net_data/nets/<file>`.
+        let (local_path, nets_sub_path) = match search_dir {
+            Some(dir) => (dir.join(trimmed), dir.join("nets").join(trimmed)),
+            None => (
+                Path::new(trimmed).to_path_buf(),
+                Path::new("nets").join(trimmed),
+            ),
+        };
+        let files = builtin_net_files();
+        let mut owned_src = None;
+        for candidate in [&local_path, &nets_sub_path] {
+            if candidate.is_file() {
+                owned_src = Some(fs::read_to_string(candidate).map_err(|e| {
+                    NetError::ParseError(format!(
+                        "failed to read net file '{trimmed}': {e}"
+                    ))
+                })?);
+                break;
+            }
+        }
+        let src: &str = if let Some(ref s) = owned_src {
+            s.as_str()
+        } else if let Some(s) = files.get(trimmed) {
+            s.as_str()
+        } else {
+            return Err(NetError::UnknownNetFile(trimmed.to_string()));
         };
         let tokens = tokenize_net(src);
         let mut idx = 0_usize;
@@ -213,9 +245,13 @@ impl ParsedNetDef {
                                 .to_string(),
                         ));
                     };
-                    let inc_name = inc.clone();
+                    let inc_name = inc.trim().to_string();
                     idx += 1;
-                    self.read_net_file(&inc_name, search_dir)?;
+                    self.read_net_file_with_depth(
+                        &inc_name,
+                        search_dir,
+                        depth + 1,
+                    )?;
                 }
                 other => {
                     return Err(NetError::ParseError(format!(

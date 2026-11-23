@@ -16,8 +16,8 @@ use crate::system::{BinaryCompanion, BinarySystem};
 /// Synchronizes initial hydrodynamic, rotational, and step-history state of a
 /// component [`StarModel`] at `model_number = 0, star_age = 0` before coupled
 /// binary evolution begins (`F3-9`: no fabricated pre-evolution settling loops;
-/// `&star_job` `relax_initial_Z` / `relax_initial_Y` is handled by
-/// `flexmesa_star::relax_composition_with_henyey`).
+/// `&star_job` `relax_initial_Z` / `relax_initial_Y` run during the star's
+/// initialization through `do_internal_evolve`).
 pub(crate) fn prep_and_settle_binary_star(
     star: &mut StarModel,
 ) -> Result<(), StarError> {
@@ -30,12 +30,6 @@ pub(crate) fn prep_and_settle_binary_star(
         }
     }
     update_rotation_distortion_factors(star);
-
-    if star.job.relax_z || star.job.relax_y {
-        star.star_age = 0.0;
-        star.star_age_old = 0.0;
-        star.model_number = 0;
-    }
 
     star.mstar_start = star.mstar;
     star.mstar_old = star.mstar;

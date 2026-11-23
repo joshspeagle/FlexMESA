@@ -266,8 +266,10 @@ pub fn apply_step_pre_physics_with_extras(
     }
 
     // Refresh hydro and mixing info before operator-split pre-physics
-    // (`evolve.f90:569,606`).
-    set_hydro_vars(model, false, false)?;
+    // (`evolve.f90:569,606`): `set_vars_if_needed`.
+    if model.aux.need_to_setvars {
+        set_hydro_vars(model, false, false)?;
+    }
 
     if model.controls.do_conv_premix {
         if model.aux.eps_pre_mix.len() != nz {

@@ -10,7 +10,7 @@ use flexmesa_const::M_SUN;
 use crate::controls::{StarControls, StarJobControls};
 use crate::model_io::{read_mod_str, write_mod_string};
 use crate::relax::{
-    apply_composition_relaxation, apply_uniform_rotation, relax_core_boundary,
+    apply_uniform_rotation, relax_core_boundary,
     relax_from_profile_files, relax_irradiation_to_target,
     relax_mass_to_target, relax_tau_factor_to_target, relax_to_remove_h_env,
 };
@@ -95,7 +95,7 @@ fn test_read_mod_str_parses_w_and_w_div_wc_columns() {
 #[test]
 fn test_multi_step_relaxation_routines_preserve_physical_invariants() {
     let controls = StarControls::default();
-    let mut job = StarJobControls::default();
+    let job = StarJobControls::default();
     let mut model = load_zams_model(controls, job.clone())
         .expect("1 Msun ZAMS should load");
 
@@ -134,14 +134,10 @@ fn test_multi_step_relaxation_routines_preserve_physical_invariants() {
     );
     assert!(model.aux.irradiation_heat[0] > 0.0);
 
-    // 6. Uniform rotation & composition relaxation
+    // 6. Uniform rotation
     apply_uniform_rotation(&mut model, 1.0e-5);
     assert!(model.controls.rotation_flag);
     assert!(model.aux.w_div_wc[0] > 0.0);
-    job.relax_y = true;
-    job.new_y = 0.28;
-    apply_composition_relaxation(&mut model, &job);
-    assert!(!model.aux.doing_relax);
 }
 
 fn write_test_relax_profile_files(

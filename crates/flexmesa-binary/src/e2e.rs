@@ -11,7 +11,7 @@ use flexmesa_const::{MSUN, RSUN, SECDAY, SECYER};
 use flexmesa_star::{
     DefaultStarExtras, InlistBundle, InlistLoadOptions, StarError, StarModel,
     ZamsCatalog, init_or_update_model_from_bundle,
-    load_zams_model_from_catalog, relax_composition_with_henyey,
+    load_zams_model_from_catalog,
 };
 
 use crate::binary_history::BinaryLogsWriter;
@@ -94,12 +94,9 @@ fn init_binary_star_component(
         options,
     )?;
     bundle.controls.initial_mass = mass_msun;
-    let needs_henyey_yz_relax = bundle.job.relax_z || bundle.job.relax_y;
-    let mut init_bundle = bundle.clone();
-    if needs_henyey_yz_relax {
-        init_bundle.job.relax_z = false;
-        init_bundle.job.relax_y = false;
-    }
+    // `relax_Z` / `relax_Y` run inside `init_or_update_model_from_bundle`
+    // through `do_internal_evolve` (`star/job/run_star_support.f90:2386-2420`).
+    let init_bundle = bundle.clone();
     let zams_fname = bundle.controls.zams_filename.trim();
     let custom_zams = !zams_fname.is_empty()
         && !zams_fname.eq_ignore_ascii_case("zams_z2m2_y28.data");
@@ -108,9 +105,9 @@ fn init_binary_star_component(
         && !bundle.job.create_initial_model
         && !bundle.job.use_other_build_initial_model
         && (custom_zams
-            || ((bundle.job.relax_z
+            || ((bundle.job.changes_z()
                 || (bundle.controls.initial_z - 0.02).abs() <= 1.0e-4)
-                && (bundle.job.relax_y
+                && (bundle.job.changes_y()
                     || bundle.controls.initial_y < 0.0
                     || (bundle.controls.initial_y - 0.28).abs() <= 1.0e-4)));
     let seed_zams = if uses_zams_catalog {
@@ -138,9 +135,6 @@ fn init_binary_star_component(
         &mut star_extras,
     )?;
     model.job = bundle.job.clone();
-    if needs_henyey_yz_relax {
-        relax_composition_with_henyey(&mut model, &bundle.job)?;
-    }
     Ok(model)
 }
 

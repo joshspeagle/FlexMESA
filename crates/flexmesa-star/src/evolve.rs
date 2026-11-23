@@ -1163,6 +1163,9 @@ pub(crate) fn star_evolve_step_outcome_checked(
     loop {
         model.dt = dt_try;
         model.step_retry_cnt = retries;
+        // `need_to_setvars = .true.  ! always start fresh`
+        // (`star/private/evolve.f90:319`).
+        model.aux.need_to_setvars = true;
         // `do_step_part1` clears the hold on every try of the first model,
         // retries included (`star/private/evolve.f90:355-370`).
         if model.doing_first_model_of_run {

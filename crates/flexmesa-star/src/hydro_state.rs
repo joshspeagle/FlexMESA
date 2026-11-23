@@ -325,6 +325,10 @@ const fn default_k_below_const_q() -> usize {
     1
 }
 
+const fn need_to_setvars_default() -> bool {
+    true
+}
+
 /// Auxiliary hydrodynamic, thermodynamic, and heating state vectors for
 /// `flexmesa-star` (`star_data_step_work.inc`).
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -332,6 +336,16 @@ pub struct HydroAuxState {
     /// Whether the model is currently in an initialization relaxation phase
     /// (`doing_relax` in `star_data_def.f90`).
     pub doing_relax: bool,
+    /// `need_to_setvars` (`star_data_step_work.inc`), as far as it is ported:
+    /// `false` only after `relax_composition_adjust_model` has changed `xa`
+    /// without asking for new variables, so the `set_vars_if_needed` calls
+    /// before the solve and the solver's evaluation before its first
+    /// iteration keep the microphysics from before the change
+    /// (`star/private/evolve.f90:580-666`,
+    /// `star/private/solver_support.f90:108-118`). Everywhere else the
+    /// variables are recomputed whenever they are set, so it stays `true`.
+    #[serde(default = "need_to_setvars_default")]
+    pub need_to_setvars: bool,
     /// Whether the model is currently inside `do_struct_burn_mix`
     /// (`doing_struct_burn_mix` in `star_data_step_work.inc`).
     pub doing_struct_burn_mix: bool,
@@ -603,6 +617,7 @@ impl HydroAuxState {
     pub fn new(nz: usize, species: usize) -> Self {
         Self {
             doing_relax: false,
+            need_to_setvars: true,
             doing_struct_burn_mix: false,
             total_energy: 0.0,
             total_internal_energy_start: 0.0,

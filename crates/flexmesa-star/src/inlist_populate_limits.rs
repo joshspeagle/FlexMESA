@@ -131,6 +131,8 @@ impl InlistBundle {
         }
         ctrl.try_isize_into("controls", &mut c.max_number_retries, "max_number_retries")?;
         ctrl.try_isize_into("controls", &mut c.relax_max_number_retries, "relax_max_number_retries")?;
+        ctrl.try_f64_into("controls", &mut c.relax_dy, "relax_dY")?;
+        ctrl.try_f64_into("controls", &mut c.relax_dlnz, "relax_dlnZ")?;
         ctrl.try_f64_into("controls", &mut c.max_years_for_timestep, "max_years_for_timestep")?;
         ctrl.try_bool_into("controls", &mut c.stop_near_zams, "stop_near_zams")?;
         ctrl.try_f64_into("controls", &mut c.lnuc_div_l_zams_limit, "lnuc_div_l_zams_limit")?;

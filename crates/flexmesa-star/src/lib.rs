@@ -138,6 +138,7 @@ pub mod pulse_utils;
 pub mod relax;
 pub mod relax_comp;
 pub(crate) mod relax_driver;
+pub(crate) mod relax_mass_comp;
 pub mod report_utils;
 pub mod riemann;
 pub mod riemann_ad;
@@ -415,11 +416,10 @@ pub use pulse_modes::{
     solve_gyre_mesa_modes,
 };
 pub use relax::{
-    apply_composition_relaxation, apply_planetary_core, apply_uniform_rotation,
+    apply_planetary_core, apply_uniform_rotation,
     relax_core_boundary, relax_from_profile_files, relax_irradiation_to_target,
     relax_mass_to_target, relax_tau_factor_to_target, relax_to_remove_h_env,
 };
-pub use relax_comp::relax_composition_with_henyey;
 pub use report_utils::{
     ConvAndMixSummary, MESA_REF_VERSION_NUMBER, PhotosphereInfo,
     STAR_LOG_COL_WIDTH, StepReportContext, SurfAvgRotationInfo,

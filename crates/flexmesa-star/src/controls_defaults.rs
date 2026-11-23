@@ -23,6 +23,8 @@ impl Default for StarControls {
             max_age_in_seconds: None,
             max_number_retries: -1,
             relax_max_number_retries: 300,
+            relax_dy: 0.005,
+            relax_dlnz: 2.302_585_092_994_045_9e-1,
             max_years_for_timestep: 0.0,
             min_timestep_limit: 1.0e-6,
             mixing_length_alpha: 2.0,

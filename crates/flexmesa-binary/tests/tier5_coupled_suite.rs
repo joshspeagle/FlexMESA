@@ -933,6 +933,8 @@ fn test_coupled_double_bh_35_steps_preserves_star_controls() {
     b_probe.controls.initial_mass = 10.0;
     b_probe.job.relax_z = false;
     b_probe.job.relax_y = false;
+    b_probe.job.relax_initial_z = false;
+    b_probe.job.relax_initial_y = false;
     let seed = load_zams_model(b_probe.controls.clone(), b_probe.job.clone())
         .expect("probe ZAMS");
     let mut star_extras = DefaultStarExtras;
@@ -1253,6 +1255,8 @@ fn test_double_bh_che_diffusivity_stiffness_and_bh_collapse_invariants() {
     probe.controls.initial_mass = 20.0;
     probe.job.relax_z = false;
     probe.job.relax_y = false;
+    probe.job.relax_initial_z = false;
+    probe.job.relax_initial_y = false;
     let seed = load_zams_model(probe.controls.clone(), probe.job.clone())
         .expect("zams");
     let mut extras = DefaultStarExtras;

@@ -845,13 +845,42 @@ def build_manifest_inventory_records(
         if manifest_path is not None
         else None
     )
+    records = records_from_stored_rows(manifest, gaps, stored_by_key, base_dir)
+    return manifest, gaps, records
+
+
+def records_from_stored_rows(
+    manifest: case_manifest.HarnessManifest,
+    gaps: dict[tuple[str, str], case_manifest.KnownGapSpec],
+    stored_by_key: dict[tuple[str, str], dict[str, Any]],
+    base_dir: pathlib.Path | None = None,
+    *,
+    max_steps: int | None = None,
+) -> list[harness_runner.CaseHarnessRecord]:
+    """Rebuild ``CaseHarnessRecord`` entries from stored JSON case rows.
+
+    Verdicts are re-evaluated against ``manifest`` and ``gaps`` from the
+    stored measurements and comparisons; no history file is read.
+
+    Args:
+        manifest: Loaded ``HarnessManifest``.
+        gaps: Loaded ``known_gaps.toml`` mapping.
+        stored_by_key: Executed case rows (as written by
+            :func:`record_to_dict`) keyed by ``(suite, case)``.
+        base_dir: Directory against which manifest reference paths resolve.
+        max_steps: Step cap the stored runs used, or ``None`` when uncapped.
+
+    Returns:
+        One record per manifest entry, in manifest order; entries without a
+        stored row are not-executed records.
+    """
     records: list[harness_runner.CaseHarnessRecord] = []
     for entry in manifest.cases:
         stored = stored_by_key.get(entry.key)
         if stored is None:
             records.append(
                 harness_runner.evaluate_case_record(
-                    entry, gaps, None, root_dir=base_dir
+                    entry, gaps, None, max_steps=max_steps, root_dir=base_dir
                 )
             )
             continue
@@ -927,6 +956,7 @@ def build_manifest_inventory_records(
                 entry,
                 gaps,
                 outcome,
+                max_steps=max_steps,
                 root_dir=base_dir,
                 precomputed_comparison=comp,
                 precomputed_component_comparisons=ccomps,
@@ -936,4 +966,4 @@ def build_manifest_inventory_records(
                 precomputed_mesa_stats=pre_mesa,
             )
         )
-    return manifest, gaps, records
+    return records

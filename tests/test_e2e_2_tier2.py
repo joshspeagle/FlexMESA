@@ -198,14 +198,6 @@ def test_upstream_tier2_test_suite_case_and_restart_reproducibility(
     _check_tier2_case(case_name, tmp_path)
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "#414: the first pre-MS relax step of make_co_wd does not converge "
-        "(min_timestep_limit) where MESA 26.4.1's retry does, so the run "
-        "stops before the stage with unported controls."
-    ),
-)
 def test_upstream_tier2_make_co_wd_fails_strictly_on_unported_controls(
     tmp_path: pathlib.Path,
 ) -> None:

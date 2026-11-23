@@ -757,15 +757,6 @@ reason = "Rust eval_face_dm_bar at k = nz - 1 uses 0.5*(dm[k-1] + dm[k]) (MESA 2
 
 [[test_gaps]]
 kind = "python_xfail"
-file = "tests/test_e2e_2_tier2.py"
-test_name = "test_upstream_tier2_make_co_wd_fails_strictly_on_unported_controls"
-issue = "#414"
-role = "physics_gap"
-expect_fail_when_run = true
-reason = "The first pre-MS relax step of make_co_wd does not converge (min_timestep_limit) where MESA 26.4.1's retry does, so the run stops before the stage with unported controls."
-
-[[test_gaps]]
-kind = "python_xfail"
 file = "tests/test_star_wave4_2.py"
 test_name = "test_solve_henyey_damped_newton_converges_for_all_modes"
 issue = "#154"

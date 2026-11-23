@@ -1,8 +1,9 @@
 # Declared Level-2 module-hex gaps against upstream MESA 26.4.1 (#144).
 # Clean 0-ULP modules (const: 23/23, math: 99/99, auto_diff: 387/387,
-# binary: 5/5, neu: 300000/300000) are omitted here and fail if
-# any regression occurs. Remaining packages must declare open issues and ULP
-# ceilings; improving a nonzero_ulp module to 0 ULP fails as a stale gap.
+# binary: 5/5, neu: 300000/300000, rates: 3639/3639, ionization: 31/31,
+# atm: 39/39) are omitted here and fail if any regression occurs. Remaining packages must
+# declare open issues and ULP ceilings; improving a nonzero_ulp module to
+# 0 ULP fails as a stale gap.
 
 [[gaps]]
 module = "utils"
@@ -48,15 +49,6 @@ expect_nonzero_ulp = false
 reason = "All 286 Lodders (2003) atom percents match at 0 ULP; remaining 816 composition/mass rows await driver wiring."
 
 [[gaps]]
-module = "ionization"
-status = "nonzero_ulp"
-issue = "#161"
-max_declared_ulp = 15000000
-min_zero_ulp_count = 28
-expect_nonzero_ulp = true
-reason = "28/28 eval_ionization channels match at 0 ULP; 3 Fe56-in-He4 table interpolations differ by up to ~1.07e7 ULPs (~1e-8 rel)."
-
-[[gaps]]
 module = "kap"
 status = "nonzero_ulp"
 issue = "#161"
@@ -85,12 +77,12 @@ reason = "All 4 interior midpoint bicubic spline coefficients match at 0 ULP; re
 
 [[gaps]]
 module = "colors"
-status = "nonzero_ulp"
+status = "partial_0_ulp"
 issue = "#161"
-max_declared_ulp = 20
-min_zero_ulp_count = 4
-expect_nonzero_ulp = true
-reason = "Group 1 solar Mag_bol/B/U/V match at 0 ULP; remaining 6 bolometric/band channels differ by 1-13 ULPs."
+max_declared_ulp = 0
+min_zero_ulp_count = 10
+expect_nonzero_ulp = false
+reason = "All 10 tested Group 1 solar bolometric and UBVRIJM band values match at 0 ULP; remaining 224 grid/SED outputs await probe wiring."
 
 [[gaps]]
 module = "turb"
@@ -100,15 +92,6 @@ max_declared_ulp = 10
 min_zero_ulp_count = 40
 expect_nonzero_ulp = true
 reason = "40/62 TDC gradT and conv_vel outputs of the Rust kernel agree at 0 ULP; the remaining TDC iterations differ by up to 6 ULPs."
-
-[[gaps]]
-module = "rates"
-status = "nonzero_ulp"
-issue = "#161"
-max_declared_ulp = 35
-min_zero_ulp_count = 3636
-expect_nonzero_ulp = true
-reason = "3,636/3,639 outputs (all 2,763 raw rates, 12 screening, 845/846 weak, 4 Coulomb, 4 Suzuki/weaklib, pycno, r3, and 4 rev_c1) match at 0 ULP; 3 Fermi-Dirac ecapture evaluations differ by 1-29 ULPs."
 
 [[gaps]]
 module = "num"
@@ -130,15 +113,6 @@ max_declared_ulp = 66
 min_zero_ulp_count = 55
 expect_nonzero_ulp = true
 reason = "55/116 net_get outputs match at 0 ULP across 7 upstream nets (0 ULP on approx21_cr60_plus_co56 weak rates; max 66 ULP on approx21 category subtotals); 8 one-zone burn rows remain unchecked."
-
-[[gaps]]
-module = "atm"
-status = "nonzero_ulp"
-issue = "#161"
-max_declared_ulp = 9000000
-min_zero_ulp_count = 15
-expect_nonzero_ulp = true
-reason = "All 39 computed outputs checked: 15 at 0 ULP (20 within 2 ULP across WD tables, photosphere logT, T(tau) uniform/varying logT, and irradiated); 14 non-WD table rows differ by up to 7.86e6 ULPs (~7e-9 rel) from f64 vs f32 fvbicub_db basis terms, and 5 dopri5 T(tau) varying logP integrations differ by 117-43,905 ULPs."
 
 [[gaps]]
 module = "gyre"

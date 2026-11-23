@@ -236,7 +236,9 @@ impl HelmTable {
         AutoDiffReal2VarOrder3,
         AutoDiffReal2VarOrder3,
     ) {
-        let ye = zbar / abar;
+        // Match upstream skye.f90:327-328 (`ytot1 = 1/abar; ye = ytot1 * zbar`).
+        let ytot1 = 1.0 / abar;
+        let ye = ytot1 * zbar;
         let din = ye * den;
         let c = self.cell(log_temp, din);
         let xt = ((temp - c.t_lo) * c.dti).max(0.0);
@@ -249,7 +251,8 @@ impl HelmTable {
 
         let ye2 = ye * ye;
         let ye3 = ye2 * ye;
-        let ye4 = ye2 * ye2;
+        // Match upstream skye_ideal.f90:647 `pow4(ye)` (`ye * ye * ye * ye`).
+        let ye4 = ye3 * ye;
 
         let f_ele = AutoDiffReal2VarOrder3 {
             val: h5(&c.fi_f, &qt.w0, &qd.w0) * ye,

@@ -255,18 +255,31 @@ fn weak_low_t_rate(
     rhs_id: u16,
     has_weaklib: bool,
 ) -> f64 {
-    // Catalog lookup: fall back to tabulated weak half-life when Reaclib terms
-    // are absent for this weak transition.
-    if let Ok((is_rev, terms)) = cat.reaclib_terms(rxn_name) {
-        if !terms.is_empty() {
-            let slice = if has_weaklib {
-                &terms[terms.len() - 1..]
-            } else {
-                terms
-            };
-            let (fw, _, rv, _) =
-                eval_reaclib_terms(slice, 0.01, DEFAULT_REACLIB_MIN_T9, false);
-            return if is_rev { rv } else { fw };
+    // In upstream `init_rates_info` (`rates/private/rates_initialize.f90:1256-1262`),
+    // predefined `reactions.list` entries call `set_weak_lowT_rate` (`808`, `403-459`)
+    // before `finish_rates_def_init` (`55`) extracts `reaclib_rates`. Because
+    // `reaclib_rates% reaction_dict` is still null (`reaclib_eval.f90:249-252`),
+    // `do_reaclib_indices_for_reaction` fails and falls back to `weak_info.list`
+    // (`LN2 / half_life` when present, e.g. `r_be7_wk_li7`, else `-1.0e-99`).
+    // Reactions added dynamically via `add_reaction_from_reaclib` (`142-239`, `325`)
+    // run after `finish_rates_def_init` and therefore resolve in `reaclib_rates`.
+    let is_predefined = cat.reaction_id_by_name(rxn_name).is_some();
+    if !is_predefined {
+        if let Ok((is_rev, terms)) = cat.reaclib_terms(rxn_name) {
+            if !terms.is_empty() {
+                let slice = if has_weaklib {
+                    &terms[terms.len() - 1..]
+                } else {
+                    terms
+                };
+                let (fw, _, rv, _) = eval_reaclib_terms(
+                    slice,
+                    0.01,
+                    DEFAULT_REACLIB_MIN_T9,
+                    false,
+                );
+                return if is_rev { rv } else { fw };
+            }
         }
     }
     if let Some((half_life, _)) = cat.weak_info_by_ids(lhs_id, rhs_id) {
@@ -274,7 +287,7 @@ fn weak_low_t_rate(
             return LN2 / half_life;
         }
     }
-    if has_weaklib {
+    if !is_predefined && has_weaklib {
         return -1.0;
     }
     -1.0e-99
@@ -595,5 +608,71 @@ pub fn update_special_rates(
             symbolic,
             just_dydt,
         );
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use flexmesa_chem::NuclideCatalog;
+    use flexmesa_math::{exp10, with_numerics_mode, NumericsMode};
+
+    use super::*;
+    use crate::types::{RATTAB_TEMP_LO, RATTAB_TLO};
+
+    #[test]
+    fn test_weak_low_t_rate_matches_mesa_init_order() {
+        let cat = RatesCatalog::builtin();
+        let nuclides = NuclideCatalog::builtin_ref();
+        let cid = |name: &str| nuclides.get_nuclide_index(name).unwrap() as u16;
+
+        with_numerics_mode(NumericsMode::Strict, || {
+            let be7_rate = weak_low_t_rate(
+                cat,
+                "r_be7_wk_li7",
+                cid("be7"),
+                cid("li7"),
+                true,
+            );
+            assert_eq!(be7_rate.to_bits(), 0x3E84_34AE_CB5C_CB90);
+
+            let pp_rate = weak_low_t_rate(
+                cat,
+                "r_h1_h1_wk_h2",
+                cid("h1"),
+                cid("h2"),
+                false,
+            );
+            assert_eq!(pp_rate.to_bits(), (-1.0e-99_f64).to_bits());
+
+            let b8_rate = weak_low_t_rate(
+                cat,
+                "r_b8_wk_he4_he4",
+                cid("b8"),
+                cid("he4"),
+                false,
+            );
+            assert_eq!(b8_rate.to_bits(), (-1.0e-99_f64).to_bits());
+
+            let n13_rate = weak_low_t_rate(
+                cat,
+                "r_n13_wk_c13",
+                cid("n13"),
+                cid("c13"),
+                false,
+            );
+            assert_eq!(n13_rate.to_bits(), 0x3F52_FDAC_61EF_833C);
+
+            let o15_rate = weak_low_t_rate(
+                cat,
+                "r_o15_wk_n15",
+                cid("o15"),
+                cid("n15"),
+                false,
+            );
+            assert_eq!(o15_rate.to_bits(), 0x3F77_458B_4A11_2F36);
+
+            assert_eq!(RATTAB_TEMP_LO.to_bits(), 0x4108_69FF_FFFF_FFE9);
+            assert_eq!(RATTAB_TEMP_LO.to_bits(), exp10(RATTAB_TLO).to_bits());
+        });
     }
 }

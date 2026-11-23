@@ -12,11 +12,14 @@
 //! - `96..`: `payload`
 
 use std::fs::{self, File};
-use std::io::{BufWriter, Write};
+use std::io::{BufReader, BufWriter, Read, Seek, SeekFrom, Write};
 use std::path::Path;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use crate::sha256::{compute_sha256_raw, decode_sha256_hex, encode_sha256_hex};
+use crate::sha256::{
+    compute_sha256_raw, compute_sha256_reader, decode_sha256_hex,
+    encode_sha256_hex,
+};
 use crate::RUNTIME_CACHE_SCHEMA_VERSION;
 
 /// Magic header for versioned runtime derived caches (`FMCENV01`).
@@ -92,6 +95,108 @@ pub fn write_verified_cache_atomic(
     })
 }
 
+fn open_checked_envelope_reader(
+    path: &Path,
+    expected_builder_version: u32,
+    expected_payload_tag: [u8; 8],
+    expected_source_sha: Option<&[u8; 32]>,
+    expected_source_sha256_hex: Option<&str>,
+) -> Result<(BufReader<File>, [u8; 32], u64), String> {
+    let file = File::open(path).map_err(|e| {
+        format!("failed to read runtime cache {}: {e}", path.display())
+    })?;
+    let actual_len = file
+        .metadata()
+        .map_err(|e| {
+            format!("failed to read runtime cache {}: {e}", path.display())
+        })?
+        .len();
+    let header_len = CACHE_ENVELOPE_HEADER_BYTES as u64;
+    if actual_len < header_len {
+        return Err(format!(
+            "truncated runtime cache header in {} ({actual_len} < {CACHE_ENVELOPE_HEADER_BYTES} bytes)",
+            path.display()
+        ));
+    }
+    let mut reader = BufReader::with_capacity(256 * 1024, file);
+    let mut header = [0_u8; CACHE_ENVELOPE_HEADER_BYTES];
+    reader.read_exact(&mut header).map_err(|e| {
+        format!(
+            "failed to read runtime cache header in {}: {e}",
+            path.display()
+        )
+    })?;
+    if &header[0..8] != CACHE_ENVELOPE_MAGIC {
+        return Err(format!(
+            "invalid runtime cache magic in {} (expected FMCENV01)",
+            path.display()
+        ));
+    }
+    let schema_ver = u32::from_le_bytes(
+        header[8..12]
+            .try_into()
+            .map_err(|_| "short schema version slice".to_string())?,
+    );
+    if schema_ver != RUNTIME_CACHE_SCHEMA_VERSION {
+        return Err(format!(
+            "runtime cache schema version mismatch in {}: expected {}, got {schema_ver}",
+            path.display(),
+            RUNTIME_CACHE_SCHEMA_VERSION
+        ));
+    }
+    let builder_ver = u32::from_le_bytes(
+        header[12..16]
+            .try_into()
+            .map_err(|_| "short builder version slice".to_string())?,
+    );
+    if builder_ver != expected_builder_version {
+        return Err(format!(
+            "runtime cache builder version mismatch in {}: expected {expected_builder_version}, got {builder_ver}",
+            path.display()
+        ));
+    }
+    let payload_tag = &header[16..24];
+    if payload_tag != &expected_payload_tag[..] {
+        return Err(format!(
+            "runtime cache payload tag mismatch in {} (expected {:?}, got {:?})",
+            path.display(),
+            String::from_utf8_lossy(&expected_payload_tag),
+            String::from_utf8_lossy(payload_tag)
+        ));
+    }
+    if let (Some(expected_sha), Some(expected_hex)) =
+        (expected_source_sha, expected_source_sha256_hex)
+    {
+        let mut stored_source = [0_u8; 32];
+        stored_source.copy_from_slice(&header[24..56]);
+        if stored_source != *expected_sha {
+            return Err(format!(
+                "runtime cache source SHA-256 mismatch in {}: expected {expected_hex}, got {}",
+                path.display(),
+                encode_sha256_hex(&stored_source)
+            ));
+        }
+    }
+    let mut stored_payload = [0_u8; 32];
+    stored_payload.copy_from_slice(&header[56..88]);
+    let payload_len = u64::from_le_bytes(
+        header[88..96]
+            .try_into()
+            .map_err(|_| "short payload len slice".to_string())?,
+    );
+    let expected_total =
+        header_len.checked_add(payload_len).ok_or_else(|| {
+            format!("runtime cache size overflow in {}", path.display())
+        })?;
+    if actual_len != expected_total {
+        return Err(format!(
+            "runtime cache length mismatch in {}: expected {expected_total} bytes, got {actual_len}",
+            path.display()
+        ));
+    }
+    Ok((reader, stored_payload, payload_len))
+}
+
 /// Read `path`, verify its `FMCENV01` header, `source_sha256`, exact byte length,
 /// and `payload_sha256`, and return the verified payload bytes.
 ///
@@ -111,90 +216,41 @@ pub fn read_verified_cache(
                 "invalid expected source SHA-256 '{expected_source_sha256_hex}'"
             )
         })?;
-    let bytes = fs::read(path).map_err(|e| {
-        format!("failed to read runtime cache {}: {e}", path.display())
-    })?;
-    if bytes.len() < CACHE_ENVELOPE_HEADER_BYTES {
-        return Err(format!(
-            "truncated runtime cache header in {} ({} < {CACHE_ENVELOPE_HEADER_BYTES} bytes)",
-            path.display(),
-            bytes.len()
-        ));
-    }
-    if &bytes[0..8] != CACHE_ENVELOPE_MAGIC {
-        return Err(format!(
-            "invalid runtime cache magic in {} (expected FMCENV01)",
-            path.display()
-        ));
-    }
-    let schema_ver = u32::from_le_bytes(
-        bytes[8..12]
-            .try_into()
-            .map_err(|_| "short schema version slice".to_string())?,
-    );
-    if schema_ver != RUNTIME_CACHE_SCHEMA_VERSION {
-        return Err(format!(
-            "runtime cache schema version mismatch in {}: expected {}, got {schema_ver}",
-            path.display(),
-            RUNTIME_CACHE_SCHEMA_VERSION
-        ));
-    }
-    let builder_ver = u32::from_le_bytes(
-        bytes[12..16]
-            .try_into()
-            .map_err(|_| "short builder version slice".to_string())?,
-    );
-    if builder_ver != expected_builder_version {
-        return Err(format!(
-            "runtime cache builder version mismatch in {}: expected {expected_builder_version}, got {builder_ver}",
-            path.display()
-        ));
-    }
-    let payload_tag = &bytes[16..24];
-    if payload_tag != expected_payload_tag {
-        return Err(format!(
-            "runtime cache payload tag mismatch in {} (expected {:?}, got {:?})",
-            path.display(),
-            String::from_utf8_lossy(expected_payload_tag),
-            String::from_utf8_lossy(payload_tag)
-        ));
-    }
-    let mut stored_source = [0_u8; 32];
-    stored_source.copy_from_slice(&bytes[24..56]);
-    if stored_source != expected_source_sha {
-        return Err(format!(
-            "runtime cache source SHA-256 mismatch in {}: expected {expected_source_sha256_hex}, got {}",
-            path.display(),
-            encode_sha256_hex(&stored_source)
-        ));
-    }
-    let mut stored_payload = [0_u8; 32];
-    stored_payload.copy_from_slice(&bytes[56..88]);
-    let payload_len_u64 = u64::from_le_bytes(
-        bytes[88..96]
-            .try_into()
-            .map_err(|_| "short payload len slice".to_string())?,
-    );
+    let (mut reader, stored_payload, payload_len_u64) =
+        open_checked_envelope_reader(
+            path,
+            expected_builder_version,
+            *expected_payload_tag,
+            Some(&expected_source_sha),
+            Some(expected_source_sha256_hex),
+        )?;
     let payload_len = usize::try_from(payload_len_u64).map_err(|_| {
         format!(
             "runtime cache payload length overflow in {}: {payload_len_u64}",
             path.display()
         )
     })?;
-    let expected_total = CACHE_ENVELOPE_HEADER_BYTES
-        .checked_add(payload_len)
-        .ok_or_else(|| {
-        format!("runtime cache size overflow in {}", path.display())
+    let mut payload = vec![0_u8; payload_len];
+    reader.read_exact(&mut payload).map_err(|e| {
+        format!(
+            "failed to read runtime cache payload in {}: {e}",
+            path.display()
+        )
     })?;
-    if bytes.len() != expected_total {
+    let mut trailing = [0_u8; 1];
+    if reader.read(&mut trailing).map_err(|e| {
+        format!(
+            "failed to verify runtime cache EOF in {}: {e}",
+            path.display()
+        )
+    })? != 0
+    {
         return Err(format!(
-            "runtime cache length mismatch in {}: expected {expected_total} bytes, got {}",
-            path.display(),
-            bytes.len()
+            "runtime cache length mismatch in {} (unexpected trailing bytes)",
+            path.display()
         ));
     }
-    let payload = &bytes[CACHE_ENVELOPE_HEADER_BYTES..];
-    let actual_payload_sha = compute_sha256_raw(payload);
+    let actual_payload_sha = compute_sha256_raw(&payload);
     if actual_payload_sha != stored_payload {
         return Err(format!(
             "corrupt runtime cache payload in {} (SHA-256 mismatch: expected {}, got {})",
@@ -203,7 +259,117 @@ pub fn read_verified_cache(
             encode_sha256_hex(&actual_payload_sha)
         ));
     }
-    Ok(payload.to_vec())
+    Ok(payload)
+}
+
+/// Open `path`, verify its `FMCENV01` header, `source_sha256`, exact byte
+/// length, and `payload_sha256` via a streaming `64 KiB` chunk pass, then
+/// rewind to the start of the payload (`96`-byte offset) and return
+/// `(reader, payload_len)`.
+///
+/// Unlike [`read_verified_cache`], this verifies multi-megabyte payloads
+/// without buffering an extra full-payload copy in RAM.
+///
+/// # Errors
+/// Returns a descriptive error string naming `path` on I/O failure, truncated
+/// header/payload, trailing bytes, version/tag mismatch, source hash mismatch,
+/// or payload SHA-256 corruption.
+pub fn open_verified_cache_streaming(
+    path: &Path,
+    expected_builder_version: u32,
+    expected_payload_tag: &[u8; 8],
+    expected_source_sha256_hex: &str,
+) -> Result<(BufReader<File>, u64), String> {
+    let expected_source_sha = decode_sha256_hex(expected_source_sha256_hex)
+        .ok_or_else(|| {
+            format!(
+                "invalid expected source SHA-256 '{expected_source_sha256_hex}'"
+            )
+        })?;
+    let (mut reader, stored_payload, payload_len) =
+        open_checked_envelope_reader(
+            path,
+            expected_builder_version,
+            *expected_payload_tag,
+            Some(&expected_source_sha),
+            Some(expected_source_sha256_hex),
+        )?;
+    let actual_hex = compute_sha256_reader(
+        &mut reader.by_ref().take(payload_len),
+    )
+    .map_err(|e| {
+        format!(
+            "failed to read runtime cache payload in {}: {e}",
+            path.display()
+        )
+    })?;
+    let expected_end = (CACHE_ENVELOPE_HEADER_BYTES as u64)
+        .checked_add(payload_len)
+        .ok_or_else(|| {
+            format!("runtime cache size overflow in {}", path.display())
+        })?;
+    let pos = reader.stream_position().map_err(|e| {
+        format!(
+            "failed to verify runtime cache position in {}: {e}",
+            path.display()
+        )
+    })?;
+    let mut trailing = [0_u8; 1];
+    let trailing_read = reader.read(&mut trailing).map_err(|e| {
+        format!(
+            "failed to verify runtime cache EOF in {}: {e}",
+            path.display()
+        )
+    })?;
+    if pos != expected_end || trailing_read != 0 {
+        return Err(format!(
+            "runtime cache length mismatch in {}: expected {expected_end} bytes, got {}",
+            path.display(),
+            pos.saturating_add(trailing_read as u64)
+        ));
+    }
+    let actual_payload_sha = decode_sha256_hex(&actual_hex)
+        .ok_or_else(|| "internal SHA-256 hex decode failure".to_string())?;
+    if actual_payload_sha != stored_payload {
+        return Err(format!(
+            "corrupt runtime cache payload in {} (SHA-256 mismatch: expected {}, got {})",
+            path.display(),
+            encode_sha256_hex(&stored_payload),
+            encode_sha256_hex(&actual_payload_sha)
+        ));
+    }
+    reader
+        .seek(SeekFrom::Start(CACHE_ENVELOPE_HEADER_BYTES as u64))
+        .map_err(|e| {
+            format!("failed to rewind verified cache {}: {e}", path.display())
+        })?;
+    Ok((reader, payload_len))
+}
+
+/// Open a previously verified `FMCENV01` cache file, validate its header
+/// (`magic`, `schema_version`, `builder_version`, `payload_tag`) and exact
+/// file byte length, and return `(reader, payload_len)` positioned at the
+/// payload start without re-hashing the payload.
+///
+/// Callers must only use this on cache files whose `source_sha256` and
+/// `payload_sha256` have already been verified in the current process.
+///
+/// # Errors
+/// Returns a descriptive error string naming `path` on I/O failure, truncated
+/// header, magic/version/tag mismatch, or total file-length mismatch.
+pub fn open_preverified_cache_streaming(
+    path: &Path,
+    expected_builder_version: u32,
+    expected_payload_tag: &[u8; 8],
+) -> Result<(BufReader<File>, u64), String> {
+    let (reader, _stored_payload, payload_len) = open_checked_envelope_reader(
+        path,
+        expected_builder_version,
+        *expected_payload_tag,
+        None,
+        None,
+    )?;
+    Ok((reader, payload_len))
 }
 
 #[cfg(test)]
@@ -338,5 +504,83 @@ mod tests {
             Some(v) => std::env::set_var("FLEXMESA_DISABLE_RUNTIME_CACHE", v),
             None => std::env::remove_var("FLEXMESA_DISABLE_RUNTIME_CACHE"),
         }
+    }
+
+    #[test]
+    fn test_streaming_cache_verification_roundtrip_and_corruption_detection() {
+        let dir = std::env::temp_dir()
+            .join(format!("flexmesa_cenv_stream_test_{}", std::process::id()));
+        let _ = fs::create_dir_all(&dir);
+        let cache_file = dir.join("stream_sample.bin");
+        let src_sha = compute_sha256_bytes(b"upstream-raw-slice-v1");
+        let payload = vec![0x5A_u8; 300 * 1024 + 17];
+
+        write_verified_cache_atomic(
+            &cache_file,
+            1,
+            b"FMDT4D01",
+            &src_sha,
+            &payload,
+        )
+        .expect("write verified cache");
+
+        let (mut reader, payload_len) = open_verified_cache_streaming(
+            &cache_file,
+            1,
+            b"FMDT4D01",
+            &src_sha,
+        )
+        .expect("streaming open verified cache");
+        assert_eq!(payload_len, payload.len() as u64);
+        let mut recovered = Vec::new();
+        reader.read_to_end(&mut recovered).expect("read payload");
+        assert_eq!(recovered, payload);
+
+        let (mut pre_reader, pre_len) =
+            open_preverified_cache_streaming(&cache_file, 1, b"FMDT4D01")
+                .expect("preverified open");
+        assert_eq!(pre_len, payload.len() as u64);
+        let mut pre_recovered = Vec::new();
+        pre_reader
+            .read_to_end(&mut pre_recovered)
+            .expect("read preverified");
+        assert_eq!(pre_recovered, payload);
+
+        let other_src = compute_sha256_bytes(b"other");
+        let err = open_verified_cache_streaming(
+            &cache_file,
+            1,
+            b"FMDT4D01",
+            &other_src,
+        )
+        .expect_err("source mismatch must fail");
+        assert!(err.contains("source SHA-256 mismatch"));
+
+        // Single-bit payload flip detected during streaming hash.
+        let mut flipped = fs::read(&cache_file).expect("read raw");
+        let mid = CACHE_ENVELOPE_HEADER_BYTES + 128 * 1024;
+        flipped[mid] ^= 0x01;
+        fs::write(&cache_file, &flipped).expect("write flipped");
+        let err = open_verified_cache_streaming(
+            &cache_file,
+            1,
+            b"FMDT4D01",
+            &src_sha,
+        )
+        .expect_err("bit flip must fail");
+        assert!(err.contains("SHA-256 mismatch"));
+
+        // Truncated header rejected.
+        fs::write(&cache_file, &flipped[..16]).expect("write short");
+        let err = open_verified_cache_streaming(
+            &cache_file,
+            1,
+            b"FMDT4D01",
+            &src_sha,
+        )
+        .expect_err("truncated header must fail");
+        assert!(err.contains("truncated runtime cache header"));
+
+        let _ = fs::remove_dir_all(&dir);
     }
 }

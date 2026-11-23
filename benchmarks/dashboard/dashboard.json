@@ -21,7 +21,7 @@
         "verified_total": 5640,
         "pct_ported": 35.1,
         "pct_verified": 4.7,
-        "rust_lines": 91831,
+        "rust_lines": 91997,
         "python_jax_lines": 3869
       },
       {
@@ -89,7 +89,7 @@
         "verified_total": 0,
         "pct_ported": 0.0,
         "pct_verified": 0.0,
-        "rust_lines": 15558,
+        "rust_lines": 15732,
         "python_jax_lines": 9911
       },
       {
@@ -378,7 +378,7 @@
         "verified_total": 0,
         "pct_ported": 0.0,
         "pct_verified": 0.0,
-        "rust_lines": 4846,
+        "rust_lines": 5090,
         "python_jax_lines": 2659
       },
       {
@@ -456,7 +456,7 @@
     },
     "infrastructure_lines": {
       "rust_bridge_testing_bench": 19428,
-      "python_testing_bench": 17102
+      "python_testing_bench": 17253
     }
   },
   "numerics": {
@@ -595,7 +595,7 @@
         "no_reference_yet": 4,
         "strict_validated": 45,
         "diagnostic_runs": 45,
-        "reached_termination": 41,
+        "reached_termination": 42,
         "within_numeric_tol": 6,
         "passing": 1,
         "declared_gaps": 85,
@@ -1360,8 +1360,8 @@
       },
       {
         "phase": "Phase C",
-        "open": 17,
-        "closed": 7,
+        "open": 18,
+        "closed": 8,
         "issues": [
           {
             "number": 152,
@@ -1481,6 +1481,16 @@
           {
             "number": 422,
             "title": "[Parity] Strict arithmetic follows auto_diff division (powm1): pre-MS builder MLT and Prad in hydro_vars (#154)",
+            "state": "closed"
+          },
+          {
+            "number": 423,
+            "title": "[Parity] Post-relax pre-MS starting model is hotter than MESA's (log_Teff +0.016 dex at model 1; 6 cases now first diverge at model 1)",
+            "state": "open"
+          },
+          {
+            "number": 424,
+            "title": "[Parity] Peos value sources and MLT/Pturb face forms on the strict path (wrap_Peos, get_Peos_face, r_start)",
             "state": "open"
           }
         ]
@@ -1583,13 +1593,13 @@
         "draft": true
       },
       {
-        "number": 426,
-        "title": "Fix 4D EOS RSS spikes, slim Rust-only trace workers, and show Peak RSS (#412)",
+        "number": 427,
+        "title": "fix(atm,eos): align table_atm fvbicub_db and linear (Pgas, T) EOS inversion to 38/39 0-ULP parity (#420)",
         "draft": true
       },
       {
-        "number": 427,
-        "title": "fix(atm,eos): align table_atm fvbicub_db and linear (Pgas, T) EOS inversion to 38/39 0-ULP parity (#420)",
+        "number": 431,
+        "title": "fix(star,turb,astero): model-1 Jacobian as upstream; tau_base and astero composition order (#424, #423, #414)",
         "draft": true
       }
     ],
@@ -3194,6 +3204,32 @@
       "python_cov_pct": "87.7",
       "closed_140": "22",
       "total_140": "43",
+      "deferred_169": "52"
+    },
+    {
+      "date_utc": "2026-11-23",
+      "commit": "5799a16",
+      "event": "main merge",
+      "engine_ported_pct": "30.7",
+      "all_verified_pct": "1.1",
+      "cases_passing": "4",
+      "rust_cov_pct": "76.2",
+      "python_cov_pct": "87.7",
+      "closed_140": "23",
+      "total_140": "45",
+      "deferred_169": "52"
+    },
+    {
+      "date_utc": "2026-11-23",
+      "commit": "d9fcaf8",
+      "event": "main merge",
+      "engine_ported_pct": "30.7",
+      "all_verified_pct": "1.1",
+      "cases_passing": "4",
+      "rust_cov_pct": "76.2",
+      "python_cov_pct": "87.7",
+      "closed_140": "23",
+      "total_140": "45",
       "deferred_169": "52"
     }
   ]

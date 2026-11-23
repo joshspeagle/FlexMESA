@@ -13,9 +13,9 @@ use crate::job_controls::{AtmOption, AtmTTauOpacity, AtmTTauRelation};
 use crate::hydro_vars::set_hydro_vars;
 use crate::inlist::InlistBundle;
 use crate::inlist_runner::StarExtras;
-use crate::micro::change_model_network;
+use crate::micro::{change_model_network, resolve_model_net, NetSearchDirGuard};
 use crate::model::StarModel;
-use crate::model_io::read_mod_str;
+use crate::model_io::read_mod_str_with_dir;
 use crate::relax::{
     apply_composition_relaxation, apply_uniform_rotation,
     excise_core_by_temperature, relax_core_boundary, relax_from_profile_files,
@@ -70,7 +70,7 @@ fn load_saved_mod(
             mod_path.display()
         ))
     })?;
-    read_mod_str(&text, controls, job)
+    read_mod_str_with_dir(&text, controls, job, Some(case_dir))
 }
 
 /// Brings a newly built model into the state the step loop starts from, so
@@ -196,6 +196,7 @@ pub(crate) fn init_or_update_model_from_bundle_outcome(
     mut existing_model: Option<StarModel>,
     extras: &mut dyn StarExtras,
 ) -> Result<InitModelOutcome, StarError> {
+    let _net_dir_guard = NetSearchDirGuard::new(&bundle.case_dir);
     match crate::rsp_driver::init_rsp_model_from_bundle(
         bundle,
         &mut existing_model,
@@ -563,6 +564,9 @@ pub(crate) fn init_or_update_model_from_bundle_outcome(
         model.doing_first_model_of_run = true;
     }
     extras.extras_startup(&mut model, false)?;
+    if !model.job.net_name.trim().is_empty() {
+        let _ = resolve_model_net(&model)?;
+    }
 
     Ok(InitModelOutcome::Model(Box::new(model)))
 }

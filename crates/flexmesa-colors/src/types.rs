@@ -38,6 +38,11 @@ pub trait RealScalar:
     /// Base-10 logarithm $\log_{10}(x)$.
     #[must_use]
     fn log10(self) -> Self;
+
+    /// Exact IEEE-754 division by a scalar `f64` denominator, matching primal
+    /// `self / rhs` in `Strict` mode.
+    #[must_use]
+    fn div_f64(self, rhs: f64) -> Self;
 }
 
 impl RealScalar for f64 {
@@ -61,6 +66,10 @@ impl RealScalar for f64 {
     fn log10(self) -> Self {
         // `colors/private/{bolometric.f90:106, synthetic.f90:111}` omit `use math_lib` (#198).
         flexmesa_math::intrinsic_log10(self)
+    }
+    #[inline]
+    fn div_f64(self, rhs: f64) -> Self {
+        self / rhs
     }
 }
 
@@ -87,6 +96,13 @@ impl<const N: usize> RealScalar for DualOrder1<N> {
         let z_val = flexmesa_math::intrinsic_log10(self.val);
         let z_d1x = flexmesa_const::ILN10 * flexmesa_math::powm1(self.val);
         self.make_unary_operator(z_val, z_d1x)
+    }
+    #[inline]
+    fn div_f64(self, rhs: f64) -> Self {
+        Self {
+            val: self.val / rhs,
+            d1: self.d1.map(|d| d / rhs),
+        }
     }
 }
 

@@ -101,8 +101,8 @@
     },
     {
       "phase": "Phase C",
-      "open": 17,
-      "closed": 7,
+      "open": 18,
+      "closed": 8,
       "issues": [
         {
           "number": 152,
@@ -222,6 +222,16 @@
         {
           "number": 422,
           "title": "[Parity] Strict arithmetic follows auto_diff division (powm1): pre-MS builder MLT and Prad in hydro_vars (#154)",
+          "state": "closed"
+        },
+        {
+          "number": 423,
+          "title": "[Parity] Post-relax pre-MS starting model is hotter than MESA's (log_Teff +0.016 dex at model 1; 6 cases now first diverge at model 1)",
+          "state": "open"
+        },
+        {
+          "number": 424,
+          "title": "[Parity] Peos value sources and MLT/Pturb face forms on the strict path (wrap_Peos, get_Peos_face, r_start)",
           "state": "open"
         }
       ]
@@ -324,13 +334,13 @@
       "draft": true
     },
     {
-      "number": 426,
-      "title": "Fix 4D EOS RSS spikes, slim Rust-only trace workers, and show Peak RSS (#412)",
+      "number": 427,
+      "title": "fix(atm,eos): align table_atm fvbicub_db and linear (Pgas, T) EOS inversion to 38/39 0-ULP parity (#420)",
       "draft": true
     },
     {
-      "number": 427,
-      "title": "fix(atm,eos): align table_atm fvbicub_db and linear (Pgas, T) EOS inversion to 38/39 0-ULP parity (#420)",
+      "number": 431,
+      "title": "fix(star,turb,astero): model-1 Jacobian as upstream; tau_base and astero composition order (#424, #423, #414)",
       "draft": true
     }
   ],

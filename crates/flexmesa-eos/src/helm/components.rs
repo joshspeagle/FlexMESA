@@ -149,7 +149,8 @@ pub fn eval_radiation(
     let dsradddd =
         (2.0 * prad_val * deninv * deninv * deninv + deradddd) * tempinv;
     let dsradddt = (-dpraddt * deninv * deninv + deradddt - dsraddd) * tempinv;
-    let dsraddtt = (dpraddtt * deninv + deraddtt - 2.0 * dsraddt) * tempinv;
+    let dsraddtt =
+        ((dpraddtt * deninv + deraddtt - dsraddt) - dsraddt) * tempinv;
     let srad = HelmThermoVar {
         val: srad_val,
         dd: dsraddd,
@@ -245,7 +246,7 @@ pub fn eval_ideal_ions(
     let detaida = dxnida * xx - 1.5 * ytot1;
     let detaiddd = -detaidd * detaidd;
     let detaidda = dxnidda * xx - dxnidd * dxnida * xx * xx;
-    let detaidtt = -detaidt * tempinv;
+    let detaidtt = 1.5 * tempinv * tempinv;
     let detaidaa = (dxnidaa - dxnida * dxnida * xx) * xx + 1.5 * ytot1 * ytot1;
     let etaion = HelmThermoVar {
         val: etaion_val,
@@ -279,8 +280,9 @@ pub fn eval_ideal_ions(
         * tempinv
         + detaidd * z
         - detaidda * y;
-    let mut dsiondtt = -2.0 * (deiondt + dpiondt * deninv) * tempinv * tempinv
-        + 2.0 * (eion_val + pion_val * deninv) * tempinv * tempinv * tempinv
+    let mut dsiondtt = (-2.0 * (deiondt + dpiondt * deninv) * tempinv
+        + 2.0 * (eion_val + pion_val * deninv) * tempinv * tempinv)
+        * tempinv
         - detaidtt * y;
     let mut dsiondta = ((deiondta + dpiondta * deninv)
         - (deionda + dpionda * deninv) * tempinv)

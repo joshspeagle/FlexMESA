@@ -1479,8 +1479,9 @@ def test_extract_history_run_stats_and_rel_num_zones_and_mass_loss_tables(
         mini_manifest, [rec_wind, rec_hb], known_gaps={}
     )
     assert "| Steps (MESA) | Retries (MESA) | Iters (MESA) |" in md
+    assert "| Iters (MESA) | Peak RSS | num_zones Track Diff |" in md
     assert "| num_zones Track Diff |" in md
-    assert "3 (3) | 2 (2) | 6.0 [18] (6.0 [18]) |" in md
+    assert "3 (3) | 2 (2) | 6.0 [18] (6.0 [18]) | 0.10 GB |" in md
     assert (
         "## Convective-Core Track Comparisons (`mass_conv_core`, `#155`)" in md
     )
@@ -1722,3 +1723,137 @@ def test_evaluate_case_record_augments_energy_columns_from_full_history(
     assert comp.final_ref_values["log_rel_run_E_err"] == pytest.approx(-8.40)
     assert comp.final_run_values["log_rel_run_E_err"] == pytest.approx(-8.15)
     assert comp.final_diffs["log_rel_run_E_err"] == pytest.approx(0.25)
+
+
+def test_render_case_table_markdown_peak_rss_formatting(
+    tmp_path: pathlib.Path,
+) -> None:
+    """Peak RSS renders `X.XX GB` for positive runs and `-` for 0/unexecuted."""
+    spec, ref_file, _, outcome = _make_energy_harness_fixture(tmp_path)
+    ref_file.write_text(
+        "# MESA 26.4.1 reference\n"
+        "model_number\tstar_age\tlog_L\n"
+        "1\t0.0\t0.000\n"
+        "2\t1.0e6\t0.010\n"
+        "3\t2.0e6\t0.020\n",
+        encoding="utf-8",
+    )
+    manifest = case_manifest.HarnessManifest(
+        mesa_release="26.4.1",
+        zenodo_record="19722306",
+        cases=(spec,),
+    )
+    rec_live = harness_runner.evaluate_case_record(
+        spec,
+        {},
+        dataclasses.replace(outcome, peak_rss_gb=3.847),
+        root_dir=tmp_path,
+    )
+    rec_baseline = dataclasses.replace(rec_live, peak_rss_gb=0.0)
+    rec_unexecuted = dataclasses.replace(
+        rec_live, executed=False, peak_rss_gb=2.5
+    )
+
+    md_live = case_report.render_case_table_markdown(manifest, [rec_live])
+    md_base = case_report.render_case_table_markdown(manifest, [rec_baseline])
+    md_skip = case_report.render_case_table_markdown(manifest, [rec_unexecuted])
+
+    assert "| Iters (MESA) | Peak RSS | num_zones Track Diff |" in md_live
+    assert "| 3 (3) | 0 (-) | - | 3.85 GB | - |" in md_live
+    assert "| 3 (3) | 0 (-) | - | - | - |" in md_base
+    assert "| 2.50 GB |" not in md_skip
+    assert "| - (3) | - | - | - | - |" in md_skip
+
+
+def test_flexmesa_import_respects_worker_rust_only_env(
+    tmp_path: pathlib.Path,
+) -> None:
+    """`FLEXMESA_WORKER_RUST_ONLY=1` skips JAX/plotting while keeping checks."""
+    import os
+    import sys
+
+    src_root = str(case_manifest.repo_root() / "src")
+    base_env = dict(os.environ, PYTHONPATH=src_root)
+    base_env.pop("FLEXMESA_WORKER_RUST_ONLY", None)
+
+    probe = (
+        "import json, sys, flexmesa; "
+        "print(json.dumps({"
+        "'jax': 'jax' in sys.modules, "
+        "'mpl': 'matplotlib' in sys.modules, "
+        "'scipy': 'scipy' in sys.modules, "
+        "'rust': 'flexmesa._rust' in sys.modules"
+        "}))"
+    )
+    proc_full = subprocess.run(
+        [sys.executable, "-c", probe],
+        env=base_env,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    full_mods = json.loads(proc_full.stdout)
+    assert full_mods["jax"] is True
+    assert full_mods["rust"] is True
+
+    rust_env = dict(base_env, FLEXMESA_WORKER_RUST_ONLY="1")
+    proc_rust = subprocess.run(
+        [sys.executable, "-c", probe],
+        env=rust_env,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    rust_mods = json.loads(proc_rust.stdout)
+    assert rust_mods["jax"] is False
+    assert rust_mods["mpl"] is False
+    assert rust_mods["scipy"] is False
+    assert rust_mods["rust"] is True
+
+    bad_env = dict(rust_env, FLEXMESA_NUMERICS_MODE="bogus_mode")
+    proc_bad = subprocess.run(
+        [sys.executable, "-c", "import flexmesa"],
+        env=bad_env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert proc_bad.returncode != 0
+    assert "ValueError" in proc_bad.stderr
+    assert "bogus_mode" in proc_bad.stderr
+
+    # Verify _build_worker_env only enables FLEXMESA_WORKER_RUST_ONLY for
+    # rust_only=True and explicitly clears it otherwise.
+    env_rust = harness_runner._build_worker_env(
+        tmp_path, "strict", rust_only=True
+    )
+    assert env_rust["FLEXMESA_WORKER_RUST_ONLY"] == "1"
+    env_orig = os.environ.get("FLEXMESA_WORKER_RUST_ONLY")
+    os.environ["FLEXMESA_WORKER_RUST_ONLY"] = "1"
+    try:
+        env_extras = harness_runner._build_worker_env(
+            tmp_path, "strict", rust_only=False
+        )
+    finally:
+        if env_orig is None:
+            os.environ.pop("FLEXMESA_WORKER_RUST_ONLY", None)
+        else:
+            os.environ["FLEXMESA_WORKER_RUST_ONLY"] = env_orig
+    assert "FLEXMESA_WORKER_RUST_ONLY" not in env_extras
+
+    # Verify _has_active_extras_handler classifies empty, no-op, active, and
+    # malformed factory specs cleanly.
+    amj_dir = harness_runner.resolve_case_dir("star", "accreted_material_j")
+    cam_dir = harness_runner.resolve_case_dir(
+        "star", "conserve_angular_momentum"
+    )
+    assert not harness_runner._has_active_extras_handler("star", amj_dir, None)
+    assert not harness_runner._has_active_extras_handler(
+        "star", amj_dir, "tests.case_extras:resolve_case_extras"
+    )
+    assert harness_runner._has_active_extras_handler(
+        "star", cam_dir, "tests.case_extras:resolve_case_extras"
+    )
+    assert harness_runner._has_active_extras_handler(
+        "star", amj_dir, "bad_factory_spec"
+    )

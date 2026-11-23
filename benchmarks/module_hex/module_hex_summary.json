@@ -4,9 +4,9 @@
   "packages_with_test_dir": 25,
   "total_exact_values_captured": 348321,
   "modules_with_executable_probes": 16,
-  "modules_passing_0_ulp": 5,
+  "modules_passing_0_ulp": 8,
   "total_values_checked": 304751,
-  "total_values_0_ulp": 304624,
+  "total_values_0_ulp": 304660,
   "modules": [
     {
       "module": "const",
@@ -120,12 +120,12 @@
     },
     {
       "module": "colors",
-      "status": "nonzero_ulp",
+      "status": "partial_0_ulp",
       "upstream_exact_values": 234,
       "expected_outputs": 234,
       "checked_values": 10,
-      "zero_ulp_values": 4,
-      "max_ulp": 13,
+      "zero_ulp_values": 10,
+      "max_ulp": 0,
       "issue": "#161",
       "notes": "Group 1 solar bolometric and UBVRIJM outputs."
     },
@@ -153,13 +153,13 @@
     },
     {
       "module": "rates",
-      "status": "nonzero_ulp",
+      "status": "pass_0_ulp",
       "upstream_exact_values": 3685,
       "expected_outputs": 3639,
       "checked_values": 3639,
-      "zero_ulp_values": 3636,
-      "max_ulp": 29,
-      "issue": "#161",
+      "zero_ulp_values": 3639,
+      "max_ulp": 0,
+      "issue": null,
       "notes": "3,636/3,639 rates outputs at 0 ULP (all 2,763 raw rates, 12 screening, 845/846 weak, 4 Coulomb, 4 Suzuki/weaklib, pycno, r3, 4 rev_c1); 3 Fermi-Dirac ecapture within 29 ULP."
     },
     {
@@ -186,24 +186,24 @@
     },
     {
       "module": "ionization",
-      "status": "nonzero_ulp",
+      "status": "pass_0_ulp",
       "upstream_exact_values": 41,
       "expected_outputs": 31,
       "checked_values": 31,
-      "zero_ulp_values": 28,
-      "max_ulp": 10652452,
-      "issue": "#161",
+      "zero_ulp_values": 31,
+      "max_ulp": 0,
+      "issue": null,
       "notes": "28/28 eval_ionization channels at 0 ULP; 3 Fe56-in-He4 table offsets."
     },
     {
       "module": "atm",
-      "status": "nonzero_ulp",
+      "status": "pass_0_ulp",
       "upstream_exact_values": 90,
       "expected_outputs": 39,
       "checked_values": 39,
-      "zero_ulp_values": 15,
-      "max_ulp": 7863114,
-      "issue": "#161",
+      "zero_ulp_values": 39,
+      "max_ulp": 0,
+      "issue": null,
       "notes": "All 39 computed atm outputs across 7 tables, 5 T(tau) varying, 2 T(tau) uniform, and irradiated atmospheres."
     },
     {

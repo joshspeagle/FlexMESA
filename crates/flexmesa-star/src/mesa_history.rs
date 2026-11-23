@@ -9,7 +9,9 @@ use std::io::{BufWriter, Write};
 use std::path::{Path, PathBuf};
 
 use flexmesa_chem::{NuclideCatalog, category_id, category_name};
-use flexmesa_const::{L_SUN, LN10, M_SUN, R_SUN, SECDAY, SECYER};
+use flexmesa_const::{
+    FOUR_PI, L_SUN, LN10, M_SUN, PI, R_SUN, SECDAY, SECYER,
+};
 use flexmesa_schema::strip_fortran_comment;
 
 use crate::controls::StarError;
@@ -20,11 +22,13 @@ use crate::report_utils::{
     center_avg_x_by_name, center_avg_x_slot, center_value, center_value_by,
     csound_face_at, equatorial_and_polar_r_cm, eval_astero_report_scalars,
     eval_conv_time_scales, eval_history_burning_regions,
-    eval_history_mixing_regions, eval_ledd_erg_s, eval_upstream_omega_crit,
-    format_mesa_dbl, format_mesa_header_str, get_lrad_div_ledd,
-    iso_slot_for_chem_id, parse_quoted_include_arg, push_mesa_6line_header,
-    resolve_iso_slot, safe_log10, star_avg_x_slot, surface_avg_x_by_name,
-    surface_avg_x_slot, write_mesa_dbl_width, write_mesa_int_width,
+    eval_history_mixing_regions, eval_ledd_erg_s, eval_shock_info,
+    eval_surface_w_div_w_kep, eval_upstream_omega_crit, format_mesa_dbl,
+    format_mesa_header_str, get_lrad_div_ledd, gravity_darkening_l_coeff,
+    gravity_darkening_teff_coeff, iso_slot_for_chem_id, parse_quoted_include_arg,
+    push_mesa_6line_header, resolve_iso_slot, safe_log10, star_avg_x_slot,
+    surface_avg_x_by_name, surface_avg_x_slot, write_mesa_dbl_width,
+    write_mesa_int_width,
 };
 
 /// Active column declarations from upstream MESA `26.4.1`
@@ -441,8 +445,13 @@ const SUPPORTED_SCALAR_COLUMNS: &[&str] = &[
     "surf_avg_opacity",
     "surf_avg_logT",
     "surf_avg_logRho",
+    "v_wind_Km_per_s",
     "log_rotational_mdot_boost",
     "rotational_mdot_boost",
+    "grav_dark_L_polar",
+    "grav_dark_Teff_polar",
+    "grav_dark_L_equatorial",
+    "grav_dark_Teff_equatorial",
     "min_Pgas_div_P",
     "center_degeneracy",
     "log_center_eps_nuc",
@@ -542,10 +551,25 @@ const SUPPORTED_SCALAR_COLUMNS: &[&str] = &[
     "dt_cell_collapse",
     "dt_div_dt_cell_collapse",
     "cz_bot_mass",
+    "cz_bot_radius",
+    "cz_log_xmsun",
+    "cz_scale_height",
     "cz_mass",
     "cz_top_mass",
+    "cz_top_radius",
+    "cz_top_scale_height",
     "cz_zone",
     "cz_top_zone",
+    "gradT_excess_alpha",
+    "gradT_excess_min_beta",
+    "gradT_excess_max_lambda",
+    "k_below_const_q",
+    "q_below_const_q",
+    "logxq_below_const_q",
+    "k_const_mass",
+    "q_const_mass",
+    "logxq_const_mass",
+    "logxq_below_just_added",
     "mass_conv_core",
     "mass_semiconv_core",
     "max_gradT_div_grada",
@@ -610,6 +634,19 @@ const SUPPORTED_SCALAR_COLUMNS: &[&str] = &[
     "dt_div_min_tau_conv",
     "fe_core_infall",
     "non_fe_core_infall",
+    "shock_mass",
+    "shock_q",
+    "shock_radius",
+    "shock_velocity",
+    "shock_csound",
+    "shock_lgT",
+    "shock_lgRho",
+    "shock_lgP",
+    "shock_gamma1",
+    "shock_entropy",
+    "shock_tau",
+    "shock_k",
+    "shock_pre_lgRho",
 ];
 
 fn match_scalar_column(tok: &str) -> Option<&'static str> {
@@ -2115,6 +2152,44 @@ fn eval_scalar_column(
                 1.0
             })
         }
+        // `star/private/history.f90:2043-2045` (km/s).
+        "v_wind_Km_per_s" => {
+            let denom = FOUR_PI * ctx.phot.r_rsun * R_SUN * model.tau_base;
+            MesaCellValue::Float(if nz > 0 && denom > 0.0 {
+                1.0e-5 * model.opacity[0] * (-model.mstar_dot).max(0.0) / denom
+            } else {
+                0.0
+            })
+        }
+        // `star/private/history.f90:2901-2928` (pole `i = 0`, equator `pi / 2`).
+        "grav_dark_L_polar"
+        | "grav_dark_Teff_polar"
+        | "grav_dark_L_equatorial"
+        | "grav_dark_Teff_equatorial" => {
+            MesaCellValue::Float(if model.controls.rotation_flag {
+                let w_div_w_kep = eval_surface_w_div_w_kep(model);
+                match name {
+                    "grav_dark_L_polar" => {
+                        gravity_darkening_l_coeff(w_div_w_kep, 0.0)
+                            * l_surf_lsun
+                    }
+                    "grav_dark_Teff_polar" => {
+                        gravity_darkening_teff_coeff(w_div_w_kep, 0.0)
+                            * model.teff
+                    }
+                    "grav_dark_L_equatorial" => {
+                        gravity_darkening_l_coeff(w_div_w_kep, 0.5 * PI)
+                            * l_surf_lsun
+                    }
+                    _ => {
+                        gravity_darkening_teff_coeff(w_div_w_kep, 0.5 * PI)
+                            * model.teff
+                    }
+                }
+            } else {
+                0.0
+            })
+        }
 
         "min_Pgas_div_P" => MesaCellValue::Float(if nz > 0 {
             (0..nz)
@@ -2460,6 +2535,52 @@ fn eval_scalar_column(
                 None => 0.0,
             })
         }
+        // `star/private/history.f90:2545-2553` (solar radii).
+        "cz_bot_radius" => {
+            MesaCellValue::Float(match ctx.mix.largest_conv_top_bot {
+                Some((_, bot)) if bot + 1 == nz => model.r_center / R_SUN,
+                Some((_, bot)) => model.r[bot] / R_SUN,
+                None => 0.0,
+            })
+        }
+        // `star/private/history.f90:2459-2465`.
+        "cz_log_xmsun" => {
+            MesaCellValue::Float(match ctx.mix.largest_conv_top_bot {
+                Some((_, bot)) => {
+                    let sum_dq: f64 =
+                        model.dq.get(..bot).map_or(0.0, |s| s.iter().sum());
+                    safe_log10(model.xmstar * sum_dq / M_SUN)
+                }
+                None => -99.0,
+            })
+        }
+        // `star/private/history.f90:2535-2539` (cm).
+        "cz_scale_height" => {
+            MesaCellValue::Float(match ctx.mix.largest_conv_top_bot {
+                Some((_, bot)) => {
+                    model.scale_height.get(bot).copied().unwrap_or(0.0)
+                }
+                None => 0.0,
+            })
+        }
+        // `star/private/history.f90:2671-2675` (solar radii).
+        "cz_top_radius" => {
+            MesaCellValue::Float(match ctx.mix.largest_conv_top_bot {
+                Some((top, _)) => {
+                    model.r.get(top).copied().unwrap_or(0.0) / R_SUN
+                }
+                None => 0.0,
+            })
+        }
+        // `star/private/history.f90:2661-2665` (cm).
+        "cz_top_scale_height" => {
+            MesaCellValue::Float(match ctx.mix.largest_conv_top_bot {
+                Some((top, _)) => {
+                    model.scale_height.get(top).copied().unwrap_or(0.0)
+                }
+                None => 0.0,
+            })
+        }
         "cz_mass" => MesaCellValue::Float(match ctx.mix.largest_conv_top_bot {
             Some((_, bot)) => model.m[bot] / M_SUN,
             None => 0.0,
@@ -2683,6 +2804,106 @@ fn eval_scalar_column(
             } else {
                 non_fe_infall_cms * 1.0e-5
             })
+        }
+        // `star/private/history.f90:1991-1996`.
+        "gradT_excess_alpha" => {
+            MesaCellValue::Float(model.aux.mixing.gradt_excess_alpha)
+        }
+        "gradT_excess_min_beta" => {
+            MesaCellValue::Float(model.aux.mixing.gradt_excess_min_beta)
+        }
+        "gradT_excess_max_lambda" => {
+            MesaCellValue::Float(model.aux.mixing.gradt_excess_max_lambda)
+        }
+        // `star/private/history.f90:2793-2799` (1-based `k_below_const_q`).
+        "k_below_const_q" => {
+            MesaCellValue::Int(model.aux.k_below_const_q as i64)
+        }
+        "q_below_const_q" => {
+            let k1 = model.aux.k_below_const_q;
+            MesaCellValue::Float(if k1 > 0 && k1 <= nz {
+                model.q[k1 - 1]
+            } else {
+                0.0
+            })
+        }
+        "logxq_below_const_q" => {
+            let k1 = model.aux.k_below_const_q;
+            MesaCellValue::Float(if k1 > 0 && nz > 0 {
+                let sum_dq: f64 =
+                    model.dq[..(k1 - 1).min(nz)].iter().sum();
+                safe_log10(sum_dq)
+            } else {
+                0.0
+            })
+        }
+        // `star/private/history.f90:2801-2807` (`aux.k_const_mass` is
+        // stored 0-based for `hydro_vars`; convert to 1-based here).
+        "k_const_mass" => MesaCellValue::Int(if nz > 0 {
+            ((model.aux.k_const_mass + 1).min(nz)) as i64
+        } else {
+            0
+        }),
+        "q_const_mass" => MesaCellValue::Float(if nz > 0 {
+            let k1 = (model.aux.k_const_mass + 1).min(nz);
+            model.q[k1 - 1]
+        } else {
+            0.0
+        }),
+        "logxq_const_mass" => MesaCellValue::Float(if nz > 0 {
+            let k1 = (model.aux.k_const_mass + 1).min(nz);
+            let sum_dq: f64 = model.dq[..(k1 - 1)].iter().sum();
+            safe_log10(sum_dq)
+        } else {
+            0.0
+        }),
+        // `star/private/history.f90:2814-2815` (1-based `k_below_just_added`).
+        "logxq_below_just_added" => MesaCellValue::Float(if nz > 0 {
+            let n_above = model.k_below_just_added.saturating_sub(1).min(nz);
+            let sum_dq: f64 = model.dq[..n_above].iter().sum();
+            safe_log10(sum_dq)
+        } else {
+            0.0
+        }),
+        // `star/private/history.f90:2336-2370`,
+        // `star/private/star_utils.f90:1328-1485`, and
+        // `star_data/public/star_data_step_work.inc:781`.
+        "shock_mass"
+        | "shock_q"
+        | "shock_radius"
+        | "shock_velocity"
+        | "shock_csound"
+        | "shock_lgT"
+        | "shock_lgRho"
+        | "shock_lgP"
+        | "shock_gamma1"
+        | "shock_entropy"
+        | "shock_tau"
+        | "shock_k"
+        | "shock_pre_lgRho" => {
+            let info = eval_shock_info(model);
+            if name == "shock_k" {
+                MesaCellValue::Int(info.k_1based as i64)
+            } else if info.k_1based == 0 {
+                MesaCellValue::Float(0.0)
+            } else {
+                MesaCellValue::Float(match name {
+                    "shock_mass" => info.mass_msun,
+                    "shock_q" => info.q,
+                    "shock_radius" => info.radius_rsun,
+                    "shock_velocity" => info.velocity_cms,
+                    "shock_csound" => info.csound_cms,
+                    "shock_lgT" => info.lg_t,
+                    "shock_lgRho" => info.lg_rho,
+                    "shock_lgP" => info.lg_p,
+                    "shock_gamma1" => info.gamma1,
+                    "shock_entropy" => info.entropy,
+                    "shock_tau" => info.tau,
+                    // Initialized to `0.0` in `star_data_step_work.inc:781`
+                    // and never reassigned in `star/private/`.
+                    _ => 0.0,
+                })
+            }
         }
         // `star/private/init.f90:704` and `history.f90:1593-1594`: initialized to `0.0`
         // and never reassigned anywhere in `star/private/`.

@@ -950,6 +950,9 @@ pub struct PyStarExtrasAdapter {
     has_other_rsp_build_model: bool,
     has_other_rsp_linear_analysis: bool,
     has_extra_history_columns: bool,
+    has_extra_profile_columns: bool,
+    has_extra_history_header_items: bool,
+    has_extra_profile_header_items: bool,
     state: PyAdapterState,
 }
 
@@ -979,6 +982,11 @@ impl PyStarExtrasAdapter {
             has_other_rsp_linear_analysis: b
                 .hasattr("other_rsp_linear_analysis")?,
             has_extra_history_columns: b.hasattr("extra_history_columns")?,
+            has_extra_profile_columns: b.hasattr("extra_profile_columns")?,
+            has_extra_history_header_items: b
+                .hasattr("extra_history_header_items")?,
+            has_extra_profile_header_items: b
+                .hasattr("extra_profile_header_items")?,
             py_obj: obj,
             state: PyAdapterState::default(),
         })
@@ -1064,6 +1072,36 @@ impl PyStarExtrasAdapter {
                     None
                 }
             }
+        })
+    }
+
+    fn call_star_snapshot_extract<T, F>(
+        &self,
+        enabled: bool,
+        method: &str,
+        model: &StarModel,
+        extract: F,
+    ) -> Result<Vec<T>, StarError>
+    where
+        F: FnOnce(&Bound<'_, PyAny>) -> PyResult<Vec<T>>,
+    {
+        if !enabled {
+            return Ok(Vec::new());
+        }
+        let case_dir = self.state.staged_dir_string();
+        Python::attach(|py| {
+            let snap = build_star_snapshot(py, model, &case_dir, false)
+                .map_err(|e| StarError::InvalidInput(format_py_err(py, &e)))?;
+            let res = self
+                .py_obj
+                .bind(py)
+                .call_method1(method, (snap,))
+                .map_err(|e| StarError::InvalidInput(format_py_err(py, &e)))?;
+            if res.is_none() {
+                return Ok(Vec::new());
+            }
+            extract(&res)
+                .map_err(|e| StarError::InvalidInput(format_py_err(py, &e)))
         })
     }
 }
@@ -1548,6 +1586,42 @@ impl StarExtras for PyStarExtrasAdapter {
                 }
             }
         })
+    }
+
+    fn extra_profile_columns(
+        &self,
+        model: &StarModel,
+    ) -> Result<Vec<(String, Vec<f64>)>, StarError> {
+        self.call_star_snapshot_extract(
+            self.has_extra_profile_columns,
+            "extra_profile_columns",
+            model,
+            |res| res.extract::<Vec<(String, Vec<f64>)>>(),
+        )
+    }
+
+    fn extra_history_header_items(
+        &self,
+        model: &StarModel,
+    ) -> Result<Vec<(String, f64)>, StarError> {
+        self.call_star_snapshot_extract(
+            self.has_extra_history_header_items,
+            "extra_history_header_items",
+            model,
+            |res| res.extract::<Vec<(String, f64)>>(),
+        )
+    }
+
+    fn extra_profile_header_items(
+        &self,
+        model: &StarModel,
+    ) -> Result<Vec<(String, f64)>, StarError> {
+        self.call_star_snapshot_extract(
+            self.has_extra_profile_header_items,
+            "extra_profile_header_items",
+            model,
+            |res| res.extract::<Vec<(String, f64)>>(),
+        )
     }
 }
 

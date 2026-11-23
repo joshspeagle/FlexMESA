@@ -77,9 +77,8 @@ issue = "#231"
 [[cases]]
 suite = "star"
 case = "20M_z2m2_high_rotation"
-status = "unported"
+status = "ported"
 digest = "daf87045393882fec7cefe55203ac70f6aef0b53aa888dd05abee4c0d5e7b74a"
-issue = "#231"
 
 [[cases]]
 suite = "star"
@@ -102,9 +101,8 @@ digest = "c9fe076ed4ab62efb2417b76d7c22efe0a65f68a1872e098a694d0f5324e03dc"
 [[cases]]
 suite = "star"
 case = "T_tau_gradr"
-status = "unported"
+status = "ported"
 digest = "2141345c8c4555b2b0be2c2abf1fdb1d537ba1665f61bae2b70c85801868a6f7"
-issue = "#231"
 
 [[cases]]
 suite = "star"
@@ -248,9 +246,8 @@ issue = "#231"
 [[cases]]
 suite = "star"
 case = "hb_2M"
-status = "unported"
+status = "ported"
 digest = "43f8d2e178b99ebdaaa9dbb5f08205755afc53abd0f98b815c6e5e717b39e788"
-issue = "#231"
 
 [[cases]]
 suite = "star"
@@ -291,9 +288,8 @@ digest = "4b7b570f3a144678fa67d368b2c5b485ad89e03f9b43abe8575c1635939c1a5a"
 [[cases]]
 suite = "star"
 case = "low_z"
-status = "unported"
+status = "ported"
 digest = "e7282bed456cfdefe4a4f86f6851e945f0890fe320db615420ef1ae14052d3cb"
-issue = "#231"
 
 [[cases]]
 suite = "star"
@@ -533,9 +529,8 @@ issue = "#231"
 [[cases]]
 suite = "star"
 case = "wd_acc_small_dm"
-status = "unported"
+status = "ported"
 digest = "7d75b8170807ce58e0c065b076b13ca1102d04ba6bb4e8dbbb21822e5c9935fd"
-issue = "#231"
 
 [[cases]]
 suite = "star"
@@ -553,9 +548,8 @@ digest = "ac62d4397d7617eb25e31531a0e81b981c27965a32c5a09430e9084db5639ddc"
 [[cases]]
 suite = "star"
 case = "wd_cool_0.6M"
-status = "unported"
+status = "ported"
 digest = "6fc9b93588daa6528c52e58c2780679030ea5ef47597803431cb459c4113af4c"
-issue = "#231"
 
 [[cases]]
 suite = "star"
@@ -573,9 +567,8 @@ digest = "4b7b570f3a144678fa67d368b2c5b485ad89e03f9b43abe8575c1635939c1a5a"
 [[cases]]
 suite = "star"
 case = "wd_nova_burst"
-status = "unported"
+status = "ported"
 digest = "c8d97a525ad1bad6bab372cb302cd1e0dc1c67d8b42765f8555154b88f829c73"
-issue = "#231"
 
 [[cases]]
 suite = "star"

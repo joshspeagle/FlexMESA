@@ -14,7 +14,7 @@ use crate::evolve_support::snapshot_step_start_extras;
 use crate::history::{HistoryRow, extract_history_row};
 use crate::hydro_vars::set_hydro_vars;
 use crate::inlist::{InlistBundle, InlistLoadOptions};
-use crate::mesa_profile::StarLogsWriter;
+use crate::mesa_profile::{StarLogsWriter, StarStepLogExtras};
 use crate::model::StarModel;
 use crate::model_io::{
     compute_photo_checksum, load_photo_bytes, write_mod_string,
@@ -229,6 +229,41 @@ pub trait StarExtras {
     /// (`data_for_extra_history_columns`).
     fn extra_history_columns(&self, _m: &StarModel) -> Vec<(String, f64)> {
         Vec::new()
+    }
+    /// Extra per-zone profile columns appended to `profileN.data` rows
+    /// (`how_many_extra_profile_columns` + `data_for_extra_profile_columns`).
+    ///
+    /// # Errors
+    /// Returns [`StarError`] if extra profile column generation fails.
+    fn extra_profile_columns(
+        &self,
+        _m: &StarModel,
+    ) -> Result<Vec<(String, Vec<f64>)>, StarError> {
+        Ok(Vec::new())
+    }
+    /// Extra header items emitted when starting a `history.data` log
+    /// (`how_many_extra_history_header_items` +
+    /// `data_for_extra_history_header_items`).
+    ///
+    /// # Errors
+    /// Returns [`StarError`] if extra history header generation fails.
+    fn extra_history_header_items(
+        &self,
+        _m: &StarModel,
+    ) -> Result<Vec<(String, f64)>, StarError> {
+        Ok(Vec::new())
+    }
+    /// Extra header items emitted on each `profileN.data` snapshot
+    /// (`how_many_extra_profile_header_items` +
+    /// `data_for_extra_profile_header_items`).
+    ///
+    /// # Errors
+    /// Returns [`StarError`] if extra profile header generation fails.
+    fn extra_profile_header_items(
+        &self,
+        _m: &StarModel,
+    ) -> Result<Vec<(String, f64)>, StarError> {
+        Ok(Vec::new())
     }
     /// Receives the staged temporary case directory path before stage execution
     /// so caller-supplied extras write auxiliary outputs inside the staged copy.
@@ -524,6 +559,27 @@ impl<'a> StarLogsOptions<'a> {
         case_dir: &Path,
         stage_logs_dir: Option<&str>,
     ) -> Result<Option<StarLogsWriter>, StarError> {
+        self.build_writer_with_extras(
+            model,
+            case_dir,
+            stage_logs_dir,
+            &DefaultStarExtras,
+        )
+    }
+
+    /// Builds the per-stage [`StarLogsWriter`] configured by `self`, forwarding
+    /// `extras` into `profile_starting_model` if enabled.
+    ///
+    /// # Errors
+    /// Returns [`StarError`] if column resolution, extra profile hook calls, or
+    /// output directory setup fails.
+    pub fn build_writer_with_extras(
+        &self,
+        model: &StarModel,
+        case_dir: &Path,
+        stage_logs_dir: Option<&str>,
+        extras: &dyn StarExtras,
+    ) -> Result<Option<StarLogsWriter>, StarError> {
         if let Some(exp_hist) = self.explicit_history_file {
             Ok(Some(StarLogsWriter::for_explicit_history_file(
                 model,
@@ -532,18 +588,71 @@ impl<'a> StarLogsOptions<'a> {
                 self.history_interval_override,
             )?))
         } else if let Some(out_root) = self.output_root {
-            Ok(Some(StarLogsWriter::for_stage_with_logs_dir(
-                model,
-                case_dir,
-                out_root,
-                stage_logs_dir,
-                self.history_interval_override,
-                self.write_profiles_override,
-            )?))
+            Ok(Some(
+                StarLogsWriter::for_stage_with_logs_dir_and_profile_extras(
+                    model,
+                    case_dir,
+                    out_root,
+                    stage_logs_dir,
+                    self.history_interval_override,
+                    self.write_profiles_override,
+                    |m| {
+                        Ok((
+                            extras.extra_profile_header_items(m)?,
+                            extras.extra_profile_columns(m)?,
+                        ))
+                    },
+                )?,
+            ))
         } else {
             Ok(None)
         }
     }
+}
+
+fn record_logs_step_with_extras(
+    lw: &mut StarLogsWriter,
+    model: &StarModel,
+    extras: &dyn StarExtras,
+    is_first_step: bool,
+    is_terminating: bool,
+) -> Result<(), StarError> {
+    let hist_due = lw.is_history_due(model, is_first_step, is_terminating);
+    let prof_due = lw.is_profile_due(model, is_first_step, is_terminating);
+    if !hist_due && !prof_due {
+        return Ok(());
+    }
+    let hist_hdr = if hist_due && lw.needs_history_header() {
+        extras.extra_history_header_items(model)?
+    } else {
+        Vec::new()
+    };
+    let hist_cols = if hist_due {
+        extras.extra_history_columns(model)
+    } else {
+        Vec::new()
+    };
+    let prof_hdr = if prof_due {
+        extras.extra_profile_header_items(model)?
+    } else {
+        Vec::new()
+    };
+    let prof_cols = if prof_due {
+        extras.extra_profile_columns(model)?
+    } else {
+        Vec::new()
+    };
+    lw.record_step_with_extras(
+        model,
+        is_first_step,
+        is_terminating,
+        StarStepLogExtras {
+            history_header_items: &hist_hdr,
+            history_columns: &hist_cols,
+            profile_header_items: &prof_hdr,
+            profile_columns: &prof_cols,
+        },
+    )
 }
 
 /// Executes a single `inlist` stage on `model`, stepping until either a
@@ -607,12 +716,7 @@ pub fn run_inlist_stage_with_logs(
             }
         }
         if let Some(lw) = logs_writer.as_deref_mut() {
-            let extra_cols = if lw.is_history_due(model, true, true) {
-                extras.extra_history_columns(model)
-            } else {
-                Vec::new()
-            };
-            lw.record_step_with_extra(model, true, true, &extra_cols)?;
+            record_logs_step_with_extras(lw, model, extras, true, true)?;
         }
     } else {
         for _ in 0..cap {
@@ -708,20 +812,12 @@ pub fn run_inlist_stage_with_logs(
             let is_last_cap_step = steps_taken == cap;
             let is_terminating = will_terminate || is_last_cap_step;
             if let Some(lw) = logs_writer.as_deref_mut() {
-                let extra_cols = if lw.is_history_due(
+                record_logs_step_with_extras(
+                    lw,
                     model,
+                    extras,
                     steps_taken == 1,
                     is_terminating,
-                ) {
-                    extras.extra_history_columns(model)
-                } else {
-                    Vec::new()
-                };
-                lw.record_step_with_extra(
-                    model,
-                    steps_taken == 1,
-                    is_terminating,
-                    &extra_cols,
                 )?;
             }
             // Periodic restart photo output (`star/private/evolve.f90:2340-2361`).
@@ -1060,10 +1156,11 @@ pub fn run_test_suite_case_with_extras(
                     }
                 };
 
-                let mut stage_logs = logs_opts.build_writer(
+                let mut stage_logs = logs_opts.build_writer_with_extras(
                     &model,
                     case_dir,
                     logs_dir.as_deref(),
+                    extras,
                 )?;
 
                 let rep = run_inlist_stage_with_logs(

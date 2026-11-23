@@ -3182,6 +3182,20 @@ pub fn evaluate_star_history_row_with_ctx(
         .collect()
 }
 
+pub(crate) fn validate_extra_header_items(
+    kind: &str,
+    items: &[(String, f64)],
+) -> Result<(), StarError> {
+    for (idx, (name, _)) in items.iter().enumerate() {
+        if name.trim().is_empty() {
+            return Err(StarError::InvalidInput(format!(
+                "extra {kind} header item #{idx} has an empty name"
+            )));
+        }
+    }
+    Ok(())
+}
+
 /// Formats the 6-line MESA `26.4.1` `history.data` header (`do_history_info` in
 /// `star/private/history.f90:378-405, 469-484`).
 #[must_use]
@@ -3200,26 +3214,50 @@ pub fn format_star_history_file_header_with_extra(
     specs: &[HistoryColumnSpec],
     extra_col_names: &[&str],
 ) -> String {
+    format_star_history_file_header_with_extras(
+        model,
+        specs,
+        &[],
+        extra_col_names,
+    )
+}
+
+/// Formats the 6-line MESA `26.4.1` `history.data` header including both
+/// `extra_history_header_items` (`star/private/history.f90:353-398`) and
+/// appended extra/binary column names (`history.f90:548-557`).
+#[must_use]
+pub fn format_star_history_file_header_with_extras(
+    model: &StarModel,
+    specs: &[HistoryColumnSpec],
+    extra_header_items: &[(String, f64)],
+    extra_col_names: &[&str],
+) -> String {
     let o = &model.controls.output;
-    let hdr_items: [(&str, String); 11] = [
-        (
-            "version_number",
-            format_mesa_header_str(MESA_REF_VERSION_NUMBER),
-        ),
-        ("compiler", format_mesa_header_str("rustc")),
-        ("build", format_mesa_header_str("flexmesa")),
-        ("MESA_SDK_version", format_mesa_header_str("flexmesa-0.1")),
-        (
-            "math_backend",
-            format_mesa_header_str(flexmesa_math::numerics_mode().as_str()),
-        ),
-        ("date", format_mesa_header_str("20260401")),
-        ("burn_min1", format_mesa_dbl(o.burn_min1)),
-        ("burn_min2", format_mesa_dbl(o.burn_min2)),
-        ("msun", format_mesa_dbl(M_SUN)),
-        ("rsun", format_mesa_dbl(R_SUN)),
-        ("lsun", format_mesa_dbl(L_SUN)),
-    ];
+    let mut hdr_items: Vec<(&str, String)> =
+        Vec::with_capacity(11 + extra_header_items.len());
+    hdr_items.push((
+        "version_number",
+        format_mesa_header_str(MESA_REF_VERSION_NUMBER),
+    ));
+    hdr_items.push(("compiler", format_mesa_header_str("rustc")));
+    hdr_items.push(("build", format_mesa_header_str("flexmesa")));
+    hdr_items.push((
+        "MESA_SDK_version",
+        format_mesa_header_str("flexmesa-0.1"),
+    ));
+    hdr_items.push((
+        "math_backend",
+        format_mesa_header_str(flexmesa_math::numerics_mode().as_str()),
+    ));
+    hdr_items.push(("date", format_mesa_header_str("20260401")));
+    hdr_items.push(("burn_min1", format_mesa_dbl(o.burn_min1)));
+    hdr_items.push(("burn_min2", format_mesa_dbl(o.burn_min2)));
+    hdr_items.push(("msun", format_mesa_dbl(M_SUN)));
+    hdr_items.push(("rsun", format_mesa_dbl(R_SUN)));
+    hdr_items.push(("lsun", format_mesa_dbl(L_SUN)));
+    for (name, val) in extra_header_items {
+        hdr_items.push((name.trim(), format_mesa_dbl(*val)));
+    }
     let spec_names: Vec<String> =
         specs.iter().map(HistoryColumnSpec::column_name).collect();
     let mut col_names: Vec<&str> =
@@ -3347,6 +3385,12 @@ impl IncrementalHistoryWriter {
         self.rows_written
     }
 
+    /// Returns whether the initial `history.data` header has already been emitted.
+    #[must_use]
+    pub fn header_written(&self) -> bool {
+        self.writer.is_some()
+    }
+
     /// Evaluates `model`, writes the header on the first row, appends the row,
     /// and flushes immediately (`write_history_info` in `star/private/history.f90:48-53`).
     pub fn write_step(&mut self, model: &StarModel) -> Result<(), StarError> {
@@ -3373,10 +3417,24 @@ impl IncrementalHistoryWriter {
         ctx: &StepReportContext,
         extra_cols: &[(String, f64)],
     ) -> Result<(), StarError> {
+        self.write_step_with_ctx_and_extras(model, ctx, &[], extra_cols)
+    }
+
+    /// Evaluates `model` reusing `ctx` with both `extra_history_header_items`
+    /// (`star/private/history.f90:353-398`) and appended `extra_cols`, writing
+    /// the header on the first row and flushing immediately.
+    pub fn write_step_with_ctx_and_extras(
+        &mut self,
+        model: &StarModel,
+        ctx: &StepReportContext,
+        extra_header_items: &[(String, f64)],
+        extra_cols: &[(String, f64)],
+    ) -> Result<(), StarError> {
         if self.last_model_number == Some(model.model_number) {
             return Ok(());
         }
         if self.writer.is_none() {
+            validate_extra_header_items("history", extra_header_items)?;
             if let Some(parent) =
                 self.path.parent().filter(|p| !p.as_os_str().is_empty())
             {
@@ -3389,9 +3447,10 @@ impl IncrementalHistoryWriter {
             }
             let extra_names: Vec<&str> =
                 extra_cols.iter().map(|(k, _)| k.as_str()).collect();
-            let hdr = format_star_history_file_header_with_extra(
+            let hdr = format_star_history_file_header_with_extras(
                 model,
                 &self.specs,
+                extra_header_items,
                 &extra_names,
             );
             if let Some(ref hp) = self.header_path {

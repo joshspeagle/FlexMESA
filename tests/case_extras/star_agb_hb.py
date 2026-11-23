@@ -331,14 +331,10 @@ class LowZStarExtras:
     """
 
     def extras_controls(self, _state: dict[str, Any]) -> None:
-        """Require `extra_history_header_items` and `extra_profile_header_items`
-        (`:38-60`).
+        """Header-item hooks (`:38-60`) are now auto-discovered by
+        `PyStarExtrasAdapter`.
         """
-        raise NotImplementedError(
-            "low_z: extras_controls registers extra_history_header_items "
-            "(:55-56) and extra_profile_header_items (:57-58), which "
-            "flexmesa-star StarExtras does not expose (#231)"
-        )
+        return None
 
     def extra_history_header_items(
         self, state: dict[str, Any]

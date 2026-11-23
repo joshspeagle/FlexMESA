@@ -22,7 +22,9 @@ use flexmesa_schema::strip_fortran_comment;
 
 use crate::controls::StarError;
 use crate::eps_mdot::eval_cell_specific_total_energy;
-use crate::mesa_history::{IncrementalHistoryWriter, MesaCellValue};
+use crate::mesa_history::{
+    validate_extra_header_items, IncrementalHistoryWriter, MesaCellValue,
+};
 use crate::model::StarModel;
 use crate::report_utils::{
     center_avg_x_by_name, center_value, csound_face_at,
@@ -1202,6 +1204,29 @@ fn species_mass_msun(model: &StarModel, iso_name: &str) -> f64 {
     sum / M_SUN
 }
 
+fn validate_extra_profile_inputs(
+    nz: usize,
+    extra_header_items: &[(String, f64)],
+    extra_cols: &[(String, Vec<f64>)],
+) -> Result<(), StarError> {
+    validate_extra_header_items("profile", extra_header_items)?;
+    for (idx, (name, vals)) in extra_cols.iter().enumerate() {
+        if name.trim().is_empty() {
+            return Err(StarError::InvalidInput(format!(
+                "extra profile column #{idx} has an empty name"
+            )));
+        }
+        if vals.len() != nz {
+            return Err(StarError::InvalidInput(format!(
+                "extra profile column '{}' has length {}, expected nz={nz}",
+                name.trim(),
+                vals.len()
+            )));
+        }
+    }
+    Ok(())
+}
+
 /// Formats a complete MESA `26.4.1` `profileN.data` snapshot from `model` and
 /// `specs` (`do_profile_info` in `star/private/profile.f90:519-660`).
 #[must_use]
@@ -1210,17 +1235,49 @@ pub fn format_star_profile_text(
     specs: &[ProfileColumnSpec],
 ) -> String {
     let ctx = StepReportContext::compute(model);
-    let (hdr, body) = format_star_profile_parts_with_ctx(model, specs, &ctx);
+    let (hdr, body) = format_star_profile_parts_with_extras_impl(
+        model,
+        specs,
+        &ctx,
+        &[],
+        &[],
+    );
     let mut out = String::with_capacity(hdr.len() + body.len());
     out.push_str(&hdr);
     out.push_str(&body);
     out
 }
 
-fn format_star_profile_parts_with_ctx(
+/// Formats a complete MESA `26.4.1` `profileN.data` snapshot including
+/// `extra_profile_header_items` (`star/private/profile.f90:590-592`) and
+/// `extra_profile_columns` (`profile.f90:653-656`).
+pub fn format_star_profile_text_with_extras(
+    model: &StarModel,
+    specs: &[ProfileColumnSpec],
+    extra_header_items: &[(String, f64)],
+    extra_cols: &[(String, Vec<f64>)],
+) -> Result<String, StarError> {
+    validate_extra_profile_inputs(model.nz, extra_header_items, extra_cols)?;
+    let ctx = StepReportContext::compute(model);
+    let (hdr, body) = format_star_profile_parts_with_extras_impl(
+        model,
+        specs,
+        &ctx,
+        extra_header_items,
+        extra_cols,
+    );
+    let mut out = String::with_capacity(hdr.len() + body.len());
+    out.push_str(&hdr);
+    out.push_str(&body);
+    Ok(out)
+}
+
+fn format_star_profile_parts_with_extras_impl(
     model: &StarModel,
     specs: &[ProfileColumnSpec],
     ctx: &StepReportContext,
+    extra_header_items: &[(String, f64)],
+    extra_cols: &[(String, Vec<f64>)],
 ) -> (String, String) {
     let nz = model.nz;
     let o = &model.controls.output;
@@ -1317,6 +1374,9 @@ fn format_star_profile_parts_with_ctx(
     hdr.push(("msun", format_mesa_dbl(M_SUN)));
     hdr.push(("rsun", format_mesa_dbl(R_SUN)));
     hdr.push(("lsun", format_mesa_dbl(L_SUN)));
+    for (name, val) in extra_header_items {
+        hdr.push((name.trim(), format_mesa_dbl(*val)));
+    }
 
     // 2. Expand column names (`profile.f90:633-656`) and pre-resolve nuclide slots.
     let mut col_names_owned: Vec<String> = Vec::new();
@@ -1353,6 +1413,9 @@ fn format_star_profile_parts_with_ctx(
                 spec_slots.push(None);
             }
         }
+    }
+    for (name, _) in extra_cols {
+        col_names_owned.push(name.trim().to_owned());
     }
     let col_refs: Vec<&str> =
         col_names_owned.iter().map(String::as_str).collect();
@@ -1430,6 +1493,10 @@ fn format_star_profile_parts_with_ctx(
                 }
             }
         }
+        for (_, vals) in extra_cols {
+            let v = vals.get(kk).copied().unwrap_or(f64::NAN);
+            write_mesa_dbl_width(&mut body, v, STAR_LOG_COL_WIDTH);
+        }
         let _ = writeln!(body);
     }
     (hdr_text, body)
@@ -1498,6 +1565,34 @@ impl ProfilesIndex {
         log_dir: &Path,
         priority: i32,
     ) -> Result<PathBuf, StarError> {
+        self.save_profile_with_ctx_and_extras(
+            model,
+            specs,
+            ctx,
+            log_dir,
+            priority,
+            &[],
+            &[],
+        )
+    }
+
+    /// Saves a radial profile reusing `ctx` together with `extra_profile_header_items`
+    /// and `extra_profile_columns` (`star/private/profile.f90:590-592, 653-656`).
+    pub fn save_profile_with_ctx_and_extras(
+        &mut self,
+        model: &StarModel,
+        specs: &[ProfileColumnSpec],
+        ctx: &StepReportContext,
+        log_dir: &Path,
+        priority: i32,
+        extra_header_items: &[(String, f64)],
+        extra_cols: &[(String, Vec<f64>)],
+    ) -> Result<PathBuf, StarError> {
+        validate_extra_profile_inputs(
+            model.nz,
+            extra_header_items,
+            extra_cols,
+        )?;
         fs::create_dir_all(log_dir).map_err(|e| {
             StarError::IoError(format!(
                 "failed to create log directory {}: {e}",
@@ -1548,8 +1643,13 @@ impl ProfilesIndex {
             o.profile_data_suffix.trim()
         );
         let prof_path = log_dir.join(&prof_filename);
-        let (hdr_text, body_text) =
-            format_star_profile_parts_with_ctx(model, specs, ctx);
+        let (hdr_text, body_text) = format_star_profile_parts_with_extras_impl(
+            model,
+            specs,
+            ctx,
+            extra_header_items,
+            extra_cols,
+        );
         let hdr_suffix = o.profile_data_header_suffix.trim();
         if hdr_suffix.is_empty() {
             let mut full =
@@ -1592,6 +1692,23 @@ impl ProfilesIndex {
         })?;
         Ok(prof_path)
     }
+}
+
+/// Caller-supplied extra log headers and columns for one converged step.
+#[derive(Debug, Default, Clone, Copy)]
+pub struct StarStepLogExtras<'a> {
+    /// Extra header scalars emitted on `history.data` header creation
+    /// (`data_for_extra_history_header_items`).
+    pub history_header_items: &'a [(String, f64)],
+    /// Extra per-step scalars appended to `history.data` rows
+    /// (`data_for_extra_history_columns`).
+    pub history_columns: &'a [(String, f64)],
+    /// Extra header scalars emitted on each `profileN.data` header
+    /// (`data_for_extra_profile_header_items`).
+    pub profile_header_items: &'a [(String, f64)],
+    /// Extra per-zone arrays appended to `profileN.data` rows
+    /// (`data_for_extra_profile_columns`).
+    pub profile_columns: &'a [(String, Vec<f64>)],
 }
 
 /// Stage-level `LOGS/` coordinator writing `history.data`, `profileN.data`, and
@@ -1640,6 +1757,34 @@ impl StarLogsWriter {
         history_interval_override: Option<usize>,
         write_profiles_override: Option<bool>,
     ) -> Result<Self, StarError> {
+        Self::for_stage_with_logs_dir_and_profile_extras(
+            model,
+            case_dir,
+            output_root,
+            stage_logs_dir,
+            history_interval_override,
+            write_profiles_override,
+            |_| Ok((Vec::new(), Vec::new())),
+        )
+    }
+
+    /// Initializes a [`StarLogsWriter`] honoring `stage_logs_dir` and fetching
+    /// `extra_profile_header_items` / `extra_profile_columns` only when
+    /// `profile_starting_model` triggers an initial profile snapshot.
+    pub fn for_stage_with_logs_dir_and_profile_extras<F>(
+        model: &StarModel,
+        case_dir: &Path,
+        output_root: &Path,
+        stage_logs_dir: Option<&str>,
+        history_interval_override: Option<usize>,
+        write_profiles_override: Option<bool>,
+        fetch_starting_profile_extras: F,
+    ) -> Result<Self, StarError>
+    where
+        F: FnOnce(
+            &StarModel,
+        ) -> Result<(Vec<(String, f64)>, Vec<(String, Vec<f64>)>), StarError>,
+    {
         let o = &model.controls.output;
         let ctrl_log_dir = o.log_directory.trim();
         let eff_log_dir = match stage_logs_dir.map(str::trim) {
@@ -1703,11 +1848,17 @@ impl StarLogsWriter {
             write_profiles_override,
         };
         if model.job.profile_starting_model && write_profs {
-            out.profiles_index.save_profile(
+            let (extra_hdr, extra_cols) =
+                fetch_starting_profile_extras(model)?;
+            let ctx = StepReportContext::compute(model);
+            out.profiles_index.save_profile_with_ctx_and_extras(
                 model,
                 &out.profile_specs,
+                &ctx,
                 &out.log_dir,
                 3,
+                &extra_hdr,
+                &extra_cols,
             )?;
         }
         Ok(out)
@@ -1796,6 +1947,31 @@ impl StarLogsWriter {
         self.due_flags(model, is_first_step, is_terminating).1
     }
 
+    /// Returns whether `record_step*` will emit a `profileN.data` or termination
+    /// profile on this step.
+    #[must_use]
+    pub fn is_profile_due(
+        &self,
+        model: &StarModel,
+        is_first_step: bool,
+        is_terminating: bool,
+    ) -> bool {
+        let (prof_due, _, _) =
+            self.due_flags(model, is_first_step, is_terminating);
+        let term_prof_due = is_terminating
+            && self.write_profiles_override != Some(false)
+            && model.job.write_profile_when_terminate;
+        prof_due || term_prof_due
+    }
+
+    /// Returns whether the stage `history.data` writer still needs its header row.
+    #[must_use]
+    pub fn needs_history_header(&self) -> bool {
+        self.history_writer
+            .as_ref()
+            .is_some_and(|hw| !hw.header_written())
+    }
+
     /// Records a converged step (`is_first_step` corresponds to
     /// `doing_first_model_of_run`, `is_terminating` corresponds to stage termination).
     pub fn record_step(
@@ -1815,6 +1991,27 @@ impl StarLogsWriter {
         is_first_step: bool,
         is_terminating: bool,
         extra_history_cols: &[(String, f64)],
+    ) -> Result<(), StarError> {
+        self.record_step_with_extras(
+            model,
+            is_first_step,
+            is_terminating,
+            StarStepLogExtras {
+                history_columns: extra_history_cols,
+                ..StarStepLogExtras::default()
+            },
+        )
+    }
+
+    /// Records a converged step with caller-supplied history and profile extra
+    /// headers and columns (`history.f90:353-398, 475-477` and
+    /// `profile.f90:590-592, 653-656`).
+    pub fn record_step_with_extras(
+        &mut self,
+        model: &StarModel,
+        is_first_step: bool,
+        is_terminating: bool,
+        extras: StarStepLogExtras<'_>,
     ) -> Result<(), StarError> {
         let o = &model.controls.output;
         let mnum = model.model_number;
@@ -1844,21 +2041,24 @@ impl StarLogsWriter {
             } else {
                 1
             };
-            self.profiles_index.save_profile_with_ctx(
+            self.profiles_index.save_profile_with_ctx_and_extras(
                 model,
                 &self.profile_specs,
                 &ctx,
                 &self.log_dir,
                 priority,
+                extras.profile_header_items,
+                extras.profile_columns,
             )?;
         }
 
         if hist_due {
             if let Some(ref mut hw) = self.history_writer {
-                hw.write_step_with_ctx_and_extra(
+                hw.write_step_with_ctx_and_extras(
                     model,
                     &ctx,
-                    extra_history_cols,
+                    extras.history_header_items,
+                    extras.history_columns,
                 )?;
             }
         }
@@ -1870,6 +2070,11 @@ impl StarLogsWriter {
                     "filename_for_profile_when_terminate must be non-empty when write_profile_when_terminate is true",
                 )));
             }
+            validate_extra_profile_inputs(
+                model.nz,
+                extras.profile_header_items,
+                extras.profile_columns,
+            )?;
             let out_path = self.output_root.join(fname);
             if let Some(parent) =
                 out_path.parent().filter(|p| !p.as_os_str().is_empty())
@@ -1881,10 +2086,12 @@ impl StarLogsWriter {
                     ))
                 })?;
             }
-            let (hdr_t, body_t) = format_star_profile_parts_with_ctx(
+            let (hdr_t, body_t) = format_star_profile_parts_with_extras_impl(
                 model,
                 &self.profile_specs,
                 &ctx,
+                extras.profile_header_items,
+                extras.profile_columns,
             );
             let mut full = String::with_capacity(hdr_t.len() + body_t.len());
             full.push_str(&hdr_t);

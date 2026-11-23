@@ -145,7 +145,7 @@ pub fn do_element_diffusion_step(
         if k > 0 {
             let r_k = model.r[k];
             let grav = -model.cgrav[k] * model.m[k] / (r_k * r_k);
-            let area = PI4 * r_k * r_k;
+            let area = PI4 * (r_k * r_k);
             let p_face = 0.5 * (model.peos[k] + model.peos[k - 1]);
             dlnp_dm[k] = grav / (area * p_face);
             dlnt_dm[k] = model.gradt[k] * dlnp_dm[k];

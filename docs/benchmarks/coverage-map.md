@@ -54,7 +54,7 @@ Compared against MESA `26.4.1` `.defaults` schemas, **307 / 1,444** `&controls` 
 
 | Namelist | Upstream Scalars | Matched in FlexMESA | Defaults Agree | Value Mismatch | Disabled (`none`/limit) | Non-Scalar Rust | Unimplemented |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| `star &controls` | 1,444 | 1,119 | 1,119 | 0 | 0 | 18 | 307 |
+| `star &controls` | 1,444 | 1,120 | 1,120 | 0 | 0 | 17 | 307 |
 | `star &star_job` | 455 | 97 | 97 | 0 | 0 | 1 | 357 |
 | `binary &binary_controls + &binary_job` | 209 | 145 | 145 | 0 | 0 | 1 | 63 |
 | `astero &astero_search_controls` | 150 | 75 | 75 | 0 | 0 | 1 | 74 |

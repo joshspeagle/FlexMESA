@@ -4425,7 +4425,7 @@
       "wall_time_sec": 0.0,
       "peak_rss_gb": 0.0,
       "known_gap_issue": "#161",
-      "known_gap_reason": "Strict validation rejects unported &colors and relaxation controls, and history_columns.list requests unported phase_of_evolution and colors columns (#161). With the controls ignored, the run stops at model 1 (min_timestep_limit) because the first pre-MS step at upstream's dt = 1e-5 yr does not converge from FlexMESA's pre-MS model (#154).",
+      "known_gap_reason": "Strict validation rejects unported &colors and relaxation controls, and history_columns.list requests unported phase_of_evolution and colors columns (#161).",
       "is_undeclared_failure": false,
       "is_stale_known_gap": false,
       "controls_ignored": true,

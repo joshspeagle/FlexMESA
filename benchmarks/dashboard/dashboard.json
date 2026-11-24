@@ -21,8 +21,8 @@
         "verified_total": 5640,
         "pct_ported": 35.1,
         "pct_verified": 4.7,
-        "rust_lines": 95710,
-        "python_jax_lines": 3869
+        "rust_lines": 97770,
+        "python_jax_lines": 3893
       },
       {
         "module": "star_data",
@@ -55,7 +55,7 @@
         "verified_total": 0,
         "pct_ported": 18.7,
         "pct_verified": 0.0,
-        "rust_lines": 12414,
+        "rust_lines": 12661,
         "python_jax_lines": 1244
       },
       {
@@ -72,7 +72,7 @@
         "verified_total": 0,
         "pct_ported": 0.0,
         "pct_verified": 0.0,
-        "rust_lines": 6121,
+        "rust_lines": 6333,
         "python_jax_lines": 1295
       },
       {
@@ -379,7 +379,7 @@
         "pct_ported": 0.0,
         "pct_verified": 0.0,
         "rust_lines": 5090,
-        "python_jax_lines": 2659
+        "python_jax_lines": 2676
       },
       {
         "module": "gyre",
@@ -455,8 +455,8 @@
       "upstream_panel_modules": 46
     },
     "infrastructure_lines": {
-      "rust_bridge_testing_bench": 20001,
-      "python_testing_bench": 17465
+      "rust_bridge_testing_bench": 20182,
+      "python_testing_bench": 17848
     }
   },
   "numerics": {
@@ -593,12 +593,12 @@
         "total": 90,
         "mesa_26_4_1_ref": 86,
         "no_reference_yet": 4,
-        "strict_validated": 54,
-        "diagnostic_runs": 36,
-        "reached_termination": 53,
-        "within_numeric_tol": 29,
-        "passing": 22,
-        "declared_gaps": 59,
+        "strict_validated": 56,
+        "diagnostic_runs": 34,
+        "reached_termination": 54,
+        "within_numeric_tol": 30,
+        "passing": 23,
+        "declared_gaps": 58,
         "undeclared_failures": 0
       },
       "binary": {
@@ -621,7 +621,7 @@
         "diagnostic_runs": 7,
         "reached_termination": 3,
         "within_numeric_tol": 3,
-        "passing": 0,
+        "passing": 1,
         "declared_gaps": 7,
         "undeclared_failures": 0
       }
@@ -650,10 +650,10 @@
     ],
     "gaps_by_issue": {
       "#161": 23,
-      "#154": 14,
+      "#154": 13,
       "#162": 9,
       "#157": 8,
-      "#170": 7,
+      "#170": 6,
       "#158": 5,
       "#160": 4,
       "#156": 2,
@@ -668,22 +668,22 @@
     {
       "namelist": "star &controls",
       "upstream_scalars": 1444,
-      "matched_in_flexmesa": 1123,
-      "defaults_agree": 1123,
+      "matched_in_flexmesa": 1131,
+      "defaults_agree": 1131,
       "value_mismatch": 0,
       "disabled_limit_none": 0,
       "skipped_unparseable_rust": 17,
-      "unimplemented": 304
+      "unimplemented": 296
     },
     {
       "namelist": "star &star_job",
       "upstream_scalars": 455,
-      "matched_in_flexmesa": 135,
-      "defaults_agree": 135,
+      "matched_in_flexmesa": 164,
+      "defaults_agree": 164,
       "value_mismatch": 0,
       "disabled_limit_none": 0,
       "skipped_unparseable_rust": 1,
-      "unimplemented": 319
+      "unimplemented": 290
     },
     {
       "namelist": "binary &binary_controls + &binary_job",
@@ -1090,27 +1090,27 @@
     "rust_ignore_count": 13,
     "rust_ignores": [
       {
-        "location": "crates/flexmesa-astero/tests/astero_suite.rs:617",
+        "location": "crates/flexmesa-astero/tests/astero_suite.rs:619",
         "reason": "unverified uncapped astero campaign; tracked in #143 and #162",
         "issues": "#143, #162"
       },
       {
-        "location": "crates/flexmesa-astero/tests/astero_suite.rs:623",
+        "location": "crates/flexmesa-astero/tests/astero_suite.rs:625",
         "reason": "unverified uncapped astero campaign; tracked in #143 and #162",
         "issues": "#143, #162"
       },
       {
-        "location": "crates/flexmesa-astero/tests/astero_suite.rs:629",
+        "location": "crates/flexmesa-astero/tests/astero_suite.rs:631",
         "reason": "unverified uncapped astero campaign; tracked in #143 and #162",
         "issues": "#143, #162"
       },
       {
-        "location": "crates/flexmesa-astero/tests/astero_suite.rs:635",
+        "location": "crates/flexmesa-astero/tests/astero_suite.rs:637",
         "reason": "unverified uncapped astero campaign; tracked in #143 and #162",
         "issues": "#143, #162"
       },
       {
-        "location": "crates/flexmesa-astero/tests/astero_suite.rs:641",
+        "location": "crates/flexmesa-astero/tests/astero_suite.rs:643",
         "reason": "unverified uncapped astero campaign; tracked in #143 and #162",
         "issues": "#143, #162"
       },
@@ -1173,12 +1173,12 @@
         "issues": "#43, #161, #295, #420"
       },
       {
-        "location": "tests/test_e2e_2_tier2.py:26",
+        "location": "tests/test_e2e_2_tier2.py:23",
         "reason": "pytest.mark.xfail( strict=True, reason=( \"#445: this synthetic setup (never run in MESA) relied on the removed \" \"relax_initial_mass_to_remove_h_env stand-in; with upstream \" \"star_relax_mass_to_remove_H_env the 0.6 Msun ZAMS start has no He \" \"core and final_log_tc is 5.10 against the asserted > 6.0.\" ), )",
         "issues": "#445"
       },
       {
-        "location": "tests/test_e2e_2_tier2.py:132",
+        "location": "tests/test_e2e_2_tier2.py:129",
         "reason": "pytest.mark.xfail( strict=True, reason=( \"#445: this synthetic setup (never run in MESA) relied on the removed \" \"relax_initial_mass_to_remove_h_env stand-in; with upstream \" \"star_relax_mass_to_remove_H_env the 1.10 Msun ZAMS relax stops on \" \"max_number_retries.\" ), )",
         "issues": "#445"
       },
@@ -1383,8 +1383,8 @@
       },
       {
         "phase": "Phase C",
-        "open": 19,
-        "closed": 11,
+        "open": 18,
+        "closed": 12,
         "issues": [
           {
             "number": 152,
@@ -1529,7 +1529,7 @@
           {
             "number": 451,
             "title": "[Parity] Binary step loop: binary_pick_next_timestep before star_pick_next_timestep, and why_Tlim = Tlim_binary (run_binary_support.f90:536-562)",
-            "state": "open"
+            "state": "closed"
           },
           {
             "number": 453,
@@ -1592,61 +1592,6 @@
     ],
     "open_pull_requests": [
       {
-        "number": 475,
-        "title": "fix(star): finish_load_model before change_net; .mod columns in net order",
-        "draft": true
-      },
-      {
-        "number": 476,
-        "title": "feat(star): port enable_adaptive_network (check_adjust_net) (#466)",
-        "draft": true
-      },
-      {
-        "number": 478,
-        "title": "fix(star): model-1 surface boundary condition as upstream (Teff, get_table, starspots, get_PT_bc_ad)",
-        "draft": true
-      },
-      {
-        "number": 483,
-        "title": "feat(star): port auto_extend_net (extend_net) (#474)",
-        "draft": true
-      },
-      {
-        "number": 487,
-        "title": "fix(binary): binary_pick_next_timestep in upstream's slot; set_star_timesteps and Tlim_binary (#451)",
-        "draft": true
-      },
-      {
-        "number": 489,
-        "title": "fix(star): keep xmstar as read; update_radius as upstream; no eps_mdot fallback",
-        "draft": true
-      },
-      {
-        "number": 490,
-        "title": "feat(star): in-memory get_gyre_data, bit-exact vs MESA 26.4.1 (#170, G3b)",
-        "draft": true
-      },
-      {
-        "number": 493,
-        "title": "fix(star): restart semantics, initial_y, set_initial_dt and relax ports as upstream (#436)",
-        "draft": true
-      },
-      {
-        "number": 495,
-        "title": "feat(astero): wire GYRE into astero_gyre and remove its scaffolding (#170, G3c)",
-        "draft": true
-      },
-      {
-        "number": 500,
-        "title": "fix(star): set_vars at the start of every step as upstream; the remesh only flags it",
-        "draft": true
-      },
-      {
-        "number": 501,
-        "title": "feat(harness): compare astero search cases track by track against MESA (#430)",
-        "draft": true
-      },
-      {
         "number": 507,
         "title": "feat(star): port the uniform-omega rotation relaxes on do_internal_evolve (#499)",
         "draft": true
@@ -1679,6 +1624,21 @@
       {
         "number": 518,
         "title": "feat(star): rotation mixing coefficients, D_omega and am_nu_rot as upstream (#158)",
+        "draft": true
+      },
+      {
+        "number": 520,
+        "title": "fix(star): store the reset density in xh as store_rho_in_xh does (#154)",
+        "draft": true
+      },
+      {
+        "number": 523,
+        "title": "feat(star): GYRE, FGONG and OSC exporters as upstream; byte-identical to MESA 26.4.1 (#491)",
+        "draft": true
+      },
+      {
+        "number": 527,
+        "title": "feat(star,astero): wire ADIPLS into flexmesa-star and flexmesa-astero (Package A3) (#171)",
         "draft": true
       }
     ],
@@ -2209,6 +2169,30 @@
         "state": "open",
         "kind": "enhancement",
         "parity_pending": false,
+        "needs_confirmation": false
+      },
+      {
+        "number": 524,
+        "title": "[Deferred bug] pulse_saio store_saio_data_env reads kap unset on envelope points (pulse_saio.f90:279-288)",
+        "state": "open",
+        "kind": "upstream-bug",
+        "parity_pending": false,
+        "needs_confirmation": false
+      },
+      {
+        "number": 525,
+        "title": "[Deferred bug] pulse_gr1d never advances j and writes REALs with an I6 format (pulse_gr1d.f90:68-78, 170)",
+        "state": "open",
+        "kind": "upstream-bug",
+        "parity_pending": false,
+        "needs_confirmation": false
+      },
+      {
+        "number": 526,
+        "title": "[Deferred bug] approx21 He4 equation counts He3+He4 twice (stale a2, net_approx21.f90:1110-1113)",
+        "state": "open",
+        "kind": "upstream-bug",
+        "parity_pending": true,
         "needs_confirmation": false
       }
     ]
@@ -3591,6 +3575,19 @@
       "closed_140": "26",
       "total_140": "50",
       "deferred_169": "66"
+    },
+    {
+      "date_utc": "2026-11-24",
+      "commit": "b343040",
+      "event": "main merge",
+      "engine_ported_pct": "30.7",
+      "all_verified_pct": "1.1",
+      "cases_passing": "27",
+      "rust_cov_pct": "76.3",
+      "python_cov_pct": "87.7",
+      "closed_140": "27",
+      "total_140": "50",
+      "deferred_169": "69"
     }
   ]
 }

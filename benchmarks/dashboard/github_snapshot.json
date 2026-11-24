@@ -101,8 +101,8 @@
     },
     {
       "phase": "Phase C",
-      "open": 19,
-      "closed": 11,
+      "open": 18,
+      "closed": 12,
       "issues": [
         {
           "number": 152,
@@ -247,7 +247,7 @@
         {
           "number": 451,
           "title": "[Parity] Binary step loop: binary_pick_next_timestep before star_pick_next_timestep, and why_Tlim = Tlim_binary (run_binary_support.f90:536-562)",
-          "state": "open"
+          "state": "closed"
         },
         {
           "number": 453,
@@ -310,61 +310,6 @@
   ],
   "open_pull_requests": [
     {
-      "number": 475,
-      "title": "fix(star): finish_load_model before change_net; .mod columns in net order",
-      "draft": true
-    },
-    {
-      "number": 476,
-      "title": "feat(star): port enable_adaptive_network (check_adjust_net) (#466)",
-      "draft": true
-    },
-    {
-      "number": 478,
-      "title": "fix(star): model-1 surface boundary condition as upstream (Teff, get_table, starspots, get_PT_bc_ad)",
-      "draft": true
-    },
-    {
-      "number": 483,
-      "title": "feat(star): port auto_extend_net (extend_net) (#474)",
-      "draft": true
-    },
-    {
-      "number": 487,
-      "title": "fix(binary): binary_pick_next_timestep in upstream's slot; set_star_timesteps and Tlim_binary (#451)",
-      "draft": true
-    },
-    {
-      "number": 489,
-      "title": "fix(star): keep xmstar as read; update_radius as upstream; no eps_mdot fallback",
-      "draft": true
-    },
-    {
-      "number": 490,
-      "title": "feat(star): in-memory get_gyre_data, bit-exact vs MESA 26.4.1 (#170, G3b)",
-      "draft": true
-    },
-    {
-      "number": 493,
-      "title": "fix(star): restart semantics, initial_y, set_initial_dt and relax ports as upstream (#436)",
-      "draft": true
-    },
-    {
-      "number": 495,
-      "title": "feat(astero): wire GYRE into astero_gyre and remove its scaffolding (#170, G3c)",
-      "draft": true
-    },
-    {
-      "number": 500,
-      "title": "fix(star): set_vars at the start of every step as upstream; the remesh only flags it",
-      "draft": true
-    },
-    {
-      "number": 501,
-      "title": "feat(harness): compare astero search cases track by track against MESA (#430)",
-      "draft": true
-    },
-    {
       "number": 507,
       "title": "feat(star): port the uniform-omega rotation relaxes on do_internal_evolve (#499)",
       "draft": true
@@ -397,6 +342,21 @@
     {
       "number": 518,
       "title": "feat(star): rotation mixing coefficients, D_omega and am_nu_rot as upstream (#158)",
+      "draft": true
+    },
+    {
+      "number": 520,
+      "title": "fix(star): store the reset density in xh as store_rho_in_xh does (#154)",
+      "draft": true
+    },
+    {
+      "number": 523,
+      "title": "feat(star): GYRE, FGONG and OSC exporters as upstream; byte-identical to MESA 26.4.1 (#491)",
+      "draft": true
+    },
+    {
+      "number": 527,
+      "title": "feat(star,astero): wire ADIPLS into flexmesa-star and flexmesa-astero (Package A3) (#171)",
       "draft": true
     }
   ],
@@ -927,6 +887,30 @@
       "state": "open",
       "kind": "enhancement",
       "parity_pending": false,
+      "needs_confirmation": false
+    },
+    {
+      "number": 524,
+      "title": "[Deferred bug] pulse_saio store_saio_data_env reads kap unset on envelope points (pulse_saio.f90:279-288)",
+      "state": "open",
+      "kind": "upstream-bug",
+      "parity_pending": false,
+      "needs_confirmation": false
+    },
+    {
+      "number": 525,
+      "title": "[Deferred bug] pulse_gr1d never advances j and writes REALs with an I6 format (pulse_gr1d.f90:68-78, 170)",
+      "state": "open",
+      "kind": "upstream-bug",
+      "parity_pending": false,
+      "needs_confirmation": false
+    },
+    {
+      "number": 526,
+      "title": "[Deferred bug] approx21 He4 equation counts He3+He4 twice (stale a2, net_approx21.f90:1110-1113)",
+      "state": "open",
+      "kind": "upstream-bug",
+      "parity_pending": true,
       "needs_confirmation": false
     }
   ]

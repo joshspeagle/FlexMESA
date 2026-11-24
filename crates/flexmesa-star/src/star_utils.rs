@@ -38,7 +38,8 @@ pub struct NonPositiveRho {
 /// Args:
 ///     model: Star model whose `ln_r` (`ln(r/cm)`, `len = nz`), `dm` (g,
 ///         `len = nz`) and `r_center` (cm) are read, and whose `lnd`
-///         (`ln(rho / g cm^-3)`, `len = nz`) is overwritten.
+///         (`ln(rho / g cm^-3)`, `len = nz`) and the `lnd` slot of `xh` are
+///         overwritten.
 ///
 /// Returns:
 ///     `Ok(())` when every cell has `rho > 0`.
@@ -52,6 +53,8 @@ pub fn use_xh_to_set_rho_to_dm_div_dv(
     model: &mut StarModel,
 ) -> Result<(), NonPositiveRho> {
     let nz = model.nz;
+    let nvar = model.layout.nvar_hydro;
+    let i_lnd = model.layout.i_lnd;
     let mut r_r = model.r_center;
     for k in (0..nz).rev() {
         let r_l = r_r;
@@ -62,7 +65,15 @@ pub fn use_xh_to_set_rho_to_dm_div_dv(
         if rho <= 0.0 {
             return Err(NonPositiveRho { k, rho });
         }
-        model.lnd[k] = flexmesa_math::log(rho);
+        // `store_rho_in_xh` (`star/private/star_utils.f90:576-588, 628`)
+        // writes the primary variable; `lnd` is what the following
+        // `set_vars_if_needed` unpacks from it (`evolve.f90:1891`,
+        // `hydro_vars.f90:224-226`). Both are stored so a later `unpack_xh`
+        // (as after `do_conv_premix`, `evolve.f90:613-616`) keeps this
+        // density instead of the previous step's.
+        let lnd = flexmesa_math::log(rho);
+        model.lnd[k] = lnd;
+        model.xh[k * nvar + i_lnd] = lnd;
     }
     Ok(())
 }

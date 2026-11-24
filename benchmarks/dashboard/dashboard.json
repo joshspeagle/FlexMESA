@@ -21,7 +21,7 @@
         "verified_total": 5640,
         "pct_ported": 35.1,
         "pct_verified": 4.7,
-        "rust_lines": 94514,
+        "rust_lines": 95710,
         "python_jax_lines": 3869
       },
       {
@@ -55,7 +55,7 @@
         "verified_total": 0,
         "pct_ported": 18.7,
         "pct_verified": 0.0,
-        "rust_lines": 12416,
+        "rust_lines": 12414,
         "python_jax_lines": 1244
       },
       {
@@ -123,7 +123,7 @@
         "verified_total": 0,
         "pct_ported": 0.0,
         "pct_verified": 0.0,
-        "rust_lines": 10858,
+        "rust_lines": 10880,
         "python_jax_lines": 728
       },
       {
@@ -242,7 +242,7 @@
         "verified_total": 0,
         "pct_ported": 0.0,
         "pct_verified": 0.0,
-        "rust_lines": 2505,
+        "rust_lines": 3922,
         "python_jax_lines": 1500
       },
       {
@@ -455,8 +455,8 @@
       "upstream_panel_modules": 46
     },
     "infrastructure_lines": {
-      "rust_bridge_testing_bench": 19687,
-      "python_testing_bench": 17435
+      "rust_bridge_testing_bench": 20001,
+      "python_testing_bench": 17465
     }
   },
   "numerics": {
@@ -593,12 +593,12 @@
         "total": 90,
         "mesa_26_4_1_ref": 86,
         "no_reference_yet": 4,
-        "strict_validated": 46,
-        "diagnostic_runs": 44,
-        "reached_termination": 52,
-        "within_numeric_tol": 10,
-        "passing": 2,
-        "declared_gaps": 84,
+        "strict_validated": 54,
+        "diagnostic_runs": 36,
+        "reached_termination": 53,
+        "within_numeric_tol": 29,
+        "passing": 22,
+        "declared_gaps": 59,
         "undeclared_failures": 0
       },
       "binary": {
@@ -620,9 +620,9 @@
         "strict_validated": 1,
         "diagnostic_runs": 7,
         "reached_termination": 3,
-        "within_numeric_tol": 1,
+        "within_numeric_tol": 3,
         "passing": 0,
-        "declared_gaps": 8,
+        "declared_gaps": 7,
         "undeclared_failures": 0
       }
     },
@@ -634,38 +634,13 @@
       },
       {
         "suite": "star",
-        "case": "custom_colors",
-        "issue": "#161"
-      },
-      {
-        "suite": "star",
-        "case": "hb_2M",
-        "issue": "#155"
-      },
-      {
-        "suite": "star",
-        "case": "rsp_BEP",
-        "issue": "#161"
-      },
-      {
-        "suite": "star",
-        "case": "rsp_BLAP",
-        "issue": "#161"
-      },
-      {
-        "suite": "star",
-        "case": "rsp_Cepheid",
-        "issue": "#161"
-      },
-      {
-        "suite": "star",
-        "case": "rsp_RR_Lyrae",
-        "issue": "#161"
-      },
-      {
-        "suite": "star",
         "case": "rsp_save_and_load_file",
         "issue": "#161"
+      },
+      {
+        "suite": "astero",
+        "case": "astero_adipls",
+        "issue": "#171"
       },
       {
         "suite": "astero",
@@ -674,19 +649,17 @@
       }
     ],
     "gaps_by_issue": {
-      "#161": 28,
-      "#154": 16,
-      "#157": 9,
+      "#161": 23,
+      "#154": 14,
       "#162": 9,
+      "#157": 8,
       "#170": 7,
-      "#152": 5,
-      "#155": 5,
       "#158": 5,
       "#160": 4,
-      "#156": 3,
-      "#231": 3,
+      "#156": 2,
+      "#231": 2,
+      "#152": 1,
       "#153": 1,
-      "#159": 1,
       "#171": 1
     },
     "comparison_figures_count": 0
@@ -1619,16 +1592,6 @@
     ],
     "open_pull_requests": [
       {
-        "number": 460,
-        "title": "fix(harness): compare sparse reference histories only at their rows (#459)",
-        "draft": true
-      },
-      {
-        "number": 462,
-        "title": "fix(star): unpack_xh after conv_premix, energy-equation scale as upstream, dump max_correction sign (#444)",
-        "draft": true
-      },
-      {
         "number": 475,
         "title": "fix(star): finish_load_model before change_net; .mod columns in net order",
         "draft": true
@@ -1661,6 +1624,16 @@
       {
         "number": 490,
         "title": "feat(star): in-memory get_gyre_data, bit-exact vs MESA 26.4.1 (#170, G3b)",
+        "draft": true
+      },
+      {
+        "number": 493,
+        "title": "fix(star): restart semantics, initial_y, set_initial_dt and relax ports as upstream (#436)",
+        "draft": true
+      },
+      {
+        "number": 495,
+        "title": "feat(astero): wire GYRE into astero_gyre and remove its scaffolding (#170, G3c)",
         "draft": true
       }
     ],
@@ -2156,6 +2129,14 @@
       {
         "number": 488,
         "title": "[Deferred bug] cell_specific_PE divides by r(k) with no guard (star_utils.f90:2266)",
+        "state": "open",
+        "kind": "upstream-bug",
+        "parity_pending": false,
+        "needs_confirmation": false
+      },
+      {
+        "number": 496,
+        "title": "[Deferred bug] D_mix_rotation tau test overwrites the lgT factor and reuses the lgT formula (mix_info.f90:1602-1621)",
         "state": "open",
         "kind": "upstream-bug",
         "parity_pending": false,
@@ -3502,6 +3483,19 @@
       "closed_140": "26",
       "total_140": "50",
       "deferred_169": "62"
+    },
+    {
+      "date_utc": "2026-11-24",
+      "commit": "06ce88c",
+      "event": "main merge",
+      "engine_ported_pct": "30.7",
+      "all_verified_pct": "1.1",
+      "cases_passing": "25",
+      "rust_cov_pct": "76.3",
+      "python_cov_pct": "87.7",
+      "closed_140": "26",
+      "total_140": "50",
+      "deferred_169": "63"
     }
   ]
 }

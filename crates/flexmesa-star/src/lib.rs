@@ -365,7 +365,7 @@ pub use mix_info::{
 pub use model::StarModel;
 pub use model_io::{
     PHOTO_FORMAT_VERSION, STAR_DEF_VERSION, compute_photo_checksum,
-    load_photo_bytes, photo_numerics_mode, read_mod_str, read_photo_bytes,
+    load_photo_bytes, photo_numerics_mode, read_mod_str, read_mod_str_with_dir, read_photo_bytes,
     try_write_photo_bytes, write_mod_string, write_photo_bytes,
 };
 pub use omega_mix::{

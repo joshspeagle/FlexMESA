@@ -82,9 +82,26 @@ class StarModel(_arrays.StarModelArrays):
         return inst
 
     @classmethod
-    def from_mod_str(cls, text: str, eval_hydro: bool = False) -> StarModel:
-        """Parse an upstream MESA ASCII `.mod` string into a `StarModel`."""
-        inst = cls(_rust.RustStarModel.from_mod_str(text))
+    def from_mod_str(
+        cls,
+        text: str,
+        eval_hydro: bool = False,
+        search_dir: str | pathlib.Path | None = None,
+    ) -> StarModel:
+        """Parse an upstream MESA ASCII `.mod` string into a `StarModel`.
+
+        Args:
+            text: Contents of the `.mod` file.
+            eval_hydro: Evaluate hydro variables after loading.
+            search_dir: Directory searched first for the model's network
+                file (for example a test case's own `.net`), before the
+                built-in network bundle.
+
+        Returns:
+            The loaded `StarModel`.
+        """
+        sdir = None if search_dir is None else str(search_dir)
+        inst = cls(_rust.RustStarModel.from_mod_str(text, sdir))
         if eval_hydro:
             inst.eval_hydro_vars()
         return inst
@@ -93,9 +110,16 @@ class StarModel(_arrays.StarModelArrays):
     def from_mod_file(
         cls, path: str | pathlib.Path, eval_hydro: bool = False
     ) -> StarModel:
-        """Read an ASCII `.mod` file from disk into a `StarModel`."""
-        text = pathlib.Path(path).read_text(encoding="utf-8")
-        return cls.from_mod_str(text, eval_hydro=eval_hydro)
+        """Read an ASCII `.mod` file from disk into a `StarModel`.
+
+        The model's network is looked up first in the file's own directory,
+        then in the built-in network bundle.
+        """
+        path = pathlib.Path(path)
+        text = path.read_text(encoding="utf-8")
+        return cls.from_mod_str(
+            text, eval_hydro=eval_hydro, search_dir=path.parent
+        )
 
     @classmethod
     def from_photo_bytes(

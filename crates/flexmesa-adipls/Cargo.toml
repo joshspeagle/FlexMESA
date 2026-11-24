@@ -1,0 +1,15 @@
+[package]
+name = "flexmesa-adipls"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "Safe Rust port of MESA 26.4.1 ADIPLS (parameter parsing, FGONG/AMDL models, shooting solver, and mode post-processing; #171)"
+
+[dependencies]
+flexmesa-const = { path = "../flexmesa-const" }
+flexmesa-math = { path = "../flexmesa-math" }
+
+[lints]
+workspace = true

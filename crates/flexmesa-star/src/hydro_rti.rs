@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //! Duffell (2016) Rayleigh-Taylor instability (`RTI`) turbulent diffusivity
 //! profiles (`set_dpdr_drhodr_info`, `set_rti_mixing_info` in
-//! `star/private/mix_info.f90:1966-2237`) and coupled $\alpha_{\mathrm{RTI}}$
+//! `star/private/mix_info.f90:1960-2240`) and coupled $\alpha_{\mathrm{RTI}}$
 //! transport-source-sink equation (`do1_dalpha_rti_dt_eqn` in
 //! `star/private/hydro_alpha_rti_eqns.f90:33-193`).
 //!
@@ -11,15 +11,26 @@
 //! block-tridiagonal Henyey system with exact 3-point `(k - 1, k, k + 1)`
 //! Jacobian entries.
 
-use flexmesa_const::FOUR_PI;
+use flexmesa_const::{FOUR_PI, M_SUN};
 
 use crate::hydro_eqns::HenyeySystem;
 use crate::model::StarModel;
+use crate::report_utils::{csound_face_at, eval_shock_info};
+
+/// Upstream MESA `26.4.1` default `RTI_log_max_boost` (`controls.defaults:8601`).
+const RTI_LOG_MAX_BOOST: f64 = 3.0;
+/// Upstream MESA `26.4.1` default `RTI_m_full_boost` in solar masses (`controls.defaults:8602`).
+const RTI_M_FULL_BOOST_MSUN: f64 = 4.0;
+/// Upstream MESA `26.4.1` default `RTI_m_no_boost` in solar masses (`controls.defaults:8603`).
+const RTI_M_NO_BOOST_MSUN: f64 = 5.0;
+/// Upstream MESA `26.4.1` default `RTI_dm_for_center_eta_nondecreasing` in solar masses
+/// (`controls.defaults:8594`).
+const RTI_DM_FOR_CENTER_ETA_NONDECREASING_MSUN: f64 = 0.02;
 
 /// Evaluates the start-of-step Rayleigh-Taylor baroclinic instability indicator
 /// $(\partial P / \partial r)(\partial \rho / \partial r) \le 0$ across all
 /// cells `k = 0..nz-1` (`set_dPdr_dRhodr_info` in
-/// `star/private/mix_info.f90:2124-2237`).
+/// `star/private/mix_info.f90:2129-2240`).
 pub fn set_dpdr_drhodr_info(model: &mut StarModel) {
     let nz = model.nz;
     if nz == 0 {
@@ -57,8 +68,9 @@ pub fn set_dpdr_drhodr_info(model: &mut StarModel) {
         } else {
             0.0
         };
-        let cs_k = model.csound[k].max(1.0);
-        if a_start <= 0.0 && vel_k / cs_k < min_mach {
+        let cs_k = model.csound[k];
+        // Guard `cs_k <= 0.0` before computing Mach ratio (`mix_info.f90:2166-2168`).
+        if a_start == 0.0 && (cs_k <= 0.0 || vel_k / cs_k < min_mach) {
             continue;
         }
         let r_in = model.r[k + 1];
@@ -70,23 +82,15 @@ pub fn set_dpdr_drhodr_info(model: &mut StarModel) {
         drhodr[k] = (rho_face[k] - rho_face[k + 1]) / dr_k;
     }
 
-    // 3-point smoothing (`rti_smooth_fraction = 0.5` default in `mix_info.f90:2188-2211`)
-    let c = 0.5_f64;
-    let d = 0.5 * (1.0 - c);
-    let dp_orig = dpdr.clone();
-    let dr_orig = drhodr.clone();
-    for k in 1..(nz - 1) {
-        dpdr[k] = c * dp_orig[k] + d * (dp_orig[k - 1] + dp_orig[k + 1]);
-        if !(dr_orig[k - 1] == 0.0 && dr_orig[k] == 0.0) {
-            drhodr[k] = c * dr_orig[k] + d * (dr_orig[k - 1] + dr_orig[k + 1]);
-        }
-    }
-    dpdr[nz - 1] = c * dp_orig[nz - 2] + 2.0 * d * dp_orig[nz - 3];
-    drhodr[nz - 1] = c * dr_orig[nz - 2] + 2.0 * d * dr_orig[nz - 3];
-
+    // MESA `26.4.1` defaults leave `RTI_smooth_mass = 0`,
+    // `RTI_smooth_iterations = 0`, and `RTI_smooth_fraction = 1`
+    // (`star/defaults/controls.defaults:3100-3102`,
+    // `star/private/mix_info.f90:2185-2216`), so `dpdr` and `drhodr`
+    // remain unsmoothed.
     for k in 0..nz {
         model.aux.dpdr_drhodr_info[k] = (dpdr[k] * drhodr[k]).min(0.0);
     }
+
     refresh_alpha_rti_diagnostic_sources(model);
 }
 
@@ -105,11 +109,69 @@ fn refresh_alpha_rti_diagnostic_sources(model: &mut StarModel) {
     }
 }
 
+/// Computes Lagrangian RTI mass-diffusion coefficients `sig` from kinematic
+/// diffusivity `eta`, area-density factor `4*pi*r^2*rho`, and zone mass
+/// spacing `dm_bar`, gating out cells ahead of the shock and capping at
+/// `sig_term_limit * dm_bar / dt` when `max_sig >= 1` (`get_RTI_sigmas` in
+/// `star/private/mix_info.f90:2079-2126`).
+#[allow(clippy::too_many_arguments)]
+fn get_rti_sigmas(
+    sig: &mut [f64],
+    eta: &[f64],
+    rho: &[f64],
+    r: &[f64],
+    dm_bar: &[f64],
+    q: &[f64],
+    shock_q: f64,
+    mix_factor: f64,
+    sig_term_limit: f64,
+    dt: f64,
+) {
+    let nz = sig.len();
+    if nz == 0 {
+        return;
+    }
+    sig[0] = 0.0;
+    let mut max_sig = 0.0_f64;
+    for k in 1..nz {
+        let d = eta[k];
+        if d <= 0.0 || (q[k] > shock_q && shock_q > 0.0) {
+            sig[k] = 0.0;
+            continue;
+        }
+        let f1 = FOUR_PI * r[k] * r[k] * rho[k];
+        let f = f1 * f1;
+        let cdcterm = mix_factor * d * f;
+        let mut sig_k = cdcterm / dm_bar[k];
+        if !sig_k.is_finite() {
+            sig_k = 1.0e99;
+        }
+        sig[k] = sig_k;
+        if sig_k > max_sig {
+            max_sig = sig_k;
+        }
+    }
+
+    if max_sig < 1.0 || dt <= 0.0 {
+        return;
+    }
+    for k in 0..nz {
+        if sig[k] == 0.0 {
+            continue;
+        }
+        let siglim = sig_term_limit * dm_bar[k] / dt;
+        if sig[k] > siglim {
+            sig[k] = siglim;
+        }
+    }
+}
+
 /// Evaluates start-of-step Duffell (2016) RTI kinematic diffusivity
 /// $\eta_{\mathrm{RTI},k} = C \alpha_{\mathrm{RTI,face},k} c_{s,k} r_k$ and
 /// Lagrangian mass-diffusion coefficients `sig_rti` and `sigmid_rti` without
 /// mutating convective `d_mix` or `sig` (`set_RTI_mixing_info` in
-/// `star/private/mix_info.f90:1966-2121`).
+/// `star/private/mix_info.f90:1960-2076`, `star/private/micro.f90:96-100`,
+/// `star/private/star_utils.f90:1328-1403`).
 pub fn set_rti_mixing_info(model: &mut StarModel) {
     let nz = model.nz;
     if nz == 0 {
@@ -131,89 +193,81 @@ pub fn set_rti_mixing_info(model: &mut StarModel) {
     }
 
     let c_base = model.controls.rti_c;
-    let dt = model.dt.max(1.0e-30);
-    let mix_fac = if model.controls.do_mix {
-        model.controls.mix_factor
-    } else {
-        1.0
-    };
+    let max_boost = flexmesa_math::exp10(RTI_LOG_MAX_BOOST);
+    let m_full_boost = RTI_M_FULL_BOOST_MSUN * M_SUN;
+    let m_no_boost = RTI_M_NO_BOOST_MSUN * M_SUN;
+    let dm_for_center_eta_nondecreasing =
+        RTI_DM_FOR_CENTER_ETA_NONDECREASING_MSUN * M_SUN;
+    let mut min_eta = -1.0_f64;
 
-    for k in 1..nz {
-        let (alfa, beta) = model.get_face_weights(k);
-        let a_00 = model
-            .aux
-            .alpha_rti_start
-            .get(k)
-            .copied()
-            .unwrap_or(model.aux.alpha_rti[k])
-            .max(0.0);
-        let a_m1 = model
-            .aux
-            .alpha_rti_start
-            .get(k - 1)
-            .copied()
-            .unwrap_or(model.aux.alpha_rti[k - 1])
-            .max(0.0);
-        let alpha_face = alfa * a_00 + beta * a_m1;
-        if alpha_face <= 0.0 {
-            continue;
+    // Outside-in pass sets `eta_rti` and `etamid_rti` using current `alpha_rti`
+    // and `csound_face_at` (`mix_info.f90:2008-2060`, `micro.f90:96-100`),
+    // applying the `4-5 M_sun` core mass boost and inner `0.02 M_sun`
+    // nondecreasing floor (`controls.defaults:8594, 8601-8603`).
+    for k in 0..nz {
+        let mut c = c_base;
+        let m_k = model.m[k];
+        if m_k < m_no_boost {
+            if m_k <= m_full_boost {
+                c *= max_boost;
+            } else {
+                let alfa = (m_no_boost - m_k) / (m_no_boost - m_full_boost);
+                c *= flexmesa_math::exp10(alfa * RTI_LOG_MAX_BOOST);
+            }
         }
-        let cs_00 = model
-            .aux
-            .csound_start
-            .get(k)
-            .copied()
-            .filter(|&c| c > 0.0)
-            .unwrap_or(model.csound[k]);
-        let cs_m1 = model
-            .aux
-            .csound_start
-            .get(k - 1)
-            .copied()
-            .filter(|&c| c > 0.0)
-            .unwrap_or(model.csound[k - 1]);
-        let cs_face = alfa * cs_00 + beta * cs_m1;
-        let eta_k = c_base * alpha_face * cs_face * model.r[k];
-        model.aux.eta_rti[k] = eta_k;
 
-        let rho_f = model.face_value_alfa_beta(&model.rho, k);
-        let area_rho = FOUR_PI * model.r[k] * model.r[k] * rho_f;
-        let dm_bar_k = model.dm_bar[k].max(1.0e-30);
-        let mut sig_k = mix_fac * eta_k * (area_rho * area_rho) / dm_bar_k;
-        if model.dt > 0.0 && model.controls.sig_term_limit > 0.0 {
-            sig_k = sig_k.min(model.controls.sig_term_limit * dm_bar_k / dt);
+        let a_k = model.aux.alpha_rti.get(k).copied().unwrap_or(0.0);
+        if k > 0 {
+            let (alfa, beta) = model.get_face_weights(k);
+            let a_m1 = model.aux.alpha_rti.get(k - 1).copied().unwrap_or(0.0);
+            let alpha_face = alfa * a_k + beta * a_m1;
+            let cs = csound_face_at(model, k);
+            let mut eta_k = c * alpha_face * cs * model.r[k];
+            if m_k - model.m_center <= dm_for_center_eta_nondecreasing {
+                if min_eta < 0.0 {
+                    min_eta = eta_k;
+                } else if min_eta > eta_k {
+                    eta_k = min_eta;
+                }
+            }
+            model.aux.eta_rti[k] = eta_k;
         }
-        model.aux.sig_rti[k] = sig_k;
+
+        model.aux.etamid_rti[k] =
+            min_eta.max(c * a_k * model.csound[k] * model.rmid[k]);
     }
 
-    for k in 0..nz {
-        let a_k = model
-            .aux
-            .alpha_rti_start
-            .get(k)
-            .copied()
-            .unwrap_or(model.aux.alpha_rti[k])
-            .max(0.0);
-        if a_k <= 0.0 {
-            continue;
-        }
-        let cs_k = model
-            .aux
-            .csound_start
-            .get(k)
-            .copied()
-            .filter(|&c| c > 0.0)
-            .unwrap_or(model.csound[k]);
-        let rmid = model.rmid[k];
-        let etamid = c_base * a_k * cs_k * rmid;
-        model.aux.etamid_rti[k] = etamid;
-        let area_rho = FOUR_PI * rmid * rmid * model.rho[k];
-        let dm_k = model.dm[k].max(1.0e-30);
-        let mut sigmid = mix_fac * etamid * (area_rho * area_rho) / dm_k;
-        if model.dt > 0.0 {
-            sigmid = sigmid.min(1.0e6 * dm_k / dt);
-        }
-        model.aux.sigmid_rti[k] = sigmid;
+    let shock_q = eval_shock_info(model).q;
+    let rho_face: Vec<f64> = (0..nz)
+        .map(|k| model.face_value_alfa_beta(&model.rho, k))
+        .collect();
+
+    get_rti_sigmas(
+        &mut model.aux.sig_rti,
+        &model.aux.eta_rti,
+        &rho_face,
+        &model.r,
+        &model.dm_bar,
+        &model.q,
+        shock_q,
+        model.controls.mix_factor,
+        model.controls.sig_term_limit,
+        model.dt,
+    );
+
+    if model.controls.v_flag {
+        get_rti_sigmas(
+            &mut model.aux.sigmid_rti,
+            &model.aux.etamid_rti,
+            &model.rho,
+            &model.rmid,
+            &model.dm,
+            &model.q,
+            shock_q,
+            model.controls.mix_factor,
+            model.controls.sig_term_limit,
+            model.dt,
+        );
     }
 
     refresh_alpha_rti_diagnostic_sources(model);
@@ -242,7 +296,7 @@ pub fn augment_mixing_with_rti(model: &mut StarModel) {
 }
 
 /// Evaluates `(source_plus, d_source_plus_da00, source_minus, d_source_minus_da00)`
-/// for cell `k` (`hydro_alpha_rti_eqns.f90:91-147`).
+/// for cell `k` (`hydro_alpha_rti_eqns.f90:110-142`).
 #[must_use]
 pub fn eval_alpha_rti_sources(
     model: &StarModel,
@@ -280,17 +334,24 @@ pub fn eval_alpha_rti_sources(
     let (source_minus, d_sm_da) =
         if a_00 > 0.0 && model.controls.rti_d > 0.0 && cs_s > 0.0 {
             let max_a = model.controls.rti_max_alpha.max(1.0e-30);
-            let k_fac = model.controls.rti_d * cs_s / rmid_s;
             if a_00 > max_a {
-                (k_fac * (a_00 * a_00 / max_a), 2.0 * k_fac * (a_00 / max_a))
+                let rti_d_eff = model.controls.rti_d * (a_00 / max_a);
+                let source_minus = rti_d_eff * a_00 * cs_s / rmid_s;
+                let d_sm_da = 2.0 * rti_d_eff * cs_s / rmid_s;
+                (source_minus, d_sm_da)
             } else {
-                (k_fac * a_00, k_fac)
+                let rti_d_eff = model.controls.rti_d;
+                let source_minus = rti_d_eff * a_00 * cs_s / rmid_s;
+                let d_sm_da = rti_d_eff * cs_s / rmid_s;
+                (source_minus, d_sm_da)
             }
         } else {
             (0.0, 0.0)
         };
 
-    // Baroclinic Rayleigh-Taylor growth source: `((A + B * a_00) / rho_start) * sqrt(-dPdr * drhodr)`
+    // Baroclinic Rayleigh-Taylor growth source (`hydro_alpha_rti_eqns.f90:125-142`):
+    // `A_plus_B_div_rho = (RTI_A + RTI_B * a_00) / rho_start`
+    // `source_plus = A_plus_B_div_rho * sqrt(-dPdr_dRhodr_info)`
     let instab2 = -model.aux.dpdr_drhodr_info.get(k).copied().unwrap_or(0.0);
     let (source_plus, d_sp_da) = if instab2 > 0.0
         && model.q[k] >= model.controls.alpha_rti_src_min_q
@@ -301,10 +362,12 @@ pub fn eval_alpha_rti_sources(
             model.lnd_start.get(k).copied().unwrap_or(model.lnd[k]),
         )
         .max(1.0e-30);
-        let root = instab2.sqrt() / rho_s;
+        let instab = instab2.sqrt();
+        let a_plus_b_div_rho =
+            (model.controls.rti_a + model.controls.rti_b * a_00) / rho_s;
         (
-            (model.controls.rti_a + model.controls.rti_b * a_00) * root,
-            model.controls.rti_b * root,
+            a_plus_b_div_rho * instab,
+            (model.controls.rti_b / rho_s) * instab,
         )
     } else {
         (0.0, 0.0)
@@ -333,11 +396,8 @@ pub fn do1_dalpha_rti_dt_eqn(
     let nz = model.nz;
     let dt = model.dt.max(1.0e-30);
     let dm_k = model.dm[k].max(1.0e-30);
-    let diff_fac = if model.controls.do_mix {
-        model.controls.alpha_rti_diffusion_factor
-    } else {
-        0.0
-    };
+    // Upstream `hydro_alpha_rti_eqns.f90:71` reads `alpha_RTI_diffusion_factor` directly.
+    let diff_fac = model.controls.alpha_rti_diffusion_factor;
 
     let a_00 = model.aux.alpha_rti[k];
     let a_start = model.aux.alpha_rti_start.get(k).copied().unwrap_or(a_00);
@@ -372,11 +432,13 @@ pub fn do1_dalpha_rti_dt_eqn(
         eval_alpha_rti_sources(model, k);
     let dadt_actual = (a_00 - a_start) / dt;
 
-    let x_scale_k = sys.x_scale[k * sys.nvar + i_var];
+    // Upstream `hydro_alpha_rti_eqns.f90:157` scales by `x_scale(i_dalpha_RTI_dt, k) / dt`.
+    let x_scale_k = sys.x_scale[k * sys.nvar + i_equ];
     let eqn_scale = (x_scale_k / dt).max(1.0);
 
-    sys.equ[k * sys.nvar + i_equ] =
-        (dadt_mix + source_plus - source_minus - dadt_actual) / eqn_scale;
+    let dadt_source = source_plus - source_minus;
+    let dadt_expected = dadt_mix + dadt_source;
+    sys.equ[k * sys.nvar + i_equ] = (dadt_expected - dadt_actual) / eqn_scale;
 
     let d_diag =
         (-(sig00 + sigp1) / dm_k + d_sp_da - d_sm_da - 1.0 / dt) / eqn_scale;

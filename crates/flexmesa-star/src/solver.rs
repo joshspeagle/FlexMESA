@@ -190,14 +190,19 @@ fn eval_f(nvar: usize, nz: usize, equ: &[f64]) -> f64 {
     0.5 * sum_sq
 }
 
+/// Evaluates the line-search directional derivative $\nabla f \cdot B$ using
+/// per-variable radial dot products matching `eval_slope`
+/// (`star/private/star_solver.f90:1911-1919`).
 #[inline]
 fn eval_slope(nvar: usize, nz: usize, grad_f: &[f64], soln: &[f64]) -> f64 {
     let mut slope = 0.0_f64;
     for i in 0..nvar {
+        let mut dot_i = 0.0_f64;
         for k in 0..nz {
             let idx = k * nvar + i;
-            slope += grad_f[idx] * soln[idx];
+            dot_i += grad_f[idx] * soln[idx];
         }
+        slope += dot_i;
     }
     slope
 }

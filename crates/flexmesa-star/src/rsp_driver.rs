@@ -346,6 +346,23 @@ pub fn rsp_one_step_with_extras(
     if !model.aux.rsp.have_set_velocities {
         model.aux.rsp.just_set_velocities = true;
         if model.controls.rsp.use_other_rsp_linear_analysis {
+            // Populate microphysics, `gradT`, and `brunt_N2` before calling
+            // `other_rsp_linear_analysis` (`star/private/rsp.f90:441-458`).
+            crate::hydro_vars::set_hydro_vars(model, false, false)?;
+            for k in 0..nz {
+                let yf =
+                    model.aux.rsp.y_face_rsp.get(k).copied().unwrap_or(0.0);
+                model.aux.mixing.gradt_sub_grada[k] = yf;
+                if k > 0 {
+                    model.gradt[k] =
+                        yf + 0.5 * (model.grada[k - 1] + model.grada[k]);
+                }
+            }
+            if nz > 1 {
+                model.gradt[0] = model.gradt[1];
+            }
+            model.controls.calculate_brunt_n2 = true;
+            crate::hydro_brunt_surf::do_brunt_n2(model)?;
             if !extras.other_rsp_linear_analysis(model, &chem, log_dir)? {
                 return Err(StarError::InvalidInput(String::from(
                     "use_other_rsp_linear_analysis = .true. requires an other_rsp_linear_analysis hook",

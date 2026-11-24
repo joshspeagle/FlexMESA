@@ -197,6 +197,7 @@ ADAPTER_SERVED_STAR_HANDLERS: frozenset[str] = frozenset(
         "NeutronStarEnvStarExtras",
         "PreMs1MToWdStarExtras",
         "RCrBStarExtras",
+        "RspGyreExtras",
         "SemiconvectionStarExtras",
         "TTauGradrStarExtras",
         "Thermohaline1MStarExtras",

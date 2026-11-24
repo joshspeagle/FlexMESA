@@ -102,6 +102,7 @@ def test_star_extras_snapshot_supplies_general_fields_and_omits_absent_isos(
         "center_avg_value_dq",
         "he_core_boundary_h1_fraction",
         "create_pre_main_sequence_model",
+        "need_to_save_profiles_now",
         "use_other_remove_surface",
         "he_core_mass",
         "co_core_mass",

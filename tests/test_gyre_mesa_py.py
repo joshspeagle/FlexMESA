@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import math
 import pathlib
 from typing import Any
 
@@ -10,7 +11,8 @@ import pytest
 
 from flexmesa import _rust
 from flexmesa.testing import harness_runner
-from tests.case_extras import star_extras
+from tests import case_extras
+from tests.case_extras import rsp_extras, star_extras
 
 
 def test_gyre_mesa_error_paths(tmp_path: pathlib.Path) -> None:
@@ -172,4 +174,139 @@ def test_gyre_in_mesa_ms_live_handler_and_profile_due_flag(
             1,
             2.0e-4,
             -1.0e-9,
+        )
+
+
+def test_gyre_mesa_get_modes_full_eigenfunctions(
+    tmp_path: pathlib.Path,
+) -> None:
+    """`get_modes_full` returns eigenfunctions consistent with `get_modes`."""
+    wd_dir = harness_runner.resolve_case_dir("star", "gyre_in_mesa_wd")
+    captured: dict[str, Any] = {}
+
+    class _HandleCaptureProbe:
+        wants_star_model = True
+
+        def extras_after_evolve(self, state: dict[str, Any]) -> None:
+            captured["handle"] = state["star_model"]
+
+    _rust.trace_star_case(
+        str(wd_dir),
+        str(tmp_path / "wd_full_cap"),
+        max_steps_per_stage=1,
+        skip_optional=True,
+        allow_unsupported_controls=False,
+        extras=_HandleCaptureProbe(),
+    )
+    handle = captured["handle"]
+
+    gyre_summary = _rust.GyreMesa(str(wd_dir / "gyre.in"))
+    gyre_summary.set_mesa_constants("mesa")
+    gyre_summary.set_model(handle, False, False, False)
+    summary_modes = gyre_summary.get_modes(1)
+
+    gyre_full = _rust.GyreMesa(str(wd_dir / "gyre.in"))
+    gyre_full.set_mesa_constants("mesa")
+    gyre_full.set_model(handle, False, False, False)
+    full_modes = gyre_full.get_modes_full(1)
+
+    assert [(m.n_pg, m.freq) for m in full_modes] == summary_modes
+    assert len(full_modes) >= 1
+    for mode in full_modes:
+        n_pts = len(mode.x)
+        assert n_pts >= 10
+        assert len(mode.xi_r) == n_pts
+        assert len(mode.xi_h) == n_pts
+        assert len(mode.dw_dx) == n_pts
+        assert mode.x[0] >= 0.0 and mode.x[-1] <= 1.0 + 1.0e-12
+        assert all(mode.x[i] <= mode.x[i + 1] for i in range(n_pts - 1))
+        assert all(math.isfinite(val) for val in mode.x)
+        assert all(
+            math.isfinite(xr) and math.isfinite(xi) for xr, xi in mode.xi_r
+        )
+        assert all(
+            math.isfinite(xr) and math.isfinite(xi) for xr, xi in mode.xi_h
+        )
+        assert all(math.isfinite(val) for val in mode.dw_dx)
+
+
+def test_rsp_gyre_live_other_rsp_linear_analysis_and_velocities(
+    tmp_path: pathlib.Path,
+) -> None:
+    """`RspGyreExtras` resolves `rsp_gyre` and sets period and velocity."""
+    rsp_dir = harness_runner.resolve_case_dir("star", "rsp_gyre")
+    resolved = case_extras.resolve_case_extras("star", rsp_dir)
+    assert isinstance(resolved, rsp_extras.RspGyreExtras)
+    assert resolved.wants_star_model is True
+
+    captured: dict[str, Any] = {}
+
+    class _CapturingRspGyreExtras(rsp_extras.RspGyreExtras):
+        def other_rsp_linear_analysis(
+            self,
+            state: dict[str, Any],
+            gyre_str: str,
+            case_dir: str,
+            log_dir: str | None,
+        ) -> dict[str, Any]:
+            res = super().other_rsp_linear_analysis(
+                state, gyre_str, case_dir, log_dir
+            )
+            captured["handle"] = state["star_model"]
+            captured["nz"] = int(state["nz"])
+            captured["mode_idx"] = int(state["mode_for_setting_periodlin"])
+            captured["res"] = res
+            return res
+
+    probe = _CapturingRspGyreExtras(
+        emit_eight_history_columns=resolved._emit_eight_history_columns,
+        write_lina_file=resolved._write_lina_file,
+    )
+    rep = _rust.trace_star_case(
+        str(rsp_dir),
+        str(tmp_path / "rsp_out"),
+        max_steps_per_stage=2,
+        skip_optional=True,
+        allow_unsupported_controls=False,
+        extras=probe,
+    )
+
+    assert int(rep["total_steps"]) == 2
+    nz = captured["nz"]
+    res = captured["res"]
+    assert res["handled"] is True
+    assert res["v"] == [0.0] * nz
+    assert res["v_center"] == 0.0
+    assert captured["mode_idx"] == 1
+    assert res["rsp_period"] / 86400.0 == pytest.approx(2.8153, rel=1.0e-3)
+    assert [p / 86400.0 for p in res["lina_periods"]] == pytest.approx(
+        [3.9579, 2.8153, 2.1533], rel=1.0e-3
+    )
+    assert res["lina_growth_rates"] == pytest.approx(
+        [0.02176, 0.1043, 0.05522], rel=1.0e-2
+    )
+
+    handle = captured["handle"]
+    kick_state: dict[str, Any] = {
+        "star_model": handle,
+        "case_dir": str(rsp_dir),
+        "nz": nz,
+        "x_ctrl": [0.0, 0.0, 0.0, 0.0, 0.0, 10.0],
+        "mode_for_setting_periodlin": captured["mode_idx"],
+    }
+    kick_res = resolved.other_rsp_linear_analysis(
+        kick_state, "", str(rsp_dir), None
+    )
+    v_kick = kick_res["v"]
+    assert len(v_kick) == nz
+    assert v_kick[0] == v_kick[1]
+    assert abs(v_kick[1]) == pytest.approx(10.0 * 1.0e5, rel=1.0e-12)
+    assert all(math.isfinite(val) for val in v_kick)
+
+    with pytest.raises(ValueError, match=r"exceeds 1\.0"):
+        resolved.other_rsp_linear_analysis(
+            {**kick_state, "x_ctrl": [0.0, 0.0, 0.0, 0.7, 0.5, 1.0]},
+            "",
+            str(rsp_dir),
+            None,
         )

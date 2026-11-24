@@ -20,6 +20,37 @@ fn gyre_err(e: &GyreError) -> PyErr {
 /// `(re, im)`.
 type ModeInfo = (i32, (f64, f64));
 
+/// Full mode summary and eigenfunctions from `get_modes` (`#170`): frequency
+/// in Hz and `(x, xi_r, xi_h, dW_dx)` across the GYRE grid (`1..=md%n`).
+#[pyclass(name = "GyreMesaMode", module = "flexmesa._rust")]
+#[derive(Clone)]
+pub struct PyGyreMesaMode {
+    /// Mode radial order `n_pg`.
+    #[pyo3(get)]
+    pub n_pg: i32,
+    /// Acoustic radial order `n_p`.
+    #[pyo3(get)]
+    pub n_p: i32,
+    /// Gravity radial order `n_g`.
+    #[pyo3(get)]
+    pub n_g: i32,
+    /// Frequency `md%freq('HZ')` as `(re, im)` in Hz.
+    #[pyo3(get)]
+    pub freq: (f64, f64),
+    /// Normalized radius grid `x = r / R` (`gr%pt(:)%x`).
+    #[pyo3(get)]
+    pub x: Vec<f64>,
+    /// Radial displacement eigenfunction `md%xi_r(:)` as `(re, im)` pairs.
+    #[pyo3(get)]
+    pub xi_r: Vec<(f64, f64)>,
+    /// Horizontal displacement eigenfunction `md%xi_h(:)` as `(re, im)` pairs.
+    #[pyo3(get)]
+    pub xi_h: Vec<(f64, f64)>,
+    /// Differential work `md%dW_dx(:)`.
+    #[pyo3(get)]
+    pub dw_dx: Vec<f64>,
+}
+
 /// `gyre_mesa_m`'s module state for one run.
 #[pyclass(name = "GyreMesa", module = "flexmesa._rust", unsendable)]
 pub struct PyGyreMesa {
@@ -122,6 +153,41 @@ impl PyGyreMesa {
         self.inner.get_modes(l, &mut cb).map_err(|e| gyre_err(&e))?;
         Ok(out)
     }
+
+    /// `get_modes(l, user_sub, ipar, rpar)` returning full mode eigenfunctions
+    /// (`n_pg`, `n_p`, `n_g`, `freq('HZ')`, `x`, `xi_r`, `xi_h`, `dW_dx`).
+    fn get_modes_full(&mut self, l: i32) -> PyResult<Vec<PyGyreMesaMode>> {
+        let mut out: Vec<PyGyreMesaMode> = Vec::new();
+        let mut cb = |md: &Mode<'_>| -> Result<i32, GyreError> {
+            let f = md.freq("HZ")?;
+            let n = md.wave.n;
+            let mut x = Vec::with_capacity(n);
+            let mut xi_r = Vec::with_capacity(n);
+            let mut xi_h = Vec::with_capacity(n);
+            let mut dw_dx = Vec::with_capacity(n);
+            for j in 1..=n {
+                x.push(md.wave.x(j));
+                let xr = md.wave.xi_r(j)?;
+                let xh = md.wave.xi_h(j)?;
+                xi_r.push((xr.re, xr.im));
+                xi_h.push((xh.re, xh.im));
+                dw_dx.push(md.wave.dw_dx(j)?);
+            }
+            out.push(PyGyreMesaMode {
+                n_pg: md.n_pg,
+                n_p: md.n_p,
+                n_g: md.n_g,
+                freq: (f.re, f.im),
+                x,
+                xi_r,
+                xi_h,
+                dw_dx,
+            });
+            Ok(0)
+        };
+        self.inner.get_modes(l, &mut cb).map_err(|e| gyre_err(&e))?;
+        Ok(out)
+    }
 }
 
 /// Registers the class.
@@ -130,5 +196,6 @@ impl PyGyreMesa {
 /// Returns [`PyErr`] if registration fails.
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyGyreMesa>()?;
+    m.add_class::<PyGyreMesaMode>()?;
     Ok(())
 }

@@ -2739,6 +2739,7 @@ impl StarExtras for PyStarExtrasAdapter {
         let log_dir_opt = log_dir.map(|p| p.to_string_lossy().into_owned());
         Python::attach(|py| {
             let snap = build_star_snapshot(py, model, &case_dir, false)
+                .and_then(|s| self.add_model_handle(py, s, model))
                 .map_err(|e| StarError::InvalidInput(format_py_err(py, &e)))?;
             snap.set_item(
                 "mode_for_setting_periodlin",

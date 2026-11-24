@@ -14,7 +14,7 @@ use crate::photometry::{
     compute_ab_zero_point, compute_st_zero_point, compute_vega_zero_point,
     flux_to_magnitude,
 };
-use crate::sed_cube::{builtin_sed_cube, SedCube};
+use crate::sed_cube::{builtin_sed_cube_arc, SedCube};
 use crate::types::{ColorsError, MagSystem};
 use crate::utils::{
     compute_interp_radius, interpolate_array, remove_dat,
@@ -23,6 +23,7 @@ use crate::utils::{
 
 const CANON_KURUCZ_ATM: &str = "data/colors_data/stellar_models/kurucz2003all";
 const CANON_JOHNSON_INST: &str = "data/colors_data/filters/generic/johnson";
+const CANON_GAIA_INST: &str = "data/colors_data/filters/gaia/gaia";
 const CANON_VEGA_SED: &str = "data/colors_data/stellar_models/vega_flam.csv";
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -33,7 +34,6 @@ struct CubeCacheKey {
 
 static FLUX_CUBE_CACHE: OnceLock<Mutex<HashMap<CubeCacheKey, Arc<SedCube>>>> =
     OnceLock::new();
-static BUILTIN_ARC_CUBE: OnceLock<Arc<SedCube>> = OnceLock::new();
 
 /// Single photometric filter loaded from disk or built-in Johnson tables.
 #[derive(Debug, Clone, PartialEq)]
@@ -167,8 +167,9 @@ impl ColorsContext {
     /// `FLEXMESA_DATA_DIR` without silent fallbacks.
     ///
     /// Built-in embedded assets are used only when the exact default paths
-    /// (`Kurucz2003all`, `Generic/Johnson`, `vega_flam.csv`) are configured and
-    /// not present on disk under `case_dir` / `MESA_DIR` / `FLEXMESA_DATA_DIR`.
+    /// (`Kurucz2003all`, `Generic/Johnson`, `GAIA/GAIA`, `vega_flam.csv`) are
+    /// configured and not present on disk under `case_dir` / `MESA_DIR` /
+    /// `FLEXMESA_DATA_DIR`.
     ///
     /// # Errors
     /// Returns [`ColorsError`] if any control is invalid (`mag_system`,
@@ -518,7 +519,8 @@ fn load_stellar_atmosphere(
         Ok(dir) => {
             let lookup_path = dir.join("lookup_table.csv");
             let entries = load_lookup_table_entries(&lookup_path)?;
-            let (meta_min, meta_max) = meta_bounds(&entries);
+            let (meta_min, meta_max) =
+                iter_min_max(entries.iter().map(|r| r.meta));
             let cube_path = dir.join("flux_cube.bin");
             let cube = if cube_path.is_file() {
                 load_or_cached_flux_cube(&cube_path)?
@@ -529,11 +531,9 @@ fn load_stellar_atmosphere(
         }
         Err(err) => {
             if !is_explicit_relative(stellar_atm) && key == CANON_KURUCZ_ATM {
-                let cube = Arc::clone(
-                    BUILTIN_ARC_CUBE
-                        .get_or_init(|| Arc::new(builtin_sed_cube().clone())),
-                );
-                let (meta_min, meta_max) = slice_min_max(&cube.meta_grid);
+                let cube = builtin_sed_cube_arc();
+                let (meta_min, meta_max) =
+                    iter_min_max(cube.meta_grid.iter().copied());
                 Ok((cube, meta_min, meta_max))
             } else {
                 Err(err)
@@ -618,7 +618,7 @@ fn load_lookup_table_entries(
     ]);
 
     let mut rows = Vec::new();
-    for line in lines {
+    for (row_idx, line) in lines.enumerate() {
         if line.starts_with('#') {
             continue;
         }
@@ -626,24 +626,62 @@ fn load_lookup_table_entries(
         if cols.is_empty() || cols[0].is_empty() {
             continue;
         }
-        let parse_or = |col_opt: Option<usize>, default: f64| -> f64 {
-            col_opt
-                .and_then(|idx| cols.get(idx))
-                .and_then(|tok| {
-                    let t = tok.trim_matches('"').trim();
-                    if t.is_empty() {
-                        None
-                    } else {
-                        t.parse::<f64>().ok()
-                    }
-                })
-                .unwrap_or(default)
+        let parse_col = |col_opt: Option<usize>,
+                         col_name: &str,
+                         default: f64|
+         -> Result<f64, ColorsError> {
+            let Some(idx) = col_opt else {
+                return Ok(default);
+            };
+            let raw =
+                cols.get(idx).ok_or_else(|| ColorsError::InvalidData {
+                    context: "load_lookup_table_entries",
+                    detail: format!(
+                        "missing '{col_name}' column (index {idx}) on row {} \
+                     in '{}'",
+                        row_idx + 1,
+                        lookup_path.display()
+                    ),
+                })?;
+            let tok = raw.trim_matches('"').trim();
+            if tok.is_empty() {
+                return Err(ColorsError::InvalidData {
+                    context: "load_lookup_table_entries",
+                    detail: format!(
+                        "empty '{col_name}' value on row {} in '{}'",
+                        row_idx + 1,
+                        lookup_path.display()
+                    ),
+                });
+            }
+            let val =
+                tok.parse::<f64>().map_err(|e| ColorsError::InvalidData {
+                    context: "load_lookup_table_entries",
+                    detail: format!(
+                        "invalid '{col_name}' value '{tok}' on row {} in \
+                         '{}': {e}",
+                        row_idx + 1,
+                        lookup_path.display()
+                    ),
+                })?;
+            if !val.is_finite() {
+                return Err(ColorsError::InvalidData {
+                    context: "load_lookup_table_entries",
+                    detail: format!(
+                        "non-finite '{col_name}' value '{tok}' on row {} in \
+                         '{}'",
+                        row_idx + 1,
+                        lookup_path.display()
+                    ),
+                });
+            }
+            Ok(val)
         };
         rows.push(LookupRow {
             file_name: cols[0].trim_matches('"').to_string(),
-            teff: parse_or(teff_col, 0.0),
-            logg: parse_or(logg_col, -999.0),
-            meta: parse_or(meta_col, 0.0),
+            teff: parse_col(teff_col, "teff", 0.0)?,
+            logg: parse_col(logg_col, "logg", -999.0)?,
+            meta: parse_col(meta_col, "meta", 0.0)?,
         });
     }
     if rows.is_empty() {
@@ -655,22 +693,12 @@ fn load_lookup_table_entries(
     Ok(rows)
 }
 
-fn slice_min_max(vals: &[f64]) -> (f64, f64) {
+fn iter_min_max(vals: impl Iterator<Item = f64>) -> (f64, f64) {
     let mut min_v = f64::INFINITY;
     let mut max_v = f64::NEG_INFINITY;
-    for &v in vals {
+    for v in vals {
         min_v = min_v.min(v);
         max_v = max_v.max(v);
-    }
-    (min_v, max_v)
-}
-
-fn meta_bounds(rows: &[LookupRow]) -> (f64, f64) {
-    let mut min_v = f64::INFINITY;
-    let mut max_v = f64::NEG_INFINITY;
-    for row in rows {
-        min_v = min_v.min(row.meta);
-        max_v = max_v.max(row.meta);
     }
     (min_v, max_v)
 }
@@ -850,6 +878,13 @@ fn load_filter_file(path: &Path) -> Result<(Vec<f64>, Vec<f64>), ColorsError> {
         path: path.display().to_string(),
         detail: e.to_string(),
     })?;
+    parse_filter_text(&text, &path.display().to_string())
+}
+
+fn parse_filter_text(
+    text: &str,
+    label: &str,
+) -> Result<(Vec<f64>, Vec<f64>), ColorsError> {
     let mut lines = text
         .lines()
         .map(str::trim)
@@ -878,17 +913,11 @@ fn load_filter_file(path: &Path) -> Result<(Vec<f64>, Vec<f64>), ColorsError> {
         };
         let w = w_s.parse::<f64>().map_err(|e| ColorsError::InvalidData {
             context: "load_filter_file",
-            detail: format!(
-                "invalid wavelength '{w_s}' in '{}': {e}",
-                path.display()
-            ),
+            detail: format!("invalid wavelength '{w_s}' in '{label}': {e}"),
         })?;
         let tr = t_s.parse::<f64>().map_err(|e| ColorsError::InvalidData {
             context: "load_filter_file",
-            detail: format!(
-                "invalid transmission '{t_s}' in '{}': {e}",
-                path.display()
-            ),
+            detail: format!("invalid transmission '{t_s}' in '{label}': {e}"),
         })?;
         wavelengths.push(w);
         transmission.push(tr);
@@ -896,10 +925,7 @@ fn load_filter_file(path: &Path) -> Result<(Vec<f64>, Vec<f64>), ColorsError> {
     if wavelengths.len() < 2 {
         return Err(ColorsError::InvalidData {
             context: "load_filter_file",
-            detail: format!(
-                "filter '{}' contains fewer than 2 rows",
-                path.display()
-            ),
+            detail: format!("filter '{label}' contains fewer than 2 rows"),
         });
     }
     Ok((wavelengths, transmission))
@@ -914,18 +940,11 @@ fn load_instrument_filters(
     match resolve_colors_path(instrument, case_dir, true) {
         Ok(dir) => {
             let Some(vega) = vega_opt else {
-                // Only reach here if instrument is on disk while CANON_VEGA_SED
-                // was not found on disk: still disallow missing disk Vega when
-                // loading non-builtin disk filters.
-                if !is_explicit_relative(instrument)
-                    && key == CANON_JOHNSON_INST
-                {
-                    return Ok(builtin_johnson_loaded_filters(None));
-                }
                 return Err(ColorsError::IoError {
                     path: String::from(CANON_VEGA_SED),
                     detail: String::from(
-                        "Vega SED file is required on disk for external filter sets",
+                        "Vega SED file is required on disk for on-disk \
+                         filter sets",
                     ),
                 });
             };
@@ -976,7 +995,11 @@ fn load_instrument_filters(
         }
         Err(err) => {
             if !is_explicit_relative(instrument) && key == CANON_JOHNSON_INST {
-                Ok(builtin_johnson_loaded_filters(vega_opt))
+                builtin_johnson_loaded_filters(vega_opt)
+            } else if !is_explicit_relative(instrument)
+                && key == CANON_GAIA_INST
+            {
+                builtin_gaia_loaded_filters(vega_opt)
             } else {
                 Err(err)
             }
@@ -986,22 +1009,20 @@ fn load_instrument_filters(
 
 fn builtin_johnson_loaded_filters(
     vega_opt: Option<&VegaSpectrum>,
-) -> Vec<LoadedFilter> {
+) -> Result<Vec<LoadedFilter>, ColorsError> {
     JOHNSON_FILTERS
         .iter()
         .map(|f| {
-            let vega_zp = vega_opt
-                .and_then(|v| {
-                    compute_vega_zero_point(
-                        &v.wavelengths,
-                        &v.fluxes,
-                        f.wavelengths,
-                        f.transmission,
-                    )
-                    .ok()
-                })
-                .unwrap_or(f.vega_zero_point);
-            LoadedFilter {
+            let vega_zp = match vega_opt {
+                Some(v) => compute_vega_zero_point(
+                    &v.wavelengths,
+                    &v.fluxes,
+                    f.wavelengths,
+                    f.transmission,
+                )?,
+                None => f.vega_zero_point,
+            };
+            Ok(LoadedFilter {
                 raw_filename: format!("{}.dat", f.name),
                 name: f.name.to_string(),
                 wavelengths: f.wavelengths.to_vec(),
@@ -1009,7 +1030,67 @@ fn builtin_johnson_loaded_filters(
                 vega_zero_point: vega_zp,
                 ab_zero_point: f.ab_zero_point,
                 st_zero_point: f.st_zero_point,
-            }
+            })
+        })
+        .collect()
+}
+
+fn builtin_gaia_loaded_filters(
+    vega_opt: Option<&VegaSpectrum>,
+) -> Result<Vec<LoadedFilter>, ColorsError> {
+    // Verbatim MESA 26.4.1 `data/colors_data/filters/GAIA/GAIA` curves with
+    // exact Vega zero-point fluxes computed against `vega_flam.csv`.
+    const GAIA_BANDS: [(&str, &str, &str, f64); 4] = [
+        (
+            "G",
+            "G.dat",
+            include_str!("../data/gaia/G.dat"),
+            4.69633530055375771e-12,
+        ),
+        (
+            "Gbp",
+            "Gbp.dat",
+            include_str!("../data/gaia/Gbp.dat"),
+            4.03333366396942215e-09,
+        ),
+        (
+            "Grp",
+            "Grp.dat",
+            include_str!("../data/gaia/Grp.dat"),
+            1.54248206144501547e-11,
+        ),
+        (
+            "Grvs",
+            "Grvs.dat",
+            include_str!("../data/gaia/Grvs.dat"),
+            8.86733979418697526e-10,
+        ),
+    ];
+
+    GAIA_BANDS
+        .iter()
+        .map(|&(name, raw_filename, body, precomputed_vega_zp)| {
+            let (fw, ft) = parse_filter_text(body, raw_filename)?;
+            let vega_zp = match vega_opt {
+                Some(v) => compute_vega_zero_point(
+                    &v.wavelengths,
+                    &v.fluxes,
+                    &fw,
+                    &ft,
+                )?,
+                None => precomputed_vega_zp,
+            };
+            let ab_zp = compute_ab_zero_point(&fw, &ft)?;
+            let st_zp = compute_st_zero_point(&fw, &ft)?;
+            Ok(LoadedFilter {
+                raw_filename: raw_filename.to_string(),
+                name: name.to_string(),
+                wavelengths: fw,
+                transmission: ft,
+                vega_zero_point: vega_zp,
+                ab_zero_point: ab_zp,
+                st_zero_point: st_zp,
+            })
         })
         .collect()
 }
@@ -1075,5 +1156,189 @@ fn push_fortran_es14_6(out: &mut String, val: f64) {
         let _ = write!(out, "{formatted:>14}");
     } else {
         let _ = write!(out, "{raw:>14}");
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    use super::*;
+    use crate::sed_cube::builtin_sed_cube;
+
+    static TEST_TMP_COUNTER: AtomicUsize = AtomicUsize::new(0);
+
+    struct TempDirGuard(PathBuf);
+
+    impl TempDirGuard {
+        fn new(tag: &str) -> Self {
+            let id = TEST_TMP_COUNTER.fetch_add(1, Ordering::Relaxed);
+            let dir = std::env::temp_dir().join(format!(
+                "flexmesa_colors_loader_{tag}_{}_{id}",
+                std::process::id()
+            ));
+            fs::create_dir_all(&dir).expect("create temp test dir");
+            Self(dir)
+        }
+
+        fn path(&self) -> &Path {
+            &self.0
+        }
+    }
+
+    impl Drop for TempDirGuard {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.0);
+        }
+    }
+
+    #[test]
+    fn builtin_sed_cube_arc_shares_singleton_allocation() {
+        let static_ref = builtin_sed_cube();
+        let arc_ref = builtin_sed_cube_arc();
+        assert!(std::ptr::eq(static_ref, arc_ref.as_ref()));
+    }
+
+    #[test]
+    fn builtin_johnson_propagates_custom_vega_zero_point_error() {
+        let narrow_vega = VegaSpectrum {
+            wavelengths: vec![4000.0, 5000.0],
+            fluxes: vec![1.0e-8, 1.0e-8],
+        };
+        let err = builtin_johnson_loaded_filters(Some(&narrow_vega))
+            .expect_err("narrow Vega SED must error instead of falling back");
+        assert!(matches!(err, ColorsError::NonPositiveFlux { .. }));
+    }
+
+    #[test]
+    fn load_instrument_filters_on_disk_johnson_requires_vega_sed() {
+        let temp = TempDirGuard::new("disk_johnson");
+        let inst_dir =
+            temp.path().join("data/colors_data/filters/Generic/Johnson");
+        fs::create_dir_all(&inst_dir).expect("create disk Johnson dir");
+        let err = load_instrument_filters(
+            "data/colors_data/filters/Generic/Johnson",
+            None,
+            Some(temp.path()),
+        )
+        .expect_err("on-disk Johnson dir without disk Vega SED must error");
+        assert!(matches!(err, ColorsError::IoError { .. }));
+    }
+
+    #[test]
+    fn load_lookup_table_rejects_malformed_present_columns_and_allows_absent_columns(
+    ) {
+        let temp = TempDirGuard::new("lookup_validation");
+        let absent_path = temp.path().join("absent_cols.csv");
+        fs::write(&absent_path, "#file_name, teff\na.txt, 5000.0\n")
+            .expect("write absent-cols lookup table");
+        let rows =
+            load_lookup_table_entries(&absent_path).expect("parse 2-col table");
+        assert_eq!(rows.len(), 1);
+        assert!((rows[0].teff - 5000.0).abs() < 1.0e-12);
+        assert!((rows[0].logg + 999.0).abs() < 1.0e-12);
+        assert!(rows[0].meta.abs() < 1.0e-12);
+
+        let invalid_cases = [
+            (
+                "non_numeric",
+                "file_name, teff, logg, meta\na.txt, abc, 4.0, 0.0\n",
+            ),
+            (
+                "blank_cell",
+                "file_name, teff, logg, meta\na.txt, 5000.0, , 0.0\n",
+            ),
+            ("truncated", "file_name, teff, logg, meta\na.txt, 5000.0\n"),
+            (
+                "nan_cell",
+                "file_name, teff, logg, meta\na.txt, NaN, 4.0, 0.0\n",
+            ),
+            (
+                "inf_cell",
+                "file_name, teff, logg, meta\na.txt, 5000.0, inf, 0.0\n",
+            ),
+        ];
+        for (tag, contents) in invalid_cases {
+            let p = temp.path().join(format!("{tag}.csv"));
+            fs::write(&p, contents).expect("write invalid lookup table");
+            let err = load_lookup_table_entries(&p)
+                .expect_err("malformed present lookup cell must fail");
+            assert!(
+                matches!(err, ColorsError::InvalidData { .. }),
+                "expected InvalidData for case {tag}, got {err:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn builtin_gaia_filters_parse_propagate_error_and_match_disk() {
+        let filters = builtin_gaia_loaded_filters(None)
+            .expect("built-in Gaia filters must load");
+        let names: Vec<&str> =
+            filters.iter().map(|f| f.name.as_str()).collect();
+        assert_eq!(names, ["G", "Gbp", "Grp", "Grvs"]);
+        let counts: Vec<usize> =
+            filters.iter().map(|f| f.wavelengths.len()).collect();
+        assert_eq!(counts, [731, 426, 471, 963]);
+        for f in &filters {
+            assert!(f.vega_zero_point.is_finite() && f.vega_zero_point > 0.0);
+            assert!(f.ab_zero_point.is_finite() && f.ab_zero_point > 0.0);
+            assert!(f.st_zero_point.is_finite() && f.st_zero_point > 0.0);
+        }
+
+        let off_band_vega = VegaSpectrum {
+            wavelengths: vec![20000.0, 30000.0],
+            fluxes: vec![1.0e-8, 1.0e-8],
+        };
+        let err = builtin_gaia_loaded_filters(Some(&off_band_vega))
+            .expect_err("off-band Vega SED must error for built-in Gaia");
+        assert!(matches!(err, ColorsError::NonPositiveFlux { .. }));
+
+        if let Some(mesa_dir) = std::env::var_os("MESA_DIR") {
+            let mesa_root = PathBuf::from(mesa_dir);
+            let gaia_index =
+                mesa_root.join("data/colors_data/filters/GAIA/GAIA/GAIA");
+            let vega_path =
+                mesa_root.join("data/colors_data/stellar_models/vega_flam.csv");
+            if gaia_index.is_file() && vega_path.is_file() {
+                let vega = load_vega_file(&vega_path).expect("load MESA Vega");
+                let disk_filters = load_instrument_filters(
+                    "data/colors_data/filters/GAIA/GAIA",
+                    Some(&vega),
+                    None,
+                )
+                .expect("load disk Gaia filters");
+                assert_eq!(disk_filters.len(), filters.len());
+                for (builtin, disk) in filters.iter().zip(disk_filters.iter()) {
+                    assert_eq!(builtin.name, disk.name);
+                    assert_eq!(
+                        builtin.vega_zero_point.to_bits(),
+                        disk.vega_zero_point.to_bits()
+                    );
+                    assert_eq!(
+                        builtin.ab_zero_point.to_bits(),
+                        disk.ab_zero_point.to_bits()
+                    );
+                    assert_eq!(
+                        builtin.st_zero_point.to_bits(),
+                        disk.st_zero_point.to_bits()
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn load_instrument_filters_on_disk_gaia_requires_vega_sed() {
+        let temp = TempDirGuard::new("disk_gaia");
+        let inst_dir = temp.path().join("data/colors_data/filters/GAIA/GAIA");
+        fs::create_dir_all(&inst_dir).expect("create disk Gaia dir");
+        let err = load_instrument_filters(
+            "data/colors_data/filters/GAIA/GAIA",
+            None,
+            Some(temp.path()),
+        )
+        .expect_err("on-disk Gaia dir without disk Vega SED must error");
+        assert!(matches!(err, ColorsError::IoError { .. }));
     }
 }

@@ -17,10 +17,7 @@ from flexmesa.testing import known_gaps_gate
 
 from . import cleaned_case_gaps
 
-_REPRESENTATIVE_TIER2_CASES = (
-    "irradiated_planet",
-    "wd_aic",
-)
+_REPRESENTATIVE_TIER2_CASES = ("wd_aic",)
 
 
 @pytest.mark.xfail(
@@ -227,11 +224,39 @@ def test_upstream_tier2_test_suite_case_and_restart_reproducibility(
     _check_tier2_case(case_name, tmp_path)
 
 
+def test_upstream_irradiated_planet_runs_unmodified_with_relaxes_ported() -> (
+    None
+):
+    """Verify unmodified irradiated_planet reads every control strictly
+    (`relax_initial_tau_factor` and `relax_initial_irradiation` are ported,
+    `#436`) and runs a capped smoke run with a bit-identical photo restart.
+    """
+    base = known_gaps_gate.require_mesa_test_inputs_dir()
+    if base is None:
+        return
+    case_dir = base / "star" / "test_suite" / "irradiated_planet"
+    assert case_dir.is_dir(), f"Upstream case directory not found: {case_dir}"
+    rep = e2e.run_test_suite_case(
+        case_dir,
+        skip_optional=True,
+        max_steps_per_stage=2,
+        verify_restart=True,
+    )
+    assert rep["case_name"] == "irradiated_planet"
+    assert rep["termination_code"] == "max_steps_cap"
+    assert rep["passed"] is False
+    assert rep["assertions_passed"] is True
+    assert rep["photo_restart_verified"] is True
+    assert rep["total_steps"] >= 1
+    assert np.isfinite(rep["final_teff"]) and rep["final_teff"] > 0.0
+
+
 def test_upstream_tier2_make_co_wd_fails_strictly_on_unported_controls(
     tmp_path: pathlib.Path,
 ) -> None:
     """Verify unmodified make_co_wd fails strictly under `#147` and its
-    cleaned copy follows its declared stop.
+    cleaned copy stops with the named error for the unported
+    `remove_surface_by_relax_to_star_cut` (`#436`).
     """
     _check_tier2_case("make_co_wd", tmp_path)
 
@@ -270,15 +295,18 @@ def _check_tier2_case(case_name: str, tmp_path: pathlib.Path) -> None:
     if gap is not None:
         cleaned_case_gaps.assert_declared_stop(gap, run)
         return
+    if case_name == "make_co_wd":
+        # `remove_surface_by_relax_to_star_cut` (`do_relax_to_star_cut`,
+        # star/private/remove_shells.f90:1156-1404) is not ported (#436).
+        with pytest.raises(
+            ValueError,
+            match=r"remove_surface_by_relax_to_star_cut.*not ported",
+        ):
+            run()
+        return
     rep = run()
     assert rep["case_name"] == case_name
     assert rep["tier"] == 0
-    if case_name == "make_co_wd":
-        # Cleaned make_co_wd without extras or entropy relaxation (#154, #157)
-        # terminates cleanly at min_timestep_limit under #152.
-        assert rep["termination_code"] == "min_timestep_limit"
-        assert rep["total_steps"] >= 2
-        return
     assert rep["termination_code"] == "max_steps_cap"
     assert rep["passed"] is False
     assert rep["assertions_passed"] is True

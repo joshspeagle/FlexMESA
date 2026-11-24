@@ -137,22 +137,6 @@ impl SectionControls {
         Ok(found)
     }
 
-    #[inline]
-    pub(crate) fn try_first_f64(
-        &self,
-        section: &str,
-        keys: &[&str],
-    ) -> Result<Option<f64>, StarError> {
-        let mut found: Option<f64> = None;
-        for k in keys {
-            if let Some(v) = self.try_get_f64(section, k)? {
-                if found.is_none() {
-                    found = Some(v);
-                }
-            }
-        }
-        Ok(found)
-    }
 }
 
 impl InlistBundle {
@@ -223,6 +207,8 @@ impl InlistBundle {
             set_initial_number_retries, set_initial_dt,
             set_initial_cumulative_energy_error, set_uniform_initial_composition,
             relax_initial_to_xaccrete, set_initial_v_center, set_initial_l_center,
+            set_v_center, set_l_center, set_irradiation, set_initial_irradiation,
+            relax_initial_angular_momentum, relax_initial_entropy,
             new_rti_flag, pgstar_flag,
             write_profile_when_terminate, profile_starting_model,
             set_omega, set_initial_omega,
@@ -237,7 +223,7 @@ impl InlistBundle {
             new_cumulative_energy_error, initial_h1, initial_h2, initial_he3, initial_he4,
             new_mass, new_z, new_y, core_avg_rho, core_avg_eps, new_r_center, new_l_center,
             new_omega, new_omega_div_omega_crit, new_surface_rotation_v,
-            remove_initial_center_by_temperature,
+            remove_initial_center_by_temperature, new_v_center, set_to_this_irrad_flux,
         ]);
         map_strs!("star_job", sj, j, [
             save_model_filename, save_photo_filename, save_pulse_data_filename,
@@ -335,41 +321,25 @@ impl InlistBundle {
         ]);
         sj.try_usize_into("star_job", &mut j.num_steps_to_relax_composition, "num_steps_to_relax_composition", 0)?;
         map_strs!("star_job", sj, j, [relax_composition_filename]);
-        if let Some(b) = sj.try_any_bool("star_job", &[
-            "set_tau_factor", "set_initial_tau_factor", "relax_tau_factor",
-            "relax_initial_tau_factor",
-        ])? {
-            j.set_tau_factor = b;
-        }
-        if let Some(b) = sj.try_any_bool("star_job", &["relax_tau_factor", "relax_initial_tau_factor"])? {
-            j.relax_tau_factor = b;
-        }
-        if let Some(v) = sj.try_first_f64(
-            "star_job",
-            &["set_to_this_tau_factor", "relax_to_this_tau_factor"],
-        )? {
-            j.set_to_this_tau_factor = v;
-        }
-        if let Some(b) = sj.try_any_bool("star_job", &[
-            "relax_core", "relax_initial_core", "relax_m_center", "relax_initial_m_center",
-        ])? {
-            j.relax_m_center = b;
-        }
-        let core_mass = match sj.try_get_f64("star_job", "new_core_mass")? {
-            Some(v) => Some(v),
-            None => sj.try_get_f64("star_job", "new_mass")?.filter(|_| j.relax_m_center),
-        };
-        if let Some(v) = core_mass {
-            j.new_core_mass = v;
+        map_bools!("star_job", sj, j, [
+            set_tau_factor, set_initial_tau_factor, relax_tau_factor, relax_initial_tau_factor,
+            relax_core, relax_initial_core, relax_m_center, relax_initial_m_center,
+            relax_irradiation, relax_initial_irradiation,
+        ]);
+        map_f64s!("star_job", sj, j, [
+            set_to_this_tau_factor, relax_to_this_tau_factor, dlogtau_factor,
+            new_core_mass, dlg_core_mass_per_step, relax_core_years_for_dt,
+            relax_irradiation_max_yrs_dt,
+        ]);
+        sj.try_f64_into("star_job", &mut j.relax_m_center_dt, "relax_M_center_dt")?;
+        if let Some(v) = sj.try_get_i64("star_job", "relax_irradiation_min_steps")? {
+            j.relax_irradiation_min_steps = v;
         }
         if let Some(b) = sj.try_any_bool("star_job", &["relax_r_center", "relax_initial_r_center"])? {
             j.relax_r_center = b;
         }
         if let Some(b) = sj.try_any_bool("star_job", &["relax_l_center", "relax_initial_l_center"])? {
             j.relax_l_center = b;
-        }
-        if let Some(b) = sj.try_any_bool("star_job", &["relax_irradiation", "relax_initial_irradiation"])? {
-            j.relax_irradiation = b;
         }
         sj.try_f64_into("star_job", &mut j.new_irradiation_flux, "relax_to_this_irrad_flux")?;
         sj.try_f64_into("star_job", &mut j.column_depth_for_irradiation, "irrad_col_depth")?;

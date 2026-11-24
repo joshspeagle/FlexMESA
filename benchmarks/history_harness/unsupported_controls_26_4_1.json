@@ -8,9 +8,9 @@
   },
   "summary": {
     "total_cases": 106,
-    "strict_pass_cases": 53,
-    "strict_fail_cases": 53,
-    "distinct_unsupported_controls": 176,
+    "strict_pass_cases": 56,
+    "strict_fail_cases": 50,
+    "distinct_unsupported_controls": 170,
     "distinct_unknown_controls": 0,
     "cases_with_headless_plotting": 78,
     "distinct_headless_plotting_keys": 895
@@ -19,11 +19,11 @@
     {
       "section": "star_job",
       "upstream_keys": 455,
-      "supported_keys": 146,
+      "supported_keys": 160,
       "unused_keys": 12,
       "headless_gui_keys": 3,
       "terminal_output_keys": 8,
-      "unimplemented_upstream_keys": 286
+      "unimplemented_upstream_keys": 272
     },
     {
       "section": "eos",
@@ -910,18 +910,6 @@
     },
     {
       "section": "star_job",
-      "key": "dlogtau_factor",
-      "category": "unimplemented",
-      "case_count": 4,
-      "cases": [
-        "star/irradiated_planet",
-        "star/pisn",
-        "star/wd_he_shell_ignition",
-        "star/wd_stable_h_burn"
-      ]
-    },
-    {
-      "section": "star_job",
       "key": "near_zams_relax_omega_div_omega_crit",
       "category": "unimplemented",
       "case_count": 3,
@@ -1195,16 +1183,6 @@
     },
     {
       "section": "star_job",
-      "key": "dlg_core_mass_per_step",
-      "category": "unimplemented",
-      "case_count": 2,
-      "cases": [
-        "star/make_planets",
-        "star/tzo"
-      ]
-    },
-    {
-      "section": "star_job",
       "key": "electron_coulomb_corrections",
       "category": "unimplemented",
       "case_count": 2,
@@ -1261,16 +1239,6 @@
       "cases": [
         "star/make_co_wd",
         "star/ppisn"
-      ]
-    },
-    {
-      "section": "star_job",
-      "key": "relax_core_years_for_dt",
-      "category": "unimplemented",
-      "case_count": 2,
-      "cases": [
-        "star/make_planets",
-        "star/tzo"
       ]
     },
     {
@@ -1843,15 +1811,6 @@
     },
     {
       "section": "star_job",
-      "key": "new_v_center",
-      "category": "unimplemented",
-      "case_count": 1,
-      "cases": [
-        "star/ccsn_IIp"
-      ]
-    },
-    {
-      "section": "star_job",
       "key": "rate_cache_suffix",
       "category": "unimplemented",
       "case_count": 1,
@@ -1875,24 +1834,6 @@
       "case_count": 1,
       "cases": [
         "star/high_rot_darkening"
-      ]
-    },
-    {
-      "section": "star_job",
-      "key": "relax_irradiation_max_yrs_dt",
-      "category": "unimplemented",
-      "case_count": 1,
-      "cases": [
-        "star/irradiated_planet"
-      ]
-    },
-    {
-      "section": "star_job",
-      "key": "relax_irradiation_min_steps",
-      "category": "unimplemented",
-      "case_count": 1,
-      "cases": [
-        "star/irradiated_planet"
       ]
     },
     {
@@ -7083,7 +7024,6 @@
         "controls::warn_rates_for_high_temp::unimplemented",
         "star_job::fallback_check_total_energy::unimplemented",
         "star_job::limit_initial_dt::unimplemented",
-        "star_job::new_v_center::unimplemented",
         "star_job::remove_center_set_zero_v_center::unimplemented",
         "star_job::remove_fallback_at_each_step::unimplemented",
         "star_job::remove_fallback_speed_limit::unimplemented",
@@ -7511,16 +7451,12 @@
     {
       "suite": "star",
       "case": "irradiated_planet",
-      "strict_ok": false,
+      "strict_ok": true,
       "entry_files": [
         "inlist_create_header",
         "inlist_evolve_header"
       ],
-      "unsupported_controls": [
-        "star_job::dlogtau_factor::unimplemented",
-        "star_job::relax_irradiation_max_yrs_dt::unimplemented",
-        "star_job::relax_irradiation_min_steps::unimplemented"
-      ],
+      "unsupported_controls": [],
       "unknown_controls": [],
       "headless_plotting_keys_count": 0,
       "terminal_output_keys": [
@@ -7707,9 +7643,7 @@
         "inlist_evolve_header"
       ],
       "unsupported_controls": [
-        "controls::warn_when_large_virial_thm_rel_err::unimplemented",
-        "star_job::dlg_core_mass_per_step::unimplemented",
-        "star_job::relax_core_years_for_dt::unimplemented"
+        "controls::warn_when_large_virial_thm_rel_err::unimplemented"
       ],
       "unknown_controls": [],
       "headless_plotting_keys_count": 0,
@@ -7911,7 +7845,6 @@
         "controls::warn_rates_for_high_temp::unimplemented",
         "star_job::change_d_omega_flag::unimplemented",
         "star_job::change_initial_d_omega_flag::unimplemented",
-        "star_job::dlogtau_factor::unimplemented",
         "star_job::new_d_omega_flag::unimplemented"
       ],
       "unknown_controls": [],
@@ -8417,9 +8350,7 @@
         "controls::add_center_point_to_pulse_data::unimplemented",
         "controls::add_double_points_to_pulse_data::unimplemented",
         "controls::report_ierr::unimplemented",
-        "controls::write_pulse_data_with_profile::unimplemented",
-        "star_job::dlg_core_mass_per_step::unimplemented",
-        "star_job::relax_core_years_for_dt::unimplemented"
+        "controls::write_pulse_data_with_profile::unimplemented"
       ],
       "unknown_controls": [],
       "headless_plotting_keys_count": 334,
@@ -8533,13 +8464,11 @@
     {
       "suite": "star",
       "case": "wd_he_shell_ignition",
-      "strict_ok": false,
+      "strict_ok": true,
       "entry_files": [
         "inlist_he_shell_ignition_header"
       ],
-      "unsupported_controls": [
-        "star_job::dlogtau_factor::unimplemented"
-      ],
+      "unsupported_controls": [],
       "unknown_controls": [],
       "headless_plotting_keys_count": 17,
       "terminal_output_keys": [
@@ -8575,13 +8504,11 @@
     {
       "suite": "star",
       "case": "wd_stable_h_burn",
-      "strict_ok": false,
+      "strict_ok": true,
       "entry_files": [
         "inlist_wd_stable_h_burn_header"
       ],
-      "unsupported_controls": [
-        "star_job::dlogtau_factor::unimplemented"
-      ],
+      "unsupported_controls": [],
       "unknown_controls": [],
       "headless_plotting_keys_count": 0,
       "terminal_output_keys": [

@@ -1675,6 +1675,11 @@
         "number": 517,
         "title": "fix: redo/retry semantics (#510) and chi2_delta_nu condition (#511) as upstream",
         "draft": true
+      },
+      {
+        "number": 518,
+        "title": "feat(star): rotation mixing coefficients, D_omega and am_nu_rot as upstream (#158)",
+        "draft": true
       }
     ],
     "deferred_169": [
@@ -3564,6 +3569,19 @@
     {
       "date_utc": "2026-11-24",
       "commit": "50b1b83",
+      "event": "main merge",
+      "engine_ported_pct": "30.7",
+      "all_verified_pct": "1.1",
+      "cases_passing": "25",
+      "rust_cov_pct": "76.3",
+      "python_cov_pct": "87.7",
+      "closed_140": "26",
+      "total_140": "50",
+      "deferred_169": "66"
+    },
+    {
+      "date_utc": "2026-11-24",
+      "commit": "89fede1",
       "event": "main merge",
       "engine_ported_pct": "30.7",
       "all_verified_pct": "1.1",

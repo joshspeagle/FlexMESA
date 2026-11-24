@@ -393,6 +393,11 @@
       "number": 517,
       "title": "fix: redo/retry semantics (#510) and chi2_delta_nu condition (#511) as upstream",
       "draft": true
+    },
+    {
+      "number": 518,
+      "title": "feat(star): rotation mixing coefficients, D_omega and am_nu_rot as upstream (#158)",
+      "draft": true
     }
   ],
   "deferred_169": [

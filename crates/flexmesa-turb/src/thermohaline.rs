@@ -212,7 +212,7 @@ pub fn set_thermohaline<T: TurbScalar>(
         gamma: T::from_f64(0.0),
         grad_t: inp.gradr,
         y_face: inp.gradr - inp.grada,
-        conv_vel: T::from_f64(3.0) * d / inp.lambda,
+        conv_vel: (T::from_f64(3.0) * d).div_ad(inp.lambda),
         d,
         mixing_type: MixingType::ThermohalineMixing,
     })
@@ -232,8 +232,11 @@ fn get_diff_coeffs(
 ) -> (f64, f64, f64) {
     let kt = k_therm / (cp * rho);
     let qe4 = pow4(QE);
-    let loglambdah_base = -19.26 - 0.5 * log(rho) + 1.5 * log(t)
-        - 0.5 * log(1.0 + 0.5 * (1.0 + xh1));
+    let log_rho = log(rho);
+    let log_t = log(t);
+    let log_xh1_fac = log(1.0 + 0.5 * (1.0 + xh1));
+    let loglambdah_base =
+        -19.26 - 0.5 * log_rho + 1.5 * log_t - 0.5 * log_xh1_fac;
     let nu_rad = 4.0 * CRAD * pow4(t) / (15.0 * CLIGHT * opacity * pow2(rho));
     let nu_mol = 0.406 * AMU.sqrt() * pow(BOLTZM * t, 2.5)
         / (qe4 * loglambdah_base * rho);
@@ -254,7 +257,11 @@ fn get_diff_coeffs(
             / (sqrt5 * rho * species.chem_z * species.chem_z)
             / (xh1 * acx.sqrt() * ccx + (1.0 - xh1) * acy.sqrt() * ccy)
     } else {
-        let loglambdah = loglambdah_base - log(2.0);
+        // Match MESA `thermohaline.f90:138-139` left-to-right sum order:
+        // subtracting `log(2.0)` directly from `-19.26` rather than from
+        // `loglambdah_base`.
+        let loglambdah =
+            -19.26 - log(2.0) - 0.5 * log_rho + 1.5 * log_t - 0.5 * log_xh1_fac;
         let ccy = log(exp(1.2 * loglambdah) + 1.0) / 1.2;
         (b_coeff * pow(t, 2.5) / (rho * ccy)) * (3.0 + xh1)
             / ((1.0 + xh1) * (3.0 + 5.0 * xh1) * (0.7 + 0.3 * xh1))

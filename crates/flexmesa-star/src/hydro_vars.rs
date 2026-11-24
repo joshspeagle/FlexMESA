@@ -755,51 +755,47 @@ pub(crate) fn do1_mlt_2(
         }
 
         // Semiconvection and thermohaline (`turb_support.f90:398-419`).
+        // Upstream invokes both unconditionally within the `no_mixing` branch
+        // so that `D` (`intent(out)` in `set_thermohaline` and
+        // `calc_semiconvection`) is always updated before the
+        // `remove_small_D_limit` check at `turb_support.f90:422-430`.
         if mix_type == MixingType::NoMixing {
             if gradl_composition_term < 0.0 {
-                if model.controls.thermohaline_coeff > 0.0 {
-                    let iso_cid = model
-                        .aux
-                        .mixing
-                        .dominant_iso_for_thermohaline
-                        .get(k)
-                        .copied()
-                        .unwrap_or(0);
-                    let th_params = ThermohalineParams {
-                        option: model.controls.thermohaline_option,
-                        gradl_composition_term,
-                        xh1: model.xh_mass[k],
-                        thermohaline_coeff: model.controls.thermohaline_coeff,
-                        species: driving_species_for_cid(iso_cid),
-                    };
-                    let th_in = ThermohalineInputs {
-                        lambda: lambda_f,
-                        grada: grada_face_ad,
-                        gradr: gradr_spot,
-                        t: t_f,
-                        opacity: kap_f,
-                        rho: rho_f,
-                        cp: cp_f,
-                    };
-                    let th_out =
-                        set_thermohaline(&th_params, &th_in).map_err(|e| {
-                            StarError::MicrophysicsError(format!(
-                                "thermohaline mixing failed at face {k} (`star/private/turb_support.f90:404-407`): {e}"
-                            ))
-                        })?;
-                    if th_out.mixing_type != MixingType::NoMixing {
-                        grad_t_f = th_out.grad_t;
-                        y_face_f = th_out.y_face;
-                        conv_vel_f = th_out.conv_vel;
-                        d_f = th_out.d;
-                        gamma_f = th_out.gamma;
-                        mix_type = th_out.mixing_type;
-                    }
-                }
-            } else if gradr_spot.val > grada_face_ad.val
-                && model.controls.alpha_semiconvection > 0.0
-                && gradl_f.val > gradr_spot.val
-            {
+                let iso_cid = model
+                    .aux
+                    .mixing
+                    .dominant_iso_for_thermohaline
+                    .get(k)
+                    .copied()
+                    .unwrap_or(0);
+                let th_params = ThermohalineParams {
+                    option: model.controls.thermohaline_option,
+                    gradl_composition_term,
+                    xh1: model.xh_mass[k],
+                    thermohaline_coeff: model.controls.thermohaline_coeff,
+                    species: driving_species_for_cid(iso_cid),
+                };
+                let th_in = ThermohalineInputs {
+                    lambda: lambda_f,
+                    grada: grada_face_ad,
+                    gradr: gradr_spot,
+                    t: t_f,
+                    opacity: kap_f,
+                    rho: rho_f,
+                    cp: cp_f,
+                };
+                let th_out =
+                    set_thermohaline(&th_params, &th_in).map_err(|e| {
+                        StarError::MicrophysicsError(format!(
+                            "thermohaline mixing failed at face {k} (`star/private/turb_support.f90:404-407`): {e}"
+                        ))
+                    })?;
+                grad_t_f = th_out.grad_t;
+                y_face_f = th_out.y_face;
+                conv_vel_f = th_out.conv_vel;
+                d_f = th_out.d;
+                mix_type = th_out.mixing_type;
+            } else if gradr_spot.val > grada_face_ad.val {
                 let sc_params = SemiconvectionParams {
                     option: model.controls.semiconvection_option,
                     alpha_semiconvection: model.controls.alpha_semiconvection,
@@ -827,12 +823,13 @@ pub(crate) fn do1_mlt_2(
                             "semiconvection failed at face {k} (`star/private/turb_support.f90:414-417`): {e}"
                         ))
                     })?;
+                // `calc_semiconvection` assigns `intent(out) :: D` before
+                // `if (D%val <= 0) return` (`turb/private/semiconvection.f90:79-81`).
+                d_f = sc_out.d;
                 if sc_out.mixing_type != MixingType::NoMixing {
                     grad_t_f = sc_out.grad_t;
                     y_face_f = sc_out.y_face;
                     conv_vel_f = sc_out.conv_vel;
-                    d_f = sc_out.d;
-                    gamma_f = sc_out.gamma;
                     mix_type = sc_out.mixing_type;
                 }
             }

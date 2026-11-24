@@ -4,9 +4,11 @@
 //! diffusion coupling factors ($\sigma_k$), and conservative species mixing
 //! rates (`star/private/mix_info.f90`).
 
-use flexmesa_const::{MixingType, FOUR_PI, LN10, M_SUN, SQRT_2_DIV_3};
+use flexmesa_chem::NuclideCatalog;
+use flexmesa_const::{MixingType, CRAD, FOUR_PI, LN10, M_SUN, SQRT_2_DIV_3};
 
 use crate::controls::StarError;
+use crate::controls_mix_wind::MixWindControls;
 use crate::model::StarModel;
 
 const CAT_PP: usize = 0;
@@ -392,9 +394,9 @@ fn remove_mixing_singletons(model: &mut StarModel, remove_conv: bool) {
             if model.aux.mixing.cdc[k - 1] != 0.0
                 && model.aux.mixing.cdc[k + 1] != 0.0
             {
-                let cdc_k =
-                    (model.aux.mixing.cdc[k - 1] + model.aux.mixing.cdc[k + 1])
-                        / 2.0;
+                let cdc_k = (model.aux.mixing.cdc[k - 1]
+                    + model.aux.mixing.cdc[k + 1])
+                    / 2.0;
                 model.aux.mixing.cdc[k] = cdc_k;
                 let denom = flexmesa_math::pow2(
                     FOUR_PI * model.r[k] * model.r[k] * model.rho[k],
@@ -484,8 +486,7 @@ fn close_gaps(model: &mut StarModel, mix_type: MixingType, min_gap: f64) {
         } else if model.mixing_type[k] == mix_type {
             let ktop = k;
             let rtop = model.r[ktop];
-            let hp =
-                model.peos[ktop] / (model.rho[ktop] * model.grav[ktop]);
+            let hp = model.peos[ktop] / (model.rho[ktop] * model.grav[ktop]);
             if rtop - rbot < hp * min_gap {
                 if kbot < nz - 1 {
                     let cdc_avg = (model.aux.mixing.cdc[ktop]
@@ -528,9 +529,8 @@ fn remove_thermohaline_dropouts(
         return;
     }
     // `s% grada_face(k)` (`mix_info.f90:1203, 1232-1233`).
-    let grada_at = |m: &StarModel, idx: usize| -> f64 {
-        m.aux.mixing.grada_face[idx]
-    };
+    let grada_at =
+        |m: &StarModel, idx: usize| -> f64 { m.aux.mixing.grada_face[idx] };
 
     let mut rbot = model.r[nz - 1];
     let mut kbot = nz - 2;
@@ -546,8 +546,8 @@ fn remove_thermohaline_dropouts(
             } else {
                 let ktop = k + 1;
                 let rtop = model.r[ktop];
-                let hp = model.peos[ktop]
-                    / (model.rho[ktop] * model.grav[ktop]);
+                let hp =
+                    model.peos[ktop] / (model.rho[ktop] * model.grav[ktop]);
                 let q_upper = model.q[ktop - 1];
                 let q_lower = model.q[kbot + 1];
                 if rtop - rbot < hp * min_dropout_hp
@@ -613,7 +613,11 @@ fn remove_embedded_semiconvection_zones(model: &mut StarModel) {
     }
 }
 
-fn clean_embedded_region(model: &mut StarModel, mut ktop: usize, mut kbot: usize) {
+fn clean_embedded_region(
+    model: &mut StarModel,
+    mut ktop: usize,
+    mut kbot: usize,
+) {
     while model.mixing_type[ktop] == MixingType::ConvectiveMixing {
         ktop += 1;
         if ktop >= kbot {
@@ -913,8 +917,9 @@ fn end_of_convective_region(
         for kk in k..=k_bot {
             max_eps = max_eps.max(eps_h[kk] + eps_he[kk] + eps_z[kk]);
         }
-        let min_eps =
-            flexmesa_math::exp10(model.controls.mix_wind.prune_bad_cz_min_log_eps_nuc);
+        let min_eps = flexmesa_math::exp10(
+            model.controls.mix_wind.prune_bad_cz_min_log_eps_nuc,
+        );
         let no_th = ((k + 1)..k_bot)
             .all(|kk| model.mixing_type[kk] != MixingType::ThermohalineMixing);
         if max_eps < min_eps && no_th {
@@ -1403,11 +1408,7 @@ pub fn compute_convection_sigmas(
         model.sig[k] = if sig_k.is_finite() { sig_k } else { 1.0e99 };
     }
 
-    let max_sig = model
-        .sig
-        .iter()
-        .copied()
-        .fold(f64::NEG_INFINITY, f64::max);
+    let max_sig = model.sig.iter().copied().fold(f64::NEG_INFINITY, f64::max);
     if max_sig < 1.0 {
         return Ok(());
     }
@@ -1582,4 +1583,223 @@ pub fn eval_dxdt_mix(model: &StarModel) -> Vec<f64> {
         }
     }
     dxdt_mix
+}
+
+/// Computes the radiative-to-Eddington luminosity ratio
+/// $L_{\mathrm{rad},k} / L_{\mathrm{Edd},k}$ at face `k`
+/// (`get_Lrad_div_Ledd` in `star/private/star_utils.f90:2118-2137`).
+///
+/// Returns `0.0` if `k >= model.nz`, `model.nz < 2`, `model.cgrav[k] <= 0.0`,
+/// or the shifted face denominators (`dm_bar`, `cgrav`, `m_grav`) vanish.
+#[must_use]
+pub fn eval_lrad_div_ledd(model: &StarModel, k: usize) -> f64 {
+    if k >= model.nz || model.nz < 2 || model.cgrav[k] <= 0.0 {
+        return 0.0;
+    }
+    let j = if k == 0 { 1 } else { k };
+    let del_m = model.dm_bar[j];
+    if del_m == 0.0 || model.cgrav[j] <= 0.0 || model.m_grav[j] == 0.0 {
+        return 0.0;
+    }
+    let del_t4 =
+        flexmesa_math::pow4(model.t[j - 1]) - flexmesa_math::pow4(model.t[j]);
+    let area = FOUR_PI * model.r[j] * model.r[j];
+    let lrad = -(area * area * CRAD * (del_t4 / del_m) / 3.0);
+    let ledd = FOUR_PI * model.cgrav[j] * model.m_grav[j];
+    lrad / ledd
+}
+
+fn center_xa_for_iso(
+    model: &StarModel,
+    catalog: &NuclideCatalog,
+    name: &str,
+) -> Option<f64> {
+    let nz = model.nz;
+    let species = model.species;
+    if nz == 0 || species == 0 {
+        return None;
+    }
+    let iso = catalog
+        .get_by_name(name)
+        .and_then(|e| model.net_iso.get(e.chem_id).copied().flatten())?;
+    Some(model.xa[(nz - 1) * species + iso])
+}
+
+#[inline]
+fn eval_beta_lambda_alpha(beta: f64, lambda: f64, mw: &MixWindControls) -> f64 {
+    let lambda1 = mw.gradt_excess_lambda1;
+    let beta1 = mw.gradt_excess_beta1;
+    let lambda2 = mw.gradt_excess_lambda2;
+    let beta2 = mw.gradt_excess_beta2;
+    let dlambda = mw.gradt_excess_dlambda;
+    let dbeta = mw.gradt_excess_dbeta;
+
+    if lambda1 < 0.0 {
+        1.0
+    } else if lambda >= lambda1 {
+        if beta <= beta1 {
+            1.0
+        } else if beta < beta1 + dbeta {
+            (beta1 + dbeta - beta) / dbeta
+        } else {
+            0.0
+        }
+    } else if lambda >= lambda2 {
+        let beta_limit =
+            beta2 + (lambda - lambda2) * (beta1 - beta2) / (lambda1 - lambda2);
+        if beta <= beta_limit {
+            1.0
+        } else if beta < beta_limit + dbeta {
+            (beta_limit + dbeta - beta) / dbeta
+        } else {
+            0.0
+        }
+    } else if lambda > lambda2 - dlambda {
+        if beta <= beta2 {
+            1.0
+        } else if beta < beta2 + dbeta {
+            (lambda - (lambda2 - dlambda)) / dlambda
+        } else {
+            0.0
+        }
+    } else {
+        0.0
+    }
+}
+
+/// Computes the start-of-step MLT++ reduction factor
+/// `model.aux.mixing.gradt_excess_alpha` (together with diagnostic extrema
+/// `gradt_excess_min_beta` and `gradt_excess_max_lambda`) across the
+/// $(\beta, \lambda)$ plane (`set_gradT_excess_alpha` in
+/// `star/private/turb_info.f90:411-519`).
+pub fn set_gradt_excess_alpha(model: &mut StarModel) {
+    let mw = &model.controls.mix_wind;
+    if !mw.okay_to_reduce_gradt_excess || model.nz == 0 {
+        model.aux.mixing.gradt_excess_alpha = 0.0;
+        return;
+    }
+
+    let nz = model.nz;
+    let species = model.species;
+    let catalog = NuclideCatalog::builtin_ref();
+    if center_xa_for_iso(model, catalog, "h1")
+        .is_some_and(|x_h1| x_h1 > mw.gradt_excess_max_center_h1)
+        || center_xa_for_iso(model, catalog, "he4")
+            .is_some_and(|x_he4| x_he4 < mw.gradt_excess_min_center_he4)
+    {
+        model.aux.mixing.gradt_excess_alpha = 0.0;
+        return;
+    }
+
+    let mut beta = 1.0_f64;
+    let mut k_beta: Option<usize> = None;
+    for k in 0..nz {
+        let tmp = model.pgas[k] / model.peos[k];
+        if tmp < beta {
+            k_beta = Some(k);
+            beta = tmp;
+        }
+    }
+    if species > 0 {
+        beta *= 1.0 + model.xa[(nz - 1) * species];
+    }
+    model.aux.mixing.gradt_excess_min_beta = beta;
+
+    let mut lambda = 0.0_f64;
+    if let Some(kb) = k_beta {
+        for k in 1..=kb {
+            let tmp = eval_lrad_div_ledd(model, k);
+            if tmp > lambda {
+                lambda = tmp;
+            }
+        }
+    }
+    lambda = lambda.min(1.0);
+    model.aux.mixing.gradt_excess_max_lambda = lambda;
+
+    let lambda1 = mw.gradt_excess_lambda1;
+    let alpha = eval_beta_lambda_alpha(beta, lambda, mw);
+
+    let alpha_old = model.aux.mixing.gradt_excess_alpha_old;
+    let mut new_alpha = if model.generations > 1 && lambda1 >= 0.0 {
+        let smoothed = (1.0 - mw.gradt_excess_age_fraction) * alpha
+            + mw.gradt_excess_age_fraction * alpha_old;
+        if mw.gradt_excess_max_change > 0.0 {
+            if smoothed > alpha_old {
+                smoothed.min(alpha_old + mw.gradt_excess_max_change)
+            } else {
+                smoothed.max(alpha_old - mw.gradt_excess_max_change)
+            }
+        } else {
+            smoothed
+        }
+    } else {
+        alpha
+    };
+    if new_alpha < 1.0e-4 {
+        new_alpha = 0.0;
+    }
+    if new_alpha > 0.9999 {
+        new_alpha = 1.0;
+    }
+    model.aux.mixing.gradt_excess_alpha = new_alpha;
+}
+
+/// Applies MLT++ superadiabaticity reduction to `gradt` and `gradt_ad` at
+/// face `k`, recording the blend fraction `gradt_excess_effect[k]`
+/// (`adjust_gradT_excess` in `star/private/turb_info.f90:358-386`).
+pub fn adjust_gradt_excess(model: &mut StarModel, k: usize) {
+    if k >= model.nz {
+        return;
+    }
+    let mut gradt_excess_alpha = model.aux.mixing.gradt_excess_alpha;
+    model.aux.mixing.gradt_excess_effect[k] = 0.0;
+    let gradt_sub_grada = model.gradt[k] - model.aux.mixing.grada_face[k];
+    let mw = &model.controls.mix_wind;
+    if gradt_excess_alpha <= 0.0 || gradt_sub_grada <= mw.gradt_excess_f1 {
+        return;
+    }
+    if model.ln_t[k] / LN10 > mw.gradt_excess_max_logt {
+        return;
+    }
+    let log_tau = flexmesa_math::log10(model.tau[k]);
+    if log_tau < mw.gradt_excess_max_log_tau_full_off {
+        return;
+    }
+    if log_tau < mw.gradt_excess_min_log_tau_full_on {
+        gradt_excess_alpha = (gradt_excess_alpha
+            * (log_tau - mw.gradt_excess_max_log_tau_full_off))
+            / (mw.gradt_excess_min_log_tau_full_on
+                - mw.gradt_excess_max_log_tau_full_off);
+    }
+    let mut alfa = mw.gradt_excess_f2;
+    if gradt_excess_alpha < 1.0 {
+        alfa += (1.0 - alfa) * (1.0 - gradt_excess_alpha);
+    }
+    model.gradt_ad[k] = alfa * model.gradt_ad[k]
+        + (1.0 - alfa) * model.aux.mixing.grada_face_ad[k];
+    model.gradt[k] = model.gradt_ad[k].val;
+    model.aux.mixing.gradt_excess_effect[k] = 1.0 - alfa;
+}
+
+/// Blends `gradt_ad[k]` between `grada_face_ad[k]` and `gradr_ad[k]` with
+/// weight `f` when `0.0 <= f <= 1.0`, applies [`adjust_gradt_excess`], and
+/// updates `gradt_sub_grada[k]` (`adjust_gradT_fraction` in
+/// `star/private/turb_info.f90:337-355`).
+pub fn adjust_gradt_fraction(model: &mut StarModel, k: usize, f: f64) {
+    if k >= model.nz {
+        return;
+    }
+    if (0.0..=1.0).contains(&f) {
+        model.gradt_ad[k] = if f == 0.0 {
+            model.gradr_ad[k]
+        } else {
+            f * model.aux.mixing.grada_face_ad[k]
+                + (1.0 - f) * model.gradr_ad[k]
+        };
+        model.gradt[k] = model.gradt_ad[k].val;
+    }
+    adjust_gradt_excess(model, k);
+    model.aux.mixing.gradt_sub_grada[k] =
+        model.gradt[k] - model.aux.mixing.grada_face[k];
 }

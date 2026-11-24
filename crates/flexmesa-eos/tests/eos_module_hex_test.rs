@@ -276,8 +276,9 @@ fn mesa_26_4_1_eos_module_hex_zero_ulp() {
 
                 // Note: `Do_One_TRho` sets module-global `Z = Zinit + dXC + dXO`
                 // (`test_eos_support.f90:599`), and `Init_Composition` declares
-                // a local `Z` (`eos_support.f90:43`), so line 609 prints `z_init`
-                // while `X` and `Y` come from `composition_info`.
+                // a local `Z` (`eos/test/src/eos_support.f90:43`), so line 609
+                // prints `z_init` while `X` and `Y` come from
+                // `composition_info`.
                 let expected_vals = [
                     ("X", comp.xh),
                     ("Y", comp.xhe),

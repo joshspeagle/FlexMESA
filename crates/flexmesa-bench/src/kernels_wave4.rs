@@ -118,6 +118,10 @@ pub fn make_wave4_zams_model(nz: usize) -> StarModel {
     model
         .save_start_values()
         .expect("save_start_values on resampled ZAMS");
+    // The step driver records the start-of-step energy integrals after
+    // `set_mdot` (`star/private/evolve.f90:427-436`); a standalone solver
+    // evaluation must do the same before `set_energy_eqn_scal` reads them.
+    flexmesa_star::record_start_of_step_energy_integrals(&mut model);
     model.save_old_values();
     model.dt_old = 0.0;
     model

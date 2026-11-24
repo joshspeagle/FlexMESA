@@ -1,0 +1,121 @@
+# GCC expansions reproduced by crates/flexmesa-gyre (#170, package G1)
+# compiler: GNU Fortran (GCC) 15.2.0
+# flags: -std=f2018 -finit-real=snan -fmax-errors=25 -fPIC -ffpe-trap=invalid,overflow,zero -O2 -fno-backtrace -fopenmp -ffp-contract=off
+# source: benchmarks/fortran_mesa/gyre_g1_vectors/probe_expansions.f90
+
+== cmul: OK
+   _7 = REALPART_EXPR <*a_4(D)>;
+   _8 = IMAGPART_EXPR <*a_4(D)>;
+   _9 = REALPART_EXPR <*b_5(D)>;
+   _10 = IMAGPART_EXPR <*b_5(D)>;
+   _11 = _7 * _9;
+   _12 = _8 * _10;
+   _13 = _7 * _10;
+   _14 = _8 * _9;
+   c$real_15 = _11 - _12;
+   c$imag_16 = _13 + _14;
+   c_6 = COMPLEX_EXPR <c$real_15, c$imag_16>;
+   return c_6;
+
+== cdiv: OK
+   _7 = REALPART_EXPR <*a_4(D)>;
+   _8 = IMAGPART_EXPR <*a_4(D)>;
+   _9 = REALPART_EXPR <*b_5(D)>;
+   _10 = IMAGPART_EXPR <*b_5(D)>;
+   _11 = ABS_EXPR <_9>;
+   _12 = ABS_EXPR <_10>;
+   if (_11 < _12)
+   goto <bb 3>; [50.00%]
+   goto <bb 4>; [50.00%]
+   _14 = _9 / _10;
+   _15 = _9 * _14;
+   _16 = _10 + _15;
+   _17 = _7 * _14;
+   _18 = _8 + _17;
+   _19 = _8 * _14;
+   _20 = _19 - _7;
+   _21 = _18 / _16;
+   _22 = _20 / _16;
+   goto <bb 5>; [100.00%]
+   _23 = _10 / _9;
+   _24 = _10 * _23;
+   _25 = _9 + _24;
+   _26 = _8 * _23;
+   _27 = _7 + _26;
+   _28 = _7 * _23;
+   _29 = _8 - _28;
+   _30 = _27 / _25;
+   _31 = _29 / _25;
+   # _34 = PHI <_21(3), _30(4)>
+   # _35 = PHI <_22(3), _31(4)>
+   c_6 = COMPLEX_EXPR <_34, _35>;
+   return c_6;
+
+== crmul: OK
+   _8 = REALPART_EXPR <*a_5(D)>;
+   _9 = IMAGPART_EXPR <*a_5(D)>;
+   _2 = *r_6(D);
+   _10 = _2 * _8;
+   _11 = _9 * 0.0;
+   _12 = _8 * 0.0;
+   _13 = _2 * _9;
+   c$real_14 = _10 - _11;
+   c$imag_15 = _12 + _13;
+   c_7 = COMPLEX_EXPR <c$real_14, c$imag_15>;
+   return c_7;
+
+== cdivr: OK
+   _8 = REALPART_EXPR <*a_5(D)>;
+   _9 = IMAGPART_EXPR <*a_5(D)>;
+   _2 = *r_6(D);
+   _21 = 0.0 / _2;
+   _22 = _21 * 0.0;
+   _23 = _2 + _22;
+   _24 = _9 * _21;
+   _25 = _8 + _24;
+   _26 = _8 * _21;
+   _27 = _9 - _26;
+   _28 = _25 / _23;
+   _29 = _27 / _23;
+   c_7 = COMPLEX_EXPR <_28, _29>;
+   return c_7;
+
+== rp5: OK
+   _4 = *x_2(D);
+   powmult_3 = _4 * _4;
+   powmult_7 = powmult_3 * _4;
+   powmult_6 = powmult_3 * powmult_7;
+   return powmult_6;
+
+== rp6: OK
+   _4 = *x_2(D);
+   powmult_7 = _4 * _4;
+   powmult_3 = _4 * powmult_7;
+   powmult_6 = powmult_3 * powmult_3;
+   return powmult_6;
+
+== ipown: OK
+   _4 = *x_3(D);
+   _1 = *n_5(D);
+   y_6 = __builtin_powi (_4, _1); [tail call]
+   return y_6;
+
+== cp2: OK
+   _6 = REALPART_EXPR <*x_2(D)>;
+   _3 = IMAGPART_EXPR <*x_2(D)>;
+   _7 = _6 * _6;
+   _8 = _3 * _3;
+   _9 = _3 * _6;
+   _10 = _7 - _8;
+   _11 = _9 * 2.0e+0;
+   _5 = COMPLEX_EXPR <_10, _11>;
+   return _5;
+
+== MATMUL (front-end tree, -fdump-tree-original)
+   size guard <= 2.7e+4: OK
+   zero fill: OK
+   accumulate C + A*B: OK
+   outer j, middle l, inner i: OK
+   library fallback: OK
+   matvec: no size guard: OK
+   *((real(kind=8) *) c.0 + (sizetype) ((((__var_3_do + 1) * stride.32 + offset.33) + (__var_5_do + 1) * stride.30) * 8)) = *((real(kind=8) *) c.0 + (sizetype) ((((__var_3_do + 1) * stride.32 + offset.33) + (__var_5_do + 1) * stride.30) * 8)) + *((real(kind=8) *) a.0 + (sizetype) ((((__var_4_do + 1) * stride.20 + offset.21) + (__var_5_do + 1) * stride.18) * 8)) * *((real(kind=8) *) b.0 + (sizetype) ((((__var_3_do + 1) * stride.26 + offset.27) + (__var_4_do + 1) * stride.24) * 8));

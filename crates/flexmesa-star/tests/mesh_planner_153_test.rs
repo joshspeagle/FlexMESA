@@ -15,15 +15,18 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use flexmesa_chem::NuclideCatalog;
-use flexmesa_const::{LN10, M_SUN, MixingType, SECYER};
+use flexmesa_const::{MixingType, LN10, M_SUN, SECYER};
+use flexmesa_star::star_utils::set_rho_to_dm_div_dv_for_new_step;
 use flexmesa_star::{
-    InlistBundle, InlistLoadOptions, MeshFunctionConfig,
-    OtherMeshDeltaCoeffFactorHandle, OtherMeshDeltaCoeffFactorHook,
-    OtherMeshFunctionColumn, OtherMeshFunctionsHandle, OtherMeshFunctionsHook,
-    StarControls, StarError, StarJobControls, StarModel, do_adjust_mesh,
-    do_prune_mesh_surface, eval_effective_mesh_delta_coeff, get_gval_info,
-    load_zams_model, num_mesh_functions, read_mod_str, remesh_split_merge,
+    do_adjust_mesh, do_prune_mesh_surface, eval_effective_mesh_delta_coeff,
+    get_gval_info, init_or_update_model_from_bundle, load_zams_model,
+    num_mesh_functions, plan_mesh, read_mod_str, remesh_split_merge,
     set_hydro_vars, set_mesh_function_data, star_evolve_step,
+    try_plan_standard_mesh, InlistBundle, InlistLoadOptions,
+    MeshFunctionConfig, OtherMeshDeltaCoeffFactorHandle,
+    OtherMeshDeltaCoeffFactorHook, OtherMeshFunctionColumn,
+    OtherMeshFunctionsHandle, OtherMeshFunctionsHook, StarControls, StarError,
+    StarExtras, StarJobControls, StarModel,
 };
 
 fn star_suite_dir() -> PathBuf {
@@ -612,8 +615,8 @@ fn test_split_merge_amr_zoning_modes_conserve_invariants_and_reject_242() {
 }
 
 #[test]
-fn test_num_zones_star_test_four_pass_remesh_matches_committed_model5_reference()
-{
+fn test_num_zones_star_test_four_pass_remesh_matches_committed_model5_reference(
+) {
     let root = repo_root();
 
     // `star/test` (`4 Msun, Z = 0.02` ZAMS, `mesh_delta_coeff = 1.0`):
@@ -655,6 +658,215 @@ fn test_num_zones_star_test_four_pass_remesh_matches_committed_model5_reference(
         "star/test 4-pass static remesh num_zones: {st_nz_seq:?} (committed star_test/history.data: model 1 = 2464, models 5/10/11 = 992)"
     );
     assert_eq!(m_st.nz, star_test_ref[1].1);
+}
+
+#[derive(Default)]
+struct NoopMeshExtras;
+
+impl StarExtras for NoopMeshExtras {}
+
+fn assert_mesh_invariants(model: &StarModel, label: &str) {
+    assert!(model.nz >= 2, "{label}: nz must be >= 2");
+    let dq_sum: f64 = model.dq.iter().sum();
+    assert!(
+        (dq_sum - 1.0).abs() < 1.0e-12,
+        "{label}: sum(dq)={dq_sum} drifted from 1.0"
+    );
+    for (k, &dq_k) in model.dq.iter().enumerate().take(model.nz) {
+        assert!(
+            dq_k.is_finite() && dq_k > 0.0,
+            "{label}: invalid dq[{k}]={dq_k}"
+        );
+    }
+    for k in 0..(model.nz - 1) {
+        assert!(
+            model.ln_r[k] > model.ln_r[k + 1],
+            "{label}: non-positive cell volume at k={k} ({} <= {})",
+            model.ln_r[k],
+            model.ln_r[k + 1]
+        );
+    }
+}
+
+#[test]
+fn test_1p3m_high_z_steps_1_to_63_exact_num_zones_parity() {
+    let root = repo_root();
+    let highz_ref = read_reference_num_zones(
+        &root
+            .join("benchmarks")
+            .join("history_harness")
+            .join("reference_histories")
+            .join("star")
+            .join("1.3M_ms_high_Z.data"),
+    );
+    assert!(
+        highz_ref.len() >= 63,
+        "expected >= 63 rows in 1.3M_ms_high_Z.data"
+    );
+    assert_eq!(highz_ref[62], (63, 887));
+
+    let highz_dir = star_suite_dir().join("1.3M_ms_high_Z");
+    assert!(
+        highz_dir.is_dir(),
+        "missing 1.3M_ms_high_Z test_suite inputs at {}",
+        highz_dir.display()
+    );
+    let mut bundle = InlistBundle::from_file_in_case_dir(
+        &highz_dir,
+        "inlist_1.3M_ms_high_Z_header",
+    )
+    .expect("parse 1.3M_ms_high_Z inlist cleanly");
+    bundle.job.saved_model_name = String::from("standard_zams_0.040_1.30.mod");
+
+    let mut extras = NoopMeshExtras;
+    let mut model =
+        init_or_update_model_from_bundle(&bundle, None, &mut extras)
+            .expect("init 1.3M_ms_high_Z from ZAMS mod");
+    assert_eq!(model.nz, 807);
+
+    let op_split = bundle.controls.op_split_burn;
+    for &(expected_step, expected_zones) in &highz_ref[..63] {
+        let rep = star_evolve_step(&mut model, true, op_split, true)
+            .unwrap_or_else(|e| {
+                panic!("1.3M_ms_high_Z step {expected_step} failed: {e}")
+            });
+        assert!(
+            rep.converged,
+            "step {expected_step} did not converge cleanly"
+        );
+        assert_eq!(rep.model_number, expected_step);
+        assert_eq!(
+            model.nz, expected_zones,
+            "1.3M_ms_high_Z num_zones mismatch at step {expected_step}"
+        );
+    }
+    assert_mesh_invariants(&model, "1.3M_ms_high_Z step 63");
+
+    // Verify `plan_mesh`, `try_plan_standard_mesh`, and `do_adjust_mesh`
+    // agree on step-64 pre-step preparation (`dmdv` + `set_hydro_vars`) and
+    // preserve total and per-species masses.
+    let mut probe = model.clone();
+    set_rho_to_dm_div_dv_for_new_step(&mut probe).expect("dmdv at step 63");
+    set_hydro_vars(&mut probe, false, false).expect("set_hydro_vars step 63");
+    let cfg = MeshFunctionConfig::from_controls(&probe.controls);
+    let plan = try_plan_standard_mesh(&probe, &cfg)
+        .expect("try_plan_standard_mesh")
+        .expect("standard mesh plan enabled");
+    let (dq_planned, sp_plan, mg_plan) = plan_mesh(&probe, &cfg);
+    assert_eq!(plan.dq_new, dq_planned);
+    assert_eq!(plan.num_splits, sp_plan);
+    assert_eq!(plan.num_merges, mg_plan);
+
+    let m0 = probe.mstar;
+    let sp0 = species_masses(&probe);
+    let (sp_exec, mg_exec) =
+        do_adjust_mesh(&mut probe, &cfg).expect("do_adjust_mesh step 63");
+    assert_eq!((sp_exec, mg_exec), (sp_plan, mg_plan));
+    assert_eq!(probe.nz, dq_planned.len());
+    assert!(
+        ((probe.mstar - m0) / m0).abs() < 1.0e-14,
+        "mstar drift across step-63 remesh"
+    );
+    for (j, (a, b)) in species_masses(&probe).iter().zip(&sp0).enumerate() {
+        if *b > 1.0e-20 {
+            assert!(
+                ((a - b) / b).abs() < 1.0e-13,
+                "species[{j}] mass drift across step-63 remesh: {a} vs {b}"
+            );
+        }
+    }
+}
+
+#[test]
+fn test_make_brown_dwarf_pre_evol_controls_and_remesh_invariants() {
+    let root = repo_root();
+    let mbd_ref = read_reference_num_zones(
+        &root
+            .join("benchmarks")
+            .join("history_harness")
+            .join("reference_histories")
+            .join("star")
+            .join("make_brown_dwarf.data"),
+    );
+    assert_eq!(mbd_ref[0], (1, 525));
+
+    let mbd_dir = star_suite_dir().join("make_brown_dwarf");
+    assert!(
+        mbd_dir.is_dir(),
+        "missing make_brown_dwarf test_suite inputs at {}",
+        mbd_dir.display()
+    );
+    let bundle = InlistBundle::from_file_in_case_dir(
+        &mbd_dir,
+        "inlist_make_brown_dwarf_header",
+    )
+    .expect("parse make_brown_dwarf inlist cleanly");
+
+    assert!(!bundle.controls.mix_wind.mlt_make_surface_no_mixing);
+    assert!(bundle.controls.convergence_ignore_equl_residuals);
+    assert!(bundle.controls.mix_wind.make_gradr_sticky_in_solver_iters);
+    assert!(bundle.controls.use_gold2_tolerances);
+
+    // Pre-relax initial model (`m=0`): 774 zones; verify `plan_mesh` /
+    // `do_adjust_mesh` exact plan consistency and mass conservation.
+    let mut b0 = bundle.clone();
+    b0.job.initial_model_relax_num_steps = 0;
+    let mut ex0 = NoopMeshExtras;
+    let mut m0 = init_or_update_model_from_bundle(&b0, None, &mut ex0)
+        .expect("build make_brown_dwarf initial model");
+    assert_eq!(m0.nz, 774);
+    assert_mesh_invariants(&m0, "make_brown_dwarf initial model");
+
+    let cfg = MeshFunctionConfig::from_controls(&m0.controls);
+    let (dq_plan, sp_plan, mg_plan) = plan_mesh(&m0, &cfg);
+    let sp0 = species_masses(&m0);
+    let (sp_exec, mg_exec) =
+        do_adjust_mesh(&mut m0, &cfg).expect("do_adjust_mesh on m0");
+    assert_eq!((sp_exec, mg_exec), (sp_plan, mg_plan));
+    assert_eq!(m0.nz, dq_plan.len());
+    assert_mesh_invariants(&m0, "make_brown_dwarf remeshed m0");
+    for (j, (a, b)) in species_masses(&m0).iter().zip(&sp0).enumerate() {
+        if *b > 1.0e-20 {
+            assert!(
+                ((a - b) / b).abs() < 1.0e-13,
+                "species[{j}] drift after m0 remesh: {a} vs {b}"
+            );
+        }
+    }
+
+    // Full 10-step RELAX + 5 EVOL steps maintain mesh and mass invariants.
+    let mut ex = NoopMeshExtras;
+    let mut model = init_or_update_model_from_bundle(&bundle, None, &mut ex)
+        .expect("init make_brown_dwarf after 10 relax steps");
+    assert_mesh_invariants(&model, "make_brown_dwarf post-relax startup");
+    let mstar_start = model.mstar;
+    let species_start = species_masses(&model);
+    let op_split = bundle.controls.op_split_burn;
+    for step in 1..=5 {
+        let rep = star_evolve_step(&mut model, true, op_split, true)
+            .unwrap_or_else(|e| {
+                panic!("make_brown_dwarf EVOL step {step} failed: {e}")
+            });
+        assert!(rep.converged);
+        assert_eq!(rep.retries, 0);
+        assert_mesh_invariants(&model, "make_brown_dwarf post-relax evol");
+    }
+    assert!(
+        ((model.mstar - mstar_start) / mstar_start).abs() < 1.0e-14,
+        "make_brown_dwarf mstar drift across EVOL 1..5"
+    );
+    for (j, (a, b)) in species_masses(&model)
+        .iter()
+        .zip(&species_start)
+        .enumerate()
+    {
+        if *b > 1.0e-20 {
+            assert!(
+                ((a - b) / b).abs() < 1.0e-13,
+                "make_brown_dwarf species[{j}] drift across EVOL 1..5"
+            );
+        }
+    }
 }
 
 /// Diagnostic-only remesh check (`DECISIONS #26`) for `hb_2M` and
@@ -858,8 +1070,9 @@ fn test_cell_specific_pe_and_ke_double_double_matches_quad_oracle() {
 
     let pe_dd = flexmesa_star::mesh_remap::cell_specific_pe(&m, 0);
     let pe_qp_oracle = -1.923_649_218_405_293_3e15_f64;
-    let pe_f64_naive =
-        0.5 * mb * (-cgrav * m.m_grav[1] / m.r[1] + (-cgrav * m.m_grav[0] / m.r[0]));
+    let pe_f64_naive = 0.5
+        * mb
+        * (-cgrav * m.m_grav[1] / m.r[1] + (-cgrav * m.m_grav[0] / m.r[0]));
     assert_ne!(
         pe_f64_naive.to_bits(),
         pe_qp_oracle.to_bits(),

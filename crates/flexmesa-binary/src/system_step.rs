@@ -395,6 +395,16 @@ impl BinarySystem {
                     self.restore_snapshot(&pre_step_snap)?;
                     return Err(e);
                 }
+                // Store mesh info for the ST time smoothing
+                // (`star/private/evolve.f90:1859-1879`).
+                flexmesa_star::rotation_mix_info::store_prev_mesh_st_info(
+                    &mut self.donor,
+                );
+                if let BinaryCompanion::Star(ref mut s2) = self.companion {
+                    flexmesa_star::rotation_mix_info::store_prev_mesh_st_info(
+                        s2,
+                    );
+                }
                 if restore_pre_mesh {
                     pre_mesh_snap = Some(self.capture_snapshot());
                 }
@@ -2073,9 +2083,9 @@ fn finalize_star_post_binary_torques(
     star.mstar_start = star.mstar;
     if !star.controls.rsp_flag {
         star.sync_mesh_and_pack()?;
-        sync_post_henyey_rotation(star, 0.0);
+        sync_post_henyey_rotation(star, 0.0)?;
         set_hydro_vars(star, false, false)?;
-        sync_post_henyey_rotation(star, 0.0);
+        sync_post_henyey_rotation(star, 0.0)?;
         star.aux.total_energy = eval_total_energy_integrals(star).5;
     }
     Ok(())

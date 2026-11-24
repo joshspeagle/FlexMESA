@@ -409,7 +409,8 @@ fn test_select_mdot_action_solver_failure_retries_without_force_accept_139() {
     m.omega.fill(2.0e-4);
     flexmesa_star::update_rotation_distortion_factors(&mut m);
     set_hydro_vars(&mut m, false, false).expect("hydro");
-    flexmesa_star::sync_post_henyey_rotation(&mut m, 1.0);
+    flexmesa_star::sync_post_henyey_rotation(&mut m, 1.0)
+        .expect("sync_post_henyey_rotation");
     m.save_start_values().expect("start");
     m.save_old_values();
 

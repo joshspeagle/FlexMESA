@@ -47,7 +47,8 @@ fn test_default_am_d_mix_zero_omega_transport_and_gold2_chem_increment_convergen
     star.mixing_type
         .fill(flexmesa_const::MixingType::ConvectiveMixing);
     let shear_before = (star.omega[0] - star.omega[nz - 1]).abs();
-    sync_post_henyey_rotation(&mut star, 1.0e4 * SECYER);
+    sync_post_henyey_rotation(&mut star, 1.0e4 * SECYER)
+        .expect("sync_post_henyey_rotation");
     let shear_after = (star.omega[0] - star.omega[nz - 1]).abs();
     assert!(
         shear_after < 0.1 * shear_before,

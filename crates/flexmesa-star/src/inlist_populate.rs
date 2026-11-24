@@ -361,6 +361,31 @@ impl InlistBundle {
                 self.controls.rotation_flag = b;
             }
         }
+        // `star_set_D_omega_flag` / `star_set_am_nu_rot_flag`
+        // (`star/job/run_star_support.f90:2119-2129`); as for
+        // `change_rotation_flag`, the `change_initial_*` forms are taken
+        // together with the `change_*` forms (no photo restart here).
+        if let Some(b) = sj.try_any_bool("star_job", &["change_D_omega_flag", "change_initial_D_omega_flag"])? {
+            j.change_d_omega_flag = b;
+        }
+        if let Some(b) = sj.try_get_bool("star_job", "new_D_omega_flag")? {
+            j.new_d_omega_flag = b;
+        }
+        if j.change_d_omega_flag {
+            self.controls.d_omega_flag = j.new_d_omega_flag;
+        }
+        if let Some(b) = sj.try_any_bool("star_job", &["change_am_nu_rot_flag", "change_initial_am_nu_rot_flag"])? {
+            j.change_am_nu_rot_flag = b;
+        }
+        if let Some(b) = sj.try_get_bool("star_job", "new_am_nu_rot_flag")? {
+            j.new_am_nu_rot_flag = b;
+        }
+        if j.change_am_nu_rot_flag {
+            self.controls.am_nu_rot_flag = j.new_am_nu_rot_flag;
+        }
+        if let Some(b) = sj.try_get_bool("star_job", "use_D_omega_for_am_nu_rot")? {
+            j.use_d_omega_for_am_nu_rot = b;
+        }
         sj.try_usize_into("star_job", &mut j.initial_model_number, "initial_model_number", 0)?;
         sj.try_usize_into("star_job", &mut j.initial_number_retries, "initial_number_retries", 0)?;
         if let Some(v) = sj.try_get_i64("star_job", "initial_zfracs")? {

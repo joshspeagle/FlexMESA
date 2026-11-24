@@ -97,6 +97,8 @@ fn finish_load_model(
     model: &mut StarModel,
     extras: &mut dyn StarExtras,
 ) -> Result<(), StarError> {
+    // `if (.not. restart) s% have_ST_start_info = .false.` (`read_model.f90:139`).
+    model.aux.st_start.have_st_start_info = false;
     // `RSP_setup_part1` / `RSP_setup_part2` (`read_model.f90:150-156,
     // 175-181`): an `RSP` model is set up by `rsp_driver` instead.
     if model.controls.rsp_flag {
@@ -142,13 +144,16 @@ fn finish_load_model(
         extras.other_cgrav(model)?;
     }
     // `set_vars` with `doing_finish_load_model = .true.`
-    // (`read_model.f90:161-168`). Its effects on `D_omega` and `am_nu_rot`
+    // (`read_model.f90:161-168`): under `D_omega_flag` / `am_nu_rot_flag`
+    // it zeroes `D_omega` and `am_nu_rot`
     // (`star/private/rotation_mix_info.f90:255-258`,
-    // `star/private/mix_info.f90:1810-1813`) apply only under
-    // `D_omega_flag` / `am_nu_rot_flag`, which FlexMESA does not support
-    // (their controls are rejected by the control inventory), and the `RSP`
-    // `unpack_xh` branch (`star/private/hydro_vars.f90:225`) is excluded above.
-    set_hydro_vars(model, false, false)?;
+    // `star/private/mix_info.f90:1810-1813`). The `RSP` `unpack_xh` branch
+    // (`star/private/hydro_vars.f90:225`) is excluded above.
+    model.aux.doing_finish_load_model = true;
+    if let Err(e) = set_hydro_vars(model, false, false) {
+        model.aux.doing_finish_load_model = false;
+        return Err(e);
+    }
     if model.controls.rsp2_flag {
         // `set_RSP2_vars` (`star/private/hydro_rsp2.f90:67-111`): fill
         // `Hp_face(k) <= 0` from the face scale height, then the RSP2 face
@@ -162,13 +167,15 @@ fn finish_load_model(
         model.pack_xh();
         crate::rsp2_ad::update_rsp2_vars_ad(model);
     }
+    model.aux.doing_finish_load_model = false;
 
-    // `read_model.f90:185-195`.
+    // `read_model.f90:184-199`, again with `doing_finish_load_model`, which
+    // nothing in the Brunt-Vaisala update reads.
     if model.controls.calculate_brunt_b {
         crate::hydro_brunt_surf::do_brunt_b(model)?;
     }
     if model.controls.calculate_brunt_n2 {
-        crate::hydro_brunt_surf::do_brunt_n2(model);
+        crate::hydro_brunt_surf::do_brunt_n2(model)?;
     }
     Ok(())
 }
@@ -196,7 +203,12 @@ fn prepare_new_model_for_relax(
     if model.controls.use_other_cgrav {
         extras.other_cgrav(model)?;
     }
-    set_hydro_vars(model, false, false)?;
+    // `finish_load_model` runs `set_vars` with `doing_finish_load_model`
+    // (`star/private/init.f90:1045`, `star/private/read_model.f90:161-168`).
+    model.aux.doing_finish_load_model = true;
+    let set_vars_result = set_hydro_vars(model, false, false);
+    model.aux.doing_finish_load_model = false;
+    set_vars_result?;
     model.save_start_values()?;
     model.save_old_values();
     model.m_center_old = model.m_center;
@@ -577,6 +589,26 @@ pub(crate) fn init_or_update_model_from_bundle_outcome(
         if job.new_u_flag && model.u.len() != model.nz {
             model.u.resize(model.nz, 0.0);
         }
+    }
+    // `star_set_D_omega_flag` and `star_set_am_nu_rot_flag`
+    // (`star/job/run_star_support.f90:2119-2129`,
+    // `star/private/set_flags.f90:718-745`): a change of flag zeroes the
+    // array.
+    if job.change_d_omega_flag
+        && model.controls.d_omega_flag != job.new_d_omega_flag
+    {
+        model.controls.d_omega_flag = job.new_d_omega_flag;
+        let nz = model.nz;
+        model.aux.rotmix.d_omega.resize(nz, 0.0);
+        model.aux.rotmix.d_omega[..nz].fill(0.0);
+    }
+    if job.change_am_nu_rot_flag
+        && model.controls.am_nu_rot_flag != job.new_am_nu_rot_flag
+    {
+        model.controls.am_nu_rot_flag = job.new_am_nu_rot_flag;
+        let nz = model.nz;
+        model.aux.am_nu_rot.resize(nz, 0.0);
+        model.aux.am_nu_rot[..nz].fill(0.0);
     }
     if job.change_rotation_flag {
         model.controls.rotation_flag = job.new_rotation_flag;

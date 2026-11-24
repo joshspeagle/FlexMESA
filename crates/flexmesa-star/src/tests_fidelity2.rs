@@ -22,9 +22,8 @@ use crate::hydro_vars::{
 };
 use crate::micro::{change_model_network, do_kap, set_basic_vars};
 use crate::premix::do_phase_separation;
-use crate::rotation::{
-    set_rotation_mixing_info, update_rotation_distortion_factors,
-};
+use crate::rotation::update_rotation_distortion_factors;
+use crate::rotation_mix_info::set_rotation_mixing_info;
 use crate::star_ad::{I_LND_00, I_LNR_00, I_LNT_00, I_L_00};
 use crate::struct_burn_mix::solve_omega_mix;
 use crate::winds::{eval_dutch_wind, eval_nugis_lamers_wind, DutchLowTScheme};
@@ -90,7 +89,7 @@ fn test_brunt_b_brassard_eos_finite_difference_and_gradmux_forms() {
 
     // 3. Verify `do_brunt_n2` populates `model.aux.brunt_n2_composition_term`
     set_mlt_vars(&mut model).expect("set_mlt_vars");
-    do_brunt_n2(&mut model);
+    do_brunt_n2(&mut model).expect("do_brunt_n2");
     assert!(
         model.aux.brunt_n2_composition_term[k_test] > 0.0,
         "brunt_n2_composition_term must be positive at stabilizing composition jump"
@@ -225,7 +224,7 @@ fn test_eval_face_mlt_and_brunt_n2_rotational_fp_ft_coupling() {
     assert!(model.aux.i_rot[k] > (2.0 / 3.0) * model.r[k] * model.r[k]);
 
     set_mlt_vars(&mut model).expect("set_mlt_vars rotating");
-    do_brunt_n2(&mut model);
+    do_brunt_n2(&mut model).expect("do_brunt_n2");
 
     // Literal provenance (#155): pre-#262 asserted `hp_ratio == 1.0 / fp_k`,
     // which departed from upstream MESA 26.4.1. Upstream `get_scale_height_face`
@@ -244,8 +243,8 @@ fn test_eval_face_mlt_and_brunt_n2_rotational_fp_ft_coupling() {
         ft_k / fp_k
     );
     let _ = n2_nonrot;
-    let zones = set_rotation_mixing_info(&mut model);
-    assert_eq!(zones.len(), model.nz);
+    set_rotation_mixing_info(&mut model).expect("set_rotation_mixing_info");
+    assert_eq!(model.aux.rotmix.d_st.len(), model.nz);
     let gradr_ratio_after = model.gradr[k] / gradr_nonrot;
     assert!(
         (gradr_ratio_after - ft_k / fp_k).abs() < 1.0e-10,

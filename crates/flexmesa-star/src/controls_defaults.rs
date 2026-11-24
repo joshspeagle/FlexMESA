@@ -99,6 +99,8 @@ impl Default for StarControls {
             v_flag: false,
             u_flag: false,
             rotation_flag: false,
+            d_omega_flag: false,
+            am_nu_rot_flag: false,
             rsp_flag: false,
             // `star/defaults/controls.defaults:11706`.
             set_rho_to_dm_div_dv: true,

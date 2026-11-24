@@ -451,6 +451,11 @@ pub struct HydroAuxState {
     /// Whether the model is currently in an initialization relaxation phase
     /// (`doing_relax` in `star_data_def.f90`).
     pub doing_relax: bool,
+    /// `doing_finish_load_model`: true while `finish_load_model` runs
+    /// `set_vars` and the Brunt-Vaisala update
+    /// (`star/private/read_model.f90:161-199`).
+    #[serde(default)]
+    pub doing_finish_load_model: bool,
     /// `need_to_setvars` (`star_data_step_work.inc`), as far as it is ported:
     /// `false` only after `relax_composition_adjust_model` has changed `xa`
     /// without asking for new variables, so the `set_vars_if_needed` calls
@@ -461,6 +466,15 @@ pub struct HydroAuxState {
     /// variables are recomputed whenever they are set, so it stays `true`.
     #[serde(default = "need_to_setvars_default")]
     pub need_to_setvars: bool,
+    /// Rotational mixing coefficients and their inputs from the last
+    /// `set_rotation_mixing_info` / `set_grads` (recomputed by every
+    /// `set_mixing_info`, so not stored in photos).
+    #[serde(skip)]
+    pub rotmix: crate::rotation_mix_info::RotMixArrays,
+    /// Spruit-Tayler start-of-step state for its time smoothing
+    /// (`D_ST_start`, `prev_mesh_D_ST_start`, ...).
+    #[serde(default)]
+    pub st_start: crate::rotation_mix_info::StStartInfo,
     /// Whether the model is currently inside `do_struct_burn_mix`
     /// (`doing_struct_burn_mix` in `star_data_step_work.inc`).
     pub doing_struct_burn_mix: bool,
@@ -747,7 +761,10 @@ impl HydroAuxState {
     pub fn new(nz: usize, species: usize) -> Self {
         Self {
             doing_relax: false,
+            doing_finish_load_model: false,
             need_to_setvars: true,
+            rotmix: crate::rotation_mix_info::RotMixArrays::default(),
+            st_start: crate::rotation_mix_info::StStartInfo::default(),
             doing_struct_burn_mix: false,
             total_energy: 0.0,
             total_internal_energy_start: None,

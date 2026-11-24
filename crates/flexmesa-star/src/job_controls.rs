@@ -747,6 +747,24 @@ pub struct StarJobControls {
     pub change_rotation_flag: bool,
     /// Target `rotation_flag` when `change_rotation_flag` is true (`new_rotation_flag`).
     pub new_rotation_flag: bool,
+    /// Whether to change `D_omega_flag` on startup (`change_D_omega_flag` /
+    /// `change_initial_D_omega_flag`, `.false.` default).
+    #[serde(default)]
+    pub change_d_omega_flag: bool,
+    /// Target `D_omega_flag` (`new_D_omega_flag`, `.false.` default).
+    #[serde(default)]
+    pub new_d_omega_flag: bool,
+    /// Whether to change `am_nu_rot_flag` on startup (`change_am_nu_rot_flag` /
+    /// `change_initial_am_nu_rot_flag`, `.false.` default).
+    #[serde(default)]
+    pub change_am_nu_rot_flag: bool,
+    /// Target `am_nu_rot_flag` (`new_am_nu_rot_flag`, `.false.` default).
+    #[serde(default)]
+    pub new_am_nu_rot_flag: bool,
+    /// Under `D_omega_flag`, set `am_nu_rot = am_nu_factor * D_omega`
+    /// (`use_D_omega_for_am_nu_rot`, `.true.` default).
+    #[serde(default = "default_true")]
+    pub use_d_omega_for_am_nu_rot: bool,
     /// Apply `new_omega` at startup (`set_omega`, `false` default).
     pub set_omega: bool,
     /// Apply `new_omega` only on initial non-restart run (`set_initial_omega`, `false` default).
@@ -1171,6 +1189,11 @@ impl Default for StarJobControls {
             new_u_flag: false,
             change_rotation_flag: false,
             new_rotation_flag: false,
+            change_d_omega_flag: false,
+            new_d_omega_flag: false,
+            change_am_nu_rot_flag: false,
+            new_am_nu_rot_flag: false,
+            use_d_omega_for_am_nu_rot: true,
             set_omega: false,
             set_initial_omega: false,
             new_omega: 0.0,

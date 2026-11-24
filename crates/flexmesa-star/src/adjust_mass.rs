@@ -626,6 +626,14 @@ fn do_adjust_mass_core(
                 j_removed,
             )?;
         }
+        // Upstream also remaps `D_omega` and `am_nu_rot` here under
+        // `D_omega_flag` / `am_nu_rot_flag`
+        // (`star/private/adjust_mass.f90:453-475`). Not ported: both arrays
+        // are reset and rebuilt before any use, `D_omega` by the next
+        // `set_rotation_mixing_info` (`star/private/rotation_mix_info.f90:94,
+        // 255-328`) and `am_nu_rot` by `update_rotation_mixing_info`
+        // (`star/private/mix_info.f90:1685-1712, 1810-1840`), so the
+        // remapped values are never read.
     }
     let j_rot_after_remap = if model.controls.rotation_flag {
         model.j_rot.clone()

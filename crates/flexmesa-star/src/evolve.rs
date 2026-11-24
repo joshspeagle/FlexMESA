@@ -329,6 +329,8 @@ pub fn star_evolve_step_part1(
     // both stars before remeshing them, `DECISIONS #55`).
     if first_try && prepare_new_step {
         set_rho_to_dm_div_dv_for_new_step(model)?;
+        // Store mesh info for the ST time smoothing (`evolve.f90:1859-1879`).
+        crate::rotation_mix_info::store_prev_mesh_st_info(model);
     }
 
     let has_prev_generation = !model.lnd_old.is_empty();
@@ -1058,6 +1060,8 @@ pub(crate) fn star_evolve_step_outcome_checked(
     model.aux.need_to_setvars = true;
     // `prepare_for_new_step` (`star/private/evolve.f90:1854-1857`).
     set_rho_to_dm_div_dv_for_new_step(model)?;
+    // Store mesh info for the ST time smoothing (`evolve.f90:1859-1879`).
+    crate::rotation_mix_info::store_prev_mesh_st_info(model);
 
     let has_prev_generation = !model.lnd_old.is_empty();
     let prev_dt_old = model.dt_old;

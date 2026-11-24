@@ -226,6 +226,16 @@ pub struct StarControls {
     pub u_flag: bool,
     /// Whether rotation $\Omega_k$ is active (`rotation_flag`).
     pub rotation_flag: bool,
+    /// Whether rotational chemical mixing and, by default, `am_nu_rot` use
+    /// the smoothed and mixed `D_omega` (`s% D_omega_flag`; set from
+    /// `&star_job` `change_D_omega_flag`, `star/private/set_flags.f90:718-730`).
+    #[serde(default)]
+    pub d_omega_flag: bool,
+    /// Whether `am_nu_rot` is smoothed and mixed like `D_omega`
+    /// (`s% am_nu_rot_flag`; set from `&star_job` `change_am_nu_rot_flag`,
+    /// `star/private/set_flags.f90:733-745`).
+    #[serde(default)]
+    pub am_nu_rot_flag: bool,
     /// Whether nonlinear pulsation (`RSP_flag`) is active.
     pub rsp_flag: bool,
     /// Reset `ln rho` to `dm / dV` before each step when neither `u_flag`

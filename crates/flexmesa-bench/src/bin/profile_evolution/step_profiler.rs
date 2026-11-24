@@ -402,7 +402,7 @@ fn measure_step_kernels_on_probe(
     let t0 = Instant::now();
     do_brunt_b(&mut probe)?;
     set_mlt_vars(&mut probe)?;
-    do_brunt_n2(&mut probe);
+    do_brunt_n2(&mut probe)?;
     eval_surf_bc(&mut probe)?;
     eval_eps_grav(&mut probe)?;
     let turb_sec = t0.elapsed().as_secs_f64();

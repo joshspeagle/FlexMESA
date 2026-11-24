@@ -1299,10 +1299,21 @@ fn test_double_bh_che_diffusivity_stiffness_and_bh_collapse_invariants() {
         .zip(&star.j_rot)
         .map(|(m, j)| m * j)
         .sum();
-    let zones = flexmesa_star::set_rotation_mixing_info(&mut star);
-    assert!(zones.iter().all(|z| z.nu_st == 0.0));
+    flexmesa_star::set_rotation_mixing_info(&mut star)
+        .expect("set_rotation_mixing_info");
+    // `am_nu_ST_factor = 1 > 0`, so upstream runs `set_ST`
+    // (`star/private/rotation_mix_info.f90:178-181`): `nu_ST` is a finite,
+    // non-negative viscosity that is positive on some faces of this rotating
+    // model. The removed stand-in returned `nu_ST = 0` everywhere.
+    let nu_st = &star.aux.rotmix.nu_st[..star.nz];
+    assert!(nu_st.iter().all(|&v| v.is_finite() && v >= 0.0));
+    assert!(
+        nu_st.iter().any(|&v| v > 0.0),
+        "set_ST gives nu_ST = 0 on every face"
+    );
     let dt_star = star.dt;
-    flexmesa_star::sync_post_henyey_rotation(&mut star, dt_star);
+    flexmesa_star::sync_post_henyey_rotation(&mut star, dt_star)
+        .expect("sync_post_henyey_rotation");
     assert!(star.omega.iter().all(|w| w.is_finite() && *w > 0.0));
     assert!(star.j_rot.iter().all(|j| j.is_finite() && *j > 0.0));
     let j_after: f64 = star

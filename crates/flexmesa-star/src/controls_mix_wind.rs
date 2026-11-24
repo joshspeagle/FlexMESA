@@ -560,6 +560,97 @@ pub struct MixWindControls {
     pub am_nu_j_rot_factor: f64,
     /// Non-rotational viscosity weight in `am_nu_j` (`am_nu_j_non_rot_factor`, `0.0` default).
     pub am_nu_j_non_rot_factor: f64,
+    /// Half-width in cells of the `weighted_smoothing` of `D_DSI` (`smooth_D_DSI`, `0` default).
+    #[serde(default)]
+    pub smooth_d_dsi: i64,
+    /// Half-width in cells of the smoothing of `D_SH` (`smooth_D_SH`, `0` default).
+    #[serde(default)]
+    pub smooth_d_sh: i64,
+    /// Half-width in cells of the smoothing of `D_SSI` (`smooth_D_SSI`, `0` default).
+    #[serde(default)]
+    pub smooth_d_ssi: i64,
+    /// Half-width in cells of the smoothing of `D_ES` (`smooth_D_ES`, `0` default).
+    #[serde(default)]
+    pub smooth_d_es: i64,
+    /// Half-width in cells of the smoothing of `D_GSF` (`smooth_D_GSF`, `0` default).
+    #[serde(default)]
+    pub smooth_d_gsf: i64,
+    /// Half-width in cells of the smoothing of `D_ST` (`smooth_D_ST`, `0` default).
+    #[serde(default)]
+    pub smooth_d_st: i64,
+    /// Half-width in cells of the smoothing of `nu_ST` (`smooth_nu_ST`, `0` default).
+    #[serde(default)]
+    pub smooth_nu_st: i64,
+    /// `log10 T` at and below which rotational chemical mixing is fully on
+    /// (`D_mix_rotation_max_logT_full_on`, `9.4` default).
+    #[serde(default = "default_d_mix_rotation_max_logt_full_on")]
+    pub d_mix_rotation_max_logt_full_on: f64,
+    /// `log10 T` at and above which rotational chemical mixing is off
+    /// (`D_mix_rotation_min_logT_full_off`, `9.5` default).
+    #[serde(default = "default_d_mix_rotation_min_logt_full_off")]
+    pub d_mix_rotation_min_logt_full_off: f64,
+    /// Optical depth at and above which rotational chemical mixing is fully on
+    /// (`D_mix_rotation_min_tau_full_on`, `0` default).
+    #[serde(default)]
+    pub d_mix_rotation_min_tau_full_on: f64,
+    /// Optical depth at and below which rotational chemical mixing is off
+    /// (`D_mix_rotation_min_tau_full_off`, `0` default).
+    #[serde(default)]
+    pub d_mix_rotation_min_tau_full_off: f64,
+    /// Use `uniform_am_nu_non_rot` for `am_nu_non_rot` (`set_uniform_am_nu_non_rot`, `.false.` default).
+    #[serde(default)]
+    pub set_uniform_am_nu_non_rot: bool,
+    /// Uniform non-rotational viscosity in cm^2 s^-1 (`uniform_am_nu_non_rot`, `1d20` default).
+    #[serde(default = "default_uniform_am_nu_non_rot")]
+    pub uniform_am_nu_non_rot: f64,
+    /// Floor `am_nu_non_rot` at `min_am_nu_non_rot` (`set_min_am_nu_non_rot`, `.false.` default).
+    #[serde(default)]
+    pub set_min_am_nu_non_rot: bool,
+    /// Floor for `am_nu_non_rot` in cm^2 s^-1 (`min_am_nu_non_rot`, `1d8` default).
+    #[serde(default = "default_min_am_nu_non_rot")]
+    pub min_am_nu_non_rot: f64,
+    /// Central `Ye` at or above which the `am_nu_non_rot` floor applies
+    /// (`min_center_Ye_for_min_am_nu_non_rot`, `0.47` default).
+    #[serde(default = "default_min_center_ye_for_min_am_nu_non_rot")]
+    pub min_center_ye_for_min_am_nu_non_rot: f64,
+    /// Half-width in cells of the smoothing of `D_omega` (`smooth_D_omega`, `0` default).
+    #[serde(default)]
+    pub smooth_d_omega: i64,
+    /// Half-width in cells of the smoothing of `am_nu_rot` (`smooth_am_nu_rot`, `0` default).
+    #[serde(default)]
+    pub smooth_am_nu_rot: i64,
+    /// Rate in s^-1 of the implicit diffusive mixing of `D_omega`
+    /// (`D_omega_mixing_rate`, `1d0` default).
+    #[serde(default = "default_one")]
+    pub d_omega_mixing_rate: f64,
+    /// Mix `D_omega` across convective boundaries
+    /// (`D_omega_mixing_across_convection_boundary`, `.false.` default).
+    #[serde(default)]
+    pub d_omega_mixing_across_convection_boundary: bool,
+    /// `D_omega = 0` in convective cells with `q` at or below this
+    /// (`max_q_for_D_omega_zero_in_convection_region`, `0.8d0` default).
+    #[serde(default = "default_zero_point_eight")]
+    pub max_q_for_d_omega_zero_in_convection_region: f64,
+    /// Rate in s^-1 of the implicit diffusive mixing of `am_nu_rot`
+    /// (`nu_omega_mixing_rate`, `1d0` default).
+    #[serde(default = "default_one")]
+    pub nu_omega_mixing_rate: f64,
+    /// Mix `am_nu_rot` across convective boundaries
+    /// (`nu_omega_mixing_across_convection_boundary`, `.false.` default).
+    #[serde(default)]
+    pub nu_omega_mixing_across_convection_boundary: bool,
+    /// `am_nu_rot = 0` in convective cells with `q` at or below this
+    /// (`max_q_for_nu_omega_zero_in_convection_region`, `0.8d0` default).
+    #[serde(default = "default_zero_point_eight")]
+    pub max_q_for_nu_omega_zero_in_convection_region: f64,
+    /// Fractional limit on the change of `D_ST` and `nu_ST` per step
+    /// (`ST_angsmt`, `0.2` default).
+    #[serde(default = "default_st_angsmt")]
+    pub st_angsmt: f64,
+    /// Length factor for the absolute change of `D_ST` and `nu_ST` per step
+    /// (`ST_angsml`, `1d-3` default).
+    #[serde(default = "default_st_angsml")]
+    pub st_angsml: f64,
     /// Dimensionless tridiagonal stiffness cap for `solve_omega_mix` (`am_sig_term_limit`, `1e13` default).
     pub am_sig_term_limit: f64,
     /// Relative total angular momentum conservation error warning threshold in `solve_omega_mix` (`angular_momentum_error_warn`, `5e-6` default).
@@ -1041,6 +1132,32 @@ impl Default for MixWindControls {
             am_nu_omega_non_rot_factor: 1.0,
             am_nu_j_rot_factor: 0.0,
             am_nu_j_non_rot_factor: 0.0,
+            smooth_d_dsi: 0,
+            smooth_d_sh: 0,
+            smooth_d_ssi: 0,
+            smooth_d_es: 0,
+            smooth_d_gsf: 0,
+            smooth_d_st: 0,
+            smooth_nu_st: 0,
+            d_mix_rotation_max_logt_full_on: 9.4,
+            d_mix_rotation_min_logt_full_off: 9.5,
+            d_mix_rotation_min_tau_full_on: 0.0,
+            d_mix_rotation_min_tau_full_off: 0.0,
+            set_uniform_am_nu_non_rot: false,
+            uniform_am_nu_non_rot: 1.0e20,
+            set_min_am_nu_non_rot: false,
+            min_am_nu_non_rot: 1.0e8,
+            min_center_ye_for_min_am_nu_non_rot: 0.47,
+            smooth_d_omega: 0,
+            smooth_am_nu_rot: 0,
+            d_omega_mixing_rate: 1.0,
+            d_omega_mixing_across_convection_boundary: false,
+            max_q_for_d_omega_zero_in_convection_region: 0.8,
+            nu_omega_mixing_rate: 1.0,
+            nu_omega_mixing_across_convection_boundary: false,
+            max_q_for_nu_omega_zero_in_convection_region: 0.8,
+            st_angsmt: 0.2,
+            st_angsml: 1.0e-3,
             am_sig_term_limit: 1.0e13,
             angular_momentum_error_warn: 5.0e-6,
             angular_momentum_error_retry: 1.0e-6,
@@ -1164,4 +1281,40 @@ impl Default for MixWindControls {
             smooth_outer_xa_small: -1.0,
         }
     }
+}
+
+const fn default_d_mix_rotation_max_logt_full_on() -> f64 {
+    9.4
+}
+
+const fn default_d_mix_rotation_min_logt_full_off() -> f64 {
+    9.5
+}
+
+const fn default_uniform_am_nu_non_rot() -> f64 {
+    1.0e20
+}
+
+const fn default_min_am_nu_non_rot() -> f64 {
+    1.0e8
+}
+
+const fn default_min_center_ye_for_min_am_nu_non_rot() -> f64 {
+    0.47
+}
+
+const fn default_one() -> f64 {
+    1.0
+}
+
+const fn default_zero_point_eight() -> f64 {
+    0.8
+}
+
+const fn default_st_angsmt() -> f64 {
+    0.2
+}
+
+const fn default_st_angsml() -> f64 {
+    1.0e-3
 }

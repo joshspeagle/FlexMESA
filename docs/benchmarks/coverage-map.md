@@ -50,12 +50,12 @@ Progress is tracked by **upstream MESA `26.4.1` lines promoted to verified statu
 
 ## Namelist Controls & Defaults Alignment
 
-Compared against MESA `26.4.1` `.defaults` schemas, **296 / 1,444** `&controls` keys (`20.5%`) and **290 / 455** `&star_job` keys (`63.7%`) are currently unimplemented (details in [`notes/audit/defaults_diff_26_4_1.md`](https://github.com/joshspeagle/FlexMESA/blob/main/notes/audit/defaults_diff_26_4_1.md); loud rejection of unsupported keys is tracked in `#147` and default alignment in `#149`):
+Compared against MESA `26.4.1` `.defaults` schemas, **270 / 1,444** `&controls` keys (`18.7%`) and **285 / 455** `&star_job` keys (`62.6%`) are currently unimplemented (details in [`notes/audit/defaults_diff_26_4_1.md`](https://github.com/joshspeagle/FlexMESA/blob/main/notes/audit/defaults_diff_26_4_1.md); loud rejection of unsupported keys is tracked in `#147` and default alignment in `#149`):
 
 | Namelist | Upstream Scalars | Matched in FlexMESA | Defaults Agree | Value Mismatch | Disabled (`none`/limit) | Non-Scalar Rust | Unimplemented |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| `star &controls` | 1,444 | 1,131 | 1,131 | 0 | 0 | 17 | 296 |
-| `star &star_job` | 455 | 164 | 164 | 0 | 0 | 1 | 290 |
+| `star &controls` | 1,444 | 1,157 | 1,157 | 0 | 0 | 17 | 270 |
+| `star &star_job` | 455 | 169 | 169 | 0 | 0 | 1 | 285 |
 | `binary &binary_controls + &binary_job` | 209 | 145 | 145 | 0 | 0 | 1 | 63 |
 | `astero &astero_search_controls` | 150 | 75 | 75 | 0 | 0 | 1 | 74 |
 | `eos &eos` | 102 | 60 | 60 | 0 | 0 | 0 | 42 |

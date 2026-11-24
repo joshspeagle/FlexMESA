@@ -135,6 +135,7 @@ pub mod pulse;
 pub mod pulse_bvp;
 pub mod pulse_bvp_recon;
 pub mod pulse_exporters;
+pub mod pulse_gyre_data;
 pub mod pulse_modes;
 pub mod pulse_utils;
 pub mod relax;

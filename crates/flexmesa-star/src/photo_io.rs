@@ -115,6 +115,14 @@ pub fn read_photo_bytes(
     controls: StarControls,
     job: StarJobControls,
 ) -> Result<StarModel, StarError> {
+    // `photo_in` restores `s% net_name` from `using_revised_net_name` /
+    // `revised_net_name` (`star/private/photo_in.f90:81-82,113-114`), which
+    // FlexMESA photos do not store.
+    if job.enable_adaptive_network {
+        return Err(StarError::IoError(String::from(
+            "photo restart with enable_adaptive_network: using_revised_net_name / revised_net_name (star/private/photo_in.f90:81-82,113-114) are not stored in FlexMESA photos (#466)",
+        )));
+    }
     let mut model = load_photo_bytes(bytes)?;
     let layout_changed = model.controls.v_flag != controls.v_flag
         || model.controls.u_flag != controls.u_flag

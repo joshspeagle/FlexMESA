@@ -62,6 +62,7 @@
 
 pub mod accretion_xa;
 pub mod adjust_mass;
+pub mod adjust_net;
 pub mod adjust_mesh_split_merge;
 pub mod adjust_mesh_support;
 pub mod case_staging;

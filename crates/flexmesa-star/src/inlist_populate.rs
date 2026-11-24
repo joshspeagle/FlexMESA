@@ -230,7 +230,14 @@ impl InlistBundle {
             set_omega_div_omega_crit, set_initial_omega_div_omega_crit,
             set_surface_rotation_v, set_initial_surface_rotation_v,
             astero_just_call_my_extras_check_model,
+            enable_adaptive_network,
         ]);
+        map_f64s!("star_job", sj, j, [
+            min_x_for_keep, min_x_for_n, min_x_for_add,
+        ]);
+        sj.try_f64_into("star_job", &mut j.max_z_for_add, "max_Z_for_add")?;
+        sj.try_f64_into("star_job", &mut j.max_n_for_add, "max_N_for_add")?;
+        sj.try_f64_into("star_job", &mut j.max_a_for_add, "max_A_for_add")?;
         map_f64s!("star_job", sj, j, [
             pre_ms_t_c, pre_ms_guess_rho_c, pre_ms_d_log10_p,
             radius_in_cm_for_create_initial_model, mass_in_gm_for_create_initial_model,

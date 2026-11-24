@@ -677,6 +677,35 @@ pub struct StarJobControls {
     pub new_net_name: String,
     /// Whether to automatically extend the reaction network with evolutionary stage (`auto_extend_net`).
     pub auto_extend_net: bool,
+    /// Heger-style adaptive network, rebuilt before every step
+    /// (`enable_adaptive_network`, `.false.` default,
+    /// `star/defaults/star_job.defaults:2538`).
+    #[serde(default)]
+    pub enable_adaptive_network: bool,
+    /// Keep an isotope whose maximum mass fraction is at least this
+    /// (`min_x_for_keep`, `1d-5` default, `star_job.defaults:2539`).
+    #[serde(default = "default_min_x_for_keep")]
+    pub min_x_for_keep: f64,
+    /// Add `(n,g)` / `(g,n)` neighbours above this maximum mass fraction
+    /// (`min_x_for_n`, `1d-4` default, `star_job.defaults:2540`).
+    #[serde(default = "default_min_x_for_n_or_add")]
+    pub min_x_for_n: f64,
+    /// Add charged-particle neighbours above this maximum mass fraction
+    /// (`min_x_for_add`, `1d-4` default, `star_job.defaults:2541`).
+    #[serde(default = "default_min_x_for_n_or_add")]
+    pub min_x_for_add: f64,
+    /// Largest `Z` an adaptive-network addition may reach
+    /// (`max_Z_for_add`, `999` default, `star_job.defaults:2542`).
+    #[serde(default = "default_max_for_add")]
+    pub max_z_for_add: f64,
+    /// Largest `N` an adaptive-network addition may reach
+    /// (`max_N_for_add`, `999` default, `star_job.defaults:2543`).
+    #[serde(default = "default_max_for_add")]
+    pub max_n_for_add: f64,
+    /// Largest `A` an adaptive-network addition may reach
+    /// (`max_A_for_add`, `999` default, `star_job.defaults:2544`).
+    #[serde(default = "default_max_for_add")]
+    pub max_a_for_add: f64,
     /// H/He-burning network for `auto_extend_net` (`"basic.net"` default).
     pub h_he_net: String,
     /// C/O-burning network for `auto_extend_net` (`"co_burn.net"` default).
@@ -992,6 +1021,13 @@ impl Default for StarJobControls {
             change_net: false,
             new_net_name: String::new(),
             auto_extend_net: true,
+            enable_adaptive_network: false,
+            min_x_for_keep: 1.0e-5,
+            min_x_for_n: 1.0e-4,
+            min_x_for_add: 1.0e-4,
+            max_z_for_add: 999.0,
+            max_n_for_add: 999.0,
+            max_a_for_add: 999.0,
             h_he_net: String::from("basic.net"),
             co_net: String::from("co_burn.net"),
             adv_net: String::from("approx21.net"),
@@ -1094,6 +1130,18 @@ impl Default for StarJobControls {
             profile_starting_model: false,
         }
     }
+}
+
+const fn default_min_x_for_keep() -> f64 {
+    1.0e-5
+}
+
+const fn default_min_x_for_n_or_add() -> f64 {
+    1.0e-4
+}
+
+const fn default_max_for_add() -> f64 {
+    999.0
 }
 
 const fn default_true() -> bool {

@@ -149,9 +149,13 @@ pub fn eval_spectro_and_delta_nu_chi2(
     } else {
         eval_delta_nu_radius_scaling(model.mstar, r_phot_cm)
     };
-    let chi2_delta_nu = if ctrl.delta_nu > 0.0 && ctrl.delta_nu_sigma > 0.0 {
-        let d = (ctrl.delta_nu - delta_nu_uhz) / ctrl.delta_nu_sigma;
-        d * d
+    // `if (delta_nu_sigma > 0) chi2_delta_nu = pow2((delta_nu -
+    // delta_nu_model)/delta_nu_sigma)`, else 0
+    // (`astero/private/extras_support.f90:236-241`).
+    let chi2_delta_nu = if ctrl.delta_nu_sigma > 0.0 {
+        flexmesa_math::pow2(
+            (ctrl.delta_nu - delta_nu_uhz) / ctrl.delta_nu_sigma,
+        )
     } else {
         0.0
     };

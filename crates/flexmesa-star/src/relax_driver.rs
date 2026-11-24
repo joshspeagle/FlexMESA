@@ -9,7 +9,7 @@
 //! relax supplies `before_evolve`, `adjust_model`, `check_model` and
 //! `finish_model` through [`RelaxHooks`].
 
-use flexmesa_const::{M_SUN, SECYER};
+use flexmesa_const::{M_SUN, RSUN, SECYER};
 use flexmesa_turb::MltOption;
 
 use crate::controls::StarError;
@@ -668,5 +668,152 @@ pub(crate) fn do_relax_to_radiative_core(
     model.model_number = model_number;
     model.controls.ts_stop.max_timestep = save_max_timestep;
     model.controls.max_years_for_timestep = save_max_years_for_timestep;
+    res
+}
+
+/// `kind_of_relax` of `do_relax_uniform_omega`
+/// (`star/private/star_private_def.f90`: `relax_to_new_omega`,
+/// `relax_to_new_omega_div_omega_crit`, `relax_to_new_surface_rotation_v`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum RelaxOmegaKind {
+    /// Target $\Omega$ in $\mathrm{rad\,s^{-1}}$.
+    NewOmega,
+    /// Target $\Omega/\Omega_{\mathrm{crit,avg\,surf}}$.
+    NewOmegaDivOmegaCrit,
+    /// Target surface rotation velocity in $\mathrm{km\,s^{-1}}$.
+    NewSurfaceRotationV,
+}
+
+/// `before_evolve_relax_omega`, `relax_omega_adjust_model` and
+/// `relax_omega_check_model` (`star/private/relax.f90:1313-1391`).
+struct RelaxOmega {
+    kind: RelaxOmegaKind,
+    /// `rpar(1)`.
+    target_value: f64,
+    /// `rpar(2)`, the surface $\Omega$ when the relax starts.
+    starting_omega: f64,
+    /// `ipar(1)`.
+    starting_model_number: usize,
+    /// `ipar(2)`.
+    num_steps_to_use: usize,
+}
+
+impl RelaxHooks for RelaxOmega {
+    fn before_evolve(&mut self, model: &mut StarModel) -> Result<(), StarError> {
+        setup_before_relax(model);
+        Ok(())
+    }
+
+    fn check_model(
+        &mut self,
+        model: &mut StarModel,
+    ) -> Result<RelaxHookResult, StarError> {
+        // `do_bare_bones_check_model` only gathers history values.
+        let since_start =
+            model.model_number as f64 - self.starting_model_number as f64;
+        let frac = 0.0_f64
+            .max(1.0_f64.min(since_start / self.num_steps_to_use as f64));
+        let new_omega = match self.kind {
+            RelaxOmegaKind::NewOmega => self.target_value,
+            RelaxOmegaKind::NewOmegaDivOmegaCrit => {
+                crate::hydro_rotation::set_i_rot(model, false);
+                let surf =
+                    crate::report_utils::eval_surf_avg_rotation_info(model);
+                self.target_value * surf.omega_crit
+            }
+            RelaxOmegaKind::NewSurfaceRotationV => {
+                let phot = crate::report_utils::eval_photosphere_info(model);
+                self.target_value * 1.0e5 / (phot.r_rsun * RSUN)
+            }
+        };
+        let this_step_omega =
+            frac * new_omega + (1.0 - frac) * self.starting_omega;
+        let omega_surf = model.omega[0];
+        let result = if model.model_number
+            > self.starting_model_number + self.num_steps_to_use + 50
+            || (omega_surf - new_omega).abs()
+                < 1.0e-4 * 1.0e-10_f64.max(new_omega.abs())
+        {
+            RelaxHookResult::Terminate(String::from(RELAX_FINISHED_OKAY))
+        } else {
+            RelaxHookResult::KeepGoing
+        };
+        // `set_uniform_omega` runs on the final step as well
+        // (`star/private/relax.f90:1383-1389`).
+        crate::relax::apply_uniform_rotation(model, this_step_omega);
+        Ok(result)
+    }
+}
+
+/// `do_relax_uniform_omega` (`star/private/relax.f90:1234-1310`): relaxes a
+/// rotating model to a uniform $\Omega$ over `num_steps_to_relax_rotation`
+/// steps with nuclear burning, mixing and angular-momentum mixing off, winds
+/// off (`setup_before_relax`), and the timestep at most
+/// `relax_omega_max_yrs_dt` years, setting a uniform $\Omega$ ramped
+/// linearly from the starting surface value after every step.
+///
+/// # Errors
+/// Returns [`StarError::InvalidInput`] for `num_steps_to_relax_rotation <= 0`
+/// (`ierr = -1`, `relax.f90:1279-1283`) and the [`StarError`] of a failed
+/// relax.
+pub(crate) fn do_relax_uniform_omega(
+    model: &mut StarModel,
+    kind: RelaxOmegaKind,
+    target_value: f64,
+    num_steps_to_relax_rotation: isize,
+    relax_omega_max_yrs_dt: f64,
+    extras: &mut dyn StarExtras,
+) -> Result<(), StarError> {
+    if !model.controls.rotation_flag {
+        return Ok(());
+    }
+    if model.omega[..model.nz].iter().all(|&w| w == target_value) {
+        return Ok(());
+    }
+    let starting_omega = model.omega[0];
+    let starting_model_number = model.model_number;
+    let num_steps_to_use = match usize::try_from(num_steps_to_relax_rotation)
+    {
+        Ok(n) if n > 0 => n,
+        _ => {
+            return Err(StarError::InvalidInput(format!(
+                "invalid num_steps_to_relax_rotation {num_steps_to_relax_rotation} \
+                 (star/private/relax.f90:1279-1283)"
+            )));
+        }
+    };
+
+    let c = &mut model.controls;
+    let dxdt_nuc_factor = c.dxdt_nuc_factor;
+    c.dxdt_nuc_factor = 0.0;
+    let mix_factor = c.mix_factor;
+    let am_d_mix_factor = c.mix_wind.am_d_mix_factor;
+    c.mix_factor = 0.0;
+    c.mix_wind.am_d_mix_factor = 0.0;
+    let max_model_number = c.max_model_number;
+    // `setup_before_relax` then sets `max_model_number = -1111` in
+    // `before_evolve`, as upstream (`relax.f90:1292, 1320`, `:3885`).
+    c.max_model_number = Some(num_steps_to_use + 1);
+    let max_years_for_timestep = c.max_years_for_timestep;
+    c.max_years_for_timestep = relax_omega_max_yrs_dt;
+
+    let mut hooks = RelaxOmega {
+        kind,
+        target_value,
+        starting_omega,
+        starting_model_number,
+        num_steps_to_use,
+    };
+    let res = do_internal_evolve(model, &mut hooks, true, extras);
+
+    let c = &mut model.controls;
+    c.dxdt_nuc_factor = dxdt_nuc_factor;
+    c.mix_factor = mix_factor;
+    c.mix_wind.am_d_mix_factor = am_d_mix_factor;
+    c.max_model_number = max_model_number;
+    c.max_years_for_timestep = max_years_for_timestep;
+    // `s% D_omega(1:nz) = 0; s% am_nu_rot(1:nz) = 0` (`relax.f90:1306-1307`);
+    // `D_omega` (`D_omega_flag`) is not ported.
+    model.aux.am_nu_rot.fill(0.0);
     res
 }

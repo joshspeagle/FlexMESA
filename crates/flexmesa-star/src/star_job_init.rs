@@ -21,7 +21,10 @@ use crate::relax::{
     set_uniform_initial_composition,
 };
 use crate::relax_comp::{parse_composition_profile_str, set_y, set_z};
-use crate::relax_driver::{do_relax_num_steps, do_relax_to_radiative_core};
+use crate::relax_driver::{
+    RelaxOmegaKind, do_relax_num_steps, do_relax_to_radiative_core,
+    do_relax_uniform_omega,
+};
 use crate::relax_mass_comp::{
     do_relax_composition, do_relax_core, do_relax_irradiation,
     do_relax_m_center, do_relax_mass, do_relax_mass_scale, do_relax_tau_factor,
@@ -717,6 +720,55 @@ pub(crate) fn init_or_update_model_from_bundle_outcome(
             "remove_surface_by_relax_to_star_cut (do_relax_to_star_cut, \
              star/private/remove_shells.f90:1156-1404) is not ported (#436)",
         )));
+    }
+
+    // Rotation relaxes, after `do_remove_surface`
+    // (`star/job/run_star_support.f90:2593-2652`).
+    {
+        let rot = model.controls.rotation_flag;
+        let (n, dt_yrs) =
+            (job.num_steps_to_relax_rotation, job.relax_omega_max_yrs_dt);
+        let relaxes = [
+            (job.relax_omega, RelaxOmegaKind::NewOmega, job.new_omega),
+            (
+                job.relax_initial_omega && !restart,
+                RelaxOmegaKind::NewOmega,
+                job.new_omega,
+            ),
+            (
+                job.relax_omega_div_omega_crit,
+                RelaxOmegaKind::NewOmegaDivOmegaCrit,
+                job.new_omega_div_omega_crit,
+            ),
+            (
+                job.relax_initial_omega_div_omega_crit && !restart,
+                RelaxOmegaKind::NewOmegaDivOmegaCrit,
+                job.new_omega_div_omega_crit,
+            ),
+            (
+                job.relax_surface_rotation_v,
+                RelaxOmegaKind::NewSurfaceRotationV,
+                job.new_surface_rotation_v,
+            ),
+            (
+                job.relax_initial_surface_rotation_v && !restart,
+                RelaxOmegaKind::NewSurfaceRotationV,
+                job.new_surface_rotation_v,
+            ),
+        ];
+        for (i, (wanted, kind, target)) in relaxes.into_iter().enumerate() {
+            if !(rot && wanted) {
+                continue;
+            }
+            ready_for_relax(&mut model, extras)?;
+            do_relax_uniform_omega(&mut model, kind, target, n, dt_yrs, extras)?;
+            if i == 4 {
+                // `s% job% new_omega = new_surface_rotation_v*1d5/s% r(1)`
+                // after `relax_surface_rotation_v` only (`:2633`).
+                model.job.new_omega =
+                    job.new_surface_rotation_v * 1.0e5 / model.r[0];
+            }
+        }
     }
 
     if job.remove_initial_center_by_temperature > 0.0 {

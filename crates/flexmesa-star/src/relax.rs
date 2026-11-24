@@ -69,7 +69,33 @@ pub fn apply_uniform_rotation(model: &mut StarModel, omega_0: f64) {
         model.j_rot.resize(nz, 0.0);
     }
     model.omega[..nz].fill(omega_0);
+    // `fp_rot = ft_rot = 0` (`hydro_rotation.f90:503-507`).
+    for v in [&mut model.aux.fp_rot, &mut model.aux.ft_rot] {
+        if v.len() == nz {
+            v[..nz].fill(0.0);
+        }
+    }
     crate::hydro_rotation::use_xh_to_update_i_rot_and_j_rot(model);
+    // `hydro_rotation.f90:509-531` zeroes the rotational distortion and the
+    // angular-momentum mixing arrays. Of those FlexMESA stores
+    // `w_div_w_crit_roche` (`w_div_wc`, set again by `set_rotation_info`), the
+    // `am_nu_*`/`am_sig_*` viscosities and `D_mix_non_rotation`; `r_polar`,
+    // `r_equatorial`, `domega_dlnR`, `richardson_number`, `D_visc`, `D_DSI`,
+    // `D_SH`, `D_SSI`, `D_ES`, `D_GSF`, `D_ST`, `nu_ST`, `omega_shear` and
+    // `dynamo_B_*` are recomputed where they are used, not stored.
+    let aux = &mut model.aux;
+    for v in [
+        &mut aux.w_div_wc,
+        &mut aux.am_nu_rot,
+        &mut aux.am_nu_non_rot,
+        &mut aux.am_nu_omega,
+        &mut aux.am_nu_j,
+        &mut aux.am_sig_omega,
+        &mut aux.am_sig_j,
+        &mut aux.mixing.d_mix_non_rotation,
+    ] {
+        v.fill(0.0);
+    }
     crate::hydro_rotation::set_rotation_info(model, false);
 }
 

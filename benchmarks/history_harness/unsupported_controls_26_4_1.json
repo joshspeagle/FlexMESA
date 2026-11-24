@@ -10,7 +10,7 @@
     "total_cases": 106,
     "strict_pass_cases": 56,
     "strict_fail_cases": 50,
-    "distinct_unsupported_controls": 170,
+    "distinct_unsupported_controls": 167,
     "distinct_unknown_controls": 0,
     "cases_with_headless_plotting": 78,
     "distinct_headless_plotting_keys": 895
@@ -19,11 +19,11 @@
     {
       "section": "star_job",
       "upstream_keys": 455,
-      "supported_keys": 160,
+      "supported_keys": 168,
       "unused_keys": 12,
       "headless_gui_keys": 3,
       "terminal_output_keys": 8,
-      "unimplemented_upstream_keys": 272
+      "unimplemented_upstream_keys": 264
     },
     {
       "section": "eos",
@@ -897,19 +897,6 @@
     },
     {
       "section": "star_job",
-      "key": "num_steps_to_relax_rotation",
-      "category": "unimplemented",
-      "case_count": 5,
-      "cases": [
-        "star/1M_thermohaline",
-        "star/20M_z2m2_high_rotation",
-        "star/high_rot_darkening",
-        "star/magnetic_braking",
-        "star/twin_studies"
-      ]
-    },
-    {
-      "section": "star_job",
       "key": "near_zams_relax_omega_div_omega_crit",
       "category": "unimplemented",
       "case_count": 3,
@@ -917,17 +904,6 @@
         "star/20M_z2m2_high_rotation",
         "star/magnetic_braking",
         "star/twin_studies"
-      ]
-    },
-    {
-      "section": "star_job",
-      "key": "relax_omega_max_yrs_dt",
-      "category": "unimplemented",
-      "case_count": 3,
-      "cases": [
-        "star/high_rot_darkening",
-        "star/magnetic_braking",
-        "star/ppisn"
       ]
     },
     {
@@ -1825,15 +1801,6 @@
       "case_count": 1,
       "cases": [
         "star/custom_rates"
-      ]
-    },
-    {
-      "section": "star_job",
-      "key": "relax_initial_omega_div_omega_crit",
-      "category": "unimplemented",
-      "case_count": 1,
-      "cases": [
-        "star/high_rot_darkening"
       ]
     },
     {
@@ -6753,8 +6720,7 @@
       "unsupported_controls": [
         "star_job::change_d_omega_flag::unimplemented",
         "star_job::near_zams_relax_initial_surface_rotation_v::unimplemented",
-        "star_job::new_d_omega_flag::unimplemented",
-        "star_job::num_steps_to_relax_rotation::unimplemented"
+        "star_job::new_d_omega_flag::unimplemented"
       ],
       "unknown_controls": [],
       "headless_plotting_keys_count": 66,
@@ -6813,8 +6779,7 @@
         "controls::warn_rates_for_high_temp::unimplemented",
         "star_job::change_d_omega_flag::unimplemented",
         "star_job::near_zams_relax_omega_div_omega_crit::unimplemented",
-        "star_job::new_d_omega_flag::unimplemented",
-        "star_job::num_steps_to_relax_rotation::unimplemented"
+        "star_job::new_d_omega_flag::unimplemented"
       ],
       "unknown_controls": [],
       "headless_plotting_keys_count": 295,
@@ -7380,10 +7345,7 @@
       ],
       "unsupported_controls": [
         "star_job::change_initial_w_div_wc_flag::unimplemented",
-        "star_job::new_w_div_wc_flag::unimplemented",
-        "star_job::num_steps_to_relax_rotation::unimplemented",
-        "star_job::relax_initial_omega_div_omega_crit::unimplemented",
-        "star_job::relax_omega_max_yrs_dt::unimplemented"
+        "star_job::new_w_div_wc_flag::unimplemented"
       ],
       "unknown_controls": [],
       "headless_plotting_keys_count": 65,
@@ -7496,9 +7458,7 @@
       "unsupported_controls": [
         "star_job::change_d_omega_flag::unimplemented",
         "star_job::near_zams_relax_omega_div_omega_crit::unimplemented",
-        "star_job::new_d_omega_flag::unimplemented",
-        "star_job::num_steps_to_relax_rotation::unimplemented",
-        "star_job::relax_omega_max_yrs_dt::unimplemented"
+        "star_job::new_d_omega_flag::unimplemented"
       ],
       "unknown_controls": [],
       "headless_plotting_keys_count": 56,
@@ -7881,7 +7841,6 @@
         "star_job::max_steps_to_relax_entropy::unimplemented",
         "star_job::new_w_div_wc_flag::unimplemented",
         "star_job::num_timescales_for_relax_entropy::unimplemented",
-        "star_job::relax_omega_max_yrs_dt::unimplemented",
         "star_job::timescale_for_relax_entropy::unimplemented"
       ],
       "unknown_controls": [],
@@ -8323,8 +8282,7 @@
         "controls::warn_rates_for_high_temp::unimplemented",
         "star_job::change_d_omega_flag::unimplemented",
         "star_job::near_zams_relax_omega_div_omega_crit::unimplemented",
-        "star_job::new_d_omega_flag::unimplemented",
-        "star_job::num_steps_to_relax_rotation::unimplemented"
+        "star_job::new_d_omega_flag::unimplemented"
       ],
       "unknown_controls": [],
       "headless_plotting_keys_count": 255,

@@ -182,6 +182,11 @@ impl InlistBundle {
         let j = &mut self.job;
         sj.try_bool_into("star_job", &mut j.create_pre_ms_model, "create_pre_main_sequence_model")?;
         sj.try_isize_into("star_job", &mut j.pre_ms_relax_num_steps, "pre_ms_relax_num_steps")?;
+        sj.try_isize_into(
+            "star_job",
+            &mut j.num_steps_to_relax_rotation,
+            "num_steps_to_relax_rotation",
+        )?;
         sj.try_bool_into("star_job", &mut j.pre_ms_relax_to_start_radiative_core, "pre_ms_relax_to_start_radiative_core")?;
         sj.try_isize_into("star_job", &mut j.pre_ms_min_steps_before_check_radiative_core, "pre_ms_min_steps_before_check_radiative_core")?;
         sj.try_f64_into("star_job", &mut j.pre_ms_check_radiative_core_start, "pre_ms_check_radiative_core_start")?;
@@ -214,6 +219,9 @@ impl InlistBundle {
             set_omega, set_initial_omega,
             set_omega_div_omega_crit, set_initial_omega_div_omega_crit,
             set_surface_rotation_v, set_initial_surface_rotation_v,
+            relax_omega, relax_initial_omega,
+            relax_omega_div_omega_crit, relax_initial_omega_div_omega_crit,
+            relax_surface_rotation_v, relax_initial_surface_rotation_v,
             astero_just_call_my_extras_check_model,
         ]);
         map_f64s!("star_job", sj, j, [
@@ -223,6 +231,7 @@ impl InlistBundle {
             new_cumulative_energy_error, initial_h1, initial_h2, initial_he3, initial_he4,
             new_mass, new_z, new_y, core_avg_rho, core_avg_eps, new_r_center, new_l_center,
             new_omega, new_omega_div_omega_crit, new_surface_rotation_v,
+            relax_omega_max_yrs_dt,
             remove_initial_center_by_temperature, new_v_center, set_to_this_irrad_flux,
         ]);
         map_strs!("star_job", sj, j, [

@@ -101,8 +101,8 @@
     },
     {
       "phase": "Phase C",
-      "open": 18,
-      "closed": 12,
+      "open": 17,
+      "closed": 13,
       "issues": [
         {
           "number": 152,
@@ -252,7 +252,7 @@
         {
           "number": 453,
           "title": "[Extras] make_env: star_lib public API subset for case extras, and create_env as a test-side hook",
-          "state": "open"
+          "state": "closed"
         }
       ]
     },
@@ -308,58 +308,7 @@
       ]
     }
   ],
-  "open_pull_requests": [
-    {
-      "number": 507,
-      "title": "feat(star): port the uniform-omega rotation relaxes on do_internal_evolve (#499)",
-      "draft": true
-    },
-    {
-      "number": 508,
-      "title": "feat(star): near-ZAMS rotation and tau_factor tail of after_step_loop (#506)",
-      "draft": true
-    },
-    {
-      "number": 509,
-      "title": "fix(star): keep m, dm_bar at start-of-step values in do_adjust_mass (#489 follow-up)",
-      "draft": true
-    },
-    {
-      "number": 512,
-      "title": "fix(astero): scan_grid order, extras_check_model and redo dt as upstream (#502)",
-      "draft": true
-    },
-    {
-      "number": 515,
-      "title": "fix(star): need_to_setvars refreshes, unset energy total and energy sources as upstream",
-      "draft": true
-    },
-    {
-      "number": 517,
-      "title": "fix: redo/retry semantics (#510) and chi2_delta_nu condition (#511) as upstream",
-      "draft": true
-    },
-    {
-      "number": 518,
-      "title": "feat(star): rotation mixing coefficients, D_omega and am_nu_rot as upstream (#158)",
-      "draft": true
-    },
-    {
-      "number": 520,
-      "title": "fix(star): store the reset density in xh as store_rho_in_xh does (#154)",
-      "draft": true
-    },
-    {
-      "number": 523,
-      "title": "feat(star): GYRE, FGONG and OSC exporters as upstream; byte-identical to MESA 26.4.1 (#491)",
-      "draft": true
-    },
-    {
-      "number": 527,
-      "title": "feat(star,astero): wire ADIPLS into flexmesa-star and flexmesa-astero (Package A3) (#171)",
-      "draft": true
-    }
-  ],
+  "open_pull_requests": [],
   "deferred_169": [
     {
       "number": 175,

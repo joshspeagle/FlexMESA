@@ -23,8 +23,8 @@ def test_live_module_hex_gate_and_summary_match() -> None:
 
     summary = res.to_summary_dict()
     assert summary["total_packages_in_install"] == 26
-    assert summary["modules_with_executable_probes"] >= 14
-    assert summary["total_values_0_ulp"] >= 3800
+    assert summary["modules_with_executable_probes"] >= 15
+    assert summary["total_values_0_ulp"] >= 5000
 
     by_mod = {r.module: r for r in res.module_results}
     assert by_mod["const"].status == "pass_0_ulp"
@@ -37,6 +37,12 @@ def test_live_module_hex_gate_and_summary_match() -> None:
     assert by_mod["auto_diff"].status == "pass_0_ulp"
     assert by_mod["auto_diff"].checked_values == 387
     assert by_mod["auto_diff"].zero_ulp_values == 387
+    assert by_mod["chem"].status == "pass_0_ulp"
+    assert by_mod["chem"].checked_values == 1102
+    assert by_mod["chem"].zero_ulp_values == 1102
+    assert by_mod["eos"].status == "pass_0_ulp"
+    assert by_mod["eos"].checked_values == 391
+    assert by_mod["eos"].zero_ulp_values == 391
     assert by_mod["turb"].status == "pass_0_ulp"
     assert by_mod["turb"].checked_values == 71
     assert by_mod["turb"].zero_ulp_values == 71

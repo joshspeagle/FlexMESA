@@ -6,10 +6,11 @@ use flexmesa_chem::{get_composition_info, NuclideCatalog};
 use flexmesa_const::LN10;
 use flexmesa_eos::{
     eos_dt_get, eos_dt_get_rho, eos_dt_get_t, eos_gamma_de_get, eos_pt_get,
-    eos_pt_get_pgas, eos_pt_get_t, eval_cms_eos, eval_free_eos,
-    eval_opal_scvh_eos, get1_eosdt_results, CmsConfig, CmsTableSet, EosConfig,
-    EosDtTableKind, EosDtTableSet, FreeEosConfig, HelmTable, OpalScvhConfig,
-    I_FRAC_OPAL_SCVH, NUM_EOS_BASIC_RESULTS, NUM_EOS_TABLE_VALS,
+    eos_pt_get_pgas, eos_pt_get_t, eos_pt_get_with_linear, eval_cms_eos,
+    eval_free_eos, eval_opal_scvh_eos, get1_eosdt_results, CmsConfig,
+    CmsTableSet, EosConfig, EosDtTableKind, EosDtTableSet, FreeEosConfig,
+    HelmTable, OpalScvhConfig, I_FRAC_OPAL_SCVH, NUM_EOS_BASIC_RESULTS,
+    NUM_EOS_TABLE_VALS,
 };
 use numpy::{PyArray1, PyArray2, PyArrayMethods, PyReadonlyArray1};
 use pyo3::exceptions::PyValueError;
@@ -124,7 +125,9 @@ pub fn eos_eval_dt_get<'py>(
     skye_solid_mixing_rule="PC",
     use_cms=false,
     use_free_eos=true,
-    use_opal_scvh=true
+    use_opal_scvh=true,
+    log_pgas=None,
+    log_t=None
 ))]
 #[allow(clippy::too_many_arguments)]
 pub fn eos_eval_pt_get<'py>(
@@ -140,6 +143,8 @@ pub fn eos_eval_pt_get<'py>(
     use_cms: bool,
     use_free_eos: bool,
     use_opal_scvh: bool,
+    log_pgas: Option<f64>,
+    log_t: Option<f64>,
 ) -> PyResult<PyPtTuple<'py>> {
     let xa_s = xa
         .as_slice()
@@ -155,14 +160,27 @@ pub fn eos_eval_pt_get<'py>(
     )?;
     let ht = HelmTable::builtin()
         .map_err(|e| PyValueError::new_err(e.to_string()))?;
-    let pt = eos_pt_get(
-        ht,
-        &chem_id,
-        xa_s,
-        flexmesa_math::log10(pgas),
-        flexmesa_math::log10(temp),
-        &cfg,
-    )
+    let pt = if log_pgas.is_none() && log_t.is_none() {
+        eos_pt_get(
+            ht,
+            &chem_id,
+            xa_s,
+            flexmesa_math::log10(pgas),
+            flexmesa_math::log10(temp),
+            &cfg,
+        )
+    } else {
+        eos_pt_get_with_linear(
+            ht,
+            &chem_id,
+            xa_s,
+            log_pgas.unwrap_or_else(|| flexmesa_math::log10(pgas)),
+            log_t.unwrap_or_else(|| flexmesa_math::log10(temp)),
+            Some(pgas),
+            Some(temp),
+            &cfg,
+        )
+    }
     .map_err(|e| PyValueError::new_err(e.to_string()))?;
     let (res, d_dlnd, d_dln_t) = into_py_eos_tuple(py, &pt.eos);
     Ok((
@@ -242,15 +260,9 @@ pub fn eos_eval_cms<'py>(
         include_radiation,
         ..CmsConfig::default()
     };
-    let out = eval_cms_eos(
-        CmsTableSet::builtin(),
-        &cfg,
-        rho,
-        temp,
-        &chem_id,
-        xa_s,
-    )
-    .map_err(|e| PyValueError::new_err(e.to_string()))?;
+    let out =
+        eval_cms_eos(CmsTableSet::builtin(), &cfg, rho, temp, &chem_id, xa_s)
+            .map_err(|e| PyValueError::new_err(e.to_string()))?;
     Ok(into_py_eos_tuple(py, &out))
 }
 
@@ -335,7 +347,9 @@ pub fn eos_eval_dt_get_t<'py>(
     use_pc=false,
     use_cms=false,
     use_free_eos=true,
-    use_opal_scvh=true
+    use_opal_scvh=true,
+    logrho_tol=None,
+    other_tol=None
 ))]
 #[allow(clippy::too_many_arguments)]
 pub fn eos_eval_dt_get_rho<'py>(
@@ -351,6 +365,8 @@ pub fn eos_eval_dt_get_rho<'py>(
     use_cms: bool,
     use_free_eos: bool,
     use_opal_scvh: bool,
+    logrho_tol: Option<f64>,
+    other_tol: Option<f64>,
 ) -> PyResult<PyInvTuple<'py>> {
     let xa_s = xa
         .as_slice()
@@ -374,8 +390,8 @@ pub fn eos_eval_dt_get_rho<'py>(
         which_other,
         other_value,
         log_rho_guess,
-        1.0e-12,
-        1.0e-12,
+        logrho_tol.unwrap_or(1.0e-12),
+        other_tol.unwrap_or(1.0e-12),
         100,
         &cfg,
     )

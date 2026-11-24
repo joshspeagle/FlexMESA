@@ -327,22 +327,394 @@ def _probe_interp_1d(hex_root: pathlib.Path) -> ProbeOutcome:
     )
 
 
+def _require_chem_id(name: str) -> int:
+    cid = _rust.py_chem_get_nuclide_index(name)
+    if cid is None:
+        raise KeyError(f"nuclide {name!r} missing from built-in catalog")
+    return int(cid)
+
+
 def _probe_chem(hex_root: pathlib.Path) -> ProbeOutcome:
+    """Verify all 1,102 outputs of `chem/test/src/test_chem.f90` at 0 ULP."""
     rows = load_tsv_rows(hex_root, "chem")
-    ulps = [
-        ulp_distance(
-            float(_rust.py_chem_lodders03_atom_percent(row["label"])),
-            row["raw_bits_hex"],
-        )
-        for row in rows[:286]
-    ]
+    assert len(rows) == 1102, f"expected 1102 chem rows, got {len(rows)}"
+    o16_id = _require_chem_id("o16")
+    o16_info = _rust.py_chem_nuclide_info(o16_id)
+    c12_id = _require_chem_id("c12")
+    fe56_id = _require_chem_id("fe56")
+    he3_id = _require_chem_id("he3")
+    he4_id = _require_chem_id("he4")
+    h1_id = _require_chem_id("h1")
+
+    comp_t, _, _, _ = _rust.py_chem_get_composition_info(
+        [c12_id, fe56_id], [0.5, 0.5], False
+    )
+    qtotal = _rust.py_chem_reaction_qtotal(
+        2, 3, [he3_id, he3_id, he4_id, h1_id, h1_id]
+    )
+    ag89_cno = (
+        _rust.py_chem_xsol("c12")
+        + _rust.py_chem_xsol("n14")
+        + _rust.py_chem_xsol("o16")
+    ) / _rust.py_chem_ag89_zsol()
+
+    # Exact row mapping for `chem/test/src/test_chem.f90:67-176`.
+    do_tests_map: dict[str, tuple[str, float]] = {
+        "test_chem.f90:67": ("chem_W(io16)", float(o16_info[7])),
+        "test_chem.f90:69": ("chem_Z(io16)", float(o16_info[2])),
+        "test_chem.f90:71": ("chem_binding_energy(io16)", float(o16_info[6])),
+        "test_chem.f90:85": (
+            "Anders & Grevesse 1989 zsol",
+            float(_rust.py_chem_ag89_zsol()),
+        ),
+        "test_chem.f90:86": (
+            "Anders & Grevesse 1989 yesol",
+            float(_rust.py_chem_ag89_yesol()),
+        ),
+        "test_chem.f90:100": ("Anders & Grevesse 1989", float(ag89_cno)),
+        "test_chem.f90:103": (
+            "Grevesse and Noels 1993",
+            float(_rust.py_chem_solar_cno_fraction("GN93")),
+        ),
+        "test_chem.f90:106": (
+            "Grevesse and Sauval 1998",
+            float(_rust.py_chem_solar_cno_fraction("GS98")),
+        ),
+        "test_chem.f90:109": (
+            "Lodders 2003",
+            float(_rust.py_chem_solar_cno_fraction("L03")),
+        ),
+        "test_chem.f90:112": (
+            "Asplund, Grevesse and Sauval 2005",
+            float(_rust.py_chem_solar_cno_fraction("AGS05")),
+        ),
+        "test_chem.f90:151": ("Abar", float(comp_t[3])),
+        "test_chem.f90:152": ("Zbar", float(comp_t[4])),
+        "test_chem.f90:153": ("Z2bar", float(comp_t[5])),
+        "test_chem.f90:154": ("Ye", float(comp_t[7])),
+        "test_chem.f90:155": ("sum(X*W/A)", float(comp_t[8])),
+        "test_chem.f90:176": ("Qtotal", float(qtotal)),
+    }
+
+    ulps: list[int] = []
+    lodders_count = 0
+    do_tests_count = 0
+    for row in rows:
+        src_loc = row["src_loc"].strip()
+        if src_loc == "test_chem.f90:189":
+            lodders_count += 1
+            actual = float(_rust.py_chem_lodders03_atom_percent(row["label"]))
+        else:
+            if src_loc not in do_tests_map:
+                raise KeyError(f"unexpected chem src_loc {src_loc!r}")
+            expected_label, actual = do_tests_map[src_loc]
+            assert row["label"].strip() == expected_label, (
+                f"chem label mismatch at {src_loc}: "
+                f"{row['label']!r} != {expected_label!r}"
+            )
+            do_tests_count += 1
+        ulps.append(ulp_distance(actual, row["raw_bits_hex"]))
+
+    assert lodders_count == 286, (
+        f"expected 286 Lodders rows, got {lodders_count}"
+    )
+    assert do_tests_count == 816, (
+        f"expected 816 do_tests rows, got {do_tests_count}"
+    )
     checked, zeros, max_u = _summarize_ulps(ulps)
     return (
         len(rows),
         checked,
         zeros,
         max_u,
-        "286 Lodders (2003) isotopic atom percents.",
+        (
+            "All 1,102 chem/test/src/test_chem.f90 outputs at 0 ULP "
+            "(286 Lodders 2003 atom percents + 816 do_tests properties)."
+        ),
+    )
+
+
+def _eos_init_composition(
+    x_in: float,
+    zinit_in: float,
+    xc_in: float = 0.0,
+    xo_in: float = 0.0,
+) -> tuple[list[int], np.ndarray]:
+    """Build 7-species composition matching `eos/test/src/eos_support.f90`."""
+    zfrac_c = 0.173312
+    zfrac_n = 0.053177
+    zfrac_o = 0.482398
+    zfrac_ne = 0.098675
+    names = ("h1", "he4", "c12", "n14", "o16", "ne20", "mg24")
+    chem_id = [_require_chem_id(name) for name in names]
+    xc = xc_in
+    xo = xo_in
+    y = 1.0 - (x_in + zinit_in + xc + xo)
+    if y < 0.0:
+        frac = (1.0 - x_in - zinit_in) / (xc + xo)
+        xc *= frac
+        xo *= frac
+        y = max(1.0 - (x_in + zinit_in + xc + xo), 0.0)
+    xa = [
+        x_in,
+        y,
+        zinit_in * zfrac_c + xc,
+        zinit_in * zfrac_n,
+        zinit_in * zfrac_o + xo,
+        zinit_in * zfrac_ne,
+        0.0,
+    ]
+    xa[6] = 1.0 - sum(xa[:6])
+    return chem_id, np.array(xa, dtype=np.float64)
+
+
+def _eos_do_one_pairs(crad: float) -> list[tuple[str, float]]:
+    """Collect 320 `Do_One` pairs (`eos/test/src/test_eos_support.f90`)."""
+    compositions = (
+        (0.0, 0.0),
+        (1.0, 0.0),
+        (0.75 * (1.0 - 0.03), 0.03),
+        (0.70, 0.02),
+    )
+    trho_points = (
+        (1.0e6, 1.0e-2),
+        (1.0e4, 1.0e-1),
+        (1.0e5, 1.0e-1),
+        (2.0e8, 1.0e2),
+    )
+    pairs: list[tuple[str, float]] = []
+    for x_in, z_init in compositions:
+        chem_id, xa = _eos_init_composition(x_in, z_init)
+        comp_t, _, _, _ = _rust.py_chem_get_composition_info(
+            chem_id, xa.tolist(), False
+        )
+        xh, xhe, abar, zbar = (
+            float(comp_t[0]),
+            float(comp_t[1]),
+            float(comp_t[3]),
+            float(comp_t[4]),
+        )
+        for t, rho in trho_points:
+            res, _, _ = _rust.eos_eval_dt_get(rho, t, chem_id, xa)
+            prad = crad * t * t * t * t / 3.0
+            pgas = float(_rust.crmath_exp(float(res[eos.I_LN_PGAS])))
+            p_tot = pgas + prad
+            e_val = float(_rust.crmath_exp(float(res[eos.I_LN_E])))
+            s_val = float(_rust.crmath_exp(float(res[eos.I_LN_S])))
+            # `Do_One_TRho` prints module-global `Z`
+            # (`eos/test/src/test_eos_support.f90:599`).
+            pairs.extend(
+                (
+                    ("X", xh),
+                    ("Y", xhe),
+                    ("Z", z_init),
+                    ("abar", abar),
+                    ("zbar", zbar),
+                    ("logRho", float(_rust.log10(rho))),
+                    ("logT", float(_rust.log10(t))),
+                    ("T6", t * 1.0e-6),
+                    ("P", p_tot),
+                    ("E", e_val),
+                    ("S", s_val),
+                    ("mu", float(res[eos.I_MU])),
+                    ("lnfree_e", float(res[eos.I_LN_FREE_E])),
+                    ("eta", float(res[eos.I_ETA])),
+                    ("grad_ad", float(res[eos.I_GRAD_AD])),
+                    ("chiRho", float(res[eos.I_CHI_RHO])),
+                    ("chiT", float(res[eos.I_CHI_T])),
+                    ("gamma1", float(res[eos.I_GAMMA1])),
+                    ("gamma3", float(res[eos.I_GAMMA3])),
+                    ("eta", float(res[eos.I_ETA])),
+                )
+            )
+    return pairs
+
+
+def _eos_get_rho_t_pairs(crad: float, ln10: float) -> list[tuple[str, float]]:
+    """Collect 16 `test_get_Rho_T` pairs.
+
+    Matches `eos/test/src/test_eos_support.f90:191-204, 232-357`.
+    """
+    chem_id, xa = _eos_init_composition(0.70, 0.02)
+    t_init = float(_rust.exp10(4.8))
+    rho_init = 1.0e-7
+    log10_rho = float(_rust.log10(rho_init))
+    log10_t = float(_rust.log10(t_init))
+    ln_s = float(_rust.safe_log(2.968_064_512e9))
+    tol = 1.0e-5
+    othertol = 1.0e-12
+
+    log_rho_guess = float(_rust.log10(rho_init * 0.5))
+    _, inv_rho_l10, inv_rho_res, _, _ = _rust.eos_eval_dt_get_rho(
+        t_init,
+        eos.I_LN_S,
+        ln_s,
+        chem_id,
+        xa,
+        log_rho_guess,
+        logrho_tol=tol,
+        other_tol=othertol,
+    )
+    log_t_guess = float(_rust.log10(t_init * 2.0))
+    _, inv_t_s_l10, inv_t_s_res, _, _ = _rust.eos_eval_dt_get_t(
+        rho_init,
+        eos.I_LN_S,
+        ln_s,
+        chem_id,
+        xa,
+        log_t_guess,
+        logt_tol=tol,
+        other_tol=othertol,
+    )
+
+    t_for_p = float(_rust.exp10(log10_t))
+    prad = crad * t_for_p * t_for_p * t_for_p * t_for_p / 3.0
+    pgas = float(_rust.crmath_exp(float(inv_t_s_res[eos.I_LN_PGAS])))
+    log_p = float(_rust.log10(prad + pgas))
+    log_t_guess_p = float(_rust.log10(t_for_p * 2.0))
+    _, inv_t_p_l10, inv_t_p_res, _, _ = _rust.eos_eval_dt_get_t(
+        rho_init,
+        eos.solver.WHICH_OTHER_LOG_PTOT,
+        log_p,
+        chem_id,
+        xa,
+        log_t_guess_p,
+        logt_tol=tol,
+        other_tol=othertol,
+    )
+    t_res = float(_rust.exp10(inv_t_p_l10))
+    prad_res = crad * t_res * t_res * t_res * t_res / 3.0
+    pgas_res = float(_rust.crmath_exp(float(inv_t_p_res[eos.I_LN_PGAS])))
+    got_log_p = float(_rust.log10(prad_res + pgas_res))
+
+    return [
+        ("tolerance", tol),
+        ("actual logRho", log10_rho),
+        ("guess logRho", log_rho_guess),
+        ("found logRho", float(inv_rho_l10)),
+        ("wanted logS", ln_s / ln10),
+        ("got logS", float(inv_rho_res[eos.I_LN_S]) / ln10),
+        ("actual logT", log10_t),
+        ("guess logT", log_t_guess),
+        ("found logT", float(inv_t_s_l10)),
+        ("wanted logS", ln_s / ln10),
+        ("got logS", float(inv_t_s_res[eos.I_LN_S]) / ln10),
+        ("actual logT", log10_t),
+        ("guess logT", log_t_guess_p),
+        ("found logT", float(inv_t_p_l10)),
+        ("wanted logP", log_p),
+        ("got logP", got_log_p),
+    ]
+
+
+def _eos_pt_ck_pairs(crad: float) -> list[tuple[str, float]]:
+    """Collect 40 `test1_eosPT_for_ck` pairs.
+
+    Matches `eos/test/src/test_eos_support.f90:15-24, 36-122`.
+    """
+    z_in = 0.02
+    x_in = 0.7
+    chem_id, xa = _eos_init_composition(x_in, z_in)
+    comp_t, _, _, _ = _rust.py_chem_get_composition_info(
+        chem_id, xa.tolist(), False
+    )
+    abar, zbar = float(comp_t[3]), float(comp_t[4])
+    log_t = 3.0
+    log_pgas = 4.2
+    t = float(_rust.exp10(log_t))
+    pgas = float(_rust.exp10(log_pgas))
+    pt_rho, pt_l10_rho, dl_dp, dl_dt, pt_res, _, _ = _rust.eos_eval_pt_get(
+        pgas, t, chem_id, xa, log_pgas=log_pgas, log_t=log_t
+    )
+    prad = crad * t * t * t * t / 3.0
+    p_tot = pgas + prad
+    pairs: list[tuple[str, float]] = [
+        ("logT", log_t),
+        ("logPgas", log_pgas),
+        ("T", t),
+        ("Pgas", pgas),
+        ("Z", z_in),
+        ("X", x_in),
+        ("abar", abar),
+        ("zbar", zbar),
+        ("rho", float(pt_rho)),
+        ("logRho", float(pt_l10_rho)),
+        ("logT", log_t),
+        ("logPgas", log_pgas),
+        ("dlnRho_dlnPgas_c_T", float(dl_dp)),
+        ("dlnRho_dlnT_c_Pgas", float(dl_dt)),
+        ("P", p_tot),
+        ("E", float(_rust.crmath_exp(float(pt_res[eos.I_LN_E])))),
+        ("S", float(_rust.crmath_exp(float(pt_res[eos.I_LN_S])))),
+    ]
+    res_names = _rust.eos_basic_result_names()
+    for slot in range(3, len(res_names)):
+        pairs.append((res_names[slot], float(pt_res[slot])))
+    return pairs
+
+
+def _eos_blend_pairs() -> list[tuple[str, float]]:
+    """Collect 15 `do_test_eos_blend` pairs.
+
+    Matches `eos/test/src/test_eos_blend.f90:14-53`.
+    """
+    coords = np.array(
+        [[-1.0, -1.0], [-1.0, 1.0], [1.0, 1.0], [1.0, -1.0]], dtype=np.float64
+    )
+    pts = (
+        (0.0, 1.0, True),
+        (-1.0, 1.0, False),
+        (0.0, 0.0, True),
+        (-2.0, 0.0, False),
+        (-1.0, 3.0, False),
+    )
+    pairs: list[tuple[str, float]] = []
+    for px, py, exp_contained in pts:
+        assert _rust.eos_is_contained(coords, px, py) is exp_contained
+        dv, dd1, dd2 = _rust.eos_min_distance_to_polygon(
+            coords, px, py, 0.0, 0.0, 0.0, 0.0
+        )
+        pairs.extend((("-", float(dv)), ("-", float(dd1)), ("-", float(dd2))))
+    return pairs
+
+
+def _probe_eos(hex_root: pathlib.Path) -> ProbeOutcome:
+    """Verify all 391 outputs of `eos/test` at 0 ULP.
+
+    Covers `eos/test/src/test_eos_support.f90` and
+    `eos/test/src/test_eos_blend.f90`.
+    """
+    rows = load_tsv_rows(hex_root, "eos")
+    assert len(rows) == 391, f"expected 391 eos rows, got {len(rows)}"
+    c_vals = _rust.const_probe_values()
+    ln10, crad = float(c_vals[1]), float(c_vals[6])
+
+    actual_pairs = [
+        *_eos_do_one_pairs(crad),
+        *_eos_get_rho_t_pairs(crad, ln10),
+        *_eos_pt_ck_pairs(crad),
+        *_eos_blend_pairs(),
+    ]
+    ulps: list[int] = []
+    for idx, (row, (expected_label, actual)) in enumerate(
+        zip(rows, actual_pairs, strict=True)
+    ):
+        assert row["label"].strip() == expected_label, (
+            f"eos label mismatch at row {idx}: "
+            f"{row['label']!r} != {expected_label!r}"
+        )
+        ulps.append(ulp_distance(actual, row["raw_bits_hex"]))
+
+    checked, zeros, max_u = _summarize_ulps(ulps)
+    return (
+        len(rows),
+        checked,
+        zeros,
+        max_u,
+        (
+            "All 391 eos/test outputs at 0 ULP (320 Do_One, 16 get_Rho_T, "
+            "40 test1_eosPT_for_ck, 15 do_test_eos_blend)."
+        ),
     )
 
 
@@ -1455,6 +1827,7 @@ MODULE_PROBES: dict[str, ProbeFn] = {
     "auto_diff": _probe_auto_diff,
     "interp_1d": _probe_interp_1d,
     "chem": _probe_chem,
+    "eos": _probe_eos,
     "ionization": _probe_ionization,
     "kap": _probe_kap,
     "mtx": _probe_mtx,

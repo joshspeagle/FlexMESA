@@ -3,10 +3,10 @@
   "total_packages_in_install": 26,
   "packages_with_test_dir": 25,
   "total_exact_values_captured": 348321,
-  "modules_with_executable_probes": 16,
-  "modules_passing_0_ulp": 10,
-  "total_values_checked": 304760,
-  "total_values_0_ulp": 304760,
+  "modules_with_executable_probes": 17,
+  "modules_passing_0_ulp": 12,
+  "total_values_checked": 305967,
+  "total_values_0_ulp": 305967,
   "modules": [
     {
       "module": "const",
@@ -109,14 +109,14 @@
     },
     {
       "module": "chem",
-      "status": "partial_0_ulp",
+      "status": "pass_0_ulp",
       "upstream_exact_values": 1102,
       "expected_outputs": 1102,
-      "checked_values": 286,
-      "zero_ulp_values": 286,
+      "checked_values": 1102,
+      "zero_ulp_values": 1102,
       "max_ulp": 0,
-      "issue": "#161",
-      "notes": "286 Lodders (2003) isotopic atom percents."
+      "issue": null,
+      "notes": "All 1,102 chem/test/src/test_chem.f90 outputs at 0 ULP (286 Lodders 2003 atom percents + 816 do_tests properties)."
     },
     {
       "module": "colors",
@@ -131,14 +131,14 @@
     },
     {
       "module": "eos",
-      "status": "unported_hex_harness",
+      "status": "pass_0_ulp",
       "upstream_exact_values": 391,
       "expected_outputs": 391,
-      "checked_values": 0,
-      "zero_ulp_values": 0,
+      "checked_values": 391,
+      "zero_ulp_values": 391,
       "max_ulp": 0,
-      "issue": "#161",
-      "notes": "391 upstream EOS diagnostic table/blend printouts await direct TSV harness mapping."
+      "issue": null,
+      "notes": "All 391 eos/test outputs at 0 ULP (320 Do_One, 16 get_Rho_T, 40 test1_eosPT_for_ck, 15 do_test_eos_blend)."
     },
     {
       "module": "kap",

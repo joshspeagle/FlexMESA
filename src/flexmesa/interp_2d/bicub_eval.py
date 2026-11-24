@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Two-dimensional bicubic spline evaluation (`herm2xy_db`, `fvbicub_db`).
 
 Evaluates $C^2$ bicubic splines and their first and second partial derivatives

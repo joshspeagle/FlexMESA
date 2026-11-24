@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Runs one upstream `star/test_suite/<case>` directory to completion (or to
 //! an optional per-stage step cap) and streams incremental MESA-format
 //! `history.data` (plus `profileN.data` and `profiles.index` when targeting an

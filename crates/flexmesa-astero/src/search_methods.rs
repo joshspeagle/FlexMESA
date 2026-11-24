@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Optimization drivers (`scan_grid`, `simplex`, `newuoa`, `bobyqa`),
 //! output writers, surface-correction dispatch, and mode-matching helpers
 //! extracted from `search_driver` and `sample_eval`.

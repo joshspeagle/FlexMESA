@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Core nuclear reaction rate (`rates`) lookup and evaluation routines.
 
 Provides reaction catalog queries (`reaction_id_by_name`, `reaction_name_by_id`,

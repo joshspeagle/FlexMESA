@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Render or verify the public MkDocs declared-known-gaps page (`#142`, `#144`).
 
 Builds `docs/benchmarks/known-gaps.md` deterministically from

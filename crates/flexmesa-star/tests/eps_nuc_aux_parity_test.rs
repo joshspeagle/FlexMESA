@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! MESA `26.4.1` AUX step-dump parity tests for nuclear `eps_nuc` (`#394`).
 //!
 //! Verifies exact IEEE-754 bit-level (`0 ULP`) parity in `NumericsMode::Strict`

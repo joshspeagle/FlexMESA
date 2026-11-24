@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! MESA `26.4.1` Level-2 `turb` module-hex parity test (`#434`, `#157`).
 //!
 //! Verifies `set_tdc` and `set_mlt` in `f64` strict mode directly against

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 # Build and run the MESA 26.4.1 turb::set_TDC value and d1Array partial oracle
 # generator (#328, #321, DECISIONS #50).
 #

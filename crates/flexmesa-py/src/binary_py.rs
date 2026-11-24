@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! `PyO3` bindings for `flexmesa-binary` (`RustBinarySystem`, Eggleton Roche
 //! lobe, Kepler orbital relations, Ritter/Kolb/Arras RLOF, Lu et al. 2023 thin
 //! disk $L_2$ mass loss, Kerr BH ISCO/Eddington limit, Bondi-Hoyle wind

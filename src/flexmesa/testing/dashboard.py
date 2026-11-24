@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Progress dashboard generator, freshness gate, and CLI (`#174`).
 
 Orchestrates collection across ``benchmarks/dashboard/port_manifest.toml``,
@@ -299,7 +299,7 @@ def record_history_entry(
     existing.append(new_row)
     cols = HISTORY_HEADER.split("\t")
     out_lines = [
-        "# SPDX-License-Identifier: LGPL-3.0-or-later",
+        "# SPDX-License-Identifier: GPL-3.0-or-later",
         "# Headline progress history across merges to main (#174).",
         HISTORY_HEADER,
         *("\t".join(r[c] for c in cols) for r in existing),

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Trigonometric, half-turn (`pi`-scaled), hyperbolic, sign, and string helpers.
 
 Provides radian and half-turn trigonometric functions, hyperbolic functions,

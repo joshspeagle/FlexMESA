@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Plasma electrostatic screening (`no_screening`, `salpeter_screening`,
 //! `extended_screening`, and `chugunov_screening`) ported from
 //! `rates/private/screen.f90` and `rates/private/screen5.f90`.

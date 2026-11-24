@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Shared data structures and scalar-dual dispatch for `flexmesa.turb`.
 
 Defines configuration parameter dataclasses, thermodynamic input dataclasses,

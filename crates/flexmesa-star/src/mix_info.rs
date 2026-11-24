@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Convective boundary detection, mixing glitch removal, envelope mixing,
 //! minimum-diffusivity floors, crossover zeroing, face-centered Lagrangian
 //! diffusion coupling factors ($\sigma_k$), and conservative species mixing

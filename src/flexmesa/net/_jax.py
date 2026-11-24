@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Differentiable JAX wrappers for nuclear reaction networks (`net`).
 
 Implements `eval_net_jax` with an exact `jax.custom_vjp` rule backed by the

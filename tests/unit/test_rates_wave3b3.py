@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Unit and golden-oracle parity tests for `flexmesa.rates` (Wave 3b.3)."""
 
 from __future__ import annotations

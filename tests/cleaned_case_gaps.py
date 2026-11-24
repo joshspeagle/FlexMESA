@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Declared stops of cleaned upstream cases exposed by strict `#147` checks.
 
 Before `#147`, the engine substituted a default for an option it did not

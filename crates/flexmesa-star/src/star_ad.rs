@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Three-cell stencil forward-mode automatic differentiation type
 //! [`StarAdOrder1`] (`auto_diff_real_star_order1` in
 //! `star/private/auto_diff_support.f90`).

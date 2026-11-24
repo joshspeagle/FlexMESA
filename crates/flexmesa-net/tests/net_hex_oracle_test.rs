@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! MESA `26.4.1` IEEE-754 hex oracle test for `flexmesa_net::net_get` across
 //! six upstream reaction networks (`#328`, `#161`).
 

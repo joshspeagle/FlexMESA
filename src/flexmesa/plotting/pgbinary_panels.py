@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 r"""Binary ``pgbinary`` diagnostic and MESA ``26.4.1`` panels (`#173`).
 
 Ports the static content of ``binary/private/pgbinary_orbit.f90:63-296``,

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Tests for the short-budget campaign tier and sharded harness campaigns."""
 
 from __future__ import annotations

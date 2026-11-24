@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Upstream MESA `run_star_extras.f90` and `run_binary_extras.f90` dispatch
 for test suites and the history harness (`#148`).
 

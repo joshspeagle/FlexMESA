@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Verified slice loaders for JAX EOS tables via ``flexmesa._rust``."""
 
 from __future__ import annotations

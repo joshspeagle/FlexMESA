@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Embedded `.net` bundle loader and recursive `.net` tokenizer/parser
 //! (`net/private/net_initialize.f90` and `net/private/net_approx21.f90`).
 

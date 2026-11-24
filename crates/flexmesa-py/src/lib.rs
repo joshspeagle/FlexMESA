@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Compiled `PyO3` extension bridge (`flexmesa._rust`) for `FlexMESA`.
 //!
 //! Exposes the canonical Safe Rust (`crates/`) implementations of:

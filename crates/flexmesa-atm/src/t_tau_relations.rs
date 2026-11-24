@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Grey and solar-calibrated $T(\tau)$ relations (`atm_t_tau_relations.f90`).
 //!
 //! Ports `get_T_tau_base`, `eval_T_tau`, and `eval_T_tau_dq_dtau` across all four

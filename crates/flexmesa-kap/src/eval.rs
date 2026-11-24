@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Top-level opacity evaluation and regime blending (`kap_eval.f90` and `kap_lib.f90`).
 //!
 //! Mirrors `Get_kap_Results`, `combine_rad_with_conduction`, `kap_get`, and

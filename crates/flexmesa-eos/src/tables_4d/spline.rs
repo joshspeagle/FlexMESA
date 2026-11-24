@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Bicubic spline construction, cell lookup, and 2D evaluation for `(logQ, logT)` EOS tables.
 //!
 //! Ports `Load1_eosDT_Table`, `Make_XEoS_Interpolation_Data`, and

@@ -30,6 +30,7 @@ Every Cargo crate and Python subpackage maps to specific concept explainers, run
 | `flexmesa-star-data`, `flexmesa-star` | `star` | `concepts/stellar-structure-and-hydro.md`, `concepts/convection-mixing-rotation.md`, `concepts/asteroseismology.md` | `tutorials/01-single-star-evolution.md`, `tutorials/02-massive-stars-and-hydro.md`, `tutorials/03-white-dwarfs-and-diffusion.md`, `guides/inlists-and-models.md`, `guides/custom-physics-hooks.md` | `api/star.md` | `benchmarks/overview.md`, `benchmarks/kernel-scorecards.md`, `reference/glossary-and-units.md` |
 | `flexmesa-binary` | `binary` | `concepts/binaries.md` | `tutorials/04-interacting-binaries.md`, `guides/custom-physics-hooks.md` | `api/binary.md` | `benchmarks/overview.md`, `benchmarks/kernel-scorecards.md`, `reference/references.md` |
 | `flexmesa-astero` | `astero` | `concepts/asteroseismology.md` | `tutorials/05-asteroseismology-and-pulsations.md`, `tutorials/06-differentiable-jax-workflows.md` | `api/astero.md` | `benchmarks/overview.md`, `benchmarks/kernel-scorecards.md`, `reference/references.md` |
+| `flexmesa-gyre` | (none yet; wired through `astero` in G3, `#170`) | `concepts/asteroseismology.md` | `tutorials/05-asteroseismology-and-pulsations.md` | `api/astero.md` | `benchmarks/overview.md`, `reference/references.md` |
 | `flexmesa-bench` | `plotting`, `bench` | `concepts/architecture.md` | `guides/diagnostic-plotting.md`, `guides/backends-and-performance.md` | `api/io-plotting-bench.md` | `benchmarks/overview.md`, `benchmarks/kernel-scorecards.md` |
 
 ---

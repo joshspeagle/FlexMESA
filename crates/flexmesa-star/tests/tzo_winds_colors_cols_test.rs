@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Issue `#435` regression tests unblocking `star/test_suite/tzo` (`#161`):
 //! 1. Lazy `Dutch_wind_lowT_scheme` validation in namelist loading and
 //!    `do_set_mdot` (`star/private/winds.f90:576-593`).

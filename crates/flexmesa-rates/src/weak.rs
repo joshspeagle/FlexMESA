@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Tabulated weak reaction evaluation (`weakreactions.tables`,
 //! `S13_r_be7_wk_li7.h5`, and `Suzuki2016.h5`) ported from
 //! `rates/private/eval_weak.f90`, `weaklib_tables.f90`, and `suzuki_tables.f90`.

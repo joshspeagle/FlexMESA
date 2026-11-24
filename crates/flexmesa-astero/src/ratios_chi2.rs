@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Mode matching, Roxburgh & Vorontsov (2003) frequency separation ratios
 //! ($r_{01}, r_{10}, r_{02}$), and composite asteroseismic + spectroscopic
 //! $\chi^2$ evaluation (`astero/private/astero_support.f90:148-587, 1346-1527`).

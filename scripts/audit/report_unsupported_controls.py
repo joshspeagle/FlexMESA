@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Audit unsupported and headless plotting controls across MESA 26.4.1 cases.
 
 Scans all 106 manifest cases in ``$MESA_DIR`` / ``mesa_test_inputs`` across

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Shared loader helpers for `benchmarks/fortran_mesa/eos_oracles/mesa_26_4_1_eos_oracles.tsv`
 //! (`#161` Slice 1, `T2-15`).
 

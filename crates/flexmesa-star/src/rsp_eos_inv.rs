@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Inverse `eosDT` root-finders, thermodynamic cell updaters, and Eddington
 //! grey $T(\tau)$ surface boundary solver for `RSP`
 //! (`star/private/rsp_eval_eos_and_kap.f90:409-1047` and

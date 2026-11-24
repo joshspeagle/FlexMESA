@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Branchless JAX `float64` kernels for `PC` ideal relativistic electrons.
 
 Ports `FERMI10`, `FERINV7`, `CHEMFIT`, `BLIN9` (`BLIN9a`, `BLIN9b`, `BLIN9c`),

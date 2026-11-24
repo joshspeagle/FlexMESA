@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 r"""Publication diagnostic plotting package (`flexmesa.plotting`).
 
 Provides publication-styled `matplotlib` replacements for `pgstar` and

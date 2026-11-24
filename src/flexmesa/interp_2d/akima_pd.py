@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Akima (1996, ACM Algorithm 760) partial-derivative estimation (`rgpd3p_db`).
 
 Estimates first partial derivatives $(z_x, z_y)$ and cross partial derivative

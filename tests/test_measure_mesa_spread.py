@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Unit tests for `scripts/mesa_reference/measure_mesa_spread.py`."""
 
 from __future__ import annotations

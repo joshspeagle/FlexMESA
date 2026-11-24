@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Runs one upstream `binary/test_suite/<case>` directory to completion (or to
 //! an optional step cap) and streams incremental MESA-format
 //! `binary_history.data` (plus component `LOGS1/` / `LOGS2/` files when

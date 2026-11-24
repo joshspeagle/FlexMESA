@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Core EOS schema, polygonal blending, and ground-state ionization offsets.
 
 Provides canonical Safe Rust (``backend="rust"``), derived JAX

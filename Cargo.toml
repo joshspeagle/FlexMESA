@@ -26,6 +26,7 @@ members = [
   "crates/flexmesa-star",
   "crates/flexmesa-binary",
   "crates/flexmesa-astero",
+  "crates/flexmesa-gyre",
   "crates/flexmesa-bench",
   "crates/flexmesa-py",
 ]
@@ -33,7 +34,7 @@ members = [
 [workspace.package]
 version = "0.1.0"
 edition = "2021"
-license = "LGPL-3.0-or-later"
+license = "GPL-3.0-or-later"
 authors = ["Josh Speagle <j.speagle@utoronto.ca>"]
 repository = "https://github.com/joshspeagle/FlexMESA"
 

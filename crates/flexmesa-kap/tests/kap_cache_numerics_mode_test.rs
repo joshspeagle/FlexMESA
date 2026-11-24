@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Numerics-mode isolation verification for the `kap` `FMCENV01` runtime cache
 //! (`#164`, `DECISIONS #33`).
 //!

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 r"""Internal 2D Keplerian orbit and Roche equipotential solver (`#173`).
 
 Mirrors ``orbit_panel``, ``xl1_fit``, ``Psi_fit``, and ``roche`` from

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Unit and integration tests for the MESA `26.4.1` adaptive mesh planner,
 //! mesh functions, multipliers, conservative remapping, and `split_merge_amr`
 //! (`#153`, `#241`, `#242`, `#243`, `#244`, `#250`).

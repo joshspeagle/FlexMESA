@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Generates publication-styled Wave 5 diagnostic figures for FlexMESA.
 
 Produces three 300 dpi PNG figures in `docs/assets/figures/` following the

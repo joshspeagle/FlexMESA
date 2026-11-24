@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Two-dimensional bicubic, piecewise-monotonic, and Akima (1996) interpolation.
 
 This subpackage exposes canonical Safe Rust (`backend="rust"`) and Python/JAX

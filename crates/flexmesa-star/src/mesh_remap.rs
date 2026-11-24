@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Upstream MESA `26.4.1` conservative Lagrangian profile remapping
 //! (`do_mesh_adjust`, `get1_lpp`, `get_xq_integral`, `do_lnR_and_lnd`, `do_xa`,
 //! `do1_lnT`, `set_lnT_for_energy`, `adjust_omega`, `do_v`, `do_u`, `do_etrb`,

@@ -18,7 +18,7 @@ Scope and the `v0.1.0` definition are in [`SCOPE.md`](SCOPE.md). Work is tracked
 | 1 | Dual-Track (Safe Rust + Python/JAX) Pilot in Wave 1 (Including neu and turb) | Superseded by decision 17 (Rust canonical, JAX derived) | [archive](archive/DECISIONS-archive.md) |
 | 2 | Legacy & External Bundled Subsystem Scope Exclusions (~98,000 LOC) | Superseded in part by decision 17 and `notes/SCOPE.md` (bundled codes and plotting are in scope) | [archive](archive/DECISIONS-archive.md) |
 | 3 | Physics Data Table Format (.safetensors), GitHub Releases Hosting, & Wave 3a/3b EOS Staging | In force | below |
-| 4 | LGPL-3.0-or-later License & Portable Tooling Configuration | In force | below |
+| 4 | LGPL-3.0-or-later License & Portable Tooling Configuration | In force (licence part superseded by #63) | below |
 | 5 | Issue-First Wave Decomposition & Pre-Merge Verification Gate | Superseded by decision 17 (work is taken from sub-issues of `#140`) | [archive](archive/DECISIONS-archive.md) |
 | 6 | Integrated Three-Tier Hybrid Architecture (Safe Rust Core via PyO3 + Native @jax.jit Array Kernels) | Superseded by decision 17 (`#165`, `#166`) | [archive](archive/DECISIONS-archive.md) |
 | 7 | Block-Tridiagonal & Stiff Solver Strategy (Odd-Even bcyclic + Native JAX PCR + Rust FFI custom_vjp) | Superseded by decision 17 (`#165`, `#166`) | [archive](archive/DECISIONS-archive.md) |
@@ -77,6 +77,7 @@ Scope and the `v0.1.0` definition are in [`SCOPE.md`](SCOPE.md). Work is tracked
 | 60 | ADIPLS Elementary Functions Are Correctly Rounded in Strict Mode (`#171`) | In force | below |
 | 61 | The In-House Pulsation Scaffolding Is Removed Package by Package (`#170`, `#171`) | In force | below |
 | 62 | A Reference History That Skips Models Is Compared Only at Its Own Rows (`#459`) | In force | below |
+| 63 | FlexMESA Is Licensed Under `GPL-3.0-or-later` (`#470`) | In force | below |
 
 ## Pre-audit decisions still in force
 
@@ -100,6 +101,8 @@ The text of these four entries predates the audit of 2026-11-16. The decisions s
 ---
 
 ## DECISIONS #4: `LGPL-3.0-or-later` License & Portable Tooling Configuration
+
+*(The licence part is superseded by `DECISIONS #63`; the portable-tooling part remains in force.)*
 
 - **Date**: 2026-11-04
 - **Decision**:
@@ -835,3 +838,12 @@ The text of these four entries predates the audit of 2026-11-16. The decisions s
   - *Regenerating references with `history_interval = 1`*: changes the upstream inlist used to produce the reference.
   - *Recording the FlexMESA run at the same interval (`respect_intervals`)*: still compares chords wherever the two runs' rows fall at different ages.
   - *Comparing at reference rows for every case*: drops the dense check for every-model references, where the chord is MESA's own step-to-step record.
+
+## DECISIONS #63: FlexMESA Is Licensed Under `GPL-3.0-or-later` (`#470`)
+
+- **Date**: 2026-11-24 (project lead)
+- **Decision**: FlexMESA as a whole is distributed under the GNU General Public License v3.0 or later. Every FlexMESA source file carries `SPDX-License-Identifier: GPL-3.0-or-later`, and the Rust workspace and Python package declare the same licence. The ADIPLS port is treated the same way. Third-party files keep their own compatible licences: vendored `crlibm` (`LGPL-2.1-or-later`) and files copied from MESA's test suite (`LGPL-3.0`). GYRE 8.1 is licensed under GPL version 3 only (no "or later" clause), so the `flexmesa-gyre` crate is `GPL-3.0-only`; once it is linked into the Python extension, the built wheel as a whole is distributed under `GPL-3.0-only`.
+- **Why**: MESA 26.4.1 bundles GYRE 8.1 and ForUM under GPL-3.0, and both are in scope for `v0.1.0` (`#170`). A faithful port of them is a derivative work that cannot be distributed under `LGPL-3.0-or-later`. The ADIPLS sources carry no licence of their own; under GPL-3.0 they can be included alongside MESA's LGPL code. This supersedes the licence part of `DECISIONS #4`.
+- **Alternatives Rejected**:
+  - *A separate, optional GPL crate for GYRE, with an LGPL core*: two licences in one project, and cases that need GYRE would require an extra.
+  - *Asking GYRE's author for an LGPL grant*: makes the port depend on an outside reply.

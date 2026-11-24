@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Verification test suite for ``flexmesa.num``.
 
 Covers 100% golden verification against upstream MESA ``num/test/test_output``

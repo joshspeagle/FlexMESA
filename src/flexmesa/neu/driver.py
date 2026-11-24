@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Top-level thermal neutrino loss driver (`neu_get`) and JAX `float64` kernel.
 
 Ports `neu_get` (`neu/public/neu_lib.f90` and `neutrinos` in

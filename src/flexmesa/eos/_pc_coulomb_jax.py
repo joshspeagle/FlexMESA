@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Branchless JAX Coulomb liquid/crystal and screening kernels for `PC` EOS.
 
 Implements `EXCOR7`, `FITION9`, `FHARM12`, and `ANHARM8` from

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Issue `#374` Wave 1 star history columns and sibling family tests:
 //! `gradT_excess_*`, `shock_*`, `grav_dark_*`, `cz_*`, `v_wind_Km_per_s`,
 //! `*_below_const_q`, `*_const_mass`, and `logxq_below_just_added`.

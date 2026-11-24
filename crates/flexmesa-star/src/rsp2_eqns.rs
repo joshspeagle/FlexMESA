@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Full-profile `RSP2` face/cell turbulent variables, Stellingwerf radiative
 //! luminosity, pre-solver equilibrium initialization, and coupled Henyey
 //! equation residuals (`do1_rsp2_L_eqn`, `do1_rsp2_Hp_eqn`,

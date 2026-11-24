@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! MESA `26.4.1` Fortran oracle parity and physics invariant tests for element
 //! diffusion and phase separation (`#156`, `Refs #271, #272, #273`).
 

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Photo, history, and radial profile output controls on [`crate::StarControls::output`]
 //! corresponding to `star/defaults/controls.defaults:185-857, 1794, 3489, 4883-4900, 7844-7877`.
 

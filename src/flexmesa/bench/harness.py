@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Shared timing harness and deterministic stellar fixtures for Wave 1F.
 
 Provides `LatencyStats`, `BenchRecord`, `ThermoGrid`, `BicubTable`,

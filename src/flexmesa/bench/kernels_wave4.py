@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Wave 4 four-stage stellar structure and evolution benchmarks.
 
 Evaluates the Three-Tier Hybrid Architecture (`flexmesa._rust` + JAX `float64`)

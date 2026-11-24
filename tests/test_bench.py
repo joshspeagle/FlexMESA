@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Verification tests for the four-stage benchmark suites (Waves 1 through 3b).
 
 Checks that Stages 0, 1, 2, and 3 agree internally and match self-generated

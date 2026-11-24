@@ -1,0 +1,371 @@
+# SDK crmath-slot LAPACK/BLAS objects vs Reference LAPACK 3.12.0 source (#170, G2)
+# mesasdk_version: x86_64-linux-26.6.1; compiler: GNU Fortran (GCC) 15.2.0
+# comparison: objdump -d, addresses and relocation offsets masked
+# routine	library	matching_flags (empty: none of -O0/-O2/-O3, each +-fPIC)
+dasum	blas	-O2 -fPIC, -O2
+daxpy	blas	-O2 -fPIC, -O2
+dcopy	blas	-O2 -fPIC, -O2
+dgemm	blas	-O2 -fPIC
+dgemv	blas	-O2 -fPIC
+dger	blas	-O2 -fPIC
+dnrm2	blas	-O2 -fPIC, -O2
+drot	blas	-O2 -fPIC, -O2
+dscal	blas	-O2 -fPIC, -O2
+dswap	blas	-O2 -fPIC, -O2
+dtrsm	blas	-O2 -fPIC
+dtrsv	blas	-O2 -fPIC
+idamax	blas	-O2 -fPIC, -O3 -fPIC, -O2, -O3
+lsame	lapack	-O2 -fPIC, -O3 -fPIC, -O2, -O3
+dbdsqr	lapack	
+dgebd2	lapack	-O2 -fPIC
+dgebrd	lapack	-O2 -fPIC, -O3 -fPIC
+dgecon	lapack	-O2 -fPIC
+dgeequ	lapack	-O2 -fPIC
+dgeqrf	lapack	-O2 -fPIC, -O3 -fPIC
+dgerfs	lapack	-O2 -fPIC
+dgesvd	lapack	-O2 -fPIC
+dgesvx	lapack	-O2 -fPIC
+dgetrf	lapack	-O2 -fPIC
+dgetrf2	lapack	-O2 -fPIC
+dgetrs	lapack	-O2 -fPIC, -O3 -fPIC
+disnan	lapack	-O2 -fPIC, -O3 -fPIC, -O2, -O3
+dlacn2	lapack	-O2 -fPIC
+dlacpy	lapack	-O2 -fPIC
+dlaisnan	lapack	-O2 -fPIC, -O3 -fPIC, -O2, -O3
+dlamch	lapack	-O0 -fPIC
+dlange	lapack	-O2 -fPIC
+dlantr	lapack	-O2 -fPIC
+dlapy2	lapack	-O2 -fPIC, -O3 -fPIC
+dlaqge	lapack	-O2 -fPIC
+dlarf	lapack	-O2 -fPIC, -O3 -fPIC
+dlarfg	lapack	-O2 -fPIC, -O3 -fPIC
+dlartg	lapack	-O2 -fPIC, -O3 -fPIC, -O2, -O3
+dlas2	lapack	-O2 -fPIC, -O3 -fPIC, -O2, -O3
+dlasr	lapack	-O2 -fPIC
+dlasv2	lapack	-O2 -fPIC
+dlaswp	lapack	-O2 -fPIC, -O2
+dlatrs	lapack	-O2 -fPIC
+dorg2r	lapack	-O2 -fPIC
+dorgbr	lapack	-O2 -fPIC
+dorgl2	lapack	-O2 -fPIC
+dorglq	lapack	-O2 -fPIC
+dorgqr	lapack	-O2 -fPIC
+iladlc	lapack	-O2 -fPIC, -O3 -fPIC, -O2, -O3
+iladlr	lapack	-O2 -fPIC, -O3 -fPIC, -O2, -O3
+ilaenv	lapack	-O2 -fPIC
+zgemm	blas	-O2 -fPIC
+zgemv	blas	-O2 -fPIC
+zgerc	blas	-O2 -fPIC
+ztrsm	blas	-O2 -fPIC
+ztrsv	blas	-O2 -fPIC
+zscal	blas	-O2 -fPIC, -O3 -fPIC, -O2, -O3
+zswap	blas	-O2 -fPIC, -O2
+zcopy	blas	-O2 -fPIC, -O2
+zlaswp	lapack	-O2 -fPIC, -O2
+zlacpy	lapack	-O2 -fPIC
+zlarf	lapack	-O2 -fPIC, -O3 -fPIC
+zgetrf	lapack	-O2 -fPIC
+zgetrs	lapack	-O2 -fPIC, -O3 -fPIC
+zung2r	lapack	-O2 -fPIC
+zungqr	lapack	-O2 -fPIC
+zgebd2	lapack	-O2 -fPIC, -O3 -fPIC
+zgetrf2	lapack	
+zlahqr	lapack	
+zladiv	lapack	
+dladiv	lapack	-O2 -fPIC
+iparmq	lapack	
+
+# dbdsqr: TOLMUL = MAX(TEN, MIN(HNDRD, EPS**MEIGTH)) in the SDK object
+# (0x180(%rsp) holds DLAMCH('Epsilon'); pxor zeroes the multiplier of log(EPS))
+#   			401: R_X86_64_PLT32	dlasr_-0x4
+#        405:	8b 2b                	mov    (%rbx),%ebp
+#        407:	48 83 c4 30          	add    $0x30,%rsp
+#        40b:	48 8d bc 24 80 01 00 	lea    0x180(%rsp),%rdi
+#        412:	00 
+#        413:	e8 00 00 00 00       	call   418 <dbdsqr_+0x418>
+#   			414: R_X86_64_PLT32	__crmath_MOD_log_r_dp_-0x4
+#        418:	48 8d 84 24 e8 01 00 	lea    0x1e8(%rsp),%rax
+#        41f:	00 
+#        420:	66 0f 28 c8          	movapd %xmm0,%xmm1
+#        424:	66 0f ef c0          	pxor   %xmm0,%xmm0
+#        428:	48 89 c7             	mov    %rax,%rdi
+#        42b:	48 89 84 24 f0 00 00 	mov    %rax,0xf0(%rsp)
+#        432:	00 
+#        433:	f2 0f 59 c1          	mulsd  %xmm1,%xmm0
+#        437:	f2 0f 11 84 24 e8 01 	movsd  %xmm0,0x1e8(%rsp)
+#        43e:	00 00 
+#        440:	e8 00 00 00 00       	call   445 <dbdsqr_+0x445>
+#   			441: R_X86_64_PLT32	__crmath_MOD_exp_r_dp_-0x4
+#        445:	f2 0f 5d 05 00 00 00 	minsd  0x0(%rip),%xmm0        # 44d <dbdsqr_+0x44d>
+#        44c:	00 
+
+# SDK objects that reference CRMATH (undefined __crmath_MOD_* symbols)
+#   blas	zdscal	dcmplx_r_r_dp
+#   blas	zherk	dcmplx_r_dp
+#   lapack	cbbcsd	atan2_r_r_sp cos_r_sp exp_r_sp log_r_sp sin_r_sp
+#   lapack	cbdsqr	exp_r_sp log_r_sp
+#   lapack	cgbbrd	abs_c_sp
+#   lapack	cgbequb	log_r_sp
+#   lapack	cgbsvx	abs_c_sp
+#   lapack	cgebal	abs_c_sp
+#   lapack	cgeequb	log_r_sp
+#   lapack	cgejsv	abs_c_sp
+#   lapack	cgelsd	log_r_sp
+#   lapack	cgelsx	abs_c_sp
+#   lapack	cgelsy	abs_c_sp
+#   lapack	cgeqpf	abs_c_sp
+#   lapack	cgesc2	abs_c_sp
+#   lapack	cgesvdq	abs_c_sp
+#   lapack	cgesvj	abs_c_sp
+#   lapack	cgetc2	abs_c_sp
+#   lapack	cgetrf2	abs_c_sp
+#   lapack	cggbal	abs_c_sp log10_r_sp
+#   lapack	cggsvp3	abs_c_sp
+#   lapack	cgsvj0	abs_c_sp
+#   lapack	cgsvj1	abs_c_sp
+#   lapack	chbtrd	abs_c_sp
+#   lapack	cheequb	log_r_sp
+#   lapack	chetri	abs_c_sp
+#   lapack	chetri2x	abs_c_sp
+#   lapack	chetri_3x	abs_c_sp
+#   lapack	chetri_rook	abs_c_sp
+#   lapack	chgeqz	abs_c_sp sqrt_c_sp
+#   lapack	chptri	abs_c_sp
+#   lapack	clacn2	abs_c_sp
+#   lapack	clacon	abs_c_sp
+#   lapack	claed0	log_r_sp
+#   lapack	claesy	abs_c_sp sqrt_c_sp
+#   lapack	claev2	abs_c_sp
+#   lapack	clags2	abs_c_sp
+#   lapack	clahqr	abs_c_sp sqrt_c_sp
+#   lapack	claic1	abs_c_sp sqrt_c_sp
+#   lapack	clalsd	log_r_sp
+#   lapack	clangb	abs_c_sp
+#   lapack	clange	abs_c_sp
+#   lapack	clangt	abs_c_sp
+#   lapack	clanhb	abs_c_sp
+#   lapack	clanhe	abs_c_sp
+#   lapack	clanhf	abs_c_sp
+#   lapack	clanhp	abs_c_sp
+#   lapack	clanhs	abs_c_sp
+#   lapack	clanht	abs_c_sp
+#   lapack	clansb	abs_c_sp
+#   lapack	clansp	abs_c_sp
+#   lapack	clansy	abs_c_sp
+#   lapack	clantb	abs_c_sp
+#   lapack	clantp	abs_c_sp
+#   lapack	clantr	abs_c_sp
+#   lapack	clapll	abs_c_sp
+#   lapack	claqp2	abs_c_sp
+#   lapack	claqp2rk	abs_c_sp
+#   lapack	claqp3rk	abs_c_sp
+#   lapack	claqps	abs_c_sp
+#   lapack	claqr0	sqrt_c_sp
+#   lapack	claqr4	sqrt_c_sp
+#   lapack	claqz0	abs_c_sp
+#   lapack	claqz2	abs_c_sp
+#   lapack	claqz3	abs_c_sp
+#   lapack	clar1v	abs_c_sp
+#   lapack	clarfgp	abs_c_sp
+#   lapack	clargv	log_r_sp
+#   lapack	clarnv	exp_c_sp log_r_sp
+#   lapack	clarrv	log_r_sp
+#   lapack	clatdf	abs_c_sp sqrt_c_sp
+#   lapack	cpoequb	log_r_sp
+#   lapack	cptcon	abs_c_sp
+#   lapack	cptrfs	abs_c_sp
+#   lapack	cstedc	log_r_sp
+#   lapack	csyequb	log_r_sp
+#   lapack	ctgex2	abs_c_sp
+#   lapack	ctgsen	abs_c_sp
+#   lapack	ctgsna	abs_c_sp
+#   lapack	ctrsna	abs_c_sp
+#   lapack	cunbdb	atan2_r_r_sp cos_r_sp sin_r_sp
+#   lapack	cunbdb1	atan2_r_r_sp cos_r_sp sin_r_sp
+#   lapack	cunbdb2	atan2_r_r_sp cos_r_sp sin_r_sp
+#   lapack	cunbdb3	atan2_r_r_sp cos_r_sp sin_r_sp
+#   lapack	cunbdb4	atan2_r_r_sp cos_r_sp sin_r_sp
+#   lapack	dbbcsd	atan2_r_r_dp cos_r_dp exp_r_dp log_r_dp sin_r_dp
+#   lapack	dbdsdc	log_r_dp
+#   lapack	dbdsqr	exp_r_dp log_r_dp
+#   lapack	dbdsvdx	exp_r_dp log_r_dp
+#   lapack	dgbequb	log_r_dp
+#   lapack	dgeequb	log_r_dp
+#   lapack	dgejsv	log_r_dp
+#   lapack	dgelsd	log_r_dp
+#   lapack	dggbal	log10_r_dp
+#   lapack	dlaed0	log_r_dp
+#   lapack	dlaed6	log_r_dp
+#   lapack	dlalsd	log_r_dp
+#   lapack	dlanv2	log_r_dp
+#   lapack	dlarnv	cos_r_dp log_r_dp
+#   lapack	dlarrb	log_r_dp
+#   lapack	dlarrd	log_r_dp
+#   lapack	dlarre	log_r_dp
+#   lapack	dlarrj	log_r_dp
+#   lapack	dlarrk	log_r_dp
+#   lapack	dlarrv	log_r_dp
+#   lapack	dlartgp	log_r_dp
+#   lapack	dlasdt	log_r_dp
+#   lapack	dorbdb	atan2_r_r_dp cos_r_dp sin_r_dp
+#   lapack	dorbdb1	atan2_r_r_dp cos_r_dp sin_r_dp
+#   lapack	dorbdb2	atan2_r_r_dp cos_r_dp sin_r_dp
+#   lapack	dorbdb3	atan2_r_r_dp cos_r_dp sin_r_dp
+#   lapack	dorbdb4	atan2_r_r_dp cos_r_dp sin_r_dp
+#   lapack	dpoequb	log_r_dp
+#   lapack	dstebz	log_r_dp
+#   lapack	dstedc	log_r_dp
+#   lapack	dsyequb	log_r_dp
+#   lapack	dzsum1	abs_c_dp
+#   lapack	icmax1	abs_c_sp
+#   lapack	iparmq	log_r_sp
+#   lapack	izmax1	abs_c_dp
+#   lapack	sbbcsd	atan2_r_r_sp cos_r_sp exp_r_sp log_r_sp sin_r_sp
+#   lapack	sbdsdc	log_r_sp
+#   lapack	sbdsqr	exp_r_sp log_r_sp
+#   lapack	sbdsvdx	exp_r_sp log_r_sp
+#   lapack	scsum1	abs_c_sp
+#   lapack	sgbequb	log_r_sp
+#   lapack	sgeequb	log_r_sp
+#   lapack	sgelsd	log_r_sp
+#   lapack	sggbal	log10_r_sp
+#   lapack	slaed0	log_r_sp
+#   lapack	slaed6	log_r_sp
+#   lapack	slalsd	log_r_sp
+#   lapack	slanv2	log_r_sp
+#   lapack	slarnv	cos_r_sp log_r_sp
+#   lapack	slarrb	log_r_sp
+#   lapack	slarrd	log_r_sp
+#   lapack	slarre	log_r_sp
+#   lapack	slarrj	log_r_sp
+#   lapack	slarrk	log_r_sp
+#   lapack	slarrv	log_r_sp
+#   lapack	slartgp	log_r_sp
+#   lapack	slasdt	log_r_sp
+#   lapack	sorbdb	atan2_r_r_sp cos_r_sp sin_r_sp
+#   lapack	sorbdb1	atan2_r_r_sp cos_r_sp sin_r_sp
+#   lapack	sorbdb2	atan2_r_r_sp cos_r_sp sin_r_sp
+#   lapack	sorbdb3	atan2_r_r_sp cos_r_sp sin_r_sp
+#   lapack	sorbdb4	atan2_r_r_sp cos_r_sp sin_r_sp
+#   lapack	spoequb	log_r_sp
+#   lapack	sstebz	log_r_sp
+#   lapack	sstedc	log_r_sp
+#   lapack	ssyequb	log_r_sp
+#   lapack	zbbcsd	atan2_r_r_dp cos_r_dp exp_r_dp log_r_dp sin_r_dp
+#   lapack	zbdsqr	exp_r_dp log_r_dp
+#   lapack	zgbbrd	abs_c_dp
+#   lapack	zgbequb	log_r_dp
+#   lapack	zgbsvx	abs_c_dp
+#   lapack	zgebal	abs_c_dp
+#   lapack	zgeequb	log_r_dp
+#   lapack	zgeev	dcmplx_r_r_dp
+#   lapack	zgeevx	dcmplx_r_r_dp
+#   lapack	zgegv	dcmplx_r_r_dp
+#   lapack	zgejsv	abs_c_dp dcmplx_r_r_dp log_r_dp
+#   lapack	zgelsd	log_r_dp
+#   lapack	zgelsx	abs_c_dp
+#   lapack	zgelsy	abs_c_dp
+#   lapack	zgeqpf	abs_c_dp dcmplx_r_dp
+#   lapack	zgesc2	abs_c_dp dcmplx_r_r_dp
+#   lapack	zgesvdq	abs_c_dp
+#   lapack	zgesvdx	dcmplx_r_r_dp
+#   lapack	zgesvj	abs_c_dp
+#   lapack	zgetc2	abs_c_dp dcmplx_r_dp dcmplx_r_r_dp
+#   lapack	zgetrf2	abs_c_dp
+#   lapack	zggbal	abs_c_dp log10_r_dp
+#   lapack	zgghd3	dcmplx_r_dp
+#   lapack	zggsvp3	abs_c_dp
+#   lapack	zgsvj0	abs_c_dp
+#   lapack	zgsvj1	abs_c_dp
+#   lapack	zgtcon	dcmplx_r_dp
+#   lapack	zgtrfs	dcmplx_r_dp
+#   lapack	zhbtrd	abs_c_dp
+#   lapack	zheequb	log_r_dp
+#   lapack	zhetf2	dcmplx_r_r_dp
+#   lapack	zhetf2_rk	dcmplx_r_r_dp
+#   lapack	zhetf2_rook	dcmplx_r_r_dp
+#   lapack	zhetri	abs_c_dp
+#   lapack	zhetri2x	abs_c_dp
+#   lapack	zhetri_3x	abs_c_dp
+#   lapack	zhetri_rook	abs_c_dp
+#   lapack	zhfrk	dcmplx_r_r_dp
+#   lapack	zhgeqz	abs_c_dp sqrt_c_dp
+#   lapack	zhptrf	dcmplx_r_r_dp
+#   lapack	zhptri	abs_c_dp
+#   lapack	zhseqr	dcmplx_r_r_dp
+#   lapack	zlacn2	abs_c_dp dcmplx_r_dp dcmplx_r_r_dp
+#   lapack	zlacon	abs_c_dp dcmplx_r_dp dcmplx_r_r_dp
+#   lapack	zlacrm	dcmplx_r_r_dp
+#   lapack	zladiv	dcmplx_r_r_dp
+#   lapack	zlaed0	log_r_dp
+#   lapack	zlaesy	abs_c_dp sqrt_c_dp
+#   lapack	zlaev2	abs_c_dp
+#   lapack	zlags2	abs_c_dp dcmplx_r_dp
+#   lapack	zlahqr	abs_c_dp sqrt_c_dp
+#   lapack	zlaic1	abs_c_dp sqrt_c_dp
+#   lapack	zlals0	dcmplx_r_r_dp
+#   lapack	zlalsa	dcmplx_r_r_dp
+#   lapack	zlalsd	dcmplx_r_r_dp log_r_dp
+#   lapack	zlangb	abs_c_dp
+#   lapack	zlange	abs_c_dp
+#   lapack	zlangt	abs_c_dp
+#   lapack	zlanhb	abs_c_dp
+#   lapack	zlanhe	abs_c_dp
+#   lapack	zlanhf	abs_c_dp
+#   lapack	zlanhp	abs_c_dp
+#   lapack	zlanhs	abs_c_dp
+#   lapack	zlanht	abs_c_dp
+#   lapack	zlansb	abs_c_dp
+#   lapack	zlansp	abs_c_dp
+#   lapack	zlansy	abs_c_dp
+#   lapack	zlantb	abs_c_dp
+#   lapack	zlantp	abs_c_dp
+#   lapack	zlantr	abs_c_dp
+#   lapack	zlapll	abs_c_dp
+#   lapack	zlaqp2	abs_c_dp
+#   lapack	zlaqp2rk	abs_c_dp
+#   lapack	zlaqp3rk	abs_c_dp
+#   lapack	zlaqps	abs_c_dp
+#   lapack	zlaqr0	sqrt_c_dp
+#   lapack	zlaqr4	sqrt_c_dp
+#   lapack	zlaqz0	abs_c_dp
+#   lapack	zlaqz2	abs_c_dp
+#   lapack	zlaqz3	abs_c_dp
+#   lapack	zlar1v	abs_c_dp
+#   lapack	zlar2v	dcmplx_r_r_dp
+#   lapack	zlarcm	dcmplx_r_r_dp
+#   lapack	zlarfg	dcmplx_r_dp dcmplx_r_r_dp
+#   lapack	zlarfgp	abs_c_dp dcmplx_r_dp dcmplx_r_r_dp
+#   lapack	zlargv	dcmplx_r_r_dp log_r_dp
+#   lapack	zlarnv	dcmplx_r_r_dp exp_c_dp log_r_dp
+#   lapack	zlarrv	dcmplx_r_r_dp log_r_dp
+#   lapack	zlatbs	dcmplx_r_dp
+#   lapack	zlatdf	abs_c_dp sqrt_c_dp
+#   lapack	zlatps	dcmplx_r_dp
+#   lapack	zlatrs	dcmplx_r_dp
+#   lapack	zlaunhr_col_getrfnp2	dcmplx_r_dp
+#   lapack	zlauu2	dcmplx_r_dp
+#   lapack	zpoequb	log_r_dp
+#   lapack	zptcon	abs_c_dp
+#   lapack	zptrfs	abs_c_dp dcmplx_r_dp
+#   lapack	zpttrf	dcmplx_r_r_dp
+#   lapack	zrscl	dcmplx_r_r_dp
+#   lapack	zstedc	log_r_dp
+#   lapack	zstein	dcmplx_r_r_dp
+#   lapack	zsyequb	log_r_dp
+#   lapack	ztgevc	dcmplx_r_dp
+#   lapack	ztgex2	abs_c_dp
+#   lapack	ztgsen	abs_c_dp dcmplx_r_r_dp
+#   lapack	ztgsna	abs_c_dp dcmplx_r_r_dp
+#   lapack	ztgsy2	dcmplx_r_r_dp
+#   lapack	ztgsyl	dcmplx_r_r_dp
+#   lapack	ztrevc	dcmplx_r_dp
+#   lapack	ztrevc3	dcmplx_r_dp
+#   lapack	ztrsna	abs_c_dp
+#   lapack	ztrsyl	dcmplx_r_dp
+#   lapack	ztrsyl3	dcmplx_r_r_dp
+#   lapack	zunbdb	atan2_r_r_dp cos_r_dp dcmplx_r_r_dp sin_r_dp
+#   lapack	zunbdb1	atan2_r_r_dp cos_r_dp sin_r_dp
+#   lapack	zunbdb2	atan2_r_r_dp cos_r_dp sin_r_dp
+#   lapack	zunbdb3	atan2_r_r_dp cos_r_dp sin_r_dp
+#   lapack	zunbdb4	atan2_r_r_dp cos_r_dp sin_r_dp

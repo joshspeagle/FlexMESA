@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Merge per-shard LCOV reports into a ``cargo llvm-cov`` summary JSON (`#345`).
 
 The dashboard's Rust coverage runs as one job per test shard. Each shard writes

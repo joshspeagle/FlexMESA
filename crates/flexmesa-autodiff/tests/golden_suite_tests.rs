@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Complete upstream MESA `auto_diff/test/test_output` golden parity suite.
 //!
 //! Executes every `assignment`, `comparison`, `binary`, `unary`, and

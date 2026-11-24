@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Authoritative inventory of implemented, parsed-but-unused (`N1-28`), and
 //! headless plotting GUI control keys for single-star namelist sections
 //! (`&star_job`, `&eos`, `&kap`, `&colors`, `&controls`).

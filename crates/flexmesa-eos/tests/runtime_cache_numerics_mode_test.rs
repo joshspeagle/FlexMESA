@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Numerics-mode isolation verification for `eos_4d_slices` and `helm`
 //! `FMCENV01` runtime caches (`#164`, `DECISIONS #33`).
 //!

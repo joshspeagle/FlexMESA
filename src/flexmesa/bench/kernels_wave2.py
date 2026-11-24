@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Wave 2 four-stage microphysics benchmarks (`flexmesa.bench.kernels_wave2`).
 
 Evaluates the Three-Tier Hybrid Architecture across Stages 0..3 for the four

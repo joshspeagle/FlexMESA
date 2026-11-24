@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Render or verify the public MkDocs port coverage map (`#142`, `#174`).
 
 Builds `docs/benchmarks/coverage-map.md` deterministically from

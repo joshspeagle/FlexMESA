@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Authoritative MESA `26.4.1` control inventory and shared section-key
 //! validation for single-star, binary, asteroseismology, and headless
 //! `&pgstar` / `&pgbinary` namelists (`DECISIONS #25`).

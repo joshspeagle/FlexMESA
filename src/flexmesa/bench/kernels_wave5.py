@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Wave 5 four-stage advanced stellar physics, interacting binary, and
 asteroseismology benchmarks (`flexmesa.bench.kernels_wave5`).
 

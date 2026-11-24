@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Public constants, result structures, and callback signatures for `flexmesa-atm`.
 //!
 //! Mirrors `atm/public/atm_def.f90` from upstream MESA.

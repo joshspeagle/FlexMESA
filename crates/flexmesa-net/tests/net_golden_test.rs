@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Golden parity and analytical Jacobian tests for `flexmesa-net` against
 //! upstream Fortran MESA `net/test/test_output`.
 

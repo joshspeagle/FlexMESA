@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Script-generated Markdown and JSON case-table builder for ``#143``.
 
 Produces deterministic, non-hand-typed case tables and headline summaries from

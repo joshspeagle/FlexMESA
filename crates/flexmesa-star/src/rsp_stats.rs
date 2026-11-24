@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Cycle period and amplitude detection (`gather_pulse_statistics`,
 //! `check_cycle_completed`) and $P\,\mathrm{d}V$ work integrals
 //! (`star/private/rsp.f90:574-1028`).

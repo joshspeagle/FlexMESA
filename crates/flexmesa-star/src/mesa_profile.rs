@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Upstream MESA `26.4.1` radial `LOGS/profileN.data` and `LOGS/profiles.index`
 //! column parser, evaluator, priority-evicting index manager, and stage log
 //! coordinator (`star/private/profile.f90`, `star/private/profile_getval.f90`,

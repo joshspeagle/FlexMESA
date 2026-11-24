@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Integration tests for `RSP2` time-dependent turbulent convection kernels,
 //! quintic $C^2$ enthalpy flux limiter, coupled profile residuals, pre-solver
 //! stationary adjustment, and two-zone anchor-temperature remeshing

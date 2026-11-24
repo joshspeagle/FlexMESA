@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Unit tests for `scripts/check_strict_determinism.py`."""
 
 from __future__ import annotations

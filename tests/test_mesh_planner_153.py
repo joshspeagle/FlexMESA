@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Python integration tests for MESA 26.4.1 mesh planning and remap (#153)."""
 
 from __future__ import annotations

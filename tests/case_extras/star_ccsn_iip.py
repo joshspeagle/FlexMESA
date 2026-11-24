@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 r"""Upstream Type II-P core-collapse supernova (`ccsn_IIp`) low-density wind,
 $^{56}\mathrm{Ni}$/$^{56}\mathrm{Co}$ rescaling, shock `stop_m` locator, RTI
 post-check, and STELLA handoff `StarExtras` port (`#231`).

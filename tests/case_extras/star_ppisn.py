@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 r"""Upstream pulsational pair-instability supernova (`ppisn`) Brott wind,
 `mstar_dot` limiter, Fabry+2022 Roche distortion, escape-velocity opacity
 override, and 22-column hydro/ejecta history `StarExtras` port (`#231`).

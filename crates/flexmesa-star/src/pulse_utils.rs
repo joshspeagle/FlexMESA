@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Shared pulsation grid construction, cell-to-face interpolation, composition
 //! double-point splitting, $T(\tau)$ atmosphere attachment, and central
 //! $r \to 0$ parabolic extrapolation (`star/private/pulse_utils.f90` and

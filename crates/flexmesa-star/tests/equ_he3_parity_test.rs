@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! MESA `26.4.1` Model-1 Zone-7 `equ_he3` bit-parity tests (`#450`).
 //!
 //! Reproduces `star/1.3M_ms_high_Z` Model 1 iteration 1 radiative zones (`z=7`

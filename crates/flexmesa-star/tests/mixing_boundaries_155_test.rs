@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Unit and integration tests for Issue `#155` (Audit C4):
 //! thresholded composition-gradient smoothing, Brunt $B$/$N^2$, MLT call-site
 //! gates, `mix_info`, `overshoot`, `predictive_mix`, and `conv_premix`.

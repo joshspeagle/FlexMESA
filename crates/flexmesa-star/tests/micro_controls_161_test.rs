@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Issue `#161` (`F2-1`) `&eos` and `&kap` namelist coverage, population, and
 //! fail-loudly validation tests.
 

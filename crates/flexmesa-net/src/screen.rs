@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Reaction-network electrostatic screening (`net_screen.f90` lines 1–529).
 
 use flexmesa_chem::NuclideCatalog;

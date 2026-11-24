@@ -316,6 +316,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "flexmesa-gyre"
+version = "0.1.0"
+dependencies = [
+ "flexmesa-math",
+]
+
+[[package]]
 name = "flexmesa-interp1d"
 version = "0.1.0"
 dependencies = [

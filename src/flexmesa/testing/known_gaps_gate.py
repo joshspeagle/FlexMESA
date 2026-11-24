@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Bijective known-gaps verification gate for tests and skips.
 
 Enforces bidirectional correspondence between code-level suppression markers

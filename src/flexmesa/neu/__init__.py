@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Public interface for `flexmesa.neu` (`neu` thermal neutrino loss module).
 
 Re-exports the top-level driver `neu_get`, JAX `float64` kernel

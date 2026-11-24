@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Routines from upstream `star/private/star_utils.f90` that act on the
 //! whole structure at the start of a step.
 //!

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Tier A (`utils`, `testing`, `schema`) `PyO3` bindings.
 //!
 //! Exposes the canonical Safe Rust implementations of:

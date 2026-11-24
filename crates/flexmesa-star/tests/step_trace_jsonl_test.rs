@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Integration test verifying `FLEXMESA_STEP_TRACE` emits valid single-line
 //! JSONL events into `FLEXMESA_STEP_TRACE_FILE` (`#150`).
 

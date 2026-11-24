@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """On-demand binary opacity table loader and bicubic spline cache for JAX.
 
 Reads the immutable `FMKAP001` binary payload from

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Merge a campaign's baseline candidate into the committed baseline.
 
 The scheduled campaign uploads `baseline_candidate.json`, a regression

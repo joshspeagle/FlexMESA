@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Block-tridiagonal damped Newton-Raphson Henyey solver (`star_solver.f90`
 //! and `solver_support.f90`).
 //!

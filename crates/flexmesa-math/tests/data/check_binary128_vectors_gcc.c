@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 // Replays binary128_vectors.tsv against GCC's `__float128`, whose arithmetic
 // on x86_64 is libgcc's soft-fp (`__addtf3`, `__subtf3`, `__multf3`,
 // `__divtf3`, `__extenddftf2`, `__trunctfdf2`, `__powitf2`), the same routines

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Upstream non-`RSP` `star/test_suite/*/src/run_star_extras.f90` dispatch
 (`#148`, `#231`).
 """

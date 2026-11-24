@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Bit-level oracle verification of `Excor7Table` (`1,476,657` grid values)
 //! against MESA `26.4.1`'s shipped `data/eosPC_support_data/EXCOR7.data`
 //! (`#161`).

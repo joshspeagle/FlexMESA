@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Verbatim MESA `26.4.1` convective premixing (`star/private/conv_premix.f90`).
 //!
 //! Advances convective boundaries cell-by-cell prior to the Henyey solve,

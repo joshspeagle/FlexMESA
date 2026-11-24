@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Coupled and thresholded operator-split structure-burn-mix driver
 //! (`do_struct_burn_mix`), implicit tridiagonal species diffusion
 //! (`solve_composition_diffusion`), and substepped rotational angular momentum

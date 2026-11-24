@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 r"""Upstream ``pgstar`` summary and custom radial profile panels (`#173`).
 
 Ports ``Summary_Profile`` (`star/private/pgstar_summary_profile.f90:72-307`),

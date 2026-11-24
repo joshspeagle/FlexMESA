@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Runtime path resolution, table/filter/Vega loaders, CSV SED writer, and
 //! dynamic multi-filter photometry context (`colors_lib.f90`,
 //! `colors_utils.f90`, `colors_history.f90`, `synthetic.f90`).

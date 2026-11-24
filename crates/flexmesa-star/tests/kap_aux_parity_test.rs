@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Issue `#404` regression tests: exact 0-ULP MESA `26.4.1` `AUX opacity` parity
 //! in the low-T / high-T blend region (`kap/private/kap_eval.f90:345-365`)
 //! across `star/16M_conv_premix`, `star/16M_predictive_mix`, and `star/low_z`.

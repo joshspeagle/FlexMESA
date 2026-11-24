@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Branchless `@jax.jit` (`float64`) 3rd-order jet Coulomb kernels for `Skye`.
 
 Implements the one-component plasma (OCP) liquid and solid free energies,

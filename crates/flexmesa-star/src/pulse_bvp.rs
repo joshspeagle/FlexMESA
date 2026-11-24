@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! 2nd-order ($\ell = 0$) and 4th-order ($\ell \ge 1$) Gauss-Legendre Magnus
 //! (`MAGNUS_GL2`) oscillation boundary-value problem (BVP) structures and
 //! 2nd-compound-matrix (Plücker) shooting determinant (`gyre/src/diff/magnus_gl2_diff_m.fypp`,

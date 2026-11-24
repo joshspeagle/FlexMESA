@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Time-dependent convection physics kernels (`turb/private/tdc_support.f90`).
 
 Provides the Kuhfuss (1986) / Smolec time-dependent convection velocity

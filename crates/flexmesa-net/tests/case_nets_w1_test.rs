@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Issue `#375` tests for Wave 1 `.net` search precedence, `include` chains,
 //! loud failures, and exact species/reaction graphs for `minimal.net`,
 //! `nco.net`, and `wd_aic.net`.

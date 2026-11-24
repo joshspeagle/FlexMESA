@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Comprehensive Issue `#159` unit & integration tests covering:
 //! 1. Super-Eddington wind (`0.5 * vesc2`, `Leff`, `prev_Ledd`, `max_wind` override).
 //! 2. Wind schemes (`WindScheme::Other`, `"none"` rejection), `no_wind_if_no_rotation`,

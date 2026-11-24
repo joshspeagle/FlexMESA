@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Convective overshooting (`star/private/overshoot.f90`,
 //! `star/private/overshoot_utils.f90`, `star/private/overshoot_exp.f90`, and
 //! `star/private/overshoot_step.f90`).

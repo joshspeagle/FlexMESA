@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Recursive `&binary_job` and `&binary_controls` Fortran namelist loader.
 //!
 //! Corresponds to `binary/private/binary_job_ctrls_io.f90`,

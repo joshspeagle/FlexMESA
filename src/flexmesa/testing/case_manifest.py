@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """TOML case manifest and declared known-gaps loader for history comparisons.
 
 Defines the schema for ``benchmarks/history_harness/case_manifest.toml`` and

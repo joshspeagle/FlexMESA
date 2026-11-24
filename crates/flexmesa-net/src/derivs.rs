@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! General reaction-network RHS, analytical Jacobians, and energy generation
 //! (`net_derivs.f90` and `net_eval.f90`).
 

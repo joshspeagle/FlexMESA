@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Top-level `RSP` setup (`rsp_setup_model`, `init_rsp_model_from_bundle`) and
 //! nonlinear `HYD` timestep driver (`rsp_one_step`, `do1_step`,
 //! `get_LINA_info` in `star/private/rsp.f90:204-857`).

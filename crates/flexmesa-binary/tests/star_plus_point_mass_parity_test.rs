@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Regression and MESA `26.4.1` parity tests for `star_plus_point_mass` and
 //! `star_plus_point_mass_explicit_mdot` allowlisted binary physics (`#446`).
 //!

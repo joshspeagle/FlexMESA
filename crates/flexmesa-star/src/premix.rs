@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Thin public entry points delegating convective premixing (`conv_premix.rs`)
 //! and predictive mixing (`predictive_mix.rs`) to verbatim MESA `26.4.1`
 //! implementations, plus white-dwarf crystallization phase separation

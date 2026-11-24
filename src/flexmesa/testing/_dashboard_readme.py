@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Compact, visual README view of the progress dashboard (`#174`).
 
 The README shows badges, one headline, a status chart, a module map and two

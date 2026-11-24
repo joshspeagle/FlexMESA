@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Pure `@jax.jit` opacity table interpolators (`flexmesa.kap.jax_interp`).
 
 Implements 2D PSPLINE bicubic evaluation (`do_kap_interpolations`,

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Regression tests for Issue #444 covering verbatim MESA `26.4.1` parity in
 //! convective premixing (`conv_premix`), Ledoux composition-gradient smoothing
 //! (`mixing_state`), burning-gradient mesh refinement (`adjust_mesh_support`),

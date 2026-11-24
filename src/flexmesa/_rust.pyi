@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Type annotations for the compiled ``flexmesa._rust`` PyO3 extension.
 
 Declares the public Python-to-Rust boundary across Tier A (`utils`, `testing`,

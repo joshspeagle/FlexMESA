@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Waves 1 through 5 four-stage performance benchmark suite (`flexmesa.bench`).
 
 Evaluates all 25 migrated FlexMESA modules across Waves 1, 2, 3a, 3b, 4, and 5

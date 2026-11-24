@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Analytical Jacobian finite-difference and Rosenbrock variant tests for `flexmesa-net`.
 
 #![forbid(unsafe_code)]

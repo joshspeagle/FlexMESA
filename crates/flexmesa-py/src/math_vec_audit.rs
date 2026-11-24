@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Reference-vector `Strict` `SHA-256` hashing, `Fast`-vs-`Strict` comparison,
 //! and dispatch-overhead microbenchmark bindings (`#165` Items 2, 15, 17).
 

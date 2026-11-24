@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Tests for Wave 3a.3 (`PC`, `Skye`, `eosDT_get`, and inverse solvers)."""
 
 from __future__ import annotations

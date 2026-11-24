@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Seed or refresh ``benchmarks/dashboard/port_manifest.toml`` from MESA 26.4.1.
 
 Counts exact upstream line counts and SHA-256 digests directly from

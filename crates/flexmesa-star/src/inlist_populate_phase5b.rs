@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Namelist population helpers for [`crate::controls_mix_wind::MixWindControls`]
 //! and [`crate::controls_timestep_stop::TimestepStopControls`] invoked by
 //! [`crate::InlistBundle::populate_typed_structs`].

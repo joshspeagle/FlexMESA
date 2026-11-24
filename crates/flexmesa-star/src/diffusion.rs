@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Coupled multi-species Burgers element diffusion solver ported from MESA
 //! `26.4.1` `star/private/diffusion.f90`, including both the adaptive
 //! backward-Euler block-tridiagonal solver (`BE_solve`) and the block-tridiagonal

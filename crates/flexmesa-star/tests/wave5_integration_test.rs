@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Integration tests for `flexmesa-star` Wave 5 modules (`diffusion`,
 //! `rotation`, `premix`, `riemann`, `rsp2`, `pulse`) and multi-stage `inlist`
 //! / `rn` execution.

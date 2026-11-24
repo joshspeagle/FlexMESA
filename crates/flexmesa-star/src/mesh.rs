@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Staggered Lagrangian grid geometry, mass-weighted face interpolation, and
 //! state vector packing/snapshot operations on [`StarModel`]
 //! (`star/private/star_utils.f90` and `star/private/hydro_vars.f90`).

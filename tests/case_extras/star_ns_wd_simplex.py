@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 r"""Upstream neutron-star TOV gravity, white-dwarf cooling/nova-burst,
 overshoot mesh-refinement, and solar simplex calibration `StarExtras` ports
 (`#231`).

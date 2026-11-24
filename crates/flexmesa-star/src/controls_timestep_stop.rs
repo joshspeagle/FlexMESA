@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Core-boundary thresholds, stopping criteria extensions, and soft/hard
 //! timestep controller parameters on [`crate::StarControls::ts_stop`]
 //! (`star/defaults/controls.defaults:762-950` and `9425-11300`).

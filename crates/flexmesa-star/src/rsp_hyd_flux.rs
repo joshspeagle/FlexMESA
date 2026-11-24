@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Face convective/turbulent luminosities (`Lc`, `Lt`), Stellingwerf
 //! temperature-form radiative flux (`T_form_of_calc_Fr`), and time-weighted
 //! combined pressure (`rsp_calc_XP`) for the nonlinear `RSP` `HYD` solver

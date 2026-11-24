@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Per-sample spectroscopic and asteroseismic observable evaluation, pulsation
 //! mode matching, surface-effect correction, and composite $\chi^2$ scoring
 //! (`astero/private/extras_support.f90:155-485`, `astero_support.f90:223-760`).

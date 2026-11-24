@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Physical, mathematical, and astronomical CGS constants for FlexMESA.
 
 This module ports upstream MESA's `const_def` module in IEEE-754 double

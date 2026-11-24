@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Integration tests for `StarExtras` extra profile columns and extra
 //! history/profile header items (`#442`, MESA `26.4.1` parity).
 

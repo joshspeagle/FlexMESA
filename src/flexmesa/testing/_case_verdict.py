@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Governed verdict evaluation and reference-path resolution for ``#143``.
 
 Evaluates trajectory runs against ``case_manifest.toml`` and

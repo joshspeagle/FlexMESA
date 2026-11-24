@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! 1D bisection and damped Newton-Raphson searches for Time-Dependent
 //! Convection (`turb/private/tdc.f90` and `turb/private/tdc_support.f90`).
 //!

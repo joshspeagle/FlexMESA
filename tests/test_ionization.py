@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 r"""Verification suite for `flexmesa.ionization` (`Wave 2b`).
 
 Validates `flexmesa.ionization` against:

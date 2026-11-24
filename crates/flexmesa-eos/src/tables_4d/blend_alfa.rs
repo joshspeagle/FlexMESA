@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Analytical blend fraction and partial-derivative evaluators for `FreeEOS` and `OPAL/SCVH`.
 //!
 //! Ports `Get_FreeEOS_alfa` and `get_opal_scvh_alfa_and_partials` from

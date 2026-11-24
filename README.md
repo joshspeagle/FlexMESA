@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/joshspeagle/FlexMESA/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/joshspeagle/FlexMESA/actions/workflows/ci.yml)
 [![Docs](https://github.com/joshspeagle/FlexMESA/actions/workflows/docs.yml/badge.svg?branch=main)](https://joshspeagle.github.io/FlexMESA/)
-[![License: LGPL v3+](https://img.shields.io/badge/License-LGPL_v3%2B-blue.svg)](LICENSE)
+[![License: GPL v3+](https://img.shields.io/badge/License-GPL_v3%2B-blue.svg)](LICENSE)
 [![Reference: MESA 26.4.1](https://img.shields.io/badge/reference-MESA_26.4.1-6f42c1.svg)](https://github.com/MESAHub/mesa/releases/tag/26.4.1)
 [![Rust 1.100](https://img.shields.io/badge/Rust-1.100-dea584.svg)](rust-toolchain.toml)
 [![Python 3.12+](https://img.shields.io/badge/Python-3.12%2B-3776ab.svg)](pyproject.toml)
@@ -144,8 +144,8 @@ A case passes only when upstream's unmodified inlists run to upstream's stopping
 ### Work in flight
 
 - Packages under [#140](https://github.com/joshspeagle/FlexMESA/issues/140): **26 closed**, 24 open.
-- Open pull requests: 7.
-- Deferred upstream issues ([#169](https://github.com/joshspeagle/FlexMESA/issues/169)): 60 open.
+- Open pull requests: 10.
+- Deferred upstream issues ([#169](https://github.com/joshspeagle/FlexMESA/issues/169)): 62 open.
 - Test line coverage: Rust 76.3%, Python 87.7%.
 <!-- END GENERATED DASHBOARD -->
 
@@ -193,4 +193,4 @@ mkdocs build --strict
 
 ## License & Upstream Attribution
 
-`FlexMESA` is distributed under the **GNU Lesser General Public License v3.0 or later (`LGPL-3.0-or-later`)**; see [`LICENSE`](LICENSE) for full terms. Physical equations, numerical algorithms, reference test cases, and converted physics tables derive from [MESA (Modules for Experiments in Stellar Astrophysics)](https://github.com/MESAHub/mesa) by Bill Paxton, Frank Timmes, Josiah Schwab, Evan Bauer, Adam Jermyn, and the MESA Team.
+`FlexMESA` is distributed under the **GNU General Public License v3.0 or later (`GPL-3.0-or-later`)**; see [`LICENSE`](LICENSE) for full terms. Its scope includes ports of GPL-3.0 code bundled with MESA (GYRE, ForUM) and of ADIPLS; the vendored `crlibm` sources keep their own `LGPL-2.1-or-later` licence. Physical equations, numerical algorithms, reference test cases, and converted physics tables derive from [MESA (Modules for Experiments in Stellar Astrophysics)](https://github.com/MESAHub/mesa) by Bill Paxton, Frank Timmes, Josiah Schwab, Evan Bauer, Adam Jermyn, and the MESA Team.

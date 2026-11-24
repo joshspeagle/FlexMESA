@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 r"""Upstream `GYRE`-in-MESA, $T(\tau)$ atmosphere, FGONG pulse-atmosphere, and
 `OP_mono` `StarExtras` ports (`#231`).
 

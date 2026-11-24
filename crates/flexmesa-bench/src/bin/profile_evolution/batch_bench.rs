@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Multi-star worker-pool batching experiment (`N` independent stars evolved
 //! concurrently on a `rayon::ThreadPool`, `#168` Task 6).
 

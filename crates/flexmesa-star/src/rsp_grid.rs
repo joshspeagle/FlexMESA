@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Smolec 1-based (`1..=nzn`) center-to-surface envelope grid, Marsaglia-Zaman
 //! `RANMAR` generator (`init_random` in `star/private/star_utils.f90:3474-3504`), combined gas+radiation EOS
 //! and `EOP` volume root-finder (`star/private/rsp_lina.f90:1170-1204`, `star/private/rsp_relax_env.f90:36-124`),

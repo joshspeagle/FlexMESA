@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Local Mixing-Length Theory (`set_mlt`, `turb/private/mlt.f90`).
 
 Solves the cubic convective efficiency equation (Cox & Giuli 1968, §14.82)

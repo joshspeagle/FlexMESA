@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 r"""Differentiable composition moments and multi-zone kernels (`chem`).
 
 Implements composition moment evaluators (`get_composition_info`,

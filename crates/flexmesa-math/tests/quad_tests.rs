@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Tests of [`flexmesa_math::Quad`] against exact rational arithmetic.
 //!
 //! `tests/data/binary128_vectors.tsv` is produced by

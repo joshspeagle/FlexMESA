@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Pre-step operator-split physics hooks (`apply_step_pre_physics`),
 //! domain total-energy integration (`eval_total_energy_integrals`), and
 //! discrete energy-conservation residual accounting

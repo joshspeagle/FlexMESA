@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Upstream MESA trajectory loader and ``float64`` history track comparator.
 
 Loads raw 6-line MESA ``LOGS/history.data`` or ``binary_history.data`` files as

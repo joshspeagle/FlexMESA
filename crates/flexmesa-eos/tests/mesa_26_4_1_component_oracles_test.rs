@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Direct verification of all 20 `HELM`, `PC`, `Skye`, and blend EOS component
 //! test points against compiled upstream Fortran MESA release `26.4.1` (`r26.4.1`,
 //! MESA SDK `x86_64-linux-26.6.1`, `GCC 15.2.0`, `CRMATH`), parsed from

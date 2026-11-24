@@ -1,0 +1,39 @@
+file	line	count	literal_or_conversion	exact_in_binary32	source
+adiajobs/sr/srdist.c.d.f	135	1	1.e-3	no	dlxdsc=1.e-3
+adiajobs/sr/srdist.c.d.f	147	1	40.	yes	cx=40.
+adiajobs/sr/srdist.c.d.f	149	1	0.01	no	ca=0.01
+adiajobs/sr/srdist.c.d.f	282	1	0.0002	no	dlxdsc=0.0002
+adiajobs/sr/srdist.c.d.f	311	1	0.0001	no	cg=0.0001
+adiajobs/sr/srdist.c.d.f	313	1	0.005	no	ca=0.005
+adiajobs/sr/srdist.c.d.f	314	1	0.01	no	cdg=0.01
+adiajobs/sr/srdist.c.d.f	315	1	0.5	yes	adda4=0.5
+adipls/adipls.c.d.f	1729	2165	1.e-6	no	radial=el.le.1.e-6
+adipls/adirhs.c.d.f	119	177065097	1.e-6	no	if(el.le.1.e-6) go to 20
+adipls/adirhs.c.d.f	211	31953959	0.95	no	if(idiag.gt.0.and.x.gt.0.95) then
+adipls/kiner.n.d.f	41	27364	1.e-6	no	else if(el.gt.1.e-6) then
+adipls/kiner.n.d.f	77	27364	1.e-6	no	if(el.le.1.e-6) then
+adipls/mchcff.d.f	124	53296	1.	yes	cimax=1./c(imax)
+adipls/res_adimod.c.d.f	39	2165	0.1	no	idata8 = idint(data_in(8)+0.1)
+adipls/rsnfit.n.d.f	29	18	0.05	no	nfit=max(10,nint(nfit-0.05*nftcnt*nn))
+adipls/rsnfit.n.d.f	31	18	0.05	no	nfit=min(nint(nfit+0.05*nftcnt*nn),nn-10)
+adipls/setbcs.n.d.f	105	292948	1.e-6	no	radial=el.le.1.e-6
+adipls/setbcs.n.d.f	360	252940	0.1	no	if(aa(3,1).gt.0.1) gm1=aa(3,1)
+adipls/setbcs.n.d.f	424	290864	0.1	no	if(aa(3,1).gt.0.1) gm1=aa(3,nn)
+adipls/setssm.n.d.f	46	109444	1.e-5	no	if(abs(csmodp(i)/cs(i)-1).gt.1.e-5) irmod=1
+adipls/sigitc.c.d.f	46	27524	1.e-6	no	radial = el.le.1.e-6
+adipls/sigitr.n.d.f	37	27560	1.e-6	no	radial=el.le.1.e-6
+adipls/sigout.c.d.f	69	27364	1.e-6	no	radial = el.le.1.e-6
+adipls/sigout.c.d.f	84	27364	1.e-5	no	if(.not.radial.and.icow.eq.0.and.abs(fcy).lt.1.e-5*abs(y(3,nn)))
+adipls/sigout.c.d.f	88	27364	1.	yes	if(fcy1.ne.0) fcy=1./fcy1
+adipls/sigout.c.d.f	89	27364	1.e-8	no	if(abs(fcy-1).ge.1.e-8) then
+adipls/sigout.c.d.f	253	27361	0.5	yes	flmuhz=frmuhz/(el+0.5)
+adipls/sigscn.c.d.f	81	2165	1.e-6	no	radial = el.le.1.e-6
+adipls/sigscn.c.d.f	227	149998	0.6	no	*    .and.2*detp/(detpp+det).le.0.6) then
+adipls/sigsol.c.d.f	80	27524	1.e-6	no	radial = el.le.1.e-6
+adipls/stevft.n.d.f	80	84372	0.25	yes	if(akr.lt.0.25.and.x(n).ge.xmnevn) then
+adipls/varfrq.n.d.f	93	27364	1.e-6	no	if(el.gt.1.e-6.and.ivarf.eq.3) ivarf=1
+adipls/varfrq.n.d.f	94	27364	1.e-6	no	if(el.le.1.e-6.and.ivarf.ne.3) go to 30
+adipls/varfrq.n.d.f	180	3275	1.e-6	no	if(el.gt.1.e-6) elli=1.d0/ell
+adipls/varfrq.n.d.f	237	3275	1.e-6	no	if(el.lt.1.e-6) go to 22
+adipls/varfrq.n.d.f	281	24089	0.1	no	30 usegam=aa(3,1).gt.0.1
+adipls/varfrq.n.d.f	307	13071290	1.e-10	no	if(abs(dgm1).lt.1.e-10) dgm1=0

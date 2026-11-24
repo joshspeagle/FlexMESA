@@ -1,0 +1,6 @@
+case	call_id	modes	match_reference	modes_bytes	taps_bytes
+astero/astero_adipls	1	7	yes	42518	29194
+astero/surface_effects	2	27	yes	151742	59773
+astero/surface_effects	4	24	yes	135003	50773
+astero/example_astero	29	19	yes	117222	48156
+astero/fast_scan_grid	211	16	yes	107145	27277

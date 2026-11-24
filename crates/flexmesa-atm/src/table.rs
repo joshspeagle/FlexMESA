@@ -230,6 +230,18 @@ pub fn get_table_values(
     new_logg_in: f64,
     new_teff_in: f64,
 ) -> Result<(f64, f64, f64, f64, f64, f64), AtmError> {
+    if !new_z.is_finite()
+        || new_z < 0.0
+        || !new_logg_in.is_finite()
+        || !new_teff_in.is_finite()
+    {
+        return Err(AtmError::InvalidArgument {
+            context: "get_table_values",
+            detail: format!(
+                "require finite Z >= 0, logg, Teff, got Z={new_z}, logg={new_logg_in}, Teff={new_teff_in}"
+            ),
+        });
+    }
     let ai = AtmTables::builtin().get_info(id)?;
     let nz = ai.nz;
     let nt = ai.nt;
@@ -442,10 +454,24 @@ pub fn eval_table(
     skip_partials: bool,
     teff: f64,
 ) -> Result<AtmEvalOutput, AtmError> {
-    if l <= 0.0 || r <= 0.0 || m <= 0.0 {
+    if !l.is_finite()
+        || !r.is_finite()
+        || !m.is_finite()
+        || !cgrav.is_finite()
+        || !teff.is_finite()
+        || !z.is_finite()
+        || l <= 0.0
+        || r <= 0.0
+        || m <= 0.0
+        || cgrav <= 0.0
+        || teff <= 0.0
+        || z < 0.0
+    {
         return Err(AtmError::InvalidArgument {
             context: "eval_table",
-            detail: format!("require L, R, M > 0, got L={l}, R={r}, M={m}"),
+            detail: format!(
+                "require finite L, R, M, cgrav, Teff > 0 and Z >= 0, got L={l}, R={r}, M={m}, Teff={teff}, Z={z}"
+            ),
         });
     }
     let g = cgrav * m / (r * r);
@@ -535,10 +561,22 @@ pub fn get_table_alfa_beta(
     cgrav: f64,
     id: i32,
 ) -> Result<(f64, f64), AtmError> {
-    if l <= 0.0 || r <= 0.0 || m <= 0.0 {
+    if !l.is_finite()
+        || !teff.is_finite()
+        || !r.is_finite()
+        || !m.is_finite()
+        || !cgrav.is_finite()
+        || l <= 0.0
+        || teff <= 0.0
+        || r <= 0.0
+        || m <= 0.0
+        || cgrav <= 0.0
+    {
         return Err(AtmError::InvalidArgument {
             context: "get_table_alfa_beta",
-            detail: "require L, R, M > 0".to_string(),
+            detail: format!(
+                "require finite L, Teff, R, M, cgrav > 0, got L={l}, Teff={teff}, R={r}, M={m}, cgrav={cgrav}"
+            ),
         });
     }
     let ai = AtmTables::builtin().get_info(id)?;

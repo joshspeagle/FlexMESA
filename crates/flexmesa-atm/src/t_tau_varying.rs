@@ -169,10 +169,25 @@ where
         &AtmEosCallbackResult,
     ) -> Result<AtmKapCallbackResult, AtmError>,
 {
-    if l <= 0.0 || r <= 0.0 || m <= 0.0 {
+    if !l.is_finite()
+        || !r.is_finite()
+        || !m.is_finite()
+        || !cgrav.is_finite()
+        || !tau_surf.is_finite()
+        || !teff.is_finite()
+        || !errtol.is_finite()
+        || l <= 0.0
+        || r <= 0.0
+        || m <= 0.0
+        || cgrav <= 0.0
+        || tau_surf <= 0.0
+        || teff <= 0.0
+        || errtol <= 0.0
+    {
         return Err(AtmError::InvalidArgument {
             context: "eval_t_tau_varying",
-            detail: "require L, R, M > 0".to_string(),
+            detail: "require finite L, R, M, cgrav, tau_surf, Teff, errtol > 0"
+                .to_string(),
         });
     }
     let g = cgrav * m / (r * r);
@@ -294,10 +309,30 @@ where
         &AtmEosCallbackResult,
     ) -> Result<AtmKapCallbackResult, AtmError>,
 {
-    if l <= 0.0 || r <= 0.0 || m <= 0.0 || dlogtau <= 0.0 {
+    if !l.is_finite()
+        || !r.is_finite()
+        || !m.is_finite()
+        || !teff.is_finite()
+        || !cgrav.is_finite()
+        || !ln_p_surf.is_finite()
+        || !tau_surf.is_finite()
+        || !tau_outer.is_finite()
+        || !errtol.is_finite()
+        || !dlogtau.is_finite()
+        || l <= 0.0
+        || r <= 0.0
+        || m <= 0.0
+        || teff <= 0.0
+        || cgrav <= 0.0
+        || tau_surf <= 0.0
+        || tau_outer <= 0.0
+        || errtol <= 0.0
+        || dlogtau <= 0.0
+    {
         return Err(AtmError::InvalidArgument {
             context: "build_t_tau_varying",
-            detail: "require L, R, M, dlogtau > 0".to_string(),
+            detail: "require finite positive L, R, M, Teff, cgrav, tau, errtol, dlogtau and finite lnP_surf"
+                .to_string(),
         });
     }
     if tau_outer > tau_surf {

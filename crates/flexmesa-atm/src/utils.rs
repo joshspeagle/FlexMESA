@@ -74,15 +74,42 @@ pub fn eval_paczynski_gradr(
 /// using the 571-point Steffen monotonic cubic spline of $\log_{10} E_2(x)$
 /// (`eval_E2` in `atm_utils.f90`).
 ///
+/// Queries outside the tabulated domain $[0, 10]$ clamp to the nearest
+/// boundary knot while retaining the boundary cubic's slope, matching MESA
+/// `do_interp_values_and_slopes`.
+///
 /// # Errors
-/// Returns [`AtmError::CallbackError`] if `x` lies outside `[0, 10]` or spline evaluation fails.
+/// Returns [`AtmError::InvalidArgument`] if `x` is non-finite, or
+/// [`AtmError::CallbackError`] if spline evaluation fails.
 pub fn eval_e2(x: f64) -> Result<(f64, f64), AtmError> {
-    let tables = AtmTables::builtin();
-    let (val, slope) = interp_value_and_slope(&tables.e2_x, &tables.e2_f, x)
-        .map_err(|e| AtmError::CallbackError {
+    if !x.is_finite() {
+        return Err(AtmError::InvalidArgument {
             context: "eval_e2",
-            detail: e.to_string(),
-        })?;
+            detail: format!("require finite x, got {x}"),
+        });
+    }
+    let tables = AtmTables::builtin();
+    let n = tables.e2_x.len();
+    // Out-of-domain queries clamp `x` while evaluating the boundary polynomial slope
+    // (`do_interp_values_and_slopes` in `interp_1d_misc.f90`), bypassing `interp_1d`'s zero exterior slope.
+    let (val, slope) = if n >= 2 && x < tables.e2_x[0] {
+        let c = &tables.e2_f[0];
+        (c[0], c[1])
+    } else if n >= 2 && x > tables.e2_x[n - 1] {
+        let k = n - 2;
+        let delta = tables.e2_x[n - 1] - tables.e2_x[k];
+        let c = &tables.e2_f[k];
+        let val = c[0] + delta * (c[1] + delta * (c[2] + delta * c[3]));
+        let slope = c[1] + 2.0 * delta * (c[2] + 1.5 * delta * c[3]);
+        (val, slope)
+    } else {
+        interp_value_and_slope(&tables.e2_x, &tables.e2_f, x).map_err(|e| {
+            AtmError::CallbackError {
+                context: "eval_e2",
+                detail: e.to_string(),
+            }
+        })?
+    };
     let e2 = exp10(val);
     let de2_dx = slope * LN10 * e2;
     Ok((e2, de2_dx))

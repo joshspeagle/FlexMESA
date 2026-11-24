@@ -190,6 +190,19 @@ pub struct StarControls {
     /// default, `star/defaults/controls.defaults:691`).
     #[serde(default = "default_gyre_data_schema")]
     pub gyre_data_schema: i32,
+    /// FGONG file version, `300` or `1300` (`fgong_ivers`, `1300` default,
+    /// `star/defaults/controls.defaults:672`).
+    #[serde(default = "default_fgong_ivers")]
+    pub fgong_ivers: i32,
+    /// Record format of OSC files (`format_for_OSC_data`,
+    /// `'(1P5E19.12,x)'` default, `star/defaults/controls.defaults:680`).
+    #[serde(default = "default_format_for_osc_data")]
+    pub format_for_osc_data: String,
+    /// FGONG $A^*$ is zeroed in mixed zones inside this radius in
+    /// $R_\odot$ (`fgong_zero_A_inside_r`, `0d0` default,
+    /// `star/defaults/controls.defaults:712`).
+    #[serde(default)]
+    pub fgong_zero_a_inside_r: f64,
     /// Whether to use the $\nabla \ln \mu_X$ form for Brunt $B$.
     pub use_brunt_gradmux_form: bool,
     /// Energy equation form (`EnergyEqnOption::Dedt` default).
@@ -949,4 +962,12 @@ const fn default_threshold_grad_mu() -> f64 {
 
 const fn default_gyre_data_schema() -> i32 {
     101
+}
+
+const fn default_fgong_ivers() -> i32 {
+    1300
+}
+
+fn default_format_for_osc_data() -> String {
+    String::from("(1P5E19.12,x)")
 }

@@ -341,8 +341,7 @@ pub fn surface_avg_x_by_name(model: &StarModel, iso_name: &str) -> f64 {
     surface_avg_x_slot(model, slot)
 }
 
-/// Face-interpolated adiabatic sound speed `csound_face(k)` (`eval_csound` / face
-/// interpolation in `star/private/star_utils.f90`).
+/// Face sound speed `s% csound_face(k)` (`star/private/micro.f90:91-101`).
 #[must_use]
 #[inline]
 pub fn csound_face_at(model: &StarModel, k: usize) -> f64 {
@@ -351,7 +350,7 @@ pub fn csound_face_at(model: &StarModel, k: usize) -> f64 {
     } else if k == 0 || k >= model.nz {
         model.csound[0]
     } else {
-        model.interp_val_to_pt(&model.csound, k)
+        model.face_value_alfa_beta(&model.csound, k)
     }
 }
 
@@ -383,10 +382,16 @@ pub fn get_ledd(model: &StarModel, k: usize) -> f64 {
         return 0.0;
     }
     let j = if k == 0 { 1 } else { k };
-    let kap_face = model.interp_val_to_pt(&model.opacity, j);
-    if kap_face <= 0.0 {
-        return 0.0;
-    }
+    // `kap_face = interp_val_to_pt(s% opacity,j,s% nz,s% dq,'get_Ledd')`
+    // (`star_utils.f90:2073`), four-point; upstream stops if it fails.
+    let nz = model.nz;
+    let kap_face = crate::pulse_gyre_data::interp_val_to_pt_slices(
+        &model.opacity[..nz],
+        j + 1,
+        nz,
+        &model.dq[..nz],
+    )
+    .unwrap_or(f64::NAN);
     FOUR_PI * CLIGHT * model.cgrav[j] * model.m_grav[j] / kap_face
 }
 
@@ -905,13 +910,10 @@ pub fn eval_cz_bdy_dq(model: &StarModel) -> Vec<f64> {
         } else if mt1 == MixingType::SemiconvectiveMixing
             || mt2 == MixingType::SemiconvectiveMixing
         {
-            let ga0 = if k == 0 {
-                model.grada[0]
-            } else {
-                model.interp_val_to_pt(&model.grada, k)
-            };
-            let ga1 = model.interp_val_to_pt(&model.grada, k + 1);
-            (ga0 - model.gradr[k], ga1 - model.gradr[k + 1])
+            // `s% grada_face(k-1)`, `s% grada_face(k)` with upstream
+            // `k` = this `k + 1` (`mix_info.f90:454-455`).
+            let gf = &model.aux.mixing.grada_face;
+            (gf[k] - model.gradr[k], gf[k + 1] - model.gradr[k + 1])
         } else {
             continue;
         };

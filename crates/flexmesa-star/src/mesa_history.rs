@@ -2714,7 +2714,8 @@ fn eval_scalar_column(
         "max_gradT_div_grada" => {
             let mut v = 0.0;
             for k in 1..nz {
-                let ga = model.interp_val_to_pt(&model.grada, k);
+                // `s% grada_face(k)` (`history.f90:2706-2712`).
+                let ga = model.aux.mixing.grada_face[k];
                 if ga != 0.0 && model.gradt[k] / ga > v {
                     v = model.gradt[k] / ga;
                 }
@@ -2724,7 +2725,8 @@ fn eval_scalar_column(
         "max_gradT_sub_grada" => {
             let mut v = 0.0;
             for k in 1..nz {
-                let ga = model.interp_val_to_pt(&model.grada, k);
+                // `s% grada_face(k)` (`history.f90:2713-2718`).
+                let ga = model.aux.mixing.grada_face[k];
                 if model.gradt[k] - ga > v {
                     v = model.gradt[k] - ga;
                 }

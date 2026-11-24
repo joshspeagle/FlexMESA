@@ -288,15 +288,35 @@ impl StarModel {
         }
     }
 
-    /// Interpolates a cell-centered array `v` to face `k` (`interp_val_to_pt`).
+    /// Face value `alfa*v(k) + beta*v(k-1)` with the weights of
+    /// [`Self::get_face_weights`], `v(1)` at the surface face (the pattern
+    /// of `s% csound_face(k)`, `star/private/micro.f90:91-101`).
+    ///
+    /// This is not MESA's `interp_val_to_pt` (`star_utils.f90:779-811`),
+    /// which interpolates through four cells; see
+    /// `pulse_gyre_data::interp_val_to_pt_slices` (#491).
     #[must_use]
     #[inline]
-    pub fn interp_val_to_pt(&self, v: &[f64], k: usize) -> f64 {
+    pub fn face_value_alfa_beta(&self, v: &[f64], k: usize) -> f64 {
         if k == 0 {
             v[0]
         } else {
             let (alfa, beta) = self.get_face_weights(k);
             alfa * v[k] + beta * v[k - 1]
+        }
+    }
+
+    /// `get_face_values` at face `k` (`star/private/star_utils.f90:2046-2060`):
+    /// `v_face(1) = v_mid(1)` and
+    /// `v_face(k) = (v_mid(k)*dq(k-1) + v_mid(k-1)*dq(k))/(dq(k-1) + dq(k))`.
+    #[must_use]
+    #[inline]
+    pub fn get_face_value(&self, v: &[f64], k: usize) -> f64 {
+        if k == 0 {
+            v[0]
+        } else {
+            let dq_sum = self.dq[k - 1] + self.dq[k];
+            (v[k] * self.dq[k - 1] + v[k - 1] * self.dq[k]) / dq_sum
         }
     }
 

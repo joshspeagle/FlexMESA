@@ -54,17 +54,12 @@ pub fn do_brunt_b(model: &mut StarModel) -> Result<(), StarError> {
     let use_mc = model.controls.use_mass_corrections;
     let ht = crate::micro::builtin_helm_table()?;
 
-    // `get_face_values` (`star/private/star_utils.f90:2046-2060`), as
-    // `do_brunt_B_MHM_form` uses it (`star/private/brunt.f90:200-207`).
-    let face = |v: &[f64], k: usize| -> f64 {
-        let dq_sum = model.dq[k - 1] + model.dq[k];
-        (v[k] * model.dq[k - 1] + v[k - 1] * model.dq[k]) / dq_sum
-    };
     for k in 1..nz {
-        let rho_f = face(&model.rho, k);
-        let t_f = face(&model.t, k);
-        let chi_t_f = face(&model.chi_t, k);
-        let chi_rho_f = face(&model.chi_rho, k);
+        // `get_face_values` (`brunt.f90:207-216`).
+        let rho_f = model.get_face_value(&model.rho, k);
+        let t_f = model.get_face_value(&model.t, k);
+        let chi_t_f = model.get_face_value(&model.chi_t, k);
+        let chi_rho_f = model.get_face_value(&model.chi_rho, k);
 
         let mut delta_lnp = model.ln_peos[k - 1] - model.ln_peos[k];
         if delta_lnp > -1.0e-50 {
@@ -206,10 +201,8 @@ pub fn do_brunt_n2(model: &mut StarModel) -> Result<(), StarError> {
     let mut face_fac = vec![0.0_f64; nz];
     face_fac[0] = cell_fac[0];
     for k in 1..nz {
-        let dq_sum = model.dq[k - 1] + model.dq[k];
-        face_fac[k] = (cell_fac[k] * model.dq[k - 1]
-            + cell_fac[k - 1] * model.dq[k])
-            / dq_sum;
+        // `get_face_values` (`brunt.f90:144-145`).
+        face_fac[k] = model.get_face_value(&cell_fac, k);
     }
 
     let min_mag = model.controls.mix_wind.min_magnitude_brunt_b;
@@ -218,8 +211,8 @@ pub fn do_brunt_n2(model: &mut StarModel) -> Result<(), StarError> {
             "do_brunt_N2: gradT_sub_grada is unset (star/private/brunt.f90:139)",
         )));
     }
-    // Clip B and calculate N^2 from B (`star/private/brunt.f90:138-162`).
     for k in 0..nz {
+        // `s% gradT_sub_grada(k)` (`brunt.f90:153-154`).
         let gradt_sub_grada = model.aux.mixing.gradt_sub_grada[k];
         if model.brunt_b[k].abs() < min_mag
             || model.gradt[k] == 0.0

@@ -135,7 +135,7 @@ impl V<'_> {
 
 /// `set_segment_indices(s, k_a, k_b, include_last_face)`
 /// (`pulse_utils.f90:42-133`), 1-based segment bounds.
-fn set_segment_indices(
+pub(crate) fn set_segment_indices(
     s: &GyreDataInput<'_>,
     include_last_face: bool,
 ) -> Result<(Vec<usize>, Vec<usize>), GyreDataError> {
@@ -207,8 +207,18 @@ fn interp_val_to_pt(
         / (dq.at(k - 1) + dq.at(k)))
 }
 
+/// [`interp_val_to_pt`] on plain 1-based sub-arrays (for `eval_face_X`).
+pub(crate) fn interp_val_to_pt_slices(
+    v: &[f64],
+    k: usize,
+    sz: usize,
+    dq: &[f64],
+) -> Result<f64, GyreDataError> {
+    interp_val_to_pt(V(v), k, sz, V(dq))
+}
+
 /// `eval_face(dq, v, k, k_a, k_b)` (`pulse_utils.f90:136-189`), no limits.
-fn eval_face(
+pub(crate) fn eval_face(
     dq: &[f64],
     v: &[f64],
     k: usize,
@@ -256,7 +266,7 @@ fn eval_face(
 }
 
 /// `eval_face_A_ast(s, k, k_a, k_b)` (`pulse_utils.f90:248-298`).
-fn eval_face_a_ast(
+pub(crate) fn eval_face_a_ast(
     s: &GyreDataInput<'_>,
     k: usize,
     k_a: usize,
@@ -294,7 +304,7 @@ fn eval_face_a_ast(
 }
 
 /// `eval_face_rho(s, k, k_a, k_b)` (`pulse_utils.f90:301-351`).
-fn eval_face_rho(
+pub(crate) fn eval_face_rho(
     s: &GyreDataInput<'_>,
     k: usize,
     k_a: usize,
@@ -332,7 +342,7 @@ fn eval_face_rho(
 }
 
 /// `eval_center(r, v, k_a, k_b)` (`pulse_utils.f90:354-404`), no limits.
-fn eval_center(
+pub(crate) fn eval_center(
     r: &[f64],
     v: &[f64],
     k_a: usize,
@@ -356,7 +366,7 @@ fn eval_center(
 }
 
 /// `eval_center_rho(s, k_b)` (`pulse_utils.f90:463-482`).
-fn eval_center_rho(s: &GyreDataInput<'_>, k_b: usize) -> f64 {
+pub(crate) fn eval_center_rho(s: &GyreDataInput<'_>, k_b: usize) -> f64 {
     let r_1 = V(s.rmid).at(k_b);
     let rho_1 = V(s.rho).at(k_b);
     let m_1 = V(s.m).at(k_b) - 0.5 * V(s.dm).at(k_b);

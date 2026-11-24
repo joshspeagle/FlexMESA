@@ -9,9 +9,9 @@
 use std::path::PathBuf;
 
 use crate::{
-    build_pulse_points_with_options, export_cafein, export_fgong_with_version,
-    export_gr1d, export_gsm, export_gsm_data, export_gyre_with_schema,
-    export_osc, export_pulse_by_format, export_saio, export_stella_pair,
+    build_pulse_points_with_options, export_cafein, export_fgong, export_gr1d,
+    export_gsm, export_gsm_data, export_gyre, export_osc,
+    export_pulse_by_format, export_saio, export_stella_pair,
     load_zams_model, parse_fortran_float, parse_stella_abn, parse_stella_hyd,
     parse_stella_lbol, run_stella_from_hyd_abn, set_hydro_vars,
     solve_adipls_fgong_modes, solve_gyre_mesa_modes, FeII5169EtaTable,
@@ -58,27 +58,33 @@ fn test_all_seven_pulsation_exporters_and_double_point_atmosphere_options() {
     let pts_split = build_pulse_points_with_options(&model, &opts_split);
     assert!(pts_split.len() > pts_base.len() + 6);
 
-    // 1. GYRE v101 & v110 (19 cols = index + 18), v120 (20 cols = index + 19)
-    for (schema, expected_cols) in [(101, 19), (110, 19), (120, 20)] {
-        let g = export_gyre_with_schema(&model, true, schema);
-        let mut lines = g.lines();
-        let hdr: Vec<&str> = lines.next().unwrap().split_whitespace().collect();
-        assert_eq!(hdr.len(), 5);
-        assert_eq!(hdr[4].parse::<usize>().unwrap(), schema);
-        let row0: Vec<&str> =
-            lines.next().unwrap().split_whitespace().collect();
-        assert_eq!(row0.len(), expected_cols);
+    // 1-3. GYRE, FGONG and OSC text (`star/private/pulse.f90:43-86`):
+    // without the surface point and with the centre, nn = nz points.
+    let nn = model.nz;
+    let g = export_gyre(&model, true, false, false).expect("gyre 101");
+    let mut lines = g.lines();
+    let hdr: Vec<&str> = lines.next().unwrap().split_whitespace().collect();
+    assert_eq!(hdr.len(), 5);
+    assert_eq!(hdr[0].parse::<usize>().unwrap(), nn);
+    assert_eq!(hdr[4].parse::<i32>().unwrap(), 101);
+    let row0: Vec<&str> = lines.next().unwrap().split_whitespace().collect();
+    assert_eq!(row0.len(), 19);
+    // write_gyre_data accepts schemas 101 and 120 only (pulse_gyre.f90:440-446);
+    // get_gyre_data's schema 120 is not ported.
+    for schema in [110, 120] {
+        model.controls.gyre_data_schema = schema;
+        assert!(export_gyre(&model, true, false, false).is_err());
     }
-
-    // 2. FGONG v300 and v1300 (15 global constants + 40 point columns)
+    model.controls.gyre_data_schema = 101;
     for ver in [300, 1300] {
-        let fg = export_fgong_with_version(&model, true, ver);
-        assert_eq!(fg.lines().count(), 5 + 3 + 8 * pts_base.len());
+        model.controls.fgong_ivers = ver;
+        let fg = export_fgong(&model, true, false, false).expect("fgong");
+        assert_eq!(fg.lines().count(), 5 + 3 + 8 * nn);
     }
-
-    // 3. OSC (15 global constants + 36 point columns = 22 structure + 14 abundance)
-    let osc = export_osc(&model, true);
-    assert_eq!(osc.lines().count(), 6 + 3 + 8 * pts_base.len());
+    model.controls.fgong_ivers = 1300;
+    let osc = export_osc(&model, true, false, false).expect("osc");
+    assert_eq!(osc.lines().count(), 6 + 3 + 8 * nn);
+    assert!(export_fgong(&model, true, false, true).is_err());
 
     // 4. GSM v110 and v120
     let gsm_110 = export_gsm_data(&model, true, 110);

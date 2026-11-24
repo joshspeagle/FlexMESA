@@ -15,6 +15,7 @@ use flexmesa_star::{
 use numpy::{
     IntoPyArray, PyArray1, PyArray2, PyArrayMethods, PyReadonlyArray1,
 };
+use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 
 use crate::star_py::PyStarModel;
@@ -351,37 +352,70 @@ pub fn star_build_pulse_points<'py>(
     Ok(PyArray2::from_vec2(py, &rows)?)
 }
 
-/// Exports `model` in `GYRE` v120 ASCII format (`pulse_gyre.f90`).
+/// Exports `model` as `GYRE` text (`star_export_pulse_data`,
+/// `star/private/pulse.f90:43-86`).
 #[pyfunction]
-#[pyo3(signature = (model, add_center_point = true))]
+#[pyo3(signature = (model, add_center_point = true, keep_surface_point = false, add_atmosphere = false))]
 pub fn star_export_gyre(
     py: Python<'_>,
     model: &PyStarModel,
     add_center_point: bool,
-) -> String {
-    py.detach(|| export_gyre(&model.inner, add_center_point))
+    keep_surface_point: bool,
+    add_atmosphere: bool,
+) -> PyResult<String> {
+    py.detach(|| {
+        export_gyre(
+            &model.inner,
+            add_center_point,
+            keep_surface_point,
+            add_atmosphere,
+        )
+    })
+    .map_err(|e| PyValueError::new_err(e.to_string()))
 }
 
-/// Exports `model` in `FGONG` v1300 ASCII format (`pulse_fgong.f90`).
+/// Exports `model` as `FGONG` text (`star_export_pulse_data`,
+/// `star/private/pulse.f90:43-86`).
 #[pyfunction]
-#[pyo3(signature = (model, add_center_point = true))]
+#[pyo3(signature = (model, add_center_point = true, keep_surface_point = false, add_atmosphere = false))]
 pub fn star_export_fgong(
     py: Python<'_>,
     model: &PyStarModel,
     add_center_point: bool,
-) -> String {
-    py.detach(|| export_fgong(&model.inner, add_center_point))
+    keep_surface_point: bool,
+    add_atmosphere: bool,
+) -> PyResult<String> {
+    py.detach(|| {
+        export_fgong(
+            &model.inner,
+            add_center_point,
+            keep_surface_point,
+            add_atmosphere,
+        )
+    })
+    .map_err(|e| PyValueError::new_err(e.to_string()))
 }
 
-/// Exports `model` in `OSC` ASCII format (`pulse_osc.f90`).
+/// Exports `model` as `OSC` text (`star_export_pulse_data`,
+/// `star/private/pulse.f90:43-86`).
 #[pyfunction]
-#[pyo3(signature = (model, add_center_point = true))]
+#[pyo3(signature = (model, add_center_point = true, keep_surface_point = false, add_atmosphere = false))]
 pub fn star_export_osc(
     py: Python<'_>,
     model: &PyStarModel,
     add_center_point: bool,
-) -> String {
-    py.detach(|| export_osc(&model.inner, add_center_point))
+    keep_surface_point: bool,
+    add_atmosphere: bool,
+) -> PyResult<String> {
+    py.detach(|| {
+        export_osc(
+            &model.inner,
+            add_center_point,
+            keep_surface_point,
+            add_atmosphere,
+        )
+    })
+    .map_err(|e| PyValueError::new_err(e.to_string()))
 }
 
 /// Exports `model` in `GYRE` `GSM` v110 binary/HDF-compatible format (`pulse_gsm.f90`).

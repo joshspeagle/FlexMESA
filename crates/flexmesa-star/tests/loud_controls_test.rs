@@ -128,12 +128,14 @@ fn test_unknown_section_key_unused_and_removed_aliases_fail_loudly() {
     let unimpl = tmp.root.join("inlist_unimpl");
     fs::write(
         &unimpl,
-        "&controls\n  initial_mass = 1.0d0\n  fgong_ivers = 300\n/\n",
+        "&controls\n  initial_mass = 1.0d0\n  add_center_point_to_pulse_data = .false.\n/\n",
     )
     .expect("write");
     let unimpl_err = InlistBundle::from_file(&unimpl)
         .expect_err("unimplemented upstream key must fail by default");
-    assert!(unimpl_err.to_string().contains("fgong_ivers"));
+    assert!(unimpl_err
+        .to_string()
+        .contains("add_center_point_to_pulse_data"));
 
     assert!(
         InlistBundle::from_file_with_options(

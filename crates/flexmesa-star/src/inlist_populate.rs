@@ -504,6 +504,7 @@ impl InlistBundle {
         for (dst, key) in [
             (&mut c.max_number_of_double_points, "max_number_of_double_points"),
             (&mut c.gyre_data_schema, "gyre_data_schema"),
+            (&mut c.fgong_ivers, "fgong_ivers"),
         ] {
             let mut v = isize::try_from(*dst).unwrap_or(0);
             ctrl.try_isize_into("controls", &mut v, key)?;
@@ -511,6 +512,8 @@ impl InlistBundle {
                 StarError::InvalidInput(format!("'&controls::{key}' out of range: {v}"))
             })?;
         }
+        ctrl.try_str_into("controls", &mut c.format_for_osc_data, "format_for_osc_data")?;
+        ctrl.try_f64_into("controls", &mut c.fgong_zero_a_inside_r, "fgong_zero_a_inside_r")?;
         map_strs!("controls", ctrl, c, [
             zams_filename, cool_wind_rgb_scheme, cool_wind_agb_scheme, phase_separation_option,
         ]);

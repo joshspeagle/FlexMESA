@@ -24,8 +24,13 @@ const RSP2_MIN_LC_DIV_L_FOR_CONVECTIVE_MIXING_TYPE: f64 = 1.0e-4;
 pub fn face_density(model: &StarModel, k: usize) -> f64 {
     if k >= model.nz {
         model.rho.first().copied().unwrap_or(0.0)
+    } else if k == 0 {
+        model.rho[0]
     } else {
-        model.interp_val_to_pt(&model.rho, k)
+        // `rho_face = (s% dq(k-1)*s% rho(k) + s% dq(k)*s% rho(k-1))/
+        // (s% dq(k-1) + s% dq(k))` (`mix_info.f90:118-119`).
+        (model.dq[k - 1] * model.rho[k] + model.dq[k] * model.rho[k - 1])
+            / (model.dq[k - 1] + model.dq[k])
     }
 }
 
@@ -522,13 +527,9 @@ fn remove_thermohaline_dropouts(
     if nz < 4 {
         return;
     }
-    let has_gf = model.aux.mixing.grada_face.len() == nz;
+    // `s% grada_face(k)` (`mix_info.f90:1203, 1232-1233`).
     let grada_at = |m: &StarModel, idx: usize| -> f64 {
-        if has_gf && m.aux.mixing.grada_face[idx] > 0.0 {
-            m.aux.mixing.grada_face[idx]
-        } else {
-            m.interp_val_to_pt(&m.grada, idx)
-        }
+        m.aux.mixing.grada_face[idx]
     };
 
     let mut rbot = model.r[nz - 1];
@@ -740,7 +741,6 @@ pub fn set_cz_boundary_info(model: &mut StarModel) -> Result<(), StarError> {
     if nz < 2 {
         return Ok(());
     }
-    let has_gf = model.aux.mixing.grada_face.len() == nz;
     for k in 1..nz {
         let mt1 = model.mixing_type[k - 1];
         let mt2 = model.mixing_type[k];
@@ -757,19 +757,10 @@ pub fn set_cz_boundary_info(model: &mut StarModel) -> Result<(), StarError> {
         } else if mt2 == MixingType::SemiconvectiveMixing
             || mt1 == MixingType::SemiconvectiveMixing
         {
-            let ga0 = if has_gf && model.aux.mixing.grada_face[k - 1] > 0.0 {
-                model.aux.mixing.grada_face[k - 1]
-            } else if k == 1 {
-                model.grada[0]
-            } else {
-                model.interp_val_to_pt(&model.grada, k - 1)
-            };
-            let ga1 = if has_gf && model.aux.mixing.grada_face[k] > 0.0 {
-                model.aux.mixing.grada_face[k]
-            } else {
-                model.interp_val_to_pt(&model.grada, k)
-            };
-            (ga0 - model.gradr[k - 1], ga1 - model.gradr[k])
+            // `dg0 = s% grada_face(k-1) - s% gradr(k-1)`,
+            // `dg1 = s% grada_face(k) - s% gradr(k)` (`mix_info.f90:454-455`).
+            let gf = &model.aux.mixing.grada_face;
+            (gf[k - 1] - model.gradr[k - 1], gf[k] - model.gradr[k])
         } else {
             continue;
         };

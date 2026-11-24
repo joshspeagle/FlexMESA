@@ -48,7 +48,9 @@ def test_pulse_atm_export_preserves_invariants() -> None:
     model = star.StarModel.from_zams(initial_mass=1.0, initial_z=0.02)
     gyre_txt = model.to_gyre_str(add_center_point=True)
     fgong_txt = model.to_fgong_str(add_center_point=True)
-    assert len(gyre_txt.splitlines()) == model.nz + 2
+    # get_gyre_data without the surface point and with the centre has nz
+    # points (`star/private/pulse_gyre.f90:116-128`), plus the header.
+    assert len(gyre_txt.splitlines()) == model.nz + 1
     assert len(fgong_txt.splitlines()) > model.nz
 
 

@@ -572,17 +572,83 @@ class StarModel(_arrays.StarModelArrays):
             float(grad_mu_threshold),
         )
 
-    def to_gyre_str(self, add_center_point: bool = True) -> str:
-        """Export the model in `GYRE` v120 ASCII format (`pulse_gyre.f90`)."""
-        return _rust.star_export_gyre(self._rust_model, bool(add_center_point))
+    def to_gyre_str(
+        self,
+        add_center_point: bool = True,
+        keep_surface_point: bool = False,
+        add_atmosphere: bool = False,
+    ) -> str:
+        """Export the model as `GYRE` text (`star_export_pulse_data`).
 
-    def to_fgong_str(self, add_center_point: bool = True) -> str:
-        """Export the model in `FGONG` v1300 format (`pulse_fgong.f90`)."""
-        return _rust.star_export_fgong(self._rust_model, bool(add_center_point))
+        Args:
+            add_center_point: Add a point at the centre.
+            keep_surface_point: Keep the outermost face.
+            add_atmosphere: Attach an atmosphere (not ported; raises).
 
-    def to_osc_str(self, add_center_point: bool = True) -> str:
-        """Export the model in `OSC` ASCII format (`pulse_osc.f90`)."""
-        return _rust.star_export_osc(self._rust_model, bool(add_center_point))
+        Returns:
+            The file text, as MESA 26.4.1's `pulse_gyre.f90` writes it.
+
+        Raises:
+            ValueError: Where upstream stops, or for a path not ported.
+        """
+        return _rust.star_export_gyre(
+            self._rust_model,
+            bool(add_center_point),
+            bool(keep_surface_point),
+            bool(add_atmosphere),
+        )
+
+    def to_fgong_str(
+        self,
+        add_center_point: bool = True,
+        keep_surface_point: bool = False,
+        add_atmosphere: bool = False,
+    ) -> str:
+        """Export the model as `FGONG` text (`star_export_pulse_data`).
+
+        Args:
+            add_center_point: Add a point at the centre.
+            keep_surface_point: Keep the outermost face.
+            add_atmosphere: Attach an atmosphere (not ported; raises).
+
+        Returns:
+            The file text, as MESA 26.4.1's `pulse_fgong.f90` writes it.
+
+        Raises:
+            ValueError: Where upstream stops, or for a path not ported.
+        """
+        return _rust.star_export_fgong(
+            self._rust_model,
+            bool(add_center_point),
+            bool(keep_surface_point),
+            bool(add_atmosphere),
+        )
+
+    def to_osc_str(
+        self,
+        add_center_point: bool = True,
+        keep_surface_point: bool = False,
+        add_atmosphere: bool = False,
+    ) -> str:
+        """Export the model as `OSC` text (`star_export_pulse_data`).
+
+        Args:
+            add_center_point: Add a point at the centre.
+            keep_surface_point: Keep the outermost face.
+            add_atmosphere: Attach an atmosphere (not ported; raises).
+
+        Returns:
+            The file text, as MESA 26.4.1's `pulse_osc.f90` writes it.
+
+        Raises:
+            ValueError: Where upstream stops, or for a path not ported.
+        """
+        return _rust.star_export_osc(
+            self._rust_model,
+            bool(add_center_point),
+            bool(keep_surface_point),
+            bool(add_atmosphere),
+        )
 
     def to_gsm_bytes(self, add_center_point: bool = True) -> bytes:
         """Export the model in `GYRE` `GSM` v110 format (`pulse_gsm.f90`)."""

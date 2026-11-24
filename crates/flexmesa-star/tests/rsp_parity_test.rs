@@ -619,3 +619,409 @@ fn test_rsp_t2c_built_model_with_mesa_rng_state_matches_10_periods_mesa_26_4_1()
     assert_eq!(m.aux.rsp.num_periods, 10);
     assert_eq!(checked, T2C_REF_ROWS.len());
 }
+
+struct RspTempDir {
+    root: PathBuf,
+}
+
+impl RspTempDir {
+    fn new(tag: &str) -> Self {
+        static COUNTER: std::sync::atomic::AtomicU64 =
+            std::sync::atomic::AtomicU64::new(0);
+        let n = COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let root = std::env::temp_dir().join(format!(
+            "flexmesa_rsp_parity_{tag}_{}_{}",
+            std::process::id(),
+            n
+        ));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(&root).expect("create temp test dir");
+        Self { root }
+    }
+}
+
+impl Drop for RspTempDir {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir_all(&self.root);
+    }
+}
+
+#[test]
+fn test_rsp_13_controls_defaults_and_inventory() {
+    use flexmesa_star::inlist_inventory::{
+        CONTROLS_SUPPORTED, CONTROLS_TERMINAL_OUTPUT, CONTROLS_UNUSED,
+    };
+    use flexmesa_star::RspConfig;
+
+    let def = RspConfig::default();
+    assert!(!def.write_map);
+    assert_eq!(def.map_columns_filename, "map_columns.list");
+    assert_eq!(def.map_filename, "map.data");
+    assert_eq!(def.map_first_period, -1);
+    assert_eq!(def.map_last_period, -1);
+    assert_eq!(def.map_zone_interval, 2);
+    assert_eq!(def.map_history_filename, "map_history.data");
+    assert_eq!(def.qvisc_linear, 0.0);
+    assert_eq!(def.qvisc_quadratic, 0.0);
+    assert!((def.tol_max_resid - 1.0e-6).abs() < 1.0e-18);
+    assert!(!def.report_limit_dt);
+    assert!(!def.report_undercorrections);
+    assert!(!def.trace_rsp_build_model);
+
+    for k in [
+        "rsp_write_map",
+        "rsp_map_columns_filename",
+        "rsp_map_filename",
+        "rsp_map_first_period",
+        "rsp_map_last_period",
+        "rsp_map_zone_interval",
+        "rsp_map_history_filename",
+        "rsp_qvisc_linear",
+        "rsp_qvisc_quadratic",
+        "rsp_tol_max_resid",
+    ] {
+        assert!(CONTROLS_SUPPORTED.contains(&k), "{k} in CONTROLS_SUPPORTED");
+        assert!(!CONTROLS_UNUSED.contains(&k), "{k} not in CONTROLS_UNUSED");
+    }
+    for k in [
+        "rsp_report_limit_dt",
+        "rsp_report_undercorrections",
+        "rsp_trace_rsp_build_model",
+    ] {
+        assert!(
+            CONTROLS_TERMINAL_OUTPUT.contains(&k),
+            "{k} in CONTROLS_TERMINAL_OUTPUT"
+        );
+        assert!(!CONTROLS_UNUSED.contains(&k), "{k} not in CONTROLS_UNUSED");
+    }
+}
+
+#[test]
+fn test_rsp_13_controls_strict_parsing_and_validation() {
+    use flexmesa_star::InlistBundle;
+
+    let tmp = RspTempDir::new("strict_parse");
+    let valid_path = tmp.root.join("inlist_valid");
+    fs::write(
+        &valid_path,
+        "&controls\n\
+         rsp_write_map = .true.\n\
+         rsp_map_columns_filename = 'custom_cols.list'\n\
+         rsp_map_filename = 'custom_map.data'\n\
+         rsp_map_first_period = 3\n\
+         rsp_map_last_period = 5\n\
+         rsp_map_history_filename = 'custom_hist.data'\n\
+         rsp_map_zone_interval = 4\n\
+         rsp_qvisc_linear = 0.25d0\n\
+         rsp_qvisc_quadratic = 1.5d0\n\
+         rsp_tol_max_resid = 5.0d-7\n\
+         rsp_report_limit_dt = .true.\n\
+         rsp_report_undercorrections = .true.\n\
+         rsp_trace_rsp_build_model = .true.\n\
+         /\n",
+    )
+    .expect("write valid inlist");
+    let bundle = InlistBundle::from_file(&valid_path).expect("strict parse");
+    assert_eq!(bundle.validation_report.unsupported_controls, Vec::new());
+    let rsp = &bundle.controls.rsp;
+    assert!(rsp.write_map);
+    assert_eq!(rsp.map_columns_filename, "custom_cols.list");
+    assert_eq!(rsp.map_filename, "custom_map.data");
+    assert_eq!(rsp.map_first_period, 3);
+    assert_eq!(rsp.map_last_period, 5);
+    assert_eq!(rsp.map_history_filename, "custom_hist.data");
+    assert_eq!(rsp.map_zone_interval, 4);
+    assert!((rsp.qvisc_linear - 0.25).abs() < 1.0e-15);
+    assert!((rsp.qvisc_quadratic - 1.5).abs() < 1.0e-15);
+    assert!((rsp.tol_max_resid - 5.0e-7).abs() < 1.0e-18);
+    assert!(rsp.report_limit_dt);
+    assert!(rsp.report_undercorrections);
+    assert!(rsp.trace_rsp_build_model);
+    for k in [
+        "rsp_report_limit_dt",
+        "rsp_report_undercorrections",
+        "rsp_trace_rsp_build_model",
+    ] {
+        assert!(
+            bundle
+                .validation_report
+                .terminal_output_keys
+                .iter()
+                .any(|(_, name)| name == k),
+            "terminal_output records {k}"
+        );
+    }
+
+    for (tag, bad) in [
+        ("zero_stride", "rsp_map_zone_interval = 0"),
+        ("bad_write_map", "rsp_write_map = 123"),
+        ("bad_qvisc", "rsp_qvisc_linear = 'bad'"),
+        ("bad_tol", "rsp_tol_max_resid = .true."),
+        ("bad_report", "rsp_report_limit_dt = 1"),
+    ] {
+        let p = tmp.root.join(format!("inlist_{tag}"));
+        fs::write(&p, format!("&controls\n  {bad}\n/\n")).expect("write");
+        assert!(
+            InlistBundle::from_file(&p).is_err(),
+            "{tag} should fail strict validation"
+        );
+    }
+}
+
+#[test]
+fn test_rsp_profile_scalars_uq_photo_and_qvisc_invariance() {
+    use flexmesa_star::mesa_profile::{
+        format_star_profile_text, parse_star_profile_columns,
+    };
+    use flexmesa_star::photo_io::{load_photo_bytes, write_photo_bytes};
+    use flexmesa_star::rsp_driver::rsp_total_energy_integrals;
+
+    let mod_text =
+        fs::read_to_string(golden_rsp_dir().join("rsp_Delta_Scuti_cycle0.mod"))
+            .expect("read delta scuti cycle0.mod");
+    let mut c_default = delta_scuti_controls();
+    c_default.rsp_target_steps_per_cycle = 120;
+    let mut m_def = read_mod_str(&mod_text, c_default, base_job(false))
+        .expect("read_mod_str default");
+    rsp_setup_model(&mut m_def, false, false).expect("setup default");
+
+    let mut c_qvisc = delta_scuti_controls();
+    c_qvisc.rsp_target_steps_per_cycle = 120;
+    c_qvisc.rsp.qvisc_linear = 0.5;
+    c_qvisc.rsp.qvisc_quadratic = 2.0;
+    c_qvisc.rsp.tol_max_resid = 1.0e-3;
+    let mut m_qv = read_mod_str(&mod_text, c_qvisc, base_job(false))
+        .expect("read_mod_str qvisc");
+    rsp_setup_model(&mut m_qv, false, false).expect("setup qvisc");
+
+    for _ in 0..3 {
+        let r_def =
+            star_evolve_step(&mut m_def, false, true, true).expect("step def");
+        let r_qv =
+            star_evolve_step(&mut m_qv, false, true, true).expect("step qv");
+        assert_eq!(r_def.iterations, r_qv.iterations);
+        assert_eq!(r_def.retries, r_qv.retries);
+        assert_eq!(m_def.teff.to_bits(), m_qv.teff.to_bits());
+        assert_eq!(m_def.aux.rsp.uq_rsp, m_qv.aux.rsp.uq_rsp);
+    }
+    let _ = rsp_total_energy_integrals(&mut m_def);
+
+    assert!(
+        m_def.aux.rsp.uq_rsp.iter().any(|&v| v.abs() > 0.0),
+        "expected non-zero Uq from momentum equation"
+    );
+
+    let nz = m_def.nz;
+    let specs = parse_star_profile_columns(
+        "zone\nrsp_Hp_face\nrsp_Y_face\nrsp_Lc_div_L\nrsp_Lr_div_L\n\
+         rsp_Lt_div_L\nrsp_Et\nrsp_Pt\nrsp_Eq\nrsp_src_snk\nrsp_Uq\nrsp_Pvsc\n",
+        None,
+    )
+    .expect("parse all 11 rsp_* profile columns");
+    let text = format_star_profile_text(&m_def, &specs);
+    let data_lines: Vec<&str> = text.lines().skip(6).collect();
+    assert_eq!(data_lines.len(), nz);
+    let row0: Vec<f64> = data_lines[0]
+        .split_whitespace()
+        .map(|s| s.parse::<f64>().expect("float col"))
+        .collect();
+    let row1: Vec<f64> = data_lines[1]
+        .split_whitespace()
+        .map(|s| s.parse::<f64>().expect("float col"))
+        .collect();
+    // `profile_getval.f90:1960-2020`: k=1 surface cell uses k=2 values for
+    // `rsp_Y_face`, `rsp_Lc_div_L`, `rsp_Lt_div_L`, `rsp_Uq`.
+    assert_eq!(row0[2], row1[2], "rsp_Y_face k=1 uses k=2");
+    assert_eq!(row0[3], row1[3], "rsp_Lc_div_L k=1 uses k=2");
+    assert_eq!(row0[5], row1[5], "rsp_Lt_div_L k=1 uses k=2");
+    assert_eq!(row0[10], row1[10], "rsp_Uq k=1 uses k=2");
+    assert!(
+        (row0[1] - m_def.aux.rsp.hp_face[0]).abs()
+            <= 1.0e-12 * row0[1].abs() + 1.0e-30
+    );
+    let lr_div_l_0 =
+        m_def.aux.rsp.fr_rsp[0] * 4.0 * PI * m_def.r[0] * m_def.r[0]
+            / m_def.lum[0];
+    assert!((row0[4] - lr_div_l_0).abs() < 1.0e-12);
+
+    let mut non_rsp = m_def.clone();
+    non_rsp.controls.rsp_flag = false;
+    let non_rsp_text = format_star_profile_text(&non_rsp, &specs);
+    let non_rsp_row0: Vec<f64> = non_rsp_text
+        .lines()
+        .nth(6)
+        .expect("row 0")
+        .split_whitespace()
+        .map(|s| s.parse::<f64>().expect("float"))
+        .collect();
+    for val in &non_rsp_row0[1..] {
+        assert_eq!(*val, 0.0);
+    }
+
+    m_def.aux.rsp.writing_map = true;
+    m_def.aux.rsp.fase0 = 12.5;
+    m_def.aux.rsp.map_col_names = vec![String::from("rsp_Uq")];
+    let bytes = write_photo_bytes(&m_def);
+    let mut restored = load_photo_bytes(&bytes).expect("photo roundtrip");
+    assert!(restored.aux.rsp.writing_map);
+    assert_eq!(restored.aux.rsp.fase0, 12.5);
+    assert_eq!(restored.aux.rsp.map_col_names, vec![String::from("rsp_Uq")]);
+    assert_eq!(restored.aux.rsp.uq_rsp, m_def.aux.rsp.uq_rsp);
+    rsp_setup_model(&mut restored, false, true).expect("photo setup");
+    assert!(!restored.aux.rsp.writing_map);
+}
+
+fn verify_map_data_output(map_text: &str) {
+    let mut map_lines = map_text.lines();
+    let idx_hdr: Vec<usize> = map_lines
+        .next()
+        .expect("line 1")
+        .split_whitespace()
+        .map(|s| s.parse::<usize>().expect("col idx"))
+        .collect();
+    assert_eq!(idx_hdr, (1..=20).collect::<Vec<_>>());
+    let name_hdr: Vec<&str> = map_lines
+        .next()
+        .expect("line 2")
+        .split_whitespace()
+        .collect();
+    assert_eq!(name_hdr[0], "phase");
+    assert_eq!(name_hdr[1], "zone");
+    assert_eq!(name_hdr[2], "temperature");
+    assert_eq!(name_hdr[15], "rsp_Uq");
+    assert_eq!(name_hdr.len(), 20);
+
+    let first_row: Vec<f64> = map_lines
+        .next()
+        .expect("row 1")
+        .split_whitespace()
+        .map(|s| s.parse::<f64>().expect("float"))
+        .collect();
+    assert_eq!(first_row.len(), 20);
+    assert_eq!(first_row[0], 0.0, "first map phase must be 0.0");
+    assert!(
+        (first_row[1] - 3.0).abs() < 1.0e-12,
+        "k=1 skipped by I<NZN, k=3 first with zone_interval=2"
+    );
+    let mut saw_nonzero_uq = false;
+    for row_line in map_lines {
+        let vals: Vec<f64> = row_line
+            .split_whitespace()
+            .map(|s| s.parse::<f64>().expect("float"))
+            .collect();
+        assert_eq!(vals.len(), 20);
+        assert!(vals.iter().all(|v| v.is_finite()));
+        if vals[15].abs() > 0.0 {
+            saw_nonzero_uq = true;
+        }
+    }
+    assert!(saw_nonzero_uq, "expected non-zero rsp_Uq in map.data");
+}
+
+#[test]
+fn test_rsp_write_map_emits_pm3d_map_and_rotates_history_file() {
+    use flexmesa_star::mesa_log_reader::read_mesa_log_file;
+    use flexmesa_star::{run_test_suite_case_with_logs, StarLogsOptions};
+
+    let tmp = RspTempDir::new("map_rotate");
+    let case_dir = tmp.root.join("case");
+    let out_dir = tmp.root.join("out");
+    fs::create_dir_all(&case_dir).expect("mkdir case");
+    fs::create_dir_all(&out_dir).expect("mkdir out");
+
+    fs::copy(
+        golden_rsp_dir().join("rsp_Delta_Scuti_cycle0.mod"),
+        case_dir.join("cycle0.mod"),
+    )
+    .expect("copy cycle0.mod");
+    fs::write(
+        case_dir.join("history_columns.list"),
+        "model_number\nstar_age\nrsp_num_periods\nrsp_phase\n",
+    )
+    .expect("write history_columns.list");
+    fs::write(
+        case_dir.join("map_columns.list"),
+        "temperature\nrsp_Hp_face\nrsp_Y_face\nrsp_Lc_div_L\nrsp_Lr_div_L\n\
+         rsp_Lt_div_L\nrsp_Et\nenergy\ncsound\nrsp_Pt\npressure\nrsp_Eq\n\
+         rsp_src_snk\nrsp_Uq\nrsp_Pvsc\nvel_km_per_s\nv_div_csound\nxq\n",
+    )
+    .expect("write map_columns.list");
+    fs::write(
+        case_dir.join("inlist"),
+        "&star_job\n\
+         load_saved_model = .true.\n\
+         load_model_filename = 'cycle0.mod'\n\
+         set_initial_age = .true.\n\
+         initial_age = 0\n\
+         set_initial_model_number = .true.\n\
+         initial_model_number = 0\n\
+         set_initial_dt = .true.\n\
+         seconds_for_initial_dt = 160.0d0\n\
+         /\n\
+         &eos\n/\n\
+         &kap\n\
+         Zbase = 0.02d0\n\
+         kap_file_prefix = 'a09'\n\
+         kap_lowT_prefix = 'lowT_fa05_a09p'\n\
+         kap_CO_prefix = 'a09_co'\n\
+         /\n\
+         &controls\n\
+         RSP_mass = 2.0\n\
+         RSP_Teff = 6900\n\
+         RSP_L = 30\n\
+         RSP_X = 0.70\n\
+         RSP_Z = 0.02\n\
+         RSP_alfa = 1.2d0\n\
+         RSP_alfam = 0.25d0\n\
+         RSP_target_steps_per_cycle = 80\n\
+         RSP_max_num_periods = 2\n\
+         RSP_write_map = .true.\n\
+         RSP_map_first_period = 2\n\
+         RSP_map_last_period = 2\n\
+         RSP_map_zone_interval = 2\n\
+         RSP_map_history_filename = 'map_history.data'\n\
+         history_interval = 5\n\
+         /\n",
+    )
+    .expect("write inlist");
+
+    let logs_opts = StarLogsOptions::from_target(&out_dir, true, true, false);
+    let rep = run_test_suite_case_with_logs(
+        &case_dir,
+        false,
+        Some(500),
+        false,
+        logs_opts,
+    )
+    .expect("run map case");
+    assert_eq!(rep.termination_code, "reached max number of periods");
+
+    let hist_tbl = read_mesa_log_file(&out_dir.join("LOGS/history.data"))
+        .expect("read LOGS/history.data");
+    let map_hist_tbl =
+        read_mesa_log_file(&out_dir.join("LOGS/map_history.data"))
+            .expect("read LOGS/map_history.data");
+    let hist_models = hist_tbl.column("model_number").expect("hist models");
+    let hist_periods =
+        hist_tbl.column("rsp_num_periods").expect("hist periods");
+    let map_hist_models = map_hist_tbl
+        .column("model_number")
+        .expect("map hist models");
+    assert_ne!(hist_models.len(), 0);
+    assert_ne!(map_hist_models.len(), 0);
+
+    let hist_last_model = *hist_models.last().expect("hist last");
+    let map_hist_first_model = *map_hist_models.first().expect("map first");
+    assert!(
+        hist_last_model < map_hist_first_model,
+        "history.data ({hist_last_model}) must end before map_history.data ({map_hist_first_model})"
+    );
+    assert!((hist_last_model % 5.0).abs() < 1.0e-12);
+    for &np in hist_periods {
+        assert!(np < 1.0, "history.data should stop before period 2 opens");
+    }
+
+    let map_text = fs::read_to_string(out_dir.join("LOGS/map.data"))
+        .expect("read LOGS/map.data");
+    verify_map_data_output(&map_text);
+}

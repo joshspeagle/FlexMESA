@@ -3,14 +3,19 @@
 //! nonlinear `HYD` timestep driver (`rsp_one_step`, `do1_step`,
 //! `get_LINA_info` in `star/private/rsp.f90:204-857`).
 
-use std::fs;
-use std::path::Path;
+use std::fs::{self, OpenOptions};
+use std::io::Write as _;
+use std::path::{Path, PathBuf};
 
 use flexmesa_const::{CLIGHT, CRAD, PI, SECYER};
 
 use crate::controls::{StarError, StarJobControls};
 use crate::inlist::InlistBundle;
 use crate::inlist_runner::{DefaultStarExtras, RspBuildOutcome, StarExtras};
+use crate::mesa_profile::{
+    format_rsp_map_header, format_rsp_map_rows, parse_rsp_map_columns,
+    resolve_rsp_map_column_names,
+};
 use crate::model::StarModel;
 use crate::model_io::read_mod_str_with_dir;
 use crate::rsp_build::do_rsp_build_model;
@@ -190,6 +195,7 @@ pub fn rsp_setup_model(
 
     if restart_flag {
         model.controls.tau_factor = model.aux.rsp.rsp_tau_factor;
+        model.aux.rsp.writing_map = false;
         return Ok(());
     }
 
@@ -530,4 +536,138 @@ fn set_random_velocities(model: &mut StarModel) {
         }
         model.aux.rsp.have_set_velocities = true;
     }
+}
+
+/// Executes post-step 3D map output and history file switching when
+/// `RSP_write_map` is enabled (`add_to_map` and `read_map_specs` in
+/// `star/private/rsp.f90:495-637`).
+///
+/// # Errors
+/// Returns [`StarError`] if `RSP_map_columns_filename` cannot be opened or
+/// parsed, `extra_profile_columns` fails, or map file I/O fails.
+pub fn rsp_after_step_map(
+    model: &mut StarModel,
+    case_dir: &Path,
+    log_dir: Option<&Path>,
+    extras: &dyn StarExtras,
+) -> Result<(), StarError> {
+    if !model.controls.rsp_flag || !model.controls.rsp.write_map {
+        return Ok(());
+    }
+    let npch1 = model.controls.rsp.map_first_period;
+    let npch2 = model.controls.rsp.map_last_period;
+    let ip = model.aux.rsp.num_periods as isize;
+
+    if ip + 1 >= npch1 && ip < npch2 {
+        let extra_cols = extras.extra_profile_columns(model)?;
+        let extra_names: Vec<&str> =
+            extra_cols.iter().map(|(name, _)| name.trim()).collect();
+
+        let col_specs = if model.aux.rsp.writing_map {
+            resolve_rsp_map_column_names(
+                &model.aux.rsp.map_col_names,
+                &extra_names,
+            )?
+        } else {
+            let cols_filename =
+                match model.controls.rsp.map_columns_filename.trim() {
+                    "" => "map_columns.list",
+                    s => s,
+                };
+            let cols_path = if Path::new(cols_filename).is_absolute() {
+                PathBuf::from(cols_filename)
+            } else {
+                case_dir.join(cols_filename)
+            };
+            let text = fs::read_to_string(&cols_path).map_err(|e| {
+                StarError::IoError(format!(
+                    "failed to open {}: {e}",
+                    cols_path.display()
+                ))
+            })?;
+            let (col_names, col_specs) =
+                parse_rsp_map_columns(&text, &extra_names)?;
+            if model.controls.rsp.map_filename.trim().is_empty() {
+                model.controls.rsp.map_filename = String::from("map.data");
+            }
+            let hist_name = model.controls.rsp.map_history_filename.trim();
+            if hist_name.is_empty() {
+                return Err(StarError::InvalidInput(String::from(
+                    "rsp_map_history_filename must be non-empty when rsp_write_map is active",
+                )));
+            }
+            let hdr = format_rsp_map_header(&col_names);
+            if let Some(dir) = log_dir {
+                fs::create_dir_all(dir).map_err(|e| {
+                    StarError::IoError(format!(
+                        "failed to create {}: {e}",
+                        dir.display()
+                    ))
+                })?;
+                let map_path = dir.join(model.controls.rsp.map_filename.trim());
+                fs::write(&map_path, hdr.as_bytes()).map_err(|e| {
+                    StarError::IoError(format!(
+                        "failed to write {}: {e}",
+                        map_path.display()
+                    ))
+                })?;
+            }
+            model.aux.rsp.map_col_names = col_names;
+            model.aux.rsp.writing_map = true;
+            model.aux.rsp.done_writing_map = false;
+            model.controls.output.need_to_set_history_names_etc = true;
+            model.controls.output.star_history_name = hist_name.to_owned();
+            model.aux.rsp.fase0 = model.aux.rsp.time_sec;
+            col_specs
+        };
+
+        let phase = if model.aux.rsp.period == 0.0 {
+            0.0
+        } else {
+            (model.aux.rsp.time_sec - model.aux.rsp.fase0)
+                / model.aux.rsp.period
+        };
+        let ibotom =
+            RspDerivedConsts::from_config(&model.controls.rsp, model.nz).ibotom;
+        let rows = format_rsp_map_rows(
+            model,
+            &col_specs,
+            &extra_cols,
+            model.controls.rsp.map_zone_interval,
+            ibotom,
+            phase,
+        );
+        if !rows.is_empty() {
+            if let Some(dir) = log_dir {
+                let map_path = dir.join(model.controls.rsp.map_filename.trim());
+                let mut f = OpenOptions::new()
+                    .create(true)
+                    .append(true)
+                    .open(&map_path)
+                    .map_err(|e| {
+                        StarError::IoError(format!(
+                            "failed to open {}: {e}",
+                            map_path.display()
+                        ))
+                    })?;
+                f.write_all(rows.as_bytes()).map_err(|e| {
+                    StarError::IoError(format!(
+                        "failed to write {}: {e}",
+                        map_path.display()
+                    ))
+                })?;
+                f.flush().map_err(|e| {
+                    StarError::IoError(format!(
+                        "failed to flush {}: {e}",
+                        map_path.display()
+                    ))
+                })?;
+            }
+        }
+    }
+
+    if ip == npch2 && !model.aux.rsp.done_writing_map {
+        model.aux.rsp.done_writing_map = true;
+    }
+    Ok(())
 }

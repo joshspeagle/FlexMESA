@@ -31,6 +31,12 @@ pub struct RspConfig {
     pub cq: f64,
     /// Artificial viscosity threshold $z_{\mathrm{sh}}$ (`0.1`).
     pub zsh: f64,
+    /// Tscharnuter & Winkler linear artificial viscosity (`0.0`, `controls.defaults:3337`; read/stored in `ctrls_io.f90:1183,2903` with no runtime read in MESA `26.4.1`).
+    #[serde(default)]
+    pub qvisc_linear: f64,
+    /// Tscharnuter & Winkler quadratic artificial viscosity (`0.0`, `controls.defaults:3338`; read/stored in `ctrls_io.f90:1184,2904` with no runtime read in MESA `26.4.1`).
+    #[serde(default)]
+    pub qvisc_quadratic: f64,
     /// Flux-limiter scale (`1e2`).
     pub efl0: f64,
     /// Time-centering weights $(\theta, \theta_t, \theta_e, \theta_q, \theta_u, w_r, w_c, w_t, \gamma)$.
@@ -131,12 +137,21 @@ pub struct RspConfig {
     pub surface_tau: f64,
     /// `HYD` Newton solver tolerances, iteration limits, and turbulent zone cutoffs.
     pub tol_max_corr: f64,
-    /// Maximum relative residual tolerance (`1e-6`).
+    /// Maximum relative residual tolerance (`1e-6`, `controls.defaults:3368`; read/stored in `ctrls_io.f90:1187,2907` with no runtime read in MESA `26.4.1`).
     pub tol_max_resid: f64,
     /// Maximum Newton iterations per try (`100`).
     pub max_iters_per_try: usize,
     /// Maximum retries per step (`50`).
     pub max_retries_per_step: usize,
+    /// Report `HYD` iteration undercorrections to terminal (`false`, `controls.defaults:3371`, `rsp_step.f90:1011`).
+    #[serde(default)]
+    pub report_undercorrections: bool,
+    /// Report `dt` cap triggers to terminal (`false`, `controls.defaults:3315`, `rsp.f90:678`, `rsp_step.f90:260`).
+    #[serde(default)]
+    pub report_limit_dt: bool,
+    /// Trace `build_rsp_model` / `do_LINA` / `relax_env` diagnostics to terminal (`false`, `controls.defaults:3423`, `rsp_build.f90:141,225,262,357-429`).
+    #[serde(default)]
+    pub trace_rsp_build_model: bool,
     /// Divisor setting `IBOTOM = nz / nz_div_ibotom` (`30.0`).
     pub nz_div_ibotom: f64,
     /// Optical depth threshold for damping $L_t$ near surface (`2e2`).
@@ -209,6 +224,8 @@ impl Default for RspConfig {
             gammar: 0.0,
             cq: 4.0,
             zsh: 0.1,
+            qvisc_linear: 0.0,
+            qvisc_quadratic: 0.0,
             efl0: 1.0e2,
             theta: 0.5,
             thetat: 0.5,
@@ -262,6 +279,9 @@ impl Default for RspConfig {
             tol_max_resid: 1.0e-6,
             max_iters_per_try: 100,
             max_retries_per_step: 50,
+            report_undercorrections: false,
+            report_limit_dt: false,
+            trace_rsp_build_model: false,
             nz_div_ibotom: 30.0,
             min_tau_for_turbulent_flux: 2.0e2,
             kap_density_factor: -1.0,
@@ -454,7 +474,9 @@ pub(crate) fn populate_rsp_inlist(
         ("rsp_alfa", &mut r.alfa), ("rsp_alfac", &mut r.alfac), ("rsp_alfas", &mut r.alfas),
         ("rsp_alfad", &mut r.alfad), ("rsp_alfap", &mut r.alfap), ("rsp_alfat", &mut r.alfat),
         ("rsp_alfam", &mut r.alfam), ("rsp_gammar", &mut r.gammar), ("rsp_cq", &mut r.cq),
-        ("rsp_zsh", &mut r.zsh), ("rsp_efl0", &mut r.efl0), ("rsp_theta", &mut r.theta),
+        ("rsp_zsh", &mut r.zsh), ("rsp_qvisc_linear", &mut r.qvisc_linear),
+        ("rsp_qvisc_quadratic", &mut r.qvisc_quadratic), ("rsp_efl0", &mut r.efl0),
+        ("rsp_theta", &mut r.theta),
         ("rsp_thetat", &mut r.thetat), ("rsp_thetae", &mut r.thetae), ("rsp_thetaq", &mut r.thetaq),
         ("rsp_thetau", &mut r.thetau), ("rsp_wtr", &mut r.wtr), ("rsp_wtc", &mut r.wtc),
         ("rsp_wtt", &mut r.wtt), ("rsp_gam", &mut r.gam), ("rsp_t_anchor", &mut r.t_anchor),
@@ -506,6 +528,9 @@ pub(crate) fn populate_rsp_inlist(
         ("use_other_rsp_build_model", &mut r.use_other_rsp_build_model),
         ("use_rsp_new_start_scheme", &mut r.use_rsp_new_start_scheme),
         ("rsp_do_check_omega", &mut r.do_check_omega), ("rsp_hydro_only", &mut r.hydro_only),
+        ("rsp_report_limit_dt", &mut r.report_limit_dt),
+        ("rsp_report_undercorrections", &mut r.report_undercorrections),
+        ("rsp_trace_rsp_build_model", &mut r.trace_rsp_build_model),
     ] {
         ctrl.try_bool_into("controls", dst, k)?;
     }
@@ -517,10 +542,15 @@ pub(crate) fn populate_rsp_inlist(
         ("rsp_mode_for_setting_periodlin", &mut r.mode_for_setting_periodlin),
         ("rsp_max_iters_per_try", &mut r.max_iters_per_try),
         ("rsp_max_retries_per_step", &mut r.max_retries_per_step),
-        ("rsp_map_zone_interval", &mut r.map_zone_interval),
     ] {
         ctrl.try_usize_into("controls", dst, k, 0)?;
     }
+    ctrl.try_usize_into(
+        "controls",
+        &mut r.map_zone_interval,
+        "rsp_map_zone_interval",
+        1,
+    )?;
     for (k, dst) in [
         ("rsp_work_period", &mut r.work_period),
         ("rsp_map_first_period", &mut r.map_first_period),

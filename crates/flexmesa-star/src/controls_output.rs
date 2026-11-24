@@ -20,6 +20,9 @@ pub struct OutputControls {
     pub history_interval: usize,
     /// History filename inside `log_directory` (`star_history_name`, `'history.data'` default, `controls.defaults:253`).
     pub star_history_name: String,
+    /// Runtime flag signaling the history writer to re-open `star_history_name` with a fresh header (`need_to_set_history_names_etc`, `star_data.inc`, mutated by `rsp.f90:534` and cleared by `history.f90:499`).
+    #[serde(default)]
+    pub need_to_set_history_names_etc: bool,
     /// Optional separate filename for the history header (`star_history_header_name`, `''` default, `controls.defaults:265`).
     pub star_history_header_name: String,
     /// Enable writing radial structure profiles (`write_profiles_flag`, `true` default, `controls.defaults:305`).
@@ -106,6 +109,7 @@ impl Default for OutputControls {
             do_history_file: true,
             history_interval: 5,
             star_history_name: String::from("history.data"),
+            need_to_set_history_names_etc: false,
             star_history_header_name: String::new(),
             write_profiles_flag: true,
             profile_interval: 50,

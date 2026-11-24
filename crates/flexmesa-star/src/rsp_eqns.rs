@@ -182,7 +182,7 @@ pub fn solve_for_corrections(band: &mut RspHydBand) -> Result<(), StarError> {
 }
 
 fn acceleration_eqn(
-    model: &StarModel,
+    model: &mut StarModel,
     dc: &RspDerivedConsts,
     wk: &RspHydWork,
     band: &mut RspHydBand,
@@ -260,6 +260,9 @@ fn acceleration_eqn(
     };
 
     let uq = uq1 * (chi_out - chi_00);
+    if k0 < model.aux.rsp.uq_rsp.len() {
+        model.aux.rsp.uq_rsp[k0] = uq;
+    }
     let d_uq_dt_in = -uq1 * d_chi_00_dt_in;
     let d_uq_dt_00 = uq1 * (d_chi_out_dt_00 - d_chi_00_dt_00);
     let d_uq_dt_out = uq1 * (d_chi_out_dt_out - d_chi_00_dt_out);

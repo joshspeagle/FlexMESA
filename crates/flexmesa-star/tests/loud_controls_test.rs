@@ -154,9 +154,9 @@ fn test_unknown_section_key_unused_and_removed_aliases_fail_loudly() {
             "save_pulse_data_filename",
         ),
         (
-            "unused_rsp_map",
-            "&controls\n  rsp_map_filename = 'map.data'\n/\n",
-            "rsp_map_filename",
+            "unused_bad_max_corr_series",
+            "&controls\n  bad_max_correction_series_limit = 5\n/\n",
+            "bad_max_correction_series_limit",
         ),
         (
             "unused_neg_mass_frac",

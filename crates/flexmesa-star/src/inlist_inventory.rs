@@ -372,10 +372,24 @@ pub const STAR_JOB_TERMINAL_OUTPUT: &[&str] = &[
 ///   `star/private/star_solver.f90:615-617` (saved and restored around init
 ///   and relaxation in `star/private/init.f90:918-919,1122` and
 ///   `star/private/relax.f90:3988,4172,4230`).
+/// - `rsp_report_limit_dt`: `star/defaults/controls.defaults:3315`,
+///   `star/private/rsp.f90:678`, and `star/private/rsp_step.f90:260` (only
+///   gates terminal `write(*,*)` output; `mesa_error` runs unconditionally).
+/// - `rsp_report_undercorrections`: `star/defaults/controls.defaults:3371`
+///   and `star/private/rsp_step.f90:1011` (only gates terminal `write(*,*)`
+///   output).
+/// - `rsp_trace_rsp_build_model`: `star/defaults/controls.defaults:3423`,
+///   `star/private/rsp_build.f90:141,225,262,357-429`,
+///   `star/private/rsp_lina.f90:933`, and
+///   `star/private/rsp_relax_env.f90:257,1276` (only gates terminal
+///   `write(*,*)` output).
 pub const CONTROLS_TERMINAL_OUTPUT: &[&str] = &[
     "extra_terminal_output_file",
     "num_trace_history_values",
     "report_solver_progress",
+    "rsp_report_limit_dt",
+    "rsp_report_undercorrections",
+    "rsp_trace_rsp_build_model",
     "show_diffusion_info",
     "show_diffusion_substep_info",
     "show_diffusion_timing",
@@ -1481,6 +1495,12 @@ pub const CONTROLS_SUPPORTED: &[&str] = &[
     "rsp_kap_density_factor",
     "rsp_kick_vsurf_km_per_sec",
     "rsp_l",
+    "rsp_map_columns_filename",
+    "rsp_map_filename",
+    "rsp_map_first_period",
+    "rsp_map_history_filename",
+    "rsp_map_last_period",
+    "rsp_map_zone_interval",
     "rsp_mass",
     "rsp_max_dt",
     "rsp_max_dt_times_min_dr_div_cs",
@@ -1500,6 +1520,8 @@ pub const CONTROLS_SUPPORTED: &[&str] = &[
     "rsp_nz_div_ibotom",
     "rsp_nz_outer",
     "rsp_psurf",
+    "rsp_qvisc_linear",
+    "rsp_qvisc_quadratic",
     "rsp_relax_adjust_inner_mass_distribution",
     "rsp_relax_alfap_before_alfat",
     "rsp_relax_dm_tolerance",
@@ -1519,11 +1541,13 @@ pub const CONTROLS_SUPPORTED: &[&str] = &[
     "rsp_thetat",
     "rsp_thetau",
     "rsp_tol_max_corr",
+    "rsp_tol_max_resid",
     "rsp_use_atm_grey_with_kap_for_psurf",
     "rsp_use_prad_for_psurf",
     "rsp_v_div_cs_threshold_for_dt_limit",
     "rsp_work_filename",
     "rsp_work_period",
+    "rsp_write_map",
     "rsp_wtc",
     "rsp_wtr",
     "rsp_wtt",
@@ -1799,14 +1823,6 @@ pub const CONTROLS_UNUSED: &[&str] = &[
     "diffusion_dump_call_number",
     "rsp2_max_num_periods",
     "rsp2_num_innermost_cells_forced_nonturbulent",
-    "rsp_map_columns_filename",
-    "rsp_map_filename",
-    "rsp_map_first_period",
-    "rsp_map_history_filename",
-    "rsp_map_last_period",
-    "rsp_map_zone_interval",
-    "rsp_tol_max_resid",
-    "rsp_write_map",
     "steps_before_use_velocity_time_centering",
     "tol_bad_max_correction",
     "use_other_diffusion",

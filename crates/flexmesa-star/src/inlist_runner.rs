@@ -651,7 +651,7 @@ impl<'a> StarLogsOptions<'a> {
 
 fn record_logs_step_with_extras(
     lw: &mut StarLogsWriter,
-    model: &StarModel,
+    model: &mut StarModel,
     extras: &dyn StarExtras,
     is_first_step: bool,
     is_terminating: bool,
@@ -660,6 +660,9 @@ fn record_logs_step_with_extras(
     let prof_due = lw.is_profile_due(model, is_first_step, is_terminating);
     if !hist_due && !prof_due {
         return Ok(());
+    }
+    if hist_due {
+        lw.sync_history_target(model);
     }
     let hist_hdr = if hist_due && lw.needs_history_header() {
         extras.extra_history_header_items(model)?
@@ -866,6 +869,18 @@ pub fn run_inlist_stage_with_logs(
             }
             let is_last_cap_step = steps_taken == cap;
             let is_terminating = will_terminate || is_last_cap_step;
+            if model.controls.rsp_flag && model.controls.rsp.write_map {
+                let map_log_dir = logs_writer
+                    .as_deref()
+                    .filter(|lw| !lw.is_explicit_history_file())
+                    .map(|lw| lw.log_dir().to_path_buf());
+                crate::rsp_driver::rsp_after_step_map(
+                    model,
+                    &bundle.case_dir,
+                    map_log_dir.as_deref(),
+                    extras,
+                )?;
+            }
             if let Some(lw) = logs_writer.as_deref_mut() {
                 record_logs_step_with_extras(
                     lw,

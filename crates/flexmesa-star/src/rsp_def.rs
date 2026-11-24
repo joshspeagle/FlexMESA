@@ -254,6 +254,9 @@ pub struct RspState {
     pub coupl_rsp: Vec<f64>,
     /// Zone eddy-viscosity dissipation $E_q$ ($\mathrm{erg\,g^{-1}\,s^{-1}}$).
     pub eq_rsp: Vec<f64>,
+    /// Face viscous momentum transfer rate $U_q$ ($\mathrm{cm\,s^{-2}}$, `rsp_step.f90:2811`).
+    #[serde(default)]
+    pub uq_rsp: Vec<f64>,
     /// Zone thermal expansion $Q_k$, turbulent source $S_k$, and dissipations $(D_k, D_{r,k})$.
     pub qq_rsp: Vec<f64>,
     /// Turbulent buoyancy generation `SOURCE` ($\mathrm{erg\,g^{-1}\,s^{-1}}$).
@@ -414,6 +417,18 @@ pub struct RspState {
     pub just_set_velocities: bool,
     /// Step-within-cycle counter (`IWORK`).
     pub iwork: usize,
+    /// Whether `RSP_write_map` has opened its `map.data` file (`rsp_def.f90:118`).
+    #[serde(default)]
+    pub writing_map: bool,
+    /// Whether `RSP_write_map` has finished writing through `RSP_map_last_period` (`rsp_def.f90:118`).
+    #[serde(default)]
+    pub done_writing_map: bool,
+    /// Reference simulation time `FASE0` ($\mathrm{s}$) when map writing began (`rsp_def.f90:109`).
+    #[serde(default)]
+    pub fase0: f64,
+    /// Ordered column names parsed from `RSP_map_columns_filename` (`rsp_def.f90:120`).
+    #[serde(default)]
+    pub map_col_names: Vec<String>,
 }
 
 impl RspState {
@@ -437,6 +452,7 @@ impl RspState {
             chi_rsp: vec![0.0; nz],
             coupl_rsp: vec![0.0; nz],
             eq_rsp: vec![0.0; nz],
+            uq_rsp: vec![0.0; nz],
             qq_rsp: vec![0.0; nz],
             source_rsp: vec![0.0; nz],
             damp_rsp: vec![0.0; nz],
@@ -517,6 +533,10 @@ impl RspState {
             have_set_velocities: false,
             just_set_velocities: false,
             iwork: 0,
+            writing_map: false,
+            done_writing_map: false,
+            fase0: 0.0,
+            map_col_names: Vec::new(),
         }
     }
 }

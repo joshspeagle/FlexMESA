@@ -7,17 +7,32 @@
 //! variables; here they live in one [`GyreMesa`] value. The bracket-search
 //! mode counter `id_m` stays process-wide (`search.rs`).
 
+use crate::ad::AdBvp;
 use crate::constants::GyreConstants;
 use crate::context::Context;
 use crate::ext_real::ExtR;
+use crate::fcomplex::Cplx;
 use crate::grid::Grid;
 use crate::grid_refine::refine_grid;
 use crate::mode::Mode;
 use crate::model::EvolModel;
-use crate::par::{select_par_1, select_par_v, GyrePars};
+use crate::nad::NadBvp;
+use crate::par::{select_par_1, select_par_v, GyrePars, ModePar, NumPar};
+use crate::prox::prox_search;
 use crate::rad::{GyreTap, NoTap, RadBvp};
-use crate::search::{bracket_search, build_scan, check_scan};
+use crate::search::{bracket_search, build_scan, check_scan, RealBvp};
 use crate::GyreError;
+
+/// `[l, n_p, n_g, n_pg, n]` of a mode (the `MODE_AD`/`MODE_NAD` taps).
+fn mode_ints(md: &Mode<'_>) -> [i64; 5] {
+    [
+        i64::from(md.wave.l),
+        i64::from(md.n_p),
+        i64::from(md.n_g),
+        i64::from(md.n_pg),
+        i64::try_from(md.wave.n).unwrap_or(i64::MAX),
+    ]
+}
 
 /// GYRE's MESA library state.
 #[derive(Debug, Clone)]
@@ -100,13 +115,13 @@ impl GyreMesa {
         self.model.as_ref()
     }
 
-    /// `get_modes(l, user_sub, ipar, rpar)` (`gyre_mesa_m.fypp:244-482`)
-    /// for adiabatic radial modes. `user_sub` returns the upstream
-    /// `retcode`, which `gyre_mesa_m` ignores.
+    /// `get_modes(l, user_sub, ipar, rpar)` (`gyre_mesa_m.fypp:244-482`).
+    /// `user_sub` returns the upstream `retcode`, which `gyre_mesa_m` ignores.
     ///
     /// # Errors
     ///
-    /// [`GyreError::Unported`] for non-radial or non-adiabatic searches;
+    /// [`GyreError::Unported`] for nonadiabatic searches other than
+    /// `nad_search = 'AD'` and unported model/boundary/solver options;
     /// errors of every stage.
     pub fn get_modes(
         &mut self,
@@ -188,54 +203,142 @@ impl GyreMesa {
                 (-f64::MAX, f64::MAX)
             };
             check_scan(&cx, &gr, &omega_re, md_p)?;
+            let nonad = os_p.nonadiabatic;
+            // Adiabatic modes stored for the nonadiabatic search
+            // (omega_ad(:n_ad), id_ad(:n_ad); gyre_mesa_m.fypp:336-340).
+            let mut omega_ad: Vec<Cplx> = Vec::new();
+            let mut id_ad: Vec<i32> = Vec::new();
             if os_p.adiabatic {
-                if !(md_p.l == 0 && os_p.reduce_order) {
-                    return Err(GyreError::Unported {
-                        what: "adiabatic non-radial (ad_bvp_t) searches",
-                        at: "lib/gyre_mesa_m.fypp:345-347",
-                    });
-                }
-                let mut bp = RadBvp::new(&cx, &gr, md_p, &nm_p, &os_p)?;
-                match nm_p.ad_search.as_str() {
-                    "BRACKET" => {
-                        if omega_re.len() > 2 {
-                            let n_pg_min = md_p.n_pg_min;
-                            let n_pg_max = md_p.n_pg_max;
-                            let nonad = os_p.nonadiabatic;
-                            let mut process = |md: &Mode<'_>, _n_iter: i32, _chi: ExtR| -> Result<(), GyreError> {
-                                if md.n_pg < n_pg_min || md.n_pg > n_pg_max {
-                                    return Ok(());
-                                }
-                                if nonad {
-                                    return Err(GyreError::Unported {
-                                        what: "nonadiabatic mode processing",
-                                        at: "lib/gyre_mesa_m.fypp:433-446",
-                                    });
-                                }
-                                let _retcode = user_sub(md)?;
-                                Ok(())
-                            };
-                            bracket_search(
-                                &mut bp,
-                                &omega_re,
-                                omega_min,
-                                omega_max,
-                                &nm_p,
-                                tap,
-                                &mut process,
-                            )?;
-                        }
-                    }
-                    _ => return Err(GyreError::Abort("Invalid ad_search")),
+                if md_p.l == 0 && os_p.reduce_order {
+                    let mut bp = RadBvp::new(&cx, &gr, md_p, &nm_p, &os_p)?;
+                    run_ad_bracket(
+                        &mut bp,
+                        md_p,
+                        &nm_p,
+                        &omega_re,
+                        omega_min,
+                        omega_max,
+                        nonad,
+                        &mut omega_ad,
+                        &mut id_ad,
+                        user_sub,
+                        tap,
+                    )?;
+                } else {
+                    let mut bp = AdBvp::new(&cx, &gr, md_p, &nm_p, &os_p)?;
+                    run_ad_bracket(
+                        &mut bp,
+                        md_p,
+                        &nm_p,
+                        &omega_re,
+                        omega_min,
+                        omega_max,
+                        nonad,
+                        &mut omega_ad,
+                        &mut id_ad,
+                        user_sub,
+                        tap,
+                    )?;
                 }
             }
-            if os_p.nonadiabatic {
-                return Err(GyreError::Unported {
-                    what: "nonadiabatic searches",
-                    at: "lib/gyre_mesa_m.fypp:369-400",
-                });
+            if nonad {
+                let mut bp = NadBvp::new(&cx, &gr, md_p, &nm_p, &os_p)?;
+                match nm_p.nad_search.as_str() {
+                    "AD" => {
+                        if !os_p.adiabatic {
+                            return Err(GyreError::Assert(
+                                "No adiabatic modes to start from",
+                            ));
+                        }
+                        let mut mode_taps: Vec<(Cplx, [i64; 5])> = Vec::new();
+                        // process_mode_nad (gyre_mesa_m.fypp:450-470)
+                        let mut process = |md: &Mode<'_>, _n_iter: i32, _chi: ExtR| -> Result<(), GyreError> {
+                            mode_taps.push((md.wave.omega, mode_ints(md)));
+                            let _retcode = user_sub(md)?;
+                            Ok(())
+                        };
+                        prox_search(
+                            &mut bp,
+                            &omega_ad,
+                            &id_ad,
+                            omega_min,
+                            omega_max,
+                            &nm_p,
+                            tap,
+                            &mut process,
+                        )?;
+                        drop(process);
+                        for (w, ints) in mode_taps {
+                            tap.mode_nad(w, ints);
+                        }
+                    }
+                    "MINMOD" | "CONTOUR" => {
+                        return Err(GyreError::Unported {
+                            what: "nad_search = 'MINMOD' or 'CONTOUR'",
+                            at: "lib/gyre_mesa_m.fypp:381-392",
+                        })
+                    }
+                    _ => return Err(GyreError::Abort("Invalid nad_start")),
+                }
             }
         }
         Ok(())
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn run_ad_bracket<'a, B: RealBvp<'a>>(
+    bp: &mut B,
+    md_p: &ModePar,
+    nm_p: &NumPar,
+    omega_re: &[f64],
+    omega_min: f64,
+    omega_max: f64,
+    nonad: bool,
+    omega_ad: &mut Vec<Cplx>,
+    id_ad: &mut Vec<i32>,
+    user_sub: &mut dyn FnMut(&Mode<'_>) -> Result<i32, GyreError>,
+    tap: &mut dyn GyreTap,
+) -> Result<(), GyreError> {
+    match nm_p.ad_search.as_str() {
+        "BRACKET" => {
+            if omega_re.len() > 2 {
+                let n_pg_min = md_p.n_pg_min;
+                let n_pg_max = md_p.n_pg_max;
+                let mut mode_taps: Vec<(Cplx, [i64; 5])> = Vec::new();
+                // process_mode_ad (gyre_mesa_m.fypp:408-446)
+                let mut process = |md: &Mode<'_>,
+                                   _n_iter: i32,
+                                   _chi: ExtR|
+                 -> Result<(), GyreError> {
+                    if md.n_pg < n_pg_min || md.n_pg > n_pg_max {
+                        return Ok(());
+                    }
+                    mode_taps.push((md.wave.omega, mode_ints(md)));
+                    if nonad {
+                        omega_ad.push(md.wave.omega);
+                        id_ad.push(md.wave.id);
+                    } else {
+                        let _retcode = user_sub(md)?;
+                    }
+                    Ok(())
+                };
+                bracket_search(
+                    bp,
+                    omega_re,
+                    omega_min,
+                    omega_max,
+                    nm_p,
+                    tap,
+                    &mut process,
+                )?;
+                drop(process);
+                for (w, ints) in mode_taps {
+                    tap.mode_ad(w, ints);
+                }
+            }
+            Ok(())
+        }
+        _ => Err(GyreError::Abort("Invalid ad_search")),
     }
 }

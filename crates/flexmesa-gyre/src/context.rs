@@ -92,6 +92,33 @@ impl<'a> Context<'a> {
         omega - f64::from(self.m) * omega_rot
     }
 
+    /// `omega_c(Omega_rot, st)` for a complex state (`omega_c_c_`,
+    /// `context_m.fypp:220-248`, `use_omega_r` absent):
+    /// `st%omega - m*Omega_rot`.
+    #[must_use]
+    pub fn omega_c_c(&self, omega_rot: f64, omega: Cplx) -> Cplx {
+        omega - Cplx::from_real(f64::from(self.m) * omega_rot)
+    }
+
+    /// `eps_rho(st, pt)` for a complex state (`eps_rho_c_`,
+    /// `context_m.fypp:398-444`), model source.
+    ///
+    /// # Errors
+    ///
+    /// Model interpolation errors.
+    pub fn eps_rho_c(&self, pt: Point) -> Result<Cplx, GyreError> {
+        Ok(Cplx::from_real(self.ml.coeff(idx::EPS_RHO, pt)?))
+    }
+
+    /// `eps_T(st, pt)` for a complex state (`eps_t_c_`), model source.
+    ///
+    /// # Errors
+    ///
+    /// Model interpolation errors.
+    pub fn eps_t_c(&self, pt: Point) -> Result<Cplx, GyreError> {
+        Ok(Cplx::from_real(self.ml.coeff(idx::EPS_T, pt)?))
+    }
+
     /// `null_rot_ct%lambda`: `l*(l+1)` (integer product, then complex).
     fn rt_lambda(&self) -> Cplx {
         Cplx::new(f64::from(self.l * (self.l + 1)), 0.0)
@@ -162,12 +189,36 @@ impl<'a> Context<'a> {
     /// [`GyreError::Abort`] for invalid units.
     pub fn freq_scale(&self, units: &str) -> Result<f64, GyreError> {
         match units {
-            "ACOUSTIC_DELTA" | "GRAVITY_DELTA" | "UPPER_DELTA"
-            | "LOWER_DELTA" | "ROSSBY_I" | "ROSSBY_O" | "ACOUSTIC_CUTOFF"
-            | "GRAVITY_CUTOFF" => Err(GyreError::Unported {
-                what: "frequency units depending on the context",
-                at: "common/freq_context_m.fypp:84-133",
-            }),
+            // freq_context_m.fypp:86-93
+            "ACOUSTIC_DELTA" => Ok(1.0
+                / (self.k.math.twopi
+                    * self.ml.delta_p(self.pt_i.x, self.pt_o.x)?)),
+            "GRAVITY_DELTA" => {
+                let l = f64::from(self.l);
+                let dg =
+                    self.ml.delta_g(self.pt_i.x, self.pt_o.x, l * (l + 1.0))?;
+                Ok(1.0 / (self.k.math.twopi * dg))
+            }
+            "UPPER_DELTA" => {
+                let l = f64::from(self.l);
+                let dp = self.ml.delta_p(self.pt_i.x, self.pt_o.x)?;
+                let dg =
+                    self.ml.delta_g(self.pt_i.x, self.pt_o.x, l * (l + 1.0))?;
+                Ok(1.0 / (self.k.math.twopi * dp.max(dg)))
+            }
+            "LOWER_DELTA" => {
+                let l = f64::from(self.l);
+                let dp = self.ml.delta_p(self.pt_i.x, self.pt_o.x)?;
+                let dg =
+                    self.ml.delta_g(self.pt_i.x, self.pt_o.x, l * (l + 1.0))?;
+                Ok(1.0 / (self.k.math.twopi * dp.min(dg)))
+            }
+            "ROSSBY_I" | "ROSSBY_O" | "ACOUSTIC_CUTOFF" | "GRAVITY_CUTOFF" => {
+                Err(GyreError::Unported {
+                    what: "frequency units depending on the context",
+                    at: "common/freq_context_m.fypp:94-133",
+                })
+            }
             _ => {
                 let ml = self.ml;
                 let twopi = self.k.math.twopi;

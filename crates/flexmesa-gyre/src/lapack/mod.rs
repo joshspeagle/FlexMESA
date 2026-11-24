@@ -64,6 +64,12 @@ lapack_mod!(aux);
 lapack_mod!(blas);
 lapack_mod!(lu);
 lapack_mod!(svd);
+lapack_mod!(zaux);
+lapack_mod!(zblas);
+lapack_mod!(zlu);
+lapack_mod!(zsvd);
+lapack_mod!(eig);
+lapack_mod!(zeig);
 
 /// Errors from the LAPACK port.
 #[derive(Debug, Clone, PartialEq, Eq)]

@@ -84,6 +84,16 @@ fn dpsi_dt_0(t: f64) -> f64 {
     p3(t) - p2(t)
 }
 
+/// `dphi_dt_(t, 1)` (`cubic_interp_m.fypp:305-334`).
+fn dphi_dt_1(t: f64) -> f64 {
+    6.0 * t - 6.0 * p2(t)
+}
+
+/// `dpsi_dt_(t, 1)` (`cubic_interp_m.fypp:338-367`).
+fn dpsi_dt_1(t: f64) -> f64 {
+    3.0 * p2(t) - 2.0 * t
+}
+
 /// `cubic_interp_rt` (`cubic_interp_m.fypp:85-111`).
 #[derive(Debug, Clone, PartialEq)]
 pub struct CubicInterp {
@@ -135,6 +145,37 @@ impl CubicInterp {
                 - self.df_dx[j] * dpsi_dt_0(1.0 - w) / hm1
                 + self.df_dx[j + 1] * dpsi_dt_0(w) / hm1,
         )
+    }
+
+    /// The bracket `j` (0-based) and the abscissa offsets `(h, w)` of
+    /// `eval_f`/`eval_df_dx`.
+    fn bracket(&self, x: f64) -> Result<(usize, f64, f64), GyreError> {
+        let n = self.x.len();
+        let mut i: i32 = 1;
+        locate(&self.x, x, &mut i, false);
+        let n_i =
+            i32::try_from(n).map_err(|_| GyreError::Assert("grid too long"))?;
+        if !(i >= 1 && i <= n_i) {
+            return Err(GyreError::Assert("out-of-bounds interpolation"));
+        }
+        let j = usize::try_from(i.min(n_i - 1) - 1)
+            .map_err(|_| GyreError::Assert("out-of-bounds interpolation"))?;
+        let h = self.x[j + 1] - self.x[j];
+        let w = (x - self.x[j]) / h;
+        Ok((j, h, w))
+    }
+
+    /// `eval_df_dx` (`cubic_interp_m.fypp:262-299`).
+    ///
+    /// # Errors
+    ///
+    /// [`GyreError::Assert`] for out-of-bounds interpolation.
+    pub fn eval_df_dx(&self, x: f64) -> Result<f64, GyreError> {
+        let (j, h, w) = self.bracket(x)?;
+        Ok(-(self.f[j] * dphi_dt_1(1.0 - w)) / h
+            + self.f[j + 1] * dphi_dt_1(w) / h
+            + self.df_dx[j] * dpsi_dt_1(1.0 - w)
+            + self.df_dx[j + 1] * dpsi_dt_1(w))
     }
 }
 
@@ -228,10 +269,11 @@ impl EvolBuilder {
         ml_p: &ModelPar,
     ) -> Result<Self, GyreError> {
         let (gr, add_center) = if ml_p.add_center && x[0] != 0.0 {
-            return Err(GyreError::Unported {
-                what: "evol_model_t: adding a central point",
-                at: "model/evol_model_m.fypp:111-119",
-            });
+            // grid_t([0._RD,x]) (evol_model_m.fypp:113)
+            let mut x0 = Vec::with_capacity(x.len() + 1);
+            x0.push(0.0);
+            x0.extend_from_slice(x);
+            (Grid::from_x(&x0)?, true)
         } else {
             (Grid::from_x(x)?, false)
         };
@@ -253,12 +295,24 @@ impl EvolBuilder {
     /// `define(i, coeff)` (`evol_model_m.fypp:171-234`).
     fn define(&mut self, i: usize, coeff: Vec<f64>) -> Result<(), GyreError> {
         if self.add_center {
-            return Err(GyreError::Unported {
-                what: "evol_model_t%define with an added central point",
-                at: "model/evol_model_m.fypp:185-211",
-            });
+            // evol_model_m.fypp:185-211
+            let coeff_0 = match i {
+                idx::U => 3.0,
+                idx::AS => 0.0,
+                _ => {
+                    let x_1 = self.gr.pt[1].x;
+                    let x_2 = self.gr.pt[2].x;
+                    (p2(x_2) * coeff[0] - p2(x_1) * coeff[1])
+                        / (p2(x_2) - p2(x_1))
+                }
+            };
+            let mut c = Vec::with_capacity(coeff.len() + 1);
+            c.push(coeff_0);
+            c.extend(coeff);
+            self.coeffs[i] = c;
+        } else {
+            self.coeffs[i] = coeff;
         }
-        self.coeffs[i] = coeff;
         self.defined[i] = true;
         if i == idx::AS && self.repair_as {
             return Err(GyreError::Unported {
@@ -512,13 +566,11 @@ impl EvolModel {
         ci.eval_f(pt.x)
     }
 
-    /// `dcoeff(i, pt)` (`evol_model_m.fypp:450-537`), the constrained
-    /// branches.
+    /// `dcoeff(i, pt)` (`evol_model_m.fypp:450-537`).
     ///
     /// # Errors
     ///
-    /// As [`Self::coeff`]; [`GyreError::Unported`] for the unconstrained
-    /// derivative path.
+    /// As [`Self::coeff`].
     pub fn dcoeff(&self, i: usize, pt: Point) -> Result<f64, GyreError> {
         let x = pt.x;
         if self.constrain_derivs
@@ -544,12 +596,86 @@ impl EvolModel {
                     Ok(3.0 - u)
                 }
             }
+        } else if pt.x == 0.0 {
+            Ok(0.0)
         } else {
-            Err(GyreError::Unported {
-                what: "evol_model_t%dcoeff without constrained derivatives",
-                at: "model/evol_model_m.fypp:519-529",
-            })
+            let ci = self.interp_for(i, pt)?;
+            let f = ci.eval_f(x)?;
+            let df_dx = ci.eval_df_dx(x)?;
+            Ok(x * df_dx / f)
         }
+    }
+
+    fn interp_for(
+        &self,
+        i: usize,
+        pt: Point,
+    ) -> Result<&CubicInterp, GyreError> {
+        let s = usize::try_from(pt.s - self.s_i)
+            .map_err(|_| GyreError::Assert("invalid segment"))?;
+        self.interp
+            .get(s)
+            .and_then(|row| row[i].as_ref())
+            .ok_or(GyreError::Assert("undefined coefficient"))
+    }
+
+    /// `Delta_p(x_i, x_o)` (`evol_model_m.fypp:654-711`): the
+    /// dimensionless acoustic large separation.
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::coeff`].
+    pub fn delta_p(&self, x_i: f64, x_o: f64) -> Result<f64, GyreError> {
+        let gr = Grid::nest(&self.gr, x_i, x_o);
+        let mut sum = 0.0_f64;
+        for s in gr.s_i()..=gr.s_o() {
+            let j_i = gr.j_s_i(s);
+            let j_o = gr.j_s_o(s);
+            for j in j_i..j_o {
+                let (a, b) = (gr.pt[j - 1].x, gr.pt[j].x);
+                let pt = Point {
+                    s,
+                    x: 0.5 * (a + b),
+                };
+                let v_2 = self.coeff(idx::V_2, pt)?;
+                let c_1 = self.coeff(idx::C_1, pt)?;
+                let gamma_1 = self.coeff(idx::GAMMA_1, pt)?;
+                sum += (c_1 * v_2 / gamma_1).sqrt() * (b - a);
+            }
+        }
+        Ok(0.5 / sum)
+    }
+
+    /// `Delta_g(x_i, x_o, lambda)` (`evol_model_m.fypp:715-771`), dimensionless
+    /// g-mode inverse period separation evaluated by midpoint quadrature.
+    ///
+    /// # Errors
+    ///
+    /// Model interpolation errors.
+    pub fn delta_g(
+        &self,
+        x_i: f64,
+        x_o: f64,
+        lambda: f64,
+    ) -> Result<f64, GyreError> {
+        let gr = Grid::nest(&self.gr, x_i, x_o);
+        let mut sum = 0.0_f64;
+        for s in gr.s_i()..=gr.s_o() {
+            let j_i = gr.j_s_i(s);
+            let j_o = gr.j_s_o(s);
+            for j in j_i..j_o {
+                let pt = Point {
+                    s,
+                    x: 0.5 * (gr.pt[j - 1].x + gr.pt[j].x),
+                };
+                let as_val = self.coeff(idx::AS, pt)?;
+                let c_1 = self.coeff(idx::C_1, pt)?;
+                sum += ((as_val / c_1).max(0.0).sqrt() / pt.x)
+                    * (gr.pt[j].x - gr.pt[j - 1].x);
+            }
+        }
+        let pi = crate::math_m::MathConstants::init().pi;
+        Ok(lambda.sqrt() / (2.0 * (pi * pi)) * sum)
     }
 
     /// `is_vacuum(pt)` (`evol_model_m.fypp:634-650`).

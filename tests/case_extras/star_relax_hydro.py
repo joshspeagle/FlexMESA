@@ -36,6 +36,13 @@ def _fmt_d26_18(val: float) -> str:
     return f"{float(val):26.18E}"
 
 
+def _surface_luminosity_erg_s(state: dict[str, Any]) -> float:
+    """Return surface luminosity $L_1$ in erg/s from `l` or `surface_l_lsun`."""
+    if "l" in state:
+        return float(state["l"][0])
+    return float(state["surface_l_lsun"]) * float(constants.LSUN)
+
+
 class RelaxCompositionJEntropyStarExtras:
     """Relaxation-profile file generator and target `(Teff, L)` checker from
     `star/test_suite/relax_composition_j_entropy/src/run_star_extras.f90:33-363`.
@@ -76,16 +83,17 @@ class RelaxCompositionJEntropyStarExtras:
         return init_mass
 
     def extras_controls(self, state: dict[str, Any]) -> None:
-        """Load part-2 targets and require `#154` `initial_mass` update
+        """Load part-2 targets and guard custom `t_xtra1` and `#154` relaxation
         (`:41-105`).
         """
         if int(state["x_integer_ctrl"][0]) != 2:
             return
         init_mass = self.load_part2_targets(str(state["case_dir"]))
         raise NotImplementedError(
-            "relax_composition_j_entropy: extras_controls sets "
-            f"s% initial_mass = {init_mass!r} (:77), which "
-            "PyStarExtrasAdapter updates do not expose (#154, #231)"
+            "relax_composition_j_entropy: loaded initial_mass="
+            f"{init_mass!r} (:77), but stages 1-2 require custom "
+            "termination_code_str(t_xtra1) strings (:141, 144, 340) and "
+            "part-2 composition/J/entropy relaxation (#154, #231)"
         )
 
     def extras_check_model(
@@ -94,7 +102,7 @@ class RelaxCompositionJEntropyStarExtras:
         """Verify relaxed `(Teff, L(1))` within 0.5% in part 2 (`:124-159`)."""
         if int(state["x_integer_ctrl"][0]) == 2:
             teff = float(state["teff"])
-            l_surf_erg = float(state["l"][0])
+            l_surf_erg = _surface_luminosity_erg_s(state)
             bad_teff = (
                 teff > self.target_teff * 1.005
                 or teff < self.target_teff * 0.995
@@ -175,7 +183,7 @@ class RelaxCompositionJEntropyStarExtras:
         (root / "initial_mass.dat").write_text(
             f"{_fmt_d26_18(float(state['star_mass']))}\n", encoding="utf-8"
         )
-        l1 = float(state["l"][0])
+        l1 = _surface_luminosity_erg_s(state)
         teff = float(state["teff"])
         (root / "target_vals.dat").write_text(
             f"{_fmt_d26_18(teff)}\n{_fmt_d26_18(l1)}\n", encoding="utf-8"

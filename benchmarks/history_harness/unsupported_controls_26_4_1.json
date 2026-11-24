@@ -10,7 +10,7 @@
     "total_cases": 106,
     "strict_pass_cases": 53,
     "strict_fail_cases": 53,
-    "distinct_unsupported_controls": 176,
+    "distinct_unsupported_controls": 172,
     "distinct_unknown_controls": 0,
     "cases_with_headless_plotting": 78,
     "distinct_headless_plotting_keys": 895
@@ -19,11 +19,11 @@
     {
       "section": "star_job",
       "upstream_keys": 455,
-      "supported_keys": 146,
+      "supported_keys": 153,
       "unused_keys": 12,
       "headless_gui_keys": 3,
       "terminal_output_keys": 8,
-      "unimplemented_upstream_keys": 286
+      "unimplemented_upstream_keys": 279
     },
     {
       "section": "eos",
@@ -1771,15 +1771,6 @@
     },
     {
       "section": "star_job",
-      "key": "enable_adaptive_network",
-      "category": "unimplemented",
-      "case_count": 1,
-      "cases": [
-        "star/adjust_net"
-      ]
-    },
-    {
-      "section": "star_job",
       "key": "fallback_check_total_energy",
       "category": "unimplemented",
       "case_count": 1,
@@ -1803,33 +1794,6 @@
       "case_count": 1,
       "cases": [
         "star/starspots"
-      ]
-    },
-    {
-      "section": "star_job",
-      "key": "min_x_for_add",
-      "category": "unimplemented",
-      "case_count": 1,
-      "cases": [
-        "star/adjust_net"
-      ]
-    },
-    {
-      "section": "star_job",
-      "key": "min_x_for_keep",
-      "category": "unimplemented",
-      "case_count": 1,
-      "cases": [
-        "star/adjust_net"
-      ]
-    },
-    {
-      "section": "star_job",
-      "key": "min_x_for_n",
-      "category": "unimplemented",
-      "case_count": 1,
-      "cases": [
-        "star/adjust_net"
       ]
     },
     {
@@ -6978,11 +6942,7 @@
         "inlist_adjust_net_header"
       ],
       "unsupported_controls": [
-        "controls::max_dt_yrs_for_velocity_logt_lower_bound::unimplemented",
-        "star_job::enable_adaptive_network::unimplemented",
-        "star_job::min_x_for_add::unimplemented",
-        "star_job::min_x_for_keep::unimplemented",
-        "star_job::min_x_for_n::unimplemented"
+        "controls::max_dt_yrs_for_velocity_logt_lower_bound::unimplemented"
       ],
       "unknown_controls": [],
       "headless_plotting_keys_count": 68,

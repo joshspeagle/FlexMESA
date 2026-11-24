@@ -451,6 +451,23 @@ pub fn change_model_network(
     new_net_name: &str,
     search_dir: Option<&Path>,
 ) -> Result<(), StarError> {
+    change_model_network_with_adjust(model, new_net_name, search_dir, true)
+}
+
+/// [`change_model_network`] with an explicit `adjust_abundances_for_new_isos`
+/// (`change_net(id, adjust_abundances_for_new_isos, new_net_name, ierr)`,
+/// `star/private/adjust_xyz.f90:51-59`): when `false`, isotopes absent from
+/// the old net start at zero before `clean1` (`adjust_xyz.f90:357-358`).
+///
+/// # Errors
+/// Returns [`StarError`] if `new_net_name` cannot be loaded or mass fractions
+/// cannot be normalized cleanly.
+pub fn change_model_network_with_adjust(
+    model: &mut StarModel,
+    new_net_name: &str,
+    search_dir: Option<&Path>,
+    adjust_abundances_for_new_isos: bool,
+) -> Result<(), StarError> {
     let trimmed = new_net_name.trim();
     let net_info = get_or_load_net(trimmed, search_dir)?;
     let new_chem_id = net_info.chem_id.clone();
@@ -508,7 +525,7 @@ pub fn change_model_network(
         &model.ln_t,
         &model.mlt_d,
         model.controls.initial_z,
-        true,
+        adjust_abundances_for_new_isos,
     )?;
 
     // `star/private/adjust_xyz.f90:148`: `if (s% generations > 1) call do_xa(s% nz_old, s% xh_old, s% xa_old)`
@@ -535,7 +552,7 @@ pub fn change_model_network(
             &model.ln_t_old,
             &model.mlt_d,
             model.controls.initial_z,
-            true,
+            adjust_abundances_for_new_isos,
         )?
     } else {
         new_xa.clone()

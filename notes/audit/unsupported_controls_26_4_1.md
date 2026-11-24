@@ -8,7 +8,7 @@ Generated mechanically against **MESA 26.4.1** (git tag `26.4.1`, commit `c8c202
 - **Total manifest cases scanned**: `106`
 - **Cases passing strict `#147` validation**: `53`
 - **Cases rejected by strict `#147` validation**: `53`
-- **Distinct unsupported physics/solver controls encountered**: `176`
+- **Distinct unsupported physics/solver controls encountered**: `172`
 - **Distinct unknown/misspelled controls encountered**: `0`
 - **Cases using headless plotting controls (`#173` / `DECISIONS #25`)**: `78` (`895` distinct keys)
 
@@ -16,7 +16,7 @@ Generated mechanically against **MESA 26.4.1** (git tag `26.4.1`, commit `c8c202
 
 | Section | Upstream `26.4.1` | Supported | Unused (`#147`) | Headless GUI (`#173`) | Terminal output (`DECISIONS #26`) | Unimplemented |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `&star_job` | 455 | 146 | 12 | 3 | 8 | 286 |
+| `&star_job` | 455 | 153 | 12 | 3 | 8 | 279 |
 | `&eos` | 102 | 91 | 0 | 0 | 9 | 2 |
 | `&kap` | 51 | 39 | 0 | 0 | 10 | 2 |
 | `&controls` | 1448 | 1172 | 23 | 0 | 16 | 237 |
@@ -198,7 +198,7 @@ Per `DECISIONS #25` (matching upstream `USE_PGSTAR = NO`), keys in `&pgstar`, `&
 | `star` | `R_CrB_star` | `pass` | 0 | 0 | 122 |
 | `star` | `T_tau_gradr` | `pass` | 0 | 0 | 0 |
 | `star` | `accreted_material_j` | `pass` | 0 | 0 | 24 |
-| `star` | `adjust_net` | `fail_unsupported` | 5 | 0 | 68 |
+| `star` | `adjust_net` | `fail_unsupported` | 1 | 0 | 68 |
 | `star` | `c13_pocket` | `fail_unsupported` | 1 | 0 | 100 |
 | `star` | `carbon_kh` | `fail_unsupported` | 2 | 0 | 81 |
 | `star` | `cburn_inward` | `pass` | 0 | 0 | 66 |

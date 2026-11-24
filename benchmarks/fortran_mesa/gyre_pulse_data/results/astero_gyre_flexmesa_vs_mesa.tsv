@@ -1,0 +1,19 @@
+# FlexMESA astero_gyre run vs MESA 26.4.1 reference run, per GYRE call (#170, G3c)
+# reference: mesa_histories bundle runs/astero/astero_gyre/pulse_tap (MESA r26.4.1, SDK x86_64-linux-26.6.1)
+# generator: benchmarks/fortran_mesa/gyre_pulse_data/compare_astero_gyre_run.py
+# flexmesa run: 465 steps, termination xa_central_lower_limit, wall 300 s, numerics strict
+# modes_bitexact: modes whose n_pg, freq_uHz, inertia and growth rate equal MESA's bits
+# n_points: GYRE input points from FlexMESA's own model and from MESA's .gyre
+# pulse_points_bitexact: points with all 18 columns equal to MESA's bits
+# max_rel_d_r_P_T_rho: max relative difference of r, P, T, rho over points (equal point counts only)
+model_number	n_modes	n_modes_mesa	modes_bitexact	max_rel_dfreq	global_bitexact	n_points	n_points_mesa	pulse_points_bitexact	max_rel_d_r_P_T_rho
+50	7	7	0	9.332e-14	0	1455	1455	0	3.564e-13
+100	7	7	0	1.186e-13	0	1465	1465	0	4.180e-13
+150	8	8	0	1.657e-13	0	1472	1472	0	7.414e-13
+200	8	8	0	8.556e-14	0	1499	1499	0	5.883e-13
+250	9	9	0	3.894e-14	0	1513	1513	0	2.978e-13
+300	9	9	0	8.436e-14	0	1537	1537	0	2.603e-13
+350	10	10	0	1.695e-12	0	1547	1547	0	3.822e-13
+400	10	10	0	9.584e-05	0	1564	1562	0	n/a
+450	12	12	0	9.069e-07	0	1632	1633	0	n/a
+465	12	12	0	4.260e-05	0	1627	1626	0	n/a

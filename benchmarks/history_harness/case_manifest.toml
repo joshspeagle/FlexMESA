@@ -823,8 +823,6 @@ case = "astero_gyre"
 reference_status = "mesa_26_4_1"
 reference_path = "benchmarks/history_harness/reference_histories/astero/astero_gyre.data"
 required_termination = "xa_central_lower_limit"
-uses_pulsation_scaffolding = true
-scaffolding_issue = "#170"
 
 [[cases]]
 suite = "astero"

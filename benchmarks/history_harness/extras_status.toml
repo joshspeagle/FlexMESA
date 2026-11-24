@@ -648,9 +648,8 @@ issue = "#231"
 [[cases]]
 suite = "astero"
 case = "astero_gyre"
-status = "unported"
+status = "ported"
 digest = "61c0a560093e701477aff6315aa8f34a0ffc113d0032ddc0c10964692bebad08"
-issue = "#231"
 
 [[cases]]
 suite = "astero"

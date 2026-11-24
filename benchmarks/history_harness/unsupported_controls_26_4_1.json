@@ -10,7 +10,7 @@
     "total_cases": 106,
     "strict_pass_cases": 53,
     "strict_fail_cases": 53,
-    "distinct_unsupported_controls": 176,
+    "distinct_unsupported_controls": 175,
     "distinct_unknown_controls": 0,
     "cases_with_headless_plotting": 78,
     "distinct_headless_plotting_keys": 895
@@ -46,11 +46,11 @@
     {
       "section": "controls",
       "upstream_keys": 1448,
-      "supported_keys": 1172,
+      "supported_keys": 1177,
       "unused_keys": 23,
       "headless_gui_keys": 0,
       "terminal_output_keys": 16,
-      "unimplemented_upstream_keys": 237
+      "unimplemented_upstream_keys": 232
     },
     {
       "section": "binary_job",
@@ -1295,15 +1295,6 @@
     {
       "section": "controls",
       "key": "add_center_point_to_pulse_data",
-      "category": "unimplemented",
-      "case_count": 1,
-      "cases": [
-        "star/tzo"
-      ]
-    },
-    {
-      "section": "controls",
-      "key": "add_double_points_to_pulse_data",
       "category": "unimplemented",
       "case_count": 1,
       "cases": [
@@ -8415,7 +8406,6 @@
       "unsupported_controls": [
         "controls::add_atmosphere_to_pulse_data::unimplemented",
         "controls::add_center_point_to_pulse_data::unimplemented",
-        "controls::add_double_points_to_pulse_data::unimplemented",
         "controls::report_ierr::unimplemented",
         "controls::write_pulse_data_with_profile::unimplemented",
         "star_job::dlg_core_mass_per_step::unimplemented",

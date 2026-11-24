@@ -6,7 +6,8 @@ use std::collections::HashSet;
 use std::path::Path;
 
 use flexmesa_astero::{
-    run_astero_test_suite_case_with_case_hooks, AsteroCaseHooks,
+    run_astero_test_suite_case_with_case_hooks,
+    run_astero_test_suite_case_with_hooks, AsteroCaseHooks,
 };
 use flexmesa_binary::{
     run_binary_test_suite_case_with_extras, BinaryLogsOptions,
@@ -191,11 +192,41 @@ pub fn trace_astero_case<'py>(
     extras: Option<Py<PyAny>>,
 ) -> PyResult<Bound<'py, PyDict>> {
     let mode = parse_opt_mode(numerics_mode)?;
-    let mut set_param =
-        crate::astero_case_hooks_py::adapter_from_extras(py, extras)?;
     let load_opts = InlistLoadOptions {
         allow_unsupported_controls,
     };
+    // An astero search case's extras implement `set_param` (case hooks);
+    // a case with `astero_just_call_my_extras_check_model` supplies star
+    // extras instead (`extras_check_model` and the other hooks).
+    let is_case_hooks = match &extras {
+        Some(obj) => obj.bind(py).hasattr("set_param")?,
+        None => true,
+    };
+    if !is_case_hooks {
+        let rep = run_with_star_extras(py, extras, |ex| {
+            run_in_opt_mode(mode, || {
+                let opts = StarLogsOptions::from_target(
+                    Path::new(out_target),
+                    is_logs_dir,
+                    respect_intervals,
+                    write_profiles,
+                );
+                run_astero_test_suite_case_with_hooks(
+                    Path::new(case_dir),
+                    skip_optional,
+                    max_steps_per_stage,
+                    false,
+                    opts,
+                    load_opts,
+                    None,
+                    Some(ex),
+                )
+            })
+        })?;
+        return case_report_to_pydict(py, &rep);
+    }
+    let mut set_param =
+        crate::astero_case_hooks_py::adapter_from_extras(py, extras)?;
     let rep = py
         .detach(|| {
             run_in_opt_mode(mode, || {

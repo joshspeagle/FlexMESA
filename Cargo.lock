@@ -176,6 +176,7 @@ version = "0.1.0"
 dependencies = [
  "flexmesa-autodiff",
  "flexmesa-const",
+ "flexmesa-gyre",
  "flexmesa-math",
  "flexmesa-num",
  "flexmesa-schema",

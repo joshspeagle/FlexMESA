@@ -574,6 +574,17 @@ def astero_nelder_mead_minimize(objective: Any, x_first: list[float], x_lower: l
 def astero_powell_quadratic_minimize(objective: Any, x_first: list[float], x_lower: list[float], x_upper: list[float], max_evals: int, rhobeg: float, rhoend: float) -> dict[str, Any]: ...  # noqa: E501
 def astero_scan_cartesian_grid(objective: Any, x_lower: list[float], x_upper: list[float], x_delta: list[float]) -> dict[str, Any]: ...  # noqa: E501
 
+class StarModelHandle:
+    """Copy of the star model at an extras hook (`wants_star_model`)."""
+    @property
+    def model_number(self) -> int: ...
+    def gyre_pulse_data(self, add_center_point: bool, keep_surface_point: bool, add_atmosphere: bool) -> tuple[list[float], list[list[float]]]: ...  # noqa: E501
+
+class AsteroGyre:
+    """Astero's GYRE interface (`astero/private/gyre_support.f90`)."""
+    def __init__(self, case_dir: str, mesa_dir: str) -> None: ...
+    def get_modes(self, model: StarModelHandle, el: int, store_model: bool) -> list[tuple[int, int, int, float, float, float]]: ...  # noqa: E501
+
 def w5_eval_diff_rot_batch(nz: int, parallel: bool = False) -> _ArrF64: ...
 def w5_eval_riemann_rsp2_batch(nz: int, parallel: bool = False) -> _ArrF64: ...
 def w5_eval_binary_rlof_batch(nz: int, parallel: bool = False) -> _ArrF64: ...

@@ -8,7 +8,7 @@ Generated mechanically against **MESA 26.4.1** (git tag `26.4.1`, commit `c8c202
 - **Total manifest cases scanned**: `106`
 - **Cases passing strict `#147` validation**: `53`
 - **Cases rejected by strict `#147` validation**: `53`
-- **Distinct unsupported physics/solver controls encountered**: `176`
+- **Distinct unsupported physics/solver controls encountered**: `175`
 - **Distinct unknown/misspelled controls encountered**: `0`
 - **Cases using headless plotting controls (`#173` / `DECISIONS #25`)**: `78` (`895` distinct keys)
 
@@ -19,7 +19,7 @@ Generated mechanically against **MESA 26.4.1** (git tag `26.4.1`, commit `c8c202
 | `&star_job` | 455 | 146 | 12 | 3 | 8 | 286 |
 | `&eos` | 102 | 91 | 0 | 0 | 9 | 2 |
 | `&kap` | 51 | 39 | 0 | 0 | 10 | 2 |
-| `&controls` | 1448 | 1172 | 23 | 0 | 16 | 237 |
+| `&controls` | 1448 | 1177 | 23 | 0 | 16 | 232 |
 | `&binary_job` | 37 | 22 | 0 | 1 | 1 | 13 |
 | `&binary_controls` | 176 | 124 | 0 | 0 | 2 | 50 |
 | `&astero_search_controls` | 153 | 88 | 3 | 0 | 0 | 62 |
@@ -262,7 +262,7 @@ Per `DECISIONS #25` (matching upstream `USE_PGSTAR = NO`), keys in `&pgstar`, `&
 | `star` | `starspots` | `fail_unsupported` | 5 | 0 | 17 |
 | `star` | `timing` | `pass` | 0 | 0 | 0 |
 | `star` | `twin_studies` | `fail_unsupported` | 8 | 0 | 255 |
-| `star` | `tzo` | `fail_unsupported` | 7 | 0 | 334 |
+| `star` | `tzo` | `fail_unsupported` | 6 | 0 | 334 |
 | `star` | `wd_acc_small_dm` | `pass` | 0 | 0 | 55 |
 | `star` | `wd_aic` | `fail_unsupported` | 6 | 0 | 41 |
 | `star` | `wd_c_core_ignition` | `pass` | 0 | 0 | 15 |

@@ -522,9 +522,11 @@ fn assert_uncapped_case_passes(case_name: &str) {
 }
 
 // These three cases set `astero_just_call_my_extras_check_model`, so they run
-// as plain star runs (`astero/private/astero_run_support.f90:171-174`). Their
-// upstream `run_star_extras.f90` (the ADIPLS/GYRE frequency checks and the
-// `freqs.dat` output) is not ported, so this covers the star run only.
+// as plain star runs (`astero/private/astero_run_support.f90:171-174`). These
+// tests attach no extras, so they cover the star run only. `astero_gyre`'s
+// `run_star_extras.f90` (the GYRE frequency check) is ported test-side in
+// `tests/case_extras/astero_extras.py` and runs in the history harness; the
+// ADIPLS check and `freqs.dat` output of the other two are not ported.
 // One test per case, so the three runs can go in parallel and be placed in
 // different CI shards (`scripts/ci/cargo_test_shard.py`).
 #[test]

@@ -1302,6 +1302,8 @@ pub(crate) fn star_evolve_step_outcome_checked(
 
         let mut ts_retry_reason: Option<String> = None;
         let mut requested_redo = false;
+        // `dt` of the try on which `extras_check_model` asked for a redo.
+        let mut extras_redo_dt: Option<f64> = None;
 
         if let Ok(ref rep) = attempt {
             if rep.converged && !force_outer_retry {
@@ -1462,6 +1464,7 @@ pub(crate) fn star_evolve_step_outcome_checked(
                             }
                             ExtrasDirective::Redo => {
                                 requested_redo = true;
+                                extras_redo_dt = Some(model.dt);
                             }
                             ExtrasDirective::Retry => {
                                 ts_retry_reason = Some(String::from(
@@ -1556,6 +1559,15 @@ pub(crate) fn star_evolve_step_outcome_checked(
                 });
             }
             restore_attempt_state(model, None, saved)?;
+            // `prepare_to_redo` (`star/private/evolve.f90:2148-2172`) and
+            // `set_current_to_old` (`star/private/evolve_support.f90:147-240`)
+            // leave `s% dt` as it is, so a redo requested by
+            // `extras_check_model` retakes the step with the `dt` the hook
+            // set (for example the astero "warm" and "hot" limits,
+            // `astero/private/extras_support.f90:299-322`).
+            if let Some(dt_redo) = extras_redo_dt {
+                dt_try = dt_redo;
+            }
             first_try = false;
             continue;
         }

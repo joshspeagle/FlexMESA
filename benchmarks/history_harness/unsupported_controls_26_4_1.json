@@ -10,7 +10,7 @@
     "total_cases": 106,
     "strict_pass_cases": 61,
     "strict_fail_cases": 45,
-    "distinct_unsupported_controls": 168,
+    "distinct_unsupported_controls": 160,
     "distinct_unknown_controls": 0,
     "cases_with_headless_plotting": 78,
     "distinct_headless_plotting_keys": 895
@@ -73,11 +73,11 @@
     {
       "section": "astero_search_controls",
       "upstream_keys": 153,
-      "supported_keys": 88,
+      "supported_keys": 96,
       "unused_keys": 3,
       "headless_gui_keys": 0,
       "terminal_output_keys": 0,
-      "unimplemented_upstream_keys": 62
+      "unimplemented_upstream_keys": 54
     }
   ],
   "unsupported_controls": [
@@ -212,34 +212,6 @@
     },
     {
       "section": "astero_search_controls",
-      "key": "chi2_limit_for_smaller_timesteps",
-      "category": "unimplemented",
-      "case_count": 6,
-      "cases": [
-        "astero/example_astero",
-        "astero/fast_from_file",
-        "astero/fast_newuoa",
-        "astero/fast_scan_grid",
-        "astero/fast_simplex",
-        "astero/surface_effects"
-      ]
-    },
-    {
-      "section": "astero_search_controls",
-      "key": "chi2_limit_for_smallest_timesteps",
-      "category": "unimplemented",
-      "case_count": 6,
-      "cases": [
-        "astero/example_astero",
-        "astero/fast_from_file",
-        "astero/fast_newuoa",
-        "astero/fast_scan_grid",
-        "astero/fast_simplex",
-        "astero/surface_effects"
-      ]
-    },
-    {
-      "section": "astero_search_controls",
       "key": "fgong_postfix",
       "category": "unimplemented",
       "case_count": 6,
@@ -269,34 +241,6 @@
     {
       "section": "astero_search_controls",
       "key": "last_model_save_info_filename",
-      "category": "unimplemented",
-      "case_count": 6,
-      "cases": [
-        "astero/example_astero",
-        "astero/fast_from_file",
-        "astero/fast_newuoa",
-        "astero/fast_scan_grid",
-        "astero/fast_simplex",
-        "astero/surface_effects"
-      ]
-    },
-    {
-      "section": "astero_search_controls",
-      "key": "max_yrs_dt_chi2_smaller_limit",
-      "category": "unimplemented",
-      "case_count": 6,
-      "cases": [
-        "astero/example_astero",
-        "astero/fast_from_file",
-        "astero/fast_newuoa",
-        "astero/fast_scan_grid",
-        "astero/fast_simplex",
-        "astero/surface_effects"
-      ]
-    },
-    {
-      "section": "astero_search_controls",
-      "key": "max_yrs_dt_chi2_smallest_limit",
       "category": "unimplemented",
       "case_count": 6,
       "cases": [
@@ -576,32 +520,6 @@
     },
     {
       "section": "astero_search_controls",
-      "key": "avg_age_sigma_limit",
-      "category": "unimplemented",
-      "case_count": 5,
-      "cases": [
-        "astero/example_astero",
-        "astero/fast_from_file",
-        "astero/fast_newuoa",
-        "astero/fast_scan_grid",
-        "astero/fast_simplex"
-      ]
-    },
-    {
-      "section": "astero_search_controls",
-      "key": "avg_model_number_sigma_limit",
-      "category": "unimplemented",
-      "case_count": 5,
-      "cases": [
-        "astero/example_astero",
-        "astero/fast_from_file",
-        "astero/fast_newuoa",
-        "astero/fast_scan_grid",
-        "astero/fast_simplex"
-      ]
-    },
-    {
-      "section": "astero_search_controls",
       "key": "best_model_gyre_filename",
       "category": "unimplemented",
       "case_count": 5,
@@ -642,32 +560,6 @@
     {
       "section": "astero_search_controls",
       "key": "max_num_gyre_points",
-      "category": "unimplemented",
-      "case_count": 5,
-      "cases": [
-        "astero/example_astero",
-        "astero/fast_from_file",
-        "astero/fast_newuoa",
-        "astero/fast_scan_grid",
-        "astero/fast_simplex"
-      ]
-    },
-    {
-      "section": "astero_search_controls",
-      "key": "max_num_samples_for_avg",
-      "category": "unimplemented",
-      "case_count": 5,
-      "cases": [
-        "astero/example_astero",
-        "astero/fast_from_file",
-        "astero/fast_newuoa",
-        "astero/fast_scan_grid",
-        "astero/fast_simplex"
-      ]
-    },
-    {
-      "section": "astero_search_controls",
-      "key": "min_num_samples_for_avg",
       "category": "unimplemented",
       "case_count": 5,
       "cases": [
@@ -8607,14 +8499,10 @@
         "inlist_astero_search_controls"
       ],
       "unsupported_controls": [
-        "astero_search_controls::avg_age_sigma_limit::unimplemented",
-        "astero_search_controls::avg_model_number_sigma_limit::unimplemented",
         "astero_search_controls::best_model_fgong_filename::unimplemented",
         "astero_search_controls::best_model_gyre_filename::unimplemented",
         "astero_search_controls::best_model_profile_filename::unimplemented",
         "astero_search_controls::best_model_save_model_filename::unimplemented",
-        "astero_search_controls::chi2_limit_for_smaller_timesteps::unimplemented",
-        "astero_search_controls::chi2_limit_for_smallest_timesteps::unimplemented",
         "astero_search_controls::do_redistribute_mesh::unimplemented",
         "astero_search_controls::fgong_postfix::unimplemented",
         "astero_search_controls::fgong_prefix::unimplemented",
@@ -8622,10 +8510,6 @@
         "astero_search_controls::gyre_prefix::unimplemented",
         "astero_search_controls::last_model_save_info_filename::unimplemented",
         "astero_search_controls::max_num_gyre_points::unimplemented",
-        "astero_search_controls::max_num_samples_for_avg::unimplemented",
-        "astero_search_controls::max_yrs_dt_chi2_smaller_limit::unimplemented",
-        "astero_search_controls::max_yrs_dt_chi2_smallest_limit::unimplemented",
-        "astero_search_controls::min_num_samples_for_avg::unimplemented",
         "astero_search_controls::model_num_digits::unimplemented",
         "astero_search_controls::num_digits::unimplemented",
         "astero_search_controls::restart_scan_grid_from_file::unimplemented",
@@ -8678,14 +8562,10 @@
         "inlist_astero_search_controls"
       ],
       "unsupported_controls": [
-        "astero_search_controls::avg_age_sigma_limit::unimplemented",
-        "astero_search_controls::avg_model_number_sigma_limit::unimplemented",
         "astero_search_controls::best_model_fgong_filename::unimplemented",
         "astero_search_controls::best_model_gyre_filename::unimplemented",
         "astero_search_controls::best_model_profile_filename::unimplemented",
         "astero_search_controls::best_model_save_model_filename::unimplemented",
-        "astero_search_controls::chi2_limit_for_smaller_timesteps::unimplemented",
-        "astero_search_controls::chi2_limit_for_smallest_timesteps::unimplemented",
         "astero_search_controls::do_redistribute_mesh::unimplemented",
         "astero_search_controls::fgong_postfix::unimplemented",
         "astero_search_controls::fgong_prefix::unimplemented",
@@ -8693,10 +8573,6 @@
         "astero_search_controls::gyre_prefix::unimplemented",
         "astero_search_controls::last_model_save_info_filename::unimplemented",
         "astero_search_controls::max_num_gyre_points::unimplemented",
-        "astero_search_controls::max_num_samples_for_avg::unimplemented",
-        "astero_search_controls::max_yrs_dt_chi2_smaller_limit::unimplemented",
-        "astero_search_controls::max_yrs_dt_chi2_smallest_limit::unimplemented",
-        "astero_search_controls::min_num_samples_for_avg::unimplemented",
         "astero_search_controls::model_num_digits::unimplemented",
         "astero_search_controls::num_digits::unimplemented",
         "astero_search_controls::sample_results_postfix::unimplemented",
@@ -8741,14 +8617,10 @@
         "inlist_astero_search_controls"
       ],
       "unsupported_controls": [
-        "astero_search_controls::avg_age_sigma_limit::unimplemented",
-        "astero_search_controls::avg_model_number_sigma_limit::unimplemented",
         "astero_search_controls::best_model_fgong_filename::unimplemented",
         "astero_search_controls::best_model_gyre_filename::unimplemented",
         "astero_search_controls::best_model_profile_filename::unimplemented",
         "astero_search_controls::best_model_save_model_filename::unimplemented",
-        "astero_search_controls::chi2_limit_for_smaller_timesteps::unimplemented",
-        "astero_search_controls::chi2_limit_for_smallest_timesteps::unimplemented",
         "astero_search_controls::do_redistribute_mesh::unimplemented",
         "astero_search_controls::fgong_postfix::unimplemented",
         "astero_search_controls::fgong_prefix::unimplemented",
@@ -8756,10 +8628,6 @@
         "astero_search_controls::gyre_prefix::unimplemented",
         "astero_search_controls::last_model_save_info_filename::unimplemented",
         "astero_search_controls::max_num_gyre_points::unimplemented",
-        "astero_search_controls::max_num_samples_for_avg::unimplemented",
-        "astero_search_controls::max_yrs_dt_chi2_smaller_limit::unimplemented",
-        "astero_search_controls::max_yrs_dt_chi2_smallest_limit::unimplemented",
-        "astero_search_controls::min_num_samples_for_avg::unimplemented",
         "astero_search_controls::model_num_digits::unimplemented",
         "astero_search_controls::num_digits::unimplemented",
         "astero_search_controls::sample_results_postfix::unimplemented",
@@ -8804,14 +8672,10 @@
         "inlist_astero_search_controls"
       ],
       "unsupported_controls": [
-        "astero_search_controls::avg_age_sigma_limit::unimplemented",
-        "astero_search_controls::avg_model_number_sigma_limit::unimplemented",
         "astero_search_controls::best_model_fgong_filename::unimplemented",
         "astero_search_controls::best_model_gyre_filename::unimplemented",
         "astero_search_controls::best_model_profile_filename::unimplemented",
         "astero_search_controls::best_model_save_model_filename::unimplemented",
-        "astero_search_controls::chi2_limit_for_smaller_timesteps::unimplemented",
-        "astero_search_controls::chi2_limit_for_smallest_timesteps::unimplemented",
         "astero_search_controls::do_redistribute_mesh::unimplemented",
         "astero_search_controls::fgong_postfix::unimplemented",
         "astero_search_controls::fgong_prefix::unimplemented",
@@ -8819,10 +8683,6 @@
         "astero_search_controls::gyre_prefix::unimplemented",
         "astero_search_controls::last_model_save_info_filename::unimplemented",
         "astero_search_controls::max_num_gyre_points::unimplemented",
-        "astero_search_controls::max_num_samples_for_avg::unimplemented",
-        "astero_search_controls::max_yrs_dt_chi2_smaller_limit::unimplemented",
-        "astero_search_controls::max_yrs_dt_chi2_smallest_limit::unimplemented",
-        "astero_search_controls::min_num_samples_for_avg::unimplemented",
         "astero_search_controls::model_num_digits::unimplemented",
         "astero_search_controls::num_digits::unimplemented",
         "astero_search_controls::restart_scan_grid_from_file::unimplemented",
@@ -8868,14 +8728,10 @@
         "inlist_astero_search_controls"
       ],
       "unsupported_controls": [
-        "astero_search_controls::avg_age_sigma_limit::unimplemented",
-        "astero_search_controls::avg_model_number_sigma_limit::unimplemented",
         "astero_search_controls::best_model_fgong_filename::unimplemented",
         "astero_search_controls::best_model_gyre_filename::unimplemented",
         "astero_search_controls::best_model_profile_filename::unimplemented",
         "astero_search_controls::best_model_save_model_filename::unimplemented",
-        "astero_search_controls::chi2_limit_for_smaller_timesteps::unimplemented",
-        "astero_search_controls::chi2_limit_for_smallest_timesteps::unimplemented",
         "astero_search_controls::do_redistribute_mesh::unimplemented",
         "astero_search_controls::fgong_postfix::unimplemented",
         "astero_search_controls::fgong_prefix::unimplemented",
@@ -8883,10 +8739,6 @@
         "astero_search_controls::gyre_prefix::unimplemented",
         "astero_search_controls::last_model_save_info_filename::unimplemented",
         "astero_search_controls::max_num_gyre_points::unimplemented",
-        "astero_search_controls::max_num_samples_for_avg::unimplemented",
-        "astero_search_controls::max_yrs_dt_chi2_smaller_limit::unimplemented",
-        "astero_search_controls::max_yrs_dt_chi2_smallest_limit::unimplemented",
-        "astero_search_controls::min_num_samples_for_avg::unimplemented",
         "astero_search_controls::model_num_digits::unimplemented",
         "astero_search_controls::num_digits::unimplemented",
         "astero_search_controls::restart_simplex_from_file::unimplemented",
@@ -8939,14 +8791,10 @@
         "astero_search_controls::best_model_fgong_filename::unimplemented",
         "astero_search_controls::best_model_profile_filename::unimplemented",
         "astero_search_controls::best_model_save_model_filename::unimplemented",
-        "astero_search_controls::chi2_limit_for_smaller_timesteps::unimplemented",
-        "astero_search_controls::chi2_limit_for_smallest_timesteps::unimplemented",
         "astero_search_controls::do_redistribute_mesh::unimplemented",
         "astero_search_controls::fgong_postfix::unimplemented",
         "astero_search_controls::fgong_prefix::unimplemented",
         "astero_search_controls::last_model_save_info_filename::unimplemented",
-        "astero_search_controls::max_yrs_dt_chi2_smaller_limit::unimplemented",
-        "astero_search_controls::max_yrs_dt_chi2_smallest_limit::unimplemented",
         "astero_search_controls::model_num_digits::unimplemented",
         "astero_search_controls::num_digits::unimplemented",
         "astero_search_controls::sample_results_postfix::unimplemented",

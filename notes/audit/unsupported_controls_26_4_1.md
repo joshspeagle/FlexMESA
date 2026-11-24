@@ -8,7 +8,7 @@ Generated mechanically against **MESA 26.4.1** (git tag `26.4.1`, commit `c8c202
 - **Total manifest cases scanned**: `106`
 - **Cases passing strict `#147` validation**: `61`
 - **Cases rejected by strict `#147` validation**: `45`
-- **Distinct unsupported physics/solver controls encountered**: `168`
+- **Distinct unsupported physics/solver controls encountered**: `160`
 - **Distinct unknown/misspelled controls encountered**: `0`
 - **Cases using headless plotting controls (`#173` / `DECISIONS #25`)**: `78` (`895` distinct keys)
 
@@ -22,7 +22,7 @@ Generated mechanically against **MESA 26.4.1** (git tag `26.4.1`, commit `c8c202
 | `&controls` | 1448 | 1172 | 23 | 0 | 16 | 237 |
 | `&binary_job` | 37 | 22 | 0 | 1 | 1 | 13 |
 | `&binary_controls` | 176 | 124 | 0 | 0 | 2 | 50 |
-| `&astero_search_controls` | 153 | 88 | 3 | 0 | 0 | 62 |
+| `&astero_search_controls` | 153 | 96 | 3 | 0 | 0 | 54 |
 
 ## Top Unsupported Physics & Solver Controls (`#147`)
 
@@ -36,13 +36,9 @@ Generated mechanically against **MESA 26.4.1** (git tag `26.4.1`, commit `c8c202
 | `&astero_search_controls::best_model_fgong_filename` | `unimplemented` | 6 | `astero/example_astero`, `astero/fast_from_file`, `astero/fast_newuoa`, `astero/fast_scan_grid`, ... (+2) |
 | `&astero_search_controls::best_model_profile_filename` | `unimplemented` | 6 | `astero/example_astero`, `astero/fast_from_file`, `astero/fast_newuoa`, `astero/fast_scan_grid`, ... (+2) |
 | `&astero_search_controls::best_model_save_model_filename` | `unimplemented` | 6 | `astero/example_astero`, `astero/fast_from_file`, `astero/fast_newuoa`, `astero/fast_scan_grid`, ... (+2) |
-| `&astero_search_controls::chi2_limit_for_smaller_timesteps` | `unimplemented` | 6 | `astero/example_astero`, `astero/fast_from_file`, `astero/fast_newuoa`, `astero/fast_scan_grid`, ... (+2) |
-| `&astero_search_controls::chi2_limit_for_smallest_timesteps` | `unimplemented` | 6 | `astero/example_astero`, `astero/fast_from_file`, `astero/fast_newuoa`, `astero/fast_scan_grid`, ... (+2) |
 | `&astero_search_controls::fgong_postfix` | `unimplemented` | 6 | `astero/example_astero`, `astero/fast_from_file`, `astero/fast_newuoa`, `astero/fast_scan_grid`, ... (+2) |
 | `&astero_search_controls::fgong_prefix` | `unimplemented` | 6 | `astero/example_astero`, `astero/fast_from_file`, `astero/fast_newuoa`, `astero/fast_scan_grid`, ... (+2) |
 | `&astero_search_controls::last_model_save_info_filename` | `unimplemented` | 6 | `astero/example_astero`, `astero/fast_from_file`, `astero/fast_newuoa`, `astero/fast_scan_grid`, ... (+2) |
-| `&astero_search_controls::max_yrs_dt_chi2_smaller_limit` | `unimplemented` | 6 | `astero/example_astero`, `astero/fast_from_file`, `astero/fast_newuoa`, `astero/fast_scan_grid`, ... (+2) |
-| `&astero_search_controls::max_yrs_dt_chi2_smallest_limit` | `unimplemented` | 6 | `astero/example_astero`, `astero/fast_from_file`, `astero/fast_newuoa`, `astero/fast_scan_grid`, ... (+2) |
 | `&astero_search_controls::model_num_digits` | `unimplemented` | 6 | `astero/example_astero`, `astero/fast_from_file`, `astero/fast_newuoa`, `astero/fast_scan_grid`, ... (+2) |
 | `&astero_search_controls::num_digits` | `unimplemented` | 6 | `astero/example_astero`, `astero/fast_from_file`, `astero/fast_newuoa`, `astero/fast_scan_grid`, ... (+2) |
 | `&astero_search_controls::sample_results_postfix` | `unimplemented` | 6 | `astero/example_astero`, `astero/fast_from_file`, `astero/fast_newuoa`, `astero/fast_scan_grid`, ... (+2) |
@@ -62,14 +58,10 @@ Generated mechanically against **MESA 26.4.1** (git tag `26.4.1`, commit `c8c202
 | `&astero_search_controls::write_profile_for_best_model` | `unimplemented` | 6 | `astero/example_astero`, `astero/fast_from_file`, `astero/fast_newuoa`, `astero/fast_scan_grid`, ... (+2) |
 | `&controls::d_omega_mixing_across_convection_boundary` | `unimplemented` | 6 | `star/12M_pre_ms_to_core_collapse`, `star/20M_pre_ms_to_core_collapse`, `star/pisn`, `star/split_burn_big_net`, ... (+2) |
 | `&controls::d_omega_mixing_rate` | `unimplemented` | 6 | `star/12M_pre_ms_to_core_collapse`, `star/20M_pre_ms_to_core_collapse`, `star/pisn`, `star/split_burn_big_net`, ... (+2) |
-| `&astero_search_controls::avg_age_sigma_limit` | `unimplemented` | 5 | `astero/example_astero`, `astero/fast_from_file`, `astero/fast_newuoa`, `astero/fast_scan_grid`, ... (+1) |
-| `&astero_search_controls::avg_model_number_sigma_limit` | `unimplemented` | 5 | `astero/example_astero`, `astero/fast_from_file`, `astero/fast_newuoa`, `astero/fast_scan_grid`, ... (+1) |
 | `&astero_search_controls::best_model_gyre_filename` | `unimplemented` | 5 | `astero/example_astero`, `astero/fast_from_file`, `astero/fast_newuoa`, `astero/fast_scan_grid`, ... (+1) |
 | `&astero_search_controls::gyre_postfix` | `unimplemented` | 5 | `astero/example_astero`, `astero/fast_from_file`, `astero/fast_newuoa`, `astero/fast_scan_grid`, ... (+1) |
 | `&astero_search_controls::gyre_prefix` | `unimplemented` | 5 | `astero/example_astero`, `astero/fast_from_file`, `astero/fast_newuoa`, `astero/fast_scan_grid`, ... (+1) |
 | `&astero_search_controls::max_num_gyre_points` | `unimplemented` | 5 | `astero/example_astero`, `astero/fast_from_file`, `astero/fast_newuoa`, `astero/fast_scan_grid`, ... (+1) |
-| `&astero_search_controls::max_num_samples_for_avg` | `unimplemented` | 5 | `astero/example_astero`, `astero/fast_from_file`, `astero/fast_newuoa`, `astero/fast_scan_grid`, ... (+1) |
-| `&astero_search_controls::min_num_samples_for_avg` | `unimplemented` | 5 | `astero/example_astero`, `astero/fast_from_file`, `astero/fast_newuoa`, `astero/fast_scan_grid`, ... (+1) |
 | `&astero_search_controls::save_next_best_at_higher_frequency` | `unimplemented` | 5 | `astero/example_astero`, `astero/fast_from_file`, `astero/fast_newuoa`, `astero/fast_scan_grid`, ... (+1) |
 | `&astero_search_controls::save_next_best_at_lower_frequency` | `unimplemented` | 5 | `astero/example_astero`, `astero/fast_from_file`, `astero/fast_newuoa`, `astero/fast_scan_grid`, ... (+1) |
 | `&astero_search_controls::trace_limits` | `unused` | 5 | `astero/example_astero`, `astero/fast_from_file`, `astero/fast_newuoa`, `astero/fast_scan_grid`, ... (+1) |
@@ -88,6 +80,14 @@ Generated mechanically against **MESA 26.4.1** (git tag `26.4.1`, commit `c8c202
 | `&astero_search_controls::simplex_beta` | `unimplemented` | 2 | `astero/example_astero`, `astero/fast_simplex` |
 | `&astero_search_controls::simplex_delta` | `unimplemented` | 2 | `astero/example_astero`, `astero/fast_simplex` |
 | `&astero_search_controls::simplex_gamma` | `unimplemented` | 2 | `astero/example_astero`, `astero/fast_simplex` |
+| `&astero_search_controls::surf_coef1_name` | `unimplemented` | 2 | `astero/example_astero`, `astero/surface_effects` |
+| `&astero_search_controls::surf_coef2_name` | `unimplemented` | 2 | `astero/example_astero`, `astero/surface_effects` |
+| `&controls::add_atmosphere_to_pulse_data` | `unimplemented` | 2 | `star/check_pulse_atm`, `star/tzo` |
+| `&controls::high_logt_op_mono_full_off` | `unimplemented` | 2 | `star/1.4M_ms_op_mono`, `star/radiative_levitation` |
+| `&controls::high_logt_op_mono_full_on` | `unimplemented` | 2 | `star/1.4M_ms_op_mono`, `star/radiative_levitation` |
+| `&controls::report_ierr` | `unimplemented` | 2 | `star/1.4M_ms_op_mono`, `star/tzo` |
+| `&controls::rsp_map_columns_filename` | `unused` | 2 | `star/rsp_Delta_Scuti`, `star/rsp_save_and_load_file` |
+| `&controls::rsp_map_filename` | `unused` | 2 | `star/rsp_Delta_Scuti`, `star/rsp_save_and_load_file` |
 
 ## Terminal-Output Controls (`DECISIONS #26`)
 
@@ -282,9 +282,9 @@ Per `DECISIONS #25` (matching upstream `USE_PGSTAR = NO`), keys in `&pgstar`, `&
 | `binary` | `wind_fed_bhhmxb` | `pass` | 0 | 0 | 0 |
 | `astero` | `astero_adipls` | `fail_unsupported` | 1 | 0 | 0 |
 | `astero` | `astero_gyre` | `pass` | 0 | 0 | 0 |
-| `astero` | `example_astero` | `fail_unsupported` | 51 | 0 | 173 |
-| `astero` | `fast_from_file` | `fail_unsupported` | 43 | 0 | 173 |
-| `astero` | `fast_newuoa` | `fail_unsupported` | 43 | 0 | 173 |
-| `astero` | `fast_scan_grid` | `fail_unsupported` | 44 | 0 | 173 |
-| `astero` | `fast_simplex` | `fail_unsupported` | 48 | 0 | 173 |
-| `astero` | `surface_effects` | `fail_unsupported` | 30 | 0 | 36 |
+| `astero` | `example_astero` | `fail_unsupported` | 43 | 0 | 173 |
+| `astero` | `fast_from_file` | `fail_unsupported` | 35 | 0 | 173 |
+| `astero` | `fast_newuoa` | `fail_unsupported` | 35 | 0 | 173 |
+| `astero` | `fast_scan_grid` | `fail_unsupported` | 36 | 0 | 173 |
+| `astero` | `fast_simplex` | `fail_unsupported` | 40 | 0 | 173 |
+| `astero` | `surface_effects` | `fail_unsupported` | 26 | 0 | 36 |

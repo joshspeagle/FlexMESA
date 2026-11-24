@@ -37,6 +37,7 @@ _STRICT_VALID_TIER1_CASES = frozenset(
         "custom_colors",
         "extended_convective_penetration",
         "make_env",
+        "carbon_kh",
     }
 )
 

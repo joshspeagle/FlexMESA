@@ -194,7 +194,7 @@ def test_synthetic_astero_case_execution_and_photo_restart(
 def test_rsp_and_astero_raw_cases_rejected_and_cleaned_copies_smoke(
     tmp_path: pathlib.Path,
 ) -> None:
-    """Run strict-valid raw `rsp_BLAP`; reject raw `rsp_Delta_Scuti` and
+    """Run strict-valid raw `rsp_BLAP` and `rsp_Delta_Scuti`; reject raw
     `astero` cases under `#147` and run cleaned 2-step smoke checks.
     """
     root = known_gaps_gate.require_mesa_test_inputs_dir()
@@ -216,23 +216,14 @@ def test_rsp_and_astero_raw_cases_rejected_and_cleaned_copies_smoke(
     assert strict_rsp_rep["assertions_passed"] is True
     assert strict_rsp_rep["photo_restart_verified"] is True
 
+    # `rsp_Delta_Scuti` passes strict control validation since Train 8, so
+    # its raw inlists run unmodified, like `rsp_BLAP`.
     raw_delta = root / "star" / "test_suite" / "rsp_Delta_Scuti"
     assert raw_delta.is_dir(), f"Missing upstream case: {raw_delta}"
-    with pytest.raises(
-        ValueError,
-        match=r"(unsupported|unknown|unrecognized).*control",
-    ):
-        star.run_test_suite_case(
-            raw_delta,
-            skip_optional=True,
-            max_steps_per_stage=2,
-            verify_restart=True,
-            extras=resolve_case_extras("star", raw_delta),
-        )
-    clean_rsp = tmp_path / "rsp_Delta_Scuti"
-    star.copy_cleaned_case(raw_delta, clean_rsp, suite="star")
+    strict_delta = tmp_path / "strict_rsp_Delta_Scuti"
+    shutil.copytree(raw_delta, strict_delta)
     rsp_rep = star.run_test_suite_case(
-        clean_rsp,
+        strict_delta,
         skip_optional=True,
         max_steps_per_stage=2,
         verify_restart=True,

@@ -9,14 +9,14 @@ Instead of capping steps or loosening checks to force green runs, unfinished or 
 
 | Suite | Target Cases | Stored `26.4.1` Refs | `no_reference_yet` | Strict-Validated | Diagnostic Runs | Reach Upstream Term | Declared Gaps | Verified Pass |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| `star` | 90 | 86 | 4 | 56 | 34 | 54 | 58 | 23 |
+| `star` | 90 | 86 | 4 | 56 | 34 | 54 | 57 | 23 |
 | `binary` | 8 | 8 | 0 | 7 | 1 | 6 | 5 | 3 |
 | `astero` | 8 | 8 | 0 | 1 | 7 | 3 | 7 | 1 |
-| **Total** | **106** | **102** | **4** | **64** | **42** | **63** | **70** | **27** |
+| **Total** | **106** | **102** | **4** | **64** | **42** | **63** | **69** | **27** |
 
 `Strict-Validated` counts cases whose unmodified inlists pass strict control validation (`#147`). `Diagnostic Runs` counts cases that strict validation rejects and that were rerun with the unsupported controls ignored; their numbers show where the engine stands and can never count as a pass (`DECISIONS #26`). `Reach Upstream Term` counts runs of either kind.
 
-- **Undeclared Failures**: `0`
+- **Undeclared Failures**: `1`
 - **Within Numeric Tolerance While Governed as Gaps**: `9` cases (`star/carbon_kh` ([#161](https://github.com/joshspeagle/FlexMESA/issues/161)), `star/gyre_in_mesa_bcep` ([#170](https://github.com/joshspeagle/FlexMESA/issues/170)), `star/gyre_in_mesa_ms` ([#170](https://github.com/joshspeagle/FlexMESA/issues/170)), `star/gyre_in_mesa_rsg` ([#170](https://github.com/joshspeagle/FlexMESA/issues/170)), `star/gyre_in_mesa_spb` ([#170](https://github.com/joshspeagle/FlexMESA/issues/170)), `star/gyre_in_mesa_wd` ([#157](https://github.com/joshspeagle/FlexMESA/issues/157)), `star/rsp_save_and_load_file` ([#161](https://github.com/joshspeagle/FlexMESA/issues/161)), `astero/astero_adipls` ([#171](https://github.com/joshspeagle/FlexMESA/issues/171)), `astero/surface_effects` ([#162](https://github.com/joshspeagle/FlexMESA/issues/162))) meet numeric tolerances while remaining declared gaps under active tracking issues.
 
 ## Cases Without a Stored `26.4.1` Reference (`no_reference_yet`)
@@ -35,7 +35,7 @@ Cases lacking a committed MESA `26.4.1` baseline report `no reference yet` and c
 | Tracking Issue | Declared Case Count | Primary Focus |
 | :--- | ---: | :--- |
 | [#161](https://github.com/joshspeagle/FlexMESA/issues/161) | 23 | Restore upstream EOS, opacity, network, and atm control paths |
-| [#154](https://github.com/joshspeagle/FlexMESA/issues/154) | 13 | Align `timestep.rs` and `star` mass-change `do_adjust_mass` |
+| [#154](https://github.com/joshspeagle/FlexMESA/issues/154) | 12 | Align `timestep.rs` and `star` mass-change `do_adjust_mass` |
 | [#162](https://github.com/joshspeagle/FlexMESA/issues/162) | 9 | Align `astero` search and chi-squared drivers |
 | [#157](https://github.com/joshspeagle/FlexMESA/issues/157) | 7 | Restore MLT/TDC controls and remove non-upstream fallbacks |
 | [#158](https://github.com/joshspeagle/FlexMESA/issues/158) | 5 | Align shellular rotation solver variables and Spruit-Tayler |
@@ -47,7 +47,7 @@ Cases lacking a committed MESA `26.4.1` baseline report `no reference yet` and c
 | [#153](https://github.com/joshspeagle/FlexMESA/issues/153) | 1 | Port upstream `mesh_adjust.f90` remeshing planner |
 | [#171](https://github.com/joshspeagle/FlexMESA/issues/171) | 1 | Integrate bundled `ADIPLS` oscillation eigensolver |
 
-## Complete Known-Gaps Registry (70 Cases)
+## Complete Known-Gaps Registry (69 Cases)
 
 | Suite | Case | Issue | Expected Term | Baseline Outcome | Mechanism |
 | :--- | :--- | :--- | :--- | :--- | :--- |
@@ -80,7 +80,6 @@ Cases lacking a committed MESA `26.4.1` baseline report `no reference yet` and c
 | `star` | `magnetic_braking` | [#157](https://github.com/joshspeagle/FlexMESA/issues/157) | `xa_central_lower_limit` | `xa_central_lower_limit` (682 steps; diagnostic (5 controls ignored)) | Case history_columns.list requests unported MLT++ gradT_excess_alpha column (#157) and rotational retry/physics controls (#152, #158). |
 | `star` | `make_brown_dwarf` | [#154](https://github.com/joshspeagle/FlexMESA/issues/154) | `max_age` | `max_age` (237 steps; strict) | Fails loudly at sub-grid initial_mass without create_initial_model polytrope integration (#154). |
 | `star` | `make_co_wd` | [#157](https://github.com/joshspeagle/FlexMESA/issues/157) | `log_L_lower_limit` | `timeout` (322 steps; strict) | Case history_columns.list requests unported MLT++ gradT_excess_alpha column. |
-| `star` | `make_env` | [#154](https://github.com/joshspeagle/FlexMESA/issues/154) | `max_age` | `error` (0 steps; strict) | Envelope initial-model construction and boundary relaxation (#154). |
 | `star` | `make_he_wd` | [#154](https://github.com/joshspeagle/FlexMESA/issues/154) | `max_age` | `max_age` (214 steps; strict) | Mass-removal stage skips unported do_relax_mass and star_job::lg_max_abs_mdot, leaving an unrelaxed bare_he_core.mod that terminates at min_timestep_limit (#154). |
 | `star` | `make_o_ne_wd` | [#157](https://github.com/joshspeagle/FlexMESA/issues/157) | `log_L_lower_limit` | `log_L_lower_limit` (253 steps; strict) | Case history_columns.list requests unported MLT++ gradT_excess_alpha column. |
 | `star` | `make_planets` | [#154](https://github.com/joshspeagle/FlexMESA/issues/154) | `max_age` | `dt_is_zero` (76 steps; diagnostic (1 controls ignored)) | Fails loudly at sub-grid planetary initial_mass without create_initial_model relaxation (#154). |
@@ -168,7 +167,7 @@ Every Rust `#[ignore]` and Python `xfail`/`skip` marker in the repository is tra
 
 ## Level-2 Module Hex Reference Gaps (`benchmarks/module_hex/`)
 
-- **Checked vs MESA `26.4.1` `raw_bits_hex`**: `304,760` / `304,760` outputs at `0 ULP` across `16` probed modules (`10` modules complete at `0 ULP`; `348,321` total captured upstream values).
+- **Checked vs MESA `26.4.1` `raw_bits_hex`**: `305,967` / `305,967` outputs at `0 ULP` across `17` probed modules (`12` modules complete at `0 ULP`; `348,321` total captured upstream values).
 
 | Module | Status | Checked / Expected | 0 ULP | Max ULP | Issue | Notes |
 | :--- | :--- | ---: | ---: | ---: | :--- | :--- |
@@ -181,9 +180,9 @@ Every Rust `#[ignore]` and Python `xfail`/`skip` marker in the repository is tra
 | `num` | `unported_hex_harness` | 0 / 570 | 0 | 0 | [#365](https://github.com/joshspeagle/FlexMESA/issues/365) | 570 upstream num Brent/Newton/ODE test printouts await direct TSV harness mapping. |
 | `interp_1d` | `partial_0_ulp` | 22 / 234 | 22 | 0 | [#365](https://github.com/joshspeagle/FlexMESA/issues/365) | test3 (interp_pm asc/desc) & test1 (interp_m3q asc/desc) values. |
 | `interp_2d` | `partial_0_ulp` | 4 / 104 | 4 | 0 | [#365](https://github.com/joshspeagle/FlexMESA/issues/365) | All 4 midpoint bicubic spline coefficients at 0 ULP. |
-| `chem` | `partial_0_ulp` | 286 / 1,102 | 286 | 0 | [#161](https://github.com/joshspeagle/FlexMESA/issues/161) | 286 Lodders (2003) isotopic atom percents. |
+| `chem` | `pass_0_ulp` | 1,102 / 1,102 | 1,102 | 0 | none | All 1,102 chem/test/src/test_chem.f90 outputs at 0 ULP (286 Lodders 2003 atom percents + 816 do_tests properties). |
 | `colors` | `partial_0_ulp` | 10 / 234 | 10 | 0 | [#161](https://github.com/joshspeagle/FlexMESA/issues/161) | Group 1 solar bolometric and UBVRIJM outputs. |
-| `eos` | `unported_hex_harness` | 0 / 391 | 0 | 0 | [#161](https://github.com/joshspeagle/FlexMESA/issues/161) | 391 upstream EOS diagnostic table/blend printouts await direct TSV harness mapping. |
+| `eos` | `pass_0_ulp` | 391 / 391 | 391 | 0 | none | All 391 eos/test outputs at 0 ULP (320 Do_One, 16 get_Rho_T, 40 test1_eosPT_for_ck, 15 do_test_eos_blend). |
 | `kap` | `pass_0_ulp` | 21 / 21 | 21 | 0 | none | All 21 gs98, CO-enhanced, and AESOPUS outputs at 0 ULP. |
 | `rates` | `pass_0_ulp` | 3,639 / 3,639 | 3,639 | 0 | none | 3,636/3,639 rates outputs at 0 ULP (all 2,763 raw rates, 12 screening, 845/846 weak, 4 Coulomb, 4 Suzuki/weaklib, pycno, r3, 4 rev_c1); 3 Fermi-Dirac ecapture within 29 ULP. |
 | `neu` | `pass_0_ulp` | 300,000 / 300,000 | 300,000 | 0 | none | All 10,000 records (300,000 outputs) of neu at 0 ULP. |
@@ -207,7 +206,7 @@ from flexmesa.testing import case_manifest
 manifest = case_manifest.load_case_manifest()
 gaps = case_manifest.load_known_gaps()
 assert len(manifest.cases) == 106
-assert len(gaps) == 75
+assert len(gaps) == 74
 no_ref = [
     c.case for c in manifest.cases
     if c.reference_status == "no_reference_yet"

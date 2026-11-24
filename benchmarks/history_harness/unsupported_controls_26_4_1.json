@@ -8,9 +8,9 @@
   },
   "summary": {
     "total_cases": 106,
-    "strict_pass_cases": 67,
-    "strict_fail_cases": 39,
-    "distinct_unsupported_controls": 143,
+    "strict_pass_cases": 71,
+    "strict_fail_cases": 35,
+    "distinct_unsupported_controls": 116,
     "distinct_unknown_controls": 0,
     "cases_with_headless_plotting": 78,
     "distinct_headless_plotting_keys": 895
@@ -19,11 +19,11 @@
     {
       "section": "star_job",
       "upstream_keys": 455,
-      "supported_keys": 179,
+      "supported_keys": 202,
       "unused_keys": 8,
       "headless_gui_keys": 3,
       "terminal_output_keys": 8,
-      "unimplemented_upstream_keys": 257
+      "unimplemented_upstream_keys": 234
     },
     {
       "section": "eos",
@@ -46,11 +46,11 @@
     {
       "section": "controls",
       "upstream_keys": 1448,
-      "supported_keys": 1206,
-      "unused_keys": 23,
+      "supported_keys": 1219,
+      "unused_keys": 15,
       "headless_gui_keys": 0,
-      "terminal_output_keys": 16,
-      "unimplemented_upstream_keys": 203
+      "terminal_output_keys": 19,
+      "unimplemented_upstream_keys": 195
     },
     {
       "section": "binary_job",
@@ -73,11 +73,11 @@
     {
       "section": "astero_search_controls",
       "upstream_keys": 153,
-      "supported_keys": 88,
+      "supported_keys": 96,
       "unused_keys": 3,
       "headless_gui_keys": 0,
       "terminal_output_keys": 0,
-      "unimplemented_upstream_keys": 62
+      "unimplemented_upstream_keys": 54
     }
   ],
   "unsupported_controls": [
@@ -173,34 +173,6 @@
     },
     {
       "section": "astero_search_controls",
-      "key": "chi2_limit_for_smaller_timesteps",
-      "category": "unimplemented",
-      "case_count": 6,
-      "cases": [
-        "astero/example_astero",
-        "astero/fast_from_file",
-        "astero/fast_newuoa",
-        "astero/fast_scan_grid",
-        "astero/fast_simplex",
-        "astero/surface_effects"
-      ]
-    },
-    {
-      "section": "astero_search_controls",
-      "key": "chi2_limit_for_smallest_timesteps",
-      "category": "unimplemented",
-      "case_count": 6,
-      "cases": [
-        "astero/example_astero",
-        "astero/fast_from_file",
-        "astero/fast_newuoa",
-        "astero/fast_scan_grid",
-        "astero/fast_simplex",
-        "astero/surface_effects"
-      ]
-    },
-    {
-      "section": "astero_search_controls",
       "key": "fgong_postfix",
       "category": "unimplemented",
       "case_count": 6,
@@ -230,34 +202,6 @@
     {
       "section": "astero_search_controls",
       "key": "last_model_save_info_filename",
-      "category": "unimplemented",
-      "case_count": 6,
-      "cases": [
-        "astero/example_astero",
-        "astero/fast_from_file",
-        "astero/fast_newuoa",
-        "astero/fast_scan_grid",
-        "astero/fast_simplex",
-        "astero/surface_effects"
-      ]
-    },
-    {
-      "section": "astero_search_controls",
-      "key": "max_yrs_dt_chi2_smaller_limit",
-      "category": "unimplemented",
-      "case_count": 6,
-      "cases": [
-        "astero/example_astero",
-        "astero/fast_from_file",
-        "astero/fast_newuoa",
-        "astero/fast_scan_grid",
-        "astero/fast_simplex",
-        "astero/surface_effects"
-      ]
-    },
-    {
-      "section": "astero_search_controls",
-      "key": "max_yrs_dt_chi2_smallest_limit",
       "category": "unimplemented",
       "case_count": 6,
       "cases": [
@@ -509,32 +453,6 @@
     },
     {
       "section": "astero_search_controls",
-      "key": "avg_age_sigma_limit",
-      "category": "unimplemented",
-      "case_count": 5,
-      "cases": [
-        "astero/example_astero",
-        "astero/fast_from_file",
-        "astero/fast_newuoa",
-        "astero/fast_scan_grid",
-        "astero/fast_simplex"
-      ]
-    },
-    {
-      "section": "astero_search_controls",
-      "key": "avg_model_number_sigma_limit",
-      "category": "unimplemented",
-      "case_count": 5,
-      "cases": [
-        "astero/example_astero",
-        "astero/fast_from_file",
-        "astero/fast_newuoa",
-        "astero/fast_scan_grid",
-        "astero/fast_simplex"
-      ]
-    },
-    {
-      "section": "astero_search_controls",
       "key": "best_model_gyre_filename",
       "category": "unimplemented",
       "case_count": 5,
@@ -575,32 +493,6 @@
     {
       "section": "astero_search_controls",
       "key": "max_num_gyre_points",
-      "category": "unimplemented",
-      "case_count": 5,
-      "cases": [
-        "astero/example_astero",
-        "astero/fast_from_file",
-        "astero/fast_newuoa",
-        "astero/fast_scan_grid",
-        "astero/fast_simplex"
-      ]
-    },
-    {
-      "section": "astero_search_controls",
-      "key": "max_num_samples_for_avg",
-      "category": "unimplemented",
-      "case_count": 5,
-      "cases": [
-        "astero/example_astero",
-        "astero/fast_from_file",
-        "astero/fast_newuoa",
-        "astero/fast_scan_grid",
-        "astero/fast_simplex"
-      ]
-    },
-    {
-      "section": "astero_search_controls",
-      "key": "min_num_samples_for_avg",
       "category": "unimplemented",
       "case_count": 5,
       "cases": [
@@ -700,41 +592,6 @@
         "astero/fast_newuoa",
         "astero/fast_scan_grid",
         "astero/fast_simplex"
-      ]
-    },
-    {
-      "section": "star_job",
-      "key": "num_steps_to_relax_rotation",
-      "category": "unimplemented",
-      "case_count": 5,
-      "cases": [
-        "star/1M_thermohaline",
-        "star/20M_z2m2_high_rotation",
-        "star/high_rot_darkening",
-        "star/magnetic_braking",
-        "star/twin_studies"
-      ]
-    },
-    {
-      "section": "star_job",
-      "key": "near_zams_relax_omega_div_omega_crit",
-      "category": "unimplemented",
-      "case_count": 3,
-      "cases": [
-        "star/20M_z2m2_high_rotation",
-        "star/magnetic_braking",
-        "star/twin_studies"
-      ]
-    },
-    {
-      "section": "star_job",
-      "key": "relax_omega_max_yrs_dt",
-      "category": "unimplemented",
-      "case_count": 3,
-      "cases": [
-        "star/high_rot_darkening",
-        "star/magnetic_braking",
-        "star/ppisn"
       ]
     },
     {
@@ -870,76 +727,6 @@
     },
     {
       "section": "controls",
-      "key": "rsp_map_columns_filename",
-      "category": "unused",
-      "case_count": 2,
-      "cases": [
-        "star/rsp_Delta_Scuti",
-        "star/rsp_save_and_load_file"
-      ]
-    },
-    {
-      "section": "controls",
-      "key": "rsp_map_filename",
-      "category": "unused",
-      "case_count": 2,
-      "cases": [
-        "star/rsp_Delta_Scuti",
-        "star/rsp_save_and_load_file"
-      ]
-    },
-    {
-      "section": "controls",
-      "key": "rsp_map_first_period",
-      "category": "unused",
-      "case_count": 2,
-      "cases": [
-        "star/rsp_Delta_Scuti",
-        "star/rsp_save_and_load_file"
-      ]
-    },
-    {
-      "section": "controls",
-      "key": "rsp_map_history_filename",
-      "category": "unused",
-      "case_count": 2,
-      "cases": [
-        "star/rsp_Delta_Scuti",
-        "star/rsp_save_and_load_file"
-      ]
-    },
-    {
-      "section": "controls",
-      "key": "rsp_map_last_period",
-      "category": "unused",
-      "case_count": 2,
-      "cases": [
-        "star/rsp_Delta_Scuti",
-        "star/rsp_save_and_load_file"
-      ]
-    },
-    {
-      "section": "controls",
-      "key": "rsp_map_zone_interval",
-      "category": "unused",
-      "case_count": 2,
-      "cases": [
-        "star/rsp_Delta_Scuti",
-        "star/rsp_save_and_load_file"
-      ]
-    },
-    {
-      "section": "controls",
-      "key": "rsp_write_map",
-      "category": "unused",
-      "case_count": 2,
-      "cases": [
-        "star/rsp_Delta_Scuti",
-        "star/rsp_save_and_load_file"
-      ]
-    },
-    {
-      "section": "controls",
       "key": "use_op_mono_alt_get_kap",
       "category": "unimplemented",
       "case_count": 2,
@@ -1067,15 +854,6 @@
     },
     {
       "section": "controls",
-      "key": "fgong_ivers",
-      "category": "unimplemented",
-      "case_count": 1,
-      "cases": [
-        "star/check_pulse_atm"
-      ]
-    },
-    {
-      "section": "controls",
       "key": "fill_arrays_with_nans",
       "category": "unimplemented",
       "case_count": 1,
@@ -1126,60 +904,6 @@
       "case_count": 1,
       "cases": [
         "star/radiative_levitation"
-      ]
-    },
-    {
-      "section": "controls",
-      "key": "rsp_qvisc_linear",
-      "category": "unimplemented",
-      "case_count": 1,
-      "cases": [
-        "star/rsp_save_and_load_file"
-      ]
-    },
-    {
-      "section": "controls",
-      "key": "rsp_qvisc_quadratic",
-      "category": "unimplemented",
-      "case_count": 1,
-      "cases": [
-        "star/rsp_save_and_load_file"
-      ]
-    },
-    {
-      "section": "controls",
-      "key": "rsp_report_limit_dt",
-      "category": "unimplemented",
-      "case_count": 1,
-      "cases": [
-        "star/rsp_save_and_load_file"
-      ]
-    },
-    {
-      "section": "controls",
-      "key": "rsp_report_undercorrections",
-      "category": "unimplemented",
-      "case_count": 1,
-      "cases": [
-        "star/rsp_save_and_load_file"
-      ]
-    },
-    {
-      "section": "controls",
-      "key": "rsp_tol_max_resid",
-      "category": "unused",
-      "case_count": 1,
-      "cases": [
-        "star/rsp_save_and_load_file"
-      ]
-    },
-    {
-      "section": "controls",
-      "key": "rsp_trace_rsp_build_model",
-      "category": "unimplemented",
-      "case_count": 1,
-      "cases": [
-        "star/rsp_save_and_load_file"
       ]
     },
     {
@@ -1463,15 +1187,6 @@
     },
     {
       "section": "star_job",
-      "key": "near_zams_relax_initial_surface_rotation_v",
-      "category": "unimplemented",
-      "case_count": 1,
-      "cases": [
-        "star/1M_thermohaline"
-      ]
-    },
-    {
-      "section": "star_job",
       "key": "rate_cache_suffix",
       "category": "unimplemented",
       "case_count": 1,
@@ -1486,15 +1201,6 @@
       "case_count": 1,
       "cases": [
         "star/custom_rates"
-      ]
-    },
-    {
-      "section": "star_job",
-      "key": "relax_initial_omega_div_omega_crit",
-      "category": "unimplemented",
-      "case_count": 1,
-      "cases": [
-        "star/high_rot_darkening"
       ]
     },
     {
@@ -1725,6 +1431,21 @@
       {
         "section": "binary_controls",
         "key": "terminal_interval",
+        "case_count": 1
+      },
+      {
+        "section": "controls",
+        "key": "rsp_report_limit_dt",
+        "case_count": 1
+      },
+      {
+        "section": "controls",
+        "key": "rsp_report_undercorrections",
+        "case_count": 1
+      },
+      {
+        "section": "controls",
+        "key": "rsp_trace_rsp_build_model",
         "case_count": 1
       },
       {
@@ -6398,14 +6119,11 @@
     {
       "suite": "star",
       "case": "1M_thermohaline",
-      "strict_ok": false,
+      "strict_ok": true,
       "entry_files": [
         "inlist_1M_thermohaline_header"
       ],
-      "unsupported_controls": [
-        "star_job::near_zams_relax_initial_surface_rotation_v::unimplemented",
-        "star_job::num_steps_to_relax_rotation::unimplemented"
-      ],
+      "unsupported_controls": [],
       "unknown_controls": [],
       "headless_plotting_keys_count": 66,
       "terminal_output_keys": [
@@ -6452,9 +6170,7 @@
       ],
       "unsupported_controls": [
         "controls::max_safe_logt_for_rates::unimplemented",
-        "controls::warn_rates_for_high_temp::unimplemented",
-        "star_job::near_zams_relax_omega_div_omega_crit::unimplemented",
-        "star_job::num_steps_to_relax_rotation::unimplemented"
+        "controls::warn_rates_for_high_temp::unimplemented"
       ],
       "unknown_controls": [],
       "headless_plotting_keys_count": 295,
@@ -6687,8 +6403,7 @@
         "inlist_check_pulse_atm_header"
       ],
       "unsupported_controls": [
-        "controls::add_atmosphere_to_pulse_data::unimplemented",
-        "controls::fgong_ivers::unimplemented"
+        "controls::add_atmosphere_to_pulse_data::unimplemented"
       ],
       "unknown_controls": [],
       "headless_plotting_keys_count": 0,
@@ -7003,10 +6718,7 @@
       ],
       "unsupported_controls": [
         "star_job::change_initial_w_div_wc_flag::unimplemented",
-        "star_job::new_w_div_wc_flag::unimplemented",
-        "star_job::num_steps_to_relax_rotation::unimplemented",
-        "star_job::relax_initial_omega_div_omega_crit::unimplemented",
-        "star_job::relax_omega_max_yrs_dt::unimplemented"
+        "star_job::new_w_div_wc_flag::unimplemented"
       ],
       "unknown_controls": [],
       "headless_plotting_keys_count": 65,
@@ -7111,16 +6823,12 @@
     {
       "suite": "star",
       "case": "magnetic_braking",
-      "strict_ok": false,
+      "strict_ok": true,
       "entry_files": [
         "inlist_zams_header",
         "inlist_braking_header"
       ],
-      "unsupported_controls": [
-        "star_job::near_zams_relax_omega_div_omega_crit::unimplemented",
-        "star_job::num_steps_to_relax_rotation::unimplemented",
-        "star_job::relax_omega_max_yrs_dt::unimplemented"
-      ],
+      "unsupported_controls": [],
       "unknown_controls": [],
       "headless_plotting_keys_count": 56,
       "terminal_output_keys": [
@@ -7496,7 +7204,6 @@
         "star_job::max_steps_to_relax_entropy::unimplemented",
         "star_job::new_w_div_wc_flag::unimplemented",
         "star_job::num_timescales_for_relax_entropy::unimplemented",
-        "star_job::relax_omega_max_yrs_dt::unimplemented",
         "star_job::timescale_for_relax_entropy::unimplemented"
       ],
       "unknown_controls": [],
@@ -7609,19 +7316,11 @@
     {
       "suite": "star",
       "case": "rsp_Delta_Scuti",
-      "strict_ok": false,
+      "strict_ok": true,
       "entry_files": [
         "inlist_rsp_Delta_Scuti_header"
       ],
-      "unsupported_controls": [
-        "controls::rsp_map_columns_filename::unused",
-        "controls::rsp_map_filename::unused",
-        "controls::rsp_map_first_period::unused",
-        "controls::rsp_map_history_filename::unused",
-        "controls::rsp_map_last_period::unused",
-        "controls::rsp_map_zone_interval::unused",
-        "controls::rsp_write_map::unused"
-      ],
+      "unsupported_controls": [],
       "unknown_controls": [],
       "headless_plotting_keys_count": 75,
       "terminal_output_keys": [
@@ -7714,30 +7413,19 @@
     {
       "suite": "star",
       "case": "rsp_save_and_load_file",
-      "strict_ok": false,
+      "strict_ok": true,
       "entry_files": [
         "inlist_rsp_save_file_header",
         "inlist_rsp_load_file_header"
       ],
-      "unsupported_controls": [
-        "controls::rsp_map_columns_filename::unused",
-        "controls::rsp_map_filename::unused",
-        "controls::rsp_map_first_period::unused",
-        "controls::rsp_map_history_filename::unused",
-        "controls::rsp_map_last_period::unused",
-        "controls::rsp_map_zone_interval::unused",
-        "controls::rsp_qvisc_linear::unimplemented",
-        "controls::rsp_qvisc_quadratic::unimplemented",
-        "controls::rsp_report_limit_dt::unimplemented",
-        "controls::rsp_report_undercorrections::unimplemented",
-        "controls::rsp_tol_max_resid::unused",
-        "controls::rsp_trace_rsp_build_model::unimplemented",
-        "controls::rsp_write_map::unused"
-      ],
+      "unsupported_controls": [],
       "unknown_controls": [],
       "headless_plotting_keys_count": 69,
       "terminal_output_keys": [
         "controls::num_trace_history_values",
+        "controls::rsp_report_limit_dt",
+        "controls::rsp_report_undercorrections",
+        "controls::rsp_trace_rsp_build_model",
         "controls::terminal_interval",
         "controls::terminal_show_age_units",
         "controls::terminal_show_log_age",
@@ -7856,9 +7544,7 @@
       ],
       "unsupported_controls": [
         "controls::max_safe_logt_for_rates::unimplemented",
-        "controls::warn_rates_for_high_temp::unimplemented",
-        "star_job::near_zams_relax_omega_div_omega_crit::unimplemented",
-        "star_job::num_steps_to_relax_rotation::unimplemented"
+        "controls::warn_rates_for_high_temp::unimplemented"
       ],
       "unknown_controls": [],
       "headless_plotting_keys_count": 255,
@@ -8275,14 +7961,10 @@
         "inlist_astero_search_controls"
       ],
       "unsupported_controls": [
-        "astero_search_controls::avg_age_sigma_limit::unimplemented",
-        "astero_search_controls::avg_model_number_sigma_limit::unimplemented",
         "astero_search_controls::best_model_fgong_filename::unimplemented",
         "astero_search_controls::best_model_gyre_filename::unimplemented",
         "astero_search_controls::best_model_profile_filename::unimplemented",
         "astero_search_controls::best_model_save_model_filename::unimplemented",
-        "astero_search_controls::chi2_limit_for_smaller_timesteps::unimplemented",
-        "astero_search_controls::chi2_limit_for_smallest_timesteps::unimplemented",
         "astero_search_controls::do_redistribute_mesh::unimplemented",
         "astero_search_controls::fgong_postfix::unimplemented",
         "astero_search_controls::fgong_prefix::unimplemented",
@@ -8290,10 +7972,6 @@
         "astero_search_controls::gyre_prefix::unimplemented",
         "astero_search_controls::last_model_save_info_filename::unimplemented",
         "astero_search_controls::max_num_gyre_points::unimplemented",
-        "astero_search_controls::max_num_samples_for_avg::unimplemented",
-        "astero_search_controls::max_yrs_dt_chi2_smaller_limit::unimplemented",
-        "astero_search_controls::max_yrs_dt_chi2_smallest_limit::unimplemented",
-        "astero_search_controls::min_num_samples_for_avg::unimplemented",
         "astero_search_controls::model_num_digits::unimplemented",
         "astero_search_controls::num_digits::unimplemented",
         "astero_search_controls::restart_scan_grid_from_file::unimplemented",
@@ -8346,14 +8024,10 @@
         "inlist_astero_search_controls"
       ],
       "unsupported_controls": [
-        "astero_search_controls::avg_age_sigma_limit::unimplemented",
-        "astero_search_controls::avg_model_number_sigma_limit::unimplemented",
         "astero_search_controls::best_model_fgong_filename::unimplemented",
         "astero_search_controls::best_model_gyre_filename::unimplemented",
         "astero_search_controls::best_model_profile_filename::unimplemented",
         "astero_search_controls::best_model_save_model_filename::unimplemented",
-        "astero_search_controls::chi2_limit_for_smaller_timesteps::unimplemented",
-        "astero_search_controls::chi2_limit_for_smallest_timesteps::unimplemented",
         "astero_search_controls::do_redistribute_mesh::unimplemented",
         "astero_search_controls::fgong_postfix::unimplemented",
         "astero_search_controls::fgong_prefix::unimplemented",
@@ -8361,10 +8035,6 @@
         "astero_search_controls::gyre_prefix::unimplemented",
         "astero_search_controls::last_model_save_info_filename::unimplemented",
         "astero_search_controls::max_num_gyre_points::unimplemented",
-        "astero_search_controls::max_num_samples_for_avg::unimplemented",
-        "astero_search_controls::max_yrs_dt_chi2_smaller_limit::unimplemented",
-        "astero_search_controls::max_yrs_dt_chi2_smallest_limit::unimplemented",
-        "astero_search_controls::min_num_samples_for_avg::unimplemented",
         "astero_search_controls::model_num_digits::unimplemented",
         "astero_search_controls::num_digits::unimplemented",
         "astero_search_controls::sample_results_postfix::unimplemented",
@@ -8409,14 +8079,10 @@
         "inlist_astero_search_controls"
       ],
       "unsupported_controls": [
-        "astero_search_controls::avg_age_sigma_limit::unimplemented",
-        "astero_search_controls::avg_model_number_sigma_limit::unimplemented",
         "astero_search_controls::best_model_fgong_filename::unimplemented",
         "astero_search_controls::best_model_gyre_filename::unimplemented",
         "astero_search_controls::best_model_profile_filename::unimplemented",
         "astero_search_controls::best_model_save_model_filename::unimplemented",
-        "astero_search_controls::chi2_limit_for_smaller_timesteps::unimplemented",
-        "astero_search_controls::chi2_limit_for_smallest_timesteps::unimplemented",
         "astero_search_controls::do_redistribute_mesh::unimplemented",
         "astero_search_controls::fgong_postfix::unimplemented",
         "astero_search_controls::fgong_prefix::unimplemented",
@@ -8424,10 +8090,6 @@
         "astero_search_controls::gyre_prefix::unimplemented",
         "astero_search_controls::last_model_save_info_filename::unimplemented",
         "astero_search_controls::max_num_gyre_points::unimplemented",
-        "astero_search_controls::max_num_samples_for_avg::unimplemented",
-        "astero_search_controls::max_yrs_dt_chi2_smaller_limit::unimplemented",
-        "astero_search_controls::max_yrs_dt_chi2_smallest_limit::unimplemented",
-        "astero_search_controls::min_num_samples_for_avg::unimplemented",
         "astero_search_controls::model_num_digits::unimplemented",
         "astero_search_controls::num_digits::unimplemented",
         "astero_search_controls::sample_results_postfix::unimplemented",
@@ -8472,14 +8134,10 @@
         "inlist_astero_search_controls"
       ],
       "unsupported_controls": [
-        "astero_search_controls::avg_age_sigma_limit::unimplemented",
-        "astero_search_controls::avg_model_number_sigma_limit::unimplemented",
         "astero_search_controls::best_model_fgong_filename::unimplemented",
         "astero_search_controls::best_model_gyre_filename::unimplemented",
         "astero_search_controls::best_model_profile_filename::unimplemented",
         "astero_search_controls::best_model_save_model_filename::unimplemented",
-        "astero_search_controls::chi2_limit_for_smaller_timesteps::unimplemented",
-        "astero_search_controls::chi2_limit_for_smallest_timesteps::unimplemented",
         "astero_search_controls::do_redistribute_mesh::unimplemented",
         "astero_search_controls::fgong_postfix::unimplemented",
         "astero_search_controls::fgong_prefix::unimplemented",
@@ -8487,10 +8145,6 @@
         "astero_search_controls::gyre_prefix::unimplemented",
         "astero_search_controls::last_model_save_info_filename::unimplemented",
         "astero_search_controls::max_num_gyre_points::unimplemented",
-        "astero_search_controls::max_num_samples_for_avg::unimplemented",
-        "astero_search_controls::max_yrs_dt_chi2_smaller_limit::unimplemented",
-        "astero_search_controls::max_yrs_dt_chi2_smallest_limit::unimplemented",
-        "astero_search_controls::min_num_samples_for_avg::unimplemented",
         "astero_search_controls::model_num_digits::unimplemented",
         "astero_search_controls::num_digits::unimplemented",
         "astero_search_controls::restart_scan_grid_from_file::unimplemented",
@@ -8536,14 +8190,10 @@
         "inlist_astero_search_controls"
       ],
       "unsupported_controls": [
-        "astero_search_controls::avg_age_sigma_limit::unimplemented",
-        "astero_search_controls::avg_model_number_sigma_limit::unimplemented",
         "astero_search_controls::best_model_fgong_filename::unimplemented",
         "astero_search_controls::best_model_gyre_filename::unimplemented",
         "astero_search_controls::best_model_profile_filename::unimplemented",
         "astero_search_controls::best_model_save_model_filename::unimplemented",
-        "astero_search_controls::chi2_limit_for_smaller_timesteps::unimplemented",
-        "astero_search_controls::chi2_limit_for_smallest_timesteps::unimplemented",
         "astero_search_controls::do_redistribute_mesh::unimplemented",
         "astero_search_controls::fgong_postfix::unimplemented",
         "astero_search_controls::fgong_prefix::unimplemented",
@@ -8551,10 +8201,6 @@
         "astero_search_controls::gyre_prefix::unimplemented",
         "astero_search_controls::last_model_save_info_filename::unimplemented",
         "astero_search_controls::max_num_gyre_points::unimplemented",
-        "astero_search_controls::max_num_samples_for_avg::unimplemented",
-        "astero_search_controls::max_yrs_dt_chi2_smaller_limit::unimplemented",
-        "astero_search_controls::max_yrs_dt_chi2_smallest_limit::unimplemented",
-        "astero_search_controls::min_num_samples_for_avg::unimplemented",
         "astero_search_controls::model_num_digits::unimplemented",
         "astero_search_controls::num_digits::unimplemented",
         "astero_search_controls::restart_simplex_from_file::unimplemented",
@@ -8607,14 +8253,10 @@
         "astero_search_controls::best_model_fgong_filename::unimplemented",
         "astero_search_controls::best_model_profile_filename::unimplemented",
         "astero_search_controls::best_model_save_model_filename::unimplemented",
-        "astero_search_controls::chi2_limit_for_smaller_timesteps::unimplemented",
-        "astero_search_controls::chi2_limit_for_smallest_timesteps::unimplemented",
         "astero_search_controls::do_redistribute_mesh::unimplemented",
         "astero_search_controls::fgong_postfix::unimplemented",
         "astero_search_controls::fgong_prefix::unimplemented",
         "astero_search_controls::last_model_save_info_filename::unimplemented",
-        "astero_search_controls::max_yrs_dt_chi2_smaller_limit::unimplemented",
-        "astero_search_controls::max_yrs_dt_chi2_smallest_limit::unimplemented",
         "astero_search_controls::model_num_digits::unimplemented",
         "astero_search_controls::num_digits::unimplemented",
         "astero_search_controls::sample_results_postfix::unimplemented",

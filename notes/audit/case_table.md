@@ -19,8 +19,8 @@ Generated mechanically by `flexmesa harness` from `benchmarks/history_harness/ca
 | Diagnostic runs reaching upstream termination | 11 |
 | Acceptance passes against MESA `26.4.1` (`pass`) | 27 |
 | Interim `0b2e6bb` comparisons within manifest tolerance | 0 |
-| Declared known gaps (`known_gaps.toml`) | 75 |
-| Undeclared failures | 0 |
+| Declared known gaps (`known_gaps.toml`) | 74 |
+| Undeclared failures | 1 |
 
 ## Per-Case Status and Reference Availability
 
@@ -75,7 +75,7 @@ Generated mechanically by `flexmesa harness` from `benchmarks/history_harness/ca
 | `star` | `magnetic_braking` | `mesa_26_4_1` | `xa_central_lower_limit` | diagnostic (5 controls ignored) | `xa_central_lower_limit` | 682 (219) | 0 (0) | 9.1 [1004] (8.3 [191/23r]) | - | 5.62% (50) | -12.71% | `log_center_Rho`: 1.389e-01 | 11 | #157 | declared gap (#157) |
 | `star` | `make_brown_dwarf` | `mesa_26_4_1` | `max_age` | strict | `max_age` | 237 (238) | 0 (0) | 3.5 [836] (3.7 [93/25r]) | - | 7.24% (39) | +0.00% | `log_L`: 1.372e-03 | 1 | #154 | declared gap (#154) |
 | `star` | `make_co_wd` | `mesa_26_4_1` | `log_L_lower_limit` | strict | `timeout` | 322 (391) | 0 (1) | 5.6 [1793] (5.3 [217/41r]) | - | 22.15% (309) | -0.32% | `log_R`: 3.990e+00 | 750 | #157 | declared gap (#157) |
-| `star` | `make_env` | `mesa_26_4_1` | `max_age` | strict | - | 0 (172) | 0 (0) | - (5.2 [52/10r]) | - | - | - | - | - | #154 | declared gap (#154) |
+| `star` | `make_env` | `mesa_26_4_1` | `max_age` | strict | - | 0 (172) | 0 (0) | - (5.2 [52/10r]) | - | - | - | - | - | - | fail (undeclared) |
 | `star` | `make_he_wd` | `mesa_26_4_1` | `max_age` | strict | `max_age` | 214 (136) | 0 (0) | 3.2 [438] (3.1 [47/15r]) | - | 3.39% (58) | +0.00% | `log_L`: 2.840e-03 | 2 | #154 | declared gap (#154) |
 | `star` | `make_metals` | `mesa_26_4_1` | `xa_central_lower_limit` | strict | `xa_central_lower_limit` | 511 (511) | 4 (4) | 6.5 [3337] (5.7 [40/7r]) | - | 0.00% (0) | +0.00% | `log_center_Rho`: 1.639e-07 | - | - | pass |
 | `star` | `make_o_ne_wd` | `mesa_26_4_1` | `log_L_lower_limit` | strict | `log_L_lower_limit` | 253 (168) | 0 (0) | 3.9 [646] (3.9 [71/18r]) | - | 2.27% (26) | -0.14% | `log_L`: 3.716e-02 | 1110 | #157 | declared gap (#157) |

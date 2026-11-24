@@ -6,9 +6,9 @@ Generated mechanically against **MESA 26.4.1** (git tag `26.4.1`, commit `c8c202
 ## Summary
 
 - **Total manifest cases scanned**: `106`
-- **Cases passing strict `#147` validation**: `67`
-- **Cases rejected by strict `#147` validation**: `39`
-- **Distinct unsupported physics/solver controls encountered**: `143`
+- **Cases passing strict `#147` validation**: `71`
+- **Cases rejected by strict `#147` validation**: `35`
+- **Distinct unsupported physics/solver controls encountered**: `116`
 - **Distinct unknown/misspelled controls encountered**: `0`
 - **Cases using headless plotting controls (`#173` / `DECISIONS #25`)**: `78` (`895` distinct keys)
 
@@ -16,13 +16,13 @@ Generated mechanically against **MESA 26.4.1** (git tag `26.4.1`, commit `c8c202
 
 | Section | Upstream `26.4.1` | Supported | Unused (`#147`) | Headless GUI (`#173`) | Terminal output (`DECISIONS #26`) | Unimplemented |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `&star_job` | 455 | 179 | 8 | 3 | 8 | 257 |
+| `&star_job` | 455 | 202 | 8 | 3 | 8 | 234 |
 | `&eos` | 102 | 91 | 0 | 0 | 9 | 2 |
 | `&kap` | 51 | 39 | 0 | 0 | 10 | 2 |
-| `&controls` | 1448 | 1206 | 23 | 0 | 16 | 203 |
+| `&controls` | 1448 | 1219 | 15 | 0 | 19 | 195 |
 | `&binary_job` | 37 | 22 | 0 | 1 | 1 | 13 |
 | `&binary_controls` | 176 | 124 | 0 | 0 | 2 | 50 |
-| `&astero_search_controls` | 153 | 88 | 3 | 0 | 0 | 62 |
+| `&astero_search_controls` | 153 | 96 | 3 | 0 | 0 | 54 |
 
 ## Top Unsupported Physics & Solver Controls (`#147`)
 
@@ -34,13 +34,9 @@ Generated mechanically against **MESA 26.4.1** (git tag `26.4.1`, commit `c8c202
 | `&astero_search_controls::best_model_fgong_filename` | `unimplemented` | 6 | `astero/example_astero`, `astero/fast_from_file`, `astero/fast_newuoa`, `astero/fast_scan_grid`, ... (+2) |
 | `&astero_search_controls::best_model_profile_filename` | `unimplemented` | 6 | `astero/example_astero`, `astero/fast_from_file`, `astero/fast_newuoa`, `astero/fast_scan_grid`, ... (+2) |
 | `&astero_search_controls::best_model_save_model_filename` | `unimplemented` | 6 | `astero/example_astero`, `astero/fast_from_file`, `astero/fast_newuoa`, `astero/fast_scan_grid`, ... (+2) |
-| `&astero_search_controls::chi2_limit_for_smaller_timesteps` | `unimplemented` | 6 | `astero/example_astero`, `astero/fast_from_file`, `astero/fast_newuoa`, `astero/fast_scan_grid`, ... (+2) |
-| `&astero_search_controls::chi2_limit_for_smallest_timesteps` | `unimplemented` | 6 | `astero/example_astero`, `astero/fast_from_file`, `astero/fast_newuoa`, `astero/fast_scan_grid`, ... (+2) |
 | `&astero_search_controls::fgong_postfix` | `unimplemented` | 6 | `astero/example_astero`, `astero/fast_from_file`, `astero/fast_newuoa`, `astero/fast_scan_grid`, ... (+2) |
 | `&astero_search_controls::fgong_prefix` | `unimplemented` | 6 | `astero/example_astero`, `astero/fast_from_file`, `astero/fast_newuoa`, `astero/fast_scan_grid`, ... (+2) |
 | `&astero_search_controls::last_model_save_info_filename` | `unimplemented` | 6 | `astero/example_astero`, `astero/fast_from_file`, `astero/fast_newuoa`, `astero/fast_scan_grid`, ... (+2) |
-| `&astero_search_controls::max_yrs_dt_chi2_smaller_limit` | `unimplemented` | 6 | `astero/example_astero`, `astero/fast_from_file`, `astero/fast_newuoa`, `astero/fast_scan_grid`, ... (+2) |
-| `&astero_search_controls::max_yrs_dt_chi2_smallest_limit` | `unimplemented` | 6 | `astero/example_astero`, `astero/fast_from_file`, `astero/fast_newuoa`, `astero/fast_scan_grid`, ... (+2) |
 | `&astero_search_controls::model_num_digits` | `unimplemented` | 6 | `astero/example_astero`, `astero/fast_from_file`, `astero/fast_newuoa`, `astero/fast_scan_grid`, ... (+2) |
 | `&astero_search_controls::num_digits` | `unimplemented` | 6 | `astero/example_astero`, `astero/fast_from_file`, `astero/fast_newuoa`, `astero/fast_scan_grid`, ... (+2) |
 | `&astero_search_controls::sample_results_postfix` | `unimplemented` | 6 | `astero/example_astero`, `astero/fast_from_file`, `astero/fast_newuoa`, `astero/fast_scan_grid`, ... (+2) |
@@ -58,14 +54,10 @@ Generated mechanically against **MESA 26.4.1** (git tag `26.4.1`, commit `c8c202
 | `&astero_search_controls::write_fgong_for_best_model` | `unimplemented` | 6 | `astero/example_astero`, `astero/fast_from_file`, `astero/fast_newuoa`, `astero/fast_scan_grid`, ... (+2) |
 | `&astero_search_controls::write_fgong_for_each_model` | `unimplemented` | 6 | `astero/example_astero`, `astero/fast_from_file`, `astero/fast_newuoa`, `astero/fast_scan_grid`, ... (+2) |
 | `&astero_search_controls::write_profile_for_best_model` | `unimplemented` | 6 | `astero/example_astero`, `astero/fast_from_file`, `astero/fast_newuoa`, `astero/fast_scan_grid`, ... (+2) |
-| `&astero_search_controls::avg_age_sigma_limit` | `unimplemented` | 5 | `astero/example_astero`, `astero/fast_from_file`, `astero/fast_newuoa`, `astero/fast_scan_grid`, ... (+1) |
-| `&astero_search_controls::avg_model_number_sigma_limit` | `unimplemented` | 5 | `astero/example_astero`, `astero/fast_from_file`, `astero/fast_newuoa`, `astero/fast_scan_grid`, ... (+1) |
 | `&astero_search_controls::best_model_gyre_filename` | `unimplemented` | 5 | `astero/example_astero`, `astero/fast_from_file`, `astero/fast_newuoa`, `astero/fast_scan_grid`, ... (+1) |
 | `&astero_search_controls::gyre_postfix` | `unimplemented` | 5 | `astero/example_astero`, `astero/fast_from_file`, `astero/fast_newuoa`, `astero/fast_scan_grid`, ... (+1) |
 | `&astero_search_controls::gyre_prefix` | `unimplemented` | 5 | `astero/example_astero`, `astero/fast_from_file`, `astero/fast_newuoa`, `astero/fast_scan_grid`, ... (+1) |
 | `&astero_search_controls::max_num_gyre_points` | `unimplemented` | 5 | `astero/example_astero`, `astero/fast_from_file`, `astero/fast_newuoa`, `astero/fast_scan_grid`, ... (+1) |
-| `&astero_search_controls::max_num_samples_for_avg` | `unimplemented` | 5 | `astero/example_astero`, `astero/fast_from_file`, `astero/fast_newuoa`, `astero/fast_scan_grid`, ... (+1) |
-| `&astero_search_controls::min_num_samples_for_avg` | `unimplemented` | 5 | `astero/example_astero`, `astero/fast_from_file`, `astero/fast_newuoa`, `astero/fast_scan_grid`, ... (+1) |
 | `&astero_search_controls::save_next_best_at_higher_frequency` | `unimplemented` | 5 | `astero/example_astero`, `astero/fast_from_file`, `astero/fast_newuoa`, `astero/fast_scan_grid`, ... (+1) |
 | `&astero_search_controls::save_next_best_at_lower_frequency` | `unimplemented` | 5 | `astero/example_astero`, `astero/fast_from_file`, `astero/fast_newuoa`, `astero/fast_scan_grid`, ... (+1) |
 | `&astero_search_controls::trace_limits` | `unused` | 5 | `astero/example_astero`, `astero/fast_from_file`, `astero/fast_newuoa`, `astero/fast_scan_grid`, ... (+1) |
@@ -73,9 +65,6 @@ Generated mechanically against **MESA 26.4.1** (git tag `26.4.1`, commit `c8c202
 | `&astero_search_controls::write_gyre_for_best_model` | `unimplemented` | 5 | `astero/example_astero`, `astero/fast_from_file`, `astero/fast_newuoa`, `astero/fast_scan_grid`, ... (+1) |
 | `&astero_search_controls::write_gyre_for_each_model` | `unimplemented` | 5 | `astero/example_astero`, `astero/fast_from_file`, `astero/fast_newuoa`, `astero/fast_scan_grid`, ... (+1) |
 | `&astero_search_controls::y_frac_he3` | `unused` | 5 | `astero/example_astero`, `astero/fast_from_file`, `astero/fast_newuoa`, `astero/fast_scan_grid`, ... (+1) |
-| `&star_job::num_steps_to_relax_rotation` | `unimplemented` | 5 | `star/1M_thermohaline`, `star/20M_z2m2_high_rotation`, `star/high_rot_darkening`, `star/magnetic_braking`, ... (+1) |
-| `&star_job::near_zams_relax_omega_div_omega_crit` | `unimplemented` | 3 | `star/20M_z2m2_high_rotation`, `star/magnetic_braking`, `star/twin_studies` |
-| `&star_job::relax_omega_max_yrs_dt` | `unimplemented` | 3 | `star/high_rot_darkening`, `star/magnetic_braking`, `star/ppisn` |
 | `&star_job::set_cumulative_energy_error_at_step` | `unimplemented` | 3 | `binary/double_bh`, `star/carbon_kh`, `star/wd_aic` |
 | `&astero_search_controls::restart_scan_grid_from_file` | `unimplemented` | 2 | `astero/example_astero`, `astero/fast_scan_grid` |
 | `&astero_search_controls::restart_simplex_from_file` | `unimplemented` | 2 | `astero/example_astero`, `astero/fast_simplex` |
@@ -88,6 +77,17 @@ Generated mechanically against **MESA 26.4.1** (git tag `26.4.1`, commit `c8c202
 | `&controls::add_atmosphere_to_pulse_data` | `unimplemented` | 2 | `star/check_pulse_atm`, `star/tzo` |
 | `&controls::high_logt_op_mono_full_off` | `unimplemented` | 2 | `star/1.4M_ms_op_mono`, `star/radiative_levitation` |
 | `&controls::high_logt_op_mono_full_on` | `unimplemented` | 2 | `star/1.4M_ms_op_mono`, `star/radiative_levitation` |
+| `&controls::report_ierr` | `unimplemented` | 2 | `star/1.4M_ms_op_mono`, `star/tzo` |
+| `&controls::use_op_mono_alt_get_kap` | `unimplemented` | 2 | `star/1.4M_ms_op_mono`, `star/radiative_levitation` |
+| `&controls::use_other_mesh_functions` | `unimplemented` | 2 | `star/other_physics_hooks`, `star/simplex_solar_calibration` |
+| `&controls::warn_when_large_virial_thm_rel_err` | `unimplemented` | 2 | `star/conductive_flame`, `star/make_planets` |
+| `&star_job::electron_coulomb_corrections` | `unimplemented` | 2 | `star/custom_rates`, `star/wd_aic` |
+| `&star_job::ion_coulomb_corrections` | `unimplemented` | 2 | `star/custom_rates`, `star/wd_aic` |
+| `&star_job::max_dt_for_relax_entropy` | `unimplemented` | 2 | `star/make_co_wd`, `star/ppisn` |
+| `&star_job::max_steps_to_relax_entropy` | `unimplemented` | 2 | `star/make_co_wd`, `star/ppisn` |
+| `&star_job::new_w_div_wc_flag` | `unimplemented` | 2 | `star/high_rot_darkening`, `star/ppisn` |
+| `&star_job::num_timescales_for_relax_entropy` | `unimplemented` | 2 | `star/make_co_wd`, `star/ppisn` |
+| `&star_job::timescale_for_relax_entropy` | `unimplemented` | 2 | `star/make_co_wd`, `star/ppisn` |
 
 ## Terminal-Output Controls (`DECISIONS #26`)
 
@@ -115,6 +115,9 @@ These keys only gate or format text that MESA writes to the terminal. Strict val
 | `&eos::logt_lo` | 2 |
 | `&star_job::pause_before_terminate` | 2 |
 | `&binary_controls::terminal_interval` | 1 |
+| `&controls::rsp_report_limit_dt` | 1 |
+| `&controls::rsp_report_undercorrections` | 1 |
+| `&controls::rsp_trace_rsp_build_model` | 1 |
 | `&star_job::show_net_reactions_info` | 1 |
 | `&star_job::show_net_species_info` | 1 |
 | `&star_job::warn_run_star_extras` | 1 |
@@ -190,9 +193,9 @@ Per `DECISIONS #25` (matching upstream `USE_PGSTAR = NO`), keys in `&pgstar`, `&
 | `star` | `16M_conv_premix` | `pass` | 0 | 0 | 1 |
 | `star` | `16M_predictive_mix` | `pass` | 0 | 0 | 1 |
 | `star` | `1M_pre_ms_to_wd` | `fail_unsupported` | 1 | 0 | 18 |
-| `star` | `1M_thermohaline` | `fail_unsupported` | 2 | 0 | 66 |
+| `star` | `1M_thermohaline` | `pass` | 0 | 0 | 66 |
 | `star` | `20M_pre_ms_to_core_collapse` | `fail_unsupported` | 2 | 0 | 263 |
-| `star` | `20M_z2m2_high_rotation` | `fail_unsupported` | 4 | 0 | 295 |
+| `star` | `20M_z2m2_high_rotation` | `fail_unsupported` | 2 | 0 | 295 |
 | `star` | `5M_cepheid_blue_loop` | `pass` | 0 | 0 | 20 |
 | `star` | `7M_prems_to_AGB` | `pass` | 0 | 0 | 20 |
 | `star` | `R_CrB_star` | `pass` | 0 | 0 | 122 |
@@ -203,7 +206,7 @@ Per `DECISIONS #25` (matching upstream `USE_PGSTAR = NO`), keys in `&pgstar`, `&
 | `star` | `carbon_kh` | `fail_unsupported` | 1 | 0 | 81 |
 | `star` | `cburn_inward` | `pass` | 0 | 0 | 66 |
 | `star` | `ccsn_IIp` | `fail_unsupported` | 24 | 0 | 100 |
-| `star` | `check_pulse_atm` | `fail_unsupported` | 2 | 0 | 0 |
+| `star` | `check_pulse_atm` | `fail_unsupported` | 1 | 0 | 0 |
 | `star` | `check_redo` | `pass` | 0 | 0 | 3 |
 | `star` | `conductive_flame` | `fail_unsupported` | 3 | 0 | 109 |
 | `star` | `conserve_angular_momentum` | `pass` | 0 | 0 | 0 |
@@ -220,13 +223,13 @@ Per `DECISIONS #25` (matching upstream `USE_PGSTAR = NO`), keys in `&pgstar`, `&
 | `star` | `gyre_in_mesa_wd` | `pass` | 0 | 0 | 28 |
 | `star` | `hb_2M` | `pass` | 0 | 0 | 29 |
 | `star` | `high_mass` | `pass` | 0 | 0 | 41 |
-| `star` | `high_rot_darkening` | `fail_unsupported` | 5 | 0 | 65 |
+| `star` | `high_rot_darkening` | `fail_unsupported` | 2 | 0 | 65 |
 | `star` | `high_z` | `pass` | 0 | 0 | 0 |
 | `star` | `hot_cool_wind` | `pass` | 0 | 0 | 0 |
 | `star` | `hse_riemann` | `pass` | 0 | 0 | 67 |
 | `star` | `irradiated_planet` | `pass` | 0 | 0 | 0 |
 | `star` | `low_z` | `pass` | 0 | 0 | 0 |
-| `star` | `magnetic_braking` | `fail_unsupported` | 3 | 0 | 56 |
+| `star` | `magnetic_braking` | `pass` | 0 | 0 | 56 |
 | `star` | `make_brown_dwarf` | `pass` | 0 | 0 | 19 |
 | `star` | `make_co_wd` | `fail_unsupported` | 7 | 0 | 29 |
 | `star` | `make_env` | `pass` | 0 | 0 | 0 |
@@ -244,24 +247,24 @@ Per `DECISIONS #25` (matching upstream `USE_PGSTAR = NO`), keys in `&pgstar`, `&
 | `star` | `ns_he` | `fail_unsupported` | 8 | 0 | 64 |
 | `star` | `other_physics_hooks` | `fail_unsupported` | 1 | 0 | 0 |
 | `star` | `pisn` | `fail_unsupported` | 2 | 0 | 288 |
-| `star` | `ppisn` | `fail_unsupported` | 12 | 0 | 76 |
+| `star` | `ppisn` | `fail_unsupported` | 11 | 0 | 76 |
 | `star` | `radiative_levitation` | `fail_unsupported` | 4 | 0 | 14 |
 | `star` | `relax_composition_j_entropy` | `pass` | 0 | 0 | 0 |
 | `star` | `rsp_BEP` | `pass` | 0 | 0 | 75 |
 | `star` | `rsp_BLAP` | `pass` | 0 | 0 | 76 |
 | `star` | `rsp_Cepheid` | `pass` | 0 | 0 | 75 |
-| `star` | `rsp_Delta_Scuti` | `fail_unsupported` | 7 | 0 | 75 |
+| `star` | `rsp_Delta_Scuti` | `pass` | 0 | 0 | 75 |
 | `star` | `rsp_RR_Lyrae` | `pass` | 0 | 0 | 75 |
 | `star` | `rsp_Type_II_Cepheid` | `pass` | 0 | 0 | 14 |
 | `star` | `rsp_check_2nd_crossing` | `pass` | 0 | 0 | 0 |
 | `star` | `rsp_gyre` | `pass` | 0 | 0 | 20 |
-| `star` | `rsp_save_and_load_file` | `fail_unsupported` | 13 | 0 | 69 |
+| `star` | `rsp_save_and_load_file` | `pass` | 0 | 0 | 69 |
 | `star` | `semiconvection` | `pass` | 0 | 0 | 1 |
 | `star` | `simplex_solar_calibration` | `fail_unsupported` | 2 | 0 | 0 |
 | `star` | `split_burn_big_net` | `fail_unsupported` | 2 | 0 | 258 |
 | `star` | `starspots` | `fail_unsupported` | 2 | 0 | 17 |
 | `star` | `timing` | `pass` | 0 | 0 | 0 |
-| `star` | `twin_studies` | `fail_unsupported` | 4 | 0 | 255 |
+| `star` | `twin_studies` | `fail_unsupported` | 2 | 0 | 255 |
 | `star` | `tzo` | `fail_unsupported` | 4 | 0 | 334 |
 | `star` | `wd_acc_small_dm` | `pass` | 0 | 0 | 55 |
 | `star` | `wd_aic` | `fail_unsupported` | 6 | 0 | 41 |
@@ -282,9 +285,9 @@ Per `DECISIONS #25` (matching upstream `USE_PGSTAR = NO`), keys in `&pgstar`, `&
 | `binary` | `wind_fed_bhhmxb` | `pass` | 0 | 0 | 0 |
 | `astero` | `astero_adipls` | `fail_unsupported` | 1 | 0 | 0 |
 | `astero` | `astero_gyre` | `pass` | 0 | 0 | 0 |
-| `astero` | `example_astero` | `fail_unsupported` | 51 | 0 | 173 |
-| `astero` | `fast_from_file` | `fail_unsupported` | 43 | 0 | 173 |
-| `astero` | `fast_newuoa` | `fail_unsupported` | 43 | 0 | 173 |
-| `astero` | `fast_scan_grid` | `fail_unsupported` | 44 | 0 | 173 |
-| `astero` | `fast_simplex` | `fail_unsupported` | 48 | 0 | 173 |
-| `astero` | `surface_effects` | `fail_unsupported` | 30 | 0 | 36 |
+| `astero` | `example_astero` | `fail_unsupported` | 43 | 0 | 173 |
+| `astero` | `fast_from_file` | `fail_unsupported` | 35 | 0 | 173 |
+| `astero` | `fast_newuoa` | `fail_unsupported` | 35 | 0 | 173 |
+| `astero` | `fast_scan_grid` | `fail_unsupported` | 36 | 0 | 173 |
+| `astero` | `fast_simplex` | `fail_unsupported` | 40 | 0 | 173 |
+| `astero` | `surface_effects` | `fail_unsupported` | 26 | 0 | 36 |

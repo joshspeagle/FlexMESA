@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Upstream Fortran MESA `26.4.1` oracle tests for Wave 3a.2 (`HELM`
 //! degenerate, relativistic pair-production, crystallized WD, and Hermite basis
 //! regimes; `#161`, `T2-15`).

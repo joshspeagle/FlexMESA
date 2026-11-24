@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Henyey solver domain enforcement (`Bdomain`), trial-state variable
 //! synchronization (`set_vars_for_solver`, `check1_chem`, `edit_lnR`),
 //! minimum-iteration / accretion surface-entropy revision gating

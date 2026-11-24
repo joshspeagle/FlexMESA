@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Auxiliary mixing, MLT, Brunt composition-gradient smoothing, convective
 //! boundary tracking, and thermohaline driving-species state
 //! (`star_data_step_work.inc`, `star/private/star_utils.f90:2777-2887`, and

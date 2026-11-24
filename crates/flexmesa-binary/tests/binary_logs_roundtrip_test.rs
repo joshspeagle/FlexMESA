@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Integration tests for MESA `26.4.1` `binary_history.data` round-trip reading,
 //! 32-character column formatting, `[donor, accretor] -> [star_1, star_2]` slot
 //! mapping, `step_mtransfer_rate` stepping, interval gating, and

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! 1D stellar structure, ZAMS/pre-MS initialization, `.mod`/`.photo` model I/O,
 //! zone/face microphysics, coupled Henyey solver, convective boundary
 //! overshooting, structure-burn-mix driver, and stellar winds

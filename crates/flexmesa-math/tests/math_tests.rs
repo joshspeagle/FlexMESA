@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Golden parity and property-based tests for `flexmesa-math`.
 //!
 //! Verifies all 33 mathematical functions in upstream MESA's

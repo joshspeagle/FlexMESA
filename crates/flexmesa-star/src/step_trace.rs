@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Opt-in structured JSONL per-attempt step telemetry for diagnosing retry
 //! cascades and timestep collapses in evolutionary campaigns (`#137`, `#150`).
 //!

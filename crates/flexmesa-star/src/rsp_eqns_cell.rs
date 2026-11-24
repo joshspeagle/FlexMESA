@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Cell-centered nonlinear `RSP` `HYD` conservation equations
 //! (`total_energy_eqn`, `turbulent_energy_eqn`, and `T_form_of_erad_eqn` in
 //! `star/private/rsp_step.f90:3122-3758`).

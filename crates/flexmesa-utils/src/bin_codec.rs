@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Deterministic IEEE-754 little-endian binary `serde` codec for exact
 //! checkpoint serialization without hand-enumerated field codecs.
 

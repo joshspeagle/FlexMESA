@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Read-only RAII temporary case directory staging (`TempCaseStaging`) so
 //! upstream `$MESA_DIR` `test_suite` and `dev_cases_*` directories are never
 //! mutated by `.mod`, `lina.data`, or relaxation profile outputs during parallel

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Upstream MESA `26.4.1` mesh spacing function evaluation
 //! (`star/private/mesh_functions.f90:1-327`).
 

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Relativistic Fermi-Dirac integrals and analytical derivatives via
 //! Aparicio (1998, ApJS 117, 632) four-interval Gauss-Legendre and
 //! Gauss-Laguerre quadrature.

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Lossless zone-vector accessors, resize helpers, and `.photo` scalar
 //! serialization for [`RspState`] (`star/private/rsp_def.f90:240-620`).
 

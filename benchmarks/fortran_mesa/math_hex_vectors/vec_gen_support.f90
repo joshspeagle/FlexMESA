@@ -1,4 +1,4 @@
-! SPDX-License-Identifier: LGPL-3.0-or-later
+! SPDX-License-Identifier: GPL-3.0-or-later
 ! Isolated Fortran platform-intrinsic wrappers (`#196`, `#198`) and
 ! deterministic IEEE-754 edge-case table builders for `gen_math_vectors.f90` (`#165`).
 

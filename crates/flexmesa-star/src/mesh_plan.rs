@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Upstream MESA `26.4.1` Lagrangian mesh split/merge point selection and
 //! adjacent-ratio smoothing (`star/private/mesh_plan.f90:1-1301`).
 

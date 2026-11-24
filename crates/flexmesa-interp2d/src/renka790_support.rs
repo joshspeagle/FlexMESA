@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Spatial cell-grid and QR least-squares helpers for ACM TOMS 790 (`CSHEP2D`).
 //!
 //! Direct port of `STORE2_db`, `GETNP2_db`, `SETUP2_db`, `GIVENS_db`, and

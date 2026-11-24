@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Root-finding, optimization, quadrature, ODE, and Newton solvers (``num``).
 
 Provides ``float64`` NumPy and JAX implementations of MESA's ``num`` module:

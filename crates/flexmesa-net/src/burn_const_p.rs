@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Constant-pressure one-zone nuclear burner (`burn_1_zone_const_p`)
 //! coupling species mass fractions $X_i$ and $\ln T$ at prescribed total
 //! pressure $P = P_{\mathrm{gas}} + P_{\mathrm{rad}}$ via `eosPT_get` and

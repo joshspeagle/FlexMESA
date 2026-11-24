@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Verified runtime spline cache reader/writer (`FMCENV01` wrapping
 //! `FMDT4D01` / `FMCMS001`) and upstream MESA Fortran `.bin` cache reader for
 //! `OPAL/SCVH`, `FreeEOS`, and `CMS` tables (`N1-11`, `N1-12`).

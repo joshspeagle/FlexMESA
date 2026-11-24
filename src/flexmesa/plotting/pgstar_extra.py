@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 r"""Upstream ``pgstar`` ``Dynamo``, ``dPg_dnu``, ``rti``, and CMD panels.
 
 Ports ``Dyn_plot`` (`star/private/pgstar_dynamo.f90:57-315`),

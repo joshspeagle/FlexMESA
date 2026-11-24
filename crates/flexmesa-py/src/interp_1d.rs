@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Tier B (`interp_1d`) `PyO3` bindings for 1D piecewise-monotonic and
 //! monotonicity-preserving cubic spline interpolation.
 //!

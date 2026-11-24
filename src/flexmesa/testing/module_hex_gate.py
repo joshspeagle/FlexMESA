@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Level-2 IEEE-754 module hex verification gate (``mesa_module_hex``).
 
 Compares FlexMESA double-precision computations in ``strict`` arithmetic mode

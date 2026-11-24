@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Donor structure of the original binary RLOF fixture compared bit for bit
 //! with an instrumented MESA `26.4.1` run
 //! (`benchmarks/fortran_mesa/binary_rlof_fixture/instrumented/`).

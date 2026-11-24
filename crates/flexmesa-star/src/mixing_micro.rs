@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Slice-scoped microphysics helpers (`eval_uniform_xa_eos_kap_range`,
 //! `eval_eos_kap_range_by_mode`) and zero-drift range snapshots used by
 //! verbatim MESA `26.4.1` predictive mixing (`predictive_mix.f90`) and

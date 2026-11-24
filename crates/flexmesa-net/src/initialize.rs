@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Network initialization, reaction-kind ordering, forward/reverse adjacency
 //! pairing, and cached 10,001-point `interp_m3q` raw rate tables
 //! (`net/private/net_initialize.f90` and `rates/private/rates_support.f90`).

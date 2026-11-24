@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 r"""Upstream ``pgstar`` and ``pgbinary`` ``Text_Summary<N>`` table renderer.
 
 Ports ``Summary_plot`` from ``star/private/pgstar_summary.f90:337-447`` and

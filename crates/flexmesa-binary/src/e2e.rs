@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Coupled binary evolution case runner for `FlexMESA` (`#148`).
 
 use std::collections::BTreeMap;

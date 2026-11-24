@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Pair-production (`pair_neu`) and plasmon-decay (`plas_neu`) neutrino losses.
 //!
 //! Ports `pair_neu` (Itoh et al. 1996, ApJS, 102, 411, eqs. 2.1–2.8) and

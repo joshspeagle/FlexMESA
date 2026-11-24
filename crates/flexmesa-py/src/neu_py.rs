@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Tier B (`neu`) `PyO3` bindings for Itoh et al. (1996) 5-channel thermal
 //! neutrino energy-loss rates and analytical logarithmic partial derivatives.
 //!

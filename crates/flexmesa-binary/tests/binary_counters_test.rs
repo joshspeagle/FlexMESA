@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Integration tests verifying that binary and stellar retry/trial/cut
 //! counters survive implicit-RLOF rollbacks and hard-limit outer retries
 //! (`#150`, F3-7).

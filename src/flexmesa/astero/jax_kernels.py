@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Differentiable JAX (`float64`) kernels for Wave 5.4 `astero`.
 
 Provides `@jax.jit` kernels for asteroseismic scaling relations, acoustic

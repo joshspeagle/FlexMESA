@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Multi-track asteroseismic search driver (`run_star_astero`) and adaptive
 //! evolutionary timestep controller (`extras_support.f90:58-669`,
 //! `astero_run_support.f90:36-850`).

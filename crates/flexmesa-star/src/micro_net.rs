@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Parallel thread-local nuclear reaction network evaluation (`do_net`)
 //! corresponding to `star/private/net.f90:62-436` and
 //! `star/job/run_star_support.f90:1493-1524`.

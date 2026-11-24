@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Every pinned raw 4-D EOS slice fits without a non-finite value (`#164`).
 //!
 //! Upstream `Check_XEoS_Interpolation_Data`

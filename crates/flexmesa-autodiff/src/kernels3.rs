@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Third-order scalar derivative kernels for [`crate::AutoDiffReal2VarOrder3`].
 //!
 //! Every unary kernel returns `(f(x), f'(x), f''(x), f'''(x))` in IEEE-754

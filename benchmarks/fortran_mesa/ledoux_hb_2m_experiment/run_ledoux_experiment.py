@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Run ``star/test_suite/hb_2M`` with ``use_Ledoux_criterion`` on and off.
 
 The experiment is a 2x2 grid of {MESA 26.4.1, FlexMESA} by

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Differentiable JAX kernels for adaptive mesh spacing variation (`g_k`),
 structural variation (`varcontrol`), and the Söderlind & Wang (2006) H211PI
 digital timestep filter (`flexmesa.star`, Wave 4.4).

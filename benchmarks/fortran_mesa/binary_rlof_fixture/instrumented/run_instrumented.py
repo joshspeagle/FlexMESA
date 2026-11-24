@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Instrumented MESA 26.4.1 run of the original binary RLOF fixture.
 
 Builds a private overlay of a compiled MESA 26.4.1 tree in which only

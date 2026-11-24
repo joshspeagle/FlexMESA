@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Scattered 2D cubic Shepard interpolation (ACM TOMS Algorithm 790).
 
 Direct double-precision (`float64`) port of Robert J. Renka's `CSHEP2D`

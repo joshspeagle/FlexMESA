@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Backend-dispatched (`auto` | `rust` | `jax`) asteroseismic routines.
 
 Exposes scaling relations, acoustic profiles, g-mode period spacings, glitch

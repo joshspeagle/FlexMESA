@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Native `@jax.jit` kernels and `custom_jvp` rules for the `PC` EOS.
 
 Provides `eval_pc_eos_jax` in pure vectorized JAX (`jnp.float64`).

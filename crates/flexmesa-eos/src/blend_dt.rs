@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Hierarchical 7-level `eosDT_get` equation of state evaluator and blending cascade.
 //!
 //! Ports the hierarchical evaluation tree from upstream MESA `eosdt_eval.f90`

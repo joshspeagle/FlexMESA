@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Analytical and finite-difference Jacobian verification tests for Track 3
 //! Phase `Fidelity-1` (`#112`: `eps_grav.f90`, `hydro_energy.f90`,
 //! `hydro_momentum.f90`, `hydro_temperature.f90`, `hydro_chem_eqns.f90`, and

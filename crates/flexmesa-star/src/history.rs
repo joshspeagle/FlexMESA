@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! MESA-compatible evolutionary `history.data` summary rows and legacy string
 //! snapshot helpers (`star/private/history.f90` and `star/private/profile.f90`).
 

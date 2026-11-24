@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Golden verification tests for Wave 3b.1 4D Tabulated EOS (`OPAL/SCVH`,
 //! `FreeEOS`, `CMS`), the full 7-level `eosDT_get` cascade, and `eosPT_get`
 //! against upstream Fortran MESA `eos/test/test_output`.

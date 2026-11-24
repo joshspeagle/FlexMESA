@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """MESA 26.4.1 comparison and radial profile plots built solely from outputs.
 
 Every figure in this module reads stored ASCII outputs (``history.data``,

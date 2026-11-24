@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Hydrodynamic Adaptive Mesh Refinement (`remesh_split_merge`, `amr`,
 //! `biggest_smallest`, `do_merge`, `do_split`, `revise_star_radius`, `minmod`,
 //! and `get1_grad` in `star/private/adjust_mesh_split_merge.f90:1-1461`).

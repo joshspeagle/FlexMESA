@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Golden parity and analytical derivative tests for `flexmesa-kap`.
 
 #![allow(clippy::excessive_precision, clippy::similar_names)]

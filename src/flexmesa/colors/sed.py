@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """3D stellar atmosphere SED interpolators for ``flexmesa.colors``.
 
 Ports upstream MESA ``colors/private/hermite_interp.f90``,

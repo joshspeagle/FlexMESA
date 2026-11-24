@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Parallel Cyclic Reduction (PCR) and Rust FFI block-tridiagonal solvers.
 
 Provides two high-throughput, differentiable block-tridiagonal solvers for

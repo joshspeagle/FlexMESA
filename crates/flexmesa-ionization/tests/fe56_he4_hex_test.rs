@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Bit-exact IEEE-754 `f64` regression tests for `eval_charge_of_fe56_in_he4`
 //! against MESA 26.4.1 (`ionization/test/src/test_ionization.f90`).
 

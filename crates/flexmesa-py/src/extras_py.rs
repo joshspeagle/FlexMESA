@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! `PyO3` callback adapters and RSP/GYRE helpers bridging Python test-side
 //! extras (`run_star_extras` / `run_binary_extras` implementations) into
 //! `StarExtras` and `BinaryExtras` (`#148`).

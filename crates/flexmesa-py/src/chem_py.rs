@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Tier A and Tier B `PyO3` bindings for `flexmesa-chem`.
 //!
 //! Part of the Wave 2a (`chem`) microphysics layer in `FlexMESA`.

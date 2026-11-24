@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Sign, Heaviside step, and Fortran `math_io` string conversion helpers
 //! (`math/private/math_io.f90` and `auto_diff/private/support_functions.f90`).
 

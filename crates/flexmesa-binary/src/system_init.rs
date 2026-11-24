@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Initial hydrodynamic, rotational-distortion, and energy-accounting setup and
 //! evolutionary stage `varcontrol` selector for coupled
 //! [`crate::system::BinarySystem`] star models (`run_binary_support.f90` and

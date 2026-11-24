@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Binary star orbital mechanics, Roche-lobe overflow, angular momentum loss,
 //! tidal synchronization/circularization, and coupled binary evolution for
 //! `FlexMESA`.

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Adaptive timestep controller (`varcontrol`, nuclear burning depletion
 //! limits, and Söderlind & Wang 2006 H211PI digital control filter)
 //! corresponding to `star/private/timestep.f90`.

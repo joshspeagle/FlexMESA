@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Wave 4 four-stage 1D stellar structure and evolution benchmarks
 //! (`star_micro_vars`, `star_hydro_eqns`, `star_newton_step`, `star_remesh`,
 //! and `star_evolve_step`).

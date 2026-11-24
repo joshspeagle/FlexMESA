@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Configuration structs and defaults for `&astero_search_controls` namelists
 //! and `from_file` parameter tables (`astero/defaults/astero_search.defaults`,
 //! `astero/private/astero_run_support.f90`).

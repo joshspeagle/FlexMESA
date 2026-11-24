@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Cell-centered energy conservation equation (`do1_energy_eqn`) with 3-cell
 //! stencil [`StarAdOrder1`] automatic differentiation and composition partial
 //! derivatives (`star/private/hydro_energy.f90` and `star_utils.f90`).

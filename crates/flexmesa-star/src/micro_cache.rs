@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Bit-exact 2-slot LRU microphysics cache for [`crate::hydro_vars::set_hydro_vars`].
 //!
 //! Avoids redundant `set_basic_vars`, `do_eos`, `do_kap`, `do_neu`, and `do_net`

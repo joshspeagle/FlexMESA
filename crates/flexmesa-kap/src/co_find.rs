@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Convex-hull $(\delta X_{\mathrm{C}}, \delta X_{\mathrm{O}})$ sub-table lookup and
 //! $(\log_{10} R, \log_{10} T)$ evaluation (`Find_CO_Tables` and
 //! `Get_CO_Kap_for_logRho_logT` in `kap/private/kap_eval_co.f90`).

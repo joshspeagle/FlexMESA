@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Golden, autodiff, and property tests for `flexmesa.interp_1d`.
 
 Validates FlexMESA 1D piecewise-monotonic cubic spline builders (`interp_pm`,

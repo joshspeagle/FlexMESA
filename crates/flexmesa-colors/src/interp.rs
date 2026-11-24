@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! 3D/4D Spectral Energy Distribution (SED) interpolation kernels
 //! (`colors/private/hermite_interp.f90`, `linear_interp.f90`,
 //! `knn_interp.f90`).

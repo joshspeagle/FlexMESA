@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """MESA 26.4.1 step dumps for upstream test-suite cases (#372).
 
 Builds a private overlay of a compiled MESA 26.4.1 tree in which only

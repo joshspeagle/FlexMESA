@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Unit, golden parity, full-table, and JAX autodiff tests for `kap`."""
 
 from __future__ import annotations

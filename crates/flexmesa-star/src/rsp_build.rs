@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Static nonlinear Radial Stellar Pulsation (`RSP`) envelope builder
 //! (`build_rsp_model` in `star/private/rsp.f90:70-217` and `do_rsp_build` in
 //! `star/private/rsp_build.f90:46-298`) and linear non-adiabatic (`LINA`)

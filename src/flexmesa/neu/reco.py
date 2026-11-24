@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Recombination (`reco_neu`) neutrino energy loss rates and Antia (1993) fits.
 
 Ports `ifermi12`, `zfermim12` (Antia 1993, ApJS, 84, 101), and `reco_neu` (Itoh

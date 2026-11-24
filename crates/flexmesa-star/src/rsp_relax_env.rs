@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Static Kuhfuss/Smolec envelope relaxation (`RELAX_ENV` in
 //! `star/private/rsp_relax_env.f90:127-1333`).
 

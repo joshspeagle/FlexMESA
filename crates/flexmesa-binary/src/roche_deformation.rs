@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Roche-potential tidal distortion tables $(f_P, f_T, i_{\mathrm{rot}}, \psi)$
 //! and synchronicity blending switch for binary stars (`use_tidal_deformation`).
 //!

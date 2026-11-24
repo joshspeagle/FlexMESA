@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """First-divergence comparison of MESA and FlexMESA step dumps (#372).
 
 Both sides write the record layout of

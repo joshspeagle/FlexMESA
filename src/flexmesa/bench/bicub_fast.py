@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Pre-validated JAX `float64` 2D bicubic spline evaluation (`bicub_fast`).
 
 Hoists $O(n_x n_y)$ grid monotonicity (`splinck_db`) and coefficient

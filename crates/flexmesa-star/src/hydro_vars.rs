@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Face-centered temperature gradients, Mixing-Length Theory, Time-Dependent
 //! Convection, Semiconvection, and Thermohaline Mixing (`set_mlt_vars`,
 //! `do1_mlt_2`, `check_for_redo_MLT`, `set_gradT_excess_alpha` in

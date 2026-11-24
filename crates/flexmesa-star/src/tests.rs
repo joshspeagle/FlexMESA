@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Unit tests for `flexmesa-star` (Waves 4.1, 4.2, and 4.3).
 
 use super::*;

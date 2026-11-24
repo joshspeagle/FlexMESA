@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Chabrier, Mazevet & Soubiran (2019) hydrogen-helium equation of state (`CMS`).
 //!
 //! Ports the `CMS` table loader and evaluator from upstream MESA `eoscms_load_tables.f90`

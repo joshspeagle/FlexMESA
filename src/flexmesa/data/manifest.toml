@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 # FlexMESA Physics Table Manifest (Wave 0C)
 #
 # Maps logical table identifiers to their row-major float64/int64 .safetensors

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Stellar model ASCII `.mod` reader/writer (`read_model.f90`, `write_model.f90`)
 //! and binary `.photo` restart checkpoint serializer (`photo_in.f90`,
 //! `photo_out.f90`).

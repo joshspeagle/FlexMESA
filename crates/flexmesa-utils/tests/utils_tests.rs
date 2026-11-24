@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Integration and property-based tests verifying `flexmesa-utils` against
 //! upstream MESA golden output (`utils/test/test_output`).
 //!

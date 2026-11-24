@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Wave 3a four-stage equation-of-state (`eos`) benchmarks (`eos_ideal`,
 //! `eos_helm`, `eos_pc`, and `eos_skye`).
 //!

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Mass-fraction fixup, conservative linear mass redistribution, limit-ramp
 //! coefficients, structure face setup, and isotope mapping ported from MESA
 //! `26.4.1` `star/private/diffusion_procs.f90`.

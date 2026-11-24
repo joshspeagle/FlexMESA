@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! `(P_gas, T)` equation of state evaluation (`eos_pt_get`) and inverse solvers
 //! (`eos_pt_get_t`, `eos_pt_get_pgas`).
 //!

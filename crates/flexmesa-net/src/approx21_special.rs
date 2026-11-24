@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Steady-state equilibrium links and beta-decay rate caps for `approx21`
 //! (`approx21_special_reactions` in `net/private/net_approx21.f90` lines 352–923).
 

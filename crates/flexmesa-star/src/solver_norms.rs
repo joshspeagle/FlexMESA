@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Residual norms (`sizequ`), per-variable filtered correction norms (`sizeB`),
 //! 3-iteration flailing detection, high-$T$ correction tolerance relaxation
 //! (`set_tol_correction`), `max_tries` retry schedule, and 3-stage `gold` /

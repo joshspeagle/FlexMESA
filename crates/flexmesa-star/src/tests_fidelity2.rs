@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Unit tests for Stage `Fidelity-2` (`#113`):
 //! - Brassard et al. (1991) finite-difference EOS vs. $\nabla_\mu$ `do_brunt_b`
 //!   and `brunt_n2_composition_term` (`brunt.f90`).

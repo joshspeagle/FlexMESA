@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Upstream Fortran MESA `26.4.1` oracle tests for Wave 3a.3 solid/quantum-melting
 //! `PC` regimes, `get_pc_alfa`, and `eosDT_get` `PC`/`HELM` & `PC`/`FreeEOS`
 //! blending (`#161`, `T2-15`).

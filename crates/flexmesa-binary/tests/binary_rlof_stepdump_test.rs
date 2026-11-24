@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! The step dump (`FLEXMESA_STEPDUMP`, `#372`) of the original binary RLOF
 //! fixture's model 1 reproduces the instrumented MESA `26.4.1` tables
 //! (`benchmarks/fortran_mesa/binary_rlof_fixture/instrumented/`): the donor's

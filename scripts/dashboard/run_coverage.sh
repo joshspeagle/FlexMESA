@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 # Shared Rust (`cargo llvm-cov`) and Python (`pytest --cov`) line-coverage
 # runner invoked by `.github/workflows/dashboard.yml` (#174).
 #

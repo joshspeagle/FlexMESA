@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Hardwired `approx21` and `approx21_plus_co56` molar abundance derivatives
 //! (`approx21_dydt` with `Quad` (`real(qp)`) accumulation in
 //! `net/private/net_approx21.f90` lines 926–1544).

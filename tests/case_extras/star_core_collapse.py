@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 r"""Upstream massive-star `alpha_mlt_routine`, core-collapse infall, split-burn,
 and pre-CCSN envelope-stripping `StarExtras` ports (`#231`).
 

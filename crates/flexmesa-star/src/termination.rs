@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Upstream `do_check_limits` (`star/private/do_one_utils.f90:565-1465`),
 //! `set_phase_of_evolution` (`star/private/star_utils.f90:2910-2969`),
 //! ejecta/remnant/shock diagnostics (`star/private/star_utils.f90:1328-1485,

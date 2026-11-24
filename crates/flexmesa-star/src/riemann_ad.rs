@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Coupled 3-cell stencil [`StarAdOrder1`] HLLC Riemann contact solver
 //! (`do_uface_and_pface`) for `u_flag` hydrodynamics
 //! (`star/private/hydro_riemann.f90:289-459`).

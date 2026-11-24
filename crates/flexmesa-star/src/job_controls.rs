@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Job-level initialization, relaxation, and output controls
 //! (`StarJobControls`, corresponding to `star_data/private/star_job_controls.inc`),
 //! atmosphere/energy enums, `VarLayout`, and `StarError`.

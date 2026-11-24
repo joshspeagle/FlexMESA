@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """End-to-end MESA `inlist` parser, `./rn` stage extractor, multi-stage
 `test_suite` case execution driver, and linear/envelope pulsation helpers
 (`flexmesa.star.e2e`).

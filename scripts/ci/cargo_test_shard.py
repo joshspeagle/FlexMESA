@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Run one shard of a crate's `cargo test` targets in CI.
 
 A crate's tests are its library unit tests, each integration-test binary

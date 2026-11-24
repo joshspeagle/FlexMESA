@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Stage E2E-2 (#93) Tier 2 substellar, planetary, white dwarf, and accretion
 `test_suite` execution and loud-error checks (`#148`).
 """

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Photoneutrino (`phot_neu`) energy loss rates and analytical derivatives.
 
 Ports `phot_neu` (Itoh et al. 1996, ApJS, 102, 411, eqs. 3.2-3.8 and Table 2)

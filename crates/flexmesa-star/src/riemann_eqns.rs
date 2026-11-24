@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Cell-centered Lagrangian momentum conservation (`do1_dudt_eqn` and
 //! `do_surf_Riemann_dudt_eqn`) and conservative HLLC mechanical work /
 //! total-energy rate assembly (`eval1_work_u_flag_ad` and

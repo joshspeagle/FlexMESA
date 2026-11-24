@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Grey $T(\tau)$ atmosphere with uniform opacity (`atm_t_tau_uniform.f90`).
 //!
 //! Ports `eval_T_tau_uniform` (0.5-underrelaxed fixed-point opacity iteration

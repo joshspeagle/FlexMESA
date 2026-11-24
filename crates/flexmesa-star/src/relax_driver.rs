@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! The relax driver `do_internal_evolve` (`star/private/relax.f90:3905-4286`)
 //! and the relaxes built on it: `do_relax_num_steps`
 //! (`star/private/relax.f90:3323-3394`) and `do_relax_to_radiative_core`

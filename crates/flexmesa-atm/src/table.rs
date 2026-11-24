@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Tabulated stellar and white dwarf atmosphere evaluation (`table_atm.f90` and `atm_table.f90`).
 //!
 //! Unpacks `crates/flexmesa-atm/data/atm_tables.bin` (`FATM0001`), fits the 2D

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 r"""Live-evolution plotting hooks and log watchers (`#173`).
 
 Provides headless, non-leaking live frame rendering during FlexMESA single-star

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Wave 1 integration and parity tests for Issue `#376`:
 //! `atm_option = 'irradiated_grey'` and `&controls` irradiation inputs
 //! (`star/defaults/controls.defaults:4292-4297, 4524-4613`,

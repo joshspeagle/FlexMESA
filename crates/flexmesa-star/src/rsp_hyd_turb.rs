@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Kuhfuss (1986) eddy-viscosity stress (`Chi`), shear dissipation (`Eq`), and
 //! buoyancy/dissipation turbulent coupling (`SOURCE`, `DAMP`, `DAMPR`, `COUPL`)
 //! with analytical partials (`star/private/rsp_step.f90:1613-2060`).

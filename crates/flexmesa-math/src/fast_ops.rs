@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Isolated `std` `f64` platform math operations used exclusively by
 //! [`crate::NumericsMode::Fast`].
 //!

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Stage `E2E-5` (`#114`) coupled `binary/test_suite` integration tests and
 //! unit checks for decoupled Eddington retention vs. radiation-corrected
 //! accretion, recursive 3-level binary inlist chaining,

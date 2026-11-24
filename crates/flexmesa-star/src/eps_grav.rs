@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Gravitational energy generation rate $\epsilon_{\mathrm{grav},k} = -T_k\,ds_k/dt$
 //! with 3-cell stencil [`StarAdOrder1`] automatic differentiation and
 //! composition derivatives (`star/private/eps_grav.f90`).

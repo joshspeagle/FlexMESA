@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Neutral ground-state ionization energy offset
 //! (`eos/private/ion_offset.f90`).
 //!

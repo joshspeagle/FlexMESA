@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Static `RSP` envelope integrator (`STAH`, `ZNVAR`, and `CFLUX` matching
 //! `star/private/rsp_build.f90:301-986`).
 

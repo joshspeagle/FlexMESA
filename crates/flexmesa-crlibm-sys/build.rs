@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Build script compiling vendored `crlibm 1.0beta4` C sources with fixed
 //! per-target configuration headers (no autoconf at build time, `#165`).
 

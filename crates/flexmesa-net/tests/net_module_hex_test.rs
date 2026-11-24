@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Level-2 IEEE-754 module-hex parity tests for `flexmesa-net` against MESA
 //! `26.4.1` `net/test/test_output` (`exact_tested_values.tsv`, 116 `net_get`
 //! outputs across 7 networks + 8 one-zone burn outputs).

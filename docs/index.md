@@ -109,7 +109,7 @@ print(f"Convective d(grad_T)/d(grad_r) = {float(grad_t_sens):.6f}")
 
 ## Citing FlexMESA and MESA
 
-`FlexMESA` is distributed under the **GNU Lesser General Public License v3.0 or later (`LGPL-3.0-or-later`)**. Its physical formulations, numerical algorithms, reference test cases, and converted microphysical data tables derive from the upstream [MESA (Modules for Experiments in Stellar Astrophysics)](https://github.com/MESAHub/mesa) project. Any scientific publication using `FlexMESA` should cite both the `FlexMESA` software repository and the six MESA instrument papers:
+`FlexMESA` is distributed under the **GNU General Public License v3.0 or later (`GPL-3.0-or-later`)**, because its scope includes ports of GPL-3.0 code bundled with MESA (GYRE and ForUM). Its physical formulations, numerical algorithms, reference test cases, and converted microphysical data tables derive from the upstream [MESA (Modules for Experiments in Stellar Astrophysics)](https://github.com/MESAHub/mesa) project. Any scientific publication using `FlexMESA` should cite both the `FlexMESA` software repository and the six MESA instrument papers:
 
 1. **MESA I**: Paxton, B., Bildsten, L., Dotter, A., Herwig, F., Lesaffre, P., & Timmes, F. (2011), *"Modules for Experiments in Stellar Astrophysics (MESA)"*, ApJS, 192, 3, [doi:10.1088/0067-0049/192/1/3](https://doi.org/10.1088/0067-0049/192/1/3).
 2. **MESA II**: Paxton, B., Cantiello, M., Arras, P., et al. (2013), *"Modules for Experiments in Stellar Astrophysics (MESA): Planets, Oscillations, Rotation, and Massive Stars"*, ApJS, 208, 4, [doi:10.1088/0067-0049/208/1/4](https://doi.org/10.1088/0067-0049/208/1/4).

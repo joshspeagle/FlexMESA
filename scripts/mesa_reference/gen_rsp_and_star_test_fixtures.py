@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Regenerate upstream MESA 26.4.1 `RSP` and `star/test` golden fixtures.
 
 Runs compiled upstream Fortran MESA `26.4.1` (`$MESA_DIR`, with MESA SDK active

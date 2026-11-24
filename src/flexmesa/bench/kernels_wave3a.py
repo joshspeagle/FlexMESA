@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Wave 3a four-stage EOS benchmarks (`flexmesa.bench.kernels_wave3a`).
 
 Evaluates the Three-Tier Hybrid Architecture across Stages 0..3 for the four

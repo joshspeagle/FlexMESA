@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Integration tests for Phase 5b (`#113`): adaptive remeshing (`do_adjust_mesh`),
 //! Björklund/Dutch/rotational winds (`do_set_mdot`), 3-region mass adjustment
 //! and `eps_mdot` (`do_adjust_mass_step`), 16-set overshooting + Péclet damping,

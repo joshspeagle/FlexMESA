@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 r"""Continuum depression and typical diffusion charges (`mod_typical_charge`).
 
 Implements the continuum-depression and typical ionic charge routines from

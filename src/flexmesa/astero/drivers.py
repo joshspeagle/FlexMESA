@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Mode matching, $r_{02}$ ratios, composite $\\chi^2$, and optimizers."""
 
 from __future__ import annotations

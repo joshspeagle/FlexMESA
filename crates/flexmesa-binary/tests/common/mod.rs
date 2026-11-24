@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Shared test fixtures for `flexmesa-binary` counter, determinism, and
 //! child-process checkpoint integration tests.
 

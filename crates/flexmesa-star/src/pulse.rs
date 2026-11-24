@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! `GYRE` (`v101`/`v110`/`v120`), `FGONG` (`v300`/`v1300`, 40 columns), and
 //! `OSC` (36 columns) ASCII pulsation exporters (`star/private/pulse_gyre.f90`,
 //! `pulse_fgong.f90`, and `pulse_osc.f90`, resolving Issue #4).

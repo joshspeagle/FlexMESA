@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Wave 2 four-stage microphysics benchmarks (`chem_comp`, `ion_fe56`,
 //! `ion_4d`, and `colors_sed`).
 //!

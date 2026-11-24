@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Upstream `binary/test_suite/*/src/run_binary_extras.f90` and coupled
 `run_star_extras.f90` implementations (`#148`).
 """

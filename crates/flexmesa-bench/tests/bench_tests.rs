@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Integration tests for the four-stage benchmark harness (`flexmesa-bench`).
 //!
 //! Checks internal Stage 0..3 consistency ($\le 10^{-12}$ relative difference,

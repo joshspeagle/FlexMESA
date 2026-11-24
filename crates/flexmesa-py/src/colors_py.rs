@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! `PyO3` bindings for `flexmesa-colors` (`Wave 2c`).
 //!
 //! Exposes the canonical Safe Rust implementations of `colors` to Python and

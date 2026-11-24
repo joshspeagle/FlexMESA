@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! White-dwarf crystallization chemical phase separation ported from MESA
 //! `26.4.1` `star/private/phase_separation.f90` (Blouin et al. 2021a,b C/O and
 //! O/Ne phase diagrams, constant-`Pgas` EOS updates with

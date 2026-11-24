@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Paired forward/reverse REACLIB derivative kernels (`get_general_*` and
 //! `get_basic_*` in `net/private/net_derivs.f90` lines 166–775).
 

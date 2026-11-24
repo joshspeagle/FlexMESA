@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Semiconvective mixing (`set_semiconvection`, `semiconvection.f90`).
 //!
 //! Implements Langer, El Eid, & Fricke (1983, 1985) semiconvective mixing

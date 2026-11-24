@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Wave 4.2 verification tests for `flexmesa.star` Henyey equations and solver.
 
 Tests Safe Rust (`strict` mode) vs JAX residual consistency (`eval_equations` vs

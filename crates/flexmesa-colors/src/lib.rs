@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Safe Rust bolometric and synthetic stellar photometry (`colors`) for
 //! FlexMESA.
 //!

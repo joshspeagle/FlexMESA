@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Full opacity table builder and verified runtime cache manager (`FMKAP001`).
 //!
 //! Loads the verified immutable `$FLEXMESA_DATA_DIR/kap_full/kap_tables_full.bin`

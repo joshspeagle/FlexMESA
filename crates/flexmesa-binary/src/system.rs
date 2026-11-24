@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Coupled `BinarySystem` state container, constructors, component switching,
 //! and `.photo` + orbital state snapshot helpers (`binary_def.f90`,
 //! `run_binary_support.f90`, and `binary_evolve.f90:103-255`).

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Inverse Fermi-Dirac integrals (`FERINV7`), Fermi weight function (`FERMI10`),
 //! and Chabrier & Potekhin (1998) relativistic chemical potential fit
 //! (`CHEMFIT`, `CHEMFIT7`) from `eos/private/pc_eos.f90`.

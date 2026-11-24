@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Measure MESA-to-MESA numerical spread across compiler/flag configurations.
 
 Compiles or invokes an alternative upstream MESA ``26.4.1`` build (for example

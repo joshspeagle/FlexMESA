@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Tests enforcing MESA 26.4.1 default parity across all namelists (#149)."""
 
 from __future__ import annotations

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Powell (`2009`) bound-constrained quadratic optimizer (``BOBYQA``).
 
 Ports MESA's ``num/private/mod_bobyqa.f`` box-constrained derivative-free

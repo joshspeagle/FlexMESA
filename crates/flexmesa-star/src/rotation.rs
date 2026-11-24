@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Shellular rotation distortion polynomials (`hydro_rotation.f90`), local
 //! rotational mixing instabilities (`rotation_mix_info.f90`), Spruit-Tayler
 //! (2002) dynamo (`magnetic_diffusion.f90`), and post-remesh reconstruction.

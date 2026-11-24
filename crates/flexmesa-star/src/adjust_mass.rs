@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Three-region pseudo-Lagrangian mass adjustment (`do_adjust_mass`,
 //! `compute_delta_m`, `revise_q_and_dq`, `set_omega_adjust_mass`,
 //! `adjust_J_lost`, and `smooth_outer_xa`) matching

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Verification suite for `flexmesa.star` Wave 4.4 (`#71`): adaptive remeshing
 (`adjust_mesh`), Söderlind & Wang (2006) H211 timestep control
 (`pick_next_timestep`), end-to-end `star/test` evolution (`evolve`), and

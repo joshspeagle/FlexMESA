@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! 24-slot 3-cell stencil [`StarAdOrder1`] automatic differentiation for
 //! coupled `RSP2` hydrodynamic variables and Henyey equations (`set_RSP2_vars`,
 //! `do1_rsp2_L_eqn`, `do1_rsp2_Hp_eqn`, and `do1_turbulent_energy_eqn` in

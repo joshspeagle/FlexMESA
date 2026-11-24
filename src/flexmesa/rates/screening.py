@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Plasma electrostatic screening (`no_screening`, `salpeter`, `extended`).
 
 Provides unified Safe Rust and JAX (`float64`) dispatchers for single-pair and

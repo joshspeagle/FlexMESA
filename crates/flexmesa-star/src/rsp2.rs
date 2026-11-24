@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Time-dependent Radial Stellar Pulsation (`RSP2`) turbulent convection
 //! kernels and stationary quadratic pre-solver (`star/private/hydro_rsp2.f90`
 //! and `star/private/rsp2_solve.f90`, resolving Issue #5).

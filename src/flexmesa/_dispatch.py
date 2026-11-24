@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Backend dispatch helper for canonical Safe Rust and derived JAX.
 
 Provides the :data:`Backend` type alias (``"auto" | "rust" | "jax"``) and

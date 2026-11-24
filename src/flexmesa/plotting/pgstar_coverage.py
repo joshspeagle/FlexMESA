@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Upstream ``pgstar`` / ``pgbinary`` / ``astero_pgstar`` coverage catalog.
 
 Parses MESA ``26.4.1`` plotting ``*.defaults`` schemas and maps each upstream

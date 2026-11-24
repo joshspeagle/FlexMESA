@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """JAX autodiff, `kapCN`, and multi-zone batch consistency tests for `kap`."""
 
 from __future__ import annotations

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Multi-step physical stellar model relaxation routines (`star/private/relax.f90`):
 //! composition relaxation (`relax_Y`, `relax_Z`, `set_uniform_initial_composition`,
 //! external `composition.dat`), mass relaxation (`relax_mass`, `relax_mass_scale`,

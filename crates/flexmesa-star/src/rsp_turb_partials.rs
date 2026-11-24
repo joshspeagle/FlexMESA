@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Shared 1-based (`1..=nzn`) Smolec & Moskalik (2008) convective, turbulent,
 //! pressure, and eddy-viscosity partial derivatives used by both `RELAX_ENV`
 //! (`star/private/rsp_relax_env.f90:576-988`) and `do_LINA`

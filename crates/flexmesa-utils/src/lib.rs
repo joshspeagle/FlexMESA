@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Core numerical guards, dictionaries, and stream tokenizers for `FlexMESA`.
 //!
 //! This crate ports upstream MESA's `utils` module, providing:

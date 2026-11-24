@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Stage E2E-5 (#96) verification test suite for test-side `run_star_extras`
 and `run_binary_extras` dispatch and coupled binary execution (`#148`).
 """

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 r"""Upstream Spruit-Tayler dynamo, thermohaline rotation, high-rotation profile,
 diffusion smoothness, and radiative levitation `StarExtras` ports (`#231`).
 

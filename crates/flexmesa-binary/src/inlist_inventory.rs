@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Authoritative inventory and validation helpers for `&binary_job`,
 //! `&binary_controls`, and headless `&pgbinary` namelist sections
 //! (`DECISIONS #25`).

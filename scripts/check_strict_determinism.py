@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Verify `NumericsMode::Strict` cross-machine and thread-count bit-identity.
 
 Implements Items 15 and 16 of `#165` and the uncapped campaign extension (#144):

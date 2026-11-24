@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Two-zone anchor-temperature remeshing and quasi-hydrostatic `lnT` revision
 //! for `RSP2` (`remesh_for_RSP2` in `star/private/hydro_rsp2_support.f90:36-442`).
 

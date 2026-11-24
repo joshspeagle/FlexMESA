@@ -691,3 +691,66 @@ def test_cepheid_blue_loop_runs_live_through_py_star_extras_adapter(
         extras_factory="tests.case_extras:resolve_case_extras",
     )
     assert rep["total_steps"] == 4
+
+
+def test_carbon_kh_runs_live_through_py_star_extras_adapter(
+    tmp_path: pathlib.Path,
+) -> None:
+    """`carbon_kh` runs live steps through `PyStarExtrasAdapter` (#152/#231)."""
+    case_dir = harness_runner.resolve_case_dir("star", "carbon_kh")
+    out_dir = tmp_path / "out_carbon_kh"
+    rep = harness_runner.run_trace_inprocess(
+        "star",
+        case_dir,
+        out_dir,
+        max_steps=5,
+        write_profiles=True,
+        allow_unsupported_controls=True,
+        extras_factory="tests.case_extras:resolve_case_extras",
+    )
+    assert rep["total_steps"] == 5
+    history_lines = (
+        (out_dir / "LOGS" / "history.data")
+        .read_text(encoding="utf-8")
+        .splitlines()
+    )
+    header = next(
+        line.split() for line in history_lines if "model_number" in line.split()
+    )
+    values = [float(v) for v in history_lines[-1].split()]
+    row = dict(zip(header, values, strict=True))
+    expected_cols = (
+        "rel_e_res_err_step",
+        "rel_e_res_err_run",
+        "rel_e_eos_err_step",
+        "rel_e_eos_err_run",
+        "rel_e_eos_err_step_blend",
+        "rel_e_eos_err_run_blend",
+    )
+    for col in expected_cols:
+        assert col in row
+        assert math.isfinite(row[col])
+    assert abs(row["rel_e_res_err_step"]) < 1.0e-6
+    assert abs(row["rel_e_eos_err_step"]) < 1.0e-2
+    profile_files = sorted((out_dir / "LOGS").glob("profile*.data"))
+    assert profile_files, "expected profile*.data output with write_profiles"
+    prof_lines = profile_files[-1].read_text(encoding="utf-8").splitlines()
+    hdr_idx, prof_header = next(
+        (i, ln.split())
+        for i, ln in enumerate(prof_lines)
+        if "zone" in ln.split()
+    )
+    prof_rows = [
+        dict(zip(prof_header, [float(v) for v in ln.split()], strict=True))
+        for ln in prof_lines[hdr_idx + 1 :]
+        if ln.strip()
+    ]
+    for pcol in (
+        "eos_frac_HELM",
+        "eos_frac_FreeEOS",
+        "eps_eos",
+        "rse_eps_grav",
+    ):
+        assert pcol in prof_header
+    assert any(abs(r["eps_eos"]) > 0.0 for r in prof_rows)
+    assert any(abs(r["rse_eps_grav"]) > 0.0 for r in prof_rows)

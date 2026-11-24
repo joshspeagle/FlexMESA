@@ -14,6 +14,7 @@
 )]
 
 use flexmesa_const::{M_SUN, SECYER};
+use flexmesa_eos::I_DE_DRHO;
 use flexmesa_star::inlist::InlistBundle;
 use flexmesa_star::inlist_runner::DefaultStarExtras;
 use flexmesa_star::{
@@ -24,8 +25,8 @@ use flexmesa_star::{
     load_photo_bytes, load_zams_model, record_start_of_step_energy_integrals,
     set_hydro_vars, star_evolve_step, update_step_energy_conservation,
     verify_photo_restart_parity, write_mod_string, write_photo_bytes,
-    EnergyEqnOption, HistoryColumnSpec, MesaCellValue, StarControls, StarError,
-    StarJobControls, StarModel, PHOTO_FORMAT_VERSION,
+    EnergyEqnOption, HistoryColumnSpec, MesaCellValue, PrimaryStateBuffer,
+    StarControls, StarError, StarJobControls, StarModel, PHOTO_FORMAT_VERSION,
 };
 use flexmesa_turb::MltOption;
 
@@ -720,4 +721,115 @@ fn test_velocity_time_centering_transition_step_is_consistent() {
             .error_in_energy_conservation
             .to_bits()
     );
+}
+
+/// Verifies `HydroAuxState` captures `cv_start` and `de_drho_start` in
+/// `save_start_values`, populates `ergs_error` matching `tot_e_equ_err` in
+/// `assemble_henyey_system`, resizes all three in `resize_zones`, and leaves
+/// the solver trajectory bit-identical (`#152`).
+#[test]
+fn test_cv_de_drho_start_ergs_error_snapshot_resize_and_trajectory_parity() {
+    let mut model = solar_zams(EnergyEqnOption::EpsGrav);
+    model.dt = 1.0e5 * SECYER;
+    model.dt_next = model.dt;
+    model.save_start_values().expect("save_start_values");
+
+    let nz = model.nz;
+    let init_cv = model.cv.clone();
+    let init_de_drho: Vec<f64> = model
+        .eos_res
+        .iter()
+        .take(nz)
+        .map(|r| r[I_DE_DRHO])
+        .collect();
+    assert_eq!(model.aux.cv_start, init_cv);
+    assert_eq!(model.aux.de_drho_start, init_de_drho);
+    assert_eq!(model.aux.ergs_error.len(), nz);
+
+    let mut perturbed = model.clone();
+    perturbed.aux.cv_start.fill(1.23e45);
+    perturbed.aux.de_drho_start.fill(-4.56e12);
+    perturbed.aux.ergs_error.fill(7.89e33);
+
+    let rep_a =
+        star_evolve_step(&mut model, false, false, true).expect("step base");
+    let rep_b = star_evolve_step(&mut perturbed, false, false, true)
+        .expect("step perturbed");
+    assert!(rep_a.converged && rep_b.converged);
+    assert_eq!(model.nz, perturbed.nz);
+
+    // Pre-existing snapshot/residual values have zero trajectory feedback.
+    assert_eq!(
+        model.aux.step_hist.total_energy_end.to_bits(),
+        perturbed.aux.step_hist.total_energy_end.to_bits()
+    );
+    assert_eq!(
+        model.aux.step_hist.tot_e_equ_err.to_bits(),
+        perturbed.aux.step_hist.tot_e_equ_err.to_bits()
+    );
+    for k in 0..model.nz {
+        assert_eq!(model.lnd[k].to_bits(), perturbed.lnd[k].to_bits());
+        assert_eq!(model.ln_t[k].to_bits(), perturbed.ln_t[k].to_bits());
+        assert_eq!(
+            model.aux.cv_start[k].to_bits(),
+            perturbed.aux.cv_start[k].to_bits()
+        );
+        assert_eq!(
+            model.aux.de_drho_start[k].to_bits(),
+            perturbed.aux.de_drho_start[k].to_bits()
+        );
+        assert_eq!(
+            model.aux.ergs_error[k].to_bits(),
+            perturbed.aux.ergs_error[k].to_bits()
+        );
+    }
+
+    // `ergs_error` sums strictly to `tot_e_equ_err` and all fields match nz.
+    assert_eq!(model.aux.ergs_error.len(), model.nz);
+    assert_eq!(model.aux.cv_start.len(), model.nz);
+    assert_eq!(model.aux.de_drho_start.len(), model.nz);
+    assert!(model.aux.ergs_error.iter().all(|v| v.is_finite()));
+    let sum_ergs: f64 = model.aux.ergs_error.iter().sum();
+    assert_eq!(
+        sum_ergs.to_bits(),
+        model.aux.step_hist.tot_e_equ_err.to_bits()
+    );
+    assert!(model
+        .aux
+        .cv_start
+        .iter()
+        .zip(&model.cv)
+        .any(|(a, b)| a != b));
+    assert!(model
+        .aux
+        .de_drho_start
+        .iter()
+        .zip(model.eos_res.iter().take(model.nz))
+        .any(|(&a, row)| a != row[I_DE_DRHO]));
+
+    // `resize_zones` propagates cleanly to all three arrays.
+    let new_nz = model.nz + 5;
+    model.resize_zones(new_nz);
+    assert_eq!(model.aux.cv_start.len(), new_nz);
+    assert_eq!(model.aux.de_drho_start.len(), new_nz);
+    assert_eq!(model.aux.ergs_error.len(), new_nz);
+
+    // `.photo` restart preserves `cv_start`, `de_drho_start`, and `ergs_error`.
+    let loaded = load_photo_bytes(&write_photo_bytes(&perturbed))
+        .expect("photo roundtrip");
+    assert_eq!(loaded.aux.cv_start, perturbed.aux.cv_start);
+    assert_eq!(loaded.aux.de_drho_start, perturbed.aux.de_drho_start);
+    assert_eq!(loaded.aux.ergs_error, perturbed.aux.ergs_error);
+
+    // `PrimaryStateBuffer` snapshot/restore preserves all three fields.
+    let snap = PrimaryStateBuffer::from_model(&perturbed);
+    let mut rolled_back = perturbed.clone();
+    rolled_back.aux.cv_start.fill(-1.0);
+    rolled_back.aux.de_drho_start.fill(-2.0);
+    rolled_back.aux.ergs_error.fill(-3.0);
+    snap.restore_into(&mut rolled_back)
+        .expect("PrimaryStateBuffer::restore_into");
+    assert_eq!(rolled_back.aux.cv_start, perturbed.aux.cv_start);
+    assert_eq!(rolled_back.aux.de_drho_start, perturbed.aux.de_drho_start);
+    assert_eq!(rolled_back.aux.ergs_error, perturbed.aux.ergs_error);
 }

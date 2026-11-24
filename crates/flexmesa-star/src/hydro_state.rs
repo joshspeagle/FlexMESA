@@ -503,6 +503,19 @@ pub struct HydroAuxState {
     pub chi_t_start: Vec<f64>,
     /// Start-of-step density exponent $\chi_{\rho,\mathrm{start},k}$ (`chiRho_start`).
     pub chi_rho_start: Vec<f64>,
+    /// Start-of-step specific heat at constant volume
+    /// $C_{V,\mathrm{start},k}$ in $\mathrm{erg\,g^{-1}\,K^{-1}}$ (`Cv_start`).
+    #[serde(default)]
+    pub cv_start: Vec<f64>,
+    /// Start-of-step internal energy density derivative
+    /// $(\partial e/\partial\rho)_{T,\mathrm{start},k}$ in
+    /// $\mathrm{erg\,cm^{3}\,g^{-2}}$ (`dE_dRho_start`).
+    #[serde(default)]
+    pub de_drho_start: Vec<f64>,
+    /// Per-cell unscaled energy-equation residual `-dm(k) * dt * resid_ad`
+    /// in $\mathrm{erg}$ (`ergs_error`, `star/private/hydro_energy.f90:114`).
+    #[serde(default)]
+    pub ergs_error: Vec<f64>,
     /// Fraction of Potekhin-Chabrier (`PC`) EOS in cell `k` (`eos_frac_PC`).
     pub eos_frac_pc: Vec<f64>,
     /// Opacity regime blend fractions `[lowT, highT, Type2, Compton]` per cell (`kap_frac_*`).
@@ -779,6 +792,9 @@ impl HydroAuxState {
             grada_start: vec![0.0; nz],
             chi_t_start: vec![0.0; nz],
             chi_rho_start: vec![0.0; nz],
+            cv_start: vec![0.0; nz],
+            de_drho_start: vec![0.0; nz],
+            ergs_error: vec![0.0; nz],
             eos_frac_pc: vec![0.0; nz],
             kap_frac: vec![[0.0; 4]; nz],
             nonnucneu_channels: vec![[0.0; 5]; nz],
@@ -896,6 +912,9 @@ impl HydroAuxState {
             &mut self.grada_start,
             &mut self.chi_t_start,
             &mut self.chi_rho_start,
+            &mut self.cv_start,
+            &mut self.de_drho_start,
+            &mut self.ergs_error,
             &mut self.eos_frac_pc,
             &mut self.latent_ddlnrho,
             &mut self.latent_ddlnt,
@@ -994,6 +1013,8 @@ impl HydroAuxState {
     pub fn save_start(
         &mut self,
         cp: &[f64],
+        cv: &[f64],
+        de_drho: &[f64],
         grada: &[f64],
         chi_t: &[f64],
         chi_rho: &[f64],
@@ -1001,6 +1022,8 @@ impl HydroAuxState {
         _mlt_vc: &[f64],
     ) {
         self.cp_start.clone_from_slice(cp);
+        self.cv_start.clone_from_slice(cv);
+        self.de_drho_start.clone_from_slice(de_drho);
         self.grada_start.clone_from_slice(grada);
         self.chi_t_start.clone_from_slice(chi_t);
         self.chi_rho_start.clone_from_slice(chi_rho);

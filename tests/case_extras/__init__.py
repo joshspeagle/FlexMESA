@@ -126,8 +126,7 @@ STOCK_EXTRAS_DIGESTS: frozenset[str] = frozenset(
 # case without failing on state the adapter does not provide. A handler not
 # listed here is written but cannot run yet because its hooks require an
 # unported engine or `StarExtras` capability:
-# - `#152` (solver/timestep/state hooks): `CarbonKhStarExtras` (`ergs_error`,
-#   `cv_start`, `de_drho_start`), `MagneticBrakingStarExtras`
+# - `#152` (solver/timestep/state hooks): `MagneticBrakingStarExtras`
 #   (`other_timestep_limit`), `TzoStarExtras` (`star_set_v_flag`, center mass
 #   and luminosity mutation).
 # - `#153` (mesh/surface-cut hooks): `MakeCoWdStarExtras`
@@ -174,6 +173,7 @@ ADAPTER_SERVED_STAR_HANDLERS: frozenset[str] = frozenset(
     {
         "AccretedMaterialJStarExtras",
         "AdjustNetStarExtras",
+        "CarbonKhStarExtras",
         "CburnInwardStarExtras",
         "CepheidBlueLoopStarExtras",
         "CheckRedoStarExtras",

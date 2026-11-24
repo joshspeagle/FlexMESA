@@ -783,6 +783,24 @@ impl StarModel {
             &self.aux.d_eps_grav_dx,
             &self.aux.dln_e_dxa_for_partials,
             &self.aux.dln_peos_dxa_for_partials,
+            &self.aux.am_sig_omega,
+            &self.aux.am_sig_j,
+            &self.aux.extra_jdot,
+            &self.aux.extra_omegadot,
+            &self.aux.d_extra_jdot_domega_m1,
+            &self.aux.d_extra_jdot_domega_00,
+            &self.aux.d_extra_jdot_domega_p1,
+            &self.aux.d_extra_omegadot_domega_m1,
+            &self.aux.d_extra_omegadot_domega_00,
+            &self.aux.d_extra_omegadot_domega_p1,
+            &self.aux.edv,
+            &self.aux.e_field,
+            &self.aux.g_field_element_diffusion,
+            &self.aux.diffusion_d_self,
+            &self.aux.typical_charge,
+            &self.aux.v_rad,
+            &self.aux.g_rad,
+            &self.aux.diffusion_dx,
         ]
         .into_iter()
         .map(|v| size_of_val(v.as_slice()))
@@ -810,7 +828,9 @@ impl StarModel {
         .sum();
         let eos_raw = size_of_val(self.eos_res.as_slice())
             + size_of_val(self.eos_d_dlnd.as_slice())
-            + size_of_val(self.eos_d_dlnt.as_slice());
+            + size_of_val(self.eos_d_dlnt.as_slice())
+            + size_of_val(self.aux.kap_frac.as_slice())
+            + size_of_val(self.aux.nonnucneu_channels.as_slice());
         prim_bytes
             + extra_f64
             + ad_bytes

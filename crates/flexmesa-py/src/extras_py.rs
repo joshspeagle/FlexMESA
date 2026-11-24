@@ -14,8 +14,8 @@ use flexmesa_const::{
     CLIGHT, CRAD, LN10, LSUN, M_SUN, PI, RSUN, SECDAY, SECYER,
 };
 use flexmesa_eos::{
-    I_FRAC_CMS, I_FRAC_FREE_EOS, I_FRAC_HELM, I_FRAC_IDEAL, I_FRAC_OPAL_SCVH,
-    I_FRAC_PC, I_FRAC_SKYE,
+    I_DE_DRHO, I_FRAC_CMS, I_FRAC_FREE_EOS, I_FRAC_HELM, I_FRAC_IDEAL,
+    I_FRAC_OPAL_SCVH, I_FRAC_PC, I_FRAC_SKYE,
 };
 use flexmesa_star::hydro_state::{
     OtherAdjustMltGradtFractionHandle, OtherAdjustMltGradtFractionHook,
@@ -626,6 +626,79 @@ fn set_star_species_arrays(
     Ok(())
 }
 
+fn set_star_f64_prefix(
+    py: Python<'_>,
+    d: &Bound<'_, PyDict>,
+    nz: usize,
+    key: &str,
+    slice: &[f64],
+) -> PyResult<()> {
+    if slice.len() >= nz {
+        d.set_item(key, PyArray1::from_slice(py, &slice[..nz]))?;
+    }
+    Ok(())
+}
+
+fn set_star_energy_and_start_arrays(
+    py: Python<'_>,
+    d: &Bound<'_, PyDict>,
+    model: &StarModel,
+) -> PyResult<()> {
+    let nz = model.nz;
+    if nz == 0 {
+        return Ok(());
+    }
+    set_star_f64_prefix(py, d, nz, "energy_start", &model.energy_start)?;
+    set_star_f64_prefix(py, d, nz, "cv", &model.cv)?;
+    set_star_f64_prefix(py, d, nz, "cv_start", &model.aux.cv_start)?;
+    set_star_f64_prefix(
+        py,
+        d,
+        nz,
+        "de_drho_start",
+        &model.aux.de_drho_start,
+    )?;
+    set_star_f64_prefix(py, d, nz, "ergs_error", &model.aux.ergs_error)?;
+    if model.ln_t_start.len() >= nz {
+        let t_start: Vec<f64> = model.ln_t_start[..nz]
+            .iter()
+            .map(|&v| flexmesa_math::exp(v))
+            .collect();
+        d.set_item("t_start", PyArray1::from_vec(py, t_start))?;
+    }
+    if model.lnd_start.len() >= nz {
+        let rho_start: Vec<f64> = model.lnd_start[..nz]
+            .iter()
+            .map(|&v| flexmesa_math::exp(v))
+            .collect();
+        d.set_item("rho_start", PyArray1::from_vec(py, rho_start))?;
+    }
+    if model.ln_t.len() >= nz && model.ln_t_start.len() >= nz {
+        let dxh_lnt: Vec<f64> = model.ln_t[..nz]
+            .iter()
+            .zip(&model.ln_t_start[..nz])
+            .map(|(a, b)| a - b)
+            .collect();
+        d.set_item("dxh_lnt", PyArray1::from_vec(py, dxh_lnt))?;
+    }
+    if model.lnd.len() >= nz && model.lnd_start.len() >= nz {
+        let dxh_lnd: Vec<f64> = model.lnd[..nz]
+            .iter()
+            .zip(&model.lnd_start[..nz])
+            .map(|(a, b)| a - b)
+            .collect();
+        d.set_item("dxh_lnd", PyArray1::from_vec(py, dxh_lnd))?;
+    }
+    if model.eos_res.len() >= nz {
+        let de_drho: Vec<f64> = model.eos_res[..nz]
+            .iter()
+            .map(|row| row[I_DE_DRHO])
+            .collect();
+        d.set_item("de_drho", PyArray1::from_vec(py, de_drho))?;
+    }
+    Ok(())
+}
+
 fn set_star_radial_arrays(
     py: Python<'_>,
     d: &Bound<'_, PyDict>,
@@ -704,6 +777,7 @@ fn set_star_radial_arrays(
             .collect();
         d.set_item("mixing_type", PyArray1::from_vec(py, mix_codes))?;
     }
+    set_star_energy_and_start_arrays(py, d, model)?;
     set_star_eos_frac_arrays(py, d, model)?;
     set_star_species_arrays(py, d, model)?;
     Ok(())

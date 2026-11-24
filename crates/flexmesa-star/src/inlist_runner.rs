@@ -833,8 +833,6 @@ pub fn run_inlist_stage_with_logs(
                     model.dt,
                     &[],
                 )?;
-                model.save_start_values()?;
-                snapshot_step_start_extras(model);
             }
             let hr = extract_history_row(model);
             history_rows.push(hr);
@@ -891,6 +889,10 @@ pub fn run_inlist_stage_with_logs(
                     steps_taken == 1,
                     is_terminating,
                 )?;
+            }
+            if !model.controls.rsp_flag {
+                model.save_start_values()?;
+                snapshot_step_start_extras(model);
             }
             // Periodic restart photo output (`star/private/evolve.f90:2340-2361`).
             let photo_interval = model.controls.output.photo_interval;

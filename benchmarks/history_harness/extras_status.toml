@@ -126,9 +126,8 @@ issue = "#231"
 [[cases]]
 suite = "star"
 case = "carbon_kh"
-status = "unported"
+status = "ported"
 digest = "97fc0a9e2d2d709330df035da2d3ebb6141739c63b0b42873019a2f033b1aacc"
-issue = "#231"
 
 [[cases]]
 suite = "star"

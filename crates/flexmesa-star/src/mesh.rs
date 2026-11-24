@@ -3,7 +3,7 @@
 //! state vector packing/snapshot operations on [`StarModel`]
 //! (`star/private/star_utils.f90` and `star/private/hydro_vars.f90`).
 
-use flexmesa_eos::{I_LN_E, I_LN_S, NUM_EOS_BASIC_RESULTS};
+use flexmesa_eos::{I_DE_DRHO, I_LN_E, I_LN_S, NUM_EOS_BASIC_RESULTS};
 
 use crate::controls::StarError;
 use crate::model::StarModel;
@@ -486,8 +486,14 @@ impl StarModel {
         self.xa_sub_xa_start.clear();
         self.xh_start.clone_from(&self.xh);
         self.aux.opacity_start_surf = self.opacity.first().copied().unwrap_or(0.0);
+        let mut de_drho = vec![0.0; self.nz];
+        for (dst, row) in de_drho.iter_mut().zip(self.eos_res.iter()) {
+            *dst = row[I_DE_DRHO];
+        }
         self.aux.save_start(
             &self.cp,
+            &self.cv,
+            &de_drho,
             &self.grada,
             &self.chi_t,
             &self.chi_rho,

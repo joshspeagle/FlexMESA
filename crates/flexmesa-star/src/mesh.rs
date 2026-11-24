@@ -157,10 +157,11 @@ impl StarModel {
         }
     }
 
-    /// Updates `xmstar`, `dm`, `m`, `dm_bar`, and `m_grav` (`set_m_and_dm` and
-    /// `set_dm_bar` in `star/private/star_utils.f90:679-709`).
+    /// Updates `dm`, `m`, `dm_bar`, and `m_grav` from `dq`, `q`, `M_center`
+    /// and `xmstar` (`set_m_and_dm` and `set_dm_bar` in
+    /// `star/private/star_utils.f90:635-666`). `xmstar` is an input: upstream
+    /// never recomputes it as `mstar - M_center`, which can round differently.
     pub fn set_m_and_dm(&mut self) {
-        self.xmstar = self.mstar - self.m_center;
         for k in 0..self.nz {
             self.dm[k] = self.dq[k] * self.xmstar;
             self.m[k] = self.m_center + self.q[k] * self.xmstar;

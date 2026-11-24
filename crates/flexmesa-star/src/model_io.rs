@@ -636,6 +636,7 @@ pub fn read_mod_str_with_dir(
     model.time_sec = model.star_age * flexmesa_const::SECYER;
     model.time_old_sec = model.star_age_old * flexmesa_const::SECYER;
     model.m_center_old = model.m_center;
+    model.xmstar_old = model.xmstar;
     model.r_center_old = model.r_center;
     model.l_center_old = model.l_center;
     model.v_center_old = model.v_center;

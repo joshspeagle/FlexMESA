@@ -104,6 +104,11 @@ pub struct StarModel {
     pub m_center: f64,
     /// Previous-step inner boundary core mass in grams (`M_center_old`).
     pub m_center_old: f64,
+    /// Previous-step envelope mass $M_\star - M_{\mathrm{center}}$ in grams
+    /// (`xmstar_old`), restored on a retry
+    /// (`star/private/evolve_support.f90:85, 158`).
+    #[serde(default)]
+    pub xmstar_old: f64,
     /// Inner boundary core radius $R_{\mathrm{center}}$ in cm (`R_center`).
     pub r_center: f64,
     /// Previous-step inner boundary core radius in cm (`R_center_old`).
@@ -501,6 +506,7 @@ impl StarModel {
             mstar_dot: 0.0,
             m_center: 0.0,
             m_center_old: 0.0,
+            xmstar_old: 0.0,
             r_center: 0.0,
             r_center_old: 0.0,
             l_center: 0.0,

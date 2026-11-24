@@ -139,7 +139,8 @@ pub fn restore_from_old(model: &mut StarModel) -> Result<(), StarError> {
     model.r_center = model.r_center_old;
     model.l_center = model.l_center_old;
     model.v_center = model.v_center_old;
-    model.xmstar = model.mstar - model.m_center;
+    // `s% xmstar = s% xmstar_old` (`star/private/evolve_support.f90:158`).
+    model.xmstar = model.xmstar_old;
     model.lnd.clone_from(&model.lnd_old);
     model.ln_t.clone_from(&model.ln_t_old);
     model.ln_r.clone_from(&model.ln_r_old);

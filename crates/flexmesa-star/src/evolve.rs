@@ -1825,6 +1825,8 @@ fn abandon_step(
     let restored_remesh = restore_attempt_state(model, snap, saved)?;
     model.controls.max_years_for_timestep = saved.max_years_for_timestep;
     model.controls.ts_stop.max_timestep = saved.max_timestep;
+    model.aux.step_hist.using_revised_max_yr_dt = saved.using_revised_max_yr_dt;
+    model.aux.step_hist.revised_max_yr_dt = saved.revised_max_yr_dt;
     model.dt = dt_prev;
     model.model_number = model.model_number_old;
     Ok(restored_remesh)
@@ -1857,11 +1859,10 @@ fn restore_attempt_state(
     model.time_sec = saved.time_sec;
     model.time_old_sec = saved.time_old_sec;
     model.aux.step_hist.phase_of_evolution = saved.phase_of_evolution;
-    model.aux.step_hist.using_revised_max_yr_dt = saved.using_revised_max_yr_dt;
-    model.aux.step_hist.revised_max_yr_dt = saved.revised_max_yr_dt;
     // `set_current_to_old` (`star/private/evolve_support.f90:147-240`) does
-    // not restore `max_years_for_timestep` or `max_timestep`: a value a try
-    // set (the `max_timestep_hi_T_limit` switch, `evolve.f90:705-711`, or an
+    // not restore `max_years_for_timestep`, `max_timestep`,
+    // `using_revised_max_yr_dt` or `revised_max_yr_dt`: a value a try set
+    // (the `max_timestep_hi_T_limit` switch, `evolve.f90:705-711`, or an
     // `extras_check_model` limit) stays for the retry or redo (#510).
     Ok(restored_remesh)
 }

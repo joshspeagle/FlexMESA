@@ -634,8 +634,11 @@ fn do_adjust_mass_core(
     // Soften outer `xa` (`adjust_mass.f90:480-510`).
     smooth_outer_xa(model);
 
+    // Upstream refreshes `m_grav` and `grav` only in the `set_vars` that
+    // follows (`set_m_grav_and_grav` in `update_vars`,
+    // `star/private/hydro_vars.f90:530-534`); `update_radius` is the last
+    // step of `do_adjust_mass` (`adjust_mass.f90:513`).
     update_radius(model);
-    model.set_m_grav_and_grav();
     model.pack_xh();
     if model.xh_start.len() == model.xh.len() {
         let nv = model.layout.nvar_hydro;
@@ -653,8 +656,9 @@ fn do_adjust_mass_core(
     // (`star/private/hydro_vars.f90:359-365`).
     model.set_qs();
     model.set_m_and_dm();
+    // `set_basic_vars` refreshes `m_grav`, `grav`, `r` and `rmid`
+    // (`micro.rs`, `hydro_vars.f90:530-534, 758`).
     set_basic_vars(model)?;
-    model.set_m_grav_and_grav();
     if need_eps_mdot {
         set_hydro_vars(model, false, false)?;
         model.set_qs();

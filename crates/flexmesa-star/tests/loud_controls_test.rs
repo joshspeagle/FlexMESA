@@ -148,8 +148,8 @@ fn test_unknown_section_key_unused_and_removed_aliases_fail_loudly() {
     for (tag, body, expected) in [
         (
             "unused_job",
-            "&star_job\n  h_he_net = 'h_he.net'\n/\n",
-            "h_he_net",
+            "&star_job\n  save_pulse_data_filename = 'p.data'\n/\n",
+            "save_pulse_data_filename",
         ),
         (
             "unused_rsp_map",

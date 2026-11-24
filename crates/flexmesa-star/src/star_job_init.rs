@@ -13,7 +13,7 @@ use crate::job_controls::{AtmOption, AtmTTauOpacity, AtmTTauRelation};
 use crate::hydro_vars::set_hydro_vars;
 use crate::inlist::InlistBundle;
 use crate::inlist_runner::StarExtras;
-use crate::micro::{change_model_network, resolve_model_net, NetSearchDirGuard};
+use crate::micro::{resolve_model_net, NetSearchDirGuard};
 use crate::model::StarModel;
 use crate::model_io::read_mod_str_with_dir;
 use crate::relax::{
@@ -495,10 +495,13 @@ pub(crate) fn init_or_update_model_from_bundle_outcome(
     let pre_ms_on_new_net = did_create_pre_ms
         && model.job.net_name.trim() == job.new_net_name.trim();
     if job.change_net && !job.new_net_name.is_empty() && !pre_ms_on_new_net {
-        change_model_network(
+        // `star_change_to_new_net(id, s% job% adjust_abundances_for_new_isos,
+        // ...)` (`star/job/run_star_support.f90:1912-1916`).
+        crate::micro::change_model_network_with_adjust(
             &mut model,
             &job.new_net_name,
             Some(&bundle.case_dir),
+            job.adjust_abundances_for_new_isos,
         )?;
     }
 

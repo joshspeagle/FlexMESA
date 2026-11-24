@@ -516,6 +516,9 @@ pub fn do1_radius_eqn(model: &StarModel, k: usize, sys: &mut HenyeySystem) {
     };
     let ln_t_ref = model.ln_t_start.get(k).copied().unwrap_or(model.ln_t[k]);
     let logt = ln_t_ref / LN10;
+    // `max_dt_yrs_for_velocity_logT_lower_bound` is not ported (it fails as
+    // an unsupported control); at its default `1d99` the `dt` clause of
+    // `star/private/hydro_momentum.f90:562-564` always holds.
     let force_zero_v = model.q[k] > model.controls.velocity_q_upper_bound
         || model.tau[k] < model.controls.velocity_tau_lower_bound
         || logt < model.controls.velocity_logt_lower_bound;
@@ -533,8 +536,8 @@ pub fn do1_radius_eqn(model: &StarModel, k: usize, sys: &mut HenyeySystem) {
     };
     let v_var = StarAdOrder1::variable(vel_curr, I_V_00);
     let resid = if force_zero_v {
-        let cs = model.csound[k].max(1.0);
-        -v_var / cs
+        // `resid_ad = v00/s% csound_start(k)` (`hydro_momentum.f90:565-574`).
+        v_var / model.aux.csound_start[k]
     } else {
         let vel_tc =
             model.controls.is_velocity_time_centered(model.model_number_old);
@@ -552,10 +555,17 @@ pub fn do1_radius_eqn(model: &StarModel, k: usize, sys: &mut HenyeySystem) {
         } else {
             v_var
         };
-        let lnr_ad = StarAdOrder1::variable(model.ln_r[k], I_LNR_00);
-        let r_start = flexmesa_math::exp(model.ln_r_start[k]).max(1.0);
-        v_ad * (model.dt / r_start)
-            - ((lnr_ad - model.ln_r_start[k]).exp() - 1.0)
+        // `dxh_lnR = wrap_dxh_lnR(s,k)` carries the Newton change of `lnR`
+        // before `edit_lnR` (`auto_diff_support.f90:977-984`), and
+        // `dr_div_r0_actual = expm1(dxh_lnR)`
+        // (`star/private/hydro_momentum.f90:582-583`).
+        let dxh_lnr = StarAdOrder1::variable(model.aux.dxh_lnr[k], I_LNR_00);
+        let dr_div_r0_actual = dxh_lnr.expm1();
+        // `dr_div_r0_expected = v00*s% dt/s% r_start(k)` (`:585-586`), with
+        // `r_start = exp(lnR_start)` as `set_rv_info` sets `r`.
+        let r_start = flexmesa_math::exp(model.ln_r_start[k]);
+        let dr_div_r0_expected = v_ad * model.dt / r_start;
+        dr_div_r0_expected - dr_div_r0_actual
     };
     sys.save_eqn_residual(&model.layout, k, i_dlnr_dt, &resid);
 }

@@ -344,7 +344,8 @@ fn test_hydro_momentum_and_radius_rotational_fp_drag_pvsc_rti_and_bounds() {
     let mut sys_zero = HenyeySystem::new(model.nz, nvar, x_scale);
     do1_radius_eqn(&model, 0, &mut sys_zero);
     let i_dlnr = model.layout.i_dlnr_dt.unwrap();
-    let expected_zero = -model.v[0] / model.csound[0].max(1.0);
+    // `resid_ad = v00/s% csound_start(k)` (`star/private/hydro_momentum.f90:565-574`).
+    let expected_zero = model.v[0] / model.aux.csound_start[0];
     assert!((sys_zero.equ[i_dlnr] - expected_zero).abs() < 1.0e-12);
 }
 

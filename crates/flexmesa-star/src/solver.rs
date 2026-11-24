@@ -557,6 +557,10 @@ pub fn solve_henyey_step(
     let (tol_cn, tol_mc) = active_correction_tolerances(model);
 
     model.pack_xh();
+    // The variables were set from `xh` before the solve (`unpack_xh`), which
+    // zeroes `dxh_lnR` (`star/private/hydro_vars.f90:308-313`).
+    model.aux.dxh_lnr.clear();
+    model.aux.dxh_lnr.resize(nz, 0.0);
     let xh_start_buf = build_xh_start_buffer(model);
     let mut solver_dx = vec![0.0_f64; nz * nvar];
     for k in 0..nz {

@@ -552,6 +552,11 @@ pub struct HydroAuxState {
     pub hp_face_old: Vec<f64>,
     /// Start-of-step adiabatic sound speed $c_{s,\mathrm{start},k}$ (`csound_start`).
     pub csound_start: Vec<f64>,
+    /// Newton change of `lnR` this step, `solver_dx(i_lnR, k)` as
+    /// `set_vars_for_solver` stores it before `edit_lnR` rewrites `lnR`
+    /// (`dxh_lnR`, `star/private/solver_support.f90:1311`); zero after
+    /// `unpack_xh` (`star/private/hydro_vars.f90:313`). Length `nz`.
+    pub dxh_lnr: Vec<f64>,
     /// Start-of-step face convective velocity $v_{c,\mathrm{old},k}$ in $\mathrm{cm\,s^{-1}}$ (`mlt_vc_old`).
     pub mlt_vc_old: Vec<f64>,
     /// Whether `mlt_vc` holds valid convective velocities from the prior step (`have_mlt_vc`).
@@ -796,6 +801,7 @@ impl HydroAuxState {
             et_rsp_old: vec![0.0; nz],
             hp_face_old: vec![0.0; nz],
             csound_start: vec![0.0; nz],
+            dxh_lnr: vec![0.0; nz],
             mlt_vc_old: vec![0.0; nz],
             have_mlt_vc: false,
             have_j_rot: false,

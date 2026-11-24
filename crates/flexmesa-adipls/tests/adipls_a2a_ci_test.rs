@@ -1195,3 +1195,95 @@ fn test_synthetic_polytrope_radial_and_nonradial_end_to_end_solve() {
         }
     }
 }
+
+#[test]
+fn test_adipls_bounds_guards_return_errors_on_edge_nfit_and_small_nn() {
+    let (data, x, aa) = build_polytrope_n3_amdl(401);
+
+    // 1. Singular-surface model with xfit > x[nn - 1] returns InvalidModel rather than underflowing `shtint`.
+    let mut input_hi = parse_adipls_pruned_in(ADIPLS_PRUNED_IN).unwrap();
+    input_hi.int_ctrl.xfit = 1.05_f64;
+    let solver_hi = AdiplsSolver::new(input_hi);
+    let ctrl_hi = AdiplsControlState::from_input(solver_hi.input());
+    let err_hi = solver_hi
+        .run_call(&ctrl_hi, &x, &aa, data)
+        .expect_err("xfit > 1 on singular-surface model must fail loudly");
+    assert!(matches!(err_hi, AdiplsError::InvalidModel { .. }));
+
+    // 2. Full model (`x[0] == 0.0`, `nibc = 2`) with `0 < xfit <= x[1]` (`nfit = 1 < nibc`).
+    let mut input_lo = parse_adipls_pruned_in(ADIPLS_PRUNED_IN).unwrap();
+    input_lo.int_ctrl.xfit = 1.0e-4_f64;
+    let solver_lo = AdiplsSolver::new(input_lo);
+    let ctrl_lo = AdiplsControlState::from_input(solver_lo.input());
+    let err_lo = solver_lo
+        .run_call(&ctrl_lo, &x, &aa, data)
+        .expect_err("nfit < nibc must fail loudly before shtint");
+    assert!(matches!(err_lo, AdiplsError::InvalidModel { .. }));
+
+    // 3. `mdintg = 1, iriche = 1` with `nfit == nn` and odd `nfit - nibc` must fail loudly instead of indexing `x[nn]`;
+    //    on a non-singular model with `nfit == nn` (`nd_limit == nn`), it reaches `mdintg=1` unsupported error cleanly.
+    let mut input_iriche = parse_adipls_pruned_in(ADIPLS_PRUNED_IN).unwrap();
+    input_iriche.int_ctrl.mdintg = 1;
+    input_iriche.int_ctrl.iriche = 1;
+    input_iriche.int_ctrl.xfit = 1.05_f64;
+    let solver_iriche = AdiplsSolver::new(input_iriche);
+    let ctrl_iriche = AdiplsControlState::from_input(solver_iriche.input());
+    let err_iriche = solver_iriche
+        .run_call(&ctrl_iriche, &x, &aa, data)
+        .expect_err("iriche parity shift past nn must fail loudly");
+    assert!(matches!(err_iriche, AdiplsError::InvalidModel { .. }));
+
+    let mut data_nonsing = data;
+    data_nonsing[6] = -1.0_f64;
+    let err_mdintg = solver_iriche
+        .run_call(&ctrl_iriche, &x, &aa, data_nonsing)
+        .expect_err(
+            "mdintg = 1 with valid nfit == nd_limit must fail loudly cleanly",
+        );
+    assert!(matches!(
+        err_mdintg,
+        AdiplsError::UnsupportedControl {
+            control: "mdintg",
+            ..
+        }
+    ));
+
+    // 4. Small-model guards in `res_adimod`, `run_call` (`nn == 1`), and `rsnfit`.
+    let x_tiny = [0.0_f64];
+    let mut aa_tiny = AmdlAa::new_unset(1);
+    for row in 1..=5 {
+        aa_tiny.set_row(row, vec![1.0_f64]).unwrap();
+    }
+    let mut iturpr = 0_i32;
+    let mut omgrtp = [0.0_f64; 1];
+    assert!(matches!(
+        res_adimod(
+            &x_tiny,
+            &aa_tiny,
+            data,
+            1,
+            IVARMD,
+            1,
+            0,
+            &mut iturpr,
+            0,
+            &mut omgrtp
+        ),
+        Err(AdiplsError::InvalidModel { .. })
+    ));
+    let mut data_tiny_nonsing = data;
+    data_tiny_nonsing[6] = -1.0_f64;
+    assert!(matches!(
+        solver_hi.run_call(&ctrl_hi, &x_tiny, &aa_tiny, data_tiny_nonsing),
+        Err(AdiplsError::InvalidModel { .. })
+    ));
+
+    let x_short = [0.0_f64, 0.25, 0.5, 0.75, 1.0];
+    let mut nfit = 3_usize;
+    let mut xfit1 = 0.5_f64;
+    let mut nftcnt = 0_i32;
+    rsnfit(&x_short, 2, 5, &mut nfit, &mut xfit1, &mut nftcnt, 0);
+    assert!((2..=5).contains(&nfit));
+    rsnfit(&x_short, 2, 5, &mut nfit, &mut xfit1, &mut nftcnt, 1);
+    assert!((2..=5).contains(&nfit));
+}

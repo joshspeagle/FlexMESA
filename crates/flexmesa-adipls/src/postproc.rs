@@ -69,6 +69,9 @@ pub struct VarfrqCache {
     kvarfi: i32,
     derivk_cache: DerivkCache,
     vintk_cache: VintkCache,
+    wrk: [Vec<f64>; 8],
+    vintk_a: Vec<f64>,
+    vintk_y: Vec<f64>,
 }
 
 impl Default for VarfrqCache {
@@ -82,6 +85,9 @@ impl Default for VarfrqCache {
             kvarfi: 0,
             derivk_cache: DerivkCache::default(),
             vintk_cache: VintkCache::default(),
+            wrk: std::array::from_fn(|_| Vec::new()),
+            vintk_a: Vec::new(),
+            vintk_y: Vec::new(),
         }
     }
 }
@@ -340,20 +346,22 @@ pub fn varfrq_with_observer(
         cache.nnp = nn;
     }
 
-    let mut wrk: [Vec<f64>; 8] = std::array::from_fn(|_| vec![0.0_f64; nn]);
+    let VarfrqCache {
+        kvarfi,
+        derivk_cache,
+        vintk_cache,
+        wrk,
+        vintk_a,
+        vintk_y,
+        ..
+    } = cache;
+    for row in wrk.iter_mut() {
+        row.clear();
+        row.resize(nn, 0.0_f64);
+    }
 
-    let kvarfi_isize = isize::try_from(cache.kvarfi).unwrap_or(0);
-    let _ = derivk(
-        x,
-        y,
-        &mut wrk[0],
-        1,
-        nn,
-        iy,
-        1,
-        kvarfi_isize,
-        &mut cache.derivk_cache,
-    );
+    let kvarfi_isize = isize::try_from(*kvarfi).unwrap_or(0);
+    let _ = derivk(x, y, &mut wrk[0], 1, nn, iy, 1, kvarfi_isize, derivk_cache);
 
     if el > sp_radial_eps() && varcon.ivarf == 3 {
         varcon.ivarf = 1;
@@ -400,7 +408,6 @@ pub fn varfrq_with_observer(
                     * qxu;
                 wrk[3][n] =
                     (((((-3.0_f64 * qxu) * xx) * dgm1) * z1) * z1) / (vg * gm1);
-                wrk[7][n] = wrk[0][n];
             } else {
                 z1 = (2.0_f64 * z1) / xx;
                 let d1 = wrk[0][n] + z1;
@@ -421,9 +428,11 @@ pub fn varfrq_with_observer(
             &mut [&mut out4[0], &mut out5[0], &mut rest[0]],
             nn,
             kvarfi_isize,
-            &mut cache.vintk_cache,
+            vintk_cache,
+            vintk_a,
+            vintk_y,
         );
-        cache.kvarfi = 0;
+        *kvarfi = 0;
 
         let nn0 = nn - 1;
         if usegam {
@@ -498,24 +507,15 @@ pub fn varfrq_with_observer(
             let (left, right) = wrk.split_at_mut(2);
             (&right[0], &mut left[1])
         };
-        let _ = vintk(
-            x,
-            wrk2_in,
-            wrk1_out,
-            1,
-            nn,
-            1,
-            1,
-            kvarfi_isize,
-            &mut cache.vintk_cache,
-        );
+        let _ =
+            vintk(x, wrk2_in, wrk1_out, 1, nn, 1, 1, kvarfi_isize, vintk_cache);
 
         if an > 0.0_f64 {
             wrk[1][nn - 1] =
                 wrk[1][nn - 2] + ((1.0_f64 - x[nn - 2]) * wrk[2][nn - 2]) / an;
         }
 
-        cache.kvarfi = 0;
+        *kvarfi = 0;
 
         let elli = if el > sp_radial_eps() {
             1.0_f64 / ell
@@ -570,7 +570,9 @@ pub fn varfrq_with_observer(
             &mut [&mut out2_slice[2], &mut out3_slice[0], &mut out4[0]],
             nn,
             0,
-            &mut cache.vintk_cache,
+            vintk_cache,
+            vintk_a,
+            vintk_y,
         );
 
         if an > 0.0_f64 {
@@ -596,6 +598,7 @@ pub fn varfrq_with_observer(
     Ok(sigv)
 }
 
+#[allow(clippy::too_many_arguments)]
 fn vintk_rows_3(
     x: &[f64],
     src: [&[f64]; 3],
@@ -603,9 +606,13 @@ fn vintk_rows_3(
     nn: usize,
     karg: isize,
     cache: &mut VintkCache,
+    a_buf: &mut Vec<f64>,
+    y_buf: &mut Vec<f64>,
 ) {
-    let mut a_buf = vec![0.0_f64; 3 * nn];
-    let mut y_buf = vec![0.0_f64; 3 * nn];
+    a_buf.clear();
+    a_buf.resize(3 * nn, 0.0_f64);
+    y_buf.clear();
+    y_buf.resize(3 * nn, 0.0_f64);
     for n in 0..nn {
         let base = n * 3;
         a_buf[base] = src[0][n];
@@ -615,7 +622,7 @@ fn vintk_rows_3(
     y_buf[0] = dst[0][0];
     y_buf[1] = dst[1][0];
     y_buf[2] = dst[2][0];
-    let _ = vintk(x, &a_buf, &mut y_buf, 3, nn, 3, 3, karg, cache);
+    let _ = vintk(x, a_buf, y_buf, 3, nn, 3, 3, karg, cache);
     for n in 0..nn {
         let base = n * 3;
         dst[0][n] = y_buf[base];

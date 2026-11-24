@@ -435,12 +435,26 @@ pub fn res_adimod(
     // Build index map `src_indices` (0-based into `x_in`/`aa_in`) matching
     // `res_adimod.c.d.f:65-158`.
     let (nn, src_indices): (usize, Vec<usize>) = if in_step <= 1 {
-        let nshift = usize::from(!(iriche != 1 || (nn_in - nsin) % 2 == 1));
+        let Some(diff_sin) = nn_in.checked_sub(nsin) else {
+            return Err(AdiplsError::InvalidModel {
+                message: format!(
+                    "res_adimod model too small for singular-point parity (nn_in={nn_in}, nsin={nsin})"
+                ),
+            });
+        };
+        let nshift = usize::from(!(iriche != 1 || diff_sin % 2 == 1));
         let nn = nn_in.checked_sub(nshift).ok_or_else(|| {
             AdiplsError::InvalidModel {
                 message: String::from("res_adimod nshift underflow"),
             }
         })?;
+        if nn == 0 {
+            return Err(AdiplsError::InvalidModel {
+                message: format!(
+                    "res_adimod produced empty mesh (nn_in={nn_in}, nshift={nshift})"
+                ),
+            });
+        }
         let mut idx = Vec::with_capacity(nn);
         idx.push(0);
         for n in 1..nn {
@@ -458,13 +472,29 @@ pub fn res_adimod(
                 message: format!("invalid in_step={in_step}"),
             }
         })?;
+        if sincen && nn_in < 2 {
+            return Err(AdiplsError::InvalidModel {
+                message: format!(
+                    "res_adimod requires at least 2 points when x_in[0] == 0 and in_step={in_step}, got {nn_in}"
+                ),
+            });
+        }
         let mut nn = if sincen {
             (nn_in - 2) / step + 2
         } else {
             (nn_in - 1) / step + 1
         };
-        if iriche == 1 && (nn - nsin).is_multiple_of(2) {
-            nn -= 1;
+        if iriche == 1 {
+            let Some(diff_sin) = nn.checked_sub(nsin) else {
+                return Err(AdiplsError::InvalidModel {
+                    message: format!(
+                        "res_adimod downsampled model too small (nn={nn}, nsin={nsin})"
+                    ),
+                });
+            };
+            if diff_sin.is_multiple_of(2) {
+                nn -= 1;
+            }
         }
         let mut idx = Vec::with_capacity(nn);
         let mut n1_1based: isize;

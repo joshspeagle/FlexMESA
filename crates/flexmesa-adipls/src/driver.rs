@@ -293,6 +293,13 @@ impl AdiplsSolver {
             (1_usize, false, x[0])
         };
         let nn = nn0;
+        if nn < 2 {
+            return Err(AdiplsError::InvalidModel {
+                message: format!(
+                    "adipls requires at least 2 mesh points, got nn={nn}"
+                ),
+            });
+        }
         let nnw = nn - nw1 + 1;
 
         let mut csummm = Csummm::zeroed();
@@ -384,7 +391,23 @@ impl AdiplsSolver {
             if (nfit.cast_signed() - nibc.cast_signed()).rem_euclid(2) != 0
                 && cincnt.iriche == 1
             {
+                if nfit >= nn {
+                    return Err(AdiplsError::InvalidModel {
+                        message: format!(
+                            "adipls fitting point nfit={nfit} exceeds mesh nn={nn} after Richardson parity shift"
+                        ),
+                    });
+                }
                 nfit += 1;
+            }
+            let nd_limit = if rhs.data[6] >= 0.0_f64 { nn - 1 } else { nn };
+            if nfit < nibc || nfit > nd_limit {
+                return Err(AdiplsError::InvalidModel {
+                    message: format!(
+                        "adipls fitting point nfit={nfit} out of valid range [{nibc}, {nd_limit}] (nn={nn}, xfit={})",
+                        cincnt.xfit
+                    ),
+                });
             }
             let xfit1 = x[nfit - 1];
             csummm.set_f64(14, xfit1)?;

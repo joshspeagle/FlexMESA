@@ -12,7 +12,7 @@ use flexmesa_adipls::{
     ADIPLS_DEFAULT_EPSUFL,
 };
 use flexmesa_const::{PI4, STANDARD_CGRAV};
-use flexmesa_math::{cos, sin};
+use flexmesa_math::cos;
 
 const ADIPLS_PRUNED_IN: &str = "\
 2  'amdl.mesa'
@@ -719,9 +719,6 @@ fn test_adipls_solver_run_call_returns_complete_modes_obs_st_ssm_and_taps() {
             assert_eq!(ics[6], 1);
         }
     }
-
-    // `sin` import verified in `varfrq` helper test usage below if needed.
-    let _ = sin(0.0_f64);
 }
 
 #[test]

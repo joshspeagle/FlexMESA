@@ -390,6 +390,15 @@ pub fn shtint(
 ) -> Result<(), AdiplsError> {
     *icry = 0;
 
+    if nibc == 0 || nev1 < nibc || nfit < nev1 || nd < nfit {
+        return Err(AdiplsError::Solver {
+            routine: "shtint",
+            message: format!(
+                "invalid shooting bounds nibc={nibc}, nev1={nev1}, nfit={nfit}, nd={nd}"
+            ),
+        });
+    }
+
     if iasn > 1
         && (!(nev1 - nibc).is_multiple_of(iasn)
             || !(nfit - nev1).is_multiple_of(iasn)
@@ -803,31 +812,19 @@ pub fn mchsol(
                 ),
             });
         }
-        let mut fccan = 0.0_f64;
         for n in nw1..=nfit {
             let base = (n - 1) * iy;
             for i in 0..4 {
-                let yy1 = c[0] * y[base + i];
-                let yy2 = c[1] * y[base + i + 4];
-                if n > 1 {
-                    fccan += (yy1 + yy2).abs()
-                        / (yy1.abs() + yy2.abs() + 1.0e-10_f64);
-                }
-                y[base + i] = yy1 + yy2;
+                y[base + i] = c[0] * y[base + i] + c[1] * y[base + i + 4];
             }
         }
         for n in (nfit + 1)..=nn {
             let dst = (n - 1) * iy;
             let src = n * iy;
             for i in 0..4 {
-                let yy1 = -c[2] * y[src + i];
-                let yy2 = -c[3] * y[src + i + 4];
-                y[dst + i] = yy1 + yy2;
-                fccan +=
-                    (yy1 + yy2).abs() / (yy1.abs() + yy2.abs() + 1.0e-10_f64);
+                y[dst + i] = -c[2] * y[src + i] - c[3] * y[src + i + 4];
             }
         }
-        let _ = fccan / f64::from(i32::try_from(4 * nn).unwrap_or(1));
     }
 
     *icry = 0;
@@ -918,9 +915,16 @@ pub fn rsnfit(
     nftrcs: i32,
 ) {
     *nftcnt += 1;
+    if nn == 0 || x.len() < nn {
+        return;
+    }
+    let lo = 10_usize.min(nn).max(nibc.min(nn)).max(1);
+    let hi = nn.saturating_sub(10).max(lo).min(nn);
     let nn_i32 = i32::try_from(nn).unwrap_or(i32::MAX);
 
     if nftrcs == 0 {
+        let lo_i32 = i32::try_from(lo).unwrap_or(1);
+        let hi_i32 = i32::try_from(hi).unwrap_or(nn_i32);
         #[allow(clippy::cast_precision_loss)]
         let nfit_f = (*nfit) as f32;
         #[allow(clippy::cast_precision_loss)]
@@ -928,13 +932,13 @@ pub fn rsnfit(
         let new_nfit = if *nftcnt % 2 == 1 {
             #[allow(clippy::cast_possible_truncation)]
             let cand = (nfit_f - step_f).round() as i32;
-            cand.max(10)
+            cand.max(lo_i32)
         } else {
             #[allow(clippy::cast_possible_truncation)]
             let cand = (nfit_f + step_f).round() as i32;
-            cand.min(nn_i32 - 10)
+            cand.min(hi_i32)
         };
-        *nfit = usize::try_from(new_nfit).unwrap_or(10);
+        *nfit = usize::try_from(new_nfit).unwrap_or(lo).clamp(lo, hi);
     } else {
         let dx = 0.05_f64 * (*xfit1).min(1.0_f64 - *xfit1);
         if *nftcnt % 2 == 1 {
@@ -949,11 +953,15 @@ pub fn rsnfit(
                 break;
             }
         }
-        *nfit = nf.max(10).min(nn.saturating_sub(10));
+        *nfit = nf.clamp(lo, hi);
     }
 
     if ((*nfit).cast_signed() - nibc.cast_signed()).rem_euclid(2) != 0 {
-        *nfit += 1;
+        if *nfit < nn {
+            *nfit += 1;
+        } else if *nfit > 1 {
+            *nfit -= 1;
+        }
     }
     *xfit1 = x[*nfit - 1];
 }
@@ -1692,11 +1700,21 @@ pub fn sigsol(
         let nwor1 = if ctx.rhs.el < 50.0_f64 { nw1 } else { *nev1 };
         let nnwor = nn - nwor1 + 1;
         let y_order_off = (nwor1 - 1) * iy;
+        // `order` only accesses `aa` via `takata` when `mdintg != 2 && irsord == 20 && el ~= 1`.
+        let aa_ord: std::borrow::Cow<'_, AmdlAa> = if nwor1 == 1
+            || mdintg == 2
+            || ctx.cincnt.irsord != 20
+            || (ctx.rhs.el - 1.0_f64).abs() > 1.0e-10_f64
+        {
+            std::borrow::Cow::Borrowed(aa)
+        } else {
+            std::borrow::Cow::Owned(aa.slice_from(nwor1 - 1)?)
+        };
         order(
             &x[nwor1 - 1..],
             &y[y_order_off..],
             &ctx.rhs.data,
-            &aa.slice_from(nwor1 - 1)?,
+            aa_ord.as_ref(),
             ctx.rhs.el,
             *sig,
             ctx.cincnt.icow,

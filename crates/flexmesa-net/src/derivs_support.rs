@@ -212,8 +212,8 @@ pub fn eval_single_weak_blended(
             let beta = 1.0 - alfa;
             let raw_lam = ev.lambda;
             ev.lambda = alfa * raw_lam + beta * low_t_rate;
-            ev.dlambda_dln_t =
-                alfa * ev.dlambda_dln_t + d_alfa_dln_t * (raw_lam - low_t_rate);
+            ev.dlambda_dln_t = alfa * ev.dlambda_dln_t
+                + d_alfa_dln_t * (ev.lambda - low_t_rate);
             ev.dlambda_dln_rho *= alfa;
         }
     }

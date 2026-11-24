@@ -294,7 +294,7 @@ impl StarModel {
     ///
     /// This is not MESA's `interp_val_to_pt` (`star_utils.f90:779-811`),
     /// which interpolates through four cells; see
-    /// [`crate::pulse_gyre_data::interp_val_to_pt_slices`] (#491).
+    /// `pulse_gyre_data::interp_val_to_pt_slices` (#491).
     #[must_use]
     #[inline]
     pub fn face_value_alfa_beta(&self, v: &[f64], k: usize) -> f64 {

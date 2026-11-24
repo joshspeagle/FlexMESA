@@ -14,16 +14,16 @@ use std::fmt::{self, Display};
 
 use flexmesa_atm::{
     build_t_tau_uniform, build_t_tau_varying, eval_t_tau_uniform,
-    eval_t_tau_varying, AtmEosCallbackResult, AtmError, AtmKapCallbackResult,
-    AtmStructure, ATM_CHIRHO, ATM_CHIT, ATM_CP, ATM_DELTA_R, ATM_GAMMA1,
-    ATM_GRADA, ATM_GRADT, ATM_KAP, ATM_LND, ATM_LNFREE_E, ATM_LNP, ATM_LNT,
+    eval_t_tau_varying, radiation_pressure, AtmEosCallbackResult, AtmError,
+    AtmKapCallbackResult, AtmStructure, ATM_CHIRHO, ATM_CHIT, ATM_CP,
+    ATM_DELTA_R, ATM_GAMMA1, ATM_GRADA, ATM_GRADT, ATM_KAP, ATM_LND,
+    ATM_LNFREE_E, ATM_LNP, ATM_LNT,
 };
 use flexmesa_chem::{
     get_composition_info_from_props, NuclideCatalog, SpeciesProps,
 };
 use flexmesa_const::{
-    MixingType, AVO, CRAD, FOUR_THIRDS, KERG, LN10, PI, PI4, R_SUN,
-    STANDARD_CGRAV,
+    MixingType, AVO, FOUR_THIRDS, KERG, LN10, PI, PI4, R_SUN, STANDARD_CGRAV,
 };
 use flexmesa_eos::{
     eos_dt_get_rho, EosConfig, I_CHI_RHO, I_CHI_T, I_ETA, I_GAMMA1,
@@ -59,6 +59,24 @@ const ATM_LOG_TOL: f64 = 1.0e-11;
 /// Maximum Newton iterations in `solve_eos_given_PgasT`
 /// (`star/private/eos_support.f90:345`).
 const ATM_EOS_MAX_ITERS: usize = 100;
+
+/// FGONG output slot indices (`point_data[20..=24]`, `point_data[28..=35]`) and
+/// corresponding nuclide names (`star/private/pulse_fgong.f90:400-599`).
+const FGONG_ISO_SPEC: [(usize, &str); 13] = [
+    (20, "he3"),
+    (21, "c12"),
+    (22, "c13"),
+    (23, "n14"),
+    (24, "o16"),
+    (28, "h2"),
+    (29, "he4"),
+    (30, "li7"),
+    (31, "be7"),
+    (32, "n15"),
+    (33, "o17"),
+    (34, "o18"),
+    (35, "ne20"),
+];
 
 /// Errors returned by [`get_fgong_data`] and [`star_get_pulse_data_fgong`].
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -410,19 +428,9 @@ pub fn get_fgong_data(
         input.net_iso.get(cid).copied().flatten()
     };
     let h1 = net_idx("h1");
-    let h2 = net_idx("h2");
-    let he3 = net_idx("he3");
     let he4 = net_idx("he4");
-    let li7 = net_idx("li7");
-    let be7 = net_idx("be7");
-    let c12 = net_idx("c12");
-    let c13 = net_idx("c13");
-    let n14 = net_idx("n14");
-    let n15 = net_idx("n15");
-    let o16 = net_idx("o16");
-    let o17 = net_idx("o17");
-    let o18 = net_idx("o18");
-    let ne20 = net_idx("ne20");
+    let iso_slots: [(usize, Option<usize>); 13] =
+        FGONG_ISO_SPEC.map(|(slot, name)| (slot, net_idx(name)));
 
     let eos_ctx = EosZoneContext::new(input.chem_id)
         .map_err(|e| FgongDataError::Microphysics(e.to_string()))?;
@@ -487,54 +495,8 @@ pub fn get_fgong_data(
     global_data[13] = input.teff;
     global_data[14] = STANDARD_CGRAV;
 
-    let dxdt_h1: Vec<f64> = if let Some(ih1) = h1 {
-        (0..nz).map(|k| input.dxdt_nuc[k * species + ih1]).collect()
-    } else {
-        vec![0.0; nz]
-    };
-
     let mut point_data = Vec::with_capacity(nn);
     let mut xa_buf = vec![0.0_f64; species];
-
-    if let Some(ref atm) = atm_opt {
-        let ka0 = k_a[0];
-        let kb0 = k_b[0];
-        let xa_surf = &input.xa[0..species];
-        let mut ctx = PointHelperCtx {
-            input,
-            eos_ctx: &eos_ctx,
-            xa_buf: &mut xa_buf,
-            r_outer,
-            m_outer,
-            h1,
-            h2,
-            he3,
-            he4,
-            li7,
-            be7,
-            c12,
-            c13,
-            n14,
-            n15,
-            o16,
-            o17,
-            o18,
-            ne20,
-            dxdt_h1: &dxdt_h1,
-        };
-        for k in 0..nn_atm {
-            point_data.push(store_point_data_atm(
-                &mut ctx,
-                &atm.points[k],
-                xa_surf,
-                k,
-                ka0,
-                kb0,
-            )?);
-        }
-    }
-
-    let mut sg = 0_usize;
     let mut ctx = PointHelperCtx {
         input,
         eos_ctx: &eos_ctx,
@@ -542,21 +504,25 @@ pub fn get_fgong_data(
         r_outer,
         m_outer,
         h1,
-        h2,
-        he3,
         he4,
-        li7,
-        be7,
-        c12,
-        c13,
-        n14,
-        n15,
-        o16,
-        o17,
-        o18,
-        ne20,
-        dxdt_h1: &dxdt_h1,
+        iso_slots,
     };
+
+    if let Some(ref atm) = atm_opt {
+        let surf_fg = SurfaceAtmFgong::new(&ctx, k_a[0], k_b[0])?;
+        let xa_surf = &input.xa[0..species];
+        for k in 0..nn_atm {
+            point_data.push(store_point_data_atm(
+                &mut ctx,
+                &atm.points[k],
+                &surf_fg,
+                xa_surf,
+                k,
+            )?);
+        }
+    }
+
+    let mut sg = 0_usize;
     for k in 0..n_env {
         if k == 0 && !keep_surface_point {
             continue;
@@ -594,20 +560,42 @@ struct PointHelperCtx<'a, 'b> {
     r_outer: f64,
     m_outer: f64,
     h1: Option<usize>,
-    h2: Option<usize>,
-    he3: Option<usize>,
     he4: Option<usize>,
-    li7: Option<usize>,
-    be7: Option<usize>,
-    c12: Option<usize>,
-    c13: Option<usize>,
-    n14: Option<usize>,
-    n15: Option<usize>,
-    o16: Option<usize>,
-    o17: Option<usize>,
-    o18: Option<usize>,
-    ne20: Option<usize>,
-    dxdt_h1: &'b [f64],
+    iso_slots: [(usize, Option<usize>); 13],
+}
+
+struct SurfaceAtmFgong {
+    lnq: f64,
+    x: f64,
+    l: f64,
+    z: f64,
+    isos: [(usize, f64); 13],
+}
+
+impl SurfaceAtmFgong {
+    fn new(
+        ctx: &PointHelperCtx<'_, '_>,
+        k_a: usize,
+        k_b: usize,
+    ) -> Result<Self, FgongDataError> {
+        let s = ctx.input;
+        let lnq = log(s.m_grav[0] / ctx.m_outer);
+        let x_unclamped = eval_face(s.dq, s.xh_mass, 0, k_a, k_b, None, None)?;
+        let x = x_unclamped.clamp(0.0, 1.0);
+        let y_unclamped = eval_face(s.dq, s.yhe_mass, 0, k_a, k_b, None, None)?;
+        let z = (1.0 - x_unclamped - y_unclamped).clamp(0.0, 1.0);
+        let mut isos = [(0_usize, 0.0_f64); 13];
+        for (dst, &(slot, iso)) in isos.iter_mut().zip(&ctx.iso_slots) {
+            *dst = (slot, eval_face_x(s, iso, 0, k_a, k_b)?);
+        }
+        Ok(Self {
+            lnq,
+            x,
+            l: s.lum[0],
+            z,
+            isos,
+        })
+    }
 }
 
 fn validate_inputs(input: &FgongDataInput<'_>) -> Result<(), FgongDataError> {
@@ -628,33 +616,37 @@ fn validate_inputs(input: &FgongDataInput<'_>) -> Result<(), FgongDataError> {
             "eval_face_A_ast: must have calculate_Brunt_N2 = .true.",
         )));
     }
-    if input.m_grav.len() != nz
-        || input.dq.len() != nz
-        || input.dm.len() != nz
-        || input.cgrav.len() != nz
-        || input.grav.len() != nz
-        || input.r.len() != nz
-        || input.rmid.len() != nz
-        || input.lum.len() != nz
-        || input.t.len() != nz
-        || input.peos.len() != nz
-        || input.rho.len() != nz
-        || input.mu.len() != nz
-        || input.xh_mass.len() != nz
-        || input.yhe_mass.len() != nz
-        || input.opacity.len() != nz
-        || input.eps_nuc.len() != nz
-        || input.eps_grav.len() != nz
-        || input.gamma1.len() != nz
-        || input.grada.len() != nz
-        || input.chi_rho.len() != nz
-        || input.chi_t.len() != nz
-        || input.cp.len() != nz
-        || input.lnfree_e.len() != nz
-        || input.brunt_n2.len() != nz
-        || input.zbar.len() != nz
-        || input.abar.len() != nz
-        || input.mixing_type.len() != nz
+    if [
+        input.m_grav.len(),
+        input.dq.len(),
+        input.dm.len(),
+        input.cgrav.len(),
+        input.grav.len(),
+        input.r.len(),
+        input.rmid.len(),
+        input.lum.len(),
+        input.t.len(),
+        input.peos.len(),
+        input.rho.len(),
+        input.mu.len(),
+        input.xh_mass.len(),
+        input.yhe_mass.len(),
+        input.opacity.len(),
+        input.eps_nuc.len(),
+        input.eps_grav.len(),
+        input.gamma1.len(),
+        input.grada.len(),
+        input.chi_rho.len(),
+        input.chi_t.len(),
+        input.cp.len(),
+        input.lnfree_e.len(),
+        input.brunt_n2.len(),
+        input.zbar.len(),
+        input.abar.len(),
+        input.mixing_type.len(),
+    ]
+    .into_iter()
+    .any(|len| len != nz)
     {
         return Err(FgongDataError::InvalidInput(format!(
             "one or more zone arrays do not match nz={nz}"
@@ -725,9 +717,9 @@ fn build_atm_structure(
     let xa_surf = &input.xa[0..sp];
     let abar_surf = input.abar[0];
 
-    let (xa_kap, zbar_kap, xh_kap, z_kap) = if input
-        .use_starting_composition_for_kap
-    {
+    let (mut xc_kap, mut xn_kap, mut xo_kap, mut xne_kap) =
+        (0.0, 0.0, 0.0, 0.0);
+    let (zbar_kap, xh_kap, z_kap) = if input.use_starting_composition_for_kap {
         if input.xa_start.len() != input.nz * sp {
             return Err(FgongDataError::InvalidInput(format!(
                     "use_starting_composition_for_kap = .true. but xa_start len {} != nz*species ({})",
@@ -742,46 +734,51 @@ fn build_atm_structure(
         let xh_c = comp.xh.clamp(0.0, 1.0);
         let xhe_c = comp.xhe.clamp(0.0, 1.0);
         let z_c = (1.0 - (xh_c + xhe_c)).clamp(0.0, 1.0);
-        (xs, comp.zbar, xh_c, z_c)
+        for (j, &cid) in input.chem_id.iter().enumerate() {
+            if let Some(n) = catalog.get_by_id(cid) {
+                match n.z {
+                    6 => xc_kap += xs[j],
+                    7 => xn_kap += xs[j],
+                    8 => xo_kap += xs[j],
+                    10 => xne_kap += xs[j],
+                    _ => {}
+                }
+            }
+        }
+        (comp.zbar, xh_c, z_c)
     } else {
         let mut xh_s = 0.0;
         let mut xhe_s = 0.0;
         for (j, &cid) in input.chem_id.iter().enumerate() {
             if let Some(n) = catalog.get_by_id(cid) {
-                if n.z == 1 && (n.z_plus_n == 1 || n.z_plus_n == 2) {
-                    xh_s += xa_surf[j];
-                } else if n.z == 2 && (n.z_plus_n == 3 || n.z_plus_n == 4) {
-                    xhe_s += xa_surf[j];
+                match (n.z, n.z_plus_n) {
+                    (1, 1 | 2) => xh_s += xa_surf[j],
+                    (2, 3 | 4) => xhe_s += xa_surf[j],
+                    (6, _) => xc_kap += xa_surf[j],
+                    (7, _) => xn_kap += xa_surf[j],
+                    (8, _) => xo_kap += xa_surf[j],
+                    (10, _) => xne_kap += xa_surf[j],
+                    _ => {}
                 }
             }
         }
         let xh_c = xh_s.clamp(0.0, 1.0);
         let xhe_c = xhe_s.clamp(0.0, 1.0);
         let z_c = (1.0 - (xh_c + xhe_c)).clamp(0.0, 1.0);
-        (xa_surf, input.zbar[0], xh_c, z_c)
+        (input.zbar[0], xh_c, z_c)
     };
 
-    let (mut xc_kap, mut xn_kap, mut xo_kap, mut xne_kap) =
-        (0.0, 0.0, 0.0, 0.0);
-    for (j, &cid) in input.chem_id.iter().enumerate() {
-        if let Some(n) = catalog.get_by_id(cid) {
-            match n.z {
-                6 => xc_kap += xa_kap[j],
-                7 => xn_kap += xa_kap[j],
-                8 => xo_kap += xa_kap[j],
-                10 => xne_kap += xa_kap[j],
-                _ => {}
-            }
-        }
-    }
+    let eos_cfg = input.eos_config;
+    let chem_id = input.chem_id;
+    let kap_cfg = input.kap_config;
+    let ctrl = input.kap_controls;
+    let use_simple_es = input.use_simple_es_for_kap;
 
-    let make_eos_proc = || {
-        let eos_cfg = input.eos_config;
-        let chem_id = input.chem_id;
-        move |ln_p: f64, ln_t: f64| -> Result<AtmEosCallbackResult, AtmError> {
+    let eos_proc =
+        |ln_p: f64, ln_t: f64| -> Result<AtmEosCallbackResult, AtmError> {
             let t = exp(ln_t);
             let p = exp(ln_p);
-            let prad = CRAD * t * t * t * t / 3.0;
+            let prad = radiation_pressure(t);
             let pgas = (p - prad).max(1.0e-99);
             let rho_guess = ((p / t) * abar_surf / (AVO * KERG)).max(1.0e-40);
             let inv = eos_dt_get_rho(
@@ -807,100 +804,72 @@ fn build_atm_structure(
                 dres_dln_rho: inv.eos.d_dlnd,
                 dres_dln_t: inv.eos.d_dln_t,
             })
+        };
+
+    let kap_proc = |ln_rho: f64,
+                    ln_t: f64,
+                    eos: &AtmEosCallbackResult|
+     -> Result<AtmKapCallbackResult, AtmError> {
+        let log_rho = ln_rho / LN10;
+        let log_t = ln_t / LN10;
+        let (kap_raw, dlnkap_dlnd_raw, dlnkap_dlnt_raw) = if use_simple_es {
+            (0.2 * (1.0 + xh_kap), 0.0, 0.0)
+        } else {
+            let out = get_kap_results(
+                kap_cfg,
+                zbar_kap,
+                xh_kap,
+                z_kap,
+                xc_kap,
+                xn_kap,
+                xo_kap,
+                xne_kap,
+                log_rho,
+                log_t,
+                eos.res[I_LN_FREE_E],
+                eos.dres_dln_rho[I_LN_FREE_E],
+                eos.dres_dln_t[I_LN_FREE_E],
+                eos.res[I_ETA],
+                eos.dres_dln_rho[I_ETA],
+                eos.dres_dln_t[I_ETA],
+            )
+            .map_err(|e| AtmError::CallbackError {
+                context: "build_atm::kap_proc",
+                detail: e.to_string(),
+            })?;
+            (out.kap, out.dlnkap_dln_rho, out.dlnkap_dln_t)
+        };
+
+        let opacity_factor =
+            crate::rsp_eos_kap::effective_opacity_factor(ctrl, log_t);
+        let mut kap = kap_raw * opacity_factor;
+        let mut dlnkap_dlnd = dlnkap_dlnd_raw;
+        let mut dlnkap_dlnt = dlnkap_dlnt_raw;
+        if ctrl.opacity_max > 0.0 && kap > ctrl.opacity_max {
+            kap = ctrl.opacity_max;
+            dlnkap_dlnd = 0.0;
+            dlnkap_dlnt = 0.0;
         }
+        if ctrl.opacity_min > 0.0 && kap < ctrl.opacity_min {
+            kap = ctrl.opacity_min;
+            dlnkap_dlnd = 0.0;
+            dlnkap_dlnt = 0.0;
+        }
+        if kap <= 0.0 || !kap.is_finite() {
+            return Err(AtmError::CallbackError {
+                context: "build_atm::kap_proc",
+                detail: format!("invalid atmosphere opacity kap={kap}"),
+            });
+        }
+        Ok(AtmKapCallbackResult {
+            kap,
+            dlnkap_dln_rho: dlnkap_dlnd,
+            dlnkap_dln_t: dlnkap_dlnt,
+        })
     };
 
-    let make_kap_proc = || {
-        let kap_cfg = input.kap_config;
-        let ctrl = input.kap_controls;
-        let use_simple_es = input.use_simple_es_for_kap;
-        move |ln_rho: f64,
-              ln_t: f64,
-              eos: &AtmEosCallbackResult|
-              -> Result<AtmKapCallbackResult, AtmError> {
-            let log_rho = ln_rho / LN10;
-            let log_t = ln_t / LN10;
-            let (kap_raw, dlnkap_dlnd_raw, dlnkap_dlnt_raw) = if use_simple_es {
-                (0.2 * (1.0 + xh_kap), 0.0, 0.0)
-            } else {
-                let out = get_kap_results(
-                    kap_cfg,
-                    zbar_kap,
-                    xh_kap,
-                    z_kap,
-                    xc_kap,
-                    xn_kap,
-                    xo_kap,
-                    xne_kap,
-                    log_rho,
-                    log_t,
-                    eos.res[I_LN_FREE_E],
-                    eos.dres_dln_rho[I_LN_FREE_E],
-                    eos.dres_dln_t[I_LN_FREE_E],
-                    eos.res[I_ETA],
-                    eos.dres_dln_rho[I_ETA],
-                    eos.dres_dln_t[I_ETA],
-                )
-                .map_err(|e| AtmError::CallbackError {
-                    context: "build_atm::kap_proc",
-                    detail: e.to_string(),
-                })?;
-                (out.kap, out.dlnkap_dln_rho, out.dlnkap_dln_t)
-            };
-
-            let mut opacity_factor = ctrl.opacity_factor;
-            let min_off = ctrl.rsp.min_logt_for_opacity_factor_off;
-            let min_on = ctrl.rsp.min_logt_for_opacity_factor_on;
-            let max_on = ctrl.rsp.max_logt_for_opacity_factor_on;
-            let max_off = ctrl.rsp.max_logt_for_opacity_factor_off;
-            if min_off > 0.0 {
-                if log_t >= max_off || log_t <= min_off {
-                    opacity_factor = 1.0;
-                } else if log_t > max_on {
-                    opacity_factor = 1.0
-                        + (opacity_factor - 1.0) * (log_t - max_off)
-                            / (max_on - max_off);
-                } else if log_t < min_on {
-                    opacity_factor = 1.0
-                        + (opacity_factor - 1.0) * (log_t - min_off)
-                            / (min_on - min_off);
-                }
-            }
-
-            let mut kap = kap_raw * opacity_factor;
-            let mut dlnkap_dlnd = dlnkap_dlnd_raw;
-            let mut dlnkap_dlnt = dlnkap_dlnt_raw;
-            if ctrl.opacity_max > 0.0 && kap > ctrl.opacity_max {
-                kap = ctrl.opacity_max;
-                dlnkap_dlnd = 0.0;
-                dlnkap_dlnt = 0.0;
-            }
-            if ctrl.opacity_min > 0.0 && kap < ctrl.opacity_min {
-                kap = ctrl.opacity_min;
-                dlnkap_dlnd = 0.0;
-                dlnkap_dlnt = 0.0;
-            }
-            if kap <= 0.0 || !kap.is_finite() {
-                return Err(AtmError::CallbackError {
-                    context: "build_atm::kap_proc",
-                    detail: format!("invalid atmosphere opacity kap={kap}"),
-                });
-            }
-            Ok(AtmKapCallbackResult {
-                kap,
-                dlnkap_dln_rho: dlnkap_dlnd,
-                dlnkap_dln_t: dlnkap_dlnt,
-            })
-        }
-    };
-
-    match input.atm_t_tau_opacity {
-        AtmTTauOpacity::Fixed | AtmTTauOpacity::Iterated => {
-            let max_iters = match input.atm_t_tau_opacity {
-                AtmTTauOpacity::Fixed => 0,
-                AtmTTauOpacity::Iterated => input.atm_t_tau_max_iters,
-                AtmTTauOpacity::Varying => unreachable!(),
-            };
+    let run_uniform =
+        |max_iters: usize| -> Result<AtmStructure, FgongDataError> {
             let surf = eval_t_tau_uniform(
                 tau_surf,
                 l,
@@ -910,8 +879,8 @@ fn build_atm_structure(
                 input.opacity[0],
                 input.pextra_factor,
                 t_tau_id,
-                make_eos_proc(),
-                make_kap_proc(),
+                eos_proc,
+                kap_proc,
                 input.atm_t_tau_errtol,
                 max_iters,
                 true,
@@ -930,12 +899,16 @@ fn build_atm_structure(
                 input.pextra_factor,
                 input.atm_build_tau_outer,
                 t_tau_id,
-                make_eos_proc(),
+                eos_proc,
                 input.atm_build_errtol,
                 input.atm_build_dlogtau,
             )
             .map_err(|e| FgongDataError::Atmosphere(e.to_string()))
-        }
+        };
+
+    match input.atm_t_tau_opacity {
+        AtmTTauOpacity::Fixed => run_uniform(0),
+        AtmTTauOpacity::Iterated => run_uniform(input.atm_t_tau_max_iters),
         AtmTTauOpacity::Varying => {
             let surf = eval_t_tau_varying(
                 tau_surf,
@@ -944,8 +917,8 @@ fn build_atm_structure(
                 m,
                 cgrav,
                 t_tau_id,
-                make_eos_proc(),
-                make_kap_proc(),
+                eos_proc,
+                kap_proc,
                 input.atm_t_tau_errtol,
                 input.atm_t_tau_max_steps,
                 true,
@@ -963,8 +936,8 @@ fn build_atm_structure(
                 surf.ln_p,
                 input.atm_build_tau_outer,
                 t_tau_id,
-                make_eos_proc(),
-                make_kap_proc(),
+                eos_proc,
+                kap_proc,
                 input.atm_build_errtol,
                 input.atm_build_dlogtau,
             )
@@ -976,21 +949,17 @@ fn build_atm_structure(
 fn store_point_data_atm(
     ctx: &mut PointHelperCtx<'_, '_>,
     atm_pt: &[f64; 19],
+    surf_fg: &SurfaceAtmFgong,
     xa_surf: &[f64],
     k_atm: usize,
-    k_a: usize,
-    k_b: usize,
 ) -> Result<[f64; FGONG_IVAR], FgongDataError> {
     let mut pt = [0.0_f64; FGONG_IVAR];
     let s = ctx.input;
 
     let r = s.r[0] + atm_pt[ATM_DELTA_R];
-    let lnq = log(s.m_grav[0] / ctx.m_outer);
     let t = exp(atm_pt[ATM_LNT]);
     let p = exp(atm_pt[ATM_LNP]);
     let rho = exp(atm_pt[ATM_LND]);
-    let x = eval_face(s.dq, s.xh_mass, 0, k_a, k_b, Some(0.0), Some(1.0))?;
-    let l = s.lum[0];
     let kap = atm_pt[ATM_KAP];
     let gamma1 = atm_pt[ATM_GAMMA1];
     let nabla_ad = atm_pt[ATM_GRADA];
@@ -1001,19 +970,15 @@ fn store_point_data_atm(
     let grav = s.cgrav[0] * s.m_grav[0] / (r * r);
     let n2 = grav * grav * (rho / p) * delta * (nabla_ad - atm_pt[ATM_GRADT]);
     let a_ast = n2 * r / grav;
-
-    let x_unclamped = eval_face(s.dq, s.xh_mass, 0, k_a, k_b, None, None)?;
-    let y_unclamped = eval_face(s.dq, s.yhe_mass, 0, k_a, k_b, None, None)?;
-    let z = (1.0 - x_unclamped - y_unclamped).clamp(0.0, 1.0);
     let r_r = ctx.r_outer - r;
 
     pt[0] = r;
-    pt[1] = lnq;
+    pt[1] = surf_fg.lnq;
     pt[2] = t;
     pt[3] = p;
     pt[4] = rho;
-    pt[5] = x;
-    pt[6] = l;
+    pt[5] = surf_fg.x;
+    pt[6] = surf_fg.l;
     pt[7] = kap;
     pt[8] = 0.0;
     pt[9] = gamma1;
@@ -1023,15 +988,9 @@ fn store_point_data_atm(
     pt[13] = rec_mu_e;
     pt[14] = a_ast;
     pt[15] = 0.0;
-    pt[16] = z;
+    pt[16] = surf_fg.z;
     pt[17] = r_r;
     pt[18] = 0.0;
-
-    pt[20] = eval_face_x(s, ctx.he3, 0, k_a, k_b)?;
-    pt[21] = eval_face_x(s, ctx.c12, 0, k_a, k_b)?;
-    pt[22] = eval_face_x(s, ctx.c13, 0, k_a, k_b)?;
-    pt[23] = eval_face_x(s, ctx.n14, 0, k_a, k_b)?;
-    pt[24] = eval_face_x(s, ctx.o16, 0, k_a, k_b)?;
 
     let (d1_rho, d1_p, d1_y) = eval_gamma1_derivs(
         ctx.eos_ctx,
@@ -1048,14 +1007,9 @@ fn store_point_data_atm(
     pt[26] = d1_p;
     pt[27] = d1_y;
 
-    pt[28] = eval_face_x(s, ctx.h2, 0, k_a, k_b)?;
-    pt[29] = eval_face_x(s, ctx.he4, 0, k_a, k_b)?;
-    pt[30] = eval_face_x(s, ctx.li7, 0, k_a, k_b)?;
-    pt[31] = eval_face_x(s, ctx.be7, 0, k_a, k_b)?;
-    pt[32] = eval_face_x(s, ctx.n15, 0, k_a, k_b)?;
-    pt[33] = eval_face_x(s, ctx.o17, 0, k_a, k_b)?;
-    pt[34] = eval_face_x(s, ctx.o18, 0, k_a, k_b)?;
-    pt[35] = eval_face_x(s, ctx.ne20, 0, k_a, k_b)?;
+    for &(slot, val) in &surf_fg.isos {
+        pt[slot] = val;
+    }
 
     Ok(pt)
 }
@@ -1081,7 +1035,8 @@ fn store_point_data_env(
     } else {
         eval_face_rho(s, k, k_a, k_b)?
     };
-    let x = eval_face(s.dq, s.xh_mass, k, k_a, k_b, Some(0.0), Some(1.0))?;
+    let x_unclamped = eval_face(s.dq, s.xh_mass, k, k_a, k_b, None, None)?;
+    let x = x_unclamped.clamp(0.0, 1.0);
     let l = s.lum[k];
     let kap = eval_face(s.dq, s.opacity, k, k_a, k_b, None, None)?;
     let eps_grav = eval_face(s.dq, &s.eps_grav, k, k_a, k_b, None, None)?;
@@ -1099,12 +1054,13 @@ fn store_point_data_env(
     } else {
         eval_face_a_ast(s, k, k_a, k_b)?
     };
-    let r_x = if ctx.h1.is_some() {
-        eval_face(s.dq, ctx.dxdt_h1, k, k_a, k_b, None, None)?
+    let r_x = if let Some(ih1) = ctx.h1 {
+        eval_face_raw_by(s.dq, k, k_a, k_b, "eval_face", |z| {
+            s.dxdt_nuc[z * sp + ih1]
+        })?
     } else {
         0.0
     };
-    let x_unclamped = eval_face(s.dq, s.xh_mass, k, k_a, k_b, None, None)?;
     let y_unclamped = eval_face(s.dq, s.yhe_mass, k, k_a, k_b, None, None)?;
     let z = (1.0 - x_unclamped - y_unclamped).clamp(0.0, 1.0);
     let r_r = ctx.r_outer - s.r[k];
@@ -1129,12 +1085,6 @@ fn store_point_data_env(
     pt[17] = r_r;
     pt[18] = eps_grav;
 
-    pt[20] = eval_face_x(s, ctx.he3, k, k_a, k_b)?;
-    pt[21] = eval_face_x(s, ctx.c12, k, k_a, k_b)?;
-    pt[22] = eval_face_x(s, ctx.c13, k, k_a, k_b)?;
-    pt[23] = eval_face_x(s, ctx.n14, k, k_a, k_b)?;
-    pt[24] = eval_face_x(s, ctx.o16, k, k_a, k_b)?;
-
     let xa_k = &s.xa[k * sp..(k + 1) * sp];
     let (d1_rho, d1_p, d1_y) = eval_gamma1_derivs(
         ctx.eos_ctx,
@@ -1151,14 +1101,9 @@ fn store_point_data_env(
     pt[26] = d1_p;
     pt[27] = d1_y;
 
-    pt[28] = eval_face_x(s, ctx.h2, k, k_a, k_b)?;
-    pt[29] = eval_face_x(s, ctx.he4, k, k_a, k_b)?;
-    pt[30] = eval_face_x(s, ctx.li7, k, k_a, k_b)?;
-    pt[31] = eval_face_x(s, ctx.be7, k, k_a, k_b)?;
-    pt[32] = eval_face_x(s, ctx.n15, k, k_a, k_b)?;
-    pt[33] = eval_face_x(s, ctx.o17, k, k_a, k_b)?;
-    pt[34] = eval_face_x(s, ctx.o18, k, k_a, k_b)?;
-    pt[35] = eval_face_x(s, ctx.ne20, k, k_a, k_b)?;
+    fill_fgong_isotopes(&mut pt, &ctx.iso_slots, |iso| {
+        eval_face_x(s, iso, k, k_a, k_b)
+    })?;
 
     Ok(pt)
 }
@@ -1180,7 +1125,8 @@ fn store_point_data_ctr(
     let t = eval_center(s.rmid, s.t, 0, nz - 1, None, None)?;
     let p = p_c;
     let rho = rho_c;
-    let x = eval_center(s.rmid, s.xh_mass, k_a, k_b, Some(0.0), Some(1.0))?;
+    let x_unclamped = eval_center(s.rmid, s.xh_mass, k_a, k_b, None, None)?;
+    let x = x_unclamped.clamp(0.0, 1.0);
     let kap = eval_center(s.rmid, s.opacity, k_a, k_b, None, None)?;
     let eps_grav = eval_center(s.rmid, &s.eps_grav, k_a, k_b, None, None)?;
     let eps = eval_center(s.rmid, s.eps_nuc, k_a, k_b, None, None)? + eps_grav;
@@ -1190,12 +1136,13 @@ fn store_point_data_ctr(
         / eval_center(s.rmid, s.chi_rho, k_a, k_b, None, None)?;
     let c_p = eval_center(s.rmid, s.cp, k_a, k_b, None, None)?;
     let rec_mu_e = exp(eval_center(s.rmid, s.lnfree_e, k_a, k_b, None, None)?);
-    let r_x = if ctx.h1.is_some() {
-        eval_center(s.rmid, ctx.dxdt_h1, k_a, k_b, None, None)?
+    let r_x = if let Some(ih1) = ctx.h1 {
+        eval_center_raw_by(s.rmid, k_a, k_b, "eval_center", |z| {
+            s.dxdt_nuc[z * sp + ih1]
+        })?
     } else {
         0.0
     };
-    let x_unclamped = eval_center(s.rmid, s.xh_mass, k_a, k_b, None, None)?;
     let y_unclamped = eval_center(s.rmid, s.yhe_mass, k_a, k_b, None, None)?;
     let z = (1.0 - x_unclamped - y_unclamped).clamp(0.0, 1.0);
 
@@ -1219,12 +1166,6 @@ fn store_point_data_ctr(
     pt[17] = ctx.r_outer;
     pt[18] = eps_grav;
 
-    pt[20] = eval_center_x(s, ctx.he3, k_a, k_b)?;
-    pt[21] = eval_center_x(s, ctx.c12, k_a, k_b)?;
-    pt[22] = eval_center_x(s, ctx.c13, k_a, k_b)?;
-    pt[23] = eval_center_x(s, ctx.n14, k_a, k_b)?;
-    pt[24] = eval_center_x(s, ctx.o16, k_a, k_b)?;
-
     let xa_ctr = &s.xa[(nz - 1) * sp..nz * sp];
     let (d1_rho, d1_p, d1_y) = eval_gamma1_derivs(
         ctx.eos_ctx,
@@ -1241,16 +1182,22 @@ fn store_point_data_ctr(
     pt[26] = d1_p;
     pt[27] = d1_y;
 
-    pt[28] = eval_center_x(s, ctx.h2, k_a, k_b)?;
-    pt[29] = eval_center_x(s, ctx.he4, k_a, k_b)?;
-    pt[30] = eval_center_x(s, ctx.li7, k_a, k_b)?;
-    pt[31] = eval_center_x(s, ctx.be7, k_a, k_b)?;
-    pt[32] = eval_center_x(s, ctx.n15, k_a, k_b)?;
-    pt[33] = eval_center_x(s, ctx.o17, k_a, k_b)?;
-    pt[34] = eval_center_x(s, ctx.o18, k_a, k_b)?;
-    pt[35] = eval_center_x(s, ctx.ne20, k_a, k_b)?;
+    fill_fgong_isotopes(&mut pt, &ctx.iso_slots, |iso| {
+        eval_center_x(s, iso, k_a, k_b)
+    })?;
 
     Ok(pt)
+}
+
+fn fill_fgong_isotopes(
+    pt: &mut [f64; FGONG_IVAR],
+    iso_slots: &[(usize, Option<usize>); 13],
+    mut eval_iso: impl FnMut(Option<usize>) -> Result<f64, FgongDataError>,
+) -> Result<(), FgongDataError> {
+    for &(slot, iso) in iso_slots {
+        pt[slot] = eval_iso(iso)?;
+    }
+    Ok(())
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1318,35 +1265,35 @@ fn set_segment_indices(
     include_last_face: bool,
 ) -> Result<(Vec<usize>, Vec<usize>), FgongDataError> {
     let nz = input.nz;
+    if !input.add_double_points_to_pulse_data {
+        return Ok((vec![0], vec![nz - 1]));
+    }
     let mut mask = vec![false; nz];
 
-    if input.add_double_points_to_pulse_data {
-        let mut grad_mu = vec![0.0_f64; nz];
-        for k in 1..(nz - 1) {
-            grad_mu[k] = log(input.mu[k] / input.mu[k - 1])
-                / log(input.peos[k] / input.peos[k - 1]);
-        }
-        if include_last_face {
-            let k = nz - 1;
-            grad_mu[k] = log(input.mu[k] / input.mu[k - 1])
-                / log(input.peos[k] / input.peos[k - 1]);
-        }
-        for k in 0..nz {
-            mask[k] =
-                grad_mu[k].abs() > input.threshold_grad_mu_for_double_point;
-        }
-        if input.max_number_of_double_points > 0 {
-            let n_mk = input.max_number_of_double_points.min(nz);
-            let mut order: Vec<usize> = (0..nz).collect();
-            order.sort_by(|&a, &b| {
-                grad_mu[b]
-                    .abs()
-                    .total_cmp(&grad_mu[a].abs())
-                    .then_with(|| a.cmp(&b))
-            });
-            for &idx in &order[n_mk..] {
-                mask[idx] = false;
-            }
+    let mut grad_mu = vec![0.0_f64; nz];
+    for k in 1..(nz - 1) {
+        grad_mu[k] = log(input.mu[k] / input.mu[k - 1])
+            / log(input.peos[k] / input.peos[k - 1]);
+    }
+    if include_last_face {
+        let k = nz - 1;
+        grad_mu[k] = log(input.mu[k] / input.mu[k - 1])
+            / log(input.peos[k] / input.peos[k - 1]);
+    }
+    for k in 0..nz {
+        mask[k] = grad_mu[k].abs() > input.threshold_grad_mu_for_double_point;
+    }
+    if input.max_number_of_double_points > 0 {
+        let n_mk = input.max_number_of_double_points.min(nz);
+        let mut order: Vec<usize> = (0..nz).collect();
+        order.sort_by(|&a, &b| {
+            grad_mu[b]
+                .abs()
+                .total_cmp(&grad_mu[a].abs())
+                .then_with(|| a.cmp(&b))
+        });
+        for &idx in &order[n_mk..] {
+            mask[idx] = false;
         }
     }
 
@@ -1369,6 +1316,48 @@ fn set_segment_indices(
     Ok((k_a, k_b))
 }
 
+fn eval_face_raw_by(
+    dq: &[f64],
+    k: usize,
+    k_a: usize,
+    k_b: usize,
+    err_ctx: &str,
+    v_at: impl Fn(usize) -> f64,
+) -> Result<f64, FgongDataError> {
+    if k_b < k_a || k < k_a || k > k_b + 1 {
+        return Err(FgongDataError::InvalidInput(format!(
+            "{err_ctx}: invalid indices k={k}, segment=({k_a}, {k_b})"
+        )));
+    }
+    if k_b == k_a {
+        Ok(v_at(k_a))
+    } else if k == k_a {
+        Ok(v_at(k_a)
+            - dq[k_a] * (v_at(k_a + 1) - v_at(k_a)) / (dq[k_a + 1] + dq[k_a]))
+    } else if k == k_a + 1 {
+        Ok(v_at(k_a)
+            + dq[k_a] * (v_at(k_a + 1) - v_at(k_a)) / (dq[k_a + 1] + dq[k_a]))
+    } else if k == k_b {
+        Ok(v_at(k_b)
+            - dq[k_b] * (v_at(k_b) - v_at(k_b - 1)) / (dq[k_b] + dq[k_b - 1]))
+    } else if k == k_b + 1 {
+        Ok(v_at(k_b)
+            + dq[k_b] * (v_at(k_b) - v_at(k_b - 1)) / (dq[k_b] + dq[k_b - 1]))
+    } else {
+        interp_4_to_1(
+            0.5 * (dq[k - 2] + dq[k - 1]),
+            0.5 * (dq[k - 1] + dq[k]),
+            0.5 * (dq[k] + dq[k + 1]),
+            0.5 * dq[k - 2] + dq[k - 1],
+            v_at(k - 2),
+            v_at(k - 1),
+            v_at(k),
+            v_at(k + 1),
+        )
+        .map_err(|e| FgongDataError::Interpolation(e.to_string()))
+    }
+}
+
 fn eval_face(
     dq: &[f64],
     v: &[f64],
@@ -1378,40 +1367,7 @@ fn eval_face(
     v_lo: Option<f64>,
     v_hi: Option<f64>,
 ) -> Result<f64, FgongDataError> {
-    if k_b < k_a {
-        return Err(FgongDataError::InvalidInput(format!(
-            "eval_face: invalid segment indices ({k_a}, {k_b})"
-        )));
-    }
-    if k < k_a || k > k_b + 1 {
-        return Err(FgongDataError::InvalidInput(format!(
-            "eval_face: out-of-bounds k={k} for [{k_a}, {k_b}+1]"
-        )));
-    }
-    let mut val = if k_b == k_a {
-        v[k_a]
-    } else if k == k_a {
-        v[k_a] - dq[k_a] * (v[k_a + 1] - v[k_a]) / (dq[k_a + 1] + dq[k_a])
-    } else if k == k_a + 1 {
-        v[k_a] + dq[k_a] * (v[k_a + 1] - v[k_a]) / (dq[k_a + 1] + dq[k_a])
-    } else if k == k_b {
-        v[k_b] - dq[k_b] * (v[k_b] - v[k_b - 1]) / (dq[k_b] + dq[k_b - 1])
-    } else if k == k_b + 1 {
-        v[k_b] + dq[k_b] * (v[k_b] - v[k_b - 1]) / (dq[k_b] + dq[k_b - 1])
-    } else {
-        interp_4_to_1(
-            0.5 * (dq[k - 2] + dq[k - 1]),
-            0.5 * (dq[k - 1] + dq[k]),
-            0.5 * (dq[k] + dq[k + 1]),
-            0.5 * dq[k - 2] + dq[k - 1],
-            v[k - 2],
-            v[k - 1],
-            v[k],
-            v[k + 1],
-        )
-        .map_err(|e| FgongDataError::Interpolation(e.to_string()))?
-    };
-
+    let mut val = eval_face_raw_by(dq, k, k_a, k_b, "eval_face", |z| v[z])?;
     if let Some(lo) = v_lo {
         val = val.max(lo);
     }
@@ -1431,39 +1387,10 @@ fn eval_face_x(
     let Some(i) = species_idx else {
         return Ok(0.0);
     };
-    if k_b < k_a || k < k_a || k > k_b + 1 {
-        return Err(FgongDataError::InvalidInput(format!(
-            "eval_face_X: invalid indices k={k}, segment=({k_a}, {k_b})"
-        )));
-    }
     let sp = input.species;
-    let xa = |zone: usize| input.xa[zone * sp + i];
-    let dq = input.dq;
-
-    let raw = if k_b == k_a {
-        xa(k_a)
-    } else if k == k_a {
-        xa(k_a) - dq[k_a] * (xa(k_a + 1) - xa(k_a)) / (dq[k_a + 1] + dq[k_a])
-    } else if k == k_a + 1 {
-        xa(k_a) + dq[k_a] * (xa(k_a + 1) - xa(k_a)) / (dq[k_a + 1] + dq[k_a])
-    } else if k == k_b {
-        xa(k_b) - dq[k_b] * (xa(k_b) - xa(k_b - 1)) / (dq[k_b] + dq[k_b - 1])
-    } else if k == k_b + 1 {
-        xa(k_b) + dq[k_b] * (xa(k_b) - xa(k_b - 1)) / (dq[k_b] + dq[k_b - 1])
-    } else {
-        interp_4_to_1(
-            0.5 * (dq[k - 2] + dq[k - 1]),
-            0.5 * (dq[k - 1] + dq[k]),
-            0.5 * (dq[k] + dq[k + 1]),
-            0.5 * dq[k - 2] + dq[k - 1],
-            xa(k - 2),
-            xa(k - 1),
-            xa(k),
-            xa(k + 1),
-        )
-        .map_err(|e| FgongDataError::Interpolation(e.to_string()))?
-    };
-
+    let raw = eval_face_raw_by(input.dq, k, k_a, k_b, "eval_face_X", |z| {
+        input.xa[z * sp + i]
+    })?;
     Ok(raw.clamp(0.0, 1.0))
 }
 
@@ -1473,15 +1400,23 @@ fn eval_face_a_ast(
     k_a: usize,
     k_b: usize,
 ) -> Result<f64, FgongDataError> {
-    if k_b < k_a || k < k_a || k > k_b + 1 {
+    if k_b < k_a || k < k_a || k > k_b + 1 || k >= input.nz {
         return Err(FgongDataError::InvalidInput(format!(
-            "eval_face_A_ast: invalid indices k={k}, segment=({k_a}, {k_b})"
+            "eval_face_A_ast: invalid indices k={k}, segment=({k_a}, {k_b}), nz={}",
+            input.nz
         )));
     }
     if k_b == k_a {
         return Ok(input.brunt_n2[k] * input.r[k] / input.grav[k]);
     }
     if k == k_a {
+        if k_a + 2 >= input.nz {
+            return Err(FgongDataError::InvalidInput(format!(
+                "eval_face_A_ast: undefined upstream read at k_a+2={} >= nz={} for segment ({k_a}, {k_b}) (pulse_utils.f90:275-276)",
+                k_a + 2,
+                input.nz
+            )));
+        }
         let a1 =
             input.brunt_n2[k_a + 1] * input.r[k_a + 1] / input.grav[k_a + 1];
         let a2 =
@@ -1503,9 +1438,10 @@ fn eval_face_rho(
     k_a: usize,
     k_b: usize,
 ) -> Result<f64, FgongDataError> {
-    if k_b < k_a || k < k_a || k > k_b + 1 {
+    if k_b < k_a || k < k_a || k > k_b + 1 || k >= input.nz {
         return Err(FgongDataError::InvalidInput(format!(
-            "eval_face_rho: invalid indices k={k}, segment=({k_a}, {k_b})"
+            "eval_face_rho: invalid indices k={k}, segment=({k_a}, {k_b}), nz={}",
+            input.nz
         )));
     }
     if k_b == k_a {
@@ -1528,6 +1464,29 @@ fn eval_face_rho(
     Ok(dm / (PI4 * r * r * r * dlnr))
 }
 
+fn eval_center_raw_by(
+    r: &[f64],
+    k_a: usize,
+    k_b: usize,
+    err_ctx: &str,
+    v_at: impl Fn(usize) -> f64,
+) -> Result<f64, FgongDataError> {
+    if k_b < k_a {
+        return Err(FgongDataError::InvalidInput(format!(
+            "{err_ctx}: invalid segment indices ({k_a}, {k_b})"
+        )));
+    }
+    if k_a == k_b {
+        Ok(v_at(k_a))
+    } else {
+        let r1 = r[k_b];
+        let r2 = r[k_b - 1];
+        let v1 = v_at(k_b);
+        let v2 = v_at(k_b - 1);
+        Ok((v1 * r2 * r2 - v2 * r1 * r1) / (r2 * r2 - r1 * r1))
+    }
+}
+
 fn eval_center(
     r: &[f64],
     v: &[f64],
@@ -1536,20 +1495,7 @@ fn eval_center(
     v_lo: Option<f64>,
     v_hi: Option<f64>,
 ) -> Result<f64, FgongDataError> {
-    if k_b < k_a {
-        return Err(FgongDataError::InvalidInput(format!(
-            "eval_center: invalid segment indices ({k_a}, {k_b})"
-        )));
-    }
-    let mut val = if k_a == k_b {
-        v[k_a]
-    } else {
-        let r1 = r[k_b];
-        let r2 = r[k_b - 1];
-        let v1 = v[k_b];
-        let v2 = v[k_b - 1];
-        (v1 * r2 * r2 - v2 * r1 * r1) / (r2 * r2 - r1 * r1)
-    };
+    let mut val = eval_center_raw_by(r, k_a, k_b, "eval_center", |z| v[z])?;
     if let Some(lo) = v_lo {
         val = val.max(lo);
     }
@@ -1568,21 +1514,10 @@ fn eval_center_x(
     let Some(i) = species_idx else {
         return Ok(0.0);
     };
-    if k_b < k_a {
-        return Err(FgongDataError::InvalidInput(format!(
-            "eval_center_X: invalid segment indices ({k_a}, {k_b})"
-        )));
-    }
     let sp = input.species;
-    let raw = if k_a == k_b {
-        input.xa[k_a * sp + i]
-    } else {
-        let r1 = input.rmid[k_b];
-        let r2 = input.rmid[k_b - 1];
-        let x1 = input.xa[k_b * sp + i];
-        let x2 = input.xa[(k_b - 1) * sp + i];
-        (x1 * r2 * r2 - x2 * r1 * r1) / (r2 * r2 - r1 * r1)
-    };
+    let raw = eval_center_raw_by(input.rmid, k_a, k_b, "eval_center_X", |z| {
+        input.xa[z * sp + i]
+    })?;
     Ok(raw.clamp(0.0, 1.0))
 }
 

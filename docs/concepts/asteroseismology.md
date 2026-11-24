@@ -61,7 +61,7 @@ To compute full non-radial adiabatic or non-adiabatic oscillation eigenfrequenci
 
 $$V = \frac{G m \rho}{P r}, \qquad V_g = \frac{V}{\Gamma_1}, \qquad A^* = \frac{r N^2}{g}, \qquad U = \frac{4\pi r^3 \rho}{m}, \qquad c_1 = \frac{(r/R_\star)^3}{m/M_\star},$$
 
-and exports stellar structure profiles (with optional central boundary point insertion and double-point splitting across sharp composition discontinuities; bundled `GYRE` and `ADIPLS` integration is tracked in `#170` and `#171`, while `eval_linear_oscillation_modes` currently uses an in-house adiabatic BVP stub that does not count toward any passing case).:
+and exports stellar structure profiles (with optional central boundary point insertion and double-point splitting across sharp composition discontinuities; bundled `GYRE` integration is tracked in `#170`, `ADIPLS` library/search wiring is landing in `#171`, and `eval_linear_oscillation_modes` retains the legacy Python BVP helper):
 
 - `model.to_gyre_str(add_center_point=True)`: Standard `GYRE` ASCII format (`version 101` / `120`).
 - `model.to_fgong_str(add_center_point=True)`: Standard `FGONG` format (`ivers = 1300`).
@@ -69,7 +69,7 @@ and exports stellar structure profiles (with optional central boundary point ins
 
 The port of `GYRE` 8.1 is under way in the `crates/flexmesa-gyre` crate, licensed `GPL-3.0-only` as `GYRE` is. Its numerics substrate (gfortran complex arithmetic, GCC integer-power chains, CRMATH complex functions and the inlined `MATMUL` order) and the real LAPACK routines `GYRE` reaches are checked bit for bit against vectors from MESA's own `GYRE` build and SDK libraries. The crate is not yet connected to `flexmesa.astero`.
 
-The port of `ADIPLS` is under way in the `crates/flexmesa-adipls` crate, licensed `GPL-3.0-or-later`. It covers input parsing (`adipls.c.pruned.in`, `redistrb.c.pruned.in`), FGONG-to-AMDL conversion, control setup, `mdintg=5` shooting scans and eigenfrequency solving, variational frequency and kinetic-energy post-processing, and grand/short summary records checked bit for bit (`0 ULP` under `NumericsMode::Strict`) against captured MESA `26.4.1` calls. The crate is not yet connected to `flexmesa.astero`.
+The pure-Rust `ADIPLS` solver lives in `crates/flexmesa-adipls`, licensed `GPL-3.0-or-later`. It covers input parsing (`adipls.c.pruned.in`, `redistrb.c.pruned.in`), FGONG-to-AMDL conversion, control setup, `mdintg=5` shooting scans and eigenfrequency solving, variational frequency and kinetic-energy post-processing, and grand/short summary records checked bit for bit (`0 ULP` under `NumericsMode::Strict`) against captured MESA `26.4.1` calls. `flexmesa_star::pulse_fgong_data::star_get_pulse_data_fgong` and `flexmesa_astero::adipls_support::AsteroAdipls` wire this solver into the `"adipls"` branch of `eval_model_astero_sample` (raising `InvalidInput` explicitly if runtime mesh redistribution `srdist` or a non-`T_tau` atmosphere is requested); `do_redistribute_mesh` control parsing and Python/extras wiring for the full `astero/astero_adipls` case remain tracked in `#171`.
 
 ---
 

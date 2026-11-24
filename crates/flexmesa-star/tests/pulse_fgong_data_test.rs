@@ -259,6 +259,76 @@ fn test_fgong_data_double_points_rho_mode_zero_a_and_error_checks() {
     ));
 }
 
+#[test]
+fn test_fgong_data_eval_face_a_ast_rejects_two_cell_terminal_segments() {
+    let model = build_hydrated_solar_zams();
+    let nz = model.nz;
+
+    // Explicit DECISIONS #43 error on 2-cell terminal segments in
+    // `eval_face_A_ast` (pulse_utils.f90:275-276 undefined k_a+2 read)
+    let mut dp_nz_minus_2 = model.clone();
+    for mu_k in &mut dp_nz_minus_2.mu[..(nz - 2)] {
+        *mu_k *= 0.5;
+    }
+    let mut input_dp_tail = FgongDataInput::from_model(&dp_nz_minus_2);
+    input_dp_tail.add_double_points_to_pulse_data = true;
+    input_dp_tail.threshold_grad_mu_for_double_point = 0.05;
+    input_dp_tail.max_number_of_double_points = 1;
+    input_dp_tail.fgong_zero_a_inside_r = 0.0;
+    let err_tail = get_fgong_data(&input_dp_tail, true, false, false)
+        .expect_err(
+            "2-cell terminal segment must return InvalidInput, not panic",
+        );
+    assert!(
+        matches!(err_tail, FgongDataError::InvalidInput(ref msg) if msg.contains("pulse_utils.f90:275-276")),
+        "unexpected error for k=nz-2 double point: {err_tail}"
+    );
+
+    let mut two_zone = model;
+    two_zone.nz = 2;
+    for arr in [
+        &mut two_zone.m_grav,
+        &mut two_zone.dq,
+        &mut two_zone.dm,
+        &mut two_zone.cgrav,
+        &mut two_zone.grav,
+        &mut two_zone.r,
+        &mut two_zone.rmid,
+        &mut two_zone.lum,
+        &mut two_zone.t,
+        &mut two_zone.peos,
+        &mut two_zone.rho,
+        &mut two_zone.mu,
+        &mut two_zone.xh_mass,
+        &mut two_zone.yhe_mass,
+        &mut two_zone.opacity,
+        &mut two_zone.eps_nuc,
+        &mut two_zone.gamma1,
+        &mut two_zone.grada,
+        &mut two_zone.chi_rho,
+        &mut two_zone.chi_t,
+        &mut two_zone.cp,
+        &mut two_zone.lnfree_e,
+        &mut two_zone.brunt_n2,
+        &mut two_zone.zbar,
+        &mut two_zone.abar,
+    ] {
+        arr.truncate(2);
+    }
+    two_zone.eps_grav_ad.truncate(2);
+    two_zone.mixing_type.truncate(2);
+    two_zone.xa.truncate(2 * two_zone.species);
+    two_zone.dxdt_nuc.truncate(2 * two_zone.species);
+    let err_two = star_get_pulse_data_fgong(&two_zone, true, true, false)
+        .expect_err(
+            "nz=2 with keep_surface_point=true must return InvalidInput",
+        );
+    assert!(
+        matches!(err_two, FgongDataError::InvalidInput(ref msg) if msg.contains("pulse_utils.f90:275-276")),
+        "unexpected error for nz=2 keep_surface_point=true: {err_two}"
+    );
+}
+
 #[derive(Debug)]
 struct CapturedFgongBin {
     iconst: usize,

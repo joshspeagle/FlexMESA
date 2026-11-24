@@ -8,11 +8,11 @@ use std::path::Path;
 
 use flexmesa_adipls::{
     dfsig_from_delta_nu, fgong_amdl, parse_adipls_pruned_file,
-    parse_redistrb_pruned_file, resolve_store_model_flags, set_adipls_controls,
+    parse_redistrb_pruned_file, resolve_store_model_flags,
     sig_fac_adipls_support, sig_fac_astero_support, sig_from_nu_uhz,
     store_amdl, AdiplsCallerFlags, AdiplsControlState, AdiplsError,
     AdiplsInput, AdiplsSolver, AsteroDefPulseFlags, FgongModel, RedistrbInput,
-    StoreAmdlOutput,
+    SetAdiplsControlsArgs, StoreAmdlOutput,
 };
 use flexmesa_const::{R_SUN, STANDARD_CGRAV};
 use flexmesa_star::controls::StarError;
@@ -45,7 +45,6 @@ pub struct OscResult {
 /// `do_adipls_get_one_el_info`, `get_one_el_info`).
 #[derive(Debug, Clone)]
 pub struct AsteroAdipls {
-    input: AdiplsInput,
     solver: AdiplsSolver,
     redistrb_input: Option<RedistrbInput>,
     astero_def_flags: AsteroDefPulseFlags,
@@ -85,8 +84,7 @@ impl AsteroAdipls {
         ctrl: &AsteroSearchControls,
         do_redistribute_mesh: bool,
     ) -> Result<Self, StarError> {
-        let osc_low = ctrl.oscillation_code.trim().to_ascii_lowercase();
-        if osc_low != "adipls" {
+        if !ctrl.oscillation_code.trim().eq_ignore_ascii_case("adipls") {
             return Err(StarError::InvalidInput(format!(
                 "AsteroAdipls::init requires oscillation_code == 'adipls', got '{}'",
                 ctrl.oscillation_code
@@ -107,9 +105,8 @@ impl AsteroAdipls {
             None
         };
 
-        let solver = AdiplsSolver::new(input.clone());
+        let solver = AdiplsSolver::new(input);
         Ok(Self {
-            input,
             solver,
             redistrb_input,
             astero_def_flags: AsteroDefPulseFlags {
@@ -124,7 +121,7 @@ impl AsteroAdipls {
     /// Borrow the underlying [`AdiplsInput`] parsed from `adipls.c.pruned.in`.
     #[must_use]
     pub const fn input(&self) -> &AdiplsInput {
-        &self.input
+        self.solver.input()
     }
 
     /// Borrow the underlying [`AdiplsSolver`].
@@ -223,24 +220,20 @@ impl AsteroAdipls {
         )
         .map_err(map_adipls_err)?;
 
-        let fg_amdl = fgong_amdl(self.input.cst.cgrav, &fgong_model)
+        let input = self.solver.input();
+        let fg_amdl = fgong_amdl(input.cst.cgrav, &fgong_model)
             .map_err(map_adipls_err)?;
 
         let st = store_amdl(
             fg_amdl.nn,
-            self.input.int_ctrl.iriche,
-            self.input.int_ctrl.iturpr,
+            input.int_ctrl.iriche,
+            input.int_ctrl.iturpr,
             fg_amdl.data,
             &fg_amdl.aa,
         )
         .map_err(map_adipls_err)?;
 
-        self.stored_model = Some(st);
-        self.stored_model.as_ref().ok_or_else(|| {
-            StarError::InvalidInput(String::from(
-                "internal error storing ADIPLS model",
-            ))
-        })
+        Ok(self.stored_model.insert(st))
     }
 
     /// Evaluate all ADIPLS modes for degree `l` in `[nu1, nu2]` $\mu\mathrm{Hz}$
@@ -386,35 +379,33 @@ impl AsteroAdipls {
         if store_for_adipls {
             self.store_model(model, add_atmosphere, do_redistribute_mesh)?;
         }
+        let sig1 = sig_from_nu_uhz(sig_fac, nu1);
+        let sig2 = sig_from_nu_uhz(sig_fac, nu2);
+        let dfsig = dfsig_from_delta_nu(sig_fac, delta_nu_model);
+
+        let mut controls = AdiplsControlState::from_input(self.solver.input());
+        controls.apply_controls(&SetAdiplsControlsArgs {
+            el: l,
+            nsel,
+            els1: f64::from(l),
+            dels,
+            itrsig: 1,
+            iscan,
+            sig1,
+            sig2,
+            dfsig,
+            nsig: 2,
+            irotkr: 0,
+            nprtkr: 0,
+            igm1kr: 0,
+            npgmkr: 0,
+        });
+
         let stored = self.stored_model.as_ref().ok_or_else(|| {
             StarError::InvalidInput(String::from(
                 "ADIPLS store_for_adipls = false called before store_model",
             ))
         })?;
-
-        let sig1 = sig_from_nu_uhz(sig_fac, nu1);
-        let sig2 = sig_from_nu_uhz(sig_fac, nu2);
-        let dfsig = dfsig_from_delta_nu(sig_fac, delta_nu_model);
-
-        let mut controls = AdiplsControlState::from_input(&self.input);
-        set_adipls_controls(
-            &mut controls,
-            l,
-            nsel,
-            f64::from(l),
-            dels,
-            1,
-            iscan,
-            sig1,
-            sig2,
-            dfsig,
-            2,
-            0,
-            0,
-            0,
-            0,
-        );
-
         let call_out = self
             .solver
             .run_call(&controls, &stored.x, &stored.aa, stored.data)

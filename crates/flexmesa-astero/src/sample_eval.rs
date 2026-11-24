@@ -245,24 +245,21 @@ pub fn eval_model_astero_sample(
         && (ctrl.weights.chi2_seismo_fraction > 0.0 || sp_obs.is_empty());
     let mut pre_chi2_radial = 0.0_f64;
     if need_modes {
-        let osc_low = ctrl.oscillation_code.trim().to_ascii_lowercase();
-        let mut scanner = match osc_low.as_str() {
-            "adipls" => DegreeScanner::Adipls {
-                driver: Box::new(AsteroAdipls::init(case_dir, ctrl)?),
-                store_pending: true,
-            },
-            "gyre" => DegreeScanner::Gyre {
+        let osc_trimmed = ctrl.oscillation_code.trim();
+        let mut scanner = if osc_trimmed.eq_ignore_ascii_case("adipls") {
+            DegreeScanner::Adipls(Box::new(AsteroAdipls::init(case_dir, ctrl)?))
+        } else if osc_trimmed.eq_ignore_ascii_case("gyre") {
+            DegreeScanner::Gyre {
                 outer_bc: parse_gyre_outer_bound(
                     case_dir,
                     &ctrl.gyre_input_file,
                 )?,
-            },
-            _ => {
-                return Err(StarError::InvalidInput(format!(
-                    "unrecognized oscillation_code '{}'",
-                    ctrl.oscillation_code
-                )));
             }
+        } else {
+            return Err(StarError::InvalidInput(format!(
+                "unrecognized oscillation_code '{}'",
+                ctrl.oscillation_code
+            )));
         };
         if ctrl.nl[0] > 0 {
             if let Some((mf, mi, mo)) =
@@ -516,13 +513,8 @@ pub fn eval_model_astero_sample(
 }
 
 enum DegreeScanner {
-    Adipls {
-        driver: Box<AsteroAdipls>,
-        store_pending: bool,
-    },
-    Gyre {
-        outer_bc: OuterBoundKind,
-    },
+    Adipls(Box<AsteroAdipls>),
+    Gyre { outer_bc: OuterBoundKind },
 }
 
 impl DegreeScanner {
@@ -541,14 +533,11 @@ impl DegreeScanner {
             dnu_obs,
         );
         match self {
-            Self::Adipls {
-                driver,
-                store_pending,
-            } => {
+            Self::Adipls(driver) => {
                 let raw_iscan =
                     (ctrl.iscan_factor[l] * (ctrl.nl[l] as f64)) as i32;
                 let iscan = raw_iscan.max(1);
-                let store_now = *store_pending;
+                let store_now = driver.stored_model().is_none();
                 let raw_modes = driver.get_one_el_info(
                     model,
                     l,
@@ -558,7 +547,6 @@ impl DegreeScanner {
                     delta_nu_model,
                     store_now,
                 )?;
-                *store_pending = false;
                 Ok(match_osc_results(&ctrl.freq_target[l], &raw_modes))
             }
             Self::Gyre { outer_bc } => {

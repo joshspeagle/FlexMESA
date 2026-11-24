@@ -353,11 +353,6 @@
       "number": 490,
       "title": "feat(star): in-memory get_gyre_data, bit-exact vs MESA 26.4.1 (#170, G3b)",
       "draft": true
-    },
-    {
-      "number": 492,
-      "title": "fix(trace): default --extras-factory to the case manifest, as the harness does",
-      "draft": false
     }
   ],
   "deferred_169": [

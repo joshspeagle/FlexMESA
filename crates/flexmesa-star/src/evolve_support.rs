@@ -625,6 +625,8 @@ pub fn snapshot_step_old_extras(model: &mut StarModel) {
     }
     model.time_old_sec = model.time_sec;
     model.m_center_old = model.m_center;
+    // `star/private/evolve_support.f90:85`.
+    model.xmstar_old = model.xmstar;
     model.r_center_old = model.r_center;
     model.l_center_old = model.l_center;
     model.v_center_old = model.v_center;

@@ -304,6 +304,11 @@ fn do_2component_phase_separation(
     })();
 
     model.eos_config.skye.skye_use_ion_offsets = save_skye_ion_offsets;
+    // `s% need_to_setvars = .true.` after the restore, inside the
+    // `k_bound > 0` branch (`star/private/phase_separation.f90:138-139`).
+    if result.is_ok() {
+        model.aux.need_to_setvars = true;
+    }
     result
 }
 

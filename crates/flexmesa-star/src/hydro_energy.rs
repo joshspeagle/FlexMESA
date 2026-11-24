@@ -129,44 +129,69 @@ pub fn setup_dl_dm(model: &StarModel, k: usize) -> StarAdOrder1 {
     } else {
         StarAdOrder1::constant(model.l_center)
     };
-    (lum_00 - lum_p1) / model.dm[k].max(1.0e-30)
+    // `dL_dm_ad = (L00_ad - Lp1_ad)/dm` with `dm = s% dm(k)`
+    // (`star/private/hydro_energy.f90:157, 213`).
+    (lum_00 - lum_p1) / model.dm[k]
+}
+
+/// `wrap_e_00` (`star/private/auto_diff_support.f90:528-536`): `energy(k)`
+/// with `lnd` and `lnT` partials `dE_dRho_for_partials*rho` and
+/// `Cv_for_partials*T`, where `dE_dRho_for_partials = d_dlnd(i_lnE)*energy/rho`
+/// and `Cv_for_partials = d_dlnT(i_lnE)*energy/T`
+/// (`star/private/micro.f90:499-500`).
+fn wrap_e_cell_00(model: &StarModel, k: usize) -> StarAdOrder1 {
+    let e = model.energy[k];
+    let de_drho_for_partials = model.eos_d_dlnd[k][I_LN_E] * e / model.rho[k];
+    let cv_for_partials = model.eos_d_dlnt[k][I_LN_E] * e / model.t[k];
+    let mut out = StarAdOrder1::constant(e);
+    out.d1[I_LND_00] = de_drho_for_partials * model.rho[k];
+    out.d1[I_LNT_00] = cv_for_partials * model.t[k];
+    out
 }
 
 /// Evaluates Rayleigh-Taylor instability (`RTI`) internal energy diffusion
-/// (`setup_RTI_diffusion` in `star/private/hydro_energy.f90:333-373`).
+/// (`setup_RTI_diffusion` in `star/private/hydro_energy.f90:312-352`).
 #[must_use]
 fn setup_rti_diffusion(model: &StarModel, k: usize) -> StarAdOrder1 {
-    if !model.controls.rti_flag
-        || model.controls.dedt_rti_diffusion_factor <= 0.0
-    {
+    let mut diffusion_factor = model.controls.dedt_rti_diffusion_factor;
+    let do_diffusion = model.controls.rti_flag && diffusion_factor > 0.0;
+    if !do_diffusion {
         return StarAdOrder1::ZERO;
     }
-    let dm_k = model.dm[k].max(1.0e-30);
-    let fac = model.controls.dedt_rti_diffusion_factor;
-    let e_00 = model.ln_e_ad[k].exp();
-    let term_00 = if k > 0 {
-        let sig_00 = model.aux.sig_rti.get(k).copied().unwrap_or(0.0) * fac;
-        if sig_00 > 0.0 {
-            let e_m1 = model.ln_e_ad[k - 1].shift_m1().exp();
-            (e_00 - e_m1) * (sig_00 / dm_k)
-        } else {
-            StarAdOrder1::ZERO
+    let nz = model.nz;
+    let dm = model.dm[k];
+    let (sigp1, e_p1) = if k + 1 < nz {
+        // `star/private/hydro_energy.f90:325-332`.
+        if model.aux.alpha_rti[k] > 1.0e-10 && k > 0 {
+            let emin_start = model.energy_start[k + 1]
+                .min(model.energy_start[k])
+                .min(model.energy_start[k - 1]);
+            let floor = model.controls.rti_energy_floor;
+            if emin_start < 5.0 * floor {
+                diffusion_factor *=
+                    1.0 + (5.0 * floor - emin_start) / emin_start;
+            }
         }
+        (
+            diffusion_factor * model.aux.sig_rti[k + 1],
+            wrap_e_cell_00(model, k + 1).shift_p1(),
+        )
     } else {
-        StarAdOrder1::ZERO
+        (0.0, StarAdOrder1::ZERO)
     };
-    let term_p1 = if k + 1 < model.nz {
-        let sig_p1 = model.aux.sig_rti.get(k + 1).copied().unwrap_or(0.0) * fac;
-        if sig_p1 > 0.0 {
-            let e_p1 = model.ln_e_ad[k + 1].shift_p1().exp();
-            (e_p1 - e_00) * (sig_p1 / dm_k)
-        } else {
-            StarAdOrder1::ZERO
-        }
+    let (sig00, e_m1) = if k > 0 {
+        (
+            diffusion_factor * model.aux.sig_rti[k],
+            wrap_e_cell_00(model, k - 1).shift_m1(),
+        )
     } else {
-        StarAdOrder1::ZERO
+        (0.0, StarAdOrder1::ZERO)
     };
-    term_p1 - term_00
+    let e_00 = wrap_e_cell_00(model, k);
+    // `star/private/hydro_energy.f90:347-349`.
+    let diffusion_eps_in = (e_p1 - e_00) * sigp1 / dm;
+    let diffusion_eps_out = (e_00 - e_m1) * sig00 / dm;
+    diffusion_eps_in - diffusion_eps_out
 }
 
 /// Evaluates all nuclear, neutrino, extra, diffusion, premix, phase-separation,
@@ -510,6 +535,14 @@ pub(crate) fn do1_energy_eqn_with_ergs_error(
         setup_sources_and_others(model, k);
     // Every rate in the energy equation divides by `s% dt`
     // (`dt = s% dt`, `star/private/hydro_energy.f90:156`); a solve always has `dt > 0`.
+    // `dm = s% dm(k)` (`star/private/hydro_energy.f90:157`); `set_m_and_dm`
+    // flags `dm <= 0` as bad (`star/private/star_utils.f90:642-646`).
+    let dm_k = model.dm[k];
+    if dm_k.is_nan() || dm_k <= 0.0 {
+        return Err(StarError::InvalidInput(format!(
+            "energy equation at cell {k}: dm = {dm_k} is not positive (star/private/star_utils.f90:642-646)"
+        )));
+    }
     let dt = model.dt;
     if dt.is_nan() || dt <= 0.0 {
         return Err(StarError::InvalidInput(format!(

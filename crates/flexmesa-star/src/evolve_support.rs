@@ -291,8 +291,12 @@ pub fn apply_step_pre_physics_with_extras(
         // `set_vars_if_needed` after `do_conv_premix` (`evolve.f90:613-616`)
         // reaches `set_hydro_vars`, which unpacks `xh` first
         // (`hydro_vars.f90:226`), discarding the premix trial `lnd`.
-        model.unpack_xh();
-        set_hydro_vars(model, false, false)?;
+        // `do_conv_premix` sets `need_to_setvars` (`conv_premix.f90:176`).
+        if model.aux.need_to_setvars {
+            model.unpack_xh();
+            set_hydro_vars(model, false, false)?;
+            model.aux.need_to_setvars = false;
+        }
         if dt > 0.0 {
             for k in 0..nz {
                 model.aux.eps_pre_mix[k] =
@@ -307,7 +311,12 @@ pub fn apply_step_pre_physics_with_extras(
 
     if model.controls.do_phase_separation {
         do_phase_separation_step(model, dt)?;
-        set_hydro_vars(model, false, false)?;
+        // `set_vars_if_needed(s, dt, 'after phase separation')`
+        // (`star/private/evolve.f90:626`, flag from `phase_separation.f90:139`).
+        if model.aux.need_to_setvars {
+            set_hydro_vars(model, false, false)?;
+            model.aux.need_to_setvars = false;
+        }
     } else {
         model.aux.crystal_core_boundary_mass = -1.0;
         model.aux.phase_sep_mixing_mass = -1.0;
@@ -320,7 +329,12 @@ pub fn apply_step_pre_physics_with_extras(
 
     if model.controls.do_element_diffusion {
         do_element_diffusion_step(model, dt)?;
-        set_hydro_vars(model, false, false)?;
+        // `set_vars_if_needed(s, dt, 'after element diffusion')`
+        // (`star/private/evolve.f90:637`, flag from `element_diffusion.f90:93`).
+        if model.aux.need_to_setvars {
+            set_hydro_vars(model, false, false)?;
+            model.aux.need_to_setvars = false;
+        }
         finish_element_diffusion(model, dt);
     } else {
         model.aux.step_hist.num_diffusion_solver_steps = 0;

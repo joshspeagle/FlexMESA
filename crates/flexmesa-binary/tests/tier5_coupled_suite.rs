@@ -768,14 +768,11 @@ fn copy_dir_verbatim(src: &std::path::Path, dst: &std::path::Path) {
     }
 }
 
-fn assert_non_double_bh_raw_cases_pass_strict(suite_dir: &std::path::Path) {
-    // Issue #299: `extra_terminal_output_file` is classified as terminal-only
-    // (`DECISIONS #26`), so all 7 non-`double_bh` binary cases pass strict
-    // validation without cleaning.
+fn assert_all_raw_cases_pass_strict(suite_dir: &std::path::Path) {
+    // All 8 raw binary cases (including `double_bh` after
+    // `set_cumulative_energy_error_at_step` support) pass strict validation
+    // without cleaning.
     for &case_name in &BINARY_CASES {
-        if case_name == "double_bh" {
-            continue;
-        }
         let raw_dir = suite_dir.join(case_name);
         let bctrl = BinaryInlistControls::from_case_dir(&raw_dir)
             .expect("raw binary controls");
@@ -818,19 +815,27 @@ fn test_recursive_binary_inlists_and_all_8_cases_capped_4_steps() {
                 )
             });
     }
-    let raw_dbh_err = run_binary_test_suite_case(
-        &suite_dir.join("double_bh"),
-        Some(4),
+    let bad_tmp = TempDirGuard::new("raw_unsup_star");
+    fs::write(
+        bad_tmp.root.join("inlist"),
+        "&binary_job\n  evolve_both_stars = .false.\n/\n\
+         &binary_controls\n  m1 = 10.0\n  m2 = 8.0\n  initial_period_in_days = 5.0\n/\n",
     )
-    .expect_err(
-        "raw $MESA_DIR double_bh must fail on unsupported star controls",
-    );
+    .expect("write synthetic binary inlist");
+    fs::write(
+        bad_tmp.root.join("inlist1"),
+        "&star_job\n  save_pulse_data_filename = 'p.data'\n/\n\
+         &controls\n  initial_mass = 10.0\n/\n",
+    )
+    .expect("write synthetic unsupported inlist1");
+    let raw_unsup_err = run_binary_test_suite_case(&bad_tmp.root, Some(4))
+        .expect_err("synthetic case must fail on unsupported star controls");
     assert!(
-        matches!(raw_dbh_err, StarError::InvalidInput(_))
-            && raw_dbh_err.to_string().contains("unsupported control"),
-        "unexpected raw double_bh error: {raw_dbh_err}"
+        matches!(raw_unsup_err, StarError::InvalidInput(_))
+            && raw_unsup_err.to_string().contains("unsupported control"),
+        "unexpected synthetic unsupported error: {raw_unsup_err}"
     );
-    assert_non_double_bh_raw_cases_pass_strict(&suite_dir);
+    assert_all_raw_cases_pass_strict(&suite_dir);
     let raw_gr_tmp = TempDirGuard::new("raw_gr_strict");
     let raw_gr_dir = raw_gr_tmp.root.join("jdot_gr_check");
     copy_dir_verbatim(&suite_dir.join("jdot_gr_check"), &raw_gr_dir);
@@ -904,13 +909,18 @@ fn test_coupled_double_bh_35_steps_preserves_star_controls() {
         return;
     };
     let raw_cdir = suite_dir.join("double_bh");
-    let raw_err = InlistBundle::from_file_in_case_dir(&raw_cdir, "inlist1")
-        .expect_err("raw double_bh inlist1 must reject unsupported controls");
-    assert!(
-        matches!(raw_err, StarError::InvalidInput(_))
-            && raw_err.to_string().contains("unsupported control"),
-        "unexpected raw inlist1 error: {raw_err}"
-    );
+    for inlist_name in ["inlist1", "inlist2"] {
+        let raw_b = InlistBundle::from_file_in_case_dir(&raw_cdir, inlist_name)
+            .unwrap_or_else(|e| {
+                panic!("raw double_bh/{inlist_name} must pass strict: {e}")
+            });
+        assert_eq!(
+            raw_b.validation_report.unsupported_controls.len(),
+            0,
+            "unexpected unsupported controls in raw double_bh/{inlist_name}: {:?}",
+            raw_b.validation_report.unsupported_controls
+        );
+    }
     let tmp = TempDirGuard::new("dbh35");
     let cdir = tmp.root.join("double_bh");
     copy_cleaned_binary_case(&raw_cdir, &cdir).expect("clean double_bh");

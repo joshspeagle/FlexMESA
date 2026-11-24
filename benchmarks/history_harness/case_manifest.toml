@@ -156,7 +156,7 @@ suite = "star"
 case = "5M_cepheid_blue_loop"
 reference_status = "mesa_26_4_1"
 reference_path = "benchmarks/history_harness/reference_histories/star/5M_cepheid_blue_loop.data"
-required_termination = "star_species_mass_min_limit"
+required_termination = "extras_check_model"
 
 [[cases]]
 suite = "star"

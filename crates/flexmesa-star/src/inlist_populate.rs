@@ -106,6 +106,20 @@ impl SectionControls {
         Ok(())
     }
 
+    /// Reads a signed `i64` scalar for `&section::key` into `dst` when present.
+    #[inline]
+    pub fn try_i64_into(
+        &self,
+        section: &str,
+        dst: &mut i64,
+        key: &str,
+    ) -> Result<(), StarError> {
+        if let Some(v) = self.try_get_i64(section, key)? {
+            *dst = v;
+        }
+        Ok(())
+    }
+
     /// Reads a signed integer for `&section::key` into `dst` when present.
     #[inline]
     pub fn try_isize_into(
@@ -238,6 +252,7 @@ impl InlistBundle {
         sj.try_f64_into("star_job", &mut j.pre_ms_check_radiative_core_lnuc_div_l_limit, "pre_ms_check_radiative_core_Lnuc_div_L_limit")?;
         sj.try_f64_into("star_job", &mut j.pre_ms_check_radiative_core_min_mass, "pre_ms_check_radiative_core_min_mass")?;
         sj.try_bool_into("star_job", &mut j.set_cumulative_energy_error_each_relax, "set_cumulative_energy_error_each_relax")?;
+        sj.try_i64_into("star_job", &mut j.set_cumulative_energy_error_at_step, "set_cumulative_energy_error_at_step")?;
         sj.try_f64_into("star_job", &mut j.center_log_p_1st_try_for_create_initial_model, "center_logP_1st_try_for_create_initial_model")?;
         map_f64s!("star_job", sj, j, [
             entropy_1st_try_for_create_initial_model,
@@ -254,7 +269,8 @@ impl InlistBundle {
             save_pulse_data_when_terminate,
             auto_extend_net, set_initial_age, set_initial_model_number,
             set_initial_number_retries, set_initial_dt,
-            set_initial_cumulative_energy_error, set_uniform_initial_composition,
+            set_initial_cumulative_energy_error, set_cumulative_energy_error,
+            set_uniform_initial_composition,
             relax_initial_to_xaccrete, set_initial_v_center, set_initial_l_center,
             set_v_center, set_l_center, set_irradiation, set_initial_irradiation,
             relax_initial_angular_momentum, relax_initial_entropy,
@@ -282,7 +298,9 @@ impl InlistBundle {
             pre_ms_t_c, pre_ms_guess_rho_c, pre_ms_d_log10_p,
             radius_in_cm_for_create_initial_model, mass_in_gm_for_create_initial_model,
             initial_age, years_for_initial_dt, seconds_for_initial_dt,
-            new_cumulative_energy_error, initial_h1, initial_h2, initial_he3, initial_he4,
+            new_cumulative_energy_error,
+            set_cumulative_energy_error_each_step_if_age_less_than,
+            initial_h1, initial_h2, initial_he3, initial_he4,
             new_mass, new_z, new_y, core_avg_rho, core_avg_eps, new_r_center, new_l_center,
             new_omega, new_omega_div_omega_crit, new_surface_rotation_v,
             relax_omega_max_yrs_dt, base_for_adjust_tau_factor_to_surf_density,

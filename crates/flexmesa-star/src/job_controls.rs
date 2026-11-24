@@ -876,6 +876,27 @@ pub struct StarJobControls {
     pub seconds_for_initial_dt: f64,
     /// Whether to reset cumulative energy error on startup (`set_initial_cumulative_energy_error`).
     pub set_initial_cumulative_energy_error: bool,
+    /// Whether to reset `cumulative_energy_error` to
+    /// `new_cumulative_energy_error` at run startup or restart
+    /// (`set_cumulative_energy_error`, `.false.` default,
+    /// `star/defaults/star_job.defaults:2371`,
+    /// `star/job/run_star_support.f90:2762-2767`).
+    #[serde(default)]
+    pub set_cumulative_energy_error: bool,
+    /// Model number at which to reset `cumulative_energy_error` to
+    /// `new_cumulative_energy_error`, at startup and at the end of that step
+    /// (`set_cumulative_energy_error_at_step`, `-1` default = disabled,
+    /// `star/defaults/star_job.defaults:2372`,
+    /// `star/job/run_star_support.f90:689-692, 2762-2767`).
+    #[serde(default = "default_neg_one_i64")]
+    pub set_cumulative_energy_error_at_step: i64,
+    /// Age threshold in years below which `cumulative_energy_error` is reset
+    /// to `new_cumulative_energy_error` before each step
+    /// (`set_cumulative_energy_error_each_step_if_age_less_than`, `-1d99`
+    /// default = disabled, `star/defaults/star_job.defaults:2373`,
+    /// `star/job/run_star_support.f90:636-640`).
+    #[serde(default = "default_neg_1e99")]
+    pub set_cumulative_energy_error_each_step_if_age_less_than: f64,
     /// Target cumulative energy error in erg (`new_cumulative_energy_error`).
     pub new_cumulative_energy_error: f64,
     /// Set `cumulative_energy_error` to `new_cumulative_energy_error` at the
@@ -1236,6 +1257,9 @@ impl Default for StarJobControls {
             years_for_initial_dt: -1.0,
             seconds_for_initial_dt: -1.0,
             set_initial_cumulative_energy_error: false,
+            set_cumulative_energy_error: false,
+            set_cumulative_energy_error_at_step: -1,
+            set_cumulative_energy_error_each_step_if_age_less_than: -1.0e99,
             new_cumulative_energy_error: 0.0,
             set_cumulative_energy_error_each_relax: true,
             set_uniform_initial_composition: false,
@@ -1341,4 +1365,12 @@ const fn default_max_for_add() -> f64 {
 
 const fn default_true() -> bool {
     true
+}
+
+const fn default_neg_one_i64() -> i64 {
+    -1
+}
+
+const fn default_neg_1e99() -> f64 {
+    -1.0e99
 }

@@ -135,7 +135,8 @@ pub struct ReactionInfo {
     /// Reaction handle name (e.g., `"r1212"`, `"r_c12_ag_o16"`).
     pub name: String,
     /// Evaluation opcode (`0` = default REACLIB, `1` = `interp_pm` table,
-    /// `2` = `-1.0`, `3..=28` = analytic `ratelib`, `29..=31` = JINA).
+    /// `2` = `weaklib_only` (`exp(-99.0)`), `3..=28` = analytic `ratelib`,
+    /// `29..=31` = JINA).
     pub op_code: u8,
     /// Whether this reaction evaluates the reverse (`1`) or forward (`0`)
     /// channel.

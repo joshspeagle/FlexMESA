@@ -3,6 +3,8 @@
 //! bundle (`crates/flexmesa-rates/data/rates_tables.bin`).
 
 use std::collections::HashMap;
+use std::fs;
+use std::path::Path;
 use std::sync::OnceLock;
 
 use flexmesa_chem::{NuclideCatalog, NuclideEntry};
@@ -107,6 +109,291 @@ fn compute_reaclib_rev_coeffs(
 }
 
 const RAW_BUNDLE: &[u8] = include_bytes!("../data/rates_tables.bin");
+const AIC_STATES_SRC: &str = include_str!("../data/aic.states");
+const AIC_TRANSITIONS_SRC: &str = include_str!("../data/aic.transitions");
+
+fn normalize_ecapture_iso(name: &str) -> &str {
+    match name.trim() {
+        "al-6" => "al26-1",
+        "al*6" => "al26-2",
+        other => other,
+    }
+}
+
+fn collect_ecapture_tokens(src: &str) -> Vec<String> {
+    let mut tokens = Vec::new();
+    for line in src.lines() {
+        let stripped = line.split('!').next().unwrap_or("");
+        for tok in stripped.split_whitespace() {
+            tokens.push(tok.to_string());
+        }
+    }
+    tokens
+}
+
+fn parse_ecapture_f64(tok: &str, what: &str) -> Result<f64, RatesError> {
+    let norm = if tok.contains('d') || tok.contains('D') {
+        tok.replace(['d', 'D'], "e")
+    } else {
+        tok.to_string()
+    };
+    norm.parse::<f64>().map_err(|_| {
+        RatesError::InvalidTableData(format!("invalid {what} value '{tok}'"))
+    })
+}
+
+/// Nuclear level schemes and weak transition $\log ft$ tables loaded from MESA
+/// `.states` / `.transitions` files (`rates/private/load_ecapture.f90`).
+///
+/// The built-in singleton embeds upstream MESA `26.4.1`'s `wd_aic`
+/// (`aic.states` and `aic.transitions`) catalog, which is a strict superset
+/// of `rates/test/test_special.{states,transitions}`.
+#[derive(Debug, Clone)]
+pub struct EcaptureTables {
+    states: HashMap<String, Vec<(f64, f64)>>,
+    trans: HashMap<(String, String), Vec<(usize, usize, f64)>>,
+}
+
+static BUILTIN_ECAPTURE: OnceLock<EcaptureTables> = OnceLock::new();
+
+impl EcaptureTables {
+    /// Returns the built-in [`EcaptureTables`] parsed from `aic.states` and
+    /// `aic.transitions`.
+    #[must_use]
+    pub fn builtin() -> &'static Self {
+        BUILTIN_ECAPTURE.get_or_init(|| {
+            Self::from_str_pair(AIC_STATES_SRC, AIC_TRANSITIONS_SRC)
+                .expect("built-in aic.states / aic.transitions must parse")
+        })
+    }
+
+    /// Parses special weak states and transitions tables from in-memory MESA
+    /// `.states` and `.transitions` file text (`load_ecapture.f90`).
+    ///
+    /// # Errors
+    /// Returns [`RatesError::InvalidTableData`] if syntax, counts, numeric
+    /// fields, or 1-based state indices are malformed.
+    pub fn from_str_pair(
+        states_src: &str,
+        trans_src: &str,
+    ) -> Result<Self, RatesError> {
+        let st_toks = collect_ecapture_tokens(states_src);
+        let mut states: HashMap<String, Vec<(f64, f64)>> = HashMap::new();
+        let mut idx = 0_usize;
+        while idx < st_toks.len() {
+            let iso = normalize_ecapture_iso(&st_toks[idx]).to_string();
+            idx += 1;
+            let n_tok = st_toks.get(idx).ok_or_else(|| {
+                RatesError::InvalidTableData(format!(
+                    "missing state count for '{iso}'"
+                ))
+            })?;
+            idx += 1;
+            let nstates = n_tok.parse::<usize>().map_err(|_| {
+                RatesError::InvalidTableData(format!(
+                    "invalid state count '{n_tok}' for '{iso}'"
+                ))
+            })?;
+            let mut levels = Vec::with_capacity(nstates);
+            for k in 0..nstates {
+                let e_tok = st_toks.get(idx).ok_or_else(|| {
+                    RatesError::InvalidTableData(format!(
+                        "missing energy for '{iso}' level {}",
+                        k + 1
+                    ))
+                })?;
+                let j_tok = st_toks.get(idx + 1).ok_or_else(|| {
+                    RatesError::InvalidTableData(format!(
+                        "missing spin J for '{iso}' level {}",
+                        k + 1
+                    ))
+                })?;
+                idx += 2;
+                let e = parse_ecapture_f64(e_tok, "ecapture level energy")?;
+                let j = parse_ecapture_f64(j_tok, "ecapture level spin")?;
+                levels.push((e, j));
+            }
+            states.insert(iso, levels);
+        }
+
+        let tr_toks = collect_ecapture_tokens(trans_src);
+        let mut trans: HashMap<(String, String), Vec<(usize, usize, f64)>> =
+            HashMap::new();
+        let mut tidx = 0_usize;
+        while tidx < tr_toks.len() {
+            let lhs = normalize_ecapture_iso(&tr_toks[tidx]).to_string();
+            let rhs = tr_toks
+                .get(tidx + 1)
+                .ok_or_else(|| {
+                    RatesError::InvalidTableData(format!(
+                        "missing rhs isotope after '{lhs}'"
+                    ))
+                })
+                .map(|s| normalize_ecapture_iso(s).to_string())?;
+            let n_tok = tr_toks.get(tidx + 2).ok_or_else(|| {
+                RatesError::InvalidTableData(format!(
+                    "missing transition count for '{lhs}->{rhs}'"
+                ))
+            })?;
+            tidx += 3;
+            let ntrans = n_tok.parse::<usize>().map_err(|_| {
+                RatesError::InvalidTableData(format!(
+                    "invalid transition count '{n_tok}' for '{lhs}->{rhs}'"
+                ))
+            })?;
+            let lhs_n = states.get(&lhs).map_or(0, Vec::len);
+            let rhs_n = states.get(&rhs).map_or(0, Vec::len);
+            let mut items = Vec::with_capacity(ntrans);
+            for k in 0..ntrans {
+                let si_tok = tr_toks.get(tidx).ok_or_else(|| {
+                    RatesError::InvalidTableData(format!(
+                        "missing Si for '{lhs}->{rhs}' transition {}",
+                        k + 1
+                    ))
+                })?;
+                let sf_tok = tr_toks.get(tidx + 1).ok_or_else(|| {
+                    RatesError::InvalidTableData(format!(
+                        "missing Sf for '{lhs}->{rhs}' transition {}",
+                        k + 1
+                    ))
+                })?;
+                let logft_tok = tr_toks.get(tidx + 2).ok_or_else(|| {
+                    RatesError::InvalidTableData(format!(
+                        "missing logft for '{lhs}->{rhs}' transition {}",
+                        k + 1
+                    ))
+                })?;
+                tidx += 3;
+                let si = si_tok.parse::<usize>().map_err(|_| {
+                    RatesError::InvalidTableData(format!(
+                        "invalid Si '{si_tok}' for '{lhs}->{rhs}'"
+                    ))
+                })?;
+                let sf = sf_tok.parse::<usize>().map_err(|_| {
+                    RatesError::InvalidTableData(format!(
+                        "invalid Sf '{sf_tok}' for '{lhs}->{rhs}'"
+                    ))
+                })?;
+                if si == 0
+                    || sf == 0
+                    || (lhs_n > 0 && si > lhs_n)
+                    || (rhs_n > 0 && sf > rhs_n)
+                {
+                    return Err(RatesError::InvalidTableData(format!(
+                        "out-of-range state index ({si}, {sf}) for '{lhs}->{rhs}' ({lhs_n}, {rhs_n})"
+                    )));
+                }
+                let logft = parse_ecapture_f64(logft_tok, "ecapture logft")?;
+                items.push((si, sf, logft));
+            }
+            trans.insert((lhs, rhs), items);
+        }
+
+        Ok(Self { states, trans })
+    }
+
+    /// Loads special weak states and transitions tables from disk files.
+    ///
+    /// # Errors
+    /// Returns [`RatesError::InvalidTableData`] if either file cannot be read
+    /// or fails parsing.
+    pub fn from_files(
+        states_path: impl AsRef<Path>,
+        trans_path: impl AsRef<Path>,
+    ) -> Result<Self, RatesError> {
+        let sp = states_path.as_ref();
+        let tp = trans_path.as_ref();
+        let states_src = fs::read_to_string(sp).map_err(|e| {
+            RatesError::InvalidTableData(format!(
+                "failed to read states file {}: {e}",
+                sp.display()
+            ))
+        })?;
+        let trans_src = fs::read_to_string(tp).map_err(|e| {
+            RatesError::InvalidTableData(format!(
+                "failed to read transitions file {}: {e}",
+                tp.display()
+            ))
+        })?;
+        Self::from_str_pair(&states_src, &trans_src)
+    }
+
+    /// Returns all parsed nuclear level tables keyed by nuclide name.
+    #[must_use]
+    pub const fn states(&self) -> &HashMap<String, Vec<(f64, f64)>> {
+        &self.states
+    }
+
+    /// Returns all parsed `(Si, Sf, logft)` transitions keyed by `(lhs, rhs)`.
+    #[must_use]
+    pub const fn transitions(
+        &self,
+    ) -> &HashMap<(String, String), Vec<(usize, usize, f64)>> {
+        &self.trans
+    }
+
+    /// Resolves `(states_lhs, states_rhs, transitions, z_lhs, z_rhs, q_tot)`
+    /// for `(lhs, rhs)` using nuclear mass excesses from [`NuclideCatalog`].
+    ///
+    /// # Errors
+    /// Returns [`RatesError::UnknownWeakPair`] if `(lhs, rhs)` is absent from
+    /// either table, or [`RatesError::InvalidTableData`] if either isotope is
+    /// missing from [`NuclideCatalog`].
+    pub fn pair_data(
+        &self,
+        lhs: &str,
+        rhs: &str,
+    ) -> Result<
+        (
+            &[(f64, f64)],
+            &[(f64, f64)],
+            &[(usize, usize, f64)],
+            f64,
+            f64,
+            f64,
+        ),
+        RatesError,
+    > {
+        let l_key = normalize_ecapture_iso(lhs).to_string();
+        let r_key = normalize_ecapture_iso(rhs).to_string();
+        let key = (l_key.clone(), r_key.clone());
+        let Some(trans) = self.trans.get(&key) else {
+            return Err(RatesError::UnknownWeakPair(key.0, key.1));
+        };
+        let Some(s_lhs) = self.states.get(&key.0) else {
+            return Err(RatesError::UnknownWeakPair(key.0, key.1));
+        };
+        let Some(s_rhs) = self.states.get(&key.1) else {
+            return Err(RatesError::UnknownWeakPair(key.0, key.1));
+        };
+        let nuclides = NuclideCatalog::builtin_ref();
+        let id_l = nuclides.get_nuclide_index(&l_key).ok_or_else(|| {
+            RatesError::InvalidTableData(format!(
+                "unknown lhs nuclide '{l_key}'"
+            ))
+        })?;
+        let id_r = nuclides.get_nuclide_index(&r_key).ok_or_else(|| {
+            RatesError::InvalidTableData(format!(
+                "unknown rhs nuclide '{r_key}'"
+            ))
+        })?;
+        let n_lhs = nuclides.get_by_id(id_l).ok_or_else(|| {
+            RatesError::InvalidTableData(format!("unknown lhs_id {id_l}"))
+        })?;
+        let n_rhs = nuclides.get_by_id(id_r).ok_or_else(|| {
+            RatesError::InvalidTableData(format!("unknown rhs_id {id_r}"))
+        })?;
+        #[allow(clippy::cast_precision_loss)]
+        Ok((
+            s_lhs,
+            s_rhs,
+            trans,
+            n_lhs.z as f64,
+            n_rhs.z as f64,
+            n_lhs.mass_excess - n_rhs.mass_excess,
+        ))
+    }
+}
 
 /// A 2D tabulated weak reaction table (`weakreactions.tables` or `S13_r_be7_wk_li7.h5`).
 #[derive(Debug, Clone)]
@@ -175,8 +462,6 @@ pub struct RatesCatalog {
     pub weak_tables: Vec<WeakTable>,
     weak_pair_map: HashMap<(String, String), usize>,
     suzuki_pair_map: HashMap<(String, String), SuzukiTable>,
-    special_states: HashMap<String, Vec<(f64, f64)>>,
-    special_trans: HashMap<(String, String), Vec<(usize, usize, f64)>>,
 }
 
 static CATALOG: OnceLock<RatesCatalog> = OnceLock::new();
@@ -273,10 +558,13 @@ impl RatesCatalog {
     }
 
     /// Returns `(states_lhs, states_rhs, transitions, z_lhs, z_rhs, q_tot)` for
-    /// special `ecapture` transitions (`test_special.states` / `test_special.transitions`).
+    /// special `ecapture` transitions (`aic.states` / `aic.transitions`, which
+    /// embeds both `wd_aic` and `test_special` level schemes).
     ///
     /// # Errors
-    /// Returns [`RatesError::UnknownWeakPair`] if `(lhs, rhs)` is not in `special_trans`.
+    /// Returns [`RatesError::UnknownWeakPair`] if `(lhs, rhs)` is absent from
+    /// the ecapture tables, or [`RatesError::InvalidTableData`] if either
+    /// isotope is missing from [`NuclideCatalog`].
     pub fn special_ecapture_data(
         &self,
         lhs: &str,
@@ -292,45 +580,8 @@ impl RatesCatalog {
         ),
         RatesError,
     > {
-        let key = (lhs.trim().to_string(), rhs.trim().to_string());
-        let Some(trans) = self.special_trans.get(&key) else {
-            return Err(RatesError::UnknownWeakPair(key.0, key.1));
-        };
-        let Some(s_lhs) = self.special_states.get(&key.0) else {
-            return Err(RatesError::UnknownWeakPair(key.0, key.1));
-        };
-        let Some(s_rhs) = self.special_states.get(&key.1) else {
-            return Err(RatesError::UnknownWeakPair(key.0, key.1));
-        };
-        let wtab = self.weak_by_pair(&key.0, &key.1)?;
-        let nuclides = NuclideCatalog::builtin_ref();
-        let n_lhs =
-            nuclides
-                .get_by_id(usize::from(wtab.lhs_id))
-                .ok_or_else(|| {
-                    RatesError::InvalidTableData(format!(
-                        "unknown lhs_id {}",
-                        wtab.lhs_id
-                    ))
-                })?;
-        let n_rhs =
-            nuclides
-                .get_by_id(usize::from(wtab.rhs_id))
-                .ok_or_else(|| {
-                    RatesError::InvalidTableData(format!(
-                        "unknown rhs_id {}",
-                        wtab.rhs_id
-                    ))
-                })?;
-        #[allow(clippy::cast_precision_loss)]
-        Ok((
-            s_lhs,
-            s_rhs,
-            trans,
-            n_lhs.z as f64,
-            n_rhs.z as f64,
-            wtab.q_tot,
-        ))
+        let _ = self;
+        EcaptureTables::builtin().pair_data(lhs, rhs)
     }
 
     #[allow(clippy::too_many_lines)]
@@ -587,30 +838,6 @@ impl RatesCatalog {
             );
         }
 
-        let mut special_states = HashMap::new();
-        special_states
-            .insert("mg24".to_string(), vec![(0.000, 0.0), (1.369, 2.0)]);
-        special_states.insert(
-            "na24".to_string(),
-            vec![
-                (0.000, 4.0),
-                (0.472, 1.0),
-                (0.563, 2.0),
-                (1.341, 2.0),
-                (1.345, 3.0),
-                (1.347, 1.0),
-            ],
-        );
-        let mut special_trans = HashMap::new();
-        special_trans.insert(
-            ("mg24".to_string(), "na24".to_string()),
-            vec![(1, 2, 4.8), (1, 6, 3.772)],
-        );
-        special_trans.insert(
-            ("na24".to_string(), "mg24".to_string()),
-            vec![(2, 1, 5.3), (6, 1, 4.249)],
-        );
-
         Self {
             reactions,
             reaction_by_name,
@@ -620,8 +847,6 @@ impl RatesCatalog {
             weak_tables,
             weak_pair_map,
             suzuki_pair_map,
-            special_states,
-            special_trans,
         }
     }
 }

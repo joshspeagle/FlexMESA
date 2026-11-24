@@ -43,9 +43,11 @@ pub mod types;
 pub mod weak;
 
 pub use ecapture::{
-    eval_ecapnuc_rate, eval_ecapture_pair, eval_mui_coulomb, eval_vs_coulomb,
+    eval_ecapnuc_rate, eval_ecapture_pair, eval_ecapture_pair_with_derivs,
+    eval_ecapture_pair_with_tables, eval_mui_coulomb,
+    eval_mui_coulomb_with_derivs, eval_vs_coulomb, eval_vs_coulomb_with_derivs,
 };
-pub use loader::{RatesCatalog, SuzukiTable, WeakTable};
+pub use loader::{EcaptureTables, RatesCatalog, SuzukiTable, WeakTable};
 pub use ratelib::eval_analytic_rate;
 pub use raw_rates::{
     eval_fl_epsnuc_3alf, eval_fl_epsnuc_3alf_with_derivs,

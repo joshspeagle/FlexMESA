@@ -188,9 +188,9 @@ pub fn eval_suzuki_one(
         l_ye_rho,
     );
 
-    let lambda = capture + decay;
-    let dlambda_dln_t = capture * dlcap_dlogt + decay * dldec_dlogt;
-    let dlambda_dln_rho = capture * dlcap_dly + decay * dldec_dly;
+    let lambda = decay + capture;
+    let dlambda_dln_t = decay * dldec_dlogt + capture * dlcap_dlogt;
+    let dlambda_dln_rho = decay * dldec_dly + capture * dlcap_dly;
 
     let (qneu, dqneu_dln_t, dqneu_dln_rho) = if lambda > 1.0e-30 {
         let nu = capture_nu + decay_nu;
@@ -198,14 +198,6 @@ pub fn eval_suzuki_one(
         let mut dqn_dt = 0.0;
         let mut dqn_dr = 0.0;
         if nu > 1.0e-30 {
-            if tab.has_capture {
-                dqn_dt += qn
-                    * ((capture_nu / nu) * dlcap_nu_dlogt
-                        - (capture / lambda) * dlcap_dlogt);
-                dqn_dr += qn
-                    * ((capture_nu / nu) * dlcap_nu_dly
-                        - (capture / lambda) * dlcap_dly);
-            }
             if tab.has_decay {
                 dqn_dt += qn
                     * ((decay_nu / nu) * dldec_nu_dlogt
@@ -213,6 +205,14 @@ pub fn eval_suzuki_one(
                 dqn_dr += qn
                     * ((decay_nu / nu) * dldec_nu_dly
                         - (decay / lambda) * dldec_dly);
+            }
+            if tab.has_capture {
+                dqn_dt += qn
+                    * ((capture_nu / nu) * dlcap_nu_dlogt
+                        - (capture / lambda) * dlcap_dlogt);
+                dqn_dr += qn
+                    * ((capture_nu / nu) * dlcap_nu_dly
+                        - (capture / lambda) * dlcap_dly);
             }
         }
         (qn, dqn_dt, dqn_dr)

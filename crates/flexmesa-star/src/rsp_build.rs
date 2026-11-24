@@ -62,11 +62,17 @@ pub fn do_rsp_build_model(
         job.new_net_name.trim()
     } else {
         "o18_and_ne22.net"
-    };
-    let net = get_or_load_net(net_name, None)?;
+    }
+    .to_string();
+    let net = get_or_load_net(&net_name, None)?;
     let nzn_init = controls.rsp.nz.clamp(4, MAX_RSP_NZN - 1);
     let mut model =
         StarModel::new(nzn_init, net.chem_id.clone(), job, controls);
+    // `s% net_name` names the net the species come from; a `.mod` written
+    // from this model records it (`star/private/write_model.f90:129`) and
+    // `do_read_saved_model` loads it to order the abundance columns
+    // (`star/private/read_model.f90:381,405-420`).
+    model.job.net_name = net_name;
     model.eos_config = eos_config;
     model.kap_config = kap_config;
     model.controls.tau_factor =

@@ -422,6 +422,9 @@ pub struct HydroAuxState {
     pub mlt_vc_old: Vec<f64>,
     /// Whether `mlt_vc` holds valid convective velocities from the prior step (`have_mlt_vc`).
     pub have_mlt_vc: bool,
+    /// Whether the loaded model file carried `j_rot` (`have_j_rot`,
+    /// `star/private/read_model.f90:347`).
+    pub have_j_rot: bool,
     /// Whether MLT/TDC evaluations may overwrite `mlt_vc` (`okay_to_set_mlt_vc` in `evolve.f90:321`).
     pub okay_to_set_mlt_vc: bool,
     /// 1-based inner boundary zone index below constant-$q$ shell (`k_below_const_q`
@@ -651,6 +654,7 @@ impl HydroAuxState {
             csound_start: vec![0.0; nz],
             mlt_vc_old: vec![0.0; nz],
             have_mlt_vc: false,
+            have_j_rot: false,
             okay_to_set_mlt_vc: true,
             k_below_const_q: 1,
             k_const_mass: 0,

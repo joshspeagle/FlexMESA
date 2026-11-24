@@ -166,3 +166,8 @@ Standalone Fortran 2008 reference generators compiled against upstream MESA
   stiffness, explicit and nonlinear 3-point implicit torques, adaptive
   substepping, and conservation-error retry) reference tables (`4,758` rows;
   `make -C benchmarks/fortran_mesa/omega_mix_oracles MESA_DIR=/path/to/mesa MESASDK_ROOT=/path/to/mesasdk generate clean`).
+- `net_oracles_516/`: One-zone `net_get` capture for `approx21_cr60_plus_co56.net`
+  at the bit-exact `20M_z2m2_high_rotation` model-1 zone-650 state (`#516`,
+  `#526`): `eps_nuc` and its derivatives, every `dxdt` with its partials, and the
+  full composition Jacobian (`823` rows;
+  `make -C benchmarks/fortran_mesa/net_oracles_516 MESA_DIR=/path/to/mesa MESASDK_ROOT=/path/to/mesasdk generate clean`).

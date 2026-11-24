@@ -161,15 +161,64 @@ def test_cburn_inward_ignition_columns_and_halfway_stop() -> None:
 
 
 def test_conductive_flame_missing_hooks_and_surface_pt() -> None:
-    """`ConductiveFlameStarExtras` guards missing library callbacks."""
+    """`ConductiveFlameStarExtras` builds isothermal balls and guards
+    unexposed surface-PT/photo hooks.
+    """
     h = star_extras.ConductiveFlameStarExtras()
     with pytest.raises(NotImplementedError, match="#161"):
         h.extras_controls({})
-    with pytest.raises(NotImplementedError, match="#154"):
-        h.other_build_initial_model(object())
     with pytest.raises(NotImplementedError, match="#150"):
         h.extras_startup({}, restart=True)
     assert h.constant_surface_pt()["dlnP_dL"] == 0.0
+
+    class _FakeBuildCtx:
+        def __init__(self) -> None:
+            self.x_ctrl = [
+                10.0,
+                1.0e10,
+                2.0e8,
+                0.2,
+                5.0e9,
+                0.5,
+                0.5,
+                0.0,
+            ]
+            self.x_integer_ctrl = [10]
+            self.built: dict[str, Any] = {}
+
+        def net_info(self) -> tuple[list[int], list[str], dict[str, int]]:
+            return (
+                [4, 8, 12],
+                ["c12", "o16", "ne20"],
+                {"c12": 0, "o16": 1, "ne20": 2},
+            )
+
+        def eos_dt_get(
+            self, _rho: float, _temp: float, _xa: list[float]
+        ) -> dict[str, float]:
+            return {"ln_pgas": 64.5}
+
+        def build_star_model(self, *args: Any, **kwargs: Any) -> str:
+            self.built = {"args": args, "kwargs": kwargs}
+            return "mock_star_model"
+
+    bad_ctx = _FakeBuildCtx()
+    bad_ctx.x_integer_ctrl = [1]
+    with pytest.raises(ValueError, match="nz >= 2"):
+        h.other_build_initial_model(bad_ctx)
+
+    ctx = _FakeBuildCtx()
+    res = h.other_build_initial_model(ctx)
+    assert res == "mock_star_model"
+    assert math.isclose(h.constant_ln_p, 64.5)
+    assert math.isclose(h.constant_ln_t, _rust.safe_log(2.0e8))
+    _lnd, ln_t, _ln_r, lum, dq, xa_grid = ctx.built["args"]
+    assert len(dq) == 10
+    assert math.isclose(sum(dq), 1.0, rel_tol=1.0e-12)
+    assert all(val == 0.0 for val in lum)
+    assert math.isclose(_rust.crmath_exp(ln_t[9]), 5.0e9, rel_tol=1.0e-12)
+    assert math.isclose(_rust.crmath_exp(ln_t[0]), 2.0e8, rel_tol=1.0e-12)
+    assert all(row == [0.5, 0.5, 0.0] for row in xa_grid)
 
 
 def test_conductive_flame_properties_speed_and_halfway_stop() -> None:
@@ -754,3 +803,329 @@ def test_carbon_kh_runs_live_through_py_star_extras_adapter(
         assert pcol in prof_header
     assert any(abs(r["eps_eos"]) > 0.0 for r in prof_rows)
     assert any(abs(r["rse_eps_grav"]) > 0.0 for r in prof_rows)
+
+
+def test_other_physics_hooks_dbl_exp_timestep_and_xtrans_mesh() -> None:
+    """`OtherPhysicsHooksStarExtras` runs dbl-exp overshoot, timestep, and
+    `xtrans` mesh hooks.
+    """
+    oph = star_extras.OtherPhysicsHooksStarExtras()
+    orig_dir = harness_runner.resolve_case_dir("star", "other_physics_hooks")
+    oph.read_inlist_overshoot_dbl_exp(orig_dir)
+    oph.read_inlist_other_timestep_limit(orig_dir)
+    oph.read_inlist_xtrans_mesh_factor(orig_dir)
+    assert math.isclose(oph.overshoot_f2[0], 0.1)
+    assert math.isclose(oph.overshoot_d2[0], 1.0e10)
+    assert math.isclose(oph.delta_lg_t_limit, 1.0e-5)
+    assert math.isclose(oph.delta_lg_t_hard_limit, 1.0e-4)
+    assert math.isclose(oph.xtra_dist_above_xtrans, 0.2)
+    assert oph.other_mesh_functions({}) == []
+
+    # 1. Double-exponential overshoot switches to `(f2, d2)` past `dr2`.
+    ov_state: dict[str, Any] = {
+        "nz": 4,
+        "star_mass": 1.0,
+        "overshoot_f": [0.01],
+        "overshoot_f0": [0.004],
+        "overshoot_d0": [0.0],
+        "overshoot_delta0": [1.0],
+        "overshoot_mass_full_on": [1.8],
+        "overshoot_mass_full_off": [1.1],
+        "overshoot_d_min": 1.0e-2,
+        "conv_bdy_hp": [1.0e10],
+        "over_bdy_k": [1],
+        "over_bdy_r": [5.0e10],
+        "over_bdy_d": [1.0e12],
+        "over_bdy_vc": [1.0e5],
+        "top_conv_bdy": [False],
+        "r": [6.0e10, 5.0e10, 4.99e10, 4.9e10],
+    }
+    # Below `mass_full_off`, tapering zeroes `f`, so diffusivity vanishes.
+    k_a0, _k_b0, d_off, _vc_off = oph.other_overshooting_scheme(ov_state, 0, 0)
+    assert k_a0 == 2
+    assert d_off == [0.0, 0.0, 0.0, 0.0]
+
+    ov_state["star_mass"] = 2.0
+    k_a, k_b, d_arr, vc_arr = oph.other_overshooting_scheme(ov_state, 0, 0)
+    assert (k_a, k_b) == (2, 3)
+    assert d_arr[2] > 1.0e10
+    assert 0.0 < d_arr[3] < d_arr[2]
+    assert vc_arr[2] > vc_arr[3] > 0.0
+
+    # 2. `other_timestep_limit` only acts on `model_number in [29, 42]`.
+    assert oph.other_timestep_limit({"model_number": 28}, False, 1.0e5) == {
+        "action": "keep_going",
+        "dt_limit_ratio": 0.0,
+    }
+    ts_base: dict[str, Any] = {
+        "model_number": 30,
+        "num_retries": 0,
+        "rotation_flag": False,
+        "num_rotation_solver_steps": 0,
+        "mstar_dot": 0.0,
+        "mstar_dot_old": 0.0,
+        "nz": 2,
+        "lnt": [10.0, 10.0 + 2.0e-5 * constants.LN10],
+        "lnt_start": [10.0, 10.0],
+        "time_delta_coeff": 1.0,
+    }
+    assert oph.other_timestep_limit(ts_base, False, 1.0e5)["action"] == "retry"
+    res_soft = oph.other_timestep_limit(
+        {**ts_base, "num_retries": 1}, False, 1.0e5
+    )
+    assert res_soft["action"] == "keep_going"
+    assert math.isclose(res_soft["dt_limit_ratio"], 2.0, rel_tol=1.0e-12)
+    res_hard = oph.other_timestep_limit(
+        {
+            **ts_base,
+            "num_retries": 1,
+            "lnt": [10.0, 10.0 + 2.0e-4 * constants.LN10],
+        },
+        False,
+        1.0e5,
+    )
+    assert res_hard["action"] == "retry"
+
+    # 3. `other_mesh_delta_coeff_factor` refines around transitions in `20..40`.
+    assert (
+        oph.other_mesh_delta_coeff_factor({"model_number": 19, "nz": 4}) is None
+    )
+    assert oph.other_mesh_delta_coeff_factor({"model_number": 25, "nz": 3}) == [
+        0.75,
+        0.75,
+        0.75,
+    ]
+    oph.xtra_coef_below_xtrans = 0.5
+    oph.xtra_dist_below_xtrans = 0.5
+    xm_res = oph.other_mesh_delta_coeff_factor(
+        {
+            "model_number": 25,
+            "nz": 4,
+            "xa": [[0.9, 0.1], [0.1, 0.9], [0.1, 0.9], [0.1, 0.9]],
+            "peos": [1.0e12] * 4,
+            "rho": [1.0] * 4,
+            "grav": [1.0e4] * 4,
+            "r": [1.0e10, 0.99e10, 0.986e10, 0.50e10],
+        }
+    )
+    assert xm_res == [0.75, 0.5, 0.5, 0.75]
+
+
+def test_231_adapter_live_initial_model_and_physics_hooks(
+    tmp_path: pathlib.Path,
+) -> None:
+    """Exercise `other_build_initial_model`, `other_timestep_limit`,
+    `other_mesh_delta_coeff_factor`, `other_mesh_functions`, and
+    `other_overshooting_scheme` end-to-end through `PyStarExtrasAdapter`.
+    """
+    # 1. Live `ConductiveFlameStarExtras.other_build_initial_model` via
+    #    `PyRspBuildContext.{net_info, eos_dt_get, build_star_model}`.
+    flame_dir = tmp_path / "flame_build_init"
+    flame_dir.mkdir()
+    (flame_dir / "inlist").write_text(
+        "&star_job\n"
+        "  read_extra_star_job_inlist(1) = .true.\n"
+        "  extra_star_job_inlist_name(1) = 'inlist_case'\n"
+        "/\n"
+        "&eos\n"
+        "  read_extra_eos_inlist(1) = .true.\n"
+        "  extra_eos_inlist_name(1) = 'inlist_case'\n"
+        "/\n"
+        "&kap\n"
+        "  read_extra_kap_inlist(1) = .true.\n"
+        "  extra_kap_inlist_name(1) = 'inlist_case'\n"
+        "/\n"
+        "&controls\n"
+        "  read_extra_controls_inlist(1) = .true.\n"
+        "  extra_controls_inlist_name(1) = 'inlist_case'\n"
+        "/\n",
+        encoding="utf-8",
+    )
+    (flame_dir / "inlist_case").write_text(
+        "&star_job\n"
+        "  create_initial_model = .true.\n"
+        "  change_net = .true.\n"
+        "  new_net_name = 'approx21.net'\n"
+        "  set_initial_dt = .true.\n"
+        "  seconds_for_initial_dt = 1d-15\n"
+        "/\n"
+        "&eos\n"
+        "  use_Skye = .false.\n"
+        "  use_PC = .false.\n"
+        "/\n"
+        "&kap\n"
+        "  Zbase = 0.02\n"
+        "/\n"
+        "&controls\n"
+        "  use_other_build_initial_model = .true.\n"
+        "  use_zero_pgas_outer_bc = .true.\n"
+        "  use_rsp_l_eqn_outer_bc = .true.\n"
+        "  x_integer_ctrl(1) = 30\n"
+        "  x_ctrl(1) = 10.0\n"
+        "  x_ctrl(2) = 1d10\n"
+        "  x_ctrl(3) = 2d8\n"
+        "  x_ctrl(4) = 0.05\n"
+        "  x_ctrl(5) = 5d9\n"
+        "  x_ctrl(6) = 0.5\n"
+        "  x_ctrl(7) = 0.5\n"
+        "  x_ctrl(8) = 0.0\n"
+        "/\n",
+        encoding="utf-8",
+    )
+
+    flame = star_extras.ConductiveFlameStarExtras()
+    observed_init: dict[str, Any] = {}
+
+    class _FlameBuildProbe:
+        def other_build_initial_model(self, ctx: Any) -> Any:
+            return flame.other_build_initial_model(ctx)
+
+        def extras_start_step(self, state: dict[str, Any]) -> tuple[str, str]:
+            observed_init["nz"] = int(state["nz"])
+            observed_init["species"] = int(state["species"])
+            observed_init["t_center"] = float(state["t"][-1])
+            observed_init["t_surf"] = float(state["t"][0])
+            observed_init["xa_c12_0"] = float(state["xa_c12"][0])
+            return ("terminate", "initial model verified")
+
+    rep_flame = _rust.trace_star_case(
+        str(flame_dir),
+        str(tmp_path / "flame_out"),
+        extras=_FlameBuildProbe(),
+    )
+    assert rep_flame["termination_code"] == "extras_start_step"
+    assert observed_init["nz"] == 30
+    assert observed_init["species"] == 21
+    assert observed_init["t_center"] > 4.0e9
+    assert math.isclose(observed_init["t_surf"], 2.0e8, rel_tol=1.0e-5)
+    assert math.isclose(observed_init["xa_c12_0"], 0.5, rel_tol=1.0e-5)
+    assert math.isfinite(flame.constant_ln_p)
+    assert flame.constant_ln_p > 50.0
+
+    # 2. Live `OtherPhysicsHooksStarExtras` hooks (`other_timestep_limit`,
+    #    `other_mesh_delta_coeff_factor`, `other_mesh_functions`,
+    #    `other_overshooting_scheme`, `other_wind`) + snapshot updates.
+    orig_oph = harness_runner.resolve_case_dir("star", "other_physics_hooks")
+    oph_dir = tmp_path / "oph_live"
+    oph_dir.mkdir()
+    for fname in (
+        "inlist_overshoot_dbl_exp",
+        "inlist_other_timestep_limit",
+        "inlist_other_winds",
+        "inlist_xtrans_mesh_factor",
+    ):
+        shutil.copy2(orig_oph / fname, oph_dir / fname)
+    (oph_dir / "inlist").write_text(
+        "&star_job\n"
+        "  read_extra_star_job_inlist(1) = .true.\n"
+        "  extra_star_job_inlist_name(1) = 'inlist_case'\n"
+        "/\n"
+        "&kap\n"
+        "  read_extra_kap_inlist(1) = .true.\n"
+        "  extra_kap_inlist_name(1) = 'inlist_case'\n"
+        "/\n"
+        "&controls\n"
+        "  read_extra_controls_inlist(1) = .true.\n"
+        "  extra_controls_inlist_name(1) = 'inlist_case'\n"
+        "/\n",
+        encoding="utf-8",
+    )
+    (oph_dir / "inlist_case").write_text(
+        "&star_job\n"
+        "  set_initial_model_number = .true.\n"
+        "  initial_model_number = 28\n"
+        "/\n"
+        "&kap\n"
+        "  Zbase = 0.02\n"
+        "/\n"
+        "&controls\n"
+        "  initial_mass = 1.0\n"
+        "  initial_z = 0.02\n"
+        "  max_model_number = 31\n"
+        "  max_years_for_timestep = 1d4\n"
+        "  never_skip_hard_limits = .false.\n"
+        "  use_other_wind = .true.\n"
+        "  use_other_timestep_limit = .true.\n"
+        "  overshoot_scheme(1) = 'other'\n"
+        "  overshoot_zone_type(1) = 'any'\n"
+        "  overshoot_zone_loc(1) = 'any'\n"
+        "  overshoot_bdy_loc(1) = 'bottom'\n"
+        "  overshoot_f(1) = 0.010\n"
+        "  overshoot_f0(1) = 0.004\n"
+        "/\n",
+        encoding="utf-8",
+    )
+
+    oph = star_extras.OtherPhysicsHooksStarExtras()
+    hook_calls: dict[str, int] = {
+        "mesh_factor": 0,
+        "mesh_fcns": 0,
+        "timestep": 0,
+        "overshoot": 0,
+    }
+    saw_snapshot_shape: dict[str, Any] = {}
+
+    class _OphAdapterProbe:
+        def extras_controls(self, state: dict[str, Any]) -> dict[str, Any]:
+            saw_snapshot_shape["atm_t_tau_opacity"] = state["atm_t_tau_opacity"]
+            saw_snapshot_shape["xa_shape"] = tuple(state["xa"].shape)
+            return {
+                "use_other_mesh_delta_coeff_factor": True,
+                "use_other_mesh_functions": True,
+                "atm_t_tau_opacity": "varying",
+            }
+
+        def other_overshooting_scheme(
+            self, state: dict[str, Any], i_bdy: int, j_param: int
+        ) -> tuple[int, int, list[float], list[float]]:
+            hook_calls["overshoot"] += 1
+            return oph.other_overshooting_scheme(state, i_bdy, j_param)
+
+        def other_timestep_limit(
+            self, state: dict[str, Any], skip_hard_limit: bool, dt: float
+        ) -> dict[str, Any]:
+            hook_calls["timestep"] += 1
+            return oph.other_timestep_limit(state, skip_hard_limit, dt)
+
+        def other_mesh_delta_coeff_factor(
+            self, state: dict[str, Any], factor: list[float]
+        ) -> list[float] | None:
+            hook_calls["mesh_factor"] += 1
+            saw_snapshot_shape["factor_len"] = len(factor)
+            return oph.other_mesh_delta_coeff_factor(state, factor)
+
+        def other_mesh_functions(
+            self, state: dict[str, Any]
+        ) -> list[tuple[str, bool, list[float]]]:
+            hook_calls["mesh_fcns"] += 1
+            return oph.other_mesh_functions(state)
+
+        def other_wind(
+            self,
+            state: dict[str, Any],
+            l_surf: float,
+            m_surf: float,
+            r_surf: float,
+            t_surf: float,
+        ) -> float:
+            return oph.other_wind(state, l_surf, m_surf, r_surf, t_surf)
+
+        def extras_check_model(self, state: dict[str, Any]) -> str:
+            saw_snapshot_shape["final_opacity_opt"] = state["atm_t_tau_opacity"]
+            return "keep_going"
+
+    rep_oph = _rust.trace_star_case(
+        str(oph_dir),
+        str(tmp_path / "oph_out"),
+        extras=_OphAdapterProbe(),
+    )
+    assert rep_oph["termination_code"] == "max_model_number"
+    assert int(rep_oph["total_steps"]) == 3
+    assert int(rep_oph["total_retries"]) >= 1
+    assert hook_calls["mesh_factor"] >= 1
+    assert hook_calls["mesh_fcns"] >= 1
+    assert hook_calls["timestep"] >= 2
+    assert hook_calls["overshoot"] >= 1
+    assert saw_snapshot_shape["atm_t_tau_opacity"] == "fixed"
+    assert saw_snapshot_shape["final_opacity_opt"] == "varying"
+    assert saw_snapshot_shape["xa_shape"][1] == 8

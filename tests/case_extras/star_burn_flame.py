@@ -13,6 +13,7 @@ Covers:
 
 from __future__ import annotations
 
+import math
 import sys
 from collections.abc import Sequence
 from typing import Any
@@ -209,22 +210,95 @@ class ConductiveFlameStarExtras:
         self.within_tolerance: bool | None = None
 
     def extras_controls(self, _state: dict[str, Any]) -> None:
-        """Fail loudly on unexposed surface-PT and header hooks (`:201-238`)."""
-        raise NotImplementedError(
-            "conductive_flame: extras_controls registers other_surface_PT "
-            "(:211, #161), build_isothermal_ball (:212, #154), and "
-            "extra_history_header_items (:228-229, #231), which flexmesa-star "
-            "StarExtras does not expose"
-        )
-
-    def other_build_initial_model(self, _ctx: Any) -> Any:
-        """Fail loudly naming in-place `StarModel` allocation and EOS access
-        (`:39-149`).
+        """Fail loudly naming unexposed surface-PT and termination hooks
+        (`:201-238`).
         """
         raise NotImplementedError(
-            "conductive_flame: build_isothermal_ball (:39-149) requires "
-            "mutable StarModel cell allocation and eosDT_get access in "
-            "flexmesa-star (#154)"
+            "conductive_flame: extras_controls registers other_surface_PT "
+            "(:211, #161, unimplemented in hydro_brunt_surf / "
+            "inlist_inventory), other_photo_read/other_photo_write (:214-215, "
+            "#150), and custom t_xtra1 termination 'flame reached halfway "
+            "point' (:488-489, #231), which flexmesa-star StarExtras does not "
+            "expose"
+        )
+
+    def other_build_initial_model(self, ctx: Any) -> Any:
+        """Build the heated isothermal carbon-oxygen ball
+        (`build_isothermal_ball`,
+        `star/test_suite/conductive_flame/src/run_star_extras.f90:39-149`).
+        """
+        x_ctrl = ctx.x_ctrl
+        nz = int(ctx.x_integer_ctrl[0])
+        mstar = float(x_ctrl[0])
+        rho_c = float(x_ctrl[1])
+        t_c = float(x_ctrl[2])
+        if nz < 2 or mstar <= 0.0 or rho_c <= 0.0 or t_c <= 0.0:
+            raise ValueError(
+                "build_isothermal_ball requires nz >= 2 and positive mstar, "
+                "rho_c, t_c"
+            )
+
+        chem_id, _iso_names, net_iso = ctx.net_info()
+        xa_uni = [0.0] * len(chem_id)
+        for iso_name, idx_1 in (("c12", 5), ("o16", 6), ("ne20", 7)):
+            pos = net_iso.get(iso_name)
+            if pos is None:
+                raise ValueError(
+                    f"build_isothermal_ball: isotope {iso_name!r} missing from "
+                    "initial network"
+                )
+            xa_uni[int(pos)] = float(x_ctrl[idx_1])
+
+        eos = ctx.eos_dt_get(rho_c, t_c, xa_uni)
+        ln_t_bg = float(_rust.safe_log(t_c))
+        self.constant_ln_t = ln_t_bg
+        self.constant_ln_p = float(eos["ln_pgas"])
+
+        lnd_val = float(_rust.safe_log(rho_c))
+        lnd = [lnd_val] * nz
+        ln_t = [ln_t_bg] * nz
+
+        r0 = _rust.pow(3.0 / (4.0 * math.pi) * mstar / rho_c, 1.0 / 3.0)
+        dr = r0 / float(nz)
+        ln_r = [float(_rust.safe_log(float(nz - k) * dr)) for k in range(nz)]
+
+        four_pi_third = 4.0 * math.pi / 3.0
+        dq = [0.0] * nz
+        q = [0.0] * nz
+        dq[nz - 1] = four_pi_third * _rust.pow(dr, 3.0) * rho_c / mstar
+        q[nz - 1] = dq[nz - 1]
+        for k in range(nz - 2, -1, -1):
+            rp = _rust.crmath_exp(ln_r[k])
+            rm = _rust.crmath_exp(ln_r[k + 1])
+            dq[k] = (
+                four_pi_third
+                * (_rust.pow(rp, 3.0) - _rust.pow(rm, 3.0))
+                * rho_c
+                / mstar
+            )
+            q[k] = q[k + 1] + dq[k]
+
+        lum = [0.0] * nz
+        q_bump = float(x_ctrl[3])
+        ln_t_bump = float(_rust.safe_log(float(x_ctrl[4])))
+        for k in range(nz - 1, -1, -1):
+            if q[k] < q_bump:
+                ln_t[k] = ln_t_bump
+
+        xa_grid = [xa_uni[:] for _ in range(nz)]
+        return ctx.build_star_model(
+            lnd,
+            ln_t,
+            ln_r,
+            lum,
+            dq,
+            xa_grid,
+            m_center=0.0,
+            r_center=0.0,
+            l_center=0.0,
+            v_center=0.0,
+            mstar=mstar,
+            xmstar=mstar,
         )
 
     def constant_surface_pt(self) -> dict[str, float]:

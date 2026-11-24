@@ -90,6 +90,12 @@ pub struct BinaryStepSnapshot {
     pub donor_column_depth_for_irradiation: f64,
     /// Tidal synchronization timescales `[t_sync_1, t_sync_2]` (s).
     pub t_sync: [f64; 2],
+    /// Start-of-step binary component masses `[m1, m2]` (g).
+    pub star_b_m_g: [f64; 2],
+    /// Start-of-step binary photospheric radii `[r1, r2]` (cm).
+    pub star_b_r_cm: [f64; 2],
+    /// Start-of-step surface-averaged $\Omega$ `[omega_avg_surf_1, omega_avg_surf_2]` ($\mathrm{rad\,s^{-1}}$).
+    pub star_b_omega_avg_surf: [f64; 2],
     /// Orbital separation $a$ (cm).
     pub separation: f64,
     /// Orbital period $P$ (s).
@@ -149,6 +155,12 @@ pub struct BinaryStepScalars {
     pub donor_column_depth_for_irradiation: f64,
     /// Tidal synchronization timescales `[t_sync_1, t_sync_2]` (s).
     pub t_sync: [f64; 2],
+    /// Start-of-step binary component masses `[m1, m2]` (g).
+    pub star_b_m_g: [f64; 2],
+    /// Start-of-step binary photospheric radii `[r1, r2]` (cm).
+    pub star_b_r_cm: [f64; 2],
+    /// Start-of-step surface-averaged $\Omega$ `[omega_avg_surf_1, omega_avg_surf_2]` ($\mathrm{rad\,s^{-1}}$).
+    pub star_b_omega_avg_surf: [f64; 2],
     /// Orbital separation $a$ (cm).
     pub separation: f64,
     /// Orbital period $P$ (s).
@@ -209,6 +221,9 @@ impl BinaryStepSnapshot {
             donor_column_depth_for_irradiation: s
                 .donor_column_depth_for_irradiation,
             t_sync: s.t_sync,
+            star_b_m_g: s.star_b_m_g,
+            star_b_r_cm: s.star_b_r_cm,
+            star_b_omega_avg_surf: s.star_b_omega_avg_surf,
             separation: s.separation,
             period: s.period,
             eccentricity: s.eccentricity,
@@ -257,6 +272,9 @@ impl BinaryStepSnapshot {
         self.donor_column_depth_for_irradiation =
             s.donor_column_depth_for_irradiation;
         self.t_sync = s.t_sync;
+        self.star_b_m_g = s.star_b_m_g;
+        self.star_b_r_cm = s.star_b_r_cm;
+        self.star_b_omega_avg_surf = s.star_b_omega_avg_surf;
         self.separation = s.separation;
         self.period = s.period;
         self.eccentricity = s.eccentricity;

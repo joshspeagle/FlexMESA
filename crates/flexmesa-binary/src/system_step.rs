@@ -11,10 +11,10 @@ use flexmesa_star::inlist_runner::DefaultStarExtras;
 use flexmesa_star::star_utils::set_rho_to_dm_div_dv_for_new_step;
 use flexmesa_star::{
     compute_core_masses_msun, do_check_limits, eval_photosphere_info,
-    eval_total_energy_integrals, remesh_star_before_step, set_hydro_vars,
-    star_finalize_terminated_step, star_pick_next_timestep_after_step,
-    sync_post_henyey_rotation, LimitCheckOutcome, StarError, StarModel,
-    StarPickTimestepOutcome, StarStepAttemptOutcome, StarStepConverged,
+    remesh_star_before_step, star_finalize_terminated_step,
+    star_pick_next_timestep_after_step, LimitCheckOutcome, StarError,
+    StarModel, StarPickTimestepOutcome, StarStepAttemptOutcome,
+    StarStepConverged,
 };
 
 use crate::extras::{BinaryExtras, BinaryExtrasAction, DefaultBinaryExtras};
@@ -27,8 +27,8 @@ use crate::orbit::{
 };
 use crate::system::{compute_rl_and_gaps, BinaryCompanion, BinarySystem};
 use crate::system_jdot::{
-    apply_tidal_spin_sync_step, eval_coupled_edot_breakdown,
-    eval_gated_jdot_step, eval_star_am_removed_post_step, eval_star_spin_j,
+    eval_coupled_edot_breakdown, eval_gated_jdot_step,
+    eval_star_am_removed_post_step, eval_star_spin_j,
     star_photosphere_radius_cm, EdotBreakdown,
 };
 use crate::system_rlof::{
@@ -1659,6 +1659,7 @@ impl BinarySystem {
     ) -> Result<SingleTrialOutcome, StarError> {
         let doing_first_model_of_run = self.model_number == 0;
         self.t_sync = [0.0; 2];
+        self.tide_sync_scratch.reset();
         self.refresh_tidal_deformation_hooks(false)?;
         let (m_d_old, m_a_old) = (self.donor.mstar, self.accretor_mass_g());
         let (j_old, a_old, p_old, e_old, gap_old) = (
@@ -1853,66 +1854,7 @@ impl BinarySystem {
         };
 
         if self.controls.do_tidal_sync {
-            let (st_d, sm_d, ft_d, st_a, sm_a, ft_a) = if self.donor_i == 1 {
-                (
-                    self.controls.sync_type_1.as_str(),
-                    self.controls.sync_mode_1.as_str(),
-                    self.controls.ftid_1,
-                    self.controls.sync_type_2.as_str(),
-                    self.controls.sync_mode_2.as_str(),
-                    self.controls.ftid_2,
-                )
-            } else {
-                (
-                    self.controls.sync_type_2.as_str(),
-                    self.controls.sync_mode_2.as_str(),
-                    self.controls.ftid_2,
-                    self.controls.sync_type_1.as_str(),
-                    self.controls.sync_mode_1.as_str(),
-                    self.controls.ftid_1,
-                )
-            };
-            let ts_d = apply_tidal_spin_sync_step(
-                &mut self.donor,
-                doing_first_model_of_run,
-                st_d,
-                sm_d,
-                ft_d,
-                self.controls.tidal_reduction,
-                m_a_old,
-                a_old,
-                p_old,
-                e_old,
-                dt_used,
-            )?;
-            let ts_a = if let BinaryCompanion::Star(ref mut s2) = self.companion
-            {
-                apply_tidal_spin_sync_step(
-                    s2,
-                    doing_first_model_of_run,
-                    st_a,
-                    sm_a,
-                    ft_a,
-                    self.controls.tidal_reduction,
-                    m_d_old,
-                    a_old,
-                    p_old,
-                    e_old,
-                    dt_used,
-                )?
-            } else {
-                0.0
-            };
-            self.t_sync = if self.donor_i == 1 {
-                [ts_d, ts_a]
-            } else {
-                [ts_a, ts_d]
-            };
-        }
-
-        finalize_star_post_binary_torques(&mut self.donor)?;
-        if let BinaryCompanion::Star(ref mut s2) = self.companion {
-            finalize_star_post_binary_torques(s2)?;
+            self.t_sync = self.tide_sync_scratch.load();
         }
 
         if let BinaryCompanion::PointMass { ref mut mass_g, .. } =
@@ -2040,13 +1982,14 @@ impl BinarySystem {
         self.last_mdot = acct;
         self.last_jdot = last_jb;
         self.last_edot = last_eb;
-        self.refresh_tidal_deformation_hooks(false)?;
 
         // `binary_evolve.f90:385-386`: increment `model_number` and `binary_age`
         // inside `binary_evolve_step` before `binary_check_model` and
         // `extras_binary_check_model` run (`restore_snapshot` rewinds on redo/retry).
         self.model_number += 1;
         self.binary_age_yr += dt_used / SECYER;
+        self.refresh_binary_star_baselines();
+        self.refresh_tidal_deformation_hooks(false)?;
 
         let am_wind_d = if self.donor.mstar_dot < 0.0 {
             am_rem_d * (acct.mdot_system_wind[0] / self.donor.mstar_dot).abs()
@@ -2180,20 +2123,6 @@ impl BinarySystem {
             app(s2, holds[1 - d_idx]);
         }
     }
-}
-
-fn finalize_star_post_binary_torques(
-    star: &mut StarModel,
-) -> Result<(), StarError> {
-    star.mstar_start = star.mstar;
-    if !star.controls.rsp_flag {
-        star.sync_mesh_and_pack()?;
-        sync_post_henyey_rotation(star, 0.0)?;
-        set_hydro_vars(star, false, false)?;
-        sync_post_henyey_rotation(star, 0.0)?;
-        star.aux.total_energy = eval_total_energy_integrals(star).5;
-    }
-    Ok(())
 }
 
 #[cfg(test)]

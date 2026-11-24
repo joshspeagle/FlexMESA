@@ -7,11 +7,15 @@
 //! `binary/private/binary_tides.f90:120-456`, and
 //! `binary/private/binary_edot.f90:33-182`.
 
-use flexmesa_const::{MSUN, MixingType, PI, RSUN};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
+
+use flexmesa_const::{MixingType, MSUN, PI, RSUN};
 use flexmesa_math::{exp, pow};
 use flexmesa_star::{
-    StarError, StarModel, apply_uniform_rotation, eval_photosphere_info,
-    eval_surf_avg_rotation_info, update_rotation_distortion_factors,
+    apply_uniform_rotation, eval_photosphere_info, eval_surf_avg_rotation_info,
+    update_rotation_distortion_factors, BinaryOtherTorqueHook, StarError,
+    StarModel,
 };
 
 use crate::inlist::BinaryInlistControls;
@@ -69,13 +73,17 @@ pub fn eval_star_spin_j(star: &StarModel) -> f64 {
 }
 
 /// Evaluates dimensionless squared gyration radius $r_{\mathrm{gyr}}^2 = I_* / (M_* R_{\mathrm{phot}}^2)$
-/// (`binary/private/binary_tides.f90:355-359`).
+/// (`binary/private/binary_tides.f90:355-359`) using explicit binary mass `m_star` (g)
+/// and photospheric radius `r_phot_cm` (cm).
 #[must_use]
-pub fn eval_star_r_gyr_sq(star: &StarModel) -> f64 {
-    if star.nz == 0 || star.mstar <= 0.0 {
+pub(crate) fn eval_star_r_gyr_sq_with_mr(
+    star: &StarModel,
+    m_star: f64,
+    r_phot_cm: f64,
+) -> f64 {
+    if star.nz == 0 || m_star <= 0.0 || r_phot_cm <= 0.0 {
         return 0.1;
     }
-    let r_phot = star_photosphere_radius_cm(star).max(1.0);
     let mut i_tot = 0.0_f64;
     for k in 0..star.nz {
         let dm_k = star.dm_bar.get(k).copied().unwrap_or(star.dm[k]);
@@ -88,19 +96,33 @@ pub fn eval_star_r_gyr_sq(star: &StarModel) -> f64 {
             .unwrap_or((2.0 / 3.0) * star.r[k] * star.r[k]);
         i_tot += dm_k * i_k;
     }
-    i_tot / (star.mstar * r_phot * r_phot)
+    i_tot / (m_star * r_phot_cm * r_phot_cm)
+}
+
+/// Evaluates dimensionless squared gyration radius $r_{\mathrm{gyr}}^2 = I_* / (M_* R_{\mathrm{phot}}^2)$
+/// (`binary/private/binary_tides.f90:355-359`).
+#[must_use]
+pub fn eval_star_r_gyr_sq(star: &StarModel) -> f64 {
+    eval_star_r_gyr_sq_with_mr(
+        star,
+        star.mstar,
+        star_photosphere_radius_cm(star).max(1.0),
+    )
 }
 
 /// Estimates outer convective envelope mass ($M_\odot$) and radial thickness ($R_\odot$)
-/// for Hurley et al. (2002) convective-envelope tidal dissipation (`binary_tides.f90:418-427`).
+/// for Hurley et al. (2002) convective-envelope tidal dissipation (`binary_tides.f90:418-427`)
+/// using explicit `r_phot_cm` (`b% r(i)`).
 #[must_use]
-pub fn eval_convective_envelope_mass_and_size(star: &StarModel) -> (f64, f64) {
+pub(crate) fn eval_convective_envelope_mass_and_size_with_rphot(
+    star: &StarModel,
+    r_phot_cm: f64,
+) -> (f64, f64) {
     if star.nz == 0 {
         return (0.0, 0.0);
     }
     let m_top = star.m.first().copied().unwrap_or(star.mstar);
     let r_top = star.r[0];
-    let r_phot = star_photosphere_radius_cm(star);
     let rho_top = star.rho[0];
     let mut m_env = m_top / MSUN;
     let mut r_env = r_top / RSUN;
@@ -113,12 +135,22 @@ pub fn eval_convective_envelope_mass_and_size(star: &StarModel) -> (f64, f64) {
                 mt == MixingType::ConvectiveMixing
             });
         if !is_conv && star.rho[k] > 1.0e5 * rho_top {
-            r_env = (r_phot - star.r[k]) / RSUN;
+            r_env = (r_phot_cm - star.r[k]) / RSUN;
             m_env = (m_top - star.m[k]) / MSUN;
             break;
         }
     }
     (m_env, r_env)
+}
+
+/// Estimates outer convective envelope mass ($M_\odot$) and radial thickness ($R_\odot$)
+/// for Hurley et al. (2002) convective-envelope tidal dissipation (`binary_tides.f90:418-427`).
+#[must_use]
+pub fn eval_convective_envelope_mass_and_size(star: &StarModel) -> (f64, f64) {
+    eval_convective_envelope_mass_and_size_with_rphot(
+        star,
+        star_photosphere_radius_cm(star),
+    )
 }
 
 /// Synchronizes a stellar model uniformly to orbital period `period_sec` (s) at
@@ -334,9 +366,115 @@ pub fn apply_tidal_spin_sync(
     Ok(())
 }
 
-/// Evaluates `sync_spin_to_orbit` (`binary/private/binary_tides.f90:93-271`),
-/// returning `t_sync` (s) (`0.0` when inactive or `"Instantaneous"`) and
-/// skipping the `extra_jdot` spin update on `doing_first_model_of_run` (`:265`).
+/// Coupling parameters passed to `sync_spin_to_orbit`
+/// (`binary/private/binary_tides.f90:93-271`).
+struct SyncSpinOrbitParams<'a> {
+    sync_type: &'a str,
+    sync_mode: &'a str,
+    f_tid: f64,
+    tidal_reduction: f64,
+    m_star: f64,
+    r_phot_cm: f64,
+    l_phot_lsun: f64,
+    omega_avg_surf: f64,
+    m_companion: f64,
+    rl_cm: f64,
+    separation: f64,
+    period: f64,
+    eccentricity: f64,
+    dt_next: f64,
+}
+
+/// Evaluates `sync_spin_to_orbit` (`binary/private/binary_tides.f90:93-254`),
+/// returning `Ok(None)` on upstream early returns or `Ok(Some((t_sync, delta_j)))`.
+fn eval_sync_spin_to_orbit_delta_j(
+    star: &StarModel,
+    p: &SyncSpinOrbitParams<'_>,
+) -> Result<Option<(f64, Vec<f64>)>, StarError> {
+    validate_sync_type(p.sync_type)?;
+    validate_sync_mode(p.sync_mode)?;
+    let nz = star.nz;
+    let qratio = if p.m_star > 0.0 {
+        p.m_companion / p.m_star
+    } else {
+        0.0
+    };
+    if p.separation <= 0.0
+        || qratio <= 0.0
+        || p.rl_cm <= 0.0
+        || p.dt_next <= 0.0
+        || p.f_tid <= 0.0
+        || p.period <= 0.0
+        || p.r_phot_cm <= 0.0
+        || !star.controls.rotation_flag
+        || nz == 0
+        || p.sync_type.eq_ignore_ascii_case("None")
+    {
+        return Ok(None);
+    }
+
+    let omega_orb = 2.0 * PI / p.period;
+    let j_sync: Vec<f64> = (0..nz)
+        .map(|k| omega_orb * star.aux.i_rot.get(k).copied().unwrap_or(0.0))
+        .collect();
+
+    if p.sync_type.eq_ignore_ascii_case("Instantaneous") {
+        let delta_j = (0..nz).map(|k| star.j_rot[k] - j_sync[k]).collect();
+        return Ok(Some((0.0, delta_j)));
+    }
+
+    let t_sync = if p.sync_type.eq_ignore_ascii_case("Orb_period") {
+        p.period / p.f_tid
+    } else {
+        let k_div_t = eval_star_k_div_t_with_state(
+            star,
+            p.m_star,
+            p.r_phot_cm,
+            p.l_phot_lsun,
+            p.omega_avg_surf,
+            p.sync_type,
+            p.tidal_reduction,
+            p.m_companion,
+            p.separation,
+            p.period,
+        )?;
+        if k_div_t <= 0.0 {
+            return Ok(Some((0.0, vec![0.0; nz])));
+        }
+        let r_gyr_sq = eval_star_r_gyr_sq_with_mr(star, p.m_star, p.r_phot_cm);
+        if r_gyr_sq <= 0.0 {
+            return Ok(Some((0.0, vec![0.0; nz])));
+        }
+        eval_tsync(
+            k_div_t,
+            qratio,
+            r_gyr_sq,
+            p.r_phot_cm,
+            p.separation,
+            p.f_tid,
+        )
+    };
+
+    if !t_sync.is_finite() || t_sync <= 0.0 {
+        return Ok(Some((0.0, vec![0.0; nz])));
+    }
+
+    let delta_j = if p.sync_mode.eq_ignore_ascii_case("tdyn_div_tkh") {
+        eval_tdyn_div_tkh_delta_j(star, &j_sync, t_sync, p.dt_next)
+    } else {
+        let a1 = hut_f2(p.eccentricity);
+        let a2 = pow(1.0 - p.eccentricity * p.eccentricity, 1.5)
+            * hut_f5(p.eccentricity);
+        let factor = 1.0 - exp(-a2 * p.dt_next / t_sync);
+        (0..nz)
+            .map(|k| factor * (star.j_rot[k] - a1 / a2 * j_sync[k]))
+            .collect()
+    };
+    Ok(Some((t_sync, delta_j)))
+}
+
+/// Evaluates `sync_spin_to_orbit` (`binary/private/binary_tides.f90:93-271`)
+/// directly on `star`, returning `t_sync` (s) (`0.0` when inactive or `"Instantaneous"`).
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn apply_tidal_spin_sync_step(
     star: &mut StarModel,
@@ -364,61 +502,110 @@ pub(crate) fn apply_tidal_spin_sync_step(
         return Ok(0.0);
     }
     update_rotation_distortion_factors(star);
-    let omega_orb = 2.0 * PI / period;
-    if sync_type.eq_ignore_ascii_case("Instantaneous") {
-        if !doing_first_model_of_run {
-            for k in 0..star.nz {
-                star.omega[k] = omega_orb;
-                star.j_rot[k] = star.aux.i_rot[k] * omega_orb;
-            }
-        }
-        return Ok(0.0);
-    }
-    let t_sync = if sync_type.eq_ignore_ascii_case("Orb_period") {
-        period / f_tid
-    } else {
-        let k_div_t = eval_star_k_div_t(
-            star,
-            star.mstar,
-            sync_type,
-            tidal_reduction,
-            m_companion,
-            separation,
-            period,
-        )?;
-        let r_gyr_sq = eval_star_r_gyr_sq(star);
-        eval_tsync(
-            k_div_t,
-            m_companion / star.mstar.max(1.0),
-            r_gyr_sq,
-            star_photosphere_radius_cm(star),
-            separation,
-            f_tid,
-        )
+    let phot = eval_photosphere_info(star);
+    let r_phot_cm = RSUN * phot.r_rsun;
+    let omega_avg_surf = eval_surf_avg_rotation_info(star).omega;
+    let params = SyncSpinOrbitParams {
+        sync_type,
+        sync_mode,
+        f_tid,
+        tidal_reduction,
+        m_star: star.mstar,
+        r_phot_cm,
+        l_phot_lsun: phot.l_lsun,
+        omega_avg_surf,
+        m_companion,
+        rl_cm: r_phot_cm,
+        separation,
+        period,
+        eccentricity,
+        dt_next: dt,
     };
-    if !t_sync.is_finite() || t_sync <= 0.0 {
+    let Some((t_sync, delta_j)) =
+        eval_sync_spin_to_orbit_delta_j(star, &params)?
+    else {
         return Ok(0.0);
-    }
-    // `binary_tides.f90:256-269`: `b% t_sync_{1,2}` is recorded on all steps,
-    // while `s% extra_jdot` is applied only when `.not. b% doing_first_model_of_run`.
-    if doing_first_model_of_run {
-        return Ok(t_sync);
-    }
-    if sync_mode.eq_ignore_ascii_case("tdyn_div_tkh") {
-        apply_tdyn_div_tkh_sync(star, omega_orb, t_sync, dt);
-        return Ok(t_sync);
-    }
-    let a1 = hut_f2(eccentricity);
-    let a2 = pow((1.0 - eccentricity * eccentricity).max(1.0e-12), 1.5)
-        * hut_f5(eccentricity);
-    let relax_frac = 1.0 - exp(-(a2 * dt / t_sync).min(100.0));
-    let sync_ratio = a1 / a2.max(1.0e-12);
-    for k in 0..star.nz {
-        let j_sync = omega_orb * star.aux.i_rot[k];
-        star.j_rot[k] -= relax_frac * (star.j_rot[k] - sync_ratio * j_sync);
-        star.omega[k] = star.j_rot[k] / star.aux.i_rot[k].max(1.0e-30);
+    };
+    if !doing_first_model_of_run {
+        for k in 0..star.nz {
+            star.j_rot[k] -= delta_j[k];
+            star.omega[k] = star.j_rot[k] / star.aux.i_rot[k].max(1.0e-30);
+        }
     }
     Ok(t_sync)
+}
+
+/// [`BinaryOtherTorqueHook`] implementing upstream `sync_spin_orbit_torque`
+/// (`binary/private/binary_tides.f90:35-271`) inside `do_solve_omega_mix`
+/// (`star/private/solve_omega_mix.f90:90-97`).
+#[derive(Debug, Clone)]
+pub(crate) struct BinarySpinOrbitTorqueHook {
+    pub do_tidal_sync: bool,
+    pub doing_first_model_of_run: bool,
+    pub is_star_1: bool,
+    pub model_twins_flag: bool,
+    pub separation: f64,
+    pub period: f64,
+    pub eccentricity: f64,
+    pub rlr: f64,
+    pub m_star: f64,
+    pub m_companion: f64,
+    pub r_phot: f64,
+    /// Prior end-of-step/relax surface-averaged $\Omega$ (`s% omega_avg_surf`),
+    /// matching `binary_tides.f90:430-431` where `s% omega_avg_surf` updates at
+    /// `relax`/`report`/`select_mdot_action` rather than inside `do_solve_omega_mix`.
+    /// An implicit-wind redo inside a single star step does not refresh this
+    /// binary-side snapshot (`#160`; unused by `Hut_rad`).
+    pub omega_avg_surf: f64,
+    pub f_tid: f64,
+    pub sync_type: String,
+    pub sync_mode: String,
+    pub tidal_reduction: f64,
+    pub t_sync_cells: Arc<[AtomicU64; 2]>,
+}
+
+impl BinaryOtherTorqueHook for BinarySpinOrbitTorqueHook {
+    fn apply(&self, model: &mut StarModel) -> Result<(), StarError> {
+        if !self.do_tidal_sync {
+            return Ok(());
+        }
+        let dt_next = model.dt;
+        let l_phot_lsun = eval_photosphere_info(model).l_lsun;
+        let params = SyncSpinOrbitParams {
+            sync_type: self.sync_type.as_str(),
+            sync_mode: self.sync_mode.as_str(),
+            f_tid: self.f_tid,
+            tidal_reduction: self.tidal_reduction,
+            m_star: self.m_star,
+            r_phot_cm: self.r_phot,
+            l_phot_lsun,
+            omega_avg_surf: self.omega_avg_surf,
+            m_companion: self.m_companion,
+            rl_cm: self.rlr,
+            separation: self.separation,
+            period: self.period,
+            eccentricity: self.eccentricity,
+            dt_next,
+        };
+        let Some((t_sync, delta_j)) =
+            eval_sync_spin_to_orbit_delta_j(model, &params)?
+        else {
+            return Ok(());
+        };
+        let slot = usize::from(!self.is_star_1);
+        self.t_sync_cells[slot].store(t_sync.to_bits(), Ordering::Relaxed);
+        if self.is_star_1 && self.model_twins_flag {
+            self.t_sync_cells[1].store(t_sync.to_bits(), Ordering::Relaxed);
+        }
+        if !self.doing_first_model_of_run {
+            for (ej, &dj) in
+                model.aux.extra_jdot.iter_mut().take(model.nz).zip(&delta_j)
+            {
+                *ej -= dj / dt_next;
+            }
+        }
+        Ok(())
+    }
 }
 
 fn interp_val_to_face(vals: &[f64], dq: &[f64], k: usize) -> f64 {
@@ -431,30 +618,32 @@ fn interp_val_to_face(vals: &[f64], dq: &[f64], k: usize) -> f64 {
     (dq_00 * vals[k - 1] + dq_m1 * vals[k]) / sum
 }
 
-fn apply_tdyn_div_tkh_sync(
-    star: &mut StarModel,
-    omega_orb: f64,
+fn eval_tdyn_div_tkh_delta_j(
+    star: &StarModel,
+    j_sync: &[f64],
     t_sync: f64,
-    dt: f64,
-) {
+    dt_next: f64,
+) -> Vec<f64> {
     let nz = star.nz;
     let mut tdyn_div_tkh = vec![0.0_f64; nz];
-    let mut j_sync = vec![0.0_f64; nz];
     let mut delta_total_j = 0.0_f64;
     for k in 0..nz {
         let rho_f = interp_val_to_face(&star.rho, &star.dq, k);
         let cv_f = interp_val_to_face(&star.cv, &star.dq, k);
         let t_f = interp_val_to_face(&star.t, &star.dq, k);
         let cs_f = interp_val_to_face(&star.csound, &star.dq, k).max(1.0e-30);
-        let tkh = 4.0 * PI * star.r[k] * star.r[k] * rho_f * cv_f * t_f
-            / star.lum[k].abs().max(1.0e-30);
+        let lum_k = if star.lum[k] == 0.0 {
+            1.0e-30
+        } else {
+            star.lum[k]
+        };
+        let tkh = 4.0 * PI * star.r[k] * star.r[k] * rho_f * cv_f * t_f / lum_k;
         let tdyn = 1.0 / cs_f;
-        tdyn_div_tkh[k] = if tkh > 0.0 { tdyn / tkh } else { 0.0 };
-        j_sync[k] = omega_orb * star.aux.i_rot[k];
+        tdyn_div_tkh[k] = if tkh == 0.0 { 0.0 } else { tdyn / tkh };
         let dm_k = star.dm_bar.get(k).copied().unwrap_or(star.dm[k]);
         delta_total_j += (star.j_rot[k] - j_sync[k]).abs() * dm_k;
     }
-    delta_total_j *= 1.0 - exp(-(dt / t_sync).min(100.0));
+    delta_total_j *= 1.0 - exp(-dt_next / t_sync);
     let mut layers_in_sync = vec![false; nz];
     let mut delta_j = vec![0.0_f64; nz];
     let mut num_sync_layers = 0_usize;
@@ -501,41 +690,39 @@ fn apply_tdyn_div_tkh_sync(
         }
         num_sync_layers = new_sync_count;
     }
-    for k in 0..nz {
-        star.j_rot[k] -= delta_j[k];
-        star.omega[k] = star.j_rot[k] / star.aux.i_rot[k].max(1.0e-30);
-    }
+    delta_j
 }
 
-fn eval_star_k_div_t(
+#[allow(clippy::too_many_arguments)]
+fn eval_star_k_div_t_with_state(
     star: &StarModel,
     m_star: f64,
+    r_phot_cm: f64,
+    l_phot_lsun: f64,
+    omega_surf: f64,
     prescription: &str,
     tidal_reduction: f64,
     m_companion: f64,
     separation: f64,
     period: f64,
 ) -> Result<f64, StarError> {
-    let phot = eval_photosphere_info(star);
-    let r_phot = RSUN * phot.r_rsun;
     if prescription.eq_ignore_ascii_case("Hut_rad") {
         Ok(eval_k_div_t_radiative(
             m_star,
             m_companion,
-            r_phot,
+            r_phot_cm,
             separation,
         ))
     } else if prescription.eq_ignore_ascii_case("Hut_conv") {
         let (m_env_msun, r_env_rsun) =
-            eval_convective_envelope_mass_and_size(star);
+            eval_convective_envelope_mass_and_size_with_rphot(star, r_phot_cm);
         if m_env_msun > 0.0 && r_env_rsun > 0.0 {
-            let omega_surf = eval_surf_avg_rotation_info(star).omega;
             Ok(eval_k_div_t_convective(
                 m_star / MSUN,
                 m_env_msun,
-                phot.r_rsun,
+                r_phot_cm / RSUN,
                 r_env_rsun,
-                phot.l_lsun.max(1.0e-30),
+                l_phot_lsun.max(1.0e-30),
                 period,
                 omega_surf,
                 tidal_reduction,
@@ -550,6 +737,32 @@ fn eval_star_k_div_t(
             "unrecognized tidal prescription '{prescription}'"
         )))
     }
+}
+
+fn eval_star_k_div_t(
+    star: &StarModel,
+    m_star: f64,
+    prescription: &str,
+    tidal_reduction: f64,
+    m_companion: f64,
+    separation: f64,
+    period: f64,
+) -> Result<f64, StarError> {
+    let phot = eval_photosphere_info(star);
+    let r_phot_cm = RSUN * phot.r_rsun;
+    let omega_surf = eval_surf_avg_rotation_info(star).omega;
+    eval_star_k_div_t_with_state(
+        star,
+        m_star,
+        r_phot_cm,
+        phot.l_lsun,
+        omega_surf,
+        prescription,
+        tidal_reduction,
+        m_companion,
+        separation,
+        period,
+    )
 }
 
 /// Evaluates all gated orbital $\dot{J}$ terms matching `get_jdot` in
@@ -977,4 +1190,163 @@ pub fn eval_coupled_edot_breakdown(
         extra_edot,
         edot_total: edot_tidal + edot_enhance + extra_edot,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::jdot_tides::{
+        eval_k_div_t_convective, eval_k_div_t_radiative, eval_tsync, hut_f2,
+        hut_f5,
+    };
+    use flexmesa_const::SECDAY;
+    use flexmesa_star::{load_zams_model, StarControls, StarJobControls};
+
+    fn rotating_zams_star(mass_msun: f64, omega: f64) -> StarModel {
+        let mut star = load_zams_model(
+            StarControls {
+                initial_mass: mass_msun,
+                zbase: 0.02,
+                ..StarControls::default()
+            },
+            StarJobControls::default(),
+        )
+        .expect("ZAMS model");
+        star.controls.rotation_flag = true;
+        apply_uniform_rotation(&mut star, omega);
+        update_rotation_distortion_factors(&mut star);
+        star.dt = 10.0 * SECDAY;
+        star.aux.extra_jdot = vec![0.0; star.nz];
+        star
+    }
+
+    #[test]
+    fn test_sync_spin_orbit_torque_first_model_records_tsync_with_zero_torque()
+    {
+        let period = 1.2 * SECDAY;
+        let omega_orb = 2.0 * PI / period;
+        let mut star = rotating_zams_star(5.0, 1.25 * omega_orb);
+        let r_phot = star_photosphere_radius_cm(&star);
+        let m_comp = 4.0 * MSUN;
+        let osep = 12.0 * RSUN;
+        let scratch = Arc::new([AtomicU64::new(0), AtomicU64::new(0)]);
+        let hook = BinarySpinOrbitTorqueHook {
+            do_tidal_sync: true,
+            doing_first_model_of_run: true,
+            is_star_1: true,
+            model_twins_flag: false,
+            separation: osep,
+            period,
+            eccentricity: 0.0,
+            rlr: 0.4 * osep,
+            m_star: star.mstar,
+            m_companion: m_comp,
+            r_phot,
+            omega_avg_surf: eval_surf_avg_rotation_info(&star).omega,
+            f_tid: 1.0,
+            sync_type: String::from("Hut_rad"),
+            sync_mode: String::from("Uniform"),
+            tidal_reduction: 2.0,
+            t_sync_cells: scratch.clone(),
+        };
+
+        hook.apply(&mut star).expect("first-model hook succeeds");
+        let ts_recorded = f64::from_bits(scratch[0].load(Ordering::Relaxed));
+        let k_div_t = eval_k_div_t_radiative(star.mstar, m_comp, r_phot, osep);
+        let r_gyr_sq = eval_star_r_gyr_sq_with_mr(&star, star.mstar, r_phot);
+        let ts_expected = eval_tsync(
+            k_div_t,
+            m_comp / star.mstar,
+            r_gyr_sq,
+            r_phot,
+            osep,
+            1.0,
+        );
+        assert!(
+            (ts_recorded - ts_expected).abs() / ts_expected < 1.0e-14,
+            "expected t_sync={ts_expected:.16e}, got {ts_recorded:.16e}"
+        );
+        assert!(star.aux.extra_jdot.iter().all(|&ej| ej == 0.0));
+    }
+
+    #[test]
+    fn test_sync_spin_orbit_torque_uses_model_dt_and_start_baselines() {
+        let period = 1.0 * SECDAY;
+        let omega_orb = 2.0 * PI / period;
+        let mut star = rotating_zams_star(1.0, 0.8 * omega_orb);
+        let m_start = star.mstar;
+        let r_start = star_photosphere_radius_cm(&star);
+        let om_surf_start = eval_surf_avg_rotation_info(&star).omega;
+        let m_comp = 0.8 * MSUN;
+        let osep = 5.1 * RSUN;
+        let ecc = 0.2;
+        let scratch = Arc::new([AtomicU64::new(0), AtomicU64::new(0)]);
+        let hook = BinarySpinOrbitTorqueHook {
+            do_tidal_sync: true,
+            doing_first_model_of_run: false,
+            is_star_1: false,
+            model_twins_flag: false,
+            separation: osep,
+            period,
+            eccentricity: ecc,
+            rlr: 0.4 * osep,
+            m_star: m_start,
+            m_companion: m_comp,
+            r_phot: r_start,
+            omega_avg_surf: om_surf_start,
+            f_tid: 1.5,
+            sync_type: String::from("Hut_conv"),
+            sync_mode: String::from("Uniform"),
+            tidal_reduction: 2.0,
+            t_sync_cells: scratch.clone(),
+        };
+
+        // Mutate star.mstar and star.omega to simulate mid-step adjust_mass / Henyey
+        // changes; upstream binary_tides reads start-of-step b% m, b% r, and
+        // prior report omega_avg_surf rather than mutating star-side baselines.
+        star.mstar *= 0.92;
+        for om in &mut star.omega {
+            *om *= 1.3;
+        }
+        let dt_next = 2.0e6;
+        star.dt = dt_next;
+
+        hook.apply(&mut star).expect("convective hook succeeds");
+        let ts_recorded = f64::from_bits(scratch[1].load(Ordering::Relaxed));
+        let (m_env, r_env) =
+            eval_convective_envelope_mass_and_size_with_rphot(&star, r_start);
+        let l_phot = eval_photosphere_info(&star).l_lsun;
+        let k_div_t = eval_k_div_t_convective(
+            m_start / MSUN,
+            m_env,
+            r_start / RSUN,
+            r_env,
+            l_phot,
+            period,
+            om_surf_start,
+            2.0,
+        );
+        let r_gyr_sq = eval_star_r_gyr_sq_with_mr(&star, m_start, r_start);
+        let ts_expected =
+            eval_tsync(k_div_t, m_comp / m_start, r_gyr_sq, r_start, osep, 1.5);
+        assert!(
+            (ts_recorded - ts_expected).abs() / ts_expected < 1.0e-14,
+            "expected t_sync={ts_expected:.16e}, got {ts_recorded:.16e}"
+        );
+
+        let a1 = hut_f2(ecc);
+        let a2 = pow(1.0 - ecc * ecc, 1.5) * hut_f5(ecc);
+        let factor = 1.0 - exp(-a2 * dt_next / ts_expected);
+        for k in [0, star.nz / 2, star.nz - 1] {
+            let j_sync = omega_orb * star.aux.i_rot[k];
+            let dj = factor * (star.j_rot[k] - a1 / a2 * j_sync);
+            let expected_ej = -dj / dt_next;
+            let actual_ej = star.aux.extra_jdot[k];
+            assert!(
+                (actual_ej - expected_ej).abs()
+                    <= 1.0e-14 * expected_ej.abs().max(1.0),
+                "zone {k}: actual={actual_ej:.16e}, expected={expected_ej:.16e}"
+            );
+        }
+    }
 }

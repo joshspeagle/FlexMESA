@@ -3,9 +3,13 @@
 //! and `.photo` + orbital state snapshot helpers (`binary_def.f90`,
 //! `run_binary_support.f90`, and `binary_evolve.f90:103-255`).
 
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
+
 use flexmesa_const::{MSUN, RSUN, SECDAY, SECYER};
 use flexmesa_star::{
-    StarError, StarModel, set_hydro_vars, sync_post_henyey_rotation,
+    eval_surf_avg_rotation_info, set_hydro_vars, BinaryOtherTorqueHandle,
+    StarError, StarModel,
 };
 
 use crate::edd_wind::bh_initial_equatorial_mass;
@@ -17,8 +21,8 @@ use crate::orbit::{
 use crate::roche_deformation::BinaryTidalDeformationHook;
 use crate::system_init::prep_and_settle_binary_star;
 use crate::system_jdot::{
-    EdotBreakdown, JdotBreakdown, apply_initial_orbit_sync, eval_star_spin_j,
-    star_photosphere_radius_cm,
+    apply_initial_orbit_sync, eval_star_spin_j, star_photosphere_radius_cm,
+    BinarySpinOrbitTorqueHook, EdotBreakdown, JdotBreakdown,
 };
 use crate::system_rlof::{
     BinaryStepScalars, BinaryStepSnapshot, CoupledMdotAccounting,
@@ -81,6 +85,35 @@ pub struct BinaryStepCounters {
     pub num_dt_cuts: usize,
     /// Cumulative retries triggered by binary hard limits or `delta_mdot_hard_limit`.
     pub num_hard_limit_retries: usize,
+}
+
+#[derive(Debug)]
+pub(crate) struct BinaryTorqueScratch(pub(crate) Arc<[AtomicU64; 2]>);
+
+impl Default for BinaryTorqueScratch {
+    fn default() -> Self {
+        Self(Arc::new([AtomicU64::new(0), AtomicU64::new(0)]))
+    }
+}
+
+impl Clone for BinaryTorqueScratch {
+    fn clone(&self) -> Self {
+        Self::default()
+    }
+}
+
+impl BinaryTorqueScratch {
+    pub(crate) fn reset(&self) {
+        self.0[0].store(0, Ordering::Relaxed);
+        self.0[1].store(0, Ordering::Relaxed);
+    }
+
+    pub(crate) fn load(&self) -> [f64; 2] {
+        [
+            f64::from_bits(self.0[0].load(Ordering::Relaxed)),
+            f64::from_bits(self.0[1].load(Ordering::Relaxed)),
+        ]
+    }
 }
 
 /// Coupled binary star evolution state and step driver (`binary_info`).
@@ -171,6 +204,15 @@ pub struct BinarySystem {
     /// Frozen stellar structure retained after `set_point_mass_i` converts an
     /// evolved star into a compact point mass (`b% s1` / `b% s2` in `binary_utils.f90:67-82`).
     collapsed_star: Option<Box<StarModel>>,
+    /// Start-of-step component masses `[m_1, m_2]` (`b% m`, g).
+    star_b_m_g: [f64; 2],
+    /// Start-of-step photospheric radii `[r_1, r_2]` (`b% r`, cm).
+    star_b_r_cm: [f64; 2],
+    /// Prior end-of-step/relax surface-averaged $\Omega$ `[omega_avg_surf_1, omega_avg_surf_2]`.
+    star_b_omega_avg_surf: [f64; 2],
+    /// Non-serialized atomic scratchpad populated by [`BinarySpinOrbitTorqueHook`].
+    #[serde(skip, default)]
+    pub(crate) tide_sync_scratch: BinaryTorqueScratch,
 }
 
 impl BinarySystem {
@@ -277,14 +319,6 @@ impl BinarySystem {
             (a, period_from_separation(m_d, m_a, a))
         };
 
-        if controls.do_initial_orbit_sync_1 && point_mass_i != 1 {
-            apply_initial_orbit_sync(&mut donor, period)?;
-        }
-        if controls.do_initial_orbit_sync_2 && point_mass_i != 2 {
-            if let BinaryCompanion::Star(ref mut s2) = companion {
-                apply_initial_orbit_sync(s2, period)?;
-            }
-        }
         let r_a_init = match &companion {
             BinaryCompanion::PointMass { .. } => 0.0,
             BinaryCompanion::Star(s2) => s2.r[0],
@@ -297,6 +331,9 @@ impl BinarySystem {
             separation,
             eccentricity,
         );
+        // `run_binary_support.f90:269-275, 319-339`: attach `use_tidal_deformation`
+        // before `do_initial_orbit_sync_{1,2}` (`star_relax_uniform_omega`) so
+        // Roche `FP_rot`, `FT_rot`, and `i_rot` are active during initial sync.
         if controls.use_tidal_deformation {
             donor.aux.tidal_deformation =
                 Some(BinaryTidalDeformationHook::new_handle(
@@ -321,6 +358,14 @@ impl BinarySystem {
                         controls.f_sync_switch_width,
                         controls.f_sync_switch_lim,
                     )?);
+            }
+        }
+        if controls.do_initial_orbit_sync_1 && point_mass_i != 1 {
+            apply_initial_orbit_sync(&mut donor, period)?;
+        }
+        if controls.do_initial_orbit_sync_2 && point_mass_i != 2 {
+            if let BinaryCompanion::Star(ref mut s2) = companion {
+                apply_initial_orbit_sync(s2, period)?;
             }
         }
         prep_and_settle_binary_star(&mut donor)?;
@@ -405,62 +450,132 @@ impl BinarySystem {
             last_termination_reason: None,
             counters: BinaryStepCounters::default(),
             collapsed_star: None,
+            star_b_m_g: [0.0; 2],
+            star_b_r_cm: [0.0; 2],
+            star_b_omega_avg_surf: [0.0; 2],
+            tide_sync_scratch: BinaryTorqueScratch::default(),
         };
         sys.apply_binary_job_controls_after(false)?;
+        sys.refresh_binary_star_baselines();
         sys.refresh_tidal_deformation_hooks(false)?;
         Ok(sys)
     }
 
-    /// Attaches or updates the `use_tidal_deformation` Roche-potential hooks on
-    /// active stellar components (`run_binary_support.f90:269-277`).
+    /// Captures the start-of-step `b% m`, `b% r`, and prior `s% omega_avg_surf`
+    /// snapshots (`binary_evolve.f90:92-97, 275-296`, `report.f90:211`).
+    pub(crate) fn refresh_binary_star_baselines(&mut self) {
+        let masses = self.star_masses_g();
+        for idx in 1..=2 {
+            let slot = idx - 1;
+            let (r_cm, om_surf) = if let Some(star) = self.star_ref(idx) {
+                (
+                    star_photosphere_radius_cm(star),
+                    eval_surf_avg_rotation_info(star).omega,
+                )
+            } else {
+                (0.0, 0.0)
+            };
+            self.star_b_m_g[slot] = masses[slot];
+            self.star_b_r_cm[slot] = r_cm;
+            self.star_b_omega_avg_surf[slot] = om_surf;
+        }
+    }
+
+    /// Attaches or updates the `use_tidal_deformation` Roche-potential hooks and
+    /// `binary_other_torque` spin-orbit tidal hooks on active stellar components
+    /// (`run_binary_support.f90:266-277`).
     pub fn refresh_tidal_deformation_hooks(
         &mut self,
         recompute_hydro: bool,
     ) -> Result<(), StarError> {
-        if !self.controls.use_tidal_deformation {
-            self.donor.aux.tidal_deformation = None;
-            if let BinaryCompanion::Star(ref mut s2) = self.companion {
-                s2.aux.tidal_deformation = None;
-            }
-            return Ok(());
-        }
-        let m_d = self.donor.mstar;
-        let m_a = self.accretor_mass_g();
-        self.donor.aux.tidal_deformation =
-            Some(BinaryTidalDeformationHook::new_handle(
-                m_d,
-                m_a,
-                self.separation,
-                self.rl[0],
-                self.period,
-                self.controls.f_sync_switch_from_rot_defor,
-                self.controls.f_sync_switch_width,
-                self.controls.f_sync_switch_lim,
-            )?);
-        sync_post_henyey_rotation(&mut self.donor, 0.0)?;
-        if recompute_hydro {
-            set_hydro_vars(&mut self.donor, false, false)?;
-            self.donor.save_start_values()?;
-            self.donor.save_old_values();
-        }
-        if let BinaryCompanion::Star(ref mut s2) = self.companion {
-            s2.aux.tidal_deformation =
+        if self.controls.use_tidal_deformation {
+            let m_d = self.donor.mstar;
+            let m_a = self.accretor_mass_g();
+            self.donor.aux.tidal_deformation =
                 Some(BinaryTidalDeformationHook::new_handle(
-                    m_a,
                     m_d,
+                    m_a,
                     self.separation,
-                    self.rl[1],
+                    self.rl[0],
                     self.period,
                     self.controls.f_sync_switch_from_rot_defor,
                     self.controls.f_sync_switch_width,
                     self.controls.f_sync_switch_lim,
                 )?);
-            sync_post_henyey_rotation(s2, 0.0)?;
             if recompute_hydro {
-                set_hydro_vars(s2, false, false)?;
-                s2.save_start_values()?;
-                s2.save_old_values();
+                set_hydro_vars(&mut self.donor, false, false)?;
+                self.donor.save_start_values()?;
+                self.donor.save_old_values();
             }
+            if let BinaryCompanion::Star(ref mut s2) = self.companion {
+                s2.aux.tidal_deformation =
+                    Some(BinaryTidalDeformationHook::new_handle(
+                        m_a,
+                        m_d,
+                        self.separation,
+                        self.rl[1],
+                        self.period,
+                        self.controls.f_sync_switch_from_rot_defor,
+                        self.controls.f_sync_switch_width,
+                        self.controls.f_sync_switch_lim,
+                    )?);
+                if recompute_hydro {
+                    set_hydro_vars(s2, false, false)?;
+                    s2.save_start_values()?;
+                    s2.save_old_values();
+                }
+            }
+        } else {
+            self.donor.aux.tidal_deformation = None;
+            if let BinaryCompanion::Star(ref mut s2) = self.companion {
+                s2.aux.tidal_deformation = None;
+            }
+        }
+
+        let (st_1, sm_1, ft_1) = (
+            self.controls.sync_type_1.clone(),
+            self.controls.sync_mode_1.clone(),
+            self.controls.ftid_1,
+        );
+        let (st_2, sm_2, ft_2) = (
+            self.controls.sync_type_2.clone(),
+            self.controls.sync_mode_2.clone(),
+            self.controls.ftid_2,
+        );
+        let make_torque_hook = |star_idx: usize, rl_cm: f64| {
+            let slot = star_idx - 1;
+            let other_slot = 1 - slot;
+            let is_star_1 = self.point_mass_i != 1 && star_idx == 1;
+            let (sync_type, sync_mode, f_tid) = if is_star_1 {
+                (st_1.clone(), sm_1.clone(), ft_1)
+            } else {
+                (st_2.clone(), sm_2.clone(), ft_2)
+            };
+            BinaryOtherTorqueHandle::new(BinarySpinOrbitTorqueHook {
+                do_tidal_sync: self.controls.do_tidal_sync,
+                doing_first_model_of_run: self.model_number == 0,
+                is_star_1,
+                model_twins_flag: false,
+                separation: self.separation,
+                period: self.period,
+                eccentricity: self.eccentricity,
+                rlr: rl_cm,
+                m_star: self.star_b_m_g[slot],
+                m_companion: self.star_b_m_g[other_slot],
+                r_phot: self.star_b_r_cm[slot],
+                omega_avg_surf: self.star_b_omega_avg_surf[slot],
+                f_tid,
+                sync_type,
+                sync_mode,
+                tidal_reduction: self.controls.tidal_reduction,
+                t_sync_cells: self.tide_sync_scratch.0.clone(),
+            })
+        };
+        self.donor.aux.binary_other_torque =
+            Some(make_torque_hook(self.donor_i, self.rl[0]));
+        if let BinaryCompanion::Star(ref mut s2) = self.companion {
+            s2.aux.binary_other_torque =
+                Some(make_torque_hook(3 - self.donor_i, self.rl[1]));
         }
         Ok(())
     }
@@ -600,6 +715,7 @@ impl BinarySystem {
         self.rl = rl;
         self.rl_relative_gap = gaps;
         self.ignore_hard_limits_this_step = true;
+        self.refresh_binary_star_baselines();
         self.refresh_tidal_deformation_hooks(false)
     }
 
@@ -631,6 +747,7 @@ impl BinarySystem {
         self.rl = rl;
         self.rl_relative_gap = gaps;
         self.ignore_hard_limits_this_step = true;
+        self.refresh_binary_star_baselines();
         self.refresh_tidal_deformation_hooks(false)
     }
 
@@ -782,6 +899,7 @@ impl BinarySystem {
         );
         self.rl = rl;
         self.rl_relative_gap = gaps;
+        self.refresh_binary_star_baselines();
         self.refresh_tidal_deformation_hooks(false)?;
         Ok(())
     }
@@ -868,6 +986,9 @@ impl BinarySystem {
                 .controls
                 .column_depth_for_irradiation,
             t_sync: self.t_sync,
+            star_b_m_g: self.star_b_m_g,
+            star_b_r_cm: self.star_b_r_cm,
+            star_b_omega_avg_surf: self.star_b_omega_avg_surf,
             separation: self.separation,
             period: self.period,
             eccentricity: self.eccentricity,
@@ -929,6 +1050,9 @@ impl BinarySystem {
         self.donor.controls.column_depth_for_irradiation =
             snap.donor_column_depth_for_irradiation;
         self.t_sync = snap.t_sync;
+        self.star_b_m_g = snap.star_b_m_g;
+        self.star_b_r_cm = snap.star_b_r_cm;
+        self.star_b_omega_avg_surf = snap.star_b_omega_avg_surf;
         self.separation = snap.separation;
         self.period = snap.period;
         self.eccentricity = snap.eccentricity;

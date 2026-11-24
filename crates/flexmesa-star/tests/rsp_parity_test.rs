@@ -461,6 +461,15 @@ const T2C_REF_ROWS: &[(usize, f64, f64, f64, usize, f64, f64)] = &[
         2.083355521929617e-1,
     ),
     (
+        4490,
+        2.1593283032673152,
+        3.816898938521944,
+        9.742822490131794e-1,
+        1,
+        1.6869136748316769,
+        2.083355521929617e-1,
+    ),
+    (
         4760,
         2.1616073532443654,
         3.8119311222554786,
@@ -497,10 +506,28 @@ const T2C_REF_ROWS: &[(usize, f64, f64, f64, usize, f64, f64)] = &[
         2.969700758060576e-1,
     ),
     (
+        9280,
+        2.1471931045277,
+        3.815479650187092,
+        9.692982628125483e-1,
+        5,
+        1.5734071717462521,
+        2.969700758060576e-1,
+    ),
+    (
         9570,
         2.1847698862900176,
         3.8179651743337333,
         9.953588613551477e-1,
+        6,
+        1.5957784609687937,
+        3.218501864916139e-1,
+    ),
+    (
+        10450,
+        2.120139998041459,
+        3.81156815054221,
+        9.628254438999801e-1,
         6,
         1.5957784609687937,
         3.218501864916139e-1,
@@ -524,12 +551,30 @@ const T2C_REF_ROWS: &[(usize, f64, f64, f64, usize, f64, f64)] = &[
         3.580961276584791e-1,
     ),
     (
+        12930,
+        2.111911722408387,
+        3.8106712357179844,
+        9.603580315700044e-1,
+        8,
+        1.433385651122266,
+        3.580961276584791e-1,
+    ),
+    (
         13540,
         2.133826815933002,
         3.801235957563389,
         1.000431937989085,
         9,
         1.951511716913778,
+        5.118759466155135e-1,
+    ),
+    (
+        13860,
+        2.0532635285124434,
+        3.7902119822476665,
+        9.769828673264457e-1,
+        9,
+        1.9515117169137779,
         5.118759466155135e-1,
     ),
     (
@@ -567,11 +612,12 @@ fn test_rsp_t2c_built_model_with_mesa_rng_state_matches_10_periods_mesa_26_4_1()
         "LINA P1 mismatch: {lina_p1_days}"
     );
 
-    // Natural `RELAX_ENV` stops at 5243 draws because `flexmesa_math::intrinsic_log`
-    // (`crlibm::log_rn`, `#165`) differs by 1 ULP from MESA's `glibc libm dlog`
-    // (`star/private/rsp_relax_env.f90:1019-1020`) under Jacobian `cond ~ 1.93e19`.
-    // Pinning the RNG seed isolates nonlinear evolution parity on a freshly built
-    // envelope over all 14,683 steps (10 periods) of `star/rsp_Type_II_Cepheid`.
+    // Natural `RELAX_ENV` stops at 7057 draws (vs 7071 in MESA) because
+    // `flexmesa_math::intrinsic_{log,log10,pow}` (`crlibm` `*_rn`, `#165`/`#198`)
+    // differs by 1 ULP on isolated calls from MESA's `glibc libm` intrinsics
+    // (`dlog`, `dlog10`, `10.d0**`, `**1.5d0` in `star/private/rsp_relax_env.f90:599,737,1019-1020`).
+    // Pinning the post-relax `RANMAR` state isolates nonlinear evolution parity
+    // over all 14,683 steps (10 periods) including peak-luminosity extrema.
     m.aux.rsp.rng.unpack(&MESA_T2C_RNG_STATE);
 
     let mut checked = 0_usize;

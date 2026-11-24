@@ -171,6 +171,11 @@ fn freeze_microphysics_tangents(m: &mut StarModel) {
     }
     m.ln_peos_surf_ad = StarAdOrder1::constant(m.ln_peos_surf_ad.val);
     m.ln_t_surf_ad = StarAdOrder1::constant(m.ln_t_surf_ad.val);
+    m.surf_pt = flexmesa_star::SurfPt {
+        ln_t: m.surf_pt.ln_t,
+        ln_p: m.surf_pt.ln_p,
+        ..flexmesa_star::SurfPt::default()
+    };
     for d in m.eos_d_dlnd.iter_mut().chain(m.eos_d_dlnt.iter_mut()) {
         d.fill(0.0);
     }

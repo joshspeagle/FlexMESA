@@ -362,7 +362,7 @@ pub use mix_info::{
     set_cz_bdy_mass, set_cz_boundary_info, set_mixing_info,
     set_mixing_info_with_skip,
 };
-pub use model::StarModel;
+pub use model::{StarModel, SurfPt};
 pub use model_io::{
     PHOTO_FORMAT_VERSION, STAR_DEF_VERSION, compute_photo_checksum,
     load_photo_bytes, photo_numerics_mode, read_mod_str, read_photo_bytes,

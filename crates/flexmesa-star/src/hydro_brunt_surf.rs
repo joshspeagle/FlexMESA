@@ -4,11 +4,11 @@
 //! conditions (`eval_surf_bc` in `star/private/hydro_vars.f90`).
 
 use flexmesa_atm::{
-    atm_teff, eval_irradiated, eval_t_tau_uniform, eval_t_tau_varying,
+    atm_black_body_t, eval_irradiated, eval_t_tau_uniform, eval_t_tau_varying,
     eval_table, get_t_tau_base, get_table_alfa_beta, get_table_base,
     AtmEosCallbackResult, AtmError, AtmEvalOutput, AtmKapCallbackResult,
 };
-use flexmesa_const::{CLIGHT, CRAD, FOUR_PI, LN10, L_SUN, M_SUN, PI};
+use flexmesa_const::{BOLTZ_SIGMA, CRAD, FOUR_PI, LN10};
 use flexmesa_eos::{
     eos_dt_get, eos_dt_get_rho, EosConfig, HelmTable, I_ETA, I_LN_FREE_E,
     I_LN_PGAS,
@@ -18,12 +18,9 @@ use flexmesa_kap::{get_kap_results, KapConfig};
 use crate::controls::{
     AtmIrradiatedOpacity, AtmOption, AtmTTauOpacity, StarControls, StarError,
 };
-use crate::model::StarModel;
+use crate::model::{StarModel, SurfPt};
 use crate::rsp_eos_kap::RspChemCache;
-use crate::star_ad::{
-    StarAdExt, StarAdOrder1, I_LND_00, I_LNR_00, I_LNT_00, I_L_00,
-    NUM_STAR_AD_VARS,
-};
+use crate::star_ad::{StarAdOrder1, I_LND_00, I_LNR_00, I_LNT_00, I_L_00};
 
 /// Evaluates the face-centered composition gradient term $B_k$ (`do_brunt_B`
 /// in `star/private/brunt.f90:37-106,184-333`), stores `unsmoothed_brunt_B`,
@@ -287,10 +284,8 @@ pub(crate) fn get_atm_tau_base(
                 ))
             })
         }
-        // 'irradiated_grey' and every other option (`atm_support.f90:201-209`).
-        AtmOption::IrradiatedGrey | AtmOption::SimplePhotosphere => {
-            Ok(2.0 / 3.0)
-        }
+        // 'irradiated_grey' (`atm_support.f90:201-204`).
+        AtmOption::IrradiatedGrey => Ok(2.0 / 3.0),
     }
 }
 
@@ -306,6 +301,74 @@ pub fn eval_surf_bc(model: &mut StarModel) -> Result<(), StarError> {
     if model.nz == 0 {
         return Ok(());
     }
+    // `set_Teff_info_for_eqns` (`star/private/hydro_vars.f90:388-469`):
+    // `set_phot_info` sets `s% Teff` from the photosphere's `L` and `r`
+    // (`hydro_vars.f90:418-419`, `star/private/star_utils.f90:1094-1106`),
+    // and `get_surf_PT` passes that `Teff` to the atmosphere
+    // (`hydro_vars.f90:821, 962-966`).
+    let phot = crate::report_utils::eval_photosphere_info(model);
+    let teff = atm_black_body_t(phot.l_erg, phot.r_cm);
+    model.teff = teff;
+    if model.controls.do_starspots {
+        // `starspot_tweak_PT` before `get_surf_PT` and `starspot_restore_PT`
+        // after it (`hydro_vars.f90:443-456`,
+        // `star/private/starspots.f90:68-102`): the atmosphere sees the
+        // unspotted surface luminosity `L(1)/alp` and its `Teff`.
+        let alp = 1.0 - model.controls.fspot
+            + model.controls.fspot * flexmesa_math::pow4(model.controls.xspot);
+        let l_init = model.lum[0];
+        model.lum[0] /= alp;
+        let teff_spot = flexmesa_math::pow(
+            model.lum[0]
+                / (FOUR_PI * flexmesa_math::pow2(model.r[0]) * BOLTZ_SIGMA),
+            0.25,
+        );
+        let result = get_surf_pt(model, teff_spot);
+        model.lum[0] = l_init;
+        result?;
+    } else {
+        get_surf_pt(model, teff)?;
+    }
+    // `set_phot_info` is called again after `T_surf` is set
+    // (`hydro_vars.f90:467`); `Teff` depends only on the photosphere's `L`
+    // and `r`, so it is unchanged.
+    set_surf_diagnostic_ad(model);
+    Ok(())
+}
+
+/// Fills the diagnostic [`StarModel::ln_peos_surf_ad`] and
+/// [`StarModel::ln_t_surf_ad`] from [`StarModel::surf_pt`], with the
+/// `lnd`/`lnT` partials `dlnX_dlnkap*dlnkap_dlnd` from the cell-1 opacity
+/// (`star/private/hydro_eqns.f90:922-928`). The surface equations do not read
+/// these; they use `get_pt_bc_ad` in `hydro_eqns.rs`.
+fn set_surf_diagnostic_ad(model: &mut StarModel) {
+    let sp = model.surf_pt;
+    let dlnkap_dlnd = model.d_opacity_dlnd[0] / model.opacity[0];
+    let dlnkap_dlnt = model.d_opacity_dlnt[0] / model.opacity[0];
+    let mut lnp = StarAdOrder1::constant(sp.ln_p);
+    lnp.d1[I_LND_00] = sp.dlnp_dlnkap * dlnkap_dlnd;
+    lnp.d1[I_LNT_00] = sp.dlnp_dlnkap * dlnkap_dlnt;
+    lnp.d1[I_LNR_00] = sp.dlnp_dlnr;
+    lnp.d1[I_L_00] = sp.dlnp_dl;
+    let mut lnt = StarAdOrder1::constant(sp.ln_t);
+    lnt.d1[I_LND_00] = sp.dlnt_dlnkap * dlnkap_dlnd;
+    lnt.d1[I_LNT_00] = sp.dlnt_dlnkap * dlnkap_dlnt;
+    lnt.d1[I_LNR_00] = sp.dlnt_dlnr;
+    lnt.d1[I_L_00] = sp.dlnt_dl;
+    model.ln_peos_surf_ad = lnp;
+    model.ln_t_surf_ad = lnt;
+}
+
+/// `get_surf_PT` (`star/private/hydro_vars.f90:779-1030`) with `Teff = s% Teff`
+/// as set by `set_Teff_info_for_eqns`. Stores the result in
+/// [`StarModel::surf_pt`].
+///
+/// # Errors
+/// Returns [`StarError`] from the atmosphere evaluation; `atm_option`
+/// values other than `'T_tau'`, `'table'` and `'irradiated_grey'` cannot be
+/// set (the `fixed_*` options are not ported, and the deprecated options stop
+/// in `get_legacy`, `star/private/atm_support.f90:891-998`).
+fn get_surf_pt(model: &mut StarModel, teff: f64) -> Result<(), StarError> {
     // `L_surf = s% L(1)`, `R_surf = s% r(1)` and `s% m(1)`, unclamped
     // (`star/private/hydro_vars.f90:817-821, 962-966`).
     let l_surf = model.lum[0];
@@ -313,177 +376,161 @@ pub fn eval_surf_bc(model: &mut StarModel) -> Result<(), StarError> {
     let m_surf = model.m[0];
     let cgrav = model.cgrav[0];
     let tau_surf = model.controls.tau_factor * model.tau_base;
-    let teff = atm_teff(l_surf, r_surf);
-    model.teff = teff;
 
-    if model.controls.use_zero_pgas_outer_bc {
-        let t_start_0 = flexmesa_math::exp(
-            model.ln_t_start.first().copied().unwrap_or(model.ln_t[0]),
-        )
-        .max(1.0);
-        model.ln_t_surf_ad =
-            StarAdOrder1::constant(flexmesa_math::log(t_start_0));
-        let p_rad_0 =
-            // `Radiation_Pressure(s% T_start(1))` (`star/private/hydro_eqns.f90:761`,
-            // `eos/public/eos_lib.f90:91`: `crad*T*T*T*T/3d0`).
-            (CRAD * t_start_0 * t_start_0 * t_start_0 * t_start_0 / 3.0)
-                .max(1.0e-30);
-        model.ln_peos_surf_ad =
-            StarAdOrder1::constant(flexmesa_math::log(p_rad_0));
-        return Ok(());
-    }
+    // `need_P_surf` and `need_T_surf` (`star/private/hydro_eqns.f90:757-779`),
+    // both forced on with starspots (`hydro_vars.f90:443-445`). The solver
+    // always has an `equL` equation here (`do_equL`).
+    let c = &model.controls;
+    let need_p_surf = !(c.use_compression_outer_bc
+        || c.use_zero_pgas_outer_bc
+        || c.use_fixed_psurf_outer_bc
+        || c.use_fixed_vsurf_outer_bc);
+    let need_t_surf = !(c.rsp2_flag || c.use_rsp_l_eqn_outer_bc);
+    let (need_p_surf, need_t_surf) = if c.do_starspots {
+        (true, true)
+    } else {
+        (need_p_surf, need_t_surf)
+    };
 
-    if model.controls.atm_option == AtmOption::SimplePhotosphere {
-        // Direct radiation-pressure corrected simple photosphere (`hydro_vars.f90:857-916`):
-        // P_surf = (tau_surf * g / kap_0) * (1 + 1.6e-4 * pextra_factor * kap_0 * (L/Lsun)/(M/Msun))
-        // T_surf = Teff * (0.75 * tau_surf + 0.5)^(1/4)
-        let lnr_0 = StarAdOrder1::variable(model.ln_r[0], I_LNR_00);
-        let r_0 = lnr_0.exp();
-        let lum_0 = StarAdOrder1::variable(l_surf, I_L_00);
-        let kap_0 = StarAdOrder1::from_dlnd_dlnt_00(
-            model.opacity[0].max(1.0e-10),
-            model.d_opacity_dlnd[0],
-            model.d_opacity_dlnt[0],
-        );
-        let g_0 = (cgrav * m_surf) / (r_0 * r_0);
-        let pextra_coeff = 1.6e-4 * model.controls.pextra_factor
-            / ((m_surf / M_SUN).max(1.0e-10) * L_SUN);
-        let pextra = StarAdOrder1::constant(1.0) + kap_0 * lum_0 * pextra_coeff;
-        let p_surf = (g_0 * tau_surf / kap_0) * pextra;
-        model.ln_peos_surf_ad = p_surf.log();
-
-        let t_surf4 = lum_0 * (0.75 * tau_surf.max(0.0) + 0.5)
-            / (PI * CRAD * CLIGHT * r_0 * r_0);
-        model.ln_t_surf_ad = t_surf4.log() * 0.25;
-        return Ok(());
-    }
-
-    if model.controls.atm_option == AtmOption::Table {
-        if model.controls.atm_table.trim().is_empty() {
-            return Err(StarError::InvalidInput(String::from(
-                "atm_option = 'table' requires a non-empty atm_table",
-            )));
+    if !(need_p_surf || need_t_surf) {
+        // Special-case boundary condition (`hydro_vars.f90:839-853`): the
+        // start-of-step cell-1 values, with zero partials.
+        let mut ln_p = model.ln_peos_start[0];
+        if !ln_p.is_finite() {
+            ln_p = 0.0;
         }
-        let table_id =
-            crate::inlist_populate::atm_table_id(&model.controls.atm_table)
-                .ok_or_else(|| {
-                    StarError::MicrophysicsError(format!(
-                        "unknown atm_table {:?}",
-                        model.controls.atm_table
-                    ))
-                })?;
-        model.tau_base = get_table_base(table_id).map_err(|e| {
-            StarError::MicrophysicsError(format!("get_table_base failed: {e}"))
-        })?;
-        let tbl_tau_surf = model.controls.tau_factor * model.tau_base;
-        let z_surf = model.z_mass.first().copied().unwrap_or(0.02);
-        let (alfa, beta) =
-            get_table_alfa_beta(l_surf, teff, r_surf, m_surf, cgrav, table_id)
-                .map_err(|e| {
-                    StarError::MicrophysicsError(format!(
-                        "get_table_alfa_beta failed for '{}': {e}",
-                        model.controls.atm_table
-                    ))
-                })?;
-        if beta > 0.0 && alfa < 1.0 {
-            let tbl_out = eval_table(
-                l_surf, r_surf, m_surf, cgrav, table_id, z_surf, false, teff,
-            )
-            .map_err(|e| {
-                StarError::MicrophysicsError(format!(
-                    "atm table '{}' evaluation failed: {e}",
-                    model.controls.atm_table
-                ))
-            })?;
-            let (tbl_lnp, tbl_lnt) = atm_out_to_ad(&tbl_out, 0.0, 0.0);
-            if alfa <= 0.0 {
-                model.ln_peos_surf_ad = tbl_lnp;
-                model.ln_t_surf_ad = tbl_lnt;
-            } else {
-                let (grey_lnp, grey_lnt) = eval_grey_t_tau_surf(
-                    model,
-                    tbl_tau_surf,
-                    l_surf,
-                    r_surf,
-                    m_surf,
-                    cgrav,
-                    teff,
-                )?;
-                model.ln_peos_surf_ad =
-                    blend_surf_ad(alfa, grey_lnp, beta, tbl_lnp);
-                model.ln_t_surf_ad =
-                    blend_surf_ad(alfa, grey_lnt, beta, tbl_lnt);
-            }
-            return Ok(());
-        }
-        let (grey_lnp, grey_lnt) = eval_grey_t_tau_surf(
-            model,
-            tbl_tau_surf,
-            l_surf,
-            r_surf,
-            m_surf,
-            cgrav,
-            teff,
-        )?;
-        model.ln_peos_surf_ad = grey_lnp;
-        model.ln_t_surf_ad = grey_lnt;
+        let t_surf = flexmesa_math::exp(model.ln_t_start[0]);
+        model.surf_pt = SurfPt {
+            ln_t: flexmesa_math::log(t_surf),
+            ln_p,
+            ..SurfPt::default()
+        };
         return Ok(());
     }
 
-    if model.controls.atm_option == AtmOption::IrradiatedGrey {
-        return eval_irradiated_surf(model);
-    }
-
-    let (lnp_ad, lnt_ad) = eval_grey_t_tau_surf(
-        model, tau_surf, l_surf, r_surf, m_surf, cgrav, teff,
-    )?;
-    model.ln_peos_surf_ad = lnp_ad;
-    model.ln_t_surf_ad = lnt_ad;
+    model.surf_pt = match model.controls.atm_option {
+        AtmOption::Table => {
+            get_table(model, l_surf, r_surf, m_surf, cgrav, teff)?
+        }
+        AtmOption::IrradiatedGrey => eval_irradiated_surf(model)?,
+        AtmOption::TTau => eval_grey_t_tau_surf(
+            model, tau_surf, l_surf, r_surf, m_surf, cgrav, teff,
+        )?,
+    };
     Ok(())
 }
 
-fn atm_out_to_ad(
-    atm_out: &AtmEvalOutput,
-    dlnkap_dlnd: f64,
-    dlnkap_dlnt: f64,
-) -> (StarAdOrder1, StarAdOrder1) {
-    let mut d1_lnp = [0.0; NUM_STAR_AD_VARS];
-    d1_lnp[I_LND_00] = atm_out.dln_p_dln_kap * dlnkap_dlnd;
-    d1_lnp[I_LNT_00] = atm_out.dln_p_dln_kap * dlnkap_dlnt;
-    d1_lnp[I_LNR_00] = atm_out.dln_p_dln_r;
-    d1_lnp[I_L_00] = atm_out.dln_p_dl;
-
-    let mut d1_lnt = [0.0; NUM_STAR_AD_VARS];
-    d1_lnt[I_LND_00] = atm_out.dln_t_dln_kap * dlnkap_dlnd;
-    d1_lnt[I_LNT_00] = atm_out.dln_t_dln_kap * dlnkap_dlnt;
-    d1_lnt[I_LNR_00] = atm_out.dln_t_dln_r;
-    d1_lnt[I_L_00] = atm_out.dln_t_dl;
-
-    (
-        StarAdOrder1 {
-            val: atm_out.ln_p,
-            d1: d1_lnp,
-        },
-        StarAdOrder1 {
-            val: atm_out.ln_t,
-            d1: d1_lnt,
-        },
-    )
+/// `get_table` (`star/private/atm_support.f90:430-689`): blends the
+/// tabulated atmosphere (weight `beta`) with the off-table `T_tau`
+/// atmosphere at `tau = s% tau_base` (weight `alfa`), resetting `s% tau_base`
+/// to the `T_tau` base when completely off the table and back to the table
+/// base otherwise.
+///
+/// `atm_off_table_option` is not a supported control, so it always has its
+/// default `'T_tau'` (`star/defaults/controls.defaults:4335`).
+///
+/// # Errors
+/// Returns [`StarError::InvalidInput`] when `tau_factor /= 1`
+/// (`atm_support.f90:491-494`, a `mesa_error` upstream) and
+/// [`StarError::MicrophysicsError`] for `L < 0` or a failing table or `T_tau`
+/// evaluation.
+fn get_table(
+    model: &mut StarModel,
+    l: f64,
+    r: f64,
+    m: f64,
+    cgrav: f64,
+    teff: f64,
+) -> Result<SurfPt, StarError> {
+    if model.controls.tau_factor != 1.0 {
+        return Err(StarError::InvalidInput(String::from(
+            "Cannot use atm_option == 'table' with tau_factor /= 1",
+        )));
+    }
+    let z = model.z_mass[0];
+    if l < 0.0 {
+        return Err(StarError::MicrophysicsError(String::from(
+            "atm get_table: L < 0",
+        )));
+    }
+    let table_id =
+        crate::inlist_populate::atm_table_id(&model.controls.atm_table)
+            .ok_or_else(|| {
+                StarError::MicrophysicsError(format!(
+                    "get_table_id failed in get_table: {:?}",
+                    model.controls.atm_table
+                ))
+            })?;
+    let (alfa, beta) = get_table_alfa_beta(l, teff, r, m, cgrav, table_id)
+        .map_err(|e| {
+            StarError::MicrophysicsError(format!(
+                "Call to atm_get_table_alfa_beta failed in get_table: {e}"
+            ))
+        })?;
+    // `atm_support.f90:531-566`.
+    let tau_base = if beta == 0.0 {
+        get_t_tau_base(model.controls.atm_t_tau_relation.id()).map_err(|e| {
+            StarError::MicrophysicsError(format!(
+                "Call to atm_get_T_tau_base failed in get_table: {e}"
+            ))
+        })?
+    } else {
+        get_table_base(table_id).map_err(|e| {
+            StarError::MicrophysicsError(format!(
+                "Call to atm_get_table_base failed in get_table: {e}"
+            ))
+        })?
+    };
+    if model.tau_base != tau_base {
+        model.tau_base = tau_base;
+    }
+    // `atm_support.f90:571-600`.
+    let b = if beta == 0.0 {
+        SurfPt::default()
+    } else {
+        let out = eval_table(l, r, m, cgrav, table_id, z, false, teff)
+            .map_err(|e| {
+                StarError::MicrophysicsError(format!(
+                    "Call to atm_eval_table failed in get_table: {e}"
+                ))
+            })?;
+        surf_pt_from_atm(&out)
+    };
+    // `atm_support.f90:604-650`: `atm_off_table_option = 'T_tau'`.
+    let a = if alfa == 0.0 {
+        SurfPt::default()
+    } else {
+        let tau = model.tau_base;
+        eval_grey_t_tau_surf(model, tau, l, r, m, cgrav, teff)?
+    };
+    // `atm_support.f90:654-668`: values and raw partials blended separately.
+    Ok(SurfPt {
+        ln_t: alfa * a.ln_t + beta * b.ln_t,
+        ln_p: alfa * a.ln_p + beta * b.ln_p,
+        dlnt_dl: alfa * a.dlnt_dl + beta * b.dlnt_dl,
+        dlnt_dlnr: alfa * a.dlnt_dlnr + beta * b.dlnt_dlnr,
+        dlnt_dlnm: alfa * a.dlnt_dlnm + beta * b.dlnt_dlnm,
+        dlnt_dlnkap: alfa * a.dlnt_dlnkap + beta * b.dlnt_dlnkap,
+        dlnp_dl: alfa * a.dlnp_dl + beta * b.dlnp_dl,
+        dlnp_dlnr: alfa * a.dlnp_dlnr + beta * b.dlnp_dlnr,
+        dlnp_dlnm: alfa * a.dlnp_dlnm + beta * b.dlnp_dlnm,
+        dlnp_dlnkap: alfa * a.dlnp_dlnkap + beta * b.dlnp_dlnkap,
+    })
 }
 
-fn blend_surf_ad(
-    alfa: f64,
-    grey: StarAdOrder1,
-    beta: f64,
-    tbl: StarAdOrder1,
-) -> StarAdOrder1 {
-    let mut d1 = [0.0; NUM_STAR_AD_VARS];
-    for (i, slot) in d1.iter_mut().enumerate() {
-        *slot = alfa * grey.d1[i] + beta * tbl.d1[i];
-    }
-    StarAdOrder1 {
-        val: alfa * grey.val + beta * tbl.val,
-        d1,
+/// The `lnT`/`lnP` outputs and raw partials of an `atm_lib` evaluation.
+fn surf_pt_from_atm(o: &AtmEvalOutput) -> SurfPt {
+    SurfPt {
+        ln_t: o.ln_t,
+        dlnt_dl: o.dln_t_dl,
+        dlnt_dlnr: o.dln_t_dln_r,
+        dlnt_dlnm: o.dln_t_dln_m,
+        dlnt_dlnkap: o.dln_t_dln_kap,
+        ln_p: o.ln_p,
+        dlnp_dl: o.dln_p_dl,
+        dlnp_dlnr: o.dln_p_dln_r,
+        dlnp_dlnm: o.dln_p_dln_m,
+        dlnp_dlnkap: o.dln_p_dln_kap,
     }
 }
 
@@ -509,7 +556,10 @@ fn atm_eos_proc(
         &chem.xa,
         ln_t / LN10,
         I_LN_PGAS as isize,
-        flexmesa_math::log(pgas),
+        // `solve_eos_given_PgasT` passes `logPgas*ln10` with
+        // `logPgas = log10(Pgas)` (`star/private/atm_support.f90:1221-1225`,
+        // `star/private/eos_support.f90:340-346`).
+        flexmesa_math::log10(pgas) * LN10,
         flexmesa_math::log10(rho_guess),
         1.0e-11,
         1.0e-11 * LN10,
@@ -620,7 +670,7 @@ fn unused_kap_proc(
 /// `model.controls.tau_factor` (`get_atm_tau_base` and `get_irradiated` in
 /// `star/private/atm_support.f90:201-204, 736-888`, `atm/private/atm_irradiated.f90:35-332`,
 /// and `star/private/hydro_eqns.f90:922-966`).
-fn eval_irradiated_surf(model: &mut StarModel) -> Result<(), StarError> {
+fn eval_irradiated_surf(model: &mut StarModel) -> Result<SurfPt, StarError> {
     let c = &model.controls;
     let t_eq = c.atm_irradiated_t_eq;
     let p_surf = c.atm_irradiated_p_surf;
@@ -683,7 +733,7 @@ fn eval_irradiated_surf(model: &mut StarModel) -> Result<(), StarError> {
         k0
     };
 
-    let (irr_out, dlnkap_dlnd, dlnkap_dlnt) = match c.atm_irradiated_opacity {
+    let irr_out = match c.atm_irradiated_opacity {
         AtmIrradiatedOpacity::Fixed => {
             let out = eval_irradiated(
                 l_surf,
@@ -706,11 +756,7 @@ fn eval_irradiated_surf(model: &mut StarModel) -> Result<(), StarError> {
                     "eval_irradiated (fixed) failed: {e}"
                 ))
             })?;
-            (
-                out,
-                model.d_opacity_dlnd[0] / k0,
-                model.d_opacity_dlnt[0] / k0,
-            )
+            out
         }
         AtmIrradiatedOpacity::Iterated => {
             let chem = RspChemCache::from_model_zone0(model)?;
@@ -758,31 +804,27 @@ fn eval_irradiated_surf(model: &mut StarModel) -> Result<(), StarError> {
                     "eval_irradiated (iterated) failed: {e}"
                 ))
             })?;
-            (out, 0.0, 0.0)
+            out
         }
     };
 
     // `star/private/atm_support.f90:201-204, 830-840`: fixed `lnP_surf`, zero
     // pressure partials, `tau_base = 2/3`, and `tau_factor = tau_surf / tau_base`.
-    let atm_out = AtmEvalOutput {
+    let surf = SurfPt {
         ln_t: irr_out.ln_t,
-        dln_t_dl: irr_out.dln_t_dl,
-        dln_t_dln_r: irr_out.dln_t_dln_r,
-        dln_t_dln_m: irr_out.dln_t_dln_m,
-        dln_t_dln_kap: irr_out.dln_t_dln_kap,
+        dlnt_dl: irr_out.dln_t_dl,
+        dlnt_dlnr: irr_out.dln_t_dln_r,
+        dlnt_dlnm: irr_out.dln_t_dln_m,
+        dlnt_dlnkap: irr_out.dln_t_dln_kap,
         ln_p: flexmesa_math::log(p_surf),
-        dln_p_dl: 0.0,
-        dln_p_dln_r: 0.0,
-        dln_p_dln_m: 0.0,
-        dln_p_dln_kap: 0.0,
-        kap: irr_out.kap,
+        dlnp_dl: 0.0,
+        dlnp_dlnr: 0.0,
+        dlnp_dlnm: 0.0,
+        dlnp_dlnkap: 0.0,
     };
-    let (lnp_ad, lnt_ad) = atm_out_to_ad(&atm_out, dlnkap_dlnd, dlnkap_dlnt);
-    model.ln_peos_surf_ad = lnp_ad;
-    model.ln_t_surf_ad = lnt_ad;
     model.tau_base = 2.0 / 3.0;
     model.controls.tau_factor = irr_out.tau / model.tau_base;
-    Ok(())
+    Ok(surf)
 }
 
 /// Evaluates surface $(P_{\mathrm{surf}}, T_{\mathrm{surf}})$ and partials for
@@ -798,17 +840,13 @@ fn eval_grey_t_tau_surf(
     m_surf: f64,
     cgrav: f64,
     teff: f64,
-) -> Result<(StarAdOrder1, StarAdOrder1), StarError> {
-    let k0 = model.opacity[0].max(1.0e-10);
+) -> Result<SurfPt, StarError> {
     let relation_id = model.controls.atm_t_tau_relation.id();
     let errtol = model.controls.atm_t_tau_errtol;
 
     if model.controls.atm_t_tau_opacity == AtmTTauOpacity::Fixed {
-        let (kap_surf, dlnkap_dlnd, dlnkap_dlnt) = (
-            k0,
-            model.d_opacity_dlnd[0] / k0,
-            model.d_opacity_dlnt[0] / k0,
-        );
+        // `s% opacity(1)` (`star/private/atm_support.f90:280-290`).
+        let kap_surf = model.opacity[0];
         let atm_out = eval_t_tau_uniform(
             tau_surf,
             l_surf,
@@ -830,7 +868,7 @@ fn eval_grey_t_tau_surf(
                 "eval_t_tau_uniform failed: {e}"
             ))
         })?;
-        return Ok(atm_out_to_ad(&atm_out, dlnkap_dlnd, dlnkap_dlnt));
+        return Ok(surf_pt_from_atm(&atm_out));
     }
 
     // Live EOS and opacity callbacks matching `eos_proc` and `kap_proc` in
@@ -874,9 +912,8 @@ fn eval_grey_t_tau_surf(
                 if in_solver_iter && model.aux.opacity_start_surf > 0.0 {
                     model.aux.opacity_start_surf
                 } else {
-                    k0
-                }
-                .max(1.0e-10);
+                    model.opacity[0]
+                };
             eval_t_tau_uniform(
                 tau_surf,
                 l_surf,
@@ -920,5 +957,8 @@ fn eval_grey_t_tau_surf(
         })?,
     };
 
-    Ok(atm_out_to_ad(&atm_out, 0.0, 0.0))
+    // `'iterated'` and `'varying'` return zero `dlnT_dlnkap` and
+    // `dlnP_dlnkap` (`atm/private/atm_t_tau_uniform.f90:231-232`,
+    // `atm/private/atm_t_tau_varying.f90:180, 186`).
+    Ok(surf_pt_from_atm(&atm_out))
 }

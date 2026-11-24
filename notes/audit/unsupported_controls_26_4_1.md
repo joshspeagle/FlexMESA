@@ -8,7 +8,7 @@ Generated mechanically against **MESA 26.4.1** (git tag `26.4.1`, commit `c8c202
 - **Total manifest cases scanned**: `106`
 - **Cases passing strict `#147` validation**: `53`
 - **Cases rejected by strict `#147` validation**: `53`
-- **Distinct unsupported physics/solver controls encountered**: `176`
+- **Distinct unsupported physics/solver controls encountered**: `173`
 - **Distinct unknown/misspelled controls encountered**: `0`
 - **Cases using headless plotting controls (`#173` / `DECISIONS #25`)**: `78` (`895` distinct keys)
 
@@ -19,7 +19,7 @@ Generated mechanically against **MESA 26.4.1** (git tag `26.4.1`, commit `c8c202
 | `&star_job` | 455 | 146 | 12 | 3 | 8 | 286 |
 | `&eos` | 102 | 91 | 0 | 0 | 9 | 2 |
 | `&kap` | 51 | 39 | 0 | 0 | 10 | 2 |
-| `&controls` | 1448 | 1172 | 23 | 0 | 16 | 237 |
+| `&controls` | 1448 | 1175 | 23 | 0 | 16 | 234 |
 | `&binary_job` | 37 | 22 | 0 | 1 | 1 | 13 |
 | `&binary_controls` | 176 | 124 | 0 | 0 | 2 | 50 |
 | `&astero_search_controls` | 153 | 88 | 3 | 0 | 0 | 62 |
@@ -259,7 +259,7 @@ Per `DECISIONS #25` (matching upstream `USE_PGSTAR = NO`), keys in `&pgstar`, `&
 | `star` | `semiconvection` | `pass` | 0 | 0 | 1 |
 | `star` | `simplex_solar_calibration` | `fail_unsupported` | 2 | 0 | 0 |
 | `star` | `split_burn_big_net` | `fail_unsupported` | 6 | 0 | 258 |
-| `star` | `starspots` | `fail_unsupported` | 5 | 0 | 17 |
+| `star` | `starspots` | `fail_unsupported` | 2 | 0 | 17 |
 | `star` | `timing` | `pass` | 0 | 0 | 0 |
 | `star` | `twin_studies` | `fail_unsupported` | 8 | 0 | 255 |
 | `star` | `tzo` | `fail_unsupported` | 7 | 0 | 334 |

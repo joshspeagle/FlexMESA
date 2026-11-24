@@ -39,7 +39,8 @@ fn rel_err(actual: f64, expected: f64) -> f64 {
 
 fn history_float(model: &StarModel, col: &'static str) -> f64 {
     let row =
-        evaluate_star_history_row(model, &[HistoryColumnSpec::Scalar(col)]);
+        evaluate_star_history_row(model, &[HistoryColumnSpec::Scalar(col)])
+            .expect("history row");
     match row.first().map(|(_, v)| v) {
         Some(MesaCellValue::Float(v)) => *v,
         other => {

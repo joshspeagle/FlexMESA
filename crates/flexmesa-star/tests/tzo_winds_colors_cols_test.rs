@@ -266,7 +266,8 @@ fn test_colors_history_directives_match_mesa_26_4_1_semantics_and_tzo_list() {
                 .expect("stripped tzo history columns");
         assert_eq!(specs, specs_without);
 
-        let row = evaluate_star_history_row(&model, &specs);
+        let row =
+            evaluate_star_history_row(&model, &specs).expect("history row");
         assert_eq!(row.len(), specs.len());
         for (col_name, _) in &row {
             assert!(

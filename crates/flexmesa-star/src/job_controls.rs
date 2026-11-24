@@ -22,8 +22,6 @@ pub enum AtmOption {
     /// Irradiated grey atmosphere (`'irradiated_grey'`, Guillot & Havel 2011;
     /// `star/defaults/controls.defaults:4292-4297`, `star/private/atm_support.f90:93-100`).
     IrradiatedGrey,
-    /// Simple photosphere $P_0 = \tau g / \kappa$, $T = T_{\mathrm{eff}}$.
-    SimplePhotosphere,
 }
 
 /// Grey $T(\tau)$ relation identifier (`atm_T_tau_relation` in `star_controls.inc`).

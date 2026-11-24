@@ -63,6 +63,13 @@ pub struct StarControls {
     pub thermohaline_option: ThermohalineOption,
     /// Radiation-pressure surface correction factor for `SimplePhotosphere` (`Pextra_factor`).
     pub pextra_factor: f64,
+    /// Whether to apply the YREC starspot surface and `gradr` modifications
+    /// (`do_starspots`, `star/private/starspots.f90`).
+    pub do_starspots: bool,
+    /// Starspot filling factor (`fspot`, 0 to 1).
+    pub fspot: f64,
+    /// Starspot temperature contrast (`xspot`, 0.5 to 1).
+    pub xspot: f64,
     /// Minimum diffusive mixing floor $D_{\min}$ ($\mathrm{cm^2\,s^{-1}}$).
     pub min_d_mix: f64,
     /// Whether to remove single-zone mixing glitches (`true` default).

@@ -9,8 +9,6 @@
 //! - Rotational distortion $(f_P, f_T, i_{\mathrm{rot}})$ coupling into
 //!   `set_mlt_vars`, `do_brunt_n2`, `set_rotation_mixing_info`, and
 //!   `solve_omega_mix` (`hydro_rotation.f90`, `solve_omega_mix.f90`).
-//! - Radiation-pressure corrected `AtmOption::SimplePhotosphere` surface
-//!   boundary condition and `StarAdOrder1` partials (`hydro_vars.f90:857-916`).
 //! - Multi-isotope C/N/O/Ne summation in `do_kap` (`micro.f90:694-702`),
 //!   `eval_nugis_lamers_wind` (`winds.f90:459-462`), and spectator-normalized
 //!   `do_phase_separation` (`phase_separation.f90:253`).
@@ -253,107 +251,6 @@ fn test_eval_face_mlt_and_brunt_n2_rotational_fp_ft_coupling() {
         (gradr_ratio_after - ft_k / fp_k).abs() < 1.0e-10,
         "set_rotation_mixing_info must not double-scale gradr: got {gradr_ratio_after}, expected {}",
         ft_k / fp_k
-    );
-}
-
-#[test]
-fn test_eval_surf_bc_simple_photosphere_pextra_and_ad_partials() {
-    let mut model =
-        load_zams_model(solar_zams_controls(), StarJobControls::default())
-            .expect("load 1 Msun ZAMS");
-    set_hydro_vars(&mut model, true, true).expect("set_hydro_vars");
-
-    model.controls.atm_option = AtmOption::SimplePhotosphere;
-    model.controls.pextra_factor = 0.0;
-    eval_surf_bc(&mut model).expect("eval_surf_bc pextra=0");
-    let lnp_no_extra = model.ln_peos_surf_ad.val;
-
-    model.controls.pextra_factor = 1.0;
-    eval_surf_bc(&mut model).expect("eval_surf_bc pextra=1");
-    let lnp_ad = model.ln_peos_surf_ad;
-    let lnt_ad = model.ln_t_surf_ad;
-
-    let expected_extra = flexmesa_math::log(
-        1.0 + 1.6e-4 * model.opacity[0] * (model.lum[0] / L_SUN)
-            / (model.m_grav[0] / M_SUN),
-    );
-    assert!(
-        ((lnp_ad.val - lnp_no_extra) - expected_extra).abs() < 1.0e-12,
-        "SimplePhotosphere pextra shift mismatch"
-    );
-
-    // Finite-difference verification of `I_LNR_00`, `I_L_00`, `I_LND_00`, `I_LNT_00`
-    let eps = 1.0e-6;
-    let lnr0 = model.ln_r[0];
-    model.ln_r[0] = lnr0 + eps;
-    model.r[0] = flexmesa_math::exp(model.ln_r[0]);
-    eval_surf_bc(&mut model).expect("eval_surf_bc +lnr");
-    let lnp_p = model.ln_peos_surf_ad.val;
-    let lnt_p = model.ln_t_surf_ad.val;
-    model.ln_r[0] = lnr0 - eps;
-    model.r[0] = flexmesa_math::exp(model.ln_r[0]);
-    eval_surf_bc(&mut model).expect("eval_surf_bc -lnr");
-    let lnp_m = model.ln_peos_surf_ad.val;
-    let lnt_m = model.ln_t_surf_ad.val;
-    model.ln_r[0] = lnr0;
-    model.r[0] = flexmesa_math::exp(lnr0);
-
-    let fd_lnp_lnr = (lnp_p - lnp_m) / (2.0 * eps);
-    let fd_lnt_lnr = (lnt_p - lnt_m) / (2.0 * eps);
-    assert!((lnp_ad.d1[I_LNR_00] - fd_lnp_lnr).abs() < 1.0e-7);
-    assert!((lnt_ad.d1[I_LNR_00] - fd_lnt_lnr).abs() < 1.0e-7);
-
-    // Luminosity `I_L_00` finite difference
-    let l0 = model.lum[0];
-    let dl = l0 * eps;
-    model.lum[0] = l0 + dl;
-    eval_surf_bc(&mut model).expect("eval_surf_bc +L");
-    let lnp_lp = model.ln_peos_surf_ad.val;
-    let lnt_lp = model.ln_t_surf_ad.val;
-    model.lum[0] = l0 - dl;
-    eval_surf_bc(&mut model).expect("eval_surf_bc -L");
-    let lnp_lm = model.ln_peos_surf_ad.val;
-    let lnt_lm = model.ln_t_surf_ad.val;
-    model.lum[0] = l0;
-    let fd_lnp_l = (lnp_lp - lnp_lm) / (2.0 * dl);
-    let fd_lnt_l = (lnt_lp - lnt_lm) / (2.0 * dl);
-    assert!(
-        (lnp_ad.d1[I_L_00] - fd_lnp_l).abs()
-            <= 1.0e-6 * fd_lnp_l.abs().max(1.0e-30)
-    );
-    assert!(
-        (lnt_ad.d1[I_L_00] - fd_lnt_l).abs()
-            <= 1.0e-6 * fd_lnt_l.abs().max(1.0e-30)
-    );
-
-    // Density `I_LND_00` and temperature `I_LNT_00` finite differences via `opacity[0]`
-    let kap0 = model.opacity[0];
-    let dkap_dlnd = model.d_opacity_dlnd[0];
-    let dkap_dlnt = model.d_opacity_dlnt[0];
-
-    model.opacity[0] = kap0 + dkap_dlnd * eps;
-    eval_surf_bc(&mut model).expect("eval_surf_bc +lnd");
-    let lnp_dp = model.ln_peos_surf_ad.val;
-    model.opacity[0] = kap0 - dkap_dlnd * eps;
-    eval_surf_bc(&mut model).expect("eval_surf_bc -lnd");
-    let lnp_dm = model.ln_peos_surf_ad.val;
-    let fd_lnp_lnd = (lnp_dp - lnp_dm) / (2.0 * eps);
-    assert!(
-        (lnp_ad.d1[I_LND_00] - fd_lnp_lnd).abs()
-            <= 1.0e-6 * fd_lnp_lnd.abs().max(1.0)
-    );
-
-    model.opacity[0] = kap0 + dkap_dlnt * eps;
-    eval_surf_bc(&mut model).expect("eval_surf_bc +lnt");
-    let lnp_tp = model.ln_peos_surf_ad.val;
-    model.opacity[0] = kap0 - dkap_dlnt * eps;
-    eval_surf_bc(&mut model).expect("eval_surf_bc -lnt");
-    let lnp_tm = model.ln_peos_surf_ad.val;
-    model.opacity[0] = kap0;
-    let fd_lnp_lnt = (lnp_tp - lnp_tm) / (2.0 * eps);
-    assert!(
-        (lnp_ad.d1[I_LNT_00] - fd_lnp_lnt).abs()
-            <= 1.0e-6 * fd_lnp_lnt.abs().max(1.0)
     );
 }
 

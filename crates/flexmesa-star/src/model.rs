@@ -26,6 +26,36 @@ use crate::controls::{StarControls, StarJobControls, VarLayout};
 use crate::hydro_state::HydroAuxState;
 use crate::star_ad::{StarAdExt, StarAdOrder1};
 
+/// Surface temperature and pressure from the atmosphere and their partials
+/// (`lnT_surf, dlnT_dL, dlnT_dlnR, dlnT_dlnM, dlnT_dlnkap` and the matching
+/// `lnP_surf` set of `get_surf_PT`, `star/private/hydro_vars.f90:779-1030`).
+/// Partials in `L` are per erg/s; the others are logarithmic.
+#[derive(
+    Debug, Clone, Copy, Default, PartialEq, serde::Serialize, serde::Deserialize,
+)]
+pub struct SurfPt {
+    /// $\ln T_{\mathrm{surf}}$ (`lnT_surf`).
+    pub ln_t: f64,
+    /// `dlnT_dL`.
+    pub dlnt_dl: f64,
+    /// `dlnT_dlnR`.
+    pub dlnt_dlnr: f64,
+    /// `dlnT_dlnM`.
+    pub dlnt_dlnm: f64,
+    /// `dlnT_dlnkap`.
+    pub dlnt_dlnkap: f64,
+    /// $\ln P_{\mathrm{surf}}$ (`lnP_surf`).
+    pub ln_p: f64,
+    /// `dlnP_dL`.
+    pub dlnp_dl: f64,
+    /// `dlnP_dlnR`.
+    pub dlnp_dlnr: f64,
+    /// `dlnP_dlnM`.
+    pub dlnp_dlnm: f64,
+    /// `dlnP_dlnkap`.
+    pub dlnp_dlnkap: f64,
+}
+
 /// Canonical 1D stellar structure and evolution state (`Star_Info` in
 /// `star_data/public/star_data_def.f90` and `star_data_step_work.inc`).
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -423,9 +453,17 @@ pub struct StarModel {
     // --- Surface Boundary Conditions ---
     /// Effective temperature $T_{\mathrm{eff}}$ in K (`Teff`).
     pub teff: f64,
-    /// Atmosphere surface $\ln P_{\mathrm{surf}}$ with stencil partials (`lnPeos_surf_ad`).
+    /// Atmosphere surface $\ln P_{\mathrm{surf}}$ and $\ln T_{\mathrm{surf}}$
+    /// with their partials in $(L, \ln R, \ln M, \ln \kappa)$, as
+    /// `get_surf_PT` returns them (`star/private/hydro_vars.f90:779-1030`).
+    /// The surface equations read these (`get_PT_bc_ad`).
+    #[serde(default)]
+    pub surf_pt: SurfPt,
+    /// Diagnostic $\ln P_{\mathrm{surf}}$ with stencil partials, derived from
+    /// [`StarModel::surf_pt`] and the cell-1 opacity partials.
     pub ln_peos_surf_ad: StarAdOrder1,
-    /// Atmosphere surface $\ln T_{\mathrm{surf}}$ with stencil partials (`lnT_surf_ad`).
+    /// Diagnostic $\ln T_{\mathrm{surf}}$ with stencil partials, derived from
+    /// [`StarModel::surf_pt`] and the cell-1 opacity partials.
     pub ln_t_surf_ad: StarAdOrder1,
     /// Auxiliary start-of-step thermodynamic arrays, heating channels,
     /// rotational factors, RTI profiles, and EOS composition partials (`aux`).
@@ -649,6 +687,7 @@ impl StarModel {
             mlt_d_ad: vec![StarAdOrder1::ZERO; nz],
             mlt_cdc_ad: vec![StarAdOrder1::ZERO; nz],
             teff: 5777.0,
+            surf_pt: SurfPt::default(),
             ln_peos_surf_ad: StarAdOrder1::ZERO,
             ln_t_surf_ad: StarAdOrder1::ZERO,
             aux: HydroAuxState::new(nz, species),

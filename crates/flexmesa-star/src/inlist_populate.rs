@@ -434,7 +434,7 @@ impl InlistBundle {
             drag_coefficient, min_q_for_drag, mlt_pturb_factor, pvsc_cq,
             eps_grav_factor,
             velocity_q_upper_bound, velocity_tau_lower_bound, velocity_logt_lower_bound,
-            mix_factor, pextra_factor, min_kap_for_dprad_dm_eqn,
+            mix_factor, pextra_factor, fspot, xspot, min_kap_for_dprad_dm_eqn,
             fixed_psurf, fixed_vsurf,
         ]);
         ctrl.try_usize_into("controls", &mut c.burn_steps_hard_limit, "burn_steps_hard_limit", 0)?;
@@ -442,7 +442,7 @@ impl InlistBundle {
             zams_filename, cool_wind_rgb_scheme, cool_wind_agb_scheme, phase_separation_option,
         ]);
         map_bools!("controls", ctrl, c, [
-            use_ledoux_criterion, calculate_brunt_b, calculate_brunt_n2,
+            use_ledoux_criterion, calculate_brunt_b, calculate_brunt_n2, do_starspots,
             op_split_burn, accrete_same_as_surface, set_rho_to_dm_div_dv,
             accrete_given_mass_fractions, do_element_diffusion, do_conv_premix,
             do_phase_separation, do_phase_separation_heating, use_other_cgrav,
@@ -535,6 +535,7 @@ impl InlistBundle {
                 "t_tau" => AtmOption::TTau,
                 "table" => AtmOption::Table,
                 "irradiated_grey" => AtmOption::IrradiatedGrey,
+                // Deprecated options such as 'simple_photosphere' stop here (#468).
                 other => {
                     return Err(StarError::InvalidInput(format!(
                         "unrecognized/unsupported '&controls::atm_option' option '{other}' (`star/private/atm_support.f90:900-930`)"

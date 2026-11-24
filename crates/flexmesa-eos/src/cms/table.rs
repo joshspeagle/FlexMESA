@@ -102,12 +102,22 @@ impl CmsXTable {
         delta_log_rho: f64,
         raw_vars: &[f64],
     ) -> Result<Self, EosError> {
-        let log_ts: Vec<f64> = (0..num_log_ts)
-            .map(|i| log_t_min + (i as f64) * delta_log_t)
-            .collect();
-        let log_rhos: Vec<f64> = (0..num_log_rhos)
-            .map(|j| log_rho_min + (j as f64) * delta_log_rho)
-            .collect();
+        let mut log_ts = Vec::with_capacity(num_log_ts);
+        let mut t_cur = log_t_min;
+        for i in 0..num_log_ts {
+            if i > 0 {
+                t_cur += delta_log_t;
+            }
+            log_ts.push(t_cur);
+        }
+        let mut log_rhos = Vec::with_capacity(num_log_rhos);
+        let mut rho_cur = log_rho_min;
+        for j in 0..num_log_rhos {
+            if j > 0 {
+                rho_cur += delta_log_rho;
+            }
+            log_rhos.push(rho_cur);
+        }
         let dense = build_4d_slice_vertices(
             "CmsXTable::build_from_raw_vars",
             table_label,

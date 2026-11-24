@@ -53,21 +53,21 @@ pub fn elect11(
     temp: AutoDiffReal2VarOrder1,
     chi: AutoDiffReal2VarOrder1,
 ) -> Elect11Output {
-    let chi1 = 0.6_f64;
-    let chi2 = 28.0_f64;
-    let xmax = 20.0_f64;
-    let dchi1 = 0.1_f64;
+    let chi1 = AutoDiffReal2VarOrder1::constant(0.6_f64);
+    let chi2 = AutoDiffReal2VarOrder1::constant(28.0_f64);
+    let xmax = AutoDiffReal2VarOrder1::constant(20.0_f64);
+    let dchi1 = AutoDiffReal2VarOrder1::constant(0.1_f64);
     let dchi2 = chi2 - chi1 - dchi1;
     let xscal2 = xmax / dchi2;
     let x2 = (chi - chi2) * xscal2;
-    if x2.val < -xmax {
+    if x2.val < -xmax.val {
         elect11a(temp, chi)
-    } else if x2.val > xmax {
+    } else if x2.val > xmax.val {
         elect11b(temp, chi)
     } else {
         let a = elect11a(temp, chi);
         let b = elect11b(temp, chi);
-        let (fp, fm) = fermi10(x2, xmax);
+        let (fp, fm) = fermi10(x2, xmax.val);
         Elect11Output {
             dens: a.dens * fp + b.dens * fm,
             fe_id: a.fe_id * fp + b.fe_id * fm,
@@ -92,15 +92,15 @@ pub fn elect11a(
     temp: AutoDiffReal2VarOrder1,
     chi: AutoDiffReal2VarOrder1,
 ) -> Elect11Output {
-    let bohr = 137.036_f64;
-    let pi2 = PI * PI;
+    let bohr = AutoDiffReal2VarOrder1::constant(137.036_f64);
+    let pi2 = AutoDiffReal2VarOrder1::constant(PI * PI);
     let bohr2 = bohr * bohr;
     let bohr3 = bohr2 * bohr;
     let temr = temp / bohr2;
     let b = blin9(temr, chi);
-    let tpi = temr * (temr * 2.0).sqrt() / pi2;
+    let tpi = temr * (2.0 * temr).sqrt() / pi2;
     let denr = tpi * (b.w1.w * temr + b.w0.w);
-    let pr = (temr * tpi / 3.0) * (b.w2.w * temr + b.w1.w * 2.0);
+    let pr = temr * tpi / 3.0 * (b.w2.w * temr + 2.0 * b.w1.w);
     let u = temr * tpi * (b.w2.w * temr + b.w1.w);
     let pe_id = pr / (denr * temr);
     let ue_id = u / (denr * temr);
@@ -108,41 +108,41 @@ pub fn elect11a(
     let dens = denr * bohr3;
     let se_id = ue_id - fe_id;
     let dndt =
-        tpi * (b.w0.w * 1.5 / temr + b.w1.w * 2.5 + b.w0.wdt + temr * b.w1.wdt);
-    let dpdt = (tpi / 3.0)
-        * (b.w1.w * 5.0
-            + temr * b.w1.wdt * 2.0
-            + temr * b.w2.w * 3.5
-            + temr.pow2() * b.w2.wdt);
+        tpi * (1.5 * b.w0.w / temr + 2.5 * b.w1.w + b.w0.wdt + temr * b.w1.wdt);
+    let dpdt = tpi / 3.0
+        * (5.0 * b.w1.w
+            + 2.0 * temr * b.w1.wdt
+            + 3.5 * temr * b.w2.w
+            + temr * temr * b.w2.wdt);
     let dudt = tpi
-        * (b.w1.w * 2.5
+        * (2.5 * b.w1.w
             + temr * b.w1.wdt
-            + temr * b.w2.w * 3.5
-            + temr.pow2() * b.w2.wdt);
+            + 3.5 * temr * b.w2.w
+            + temr * temr * b.w2.wdt);
     let dndh = tpi * (b.w0.wdx + temr * b.w1.wdx);
     let dndhh = tpi * (b.w0.wdxx + temr * b.w1.wdxx);
     let dndtt = tpi
-        * (b.w0.w * 0.75 / temr.pow2()
-            + b.w0.wdt * 3.0 / temr
+        * (0.75 * b.w0.w / temr.pow2()
+            + 3.0 * b.w0.wdt / temr
             + b.w0.wdtt
-            + b.w1.w * 3.75 / temr
-            + b.w1.wdt * 5.0
+            + 3.75 * b.w1.w / temr
+            + 5.0 * b.w1.wdt
             + temr * b.w1.wdtt);
     let dndht = tpi
-        * (b.w0.wdx * 1.5 / temr
+        * (1.5 * b.w0.wdx / temr
             + b.w0.wdxt
-            + b.w1.wdx * 2.5
+            + 2.5 * b.w1.wdx
             + temr * b.w1.wdxt);
     let dln_dh = dndh / denr;
     let dln_dt = dndt * temr / denr;
     let dln_dhh = dndhh / denr - dln_dh.pow2();
     let dln_dtt = temr.pow2() / denr * dndtt + dln_dt - dln_dt.pow2();
     let dln_dht = temr / denr * (dndht - dndt * dln_dh);
-    let dpdh = (tpi / 3.0) * temr * (b.w1.wdx * 2.0 + temr * b.w2.wdx);
+    let dpdh = tpi / 3.0 * temr * (2.0 * b.w1.wdx + temr * b.w2.wdx);
     let dudh = tpi * temr * (b.w1.wdx + temr * b.w2.wdx);
     let cve = (dudt - dudh * dndt / dndh) / denr;
-    let chite = (temr / pr) * (dpdt - dpdh * dndt / dndh);
-    let chire = (denr / pr) * (dpdh / dndh);
+    let chite = temr / pr * (dpdt - dpdh * dndt / dndh);
+    let chire = denr / pr * dpdh / dndh;
     Elect11Output {
         dens,
         fe_id,
@@ -167,64 +167,63 @@ pub fn elect11b(
     temp: AutoDiffReal2VarOrder1,
     chi: AutoDiffReal2VarOrder1,
 ) -> Elect11Output {
-    let bohr = 137.036_f64;
-    let pi2 = PI * PI;
+    let bohr = AutoDiffReal2VarOrder1::constant(137.036_f64);
+    let pi2 = AutoDiffReal2VarOrder1::constant(PI * PI);
     let bohr2 = bohr * bohr;
     let bohr3 = bohr2 * bohr;
     let temr = temp / bohr2;
     let ef0 = chi * temr;
-    let delta_ef = (temr.pow2() * (pi2 / 6.0))
-        * (ef0 * (ef0 + 2.0) * 2.0 + 1.0)
-        / (ef0 * (ef0 + 1.0) * (ef0 + 2.0));
+    let delta_ef = pi2 * temr * temr / 6.0 * (1.0 + 2.0 * ef0 * (2.0 + ef0))
+        / (ef0 * (1.0 + ef0) * (2.0 + ef0));
     let ef = ef0 + delta_ef;
-    let g = ef + 1.0;
+    let g = 1.0 + ef;
     let (pf, f0, df, p0, del_p, mut cve) = if ef.val > 1.0e-5 {
-        let pf = (g.pow2() - 1.0).sqrt();
-        let f0 = (pf * (pf.pow2() * 2.0 + 1.0) * g
-            - pf.pow3() / 0.375
+        let pf = (g * g - 1.0).sqrt();
+        let f0 = (pf * (1.0 + 2.0 * pf * pf) * g
+            - pf * pf * pf / 0.375
             - (pf + g).ln())
-            / (8.0 * pi2);
-        let df = -temr.pow2() * pf * g / 6.0;
-        let p0 =
-            (pf * g * (pf.pow2() / 1.5 - 1.0) + (pf + g).ln()) / (8.0 * pi2);
-        let del_p = temr.pow2() * pf * (pf.pow2() + 2.0) / g / 18.0;
-        let cve = temr * g * pi2 / pf.pow2();
+            / 8.0
+            / pi2;
+        let df = -temr * temr * pf * g / 6.0;
+        let p0 = (pf * g * (pf * pf / 1.5 - 1.0) + (pf + g).ln()) / 8.0 / pi2;
+        let del_p = temr * temr * pf * (pf * pf + 2.0) / g / 18.0;
+        let cve = pi2 * temr * g / (pf * pf);
         (pf, f0, df, p0, del_p, cve)
     } else {
-        let pf = (ef * 2.0).sqrt();
+        let pf = (2.0 * ef).sqrt();
         let f0 = pf.pow5() * 0.1 / pi2;
-        let df = -temr.pow2() * pf / 6.0;
+        let df = -temr * temr * pf / 6.0;
         let p0 = f0 / 1.5;
-        let del_p = temr.pow2() * pf / 9.0;
-        let cve = temr * (pi2 / 2.0) / ef;
+        let del_p = temr * temr * pf / 9.0;
+        let cve = pi2 * temr / ef / 2.0;
         (pf, f0, df, p0, del_p, cve)
     };
     let f = f0 + df;
     let p = p0 + del_p;
-    let s = df * (-2.0);
+    let s = -2.0 * df;
     let u = f + s;
-    let chire = pf.pow5() / (p * g * (9.0 * pi2));
-    let mut chite = del_p * 2.0 / p;
-    let denr = pf.pow3() / (3.0 * pi2);
+    let chire = pf.pow5() / (9.0 * pi2 * p * g);
+    let mut chite = 2.0 * del_p / p;
+    let denr = pf * pf * pf / 3.0 / pi2;
     let dens = denr * bohr3;
 
     let b = sommerf(temr, chi);
-    let tpi = temr * (temr * 2.0).sqrt() / pi2;
+    let tpi = temr * (2.0 * temr).sqrt() / pi2;
     let dndh = tpi * (b.w0.wdx + temr * b.w1.wdx);
     let dndt =
-        tpi * (b.w0.w * 1.5 / temr + b.w1.w * 2.5 + b.w0.wdt + temr * b.w1.wdt);
+        tpi * (1.5 * b.w0.w / temr + 2.5 * b.w1.w + b.w0.wdt + temr * b.w1.wdt);
     let dndhh = tpi * (b.w0.wdxx + temr * b.w1.wdxx);
     let dndtt = tpi
-        * (b.w0.w * 0.75 / temr.pow2()
-            + b.w0.wdt * 3.0 / temr
+        * (0.75 * b.w0.w / temr.pow2()
+            + 3.0 * b.w0.wdt / temr
             + b.w0.wdtt
-            + b.w1.w * 3.75 / temr
-            + b.w1.wdt * 5.0
+            + 3.75 * b.w1.w / temr
+            + 5.0 * b.w1.wdt
             + temr * b.w1.wdtt);
     let dndht = tpi
-        * (b.w0.wdx * 1.5 / temr
+        * (1.5 * b.w0.wdx / temr
             + b.w0.wdxt
-            + b.w1.wdx * 2.5
+            + 2.5 * b.w1.wdx
             + temr * b.w1.wdxt);
     let dln_dh = dndh / denr;
     let dln_dt = dndt * temr / denr;
@@ -238,10 +237,10 @@ pub fn elect11b(
     let mut se_id = s / dt;
     // Empirical corrections of 16.02.09 (`pc_eos.f90` lines 1699-1703):
     let d1 = delta_ef / ef;
-    let d2 = d1 * (4.0 - (pf / g) * 2.0);
-    cve = cve / (d2 + 1.0);
-    se_id = se_id / (d1 + 1.0);
-    chite = chite / (d2 + 1.0);
+    let d2 = d1 * (4.0 - 2.0 * (pf / g));
+    cve = cve / (1.0 + d2);
+    se_id = se_id / (1.0 + d1);
+    chite = chite / (1.0 + d2);
     Elect11Output {
         dens,
         fe_id,
@@ -272,30 +271,30 @@ pub fn sommerf(
     let x3 = x0.pow3();
     let x5 = x0.pow5();
     let (cj00, cj10, cj20) = if x0.val < 1.0e-4 {
-        (x3 / 3.0, x5 * 0.1, x0.pow7() / 28.0)
+        (x3 / 3.0, 0.1 * x5, x0.pow7() / 28.0)
     } else {
         let cl = (x0 + cmu).ln();
-        let cj00 = (x0 * cmu - cl) * 0.5;
+        let cj00 = 0.5 * (x0 * cmu - cl);
         let cj10 = x3 / 3.0 - cj00;
-        let cj20 = (cmu * 0.75 - 2.0) / 3.0 * x3 + cj00 * 1.25;
+        let cj20 = (0.75 * cmu - 2.0) / 3.0 * x3 + 1.25 * cj00;
         (cj00, cj10, cj20)
     };
     let cj01 = x0;
     let cj11 = cj01 * cmu1;
     let cj21 = cj11 * cmu1;
     let cj02 = cmu / x0;
-    let cj12 = (cmu1 / x0) * (cmu1 * 2.0 + 3.0);
-    let cj22 = (cmu1.pow2() / x0) * (cmu1 * 3.0 + 5.0);
+    let cj12 = cmu1 / x0 * (3.0 + 2.0 * cmu1);
+    let cj22 = cmu1.pow2() / x0 * (5.0 + 3.0 * cmu1);
     let cj03 = -1.0 / x3;
-    let cj13 = (cmu1 / x3) * (cmu1.pow2() * 2.0 + cmu1 * 6.0 + 3.0);
-    let cj23 = (cmu1.pow2() / x3) * (cmu1.pow2() * 6.0 + cmu1 * 20.0 + 15.0);
-    let cj04 = cmu * 3.0 / x5;
-    let cj14 = cmu1 * (-3.0) / x5;
-    let cj24 = (cmu1.pow2() / x5)
-        * (cmu1.pow3() * 6.0 + cmu1.pow2() * 30.0 + cmu1 * 45.0 + 15.0);
-    let cj05 = (cmu1.pow2() * (-12.0) - cmu1 * 24.0 - 15.0) / (x5 * x0.pow2());
+    let cj13 = cmu1 / x3 * (2.0 * cmu1.pow2() + 6.0 * cmu1 + 3.0);
+    let cj23 = cmu1.pow2() / x3 * (6.0 * cmu1.pow2() + 20.0 * cmu1 + 15.0);
+    let cj04 = 3.0 * cmu / x5;
+    let cj14 = -3.0 * cmu1 / x5;
+    let cj24 = cmu1.pow2() / x5
+        * (6.0 * cmu1.pow3() + 30.0 * cmu1.pow2() + 45.0 * cmu1 + 15.0);
+    let cj05 = (-12.0 * cmu1.pow2() - 24.0 * cmu1 - 15.0) / (x5 * x0.pow2());
 
-    let pit26 = (temr * PI).pow2() / 6.0;
+    let pit26 = (PI * temr).pow2() / 6.0;
     let cn0 = (0.5 / temr).sqrt() / temr;
     let cn1 = cn0 / temr;
     let cn2 = cn1 / temr;
@@ -303,50 +302,50 @@ pub fn sommerf(
         w: cn0 * (cj00 + pit26 * cj02),
         wdx: cn0 * temr * (cj01 + pit26 * cj03),
         wdt: cn1
-            * (cmu1 * cj01 - cj00 * 1.5 + pit26 * (cmu1 * cj03 + cj02 * 0.5)),
+            * (cmu1 * cj01 - 1.5 * cj00 + pit26 * (cmu1 * cj03 + 0.5 * cj02)),
         wdxx: cn0 * temr.pow2() * (cj02 + pit26 * cj04),
         wdxt: cn0
-            * (cmu1 * cj02 - cj01 * 0.5 + pit26 * (cmu1 * cj04 + cj03 * 1.5)),
+            * (cmu1 * cj02 - 0.5 * cj01 + pit26 * (cmu1 * cj04 + 1.5 * cj03)),
         wdtt: cn2
-            * (cj00 * 3.75 - cmu1 * cj01 * 3.0
+            * (3.75 * cj00 - 3.0 * cmu1 * cj01
                 + cmu1.pow2() * cj02
-                + pit26 * (cj02 * (-0.25) + cmu1 * cj03 + cmu1.pow2() * cj04)),
+                + pit26 * (-0.25 * cj02 + cmu1 * cj03 + cmu1.pow2() * cj04)),
     };
     let w1 = BlinSeries {
         w: cn1 * (cj10 + pit26 * cj12),
         wdx: cn0 * (cj11 + pit26 * cj13),
         wdt: cn2
-            * (cmu1 * cj11 - cj10 * 2.5 + pit26 * (cmu1 * cj13 - cj12 * 0.5)),
+            * (cmu1 * cj11 - 2.5 * cj10 + pit26 * (cmu1 * cj13 - 0.5 * cj12)),
         wdxx: cn0 * temr * (cj12 + pit26 * cj14),
         wdxt: cn1
-            * (cmu1 * cj12 - cj11 * 1.5 + pit26 * (cmu1 * cj14 + cj13 * 0.5)),
-        wdtt: (cn2 / temr)
-            * (cj10 * 8.75 - cmu1 * cj11 * 5.0
+            * (cmu1 * cj12 - 1.5 * cj11 + pit26 * (cmu1 * cj14 + 0.5 * cj13)),
+        wdtt: cn2 / temr
+            * (8.75 * cj10 - 5.0 * cmu1 * cj11
                 + cmu1.pow2() * cj12
-                + pit26 * (cj12 * 0.75 - cmu1 * cj13 + cmu1.pow2() * cj14)),
+                + pit26 * (0.75 * cj12 - cmu1 * cj13 + cmu1.pow2() * cj14)),
     };
     let w2 = BlinSeries {
         w: cn2 * (cj20 + pit26 * cj22),
         wdx: cn1 * (cj21 + pit26 * cj23),
-        wdt: (cn2 / temr)
-            * (cmu1 * cj21 - cj20 * 3.5 + pit26 * (cmu1 * cj23 - cj22 * 1.5)),
+        wdt: cn2 / temr
+            * (cmu1 * cj21 - 3.5 * cj20 + pit26 * (cmu1 * cj23 - 1.5 * cj22)),
         wdxx: cn0 * (cj22 + pit26 * cj24),
         wdxt: cn2
-            * (cmu1 * cj22 - cj21 * 2.5 + pit26 * (cmu1 * cj24 - cj23 * 0.5)),
-        wdtt: (cn2 / temr.pow2())
-            * (cj20 * 15.75 - cmu1 * cj21 * 7.0
+            * (cmu1 * cj22 - 2.5 * cj21 + pit26 * (cmu1 * cj24 - 0.5 * cj23)),
+        wdtt: cn2 / temr.pow2()
+            * (15.75 * cj20 - 7.0 * cmu1 * cj21
                 + cmu1.pow2() * cj22
                 + pit26
-                    * (cj22 * 3.75 - cmu1 * cj23 * 3.0 + cmu1.pow2() * cj24)),
+                    * (3.75 * cj22 - 3.0 * cmu1 * cj23 + cmu1.pow2() * cj24)),
     };
     let w0xxx = cn0 * temr.pow3() * (cj03 + pit26 * cj05);
     let w0xxt = cn0
         * temr
-        * (cmu1 * cj03 + cj02 * 0.5 + pit26 * (cmu1 * cj05 + cj04 * 2.5));
+        * (cmu1 * cj03 + 0.5 * cj02 + pit26 * (cmu1 * cj05 + 2.5 * cj04));
     let w0xtt = cn1
-        * (cj01 * 0.75 - cmu1 * cj02
+        * (0.75 * cj01 - cmu1 * cj02
             + cmu1.pow2() * cj03
-            + pit26 * (cj03 * 0.75 + cmu1 * cj04 * 3.0 + cmu1.pow2() * cj05));
+            + pit26 * (0.75 * cj03 + 3.0 * cmu1 * cj04 + cmu1.pow2() * cj05));
     Blin9Output {
         w0,
         w1,

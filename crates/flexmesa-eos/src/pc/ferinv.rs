@@ -232,8 +232,8 @@ pub fn ferinv7(
             + (down1 / down).pow2();
         (x, xdf, xdff)
     } else {
-        let p = -1.0 / (0.5 + n as f64);
-        let t = f.powf(p);
+        let p = AutoDiffReal2VarOrder1::constant(-1.0 / (0.5 + n as f64));
+        let t = f.pow(p);
         let t1 = p * t / f;
         let t2 = p * (p - 1.0) * t / (f * f);
         let mut up = AutoDiffReal2VarOrder1::zero();
@@ -296,17 +296,18 @@ pub fn chemfit(
     let theta = temr / tf;
     let theta32 = theta * theta.sqrt();
     let q2 = 12.0 + 8.0 / theta32;
-    let sqt = temr.sqrt();
     let t1 = (-theta).exp();
-    let t2 = t1 * t1;
-    let u3 = t2 + 1.612;
-    let d3 = 6.192 * theta.powf(0.0944) * t2 + 5.535 * theta.powf(0.698);
+    let u3 = t1 * t1 + 1.612;
+    let thetac = theta.powf(0.0944);
+    let thetag = theta.powf(0.698);
+    let d3 = 6.192 * thetac * t1 * t1 + 5.535 * thetag;
     let q3 = 1.365_568_127 - u3 / d3;
     let q1 = if theta.val > 1.0e-5 {
         1.5 * t1 / (1.0 - t1)
     } else {
         1.5 / theta
     };
+    let sqt = temr.sqrt();
     let g = (1.0 + q2 * temr * q3 + q1 * sqt) * temr;
     let h = (1.0 + 0.5 * temr / theta) * (1.0 + q2 * temr);
     let ct = 1.0 + g / h;

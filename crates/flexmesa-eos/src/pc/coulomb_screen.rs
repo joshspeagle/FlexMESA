@@ -38,129 +38,121 @@ pub fn fscr_liq8(
             pdr: z,
         });
     }
+    let zion_ad = AutoDiffReal2VarOrder1::constant(zion);
     let sqg = game.sqrt();
-    let sqz1 = (1.0 + zion).sqrt();
-    let sqz = zion.sqrt();
-    let cdh0 = zion / 1.73205;
+    let sqz1 = (1.0 + zion_ad).sqrt();
+    let sqz = zion_ad.sqrt();
+    let cdh0 = zion_ad / 1.73205;
     let cdh = cdh0 * (sqz1 * sqz1 * sqz1 - sqz * sqz * sqz - 1.0);
-    let zln = flexmesa_math::log(zion);
-    let z13 = flexmesa_math::exp(zln / 3.0);
-    let x = rs.recip() * XRS;
-    let ctf = zion * zion * 0.2513 * (z13 - 1.0 + 0.2 / z13.sqrt());
-    let p01 = 1.11 * flexmesa_math::exp(0.475 * zln);
+    let zln = zion_ad.ln();
+    let z13 = (zln / 3.0).exp();
+    let x = XRS / rs;
+    let ctf = zion_ad * zion_ad * 0.2513 * (z13 - 1.0 + 0.2 / z13.sqrt());
+    let p01 = 1.11 * (0.475 * zln).exp();
     let p03 = 0.2 + 0.078 * zln * zln;
     let ptx = 1.16 + 0.08 * zln;
-    let tx = game.powf(ptx);
-    let txdg = tx * ptx / game;
-    let txdgg = txdg * (ptx - 1.0) / game;
-    let ty1 = (game * 2.0 + 1.0e-3 * zion * zion).recip();
-    let ty1dg = -ty1 * ty1 * 2.0;
-    let ty1dgg = -ty1 * ty1dg * 4.0;
-    let rs2 = rs * rs;
-    let rs3 = rs2 * rs;
-    let ty2 = rs2 * 6.0 + 1.0;
-    let ty2dx = -rs2 * 12.0 / x;
-    let ty2dxx = -ty2dx * 3.0 / x;
-    let ty = rs3 / ty2 * (ty1 + 1.0);
-    let tyx = x.recip() * 3.0 + ty2dx / ty2;
+    let tx = game.pow(ptx);
+    let txdg = ptx * tx / game;
+    let txdgg = (ptx - 1.0) * txdg / game;
+    let ty1 = 1.0 / (1.0e-3 * zion_ad * zion_ad + 2.0 * game);
+    let ty1dg = -2.0 * ty1 * ty1;
+    let ty1dgg = -4.0 * ty1 * ty1dg;
+    let ty2 = 1.0 + 6.0 * rs * rs;
+    let ty2dx = -12.0 * rs * rs / x;
+    let ty2dxx = -3.0 * ty2dx / x;
+    let ty = rs * rs * rs / ty2 * (1.0 + ty1);
+    let tyx = 3.0 / x + ty2dx / ty2;
     let tydx = -ty * tyx;
-    let tydg = rs3 * ty1dg / ty2;
-    let p1 = (zion - 1.0) / 9.0;
-    let cor1 = ty * p1 + 1.0;
-    let cor1dx = tydx * p1;
-    let cor1dg = tydg * p1;
-    let cor1dxx = (ty
-        * ((x * x).recip() * 3.0 + (ty2dx / ty2).pow2() - ty2dxx / ty2)
-        - tydx * tyx)
-        * p1;
-    let cor1dgg = rs3 * ty1dgg / ty2 * p1;
-    let cor1dxg = -tydg * tyx * p1;
-    let u0 = (game / zion).sqrt() * rs3 * 0.78;
-    let u0dx = -u0 * 3.0 / x;
-    let u0dg = u0 * 0.5 / game;
-    let u0dxx = -u0dx * 4.0 / x;
-    let u0dgg = -u0dg * 0.5 / game;
-    let u0dxg = -u0dg * 3.0 / x;
-    let d0dg = zion * zion * zion;
-    let d0 = game * d0dg + rs3 * 21.0;
-    let d0dx = -rs3 * 63.0 / x;
-    let d0dxx = rs3 * 252.0 / (x * x);
-    let cor0 = u0 / d0 + 1.0;
+    let tydg = rs * rs * rs * ty1dg / ty2;
+    let p1 = (zion_ad - 1.0) / 9.0;
+    let cor1 = 1.0 + p1 * ty;
+    let cor1dx = p1 * tydx;
+    let cor1dg = p1 * tydg;
+    let cor1dxx = p1
+        * (ty * (3.0 / (x * x) + (ty2dx / ty2) * (ty2dx / ty2) - ty2dxx / ty2)
+            - tydx * tyx);
+    let cor1dgg = p1 * rs * rs * rs * ty1dgg / ty2;
+    let cor1dxg = -p1 * tydg * tyx;
+    let u0 = 0.78 * (game / zion_ad).sqrt() * rs * rs * rs;
+    let u0dx = -3.0 * u0 / x;
+    let u0dg = 0.5 * u0 / game;
+    let u0dxx = -4.0 * u0dx / x;
+    let u0dgg = -0.5 * u0dg / game;
+    let u0dxg = -3.0 * u0dg / x;
+    let d0dg = zion_ad * zion_ad * zion_ad;
+    let d0 = game * d0dg + 21.0 * rs * rs * rs;
+    let d0dx = -63.0 * rs * rs * rs / x;
+    let d0dxx = 252.0 * rs * rs * rs / (x * x);
+    let cor0 = 1.0 + u0 / d0;
     let cor0dx = (u0dx - u0 * d0dx / d0) / d0;
     let cor0dg = (u0dg - u0 * d0dg / d0) / d0;
-    let cor0dxx = (u0dxx - (u0dx * d0dx * 2.0 + u0 * d0dxx) / d0
-        + (d0dx / d0).pow2() * 2.0)
+    let cor0dxx = (u0dxx - (2.0 * u0dx * d0dx + u0 * d0dxx) / d0
+        + 2.0 * (d0dx / d0) * (d0dx / d0))
         / d0;
-    let cor0dgg = (u0dgg - u0dg * (2.0 * d0dg) / d0
-        + u0 * 2.0 * (d0dg / d0) * (d0dg / d0))
+    let cor0dgg = (u0dgg - 2.0 * u0dg * d0dg / d0
+        + 2.0 * u0 * (d0dg / d0) * (d0dg / d0))
         / d0;
     let cor0dxg = (u0dxg - (u0dx * d0dg + u0dg * d0dx) / d0
-        + u0 * d0dx * (2.0 * d0dg) / (d0 * d0))
+        + 2.0 * u0 * d0dx * d0dg / (d0 * d0))
         / d0;
-    let rele = (x * x + 1.0).sqrt();
-    let q1 = 0.18 / zion.sqrt().sqrt();
-    let q2 = 0.2 + 0.37 / zion.sqrt();
-    let h1u = x * x / 5.0 + 1.0;
-    let h1d = x * q1 + x * x * q2 + 1.0;
+    let rele = (1.0 + x * x).sqrt();
+    let q1 = 0.18 / zion_ad.sqrt().sqrt();
+    let q2 = 0.2 + 0.37 / zion_ad.sqrt();
+    let h1u = 1.0 + x * x / 5.0;
+    let h1d = 1.0 + q1 * x + q2 * x * x;
     let h1 = h1u / h1d;
-    let h1x = x * 0.4 / h1u - (x * (2.0 * q2) + q1) / h1d;
+    let h1x = 0.4 * x / h1u - (q1 + 2.0 * q2 * x) / h1d;
     let h1dx = h1 * h1x;
     let h1dxx = h1dx * h1x
-        + h1 * (h1u.recip() * 0.4
-            - (x * 0.4 / h1u).pow2()
-            - h1d.recip() * (2.0 * q2)
-            + ((x * (2.0 * q2) + q1) / h1d).pow2());
-    let up = sqg * cdh + tx * cor0 * h1 * (p01 * ctf);
-    let updx = tx * (cor0dx * h1 + cor0 * h1dx) * (p01 * ctf);
-    let updg = sqg.recip() * (0.5 * cdh)
-        + (txdg * cor0 + tx * cor0dg) * h1 * (p01 * ctf);
+        + h1 * (0.4 / h1u - (0.4 * x / h1u) * (0.4 * x / h1u) - 2.0 * q2 / h1d
+            + ((q1 + 2.0 * q2 * x) / h1d).pow2());
+    let up = cdh * sqg + p01 * ctf * tx * cor0 * h1;
+    let updx = p01 * ctf * tx * (cor0dx * h1 + cor0 * h1dx);
+    let updg = 0.5 * cdh / sqg + p01 * ctf * (txdg * cor0 + tx * cor0dg) * h1;
     let updxx =
-        tx * (cor0dxx * h1 + cor0dx * h1dx * 2.0 + cor0 * h1dxx) * (p01 * ctf);
-    let updgg = -(sqg * game).recip() * (0.25 * cdh)
-        + (txdgg * cor0 + txdg * cor0dg * 2.0 + tx * cor0dgg)
-            * h1
-            * (p01 * ctf);
-    let updxg = (txdg * (cor0dx * h1 + cor0 * h1dx)
-        + tx * (cor0dxg * h1 + cor0dg * h1dx))
-        * (p01 * ctf);
-    let dn1 = sqg * p03 + tx * cor1 * p01 / rs;
-    let dn1dx = tx * (cor1 / XRS + cor1dx / rs) * p01;
-    let dn1dg =
-        sqg.recip() * (0.5 * p03) + (txdg * cor1 + tx * cor1dg) * p01 / rs;
-    let dn1dxx = tx * (cor1dx * 2.0 + x * cor1dxx) * (p01 / XRS);
-    let dn1dgg = -(game * sqg).recip() * (0.25 * p03)
-        + (txdgg * cor1 + txdg * cor1dg * 2.0 + tx * cor1dgg) * p01 / rs;
-    let dn1dxg = (txdg * (cor1 / XRS + cor1dx / rs)
-        + tx * (cor1dg / XRS + cor1dxg / rs))
-        * p01;
-    let rele2 = rele * rele;
-    let rele3 = rele2 * rele;
-    let dn = dn1 / rele + 1.0;
-    let dndx = dn1dx / rele - x * dn1 / rele3;
+        p01 * ctf * tx * (cor0dxx * h1 + 2.0 * cor0dx * h1dx + cor0 * h1dxx);
+    let updgg = -0.25 * cdh / (sqg * game)
+        + p01 * ctf * (txdgg * cor0 + 2.0 * txdg * cor0dg + tx * cor0dgg) * h1;
+    let updxg = p01
+        * ctf
+        * (txdg * (cor0dx * h1 + cor0 * h1dx)
+            + tx * (cor0dxg * h1 + cor0dg * h1dx));
+    let dn1 = p03 * sqg + p01 / rs * tx * cor1;
+    let dn1dx = p01 * tx * (cor1 / XRS + cor1dx / rs);
+    let dn1dg = 0.5 * p03 / sqg + p01 / rs * (txdg * cor1 + tx * cor1dg);
+    let dn1dxx = p01 * tx / XRS * (2.0 * cor1dx + x * cor1dxx);
+    let dn1dgg = -0.25 * p03 / (game * sqg)
+        + p01 / rs * (txdgg * cor1 + 2.0 * txdg * cor1dg + tx * cor1dgg);
+    let dn1dxg = p01
+        * (txdg * (cor1 / XRS + cor1dx / rs)
+            + tx * (cor1dg / XRS + cor1dxg / rs));
+    let dn = 1.0 + dn1 / rele;
+    let dndx = dn1dx / rele - x * dn1 / (rele * rele * rele);
     let dndxx = (dn1dxx
-        - (x * dn1dx * 2.0 + dn1 - x * x * dn1 * 3.0 / rele2) / rele2)
+        - ((2.0 * x * dn1dx + dn1) - 3.0 * x * x * dn1 / (rele * rele))
+            / (rele * rele))
         / rele;
     let dndg = dn1dg / rele;
     let dndgg = dn1dgg / rele;
-    let dndxg = dn1dxg / rele - x * dn1dg / rele3;
+    let dndxg = dn1dxg / rele - x * dn1dg / (rele * rele * rele);
     let fscr = -up / dn * game;
     let fx = (up * dndx / dn - updx) / dn;
     let fxdg = ((updg * dndx + updx * dndg + up * dndxg
-        - up * dndx * dndg * 2.0 / dn)
+        - 2.0 * up * dndx * dndg / dn)
         / dn
         - updxg)
         / dn;
     let fdx = fx * game;
     let fg = (up * dndg / dn - updg) / dn;
     let fdg = fg * game - up / dn;
-    let fdxx = ((up * dndxx + (updx * dndx - up * dndx * dndx / dn) * 2.0)
+    let fdxx = ((up * dndxx + 2.0 * (updx * dndx - up * dndx * dndx / dn))
         / dn
         - updxx)
         / dn
         * game;
-    let fdgg = fg * 2.0
+    let fdgg = 2.0 * fg
         + game
-            * ((dndg * (updg - up * dndg / dn) * 2.0 + up * dndgg) / dn
+            * ((2.0 * dndg * (updg - up * dndg / dn) + up * dndgg) / dn
                 - updgg)
             / dn;
     let fdxg = fx + game * fxdg;
@@ -168,9 +160,9 @@ pub fn fscr_liq8(
     let cvscr = -game * game * fdgg;
     let pscr = (x * fdx + game * fdg) / 3.0;
     let pdtscr = -game * game * (x * fxdg + fdgg) / 3.0;
-    let pdrscr = (pscr * 12.0
+    let pdrscr = (12.0 * pscr
         + x * x * fdxx
-        + x * game * fdxg * 2.0
+        + 2.0 * x * game * fdxg
         + game * game * fdgg)
         / 9.0;
     let sscr = uscr - fscr;
@@ -215,40 +207,43 @@ pub fn fscr_sol8(
             pdr: z,
         });
     }
-    let xsr = rs.recip() * 0.0140047;
+    let xsr = 0.0140047 / rs;
     let z13 = flexmesa_math::pow(zion, 1.0 / 3.0);
-    let p1 =
-        0.00352 * (1.0 - AP[0] / flexmesa_math::pow(zion, 0.267) + 0.27 / zion);
-    let z5 = flexmesa_math::pow5(zion);
-    let z6 = z5 * zion;
-    let p2 =
-        1.0 + 2.25 / z13 * (1.0 + AP[1] * z5 + 0.222 * z6) / (1.0 + 0.222 * z6);
+    let p1 = AutoDiffReal2VarOrder1::constant(
+        0.00352 * (1.0 - AP[0] / flexmesa_math::pow(zion, 0.267) + 0.27 / zion),
+    );
+    let p2 = AutoDiffReal2VarOrder1::constant(
+        1.0 + 2.25 / z13
+            * (1.0
+                + AP[1] * flexmesa_math::pow5(zion)
+                + 0.222 * flexmesa_math::pow6(zion))
+            / (1.0 + 0.222 * flexmesa_math::pow6(zion)),
+    );
     let zln = flexmesa_math::log(zion);
-    let xsr2 = xsr * xsr;
-    let finf = (xsr2.recip() * p2 + 1.0).sqrt() * (z13 * z13 * p1);
-    let finfx = -((xsr2 + p2) * xsr).recip() * p2;
+    let finf = (p2 / (xsr * xsr) + 1.0).sqrt() * z13 * z13 * p1;
+    let finfx = -p2 / ((p2 + xsr * xsr) * xsr);
     let finfdx = finf * finfx;
-    let finfdxx =
-        finfdx * finfx - finfdx * (xsr2 * 3.0 + p2) / ((xsr2 + p2) * xsr);
+    let finfdxx = finfdx * finfx
+        - finfdx * (p2 + 3.0 * xsr * xsr) / ((p2 + xsr * xsr) * xsr);
     let r1 = AP[3] / (1.0 + zln);
     let r2 = 0.395 * zln + 0.347 / zion / zion.sqrt();
     let r3 = 1.0 / (1.0 + zln * zln.sqrt() * 0.01 + 0.097 / (zion * zion));
-    let q1u = xsr2 * AP[2] + r1;
-    let q1d = xsr2 * r2 + 1.0;
+    let q1u = r1 + AP[2] * xsr * xsr;
+    let q1d = 1.0 + r2 * xsr * xsr;
     let q1 = q1u / q1d;
-    let q1x = xsr * 2.0 * (q1u.recip() * AP[2] - q1d.recip() * r2);
+    let q1x = 2.0 * xsr * (AP[2] / q1u - r2 / q1d);
     let q1xdx = q1x / xsr
-        + xsr2
-            * 4.0
-            * ((q1d.recip() * r2).pow2() - (q1u.recip() * AP[2]).pow2());
+        + 4.0
+            * xsr
+            * xsr
+            * ((r2 / q1d) * (r2 / q1d) - (AP[2] / q1u) * (AP[2] / q1u));
     let q1dx = q1 * q1x;
     let q1dxx = q1dx * q1x + q1 * q1xdx;
 
     let (sup, supdx, supdg, supdxx, supdgg, supdxg) = if tpt.val < 6.0 / PX {
-        let px_tpt = tpt * PX;
-        let y0 = px_tpt * px_tpt;
+        let y0 = (PX * tpt) * (PX * tpt);
         let y0dx = y0 / xsr;
-        let y0dg = y0 * 2.0 / gami;
+        let y0dg = 2.0 * y0 / gami;
         let y0dxx = AutoDiffReal2VarOrder1::zero();
         let y0dgg = y0dg / gami;
         let y0dxg = y0dg / xsr;
@@ -258,37 +253,41 @@ pub fn fscr_sol8(
         let y1dxx = y1 * (y0dx * y0dx + y0dxx);
         let y1dgg = y1 * (y0dg * y0dg + y0dgg);
         let y1dxg = y1 * (y0dx * y0dg + y0dxg);
-        let sa = y1 + 1.0;
+        let sa = 1.0 + y1;
         let supa = sa.ln();
         let supadx = y1dx / sa;
         let supadg = y1dg / sa;
         let supadxx = (y1dxx - y1dx * y1dx / sa) / sa;
         let supadgg = (y1dgg - y1dg * y1dg / sa) / sa;
         let supadxg = (y1dxg - y1dx * y1dg / sa) / sa;
-        let em2 = ENAT - 2.0;
-        let sb = -y1.recip() * em2 + ENAT;
+        let em2 = AutoDiffReal2VarOrder1::constant(ENAT - 2.0);
+        let sb = ENAT - em2 / y1;
         let supb = sb.ln();
-        let em2y1 = (y1 * y1 * sb).recip() * em2;
+        let em2y1 = em2 / (y1 * y1 * sb);
         let supbdx = em2y1 * y1dx;
         let supbdg = em2y1 * y1dg;
-        let supbdxx = em2y1 * (y1dxx - y1dx * y1dx * 2.0 / y1 - y1dx * supbdx);
-        let supbdgg = em2y1 * (y1dgg - y1dg * y1dg * 2.0 / y1 - y1dg * supbdg);
-        let supbdxg = em2y1 * (y1dxg - y1dx * y1dg * 2.0 / y1 - y1dg * supbdx);
+        let supbdxx = em2y1 * (y1dxx - 2.0 * y1dx * y1dx / y1 - y1dx * supbdx);
+        let supbdgg = em2y1 * (y1dgg - 2.0 * y1dg * y1dg / y1 - y1dg * supbdg);
+        let supbdxg = em2y1 * (y1dxg - 2.0 * y1dx * y1dg / y1 - y1dg * supbdx);
         let sup = (supa / supb).sqrt();
-        let supx = (supadx / supa - supbdx / supb) * 0.5;
+        let supx = 0.5 * (supadx / supa - supbdx / supb);
         let supdx = sup * supx;
-        let supg = (supadg / supa - supbdg / supb) * 0.5;
+        let supg = 0.5 * (supadg / supa - supbdg / supb);
         let supdg = sup * supg;
         let supdxx = supdx * supx
             + sup
                 * 0.5
-                * (supadxx / supa - (supadx / supa).pow2() - supbdxx / supb
-                    + (supbdx / supb).pow2());
+                * (supadxx / supa
+                    - (supadx / supa) * (supadx / supa)
+                    - supbdxx / supb
+                    + (supbdx / supb) * (supbdx / supb));
         let supdgg = supdg * supg
             + sup
                 * 0.5
-                * (supadgg / supa - (supadg / supa).pow2() - supbdgg / supb
-                    + (supbdg / supb).pow2());
+                * (supadgg / supa
+                    - (supadg / supa) * (supadg / supa)
+                    - supbdgg / supb
+                    + (supbdg / supb) * (supbdg / supb));
         let supdxg = supdx * supg
             + sup
                 * 0.5
@@ -296,55 +295,55 @@ pub fn fscr_sol8(
                     - (supbdxg - supbdx * supbdg / supb) / supb);
         (sup, supdx, supdg, supdxx, supdgg, supdxg)
     } else {
-        let sup = tpt * PX;
-        let supdx = tpt * (0.5 * PX) / xsr;
-        let supdg = tpt * PX / gami;
-        let supdxx = -supdx * 0.5 / xsr;
+        let sup = PX * tpt;
+        let supdx = 0.5 * PX * tpt / xsr;
+        let supdg = PX * tpt / gami;
+        let supdxx = -0.5 * supdx / xsr;
         let supdgg = AutoDiffReal2VarOrder1::zero();
         let supdxg = supdx / gami;
         (sup, supdx, supdg, supdxx, supdgg, supdxg)
     };
 
     let gr3 = (gami / sup).powf(r3);
-    let gr3x = -supdx / sup * r3;
+    let gr3x = -r3 * supdx / sup;
     let gr3dx = gr3 * gr3x;
-    let gr3dxx =
-        gr3dx * gr3x - gr3 * (supdxx / sup - (supdx / sup).pow2()) * r3;
-    let gr3g = (gami.recip() - supdg / sup) * r3;
+    let gr3dxx = gr3dx * gr3x
+        - r3 * gr3 * (supdxx / sup - (supdx / sup) * (supdx / sup));
+    let gr3g = r3 * (1.0 / gami - supdg / sup);
     let gr3dg = gr3 * gr3g;
     let gr3dgg = gr3dg * gr3g
         + gr3
-            * ((supdg / sup).pow2() - supdgg / sup - (gami * gami).recip())
-            * r3;
+            * r3
+            * ((supdg / sup) * (supdg / sup)
+                - supdgg / sup
+                - 1.0 / (gami * gami));
     let gr3dxg =
-        gr3dg * gr3x + gr3 * (supdx * supdg / (sup * sup) - supdxg / sup) * r3;
+        gr3dg * gr3x + gr3 * r3 * (supdx * supdg / (sup * sup) - supdxg / sup);
 
-    let gr3_2 = gr3 * gr3;
-    let gr3_3 = gr3_2 * gr3;
-    let w = q1 / gr3 + 1.0;
-    let wdx = q1dx / gr3 - q1 * gr3dx / gr3_3;
-    let wdg = -q1 * gr3dg / gr3_2;
+    let w = 1.0 + q1 / gr3;
+    let wdx = q1dx / gr3 - q1 * gr3dx / (gr3 * gr3 * gr3);
+    let wdg = -q1 * gr3dg / (gr3 * gr3);
     let wdxx = q1dxx / gr3
-        - (q1dx * gr3dx * 2.0 + q1 * (gr3dxx - gr3dx * gr3dx * 2.0 / gr3))
-            / gr3_2;
-    let wdgg = q1 * (gr3dg * gr3dg * 2.0 / gr3 - gr3dgg) / gr3_2;
-    let wdxg =
-        -(q1dx * gr3dg + q1 * (gr3dxg - gr3dx * gr3dg * 2.0 / gr3)) / gr3_2;
+        - (2.0 * q1dx * gr3dx + q1 * (gr3dxx - 2.0 * gr3dx * gr3dx / gr3))
+            / (gr3 * gr3);
+    let wdgg = q1 * (2.0 * gr3dg * gr3dg / gr3 - gr3dgg) / (gr3 * gr3);
+    let wdxg = -(q1dx * gr3dg + q1 * (gr3dxg - 2.0 * gr3dx * gr3dg / gr3))
+        / (gr3 * gr3);
 
     let fscr = -gami * finf * w;
     let fdx = -gami * (finfdx * w + finf * wdx);
-    let fdxx = -gami * (finfdxx * w + finfdx * wdx * 2.0 + finf * wdxx);
+    let fdxx = -gami * (finfdxx * w + 2.0 * finfdx * wdx + finf * wdxx);
     let fdg = -finf * w - gami * finf * wdg;
-    let fdgg = -finf * wdg * 2.0 - gami * finf * wdgg;
+    let fdgg = -2.0 * finf * wdg - gami * finf * wdgg;
     let fdxg = -finfdx * w - finf * wdx - gami * (finfdx * wdg + finf * wdxg);
     let s_scr = -gami * gami * finf * wdg;
     let uscr = s_scr + fscr;
     let cvscr = -gami * gami * fdgg;
     let pscr = (xsr * fdx + gami * fdg) / 3.0;
     let pdtscr = gami * gami * (xsr * finf * (finfx * wdg + wdxg) - fdgg) / 3.0;
-    let pdrscr = (pscr * 12.0
+    let pdrscr = (12.0 * pscr
         + xsr * xsr * fdxx
-        + xsr * gami * fdxg * 2.0
+        + 2.0 * xsr * gami * fdxg
         + gami * gami * fdgg)
         / 9.0;
     Ok(PcIonContrib {
@@ -392,20 +391,21 @@ pub fn cormix(
         z321 - (zm * zm * zm / zmean).sqrt()
     };
     let dif_r = dif0 / z52;
-    let dif_fdh = game * (game / 3.0).sqrt() * dif0;
+    let dif_fdh = dif0 * game * (game / 3.0).sqrt();
     let p3 = flexmesa_math::pow(d, -0.2);
     let d0 = (2.6 * dif_r + 14.0 * dif_r * dif_r * dif_r) / (1.0 - p3);
-    let gp = gami_mean.powf(p3) * d0;
-    let fmix0 = dif_fdh / (gp + 1.0);
+    let gp = d0 * gami_mean.powf(p3);
+    let fmix0 = dif_fdh / (1.0 + gp);
     let q = d * d * 0.0117;
     let r = 1.5 / p3 - 1.0;
-    let gq = gp * q;
-    let fmix = fmix0 / (gq + 1.0).powf(r);
-    let g = -gp * p3 / (gp + 1.0) - gq * (r * p3) / (gq + 1.0) + 1.5;
+    let gq = q * gp;
+    let fmix = fmix0 / (1.0 + gq).powf(r);
+    let g = 1.5 - p3 * gp / (1.0 + gp) - r * p3 * gq / (1.0 + gq);
     let umix = fmix * g;
     let pmix = umix / 3.0;
-    let gdg =
-        -(gp / (gp + 1.0).pow2() + gq * r / (gq + 1.0).pow2()) * (p3 * p3);
+    let gdg = -p3
+        * p3
+        * (gp / ((1.0 + gp) * (1.0 + gp)) + r * gq / ((1.0 + gq) * (1.0 + gq)));
     let udg = umix * g + fmix * gdg;
     let cvmix = umix - udg;
     let pdtmix = pmix - udg / 3.0;

@@ -22,7 +22,6 @@ use crate::mesh_adjust::{MeshFunctionConfig, do_adjust_mesh_for_step};
 use crate::model::StarModel;
 use crate::phase_separation::do_phase_separation_step;
 use crate::primary_state::PrimaryStateBuffer;
-use crate::rotation::conserve_shell_j_rot_and_distortion;
 
 /// Evaluates domain-integrated `(e_int, e_grav, e_kin, e_rot, e_turb, e_tot)`
 /// over zero-based zones `klo..khi` with optional mass cap `delta_m`, optional
@@ -378,27 +377,37 @@ pub fn apply_step_pre_physics_with_extras(
         }
     }
 
-    if model.controls.rotation_flag {
-        conserve_shell_j_rot_and_distortion(model);
-        if model.controls.mix_wind.premix_omega && dt > 0.0 {
-            match crate::omega_mix::do_solve_omega_mix_with_extras(
-                model,
-                0.5 * dt,
-                extras,
-            )? {
-                crate::omega_mix::OmegaMixOutcome::KeepGoing => {}
-                crate::omega_mix::OmegaMixOutcome::Retry(msg) => {
-                    return Err(StarError::ConvergenceFailure(msg));
-                }
-                crate::omega_mix::OmegaMixOutcome::Terminate(msg) => {
-                    return Err(StarError::Terminated {
-                        model_number: model.model_number,
-                        reason: msg,
-                    });
-                }
+    // `star/private/evolve.f90:648-655`: `do_solve_omega_mix` over half the
+    // step, then `set_rotation_info(s, .false., ierr)` and
+    // `set_vars_if_needed`. Neither sets `need_to_setvars`
+    // (`star/private/hydro_rotation.f90:537-586`), so the structure solve
+    // starts from the variables of the last `set_vars`. `j_rot_flag` is not
+    // a supported control, so `.not. s% j_rot_flag` holds.
+    if model.controls.rotation_flag
+        && model.controls.mix_wind.premix_omega
+        && dt > 0.0
+    {
+        match crate::omega_mix::do_solve_omega_mix_with_extras(
+            model,
+            0.5 * dt,
+            extras,
+        )? {
+            crate::omega_mix::OmegaMixOutcome::KeepGoing => {}
+            crate::omega_mix::OmegaMixOutcome::Retry(msg) => {
+                return Err(StarError::ConvergenceFailure(msg));
             }
-            crate::hydro_rotation::set_rotation_info(model, false);
+            crate::omega_mix::OmegaMixOutcome::Terminate(msg) => {
+                return Err(StarError::Terminated {
+                    model_number: model.model_number,
+                    reason: msg,
+                });
+            }
+        }
+        crate::hydro_rotation::set_rotation_info(model, false);
+        if model.aux.need_to_setvars {
             set_hydro_vars(model, false, false)?;
+            // `star/private/hydro_vars.f90:653`.
+            model.aux.need_to_setvars = false;
         }
     }
     Ok(())

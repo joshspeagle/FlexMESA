@@ -178,7 +178,19 @@ pub fn restore_from_old(model: &mut StarModel) -> Result<(), StarError> {
     model.set_m_and_dm();
     model.set_m_grav_and_grav();
     model.pack_xh();
-    crate::rotation::conserve_shell_j_rot_and_distortion(model);
+    // `set_current_to_old` (`star/private/evolve_support.f90:205-219`):
+    // `j_rot = j_rot_old`, `use_xh_to_update_i_rot`, then
+    // `omega = j_rot/i_rot`. `fp_rot` and `ft_rot` are left alone.
+    if model.controls.rotation_flag {
+        crate::hydro_rotation::use_xh_to_update_i_rot(model);
+        for k in 0..model.nz {
+            // Upstream stops on a bad omega only with `stop_for_bad_nums`
+            // (`evolve_support.f90:211-216`), which defaults to `.false.`
+            // (`star/defaults/controls.defaults`) and is not a supported
+            // control here, so the value is kept as computed.
+            model.omega[k] = model.j_rot[k] / model.aux.i_rot[k];
+        }
+    }
     set_hydro_vars(model, false, false)?;
     model.mlt_vc.clone_from(&model.aux.mlt_vc_old);
     model.conv_vel.clone_from(&model.aux.mlt_vc_old);

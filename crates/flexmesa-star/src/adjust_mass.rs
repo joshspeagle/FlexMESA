@@ -19,7 +19,6 @@ use crate::hydro_vars::set_hydro_vars;
 use flexmesa_num::search::binary_search_1based;
 use crate::micro::set_basic_vars;
 use crate::model::StarModel;
-use crate::rotation::conserve_shell_j_rot_and_distortion;
 
 /// Evaluates `delta_m = dt * mstar_dot` with the upstream super-Eddington
 /// override and `min_star_mass_for_loss` / `max_star_mass_for_gain` gates
@@ -635,11 +634,6 @@ fn do_adjust_mass_core(
         // (`star/private/mix_info.f90:1685-1712, 1810-1840`), so the
         // remapped values are never read.
     }
-    let j_rot_after_remap = if model.controls.rotation_flag {
-        model.j_rot.clone()
-    } else {
-        Vec::new()
-    };
 
     // Soften outer `xa` (`adjust_mass.f90:480-510`).
     smooth_outer_xa(model);
@@ -678,10 +672,8 @@ fn do_adjust_mass_core(
         model.aux.need_to_setvars = false;
         model.set_qs();
         model.set_m_and_dm();
-        if model.controls.rotation_flag {
-            model.j_rot.clone_from(&j_rot_after_remap);
-            conserve_shell_j_rot_and_distortion(model);
-        }
+        // `calculate_eps_mdot` follows `set_vars_if_needed` directly
+        // (`evolve.f90:593-596`): no rotation refresh in between.
         // `calculate_eps_mdot` (`evolve.f90:596`), with what
         // `save_for_eps_mdot` and `revise_q_and_dq` left for it. The indices
         // are upstream's one-based `kA` and `kB`.
@@ -988,9 +980,10 @@ fn set1_irot(model: &mut StarModel, k: usize, jrot_known: bool) {
             false,
         )
     };
-    if k < model.aux.w_div_wc.len() {
-        model.aux.w_div_wc[k] = w_div_wcrit_roche;
-    }
+    // `w_div_wcrit_roche` is local to `set1_irot` (`adjust_mass.f90:1238,
+    // 1246-1252`): `s% w_div_w_crit_roche` keeps its start-of-step value
+    // until the next `set_rotation_info(s, .false.)`
+    // (`star/private/evolve.f90:651`).
     let i_rot_k = eval_i_rot(
         r00,
         w_div_wcrit_roche,

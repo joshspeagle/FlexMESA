@@ -436,7 +436,7 @@ impl StarExtras for ConfigurableTerminateExtras {
 }
 
 /// Verifies clean `ExtrasDirective::Terminate("")` (`s% termination_code == 0`
-/// in MESA, as in `5M_cepheid_blue_loop/src/run_star_extras.f90:127`) passes
+/// in MESA, as in `star/test_suite/5M_cepheid_blue_loop/src/run_star_extras.f90:127`) passes
 /// `required_termination_code_string`, writes termination `.mod`/`.photo`
 /// saves, and marks `CaseRunReport::passed == true`, while explicit
 /// `"extras_check_model"` continues enforcing `required_termination_code_string`.

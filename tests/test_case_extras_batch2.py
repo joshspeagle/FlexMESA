@@ -636,7 +636,9 @@ def test_r_crb_star_writes_inlist_nzhi(tmp_path: pathlib.Path) -> None:
     assert rcrb.saved_nzhi == 4
 
 
-def test_post_evolve_wind_cpm_and_wd_diffusion() -> None:
+def test_post_evolve_wind_cpm_and_wd_diffusion(
+    tmp_path: pathlib.Path,
+) -> None:
     """`HotCoolWindStarExtras`, `ConvCoreCpmStarExtras`, `WdDiffusion`."""
     hcw = star_extras.HotCoolWindStarExtras()
     hcw.extras_after_evolve(
@@ -669,6 +671,53 @@ def test_post_evolve_wind_cpm_and_wd_diffusion() -> None:
         }
     )
     assert wdd.within_tolerance is True
+
+    wd_dir = harness_runner.resolve_case_dir("star", "wd_diffusion")
+    assert isinstance(
+        case_extras.resolve_case_extras("star", wd_dir),
+        star_extras.WdDiffusionStarExtras,
+    )
+    co_mod = _rust.RustStarModel.from_mod_str(
+        (wd_dir / "co_wd_settled.mod").read_text(encoding="utf-8")
+    )
+    co_snap = _rust.star_extras_snapshot(
+        co_mod, str(tmp_path), include_history=False
+    )
+    co_nz = int(co_snap["nz"])
+    assert len(co_snap["e_field"]) == co_nz
+    assert len(co_snap["g_field_element_diffusion"]) == co_nz
+
+    staged = tmp_path / "staged_wd_diffusion"
+    shutil.copytree(wd_dir, staged)
+    (staged / "history_columns.list").write_text(
+        "model_number\nstar_age\nTeff\n", encoding="utf-8"
+    )
+    inlist_wd = staged / "inlist_wd_diff"
+    inlist_txt = inlist_wd.read_text(encoding="utf-8")
+    assert "Teff_lower_limit = 9d3" in inlist_txt
+    inlist_wd.write_text(
+        inlist_txt.replace("Teff_lower_limit = 9d3", "Teff_lower_limit = 1d5"),
+        encoding="utf-8",
+    )
+    rep = harness_runner.run_trace_inprocess(
+        "star",
+        staged,
+        tmp_path / "out_wd_diff",
+        max_steps=1,
+        allow_unsupported_controls=True,
+        extras_factory="tests.case_extras:resolve_case_extras",
+    )
+    assert int(rep["total_steps"]) == 1
+
+    with pytest.raises(ValueError, match="failed to reach target for Teff"):
+        harness_runner.run_trace_inprocess(
+            "star",
+            wd_dir,
+            tmp_path / "out_wd_diff_cold_limit",
+            max_steps=1,
+            allow_unsupported_controls=True,
+            extras_factory="tests.case_extras:resolve_case_extras",
+        )
 
 
 def test_high_rot_darkening_and_semiconvection_checks() -> None:

@@ -691,11 +691,12 @@ def test_other_physics_hooks_stern51_wind_branches() -> None:
     assert w_wr > 0.0
 
 
-def test_magnetic_braking_torque_conservation_and_spindown_limit() -> None:
-    """`MagneticBrakingStarExtras` redistributes capped shell torque."""
+def test_magnetic_braking_torque_conservation_and_spindown_limit(
+    tmp_path: pathlib.Path,
+) -> None:
+    """`MagneticBrakingStarExtras` redistributes capped torque and limits dt."""
     mb = star_extras.MagneticBrakingStarExtras()
-    with pytest.raises(NotImplementedError, match="#152"):
-        mb.extras_controls({"use_other_timestep_limit": True})
+    mb.extras_controls({"use_other_timestep_limit": True})
     mb.extras_controls({"use_other_timestep_limit": False})
     mb_snap: dict[str, Any] = {
         "nz": 3,
@@ -720,10 +721,27 @@ def test_magnetic_braking_torque_conservation_and_spindown_limit() -> None:
     j_dot_expected = (2.0 / 3.0) * mb_snap["mstar_dot"] * 1.0e-4 * r_cm**2 * eta
     torque_applied = sum(ej[k] * mb_snap["dm_bar"][k] for k in range(3))
     assert math.isclose(torque_applied, j_dot_expected, rel_tol=1.0e-12)
-    act, ratio = mb.other_timestep_limit(mb_snap, 0.0)
-    assert act == "keep_going" and ratio > 0.0
+    lim_res = mb.other_timestep_limit(mb_snap, False, 1.0e11)
+    assert lim_res["action"] == "keep_going"
+    assert lim_res["dt_limit_ratio"] > 0.0
+    assert mb.other_timestep_limit(
+        {**mb_snap, "v_rot_avg_surf": 5.0e4}, False, 1.0e11
+    ) == {"action": "keep_going", "dt_limit_ratio": 0.0}
     mb.extras_after_evolve({**mb_snap, "v_rot_avg_surf": 5.0e4})
     assert mb.spindown_ok is True
+
+    mb_dir = harness_runner.resolve_case_dir("star", "magnetic_braking")
+    attached = case_extras.resolve_case_extras("star", mb_dir)
+    assert isinstance(attached, star_extras.MagneticBrakingStarExtras)
+    rep = harness_runner.run_trace_inprocess(
+        "star",
+        mb_dir,
+        tmp_path / "out_magnetic_braking",
+        max_steps=2,
+        allow_unsupported_controls=True,
+        extras_factory="tests.case_extras:resolve_case_extras",
+    )
+    assert int(rep["total_steps"]) >= 2
 
 
 def test_cepheid_blue_loop_runs_live_through_py_star_extras_adapter(
@@ -1131,3 +1149,52 @@ def test_231_adapter_live_initial_model_and_physics_hooks(
     assert saw_snapshot_shape["atm_t_tau_opacity"] == "fixed"
     assert saw_snapshot_shape["final_opacity_opt"] == "varying"
     assert saw_snapshot_shape["xa_shape"][1] == 8
+
+
+def test_alpha_mlt_and_fe_infall_snapshot_hooks(
+    tmp_path: pathlib.Path,
+) -> None:
+    """`extras_py.rs` exposes `alpha_mlt`, `fe_core_infall*`, and vector
+    `other_alpha_mlt` (`#231`).
+    """
+    m = _rust.RustStarModel.from_zams(1.0, 0.02)
+    snap0 = _rust.star_extras_snapshot(m, str(tmp_path), include_history=False)
+    nz = int(snap0["nz"])
+    assert len(snap0["alpha_mlt"]) == nz
+    assert float(snap0["fe_core_infall"]) == 0.0
+    assert float(snap0["fe_core_infall_limit"]) > 0.0
+
+    vec = [1.8 + 0.1 * (k % 3) for k in range(nz)]
+    _rust.star_apply_extras_updates(m, {"alpha_mlt": vec})
+    snap1 = _rust.star_extras_snapshot(m, str(tmp_path), include_history=False)
+    assert list(snap1["alpha_mlt"]) == pytest.approx(vec)
+
+    with pytest.raises(ValueError, match="got bool"):
+        _rust.star_apply_extras_updates(m, {"alpha_mlt": True})
+    with pytest.raises(ValueError, match="nz ="):
+        _rust.star_apply_extras_updates(m, {"alpha_mlt": [1.5, 1.5]})
+
+    class _VecAlphaProbe:
+        def __init__(self) -> None:
+            self.seen_alpha_len: int | None = None
+
+        def extras_controls(self, _state: dict[str, Any]) -> dict[str, Any]:
+            return {"use_other_alpha_mlt": True}
+
+        def other_alpha_mlt(self, state: dict[str, Any]) -> list[float]:
+            n = int(state["nz"])
+            self.seen_alpha_len = n
+            return [2.1] * n
+
+    adj_dir = harness_runner.resolve_case_dir("star", "adjust_net")
+    probe = _VecAlphaProbe()
+    rep = harness_runner.run_trace_inprocess(
+        "star",
+        adj_dir,
+        tmp_path / "alpha_probe",
+        max_steps=1,
+        allow_unsupported_controls=True,
+        extras=probe,
+    )
+    assert int(rep["total_steps"]) == 1
+    assert probe.seen_alpha_len is not None and probe.seen_alpha_len > 0

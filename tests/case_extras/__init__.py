@@ -126,23 +126,19 @@ STOCK_EXTRAS_DIGESTS: frozenset[str] = frozenset(
 # case without failing on state the adapter does not provide. A handler not
 # listed here is written but cannot run yet because its hooks require an
 # unported engine or `StarExtras` capability:
-# - `#152` (solver/timestep/state hooks): `MagneticBrakingStarExtras`
-#   (`other_timestep_limit`), `TzoStarExtras` (`star_set_v_flag`, center mass
-#   and luminosity mutation).
+# - `#152` (solver/timestep/state hooks): `TzoStarExtras`
+#   (`star_set_v_flag`, center mass and luminosity mutation).
 # - `#153` (mesh/surface-cut hooks): `MakeCoWdStarExtras`
-#   (`star_remove_surface_at_cell_k`), `PreMs1MToWdStarExtras`
-#   (`other_mesh_delta_coeff_factor`).
+#   (`star_remove_surface_at_cell_k`).
 # - `#154` (startup/relax/build-model hooks):
 #   `RelaxCompositionJEntropyStarExtras` (`initial_mass` mutation before
 #   model build).
 # - `#155` (per-cell MLT/overshoot/rotation diffusivity hooks):
 #   `PreMs12MCoreCollapseStarExtras`, `PreMs20MCoreCollapseStarExtras`,
 #   `SplitBurnBigNetStarExtras`, `MakePreCcsn13bvnStarExtras` (per-cell
-#   `alpha_mlt(1:nz)`),
-#   `Dynamo15MStarExtras`, `Thermohaline1MStarExtras` (`D_ES`/`D_ST`/`nu_ST`
-#   arrays not yet publicly exposed on `StarModel`).
-# - `#156` (element diffusion electric/gravity fields): `WdDiffusionStarExtras`
-#   (`e_field`, `g_field_element_diffusion`).
+#   `alpha_mlt(1:nz)` is overwritten by `hydro_vars.rs` during `set_vars`
+#   after `inlist_runner.rs` calls `other_alpha_mlt`, plus per-zone
+#   `burn_num_iters` and `dvdt_drag`/`fdotv_drag_energy` are absent).
 # - `#159` (rotation-distortion hooks): `PpisnStarExtras` (`other_kap_get`,
 #   `other_eval_fp_ft`, `other_before_struct_burn_mix`, `#152`/`#159`/`#161`).
 # - `#161` (opacity/surface-PT/other-physics hooks): `ConductiveFlameStarExtras`
@@ -187,6 +183,7 @@ ADAPTER_SERVED_STAR_HANDLERS: frozenset[str] = frozenset(
         "ConserveAngularMomentumStarExtras",
         "ConvCoreCpmStarExtras",
         "DiffusionSmoothnessStarExtras",
+        "Dynamo15MStarExtras",
         "ExtendedConvectivePenetrationStarExtras",
         "Hb2MStarExtras",
         "HighRotDarkeningStarExtras",
@@ -194,14 +191,18 @@ ADAPTER_SERVED_STAR_HANDLERS: frozenset[str] = frozenset(
         "HotCoolWindStarExtras",
         "HseRiemannStarExtras",
         "LowZStarExtras",
+        "MagneticBrakingStarExtras",
         "MakeEnvStarExtras",
         "MakeONeWdStarExtras",
         "NeutronStarEnvStarExtras",
+        "PreMs1MToWdStarExtras",
         "RCrBStarExtras",
         "SemiconvectionStarExtras",
         "TTauGradrStarExtras",
+        "Thermohaline1MStarExtras",
         "WdAccSmallDmStarExtras",
         "WdCool06MStarExtras",
+        "WdDiffusionStarExtras",
         "WdNovaBurstStarExtras",
     }
 )

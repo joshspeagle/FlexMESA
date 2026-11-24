@@ -38,8 +38,9 @@ use flexmesa_star::{
     OuterBoundKind, RspChemCache, StarControls, StarError, StarModel,
     center_avg_x_by_name, center_value, compute_core_masses,
     compute_power_categories, do_rsp_build_model, eval_conv_and_mx_summary,
-    eval_photosphere_info, eval_surf_avg_rotation_info, export_gyre,
-    get_or_load_net, parse_gyre_mesa_model, safe_log10, solve_bvp_eigenmodes,
+    eval_core_infall_and_rebound_cms, eval_photosphere_info,
+    eval_surf_avg_rotation_info, export_gyre, get_or_load_net,
+    parse_gyre_mesa_model, safe_log10, solve_bvp_eigenmodes,
 };
 use numpy::{PyArray1, PyArrayMethods};
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
@@ -551,8 +552,11 @@ fn surface_iso_frac(model: &StarModel, iso_name: &str) -> Option<f64> {
         .and_then(|j| model.cell_xa(0).get(j).copied())
 }
 
-/// 0-based index of the `c12_c12` (`icc`) burning category in
-/// `flexmesa_chem::CATEGORY_NAME` (`CATEGORY_NAME[16] == "c12_c12"`).
+/// 0-based indices into `eps_nuc_categories` matching
+/// `flexmesa_chem::CATEGORY_NAME` (`ipp`, `cno`, `tri_alpha`, and `c12_c12`).
+const CATEGORY_PP: usize = 0;
+const CATEGORY_CNO: usize = 1;
+const CATEGORY_3ALF: usize = 2;
 const CATEGORY_ICC: usize = 16;
 
 /// Signed $\log_{10}$ matching `star/private/profile_getval.f90:475-477`
@@ -708,6 +712,7 @@ fn set_star_control_scalars(
         "dt_div_min_dr_div_cs_limit",
         c.ts_stop.dt_div_min_dr_div_cs_limit,
     )?;
+    d.set_item("fe_core_infall_limit", c.fe_core_infall_limit)?;
     d.set_item(
         "use_other_timestep_limit",
         c.ts_stop.use_other_timestep_limit,
@@ -809,6 +814,8 @@ fn set_star_report_scalars(
 ) -> PyResult<()> {
     let nz = model.nz;
     let cores = compute_core_masses(model);
+    let (fe_core_infall, _, _) =
+        eval_core_infall_and_rebound_cms(model, &cores);
     let powers = compute_power_categories(model);
     let phot = eval_photosphere_info(model);
     let mix = eval_conv_and_mx_summary(model);
@@ -821,6 +828,7 @@ fn set_star_report_scalars(
     d.set_item("co_core_mass", cores.co_core_mass)?;
     d.set_item("one_core_mass", cores.one_core_mass)?;
     d.set_item("fe_core_mass", cores.fe_core_mass)?;
+    d.set_item("fe_core_infall", fe_core_infall)?;
     d.set_item("he_core_omega", cores.he_bdy.omega)?;
     d.set_item("power_nuc_burn", powers.power_nuc_burn)?;
     d.set_item("power_h_burn", powers.power_h_burn)?;
@@ -1028,6 +1036,45 @@ fn set_star_energy_and_start_arrays(
     Ok(())
 }
 
+fn set_star_aux_radial_arrays(
+    py: Python<'_>,
+    d: &Bound<'_, PyDict>,
+    model: &StarModel,
+) -> PyResult<()> {
+    let nz = model.nz;
+    let set_f64_or_zeros = |key: &str, slice: &[f64]| -> PyResult<()> {
+        if slice.len() >= nz {
+            d.set_item(key, PyArray1::from_slice(py, &slice[..nz]))?;
+        } else {
+            d.set_item(key, PyArray1::from_vec(py, vec![0.0_f64; nz]))?;
+        }
+        Ok(())
+    };
+    set_f64_or_zeros("alpha_mlt", &model.aux.mixing.alpha_mlt)?;
+    set_f64_or_zeros("d_es", &model.aux.rotmix.d_es)?;
+    set_f64_or_zeros("d_st", &model.aux.rotmix.d_st)?;
+    set_f64_or_zeros("nu_st", &model.aux.rotmix.nu_st)?;
+    set_f64_or_zeros("e_field", &model.aux.e_field)?;
+    set_f64_or_zeros(
+        "g_field_element_diffusion",
+        &model.aux.g_field_element_diffusion,
+    )?;
+    if model.aux.eps_nuc_categories.len() >= nz {
+        let mut eps_pp = Vec::with_capacity(nz);
+        let mut eps_cno = Vec::with_capacity(nz);
+        let mut eps_3alf = Vec::with_capacity(nz);
+        for row in &model.aux.eps_nuc_categories[..nz] {
+            eps_pp.push(row[CATEGORY_PP]);
+            eps_cno.push(row[CATEGORY_CNO]);
+            eps_3alf.push(row[CATEGORY_3ALF]);
+        }
+        d.set_item("eps_nuc_ipp", PyArray1::from_vec(py, eps_pp))?;
+        d.set_item("eps_nuc_icno", PyArray1::from_vec(py, eps_cno))?;
+        d.set_item("eps_nuc_i3alf", PyArray1::from_vec(py, eps_3alf))?;
+    }
+    Ok(())
+}
+
 fn set_star_radial_arrays(
     py: Python<'_>,
     d: &Bound<'_, PyDict>,
@@ -1106,6 +1153,7 @@ fn set_star_radial_arrays(
             .collect();
         d.set_item("mixing_type", PyArray1::from_vec(py, mix_codes))?;
     }
+    set_star_aux_radial_arrays(py, d, model)?;
     set_star_energy_and_start_arrays(py, d, model)?;
     set_star_eos_frac_arrays(py, d, model)?;
     set_star_species_arrays(py, d, model)?;
@@ -1271,6 +1319,9 @@ fn apply_star_updates(
             "use_other_surface_pt" => {
                 model.controls.use_other_surface_pt = val.extract::<bool>()?;
             }
+            "use_other_alpha_mlt" => {
+                model.controls.use_other_alpha_mlt = val.extract::<bool>()?;
+            }
             "reimers_scaling_factor" => {
                 model.controls.reimers_scaling_factor = val.extract::<f64>()?;
             }
@@ -1283,6 +1334,9 @@ fn apply_star_updates(
             "mass_change" => model.controls.mass_change = val.extract::<f64>()?,
             "mixing_length_alpha" => {
                 model.controls.mixing_length_alpha = val.extract::<f64>()?;
+            }
+            "alpha_mlt" => {
+                apply_alpha_mlt_py_value(model, &val, "alpha_mlt", false)?;
             }
             "tau_factor" => {
                 model.controls.tau_factor = val.extract::<f64>()?;
@@ -1313,6 +1367,47 @@ fn apply_star_updates(
             }
         }
     }
+    Ok(())
+}
+
+fn apply_alpha_mlt_py_value(
+    model: &mut StarModel,
+    val: &Bound<'_, PyAny>,
+    context: &str,
+    update_scalar_control: bool,
+) -> PyResult<()> {
+    if val.is_instance_of::<pyo3::types::PyBool>() {
+        return Err(PyValueError::new_err(format!(
+            "{context} expected float or float sequence, got bool"
+        )));
+    }
+    if let Ok(alpha) = val.extract::<f64>() {
+        if !alpha.is_finite() {
+            return Err(PyValueError::new_err(format!(
+                "{context} received non-finite scalar alpha_mlt"
+            )));
+        }
+        if update_scalar_control {
+            model.controls.mixing_length_alpha = alpha;
+        }
+        model.aux.mixing.alpha_mlt.resize(model.nz, alpha);
+        model.aux.mixing.alpha_mlt.fill(alpha);
+        return Ok(());
+    }
+    let vals: Vec<f64> = val.extract()?;
+    if vals.len() != model.nz {
+        return Err(PyValueError::new_err(format!(
+            "{context} returned {} values for nz = {}",
+            vals.len(),
+            model.nz
+        )));
+    }
+    if !vals.iter().all(|v| v.is_finite()) {
+        return Err(PyValueError::new_err(format!(
+            "{context} returned non-finite alpha_mlt value"
+        )));
+    }
+    model.aux.mixing.alpha_mlt = vals;
     Ok(())
 }
 
@@ -2375,15 +2470,19 @@ impl StarExtras for PyStarExtrasAdapter {
                 .bind(py)
                 .call_method1("other_alpha_mlt", (snap,))
             {
-                Ok(res) if !res.is_none() => match res.extract::<f64>() {
-                    Ok(alpha) => {
-                        model.controls.mixing_length_alpha = alpha;
-                    }
-                    Err(e) => self.state.record_py_err(
+                Ok(res) if !res.is_none() => {
+                    if let Err(e) = apply_alpha_mlt_py_value(
+                        model,
+                        &res,
                         "other_alpha_mlt",
-                        format_py_err(py, &e),
-                    ),
-                },
+                        true,
+                    ) {
+                        self.state.record_py_err(
+                            "other_alpha_mlt",
+                            format_py_err(py, &e),
+                        );
+                    }
+                }
                 Ok(_) => {}
                 Err(e) => self
                     .state

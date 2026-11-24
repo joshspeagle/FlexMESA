@@ -37,9 +37,8 @@ issue = "#231"
 [[cases]]
 suite = "star"
 case = "15M_dynamo"
-status = "unported"
+status = "ported"
 digest = "a332120e1a169adc9459ed9b3f09eaa73988a0ad5d8d1867f5b92395df5b10f2"
-issue = "#231"
 
 [[cases]]
 suite = "star"
@@ -56,16 +55,14 @@ digest = "dc0c5abaf8ce92977981d709bc64664c21ec2f5fe5ba74ab443bd14b681c61fe"
 [[cases]]
 suite = "star"
 case = "1M_pre_ms_to_wd"
-status = "unported"
+status = "ported"
 digest = "7e260170e4c72d47480dd74b179a97ab47ca70221b40da51ad90080d758bb358"
-issue = "#231"
 
 [[cases]]
 suite = "star"
 case = "1M_thermohaline"
-status = "unported"
+status = "ported"
 digest = "e08754f3f15ba1e96aeb9f55687a8dd48d6e6ca32e5905f04f00fc1a44dde9c2"
-issue = "#231"
 
 [[cases]]
 suite = "star"
@@ -291,9 +288,8 @@ digest = "e7282bed456cfdefe4a4f86f6851e945f0890fe320db615420ef1ae14052d3cb"
 [[cases]]
 suite = "star"
 case = "magnetic_braking"
-status = "unported"
+status = "ported"
 digest = "f1ebb2e3a5f52b0564658682dc70a7e22e055e8455db385e847cc1a075b4bcb0"
-issue = "#231"
 
 [[cases]]
 suite = "star"
@@ -550,9 +546,8 @@ digest = "6fc9b93588daa6528c52e58c2780679030ea5ef47597803431cb459c4113af4c"
 [[cases]]
 suite = "star"
 case = "wd_diffusion"
-status = "unported"
+status = "ported"
 digest = "ce9c3773b8d041826e3b4ccf763b24fc07e2d4cdb246282ef68aa51a6bf26930"
-issue = "#231"
 
 [[cases]]
 suite = "star"

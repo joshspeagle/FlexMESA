@@ -311,8 +311,13 @@ pub fn apply_step_pre_physics_with_extras(
     if model.controls.do_phase_separation {
         do_phase_separation_step(model, dt)?;
         // `set_vars_if_needed(s, dt, 'after phase separation')`
-        // (`star/private/evolve.f90:626`, flag from `phase_separation.f90:139`).
+        // (`star/private/evolve.f90:622-627`). `phase_separation.f90:139,
+        // 355-361` updates `lnd` under `fix_Pgas` without touching `xh` and
+        // sets `need_to_setvars`; `set_vars` then unpacks `xh`
+        // (`star/private/hydro_vars.f90:226`), restoring `lnd` before
+        // `set_hydro_vars` and `do_element_diffusion` (#156).
         if model.aux.need_to_setvars {
+            model.unpack_xh();
             set_hydro_vars(model, false, false)?;
             model.aux.need_to_setvars = false;
         }

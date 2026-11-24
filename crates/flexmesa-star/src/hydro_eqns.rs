@@ -485,9 +485,17 @@ fn wrap_surf_bc(
 
 /// Surface pressure and temperature boundary condition equations at `k = 0`
 /// (`set_Psurf_BC` and `set_Tsurf_BC` in `star/private/hydro_eqns.f90:1002-1067`).
-pub fn do_surf_bc_eqns(model: &StarModel, sys: &mut HenyeySystem) {
+///
+/// # Errors
+/// Returns [`StarError::InvalidInput`] for `RSP2_flag` without
+/// `RSP2_use_L_eqn_at_surface`: upstream then never sets `equ(i_equL, 1)`
+/// (DECISIONS #43).
+pub fn do_surf_bc_eqns(
+    model: &StarModel,
+    sys: &mut HenyeySystem,
+) -> Result<(), StarError> {
     if model.nz == 0 {
-        return;
+        return Ok(());
     }
     let bc = get_pt_bc_ad(model);
 
@@ -533,10 +541,23 @@ pub fn do_surf_bc_eqns(model: &StarModel, sys: &mut HenyeySystem) {
         sys.save_eqn_residual(&model.layout, 0, model.layout.i_dv_dt, &resid_p);
     }
 
-    let skip_surf_t_bc = model.controls.use_rsp_l_eqn_outer_bc
-        || (model.controls.rsp2_flag
-            && model.controls.rsp2.use_l_eqn_at_surface);
-    if !skip_surf_t_bc {
+    // `need_T_surf` is `.false.` whenever `RSP2_flag` or
+    // `use_RSP_L_eqn_outer_BC` is set (`star/private/hydro_eqns.f90:773-779`),
+    // so `set_Tsurf_BC`'s RSP2 branch (`hydro_eqns.f90:1012-1018`) is
+    // unreachable. With RSP2 the cell-1 `equL` row is the RSP2 luminosity
+    // equation only when `RSP2_use_L_eqn_at_surface` (`hydro_eqns.f90:250-251`);
+    // otherwise upstream never sets `equ(i_equL, 1)`.
+    if model.controls.rsp2_flag && !model.controls.rsp2.use_l_eqn_at_surface {
+        return Err(StarError::InvalidInput(String::from(
+            "RSP2_flag with RSP2_use_L_eqn_at_surface = .false.: upstream never sets equ(i_equL,1) (star/private/hydro_eqns.f90:250-251, 773-779; DECISIONS #43)",
+        )));
+    }
+    // Upstream also clears need_T_surf when `.not. do_equL` (hydro_eqns.f90:774),
+    // with do_equL = (i_equL > 0 .and. i_equL <= nvar) (:111). The layout
+    // always assigns i_equ_l within nvar, so do_equL is always true here.
+    let need_t_surf =
+        !(model.controls.rsp2_flag || model.controls.use_rsp_l_eqn_outer_bc);
+    if need_t_surf {
         let lnt_0 = StarAdOrder1::variable(model.ln_t[0], I_LNT_00);
         let ln_t_bc = bc.ln_t_bc;
         let denom_t = if lnt_0.val > 1.0 {
@@ -547,6 +568,7 @@ pub fn do_surf_bc_eqns(model: &StarModel, sys: &mut HenyeySystem) {
         let resid_t = (ln_t_bc - lnt_0) / denom_t;
         sys.save_eqn_residual(&model.layout, 0, model.layout.i_equ_l, &resid_t);
     }
+    Ok(())
 }
 
 /// Coupled nuclear burning and diffusive mixing equations for cell `k`
@@ -698,7 +720,7 @@ pub fn assemble_henyey_system(
     sys.ublk.clear();
     sys.ublk.resize(blk_len, 0.0);
 
-    do_surf_bc_eqns(model, sys);
+    do_surf_bc_eqns(model, sys)?;
     let riemann_p_surf = (model.controls.u_flag
         && !model.controls.v_flag
         && !model.controls.use_compression_outer_bc

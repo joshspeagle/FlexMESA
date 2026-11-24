@@ -907,6 +907,10 @@ pub fn run_inlist_stage_with_logs(
             if will_terminate {
                 break;
             }
+            // `adjust_tau_factor`, `do_rotation_near_zams` and `do_rotation`
+            // after `star_finish_step` returned `keep_going`
+            // (`star/job/run_star_support.f90:752-763`).
+            crate::job_rotation::after_step_rotation_and_tau(model, extras)?;
         }
     }
 

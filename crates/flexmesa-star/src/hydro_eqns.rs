@@ -758,8 +758,14 @@ pub fn eval_henyey_equations_into(
     // `eval_equations` skips `set_solver_vars` before the first iteration
     // (`star/private/solver_support.f90:108-118`); every later evaluation
     // sets the variables, so the flag is restored here.
+    // The net is evaluated with its full Jacobian whether or not abundances
+    // are solved for: upstream calls `net_get` with `just_dxdt = .false.`
+    // (`star/private/net.f90:245-246`). With `just_dxdt` the net returns
+    // before `d_eps_nuc_dT` and `d_eps_nuc_dRho` are formed
+    // (`net/private/net_eval.f90:384-397`), which drops them from the
+    // structure-only energy equation (`do_chem = .false.`, as while relaxing).
     if model.aux.need_to_setvars {
-        set_hydro_vars(model, false, !include_chem)?;
+        set_hydro_vars(model, false, false)?;
     }
     model.aux.need_to_setvars = true;
     // `star/private/hydro_eqns.f90:131-137`: revise EOS composition partials

@@ -103,6 +103,7 @@ mod inlist_populate_limits;
 mod inlist_populate_micro;
 mod inlist_populate_phase5b;
 pub mod inlist_runner;
+pub(crate) mod job_rotation;
 pub mod job_controls;
 pub mod mdot_redo;
 pub mod mesa_history;

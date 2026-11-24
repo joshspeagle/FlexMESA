@@ -10,7 +10,7 @@ use flexmesa_chem::NuclideCatalog;
 use flexmesa_const::LN10;
 
 use crate::adjust_mesh_split_merge::{
-    preview_split_merge_amr, remesh_split_merge,
+    preview_split_merge_amr, remesh_split_merge_with,
 };
 use crate::adjust_mesh_support::{
     check_validity, get_gval_info_with_controls_and_xa,
@@ -27,7 +27,7 @@ pub use crate::mesh_remap::{
 };
 use crate::mesh_remap::{
     clean_up_fractions_slice, compute_xqs, count_plan_splits_and_merges,
-    execute_adjust_mesh_from_plan, fix_tail_dq,
+    execute_adjust_mesh_from_plan_with, fix_tail_dq,
 };
 use crate::model::StarModel;
 
@@ -589,6 +589,28 @@ pub fn do_adjust_mesh(
     model: &mut StarModel,
     cfg: &MeshFunctionConfig,
 ) -> Result<(usize, usize), StarError> {
+    do_adjust_mesh_with(model, cfg, true)
+}
+
+/// [`do_adjust_mesh`] as `do_mesh` runs it inside `prepare_for_new_step`
+/// (`star/private/evolve.f90:1961-1989`): a changed mesh only sets
+/// `need_to_setvars`, and the caller sets the variables at
+/// `set_vars_if_needed` (`evolve.f90:1891`).
+///
+/// # Errors
+/// As [`do_adjust_mesh`].
+pub(crate) fn do_adjust_mesh_for_step(
+    model: &mut StarModel,
+    cfg: &MeshFunctionConfig,
+) -> Result<(usize, usize), StarError> {
+    do_adjust_mesh_with(model, cfg, false)
+}
+
+fn do_adjust_mesh_with(
+    model: &mut StarModel,
+    cfg: &MeshFunctionConfig,
+    finish: bool,
+) -> Result<(usize, usize), StarError> {
     let _ = model.aux.planned_mesh.take();
     if !model.controls.okay_to_remesh || suppressed_by_evolve_guards(model, cfg)
     {
@@ -597,7 +619,7 @@ pub fn do_adjust_mesh(
 
     let from_ctrls = *cfg == MeshFunctionConfig::from_controls(&model.controls);
     if from_ctrls && model.controls.mix_wind.use_split_merge_amr {
-        return remesh_split_merge(model);
+        return remesh_split_merge_with(model, finish);
     }
 
     let nz = model.nz;
@@ -630,6 +652,6 @@ pub fn do_adjust_mesh(
         model.controls.mix_wind.mesh_max_allowed_ratio = 2.5;
     }
     let (ns, nm) = (plan.num_splits, plan.num_merges);
-    execute_adjust_mesh_from_plan(model, plan)?;
+    execute_adjust_mesh_from_plan_with(model, plan, finish)?;
     Ok((ns, nm))
 }

@@ -8,6 +8,7 @@ use std::path::{Path, PathBuf};
 
 use flexmesa_const::SECYER;
 use flexmesa_star::controls::StarError;
+use flexmesa_star::core_boundaries::compute_power_categories;
 use flexmesa_star::history::extract_history_row;
 use flexmesa_star::inlist::{InlistBundle, InlistLoadOptions};
 use flexmesa_star::inlist_runner::{
@@ -15,6 +16,7 @@ use flexmesa_star::inlist_runner::{
     StarLogsOptions,
 };
 use flexmesa_star::model::StarModel;
+use flexmesa_star::report_utils::eval_photosphere_info;
 use flexmesa_star::star_job_init::init_or_update_model_from_bundle;
 
 use crate::inlist_astero::{
@@ -63,12 +65,70 @@ struct AsteroTrackExtras<'a, 'h> {
     sample_number: usize,
     case_dir: &'a Path,
     best_sample: Option<AsteroSampleResult>,
-    prev_model: Option<StarModel>,
-    entered_warm: bool,
-    entered_hot: bool,
-    passed_lnuc_limit: bool,
+    /// Averages over the best samples of earlier tracks
+    /// (`set_sample_averages`).
+    averages: SampleAverages,
+    /// `num_chi2_too_big`.
     bad_count: usize,
     eval_error: Option<StarError>,
+}
+
+/// Averages of age and model number over the best-$\chi^2$ samples of the
+/// tracks evaluated so far (`set_sample_averages`,
+/// `astero/private/astero_run_support.f90:1045-1102`).
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct SampleAverages {
+    /// `avg_age_top_samples` (yr).
+    pub(crate) age: f64,
+    /// `avg_age_sigma` (yr).
+    pub(crate) age_sigma: f64,
+    /// `avg_model_number_top_samples`.
+    pub(crate) model_number: f64,
+    /// `avg_model_number_sigma`.
+    pub(crate) model_number_sigma: f64,
+}
+
+impl SampleAverages {
+    /// Too few samples for averages: every limit is `1d99` (`:1053-1058`).
+    pub(crate) const NONE: Self = Self {
+        age: 1.0e99,
+        age_sigma: 1.0e99,
+        model_number: 1.0e99,
+        model_number_sigma: 1.0e99,
+    };
+
+    /// `set_sample_averages` over `samples` in evaluation order.
+    pub(crate) fn from_samples(
+        samples: &[AsteroSampleResult],
+        ctrl: &AsteroSearchControls,
+    ) -> Self {
+        let n = samples.len().min(ctrl.max_num_samples_for_avg);
+        if n < ctrl.min_num_samples_for_avg.max(2) {
+            return Self::NONE;
+        }
+        // `set_sample_index_by_chi2`: samples in increasing chi^2.
+        let mut order: Vec<usize> = (0..samples.len()).collect();
+        order.sort_by(|&a, &b| samples[a].chi2.total_cmp(&samples[b].chi2));
+        let (mut age, mut age2, mut mn, mut mn2) = (0.0, 0.0, 0.0, 0.0);
+        for &j in &order[..n] {
+            let a = samples[j].age_yr;
+            let m = samples[j].model_number as f64;
+            age += a;
+            age2 += a * a;
+            mn += m;
+            mn2 += m * m;
+        }
+        let nf = n as f64;
+        let age_sigma = ((age2 - age * age / nf) / (nf - 1.0)).max(0.0).sqrt();
+        let model_number_sigma =
+            ((mn2 - mn * mn / nf) / (nf - 1.0)).max(0.0).sqrt();
+        Self {
+            age: age / nf,
+            age_sigma,
+            model_number: mn / nf,
+            model_number_sigma,
+        }
+    }
 }
 
 impl AsteroTrackExtras<'_, '_> {
@@ -77,6 +137,39 @@ impl AsteroTrackExtras<'_, '_> {
         model.controls.max_years_for_timestep = yrs;
         model.dt = model.dt.min(yrs * SECYER);
         model.dt_next = model.dt_next.min(yrs * SECYER);
+    }
+
+    /// Redo the step with `dt = max_yrs` and hold the timestep for 10
+    /// models (`s% dt = max_yrs*secyer; s% timestep_hold = model_number +
+    /// 10`, `astero/private/extras_support.f90:301-308`).
+    fn redo_with_max_years(
+        model: &mut StarModel,
+        max_yrs: f64,
+    ) -> ExtrasDirective {
+        model.dt = max_yrs * SECYER;
+        model.aux.step_hist.timestep_hold = model.model_number + 10;
+        ExtrasDirective::Redo
+    }
+
+    /// Frequencies, ratios and chi^2 of `model`; an evaluation error
+    /// terminates the track and is reported by the caller.
+    fn eval_sample(
+        &mut self,
+        model: &StarModel,
+        values: &[f64; MAX_CONSTRAINTS],
+    ) -> Result<AsteroSampleResult, ExtrasDirective> {
+        eval_model_astero_sample(
+            model,
+            self.ctrl,
+            values,
+            self.params,
+            self.sample_number,
+            self.case_dir,
+        )
+        .map_err(|e| {
+            self.eval_error = Some(e);
+            ExtrasDirective::Terminate(String::from("AsteroSampleEvalError"))
+        })
     }
 
     /// `constraint_value(i)` for every named constraint, from the case's
@@ -105,21 +198,22 @@ impl AsteroTrackExtras<'_, '_> {
         Ok(values)
     }
 
-    fn check_too_many_bad(&mut self) -> Option<&'static str> {
-        if self.best_sample.is_some() {
+    /// `check_too_many_bad` (`astero/private/extras_support.f90:492-502`).
+    fn check_too_many_bad(&mut self) -> ExtrasDirective {
+        if self.best_sample.as_ref().is_some_and(|b| b.chi2 > 0.0) {
             self.bad_count += 1;
-            if self.ctrl.limit_num_chi2_too_big > 0
-                && self.bad_count > self.ctrl.limit_num_chi2_too_big
-            {
-                return Some("limit_num_chi2_too_big");
+            if self.bad_count > self.ctrl.limit_num_chi2_too_big {
+                return ExtrasDirective::Terminate(String::from(
+                    "limit_num_chi2_too_big",
+                ));
             }
-        } else {
-            self.bad_count = 0;
+            return ExtrasDirective::KeepGoing;
         }
-        None
+        self.bad_count = 0;
+        ExtrasDirective::KeepGoing
     }
 
-    /// `final_checks` age stops (`astero/private/extras_support.f90:503-513`),
+    /// `final_checks` age stops (`astero/private/extras_support.f90:506-513`),
     /// tested after the model's chi^2 has been evaluated and the best sample
     /// saved (`:491-495`).
     fn final_age_stop(&self, model: &StarModel) -> Option<&'static str> {
@@ -140,44 +234,52 @@ impl AsteroTrackExtras<'_, '_> {
     }
 
     /// `save_best_info` followed by `final_checks`
-    /// (`astero/private/extras_support.f90:491-529`).
+    /// (`astero/private/extras_support.f90:481-486, 505-531`).
     fn save_best_and_final_checks(
         &mut self,
         model: &StarModel,
         sample: &AsteroSampleResult,
     ) -> ExtrasDirective {
+        // `if (best_chi2 <= 0 .or. chi2 < best_chi2) call save_best_info(s)`.
         if self
             .best_sample
             .as_ref()
-            .is_none_or(|b| sample.chi2 < b.chi2)
+            .is_none_or(|b| b.chi2 <= 0.0 || sample.chi2 < b.chi2)
         {
             self.best_sample = Some(sample.clone());
-            self.bad_count = 0;
-        } else if let Some(best) = &self.best_sample {
-            if best.chi2 <= self.ctrl.chi2_search_limit1
-                && sample.chi2 >= self.ctrl.chi2_search_limit2
-            {
-                return ExtrasDirective::Terminate(String::from(
-                    "chi2_search_limit2",
+        }
+        // `final_checks`: the age stops set `terminate` and the chi^2 checks
+        // below still run.
+        let mut directive = match self.final_age_stop(model) {
+            Some(reason) => ExtrasDirective::Terminate(String::from(reason)),
+            None => ExtrasDirective::KeepGoing,
+        };
+        let Some(best_chi2) = self
+            .best_sample
+            .as_ref()
+            .map(|b| b.chi2)
+            .filter(|&c| c > 0.0)
+        else {
+            return directive;
+        };
+        if best_chi2 <= self.ctrl.chi2_search_limit1
+            && sample.chi2 >= self.ctrl.chi2_search_limit2
+        {
+            return ExtrasDirective::Terminate(String::from(
+                "chi2_search_limit2",
+            ));
+        }
+        if sample.chi2 >= self.ctrl.chi2_relative_increase_limit * best_chi2 {
+            self.bad_count += 1;
+            if self.bad_count > self.ctrl.limit_num_chi2_too_big {
+                directive = ExtrasDirective::Terminate(String::from(
+                    "limit_num_chi2_too_big",
                 ));
             }
-            if sample.chi2 >= self.ctrl.chi2_relative_increase_limit * best.chi2
-            {
-                if let Some(reason) = self.check_too_many_bad() {
-                    return ExtrasDirective::Terminate(String::from(reason));
-                }
-            } else {
-                self.bad_count = 0;
-            }
+            return directive;
         }
-        // `final_checks` (`extras_support.f90:503-513`): the age stops come
-        // after the model's chi^2 has been saved. Upstream tests the
-        // `delta_nu` and constraint limits only once per model, before the
-        // chi^2 evaluation (`:211-212`), so they are not repeated here.
-        if let Some(reason) = self.final_age_stop(model) {
-            return ExtrasDirective::Terminate(String::from(reason));
-        }
-        ExtrasDirective::KeepGoing
+        self.bad_count = 0;
+        directive
     }
 
     fn check_limits(
@@ -224,9 +326,6 @@ impl StarExtras for AsteroTrackExtras<'_, '_> {
     fn extras_start_step(&mut self, model: &mut StarModel) -> ExtrasDirective {
         let checking_age = self.ctrl.eval_chi2_at_target_age_only
             || self.ctrl.include_age_in_chi2_spectro;
-        if !checking_age && (!self.entered_warm || !self.entered_hot) {
-            self.prev_model = Some(model.clone());
-        }
         if checking_age && model.star_age < self.ctrl.age_target {
             let rem = (self.ctrl.age_target - model.star_age).max(1.0);
             let cur_max = if model.controls.max_years_for_timestep > 0.0 {
@@ -255,6 +354,8 @@ impl StarExtras for AsteroTrackExtras<'_, '_> {
     }
 
     fn extras_check_model(&mut self, model: &mut StarModel) -> ExtrasDirective {
+        // `do_astero_extras_check_model`
+        // (`astero/private/extras_support.f90:56-669`), in upstream's order.
         let checking_age = self.ctrl.eval_chi2_at_target_age_only
             || self.ctrl.include_age_in_chi2_spectro;
         if self.ctrl.eval_chi2_at_target_age_only
@@ -263,32 +364,57 @@ impl StarExtras for AsteroTrackExtras<'_, '_> {
             return ExtrasDirective::KeepGoing;
         }
         if !checking_age {
-            let next_dt = if self.entered_hot {
-                self.ctrl.max_yrs_dt_when_hot
-            } else if self.entered_warm {
-                self.ctrl.max_yrs_dt_when_warm
-            } else {
-                self.ctrl.max_yrs_dt_when_cold
-            };
-            Self::set_max_years_dt(model, next_dt);
-        }
-        let hr = extract_history_row(model);
-        let l_nuc_div_l = flexmesa_math::exp10(hr.log_lh - hr.log_l);
-        if l_nuc_div_l >= self.ctrl.lnuc_div_l_limit {
-            self.passed_lnuc_limit = true;
-        }
-        if model.star_age < self.ctrl.min_age_limit
-            || (!self.passed_lnuc_limit
-                && l_nuc_div_l < self.ctrl.lnuc_div_l_limit)
-            || self
+            // `:147-150`: every model starts "cold"; the limits below raise
+            // the timestep class again when the model passes them.
+            if self
+                .ctrl
+                .min_age_for_chi2
+                .is_some_and(|m| model.star_age < m)
+            {
+                return ExtrasDirective::KeepGoing;
+            }
+            model.controls.max_years_for_timestep =
+                self.ctrl.max_yrs_dt_when_cold;
+        } else if self.ctrl.include_age_in_chi2_spectro
+            && self
                 .ctrl
                 .min_age_for_chi2
                 .is_some_and(|m| model.star_age < m)
         {
+            // `:152`.
             return ExtrasDirective::KeepGoing;
         }
-        // Constraint values are set before `check_limits`
-        // (`astero/private/extras_support.f90:204-212`).
+
+        // `:172-175`: `L_nuc_burn_total < L_phot*Lnuc_div_L_limit`.
+        let powers = compute_power_categories(model);
+        let phot = eval_photosphere_info(model);
+        if powers.power_nuc_burn < phot.l_lsun * self.ctrl.lnuc_div_l_limit
+            || model.star_age < self.ctrl.min_age_limit
+        {
+            return ExtrasDirective::KeepGoing;
+        }
+
+        if !checking_age {
+            // `:177-200`: stop a track that is older, or has more models,
+            // than the best samples so far by the configured margins.
+            let age_limit = self.averages.age
+                + self.ctrl.avg_age_sigma_limit * self.averages.age_sigma;
+            if model.star_age > age_limit {
+                return ExtrasDirective::Terminate(String::from(
+                    "star age > limit from top samples",
+                ));
+            }
+            let model_limit = self.averages.model_number
+                + self.ctrl.avg_model_number_sigma_limit
+                    * self.averages.model_number_sigma;
+            if (model.model_number as f64) > model_limit {
+                return ExtrasDirective::Terminate(String::from(
+                    "model number > limit from top samples",
+                ));
+            }
+        }
+
+        // Constraint values are set before `check_limits` (`:204-212`).
         let values = match self.eval_constraint_values(model) {
             Ok(v) => v,
             Err(e) => {
@@ -303,107 +429,89 @@ impl StarExtras for AsteroTrackExtras<'_, '_> {
         if let Some(reason) = self.check_limits(dnu_uhz, &values) {
             return ExtrasDirective::Terminate(reason);
         }
-        // `chi2_seismo_fraction <= 0` (`extras_support.f90:266-280`): no
-        // frequencies are needed, and the model is scored and saved before,
-        // and without, the spectroscopic and `delta_nu` limits below.
+        // `:214-225`: a bad `chi2_spectro` terminates the track.
+        if !chi2_sp.is_finite() {
+            return ExtrasDirective::Terminate(String::from(
+                "bad chi2_spectro",
+            ));
+        }
+
+        // `chi2_seismo_fraction <= 0` (`:266-280`): no frequencies are
+        // needed, and the model is scored and saved before, and without, the
+        // spectroscopic and `delta_nu` limits below.
         if self.ctrl.weights.chi2_seismo_fraction <= 0.0 {
-            let sample = match eval_model_astero_sample(
-                model,
-                self.ctrl,
-                &values,
-                self.params,
-                self.sample_number,
-                self.case_dir,
-            ) {
+            let sample = match self.eval_sample(model, &values) {
                 Ok(s) => s,
-                Err(e) => {
-                    self.eval_error = Some(e);
-                    return ExtrasDirective::Terminate(String::from(
-                        "AsteroSampleEvalError",
-                    ));
-                }
+                Err(dir) => return dir,
             };
+            let directive = self.save_best_and_final_checks(model, &sample);
             if sample.chi2 < self.ctrl.chi2_radial_limit && !checking_age {
                 model.controls.max_years_for_timestep =
                     self.ctrl.max_yrs_dt_when_warm;
             }
-            return self.save_best_and_final_checks(model, &sample);
+            return directive;
         }
+
+        // `:282-296`: a bad model counts towards `limit_num_chi2_too_big`.
         if chi2_sp > self.ctrl.chi2_spectroscopic_limit
-            || (self.ctrl.delta_nu > 0.0
-                && self.ctrl.delta_nu_sigma > 0.0
-                && chi2_dnu > self.ctrl.chi2_delta_nu_limit)
+            || chi2_dnu > self.ctrl.chi2_delta_nu_limit
         {
-            if let Some(reason) = self.check_too_many_bad() {
-                return ExtrasDirective::Terminate(String::from(reason));
-            }
-            return ExtrasDirective::KeepGoing;
+            return self.check_too_many_bad();
         }
+
+        // `:299-322`: passing the spectroscopic and `delta_nu` limits makes
+        // the model "warm" and then "hot"; a step longer than either limit
+        // is redone with that limit.
         if !checking_age {
-            if !self.entered_warm
-                && model.dt > 1.05 * self.ctrl.max_yrs_dt_when_warm * SECYER
-            {
-                self.entered_warm = true;
-                if let Some(prev) = self.prev_model.take() {
-                    *model = prev;
+            for max_yrs in [
+                self.ctrl.max_yrs_dt_when_warm,
+                self.ctrl.max_yrs_dt_when_hot,
+            ] {
+                model.controls.max_years_for_timestep = max_yrs;
+                if model.dt > max_yrs * SECYER {
+                    return Self::redo_with_max_years(model, max_yrs);
                 }
-                Self::set_max_years_dt(model, self.ctrl.max_yrs_dt_when_warm);
-                return ExtrasDirective::KeepGoing;
             }
-            self.entered_warm = true;
-            Self::set_max_years_dt(model, self.ctrl.max_yrs_dt_when_warm);
         }
-        let sample = match eval_model_astero_sample(
-            model,
-            self.ctrl,
-            &values,
-            self.params,
-            self.sample_number,
-            self.case_dir,
-        ) {
+
+        // `:324-444`: frequencies, ratios and chi^2. A model whose
+        // required modes cannot all be found (or whose radial chi^2 exceeds
+        // `chi2_radial_limit` while non-radial modes are required,
+        // `get_radial`, `:590-594`) counts as a bad model.
+        let sample = match self.eval_sample(model, &values) {
             Ok(s) => s,
-            Err(e) => {
-                self.eval_error = Some(e);
-                return ExtrasDirective::Terminate(String::from(
-                    "AsteroSampleEvalError",
-                ));
-            }
+            Err(dir) => return dir,
         };
-        if self.ctrl.nl[0] > 0
-            && sample.chi2_radial > self.ctrl.chi2_radial_limit
-        {
-            if !checking_age
-                && sample.chi2_radial <= 5.0 * self.ctrl.chi2_radial_limit
-            {
-                self.entered_hot = true;
-                Self::set_max_years_dt(model, self.ctrl.max_yrs_dt_when_hot);
-            }
-            if let Some(reason) = self.check_too_many_bad() {
-                return ExtrasDirective::Terminate(String::from(reason));
-            }
-            return ExtrasDirective::KeepGoing;
+        if sample.chi2 >= FAILED_TRACK_CHI2 {
+            return self.check_too_many_bad();
         }
+
+        // `:445-479`: smaller timesteps as chi^2 falls.
         if !checking_age {
-            if !self.entered_hot
-                && model.dt > 1.05 * self.ctrl.max_yrs_dt_when_hot * SECYER
-            {
-                self.entered_hot = true;
-                if let Some(prev) = self.prev_model.take() {
-                    *model = prev;
+            for (chi2_limit, max_yrs) in [
+                (
+                    self.ctrl.chi2_limit_for_smallest_timesteps,
+                    self.ctrl.max_yrs_dt_chi2_smallest_limit,
+                ),
+                (
+                    self.ctrl.chi2_limit_for_smaller_timesteps,
+                    self.ctrl.max_yrs_dt_chi2_smaller_limit,
+                ),
+                (
+                    self.ctrl.chi2_limit_for_small_timesteps,
+                    self.ctrl.max_yrs_dt_chi2_small_limit,
+                ),
+            ] {
+                if sample.chi2 <= chi2_limit {
+                    model.controls.max_years_for_timestep = max_yrs;
+                    if model.dt > max_yrs * SECYER {
+                        return Self::redo_with_max_years(model, max_yrs);
+                    }
+                    break;
                 }
-                Self::set_max_years_dt(model, self.ctrl.max_yrs_dt_when_hot);
-                return ExtrasDirective::KeepGoing;
             }
-            self.entered_hot = true;
-            let dt_hot = if self.ctrl.chi2_limit_for_small_timesteps > 0.0
-                && sample.chi2 <= self.ctrl.chi2_limit_for_small_timesteps
-            {
-                self.ctrl.max_yrs_dt_chi2_small_limit
-            } else {
-                self.ctrl.max_yrs_dt_when_hot
-            };
-            Self::set_max_years_dt(model, dt_hot);
         }
+
         self.save_best_and_final_checks(model, &sample)
     }
 }
@@ -491,10 +599,6 @@ fn apply_params_to_bundle(
             ))
         })?;
         hook.set_param(bundle, ctrl, name, val)?;
-    }
-    if !ctrl.eval_chi2_at_target_age_only && !ctrl.include_age_in_chi2_spectro {
-        bundle.controls.max_years_for_timestep =
-            ctrl.max_yrs_dt_when_cold.max(1.0);
     }
     Ok(())
 }
@@ -592,7 +696,34 @@ pub fn run_single_astero_track_with_case_hooks(
     max_steps_cap: Option<usize>,
     case_dir: &Path,
     logs_opts: StarLogsOptions<'_>,
+    set_param: Option<&mut dyn AsteroCaseHooks>,
+) -> Result<(AsteroSampleResult, StageRunReport, StarModel), StarError> {
+    run_track(
+        base_bundle,
+        ctrl,
+        params,
+        sample_number,
+        max_steps_cap,
+        case_dir,
+        logs_opts,
+        set_param,
+        SampleAverages::NONE,
+    )
+}
+
+/// One track of a search, with the sample averages of the tracks before it
+/// (`eval1`, `astero/private/astero_run_support.f90:193-256`).
+#[allow(clippy::too_many_arguments)]
+fn run_track(
+    base_bundle: &InlistBundle,
+    ctrl: &AsteroSearchControls,
+    params: AsteroParamSet,
+    sample_number: usize,
+    max_steps_cap: Option<usize>,
+    case_dir: &Path,
+    logs_opts: StarLogsOptions<'_>,
     mut set_param: Option<&mut dyn AsteroCaseHooks>,
+    averages: SampleAverages,
 ) -> Result<(AsteroSampleResult, StageRunReport, StarModel), StarError> {
     let mut bundle = base_bundle.clone();
     apply_params_to_bundle(
@@ -614,10 +745,7 @@ pub fn run_single_astero_track_with_case_hooks(
         sample_number,
         case_dir,
         best_sample: None,
-        prev_model: None,
-        entered_warm: false,
-        entered_hot: false,
-        passed_lnuc_limit: false,
+        averages,
         bad_count: 0,
         eval_error: None,
     };
@@ -766,7 +894,7 @@ pub fn run_star_astero_with_case_hooks(
         } else {
             StarLogsOptions::default()
         };
-        let (mut sample, stage, m) = run_single_astero_track_with_case_hooks(
+        let (mut sample, stage, m) = run_track(
             &base_bundle,
             active_ctrl,
             p,
@@ -777,6 +905,7 @@ pub fn run_star_astero_with_case_hooks(
             set_param
                 .as_mut()
                 .map(|h| &mut **h as &mut dyn AsteroCaseHooks),
+            SampleAverages::from_samples(&samples, active_ctrl),
         )?;
         total_steps += stage.steps_taken;
         let stage_term = stage.termination_code;
@@ -912,4 +1041,71 @@ pub fn run_star_astero_with_case_hooks(
         last_termination,
         last_model,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{SampleAverages, FAILED_TRACK_CHI2};
+    use crate::inlist_astero::{AsteroSearchControls, MAX_CONSTRAINTS};
+    use crate::sample_eval::AsteroSampleResult;
+
+    fn sample(
+        chi2: f64,
+        age_yr: f64,
+        model_number: usize,
+    ) -> AsteroSampleResult {
+        AsteroSampleResult {
+            sample_number: 1,
+            params: AsteroSearchControls::default().first_params(),
+            model_number,
+            age_yr,
+            teff: 5777.0,
+            logg: 4.44,
+            log_l: 0.0,
+            log_r: 0.0,
+            constraint_values: [f64::NAN; MAX_CONSTRAINTS],
+            delta_nu_uhz: 0.0,
+            nu_max_uhz: 0.0,
+            a_div_r: 0.0,
+            correction_r: 0.0,
+            chi2,
+            chi2_seismo: FAILED_TRACK_CHI2,
+            chi2_spectro: FAILED_TRACK_CHI2,
+            chi2_radial: FAILED_TRACK_CHI2,
+            chi2_r010: 0.0,
+            chi2_r02: 0.0,
+            model_freqs: Default::default(),
+            model_freqs_corr: Default::default(),
+            model_inertias: Default::default(),
+            model_orders: Default::default(),
+        }
+    }
+
+    /// Averages over the 3 best of 4 samples by chi^2; sigma is the sample
+    /// standard deviation (`astero_run_support.f90:1045-1102`).
+    #[test]
+    fn sample_averages_use_the_best_samples_by_chi2() {
+        let ctrl = AsteroSearchControls {
+            min_num_samples_for_avg: 2,
+            max_num_samples_for_avg: 3,
+            ..AsteroSearchControls::default()
+        };
+        let rows = [
+            (4.0, 100.0, 10),
+            (1.0, 200.0, 20),
+            (2.0, 400.0, 40),
+            (3.0, 600.0, 60),
+        ];
+        let samples: Vec<_> =
+            rows.iter().map(|&(c, a, m)| sample(c, a, m)).collect();
+        let avg = SampleAverages::from_samples(&samples, &ctrl);
+        // Best three: ages 200, 400, 600 (model numbers 20, 40, 60).
+        assert_eq!(avg.age, 400.0);
+        assert_eq!(avg.age_sigma, 200.0);
+        assert_eq!(avg.model_number, 40.0);
+        assert_eq!(avg.model_number_sigma, 20.0);
+        let few = SampleAverages::from_samples(&samples[..1], &ctrl);
+        assert_eq!(few.age, 1.0e99);
+        assert_eq!(few.model_number_sigma, 1.0e99);
+    }
 }

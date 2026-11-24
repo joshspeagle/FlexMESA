@@ -23,53 +23,92 @@ use crate::surface_corr::{
     eval_power_law_corr, eval_sonoi_corr,
 };
 
+/// Grid points of `do_scan_grid` in upstream's visiting order
+/// (`astero/private/astero_run_support.f90:366-531`).
+///
+/// `do_param(max_parameters)` recurses down to parameter 1, so the parameter
+/// with the lowest `param_name` index varies fastest. A varied parameter
+/// starts at `min_param` and steps by repeated addition of `delta_param`
+/// while it is not above `max_param + 1d-6`; a fixed or unnamed one stays at
+/// `first_param` for a single pass (`set_starting_values`, `do_param`).
 pub(crate) fn build_scan_grid_params(
     ctrl: &AsteroSearchControls,
 ) -> Vec<AsteroParamSet> {
-    let axis = |sp: AsteroSearchParam| -> Vec<f64> {
-        if !sp.vary || sp.delta <= 0.0 || sp.max < sp.min {
-            return vec![sp.first];
-        }
-        let mut v = Vec::new();
-        let mut x = sp.min;
-        while x <= sp.max + 1.0e-9 {
-            v.push(x);
-            x += sp.delta;
-        }
-        if v.is_empty() {
-            vec![sp.first]
-        } else {
-            v
-        }
-    };
+    const EPS: f64 = 1.0e-6; // `astero_run_support.f90:374`
+    let n = ctrl.param_names.len();
+    let named: Vec<bool> = ctrl
+        .param_names
+        .iter()
+        .map(|s| !s.trim().is_empty())
+        .collect();
+    let mut param: Vec<f64> = (0..n)
+        .map(|i| {
+            let ps = ctrl.indexed_params[i];
+            if !named[i] {
+                0.0
+            } else if ps.vary {
+                ps.min
+            } else {
+                ps.first
+            }
+        })
+        .collect();
     let mut out = Vec::new();
-    for m in axis(ctrl.mass) {
-        for y in axis(ctrl.y) {
-            for f in axis(ctrl.feh_param) {
-                for a in axis(ctrl.alpha) {
-                    for ov in axis(ctrl.f_ov) {
-                        for p1 in axis(ctrl.my_param[0]) {
-                            for p2 in axis(ctrl.my_param[1]) {
-                                for p3 in axis(ctrl.my_param[2]) {
-                                    out.push(AsteroParamSet {
-                                        initial_mass: m,
-                                        initial_y: y,
-                                        initial_feh: f,
-                                        alpha: a,
-                                        f_ov: ov,
-                                        my_param1: p1,
-                                        my_param2: p2,
-                                        my_param3: p3,
-                                    });
-                                }
-                            }
-                        }
-                    }
+    scan_grid_do_param(ctrl, &named, n - 1, &mut param, &mut out, EPS);
+    out
+}
+
+/// `recursive subroutine do_param(k, ierr)` with a 0-based `k`.
+fn scan_grid_do_param(
+    ctrl: &AsteroSearchControls,
+    named: &[bool],
+    k: usize,
+    param: &mut [f64],
+    out: &mut Vec<AsteroParamSet>,
+    eps: f64,
+) {
+    let ps = ctrl.indexed_params[k];
+    loop {
+        if ps.vary && named[k] && param[k] > ps.max + eps {
+            break;
+        }
+        if k == 0 {
+            // `do1_grid`: evaluate this grid point.
+            let mut p = ctrl.first_params();
+            for (i, name) in ctrl.param_names.iter().enumerate() {
+                if named[i] {
+                    set_param_slot(&mut p, name.trim(), param[i]);
                 }
             }
+            out.push(p);
+        } else {
+            scan_grid_do_param(ctrl, named, k - 1, param, out, eps);
         }
+        if ps.delta <= 0.0 || !ps.vary || !named[k] {
+            break;
+        }
+        param[k] += ps.delta;
     }
-    out
+    if ps.vary {
+        param[k] = ps.min;
+    }
+}
+
+/// Stores `value` in the [`AsteroParamSet`] slot that `param_name` selects
+/// (the names accepted by the `&astero_search_controls` parser).
+fn set_param_slot(p: &mut AsteroParamSet, name: &str, value: f64) {
+    match name.to_ascii_lowercase().as_str() {
+        "initial_mass" | "mass" => p.initial_mass = value,
+        "initial_y" | "y" => p.initial_y = value,
+        "initial_feh" | "feh" => p.initial_feh = value,
+        "alpha" => p.alpha = value,
+        "f_ov" => p.f_ov = value,
+        "my_param1" | "semiconv" => p.my_param1 = value,
+        "my_param2" | "thermohal" => p.my_param2 = value,
+        "my_param3" | "diffusion" => p.my_param3 = value,
+        // The parser rejects every other name.
+        _ => {}
+    }
 }
 
 fn active_search_params(
@@ -400,4 +439,61 @@ pub(crate) fn match_degree_modes(
         jprev = Some(best_j);
     }
     Some((mf, mi, mo))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::build_scan_grid_params;
+    use crate::inlist_astero::{AsteroSearchControls, AsteroSearchParam};
+
+    fn param(
+        vary: bool,
+        first: f64,
+        min: f64,
+        max: f64,
+        delta: f64,
+    ) -> AsteroSearchParam {
+        AsteroSearchParam {
+            vary,
+            first,
+            min,
+            max,
+            delta,
+        }
+    }
+
+    /// `astero/test_suite/fast_scan_grid/inlist_astero_search_controls`
+    /// at MESA 26.4.1: `initial_mass` (index 1) and `alpha` (index 5) vary.
+    #[test]
+    fn scan_grid_varies_the_lowest_param_index_fastest() {
+        let mut ctrl = AsteroSearchControls::default();
+        let set = [
+            (0, "initial_mass", param(true, 1.0, 0.99, 1.01, 0.02)),
+            (1, "initial_Y", param(false, 0.267, 0.24, 0.30, 0.01)),
+            (2, "initial_FeH", param(false, 0.0, 0.0, 0.17, 0.03)),
+            (4, "alpha", param(true, 1.8, 1.7, 1.9, 0.2)),
+            (7, "f_ov", param(false, 0.015, 0.0, 0.03, 0.0)),
+        ];
+        for (i, name, p) in set {
+            ctrl.param_names[i] = String::from(name);
+            ctrl.indexed_params[i] = p;
+        }
+        let grid = build_scan_grid_params(&ctrl);
+        let got: Vec<(f64, f64)> =
+            grid.iter().map(|p| (p.initial_mass, p.alpha)).collect();
+        // `min + delta` by repeated addition, as upstream does.
+        let (m1, a1) = (0.99 + 0.02, 1.7 + 0.2);
+        assert_eq!(got, vec![(0.99, 1.7), (m1, 1.7), (0.99, a1), (m1, a1)]);
+        assert!(grid.iter().all(|p| p.initial_y == 0.267 && p.f_ov == 0.015));
+    }
+
+    /// `do_param` exits before the first evaluation when `min_param`
+    /// exceeds `max_param + 1d-6`, so the grid is empty.
+    #[test]
+    fn scan_grid_with_min_above_max_has_no_points() {
+        let mut ctrl = AsteroSearchControls::default();
+        ctrl.param_names[0] = String::from("initial_mass");
+        ctrl.indexed_params[0] = param(true, 1.0, 1.2, 1.0, 0.1);
+        assert!(build_scan_grid_params(&ctrl).is_empty());
+    }
 }

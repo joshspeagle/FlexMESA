@@ -10,5 +10,9 @@ repository.workspace = true
 [dependencies]
 flexmesa-math = { path = "../flexmesa-math" }
 
+[dev-dependencies]
+flexmesa-const = { path = "../flexmesa-const" }
+flexmesa-utils = { path = "../flexmesa-utils" }
+
 [lints]
 workspace = true

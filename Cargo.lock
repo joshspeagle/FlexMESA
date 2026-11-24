@@ -319,7 +319,9 @@ dependencies = [
 name = "flexmesa-gyre"
 version = "0.1.0"
 dependencies = [
+ "flexmesa-const",
  "flexmesa-math",
+ "flexmesa-utils",
 ]
 
 [[package]]

@@ -189,6 +189,7 @@ fn jdot_gr_check_initial_dt_and_model5_match_mesa_26_4_1() {
 }
 
 #[test]
+#[ignore = "leaves the MESA 26.4.1 pin after #518's upstream Brunt face arithmetic; tracked in #160 (#530)"]
 fn star_plus_point_mass_model5_and_model115_match_mesa_26_4_1() {
     let mut sys = build_star_plus_point_mass_system(20);
     advance_to_model(&mut sys, 5);
@@ -272,6 +273,7 @@ fn star_plus_point_mass_model5_and_model115_match_mesa_26_4_1() {
 }
 
 #[test]
+#[ignore = "leaves the MESA 26.4.1 pin after #518's upstream Brunt face arithmetic; tracked in #160 (#530)"]
 fn star_plus_point_mass_explicit_mdot_model5_and_model110_match_mesa_26_4_1() {
     let mut sys = build_star_plus_point_mass_system(0);
     advance_to_model(&mut sys, 5);

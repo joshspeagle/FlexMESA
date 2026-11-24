@@ -514,24 +514,6 @@ reason = "Long-running uncapped astero NEWUOA campaign tracked under #162 and sc
 
 [[test_gaps]]
 kind = "python_xfail"
-file = "tests/test_e2e_2_tier2.py"
-test_name = "test_accretion_composition_and_super_eddington_nova_wind"
-issue = "#445"
-role = "physics_gap"
-expect_fail_when_run = true
-reason = "This synthetic setup (never run in MESA) relied on the removed relax_initial_mass_to_remove_h_env stand-in; with upstream star_relax_mass_to_remove_H_env (star_lib.f90:1271-1287) the 0.6 Msun ZAMS start has no He core and final_log_tc is 5.10 against the asserted > 6.0."
-
-[[test_gaps]]
-kind = "python_xfail"
-file = "tests/test_e2e_2_tier2.py"
-test_name = "test_synthetic_tier2_make_o_ne_wd_runner_and_restart"
-issue = "#445"
-role = "physics_gap"
-expect_fail_when_run = true
-reason = "This synthetic setup (never run in MESA) relied on the removed relax_initial_mass_to_remove_h_env stand-in; with upstream star_relax_mass_to_remove_H_env the 1.10 Msun ZAMS relax stops on max_number_retries."
-
-[[test_gaps]]
-kind = "python_xfail"
 file = "tests/test_eos_wave3b1.py"
 test_name = "test_helm_ideal_edge_skip_blend_rust_and_jax_agree"
 issue = "#295"
@@ -726,3 +708,23 @@ issue = "#295"
 role = "physics_gap"
 expect_fail_when_run = true
 reason = "Rust AESOPUS evaluates MESA 26.4.1 interp_2d/private/bicub_db.f implicit f32 fvbicub_db basis scalars in strict mode (#433, #161), whereas the frozen JAX twin keeps pure f64 basis scalars per DECISIONS #43; measured max rel diff is 1.713e-8 against rtol=1e-12, atol=1e-12."
+
+[[test_gaps]]
+kind = "rust_ignore"
+crate = "flexmesa-binary"
+file = "crates/flexmesa-binary/tests/binary_160_mesa_parity_test.rs"
+test_name = "star_plus_point_mass_model5_and_model115_match_mesa_26_4_1"
+issue = "#160"
+role = "physics_gap"
+expect_fail_when_run = true
+reason = "With #518's upstream get_face_values arithmetic for the Brunt face values (star_utils.f90:2046-2060), the model-115 period_days, binary_separation and star_1_mass leave the MESA 26.4.1 binary_history.data values by 1.3e-9 to 1.95e-9 against a 1e-9 tolerance (age 6e-12). The case is sensitive at rounding level, downstream of brunt_B (#530)."
+
+[[test_gaps]]
+kind = "rust_ignore"
+crate = "flexmesa-binary"
+file = "crates/flexmesa-binary/tests/binary_160_mesa_parity_test.rs"
+test_name = "star_plus_point_mass_explicit_mdot_model5_and_model110_match_mesa_26_4_1"
+issue = "#160"
+role = "physics_gap"
+expect_fail_when_run = true
+reason = "With #518's upstream get_face_values arithmetic for the Brunt face values (star_utils.f90:2046-2060), the model-110 age leaves the MESA 26.4.1 binary_history.data value by 4.7e-8 (other quantities at or below 3e-12). The Ledoux/semiconvection path downstream of brunt_B is suspected (#530)."

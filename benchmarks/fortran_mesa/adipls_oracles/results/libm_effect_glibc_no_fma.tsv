@@ -1,0 +1,19 @@
+# FlexMESA ADIPLS libm measurement: glibc vs crlibm 1.0beta4 round-to-nearest (#171, A0, DECISIONS #60)
+# mesa_version: r26.4.1
+# mesa_git_commit: c8c202662922a22b3efefa824473ad615c623afd
+# mesa_zenodo_record: 19722306
+# adipls_version: ADIPLS 2010 (adipack.c) as bundled with MESA 26.4.1
+# mesasdk_version: x86_64-linux-26.6.1
+# compiler: GCC version 15.2.0 (gfortran)
+# adipls_fflags: gfortran -std=legacy -w -c (no -O flag, i.e. -O0; adipls/make/makefile_adipls:78-86)
+# math_backend: system libm (glibc) for pow/exp/log; libgcc __powidf2 for integer powers; no CRMATH
+# glibc: ldd (Ubuntu GLIBC 2.39-0ubuntu8.8) 2.39
+# crlibm: vendored crates/flexmesa-crlibm-sys sources and flags; pow_rn, exp_rn, log_rn, log10_rn, sin_rn, cos_rn
+# calls per case: all
+# extra environment: GLIBC_TUNABLES=glibc.cpu.hwcaps=-AVX2,-FMA,-AVX512F
+case	calls	modes_glibc	modes_crlibm	mode_set_changed	freq_differ	freq_max_ulp	inertia_differ	inertia_max_ulp	csummm_modes_differ	glibc_run_matches_reference
+astero/astero_adipls	10	92	92	no	0	0	0	0	0	yes
+astero/surface_effects	4	110	110	no	0	0	0	0	0	yes
+astero/example_astero	65	1079	1079	no	0	0	0	0	0	yes
+astero/fast_scan_grid	1107	16301	16301	no	0	0	0	0	0	yes
+astero/fast_simplex	979	9779	9779	no	0	0	0	0	0	yes

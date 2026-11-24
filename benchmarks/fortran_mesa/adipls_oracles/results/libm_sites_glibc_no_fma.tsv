@@ -1,0 +1,16 @@
+# FlexMESA ADIPLS libm measurement: glibc vs crlibm 1.0beta4 round-to-nearest (#171, A0, DECISIONS #60)
+# mesa_version: r26.4.1
+# mesa_git_commit: c8c202662922a22b3efefa824473ad615c623afd
+# mesa_zenodo_record: 19722306
+# adipls_version: ADIPLS 2010 (adipack.c) as bundled with MESA 26.4.1
+# mesasdk_version: x86_64-linux-26.6.1
+# compiler: GCC version 15.2.0 (gfortran)
+# adipls_fflags: gfortran -std=legacy -w -c (no -O flag, i.e. -O0; adipls/make/makefile_adipls:78-86)
+# math_backend: system libm (glibc) for pow/exp/log; libgcc __powidf2 for integer powers; no CRMATH
+# glibc: ldd (Ubuntu GLIBC 2.39-0ubuntu8.8) 2.39
+# crlibm: vendored crates/flexmesa-crlibm-sys sources and flags; pow_rn, exp_rn, log_rn, log10_rn, sin_rn, cos_rn
+# calls per case: all
+# extra environment: GLIBC_TUNABLES=glibc.cpu.hwcaps=-AVX2,-FMA,-AVX512F
+function	routine	calls	mismatches	mismatch_fraction	max_ulp
+pow	varfrq_	4692675	3133	6.676e-04	1
+pow	xlmult_	87106	1	1.148e-05	1

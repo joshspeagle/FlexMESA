@@ -1,0 +1,24 @@
+# FlexMESA GYRE oracle check: pristine MESA 26.4.1 GYRE build (libgyre.a, -O2) + SDK crmath-slot LAPACK (#170, package G0)
+# mesa_version: r26.4.1
+# mesa_git_commit: c8c202662922a22b3efefa824473ad615c623afd
+# mesa_zenodo_record: 19722306
+# gyre_version: 8.1 (bundled with MESA 26.4.1, gyre/gyre-8.1.tar.gz)
+# mesasdk_version: x86_64-linux-26.6.1
+# compiler: GCC version 15.2.0 (gfortran)
+# math_backend: CRMATH (USE_CRMATH = YES); LAPACK/BLAS netlib 3.12.0, SDK crmath math slot
+# gyre_fflags: -std=f2018 -finit-real=snan -fmax-errors=25 -fPIC -ffpe-trap=invalid,overflow,zero -O2 -fno-backtrace -fopenmp -ffp-contract=off
+# gyre_config: FRONTENDS=no TOOLS=no IFACES=yes FORUM=no CRMATH=yes SHARED=no
+# driver_build: pristine MESA 26.4.1 GYRE build (libgyre.a, -O2) + SDK crmath-slot LAPACK
+# reference: pulse_tap/modes.tsv of the mesa_histories bundle (MESA's own run)
+# compared bitwise: l, m, n_pg, n_p, n_g, freq_uHz, freq_Hz, inertia, growth_rate_rad_s, growth_rate_Hz
+# omp_num_threads: 1
+case	calls	modes	calls_with_mismatch	first_mismatch
+star/gyre_in_mesa_bcep	54	192	0	-
+star/gyre_in_mesa_envelope	5	18	0	-
+star/gyre_in_mesa_ms	61	244	0	-
+star/gyre_in_mesa_rsg	10	50	0	-
+star/gyre_in_mesa_spb	51	511	0	-
+star/gyre_in_mesa_wd	52	413	0	-
+star/rsp_gyre	1	4	0	-
+astero/astero_gyre	10	92	0	-
+astero/fast_from_file	590	5508	0	-

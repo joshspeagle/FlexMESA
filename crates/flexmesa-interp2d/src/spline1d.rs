@@ -120,11 +120,21 @@ pub fn mkspline_db(
 
     v_spline_db(ibcxmin as i32, ibcxmax as i32, x, &mut fspl4);
 
+    // Match cspline_db scaling (half = 0.5, sixth = 1/6) and mkspline_db
+    // second-derivative recovery (`interp_2d/private/bicub_db.f:1228-1231,3047-3050`).
+    let half = 0.5_f64;
+    let sixth = 1.0_f64 / 6.0_f64;
+    for row in &mut fspl4 {
+        row[2] *= half;
+        row[3] *= sixth;
+    }
+
     let mut fxx = vec![0.0_f64; n];
     for i in 0..(n - 1) {
-        fxx[i] = fspl4[i][2];
+        fxx[i] = 2.0 * fspl4[i][2];
     }
-    fxx[n - 1] = fspl4[n - 2][2] + (x[n - 1] - x[n - 2]) * fspl4[n - 2][3];
+    fxx[n - 1] =
+        2.0 * fspl4[n - 2][2] + (x[n - 1] - x[n - 2]) * 6.0 * fspl4[n - 2][3];
 
     Ok((fxx, uniform))
 }
@@ -318,7 +328,7 @@ fn v_spline_db(k_bc1: i32, k_bcn: i32, x: &[f64], f: &mut [[f64; 4]]) {
         let sig_next = f[i + 1][2];
         f[i][1] =
             (f[i + 1][0] - f[i][0]) / h_i - h_i * (sig_next + 2.0 * sig_i);
-        f[i][3] = 6.0 * (sig_next - sig_i) / h_i;
+        f[i][3] = 6.0 * ((sig_next - sig_i) / h_i);
         f[i][2] = 6.0 * sig_i;
     }
 

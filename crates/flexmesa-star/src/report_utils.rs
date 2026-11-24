@@ -18,8 +18,8 @@ use std::sync::OnceLock;
 
 use flexmesa_chem::{NuclideCatalog, NUM_CATEGORIES};
 use flexmesa_const::{
-    MixingType, AMU, BOLTZ_SIGMA, CLIGHT, CRAD, FOUR_PI, KERG, LN10, L_SUN,
-    M_SUN, PI, R_SUN, SECYER,
+    MixingType, AMU, CLIGHT, CRAD, FOUR_PI, KERG, LN10, L_SUN, M_SUN, PI,
+    R_SUN, SECYER,
 };
 use flexmesa_interp2d::{
     BicubicBc, interp_evbicub_prevalidated_db, interp_mkbicub_db,
@@ -561,6 +561,12 @@ pub fn eval_ledd_erg_s(model: &StarModel) -> f64 {
 /// (`star/private/star_utils.f90:1094-1207`).
 #[derive(Debug, Clone, Copy)]
 pub struct PhotosphereInfo {
+    /// Photospheric radius in cm (`r` of `get_phot_info`, before the
+    /// division by `Rsun` in `set_phot_info`).
+    pub r_cm: f64,
+    /// Photospheric luminosity in erg/s (`L` of `get_phot_info`, before the
+    /// division by `Lsun` in `set_phot_info`).
+    pub l_erg: f64,
     /// Photospheric radius in $R_\odot$ (`photosphere_r`).
     pub r_rsun: f64,
     /// Photospheric enclosed mass in $M_\odot$ (`photosphere_m`).
@@ -579,8 +585,11 @@ pub struct PhotosphereInfo {
     pub opacity: f64,
     /// Photospheric $\log_{10} g$ (`photosphere_logg`).
     pub logg: f64,
-    /// Photospheric column density in $\mathrm{g\,cm^{-2}}$ (`photosphere_column_density`).
-    pub column_density: f64,
+    /// Photospheric column density in $\mathrm{g\,cm^{-2}}$
+    /// (`photosphere_column_density`). `None` when `tau_factor >= 1`:
+    /// upstream returns before setting `ysum` and leaves it undefined
+    /// (`star/private/star_utils.f90:1155-1158`, deferred `#467`).
+    pub column_density: Option<f64>,
     /// 1-based cell index of photosphere (`photosphere_cell_k`).
     pub cell_k_1based: usize,
 }
@@ -593,6 +602,8 @@ pub fn eval_photosphere_info(model: &StarModel) -> PhotosphereInfo {
     let nz = model.nz;
     if nz == 0 {
         return PhotosphereInfo {
+            r_cm: 0.0,
+            l_erg: 0.0,
             r_rsun: 0.0,
             m_msun: 0.0,
             v_cm_s: 0.0,
@@ -602,7 +613,7 @@ pub fn eval_photosphere_info(model: &StarModel) -> PhotosphereInfo {
             csound: 0.0,
             opacity: 0.0,
             logg: -99.0,
-            column_density: 0.0,
+            column_density: None,
             cell_k_1based: 1,
         };
     }
@@ -619,44 +630,51 @@ pub fn eval_photosphere_info(model: &StarModel) -> PhotosphereInfo {
     let mut t_phot = model.t[0];
     let mut cs = model.csound[0];
     let mut kap = model.opacity[0];
-    let mut logg = safe_log10(model.cgrav[0] * m / (r * r).max(1.0e-99));
+    let mut logg = safe_log10(model.cgrav[0] * m / (r * r));
     let mut k_phot_0 = 0_usize;
-    let mut ysum = 0.0;
+    // `ysum` is set only on the `tau_factor < 1` path (`#467`).
+    let mut ysum = None;
 
-    if model.controls.tau_factor < 1.0 && nz >= 2 {
+    // `star/private/star_utils.f90:1155-1206`; with `nz = 1` the search loop
+    // is empty and the photosphere falls back to the centre, as upstream.
+    if model.controls.tau_factor < 1.0 {
         let tau_phot = model.tau_base;
         let mut tau00 = model.controls.tau_factor * model.tau_base;
         let mut found = false;
+        let mut ysum_acc = 0.0;
         for k in 0..(nz - 1) {
             let dtau = model.dm[k] * model.opacity[k]
-                / (FOUR_PI * model.rmid[k] * model.rmid[k]).max(1.0e-99);
+                / (FOUR_PI * model.rmid[k] * model.rmid[k]);
             let taup1 = tau00 + dtau;
-            ysum += model.rho[k] * (model.r[k] - model.r[k + 1]);
+            ysum_acc += model.rho[k] * (model.r[k] - model.r[k + 1]);
             if taup1 >= tau_phot && dtau > 0.0 {
-                let frac = (tau_phot - tau00) / dtau;
+                // Each interpolation is `a + (b - a)*(tau_phot - tau00)/dtau`,
+                // evaluated left to right as upstream writes it
+                // (`star/private/star_utils.f90:1174-1184`).
                 let tface_0 = if k == 0 {
                     flexmesa_math::exp(model.ln_t_surf_ad.val)
                 } else {
                     0.5 * (model.t[k] + model.t[k - 1])
                 };
                 let tface_1 = 0.5 * (model.t[k] + model.t[k + 1]);
-                t_phot = tface_0 + (tface_1 - tface_0) * frac;
-                let r003 = flexmesa_math::pow3(model.r[k]);
-                let rp13 = flexmesa_math::pow3(model.r[k + 1]);
-                r = flexmesa_math::pow(
-                    (r003 + (rp13 - r003) * frac).max(0.0),
-                    1.0 / 3.0,
-                );
-                m = model.m[k] - model.dm[k] * frac;
+                t_phot =
+                    tface_0 + (tface_1 - tface_0) * (tau_phot - tau00) / dtau;
+                let r003 = model.r[k] * model.r[k] * model.r[k];
+                let rp13 = model.r[k + 1] * model.r[k + 1] * model.r[k + 1];
+                let r3 = r003 + (rp13 - r003) * (tau_phot - tau00) / dtau;
+                r = flexmesa_math::pow(r3, 1.0 / 3.0);
+                m = model.m[k] - model.dm[k] * (tau_phot - tau00) / dtau;
                 if model.controls.u_flag {
                     v = model.v_center;
                 } else if model.controls.v_flag {
-                    v = model.v[k] + (model.v[k + 1] - model.v[k]) * frac;
+                    v = model.v[k]
+                        + (model.v[k + 1] - model.v[k]) * (tau_phot - tau00)
+                            / dtau;
                 }
                 // Reproduces `star/private/star_utils.f90:1186-1189` verbatim
                 // (surface `L` and surface `cgrav`; `#182` under `#169`).
                 l_erg = model.lum[0].max(1.0);
-                logg = safe_log10(model.cgrav[0] * m / (r * r).max(1.0e-99));
+                logg = safe_log10(model.cgrav[0] * m / (r * r));
                 k_phot_0 = k;
                 cs = model.csound[k_phot_0];
                 kap = model.opacity[k_phot_0];
@@ -665,6 +683,7 @@ pub fn eval_photosphere_info(model: &StarModel) -> PhotosphereInfo {
             }
             tau00 = taup1;
         }
+        ysum = Some(ysum_acc);
         if !found {
             k_phot_0 = nz - 1;
             r = model.r_center;
@@ -674,16 +693,16 @@ pub fn eval_photosphere_info(model: &StarModel) -> PhotosphereInfo {
             l_erg = model.l_center.max(1.0);
             cs = model.csound[k_phot_0];
             kap = model.opacity[k_phot_0];
-            logg = safe_log10(model.cgrav[k_phot_0] * m / (r * r).max(1.0e-99));
+            logg = safe_log10(model.cgrav[k_phot_0] * m / (r * r));
         }
     }
 
-    let bb_t = if r > 0.0 && l_erg > 0.0 {
-        flexmesa_math::pow(l_erg / (FOUR_PI * r * r * BOLTZ_SIGMA), 0.25)
-    } else {
-        model.teff
-    };
+    // `atm_black_body_T(photosphere_L, photosphere_r)`
+    // (`star/private/star_utils.f90:1104-1105`).
+    let bb_t = flexmesa_atm::atm_black_body_t(l_erg, r);
     PhotosphereInfo {
+        r_cm: r,
+        l_erg,
         r_rsun: r / R_SUN,
         m_msun: m / M_SUN,
         v_cm_s: v,

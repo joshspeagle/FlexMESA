@@ -217,7 +217,7 @@ fn test_f4_28_log_lh_separates_hydrogen_helium_and_metal_burning_powers() {
     ";
     let specs = parse_star_history_columns(custom_list, None, &model)
         .expect("parse custom history columns");
-    let row = evaluate_star_history_row(&model, &specs);
+    let row = evaluate_star_history_row(&model, &specs).expect("history row");
     let find_f64 = |col: &str| -> f64 {
         row.iter()
             .find_map(|(n, v)| {

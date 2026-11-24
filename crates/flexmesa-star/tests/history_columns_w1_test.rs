@@ -48,7 +48,7 @@ fn eval_one_col(model: &StarModel, col_name: &str) -> MesaCellValue {
     let specs =
         parse_star_history_columns(col_name, None, model).expect("parse col");
     assert_eq!(specs.len(), 1);
-    let row = evaluate_star_history_row(model, &specs);
+    let row = evaluate_star_history_row(model, &specs).expect("history row");
     assert_eq!(row.len(), 1);
     row[0].1
 }
@@ -272,7 +272,7 @@ fn test_shock_columns_outward_inward_glitch_and_absent() {
     // 1. Neither `u_flag` nor `v_flag`: all shock columns are 0.
     model.controls.u_flag = false;
     model.controls.v_flag = false;
-    let row = evaluate_star_history_row(&model, &specs);
+    let row = evaluate_star_history_row(&model, &specs).expect("history row");
     for (i, (_, cell)) in row.iter().enumerate() {
         if specs[i].column_name() == "shock_k" {
             assert_eq!(as_int(cell), 0);
@@ -309,7 +309,8 @@ fn test_shock_columns_outward_inward_glitch_and_absent() {
     let expected_q = 0.5 * (model.q[k_s] + model.q[k_s + 1]);
     let expected_u = 0.5 * (model.u[k_s] + model.u[k_s + 1]);
 
-    let row_out = evaluate_star_history_row(&model, &specs);
+    let row_out =
+        evaluate_star_history_row(&model, &specs).expect("history row");
     assert!((as_float(&row_out[0].1) - expected_m_msun).abs() <= 1.0e-13);
     assert!(
         (as_float(&row_out[0].1) - get_shock_mass_msun(&model)).abs()
@@ -358,7 +359,7 @@ fn test_gravity_darkening_columns_rotating_retrograde_and_nonrotating() {
     // Non-rotating (`rotation_flag = false`) yields 0 even with nonzero `omega[0]`.
     model.controls.rotation_flag = false;
     model.omega[0] = 1.5e-4;
-    let row0 = evaluate_star_history_row(&model, &specs);
+    let row0 = evaluate_star_history_row(&model, &specs).expect("history row");
     for (_, cell) in &row0 {
         assert_eq!(as_float(cell), 0.0);
     }
@@ -379,7 +380,8 @@ fn test_gravity_darkening_columns_rotating_retrograde_and_nonrotating() {
     let w_kep = eval_surface_w_div_w_kep(&model);
     assert!(w_kep > 0.8 && w_kep < 0.9);
     let l_surf = model.surface_l_lsun();
-    let row_rot = evaluate_star_history_row(&model, &specs);
+    let row_rot =
+        evaluate_star_history_row(&model, &specs).expect("history row");
 
     let l_pol = as_float(&row_rot[0].1);
     let t_pol = as_float(&row_rot[1].1);
@@ -414,7 +416,8 @@ fn test_gravity_darkening_columns_rotating_retrograde_and_nonrotating() {
 
     // Negative retrograde `omega[0]` clamps `w_div_w_Kep` to `0.0` (`C = 1.0`).
     model.omega[0] = -2.0e-4;
-    let row_neg = evaluate_star_history_row(&model, &specs);
+    let row_neg =
+        evaluate_star_history_row(&model, &specs).expect("history row");
     assert!((as_float(&row_neg[0].1) - l_surf).abs() <= 1.0e-13);
     assert!((as_float(&row_neg[1].1) - model.teff).abs() <= 1.0e-11);
 }
@@ -432,7 +435,8 @@ fn test_convective_zone_and_wind_velocity_columns() {
     // 1. Fully radiative model: `largest_conv_mixing_region == 0`.
     model.mixing_type.fill(MixingType::NoMixing);
     model.mstar_dot = 1.0e-10 * M_SUN / SECYER; // accreting -> wind speed 0
-    let row_rad = evaluate_star_history_row(&model, &specs);
+    let row_rad =
+        evaluate_star_history_row(&model, &specs).expect("history row");
     assert_eq!(as_float(&row_rad[0].1), 0.0);
     assert_eq!(as_float(&row_rad[1].1), -99.0);
     assert_eq!(as_float(&row_rad[2].1), 0.0);
@@ -446,7 +450,8 @@ fn test_convective_zone_and_wind_velocity_columns() {
     model.mixing_type[top_core..nz].fill(MixingType::ConvectiveMixing);
     model.mstar_dot = -2.5e-8 * M_SUN / SECYER;
     let ctx_core = StepReportContext::compute(&model);
-    let row_core = evaluate_star_history_row(&model, &specs);
+    let row_core =
+        evaluate_star_history_row(&model, &specs).expect("history row");
     let bot_core = nz - 1;
     let expected_sum_dq: f64 = model.dq[..bot_core].iter().sum();
     let expected_v_wind = 1.0e-5 * model.opacity[0] * (-model.mstar_dot)
@@ -472,7 +477,8 @@ fn test_convective_zone_and_wind_velocity_columns() {
     let shell_top = 10;
     let shell_bot = 60;
     model.mixing_type[shell_top..=shell_bot].fill(MixingType::ConvectiveMixing);
-    let row_shell = evaluate_star_history_row(&model, &specs);
+    let row_shell =
+        evaluate_star_history_row(&model, &specs).expect("history row");
     assert!(
         (as_float(&row_shell[0].1) - model.r[shell_bot] / R_SUN).abs()
             <= 1.0e-15
@@ -497,7 +503,7 @@ fn test_mass_adjust_boundary_columns_and_state_restore() {
 
     // 1. Initial defaults (`k_below_const_q = 1`, `k_const_mass = 1` 1-based, `k_below_just_added = 1`).
     let neg99 = safe_log10(0.0);
-    let row0 = evaluate_star_history_row(&model, &specs);
+    let row0 = evaluate_star_history_row(&model, &specs).expect("history row");
     assert_eq!(as_int(&row0[0].1), 1);
     assert_eq!(as_float(&row0[1].1), model.q[0]);
     assert_eq!(as_float(&row0[2].1), neg99);
@@ -520,7 +526,8 @@ fn test_mass_adjust_boundary_columns_and_state_restore() {
     assert!(k_b_1 >= k_a_1);
     assert!(k_ja_1 > 1);
 
-    let row_acc = evaluate_star_history_row(&model, &specs);
+    let row_acc =
+        evaluate_star_history_row(&model, &specs).expect("history row");
     assert_eq!(as_int(&row_acc[0].1), k_a_1 as i64);
     assert_eq!(as_float(&row_acc[1].1), model.q[k_a_1 - 1]);
     let expected_logxq_a =

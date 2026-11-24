@@ -35,6 +35,10 @@ impl Default for StarControls {
             thermohaline_coeff: 0.0,
             thermohaline_option: ThermohalineOption::Kippenhahn,
             pextra_factor: 1.0,
+            // `star/defaults/controls.defaults:4771, 4780, 4792`.
+            do_starspots: false,
+            fspot: 0.0,
+            xspot: 1.0,
             min_d_mix: 1.0e3,
             remove_mixing_glitches: true,
             redo_conv_for_dr_lt_mixing_length: false,

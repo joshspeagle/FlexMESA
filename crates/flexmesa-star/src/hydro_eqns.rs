@@ -330,69 +330,166 @@ pub fn do1_density_eqn(
     Ok(())
 }
 
-/// `lnP_bc_ad` / `lnT_bc_ad` of `get_PT_bc_ad`
-/// (`star/private/hydro_eqns.f90:870-958`): value `log(X_surf + dX0)` with
-/// partials `dlnX_bc_dlnXsurf*dlnXsurf_dv + dlnX_bc_dX0*dX0_dv`, where
-/// `dlnX_bc_dlnXsurf = X_surf/X_bc` and `dlnX_bc_dX0 = 1/X_bc`. `ln_surf`
-/// carries the atmosphere partials `dlnXsurf_dv`; for `lnd` and `lnT` these
-/// are stored as the product `dlnXsurf_dlnkap*dlnkap_dv`, which upstream
-/// multiplies in the other association.
-fn ln_bc_ad(ln_surf: &StarAdOrder1, d0: &StarAdOrder1) -> StarAdOrder1 {
-    let x_surf = flexmesa_math::exp(ln_surf.val);
-    let x_bc = x_surf + d0.val;
-    let dln_bc_dln_surf = x_surf / x_bc;
-    let dln_bc_d0 = 1.0 / x_bc;
-    let mut out = StarAdOrder1::constant(flexmesa_math::log(x_bc));
-    for slot in [I_LND_00, I_LNT_00, I_LNR_00, I_L_00] {
-        out.d1[slot] = dln_bc_dln_surf * ln_surf.d1[slot] + dln_bc_d0 * d0.d1[slot];
-    }
-    out
+/// Outer-boundary pressure and temperature with partials, as `get_PT_bc_ad`
+/// builds them (`star/private/hydro_eqns.f90:817-999`).
+#[derive(Debug, Clone, Copy)]
+pub struct SurfBcAd {
+    /// `P_bc_ad`.
+    pub p_bc: StarAdOrder1,
+    /// `lnP_bc_ad`.
+    pub ln_p_bc: StarAdOrder1,
+    /// `T_bc_ad`.
+    pub t_bc: StarAdOrder1,
+    /// `lnT_bc_ad`.
+    pub ln_t_bc: StarAdOrder1,
 }
 
-/// Surface pressure and temperature boundary condition equations at `k = 0`
-/// (`set_Psurf_BC` and `set_Tsurf_BC` in `star/private/hydro_eqns.f90:857-1029`).
-pub fn do_surf_bc_eqns(model: &StarModel, sys: &mut HenyeySystem) {
-    if model.nz == 0 {
-        return;
-    }
-    // `get_PT_bc_ad` (`star/private/hydro_eqns.f90:843-911`): the offsets of
-    // the boundary pressure and temperature to the cell center are reals,
-    // with their partials set explicitly.
+/// `get_PT_bc_ad` (`star/private/hydro_eqns.f90:817-999`): offsets
+/// `P_surf` and `T_surf` ([`StarModel::surf_pt`], from `get_surf_PT`) to the
+/// centre of cell 1 and chains the atmosphere partials into the cell-1
+/// variables in upstream's order of operations.
+#[must_use]
+pub fn get_pt_bc_ad(model: &StarModel) -> SurfBcAd {
+    // `star/private/hydro_eqns.f90:782-786`.
     let offset_p_to_cell_center = !model.controls.use_momentum_outer_bc;
     let offset_t_to_cell_center = !(model.controls.use_other_surface_pt
         || model.controls.rsp2_flag
         || model.controls.use_rsp_l_eqn_outer_bc);
+    let sp = model.surf_pt;
     let r = model.r[0];
-    let dp0 = if offset_p_to_cell_center {
-        model.cgrav[0] * model.m_grav[0] * model.dm[0]
-            / (8.0 * PI * flexmesa_math::pow4(r))
-    } else {
-        0.0
-    };
-    let mut dp_0 = StarAdOrder1::constant(dp0);
+
+    // `hydro_eqns.f90:851-868`.
+    let p_surf = flexmesa_math::exp(sp.ln_p);
+    let t_surf = flexmesa_math::exp(sp.ln_t);
+    let mut dp0 = 0.0;
+    let mut dt0 = 0.0;
     if offset_p_to_cell_center {
-        dp_0.d1[I_LNR_00] = -4.0 * dp0;
+        dp0 = model.cgrav[0] * model.m_grav[0] * model.dm[0]
+            / (8.0 * PI * flexmesa_math::pow4(r));
     }
     let (t_1, peos_1, gradt_1) = (model.t[0], model.peos[0], model.gradt[0]);
-    let dt0 = if offset_t_to_cell_center {
-        dp0 * gradt_1 * t_1 / peos_1
-    } else {
-        0.0
-    };
-    let mut dt_0 = StarAdOrder1::constant(dt0);
+    if offset_t_to_cell_center {
+        dt0 = dp0 * gradt_1 * t_1 / peos_1;
+    }
+    let p_bc = p_surf + dp0;
+    let t_bc = t_surf + dt0;
+    let ln_p_bc = flexmesa_math::log(p_bc);
+    let ln_t_bc = flexmesa_math::log(t_bc);
+
+    // `hydro_eqns.f90:889-914`.
+    let mut dp0_dlnr = 0.0;
+    if offset_p_to_cell_center {
+        dp0_dlnr = -4.0 * dp0;
+    }
+    let mut dt0_dlnr = 0.0;
+    let mut dt0_dlnt = 0.0;
+    let mut dt0_dlnd = 0.0;
+    let mut dt0_dl = 0.0;
     if offset_t_to_cell_center {
         let g = &model.gradt_ad[0].d1;
+        // `chiT_for_partials(1)` and `chiRho_for_partials(1)` are the
+        // `lnT_00` and `lnd_00` partials of `ln_peos_ad`.
         let lp = &model.ln_peos_ad[0].d1;
+        let d_gradt_dlnr = g[I_LNR_00];
+        let d_gradt_dlnt00 = g[I_LNT_00];
+        let d_gradt_dlnd00 = g[I_LND_00];
+        let d_gradt_dl = g[I_L_00];
+        dt0_dlnr = -4.0 * dt0 + dp0 * d_gradt_dlnr * t_1 / peos_1;
         let dpinv_dlnt = -lp[I_LNT_00] / peos_1;
-        let dpinv_dlnd = -lp[I_LND_00] / peos_1;
-        dt_0.d1[I_LNR_00] = -4.0 * dt0 + dp0 * g[I_LNR_00] * t_1 / peos_1;
-        dt_0.d1[I_LNT_00] = dt0
-            + dp0 * g[I_LNT_00] * t_1 / peos_1
+        dt0_dlnt = dt0
+            + dp0 * d_gradt_dlnt00 * t_1 / peos_1
             + dp0 * gradt_1 * t_1 * dpinv_dlnt;
-        dt_0.d1[I_LND_00] = dp0 * g[I_LND_00] * t_1 / peos_1
+        let dpinv_dlnd = -lp[I_LND_00] / peos_1;
+        dt0_dlnd = dp0 * d_gradt_dlnd00 * t_1 / peos_1
             + dp0 * gradt_1 * t_1 * dpinv_dlnd;
-        dt_0.d1[I_L_00] = dp0 * g[I_L_00] * t_1 / peos_1;
+        dt0_dl = dp0 * d_gradt_dl * t_1 / peos_1;
     }
+
+    // `hydro_eqns.f90:916-923`.
+    let dlnp_bc_dp0 = 1.0 / p_bc;
+    let dlnt_bc_dt0 = 1.0 / t_bc;
+    let dlnp_bc_dlnpsurf = p_surf / p_bc;
+    let dlnt_bc_dlntsurf = t_surf / t_bc;
+    let dlnkap_dlnd = model.d_opacity_dlnd[0] / model.opacity[0];
+    let dlnkap_dlnt = model.d_opacity_dlnt[0] / model.opacity[0];
+
+    // `hydro_eqns.f90:925-928`.
+    let dlnp_bc_dlnd = dlnp_bc_dlnpsurf * sp.dlnp_dlnkap * dlnkap_dlnd;
+    let dlnp_bc_dlnt = dlnp_bc_dlnpsurf * sp.dlnp_dlnkap * dlnkap_dlnt;
+    let dlnp_bc_dl = dlnp_bc_dlnpsurf * sp.dlnp_dl;
+    let dlnp_bc_dlnr = dlnp_bc_dlnpsurf * sp.dlnp_dlnr + dlnp_bc_dp0 * dp0_dlnr;
+
+    // `hydro_eqns.f90:930-959`.
+    let p_bc_ad = wrap_surf_bc(
+        p_bc,
+        p_bc * dlnp_bc_dlnd,
+        p_bc * dlnp_bc_dlnt,
+        p_bc * dlnp_bc_dlnr,
+        p_bc * dlnp_bc_dl,
+    );
+    let ln_p_bc_ad = wrap_surf_bc(
+        ln_p_bc,
+        dlnp_bc_dlnd,
+        dlnp_bc_dlnt,
+        dlnp_bc_dlnr,
+        dlnp_bc_dl,
+    );
+
+    // `hydro_eqns.f90:961-966`.
+    let dlnt_bc_dlnt = dlnt_bc_dlntsurf * sp.dlnt_dlnkap * dlnkap_dlnt
+        + dlnt_bc_dt0 * dt0_dlnt;
+    let dlnt_bc_dlnd = dlnt_bc_dlntsurf * sp.dlnt_dlnkap * dlnkap_dlnd
+        + dlnt_bc_dt0 * dt0_dlnd;
+    let dlnt_bc_dl = dlnt_bc_dlntsurf * sp.dlnt_dl + dlnt_bc_dt0 * dt0_dl;
+    let dlnt_bc_dlnr = dlnt_bc_dlntsurf * sp.dlnt_dlnr + dlnt_bc_dt0 * dt0_dlnr;
+
+    // `hydro_eqns.f90:968-997`.
+    let t_bc_ad = wrap_surf_bc(
+        t_bc,
+        t_bc * dlnt_bc_dlnd,
+        t_bc * dlnt_bc_dlnt,
+        t_bc * dlnt_bc_dlnr,
+        t_bc * dlnt_bc_dl,
+    );
+    let ln_t_bc_ad = wrap_surf_bc(
+        ln_t_bc,
+        dlnt_bc_dlnd,
+        dlnt_bc_dlnt,
+        dlnt_bc_dlnr,
+        dlnt_bc_dl,
+    );
+    SurfBcAd {
+        p_bc: p_bc_ad,
+        ln_p_bc: ln_p_bc_ad,
+        t_bc: t_bc_ad,
+        ln_t_bc: ln_t_bc_ad,
+    }
+}
+
+/// `wrap(x, val, ...)` with only the `lnd_00`, `lnT_00`, `lnR_00` and `L_00`
+/// partials set, as `get_PT_bc_ad` calls it.
+fn wrap_surf_bc(
+    val: f64,
+    dlnd00: f64,
+    dlnt00: f64,
+    dlnr00: f64,
+    dl00: f64,
+) -> StarAdOrder1 {
+    let mut out = StarAdOrder1::constant(val);
+    out.d1[I_LND_00] = dlnd00;
+    out.d1[I_LNT_00] = dlnt00;
+    out.d1[I_LNR_00] = dlnr00;
+    out.d1[I_L_00] = dl00;
+    out
+}
+
+/// Surface pressure and temperature boundary condition equations at `k = 0`
+/// (`set_Psurf_BC` and `set_Tsurf_BC` in `star/private/hydro_eqns.f90:1002-1067`).
+pub fn do_surf_bc_eqns(model: &StarModel, sys: &mut HenyeySystem) {
+    if model.nz == 0 {
+        return;
+    }
+    let bc = get_pt_bc_ad(model);
 
     if model.controls.use_compression_outer_bc && model.nz >= 2 {
         let lnd_0 = StarAdOrder1::variable(model.lnd[0], I_LND_00);
@@ -425,7 +522,7 @@ pub fn do_surf_bc_eqns(model: &StarModel, sys: &mut HenyeySystem) {
         let resid_v = (vsurf - model.controls.fixed_vsurf) / cs_0;
         sys.save_eqn_residual(&model.layout, 0, model.layout.i_dv_dt, &resid_v);
     } else if !has_surf_momentum_bc(&model.controls) {
-        let ln_p_bc = ln_bc_ad(&model.ln_peos_surf_ad, &dp_0);
+        let ln_p_bc = bc.ln_p_bc;
         let ln_peos_0 = model.ln_peos_ad[0];
         let denom_p = if ln_peos_0.val > 1.0 {
             ln_peos_0
@@ -441,7 +538,7 @@ pub fn do_surf_bc_eqns(model: &StarModel, sys: &mut HenyeySystem) {
             && model.controls.rsp2.use_l_eqn_at_surface);
     if !skip_surf_t_bc {
         let lnt_0 = StarAdOrder1::variable(model.ln_t[0], I_LNT_00);
-        let ln_t_bc = ln_bc_ad(&model.ln_t_surf_ad, &dt_0);
+        let ln_t_bc = bc.ln_t_bc;
         let denom_t = if lnt_0.val > 1.0 {
             lnt_0
         } else {

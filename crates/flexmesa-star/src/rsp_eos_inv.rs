@@ -306,7 +306,7 @@ pub fn get_surf_p_t_kap(
         |ln_p: f64, ln_t: f64| -> Result<AtmEosCallbackResult, AtmError> {
             let t = flexmesa_math::exp(ln_t);
             let p = flexmesa_math::exp(ln_p);
-            let prad = CRAD * flexmesa_math::pow4(t) / 3.0;
+            let prad = CRAD * flexmesa_math::powi_f90(t, 4) / 3.0;
             let pgas = (p - prad).max(1.0e-99);
             let rho_guess = eval1_gamma_pt_get_rho(chem, p, t).max(1.0e-40);
             let inv = eos_dt_get_rho(

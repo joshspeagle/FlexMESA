@@ -229,7 +229,7 @@ pub fn rsp_setup_model(
                 )?;
                 ps
             } else if model.controls.rsp.use_prad_for_psurf {
-                CRAD * flexmesa_math::pow4(model.t[0]) / 3.0
+                CRAD * flexmesa_math::powi_f90(model.t[0], 4) / 3.0
             } else {
                 0.0
             };

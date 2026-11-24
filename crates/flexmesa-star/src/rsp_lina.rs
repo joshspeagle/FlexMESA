@@ -131,12 +131,13 @@ pub fn do_lina(
             (dfcx0, dfcxm, dfcxp, dfcy0, dfcyp, dfcz0, dfczp);
 
         if i < nzn {
-            let w_00 = flexmesa_math::pow4(grid.t[i]);
-            let w_out = flexmesa_math::pow4(grid.t[i + 1]);
+            let w_00 = flexmesa_math::powi_f90(grid.t[i], 4);
+            let w_out = flexmesa_math::powi_f90(grid.t[i + 1], 4);
             // `star/private/rsp_lina.f90:712-713` calls `dlog` (#198).
             let bw = flexmesa_math::intrinsic_log(w_out / w_00);
             let bk = flexmesa_math::intrinsic_log(mc.k[i + 1] / mc.k[i]);
-            let t1 = -dc.cl * flexmesa_math::pow4(grid.r[i]) / grid.dm_bar[i];
+            let t1 =
+                -dc.cl * flexmesa_math::powi_f90(grid.r[i], 4) / grid.dm_bar[i];
             let t2 = (w_out / mc.k[i + 1] - w_00 / mc.k[i]) / (1.0 - bk / bw);
             let t3 = t1 / (bw - bk);
             let dlk = (t3 / mc.k[i]) * (w_00 * bw / mc.k[i] - t2);
@@ -426,7 +427,8 @@ pub fn do_lina(
                 let strain = dv_0
                     .scale(1.0 / flexmesa_math::pow3(grid.r[i]))
                     .add(vrr[i].mul(scale).scale(
-                        -3.0 * grid.vol[i] / flexmesa_math::pow4(grid.r[i]),
+                        -3.0 * grid.vol[i]
+                            / flexmesa_math::powi_f90(grid.r[i], 4),
                     ));
                 qwkev[i] = PI * grid.dm[i] * dpev.conj_mul_imag(strain);
             }

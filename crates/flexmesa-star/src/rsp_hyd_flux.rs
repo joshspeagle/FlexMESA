@@ -201,7 +201,7 @@ pub(crate) fn t_form_of_calc_fr(
     }
     let k0 = nzn - i;
     if i == nzn {
-        let fr_00 = 2.0 * dc.sig * flexmesa_math::pow4(model.t[k0]);
+        let fr_00 = 2.0 * dc.sig * flexmesa_math::powi_f90(model.t[k0], 4);
         return RspFrTOut {
             fr_00,
             dfr_dt_00: 4.0 * fr_00 / model.t[k0],
@@ -209,8 +209,8 @@ pub(crate) fn t_form_of_calc_fr(
         };
     }
     let ko = k0 - 1;
-    let w = flexmesa_math::pow4(model.t[k0]);
-    let wp = flexmesa_math::pow4(model.t[ko]);
+    let w = flexmesa_math::powi_f90(model.t[k0], 4);
+    let wp = flexmesa_math::powi_f90(model.t[ko], 4);
     let bw = 4.0 * (model.ln_t[ko] - model.ln_t[k0]);
     if bw.abs() < 1.0e-20 {
         return RspFrTOut::default();
@@ -257,7 +257,8 @@ pub(crate) fn rsp_calc_xp(
         let xp = if model.controls.rsp.use_atm_grey_with_kap_for_psurf {
             p_surf
         } else if model.controls.rsp.use_prad_for_psurf {
-            CRAD * flexmesa_math::pow4(model.aux.rsp.t_start_rsp[0]) / 3.0
+            CRAD * flexmesa_math::powi_f90(model.aux.rsp.t_start_rsp[0], 4)
+                / 3.0
         } else {
             0.0
         };

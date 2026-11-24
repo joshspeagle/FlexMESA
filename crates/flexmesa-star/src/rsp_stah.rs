@@ -34,7 +34,7 @@ pub fn znvar(
         a * 1.0e-2 * (1.0 + chem.x) + (1.0 - a) * 1.0e-3
     };
     let g_m_dtau_div_r2 = dc.g * mx * dtau / (r * r);
-    let prad = CRAD * flexmesa_math::pow4(t0) / 3.0;
+    let prad = CRAD * flexmesa_math::powi_f90(t0, 4) / 3.0;
     let p_init = g_m_dtau_div_r2 / kap0 + prad;
     let (mut v, _) = eop(model, chem, nzn, t0, p_init)?;
     let mut kap = kap0;
@@ -145,9 +145,10 @@ impl StahStepVars {
         (self.e_0, self.cp_0, self.qq_0, self.op_0) =
             (out.e, out.cp, out.qq, out.op);
         self.cflux(dc, n);
-        let tt = 4.0 * dc.sig * dc.p4 * dc.p4 * flexmesa_math::pow4(self.r_1)
-            / (3.0 * self.dm_bar_0 * l);
-        self.t4_0 = flexmesa_math::pow4(self.t_0);
+        let tt =
+            4.0 * dc.sig * dc.p4 * dc.p4 * flexmesa_math::powi_f90(self.r_1, 4)
+                / (3.0 * self.dm_bar_0 * l);
+        self.t4_0 = flexmesa_math::powi_f90(self.t_0, 4);
         // `star/private/rsp_build.f90:639` calls `dlog` (#198).
         let dlnt4 = flexmesa_math::intrinsic_log(self.t4_0 / self.t4_1);
         self.lr_0 = if dlnt4 == 0.0 {
@@ -202,7 +203,7 @@ pub fn stah(
         s.dm_0 = dmn * fsub;
         s.m_0 = mx;
         s.dm_bar_0 = 0.5 * s.dm_0;
-        let we = flexmesa_math::pow4(te);
+        let we = flexmesa_math::powi_f90(te, 4);
         s.t4_0 = 0.5 * we;
         s.t_0 = flexmesa_math::pow(0.5_f64, 0.25) * te;
         s.r_1 = (l / (dc.p4 * dc.sig * we)).sqrt();
@@ -218,13 +219,14 @@ pub fn stah(
             )?;
             ps
         } else if model.controls.rsp.use_prad_for_psurf {
-            CRAD * flexmesa_math::pow4(s.t_0) / 3.0
+            CRAD * flexmesa_math::powi_f90(s.t_0, 4) / 3.0
         } else {
             0.0
         };
         model.aux.rsp.psurf_from_atm = psurf;
         s.p_0 = psurf
-            + dc.g * s.m_0 * s.dm_bar_0 / (dc.p4 * flexmesa_math::pow4(s.r_1));
+            + dc.g * s.m_0 * s.dm_bar_0
+                / (dc.p4 * flexmesa_math::powi_f90(s.r_1, 4));
         let (v0, out0) = eop(model, chem, nzn, s.t_0, s.p_0)?;
         s.v_0 = v0;
         (s.e_0, s.cp_0, s.qq_0, s.op_0) = (out0.e, out0.cp, out0.qq, out0.op);
@@ -285,7 +287,7 @@ pub fn stah(
                 s.v_0 = grid.vol[n1];
                 s.p_0 = grid.p[n1];
                 s.t_0 = grid.t[n1];
-                s.t4_0 = flexmesa_math::pow4(s.t_0);
+                s.t4_0 = flexmesa_math::powi_f90(s.t_0, 4);
                 s.m_0 = grid.m[n1];
                 s.dm_0 = grid.dm[n1];
                 s.op_0 = grid.k[n1];
@@ -313,7 +315,7 @@ pub fn stah(
             s.dm_bar_0 = 0.5 * (s.dm_0 + dml);
             s.p_0 = s.p_1
                 + dc.g * s.m_0 * s.dm_bar_0
-                    / (dc.p4 * flexmesa_math::pow4(s.r_1));
+                    / (dc.p4 * flexmesa_math::powi_f90(s.r_1, 4));
 
             if !solve_stah_zone_t(model, chem, dc, &mut s, nzn, n, l)? {
                 dmn *= 0.25;
@@ -466,7 +468,7 @@ fn solve_stah_zone_t(
                 if let Ok((lnt, _)) = root {
                     s.t_0 = flexmesa_math::exp(lnt);
                     let _ = s.eval_t_residual(model, chem, dc, nzn, n, l)?;
-                    s.t4_0 = flexmesa_math::pow4(s.t_0);
+                    s.t4_0 = flexmesa_math::powi_f90(s.t_0, 4);
                     got_est = true;
                 }
             }
@@ -475,10 +477,10 @@ fn solve_stah_zone_t(
     if !got_est {
         s.t4_0 = s.t4_1 * 1.2;
         s.t_0 = s.t4_0.sqrt().sqrt();
-        while CRAD * flexmesa_math::pow4(s.t_0) / 3.0 >= s.p_0 {
+        while CRAD * flexmesa_math::powi_f90(s.t_0, 4) / 3.0 >= s.p_0 {
             s.t_0 *= 0.99;
         }
-        s.t4_0 = flexmesa_math::pow4(s.t_0);
+        s.t4_0 = flexmesa_math::powi_f90(s.t_0, 4);
     }
 
     loop {
@@ -495,10 +497,10 @@ fn solve_stah_zone_t(
                 "STAH T_0 <= 0 in Lc_loop1",
             )));
         }
-        s.t4_0 = flexmesa_math::pow4(s.t_0);
+        s.t4_0 = flexmesa_math::powi_f90(s.t_0, 4);
     }
 
-    let tt = 4.0 * dc.sig * dc.p4 * dc.p4 * flexmesa_math::pow4(s.r_1)
+    let tt = 4.0 * dc.sig * dc.p4 * dc.p4 * flexmesa_math::powi_f90(s.r_1, 4)
         / (3.0 * s.dm_bar_0 * l);
     s.lr_0 = tt * (s.t4_0 / s.op_0 - s.t4_1 / s.op_1)
         / (1.0
@@ -527,7 +529,7 @@ fn solve_stah_zone_t(
                     "STAH T_0 <= 0 in Lc_loop",
                 )));
             }
-            s.t4_0 = flexmesa_math::pow4(s.t_0);
+            s.t4_0 = flexmesa_math::powi_f90(s.t_0, 4);
         }
         s.lr_0 = tt * (s.t4_0 / s.op_0 - s.t4_1 / s.op_1)
             / (1.0

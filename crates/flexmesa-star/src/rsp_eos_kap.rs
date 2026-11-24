@@ -278,6 +278,7 @@ pub fn compute_standard_metals_xa(
         best
     });
 
+    let ztotal = (1.0 - (initial_x + he3 + he4)).clamp(0.0, 1.0);
     let mut new_xa = vec![0.0_f64; species];
     for (j, iso) in isos.iter().enumerate() {
         if Some(j) == jskip || iso.z <= 2 || iso.z > zfrac.len() {
@@ -293,14 +294,14 @@ pub fn compute_standard_metals_xa(
                 })
                 .sum();
             if frac_sum > 0.0 {
-                new_xa[j] = initial_z * zfrac[iso.z - 1] * (frac / frac_sum);
+                new_xa[j] = ztotal * zfrac[iso.z - 1] * (frac / frac_sum);
             }
         }
     }
 
     let sum_metals: f64 = new_xa.iter().sum();
     if let Some(js) = jskip {
-        new_xa[js] = (initial_z - sum_metals).max(0.0);
+        new_xa[js] = (ztotal - sum_metals).max(0.0);
         for (j, iso) in isos.iter().enumerate() {
             if j == js || iso.z > 2 {
                 xa[j] = new_xa[j];
@@ -309,7 +310,7 @@ pub fn compute_standard_metals_xa(
     } else if sum_metals > 0.0 {
         for (j, iso) in isos.iter().enumerate() {
             if iso.z > 2 {
-                xa[j] = new_xa[j] * initial_z / sum_metals;
+                xa[j] = new_xa[j] * ztotal / sum_metals;
             }
         }
     }
@@ -357,17 +358,21 @@ fn store_eos_cell(
     rho: f64,
     t: f64,
     eos: &EosEvalOutput,
-) {
-    model.rho[k] = rho;
-    model.lnd[k] = flexmesa_math::log(rho);
-    model.t[k] = t;
-    model.ln_t[k] = flexmesa_math::log(t);
+) -> f64 {
+    let lnd = flexmesa_math::log(rho);
+    let rho_stored = flexmesa_math::exp(lnd);
+    let ln_t = flexmesa_math::log(t);
+    let t_stored = flexmesa_math::exp(ln_t);
+    model.lnd[k] = lnd;
+    model.rho[k] = rho_stored;
+    model.ln_t[k] = ln_t;
+    model.t[k] = t_stored;
     model.abar[k] = chem.abar;
     model.zbar[k] = chem.zbar;
     model.z53bar[k] = chem.z53bar;
     let ln_pgas = eos.res[I_LN_PGAS];
     let pgas = flexmesa_math::exp(ln_pgas);
-    let prad = CRAD * flexmesa_math::pow4(t) / 3.0;
+    let prad = CRAD * flexmesa_math::pow4(t_stored) / 3.0;
     let peos = pgas + prad;
     model.ln_pgas[k] = ln_pgas;
     model.pgas[k] = pgas;
@@ -383,10 +388,12 @@ fn store_eos_cell(
     model.grada[k] = eos.res[I_GRAD_AD];
     model.lnfree_e[k] = eos.res[I_LN_FREE_E];
     model.eta[k] = eos.res[I_ETA];
-    model.csound[k] = (eos.res[I_GAMMA1] * peos / rho).max(0.0).sqrt();
+    let csound = (eos.res[I_GAMMA1] * peos / rho_stored).max(0.0).sqrt();
+    model.csound[k] = csound;
     model.eos_res[k] = eos.res;
     model.eos_d_dlnd[k] = eos.d_dlnd;
     model.eos_d_dlnt[k] = eos.d_dln_t;
+    csound
 }
 
 fn eval1_kap_with_eos(
@@ -454,9 +461,9 @@ pub fn eval1_mesa_eos_and_kap(
     let log_t = flexmesa_math::log10(t);
     let dlnd_dv = -rho;
     let eos = chem.eval_eos_dt(model, rho, log_rho, t, log_t)?;
-    if let Some(k) = cell_k.filter(|&idx| idx < model.nz) {
-        store_eos_cell(model, chem, k, rho, t, &eos);
-    }
+    let csnd_stored = cell_k
+        .filter(|&idx| idx < model.nz)
+        .map(|k| store_eos_cell(model, chem, k, rho, t, &eos));
     let (op, opv, opt) = if skip_kap {
         (0.0, 0.0, 0.0)
     } else {
@@ -465,7 +472,7 @@ pub fn eval1_mesa_eos_and_kap(
         )?
     };
 
-    let prad = CRAD * flexmesa_math::pow4(t) / 3.0;
+    let prad = CRAD * flexmesa_math::powi_f90(t, 4) / 3.0;
     let d_pr_dt = 4.0 * prad / t;
     let erad = 3.0 * prad / rho;
     let d_erad_dt = 3.0 * d_pr_dt / rho;
@@ -481,7 +488,9 @@ pub fn eval1_mesa_eos_and_kap(
         )));
     }
     let pgas = flexmesa_math::exp(eos.res[I_LN_PGAS]);
-    let csnd = (eos.res[I_GAMMA1] * (prad + pgas) / rho).max(0.0).sqrt();
+    let csnd = csnd_stored.unwrap_or_else(|| {
+        (eos.res[I_GAMMA1] * (prad + pgas) / rho).max(0.0).sqrt()
+    });
     let chi_t = eos.res[I_CHI_T];
     let chi_rho = eos.res[I_CHI_RHO];
     let q = chi_t / (rho * t * chi_rho);

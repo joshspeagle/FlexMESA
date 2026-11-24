@@ -328,12 +328,12 @@ pub(crate) fn t_form_of_erad_eqn(
     band.hd[ie] = [0.0; LD_HD + 1];
     let t = model.t[k0];
     let v = model.aux.rsp.vol_rsp[k0];
-    let erad_expected = CRAD * flexmesa_math::pow4(t) * v;
+    let erad_expected = CRAD * flexmesa_math::powi_f90(t, 4) * v;
     let residual = erad_expected - model.aux.rsp.erad_rsp[k0];
     band.hr[ie] = -residual;
     let h = &mut band.hd[ie];
     h[I_ER_DER_00] = -1.0;
     h[I_ER_DT_00] = 4.0 * CRAD * flexmesa_math::pow3(t) * v;
-    h[I_ER_DR_00] = CRAD * flexmesa_math::pow4(t) * wk.dvol_dr_00[i];
-    h[I_ER_DR_IN] = CRAD * flexmesa_math::pow4(t) * wk.dvol_dr_in[i];
+    h[I_ER_DR_00] = CRAD * flexmesa_math::powi_f90(t, 4) * wk.dvol_dr_00[i];
+    h[I_ER_DR_IN] = CRAD * flexmesa_math::powi_f90(t, 4) * wk.dvol_dr_in[i];
 }

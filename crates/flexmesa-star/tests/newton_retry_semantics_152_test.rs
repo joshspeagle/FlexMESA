@@ -233,6 +233,9 @@ fn test_solver_itermin_and_adjust_correction_backtracking_converge() {
     m.solver_skip_global_corr_coeff_limit = false;
     set_hydro_vars(&mut m, false, false).expect("hydro");
     m.save_start_values().expect("start");
+    // Standalone solver call: set `total_internal_energy_old` as the step
+    // driver does before the solve (`evolve.f90:427-436`).
+    flexmesa_star::record_start_of_step_energy_integrals(&mut m);
     m.lnd[3] += 0.02;
     m.pack_xh();
 

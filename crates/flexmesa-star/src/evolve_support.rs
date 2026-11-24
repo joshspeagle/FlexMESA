@@ -205,7 +205,7 @@ pub fn record_start_of_step_energy_integrals(model: &mut StarModel) {
     let (e_int, _, _, _, _, e_tot) = eval_total_energy_integrals(model);
     // `total_internal_energy_old` for the new mesh (`evolve.f90:420-431`),
     // read by `set_energy_eqn_scal` (`star_utils.f90:3693`).
-    model.aux.total_internal_energy_start = e_int;
+    model.aux.total_internal_energy_start = Some(e_int);
     let surf_e = if model.nz > 0 {
         cell_specific_total_energy(model, 0)
     } else {
@@ -272,6 +272,8 @@ pub fn apply_step_pre_physics_with_extras(
     // (`evolve.f90:569,606`): `set_vars_if_needed`.
     if model.aux.need_to_setvars {
         set_hydro_vars(model, false, false)?;
+        // `star/private/hydro_vars.f90:653`.
+        model.aux.need_to_setvars = false;
     }
 
     if model.controls.do_conv_premix {
@@ -663,7 +665,32 @@ pub fn set_vars_for_new_step(model: &mut StarModel) -> Result<(), StarError> {
     model.aux.mixing.have_new_generation = false;
     let res = set_hydro_vars(model, false, false);
     model.aux.mixing.have_new_generation = prev_have_new_generation;
-    res
+    res?;
+    // `set_vars` ends with `need_to_setvars = .false.`
+    // (`star/private/hydro_vars.f90:653`).
+    model.aux.need_to_setvars = false;
+    Ok(())
+}
+
+/// `set_vars_if_needed` at the start of `set_start_of_step_info`, on every
+/// try (`star/private/evolve.f90:409, 1768-1771`). `new_generation` and
+/// `set_current_to_old` have set `need_to_setvars = .true.` just before
+/// (`star/private/evolve_support.f90:121, 238`), `have_new_generation` is
+/// `.true.` (`evolve.f90:383`) and `okay_to_set_mixing_info` is `.true.`
+/// (`evolve.f90:320`).
+///
+/// # Errors
+///
+/// Returns the [`StarError`] of [`set_hydro_vars`].
+pub fn set_vars_for_new_try(model: &mut StarModel) -> Result<(), StarError> {
+    if !model.aux.need_to_setvars {
+        return Ok(());
+    }
+    model.aux.mixing.okay_to_set_mixing_info = true;
+    set_hydro_vars(model, false, false)?;
+    // `star/private/hydro_vars.f90:653`.
+    model.aux.need_to_setvars = false;
+    Ok(())
 }
 
 /// Executes pre-step adaptive remeshing (`do_mesh` in

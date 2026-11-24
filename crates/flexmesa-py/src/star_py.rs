@@ -176,6 +176,17 @@ macro_rules! impl_py_star_model {
                 self.inner.save_start_values().map_err(to_py_err)
             }
 
+            /// Records the start-of-step energy integrals, including
+            /// `total_internal_energy_old`, as the step driver does after
+            /// `set_mdot` (`star/private/evolve.f90:427-453`). Standalone
+            /// `eval_equations` and `solve_henyey` callers must call it
+            /// first: the energy equation's scale reads that total.
+            pub fn record_start_of_step_energy_integrals(&mut self) {
+                flexmesa_star::record_start_of_step_energy_integrals(
+                    &mut self.inner,
+                );
+            }
+
             /// Snapshots current state arrays as previous-step `*_old` values.
             pub fn save_old_values(&mut self) {
                 self.inner.save_old_values();

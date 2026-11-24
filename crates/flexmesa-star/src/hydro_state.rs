@@ -470,8 +470,11 @@ pub struct HydroAuxState {
     /// Total internal energy in $\mathrm{erg}$ on the new mesh at the start of
     /// the step (`total_internal_energy_old`, set by
     /// `eval_total_energy_integrals` at `evolve.f90:420-431` and read by
-    /// `set_energy_eqn_scal`, `star_utils.f90:3693`).
-    pub total_internal_energy_start: f64,
+    /// `set_energy_eqn_scal`, `star_utils.f90:3693`). `None` until the step
+    /// driver records it; upstream leaves it undefined until then (NaN only
+    /// with `fill_arrays_with_NaNs`, `evolve.f90:62-65, 245`).
+    #[serde(default)]
+    pub total_internal_energy_start: Option<f64>,
     /// Cumulative global energy conservation error in $\mathrm{erg}$
     /// (`cumulative_energy_error` in `star_data_step_work.inc`).
     pub cumulative_energy_error: f64,
@@ -747,7 +750,7 @@ impl HydroAuxState {
             need_to_setvars: true,
             doing_struct_burn_mix: false,
             total_energy: 0.0,
-            total_internal_energy_start: 0.0,
+            total_internal_energy_start: None,
             cumulative_energy_error: 0.0,
             non_epsnuc_energy_change_from_split_burn: 0.0,
             cp_start: vec![0.0; nz],

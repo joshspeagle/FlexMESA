@@ -43,6 +43,7 @@ fn build_solar_test_model(v_flag: bool) -> StarModel {
     }
     crate::hydro_vars::set_hydro_vars(&mut model, false, false)
         .expect("valid hydro vars");
+    crate::evolve_support::record_start_of_step_energy_integrals(&mut model);
     model
 }
 
@@ -173,7 +174,8 @@ fn test_hydro_energy_luminosity_time_centering_and_heating_channels() {
     model.controls.use_drag_energy = true;
     model.controls.drag_coefficient = 0.2;
 
-    let (sources, doing_op_split) = setup_sources_and_others(&model, k);
+    let (sources, _others, doing_op_split) =
+        setup_sources_and_others(&model, k);
     assert!(!doing_op_split);
     assert!(sources.val.is_finite() && sources.d1[I_V_00] != 0.0);
 
@@ -254,7 +256,7 @@ fn test_hydro_energy_pressure_time_centering_pvsc_pturb_and_chem_partials() {
     let nvar = model.layout.nvar(true);
     let x_scale = compute_x_scale(&model, true);
     let mut sys = HenyeySystem::new(model.nz, nvar, x_scale.clone());
-    do1_energy_eqn(&model, k, true, &mut sys);
+    do1_energy_eqn(&model, k, true, &mut sys).expect("energy eqn");
 
     let i_equ = model.layout.i_dlne_dt;
     let j_chem0 = model.layout.chem_var_index(0);
@@ -265,7 +267,8 @@ fn test_hydro_energy_pressure_time_centering_pvsc_pturb_and_chem_partials() {
     let ublk_chem = sys.ublk[k * nvar * nvar + i_equ * nvar + j_chem0]
         / x_scale[(k + 1) * nvar + j_chem0];
 
-    let scal = crate::hydro_energy::set_energy_eqn_scal(&model, k);
+    let scal = crate::hydro_energy::set_energy_eqn_scal(&model, k)
+        .expect("energy scal");
     let (_, fac_m1, fac_00, fac_p1) =
         crate::hydro_work::eval_v_flag_dwork_dm_ad(&model, k, false, true);
     let expected_d00 = scal * model.d_epsnuc_dx[base]
@@ -478,6 +481,7 @@ fn test_eval_eps_grav_composition_finite_difference_partials_and_d_eps_grav_dx()
     crate::micro::set_basic_vars(&mut model).expect("set_basic_vars");
     crate::micro::do_eos(&mut model).expect("do_eos");
     model.save_start_values().expect("save_start_values");
+    crate::evolve_support::record_start_of_step_energy_integrals(&mut model);
 
     let k = model.nz / 2;
     let sp = model.species;
@@ -681,6 +685,7 @@ fn test_fix_d_eos_dxa_partials_populates_skye_ideal_and_skips_below_threshold_or
     crate::micro::set_basic_vars(&mut model).expect("set_basic_vars skye");
     crate::micro::do_eos(&mut model).expect("do_eos skye");
     model.save_start_values().expect("save_start_values skye");
+    crate::evolve_support::record_start_of_step_energy_integrals(&mut model);
 
     let sp = model.species;
     let i_h1 = model
@@ -789,6 +794,7 @@ fn test_fix_d_eos_dxa_partials_populates_skye_ideal_and_skips_below_threshold_or
     crate::micro::set_basic_vars(&mut helm_model).expect("basic helm");
     crate::micro::do_eos(&mut helm_model).expect("eos helm");
     helm_model.save_start_values().expect("save_start helm");
+    crate::evolve_support::record_start_of_step_energy_integrals(&mut helm_model);
     helm_model.xa[base + i_h1] -= 0.02;
     helm_model.xa[base + i_he4] += 0.02;
     crate::micro::set_basic_vars(&mut helm_model).expect("basic helm pert");

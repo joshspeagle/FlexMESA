@@ -30,13 +30,15 @@
 //!   `dln_peos_dxa_for_partials`.
 
 use flexmesa_const::{FOUR_PI, LN10};
+use flexmesa_eos::I_LN_E;
 use flexmesa_turb::MltOption;
 
-use crate::controls::EnergyEqnOption;
+use crate::controls::{EnergyEqnOption, StarError};
 use crate::hydro_eqns::HenyeySystem;
 use crate::model::StarModel;
 use crate::star_ad::{
-    StarAdExt, StarAdOrder1, I_LND_00, I_L_00, I_L_P1, I_V_00, I_V_P1,
+    StarAdExt, StarAdOrder1, I_LND_00, I_LNT_00, I_L_00, I_L_P1, I_V_00,
+    I_V_P1,
 };
 
 /// Evaluates artificial viscosity pressure $P_{\mathrm{vsc},k}$ in cell `k`
@@ -174,7 +176,7 @@ fn setup_rti_diffusion(model: &StarModel, k: usize) -> StarAdOrder1 {
 pub fn setup_sources_and_others(
     model: &StarModel,
     k: usize,
-) -> (StarAdOrder1, bool) {
+) -> (StarAdOrder1, StarAdOrder1, bool) {
     let t_start_k = flexmesa_math::exp(
         model.ln_t_start.get(k).copied().unwrap_or(model.ln_t[k]),
     );
@@ -213,43 +215,25 @@ pub fn setup_sources_and_others(
         model.aux.d_extra_heat_dlnt.get(k).copied().unwrap_or(0.0),
     );
 
-    let diff_heat = if model.controls.do_element_diffusion {
+    // `others_ad`: `eps_WD_sedimentation` or `eps_diffusion`, `eps_pre_mix`
+    // and `eps_phase_separation`, added in that order to a zero value with no
+    // partials (`star/private/hydro_energy.f90:251-262`).
+    let mut others = StarAdOrder1::ZERO;
+    if model.controls.do_element_diffusion {
         if model.controls.diffusion.do_wd_sedimentation_heating {
-            model
-                .aux
-                .eps_wd_sedimentation
-                .get(k)
-                .copied()
-                .unwrap_or(0.0)
+            others.val += model.aux.eps_wd_sedimentation[k];
         } else if model.controls.diffusion.do_diffusion_heating {
-            model.aux.eps_diffusion.get(k).copied().unwrap_or(0.0)
-        } else {
-            0.0
+            others.val += model.aux.eps_diffusion[k];
         }
-    } else {
-        0.0
-    };
-    let premix_heat =
-        if model.controls.do_conv_premix && model.controls.do_premix_heating {
-            model.aux.eps_pre_mix.get(k).copied().unwrap_or(0.0)
-        } else {
-            0.0
-        };
-    let phase_heat = if model.controls.do_phase_separation
+    }
+    if model.controls.do_conv_premix && model.controls.do_premix_heating {
+        others.val += model.aux.eps_pre_mix[k];
+    }
+    if model.controls.do_phase_separation
         && model.controls.do_phase_separation_heating
     {
-        model
-            .aux
-            .eps_phase_separation
-            .get(k)
-            .copied()
-            .unwrap_or(0.0)
-    } else {
-        0.0
-    };
-    let irrad_heat = model.aux.irradiation_heat.get(k).copied().unwrap_or(0.0);
-    let others_scalar =
-        diff_heat + premix_heat + phase_heat + irrad_heat + model.eps_mdot[k];
+        others.val += model.aux.eps_phase_separation[k];
+    }
 
     let eq_ad = if model.controls.rsp2_flag
         || (model.controls.tdc_alpha_m > 0.0
@@ -269,31 +253,49 @@ pub fn setup_sources_and_others(
 
     let rti_diff_ad = setup_rti_diffusion(model, k);
 
-    let dt = model.dt.max(1.0e-30);
-    let drag_energy = if model.controls.v_flag
-        && model.controls.use_drag_energy
-        && model.controls.drag_coefficient > 0.0
-        && model.q[k] > model.controls.min_q_for_drag
-    {
-        let v_00 = StarAdOrder1::variable(model.v[k], I_V_00);
-        let v_p1 = if k + 1 < model.nz {
-            StarAdOrder1::variable(model.v[k + 1], I_V_P1)
-        } else {
-            StarAdOrder1::constant(model.v_center)
+    // `drag_energy` (`star/private/hydro_energy.f90:281-302`): outer and inner
+    // half-cell terms `0.5*v*(drag_coefficient*v/dt)`, both only for
+    // `k /= nz`, each gated by its own face's `q`. `wrap_v_00`/`wrap_v_p1`
+    // read `s% v`, which is zero without `v_flag` (`hydro_vars.f90:354`).
+    let c = &model.controls;
+    let mut drag_energy = StarAdOrder1::ZERO;
+    if k + 1 < model.nz {
+        let v_of = |j: usize| {
+            if model.layout.i_v.is_some() {
+                model.v[j]
+            } else {
+                0.0
+            }
         };
-        (v_00 * v_00 + v_p1 * v_p1)
-            * (0.5 * model.controls.drag_coefficient / dt)
-    } else {
-        StarAdOrder1::ZERO
-    };
+        if model.q[k] > c.min_q_for_drag
+            && c.drag_coefficient > 0.0
+            && c.use_drag_energy
+        {
+            let v_00 = StarAdOrder1::variable(v_of(k), I_V_00);
+            let drag_force = v_00 * c.drag_coefficient / model.dt;
+            drag_energy = v_00 * 0.5 * drag_force;
+        }
+        if model.q[k + 1] > c.min_q_for_drag
+            && c.drag_coefficient > 0.0
+            && c.use_drag_energy
+        {
+            let v_p1 = StarAdOrder1::variable(v_of(k + 1), I_V_P1);
+            let drag_force = v_p1 * c.drag_coefficient / model.dt;
+            drag_energy = drag_energy + v_p1 * 0.5 * drag_force;
+        }
+    }
 
-    let total_sources = eps_nuc_ad - non_nuc_neu_ad
+    // `star/private/hydro_energy.f90:304-308`.
+    let mut sources = eps_nuc_ad - non_nuc_neu_ad
         + extra_heat_ad
         + eq_ad
         + rti_diff_ad
-        + drag_energy
-        + others_scalar;
-    (total_sources, doing_op_split_burn)
+        + drag_energy;
+    sources.val += model.aux.irradiation_heat[k];
+    if model.mstar_dot != 0.0 {
+        sources.val += model.eps_mdot[k];
+    }
+    (sources, others, doing_op_split_burn)
 }
 
 /// Evaluates the turbulent energy time derivative $de_{\mathrm{turb}}/dt$ for
@@ -304,7 +306,7 @@ pub fn setup_d_turbulent_energy_dt(
     model: &StarModel,
     k: usize,
 ) -> StarAdOrder1 {
-    let dt = model.dt.max(1.0e-30);
+    let dt = model.dt;
     if model.controls.rsp2_flag {
         let etrb = if model.layout.i_w.is_some() {
             model.aux.rsp.et_rsp.get(k).copied().unwrap_or(0.0).max(0.0)
@@ -373,20 +375,33 @@ pub fn eval_face_area_time_centered_ad(
 /// differences in $L_k - L_{k+1}$ are measured relative to
 /// $E_{\mathrm{int,start}} / \mathrm{dedt\_eqn\_r\_scale}$ rather than amplified
 /// by $1 / \Delta m_k$.
-#[must_use]
-pub fn set_energy_eqn_scal(model: &StarModel, k: usize) -> f64 {
+///
+/// # Errors
+/// Returns [`StarError::InvalidInput`] when `total_internal_energy_old` has
+/// not been recorded for the step: upstream would read it undefined
+/// (DECISIONS #43).
+pub fn set_energy_eqn_scal(
+    model: &StarModel,
+    k: usize,
+) -> Result<f64, StarError> {
     // `set_energy_eqn_scal` (`star/private/star_utils.f90:3677-3697`), with
     // `total_internal_energy_old` from the start of the step
     // (`evolve.f90:420-431`) and no clamps.
     let mut scal: f64 = if k > 0 { 1.0 } else { 1.0e-6 };
     if model.controls.dedt_eqn_r_scale > 0.0 {
+        let total_internal_energy_old =
+            model.aux.total_internal_energy_start.ok_or_else(|| {
+                StarError::InvalidInput(String::from(
+                    "set_energy_eqn_scal: total_internal_energy_old is not set for this step; upstream reads it undefined (star_utils.f90:3693, evolve.f90:427-436; DECISIONS #43)",
+                ))
+            })?;
         let cell_energy_fraction_start = model.energy_start[k] * model.dm[k]
-            / model.aux.total_internal_energy_start;
+            / total_internal_energy_old;
         scal = scal.min(
             cell_energy_fraction_start * model.controls.dedt_eqn_r_scale,
         );
     }
-    scal * model.dt / model.energy_start[k]
+    Ok(scal * model.dt / model.energy_start[k])
 }
 
 /// Evaluates `(work_outward_at_surface, work_inward_at_center)` in
@@ -448,8 +463,8 @@ pub fn do1_energy_eqn(
     k: usize,
     include_chem: bool,
     sys: &mut HenyeySystem,
-) {
-    let _ = do1_energy_eqn_with_ergs_error(model, k, include_chem, sys);
+) -> Result<(), StarError> {
+    do1_energy_eqn_with_ergs_error(model, k, include_chem, sys).map(|_| ())
 }
 
 /// Evaluates [`do1_energy_eqn`] and returns the cell unscaled energy residual
@@ -468,16 +483,40 @@ pub(crate) fn eps_grav_form(model: &StarModel) -> bool {
         || (model.aux.doing_relax && model.controls.no_dedt_form_during_relax)
 }
 
+/// `de_dt_ad` of `setup_de_dt_and_friends`
+/// (`star/private/hydro_energy.f90:434-441`): value
+/// `(energy - energy_start)/dt`, with `lnd` and `lnT` partials
+/// `dE_dRho_for_partials*rho/dt` and `Cv_for_partials*T/dt`, where
+/// `dE_dRho_for_partials = d_dlnd(i_lnE)*energy/rho` and
+/// `Cv_for_partials = d_dlnT(i_lnE)*energy/T` (`star/private/micro.f90:499-500`).
+fn setup_de_dt(model: &StarModel, k: usize, dt: f64) -> StarAdOrder1 {
+    let e = model.energy[k];
+    let de_drho_for_partials = model.eos_d_dlnd[k][I_LN_E] * e / model.rho[k];
+    let cv_for_partials = model.eos_d_dlnt[k][I_LN_E] * e / model.t[k];
+    let mut de_dt = StarAdOrder1::constant((e - model.energy_start[k]) / dt);
+    de_dt.d1[I_LND_00] = de_drho_for_partials * model.rho[k] / dt;
+    de_dt.d1[I_LNT_00] = cv_for_partials * model.t[k] / dt;
+    de_dt
+}
+
 pub(crate) fn do1_energy_eqn_with_ergs_error(
     model: &StarModel,
     k: usize,
     include_chem: bool,
     sys: &mut HenyeySystem,
-) -> f64 {
+) -> Result<f64, StarError> {
     let dl_dm = setup_dl_dm(model, k);
-    let (sources, doing_op_split_burn) = setup_sources_and_others(model, k);
+    let (sources, others, doing_op_split_burn) =
+        setup_sources_and_others(model, k);
+    // Every rate in the energy equation divides by `s% dt`
+    // (`dt = s% dt`, `star/private/hydro_energy.f90:156`); a solve always has `dt > 0`.
+    let dt = model.dt;
+    if dt.is_nan() || dt <= 0.0 {
+        return Err(StarError::InvalidInput(format!(
+            "energy equation at cell {k}: dt = {dt} is not positive (star/private/hydro_energy.f90)"
+        )));
+    }
     let d_eturb_dt = setup_d_turbulent_energy_dt(model, k);
-    let dt = model.dt.max(1.0e-30);
 
     let v_flag_only = model.controls.v_flag && !model.controls.u_flag;
     let u_flag_only = model.controls.u_flag && !model.controls.v_flag;
@@ -496,7 +535,7 @@ pub(crate) fn do1_energy_eqn_with_ergs_error(
         has_dedt_dxa = true;
         let total_rates =
             crate::riemann_ad::eval_u_flag_total_energy_rates_ad(model, k, dt);
-        -dl_dm + sources - d_eturb_dt - total_rates
+        -dl_dm + sources + others - d_eturb_dt - total_rates
     } else if v_flag_only {
         let simple_pdv = vel_tc
             && model
@@ -514,17 +553,17 @@ pub(crate) fn do1_energy_eqn_with_ergs_error(
                 )
                 .0
             };
-            -dl_dm + sources - d_eturb_dt - dwork_dm + model.eps_grav_ad[k]
+            -dl_dm + sources + others - d_eturb_dt - dwork_dm + model.eps_grav_ad[k]
         } else {
             has_dedt_dxa = true;
-            let de_dt = (model.ln_e_ad[k].exp() - model.energy_start[k]) / dt;
+            let de_dt = setup_de_dt(model, k, dt);
             if simple_pdv {
                 let (dwork_dm, fac_00) =
                     crate::hydro_work::eval_v_flag_simple_pdv_dm_ad(
                         model, k, false, vel_tc,
                     );
                 dwork_fac_00 = fac_00;
-                -dl_dm + sources - d_eturb_dt - dwork_dm - de_dt
+                -dl_dm + sources + others - d_eturb_dt - dwork_dm - de_dt
             } else {
                 let (dwork_dm, f_m1, f_00, f_p1) =
                     crate::hydro_work::eval_v_flag_dwork_dm_ad(
@@ -537,7 +576,7 @@ pub(crate) fn do1_energy_eqn_with_ergs_error(
                     crate::hydro_work::eval_v_flag_dke_dt_ad(model, k, dt);
                 let dpe_dt =
                     crate::hydro_work::eval_cell_dpe_dt_ad(model, k, dt);
-                -dl_dm + sources
+                -dl_dm + sources + others
                     - d_eturb_dt
                     - dwork_dm
                     - dke_dt
@@ -546,10 +585,10 @@ pub(crate) fn do1_energy_eqn_with_ergs_error(
             }
         }
     } else if eps_grav_form(model) {
-        -dl_dm + sources - d_eturb_dt + model.eps_grav_ad[k]
+        -dl_dm + sources + others - d_eturb_dt + model.eps_grav_ad[k]
     } else {
         has_dedt_dxa = true;
-        let de_dt = (model.ln_e_ad[k].exp() - model.energy_start[k]) / dt;
+        let de_dt = setup_de_dt(model, k, dt);
         let simple_pdv = vel_tc
             && model
                 .controls
@@ -560,7 +599,7 @@ pub(crate) fn do1_energy_eqn_with_ergs_error(
                     model, k, false, vel_tc,
                 );
             dwork_fac_00 = fac_00;
-            -dl_dm + sources - d_eturb_dt - dwork_dm - de_dt
+            -dl_dm + sources + others - d_eturb_dt - dwork_dm - de_dt
         } else {
             let (dwork_dm, f_m1, f_00, f_p1) =
                 crate::hydro_work::eval_v_flag_dwork_dm_ad(
@@ -570,12 +609,12 @@ pub(crate) fn do1_energy_eqn_with_ergs_error(
             dwork_fac_00 = f_00;
             dwork_fac_p1 = f_p1;
             let dpe_dt = crate::hydro_work::eval_cell_dpe_dt_ad(model, k, dt);
-            -dl_dm + sources - d_eturb_dt - dwork_dm - dpe_dt - de_dt
+            -dl_dm + sources + others - d_eturb_dt - dwork_dm - dpe_dt - de_dt
         }
     };
 
     let ergs_error_k = -model.dm[k] * model.dt * esum.val;
-    let scal = set_energy_eqn_scal(model, k);
+    let scal = set_energy_eqn_scal(model, k)?;
     let resid = esum * scal;
     let i_equ = model.layout.i_dlne_dt;
     sys.save_eqn_residual(&model.layout, k, i_equ, &resid);
@@ -646,5 +685,5 @@ pub(crate) fn do1_energy_eqn_with_ergs_error(
             sys.add_partial(k, i_equ, k, ivar, d_equ_dx);
         }
     }
-    ergs_error_k
+    Ok(ergs_error_k)
 }

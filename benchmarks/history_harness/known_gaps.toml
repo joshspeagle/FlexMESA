@@ -449,8 +449,8 @@ file = "crates/flexmesa-astero/tests/astero_suite.rs"
 test_name = "test_example_astero_uncapped"
 issue = "#162"
 role = "campaign"
-expect_fail_when_run = false
-reason = "Long-running uncapped astero campaign tracked under #162 and #171. Passes locally after removing the non-upstream limit_num_* pass rejection (samples=1, best chi2 3.81, 653 steps, ending on limit_num_chi2_too_big because best chi2 3.81 exceeds chi2_search_limit1 = 3.0). MESA 26.4.1 (mesa-histories-v1) finishes in 737 steps with best chi2 2.8005 at model 734 and ends on chi2_search_limit2; the astero/example_astero history-harness row remains a declared gap under #162 and #171."
+expect_fail_when_run = true
+reason = "Uncapped astero campaign (#162, #171). It now stops with an explicit error, by design: example_astero's set_constraint_value('Rcz') leaves val unset when no convective boundary is found (upstream reads it undefined; deferred bug #438, DECISIONS #43). MESA 26.4.1 (mesa-histories-v1) finishes in 737 steps, with best chi2 2.8005 at model 734, ending on chi2_search_limit2."
 
 [[test_gaps]]
 kind = "rust_ignore"

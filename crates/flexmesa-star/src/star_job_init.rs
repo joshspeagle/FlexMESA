@@ -77,6 +77,100 @@ fn load_saved_mod(
     read_mod_str_with_dir(&text, controls, job, Some(case_dir))
 }
 
+/// `finish_load_model` (`star/private/read_model.f90:69-205`) for a model
+/// read from a `.mod` file (`restart = .false.`).
+///
+/// Mesh quantities (`set_qs`, `set_m_and_dm`, `set_m_grav_and_grav`,
+/// `set_dm_bar`) come from `sync_mesh_and_pack`; the arrays upstream clears at
+/// `read_model.f90:131-149` are freshly zeroed by the reader. Upstream's
+/// `s% total_angular_momentum` (`:170`) and `do_report` (`:197`) are derived
+/// quantities that FlexMESA evaluates on demand from the model arrays
+/// (`report_utils`), so no stored state corresponds to them.
+///
+/// # Errors
+/// Returns [`StarError::InvalidInput`] on paths whose callees are not ported
+/// here (`RSP_setup_part1` / `RSP_setup_part2`, `set_viscosity_vars_TDC`),
+/// and propagates `set_vars` and brunt errors.
+fn finish_load_model(
+    model: &mut StarModel,
+    extras: &mut dyn StarExtras,
+) -> Result<(), StarError> {
+    // `RSP_setup_part1` / `RSP_setup_part2` (`read_model.f90:150-156,
+    // 175-181`): an `RSP` model is set up by `rsp_driver` instead.
+    if model.controls.rsp_flag {
+        return Err(StarError::InvalidInput(String::from(
+            "finish_load_model: RSP_setup_part1 is not ported on the load_saved_model path (star/private/read_model.f90:150-156)",
+        )));
+    }
+    // `set_viscosity_vars_TDC` (`star/private/tdc_hydro.f90:40-89`), called
+    // at `read_model.f90:164-167`, is not ported.
+    if model.controls.tdc_alpha_m > 0.0
+        && model.controls.mlt_option == flexmesa_turb::MltOption::Tdc
+        && !(model.controls.rsp2_flag || model.controls.rsp_flag)
+    {
+        return Err(StarError::InvalidInput(String::from(
+            "finish_load_model: set_viscosity_vars_TDC (star/private/tdc_hydro.f90:40-89) is not ported; required when TDC_alpha_M > 0 and MLT_option = 'TDC' (star/private/read_model.f90:164-167)",
+        )));
+    }
+    model.layout = VarLayout::with_flags(
+        model.species,
+        model.controls.v_flag,
+        model.controls.u_flag,
+        model.controls.rsp2_flag,
+        model.controls.rti_flag,
+    );
+    model.sync_mesh_and_pack()?;
+
+    // `read_model.f90:102-129`.
+    if model.controls.rotation_flag {
+        if model.aux.have_j_rot {
+            crate::hydro_rotation::use_xh_to_update_i_rot(model);
+            for k in 0..model.nz {
+                model.omega[k] = model.j_rot[k] / model.aux.i_rot[k];
+            }
+        } else {
+            crate::hydro_rotation::use_xh_to_update_i_rot_and_j_rot(model);
+        }
+        model.pack_xh();
+    }
+
+    // `read_model.f90:157-159`: `okay_to_set_mlt_vc` is set by the reader
+    // from `have_mlt_vc` (`model_io::read_mod_str_with_dir`).
+    if model.controls.use_other_cgrav {
+        extras.other_cgrav(model)?;
+    }
+    // `set_vars` with `doing_finish_load_model = .true.`
+    // (`read_model.f90:161-168`). Its effects on `D_omega` and `am_nu_rot`
+    // (`star/private/rotation_mix_info.f90:255-258`,
+    // `star/private/mix_info.f90:1810-1813`) apply only under
+    // `D_omega_flag` / `am_nu_rot_flag`, which FlexMESA does not support
+    // (their controls are rejected by the control inventory), and the `RSP`
+    // `unpack_xh` branch (`star/private/hydro_vars.f90:225`) is excluded above.
+    set_hydro_vars(model, false, false)?;
+    if model.controls.rsp2_flag {
+        // `set_RSP2_vars` (`star/private/hydro_rsp2.f90:67-111`): fill
+        // `Hp_face(k) <= 0` from the face scale height, then the RSP2 face
+        // and cell variables.
+        for k in 0..model.nz {
+            if model.aux.rsp.hp_face[k] <= 0.0 {
+                model.aux.rsp.hp_face[k] =
+                    crate::rsp2_eqns::eval_rsp2_hp_face_zone(model, k);
+            }
+        }
+        model.pack_xh();
+        crate::rsp2_ad::update_rsp2_vars_ad(model);
+    }
+
+    // `read_model.f90:185-195`.
+    if model.controls.calculate_brunt_b {
+        crate::hydro_brunt_surf::do_brunt_b(model)?;
+    }
+    if model.controls.calculate_brunt_n2 {
+        crate::hydro_brunt_surf::do_brunt_n2(model);
+    }
+    Ok(())
+}
+
 /// Brings a newly built model into the state the step loop starts from, so
 /// `model_builder` can relax it (`finish_load_model` and the energy integrals,
 /// `star/private/init.f90:1031-1075`; `doing_first_model_of_run = .true.`,
@@ -266,10 +360,12 @@ pub(crate) fn init_or_update_model_from_bundle_outcome(
     let controls = bundle.controls.clone();
     let mut did_create_pre_ms = false;
     let mut did_create_initial_model = false;
+    let mut did_load_saved_model = false;
     let is_restart = existing_model.is_some();
     let mut model = if let Some(prev) = existing_model {
         prev
     } else if job.load_saved_model {
+        did_load_saved_model = true;
         load_saved_mod(
             &bundle.case_dir,
             &job.saved_model_name,
@@ -366,6 +462,16 @@ pub(crate) fn init_or_update_model_from_bundle_outcome(
     // controls (`star/job/run_star_support.f90:1546`).
     model.tau_base =
         crate::hydro_brunt_surf::get_atm_tau_base(&model.controls)?;
+
+    // `star_read_model` ends in `finish_load_model`
+    // (`star/private/read_model.f90:69-205`), before
+    // `do_star_job_controls_after` changes the net
+    // (`star/job/run_star_support.f90:1912-1916`); its `set_vars` sets the
+    // `mlt_D` that `set_new_abundances` reads in `get_test_lgT`
+    // (`star/private/adjust_xyz.f90:617-626`).
+    if did_load_saved_model {
+        finish_load_model(&mut model, extras)?;
+    }
 
     // `model_builder` relaxes a newly built model before the `&star_job`
     // controls applied after loading (`star/private/init.f90:1077-1118`,

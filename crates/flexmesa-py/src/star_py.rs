@@ -7,7 +7,7 @@
 use flexmesa_star::{
     do_adjust_mesh, eval_dxdt_mix, extract_history_row, format_history_row,
     format_profile_string, interp_q, load_photo_bytes, pick_next_timestep,
-    read_mod_str, set_hydro_vars, solve_composition_diffusion,
+    read_mod_str_with_dir, set_hydro_vars, solve_composition_diffusion,
     solve_henyey_step, try_write_photo_bytes, write_mod_string,
     yrs_for_init_timestep, MeshFunctionConfig, StarControls, StarJobControls,
     StarModel,
@@ -73,12 +73,25 @@ macro_rules! impl_py_star_model {
                 )
             }
 
-            /// Parses an ASCII `.mod` model string.
+            /// Parses an ASCII `.mod` model string. When `search_dir` is
+            /// given, the model's network name is resolved there first (a
+            /// case directory's own `.net` files), then in the built-in
+            /// network bundle (`net/private/net_initialize.f90:286-302`).
             #[staticmethod]
-            pub fn from_mod_str(text: &str) -> PyResult<Self> {
+            #[pyo3(signature = (text, search_dir=None))]
+            pub fn from_mod_str(
+                text: &str,
+                search_dir: Option<&str>,
+            ) -> PyResult<Self> {
                 let (c, j) =
                     (StarControls::default(), StarJobControls::default());
-                let inner = read_mod_str(text, c, j).map_err(to_py_err)?;
+                let inner = read_mod_str_with_dir(
+                    text,
+                    c,
+                    j,
+                    search_dir.map(std::path::Path::new),
+                )
+                .map_err(to_py_err)?;
                 Ok(Self { inner })
             }
 

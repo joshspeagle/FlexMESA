@@ -69,6 +69,8 @@ and exports stellar structure profiles (with optional central boundary point ins
 
 The port of `GYRE` 8.1 is under way in the `crates/flexmesa-gyre` crate, licensed `GPL-3.0-only` as `GYRE` is. Its numerics substrate (gfortran complex arithmetic, GCC integer-power chains, CRMATH complex functions and the inlined `MATMUL` order) and the real LAPACK routines `GYRE` reaches are checked bit for bit against vectors from MESA's own `GYRE` build and SDK libraries. The crate is not yet connected to `flexmesa.astero`.
 
+The port of `ADIPLS` is under way in the `crates/flexmesa-adipls` crate, licensed `GPL-3.0-or-later`. It covers input parsing (`adipls.c.pruned.in`, `redistrb.c.pruned.in`), FGONG-to-AMDL conversion, control setup, `mdintg=5` shooting scans and eigenfrequency solving, variational frequency and kinetic-energy post-processing, and grand/short summary records checked bit for bit (`0 ULP` under `NumericsMode::Strict`) against captured MESA `26.4.1` calls. The crate is not yet connected to `flexmesa.astero`.
+
 ---
 
 ## 5. Seismic $\chi^2$ Evaluation & Optimization Drivers

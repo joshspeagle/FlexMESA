@@ -310,16 +310,6 @@
   ],
   "open_pull_requests": [
     {
-      "number": 460,
-      "title": "fix(harness): compare sparse reference histories only at their rows (#459)",
-      "draft": true
-    },
-    {
-      "number": 462,
-      "title": "fix(star): unpack_xh after conv_premix, energy-equation scale as upstream, dump max_correction sign (#444)",
-      "draft": true
-    },
-    {
       "number": 475,
       "title": "fix(star): finish_load_model before change_net; .mod columns in net order",
       "draft": true
@@ -352,6 +342,16 @@
     {
       "number": 490,
       "title": "feat(star): in-memory get_gyre_data, bit-exact vs MESA 26.4.1 (#170, G3b)",
+      "draft": true
+    },
+    {
+      "number": 493,
+      "title": "fix(star): restart semantics, initial_y, set_initial_dt and relax ports as upstream (#436)",
+      "draft": true
+    },
+    {
+      "number": 495,
+      "title": "feat(astero): wire GYRE into astero_gyre and remove its scaffolding (#170, G3c)",
       "draft": true
     }
   ],
@@ -847,6 +847,14 @@
     {
       "number": 488,
       "title": "[Deferred bug] cell_specific_PE divides by r(k) with no guard (star_utils.f90:2266)",
+      "state": "open",
+      "kind": "upstream-bug",
+      "parity_pending": false,
+      "needs_confirmation": false
+    },
+    {
+      "number": 496,
+      "title": "[Deferred bug] D_mix_rotation tau test overwrites the lgT factor and reuses the lgT formula (mix_info.f90:1602-1621)",
       "state": "open",
       "kind": "upstream-bug",
       "parity_pending": false,

@@ -8,6 +8,12 @@
 # needs a DECISIONS entry with the old value, the new value and the reason.
 # Final tolerances on log quantities and masses are absolute differences;
 # `rel_<x>` is the relative difference in the independent variable.
+#
+# `track_reference_dir` (astero search cases only, #430) is a directory of the
+# mesa-astero-tracks-v1 data bundle holding one MESA history per search
+# track, `track_0001.data` ... `track_NNNN.data`. MESA
+# rewrites LOGS/history.data for every track, so `reference_path` is the last
+# track's history; FlexMESA's track i is compared with MESA's track i instead.
 
 [metadata]
 mesa_release = "26.4.1"
@@ -829,6 +835,7 @@ suite = "astero"
 case = "example_astero"
 reference_status = "mesa_26_4_1"
 reference_path = "benchmarks/history_harness/reference_histories/astero/example_astero.data"
+track_reference_dir = "astero/example_astero"
 required_termination = "xtra1"
 uses_pulsation_scaffolding = true
 scaffolding_issue = "#171"
@@ -838,6 +845,7 @@ suite = "astero"
 case = "fast_from_file"
 reference_status = "mesa_26_4_1"
 reference_path = "thinned/astero/fast_from_file.data"
+track_reference_dir = "astero/fast_from_file"
 required_termination = "xtra1"
 uses_pulsation_scaffolding = true
 scaffolding_issue = "#170"
@@ -847,6 +855,7 @@ suite = "astero"
 case = "fast_newuoa"
 reference_status = "mesa_26_4_1"
 reference_path = "thinned/astero/fast_newuoa.data"
+track_reference_dir = "astero/fast_newuoa"
 required_termination = "xtra1"
 
 [[cases]]
@@ -854,6 +863,7 @@ suite = "astero"
 case = "fast_scan_grid"
 reference_status = "mesa_26_4_1"
 reference_path = "thinned/astero/fast_scan_grid.data"
+track_reference_dir = "astero/fast_scan_grid"
 required_termination = "xtra1"
 uses_pulsation_scaffolding = true
 scaffolding_issue = "#171"
@@ -863,6 +873,7 @@ suite = "astero"
 case = "fast_simplex"
 reference_status = "mesa_26_4_1"
 reference_path = "thinned/astero/fast_simplex.data"
+track_reference_dir = "astero/fast_simplex"
 required_termination = "xtra1"
 uses_pulsation_scaffolding = true
 scaffolding_issue = "#171"

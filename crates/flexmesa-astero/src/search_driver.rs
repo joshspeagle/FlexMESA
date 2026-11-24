@@ -745,7 +745,6 @@ pub fn run_star_astero_with_case_hooks(
         || logs_opts.explicit_history_file.is_some();
     let mut best_chi2_seen = f64::INFINITY;
     let mut best_termination: Option<String> = None;
-    let mut copied_any_log = false;
     let (mut samples, mut total_steps, mut tracks_evaluated) =
         (Vec::new(), 0usize, 0usize);
     let (mut last_termination, mut last_model) = (String::new(), None);
@@ -784,11 +783,13 @@ pub fn run_star_astero_with_case_hooks(
         last_termination.clone_from(&stage_term);
         let c2 = sample.chi2;
         let accepted = c2.is_finite() && c2 < 1.0e90;
-        let should_copy_log = want_logs
-            && sample_hist_path.is_file()
-            && ((accepted && c2 < best_chi2_seen) || !copied_any_log);
-        if should_copy_log {
-            copied_any_log = true;
+        // Upstream `eval1` calls `run1_star` once per track
+        // (`astero_run_support.f90:224-229`), and every run reopens
+        // `LOGS/history.data` without `position='append'` because
+        // `doing_first_model_of_run` is set (`star/private/history.f90:313-321`).
+        // The history left at the end of a search is therefore the last
+        // track's, accepted or not, so every track overwrites it here (#430).
+        if want_logs && sample_hist_path.is_file() {
             if let Some(exp_dst) = logs_opts.explicit_history_file {
                 if let Some(parent) = exp_dst.parent() {
                     fs::create_dir_all(parent).map_err(|e| {

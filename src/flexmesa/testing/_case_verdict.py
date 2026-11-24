@@ -57,6 +57,9 @@ class TraceRunOutcome:
             steps, or ``None`` when ``num_iters`` is unavailable.
         mean_iters: Mean Newton solver iterations per logged final-stage step,
             or ``None`` when ``num_iters`` is unavailable.
+        track_history_paths: Per-track ``astero`` search histories
+            (``sample_NNNN_history.data``) ordered by track number, the last
+            one possibly cut short when the run did not finish (``#430``).
     """
 
     suite: str
@@ -74,6 +77,7 @@ class TraceRunOutcome:
     strict_rejection: str = ""
     iters: int | None = None
     mean_iters: float | None = None
+    track_history_paths: tuple[pathlib.Path, ...] = ()
 
 
 _UNSUPPORTED_COUNT_RE = re.compile(
@@ -306,6 +310,190 @@ def resolve_full_reference_history_path(
     return None
 
 
+TRACK_REFERENCE_RE = re.compile(r"^track_(\d{4})\.data$")
+TRACK_PREFIX_SUFFIX = "_prefix"
+
+
+def track_key(index: int, *, prefix: bool = False) -> str:
+    """Return the comparison key of search track ``index`` (``#430``).
+
+    Args:
+        index: 1-based track number in the order the search evolved them.
+        prefix: True when the ``FlexMESA`` track was cut short and is
+            compared with the matching prefix of the MESA track.
+
+    Returns:
+        ``"track_NNNN"``, with ``"_prefix"`` appended for a prefix comparison.
+    """
+    return f"track_{index:04d}" + (TRACK_PREFIX_SUFFIX if prefix else "")
+
+
+def numbered_track_files(
+    directory: pathlib.Path,
+    pattern: re.Pattern[str],
+) -> tuple[pathlib.Path, ...]:
+    """List the files of ``directory`` whose names number tracks ``1..N``.
+
+    Args:
+        directory: Directory to scan.
+        pattern: Regular expression whose first group is the track number.
+
+    Returns:
+        Matching files ordered by track number.
+
+    Raises:
+        ValueError: If the track numbers are not exactly ``1..N``.
+    """
+    found: dict[int, pathlib.Path] = {}
+    for path in directory.iterdir():
+        match = pattern.match(path.name)
+        if match is not None and path.is_file():
+            found[int(match.group(1))] = path
+    numbers = sorted(found)
+    if numbers != list(range(1, len(numbers) + 1)):
+        raise ValueError(
+            f"{directory.name}: track files are not numbered 1..N: {numbers}"
+        )
+    return tuple(found[n] for n in numbers)
+
+
+def resolve_track_reference_paths(
+    track_reference_dir: str,
+    root_dir: pathlib.Path | None = None,
+) -> tuple[pathlib.Path, ...]:
+    """Resolve the per-track MESA references of an ``astero`` search case.
+
+    The references ship in the ``mesa-astero-tracks-v1`` data bundle
+    (``flexmesa data fetch --include-test-inputs``, ``#430``). A missing
+    bundle is an error: the caller fails the case loudly instead of skipping
+    the comparison.
+
+    Args:
+        track_reference_dir: Manifest ``track_reference_dir`` value, relative
+            to the bundle root (``astero/<case>``).
+        root_dir: Optional root directory tried before the bundle when it is
+            not the repository root (hermetic tests).
+
+    Returns:
+        ``track_0001.data`` ... ``track_NNNN.data`` in track order.
+
+    Raises:
+        FileNotFoundError: If no candidate directory holds track files.
+        ValueError: If the track numbers are not exactly ``1..N``.
+    """
+    candidates: list[pathlib.Path] = []
+    repo = case_manifest.repo_root()
+    if root_dir is not None and root_dir.resolve() != repo.resolve():
+        candidates.append(root_dir / track_reference_dir)
+    candidates.append(
+        fetch.resolve_mesa_astero_tracks_dir() / track_reference_dir
+    )
+    for cand in candidates:
+        if cand.is_dir():
+            paths = numbered_track_files(cand, TRACK_REFERENCE_RE)
+            if paths:
+                return paths
+    raise FileNotFoundError(
+        f"missing per-track references {track_reference_dir!r} "
+        "(run 'flexmesa data fetch --include-test-inputs')"
+    )
+
+
+def _history_prefix(
+    tbl: history_compare.HistoryTable,
+    xcol: str,
+    x_end: float,
+) -> history_compare.HistoryTable:
+    """Keep the rows of ``tbl`` with ``xcol <= x_end`` (at least one row)."""
+    keep = np.asarray(tbl.columns[xcol] <= x_end)
+    if not keep.any():
+        keep = np.zeros(tbl.num_rows, dtype=bool)
+        keep[0] = True
+    return dataclasses.replace(
+        tbl,
+        columns={k: v[keep] for k, v in tbl.columns.items()},
+        num_rows=int(keep.sum()),
+    )
+
+
+def compare_search_tracks(
+    spec: case_manifest.CaseManifestEntry,
+    ref_paths: tuple[pathlib.Path, ...],
+    run_paths: tuple[pathlib.Path, ...],
+    *,
+    run_complete: bool,
+    expected_version: str,
+) -> tuple[dict[str, history_compare.HistoryComparison], list[str]]:
+    """Compare ``FlexMESA`` search track ``i`` with MESA search track ``i``.
+
+    MESA's ``astero`` search evolves one track per objective evaluation and
+    rewrites ``LOGS/history.data`` each time, so a history comparison is like
+    for like only between tracks with the same number (``#430``). A finished
+    run is compared track by track and must have run as many tracks as MESA.
+    In an unfinished run (cut by a step cap, time or memory budget, or an
+    error) every track before the last is complete and the last one is
+    compared with the matching prefix of the MESA track, ending at the last
+    ``independent_var`` value the run reached.
+
+    Args:
+        spec: Manifest entry supplying ``independent_var`` and tolerances.
+        ref_paths: MESA per-track references in track order.
+        run_paths: ``FlexMESA`` per-track histories in track order.
+        run_complete: True when the run finished uncapped with status
+            ``"ok"``, so its last track is complete.
+        expected_version: MESA ``version_number`` every reference must carry.
+
+    Returns:
+        ``(comparisons, errors)``: comparisons keyed by :func:`track_key`,
+        and messages for track-count mismatches and unreadable complete
+        tracks.
+
+    Raises:
+        ValueError: If a reference lacks the expected MESA version header.
+        KeyError: If a reference lacks ``spec.independent_var``.
+    """
+    comps: dict[str, history_compare.HistoryComparison] = {}
+    errors: list[str] = []
+    n_ref, n_run = len(ref_paths), len(run_paths)
+    if n_run > n_ref or (run_complete and n_run != n_ref):
+        errors.append(f"FlexMESA ran {n_run} search tracks, MESA {n_ref}")
+    xcol = spec.independent_var
+    for idx in range(1, min(n_ref, n_run) + 1):
+        is_prefix = not run_complete and idx == n_run
+        ref_tbl = history_compare.load_history_file(ref_paths[idx - 1])
+        if (
+            not ref_tbl.provenance_comment
+            and ref_tbl.mesa_version_number != expected_version
+        ):
+            raise ValueError(
+                f"{spec.case} track {idx}: expected MESA version_number "
+                f"{expected_version!r}, got {ref_tbl.mesa_version_number!r}"
+            )
+        if xcol not in ref_tbl.columns:
+            raise KeyError(
+                f"{spec.case} track {idx}: missing independent_var {xcol!r}"
+            )
+        try:
+            run_tbl = history_compare.load_history_file(run_paths[idx - 1])
+            if is_prefix:
+                if run_tbl.num_rows == 0 or xcol not in run_tbl.columns:
+                    continue
+                ref_tbl = _history_prefix(
+                    ref_tbl, xcol, float(run_tbl.columns[xcol][-1])
+                )
+            comps[track_key(idx, prefix=is_prefix)] = (
+                history_compare.compare_histories(ref_tbl, run_tbl, spec)
+            )
+        except (OSError, ValueError, KeyError) as err:
+            if is_prefix:
+                # A track cut off while its first rows were being written
+                # holds nothing to compare yet.
+                continue
+            err_s = _sanitize_error_message(str(err))
+            errors.append(f"track {idx} compare error: {err_s}")
+    return comps, errors
+
+
 def _augment_ref_columns(
     ref_tbl: history_compare.HistoryTable,
     spec: case_manifest.CaseManifestEntry,
@@ -451,7 +639,13 @@ def evaluate_case_record(
     precomputed_has_component_error: bool = False,
     precomputed_mesa_stats: history_compare.HistoryRunStats | None = None,
 ) -> CaseHarnessRecord:
-    """Combine manifest metadata, run outcome, and comparison into a verdict."""
+    """Combine manifest metadata, run outcome, and comparison into a verdict.
+
+    An ``astero`` search case with a manifest ``track_reference_dir`` is
+    compared track by track (:func:`compare_search_tracks`, ``#430``): the
+    per-track comparisons go to ``component_comparisons`` and the first
+    track's comparison is the record's primary ``comparison``.
+    """
     gap = known_gaps.get(spec.key)
     gap_issue = gap.issue if gap is not None else ""
     gap_reason = gap.reason if gap is not None else ""
@@ -533,7 +727,10 @@ def evaluate_case_record(
                 spec, root_dir=base, ref_tbl=ref_tbl
             )
         ref_tbl = _augment_ref_columns(ref_tbl, spec, expected_ver, base)
-        if outcome.history_path is not None:
+        # An astero search case with per-track references is compared track
+        # by track below: its LOGS/history.data holds a different track than
+        # the reference at reference_path (#430).
+        if outcome.history_path is not None and not spec.track_reference_dir:
             try:
                 run_tbl = history_compare.load_history_file(
                     outcome.history_path
@@ -568,12 +765,34 @@ def evaluate_case_record(
     comp_map: dict[str, history_compare.HistoryComparison] = {}
     has_comp_err = precomputed_has_component_error
     if precomputed_component_comparisons is not None:
+        track_mode = bool(spec.track_reference_dir)
         comp_map = {
             cname: history_compare.re_evaluate_comparison(
-                ccomp, spec.component_spec(cname)
+                ccomp, spec if track_mode else spec.component_spec(cname)
             )
             for cname, ccomp in precomputed_component_comparisons.items()
         }
+    elif (
+        spec.track_reference_dir
+        and spec.reference_status == "mesa_26_4_1"
+        and precomputed_comparison is None
+        and (outcome.track_history_paths or outcome.history_path is not None)
+    ):
+        comp_map, track_errors = compare_search_tracks(
+            spec,
+            resolve_track_reference_paths(
+                spec.track_reference_dir, root_dir=base
+            ),
+            outcome.track_history_paths,
+            run_complete=outcome.status == "ok" and max_steps is None,
+            expected_version=fetch.load_upstream_reference().version_number,
+        )
+        if track_errors:
+            comp_err = "; ".join([comp_err, *track_errors]).strip("; ")
+            has_comp_err = True
+        comp = comp_map.get(track_key(1)) or comp_map.get(
+            track_key(1, prefix=True)
+        )
     elif (
         spec.suite == "binary"
         and spec.reference_status != "no_reference_yet"

@@ -157,6 +157,21 @@ unpacked_size_bytes = 298437959
 test_only = true
 description = "MESA 26.4.1 solver step dumps of 95 test-suite cases (#372): per-zone xh, xa, dm, residuals and the quantities the equations read (AUX) at the first solver call, and the solver and line-search records, for the first 3 models of each case's first ./rn stage (write-statement overlay, SDK 26.6.1, gfortran 15.2.0; compare with flexmesa trace --compare)."
 
+[[bundles]]
+name = "mesa_astero_tracks"
+archive = "mesa-astero-tracks-v1.tar.zst"
+kind = "tar_zst"
+bundle_root = "data"
+target_relpath = "mesa_astero_tracks"
+manifest_file = "bundle_hashes/mesa_astero_tracks.sha256.tsv"
+sentinel_relpaths = ["mesa_astero_tracks/PROVENANCE.json", "mesa_astero_tracks/astero/fast_newuoa/track_0008.data", "mesa_astero_tracks/astero/fast_simplex/track_0007.data", "mesa_astero_tracks/astero/example_astero/track_0001.data"]
+archive_sha256 = "9d6193fa65ac4f9cab8bc744b7572abfa3b8e5a7b4ee436c1f6f77d8951f7bb3"
+archive_size_bytes = 682157
+unpacked_sha256 = ""
+unpacked_size_bytes = 3579117
+test_only = true
+description = "MESA 26.4.1 history of every search track (22 tracks) of the 5 astero search cases (#430), thinned like mesa-histories-v1 with MESA's 6-line header; MESA rewrites LOGS/history.data per track, so the run's stored history is only the last track (run1_star linker tap, SDK 26.6.1, gfortran 15.2.0)."
+
 [embedded_ionization]
 name = "ion_tables_full"
 format = "FMION001"

@@ -43,6 +43,14 @@ elif [[ "$case_name" == gyre_in_mesa_* ]] || [ "$case_name" = "rsp_gyre" ]; then
     LOAD_EXTRAS1_VAL="$ROOT_DIR/build/pulse_tap_gyre.o $ROOT_DIR/build/pulse_tap_wrap_gyre.o -Wl,--wrap=__gyre_mesa_m_MOD_set_model -Wl,--wrap=__gyre_mesa_m_MOD_get_modes"
 fi
 
+# Optional per-track history tap for astero search cases (#430): set
+# HISTORY_TAP_OBJ to the compiled
+# benchmarks/fortran_mesa/astero_track_tap/history_tap_wrap.c object. It copies
+# LOGS/history.data to history_tap/track_NNNN.data after every run1_star call.
+if [ -n "${HISTORY_TAP_OBJ:-}" ]; then
+    LOAD_EXTRAS1_VAL="$LOAD_EXTRAS1_VAL $HISTORY_TAP_OBJ -Wl,--wrap=__run_star_support_MOD_run1_star"
+fi
+
 if [ -f Makefile ] || [ -f makefile ]; then
     if [ -n "$LOAD_EXTRAS1_VAL" ]; then
         make MESA_DIR="$MESA_DIR" WITH_PGSTAR=no LOAD_EXTRAS1="$LOAD_EXTRAS1_VAL" > mk.log 2>&1

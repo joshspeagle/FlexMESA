@@ -166,3 +166,8 @@ Standalone Fortran 2008 reference generators compiled against upstream MESA
   stiffness, explicit and nonlinear 3-point implicit torques, adaptive
   substepping, and conservation-error retry) reference tables (`4,758` rows;
   `make -C benchmarks/fortran_mesa/omega_mix_oracles MESA_DIR=/path/to/mesa MESASDK_ROOT=/path/to/mesasdk generate clean`).
+- `rotmix_oracles/`: One `update_rotation_mixing_info` call captured from an
+  instrumented MESA run of `20M_z2m2_high_rotation` (model 2, `1,748` faces,
+  Spruit-Tayler time smoothing active): inputs at entry and the rotational
+  diffusivities at exit (instrumentation patch and trimming script in the
+  directory's `README.md`).

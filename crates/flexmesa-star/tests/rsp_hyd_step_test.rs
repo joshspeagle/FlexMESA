@@ -343,7 +343,7 @@ impl StarExtras for TestGyreRspExtras {
         }
         model.controls.calculate_brunt_n2 = true;
         do_brunt_b(model)?;
-        do_brunt_n2(model);
+        do_brunt_n2(model)?;
 
         let gyre_txt = export_gyre_with_schema(model, false, 120);
         if let Some(dir) = log_dir {

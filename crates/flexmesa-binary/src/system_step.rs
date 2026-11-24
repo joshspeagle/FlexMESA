@@ -395,6 +395,16 @@ impl BinarySystem {
                     self.restore_snapshot(&pre_step_snap)?;
                     return Err(e);
                 }
+                // Store mesh info for the ST time smoothing
+                // (`star/private/evolve.f90:1859-1879`).
+                flexmesa_star::rotation_mix_info::store_prev_mesh_st_info(
+                    &mut self.donor,
+                );
+                if let BinaryCompanion::Star(ref mut s2) = self.companion {
+                    flexmesa_star::rotation_mix_info::store_prev_mesh_st_info(
+                        s2,
+                    );
+                }
                 if restore_pre_mesh {
                     pre_mesh_snap = Some(self.capture_snapshot());
                 }

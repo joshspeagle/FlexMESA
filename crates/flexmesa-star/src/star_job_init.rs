@@ -94,6 +94,8 @@ fn finish_load_model(
     model: &mut StarModel,
     extras: &mut dyn StarExtras,
 ) -> Result<(), StarError> {
+    // `if (.not. restart) s% have_ST_start_info = .false.` (`read_model.f90:139`).
+    model.aux.st_start.have_st_start_info = false;
     // `RSP_setup_part1` / `RSP_setup_part2` (`read_model.f90:150-156,
     // 175-181`): an `RSP` model is set up by `rsp_driver` instead.
     if model.controls.rsp_flag {
@@ -165,7 +167,7 @@ fn finish_load_model(
         crate::hydro_brunt_surf::do_brunt_b(model)?;
     }
     if model.controls.calculate_brunt_n2 {
-        crate::hydro_brunt_surf::do_brunt_n2(model);
+        crate::hydro_brunt_surf::do_brunt_n2(model)?;
     }
     Ok(())
 }

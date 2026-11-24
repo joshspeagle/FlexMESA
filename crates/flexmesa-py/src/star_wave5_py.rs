@@ -230,21 +230,38 @@ pub fn star_eval_rotational_mixing_zone(
     )
 }
 
-/// Updates rotational distortion $(f_P, f_T)$ and rotational mixing on `model`
-/// and returns a `(nz, 9)` array of `(d_dsi, d_sh, d_ssi, d_es, d_gsf, d_st,
-/// nu_st, b_phi, b_r)`.
+/// Runs `set_rotation_mixing_info`
+/// (`star/private/rotation_mix_info.f90:47-1123`) on `model` and returns a
+/// `(nz, 9)` array of face values `(D_DSI, D_SH, D_SSI, D_ES, D_GSF, D_ST,
+/// nu_ST, dynamo_B_phi, dynamo_B_r)`; the
+/// diffusivities are in `cm^2 s^-1` and the fields in Gauss. All columns are
+/// zero when `omega` is zero everywhere, as upstream.
+///
+/// # Errors
+///
+/// Returns `ValueError` on the explicit-error paths of the Rust routine
+/// (for example upstream reads of unset `kap_cond`, `#503`).
 #[pyfunction]
 pub fn star_set_rotation_mixing_info<'py>(
     py: Python<'py>,
     model: &mut PyStarModel,
 ) -> PyResult<Bound<'py, PyArray2<f64>>> {
-    let zones = set_rotation_mixing_info(&mut model.inner);
-    let nz = zones.len();
+    set_rotation_mixing_info(&mut model.inner)
+        .map_err(crate::star_helpers_py::to_py_err)?;
+    let nz = model.inner.nz;
+    let rm = &model.inner.aux.rotmix;
     let mut flat = Vec::with_capacity(nz * 9);
-    for z in zones {
+    for k in 0..nz {
         flat.extend_from_slice(&[
-            z.d_dsi, z.d_sh, z.d_ssi, z.d_es, z.d_gsf, z.d_st, z.nu_st,
-            z.b_phi, z.b_r,
+            rm.d_dsi[k],
+            rm.d_sh[k],
+            rm.d_ssi[k],
+            rm.d_es[k],
+            rm.d_gsf[k],
+            rm.d_st[k],
+            rm.nu_st[k],
+            rm.dynamo_b_phi[k],
+            rm.dynamo_b_r[k],
         ]);
     }
     PyArray1::from_vec(py, flat).reshape([nz, 9])

@@ -471,7 +471,16 @@ class StarModel(_arrays.StarModelArrays):
         )
 
     def set_rotation_mixing_info(self) -> _ArrF64:
-        """Update shellular rotation `(f_P, f_T)` and mixing coefficients."""
+        """Run MESA's `set_rotation_mixing_info` on the current model.
+
+        Returns:
+            `(nz, 9)` face values `(D_DSI, D_SH, D_SSI, D_ES, D_GSF, D_ST,
+            nu_ST, B_phi, B_r)`: diffusivities in `cm^2 s^-1`, dynamo fields
+            in Gauss. All zero when `omega` is zero everywhere.
+
+        Raises:
+            ValueError: On the explicit-error paths of the Rust routine.
+        """
         return _rust.star_set_rotation_mixing_info(self._rust_model)
 
     def do_conv_premix(

@@ -54,11 +54,17 @@ pub fn do_brunt_b(model: &mut StarModel) -> Result<(), StarError> {
     let use_mc = model.controls.use_mass_corrections;
     let ht = crate::micro::builtin_helm_table()?;
 
+    // `get_face_values` (`star/private/star_utils.f90:2046-2060`), as
+    // `do_brunt_B_MHM_form` uses it (`star/private/brunt.f90:200-207`).
+    let face = |v: &[f64], k: usize| -> f64 {
+        let dq_sum = model.dq[k - 1] + model.dq[k];
+        (v[k] * model.dq[k - 1] + v[k - 1] * model.dq[k]) / dq_sum
+    };
     for k in 1..nz {
-        let rho_f = model.interp_val_to_pt(&model.rho, k);
-        let t_f = model.interp_val_to_pt(&model.t, k);
-        let chi_t_f = model.interp_val_to_pt(&model.chi_t, k);
-        let chi_rho_f = model.interp_val_to_pt(&model.chi_rho, k);
+        let rho_f = face(&model.rho, k);
+        let t_f = face(&model.t, k);
+        let chi_t_f = face(&model.chi_t, k);
+        let chi_rho_f = face(&model.chi_rho, k);
 
         let mut delta_lnp = model.ln_peos[k - 1] - model.ln_peos[k];
         if delta_lnp > -1.0e-50 {
@@ -175,7 +181,7 @@ fn eval_gradmux_brunt_b(
 /// Evaluates the Brunt-Väisälä buoyancy frequency squared $N_k^2$ and its
 /// compositional contribution $N_{\mu,k}^2$ at all faces (`do_brunt_N2` in
 /// `star/private/brunt.f90:110-181`).
-pub fn do_brunt_n2(model: &mut StarModel) {
+pub fn do_brunt_n2(model: &mut StarModel) -> Result<(), StarError> {
     let nz = model.nz;
     model.brunt_n2.fill(0.0);
     model.aux.brunt_n2_composition_term.fill(0.0);
@@ -183,38 +189,38 @@ pub fn do_brunt_n2(model: &mut StarModel) {
         || !(model.controls.calculate_brunt_b
             && model.controls.calculate_brunt_n2)
     {
-        return;
+        return Ok(());
     }
 
     let use_mc = model.controls.use_mass_corrections;
     let mut cell_fac = vec![0.0_f64; nz];
     for k in 0..nz {
-        let mut v =
-            (model.rho[k] / model.peos[k]) * (model.chi_t[k] / model.chi_rho[k]);
+        let mut v = (model.rho[k] / model.peos[k])
+            * (model.chi_t[k] / model.chi_rho[k]);
         if use_mc {
             v *= model.aux.mass_correction[k];
         }
         cell_fac[k] = v;
     }
+    // `get_face_values` (`star/private/star_utils.f90:2046-2060`).
     let mut face_fac = vec![0.0_f64; nz];
     face_fac[0] = cell_fac[0];
     for k in 1..nz {
-        face_fac[k] = model.interp_val_to_pt(&cell_fac, k);
+        let dq_sum = model.dq[k - 1] + model.dq[k];
+        face_fac[k] = (cell_fac[k] * model.dq[k - 1]
+            + cell_fac[k - 1] * model.dq[k])
+            / dq_sum;
     }
 
     let min_mag = model.controls.mix_wind.min_magnitude_brunt_b;
-    let has_gradt_sub_grada = model.aux.mixing.gradt_sub_grada.len() == nz;
+    if model.aux.mixing.gradt_sub_grada.len() != nz {
+        return Err(StarError::InvalidInput(String::from(
+            "do_brunt_N2: gradT_sub_grada is unset (star/private/brunt.f90:139)",
+        )));
+    }
+    // Clip B and calculate N^2 from B (`star/private/brunt.f90:138-162`).
     for k in 0..nz {
-        let gradt_sub_grada = if has_gradt_sub_grada {
-            model.aux.mixing.gradt_sub_grada[k]
-        } else {
-            let grada_f = if k == 0 {
-                model.grada[0]
-            } else {
-                model.interp_val_to_pt(&model.grada, k)
-            };
-            model.gradt[k] - grada_f
-        };
+        let gradt_sub_grada = model.aux.mixing.gradt_sub_grada[k];
         if model.brunt_b[k].abs() < min_mag
             || model.gradt[k] == 0.0
             || !gradt_sub_grada.is_finite()
@@ -224,18 +230,13 @@ pub fn do_brunt_n2(model: &mut StarModel) {
             model.aux.brunt_n2_composition_term[k] = 0.0;
             continue;
         }
-        let g = if model.grav[k] > 0.0 {
-            model.grav[k]
-        } else {
-            let r_k = model.r[k].max(1.0);
-            model.cgrav[k] * model.m_grav[k] / (r_k * r_k)
-        };
-        let f = flexmesa_math::pow2(g) * face_fac[k];
+        let f = flexmesa_math::pow2(model.grav[k]) * face_fac[k];
         if !f.is_finite() || !model.brunt_b[k].is_finite() {
-            model.brunt_b[k] = 0.0;
-            model.brunt_n2[k] = 0.0;
-            model.aux.brunt_n2_composition_term[k] = 0.0;
-            continue;
+            return Err(StarError::MicrophysicsError(format!(
+                "do_brunt_N2: bad f = {f:e} or brunt_B = {:e} at face {} (star/private/brunt.f90:150-157)",
+                model.brunt_b[k],
+                k + 1
+            )));
         }
         model.brunt_n2[k] = f * (model.brunt_b[k] - gradt_sub_grada);
         model.aux.brunt_n2_composition_term[k] = f * model.brunt_b[k];
@@ -248,6 +249,7 @@ pub fn do_brunt_n2(model: &mut StarModel) {
             model.aux.brunt_n2_composition_term[k] *= coeff;
         }
     }
+    Ok(())
 }
 
 /// `get_atm_tau_base` (`star/private/atm_support.f90:150-215`): the base

@@ -1448,7 +1448,7 @@ pub fn set_hydro_vars(
             model.sig.fill(0.0);
             update_sig_from_d_mix(model)?;
         }
-        do_brunt_n2(model);
+        do_brunt_n2(model)?;
         if model.controls.u_flag {
             crate::riemann_ad::do_uface_and_pface(model)?;
         }
@@ -1456,7 +1456,7 @@ pub fn set_hydro_vars(
     }
 
     if !model.aux.doing_struct_burn_mix {
-        do_brunt_n2(model);
+        do_brunt_n2(model)?;
         if model.aux.mixing.okay_to_set_mixing_info {
             let skip_set_cz_bdy_mass = !model.aux.mixing.have_new_generation;
             crate::mix_info::set_mixing_info_with_skip(

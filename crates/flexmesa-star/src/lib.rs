@@ -149,6 +149,7 @@ pub mod riemann_eqns;
 pub mod rn_parser;
 pub mod rotation;
 pub(crate) mod rotation_mix;
+pub mod rotation_mix_info;
 pub mod rsp2;
 pub mod rsp2_ad;
 pub mod rsp2_eqns;
@@ -446,9 +447,9 @@ pub use rn_parser::{RnStage, parse_rn_stages};
 pub use rotation::{
     RI_CRIT_DSI, RotationalMixZone, eval_magnetic_diffusivity, eval_omega_crit,
     eval_rotation_fp_ft, eval_rotational_mixing_zone, eval_thermal_diffusivity,
-    set_rotation_mixing_info, sync_post_henyey_rotation,
-    update_rotation_distortion_factors,
+    sync_post_henyey_rotation, update_rotation_distortion_factors,
 };
+pub use rotation_mix_info::set_rotation_mixing_info;
 pub use rsp_build::{
     RspLinaMode, build_rsp_envelope_model, do_rsp_build_model,
     eval_rsp_lina_modes,

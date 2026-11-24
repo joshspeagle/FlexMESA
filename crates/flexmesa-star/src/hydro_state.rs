@@ -461,6 +461,15 @@ pub struct HydroAuxState {
     /// variables are recomputed whenever they are set, so it stays `true`.
     #[serde(default = "need_to_setvars_default")]
     pub need_to_setvars: bool,
+    /// Rotational mixing coefficients and their inputs from the last
+    /// `set_rotation_mixing_info` / `set_grads` (recomputed by every
+    /// `set_mixing_info`, so not stored in photos).
+    #[serde(skip)]
+    pub rotmix: crate::rotation_mix_info::RotMixArrays,
+    /// Spruit-Tayler start-of-step state for its time smoothing
+    /// (`D_ST_start`, `prev_mesh_D_ST_start`, ...).
+    #[serde(default)]
+    pub st_start: crate::rotation_mix_info::StStartInfo,
     /// Whether the model is currently inside `do_struct_burn_mix`
     /// (`doing_struct_burn_mix` in `star_data_step_work.inc`).
     pub doing_struct_burn_mix: bool,
@@ -745,6 +754,8 @@ impl HydroAuxState {
         Self {
             doing_relax: false,
             need_to_setvars: true,
+            rotmix: crate::rotation_mix_info::RotMixArrays::default(),
+            st_start: crate::rotation_mix_info::StStartInfo::default(),
             doing_struct_burn_mix: false,
             total_energy: 0.0,
             total_internal_energy_start: 0.0,

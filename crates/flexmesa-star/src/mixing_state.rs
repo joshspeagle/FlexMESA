@@ -569,6 +569,8 @@ pub fn set_grads(model: &mut StarModel) {
     if nz == 0 {
         return;
     }
+    // `grad_density`, `grad_temperature` (`star/private/hydro_vars.f90:1050-1076`).
+    crate::rotation_mix_info::set_grad_density_and_temperature(model);
     if model.aux.smoothed_brunt_b.len() != nz {
         model.aux.smoothed_brunt_b.resize(nz, 0.0);
     }

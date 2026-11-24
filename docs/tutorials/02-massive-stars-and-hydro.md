@@ -51,7 +51,7 @@ print(
 
 Differential rotation in radiative zones drives five hydrodynamic instabilities: Dynamical Shear (`DSI`), Solberg-Høiland (`SH`), Secular Shear (`SSI`), Eddington-Sweet meridional circulation (`ES`), and Goldreich-Schubert-Fricke (`GSF`). In addition, radial shear $q = |\partial \ln \Omega / \partial \ln r|$ winds poloidal magnetic seed fields into toroidal fields until the pinch-type Tayler instability saturates (Spruit 2002), producing an effective magnetic viscosity $\nu_{\mathrm{ST}}$ (which dominates core-envelope angular momentum coupling) and compositional diffusivity $D_{\mathrm{ST}}$.
 
-In `FlexMESA`, `_rust.star_eval_rotational_mixing_zone` and `star.eval_rotational_mixing_zone_jax` evaluate a single shell's 9-tuple `(d_dsi, d_sh, d_ssi, d_es, d_gsf, d_st, nu_st, b_phi, b_r)`, while `model.set_rotation_mixing_info()` and `model.run_omega_mix(...)` couple rotational mixing and implicit angular momentum diffusion across the entire 1D stellar profile:
+In `FlexMESA`, `_rust.star_eval_rotational_mixing_zone` and `star.eval_rotational_mixing_zone_jax` evaluate a single shell's 9-tuple `(d_dsi, d_sh, d_ssi, d_es, d_gsf, d_st, nu_st, b_phi, b_r)`, while `model.set_rotation_mixing_info()` runs the port of MESA's `set_rotation_mixing_info` over the whole profile and returns an `(nz, 9)` array of face values in the same column order (all zero when $\Omega = 0$ everywhere, as in this non-rotating ZAMS model), and `model.run_omega_mix(...)` applies implicit angular momentum diffusion:
 
 ```python
 import jax.numpy as jnp

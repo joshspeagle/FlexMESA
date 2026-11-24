@@ -48,9 +48,9 @@ pub use ecapture::{
 pub use loader::{RatesCatalog, SuzukiTable, WeakTable};
 pub use ratelib::eval_analytic_rate;
 pub use raw_rates::{
-    eval_fl_epsnuc_3alf, eval_interp_rate_table, eval_reaclib_handle,
-    eval_reaction_raw, eval_reaction_raw_with_overrides, set_raw_rate,
-    set_raw_rates, RateTable1D,
+    eval_fl_epsnuc_3alf, eval_fl_epsnuc_3alf_with_derivs,
+    eval_interp_rate_table, eval_reaclib_handle, eval_reaction_raw,
+    eval_reaction_raw_with_overrides, set_raw_rate, set_raw_rates, RateTable1D,
 };
 pub use screen::{screen_extended, screen_pair, screen_salpeter};
 pub use screen_chugunov::screen_chugunov;

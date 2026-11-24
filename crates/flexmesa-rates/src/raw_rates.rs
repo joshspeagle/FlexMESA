@@ -575,7 +575,7 @@ pub fn eval_interp_rate_table(
 
 /// Evaluates the Fushiki & Lamb (1987, ApJ 317, 368) pycnonuclear + thermally
 /// enhanced triple-alpha energy generation rate $\epsilon_{3\alpha}$
-/// (`erg g^-1 s^-1`) matching `rates/private/pycno.f90:fl_epsnuc_3alf`.
+/// (`erg g^-1 s^-1`) matching `rates/private/pycno.f90:31-248`.
 ///
 /// # Arguments
 /// - `t`: Temperature $T$ ($\mathrm{K}$).
@@ -584,66 +584,178 @@ pub fn eval_interp_rate_table(
 /// - `ue`: Mean nucleon-to-electron ratio $\mu_e \approx 1 / Y_e$ (typically `2.0`).
 #[must_use]
 pub fn eval_fl_epsnuc_3alf(t: f64, rho: f64, y: f64, ue: f64) -> f64 {
-    // `rates/private/pycno.f90:74-240`
-    let r6 = 1.0e-6 * rho;
-    let r6t = 2.0 * r6 / ue;
-    let r6t16 = flexmesa_math::pow(r6t, 1.0 / 6.0);
-    let r6t13 = r6t16 * r6t16;
-    let t6 = 1.0e-6 * t;
-    let t613 = flexmesa_math::pow(t6, ONE_THIRD);
-    let t623 = t613 * t613;
-    let t653 = t623 * t6;
-    let t612 = t6.sqrt();
-    let t632 = t6 * t612;
-    let u = 1.35 * r6t13 / t623;
+    eval_fl_epsnuc_3alf_with_derivs(t, rho, y, ue).0
+}
 
-    let (g1, g2) = if u < 1.0 {
+/// Evaluates the Fushiki & Lamb (1987, ApJ 317, 368) pycnonuclear + thermally
+/// enhanced triple-alpha energy generation rate and its analytical $(T, \rho)$
+/// partial derivatives `(r, dr_dt, dr_drho)` in `erg g^-1 s^-1`, matching
+/// `FL_epsnuc_3alf` in `rates/private/pycno.f90:31-248` (`0 ULP` parity).
+///
+/// # Arguments
+/// - `t`: Temperature $T$ ($\mathrm{K}$).
+/// - `rho`: Mass density $\rho$ ($\mathrm{g\,cm^{-3}}$).
+/// - `y`: Helium-4 mass fraction $Y$ (`X(He4)`).
+/// - `ue`: Mean nucleon-to-electron ratio $\mu_e \approx 1 / Y_e$ (typically `2.0`).
+#[must_use]
+pub fn eval_fl_epsnuc_3alf_with_derivs(
+    t: f64,
+    rho: f64,
+    y: f64,
+    ue: f64,
+) -> (f64, f64, f64) {
+    // `rates/private/pycno.f90:74-248`
+    let r6 = rho * 1.0e-6;
+    let d_r6_drho = 1.0e-6;
+    let r6t = 2.0 * r6 / ue;
+    let d_r6t_drho = 2.0 * d_r6_drho / ue;
+
+    let r6t16 = flexmesa_math::pow(r6t, 1.0 / 6.0);
+    let d_r6t16_drho = (1.0 / 6.0) * d_r6t_drho * r6t16 / r6t;
+    let r6t13 = r6t16 * r6t16;
+    let d_r6t13_drho = 2.0 * r6t16 * d_r6t16_drho;
+
+    let t6 = t * 1.0e-6;
+    let d_t6_dt = 1.0e-6;
+    let d_t62_dt = 2.0 * t6 * d_t6_dt;
+    let t613 = flexmesa_math::pow(t6, ONE_THIRD);
+    let d_t613_dt = ONE_THIRD * d_t6_dt * t613 / t6;
+    let t623 = t613 * t613;
+    let d_t623_dt = 2.0 * t613 * d_t613_dt;
+    let t653 = t623 * t6;
+    let d_t653_dt = d_t623_dt * t6 + t623 * d_t6_dt;
+
+    let t62 = t6 * t6;
+    let t612 = t6.sqrt();
+    let d_t612_dt = 0.5 * d_t6_dt / t612;
+    let t632 = t6 * t612;
+    let d_t632_dt = 1.5 * t612 * d_t6_dt;
+
+    let u = 1.35 * r6t13 / t623;
+    let d_u_dt = -u * d_t623_dt / t623;
+    let d_u_drho = u * d_r6t13_drho / r6t13;
+
+    let u32 = u * u.sqrt();
+    let u52 = u * u32;
+
+    let ((g1, dg1_dt, dg1_drho), (g2, dg2_dt, dg2_drho)) = if u < 1.0 {
         let a1 = flexmesa_math::pow2(1.0 - 4.222e-2 * t623) + 2.643e-5 * t653;
-        let mut b1 = (16.16 * flexmesa_math::exp(-134.92 / t613)) / (a1 * t623);
-        if r6t < 5.458e3 {
-            b1 += flexmesa_math::exp(-1065.1 / t6) / t632;
+        let d_a1_dt = -2.0 * 4.222e-2 * d_t623_dt * (1.0 - 4.222e-2 * t623)
+            + 2.643e-5 * d_t653_dt;
+        let b1_denom = a1 * t623;
+        let d_b1_denom_dt = d_a1_dt * t623 + a1 * d_t623_dt;
+        let b1_num = 16.16 * flexmesa_math::exp(-134.92 / t613);
+        let d_b1_num_dt = b1_num * 134.92 * d_t613_dt / (t613 * t613);
+        let mut b1 = b1_num / b1_denom;
+        let mut db1_dt = d_b1_num_dt / b1_denom - b1 * d_b1_denom_dt / b1_denom;
+
+        let a2 = flexmesa_math::pow2(1.0 - 2.807e-2 * t623) + 2.704e-6 * t653;
+        let d_a2_dt = -2.0 * 2.807e-2 * d_t623_dt * (1.0 - 2.807e-2 * t623)
+            + 2.704e-6 * d_t653_dt;
+        let b2_denom = a2 * t623;
+        let d_b2_denom_dt = d_a2_dt * t623 + a2 * d_t623_dt;
+        let b2_num = 244.6
+            * flexmesa_math::pow5(1.0 + 3.528e-3 * t623)
+            * flexmesa_math::exp(-235.72 / t613);
+        let d_b2_num_dt = b2_num
+            * (5.0 * 3.528e-3 * d_t623_dt / (1.0 + 3.528e-3 * t623)
+                + 235.72 * d_t613_dt / t623);
+        let mut b2 = b2_num / b2_denom;
+        let mut db2_dt = d_b2_num_dt / b2_denom - b2 * d_b2_denom_dt / b2_denom;
+
+        if 5.458e3 > r6t {
+            let e1 = -1065.1 / t6;
+            let d_e1_dt = -e1 * d_t6_dt / t6;
+            let f1 = flexmesa_math::exp(e1) / t632;
+            let d_f1_dt = f1 * (d_e1_dt - d_t632_dt / t632);
+            b1 += f1;
+            db1_dt += d_f1_dt;
+        }
+        if 1.836e4 > r6t {
+            let e2 = -3336.4 / t6;
+            let d_e2_dt = -e2 * d_t6_dt / t6;
+            let f2 = flexmesa_math::exp(e2) / t632;
+            let d_f2_dt = f2 * (d_e2_dt - d_t632_dt / t632);
+            b2 += f2;
+            db2_dt += d_f2_dt;
         }
         let g1 = b1 * flexmesa_math::exp(60.492 * r6t13 / t6);
-        let a2 = flexmesa_math::pow2(1.0 - 2.807e-2 * t623) + 2.704e-6 * t653;
-        let mut b2 = (244.6
-            * flexmesa_math::pow5(1.0 + 3.528e-3 * t623)
-            * flexmesa_math::exp(-235.72 / t613))
-            / (a2 * t623);
-        if r6t < 1.836e4 {
-            b2 += flexmesa_math::exp(-3336.4 / t6) / t632;
-        }
+        let dg1_dt = g1 * (db1_dt / b1 - 60.492 * r6t13 * d_t6_dt / (t6 * t6));
         let g2 = b2 * flexmesa_math::exp(106.35 * r6t13 / t6);
-        (g1, g2)
+        let dg2_dt = g2 * (db2_dt / b2 - 106.35 * r6t13 * d_t6_dt / (t6 * t6));
+        // Upstream `pycno.f90:161, 165` sets `dG1dRho = 0`, `dG2dRho = 0` for `U < 1`.
+        ((g1, dg1_dt, 0.0), (g2, dg2_dt, 0.0))
     } else {
-        let u32 = u * u.sqrt();
         let af = 1.0 / u32 + 1.0;
-        let b1_num = 1.178 * af * flexmesa_math::exp(-77.554 / r6t16);
-        let b1_den = t612
-            * (flexmesa_math::pow2(1.0 - 5.680e-2 * r6t13)
-                + 8.815e-7 * t6 * t6);
-        let b1 = b1_num / b1_den;
-        let g1 = if r6t < 5.458e3 {
-            b1 + flexmesa_math::exp((60.492 * r6t13 - 1065.1) / t6) / t632
-        } else {
-            b1
-        };
-        let b2_num = 13.48
+        let d_af_dt = -1.5 * d_u_dt / u52;
+        let d_af_drho = -1.5 * d_u_drho / u52;
+
+        let b1_denom = t612
+            * (flexmesa_math::pow2(1.0 - 5.680e-2 * r6t13) + 8.815e-7 * t62);
+        let d_b1_denom_dt =
+            b1_denom * d_t612_dt / t612 + t612 * 8.815e-7 * d_t62_dt;
+        let d_b1_denom_drho =
+            -2.0 * 5.680e-2 * (1.0 - 5.680e-2 * r6t13) * t612 * d_r6t13_drho;
+
+        let b1 = 1.178 * af * flexmesa_math::exp(-77.554 / r6t16) / b1_denom;
+        let db1_dt = b1 * (d_af_dt / af - d_b1_denom_dt / b1_denom);
+        let db1_drho = b1
+            * (d_af_drho / af + 77.554 * d_r6t16_drho / (r6t16 * r6t16)
+                - d_b1_denom_drho / b1_denom);
+
+        let b2_denom = t612
+            * (flexmesa_math::pow2(1.0 - 3.791e-2 * r6t13) + 5.162e-8 * t62);
+        let d_b2_denom_dt =
+            b2_denom * d_t612_dt / t612 + t612 * 5.162e-8 * d_t62_dt;
+        let tmp = flexmesa_math::pow(rho / ue, ONE_THIRD);
+        let d_b2_denom_drho =
+            t612 * (-0.000252733 + 9.58112e-8 * tmp) * tmp / rho;
+
+        let b2 = 13.48
             * af
             * flexmesa_math::pow5(1.0 + 5.070e-3 * r6t13)
-            * flexmesa_math::exp(-135.08 / r6t16);
-        let b2_den = t612
-            * (flexmesa_math::pow2(1.0 - 3.791e-2 * r6t13)
-                + 5.162e-8 * t6 * t6);
-        let b2 = b2_num / b2_den;
-        let g2 = if r6t < 1.836e4 {
-            b2 + flexmesa_math::exp((106.35 * r6t13 - 3336.4) / t6) / t632
+            * flexmesa_math::exp(-135.08 / r6t16)
+            / b2_denom;
+        let db2_dt = b2 * (d_af_dt / af - d_b2_denom_dt / b2_denom);
+        let db2_drho = b2
+            * (d_af_drho / af + 135.08 * d_r6t16_drho / (r6t16 * r6t16)
+                - d_b2_denom_drho / b2_denom);
+
+        let g1_tuple = if 5.458e3 > r6t {
+            let e1 = (60.492 * r6t13 - 1065.1) / t6;
+            let d_e1_dt = -e1 * d_t6_dt / t6;
+            let d_e1_drho = 60.492 * d_r6t13_drho / t6;
+            let f1 = flexmesa_math::exp(e1) / t632;
+            let d_f1_dt = f1 * (d_e1_dt - d_t632_dt / t632);
+            let d_f1_drho = f1 * d_e1_drho;
+            (b1 + f1, db1_dt + d_f1_dt, db1_drho + d_f1_drho)
         } else {
-            b2
+            (b1, db1_dt, db1_drho)
         };
-        (g1, g2)
+
+        let g2_tuple = if 1.836e4 > r6t {
+            let e2 = (106.35 * r6t13 - 3336.4) / t6;
+            let d_e2_dt = -e2 * d_t6_dt / t6;
+            let d_e2_drho = 106.35 * d_r6t13_drho / t6;
+            let f2 = flexmesa_math::exp(e2) / t632;
+            let d_f2_dt = f2 * (d_e2_dt - d_t632_dt / t632);
+            let d_f2_drho = f2 * d_e2_drho;
+            (b2 + f2, db2_dt + d_f2_dt, db2_drho + d_f2_drho)
+        } else {
+            (b2, db2_dt, db2_drho)
+        };
+        (g1_tuple, g2_tuple)
     };
 
-    5.120e29 * g1 * g2 * y * y * y * r6 * r6
+    let r = 5.120e29 * g1 * g2 * y * y * y * r6 * r6;
+    if r < 1.0e-99 || g1 < 1.0e-99 || g2 < 1.0e-99 {
+        (r, 0.0, 0.0)
+    } else {
+        let dr_dt = r * (dg1_dt / g1 + dg2_dt / g2);
+        let dr_drho =
+            r * (dg1_drho / g1 + dg2_drho / g2 + 2.0 * d_r6_drho / r6);
+        (r, dr_dt, dr_drho)
+    }
 }
 
 #[cfg(test)]
@@ -818,5 +930,48 @@ mod tests {
         )
         .expect_err("forward from reverse-only table must fail");
         assert!(err.to_string().contains("detailed balance"));
+    }
+
+    #[test]
+    fn test_eval_fl_epsnuc_3alf_with_derivs_mesa_hex_zero_ulp() {
+        use super::{eval_fl_epsnuc_3alf, eval_fl_epsnuc_3alf_with_derivs};
+        use flexmesa_math::{with_numerics_mode, NumericsMode};
+
+        let cases = [
+            (
+                7.943_282_347_242_821_8e7_f64,
+                3.162_277_691_791_155_8e9_f64,
+                0x4428_3AEE_9D5C_6665_u64,
+                0x42CA_AACB_9AA9_45FA_u64,
+                0x4269_3EE0_FF7E_73DA_u64,
+            ),
+            (
+                1.0e8_f64,
+                5.0e8_f64,
+                0x4333_B486_40DD_E653_u64,
+                0x41D6_EC6D_E5F2_81CB_u64,
+                0x4175_2884_50EB_FEF7_u64,
+            ),
+            (
+                flexmesa_math::exp10(8.191366),
+                flexmesa_math::exp10(9.893157),
+                0x44DE_BCD8_F480_6EAF_u64,
+                0x4344_21E3_9F5C_E493_u64,
+                0x42E0_E24A_7605_ABC1_u64,
+            ),
+        ];
+        with_numerics_mode(NumericsMode::Strict, || {
+            for (i, &(t, rho, exp_r, exp_dt, exp_drho)) in
+                cases.iter().enumerate()
+            {
+                let r_only = eval_fl_epsnuc_3alf(t, rho, 1.0, 2.0);
+                let (r, dr_dt, dr_drho) =
+                    eval_fl_epsnuc_3alf_with_derivs(t, rho, 1.0, 2.0);
+                assert_eq!(r_only.to_bits(), exp_r, "case {i} r_only");
+                assert_eq!(r.to_bits(), exp_r, "case {i} r");
+                assert_eq!(dr_dt.to_bits(), exp_dt, "case {i} dr_dt");
+                assert_eq!(dr_drho.to_bits(), exp_drho, "case {i} dr_drho");
+            }
+        });
     }
 }

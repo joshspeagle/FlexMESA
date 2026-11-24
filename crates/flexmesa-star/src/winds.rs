@@ -155,17 +155,23 @@ pub fn eval_vink_wind(
         return 0.0;
     }
     let z_solar = 0.019;
-    let z_rat = (z_surf / z_solar).max(1.0e-10);
+    let z_rat = z_surf / z_solar;
     let log_z_rat = flexmesa_math::log10(z_rat);
 
-    let d_t = 100.0;
-    let t_jump = 1.0e3 * (61.2 + 2.59 * (-13.636 + 0.889 * log_z_rat));
     let alpha = if t_surf > 27_500.0 {
         1.0
     } else if t_surf < 22_500.0 {
         0.0
     } else {
-        ((t_surf - (t_jump - d_t)) / (2.0 * d_t)).clamp(0.0, 1.0)
+        let t_jump = 1.0e3 * (61.2 + 2.59 * (-13.636 + 0.889 * log_z_rat));
+        let d_t = 100.0;
+        if t_surf > t_jump + d_t {
+            1.0
+        } else if t_surf < t_jump - d_t {
+            0.0
+        } else {
+            0.5 * (t_surf - (t_jump - d_t)) / d_t
+        }
     };
 
     let log_l_1e5 = flexmesa_math::log10(l_surf / L_SUN / 1.0e5);
@@ -178,7 +184,7 @@ pub fn eval_vink_wind(
             - 1.313 * log_m_30
             - 1.226 * flexmesa_math::log10(vinf_hot / 2.0)
             + 0.933 * log_t_4e4
-            - 10.92 * log_t_4e4 * log_t_4e4
+            - 10.92 * flexmesa_math::pow2(log_t_4e4)
             + 0.85 * log_z_rat;
         flexmesa_math::exp10(log_w1)
     } else {
@@ -223,13 +229,12 @@ pub fn eval_bjorklund_wind(
     }
     let z_bjork = 0.014;
     let gamma_e = 0.34 * l_surf / (FOUR_PI * CLIGHT * cgrav_surf * m_surf);
-    let m_eff = (m_surf * (1.0 - gamma_e)).max(1.0e-6 * m_surf);
+    let m_eff = m_surf * (1.0 - gamma_e);
     let log_t_45k = flexmesa_math::log10(t_surf / 4.5e4);
     let log_w = -5.52 + 2.39 * flexmesa_math::log10(l_surf / (1.0e6 * L_SUN))
         - 1.48 * flexmesa_math::log10(m_eff / (45.0 * M_SUN))
         + 2.12 * log_t_45k
-        + (0.75 - 1.87 * log_t_45k)
-            * flexmesa_math::log10((z_surf / z_bjork).max(1.0e-10));
+        + (0.75 - 1.87 * log_t_45k) * flexmesa_math::log10(z_surf / z_bjork);
     eta * flexmesa_math::exp10(log_w)
 }
 
@@ -295,10 +300,11 @@ pub fn eval_nugis_lamers_wind(
     if eta <= 0.0 || l_surf <= 0.0 || y_surf <= 0.0 || z_surf <= 0.0 {
         return 0.0;
     }
-    eta * 1.0e-11
+    1.0e-11
         * flexmesa_math::pow(l_surf / L_SUN, 1.29)
         * flexmesa_math::pow(y_surf, 1.7)
         * z_surf.sqrt()
+        * eta
 }
 
 /// Evaluates the composite Dutch wind rate $w$ in $M_\odot\,\mathrm{yr}^{-1}$

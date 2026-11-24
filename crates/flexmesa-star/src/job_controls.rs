@@ -677,6 +677,11 @@ pub struct StarJobControls {
     pub new_net_name: String,
     /// Whether to automatically extend the reaction network with evolutionary stage (`auto_extend_net`).
     pub auto_extend_net: bool,
+    /// Whether a net change sets abundances for isotopes new to the net
+    /// (`adjust_abundances_for_new_isos`, `.true.` default,
+    /// `star/defaults/star_job.defaults:2405`).
+    #[serde(default = "default_true")]
+    pub adjust_abundances_for_new_isos: bool,
     /// Heger-style adaptive network, rebuilt before every step
     /// (`enable_adaptive_network`, `.false.` default,
     /// `star/defaults/star_job.defaults:2538`).
@@ -1021,6 +1026,7 @@ impl Default for StarJobControls {
             change_net: false,
             new_net_name: String::new(),
             auto_extend_net: true,
+            adjust_abundances_for_new_isos: true,
             enable_adaptive_network: false,
             min_x_for_keep: 1.0e-5,
             min_x_for_n: 1.0e-4,

@@ -621,6 +621,10 @@ pub fn run_inlist_stage_with_logs(
             if model.job.enable_adaptive_network {
                 crate::adjust_net::check_adjust_net(model, &bundle.case_dir)?;
             }
+            // `run_star_support.f90:579-582`.
+            if model.job.auto_extend_net {
+                crate::extend_net::extend_net(model, &bundle.case_dir)?;
+            }
             match extras.extras_start_step(model) {
                 ExtrasDirective::Terminate(reason) => {
                     termination_code = reason;

@@ -83,6 +83,7 @@ pub mod element_diffusion;
 pub mod eps_grav;
 pub mod eps_mdot;
 pub mod evolve;
+pub mod extend_net;
 pub(crate) mod evolve_support;
 pub mod history;
 pub mod hydro_brunt_surf;

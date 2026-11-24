@@ -277,6 +277,35 @@ pub fn run_binary_test_suite_case_with_options(
     )
 }
 
+/// The per-star `before_step_loop` work a binary run performs
+/// (`star/job/run_star_support.f90:567-582`): `extend_net` when
+/// `auto_extend_net`. Returns whether any star changed net.
+///
+/// # Errors
+/// Returns [`StarError::InvalidInput`] for `enable_adaptive_network`, whose
+/// binary wiring is not ported, and propagates `extend_net` errors.
+fn before_step_loop_for_stars(
+    bin: &mut BinarySystem,
+    case_dir: &Path,
+) -> Result<bool, StarError> {
+    let mut changed = false;
+    let mut stars: Vec<&mut StarModel> = vec![&mut bin.donor];
+    if let BinaryCompanion::Star(ref mut s2) = bin.companion {
+        stars.push(s2);
+    }
+    for s in stars {
+        if s.job.enable_adaptive_network {
+            return Err(StarError::InvalidInput(String::from(
+                "enable_adaptive_network in a binary run: star_adjust_net (star/job/run_star_support.f90:567-577) is not wired into the binary step loop (#474)",
+            )));
+        }
+        if s.job.auto_extend_net {
+            changed |= flexmesa_star::extend_net::extend_net(s, case_dir)?;
+        }
+    }
+    Ok(changed)
+}
+
 /// Executes a single coupled binary directory with explicit
 /// [`InlistLoadOptions`] and caller-supplied [`BinaryExtras`] hooks (`#148`).
 pub fn run_binary_test_suite_case_with_extras(
@@ -377,6 +406,20 @@ pub fn run_binary_test_suite_case_with_extras(
     while bin.last_termination_reason.is_none() && bin.model_number < step_limit
     {
         let step_num = bin.model_number + 1;
+        // `before_step_loop` for each star (`binary/private/run_binary_support.f90:365-382`).
+        if before_step_loop_for_stars(&mut bin, case_dir)? {
+            // `set_star_timesteps` (`binary/private/binary_timestep.f90:33-62`)
+            // takes the stars' `dt_next` after `extend_net` divided it by 5.
+            let star_min = match &bin.companion {
+                BinaryCompanion::PointMass { .. } => bin.donor.dt_next,
+                BinaryCompanion::Star(s2) => bin.donor.dt_next.min(s2.dt_next),
+            };
+            dt_next = if bin.max_timestep_sec <= star_min {
+                bin.max_timestep_sec
+            } else {
+                star_min
+            };
+        }
         let (suggested_dt, _) =
             bin.try_step_with_extras(dt_next, extras).map_err(|e| {
                 contextualize_binary_step_error(&case_name, step_num, e)

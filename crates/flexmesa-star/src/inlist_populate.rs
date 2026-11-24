@@ -229,7 +229,7 @@ impl InlistBundle {
             set_omega_div_omega_crit, set_initial_omega_div_omega_crit,
             set_surface_rotation_v, set_initial_surface_rotation_v,
             astero_just_call_my_extras_check_model,
-            enable_adaptive_network,
+            enable_adaptive_network, adjust_abundances_for_new_isos,
         ]);
         map_f64s!("star_job", sj, j, [
             min_x_for_keep, min_x_for_n, min_x_for_add,

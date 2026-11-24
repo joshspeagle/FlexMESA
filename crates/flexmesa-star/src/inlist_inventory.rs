@@ -73,7 +73,10 @@ pub fn supported_star_control_inventory() -> &'static StarControlInventory {
 pub const STAR_JOB_SUPPORTED: &[&str] = &[
     "abs_e01_tolerance_for_create_initial_model",
     "abs_e02_tolerance_for_create_initial_model",
+    "adjust_abundances_for_new_isos",
+    "adv_net",
     "astero_just_call_my_extras_check_model",
+    "auto_extend_net",
     "center_logp_1st_try_for_create_initial_model",
     "change_initial_net",
     "change_initial_rotation_flag",
@@ -94,6 +97,7 @@ pub const STAR_JOB_SUPPORTED: &[&str] = &[
     "change_v_flag",
     "change_y",
     "change_z",
+    "co_net",
     "core_avg_eps",
     "core_avg_rho",
     "create_initial_model",
@@ -106,6 +110,7 @@ pub const STAR_JOB_SUPPORTED: &[&str] = &[
     "extra_mass_retained_by_remove_h_env",
     "filename_for_profile_when_terminate",
     "filename_of_special_rate",
+    "h_he_net",
     "history_columns_file",
     "initial_age",
     "initial_h1",
@@ -228,12 +233,8 @@ pub const STAR_JOB_SUPPORTED: &[&str] = &[
 
 /// Parsed-but-unused `&star_job` keys (`N1-28`).
 pub const STAR_JOB_UNUSED: &[&str] = &[
-    "adv_net",
-    "auto_extend_net",
     "change_rsp2_flag_at_model_number",
-    "co_net",
     "create_rsp2_model",
-    "h_he_net",
     "relax_initial_to_xaccrete",
     "save_model_number",
     "save_pulse_data_filename",

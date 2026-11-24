@@ -6,9 +6,9 @@ Generated mechanically against **MESA 26.4.1** (git tag `26.4.1`, commit `c8c202
 ## Summary
 
 - **Total manifest cases scanned**: `106`
-- **Cases passing strict `#147` validation**: `53`
-- **Cases rejected by strict `#147` validation**: `53`
-- **Distinct unsupported physics/solver controls encountered**: `172`
+- **Cases passing strict `#147` validation**: `54`
+- **Cases rejected by strict `#147` validation**: `52`
+- **Distinct unsupported physics/solver controls encountered**: `170`
 - **Distinct unknown/misspelled controls encountered**: `0`
 - **Cases using headless plotting controls (`#173` / `DECISIONS #25`)**: `78` (`895` distinct keys)
 
@@ -16,7 +16,7 @@ Generated mechanically against **MESA 26.4.1** (git tag `26.4.1`, commit `c8c202
 
 | Section | Upstream `26.4.1` | Supported | Unused (`#147`) | Headless GUI (`#173`) | Terminal output (`DECISIONS #26`) | Unimplemented |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `&star_job` | 455 | 153 | 12 | 3 | 8 | 279 |
+| `&star_job` | 455 | 158 | 8 | 3 | 8 | 278 |
 | `&eos` | 102 | 91 | 0 | 0 | 9 | 2 |
 | `&kap` | 51 | 39 | 0 | 0 | 10 | 2 |
 | `&controls` | 1448 | 1172 | 23 | 0 | 16 | 237 |
@@ -200,7 +200,7 @@ Per `DECISIONS #25` (matching upstream `USE_PGSTAR = NO`), keys in `&pgstar`, `&
 | `star` | `accreted_material_j` | `pass` | 0 | 0 | 24 |
 | `star` | `adjust_net` | `fail_unsupported` | 1 | 0 | 68 |
 | `star` | `c13_pocket` | `fail_unsupported` | 1 | 0 | 100 |
-| `star` | `carbon_kh` | `fail_unsupported` | 2 | 0 | 81 |
+| `star` | `carbon_kh` | `fail_unsupported` | 1 | 0 | 81 |
 | `star` | `cburn_inward` | `pass` | 0 | 0 | 66 |
 | `star` | `ccsn_IIp` | `fail_unsupported` | 25 | 0 | 100 |
 | `star` | `check_pulse_atm` | `fail_unsupported` | 2 | 0 | 0 |
@@ -244,7 +244,7 @@ Per `DECISIONS #25` (matching upstream `USE_PGSTAR = NO`), keys in `&pgstar`, `&
 | `star` | `ns_he` | `fail_unsupported` | 8 | 0 | 64 |
 | `star` | `other_physics_hooks` | `fail_unsupported` | 1 | 0 | 0 |
 | `star` | `pisn` | `fail_unsupported` | 8 | 0 | 288 |
-| `star` | `ppisn` | `fail_unsupported` | 13 | 0 | 76 |
+| `star` | `ppisn` | `fail_unsupported` | 12 | 0 | 76 |
 | `star` | `radiative_levitation` | `fail_unsupported` | 4 | 0 | 14 |
 | `star` | `relax_composition_j_entropy` | `pass` | 0 | 0 | 0 |
 | `star` | `rsp_BEP` | `fail_unsupported` | 7 | 0 | 75 |
@@ -269,7 +269,7 @@ Per `DECISIONS #25` (matching upstream `USE_PGSTAR = NO`), keys in `&pgstar`, `&
 | `star` | `wd_cool_0.6M` | `pass` | 0 | 0 | 17 |
 | `star` | `wd_diffusion` | `pass` | 0 | 0 | 11 |
 | `star` | `wd_he_shell_ignition` | `fail_unsupported` | 1 | 0 | 17 |
-| `star` | `wd_nova_burst` | `fail_unsupported` | 1 | 0 | 11 |
+| `star` | `wd_nova_burst` | `pass` | 0 | 0 | 11 |
 | `star` | `wd_stable_h_burn` | `fail_unsupported` | 1 | 0 | 0 |
 | `star` | `zams_to_cc_80` | `fail_unsupported` | 6 | 0 | 263 |
 | `binary` | `double_bh` | `fail_unsupported` | 1 | 0 | 92 |

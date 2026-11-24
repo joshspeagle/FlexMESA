@@ -7,14 +7,15 @@
 use std::collections::BTreeMap;
 
 use flexmesa_binary::{
-    binary_history_row_as_f64_pairs, default_binary_history_specs,
+    binary_history_row_as_f64_pairs, default_binary_history_specs, eval_rlobe,
     evaluate_binary_history_row, BinaryInlistControls, BinarySystem,
     DefaultBinaryExtras,
 };
 use flexmesa_const::SECYER;
 use flexmesa_math::log10;
 use flexmesa_star::{
-    eval_photosphere_info, load_zams_model, StarControls, StarJobControls,
+    eval_photosphere_info, load_zams_model, set_hydro_vars, OvershootParamSet,
+    StarControls, StarJobControls,
 };
 
 fn build_jdot_gr_check_system() -> BinarySystem {
@@ -342,5 +343,185 @@ fn star_plus_point_mass_explicit_mdot_model5_and_model110_match_mesa_26_4_1() {
         2.507_710_154_412_364_7e53,
         1.0e-9,
         "exp m110 J_orb",
+    );
+}
+
+fn build_wind_fed_bhhmxb_system() -> BinarySystem {
+    let mut d_ctrl = StarControls {
+        initial_mass: 20.0,
+        zbase: 0.02,
+        max_number_retries: 15,
+        max_model_number: Some(2000),
+        use_gold2_tolerances: true,
+        varcontrol_target: 1.0e-3,
+        use_ledoux_criterion: true,
+        alpha_semiconvection: 1.0,
+        hot_wind_full_on_t: 1.0,
+        cool_wind_full_on_t: 0.0,
+        dutch_scaling_factor: 20.0,
+        xa_central_lower_limit_species: vec![String::from("h1")],
+        xa_central_lower_limit: vec![1.0e-2],
+        ..StarControls::default()
+    };
+    d_ctrl.mix_wind.hot_wind_scheme = String::from("Dutch");
+    d_ctrl.mix_wind.overshoot_sets[0] = OvershootParamSet {
+        scheme: String::from("step"),
+        zone_type: String::from("burn_H"),
+        zone_loc: String::from("core"),
+        bdy_loc: String::from("top"),
+        f: 0.345,
+        f0: 0.01,
+        ..OvershootParamSet::mesa_default()
+    };
+    let mut donor = load_zams_model(d_ctrl, StarJobControls::default())
+        .expect("20.0 Msun ZAMS");
+    donor.eos_config.use_free_eos = false;
+    set_hydro_vars(&mut donor, false, false)
+        .expect("refresh initial hydro vars with use_FreeEOS=false");
+    let bctrl = BinaryInlistControls {
+        m1_msun: 20.0,
+        m2_msun: 10.0,
+        initial_period_in_days: 1.5,
+        initial_bh_spin: 2.0,
+        mdot_scheme: String::from("Kolb"),
+        use_radiation_corrected_transfer_rate: true,
+        fr: 0.05,
+        fr_limit: 1.0e-2,
+        fj: 0.005,
+        limit_retention_by_mdot_edd: true,
+        do_wind_mass_transfer_1: true,
+        wind_bh_beta_1: 0.125,
+        do_jdot_mb: false,
+        implicit_scheme_tolerance: 1.0e-8,
+        implicit_scheme_tiny_factor: 0.0,
+        max_tries_to_achieve: 20,
+        ..BinaryInlistControls::default()
+    };
+    BinarySystem::from_controls_point_mass(donor, bctrl)
+        .expect("wind_fed_bhhmxb BinarySystem")
+}
+
+fn assert_wind_fed_snapshot(
+    row: &BTreeMap<String, f64>,
+    tag: &str,
+    rel_pins: &[(&str, f64, f64)],
+    abs_pins: &[(&str, f64, f64)],
+) {
+    for &(col, expected, tol) in rel_pins {
+        assert_rel_close(row[col], expected, tol, &format!("{tag} {col}"));
+    }
+    for &(col, expected, tol) in abs_pins {
+        assert_abs_close(row[col], expected, tol, &format!("{tag} {col}"));
+    }
+}
+
+#[test]
+fn wind_fed_bhhmxb_model5_and_model10_match_mesa_26_4_1() {
+    let mut sys = build_wind_fed_bhhmxb_system();
+    advance_to_model(&mut sys, 5);
+    assert_wind_fed_snapshot(
+        &row_map(&sys),
+        "wind m5",
+        &[
+            ("age", 4.159_980_865_340_611e2, 1.0e-11),
+            ("period_days", 1.500_020_615_489_601_2, 1.0e-11),
+            ("binary_separation", 1.713_464_779_579_958_7e1, 1.0e-11),
+            ("star_1_mass", 1.999_974_617_055_151_4e1, 1.0e-11),
+            ("star_2_mass", 1.000_000_951_427_948_5e1, 1.0e-11),
+            ("J_orb", 9.132_219_846_940_914e53, 1.0e-11),
+            ("jdot_ml", -2.916_398_041_673_092_6e38, 1.0e-8),
+        ],
+        &[
+            ("lg_mstar_dot_1", -6.237_622_613_229_801, 1.0e-8),
+            ("lg_mstar_dot_2", -7.661_647_263_061_589, 1.0e-8),
+            ("lg_system_mdot_2", -7.797_106_038_996_278_5, 1.0e-8),
+        ],
+    );
+    assert!(sys.last_mdot.wind_xfer_fraction[0] > 0.0);
+    assert!(sys.last_mdot.mdot_edd > 0.0);
+    let max_ret = sys.last_mdot.mdot_edd * (1.0 - sys.last_mdot.mdot_edd_eta);
+    assert!(sys.last_mdot.retained_accretion_rate <= max_ret * (1.0 + 1.0e-12));
+
+    advance_to_model(&mut sys, 10);
+    assert_wind_fed_snapshot(
+        &row_map(&sys),
+        "wind m10",
+        &[
+            ("age", 1.451_134_445_218_496e3, 1.0e-11),
+            ("period_days", 1.500_064_073_632_323_2, 1.0e-11),
+            ("binary_separation", 1.713_488_028_645_593e1, 1.0e-11),
+            ("star_1_mass", 1.999_920_856_350_514e1, 1.0e-11),
+            ("star_2_mass", 1.000_003_000_580_514e1, 1.0e-11),
+            ("J_orb", 9.132_133_739_741_865e53, 1.0e-11),
+            ("jdot_gr", -1.676_112_020_056_3e36, 1.0e-11),
+            ("jdot_ml", -2.513_567_547_841_301_4e38, 1.0e-8),
+        ],
+        &[
+            ("lg_mstar_dot_1", -6.302_521_845_529_249, 1.0e-8),
+            ("lg_mstar_dot_2", -7.718_964_432_561_775, 1.0e-8),
+            ("lg_system_mdot_2", -7.854_423_208_496_463, 1.0e-8),
+        ],
+    );
+}
+
+#[test]
+fn implicit_star_limit_redo_preserves_solver_progress() {
+    let mut d_ctrl = StarControls {
+        initial_mass: 1.0,
+        zbase: 0.02,
+        max_number_retries: 10,
+        use_gold2_tolerances: true,
+        ..StarControls::default()
+    };
+    let dt_yr = 1.0e4;
+    d_ctrl.ts_stop.when_to_stop_atol = 1.0e-2;
+    d_ctrl.ts_stop.when_to_stop_rtol = 0.0;
+    d_ctrl.ts_stop.redo_limit = 8;
+    let mut donor = load_zams_model(d_ctrl, StarJobControls::default())
+        .expect("1.0 Msun ZAMS");
+    donor.controls.max_age = donor.star_age + 0.5 * dt_yr;
+    let r_rsun = eval_photosphere_info(&donor).r_rsun;
+    let a_init_rsun = r_rsun / (eval_rlobe(1.0, 0.8, 1.0) * 1.001);
+    let mut bctrl = BinaryInlistControls {
+        m1_msun: 1.0,
+        m2_msun: 0.8,
+        initial_period_in_days: -1.0,
+        initial_separation_in_rsuns: a_init_rsun,
+        mdot_scheme: String::from("roche_lobe"),
+        max_tries_to_achieve: 30,
+        implicit_scheme_tolerance: 1.0e-4,
+        starting_mdot: 1.0e-10,
+        terminate_if_initial_overflow: false,
+        ..BinaryInlistControls::default()
+    };
+    bctrl.use_radiation_corrected_transfer_rate = false;
+    let mut sys = BinarySystem::from_controls_point_mass(donor, bctrl)
+        .expect("gently overflowing ZAMS BinarySystem");
+    assert!(
+        sys.rl_relative_gap[0] > 5.0e-4,
+        "expected gentle initial overflow"
+    );
+
+    let mut extras = DefaultBinaryExtras;
+    let (_, _) = sys
+        .try_step_with_extras(dt_yr * SECYER, &mut extras)
+        .expect("star limit redo inside implicit RLOF should converge");
+    assert_eq!(sys.model_number, 1);
+    assert_eq!(
+        sys.last_termination_reason.as_deref(),
+        Some("max_age"),
+        "step should hit max_age after star-limit redo"
+    );
+    assert_eq!(
+        sys.counters.num_retries, 0,
+        "star-limit redo must stay inside step_loop without outer retry"
+    );
+    assert!(
+        sys.counters.num_implicit_trials > 1,
+        "implicit solver must preserve trial progress across star-limit redo"
+    );
+    assert!(
+        sys.mtransfer_rate < 0.0,
+        "implicit RLOF mass transfer should converge"
     );
 }

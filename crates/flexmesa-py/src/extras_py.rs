@@ -1752,7 +1752,10 @@ impl StarExtras for PyStarExtrasAdapter {
             return Ok(false);
         }
         let case_dir = self.state.staged_dir_string();
-        let gyre_str = export_gyre(model, false);
+        // `star_get_pulse_data(s%id, 'GYRE', .FALSE., .FALSE., .FALSE., ...)`
+        // (`star/test_suite/rsp_gyre/src/run_star_extras.f90:112-116`).
+        let gyre_str = export_gyre(model, false, false, false)
+            .map_err(|e| StarError::InvalidInput(e.to_string()))?;
         let log_dir_opt = log_dir.map(|p| p.to_string_lossy().into_owned());
         Python::attach(|py| {
             let snap = build_star_snapshot(py, model, &case_dir, false)

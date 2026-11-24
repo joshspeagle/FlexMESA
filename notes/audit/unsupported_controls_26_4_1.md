@@ -8,7 +8,7 @@ Generated mechanically against **MESA 26.4.1** (git tag `26.4.1`, commit `c8c202
 - **Total manifest cases scanned**: `106`
 - **Cases passing strict `#147` validation**: `65`
 - **Cases rejected by strict `#147` validation**: `41`
-- **Distinct unsupported physics/solver controls encountered**: `152`
+- **Distinct unsupported physics/solver controls encountered**: `151`
 - **Distinct unknown/misspelled controls encountered**: `0`
 - **Cases using headless plotting controls (`#173` / `DECISIONS #25`)**: `78` (`895` distinct keys)
 
@@ -19,7 +19,7 @@ Generated mechanically against **MESA 26.4.1** (git tag `26.4.1`, commit `c8c202
 | `&star_job` | 455 | 172 | 8 | 3 | 8 | 264 |
 | `&eos` | 102 | 91 | 0 | 0 | 9 | 2 |
 | `&kap` | 51 | 39 | 0 | 0 | 10 | 2 |
-| `&controls` | 1448 | 1180 | 23 | 0 | 16 | 229 |
+| `&controls` | 1448 | 1183 | 23 | 0 | 16 | 226 |
 | `&binary_job` | 37 | 22 | 0 | 1 | 1 | 13 |
 | `&binary_controls` | 176 | 124 | 0 | 0 | 2 | 50 |
 | `&astero_search_controls` | 153 | 88 | 3 | 0 | 0 | 62 |
@@ -203,7 +203,7 @@ Per `DECISIONS #25` (matching upstream `USE_PGSTAR = NO`), keys in `&pgstar`, `&
 | `star` | `carbon_kh` | `fail_unsupported` | 1 | 0 | 81 |
 | `star` | `cburn_inward` | `pass` | 0 | 0 | 66 |
 | `star` | `ccsn_IIp` | `fail_unsupported` | 24 | 0 | 100 |
-| `star` | `check_pulse_atm` | `fail_unsupported` | 2 | 0 | 0 |
+| `star` | `check_pulse_atm` | `fail_unsupported` | 1 | 0 | 0 |
 | `star` | `check_redo` | `pass` | 0 | 0 | 3 |
 | `star` | `conductive_flame` | `fail_unsupported` | 3 | 0 | 109 |
 | `star` | `conserve_angular_momentum` | `fail_unsupported` | 2 | 0 | 0 |

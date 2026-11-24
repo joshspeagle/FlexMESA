@@ -15,7 +15,7 @@ use flexmesa_kap::{KapCoOption, KapConfig, KapLowTOption, KapOption};
 use flexmesa_star::inlist_runner::StarExtras;
 use flexmesa_star::rsp_eos_kap::RspChemCache;
 use flexmesa_star::{
-    do_brunt_b, do_brunt_n2, do_rsp_build_model, export_gyre_with_schema,
+    do_brunt_b, do_brunt_n2, do_rsp_build_model, export_gyre,
     read_mod_str, rsp_setup_model, solve_gyre_mesa_modes, star_evolve_step,
     star_evolve_step_with_extras, verify_photo_restart_parity, write_mod_string,
     StarControls, StarError, StarJobControls, StarModel,
@@ -345,7 +345,8 @@ impl StarExtras for TestGyreRspExtras {
         do_brunt_b(model)?;
         do_brunt_n2(model);
 
-        let gyre_txt = export_gyre_with_schema(model, false, 120);
+        // `star/test_suite/rsp_gyre/src/run_star_extras.f90:112-116`.
+        let gyre_txt = gyre_text(model)?;
         if let Some(dir) = log_dir {
             fs::write(dir.join("gyre.data"), &gyre_txt).map_err(|e| {
                 StarError::IoError(format!(
@@ -476,4 +477,11 @@ fn test_rsp_gyre_bvp_linear_kick_and_nonlinear_hyd_steps() {
     let rel_e =
         (model.aux.cumulative_energy_error / model.aux.total_energy).abs();
     assert!(rel_e < 1.0e-6, "rsp_gyre rel_e={rel_e:.3e}");
+}
+
+/// `star_get_pulse_data(s%id, 'GYRE', .FALSE., .FALSE., .FALSE., ...)` as
+/// text (`star/test_suite/rsp_gyre/src/run_star_extras.f90:112-120`).
+fn gyre_text(model: &StarModel) -> Result<String, StarError> {
+    export_gyre(model, false, false, false)
+        .map_err(|e| StarError::InvalidInput(e.to_string()))
 }

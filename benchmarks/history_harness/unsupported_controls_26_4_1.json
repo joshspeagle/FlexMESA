@@ -10,7 +10,7 @@
     "total_cases": 106,
     "strict_pass_cases": 65,
     "strict_fail_cases": 41,
-    "distinct_unsupported_controls": 152,
+    "distinct_unsupported_controls": 151,
     "distinct_unknown_controls": 0,
     "cases_with_headless_plotting": 78,
     "distinct_headless_plotting_keys": 895
@@ -46,11 +46,11 @@
     {
       "section": "controls",
       "upstream_keys": 1448,
-      "supported_keys": 1180,
+      "supported_keys": 1183,
       "unused_keys": 23,
       "headless_gui_keys": 0,
       "terminal_output_keys": 16,
-      "unimplemented_upstream_keys": 229
+      "unimplemented_upstream_keys": 226
     },
     {
       "section": "binary_job",
@@ -1140,15 +1140,6 @@
       "case_count": 1,
       "cases": [
         "star/ccsn_IIp"
-      ]
-    },
-    {
-      "section": "controls",
-      "key": "fgong_ivers",
-      "category": "unimplemented",
-      "case_count": 1,
-      "cases": [
-        "star/check_pulse_atm"
       ]
     },
     {
@@ -6821,8 +6812,7 @@
         "inlist_check_pulse_atm_header"
       ],
       "unsupported_controls": [
-        "controls::add_atmosphere_to_pulse_data::unimplemented",
-        "controls::fgong_ivers::unimplemented"
+        "controls::add_atmosphere_to_pulse_data::unimplemented"
       ],
       "unknown_controls": [],
       "headless_plotting_keys_count": 0,

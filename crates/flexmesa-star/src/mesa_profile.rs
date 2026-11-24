@@ -833,36 +833,24 @@ fn eval_profile_scalar(
             (model.gradr[k] - model.gradl[k]).abs(),
         )),
         "gradT_sub_grada" => {
-            let ga = if k == 0 {
-                model.grada[0]
-            } else {
-                model.interp_val_to_pt(&model.grada, k)
-            };
+            // `s% grada_face(k)` (`profile_getval.f90:1427-1428, 1652-1659`).
+            let ga = model.aux.mixing.grada_face[k];
             MesaCellValue::Float(model.gradt[k] - ga)
         }
         "grada_sub_gradT" => {
-            let ga = if k == 0 {
-                model.grada[0]
-            } else {
-                model.interp_val_to_pt(&model.grada, k)
-            };
+            // `s% grada_face(k)` (`profile_getval.f90:1427-1428, 1652-1659`).
+            let ga = model.aux.mixing.grada_face[k];
             MesaCellValue::Float(ga - model.gradt[k])
         }
         "gradr_sub_grada" => {
-            let ga = if k == 0 {
-                model.grada[0]
-            } else {
-                model.interp_val_to_pt(&model.grada, k)
-            };
+            // `s% grada_face(k)` (`profile_getval.f90:1427-1428, 1652-1659`).
+            let ga = model.aux.mixing.grada_face[k];
             MesaCellValue::Float(model.gradr[k] - ga)
         }
         "gradT_div_grada" => {
-            let ga = if k == 0 {
-                model.grada[0]
-            } else {
-                model.interp_val_to_pt(&model.grada, k)
-            };
-            MesaCellValue::Float(model.gradt[k] / ga.max(1.0e-99))
+            // `s% grada_face(k)` (`profile_getval.f90:1427-1428, 1652-1659`).
+            let ga = model.aux.mixing.grada_face[k];
+            MesaCellValue::Float(model.gradt[k] / ga)
         }
         // `p_scale_height` vs `p_pressure_scale_height{_cm}` (`profile_getval.f90:1419-1426`).
         "scale_height" => MesaCellValue::Float(model.scale_height[k] / R_SUN),

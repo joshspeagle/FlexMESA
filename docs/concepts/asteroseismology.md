@@ -63,9 +63,11 @@ $$V = \frac{G m \rho}{P r}, \qquad V_g = \frac{V}{\Gamma_1}, \qquad A^* = \frac{
 
 and exports stellar structure profiles (with optional central boundary point insertion and double-point splitting across sharp composition discontinuities; bundled `GYRE` and `ADIPLS` integration is tracked in `#170` and `#171`, while `eval_linear_oscillation_modes` currently uses an in-house adiabatic BVP stub that does not count toward any passing case).:
 
-- `model.to_gyre_str(add_center_point=True)`: Standard `GYRE` ASCII format (`version 101` / `120`).
-- `model.to_fgong_str(add_center_point=True)`: Standard `FGONG` format (`ivers = 1300`).
-- `model.to_osc_str(add_center_point=True)`: `OSC` / `CESAM` pulsation structure format.
+- `model.to_gyre_str(add_center_point=True, keep_surface_point=False, add_atmosphere=False)`: `GYRE` text with `gyre_data_schema = 101` (schema `120` is not ported yet).
+- `model.to_fgong_str(...)`: `FGONG` text with `fgong_ivers = 1300` or `300`.
+- `model.to_osc_str(...)`: `OSC` 2K text (22 structure and 14 abundance columns).
+
+These three are ports of MESA's `get_gyre_data`, `get_fgong_data` and `get_osc_data` and their writers (`star/private/pulse_gyre.f90`, `pulse_fgong.f90`, `pulse_osc.f90`). On MESA `26.4.1`'s own star state, captured during an `astero/fast_from_file` run, they reproduce the files MESA writes byte for byte (`benchmarks/fortran_mesa/pulse_export_tap/`, `#491`). `add_atmosphere=True` raises an error because `build_atm` is not ported. The in-house pulsation grid (`build_pulse_points`) and the `GSM`, `SAIO`, `CAFEIN` and `GR1D` exporters are not ports.
 
 The port of `GYRE` 8.1 is under way in the `crates/flexmesa-gyre` crate, licensed `GPL-3.0-only` as `GYRE` is. Its numerics substrate (gfortran complex arithmetic, GCC integer-power chains, CRMATH complex functions and the inlined `MATMUL` order) and the real LAPACK routines `GYRE` reaches are checked bit for bit against vectors from MESA's own `GYRE` build and SDK libraries. The crate is not yet connected to `flexmesa.astero`.
 

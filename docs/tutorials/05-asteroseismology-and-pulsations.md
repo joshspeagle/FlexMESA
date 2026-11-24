@@ -167,7 +167,7 @@ plt.close(fig)
 For radially pulsating RR Lyrae, Cepheid, and $\delta$ Scuti variables, `FlexMESA` provides both:
 
 1. **Kuhfuss (1986) / Smolec & Moskalik (2008) `RSP` & `RSP2` Turbulent Convection Kernels**: `_rust.star_solve_stationary_rsp2_w` (`star.solve_stationary_rsp2_w_jax`), `_rust.star_eval_rsp2_zone` (`star.eval_rsp2_zone_jax`), `_rust.star_eval_rsp2_face` (`star.eval_rsp2_face_jax`), `star.rsp2_flux_limiter_jax`, `star.compute_rsp2_uq_face_jax`, and `star.eval_rsp_hyd_fluxes_jax` compute the stationary turbulent velocity $w = \sqrt{e_t}$, buoyant source $S$, radiative eddy cooling $D_r$, Kolmogorov cascade dissipation $D$, turbulent pressure $P_{\mathrm{trb}}$, eddy viscosity $\mathrm{X}_{\mathrm{cell}}$, viscous shear heating $E_{q,\mathrm{cell}}$, quintic $C^2$ flux-limited convective enthalpy factor $\Pi_{\mathrm{face}}$, and Stellingwerf / Richtmyer-Morton fluxes $(L_r, L_c, L_t, Q_{\mathrm{visc}})$.
-2. **Pulsation Structure Exporters (`to_gyre_str`, `to_fgong_str`, `to_osc_str`)**: Format the 1D stellar profile (including the center point $r = 0$ and Dziembowski dimensionless variables $V_g, A^\ast, U, c_1, \Gamma_1$) directly into `GYRE` (`v120`, 19 columns), `FGONG` (`ivers = 1300`, 40 variables), and `OSC` (`ivers = 1300`, 24 variables) oscillation code inputs.
+2. **Pulsation Structure Exporters (`to_gyre_str`, `to_fgong_str`, `to_osc_str`)**: Write the stellar structure, with an optional centre point at $r = 0$, as the `GYRE` (schema `101`, 18 columns), `FGONG` (`fgong_ivers = 1300`, 40 variables) and `OSC` (2K, 36 variables) files MESA's `star_export_pulse_data` writes.
 
 ```python
 import jax.numpy as jnp

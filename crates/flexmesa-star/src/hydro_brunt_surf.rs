@@ -55,10 +55,11 @@ pub fn do_brunt_b(model: &mut StarModel) -> Result<(), StarError> {
     let ht = crate::micro::builtin_helm_table()?;
 
     for k in 1..nz {
-        let rho_f = model.interp_val_to_pt(&model.rho, k);
-        let t_f = model.interp_val_to_pt(&model.t, k);
-        let chi_t_f = model.interp_val_to_pt(&model.chi_t, k);
-        let chi_rho_f = model.interp_val_to_pt(&model.chi_rho, k);
+        // `get_face_values` (`brunt.f90:207-216`).
+        let rho_f = model.get_face_value(&model.rho, k);
+        let t_f = model.get_face_value(&model.t, k);
+        let chi_t_f = model.get_face_value(&model.chi_t, k);
+        let chi_rho_f = model.get_face_value(&model.chi_rho, k);
 
         let mut delta_lnp = model.ln_peos[k - 1] - model.ln_peos[k];
         if delta_lnp > -1.0e-50 {
@@ -199,22 +200,14 @@ pub fn do_brunt_n2(model: &mut StarModel) {
     let mut face_fac = vec![0.0_f64; nz];
     face_fac[0] = cell_fac[0];
     for k in 1..nz {
-        face_fac[k] = model.interp_val_to_pt(&cell_fac, k);
+        // `get_face_values` (`brunt.f90:144-145`).
+        face_fac[k] = model.get_face_value(&cell_fac, k);
     }
 
     let min_mag = model.controls.mix_wind.min_magnitude_brunt_b;
-    let has_gradt_sub_grada = model.aux.mixing.gradt_sub_grada.len() == nz;
     for k in 0..nz {
-        let gradt_sub_grada = if has_gradt_sub_grada {
-            model.aux.mixing.gradt_sub_grada[k]
-        } else {
-            let grada_f = if k == 0 {
-                model.grada[0]
-            } else {
-                model.interp_val_to_pt(&model.grada, k)
-            };
-            model.gradt[k] - grada_f
-        };
+        // `s% gradT_sub_grada(k)` (`brunt.f90:153-154`).
+        let gradt_sub_grada = model.aux.mixing.gradt_sub_grada[k];
         if model.brunt_b[k].abs() < min_mag
             || model.gradt[k] == 0.0
             || !gradt_sub_grada.is_finite()

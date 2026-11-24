@@ -480,12 +480,16 @@ def test_star_model_riemann_profile_and_pulse_exporters() -> None:
         pts_dbl[:, 18] + pts_dbl[:, 19] + pts_dbl[:, 20], 1.0, rtol=1.0e-3
     )
 
+    # Upstream's text producers drop the surface point by default and add
+    # the centre: nn = nz points (`star/private/pulse_gyre.f90:116-128`,
+    # `pulse_fgong.f90:150-160`, `pulse_osc.f90:140-150`).
+    nn = model.nz
     gyre_txt = model.to_gyre_str(add_center_point=True)
-    assert len(gyre_txt.splitlines()) == 1 + n_pts
+    assert len(gyre_txt.splitlines()) == 1 + nn
     fgong_txt = model.to_fgong_str(add_center_point=True)
-    assert len(fgong_txt.splitlines()) == 5 + 3 + 8 * n_pts
+    assert len(fgong_txt.splitlines()) == 5 + 3 + 8 * nn
     osc_txt = model.to_osc_str(add_center_point=True)
-    assert len(osc_txt.splitlines()) == 6 + 3 + 8 * n_pts
+    assert len(osc_txt.splitlines()) == 6 + 3 + 8 * nn
     gsm_bytes = model.to_gsm_bytes(add_center_point=True)
     assert gsm_bytes.startswith(b"# GSM")
     saio_txt = model.to_saio_str(add_center_point=True)

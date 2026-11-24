@@ -494,9 +494,9 @@ def star_eval_rsp2_face(r_face: float, m_grav_face: float, cgrav_face: float, p_
 def star_solve_stationary_rsp2_w(t: float, rho: float, p: float, cp: float, grad_ad: float, delta: float, kappa: float, hp_cell: float, grad_t: float, alfa: float = 1.5, alfas: float = 1.0, alfad: float = 1.0, gammar: float = 1.0) -> float: ...  # noqa: E501
 def star_eval_center_parabolic(r_inner: float, r_outer: float, v_inner: float, v_outer: float) -> float: ...  # noqa: E501
 def star_build_pulse_points(model: RustStarModel, add_center_point: bool = True, add_double_points: bool = False, grad_mu_threshold: float = 1.0e99) -> _ArrF64: ...  # noqa: E501
-def star_export_gyre(model: RustStarModel, add_center_point: bool = True) -> str: ...  # noqa: E501
-def star_export_fgong(model: RustStarModel, add_center_point: bool = True) -> str: ...  # noqa: E501
-def star_export_osc(model: RustStarModel, add_center_point: bool = True) -> str: ...  # noqa: E501
+def star_export_gyre(model: RustStarModel, add_center_point: bool = True, keep_surface_point: bool = False, add_atmosphere: bool = False) -> str: ...  # noqa: E501
+def star_export_fgong(model: RustStarModel, add_center_point: bool = True, keep_surface_point: bool = False, add_atmosphere: bool = False) -> str: ...  # noqa: E501
+def star_export_osc(model: RustStarModel, add_center_point: bool = True, keep_surface_point: bool = False, add_atmosphere: bool = False) -> str: ...  # noqa: E501
 def star_export_gsm(model: RustStarModel, add_center_point: bool = True) -> bytes: ...  # noqa: E501
 def star_export_saio(model: RustStarModel, add_center_point: bool = True) -> str: ...  # noqa: E501
 def star_export_cafein(model: RustStarModel, add_center_point: bool = True) -> str: ...  # noqa: E501

@@ -51,6 +51,13 @@ if [ -n "${HISTORY_TAP_OBJ:-}" ]; then
     LOAD_EXTRAS1_VAL="$LOAD_EXTRAS1_VAL $HISTORY_TAP_OBJ -Wl,--wrap=__run_star_support_MOD_run1_star"
 fi
 
+# Optional pulse-export state tap (#491): set PULSE_TAP_OBJS to the compiled
+# benchmarks/fortran_mesa/pulse_export_tap/ objects. It dumps the star state
+# before every export_pulse_data call and copies the file MESA wrote.
+if [ -n "${PULSE_TAP_OBJS:-}" ]; then
+    LOAD_EXTRAS1_VAL="$LOAD_EXTRAS1_VAL $PULSE_TAP_OBJS -Wl,--wrap=__pulse_MOD_export_pulse_data"
+fi
+
 if [ -f Makefile ] || [ -f makefile ]; then
     if [ -n "$LOAD_EXTRAS1_VAL" ]; then
         make MESA_DIR="$MESA_DIR" WITH_PGSTAR=no LOAD_EXTRAS1="$LOAD_EXTRAS1_VAL" > mk.log 2>&1

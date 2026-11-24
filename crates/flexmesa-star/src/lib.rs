@@ -135,9 +135,12 @@ pub mod pulse;
 pub mod pulse_bvp;
 pub mod pulse_bvp_recon;
 pub mod pulse_exporters;
+pub mod pulse_fgong;
 pub mod pulse_gyre_data;
 pub mod pulse_modes;
+pub mod pulse_osc;
 pub mod pulse_utils;
+pub mod pulse_write;
 pub mod relax;
 pub mod relax_comp;
 pub(crate) mod relax_driver;
@@ -394,8 +397,9 @@ pub use primary_state::PrimaryStateBuffer;
 pub use pulse::{
     PULSE_ISO_NAMES, PulseExportOptions, PulsePoint, build_pulse_points,
     build_pulse_points_with_options, eval_center_d2, eval_center_parabolic,
-    eval_center_rho, eval_face, export_fgong, export_fgong_with_version,
-    export_gyre, export_gyre_with_schema, export_osc, set_segment_indices,
+    default_fgong_header, eval_center_rho, eval_face, export_fgong, export_gyre,
+    export_osc, export_pulse_data_text, set_segment_indices,
+    MESA_VERSION_NUMBER,
 };
 pub use pulse_bvp::{
     BvpEigenmode, BvpModel, BvpPoint, InertiaNormKind, OuterBoundKind,

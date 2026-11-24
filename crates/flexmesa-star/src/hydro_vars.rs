@@ -529,7 +529,7 @@ pub(crate) fn do1_mlt_2(
         && model.controls.max_conv_vel_div_csound >= 0.0
         && model.q[k] <= model.controls.output.max_conv_vel_div_csound_maxq
     {
-        (model.interp_val_to_pt(&model.csound, k)
+        (model.face_value_alfa_beta(&model.csound, k)
             * model.controls.max_conv_vel_div_csound)
             .max(0.0)
     } else {

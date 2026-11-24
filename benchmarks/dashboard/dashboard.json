@@ -1635,6 +1635,46 @@
         "number": 495,
         "title": "feat(astero): wire GYRE into astero_gyre and remove its scaffolding (#170, G3c)",
         "draft": true
+      },
+      {
+        "number": 500,
+        "title": "fix(star): set_vars at the start of every step as upstream; the remesh only flags it",
+        "draft": true
+      },
+      {
+        "number": 501,
+        "title": "feat(harness): compare astero search cases track by track against MESA (#430)",
+        "draft": true
+      },
+      {
+        "number": 507,
+        "title": "feat(star): port the uniform-omega rotation relaxes on do_internal_evolve (#499)",
+        "draft": true
+      },
+      {
+        "number": 508,
+        "title": "feat(star): near-ZAMS rotation and tau_factor tail of after_step_loop (#506)",
+        "draft": true
+      },
+      {
+        "number": 509,
+        "title": "fix(star): keep m, dm_bar at start-of-step values in do_adjust_mass (#489 follow-up)",
+        "draft": true
+      },
+      {
+        "number": 512,
+        "title": "fix(astero): scan_grid order, extras_check_model and redo dt as upstream (#502)",
+        "draft": true
+      },
+      {
+        "number": 515,
+        "title": "fix(star): need_to_setvars refreshes, unset energy total and energy sources as upstream",
+        "draft": true
+      },
+      {
+        "number": 517,
+        "title": "fix: redo/retry semantics (#510) and chi2_delta_nu condition (#511) as upstream",
+        "draft": true
       }
     ],
     "deferred_169": [
@@ -2139,6 +2179,30 @@
         "title": "[Deferred bug] D_mix_rotation tau test overwrites the lgT factor and reuses the lgT formula (mix_info.f90:1602-1621)",
         "state": "open",
         "kind": "upstream-bug",
+        "parity_pending": false,
+        "needs_confirmation": false
+      },
+      {
+        "number": 503,
+        "title": "[Deferred bug] set_ST reads kap_cond unset when D_ES and D_GSF are off (rotation_mix_info.f90:657,712-720)",
+        "state": "open",
+        "kind": "upstream-bug",
+        "parity_pending": false,
+        "needs_confirmation": false
+      },
+      {
+        "number": 504,
+        "title": "[Deferred bug] ST time smoothing reads prev_mesh arrays at index 0 when k0 = 1 (rotation_mix_info.f90:191-215)",
+        "state": "open",
+        "kind": "upstream-bug",
+        "parity_pending": false,
+        "needs_confirmation": false
+      },
+      {
+        "number": 513,
+        "title": "[Deferred enhancement] Skip the net Jacobian when abundances are not solved for",
+        "state": "open",
+        "kind": "enhancement",
         "parity_pending": false,
         "needs_confirmation": false
       }
@@ -3496,6 +3560,19 @@
       "closed_140": "26",
       "total_140": "50",
       "deferred_169": "63"
+    },
+    {
+      "date_utc": "2026-11-24",
+      "commit": "50b1b83",
+      "event": "main merge",
+      "engine_ported_pct": "30.7",
+      "all_verified_pct": "1.1",
+      "cases_passing": "25",
+      "rust_cov_pct": "76.3",
+      "python_cov_pct": "87.7",
+      "closed_140": "26",
+      "total_140": "50",
+      "deferred_169": "66"
     }
   ]
 }

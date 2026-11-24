@@ -453,7 +453,7 @@ fn lagrange_3pt_weights(a: &[f64; 3], x: f64) -> [f64; 3] {
     for i in 0..3 {
         for j in 0..3 {
             if j != i {
-                b[i] *= (x - a[j]) / (a[i] - a[j]);
+                b[i] = (b[i] * (x - a[j])) / (a[i] - a[j]);
             }
         }
     }
@@ -470,9 +470,11 @@ fn kapcn_interp_fixed_z(
     log_t: f64,
 ) -> Result<[f64; 3], KapError> {
     let zset = &kcn.z_sets[iz];
-    let my_x = x.clamp(kcn.xs[0], kcn.xs[2]);
-    let my_fc = fc.clamp(zset.fcs[0], zset.fcs[6]);
-    let my_fn = fn_val.clamp(zset.fns[0], zset.fns[2]);
+    // Mirror Fortran `max(min(val, hi), lo)`: if `val` is `NaN`, `min(NaN, hi)`
+    // returns `hi` (`f64::min`), matching x86 `minsd`/`maxsd` in `kapcn.f90:333-335`.
+    let my_x = x.min(kcn.xs[2]).max(kcn.xs[0]);
+    let my_fc = fc.min(zset.fcs[6]).max(zset.fcs[0]);
+    let my_fn = fn_val.min(zset.fns[2]).max(zset.fns[0]);
 
     // In 1-based Fortran: ifC = max(2, min(ifC, 6)); in 0-based: 1..=5
     let ifc = binary_search(&zset.fcs, my_fc, None)

@@ -253,8 +253,12 @@ pub fn get_kap_low_t_results(
                 ));
             }
             let zbase = cfg.zbase;
-            let (fc, fn_val) = if zbase <= 0.0 {
-                (1.0, 1.0)
+            // `kap/private/kap_eval.f90:439-440`: `fC = XC / (kapCN_ZC * Zbase)`.
+            // When `zbase == 0`, IEEE division produces `+Inf` (`xc > 0`) or `NaN` (`xc == 0`),
+            // and `gfortran`'s `max(min(val, max), min)` (via x86 `minsd`/`maxsd`) evaluates
+            // both `+Inf` and `NaN` to `max` (`fC_max` / `fN_max`).
+            let (fc, fn_val) = if zbase == 0.0 {
+                (f64::INFINITY, f64::INFINITY)
             } else {
                 (xc / (KAP_CN_ZC * zbase), xn / (KAP_CN_ZN * zbase))
             };
@@ -267,9 +271,7 @@ pub fn get_kap_low_t_results(
                 ));
             }
             let ka = resolve_aesopus_data(&cfg.aesopus_filename)?;
-            aesopus_get_with_data(
-                &ka, cfg.zbase, x, xc, xn, xo, log_rho, log_t,
-            )
+            aesopus_get_with_data(&ka, cfg.zbase, x, xc, xn, xo, log_rho, log_t)
         }
         _ => {
             let (lk, dlk_dr, dlk_dt) = get1_kap_fixed_metal_results(

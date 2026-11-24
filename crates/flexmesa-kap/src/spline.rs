@@ -6,7 +6,6 @@
 
 use crate::types::KapError;
 use flexmesa_const::ONE_SIXTH;
-use flexmesa_interp2d::{interp_mkbicub_db, BicubicBc};
 use flexmesa_num::binary_search;
 
 const Z36TH: f64 = 1.0 / 36.0;
@@ -215,13 +214,118 @@ pub fn do_kap_interpolations(
     (fval, df_dx, df_dy)
 }
 
+fn check_grid_uniform(grid: &[f64]) -> Result<bool, KapError> {
+    let n = grid.len();
+    if n < 4 || grid.iter().any(|v| !v.is_finite()) {
+        return Err(KapError::NumericalFailure(
+            "invalid grid coordinates for bicubic spline",
+        ));
+    }
+    let dxavg = (grid[n - 1] - grid[0]) / ((n - 1) as f64);
+    let zeps = (1.0e-3 * dxavg).abs();
+    let mut uniform = true;
+    for i in 1..n {
+        let diff = grid[i] - grid[i - 1];
+        if diff <= 0.0 {
+            return Err(KapError::NumericalFailure(
+                "non-ascending grid coordinates for bicubic spline",
+            ));
+        }
+        if (diff - dxavg).abs() > zeps {
+            uniform = false;
+        }
+    }
+    Ok(uniform)
+}
+
+/// 1D not-a-knot $C^2$ cubic spline matching upstream PSPLINE / MESA's
+/// `mkspline_db` -> `cspline_db` -> `V_SPLINE_db` floating-point evaluation
+/// order (including `cspline_db`'s `(half, sixth)` scaling and `(s_next - s_i) / h`
+/// before multiplying by `6.0`, preserving 0-ULP edge endpoint parity when
+/// $x_{N-1} - x_{N-2}$ is not a power of 2).
+fn mkspline_not_a_knot(x: &[f64], y: &[f64]) -> Vec<f64> {
+    let n = x.len();
+    let mut f = vec![[0.0_f64; 4]; n];
+    for (node, &val) in f.iter_mut().zip(y.iter()) {
+        node[0] = val;
+    }
+
+    f[0][3] = x[1] - x[0];
+    f[1][2] = (f[1][0] - f[0][0]) / f[0][3];
+    for i in 1..(n - 1) {
+        f[i][3] = x[i + 1] - x[i];
+        f[i][1] = 2.0 * (f[i - 1][3] + f[i][3]);
+        f[i + 1][2] = (f[i + 1][0] - f[i][0]) / f[i][3];
+        f[i][2] = f[i + 1][2] - f[i][2];
+    }
+
+    // Not-a-knot boundary conditions (`imin = 1`, `imax = n - 2` in 0-based).
+    f[1][1] = f[0][3] + 2.0 * f[1][3];
+    f[1][2] = f[1][2] * f[1][3] / (f[0][3] + f[1][3]);
+    f[n - 2][1] = 2.0 * f[n - 3][3] + f[n - 2][3];
+    f[n - 2][2] = f[n - 2][2] * f[n - 3][3] / (f[n - 2][3] + f[n - 3][3]);
+
+    for i in 2..=(n - 2) {
+        let t = if i == n - 2 {
+            (f[i - 1][3] - f[i][3]) / f[i - 1][1]
+        } else {
+            f[i - 1][3] / f[i - 1][1]
+        };
+        let diag_off = if i == 2 {
+            f[i - 1][3] - f[i - 2][3]
+        } else {
+            f[i - 1][3]
+        };
+        f[i][1] -= t * diag_off;
+        f[i][2] -= t * f[i - 1][2];
+    }
+
+    f[n - 2][2] /= f[n - 2][1];
+    for ib in 1..=(n - 3) {
+        let i = (n - 2) - ib;
+        let upper = if i == 1 {
+            f[i][3] - f[i - 1][3]
+        } else {
+            f[i][3]
+        };
+        f[i][2] = (f[i][2] - upper * f[i + 1][2]) / f[i][1];
+    }
+
+    f[0][3] = x[1] - x[0];
+    f[n - 2][3] = x[n - 1] - x[n - 2];
+    f[0][2] = (f[1][2] * (f[0][3] + f[1][3]) - f[2][2] * f[0][3]) / f[1][3];
+    f[n - 1][2] =
+        f[n - 2][2] + (f[n - 2][2] - f[n - 3][2]) * f[n - 2][3] / f[n - 3][3];
+
+    for i in 0..(n - 1) {
+        let h = f[i][3];
+        let s_i = f[i][2];
+        let s_next = f[i + 1][2];
+        f[i][1] = (f[i + 1][0] - f[i][0]) / h - h * (s_next + 2.0 * s_i);
+        f[i][3] = (s_next - s_i) / h;
+        f[i][2] = 6.0 * s_i;
+        f[i][3] *= 6.0;
+    }
+    for node in &mut f {
+        node[2] *= 0.5;
+        node[3] *= ONE_SIXTH;
+    }
+
+    let mut fxx = vec![0.0_f64; n];
+    for (dst, node) in fxx[..(n - 1)].iter_mut().zip(&f[..(n - 1)]) {
+        *dst = 2.0 * node[2];
+    }
+    fxx[n - 1] = 2.0 * f[n - 2][2] + (x[n - 1] - x[n - 2]) * 6.0 * f[n - 2][3];
+    fxx
+}
+
 /// Fit a 2D PSPLINE bicubic spline with not-a-knot boundary conditions (`ibc = 0`)
 /// from a flat `(num_log_ts, num_log_rs)` row-major array (`raw_vals[j_t * nx + i_r]`).
 ///
 /// Returns `(coeffs, ili_log_rs, ili_log_ts)`.
 ///
 /// # Errors
-/// Returns [`KapError::NumericalFailure`] if `interp_mkbicub_db` fails.
+/// Returns [`KapError::NumericalFailure`] if grid coordinates are invalid or `nx`/`ny < 4`.
 pub fn fit_bicubic_not_a_knot(
     log_rs: &[f64],
     log_ts: &[f64],
@@ -229,27 +333,52 @@ pub fn fit_bicubic_not_a_knot(
 ) -> Result<(Vec<[f64; 4]>, bool, bool), KapError> {
     let nx = log_rs.len();
     let ny = log_ts.len();
-    let mut z = vec![0.0_f64; nx * ny];
+    if raw_vals.len() != nx * ny {
+        return Err(KapError::NumericalFailure(
+            "mismatched raw_vals length in fit_bicubic_not_a_knot",
+        ));
+    }
+    let ili_x = check_grid_uniform(log_rs)?;
+    let ili_y = check_grid_uniform(log_ts)?;
+
+    let mut coeffs = vec![[0.0_f64; 4]; nx * ny];
     for j_t in 0..ny {
         for i_r in 0..nx {
             let v = raw_vals[j_t * nx + i_r];
-            z[i_r * ny + j_t] = if v.is_finite() { v } else { 0.0 };
+            coeffs[i_r * ny + j_t][0] = if v.is_finite() { v } else { 0.0 };
         }
     }
-    let (mut coeffs, ili_x, ili_y) = interp_mkbicub_db(
-        log_rs,
-        log_ts,
-        &z,
-        BicubicBc::NotAKnot,
-        &[],
-        BicubicBc::NotAKnot,
-        &[],
-        BicubicBc::NotAKnot,
-        &[],
-        BicubicBc::NotAKnot,
-        &[],
-    )
-    .map_err(|_| KapError::NumericalFailure("interp_mkbicub_db failed"))?;
+
+    let mut x_slice = vec![0.0_f64; nx];
+    for j_t in 0..ny {
+        for i_r in 0..nx {
+            x_slice[i_r] = coeffs[i_r * ny + j_t][0];
+        }
+        let fxx = mkspline_not_a_knot(log_rs, &x_slice);
+        for i_r in 0..nx {
+            coeffs[i_r * ny + j_t][1] = fxx[i_r];
+        }
+    }
+
+    let mut y_slice = vec![0.0_f64; ny];
+    for i_r in 0..nx {
+        for j_t in 0..ny {
+            y_slice[j_t] = coeffs[i_r * ny + j_t][0];
+        }
+        let fyy = mkspline_not_a_knot(log_ts, &y_slice);
+        for j_t in 0..ny {
+            coeffs[i_r * ny + j_t][2] = fyy[j_t];
+        }
+
+        for j_t in 0..ny {
+            y_slice[j_t] = coeffs[i_r * ny + j_t][1];
+        }
+        let fxxyy = mkspline_not_a_knot(log_ts, &y_slice);
+        for j_t in 0..ny {
+            coeffs[i_r * ny + j_t][3] = fxxyy[j_t];
+        }
+    }
+
     for node in &mut coeffs {
         for v in node {
             if !v.is_finite() {

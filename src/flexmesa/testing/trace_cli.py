@@ -170,7 +170,10 @@ def _build_trace_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--extras-factory",
         default=None,
-        help="Optional 'module:callable' returning case extras handlers.",
+        help=(
+            "'module:callable' returning case extras handlers; defaults "
+            "to the case manifest's extras_factory, as the harness uses."
+        ),
     )
     parser.add_argument(
         "--timeout-sec",
@@ -267,6 +270,15 @@ def trace_main(argv: list[str] | None = None) -> int:
     case_dir = harness_runner.resolve_case_dir(
         ns.suite, ns.case, mesa_dir=ns.mesa_dir
     )
+    # Without --extras-factory, run the case with its manifest extras, as the
+    # harness does, so a traced run matches the campaign run of the case.
+    extras_factory = ns.extras_factory
+    if extras_factory is None:
+        entry = (
+            case_manifest.load_case_manifest().by_key().get((ns.suite, ns.case))
+        )
+        if entry is not None and entry.extras_factory:
+            extras_factory = entry.extras_factory
     outcome = harness_runner.run_traced_case(
         ns.suite,
         case_dir,
@@ -278,7 +290,7 @@ def trace_main(argv: list[str] | None = None) -> int:
         is_logs_dir=not ns.explicit_file,
         numerics_mode=eff_mode,
         allow_unsupported_controls=bool(ns.allow_unsupported_controls),
-        extras_factory=ns.extras_factory,
+        extras_factory=extras_factory,
         timeout_sec=ns.timeout_sec,
         max_rss_gb=ns.max_rss_gb,
     )

@@ -727,7 +727,7 @@ pub fn assemble_henyey_system(
             k,
             include_chem,
             sys,
-        );
+        )?;
         do1_radius_eqn(model, k, sys);
         if model.controls.rti_flag {
             crate::hydro_rti::do1_dalpha_rti_dt_eqn(model, k, sys);

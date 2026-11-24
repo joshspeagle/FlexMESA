@@ -670,6 +670,7 @@ fn test_op_split_burn_with_zero_dxdt_nuc_factor_clears_burn_avg_and_eps_nuc() {
     model.controls.dxdt_nuc_factor = 0.0;
     model.aux.burn_avg_epsnuc = vec![123.0; nz];
     model.save_start_values().expect("save_start_values");
+    flexmesa_star::record_start_of_step_energy_integrals(&mut model);
     model.save_old_values();
     let rep = do_struct_burn_mix(&mut model, 10.0 * SECYER, true, true, &[])
         .expect("op_split_burn step with dxdt_nuc_factor = 0");

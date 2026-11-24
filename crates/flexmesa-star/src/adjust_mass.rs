@@ -436,6 +436,8 @@ fn do_adjust_mass_core(
         model.aux.step_hist.clear_adjust_mass_energy_fields();
         return Ok(());
     }
+    // `star/private/adjust_mass.f90:234`.
+    model.aux.need_to_setvars = true;
 
     let frac = old_xmstar / new_xmstar_in;
     let new_xmstar = old_xmstar / frac;
@@ -661,7 +663,11 @@ fn do_adjust_mass_core(
     // (`micro.rs`, `hydro_vars.f90:530-534, 758`).
     set_basic_vars(model)?;
     if need_eps_mdot {
+        // `set_vars_if_needed(s, dt, 'after do_adjust_mass')`
+        // (`star/private/evolve.f90:593`); `set_vars` clears the flag
+        // (`star/private/hydro_vars.f90:653`).
         set_hydro_vars(model, false, false)?;
+        model.aux.need_to_setvars = false;
         model.set_qs();
         model.set_m_and_dm();
         if model.controls.rotation_flag {
@@ -681,6 +687,8 @@ fn do_adjust_mass_core(
             k_const_mass: k_b + 1,
         };
         let surface = calculate_eps_mdot(model, &record, dt)?;
+        // `star/private/eps_mdot.f90:507`.
+        model.aux.need_to_setvars = true;
         // `eps_mdot.f90:669-677` and `evolve.f90:599-604`
         let (e_int, e_grav, e_kin, e_rot, e_turb, e_after) =
             crate::evolve_support::eval_total_energy_integrals(model);

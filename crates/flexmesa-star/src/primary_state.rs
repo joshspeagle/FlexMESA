@@ -423,7 +423,7 @@ pub struct PrimaryStateBuffer {
     pub(crate) k_below_const_q: usize,
     pub(crate) k_const_mass: usize,
     pub(crate) total_energy: f64,
-    pub(crate) total_internal_energy_start: f64,
+    pub(crate) total_internal_energy_start: Option<f64>,
     pub(crate) cumulative_energy_error: f64,
     pub(crate) non_epsnuc_energy_change_from_split_burn: f64,
     pub(crate) cp_start: Vec<f64>,
@@ -518,6 +518,7 @@ macro_rules! make_empty_buf {
             diffusion_call_number: 0,
             k_below_const_q: 1,
             k_const_mass: 0,
+            total_internal_energy_start: None,
             $( $v: Vec::new(), )+
             $( $z: 0.0, )+
             $( $b: false, )+
@@ -557,7 +558,7 @@ impl PrimaryStateBuffer {
                 dt_old, mstar, mstar_start, mstar_old, xmstar, mstar_dot,
                 m_center, m_center_old, r_center, r_center_old, l_center,
                 l_center_old, v_center, v_center_old, tau_base, teff,
-                total_energy, total_internal_energy_start,
+                total_energy,
                 cumulative_energy_error,
                 non_epsnuc_energy_change_from_split_burn,
                 crystal_core_boundary_mass, phase_sep_mixing_mass,

@@ -11,7 +11,8 @@ use crate::controls::{StarError, StepFailureInfo};
 pub use crate::evolve_support::snapshot_step_old_extras;
 use crate::evolve_support::{
     apply_step_pre_physics_with_extras, record_start_of_step_energy_integrals,
-    remesh_star_before_step, set_vars_for_new_step, snapshot_step_start_extras,
+    remesh_star_before_step, set_vars_for_new_step, set_vars_for_new_try,
+    snapshot_step_start_extras,
     update_step_energy_conservation,
 };
 use crate::hydro_vars::set_hydro_vars;
@@ -320,6 +321,9 @@ pub fn star_evolve_step_part1(
             reason: String::from("min_timestep_limit"),
         });
     }
+    // `need_to_setvars = .true.  ! always start fresh` at the start of
+    // `do_step_part1`, before `prepare_for_new_step` (`evolve.f90:319, 378`).
+    model.aux.need_to_setvars = true;
     // `prepare_for_new_step` (`star/private/evolve.f90:1854-1857`), unless
     // the caller has prepared the step itself (the binary step loop resets
     // both stars before remeshing them, `DECISIONS #55`).
@@ -363,9 +367,17 @@ pub fn star_evolve_step_part1(
     // (`star/private/evolve_support.f90:80`); a retry enters with
     // `model_number` restored to the pre-step value, so this is idempotent.
     model.save_old_values();
+    // `new_generation` ends with `need_to_setvars = .true.`
+    // (`star/private/evolve_support.f90:121`).
+    model.aux.need_to_setvars = true;
     // `prepare_for_new_step` (`star/private/evolve.f90:1897`).
     model.generations = 2;
-    record_start_of_step_energy_integrals(model);
+    // The energy integrals are evaluated per try, after `set_start_of_step_info`
+    // and `set_mdot` (`evolve.f90:409, 427-436`); RSP2 reads `total_energy_old`
+    // before the try loop.
+    if model.controls.rsp2_flag {
+        record_start_of_step_energy_integrals(model);
+    }
     snapshot_step_start_extras(model);
     model.aux.okay_to_set_mlt_vc = true;
     model.aux.step_hist.mstar_dot_old = prev_mstar_dot_old;
@@ -478,6 +490,16 @@ pub fn star_evolve_step_part1(
     // check inside the step sees the number of the model being computed.
     let target_mod = model.model_number_old + 1;
     model.model_number = target_mod;
+    // `need_to_setvars = .true.  ! always start fresh` and
+    // `set_current_to_old` (`star/private/evolve.f90:319, 401`), then
+    // `set_start_of_step_info`'s `set_vars_if_needed` (`evolve.f90:409`).
+    model.aux.need_to_setvars = true;
+    if !model.controls.rsp_flag {
+        if let Err(e) = set_vars_for_new_try(model) {
+            model.model_number = model.model_number_old;
+            return Err(e);
+        }
+    }
 
     // `set_start_of_step_info` (`star/private/evolve.f90:1784-1787`)
     if model.nz > 0 {
@@ -488,6 +510,11 @@ pub fn star_evolve_step_part1(
     if let Err(e) = set_step_mdot(model, explicit_step_mdot, extras) {
         model.model_number = model.model_number_old;
         return Err(e);
+    }
+    // Energy integrals for the new mesh after `set_mdot`, on every try
+    // (`star/private/evolve.f90:427-453`).
+    if !model.controls.rsp_flag {
+        record_start_of_step_energy_integrals(model);
     }
 
     Ok(StarStepPart1State {
@@ -1026,6 +1053,9 @@ pub(crate) fn star_evolve_step_outcome_checked(
             reason: String::from("min_timestep_limit"),
         });
     }
+    // `need_to_setvars = .true.  ! always start fresh` at the start of
+    // `do_step_part1`, before `prepare_for_new_step` (`evolve.f90:319, 378`).
+    model.aux.need_to_setvars = true;
     // `prepare_for_new_step` (`star/private/evolve.f90:1854-1857`).
     set_rho_to_dm_div_dv_for_new_step(model)?;
 
@@ -1064,9 +1094,17 @@ pub(crate) fn star_evolve_step_outcome_checked(
     // `new_generation` stores `model_number_old = model_number`
     // (`star/private/evolve_support.f90:80`).
     model.save_old_values();
+    // `new_generation` ends with `need_to_setvars = .true.`
+    // (`star/private/evolve_support.f90:121`).
+    model.aux.need_to_setvars = true;
     // `prepare_for_new_step` (`star/private/evolve.f90:1897`).
     model.generations = 2;
-    record_start_of_step_energy_integrals(model);
+    // The energy integrals are evaluated per try, after `set_start_of_step_info`
+    // and `set_mdot` (`evolve.f90:409, 427-436`); RSP2 reads `total_energy_old`
+    // before the try loop.
+    if model.controls.rsp2_flag {
+        record_start_of_step_energy_integrals(model);
+    }
     snapshot_step_start_extras(model);
     model.aux.okay_to_set_mlt_vc = true;
     model.aux.step_hist.mstar_dot_old = prev_mstar_dot_old;
@@ -1177,6 +1215,14 @@ pub(crate) fn star_evolve_step_outcome_checked(
         // try, including retries and redos, computes model
         // `model_number_old + 1`, and every check inside the step sees it.
         model.model_number = target_mod;
+        // `set_start_of_step_info` starts with `set_vars_if_needed`
+        // (`star/private/evolve.f90:409, 1768-1771`).
+        if !model.controls.rsp_flag {
+            if let Err(e) = set_vars_for_new_try(model) {
+                model.model_number = model.model_number_old;
+                return Err(e);
+            }
+        }
         // `set_start_of_step_info` (`star/private/evolve.f90:1784-1787`):
         // snapshot start-of-step `starting_T_center` and optical-depth-averaged
         // `prev_Ledd` before evaluating `set_mdot`.
@@ -1188,6 +1234,11 @@ pub(crate) fn star_evolve_step_outcome_checked(
         if let Err(e) = set_step_mdot(model, explicit_step_mdot, extras) {
             model.model_number = model.model_number_old;
             return Err(e);
+        }
+        // Energy integrals for the new mesh after `set_mdot`, on every try
+        // (`star/private/evolve.f90:427-453`).
+        if !model.controls.rsp_flag {
+            record_start_of_step_energy_integrals(model);
         }
         // `result = adjust_model(...)` between `do_evolve_step_part1` and
         // `do_evolve_step_part2` (`star/private/relax.f90:4070-4071`).

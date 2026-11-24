@@ -133,15 +133,18 @@ pub fn eval1_work_v_flag_ad(
             .get(f_idx)
             .copied()
             .unwrap_or(model.peos[f_idx]);
-        let pl_ad =
-            model.ln_peos_ad[f_idx].exp() * p_theta + p_s_l * (1.0 - p_theta);
+        // `PL_ad = P_theta*wrap_Peos_00(s,k) + (1d0-P_theta)*s% Peos_start(k)`
+        // and `PR_ad` with `wrap_Peos_m1` (`star/private/hydro_energy.f90:685-691`):
+        // value `Peos`, partials `Peos*chi*_for_partials`.
+        let pl_ad = crate::hydro_momentum::wrap_peos_00(model, f_idx) * p_theta
+            + p_s_l * (1.0 - p_theta);
         let pr_ad = if f_idx > 0 {
             let p_s_r = model
                 .peos_start
                 .get(f_idx - 1)
                 .copied()
                 .unwrap_or(model.peos[f_idx - 1]);
-            model.ln_peos_ad[f_idx - 1].shift_m1().exp() * p_theta
+            crate::hydro_momentum::wrap_peos_m1(model, f_idx) * p_theta
                 + p_s_r * (1.0 - p_theta)
         } else {
             StarAdOrder1::ZERO

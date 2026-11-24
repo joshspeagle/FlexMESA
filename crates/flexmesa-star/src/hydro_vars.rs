@@ -1409,9 +1409,8 @@ pub fn set_hydro_vars(
 
     if model.controls.rsp2_flag {
         eval_surf_bc(model)?;
-        if !model.aux.doing_struct_burn_mix {
-            crate::eps_grav::eval_eps_grav(model)?;
-        }
+        // `set_vars` does not evaluate `eps_grav`; the energy equation does
+        // (`star/private/hydro_vars.f90`, `star/private/hydro_energy.f90:389-418`).
         crate::rsp2_ad::update_rsp2_vars_ad(model);
         let alpha = model.controls.mixing_length_alpha;
         for k in 0..nz {
@@ -1469,9 +1468,8 @@ pub fn set_hydro_vars(
         }
     }
     eval_surf_bc(model)?;
-    if !model.aux.doing_struct_burn_mix {
-        crate::eps_grav::eval_eps_grav(model)?;
-    }
+    // `set_vars` does not evaluate `eps_grav`; the energy equation does
+    // (`star/private/hydro_vars.f90`, `star/private/hydro_energy.f90:389-418`).
     if model.controls.u_flag {
         crate::riemann_ad::do_uface_and_pface(model)?;
     }

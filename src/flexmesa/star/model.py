@@ -174,6 +174,16 @@ class StarModel(_arrays.StarModelArrays):
         """Snapshot current state arrays as start-of-step `*_start` values."""
         self._rust_model.save_start_values()
 
+    def record_start_of_step_energy_integrals(self) -> None:
+        """Record the start-of-step energy integrals for a standalone solve.
+
+        The step driver records them after ``set_mdot``
+        (``star/private/evolve.f90:427-453``); call this after
+        :meth:`save_start_values` and before :meth:`eval_equations` or
+        :meth:`solve_henyey` outside the step driver.
+        """
+        self._rust_model.record_start_of_step_energy_integrals()
+
     def save_old_values(self) -> None:
         """Snapshot current state arrays as previous-step `*_old` values."""
         self._rust_model.save_old_values()

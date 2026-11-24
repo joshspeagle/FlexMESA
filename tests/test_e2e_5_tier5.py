@@ -270,7 +270,7 @@ def test_e2e_5_tier5_star_and_binary_suites_execution(
         encoding="utf-8",
     )
     (bad_bin / "inlist1").write_text(
-        "&star_job\n  save_pulse_data_filename = 'p.data'\n/\n"
+        "&star_job\n  echo_at_start = 'hi'\n/\n"
         "&controls\n  initial_mass = 10.0\n/\n",
         encoding="utf-8",
     )

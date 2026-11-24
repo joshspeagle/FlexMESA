@@ -238,7 +238,7 @@ mod tests {
         .expect("write synthetic binary inlist");
         std::fs::write(
             tmp_dir.join("inlist1"),
-            "&star_job\n  save_pulse_data_filename = 'p.data'\n/\n\
+            "&star_job\n  echo_at_start = 'hi'\n/\n\
              &controls\n  initial_mass = 10.0\n/\n",
         )
         .expect("write synthetic component inlist1");
@@ -249,7 +249,7 @@ mod tests {
         assert!(
             matches!(err, flexmesa_star::StarError::InvalidInput(_))
                 && msg.contains("unsupported control")
-                && msg.contains("save_pulse_data_filename"),
+                && msg.contains("echo_at_start"),
             "unexpected binary case error: {msg}"
         );
 

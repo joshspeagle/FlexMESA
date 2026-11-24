@@ -6,9 +6,9 @@ Generated mechanically against **MESA 26.4.1** (git tag `26.4.1`, commit `c8c202
 ## Summary
 
 - **Total manifest cases scanned**: `106`
-- **Cases passing strict `#147` validation**: `61`
-- **Cases rejected by strict `#147` validation**: `45`
-- **Distinct unsupported physics/solver controls encountered**: `168`
+- **Cases passing strict `#147` validation**: `65`
+- **Cases rejected by strict `#147` validation**: `41`
+- **Distinct unsupported physics/solver controls encountered**: `152`
 - **Distinct unknown/misspelled controls encountered**: `0`
 - **Cases using headless plotting controls (`#173` / `DECISIONS #25`)**: `78` (`895` distinct keys)
 
@@ -16,10 +16,10 @@ Generated mechanically against **MESA 26.4.1** (git tag `26.4.1`, commit `c8c202
 
 | Section | Upstream `26.4.1` | Supported | Unused (`#147`) | Headless GUI (`#173`) | Terminal output (`DECISIONS #26`) | Unimplemented |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `&star_job` | 455 | 146 | 12 | 3 | 8 | 286 |
+| `&star_job` | 455 | 172 | 8 | 3 | 8 | 264 |
 | `&eos` | 102 | 91 | 0 | 0 | 9 | 2 |
 | `&kap` | 51 | 39 | 0 | 0 | 10 | 2 |
-| `&controls` | 1448 | 1172 | 23 | 0 | 16 | 237 |
+| `&controls` | 1448 | 1180 | 23 | 0 | 16 | 229 |
 | `&binary_job` | 37 | 22 | 0 | 1 | 1 | 13 |
 | `&binary_controls` | 176 | 124 | 0 | 0 | 2 | 50 |
 | `&astero_search_controls` | 153 | 88 | 3 | 0 | 0 | 62 |
@@ -78,7 +78,6 @@ Generated mechanically against **MESA 26.4.1** (git tag `26.4.1`, commit `c8c202
 | `&astero_search_controls::write_gyre_for_each_model` | `unimplemented` | 5 | `astero/example_astero`, `astero/fast_from_file`, `astero/fast_newuoa`, `astero/fast_scan_grid`, ... (+1) |
 | `&astero_search_controls::y_frac_he3` | `unused` | 5 | `astero/example_astero`, `astero/fast_from_file`, `astero/fast_newuoa`, `astero/fast_scan_grid`, ... (+1) |
 | `&star_job::num_steps_to_relax_rotation` | `unimplemented` | 5 | `star/1M_thermohaline`, `star/20M_z2m2_high_rotation`, `star/high_rot_darkening`, `star/magnetic_braking`, ... (+1) |
-| `&star_job::dlogtau_factor` | `unimplemented` | 4 | `star/irradiated_planet`, `star/pisn`, `star/wd_he_shell_ignition`, `star/wd_stable_h_burn` |
 | `&star_job::near_zams_relax_omega_div_omega_crit` | `unimplemented` | 3 | `star/20M_z2m2_high_rotation`, `star/magnetic_braking`, `star/twin_studies` |
 | `&star_job::relax_omega_max_yrs_dt` | `unimplemented` | 3 | `star/high_rot_darkening`, `star/magnetic_braking`, `star/ppisn` |
 | `&star_job::set_cumulative_energy_error_at_step` | `unimplemented` | 3 | `binary/double_bh`, `star/carbon_kh`, `star/wd_aic` |
@@ -88,6 +87,7 @@ Generated mechanically against **MESA 26.4.1** (git tag `26.4.1`, commit `c8c202
 | `&astero_search_controls::simplex_beta` | `unimplemented` | 2 | `astero/example_astero`, `astero/fast_simplex` |
 | `&astero_search_controls::simplex_delta` | `unimplemented` | 2 | `astero/example_astero`, `astero/fast_simplex` |
 | `&astero_search_controls::simplex_gamma` | `unimplemented` | 2 | `astero/example_astero`, `astero/fast_simplex` |
+| `&astero_search_controls::surf_coef1_name` | `unimplemented` | 2 | `astero/example_astero`, `astero/surface_effects` |
 
 ## Terminal-Output Controls (`DECISIONS #26`)
 
@@ -198,11 +198,11 @@ Per `DECISIONS #25` (matching upstream `USE_PGSTAR = NO`), keys in `&pgstar`, `&
 | `star` | `R_CrB_star` | `pass` | 0 | 0 | 122 |
 | `star` | `T_tau_gradr` | `pass` | 0 | 0 | 0 |
 | `star` | `accreted_material_j` | `pass` | 0 | 0 | 24 |
-| `star` | `adjust_net` | `fail_unsupported` | 5 | 0 | 68 |
+| `star` | `adjust_net` | `fail_unsupported` | 1 | 0 | 68 |
 | `star` | `c13_pocket` | `fail_unsupported` | 1 | 0 | 100 |
-| `star` | `carbon_kh` | `fail_unsupported` | 2 | 0 | 81 |
+| `star` | `carbon_kh` | `fail_unsupported` | 1 | 0 | 81 |
 | `star` | `cburn_inward` | `pass` | 0 | 0 | 66 |
-| `star` | `ccsn_IIp` | `fail_unsupported` | 25 | 0 | 100 |
+| `star` | `ccsn_IIp` | `fail_unsupported` | 24 | 0 | 100 |
 | `star` | `check_pulse_atm` | `fail_unsupported` | 2 | 0 | 0 |
 | `star` | `check_redo` | `pass` | 0 | 0 | 3 |
 | `star` | `conductive_flame` | `fail_unsupported` | 3 | 0 | 109 |
@@ -224,7 +224,7 @@ Per `DECISIONS #25` (matching upstream `USE_PGSTAR = NO`), keys in `&pgstar`, `&
 | `star` | `high_z` | `pass` | 0 | 0 | 0 |
 | `star` | `hot_cool_wind` | `pass` | 0 | 0 | 0 |
 | `star` | `hse_riemann` | `pass` | 0 | 0 | 67 |
-| `star` | `irradiated_planet` | `fail_unsupported` | 3 | 0 | 0 |
+| `star` | `irradiated_planet` | `pass` | 0 | 0 | 0 |
 | `star` | `low_z` | `pass` | 0 | 0 | 0 |
 | `star` | `magnetic_braking` | `fail_unsupported` | 5 | 0 | 56 |
 | `star` | `make_brown_dwarf` | `pass` | 0 | 0 | 19 |
@@ -233,7 +233,7 @@ Per `DECISIONS #25` (matching upstream `USE_PGSTAR = NO`), keys in `&pgstar`, `&
 | `star` | `make_he_wd` | `pass` | 0 | 0 | 0 |
 | `star` | `make_metals` | `pass` | 0 | 0 | 0 |
 | `star` | `make_o_ne_wd` | `pass` | 0 | 0 | 255 |
-| `star` | `make_planets` | `fail_unsupported` | 3 | 0 | 0 |
+| `star` | `make_planets` | `fail_unsupported` | 1 | 0 | 0 |
 | `star` | `make_pre_ccsn_13bvn` | `pass` | 0 | 0 | 324 |
 | `star` | `make_sdb` | `pass` | 0 | 0 | 5 |
 | `star` | `make_zams` | `pass` | 0 | 0 | 72 |
@@ -243,8 +243,8 @@ Per `DECISIONS #25` (matching upstream `USE_PGSTAR = NO`), keys in `&pgstar`, `&
 | `star` | `ns_h` | `pass` | 0 | 0 | 58 |
 | `star` | `ns_he` | `fail_unsupported` | 8 | 0 | 64 |
 | `star` | `other_physics_hooks` | `fail_unsupported` | 1 | 0 | 0 |
-| `star` | `pisn` | `fail_unsupported` | 8 | 0 | 288 |
-| `star` | `ppisn` | `fail_unsupported` | 13 | 0 | 76 |
+| `star` | `pisn` | `fail_unsupported` | 7 | 0 | 288 |
+| `star` | `ppisn` | `fail_unsupported` | 12 | 0 | 76 |
 | `star` | `radiative_levitation` | `fail_unsupported` | 4 | 0 | 14 |
 | `star` | `relax_composition_j_entropy` | `pass` | 0 | 0 | 0 |
 | `star` | `rsp_BEP` | `pass` | 0 | 0 | 75 |
@@ -259,18 +259,18 @@ Per `DECISIONS #25` (matching upstream `USE_PGSTAR = NO`), keys in `&pgstar`, `&
 | `star` | `semiconvection` | `pass` | 0 | 0 | 1 |
 | `star` | `simplex_solar_calibration` | `fail_unsupported` | 2 | 0 | 0 |
 | `star` | `split_burn_big_net` | `fail_unsupported` | 6 | 0 | 258 |
-| `star` | `starspots` | `fail_unsupported` | 5 | 0 | 17 |
+| `star` | `starspots` | `fail_unsupported` | 2 | 0 | 17 |
 | `star` | `timing` | `pass` | 0 | 0 | 0 |
 | `star` | `twin_studies` | `fail_unsupported` | 8 | 0 | 255 |
-| `star` | `tzo` | `fail_unsupported` | 7 | 0 | 334 |
+| `star` | `tzo` | `fail_unsupported` | 4 | 0 | 334 |
 | `star` | `wd_acc_small_dm` | `pass` | 0 | 0 | 55 |
 | `star` | `wd_aic` | `fail_unsupported` | 6 | 0 | 41 |
 | `star` | `wd_c_core_ignition` | `pass` | 0 | 0 | 15 |
 | `star` | `wd_cool_0.6M` | `pass` | 0 | 0 | 17 |
 | `star` | `wd_diffusion` | `pass` | 0 | 0 | 11 |
-| `star` | `wd_he_shell_ignition` | `fail_unsupported` | 1 | 0 | 17 |
-| `star` | `wd_nova_burst` | `fail_unsupported` | 1 | 0 | 11 |
-| `star` | `wd_stable_h_burn` | `fail_unsupported` | 1 | 0 | 0 |
+| `star` | `wd_he_shell_ignition` | `pass` | 0 | 0 | 17 |
+| `star` | `wd_nova_burst` | `pass` | 0 | 0 | 11 |
+| `star` | `wd_stable_h_burn` | `pass` | 0 | 0 | 0 |
 | `star` | `zams_to_cc_80` | `fail_unsupported` | 6 | 0 | 263 |
 | `binary` | `double_bh` | `fail_unsupported` | 1 | 0 | 92 |
 | `binary` | `evolve_both_stars` | `pass` | 0 | 0 | 84 |

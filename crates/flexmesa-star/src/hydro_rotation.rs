@@ -373,6 +373,39 @@ pub fn set_omega(model: &mut StarModel) {
     }
 }
 
+/// Updates `w_div_wc` from `j_rot` (zero where `j_rot == 0`) and `i_rot`
+/// from `ln_r` (`use_xh_to_update_i_rot` in
+/// `star/private/hydro_rotation.f90:362-380`). `w_div_wc_flag` is `.false.`
+/// on this path (`star/private/init.f90:531`).
+pub fn use_xh_to_update_i_rot(model: &mut StarModel) {
+    let nz = model.nz;
+    if nz == 0 {
+        return;
+    }
+    if model.aux.w_div_wc.len() != nz || model.aux.i_rot.len() != nz {
+        model.aux.resize(nz, model.species);
+    }
+    let max_w = model.controls.mix_wind.w_div_wcrit_max;
+    let max_w2 = model.controls.mix_wind.w_div_wcrit_max2;
+    for k in 0..nz {
+        if model.j_rot[k] == 0.0 {
+            model.aux.w_div_wc[k] = 0.0;
+        } else {
+            let r00 = flexmesa_math::exp(model.ln_r[k]);
+            model.aux.w_div_wc[k] = w_div_w_roche_jrot(
+                r00,
+                model.m[k],
+                model.j_rot[k],
+                model.cgrav[k],
+                max_w,
+                max_w2,
+                false,
+            );
+        }
+        update1_i_rot_from_xh(model, k);
+    }
+}
+
 /// Updates `w_div_wc`, `i_rot`, and `j_rot = i_rot * omega` from `ln_r` and
 /// `omega` (`use_xh_to_update_i_rot_and_j_rot` in
 /// `star/private/hydro_rotation.f90:382-397`).

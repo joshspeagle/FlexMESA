@@ -4,7 +4,7 @@
 //! `adjust_J_lost`, and `smooth_outer_xa`) matching
 //! `star/private/adjust_mass.f90`.
 
-use flexmesa_const::{LN10, M_SUN, SECYER};
+use flexmesa_const::{FOUR_THIRDS_PI, LN10, M_SUN, ONE_THIRD, SECYER};
 
 pub use crate::accretion_xa::{build_accreted_xa, get_xa_for_accretion};
 use flexmesa_math::Quad;
@@ -17,7 +17,7 @@ use crate::hydro_rotation::{
 };
 use crate::hydro_vars::set_hydro_vars;
 use flexmesa_num::search::binary_search_1based;
-use crate::micro::{do_eos, set_basic_vars};
+use crate::micro::set_basic_vars;
 use crate::model::StarModel;
 use crate::rotation::conserve_shell_j_rot_and_distortion;
 
@@ -460,14 +460,26 @@ fn do_adjust_mass_core(
     // (`eps_mdot.f90:494-678`), scaling `eps_mdot` by `eps_mdot_factor` at
     // the end (`eps_mdot.f90:666`).
     let need_eps_mdot = dt > 0.0 && model.mstar_dot != 0.0;
-    if need_eps_mdot
-        && (model.r[..nz].iter().any(|&v| v <= 0.0)
-            || model.energy[..nz].iter().all(|&v| v == 0.0))
-    {
-        model.reconstruct_ln_r_from_lnd_and_dm();
-        model.set_m_grav_and_grav();
-        set_basic_vars(model)?;
-        do_eos(model)?;
+    // Upstream has no fallback here: `save_for_eps_mdot` reads `s% r` and
+    // `s% energy` as `set_vars` left them (`adjust_mass.f90:75-95`).
+    if need_eps_mdot {
+        if let Some(k) = model.r[..nz].iter().position(|&v| v <= 0.0) {
+            // `grav00 = -G00*m00/r00` divides by `r(k)`
+            // (`star/private/star_utils.f90:2266`; DECISIONS #43, deferred #488).
+            return Err(StarError::InvalidInput(format!(
+                "do_adjust_mass: r({}) = {:e} <= 0 before save_for_eps_mdot; upstream divides by it in cell_specific_PE (star_utils.f90:2266; deferred #488)",
+                k + 1,
+                model.r[k]
+            )));
+        }
+        if model.energy[..nz].iter().all(|&v| v == 0.0) {
+            // `s% energy` is always set by `set_vars` before this point
+            // upstream (`star/private/micro.f90:469`); an all-zero array here
+            // means it was never evaluated (DECISIONS #43).
+            return Err(StarError::InvalidInput(String::from(
+                "do_adjust_mass: cell energies are unset before save_for_eps_mdot (star/private/adjust_mass.f90:75-95, 204)",
+            )));
+        }
     }
     let prev_dm_raw = model.dm.clone();
     // `save_for_eps_mdot` (`adjust_mass.f90:75-95, 204`).
@@ -629,10 +641,7 @@ fn do_adjust_mass_core(
     // Soften outer `xa` (`adjust_mass.f90:480-510`).
     smooth_outer_xa(model);
 
-    model.reconstruct_ln_r_from_lnd_and_dm();
-    if model.ln_r_start.len() == nz {
-        model.ln_r_start.clone_from(&model.ln_r);
-    }
+    update_radius(model);
     model.set_m_grav_and_grav();
     model.pack_xh();
     if model.xh_start.len() == model.xh.len() {
@@ -690,6 +699,32 @@ fn do_adjust_mass_core(
         model.aux.step_hist.clear_adjust_mass_energy_fields();
     }
     Ok(())
+}
+
+/// `update_radius` (`star/private/adjust_mass.f90:137-167`): rebuilds the
+/// radii from the centre outwards with each cell's volume `dm/rho`, using
+/// the cell densities `rho` as they stand, and stores `lnR = log(r_new)`,
+/// `r = exp(lnR)`, `rmid = r_new` and `lnR_start = lnR`.
+fn update_radius(model: &mut StarModel) {
+    let nz = model.nz;
+    let mut vol00 =
+        FOUR_THIRDS_PI * model.r_center * model.r_center * model.r_center;
+    for j in (0..nz).rev() {
+        let volp1 = vol00;
+        let cell_vol = model.dm[j] / model.rho[j];
+        vol00 = volp1 + cell_vol;
+        let r_new = flexmesa_math::exp(
+            flexmesa_math::log(vol00 / FOUR_THIRDS_PI) * ONE_THIRD,
+        );
+        model.rmid[j] = r_new;
+        // `store_r_in_xh` then `get_r_and_lnR_from_xh`
+        // (`star/private/star_utils.f90:413-426, 456-468`).
+        model.ln_r[j] = flexmesa_math::log(r_new);
+        model.r[j] = flexmesa_math::exp(model.ln_r[j]);
+        if model.ln_r_start.len() == nz {
+            model.ln_r_start[j] = model.ln_r[j];
+        }
+    }
 }
 
 /// Remaps the composition of zones `1..k_const_mass` onto the revised mesh

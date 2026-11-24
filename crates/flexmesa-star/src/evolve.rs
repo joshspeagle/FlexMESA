@@ -11,7 +11,7 @@ use crate::controls::{StarError, StepFailureInfo};
 pub use crate::evolve_support::snapshot_step_old_extras;
 use crate::evolve_support::{
     apply_step_pre_physics_with_extras, record_start_of_step_energy_integrals,
-    remesh_star_before_step, snapshot_step_start_extras,
+    remesh_star_before_step, set_vars_for_new_step, snapshot_step_start_extras,
     update_step_energy_conservation,
 };
 use crate::hydro_vars::set_hydro_vars;
@@ -139,7 +139,8 @@ pub fn restore_from_old(model: &mut StarModel) -> Result<(), StarError> {
     model.r_center = model.r_center_old;
     model.l_center = model.l_center_old;
     model.v_center = model.v_center_old;
-    model.xmstar = model.mstar - model.m_center;
+    // `s% xmstar = s% xmstar_old` (`star/private/evolve_support.f90:158`).
+    model.xmstar = model.xmstar_old;
     model.lnd.clone_from(&model.lnd_old);
     model.ln_t.clone_from(&model.ln_t_old);
     model.ln_r.clone_from(&model.ln_r_old);
@@ -349,6 +350,14 @@ pub fn star_evolve_step_part1(
             (0, 0, None)
         };
 
+    // `set_vars_if_needed(s, s% dt_next, 'prepare_for_new_step')`
+    // (`star/private/evolve.f90:1891`), on the first try only.
+    if first_try {
+        if let Err(e) = set_vars_for_new_step(model) {
+            model.aux.okay_to_set_mlt_vc = true;
+            return Err(e);
+        }
+    }
     snapshot_step_old_extras(model);
     // `new_generation` stores `model_number_old = model_number`
     // (`star/private/evolve_support.f90:80`); a retry enters with
@@ -438,19 +447,10 @@ pub fn star_evolve_step_part1(
             } else {
                 ts.force_timestep
             };
+            // `prepare_for_new_step` (`star/private/evolve.f90:1915-1928`)
+            // applies no `max_timestep` limit to `dt_next`.
             if force_dt > 0.0 {
                 dt_try = force_dt;
-            } else {
-                if model.controls.max_years_for_timestep > 0.0 {
-                    dt_try = dt_try
-                        .min(model.controls.max_years_for_timestep * SECYER);
-                }
-                if ts.max_timestep > 0.0 {
-                    dt_try = dt_try.min(ts.max_timestep);
-                }
-                if model.controls.rsp.max_timestep > 0.0 {
-                    dt_try = dt_try.min(model.controls.rsp.max_timestep);
-                }
             }
         } else {
             if model.controls.max_years_for_timestep > 0.0 {
@@ -1054,6 +1054,12 @@ pub(crate) fn star_evolve_step_outcome_checked(
         (0, 0, None)
     };
 
+    // `set_vars_if_needed(s, s% dt_next, 'prepare_for_new_step')`
+    // (`star/private/evolve.f90:1891`).
+    if let Err(e) = set_vars_for_new_step(model) {
+        model.aux.okay_to_set_mlt_vc = true;
+        return Err(e);
+    }
     snapshot_step_old_extras(model);
     // `new_generation` stores `model_number_old = model_number`
     // (`star/private/evolve_support.f90:80`).
@@ -1137,19 +1143,12 @@ pub(crate) fn star_evolve_step_outcome_checked(
         } else {
             ts.force_timestep
         };
+        // `prepare_for_new_step` applies only `force_timestep_min` and
+        // `force_timestep` to `dt_next` (`star/private/evolve.f90:1915-1928`);
+        // `max_years_for_timestep` and `max_timestep` limit `dt_next` in
+        // `pick_next_timestep` and a retry, not here.
         if force_dt > 0.0 {
             dt_try = force_dt;
-        } else {
-            if model.controls.max_years_for_timestep > 0.0 {
-                dt_try =
-                    dt_try.min(model.controls.max_years_for_timestep * SECYER);
-            }
-            if ts.max_timestep > 0.0 {
-                dt_try = dt_try.min(ts.max_timestep);
-            }
-            if model.controls.rsp.max_timestep > 0.0 {
-                dt_try = dt_try.min(model.controls.rsp.max_timestep);
-            }
         }
     }
 

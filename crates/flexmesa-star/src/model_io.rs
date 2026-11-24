@@ -346,8 +346,15 @@ pub fn read_mod_str_with_dir(
             "v_center" => v_center = parse_fortran_f64(v)?,
             "total_energy" => total_energy = parse_fortran_f64(v)?,
             "cumulative_energy_error" => cum_energy_err = parse_fortran_f64(v)?,
-            "tau_factor" if !job.set_tau_factor => {
-                controls.tau_factor = parse_fortran_f64(v)?;
+            "tau_factor" => {
+                // A saved `tau_factor` replaces the inlist value unless the
+                // inlist just set it (`star/private/read_model.f90:307-315`).
+                let saved = parse_fortran_f64(v)?;
+                if (saved - controls.tau_factor).abs() > saved * 1.0e-9
+                    && controls.tau_factor != job.set_to_this_tau_factor
+                {
+                    controls.tau_factor = saved;
+                }
             }
             "opacity_factor" => controls.opacity_factor = parse_fortran_f64(v)?,
             "crystal_core_boundary_mass" => {
@@ -420,7 +427,7 @@ pub fn read_mod_str_with_dir(
 
     let iso_names = &header_cols[iso_start_idx..];
     let species = iso_names.len();
-    let chem_id: Vec<usize> = iso_names
+    let col_chem_id: Vec<usize> = iso_names
         .iter()
         .map(|n| {
             catalog.get_nuclide_index(n).ok_or_else(|| {
@@ -431,7 +438,49 @@ pub fn read_mod_str_with_dir(
         })
         .collect::<Result<Vec<usize>, StarError>>()?;
 
+    // `do_read_saved_model` loads the model's own net (`set_net`,
+    // `star/private/read_model.f90:364,381`), so species follow the net's
+    // order and column `i` is stored at `perm(i) = net_iso(chem_id)`
+    // (`get_chem_col_names`, `star/private/read_model.f90:918-984`;
+    // `xa(perm(ii),k) = vec(j+ii)`, `star/private/read_model.f90:648-650`).
+    // A column the net lacks stops the run (`read_model.f90:412-420`). A
+    // change_net / change_initial_net is applied later, after
+    // `finish_load_model`, by `do_star_job_controls_after`
+    // (`star/job/run_star_support.f90:1912-1916`).
+    let (chem_id, perm): (Vec<usize>, Vec<usize>) =
+        if job.net_name.trim().is_empty() {
+            (col_chem_id.clone(), (0..species).collect())
+        } else {
+            let net = crate::micro::get_or_load_net(&job.net_name, search_dir)?;
+            let net_chem_id = net.chem_id.clone();
+            let mut perm = Vec::with_capacity(species);
+            for (n, cid) in iso_names.iter().zip(&col_chem_id) {
+                let j = net_chem_id.iter().position(|c| c == cid).ok_or_else(
+                    || {
+                        StarError::IoError(format!(
+                            "Mod file has isotope {n} but that is not in the net {} (`star/private/read_model.f90:412-420`)",
+                            job.net_name
+                        ))
+                    },
+                )?;
+                perm.push(j);
+            }
+            // DECISIONS #43, deferred #472: with fewer columns than net species upstream
+            // leaves the remaining `xa` rows unset (`set_net` sets
+            // `s% species` from the net, `star/private/net.f90:626`, while
+            // only `species` columns are read).
+            if net_chem_id.len() != species {
+                return Err(StarError::IoError(format!(
+                    ".mod has {species} isotope columns but net {} has {} species; upstream reads unset abundances here (`star/private/read_model.f90:405-420`, `star/private/net.f90:626`; DECISIONS #43, deferred #472)",
+                    job.net_name,
+                    net_chem_id.len()
+                )));
+            }
+            (net_chem_id, perm)
+        };
+
     let mut model = StarModel::new(nz, chem_id, job.clone(), controls);
+    model.aux.have_j_rot = j_rot_idx.is_some();
     model.mstar = m_msun * M_SUN;
     (model.mstar_start, model.mstar_old) = (model.mstar, model.mstar);
     if let Some(mc) = m_center_opt.filter(|&m| m > 0.0) {
@@ -519,8 +568,8 @@ pub fn read_mod_str_with_dir(
             let vc = parse_fortran_f64(toks[offset + idx])?;
             (model.mlt_vc[k], model.conv_vel[k]) = (vc, vc);
         }
-        for j in 0..species {
-            model.xa[k * species + j] =
+        for (j, &p) in perm.iter().enumerate() {
+            model.xa[k * species + p] =
                 parse_fortran_f64(toks[offset + iso_start_idx + j])?;
         }
         k += 1;
@@ -542,22 +591,6 @@ pub fn read_mod_str_with_dir(
             }
         } else if t.starts_with("dt_next (seconds)") {
             model.dt_next = parse_fortran_f64(v)?;
-        }
-    }
-
-    let target_net = if job.change_net && !job.new_net_name.is_empty() {
-        job.new_net_name.clone()
-    } else {
-        model.job.net_name.clone()
-    };
-    if !target_net.trim().is_empty() {
-        let net = crate::micro::get_or_load_net(&target_net, search_dir)?;
-        if net.chem_id != model.chem_id {
-            crate::micro::change_model_network(
-                &mut model,
-                &target_net,
-                search_dir,
-            )?;
         }
     }
 
@@ -610,6 +643,7 @@ pub fn read_mod_str_with_dir(
     model.time_sec = model.star_age * flexmesa_const::SECYER;
     model.time_old_sec = model.star_age_old * flexmesa_const::SECYER;
     model.m_center_old = model.m_center;
+    model.xmstar_old = model.xmstar;
     model.r_center_old = model.r_center;
     model.l_center_old = model.l_center;
     model.v_center_old = model.v_center;

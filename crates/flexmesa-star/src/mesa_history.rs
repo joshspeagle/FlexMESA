@@ -1832,12 +1832,14 @@ fn eval_scalar_column(
         }
         "photosphere_csound" => MesaCellValue::Float(ctx.phot.csound),
         "photosphere_opacity" => MesaCellValue::Float(ctx.phot.opacity),
+        // `column_density` is `Some` here: `evaluate_star_history_row_with_ctx`
+        // returns the `#467` error first when it is unset.
         "photosphere_column_density" => {
-            MesaCellValue::Float(ctx.phot.column_density)
+            MesaCellValue::Float(ctx.phot.column_density.unwrap_or(f64::NAN))
         }
-        "photosphere_log_column_density" => {
-            MesaCellValue::Float(safe_log10(ctx.phot.column_density))
-        }
+        "photosphere_log_column_density" => MesaCellValue::Float(safe_log10(
+            ctx.phot.column_density.unwrap_or(f64::NAN),
+        )),
         "photosphere_v_km_s" | "v_phot_km_s" => {
             MesaCellValue::Float(ctx.phot.v_cm_s * 1.0e-5)
         }
@@ -3097,7 +3099,7 @@ pub fn star_get_history_output(
             "star_get_history_output: '{name}' is not a single history column"
         )));
     }
-    let row = evaluate_star_history_row(model, &specs);
+    let row = evaluate_star_history_row(model, &specs)?;
     row.first().map(|(_, v)| v.as_f64()).ok_or_else(|| {
         StarError::InvalidInput(format!(
             "star_get_history_output: no value for '{name}'"
@@ -3106,22 +3108,43 @@ pub fn star_get_history_output(
 }
 
 /// Evaluates all `specs` for `model` at the current step (`star/private/history.f90`).
-#[must_use]
+///
+/// # Errors
+/// See [`evaluate_star_history_row_with_ctx`].
 pub fn evaluate_star_history_row(
     model: &StarModel,
     specs: &[HistoryColumnSpec],
-) -> Vec<(String, MesaCellValue)> {
+) -> Result<Vec<(String, MesaCellValue)>, StarError> {
     let ctx = StepReportContext::compute(model);
     evaluate_star_history_row_with_ctx(model, specs, &ctx)
 }
 
 /// Evaluates all `specs` for `model` reusing a precomputed [`StepReportContext`].
-#[must_use]
+///
+/// # Errors
+/// Returns [`StarError::InvalidInput`] when `photosphere_column_density` or
+/// `photosphere_log_column_density` is requested while `tau_factor >= 1`:
+/// upstream reads `ysum` without setting it there
+/// (`star/private/star_utils.f90:1155-1158`, `star/private/history.f90:1735-1738`).
 pub fn evaluate_star_history_row_with_ctx(
     model: &StarModel,
     specs: &[HistoryColumnSpec],
     ctx: &StepReportContext,
-) -> Vec<(String, MesaCellValue)> {
+) -> Result<Vec<(String, MesaCellValue)>, StarError> {
+    for sp in specs {
+        if let HistoryColumnSpec::Scalar(
+            name @ ("photosphere_column_density"
+            | "photosphere_log_column_density"),
+        ) = *sp
+        {
+            if ctx.phot.column_density.is_none() {
+                // Upstream reads `ysum` unset when `tau_factor >= 1` (#467).
+                return Err(StarError::InvalidInput(format!(
+                    "history column '{name}' is undefined when tau_factor >= 1: upstream never sets ysum (star_utils.f90:1155-1158, #467)"
+                )));
+            }
+        }
+    }
     let mut max_mix = 0_usize;
     let mut max_mix_relr = 0_usize;
     let mut max_burn = 0_usize;
@@ -3159,7 +3182,7 @@ pub fn evaluate_star_history_row_with_ctx(
     let mut colors_cache: Option<ColorsEvalOutput> = None;
 
     let nz = model.nz;
-    specs
+    Ok(specs
         .iter()
         .map(|sp| {
             let val = match sp {
@@ -3297,7 +3320,7 @@ pub fn evaluate_star_history_row_with_ctx(
             };
             (sp.column_name(), val)
         })
-        .collect()
+        .collect())
 }
 
 fn eval_photosphere_xz(
@@ -3715,7 +3738,7 @@ impl IncrementalHistoryWriter {
             self.writer = Some(bw);
         }
 
-        let row = evaluate_star_history_row_with_ctx(model, &self.specs, ctx);
+        let row = evaluate_star_history_row_with_ctx(model, &self.specs, ctx)?;
         let line = if let Some(c_ctx) = self
             .colors_specs
             .first()

@@ -137,7 +137,9 @@ pub fn eval_surf_momentum_bc_pressure_ad(model: &StarModel) -> StarAdOrder1 {
     } else if model.controls.use_fixed_psurf_outer_bc {
         StarAdOrder1::constant(model.controls.fixed_psurf)
     } else {
-        model.ln_peos_surf_ad.exp()
+        // `P_bc_ad` from `get_PT_bc_ad` for `use_momentum_outer_BC`
+        // (`star/private/hydro_eqns.f90:788-798`).
+        crate::hydro_eqns::get_pt_bc_ad(model).p_bc
     }
 }
 

@@ -775,7 +775,7 @@ fn test_set_phase_of_evolution_all_13_stop_phases_and_history_column() {
     // Verify `phase_of_evolution` history column reports exact integer code.
     let specs = parse_star_history_columns("phase_of_evolution\n", None, &m_wd)
         .expect("parse phase_of_evolution column");
-    let row = evaluate_star_history_row(&m_wd, &specs);
+    let row = evaluate_star_history_row(&m_wd, &specs).expect("history row");
     assert_eq!(row.len(), 1);
     assert_eq!(row[0].1, MesaCellValue::Int(i64::from(PHASE_WDCS)));
     let ctx = StepReportContext::compute(&m_wd);

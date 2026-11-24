@@ -39,7 +39,8 @@ fn rel_err(actual: f64, expected: f64) -> f64 {
 
 fn history_float(model: &StarModel, col: &'static str) -> f64 {
     let row =
-        evaluate_star_history_row(model, &[HistoryColumnSpec::Scalar(col)]);
+        evaluate_star_history_row(model, &[HistoryColumnSpec::Scalar(col)])
+            .expect("history row");
     match row.first().map(|(_, v)| v) {
         Some(MesaCellValue::Float(v)) => *v,
         other => {
@@ -586,8 +587,9 @@ fn test_inlist_loads_energy_accounting_controls() {
 }
 
 /// Verifies `&star_job::set_initial_cumulative_energy_error` &
-/// `new_cumulative_energy_error` reset `cumulative_energy_error` on fresh load
-/// (including `.mod`) and preserve it on restart (`run_star_support.f90:2762-2767`).
+/// `new_cumulative_energy_error` reset `cumulative_energy_error` on a `.mod`
+/// load and on a model carried over from an earlier stage, which is not a
+/// photo restart (`star/job/run_star_support.f90:433-442, 2762-2767`).
 #[test]
 fn test_set_initial_cumulative_energy_error_startup_and_restart() {
     let tmp = TempInlistGuard::new("cum_e_err");
@@ -623,8 +625,8 @@ fn test_set_initial_cumulative_energy_error_startup_and_restart() {
     assert_eq!(model.aux.cumulative_energy_error, -4.5e38);
     assert_eq!(model.aux.step_hist.cumulative_energy_error_old, -4.5e38);
 
-    // On restart (`existing_model = Some(prev)`), `set_initial_cumulative_energy_error`
-    // must preserve the carried `cumulative_energy_error`.
+    // A model carried over from an earlier stage (`existing_model = Some(prev)`)
+    // stands for the `.mod` file upstream reloads, so the reset applies.
     model.aux.cumulative_energy_error = 9.0e40;
     let restarted = init_or_update_model_from_bundle(
         &bundle_fresh,
@@ -632,7 +634,7 @@ fn test_set_initial_cumulative_energy_error_startup_and_restart() {
         &mut extras,
     )
     .expect("restart init");
-    assert_eq!(restarted.aux.cumulative_energy_error, 9.0e40);
+    assert_eq!(restarted.aux.cumulative_energy_error, -4.5e38);
 }
 
 /// Verifies non-finite global energy accounting aborts via

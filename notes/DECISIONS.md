@@ -78,6 +78,8 @@ Scope and the `v0.1.0` definition are in [`SCOPE.md`](SCOPE.md). Work is tracked
 | 61 | The In-House Pulsation Scaffolding Is Removed Package by Package (`#170`, `#171`) | In force | below |
 | 62 | A Reference History That Skips Models Is Compared Only at Its Own Rows (`#459`) | In force | below |
 | 63 | FlexMESA Is Licensed Under `GPL-3.0-or-later` (`#470`) | In force | below |
+| 64 | Test-Side Star Extras Receive a Copy of the Live Model for Library Calls (`#170`) | In force | below |
+| 65 | Astero Search Cases Are Compared Track by Track (`#430`) | In force | below |
 
 ## Pre-audit decisions still in force
 
@@ -847,3 +849,29 @@ The text of these four entries predates the audit of 2026-11-16. The decisions s
 - **Alternatives Rejected**:
   - *A separate, optional GPL crate for GYRE, with an LGPL core*: two licences in one project, and cases that need GYRE would require an extra.
   - *Asking GYRE's author for an LGPL grant*: makes the port depend on an outside reply.
+
+## DECISIONS #64: Test-Side Star Extras Receive a Copy of the Live Model for Library Calls (`#170`)
+
+- **Date**: 2026-11-24
+- **Decision**: A test-side extras object that needs the live star model, for example to call GYRE from `astero_gyre`'s `run_star_extras` as upstream does, sets `wants_star_model = True`. It then receives a copy of the model as a `StarModelHandle`, which Rust library entry points such as `AsteroGyre.get_modes` accept. `trace_astero_case` routes extras that define no `set_param` as star extras, so cases with `astero_just_call_my_extras_check_model` run their own extras.
+- **Why**: upstream's per-case extras call library routines (here `gyre_support`) on the current model. Library crates must contain no case logic (`CLAUDE.md`), so the cadence and the final check stay in `tests/case_extras/`, and the library is only called.
+- **Alternatives Rejected**:
+  - *Exposing more snapshot arrays and rebuilding the model in Python*: duplicates the model layout and risks a non-identical input to GYRE.
+  - *A directive round-trip asking Rust to call GYRE*: puts case cadence logic in the library.
+
+## DECISIONS #65: Astero Search Cases Are Compared Track by Track (`#430`)
+
+- **Date**: 2026-11-24
+- **Decision**: MESA's astero search rewrites `LOGS/history.data` on every `run1_star` call (`astero/private/astero_run_support.f90:224`, `star/private/history.f90:313-321`), so its stored history is only the last track. The harness compares FlexMESA track `i` with MESA track `i` from the test bundle `mesa-astero-tracks-v1`, which holds one history per track, recorded with a source-free `-Wl,--wrap` tap on `run1_star`.
+  - Tracks count every `run1_star` call, accepted or not.
+  - A case passes only when it reaches upstream's termination, has run as many tracks as MESA, and has every track within the unchanged manifest tolerances.
+  - In an unfinished run, the last track is compared with the MESA track up to the same `star_age`, as a prefix, and the case never passes.
+  - Track 1 is the primary comparison, used in the main table and the baseline gate. Every track is listed in the case table.
+  - FlexMESA's `LOGS/history.data` now ends as the last track's, as in MESA.
+- **Why**: comparing FlexMESA's best track with MESA's last track compared different stellar tracks. For example, `fast_newuoa` at model 1 had `log_Teff` 3.6235 against 3.6126.
+- **Limits**: track pairing assumes the same search order, so an order difference shows as divergence on the swapped tracks.
+- **Alternatives Rejected**:
+  - *MESA's `outputs/sample_*.data`*: best-model summaries, not histories.
+  - *Comparing only the last track*: uninformative for capped or budget-limited runs.
+  - *Committing the 22 files*: 3.6 MB, above the 150 KB per-file rule.
+  - *Instrumenting MESA source*: a link-time wrap changes no source or arithmetic.

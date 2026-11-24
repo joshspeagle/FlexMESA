@@ -83,8 +83,6 @@ pub struct BinaryStepSnapshot {
     pub ignore_rlof_flag: bool,
     /// Equivalent non-rotating BH mass (`eq_initial_bh_mass`, g).
     pub eq_initial_bh_mass: f64,
-    /// Suppress hard limits on the active step (`ignore_hard_limits_this_step`).
-    pub ignore_hard_limits_this_step: bool,
     /// Saved donor irradiation flux (`irradiation_flux`, $\mathrm{erg\,cm^{-2}\,s^{-1}}$).
     pub donor_irradiation_flux: f64,
     /// Saved donor irradiation column depth (`column_depth_for_irradiation`, $\mathrm{g\,cm^{-2}}$).
@@ -115,6 +113,8 @@ pub struct BinaryStepSnapshot {
     pub model_number: usize,
     /// Maximum binary timestep (s).
     pub max_timestep_sec: f64,
+    /// Binary timestep reason code (`dt_why_reason`).
+    pub dt_why_reason: i32,
     /// Implicit solver adaptive `change_factor`.
     pub change_factor: f64,
     /// Magnetic-braking active flags `[mb_1, mb_2]`.
@@ -142,8 +142,6 @@ pub struct BinaryStepScalars {
     pub ignore_rlof_flag: bool,
     /// Equivalent non-rotating BH mass (`eq_initial_bh_mass`, g).
     pub eq_initial_bh_mass: f64,
-    /// Suppress hard limits on the active step (`ignore_hard_limits_this_step`).
-    pub ignore_hard_limits_this_step: bool,
     /// Saved donor irradiation flux (`irradiation_flux`, $\mathrm{erg\,cm^{-2}\,s^{-1}}$).
     pub donor_irradiation_flux: f64,
     /// Saved donor irradiation column depth (`column_depth_for_irradiation`, $\mathrm{g\,cm^{-2}}$).
@@ -174,6 +172,8 @@ pub struct BinaryStepScalars {
     pub model_number: usize,
     /// Maximum binary timestep (s).
     pub max_timestep_sec: f64,
+    /// Binary timestep reason code (`dt_why_reason`).
+    pub dt_why_reason: i32,
     /// Implicit solver adaptive `change_factor`.
     pub change_factor: f64,
     /// Magnetic-braking active flags `[mb_1, mb_2]`.
@@ -204,7 +204,6 @@ impl BinaryStepSnapshot {
             donor_i: s.donor_i,
             ignore_rlof_flag: s.ignore_rlof_flag,
             eq_initial_bh_mass: s.eq_initial_bh_mass,
-            ignore_hard_limits_this_step: s.ignore_hard_limits_this_step,
             donor_irradiation_flux: s.donor_irradiation_flux,
             donor_column_depth_for_irradiation: s
                 .donor_column_depth_for_irradiation,
@@ -221,6 +220,7 @@ impl BinaryStepSnapshot {
             binary_age_yr: s.binary_age_yr,
             model_number: s.model_number,
             max_timestep_sec: s.max_timestep_sec,
+            dt_why_reason: s.dt_why_reason,
             change_factor: s.change_factor,
             using_jdot_mb: s.using_jdot_mb,
             cumulative_j_ext: s.cumulative_j_ext,
@@ -252,7 +252,6 @@ impl BinaryStepSnapshot {
         self.donor_i = s.donor_i;
         self.ignore_rlof_flag = s.ignore_rlof_flag;
         self.eq_initial_bh_mass = s.eq_initial_bh_mass;
-        self.ignore_hard_limits_this_step = s.ignore_hard_limits_this_step;
         self.donor_irradiation_flux = s.donor_irradiation_flux;
         self.donor_column_depth_for_irradiation =
             s.donor_column_depth_for_irradiation;
@@ -269,6 +268,7 @@ impl BinaryStepSnapshot {
         self.binary_age_yr = s.binary_age_yr;
         self.model_number = s.model_number;
         self.max_timestep_sec = s.max_timestep_sec;
+        self.dt_why_reason = s.dt_why_reason;
         self.change_factor = s.change_factor;
         self.using_jdot_mb = s.using_jdot_mb;
         self.cumulative_j_ext = s.cumulative_j_ext;

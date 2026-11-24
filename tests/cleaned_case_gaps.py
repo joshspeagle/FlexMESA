@@ -74,7 +74,4 @@ def assert_declared_stop(
 
 DECLARED_STAR_STOPS: dict[str, DeclaredStop] = {
     "make_env": DeclaredStop(r"missing saved model 'start\.mod'", "#154"),
-    "tzo": DeclaredStop(
-        r"relax ended with termination code 'min_timestep_limit'", "#161"
-    ),
 }

@@ -11,8 +11,9 @@ use flexmesa_star::controls::StarError;
 use flexmesa_star::history::{extract_history_row, HistoryRow};
 use flexmesa_star::inlist::{InlistBundle, InlistLoadOptions};
 use flexmesa_star::inlist_runner::{
-    run_test_suite_case_with_options, verify_photo_restart_parity,
-    CaseRunReport, StageRunReport, StarLogsOptions,
+    run_test_suite_case_with_extras, run_test_suite_case_with_options,
+    verify_photo_restart_parity, CaseRunReport, StageRunReport, StarExtras,
+    StarLogsOptions,
 };
 use flexmesa_star::rn_parser::{parse_rn_stages, RnStage};
 
@@ -183,6 +184,37 @@ pub fn run_astero_test_suite_case_with_case_hooks(
     inlist_opts: InlistLoadOptions,
     set_param: Option<&mut dyn AsteroCaseHooks>,
 ) -> Result<CaseRunReport, StarError> {
+    run_astero_test_suite_case_with_hooks(
+        orig_case_dir,
+        skip_optional,
+        max_steps_per_stage,
+        verify_restart,
+        logs_opts,
+        inlist_opts,
+        set_param,
+        None,
+    )
+}
+
+/// [`run_astero_test_suite_case_with_case_hooks`] with the case's own star
+/// extras as well. A case with `astero_just_call_my_extras_check_model`
+/// runs as a plain star run whose `extras_check_model` and the other
+/// `run_star_extras.f90` hooks are `star_extras`
+/// (`astero/private/extras_support.f90:898-900`).
+///
+/// # Errors
+/// As [`run_astero_test_suite_case_with_case_hooks`].
+#[allow(clippy::too_many_arguments)]
+pub fn run_astero_test_suite_case_with_hooks(
+    orig_case_dir: &Path,
+    skip_optional: bool,
+    max_steps_per_stage: Option<usize>,
+    verify_restart: bool,
+    logs_opts: StarLogsOptions<'_>,
+    inlist_opts: InlistLoadOptions,
+    set_param: Option<&mut dyn AsteroCaseHooks>,
+    star_extras: Option<&mut dyn StarExtras>,
+) -> Result<CaseRunReport, StarError> {
     let case_name = orig_case_dir
         .file_name()
         .and_then(|s| s.to_str())
@@ -209,6 +241,17 @@ pub fn run_astero_test_suite_case_with_case_hooks(
     // plain star run of the case with its own extras.
     if first_bundle.job.astero_just_call_my_extras_check_model {
         drop(staging);
+        if let Some(ex) = star_extras {
+            return run_test_suite_case_with_extras(
+                orig_case_dir,
+                skip_optional,
+                max_steps_per_stage,
+                verify_restart,
+                logs_opts,
+                inlist_opts,
+                ex,
+            );
+        }
         return run_test_suite_case_with_options(
             orig_case_dir,
             skip_optional,

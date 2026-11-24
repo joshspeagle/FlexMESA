@@ -350,9 +350,9 @@ def test_all_graduated_star_handlers_execute_on_real_star_model_snapshots(
 
     aic_dir = harness_runner.resolve_case_dir("star", "wd_aic")
     aic_txt = (aic_dir / "wd_aic.mod").read_text(encoding="utf-8")
-    aic_mod = _rust.RustStarModel.from_mod_str(
-        aic_txt.replace("'wd_aic.net'", "'mesa_204.net'")
-    )
+    # The case's own `wd_aic.net` (which has `o20`) is resolved from the case
+    # directory, as upstream `read_model` does.
+    aic_mod = _rust.RustStarModel.from_mod_str(aic_txt, str(aic_dir))
     aic_snap = _rust.star_extras_snapshot(aic_mod, str(tmp_path), True)
     aic = star_extras.WdAicStarExtras()
     assert aic.extras_check_model({**aic_snap, "x_integer_ctrl": [1]}) == (

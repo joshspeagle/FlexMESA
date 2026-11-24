@@ -63,6 +63,13 @@ pub struct StarControls {
     pub thermohaline_option: ThermohalineOption,
     /// Radiation-pressure surface correction factor for `SimplePhotosphere` (`Pextra_factor`).
     pub pextra_factor: f64,
+    /// Whether to apply the YREC starspot surface and `gradr` modifications
+    /// (`do_starspots`, `star/private/starspots.f90`).
+    pub do_starspots: bool,
+    /// Starspot filling factor (`fspot`, 0 to 1).
+    pub fspot: f64,
+    /// Starspot temperature contrast (`xspot`, 0.5 to 1).
+    pub xspot: f64,
     /// Minimum diffusive mixing floor $D_{\min}$ ($\mathrm{cm^2\,s^{-1}}$).
     pub min_d_mix: f64,
     /// Whether to remove single-zone mixing glitches (`true` default).
@@ -159,6 +166,30 @@ pub struct StarControls {
     pub calculate_brunt_b: bool,
     /// Whether to compute the Brunt-Väisälä frequency $N^2$ (`calculate_Brunt_N2`, `true` default).
     pub calculate_brunt_n2: bool,
+    /// Add double points at composition jumps to pulsation data
+    /// (`add_double_points_to_pulse_data`, `.false.` default,
+    /// `star/defaults/controls.defaults:612`).
+    #[serde(default)]
+    pub add_double_points_to_pulse_data: bool,
+    /// Interpolate face densities in pulsation data instead of the
+    /// mass-conserving form (`interpolate_rho_for_pulse_data`, `.true.`
+    /// default, `star/defaults/controls.defaults:623`).
+    #[serde(default = "default_true_pulse")]
+    pub interpolate_rho_for_pulse_data: bool,
+    /// $|\nabla_\mu|$ threshold for a pulsation-data double point
+    /// (`threshold_grad_mu_for_double_point`, `10d0` default,
+    /// `star/defaults/controls.defaults:633`).
+    #[serde(default = "default_threshold_grad_mu")]
+    pub threshold_grad_mu_for_double_point: f64,
+    /// Cap on pulsation-data double points, `0` for none
+    /// (`max_number_of_double_points`, `0` default,
+    /// `star/defaults/controls.defaults:644`).
+    #[serde(default)]
+    pub max_number_of_double_points: i32,
+    /// Schema of in-memory GYRE pulsation data (`gyre_data_schema`, `101`
+    /// default, `star/defaults/controls.defaults:691`).
+    #[serde(default = "default_gyre_data_schema")]
+    pub gyre_data_schema: i32,
     /// Whether to use the $\nabla \ln \mu_X$ form for Brunt $B$.
     pub use_brunt_gradmux_form: bool,
     /// Energy equation form (`EnergyEqnOption::Dedt` default).
@@ -896,4 +927,16 @@ const fn default_atm_irradiated_kap_v() -> f64 {
 
 const fn default_atm_irradiated_p_surf() -> f64 {
     1.0e6
+}
+
+const fn default_true_pulse() -> bool {
+    true
+}
+
+const fn default_threshold_grad_mu() -> f64 {
+    10.0
+}
+
+const fn default_gyre_data_schema() -> i32 {
+    101
 }

@@ -611,3 +611,45 @@ fn test_verify_photo_restart_parity_succeeds_after_max_age_termination() {
         .expect("photo restart parity must succeed at max_age_in_seconds");
     assert_eq!(s1, s2);
 }
+
+/// `set_vars_if_needed` at the end of `prepare_for_new_step`
+/// (`star/private/evolve.f90:1891`) recomputes `rho = exp(lnd)` after the
+/// `use_xh_to_set_rho_to_dm_div_dV` reset has changed `lnd` only, so
+/// `update_radius` reads the reset density; with `need_to_setvars = false`
+/// it does nothing; `have_new_generation` is restored.
+#[test]
+fn test_set_vars_for_new_step_refreshes_rho_after_lnd_reset_and_respects_flag()
+{
+    let controls = StarControls {
+        initial_mass: 1.0,
+        zbase: 0.02,
+        ..StarControls::default()
+    };
+    let mut model = load_zams_model(controls, StarJobControls::default())
+        .expect("1 Msun ZAMS");
+    let nz = model.nz;
+    // Simulate the reset: change lnd without touching rho.
+    for k in 0..nz {
+        model.lnd[k] += 1.0e-6;
+    }
+    model.pack_xh();
+    let stale = model.rho.clone();
+    model.aux.mixing.have_new_generation = true;
+
+    model.aux.need_to_setvars = false;
+    crate::evolve_support::set_vars_for_new_step(&mut model).expect("skip");
+    assert_eq!(model.rho, stale);
+
+    model.aux.need_to_setvars = true;
+    crate::evolve_support::set_vars_for_new_step(&mut model)
+        .expect("set_vars");
+    for k in 0..nz {
+        assert_eq!(
+            model.rho[k].to_bits(),
+            flexmesa_math::exp(model.lnd[k]).to_bits(),
+            "rho(k={}) must be exp(lnd)",
+            k + 1
+        );
+    }
+    assert!(model.aux.mixing.have_new_generation);
+}

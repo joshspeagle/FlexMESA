@@ -18,7 +18,7 @@ use crate::element_diffusion::{
     do_element_diffusion_step, finish_element_diffusion,
 };
 use crate::hydro_vars::set_hydro_vars;
-use crate::mesh_adjust::{MeshFunctionConfig, do_adjust_mesh};
+use crate::mesh_adjust::{MeshFunctionConfig, do_adjust_mesh_for_step};
 use crate::model::StarModel;
 use crate::phase_separation::do_phase_separation_step;
 use crate::primary_state::PrimaryStateBuffer;
@@ -625,9 +625,45 @@ pub fn snapshot_step_old_extras(model: &mut StarModel) {
     }
     model.time_old_sec = model.time_sec;
     model.m_center_old = model.m_center;
+    // `star/private/evolve_support.f90:85`.
+    model.xmstar_old = model.xmstar;
     model.r_center_old = model.r_center;
     model.l_center_old = model.l_center;
     model.v_center_old = model.v_center;
+}
+
+/// `set_vars_if_needed(s, s% dt_next, 'prepare_for_new_step', ierr)` at the
+/// end of `prepare_for_new_step`, after the remesh and before
+/// `new_generation` (`star/private/evolve.f90:1891`). Upstream sets
+/// `need_to_setvars = .true.` at the start of every step
+/// (`evolve.f90:319`), so the variables are set here on every first try:
+/// in particular `s% rho = exp(lnd)` after `use_xh_to_set_rho_to_dm_div_dV`
+/// has reset `lnd` (`star_utils.f90:606-632` stores only `xh`), which is the
+/// density `update_radius` reads in `do_adjust_mass`
+/// (`adjust_mass.f90:152`). On the first model of a run the remesh is
+/// skipped (`evolve.f90:1882`), so nothing else refreshes it.
+///
+/// `set_vars` runs with `have_new_generation = .false.` (cleared at the
+/// start of `do_step_part1`, `evolve.f90:377`), so it skips
+/// `set_cz_bdy_mass` (`hydro_vars.f90:81`); `okay_to_set_mlt_vc` is still
+/// `.false.` here (`evolve.f90:321`). Its `dt` argument is not used by the
+/// variables it sets.
+///
+/// # Errors
+///
+/// Returns the [`StarError`] of [`set_hydro_vars`].
+pub fn set_vars_for_new_step(model: &mut StarModel) -> Result<(), StarError> {
+    if !model.aux.need_to_setvars {
+        return Ok(());
+    }
+    // `s% okay_to_set_mixing_info = .true.` at the start of the step
+    // (`star/private/evolve.f90:320`); nothing clears it before this point.
+    model.aux.mixing.okay_to_set_mixing_info = true;
+    let prev_have_new_generation = model.aux.mixing.have_new_generation;
+    model.aux.mixing.have_new_generation = false;
+    let res = set_hydro_vars(model, false, false);
+    model.aux.mixing.have_new_generation = prev_have_new_generation;
+    res
 }
 
 /// Executes pre-step adaptive remeshing (`do_mesh` in
@@ -659,15 +695,18 @@ pub fn remesh_star_before_step(
         && !hold_after_retry
         && dt_remesh_ok
     {
+        // `set_start_of_step_info(s, 'before do_mesh')` sets the variables
+        // (`star/private/evolve.f90:1884`).
         model.aux.mixing.okay_to_set_mixing_info = true;
         set_hydro_vars(model, false, false)?;
         let snap = PrimaryStateBuffer::from_model(model);
         let mesh_cfg = MeshFunctionConfig::from_controls(&model.controls);
-        let (ns, nm) = do_adjust_mesh(model, &mesh_cfg)?;
-        model.aux.mixing.okay_to_set_mixing_info = true;
-        set_hydro_vars(model, false, false)?;
-        model.save_start_values()?;
-        snapshot_step_start_extras(model);
+        // `do_mesh` sets `need_to_setvars = .true.` and remeshes
+        // (`evolve.f90:1973-1983`); the variables are set afterwards by
+        // `set_vars_if_needed` (`evolve.f90:1891`, `set_vars_for_new_step`),
+        // and the old and start values are stored later in the step.
+        model.aux.need_to_setvars = true;
+        let (ns, nm) = do_adjust_mesh_for_step(model, &mesh_cfg)?;
         let pre_snap = (ns + nm > 0).then_some(snap);
         Ok((ns, nm, pre_snap))
     } else {

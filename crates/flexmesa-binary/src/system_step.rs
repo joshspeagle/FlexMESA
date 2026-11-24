@@ -36,8 +36,8 @@ use crate::system_rlof::{
     evolve_single_star_attempt, prepare_coupled_mdots_with_extras,
 };
 use crate::timestep::{
-    B_TLIM_COMP, BinaryHardLimitViolation, BinaryTimestepControls,
-    binary_pick_next_timestep, check_binary_hard_limits,
+    B_TLIM_COMP, BinaryTimestepControls, binary_pick_next_timestep,
+    check_binary_hard_limits,
 };
 
 #[allow(clippy::large_enum_variant)]
@@ -303,6 +303,7 @@ impl BinarySystem {
             Ok(next_dt)
         };
 
+        self.set_star_timesteps();
         let mut dt_try = dt.min(self.max_timestep_sec);
         if dt_try <= 0.0 || (dt_floor > 0.0 && dt_try < dt_floor) {
             return Err(StarError::ConvergenceFailure(format!(
@@ -528,19 +529,22 @@ impl BinarySystem {
                             decision =
                                 combine_worst_result(decision, extras_decision);
 
+                            // `run_binary_support.f90:540-544`: the binary
+                            // timestep runs first, on `keep_going` or `redo`,
+                            // because `star_pick_next_timestep` needs it.
                             if matches!(
                                 decision,
                                 TrialDecision::KeepGoing | TrialDecision::Redo
                             ) {
-                                if let Some(viol) =
-                                    self.check_hard_limits(&ts_ctrl)
-                                {
-                                    self.counters.num_hard_limit_retries += 1;
-                                    if viol.reduces_timestep_due_to_j() {
-                                        self.have_to_reduce_timestep_due_to_j =
-                                            true;
+                                match self.pick_binary_timestep(&ts_ctrl) {
+                                    Ok(d) => {
+                                        decision =
+                                            combine_worst_result(decision, d);
                                     }
-                                    decision = TrialDecision::Retry;
+                                    Err(e) => {
+                                        self.restore_snapshot(&pre_step_snap)?;
+                                        return Err(e);
+                                    }
                                 }
                             }
                             let mut dmdot_hard = false;
@@ -571,8 +575,6 @@ impl BinarySystem {
                             match decision {
                                 TrialDecision::KeepGoing => {
                                     return self.finish_accepted_step(
-                                        dt_used,
-                                        &ts_ctrl,
                                         pre_step_snap.mtransfer_rate,
                                         extras,
                                     );
@@ -585,8 +587,6 @@ impl BinarySystem {
                                     );
                                     self.last_termination_reason = Some(reason);
                                     return self.finish_accepted_step(
-                                        dt_used,
-                                        &ts_ctrl,
                                         pre_step_snap.mtransfer_rate,
                                         extras,
                                     );
@@ -1074,19 +1074,19 @@ impl BinarySystem {
                 };
                 decision = combine_worst_result(decision, extras_decision);
 
-                // `run_binary_support.f90:540-544`: check binary hard limits on
-                // both `keep_going` and `redo` to stop the implicit solver
-                // immediately if a hard limit is violated.
+                // `run_binary_support.f90:540-544`: the binary timestep runs
+                // first, on `keep_going` or `redo` (so a hard limit stops the
+                // implicit solver), because `star_pick_next_timestep` needs it.
                 if matches!(
                     decision,
                     TrialDecision::KeepGoing | TrialDecision::Redo
                 ) {
-                    if let Some(viol) = self.check_hard_limits(&ts_ctrl) {
-                        self.counters.num_hard_limit_retries += 1;
-                        if viol.reduces_timestep_due_to_j() {
-                            self.have_to_reduce_timestep_due_to_j = true;
+                    match self.pick_binary_timestep(&ts_ctrl) {
+                        Ok(d) => decision = combine_worst_result(decision, d),
+                        Err(e) => {
+                            self.restore_snapshot(&pre_step_snap)?;
+                            return Err(e);
                         }
-                        decision = TrialDecision::Retry;
                     }
                 }
                 let mut dmdot_hard = false;
@@ -1114,8 +1114,6 @@ impl BinarySystem {
                 match decision {
                     TrialDecision::KeepGoing => {
                         return self.finish_accepted_step(
-                            dt_used,
-                            &ts_ctrl,
                             pre_step_snap.mtransfer_rate,
                             extras,
                         );
@@ -1131,8 +1129,6 @@ impl BinarySystem {
                         );
                         self.last_termination_reason = Some(reason);
                         return self.finish_accepted_step(
-                            dt_used,
-                            &ts_ctrl,
                             pre_step_snap.mtransfer_rate,
                             extras,
                         );
@@ -1427,19 +1423,89 @@ impl BinarySystem {
         }
     }
 
-    fn check_hard_limits(
-        &self,
+    /// Runs `binary_pick_next_timestep` (`binary/private/binary_timestep.f90:99-322`)
+    /// at its place in the step loop: after `extras_binary_check_model` and
+    /// before `star_pick_next_timestep`, on `keep_going` or `redo`
+    /// (`run_binary_support.f90:540-544`).
+    ///
+    /// A violated hard limit returns `retry` before anything else changes
+    /// (`binary_timestep.f90:166-262`; `fj_hard` also sets
+    /// `have_to_reduce_timestep_due_to_j`). Otherwise the function stores
+    /// the softened `max_timestep` and `dt_why_reason`, which a later redo or
+    /// retry restores (`binary_set_current_to_old`, `binary_evolve.f90:613,
+    /// 635`), and sets the stars' `varcontrol_target` and clears
+    /// `ignore_hard_limits_this_step`, which neither restores
+    /// (`binary_timestep.f90:287-319`).
+    fn pick_binary_timestep(
+        &mut self,
         ts_ctrl: &BinaryTimestepControls,
-    ) -> Option<BinaryHardLimitViolation> {
-        check_binary_hard_limits(
-            ts_ctrl,
+    ) -> Result<TrialDecision, StarError> {
+        // `b% ignore_hard_limits_this_step` and `b% max_timestep` are read
+        // when the function runs, so a `set_*` call made by
+        // `extras_binary_check_model` in this trial counts.
+        let ctrl = BinaryTimestepControls {
+            ignore_hard_limits_this_step: self.ignore_hard_limits_this_step,
+            max_timestep_sec: self.max_timestep_sec,
+            ..ts_ctrl.clone()
+        };
+        if let Some(viol) = check_binary_hard_limits(
+            &ctrl,
             self.controls.fm_hard,
             self.controls.fr_hard,
             self.controls.fj_hard,
             self.controls.fa_hard,
             self.controls.fe_hard,
             self.controls.fdm_hard,
-        )
+        ) {
+            self.counters.num_hard_limit_retries += 1;
+            if viol.reduces_timestep_due_to_j() {
+                self.have_to_reduce_timestep_due_to_j = true;
+            }
+            return Ok(TrialDecision::Retry);
+        }
+        let (max_dt, reason) = binary_pick_next_timestep(&ctrl)?;
+        self.dt_why_reason = reason;
+        self.max_timestep_sec = max_dt;
+        self.update_stage_varcontrol();
+        self.ignore_hard_limits_this_step = false;
+        Ok(TrialDecision::KeepGoing)
+    }
+
+    /// `set_star_timesteps` (`binary/private/binary_timestep.f90:33-84`) at the
+    /// start of the step: caps every evolved star's `dt_next` at the binary
+    /// limit and marks it `why_Tlim = Tlim_binary`. FlexMESA models only the
+    /// `Tlim_neg_X` value of `why_Tlim` (`why_tlim_neg_x`, read by
+    /// `prepare_to_retry`, `star/private/evolve.f90:2269`), so marking a star
+    /// clears that flag. The `dt_reduction_factor_for_j` part
+    /// (`binary_timestep.f90:86-95`) is applied with the retry, in
+    /// `prepare_outer_retry`. On later passes of the step loop no star's
+    /// `dt_next` exceeds the limit (`max_timestep` is restored by every redo
+    /// and retry), so applying it once per step is equivalent.
+    fn set_star_timesteps(&mut self) {
+        let mut dt_min = 1.0e99_f64;
+        if self.donor.dt_next < dt_min {
+            dt_min = self.donor.dt_next;
+        }
+        if let BinaryCompanion::Star(ref s2) = self.companion {
+            if s2.dt_next < dt_min {
+                dt_min = s2.dt_next;
+            }
+        }
+        if self.max_timestep_sec <= dt_min {
+            dt_min = self.max_timestep_sec;
+        } else {
+            self.dt_why_reason = B_TLIM_COMP;
+        }
+        let cap = |s: &mut StarModel| {
+            if s.dt_next > dt_min {
+                s.dt_next = dt_min;
+                s.why_tlim_neg_x = false;
+            }
+        };
+        cap(&mut self.donor);
+        if let BinaryCompanion::Star(ref mut s2) = self.companion {
+            cap(s2);
+        }
     }
 
     /// Evaluates `adjust_irradiation` (`binary/private/binary_irradiation.f90:33-60`).
@@ -1889,6 +1955,7 @@ impl BinarySystem {
         let c = &self.controls;
         let ts_ctrl = BinaryTimestepControls {
             donor_time_step_yr: dt_used / SECYER,
+            donor_dt_sec: dt_used,
             max_timestep_sec: self.max_timestep_sec,
             time_delta_coeff: c.time_delta_coeff,
             dt_softening_factor: c.dt_softening_factor,
@@ -1928,25 +1995,18 @@ impl BinarySystem {
 
     fn finish_accepted_step(
         &mut self,
-        _dt_used: f64,
-        ts_ctrl: &BinaryTimestepControls,
         mtransfer_rate_old: f64,
         extras: &mut dyn BinaryExtras,
     ) -> Result<(f64, i32), StarError> {
-        // `binary_timestep.f90:99-321`: `binary_pick_next_timestep` runs on
-        // every accepted step (including `doing_first_model_of_run`), updates
-        // `varcontrol_target`, and clears `ignore_hard_limits_this_step`.
-        let (bin_max_dt, bin_reason) = binary_pick_next_timestep(ts_ctrl);
-        self.max_timestep_sec = bin_max_dt;
-        self.update_stage_varcontrol();
-        self.ignore_hard_limits_this_step = false;
-
+        // The binary timestep was picked in the step loop
+        // (`pick_binary_timestep`). The suggested next `dt` is the one the
+        // next step's `set_star_timesteps` takes (`binary_timestep.f90:56-60`).
         let star_next = match &self.companion {
             BinaryCompanion::PointMass { .. } => self.donor.dt_next,
             BinaryCompanion::Star(s2) => self.donor.dt_next.min(s2.dt_next),
         };
-        let (next_dt, reason) = if bin_max_dt <= star_next {
-            (bin_max_dt, bin_reason)
+        let (next_dt, reason) = if self.max_timestep_sec <= star_next {
+            (self.max_timestep_sec, self.dt_why_reason)
         } else {
             (star_next, B_TLIM_COMP)
         };
@@ -2220,5 +2280,135 @@ mod tests {
             .eval_star_stopping_limits(false)
             .expect_err("#264 fatal error must propagate");
         assert!(matches!(err, StarError::InvalidInput(_)));
+    }
+
+    fn point_mass_test_system(max_tries: i64) -> BinarySystem {
+        let donor = load_zams_model(
+            StarControls {
+                initial_mass: 1.0,
+                zbase: 0.02,
+                ..StarControls::default()
+            },
+            StarJobControls::default(),
+        )
+        .expect("1.0 Msun ZAMS");
+        let bctrl = BinaryInlistControls {
+            m1_msun: 1.0,
+            m2_msun: 0.8,
+            initial_period_in_days: 5.0,
+            max_tries_to_achieve: max_tries,
+            terminate_if_initial_overflow: false,
+            varcontrol_ms: 3.0e-3,
+            ..BinaryInlistControls::default()
+        };
+        BinarySystem::from_controls_point_mass(donor, bctrl)
+            .expect("detached point-mass binary")
+    }
+
+    #[test]
+    fn test_binary_pick_sets_max_timestep_varcontrol_and_clears_ignore_flag()
+    {
+        let mut sys = point_mass_test_system(0);
+        sys.ignore_hard_limits_this_step = true;
+        let vc0 = sys.donor.controls.varcontrol_target;
+        assert!((vc0 - 3.0e-3).abs() > 0.0, "inlist value differs");
+        let ctrl = BinaryTimestepControls {
+            max_timestep_sec: 10.0 * SECYER,
+            ignore_hard_limits_this_step: true,
+            ..BinaryTimestepControls::default()
+        };
+        sys.max_timestep_sec = ctrl.max_timestep_sec;
+        let want = binary_pick_next_timestep(&ctrl).expect("finite limits");
+        let dec = sys.pick_binary_timestep(&ctrl).expect("pick");
+        assert_eq!(dec, TrialDecision::KeepGoing);
+        assert_eq!(sys.max_timestep_sec.to_bits(), want.0.to_bits());
+        assert_eq!(sys.dt_why_reason, want.1);
+        // `binary_timestep.f90:306-309`: detached, donor on the main sequence.
+        assert_eq!(sys.donor.controls.varcontrol_target, 3.0e-3);
+        assert!(!sys.ignore_hard_limits_this_step);
+    }
+
+    #[test]
+    fn test_binary_pick_hard_limit_returns_retry_before_any_state_change() {
+        let mut sys = point_mass_test_system(0);
+        sys.controls.fj_hard = 0.01;
+        sys.ignore_hard_limits_this_step = false;
+        sys.max_timestep_sec = 7.0;
+        let vc0 = sys.donor.controls.varcontrol_target;
+        let ctrl = BinaryTimestepControls {
+            angular_momentum_j: 0.9e52,
+            angular_momentum_j_old: 1.0e52,
+            fj: 0.001,
+            ..BinaryTimestepControls::default()
+        };
+        let dec = sys.pick_binary_timestep(&ctrl).expect("pick");
+        assert_eq!(dec, TrialDecision::Retry);
+        assert!(sys.have_to_reduce_timestep_due_to_j);
+        assert_eq!(sys.max_timestep_sec, 7.0);
+        assert_eq!(sys.donor.controls.varcontrol_target, vc0);
+        assert_eq!(sys.counters.num_hard_limit_retries, 1);
+    }
+
+    #[test]
+    fn test_redo_trial_runs_binary_pick_and_keeps_varcontrol_and_ignore_reset()
+    {
+        // `run_binary_support.f90:540-544`: the binary timestep also runs on
+        // `redo`. `binary_prepare_to_redo` restores `max_timestep` but not
+        // the stars' `varcontrol_target` or `ignore_hard_limits_this_step`.
+        struct Probe {
+            seen: Vec<(f64, bool, f64)>,
+        }
+        impl BinaryExtras for Probe {
+            fn check_model(
+                &mut self,
+                bin: &mut BinarySystem,
+            ) -> BinaryExtrasAction {
+                self.seen.push((
+                    bin.donor.controls.varcontrol_target,
+                    bin.ignore_hard_limits_this_step,
+                    bin.max_timestep_sec,
+                ));
+                if self.seen.len() == 1 {
+                    BinaryExtrasAction::Redo
+                } else {
+                    BinaryExtrasAction::KeepGoing
+                }
+            }
+        }
+        let mut sys = point_mass_test_system(0);
+        let vc0 = sys.donor.controls.varcontrol_target;
+        assert!(sys.ignore_hard_limits_this_step);
+        let mut probe = Probe { seen: Vec::new() };
+        let _ = sys
+            .try_step_with_extras(SECYER, &mut probe)
+            .expect("step succeeds after one redo");
+        assert_eq!(probe.seen.len(), 2);
+        assert_eq!(probe.seen[0], (vc0, true, 1.0e99));
+        // The redo trial starts with the pick's varcontrol and ignore reset,
+        // and with max_timestep restored.
+        assert_eq!(probe.seen[1], (3.0e-3, false, 1.0e99));
+        // The accepted trial's pick stores a new limit (larger than 1e99 on
+        // the first model, where every relative change is zero).
+        assert_ne!(sys.max_timestep_sec, 1.0e99);
+    }
+
+    #[test]
+    fn test_set_star_timesteps_caps_dt_next_and_marks_tlim_binary() {
+        let mut sys = point_mass_test_system(0);
+        sys.donor.dt_next = 100.0;
+        sys.donor.why_tlim_neg_x = true;
+        sys.max_timestep_sec = 40.0;
+        sys.dt_why_reason = crate::timestep::B_TLIM_ROCHE;
+        sys.set_star_timesteps();
+        assert_eq!(sys.donor.dt_next, 40.0);
+        assert!(!sys.donor.why_tlim_neg_x);
+        assert_eq!(sys.dt_why_reason, crate::timestep::B_TLIM_ROCHE);
+
+        sys.donor.why_tlim_neg_x = true;
+        sys.max_timestep_sec = 50.0;
+        sys.set_star_timesteps();
+        assert_eq!(sys.donor.dt_next, 40.0);
+        assert!(sys.donor.why_tlim_neg_x);
+        assert_eq!(sys.dt_why_reason, B_TLIM_COMP);
     }
 }

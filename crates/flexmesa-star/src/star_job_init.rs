@@ -13,20 +13,19 @@ use crate::job_controls::{AtmOption, AtmTTauOpacity, AtmTTauRelation};
 use crate::hydro_vars::set_hydro_vars;
 use crate::inlist::InlistBundle;
 use crate::inlist_runner::StarExtras;
-use crate::micro::{change_model_network, resolve_model_net, NetSearchDirGuard};
+use crate::micro::{resolve_model_net, NetSearchDirGuard};
 use crate::model::StarModel;
 use crate::model_io::read_mod_str_with_dir;
 use crate::relax::{
-    apply_uniform_rotation, excise_core_by_temperature, relax_core_boundary,
-    relax_from_profile_files, relax_irradiation_to_target,
-    relax_tau_factor_to_target, relax_to_remove_h_env,
+    apply_uniform_rotation, excise_core_by_temperature,
     set_uniform_initial_composition,
 };
 use crate::relax_comp::{parse_composition_profile_str, set_y, set_z};
 use crate::relax_driver::{do_relax_num_steps, do_relax_to_radiative_core};
 use crate::relax_mass_comp::{
-    do_relax_composition, do_relax_mass, do_relax_mass_scale, do_relax_y,
-    do_relax_z,
+    do_relax_composition, do_relax_core, do_relax_irradiation,
+    do_relax_m_center, do_relax_mass, do_relax_mass_scale, do_relax_tau_factor,
+    do_relax_y, do_relax_z,
 };
 use crate::zams::load_zams_model;
 
@@ -75,6 +74,100 @@ fn load_saved_mod(
         ))
     })?;
     read_mod_str_with_dir(&text, controls, job, Some(case_dir))
+}
+
+/// `finish_load_model` (`star/private/read_model.f90:69-205`) for a model
+/// read from a `.mod` file (`restart = .false.`).
+///
+/// Mesh quantities (`set_qs`, `set_m_and_dm`, `set_m_grav_and_grav`,
+/// `set_dm_bar`) come from `sync_mesh_and_pack`; the arrays upstream clears at
+/// `read_model.f90:131-149` are freshly zeroed by the reader. Upstream's
+/// `s% total_angular_momentum` (`:170`) and `do_report` (`:197`) are derived
+/// quantities that FlexMESA evaluates on demand from the model arrays
+/// (`report_utils`), so no stored state corresponds to them.
+///
+/// # Errors
+/// Returns [`StarError::InvalidInput`] on paths whose callees are not ported
+/// here (`RSP_setup_part1` / `RSP_setup_part2`, `set_viscosity_vars_TDC`),
+/// and propagates `set_vars` and brunt errors.
+fn finish_load_model(
+    model: &mut StarModel,
+    extras: &mut dyn StarExtras,
+) -> Result<(), StarError> {
+    // `RSP_setup_part1` / `RSP_setup_part2` (`read_model.f90:150-156,
+    // 175-181`): an `RSP` model is set up by `rsp_driver` instead.
+    if model.controls.rsp_flag {
+        return Err(StarError::InvalidInput(String::from(
+            "finish_load_model: RSP_setup_part1 is not ported on the load_saved_model path (star/private/read_model.f90:150-156)",
+        )));
+    }
+    // `set_viscosity_vars_TDC` (`star/private/tdc_hydro.f90:40-89`), called
+    // at `read_model.f90:164-167`, is not ported.
+    if model.controls.tdc_alpha_m > 0.0
+        && model.controls.mlt_option == flexmesa_turb::MltOption::Tdc
+        && !(model.controls.rsp2_flag || model.controls.rsp_flag)
+    {
+        return Err(StarError::InvalidInput(String::from(
+            "finish_load_model: set_viscosity_vars_TDC (star/private/tdc_hydro.f90:40-89) is not ported; required when TDC_alpha_M > 0 and MLT_option = 'TDC' (star/private/read_model.f90:164-167)",
+        )));
+    }
+    model.layout = VarLayout::with_flags(
+        model.species,
+        model.controls.v_flag,
+        model.controls.u_flag,
+        model.controls.rsp2_flag,
+        model.controls.rti_flag,
+    );
+    model.sync_mesh_and_pack()?;
+
+    // `read_model.f90:102-129`.
+    if model.controls.rotation_flag {
+        if model.aux.have_j_rot {
+            crate::hydro_rotation::use_xh_to_update_i_rot(model);
+            for k in 0..model.nz {
+                model.omega[k] = model.j_rot[k] / model.aux.i_rot[k];
+            }
+        } else {
+            crate::hydro_rotation::use_xh_to_update_i_rot_and_j_rot(model);
+        }
+        model.pack_xh();
+    }
+
+    // `read_model.f90:157-159`: `okay_to_set_mlt_vc` is set by the reader
+    // from `have_mlt_vc` (`model_io::read_mod_str_with_dir`).
+    if model.controls.use_other_cgrav {
+        extras.other_cgrav(model)?;
+    }
+    // `set_vars` with `doing_finish_load_model = .true.`
+    // (`read_model.f90:161-168`). Its effects on `D_omega` and `am_nu_rot`
+    // (`star/private/rotation_mix_info.f90:255-258`,
+    // `star/private/mix_info.f90:1810-1813`) apply only under
+    // `D_omega_flag` / `am_nu_rot_flag`, which FlexMESA does not support
+    // (their controls are rejected by the control inventory), and the `RSP`
+    // `unpack_xh` branch (`star/private/hydro_vars.f90:225`) is excluded above.
+    set_hydro_vars(model, false, false)?;
+    if model.controls.rsp2_flag {
+        // `set_RSP2_vars` (`star/private/hydro_rsp2.f90:67-111`): fill
+        // `Hp_face(k) <= 0` from the face scale height, then the RSP2 face
+        // and cell variables.
+        for k in 0..model.nz {
+            if model.aux.rsp.hp_face[k] <= 0.0 {
+                model.aux.rsp.hp_face[k] =
+                    crate::rsp2_eqns::eval_rsp2_hp_face_zone(model, k);
+            }
+        }
+        model.pack_xh();
+        crate::rsp2_ad::update_rsp2_vars_ad(model);
+    }
+
+    // `read_model.f90:185-195`.
+    if model.controls.calculate_brunt_b {
+        crate::hydro_brunt_surf::do_brunt_b(model)?;
+    }
+    if model.controls.calculate_brunt_n2 {
+        crate::hydro_brunt_surf::do_brunt_n2(model);
+    }
+    Ok(())
 }
 
 /// Brings a newly built model into the state the step loop starts from, so
@@ -263,13 +356,29 @@ pub(crate) fn init_or_update_model_from_bundle_outcome(
         crate::rsp_driver::InitRspOutcome::NotHandled => {}
     }
     let job = bundle.job.clone();
-    let controls = bundle.controls.clone();
+    let mut controls = bundle.controls.clone();
+    // `model_builder` starts with `if (s% initial_y < 0) s% initial_y =
+    // max(0d0, min(1d0, 0.24d0 + 2*initial_z))` from the inlist's `initial_z`,
+    // before any model is loaded or built (`star/private/init.f90:891-894`);
+    // a loaded `.mod` file does not set `initial_y` (`read_model.f90:283,
+    // 366`).
+    if controls.initial_y < 0.0 {
+        controls.initial_y = (0.24 + 2.0 * controls.initial_z).clamp(0.0, 1.0);
+    }
+    let initial_y = controls.initial_y;
     let mut did_create_pre_ms = false;
     let mut did_create_initial_model = false;
-    let is_restart = existing_model.is_some();
+    let mut did_load_saved_model = false;
+    // Upstream's `restart` is a photo restart only
+    // (`star/job/run_star_support.f90:433-442`). A model carried over from an
+    // earlier `./rn` stage stands for the `.mod` file that stage saved and
+    // the next one loads, and a binary seed is a freshly loaded model, so
+    // neither is a restart: every `.not. restart` control applies.
+    let restart = false;
     let mut model = if let Some(prev) = existing_model {
         prev
     } else if job.load_saved_model {
+        did_load_saved_model = true;
         load_saved_mod(
             &bundle.case_dir,
             &job.saved_model_name,
@@ -333,11 +442,10 @@ pub(crate) fn init_or_update_model_from_bundle_outcome(
         model.controls.rotation_flag,
         model.controls.rti_flag,
     );
-    let (preserved_tau, preserved_m, preserved_z, preserved_y) = (
+    let (preserved_tau, preserved_m, preserved_z) = (
         model.controls.tau_factor,
         model.controls.initial_mass,
         model.controls.initial_z,
-        model.controls.initial_y,
     );
 
     model.job = job.clone();
@@ -351,12 +459,17 @@ pub(crate) fn init_or_update_model_from_bundle_outcome(
     if !job.change_initial_rti_flag {
         model.controls.rti_flag = preserved_rti;
     }
-    (
-        model.controls.tau_factor,
-        model.controls.initial_mass,
-        model.controls.initial_z,
-        model.controls.initial_y,
-    ) = (preserved_tau, preserved_m, preserved_z, preserved_y);
+    (model.controls.initial_mass, model.controls.initial_z) =
+        (preserved_m, preserved_z);
+    // The model's `tau_factor` (as saved in a `.mod` file) replaces the
+    // inlist value unless the inlist just set it
+    // (`star/private/read_model.f90:307-315`).
+    if (preserved_tau - model.controls.tau_factor).abs() > preserved_tau * 1.0e-9
+        && model.controls.tau_factor != job.set_to_this_tau_factor
+    {
+        model.controls.tau_factor = preserved_tau;
+    }
+    model.controls.initial_y = initial_y;
     model.eos_config = bundle.eos_config;
     model.kap_config = bundle.kap_config.clone();
 
@@ -366,6 +479,16 @@ pub(crate) fn init_or_update_model_from_bundle_outcome(
     // controls (`star/job/run_star_support.f90:1546`).
     model.tau_base =
         crate::hydro_brunt_surf::get_atm_tau_base(&model.controls)?;
+
+    // `star_read_model` ends in `finish_load_model`
+    // (`star/private/read_model.f90:69-205`), before
+    // `do_star_job_controls_after` changes the net
+    // (`star/job/run_star_support.f90:1912-1916`); its `set_vars` sets the
+    // `mlt_D` that `set_new_abundances` reads in `get_test_lgT`
+    // (`star/private/adjust_xyz.f90:617-626`).
+    if did_load_saved_model {
+        finish_load_model(&mut model, extras)?;
+    }
 
     // `model_builder` relaxes a newly built model before the `&star_job`
     // controls applied after loading (`star/private/init.f90:1077-1118`,
@@ -389,10 +512,13 @@ pub(crate) fn init_or_update_model_from_bundle_outcome(
     let pre_ms_on_new_net = did_create_pre_ms
         && model.job.net_name.trim() == job.new_net_name.trim();
     if job.change_net && !job.new_net_name.is_empty() && !pre_ms_on_new_net {
-        change_model_network(
+        // `star_change_to_new_net(id, s% job% adjust_abundances_for_new_isos,
+        // ...)` (`star/job/run_star_support.f90:1912-1916`).
+        crate::micro::change_model_network_with_adjust(
             &mut model,
             &job.new_net_name,
             Some(&bundle.case_dir),
+            job.adjust_abundances_for_new_isos,
         )?;
     }
 
@@ -400,34 +526,38 @@ pub(crate) fn init_or_update_model_from_bundle_outcome(
     // (`star/private/init.f90:1120`), before `do_star_job_controls_after`;
     // a relax there clears it again in `finish_step`
     // (`star/private/evolve.f90:2366`).
-    if !is_restart {
+    if !restart {
         model.doing_first_model_of_run = true;
     }
 
     // 2. Age, model number and initial timestep, which upstream sets before
     // the flag changes and relaxes (`star/job/run_star_support.f90:1957-2012`).
-    if job.set_initial_age {
+    // `set_tau_factor` (`star/job/run_star_support.f90:1949-1953`).
+    if job.set_tau_factor || (job.set_initial_tau_factor && !restart) {
+        model.controls.tau_factor = job.set_to_this_tau_factor;
+    }
+    if job.set_initial_age && !restart {
         model.star_age = job.initial_age;
         model.star_age_old = job.initial_age;
     }
     model.time_sec = model.star_age * SECYER;
     model.time_old_sec = model.star_age_old * SECYER;
-    if job.set_initial_model_number && !is_restart {
+    if job.set_initial_model_number && !restart {
         model.model_number = job.initial_model_number;
         model.init_model_number = model.model_number as isize;
-    } else if !is_restart {
+    } else if !restart {
         model.init_model_number = model.model_number as isize;
     }
-    if job.set_initial_number_retries && !is_restart {
+    if job.set_initial_number_retries && !restart {
         model.num_retries = job.initial_number_retries;
     }
-    if job.set_initial_dt {
+    // `set_initial_dt` sets `dt_next` only
+    // (`star/job/run_star_support.f90:1967-1975`).
+    if job.set_initial_dt && !restart {
         if job.years_for_initial_dt > 0.0 {
-            model.dt = job.years_for_initial_dt * SECYER;
-            model.dt_next = model.dt;
+            model.dt_next = job.years_for_initial_dt * SECYER;
         } else if job.seconds_for_initial_dt > 0.0 {
-            model.dt = job.seconds_for_initial_dt;
-            model.dt_next = model.dt;
+            model.dt_next = job.seconds_for_initial_dt;
         }
     }
 
@@ -504,10 +634,7 @@ pub(crate) fn init_or_update_model_from_bundle_outcome(
 
     // Uniform rotation (`star_set_uniform_omega`), after the flag changes and
     // before the composition changes and relaxes, in upstream's order
-    // (`star/job/run_star_support.f90:2138-2187`). Upstream's `restart` is a
-    // photo restart, which this path never is (a model carried over from an
-    // earlier stage or a binary seed is not one).
-    let restart = false;
+    // (`star/job/run_star_support.f90:2138-2187`).
     if model.controls.rotation_flag && job.set_omega {
         apply_uniform_rotation(&mut model, job.new_omega);
     }
@@ -563,7 +690,20 @@ pub(crate) fn init_or_update_model_from_bundle_outcome(
             extras,
         )?;
     }
-    relax_from_profile_files(&mut model, &bundle.case_dir)?;
+    if job.relax_initial_to_xaccrete && !restart {
+        return Err(StarError::InvalidInput(String::from(
+            "relax_initial_to_xaccrete (star_relax_to_xaccrete, \
+             star/job/run_star_support.f90:2240-2243) is not ported (#436)",
+        )));
+    }
+    if (job.relax_initial_angular_momentum || job.relax_initial_entropy)
+        && !restart
+    {
+        return Err(StarError::InvalidInput(String::from(
+            "relax_initial_angular_momentum / relax_initial_entropy \
+             (star/job/run_star_support.f90:2251-2259) are not ported (#436)",
+        )));
+    }
     // Change Z before Y, since changing Z can change Y
     // (`star/job/run_star_support.f90:2289-2308`).
     if job.change_z || job.change_initial_z {
@@ -573,6 +713,18 @@ pub(crate) fn init_or_update_model_from_bundle_outcome(
     if job.change_y || job.change_initial_y {
         let nz = model.nz;
         set_y(&mut model, job.new_y, 0, nz - 1)?;
+    }
+    // `star/job/run_star_support.f90:2355-2380`.
+    if job.set_irradiation || (job.set_initial_irradiation && !restart) {
+        model.controls.irradiation_flux = job.set_to_this_irrad_flux;
+        model.controls.column_depth_for_irradiation =
+            job.column_depth_for_irradiation;
+    }
+    if job.set_v_center || (job.set_initial_v_center && !restart) {
+        model.v_center = job.new_v_center;
+    }
+    if job.set_l_center || (job.set_initial_l_center && !restart) {
+        model.l_center = job.new_l_center * flexmesa_const::L_SUN;
     }
     // `star_relax_Z` / `star_relax_Y` (`star/job/run_star_support.f90:2386-2420`).
     for _ in 0..(usize::from(job.relax_initial_z) + usize::from(job.relax_z)) {
@@ -604,11 +756,6 @@ pub(crate) fn init_or_update_model_from_bundle_outcome(
         ready_for_relax(&mut model, extras)?;
         do_relax_mass_to_remove_h_env(&mut model, &job, extras)?;
     }
-    if job.remove_surface_by_relax_to_star_cut {
-        // Not ported (`star/private/remove_shells.f90`); the stand-in it
-        // shared with `relax_initial_mass_to_remove_H_env` is kept.
-        relax_to_remove_h_env(&mut model, 1.0e-4, 8);
-    }
     if job.relax_mass_scale || job.relax_initial_mass_scale {
         ready_for_relax(&mut model, extras)?;
         do_relax_mass_scale(
@@ -620,32 +767,65 @@ pub(crate) fn init_or_update_model_from_bundle_outcome(
         )?;
     }
 
-    // 5. Inner boundary, irradiation, and optical-depth relaxation
-    if job.relax_m_center && job.new_core_mass > 0.0 {
-        relax_core_boundary(
+    // 5. Inner boundary, `tau_factor` and irradiation relaxes, in upstream's
+    // order (`star/job/run_star_support.f90:2489-2567`).
+    if job.relax_core || (job.relax_initial_core && !restart) {
+        ready_for_relax(&mut model, extras)?;
+        do_relax_core(
             &mut model,
             job.new_core_mass,
+            job.dlg_core_mass_per_step,
+            job.relax_core_years_for_dt,
             job.core_avg_rho,
             job.core_avg_eps,
-            8,
-        );
+            extras,
+        )?;
     }
-    if job.relax_r_center && job.new_r_center > 0.0 {
-        model.r_center = job.new_r_center;
-    }
-    if job.relax_l_center && job.new_l_center >= 0.0 {
-        model.l_center = job.new_l_center;
-    }
-    if job.relax_irradiation && job.new_irradiation_flux > 0.0 {
-        relax_irradiation_to_target(
+    if job.relax_m_center || (job.relax_initial_m_center && !restart) {
+        ready_for_relax(&mut model, extras)?;
+        do_relax_m_center(
             &mut model,
+            job.new_mass,
+            job.dlgm_per_step,
+            job.relax_m_center_dt,
+            extras,
+        )?;
+    }
+    if job.relax_r_center || job.relax_l_center {
+        return Err(StarError::InvalidInput(String::from(
+            "relax_R_center / relax_L_center (star_relax_R_center, \
+             star_relax_L_center; star/private/relax.f90:2490-2889) are not \
+             ported (#436)",
+        )));
+    }
+    if job.relax_tau_factor || (job.relax_initial_tau_factor && !restart) {
+        ready_for_relax(&mut model, extras)?;
+        do_relax_tau_factor(
+            &mut model,
+            job.relax_to_this_tau_factor,
+            job.dlogtau_factor,
+            extras,
+        )?;
+    }
+    if job.relax_irradiation || (job.relax_initial_irradiation && !restart) {
+        ready_for_relax(&mut model, extras)?;
+        do_relax_irradiation(
+            &mut model,
+            job.relax_irradiation_min_steps,
             job.new_irradiation_flux,
             job.column_depth_for_irradiation,
-            8,
-        );
+            job.relax_irradiation_max_yrs_dt,
+            extras,
+        )?;
     }
-    if job.set_tau_factor && job.set_to_this_tau_factor > 0.0 {
-        relax_tau_factor_to_target(&mut model, job.set_to_this_tau_factor, 8);
+    if job.remove_surface_by_relax_to_star_cut {
+        // `do_remove_surface` with `remove_surface_by_relax_to_star_cut`
+        // calls `do_relax_to_star_cut` (`star/private/remove_shells.f90:
+        // 1024-1035, 1156-1404`), which is not ported.
+        return Err(StarError::InvalidInput(String::from(
+            "remove_surface_by_relax_to_star_cut (do_relax_to_star_cut, \
+             star/private/remove_shells.f90:1156-1404) is not ported (#436)",
+        )));
     }
 
     if job.remove_initial_center_by_temperature > 0.0 {
@@ -690,7 +870,7 @@ pub(crate) fn init_or_update_model_from_bundle_outcome(
     model.r_center_old = model.r_center;
     model.l_center_old = model.l_center;
     model.v_center_old = model.v_center;
-    if job.set_initial_cumulative_energy_error && !is_restart {
+    if job.set_initial_cumulative_energy_error && !restart {
         model.aux.cumulative_energy_error = job.new_cumulative_energy_error;
         model.aux.step_hist.cumulative_energy_error_old =
             job.new_cumulative_energy_error;

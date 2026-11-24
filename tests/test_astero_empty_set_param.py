@@ -3,7 +3,9 @@
 
 `astero_adipls`, `astero_gyre` and `surface_effects` share a `set_param`
 that only sets `ierr = 0` and a `set_constraint_value` with only the
-`case default` history-column branch (`#429`).
+`case default` history-column branch (`#429`). `astero_gyre` is matched
+first by its full port, `AsteroGyreExtras` (`#170`, G3c), so only the
+other two cases get this handler.
 """
 
 from __future__ import annotations
@@ -24,11 +26,6 @@ _UNPORTED = {
         "extras_check_model",
         "get_adipls_frequency_info",
         "my_other_adipls_mode_info",
-    },
-    "astero_gyre": {
-        "extras_after_evolve",
-        "extras_check_model",
-        "get_gyre_frequency_info",
     },
     "surface_effects": {
         "extras_after_evolve",

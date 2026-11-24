@@ -355,6 +355,23 @@ def load_embedded_ionization_asset(
     )
 
 
+def resolve_mesa_astero_tracks_dir(
+    data_dir: pathlib.Path | None = None,
+) -> pathlib.Path:
+    """Resolve the unpacked ``mesa-astero-tracks-v1.tar.zst`` root (``#430``).
+
+    Args:
+        data_dir: Optional physics data directory; defaults to
+            :func:`resolve_data_dir`.
+
+    Returns:
+        ``<data_dir>/mesa_astero_tracks``, holding
+        ``astero/<case>/track_NNNN.data``.
+    """
+    base = data_dir if data_dir is not None else resolve_data_dir()
+    return (base / "mesa_astero_tracks").resolve()
+
+
 def _resolve_bundle_target_root(
     bundle: ReleaseBundle,
     data_root: pathlib.Path,

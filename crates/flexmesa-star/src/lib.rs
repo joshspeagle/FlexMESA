@@ -62,6 +62,7 @@
 
 pub mod accretion_xa;
 pub mod adjust_mass;
+pub mod adjust_net;
 pub mod adjust_mesh_split_merge;
 pub mod adjust_mesh_support;
 pub mod case_staging;
@@ -82,6 +83,7 @@ pub mod element_diffusion;
 pub mod eps_grav;
 pub mod eps_mdot;
 pub mod evolve;
+pub mod extend_net;
 pub(crate) mod evolve_support;
 pub mod history;
 pub mod hydro_brunt_surf;
@@ -133,6 +135,7 @@ pub mod pulse;
 pub mod pulse_bvp;
 pub mod pulse_bvp_recon;
 pub mod pulse_exporters;
+pub mod pulse_gyre_data;
 pub mod pulse_modes;
 pub mod pulse_utils;
 pub mod relax;
@@ -362,10 +365,10 @@ pub use mix_info::{
     set_cz_bdy_mass, set_cz_boundary_info, set_mixing_info,
     set_mixing_info_with_skip,
 };
-pub use model::StarModel;
+pub use model::{StarModel, SurfPt};
 pub use model_io::{
     PHOTO_FORMAT_VERSION, STAR_DEF_VERSION, compute_photo_checksum,
-    load_photo_bytes, photo_numerics_mode, read_mod_str, read_photo_bytes,
+    load_photo_bytes, photo_numerics_mode, read_mod_str, read_mod_str_with_dir, read_photo_bytes,
     try_write_photo_bytes, write_mod_string, write_photo_bytes,
 };
 pub use omega_mix::{
@@ -416,9 +419,8 @@ pub use pulse_modes::{
     solve_gyre_mesa_modes,
 };
 pub use relax::{
-    apply_planetary_core, apply_uniform_rotation,
-    relax_core_boundary, relax_from_profile_files, relax_irradiation_to_target,
-    relax_mass_to_target, relax_tau_factor_to_target, relax_to_remove_h_env,
+    apply_uniform_rotation, excise_core_by_temperature,
+    set_uniform_initial_composition,
 };
 pub use report_utils::{
     ConvAndMixSummary, MESA_REF_VERSION_NUMBER, PhotosphereInfo,

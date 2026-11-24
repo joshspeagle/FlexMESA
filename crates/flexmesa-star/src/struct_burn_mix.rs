@@ -581,7 +581,12 @@ pub fn do_struct_burn_mix(
     let prev_ok_mix = model.aux.mixing.okay_to_set_mixing_info;
     model.aux.mixing.okay_to_set_mixing_info =
         model.controls.mix_wind.recalc_mix_info_after_evolve;
+    // `set_final_vars` calls `set_hydro_vars`, not `update_vars`, so
+    // `irradiation_heat` keeps its start-of-step value
+    // (`star/private/hydro_vars.f90:91-164`).
+    let irradiation_heat = model.aux.irradiation_heat.clone();
     let final_res = set_hydro_vars(model, false, false);
+    model.aux.irradiation_heat = irradiation_heat;
     model.aux.mixing.okay_to_set_mixing_info = prev_ok_mix;
     if op_split_burn {
         apply_burn_avg_epsnuc(model);

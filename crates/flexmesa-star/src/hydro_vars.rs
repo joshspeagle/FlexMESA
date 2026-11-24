@@ -6,7 +6,9 @@
 //! top-level microphysics/hydro variable evaluation (`set_hydro_vars` in
 //! `star/private/hydro_vars.f90`).
 
-use flexmesa_const::{MixingType, CLIGHT, CRAD, FOUR_PI, LN10};
+use flexmesa_const::{
+    MixingType, BOLTZ_SIGMA, CGAS, CLIGHT, CRAD, FOUR_PI, LN10,
+};
 use flexmesa_eos::{
     I_CHI_RHO, I_CHI_T, I_CP, I_GRAD_AD, I_LN_E, I_PHASE,
 };
@@ -161,6 +163,32 @@ fn wrap_e_cell(model: &StarModel, k: usize) -> StarAdOrder1 {
         model.eos_d_dlnt[k][I_LN_E],
     )
     .exp()
+}
+
+/// `starspot_tweak_gradr` (`star/private/starspots.f90:41-66`): divides
+/// `gradr` by `fspot*xspot_of_r^4 + 1 - fspot`, with
+/// `xspot_of_r = (P - PB_i)/P`, outside relaxation and the first model of a
+/// run.
+fn starspot_tweak_gradr(
+    model: &StarModel,
+    p: StarAdOrder1,
+    gradr: StarAdOrder1,
+) -> StarAdOrder1 {
+    if !model.aux.doing_relax && !model.doing_first_model_of_run {
+        let c = &model.controls;
+        let mu_ideal_gas = model.mu[0];
+        let r2 = flexmesa_math::pow2(model.r[0]);
+        let teff_local = flexmesa_math::pow(
+            model.lum[0] / (FOUR_PI * BOLTZ_SIGMA * r2),
+            0.25,
+        );
+        let pb_i =
+            (CGAS * model.rho[0] / mu_ideal_gas) * (1.0 - c.xspot) * teff_local;
+        let xspot_of_r = (p - pb_i) / p;
+        gradr / (xspot_of_r.pow4() * c.fspot + 1.0 - c.fspot)
+    } else {
+        gradr
+    }
 }
 
 /// Evaluates MLT/TDC/semiconvective/thermohaline quantities at a single face `k`
@@ -508,8 +536,19 @@ pub(crate) fn do1_mlt_2(
         1.0e99
     };
 
+    // `starspot_tweak_gradr` before `Get_results`
+    // (`star/private/turb_support.f90:183-187`,
+    // `star/private/starspots.f90:41-66`): `Get_results` sees the spotted
+    // `gradr`, while `store_results` keeps `gradr_in` in `s% gradr`
+    // (`star/private/turb_info.f90:277-278`).
+    let gradr_spot = if model.controls.do_starspots {
+        starspot_tweak_gradr(model, ptot_f, gradr_ad)
+    } else {
+        gradr_ad
+    };
+
     let mut mix_type = MixingType::NoMixing;
-    let mut grad_t_f = gradr_ad;
+    let mut grad_t_f = gradr_spot;
     let mut y_face_f = grad_t_f - gradl_f;
     let mut conv_vel_f = StarAdOrder1::ZERO;
     let mut d_f = StarAdOrder1::ZERO;
@@ -590,7 +629,7 @@ pub(crate) fn do1_mlt_2(
             let mut tdc_in = TdcInputs {
                 chi_t: chi_t_f,
                 chi_rho: chi_rho_f,
-                gradr: gradr_ad,
+                gradr: gradr_spot,
                 r: r_k,
                 p: ptot_f,
                 t: t_f,
@@ -628,7 +667,7 @@ pub(crate) fn do1_mlt_2(
                     p_f,
                     beta_ad,
                     grad_t_f,
-                    gradr_ad,
+                    gradr_spot,
                     gradl_f,
                 );
                 model.aux.mixing.superad_reduction_factor[k] = gamma_factor.val;
@@ -648,7 +687,7 @@ pub(crate) fn do1_mlt_2(
                     d_f = tdc_out2.d;
                 }
             }
-        } else if gradr_ad.val > gradl_f.val {
+        } else if gradr_spot.val > gradl_f.val {
             let mlt_params = MltParams {
                 option: mlt_opt,
                 mixing_length_alpha,
@@ -666,7 +705,7 @@ pub(crate) fn do1_mlt_2(
                 p: ptot_f,
                 t: t_f,
                 opacity: kap_f,
-                gradr: gradr_ad,
+                gradr: gradr_spot,
                 grada: grada_face_ad,
                 gradl: gradl_f,
             };
@@ -689,7 +728,7 @@ pub(crate) fn do1_mlt_2(
                     p_f,
                     beta_ad,
                     grad_t_f,
-                    gradr_ad,
+                    gradr_spot,
                     gradl_f,
                 );
                 model.aux.mixing.superad_reduction_factor[k] = gamma_factor.val;
@@ -731,7 +770,7 @@ pub(crate) fn do1_mlt_2(
                     let th_in = ThermohalineInputs {
                         lambda: lambda_f,
                         grada: grada_face_ad,
-                        gradr: gradr_ad,
+                        gradr: gradr_spot,
                         t: t_f,
                         opacity: kap_f,
                         rho: rho_f,
@@ -752,9 +791,9 @@ pub(crate) fn do1_mlt_2(
                         mix_type = th_out.mixing_type;
                     }
                 }
-            } else if gradr_ad.val > grada_face_ad.val
+            } else if gradr_spot.val > grada_face_ad.val
                 && model.controls.alpha_semiconvection > 0.0
-                && gradl_f.val > gradr_ad.val
+                && gradl_f.val > gradr_spot.val
             {
                 let sc_params = SemiconvectionParams {
                     option: model.controls.semiconvection_option,
@@ -773,7 +812,7 @@ pub(crate) fn do1_mlt_2(
                     opacity: kap_f,
                     rho: rho_f,
                     cp: cp_f,
-                    gradr: gradr_ad,
+                    gradr: gradr_spot,
                     grada: grada_face_ad,
                     gradl: gradl_f,
                 };
@@ -799,7 +838,7 @@ pub(crate) fn do1_mlt_2(
             || !d_f.val.is_finite()
         {
             mix_type = MixingType::NoMixing;
-            grad_t_f = gradr_ad;
+            grad_t_f = gradr_spot;
             y_face_f = grad_t_f - gradl_f;
             conv_vel_f = StarAdOrder1::ZERO;
             d_f = StarAdOrder1::ZERO;
@@ -817,7 +856,7 @@ pub(crate) fn do1_mlt_2(
             .tdc_num_outermost_cells_forced_nonturbulent;
         if (n_in > 0 && k + n_in >= nz) || (k + 1 < n_out) {
             mix_type = MixingType::NoMixing;
-            grad_t_f = gradr_ad;
+            grad_t_f = gradr_spot;
             y_face_f = grad_t_f - gradl_f;
             conv_vel_f = StarAdOrder1::ZERO;
             d_f = StarAdOrder1::ZERO;
@@ -1239,6 +1278,45 @@ fn redo_convective_region(
     Ok(())
 }
 
+/// `update_vars` irradiation block (`star/private/hydro_vars.f90:258-265`)
+/// with `eval_irradiation_heat` (`star/private/star_utils.f90:1849-1866`):
+/// heat in erg g$^{-1}$ s$^{-1}$ deposited in the outer column depth
+/// `column_depth_for_irradiation` (g cm$^{-2}$).
+pub(crate) fn set_irradiation_heat(model: &mut StarModel) {
+    let nz = model.nz;
+    if model.aux.irradiation_heat.len() != nz {
+        model.aux.irradiation_heat.resize(nz, 0.0);
+    }
+    if model.controls.irradiation_flux == 0.0 {
+        model.aux.irradiation_heat[..nz].fill(0.0);
+        return;
+    }
+    for k in 0..nz {
+        model.aux.irradiation_heat[k] = eval_irradiation_heat(model, k);
+    }
+}
+
+/// `eval_irradiation_heat` (`star/private/star_utils.f90:1849-1866`).
+fn eval_irradiation_heat(model: &StarModel, k: usize) -> f64 {
+    let mut heat = 0.0;
+    let flux = model.controls.irradiation_flux;
+    let col = model.controls.column_depth_for_irradiation;
+    if flux != 0.0 {
+        let irradiation_dq =
+            flexmesa_const::PI4 * model.r[0] * model.r[0] * col / model.xmstar;
+        let xq = 1.0 - model.q[k];
+        if irradiation_dq > xq {
+            let eps = 0.25 * flux / col;
+            if irradiation_dq < xq + model.dq[k] {
+                heat = eps * (irradiation_dq - xq) / model.dq[k];
+            } else {
+                heat = eps;
+            }
+        }
+    }
+    heat
+}
+
 /// Evaluates all zone and face microphysics and hydrodynamic variables
 /// (`set_hydro_vars` in `star/private/hydro_vars.f90:500-635`).
 ///
@@ -1254,6 +1332,12 @@ pub fn set_hydro_vars(
     let nz = model.nz;
     if nz == 0 {
         return Ok(());
+    }
+    // `update_vars` sets `irradiation_heat` (`star/private/hydro_vars.f90:
+    // 258-265`) only from `set_vars`; the solver's `set_vars_for_solver` and
+    // `set_final_vars` leave it as it was at the start of the step.
+    if !model.aux.doing_struct_burn_mix {
+        set_irradiation_heat(model);
     }
     if model.aux.mixing.mlt_mixing_type.len() != nz {
         model.aux.mixing.resize(nz);

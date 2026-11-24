@@ -14,6 +14,7 @@ import importlib
 import json
 import os
 import pathlib
+import re
 import signal
 import subprocess
 import sys
@@ -32,6 +33,7 @@ from flexmesa.testing._case_verdict import (
     evaluate_case_record,
     extract_reference_run_stats,
     is_unsupported_controls_rejection,
+    numbered_track_files,
     resolve_binary_component_reference_paths,
     resolve_full_reference_history_path,
     resolve_reference_history_path,
@@ -45,6 +47,7 @@ __all__ = [
     "evaluate_case_record",
     "extract_reference_run_stats",
     "is_unsupported_controls_rejection",
+    "locate_track_histories",
     "locate_written_history",
     "proc_rss_gb",
     "resolve_binary_component_reference_paths",
@@ -182,6 +185,11 @@ def proc_rss_gb(pid: int) -> float:
     return _proc_rss_kb(pid) / 1.0e6
 
 
+#: File names of the per-track ``astero`` search histories (``#430``).
+RUN_TRACK_GLOB = "sample_[0-9][0-9][0-9][0-9]_history.data"
+RUN_TRACK_RE = re.compile(r"^sample_(\d{4})_history\.data$")
+
+
 def _clear_stale_history_outputs(
     out_target: pathlib.Path,
     is_logs_dir: bool,
@@ -191,10 +199,44 @@ def _clear_stale_history_outputs(
         return
     if not out_target.is_dir():
         return
-    for name in ("history.data", "binary_history.data"):
+    for name in ("history.data", "binary_history.data", RUN_TRACK_GLOB):
         for stale in out_target.rglob(name):
             if stale.is_file():
                 stale.unlink(missing_ok=True)
+
+
+def locate_track_histories(
+    out_target: pathlib.Path,
+    is_logs_dir: bool,
+) -> tuple[pathlib.Path, ...]:
+    """Locate the per-track histories of an ``astero`` search run (``#430``).
+
+    The ``astero`` driver writes every track it evolves to
+    ``<astero_results_directory>/sample_NNNN_history.data``, numbering
+    tracks from 1 in evaluation order whether or not the search accepted
+    them, while MESA keeps only the last track in ``LOGS/history.data``.
+
+    Args:
+        out_target: Output file or root directory passed to the tracer.
+        is_logs_dir: True when ``out_target`` is a directory root.
+
+    Returns:
+        Track histories ordered by track number; empty when there are none.
+
+    Raises:
+        ValueError: If track histories sit in more than one directory or
+            their numbers are not exactly ``1..N``.
+    """
+    if not is_logs_dir or not out_target.is_dir():
+        return ()
+    dirs = {p.parent for p in out_target.rglob(RUN_TRACK_GLOB) if p.is_file()}
+    if not dirs:
+        return ()
+    if len(dirs) > 1:
+        raise ValueError(
+            f"track histories in {len(dirs)} directories under {out_target}"
+        )
+    return numbered_track_files(dirs.pop(), RUN_TRACK_RE)
 
 
 def locate_written_history(
@@ -777,7 +819,8 @@ def run_traced_case(
 
     Returns:
         ``TraceRunOutcome`` summarizing execution status, termination, resource
-        usage, and emitted history path.
+        usage, emitted history path, and (for ``astero``) the per-track
+        search histories.
 
     Raises:
         ValueError: If ``max_steps < 0`` or ``numerics_mode`` is invalid.
@@ -786,6 +829,49 @@ def run_traced_case(
         raise ValueError(f"max_steps must be non-negative, got {max_steps}")
     eff_mode = resolve_effective_numerics_mode(numerics_mode)
     _clear_stale_history_outputs(out_target, is_logs_dir)
+    outcome = _run_traced_case_once(
+        suite,
+        case_dir,
+        out_target,
+        max_steps=max_steps,
+        skip_optional=skip_optional,
+        respect_intervals=respect_intervals,
+        write_profiles=write_profiles,
+        is_logs_dir=is_logs_dir,
+        numerics_mode=eff_mode,
+        allow_unsupported_controls=allow_unsupported_controls,
+        extras_factory=extras_factory,
+        timeout_sec=timeout_sec,
+        max_rss_gb=max_rss_gb,
+    )
+    if suite != "astero":
+        return outcome
+    try:
+        tracks = locate_track_histories(out_target, is_logs_dir)
+    except ValueError as err:
+        msg = f"{outcome.error_message}; {err}".strip("; ")
+        return dataclasses.replace(outcome, error_message=msg)
+    return dataclasses.replace(outcome, track_history_paths=tracks)
+
+
+def _run_traced_case_once(
+    suite: str,
+    case_dir: pathlib.Path,
+    out_target: pathlib.Path,
+    *,
+    max_steps: int | None,
+    skip_optional: bool,
+    respect_intervals: bool,
+    write_profiles: bool,
+    is_logs_dir: bool,
+    numerics_mode: str,
+    allow_unsupported_controls: bool,
+    extras_factory: str | None,
+    timeout_sec: float | None,
+    max_rss_gb: float | None,
+) -> TraceRunOutcome:
+    """Run one case once, without the stale-output clearing of the caller."""
+    eff_mode = resolve_effective_numerics_mode(numerics_mode)
     case_name = case_dir.name
     t0 = time.monotonic()
 

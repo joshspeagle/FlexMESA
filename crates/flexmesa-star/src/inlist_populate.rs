@@ -137,22 +137,6 @@ impl SectionControls {
         Ok(found)
     }
 
-    #[inline]
-    pub(crate) fn try_first_f64(
-        &self,
-        section: &str,
-        keys: &[&str],
-    ) -> Result<Option<f64>, StarError> {
-        let mut found: Option<f64> = None;
-        for k in keys {
-            if let Some(v) = self.try_get_f64(section, k)? {
-                if found.is_none() {
-                    found = Some(v);
-                }
-            }
-        }
-        Ok(found)
-    }
 }
 
 impl InlistBundle {
@@ -224,13 +208,22 @@ impl InlistBundle {
             set_initial_number_retries, set_initial_dt,
             set_initial_cumulative_energy_error, set_uniform_initial_composition,
             relax_initial_to_xaccrete, set_initial_v_center, set_initial_l_center,
+            set_v_center, set_l_center, set_irradiation, set_initial_irradiation,
+            relax_initial_angular_momentum, relax_initial_entropy,
             new_rti_flag, pgstar_flag,
             write_profile_when_terminate, profile_starting_model,
             set_omega, set_initial_omega,
             set_omega_div_omega_crit, set_initial_omega_div_omega_crit,
             set_surface_rotation_v, set_initial_surface_rotation_v,
             astero_just_call_my_extras_check_model,
+            enable_adaptive_network, adjust_abundances_for_new_isos,
         ]);
+        map_f64s!("star_job", sj, j, [
+            min_x_for_keep, min_x_for_n, min_x_for_add,
+        ]);
+        sj.try_f64_into("star_job", &mut j.max_z_for_add, "max_Z_for_add")?;
+        sj.try_f64_into("star_job", &mut j.max_n_for_add, "max_N_for_add")?;
+        sj.try_f64_into("star_job", &mut j.max_a_for_add, "max_A_for_add")?;
         map_f64s!("star_job", sj, j, [
             pre_ms_t_c, pre_ms_guess_rho_c, pre_ms_d_log10_p,
             radius_in_cm_for_create_initial_model, mass_in_gm_for_create_initial_model,
@@ -238,7 +231,7 @@ impl InlistBundle {
             new_cumulative_energy_error, initial_h1, initial_h2, initial_he3, initial_he4,
             new_mass, new_z, new_y, core_avg_rho, core_avg_eps, new_r_center, new_l_center,
             new_omega, new_omega_div_omega_crit, new_surface_rotation_v,
-            remove_initial_center_by_temperature,
+            remove_initial_center_by_temperature, new_v_center, set_to_this_irrad_flux,
         ]);
         map_strs!("star_job", sj, j, [
             save_model_filename, save_photo_filename, save_pulse_data_filename,
@@ -336,41 +329,25 @@ impl InlistBundle {
         ]);
         sj.try_usize_into("star_job", &mut j.num_steps_to_relax_composition, "num_steps_to_relax_composition", 0)?;
         map_strs!("star_job", sj, j, [relax_composition_filename]);
-        if let Some(b) = sj.try_any_bool("star_job", &[
-            "set_tau_factor", "set_initial_tau_factor", "relax_tau_factor",
-            "relax_initial_tau_factor",
-        ])? {
-            j.set_tau_factor = b;
-        }
-        if let Some(b) = sj.try_any_bool("star_job", &["relax_tau_factor", "relax_initial_tau_factor"])? {
-            j.relax_tau_factor = b;
-        }
-        if let Some(v) = sj.try_first_f64(
-            "star_job",
-            &["set_to_this_tau_factor", "relax_to_this_tau_factor"],
-        )? {
-            j.set_to_this_tau_factor = v;
-        }
-        if let Some(b) = sj.try_any_bool("star_job", &[
-            "relax_core", "relax_initial_core", "relax_m_center", "relax_initial_m_center",
-        ])? {
-            j.relax_m_center = b;
-        }
-        let core_mass = match sj.try_get_f64("star_job", "new_core_mass")? {
-            Some(v) => Some(v),
-            None => sj.try_get_f64("star_job", "new_mass")?.filter(|_| j.relax_m_center),
-        };
-        if let Some(v) = core_mass {
-            j.new_core_mass = v;
+        map_bools!("star_job", sj, j, [
+            set_tau_factor, set_initial_tau_factor, relax_tau_factor, relax_initial_tau_factor,
+            relax_core, relax_initial_core, relax_m_center, relax_initial_m_center,
+            relax_irradiation, relax_initial_irradiation,
+        ]);
+        map_f64s!("star_job", sj, j, [
+            set_to_this_tau_factor, relax_to_this_tau_factor, dlogtau_factor,
+            new_core_mass, dlg_core_mass_per_step, relax_core_years_for_dt,
+            relax_irradiation_max_yrs_dt,
+        ]);
+        sj.try_f64_into("star_job", &mut j.relax_m_center_dt, "relax_M_center_dt")?;
+        if let Some(v) = sj.try_get_i64("star_job", "relax_irradiation_min_steps")? {
+            j.relax_irradiation_min_steps = v;
         }
         if let Some(b) = sj.try_any_bool("star_job", &["relax_r_center", "relax_initial_r_center"])? {
             j.relax_r_center = b;
         }
         if let Some(b) = sj.try_any_bool("star_job", &["relax_l_center", "relax_initial_l_center"])? {
             j.relax_l_center = b;
-        }
-        if let Some(b) = sj.try_any_bool("star_job", &["relax_irradiation", "relax_initial_irradiation"])? {
-            j.relax_irradiation = b;
         }
         sj.try_f64_into("star_job", &mut j.new_irradiation_flux, "relax_to_this_irrad_flux")?;
         sj.try_f64_into("star_job", &mut j.column_depth_for_irradiation, "irrad_col_depth")?;
@@ -435,15 +412,31 @@ impl InlistBundle {
             drag_coefficient, min_q_for_drag, mlt_pturb_factor, pvsc_cq,
             eps_grav_factor,
             velocity_q_upper_bound, velocity_tau_lower_bound, velocity_logt_lower_bound,
-            mix_factor, pextra_factor, min_kap_for_dprad_dm_eqn,
+            mix_factor, pextra_factor, fspot, xspot, min_kap_for_dprad_dm_eqn,
             fixed_psurf, fixed_vsurf,
         ]);
         ctrl.try_usize_into("controls", &mut c.burn_steps_hard_limit, "burn_steps_hard_limit", 0)?;
+        ctrl.try_f64_into(
+            "controls",
+            &mut c.threshold_grad_mu_for_double_point,
+            "threshold_grad_mu_for_double_point",
+        )?;
+        for (dst, key) in [
+            (&mut c.max_number_of_double_points, "max_number_of_double_points"),
+            (&mut c.gyre_data_schema, "gyre_data_schema"),
+        ] {
+            let mut v = isize::try_from(*dst).unwrap_or(0);
+            ctrl.try_isize_into("controls", &mut v, key)?;
+            *dst = i32::try_from(v).map_err(|_| {
+                StarError::InvalidInput(format!("'&controls::{key}' out of range: {v}"))
+            })?;
+        }
         map_strs!("controls", ctrl, c, [
             zams_filename, cool_wind_rgb_scheme, cool_wind_agb_scheme, phase_separation_option,
         ]);
         map_bools!("controls", ctrl, c, [
-            use_ledoux_criterion, calculate_brunt_b, calculate_brunt_n2,
+            use_ledoux_criterion, calculate_brunt_b, calculate_brunt_n2, do_starspots,
+            add_double_points_to_pulse_data, interpolate_rho_for_pulse_data,
             op_split_burn, accrete_same_as_surface, set_rho_to_dm_div_dv,
             accrete_given_mass_fractions, do_element_diffusion, do_conv_premix,
             do_phase_separation, do_phase_separation_heating, use_other_cgrav,
@@ -536,6 +529,7 @@ impl InlistBundle {
                 "t_tau" => AtmOption::TTau,
                 "table" => AtmOption::Table,
                 "irradiated_grey" => AtmOption::IrradiatedGrey,
+                // Deprecated options such as 'simple_photosphere' stop here (#468).
                 other => {
                     return Err(StarError::InvalidInput(format!(
                         "unrecognized/unsupported '&controls::atm_option' option '{other}' (`star/private/atm_support.f90:900-930`)"

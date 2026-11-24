@@ -10,7 +10,7 @@
 //! the `interp_pm` target profile) lives in [`crate::relax_comp`]; this module
 //! holds only the evolve loops.
 
-use flexmesa_const::{M_SUN, SECYER};
+use flexmesa_const::{FOUR_THIRDS_PI, M_SUN, ONE_THIRD, SECYER};
 
 use crate::controls::StarError;
 use crate::core_boundaries::k_for_q_1based;
@@ -21,8 +21,8 @@ use crate::relax_comp::{
     RelaxCompositionInterpolants,
 };
 use crate::relax_driver::{
-    do_internal_evolve, setup_before_relax, RelaxHookResult, RelaxHooks,
-    RELAX_FINISHED_OKAY,
+    do_internal_evolve, setup_before_relax, turn_off_winds, RelaxHookResult,
+    RelaxHooks, RELAX_FINISHED_OKAY,
 };
 
 /// `min_z` (`star/private/relax.f90:58`).
@@ -670,5 +670,441 @@ pub(crate) fn do_relax_composition(
     c.mix_factor = mix_factor;
     c.do_element_diffusion = do_element_diffusion;
     c.include_composition_in_eps_grav = include_composition_in_eps_grav;
+    res
+}
+
+/// `do1_relax_R_center` (`star/private/relax.f90:2616-2637`): sets
+/// `R_center` and rebuilds every `lnR` outward from it so each cell keeps its
+/// density, as the first guess for the next model.
+fn do1_relax_r_center(model: &mut StarModel, new_r_center: f64) {
+    model.r_center = new_r_center;
+    let mut rp13 = model.r_center * model.r_center * model.r_center;
+    for k in (0..model.nz).rev() {
+        let dm = model.dm[k];
+        let rho = model.rho[k];
+        let dr3 = dm / (rho * FOUR_THIRDS_PI);
+        let ln_r = flexmesa_math::log(rp13 + dr3) * ONE_THIRD;
+        model.ln_r[k] = ln_r;
+        model.r[k] = flexmesa_math::exp(ln_r);
+        rp13 += dr3;
+    }
+}
+
+/// `do1_relax_L_center` (`star/private/relax.f90:2871-2889`): sets
+/// `L_center` and shifts every `L` by the change.
+fn do1_relax_l_center(model: &mut StarModel, new_l_center: f64) {
+    let l_center_prev = model.l_center;
+    model.l_center = new_l_center;
+    let d_l = new_l_center - l_center_prev;
+    for l in &mut model.lum[..model.nz] {
+        *l += d_l;
+    }
+}
+
+/// `do1_relax_core` (`star/private/relax.f90:2178-2192`): `next` in
+/// $M_\odot$; `core_avg_rho` in g cm$^{-3}$, `core_avg_eps` in erg g$^{-1}$
+/// s$^{-1}$.
+fn do1_relax_core(
+    model: &mut StarModel,
+    next: f64,
+    core_avg_rho: f64,
+    core_avg_eps: f64,
+) {
+    model.m_center = next * M_SUN;
+    model.xmstar = model.mstar - model.m_center;
+    let next_r_center = flexmesa_math::pow(
+        model.m_center / (core_avg_rho * FOUR_THIRDS_PI),
+        ONE_THIRD,
+    );
+    do1_relax_r_center(model, next_r_center);
+    let next_l_center = model.m_center * core_avg_eps;
+    do1_relax_l_center(model, next_l_center);
+}
+
+/// `before_evolve_relax_core` and `relax_core_check_model`
+/// (`star/private/relax.f90:2063-2176`).
+struct RelaxCore {
+    new_core_mass: f64,
+    dlg_core_mass_per_step: f64,
+    years_for_dt: f64,
+    core_avg_rho: f64,
+    core_avg_eps: f64,
+}
+
+impl RelaxHooks for RelaxCore {
+    fn before_evolve(&mut self, model: &mut StarModel) -> Result<(), StarError> {
+        setup_before_relax(model);
+        model.controls.max_model_number = None;
+        model.dt_next = SECYER * self.years_for_dt;
+        Ok(())
+    }
+
+    fn check_model(
+        &mut self,
+        model: &mut StarModel,
+    ) -> Result<RelaxHookResult, StarError> {
+        let new_core_mass = self.new_core_mass;
+        let current_core_mass = model.m_center / M_SUN;
+        if (new_core_mass - current_core_mass).abs() <= 1.0e-12 * new_core_mass
+        {
+            do1_relax_core(
+                model,
+                new_core_mass,
+                self.core_avg_rho,
+                self.core_avg_eps,
+            );
+            return Ok(finished());
+        }
+
+        let relax_core_dt = SECYER * self.years_for_dt;
+        // Give a chance to stabilize.
+        if model.dt < relax_core_dt * 0.9 {
+            return Ok(RelaxHookResult::KeepGoing);
+        }
+
+        let mut end_now = false;
+        let next = if new_core_mass < current_core_mass {
+            let next = flexmesa_math::exp10(
+                flexmesa_math::safe_log10(current_core_mass)
+                    - self.dlg_core_mass_per_step,
+            );
+            if next < new_core_mass {
+                end_now = true;
+                new_core_mass
+            } else {
+                next
+            }
+        } else {
+            let next = flexmesa_math::exp10(
+                flexmesa_math::log10(current_core_mass.max(1.0e-8))
+                    + self.dlg_core_mass_per_step,
+            );
+            if next > new_core_mass {
+                end_now = true;
+                new_core_mass
+            } else {
+                next
+            }
+        };
+
+        do1_relax_core(model, next, self.core_avg_rho, self.core_avg_eps);
+
+        if end_now {
+            return Ok(finished());
+        }
+        Ok(RelaxHookResult::KeepGoing)
+    }
+}
+
+/// `do_relax_core` (`star/private/relax.f90:1999-2060`): moves the inner
+/// boundary mass `M_center` to `new_core_mass` ($M_\odot$) by
+/// `dlg_core_mass_per_step` in $\log_{10}$ per step of
+/// `relax_core_years_for_dt` years, with `R_center` from `core_avg_rho` and
+/// `L_center` from `core_avg_eps`.
+///
+/// # Errors
+/// Returns [`StarError::InvalidInput`] for `new_core_mass <= 0` and the relax
+/// error when the evolve loop fails.
+pub(crate) fn do_relax_core(
+    model: &mut StarModel,
+    new_core_mass: f64,
+    dlg_core_mass_per_step: f64,
+    years_for_dt: f64,
+    core_avg_rho: f64,
+    core_avg_eps: f64,
+    extras: &mut dyn StarExtras,
+) -> Result<(), StarError> {
+    if new_core_mass <= 0.0 {
+        return Err(StarError::InvalidInput(format!(
+            "invalid new_core_mass {new_core_mass} \
+             (star/private/relax.f90:2022-2026)"
+        )));
+    }
+    let current_core_mass = model.m_center / M_SUN;
+    if (new_core_mass - current_core_mass).abs() <= 1.0e-12 * new_core_mass {
+        do1_relax_core(model, new_core_mass, core_avg_rho, core_avg_eps);
+        return Ok(());
+    }
+    let max_model_number = model.controls.max_model_number;
+    model.controls.max_model_number = None;
+    let max_years_for_timestep = model.controls.max_years_for_timestep;
+    model.controls.max_years_for_timestep = years_for_dt;
+    let mut hooks = RelaxCore {
+        new_core_mass,
+        dlg_core_mass_per_step,
+        years_for_dt,
+        core_avg_rho,
+        core_avg_eps,
+    };
+    let res = do_internal_evolve(model, &mut hooks, true, extras);
+    model.controls.max_model_number = max_model_number;
+    model.controls.max_years_for_timestep = max_years_for_timestep;
+    res
+}
+
+/// `set_new_mass_for_relax_M_center` (`star/private/relax.f90:2477-2488`).
+fn set_new_mass_for_relax_m_center(model: &mut StarModel, new_mass: f64) {
+    model.mstar = new_mass * M_SUN;
+    model.m_center = model.mstar - model.xmstar;
+}
+
+/// `before_evolve_relax_M_center` and `relax_M_center_check_model`
+/// (`star/private/relax.f90:2392-2475`).
+struct RelaxMCenter {
+    new_mass: f64,
+    dlgm_per_step: f64,
+    dt_seconds: f64,
+}
+
+impl RelaxHooks for RelaxMCenter {
+    fn before_evolve(&mut self, model: &mut StarModel) -> Result<(), StarError> {
+        setup_before_relax(model);
+        model.controls.max_model_number = None;
+        model.dt_next = self.dt_seconds;
+        Ok(())
+    }
+
+    fn check_model(
+        &mut self,
+        model: &mut StarModel,
+    ) -> Result<RelaxHookResult, StarError> {
+        let new_mass = self.new_mass;
+        let sm = star_mass(model);
+        let mut end_now = false;
+        let next = if new_mass < sm {
+            let next = flexmesa_math::exp10(
+                flexmesa_math::safe_log10(sm) - self.dlgm_per_step,
+            );
+            if next < new_mass {
+                end_now = true;
+                new_mass
+            } else {
+                next
+            }
+        } else {
+            let next = flexmesa_math::exp10(
+                flexmesa_math::safe_log10(sm) + self.dlgm_per_step,
+            );
+            if next > new_mass {
+                end_now = true;
+                new_mass
+            } else {
+                next
+            }
+        };
+
+        if (sm - new_mass).abs() < 1.0e-15 || end_now {
+            set_new_mass_for_relax_m_center(model, new_mass);
+            return Ok(finished());
+        }
+
+        // Give a chance to stabilize.
+        if model.dt < self.dt_seconds * 0.9 {
+            return Ok(RelaxHookResult::KeepGoing);
+        }
+
+        set_new_mass_for_relax_m_center(model, next);
+        Ok(RelaxHookResult::KeepGoing)
+    }
+}
+
+/// `do_relax_M_center` (`star/private/relax.f90:2339-2389`): changes the
+/// total mass to `new_mass` ($M_\odot$) at fixed envelope mass `xmstar` by
+/// moving `M_center`, `dlgm_per_step` in $\log_{10}$ per step of
+/// `relax_M_center_dt` seconds.
+///
+/// # Errors
+/// Returns [`StarError::InvalidInput`] for `new_mass <= 0` and the relax error
+/// when the evolve loop fails.
+pub(crate) fn do_relax_m_center(
+    model: &mut StarModel,
+    new_mass: f64,
+    dlgm_per_step: f64,
+    dt_seconds: f64,
+    extras: &mut dyn StarExtras,
+) -> Result<(), StarError> {
+    if new_mass <= 0.0 {
+        return Err(StarError::InvalidInput(format!(
+            "invalid new_mass {new_mass} (star/private/relax.f90:2354-2358)"
+        )));
+    }
+    if (new_mass - star_mass(model)).abs() <= 1.0e-6 {
+        set_star_mass(model, new_mass);
+        return Ok(());
+    }
+    let max_model_number = model.controls.max_model_number;
+    let max_years_for_timestep = model.controls.max_years_for_timestep;
+    model.controls.max_model_number = None;
+    model.controls.max_years_for_timestep = dt_seconds / SECYER;
+    let mut hooks = RelaxMCenter {
+        new_mass,
+        dlgm_per_step,
+        dt_seconds,
+    };
+    let res = do_internal_evolve(model, &mut hooks, true, extras);
+    model.controls.max_model_number = max_model_number;
+    model.controls.max_years_for_timestep = max_years_for_timestep;
+    res
+}
+
+/// `before_evolve_relax_tau_factor` and `relax_tau_factor_check_model`
+/// (`star/private/relax.f90:1442-1502`).
+struct RelaxTauFactor {
+    new_tau_factor: f64,
+    dlogtau_factor: f64,
+}
+
+impl RelaxHooks for RelaxTauFactor {
+    fn before_evolve(&mut self, model: &mut StarModel) -> Result<(), StarError> {
+        turn_off_winds(model);
+        model.controls.max_model_number = None;
+        Ok(())
+    }
+
+    fn check_model(
+        &mut self,
+        model: &mut StarModel,
+    ) -> Result<RelaxHookResult, StarError> {
+        let new_tau_factor = self.new_tau_factor;
+        let current = model.controls.tau_factor;
+        if (current - new_tau_factor).abs() < 1.0e-15 {
+            model.controls.tau_factor = new_tau_factor;
+            return Ok(finished());
+        }
+        let next = if new_tau_factor < current {
+            let next = flexmesa_math::exp10(
+                flexmesa_math::safe_log10(current) - self.dlogtau_factor,
+            );
+            if next < new_tau_factor { new_tau_factor } else { next }
+        } else {
+            let next = flexmesa_math::exp10(
+                flexmesa_math::safe_log10(current) + self.dlogtau_factor,
+            );
+            if next > new_tau_factor { new_tau_factor } else { next }
+        };
+        model.controls.tau_factor = next;
+        model.controls.ts_stop.max_timestep = SECYER * (model.dt / SECYER);
+        Ok(RelaxHookResult::KeepGoing)
+    }
+}
+
+/// `do_relax_tau_factor` (`star/private/relax.f90:1394-1439`): relaxes
+/// `tau_factor` to `new_tau_factor` by `dlogtau_factor` in $\log_{10}$ per
+/// step. Upstream then sets `force_tau_factor`, which only a photo restart
+/// reads (`star/private/photo_in.f90:95-98`); this path has none.
+///
+/// # Errors
+/// Returns [`StarError::InvalidInput`] for `new_tau_factor <= 0` and the
+/// relax error when the evolve loop fails.
+pub(crate) fn do_relax_tau_factor(
+    model: &mut StarModel,
+    new_tau_factor: f64,
+    dlogtau_factor: f64,
+    extras: &mut dyn StarExtras,
+) -> Result<(), StarError> {
+    if new_tau_factor <= 0.0 {
+        return Err(StarError::InvalidInput(format!(
+            "invalid new_tau_factor {new_tau_factor} \
+             (star/private/relax.f90:1410-1414)"
+        )));
+    }
+    if (new_tau_factor - model.controls.tau_factor).abs() <= 1.0e-6 {
+        model.controls.tau_factor = new_tau_factor;
+        return Ok(());
+    }
+    let max_model_number = model.controls.max_model_number;
+    model.controls.max_model_number = None;
+    let mut hooks = RelaxTauFactor {
+        new_tau_factor,
+        dlogtau_factor,
+    };
+    let res = do_internal_evolve(model, &mut hooks, true, extras);
+    model.controls.max_model_number = max_model_number;
+    res
+}
+
+/// `before_evolve_relax_irradiation` and `relax_irradiation_check_model`
+/// (`star/private/relax.f90:1800-1874`).
+struct RelaxIrradiation {
+    /// `ipar(1)`, advanced while waiting for `dt`.
+    adjust_model: i64,
+    /// `ipar(2)`.
+    max_num_steps: i64,
+    new_irrad_flux: f64,
+    new_irrad_col_depth: f64,
+    old_irrad_flux: f64,
+    old_irrad_col_depth: f64,
+}
+
+impl RelaxHooks for RelaxIrradiation {
+    fn before_evolve(&mut self, model: &mut StarModel) -> Result<(), StarError> {
+        turn_off_winds(model);
+        model.controls.max_model_number = None;
+        Ok(())
+    }
+
+    fn check_model(
+        &mut self,
+        model: &mut StarModel,
+    ) -> Result<RelaxHookResult, StarError> {
+        let num_steps = model.model_number as i64 - self.adjust_model;
+        let frac = num_steps as f64 / self.max_num_steps as f64;
+
+        if model.dt < model.controls.max_years_for_timestep * SECYER {
+            self.adjust_model += 1;
+            return Ok(RelaxHookResult::KeepGoing);
+        }
+
+        if frac >= 1.0 {
+            model.controls.irradiation_flux = self.new_irrad_flux;
+            model.controls.column_depth_for_irradiation =
+                self.new_irrad_col_depth;
+            return Ok(finished());
+        }
+
+        model.controls.irradiation_flux = frac * self.new_irrad_flux
+            + (1.0 - frac) * self.old_irrad_flux;
+        model.controls.column_depth_for_irradiation = frac
+            * self.new_irrad_col_depth
+            + (1.0 - frac) * self.old_irrad_col_depth;
+        Ok(RelaxHookResult::KeepGoing)
+    }
+}
+
+/// `do_relax_irradiation` (`star/private/relax.f90:1743-1797`): ramps the
+/// irradiation flux and column depth linearly to the new values over at
+/// least `min_steps` steps taken at `relax_irradiation_max_yrs_dt`.
+///
+/// # Errors
+/// Returns the relax error when the evolve loop fails.
+pub(crate) fn do_relax_irradiation(
+    model: &mut StarModel,
+    min_steps: i64,
+    new_irrad_flux: f64,
+    new_irrad_col_depth: f64,
+    relax_irradiation_max_yrs_dt: f64,
+    extras: &mut dyn StarExtras,
+) -> Result<(), StarError> {
+    let mut hooks = RelaxIrradiation {
+        adjust_model: model.model_number as i64,
+        max_num_steps: min_steps,
+        new_irrad_flux,
+        new_irrad_col_depth,
+        old_irrad_flux: model.controls.irradiation_flux,
+        old_irrad_col_depth: model.controls.column_depth_for_irradiation,
+    };
+    if (hooks.new_irrad_flux - hooks.old_irrad_flux).abs() <= 1.0e-10
+        && (hooks.new_irrad_col_depth - hooks.old_irrad_col_depth).abs()
+            <= 1.0e-10
+    {
+        return Ok(());
+    }
+    let max_model_number = model.controls.max_model_number;
+    model.controls.max_model_number = None;
+    let max_years_for_timestep = model.controls.max_years_for_timestep;
+    model.controls.max_years_for_timestep = relax_irradiation_max_yrs_dt;
+    let res = do_internal_evolve(model, &mut hooks, true, extras);
+    model.controls.max_model_number = max_model_number;
+    model.controls.max_years_for_timestep = max_years_for_timestep;
     res
 }

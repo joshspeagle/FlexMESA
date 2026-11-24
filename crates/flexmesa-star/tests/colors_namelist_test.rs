@@ -401,7 +401,7 @@ fn test_builtin_solar_johnson_parity() {
         .expect("write list");
     let specs = resolve_star_history_columns(&model, Some(dir.path()))
         .expect("resolve default Johnson");
-    let row = evaluate_star_history_row(&model, &specs);
+    let row = evaluate_star_history_row(&model, &specs).expect("history row");
     let names: Vec<&str> = row.iter().map(|(k, _)| k.as_str()).collect();
     assert_eq!(
         names,

@@ -188,11 +188,6 @@ issue = "#154"
 reason = "Mass-removal stage skips unported do_relax_mass and star_job::lg_max_abs_mdot, leaving an unrelaxed bare_he_core.mod that terminates at min_timestep_limit (#154)."
 [[gaps]]
 suite = "star"
-case = "make_metals"
-issue = "#154"
-reason = "Initial composition/entropy relaxation and burning trajectory (#154, #152)."
-[[gaps]]
-suite = "star"
 case = "make_o_ne_wd"
 issue = "#157"
 reason = "Case history_columns.list requests unported MLT++ gradT_excess_alpha column."
@@ -356,11 +351,6 @@ suite = "astero"
 case = "astero_adipls"
 issue = "#171"
 reason = "Depends on bundled ADIPLS (#171) and astero mode-matching driver (#162)."
-[[gaps]]
-suite = "astero"
-case = "astero_gyre"
-issue = "#170"
-reason = "Depends on bundled GYRE (#170) and astero mode-matching driver (#162)."
 [[gaps]]
 suite = "astero"
 case = "example_astero"

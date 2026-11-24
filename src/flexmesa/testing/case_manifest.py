@@ -150,6 +150,12 @@ class CaseManifestEntry:
         extras_factory: Optional ``"module:callable"`` path returning test-side
             extras handlers for the case.
         departures: Tuple of documented ``DepartureSpec`` items.
+        track_reference_dir: Directory of the ``mesa-astero-tracks-v1`` data
+            bundle holding one MESA ``26.4.1`` history per search track
+            (``track_0001.data``, ``track_0002.data``, ...) for ``astero``
+            search cases, whose ``LOGS/history.data`` keeps only the last
+            track (``#430``). Empty when the case is compared against
+            ``reference_path`` alone.
     """
 
     suite: SuiteName
@@ -169,6 +175,7 @@ class CaseManifestEntry:
     extras_status: str = ""
     extras_issue: str = ""
     departures: tuple[DepartureSpec, ...] = ()
+    track_reference_dir: str = ""
     component_independent_var: str = "star_age"
     component_final_tolerances: dict[str, float] = dataclasses.field(
         default_factory=lambda: dict(_DEFAULT_STAR_FINAL_TOLERANCES)
@@ -440,6 +447,12 @@ def load_case_manifest(
             deps.append(DepartureSpec(issue=d_issue, rationale=d_rat))
 
         extras_factory = str(raw.get("extras_factory", def_ext_factory)).strip()
+        track_ref_dir = str(raw.get("track_reference_dir", "")).strip()
+        if track_ref_dir and (suite != "astero" or ref_status != "mesa_26_4_1"):
+            raise ValueError(
+                f"{ctx}: track_reference_dir needs suite 'astero' and "
+                "reference_status 'mesa_26_4_1'"
+            )
         star_x, star_ftol, star_ttol, _, _, _ = suite_defaults["star"]
         comp_ftol = _parse_tol_map(
             raw.get("component_final_tolerances"),
@@ -471,6 +484,7 @@ def load_case_manifest(
                 extras_status=extras_ledger.get((suite, case), ("", ""))[0],
                 extras_issue=extras_ledger.get((suite, case), ("", ""))[1],
                 departures=tuple(deps),
+                track_reference_dir=track_ref_dir,
                 component_independent_var=star_x,
                 component_final_tolerances=comp_ftol,
                 component_track_tolerances=comp_ttol,

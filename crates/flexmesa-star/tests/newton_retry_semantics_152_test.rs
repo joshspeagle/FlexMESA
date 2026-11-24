@@ -746,7 +746,7 @@ fn test_redo_trial_reverts_max_timestep_hi_t_limit_mutations() {
 }
 
 #[test]
-fn test_relax_uniform_omega_restores_all_timestamps_and_hits_target_on_early_exit()
+fn test_relax_uniform_omega_restores_all_timestamps_and_applies_ramped_omega_on_early_exit()
  {
     let mut model = load_zams_model(
         StarControls {
@@ -781,13 +781,21 @@ fn test_relax_uniform_omega_restores_all_timestamps_and_hits_target_on_early_exi
     assert_eq!(model.time_old_sec, saved_time_old_sec);
     assert_eq!(model.aux.step_hist.time_sec, saved_time_sec);
     assert_eq!(model.aux.step_hist.time_old_sec, saved_time_old_sec);
-    assert!(
-        model
-            .omega
-            .iter()
-            .all(|&w| (w - target_omega).abs() <= 1.0e-18),
-        "early exit must apply exact target_omega rather than interpolated fraction"
-    );
+    // Upstream applies `this_step_omega = frac*new_omega + (1-frac)*starting_omega`
+    // with `frac = (model_number - starting_model_number)/num_steps`, capped at
+    // 1, on the terminating step too (`star/private/relax.f90:1355-1356, 1374,
+    // 1383-1389`). Which step terminates depends on how far the solve moves the
+    // surface omega, so any step of the ramp is accepted; the result must be a
+    // uniform omega on the ramp, never a substitute value.
+    // `set_uniform_omega` ends with `set_rotation_info`, whose `set_omega`
+    // recomputes `omega = j_rot/i_rot` (`hydro_rotation.f90:532, 549-550`),
+    // so the profile is uniform to round-off rather than bit for bit.
+    let on_ramp = (1_u32..=5 + 51).any(|k| {
+        let frac = 1.0_f64.min(f64::from(k) / 5.0_f64);
+        let e = frac * target_omega + (1.0 - frac) * start_omega;
+        model.omega.iter().all(|&w| (w - e).abs() <= 1.0e-14 * e.abs())
+    });
+    assert!(on_ramp, "the terminating step applies the ramped omega, as upstream");
 }
 
 #[test]

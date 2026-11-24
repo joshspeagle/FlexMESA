@@ -35,7 +35,8 @@ reason = "Multi-stage pre-MS-to-WD campaign exceeds 300 s wall-time guard with u
 suite = "star"
 case = "1M_thermohaline"
 issue = "#158"
-reason = "Exceeds 300 s wall-time guard with 4 unsupported rotation relaxation controls (change_d_omega_flag, near_zams_relax_initial_surface_rotation_v, new_d_omega_flag, num_steps_to_relax_rotation; #158)."
+reason = "Exceeds 300 s wall-time guard with 3 unsupported rotation relaxation controls (change_d_omega_flag, near_zams_relax_initial_surface_rotation_v, new_d_omega_flag; #158)."
+
 [[gaps]]
 suite = "star"
 case = "20M_pre_ms_to_core_collapse"

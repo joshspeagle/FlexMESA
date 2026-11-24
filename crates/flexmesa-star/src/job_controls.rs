@@ -765,6 +765,29 @@ pub struct StarJobControls {
     pub set_initial_surface_rotation_v: bool,
     /// Surface equatorial velocity ($\mathrm{km\,s^{-1}}$) on startup (`new_surface_rotation_v`, `0.0` default).
     pub new_surface_rotation_v: f64,
+    /// Relax to a uniform `new_omega` (`relax_omega`, `false` default).
+    pub relax_omega: bool,
+    /// Relax to a uniform `new_omega` on a non-restart start only
+    /// (`relax_initial_omega`, `false` default).
+    pub relax_initial_omega: bool,
+    /// Relax to a uniform $\Omega = $ `new_omega_div_omega_crit`
+    /// $\times\,\Omega_{\mathrm{crit}}$ (`relax_omega_div_omega_crit`, `false` default).
+    pub relax_omega_div_omega_crit: bool,
+    /// As `relax_omega_div_omega_crit`, on a non-restart start only
+    /// (`relax_initial_omega_div_omega_crit`, `false` default).
+    pub relax_initial_omega_div_omega_crit: bool,
+    /// Relax to a uniform $\Omega$ with surface velocity `new_surface_rotation_v`
+    /// (`relax_surface_rotation_v`, `false` default).
+    pub relax_surface_rotation_v: bool,
+    /// As `relax_surface_rotation_v`, on a non-restart start only
+    /// (`relax_initial_surface_rotation_v`, `false` default).
+    pub relax_initial_surface_rotation_v: bool,
+    /// Steps over which the rotation relaxes (`num_steps_to_relax_rotation`,
+    /// `100` default).
+    pub num_steps_to_relax_rotation: isize,
+    /// Maximum timestep while the rotation relaxes, in years
+    /// (`relax_omega_max_yrs_dt`, `1d9` default).
+    pub relax_omega_max_yrs_dt: f64,
     /// Whether to set initial stellar age (`set_initial_age`).
     pub set_initial_age: bool,
     /// Initial stellar age in years (`initial_age`).
@@ -1111,6 +1134,14 @@ impl Default for StarJobControls {
             set_surface_rotation_v: false,
             set_initial_surface_rotation_v: false,
             new_surface_rotation_v: 0.0,
+            relax_omega: false,
+            relax_initial_omega: false,
+            relax_omega_div_omega_crit: false,
+            relax_initial_omega_div_omega_crit: false,
+            relax_surface_rotation_v: false,
+            relax_initial_surface_rotation_v: false,
+            num_steps_to_relax_rotation: 100,
+            relax_omega_max_yrs_dt: 1.0e9,
             set_initial_age: false,
             initial_age: 0.0,
             set_initial_model_number: false,

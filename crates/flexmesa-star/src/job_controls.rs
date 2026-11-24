@@ -756,6 +756,52 @@ pub struct StarJobControls {
     /// Maximum timestep while the rotation relaxes, in years
     /// (`relax_omega_max_yrs_dt`, `1d9` default).
     pub relax_omega_max_yrs_dt: f64,
+    /// Rotation is switched on near the ZAMS and set from `new_omega` for this
+    /// many steps (`set_near_zams_omega_steps`, `-1` default).
+    pub set_near_zams_omega_steps: isize,
+    /// As `set_near_zams_omega_steps`, from `new_omega_div_omega_crit`
+    /// (`set_near_zams_omega_div_omega_crit_steps`, `-1` default).
+    pub set_near_zams_omega_div_omega_crit_steps: isize,
+    /// As `set_near_zams_omega_steps`, from `new_surface_rotation_v`
+    /// (`set_near_zams_surface_rotation_v_steps`, `-1` default).
+    pub set_near_zams_surface_rotation_v_steps: isize,
+    /// Last model number at which `do_rotation` sets a uniform `new_omega`
+    /// (`set_omega_step_limit`, `-1` default).
+    pub set_omega_step_limit: isize,
+    /// As `set_omega_step_limit`, for `new_omega_div_omega_crit`
+    /// (`set_omega_div_omega_crit_step_limit`, `-1` default).
+    pub set_omega_div_omega_crit_step_limit: isize,
+    /// As `set_omega_step_limit`, for `new_surface_rotation_v`
+    /// (`set_surf_rotation_v_step_limit`, `-1` default).
+    pub set_surf_rotation_v_step_limit: isize,
+    /// Switch rotation on near the ZAMS and relax to `new_omega`
+    /// (`near_zams_relax_omega`, `false` default).
+    pub near_zams_relax_omega: bool,
+    /// Switch rotation on near the ZAMS and relax to
+    /// `new_omega_div_omega_crit` (`near_zams_relax_omega_div_omega_crit`,
+    /// `false` default).
+    pub near_zams_relax_omega_div_omega_crit: bool,
+    /// Switch rotation on near the ZAMS and relax to `new_surface_rotation_v`
+    /// (`near_zams_relax_initial_surface_rotation_v`, `false` default).
+    pub near_zams_relax_initial_surface_rotation_v: bool,
+    /// Set `tau_factor = rho(1)/base_for_adjust_tau_factor_to_surf_density`
+    /// after every step (`adjust_tau_factor_to_surf_density`, `false` default).
+    pub adjust_tau_factor_to_surf_density: bool,
+    /// Density for `adjust_tau_factor_to_surf_density`, in g cm^-3
+    /// (`base_for_adjust_tau_factor_to_surf_density`, `0` default).
+    pub base_for_adjust_tau_factor_to_surf_density: f64,
+    /// Central He4 below which `tau_factor` is set to `set_to_this_tau_factor`
+    /// (`set_tau_factor_after_core_He_burn`, `-1` default).
+    pub set_tau_factor_after_core_he_burn: f64,
+    /// Central C12 below which `tau_factor` is set to `set_to_this_tau_factor`
+    /// (`set_tau_factor_after_core_C_burn`, `-1` default).
+    pub set_tau_factor_after_core_c_burn: f64,
+    /// Central He4 below which `tau_factor` steps toward
+    /// `relax_to_this_tau_factor` (`relax_tau_factor_after_core_He_burn`, `-1` default).
+    pub relax_tau_factor_after_core_he_burn: f64,
+    /// Central C12 below which `tau_factor` steps toward
+    /// `relax_to_this_tau_factor` (`relax_tau_factor_after_core_C_burn`, `-1` default).
+    pub relax_tau_factor_after_core_c_burn: f64,
     /// Whether to set initial stellar age (`set_initial_age`).
     pub set_initial_age: bool,
     /// Initial stellar age in years (`initial_age`).
@@ -1102,6 +1148,21 @@ impl Default for StarJobControls {
             relax_initial_surface_rotation_v: false,
             num_steps_to_relax_rotation: 100,
             relax_omega_max_yrs_dt: 1.0e9,
+            set_near_zams_omega_steps: -1,
+            set_near_zams_omega_div_omega_crit_steps: -1,
+            set_near_zams_surface_rotation_v_steps: -1,
+            set_omega_step_limit: -1,
+            set_omega_div_omega_crit_step_limit: -1,
+            set_surf_rotation_v_step_limit: -1,
+            near_zams_relax_omega: false,
+            near_zams_relax_omega_div_omega_crit: false,
+            near_zams_relax_initial_surface_rotation_v: false,
+            adjust_tau_factor_to_surf_density: false,
+            base_for_adjust_tau_factor_to_surf_density: 0.0,
+            set_tau_factor_after_core_he_burn: -1.0,
+            set_tau_factor_after_core_c_burn: -1.0,
+            relax_tau_factor_after_core_he_burn: -1.0,
+            relax_tau_factor_after_core_c_burn: -1.0,
             set_initial_age: false,
             initial_age: 0.0,
             set_initial_model_number: false,

@@ -187,6 +187,49 @@ impl InlistBundle {
             &mut j.num_steps_to_relax_rotation,
             "num_steps_to_relax_rotation",
         )?;
+        for (dst, name) in [
+            (&mut j.set_near_zams_omega_steps, "set_near_zams_omega_steps"),
+            (
+                &mut j.set_near_zams_omega_div_omega_crit_steps,
+                "set_near_zams_omega_div_omega_crit_steps",
+            ),
+            (
+                &mut j.set_near_zams_surface_rotation_v_steps,
+                "set_near_zams_surface_rotation_v_steps",
+            ),
+            (&mut j.set_omega_step_limit, "set_omega_step_limit"),
+            (
+                &mut j.set_omega_div_omega_crit_step_limit,
+                "set_omega_div_omega_crit_step_limit",
+            ),
+            (
+                &mut j.set_surf_rotation_v_step_limit,
+                "set_surf_rotation_v_step_limit",
+            ),
+        ] {
+            sj.try_isize_into("star_job", dst, name)?;
+        }
+        // Fortran names are case-insensitive: `..._He_burn` / `..._C_burn`.
+        for (dst, name) in [
+            (
+                &mut j.set_tau_factor_after_core_he_burn,
+                "set_tau_factor_after_core_he_burn",
+            ),
+            (
+                &mut j.set_tau_factor_after_core_c_burn,
+                "set_tau_factor_after_core_c_burn",
+            ),
+            (
+                &mut j.relax_tau_factor_after_core_he_burn,
+                "relax_tau_factor_after_core_he_burn",
+            ),
+            (
+                &mut j.relax_tau_factor_after_core_c_burn,
+                "relax_tau_factor_after_core_c_burn",
+            ),
+        ] {
+            sj.try_f64_into("star_job", dst, name)?;
+        }
         sj.try_bool_into("star_job", &mut j.pre_ms_relax_to_start_radiative_core, "pre_ms_relax_to_start_radiative_core")?;
         sj.try_isize_into("star_job", &mut j.pre_ms_min_steps_before_check_radiative_core, "pre_ms_min_steps_before_check_radiative_core")?;
         sj.try_f64_into("star_job", &mut j.pre_ms_check_radiative_core_start, "pre_ms_check_radiative_core_start")?;
@@ -222,6 +265,9 @@ impl InlistBundle {
             relax_omega, relax_initial_omega,
             relax_omega_div_omega_crit, relax_initial_omega_div_omega_crit,
             relax_surface_rotation_v, relax_initial_surface_rotation_v,
+            near_zams_relax_omega, near_zams_relax_omega_div_omega_crit,
+            near_zams_relax_initial_surface_rotation_v,
+            adjust_tau_factor_to_surf_density,
             astero_just_call_my_extras_check_model,
         ]);
         map_f64s!("star_job", sj, j, [
@@ -231,7 +277,7 @@ impl InlistBundle {
             new_cumulative_energy_error, initial_h1, initial_h2, initial_he3, initial_he4,
             new_mass, new_z, new_y, core_avg_rho, core_avg_eps, new_r_center, new_l_center,
             new_omega, new_omega_div_omega_crit, new_surface_rotation_v,
-            relax_omega_max_yrs_dt,
+            relax_omega_max_yrs_dt, base_for_adjust_tau_factor_to_surf_density,
             remove_initial_center_by_temperature, new_v_center, set_to_this_irrad_flux,
         ]);
         map_strs!("star_job", sj, j, [

@@ -8,6 +8,7 @@ repository.workspace = true
 description = "Asteroseismic scaling relations, surface corrections, separation ratios, and optimization drivers for FlexMESA."
 
 [dependencies]
+flexmesa-adipls = { path = "../flexmesa-adipls" }
 flexmesa-autodiff = { path = "../flexmesa-autodiff" }
 flexmesa-const = { path = "../flexmesa-const" }
 flexmesa-math = { path = "../flexmesa-math" }

@@ -198,44 +198,38 @@ digest = "b569c11174ef867731774b51792bad3d6314ef9e0404f4084ecb71833984e2e8"
 [[cases]]
 suite = "star"
 case = "gyre_in_mesa_bcep"
-status = "unported"
+status = "ported"
 digest = "2216ecc72b24fb1cde4f31ce5fcf59fd24b57c26a4350d5b52c65211f98cde30"
-issue = "#231"
 
 [[cases]]
 suite = "star"
 case = "gyre_in_mesa_envelope"
-status = "unported"
+status = "ported"
 digest = "2216ecc72b24fb1cde4f31ce5fcf59fd24b57c26a4350d5b52c65211f98cde30"
-issue = "#231"
 
 [[cases]]
 suite = "star"
 case = "gyre_in_mesa_ms"
-status = "unported"
+status = "ported"
 digest = "2216ecc72b24fb1cde4f31ce5fcf59fd24b57c26a4350d5b52c65211f98cde30"
-issue = "#231"
 
 [[cases]]
 suite = "star"
 case = "gyre_in_mesa_rsg"
-status = "unported"
+status = "ported"
 digest = "2216ecc72b24fb1cde4f31ce5fcf59fd24b57c26a4350d5b52c65211f98cde30"
-issue = "#231"
 
 [[cases]]
 suite = "star"
 case = "gyre_in_mesa_spb"
-status = "unported"
+status = "ported"
 digest = "2216ecc72b24fb1cde4f31ce5fcf59fd24b57c26a4350d5b52c65211f98cde30"
-issue = "#231"
 
 [[cases]]
 suite = "star"
 case = "gyre_in_mesa_wd"
-status = "unported"
+status = "ported"
 digest = "2216ecc72b24fb1cde4f31ce5fcf59fd24b57c26a4350d5b52c65211f98cde30"
-issue = "#231"
 
 [[cases]]
 suite = "star"

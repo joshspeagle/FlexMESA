@@ -165,7 +165,6 @@ STOCK_EXTRAS_DIGESTS: frozenset[str] = frozenset(
 # - `#152` (extras retry): `MakeSdbStarExtras` returns `retry`
 #   (`star/test_suite/make_sdb/src/run_star_extras.f90:108`), which the step
 #   driver does not implement.
-# - `#170` (bundled GYRE pulsation): `GyreInMesaStarExtras`.
 # - `#172` (CCSN/STELLA + per-cell `alpha_mlt`): `CcsnIIpStarExtras`
 #   (`#154`/`#155`/`#158`/`#172`).
 #
@@ -185,6 +184,7 @@ ADAPTER_SERVED_STAR_HANDLERS: frozenset[str] = frozenset(
         "DiffusionSmoothnessStarExtras",
         "Dynamo15MStarExtras",
         "ExtendedConvectivePenetrationStarExtras",
+        "GyreInMesaStarExtras",
         "Hb2MStarExtras",
         "HighRotDarkeningStarExtras",
         "HighRotation20MZ2m2StarExtras",

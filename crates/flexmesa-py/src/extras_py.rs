@@ -1160,6 +1160,28 @@ fn set_star_radial_arrays(
     Ok(())
 }
 
+fn eval_need_to_save_profiles_now(
+    model: &StarModel,
+    in_post_solve_checks: bool,
+) -> bool {
+    if !in_post_solve_checks || !model.controls.output.write_profiles_flag {
+        return false;
+    }
+    let o = &model.controls.output;
+    let mnum = model.model_number;
+    let is_terminating = model.aux.step_hist.termination_code.is_some();
+    let is_first_step = model.doing_first_model_of_run
+        || (model.generations == 2
+            && model.model_number == model.model_number_old + 1
+            && (model.model_number_old as isize) == model.init_model_number);
+    let match_prof_model =
+        o.profile_model >= 0 && (mnum as isize) == o.profile_model;
+    is_terminating
+        || match_prof_model
+        || (o.profile_interval > 0
+            && (is_first_step || mnum.is_multiple_of(o.profile_interval)))
+}
+
 fn build_star_snapshot<'py>(
     py: Python<'py>,
     model: &StarModel,
@@ -1208,6 +1230,7 @@ fn build_star_snapshot<'py>(
     d.set_item("case_dir", case_dir)?;
     set_star_control_scalars(&d, model)?;
     set_user_controls(&d, &model.controls)?;
+    d.set_item("need_to_save_profiles_now", false)?;
     if model.controls.rsp_flag {
         d.set_item("rsp_num_periods", model.aux.rsp.num_periods)?;
         d.set_item("rsp_period", model.aux.rsp.period)?;
@@ -2106,10 +2129,19 @@ impl PyStarExtrasAdapter {
             return ExtrasDirective::KeepGoing;
         }
         let case_dir = self.state.staged_dir_string();
+        let in_post_solve_checks =
+            matches!(method, "extras_check_model" | "extras_finish_step");
         Python::attach(|py| {
             let snap = match build_star_snapshot(py, model, &case_dir, false)
-                .and_then(|s| self.add_model_handle(py, s, model))
-            {
+                .and_then(|s| {
+                    if in_post_solve_checks {
+                        s.set_item(
+                            "need_to_save_profiles_now",
+                            eval_need_to_save_profiles_now(model, true),
+                        )?;
+                    }
+                    self.add_model_handle(py, s, model)
+                }) {
                 Ok(s) => s,
                 Err(e) => {
                     return ExtrasDirective::Error(format!(
@@ -2335,8 +2367,13 @@ impl StarExtras for PyStarExtrasAdapter {
         let case_dir = self.state.staged_dir_string();
         Python::attach(|py| {
             let snap = match build_star_snapshot(py, model, &case_dir, false)
-                .and_then(|s| self.add_model_handle(py, s, model))
-            {
+                .and_then(|s| {
+                    s.set_item(
+                        "need_to_save_profiles_now",
+                        eval_need_to_save_profiles_now(model, true),
+                    )?;
+                    self.add_model_handle(py, s, model)
+                }) {
                 Ok(s) => s,
                 Err(e) => {
                     return (

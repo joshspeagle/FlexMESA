@@ -105,19 +105,17 @@ def test_extras_status_ledger_matches_generated_output() -> None:
     assert mod.main(["--check"]) == 0
 
 
-def test_gyre_in_mesa_pre_ms_bypass_cadence_and_issue_170_guards() -> None:
-    """`GyreInMesaStarExtras` skips pre-MS and raises `#170` when active."""
+def test_gyre_in_mesa_pre_ms_bypass_and_cadence_skip_gyre() -> None:
+    """`GyreInMesaStarExtras` skips pre-MS runs, skips off-cadence steps, and
+    clears state in `extras_after_evolve` (`inc:33-43`)."""
     h = star_extras.GyreInMesaStarExtras()
     h.extras_startup({"create_pre_main_sequence_model": True}, False)
+    assert h.gyre is None
     assert (
         h.extras_finish_step({"create_pre_main_sequence_model": True})
         == "keep_going"
     )
     h.extras_after_evolve({"create_pre_main_sequence_model": True})
-    with pytest.raises(NotImplementedError, match="#170"):
-        h.extras_startup({"create_pre_main_sequence_model": False}, False)
-    with pytest.raises(NotImplementedError, match="#170"):
-        h.extras_after_evolve({"create_pre_main_sequence_model": False})
 
     step_base = {
         "create_pre_main_sequence_model": False,
@@ -132,9 +130,10 @@ def test_gyre_in_mesa_pre_ms_bypass_cadence_and_issue_170_guards() -> None:
         h.extras_finish_step({**step_base, "x_integer_ctrl": [0, 2, 1]})
         == "keep_going"
     )
-    with pytest.raises(NotImplementedError, match="#170"):
+    assert h.num_results == 0 and h.calls == []
+    with pytest.raises(RuntimeError, match="before extras_startup"):
         h.extras_finish_step({**step_base, "model_number": 4})
-    with pytest.raises(NotImplementedError, match="#170"):
+    with pytest.raises(RuntimeError, match="before extras_startup"):
         h.extras_finish_step(
             {
                 **step_base,
@@ -142,6 +141,30 @@ def test_gyre_in_mesa_pre_ms_bypass_cadence_and_issue_170_guards() -> None:
                 "x_logical_ctrl": [True, False],
             }
         )
+    h.extras_after_evolve({"create_pre_main_sequence_model": False})
+    assert h.gyre is None
+
+
+def test_gyre_in_mesa_all_six_cases_attach_handler() -> None:
+    """All six `gyre_in_mesa_*` cases attach `GyreInMesaStarExtras` (`#170`)."""
+    attached = {
+        c: isinstance(
+            case_extras.resolve_case_extras(
+                "star", harness_runner.resolve_case_dir("star", c)
+            ),
+            star_extras.GyreInMesaStarExtras,
+        )
+        for c, cls in _PORTED_CASES_BATCH2
+        if cls is star_extras.GyreInMesaStarExtras
+    }
+    assert attached == {
+        "gyre_in_mesa_bcep": True,
+        "gyre_in_mesa_envelope": True,
+        "gyre_in_mesa_ms": True,
+        "gyre_in_mesa_rsg": True,
+        "gyre_in_mesa_spb": True,
+        "gyre_in_mesa_wd": True,
+    }
 
 
 def test_eval_t_tau_q_and_relation_cycles() -> None:

@@ -180,6 +180,41 @@ class FastFromFileAsteroExtras(SearchAsteroExtras):
         return _search_set_param(snap, name, val)
 
 
+class EmptySetParamAsteroExtras:
+    """`set_param` and `set_constraint_value` of `astero_adipls`,
+    `astero_gyre` and `surface_effects`.
+
+    Upstream `set_param` only sets `ierr = 0`
+    (`astero/test_suite/astero_adipls/src/run_star_extras.f90:86-96`,
+    `astero_gyre` `:91-100`, `surface_effects` `:92-100`), and
+    `set_constraint_value` has only the `case default` branch that reads the
+    history column of that name (`astero_adipls` `:58-83`, `astero_gyre`
+    `:63-88`, `surface_effects` `:64-89`). These cases set
+    `astero_just_call_my_extras_check_model`, so the search calls neither
+    routine; they are ported so that the case's own versions, not another
+    case's, would run if it did.
+
+    Attributes:
+        unported_routines: Names of the case's other extras routines that
+            hold case logic this handler does not execute.
+    """
+
+    def __init__(self, unported_routines: tuple[str, ...] = ()) -> None:
+        self.unported_routines = unported_routines
+
+    def set_param(
+        self, snap: dict[str, Any], name: str, val: float
+    ) -> dict[str, Any]:
+        """Return the assignments `set_param(name, val)` makes: none."""
+        del snap, name, val
+        return {}
+
+    def set_constraint_value(self, snap: dict[str, Any], name: str) -> Any:
+        """Return `set_constraint_value(name)`: always the history column."""
+        del snap, name
+        return STAR_GET_HISTORY_OUTPUT
+
+
 # Each routine of a `run_star_extras.f90`, from normalized source (see
 # `tests.case_extras.normalize_fortran`).
 _ROUTINE_RE = re.compile(
@@ -187,10 +222,7 @@ _ROUTINE_RE = re.compile(
     r"end \1 \2"
 )
 
-# SHA-256 of the normalized `set_param` subroutine. The `set_param` of
-# `astero_adipls`, `astero_gyre` and `surface_effects` is empty (`ierr = 0`)
-# and those cases set `astero_just_call_my_extras_check_model`, so they get
-# no handler.
+# SHA-256 of the normalized `set_param` subroutine.
 _SEARCH_SET_PARAM_DIGEST = (
     "ac14ad22a14892d35288d639531e9e47efb717d24af7d5d5d69f9237866c8e1a"
 )
@@ -200,6 +232,15 @@ _FAST_FROM_FILE_SET_PARAM_DIGEST = (
 # `set_constraint_value`, identical in the five search cases.
 _SEARCH_SET_CONSTRAINT_VALUE_DIGEST = (
     "4ff0c53d1c35875075d88a074967cf93e99c756f7ba010b714b9446c0fc4be29"
+)
+# `set_param` (only `ierr = 0`) and `set_constraint_value` (only `case
+# default`), identical in `astero_adipls`, `astero_gyre` and
+# `surface_effects`.
+_EMPTY_SET_PARAM_DIGEST = (
+    "50db057770e0922de5b5f1f710d466230b4c55a0b9ca6061030f8391deb47fe4"
+)
+_DEFAULT_SET_CONSTRAINT_VALUE_DIGEST = (
+    "e7ed93317a3605fd1e41d699c96dae5721ffa3a14a3cecf55e023cef10751e63"
 )
 
 # Routines read and found to hold no case logic: pointer set-up, the shared
@@ -396,11 +437,6 @@ def match_astero_extras(norm_star: str, digest: Any) -> Any:
         for name, d in routines.items()
     ):
         return AsteroGyreExtras()
-    if (
-        routines.get("set_constraint_value")
-        != _SEARCH_SET_CONSTRAINT_VALUE_DIGEST
-    ):
-        return None
     unported = tuple(
         name
         for name, d in routines.items()
@@ -408,6 +444,14 @@ def match_astero_extras(norm_star: str, digest: Any) -> Any:
         and d not in _STOCK_ROUTINE_DIGESTS.get(name, frozenset())
     )
     set_param = routines.get("set_param")
+    set_constraint_value = routines.get("set_constraint_value")
+    if (
+        set_param == _EMPTY_SET_PARAM_DIGEST
+        and set_constraint_value == _DEFAULT_SET_CONSTRAINT_VALUE_DIGEST
+    ):
+        return EmptySetParamAsteroExtras(unported)
+    if set_constraint_value != _SEARCH_SET_CONSTRAINT_VALUE_DIGEST:
+        return None
     if set_param == _SEARCH_SET_PARAM_DIGEST:
         return SearchAsteroExtras(unported)
     if set_param == _FAST_FROM_FILE_SET_PARAM_DIGEST:

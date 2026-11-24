@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Python access to astero's GYRE interface (`astero/private/gyre_support.f90`,
 //! ported in `flexmesa_astero::gyre_support`; #170, G3c) for test-side
 //! extras: `AsteroGyre` owns the GYRE state of a run, and

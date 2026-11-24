@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Heger-style adaptive nuclear network (Woosley, Heger, et al. 2004, ApJS
 //! 151, 75): before each step the network is rebuilt from the isotopes whose
 //! abundance is significant, together with their reaction neighbours

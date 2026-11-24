@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! In-memory GYRE pulsation data: `star_get_pulse_data(id, 'GYRE', ...)`,
 //! i.e. `get_gyre_data` (`star/private/pulse_gyre.f90:38-416`), with the
 //! `pulse_utils` helpers it calls (`star/private/pulse_utils.f90`) and

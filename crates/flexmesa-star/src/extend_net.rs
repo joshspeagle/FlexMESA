@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Automatic network extension `h_he_net` -> `co_net` -> `adv_net`
 //! (`extend_net` in `star/job/run_star_support.f90:1804-1886`, called each
 //! step from `before_step_loop` when `auto_extend_net` is set,

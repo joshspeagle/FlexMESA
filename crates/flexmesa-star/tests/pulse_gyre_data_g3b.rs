@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! `get_gyre_data` against MESA 26.4.1 (#170, package G3b).
 //!
 //! The inputs are MESA's own star state at each GYRE `set_model` call of

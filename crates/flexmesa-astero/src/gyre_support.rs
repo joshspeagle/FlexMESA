@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Astero's GYRE interface (`astero/private/gyre_support.f90`): `init_gyre`,
 //! `do_gyre_get_modes` with `store_model_for_gyre` and `gyre_call_back`,
 //! and the oscillation-result arrays `store_new_oscillation_results` fills

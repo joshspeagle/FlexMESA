@@ -6,6 +6,7 @@
 use flexmesa_const::{AMU, CLIGHT, CRAD, KERG, PI, QE};
 
 use crate::diffusion::eval_effective_kt;
+use crate::controls::StarError;
 use crate::model::StarModel;
 
 /// Critical Richardson number $\mathrm{Ri}_{\mathrm{crit}} = 1/4$ (`rotation_mix_info.f90`).
@@ -418,11 +419,23 @@ pub fn conserve_shell_j_rot_and_distortion(model: &mut StarModel) {
 }
 
 /// Augments `model.d_mix` with Heger et al. (2000) and Spruit (2002) diffusivities.
-pub fn augment_d_mix_with_rotation(model: &mut StarModel) {
-    crate::rotation_mix::augment_d_mix_with_rotation(model);
+///
+/// # Errors
+/// Propagates `update_rotation_mixing_info` errors.
+pub fn augment_d_mix_with_rotation(
+    model: &mut StarModel,
+) -> Result<(), StarError> {
+    crate::rotation_mix::augment_d_mix_with_rotation(model)
 }
 
 /// Updates post-Henyey $\Omega_k = j_{\mathrm{rot},k} / i_{\mathrm{rot},k}$ and $\Omega$ transport.
-pub fn sync_post_henyey_rotation(model: &mut StarModel, dt: f64) {
-    crate::rotation_mix::sync_post_henyey_rotation(model, dt);
+///
+/// # Errors
+/// Propagates `update_rotation_mixing_info` and `solve_omega_mix` failures,
+/// including a requested retry or termination.
+pub fn sync_post_henyey_rotation(
+    model: &mut StarModel,
+    dt: f64,
+) -> Result<(), StarError> {
+    crate::rotation_mix::sync_post_henyey_rotation(model, dt)
 }

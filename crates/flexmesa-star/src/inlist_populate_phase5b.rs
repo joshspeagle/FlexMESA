@@ -232,6 +232,8 @@ impl InlistBundle {
             uniform_am_nu_non_rot, min_am_nu_non_rot,
             min_center_ye_for_min_am_nu_non_rot,
             st_angsmt, st_angsml,
+            d_omega_mixing_rate, max_q_for_d_omega_zero_in_convection_region,
+            nu_omega_mixing_rate, max_q_for_nu_omega_zero_in_convection_region,
             am_sig_term_limit,
             angular_momentum_error_warn, angular_momentum_error_retry,
             adjust_j_fraction, min_q_for_adjust_j_lost, min_j_div_delta_j,
@@ -293,6 +295,8 @@ impl InlistBundle {
             simple_i_rot_flag, recalc_mixing_info_each_substep,
             premix_omega, do_adjust_j_lost, skip_rotation_in_convection_zones,
             set_uniform_am_nu_non_rot, set_min_am_nu_non_rot,
+            d_omega_mixing_across_convection_boundary,
+            nu_omega_mixing_across_convection_boundary,
             accretion_dump_missing_metals_into_heaviest,
             merge_if_dlnr_too_small,
             merge_if_dr_div_drstar_too_small,
@@ -347,6 +351,8 @@ impl InlistBundle {
             (&mut mw.smooth_d_gsf, "smooth_D_GSF"),
             (&mut mw.smooth_d_st, "smooth_D_ST"),
             (&mut mw.smooth_nu_st, "smooth_nu_ST"),
+            (&mut mw.smooth_d_omega, "smooth_D_omega"),
+            (&mut mw.smooth_am_nu_rot, "smooth_am_nu_rot"),
         ] {
             if let Some(v) = ctrl.try_get_i64("controls", key)? {
                 *dst = v;

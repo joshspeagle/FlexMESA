@@ -1,25 +1,23 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-//! MESA 26.4.1 oracle for `set_rotation_mixing_info` (`#158`).
+//! MESA 26.4.1 oracle for `set_rotation_mixing_info` and
+//! `update_rotation_mixing_info` (`#158`).
 //!
 //! The fixture `benchmarks/fortran_mesa/rotmix_oracles/` holds the inputs
 //! that real MESA 26.4.1 had at entry to `update_rotation_mixing_info`
 //! (`star/private/mix_info.f90:1561-1757`) on model 2 of
-//! `20M_z2m2_high_rotation`, and the rotational diffusivities it produced.
-//! This test loads the same state into a `StarModel`, runs
-//! [`flexmesa_star::set_rotation_mixing_info`]
-//! (`star/private/rotation_mix_info.f90:47-1123`) and requires every face
-//! value to be bit-identical. The call has the Spruit-Tayler time smoothing
-//! active (`prev_mesh_have_ST_start_info`, `:191-215`).
-//!
-//! `D_mix_rotation` and the `am_nu_*` columns are not compared: that case
-//! sets `D_omega_flag`, whose port is a separate package.
+//! `20M_z2m2_high_rotation`, and the values it produced. These tests load
+//! the same state into a `StarModel` and require every face value to be
+//! bit-identical: the rotational diffusivities of `set_rotation_mixing_info`
+//! (`star/private/rotation_mix_info.f90:47-1123`, with the Spruit-Tayler
+//! time smoothing of `:191-215` active), and `D_mix`, `D_mix_rotation` and
+//! the `am_nu_*` viscosities of `update_rotation_mixing_info`, which this
+//! case runs with `D_omega_flag` (`rotation_mix_info.f90:255-428`).
 
 #![forbid(unsafe_code)]
 
 use std::path::PathBuf;
 
 use flexmesa_const::MixingType;
-use flexmesa_star::controls::StarJobControls;
 use flexmesa_star::inlist::{InlistBundle, InlistLoadOptions};
 use flexmesa_star::model::StarModel;
 
@@ -79,10 +77,8 @@ fn read_fixture() -> Fixture {
     fx
 }
 
-#[test]
 #[allow(clippy::too_many_lines)]
-fn test_set_rotation_mixing_info_20m_model2_matches_mesa_bitwise() {
-    let fx = read_fixture();
+fn build_model(fx: &Fixture) -> StarModel {
     let nz: usize = fx.hdr[3].parse().expect("nz");
     assert_eq!(fx.inputs.len(), nz);
     assert_eq!(fx.outputs.len(), nz);
@@ -93,8 +89,9 @@ fn test_set_rotation_mixing_info_20m_model2_matches_mesa_bitwise() {
         "missing 20M_z2m2_high_rotation test_suite inputs at {}",
         case_dir.display()
     );
-    // The inlist sets `D_omega_flag` controls that are not ported yet; they
-    // do not enter `set_rotation_mixing_info`.
+    // The inlist still sets four unported controls (`max_safe_logT_for_rates`,
+    // `warn_rates_for_high_temp`, `near_zams_relax_omega_div_omega_crit`,
+    // `num_steps_to_relax_rotation`); none enters these routines.
     let bundle = InlistBundle::from_file_in_case_dir_with_options(
         &case_dir,
         "inlist_to_end_core_he_burn_header",
@@ -106,8 +103,11 @@ fn test_set_rotation_mixing_info_20m_model2_matches_mesa_bitwise() {
 
     let mut controls = bundle.controls.clone();
     controls.rotation_flag = true;
-    let mut m =
-        StarModel::new(nz, vec![2, 7], StarJobControls::default(), controls);
+    assert!(
+        controls.d_omega_flag,
+        "the inlist sets change_D_omega_flag and new_D_omega_flag"
+    );
+    let mut m = StarModel::new(nz, vec![2, 7], bundle.job.clone(), controls);
     m.kap_config = bundle.kap_config.clone();
     m.aux.doing_relax = fx.hdr[4] == "T";
     m.doing_first_model_of_run = fx.hdr[5] == "T";
@@ -188,9 +188,40 @@ fn test_set_rotation_mixing_info_20m_model2_matches_mesa_bitwise() {
     m.aux.rotmix.grad_density = grad_density;
     m.aux.rotmix.grad_temperature = grad_temperature;
 
+    m
+}
+
+/// Lists, per array, the faces from `k_min` on that differ from MESA.
+fn compare(
+    fx: &Fixture,
+    checks: &[(&str, usize, &[f64])],
+    k_min: usize,
+) -> Vec<String> {
+    let nz = fx.outputs.len();
+    let mut report = Vec::new();
+    for &(name, col, flex) in checks {
+        let mut bad = 0_usize;
+        let mut first = None;
+        for k in k_min..nz {
+            let mesa = fx.outputs[k][col];
+            if mesa.to_bits() != flex[k].to_bits() {
+                bad += 1;
+                first.get_or_insert((k + 1, mesa, flex[k]));
+            }
+        }
+        if bad > 0 {
+            report.push(format!("{name}: {bad}/{nz} differ, first {first:?}"));
+        }
+    }
+    report
+}
+
+#[test]
+fn test_set_rotation_mixing_info_20m_model2_matches_mesa_bitwise() {
+    let fx = read_fixture();
+    let mut m = build_model(&fx);
     flexmesa_star::set_rotation_mixing_info(&mut m)
         .expect("set_rotation_mixing_info");
-
     let rm = &m.aux.rotmix;
     // (name, RMX column, FlexMESA array)
     let checks: [(&str, usize, &[f64]); 11] = [
@@ -206,23 +237,43 @@ fn test_set_rotation_mixing_info_20m_model2_matches_mesa_bitwise() {
         ("omega_shear", 16, &rm.omega_shear),
         ("domega_dlnR", 17, &rm.domega_dlnr),
     ];
-    let mut report = Vec::new();
-    for (name, col, flex) in checks {
-        let mut bad = 0_usize;
-        let mut first = None;
-        for k in 0..nz {
-            let mesa = fx.outputs[k][col];
-            if mesa.to_bits() != flex[k].to_bits() {
-                bad += 1;
-                first.get_or_insert((k + 1, mesa, flex[k]));
-            }
-        }
-        if bad > 0 {
-            report.push(format!("{name}: {bad}/{nz} differ, first {first:?}"));
-        }
-    }
+    let report = compare(&fx, &checks, 0);
     // The fixture must exercise ST: some face has nonzero D_ST.
     assert!(rm.d_st.iter().any(|&v| v > 0.0), "D_ST is zero everywhere");
+    assert!(
+        report.is_empty(),
+        "not bit-identical to MESA:\n{}",
+        report.join("\n")
+    );
+}
+
+#[test]
+fn test_update_rotation_mixing_info_d_omega_20m_model2_matches_mesa_bitwise() {
+    let fx = read_fixture();
+    let mut m = build_model(&fx);
+    flexmesa_star::update_rotation_mixing_info(&mut m)
+        .expect("update_rotation_mixing_info");
+    let rm = &m.aux.rotmix;
+    // `D_omega` is not in the fixture; it enters `D_mix_rotation` and
+    // `am_nu_rot` (`star/private/mix_info.f90:1622-1623, 1701-1702`).
+    assert!(
+        rm.d_omega.iter().any(|&v| v > 0.0),
+        "D_omega is zero everywhere"
+    );
+    // Face 1 of `D_mix` and `D_mix_rotation` is not set by this routine
+    // (its loop starts at `k = 2`, `mix_info.f90:1600`).
+    let from_face_2: [(&str, usize, &[f64]); 2] = [
+        ("D_mix", 8, &m.d_mix),
+        ("D_mix_rotation", 10, &rm.d_mix_rotation),
+    ];
+    let all_faces: [(&str, usize, &[f64]); 4] = [
+        ("am_nu_rot", 11, &m.aux.am_nu_rot),
+        ("am_nu_non_rot", 12, &m.aux.am_nu_non_rot),
+        ("am_nu_omega", 13, &m.aux.am_nu_omega),
+        ("am_nu_j", 14, &m.aux.am_nu_j),
+    ];
+    let mut report = compare(&fx, &from_face_2, 1);
+    report.extend(compare(&fx, &all_faces, 0));
     assert!(
         report.is_empty(),
         "not bit-identical to MESA:\n{}",

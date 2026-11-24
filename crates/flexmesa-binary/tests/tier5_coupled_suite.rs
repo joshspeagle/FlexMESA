@@ -1312,7 +1312,8 @@ fn test_double_bh_che_diffusivity_stiffness_and_bh_collapse_invariants() {
         "set_ST gives nu_ST = 0 on every face"
     );
     let dt_star = star.dt;
-    flexmesa_star::sync_post_henyey_rotation(&mut star, dt_star);
+    flexmesa_star::sync_post_henyey_rotation(&mut star, dt_star)
+        .expect("sync_post_henyey_rotation");
     assert!(star.omega.iter().all(|w| w.is_finite() && *w > 0.0));
     assert!(star.j_rot.iter().all(|j| j.is_finite() && *j > 0.0));
     let j_after: f64 = star

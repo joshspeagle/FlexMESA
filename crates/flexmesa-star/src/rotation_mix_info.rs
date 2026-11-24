@@ -57,6 +57,9 @@ pub struct RotMixArrays {
     pub grad_temperature: Vec<f64>,
     /// Rotational part of `D_mix` (`s% D_mix_rotation`).
     pub d_mix_rotation: Vec<f64>,
+    /// Smoothed and mixed sum of the rotational diffusivities used under
+    /// `D_omega_flag` (`s% D_omega`).
+    pub d_omega: Vec<f64>,
 }
 
 impl RotMixArrays {
@@ -78,6 +81,7 @@ impl RotMixArrays {
             &mut self.grad_density,
             &mut self.grad_temperature,
             &mut self.d_mix_rotation,
+            &mut self.d_omega,
         ] {
             v.resize(nz, 0.0);
         }
@@ -276,7 +280,7 @@ pub(crate) fn weighted_smoothing(
 }
 
 /// `smooth_for_rotation` (`rotation_mix_info.f90:1126-1134`).
-fn smooth_for_rotation(v: &mut [f64], width: i64) {
+pub(crate) fn smooth_for_rotation(v: &mut [f64], width: i64) {
     if width <= 0 {
         return;
     }
@@ -1288,6 +1292,7 @@ pub fn set_rotation_mixing_info(
             &mut rm.dynamo_b_r,
             &mut rm.dynamo_b_phi,
             &mut rm.omega_shear,
+            &mut rm.d_omega,
         ] {
             v[..nz].fill(0.0);
         }
@@ -1360,5 +1365,233 @@ pub fn set_rotation_mixing_info(
     if mw.d_st_factor > 0.0 || mw.am_nu_st_factor > 0.0 {
         do_st(model, &su)?;
     }
+    set_d_omega(model)
+}
+
+fn bad_value(what: &str, k: usize, v: f64, lines: &str) -> StarError {
+    StarError::ConvergenceFailure(format!(
+        "{what}({}) is bad: {v:e} (star/private/{lines})",
+        k + 1
+    ))
+}
+
+/// `D_omega` under `D_omega_flag` (`star/private/rotation_mix_info.f90:255-328`):
+/// zero while `doing_finish_load_model`, otherwise the factor-weighted sum of
+/// the instability diffusivities (zero in convective cells with
+/// `q <= max_q_for_D_omega_zero_in_convection_region`), smoothed
+/// (`smooth_D_omega`) and diffusively mixed (`mix_D_omega`), then floored
+/// at 0. Upstream's `mesa_error` calls on bad values become errors.
+fn set_d_omega(model: &mut StarModel) -> Result<(), StarError> {
+    if !model.controls.d_omega_flag {
+        return Ok(());
+    }
+    let nz = model.nz;
+    let mw = &model.controls.mix_wind;
+    let rm = &mut model.aux.rotmix;
+    if model.aux.doing_finish_load_model {
+        rm.d_omega[..nz].fill(0.0);
+    } else {
+        for k in 0..nz {
+            if model.q[k] <= mw.max_q_for_d_omega_zero_in_convection_region
+                && model.mixing_type[k] == MixingType::ConvectiveMixing
+            {
+                rm.d_omega[k] = 0.0;
+                continue;
+            }
+            let d_omega_source = mw.d_dsi_factor * rm.d_dsi[k]
+                + mw.d_sh_factor * rm.d_sh[k]
+                + mw.d_ssi_factor * rm.d_ssi[k]
+                + mw.d_es_factor * rm.d_es[k]
+                + mw.d_gsf_factor * rm.d_gsf[k]
+                + mw.d_st_factor * rm.d_st[k];
+            if is_bad(d_omega_source) {
+                return Err(bad_value(
+                    "D_omega_source",
+                    k,
+                    d_omega_source,
+                    "rotation_mix_info.f90:274-286",
+                ));
+            }
+            rm.d_omega[k] = d_omega_source;
+        }
+        if mw.smooth_d_omega > 0 {
+            smooth_for_rotation(&mut rm.d_omega[..nz], mw.smooth_d_omega);
+            if let Some(k) = rm.d_omega[..nz].iter().position(|&v| is_bad(v)) {
+                return Err(bad_value(
+                    "D_omega after smooth_for_rotation",
+                    k,
+                    rm.d_omega[k],
+                    "rotation_mix_info.f90:298-306",
+                ));
+            }
+        }
+        if mw.d_omega_mixing_rate > 0.0 && model.dt > 0.0 {
+            mix_rotational_coefficient(
+                &mut rm.d_omega[..nz],
+                &model.mixing_type,
+                mw.d_omega_mixing_rate,
+                mw.d_omega_mixing_across_convection_boundary,
+                model.dt,
+                MixVariant::DOmega,
+            )?;
+            if let Some(k) = rm.d_omega[..nz].iter().position(|&v| is_bad(v)) {
+                return Err(bad_value(
+                    "D_omega after mix_D_omega",
+                    k,
+                    rm.d_omega[k],
+                    "rotation_mix_info.f90:308-316",
+                ));
+            }
+        }
+    }
+    for k in 0..nz {
+        if is_bad(rm.d_omega[k]) {
+            return Err(bad_value(
+                "D_omega before return",
+                k,
+                rm.d_omega[k],
+                "rotation_mix_info.f90:320-327",
+            ));
+        }
+        if rm.d_omega[k] < 0.0 {
+            rm.d_omega[k] = 0.0;
+        }
+    }
+    Ok(())
+}
+
+/// Which upstream copy of the implicit mixing solve is being run.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum MixVariant {
+    /// `mix_D_omega` (`star/private/rotation_mix_info.f90:334-428`).
+    DOmega,
+    /// The `am_nu_rot` block of `set_am_nu_rot`
+    /// (`star/private/mix_info.f90:1851-1937`), which also stops on a zero
+    /// pivot.
+    AmNuRot,
+}
+
+/// One backward-Euler step of diffusive mixing of `v` between neighbouring
+/// faces at rate `min(mixing_rate, 1/dt)`, without coupling across faces
+/// where `v` is zero or (unless `across_convection_boundary`) at radiative
+/// faces next to convective ones. The tridiagonal solve and the update
+/// follow upstream's order of operations. A non-finite correction leaves `v`
+/// unchanged, as upstream returns early there.
+///
+/// # Errors
+/// A zero pivot in the `AmNuRot` variant (`mix_info.f90:1901-1906`) and a
+/// non-finite updated value (`rotation_mix_info.f90:419-423`,
+/// `mix_info.f90:1929-1933`).
+#[allow(clippy::if_same_then_else)]
+pub(crate) fn mix_rotational_coefficient(
+    v: &mut [f64],
+    mixing_type: &[MixingType],
+    mixing_rate: f64,
+    across_convection_boundary: bool,
+    dt: f64,
+    variant: MixVariant,
+) -> Result<(), StarError> {
+    let nz = v.len();
+    if dt == 0.0 {
+        return Ok(());
+    }
+    let conv = |k: usize| mixing_type[k] == MixingType::ConvectiveMixing;
+    let inv_dt = 1.0 / dt;
+    let rate = if mixing_rate < inv_dt {
+        mixing_rate
+    } else {
+        inv_dt
+    };
+    let mut sig = vec![0.0_f64; nz];
+    // Upstream's two zero branches are kept separate.
+    for k in 1..nz.saturating_sub(1) {
+        sig[k] = if v[k] == 0.0 || v[k + 1] == 0.0 {
+            0.0
+        } else if !across_convection_boundary
+            && !conv(k)
+            && (conv(k - 1) || conv(k + 1))
+        {
+            0.0
+        } else {
+            rate * dt
+        };
+    }
+    sig[0] = 0.0;
+    sig[nz - 1] = 0.0;
+
+    let mut rhs = vec![0.0_f64; nz];
+    let mut d = vec![0.0_f64; nz];
+    let mut du = vec![0.0_f64; nz];
+    let mut dl = vec![0.0_f64; nz];
+    for k in 0..nz {
+        let d_dt_in = if k + 1 < nz {
+            sig[k] * (v[k + 1] - v[k])
+        } else {
+            -(sig[k] * v[k])
+        };
+        let (d_dt_out, d_ddt_dm1, d_ddt_d00) = if k > 0 {
+            (
+                sig[k - 1] * (v[k] - v[k - 1]),
+                sig[k - 1],
+                -(sig[k - 1] + sig[k]),
+            )
+        } else {
+            (0.0, 0.0, -sig[k])
+        };
+        let d_dt = d_dt_in - d_dt_out;
+        let d_ddt_dp1 = sig[k];
+        rhs[k] = d_dt;
+        d[k] = 1.0 - d_ddt_d00;
+        du[k] = if k + 1 < nz { -d_ddt_dp1 } else { 0.0 };
+        if k > 0 {
+            dl[k - 1] = -d_ddt_dm1;
+        }
+    }
+    dl[nz - 1] = 0.0;
+
+    // Tridiagonal solve (`rotation_mix_info.f90:395-406`,
+    // `mix_info.f90:1897-1916`).
+    let mut bp = vec![0.0_f64; nz];
+    let mut vp = vec![0.0_f64; nz];
+    let mut x = vec![0.0_f64; nz];
+    bp[0] = d[0];
+    vp[0] = rhs[0];
+    for i in 1..nz {
+        if variant == MixVariant::AmNuRot && bp[i - 1] == 0.0 {
+            return Err(StarError::ConvergenceFailure(String::from(
+                "set_am_nu_rot: zero pivot in the am_nu_rot mixing solve (star/private/mix_info.f90:1901-1906)",
+            )));
+        }
+        let m = dl[i - 1] / bp[i - 1];
+        bp[i] = d[i] - m * du[i - 1];
+        vp[i] = rhs[i] - m * vp[i - 1];
+    }
+    x[nz - 1] = vp[nz - 1] / bp[nz - 1];
+    for i in (0..nz - 1).rev() {
+        x[i] = (vp[i] - du[i] * x[i + 1]) / bp[i];
+    }
+    // `if (is_bad(x(k))) return` (`rotation_mix_info.f90:408-414`,
+    // `mix_info.f90:1918-1925`).
+    if x[1..].iter().any(|&xk| is_bad(xk)) {
+        return Ok(());
+    }
+    for k in 1..nz {
+        v[k] += x[k];
+        if is_bad(v[k]) {
+            return Err(bad_value(
+                "mixed rotational coefficient",
+                k,
+                v[k],
+                match variant {
+                    MixVariant::DOmega => "rotation_mix_info.f90:418-424",
+                    MixVariant::AmNuRot => "mix_info.f90:1928-1934",
+                },
+            ));
+        }
+        if v[k] < 0.0 {
+            v[k] = 0.0;
+        }
+    }
+    v[0] = 0.0;
     Ok(())
 }

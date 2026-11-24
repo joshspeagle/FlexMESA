@@ -48,14 +48,16 @@ pub(crate) fn eval_d_mix_non_rotation_vec(model: &StarModel) -> Vec<f64> {
 /// and `am_nu_j`. Returns `D_mix_rotation` (face 0 is not set upstream and
 /// is returned as 0).
 ///
-/// `D_omega_flag` and `am_nu_rot_flag` are not supported controls, so their
-/// branches (`:1594, 1621-1626, 1668-1687, 1696-1699`) do not arise.
+/// The `D_omega_flag` and `am_nu_rot_flag` branches (`:1622-1624`,
+/// `:1648-1667`, `:1685-1702`, `set_am_nu_rot` at `:1796-1954`) are ported.
+/// `check_D_omega` (`:1594`) is not: `set_rotation_mixing_info` already
+/// returns an error for any bad `D_omega`, so it can never fire.
 ///
 /// # Errors
 /// Propagates [`crate::rotation_mix_info::set_rotation_mixing_info`] errors
 /// and returns [`StarError::ConvergenceFailure`] for a negative `am_nu_omega`
 /// or `am_nu_j` (`:1706-1724`).
-pub(crate) fn update_rotation_mixing_info(
+pub fn update_rotation_mixing_info(
     model: &mut StarModel,
 ) -> Result<Vec<f64>, StarError> {
     let nz = model.nz;
@@ -95,14 +97,17 @@ pub(crate) fn update_rotation_mixing_info(
             } else {
                 (lgt - full_on) / (full_off - full_on)
             };
-            d_mix_rotation[k] = f
-                * mw.am_d_mix_factor
-                * (mw.d_dsi_factor * rm.d_dsi[k]
-                    + mw.d_sh_factor * rm.d_sh[k]
-                    + mw.d_ssi_factor * rm.d_ssi[k]
-                    + mw.d_es_factor * rm.d_es[k]
-                    + mw.d_gsf_factor * rm.d_gsf[k]
-                    + mw.d_st_factor * rm.d_st[k]);
+            d_mix_rotation[k] = if model.controls.d_omega_flag {
+                f * mw.am_d_mix_factor * rm.d_omega[k]
+            } else {
+                f * mw.am_d_mix_factor
+                    * (mw.d_dsi_factor * rm.d_dsi[k]
+                        + mw.d_sh_factor * rm.d_sh[k]
+                        + mw.d_ssi_factor * rm.d_ssi[k]
+                        + mw.d_es_factor * rm.d_es[k]
+                        + mw.d_gsf_factor * rm.d_gsf[k]
+                        + mw.d_st_factor * rm.d_st[k])
+            };
             model.d_mix[k] =
                 model.aux.mixing.d_mix_non_rotation[k] + d_mix_rotation[k];
         }
@@ -110,6 +115,28 @@ pub(crate) fn update_rotation_mixing_info(
     model.aux.rotmix.d_mix_rotation.resize(nz, 0.0);
     model.aux.rotmix.d_mix_rotation[1..nz]
         .copy_from_slice(&d_mix_rotation[1..nz]);
+
+    // `:1648-1667`: without `am_nu_rot_flag`, `D_omega_flag` with
+    // `use_D_omega_for_am_nu_rot = .false.` needs every non-negative
+    // `am_nu_*_factor` to equal its `D_*_factor`.
+    if !model.controls.am_nu_rot_flag
+        && model.controls.d_omega_flag
+        && !model.job.use_d_omega_for_am_nu_rot
+    {
+        let pairs = [
+            (mw.am_nu_dsi_factor, mw.d_dsi_factor),
+            (mw.am_nu_sh_factor, mw.d_sh_factor),
+            (mw.am_nu_ssi_factor, mw.d_ssi_factor),
+            (mw.am_nu_es_factor, mw.d_es_factor),
+            (mw.am_nu_gsf_factor, mw.d_gsf_factor),
+            (mw.am_nu_st_factor, mw.d_st_factor),
+        ];
+        if pairs.iter().any(|&(a, d)| a >= 0.0 && a != d) {
+            return Err(StarError::InvalidInput(String::from(
+                "update_rotation_mixing_info: an am_nu factor >= 0 differs from the corresponding D_omega factor; set am_nu_rot_flag for smoothing like D_omega (star/private/mix_info.f90:1648-1667)",
+            )));
+        }
+    }
 
     // `If am_nu_..._factor < -1, use the D_..._factor` (`:1662-1669`).
     let neg_or = |a: f64, d: f64| if a < 0.0 { d } else { a };
@@ -126,7 +153,18 @@ pub(crate) fn update_rotation_mixing_info(
         && model.ye[nz - 1] >= mw.min_center_ye_for_min_am_nu_non_rot
         && !mw.set_uniform_am_nu_non_rot;
 
-    // `:1683-1724`.
+    // `:1685-1688`.
+    if model.controls.am_nu_rot_flag {
+        set_am_nu_rot(
+            model,
+            [
+                am_nu_visc, am_nu_dsi, am_nu_sh, am_nu_ssi, am_nu_es,
+                am_nu_gsf, am_nu_st,
+            ],
+        )?;
+    }
+
+    // `:1690-1724`.
     let rm = &model.aux.rotmix;
     for k in 0..nz {
         model.aux.am_nu_non_rot[k] = if mw.set_uniform_am_nu_non_rot {
@@ -140,14 +178,22 @@ pub(crate) fn update_rotation_mixing_info(
             model.aux.am_nu_non_rot[k] =
                 mw.min_am_nu_non_rot.max(model.aux.am_nu_non_rot[k]);
         }
-        model.aux.am_nu_rot[k] = mw.am_nu_factor
-            * (am_nu_visc * rm.d_visc[k]
-                + am_nu_dsi * rm.d_dsi[k]
-                + am_nu_sh * rm.d_sh[k]
-                + am_nu_ssi * rm.d_ssi[k]
-                + am_nu_es * rm.d_es[k]
-                + am_nu_gsf * rm.d_gsf[k]
-                + am_nu_st * rm.nu_st[k]);
+        if model.controls.am_nu_rot_flag {
+            // Already set by `set_am_nu_rot` above.
+        } else if model.controls.d_omega_flag
+            && model.job.use_d_omega_for_am_nu_rot
+        {
+            model.aux.am_nu_rot[k] = mw.am_nu_factor * rm.d_omega[k];
+        } else {
+            model.aux.am_nu_rot[k] = mw.am_nu_factor
+                * (am_nu_visc * rm.d_visc[k]
+                    + am_nu_dsi * rm.d_dsi[k]
+                    + am_nu_sh * rm.d_sh[k]
+                    + am_nu_ssi * rm.d_ssi[k]
+                    + am_nu_es * rm.d_es[k]
+                    + am_nu_gsf * rm.d_gsf[k]
+                    + am_nu_st * rm.nu_st[k]);
+        }
         if model.aux.am_nu_rot[k] < 0.0 {
             model.aux.am_nu_rot[k] = 0.0;
         }
@@ -176,7 +222,82 @@ pub(crate) fn update_rotation_mixing_info(
     Ok(d_mix_rotation)
 }
 
-pub(crate) fn augment_d_mix_with_rotation(model: &mut StarModel) {
+/// `set_am_nu_rot` (`star/private/mix_info.f90:1796-1954`) with the
+/// effective factors `[visc, DSI, SH, SSI, ES, GSF, ST]` of the caller.
+fn set_am_nu_rot(
+    model: &mut StarModel,
+    fac: [f64; 7],
+) -> Result<(), StarError> {
+    let nz = model.nz;
+    let mw = &model.controls.mix_wind;
+    let rm = &model.aux.rotmix;
+    let am = &mut model.aux.am_nu_rot;
+    let bad = |what: &str, k: usize, v: f64| {
+        StarError::ConvergenceFailure(format!(
+            "set_am_nu_rot: {what}({}) is bad: {v:e} (star/private/mix_info.f90:1830-1839, 1942-1952)",
+            k + 1
+        ))
+    };
+    if model.aux.doing_finish_load_model {
+        am[..nz].fill(0.0);
+    } else {
+        let [visc, dsi, sh, ssi, es, gsf, st] = fac;
+        for k in 0..nz {
+            if model.q[k] <= mw.max_q_for_nu_omega_zero_in_convection_region
+                && model.mixing_type[k] == MixingType::ConvectiveMixing
+            {
+                am[k] = 0.0;
+                continue;
+            }
+            let am_nu_rot_source = mw.am_nu_factor
+                * (visc * rm.d_visc[k]
+                    + dsi * rm.d_dsi[k]
+                    + sh * rm.d_sh[k]
+                    + ssi * rm.d_ssi[k]
+                    + es * rm.d_es[k]
+                    + gsf * rm.d_gsf[k]
+                    + st * rm.nu_st[k]);
+            if !am_nu_rot_source.is_finite() {
+                return Err(bad("am_nu_rot_source", k, am_nu_rot_source));
+            }
+            am[k] = am_nu_rot_source;
+        }
+        if mw.smooth_am_nu_rot > 0 {
+            crate::rotation_mix_info::smooth_for_rotation(
+                &mut am[..nz],
+                mw.smooth_am_nu_rot,
+            );
+        }
+        if mw.nu_omega_mixing_rate > 0.0 && model.dt > 0.0 {
+            crate::rotation_mix_info::mix_rotational_coefficient(
+                &mut am[..nz],
+                &model.mixing_type,
+                mw.nu_omega_mixing_rate,
+                mw.nu_omega_mixing_across_convection_boundary,
+                model.dt,
+                crate::rotation_mix_info::MixVariant::AmNuRot,
+            )?;
+        }
+    }
+    for k in 0..nz {
+        if !am[k].is_finite() {
+            return Err(bad("am_nu_rot before return", k, am[k]));
+        }
+        if am[k] < 0.0 {
+            am[k] = 0.0;
+        }
+    }
+    Ok(())
+}
+
+/// Adds the rotational part to `D_mix` via [`update_rotation_mixing_info`]
+/// and marks faces where it dominates as `RotationMixing`.
+///
+/// # Errors
+/// Propagates [`update_rotation_mixing_info`] errors.
+pub(crate) fn augment_d_mix_with_rotation(
+    model: &mut StarModel,
+) -> Result<(), StarError> {
     let nz = model.nz;
     model.aux.mixing.d_mix_non_rotation.resize(nz, 0.0);
     model
@@ -184,9 +305,7 @@ pub(crate) fn augment_d_mix_with_rotation(model: &mut StarModel) {
         .mixing
         .d_mix_non_rotation
         .copy_from_slice(&model.d_mix[..nz]);
-    let Ok(d_mix_rotation) = update_rotation_mixing_info(model) else {
-        return;
-    };
+    let d_mix_rotation = update_rotation_mixing_info(model)?;
     for k in 0..nz {
         if model.d_mix[k] != 0.0
             && model.aux.mixing.d_mix_non_rotation[k] < d_mix_rotation[k]
@@ -194,16 +313,29 @@ pub(crate) fn augment_d_mix_with_rotation(model: &mut StarModel) {
             model.mixing_type[k] = MixingType::RotationMixing;
         }
     }
+    Ok(())
 }
 
-pub(crate) fn sync_post_henyey_rotation(model: &mut StarModel, dt: f64) {
+/// Restores shell `j_rot` and the distortion factors and, for `dt > 0`,
+/// runs `solve_omega_mix` over `dt` (half of it with `premix_omega`).
+///
+/// # Errors
+/// Propagates [`update_rotation_mixing_info`] and `do_solve_omega_mix`
+/// errors, and returns [`StarError::ConvergenceFailure`] when
+/// `do_solve_omega_mix` asks for a retry or termination
+/// (`star/private/solve_omega_mix.f90:136, 153`), since no caller of this
+/// helper can redo the step.
+pub(crate) fn sync_post_henyey_rotation(
+    model: &mut StarModel,
+    dt: f64,
+) -> Result<(), StarError> {
     let nz = model.nz;
     if !model.controls.rotation_flag || nz == 0 || model.j_rot.len() != nz {
-        return;
+        return Ok(());
     }
     conserve_shell_j_rot_and_distortion(model);
     if dt <= 0.0 || nz < 2 {
-        return;
+        return Ok(());
     }
     let mw = &model.controls.mix_wind;
     let d_mix_changed = model.aux.mixing.d_mix_non_rotation.len() != nz
@@ -221,13 +353,22 @@ pub(crate) fn sync_post_henyey_rotation(model: &mut StarModel, dt: f64) {
             .mixing
             .d_mix_non_rotation
             .copy_from_slice(&model.d_mix[..nz]);
-        let _ = update_rotation_mixing_info(model);
+        update_rotation_mixing_info(model)?;
     }
     let dt_tr = if model.controls.mix_wind.premix_omega {
         0.5 * dt
     } else {
         dt
     };
-    let _ = crate::omega_mix::do_solve_omega_mix(model, dt_tr);
+    match crate::omega_mix::do_solve_omega_mix(model, dt_tr)? {
+        crate::omega_mix::OmegaMixOutcome::KeepGoing => {}
+        crate::omega_mix::OmegaMixOutcome::Retry(msg)
+        | crate::omega_mix::OmegaMixOutcome::Terminate(msg) => {
+            return Err(StarError::ConvergenceFailure(format!(
+                "sync_post_henyey_rotation: solve_omega_mix failed: {msg}"
+            )));
+        }
+    }
     crate::hydro_rotation::set_rotation_info(model, false);
+    Ok(())
 }

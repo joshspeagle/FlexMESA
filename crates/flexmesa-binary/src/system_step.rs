@@ -2083,9 +2083,9 @@ fn finalize_star_post_binary_torques(
     star.mstar_start = star.mstar;
     if !star.controls.rsp_flag {
         star.sync_mesh_and_pack()?;
-        sync_post_henyey_rotation(star, 0.0);
+        sync_post_henyey_rotation(star, 0.0)?;
         set_hydro_vars(star, false, false)?;
-        sync_post_henyey_rotation(star, 0.0);
+        sync_post_henyey_rotation(star, 0.0)?;
         star.aux.total_energy = eval_total_energy_integrals(star).5;
     }
     Ok(())

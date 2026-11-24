@@ -451,6 +451,11 @@ pub struct HydroAuxState {
     /// Whether the model is currently in an initialization relaxation phase
     /// (`doing_relax` in `star_data_def.f90`).
     pub doing_relax: bool,
+    /// `doing_finish_load_model`: true while `finish_load_model` runs
+    /// `set_vars` and the Brunt-Vaisala update
+    /// (`star/private/read_model.f90:161-199`).
+    #[serde(default)]
+    pub doing_finish_load_model: bool,
     /// `need_to_setvars` (`star_data_step_work.inc`), as far as it is ported:
     /// `false` only after `relax_composition_adjust_model` has changed `xa`
     /// without asking for new variables, so the `set_vars_if_needed` calls
@@ -753,6 +758,7 @@ impl HydroAuxState {
     pub fn new(nz: usize, species: usize) -> Self {
         Self {
             doing_relax: false,
+            doing_finish_load_model: false,
             need_to_setvars: true,
             rotmix: crate::rotation_mix_info::RotMixArrays::default(),
             st_start: crate::rotation_mix_info::StStartInfo::default(),

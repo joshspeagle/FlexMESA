@@ -194,7 +194,8 @@ fn test_primary_state_buffer_preserves_omega_when_solver_mlt_eval_count_nonzero(
     flexmesa_star::update_rotation_distortion_factors(&mut model);
     set_hydro_vars(&mut model, false, false).expect("initial set_hydro_vars");
     // Apply shellular angular-momentum / distortion update so `fp_rot` scales `grav`.
-    flexmesa_star::sync_post_henyey_rotation(&mut model, 1.0);
+    flexmesa_star::sync_post_henyey_rotation(&mut model, 1.0)
+        .expect("sync_post_henyey_rotation");
 
     let snap = PrimaryStateBuffer::from_model(&model);
     eprintln!(

@@ -449,6 +449,7 @@ pub use rotation::{
     eval_rotation_fp_ft, eval_rotational_mixing_zone, eval_thermal_diffusivity,
     sync_post_henyey_rotation, update_rotation_distortion_factors,
 };
+pub use rotation_mix::update_rotation_mixing_info;
 pub use rotation_mix_info::set_rotation_mixing_info;
 pub use rsp_build::{
     RspLinaMode, build_rsp_envelope_model, do_rsp_build_model,

@@ -1594,6 +1594,11 @@ pub(crate) fn execute_adjust_mesh_from_plan_with(
     }
     model.set_m_grav_and_grav();
 
+    // Upstream interpolates `D_omega` after `adjust_omega` under
+    // `D_omega_flag` (`star/private/mesh_adjust.f90:237-243`). Not ported:
+    // `D_omega` is reset and rebuilt before any use by the next
+    // `set_rotation_mixing_info` (`star/private/rotation_mix_info.f90:94,
+    // 255-328`), so the interpolated values are never read.
     let mut untouched_rot = vec![false; nz];
     if model.controls.rotation_flag {
         let max_w = model.controls.mix_wind.w_div_wcrit_max;
@@ -1958,6 +1963,10 @@ pub fn do_prune_mesh_surface(
         &mut model.aux.alpha_rti,
         &mut model.aux.dpdr_drhodr_info,
     ] {
+        // Upstream also prunes `D_omega` under `D_omega_flag`
+        // (`star/private/mesh_adjust.f90:612-614`). Not ported: it is
+        // rebuilt by the next `set_rotation_mixing_info`
+        // (`star/private/rotation_mix_info.f90:94, 255-328`) before any use.
         if vec.len() >= nz_old {
             vec.copy_within(skip..nz_old, 0);
         }

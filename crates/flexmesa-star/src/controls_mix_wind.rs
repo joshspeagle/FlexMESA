@@ -613,6 +613,36 @@ pub struct MixWindControls {
     /// (`min_center_Ye_for_min_am_nu_non_rot`, `0.47` default).
     #[serde(default = "default_min_center_ye_for_min_am_nu_non_rot")]
     pub min_center_ye_for_min_am_nu_non_rot: f64,
+    /// Half-width in cells of the smoothing of `D_omega` (`smooth_D_omega`, `0` default).
+    #[serde(default)]
+    pub smooth_d_omega: i64,
+    /// Half-width in cells of the smoothing of `am_nu_rot` (`smooth_am_nu_rot`, `0` default).
+    #[serde(default)]
+    pub smooth_am_nu_rot: i64,
+    /// Rate in s^-1 of the implicit diffusive mixing of `D_omega`
+    /// (`D_omega_mixing_rate`, `1d0` default).
+    #[serde(default = "default_one")]
+    pub d_omega_mixing_rate: f64,
+    /// Mix `D_omega` across convective boundaries
+    /// (`D_omega_mixing_across_convection_boundary`, `.false.` default).
+    #[serde(default)]
+    pub d_omega_mixing_across_convection_boundary: bool,
+    /// `D_omega = 0` in convective cells with `q` at or below this
+    /// (`max_q_for_D_omega_zero_in_convection_region`, `0.8d0` default).
+    #[serde(default = "default_zero_point_eight")]
+    pub max_q_for_d_omega_zero_in_convection_region: f64,
+    /// Rate in s^-1 of the implicit diffusive mixing of `am_nu_rot`
+    /// (`nu_omega_mixing_rate`, `1d0` default).
+    #[serde(default = "default_one")]
+    pub nu_omega_mixing_rate: f64,
+    /// Mix `am_nu_rot` across convective boundaries
+    /// (`nu_omega_mixing_across_convection_boundary`, `.false.` default).
+    #[serde(default)]
+    pub nu_omega_mixing_across_convection_boundary: bool,
+    /// `am_nu_rot = 0` in convective cells with `q` at or below this
+    /// (`max_q_for_nu_omega_zero_in_convection_region`, `0.8d0` default).
+    #[serde(default = "default_zero_point_eight")]
+    pub max_q_for_nu_omega_zero_in_convection_region: f64,
     /// Fractional limit on the change of `D_ST` and `nu_ST` per step
     /// (`ST_angsmt`, `0.2` default).
     #[serde(default = "default_st_angsmt")]
@@ -1118,6 +1148,14 @@ impl Default for MixWindControls {
             set_min_am_nu_non_rot: false,
             min_am_nu_non_rot: 1.0e8,
             min_center_ye_for_min_am_nu_non_rot: 0.47,
+            smooth_d_omega: 0,
+            smooth_am_nu_rot: 0,
+            d_omega_mixing_rate: 1.0,
+            d_omega_mixing_across_convection_boundary: false,
+            max_q_for_d_omega_zero_in_convection_region: 0.8,
+            nu_omega_mixing_rate: 1.0,
+            nu_omega_mixing_across_convection_boundary: false,
+            max_q_for_nu_omega_zero_in_convection_region: 0.8,
             st_angsmt: 0.2,
             st_angsml: 1.0e-3,
             am_sig_term_limit: 1.0e13,
@@ -1263,6 +1301,14 @@ const fn default_min_am_nu_non_rot() -> f64 {
 
 const fn default_min_center_ye_for_min_am_nu_non_rot() -> f64 {
     0.47
+}
+
+const fn default_one() -> f64 {
+    1.0
+}
+
+const fn default_zero_point_eight() -> f64 {
+    0.8
 }
 
 const fn default_st_angsmt() -> f64 {

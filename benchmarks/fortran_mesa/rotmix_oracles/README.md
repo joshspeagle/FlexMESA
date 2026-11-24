@@ -8,13 +8,13 @@ This directory holds one call of MESA's rotational-mixing routine captured from 
 | `instrumentation.patch` | Patch to `star/private/star_utils.f90` and `star/private/mix_info.f90` that writes the raw dumps |
 | `make_fixture.py` | Trims the raw dumps to the one call kept in the fixture |
 
-The Rust test `crates/flexmesa-star/tests/rotmix_oracle_158_test.rs` loads the fixture into a `StarModel`, runs `set_rotation_mixing_info` (`star/private/rotation_mix_info.f90:47-1123`) and requires every face value of `D_visc`, `D_DSI`, `D_SH`, `D_SSI`, `D_ES`, `D_GSF`, `D_ST`, `nu_ST`, `richardson_number`, `omega_shear` and `domega_dlnR` to be bit-identical to MESA.
+The Rust tests in `crates/flexmesa-star/tests/rotmix_oracle_158_test.rs` load the fixture into a `StarModel`. The first runs `set_rotation_mixing_info` (`star/private/rotation_mix_info.f90:47-1123`) and requires every face value of `D_visc`, `D_DSI`, `D_SH`, `D_SSI`, `D_ES`, `D_GSF`, `D_ST`, `nu_ST`, `richardson_number`, `omega_shear` and `domega_dlnR` to be bit-identical to MESA. The second runs `update_rotation_mixing_info` (`star/private/mix_info.f90:1561-1757`) and requires the same of `D_mix` and `D_mix_rotation` (faces 2 to `nz`, the faces upstream sets) and of `am_nu_rot`, `am_nu_non_rot`, `am_nu_omega` and `am_nu_j`.
 
 ## What the call covers
 
 The case is `star/test_suite/20M_z2m2_high_rotation` (inlist `inlist_to_end_core_he_burn_header`), `nz = 1748`. The kept call is the first `update_rotation_mixing_info` call with $\Omega \neq 0$ that is not part of a relax, not the first model of the run, and has `prev_mesh_have_ST_start_info` set, so the Spruit-Tayler time smoothing (`rotation_mix_info.f90:191-215`) runs. The case uses `D_SH`, `D_SSI`, `D_ES`, `D_GSF` and `D_ST` factors of 1, `D_DSI_factor = 0`, and `smooth_D_ST = smooth_nu_ST = 5`.
 
-The fixture also records `D_mix`, `D_mix_rotation` and the `am_nu_*` arrays at exit. The test does not compare them yet, because this case sets `D_omega_flag`, which is ported separately. `kap_cond` (column 36 of `IN`) is MESA's face electron-conduction opacity, recorded for diagnosis; the routine computes its own.
+The case sets `D_omega_flag` through `&star_job`, so the second test covers the `D_omega` smoothing and implicit mixing (`rotation_mix_info.f90:255-428`) and `am_nu_rot = am_nu_factor * D_omega` (`use_D_omega_for_am_nu_rot`). `kap_cond` (column 36 of `IN`) is MESA's face electron-conduction opacity, recorded for diagnosis; the routine computes its own.
 
 ## Format
 

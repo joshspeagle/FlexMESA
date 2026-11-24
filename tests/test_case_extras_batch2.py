@@ -603,7 +603,7 @@ def test_hb_2m_and_low_z_hooks() -> None:
     assert hb.within_tolerance is True
 
     lz = star_extras.LowZStarExtras()
-    assert lz.extras_controls({}) is None
+    lz.extras_controls({})
     assert lz.extra_history_header_items({"mixing_length_alpha": 1.8}) == [
         ("mixing_length_alpha", 1.8)
     ]

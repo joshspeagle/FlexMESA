@@ -1001,6 +1001,37 @@ pub fn verify_photo_restart_parity(
 
     let photo_bytes = write_photo_bytes(&continued);
     let mut restarted = load_photo_bytes(&photo_bytes)?;
+    // Re-attach non-serialized `other_*` callback handles onto the reloaded
+    // photo model (matching MESA's `extras_controls` hook re-registration on
+    // restart; `.photo` files serialize numerical state only).
+    restarted
+        .aux
+        .tidal_deformation
+        .clone_from(&continued.aux.tidal_deformation);
+    restarted
+        .aux
+        .binary_other_torque
+        .clone_from(&continued.aux.binary_other_torque);
+    restarted
+        .aux
+        .binary_other_torque_implicit
+        .clone_from(&continued.aux.binary_other_torque_implicit);
+    restarted
+        .aux
+        .other_overshooting_scheme
+        .clone_from(&continued.aux.other_overshooting_scheme);
+    restarted
+        .aux
+        .other_adjust_mlt_gradt_fraction
+        .clone_from(&continued.aux.other_adjust_mlt_gradt_fraction);
+    restarted
+        .aux
+        .other_mesh_functions
+        .clone_from(&continued.aux.other_mesh_functions);
+    restarted
+        .aux
+        .other_mesh_delta_coeff_factor
+        .clone_from(&continued.aux.other_mesh_delta_coeff_factor);
 
     for _ in 0..n_verify_steps {
         star_evolve_step(&mut continued, do_remesh, op_split, true)?;

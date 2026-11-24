@@ -25,11 +25,22 @@ use crate::inlist_astero::AsteroSearchControls;
 pub const ASTERO_SEARCH_CONTROLS_SUPPORTED: &[&str] = &[
     "add_atmosphere",
     "add_center_point",
+    "adipls_igm1kr",
+    "adipls_irotkr",
+    "adipls_npgmkr",
+    "adipls_nprtkr",
     "age_sigma",
     "age_target",
+    "astero_results_dbl_format",
     "astero_results_directory",
+    "astero_results_int_format",
+    "astero_results_txt_format",
     "avg_age_sigma_limit",
     "avg_model_number_sigma_limit",
+    "best_model_fgong_filename",
+    "best_model_gyre_filename",
+    "best_model_profile_filename",
+    "best_model_save_model_filename",
     "bobyqa_output_filename",
     "bobyqa_rhoend",
     "chi2_delta_nu_limit",
@@ -58,8 +69,12 @@ pub const ASTERO_SEARCH_CONTROLS_SUPPORTED: &[&str] = &[
     "do_redistribute_mesh",
     "dt_for_smaller_steps_before_age_target",
     "dydz",
+    "el_to_save",
     "eval_chi2_at_target_age_only",
+    "extra_astero_search_inlist_name",
     "f0_ov_div_f_ov",
+    "fgong_postfix",
+    "fgong_prefix",
     "file_column_for_param",
     "filename_for_parameters",
     "first_param",
@@ -67,15 +82,20 @@ pub const ASTERO_SEARCH_CONTROLS_SUPPORTED: &[&str] = &[
     "freq_target",
     "from_file_output_filename",
     "gyre_input_file",
+    "gyre_non_ad",
+    "gyre_postfix",
+    "gyre_prefix",
     "include_age_in_chi2_spectro",
     "include_constraint_in_chi2_spectro",
     "iscan_factor",
     "keep_surface_point",
     "l0_n_obs",
+    "last_model_save_info_filename",
     "limit_num_chi2_too_big",
     "lnuc_div_l_limit",
     "max_age_for_chi2",
     "max_num_from_file",
+    "max_num_gyre_points",
     "max_num_samples_for_avg",
     "max_param",
     "max_yrs_dt_chi2_small_limit",
@@ -88,6 +108,7 @@ pub const ASTERO_SEARCH_CONTROLS_SUPPORTED: &[&str] = &[
     "min_age_limit",
     "min_num_samples_for_avg",
     "min_param",
+    "model_num_digits",
     "newuoa_output_filename",
     "newuoa_rhoend",
     "nl",
@@ -99,32 +120,66 @@ pub const ASTERO_SEARCH_CONTROLS_SUPPORTED: &[&str] = &[
     "nu_max",
     "nu_max_sigma",
     "nu_upper_factor",
+    "num_digits",
     "num_smaller_steps_before_age_target",
+    "order_to_save",
     "oscillation_code",
     "param_name",
+    "read_extra_astero_search_inlist",
+    "restart_scan_grid_from_file",
+    "restart_simplex_from_file",
+    "sample_results_postfix",
+    "sample_results_prefix",
+    "save_controls",
+    "save_controls_filename",
+    "save_info_for_last_model",
+    "save_mode_filename",
+    "save_mode_model_number",
+    "save_model_for_best_model",
+    "save_next_best_at_higher_frequency",
+    "save_next_best_at_lower_frequency",
     "scan_grid_output_filename",
     "search_type",
     "sigmas_coeff_for_constraint_limit",
     "sigmas_coeff_for_delta_nu_limit",
     "simplex_adaptive_random_search",
+    "simplex_alpha",
+    "simplex_beta",
     "simplex_centroid_weight_power",
     "simplex_chi2_tol",
+    "simplex_delta",
     "simplex_enforce_bounds",
     "simplex_fcn_calls_max",
+    "simplex_gamma",
     "simplex_itermax",
     "simplex_output_filename",
     "simplex_seed",
     "simplex_x_atol",
     "simplex_x_rtol",
+    "surf_coef1_name",
+    "surf_coef2_name",
+    "trace_chi2_seismo_delta_nu_info",
+    "trace_chi2_seismo_frequencies_info",
+    "trace_chi2_seismo_nu_max_info",
+    "trace_chi2_seismo_ratios_info",
+    "trace_chi2_spectro_info",
+    "trace_limits",
+    "trace_time_in_oscillation_code",
     "vary_param",
+    "write_best_model_data_for_each_sample",
+    "write_fgong_for_best_model",
+    "write_fgong_for_each_model",
+    "write_gyre_for_best_model",
+    "write_gyre_for_each_model",
+    "write_profile_for_best_model",
     "y0",
     "y_depends_on_z",
+    "y_frac_he3",
     "z_div_x_solar",
 ];
 
-/// Parsed-but-unused or unimplemented `&astero_search_controls` keys (`N1-28`).
-pub const ASTERO_SEARCH_CONTROLS_UNUSED: &[&str] =
-    &["gyre_non_ad", "trace_limits", "y_frac_he3"];
+/// Parsed-but-unused or unimplemented `&astero_search_controls` keys (`0` remaining).
+pub const ASTERO_SEARCH_CONTROLS_UNUSED: &[&str] = &[];
 
 /// Supported control-key sets for asteroseismic namelists.
 #[derive(Clone, Debug)]
@@ -447,9 +502,9 @@ pub fn parse_astero_search_controls_with_options(
         let main_sections =
             InlistBundle::load_sections_in_case_dir(case_dir, "inlist")?;
         match main_sections.get("star_job") {
-            Some(s) => s
-                .try_get_bool("star_job", "pgstar_flag")?
-                .unwrap_or(false),
+            Some(s) => {
+                s.try_get_bool("star_job", "pgstar_flag")?.unwrap_or(false)
+            }
             None => false,
         }
     } else {
@@ -549,6 +604,72 @@ fn parse_subscript_tokens(sub: &str) -> Result<Vec<Option<usize>>, StarError> {
     Ok(parts)
 }
 
+fn apply_include_assignment(
+    key: &str,
+    a: &NamelistAssignment,
+    c: &mut AsteroSearchControls,
+) -> Result<(), StarError> {
+    let sec = "astero_search_controls";
+    if key == "read_extra_astero_search_inlist" {
+        let b = match a.value {
+            ControlValue::Logical(v) => v,
+            ref other => {
+                return Err(StarError::InvalidInput(format!(
+                    "expected boolean for '&{sec}::{key}' at line {}, found {other:?}",
+                    a.line_number
+                )));
+            }
+        };
+        match a.subscript.as_deref() {
+            None => c.read_extra_astero_search_inlist = [b; 5],
+            Some(sub) => {
+                for slot in parse_subscript_tokens(sub)? {
+                    match slot {
+                        None => c.read_extra_astero_search_inlist = [b; 5],
+                        Some(1..=5) => {
+                            let idx = slot.unwrap_or(1) - 1;
+                            c.read_extra_astero_search_inlist[idx] = b;
+                        }
+                        Some(idx) => {
+                            return Err(StarError::InvalidInput(format!(
+                                "'&{sec}::{key}({idx})' index must be in 1..=5"
+                            )));
+                        }
+                    }
+                }
+            }
+        }
+        return Ok(());
+    }
+    if key == "extra_astero_search_inlist_name" {
+        let s = expect_str(sec, a)?;
+        match a.subscript.as_deref() {
+            None => c.extra_astero_search_inlist_name.fill(s),
+            Some(sub) => {
+                for slot in parse_subscript_tokens(sub)? {
+                    match slot {
+                        None => {
+                            c.extra_astero_search_inlist_name.fill(s.clone());
+                        }
+                        Some(1..=5) => {
+                            let idx = slot.unwrap_or(1) - 1;
+                            c.extra_astero_search_inlist_name[idx]
+                                .clone_from(&s);
+                        }
+                        Some(idx) => {
+                            return Err(StarError::InvalidInput(format!(
+                                "'&{sec}::{key}({idx})' index must be in 1..=5"
+                            )));
+                        }
+                    }
+                }
+            }
+        }
+        return Ok(());
+    }
+    Ok(())
+}
+
 fn apply_assignment(
     a: &NamelistAssignment,
     c: &mut AsteroSearchControls,
@@ -556,7 +677,7 @@ fn apply_assignment(
     let key = a.name.to_ascii_lowercase();
     let sec = "astero_search_controls";
     if is_include_key(sec, &key) {
-        return Ok(());
+        return apply_include_assignment(&key, a, c);
     }
     if ASTERO_SEARCH_CONTROLS_UNUSED.contains(&key.as_str()) {
         return Ok(());
@@ -569,6 +690,27 @@ fn apply_assignment(
     match key.as_str() {
         "chi2_seismo_fraction" => {
             c.weights.chi2_seismo_fraction = expect_f64(sec, a)?;
+        }
+        "trace_chi2_seismo_delta_nu_info" => {
+            c.trace_chi2_seismo_delta_nu_info = expect_bool(sec, a)?;
+        }
+        "trace_chi2_seismo_nu_max_info" => {
+            c.trace_chi2_seismo_nu_max_info = expect_bool(sec, a)?;
+        }
+        "trace_chi2_seismo_ratios_info" => {
+            c.trace_chi2_seismo_ratios_info = expect_bool(sec, a)?;
+        }
+        "trace_chi2_seismo_frequencies_info" => {
+            c.trace_chi2_seismo_frequencies_info = expect_bool(sec, a)?;
+        }
+        "trace_chi2_spectro_info" => {
+            c.trace_chi2_spectro_info = expect_bool(sec, a)?;
+        }
+        "trace_time_in_oscillation_code" => {
+            c.trace_time_in_oscillation_code = expect_bool(sec, a)?;
+        }
+        "trace_limits" => {
+            c.trace_limits = expect_bool(sec, a)?;
         }
         "chi2_seismo_delta_nu_fraction" => {
             c.weights.chi2_seismo_delta_nu_fraction = expect_f64(sec, a)?;
@@ -606,15 +748,48 @@ fn apply_assignment(
         "nu_lower_factor" => c.nu_lower_factor = expect_f64(sec, a)?,
         "nu_upper_factor" => c.nu_upper_factor = expect_f64(sec, a)?,
         "gyre_input_file" => c.gyre_input_file = expect_str(sec, a)?,
+        "gyre_non_ad" => c.gyre_non_ad = expect_bool(sec, a)?,
         "add_atmosphere" => c.add_atmosphere = expect_bool(sec, a)?,
         "keep_surface_point" => c.keep_surface_point = expect_bool(sec, a)?,
         "add_center_point" => c.add_center_point = expect_bool(sec, a)?,
         "do_redistribute_mesh" => {
             c.do_redistribute_mesh = expect_bool(sec, a)?;
         }
+        "adipls_irotkr" => {
+            c.adipls_irotkr =
+                i32::try_from(expect_i64(sec, a)?).map_err(|_| {
+                    StarError::InvalidInput(format!("overflow '&{sec}::{key}'"))
+                })?;
+        }
+        "adipls_nprtkr" => {
+            c.adipls_nprtkr =
+                i32::try_from(expect_i64(sec, a)?).map_err(|_| {
+                    StarError::InvalidInput(format!("overflow '&{sec}::{key}'"))
+                })?;
+        }
+        "adipls_igm1kr" => {
+            c.adipls_igm1kr =
+                i32::try_from(expect_i64(sec, a)?).map_err(|_| {
+                    StarError::InvalidInput(format!("overflow '&{sec}::{key}'"))
+                })?;
+        }
+        "adipls_npgmkr" => {
+            c.adipls_npgmkr =
+                i32::try_from(expect_i64(sec, a)?).map_err(|_| {
+                    StarError::InvalidInput(format!("overflow '&{sec}::{key}'"))
+                })?;
+        }
         "correction_scheme" => c.correction_scheme = expect_str(sec, a)?,
         "correction_b" => c.correction_b = expect_f64(sec, a)?,
         "correction_factor" => c.correction_factor = expect_f64(sec, a)?,
+        "surf_coef1_name" => c.surf_coef1_name = expect_str(sec, a)?,
+        "surf_coef2_name" => c.surf_coef2_name = expect_str(sec, a)?,
+        "save_next_best_at_higher_frequency" => {
+            c.save_next_best_at_higher_frequency = expect_bool(sec, a)?;
+        }
+        "save_next_best_at_lower_frequency" => {
+            c.save_next_best_at_lower_frequency = expect_bool(sec, a)?;
+        }
         "search_type" => c.search_type = expect_str(sec, a)?,
         "include_age_in_chi2_spectro" => {
             c.include_age_in_chi2_spectro = expect_bool(sec, a)?;
@@ -669,6 +844,7 @@ fn apply_assignment(
         "y0" => c.y0 = expect_f64(sec, a)?,
         "dydz" => c.dydz = expect_f64(sec, a)?,
         "f0_ov_div_f_ov" => c.f0_ov_div_f_ov = expect_f64(sec, a)?,
+        "y_frac_he3" => c.y_frac_he3 = expect_f64(sec, a)?,
         "simplex_itermax" => {
             let v = expect_i64(sec, a)?;
             if v <= 0 {
@@ -703,8 +879,18 @@ fn apply_assignment(
             let v = expect_i64(sec, a)?;
             c.simplex_seed = v as i32;
         }
+        "simplex_alpha" => c.simplex_alpha = expect_f64(sec, a)?,
+        "simplex_beta" => c.simplex_beta = expect_f64(sec, a)?,
+        "simplex_gamma" => c.simplex_gamma = expect_f64(sec, a)?,
+        "simplex_delta" => c.simplex_delta = expect_f64(sec, a)?,
+        "restart_simplex_from_file" => {
+            c.restart_simplex_from_file = expect_bool(sec, a)?;
+        }
         "simplex_output_filename" => {
             c.simplex_output_filename = expect_str(sec, a)?;
+        }
+        "restart_scan_grid_from_file" => {
+            c.restart_scan_grid_from_file = expect_bool(sec, a)?;
         }
         "bobyqa_rhoend" => c.bobyqa_rho_end = expect_f64(sec, a)?,
         "bobyqa_output_filename" => {
@@ -770,6 +956,100 @@ fn apply_assignment(
             } else {
                 c.max_num_samples_for_avg = v as usize;
             }
+        }
+        "astero_results_dbl_format" => {
+            c.astero_results_dbl_format = expect_str(sec, a)?;
+        }
+        "astero_results_int_format" => {
+            c.astero_results_int_format = expect_str(sec, a)?;
+        }
+        "astero_results_txt_format" => {
+            c.astero_results_txt_format = expect_str(sec, a)?;
+        }
+        "write_best_model_data_for_each_sample" => {
+            c.write_best_model_data_for_each_sample = expect_bool(sec, a)?;
+        }
+        "num_digits" | "model_num_digits" => {
+            let v = expect_i64(sec, a)?;
+            if v < 0 {
+                return Err(StarError::InvalidInput(format!(
+                    "negative '&{sec}::{key}' = {v}"
+                )));
+            }
+            if key == "num_digits" {
+                c.num_digits = v as usize;
+            } else {
+                c.model_num_digits = v as usize;
+            }
+        }
+        "sample_results_prefix" => {
+            c.sample_results_prefix = expect_str(sec, a)?;
+        }
+        "sample_results_postfix" => {
+            c.sample_results_postfix = expect_str(sec, a)?;
+        }
+        "write_fgong_for_each_model" => {
+            c.write_fgong_for_each_model = expect_bool(sec, a)?;
+        }
+        "fgong_prefix" => c.fgong_prefix = expect_str(sec, a)?,
+        "fgong_postfix" => c.fgong_postfix = expect_str(sec, a)?,
+        "write_fgong_for_best_model" => {
+            c.write_fgong_for_best_model = expect_bool(sec, a)?;
+        }
+        "best_model_fgong_filename" => {
+            c.best_model_fgong_filename = expect_str(sec, a)?;
+        }
+        "write_gyre_for_each_model" => {
+            c.write_gyre_for_each_model = expect_bool(sec, a)?;
+        }
+        "gyre_prefix" => c.gyre_prefix = expect_str(sec, a)?,
+        "gyre_postfix" => c.gyre_postfix = expect_str(sec, a)?,
+        "max_num_gyre_points" => {
+            c.max_num_gyre_points = expect_i64(sec, a)? as isize;
+        }
+        "write_gyre_for_best_model" => {
+            c.write_gyre_for_best_model = expect_bool(sec, a)?;
+        }
+        "best_model_gyre_filename" => {
+            c.best_model_gyre_filename = expect_str(sec, a)?;
+        }
+        "write_profile_for_best_model" => {
+            c.write_profile_for_best_model = expect_bool(sec, a)?;
+        }
+        "best_model_profile_filename" => {
+            c.best_model_profile_filename = expect_str(sec, a)?;
+        }
+        "save_model_for_best_model" => {
+            c.save_model_for_best_model = expect_bool(sec, a)?;
+        }
+        "best_model_save_model_filename" => {
+            c.best_model_save_model_filename = expect_str(sec, a)?;
+        }
+        "save_info_for_last_model" => {
+            c.save_info_for_last_model = expect_bool(sec, a)?;
+        }
+        "last_model_save_info_filename" => {
+            c.last_model_save_info_filename = expect_str(sec, a)?;
+        }
+        "save_controls" => c.save_controls = expect_bool(sec, a)?,
+        "save_controls_filename" => {
+            c.save_controls_filename = expect_str(sec, a)?;
+        }
+        "save_mode_model_number" => {
+            c.save_mode_model_number = expect_i64(sec, a)? as isize;
+        }
+        "save_mode_filename" => c.save_mode_filename = expect_str(sec, a)?,
+        "el_to_save" => {
+            c.el_to_save =
+                i32::try_from(expect_i64(sec, a)?).map_err(|_| {
+                    StarError::InvalidInput(format!("overflow '&{sec}::{key}'"))
+                })?;
+        }
+        "order_to_save" => {
+            c.order_to_save =
+                i32::try_from(expect_i64(sec, a)?).map_err(|_| {
+                    StarError::InvalidInput(format!("overflow '&{sec}::{key}'"))
+                })?;
         }
         other => {
             // Upstream control skipped only when `allow_unsupported_controls = true`.
@@ -1004,6 +1284,18 @@ fn finalize_controls(c: &mut AsteroSearchControls) -> Result<(), StarError> {
             "unrecognized '&astero_search_controls::correction_scheme' option '{}'",
             c.correction_scheme
         )));
+    }
+    for (fname, val) in [
+        ("astero_results_dbl_format", &c.astero_results_dbl_format),
+        ("astero_results_int_format", &c.astero_results_int_format),
+        ("astero_results_txt_format", &c.astero_results_txt_format),
+    ] {
+        let t = val.trim();
+        if t.is_empty() || !t.starts_with('(') || !t.ends_with(')') {
+            return Err(StarError::InvalidInput(format!(
+                "invalid Fortran format string for '&astero_search_controls::{fname}': '{val}'"
+            )));
+        }
     }
 
     for i in 0..10 {

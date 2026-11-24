@@ -3,6 +3,7 @@
 //! and `from_file` parameter tables (`astero/defaults/astero_search.defaults`,
 //! `astero/private/astero_run_support.f90`).
 
+use std::fmt::Write as _;
 use std::fs;
 use std::path::Path;
 
@@ -90,6 +91,18 @@ pub struct AsteroParamSet {
 pub struct AsteroSearchControls {
     /// Composite $\chi^2$ weights and normalization flags.
     pub weights: AsteroChi2Weights,
+    /// Log $\chi^2_{\Delta\nu}$ trace info (`trace_chi2_seismo_delta_nu_info`).
+    pub trace_chi2_seismo_delta_nu_info: bool,
+    /// Log $\chi^2_{\nu_{\max}}$ trace info (`trace_chi2_seismo_nu_max_info`).
+    pub trace_chi2_seismo_nu_max_info: bool,
+    /// Log seismic ratio trace info (`trace_chi2_seismo_ratios_info`).
+    pub trace_chi2_seismo_ratios_info: bool,
+    /// Log per-frequency $\chi^2$ trace info (`trace_chi2_seismo_frequencies_info`).
+    pub trace_chi2_seismo_frequencies_info: bool,
+    /// Log spectroscopic $\chi^2$ trace info (`trace_chi2_spectro_info`).
+    pub trace_chi2_spectro_info: bool,
+    /// Log wall-clock timing in oscillation code calls (`trace_time_in_oscillation_code`).
+    pub trace_time_in_oscillation_code: bool,
     /// Whether to log limit-rejection diagnostics (`trace_limits`).
     pub trace_limits: bool,
     /// Solar reference $(Z/X)_\odot$.
@@ -221,8 +234,20 @@ pub struct AsteroSearchControls {
     pub simplex_adaptive_random_search: bool,
     /// RNG seed for Nelder-Mead random search (`simplex_seed`).
     pub simplex_seed: i32,
+    /// Nelder-Mead reflection coefficient $\alpha$ (`simplex_alpha`).
+    pub simplex_alpha: f64,
+    /// Nelder-Mead expansion coefficient $\beta$ (`simplex_beta`).
+    pub simplex_beta: f64,
+    /// Nelder-Mead contraction coefficient $\gamma$ (`simplex_gamma`).
+    pub simplex_gamma: f64,
+    /// Nelder-Mead shrink coefficient $\delta$ (`simplex_delta`).
+    pub simplex_delta: f64,
+    /// Restart Nelder-Mead simplex search from `simplex_output_filename` (`restart_simplex_from_file`).
+    pub restart_simplex_from_file: bool,
     /// Output filename for `simplex` search (`simplex_output_filename`).
     pub simplex_output_filename: String,
+    /// Restart `scan_grid` search from `scan_grid_output_filename` (`restart_scan_grid_from_file`).
+    pub restart_scan_grid_from_file: bool,
     /// Initial normalized trust-region radius for `bobyqa` (`bobyqa_rho_beg`).
     pub bobyqa_rho_beg: f64,
     /// Final normalized trust-region radius for `bobyqa` (`bobyqa_rho_end`).
@@ -287,6 +312,88 @@ pub struct AsteroSearchControls {
     pub avg_age_sigma_limit: f64,
     /// Same for the model number (`avg_model_number_sigma_limit`).
     pub avg_model_number_sigma_limit: f64,
+    /// Header name for primary surface-correction coefficient column (`surf_coef1_name`).
+    pub surf_coef1_name: String,
+    /// Header name for secondary surface-correction coefficient column (`surf_coef2_name`).
+    pub surf_coef2_name: String,
+    /// Save next-best higher-frequency nonradial matches (`save_next_best_at_higher_frequency`).
+    pub save_next_best_at_higher_frequency: bool,
+    /// Save next-best lower-frequency nonradial matches (`save_next_best_at_lower_frequency`).
+    pub save_next_best_at_lower_frequency: bool,
+    /// Fortran edit descriptor for floating-point table columns (`astero_results_dbl_format`).
+    pub astero_results_dbl_format: String,
+    /// Fortran edit descriptor for integer table columns (`astero_results_int_format`).
+    pub astero_results_int_format: String,
+    /// Fortran edit descriptor for text table columns (`astero_results_txt_format`).
+    pub astero_results_txt_format: String,
+    /// Write `sample_NNNN.data` summary file for each accepted sample (`write_best_model_data_for_each_sample`).
+    pub write_best_model_data_for_each_sample: bool,
+    /// Zero-padded width of sample index in per-sample output filenames (`num_digits`).
+    pub num_digits: usize,
+    /// Filename prefix for per-sample best-model summary files (`sample_results_prefix`).
+    pub sample_results_prefix: String,
+    /// Filename suffix for per-sample best-model summary files (`sample_results_postfix`).
+    pub sample_results_postfix: String,
+    /// Zero-padded width of stellar model number in pulse filenames (`model_num_digits`).
+    pub model_num_digits: usize,
+    /// Export FGONG data for every model passed to oscillation code (`write_fgong_for_each_model`).
+    pub write_fgong_for_each_model: bool,
+    /// Filename prefix for per-model FGONG files (`fgong_prefix`).
+    pub fgong_prefix: String,
+    /// Filename suffix for per-model FGONG files (`fgong_postfix`).
+    pub fgong_postfix: String,
+    /// Export FGONG file for each track's best-fitting model (`write_fgong_for_best_model`).
+    pub write_fgong_for_best_model: bool,
+    /// Filename for best-model FGONG export (`best_model_fgong_filename`).
+    pub best_model_fgong_filename: String,
+    /// Export GYRE data for every model passed to `GYRE` (`write_gyre_for_each_model`).
+    pub write_gyre_for_each_model: bool,
+    /// Filename prefix for per-model GYRE files (`gyre_prefix`).
+    pub gyre_prefix: String,
+    /// Filename suffix for per-model GYRE files (`gyre_postfix`).
+    pub gyre_postfix: String,
+    /// Maximum number of points for GYRE output (`max_num_gyre_points`, active only if `> 1`).
+    pub max_num_gyre_points: isize,
+    /// Export GYRE file for each track's best-fitting model (`write_gyre_for_best_model`).
+    pub write_gyre_for_best_model: bool,
+    /// Filename for best-model GYRE export (`best_model_gyre_filename`).
+    pub best_model_gyre_filename: String,
+    /// Write profile file for each track's best-fitting model (`write_profile_for_best_model`).
+    pub write_profile_for_best_model: bool,
+    /// Filename for best-model profile export (`best_model_profile_filename`).
+    pub best_model_profile_filename: String,
+    /// Save MESA `.mod` file for each track's best-fitting model (`save_model_for_best_model`).
+    pub save_model_for_best_model: bool,
+    /// Filename for best-model `.mod` file (`best_model_save_model_filename`).
+    pub best_model_save_model_filename: String,
+    /// Save `show_best`-format info for the last evolved model (`save_info_for_last_model`).
+    pub save_info_for_last_model: bool,
+    /// Filename for last-model summary output (`last_model_save_info_filename`).
+    pub last_model_save_info_filename: String,
+    /// Dump `&astero_search_controls` namelist at startup (`save_controls`).
+    pub save_controls: bool,
+    /// Output filename for `save_controls` (`save_controls_filename`).
+    pub save_controls_filename: String,
+    /// Model number at which to dump eigenfunction data (`save_mode_model_number`).
+    pub save_mode_model_number: isize,
+    /// Output filename for eigenfunction dump (`save_mode_filename`).
+    pub save_mode_filename: String,
+    /// Spherical harmonic degree $l$ of mode eigenfunction to save (`el_to_save`).
+    pub el_to_save: i32,
+    /// Radial order $n_{pg}$ of mode eigenfunction to save (`order_to_save`).
+    pub order_to_save: i32,
+    /// ADIPLS rotational kernel control (`adipls_irotkr`).
+    pub adipls_irotkr: i32,
+    /// ADIPLS rotational kernel print point count (`adipls_nprtkr`).
+    pub adipls_nprtkr: i32,
+    /// ADIPLS $\Gamma_1$ kernel control (`adipls_igm1kr`).
+    pub adipls_igm1kr: i32,
+    /// ADIPLS $\Gamma_1$ kernel print point count (`adipls_npgmkr`).
+    pub adipls_npgmkr: i32,
+    /// Extra astero search inlist include flags (`read_extra_astero_search_inlist(1..5)`).
+    pub read_extra_astero_search_inlist: [bool; 5],
+    /// Extra astero search inlist filenames (`extra_astero_search_inlist_name(1..5)`).
+    pub extra_astero_search_inlist_name: [String; 5],
     pub(crate) constraint_names: [String; 10],
     pub(crate) indexed_constraints: [SpectroConstraint; 10],
     pub(crate) param_names: [String; 10],
@@ -299,6 +406,12 @@ impl Default for AsteroSearchControls {
     fn default() -> Self {
         Self {
             weights: AsteroChi2Weights::default(),
+            trace_chi2_seismo_delta_nu_info: false,
+            trace_chi2_seismo_nu_max_info: false,
+            trace_chi2_seismo_ratios_info: false,
+            trace_chi2_seismo_frequencies_info: false,
+            trace_chi2_spectro_info: false,
+            trace_time_in_oscillation_code: false,
             trace_limits: false,
             z_div_x_solar: 0.02293,
             nl: [0; 4],
@@ -366,7 +479,13 @@ impl Default for AsteroSearchControls {
             simplex_enforce_bounds: false,
             simplex_adaptive_random_search: false,
             simplex_seed: 1_074_698_122,
+            simplex_alpha: 1.0,
+            simplex_beta: 2.0,
+            simplex_gamma: 0.5,
+            simplex_delta: 0.5,
+            restart_simplex_from_file: false,
             simplex_output_filename: String::from("simplex_results.data"),
+            restart_scan_grid_from_file: false,
             bobyqa_rho_beg: 0.45,
             bobyqa_rho_end: 1.0e-6,
             bobyqa_max_fcn_calls: 1000,
@@ -399,6 +518,49 @@ impl Default for AsteroSearchControls {
             max_num_samples_for_avg: 10,
             avg_age_sigma_limit: 10.0,
             avg_model_number_sigma_limit: 10.0,
+            surf_coef1_name: String::from("a_div_r"),
+            surf_coef2_name: String::from("correction_r"),
+            save_next_best_at_higher_frequency: false,
+            save_next_best_at_lower_frequency: false,
+            astero_results_dbl_format: String::from("(1pes26.16)"),
+            astero_results_int_format: String::from("(i26)"),
+            astero_results_txt_format: String::from("(a26)"),
+            write_best_model_data_for_each_sample: true,
+            num_digits: 4,
+            sample_results_prefix: String::from("sample_"),
+            sample_results_postfix: String::from(".data"),
+            model_num_digits: 4,
+            write_fgong_for_each_model: false,
+            fgong_prefix: String::from("fgong_"),
+            fgong_postfix: String::from(".data"),
+            write_fgong_for_best_model: false,
+            best_model_fgong_filename: String::new(),
+            write_gyre_for_each_model: false,
+            gyre_prefix: String::from("gyre_"),
+            gyre_postfix: String::from(".data"),
+            max_num_gyre_points: -1,
+            write_gyre_for_best_model: false,
+            best_model_gyre_filename: String::new(),
+            write_profile_for_best_model: false,
+            best_model_profile_filename: String::new(),
+            save_model_for_best_model: false,
+            best_model_save_model_filename: String::new(),
+            save_info_for_last_model: false,
+            last_model_save_info_filename: String::new(),
+            save_controls: false,
+            save_controls_filename: String::new(),
+            save_mode_model_number: 0,
+            save_mode_filename: String::new(),
+            el_to_save: 0,
+            order_to_save: 0,
+            adipls_irotkr: 0,
+            adipls_nprtkr: 0,
+            adipls_igm1kr: 0,
+            adipls_npgmkr: 0,
+            read_extra_astero_search_inlist: [false; 5],
+            extra_astero_search_inlist_name: std::array::from_fn(|_| {
+                String::from("undefined")
+            }),
             constraint_names: std::array::from_fn(|_| String::new()),
             indexed_constraints: [SpectroConstraint::default(); 10],
             param_names: std::array::from_fn(|_| String::new()),
@@ -575,5 +737,367 @@ impl AsteroSearchControls {
             )));
         }
         Ok(out)
+    }
+
+    /// Formats the `&astero_search_controls` namelist (`write_astero_search_controls`,
+    /// `astero/public/astero_def.f90:911-940`).
+    #[must_use]
+    pub fn format_namelist(&self) -> String {
+        let fb = |v: bool| if v { ".true." } else { ".false." };
+        let fq = |s: &str| format!("'{}'", s.replace('\'', "''"));
+        let mut out = String::from("&astero_search_controls\n");
+        let _ = writeln!(
+            out,
+            "   chi2_seismo_fraction = {:.16e}",
+            self.weights.chi2_seismo_fraction
+        );
+        let _ = writeln!(
+            out,
+            "   chi2_seismo_delta_nu_fraction = {:.16e}",
+            self.weights.chi2_seismo_delta_nu_fraction
+        );
+        let _ = writeln!(
+            out,
+            "   chi2_seismo_nu_max_fraction = {:.16e}",
+            self.weights.chi2_seismo_nu_max_fraction
+        );
+        let _ = writeln!(
+            out,
+            "   chi2_seismo_r_010_fraction = {:.16e}",
+            self.weights.chi2_seismo_r_010_fraction
+        );
+        let _ = writeln!(
+            out,
+            "   chi2_seismo_r_02_fraction = {:.16e}",
+            self.weights.chi2_seismo_r_02_fraction
+        );
+        let _ = writeln!(
+            out,
+            "   normalize_chi2_seismo_frequencies = {}",
+            fb(self.weights.normalize_chi2_seismo_frequencies)
+        );
+        let _ = writeln!(
+            out,
+            "   normalize_chi2_seismo_r_010 = {}",
+            fb(self.weights.normalize_chi2_seismo_r_010)
+        );
+        let _ = writeln!(
+            out,
+            "   normalize_chi2_seismo_r_02 = {}",
+            fb(self.weights.normalize_chi2_seismo_r_02)
+        );
+        let _ = writeln!(
+            out,
+            "   normalize_chi2_spectro = {}",
+            fb(self.weights.normalize_chi2_spectro)
+        );
+        let _ = writeln!(
+            out,
+            "   trace_chi2_seismo_delta_nu_info = {}",
+            fb(self.trace_chi2_seismo_delta_nu_info)
+        );
+        let _ = writeln!(
+            out,
+            "   trace_chi2_seismo_nu_max_info = {}",
+            fb(self.trace_chi2_seismo_nu_max_info)
+        );
+        let _ = writeln!(
+            out,
+            "   trace_chi2_seismo_ratios_info = {}",
+            fb(self.trace_chi2_seismo_ratios_info)
+        );
+        let _ = writeln!(
+            out,
+            "   trace_chi2_seismo_frequencies_info = {}",
+            fb(self.trace_chi2_seismo_frequencies_info)
+        );
+        let _ = writeln!(
+            out,
+            "   trace_chi2_spectro_info = {}",
+            fb(self.trace_chi2_spectro_info)
+        );
+        let _ = writeln!(out, "   trace_limits = {}", fb(self.trace_limits));
+        let _ = writeln!(
+            out,
+            "   trace_time_in_oscillation_code = {}",
+            fb(self.trace_time_in_oscillation_code)
+        );
+        let _ = writeln!(out, "   search_type = {}", fq(&self.search_type));
+        let _ = writeln!(
+            out,
+            "   oscillation_code = {}",
+            fq(&self.oscillation_code)
+        );
+        let _ =
+            writeln!(out, "   gyre_input_file = {}", fq(&self.gyre_input_file));
+        let _ = writeln!(out, "   gyre_non_ad = {}", fb(self.gyre_non_ad));
+        let _ = writeln!(
+            out,
+            "   correction_scheme = {}",
+            fq(&self.correction_scheme)
+        );
+        let _ = writeln!(out, "   correction_b = {:.16e}", self.correction_b);
+        let _ = writeln!(
+            out,
+            "   correction_factor = {:.16e}",
+            self.correction_factor
+        );
+        let _ =
+            writeln!(out, "   surf_coef1_name = {}", fq(&self.surf_coef1_name));
+        let _ =
+            writeln!(out, "   surf_coef2_name = {}", fq(&self.surf_coef2_name));
+        let _ = writeln!(
+            out,
+            "   save_next_best_at_higher_frequency = {}",
+            fb(self.save_next_best_at_higher_frequency)
+        );
+        let _ = writeln!(
+            out,
+            "   save_next_best_at_lower_frequency = {}",
+            fb(self.save_next_best_at_lower_frequency)
+        );
+        let _ = writeln!(
+            out,
+            "   astero_results_directory = {}",
+            fq(&self.astero_results_directory)
+        );
+        let _ = writeln!(
+            out,
+            "   astero_results_dbl_format = {}",
+            fq(&self.astero_results_dbl_format)
+        );
+        let _ = writeln!(
+            out,
+            "   astero_results_int_format = {}",
+            fq(&self.astero_results_int_format)
+        );
+        let _ = writeln!(
+            out,
+            "   astero_results_txt_format = {}",
+            fq(&self.astero_results_txt_format)
+        );
+        let _ = writeln!(
+            out,
+            "   write_best_model_data_for_each_sample = {}",
+            fb(self.write_best_model_data_for_each_sample)
+        );
+        let _ = writeln!(out, "   num_digits = {}", self.num_digits);
+        let _ = writeln!(
+            out,
+            "   sample_results_prefix = {}",
+            fq(&self.sample_results_prefix)
+        );
+        let _ = writeln!(
+            out,
+            "   sample_results_postfix = {}",
+            fq(&self.sample_results_postfix)
+        );
+        let _ =
+            writeln!(out, "   model_num_digits = {}", self.model_num_digits);
+        let _ = writeln!(
+            out,
+            "   write_fgong_for_each_model = {}",
+            fb(self.write_fgong_for_each_model)
+        );
+        let _ = writeln!(out, "   fgong_prefix = {}", fq(&self.fgong_prefix));
+        let _ = writeln!(out, "   fgong_postfix = {}", fq(&self.fgong_postfix));
+        let _ = writeln!(
+            out,
+            "   write_fgong_for_best_model = {}",
+            fb(self.write_fgong_for_best_model)
+        );
+        let _ = writeln!(
+            out,
+            "   best_model_fgong_filename = {}",
+            fq(&self.best_model_fgong_filename)
+        );
+        let _ = writeln!(
+            out,
+            "   write_gyre_for_each_model = {}",
+            fb(self.write_gyre_for_each_model)
+        );
+        let _ = writeln!(out, "   gyre_prefix = {}", fq(&self.gyre_prefix));
+        let _ = writeln!(out, "   gyre_postfix = {}", fq(&self.gyre_postfix));
+        let _ = writeln!(
+            out,
+            "   max_num_gyre_points = {}",
+            self.max_num_gyre_points
+        );
+        let _ = writeln!(
+            out,
+            "   write_gyre_for_best_model = {}",
+            fb(self.write_gyre_for_best_model)
+        );
+        let _ = writeln!(
+            out,
+            "   best_model_gyre_filename = {}",
+            fq(&self.best_model_gyre_filename)
+        );
+        let _ = writeln!(
+            out,
+            "   write_profile_for_best_model = {}",
+            fb(self.write_profile_for_best_model)
+        );
+        let _ = writeln!(
+            out,
+            "   best_model_profile_filename = {}",
+            fq(&self.best_model_profile_filename)
+        );
+        let _ = writeln!(
+            out,
+            "   save_model_for_best_model = {}",
+            fb(self.save_model_for_best_model)
+        );
+        let _ = writeln!(
+            out,
+            "   best_model_save_model_filename = {}",
+            fq(&self.best_model_save_model_filename)
+        );
+        let _ = writeln!(
+            out,
+            "   save_info_for_last_model = {}",
+            fb(self.save_info_for_last_model)
+        );
+        let _ = writeln!(
+            out,
+            "   last_model_save_info_filename = {}",
+            fq(&self.last_model_save_info_filename)
+        );
+        let _ = writeln!(out, "   save_controls = {}", fb(self.save_controls));
+        let _ = writeln!(
+            out,
+            "   save_controls_filename = {}",
+            fq(&self.save_controls_filename)
+        );
+        let _ = writeln!(
+            out,
+            "   save_mode_model_number = {}",
+            self.save_mode_model_number
+        );
+        let _ = writeln!(
+            out,
+            "   save_mode_filename = {}",
+            fq(&self.save_mode_filename)
+        );
+        let _ = writeln!(out, "   el_to_save = {}", self.el_to_save);
+        let _ = writeln!(out, "   order_to_save = {}", self.order_to_save);
+        let _ = writeln!(out, "   adipls_irotkr = {}", self.adipls_irotkr);
+        let _ = writeln!(out, "   adipls_nprtkr = {}", self.adipls_nprtkr);
+        let _ = writeln!(out, "   adipls_igm1kr = {}", self.adipls_igm1kr);
+        let _ = writeln!(out, "   adipls_npgmkr = {}", self.adipls_npgmkr);
+        let _ = writeln!(out, "   simplex_alpha = {:.16e}", self.simplex_alpha);
+        let _ = writeln!(out, "   simplex_beta = {:.16e}", self.simplex_beta);
+        let _ = writeln!(out, "   simplex_gamma = {:.16e}", self.simplex_gamma);
+        let _ = writeln!(out, "   simplex_delta = {:.16e}", self.simplex_delta);
+        let _ = writeln!(
+            out,
+            "   restart_simplex_from_file = {}",
+            fb(self.restart_simplex_from_file)
+        );
+        let _ = writeln!(
+            out,
+            "   restart_scan_grid_from_file = {}",
+            fb(self.restart_scan_grid_from_file)
+        );
+        let _ = writeln!(out, "   y_frac_he3 = {:.16e}", self.y_frac_he3);
+        let _ = writeln!(out, "   z_div_x_solar = {:.16e}", self.z_div_x_solar);
+        let _ = writeln!(out, "   delta_nu = {:.16e}", self.delta_nu);
+        let _ =
+            writeln!(out, "   delta_nu_sigma = {:.16e}", self.delta_nu_sigma);
+        let _ = writeln!(out, "   nu_max = {:.16e}", self.nu_max);
+        let _ = writeln!(out, "   nu_max_sigma = {:.16e}", self.nu_max_sigma);
+        for (i, name) in self.param_names.iter().enumerate() {
+            if !name.trim().is_empty() {
+                let p = self.indexed_params[i];
+                let idx = i + 1;
+                let _ = writeln!(out, "   param_name({idx}) = {}", fq(name));
+                let _ = writeln!(out, "   vary_param({idx}) = {}", fb(p.vary));
+                let _ =
+                    writeln!(out, "   first_param({idx}) = {:.16e}", p.first);
+                let _ = writeln!(out, "   min_param({idx}) = {:.16e}", p.min);
+                let _ = writeln!(out, "   max_param({idx}) = {:.16e}", p.max);
+                let _ =
+                    writeln!(out, "   delta_param({idx}) = {:.16e}", p.delta);
+                let _ = writeln!(
+                    out,
+                    "   file_column_for_param({idx}) = {}",
+                    self.indexed_file_cols[i]
+                );
+            }
+        }
+        for (i, name) in self.constraint_names.iter().enumerate() {
+            let c = self.indexed_constraints[i];
+            if !name.trim().is_empty()
+                || c.include
+                || c.sigma > 0.0
+                || c.sigmas_coeff != 0.0
+            {
+                let idx = i + 1;
+                let _ =
+                    writeln!(out, "   constraint_name({idx}) = {}", fq(name));
+                let _ = writeln!(
+                    out,
+                    "   constraint_target({idx}) = {:.16e}",
+                    c.target
+                );
+                let _ = writeln!(
+                    out,
+                    "   constraint_sigma({idx}) = {:.16e}",
+                    c.sigma
+                );
+                let _ = writeln!(
+                    out,
+                    "   include_constraint_in_chi2_spectro({idx}) = {}",
+                    fb(c.include)
+                );
+                let _ = writeln!(
+                    out,
+                    "   sigmas_coeff_for_constraint_limit({idx}) = {:.16e}",
+                    c.sigmas_coeff
+                );
+            }
+        }
+        for l in 0..4 {
+            let _ = writeln!(out, "   nl({l}) = {}", self.nl[l]);
+            let _ = writeln!(
+                out,
+                "   iscan_factor({l}) = {:.16e}",
+                self.iscan_factor[l]
+            );
+        }
+        out.push_str("/ ! end of astero_search_controls namelist\n");
+        out
+    }
+
+    /// Writes the `&astero_search_controls` namelist dump when `save_controls`
+    /// is enabled (`astero_run_support.f90:133-135`, `astero_def.f90:911-940`).
+    pub fn write_controls_if_requested(
+        &self,
+        out_root: &Path,
+    ) -> Result<(), StarError> {
+        if !self.save_controls {
+            return Ok(());
+        }
+        let fname = self.save_controls_filename.trim();
+        let rel = if fname.is_empty() {
+            "astero_search_controls.out"
+        } else {
+            fname
+        };
+        let path = out_root.join(rel);
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent).map_err(|e| {
+                StarError::IoError(format!(
+                    "failed creating directory for save_controls '{}': {e}",
+                    parent.display()
+                ))
+            })?;
+        }
+        fs::write(&path, self.format_namelist()).map_err(|e| {
+            StarError::IoError(format!(
+                "failed writing save_controls_filename '{}': {e}",
+                path.display()
+            ))
+        })
     }
 }

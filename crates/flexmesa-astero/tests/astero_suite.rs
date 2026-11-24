@@ -258,13 +258,9 @@ fn test_surface_effects_case_recovers_synthetic_targets_and_bison_solar_fits() {
         "missing surface_effects directory: {}",
         case_dir.display()
     );
-    let raw_err = parse_astero_search_controls(&case_dir)
-        .expect_err("raw surface_effects must reject unsupported controls");
-    assert!(
-        matches!(raw_err, StarError::InvalidInput(_))
-            && raw_err.to_string().contains("unsupported control"),
-        "unexpected raw surface_effects error: {raw_err}"
-    );
+    let raw_ctrl = parse_astero_search_controls(&case_dir)
+        .expect("raw surface_effects controls must parse natively");
+    assert_eq!(raw_ctrl.correction_scheme, "kjeldsen");
     let tmp = TempAsteroDirGuard::new("surface_effects");
     let cleaned = tmp.root.join("surface_effects");
     copy_cleaned_astero_case(&case_dir, &cleaned)
@@ -462,15 +458,11 @@ fn assert_uncapped_case_passes(case_name: &str) {
     if matches!(case_name, "astero_gyre" | "astero_adipls") {
         copy_dir_recursive(&raw_case, &staged).expect("copy raw astero case");
     } else {
-        let raw_err =
-            run_astero_test_suite_case(&raw_case, true, Some(2), true)
-                .expect_err(
-                    "raw astero case must fail on unsupported controls",
-                );
+        let raw_ctrl = parse_astero_search_controls(&raw_case)
+            .expect("raw astero case controls must parse natively");
         assert!(
-            matches!(raw_err, StarError::InvalidInput(_))
-                && raw_err.to_string().contains("unsupported control"),
-            "unexpected raw astero error for {case_name}: {raw_err}"
+            !raw_ctrl.search_type.trim().is_empty(),
+            "raw astero search_type missing for {case_name}"
         );
         copy_cleaned_astero_case(&raw_case, &staged)
             .expect("clean astero case");
@@ -555,18 +547,10 @@ fn test_all_eight_astero_cases_bounded_eight_steps_pass() {
         "missing astero test_suite directory: {}",
         suite_dir.display()
     );
-    let raw_err = run_astero_test_suite_case(
-        &suite_dir.join("example_astero"),
-        true,
-        Some(2),
-        true,
-    )
-    .expect_err("raw $MESA_DIR astero case must reject unsupported controls");
-    assert!(
-        matches!(raw_err, StarError::InvalidInput(_))
-            && raw_err.to_string().contains("unsupported control"),
-        "unexpected raw astero error: {raw_err}"
-    );
+    let ex_ctrl =
+        parse_astero_search_controls(&suite_dir.join("example_astero"))
+            .expect("raw $MESA_DIR example_astero controls must parse");
+    assert_eq!(ex_ctrl.search_type, "use_first_values");
     let tmp = TempAsteroDirGuard::new("all8");
     let cleaned_suite = tmp.root.join("astero").join("test_suite");
     for &case_name in &ASTERO_CASES {

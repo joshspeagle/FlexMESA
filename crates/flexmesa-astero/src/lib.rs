@@ -49,10 +49,10 @@ mod search_methods;
 pub mod surface_corr;
 
 pub use e2e::{
-    run_astero_test_suite_case, run_astero_test_suite_case_with_logs,
-    run_astero_test_suite_case_with_options,
-    run_astero_test_suite_case_with_case_hooks, run_astero_test_suite_case_with_hooks,
-    TempCaseStaging,
+    run_astero_test_suite_case, run_astero_test_suite_case_with_case_hooks,
+    run_astero_test_suite_case_with_hooks,
+    run_astero_test_suite_case_with_logs,
+    run_astero_test_suite_case_with_options, TempCaseStaging,
 };
 pub use inlist_astero::{
     parse_astero_search_controls, parse_astero_search_controls_with_options,
@@ -73,8 +73,9 @@ pub use optimize::{
 pub use ratios_chi2::{
     eval_astero_chi2, eval_frequency_ratios_r01_r10, eval_frequency_ratios_r02,
     eval_frequency_ratios_r02_with_dnu, eval_frequency_ratios_with_trimming,
-    get_max_sequence, interpolate_ratio_r010, interpolate_ratio_r02,
-    match_modes_by_degree, AsteroChi2Weights, FrequencyRatiosR010,
+    eval_r02_model_with_indices, eval_r02_obs_with_indices, get_max_sequence,
+    interpolate_ratio_r010, interpolate_ratio_r02, match_modes_by_degree,
+    AsteroChi2Weights, FrequencyRatiosR010, FrequencyRatiosR02Obs,
 };
 pub use sample_eval::{eval_model_astero_sample, AsteroSampleResult};
 pub use scaling::{
@@ -85,16 +86,16 @@ pub use scaling::{
     eval_radial_delta_nu_ols, DELTA_NU_SUN, NU_MAX_SUN, TEFF_SUN_ASTERO,
 };
 pub use search_driver::{
-    run_single_astero_track, run_single_astero_track_with_logs,
-    run_single_astero_track_with_case_hooks, run_star_astero,
-    run_star_astero_with_logs, run_star_astero_with_options,
-    run_star_astero_with_case_hooks, AsteroCaseHooks,
-    AsteroSearchReport,
+    run_single_astero_track, run_single_astero_track_with_case_hooks,
+    run_single_astero_track_with_logs, run_star_astero,
+    run_star_astero_with_case_hooks, run_star_astero_with_logs,
+    run_star_astero_with_options, AsteroCaseHooks, AsteroSearchReport,
 };
 pub use surface_corr::{
-    estimate_l0_n_obs, eval_combined_corr, eval_cubic_corr, eval_kjeldsen_corr,
-    eval_power_law_corr, eval_power_law_corr_radial_only, eval_sonoi_corr,
-    eval_sonoi_corr_radial_only, interpolate_l0_inertia,
+    estimate_l0_n_obs, estimate_l0_n_obs_with_numax, eval_combined_corr,
+    eval_cubic_corr, eval_kjeldsen_corr, eval_power_law_corr,
+    eval_power_law_corr_radial_only, eval_sonoi_corr,
+    eval_sonoi_corr_radial_only, eval_surf_coefs, interpolate_l0_inertia,
 };
 
 #[cfg(test)]
@@ -288,34 +289,35 @@ mod tests {
     #[test]
     fn test_simplex_budget_preserves_unclamped_first_param_and_itermax() {
         let mut pts: Vec<(f64, f64)> = Vec::new();
-        let (x_best, f_best, evals) = optimize::try_simplex_minimize_with_budget(
-            &[1.00, 1.70],
-            &[1.24, 1.50],
-            &[1.32, 1.90],
-            2,
-            5,
-            1.0e-10,
-            1.0e-10,
-            0.0,
-            0.0,
-            false,
-            false,
-            1_074_698_122,
-            |x| {
-                pts.push((x[0], x[1]));
-                // Mirrors upstream 7-eval simplex trajectory where expand
-                // fails with 1e99 and inside contraction succeeds.
-                let val = if x[0] < 0.97 {
-                    search_driver::FAILED_TRACK_CHI2
-                } else {
-                    flexmesa_math::pow2(x[0] - 0.98)
-                        + flexmesa_math::pow2(x[1] - 1.80)
-                        + 0.046
-                };
-                Ok(val)
-            },
-        )
-        .expect("simplex with enforce_bounds=false succeeds");
+        let (x_best, f_best, evals) =
+            optimize::try_simplex_minimize_with_budget(
+                &[1.00, 1.70],
+                &[1.24, 1.50],
+                &[1.32, 1.90],
+                2,
+                5,
+                1.0e-10,
+                1.0e-10,
+                0.0,
+                0.0,
+                false,
+                false,
+                1_074_698_122,
+                |x| {
+                    pts.push((x[0], x[1]));
+                    // Mirrors upstream 7-eval simplex trajectory where expand
+                    // fails with 1e99 and inside contraction succeeds.
+                    let val = if x[0] < 0.97 {
+                        search_driver::FAILED_TRACK_CHI2
+                    } else {
+                        flexmesa_math::pow2(x[0] - 0.98)
+                            + flexmesa_math::pow2(x[1] - 1.80)
+                            + 0.046
+                    };
+                    Ok(val)
+                },
+            )
+            .expect("simplex with enforce_bounds=false succeeds");
         assert!((pts[0].0 - 1.00).abs() < 1.0e-15);
         assert!((pts[0].1 - 1.70).abs() < 1.0e-15);
         assert!((pts[1].0 - 1.02).abs() < 1.0e-15);

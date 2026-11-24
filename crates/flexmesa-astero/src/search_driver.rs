@@ -23,12 +23,14 @@ use crate::inlist_astero::{
     AsteroParamSet, AsteroSearchControls, MAX_CONSTRAINTS,
 };
 use crate::sample_eval::{
-    eval_model_astero_sample, eval_spectro_and_delta_nu_chi2,
-    AsteroSampleResult,
+    eval_model_astero_sample_with_output_root, eval_spectro_and_delta_nu_chi2,
+    scan_and_save_mode_at_number, AsteroSampleResult,
 };
 use crate::search_methods::{
-    build_scan_grid_params, run_powell_driver, run_simplex_driver,
-    write_sample_file, write_search_results_table,
+    build_scan_grid_params, extract_simplex_restart, format_show_best_report,
+    read_samples_from_file, run_powell_driver, run_simplex_driver,
+    write_best_model_artifacts, write_best_sample_file,
+    write_search_results_table,
 };
 
 /// Sentinel $\chi^2$ returned to optimization drivers when an evolutionary
@@ -64,12 +66,17 @@ struct AsteroTrackExtras<'a, 'h> {
     params: AsteroParamSet,
     sample_number: usize,
     case_dir: &'a Path,
+    output_root: &'a Path,
     best_sample: Option<AsteroSampleResult>,
+    best_model: Option<StarModel>,
     /// Averages over the best samples of earlier tracks
     /// (`set_sample_averages`).
     averages: SampleAverages,
     /// `num_chi2_too_big`.
     bad_count: usize,
+    astero_using_revised_max_yr_dt: bool,
+    astero_revised_max_yr_dt: f64,
+    astero_max_dt_next: f64,
     eval_error: Option<StarError>,
 }
 
@@ -158,13 +165,14 @@ impl AsteroTrackExtras<'_, '_> {
         model: &StarModel,
         values: &[f64; MAX_CONSTRAINTS],
     ) -> Result<AsteroSampleResult, ExtrasDirective> {
-        eval_model_astero_sample(
+        eval_model_astero_sample_with_output_root(
             model,
             self.ctrl,
             values,
             self.params,
             self.sample_number,
             self.case_dir,
+            self.output_root,
         )
         .map_err(|e| {
             self.eval_error = Some(e);
@@ -174,12 +182,12 @@ impl AsteroTrackExtras<'_, '_> {
 
     /// `constraint_value(i)` for every named constraint, from the case's
     /// `set_constraint_value` (`astero/private/extras_support.f90:204-209`);
-    /// unnamed slots are `NaN` and never read.
+    /// unnamed slots stay `0.0` (`astero_run_support.f90:165`).
     fn eval_constraint_values(
         &mut self,
         model: &StarModel,
     ) -> Result<[f64; MAX_CONSTRAINTS], StarError> {
-        let mut values = [f64::NAN; MAX_CONSTRAINTS];
+        let mut values = [0.0_f64; MAX_CONSTRAINTS];
         for (i, raw) in self.ctrl.constraint_names.iter().enumerate() {
             let name = raw.trim();
             if name.is_empty() {
@@ -247,6 +255,7 @@ impl AsteroTrackExtras<'_, '_> {
             .is_none_or(|b| b.chi2 <= 0.0 || sample.chi2 < b.chi2)
         {
             self.best_sample = Some(sample.clone());
+            self.best_model = Some(model.clone());
         }
         // `final_checks`: the age stops set `terminate` and the chi^2 checks
         // below still run.
@@ -291,31 +300,53 @@ impl AsteroTrackExtras<'_, '_> {
         // limits (`astero/private/extras_support.f90:621-667`). The age stops
         // are in `final_checks`, after the model's chi^2 has been saved; see
         // `final_age_stop`.
-        let check1 = |val: f64, tgt: f64, sig: f64, coeff: f64| -> bool {
-            if coeff == 0.0 || sig <= 0.0 {
-                return false;
-            }
-            let lim = tgt + sig * coeff;
-            (coeff > 0.0 && val > lim) || (coeff < 0.0 && val < lim)
-        };
-        if self.ctrl.delta_nu > 0.0
-            && check1(
+        let check1 =
+            |val: f64, tgt: f64, sig: f64, coeff: f64| -> (bool, f64) {
+                if coeff == 0.0 || sig <= 0.0 {
+                    return (false, 0.0);
+                }
+                let lim = tgt + sig * coeff;
+                (
+                    (coeff > 0.0 && val > lim) || (coeff < 0.0 && val < lim),
+                    lim,
+                )
+            };
+        if self.ctrl.delta_nu > 0.0 {
+            let (hit, lim) = check1(
                 dnu_uhz,
                 self.ctrl.delta_nu,
                 self.ctrl.delta_nu_sigma,
                 self.ctrl.sigmas_coeff_for_delta_nu_limit,
-            )
-        {
-            return Some(String::from("delta_nu_limit"));
-        }
-        // `do i = 1, max_constraints` (`extras_support.f90:645-663`).
-        for (i, c) in self.ctrl.indexed_constraints.iter().enumerate() {
-            let name = self.ctrl.constraint_names[i].trim();
-            if name.is_empty() {
-                continue;
+            );
+            if hit {
+                return Some(String::from("delta_nu_limit"));
             }
-            if check1(values[i], c.target, c.sigma, c.sigmas_coeff) {
-                return Some(format!("{name}_limit"));
+            if self.ctrl.trace_limits
+                && self.ctrl.sigmas_coeff_for_delta_nu_limit != 0.0
+                && self.ctrl.delta_nu_sigma > 0.0
+            {
+                println!("delta_nu_model={dnu_uhz:.6} delta_nu_limit={lim:.6}");
+            }
+        }
+        // `do i = 1, max_constraints` (`extras_support.f90:645-665`).
+        for (i, c) in self.ctrl.indexed_constraints.iter().enumerate() {
+            let (hit, lim) =
+                check1(values[i], c.target, c.sigma, c.sigmas_coeff);
+            let raw_name = self.ctrl.constraint_names[i].trim();
+            let label = if raw_name.is_empty() {
+                format!("constraint_{}", i + 1)
+            } else {
+                String::from(raw_name)
+            };
+            if hit {
+                return Some(format!("{label}_limit"));
+            }
+            if self.ctrl.trace_limits && c.sigmas_coeff != 0.0 && c.sigma > 0.0
+            {
+                println!(
+                    "constraint_value({i})={:.6} constraint_limit={lim:.6}",
+                    values[i]
+                );
             }
         }
         None
@@ -328,6 +359,12 @@ impl StarExtras for AsteroTrackExtras<'_, '_> {
             || self.ctrl.include_age_in_chi2_spectro;
         if checking_age && model.star_age < self.ctrl.age_target {
             let rem = (self.ctrl.age_target - model.star_age).max(1.0);
+            if self.astero_using_revised_max_yr_dt
+                && self.astero_revised_max_yr_dt > 0.0
+            {
+                model.controls.max_years_for_timestep =
+                    self.astero_revised_max_yr_dt;
+            }
             let cur_max = if model.controls.max_years_for_timestep > 0.0 {
                 model.controls.max_years_for_timestep
             } else {
@@ -336,6 +373,11 @@ impl StarExtras for AsteroTrackExtras<'_, '_> {
             .max(1.0);
             if rem <= cur_max {
                 Self::set_max_years_dt(model, rem);
+                self.astero_using_revised_max_yr_dt = true;
+                self.astero_revised_max_yr_dt =
+                    model.controls.max_years_for_timestep;
+                self.astero_max_dt_next =
+                    model.controls.max_years_for_timestep * SECYER;
             } else if self.ctrl.num_smaller_steps_before_age_target > 0
                 && self.ctrl.dt_for_smaller_steps_before_age_target > 0.0
             {
@@ -343,10 +385,32 @@ impl StarExtras for AsteroTrackExtras<'_, '_> {
                 if ((rem / cur_max + 1.0e-6).floor() as usize) <= n_steps {
                     let dt_sm =
                         self.ctrl.dt_for_smaller_steps_before_age_target;
-                    let i = (rem / dt_sm + 1.0e-6)
-                        .floor()
-                        .clamp(1.0, n_steps as f64);
-                    Self::set_max_years_dt(model, rem / i);
+                    let i = (rem / dt_sm + 1.0e-6).floor().max(0.0);
+                    let mut next_max = if (i + 1.0e-9) * dt_sm < rem {
+                        rem / (i + 1.0)
+                    } else if i > 0.0 {
+                        rem / i
+                    } else {
+                        rem
+                    };
+                    let min_max = cur_max
+                        * model
+                            .controls
+                            .ts_stop
+                            .reduction_factor_for_max_timestep;
+                    if next_max < min_max {
+                        next_max = min_max;
+                    }
+                    Self::set_max_years_dt(model, next_max);
+                    self.astero_using_revised_max_yr_dt = true;
+                    self.astero_revised_max_yr_dt =
+                        model.controls.max_years_for_timestep;
+                    if model.dt_next / SECYER
+                        > model.controls.max_years_for_timestep
+                    {
+                        self.astero_max_dt_next =
+                            model.controls.max_years_for_timestep * SECYER;
+                    }
                 }
             }
         }
@@ -356,6 +420,7 @@ impl StarExtras for AsteroTrackExtras<'_, '_> {
     fn extras_check_model(&mut self, model: &mut StarModel) -> ExtrasDirective {
         // `do_astero_extras_check_model`
         // (`astero/private/extras_support.f90:56-669`), in upstream's order.
+        self.astero_max_dt_next = 1.0e99;
         let checking_age = self.ctrl.eval_chi2_at_target_age_only
             || self.ctrl.include_age_in_chi2_spectro;
         if self.ctrl.eval_chi2_at_target_age_only
@@ -444,6 +509,17 @@ impl StarExtras for AsteroTrackExtras<'_, '_> {
                 Ok(s) => s,
                 Err(dir) => return dir,
             };
+            if let Err(e) = scan_and_save_mode_at_number(
+                model,
+                self.ctrl,
+                self.case_dir,
+                self.output_root,
+            ) {
+                self.eval_error = Some(e);
+                return ExtrasDirective::Terminate(String::from(
+                    "AsteroModeSaveError",
+                ));
+            }
             let directive = self.save_best_and_final_checks(model, &sample);
             if sample.chi2 < self.ctrl.chi2_radial_limit && !checking_age {
                 model.controls.max_years_for_timestep =
@@ -513,6 +589,11 @@ impl StarExtras for AsteroTrackExtras<'_, '_> {
         }
 
         self.save_best_and_final_checks(model, &sample)
+    }
+
+    fn extras_finish_step(&mut self, model: &mut StarModel) -> ExtrasDirective {
+        model.dt_next = model.dt_next.min(self.astero_max_dt_next);
+        ExtrasDirective::KeepGoing
     }
 }
 
@@ -641,7 +722,7 @@ pub(crate) fn failed_sample_result(
         logg: hr.log_g,
         log_l: hr.log_l,
         log_r: hr.log_r,
-        constraint_values: [f64::NAN; MAX_CONSTRAINTS],
+        constraint_values: [0.0; MAX_CONSTRAINTS],
         delta_nu_uhz: 0.0,
         nu_max_uhz: 0.0,
         a_div_r: 0.0,
@@ -656,6 +737,28 @@ pub(crate) fn failed_sample_result(
         model_freqs_corr: [Vec::new(), Vec::new(), Vec::new(), Vec::new()],
         model_inertias: [Vec::new(), Vec::new(), Vec::new(), Vec::new()],
         model_orders: [Vec::new(), Vec::new(), Vec::new(), Vec::new()],
+        surf_coef1: 0.0,
+        surf_coef2: 0.0,
+        ratios_n: 0,
+        ratios_l0_first: 0,
+        ratios_l1_first: 0,
+        obs_r01: Vec::new(),
+        obs_r01_sigmas: Vec::new(),
+        model_r01: Vec::new(),
+        obs_r10: Vec::new(),
+        obs_r10_sigmas: Vec::new(),
+        model_r10: Vec::new(),
+        obs_r02: Vec::new(),
+        obs_r02_sigmas: Vec::new(),
+        model_r02: Vec::new(),
+        model_freqs_alt_up: Default::default(),
+        model_freqs_corr_alt_up: Default::default(),
+        model_inertias_alt_up: Default::default(),
+        model_orders_alt_up: Default::default(),
+        model_freqs_alt_down: Default::default(),
+        model_freqs_corr_alt_down: Default::default(),
+        model_inertias_alt_down: Default::default(),
+        model_orders_alt_down: Default::default(),
     }
 }
 
@@ -698,6 +801,7 @@ pub fn run_single_astero_track_with_case_hooks(
     logs_opts: StarLogsOptions<'_>,
     set_param: Option<&mut dyn AsteroCaseHooks>,
 ) -> Result<(AsteroSampleResult, StageRunReport, StarModel), StarError> {
+    let output_root = logs_opts.output_root.unwrap_or(case_dir);
     run_track(
         base_bundle,
         ctrl,
@@ -705,6 +809,7 @@ pub fn run_single_astero_track_with_case_hooks(
         sample_number,
         max_steps_cap,
         case_dir,
+        output_root,
         logs_opts,
         set_param,
         SampleAverages::NONE,
@@ -721,6 +826,7 @@ fn run_track(
     sample_number: usize,
     max_steps_cap: Option<usize>,
     case_dir: &Path,
+    output_root: &Path,
     logs_opts: StarLogsOptions<'_>,
     mut set_param: Option<&mut dyn AsteroCaseHooks>,
     averages: SampleAverages,
@@ -744,9 +850,14 @@ fn run_track(
         params,
         sample_number,
         case_dir,
+        output_root,
         best_sample: None,
+        best_model: None,
         averages,
         bad_count: 0,
+        astero_using_revised_max_yr_dt: false,
+        astero_revised_max_yr_dt: bundle.controls.max_years_for_timestep,
+        astero_max_dt_next: 1.0e99,
         eval_error: None,
     };
     let mut model =
@@ -761,6 +872,42 @@ fn run_track(
     )?;
     if let Some(err) = extras.eval_error.take() {
         return Err(err);
+    }
+    let results_dir = output_root.join(&ctrl.astero_results_directory);
+    if let Some(ref best_model) = extras.best_model {
+        write_best_model_artifacts(&results_dir, ctrl, best_model, case_dir)?;
+    }
+    if ctrl.save_info_for_last_model {
+        let vals = extras.eval_constraint_values(&model)?;
+        let last_sample = eval_model_astero_sample_with_output_root(
+            &model,
+            ctrl,
+            &vals,
+            params,
+            sample_number,
+            case_dir,
+            output_root,
+        )?;
+        let fname = ctrl.last_model_save_info_filename.trim();
+        let fname = if fname.is_empty() {
+            "last_model_info.data"
+        } else {
+            fname
+        };
+        fs::create_dir_all(&results_dir).map_err(|e| {
+            StarError::IoError(format!(
+                "failed creating astero_results_directory '{}': {e}",
+                results_dir.display()
+            ))
+        })?;
+        let report_text = format_show_best_report(ctrl, &last_sample);
+        let p = results_dir.join(fname);
+        fs::write(&p, report_text).map_err(|e| {
+            StarError::IoError(format!(
+                "failed writing last_model_save_info_filename '{}': {e}",
+                p.display()
+            ))
+        })?;
     }
     let best = extras
         .best_sample
@@ -871,17 +1018,61 @@ pub fn run_star_astero_with_case_hooks(
     };
     let want_logs = logs_opts.output_root.is_some()
         || logs_opts.explicit_history_file.is_some();
+    active_ctrl.write_controls_if_requested(results_base)?;
+    let st = active_ctrl.search_type.trim().to_ascii_lowercase();
     let mut best_chi2_seen = f64::INFINITY;
     let mut best_termination: Option<String> = None;
     let (mut samples, mut total_steps, mut tracks_evaluated) =
         (Vec::new(), 0usize, 0usize);
+    let mut scan_grid_skip = 0usize;
+    let mut scan_grid_total: Option<usize> = None;
+    let mut initial_simplex: Option<(Vec<Vec<f64>>, Vec<f64>)> = None;
+    if st == "scan_grid" {
+        let grid_len = build_scan_grid_params(active_ctrl).len();
+        scan_grid_total = Some(grid_len);
+        if active_ctrl.restart_scan_grid_from_file
+            && max_steps_per_stage.is_none()
+        {
+            let prior = read_samples_from_file(
+                &out_dir.join(&active_ctrl.scan_grid_output_filename),
+                active_ctrl,
+            )?;
+            for s in &prior {
+                if s.chi2.is_finite() && s.chi2 < best_chi2_seen {
+                    best_chi2_seen = s.chi2;
+                }
+            }
+            scan_grid_skip = prior.len();
+            samples = prior;
+        }
+    } else if st == "simplex"
+        && active_ctrl.restart_simplex_from_file
+        && max_steps_per_stage.is_none()
+    {
+        let prior = read_samples_from_file(
+            &out_dir.join(&active_ctrl.simplex_output_filename),
+            active_ctrl,
+        )?;
+        let (kept, verts, f_vals) =
+            extract_simplex_restart(active_ctrl, &prior)?;
+        for s in &kept {
+            if s.chi2.is_finite() && s.chi2 < best_chi2_seen {
+                best_chi2_seen = s.chi2;
+            }
+        }
+        samples = kept;
+        initial_simplex = Some((verts, f_vals));
+    }
+
+    let is_powell = st == "newuoa" || st == "bobyqa";
     let (mut last_termination, mut last_model) = (String::new(), None);
     let mut eval_param_set = |p: AsteroParamSet| -> Result<f64, StarError> {
         if tracks_evaluated >= track_cap {
             return Ok(FAILED_TRACK_CHI2);
         }
         tracks_evaluated += 1;
-        let next_sample_num = samples.len() + 1;
+        let next_sample_num =
+            samples.iter().map(|s| s.sample_number).max().unwrap_or(0) + 1;
         let sample_hist_path =
             out_dir.join(format!("sample_{tracks_evaluated:04}_history.data"));
         let trial_logs = if want_logs {
@@ -901,6 +1092,7 @@ pub fn run_star_astero_with_case_hooks(
             next_sample_num,
             max_steps_per_stage,
             case_dir,
+            results_base,
             trial_logs,
             set_param
                 .as_mut()
@@ -959,10 +1151,18 @@ pub fn run_star_astero_with_case_hooks(
                 best_termination = Some(stage_term);
             }
             sample.sample_number = next_sample_num;
-            write_sample_file(&out_dir, &sample)?;
+            if active_ctrl.write_best_model_data_for_each_sample {
+                write_best_sample_file(&out_dir, active_ctrl, &sample)?;
+            }
             samples.push(sample);
             Ok(c2)
         } else {
+            if is_powell && max_steps_per_stage.is_none() && samples.is_empty()
+            {
+                return Err(StarError::InvalidInput(String::from(
+                    "failed to find chi^2 on 1st try; must give 'first' values that yield a chi^2 result",
+                )));
+            }
             // Upstream `eval1` / `simplex_f` (`astero_run_support.f90:241-246,749-753`):
             // unaccepted uncapped tracks return `1d99` without incrementing
             // `sample_number` or writing sample files. Bounded smoke runs still
@@ -977,7 +1177,6 @@ pub fn run_star_astero_with_case_hooks(
         }
     };
 
-    let st = active_ctrl.search_type.trim().to_ascii_lowercase();
     let results_fname = match st.as_str() {
         "from_file" => {
             for p in active_ctrl
@@ -992,6 +1191,7 @@ pub fn run_star_astero_with_case_hooks(
         "scan_grid" => {
             for p in build_scan_grid_params(active_ctrl)
                 .into_iter()
+                .skip(scan_grid_skip)
                 .take(track_cap)
             {
                 let _ = eval_param_set(p)?;
@@ -999,7 +1199,11 @@ pub fn run_star_astero_with_case_hooks(
             &active_ctrl.scan_grid_output_filename
         }
         "simplex" => {
-            run_simplex_driver(active_ctrl, &mut eval_param_set)?;
+            run_simplex_driver(
+                active_ctrl,
+                initial_simplex,
+                &mut eval_param_set,
+            )?;
             &active_ctrl.simplex_output_filename
         }
         "newuoa" | "bobyqa" => {
@@ -1024,7 +1228,12 @@ pub fn run_star_astero_with_case_hooks(
             )));
         }
     };
-    write_search_results_table(&out_dir.join(results_fname), &samples)?;
+    write_search_results_table(
+        &out_dir.join(results_fname),
+        active_ctrl,
+        &samples,
+        scan_grid_total,
+    )?;
     let best_sample_idx = samples
         .iter()
         .enumerate()
@@ -1078,6 +1287,28 @@ mod tests {
             model_freqs_corr: Default::default(),
             model_inertias: Default::default(),
             model_orders: Default::default(),
+            surf_coef1: 0.0,
+            surf_coef2: 0.0,
+            ratios_n: 0,
+            ratios_l0_first: 0,
+            ratios_l1_first: 0,
+            obs_r01: Vec::new(),
+            obs_r01_sigmas: Vec::new(),
+            model_r01: Vec::new(),
+            obs_r10: Vec::new(),
+            obs_r10_sigmas: Vec::new(),
+            model_r10: Vec::new(),
+            obs_r02: Vec::new(),
+            obs_r02_sigmas: Vec::new(),
+            model_r02: Vec::new(),
+            model_freqs_alt_up: Default::default(),
+            model_freqs_corr_alt_up: Default::default(),
+            model_inertias_alt_up: Default::default(),
+            model_orders_alt_up: Default::default(),
+            model_freqs_alt_down: Default::default(),
+            model_freqs_corr_alt_down: Default::default(),
+            model_inertias_alt_down: Default::default(),
+            model_orders_alt_down: Default::default(),
         }
     }
 

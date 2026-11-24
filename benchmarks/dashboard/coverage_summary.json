@@ -2,22 +2,28 @@
   "rust": {
     "tool": "cargo llvm-cov",
     "overall": {
-      "lines": 127870,
-      "covered": 97612,
-      "percent": 76.3
+      "lines": 143539,
+      "covered": 110497,
+      "percent": 77.0
     },
     "by_crate": [
       {
+        "crate": "flexmesa-adipls",
+        "lines": 6282,
+        "covered": 4993,
+        "percent": 79.5
+      },
+      {
         "crate": "flexmesa-astero",
-        "lines": 4222,
-        "covered": 1642,
-        "percent": 38.9
+        "lines": 4304,
+        "covered": 1664,
+        "percent": 38.7
       },
       {
         "crate": "flexmesa-atm",
         "lines": 1792,
-        "covered": 1569,
-        "percent": 87.6
+        "covered": 1573,
+        "percent": 87.8
       },
       {
         "crate": "flexmesa-autodiff",
@@ -33,9 +39,9 @@
       },
       {
         "crate": "flexmesa-binary",
-        "lines": 8334,
-        "covered": 5521,
-        "percent": 66.2
+        "lines": 8468,
+        "covered": 5696,
+        "percent": 67.3
       },
       {
         "crate": "flexmesa-chem",
@@ -45,9 +51,9 @@
       },
       {
         "crate": "flexmesa-colors",
-        "lines": 1308,
-        "covered": 903,
-        "percent": 69.0
+        "lines": 2279,
+        "covered": 1671,
+        "percent": 73.3
       },
       {
         "crate": "flexmesa-const",
@@ -74,6 +80,12 @@
         "percent": 82.6
       },
       {
+        "crate": "flexmesa-gyre",
+        "lines": 5939,
+        "covered": 5128,
+        "percent": 86.3
+      },
+      {
         "crate": "flexmesa-interp1d",
         "lines": 668,
         "covered": 565,
@@ -93,15 +105,15 @@
       },
       {
         "crate": "flexmesa-kap",
-        "lines": 4876,
-        "covered": 3735,
-        "percent": 76.6
+        "lines": 4998,
+        "covered": 3864,
+        "percent": 77.3
       },
       {
         "crate": "flexmesa-math",
         "lines": 1070,
-        "covered": 922,
-        "percent": 86.2
+        "covered": 926,
+        "percent": 86.5
       },
       {
         "crate": "flexmesa-mtx",
@@ -111,9 +123,9 @@
       },
       {
         "crate": "flexmesa-net",
-        "lines": 8032,
-        "covered": 7224,
-        "percent": 89.9
+        "lines": 8085,
+        "covered": 7284,
+        "percent": 90.1
       },
       {
         "crate": "flexmesa-neu",
@@ -141,8 +153,8 @@
       },
       {
         "crate": "flexmesa-star",
-        "lines": 60740,
-        "covered": 46656,
+        "lines": 62817,
+        "covered": 48239,
         "percent": 76.8
       },
       {
@@ -153,24 +165,24 @@
       },
       {
         "crate": "flexmesa-turb",
-        "lines": 1391,
-        "covered": 1210,
-        "percent": 87.0
+        "lines": 1400,
+        "covered": 1225,
+        "percent": 87.5
       },
       {
         "crate": "flexmesa-utils",
         "lines": 1347,
-        "covered": 947,
-        "percent": 70.3
+        "covered": 951,
+        "percent": 70.6
       }
     ]
   },
   "python": {
     "tool": "pytest --cov",
     "overall": {
-      "statements": 26872,
-      "covered": 23577,
-      "percent": 87.7
+      "statements": 27031,
+      "covered": 23723,
+      "percent": 87.8
     },
     "by_subpackage": [
       {
@@ -229,9 +241,9 @@
       },
       {
         "subpackage": "flexmesa.data",
-        "statements": 695,
-        "covered": 570,
-        "percent": 82.0
+        "statements": 698,
+        "covered": 573,
+        "percent": 82.1
       },
       {
         "subpackage": "flexmesa.eos",
@@ -313,15 +325,15 @@
       },
       {
         "subpackage": "flexmesa.star",
-        "statements": 1303,
-        "covered": 1261,
-        "percent": 96.8
+        "statements": 1305,
+        "covered": 1262,
+        "percent": 96.7
       },
       {
         "subpackage": "flexmesa.testing",
-        "statements": 4780,
-        "covered": 3867,
-        "percent": 80.9
+        "statements": 4934,
+        "covered": 4009,
+        "percent": 81.3
       },
       {
         "subpackage": "flexmesa.turb",

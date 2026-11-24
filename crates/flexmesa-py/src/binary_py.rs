@@ -581,9 +581,10 @@ pub fn binary_pick_next_timestep_rl(
     fr_dt_limit: f64,
     dt_softening_factor: f64,
     time_delta_coeff: f64,
-) -> (f64, i32) {
+) -> PyResult<(f64, i32)> {
     let ctrl = BinaryTimestepControls {
         donor_time_step_yr,
+        donor_dt_sec: donor_time_step_yr * flexmesa_const::SECYER,
         max_timestep_sec,
         time_delta_coeff,
         dt_softening_factor,
@@ -600,7 +601,7 @@ pub fn binary_pick_next_timestep_rl(
         fdm: -1.0,
         ..BinaryTimestepControls::default()
     };
-    binary_pick_next_timestep(&ctrl)
+    binary_pick_next_timestep(&ctrl).map_err(to_py_err)
 }
 
 /// Registers Wave 5.3 `binary` classes and functions on `flexmesa._rust`.

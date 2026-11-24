@@ -6,7 +6,8 @@
 
 use flexmesa_const::{MSUN, SECYER};
 use flexmesa_star::{
-    StarError, StarModel, apply_uniform_rotation, eval_total_energy_integrals,
+    StarError, StarModel, apply_uniform_rotation, center_avg_x_by_name,
+    eval_total_energy_integrals,
     set_hydro_vars, snapshot_step_history_old,
     update_rotation_distortion_factors,
 };
@@ -48,48 +49,50 @@ pub(crate) fn prep_and_settle_binary_star(
     Ok(())
 }
 
-fn center_h1_frac(star: &StarModel) -> f64 {
-    if star.nz == 0 || star.species == 0 {
-        return 0.7;
-    }
-    star.iso_names
-        .iter()
-        .position(|n| n.eq_ignore_ascii_case("h1"))
-        .map_or(0.7, |j| star.cell_xa(star.nz - 1)[j])
-}
-
 impl BinarySystem {
+    /// Sets the stars' `varcontrol_target` for the current evolutionary phase,
+    /// the last block of `binary_pick_next_timestep`
+    /// (`binary/private/binary_timestep.f90:287-317`). `center_h1` is
+    /// `s% center_h1`, the central average set by `do_report`
+    /// (`star/private/report.f90:259`, `center_avg_x`).
     pub(crate) fn update_stage_varcontrol(&mut self) {
-        let xh_d = center_h1_frac(&self.donor);
-        if self.mtransfer_rate.abs() * SECYER / MSUN > 1.0e-20 {
-            let vc = if xh_d > 1.0e-12 {
-                self.controls.varcontrol_case_a
+        let c = &self.controls;
+        let two_stars = self.point_mass_i == 0;
+        let donor_h1 = center_avg_x_by_name(&self.donor, "h1");
+        if self.mtransfer_rate.abs() / MSUN * SECYER > 1.0e-20 {
+            let vc = if donor_h1 > 1.0e-12 && c.varcontrol_case_a > 0.0 {
+                Some(c.varcontrol_case_a)
+            } else if donor_h1 < 1.0e-12 && c.varcontrol_case_b > 0.0 {
+                Some(c.varcontrol_case_b)
             } else {
-                self.controls.varcontrol_case_b
+                None
             };
-            if vc > 0.0 {
+            if let Some(vc) = vc {
                 self.donor.controls.varcontrol_target = vc;
-                if let BinaryCompanion::Star(ref mut s2) = self.companion {
-                    s2.controls.varcontrol_target = vc;
+                if two_stars {
+                    if let BinaryCompanion::Star(ref mut s2) = self.companion {
+                        s2.controls.varcontrol_target = vc;
+                    }
                 }
             }
         } else {
-            let vc_d = if xh_d > 1.0e-12 {
-                self.controls.varcontrol_ms
-            } else {
-                self.controls.varcontrol_post_ms
-            };
-            if vc_d > 0.0 {
-                self.donor.controls.varcontrol_target = vc_d;
+            let (vc_ms, vc_post_ms) = (c.varcontrol_ms, c.varcontrol_post_ms);
+            if donor_h1 > 1.0e-12 {
+                if vc_ms > 0.0 {
+                    self.donor.controls.varcontrol_target = vc_ms;
+                }
+            } else if vc_post_ms > 0.0 {
+                self.donor.controls.varcontrol_target = vc_post_ms;
             }
-            if let BinaryCompanion::Star(ref mut s2) = self.companion {
-                let vc_a = if center_h1_frac(s2) > 1.0e-12 {
-                    self.controls.varcontrol_ms
-                } else {
-                    self.controls.varcontrol_post_ms
-                };
-                if vc_a > 0.0 {
-                    s2.controls.varcontrol_target = vc_a;
+            if two_stars {
+                if let BinaryCompanion::Star(ref mut s2) = self.companion {
+                    if center_avg_x_by_name(s2, "h1") > 1.0e-12 {
+                        if vc_ms > 0.0 {
+                            s2.controls.varcontrol_target = vc_ms;
+                        }
+                    } else if vc_post_ms > 0.0 {
+                        s2.controls.varcontrol_target = vc_post_ms;
+                    }
                 }
             }
         }

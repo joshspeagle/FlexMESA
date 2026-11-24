@@ -121,6 +121,8 @@ pub struct BinarySystem {
     pub model_number: usize,
     /// Next maximum timestep (s).
     pub max_timestep_sec: f64,
+    /// Reason code (`B_TLIM_*`) of the binary timestep limit (`b% dt_why_reason`).
+    pub dt_why_reason: i32,
     /// Non-conservative mass transfer fraction lost from donor ($\alpha_{\mathrm{mt}}$).
     pub mass_transfer_alpha: f64,
     /// Fraction lost from vicinity of accretor ($\beta_{\mathrm{mt}}$).
@@ -375,6 +377,7 @@ impl BinarySystem {
             binary_age_yr: 0.0,
             model_number: 0,
             max_timestep_sec: 1.0e99,
+            dt_why_reason: 0,
             mass_transfer_alpha: controls.mass_transfer_alpha,
             mass_transfer_beta: controls.mass_transfer_beta,
             mass_transfer_delta: controls.mass_transfer_delta,
@@ -405,7 +408,6 @@ impl BinarySystem {
         };
         sys.apply_binary_job_controls_after(false)?;
         sys.refresh_tidal_deformation_hooks(false)?;
-        sys.update_stage_varcontrol();
         Ok(sys)
     }
 
@@ -781,7 +783,6 @@ impl BinarySystem {
         self.rl = rl;
         self.rl_relative_gap = gaps;
         self.refresh_tidal_deformation_hooks(false)?;
-        self.update_stage_varcontrol();
         Ok(())
     }
 
@@ -861,7 +862,6 @@ impl BinarySystem {
             donor_i: self.donor_i,
             ignore_rlof_flag: self.ignore_rlof_flag,
             eq_initial_bh_mass: self.eq_initial_bh_mass,
-            ignore_hard_limits_this_step: self.ignore_hard_limits_this_step,
             donor_irradiation_flux: self.donor.controls.irradiation_flux,
             donor_column_depth_for_irradiation: self
                 .donor
@@ -880,6 +880,7 @@ impl BinarySystem {
             binary_age_yr: self.binary_age_yr,
             model_number: self.model_number,
             max_timestep_sec: self.max_timestep_sec,
+            dt_why_reason: self.dt_why_reason,
             change_factor: self.change_factor,
             using_jdot_mb: self.using_jdot_mb,
             cumulative_j_ext: self.cumulative_j_ext,
@@ -924,7 +925,6 @@ impl BinarySystem {
         self.donor_i = snap.donor_i;
         self.ignore_rlof_flag = snap.ignore_rlof_flag;
         self.eq_initial_bh_mass = snap.eq_initial_bh_mass;
-        self.ignore_hard_limits_this_step = snap.ignore_hard_limits_this_step;
         self.donor.controls.irradiation_flux = snap.donor_irradiation_flux;
         self.donor.controls.column_depth_for_irradiation =
             snap.donor_column_depth_for_irradiation;
@@ -941,6 +941,7 @@ impl BinarySystem {
         self.binary_age_yr = snap.binary_age_yr;
         self.model_number = snap.model_number;
         self.max_timestep_sec = snap.max_timestep_sec;
+        self.dt_why_reason = snap.dt_why_reason;
         self.change_factor = snap.change_factor;
         self.using_jdot_mb = snap.using_jdot_mb;
         self.cumulative_j_ext = snap.cumulative_j_ext;

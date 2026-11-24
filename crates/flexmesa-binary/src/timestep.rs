@@ -6,6 +6,7 @@
 
 use flexmesa_const::{MSUN, RSUN, SECYER};
 use flexmesa_math::{exp10, log10};
+use flexmesa_star::StarError;
 
 /// Timestep limit reason codes matching `binary/public/binary_def.f90:39-46`.
 pub const B_TLIM_COMP: i32 = 1;
@@ -59,6 +60,9 @@ impl BinaryHardLimitViolation {
 pub struct BinaryTimestepControls {
     /// Completed donor step duration $\Delta t$ (yr) (`s%time_step`).
     pub donor_time_step_yr: f64,
+    /// Completed donor step duration $\Delta t$ (s) (`s%dt`), which replaces
+    /// a negative `max_timestep` (`binary_timestep.f90:121`).
+    pub donor_dt_sec: f64,
     /// Previous maximum binary timestep (s) (`b%max_timestep`).
     pub max_timestep_sec: f64,
     /// Global timestep scaling factor (`b%time_delta_coeff`, default `1.0`).
@@ -122,6 +126,7 @@ impl Default for BinaryTimestepControls {
     fn default() -> Self {
         Self {
             donor_time_step_yr: 10.0,
+            donor_dt_sec: 10.0 * SECYER,
             max_timestep_sec: 1.0e99,
             time_delta_coeff: 1.0,
             dt_softening_factor: 0.5,
@@ -188,11 +193,22 @@ fn step_changes(ctrl: &BinaryTimestepControls) -> (f64, f64, f64, f64, f64) {
 }
 
 /// Evaluates the next maximum binary timestep `max_timestep` (s) and limiting
-/// reason code (`B_TLIM_*`), matching `binary_pick_next_timestep` in
-/// `binary/private/binary_timestep.f90:99-322` and tested in
-/// `binary/test/src/test_binary.f90:25-80`.
-#[must_use]
-pub fn binary_pick_next_timestep(ctrl: &BinaryTimestepControls) -> (f64, i32) {
+/// reason code (`B_TLIM_*`) from the relative-change limits, matching the
+/// soft-limit part of `binary_pick_next_timestep` in
+/// `binary/private/binary_timestep.f90:99-283` and tested in
+/// `binary/test/src/test_binary.f90:25-80`. The hard limits, the
+/// `varcontrol_target` update and the reset of
+/// `ignore_hard_limits_this_step` are applied by the binary step loop
+/// (`BinarySystem`, `#451`), in upstream order around this function.
+///
+/// # Errors
+///
+/// Returns [`StarError::ConvergenceFailure`] when no limit equals the minimum
+/// (a NaN limit), where upstream stops with `mesa_error('Something wrong in
+/// binary timestep')` (`binary_timestep.f90:278-280`).
+pub fn binary_pick_next_timestep(
+    ctrl: &BinaryTimestepControls,
+) -> Result<(f64, i32), StarError> {
     let dt_yr = ctrl.donor_time_step_yr;
     let c_dt = ctrl.time_delta_coeff;
     let limit_dt =
@@ -200,7 +216,7 @@ pub fn binary_pick_next_timestep(ctrl: &BinaryTimestepControls) -> (f64, i32) {
 
     // `binary_timestep.f90:121`: only negative `max_timestep` is replaced by `s_donor% dt`.
     let prev_max = if ctrl.max_timestep_sec < 0.0 {
-        dt_yr * SECYER
+        ctrl.donor_dt_sec
     } else {
         ctrl.max_timestep_sec
     };
@@ -215,7 +231,7 @@ pub fn binary_pick_next_timestep(ctrl: &BinaryTimestepControls) -> (f64, i32) {
     let mut dte = 1.0e99_f64;
     let mut dtdm = 1.0e99_f64;
 
-    if ctrl.fj > 0.0 && ctrl.angular_momentum_j != 0.0 {
+    if ctrl.fj > 0.0 {
         let rj = (j_change / ctrl.angular_momentum_j).abs();
         dtj = limit_dt(rj, ctrl.fj);
     }
@@ -244,7 +260,7 @@ pub fn binary_pick_next_timestep(ctrl: &BinaryTimestepControls) -> (f64, i32) {
         dtr = ctrl.fr_dt_limit;
     }
 
-    if ctrl.fa > 0.0 && ctrl.separation != 0.0 {
+    if ctrl.fa > 0.0 {
         let ra = (sep_change / ctrl.separation).abs();
         dta = limit_dt(ra, ctrl.fa);
     }
@@ -256,14 +272,11 @@ pub fn binary_pick_next_timestep(ctrl: &BinaryTimestepControls) -> (f64, i32) {
 
     // `binary_timestep.f90:244-264` (`F3-8`): evaluates `fdm` on both donor
     // and accretor, including point-mass companions.
-    if ctrl.fdm > 0.0 && ctrl.m_old[0] > 0.0 {
+    if ctrl.fdm > 0.0 {
         let rdm_d = (ctrl.m[0] - ctrl.m_old[0]).abs() / ctrl.m_old[0];
-        let mut dtdm_cur = limit_dt(rdm_d, ctrl.fdm);
-        if ctrl.m_old[1] > 0.0 {
-            let rdm_a = (ctrl.m[1] - ctrl.m_old[1]).abs() / ctrl.m_old[1];
-            dtdm_cur = dtdm_cur.min(limit_dt(rdm_a, ctrl.fdm));
-        }
-        dtdm = dtdm_cur;
+        dtdm = limit_dt(rdm_d, ctrl.fdm);
+        let rdm_a = (ctrl.m[1] - ctrl.m_old[1]).abs() / ctrl.m_old[1];
+        dtdm = dtdm.min(limit_dt(rdm_a, ctrl.fdm));
     }
 
     let dt_set_raw = dtm.min(dtr).min(dtj).min(dta).min(dte).min(dtdm);
@@ -277,17 +290,20 @@ pub fn binary_pick_next_timestep(ctrl: &BinaryTimestepControls) -> (f64, i32) {
         B_TLIM_SEP
     } else if dt_set_raw == dte {
         B_TLIM_ECC
-    } else {
+    } else if dt_set_raw == dtdm {
         B_TLIM_DM
+    } else {
+        return Err(StarError::ConvergenceFailure(String::from(
+            "Something wrong in binary timestep (binary_timestep.f90:280)",
+        )));
     };
     let dt_set_yr = dt_set_raw.max(1.0e-7);
 
     let f_soft = ctrl.dt_softening_factor;
     let max_timestep_new = exp10(
-        f_soft * log10(prev_max.max(1.0e-99))
-            + (1.0 - f_soft) * log10(dt_set_yr * SECYER),
+        f_soft * log10(prev_max) + (1.0 - f_soft) * log10(dt_set_yr * SECYER),
     );
-    (max_timestep_new, reason)
+    Ok((max_timestep_new, reason))
 }
 
 /// Checks binary hard relative-change limits (`fj_hard`, `fm_hard`, `fr_hard`,
@@ -314,7 +330,7 @@ pub fn check_binary_hard_limits(
     let (env_change, rel_gap_change_d, j_change, sep_change, e_change) =
         step_changes(ctrl);
 
-    if ctrl.fj > 0.0 && fj_hard > 0.0 && ctrl.angular_momentum_j != 0.0 {
+    if ctrl.fj > 0.0 && fj_hard > 0.0 {
         let rj = (j_change / ctrl.angular_momentum_j).abs();
         if rj > fj_hard * c_dt {
             return Some(BinaryHardLimitViolation::FjHard);
@@ -345,7 +361,7 @@ pub fn check_binary_hard_limits(
             return Some(BinaryHardLimitViolation::FrHardAccretor);
         }
     }
-    if ctrl.fa > 0.0 && fa_hard > 0.0 && ctrl.separation != 0.0 {
+    if ctrl.fa > 0.0 && fa_hard > 0.0 {
         let ra = (sep_change / ctrl.separation).abs();
         if ra > fa_hard * c_dt {
             return Some(BinaryHardLimitViolation::FaHard);
@@ -357,39 +373,17 @@ pub fn check_binary_hard_limits(
             return Some(BinaryHardLimitViolation::FeHard);
         }
     }
-    if ctrl.fdm > 0.0 && fdm_hard > 0.0 && ctrl.m_old[0] > 0.0 {
+    if ctrl.fdm > 0.0 && fdm_hard > 0.0 {
         let rdm_d = (ctrl.m[0] - ctrl.m_old[0]).abs() / ctrl.m_old[0];
         if rdm_d > fdm_hard * c_dt {
             return Some(BinaryHardLimitViolation::FdmHardDonor);
         }
-        if ctrl.m_old[1] > 0.0 {
-            let rdm_a = (ctrl.m[1] - ctrl.m_old[1]).abs() / ctrl.m_old[1];
-            if rdm_a > fdm_hard * c_dt {
-                return Some(BinaryHardLimitViolation::FdmHardAccretor);
-            }
+        let rdm_a = (ctrl.m[1] - ctrl.m_old[1]).abs() / ctrl.m_old[1];
+        if rdm_a > fdm_hard * c_dt {
+            return Some(BinaryHardLimitViolation::FdmHardAccretor);
         }
     }
     None
-}
-
-/// Checks binary hard relative-change limits (`fm_hard`, `fr_hard`, `fj_hard`,
-/// `fa_hard`, `fe_hard`, `fdm_hard` in `binary_timestep.f90:166-264`), returning
-/// `true` if the trial step exceeded a configured hard limit and must retry.
-#[allow(clippy::too_many_arguments)]
-#[must_use]
-pub fn violates_binary_hard_limits(
-    ctrl: &BinaryTimestepControls,
-    fm_hard: f64,
-    fr_hard: f64,
-    fj_hard: f64,
-    fa_hard: f64,
-    fe_hard: f64,
-    fdm_hard: f64,
-) -> bool {
-    check_binary_hard_limits(
-        ctrl, fm_hard, fr_hard, fj_hard, fa_hard, fe_hard, fdm_hard,
-    )
-    .is_some()
 }
 
 #[cfg(test)]
@@ -413,7 +407,8 @@ mod tests {
             fdm: 0.005,
             ..BinaryTimestepControls::default()
         };
-        let (max_dt_sec, reason) = binary_pick_next_timestep(&ctrl);
+        let (max_dt_sec, reason) =
+            binary_pick_next_timestep(&ctrl).expect("finite limits");
         assert_eq!(reason, B_TLIM_DM);
         // Donor relative mass change is 0.0005, point-mass accretor is 0.02/1.40 = 1/70 > 0.005,
         // so accretor sets `dtdm = 100 / ((1/70) / 0.005) = 35 yr`.
@@ -455,5 +450,19 @@ mod tests {
                 BinaryHardLimitViolation::reduces_timestep_due_to_j
             )
         );
+    }
+
+    #[test]
+    fn test_nan_limit_is_an_explicit_error_like_upstream_mesa_error() {
+        // `binary_timestep.f90:278-280`: with a NaN step every limit is NaN,
+        // no limit equals the minimum and upstream stops in `mesa_error`.
+        let all_nan = BinaryTimestepControls {
+            donor_time_step_yr: f64::NAN,
+            ..BinaryTimestepControls::default()
+        };
+        assert!(matches!(
+            binary_pick_next_timestep(&all_nan),
+            Err(StarError::ConvergenceFailure(_))
+        ));
     }
 }

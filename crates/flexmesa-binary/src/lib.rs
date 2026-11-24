@@ -123,7 +123,6 @@ pub use timestep::{
     B_TLIM_COMP, B_TLIM_DM, B_TLIM_ECC, B_TLIM_ENV, B_TLIM_JORB, B_TLIM_ROCHE,
     B_TLIM_SEP, BinaryHardLimitViolation, BinaryTimestepControls,
     binary_pick_next_timestep, check_binary_hard_limits,
-    violates_binary_hard_limits,
 };
 
 #[cfg(test)]
@@ -152,13 +151,15 @@ mod tests {
             fdm: -1.0,
             ..BinaryTimestepControls::default()
         };
-        let (dt1_sec, reason1) = binary_pick_next_timestep(&ctrl);
+        let (dt1_sec, reason1) =
+            binary_pick_next_timestep(&ctrl).expect("finite limits");
         assert_eq!(reason1, B_TLIM_ROCHE);
         assert!((dt1_sec / SECYER - 5.000_000_000_000_004_4).abs() < 1.0e-13);
 
         ctrl.max_timestep_sec = 10.0;
         ctrl.time_delta_coeff = 0.5;
-        let (dt2_sec, reason2) = binary_pick_next_timestep(&ctrl);
+        let (dt2_sec, reason2) =
+            binary_pick_next_timestep(&ctrl).expect("finite limits");
         assert_eq!(reason2, B_TLIM_ROCHE);
         assert!((dt2_sec / SECYER - 2.500_000_000_000_006_7).abs() < 1.0e-13);
     }

@@ -34,7 +34,7 @@ pub fn znvar(
         a * 1.0e-2 * (1.0 + chem.x) + (1.0 - a) * 1.0e-3
     };
     let g_m_dtau_div_r2 = dc.g * mx * dtau / (r * r);
-    let prad = CRAD * flexmesa_math::powi_f90(t0, 4) / 3.0;
+    let prad = CRAD * flexmesa_math::pow4(t0) / 3.0;
     let p_init = g_m_dtau_div_r2 / kap0 + prad;
     let (mut v, _) = eop(model, chem, nzn, t0, p_init)?;
     let mut kap = kap0;
@@ -89,15 +89,16 @@ impl StahStepVars {
             self.lc_0 = 0.0;
             return;
         }
-        self.hp_0 = self.r_1 * self.r_1 / (dc.g * self.m_0)
-            * 0.5
-            * (self.p_0 * self.v_0 + self.p_1 * self.v_1);
-        let pom = dc.p4 * self.r_1 * self.r_1 * self.hp_0 * 2.0
-            / (self.dm_bar_0 * (self.v_0 + self.v_1));
+        self.hp_0 = (self.r_1 * self.r_1) / (dc.g * self.m_0)
+            * (self.p_0 * self.v_0 + self.p_1 * self.v_1)
+            / 2.0;
+        let pom = dc.p4 * (self.r_1 * self.r_1) * self.hp_0
+            / self.dm_bar_0
+            / (self.v_0 + self.v_1)
+            * 2.0;
         // `star/private/rsp_build.f90:941` calls `dlog` (#198).
         self.igr_0 = pom
-            * (0.5
-                * (self.qq_0 / self.cp_0 + self.qq_1 / self.cp_1)
+            * ((self.qq_0 / self.cp_0 + self.qq_1 / self.cp_1) / 2.0
                 * (self.p_1 - self.p_0)
                 - (flexmesa_math::intrinsic_log(self.t_1)
                     - flexmesa_math::intrinsic_log(self.t_0)));
@@ -106,7 +107,7 @@ impl StahStepVars {
             * ((self.e_0 + self.p_0 * self.v_0) / self.t_0
                 + (self.e_1 + self.p_1 * self.v_1) / self.t_1);
         let gg =
-            dc.alfas * dc.alfa * 0.5 * (self.cp_0 + self.cp_1) * self.igr_0;
+            dc.alfas * dc.alfa * (0.5 * (self.cp_0 + self.cp_1)) * self.igr_0;
         let gpf = gg / ff;
         if n <= dc.ibotom || self.igr_0 <= 0.0 {
             self.lc_0 = 0.0;
@@ -116,17 +117,16 @@ impl StahStepVars {
         self.w_0 = (dc.alfa / dc.cede
             * ff
             * gpf
-            * 0.5
             * (self.t_0 * self.p_0 * self.qq_0 / self.cp_0
-                + self.t_1 * self.p_1 * self.qq_1 / self.cp_1))
+                + self.t_1 * self.p_1 * self.qq_1 / self.cp_1)
+            * 0.5)
             .max(0.0)
             .sqrt();
         let pii = ff * self.w_0 * gpf;
         self.lc_0 = dc.p4
-            * self.r_1
-            * self.r_1
-            * 0.5
+            * (self.r_1 * self.r_1)
             * (self.t_0 / self.v_0 + self.t_1 / self.v_1)
+            * 0.5
             * pii
             * (dc.alfac / dc.alfas);
     }
@@ -145,9 +145,11 @@ impl StahStepVars {
         (self.e_0, self.cp_0, self.qq_0, self.op_0) =
             (out.e, out.cp, out.qq, out.op);
         self.cflux(dc, n);
-        let tt =
-            4.0 * dc.sig * dc.p4 * dc.p4 * flexmesa_math::powi_f90(self.r_1, 4)
-                / (3.0 * self.dm_bar_0 * l);
+        let tt = 4.0
+            * dc.sig
+            * (dc.p4 * dc.p4)
+            * flexmesa_math::powi_f90(self.r_1, 4)
+            / (3.0 * self.dm_bar_0 * l);
         self.t4_0 = flexmesa_math::powi_f90(self.t_0, 4);
         // `star/private/rsp_build.f90:639` calls `dlog` (#198).
         let dlnt4 = flexmesa_math::intrinsic_log(self.t4_0 / self.t4_1);
@@ -219,7 +221,7 @@ pub fn stah(
             )?;
             ps
         } else if model.controls.rsp.use_prad_for_psurf {
-            CRAD * flexmesa_math::powi_f90(s.t_0, 4) / 3.0
+            CRAD * flexmesa_math::pow4(s.t_0) / 3.0
         } else {
             0.0
         };
@@ -468,7 +470,7 @@ fn solve_stah_zone_t(
                 if let Ok((lnt, _)) = root {
                     s.t_0 = flexmesa_math::exp(lnt);
                     let _ = s.eval_t_residual(model, chem, dc, nzn, n, l)?;
-                    s.t4_0 = flexmesa_math::powi_f90(s.t_0, 4);
+                    s.t4_0 = flexmesa_math::pow4(s.t_0);
                     got_est = true;
                 }
             }
@@ -500,7 +502,7 @@ fn solve_stah_zone_t(
         s.t4_0 = flexmesa_math::powi_f90(s.t_0, 4);
     }
 
-    let tt = 4.0 * dc.sig * dc.p4 * dc.p4 * flexmesa_math::powi_f90(s.r_1, 4)
+    let tt = 4.0 * dc.sig * (dc.p4 * dc.p4) * flexmesa_math::powi_f90(s.r_1, 4)
         / (3.0 * s.dm_bar_0 * l);
     s.lr_0 = tt * (s.t4_0 / s.op_0 - s.t4_1 / s.op_1)
         / (1.0

@@ -37,7 +37,7 @@ pub fn relax_env(
     let mstar = grid.m[nzn];
     let psurf = if model.controls.rsp.use_prad_for_psurf {
         let t_0 = flexmesa_math::pow(0.5_f64, 0.25) * te;
-        CRAD * flexmesa_math::powi_f90(t_0, 4) / 3.0
+        CRAD * flexmesa_math::pow4(t_0) / 3.0
     } else {
         0.0
     };
@@ -304,7 +304,7 @@ pub fn relax_env(
                             * (w_out * bw / mc.k[i + 1] - t2 * bk / bw)
                             + dlkp * mc.dk_dt_00[i + 1],
                         dlk * mc.dk_dv_00[i] * mc.dvrm[i],
-                        4.0 * lr_val / grid.r[i]
+                        4.0 * t1 * t2 / grid.r[i]
                             + dlk * mc.dk_dv_00[i] * mc.dvr[i]
                             + dlkp * mc.dk_dv_00[i + 1] * mc.dvrm[i + 1],
                         dlkp * mc.dk_dv_00[i + 1] * mc.dvr[i + 1],
@@ -444,9 +444,9 @@ pub fn relax_env(
                 let iw = 3 * (i - 1);
                 let ic = iw + 1;
                 let ir = iw + 2;
-                grid.t[i] += 0.5 * ezh * rhs[iw];
-                grid.r[i] += 0.5 * ezh * rhs[ir];
-                grid.et[i] += 0.5 * ezh * rhs[ic];
+                grid.t[i] += ezh * rhs[iw] / 2.0;
+                grid.r[i] += ezh * rhs[ir] / 2.0;
+                grid.et[i] += ezh * rhs[ic] / 2.0;
                 if grid.et[i] <= 0.0 {
                     grid.et[i] = efl02 * 1.0e-4 * rng.next_f64();
                 }

@@ -28,15 +28,18 @@ use flexmesa_star::rsp_eos_kap::{
     compute_standard_metals_xa, eval1_mesa_eos_and_kap, RspChemCache,
 };
 use flexmesa_star::rsp_grid::{
-    finish_after_build_model, set_star_vars_rsp, RspEnvGrid,
+    cleanup_for_lina, finish_after_build_model, set_star_vars_rsp, RspEnvGrid,
 };
 use flexmesa_star::rsp_hyd_turb::calc_chi;
 use flexmesa_star::rsp_hyd_work::RspHydWork;
+use flexmesa_star::rsp_lina::do_lina;
+use flexmesa_star::rsp_relax_env::relax_env;
+use flexmesa_star::rsp_stah::{stah, znvar};
 use flexmesa_star::rsp_turb_partials::RspTurbPartials;
 use flexmesa_star::rsp_zone_micro::{LcFilterMode, RspZoneMicro};
 use flexmesa_star::{
-    do_rsp_build_model, read_mod_str, rsp_setup_model, star_evolve_step,
-    StarControls, StarJobControls, StarModel,
+    do_rsp_build_model, get_or_load_net, read_mod_str, rsp_setup_model,
+    star_evolve_step, StarControls, StarJobControls, StarModel,
 };
 
 fn golden_rsp_dir() -> PathBuf {
@@ -1024,4 +1027,280 @@ fn test_rsp_write_map_emits_pm3d_map_and_rotates_history_file() {
     let map_text = fs::read_to_string(out_dir.join("LOGS/map.data"))
         .expect("read LOGS/map.data");
     verify_map_data_output(&map_text);
+}
+
+#[allow(clippy::unreadable_literal)]
+fn setup_stah_case_model(
+    mut ctrl: StarControls,
+) -> (StarModel, RspChemCache, RspDerivedConsts) {
+    ctrl.rsp_flag = true;
+    ctrl.v_flag = true;
+    let job = base_job(true);
+    let net = get_or_load_net("o18_and_ne22.net", None).expect("load net");
+    let nzn = ctrl.rsp.nz;
+    let mut model = StarModel::new(nzn, net.chem_id.clone(), job, ctrl);
+    model.eos_config = EosConfig::default();
+    model.kap_config = a09_kap(model.controls.rsp_z);
+    model.controls.tau_factor =
+        if model.controls.rsp.use_atm_grey_with_kap_for_psurf {
+            model.controls.rsp.tau_surf_for_atm_grey_with_kap / model.tau_base
+        } else {
+            model.controls.rsp.surface_tau / model.tau_base
+        };
+    let dc = RspDerivedConsts::from_config(&model.controls.rsp, nzn);
+    let chem = RspChemCache::from_controls(
+        &model.chem_id,
+        &model.job,
+        &model.controls,
+    )
+    .expect("chem cache");
+    (model, chem, dc)
+}
+
+#[allow(clippy::unreadable_literal)]
+struct StahOracle {
+    name: &'static str,
+    dm_n_bits: u64,
+    h_bits: u64,
+    t1_bits: u64,
+    r1_bits: u64,
+    xm_bits: u64,
+    t100_bits: u64,
+    r100_bits: u64,
+    vol100_bits: u64,
+    rc_bits: u64,
+    mc_bits: u64,
+}
+
+fn assert_stah_oracle(ctrl: StarControls, want: &StahOracle) {
+    let (mut model, chem, dc) = setup_stah_case_model(ctrl);
+    let nzn_init = model.nz;
+    let mx = model.controls.rsp_mass * dc.sunm;
+    let l_surf = model.controls.rsp_l * dc.sunl;
+    let te = model.controls.rsp_teff;
+    let th0 = model.controls.rsp.t_anchor;
+    let tin = model.controls.rsp.t_inner;
+    let nzt = model.controls.rsp.nz_outer;
+
+    let (h_init, dmn_init) =
+        znvar(&mut model, &chem, &dc, nzn_init, l_surf, te, mx).expect("znvar");
+    assert!(h_init > 1.0 && dmn_init > 0.0, "{} znvar finite", want.name);
+
+    let grid = stah(
+        &mut model, &chem, &dc, mx, l_surf, te, th0, tin, nzt, nzn_init,
+    )
+    .expect("stah");
+    let n = grid.nzn;
+
+    assert_eq!(
+        grid.dm[n - 1].to_bits(),
+        want.dm_n_bits,
+        "{} STAH dmN bits",
+        want.name
+    );
+    assert_eq!(
+        grid.t[1].to_bits(),
+        want.t1_bits,
+        "{} STAH T(1) bits",
+        want.name
+    );
+    assert_eq!(
+        grid.r[1].to_bits(),
+        want.r1_bits,
+        "{} STAH R(1) bits",
+        want.name
+    );
+    assert_eq!(
+        model.xmstar.to_bits(),
+        want.xm_bits,
+        "{} STAH xmstar bits",
+        want.name
+    );
+    assert_eq!(
+        grid.t[100].to_bits(),
+        want.t100_bits,
+        "{} STAH T(100) bits",
+        want.name
+    );
+    assert_eq!(
+        grid.r[100].to_bits(),
+        want.r100_bits,
+        "{} STAH R(100) bits",
+        want.name
+    );
+    assert_eq!(
+        grid.vol[100].to_bits(),
+        want.vol100_bits,
+        "{} STAH Vol(100) bits",
+        want.name
+    );
+    assert_eq!(
+        model.r_center.to_bits(),
+        want.rc_bits,
+        "{} STAH R_center bits",
+        want.name
+    );
+    assert_eq!(
+        model.m_center.to_bits(),
+        want.mc_bits,
+        "{} STAH M_center bits",
+        want.name
+    );
+    let h_ratio = grid.dm[1] / grid.dm[2];
+    let h_want = f64::from_bits(want.h_bits);
+    let h_rel = (h_ratio - h_want).abs() / h_want;
+    assert!(
+        h_rel <= 1.0e-15,
+        "{} STAH inner H ratio mismatch: got={h_ratio:.17e} want={h_want:.17e}",
+        want.name
+    );
+}
+
+#[test]
+#[allow(clippy::unreadable_literal)]
+fn test_rsp_stah_0ulp_parity_t2c_and_delta_scuti_mesa_26_4_1() {
+    // MESA 26.4.1 `star/private/rsp_build.f90` STAH outputs for
+    // `star/rsp_Type_II_Cepheid` (`nzn=200`, `nzt=60`) and `star/rsp_Delta_Scuti`.
+    let t2c_want = StahOracle {
+        name: "rsp_Type_II_Cepheid",
+        dm_n_bits: 0x4501_3B8A_6E73_3802,
+        h_bits: 0x3FF1_9795_26A1_7248,
+        t1_bits: 0x413E_847F_FDD5_6B03,
+        r1_bits: 0x4229_4AF1_4E22_87FE,
+        xm_bits: 0x466A_980B_321C_A800,
+        t100_bits: 0x40E2_7DB0_4BBA_9E15,
+        r100_bits: 0x4261_6AF0_039F_A3C4,
+        vol100_bits: 0x4197_1D17_6BA2_B3EE,
+        rc_bits: 0x4227_792B_ECD7_56DE,
+        mc_bits: 0x46CA_8B5E_FF4D_0707,
+    };
+    let ds_want = StahOracle {
+        name: "rsp_Delta_Scuti",
+        dm_n_bits: 0x44BA_E048_08E1_A8EA,
+        h_bits: 0x3FF2_FC2D_7330_D504,
+        t1_bits: 0x413E_8480_0286_85F9,
+        r1_bits: 0x423C_7F08_31F0_DC6B,
+        xm_bits: 0x4693_F132_6732_8B20,
+        t100_bits: 0x40D0_A476_6530_68E4,
+        r100_bits: 0x424E_F58F_978D_AB70,
+        vol100_bits: 0x418B_41BF_3E85_8E15,
+        rc_bits: 0x423B_7C61_C779_2E3A,
+        mc_bits: 0x46E7_E2C7_207C_DA3E,
+    };
+
+    assert_stah_oracle(t2c_controls(), &t2c_want);
+    assert_stah_oracle(delta_scuti_controls(), &ds_want);
+}
+
+#[allow(clippy::unreadable_literal)]
+struct RelaxLinaOracle {
+    name: &'static str,
+    dm_n_bits: u64,
+    t1_bits: u64,
+    r1_bits: u64,
+    vol1_bits: u64,
+    lina_pers_bits: [u64; 3],
+    max_state_rel: f64,
+    max_period_rel: f64,
+}
+
+fn assert_relax_lina_oracle(ctrl: StarControls, want: &RelaxLinaOracle) {
+    let (mut model, chem, dc_init) = setup_stah_case_model(ctrl);
+    let nzn_init = model.nz;
+    let mut rng = model.aux.rsp.rng.clone();
+    let mx = model.controls.rsp_mass * dc_init.sunm;
+    let l_surf = model.controls.rsp_l * dc_init.sunl;
+    let te = model.controls.rsp_teff;
+    let th0 = model.controls.rsp.t_anchor;
+    let tin = model.controls.rsp.t_inner;
+    let nzt = model.controls.rsp.nz_outer;
+
+    let mut grid = stah(
+        &mut model, &chem, &dc_init, mx, l_surf, te, th0, tin, nzt, nzn_init,
+    )
+    .expect("stah");
+    let nzn = grid.nzn;
+    let dc = RspDerivedConsts::from_config(&model.controls.rsp, nzn);
+    relax_env(
+        &mut model, &chem, &dc, &mut rng, &mut grid, l_surf, th0, te, nzt,
+    )
+    .expect("relax_env");
+
+    let checks = [
+        (
+            "dm(NZN-1)",
+            grid.dm[nzn - 1],
+            f64::from_bits(want.dm_n_bits),
+        ),
+        ("T(1)", grid.t[1], f64::from_bits(want.t1_bits)),
+        ("R(1)", grid.r[1], f64::from_bits(want.r1_bits)),
+        ("Vol(1)", grid.vol[1], f64::from_bits(want.vol1_bits)),
+    ];
+    for (label, got, ref_val) in checks {
+        let rel = (got - ref_val).abs() / ref_val.abs();
+        assert!(
+            rel <= want.max_state_rel,
+            "{} POST_RELAX {label} drift: got={got:.17e} (0x{:016X}) \
+             want={ref_val:.17e} (0x{:016X}) rel={rel:.3e}",
+            want.name,
+            got.to_bits(),
+            ref_val.to_bits(),
+        );
+    }
+
+    cleanup_for_lina(&mut model, &dc, &mut grid).expect("cleanup_for_lina");
+    let nmodes = model.controls.rsp.nmodes;
+    let lina = do_lina(&mut model, &chem, &dc, &grid, l_surf, nmodes, None)
+        .expect("do_lina");
+
+    for (mode, &want_bits) in want.lina_pers_bits.iter().enumerate() {
+        let got = lina.periods_sec[mode];
+        let ref_val = f64::from_bits(want_bits);
+        let rel = (got - ref_val).abs() / ref_val.abs();
+        assert!(
+            rel <= want.max_period_rel,
+            "{} LINA mode {mode} period drift: got={got:.17e} (0x{:016X}) \
+             want={ref_val:.17e} (0x{:016X}) rel={rel:.3e}",
+            want.name,
+            got.to_bits(),
+            want_bits,
+        );
+    }
+}
+
+#[test]
+#[allow(clippy::unreadable_literal)]
+fn test_rsp_relax_env_and_lina_periods_parity_t2c_and_delta_scuti_mesa_26_4_1()
+{
+    let t2c_want = RelaxLinaOracle {
+        name: "rsp_Type_II_Cepheid",
+        dm_n_bits: 0x4501_617A_1276_8D1D,
+        t1_bits: 0x413E_864D_5CE5_A8C0,
+        r1_bits: 0x4229_4BA9_BBC2_5438,
+        vol1_bits: 0x4056_1F4C_7E03_EB64,
+        lina_pers_bits: [
+            0x4101_5939_2E27_DD7B,
+            0x40F8_38FB_4BC3_8BFB,
+            0x40F1_8AE5_98EA_6C34,
+        ],
+        max_state_rel: 1.0e-10,
+        max_period_rel: 5.0e-8,
+    };
+    let ds_want = RelaxLinaOracle {
+        name: "rsp_Delta_Scuti",
+        dm_n_bits: 0x44BA_6224_6AD3_0846,
+        t1_bits: 0x413E_8A4C_9B74_CACF,
+        r1_bits: 0x423C_7D73_3F5A_8EC2,
+        vol1_bits: 0x4048_CB52_E783_6BEE,
+        lina_pers_bits: [
+            0x40CC_D97E_52A4_B40E,
+            0x40C5_5BEB_AA1D_814F,
+            0x40C0_9E8B_3254_6536,
+        ],
+        max_state_rel: 1.0e-9,
+        max_period_rel: 5.0e-8,
+    };
+
+    assert_relax_lina_oracle(t2c_controls(), &t2c_want);
+    assert_relax_lina_oracle(delta_scuti_controls(), &ds_want);
 }

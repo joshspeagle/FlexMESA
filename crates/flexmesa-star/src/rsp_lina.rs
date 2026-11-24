@@ -267,7 +267,7 @@ pub fn do_lina(
         let ir = (4 * i - 2) as isize;
         let ie = (4 * i - 1) as isize;
         let ic = (4 * i) as isize;
-        let inv_cv = 1.0 / mc.de_dt_00[i];
+        let cv = mc.de_dt_00[i];
 
         set_l(&mut lll, ig, ig + 1, 1.0);
         set_l(&mut lll, ir, ir - 4, mu10);
@@ -281,18 +281,18 @@ pub fn do_lina(
         set_l(&mut lll, ir, ir + 2, mz00);
         set_l(&mut lll, ir, ir + 6, mz01);
 
-        set_l(&mut lll, ie, ie - 5, eu10 * inv_cv);
-        set_l(&mut lll, ie, ie - 1, eu00 * inv_cv);
-        set_l(&mut lll, ie, ie - 10, ex20 * inv_cv);
-        set_l(&mut lll, ie, ie - 6, ex10 * inv_cv);
-        set_l(&mut lll, ie, ie - 2, ex00 * inv_cv);
-        set_l(&mut lll, ie, ie + 2, ex01 * inv_cv);
-        set_l(&mut lll, ie, ie - 4, ey10 * inv_cv);
-        set_l(&mut lll, ie, ie, ey00 * inv_cv);
-        set_l(&mut lll, ie, ie + 4, ey01 * inv_cv);
-        set_l(&mut lll, ie, ie - 3, ez10 * inv_cv);
-        set_l(&mut lll, ie, ie + 1, ez00 * inv_cv);
-        set_l(&mut lll, ie, ie + 5, ez01 * inv_cv);
+        set_l(&mut lll, ie, ie - 5, eu10 / cv);
+        set_l(&mut lll, ie, ie - 1, eu00 / cv);
+        set_l(&mut lll, ie, ie - 10, ex20 / cv);
+        set_l(&mut lll, ie, ie - 6, ex10 / cv);
+        set_l(&mut lll, ie, ie - 2, ex00 / cv);
+        set_l(&mut lll, ie, ie + 2, ex01 / cv);
+        set_l(&mut lll, ie, ie - 4, ey10 / cv);
+        set_l(&mut lll, ie, ie, ey00 / cv);
+        set_l(&mut lll, ie, ie + 4, ey01 / cv);
+        set_l(&mut lll, ie, ie - 3, ez10 / cv);
+        set_l(&mut lll, ie, ie + 1, ez00 / cv);
+        set_l(&mut lll, ie, ie + 5, ez01 / cv);
 
         set_l(&mut lll, ic, ic - 11, cx20);
         set_l(&mut lll, ic, ic - 7, cx10);

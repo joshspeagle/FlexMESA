@@ -363,7 +363,7 @@ fn test_other_build_initial_model_precedes_create_initial_and_changes_net() {
 #[test]
 fn test_cepheid_stale_required_termination_contract() {
     let req = [String::from("star_species_mass_min_limit")];
-    // Upstream `run_star_extras.f90:125-128` sets `extras_check_model = terminate`
+    // Upstream `star/test_suite/5M_cepheid_blue_loop/src/run_star_extras.f90:125-128` sets `extras_check_model = terminate`
     // with `s% termination_code == 0`, so `termination_code_string_okay` returns
     // `true` for `""` (`run_star_support.f90:831`) and `false` for explicit
     // `"extras_check_model"`.

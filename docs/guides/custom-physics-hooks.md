@@ -96,7 +96,7 @@ for scale_cag in (0.5, 1.0, 2.0):
 
 When you need finer control than `model.evolve_step` (equivalent to Fortran MESA's `other_mlt`, `other_D_mix`, or `other_energy` hooks), `StarModel` exposes each sub-stage of the evolutionary step directly:
 
-1. `model.save_old_values()` and `model.save_start_values()`: Snapshot the current state for timestep control and backward-Euler time derivatives.
+1. `model.save_old_values()`, `model.save_start_values()` and `model.record_start_of_step_energy_integrals()`: Snapshot the current state for timestep control and backward-Euler time derivatives, and record the start-of-step energy totals the energy equation reads (`star/private/evolve.f90:427-436`).
 2. `model.update_mixing(dt, overshoot_f=..., overshoot_f0=..., scheme="exponential")`: Recompute convective boundaries and overshooting diffusivities.
 3. `model.do_conv_premix(max_iters=10)` and `model.add_predictive_mixing(...)`: Apply standalone convective premixing (`CPM`) or predictive mixing helpers at core boundaries *(partial/unverified against MESA `26.4.1`; `#155`)*.
 4. `model.step_struct_burn_mix(dt, op_split_burn=False, use_bcyclic=True, overshoot_f=0.014, overshoot_f0=0.004)`: Execute a single coupled Henyey structure + burning + mixing solve for a prescribed timestep $\Delta t$ (`s`) and return the `HenyeySolverReport`.
@@ -110,6 +110,7 @@ model = star.StarModel.from_zams(initial_mass=1.0, initial_z=0.02)
 # Save start-of-step state and apply custom exponential core overshooting (f = 0.016)
 model.save_old_values()
 model.save_start_values()
+model.record_start_of_step_energy_integrals()
 n_conv_bdy = model.update_mixing(
     dt=1.0e5 * 3.15576e7,
     overshoot_f=0.016,

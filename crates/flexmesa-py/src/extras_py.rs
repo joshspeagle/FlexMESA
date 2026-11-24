@@ -609,6 +609,64 @@ fn parse_atm_t_tau_opacity(raw: &str) -> PyResult<AtmTTauOpacity> {
     }
 }
 
+/// The `extras_controls` state: the case directory, the controls and the
+/// `x_*` user controls. Upstream calls `extras_controls` before the model is
+/// loaded (`star/job/run_star_support.f90:430-459`).
+fn build_pre_load_snapshot<'py>(
+    py: Python<'py>,
+    model: &StarModel,
+    case_dir: &str,
+) -> PyResult<Bound<'py, PyDict>> {
+    let d = PyDict::new(py);
+    d.set_item("case_dir", case_dir)?;
+    set_star_control_scalars(&d, model)?;
+    set_user_controls(&d, &model.controls)?;
+    Ok(d)
+}
+
+/// Read-only state handed to `extras_controls`. A key that is not set
+/// raises `KeyError` naming the upstream order: the model is not loaded yet
+/// when `extras_controls` runs (DECISIONS #43).
+#[pyclass(module = "flexmesa._rust")]
+pub struct PreLoadStarState {
+    d: Py<PyDict>,
+}
+
+#[pymethods]
+impl PreLoadStarState {
+    fn __getitem__(&self, py: Python<'_>, key: &str) -> PyResult<Py<PyAny>> {
+        match self.d.bind(py).get_item(key)? {
+            Some(v) => Ok(v.unbind()),
+            None => Err(pyo3::exceptions::PyKeyError::new_err(format!(
+                "'{key}' is not set when extras_controls runs: upstream calls \
+                 extras_controls before the model is loaded \
+                 (star/job/run_star_support.f90:430-459)"
+            ))),
+        }
+    }
+
+    fn __contains__(&self, py: Python<'_>, key: &str) -> PyResult<bool> {
+        self.d.bind(py).contains(key)
+    }
+
+    #[pyo3(signature = (key, default=None))]
+    fn get(
+        &self,
+        py: Python<'_>,
+        key: &str,
+        default: Option<Py<PyAny>>,
+    ) -> PyResult<Py<PyAny>> {
+        match self.d.bind(py).get_item(key)? {
+            Some(v) => Ok(v.unbind()),
+            None => Ok(default.unwrap_or_else(|| py.None())),
+        }
+    }
+
+    fn keys(&self, py: Python<'_>) -> Py<PyList> {
+        self.d.bind(py).keys().unbind()
+    }
+}
+
 fn set_star_control_scalars(
     d: &Bound<'_, PyDict>,
     model: &StarModel,
@@ -1225,6 +1283,9 @@ fn apply_star_updates(
             "mass_change" => model.controls.mass_change = val.extract::<f64>()?,
             "mixing_length_alpha" => {
                 model.controls.mixing_length_alpha = val.extract::<f64>()?;
+            }
+            "tau_factor" => {
+                model.controls.tau_factor = val.extract::<f64>()?;
             }
             "max_timestep" => {
                 model.controls.ts_stop.max_timestep = val.extract::<f64>()?;
@@ -2077,7 +2138,15 @@ impl StarExtras for PyStarExtrasAdapter {
         }
         let case_dir = self.state.staged_dir_string();
         Python::attach(|py| {
-            let snap = build_star_snapshot(py, model, &case_dir, false)
+            // Upstream calls `extras_controls` before the model is loaded
+            // (`star/job/run_star_support.f90:430-459`), so the hook sees the
+            // controls only; reading model state raises an error (DECISIONS
+            // #43).
+            let snap = build_pre_load_snapshot(py, model, &case_dir)
+                .and_then(|snap| self.add_model_handle(py, snap, model))
+                .and_then(|snap| {
+                    Py::new(py, PreLoadStarState { d: snap.unbind() })
+                })
                 .map_err(|e| StarError::InvalidInput(format_py_err(py, &e)))?;
             let res = self
                 .py_obj
@@ -3372,6 +3441,7 @@ pub fn binary_extras_snapshot<'py>(
 /// Registers test-side extras context types and full `GYRE` mode helpers on `flexmesa._rust`.
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyRspBuildContext>()?;
+    m.add_class::<PreLoadStarState>()?;
     m.add_function(wrap_pyfunction!(star_solve_gyre_mesa_modes_full, m)?)?;
     m.add_function(wrap_pyfunction!(star_extras_snapshot, m)?)?;
     m.add_function(wrap_pyfunction!(star_apply_extras_updates, m)?)?;

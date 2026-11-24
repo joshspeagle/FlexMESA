@@ -103,7 +103,7 @@ pub(crate) fn init_rsp_model_from_bundle(
         };
         apply_rsp_job_overrides(&mut model, job);
         model.save_old_values();
-        extras.extras_controls(&mut model)?;
+        crate::inlist_runner::install_star_aux_hooks(&*extras, &mut model);
         extras.extras_startup(&mut model, false)?;
         return Ok(InitRspOutcome::Model(Box::new(model)));
     }
@@ -129,7 +129,7 @@ pub(crate) fn init_rsp_model_from_bundle(
             prev.eos_config = bundle.eos_config;
             prev.kap_config = bundle.kap_config.clone();
             apply_rsp_job_overrides(&mut prev, job);
-            extras.extras_controls(&mut prev)?;
+            crate::inlist_runner::install_star_aux_hooks(&*extras, &mut prev);
             extras.extras_startup(&mut prev, false)?;
             return Ok(InitRspOutcome::Model(Box::new(prev)));
         }
@@ -168,7 +168,7 @@ pub(crate) fn init_rsp_model_from_bundle(
             apply_rsp_job_overrides(&mut m, job);
             rsp_setup_model(&mut m, false, false)?;
             m.save_old_values();
-            extras.extras_controls(&mut m)?;
+            crate::inlist_runner::install_star_aux_hooks(&*extras, &mut m);
             extras.extras_startup(&mut m, false)?;
             return Ok(InitRspOutcome::Model(Box::new(m)));
         }

@@ -311,9 +311,8 @@ issue = "#231"
 [[cases]]
 suite = "star"
 case = "make_env"
-status = "unported"
+status = "ported"
 digest = "674a09404e9cc19f0fbaf3f9f713d4891954c179e62e778c3edb428cf8298ff5"
-issue = "#231"
 
 [[cases]]
 suite = "star"

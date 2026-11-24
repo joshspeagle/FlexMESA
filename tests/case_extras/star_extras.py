@@ -163,10 +163,6 @@ _STAR_DISPATCH_RULES: tuple[tuple[re.Pattern[str], Callable[[], Any]], ...] = (
         WdAicStarExtras,
     ),
     (
-        re.compile(r"call\s+create_env\s*\(\s*id\s*,\s*s\s*,\s*ierr\s*\)"),
-        MakeEnvStarExtras,
-    ),
-    (
         re.compile(
             r"safe_log10\s*\(\s*s%\s*power_he_burn\s*\)\s*<\s*s%\s*x_ctrl\(3\)"
         ),
@@ -342,6 +338,9 @@ _STAR_DISPATCH_RULES: tuple[tuple[re.Pattern[str], Callable[[], Any]], ...] = (
 
 def match_star_extras(norm_star_text: str) -> Any:
     """Match non-RSP upstream star extras strictly by Fortran source content."""
+    make_env = star_mixing_init.match_make_env_extras(norm_star_text)
+    if make_env is not None:
+        return make_env
     for pattern, factory in _STAR_DISPATCH_RULES:
         if pattern.search(norm_star_text):
             return factory()

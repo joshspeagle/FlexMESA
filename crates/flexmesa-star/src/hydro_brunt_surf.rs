@@ -363,7 +363,10 @@ fn set_surf_diagnostic_ad(model: &mut StarModel) {
 /// values other than `'T_tau'`, `'table'` and `'irradiated_grey'` cannot be
 /// set (the `fixed_*` options are not ported, and the deprecated options stop
 /// in `get_legacy`, `star/private/atm_support.f90:891-998`).
-fn get_surf_pt(model: &mut StarModel, teff: f64) -> Result<(), StarError> {
+pub(crate) fn get_surf_pt(
+    model: &mut StarModel,
+    teff: f64,
+) -> Result<(), StarError> {
     // `L_surf = s% L(1)`, `R_surf = s% r(1)` and `s% m(1)`, unclamped
     // (`star/private/hydro_vars.f90:817-821, 962-966`).
     let l_surf = model.lum[0];
@@ -840,7 +843,7 @@ fn eval_irradiated_surf(model: &mut StarModel) -> Result<SurfPt, StarError> {
 /// opacity prescriptions (`get_T_tau`, `eos_proc`, and `kap_proc` in
 /// `star/private/atm_support.f90:218-392, 1176-1287`).
 #[allow(clippy::too_many_arguments)]
-fn eval_grey_t_tau_surf(
+pub(crate) fn eval_grey_t_tau_surf(
     model: &StarModel,
     tau_surf: f64,
     l_surf: f64,

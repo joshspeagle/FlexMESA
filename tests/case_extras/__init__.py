@@ -132,9 +132,9 @@ STOCK_EXTRAS_DIGESTS: frozenset[str] = frozenset(
 # - `#153` (mesh/surface-cut hooks): `MakeCoWdStarExtras`
 #   (`star_remove_surface_at_cell_k`), `PreMs1MToWdStarExtras`
 #   (`other_mesh_delta_coeff_factor`).
-# - `#154` (startup/relax/build-model hooks): `MakeEnvStarExtras`
-#   (`create_env`), `RelaxCompositionJEntropyStarExtras` (`initial_mass`
-#   mutation before model build).
+# - `#154` (startup/relax/build-model hooks):
+#   `RelaxCompositionJEntropyStarExtras` (`initial_mass` mutation before
+#   model build).
 # - `#155` (per-cell MLT/overshoot/rotation diffusivity hooks):
 #   `PreMs12MCoreCollapseStarExtras`, `PreMs20MCoreCollapseStarExtras`,
 #   `SplitBurnBigNetStarExtras`, `MakePreCcsn13bvnStarExtras` (per-cell
@@ -194,6 +194,7 @@ ADAPTER_SERVED_STAR_HANDLERS: frozenset[str] = frozenset(
         "HotCoolWindStarExtras",
         "HseRiemannStarExtras",
         "LowZStarExtras",
+        "MakeEnvStarExtras",
         "MakeONeWdStarExtras",
         "NeutronStarEnvStarExtras",
         "RCrBStarExtras",

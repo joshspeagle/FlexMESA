@@ -185,6 +185,7 @@ pub mod solver_norms;
 pub mod solver_support;
 pub mod star_ad;
 pub mod star_job_init;
+pub mod star_lib;
 pub mod star_utils;
 pub mod stella;
 pub mod step_trace;

@@ -351,18 +351,66 @@ pub fn init_or_update_model_from_bundle(
     }
 }
 
+/// Copies the hooks `extras_controls` installed on the pre-load star onto the
+/// loaded model (upstream installs them on the one `s`, so they persist).
+fn carry_extras_hooks(
+    src: &crate::hydro_state::HydroAuxState,
+    model: &mut StarModel,
+) {
+    let aux = &mut model.aux;
+    if src.other_overshooting_scheme.is_some() {
+        aux.other_overshooting_scheme
+            .clone_from(&src.other_overshooting_scheme);
+    }
+    if src.other_adjust_mlt_gradt_fraction.is_some() {
+        aux.other_adjust_mlt_gradt_fraction
+            .clone_from(&src.other_adjust_mlt_gradt_fraction);
+    }
+    if src.other_mesh_functions.is_some() {
+        aux.other_mesh_functions
+            .clone_from(&src.other_mesh_functions);
+    }
+    if src.other_mesh_delta_coeff_factor.is_some() {
+        aux.other_mesh_delta_coeff_factor
+            .clone_from(&src.other_mesh_delta_coeff_factor);
+    }
+}
+
 pub(crate) fn init_or_update_model_from_bundle_outcome(
     bundle: &InlistBundle,
     mut existing_model: Option<StarModel>,
     extras: &mut dyn StarExtras,
 ) -> Result<InitModelOutcome, StarError> {
     let _net_dir_guard = NetSearchDirGuard::new(&bundle.case_dir);
+    // `extras_controls` runs after `star_setup` reads the inlists and before
+    // `do_star_job_controls_before` and the model load
+    // (`star/job/run_star_support.f90:429-459`): the star has its controls
+    // but no model yet, so the hook sees a model with no cells. The controls
+    // and `&star_job` values it changes, and the hooks it installs, carry
+    // over to the loaded model.
+    let (bundle, hooks) = {
+        let mut shell = StarModel::new(
+            0,
+            Vec::new(),
+            bundle.job.clone(),
+            bundle.controls.clone(),
+        );
+        shell.eos_config = bundle.eos_config;
+        shell.kap_config = bundle.kap_config.clone();
+        extras.extras_controls(&mut shell)?;
+        let mut b = bundle.clone();
+        b.controls = shell.controls;
+        b.job = shell.job;
+        (b, shell.aux)
+    };
+    let bundle = &bundle;
     match crate::rsp_driver::init_rsp_model_from_bundle(
         bundle,
         &mut existing_model,
         extras,
     )? {
-        crate::rsp_driver::InitRspOutcome::Model(m) => {
+        crate::rsp_driver::InitRspOutcome::Model(mut m) => {
+            carry_extras_hooks(&hooks, &mut m);
             return Ok(InitModelOutcome::Model(m));
         }
         crate::rsp_driver::InitRspOutcome::Terminate(reason) => {
@@ -488,7 +536,8 @@ pub(crate) fn init_or_update_model_from_bundle_outcome(
     model.eos_config = bundle.eos_config;
     model.kap_config = bundle.kap_config.clone();
 
-    extras.extras_controls(&mut model)?;
+    crate::inlist_runner::install_star_aux_hooks(&*extras, &mut model);
+    carry_extras_hooks(&hooks, &mut model);
 
     // `do_star_job_controls_before` sets `s% tau_base` from the atmosphere
     // controls (`star/job/run_star_support.f90:1546`).

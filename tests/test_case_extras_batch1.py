@@ -530,9 +530,9 @@ def test_extended_convective_penetration_and_make_env() -> None:
     f_hi, _ = star_mixing_init.dq_f(r_fac + 1.0e-10, 1500, dq1)
     assert f_lo * f_hi <= 0.0
     menv = star_extras.MakeEnvStarExtras()
-    menv.extras_controls({"x_logical_ctrl": [False]})
-    with pytest.raises(NotImplementedError, match="#154"):
-        menv.extras_controls({"x_logical_ctrl": [True]})
+    assert menv.extras_controls({"x_logical_ctrl": [False]}) is None
+    # Only the recorded `make_env` source is served (`#453`).
+    assert star_mixing_init.match_make_env_extras("") is None
 
 
 def test_extended_convective_penetration_peclet_and_after_evolve() -> None:
@@ -1068,7 +1068,8 @@ def test_231_adapter_live_initial_model_and_physics_hooks(
     class _OphAdapterProbe:
         def extras_controls(self, state: dict[str, Any]) -> dict[str, Any]:
             saw_snapshot_shape["atm_t_tau_opacity"] = state["atm_t_tau_opacity"]
-            saw_snapshot_shape["xa_shape"] = tuple(state["xa"].shape)
+            # The model is not loaded when `extras_controls` runs, so `xa` is
+            # read in `extras_check_model` below (`#453`).
             return {
                 "use_other_mesh_delta_coeff_factor": True,
                 "use_other_mesh_functions": True,
@@ -1112,6 +1113,7 @@ def test_231_adapter_live_initial_model_and_physics_hooks(
 
         def extras_check_model(self, state: dict[str, Any]) -> str:
             saw_snapshot_shape["final_opacity_opt"] = state["atm_t_tau_opacity"]
+            saw_snapshot_shape["xa_shape"] = tuple(state["xa"].shape)
             return "keep_going"
 
     rep_oph = _rust.trace_star_case(

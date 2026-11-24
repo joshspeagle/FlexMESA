@@ -91,6 +91,8 @@ pub mod star_e2e_py;
 pub mod star_helpers_py;
 /// Tier A/B/C bindings for `star` (stellar structure, ZAMS/pre-MS, I/O, microphysics).
 pub mod star_py;
+/// `star_lib` subset for test-side model builders (`StarLibModel`).
+pub mod star_lib_py;
 /// Tier A/B bindings for Wave 5.2 `star` hydrodynamics and pulsation export.
 pub mod star_wave5_2_py;
 /// Tier B/C bindings for Wave 5.1 `star` extensions (diffusion, rotation, premix).
@@ -299,6 +301,7 @@ fn _rust(m: &Bound<'_, PyModule>) -> PyResult<()> {
     atm_py::register(m)?;
     net_py::register(m)?;
     star_py::register(m)?;
+    star_lib_py::register(m)?;
     extras_py::register(m)?;
     star_e2e_py::register(m)?;
     star_wave5_py::register(m)?;

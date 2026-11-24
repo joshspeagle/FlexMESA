@@ -179,11 +179,6 @@ issue = "#157"
 reason = "Case history_columns.list requests unported MLT++ gradT_excess_alpha column."
 [[gaps]]
 suite = "star"
-case = "make_env"
-issue = "#154"
-reason = "Envelope initial-model construction and boundary relaxation (#154)."
-[[gaps]]
-suite = "star"
 case = "make_he_wd"
 issue = "#154"
 reason = "Mass-removal stage skips unported do_relax_mass and star_job::lg_max_abs_mdot, leaving an unrelaxed bare_he_core.mod that terminates at min_timestep_limit (#154)."

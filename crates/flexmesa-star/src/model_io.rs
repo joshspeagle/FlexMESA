@@ -346,8 +346,15 @@ pub fn read_mod_str_with_dir(
             "v_center" => v_center = parse_fortran_f64(v)?,
             "total_energy" => total_energy = parse_fortran_f64(v)?,
             "cumulative_energy_error" => cum_energy_err = parse_fortran_f64(v)?,
-            "tau_factor" if !job.set_tau_factor => {
-                controls.tau_factor = parse_fortran_f64(v)?;
+            "tau_factor" => {
+                // A saved `tau_factor` replaces the inlist value unless the
+                // inlist just set it (`star/private/read_model.f90:307-315`).
+                let saved = parse_fortran_f64(v)?;
+                if (saved - controls.tau_factor).abs() > saved * 1.0e-9
+                    && controls.tau_factor != job.set_to_this_tau_factor
+                {
+                    controls.tau_factor = saved;
+                }
             }
             "opacity_factor" => controls.opacity_factor = parse_fortran_f64(v)?,
             "crystal_core_boundary_mass" => {

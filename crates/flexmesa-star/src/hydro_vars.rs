@@ -1278,6 +1278,45 @@ fn redo_convective_region(
     Ok(())
 }
 
+/// `update_vars` irradiation block (`star/private/hydro_vars.f90:258-265`)
+/// with `eval_irradiation_heat` (`star/private/star_utils.f90:1849-1866`):
+/// heat in erg g$^{-1}$ s$^{-1}$ deposited in the outer column depth
+/// `column_depth_for_irradiation` (g cm$^{-2}$).
+pub(crate) fn set_irradiation_heat(model: &mut StarModel) {
+    let nz = model.nz;
+    if model.aux.irradiation_heat.len() != nz {
+        model.aux.irradiation_heat.resize(nz, 0.0);
+    }
+    if model.controls.irradiation_flux == 0.0 {
+        model.aux.irradiation_heat[..nz].fill(0.0);
+        return;
+    }
+    for k in 0..nz {
+        model.aux.irradiation_heat[k] = eval_irradiation_heat(model, k);
+    }
+}
+
+/// `eval_irradiation_heat` (`star/private/star_utils.f90:1849-1866`).
+fn eval_irradiation_heat(model: &StarModel, k: usize) -> f64 {
+    let mut heat = 0.0;
+    let flux = model.controls.irradiation_flux;
+    let col = model.controls.column_depth_for_irradiation;
+    if flux != 0.0 {
+        let irradiation_dq =
+            flexmesa_const::PI4 * model.r[0] * model.r[0] * col / model.xmstar;
+        let xq = 1.0 - model.q[k];
+        if irradiation_dq > xq {
+            let eps = 0.25 * flux / col;
+            if irradiation_dq < xq + model.dq[k] {
+                heat = eps * (irradiation_dq - xq) / model.dq[k];
+            } else {
+                heat = eps;
+            }
+        }
+    }
+    heat
+}
+
 /// Evaluates all zone and face microphysics and hydrodynamic variables
 /// (`set_hydro_vars` in `star/private/hydro_vars.f90:500-635`).
 ///
@@ -1293,6 +1332,12 @@ pub fn set_hydro_vars(
     let nz = model.nz;
     if nz == 0 {
         return Ok(());
+    }
+    // `update_vars` sets `irradiation_heat` (`star/private/hydro_vars.f90:
+    // 258-265`) only from `set_vars`; the solver's `set_vars_for_solver` and
+    // `set_final_vars` leave it as it was at the start of the step.
+    if !model.aux.doing_struct_burn_mix {
+        set_irradiation_heat(model);
     }
     if model.aux.mixing.mlt_mixing_type.len() != nz {
         model.aux.mixing.resize(nz);

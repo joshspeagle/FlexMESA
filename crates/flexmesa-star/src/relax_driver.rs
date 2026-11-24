@@ -339,7 +339,12 @@ pub(crate) fn setup_before_relax(model: &mut StarModel) {
     c.ts_stop.max_timestep_factor = 2.0;
     // `max_model_number = -1111`: no limit.
     c.max_model_number = None;
-    // `turn_off_winds`
+    turn_off_winds(model);
+}
+
+/// `turn_off_winds` (`star/private/relax.f90:3890-3902`).
+pub(crate) fn turn_off_winds(model: &mut StarModel) {
+    let c = &mut model.controls;
     c.mass_change = 0.0;
     c.reimers_scaling_factor = 0.0;
     c.blocker_scaling_factor = 0.0;

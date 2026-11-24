@@ -2,18 +2,14 @@
 //! Unit and integration tests for Stage `Fidelity-4` ([#115](https://github.com/joshspeagle/FlexMESA/issues/115)):
 //! `.mod` checkpoint round-trip with extended header scalars (`M_center`,
 //! `cumulative_energy_error`) and optional zone columns (`w`, `et_RSP`,
-//! `w_div_wc`, `alpha_RTI`), multi-step physical relaxation loops (`relax.rs`),
-//! and physical E2E execution parity.
+//! `w_div_wc`, `alpha_RTI`), uniform rotation (`relax.rs`), and physical E2E
+//! execution parity.
 
 use flexmesa_const::M_SUN;
 
 use crate::controls::{StarControls, StarJobControls};
 use crate::model_io::{read_mod_str, write_mod_string};
-use crate::relax::{
-    apply_uniform_rotation, relax_core_boundary,
-    relax_from_profile_files, relax_irradiation_to_target,
-    relax_mass_to_target, relax_tau_factor_to_target, relax_to_remove_h_env,
-};
+use crate::relax::apply_uniform_rotation;
 use crate::zams::load_zams_model;
 
 #[test]
@@ -93,119 +89,15 @@ fn test_read_mod_str_parses_w_and_w_div_wc_columns() {
 }
 
 #[test]
-fn test_multi_step_relaxation_routines_preserve_physical_invariants() {
+fn test_uniform_rotation_sets_rotation_flag_and_w_div_wc() {
     let controls = StarControls::default();
     let job = StarJobControls::default();
     let mut model = load_zams_model(controls, job.clone())
         .expect("1 Msun ZAMS should load");
 
-    // 1. Mass relaxation (`relax_mass_to_target`)
-    relax_mass_to_target(&mut model, 1.5, 8);
-    assert!(!model.aux.doing_relax);
-    assert!((model.mstar - 1.5 * M_SUN).abs() < 1.0e-9 * M_SUN);
-    assert!((model.controls.initial_mass - 1.5).abs() < 1.0e-12);
-
-    // 2. H-envelope stripping (`relax_to_remove_h_env`)
-    let species = model.species;
-    let mid = model.nz / 2;
-    for k in mid..model.nz {
-        model.xa[k * species] = 0.0;
-        model.xa[k * species + 1] = 0.98;
-    }
-    let m_before_strip = model.mstar;
-    relax_to_remove_h_env(&mut model, 1.0e-4, 8);
-    assert!(model.mstar < m_before_strip);
-    assert!(model.mstar > 0.1 * M_SUN);
-
-    // 3. Core boundary relaxation (`relax_core_boundary`)
-    relax_core_boundary(&mut model, 0.02, 10.0, 1.0e-4, 8);
-    assert!((model.m_center - 0.02 * M_SUN).abs() < 1.0e-8 * M_SUN);
-    assert!(model.r_center > 0.0);
-
-    // 4. Optical depth relaxation (`relax_tau_factor_to_target`)
-    relax_tau_factor_to_target(&mut model, 100.0, 8);
-    assert!((model.controls.tau_factor - 100.0).abs() < 1.0e-9);
-
-    // 5. Irradiation relaxation (`relax_irradiation_to_target`)
-    relax_irradiation_to_target(&mut model, 1.0e9, 300.0, 8);
-    assert!((model.controls.irradiation_flux - 1.0e9).abs() < 1.0e-6);
-    assert!(
-        (model.controls.column_depth_for_irradiation - 300.0).abs() < 1.0e-9
-    );
-    assert!(model.aux.irradiation_heat[0] > 0.0);
-
-    // 6. Uniform rotation
     apply_uniform_rotation(&mut model, 1.0e-5);
     assert!(model.controls.rotation_flag);
     assert!(model.aux.w_div_wc[0] > 0.0);
-}
-
-fn write_test_relax_profile_files(
-    model: &crate::model::StarModel,
-    case_dir: &std::path::Path,
-) -> Result<(), crate::controls::StarError> {
-    use std::fmt::Write as _;
-    let nz = model.nz;
-    let species = model.species;
-
-    let mut ent = format!("{nz}\n");
-    let mut ang = format!("{nz}\n");
-    let mut comp = format!("{nz} {species}\n");
-    for k in 0..nz {
-        let q_rel = 1.0 - model.q[k].clamp(0.0, 1.0);
-        let s_cgs = flexmesa_math::exp(model.entropy[k])
-            * (flexmesa_const::KERG * 6.022_140_76e23);
-        let _ = writeln!(ent, "{q_rel:.16e} {s_cgs:.16e}");
-        let j_k = model.j_rot.get(k).copied().unwrap_or(0.0);
-        let _ = writeln!(ang, "{q_rel:.16e} {j_k:.16e}");
-        let _ = write!(comp, "{q_rel:.16e}");
-        for &x_j in model.cell_xa(k) {
-            let _ = write!(comp, " {x_j:.16e}");
-        }
-        comp.push('\n');
-    }
-
-    let m_msun = model.mstar / M_SUN;
-    let l1_lsun = model.lum.first().copied().unwrap_or(flexmesa_const::L_SUN)
-        / flexmesa_const::L_SUN;
-    let teff = model.teff;
-
-    for (fname, content) in [
-        ("entropy.dat", ent),
-        ("angular_momentum.dat", ang),
-        ("composition.dat", comp),
-        ("initial_mass.dat", format!("{m_msun:.16e}\n")),
-        ("target_vals.dat", format!("{teff:.16e}\n{l1_lsun:.16e}\n")),
-    ] {
-        let p = case_dir.join(fname);
-        if !p.exists() {
-            std::fs::write(&p, content).map_err(|e| {
-                crate::controls::StarError::IoError(format!(
-                    "failed to write {}: {e}",
-                    p.display()
-                ))
-            })?;
-        }
-    }
-    Ok(())
-}
-
-#[test]
-fn test_relax_from_profile_files_interpolates_j_and_entropy() {
-    let mut model =
-        load_zams_model(StarControls::default(), StarJobControls::default())
-            .expect("1 Msun ZAMS should load");
-
-    let tmp_dir = std::env::temp_dir().join("flexmesa_fidelity4_relax_test");
-    let _ = std::fs::create_dir_all(&tmp_dir);
-    write_test_relax_profile_files(&model, &tmp_dir)
-        .expect("write_test_relax_profile_files");
-
-    relax_from_profile_files(&mut model, &tmp_dir)
-        .expect("relax_from_profile_files");
-    assert!(model.controls.rotation_flag);
-    assert_eq!(model.j_rot.len(), model.nz);
-    let _ = std::fs::remove_dir_all(&tmp_dir);
 }
 
 #[test]
@@ -292,8 +184,9 @@ fn test_mod_load_resets_num_retries_by_default_and_initializes_dt_limit_ratio_ol
     );
 
     // 5. Inlist parsing + `star_job_init` respects `set_initial_number_retries`
-    //    on fresh load (`is_restart = false`) and preserves `num_retries` on
-    //    photo restart (`is_restart = true`).
+    //    on a `.mod` load and on a model carried over from an earlier stage,
+    //    which upstream loads from the saved `.mod` file: only a photo
+    //    restart is a `restart` (`star/job/run_star_support.f90:433-442`).
     let tmp_dir = std::env::temp_dir().join(format!(
         "flexmesa_retry_reset_test_{}",
         std::process::id()
@@ -341,8 +234,10 @@ fn test_mod_load_resets_num_retries_by_default_and_initializes_dt_limit_ratio_ol
     };
     assert_eq!(m_preserve.num_retries, 7);
 
-    // On restart (`existing = Some(...)`), `set_initial_number_retries = true`
-    // does NOT clobber the resumed model's `num_retries`.
+    // A model carried over from an earlier stage (`existing = Some(...)`) is
+    // not a photo restart, so `set_initial_number_retries = .true.` sets
+    // `num_retries` to `initial_number_retries`
+    // (`star/job/run_star_support.f90:2009-2012`).
     let inlist_restart = tmp_dir.join("inlist_restart");
     std::fs::write(
         &inlist_restart,
@@ -366,6 +261,6 @@ fn test_mod_load_resets_num_retries_by_default_and_initializes_dt_limit_ratio_ol
     let InitModelOutcome::Model(m_restart) = out_restart else {
         panic!("expected Model outcome");
     };
-    assert_eq!(m_restart.num_retries, 7);
+    assert_eq!(m_restart.num_retries, 0);
     let _ = std::fs::remove_dir_all(&tmp_dir);
 }

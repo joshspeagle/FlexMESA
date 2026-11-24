@@ -876,16 +876,44 @@ pub struct StarJobControls {
     /// `num_steps_to_relax_composition` (`timescale_for_relax_composition`,
     /// default `-1`).
     pub timescale_for_relax_composition: f64,
-    /// Whether to set or relax `tau_factor` (`set_tau_factor` / `relax_tau_factor`).
+    /// `set_tau_factor`: set `tau_factor` to `set_to_this_tau_factor`
+    /// (`star/job/run_star_support.f90:1949-1953`).
     pub set_tau_factor: bool,
-    /// Whether optical depth should be relaxed (`relax_tau_factor` / `relax_initial_tau_factor`).
-    pub relax_tau_factor: bool,
-    /// Target `tau_factor` (`set_to_this_tau_factor` / `relax_to_this_tau_factor`).
+    /// `set_initial_tau_factor`: as `set_tau_factor`, for a new run.
+    pub set_initial_tau_factor: bool,
+    /// `set_to_this_tau_factor` (default `-1`).
     pub set_to_this_tau_factor: f64,
-    /// Whether to relax inner core boundary (`relax_core` / `relax_M_center`).
+    /// `relax_tau_factor`: relax `tau_factor` to `relax_to_this_tau_factor`
+    /// (`star_relax_tau_factor`, `star/job/run_star_support.f90:2542-2548`).
+    pub relax_tau_factor: bool,
+    /// `relax_initial_tau_factor`: as `relax_tau_factor`, for a new run.
+    pub relax_initial_tau_factor: bool,
+    /// `relax_to_this_tau_factor` (default `-1`).
+    pub relax_to_this_tau_factor: f64,
+    /// $\Delta\log_{10}$ `tau_factor` per step (`dlogtau_factor`, default
+    /// `0.1`).
+    pub dlogtau_factor: f64,
+    /// `relax_core`: relax the inner boundary mass to `new_core_mass`
+    /// (`star_relax_core`, `star/job/run_star_support.f90:2489-2497`).
+    pub relax_core: bool,
+    /// `relax_initial_core`: as `relax_core`, for a new run.
+    pub relax_initial_core: bool,
+    /// `relax_M_center`: relax the total mass to `new_mass` at fixed envelope
+    /// mass (`star_relax_M_center`, `star/job/run_star_support.f90:2502-2508`).
     pub relax_m_center: bool,
-    /// Target inner core mass in $M_\odot$ (`new_mass` / `new_core_mass`).
+    /// `relax_initial_M_center`: as `relax_M_center`, for a new run.
+    pub relax_initial_m_center: bool,
+    /// Target inner core mass in $M_\odot$ (`new_core_mass`, default `0`).
     pub new_core_mass: f64,
+    /// $\Delta\log_{10} M_{\rm center}$ per step (`dlg_core_mass_per_step`,
+    /// default `1d-3`).
+    pub dlg_core_mass_per_step: f64,
+    /// Timestep in years for `relax_core` (`relax_core_years_for_dt`,
+    /// default `1`).
+    pub relax_core_years_for_dt: f64,
+    /// Timestep in seconds for `relax_M_center` (`relax_M_center_dt`,
+    /// default `3.1558149984d1`).
+    pub relax_m_center_dt: f64,
     /// Mean density of inert planetary/stellar core in $\mathrm{g\,cm^{-3}}$ (`core_avg_rho`).
     pub core_avg_rho: f64,
     /// Specific energy generation of inert core in $\mathrm{erg\,g^{-1}\,s^{-1}}$ (`core_avg_eps`).
@@ -898,8 +926,15 @@ pub struct StarJobControls {
     pub relax_l_center: bool,
     /// Target inner boundary luminosity in $\mathrm{erg\,s^{-1}}$ (`new_L_center`).
     pub new_l_center: f64,
-    /// Whether to relax surface irradiation (`relax_irradiation` / `relax_initial_irradiation`).
+    /// `relax_irradiation` (`star_relax_irradiation`,
+    /// `star/job/run_star_support.f90:2558-2567`).
     pub relax_irradiation: bool,
+    /// `relax_initial_irradiation`: as `relax_irradiation`, for a new run.
+    pub relax_initial_irradiation: bool,
+    /// `relax_irradiation_min_steps` (default `0`).
+    pub relax_irradiation_min_steps: i64,
+    /// `relax_irradiation_max_yrs_dt` (default `-1`).
+    pub relax_irradiation_max_yrs_dt: f64,
     /// Target irradiation flux in $\mathrm{erg\,cm^{-2}\,s^{-1}}$ (`new_irradiation_flux` / `relax_to_this_irrad_flux`).
     pub new_irradiation_flux: f64,
     /// Irradiation attenuation column depth in $\mathrm{g\,cm^{-2}}$ (`column_depth_for_irradiation` / `irrad_col_depth`).
@@ -916,13 +951,33 @@ pub struct StarJobControls {
     /// Mass kept above the He core in $M_\odot$
     /// (`extra_mass_retained_by_remove_H_env`, default `5d-3`).
     pub extra_mass_retained_by_remove_h_env: f64,
-    /// `remove_surface_by_relax_to_star_cut`. Not ported: it still runs the
-    /// `relax_to_remove_h_env` stand-in.
+    /// `remove_surface_by_relax_to_star_cut`. Not ported: a run that sets it
+    /// stops with an error (#436).
     pub remove_surface_by_relax_to_star_cut: bool,
-    /// Whether to set initial central velocity (`set_initial_v_center`).
+    /// `set_v_center`: set `v_center` to `new_v_center`
+    /// (`star/job/run_star_support.f90:2370-2374`).
+    pub set_v_center: bool,
+    /// `set_initial_v_center`: as `set_v_center`, for a new run.
     pub set_initial_v_center: bool,
-    /// Whether to set initial central luminosity (`set_initial_L_center`).
+    /// `new_v_center` in cm s$^{-1}$ (default `0`).
+    pub new_v_center: f64,
+    /// `set_L_center`: set `L_center` to `new_L_center` $L_\odot$
+    /// (`star/job/run_star_support.f90:2376-2380`).
+    pub set_l_center: bool,
+    /// `set_initial_L_center`: as `set_L_center`, for a new run.
     pub set_initial_l_center: bool,
+    /// `set_irradiation`: set `irradiation_flux` and
+    /// `column_depth_for_irradiation` (`star/job/run_star_support.f90:
+    /// 2355-2360`).
+    pub set_irradiation: bool,
+    /// `set_initial_irradiation`: as `set_irradiation`, for a new run.
+    pub set_initial_irradiation: bool,
+    /// `set_to_this_irrad_flux` in erg cm$^{-2}$ s$^{-1}$ (default `0`).
+    pub set_to_this_irrad_flux: f64,
+    /// `relax_initial_angular_momentum` (not ported; an error, #436).
+    pub relax_initial_angular_momentum: bool,
+    /// `relax_initial_entropy` (not ported; an error, #436).
+    pub relax_initial_entropy: bool,
     /// Whether to change Rayleigh-Taylor instability flag (`change_initial_RTI_flag`).
     pub change_initial_rti_flag: bool,
     /// Target RTI flag (`new_RTI_flag`).
@@ -1101,10 +1156,20 @@ impl Default for StarJobControls {
             relax_composition_filename: String::new(),
             timescale_for_relax_composition: -1.0,
             set_tau_factor: false,
-            relax_tau_factor: false,
+            set_initial_tau_factor: false,
             set_to_this_tau_factor: -1.0,
+            relax_tau_factor: false,
+            relax_initial_tau_factor: false,
+            relax_to_this_tau_factor: -1.0,
+            dlogtau_factor: 0.1,
+            relax_core: false,
+            relax_initial_core: false,
             relax_m_center: false,
+            relax_initial_m_center: false,
             new_core_mass: 0.0,
+            dlg_core_mass_per_step: 1.0e-3,
+            relax_core_years_for_dt: 1.0,
+            relax_m_center_dt: 3.155_814_998_4e1,
             core_avg_rho: 10.0,
             core_avg_eps: 1.0e-6,
             relax_r_center: false,
@@ -1112,6 +1177,9 @@ impl Default for StarJobControls {
             relax_l_center: false,
             new_l_center: 0.0,
             relax_irradiation: false,
+            relax_initial_irradiation: false,
+            relax_irradiation_min_steps: 0,
+            relax_irradiation_max_yrs_dt: -1.0,
             new_irradiation_flux: 0.0,
             column_depth_for_irradiation: -1.0,
             relax_initial_to_xaccrete: false,
@@ -1119,8 +1187,16 @@ impl Default for StarJobControls {
             relax_mass_to_remove_h_env: false,
             extra_mass_retained_by_remove_h_env: 5.0e-3,
             remove_surface_by_relax_to_star_cut: false,
+            set_v_center: false,
             set_initial_v_center: false,
+            new_v_center: 0.0,
+            set_l_center: false,
             set_initial_l_center: false,
+            set_irradiation: false,
+            set_initial_irradiation: false,
+            set_to_this_irrad_flux: 0.0,
+            relax_initial_angular_momentum: false,
+            relax_initial_entropy: false,
             change_initial_rti_flag: false,
             new_rti_flag: false,
             required_termination_code_string: Vec::new(),

@@ -439,19 +439,10 @@ pub fn star_evolve_step_part1(
             } else {
                 ts.force_timestep
             };
+            // `prepare_for_new_step` (`star/private/evolve.f90:1915-1928`)
+            // applies no `max_timestep` limit to `dt_next`.
             if force_dt > 0.0 {
                 dt_try = force_dt;
-            } else {
-                if model.controls.max_years_for_timestep > 0.0 {
-                    dt_try = dt_try
-                        .min(model.controls.max_years_for_timestep * SECYER);
-                }
-                if ts.max_timestep > 0.0 {
-                    dt_try = dt_try.min(ts.max_timestep);
-                }
-                if model.controls.rsp.max_timestep > 0.0 {
-                    dt_try = dt_try.min(model.controls.rsp.max_timestep);
-                }
             }
         } else {
             if model.controls.max_years_for_timestep > 0.0 {
@@ -1138,19 +1129,12 @@ pub(crate) fn star_evolve_step_outcome_checked(
         } else {
             ts.force_timestep
         };
+        // `prepare_for_new_step` applies only `force_timestep_min` and
+        // `force_timestep` to `dt_next` (`star/private/evolve.f90:1915-1928`);
+        // `max_years_for_timestep` and `max_timestep` limit `dt_next` in
+        // `pick_next_timestep` and a retry, not here.
         if force_dt > 0.0 {
             dt_try = force_dt;
-        } else {
-            if model.controls.max_years_for_timestep > 0.0 {
-                dt_try =
-                    dt_try.min(model.controls.max_years_for_timestep * SECYER);
-            }
-            if ts.max_timestep > 0.0 {
-                dt_try = dt_try.min(ts.max_timestep);
-            }
-            if model.controls.rsp.max_timestep > 0.0 {
-                dt_try = dt_try.min(model.controls.rsp.max_timestep);
-            }
         }
     }
 

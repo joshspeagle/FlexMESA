@@ -295,7 +295,16 @@ pub fn do_net(
 
                     for i in 0..species {
                         let a_i = aion[i];
-                        dxdt_k[i] = a_i * dydt[i][0].to_f64() * dxdt_fac;
+                        // `net/private/net_eval.f90:274,566`: multiply
+                        // `Z_plus_N * dydt` in `Quad` (`real(qp)`) before
+                        // rounding to `f64`, then scale by `dxdt_nuc_factor`
+                        // when `!= 1.0` (`star/private/net.f90:374-379`).
+                        let mut dxdt_i =
+                            (Quad::from_f64(a_i) * dydt[i][0]).to_f64();
+                        if dxdt_fac != 1.0 {
+                            dxdt_i *= dxdt_fac;
+                        }
+                        dxdt_k[i] = dxdt_i;
                     }
                     if skip_jacobian {
                         deps_x_k.fill(0.0);
@@ -308,21 +317,36 @@ pub fn do_net(
                             deps_x_k[i] = if clamped_eps {
                                 0.0
                             } else {
-                                (QCONV * w.d_eps_nuc_dy[i] / a_i) * eps_fac
+                                let mut val = QCONV * w.d_eps_nuc_dy[i] / a_i;
+                                if eps_fac != 1.0 {
+                                    val *= eps_fac;
+                                }
+                                val
                             };
-                            ddxdt_d_k[i] =
-                                a_i * dydt[i][2].to_f64() * rho_k * dxdt_fac;
+                            let mut d_rho =
+                                (Quad::from_f64(a_i) * dydt[i][2]).to_f64();
+                            if dxdt_fac != 1.0 {
+                                d_rho *= dxdt_fac;
+                            }
+                            ddxdt_d_k[i] = d_rho * rho_k;
                             ddxdt_t_k[i] = if clipped_t {
                                 0.0
                             } else {
-                                a_i * dydt[i][1].to_f64() * t_k * dxdt_fac
+                                let mut d_t =
+                                    (Quad::from_f64(a_i) * dydt[i][1]).to_f64();
+                                if dxdt_fac != 1.0 {
+                                    d_t *= dxdt_fac;
+                                }
+                                d_t * t_k
                             };
                             let row_off = i * species;
                             for j in 0..species {
-                                ddxdt_x_k[row_off + j] = w.d_dydt_dy
-                                    [row_off + j]
-                                    * (a_i / aion[j])
-                                    * dxdt_fac;
+                                let mut jac =
+                                    w.d_dydt_dy[row_off + j] * a_i / aion[j];
+                                if dxdt_fac != 1.0 {
+                                    jac *= dxdt_fac;
+                                }
+                                ddxdt_x_k[row_off + j] = jac;
                             }
                         }
                     }

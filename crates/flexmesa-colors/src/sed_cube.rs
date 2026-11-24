@@ -13,7 +13,7 @@
 
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::sync::OnceLock;
+use std::sync::{Arc, OnceLock};
 
 use flexmesa_autodiff::DualOrder1;
 use rayon::prelude::*;
@@ -399,6 +399,16 @@ impl SedCube {
     }
 }
 
+fn builtin_sed_cube_cell() -> &'static Arc<SedCube> {
+    static CUBE: OnceLock<Arc<SedCube>> = OnceLock::new();
+    CUBE.get_or_init(|| {
+        Arc::new(
+            SedCube::from_builtin()
+                .expect("built-in Kurucz2003 SED cube must parse"),
+        )
+    })
+}
+
 /// Lazily initialized singleton for the built-in `Kurucz2003all` + `Johnson`
 /// [`SedCube`].
 ///
@@ -407,11 +417,18 @@ impl SedCube {
 /// is corrupted.
 #[must_use]
 pub fn builtin_sed_cube() -> &'static SedCube {
-    static CUBE: OnceLock<SedCube> = OnceLock::new();
-    CUBE.get_or_init(|| {
-        SedCube::from_builtin()
-            .expect("built-in Kurucz2003 SED cube must parse")
-    })
+    builtin_sed_cube_cell().as_ref()
+}
+
+/// Returns a shared [`Arc`] handle to the lazily initialized built-in
+/// `Kurucz2003all` + `Johnson` [`SedCube`] singleton without cloning it.
+///
+/// # Panics
+/// Panics only if the compile-time embedded `builtin_kurucz_johnson.bin` asset
+/// is corrupted.
+#[must_use]
+pub fn builtin_sed_cube_arc() -> Arc<SedCube> {
+    Arc::clone(builtin_sed_cube_cell())
 }
 
 fn resolve_mesa_flux_cube_path() -> Option<PathBuf> {

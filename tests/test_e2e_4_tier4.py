@@ -6,6 +6,7 @@ interfaces without in-library test-case overrides (`#148`).
 from __future__ import annotations
 
 import pathlib
+import shutil
 
 import pytest
 
@@ -193,8 +194,8 @@ def test_synthetic_astero_case_execution_and_photo_restart(
 def test_rsp_and_astero_raw_cases_rejected_and_cleaned_copies_smoke(
     tmp_path: pathlib.Path,
 ) -> None:
-    """Reject raw `rsp_BLAP` and `astero` cases under `#147`; run cleaned
-    2-step smoke checks with test-side extras.
+    """Run strict-valid raw `rsp_BLAP`; reject raw `rsp_Delta_Scuti` and
+    `astero` cases under `#147` and run cleaned 2-step smoke checks.
     """
     root = known_gaps_gate.require_mesa_test_inputs_dir()
     if root is None:
@@ -202,25 +203,40 @@ def test_rsp_and_astero_raw_cases_rejected_and_cleaned_copies_smoke(
 
     raw_rsp = root / "star" / "test_suite" / "rsp_BLAP"
     assert raw_rsp.is_dir(), f"Missing upstream case: {raw_rsp}"
+    strict_rsp = tmp_path / "strict_rsp_BLAP"
+    shutil.copytree(raw_rsp, strict_rsp)
+    strict_rsp_rep = star.run_test_suite_case(
+        strict_rsp,
+        skip_optional=True,
+        max_steps_per_stage=2,
+        verify_restart=True,
+        extras=resolve_case_extras("star", raw_rsp),
+    )
+    assert strict_rsp_rep["tier"] == 0
+    assert strict_rsp_rep["assertions_passed"] is True
+    assert strict_rsp_rep["photo_restart_verified"] is True
+
+    raw_delta = root / "star" / "test_suite" / "rsp_Delta_Scuti"
+    assert raw_delta.is_dir(), f"Missing upstream case: {raw_delta}"
     with pytest.raises(
         ValueError,
         match=r"(unsupported|unknown|unrecognized).*control",
     ):
         star.run_test_suite_case(
-            raw_rsp,
+            raw_delta,
             skip_optional=True,
             max_steps_per_stage=2,
             verify_restart=True,
-            extras=resolve_case_extras("star", raw_rsp),
+            extras=resolve_case_extras("star", raw_delta),
         )
-    clean_rsp = tmp_path / "rsp_BLAP"
-    star.copy_cleaned_case(raw_rsp, clean_rsp, suite="star")
+    clean_rsp = tmp_path / "rsp_Delta_Scuti"
+    star.copy_cleaned_case(raw_delta, clean_rsp, suite="star")
     rsp_rep = star.run_test_suite_case(
         clean_rsp,
         skip_optional=True,
         max_steps_per_stage=2,
         verify_restart=True,
-        extras=resolve_case_extras("star", raw_rsp),
+        extras=resolve_case_extras("star", raw_delta),
     )
     assert rsp_rep["tier"] == 0
     assert rsp_rep["passed"] is False

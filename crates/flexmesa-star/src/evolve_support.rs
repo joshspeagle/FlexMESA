@@ -202,7 +202,10 @@ pub(crate) fn next_cumulative_energy_error(
 /// while zeroing per-attempt energy accumulators
 /// (`do_step_part1` in `star/private/evolve.f90:430-453`).
 pub fn record_start_of_step_energy_integrals(model: &mut StarModel) {
-    let (_, _, _, _, _, e_tot) = eval_total_energy_integrals(model);
+    let (e_int, _, _, _, _, e_tot) = eval_total_energy_integrals(model);
+    // `total_internal_energy_old` for the new mesh (`evolve.f90:420-431`),
+    // read by `set_energy_eqn_scal` (`star_utils.f90:3693`).
+    model.aux.total_internal_energy_start = e_int;
     let surf_e = if model.nz > 0 {
         cell_specific_total_energy(model, 0)
     } else {
@@ -283,6 +286,10 @@ pub fn apply_step_pre_physics_with_extras(
         let pm_res = do_conv_premix(model);
         model.dt = saved_dt;
         let _ = pm_res?;
+        // `set_vars_if_needed` after `do_conv_premix` (`evolve.f90:613-616`)
+        // reaches `set_hydro_vars`, which unpacks `xh` first
+        // (`hydro_vars.f90:226`), discarding the premix trial `lnd`.
+        model.unpack_xh();
         set_hydro_vars(model, false, false)?;
         if dt > 0.0 {
             for k in 0..nz {

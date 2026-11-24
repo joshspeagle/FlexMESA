@@ -61,10 +61,8 @@ pub fn eval_ritter_mdot_thin(
 
     if is_kolb_scheme && ritter_exponent > 0.0 {
         -mdot0
-    } else if ritter_exponent < -100.0 {
-        0.0
     } else {
-        -mdot0 * exp(ritter_exponent.min(60.0))
+        -mdot0 * exp(ritter_exponent)
     }
 }
 
@@ -285,8 +283,8 @@ pub fn eval_arras_mdot_thin(
     let rv_l1 = eval_rlobe(m_donor, m_accretor, separation);
     let phi_l1 = eval_phi(rv_l1);
     let phi = eval_phi(r_donor);
-    let my_ritter_exponent = (-(phi_l1 - phi) / (v_th * v_th)).min(80.0);
-    let rho_l1 = (rho_surf / exp(0.5)) * exp(my_ritter_exponent);
+    let my_ritter_exponent = -(phi_l1 - phi) / (v_th * v_th);
+    let rho_l1 = (rho_surf / exp(1.0).sqrt()) * exp(my_ritter_exponent);
     -rho_l1 * v_th * area
 }
 

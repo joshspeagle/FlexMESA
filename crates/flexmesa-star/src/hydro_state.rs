@@ -321,6 +321,121 @@ impl std::fmt::Debug for BinaryOtherTorqueHandle {
     }
 }
 
+/// Callback trait for custom convective overshooting profiles
+/// (`other_overshooting_scheme` in `star/other/other_overshooting_scheme.f90`
+/// and `star/private/overshoot.f90:177-178`).
+///
+/// Invoked when an active overshoot parameter set selects
+/// `overshoot_scheme(j) = 'other'`.
+pub trait OtherOvershootingSchemeHook: Send + Sync {
+    /// Evaluates custom overshooting diffusivity `d_out`
+    /// ($\mathrm{cm^2\,s^{-1}}$) and convective velocity `vc_out`
+    /// ($\mathrm{cm\,s^{-1}}$) across zone faces for convective boundary `i`
+    /// (`0`-based) and overshoot parameter set `j` (`0`-based).
+    ///
+    /// Returns `Ok(Some((k_a, k_b)))` with `0`-based inclusive loop bounds
+    /// `(k_a, k_b)` when implemented, or `Ok(None)` to reproduce MESA's
+    /// default `null_other_overshooting_scheme` (`ierr = -1`) failure.
+    ///
+    /// # Errors
+    /// Returns [`crate::controls::StarError`] if custom overshooting evaluation
+    /// fails.
+    fn eval_overshooting(
+        &self,
+        model: &crate::model::StarModel,
+        i: usize,
+        j: usize,
+        d_out: &mut [f64],
+        vc_out: &mut [f64],
+    ) -> Result<Option<(usize, usize)>, crate::controls::StarError>;
+}
+
+/// Cloneable reference-counted handle wrapping an [`OtherOvershootingSchemeHook`].
+#[derive(Clone)]
+pub struct OtherOvershootingSchemeHandle(
+    pub std::sync::Arc<dyn OtherOvershootingSchemeHook>,
+);
+
+impl OtherOvershootingSchemeHandle {
+    /// Wraps an [`OtherOvershootingSchemeHook`] implementation in a handle.
+    #[must_use]
+    pub fn new(hook: impl OtherOvershootingSchemeHook + 'static) -> Self {
+        Self(std::sync::Arc::new(hook))
+    }
+
+    /// Invokes the underlying custom overshooting hook.
+    ///
+    /// # Errors
+    /// Propagates any [`crate::controls::StarError`] returned by the hook.
+    pub fn eval_overshooting(
+        &self,
+        model: &crate::model::StarModel,
+        i: usize,
+        j: usize,
+        d_out: &mut [f64],
+        vc_out: &mut [f64],
+    ) -> Result<Option<(usize, usize)>, crate::controls::StarError> {
+        self.0.eval_overshooting(model, i, j, d_out, vc_out)
+    }
+}
+
+impl std::fmt::Debug for OtherOvershootingSchemeHandle {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("OtherOvershootingSchemeHandle(..)")
+    }
+}
+
+/// Callback trait for custom per-face `adjust_mlt_gradT_fraction` updates
+/// (`other_adjust_mlt_gradT_fraction` in
+/// `star/other/other_adjust_mlt_gradt_fraction.f90` and
+/// `star/private/hydro_vars.f90:555-560`).
+///
+/// Invoked inside `set_hydro_vars` prior to MLT evaluation when
+/// `okay_to_set_mixing_info`, `!doing_struct_burn_mix`, and `!rsp2_flag` hold.
+pub trait OtherAdjustMltGradtFractionHook: Send + Sync {
+    /// Updates `model.aux.mixing.adjust_mlt_gradt_fraction[..nz]` for the
+    /// active step (`other_adjust_mlt_gradT_fraction`).
+    ///
+    /// # Errors
+    /// Returns [`crate::controls::StarError`] if the hook fails.
+    fn apply(
+        &self,
+        model: &mut crate::model::StarModel,
+    ) -> Result<(), crate::controls::StarError>;
+}
+
+/// Cloneable reference-counted handle wrapping an
+/// [`OtherAdjustMltGradtFractionHook`].
+#[derive(Clone)]
+pub struct OtherAdjustMltGradtFractionHandle(
+    pub std::sync::Arc<dyn OtherAdjustMltGradtFractionHook>,
+);
+
+impl OtherAdjustMltGradtFractionHandle {
+    /// Wraps an [`OtherAdjustMltGradtFractionHook`] implementation in a handle.
+    #[must_use]
+    pub fn new(hook: impl OtherAdjustMltGradtFractionHook + 'static) -> Self {
+        Self(std::sync::Arc::new(hook))
+    }
+
+    /// Invokes the underlying `adjust_mlt_gradT_fraction` hook.
+    ///
+    /// # Errors
+    /// Propagates any [`crate::controls::StarError`] returned by the hook.
+    pub fn apply(
+        &self,
+        model: &mut crate::model::StarModel,
+    ) -> Result<(), crate::controls::StarError> {
+        self.0.apply(model)
+    }
+}
+
+impl std::fmt::Debug for OtherAdjustMltGradtFractionHandle {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("OtherAdjustMltGradtFractionHandle(..)")
+    }
+}
+
 const fn default_k_below_const_q() -> usize {
     1
 }
@@ -352,8 +467,10 @@ pub struct HydroAuxState {
     /// Total integrated model energy $E_{\mathrm{tot}}$ in $\mathrm{erg}$
     /// (`total_energy` in `star_data_step_work.inc`).
     pub total_energy: f64,
-    /// Start-of-step total integrated internal energy $\sum_k \Delta m_k e_{\mathrm{start},k}$
-    /// in $\mathrm{erg}$ (`total_internal_energy_old` in `star_utils.f90:3706`).
+    /// Total internal energy in $\mathrm{erg}$ on the new mesh at the start of
+    /// the step (`total_internal_energy_old`, set by
+    /// `eval_total_energy_integrals` at `evolve.f90:420-431` and read by
+    /// `set_energy_eqn_scal`, `star_utils.f90:3693`).
     pub total_internal_energy_start: f64,
     /// Cumulative global energy conservation error in $\mathrm{erg}$
     /// (`cumulative_energy_error` in `star_data_step_work.inc`).
@@ -509,6 +626,13 @@ pub struct HydroAuxState {
     /// Optional binary implicit torque hook (`binary_other_torque_implicit`).
     #[serde(skip)]
     pub binary_other_torque_implicit: Option<BinaryOtherTorqueHandle>,
+    /// Optional custom convective overshooting scheme (`other_overshooting_scheme`).
+    #[serde(skip)]
+    pub other_overshooting_scheme: Option<OtherOvershootingSchemeHandle>,
+    /// Optional custom MLT `gradT` blend fraction hook (`other_adjust_mlt_gradT_fraction`).
+    #[serde(skip)]
+    pub other_adjust_mlt_gradt_fraction:
+        Option<OtherAdjustMltGradtFractionHandle>,
     /// Brunt-Väisälä composition buoyancy term $N_{\mu,k}^2$ in $\mathrm{s^{-2}}$ (`brunt_N2_composition_term`).
     pub brunt_n2_composition_term: Vec<f64>,
     /// Binomial-smoothed Ledoux composition buoyancy term $B_{\mathrm{smooth},k}$ (`smoothed_brunt_B`).
@@ -692,6 +816,8 @@ impl HydroAuxState {
             d_extra_omegadot_domega_p1: vec![0.0; nz],
             binary_other_torque: None,
             binary_other_torque_implicit: None,
+            other_overshooting_scheme: None,
+            other_adjust_mlt_gradt_fraction: None,
             brunt_n2_composition_term: vec![0.0; nz],
             smoothed_brunt_b: vec![0.0; nz],
             mass_correction: vec![1.0; nz],

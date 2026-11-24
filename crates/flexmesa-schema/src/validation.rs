@@ -68,7 +68,7 @@ pub fn is_headless_plotting_section(section: &str) -> bool {
 pub fn is_known_upstream_only_section(section: &str) -> bool {
     matches!(
         section.to_ascii_lowercase().as_str(),
-        "colors" | "multi_stars_job" | "simplex_search_controls" | "stella"
+        "multi_stars_job" | "simplex_search_controls" | "stella"
     )
 }
 
@@ -118,7 +118,7 @@ pub fn is_include_key(section: &str, key: &str) -> bool {
 /// supported controls and upstream MESA `26.4.1` defaults.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct ControlValidationReport {
-    /// Known upstream sections not yet implemented (e.g., `colors`, `stella`).
+    /// Known upstream sections not yet implemented (e.g., `stella`, `multi_stars_job`).
     pub unsupported_sections: Vec<String>,
     /// Unrecognized namelist section names not found in MESA `26.4.1` defaults.
     pub unknown_sections: Vec<String>,

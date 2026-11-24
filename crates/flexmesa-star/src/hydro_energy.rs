@@ -375,25 +375,18 @@ pub fn eval_face_area_time_centered_ad(
 /// by $1 / \Delta m_k$.
 #[must_use]
 pub fn set_energy_eqn_scal(model: &StarModel, k: usize) -> f64 {
-    let dt = model.dt.max(1.0e-30);
+    // `set_energy_eqn_scal` (`star/private/star_utils.f90:3677-3697`), with
+    // `total_internal_energy_old` from the start of the step
+    // (`evolve.f90:420-431`) and no clamps.
     let mut scal: f64 = if k > 0 { 1.0 } else { 1.0e-6 };
     if model.controls.dedt_eqn_r_scale > 0.0 {
-        let total_e = if model.aux.total_internal_energy_start > 0.0 {
-            model.aux.total_internal_energy_start
-        } else {
-            (0..model.nz)
-                .map(|j| model.energy_start[j].max(0.0) * model.dm[j])
-                .sum::<f64>()
-        };
-        if total_e > 0.0 {
-            let cell_energy_fraction_start =
-                (model.energy_start[k].max(0.0) * model.dm[k]) / total_e;
-            scal = scal.min(
-                cell_energy_fraction_start * model.controls.dedt_eqn_r_scale,
-            );
-        }
+        let cell_energy_fraction_start = model.energy_start[k] * model.dm[k]
+            / model.aux.total_internal_energy_start;
+        scal = scal.min(
+            cell_energy_fraction_start * model.controls.dedt_eqn_r_scale,
+        );
     }
-    scal * dt / model.energy_start[k].max(1.0)
+    scal * model.dt / model.energy_start[k]
 }
 
 /// Evaluates `(work_outward_at_surface, work_inward_at_center)` in

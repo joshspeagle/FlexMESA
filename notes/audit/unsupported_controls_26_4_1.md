@@ -6,9 +6,9 @@ Generated mechanically against **MESA 26.4.1** (git tag `26.4.1`, commit `c8c202
 ## Summary
 
 - **Total manifest cases scanned**: `106`
-- **Cases passing strict `#147` validation**: `53`
-- **Cases rejected by strict `#147` validation**: `53`
-- **Distinct unsupported physics/solver controls encountered**: `176`
+- **Cases passing strict `#147` validation**: `61`
+- **Cases rejected by strict `#147` validation**: `45`
+- **Distinct unsupported physics/solver controls encountered**: `168`
 - **Distinct unknown/misspelled controls encountered**: `0`
 - **Cases using headless plotting controls (`#173` / `DECISIONS #25`)**: `78` (`895` distinct keys)
 
@@ -30,13 +30,6 @@ Generated mechanically against **MESA 26.4.1** (git tag `26.4.1`, commit `c8c202
 | :--- | :--- | ---: | :--- |
 | `&star_job::new_d_omega_flag` | `unimplemented` | 12 | `star/12M_pre_ms_to_core_collapse`, `star/15M_dynamo`, `star/1M_pre_ms_to_wd`, `star/1M_thermohaline`, ... (+8) |
 | `&star_job::change_d_omega_flag` | `unimplemented` | 11 | `star/12M_pre_ms_to_core_collapse`, `star/15M_dynamo`, `star/1M_pre_ms_to_wd`, `star/1M_thermohaline`, ... (+7) |
-| `&colors::colors_results_directory` | `unimplemented` | 10 | `star/custom_colors`, `star/rsp_BEP`, `star/rsp_BLAP`, `star/rsp_Cepheid`, ... (+6) |
-| `&colors::distance` | `unimplemented` | 10 | `star/custom_colors`, `star/rsp_BEP`, `star/rsp_BLAP`, `star/rsp_Cepheid`, ... (+6) |
-| `&colors::instrument` | `unimplemented` | 10 | `star/custom_colors`, `star/rsp_BEP`, `star/rsp_BLAP`, `star/rsp_Cepheid`, ... (+6) |
-| `&colors::make_csv` | `unimplemented` | 10 | `star/custom_colors`, `star/rsp_BEP`, `star/rsp_BLAP`, `star/rsp_Cepheid`, ... (+6) |
-| `&colors::stellar_atm` | `unimplemented` | 10 | `star/custom_colors`, `star/rsp_BEP`, `star/rsp_BLAP`, `star/rsp_Cepheid`, ... (+6) |
-| `&colors::use_colors` | `unimplemented` | 10 | `star/custom_colors`, `star/rsp_BEP`, `star/rsp_BLAP`, `star/rsp_Cepheid`, ... (+6) |
-| `&colors::vega_sed` | `unimplemented` | 10 | `star/custom_colors`, `star/rsp_BEP`, `star/rsp_BLAP`, `star/rsp_Cepheid`, ... (+6) |
 | `&controls::warn_rates_for_high_temp` | `unimplemented` | 10 | `star/12M_pre_ms_to_core_collapse`, `star/20M_pre_ms_to_core_collapse`, `star/20M_z2m2_high_rotation`, `star/ccsn_IIp`, ... (+6) |
 | `&astero_search_controls::do_redistribute_mesh` | `unimplemented` | 7 | `astero/astero_adipls`, `astero/example_astero`, `astero/fast_from_file`, `astero/fast_newuoa`, ... (+3) |
 | `&controls::max_safe_logt_for_rates` | `unimplemented` | 7 | `star/12M_pre_ms_to_core_collapse`, `star/20M_pre_ms_to_core_collapse`, `star/20M_z2m2_high_rotation`, `star/pisn`, ... (+3) |
@@ -88,6 +81,13 @@ Generated mechanically against **MESA 26.4.1** (git tag `26.4.1`, commit `c8c202
 | `&star_job::dlogtau_factor` | `unimplemented` | 4 | `star/irradiated_planet`, `star/pisn`, `star/wd_he_shell_ignition`, `star/wd_stable_h_burn` |
 | `&star_job::near_zams_relax_omega_div_omega_crit` | `unimplemented` | 3 | `star/20M_z2m2_high_rotation`, `star/magnetic_braking`, `star/twin_studies` |
 | `&star_job::relax_omega_max_yrs_dt` | `unimplemented` | 3 | `star/high_rot_darkening`, `star/magnetic_braking`, `star/ppisn` |
+| `&star_job::set_cumulative_energy_error_at_step` | `unimplemented` | 3 | `binary/double_bh`, `star/carbon_kh`, `star/wd_aic` |
+| `&astero_search_controls::restart_scan_grid_from_file` | `unimplemented` | 2 | `astero/example_astero`, `astero/fast_scan_grid` |
+| `&astero_search_controls::restart_simplex_from_file` | `unimplemented` | 2 | `astero/example_astero`, `astero/fast_simplex` |
+| `&astero_search_controls::simplex_alpha` | `unimplemented` | 2 | `astero/example_astero`, `astero/fast_simplex` |
+| `&astero_search_controls::simplex_beta` | `unimplemented` | 2 | `astero/example_astero`, `astero/fast_simplex` |
+| `&astero_search_controls::simplex_delta` | `unimplemented` | 2 | `astero/example_astero`, `astero/fast_simplex` |
+| `&astero_search_controls::simplex_gamma` | `unimplemented` | 2 | `astero/example_astero`, `astero/fast_simplex` |
 
 ## Terminal-Output Controls (`DECISIONS #26`)
 
@@ -208,7 +208,7 @@ Per `DECISIONS #25` (matching upstream `USE_PGSTAR = NO`), keys in `&pgstar`, `&
 | `star` | `conductive_flame` | `fail_unsupported` | 3 | 0 | 109 |
 | `star` | `conserve_angular_momentum` | `fail_unsupported` | 2 | 0 | 0 |
 | `star` | `conv_core_cpm` | `pass` | 0 | 0 | 87 |
-| `star` | `custom_colors` | `fail_unsupported` | 8 | 0 | 22 |
+| `star` | `custom_colors` | `pass` | 0 | 0 | 22 |
 | `star` | `custom_rates` | `fail_unsupported` | 4 | 0 | 48 |
 | `star` | `diffusion_smoothness` | `pass` | 0 | 0 | 24 |
 | `star` | `extended_convective_penetration` | `pass` | 0 | 0 | 14 |
@@ -247,15 +247,15 @@ Per `DECISIONS #25` (matching upstream `USE_PGSTAR = NO`), keys in `&pgstar`, `&
 | `star` | `ppisn` | `fail_unsupported` | 13 | 0 | 76 |
 | `star` | `radiative_levitation` | `fail_unsupported` | 4 | 0 | 14 |
 | `star` | `relax_composition_j_entropy` | `pass` | 0 | 0 | 0 |
-| `star` | `rsp_BEP` | `fail_unsupported` | 7 | 0 | 75 |
-| `star` | `rsp_BLAP` | `fail_unsupported` | 7 | 0 | 76 |
-| `star` | `rsp_Cepheid` | `fail_unsupported` | 7 | 0 | 75 |
-| `star` | `rsp_Delta_Scuti` | `fail_unsupported` | 14 | 0 | 75 |
-| `star` | `rsp_RR_Lyrae` | `fail_unsupported` | 7 | 0 | 75 |
-| `star` | `rsp_Type_II_Cepheid` | `fail_unsupported` | 7 | 0 | 14 |
-| `star` | `rsp_check_2nd_crossing` | `fail_unsupported` | 7 | 0 | 0 |
-| `star` | `rsp_gyre` | `fail_unsupported` | 7 | 0 | 20 |
-| `star` | `rsp_save_and_load_file` | `fail_unsupported` | 20 | 0 | 69 |
+| `star` | `rsp_BEP` | `pass` | 0 | 0 | 75 |
+| `star` | `rsp_BLAP` | `pass` | 0 | 0 | 76 |
+| `star` | `rsp_Cepheid` | `pass` | 0 | 0 | 75 |
+| `star` | `rsp_Delta_Scuti` | `fail_unsupported` | 7 | 0 | 75 |
+| `star` | `rsp_RR_Lyrae` | `pass` | 0 | 0 | 75 |
+| `star` | `rsp_Type_II_Cepheid` | `pass` | 0 | 0 | 14 |
+| `star` | `rsp_check_2nd_crossing` | `pass` | 0 | 0 | 0 |
+| `star` | `rsp_gyre` | `pass` | 0 | 0 | 20 |
+| `star` | `rsp_save_and_load_file` | `fail_unsupported` | 13 | 0 | 69 |
 | `star` | `semiconvection` | `pass` | 0 | 0 | 1 |
 | `star` | `simplex_solar_calibration` | `fail_unsupported` | 2 | 0 | 0 |
 | `star` | `split_burn_big_net` | `fail_unsupported` | 6 | 0 | 258 |

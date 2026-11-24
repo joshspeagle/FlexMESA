@@ -11,6 +11,7 @@ description = "Core 1D stellar structure, Henyey hydrostatic/hydrodynamic solver
 flexmesa-atm = { path = "../flexmesa-atm" }
 flexmesa-autodiff = { path = "../flexmesa-autodiff" }
 flexmesa-chem = { path = "../flexmesa-chem" }
+flexmesa-colors = { path = "../flexmesa-colors" }
 flexmesa-const = { path = "../flexmesa-const" }
 flexmesa-eos = { path = "../flexmesa-eos" }
 flexmesa-interp1d = { path = "../flexmesa-interp1d" }

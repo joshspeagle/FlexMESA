@@ -603,8 +603,7 @@ def test_hb_2m_and_low_z_hooks() -> None:
     assert hb.within_tolerance is True
 
     lz = star_extras.LowZStarExtras()
-    with pytest.raises(NotImplementedError, match="#231"):
-        lz.extras_controls({})
+    lz.extras_controls({})
     assert lz.extra_history_header_items({"mixing_length_alpha": 1.8}) == [
         ("mixing_length_alpha", 1.8)
     ]
@@ -707,7 +706,7 @@ def test_high_rot_darkening_and_semiconvection_checks() -> None:
 def test_batch2_live_py_star_extras_adapter_execution_and_loud_key_error(
     tmp_path: pathlib.Path,
 ) -> None:
-    """`R_CrB_star` steps live; unserved `hb_2M` and `low_z` stay detached."""
+    """`R_CrB_star`, `hb_2M`, and `low_z` attach and step live."""
     rcrb_dir = harness_runner.resolve_case_dir("star", "R_CrB_star")
     rep = harness_runner.run_trace_inprocess(
         "star",
@@ -719,16 +718,17 @@ def test_batch2_live_py_star_extras_adapter_execution_and_loud_key_error(
     )
     assert rep["total_steps"] == 4
 
-    # `hb_2M` stays detached: upstream sets `how_many_extra_profile_columns = 1`
-    # (`star/test_suite/hb_2M/src/run_star_extras.f90:198`) and the adapter
-    # does not call `extra_profile_columns` (`#231`).
     hb_dir = harness_runner.resolve_case_dir("star", "hb_2M")
-    assert case_extras.resolve_case_extras("star", hb_dir) is None
+    assert isinstance(
+        case_extras.resolve_case_extras("star", hb_dir),
+        star_extras.Hb2MStarExtras,
+    )
 
-    # `low_z` requires `extra_history_header_items` /
-    # `extra_profile_header_items` (`#163`, `#231`), so it remains detached.
     low_z_dir = harness_runner.resolve_case_dir("star", "low_z")
-    assert case_extras.resolve_case_extras("star", low_z_dir) is None
+    assert isinstance(
+        case_extras.resolve_case_extras("star", low_z_dir),
+        star_extras.LowZStarExtras,
+    )
 
 
 def test_batch2_handlers_raise_key_error_on_missing_snapshot_fields() -> None:

@@ -16,6 +16,7 @@ import pytest
 from flexmesa import star
 from flexmesa.star import e2e
 from flexmesa.testing import known_gaps_gate
+from tests.case_extras import resolve_case_extras
 
 from . import cleaned_case_gaps
 
@@ -33,6 +34,7 @@ _STRICT_VALID_TIER1_CASES = frozenset(
     {
         "1.3M_ms_high_Z",
         "semiconvection",
+        "custom_colors",
         "extended_convective_penetration",
         "make_env",
     }
@@ -327,6 +329,7 @@ def test_upstream_tier1_test_suite_case_and_restart_reproducibility(
                     skip_optional=True,
                     max_steps_per_stage=2,
                     verify_restart=True,
+                    extras=resolve_case_extras("star", case_dir),
                 )
             return
         rep = e2e.run_test_suite_case(
@@ -334,6 +337,7 @@ def test_upstream_tier1_test_suite_case_and_restart_reproducibility(
             skip_optional=True,
             max_steps_per_stage=2,
             verify_restart=True,
+            extras=resolve_case_extras("star", case_dir),
         )
         assert rep["case_name"] == case_name
         assert rep["tier"] == 0

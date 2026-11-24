@@ -774,6 +774,63 @@ pub struct StarControls {
     pub output: crate::controls_output::OutputControls,
     /// Element diffusion and white-dwarf phase separation controls (`controls.defaults:6880-7650`).
     pub diffusion: crate::controls_diffusion::DiffusionControls,
+    /// Synthetic photometry and SED history controls (`colors/defaults/colors.defaults`).
+    #[serde(default)]
+    pub colors: ColorsControls,
+}
+
+/// Synthetic photometry and spectral-energy-distribution history controls
+/// (`&colors` namelist in `colors/defaults/colors.defaults`).
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(default)]
+pub struct ColorsControls {
+    /// Enable `&colors` synthetic photometry history columns (`use_colors`, `false` default).
+    pub use_colors: bool,
+    /// Filter directory / instrument index (`instrument`,
+    /// `'data/colors_data/filters/Generic/Johnson'` default).
+    pub instrument: String,
+    /// Stellar atmosphere SED grid directory (`stellar_atm`,
+    /// `'data/colors_data/stellar_models/Kurucz2003all/'` default).
+    pub stellar_atm: String,
+    /// Vega reference spectrum path (`vega_sed`,
+    /// `'data/colors_data/stellar_models/vega_flam.csv'` default).
+    pub vega_sed: String,
+    /// Observer distance in $\mathrm{cm}$ (`distance`, `3.0857e19` = $10\,\mathrm{pc}$ default).
+    pub distance: f64,
+    /// Write per-filter SED CSV tables on history output (`make_csv`, `false` default).
+    pub make_csv: bool,
+    /// Output directory for `make_csv` CSV files (`colors_results_directory`, `'SED'` default).
+    pub colors_results_directory: String,
+    /// Magnitude zero-point system (`mag_system`: `'Vega'`, `'AB'`, or `'ST'`, `'Vega'` default).
+    pub mag_system: String,
+    /// Include `_{model_number:08}` suffix in `make_csv` filenames (`sed_per_model`, `false` default).
+    pub sed_per_model: bool,
+    /// Solar metal-to-hydrogen reference ratio $(Z/X)_\odot$ (`z_over_x_ref`,
+    /// `2.30057173972e-2` GS98 default).
+    pub z_over_x_ref: f64,
+}
+
+impl Default for ColorsControls {
+    fn default() -> Self {
+        Self {
+            use_colors: false,
+            instrument: String::from(
+                "data/colors_data/filters/Generic/Johnson",
+            ),
+            stellar_atm: String::from(
+                "data/colors_data/stellar_models/Kurucz2003all/",
+            ),
+            vega_sed: String::from(
+                "data/colors_data/stellar_models/vega_flam.csv",
+            ),
+            distance: flexmesa_colors::D_10PC_CM,
+            make_csv: false,
+            colors_results_directory: String::from("SED"),
+            mag_system: String::from("Vega"),
+            sed_per_model: false,
+            z_over_x_ref: flexmesa_colors::Z_OVER_X_REF_GS98,
+        }
+    }
 }
 
 impl StarControls {

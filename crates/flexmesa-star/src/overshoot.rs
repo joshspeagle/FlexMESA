@@ -235,32 +235,107 @@ pub fn eval_conv_bdy_hp(model: &StarModel, i: usize) -> Result<f64, StarError> {
     Ok(hp)
 }
 
-/// Evaluates overshoot-boundary anchor parameters `(k_ob, r_ob, d_ob, vc_ob)`
-/// stepped back by `f0 * Hp_cb` into the convection zone
-/// (`eval_over_bdy_params` in `star/private/overshoot_utils.f90:229-374`).
-///
-/// # Errors
-/// Returns [`StarError::InvalidInput`] if boundary parameters or radius
-/// bracketing fail.
-pub fn eval_over_bdy_params(
-    model: &StarModel,
+/// Precomputed convective-boundary anchor state permitting repeated
+/// [`eval_over_bdy_params`] calls at arbitrary step-back `f0` values inside
+/// `other_overshooting_scheme` hooks without cloning the full [`StarModel`].
+#[derive(Debug, Clone)]
+pub struct OverBdyAnchorCache {
     i: usize,
+    nz: usize,
+    k_cb: usize,
+    r_cb: f64,
+    hp_cb: f64,
+    top: bool,
+    mixing_length_alpha: f64,
+    r: Vec<f64>,
+    conv_vel: Vec<f64>,
+    mlt_mixing_length: Vec<f64>,
+    scale_height: Vec<f64>,
+}
+
+impl OverBdyAnchorCache {
+    /// Captures the boundary anchor geometry (`k_cb`, `r_cb`, `hp_cb`) and
+    /// radial interpolation slices for convective boundary `i`.
+    ///
+    /// # Errors
+    /// Returns [`StarError::InvalidInput`] if boundary geometry or
+    /// scale-height evaluation fails.
+    pub fn from_model(model: &StarModel, i: usize) -> Result<Self, StarError> {
+        let k_cb = eval_conv_bdy_k(model, i)?;
+        let r_cb = eval_conv_bdy_r(model, i)?;
+        let hp_cb = eval_conv_bdy_hp(model, i)?;
+        Ok(Self {
+            i,
+            nz: model.nz,
+            k_cb,
+            r_cb,
+            hp_cb,
+            top: model.aux.mixing.top_conv_bdy[i],
+            mixing_length_alpha: model.controls.mixing_length_alpha,
+            r: model.r[..model.nz].to_vec(),
+            conv_vel: model.conv_vel[..model.nz].to_vec(),
+            mlt_mixing_length: model.aux.mixing.mlt_mixing_length.clone(),
+            scale_height: model.scale_height[..model.nz].to_vec(),
+        })
+    }
+
+    /// Returns the 0-based convective boundary index captured by this cache.
+    #[must_use]
+    pub const fn boundary_index(&self) -> usize {
+        self.i
+    }
+
+    /// Returns the evaluated boundary pressure scale height $H_{P,\mathrm{cb}}$
+    /// in cm.
+    #[must_use]
+    pub const fn hp_cb(&self) -> f64 {
+        self.hp_cb
+    }
+
+    /// Evaluates `(k_ob, r_ob, d_ob, vc_ob)` at step-back fraction `f0`.
+    ///
+    /// # Errors
+    /// Returns [`StarError::InvalidInput`] if radius bracketing fails.
+    pub fn eval_at(&self, f0: f64) -> Result<(usize, f64, f64, f64), StarError> {
+        eval_over_bdy_params_slices(
+            self.nz,
+            &self.r,
+            &self.conv_vel,
+            &self.mlt_mixing_length,
+            &self.scale_height,
+            self.mixing_length_alpha,
+            self.k_cb,
+            self.r_cb,
+            self.hp_cb,
+            self.top,
+            f0,
+        )
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn eval_over_bdy_params_slices(
+    nz: usize,
+    r_arr: &[f64],
+    conv_vel: &[f64],
+    mx_ml: &[f64],
+    scale_height: &[f64],
+    mixing_length_alpha: f64,
+    k_cb: usize,
+    r_cb: f64,
+    hp_cb: f64,
+    top: bool,
     f0: f64,
 ) -> Result<(usize, f64, f64, f64), StarError> {
-    let nz = model.nz;
-    let k_cb = eval_conv_bdy_k(model, i)?;
-    let r_cb = eval_conv_bdy_r(model, i)?;
-    let hp_cb = eval_conv_bdy_hp(model, i)?;
-
-    let (k, r) = if model.aux.mixing.top_conv_bdy[i] {
+    let (k, r) = if top {
         let mut r_target = r_cb - f0 * hp_cb;
-        if r_target <= model.r[nz - 1] {
-            r_target = model.r[nz - 1];
+        if r_target <= r_arr[nz - 1] {
+            r_target = r_arr[nz - 1];
             (nz - 2, r_target)
         } else {
             let mut k_found = nz - 2;
             for kk in k_cb..=(nz - 2) {
-                if model.r[kk + 1] <= r_target {
+                if r_arr[kk + 1] <= r_target {
                     k_found = kk;
                     break;
                 }
@@ -269,13 +344,13 @@ pub fn eval_over_bdy_params(
         }
     } else {
         let mut r_target = r_cb + f0 * hp_cb;
-        if r_target >= model.r[0] {
-            r_target = model.r[0];
+        if r_target >= r_arr[0] {
+            r_target = r_arr[0];
             (0, r_target)
         } else {
             let mut k_found = 0;
             for kk in (0..=k_cb).rev() {
-                if model.r[kk] > r_target {
+                if r_arr[kk] > r_target {
                     k_found = kk;
                     break;
                 }
@@ -284,16 +359,16 @@ pub fn eval_over_bdy_params(
         }
     };
 
-    if !(model.r[k + 1] <= r && model.r[k] >= r) {
+    if !(r_arr[k + 1] <= r && r_arr[k] >= r) {
         return Err(StarError::InvalidInput(format!(
             "r_ob not correctly bracketed: r(k+1)={}, r={r}, r(k)={}",
-            model.r[k + 1],
-            model.r[k]
+            r_arr[k + 1],
+            r_arr[k]
         )));
     }
 
-    let rk = model.r[k];
-    let rkp1 = model.r[k + 1];
+    let rk = r_arr[k];
+    let rkp1 = r_arr[k + 1];
     let rk3 = rk * rk * rk;
     let rkp1_3 = rkp1 * rkp1 * rkp1;
     let r3 = r * r * r;
@@ -302,20 +377,19 @@ pub fn eval_over_bdy_params(
     // Verbatim `star/private/overshoot_utils.f90:322`: read `mlt_mixing_length`
     // directly whenever populated so faces zeroed by `switch_to_radiative` stay
     // `0.0` (falling back only if the entire slice was never populated).
-    let mx_ml = &model.aux.mixing.mlt_mixing_length;
     let has_ml = mx_ml.len() == nz && mx_ml.iter().any(|&v| v > 0.0);
     let (lam_k, lam_kp1) = if has_ml {
         (mx_ml[k], mx_ml[k + 1])
     } else {
         (
-            model.controls.mixing_length_alpha * model.scale_height[k],
-            model.controls.mixing_length_alpha * model.scale_height[k + 1],
+            mixing_length_alpha * scale_height[k],
+            mixing_length_alpha * scale_height[k + 1],
         )
     };
     let lambda = (1.0 - w) * lam_k + w * lam_kp1;
 
-    let vc_k = model.conv_vel[k];
-    let vc_kp1 = model.conv_vel[k + 1];
+    let vc_k = conv_vel[k];
+    let vc_kp1 = conv_vel[k + 1];
     let vc = if vc_k != 0.0 && vc_kp1 != 0.0 {
         (1.0 - w) * vc_k + w * vc_kp1
     } else if vc_k != 0.0 && vc_kp1 == 0.0 {
@@ -338,6 +412,36 @@ pub fn eval_over_bdy_params(
 
     let d = vc * lambda / 3.0;
     Ok((k, r, d, vc))
+}
+
+/// Evaluates overshoot-boundary anchor parameters `(k_ob, r_ob, d_ob, vc_ob)`
+/// stepped back by `f0 * Hp_cb` into the convection zone
+/// (`eval_over_bdy_params` in `star/private/overshoot_utils.f90:229-374`).
+///
+/// # Errors
+/// Returns [`StarError::InvalidInput`] if boundary parameters or radius
+/// bracketing fail.
+pub fn eval_over_bdy_params(
+    model: &StarModel,
+    i: usize,
+    f0: f64,
+) -> Result<(usize, f64, f64, f64), StarError> {
+    let k_cb = eval_conv_bdy_k(model, i)?;
+    let r_cb = eval_conv_bdy_r(model, i)?;
+    let hp_cb = eval_conv_bdy_hp(model, i)?;
+    eval_over_bdy_params_slices(
+        model.nz,
+        &model.r,
+        &model.conv_vel,
+        &model.aux.mixing.mlt_mixing_length,
+        &model.scale_height,
+        model.controls.mixing_length_alpha,
+        k_cb,
+        r_cb,
+        hp_cb,
+        model.aux.mixing.top_conv_bdy[i],
+        f0,
+    )
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -642,37 +746,70 @@ pub fn add_overshooting(model: &mut StarModel) -> Result<(), StarError> {
             d_arr.fill(0.0);
             vc_arr.fill(0.0);
 
-            let scheme = match scheme_str {
-                "exponential" => OvershootScheme::Exponential,
-                "step" => OvershootScheme::Step,
-                "other" => {
+            let (k_a, k_b) = if scheme_str == "other" {
+                let Some(hook) = model.aux.other_overshooting_scheme.clone()
+                else {
                     return Err(StarError::InvalidInput(format!(
                         "overshoot_scheme({}) = 'other' requires a custom other_overshooting_scheme hook (default null_other_overshooting_scheme returns ierr = -1)",
                         j + 1
                     )));
+                };
+                match hook.eval_overshooting(
+                    model,
+                    i,
+                    j,
+                    &mut d_arr,
+                    &mut vc_arr,
+                )? {
+                    Some((ka, kb)) => {
+                        if ka >= nz || kb >= nz {
+                            return Err(StarError::InvalidInput(format!(
+                                "other_overshooting_scheme returned out-of-range bounds (k_a={ka}, k_b={kb}) for nz={nz}"
+                            )));
+                        }
+                        for k in 0..nz {
+                            if !d_arr[k].is_finite() || !vc_arr[k].is_finite() {
+                                return Err(StarError::InvalidInput(format!(
+                                    "other_overshooting_scheme produced non-finite value at face {k}: D={}, vc={}",
+                                    d_arr[k], vc_arr[k]
+                                )));
+                            }
+                        }
+                        (ka, kb)
+                    }
+                    None => {
+                        return Err(StarError::InvalidInput(format!(
+                            "overshoot_scheme({}) = 'other' requires a custom other_overshooting_scheme hook (default null_other_overshooting_scheme returns ierr = -1)",
+                            j + 1
+                        )));
+                    }
                 }
-                other => {
-                    return Err(StarError::InvalidInput(format!(
-                        "Invalid overshoot_scheme({}): '{other}'",
-                        j + 1
-                    )));
-                }
+            } else {
+                let scheme = match scheme_str {
+                    "exponential" => OvershootScheme::Exponential,
+                    "step" => OvershootScheme::Step,
+                    other => {
+                        return Err(StarError::InvalidInput(format!(
+                            "Invalid overshoot_scheme({}): '{other}'",
+                            j + 1
+                        )));
+                    }
+                };
+                eval_overshoot_profile(
+                    model,
+                    i,
+                    scheme,
+                    set.f,
+                    set.f0,
+                    set.d0,
+                    set.delta0,
+                    set.mass_full_on,
+                    set.mass_full_off,
+                    d_min,
+                    &mut d_arr,
+                    &mut vc_arr,
+                )?
             };
-
-            let (k_a, k_b) = eval_overshoot_profile(
-                model,
-                i,
-                scheme,
-                set.f,
-                set.f0,
-                set.d0,
-                set.delta0,
-                set.mass_full_on,
-                set.mass_full_off,
-                d_min,
-                &mut d_arr,
-                &mut vc_arr,
-            )?;
 
             apply_evaluated_overshoot_to_model(
                 model, i, k_cb, k_a, k_b, &d_arr, &vc_arr, d_min,

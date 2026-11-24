@@ -455,9 +455,12 @@ impl StarModel {
         self.ln_e_start.clone_from(&self.ln_e);
         self.ln_s_start.clone_from(&self.ln_s);
         self.energy_start.clone_from(&self.energy);
-        self.aux.total_internal_energy_start = (0..self.nz)
-            .map(|k| self.energy_start[k].max(0.0) * self.dm[k])
-            .sum();
+        // Standalone callers (outside the step driver) get the same
+        // `eval_total_energy_integrals` total; inside a step
+        // `record_start_of_step_energy_integrals` sets it after the remesh
+        // (`evolve.f90:420-431`).
+        self.aux.total_internal_energy_start =
+            crate::evolve_support::eval_total_energy_integrals(self).0;
         self.peos_start.clone_from(&self.peos);
         self.non_nuc_neu_start.clone_from(&self.non_nuc_neu);
         self.xa_start.clone_from(&self.xa);

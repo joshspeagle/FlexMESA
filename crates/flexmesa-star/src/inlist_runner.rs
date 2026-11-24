@@ -11,22 +11,22 @@ use crate::case_staging::TempCaseStaging;
 use crate::controls::StarError;
 use crate::evolve::{star_evolve_step, star_evolve_step_outcome_with_extras};
 use crate::evolve_support::snapshot_step_start_extras;
-use crate::history::{HistoryRow, extract_history_row};
+use crate::history::{extract_history_row, HistoryRow};
 use crate::hydro_vars::set_hydro_vars;
 use crate::inlist::{InlistBundle, InlistLoadOptions};
-use crate::mesa_profile::StarLogsWriter;
+use crate::mesa_profile::{StarLogsWriter, StarStepLogExtras};
 use crate::model::StarModel;
 use crate::model_io::{
     compute_photo_checksum, load_photo_bytes, write_mod_string,
     write_photo_bytes,
 };
 use crate::photo_io::try_write_photo_bytes;
-use crate::rn_parser::{RnStage, parse_rn_stages};
+use crate::rn_parser::{parse_rn_stages, RnStage};
 use crate::rsp_eos_kap::RspChemCache;
 use crate::star_job_init::{
-    InitModelOutcome, init_or_update_model_from_bundle_outcome,
+    init_or_update_model_from_bundle_outcome, InitModelOutcome,
 };
-use crate::termination::{LimitCheckOutcome, do_check_limits};
+use crate::termination::{do_check_limits, LimitCheckOutcome};
 
 /// Control flow directive returned by [`StarExtras`] step hooks (`keep_going`,
 /// `redo`, `retry`, `terminate` in `star/public/star_def.inc`).
@@ -63,8 +63,9 @@ pub trait StarExtras {
     /// Returns [`StarError`] if custom control setup fails.
     fn extras_controls(
         &mut self,
-        _model: &mut StarModel,
+        model: &mut StarModel,
     ) -> Result<(), StarError> {
+        install_star_aux_hooks(self, model);
         Ok(())
     }
 
@@ -158,7 +159,10 @@ pub trait StarExtras {
     ///
     /// # Errors
     /// Returns [`StarError`] if evaluating or validating the torque fails.
-    fn apply_other_torque(&mut self, m: &mut StarModel) -> Result<(), StarError> {
+    fn apply_other_torque(
+        &mut self,
+        m: &mut StarModel,
+    ) -> Result<(), StarError> {
         if let Some(jdot) = self.other_torque(m) {
             if jdot.len() != m.nz {
                 return Err(StarError::InvalidInput(format!(
@@ -230,9 +234,79 @@ pub trait StarExtras {
     fn extra_history_columns(&self, _m: &StarModel) -> Vec<(String, f64)> {
         Vec::new()
     }
+    /// Extra per-zone profile columns appended to `profileN.data` rows
+    /// (`how_many_extra_profile_columns` + `data_for_extra_profile_columns`).
+    ///
+    /// # Errors
+    /// Returns [`StarError`] if extra profile column generation fails.
+    fn extra_profile_columns(
+        &self,
+        _m: &StarModel,
+    ) -> Result<Vec<(String, Vec<f64>)>, StarError> {
+        Ok(Vec::new())
+    }
+    /// Extra header items emitted when starting a `history.data` log
+    /// (`how_many_extra_history_header_items` +
+    /// `data_for_extra_history_header_items`).
+    ///
+    /// # Errors
+    /// Returns [`StarError`] if extra history header generation fails.
+    fn extra_history_header_items(
+        &self,
+        _m: &StarModel,
+    ) -> Result<Vec<(String, f64)>, StarError> {
+        Ok(Vec::new())
+    }
+    /// Extra header items emitted on each `profileN.data` snapshot
+    /// (`how_many_extra_profile_header_items` +
+    /// `data_for_extra_profile_header_items`).
+    ///
+    /// # Errors
+    /// Returns [`StarError`] if extra profile header generation fails.
+    fn extra_profile_header_items(
+        &self,
+        _m: &StarModel,
+    ) -> Result<Vec<(String, f64)>, StarError> {
+        Ok(Vec::new())
+    }
     /// Receives the staged temporary case directory path before stage execution
     /// so caller-supplied extras write auxiliary outputs inside the staged copy.
     fn set_staged_case_dir(&mut self, _case_dir: &Path) {}
+
+    /// Optional custom convective overshooting scheme handle installed onto
+    /// `model.aux.other_overshooting_scheme` (`other_overshooting_scheme` in
+    /// `star/other/other_overshooting_scheme.f90`).
+    fn other_overshooting_scheme_handle(
+        &self,
+    ) -> Option<crate::hydro_state::OtherOvershootingSchemeHandle> {
+        None
+    }
+
+    /// Optional custom `adjust_mlt_gradT_fraction` handle installed onto
+    /// `model.aux.other_adjust_mlt_gradt_fraction`
+    /// (`other_adjust_mlt_gradT_fraction` in
+    /// `star/other/other_adjust_mlt_gradt_fraction.f90`).
+    fn other_adjust_mlt_gradt_fraction_handle(
+        &self,
+    ) -> Option<crate::hydro_state::OtherAdjustMltGradtFractionHandle> {
+        None
+    }
+}
+
+/// Installs any `other_overshooting_scheme` and
+/// `other_adjust_mlt_gradT_fraction` handles exposed by `extras` onto
+/// `model.aux` without clearing handles already installed directly by
+/// `extras_controls`.
+pub fn install_star_aux_hooks<E: StarExtras + ?Sized>(
+    extras: &E,
+    model: &mut StarModel,
+) {
+    if let Some(handle) = extras.other_overshooting_scheme_handle() {
+        model.aux.other_overshooting_scheme = Some(handle);
+    }
+    if let Some(handle) = extras.other_adjust_mlt_gradt_fraction_handle() {
+        model.aux.other_adjust_mlt_gradt_fraction = Some(handle);
+    }
 }
 
 /// Default no-op [`StarExtras`] implementation (`standard_run_star_extras.inc`).
@@ -524,6 +598,27 @@ impl<'a> StarLogsOptions<'a> {
         case_dir: &Path,
         stage_logs_dir: Option<&str>,
     ) -> Result<Option<StarLogsWriter>, StarError> {
+        self.build_writer_with_extras(
+            model,
+            case_dir,
+            stage_logs_dir,
+            &DefaultStarExtras,
+        )
+    }
+
+    /// Builds the per-stage [`StarLogsWriter`] configured by `self`, forwarding
+    /// `extras` into `profile_starting_model` if enabled.
+    ///
+    /// # Errors
+    /// Returns [`StarError`] if column resolution, extra profile hook calls, or
+    /// output directory setup fails.
+    pub fn build_writer_with_extras(
+        &self,
+        model: &StarModel,
+        case_dir: &Path,
+        stage_logs_dir: Option<&str>,
+        extras: &dyn StarExtras,
+    ) -> Result<Option<StarLogsWriter>, StarError> {
         if let Some(exp_hist) = self.explicit_history_file {
             Ok(Some(StarLogsWriter::for_explicit_history_file(
                 model,
@@ -532,18 +627,71 @@ impl<'a> StarLogsOptions<'a> {
                 self.history_interval_override,
             )?))
         } else if let Some(out_root) = self.output_root {
-            Ok(Some(StarLogsWriter::for_stage_with_logs_dir(
-                model,
-                case_dir,
-                out_root,
-                stage_logs_dir,
-                self.history_interval_override,
-                self.write_profiles_override,
-            )?))
+            Ok(Some(
+                StarLogsWriter::for_stage_with_logs_dir_and_profile_extras(
+                    model,
+                    case_dir,
+                    out_root,
+                    stage_logs_dir,
+                    self.history_interval_override,
+                    self.write_profiles_override,
+                    |m| {
+                        Ok((
+                            extras.extra_profile_header_items(m)?,
+                            extras.extra_profile_columns(m)?,
+                        ))
+                    },
+                )?,
+            ))
         } else {
             Ok(None)
         }
     }
+}
+
+fn record_logs_step_with_extras(
+    lw: &mut StarLogsWriter,
+    model: &StarModel,
+    extras: &dyn StarExtras,
+    is_first_step: bool,
+    is_terminating: bool,
+) -> Result<(), StarError> {
+    let hist_due = lw.is_history_due(model, is_first_step, is_terminating);
+    let prof_due = lw.is_profile_due(model, is_first_step, is_terminating);
+    if !hist_due && !prof_due {
+        return Ok(());
+    }
+    let hist_hdr = if hist_due && lw.needs_history_header() {
+        extras.extra_history_header_items(model)?
+    } else {
+        Vec::new()
+    };
+    let hist_cols = if hist_due {
+        extras.extra_history_columns(model)
+    } else {
+        Vec::new()
+    };
+    let prof_hdr = if prof_due {
+        extras.extra_profile_header_items(model)?
+    } else {
+        Vec::new()
+    };
+    let prof_cols = if prof_due {
+        extras.extra_profile_columns(model)?
+    } else {
+        Vec::new()
+    };
+    lw.record_step_with_extras(
+        model,
+        is_first_step,
+        is_terminating,
+        StarStepLogExtras {
+            history_header_items: &hist_hdr,
+            history_columns: &hist_cols,
+            profile_header_items: &prof_hdr,
+            profile_columns: &prof_cols,
+        },
+    )
 }
 
 /// Executes a single `inlist` stage on `model`, stepping until either a
@@ -576,6 +724,13 @@ pub fn run_inlist_stage_with_logs(
     mut logs_writer: Option<&mut StarLogsWriter>,
 ) -> Result<StageRunReport, StarError> {
     let _net_dir_guard = crate::micro::NetSearchDirGuard::new(&bundle.case_dir);
+    if logs_writer.is_none() && model.controls.colors.use_colors {
+        let _ = crate::mesa_history::load_star_colors_context(
+            model,
+            Some(&bundle.case_dir),
+        )?;
+    }
+    install_star_aux_hooks(extras, model);
     let t0 = Instant::now();
     let (mut steps_taken, mut total_newton_iterations, mut total_retries) =
         (0, 0, 0);
@@ -607,12 +762,7 @@ pub fn run_inlist_stage_with_logs(
             }
         }
         if let Some(lw) = logs_writer.as_deref_mut() {
-            let extra_cols = if lw.is_history_due(model, true, true) {
-                extras.extra_history_columns(model)
-            } else {
-                Vec::new()
-            };
-            lw.record_step_with_extra(model, true, true, &extra_cols)?;
+            record_logs_step_with_extras(lw, model, extras, true, true)?;
         }
     } else {
         for _ in 0..cap {
@@ -708,20 +858,12 @@ pub fn run_inlist_stage_with_logs(
             let is_last_cap_step = steps_taken == cap;
             let is_terminating = will_terminate || is_last_cap_step;
             if let Some(lw) = logs_writer.as_deref_mut() {
-                let extra_cols = if lw.is_history_due(
+                record_logs_step_with_extras(
+                    lw,
                     model,
+                    extras,
                     steps_taken == 1,
                     is_terminating,
-                ) {
-                    extras.extra_history_columns(model)
-                } else {
-                    Vec::new()
-                };
-                lw.record_step_with_extra(
-                    model,
-                    steps_taken == 1,
-                    is_terminating,
-                    &extra_cols,
                 )?;
             }
             // Periodic restart photo output (`star/private/evolve.f90:2340-2361`).
@@ -839,7 +981,10 @@ pub fn verify_photo_restart_parity(
     continued.controls.max_age = -1.0;
     continued.controls.ts_stop.max_age_in_days = -1.0;
     continued.controls.max_age_in_seconds = None;
-    continued.controls.ts_stop.num_adjusted_dt_steps_before_max_age = 0;
+    continued
+        .controls
+        .ts_stop
+        .num_adjusted_dt_steps_before_max_age = 0;
     continued.aux.step_hist.using_revised_max_yr_dt = false;
     if continued.dt_next <= 0.0 {
         let fallback_dt = continued.dt.max(continued.dt_old);
@@ -856,6 +1001,37 @@ pub fn verify_photo_restart_parity(
 
     let photo_bytes = write_photo_bytes(&continued);
     let mut restarted = load_photo_bytes(&photo_bytes)?;
+    // Re-attach non-serialized `other_*` callback handles onto the reloaded
+    // photo model (matching MESA's `extras_controls` hook re-registration on
+    // restart; `.photo` files serialize numerical state only).
+    restarted
+        .aux
+        .tidal_deformation
+        .clone_from(&continued.aux.tidal_deformation);
+    restarted
+        .aux
+        .binary_other_torque
+        .clone_from(&continued.aux.binary_other_torque);
+    restarted
+        .aux
+        .binary_other_torque_implicit
+        .clone_from(&continued.aux.binary_other_torque_implicit);
+    restarted
+        .aux
+        .other_overshooting_scheme
+        .clone_from(&continued.aux.other_overshooting_scheme);
+    restarted
+        .aux
+        .other_adjust_mlt_gradt_fraction
+        .clone_from(&continued.aux.other_adjust_mlt_gradt_fraction);
+    restarted
+        .aux
+        .other_mesh_functions
+        .clone_from(&continued.aux.other_mesh_functions);
+    restarted
+        .aux
+        .other_mesh_delta_coeff_factor
+        .clone_from(&continued.aux.other_mesh_delta_coeff_factor);
 
     for _ in 0..n_verify_steps {
         star_evolve_step(&mut continued, do_remesh, op_split, true)?;
@@ -1060,10 +1236,11 @@ pub fn run_test_suite_case_with_extras(
                     }
                 };
 
-                let mut stage_logs = logs_opts.build_writer(
+                let mut stage_logs = logs_opts.build_writer_with_extras(
                     &model,
                     case_dir,
                     logs_dir.as_deref(),
+                    extras,
                 )?;
 
                 let rep = run_inlist_stage_with_logs(

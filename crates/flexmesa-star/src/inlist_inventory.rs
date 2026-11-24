@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //! Authoritative inventory of implemented, parsed-but-unused (`N1-28`), and
 //! headless plotting GUI control keys for single-star namelist sections
-//! (`&star_job`, `&eos`, `&kap`, `&controls`).
+//! (`&star_job`, `&eos`, `&kap`, `&colors`, `&controls`).
 
 use std::collections::HashSet;
 use std::path::Path;
@@ -26,6 +26,10 @@ pub struct StarControlInventory {
     pub eos_supported: HashSet<&'static str>,
     /// Supported `&kap` keys.
     pub kap_supported: HashSet<&'static str>,
+    /// Supported `&colors` keys wired into synthetic photometry history output (`#454`).
+    pub colors_supported: HashSet<&'static str>,
+    /// Parsed-but-unused `&colors` fields (`#454`).
+    pub colors_unused: HashSet<&'static str>,
     /// Supported `&controls` keys wired into physics/solver/output execution.
     pub controls_supported: HashSet<&'static str>,
     /// Parsed-but-unused `&controls` fields flagged by default (`#147`).
@@ -36,6 +40,8 @@ pub struct StarControlInventory {
     pub eos_terminal_output: HashSet<&'static str>,
     /// `&kap` keys that only write to the terminal (`DECISIONS #26`).
     pub kap_terminal_output: HashSet<&'static str>,
+    /// `&colors` keys that only write to the terminal (`DECISIONS #26`).
+    pub colors_terminal_output: HashSet<&'static str>,
     /// `&controls` keys that only write to the terminal (`DECISIONS #26`).
     pub controls_terminal_output: HashSet<&'static str>,
 }
@@ -54,6 +60,8 @@ pub fn supported_star_control_inventory() -> &'static StarControlInventory {
             .collect(),
         eos_supported: EOS_SUPPORTED.iter().copied().collect(),
         kap_supported: KAP_SUPPORTED.iter().copied().collect(),
+        colors_supported: COLORS_SUPPORTED.iter().copied().collect(),
+        colors_unused: COLORS_UNUSED.iter().copied().collect(),
         controls_supported: CONTROLS_SUPPORTED.iter().copied().collect(),
         controls_unused: CONTROLS_UNUSED.iter().copied().collect(),
         star_job_terminal_output: STAR_JOB_TERMINAL_OUTPUT
@@ -62,6 +70,10 @@ pub fn supported_star_control_inventory() -> &'static StarControlInventory {
             .collect(),
         eos_terminal_output: EOS_TERMINAL_OUTPUT.iter().copied().collect(),
         kap_terminal_output: KAP_TERMINAL_OUTPUT.iter().copied().collect(),
+        colors_terminal_output: COLORS_TERMINAL_OUTPUT
+            .iter()
+            .copied()
+            .collect(),
         controls_terminal_output: CONTROLS_TERMINAL_OUTPUT
             .iter()
             .copied()
@@ -493,6 +505,27 @@ pub const KAP_SUPPORTED: &[&str] = &[
     "user_num_kap_xs_for_this_z",
     "user_num_kap_zs",
     "zbase",
+];
+
+/// `&colors` keys that only write to the terminal (`DECISIONS #26`).
+pub const COLORS_TERMINAL_OUTPUT: &[&str] = &[];
+
+/// Parsed-but-unused `&colors` keys (none; all 10 non-include controls are wired).
+pub const COLORS_UNUSED: &[&str] = &[];
+
+/// Supported `&colors` keys wired into synthetic photometry history evaluation
+/// (`colors/defaults/colors.defaults`, `#454`).
+pub const COLORS_SUPPORTED: &[&str] = &[
+    "colors_results_directory",
+    "distance",
+    "instrument",
+    "mag_system",
+    "make_csv",
+    "sed_per_model",
+    "stellar_atm",
+    "use_colors",
+    "vega_sed",
+    "z_over_x_ref",
 ];
 
 /// Supported `&controls` keys.
@@ -1713,7 +1746,10 @@ pub fn copy_cleaned_star_case(
         src_case,
         dst_case,
         &|sec| {
-            matches!(sec, "star_job" | "eos" | "kap" | "controls" | "pgstar")
+            matches!(
+                sec,
+                "star_job" | "eos" | "kap" | "colors" | "controls" | "pgstar"
+            )
         },
         &|sec, key| match sec {
             "star_job" => {
@@ -1731,6 +1767,11 @@ pub fn copy_cleaned_star_case(
                 is_include_key(sec, key)
                     || inv.kap_supported.contains(key)
                     || inv.kap_terminal_output.contains(key)
+            }
+            "colors" => {
+                is_include_key(sec, key)
+                    || inv.colors_supported.contains(key)
+                    || inv.colors_terminal_output.contains(key)
             }
             "controls" => {
                 is_include_key(sec, key)
@@ -1762,20 +1803,31 @@ mod tests {
             .chain(inv.star_job_headless_gui_flags.iter())
             .chain(inv.eos_supported.iter())
             .chain(inv.kap_supported.iter())
+            .chain(inv.colors_supported.iter())
+            .chain(inv.colors_unused.iter())
             .chain(inv.controls_supported.iter())
             .chain(inv.controls_unused.iter())
         {
             assert_eq!(*key, key.to_ascii_lowercase());
         }
+        assert!(inv.colors_supported.is_disjoint(&inv.colors_unused));
+        assert!(inv
+            .colors_supported
+            .is_disjoint(&inv.colors_terminal_output));
+        for key in &inv.colors_supported {
+            assert!(
+                upstream_section_keys("colors")
+                    .is_some_and(|set| set.contains(key)),
+                "{key} is not an upstream &colors key"
+            );
+        }
         assert!(inv.star_job_supported.is_disjoint(&inv.star_job_unused));
-        assert!(
-            inv.star_job_supported
-                .is_disjoint(&inv.star_job_headless_gui_flags)
-        );
-        assert!(
-            inv.star_job_unused
-                .is_disjoint(&inv.star_job_headless_gui_flags)
-        );
+        assert!(inv
+            .star_job_supported
+            .is_disjoint(&inv.star_job_headless_gui_flags));
+        assert!(inv
+            .star_job_unused
+            .is_disjoint(&inv.star_job_headless_gui_flags));
         assert!(inv.controls_supported.is_disjoint(&inv.controls_unused));
         assert!(inv.eos_supported.is_disjoint(&inv.eos_terminal_output));
         assert!(inv.kap_supported.is_disjoint(&inv.kap_terminal_output));

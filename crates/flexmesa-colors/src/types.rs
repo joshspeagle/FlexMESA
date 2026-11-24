@@ -142,6 +142,27 @@ pub enum ColorsError {
     UnknownInterpMethod(String),
     /// Malformed binary SED cube data.
     BinaryParseError(&'static str),
+    /// Failed I/O operation with explicit filesystem path and reason.
+    IoError {
+        /// Path that failed to open, read, or write.
+        path: String,
+        /// Underlying OS/I/O error description.
+        detail: String,
+    },
+    /// Invalid or malformed `colors` table, filter curve, or SED file.
+    InvalidData {
+        /// Context string describing what failed validation.
+        context: &'static str,
+        /// Detailed failure explanation.
+        detail: String,
+    },
+    /// Invalid `&colors` control value (`z_over_x_ref`, `distance`, etc.).
+    InvalidControl {
+        /// Name of the invalid control.
+        name: &'static str,
+        /// Detailed validation message.
+        detail: String,
+    },
 }
 
 impl core::fmt::Display for ColorsError {
@@ -167,6 +188,15 @@ impl core::fmt::Display for ColorsError {
             }
             Self::BinaryParseError(msg) => {
                 write!(f, "binary SED cube parse error: {msg}")
+            }
+            Self::IoError { path, detail } => {
+                write!(f, "colors I/O error at '{path}': {detail}")
+            }
+            Self::InvalidData { context, detail } => {
+                write!(f, "{context}: {detail}")
+            }
+            Self::InvalidControl { name, detail } => {
+                write!(f, "invalid '&colors::{name}': {detail}")
             }
         }
     }

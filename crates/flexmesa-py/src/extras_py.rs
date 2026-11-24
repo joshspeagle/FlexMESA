@@ -4,7 +4,7 @@
 //! `StarExtras` and `BinaryExtras` (`#148`).
 
 use std::path::{Path, PathBuf};
-use std::sync::{Mutex, MutexGuard, PoisonError};
+use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
 use flexmesa_binary::{
     BinaryCompanion, BinaryExtras, BinaryExtrasAction, BinarySystem,
@@ -17,8 +17,16 @@ use flexmesa_eos::{
     I_FRAC_CMS, I_FRAC_FREE_EOS, I_FRAC_HELM, I_FRAC_IDEAL, I_FRAC_OPAL_SCVH,
     I_FRAC_PC, I_FRAC_SKYE,
 };
+use flexmesa_star::hydro_state::{
+    OtherAdjustMltGradtFractionHandle, OtherAdjustMltGradtFractionHook,
+    OtherOvershootingSchemeHandle, OtherOvershootingSchemeHook,
+};
 use flexmesa_star::inlist_runner::{
     DefaultStarExtras, ExtrasDirective, RspBuildOutcome, StarExtras,
+    install_star_aux_hooks,
+};
+use flexmesa_star::overshoot::{
+    OverBdyAnchorCache, eval_conv_bdy_hp, eval_over_bdy_params,
 };
 use flexmesa_star::report_utils::surface_avg_x_slot;
 use flexmesa_star::{
@@ -411,6 +419,25 @@ fn set_star_control_scalars(
     // Upstream `controls.defaults` sets `use_other_remove_surface = .false.`,
     // and `StarControls` does not yet wire `other_remove_surface` (`#153`).
     d.set_item("use_other_remove_surface", false)?;
+    d.set_item("min_d_mix", c.min_d_mix)?;
+    d.set_item("overshoot_d_min", c.mix_wind.overshoot_d_min)?;
+    let py = d.py();
+    let sets = &c.mix_wind.overshoot_sets;
+    d.set_item("overshoot_f", PyList::new(py, sets.iter().map(|s| s.f))?)?;
+    d.set_item("overshoot_f0", PyList::new(py, sets.iter().map(|s| s.f0))?)?;
+    d.set_item("overshoot_d0", PyList::new(py, sets.iter().map(|s| s.d0))?)?;
+    d.set_item(
+        "overshoot_delta0",
+        PyList::new(py, sets.iter().map(|s| s.delta0))?,
+    )?;
+    d.set_item(
+        "overshoot_mass_full_on",
+        PyList::new(py, sets.iter().map(|s| s.mass_full_on))?,
+    )?;
+    d.set_item(
+        "overshoot_mass_full_off",
+        PyList::new(py, sets.iter().map(|s| s.mass_full_off))?,
+    )?;
     Ok(())
 }
 
@@ -584,10 +611,12 @@ fn set_star_radial_arrays(
     set_f64("lnd", &model.lnd)?;
     set_f64("lnt", &model.ln_t)?;
     set_f64("peos", &model.peos)?;
+    set_f64("ln_peos", &model.ln_peos)?;
     set_f64("pgas", &model.pgas)?;
     set_f64("prad", &model.prad)?;
     set_f64("energy", &model.energy)?;
     set_f64("entropy", &model.entropy)?;
+    set_f64("cp", &model.cp)?;
     set_f64("csound", &model.csound)?;
     set_f64("gamma1", &model.gamma1)?;
     set_f64("grada", &model.grada)?;
@@ -607,6 +636,10 @@ fn set_star_radial_arrays(
     set_f64("omega", &model.omega)?;
     set_f64("j_rot", &model.j_rot)?;
     set_f64("d_mix", &model.d_mix)?;
+    set_f64(
+        "adjust_mlt_gradt_fraction",
+        &model.aux.mixing.adjust_mlt_gradt_fraction,
+    )?;
     set_f64("conv_vel", &model.conv_vel)?;
     set_f64("mlt_vc", &model.mlt_vc)?;
     set_f64("eps_nuc", &model.eps_nuc)?;
@@ -651,6 +684,16 @@ fn build_star_snapshot<'py>(
     d.set_item("dt_next", model.dt_next)?;
     d.set_item("mstar", model.mstar)?;
     d.set_item("m_center", model.m_center)?;
+    d.set_item("xmstar", model.xmstar)?;
+    d.set_item("num_conv_boundaries", model.aux.mixing.conv_bdy_loc.len())?;
+    d.set_item(
+        "conv_bdy_loc",
+        PyList::new(py, &model.aux.mixing.conv_bdy_loc)?,
+    )?;
+    d.set_item(
+        "top_conv_bdy",
+        PyList::new(py, &model.aux.mixing.top_conv_bdy)?,
+    )?;
     d.set_item("star_mass", model.mstar / M_SUN)?;
     d.set_item("mstar_dot", model.mstar_dot)?;
     d.set_item("star_mdot", model.mstar_dot / (M_SUN / SECYER))?;
@@ -929,11 +972,177 @@ fn parse_star_directive(
     }
 }
 
+/// Callable attached to `other_overshooting_scheme` snapshots so Python hooks
+/// can evaluate `eval_over_bdy_params(i_bdy, f0)` directly via
+/// `OverBdyAnchorCache` for arbitrary tapered `f0` values.
+#[pyclass]
+struct PyOverBdyEvaluator {
+    anchor: OverBdyAnchorCache,
+}
+
+#[pymethods]
+impl PyOverBdyEvaluator {
+    fn __call__(
+        &self,
+        i_bdy: usize,
+        f0: f64,
+    ) -> PyResult<(usize, f64, f64, f64)> {
+        if i_bdy != self.anchor.boundary_index() {
+            return Err(PyValueError::new_err(format!(
+                "eval_over_bdy_params called for boundary {i_bdy} != active boundary {}",
+                self.anchor.boundary_index()
+            )));
+        }
+        self.anchor.eval_at(f0).map_err(to_py_err)
+    }
+}
+
+struct PyOtherOvershootingSchemeHook {
+    py_obj: Arc<Py<PyAny>>,
+    state: Arc<PyAdapterState>,
+}
+
+impl OtherOvershootingSchemeHook for PyOtherOvershootingSchemeHook {
+    fn eval_overshooting(
+        &self,
+        model: &StarModel,
+        i: usize,
+        j: usize,
+        d_out: &mut [f64],
+        vc_out: &mut [f64],
+    ) -> Result<Option<(usize, usize)>, StarError> {
+        self.state.take_pending_star_err()?;
+        let anchor = OverBdyAnchorCache::from_model(model, i)?;
+        let n_bdy = model.aux.mixing.conv_bdy_loc.len();
+        let set_f0 = model
+            .controls
+            .mix_wind
+            .overshoot_sets
+            .get(j)
+            .map_or(0.0, |s| s.f0);
+        let mut conv_bdy_hp = Vec::with_capacity(n_bdy);
+        let mut over_bdy_k = Vec::with_capacity(n_bdy);
+        let mut over_bdy_r = Vec::with_capacity(n_bdy);
+        let mut over_bdy_d = Vec::with_capacity(n_bdy);
+        let mut over_bdy_vc = Vec::with_capacity(n_bdy);
+        for b in 0..n_bdy {
+            let hp = if b == i {
+                anchor.hp_cb()
+            } else {
+                eval_conv_bdy_hp(model, b).unwrap_or(0.0)
+            };
+            let (k_ob, r_ob, d_ob, vc_ob) = if b == i {
+                anchor.eval_at(set_f0)?
+            } else {
+                eval_over_bdy_params(model, b, set_f0)
+                    .unwrap_or((0, 0.0, 0.0, 0.0))
+            };
+            conv_bdy_hp.push(hp);
+            over_bdy_k.push(k_ob);
+            over_bdy_r.push(r_ob);
+            over_bdy_d.push(d_ob);
+            over_bdy_vc.push(vc_ob);
+        }
+
+        let nz = model.nz;
+        let case_dir = self.state.staged_dir_string();
+        Python::attach(|py| {
+            let call_res = (|| -> PyResult<Option<(isize, isize, Vec<f64>, Vec<f64>)>> {
+                let snap = build_star_snapshot(py, model, &case_dir, false)?;
+                snap.set_item("conv_bdy_hp", PyList::new(py, &conv_bdy_hp)?)?;
+                snap.set_item("over_bdy_k", PyList::new(py, &over_bdy_k)?)?;
+                snap.set_item("over_bdy_r", PyList::new(py, &over_bdy_r)?)?;
+                snap.set_item("over_bdy_d", PyList::new(py, &over_bdy_d)?)?;
+                snap.set_item("over_bdy_vc", PyList::new(py, &over_bdy_vc)?)?;
+                let eval_fn = Py::new(py, PyOverBdyEvaluator { anchor })?;
+                snap.set_item("eval_over_bdy_params", eval_fn)?;
+                let res = self.py_obj.bind(py).call_method1(
+                    "other_overshooting_scheme",
+                    (snap, i, j),
+                )?;
+                if res.is_none() {
+                    return Ok(None);
+                }
+                Ok(Some(res.extract()?))
+            })()
+            .map_err(|e| {
+                StarError::InvalidInput(format!(
+                    "other_overshooting_scheme: {}",
+                    format_py_err(py, &e)
+                ))
+            })?;
+            let Some((ka, kb, d_vec, vc_vec)) = call_res else {
+                return Ok(None);
+            };
+            if ka < 0 || kb < 0 {
+                return Err(StarError::InvalidInput(format!(
+                    "other_overshooting_scheme returned negative index bounds (k_a={ka}, k_b={kb})"
+                )));
+            }
+            if d_vec.len() != nz || vc_vec.len() != nz {
+                return Err(StarError::InvalidInput(format!(
+                    "other_overshooting_scheme returned arrays len ({}, {}) != nz={nz}",
+                    d_vec.len(),
+                    vc_vec.len()
+                )));
+            }
+            d_out[..nz].copy_from_slice(&d_vec);
+            vc_out[..nz].copy_from_slice(&vc_vec);
+            Ok(Some((ka as usize, kb as usize)))
+        })
+    }
+}
+
+struct PyOtherAdjustMltGradtFractionHook {
+    py_obj: Arc<Py<PyAny>>,
+    state: Arc<PyAdapterState>,
+}
+
+impl OtherAdjustMltGradtFractionHook for PyOtherAdjustMltGradtFractionHook {
+    fn apply(&self, model: &mut StarModel) -> Result<(), StarError> {
+        self.state.take_pending_star_err()?;
+        let nz = model.nz;
+        let case_dir = self.state.staged_dir_string();
+        Python::attach(|py| {
+            let snap = build_star_snapshot(py, model, &case_dir, false)
+                .map_err(|e| StarError::InvalidInput(format_py_err(py, &e)))?;
+            let res = self
+                .py_obj
+                .bind(py)
+                .call_method1("other_adjust_mlt_gradt_fraction", (snap,))
+                .map_err(|e| {
+                    StarError::InvalidInput(format!(
+                        "other_adjust_mlt_gradt_fraction: {}",
+                        format_py_err(py, &e)
+                    ))
+                })?;
+            if res.is_none() {
+                return Ok(());
+            }
+            let vals: Vec<f64> = res.extract().map_err(|e| {
+                StarError::InvalidInput(format!(
+                    "other_adjust_mlt_gradt_fraction: {}",
+                    format_py_err(py, &e)
+                ))
+            })?;
+            if vals.len() != nz {
+                return Err(StarError::InvalidInput(format!(
+                    "other_adjust_mlt_gradt_fraction returned {} values for nz = {nz}",
+                    vals.len()
+                )));
+            }
+            model.aux.mixing.adjust_mlt_gradt_fraction[..nz]
+                .copy_from_slice(&vals);
+            Ok(())
+        })
+    }
+}
+
 /// Thread-safe adapter forwarding [`StarExtras`] trait callbacks into a Python
 /// test-side extras object while avoiding per-step whole-model clones (`#148`).
 #[allow(clippy::struct_excessive_bools)]
 pub struct PyStarExtrasAdapter {
-    py_obj: Py<PyAny>,
+    py_obj: Arc<Py<PyAny>>,
     has_controls: bool,
     has_startup: bool,
     has_start_step: bool,
@@ -946,11 +1155,16 @@ pub struct PyStarExtrasAdapter {
     has_other_adjust_mdot: bool,
     has_other_torque: bool,
     has_other_energy: bool,
+    has_other_overshooting_scheme: bool,
+    has_other_adjust_mlt_gradt_fraction: bool,
     has_other_build_initial_model: bool,
     has_other_rsp_build_model: bool,
     has_other_rsp_linear_analysis: bool,
     has_extra_history_columns: bool,
-    state: PyAdapterState,
+    has_extra_profile_columns: bool,
+    has_extra_history_header_items: bool,
+    has_extra_profile_header_items: bool,
+    state: Arc<PyAdapterState>,
 }
 
 impl PyStarExtrasAdapter {
@@ -973,14 +1187,23 @@ impl PyStarExtrasAdapter {
             has_other_adjust_mdot: b.hasattr("other_adjust_mdot")?,
             has_other_torque: b.hasattr("other_torque")?,
             has_other_energy: b.hasattr("other_energy")?,
+            has_other_overshooting_scheme: b
+                .hasattr("other_overshooting_scheme")?,
+            has_other_adjust_mlt_gradt_fraction: b
+                .hasattr("other_adjust_mlt_gradt_fraction")?,
             has_other_build_initial_model: b
                 .hasattr("other_build_initial_model")?,
             has_other_rsp_build_model: b.hasattr("other_rsp_build_model")?,
             has_other_rsp_linear_analysis: b
                 .hasattr("other_rsp_linear_analysis")?,
             has_extra_history_columns: b.hasattr("extra_history_columns")?,
-            py_obj: obj,
-            state: PyAdapterState::default(),
+            has_extra_profile_columns: b.hasattr("extra_profile_columns")?,
+            has_extra_history_header_items: b
+                .hasattr("extra_history_header_items")?,
+            has_extra_profile_header_items: b
+                .hasattr("extra_profile_header_items")?,
+            py_obj: Arc::new(obj),
+            state: Arc::new(PyAdapterState::default()),
         })
     }
 
@@ -1066,6 +1289,36 @@ impl PyStarExtrasAdapter {
             }
         })
     }
+
+    fn call_star_snapshot_extract<T, F>(
+        &self,
+        enabled: bool,
+        method: &str,
+        model: &StarModel,
+        extract: F,
+    ) -> Result<Vec<T>, StarError>
+    where
+        F: FnOnce(&Bound<'_, PyAny>) -> PyResult<Vec<T>>,
+    {
+        if !enabled {
+            return Ok(Vec::new());
+        }
+        let case_dir = self.state.staged_dir_string();
+        Python::attach(|py| {
+            let snap = build_star_snapshot(py, model, &case_dir, false)
+                .map_err(|e| StarError::InvalidInput(format_py_err(py, &e)))?;
+            let res = self
+                .py_obj
+                .bind(py)
+                .call_method1(method, (snap,))
+                .map_err(|e| StarError::InvalidInput(format_py_err(py, &e)))?;
+            if res.is_none() {
+                return Ok(Vec::new());
+            }
+            extract(&res)
+                .map_err(|e| StarError::InvalidInput(format_py_err(py, &e)))
+        })
+    }
 }
 
 impl StarExtras for PyStarExtrasAdapter {
@@ -1078,6 +1331,7 @@ impl StarExtras for PyStarExtrasAdapter {
         model: &mut StarModel,
     ) -> Result<(), StarError> {
         self.state.take_pending_star_err()?;
+        install_star_aux_hooks(self, model);
         if !self.has_controls {
             return Ok(());
         }
@@ -1547,6 +1801,66 @@ impl StarExtras for PyStarExtrasAdapter {
                     Vec::new()
                 }
             }
+        })
+    }
+
+    fn extra_profile_columns(
+        &self,
+        model: &StarModel,
+    ) -> Result<Vec<(String, Vec<f64>)>, StarError> {
+        self.call_star_snapshot_extract(
+            self.has_extra_profile_columns,
+            "extra_profile_columns",
+            model,
+            |res| res.extract::<Vec<(String, Vec<f64>)>>(),
+        )
+    }
+
+    fn extra_history_header_items(
+        &self,
+        model: &StarModel,
+    ) -> Result<Vec<(String, f64)>, StarError> {
+        self.call_star_snapshot_extract(
+            self.has_extra_history_header_items,
+            "extra_history_header_items",
+            model,
+            |res| res.extract::<Vec<(String, f64)>>(),
+        )
+    }
+
+    fn extra_profile_header_items(
+        &self,
+        model: &StarModel,
+    ) -> Result<Vec<(String, f64)>, StarError> {
+        self.call_star_snapshot_extract(
+            self.has_extra_profile_header_items,
+            "extra_profile_header_items",
+            model,
+            |res| res.extract::<Vec<(String, f64)>>(),
+        )
+    }
+
+    fn other_overshooting_scheme_handle(
+        &self,
+    ) -> Option<OtherOvershootingSchemeHandle> {
+        self.has_other_overshooting_scheme.then(|| {
+            OtherOvershootingSchemeHandle::new(PyOtherOvershootingSchemeHook {
+                py_obj: Arc::clone(&self.py_obj),
+                state: Arc::clone(&self.state),
+            })
+        })
+    }
+
+    fn other_adjust_mlt_gradt_fraction_handle(
+        &self,
+    ) -> Option<OtherAdjustMltGradtFractionHandle> {
+        self.has_other_adjust_mlt_gradt_fraction.then(|| {
+            OtherAdjustMltGradtFractionHandle::new(
+                PyOtherAdjustMltGradtFractionHook {
+                    py_obj: Arc::clone(&self.py_obj),
+                    state: Arc::clone(&self.state),
+                },
+            )
         })
     }
 }

@@ -6,9 +6,10 @@
 //! (`net/private/net_burn_const_p.f90` and `num/private/mod_rosenbrock.f`).
 
 use flexmesa_chem::{get_composition_info, NuclideCatalog};
-use flexmesa_const::{CRAD, LN10, QCONV};
+use flexmesa_const::{CRAD, LN10};
 use flexmesa_eos::{
-    eos_pt_get, EosConfig, HelmTable, I_CHI_RHO, I_CHI_T, I_CP, I_ETA, I_LN_S,
+    eos_pt_get_with_linear, EosConfig, HelmTable, I_CHI_RHO, I_CHI_T, I_CP,
+    I_ETA, I_LN_S,
 };
 use flexmesa_math::exp10;
 use flexmesa_mtx::{dgetrf, dgetrs};
@@ -16,11 +17,9 @@ use flexmesa_num::RosenbrockVariant;
 use flexmesa_rates::ScreeningMode;
 use flexmesa_utils::is_bad;
 
-use crate::burn::collect_aion;
 use crate::burn_stepper::tableau_for;
-use crate::derivs::{eval_net_with_work, with_thread_local_work};
-use flexmesa_math::Quad;
-use crate::types::{NetError, NetGeneralInfo, NUM_RVS};
+use crate::derivs::{eval_net_result_with_work, with_thread_local_work};
+use crate::types::{NetError, NetGeneralInfo};
 
 /// Configuration inputs for [`burn_1_zone_const_p`].
 #[derive(Debug, Clone)]
@@ -113,9 +112,7 @@ pub fn burn_1_zone_const_p(
     y[num_isos] = flexmesa_math::log(input.starting_temp);
 
     let nuclides = NuclideCatalog::builtin_ref();
-    let aion = collect_aion(nuclides, &g.chem_id)?;
     let mut x_buf = vec![0.0_f64; num_isos];
-    let mut dydt_buf = vec![[Quad::ZERO; NUM_RVS]; num_isos];
 
     let mut ending_rho = 0.0_f64;
     let mut ending_lns = 0.0_f64;
@@ -159,8 +156,17 @@ pub fn burn_1_zone_const_p(
         }
         let lg_pgas = flexmesa_math::log10(pgas);
 
-        let pt = eos_pt_get(ht, &g.chem_id, &x_buf, lg_pgas, log_t, eos_cfg)
-            .map_err(|e| NetError::IntegrationError(e.to_string()))?;
+        let pt = eos_pt_get_with_linear(
+            ht,
+            &g.chem_id,
+            &x_buf,
+            lg_pgas,
+            log_t,
+            Some(pgas),
+            Some(temp),
+            eos_cfg,
+        )
+        .map_err(|e| NetError::IntegrationError(e.to_string()))?;
         let rho = pt.rho;
         let log_rho = pt.log10_rho;
         let cp = pt.eos.res[I_CP];
@@ -183,45 +189,43 @@ pub fn burn_1_zone_const_p(
 
         let just_dxdt = dfdv_opt.is_none();
         with_thread_local_work(g, |w| {
-            let (eps_nuc, d_eps_nuc_dt, d_eps_nuc_drho, _eps_neu) =
-                eval_net_with_work(
-                    g,
-                    w,
-                    &mut dydt_buf,
-                    just_dxdt,
-                    &x_buf,
-                    temp,
-                    log_t,
-                    rho,
-                    log_rho,
-                    comp.abar,
-                    comp.zbar,
-                    comp.z2bar,
-                    comp.ye,
-                    eta,
-                    d_eta_dlnt,
-                    d_eta_dlnrho,
-                    input.rate_factors,
-                    input.weak_rate_factor,
-                    input.screening_mode,
-                    g.use_3a_fl87,
-                    g.use_suzuki_weak_rates,
-                    false,
-                )?;
+            let res = eval_net_result_with_work(
+                g,
+                w,
+                false,
+                just_dxdt,
+                &x_buf,
+                temp,
+                log_t,
+                rho,
+                log_rho,
+                comp.abar,
+                comp.zbar,
+                comp.z2bar,
+                comp.ye,
+                eta,
+                d_eta_dlnt,
+                d_eta_dlnrho,
+                input.rate_factors,
+                input.weak_rate_factor,
+                input.screening_mode,
+                g.use_3a_fl87,
+                g.use_suzuki_weak_rates,
+                false,
+                false,
+            )?;
 
-            for i in 0..num_isos {
-                f[i] = aion[i] * dydt_buf[i][0].to_f64();
-            }
-            let dlnt_dt = eps_nuc / (cp * temp);
+            f[..num_isos].copy_from_slice(&res.dxdt);
+            let dlnt_dt = res.eps_nuc / (cp * temp);
             f[num_isos] = dlnt_dt;
 
             if let Some(dfdv) = dfdv_opt {
                 let dlnrho_dlnt_const_p =
                     -pt.eos.res[I_CHI_T] / pt.eos.res[I_CHI_RHO];
                 let d_epsnuc_dlnt_const_p = flexmesa_math::fma(
-                    d_eps_nuc_drho * rho * dlnrho_dlnt_const_p,
+                    res.d_eps_nuc_drho * rho * dlnrho_dlnt_const_p,
                     1.0,
-                    d_eps_nuc_dt * temp,
+                    res.d_eps_nuc_dt * temp,
                 );
                 let d_cp_dlnt = flexmesa_math::fma(
                     pt.eos.d_dlnd[I_CP],
@@ -230,22 +234,18 @@ pub fn burn_1_zone_const_p(
                 );
 
                 for i in 0..num_isos {
-                    let ai = aion[i];
-                    for j in 0..num_isos {
-                        dfdv[i * nvar + j] =
-                            w.d_dydt_dy[i * num_isos + j] * ai / aion[j];
-                    }
-                    let d_dxdt_drho_i = ai * dydt_buf[i][2].to_f64();
-                    let d_dxdt_dt_i = ai * dydt_buf[i][1].to_f64();
+                    dfdv[i * nvar..(i * nvar + num_isos)].copy_from_slice(
+                        &res.d_dxdt_dx[i * num_isos..(i + 1) * num_isos],
+                    );
                     dfdv[i * nvar + num_isos] = flexmesa_math::fma(
-                        d_dxdt_drho_i * rho * dlnrho_dlnt_const_p,
+                        res.d_dxdt_drho[i] * rho * dlnrho_dlnt_const_p,
                         1.0,
-                        d_dxdt_dt_i * temp,
+                        res.d_dxdt_dt[i] * temp,
                     );
                 }
                 for j in 0..num_isos {
-                    let d_eps_dx_j = QCONV * w.d_eps_nuc_dy[j] / aion[j];
-                    dfdv[num_isos * nvar + j] = d_eps_dx_j / (cp * temp);
+                    dfdv[num_isos * nvar + j] =
+                        res.d_eps_nuc_dx[j] / (cp * temp);
                 }
                 dfdv[num_isos * nvar + num_isos] = d_epsnuc_dlnt_const_p
                     / (cp * temp)
@@ -372,7 +372,7 @@ pub fn burn_1_zone_const_p(
                     if tab.newf[is] {
                         let mut out_of_bounds = false;
                         for j in 0..nvar {
-                            let mut s = y[j];
+                            let mut s = 0.0_f64;
                             for k in 0..is {
                                 s = flexmesa_math::fma(
                                     tab.ra[is][k],
@@ -380,7 +380,7 @@ pub fn burn_1_zone_const_p(
                                     s,
                                 );
                             }
-                            ynew[j] = s;
+                            ynew[j] = y[j] + s;
                             if ynew[j] < y_min || ynew[j] > y_max {
                                 out_of_bounds = true;
                                 break;
@@ -422,11 +422,11 @@ pub fn burn_1_zone_const_p(
 
             let mut sol_out_of_bounds = false;
             for j in 0..nvar {
-                let mut s = y[j];
+                let mut s = 0.0_f64;
                 for k in 0..ns {
                     s = flexmesa_math::fma(tab.ros_m[k], ak[k][j], s);
                 }
-                ynew[j] = s;
+                ynew[j] = y[j] + s;
                 if ynew[j] < y_min || ynew[j] > y_max {
                     sol_out_of_bounds = true;
                     break;

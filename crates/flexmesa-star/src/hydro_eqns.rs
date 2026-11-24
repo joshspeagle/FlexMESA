@@ -588,9 +588,6 @@ pub fn assemble_henyey_system(
 ) -> Result<(), StarError> {
     let nz = model.nz;
     let nvar = model.layout.nvar(include_chem);
-    model.aux.total_internal_energy_start = (0..nz)
-        .map(|k| model.energy_start[k].max(0.0) * model.dm[k])
-        .sum();
     sys.nvar = nvar;
     sys.nz = nz;
     compute_x_scale_into(model, include_chem, &mut sys.x_scale);

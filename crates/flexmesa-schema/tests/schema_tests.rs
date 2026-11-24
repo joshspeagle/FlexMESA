@@ -243,7 +243,8 @@ fn test_include_keys_headless_sections_and_kap_user_keys_recognized() {
     assert!(is_headless_plotting_section("pgstar"));
     assert!(is_headless_plotting_section("pgbinary"));
     assert!(is_headless_plotting_section("astero_pgstar_controls"));
-    assert!(is_known_upstream_only_section("colors"));
+    assert!(!is_known_upstream_only_section("colors"));
+    assert!(is_known_upstream_only_section("stella"));
     assert!(upstream_section_keys("kap")
         .expect("kap upstream keys")
         .contains("user_kap_xs"));

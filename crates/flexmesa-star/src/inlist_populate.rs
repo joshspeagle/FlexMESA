@@ -169,6 +169,7 @@ impl InlistBundle {
     ) -> Result<(), StarError> {
         self.populate_star_job()?;
         self.populate_eos_kap_with_options(allow_unsupported_controls)?;
+        self.populate_colors()?;
         self.populate_controls_physics()?;
         self.populate_controls_output()?;
         self.populate_controls_solver()?;
@@ -803,7 +804,8 @@ impl InlistBundle {
         // `star/private/star_solver.f90:194,615-617`, `star/private/rsp_step.f90:216`).
         let _ = ctrl.try_get_str("controls", "extra_terminal_output_file")?;
         let _ = ctrl.try_get_bool("controls", "report_solver_progress")?;
-        let _ = ctrl.try_get_f64("controls", "warning_limit_for_max_residual")?;
+        let _ =
+            ctrl.try_get_f64("controls", "warning_limit_for_max_residual")?;
         ctrl.try_usize_into(
             "controls",
             &mut o.history_interval,
@@ -851,6 +853,59 @@ impl InlistBundle {
                 other => {
                     return Err(StarError::InvalidInput(format!(
                         "unrecognized '&controls::pulse_data_format' option '{other}'"
+                    )));
+                }
+            }
+        }
+        Ok(())
+    }
+
+    fn populate_colors(&mut self) -> Result<(), StarError> {
+        let Some(sec) = self.sections.get("colors") else {
+            return Ok(());
+        };
+        let c = &mut self.controls.colors;
+        sec.try_bool_into("colors", &mut c.use_colors, "use_colors")?;
+        sec.try_str_into("colors", &mut c.instrument, "instrument")?;
+        sec.try_str_into("colors", &mut c.stellar_atm, "stellar_atm")?;
+        sec.try_str_into("colors", &mut c.vega_sed, "vega_sed")?;
+        sec.try_f64_into("colors", &mut c.distance, "distance")?;
+        sec.try_bool_into("colors", &mut c.make_csv, "make_csv")?;
+        sec.try_str_into(
+            "colors",
+            &mut c.colors_results_directory,
+            "colors_results_directory",
+        )?;
+        sec.try_str_into("colors", &mut c.mag_system, "mag_system")?;
+        sec.try_bool_into("colors", &mut c.sed_per_model, "sed_per_model")?;
+        sec.try_f64_into("colors", &mut c.z_over_x_ref, "z_over_x_ref")?;
+
+        if c.use_colors {
+            flexmesa_colors::MagSystem::parse(&c.mag_system).map_err(|e| {
+                StarError::InvalidInput(format!(
+                    "invalid '&colors::mag_system': {e}"
+                ))
+            })?;
+            if !c.distance.is_finite() || c.distance <= 0.0 {
+                return Err(StarError::InvalidInput(format!(
+                    "'&colors::distance' must be finite and > 0, got {}",
+                    c.distance
+                )));
+            }
+            if !c.z_over_x_ref.is_finite() || c.z_over_x_ref <= 0.0 {
+                return Err(StarError::InvalidInput(format!(
+                    "'&colors::z_over_x_ref' must be finite and > 0, got {}",
+                    c.z_over_x_ref
+                )));
+            }
+            for (name, val) in [
+                ("instrument", c.instrument.as_str()),
+                ("stellar_atm", c.stellar_atm.as_str()),
+                ("vega_sed", c.vega_sed.as_str()),
+            ] {
+                if val.trim().is_empty() {
+                    return Err(StarError::InvalidInput(format!(
+                        "'&colors::{name}' must be non-empty when use_colors = true"
                     )));
                 }
             }

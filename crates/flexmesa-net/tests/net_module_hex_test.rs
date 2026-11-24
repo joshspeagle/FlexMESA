@@ -454,13 +454,13 @@ fn mesa_26_4_1_net_module_hex_burn_diagnostics() {
                 starting_x: &x2,
                 clip: false,
                 t_end: 1.0e-4,
-                pressure: exp10(24.0),
+                pressure: exp10(log10(1.0e24)),
                 rate_factors: &rate_factors,
                 weak_rate_factor: 1.0,
                 reaction_qs: &[],
                 reaction_neu_qs: &[],
                 screening_mode: ScreeningMode::Extended,
-                h0: 1.0e-6,
+                h0: 1.0e-2 * 1.0e-4,
                 max_step_size: 1.0,
                 max_steps: 1000,
                 rtol: 1.0e-7,
@@ -471,45 +471,52 @@ fn mesa_26_4_1_net_module_hex_burn_diagnostics() {
         .unwrap();
         let xsum2: f64 = out2.ending_x.iter().sum();
 
+        // Tightened parity gates after fixing `netint` state reuse (Case 8a:
+        // matches MESA `nstep=27` and steps 1..19 to 17 digits; step 20 `he4`
+        // shifts 2 ULP before 2.7e8x `net_pzextr` cancellation at step 21 and
+        // a 3.1e-10 dt shift on the retried step 22) and `burn_const_p`
+        // `eos_pt_get_with_linear` + direct `dydt` + accumulation order (Case
+        // 8b: step 1 `dt/logT/c12/o16` match at 0 ULP, `logRho` differs by
+        // 5.87e-9 from `eos_pt_get` 1e-8 root tolerance).
         let burn_checks: [(&str, f64, &HexRow, f64); 8] = [
             (
                 "burn_1_zone c12",
                 out1.ending_x[idx("c12")],
                 &rows[131],
-                1.0e-6,
+                5.0e-11,
             ),
             (
                 "burn_1_zone he4",
                 out1.ending_x[idx("he4")],
                 &rows[132],
-                1.0e-5,
+                2.0e-9,
             ),
-            ("burn_1_zone xsum", xsum1, &rows[133], 1.0e-8),
+            ("burn_1_zone xsum", xsum1, &rows[133], 1.0e-14),
             (
                 "burn_const_P o16",
                 out2.ending_x[idx("o16")],
                 &rows[135],
-                1.0e-9,
+                1.0e-13,
             ),
             (
                 "burn_const_P si28",
                 out2.ending_x[idx("si28")],
                 &rows[136],
-                1.0e-8,
+                1.0e-13,
             ),
             (
                 "burn_const_P s32",
                 out2.ending_x[idx("s32")],
                 &rows[137],
-                1.0e-8,
+                1.0e-12,
             ),
             (
                 "burn_const_P mg24",
                 out2.ending_x[idx("mg24")],
                 &rows[138],
-                1.0e-8,
+                1.0e-12,
             ),
-            ("burn_const_P xsum", xsum2, &rows[139], 1.0e-12),
+            ("burn_const_P xsum", xsum2, &rows[139], 1.0e-15),
         ];
 
         for (label, got, row, tol) in burn_checks {

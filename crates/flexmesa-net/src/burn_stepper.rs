@@ -104,6 +104,8 @@ where
     let mut nbad = 0_usize;
     let mut dydx = vec![0.0_f64; nvar];
     let mut yscal = vec![0.0_f64; nvar];
+    let mut hdid = 0.0_f64;
+    let mut hnext = 0.0_f64;
 
     for nstp in 1..=max_steps {
         for val in y.iter_mut().take(species) {
@@ -116,8 +118,6 @@ where
         if (x + h - stopp) * (x + h - start) > 0.0 {
             h = stopp - x;
         }
-        let mut hdid = 0.0_f64;
-        let mut hnext = 0.0_f64;
         stifbs(
             y, &dydx, nvar, &mut x, h, eps, &yscal, &mut hdid, &mut hnext,
             &mut state, dens_dfdy, dmat, work, derivs, jakob,

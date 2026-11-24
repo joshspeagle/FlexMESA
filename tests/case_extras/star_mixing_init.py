@@ -155,19 +155,28 @@ class ExtendedConvectivePenetrationStarExtras:
     """
 
     def __init__(self) -> None:
+        self._pre_ms: bool = False
         self.checks_okay: bool | None = None
 
     def extras_controls(self, state: dict[str, Any]) -> None:
-        """Skip hook registration during pre-MS creation, else require `#155`
-        (`:37-60`).
-        """
-        if bool(state["create_pre_main_sequence_model"]):
-            return
-        raise NotImplementedError(
-            "extended_convective_penetration: extras_controls registers "
-            "other_adjust_mlt_gradT_fraction and other_overshooting_scheme "
-            "(:57-58), which flexmesa-star StarExtras does not expose (#155)"
-        )
+        """Record whether pre-MS skips penetration hooks (`:37-60`)."""
+        self._pre_ms = bool(state["create_pre_main_sequence_model"])
+
+    def other_adjust_mlt_gradt_fraction(
+        self, state: dict[str, Any]
+    ) -> list[float] | None:
+        """Compute Peclet `adjust_mlt_gradT_fraction` outside pre-MS (`:57`)."""
+        if self._pre_ms:
+            return None
+        return self.other_adjust_mlt_gradt_fraction_peclet(state)
+
+    def other_overshooting_scheme(
+        self, state: dict[str, Any], i_bdy: int, j_param: int
+    ) -> tuple[int, int, list[float], list[float]] | None:
+        """Evaluate extended convective penetration profile (`:58`)."""
+        if self._pre_ms:
+            return None
+        return self.eval_penetration_profile(state, i_bdy, j_param)
 
     def other_adjust_mlt_gradt_fraction_peclet(
         self, state: dict[str, Any]
@@ -201,13 +210,20 @@ class ExtendedConvectivePenetrationStarExtras:
         (`:236-372`).
         """
         f, f0, f2, d0, delta0 = _taper_overshoot_params(state, j_param)
-        _ = f0
         nz = int(state["nz"])
         hp_cb = float(state["conv_bdy_hp"][i_bdy])
-        k_ob = int(state["over_bdy_k"][i_bdy])
-        r_ob = float(state["over_bdy_r"][i_bdy])
-        d_ob = float(state["over_bdy_d"][i_bdy])
-        vc_ob = float(state["over_bdy_vc"][i_bdy])
+        eval_ob = state.get("eval_over_bdy_params")
+        if callable(eval_ob):
+            k_ob_val, r_ob_val, d_ob_val, vc_ob_val = eval_ob(i_bdy, f0)
+            k_ob = int(k_ob_val)
+            r_ob = float(r_ob_val)
+            d_ob = float(d_ob_val)
+            vc_ob = float(vc_ob_val)
+        else:
+            k_ob = int(state["over_bdy_k"][i_bdy])
+            r_ob = float(state["over_bdy_r"][i_bdy])
+            d_ob = float(state["over_bdy_d"][i_bdy])
+            vc_ob = float(state["over_bdy_vc"][i_bdy])
         outward = bool(state["top_conv_bdy"][i_bdy])
         k_a, k_b, dk = (k_ob, 0, -1) if outward else (k_ob + 1, nz - 1, 1)
         r_step = f * hp_cb if f > 0.0 else 0.0

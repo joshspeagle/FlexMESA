@@ -139,8 +139,7 @@ STOCK_EXTRAS_DIGESTS: frozenset[str] = frozenset(
 # - `#155` (per-cell MLT/overshoot/rotation diffusivity hooks):
 #   `PreMs12MCoreCollapseStarExtras`, `PreMs20MCoreCollapseStarExtras`,
 #   `SplitBurnBigNetStarExtras`, `MakePreCcsn13bvnStarExtras` (per-cell
-#   `alpha_mlt(1:nz)`), `ExtendedConvectivePenetrationStarExtras`
-#   (`other_adjust_mlt_gradT_fraction`, `other_overshooting_scheme`),
+#   `alpha_mlt(1:nz)`),
 #   `Dynamo15MStarExtras`, `Thermohaline1MStarExtras` (`D_ES`/`D_ST`/`nu_ST`
 #   arrays not yet publicly exposed on `StarModel`).
 # - `#156` (element diffusion electric/gravity fields): `WdDiffusionStarExtras`
@@ -157,18 +156,6 @@ STOCK_EXTRAS_DIGESTS: frozenset[str] = frozenset(
 # - `#162` (pulse export & simplex calibration): `CheckPulseAtmStarExtras`
 #   (`star_export_pulse_data('FGONG')`, `atm_T_tau_opacity`, `#161`),
 #   `SimplexSolarCalibrationStarExtras` (`star_simplex_procs`, `#153`).
-# - `#163` / `#231` (extra profile/header hooks): `LowZStarExtras`
-#   (`extra_history_header_items`, `extra_profile_header_items`),
-#   `HighRotation20MZ2m2StarExtras` and `WdCool06MStarExtras` (only implement
-#   `extra_profile_columns`, which `StarExtras` does not yet wire).
-#   `Hb2MStarExtras`, `TTauGradrStarExtras`, `WdAccSmallDmStarExtras`,
-#   `WdAicStarExtras` and `WdNovaBurstStarExtras` are detached for the same
-#   reason: upstream sets `how_many_extra_profile_columns = 1` in each
-#   (`star/test_suite/hb_2M/src/run_star_extras.f90:198`,
-#   `star/test_suite/T_tau_gradr/src/run_star_extras.f90:183`,
-#   `star/test_suite/wd_acc_small_dm/src/run_star_extras.f90:194`,
-#   `star/test_suite/wd_aic/src/run_star_extras.f90:210`,
-#   `star/test_suite/wd_nova_burst/src/run_star_extras.f90:162`).
 # - `#231` (custom termination codes): `C13PocketStarExtras`,
 #   `PisnStarExtras` and `WdAicStarExtras` set `termination_code_str(t_xtra*)`
 #   (`star/test_suite/c13_pocket/src/run_star_extras.f90:416`,
@@ -194,13 +181,21 @@ ADAPTER_SERVED_STAR_HANDLERS: frozenset[str] = frozenset(
         "ConserveAngularMomentumStarExtras",
         "ConvCoreCpmStarExtras",
         "DiffusionSmoothnessStarExtras",
+        "ExtendedConvectivePenetrationStarExtras",
+        "Hb2MStarExtras",
         "HighRotDarkeningStarExtras",
+        "HighRotation20MZ2m2StarExtras",
         "HotCoolWindStarExtras",
         "HseRiemannStarExtras",
+        "LowZStarExtras",
         "MakeONeWdStarExtras",
         "NeutronStarEnvStarExtras",
         "RCrBStarExtras",
         "SemiconvectionStarExtras",
+        "TTauGradrStarExtras",
+        "WdAccSmallDmStarExtras",
+        "WdCool06MStarExtras",
+        "WdNovaBurstStarExtras",
     }
 )
 

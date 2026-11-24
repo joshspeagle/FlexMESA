@@ -449,8 +449,9 @@ def test_extended_convective_penetration_and_make_env() -> None:
     """`ExtendedConvectivePenetrationStarExtras` and `MakeEnvStarExtras`."""
     ecp = star_extras.ExtendedConvectivePenetrationStarExtras()
     ecp.extras_controls({"create_pre_main_sequence_model": True})
-    with pytest.raises(NotImplementedError, match="#155"):
-        ecp.extras_controls({"create_pre_main_sequence_model": False})
+    assert ecp.other_adjust_mlt_gradt_fraction({}) is None
+    assert ecp.other_overshooting_scheme({}, 0, 0) is None
+    ecp.extras_controls({"create_pre_main_sequence_model": False})
     pen_state = {
         "nz": 4,
         "overshoot_f": [0.1],

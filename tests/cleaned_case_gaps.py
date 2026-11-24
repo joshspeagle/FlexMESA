@@ -73,9 +73,6 @@ def assert_declared_stop(
 
 
 DECLARED_STAR_STOPS: dict[str, DeclaredStop] = {
-    "extended_convective_penetration": DeclaredStop(
-        r"overshoot_scheme", "#231"
-    ),
     "make_env": DeclaredStop(r"missing saved model 'start\.mod'", "#154"),
     "tzo": DeclaredStop(
         r"relax ended with termination code 'min_timestep_limit'", "#161"

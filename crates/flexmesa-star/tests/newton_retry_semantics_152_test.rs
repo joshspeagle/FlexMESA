@@ -600,8 +600,13 @@ fn test_sizeb_flailing_check_reproduces_upstream_260_never_fires() {
     );
 }
 
+/// MESA 26.4.1 keeps the `max_timestep_hi_T_limit` switch of a failed try
+/// (`star/private/evolve.f90:705-711`): `prepare_to_retry` recomputes
+/// `max_timestep` from the switched `max_years_for_timestep` and caps the
+/// retry `dt` with it (`:2250-2255`), and `set_current_to_old`
+/// (`star/private/evolve_support.f90:147-240`) restores neither (#510).
 #[test]
-fn test_rejected_trial_reverts_max_timestep_hi_t_limit_mutations() {
+fn test_retry_keeps_max_timestep_hi_t_limit_switch_of_failed_try() {
     struct RejectOnceExtras {
         calls: usize,
         saw_second_try_max_timestep: f64,
@@ -669,26 +674,28 @@ fn test_rejected_trial_reverts_max_timestep_hi_t_limit_mutations() {
     .expect("retry step should succeed");
     assert!(rep.converged);
     assert_eq!(extras.calls, 2);
-    assert!(
-        (model.controls.max_years_for_timestep - orig_max_years).abs()
-            < 1.0e-12,
-        "max_years_for_timestep must revert after rejected hi_t trial"
+    assert_eq!(
+        model.controls.max_years_for_timestep, 0.01,
+        "the hi_T switch of the failed try stays after the step"
+    );
+    assert_eq!(
+        extras.saw_second_try_max_timestep,
+        SECYER * 0.01,
+        "prepare_to_retry recomputes max_timestep from the switched \
+         max_years_for_timestep"
     );
     assert!(
-        (extras.saw_second_try_max_timestep - orig_max_years * SECYER).abs()
-            < 1.0e-3,
-        "prepare_to_retry must compute ts_stop.max_timestep from restored max_years_for_timestep, got {}",
-        extras.saw_second_try_max_timestep
-    );
-    assert!(
-        extras.saw_second_try_dt > 0.05 * SECYER,
-        "retry dt must not be clamped to rejected hi_t_max_years_for_timestep (0.01 yr), got {} s",
+        extras.saw_second_try_dt <= SECYER * 0.01,
+        "retry dt is capped by the switched max_timestep, got {} s",
         extras.saw_second_try_dt
     );
 }
 
+/// `prepare_to_redo` (`star/private/evolve.f90:2148-2172`) and
+/// `set_current_to_old` keep the `max_timestep_hi_T_limit` switch of the
+/// redone try (`:705-711`), so the redo and the accepted step see it (#510).
 #[test]
-fn test_redo_trial_reverts_max_timestep_hi_t_limit_mutations() {
+fn test_redo_keeps_max_timestep_hi_t_limit_switch() {
     struct RedoOnceExtras {
         calls: usize,
         saw_second_try_max_timestep: f64,
@@ -740,9 +747,9 @@ fn test_redo_trial_reverts_max_timestep_hi_t_limit_mutations() {
     .expect("redo step should succeed");
     assert!(redo_rep.converged);
     assert_eq!(redo_extras.calls, 2);
-    assert_eq!(redo_extras.saw_second_try_max_timestep, 0.0);
-    assert_eq!(redo_model.controls.max_years_for_timestep, -1.0);
-    assert_eq!(redo_model.controls.ts_stop.max_timestep, 0.0);
+    assert_eq!(redo_extras.saw_second_try_max_timestep, SECYER * 0.01);
+    assert_eq!(redo_model.controls.max_years_for_timestep, 0.01);
+    assert_eq!(redo_model.controls.ts_stop.max_timestep, SECYER * 0.01);
 }
 
 #[test]

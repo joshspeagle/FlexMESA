@@ -1302,8 +1302,6 @@ pub(crate) fn star_evolve_step_outcome_checked(
 
         let mut ts_retry_reason: Option<String> = None;
         let mut requested_redo = false;
-        // `dt` of the try on which `extras_check_model` asked for a redo.
-        let mut extras_redo_dt: Option<f64> = None;
 
         if let Ok(ref rep) = attempt {
             if rep.converged && !force_outer_retry {
@@ -1464,7 +1462,6 @@ pub(crate) fn star_evolve_step_outcome_checked(
                             }
                             ExtrasDirective::Redo => {
                                 requested_redo = true;
-                                extras_redo_dt = Some(model.dt);
                             }
                             ExtrasDirective::Retry => {
                                 ts_retry_reason = Some(String::from(
@@ -1558,16 +1555,15 @@ pub(crate) fn star_evolve_step_outcome_checked(
                     reason: String::from("redo_limit"),
                 });
             }
-            restore_attempt_state(model, None, saved)?;
             // `prepare_to_redo` (`star/private/evolve.f90:2148-2172`) and
             // `set_current_to_old` (`star/private/evolve_support.f90:147-240`)
-            // leave `s% dt` as it is, so a redo requested by
-            // `extras_check_model` retakes the step with the `dt` the hook
-            // set (for example the astero "warm" and "hot" limits,
+            // leave `s% dt` as it is, so every redo retakes the step with the
+            // current `dt`, including one a hook set before asking for the
+            // redo (for example the astero "warm" and "hot" limits,
             // `astero/private/extras_support.f90:299-322`).
-            if let Some(dt_redo) = extras_redo_dt {
-                dt_try = dt_redo;
-            }
+            let dt_redo = model.dt;
+            restore_attempt_state(model, None, saved)?;
+            dt_try = dt_redo;
             first_try = false;
             continue;
         }
@@ -1581,10 +1577,11 @@ pub(crate) fn star_evolve_step_outcome_checked(
             );
         }
 
-        // `prepare_to_retry` (`star/private/evolve.f90:2176-2277`).
+        // `prepare_to_retry` (`star/private/evolve.f90:2176-2277`):
+        // `s% dt = s% dt*retry_factor` from the current `dt` (`:2223`).
         let next_retries = retries + 1;
         let hit_retry_limit = max_retries > 0 && next_retries > max_retries;
-        let mut next_dt = dt_try * retry_fac;
+        let mut next_dt = model.dt * retry_fac;
         let hit_min_dt = !next_dt.is_finite() || next_dt <= dt_floor;
         let tracing = crate::step_trace::enabled(target_mod);
         let why = if tracing || hit_retry_limit || hit_min_dt {
@@ -1642,6 +1639,9 @@ pub(crate) fn star_evolve_step_outcome_checked(
             num_merges = 0;
         }
 
+        // `:2250-2255`: the cap uses `max_years_for_timestep` as the failed
+        // try left it (for example the `max_timestep_hi_T_limit` switch,
+        // `:705-711`); `set_current_to_old` does not restore it.
         if model.controls.max_years_for_timestep > 0.0 {
             model.controls.ts_stop.max_timestep =
                 SECYER * model.controls.max_years_for_timestep;
@@ -1823,6 +1823,8 @@ fn abandon_step(
     dt_prev: f64,
 ) -> Result<bool, StarError> {
     let restored_remesh = restore_attempt_state(model, snap, saved)?;
+    model.controls.max_years_for_timestep = saved.max_years_for_timestep;
+    model.controls.ts_stop.max_timestep = saved.max_timestep;
     model.dt = dt_prev;
     model.model_number = model.model_number_old;
     Ok(restored_remesh)
@@ -1857,8 +1859,10 @@ fn restore_attempt_state(
     model.aux.step_hist.phase_of_evolution = saved.phase_of_evolution;
     model.aux.step_hist.using_revised_max_yr_dt = saved.using_revised_max_yr_dt;
     model.aux.step_hist.revised_max_yr_dt = saved.revised_max_yr_dt;
-    model.controls.max_years_for_timestep = saved.max_years_for_timestep;
-    model.controls.ts_stop.max_timestep = saved.max_timestep;
+    // `set_current_to_old` (`star/private/evolve_support.f90:147-240`) does
+    // not restore `max_years_for_timestep` or `max_timestep`: a value a try
+    // set (the `max_timestep_hi_T_limit` switch, `evolve.f90:705-711`, or an
+    // `extras_check_model` limit) stays for the retry or redo (#510).
     Ok(restored_remesh)
 }
 

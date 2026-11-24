@@ -1,0 +1,20 @@
+# FlexMESA ADIPLS oracle check: pristine MESA libadipls.a (#171, package A0)
+# mesa_version: r26.4.1
+# mesa_git_commit: c8c202662922a22b3efefa824473ad615c623afd
+# mesa_zenodo_record: 19722306
+# adipls_version: ADIPLS 2010 (adipack.c) as bundled with MESA 26.4.1
+# mesasdk_version: x86_64-linux-26.6.1
+# compiler: GCC version 15.2.0 (gfortran)
+# adipls_fflags: gfortran -std=legacy -w -c (no -O flag, i.e. -O0; adipls/make/makefile_adipls:78-86)
+# math_backend: system libm (glibc) for pow/exp/log; libgcc __powidf2 for integer powers; no CRMATH
+# driver_build: pristine MESA libadipls.a
+# replay: chain
+# extra environment: -
+# reference 1: pulse_tap/modes.tsv of the mesa_histories bundle (MESA's own run): el, order, cyclic_freq, inertia
+# reference 2: glue tap modes.tsv of the overlay MESA run: el, order, em, cyclic_freq, inertia, obs_st(1:10), csummm(1:50)
+case	replay	calls	modes	calls_with_mismatch	first_mismatch
+astero/astero_adipls	chain	10	92	0	-
+astero/surface_effects	chain	4	110	0	-
+astero/example_astero	chain	65	1079	0	-
+astero/fast_scan_grid	chain	1107	16301	0	-
+astero/fast_simplex	chain	979	9779	0	-

@@ -61,11 +61,13 @@ To compute full non-radial adiabatic or non-adiabatic oscillation eigenfrequenci
 
 $$V = \frac{G m \rho}{P r}, \qquad V_g = \frac{V}{\Gamma_1}, \qquad A^* = \frac{r N^2}{g}, \qquad U = \frac{4\pi r^3 \rho}{m}, \qquad c_1 = \frac{(r/R_\star)^3}{m/M_\star},$$
 
-and exports stellar structure profiles (with optional central boundary point insertion and double-point splitting across sharp composition discontinuities; bundled `GYRE` and `ADIPLS` integration is tracked in `#170` and `#171`, while `eval_linear_oscillation_modes` currently uses an in-house adiabatic BVP stub):
+and exports stellar structure profiles (with optional central boundary point insertion and double-point splitting across sharp composition discontinuities; bundled `GYRE` and `ADIPLS` integration is tracked in `#170` and `#171`, while `eval_linear_oscillation_modes` currently uses an in-house adiabatic BVP stub that does not count toward any passing case).:
 
 - `model.to_gyre_str(add_center_point=True)`: Standard `GYRE` ASCII format (`version 101` / `120`).
 - `model.to_fgong_str(add_center_point=True)`: Standard `FGONG` format (`ivers = 1300`).
 - `model.to_osc_str(add_center_point=True)`: `OSC` / `CESAM` pulsation structure format.
+
+The port of `GYRE` 8.1 is under way in the `crates/flexmesa-gyre` crate, licensed `GPL-3.0-only` as `GYRE` is. Its numerics substrate (gfortran complex arithmetic, GCC integer-power chains, CRMATH complex functions and the inlined `MATMUL` order) and the real LAPACK routines `GYRE` reaches are checked bit for bit against vectors from MESA's own `GYRE` build and SDK libraries. The crate is not yet connected to `flexmesa.astero`.
 
 ---
 

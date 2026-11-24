@@ -295,11 +295,37 @@ def test_upstream_mesa_26_4_1_citations_and_defaults_diff_resolve() -> None:
         "crmath_c_dp.f90": 254,
     }
 
+    # Reference LAPACK/BLAS 3.12.0 sources cited by flexmesa-gyre (#170):
+    # basename -> line count, from the committed manifest.
+    lapack_manifest = (
+        REPO_ROOT
+        / "benchmarks"
+        / "fortran_mesa"
+        / "gyre_g2_vectors"
+        / "lapack_3_12_0_sources.tsv"
+    )
+    lapack_lines: dict[str, int] = {}
+    for row in lapack_manifest.read_text(encoding="utf-8").splitlines():
+        if not row or row.startswith("#"):
+            continue
+        base, n_lines, sha256 = row.split("\t")
+        assert re.fullmatch(r"[0-9a-f]{64}", sha256), row
+        assert base not in by_basename, (
+            f"LAPACK manifest basename {base!r} collides with a MESA file"
+        )
+        lapack_lines[base] = int(n_lines)
+    assert lapack_lines
+    # Bare basenames, or the netlib source directories they live in.
+    lapack_dirs = {"", "SRC", "BLAS/SRC", "INSTALL"}
+
     def _resolve_target_lines(
         raw_fp: str, rel_src: pathlib.Path, lno: int, cite_tok: str
     ) -> tuple[str, int]:
         if raw_fp in sdk_crmath_lines:
             return f"mesasdk/crmath-1.2/{raw_fp}", sdk_crmath_lines[raw_fp]
+        lapack_dir, _, lapack_base = raw_fp.rpartition("/")
+        if lapack_base in lapack_lines and lapack_dir in lapack_dirs:
+            return f"lapack-3.12.0/{raw_fp}", lapack_lines[lapack_base]
         if "/" in raw_fp:
             cand = mesa_root / raw_fp
             assert cand.is_file(), (

@@ -437,7 +437,7 @@ impl BinarySystem {
                 self.controls.f_sync_switch_width,
                 self.controls.f_sync_switch_lim,
             )?);
-        sync_post_henyey_rotation(&mut self.donor, 0.0);
+        sync_post_henyey_rotation(&mut self.donor, 0.0)?;
         if recompute_hydro {
             set_hydro_vars(&mut self.donor, false, false)?;
             self.donor.save_start_values()?;
@@ -455,7 +455,7 @@ impl BinarySystem {
                     self.controls.f_sync_switch_width,
                     self.controls.f_sync_switch_lim,
                 )?);
-            sync_post_henyey_rotation(s2, 0.0);
+            sync_post_henyey_rotation(s2, 0.0)?;
             if recompute_hydro {
                 set_hydro_vars(s2, false, false)?;
                 s2.save_start_values()?;

@@ -319,6 +319,11 @@ fn test_rotational_mass_loss_surface_avg_alignment_and_caps() {
         let w_c = flexmesa_star::eval_upstream_omega_crit(&model, k);
         model.omega[k] = if k == 0 { 0.15 * w_c } else { 0.65 * w_c };
     }
+    // Upstream keeps `omega = j_rot/i_rot`; `set_surf_avg_rotation_info`
+    // calls `set_rotation_info(s, .true.)`, which re-derives `omega` from
+    // `j_rot` (`star/private/hydro_rotation.f90:277-287, 616`). Set `j_rot`,
+    // `i_rot` and `w_div_w_crit_roche` consistently with this `omega`.
+    flexmesa_star::hydro_rotation::use_xh_to_update_i_rot_and_j_rot(&mut model);
     assert!(model.omega[0] / w_crit_0 < 0.2);
 
     let surf_rot = eval_surf_avg_rotation_info(&model);

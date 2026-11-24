@@ -117,7 +117,7 @@ pub fn eval_radiation(
     let tempinv = 1.0 / temp;
     let deninv = 1.0 / den;
 
-    let prad_val = CRAD * third * flexmesa_math::pow4(temp);
+    let prad_val = CRAD * third * temp * temp * temp * temp;
     let dpraddt = 4.0 * prad_val * tempinv;
     let dpraddtt = 4.0 * CRAD * temp * temp;
     let prad = HelmThermoVar {

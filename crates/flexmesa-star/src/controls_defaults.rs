@@ -82,6 +82,9 @@ impl Default for StarControls {
             threshold_grad_mu_for_double_point: 10.0,
             max_number_of_double_points: 0,
             gyre_data_schema: 101,
+            fgong_ivers: 1300,
+            format_for_osc_data: String::from("(1P5E19.12,x)"),
+            fgong_zero_a_inside_r: 0.0,
             use_brunt_gradmux_form: false,
             energy_eqn_option: EnergyEqnOption::Dedt,
             no_dedt_form_during_relax: true,
@@ -99,6 +102,8 @@ impl Default for StarControls {
             v_flag: false,
             u_flag: false,
             rotation_flag: false,
+            d_omega_flag: false,
+            am_nu_rot_flag: false,
             rsp_flag: false,
             // `star/defaults/controls.defaults:11706`.
             set_rho_to_dm_div_dv: true,

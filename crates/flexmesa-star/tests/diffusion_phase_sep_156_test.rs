@@ -1379,7 +1379,8 @@ fn test_diffusion_phase_sep_guards_energy_gating_and_photo_v26_restart() {
         .expect_err("#271 mix_outward hitting k=0 must fail loudly");
     assert!(matches!(err_271, StarError::InvalidInput(_)));
 
-    // 7. Hydro energy 3-way gating (hydro_energy.f90:252-258) & finish_element_diffusion
+    // 7. Hydro energy 3-way gating (hydro_energy.f90:252-258) & finish_element_diffusion;
+    // these heating terms are `others_ad`, the second return value.
     let mut em =
         load_zams_model(StarControls::default(), StarJobControls::default())
             .expect("load 1 Msun ZAMS");
@@ -1389,12 +1390,12 @@ fn test_diffusion_phase_sep_guards_energy_gating_and_photo_v26_restart() {
     em.controls.diffusion.do_diffusion_heating = false;
     em.aux.eps_wd_sedimentation[k] = 1.0e3;
     em.aux.eps_diffusion[k] = 2.0e3;
-    let eq_off = setup_sources_and_others(&em, k).0.val;
+    let eq_off = setup_sources_and_others(&em, k).1.val;
     em.controls.diffusion.do_wd_sedimentation_heating = true;
-    let eq_wd = setup_sources_and_others(&em, k).0.val;
+    let eq_wd = setup_sources_and_others(&em, k).1.val;
     em.controls.diffusion.do_wd_sedimentation_heating = false;
     em.controls.diffusion.do_diffusion_heating = true;
-    let eq_diff = setup_sources_and_others(&em, k).0.val;
+    let eq_diff = setup_sources_and_others(&em, k).1.val;
     assert_ne!(eq_wd, eq_off, "WD sedimentation heating must affect energy eqn");
     assert_ne!(eq_diff, eq_off, "diffusion heating must affect energy eqn");
     assert_ne!(eq_wd, eq_diff, "the two heating channels must differ");

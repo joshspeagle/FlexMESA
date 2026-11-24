@@ -1,0 +1,105 @@
+--- a/star/private/star_utils.f90
++++ b/star/private/star_utils.f90
+@@ -165,6 +165,7 @@
+ 
+       logical, parameter :: mdb = .false.
+ 
++      public :: rotmix_oracle_dump, rotmix_oracle_inputs
+       contains
+ 
+       subroutine foreach_cell(s,nzlo,nzhi,use_omp,do1,ierr)
+@@ -4146,4 +4147,55 @@
+          s% need_to_setvars = .true.
+       end subroutine set_zero_alpha_RTI
+ 
++      subroutine rotmix_oracle_dump(s, tag)
++         type (star_info), pointer :: s
++         character (len=*), intent(in) :: tag
++         integer :: k, io
++         if (s% model_number > 2 .and. trim(tag) /= 'a' .and. tag(1:1) /= 'c') return
++         open(newunit=io, file='rotmix-out.txt', position='append', action='write')
++         do k = 1, s% nz
++            write(io,'(A,1X,A,1X,I0,1X,I0,99(1X,Z16.16))') 'RMX', trim(tag), s% model_number, k, &
++               s% D_visc(k), s% D_DSI(k), s% D_SH(k), s% D_SSI(k), s% D_ES(k), s% D_GSF(k), &
++               s% D_ST(k), s% nu_ST(k), s% D_mix(k), s% D_mix_non_rotation(k), s% D_mix_rotation(k), &
++               s% am_nu_rot(k), s% am_nu_non_rot(k), s% am_nu_omega(k), s% am_nu_j(k), &
++               s% richardson_number(k), s% omega_shear(k), s% domega_dlnR(k), dble(s% mixing_type(k)), &
++               s% smoothed_brunt_B(k), s% grada_face(k), s% gradT(k), s% grad_density(k), s% grad_temperature(k), &
++               s% unsmoothed_brunt_B(k), s% mlt_D(k), s% gradr(k), s% gradL(k), dble(s% mlt_mixing_type(k))
++         end do
++         close(io)
++      end subroutine rotmix_oracle_dump
++
++      subroutine rotmix_oracle_inputs(s, ncall)
++         use kap_lib, only: kap_get_elect_cond_opacity
++         type (star_info), pointer :: s
++         integer, intent(in) :: ncall
++         integer :: k, io, ierr
++         real(dp) :: alfa, beta, zb, rh, tt, kap, d1, d2
++         open(newunit=io, file='rotmix-in.txt', position='append', action='write')
++         write(io,'(A,1X,I0,1X,I0,1X,I0,1X,L1,1X,L1,1X,L1,99(1X,Z16.16))') 'HDR', ncall, s% model_number, s% nz, &
++            s% doing_relax, s% doing_first_model_of_run, s% prev_mesh_have_ST_start_info, &
++            s% R_center, s% mstar_old, s% dt
++         do k = 1, s% nz
++            if (k == 1) then
++               zb = s% zbar(1); rh = s% rho(1); tt = s% T(1)
++            else
++               alfa = s% dq(k-1)/(s% dq(k-1) + s% dq(k))
++               beta = 1 - alfa
++               zb = alfa*s% zbar(k) + beta*s% zbar(k-1)
++               rh = alfa*s% rho(k) + beta*s% rho(k-1)
++               tt = alfa*s% T(k) + beta*s% T(k-1)
++            end if
++            call kap_get_elect_cond_opacity(s% kap_handle, zb, log10(rh), log10(tt), kap, d1, d2, ierr)
++            write(io,'(A,1X,I0,1X,I0,99(1X,Z16.16))') 'IN', ncall, k, &
++               s% r(k), s% m(k), s% L(k), s% j_rot(k), s% omega(k), s% gradT(k), s% grada_face(k), s% grav(k), &
++               s% cgrav(k), s% eps_nuc(k), s% eps_nuc_neu_total(k), s% non_nuc_neu(k), s% csound(k), s% rho(k), &
++               s% T(k), s% Peos(k), s% cp(k), s% Cv(k), s% chiRho(k), s% chiT(k), s% abar(k), s% zbar(k), &
++               s% opacity(k), s% gamma1(k), s% dm(k), s% dq(k), s% rmid(k), s% grad_density(k), &
++               s% grad_temperature(k), s% smoothed_brunt_B(k), dble(s% mixing_type(k)), s% tau(k), s% lnT(k), &
++               s% ye(k), s% D_mix_non_rotation(k), kap, s% q(k), s% prev_mesh_dq(k), &
++               s% prev_mesh_D_ST_start(k), s% prev_mesh_nu_ST_start(k), dble(s% prev_mesh_nz)
++         end do
++         close(io)
++      end subroutine rotmix_oracle_inputs
++
+       end module star_utils
+--- a/star/private/mix_info.f90
++++ b/star/private/mix_info.f90
+@@ -1560,8 +1560,11 @@
+ 
+       subroutine update_rotation_mixing_info(s, ierr)
+          use rotation_mix_info, only: set_rotation_mixing_info
++         use star_utils, only: rotmix_oracle_inputs, rotmix_oracle_dump
+          type (star_info), pointer :: s
+          integer, intent(out) :: ierr
++         integer, save :: oracle_ncall = 0
++         character (len=8) :: oracle_tag
+ 
+          integer :: k, nz
+          logical :: set_min_am_nu_non_rot, okay
+@@ -1583,6 +1586,12 @@
+          ierr = 0
+          nz = s% nz
+ 
++         if (any(s% omega(1:nz) /= 0d0) .and. .not. s% doing_relax .and. &
++             .not. s% doing_first_model_of_run .and. s% prev_mesh_have_ST_start_info) &
++            oracle_ncall = oracle_ncall + 1
++         if (oracle_ncall >= 1 .and. oracle_ncall <= 3 .and. any(s% omega(1:nz) /= 0d0) .and. &
++             .not. s% doing_relax .and. .not. s% doing_first_model_of_run) &
++            call rotmix_oracle_inputs(s, oracle_ncall)
+          call set_rotation_mixing_info(s, ierr)
+          if (ierr /= 0) then
+             if (s% report_ierr) &
+@@ -1737,6 +1746,11 @@
+             call s% other_am_mixing(s% id, ierr)
+             if (ierr /= 0) return
+          end if
++         if (oracle_ncall >= 1 .and. oracle_ncall <= 3 .and. any(s% omega(1:nz) /= 0d0) .and. &
++             .not. s% doing_relax .and. .not. s% doing_first_model_of_run) then
++            write(oracle_tag,'(A,I0)') 'c', oracle_ncall
++            call rotmix_oracle_dump(s, trim(oracle_tag))
++         end if
+ 
+          contains
+ 

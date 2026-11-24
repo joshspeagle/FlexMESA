@@ -505,3 +505,37 @@ fn test_zams_360_1msun_model0_matches_mesa_26_4_1_hex_dump_at_0_ulp() {
         );
     }
 }
+
+#[test]
+fn yrs_for_init_timestep_matches_mesa_26_4_1_across_masses() {
+    // Upstream `star/private/star_utils.f90:2900-2907` (`yrs_for_init_timestep`):
+    // `1d5` for `initial_mass <= 1`, else `1d5 / pow(initial_mass, 2.5d0)`.
+    for &m in &[0.2, 0.5, 1.0] {
+        assert_eq!(
+            yrs_for_init_timestep(m).to_bits(),
+            1.0e5_f64.to_bits(),
+            "M={m} <= 1 Msun must use exact 1e5 yr"
+        );
+    }
+    let dt_2 = yrs_for_init_timestep(2.0);
+    let exp_2 = 1.0e5 / flexmesa_math::pow(2.0, 2.5);
+    assert_eq!(dt_2.to_bits(), exp_2.to_bits());
+    assert!((yrs_for_init_timestep(4.0) - 3125.0).abs() <= 1.0e-12);
+    let dt_50 = yrs_for_init_timestep(50.0);
+    let exp_50 = 1.0e5 / flexmesa_math::pow(50.0, 2.5);
+    assert_eq!(dt_50.to_bits(), exp_50.to_bits());
+
+    // `jdot_gr_check` (`0.5 Msun`) model-1 CALL dt in MESA 26.4.1 stepdump.
+    let m05 = load_zams_model(
+        StarControls {
+            initial_mass: 0.5,
+            initial_z: 0.02,
+            zbase: 0.02,
+            ..StarControls::default()
+        },
+        StarJobControls::default(),
+    )
+    .expect("load 0.5 Msun ZAMS");
+    assert_eq!(m05.dt.to_bits(), 0x4286_F60F_A160_0000);
+    assert_eq!(m05.dt_next.to_bits(), 0x4286_F60F_A160_0000);
+}

@@ -76,8 +76,8 @@ pub(crate) fn coeffs_for(variant: RosenbrockVariant) -> RosCoeffs {
     };
     match variant {
         RosenbrockVariant::Ros2 => {
-            // 2-stage L-stable 2nd-order Rosenbrock (mod_rosenbrock.f:1203-1244)
-            let g = 1.0 + 1.0 / 2.0_f64.sqrt();
+            // 2-stage L-stable 2nd-order Rosenbrock (mod_rosenbrock.f:1203-1256)
+            let g = 1.0 + 1.0 / flexmesa_math::safe_sqrt(2.0);
             rc.s = 2;
             rc.gamma = g;
             rc.order = 2.0;
@@ -85,8 +85,8 @@ pub(crate) fn coeffs_for(variant: RosenbrockVariant) -> RosCoeffs {
             rc.c[1][0] = -2.0 / g;
             rc.alpha = [0.0, 1.0, 0.0, 0.0, 0.0, 0.0];
             rc.gamma_t = [g, -g, 0.0, 0.0, 0.0, 0.0];
-            rc.m = [1.5 / g, 0.5 / g, 0.0, 0.0, 0.0, 0.0];
-            rc.e = [0.5 / g, 0.5 / g, 0.0, 0.0, 0.0, 0.0];
+            rc.m = [3.0 / (2.0 * g), 1.0 / (2.0 * g), 0.0, 0.0, 0.0, 0.0];
+            rc.e = [1.0 / (2.0 * g), 1.0 / (2.0 * g), 0.0, 0.0, 0.0, 0.0];
         }
         RosenbrockVariant::Rose2 => {
             // 3-stage L-stable 2nd-order Rose2 (mod_rosenbrock.f:1731-1785)
@@ -117,36 +117,36 @@ pub(crate) fn coeffs_for(variant: RosenbrockVariant) -> RosCoeffs {
             ];
         }
         RosenbrockVariant::Ros3p => {
-            // 3-stage 3rd-order Ros3p (Lang & Verwer 2001; mod_rosenbrock.f:1254-1305)
+            // 3-stage 3rd-order Ros3p (Lang & Verwer 2001; mod_rosenbrock.f:1335-1396)
             rc.s = 3;
-            rc.gamma = 0.788_675_134_594_812_9;
+            rc.gamma = 0.788_675_134_594_812_86;
             rc.order = 3.0;
-            rc.a[1][0] = 1.267_949_192_431_122_8;
-            rc.a[2][0] = 1.267_949_192_431_122_8;
-            rc.c[1][0] = -1.607_695_154_586_736_2;
-            rc.c[2][0] = -3.464_101_615_137_754_4;
-            rc.c[2][1] = -1.732_050_807_568_877_2;
+            rc.a[1][0] = 1.267_949_192_431_122_73;
+            rc.a[2][0] = 1.267_949_192_431_122_73;
+            rc.c[1][0] = -1.607_695_154_586_736_30;
+            rc.c[2][0] = -3.464_101_615_137_754_69;
+            rc.c[2][1] = -1.732_050_807_568_877_34;
             rc.newf = [true, true, false, true, true, true];
             rc.alpha = [0.0, 1.0, 1.0, 0.0, 0.0, 0.0];
             rc.gamma_t = [
-                0.788_675_134_594_812_9,
+                0.788_675_134_594_812_86,
                 -0.211_324_865_405_187_13,
-                -1.077_350_269_189_625_8,
+                -1.077_350_269_189_625_73,
                 0.0,
                 0.0,
                 0.0,
             ];
             rc.m = [
                 2.0,
-                0.577_350_269_189_625_8,
-                0.422_649_730_810_374_2,
+                0.577_350_269_189_625_78,
+                0.422_649_730_810_374_24,
                 0.0,
                 0.0,
                 0.0,
             ];
             rc.e = [
                 2.0 - 2.113_248_654_051_871_24,
-                0.577_350_269_189_625_8 - 1.0,
+                0.577_350_269_189_625_78 - 1.0,
                 0.0,
                 0.0,
                 0.0,
@@ -222,7 +222,8 @@ pub(crate) fn coeffs_for(variant: RosenbrockVariant) -> RosCoeffs {
             rc.gamma = 0.25;
             rc.order = 4.0;
             rc.alpha = [0.0, 0.386, 0.21, 0.63, 1.0, 1.0];
-            rc.gamma_t = [0.25, -0.1043, 0.1035, -0.0362, 0.0, 0.0];
+            rc.gamma_t =
+                [0.25, -0.1043, 0.1035, -0.036_200_000_000_000_23, 0.0, 0.0];
             rc.a[1][0] = 1.544;
             rc.a[2][0] = 0.946_678_528_081_582_6;
             rc.a[2][1] = 0.255_701_169_898_328_4;

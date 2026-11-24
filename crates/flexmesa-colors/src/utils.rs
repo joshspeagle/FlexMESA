@@ -162,8 +162,15 @@ pub fn linear_interpolate<T: RealScalar>(
     if x_val >= x[n - 1] {
         return Ok(y[n - 1]);
     }
-    let (low, t) = find_interval(x, x_val);
-    Ok(y[low] + (y[low + 1] - y[low]) * T::from_f64(t))
+    // Match `colors/private/knn_interp.f90:409` evaluation order:
+    // `y(low) + (y(low+1) - y(low)) / (x(low+1) - x(low)) * (xv - x(low))`.
+    let (low, _) = find_interval(x, x_val);
+    let dx = x[low + 1] - x[low];
+    if dx.abs() < 1.0e-30 {
+        return Ok(y[low]);
+    }
+    let slope = (y[low + 1] - y[low]).div_f64(dx);
+    Ok(y[low] + slope * T::from_f64(x_val - x[low]))
 }
 
 /// Resamples a 1D curve `(x_in, y_in)` onto target grid `x_out` using

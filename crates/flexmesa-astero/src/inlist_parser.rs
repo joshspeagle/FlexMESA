@@ -28,10 +28,14 @@ pub const ASTERO_SEARCH_CONTROLS_SUPPORTED: &[&str] = &[
     "age_sigma",
     "age_target",
     "astero_results_directory",
+    "avg_age_sigma_limit",
+    "avg_model_number_sigma_limit",
     "bobyqa_output_filename",
     "bobyqa_rhoend",
     "chi2_delta_nu_limit",
     "chi2_limit_for_small_timesteps",
+    "chi2_limit_for_smaller_timesteps",
+    "chi2_limit_for_smallest_timesteps",
     "chi2_radial_limit",
     "chi2_relative_increase_limit",
     "chi2_search_limit1",
@@ -51,6 +55,7 @@ pub const ASTERO_SEARCH_CONTROLS_SUPPORTED: &[&str] = &[
     "delta_nu",
     "delta_nu_sigma",
     "delta_param",
+    "do_redistribute_mesh",
     "dt_for_smaller_steps_before_age_target",
     "dydz",
     "eval_chi2_at_target_age_only",
@@ -71,13 +76,17 @@ pub const ASTERO_SEARCH_CONTROLS_SUPPORTED: &[&str] = &[
     "lnuc_div_l_limit",
     "max_age_for_chi2",
     "max_num_from_file",
+    "max_num_samples_for_avg",
     "max_param",
     "max_yrs_dt_chi2_small_limit",
+    "max_yrs_dt_chi2_smaller_limit",
+    "max_yrs_dt_chi2_smallest_limit",
     "max_yrs_dt_when_cold",
     "max_yrs_dt_when_hot",
     "max_yrs_dt_when_warm",
     "min_age_for_chi2",
     "min_age_limit",
+    "min_num_samples_for_avg",
     "min_param",
     "newuoa_output_filename",
     "newuoa_rhoend",
@@ -600,6 +609,9 @@ fn apply_assignment(
         "add_atmosphere" => c.add_atmosphere = expect_bool(sec, a)?,
         "keep_surface_point" => c.keep_surface_point = expect_bool(sec, a)?,
         "add_center_point" => c.add_center_point = expect_bool(sec, a)?,
+        "do_redistribute_mesh" => {
+            c.do_redistribute_mesh = expect_bool(sec, a)?;
+        }
         "correction_scheme" => c.correction_scheme = expect_str(sec, a)?,
         "correction_b" => c.correction_b = expect_f64(sec, a)?,
         "correction_factor" => c.correction_factor = expect_f64(sec, a)?,
@@ -729,6 +741,35 @@ fn apply_assignment(
         }
         "max_yrs_dt_chi2_small_limit" => {
             c.max_yrs_dt_chi2_small_limit = expect_f64(sec, a)?;
+        }
+        "chi2_limit_for_smaller_timesteps" => {
+            c.chi2_limit_for_smaller_timesteps = expect_f64(sec, a)?;
+        }
+        "max_yrs_dt_chi2_smaller_limit" => {
+            c.max_yrs_dt_chi2_smaller_limit = expect_f64(sec, a)?;
+        }
+        "chi2_limit_for_smallest_timesteps" => {
+            c.chi2_limit_for_smallest_timesteps = expect_f64(sec, a)?;
+        }
+        "max_yrs_dt_chi2_smallest_limit" => {
+            c.max_yrs_dt_chi2_smallest_limit = expect_f64(sec, a)?;
+        }
+        "avg_age_sigma_limit" => c.avg_age_sigma_limit = expect_f64(sec, a)?,
+        "avg_model_number_sigma_limit" => {
+            c.avg_model_number_sigma_limit = expect_f64(sec, a)?;
+        }
+        "min_num_samples_for_avg" | "max_num_samples_for_avg" => {
+            let v = expect_i64(sec, a)?;
+            if v < 0 {
+                return Err(StarError::InvalidInput(format!(
+                    "negative '&{sec}::{key}' = {v}"
+                )));
+            }
+            if key == "min_num_samples_for_avg" {
+                c.min_num_samples_for_avg = v as usize;
+            } else {
+                c.max_num_samples_for_avg = v as usize;
+            }
         }
         other => {
             // Upstream control skipped only when `allow_unsupported_controls = true`.

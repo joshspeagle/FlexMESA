@@ -10,12 +10,14 @@ use flexmesa_binary::{
     BinaryCompanion, BinaryExtras, BinaryExtrasAction, BinarySystem,
     DefaultBinaryExtras, separation_from_period,
 };
+use flexmesa_chem::NuclideCatalog;
 use flexmesa_const::{
     CLIGHT, CRAD, LN10, LSUN, M_SUN, PI, RSUN, SECDAY, SECYER,
 };
 use flexmesa_eos::{
-    I_FRAC_CMS, I_FRAC_FREE_EOS, I_FRAC_HELM, I_FRAC_IDEAL, I_FRAC_OPAL_SCVH,
-    I_FRAC_PC, I_FRAC_SKYE,
+    I_DE_DRHO, I_FRAC_CMS, I_FRAC_FREE_EOS, I_FRAC_HELM, I_FRAC_IDEAL,
+    I_FRAC_OPAL_SCVH, I_FRAC_PC, I_FRAC_SKYE, I_LN_PGAS, eos_dt_get,
+    HelmTable,
 };
 use flexmesa_star::hydro_state::{
     OtherAdjustMltGradtFractionHandle, OtherAdjustMltGradtFractionHook,
@@ -30,14 +32,16 @@ use flexmesa_star::overshoot::{
 };
 use flexmesa_star::report_utils::surface_avg_x_slot;
 use flexmesa_star::{
-    AtmTTauRelation, InertiaNormKind, InlistBundle, OuterBoundKind,
-    RspChemCache, StarControls, StarError, StarModel, center_avg_x_by_name,
-    center_value, compute_core_masses, compute_power_categories,
-    do_rsp_build_model, eval_conv_and_mx_summary, eval_photosphere_info,
-    eval_surf_avg_rotation_info, export_gyre, parse_gyre_mesa_model,
-    safe_log10, solve_bvp_eigenmodes,
+    AtmTTauOpacity, AtmTTauRelation, InertiaNormKind, InlistBundle,
+    OtherMeshDeltaCoeffFactorHandle, OtherMeshDeltaCoeffFactorHook,
+    OtherMeshFunctionColumn, OtherMeshFunctionsHandle, OtherMeshFunctionsHook,
+    OuterBoundKind, RspChemCache, StarControls, StarError, StarModel,
+    center_avg_x_by_name, center_value, compute_core_masses,
+    compute_power_categories, do_rsp_build_model, eval_conv_and_mx_summary,
+    eval_photosphere_info, eval_surf_avg_rotation_info, export_gyre,
+    get_or_load_net, parse_gyre_mesa_model, safe_log10, solve_bvp_eigenmodes,
 };
-use numpy::PyArray1;
+use numpy::{PyArray1, PyArrayMethods};
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList, PyTuple};
@@ -170,6 +174,228 @@ impl PyRspBuildContext {
             lina.periods_sec.iter().map(|&p| p / SECDAY).collect();
         Ok((periods_days, lina.growth_rates))
     }
+
+    /// Default initial reaction network name (`"basic.net"`).
+    #[getter]
+    pub const fn default_net_name(&self) -> &'static str {
+        "basic.net"
+    }
+
+    /// Resolves `(chem_id, iso_names, net_iso)` for `net_name` (default `"basic.net"`).
+    #[pyo3(signature = (net_name = None))]
+    pub fn net_info<'py>(
+        &self,
+        py: Python<'py>,
+        net_name: Option<&str>,
+    ) -> PyResult<(Vec<usize>, Vec<String>, Bound<'py, PyDict>)> {
+        let name = net_name.unwrap_or("basic.net");
+        let net = get_or_load_net(name, Some(&self.bundle.case_dir))
+            .map_err(to_py_err)?;
+        let (iso_names, net_iso_map) = resolve_net_iso_names(&net.chem_id);
+        let d = PyDict::new(py);
+        for (iso, idx) in net_iso_map {
+            d.set_item(iso, idx)?;
+        }
+        Ok((net.chem_id.clone(), iso_names, d))
+    }
+
+    /// Evaluates the staged bundle's `eosDT_get` cascade at `(rho, temp, xa)`.
+    #[pyo3(signature = (rho, temp, xa, net_name = None))]
+    pub fn eos_dt_get<'py>(
+        &self,
+        py: Python<'py>,
+        rho: f64,
+        temp: f64,
+        xa: Vec<f64>,
+        net_name: Option<&str>,
+    ) -> PyResult<Bound<'py, PyDict>> {
+        let name = net_name.unwrap_or("basic.net");
+        let net = get_or_load_net(name, Some(&self.bundle.case_dir))
+            .map_err(to_py_err)?;
+        if xa.len() != net.chem_id.len() {
+            return Err(PyValueError::new_err(format!(
+                "xa length {} != network species {}",
+                xa.len(),
+                net.chem_id.len()
+            )));
+        }
+        let ht = HelmTable::builtin()
+            .map_err(|e| PyValueError::new_err(e.to_string()))?;
+        let out = eos_dt_get(
+            ht,
+            rho,
+            temp,
+            &net.chem_id,
+            &xa,
+            &self.bundle.eos_config,
+        )
+        .map_err(|e| PyValueError::new_err(e.to_string()))?;
+        let d = PyDict::new(py);
+        let ln_pgas = out.res[I_LN_PGAS];
+        d.set_item("ln_pgas", ln_pgas)?;
+        d.set_item("pgas", flexmesa_math::exp(ln_pgas))?;
+        d.set_item("res", out.res.to_vec())?;
+        d.set_item("d_dlnd", out.d_dlnd.to_vec())?;
+        d.set_item("d_dlnt", out.d_dln_t.to_vec())?;
+        Ok(d)
+    }
+
+    /// Constructs and initializes a custom [`PyStarModel`] for
+    /// `other_build_initial_model` hooks from profile arrays `(lnd, ln_t,
+    /// ln_r, lum, dq, xa)` and boundary scalars.
+    #[pyo3(signature = (
+        lnd,
+        ln_t,
+        ln_r,
+        lum,
+        dq,
+        xa,
+        m_center = 0.0,
+        r_center = 0.0,
+        l_center = 0.0,
+        v_center = 0.0,
+        mstar = None,
+        xmstar = None,
+        dt_next = None,
+        net_name = None
+    ))]
+    #[allow(clippy::too_many_arguments)]
+    pub fn build_star_model(
+        &self,
+        lnd: Vec<f64>,
+        ln_t: Vec<f64>,
+        ln_r: Vec<f64>,
+        lum: Vec<f64>,
+        dq: Vec<f64>,
+        xa: &Bound<'_, PyAny>,
+        m_center: f64,
+        r_center: f64,
+        l_center: f64,
+        v_center: f64,
+        mstar: Option<f64>,
+        xmstar: Option<f64>,
+        dt_next: Option<f64>,
+        net_name: Option<&str>,
+    ) -> PyResult<PyStarModel> {
+        let nz = lnd.len();
+        if nz < 2 {
+            return Err(PyValueError::new_err(
+                "build_star_model requires nz >= 2",
+            ));
+        }
+        for (label, len) in [
+            ("ln_t", ln_t.len()),
+            ("ln_r", ln_r.len()),
+            ("lum", lum.len()),
+            ("dq", dq.len()),
+        ] {
+            if len != nz {
+                return Err(PyValueError::new_err(format!(
+                    "{label} length {len} != nz {nz}"
+                )));
+            }
+        }
+        let name = net_name.unwrap_or("basic.net");
+        let net = get_or_load_net(name, Some(&self.bundle.case_dir))
+            .map_err(to_py_err)?;
+        let ns = net.chem_id.len();
+        let xa_flat = extract_xa_flat(xa, nz, ns)?;
+
+        let mut controls = self.bundle.controls.clone();
+        if controls.initial_y < 0.0 {
+            controls.initial_y =
+                (0.24 + 2.0 * controls.initial_z).clamp(0.0, 1.0);
+        }
+        controls.v_flag = false;
+        controls.u_flag = false;
+        controls.rotation_flag = false;
+
+        let mut job = self.bundle.job.clone();
+        job.net_name.clone_from(&net.net_filename);
+
+        let mut model = StarModel::new(nz, net.chem_id.clone(), job, controls);
+        model.eos_config = self.bundle.eos_config;
+        model.kap_config = self.bundle.kap_config.clone();
+        model.m_center = m_center;
+        model.r_center = r_center;
+        model.l_center = l_center;
+        model.v_center = v_center;
+        let resolved_mstar =
+            mstar.unwrap_or(model.controls.initial_mass * M_SUN);
+        let resolved_xmstar = xmstar.unwrap_or(resolved_mstar - m_center);
+        model.mstar = resolved_mstar;
+        model.xmstar = resolved_xmstar;
+        model.mstar_start = resolved_mstar;
+        model.mstar_old = resolved_mstar;
+        model.lnd = lnd;
+        model.ln_t = ln_t;
+        model.ln_r = ln_r;
+        model.lum = lum;
+        model.dq = dq;
+        model.xa = xa_flat;
+        model.model_number = 0;
+        model.star_age = 0.0;
+        let mut resolved_dt = dt_next.unwrap_or(1.0e-5 * SECYER);
+        if model.controls.max_years_for_timestep > 0.0 {
+            resolved_dt =
+                resolved_dt.min(SECYER * model.controls.max_years_for_timestep);
+        }
+        (model.dt, model.dt_next, model.dt_old) =
+            (resolved_dt, resolved_dt, 0.0);
+        model.finish_init_model().map_err(to_py_err)?;
+        Ok(PyStarModel { inner: model })
+    }
+}
+
+fn resolve_net_iso_names(
+    chem_id: &[usize],
+) -> (Vec<String>, Vec<(String, usize)>) {
+    let catalog = NuclideCatalog::builtin_ref();
+    let mut iso_names = Vec::with_capacity(chem_id.len());
+    let mut net_iso = Vec::with_capacity(chem_id.len());
+    for (j, &cid) in chem_id.iter().enumerate() {
+        let name = catalog
+            .get_by_id(cid)
+            .map_or_else(|| format!("iso_{cid}"), |n| n.name.clone());
+        net_iso.push((name.to_ascii_lowercase(), j));
+        iso_names.push(name);
+    }
+    (iso_names, net_iso)
+}
+
+fn extract_xa_flat(
+    xa: &Bound<'_, PyAny>,
+    nz: usize,
+    species: usize,
+) -> PyResult<Vec<f64>> {
+    if let Ok(rows) = xa.extract::<Vec<Vec<f64>>>() {
+        if rows.len() != nz {
+            return Err(PyValueError::new_err(format!(
+                "xa row count {} != nz {nz}",
+                rows.len()
+            )));
+        }
+        let mut flat = Vec::with_capacity(nz * species);
+        for (k, row) in rows.iter().enumerate() {
+            if row.len() != species {
+                return Err(PyValueError::new_err(format!(
+                    "xa[{k}] length {} != species {species}",
+                    row.len()
+                )));
+            }
+            flat.extend_from_slice(row);
+        }
+        return Ok(flat);
+    }
+    let flat: Vec<f64> = xa.extract()?;
+    if flat.len() != nz * species {
+        return Err(PyValueError::new_err(format!(
+            "xa flat length {} != nz * species ({})",
+            flat.len(),
+            nz * species
+        )));
+    }
+    Ok(flat)
 }
 
 /// Solves adiabatic `GYRE` MESA modes and returns eigenfunction radial profiles:
@@ -361,6 +587,86 @@ fn parse_atm_t_tau_relation(raw: &str) -> PyResult<AtmTTauRelation> {
     }
 }
 
+/// Canonical upstream MESA string for [`AtmTTauOpacity`].
+const fn atm_t_tau_opacity_name(op: AtmTTauOpacity) -> &'static str {
+    match op {
+        AtmTTauOpacity::Fixed => "fixed",
+        AtmTTauOpacity::Iterated => "iterated",
+        AtmTTauOpacity::Varying => "varying",
+    }
+}
+
+/// Parses an upstream MESA `atm_T_tau_opacity` string, raising `ValueError`
+/// on unrecognized names.
+fn parse_atm_t_tau_opacity(raw: &str) -> PyResult<AtmTTauOpacity> {
+    match raw.trim().to_ascii_lowercase().as_str() {
+        "fixed" => Ok(AtmTTauOpacity::Fixed),
+        "iterated" => Ok(AtmTTauOpacity::Iterated),
+        "varying" => Ok(AtmTTauOpacity::Varying),
+        other => Err(PyValueError::new_err(format!(
+            "unrecognized atm_t_tau_opacity '{other}'"
+        ))),
+    }
+}
+
+/// The `extras_controls` state: the case directory, the controls and the
+/// `x_*` user controls. Upstream calls `extras_controls` before the model is
+/// loaded (`star/job/run_star_support.f90:430-459`).
+fn build_pre_load_snapshot<'py>(
+    py: Python<'py>,
+    model: &StarModel,
+    case_dir: &str,
+) -> PyResult<Bound<'py, PyDict>> {
+    let d = PyDict::new(py);
+    d.set_item("case_dir", case_dir)?;
+    set_star_control_scalars(&d, model)?;
+    set_user_controls(&d, &model.controls)?;
+    Ok(d)
+}
+
+/// Read-only state handed to `extras_controls`. A key that is not set
+/// raises `KeyError` naming the upstream order: the model is not loaded yet
+/// when `extras_controls` runs (DECISIONS #43).
+#[pyclass(module = "flexmesa._rust")]
+pub struct PreLoadStarState {
+    d: Py<PyDict>,
+}
+
+#[pymethods]
+impl PreLoadStarState {
+    fn __getitem__(&self, py: Python<'_>, key: &str) -> PyResult<Py<PyAny>> {
+        match self.d.bind(py).get_item(key)? {
+            Some(v) => Ok(v.unbind()),
+            None => Err(pyo3::exceptions::PyKeyError::new_err(format!(
+                "'{key}' is not set when extras_controls runs: upstream calls \
+                 extras_controls before the model is loaded \
+                 (star/job/run_star_support.f90:430-459)"
+            ))),
+        }
+    }
+
+    fn __contains__(&self, py: Python<'_>, key: &str) -> PyResult<bool> {
+        self.d.bind(py).contains(key)
+    }
+
+    #[pyo3(signature = (key, default=None))]
+    fn get(
+        &self,
+        py: Python<'_>,
+        key: &str,
+        default: Option<Py<PyAny>>,
+    ) -> PyResult<Py<PyAny>> {
+        match self.d.bind(py).get_item(key)? {
+            Some(v) => Ok(v.unbind()),
+            None => Ok(default.unwrap_or_else(|| py.None())),
+        }
+    }
+
+    fn keys(&self, py: Python<'_>) -> Py<PyList> {
+        self.d.bind(py).keys().unbind()
+    }
+}
+
 fn set_star_control_scalars(
     d: &Bound<'_, PyDict>,
     model: &StarModel,
@@ -378,6 +684,10 @@ fn set_star_control_scalars(
         "atm_t_tau_relation",
         atm_t_tau_relation_name(c.atm_t_tau_relation),
     )?;
+    d.set_item(
+        "atm_t_tau_opacity",
+        atm_t_tau_opacity_name(c.atm_t_tau_opacity),
+    )?;
     d.set_item("log_l_upper_limit", c.log_l_upper_limit.unwrap_or(1.0e99))?;
     d.set_item("teff_lower_limit", c.teff_lower_limit.unwrap_or(-1.0e99))?;
     d.set_item("max_age", c.max_age)?;
@@ -389,6 +699,20 @@ fn set_star_control_scalars(
     d.set_item("mass_change", c.mass_change)?;
     d.set_item("initial_mass", c.initial_mass)?;
     d.set_item("max_timestep", c.ts_stop.max_timestep)?;
+    d.set_item("time_delta_coeff", c.ts_stop.time_delta_coeff)?;
+    d.set_item(
+        "delta_lgrho_cntr_hard_limit",
+        c.ts_stop.delta_lgrho_cntr_hard_limit,
+    )?;
+    d.set_item(
+        "dt_div_min_dr_div_cs_limit",
+        c.ts_stop.dt_div_min_dr_div_cs_limit,
+    )?;
+    d.set_item(
+        "use_other_timestep_limit",
+        c.ts_stop.use_other_timestep_limit,
+    )?;
+    d.set_item("use_other_eval_fp_ft", false)?;
     d.set_item("center_avg_value_dq", c.output.center_avg_value_dq)?;
     d.set_item(
         "he_core_boundary_h1_fraction",
@@ -399,6 +723,11 @@ fn set_star_control_scalars(
     d.set_item("use_other_alpha_mlt", c.use_other_alpha_mlt)?;
     d.set_item("use_other_wind", c.use_other_wind)?;
     d.set_item("use_other_adjust_mdot", c.use_other_adjust_mdot)?;
+    d.set_item(
+        "use_accreted_material_j",
+        c.mix_wind.use_accreted_material_j,
+    )?;
+    d.set_item("accreted_material_j", c.mix_wind.accreted_material_j)?;
     d.set_item("use_other_torque", c.use_other_torque)?;
     d.set_item("use_other_torque_implicit", c.use_other_torque_implicit)?;
     d.set_item("use_other_energy", c.use_other_energy)?;
@@ -439,6 +768,38 @@ fn set_star_control_scalars(
         PyList::new(py, sets.iter().map(|s| s.mass_full_off))?,
     )?;
     Ok(())
+}
+
+#[allow(clippy::manual_midpoint)]
+fn eval_total_angular_momentum_old(model: &StarModel) -> f64 {
+    if !model.controls.rotation_flag {
+        return 0.0;
+    }
+    let nz_old = model.dq_old.len();
+    let xmstar_old = if model.xmstar_old > 0.0 {
+        model.xmstar_old
+    } else {
+        (model.mstar_old - model.m_center_old).max(0.0)
+    };
+    if nz_old == 0 || xmstar_old == 0.0 || model.aux.j_rot_old.len() < nz_old {
+        return 0.0;
+    }
+    let is_rsp = model.controls.rsp_flag || model.controls.rsp2_flag;
+    (0..nz_old)
+        .map(|k| {
+            let dm_k = model.dq_old[k] * xmstar_old;
+            let dm_bar_k = if k == 0 {
+                0.5 * dm_k
+            } else if k + 1 == nz_old && !is_rsp {
+                let half_prev = 0.5 * (model.dq_old[nz_old - 2] * xmstar_old);
+                half_prev + dm_k
+            } else {
+                let dm_prev = model.dq_old[k - 1] * xmstar_old;
+                0.5 * (dm_prev + dm_k)
+            };
+            dm_bar_k * model.aux.j_rot_old[k]
+        })
+        .sum()
 }
 
 fn set_star_report_scalars(
@@ -503,6 +864,10 @@ fn set_star_report_scalars(
         0.0
     };
     d.set_item("total_angular_momentum", total_j)?;
+    d.set_item(
+        "total_angular_momentum_old",
+        eval_total_angular_momentum_old(model),
+    )?;
 
     let net_iso = PyDict::new(py);
     for (j, name) in model.iso_names.iter().enumerate() {
@@ -581,6 +946,84 @@ fn set_star_species_arrays(
     for (name, col) in model.iso_names.iter().take(ns).zip(cols) {
         let key = format!("xa_{}", name.to_ascii_lowercase());
         d.set_item(key, PyArray1::from_vec(py, col))?;
+    }
+    d.set_item(
+        "xa",
+        PyArray1::from_slice(py, &model.xa[..nz * ns]).reshape([nz, ns])?,
+    )?;
+    Ok(())
+}
+
+fn set_star_f64_prefix(
+    py: Python<'_>,
+    d: &Bound<'_, PyDict>,
+    nz: usize,
+    key: &str,
+    slice: &[f64],
+) -> PyResult<()> {
+    if slice.len() >= nz {
+        d.set_item(key, PyArray1::from_slice(py, &slice[..nz]))?;
+    }
+    Ok(())
+}
+
+fn set_star_energy_and_start_arrays(
+    py: Python<'_>,
+    d: &Bound<'_, PyDict>,
+    model: &StarModel,
+) -> PyResult<()> {
+    let nz = model.nz;
+    if nz == 0 {
+        return Ok(());
+    }
+    set_star_f64_prefix(py, d, nz, "energy_start", &model.energy_start)?;
+    set_star_f64_prefix(py, d, nz, "cv", &model.cv)?;
+    set_star_f64_prefix(py, d, nz, "cv_start", &model.aux.cv_start)?;
+    set_star_f64_prefix(
+        py,
+        d,
+        nz,
+        "de_drho_start",
+        &model.aux.de_drho_start,
+    )?;
+    set_star_f64_prefix(py, d, nz, "ergs_error", &model.aux.ergs_error)?;
+    set_star_f64_prefix(py, d, nz, "lnt_start", &model.ln_t_start)?;
+    if model.ln_t_start.len() >= nz {
+        let t_start: Vec<f64> = model.ln_t_start[..nz]
+            .iter()
+            .map(|&v| flexmesa_math::exp(v))
+            .collect();
+        d.set_item("t_start", PyArray1::from_vec(py, t_start))?;
+    }
+    if model.lnd_start.len() >= nz {
+        let rho_start: Vec<f64> = model.lnd_start[..nz]
+            .iter()
+            .map(|&v| flexmesa_math::exp(v))
+            .collect();
+        d.set_item("rho_start", PyArray1::from_vec(py, rho_start))?;
+    }
+    if model.ln_t.len() >= nz && model.ln_t_start.len() >= nz {
+        let dxh_lnt: Vec<f64> = model.ln_t[..nz]
+            .iter()
+            .zip(&model.ln_t_start[..nz])
+            .map(|(a, b)| a - b)
+            .collect();
+        d.set_item("dxh_lnt", PyArray1::from_vec(py, dxh_lnt))?;
+    }
+    if model.lnd.len() >= nz && model.lnd_start.len() >= nz {
+        let dxh_lnd: Vec<f64> = model.lnd[..nz]
+            .iter()
+            .zip(&model.lnd_start[..nz])
+            .map(|(a, b)| a - b)
+            .collect();
+        d.set_item("dxh_lnd", PyArray1::from_vec(py, dxh_lnd))?;
+    }
+    if model.eos_res.len() >= nz {
+        let de_drho: Vec<f64> = model.eos_res[..nz]
+            .iter()
+            .map(|row| row[I_DE_DRHO])
+            .collect();
+        d.set_item("de_drho", PyArray1::from_vec(py, de_drho))?;
     }
     Ok(())
 }
@@ -663,6 +1106,7 @@ fn set_star_radial_arrays(
             .collect();
         d.set_item("mixing_type", PyArray1::from_vec(py, mix_codes))?;
     }
+    set_star_energy_and_start_arrays(py, d, model)?;
     set_star_eos_frac_arrays(py, d, model)?;
     set_star_species_arrays(py, d, model)?;
     Ok(())
@@ -694,8 +1138,15 @@ fn build_star_snapshot<'py>(
         "top_conv_bdy",
         PyList::new(py, &model.aux.mixing.top_conv_bdy)?,
     )?;
+    d.set_item("generations", model.generations)?;
+    d.set_item("num_retries", model.num_retries)?;
+    d.set_item(
+        "num_rotation_solver_steps",
+        model.aux.step_hist.num_rotation_solver_steps,
+    )?;
     d.set_item("star_mass", model.mstar / M_SUN)?;
     d.set_item("mstar_dot", model.mstar_dot)?;
+    d.set_item("mstar_dot_old", model.aux.step_hist.mstar_dot_old)?;
     d.set_item("star_mdot", model.mstar_dot / (M_SUN / SECYER))?;
     d.set_item("teff", model.teff)?;
     d.set_item("surface_l_lsun", surface_l)?;
@@ -745,44 +1196,80 @@ fn build_star_snapshot<'py>(
     Ok(d)
 }
 
+fn copy_prefix_slice<T: Clone>(dst: &mut [T], src: &[T]) {
+    let n = src.len().min(dst.len());
+    dst[..n].clone_from_slice(&src[..n]);
+}
+
+fn apply_user_ctrl_update(
+    model: &mut StarModel,
+    key: &str,
+    val: &Bound<'_, PyAny>,
+) -> PyResult<bool> {
+    match key {
+        "x_ctrl" => {
+            let xs: Vec<f64> = val.extract()?;
+            copy_prefix_slice(&mut model.controls.x_ctrl, &xs);
+        }
+        "x_integer_ctrl" => {
+            let xs: Vec<i64> = val.extract()?;
+            copy_prefix_slice(&mut model.controls.x_integer_ctrl, &xs);
+        }
+        "x_logical_ctrl" => {
+            let xs: Vec<bool> = val.extract()?;
+            copy_prefix_slice(&mut model.controls.x_logical_ctrl, &xs);
+        }
+        "x_character_ctrl" => {
+            let xs: Vec<String> = val.extract()?;
+            copy_prefix_slice(&mut model.controls.x_character_ctrl, &xs);
+        }
+        _ => return Ok(false),
+    }
+    Ok(true)
+}
+
 fn apply_star_updates(
     model: &mut StarModel,
     updates: &Bound<'_, PyDict>,
 ) -> PyResult<()> {
     for (key_obj, val) in updates.iter() {
         let key: String = key_obj.extract()?;
+        if apply_user_ctrl_update(model, &key, &val)? {
+            continue;
+        }
         match key.as_str() {
-            "x_ctrl" => {
-                let xs: Vec<f64> = val.extract()?;
-                let n = xs.len().min(model.controls.x_ctrl.len());
-                model.controls.x_ctrl[..n].copy_from_slice(&xs[..n]);
-            }
-            "x_integer_ctrl" => {
-                let xs: Vec<i64> = val.extract()?;
-                let n = xs.len().min(model.controls.x_integer_ctrl.len());
-                model.controls.x_integer_ctrl[..n].copy_from_slice(&xs[..n]);
-            }
-            "x_logical_ctrl" => {
-                let xs: Vec<bool> = val.extract()?;
-                let n = xs.len().min(model.controls.x_logical_ctrl.len());
-                model.controls.x_logical_ctrl[..n].copy_from_slice(&xs[..n]);
-            }
-            "x_character_ctrl" => {
-                let xs: Vec<String> = val.extract()?;
-                let n = xs.len().min(model.controls.x_character_ctrl.len());
-                for (dst, src) in
-                    model.controls.x_character_ctrl[..n].iter_mut().zip(xs)
-                {
-                    *dst = src;
-                }
-            }
-            "dt_next" => {
-                model.dt_next = val.extract::<f64>()?;
-            }
+            "dt_next" => model.dt_next = val.extract::<f64>()?,
             "atm_t_tau_relation" => {
                 let raw: String = val.extract()?;
                 model.controls.atm_t_tau_relation =
                     parse_atm_t_tau_relation(&raw)?;
+            }
+            "atm_t_tau_opacity" => {
+                let raw: String = val.extract()?;
+                model.controls.atm_t_tau_opacity =
+                    parse_atm_t_tau_opacity(&raw)?;
+            }
+            "use_other_timestep_limit" => {
+                model.controls.ts_stop.use_other_timestep_limit =
+                    val.extract::<bool>()?;
+            }
+            "use_other_mesh_delta_coeff_factor" => {
+                model.controls.mix_wind.use_other_mesh_delta_coeff_factor =
+                    val.extract::<bool>()?;
+            }
+            "use_other_mesh_functions" => {
+                model.controls.mix_wind.use_other_mesh_functions =
+                    val.extract::<bool>()?;
+            }
+            "use_other_overshooting_scheme" => {
+                model.controls.use_other_overshooting_scheme =
+                    val.extract::<bool>()?;
+            }
+            "use_other_kap" => {
+                model.controls.use_other_kap = val.extract::<bool>()?;
+            }
+            "use_other_surface_pt" => {
+                model.controls.use_other_surface_pt = val.extract::<bool>()?;
             }
             "reimers_scaling_factor" => {
                 model.controls.reimers_scaling_factor = val.extract::<f64>()?;
@@ -793,11 +1280,12 @@ fn apply_star_updates(
             "do_element_diffusion" => {
                 model.controls.do_element_diffusion = val.extract::<bool>()?;
             }
-            "mass_change" => {
-                model.controls.mass_change = val.extract::<f64>()?;
-            }
+            "mass_change" => model.controls.mass_change = val.extract::<f64>()?,
             "mixing_length_alpha" => {
                 model.controls.mixing_length_alpha = val.extract::<f64>()?;
+            }
+            "tau_factor" => {
+                model.controls.tau_factor = val.extract::<f64>()?;
             }
             "max_timestep" => {
                 model.controls.ts_stop.max_timestep = val.extract::<f64>()?;
@@ -813,6 +1301,11 @@ fn apply_star_updates(
                 model.controls.teff_lower_limit =
                     val.extract::<Option<f64>>()?;
             }
+            "accreted_material_j" => {
+                model.controls.mix_wind.accreted_material_j =
+                    val.extract::<f64>()?;
+            }
+            "mstar_dot" => model.mstar_dot = val.extract::<f64>()?,
             other => {
                 return Err(PyValueError::new_err(format!(
                     "unsupported star extras update key '{other}'"
@@ -970,6 +1463,109 @@ fn parse_star_directive(
              {default_terminate_code}"
         ))),
     }
+}
+
+fn read_optional_mutated_scalar(
+    snap: &Bound<'_, PyDict>,
+    key: &str,
+    prev_bits: u64,
+) -> PyResult<Option<f64>> {
+    match snap.get_item(key)? {
+        Some(v) if !v.is_none() => {
+            let val = v.extract::<f64>()?;
+            Ok((val.to_bits() != prev_bits).then_some(val))
+        }
+        _ => Ok(None),
+    }
+}
+
+/// Parses a Python `other_adjust_mdot` return value and snapshot mutations.
+///
+/// Preserves legacy `float | None` hooks while allowing hooks to return
+/// `{"mstar_dot": ..., "accreted_material_j": ..., "updates": ...}` or mutate
+/// `snap["mstar_dot"]` / `snap["accreted_material_j"]` directly.
+fn parse_adjust_mdot_result(
+    res: &Bound<'_, PyAny>,
+    snap: &Bound<'_, PyDict>,
+    model: &mut StarModel,
+    current_mdot: f64,
+    pre_bits: (u64, u64),
+) -> PyResult<Option<f64>> {
+    let (pre_mdot_bits, pre_acc_j_bits) = pre_bits;
+    let snap_mdot =
+        read_optional_mutated_scalar(snap, "mstar_dot", pre_mdot_bits)?;
+    let snap_acc_j = read_optional_mutated_scalar(
+        snap,
+        "accreted_material_j",
+        pre_acc_j_bits,
+    )?;
+
+    if res.is_none() {
+        if let Some(j) = snap_acc_j {
+            model.controls.mix_wind.accreted_material_j = j;
+        }
+        if let Some(mdot) = snap_mdot {
+            return Ok(Some(mdot));
+        }
+        if snap_acc_j.is_some() {
+            return Ok(Some(current_mdot));
+        }
+        return Ok(None);
+    }
+
+    if let Ok(d) = res.cast::<PyDict>() {
+        let mut ret_mdot: Option<f64> = None;
+        let mut ret_acc_j: Option<f64> = None;
+        let mut saw_updates = false;
+        for (k_obj, v_obj) in d.iter() {
+            let key: String = k_obj.extract()?;
+            match key.as_str() {
+                "mstar_dot" => {
+                    if !v_obj.is_none() {
+                        ret_mdot = Some(v_obj.extract::<f64>()?);
+                    }
+                }
+                "accreted_material_j" => {
+                    if !v_obj.is_none() {
+                        ret_acc_j = Some(v_obj.extract::<f64>()?);
+                    }
+                }
+                "updates" => {
+                    if let Ok(udict) = v_obj.cast::<PyDict>() {
+                        apply_star_updates(model, udict)?;
+                        saw_updates = true;
+                    } else if !v_obj.is_none() {
+                        return Err(PyValueError::new_err(format!(
+                            "hook returned 'updates' of type {}; expected a \
+                             dict",
+                            v_obj.get_type().name()?
+                        )));
+                    }
+                }
+                other => {
+                    return Err(PyValueError::new_err(format!(
+                        "unsupported star adjust_mdot dict key '{other}'"
+                    )));
+                }
+            }
+        }
+        if let Some(j) = ret_acc_j.or(snap_acc_j) {
+            model.controls.mix_wind.accreted_material_j = j;
+        }
+        if let Some(mdot) = ret_mdot.or(snap_mdot) {
+            return Ok(Some(mdot));
+        }
+        if ret_acc_j.is_some() || snap_acc_j.is_some() || saw_updates {
+            return Ok(Some(model.mstar_dot));
+        }
+        return Ok(None);
+    }
+
+    let mdot = res.extract::<f64>()?;
+    if let Some(j) = snap_acc_j {
+        model.controls.mix_wind.accreted_material_j = j;
+    }
+    Ok(Some(mdot))
 }
 
 /// Callable attached to `other_overshooting_scheme` snapshots so Python hooks
@@ -1138,6 +1734,162 @@ impl OtherAdjustMltGradtFractionHook for PyOtherAdjustMltGradtFractionHook {
     }
 }
 
+struct PyOtherMeshDeltaCoeffFactorHook {
+    py_obj: Arc<Py<PyAny>>,
+    state: Arc<PyAdapterState>,
+}
+
+impl OtherMeshDeltaCoeffFactorHook for PyOtherMeshDeltaCoeffFactorHook {
+    fn eval_mesh_delta_coeff_factor(
+        &self,
+        model: &StarModel,
+        mesh_delta_coeff_factor: &mut [f64],
+    ) -> Result<(), StarError> {
+        self.state.take_pending_star_err()?;
+        let nz = model.nz;
+        let case_dir = self.state.staged_dir_string();
+        Python::attach(|py| {
+            let snap = build_star_snapshot(py, model, &case_dir, false)
+                .map_err(|e| StarError::InvalidInput(format_py_err(py, &e)))?;
+            let current =
+                PyList::new(py, mesh_delta_coeff_factor.iter().copied())
+                    .map_err(|e| {
+                        StarError::InvalidInput(format_py_err(py, &e))
+                    })?;
+            let res = self
+                .py_obj
+                .bind(py)
+                .call_method1("other_mesh_delta_coeff_factor", (snap, current))
+                .map_err(|e| {
+                    StarError::InvalidInput(format!(
+                        "other_mesh_delta_coeff_factor: {}",
+                        format_py_err(py, &e)
+                    ))
+                })?;
+            if res.is_none() {
+                return Ok(());
+            }
+            let vals: Vec<f64> = res.extract().map_err(|e| {
+                StarError::InvalidInput(format!(
+                    "other_mesh_delta_coeff_factor: {}",
+                    format_py_err(py, &e)
+                ))
+            })?;
+            if vals.len() != nz {
+                return Err(StarError::InvalidInput(format!(
+                    "other_mesh_delta_coeff_factor returned {} values for nz = {nz}",
+                    vals.len()
+                )));
+            }
+            if !vals.iter().all(|v| v.is_finite()) {
+                return Err(StarError::InvalidInput(String::from(
+                    "other_mesh_delta_coeff_factor returned non-finite factor",
+                )));
+            }
+            mesh_delta_coeff_factor[..nz].copy_from_slice(&vals);
+            Ok(())
+        })
+    }
+}
+
+struct PyOtherMeshFunctionsHook {
+    py_obj: Arc<Py<PyAny>>,
+    state: Arc<PyAdapterState>,
+}
+
+impl OtherMeshFunctionsHook for PyOtherMeshFunctionsHook {
+    fn eval_other_mesh_functions(
+        &self,
+        model: &StarModel,
+    ) -> Result<Vec<OtherMeshFunctionColumn>, StarError> {
+        self.state.take_pending_star_err()?;
+        let nz = model.nz;
+        let case_dir = self.state.staged_dir_string();
+        Python::attach(|py| {
+            let snap = build_star_snapshot(py, model, &case_dir, false)
+                .map_err(|e| StarError::InvalidInput(format_py_err(py, &e)))?;
+            let res = self
+                .py_obj
+                .bind(py)
+                .call_method1("other_mesh_functions", (snap,))
+                .map_err(|e| {
+                    StarError::InvalidInput(format!(
+                        "other_mesh_functions: {}",
+                        format_py_err(py, &e)
+                    ))
+                })?;
+            if res.is_none() {
+                return Ok(Vec::new());
+            }
+            let cols: Vec<(String, bool, Vec<f64>)> =
+                res.extract().map_err(|e| {
+                    StarError::InvalidInput(format!(
+                        "other_mesh_functions: {}",
+                        format_py_err(py, &e)
+                    ))
+                })?;
+            let mut out = Vec::with_capacity(cols.len());
+            for (name, is_xa_function, vals) in cols {
+                if vals.len() != nz {
+                    return Err(StarError::InvalidInput(format!(
+                        "other_mesh_functions column '{name}' has len {} != nz = {nz}",
+                        vals.len()
+                    )));
+                }
+                if !vals.iter().all(|v| v.is_finite()) {
+                    return Err(StarError::InvalidInput(format!(
+                        "other_mesh_functions column '{name}' contains non-finite values"
+                    )));
+                }
+                out.push(OtherMeshFunctionColumn {
+                    name,
+                    is_xa_function,
+                    vals,
+                });
+            }
+            Ok(out)
+        })
+    }
+}
+
+fn parse_timestep_limit_result(
+    res: &Bound<'_, PyAny>,
+    model: &mut StarModel,
+) -> PyResult<(ExtrasDirective, f64)> {
+    if res.is_none() {
+        return Ok((ExtrasDirective::KeepGoing, 0.0));
+    }
+    if let Ok(ratio) = res.extract::<f64>() {
+        if !ratio.is_finite() {
+            return Err(PyValueError::new_err(
+                "other_timestep_limit returned non-finite dt_limit_ratio",
+            ));
+        }
+        return Ok((ExtrasDirective::KeepGoing, ratio));
+    }
+    if let Ok(d) = res.cast::<PyDict>() {
+        let ratio = if let Some(val) = d.get_item("dt_limit_ratio")? {
+            if val.is_none() {
+                0.0
+            } else {
+                let r = val.extract::<f64>()?;
+                if !r.is_finite() {
+                    return Err(PyValueError::new_err(
+                        "other_timestep_limit returned non-finite dt_limit_ratio",
+                    ));
+                }
+                r
+            }
+        } else {
+            0.0
+        };
+        let dir = parse_star_directive(res, "other_timestep_limit", model)?;
+        return Ok((dir, ratio));
+    }
+    let dir = parse_star_directive(res, "other_timestep_limit", model)?;
+    Ok((dir, 0.0))
+}
+
 /// Thread-safe adapter forwarding [`StarExtras`] trait callbacks into a Python
 /// test-side extras object while avoiding per-step whole-model clones (`#148`).
 #[allow(clippy::struct_excessive_bools)]
@@ -1147,6 +1899,7 @@ pub struct PyStarExtrasAdapter {
     has_startup: bool,
     has_start_step: bool,
     has_check_model: bool,
+    has_other_timestep_limit: bool,
     has_finish_step: bool,
     has_after_evolve: bool,
     has_other_cgrav: bool,
@@ -1157,6 +1910,8 @@ pub struct PyStarExtrasAdapter {
     has_other_energy: bool,
     has_other_overshooting_scheme: bool,
     has_other_adjust_mlt_gradt_fraction: bool,
+    has_other_mesh_delta_coeff_factor: bool,
+    has_other_mesh_functions: bool,
     has_other_build_initial_model: bool,
     has_other_rsp_build_model: bool,
     has_other_rsp_linear_analysis: bool,
@@ -1182,6 +1937,7 @@ impl PyStarExtrasAdapter {
             has_startup: b.hasattr("extras_startup")?,
             has_start_step: b.hasattr("extras_start_step")?,
             has_check_model: b.hasattr("extras_check_model")?,
+            has_other_timestep_limit: b.hasattr("other_timestep_limit")?,
             has_finish_step: b.hasattr("extras_finish_step")?,
             has_after_evolve: b.hasattr("extras_after_evolve")?,
             has_other_cgrav: b.hasattr("other_cgrav")?,
@@ -1194,6 +1950,9 @@ impl PyStarExtrasAdapter {
                 .hasattr("other_overshooting_scheme")?,
             has_other_adjust_mlt_gradt_fraction: b
                 .hasattr("other_adjust_mlt_gradt_fraction")?,
+            has_other_mesh_delta_coeff_factor: b
+                .hasattr("other_mesh_delta_coeff_factor")?,
+            has_other_mesh_functions: b.hasattr("other_mesh_functions")?,
             has_other_build_initial_model: b
                 .hasattr("other_build_initial_model")?,
             has_other_rsp_build_model: b.hasattr("other_rsp_build_model")?,
@@ -1357,12 +2116,37 @@ impl StarExtras for PyStarExtrasAdapter {
     ) -> Result<(), StarError> {
         self.state.take_pending_star_err()?;
         install_star_aux_hooks(self, model);
+        if self.has_other_mesh_delta_coeff_factor {
+            model.aux.other_mesh_delta_coeff_factor =
+                Some(OtherMeshDeltaCoeffFactorHandle(Arc::new(
+                    PyOtherMeshDeltaCoeffFactorHook {
+                        py_obj: Arc::clone(&self.py_obj),
+                        state: Arc::clone(&self.state),
+                    },
+                )));
+        }
+        if self.has_other_mesh_functions {
+            model.aux.other_mesh_functions = Some(OtherMeshFunctionsHandle(
+                Arc::new(PyOtherMeshFunctionsHook {
+                    py_obj: Arc::clone(&self.py_obj),
+                    state: Arc::clone(&self.state),
+                }),
+            ));
+        }
         if !self.has_controls {
             return Ok(());
         }
         let case_dir = self.state.staged_dir_string();
         Python::attach(|py| {
-            let snap = build_star_snapshot(py, model, &case_dir, false)
+            // Upstream calls `extras_controls` before the model is loaded
+            // (`star/job/run_star_support.f90:430-459`), so the hook sees the
+            // controls only; reading model state raises an error (DECISIONS
+            // #43).
+            let snap = build_pre_load_snapshot(py, model, &case_dir)
+                .and_then(|snap| self.add_model_handle(py, snap, model))
+                .and_then(|snap| {
+                    Py::new(py, PreLoadStarState { d: snap.unbind() })
+                })
                 .map_err(|e| StarError::InvalidInput(format_py_err(py, &e)))?;
             let res = self
                 .py_obj
@@ -1439,6 +2223,59 @@ impl StarExtras for PyStarExtrasAdapter {
             "extras_check_model",
             model,
         )
+    }
+
+    fn other_timestep_limit(
+        &mut self,
+        model: &mut StarModel,
+        skip_hard_limit: bool,
+        dt: f64,
+    ) -> (ExtrasDirective, f64) {
+        if let Some(msg) = self.state.take_pending_msg() {
+            return (ExtrasDirective::Error(msg), 0.0);
+        }
+        if !self.has_other_timestep_limit {
+            return (ExtrasDirective::KeepGoing, 0.0);
+        }
+        let case_dir = self.state.staged_dir_string();
+        Python::attach(|py| {
+            let snap = match build_star_snapshot(py, model, &case_dir, false)
+                .and_then(|s| self.add_model_handle(py, s, model))
+            {
+                Ok(s) => s,
+                Err(e) => {
+                    return (
+                        ExtrasDirective::Error(format!(
+                            "other_timestep_limit: {}",
+                            format_py_err(py, &e)
+                        )),
+                        0.0,
+                    );
+                }
+            };
+            match self.py_obj.bind(py).call_method1(
+                "other_timestep_limit",
+                (snap, skip_hard_limit, dt),
+            ) {
+                Ok(res) => parse_timestep_limit_result(&res, model)
+                    .unwrap_or_else(|e| {
+                        (
+                            ExtrasDirective::Error(format!(
+                                "other_timestep_limit: {}",
+                                format_py_err(py, &e)
+                            )),
+                            0.0,
+                        )
+                    }),
+                Err(e) => (
+                    ExtrasDirective::Error(format!(
+                        "other_timestep_limit: {}",
+                        format_py_err(py, &e)
+                    )),
+                    0.0,
+                ),
+            }
+        })
     }
 
     fn extras_finish_step(&mut self, model: &mut StarModel) -> ExtrasDirective {
@@ -1594,8 +2431,8 @@ impl StarExtras for PyStarExtrasAdapter {
     }
 
     fn other_adjust_mdot(
-        &self,
-        model: &StarModel,
+        &mut self,
+        model: &mut StarModel,
         current_mdot: f64,
     ) -> Result<Option<f64>, StarError> {
         self.state.take_pending_star_err()?;
@@ -1603,23 +2440,30 @@ impl StarExtras for PyStarExtrasAdapter {
             return Ok(None);
         }
         let case_dir = self.state.staged_dir_string();
+        let pre_mdot_bits = model.mstar_dot.to_bits();
+        let pre_acc_j_bits =
+            model.controls.mix_wind.accreted_material_j.to_bits();
         Python::attach(|py| {
             let snap = build_star_snapshot(py, model, &case_dir, false)
                 .map_err(|e| StarError::InvalidInput(format_py_err(py, &e)))?;
             let res = self
                 .py_obj
                 .bind(py)
-                .call_method1("other_adjust_mdot", (snap, current_mdot))
+                .call_method1("other_adjust_mdot", (&snap, current_mdot))
                 .map_err(|e| {
                     StarError::InvalidInput(format!(
                         "other_adjust_mdot: {}",
                         format_py_err(py, &e)
                     ))
                 })?;
-            if res.is_none() {
-                return Ok(None);
-            }
-            res.extract::<f64>().map(Some).map_err(|e| {
+            parse_adjust_mdot_result(
+                &res,
+                &snap,
+                model,
+                current_mdot,
+                (pre_mdot_bits, pre_acc_j_bits),
+            )
+            .map_err(|e| {
                 StarError::InvalidInput(format!(
                     "other_adjust_mdot: {}",
                     format_py_err(py, &e)
@@ -1752,7 +2596,10 @@ impl StarExtras for PyStarExtrasAdapter {
             return Ok(false);
         }
         let case_dir = self.state.staged_dir_string();
-        let gyre_str = export_gyre(model, false);
+        // `star_get_pulse_data(s%id, 'GYRE', .FALSE., .FALSE., .FALSE., ...)`
+        // (`star/test_suite/rsp_gyre/src/run_star_extras.f90:112-116`).
+        let gyre_str = export_gyre(model, false, false, false)
+            .map_err(|e| StarError::InvalidInput(e.to_string()))?;
         let log_dir_opt = log_dir.map(|p| p.to_string_lossy().into_owned());
         Python::attach(|py| {
             let snap = build_star_snapshot(py, model, &case_dir, false)
@@ -2594,6 +3441,7 @@ pub fn binary_extras_snapshot<'py>(
 /// Registers test-side extras context types and full `GYRE` mode helpers on `flexmesa._rust`.
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyRspBuildContext>()?;
+    m.add_class::<PreLoadStarState>()?;
     m.add_function(wrap_pyfunction!(star_solve_gyre_mesa_modes_full, m)?)?;
     m.add_function(wrap_pyfunction!(star_extras_snapshot, m)?)?;
     m.add_function(wrap_pyfunction!(star_apply_extras_updates, m)?)?;

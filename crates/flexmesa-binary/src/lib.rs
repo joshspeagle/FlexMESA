@@ -226,36 +226,57 @@ mod tests {
 
     #[test]
     fn test_e2e_5_binary_case_runner_rejects_raw_unsupported_controls() {
+        let tmp_dir = std::env::temp_dir()
+            .join(format!("flexmesa_bin_unsup_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp_dir);
+        std::fs::create_dir_all(&tmp_dir).expect("create synthetic bin dir");
+        std::fs::write(
+            tmp_dir.join("inlist"),
+            "&binary_job\n  evolve_both_stars = .false.\n/\n\
+             &binary_controls\n  m1 = 10.0\n  m2 = 8.0\n  initial_period_in_days = 5.0\n/\n",
+        )
+        .expect("write synthetic binary inlist");
+        std::fs::write(
+            tmp_dir.join("inlist1"),
+            "&star_job\n  save_pulse_data_filename = 'p.data'\n/\n\
+             &controls\n  initial_mass = 10.0\n/\n",
+        )
+        .expect("write synthetic component inlist1");
+        let err = run_binary_test_suite_case(&tmp_dir, Some(4))
+            .expect_err("unsupported star control must fail strict binary run");
+        let _ = std::fs::remove_dir_all(&tmp_dir);
+        let msg = err.to_string();
+        assert!(
+            matches!(err, flexmesa_star::StarError::InvalidInput(_))
+                && msg.contains("unsupported control")
+                && msg.contains("save_pulse_data_filename"),
+            "unexpected binary case error: {msg}"
+        );
+
         if let Some(bin_suite) =
             flexmesa_utils::require_mesa_test_input_path("binary/test_suite")
         {
-            let err = run_binary_test_suite_case(
-                &bin_suite.join("double_bh"),
-                Some(4),
-            )
-            .expect_err(
-                "raw $MESA_DIR double_bh must reject unsupported controls",
-            );
-            let msg = err.to_string();
-            assert!(
-                matches!(err, flexmesa_star::StarError::InvalidInput(_))
-                    && msg.contains("unsupported control")
-                    && msg.contains("set_cumulative_energy_error_at_step"),
-                "unexpected binary case error: {msg}"
-            );
-            let gr_dir = bin_suite.join("jdot_gr_check");
-            let gr_b1 = flexmesa_star::InlistBundle::from_file_in_case_dir(
-                &gr_dir, "inlist1",
-            )
-            .expect(
-                "raw jdot_gr_check/inlist1 must pass strict validation (#299)",
-            );
-            assert_eq!(
-                gr_b1.validation_report.unsupported_controls.len(),
-                0,
-                "unexpected unsupported controls in raw jdot_gr_check: {:?}",
-                gr_b1.validation_report.unsupported_controls
-            );
+            for (case_name, inlist) in [
+                ("double_bh", "inlist1"),
+                ("double_bh", "inlist2"),
+                ("jdot_gr_check", "inlist1"),
+            ] {
+                let bundle = flexmesa_star::InlistBundle::from_file_in_case_dir(
+                    &bin_suite.join(case_name),
+                    inlist,
+                )
+                .unwrap_or_else(|e| {
+                    panic!(
+                        "raw {case_name}/{inlist} must pass strict validation: {e}"
+                    )
+                });
+                assert_eq!(
+                    bundle.validation_report.unsupported_controls.len(),
+                    0,
+                    "unexpected unsupported controls in raw {case_name}/{inlist}: {:?}",
+                    bundle.validation_report.unsupported_controls
+                );
+            }
         }
     }
 

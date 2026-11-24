@@ -156,6 +156,7 @@ fn test_henyey_jacobian_blocks_match_central_finite_differences() {
     model.dt = 1.0;
     set_hydro_vars(&mut model, false, false).expect("init hydro vars");
     model.save_start_values().expect("save_start_values");
+    crate::evolve_support::record_start_of_step_energy_integrals(&mut model);
 
     let eps = 1.0e-7;
     for include_chem in [false, true] {
@@ -260,6 +261,7 @@ fn test_solve_henyey_step_converges_on_perturbed_model() {
     model.dt = 10.0 * SECYER;
     set_hydro_vars(&mut model, false, false).expect("init hydro");
     model.save_start_values().expect("save_start_values");
+    crate::evolve_support::record_start_of_step_energy_integrals(&mut model);
 
     let mut model_thomas = model.clone();
     let report_bcyclic =
@@ -294,6 +296,8 @@ fn test_solve_henyey_step_converges_on_perturbed_model() {
     }
 
     model.save_start_values().expect("save_start_values");
+
+    crate::evolve_support::record_start_of_step_energy_integrals(&mut model);
     let report_chem =
         solve_henyey_step(&mut model, true, true).expect("solve coupled");
     assert!(
@@ -415,19 +419,21 @@ fn test_do1_energy_eqn_time_centers_non_nuc_neu() {
     model.dt = 100.0;
     set_hydro_vars(&mut model, false, false).expect("init hydro");
     model.save_start_values().expect("save_start_values");
+    crate::evolve_support::record_start_of_step_energy_integrals(&mut model);
 
     let k = model.nz - 1;
     let x_scale = compute_x_scale(&model, false);
     let mut sys_base =
         HenyeySystem::new(model.nz, model.layout.nvar_hydro, x_scale.clone());
-    do1_energy_eqn(&model, k, false, &mut sys_base);
+    do1_energy_eqn(&model, k, false, &mut sys_base).expect("energy eqn");
 
     let delta_neu = 1.0e4_f64;
     let mut model_trial = model.clone();
     model_trial.non_nuc_neu[k] += delta_neu;
     let mut sys_trial =
         HenyeySystem::new(model.nz, model.layout.nvar_hydro, x_scale);
-    do1_energy_eqn(&model_trial, k, false, &mut sys_trial);
+    do1_energy_eqn(&model_trial, k, false, &mut sys_trial)
+        .expect("energy eqn");
 
     let i_equ = model.layout.i_dlne_dt;
     let idx = k * model.layout.nvar_hydro + i_equ;

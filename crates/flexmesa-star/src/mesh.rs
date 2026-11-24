@@ -3,7 +3,7 @@
 //! state vector packing/snapshot operations on [`StarModel`]
 //! (`star/private/star_utils.f90` and `star/private/hydro_vars.f90`).
 
-use flexmesa_eos::{I_LN_E, I_LN_S, NUM_EOS_BASIC_RESULTS};
+use flexmesa_eos::{I_DE_DRHO, I_LN_E, I_LN_S, NUM_EOS_BASIC_RESULTS};
 
 use crate::controls::StarError;
 use crate::model::StarModel;
@@ -288,15 +288,35 @@ impl StarModel {
         }
     }
 
-    /// Interpolates a cell-centered array `v` to face `k` (`interp_val_to_pt`).
+    /// Face value `alfa*v(k) + beta*v(k-1)` with the weights of
+    /// [`Self::get_face_weights`], `v(1)` at the surface face (the pattern
+    /// of `s% csound_face(k)`, `star/private/micro.f90:91-101`).
+    ///
+    /// This is not MESA's `interp_val_to_pt` (`star_utils.f90:779-811`),
+    /// which interpolates through four cells; see
+    /// `pulse_gyre_data::interp_val_to_pt_slices` (#491).
     #[must_use]
     #[inline]
-    pub fn interp_val_to_pt(&self, v: &[f64], k: usize) -> f64 {
+    pub fn face_value_alfa_beta(&self, v: &[f64], k: usize) -> f64 {
         if k == 0 {
             v[0]
         } else {
             let (alfa, beta) = self.get_face_weights(k);
             alfa * v[k] + beta * v[k - 1]
+        }
+    }
+
+    /// `get_face_values` at face `k` (`star/private/star_utils.f90:2046-2060`):
+    /// `v_face(1) = v_mid(1)` and
+    /// `v_face(k) = (v_mid(k)*dq(k-1) + v_mid(k-1)*dq(k))/(dq(k-1) + dq(k))`.
+    #[must_use]
+    #[inline]
+    pub fn get_face_value(&self, v: &[f64], k: usize) -> f64 {
+        if k == 0 {
+            v[0]
+        } else {
+            let dq_sum = self.dq[k - 1] + self.dq[k];
+            (v[k] * self.dq[k - 1] + v[k - 1] * self.dq[k]) / dq_sum
         }
     }
 
@@ -456,20 +476,24 @@ impl StarModel {
         self.ln_e_start.clone_from(&self.ln_e);
         self.ln_s_start.clone_from(&self.ln_s);
         self.energy_start.clone_from(&self.energy);
-        // Standalone callers (outside the step driver) get the same
-        // `eval_total_energy_integrals` total; inside a step
-        // `record_start_of_step_energy_integrals` sets it after the remesh
-        // (`evolve.f90:420-431`).
-        self.aux.total_internal_energy_start =
-            crate::evolve_support::eval_total_energy_integrals(self).0;
+        // `save_start_values` leaves `total_internal_energy_old` alone
+        // (`star/private/struct_burn_mix.f90:268-356`): it is set once per
+        // step on the new mesh, before phase separation and element diffusion
+        // change the energies (`evolve.f90:420-431, 622-639`).
         self.peos_start.clone_from(&self.peos);
         self.non_nuc_neu_start.clone_from(&self.non_nuc_neu);
         self.xa_start.clone_from(&self.xa);
         self.xa_sub_xa_start.clear();
         self.xh_start.clone_from(&self.xh);
         self.aux.opacity_start_surf = self.opacity.first().copied().unwrap_or(0.0);
+        let mut de_drho = vec![0.0; self.nz];
+        for (dst, row) in de_drho.iter_mut().zip(self.eos_res.iter()) {
+            *dst = row[I_DE_DRHO];
+        }
         self.aux.save_start(
             &self.cp,
+            &self.cv,
+            &de_drho,
             &self.grada,
             &self.chi_t,
             &self.chi_rho,

@@ -40,9 +40,9 @@ pub fn calc_chi(
         let pom = (16.0 / 3.0) * PI * dc.alfa * dc.alfam / model.dm[k0];
         let vol = model.aux.rsp.vol_rsp[k0];
         let pom1 = wk.w[k0] / (vol * vol);
-        let pom2 = 0.5
-            * (flexmesa_math::pow6(model.r[k0])
-                + flexmesa_math::pow6(model.r[ki]));
+        let r0_3 = flexmesa_math::pow3(model.r[k0]);
+        let ri_3 = flexmesa_math::pow3(model.r[ki]);
+        let pom2 = 0.5 * (r0_3 * r0_3 + ri_3 * ri_3);
         let pom4 =
             0.5 * (model.aux.rsp.hp_face[k0] + model.aux.rsp.hp_face[ki]);
         let pom3 = model.v[k0] / model.r[k0] - model.v[ki] / model.r[ki];
@@ -69,14 +69,16 @@ pub fn calc_chi(
         wk.dchi_der_in[i] = pomt4 * 0.5 * wk.dhp_der_00[i - 1];
         wk.dchi_dw_00[i] = pomt1 / (vol * vol);
         wk.dchi_dr_out[i] = pomt4 * 0.5 * wk.dhp_dr_out[i];
+        let r0_2 = flexmesa_math::pow2(model.r[k0]);
+        let ri_2 = flexmesa_math::pow2(model.r[ki]);
         wk.dchi_dr_00[i] = -2.0 * chi / vol * wk.dvol_dr_00[i]
-            + pomt2 * 3.0 * flexmesa_math::pow5(model.r[k0])
+            + pomt2 * 3.0 * ((model.r[k0] * r0_2) * r0_2)
             + pomt3
                 * (2.0 / model.dt / model.r[k0]
                     - model.v[k0] / flexmesa_math::pow2(model.r[k0]))
             + pomt4 * 0.5 * (wk.dhp_dr_00[i] + wk.dhp_dr_out[i - 1]);
         wk.dchi_dr_in[i] = -2.0 * chi / vol * wk.dvol_dr_in[i]
-            + pomt2 * 3.0 * flexmesa_math::pow5(model.r[ki])
+            + pomt2 * 3.0 * ((model.r[ki] * ri_2) * ri_2)
             - pomt3
                 * (2.0 / model.dt / model.r[ki]
                     - model.v[ki] / flexmesa_math::pow2(model.r[ki]))

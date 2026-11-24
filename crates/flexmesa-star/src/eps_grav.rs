@@ -34,29 +34,6 @@ use crate::micro::EosZoneContext;
 use crate::model::StarModel;
 use crate::star_ad::{StarAdExt, StarAdOrder1, I_LND_00, I_LNT_00};
 
-/// Returns `true` when zone `k` has a valid, non-zero `xa_start` slice that
-/// differs bit-for-bit from `xa`.
-#[inline]
-fn xa_changed_for_cell(model: &StarModel, k: usize) -> bool {
-    let species = model.species;
-    if species == 0 {
-        return false;
-    }
-    let base = k * species;
-    let Some(xa_k) = model.xa.get(base..base + species) else {
-        return false;
-    };
-    let Some(xa_start_k) = model.xa_start.get(base..base + species) else {
-        return false;
-    };
-    if xa_start_k.iter().all(|&x| x == 0.0) {
-        return false;
-    }
-    xa_k.iter()
-        .zip(xa_start_k.iter())
-        .any(|(a, b)| a.to_bits() != b.to_bits())
-}
-
 /// Computes the Potekhin-Chabrier `do_lnS_eps_grav` blend weight `alfa_lns`
 /// in `[0, 1]` for cell `k`.
 #[inline]
@@ -252,9 +229,11 @@ fn eval_eps_grav_std_cell_with_ctx(
     }
 
     // Finite-difference composition term (`eps_grav.f90:187-191, 262-399`):
-    if model.controls.include_composition_in_eps_grav
-        && xa_changed_for_cell(model, k)
-    {
+    // Upstream evaluates the composition term in every cell, also where
+    // `xa == xa_start`: its partials are then the rounding residue of
+    // `dE_dRho_for_partials*rho - d_e_with_xa_start_dlnd`
+    // (`star/private/eps_grav.f90:187-191, 318-324`).
+    if model.controls.include_composition_in_eps_grav {
         let comp_term = if let Some(shared_ctx) = ctx {
             eval_eps_grav_composition_term(model, k, shared_ctx)?
         } else {
@@ -410,7 +389,7 @@ pub fn eval_eps_grav(model: &mut StarModel) -> Result<(), StarError> {
     let need_ctx = inc_comp
         && (0..nz).any(|k| {
             let alfa_lns = pc_lns_blend_weight(model, k, gam_off, gam_span);
-            (alfa_lns - 1.0).abs() >= 1.0e-15 && xa_changed_for_cell(model, k)
+            (alfa_lns - 1.0).abs() >= 1.0e-15
         });
 
     if need_ctx {

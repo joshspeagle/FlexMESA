@@ -274,6 +274,7 @@ pub fn set_vars_for_solver(
     }
 
     model.xh.resize(nz * nvar_hydro, 0.0);
+    model.aux.dxh_lnr.resize(nz, 0.0);
     let i_lnd = model.layout.i_lnd;
     let i_lnt = model.layout.i_lnt;
     let i_lnr = model.layout.i_lnr;
@@ -406,6 +407,10 @@ pub fn set_vars_for_solver(
 
         // `lnR` check (`solver_support.f90:1308-1323`).
         let lnr_k = model.xh[h_base + i_lnr];
+        // `s% dxh_lnR(k) = s% solver_dx(i_lnR,k)`, before `edit_lnR`
+        // replaces `lnR` and `solver_dx(i_lnR,:)` but not `dxh_lnR`
+        // (`star/private/solver_support.f90:1311, 1071-1072, 1516-1534`).
+        model.aux.dxh_lnr[k] = solver_dx[s_base + i_lnr];
         if !lnr_k.is_finite() {
             return Err(StarError::ConvergenceFailure(format!(
                 "bad num for lnR at zone {k}"

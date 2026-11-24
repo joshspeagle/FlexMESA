@@ -18,13 +18,49 @@ from typing import Any
 from flexmesa import _rust, constants
 from tests.case_extras import _helpers
 
-_NML_KV_RE = re.compile(r"^([A-Za-z_]\w*)\s*=\s*(.+)$")
+_NML_KV_RE = re.compile(r"^([A-Za-z_]\w*)(?:\((\d+)\))?\s*=\s*(.+)$")
+_NUM_OVERSHOOT_PARAM_SETS = 16
 
 
 def _parse_fortran_float(raw: str) -> float:
     """Parse a Fortran real literal (`1d0`, `1.35d-12`, `-0.5`) to `float64`."""
     cleaned = raw.strip().rstrip(",").strip()
     return float(cleaned.replace("D", "E").replace("d", "e"))
+
+
+def _read_namelist_entries(
+    nml_path: pathlib.Path, block_name: str
+) -> list[tuple[str, int | None, str]]:
+    """Parse key/optional-index/value entries inside `&<block_name>`."""
+    text = nml_path.read_text(encoding="utf-8")
+    in_block = False
+    found_block = False
+    entries: list[tuple[str, int | None, str]] = []
+    target_hdr = f"&{block_name.lower()}"
+    for raw_line in text.splitlines():
+        line = raw_line.split("!", 1)[0].strip()
+        if not line:
+            continue
+        low = line.lower()
+        if low.startswith(target_hdr) and (
+            len(low) == len(target_hdr) or not low[len(target_hdr)].isalnum()
+        ):
+            in_block = True
+            found_block = True
+            continue
+        if in_block and low.startswith("/"):
+            break
+        if not in_block:
+            continue
+        m = _NML_KV_RE.match(line)
+        if m is None:
+            raise ValueError(f"Malformed &{block_name} line: {line!r}")
+        idx = int(m.group(2)) if m.group(2) is not None else None
+        val_str = m.group(3).strip().rstrip(",").strip()
+        entries.append((m.group(1).lower(), idx, val_str))
+    if not found_block:
+        raise ValueError(f"Missing &{block_name} namelist in {nml_path}")
+    return entries
 
 
 def _cf(u: float, alpha: float, beta: float) -> float:
@@ -375,10 +411,88 @@ def eval_stern51_wind(
     return dms
 
 
+def _apply_xtrans_pass(
+    out: list[float],
+    xa: Any,
+    peos: Any,
+    rho: Any,
+    grav: Any,
+    r_arr: Any,
+    *,
+    nz: int,
+    step: int,
+    xtra_coef: float,
+    xtra_dist: float,
+) -> None:
+    """Apply one directional pass of `xtrans_mesh_factor` (`:62-104`)."""
+    if xtra_coef == 1.0 or nz <= 0:
+        return
+    start_k = 0 if step > 0 else nz - 1
+    limit_k = nz - 1 if step > 0 else 0
+    direction = -1.0 if step > 0 else 1.0
+    prev_jmax = max(
+        range(len(xa[start_k])), key=lambda idx: float(xa[start_k][idx])
+    )
+    k = start_k + step
+    while (k < nz) if step > 0 else (k >= 0):
+        jmax = max(range(len(xa[k])), key=lambda idx: float(xa[k][idx]))
+        if jmax != prev_jmax:
+            prev_jmax = jmax
+            hp = float(peos[k]) / (float(rho[k]) * float(grav[k]))
+            r_extra = max(0.0, float(r_arr[k]) + direction * xtra_dist * hp)
+            while True:
+                rk = float(r_arr[k])
+                if (rk < r_extra) if step > 0 else (rk > r_extra):
+                    break
+                if xtra_coef < out[k]:
+                    out[k] = xtra_coef
+                if k == limit_k:
+                    break
+                k += step
+        k += step
+
+
+def _check_integer_timestep_limit(
+    limit: int,
+    hard_limit: int,
+    value: int,
+    skip_hard_limit: bool,
+    dt_limit_ratio: float,
+) -> tuple[str, float]:
+    """Port `check_integer_limit` (`star/private/timestep.f90:384-408`)."""
+    if value > hard_limit > 0 and not skip_hard_limit:
+        return "retry", dt_limit_ratio
+    if value <= 0 or limit <= 0:
+        return "keep_going", dt_limit_ratio
+    ratio = float(value) / float(limit) - 0.05
+    return "keep_going", 0.0 if ratio <= 1.0 else ratio
+
+
+def _check_change_timestep_limit(
+    delta_value: float,
+    lim_in: float,
+    hard_lim_in: float,
+    time_delta_coeff: float,
+    skip_hard_limit: bool,
+    dt_limit_ratio: float,
+) -> tuple[str, float]:
+    """Port `check_change` (`star/private/timestep.f90:732-766`)."""
+    abs_change = abs(delta_value)
+    lim = lim_in * time_delta_coeff
+    hard_lim = hard_lim_in * time_delta_coeff
+    if hard_lim > 0.0 and abs_change > hard_lim and not skip_hard_limit:
+        return "retry", dt_limit_ratio
+    if lim <= 0.0:
+        return "keep_going", dt_limit_ratio
+    ratio = abs_change / lim
+    return "keep_going", 0.0 if ratio <= 1.0 else ratio
+
+
 class OtherPhysicsHooksStarExtras:
     """Physics-hook test harness from
     `star/test_suite/other_physics_hooks/src/run_star_extras.f90:45-435` and
-    `star/test_suite/other_physics_hooks/src/other_winds/other_winds.inc:2-556`.
+    its included `other_winds`, `overshoot_dbl_exp`, `timestep_limit`, and
+    `xtrans_mesh_factor` modules.
     """
 
     def __init__(self) -> None:
@@ -388,6 +502,27 @@ class OtherPhysicsHooksStarExtras:
         self.stern51_scaling_factor = 0.0
         self._loaded_inlist = False
 
+        self.overshoot_f2 = [0.0] * _NUM_OVERSHOOT_PARAM_SETS
+        self.overshoot_d2 = [0.0] * _NUM_OVERSHOOT_PARAM_SETS
+        self._loaded_overshoot = False
+
+        self.delta_lg_t_limit = 0.5
+        self.delta_lg_t_hard_limit = -1.0
+        self.delta_lg_t_limit_min_lg_t = 1.0e99
+        self.rotation_steps_limit = 500
+        self.rotation_steps_hard_limit = 700
+        self.delta_mdot_atol = 1.0e-3
+        self.delta_mdot_rtol = 0.5
+        self.delta_mdot_limit = -1.0
+        self.delta_mdot_hard_limit = -1.0
+        self._loaded_timestep_limit = False
+
+        self.xtra_coef_above_xtrans = 1.0
+        self.xtra_coef_below_xtrans = 1.0
+        self.xtra_dist_above_xtrans = 0.0
+        self.xtra_dist_below_xtrans = 0.0
+        self._loaded_xtrans = False
+
     def read_inlist_other_winds(self, case_dir: pathlib.Path | str) -> None:
         """Read `inlist_other_winds` (`:2-33` of `other_winds`)."""
         self.wind_scheme = ""
@@ -395,27 +530,9 @@ class OtherPhysicsHooksStarExtras:
         self.grafener_scaling_factor = 0.0
         self.stern51_scaling_factor = 0.0
         nml_path = pathlib.Path(case_dir) / "inlist_other_winds"
-        text = nml_path.read_text(encoding="utf-8")
-        in_block = False
-        found_block = False
-        for raw_line in text.splitlines():
-            line = raw_line.split("!", 1)[0].strip()
-            if not line:
-                continue
-            low = line.lower()
-            if low.startswith("&other_winds"):
-                in_block = True
-                found_block = True
-                continue
-            if in_block and low.startswith("/"):
-                break
-            if not in_block:
-                continue
-            m = _NML_KV_RE.match(line)
-            if m is None:
-                raise ValueError(f"Malformed &other_winds line: {line!r}")
-            key = m.group(1).lower()
-            val_str = m.group(2).strip().rstrip(",").strip()
+        for key, _idx, val_str in _read_namelist_entries(
+            nml_path, "other_winds"
+        ):
             if key == "wind_scheme":
                 self.wind_scheme = val_str.strip("'\"")
             elif key == "kudritzki_scaling_factor":
@@ -426,20 +543,334 @@ class OtherPhysicsHooksStarExtras:
                 self.stern51_scaling_factor = _parse_fortran_float(val_str)
             else:
                 raise ValueError(f"Unknown &other_winds control: {key!r}")
-        if not found_block:
-            raise ValueError(f"Missing &other_winds namelist in {nml_path}")
         self._loaded_inlist = True
 
-    def extras_controls(self, _state: dict[str, Any]) -> None:
-        """Fail loudly naming unexposed `other_*` callbacks (`:45-92`)."""
+    def read_inlist_overshoot_dbl_exp(
+        self, case_dir: pathlib.Path | str
+    ) -> None:
+        """Read `inlist_overshoot_dbl_exp` (`:3-32` of `overshoot_dbl_exp`)."""
+        self.overshoot_f2 = [0.0] * _NUM_OVERSHOOT_PARAM_SETS
+        self.overshoot_d2 = [0.0] * _NUM_OVERSHOOT_PARAM_SETS
+        nml_path = pathlib.Path(case_dir) / "inlist_overshoot_dbl_exp"
+        for key, idx, val_str in _read_namelist_entries(
+            nml_path, "overshoot_dbl_exp"
+        ):
+            pos = 0 if idx is None else idx - 1
+            if not (0 <= pos < _NUM_OVERSHOOT_PARAM_SETS):
+                raise ValueError(
+                    f"&overshoot_dbl_exp index {idx} out of range 1..16"
+                )
+            val = _parse_fortran_float(val_str)
+            if key == "overshoot_f2":
+                self.overshoot_f2[pos] = val
+            elif key == "overshoot_d2":
+                self.overshoot_d2[pos] = val
+            else:
+                raise ValueError(f"Unknown &overshoot_dbl_exp control: {key!r}")
+        self._loaded_overshoot = True
+
+    def read_inlist_other_timestep_limit(
+        self, case_dir: pathlib.Path | str
+    ) -> None:
+        """Read `inlist_other_timestep_limit` (`:3-39` of `timestep_limit`)."""
+        self.delta_lg_t_limit = 0.5
+        self.delta_lg_t_hard_limit = -1.0
+        self.delta_lg_t_limit_min_lg_t = 1.0e99
+        self.rotation_steps_limit = 500
+        self.rotation_steps_hard_limit = 700
+        self.delta_mdot_atol = 1.0e-3
+        self.delta_mdot_rtol = 0.5
+        self.delta_mdot_limit = -1.0
+        self.delta_mdot_hard_limit = -1.0
+        nml_path = pathlib.Path(case_dir) / "inlist_other_timestep_limit"
+        float_map = {
+            "delta_lgt_limit": "delta_lg_t_limit",
+            "delta_lgt_hard_limit": "delta_lg_t_hard_limit",
+            "delta_lgt_limit_min_lgt": "delta_lg_t_limit_min_lg_t",
+            "delta_mdot_atol": "delta_mdot_atol",
+            "delta_mdot_rtol": "delta_mdot_rtol",
+            "delta_mdot_limit": "delta_mdot_limit",
+            "delta_mdot_hard_limit": "delta_mdot_hard_limit",
+        }
+        int_map = {
+            "rotation_steps_limit": "rotation_steps_limit",
+            "rotation_steps_hard_limit": "rotation_steps_hard_limit",
+        }
+        for key, _idx, val_str in _read_namelist_entries(
+            nml_path, "other_timestep_limit"
+        ):
+            if key in float_map:
+                setattr(self, float_map[key], _parse_fortran_float(val_str))
+            elif key in int_map:
+                setattr(self, int_map[key], int(val_str))
+            else:
+                raise ValueError(
+                    f"Unknown &other_timestep_limit control: {key!r}"
+                )
+        self._loaded_timestep_limit = True
+
+    def read_inlist_xtrans_mesh_factor(
+        self, case_dir: pathlib.Path | str
+    ) -> None:
+        """Load `inlist_xtrans_mesh_factor` (`:3-34`)."""
+        self.xtra_coef_above_xtrans = 1.0
+        self.xtra_coef_below_xtrans = 1.0
+        self.xtra_dist_above_xtrans = 0.0
+        self.xtra_dist_below_xtrans = 0.0
+        nml_path = pathlib.Path(case_dir) / "inlist_xtrans_mesh_factor"
+        valid = {
+            "xtra_coef_above_xtrans",
+            "xtra_coef_below_xtrans",
+            "xtra_dist_above_xtrans",
+            "xtra_dist_below_xtrans",
+        }
+        for key, _idx, val_str in _read_namelist_entries(
+            nml_path, "xtrans_mesh_factor"
+        ):
+            if key in valid:
+                setattr(self, key, _parse_fortran_float(val_str))
+            else:
+                raise ValueError(
+                    f"Unknown &xtrans_mesh_factor control: {key!r}"
+                )
+        self._loaded_xtrans = True
+
+    def extras_controls(self, state: dict[str, Any]) -> None:
+        """Load sub-inlists (`:53-60`) and guard missing engine hooks
+        (`:62-81`).
+        """
+        case_dir = str(state.get("case_dir", "")).strip()
+        if case_dir:
+            self.read_inlist_overshoot_dbl_exp(case_dir)
+            self.read_inlist_other_timestep_limit(case_dir)
+            self.read_inlist_other_winds(case_dir)
+            self.read_inlist_xtrans_mesh_factor(case_dir)
         raise NotImplementedError(
             "other_physics_hooks: extras_controls registers "
-            "other_overshooting_scheme (:53, #155), other_timestep_limit (:55, "
-            "#152), other_mesh_delta_coeff_factor (:59, #153), other_kap_get / "
-            "other_eos_results / other_screening / other_rate_get (:62-75, "
-            "#161), other_close_gaps (:77-78, #155), and other_pressure "
-            "(:80-81, #152), which flexmesa-star StarExtras does not expose"
+            "other_kap_get / other_eos_results / other_screening / "
+            "other_rate_get (:62-75, #161), other_close_gaps (:77-78, #155), "
+            "other_pressure (:80-81, #152), and unimplemented namelist keys "
+            "use_other_mesh_functions / use_other_mesh_delta_coeff_factor, "
+            "which flexmesa-star StarExtras/inlist_inventory do not expose"
         )
+
+    def other_overshooting_scheme(
+        self, state: dict[str, Any], i_bdy: int, j_param: int
+    ) -> tuple[int, int, list[float], list[float]]:
+        """Evaluate Battino+ (2016) double-exponential overshooting
+        (`:35-207` of `overshoot_dbl_exp.inc`).
+        """
+        if not self._loaded_overshoot and state.get("case_dir"):
+            self.read_inlist_overshoot_dbl_exp(str(state["case_dir"]))
+        f = float(state["overshoot_f"][j_param])
+        f0 = float(state["overshoot_f0"][j_param])
+        f2 = self.overshoot_f2[j_param]
+        d0 = float(state["overshoot_d0"][j_param])
+        delta0 = float(state["overshoot_delta0"][j_param])
+        d2 = self.overshoot_d2[j_param]
+        if f <= 0.0 or f0 <= 0.0 or f2 <= 0.0:
+            raise ValueError(
+                "for double exponential overshooting, must set f, f0 and f2 > 0"
+            )
+        if d0 <= 0.0 and delta0 <= 0.0:
+            raise ValueError(
+                "for double exponential overshooting, must set D0 or Delta0 > 0"
+            )
+        if d2 <= 0.0:
+            raise ValueError(
+                "for double exponential overshooting, must set D2 > 0"
+            )
+        star_mass = float(state["star_mass"])
+        m_on = float(state["overshoot_mass_full_on"][j_param])
+        m_off = float(state["overshoot_mass_full_off"][j_param])
+        if star_mass < m_on:
+            if star_mass > m_off:
+                w = (star_mass - m_off) / (m_on - m_off)
+                fac = 0.5 * (1.0 - _rust.cospi(w))
+                f, f0, f2 = f * fac, f0 * fac, f2 * fac
+            else:
+                f, f0, f2 = 0.0, 0.0, 0.0
+
+        hp_cb = float(state["conv_bdy_hp"][i_bdy])
+        eval_ob = state.get("eval_over_bdy_params")
+        if callable(eval_ob):
+            k_ob_val, r_ob_val, d_ob_val, vc_ob_val = eval_ob(i_bdy, f0)
+            k_ob = int(k_ob_val)
+            r_ob = float(r_ob_val)
+            d_ob = float(d_ob_val)
+            vc_ob = float(vc_ob_val)
+        else:
+            k_ob = int(state["over_bdy_k"][i_bdy])
+            r_ob = float(state["over_bdy_r"][i_bdy])
+            d_ob = float(state["over_bdy_d"][i_bdy])
+            vc_ob = float(state["over_bdy_vc"][i_bdy])
+
+        d_start = d0 + delta0 * d_ob
+        if f2 > 0.0 and d2 > 0.0 and d2 < d_start:
+            dr2 = f * hp_cb * _rust.safe_log(d_start / d2) / 2.0
+        else:
+            dr2 = math.inf
+
+        nz = int(state["nz"])
+        outward = bool(state["top_conv_bdy"][i_bdy])
+        k_a, k_b, dk = (k_ob, 0, -1) if outward else (k_ob + 1, nz - 1, 1)
+        d_arr = [0.0] * nz
+        vc_arr = [0.0] * nz
+        d_min = float(state["overshoot_d_min"])
+        r_arr = state["r"]
+        k = k_a
+        while (k >= k_b) if dk < 0 else (k <= k_b):
+            r_k = float(r_arr[k])
+            dr = (r_k - r_ob) if outward else (r_ob - r_k)
+            if f > 0.0 and f2 > 0.0:
+                if dr >= dr2:
+                    exponent = -2.0 * (
+                        dr2 / (f * hp_cb) + (dr - dr2) / (f2 * hp_cb)
+                    )
+                else:
+                    exponent = -2.0 * dr / (f * hp_cb)
+                factor = _rust.crmath_exp(exponent)
+            else:
+                factor = 0.0
+            d_arr[k] = d_start * factor
+            vc_arr[k] = (
+                (d0 / d_ob + delta0) * vc_ob * factor if d_ob != 0.0 else 0.0
+            )
+            if d_arr[k] < d_min:
+                k_b = k
+                break
+            k += dk
+        return k_a, k_b, d_arr, vc_arr
+
+    def other_timestep_limit(
+        self,
+        state: dict[str, Any],
+        skip_hard_limit: bool,
+        _dt: float,
+    ) -> dict[str, Any]:
+        """Evaluate `set_other_timestep_limit` (`:42-182`)."""
+        if not self._loaded_timestep_limit and state.get("case_dir"):
+            self.read_inlist_other_timestep_limit(str(state["case_dir"]))
+        model_number = int(state["model_number"])
+        if model_number < 29 or model_number > 42:
+            return {"action": "keep_going", "dt_limit_ratio": 0.0}
+
+        dt_limit_ratio = 0.0
+        if int(state["num_retries"]) == 0:
+            return {"action": "retry", "dt_limit_ratio": dt_limit_ratio}
+        if bool(state.get("rotation_flag", False)):
+            action, dt_limit_ratio = _check_integer_timestep_limit(
+                self.rotation_steps_limit,
+                self.rotation_steps_hard_limit,
+                int(state["num_rotation_solver_steps"]),
+                skip_hard_limit,
+                dt_limit_ratio,
+            )
+            if action != "keep_going":
+                return {"action": action, "dt_limit_ratio": dt_limit_ratio}
+
+        mdot = float(state["mstar_dot"])
+        mdot_old = float(state["mstar_dot_old"])
+        denom = (
+            self.delta_mdot_atol * constants.MSUN / constants.SECYER
+            + self.delta_mdot_rtol * max(abs(mdot), abs(mdot_old))
+        )
+        delta_mdot = abs(mdot - mdot_old) / denom
+        if delta_mdot != 0.0:
+            if (
+                self.delta_mdot_hard_limit > 0.0
+                and not skip_hard_limit
+                and delta_mdot > self.delta_mdot_hard_limit
+            ):
+                return {"action": "retry", "dt_limit_ratio": dt_limit_ratio}
+            if self.delta_mdot_limit > 0.0:
+                ratio = delta_mdot / self.delta_mdot_limit
+                dt_limit_ratio = 0.0 if ratio <= 1.0 else ratio
+
+        nz = int(state["nz"])
+        lnt = state["lnt"]
+        lnt_start = state["lnt_start"]
+        lim_lnt = constants.LN10 * self.delta_lg_t_limit_min_lg_t
+        max_dlnt = 0.0
+        found_cell = False
+        for k in range(nz):
+            lnt_k = float(lnt[k])
+            if lnt_k < lim_lnt:
+                continue
+            diff = abs(lnt_k - float(lnt_start[k]))
+            if diff > max_dlnt:
+                max_dlnt = diff
+                found_cell = True
+        if found_cell:
+            action, dt_limit_ratio = _check_change_timestep_limit(
+                max_dlnt / constants.LN10,
+                self.delta_lg_t_limit,
+                self.delta_lg_t_hard_limit,
+                float(state.get("time_delta_coeff", 1.0)),
+                skip_hard_limit,
+                dt_limit_ratio,
+            )
+            if action != "keep_going":
+                return {"action": action, "dt_limit_ratio": dt_limit_ratio}
+
+        return {"action": "keep_going", "dt_limit_ratio": dt_limit_ratio}
+
+    def other_mesh_delta_coeff_factor(
+        self,
+        state: dict[str, Any],
+        _factor: list[float] | None = None,
+    ) -> list[float] | None:
+        """Evaluate `other_mesh_delta_coeff_factor` (`:37-106` of
+        `xtrans_mesh_factor`).
+        """
+        if not self._loaded_xtrans and state.get("case_dir"):
+            self.read_inlist_xtrans_mesh_factor(str(state["case_dir"]))
+        model_number = int(state["model_number"])
+        if model_number < 20 or model_number > 40:
+            return None
+        nz = int(state["nz"])
+        out = [0.75] * nz
+        if (
+            self.xtra_coef_above_xtrans >= 1.0
+            and self.xtra_coef_below_xtrans >= 1.0
+        ):
+            return out
+        xa = state["xa"]
+        peos = state["peos"]
+        rho = state["rho"]
+        grav = state["grav"]
+        r_arr = state["r"]
+        _apply_xtrans_pass(
+            out,
+            xa,
+            peos,
+            rho,
+            grav,
+            r_arr,
+            nz=nz,
+            step=1,
+            xtra_coef=self.xtra_coef_below_xtrans,
+            xtra_dist=self.xtra_dist_below_xtrans,
+        )
+        _apply_xtrans_pass(
+            out,
+            xa,
+            peos,
+            rho,
+            grav,
+            r_arr,
+            nz=nz,
+            step=-1,
+            xtra_coef=self.xtra_coef_above_xtrans,
+            xtra_dist=self.xtra_dist_above_xtrans,
+        )
+        return out
+
+    def other_mesh_functions(
+        self, _state: dict[str, Any]
+    ) -> list[tuple[str, bool, list[float]]]:
+        """Match `null_how_many_other_mesh_fcns = 0` (`inlist:61`)."""
+        return []
 
     def other_wind(
         self,

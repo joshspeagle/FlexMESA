@@ -23,7 +23,8 @@ use flexmesa_schema::strip_fortran_comment;
 use crate::controls::StarError;
 use crate::eps_mdot::eval_cell_specific_total_energy;
 use crate::mesa_history::{
-    validate_extra_header_items, IncrementalHistoryWriter, MesaCellValue,
+    validate_extra_header_items, HistoryColumnSpec, IncrementalHistoryWriter,
+    MesaCellValue,
 };
 use crate::model::StarModel;
 use crate::report_utils::{
@@ -283,6 +284,17 @@ const SUPPORTED_PROFILE_SCALARS: &[&str] = &[
     "log_acoustic_radius",
     "eps_nuc_plus_nuc_neu",
     "cgrav_factor",
+    "rsp_Hp_face",
+    "rsp_Y_face",
+    "rsp_Lc_div_L",
+    "rsp_Lr_div_L",
+    "rsp_Lt_div_L",
+    "rsp_Et",
+    "rsp_Pt",
+    "rsp_Eq",
+    "rsp_src_snk",
+    "rsp_Uq",
+    "rsp_Pvsc",
 ];
 
 fn match_profile_scalar(tok: &str) -> Option<&'static str> {
@@ -833,36 +845,24 @@ fn eval_profile_scalar(
             (model.gradr[k] - model.gradl[k]).abs(),
         )),
         "gradT_sub_grada" => {
-            let ga = if k == 0 {
-                model.grada[0]
-            } else {
-                model.interp_val_to_pt(&model.grada, k)
-            };
+            // `s% grada_face(k)` (`profile_getval.f90:1427-1428, 1652-1659`).
+            let ga = model.aux.mixing.grada_face[k];
             MesaCellValue::Float(model.gradt[k] - ga)
         }
         "grada_sub_gradT" => {
-            let ga = if k == 0 {
-                model.grada[0]
-            } else {
-                model.interp_val_to_pt(&model.grada, k)
-            };
+            // `s% grada_face(k)` (`profile_getval.f90:1427-1428, 1652-1659`).
+            let ga = model.aux.mixing.grada_face[k];
             MesaCellValue::Float(ga - model.gradt[k])
         }
         "gradr_sub_grada" => {
-            let ga = if k == 0 {
-                model.grada[0]
-            } else {
-                model.interp_val_to_pt(&model.grada, k)
-            };
+            // `s% grada_face(k)` (`profile_getval.f90:1427-1428, 1652-1659`).
+            let ga = model.aux.mixing.grada_face[k];
             MesaCellValue::Float(model.gradr[k] - ga)
         }
         "gradT_div_grada" => {
-            let ga = if k == 0 {
-                model.grada[0]
-            } else {
-                model.interp_val_to_pt(&model.grada, k)
-            };
-            MesaCellValue::Float(model.gradt[k] / ga.max(1.0e-99))
+            // `s% grada_face(k)` (`profile_getval.f90:1427-1428, 1652-1659`).
+            let ga = model.aux.mixing.grada_face[k];
+            MesaCellValue::Float(model.gradt[k] / ga)
         }
         // `p_scale_height` vs `p_pressure_scale_height{_cm}` (`profile_getval.f90:1419-1426`).
         "scale_height" => MesaCellValue::Float(model.scale_height[k] / R_SUN),
@@ -1186,6 +1186,81 @@ fn eval_profile_scalar(
         "log_acoustic_depth" => {
             MesaCellValue::Float(safe_log10(prefixes.acoustic_depth[k]))
         }
+
+        // `p_rsp_*` scalar columns (`star/private/profile_getval.f90:1924-2020`).
+        "rsp_Hp_face" => MesaCellValue::Float(if model.controls.rsp_flag {
+            model.aux.rsp.hp_face.get(k).copied().unwrap_or(0.0)
+        } else {
+            0.0
+        }),
+        "rsp_Y_face" => {
+            let idx = if k == 0 && nz > 1 { 1 } else { k };
+            MesaCellValue::Float(if model.controls.rsp_flag {
+                model.aux.rsp.y_face_rsp.get(idx).copied().unwrap_or(0.0)
+            } else {
+                0.0
+            })
+        }
+        "rsp_Lc_div_L" => {
+            let idx = if k == 0 && nz > 1 { 1 } else { k };
+            MesaCellValue::Float(if model.controls.rsp_flag {
+                model.aux.rsp.lc_rsp.get(idx).copied().unwrap_or(0.0)
+                    / model.lum[idx]
+            } else {
+                0.0
+            })
+        }
+        "rsp_Lr_div_L" => MesaCellValue::Float(if model.controls.rsp_flag {
+            model.aux.rsp.fr_rsp.get(k).copied().unwrap_or(0.0)
+                * FOUR_PI
+                * model.r[k]
+                * model.r[k]
+                / model.lum[k]
+        } else {
+            0.0
+        }),
+        "rsp_Lt_div_L" => {
+            let idx = if k == 0 && nz > 1 { 1 } else { k };
+            MesaCellValue::Float(if model.controls.rsp_flag {
+                model.aux.rsp.lt_rsp.get(idx).copied().unwrap_or(0.0)
+                    / model.lum[idx]
+            } else {
+                0.0
+            })
+        }
+        "rsp_Et" => MesaCellValue::Float(if model.controls.rsp_flag {
+            model.aux.rsp.et_rsp.get(k).copied().unwrap_or(0.0)
+        } else {
+            0.0
+        }),
+        "rsp_Pt" => MesaCellValue::Float(if model.controls.rsp_flag {
+            model.aux.rsp.ptrb_rsp.get(k).copied().unwrap_or(0.0)
+        } else {
+            0.0
+        }),
+        "rsp_Eq" => MesaCellValue::Float(if model.controls.rsp_flag {
+            model.aux.rsp.eq_rsp.get(k).copied().unwrap_or(0.0)
+        } else {
+            0.0
+        }),
+        "rsp_src_snk" => MesaCellValue::Float(if model.controls.rsp_flag {
+            model.aux.rsp.coupl_rsp.get(k).copied().unwrap_or(0.0)
+        } else {
+            0.0
+        }),
+        "rsp_Uq" => {
+            let idx = if k == 0 && nz > 1 { 1 } else { k };
+            MesaCellValue::Float(if model.controls.rsp_flag {
+                model.aux.rsp.uq_rsp.get(idx).copied().unwrap_or(0.0)
+            } else {
+                0.0
+            })
+        }
+        "rsp_Pvsc" => MesaCellValue::Float(if model.controls.rsp_flag {
+            model.aux.rsp.pvsc_rsp.get(k).copied().unwrap_or(0.0)
+        } else {
+            0.0
+        }),
         other => unreachable!(
             "validated profile scalar column {other:?} missing evaluator arm"
         ),
@@ -1719,6 +1794,9 @@ pub struct StarLogsWriter {
     log_dir: PathBuf,
     output_root: PathBuf,
     history_writer: Option<IncrementalHistoryWriter>,
+    hist_specs: Vec<HistoryColumnSpec>,
+    history_header_path: Option<PathBuf>,
+    is_explicit_history_file: bool,
     profile_specs: Vec<ProfileColumnSpec>,
     profiles_index: ProfilesIndex,
     history_interval_override: Option<usize>,
@@ -1805,19 +1883,23 @@ impl StarLogsWriter {
         } else {
             default_star_profile_specs()
         };
-        let history_writer = if o.do_history_file {
+        let (history_writer, history_header_path) = if o.do_history_file {
+            let hist_name = match o.star_history_name.trim() {
+                "" => "history.data",
+                s => s,
+            };
             let hdr_name = o.star_history_header_name.trim();
             let hdr_path =
                 (!hdr_name.is_empty()).then(|| log_dir.join(hdr_name));
             let hw = IncrementalHistoryWriter::with_header_path(
-                log_dir.join(o.star_history_name.trim()),
-                hdr_path,
-                hist_specs,
+                log_dir.join(hist_name),
+                hdr_path.clone(),
+                hist_specs.clone(),
             );
             hw.clear_stale_file()?;
-            Some(hw)
+            (Some(hw), hdr_path)
         } else {
-            None
+            (None, None)
         };
         let existing_index_path = log_dir.join(o.profiles_index_name.trim());
         let profiles_index = if existing_index_path.is_file() {
@@ -1842,6 +1924,9 @@ impl StarLogsWriter {
             log_dir,
             output_root: output_root.to_path_buf(),
             history_writer,
+            hist_specs,
+            history_header_path,
+            is_explicit_history_file: false,
             profile_specs,
             profiles_index,
             history_interval_override,
@@ -1886,14 +1971,17 @@ impl StarLogsWriter {
         let hdr_path = (!hdr_name.is_empty()).then(|| log_dir.join(hdr_name));
         let hw = IncrementalHistoryWriter::with_header_path(
             explicit_history_path,
-            hdr_path,
-            hist_specs,
+            hdr_path.clone(),
+            hist_specs.clone(),
         );
         hw.clear_stale_file()?;
         Ok(Self {
             output_root: log_dir.clone(),
             log_dir,
             history_writer: Some(hw),
+            hist_specs,
+            history_header_path: hdr_path,
+            is_explicit_history_file: true,
             profile_specs: default_star_profile_specs(),
             profiles_index: ProfilesIndex::default(),
             history_interval_override,
@@ -1905,6 +1993,65 @@ impl StarLogsWriter {
     #[must_use]
     pub fn log_dir(&self) -> &Path {
         &self.log_dir
+    }
+
+    /// Returns whether this writer is pinned to a single explicit history file
+    /// rather than a stage `LOGS/` directory.
+    #[must_use]
+    pub const fn is_explicit_history_file(&self) -> bool {
+        self.is_explicit_history_file
+    }
+
+    fn history_rotation_target(
+        &self,
+        o: &crate::OutputControls,
+    ) -> Option<(PathBuf, Option<PathBuf>)> {
+        if self.is_explicit_history_file {
+            return None;
+        }
+        let hw = self.history_writer.as_ref()?;
+        let hist_name = match o.star_history_name.trim() {
+            "" => "history.data",
+            s => s,
+        };
+        let target_path = self.log_dir.join(hist_name);
+        let hdr_name = o.star_history_header_name.trim();
+        let target_hdr =
+            (!hdr_name.is_empty()).then(|| self.log_dir.join(hdr_name));
+        if o.need_to_set_history_names_etc
+            || hw.path() != target_path
+            || self.history_header_path != target_hdr
+        {
+            Some((target_path, target_hdr))
+        } else {
+            None
+        }
+    }
+
+    fn rotate_history_writer_inner(
+        &mut self,
+        o: &crate::OutputControls,
+    ) -> bool {
+        let Some((target_path, target_hdr)) = self.history_rotation_target(o)
+        else {
+            return false;
+        };
+        self.history_header_path.clone_from(&target_hdr);
+        self.history_writer = Some(IncrementalHistoryWriter::with_header_path(
+            target_path,
+            target_hdr,
+            self.hist_specs.clone(),
+        ));
+        true
+    }
+
+    /// Rotates the active incremental history file when `star_history_name`,
+    /// `star_history_header_name`, or `need_to_set_history_names_etc` signals
+    /// a new target (`star/private/history.f90:310-322, 495-499`).
+    pub fn sync_history_target(&mut self, model: &mut StarModel) {
+        if self.rotate_history_writer_inner(&model.controls.output) {
+            model.controls.output.need_to_set_history_names_etc = false;
+        }
     }
 
     fn due_flags(
@@ -2053,6 +2200,7 @@ impl StarLogsWriter {
         }
 
         if hist_due {
+            let _ = self.rotate_history_writer_inner(o);
             if let Some(ref mut hw) = self.history_writer {
                 hw.write_step_with_ctx_and_extras(
                     model,
@@ -2105,4 +2253,232 @@ impl StarLogsWriter {
         }
         Ok(())
     }
+}
+
+/// Maximum column count permitted in `RSP_map_columns_filename`
+/// (`max_map_cols = 200` in `star/private/rsp_def.f90:119`).
+pub const MAX_RSP_MAP_COLS: usize = 200;
+
+/// Single resolved column in `RSP` 3D map output (`read_map_specs` and
+/// `add_to_map` in `star/private/rsp.f90:500-637`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RspMapColumn {
+    /// Built-in scalar, nuclide, or reaction-category profile column.
+    Builtin(ProfileColumnSpec),
+    /// Index into `StarExtras::extra_profile_columns` (`get_profile_id`,
+    /// `star/private/profile_getval.f90:239-243`).
+    Extra(usize),
+}
+
+fn resolve_single_map_token(
+    tok: &str,
+    cat: &NuclideCatalog,
+    extra_col_names: &[&str],
+) -> Option<RspMapColumn> {
+    if let Some(canon) = match_profile_scalar(tok) {
+        return Some(RspMapColumn::Builtin(ProfileColumnSpec::Scalar(canon)));
+    }
+    let low = tok.to_ascii_lowercase();
+    if let Some(cid) = cat.get_nuclide_index(&low) {
+        let canon = cat
+            .get_by_id(cid)
+            .map_or_else(|| low.clone(), |n| n.name.clone());
+        return Some(RspMapColumn::Builtin(ProfileColumnSpec::Nuclide(
+            cid, canon,
+        )));
+    }
+    let rc = category_id(&low);
+    if rc > 0 {
+        return Some(RspMapColumn::Builtin(ProfileColumnSpec::CategoryEps(rc)));
+    }
+    extra_col_names
+        .iter()
+        .position(|&name| name == tok)
+        .map(RspMapColumn::Extra)
+}
+
+/// Parses `RSP_map_columns_filename` tokens into ordered `(name, spec)` pairs
+/// (`read_map_specs` in `star/private/rsp.f90:571-637`).
+///
+/// # Errors
+/// Returns [`StarError::InvalidInput`] if any token is unknown or the list
+/// exceeds [`MAX_RSP_MAP_COLS`].
+pub fn parse_rsp_map_columns(
+    text: &str,
+    extra_col_names: &[&str],
+) -> Result<(Vec<String>, Vec<RspMapColumn>), StarError> {
+    let cat = NuclideCatalog::builtin_ref();
+    let mut names = Vec::new();
+    let mut cols = Vec::new();
+    for (idx, raw_line) in text.lines().enumerate() {
+        let line_no = idx + 1;
+        let (code, _) = strip_fortran_comment(raw_line);
+        if code.is_empty() {
+            continue;
+        }
+        for tok in code.split_whitespace() {
+            let Some(col) =
+                resolve_single_map_token(tok, cat, extra_col_names)
+            else {
+                return Err(StarError::InvalidInput(format!(
+                    "map_columns.list line {line_no}: unsupported or unknown profile column {tok:?}"
+                )));
+            };
+            if cols.len() >= MAX_RSP_MAP_COLS {
+                return Err(StarError::InvalidInput(format!(
+                    "map_columns.list exceeded max_map_cols ({MAX_RSP_MAP_COLS})"
+                )));
+            }
+            names.push(tok.to_owned());
+            cols.push(col);
+        }
+    }
+    Ok((names, cols))
+}
+
+/// Resolves cached `RSP_map_columns_filename` names against built-in profile
+/// columns and the current step's `extra_profile_columns`
+/// (`star/private/rsp.f90:607-624`).
+///
+/// # Errors
+/// Returns [`StarError::InvalidInput`] if a cached column name cannot be resolved.
+pub fn resolve_rsp_map_column_names(
+    names: &[String],
+    extra_col_names: &[&str],
+) -> Result<Vec<RspMapColumn>, StarError> {
+    let cat = NuclideCatalog::builtin_ref();
+    let mut cols = Vec::with_capacity(names.len());
+    for name in names {
+        let col = resolve_single_map_token(name, cat, extra_col_names)
+            .ok_or_else(|| {
+                StarError::InvalidInput(format!(
+                    "map column {name:?} is not a supported profile or extra column"
+                ))
+            })?;
+        cols.push(col);
+    }
+    Ok(cols)
+}
+
+fn write_mesa_d18_10(out: &mut String, x: f64) {
+    let v = if !x.is_finite() {
+        -1.0e99
+    } else if x == 0.0 {
+        0.0
+    } else {
+        x
+    };
+    let mut raw = String::with_capacity(24);
+    let _ = write!(raw, "{v:.10E}");
+    let tok = if let Some((mant, exp_s)) = raw.split_once('E') {
+        let exp: i32 = exp_s.parse().unwrap_or(0);
+        let sign = if exp < 0 { '-' } else { '+' };
+        let abs_exp = exp.unsigned_abs();
+        if abs_exp < 100 {
+            format!("{mant}E{sign}{abs_exp:02}")
+        } else {
+            format!("{mant}E{sign}{abs_exp}")
+        }
+    } else {
+        raw
+    };
+    for _ in 0..18_usize.saturating_sub(tok.len()) {
+        out.push(' ');
+    }
+    out.push_str(&tok);
+}
+
+/// Formats the two-line MESA `map.data` header (`add_to_map` in
+/// `star/private/rsp.f90:522-531`).
+#[must_use]
+pub fn format_rsp_map_header(col_names: &[String]) -> String {
+    let mut out = String::with_capacity((col_names.len() + 2) * 40);
+    let _ = write!(out, "{:>18} {:>4}", 1_usize, 2_usize);
+    for idx in 1..=col_names.len() {
+        let _ = write!(out, " {:>18}", idx + 2);
+    }
+    out.push('\n');
+    let _ = write!(out, "{:>18} {:>4}", "phase", "zone");
+    for name in col_names {
+        let _ = write!(out, " {:>18}", name.trim());
+    }
+    out.push('\n');
+    out
+}
+
+/// Evaluates and formats one step's zone rows for `RSP_write_map`
+/// (`add_to_map` in `star/private/rsp.f90:538-556`).
+#[must_use]
+pub fn format_rsp_map_rows(
+    model: &StarModel,
+    cols: &[RspMapColumn],
+    extra_cols: &[(String, Vec<f64>)],
+    zone_interval: usize,
+    ibotom: usize,
+    phase: f64,
+) -> String {
+    let nz = model.nz;
+    let stride = zone_interval.max(1);
+    let mut builtin_specs = Vec::with_capacity(cols.len());
+    let mut nuclide_slots = Vec::with_capacity(cols.len());
+    for col in cols {
+        match col {
+            RspMapColumn::Builtin(sp) => {
+                builtin_specs.push(sp.clone());
+                let slot = match sp {
+                    ProfileColumnSpec::Nuclide(cid, _)
+                    | ProfileColumnSpec::LogNuclide(cid, _) => {
+                        iso_slot_for_chem_id(model, *cid)
+                    }
+                    _ => None,
+                };
+                nuclide_slots.push(slot);
+            }
+            RspMapColumn::Extra(_) => nuclide_slots.push(None),
+        }
+    }
+    let ctx = StepReportContext::compute(model);
+    let prefixes = ProfilePrefixCache::build(model, &builtin_specs);
+    let mut out =
+        String::with_capacity((nz / stride + 1) * (cols.len() * 19 + 25));
+
+    for k in (1..=nz).step_by(stride) {
+        let i_smolec = nz + 1 - k;
+        if i_smolec > ibotom && i_smolec < nz {
+            let kk = k - 1;
+            write_mesa_d18_10(&mut out, phase);
+            let _ = write!(out, " {k:>4}");
+            for (col, &slot) in cols.iter().zip(&nuclide_slots) {
+                let v = match col {
+                    RspMapColumn::Builtin(ProfileColumnSpec::Scalar(name)) => {
+                        match eval_profile_scalar(
+                            name, model, &ctx, &prefixes, kk,
+                        ) {
+                            MesaCellValue::Int(iv) => iv as f64,
+                            MesaCellValue::Float(fv) => fv,
+                        }
+                    }
+                    RspMapColumn::Builtin(ProfileColumnSpec::Nuclide(_, _)) => {
+                        slot.map_or(0.0, |j| model.cell_xa(kk)[j])
+                    }
+                    RspMapColumn::Builtin(ProfileColumnSpec::CategoryEps(
+                        cid,
+                    )) => model
+                        .aux
+                        .eps_nuc_categories
+                        .get(kk)
+                        .map_or(0.0, |c| c[cid - 1]),
+                    RspMapColumn::Builtin(_) => 0.0,
+                    RspMapColumn::Extra(idx) => extra_cols
+                        .get(*idx)
+                        .and_then(|(_, vals)| vals.get(kk).copied())
+                        .unwrap_or(f64::NAN),
+                };
+                out.push(' ');
+                write_mesa_d18_10(&mut out, v);
+            }
+            out.push('\n');
+        }
+    }
+    out
 }

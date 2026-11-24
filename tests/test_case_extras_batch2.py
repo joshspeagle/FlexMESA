@@ -360,8 +360,10 @@ def test_accreted_material_j_real4_threshold_and_wind_switch() -> None:
     assert j_acc > 0.0 and math.isclose(
         mdot_new, 1.0e-3 * constants.MSUN / constants.SECYER, rel_tol=1.0e-15
     )
-    with pytest.raises(NotImplementedError, match="#158"):
-        h.other_adjust_mdot(adj_snap, 0.0)
+    assert h.other_adjust_mdot(adj_snap, 0.0) == {
+        "mstar_dot": mdot_new,
+        "accreted_material_j": j_acc,
+    }
 
     # Test real(4) `1e-5` (`0x1.4f8b58p-17` < `1.0e-5`) boundary (:125).
     real4_1e5 = struct.unpack("f", struct.pack("f", 1.0e-5))[0]
@@ -729,6 +731,221 @@ def test_batch2_live_py_star_extras_adapter_execution_and_loud_key_error(
         case_extras.resolve_case_extras("star", low_z_dir),
         star_extras.LowZStarExtras,
     )
+
+
+_AMJ_STEP_OBS: list[dict[str, float | int | bool]] = []
+
+
+class _RecordingAccretedMaterialJExtras(
+    star_extras.AccretedMaterialJStarExtras
+):
+    """Records snapshot scalars seen during `other_adjust_mdot` / checks."""
+
+    def extras_check_model(
+        self, state: dict[str, Any]
+    ) -> str | tuple[str, str]:
+        _AMJ_STEP_OBS.append(
+            {
+                "model_number": int(state["model_number"]),
+                "generations": int(state["generations"]),
+                "use_accreted_material_j": bool(
+                    state["use_accreted_material_j"]
+                ),
+                "accreted_material_j": float(state["accreted_material_j"]),
+                "mstar_dot": float(state["mstar_dot"]),
+                "mstar_dot_old": float(state["mstar_dot_old"]),
+                "total_angular_momentum": float(
+                    state["total_angular_momentum"]
+                ),
+                "total_angular_momentum_old": float(
+                    state["total_angular_momentum_old"]
+                ),
+            }
+        )
+        return super().extras_check_model(state)
+
+
+class _SnapMutateNoneAdjustMdotExtras:
+    """Mutates snapshot in place and returns `None`."""
+
+    def other_adjust_mdot(
+        self, state: dict[str, Any], current_mdot: float
+    ) -> None:
+        mdot_new = float(current_mdot) + 2.0e17
+        state["accreted_material_j"] = 1.25e18
+        state["mstar_dot"] = mdot_new
+        _AMJ_STEP_OBS.append({"expected_mdot": mdot_new})
+
+    def extras_check_model(self, state: dict[str, Any]) -> str:
+        _AMJ_STEP_OBS.append(
+            {
+                "accreted_material_j": float(state["accreted_material_j"]),
+                "mstar_dot": float(state["mstar_dot"]),
+            }
+        )
+        return "keep_going"
+
+
+class _AccJOnlyDictExtras:
+    """Returns `{"accreted_material_j": ...}` while keeping `current_mdot`."""
+
+    def other_adjust_mdot(
+        self, state: dict[str, Any], current_mdot: float
+    ) -> dict[str, float]:
+        _AMJ_STEP_OBS.append({"current_mdot": float(current_mdot)})
+        return {"accreted_material_j": 2.5e18}
+
+    def extras_check_model(self, state: dict[str, Any]) -> str:
+        _AMJ_STEP_OBS.append(
+            {
+                "accreted_material_j": float(state["accreted_material_j"]),
+                "mstar_dot": float(state["mstar_dot"]),
+            }
+        )
+        return "keep_going"
+
+
+class _ScalarFloatAdjustMdotExtras:
+    """Legacy scalar `float` return compatibility."""
+
+    def other_adjust_mdot(
+        self, state: dict[str, Any], current_mdot: float
+    ) -> float:
+        mdot_new = float(current_mdot) + 3.0e17
+        _AMJ_STEP_OBS.append({"expected_mdot": mdot_new})
+        return mdot_new
+
+    def extras_check_model(self, state: dict[str, Any]) -> str:
+        _AMJ_STEP_OBS.append({"mstar_dot": float(state["mstar_dot"])})
+        return "keep_going"
+
+
+class _UnknownKeyAdjustMdotExtras:
+    """Returns an unsupported key from `other_adjust_mdot`."""
+
+    def other_adjust_mdot(
+        self, state: dict[str, Any], current_mdot: float
+    ) -> dict[str, float]:
+        return {"bogus_key": float(current_mdot)}
+
+
+def _recording_amj_factory(suite: str, case_dir: pathlib.Path) -> object:
+    _AMJ_STEP_OBS.clear()
+    return _RecordingAccretedMaterialJExtras()
+
+
+def _snap_mutate_none_factory(suite: str, case_dir: pathlib.Path) -> object:
+    _AMJ_STEP_OBS.clear()
+    return _SnapMutateNoneAdjustMdotExtras()
+
+
+def _acc_j_only_dict_factory(suite: str, case_dir: pathlib.Path) -> object:
+    _AMJ_STEP_OBS.clear()
+    return _AccJOnlyDictExtras()
+
+
+def _scalar_float_adjust_factory(suite: str, case_dir: pathlib.Path) -> object:
+    _AMJ_STEP_OBS.clear()
+    return _ScalarFloatAdjustMdotExtras()
+
+
+def _unknown_key_adjust_factory(suite: str, case_dir: pathlib.Path) -> object:
+    return _UnknownKeyAdjustMdotExtras()
+
+
+def test_accreted_material_j_live_and_adjust_mdot_adapter_modes(
+    tmp_path: pathlib.Path,
+) -> None:
+    """`accreted_material_j` runs via `resolve_case_extras` and adapter."""
+    amj_dir = harness_runner.resolve_case_dir("star", "accreted_material_j")
+    assert isinstance(
+        case_extras.resolve_case_extras("star", amj_dir),
+        star_extras.AccretedMaterialJStarExtras,
+    )
+
+    rep_live = harness_runner.run_trace_inprocess(
+        "star",
+        amj_dir,
+        tmp_path / "out_amj_live",
+        max_steps=2,
+        allow_unsupported_controls=True,
+        extras_factory="tests.case_extras:resolve_case_extras",
+    )
+    assert int(rep_live["total_steps"]) == 2
+
+    harness_runner.run_trace_inprocess(
+        "star",
+        amj_dir,
+        tmp_path / "out_amj_obs",
+        max_steps=2,
+        allow_unsupported_controls=True,
+        extras_factory="tests.test_case_extras_batch2:_recording_amj_factory",
+    )
+    assert len(_AMJ_STEP_OBS) == 2
+    step1, step2 = _AMJ_STEP_OBS
+    assert step1["use_accreted_material_j"] is True
+    assert float(step1["accreted_material_j"]) > 0.0
+    assert float(step1["mstar_dot"]) > 0.0
+    assert int(step2["generations"]) == 2
+    assert float(step2["mstar_dot_old"]) > 0.0
+    assert (
+        float(step2["total_angular_momentum"])
+        > float(step2["total_angular_momentum_old"])
+        > 0.0
+    )
+
+    harness_runner.run_trace_inprocess(
+        "star",
+        amj_dir,
+        tmp_path / "out_snap_mut",
+        max_steps=1,
+        allow_unsupported_controls=True,
+        extras_factory=(
+            "tests.test_case_extras_batch2:_snap_mutate_none_factory"
+        ),
+    )
+    assert len(_AMJ_STEP_OBS) == 2
+    assert _AMJ_STEP_OBS[1]["accreted_material_j"] == 1.25e18
+    assert _AMJ_STEP_OBS[1]["mstar_dot"] == _AMJ_STEP_OBS[0]["expected_mdot"]
+
+    harness_runner.run_trace_inprocess(
+        "star",
+        amj_dir,
+        tmp_path / "out_dict_accj_only",
+        max_steps=1,
+        allow_unsupported_controls=True,
+        extras_factory="tests.test_case_extras_batch2:_acc_j_only_dict_factory",
+    )
+    assert len(_AMJ_STEP_OBS) == 2
+    assert _AMJ_STEP_OBS[1]["accreted_material_j"] == 2.5e18
+    assert _AMJ_STEP_OBS[1]["mstar_dot"] == _AMJ_STEP_OBS[0]["current_mdot"]
+
+    harness_runner.run_trace_inprocess(
+        "star",
+        amj_dir,
+        tmp_path / "out_scalar_float",
+        max_steps=1,
+        allow_unsupported_controls=True,
+        extras_factory=(
+            "tests.test_case_extras_batch2:_scalar_float_adjust_factory"
+        ),
+    )
+    assert len(_AMJ_STEP_OBS) == 2
+    assert _AMJ_STEP_OBS[1]["mstar_dot"] == _AMJ_STEP_OBS[0]["expected_mdot"]
+
+    with pytest.raises(
+        Exception, match="unsupported star adjust_mdot dict key"
+    ):
+        harness_runner.run_trace_inprocess(
+            "star",
+            amj_dir,
+            tmp_path / "out_unknown_key",
+            max_steps=1,
+            allow_unsupported_controls=True,
+            extras_factory=(
+                "tests.test_case_extras_batch2:_unknown_key_adjust_factory"
+            ),
+        )
 
 
 def test_batch2_handlers_raise_key_error_on_missing_snapshot_fields() -> None:

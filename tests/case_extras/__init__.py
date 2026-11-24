@@ -126,16 +126,15 @@ STOCK_EXTRAS_DIGESTS: frozenset[str] = frozenset(
 # case without failing on state the adapter does not provide. A handler not
 # listed here is written but cannot run yet because its hooks require an
 # unported engine or `StarExtras` capability:
-# - `#152` (solver/timestep/state hooks): `CarbonKhStarExtras` (`ergs_error`,
-#   `cv_start`, `de_drho_start`), `MagneticBrakingStarExtras`
+# - `#152` (solver/timestep/state hooks): `MagneticBrakingStarExtras`
 #   (`other_timestep_limit`), `TzoStarExtras` (`star_set_v_flag`, center mass
 #   and luminosity mutation).
 # - `#153` (mesh/surface-cut hooks): `MakeCoWdStarExtras`
 #   (`star_remove_surface_at_cell_k`), `PreMs1MToWdStarExtras`
 #   (`other_mesh_delta_coeff_factor`).
-# - `#154` (startup/relax/build-model hooks): `MakeEnvStarExtras`
-#   (`create_env`), `RelaxCompositionJEntropyStarExtras` (`initial_mass`
-#   mutation before model build).
+# - `#154` (startup/relax/build-model hooks):
+#   `RelaxCompositionJEntropyStarExtras` (`initial_mass` mutation before
+#   model build).
 # - `#155` (per-cell MLT/overshoot/rotation diffusivity hooks):
 #   `PreMs12MCoreCollapseStarExtras`, `PreMs20MCoreCollapseStarExtras`,
 #   `SplitBurnBigNetStarExtras`, `MakePreCcsn13bvnStarExtras` (per-cell
@@ -144,17 +143,22 @@ STOCK_EXTRAS_DIGESTS: frozenset[str] = frozenset(
 #   arrays not yet publicly exposed on `StarModel`).
 # - `#156` (element diffusion electric/gravity fields): `WdDiffusionStarExtras`
 #   (`e_field`, `g_field_element_diffusion`).
-# - `#158` / `#159` (mutable `other_adjust_mdot` / rotation-distortion hooks):
-#   `AccretedMaterialJStarExtras` (`accreted_material_j` mutation inside
-#   `other_adjust_mdot`), `PpisnStarExtras` (`other_kap_get`,
+# - `#159` (rotation-distortion hooks): `PpisnStarExtras` (`other_kap_get`,
 #   `other_eval_fp_ft`, `other_before_struct_burn_mix`, `#152`/`#159`/`#161`).
 # - `#161` (opacity/surface-PT/other-physics hooks): `ConductiveFlameStarExtras`
-#   (`other_surface_PT`, `#154`), `MsOpMonoStarExtras` (`op_mono` tables),
-#   `RadiativeLevitationStarExtras` (`set_op_mono_factors`),
-#   `OtherPhysicsHooksStarExtras` (`other_kap_get`, `other_eos_results`,
-#   `other_overshooting_scheme`, `#152`/`#153`/`#155`/`#161`).
+#   (`other_surface_PT`, `warn_rates_for_high_temp`, custom `t_xtra1`, `#150`;
+#   `other_build_initial_model` now adapter-served),
+#   `MsOpMonoStarExtras` (`op_mono` tables), `RadiativeLevitationStarExtras`
+#   (`set_op_mono_factors`), `OtherPhysicsHooksStarExtras` (`other_kap_get`,
+#   `other_eos_results`, `other_screening`, `other_rate_get`,
+#   `other_close_gaps`, `other_pressure`, `use_other_mesh_functions` /
+#   `use_other_mesh_delta_coeff_factor` namelist inventory;
+#   `other_overshooting_scheme`, `other_timestep_limit`,
+#   `other_mesh_delta_coeff_factor`, `other_mesh_functions`, `other_wind` are
+#   now adapter-served).
 # - `#162` (pulse export & simplex calibration): `CheckPulseAtmStarExtras`
-#   (`star_export_pulse_data('FGONG')`, `atm_T_tau_opacity`, `#161`),
+#   (`star_export_pulse_data('FGONG')` with `add_atmosphere_to_pulse_data`,
+#   `atm_build_tau_outer`, `atm_T_tau_relation` atmosphere integration, `#161`),
 #   `SimplexSolarCalibrationStarExtras` (`star_simplex_procs`, `#153`).
 # - `#231` (custom termination codes): `C13PocketStarExtras`,
 #   `PisnStarExtras` and `WdAicStarExtras` set `termination_code_str(t_xtra*)`
@@ -174,7 +178,9 @@ STOCK_EXTRAS_DIGESTS: frozenset[str] = frozenset(
 # runs with default no-op hooks and never counts as a pass, `DECISIONS #32`).
 ADAPTER_SERVED_STAR_HANDLERS: frozenset[str] = frozenset(
     {
+        "AccretedMaterialJStarExtras",
         "AdjustNetStarExtras",
+        "CarbonKhStarExtras",
         "CburnInwardStarExtras",
         "CepheidBlueLoopStarExtras",
         "CheckRedoStarExtras",
@@ -188,6 +194,7 @@ ADAPTER_SERVED_STAR_HANDLERS: frozenset[str] = frozenset(
         "HotCoolWindStarExtras",
         "HseRiemannStarExtras",
         "LowZStarExtras",
+        "MakeEnvStarExtras",
         "MakeONeWdStarExtras",
         "NeutronStarEnvStarExtras",
         "RCrBStarExtras",

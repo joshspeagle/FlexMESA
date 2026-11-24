@@ -72,6 +72,4 @@ def assert_declared_stop(
         run()
 
 
-DECLARED_STAR_STOPS: dict[str, DeclaredStop] = {
-    "make_env": DeclaredStop(r"missing saved model 'start\.mod'", "#154"),
-}
+DECLARED_STAR_STOPS: dict[str, DeclaredStop] = {}

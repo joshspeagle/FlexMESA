@@ -8,7 +8,6 @@ use flexmesa_const::{
 };
 
 use crate::model::StarModel;
-use crate::rotation::conserve_shell_j_rot_and_distortion;
 
 /// Action selected by [`MdotRedoState::select_action`] after a converged Henyey
 /// structure-burn-mix trial (`select_mdot_action` in `evolve.f90:788-1057`).
@@ -32,9 +31,10 @@ pub fn eval_surf_avg_w_div_w_crit(model: &mut StarModel) -> f64 {
     if !model.controls.rotation_flag || nz < 2 {
         return 0.0;
     }
-    if model.j_rot.iter().any(|&j| j != 0.0) {
-        conserve_shell_j_rot_and_distortion(model);
-    }
+    // `call set_rotation_info(s, .true., ierr)`
+    // (`star/private/hydro_rotation.f90:616-620`): keeps
+    // `w_div_w_crit_roche`.
+    crate::hydro_rotation::set_rotation_info(model, true);
 
     let tau_min = model.controls.mix_wind.surf_avg_tau_min.max(0.0);
     let tau_max = model.controls.mix_wind.surf_avg_tau.max(tau_min + 1.0e-6);

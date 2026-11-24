@@ -568,6 +568,9 @@ pub fn do_struct_burn_mix(
         overshoot_configs,
     );
 
+    // `s% solver_iter = 0  ! to indicate that no longer doing solver
+    // iterations` (`star/private/struct_burn_mix.f90:207`).
+    model.aux.solver_mlt_eval_count = 0;
     model.aux.doing_struct_burn_mix = false;
     let report = match step_res {
         Ok(rep) => rep,
@@ -577,6 +580,11 @@ pub fn do_struct_burn_mix(
         }
     };
     model.aux.step_hist.last_solver_iterations = report.iterations;
+    // Store ST mixing info for time smoothing once the solve has converged
+    // (`star/private/struct_burn_mix.f90:183-198`).
+    if report.converged {
+        crate::rotation_mix_info::store_st_start_info(model);
+    }
 
     let prev_ok_mix = model.aux.mixing.okay_to_set_mixing_info;
     model.aux.mixing.okay_to_set_mixing_info =

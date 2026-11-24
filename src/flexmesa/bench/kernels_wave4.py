@@ -175,6 +175,7 @@ def make_wave4_zams_model(nz: int) -> star.StarModel:
     model.set_primary_state(lnd, ln_t, ln_r, lum, dq, xa)
     model.eval_hydro_vars()
     model.save_start_values()
+    model.record_start_of_step_energy_integrals()
     model.save_old_values()
     return model
 
@@ -517,6 +518,7 @@ def bench_star_evolve_step(
     base.dt = dt
     base.eval_hydro_vars()
     base.save_start_values()
+    base.record_start_of_step_energy_integrals()
     base.save_old_values()
     lnd0 = base.lnd.copy()
     lnt0 = base.ln_t.copy()

@@ -95,6 +95,7 @@ fn build_compact_zams(
     m.finish_init_model().expect("compact init should succeed");
     set_hydro_vars(&mut m, false, false).expect("initial set_hydro_vars");
     m.save_start_values().expect("save_start_values");
+    flexmesa_star::record_start_of_step_energy_integrals(&mut m);
     m.save_old_values();
     m
 }
@@ -195,6 +196,27 @@ fn freeze_microphysics_tangents(m: &mut StarModel) {
     }
 }
 
+/// Sets `dxh_lnr` to `ln_r - ln_r_start`, the value `set_vars_for_solver`
+/// stores from `solver_dx(i_lnR,:)` when the state is a solver iterate
+/// (`star/private/solver_support.f90:1311`). Upstream's partials check
+/// perturbs `solver_dx` with `edit_lnR` off (`:1071`), so the radius residual
+/// follows the perturbed `lnR` through `dxh_lnR`.
+fn sync_solver_dxh_lnr(m: &mut StarModel) {
+    m.aux.dxh_lnr.resize(m.nz, 0.0);
+    for k in 0..m.nz {
+        m.aux.dxh_lnr[k] = m.ln_r[k] - m.ln_r_start[k];
+    }
+}
+
+/// [`eval_henyey_equations`] at a solver iterate (see [`sync_solver_dxh_lnr`]).
+fn eval_iterate(
+    m: &mut StarModel,
+    include_chem: bool,
+) -> Result<HenyeySystem, flexmesa_star::controls::StarError> {
+    sync_solver_dxh_lnr(m);
+    eval_henyey_equations(m, include_chem)
+}
+
 fn eval_frozen_pde_system(
     m: &mut StarModel,
     include_chem: bool,
@@ -212,6 +234,7 @@ fn eval_frozen_pde_system(
         m.rmid[k] = f64::midpoint(m.r[k], r_in);
     }
     m.set_m_grav_and_grav();
+    sync_solver_dxh_lnr(m);
     if m.controls.u_flag {
         do_uface_and_pface(m).expect("frozen u_flag HLLC faces");
     }
@@ -236,7 +259,7 @@ fn assert_tridiagonal_jacobian_matches_fd(
     m0.aux.doing_struct_burn_mix = true;
     m0.pack_xh();
     let sys0 =
-        eval_henyey_equations(&mut m0, include_chem).expect("baseline eqns");
+        eval_iterate(&mut m0, include_chem).expect("baseline eqns");
     let (nz, nvar, nvar_hydro) = (sys0.nz, sys0.nvar, m0.layout.nvar_hydro);
     for k_var in 0..nz {
         for j_var in 0..nvar_hydro {
@@ -256,7 +279,7 @@ fn assert_tridiagonal_jacobian_matches_fd(
                 m.xh[k_var * nvar_hydro + j_var] += sgn * delta;
                 m.unpack_xh();
                 m.set_m_grav_and_grav();
-                eval_henyey_equations(&mut m, include_chem).expect("hydro fd")
+                eval_iterate(&mut m, include_chem).expect("hydro fd")
             };
             let (sys_p, sys_m) = (perturb_h(1.0), perturb_h(-1.0));
             // A second central difference at half the step measures how far
@@ -337,7 +360,7 @@ fn assert_tridiagonal_jacobian_matches_fd(
                 if let Some(s) = sink {
                     m.xa[k_var * m.species + s] -= sgn * delta;
                 }
-                let sys = eval_henyey_equations(&mut m, true).expect("chem fd");
+                let sys = eval_iterate(&mut m, true).expect("chem fd");
                 let p_surf = flexmesa_math::exp(m.ln_peos_surf_ad.val);
                 (sys, p_surf, m.energy)
             };
@@ -466,7 +489,8 @@ fn assert_tridiagonal_jacobian_matches_fd(
                                 / (2.0 * eps_scaled);
                             an_dir += -flexmesa_star::hydro_energy::set_energy_eqn_scal(
                                 &m0, k_equ,
-                            ) / m0.dt
+                            )
+                            .expect("energy scal") / m0.dt
                                 * (fd_de - an_de);
                         }
                         let eq0 = sys0.equ[k_equ * nvar + i_equ].abs();
@@ -538,6 +562,7 @@ fn frozen_microphysics_star_ad_jacobian_matches_central_fd_to_1e_10_at(nz: usize
         }
         set_hydro_vars(&mut base, false, false).expect("hydro vars");
         base.save_start_values().expect("save_start_values");
+        flexmesa_star::record_start_of_step_energy_integrals(&mut base);
         for k in 0..base.nz {
             base.lnd[k] += 1.0e-3 * (usize_to_f64(k) - 2.0);
             base.ln_t[k] -= 8.0e-4 * usize_to_f64(k);
@@ -627,6 +652,7 @@ fn coupled_hydro_chem_jacobian_matches_central_fd_across_sinks_and_spherical_v_f
         set_pure_helm(&mut model);
         set_hydro_vars(&mut model, false, false).expect("helm hydro vars");
         model.save_start_values().expect("save_start_values");
+        flexmesa_star::record_start_of_step_energy_integrals(&mut model);
         if opt == EnergyEqnOption::Dedt {
             for k in 0..model.nz {
                 model.lnd[k] += 2.0e-3 * (usize_to_f64(k) * 0.2 - 0.5);
@@ -659,6 +685,7 @@ fn coupled_hydro_chem_jacobian_matches_central_fd_across_sinks_and_spherical_v_f
     }
     set_hydro_vars(&mut model_v, false, false).expect("v_flag hydro vars");
     model_v.save_start_values().expect("save_start_values");
+    flexmesa_star::record_start_of_step_energy_integrals(&mut model_v);
     for k in 0..model_v.nz {
         model_v.v[k] *= 1.03;
         model_v.lnd[k] += 1.5e-3 * (usize_to_f64(k) * 0.2 - 0.4);
@@ -666,7 +693,7 @@ fn coupled_hydro_chem_jacobian_matches_central_fd_across_sinks_and_spherical_v_f
     }
     model_v.set_m_grav_and_grav();
     model_v.pack_xh();
-    let sys_v = eval_henyey_equations(&mut model_v.clone(), true).expect("v");
+    let sys_v = eval_iterate(&mut model_v.clone(), true).expect("v");
     let (i_e, j_x0) = (model_v.layout.i_dlne_dt, model_v.layout.nvar_hydro);
     assert!(lookup_block_entry(&sys_v, 2, i_e, 1, j_x0).abs() > 0.0);
     assert!(lookup_block_entry(&sys_v, 2, i_e, 2, j_x0).abs() > 0.0);
@@ -719,6 +746,7 @@ fn coupled_u_flag_hllc_jacobian_across_all_outer_bcs_and_chem_rti_at(nz: usize) 
         }
         set_hydro_vars(&mut model, false, !include_chem).expect("u_flag vars");
         model.save_start_values().expect("save_start_values");
+        flexmesa_star::record_start_of_step_energy_integrals(&mut model);
         for k in 0..model.nz {
             model.u[k] *= 1.02;
             model.lnd[k] += 1.0e-3;
@@ -764,6 +792,7 @@ fn test_coupled_v_flag_rti_jacobian_with_active_baroclinic_source_diffusion_and_
     model.aux.alpha_rti[5] = 1.5 * model.controls.rti_max_alpha;
     set_hydro_vars(&mut model, false, true).expect("rti hydro vars");
     model.save_start_values().expect("save_start_values");
+    flexmesa_star::record_start_of_step_energy_integrals(&mut model);
 
     assert_eq!(model.aux.dpdr_drhodr_info[0], 0.0);
     assert!(model.aux.dpdr_drhodr_info.iter().any(|&d| d < 0.0));
@@ -776,7 +805,7 @@ fn test_coupled_v_flag_rti_jacobian_with_active_baroclinic_source_diffusion_and_
     }
     model.pack_xh();
 
-    let sys0 = eval_henyey_equations(&mut model.clone(), false).expect("sys0");
+    let sys0 = eval_iterate(&mut model.clone(), false).expect("sys0");
     let i_rti = model.layout.i_alpha_rti.expect("rti var slot");
     let has_offdiag_rti = (1..model.nz)
         .any(|k| lookup_block_entry(&sys0, k, i_rti, k - 1, i_rti).abs() > 0.0);

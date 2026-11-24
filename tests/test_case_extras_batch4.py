@@ -9,14 +9,15 @@ from __future__ import annotations
 import pathlib
 import shutil
 import tomllib
+from typing import Any
 
 import numpy as np
 import pytest
 
-from flexmesa import _rust
+from flexmesa import _rust, constants
 from flexmesa.testing import harness_runner
 from tests import case_extras
-from tests.case_extras import binary_extras, star_extras
+from tests.case_extras import astero_extras, binary_extras, star_extras
 
 _MINIMAL_HISTORY_COLUMNS = "model_number\nstar_age\nlog_L\nlog_Teff\n"
 
@@ -528,3 +529,231 @@ def test_adapter_rejects_non_dict_hook_returns(
             allow_unsupported_controls=True,
             extras_factory=f"tests.test_case_extras_batch4:{factory}",
         )
+
+
+def test_astero_adipls_resolves_and_graduated_in_extras_status(
+    tmp_path: pathlib.Path,
+) -> None:
+    """`astero_adipls` matches by Fortran source and is `ported` in ledger."""
+    orig = harness_runner.resolve_case_dir("astero", "astero_adipls")
+    assert isinstance(
+        case_extras.match_case_extras("astero", orig),
+        astero_extras.AsteroAdiplsExtras,
+    )
+    assert isinstance(
+        case_extras.resolve_case_extras("astero", orig),
+        astero_extras.AsteroAdiplsExtras,
+    )
+    assert case_extras.classify_case_extras("astero", orig) == "ported"
+
+    moved = tmp_path / "renamed_astero_adipls"
+    shutil.copytree(orig / "src", moved / "src")
+    assert case_extras.classify_case_extras("astero", moved) == "ported"
+    (moved / "src" / "run_star_extras.f90").unlink()
+    assert case_extras.match_case_extras("astero", moved) is None
+
+    ledger_path = (
+        pathlib.Path(__file__).resolve().parents[1]
+        / "benchmarks/history_harness/extras_status.toml"
+    )
+    ledger = tomllib.loads(ledger_path.read_text(encoding="utf-8"))
+    by_case = {(c["suite"], c["case"]): c for c in ledger["cases"]}
+    assert by_case[("astero", "astero_adipls")]["status"] == "ported"
+
+
+def test_astero_adipls_pyo3_binding_and_extras_unit(
+    tmp_path: pathlib.Path,
+) -> None:
+    """Exercise `AsteroAdipls` error checks, caching, and extras hook."""
+    orig = harness_runner.resolve_case_dir("astero", "astero_adipls")
+
+    empty_dir = tmp_path / "missing_adipls"
+    empty_dir.mkdir()
+    (empty_dir / "inlist_astero_search_controls").write_text(
+        "&astero_search_controls\n  oscillation_code = 'adipls'\n/\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(RuntimeError):
+        _rust.AsteroAdipls(str(empty_dir))
+
+    # Default `do_redistribute_mesh = .true.` requires `redistrb.c.pruned.in`.
+    no_redistrb = tmp_path / "no_redistrb"
+    no_redistrb.mkdir()
+    shutil.copy2(
+        orig / "adipls.c.pruned.in", no_redistrb / "adipls.c.pruned.in"
+    )
+    (no_redistrb / "inlist_astero_search_controls").write_text(
+        "&astero_search_controls\n  oscillation_code = 'adipls'\n/\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(RuntimeError):
+        _rust.AsteroAdipls(str(no_redistrb))
+
+    gyre_code = tmp_path / "wrong_osc_code"
+    gyre_code.mkdir()
+    shutil.copy2(orig / "adipls.c.pruned.in", gyre_code / "adipls.c.pruned.in")
+    (gyre_code / "inlist_astero_search_controls").write_text(
+        "&astero_search_controls\n"
+        "  oscillation_code = 'gyre'\n"
+        "  do_redistribute_mesh = .false.\n"
+        "/\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(RuntimeError):
+        _rust.AsteroAdipls(str(gyre_code))
+
+    # Capture a real `StarModelHandle` from a 1-step `astero_adipls` trace.
+    captured: dict[str, Any] = {}
+
+    class _HandleCaptureProbe:
+        wants_star_model = True
+
+        def extras_after_evolve(self, state: dict[str, Any]) -> None:
+            captured["handle"] = state["star_model"]
+            captured["photosphere_r"] = float(state["photosphere_r"])
+            captured["cgrav0"] = float(state["cgrav"][0])
+            captured["star_mass"] = float(state["star_mass"])
+
+    _rust.trace_astero_case(
+        str(orig),
+        str(tmp_path / "cap_out"),
+        max_steps_per_stage=1,
+        allow_unsupported_controls=False,
+        extras=_HandleCaptureProbe(),
+    )
+    handle = captured["handle"]
+    r_cm = constants.RSUN * captured["photosphere_r"]
+    g_cgs = captured["cgrav0"]
+    m_g = constants.MSUN * captured["star_mass"]
+
+    adipls = _rust.AsteroAdipls(str(orig))
+    with pytest.raises(RuntimeError, match="before store_model"):
+        adipls.get_one_el_info(
+            handle,
+            0,
+            50.0,
+            1000.0,
+            200,
+            r_cm,
+            g_cgs,
+            m_g,
+            True,
+            False,
+            True,
+            False,
+            False,
+        )
+    with pytest.raises(RuntimeError, match="not ported"):
+        adipls.get_one_el_info(
+            handle,
+            0,
+            50.0,
+            1000.0,
+            200,
+            r_cm,
+            g_cgs,
+            m_g,
+            True,
+            False,
+            True,
+            True,
+            True,
+        )
+    with pytest.raises(ValueError, match="overflows i32"):
+        adipls.get_one_el_info(
+            handle,
+            1 << 40,
+            50.0,
+            1000.0,
+            200,
+            r_cm,
+            g_cgs,
+            m_g,
+            True,
+            False,
+            True,
+            False,
+            True,
+        )
+
+    l0_modes = adipls.get_one_el_info(
+        handle,
+        0,
+        50.0,
+        1000.0,
+        200,
+        r_cm,
+        g_cgs,
+        m_g,
+        True,
+        False,
+        True,
+        False,
+        True,
+    )
+    assert len(l0_modes) >= 5
+    assert all(m[0] == 0 and m[4] > 0.0 and m[3] > 0.0 for m in l0_modes)
+    assert [m[4] for m in l0_modes] == sorted(m[4] for m in l0_modes)
+
+    # Reuse the cached AMDL store (`store_for_adipls=False`) for `l=1`.
+    l1_modes = adipls.get_one_el_info(
+        handle,
+        1,
+        50.0,
+        1000.0,
+        200,
+        r_cm,
+        g_cgs,
+        m_g,
+        True,
+        False,
+        True,
+        False,
+        False,
+    )
+    assert len(l1_modes) >= 5
+    assert all(m[0] == 1 for m in l1_modes)
+
+    ex = astero_extras.AsteroAdiplsExtras()
+    assert ex.wants_star_model is True
+    ex.extras_startup({"case_dir": str(orig)}, False)
+    base_state: dict[str, Any] = {
+        "case_dir": str(orig),
+        "star_model": handle,
+        "photosphere_r": captured["photosphere_r"],
+        "cgrav": [captured["cgrav0"]],
+        "star_mass": captured["star_mass"],
+        "x_ctrl": [375.0],
+        "model_number": 49,
+    }
+    assert ex.extras_check_model(base_state) == "keep_going"
+    assert len(ex.calls) == 0
+    assert ex.extras_check_model({**base_state, "model_number": 50}) == (
+        "keep_going"
+    )
+    assert len(ex.calls) == 1 and ex.calls[0][0] == 50
+
+    n4_freq = next(m[4] for m in l0_modes if m[1] == 4)
+    ex.extras_after_evolve({**base_state, "x_ctrl": [n4_freq]})
+    assert ex.okay is True
+    assert ex.actual_freq == pytest.approx(n4_freq)
+    ex.extras_after_evolve({**base_state, "x_ctrl": [n4_freq * 1.1]})
+    assert ex.okay is False
+
+
+def test_astero_adipls_runs_strict_live_through_pyo3_adapter(
+    tmp_path: pathlib.Path,
+) -> None:
+    """`astero/astero_adipls` runs strictly (`controls_ignored=False`) and
+    executes `AsteroAdiplsExtras` at model 50 and `extras_after_evolve`.
+    """
+    case_dir = harness_runner.resolve_case_dir("astero", "astero_adipls")
+    rep = harness_runner.run_trace_inprocess(
+        "astero",
+        case_dir,
+        tmp_path / "out_astero_adipls",
+        max_steps=50,
+        allow_unsupported_controls=False,
+        extras_factory="tests.case_extras:resolve_case_extras",
+    )
+    assert int(rep["total_steps"]) == 50

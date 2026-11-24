@@ -5,7 +5,7 @@
 use flexmesa_chem::NuclideCatalog;
 use flexmesa_const::{AVO, LN2, QCONV};
 use flexmesa_rates::{
-    eval_ecapture_pair, eval_fl_epsnuc_3alf, eval_reaclib_terms,
+    eval_ecapture_pair, eval_fl_epsnuc_3alf_with_derivs, eval_reaclib_terms,
     eval_weak_reaction_pair, CoulombMuiOption, CoulombVsOption, RatesCatalog,
     WeakRateEval, DEFAULT_REACLIB_MIN_T9,
 };
@@ -27,7 +27,8 @@ const ZERO_WEAK: WeakRateEval = WeakRateEval {
     dqneu_dln_rho: 0.0,
 };
 
-/// Evaluates `FL_epsnuc_3alf(T, Rho, Y, UE)` and its `(T, Rho)` partials.
+/// Evaluates `FL_epsnuc_3alf(T, Rho, Y, UE)` and its analytical `(T, Rho)`
+/// partials matching `rates/private/pycno.f90:31-248` (`0 ULP` parity).
 #[must_use]
 pub fn fl_epsnuc_3alf_with_derivs(
     t: f64,
@@ -35,16 +36,7 @@ pub fn fl_epsnuc_3alf_with_derivs(
     y: f64,
     ue: f64,
 ) -> (f64, f64, f64) {
-    let eps = eval_fl_epsnuc_3alf(t, rho, y, ue);
-    let dt = 1.0e-6 * t.max(1.0);
-    let dr = 1.0e-6 * rho.max(1.0e-30);
-    let deps_dt = (eval_fl_epsnuc_3alf(t + dt, rho, y, ue)
-        - eval_fl_epsnuc_3alf(t - dt, rho, y, ue))
-        / (2.0 * dt);
-    let deps_drho = (eval_fl_epsnuc_3alf(t, rho + dr, y, ue)
-        - eval_fl_epsnuc_3alf(t, rho - dr, y, ue))
-        / (2.0 * dr);
-    (eps, deps_dt, deps_drho)
+    eval_fl_epsnuc_3alf_with_derivs(t, rho, y, ue)
 }
 
 const R_MIN: f64 = 1.0e-99;

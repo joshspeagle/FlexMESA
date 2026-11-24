@@ -11,6 +11,7 @@ Covers:
 from __future__ import annotations
 
 import math
+import pathlib
 from typing import Any
 
 from flexmesa import _rust, constants, num
@@ -287,22 +288,354 @@ class ExtendedConvectivePenetrationStarExtras:
         self.checks_okay = all(checks)
 
 
+# `star/test_suite/make_env/src/run_star_extras.f90`: SHA-256 of each
+# normalized routine (`tests.case_extras.normalize_fortran`). `create_env`
+# includes its contained routines (`get_initial_guess_for_atm`, `get_atm`,
+# `do1_cell`, `dq_f`, `calc_dq_factor`). `extras_after_evolve` (unused local
+# `dt`) and `extras_check_model` (`keep_going`) were read and hold no case
+# logic; the other routines are the stock template.
+_MAKE_ENV_ROUTINE_DIGESTS: dict[str, str] = {
+    "extras_controls": (
+        "d6977ee7d85b1af4705bc2c397a8e7fa1311a2adc817848535aeefba89ed4449"
+    ),
+    "extras_startup": (
+        "945bc8b7e365406c7f0fd5b9586324b868fdc676346914f7394876aab22f30f6"
+    ),
+    "extras_after_evolve": (
+        "ae173bfc9afe1a5837fdd7c57eac399cf6e5930570d72eb5d96ab23ab0f5b111"
+    ),
+    "extras_check_model": (
+        "1d7939ba515e2da3405b62475ced33624c3f4ca313e009707819879ff2b1f074"
+    ),
+    "how_many_extra_history_columns": (
+        "90d8c21456f037612416160a5d81adaf65b71f9d8221fbc5481319c77573dbb3"
+    ),
+    "data_for_extra_history_columns": (
+        "01288ef1cc03754d84fe38a8e7bb503ddceb5305aef9bab2f9adbd74d41db7ec"
+    ),
+    "how_many_extra_profile_columns": (
+        "294e7adcf638b1d7511d2cda6b4c43a441fb2c2f9229210c52c2f19661ac7248"
+    ),
+    "data_for_extra_profile_columns": (
+        "978902d5eebc99f1f38df1a5f1d46c13a57f66533c2b97350580801030de27d7"
+    ),
+    "extras_finish_step": (
+        "68db5ddf03a81fa38d8d47f145337a68c8b64bc2f369ede17c3ff4c7bc1c940b"
+    ),
+    "create_env": (
+        "ae802ded236964396179a68a295d72d3559841eede28692c94f0f213e2cfb9f7"
+    ),
+}
+
+
+def match_make_env_extras(norm_star: str) -> MakeEnvStarExtras | None:
+    """Return a `MakeEnvStarExtras` when every routine of the normalized
+    `run_star_extras.f90` has the digest recorded for `make_env`.
+
+    Args:
+        norm_star: Normalized `run_star_extras.f90` text.
+
+    Returns:
+        The handler, or `None` for any other source.
+    """
+    from tests.case_extras import astero_extras, source_sha256
+
+    routines = {
+        m.group(2): source_sha256(m.group(0))
+        for m in astero_extras._ROUTINE_RE.finditer(norm_star)
+    }
+    if routines != _MAKE_ENV_ROUTINE_DIGESTS:
+        return None
+    return MakeEnvStarExtras()
+
+
 class MakeEnvStarExtras:
-    """Static envelope constructor and geometric mesh-spacing root solver from
+    """Static envelope constructor `create_env` from
     `star/test_suite/make_env/src/run_star_extras.f90:36-605`.
+
+    `extras_controls` builds the envelope cell by cell through the
+    `star_lib` subset (`flexmesa._rust.StarLibModel`) and writes `start.mod`,
+    which the run then loads (`load_model_filename = 'start.mod'`).
     """
 
-    def extras_controls(self, state: dict[str, Any]) -> None:
-        """Return when `x_logical_ctrl(1)` is false; raise `#154` otherwise
-        (`:36-57`).
+    wants_star_model = True
+
+    def extras_controls(self, state: dict[str, Any]) -> dict[str, Any] | None:
+        """Return when `x_logical_ctrl(1)` is false; otherwise call
+        `create_env` (`:36-57`).
         """
         if not bool(state["x_logical_ctrl"][0]):
-            return
-        raise NotImplementedError(
-            "make_env: create_env (:158-605) requires in-place StarModel "
-            "allocation, cell-wise EOS/kap/MLT integration, and "
-            "star_write_model in flexmesa-star (#154)"
+            return None
+        return create_env(state)
+
+
+_LOGRHO_TOL = 1.0e-11
+_LOGPGAS_TOL = 1.0e-11
+_ONE_THIRD = 1.0 / 3.0
+_TWO_THIRDS = 2.0 / 3.0
+_FOUR_THIRDS = 4.0 / 3.0
+
+
+def _pow4(x: float) -> float:
+    """`pow4` (`math/private/math_pown.f90:94-101`)."""
+    return x * x * x * x
+
+
+def create_env(state: dict[str, Any]) -> dict[str, Any]:
+    """Build the envelope model and write `start.mod`
+    (`star/test_suite/make_env/src/run_star_extras.f90:158-337`).
+
+    Cells are 0-based here (upstream's `k - 1`). Returns the `s% tau_factor`
+    that `create_env` leaves on the star (`:210`).
+
+    Raises:
+        ValueError: When a solve fails, where upstream stops the run.
+    """
+    x_ctrl = state["x_ctrl"]
+    x_logical_ctrl = state["x_logical_ctrl"]
+    nz = int(state["x_integer_ctrl"][0])
+    max_iters = 100
+    net_name = str(state["x_character_ctrl"][0]).strip()
+    case_dir = str(state["case_dir"])
+
+    s = _rust.StarLibModel.new_for_build(
+        state["star_model"], net_name, nz, search_dir=case_dir
+    )
+    msun = constants.MSUN
+    lsun = constants.LSUN
+    pi = constants.PI
+    crad = constants.CRAD
+    ln10 = constants.LN10
+    standard_cgrav = constants.STANDARD_CGRAV
+
+    mstar = float(x_ctrl[0]) * msun
+    s.set_scalar("mstar", mstar)
+    xmstar = float(x_ctrl[1]) * mstar
+    s.set_scalar("xmstar", xmstar)
+    s.set_scalar("M_center", mstar - xmstar)
+
+    s.set("m", 0, mstar)
+    s.set("m_grav", 0, mstar)
+    s.set("cgrav", 0, standard_cgrav)
+    tau_factor = float(x_ctrl[5])
+    s.set_scalar("tau_factor", tau_factor)
+
+    teff_target = 0.0
+    if bool(x_logical_ctrl[1]):  # R and L in cgs units (:219-221)
+        s.set("r", 0, float(x_ctrl[2]))
+        for k in range(nz):
+            s.set("L", k, float(x_ctrl[3]))
+    else:  # x_ctrl(3) = Teff; x_ctrl(4) = L/Lsun (:222-238)
+        l_val = float(x_ctrl[3]) * lsun
+        for k in range(nz):
+            s.set("L", k, l_val)
+        tau_base = _TWO_THIRDS
+        tau_surf = tau_factor * tau_base
+        teff_target = float(x_ctrl[2])
+        teff4 = _pow4(teff_target)
+        t4 = teff4 * 0.75 * (tau_surf + tau_base)
+        l1 = s.get("L", 0)
+        s.set("r", 0, math.sqrt(l1 / (4.0 * pi * constants.BOLTZ_SIGMA * t4)))
+
+    s.set_scalar("L_center", s.get("L", nz - 1))
+
+    ln_dq1 = float(x_ctrl[4]) * ln10
+    dq1 = _rust.crmath_exp(ln_dq1)
+    dq_factor = calc_dq_factor(nz, dq1)
+
+    s.set("q", 0, 1.0)
+    s.set("dq", 0, dq1)
+    for k in range(1, nz):
+        s.set("q", k, s.get("q", k - 1) - s.get("dq", k - 1))
+        s.set("dq", k, s.get("dq", k - 1) * dq_factor)
+
+    s.normalize_dqs()
+    s.set_qs()
+    s.set_m_and_dm()
+    s.set_dm_bar()
+    s.change_to_xa_for_accretion(0, nz - 1)
+
+    for k in range(nz):
+        s.set("m_grav", k, s.get("m", k))
+        s.basic_composition_info(k)
+
+    s.set_scalar("tau_base", _TWO_THIRDS)
+    tau_surf = tau_factor * _TWO_THIRDS
+    save_atm = s.get_atm_options()
+    save_pextra_factor = s.get_scalar("Pextra_factor")
+    s.set_atm_options("T_tau", "Eddington", "iterated")
+    s.set_scalar("Pextra_factor", 2.0)
+    s.set_scalar("Teff", _rust.atm_teff(s.get("L", 0), s.get("r", 0)))
+
+    # `get_initial_guess_for_atm` (:345-374).
+    s.set("opacity", 0, 1.0e-2)
+    ln_t_surf, ln_p_surf = s.get_atm_pt(
+        tau_surf,
+        s.get("L", 0),
+        s.get("r", 0),
+        s.get("m", 0),
+        s.get("cgrav", 0),
+        s.get_scalar("Teff"),
+    )
+    t_surf = _rust.crmath_exp(ln_t_surf)
+    p_surf = _rust.crmath_exp(ln_p_surf)
+    prad = _ONE_THIRD * crad * _pow4(t_surf)
+    pgas = p_surf - prad
+    log_t = _rust.log10(t_surf)
+    log_rho = s.solve_eos_given_pgas_t_auto(
+        0, log_t, _rust.log10(pgas), _LOGRHO_TOL, _LOGPGAS_TOL
+    )
+
+    teff_now = s.get_scalar("Teff")
+    if not bool(x_logical_ctrl[1]) and abs(teff_target - teff_now) > (
+        1.0e-5 * teff_target
+    ):  # :291-298
+        ratio = teff_now / teff_target
+        s.set("r", 0, s.get("r", 0) * (ratio * ratio))
+
+    cell = _EnvCell(s, nz, max_iters)
+
+    # Cell 1, then the final atmosphere (:300-317).
+    cell.t_m1, cell.p_m1, cell.log_rho_m1 = t_surf, p_surf, log_rho
+    cell.log_rho = log_rho
+    cell.do1_cell(0)
+    s.set_atm_options(*save_atm)
+    s.set_scalar("Pextra_factor", save_pextra_factor)
+
+    # `get_atm` (:403-438).
+    opacity1 = s.get("opacity", 0)
+    if opacity1 <= 0.0 or not math.isfinite(opacity1):
+        raise ValueError(f"make_env get_atm: s% opacity(1) = {opacity1}")
+    ln_t_surf, ln_p_surf = s.get_surf_pt()
+    t_surf = _rust.crmath_exp(ln_t_surf)
+    p_surf = _rust.crmath_exp(ln_p_surf)
+    prad = _ONE_THIRD * crad * _pow4(t_surf)
+    pgas = p_surf - prad
+    log_t = _rust.log10(t_surf)
+    log_rho = s.solve_eos_given_pgas_t(
+        0,
+        log_t,
+        _rust.log10(pgas),
+        cell.log_rho,
+        _LOGRHO_TOL,
+        _LOGPGAS_TOL,
+    )
+
+    # Update the surface values for the final atmosphere (:324-327).
+    cell.t_m1, cell.p_m1, cell.log_rho_m1 = t_surf, p_surf, log_rho
+    for k in range(nz):  # :329-337
+        cell.do1_cell(k)
+        cell.t_m1, cell.p_m1, cell.log_rho_m1 = (
+            cell.t_00,
+            cell.p_00,
+            cell.log_rho,
         )
+
+    s.pack_xh()
+    s.model_number = 0
+    s.set_scalar("star_age", 0.0)
+    s.set_scalar("crystal_core_boundary_mass", -1.0)
+    s.write_model(str(pathlib.Path(case_dir) / "start.mod"))
+    return {"tau_factor": tau_factor}
+
+
+class _EnvCell:
+    """State of `do1_cell` (:441-545), which reads `r(k)`, `T_m1`, `P_m1`
+    and `logRho_m1` and sets `T_00`, `P_00` and `logRho`."""
+
+    def __init__(self, s: Any, nz: int, max_iters: int) -> None:
+        self.s = s
+        self.nz = nz
+        self.max_iters = max_iters
+        self.t_m1 = 0.0
+        self.p_m1 = 0.0
+        self.log_rho_m1 = 0.0
+        self.t_00 = 0.0
+        self.p_00 = 0.0
+        self.log_rho = 0.0
+
+    def do1_cell(self, k: int) -> None:
+        """`do1_cell` for 0-based cell `k`."""
+        s = self.s
+        pi = constants.PI
+        crad = constants.CRAD
+        ln10 = constants.LN10
+        r_00 = s.get("r", k)
+        s.set("cgrav", k, constants.STANDARD_CGRAV)
+        grav = -s.get("cgrav", k) * s.get("m", k) / (r_00 * r_00)
+
+        if k > 0:
+            dm_face = 0.5 * (s.get("dm", k) + s.get("dm", k - 1))
+        else:
+            dm_face = 0.5 * s.get("dm", k)
+        area = 4.0 * pi * (r_00 * r_00)
+
+        p_00 = self.p_m1 - grav * dm_face / area
+        p_face = 0.5 * (self.p_m1 + p_00)
+        dlnp_face = (self.p_m1 - p_00) / p_face
+        t_00 = self.t_m1
+        log_rho = self.log_rho
+        mixing_length_alpha = s.get_scalar("mixing_length_alpha")
+        for it in range(1, self.max_iters + 1):
+            prad = _ONE_THIRD * crad * _pow4(t_00)
+            pgas = p_00 - prad
+            log_t = _rust.log10(t_00)
+            log_rho = s.solve_eos_given_pgas_t(
+                k,
+                log_t,
+                _rust.log10(pgas),
+                self.log_rho_m1,
+                _LOGRHO_TOL,
+                _LOGPGAS_TOL,
+            )
+            s.set("lnd", k, log_rho * ln10)
+            s.set("lnT", k, log_t * ln10)
+            s.set("rho", k, _rust.exp10(log_rho))
+            s.set("T", k, t_00)
+            s.do_eos_for_cell(k)
+            s.do_kap_for_cell(k)
+
+            s.set("lnT_start", k, s.get("lnT", k))
+            s.set("csound_start", k, s.get("csound", k))
+            s.set_scalar("mlt_gradT_fraction", -1.0)
+            s.set("adjust_mlt_gradT_fraction", k, -1.0)
+            s.set("gradL_composition_term", k, 0.0)
+            s.set("alpha_mlt", k, mixing_length_alpha)
+            s.set("gradr_factor", k, 1.0)
+            s.set_mlt_vars(k, k)
+
+            grad_t = s.get("gradT", k)
+            d_grad_t_dt = s.d_gradt_dlnt00(k) / t_00
+            t_face = 0.5 * (self.t_m1 + t_00)
+            d_t_face_dt = 0.5
+            t_expected = self.t_m1 - t_face * grad_t * dlnp_face
+            d_t_expected_dt = -dlnp_face * (
+                d_t_face_dt * grad_t + t_face * d_grad_t_dt
+            )
+            resid = t_expected - t_00
+            d_resid_dt = d_t_expected_dt - 1.0
+            d_t = -resid / d_resid_dt
+            if abs(d_t / t_00) < 1.0e-4:
+                break
+            if it == self.max_iters:
+                raise ValueError(f"make_env do1_cell: failed to find T at {k}")
+            t_00 = t_00 + d_t
+
+        rho_00 = _rust.exp10(log_rho)
+        r3 = r_00 * r_00 * r_00
+        vol = _FOUR_THIRDS * pi * r3 - s.get("dm", k) / rho_00
+        r_p1 = _rust.pow(0.75 * vol / pi, _ONE_THIRD)
+        if k == self.nz - 1:
+            s.set_scalar("R_center", r_p1)
+        else:
+            s.set("r", k + 1, r_p1)
+
+        s.set("lnR", k, _rust.crmath_log(r_00))
+        s.set("lnd", k, _rust.crmath_log(rho_00))
+        s.set("lnT", k, _rust.crmath_log(t_00))
+        self.t_00 = t_00
+        self.p_00 = p_00
+        self.log_rho = log_rho
 
 
 class TzoStarExtras:

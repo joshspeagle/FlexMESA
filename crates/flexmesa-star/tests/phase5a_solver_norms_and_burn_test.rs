@@ -88,6 +88,7 @@ fn build_compact_zams(
     m.finish_init_model().expect("compact init should succeed");
     set_hydro_vars(&mut m, false, false).expect("initial set_hydro_vars");
     m.save_start_values().expect("save_start_values");
+    flexmesa_star::record_start_of_step_energy_integrals(&mut m);
     m.save_old_values();
     m
 }
@@ -117,6 +118,7 @@ fn test_coupled_u_flag_hllc_henyey_step_converges_to_strict_residual_tolerances(
     set_hydro_vars(&mut full_model, false, true)
         .expect("u_flag set_hydro_vars");
     full_model.save_start_values().expect("save_start_values");
+    flexmesa_star::record_start_of_step_energy_integrals(&mut full_model);
 
     let report_full = solve_henyey_step(&mut full_model, false, true)
         .expect("full-star coupled u_flag HLLC Henyey solve should succeed");
@@ -147,6 +149,7 @@ fn test_coupled_u_flag_hllc_henyey_step_converges_to_strict_residual_tolerances(
     set_hydro_vars(&mut mom_model, false, true)
         .expect("compact u_flag set_hydro_vars");
     mom_model.save_start_values().expect("save_start_values");
+    flexmesa_star::record_start_of_step_energy_integrals(&mut mom_model);
 
     let report_mom = solve_henyey_step(&mut mom_model, false, true)
         .expect("momentum-BC u_flag HLLC Henyey solve should succeed");
@@ -171,6 +174,7 @@ fn test_multi_isotope_approx21_coupled_and_variable_t_const_density_op_split_bur
     assert_eq!(model.species, 21);
     set_hydro_vars(&mut model, false, false).expect("approx21 set_hydro_vars");
     model.save_start_values().expect("save_start_values");
+    flexmesa_star::record_start_of_step_energy_integrals(&mut model);
     model.save_old_values();
 
     // 1. Coupled 21-species Henyey solve (`op_split_burn = false`).
@@ -213,6 +217,7 @@ fn test_photo_rti_and_u_flag_roundtrip_bit_parity_and_buffer_validation() {
     }
     set_hydro_vars(&mut model, false, true).expect("u_flag + rti hydro vars");
     model.save_start_values().expect("save_start_values");
+    flexmesa_star::record_start_of_step_energy_integrals(&mut model);
     model.aux.alpha_rti[2] = 0.19;
     model.pack_xh();
 

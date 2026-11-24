@@ -182,6 +182,7 @@ dependencies = [
 name = "flexmesa-astero"
 version = "0.1.0"
 dependencies = [
+ "flexmesa-adipls",
  "flexmesa-autodiff",
  "flexmesa-const",
  "flexmesa-gyre",

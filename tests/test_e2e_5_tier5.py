@@ -258,25 +258,33 @@ def test_e2e_5_tier5_star_and_binary_suites_execution(
         )
 
     assert (base / "binary" / "test_suite").is_dir()
-    strict_bin_cases = frozenset(_BINARY_CASES) - frozenset({"double_bh"})
+    bad_bin = tmp_path / "bad_bin_unsupported"
+    bad_bin.mkdir()
+    (bad_bin / "inlist").write_text(
+        "&binary_job\n  evolve_both_stars = .false.\n/\n"
+        "&binary_controls\n"
+        "  m1 = 10.0\n"
+        "  m2 = 8.0\n"
+        "  initial_period_in_days = 5.0\n"
+        "/\n",
+        encoding="utf-8",
+    )
+    (bad_bin / "inlist1").write_text(
+        "&star_job\n  save_pulse_data_filename = 'p.data'\n/\n"
+        "&controls\n  initial_mass = 10.0\n/\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(
+        ValueError,
+        match=r"(unsupported|unknown|unrecognized).*control",
+    ):
+        binary.run_binary_test_suite_case(bad_bin, max_steps_cap=4)
+
     strict_bin_root = tmp_path / "strict_binary"
     for case_name in _BINARY_CASES:
         raw_case = base / "binary" / "test_suite" / case_name
-        if case_name in strict_bin_cases:
-            run_case = strict_bin_root / case_name
-            shutil.copytree(raw_case, run_case)
-        else:
-            with pytest.raises(
-                ValueError,
-                match=r"(unsupported|unknown|unrecognized).*control",
-            ):
-                binary.run_binary_test_suite_case(
-                    raw_case,
-                    max_steps_cap=4,
-                    extras=resolve_case_extras("binary", raw_case),
-                )
-            run_case = clean_root / "binary" / "test_suite" / case_name
-            star.copy_cleaned_case(raw_case, run_case, suite="binary")
+        run_case = strict_bin_root / case_name
+        shutil.copytree(raw_case, run_case)
         brep = binary.run_binary_test_suite_case(
             run_case,
             max_steps_cap=4,

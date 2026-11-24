@@ -6,6 +6,7 @@
 use flexmesa_const::{AMU, CLIGHT, CRAD, KERG, PI, QE};
 
 use crate::diffusion::eval_effective_kt;
+use crate::controls::StarError;
 use crate::model::StarModel;
 
 /// Critical Richardson number $\mathrm{Ri}_{\mathrm{crit}} = 1/4$ (`rotation_mix_info.f90`).
@@ -418,72 +419,23 @@ pub fn conserve_shell_j_rot_and_distortion(model: &mut StarModel) {
 }
 
 /// Augments `model.d_mix` with Heger et al. (2000) and Spruit (2002) diffusivities.
-pub fn augment_d_mix_with_rotation(model: &mut StarModel) {
-    crate::rotation_mix::augment_d_mix_with_rotation(model);
+///
+/// # Errors
+/// Propagates `update_rotation_mixing_info` errors.
+pub fn augment_d_mix_with_rotation(
+    model: &mut StarModel,
+) -> Result<(), StarError> {
+    crate::rotation_mix::augment_d_mix_with_rotation(model)
 }
 
 /// Updates post-Henyey $\Omega_k = j_{\mathrm{rot},k} / i_{\mathrm{rot},k}$ and $\Omega$ transport.
-pub fn sync_post_henyey_rotation(model: &mut StarModel, dt: f64) {
-    crate::rotation_mix::sync_post_henyey_rotation(model, dt);
-}
-
-/// Evaluates shellular distortion and returns rotational mixing diagnostics.
-pub fn set_rotation_mixing_info(
+///
+/// # Errors
+/// Propagates `update_rotation_mixing_info` and `solve_omega_mix` failures,
+/// including a requested retry or termination.
+pub fn sync_post_henyey_rotation(
     model: &mut StarModel,
-) -> Vec<RotationalMixZone> {
-    let nz = model.nz;
-    let mut zones = vec![RotationalMixZone::default(); nz];
-    if !model.controls.rotation_flag || nz < 2 {
-        return zones;
-    }
-    conserve_shell_j_rot_and_distortion(model);
-    for k in 0..nz {
-        let (r_k, m_k) = (model.r[k].max(1.0e5), model.m_grav[k].max(1.0e20));
-        model.grav[k] =
-            model.aux.fp_rot[k] * model.cgrav[k] * m_k / (r_k * r_k);
-    }
-    for k in 1..(nz - 1) {
-        let r_k = model.r[k].max(1.0e5);
-        let dr_ln = (model.ln_r[k - 1] - model.ln_r[k + 1]).abs().max(1.0e-6);
-        let dln_om =
-            (flexmesa_math::log(model.omega[k - 1].abs().max(1.0e-20))
-                - flexmesa_math::log(model.omega[k + 1].abs().max(1.0e-20)))
-                / dr_ln;
-        let stored_n2_mu = model
-            .aux
-            .brunt_n2_composition_term
-            .get(k)
-            .copied()
-            .unwrap_or(0.0);
-        let n2_mu = if stored_n2_mu.abs() > 0.0 {
-            stored_n2_mu
-        } else {
-            (model.grav[k] / model.scale_height[k].max(1.0e5))
-                * (model.chi_t[k] / model.chi_rho[k].max(1.0e-6)).abs()
-                * model.brunt_b[k]
-        };
-        let mut z_mix = eval_rotational_mixing_zone(
-            r_k,
-            model.scale_height[k],
-            model.grav[k],
-            model.rho[k],
-            model.t[k],
-            model.cp[k],
-            model.opacity[k],
-            model.chi_t[k],
-            model.chi_rho[k],
-            model.grada[k],
-            model.gradt[k],
-            model.brunt_n2[k] - n2_mu,
-            n2_mu,
-            model.omega[k],
-            dln_om,
-            model.abar[k],
-            model.zbar[k],
-            model.mlt_d[k],
-        );
-        z_mix.nu_st = 0.0;
-        zones[k] = z_mix;
-    }
-    zones
+    dt: f64,
+) -> Result<(), StarError> {
+    crate::rotation_mix::sync_post_henyey_rotation(model, dt)
 }

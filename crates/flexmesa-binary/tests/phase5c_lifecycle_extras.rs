@@ -47,7 +47,8 @@ fn test_default_am_d_mix_zero_omega_transport_and_gold2_chem_increment_convergen
     star.mixing_type
         .fill(flexmesa_const::MixingType::ConvectiveMixing);
     let shear_before = (star.omega[0] - star.omega[nz - 1]).abs();
-    sync_post_henyey_rotation(&mut star, 1.0e4 * SECYER);
+    sync_post_henyey_rotation(&mut star, 1.0e4 * SECYER)
+        .expect("sync_post_henyey_rotation");
     let shear_after = (star.omega[0] - star.omega[nz - 1]).abs();
     assert!(
         shear_after < 0.1 * shear_before,
@@ -58,6 +59,9 @@ fn test_default_am_d_mix_zero_omega_transport_and_gold2_chem_increment_convergen
     // balance at its ZAMS timestep before injecting the stiff 50 s core test.
     star.pack_xh();
     star.save_start_values().expect("save_start_values");
+    // Standalone solve: record `total_internal_energy_old` as the step
+    // driver does (`evolve.f90:427-453`).
+    flexmesa_star::record_start_of_step_energy_integrals(&mut star);
     solve_henyey_step(&mut star, false, true)
         .expect("equilibrate spun-up ZAMS");
 
@@ -65,6 +69,9 @@ fn test_default_am_d_mix_zero_omega_transport_and_gold2_chem_increment_convergen
     // 1-ULP start-of-step normalization jitter across core cells.
     star.pack_xh();
     star.save_start_values().expect("save_start_values");
+    // Standalone solve: record `total_internal_energy_old` as the step
+    // driver does (`evolve.f90:427-453`).
+    flexmesa_star::record_start_of_step_energy_integrals(&mut star);
     star.dt = 50.0;
     let k_core = nz.saturating_sub(4);
     assert!(k_core >= 2 && star.species > 0);
@@ -165,6 +172,9 @@ fn test_op_split_burn_runs_before_save_start_values_preserving_pre_burn_t_start(
         .expect("15 Msun ZAMS");
     set_hydro_vars(&mut star, false, false).expect("set_hydro_vars");
     star.save_start_values().expect("save_start_values");
+    // Standalone solve: record `total_internal_energy_old` as the step
+    // driver does (`evolve.f90:427-453`).
+    flexmesa_star::record_start_of_step_energy_integrals(&mut star);
     star.save_old_values();
 
     let c_idx = star.nz - 1;

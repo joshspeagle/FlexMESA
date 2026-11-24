@@ -34,10 +34,10 @@ pub fn set_dpdr_drhodr_info(model: &mut StarModel) {
     }
 
     let p_face: Vec<f64> = (0..nz)
-        .map(|k| model.interp_val_to_pt(&model.peos, k))
+        .map(|k| model.face_value_alfa_beta(&model.peos, k))
         .collect();
     let rho_face: Vec<f64> = (0..nz)
-        .map(|k| model.interp_val_to_pt(&model.rho, k))
+        .map(|k| model.face_value_alfa_beta(&model.rho, k))
         .collect();
 
     let min_mach = model.controls.alpha_rti_src_min_v_div_cs;
@@ -176,7 +176,7 @@ pub fn set_rti_mixing_info(model: &mut StarModel) {
         let eta_k = c_base * alpha_face * cs_face * model.r[k];
         model.aux.eta_rti[k] = eta_k;
 
-        let rho_f = model.interp_val_to_pt(&model.rho, k);
+        let rho_f = model.face_value_alfa_beta(&model.rho, k);
         let area_rho = FOUR_PI * model.r[k] * model.r[k] * rho_f;
         let dm_bar_k = model.dm_bar[k].max(1.0e-30);
         let mut sig_k = mix_fac * eta_k * (area_rho * area_rho) / dm_bar_k;

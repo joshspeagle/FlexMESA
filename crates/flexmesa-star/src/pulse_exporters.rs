@@ -515,9 +515,12 @@ pub fn export_pulse_by_format(
     add_center_point: bool,
 ) -> Result<String, crate::StarError> {
     match format.trim().to_ascii_lowercase().as_str() {
-        "gyre" => Ok(export_gyre(model, add_center_point)),
-        "fgong" => Ok(export_fgong(model, add_center_point)),
-        "osc" => Ok(export_osc(model, add_center_point)),
+        "gyre" => export_gyre(model, add_center_point, false, false)
+            .map_err(|e| crate::StarError::InvalidInput(e.to_string())),
+        "fgong" => export_fgong(model, add_center_point, false, false)
+            .map_err(|e| crate::StarError::InvalidInput(e.to_string())),
+        "osc" => export_osc(model, add_center_point, false, false)
+            .map_err(|e| crate::StarError::InvalidInput(e.to_string())),
         "gsm" => Ok(export_gsm(model, add_center_point)),
         "saio" => Ok(export_saio(model, true, false)),
         "cafein" => Ok(export_cafein(model, add_center_point, true, false)),

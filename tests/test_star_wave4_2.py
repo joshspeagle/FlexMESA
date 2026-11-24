@@ -29,6 +29,7 @@ def _make_pre_ms_model() -> star.StarModel:
     model.dt = 10.0 * float(constants.SECYER)
     model.eval_hydro_vars()
     model.save_start_values()
+    model.record_start_of_step_energy_integrals()
     return model
 
 
@@ -49,6 +50,7 @@ def test_eval_equations_rust_jax_residual_consistency() -> None:
         model.dt = 100.0 * float(constants.SECYER)
         model.eval_hydro_vars()
         model.save_start_values()
+        model.record_start_of_step_energy_integrals()
 
         # Perturb lnd and ln_t after save_start_values() so de_dt and pdv_dt
         # are non-zero in both Rust and JAX.
@@ -181,6 +183,7 @@ def test_solve_henyey_damped_newton_converges_for_all_modes() -> None:
     model_thomas.dt = model.dt
     model_thomas.eval_hydro_vars()
     model_thomas.save_start_values()
+    model_thomas.record_start_of_step_energy_integrals()
 
     rep_bcyclic = model.solve_henyey(include_chem=False, use_bcyclic=True)
     assert rep_bcyclic.converged
@@ -199,6 +202,8 @@ def test_solve_henyey_damped_newton_converges_for_all_modes() -> None:
     )
 
     model.save_start_values()
+
+    model.record_start_of_step_energy_integrals()
     rep_chem = model.solve_henyey(include_chem=True, use_bcyclic=True)
     assert rep_chem.converged
     assert np.all(np.isfinite(model.eps_grav))
@@ -207,6 +212,7 @@ def test_solve_henyey_damped_newton_converges_for_all_modes() -> None:
     zams = star.StarModel.from_zams(initial_mass=4.0, initial_z=0.02)
     zams.eval_hydro_vars()
     zams.save_start_values()
+    zams.record_start_of_step_energy_integrals()
     rep_zams = zams.solve_henyey(include_chem=True, use_bcyclic=True)
     assert rep_zams.converged
     assert np.allclose(np.sum(zams.xa, axis=1), 1.0, atol=1.0e-12)

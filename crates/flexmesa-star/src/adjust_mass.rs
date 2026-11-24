@@ -19,17 +19,6 @@ use crate::hydro_vars::set_hydro_vars;
 use flexmesa_num::search::binary_search_1based;
 use crate::micro::set_basic_vars;
 use crate::model::StarModel;
-use crate::rotation::conserve_shell_j_rot_and_distortion;
-
-fn sync_enclosed_mass_from_dm(model: &mut StarModel, dm_target: &[f64]) {
-    model.dm.copy_from_slice(dm_target);
-    let mut m_acc = model.m_center;
-    for k in (1..model.nz).rev() {
-        m_acc += model.dm[k];
-        model.m[k] = m_acc;
-    }
-    model.m[0] = model.mstar;
-}
 
 /// Evaluates `delta_m = dt * mstar_dot` with the upstream super-Eddington
 /// override and `min_star_mass_for_loss` / `max_star_mass_for_gain` gates
@@ -446,6 +435,8 @@ fn do_adjust_mass_core(
         model.aux.step_hist.clear_adjust_mass_energy_fields();
         return Ok(());
     }
+    // `star/private/adjust_mass.f90:234`.
+    model.aux.need_to_setvars = true;
 
     let frac = old_xmstar / new_xmstar_in;
     let new_xmstar = old_xmstar / frac;
@@ -577,8 +568,11 @@ fn do_adjust_mass_core(
         }
     }
 
-    sync_enclosed_mass_from_dm(model, &dm_target);
-    model.set_dm_bar();
+    // `revise_q_and_dq` updates `dm` only (`star/private/adjust_mass.f90:822-826`);
+    // `m` and `dm_bar` keep their start-of-step values through the rest of
+    // `do_adjust_mass` (`smooth_outer_xa` reads `s% m`, `adjust_mass.f90:480-510`)
+    // until `unpack_xh` rebuilds them (`star/private/hydro_vars.f90:359-365`).
+    model.dm.copy_from_slice(&dm_target);
 
     // Accretion composition (`adjust_mass.f90:379-395`).
     let built_acc = if delta_m > 0.0 && x_accreted.is_none() {
@@ -631,18 +625,24 @@ fn do_adjust_mass_core(
                 j_removed,
             )?;
         }
+        // Upstream also remaps `D_omega` and `am_nu_rot` here under
+        // `D_omega_flag` / `am_nu_rot_flag`
+        // (`star/private/adjust_mass.f90:453-475`). Not ported: both arrays
+        // are reset and rebuilt before any use, `D_omega` by the next
+        // `set_rotation_mixing_info` (`star/private/rotation_mix_info.f90:94,
+        // 255-328`) and `am_nu_rot` by `update_rotation_mixing_info`
+        // (`star/private/mix_info.f90:1685-1712, 1810-1840`), so the
+        // remapped values are never read.
     }
-    let j_rot_after_remap = if model.controls.rotation_flag {
-        model.j_rot.clone()
-    } else {
-        Vec::new()
-    };
 
     // Soften outer `xa` (`adjust_mass.f90:480-510`).
     smooth_outer_xa(model);
 
+    // Upstream refreshes `m_grav` and `grav` only in the `set_vars` that
+    // follows (`set_m_grav_and_grav` in `update_vars`,
+    // `star/private/hydro_vars.f90:530-534`); `update_radius` is the last
+    // step of `do_adjust_mass` (`adjust_mass.f90:513`).
     update_radius(model);
-    model.set_m_grav_and_grav();
     model.pack_xh();
     if model.xh_start.len() == model.xh.len() {
         let nv = model.layout.nvar_hydro;
@@ -651,22 +651,32 @@ fn do_adjust_mass_core(
             model.xh_start[k * nv + i_lnr] = model.xh[k * nv + i_lnr];
         }
     }
-    if model.controls.rotation_flag {
-        conserve_shell_j_rot_and_distortion(model);
-    }
+    // No rotation refresh here: `update_radius` is the last step of
+    // `do_adjust_mass` (`adjust_mass.f90:430-477, 513`); the rotation
+    // variables are refreshed by `set_rotation_info` in the `set_vars` that
+    // follows (`star/private/hydro_vars.f90:539-541`).
 
+    // `set_vars_if_needed` after `do_adjust_mass` (`evolve.f90:593`) unpacks
+    // `xh`: `set_qs`, `set_m_and_dm`, `set_dm_bar`
+    // (`star/private/hydro_vars.f90:359-365`). `set_qs` belongs to that later
+    // `set_vars`, not to `do_adjust_mass`: MESA's `q` when `do_adjust_mass`
+    // returns is `revise_q_and_dq`'s (`adjust_mass.f90:812-821`), as the
+    // zone-by-zone MESA oracle `tests/test_adjust_mass_385.py` checks. Moving
+    // `set_qs` into the step driver's post-`do_adjust_mass` `set_vars` is #529.
+    model.set_m_and_dm();
+    // `set_basic_vars` refreshes `m_grav`, `grav`, `r` and `rmid`
+    // (`micro.rs`, `hydro_vars.f90:530-534, 758`).
     set_basic_vars(model)?;
-    sync_enclosed_mass_from_dm(model, &dm_target);
-    model.set_dm_bar();
-    model.set_m_grav_and_grav();
     if need_eps_mdot {
+        // `set_vars_if_needed(s, dt, 'after do_adjust_mass')`
+        // (`star/private/evolve.f90:593`); `set_vars` clears the flag
+        // (`star/private/hydro_vars.f90:653`).
         set_hydro_vars(model, false, false)?;
-        sync_enclosed_mass_from_dm(model, &dm_target);
-        model.set_dm_bar();
-        if model.controls.rotation_flag {
-            model.j_rot.clone_from(&j_rot_after_remap);
-            conserve_shell_j_rot_and_distortion(model);
-        }
+        model.aux.need_to_setvars = false;
+        // No `set_qs` here either (#529).
+        model.set_m_and_dm();
+        // `calculate_eps_mdot` follows `set_vars_if_needed` directly
+        // (`evolve.f90:593-596`): no rotation refresh in between.
         // `calculate_eps_mdot` (`evolve.f90:596`), with what
         // `save_for_eps_mdot` and `revise_q_and_dq` left for it. The indices
         // are upstream's one-based `kA` and `kB`.
@@ -680,6 +690,8 @@ fn do_adjust_mass_core(
             k_const_mass: k_b + 1,
         };
         let surface = calculate_eps_mdot(model, &record, dt)?;
+        // `star/private/eps_mdot.f90:507`.
+        model.aux.need_to_setvars = true;
         // `eps_mdot.f90:669-677` and `evolve.f90:599-604`
         let (e_int, e_grav, e_kin, e_rot, e_turb, e_after) =
             crate::evolve_support::eval_total_energy_integrals(model);
@@ -716,6 +728,14 @@ fn update_radius(model: &mut StarModel) {
         let r_new = flexmesa_math::exp(
             flexmesa_math::log(vol00 / FOUR_THIRDS_PI) * ONE_THIRD,
         );
+        // Upstream also sets `r_start(j) = r(j)` and `rmid_start(j) = r_new`
+        // here (`adjust_mass.f90:158-160`). FlexMESA keeps no `r_start` or
+        // `rmid_start` arrays: the `set_vars_if_needed` that follows
+        // (`evolve.f90:593`, with `need_to_setvars` set at
+        // `adjust_mass.f90:234`) resets both (`star_utils.f90:1563-1583`,
+        // called from `hydro_vars.f90:80`) and sets them again from `r` and
+        // `rmid` (`hydro_vars.f90:744`, `star_utils.f90:1046, 1061`) before
+        // anything reads them, which is the `exp(lnR_start)` FlexMESA uses.
         model.rmid[j] = r_new;
         // `store_r_in_xh` then `get_r_and_lnR_from_xh`
         // (`star/private/star_utils.f90:413-426, 456-468`).
@@ -963,9 +983,10 @@ fn set1_irot(model: &mut StarModel, k: usize, jrot_known: bool) {
             false,
         )
     };
-    if k < model.aux.w_div_wc.len() {
-        model.aux.w_div_wc[k] = w_div_wcrit_roche;
-    }
+    // `w_div_wcrit_roche` is local to `set1_irot` (`adjust_mass.f90:1238,
+    // 1246-1252`): `s% w_div_w_crit_roche` keeps its start-of-step value
+    // until the next `set_rotation_info(s, .false.)`
+    // (`star/private/evolve.f90:651`).
     let i_rot_k = eval_i_rot(
         r00,
         w_div_wcrit_roche,

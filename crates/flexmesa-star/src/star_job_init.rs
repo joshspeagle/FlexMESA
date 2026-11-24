@@ -21,7 +21,10 @@ use crate::relax::{
     set_uniform_initial_composition,
 };
 use crate::relax_comp::{parse_composition_profile_str, set_y, set_z};
-use crate::relax_driver::{do_relax_num_steps, do_relax_to_radiative_core};
+use crate::relax_driver::{
+    RelaxOmegaKind, do_relax_num_steps, do_relax_to_radiative_core,
+    do_relax_uniform_omega,
+};
 use crate::relax_mass_comp::{
     do_relax_composition, do_relax_core, do_relax_irradiation,
     do_relax_m_center, do_relax_mass, do_relax_mass_scale, do_relax_tau_factor,
@@ -94,6 +97,8 @@ fn finish_load_model(
     model: &mut StarModel,
     extras: &mut dyn StarExtras,
 ) -> Result<(), StarError> {
+    // `if (.not. restart) s% have_ST_start_info = .false.` (`read_model.f90:139`).
+    model.aux.st_start.have_st_start_info = false;
     // `RSP_setup_part1` / `RSP_setup_part2` (`read_model.f90:150-156,
     // 175-181`): an `RSP` model is set up by `rsp_driver` instead.
     if model.controls.rsp_flag {
@@ -139,13 +144,16 @@ fn finish_load_model(
         extras.other_cgrav(model)?;
     }
     // `set_vars` with `doing_finish_load_model = .true.`
-    // (`read_model.f90:161-168`). Its effects on `D_omega` and `am_nu_rot`
+    // (`read_model.f90:161-168`): under `D_omega_flag` / `am_nu_rot_flag`
+    // it zeroes `D_omega` and `am_nu_rot`
     // (`star/private/rotation_mix_info.f90:255-258`,
-    // `star/private/mix_info.f90:1810-1813`) apply only under
-    // `D_omega_flag` / `am_nu_rot_flag`, which FlexMESA does not support
-    // (their controls are rejected by the control inventory), and the `RSP`
-    // `unpack_xh` branch (`star/private/hydro_vars.f90:225`) is excluded above.
-    set_hydro_vars(model, false, false)?;
+    // `star/private/mix_info.f90:1810-1813`). The `RSP` `unpack_xh` branch
+    // (`star/private/hydro_vars.f90:225`) is excluded above.
+    model.aux.doing_finish_load_model = true;
+    if let Err(e) = set_hydro_vars(model, false, false) {
+        model.aux.doing_finish_load_model = false;
+        return Err(e);
+    }
     if model.controls.rsp2_flag {
         // `set_RSP2_vars` (`star/private/hydro_rsp2.f90:67-111`): fill
         // `Hp_face(k) <= 0` from the face scale height, then the RSP2 face
@@ -159,13 +167,15 @@ fn finish_load_model(
         model.pack_xh();
         crate::rsp2_ad::update_rsp2_vars_ad(model);
     }
+    model.aux.doing_finish_load_model = false;
 
-    // `read_model.f90:185-195`.
+    // `read_model.f90:184-199`, again with `doing_finish_load_model`, which
+    // nothing in the Brunt-Vaisala update reads.
     if model.controls.calculate_brunt_b {
         crate::hydro_brunt_surf::do_brunt_b(model)?;
     }
     if model.controls.calculate_brunt_n2 {
-        crate::hydro_brunt_surf::do_brunt_n2(model);
+        crate::hydro_brunt_surf::do_brunt_n2(model)?;
     }
     Ok(())
 }
@@ -193,7 +203,12 @@ fn prepare_new_model_for_relax(
     if model.controls.use_other_cgrav {
         extras.other_cgrav(model)?;
     }
-    set_hydro_vars(model, false, false)?;
+    // `finish_load_model` runs `set_vars` with `doing_finish_load_model`
+    // (`star/private/init.f90:1045`, `star/private/read_model.f90:161-168`).
+    model.aux.doing_finish_load_model = true;
+    let set_vars_result = set_hydro_vars(model, false, false);
+    model.aux.doing_finish_load_model = false;
+    set_vars_result?;
     model.save_start_values()?;
     model.save_old_values();
     model.m_center_old = model.m_center;
@@ -336,18 +351,66 @@ pub fn init_or_update_model_from_bundle(
     }
 }
 
+/// Copies the hooks `extras_controls` installed on the pre-load star onto the
+/// loaded model (upstream installs them on the one `s`, so they persist).
+fn carry_extras_hooks(
+    src: &crate::hydro_state::HydroAuxState,
+    model: &mut StarModel,
+) {
+    let aux = &mut model.aux;
+    if src.other_overshooting_scheme.is_some() {
+        aux.other_overshooting_scheme
+            .clone_from(&src.other_overshooting_scheme);
+    }
+    if src.other_adjust_mlt_gradt_fraction.is_some() {
+        aux.other_adjust_mlt_gradt_fraction
+            .clone_from(&src.other_adjust_mlt_gradt_fraction);
+    }
+    if src.other_mesh_functions.is_some() {
+        aux.other_mesh_functions
+            .clone_from(&src.other_mesh_functions);
+    }
+    if src.other_mesh_delta_coeff_factor.is_some() {
+        aux.other_mesh_delta_coeff_factor
+            .clone_from(&src.other_mesh_delta_coeff_factor);
+    }
+}
+
 pub(crate) fn init_or_update_model_from_bundle_outcome(
     bundle: &InlistBundle,
     mut existing_model: Option<StarModel>,
     extras: &mut dyn StarExtras,
 ) -> Result<InitModelOutcome, StarError> {
     let _net_dir_guard = NetSearchDirGuard::new(&bundle.case_dir);
+    // `extras_controls` runs after `star_setup` reads the inlists and before
+    // `do_star_job_controls_before` and the model load
+    // (`star/job/run_star_support.f90:429-459`): the star has its controls
+    // but no model yet, so the hook sees a model with no cells. The controls
+    // and `&star_job` values it changes, and the hooks it installs, carry
+    // over to the loaded model.
+    let (bundle, hooks) = {
+        let mut shell = StarModel::new(
+            0,
+            Vec::new(),
+            bundle.job.clone(),
+            bundle.controls.clone(),
+        );
+        shell.eos_config = bundle.eos_config;
+        shell.kap_config = bundle.kap_config.clone();
+        extras.extras_controls(&mut shell)?;
+        let mut b = bundle.clone();
+        b.controls = shell.controls;
+        b.job = shell.job;
+        (b, shell.aux)
+    };
+    let bundle = &bundle;
     match crate::rsp_driver::init_rsp_model_from_bundle(
         bundle,
         &mut existing_model,
         extras,
     )? {
-        crate::rsp_driver::InitRspOutcome::Model(m) => {
+        crate::rsp_driver::InitRspOutcome::Model(mut m) => {
+            carry_extras_hooks(&hooks, &mut m);
             return Ok(InitModelOutcome::Model(m));
         }
         crate::rsp_driver::InitRspOutcome::Terminate(reason) => {
@@ -473,7 +536,8 @@ pub(crate) fn init_or_update_model_from_bundle_outcome(
     model.eos_config = bundle.eos_config;
     model.kap_config = bundle.kap_config.clone();
 
-    extras.extras_controls(&mut model)?;
+    crate::inlist_runner::install_star_aux_hooks(&*extras, &mut model);
+    carry_extras_hooks(&hooks, &mut model);
 
     // `do_star_job_controls_before` sets `s% tau_base` from the atmosphere
     // controls (`star/job/run_star_support.f90:1546`).
@@ -574,6 +638,26 @@ pub(crate) fn init_or_update_model_from_bundle_outcome(
         if job.new_u_flag && model.u.len() != model.nz {
             model.u.resize(model.nz, 0.0);
         }
+    }
+    // `star_set_D_omega_flag` and `star_set_am_nu_rot_flag`
+    // (`star/job/run_star_support.f90:2119-2129`,
+    // `star/private/set_flags.f90:718-745`): a change of flag zeroes the
+    // array.
+    if job.change_d_omega_flag
+        && model.controls.d_omega_flag != job.new_d_omega_flag
+    {
+        model.controls.d_omega_flag = job.new_d_omega_flag;
+        let nz = model.nz;
+        model.aux.rotmix.d_omega.resize(nz, 0.0);
+        model.aux.rotmix.d_omega[..nz].fill(0.0);
+    }
+    if job.change_am_nu_rot_flag
+        && model.controls.am_nu_rot_flag != job.new_am_nu_rot_flag
+    {
+        model.controls.am_nu_rot_flag = job.new_am_nu_rot_flag;
+        let nz = model.nz;
+        model.aux.am_nu_rot.resize(nz, 0.0);
+        model.aux.am_nu_rot[..nz].fill(0.0);
     }
     if job.change_rotation_flag {
         model.controls.rotation_flag = job.new_rotation_flag;
@@ -828,6 +912,55 @@ pub(crate) fn init_or_update_model_from_bundle_outcome(
         )));
     }
 
+    // Rotation relaxes, after `do_remove_surface`
+    // (`star/job/run_star_support.f90:2593-2652`).
+    {
+        let rot = model.controls.rotation_flag;
+        let (n, dt_yrs) =
+            (job.num_steps_to_relax_rotation, job.relax_omega_max_yrs_dt);
+        let relaxes = [
+            (job.relax_omega, RelaxOmegaKind::NewOmega, job.new_omega),
+            (
+                job.relax_initial_omega && !restart,
+                RelaxOmegaKind::NewOmega,
+                job.new_omega,
+            ),
+            (
+                job.relax_omega_div_omega_crit,
+                RelaxOmegaKind::NewOmegaDivOmegaCrit,
+                job.new_omega_div_omega_crit,
+            ),
+            (
+                job.relax_initial_omega_div_omega_crit && !restart,
+                RelaxOmegaKind::NewOmegaDivOmegaCrit,
+                job.new_omega_div_omega_crit,
+            ),
+            (
+                job.relax_surface_rotation_v,
+                RelaxOmegaKind::NewSurfaceRotationV,
+                job.new_surface_rotation_v,
+            ),
+            (
+                job.relax_initial_surface_rotation_v && !restart,
+                RelaxOmegaKind::NewSurfaceRotationV,
+                job.new_surface_rotation_v,
+            ),
+        ];
+        for (i, (wanted, kind, target)) in relaxes.into_iter().enumerate() {
+            if !(rot && wanted) {
+                continue;
+            }
+            ready_for_relax(&mut model, extras)?;
+            do_relax_uniform_omega(&mut model, kind, target, n, dt_yrs, extras)?;
+            if i == 4 {
+                // `s% job% new_omega = new_surface_rotation_v*1d5/s% r(1)`
+                // after `relax_surface_rotation_v` only (`:2633`).
+                model.job.new_omega =
+                    job.new_surface_rotation_v * 1.0e5 / model.r[0];
+            }
+        }
+    }
+
     if job.remove_initial_center_by_temperature > 0.0 {
         excise_core_by_temperature(
             &mut model,
@@ -870,7 +1003,12 @@ pub(crate) fn init_or_update_model_from_bundle_outcome(
     model.r_center_old = model.r_center;
     model.l_center_old = model.l_center;
     model.v_center_old = model.v_center;
-    if job.set_initial_cumulative_energy_error && !restart {
+    let at_init_step = i64::try_from(model.model_number)
+        .is_ok_and(|m| m == job.set_cumulative_energy_error_at_step);
+    if job.set_cumulative_energy_error
+        || (job.set_initial_cumulative_energy_error && !restart)
+        || at_init_step
+    {
         model.aux.cumulative_energy_error = job.new_cumulative_energy_error;
         model.aux.step_hist.cumulative_energy_error_old =
             job.new_cumulative_energy_error;

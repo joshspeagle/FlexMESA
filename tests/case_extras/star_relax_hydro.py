@@ -207,9 +207,12 @@ class AccretedMaterialJStarExtras:
         $(\mathrm{cm^2\,s^{-1}}, \mathrm{g\,s^{-1}})$ (`:63-74`).
         """
         x_ctrl = state["x_ctrl"]
-        r_phot_cm = float(state["photosphere_r"]) * constants.RSUN
+        # Fortran evaluates `cgrav(1) * mstar * photosphere_r * Rsun`
+        # left-to-right (`:69`).
+        r_phot = float(state["photosphere_r"])
         j_acc = float(x_ctrl[0]) * math.sqrt(
-            (float(state["cgrav"][0]) * float(state["mstar"])) * r_phot_cm
+            ((float(state["cgrav"][0]) * float(state["mstar"])) * r_phot)
+            * constants.RSUN
         )
         mdot_new = float(current_mdot) + (
             (_rust.pow(10.0, float(x_ctrl[1])) * constants.MSUN)
@@ -219,17 +222,15 @@ class AccretedMaterialJStarExtras:
 
     def other_adjust_mdot(
         self, state: dict[str, Any], current_mdot: float
-    ) -> float:
-        """Evaluate `accretor_adjust_mdot` and require `#158` `j_acc` mutation
+    ) -> dict[str, float]:
+        """Set `accreted_material_j` and `mstar_dot` via `accretor_adjust_mdot`
         (`:63-74`).
         """
-        j_acc, _ = self.compute_accretor_adjust_mdot(state, current_mdot)
-        raise NotImplementedError(
-            "accreted_material_j: accretor_adjust_mdot sets "
-            f"s% accreted_material_j = {j_acc!r} (:68-69), which "
-            "StarExtras::other_adjust_mdot(&StarModel) cannot mutate (#158, "
-            "#231)"
-        )
+        j_acc, mdot_new = self.compute_accretor_adjust_mdot(state, current_mdot)
+        return {
+            "mstar_dot": mdot_new,
+            "accreted_material_j": j_acc,
+        }
 
     def extras_check_model(
         self, state: dict[str, Any]

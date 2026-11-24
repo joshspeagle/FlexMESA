@@ -37,7 +37,7 @@ pub fn relax_env(
     let mstar = grid.m[nzn];
     let psurf = if model.controls.rsp.use_prad_for_psurf {
         let t_0 = flexmesa_math::pow(0.5_f64, 0.25) * te;
-        CRAD * flexmesa_math::pow4(t_0) / 3.0
+        CRAD * flexmesa_math::powi_f90(t_0, 4) / 3.0
     } else {
         0.0
     };
@@ -243,7 +243,7 @@ pub fn relax_env(
 
             mc.p[1] = mc.p[2]
                 + dc.g * grid.m[1] * grid.dm_bar[1]
-                    / (dc.p4 * flexmesa_math::pow4(grid.r[1]));
+                    / (dc.p4 * flexmesa_math::powi_f90(grid.r[1], 4));
             let (vol1, _) = eop(model, chem, nzn, grid.t[1], mc.p[1])?;
             grid.vol[1] = vol1;
             model.r_center = flexmesa_math::pow(
@@ -280,13 +280,13 @@ pub fn relax_env(
                 let ic = 2 + 3 * (i - 1);
                 let ir = 3 + 3 * (i - 1);
                 let (lr_i, dlt, dltp, dlrm, dlr, dlrp) = if i < nzn {
-                    let w_00 = flexmesa_math::pow4(grid.t[i]);
-                    let w_out = flexmesa_math::pow4(grid.t[i + 1]);
+                    let w_00 = flexmesa_math::powi_f90(grid.t[i], 4);
+                    let w_out = flexmesa_math::powi_f90(grid.t[i + 1], 4);
                     // `star/private/rsp_relax_env.f90:1019-1020` calls `dlog` (#198).
                     let bw = flexmesa_math::intrinsic_log(w_out / w_00);
                     let bk =
                         flexmesa_math::intrinsic_log(mc.k[i + 1] / mc.k[i]);
-                    let t1 = -dc.cl * flexmesa_math::pow4(grid.r[i])
+                    let t1 = -dc.cl * flexmesa_math::powi_f90(grid.r[i], 4)
                         / grid.dm_bar[i];
                     let t2 = (w_out / mc.k[i + 1] - w_00 / mc.k[i])
                         / (1.0 - bk / bw);

@@ -35,6 +35,7 @@
     clippy::unreadable_literal
 )]
 
+pub mod adipls_support;
 pub mod e2e;
 pub mod gyre_support;
 pub mod inlist_astero;

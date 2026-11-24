@@ -64,7 +64,7 @@ pub fn compton_opacity(
         ],
     };
 
-    let tkev = t_ad * (KEV * 1.0e-3);
+    let tkev = (t_ad * KEV) * 1.0e-3;
     let eta_sq = eta_ad * eta_ad;
     let zeta = (eta_ad * C01 + eta_sq * C02).exp();
     let zeta_sq = zeta * zeta;
@@ -76,12 +76,11 @@ pub fn compton_opacity(
     let alpha = f3 * ALPHA0;
     let tbr = f2 * T0;
 
-    // (tkev / tbr)^alpha = exp(alpha * ln(tkev / tbr))
     let ratio = tkev / tbr;
-    let ratio_pow = (alpha * ratio.ln()).exp();
-    let mfp = f1 * (ratio_pow + 1.0);
+    let ratio_pow = ratio.pow(alpha);
+    let mfp = f1 * (1.0 + ratio_pow);
 
-    let kap_ad = (free_e_ad * (SIGE / AMU)) / mfp;
+    let kap_ad = ((free_e_ad / AMU) * SIGE) / mfp;
 
     let kap = kap_ad.val;
     let dlnkap_dln_rho = rho * kap_ad.d1[0] / kap;

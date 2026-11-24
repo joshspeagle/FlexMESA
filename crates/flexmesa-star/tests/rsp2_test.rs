@@ -249,6 +249,7 @@ fn build_rsp2_jacobian_test_model() -> StarModel {
             1.03 * eval_rsp2_hp_face_zone(&model, k).max(1.0);
     }
     model.save_start_values().expect("save_start_values");
+    flexmesa_star::record_start_of_step_energy_integrals(&mut model);
     for k in 0..nz {
         model.v[k] *= 1.04;
         model.ln_r[k] += 1.0e-4;

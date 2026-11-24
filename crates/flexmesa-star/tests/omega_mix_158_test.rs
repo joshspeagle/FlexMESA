@@ -661,17 +661,21 @@ fn assert_roche_i_rot_and_omega_consistent(model: &StarModel, label: &str) {
     );
 }
 
-struct AccretorExtras {
-    mdot_add_cgs: f64,
-}
+struct AccretorExtras;
 
 impl StarExtras for AccretorExtras {
     fn other_adjust_mdot(
-        &self,
-        _m: &StarModel,
+        &mut self,
+        m: &mut StarModel,
         current_mdot: f64,
     ) -> Result<Option<f64>, StarError> {
-        Ok(Some(current_mdot + self.mdot_add_cgs))
+        let x_ctrl_1 = m.controls.x_ctrl[0];
+        let x_ctrl_2 = m.controls.x_ctrl[1];
+        let phot_r_rsun = eval_photosphere_info(m).r_rsun;
+        m.controls.mix_wind.accreted_material_j =
+            x_ctrl_1 * (((m.cgrav[0] * m.mstar) * phot_r_rsun) * R_SUN).sqrt();
+        let mdot_add_cgs = flexmesa_math::exp10(x_ctrl_2) * M_SUN / SECYER;
+        Ok(Some(current_mdot + mdot_add_cgs))
     }
 }
 
@@ -744,17 +748,10 @@ fn test_rotating_star_smoke_accreted_material_j() {
     assert!(m_acc.controls.mix_wind.premix_omega);
     assert!(m_acc.controls.mix_wind.use_accreted_material_j);
 
-    let x_ctrl_1 = m_acc.controls.x_ctrl[0];
-    let x_ctrl_2 = m_acc.controls.x_ctrl[1];
-    let mut extras_acc = AccretorExtras {
-        mdot_add_cgs: flexmesa_math::exp10(x_ctrl_2) * M_SUN / SECYER,
-    };
+    let mut extras_acc = AccretorExtras;
     let mut max_rel_acc_j = 0.0_f64;
     for step in 1..=10 {
         let j_before = total_angular_momentum(&m_acc);
-        let phot_r_rsun = eval_photosphere_info(&m_acc).r_rsun;
-        m_acc.controls.mix_wind.accreted_material_j = x_ctrl_1
-            * (m_acc.cgrav[0] * m_acc.mstar * phot_r_rsun * R_SUN).sqrt();
         let rep = star_evolve_step_with_extras(
             &mut m_acc,
             true,
@@ -784,6 +781,178 @@ fn test_rotating_star_smoke_accreted_material_j() {
         max_rel_acc_j,
         m_acc.star_age,
         m_acc.aux.step_hist.num_rotation_solver_steps
+    );
+}
+
+#[test]
+fn test_other_adjust_mdot_mutation_none_preservation_and_retry_restore() {
+    struct MutateWithNoneExtras;
+    impl StarExtras for MutateWithNoneExtras {
+        fn other_adjust_mdot(
+            &mut self,
+            m: &mut StarModel,
+            _current_mdot: f64,
+        ) -> Result<Option<f64>, StarError> {
+            m.mstar_dot = 4.56e17;
+            m.controls.mix_wind.accreted_material_j = 7.89e18;
+            Ok(None)
+        }
+    }
+
+    struct RetryAndAbandonExtras {
+        observed_before_hook: Vec<f64>,
+        fail_first_call: bool,
+    }
+    impl StarExtras for RetryAndAbandonExtras {
+        fn other_adjust_mdot(
+            &mut self,
+            m: &mut StarModel,
+            current_mdot: f64,
+        ) -> Result<Option<f64>, StarError> {
+            self.observed_before_hook
+                .push(m.controls.mix_wind.accreted_material_j);
+            let call_num = f64::from(
+                u32::try_from(self.observed_before_hook.len()).unwrap_or(0),
+            );
+            m.controls.mix_wind.accreted_material_j = 1.0e18 * call_num;
+            Ok(Some(current_mdot + 1.0e17))
+        }
+
+        fn other_torque_implicit(
+            &mut self,
+            _m: &mut StarModel,
+        ) -> Result<(), StarError> {
+            if self.fail_first_call && self.observed_before_hook.len() == 1 {
+                return Err(StarError::ConvergenceFailure(String::from(
+                    "synthetic first-try implicit torque failure",
+                )));
+            }
+            Ok(())
+        }
+    }
+
+    let acc_dir = star_suite_dir().join("accreted_material_j");
+    let mut acc_bundle = InlistBundle::from_file_with_options(
+        &acc_dir.join("inlist_accreted_material_j_header"),
+        InlistLoadOptions {
+            allow_unsupported_controls: true,
+        },
+    )
+    .expect("parse accreted_material_j inlist");
+    acc_bundle.job.saved_model_name = String::from("standard_zams.mod");
+    let mut default_ex = DefaultStarExtras;
+    let base =
+        init_or_update_model_from_bundle(&acc_bundle, None, &mut default_ex)
+            .expect("init accreted_material_j");
+
+    // 1. Returning `Ok(None)` without mutating `m.mstar_dot` preserves
+    //    `explicit_step_mdot` (`binary/system_rlof` contract).
+    let mut m_none = base.clone();
+    let explicit_mdot = -1.23e17;
+    m_none.controls.use_other_adjust_mdot = true;
+    m_none.mstar_dot = explicit_mdot;
+    m_none.controls.mix_wind.accreted_material_j = 3.21e17;
+    let rep_none = star_evolve_step_with_extras(
+        &mut m_none,
+        false,
+        false,
+        true,
+        &mut default_ex,
+    )
+    .expect("step with DefaultStarExtras");
+    assert!(rep_none.converged);
+    assert_eq!(m_none.mstar_dot.to_bits(), explicit_mdot.to_bits());
+    assert_eq!(
+        m_none.controls.mix_wind.accreted_material_j.to_bits(),
+        3.21e17_f64.to_bits()
+    );
+
+    // 2. Returning `Ok(None)` while mutating `m.mstar_dot` and
+    //    `m.controls.mix_wind.accreted_material_j` preserves both mutations.
+    let mut m_mut = base.clone();
+    m_mut.controls.use_other_adjust_mdot = true;
+    m_mut.mstar_dot = explicit_mdot;
+    let mut mut_ex = MutateWithNoneExtras;
+    let rep_mut = star_evolve_step_with_extras(
+        &mut m_mut,
+        false,
+        false,
+        true,
+        &mut mut_ex,
+    )
+    .expect("step with MutateWithNoneExtras");
+    assert!(rep_mut.converged);
+    assert_eq!(m_mut.mstar_dot.to_bits(), 4.56e17_f64.to_bits());
+    assert_eq!(
+        m_mut.controls.mix_wind.accreted_material_j.to_bits(),
+        7.89e18_f64.to_bits()
+    );
+
+    // 3. `PreAttemptScalars` restores `accreted_material_j` on both step
+    //    abandonment (`max_number_retries = 0`) and retry (`max_number_retries = 1`).
+    let init_acc_j = 0.5e18;
+    let mut m_abort = base.clone();
+    m_abort.controls.use_other_adjust_mdot = true;
+    m_abort.controls.use_other_torque_implicit = true;
+    m_abort.controls.max_number_retries = 0;
+    m_abort.controls.mix_wind.accreted_material_j = init_acc_j;
+    let mut abort_ex = RetryAndAbandonExtras {
+        observed_before_hook: Vec::new(),
+        fail_first_call: true,
+    };
+    let err = star_evolve_step_with_extras(
+        &mut m_abort,
+        false,
+        false,
+        true,
+        &mut abort_ex,
+    )
+    .expect_err(
+        "max_number_retries=0 must abandon step on implicit torque error",
+    );
+    assert!(
+        matches!(
+            err,
+            StarError::Terminated { ref reason, .. }
+                if reason == "max_number_retries"
+        ),
+        "expected max_number_retries termination, got {err:?}"
+    );
+    assert_eq!(
+        m_abort.controls.mix_wind.accreted_material_j.to_bits(),
+        init_acc_j.to_bits()
+    );
+
+    let mut m_retry = base;
+    m_retry.controls.use_other_adjust_mdot = true;
+    m_retry.controls.use_other_torque_implicit = true;
+    m_retry.controls.max_number_retries = 2;
+    m_retry.controls.ts_stop.retry_limit = 2;
+    m_retry.controls.mix_wind.accreted_material_j = init_acc_j;
+    let mut retry_ex = RetryAndAbandonExtras {
+        observed_before_hook: Vec::new(),
+        fail_first_call: true,
+    };
+    let rep_retry = star_evolve_step_with_extras(
+        &mut m_retry,
+        false,
+        false,
+        true,
+        &mut retry_ex,
+    )
+    .expect("retry_limit=1 must recover on second try");
+    assert_eq!(rep_retry.retries, 1);
+    assert_eq!(
+        retry_ex
+            .observed_before_hook
+            .iter()
+            .map(|v| v.to_bits())
+            .collect::<Vec<_>>(),
+        vec![init_acc_j.to_bits(), init_acc_j.to_bits()]
+    );
+    assert_eq!(
+        m_retry.controls.mix_wind.accreted_material_j.to_bits(),
+        2.0e18_f64.to_bits()
     );
 }
 

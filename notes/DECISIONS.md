@@ -80,6 +80,7 @@ Scope and the `v0.1.0` definition are in [`SCOPE.md`](SCOPE.md). Work is tracked
 | 63 | FlexMESA Is Licensed Under `GPL-3.0-or-later` (`#470`) | In force | below |
 | 64 | Test-Side Star Extras Receive a Copy of the Live Model for Library Calls (`#170`) | In force | below |
 | 65 | Astero Search Cases Are Compared Track by Track (`#430`) | In force | below |
+| 66 | `extras_controls` Runs Before the Model Load, as Upstream (`#453`) | In force | below |
 
 ## Pre-audit decisions still in force
 
@@ -875,3 +876,11 @@ The text of these four entries predates the audit of 2026-11-16. The decisions s
   - *Comparing only the last track*: uninformative for capped or budget-limited runs.
   - *Committing the 22 files*: 3.6 MB, above the 150 KB per-file rule.
   - *Instrumenting MESA source*: a link-time wrap changes no source or arithmetic.
+
+## DECISIONS #66: `extras_controls` Runs Before the Model Load, as Upstream (`#453`)
+
+- **Date**: 2026-11-24
+- **Decision**: The star init path calls `extras_controls` on a model with no cells, after the inlists are read and before `do_star_job_controls_before` and the model load, and before the RSP dispatch (`star/job/run_star_support.f90:429-459`). The controls, `&star_job` values and hooks it sets carry over to the loaded model. A test-side hook that reads model state (`xa`, `nz`) in `extras_controls` gets an explicit `KeyError` (`DECISIONS #43`).
+- **Why**: upstream's `make_env` `extras_controls` runs `create_env`, which writes `start.mod` that the load then reads. With the old order, that file did not exist when the load ran.
+- **Alternatives Rejected**:
+  - *A separate pre-load hook used only by `make_env`*: two hooks where upstream has one, and the order of every other case's `extras_controls` would still differ from upstream.

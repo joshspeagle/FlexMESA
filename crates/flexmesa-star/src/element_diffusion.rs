@@ -75,6 +75,8 @@ pub fn do_element_diffusion_step(
         model.aux.eps_wd_sedimentation.fill(0.0);
         return Ok(());
     }
+    // `star/private/element_diffusion.f90:93`.
+    model.aux.need_to_setvars = true;
 
     if dctrl.use_other_diffusion {
         return Err(StarError::InvalidInput(

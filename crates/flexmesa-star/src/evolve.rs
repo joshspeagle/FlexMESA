@@ -11,7 +11,8 @@ use crate::controls::{StarError, StepFailureInfo};
 pub use crate::evolve_support::snapshot_step_old_extras;
 use crate::evolve_support::{
     apply_step_pre_physics_with_extras, record_start_of_step_energy_integrals,
-    remesh_star_before_step, set_vars_for_new_step, snapshot_step_start_extras,
+    remesh_star_before_step, set_vars_for_new_step, set_vars_for_new_try,
+    snapshot_step_start_extras,
     update_step_energy_conservation,
 };
 use crate::hydro_vars::set_hydro_vars;
@@ -177,7 +178,19 @@ pub fn restore_from_old(model: &mut StarModel) -> Result<(), StarError> {
     model.set_m_and_dm();
     model.set_m_grav_and_grav();
     model.pack_xh();
-    crate::rotation::conserve_shell_j_rot_and_distortion(model);
+    // `set_current_to_old` (`star/private/evolve_support.f90:205-219`):
+    // `j_rot = j_rot_old`, `use_xh_to_update_i_rot`, then
+    // `omega = j_rot/i_rot`. `fp_rot` and `ft_rot` are left alone.
+    if model.controls.rotation_flag {
+        crate::hydro_rotation::use_xh_to_update_i_rot(model);
+        for k in 0..model.nz {
+            // Upstream stops on a bad omega only with `stop_for_bad_nums`
+            // (`evolve_support.f90:211-216`), which defaults to `.false.`
+            // (`star/defaults/controls.defaults`) and is not a supported
+            // control here, so the value is kept as computed.
+            model.omega[k] = model.j_rot[k] / model.aux.i_rot[k];
+        }
+    }
     set_hydro_vars(model, false, false)?;
     model.mlt_vc.clone_from(&model.aux.mlt_vc_old);
     model.conv_vel.clone_from(&model.aux.mlt_vc_old);
@@ -320,11 +333,16 @@ pub fn star_evolve_step_part1(
             reason: String::from("min_timestep_limit"),
         });
     }
+    // `need_to_setvars = .true.  ! always start fresh` at the start of
+    // `do_step_part1`, before `prepare_for_new_step` (`evolve.f90:319, 378`).
+    model.aux.need_to_setvars = true;
     // `prepare_for_new_step` (`star/private/evolve.f90:1854-1857`), unless
     // the caller has prepared the step itself (the binary step loop resets
     // both stars before remeshing them, `DECISIONS #55`).
     if first_try && prepare_new_step {
         set_rho_to_dm_div_dv_for_new_step(model)?;
+        // Store mesh info for the ST time smoothing (`evolve.f90:1859-1879`).
+        crate::rotation_mix_info::store_prev_mesh_st_info(model);
     }
 
     let has_prev_generation = !model.lnd_old.is_empty();
@@ -363,9 +381,17 @@ pub fn star_evolve_step_part1(
     // (`star/private/evolve_support.f90:80`); a retry enters with
     // `model_number` restored to the pre-step value, so this is idempotent.
     model.save_old_values();
+    // `new_generation` ends with `need_to_setvars = .true.`
+    // (`star/private/evolve_support.f90:121`).
+    model.aux.need_to_setvars = true;
     // `prepare_for_new_step` (`star/private/evolve.f90:1897`).
     model.generations = 2;
-    record_start_of_step_energy_integrals(model);
+    // The energy integrals are evaluated per try, after `set_start_of_step_info`
+    // and `set_mdot` (`evolve.f90:409, 427-436`); RSP2 reads `total_energy_old`
+    // before the try loop.
+    if model.controls.rsp2_flag {
+        record_start_of_step_energy_integrals(model);
+    }
     snapshot_step_start_extras(model);
     model.aux.okay_to_set_mlt_vc = true;
     model.aux.step_hist.mstar_dot_old = prev_mstar_dot_old;
@@ -394,6 +420,7 @@ pub fn star_evolve_step_part1(
         revised_max_yr_dt: model.aux.step_hist.revised_max_yr_dt,
         max_years_for_timestep: model.controls.max_years_for_timestep,
         max_timestep: model.controls.ts_stop.max_timestep,
+        accreted_material_j: model.controls.mix_wind.accreted_material_j,
     };
 
     if first_try {
@@ -478,6 +505,16 @@ pub fn star_evolve_step_part1(
     // check inside the step sees the number of the model being computed.
     let target_mod = model.model_number_old + 1;
     model.model_number = target_mod;
+    // `need_to_setvars = .true.  ! always start fresh` and
+    // `set_current_to_old` (`star/private/evolve.f90:319, 401`), then
+    // `set_start_of_step_info`'s `set_vars_if_needed` (`evolve.f90:409`).
+    model.aux.need_to_setvars = true;
+    if !model.controls.rsp_flag {
+        if let Err(e) = set_vars_for_new_try(model) {
+            model.model_number = model.model_number_old;
+            return Err(e);
+        }
+    }
 
     // `set_start_of_step_info` (`star/private/evolve.f90:1784-1787`)
     if model.nz > 0 {
@@ -486,8 +523,14 @@ pub fn star_evolve_step_part1(
             Some(crate::report_utils::eval_ledd_erg_s(model));
     }
     if let Err(e) = set_step_mdot(model, explicit_step_mdot, extras) {
+        model.controls.mix_wind.accreted_material_j = saved.accreted_material_j;
         model.model_number = model.model_number_old;
         return Err(e);
+    }
+    // Energy integrals for the new mesh after `set_mdot`, on every try
+    // (`star/private/evolve.f90:427-453`).
+    if !model.controls.rsp_flag {
+        record_start_of_step_energy_integrals(model);
     }
 
     Ok(StarStepPart1State {
@@ -505,7 +548,7 @@ pub fn star_evolve_step_part1(
 
 /// Evaluates the step's `mstar_dot` (`set_mdot` and `other_adjust_mdot`,
 /// `star/private/evolve.f90:426-427`), restoring the explicit rate when the
-/// `other_adjust_mdot` hook declines.
+/// `other_adjust_mdot` hook declines without mutating `m.mstar_dot`.
 fn set_step_mdot(
     model: &mut StarModel,
     explicit_step_mdot: f64,
@@ -514,11 +557,12 @@ fn set_step_mdot(
     if model.controls.use_other_adjust_mdot {
         let prev_rot_boost = model.aux.step_hist.rotational_mdot_boost_old;
         do_set_mdot_with_extras(model, extras)?;
+        let pre_hook_mdot = model.mstar_dot;
         if let Some(adj_mdot) =
-            extras.other_adjust_mdot(model, model.mstar_dot)?
+            extras.other_adjust_mdot(model, pre_hook_mdot)?
         {
             model.mstar_dot = adj_mdot;
-        } else {
+        } else if model.mstar_dot.to_bits() == pre_hook_mdot.to_bits() {
             model.mstar_dot = explicit_step_mdot;
             model.aux.step_hist.rotational_mdot_boost_old = prev_rot_boost;
         }
@@ -1026,8 +1070,13 @@ pub(crate) fn star_evolve_step_outcome_checked(
             reason: String::from("min_timestep_limit"),
         });
     }
+    // `need_to_setvars = .true.  ! always start fresh` at the start of
+    // `do_step_part1`, before `prepare_for_new_step` (`evolve.f90:319, 378`).
+    model.aux.need_to_setvars = true;
     // `prepare_for_new_step` (`star/private/evolve.f90:1854-1857`).
     set_rho_to_dm_div_dv_for_new_step(model)?;
+    // Store mesh info for the ST time smoothing (`evolve.f90:1859-1879`).
+    crate::rotation_mix_info::store_prev_mesh_st_info(model);
 
     let has_prev_generation = !model.lnd_old.is_empty();
     let prev_dt_old = model.dt_old;
@@ -1064,9 +1113,17 @@ pub(crate) fn star_evolve_step_outcome_checked(
     // `new_generation` stores `model_number_old = model_number`
     // (`star/private/evolve_support.f90:80`).
     model.save_old_values();
+    // `new_generation` ends with `need_to_setvars = .true.`
+    // (`star/private/evolve_support.f90:121`).
+    model.aux.need_to_setvars = true;
     // `prepare_for_new_step` (`star/private/evolve.f90:1897`).
     model.generations = 2;
-    record_start_of_step_energy_integrals(model);
+    // The energy integrals are evaluated per try, after `set_start_of_step_info`
+    // and `set_mdot` (`evolve.f90:409, 427-436`); RSP2 reads `total_energy_old`
+    // before the try loop.
+    if model.controls.rsp2_flag {
+        record_start_of_step_energy_integrals(model);
+    }
     snapshot_step_start_extras(model);
     model.aux.okay_to_set_mlt_vc = true;
     model.aux.step_hist.mstar_dot_old = prev_mstar_dot_old;
@@ -1095,6 +1152,7 @@ pub(crate) fn star_evolve_step_outcome_checked(
         revised_max_yr_dt: model.aux.step_hist.revised_max_yr_dt,
         max_years_for_timestep: model.controls.max_years_for_timestep,
         max_timestep: model.controls.ts_stop.max_timestep,
+        accreted_material_j: model.controls.mix_wind.accreted_material_j,
     };
 
     // Clip `dt_next_in` against `max_age*` (`evolve.f90:1899-1915, 550-555`).
@@ -1177,6 +1235,14 @@ pub(crate) fn star_evolve_step_outcome_checked(
         // try, including retries and redos, computes model
         // `model_number_old + 1`, and every check inside the step sees it.
         model.model_number = target_mod;
+        // `set_start_of_step_info` starts with `set_vars_if_needed`
+        // (`star/private/evolve.f90:409, 1768-1771`).
+        if !model.controls.rsp_flag {
+            if let Err(e) = set_vars_for_new_try(model) {
+                model.model_number = model.model_number_old;
+                return Err(e);
+            }
+        }
         // `set_start_of_step_info` (`star/private/evolve.f90:1784-1787`):
         // snapshot start-of-step `starting_T_center` and optical-depth-averaged
         // `prev_Ledd` before evaluating `set_mdot`.
@@ -1186,8 +1252,15 @@ pub(crate) fn star_evolve_step_outcome_checked(
                 Some(crate::report_utils::eval_ledd_erg_s(model));
         }
         if let Err(e) = set_step_mdot(model, explicit_step_mdot, extras) {
+            model.controls.mix_wind.accreted_material_j =
+                saved.accreted_material_j;
             model.model_number = model.model_number_old;
             return Err(e);
+        }
+        // Energy integrals for the new mesh after `set_mdot`, on every try
+        // (`star/private/evolve.f90:427-453`).
+        if !model.controls.rsp_flag {
+            record_start_of_step_energy_integrals(model);
         }
         // `result = adjust_model(...)` between `do_evolve_step_part1` and
         // `do_evolve_step_part2` (`star/private/relax.f90:4070-4071`).
@@ -1554,7 +1627,15 @@ pub(crate) fn star_evolve_step_outcome_checked(
                     reason: String::from("redo_limit"),
                 });
             }
+            // `prepare_to_redo` (`star/private/evolve.f90:2148-2172`) and
+            // `set_current_to_old` (`star/private/evolve_support.f90:147-240`)
+            // leave `s% dt` as it is, so every redo retakes the step with the
+            // current `dt`, including one a hook set before asking for the
+            // redo (for example the astero "warm" and "hot" limits,
+            // `astero/private/extras_support.f90:299-322`).
+            let dt_redo = model.dt;
             restore_attempt_state(model, None, saved)?;
+            dt_try = dt_redo;
             first_try = false;
             continue;
         }
@@ -1568,10 +1649,11 @@ pub(crate) fn star_evolve_step_outcome_checked(
             );
         }
 
-        // `prepare_to_retry` (`star/private/evolve.f90:2176-2277`).
+        // `prepare_to_retry` (`star/private/evolve.f90:2176-2277`):
+        // `s% dt = s% dt*retry_factor` from the current `dt` (`:2223`).
         let next_retries = retries + 1;
         let hit_retry_limit = max_retries > 0 && next_retries > max_retries;
-        let mut next_dt = dt_try * retry_fac;
+        let mut next_dt = model.dt * retry_fac;
         let hit_min_dt = !next_dt.is_finite() || next_dt <= dt_floor;
         let tracing = crate::step_trace::enabled(target_mod);
         let why = if tracing || hit_retry_limit || hit_min_dt {
@@ -1629,6 +1711,9 @@ pub(crate) fn star_evolve_step_outcome_checked(
             num_merges = 0;
         }
 
+        // `:2250-2255`: the cap uses `max_years_for_timestep` as the failed
+        // try left it (for example the `max_timestep_hi_T_limit` switch,
+        // `:705-711`); `set_current_to_old` does not restore it.
         if model.controls.max_years_for_timestep > 0.0 {
             model.controls.ts_stop.max_timestep =
                 SECYER * model.controls.max_years_for_timestep;
@@ -1770,6 +1855,7 @@ struct PreAttemptScalars {
     revised_max_yr_dt: f64,
     max_years_for_timestep: f64,
     max_timestep: f64,
+    accreted_material_j: f64,
 }
 
 fn sync_time_sec_from_age(model: &mut StarModel) {
@@ -1810,6 +1896,10 @@ fn abandon_step(
     dt_prev: f64,
 ) -> Result<bool, StarError> {
     let restored_remesh = restore_attempt_state(model, snap, saved)?;
+    model.controls.max_years_for_timestep = saved.max_years_for_timestep;
+    model.controls.ts_stop.max_timestep = saved.max_timestep;
+    model.aux.step_hist.using_revised_max_yr_dt = saved.using_revised_max_yr_dt;
+    model.aux.step_hist.revised_max_yr_dt = saved.revised_max_yr_dt;
     model.dt = dt_prev;
     model.model_number = model.model_number_old;
     Ok(restored_remesh)
@@ -1842,10 +1932,12 @@ fn restore_attempt_state(
     model.time_sec = saved.time_sec;
     model.time_old_sec = saved.time_old_sec;
     model.aux.step_hist.phase_of_evolution = saved.phase_of_evolution;
-    model.aux.step_hist.using_revised_max_yr_dt = saved.using_revised_max_yr_dt;
-    model.aux.step_hist.revised_max_yr_dt = saved.revised_max_yr_dt;
-    model.controls.max_years_for_timestep = saved.max_years_for_timestep;
-    model.controls.ts_stop.max_timestep = saved.max_timestep;
+    // `set_current_to_old` (`star/private/evolve_support.f90:147-240`) does
+    // not restore `max_years_for_timestep`, `max_timestep`,
+    // `using_revised_max_yr_dt` or `revised_max_yr_dt`: a value a try set
+    // (the `max_timestep_hi_T_limit` switch, `evolve.f90:705-711`, or an
+    // `extras_check_model` limit) stays for the retry or redo (#510).
+    model.controls.mix_wind.accreted_material_j = saved.accreted_material_j;
     Ok(restored_remesh)
 }
 

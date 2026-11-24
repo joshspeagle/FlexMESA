@@ -22,7 +22,6 @@ use crate::mesh_adjust::{MeshFunctionConfig, do_adjust_mesh_for_step};
 use crate::model::StarModel;
 use crate::phase_separation::do_phase_separation_step;
 use crate::primary_state::PrimaryStateBuffer;
-use crate::rotation::conserve_shell_j_rot_and_distortion;
 
 /// Evaluates domain-integrated `(e_int, e_grav, e_kin, e_rot, e_turb, e_tot)`
 /// over zero-based zones `klo..khi` with optional mass cap `delta_m`, optional
@@ -205,7 +204,7 @@ pub fn record_start_of_step_energy_integrals(model: &mut StarModel) {
     let (e_int, _, _, _, _, e_tot) = eval_total_energy_integrals(model);
     // `total_internal_energy_old` for the new mesh (`evolve.f90:420-431`),
     // read by `set_energy_eqn_scal` (`star_utils.f90:3693`).
-    model.aux.total_internal_energy_start = e_int;
+    model.aux.total_internal_energy_start = Some(e_int);
     let surf_e = if model.nz > 0 {
         cell_specific_total_energy(model, 0)
     } else {
@@ -272,6 +271,8 @@ pub fn apply_step_pre_physics_with_extras(
     // (`evolve.f90:569,606`): `set_vars_if_needed`.
     if model.aux.need_to_setvars {
         set_hydro_vars(model, false, false)?;
+        // `star/private/hydro_vars.f90:653`.
+        model.aux.need_to_setvars = false;
     }
 
     if model.controls.do_conv_premix {
@@ -289,8 +290,12 @@ pub fn apply_step_pre_physics_with_extras(
         // `set_vars_if_needed` after `do_conv_premix` (`evolve.f90:613-616`)
         // reaches `set_hydro_vars`, which unpacks `xh` first
         // (`hydro_vars.f90:226`), discarding the premix trial `lnd`.
-        model.unpack_xh();
-        set_hydro_vars(model, false, false)?;
+        // `do_conv_premix` sets `need_to_setvars` (`conv_premix.f90:176`).
+        if model.aux.need_to_setvars {
+            model.unpack_xh();
+            set_hydro_vars(model, false, false)?;
+            model.aux.need_to_setvars = false;
+        }
         if dt > 0.0 {
             for k in 0..nz {
                 model.aux.eps_pre_mix[k] =
@@ -305,7 +310,17 @@ pub fn apply_step_pre_physics_with_extras(
 
     if model.controls.do_phase_separation {
         do_phase_separation_step(model, dt)?;
-        set_hydro_vars(model, false, false)?;
+        // `set_vars_if_needed(s, dt, 'after phase separation')`
+        // (`star/private/evolve.f90:622-627`). `phase_separation.f90:139,
+        // 355-361` updates `lnd` under `fix_Pgas` without touching `xh` and
+        // sets `need_to_setvars`; `set_vars` then unpacks `xh`
+        // (`star/private/hydro_vars.f90:226`), restoring `lnd` before
+        // `set_hydro_vars` and `do_element_diffusion` (#156).
+        if model.aux.need_to_setvars {
+            model.unpack_xh();
+            set_hydro_vars(model, false, false)?;
+            model.aux.need_to_setvars = false;
+        }
     } else {
         model.aux.crystal_core_boundary_mass = -1.0;
         model.aux.phase_sep_mixing_mass = -1.0;
@@ -318,7 +333,12 @@ pub fn apply_step_pre_physics_with_extras(
 
     if model.controls.do_element_diffusion {
         do_element_diffusion_step(model, dt)?;
-        set_hydro_vars(model, false, false)?;
+        // `set_vars_if_needed(s, dt, 'after element diffusion')`
+        // (`star/private/evolve.f90:637`, flag from `element_diffusion.f90:93`).
+        if model.aux.need_to_setvars {
+            set_hydro_vars(model, false, false)?;
+            model.aux.need_to_setvars = false;
+        }
         finish_element_diffusion(model, dt);
     } else {
         model.aux.step_hist.num_diffusion_solver_steps = 0;
@@ -362,27 +382,37 @@ pub fn apply_step_pre_physics_with_extras(
         }
     }
 
-    if model.controls.rotation_flag {
-        conserve_shell_j_rot_and_distortion(model);
-        if model.controls.mix_wind.premix_omega && dt > 0.0 {
-            match crate::omega_mix::do_solve_omega_mix_with_extras(
-                model,
-                0.5 * dt,
-                extras,
-            )? {
-                crate::omega_mix::OmegaMixOutcome::KeepGoing => {}
-                crate::omega_mix::OmegaMixOutcome::Retry(msg) => {
-                    return Err(StarError::ConvergenceFailure(msg));
-                }
-                crate::omega_mix::OmegaMixOutcome::Terminate(msg) => {
-                    return Err(StarError::Terminated {
-                        model_number: model.model_number,
-                        reason: msg,
-                    });
-                }
+    // `star/private/evolve.f90:648-655`: `do_solve_omega_mix` over half the
+    // step, then `set_rotation_info(s, .false., ierr)` and
+    // `set_vars_if_needed`. Neither sets `need_to_setvars`
+    // (`star/private/hydro_rotation.f90:537-586`), so the structure solve
+    // starts from the variables of the last `set_vars`. `j_rot_flag` is not
+    // a supported control, so `.not. s% j_rot_flag` holds.
+    if model.controls.rotation_flag
+        && model.controls.mix_wind.premix_omega
+        && dt > 0.0
+    {
+        match crate::omega_mix::do_solve_omega_mix_with_extras(
+            model,
+            0.5 * dt,
+            extras,
+        )? {
+            crate::omega_mix::OmegaMixOutcome::KeepGoing => {}
+            crate::omega_mix::OmegaMixOutcome::Retry(msg) => {
+                return Err(StarError::ConvergenceFailure(msg));
             }
-            crate::hydro_rotation::set_rotation_info(model, false);
+            crate::omega_mix::OmegaMixOutcome::Terminate(msg) => {
+                return Err(StarError::Terminated {
+                    model_number: model.model_number,
+                    reason: msg,
+                });
+            }
+        }
+        crate::hydro_rotation::set_rotation_info(model, false);
+        if model.aux.need_to_setvars {
             set_hydro_vars(model, false, false)?;
+            // `star/private/hydro_vars.f90:653`.
+            model.aux.need_to_setvars = false;
         }
     }
     Ok(())
@@ -663,7 +693,32 @@ pub fn set_vars_for_new_step(model: &mut StarModel) -> Result<(), StarError> {
     model.aux.mixing.have_new_generation = false;
     let res = set_hydro_vars(model, false, false);
     model.aux.mixing.have_new_generation = prev_have_new_generation;
-    res
+    res?;
+    // `set_vars` ends with `need_to_setvars = .false.`
+    // (`star/private/hydro_vars.f90:653`).
+    model.aux.need_to_setvars = false;
+    Ok(())
+}
+
+/// `set_vars_if_needed` at the start of `set_start_of_step_info`, on every
+/// try (`star/private/evolve.f90:409, 1768-1771`). `new_generation` and
+/// `set_current_to_old` have set `need_to_setvars = .true.` just before
+/// (`star/private/evolve_support.f90:121, 238`), `have_new_generation` is
+/// `.true.` (`evolve.f90:383`) and `okay_to_set_mixing_info` is `.true.`
+/// (`evolve.f90:320`).
+///
+/// # Errors
+///
+/// Returns the [`StarError`] of [`set_hydro_vars`].
+pub fn set_vars_for_new_try(model: &mut StarModel) -> Result<(), StarError> {
+    if !model.aux.need_to_setvars {
+        return Ok(());
+    }
+    model.aux.mixing.okay_to_set_mixing_info = true;
+    set_hydro_vars(model, false, false)?;
+    // `star/private/hydro_vars.f90:653`.
+    model.aux.need_to_setvars = false;
+    Ok(())
 }
 
 /// Executes pre-step adaptive remeshing (`do_mesh` in
@@ -714,148 +769,26 @@ pub fn remesh_star_before_step(
     }
 }
 
-/// Relaxes a rotating stellar model smoothly to a uniform angular velocity
-/// `target_omega` ($\mathrm{rad\,s^{-1}}$) over `num_steps` internal
-/// relaxation steps (`do_relax_uniform_omega` and `do_internal_evolve` in
-/// `star/private/relax.f90:1234-1391, 3878-4286`).
+/// Relaxes a rotating stellar model to a uniform angular velocity
+/// `target_omega` ($\mathrm{rad\,s^{-1}}$) over `num_steps` relax steps:
+/// `star_relax_uniform_omega` with `relax_to_new_omega`
+/// (`do_relax_uniform_omega`, `star/private/relax.f90:1234-1391`), run on
+/// `do_internal_evolve` without case extras.
 ///
 /// # Errors
-/// Returns [`StarError`] if `num_steps == 0` or an internal relaxation step
-/// fails to converge.
+/// Returns [`StarError`] if `num_steps == 0` or a relax step fails.
 pub fn relax_uniform_omega(
     model: &mut StarModel,
     target_omega: f64,
     num_steps: usize,
     max_yrs_dt: f64,
 ) -> Result<(), StarError> {
-    if !model.controls.rotation_flag || model.nz == 0 {
-        return Ok(());
-    }
-    if model.omega.iter().all(|&w| w == target_omega) {
-        return Ok(());
-    }
-    if num_steps == 0 {
-        return Err(StarError::InvalidInput(String::from(
-            "invalid num_steps_to_relax_rotation (must be > 0)",
-        )));
-    }
-
-    let saved_ctrl = model.controls.clone();
-    let saved_age = model.star_age;
-    let saved_age_old = model.star_age_old;
-    let saved_time_sec = model.time_sec;
-    let saved_time_old_sec = model.time_old_sec;
-    let saved_hist_time_sec = model.aux.step_hist.time_sec;
-    let saved_hist_time_old_sec = model.aux.step_hist.time_old_sec;
-    let saved_model_number = model.model_number;
-    let saved_num_retries = model.num_retries;
-    let saved_num_redos = model.num_redos;
-    let saved_iters = model.total_num_solver_iterations;
-    let saved_calls = model.total_num_solver_calls;
-    let saved_cache_hits = model.micro_cache_hits;
-    let saved_cache_misses = model.micro_cache_misses;
-    let saved_dt_next = model.dt_next;
-    let saved_first = model.doing_first_model_of_run;
-    let saved_cum_err = model.aux.cumulative_energy_error;
-
-    let starting_omega = model.omega.first().copied().unwrap_or(0.0);
-    model.aux.doing_relax = true;
-    {
-        let c = &mut model.controls;
-        c.dxdt_nuc_factor = 0.0;
-        c.mix_factor = 0.0;
-        c.mix_wind.am_d_mix_factor = 0.0;
-        c.max_age = 1.0e50;
-        c.ts_stop.max_age_in_days = 1.0e50;
-        c.max_age_in_seconds = None;
-        c.ts_stop.max_timestep_factor = 2.0;
-        c.max_model_number = None;
-        c.max_years_for_timestep = max_yrs_dt;
-        c.ts_stop.max_timestep = 0.0;
-        c.mass_change = 0.0;
-        c.use_other_wind = false;
-        c.reimers_scaling_factor = 0.0;
-        c.blocker_scaling_factor = 0.0;
-        c.vink_scaling_factor = 0.0;
-        c.dutch_scaling_factor = 0.0;
-        c.mix_wind.de_jager_scaling_factor = 0.0;
-        c.mix_wind.van_loon_scaling_factor = 0.0;
-        c.mix_wind.nieuwenhuijzen_scaling_factor = 0.0;
-        c.mix_wind.bjorklund_scaling_factor = 0.0;
-        c.use_gold2_tolerances = false;
-        c.steps_before_use_gold2_tolerances = -1;
-        c.use_gold_tolerances = c.relax_use_gold_tolerances;
-        c.steps_before_use_gold_tolerances = -1;
-        if c.mlt_option == MltOption::Tdc {
-            c.mlt_option = MltOption::Cox;
-        }
-    }
-    if model.dt_next <= 0.0 {
-        model.dt_next = flexmesa_const::SECYER;
-    }
-
-    let max_iters = num_steps + 51;
-    let mut step_err = Ok(());
-    for step_idx in 1..=max_iters {
-        if let Err(e) = crate::evolve::star_evolve_step(
-            model,
-            model.controls.okay_to_remesh,
-            model.controls.op_split_burn,
-            true,
-        ) {
-            step_err = Err(e);
-            break;
-        }
-        let frac = ((step_idx as f64) / (num_steps as f64)).clamp(0.0, 1.0);
-        let cur_omega = model.omega.first().copied().unwrap_or(0.0);
-        let done = step_idx > num_steps + 50
-            || (cur_omega - target_omega).abs()
-                < 1.0e-4 * target_omega.abs().max(1.0e-10);
-        let this_step_omega = if done {
-            target_omega
-        } else {
-            frac * target_omega + (1.0 - frac) * starting_omega
-        };
-        crate::relax::apply_uniform_rotation(model, this_step_omega);
-        crate::rotation::update_rotation_distortion_factors(model);
-        if done {
-            break;
-        }
-    }
-
-    model.controls = saved_ctrl;
-    model.aux.doing_relax = false;
-    model.doing_first_model_of_run = saved_first;
-    model.star_age = saved_age;
-    model.star_age_old = saved_age_old;
-    model.time_sec = saved_time_sec;
-    model.time_old_sec = saved_time_old_sec;
-    model.aux.step_hist.time_sec = saved_hist_time_sec;
-    model.aux.step_hist.time_old_sec = saved_hist_time_old_sec;
-    model.model_number = saved_model_number;
-    model.num_retries = saved_num_retries;
-    model.num_redos = saved_num_redos;
-    model.total_num_solver_iterations = saved_iters;
-    model.total_num_solver_calls = saved_calls;
-    model.micro_cache_hits = saved_cache_hits;
-    model.micro_cache_misses = saved_cache_misses;
-    model.dt = 0.0;
-    model.dt_old = 0.0;
-    model.dt_next = saved_dt_next;
-    model.aux.cumulative_energy_error = saved_cum_err;
-    model.aux.step_hist.timestep_hold = 0;
-    model.aux.step_hist.model_number_for_last_retry = None;
-
-    step_err?;
-    set_hydro_vars(model, false, false)?;
-    model.save_start_values()?;
-    snapshot_step_start_extras(model);
-    model.save_old_values();
-    snapshot_step_old_extras(model);
-    // Restore pre-relaxation `*_old` timestamps after `save_old_values`
-    // (`restore_stuff` in `star/private/relax.f90:4280-4281`).
-    model.star_age_old = saved_age_old;
-    model.time_old_sec = saved_time_old_sec;
-    model.aux.step_hist.time_old_sec = saved_hist_time_old_sec;
-    Ok(())
+    crate::relax_driver::do_relax_uniform_omega(
+        model,
+        crate::relax_driver::RelaxOmegaKind::NewOmega,
+        target_omega,
+        isize::try_from(num_steps).unwrap_or(isize::MAX),
+        max_yrs_dt,
+        &mut crate::inlist_runner::DefaultStarExtras,
+    )
 }

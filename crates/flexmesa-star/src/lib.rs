@@ -103,6 +103,7 @@ mod inlist_populate_limits;
 mod inlist_populate_micro;
 mod inlist_populate_phase5b;
 pub mod inlist_runner;
+pub(crate) mod job_rotation;
 pub mod job_controls;
 pub mod mdot_redo;
 pub mod mesa_history;
@@ -135,9 +136,12 @@ pub mod pulse;
 pub mod pulse_bvp;
 pub mod pulse_bvp_recon;
 pub mod pulse_exporters;
+pub mod pulse_fgong;
 pub mod pulse_gyre_data;
 pub mod pulse_modes;
+pub mod pulse_osc;
 pub mod pulse_utils;
+pub mod pulse_write;
 pub mod relax;
 pub mod relax_comp;
 pub(crate) mod relax_driver;
@@ -149,6 +153,7 @@ pub mod riemann_eqns;
 pub mod rn_parser;
 pub mod rotation;
 pub(crate) mod rotation_mix;
+pub mod rotation_mix_info;
 pub mod rsp2;
 pub mod rsp2_ad;
 pub mod rsp2_eqns;
@@ -180,6 +185,7 @@ pub mod solver_norms;
 pub mod solver_support;
 pub mod star_ad;
 pub mod star_job_init;
+pub mod star_lib;
 pub mod star_utils;
 pub mod stella;
 pub mod step_trace;
@@ -394,8 +400,9 @@ pub use primary_state::PrimaryStateBuffer;
 pub use pulse::{
     PULSE_ISO_NAMES, PulseExportOptions, PulsePoint, build_pulse_points,
     build_pulse_points_with_options, eval_center_d2, eval_center_parabolic,
-    eval_center_rho, eval_face, export_fgong, export_fgong_with_version,
-    export_gyre, export_gyre_with_schema, export_osc, set_segment_indices,
+    default_fgong_header, eval_center_rho, eval_face, export_fgong, export_gyre,
+    export_osc, export_pulse_data_text, set_segment_indices,
+    MESA_VERSION_NUMBER,
 };
 pub use pulse_bvp::{
     BvpEigenmode, BvpModel, BvpPoint, InertiaNormKind, OuterBoundKind,
@@ -446,9 +453,10 @@ pub use rn_parser::{RnStage, parse_rn_stages};
 pub use rotation::{
     RI_CRIT_DSI, RotationalMixZone, eval_magnetic_diffusivity, eval_omega_crit,
     eval_rotation_fp_ft, eval_rotational_mixing_zone, eval_thermal_diffusivity,
-    set_rotation_mixing_info, sync_post_henyey_rotation,
-    update_rotation_distortion_factors,
+    sync_post_henyey_rotation, update_rotation_distortion_factors,
 };
+pub use rotation_mix::update_rotation_mixing_info;
+pub use rotation_mix_info::set_rotation_mixing_info;
 pub use rsp_build::{
     RspLinaMode, build_rsp_envelope_model, do_rsp_build_model,
     eval_rsp_lina_modes,

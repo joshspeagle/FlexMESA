@@ -485,9 +485,17 @@ fn wrap_surf_bc(
 
 /// Surface pressure and temperature boundary condition equations at `k = 0`
 /// (`set_Psurf_BC` and `set_Tsurf_BC` in `star/private/hydro_eqns.f90:1002-1067`).
-pub fn do_surf_bc_eqns(model: &StarModel, sys: &mut HenyeySystem) {
+///
+/// # Errors
+/// Returns [`StarError::InvalidInput`] for `RSP2_flag` without
+/// `RSP2_use_L_eqn_at_surface`: upstream then never sets `equ(i_equL, 1)`
+/// (DECISIONS #43).
+pub fn do_surf_bc_eqns(
+    model: &StarModel,
+    sys: &mut HenyeySystem,
+) -> Result<(), StarError> {
     if model.nz == 0 {
-        return;
+        return Ok(());
     }
     let bc = get_pt_bc_ad(model);
 
@@ -533,10 +541,23 @@ pub fn do_surf_bc_eqns(model: &StarModel, sys: &mut HenyeySystem) {
         sys.save_eqn_residual(&model.layout, 0, model.layout.i_dv_dt, &resid_p);
     }
 
-    let skip_surf_t_bc = model.controls.use_rsp_l_eqn_outer_bc
-        || (model.controls.rsp2_flag
-            && model.controls.rsp2.use_l_eqn_at_surface);
-    if !skip_surf_t_bc {
+    // `need_T_surf` is `.false.` whenever `RSP2_flag` or
+    // `use_RSP_L_eqn_outer_BC` is set (`star/private/hydro_eqns.f90:773-779`),
+    // so `set_Tsurf_BC`'s RSP2 branch (`hydro_eqns.f90:1012-1018`) is
+    // unreachable. With RSP2 the cell-1 `equL` row is the RSP2 luminosity
+    // equation only when `RSP2_use_L_eqn_at_surface` (`hydro_eqns.f90:250-251`);
+    // otherwise upstream never sets `equ(i_equL, 1)`.
+    if model.controls.rsp2_flag && !model.controls.rsp2.use_l_eqn_at_surface {
+        return Err(StarError::InvalidInput(String::from(
+            "RSP2_flag with RSP2_use_L_eqn_at_surface = .false.: upstream never sets equ(i_equL,1) (star/private/hydro_eqns.f90:250-251, 773-779; DECISIONS #43)",
+        )));
+    }
+    // Upstream also clears need_T_surf when `.not. do_equL` (hydro_eqns.f90:774),
+    // with do_equL = (i_equL > 0 .and. i_equL <= nvar) (:111). The layout
+    // always assigns i_equ_l within nvar, so do_equL is always true here.
+    let need_t_surf =
+        !(model.controls.rsp2_flag || model.controls.use_rsp_l_eqn_outer_bc);
+    if need_t_surf {
         let lnt_0 = StarAdOrder1::variable(model.ln_t[0], I_LNT_00);
         let ln_t_bc = bc.ln_t_bc;
         let denom_t = if lnt_0.val > 1.0 {
@@ -547,6 +568,7 @@ pub fn do_surf_bc_eqns(model: &StarModel, sys: &mut HenyeySystem) {
         let resid_t = (ln_t_bc - lnt_0) / denom_t;
         sys.save_eqn_residual(&model.layout, 0, model.layout.i_equ_l, &resid_t);
     }
+    Ok(())
 }
 
 /// Coupled nuclear burning and diffusive mixing equations for cell `k`
@@ -698,7 +720,7 @@ pub fn assemble_henyey_system(
     sys.ublk.clear();
     sys.ublk.resize(blk_len, 0.0);
 
-    do_surf_bc_eqns(model, sys);
+    do_surf_bc_eqns(model, sys)?;
     let riemann_p_surf = (model.controls.u_flag
         && !model.controls.v_flag
         && !model.controls.use_compression_outer_bc
@@ -706,6 +728,7 @@ pub fn assemble_henyey_system(
         && has_surf_momentum_bc(&model.controls))
     .then(|| eval_surf_momentum_bc_pressure_ad(model));
 
+    model.aux.ergs_error.resize(nz, 0.0);
     let mut tot_e_equ_err = 0.0_f64;
     for k in 0..nz {
         do1_density_eqn(model, k, sys)?;
@@ -722,12 +745,14 @@ pub fn assemble_henyey_system(
         if !model.controls.rsp2_flag {
             do1_temperature_eqn(model, k, sys);
         }
-        tot_e_equ_err += crate::hydro_energy::do1_energy_eqn_with_ergs_error(
+        let ergs_k = crate::hydro_energy::do1_energy_eqn_with_ergs_error(
             model,
             k,
             include_chem,
             sys,
-        );
+        )?;
+        model.aux.ergs_error[k] = ergs_k;
+        tot_e_equ_err += ergs_k;
         do1_radius_eqn(model, k, sys);
         if model.controls.rti_flag {
             crate::hydro_rti::do1_dalpha_rti_dt_eqn(model, k, sys);
@@ -758,8 +783,14 @@ pub fn eval_henyey_equations_into(
     // `eval_equations` skips `set_solver_vars` before the first iteration
     // (`star/private/solver_support.f90:108-118`); every later evaluation
     // sets the variables, so the flag is restored here.
+    // The net is evaluated with its full Jacobian whether or not abundances
+    // are solved for: upstream calls `net_get` with `just_dxdt = .false.`
+    // (`star/private/net.f90:245-246`). With `just_dxdt` the net returns
+    // before `d_eps_nuc_dT` and `d_eps_nuc_dRho` are formed
+    // (`net/private/net_eval.f90:384-397`), which drops them from the
+    // structure-only energy equation (`do_chem = .false.`, as while relaxing).
     if model.aux.need_to_setvars {
-        set_hydro_vars(model, false, !include_chem)?;
+        set_hydro_vars(model, false, false)?;
     }
     model.aux.need_to_setvars = true;
     // `star/private/hydro_eqns.f90:131-137`: revise EOS composition partials

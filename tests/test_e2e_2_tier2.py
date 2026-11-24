@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import pathlib
+import shutil
 import tempfile
 from typing import Any
 
@@ -20,52 +21,113 @@ from . import cleaned_case_gaps
 _REPRESENTATIVE_TIER2_CASES = ("wd_aic",)
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "#445: this synthetic setup (never run in MESA) relied on the removed "
-        "relax_initial_mass_to_remove_h_env stand-in; with upstream "
-        "star_relax_mass_to_remove_H_env the 0.6 Msun ZAMS start has no He "
-        "core and final_log_tc is 5.10 against the asserted > 6.0."
-    ),
-)
+class _NovaWindObserver:
+    """Read-only step observer recording mass, mdot, and surface H1."""
+
+    def __init__(self) -> None:
+        self.steps: list[tuple[int, float, float, float]] = []
+
+    def extras_finish_step(self, state: dict[str, Any]) -> str:
+        """Record per-step mass, accretion/wind rate, and surface H1."""
+        self.steps.append(
+            (
+                int(state["model_number"]),
+                float(state["star_mass"]),
+                float(state["star_mdot"]),
+                float(state["surface_h1"]),
+            )
+        )
+        return "keep_going"
+
+
+def _upstream_one_wd_model() -> pathlib.Path | None:
+    """Resolve the upstream MESA `1.1M_lgTc_7.7.mod` ONe white dwarf."""
+    base = known_gaps_gate.require_mesa_test_inputs_dir()
+    if base is None:
+        return None
+    wd_mod = (
+        base / "star" / "test_suite" / "wd_nova_burst" / "1.1M_lgTc_7.7.mod"
+    )
+    assert wd_mod.is_file(), f"Upstream ONe WD model not found: {wd_mod}"
+    return wd_mod
+
+
 def test_accretion_composition_and_super_eddington_nova_wind() -> None:
     """Verify accretion composition and super-Eddington nova wind execution on
-    a synthetic white dwarf accretion configuration (`wd_nova_burst`).
+    an evolved ONe white dwarf (`1.1M_lgTc_7.7.mod`, `wd_nova_burst`).
     """
+    wd_mod = _upstream_one_wd_model()
+    if wd_mod is None:
+        return
+
     with tempfile.TemporaryDirectory() as tmp:
         case_dir = pathlib.Path(tmp) / "wd_nova_burst"
         case_dir.mkdir(parents=True, exist_ok=True)
-        (case_dir / "inlist").write_text(
+        shutil.copy2(wd_mod, case_dir / wd_mod.name)
+        (case_dir / "inlist_accrete").write_text(
             "&star_job\n"
-            "  relax_initial_mass_to_remove_h_env = .true.\n"
-            "  new_mass = 0.60\n"
+            "  load_saved_model = .true.\n"
+            "  load_model_filename = '1.1M_lgTc_7.7.mod'\n"
+            "  save_model_when_terminate = .true.\n"
+            "  save_model_filename = 'accreted.mod'\n"
+            "  set_initial_age = .true.\n"
+            "  initial_age = 0\n"
+            "  set_initial_model_number = .true.\n"
+            "  initial_model_number = 0\n"
+            "  set_initial_dt = .true.\n"
+            "  years_for_initial_dt = 1.0d-3\n"
             "/\n"
             "&kap\n"
             "  zbase = 0.02\n"
+            "  use_Type2_opacities = .true.\n"
             "/\n"
             "&controls\n"
-            "  initial_mass = 0.60\n"
-            "  initial_z = 0.02\n"
             "  mass_change = 1.0d-9\n"
             "  accrete_same_as_surface = .false.\n"
             "  accretion_h1 = 0.70\n"
-            "  accretion_he4 = 0.28\n"
+            "  accretion_he3 = 0.292910d-4\n"
+            "  accretion_he4 = 0.279971\n"
             "  accretion_zfracs = 4\n"
             "  super_eddington_scaling_factor = 1.0\n"
             "  max_model_number = 2\n"
             "/\n",
             encoding="utf-8",
         )
-        (case_dir / "rn").write_text(
-            "#!/usr/bin/env bash\ndo_one inlist final.mod\n",
+        (case_dir / "inlist_wind").write_text(
+            "&star_job\n"
+            "  load_saved_model = .true.\n"
+            "  load_model_filename = 'accreted.mod'\n"
+            "/\n"
+            "&kap\n"
+            "  zbase = 0.02\n"
+            "  use_Type2_opacities = .true.\n"
+            "/\n"
+            "&controls\n"
+            "  mass_change = 1.0d-9\n"
+            "  accrete_same_as_surface = .false.\n"
+            "  accretion_h1 = 0.70\n"
+            "  accretion_he3 = 0.292910d-4\n"
+            "  accretion_he4 = 0.279971\n"
+            "  accretion_zfracs = 4\n"
+            "  super_eddington_scaling_factor = 1.0\n"
+            "  super_eddington_wind_Ledd_factor = 1.0d-6\n"
+            "  max_model_number = 4\n"
+            "/\n",
             encoding="utf-8",
         )
+        (case_dir / "rn").write_text(
+            "#!/usr/bin/env bash\n"
+            "do_one inlist_accrete accreted.mod\n"
+            "do_one inlist_wind final.mod\n",
+            encoding="utf-8",
+        )
+        obs = _NovaWindObserver()
         rep = e2e.run_test_suite_case(
             case_dir,
             skip_optional=True,
             max_steps_per_stage=3,
             verify_restart=True,
+            extras=obs,
         )
         assert rep["case_name"] == "wd_nova_burst"
         assert rep["tier"] == 0
@@ -74,19 +136,30 @@ def test_accretion_composition_and_super_eddington_nova_wind() -> None:
         assert rep["photo_restart_passed"] is True
         assert rep["photo_restart_verified"] is True
         assert rep["final_log_tc"] > 6.0
+        assert len(rep["stages"]) == 2
+        assert len(obs.steps) == 4
+        # Stage 1 accretes H-rich Lodders 03 composition onto the pure-He WD.
+        assert obs.steps[0][2] == pytest.approx(1.0e-9, rel=1.0e-12)
+        assert obs.steps[1][1] > obs.steps[0][1] > 1.115
+        assert obs.steps[1][3] > obs.steps[0][3] > 1.0e-5
+        # Stage 2 triggers super-Eddington wind mass loss over accretion.
+        assert obs.steps[2][2] < 0.0
+        assert obs.steps[3][2] < 0.0
+        assert obs.steps[3][1] < obs.steps[2][1] < obs.steps[1][1]
 
 
 _MAKE_O_NE_WD_SYNTHETIC_INLIST = (
     "&star_job\n"
-    "  relax_initial_mass_to_remove_h_env = .true.\n"
-    "  new_mass = 1.10\n"
+    "  load_saved_model = .true.\n"
+    "  load_model_filename = '1.1M_lgTc_7.7.mod'\n"
+    "  set_initial_model_number = .true.\n"
+    "  initial_model_number = 0\n"
     "/\n"
     "&kap\n"
     "  zbase = 0.02\n"
+    "  use_Type2_opacities = .true.\n"
     "/\n"
     "&controls\n"
-    "  initial_mass = 1.10\n"
-    "  initial_z = 0.02\n"
     "  do_phase_separation = .true.\n"
     "  phase_separation_option = 'ONe'\n"
     "  max_model_number = 2\n"
@@ -126,25 +199,34 @@ def test_synthetic_tier2_case_runners_pass_assertions_and_restart(
     _check_synthetic_tier2_case(case_name, inlist_body)
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "#445: this synthetic setup (never run in MESA) relied on the removed "
-        "relax_initial_mass_to_remove_h_env stand-in; with upstream "
-        "star_relax_mass_to_remove_H_env the 1.10 Msun ZAMS relax stops on "
-        "max_number_retries."
-    ),
-)
 def test_synthetic_tier2_make_o_ne_wd_runner_and_restart() -> None:
-    """Verify the synthetic make_o_ne_wd directory as the cases above."""
-    _check_synthetic_tier2_case("make_o_ne_wd", _MAKE_O_NE_WD_SYNTHETIC_INLIST)
+    """Verify the ONe white dwarf `make_o_ne_wd` setup from
+    `1.1M_lgTc_7.7.mod` passes physical assertions and `.photo` restart parity.
+    """
+    wd_mod = _upstream_one_wd_model()
+    if wd_mod is None:
+        return
+    rep = _check_synthetic_tier2_case(
+        "make_o_ne_wd",
+        _MAKE_O_NE_WD_SYNTHETIC_INLIST,
+        mod_src=wd_mod,
+    )
+    assert rep["final_log_tc"] > 7.0
+    assert rep["final_log_rhoc"] > 7.5
 
 
-def _check_synthetic_tier2_case(case_name: str, inlist_body: str) -> None:
+def _check_synthetic_tier2_case(
+    case_name: str,
+    inlist_body: str,
+    *,
+    mod_src: pathlib.Path | None = None,
+) -> dict[str, Any]:
     """Runs one synthetic Tier 2 directory (see the tests above)."""
     with tempfile.TemporaryDirectory() as tmp:
         case_dir = pathlib.Path(tmp) / case_name
         case_dir.mkdir(parents=True, exist_ok=True)
+        if mod_src is not None:
+            shutil.copy2(mod_src, case_dir / mod_src.name)
         (case_dir / "inlist").write_text(inlist_body, encoding="utf-8")
         (case_dir / "rn").write_text(
             "#!/usr/bin/env bash\ndo_one inlist final.mod\n",
@@ -170,6 +252,7 @@ def _check_synthetic_tier2_case(case_name: str, inlist_body: str) -> None:
         assert np.isfinite(rep["final_log_r"])
         assert np.isfinite(rep["final_log_tc"])
         assert np.isfinite(rep["final_log_rhoc"])
+        return rep
 
 
 def test_unimplemented_create_initial_model_and_missing_hook_fail_loudly(

@@ -42,32 +42,57 @@
 use flexmesa_mtx::{
     band_multiply_xa, band_to_col_sparse_with_diag, band_to_column_sparse,
     band_to_dense, band_to_row_sparse, band_to_row_sparse_with_diag,
-    col_sparse_0_based_to_dense, column_sparse_to_band, column_sparse_to_dense,
-    decsol_option, decsol_option_str, dense_to_band, dense_to_col_0_based,
+    clip_block, clip_blocks, col_sparse_0_based_to_dense,
+    column_sparse_to_band, column_sparse_to_dense, decsol_option,
+    decsol_option_str, dense_to_band, dense_to_col_0_based,
     dense_to_col_sparse, dense_to_row_0_based, dense_to_row_sparse,
-    dense_to_sparse_with_diag, dgbtrf, dgbtrs, dgetrf, find_loc_in_sparse,
-    is_block_tridiagonal_decsol, lu_factored_square_mm, lu_factored_square_mv,
-    multiply_xa, rcond_banded, rcond_dense, row_sparse_0_based_to_dense,
-    row_sparse_to_band, row_sparse_to_dense, solve_banded, solve_dense,
-    solve_dense_multi, DecsolOption, SparseFormat,
+    dense_to_sparse_with_diag, dgbtrf, dgbtrs, dgetrf, dgetrs_trans,
+    find_loc_in_sparse, is_block_tridiagonal_decsol, lu_factored_square_mm,
+    lu_factored_square_mv, multiply_xa, multiply_xa_plus_c, rcond_banded,
+    rcond_dense, row_sparse_0_based_to_dense, row_sparse_to_band,
+    row_sparse_to_dense, solve_banded, solve_block_tridiag_bcyclic,
+    solve_dense, solve_dense_multi, DecsolOption, MtxError, SparseFormat,
 };
 use proptest::prelude::*;
 
 /// Verifies solver option enums and string helpers against `mtx_def.f90`.
 ///
-/// Checks round-trip string lookup (`decsol_option`, `decsol_option_str`) and
-/// block-tridiagonal classification (`is_block_tridiagonal_decsol`).
+/// Checks round-trip string lookup (`decsol_option`, `decsol_option_str`),
+/// block-tridiagonal classification (`is_block_tridiagonal_decsol`), and error
+/// reporting on unknown option names.
 #[test]
 fn test_decsol_options_match_upstream() {
-    assert_eq!(decsol_option("lapack").unwrap(), DecsolOption::Lapack);
+    assert_eq!(decsol_option(" lapack ").unwrap(), DecsolOption::Lapack);
     assert_eq!(
         decsol_option("block_thomas_dble").unwrap(),
         DecsolOption::BlockThomasDble
     );
+    assert_eq!(
+        decsol_option("block_thomas_refine").unwrap(),
+        DecsolOption::BlockThomasRefine
+    );
+    assert_eq!(
+        decsol_option("bcyclic_dble").unwrap(),
+        DecsolOption::BcyclicDble
+    );
     assert_eq!(decsol_option_str(DecsolOption::Lapack), "lapack");
+    assert_eq!(
+        decsol_option_str(DecsolOption::BlockThomasDble),
+        "block_thomas_dble"
+    );
+    assert_eq!(
+        decsol_option_str(DecsolOption::BlockThomasRefine),
+        "block_thomas_refine"
+    );
+    assert_eq!(decsol_option_str(DecsolOption::BcyclicDble), "bcyclic_dble");
     assert!(!is_block_tridiagonal_decsol(DecsolOption::Lapack));
     assert!(is_block_tridiagonal_decsol(DecsolOption::BlockThomasDble));
+    assert!(is_block_tridiagonal_decsol(DecsolOption::BlockThomasRefine));
     assert!(is_block_tridiagonal_decsol(DecsolOption::BcyclicDble));
+    assert!(matches!(
+        decsol_option("unknown_solver"),
+        Err(MtxError::InvalidParameter(_))
+    ));
 }
 
 /// Golden test matching `test_square1` ($4 \times 4$ system) from
@@ -345,6 +370,207 @@ fn test_banded_lu_matches_dense_lu() {
     for i in 0..n {
         assert!((xa_band[i] - xa_dense[i]).abs() < 1e-14);
     }
+}
+
+/// Verifies `test_format_conversion` from `mtx/test/src/test_mtx_support.f90`
+/// (`6 x 6` matrices `a` and `b`, `ml = 1, mu = 2`), including sequential
+/// `hint`-accelerated `find_loc_in_sparse` lookups.
+#[test]
+fn test_upstream_test_mtx_support_format_conversion() {
+    let n = 6;
+    let ml = 1;
+    let mu = 2;
+    let ldab = 2 * ml + mu + 1;
+    let nzmax = n * n;
+    #[rustfmt::skip]
+    let a = [
+        10.0,  0.0,  0.0,  0.0,  0.0,  0.0,
+         0.0, 12.0, -3.0, -1.0,  0.0,  0.0,
+         0.0,  0.0, 15.0,  0.0,  0.0,  0.0,
+        -2.0,  0.0,  0.0, 10.0, -1.0,  0.0,
+        -1.0,  0.0,  0.0, -5.0,  1.0, -1.0,
+        -1.0, -2.0,  0.0,  0.0,  0.0,  6.0,
+    ];
+    #[rustfmt::skip]
+    let b = [
+        10.0,  0.0,  0.0,  0.0,  0.0,  0.0,
+        -2.0, 12.0, -3.0, -1.0,  0.0,  0.0,
+         0.0,  1.0, 15.0,  0.0,  0.0,  0.0,
+         0.0,  0.0,  0.0, 10.0, -1.0,  0.0,
+         0.0,  0.0,  0.0, -5.0,  1.0, -1.0,
+         0.0,  0.0,  0.0,  0.0,  0.0,  6.0,
+    ];
+
+    let mut ptr = vec![0usize; n + 1];
+    let mut ind = vec![0usize; nzmax];
+    let mut vals = vec![0.0; nzmax];
+    let nz =
+        dense_to_row_sparse(n, n, &a, nzmax, &mut ptr, &mut ind, &mut vals)
+            .unwrap();
+    for i in 0..n {
+        let mut hint = Some(0usize);
+        for k_1based in ptr[i]..ptr[i + 1] {
+            let j_1based = ind[k_1based - 1];
+            let found = find_loc_in_sparse(
+                SparseFormat::CompressedRowSparse,
+                n,
+                nz,
+                &ptr,
+                &ind,
+                i + 1,
+                j_1based,
+                hint,
+            )
+            .unwrap()
+            .unwrap();
+            assert_eq!(found, k_1based);
+            hint = Some(found);
+        }
+    }
+
+    let mut bb = vec![0.0; ldab * n];
+    dense_to_band(n, n, &b, ml, mu, &mut bb, ldab).unwrap();
+    let mut a2 = vec![-1.0; n * n];
+    band_to_dense(n, ml, mu, &bb, ldab, n, &mut a2).unwrap();
+    assert_eq!(b.as_slice(), a2.as_slice());
+
+    let nz_col = band_to_column_sparse(
+        n, ml, mu, &bb, ldab, nzmax, &mut ptr, &mut ind, &mut vals,
+    )
+    .unwrap();
+    let mut bb2 = vec![-1.0; ldab * n];
+    column_sparse_to_band(n, ml, mu, &mut bb2, ldab, nz_col, &ptr, &ind, &vals)
+        .unwrap();
+    assert_eq!(bb, bb2);
+
+    let nz_row = band_to_row_sparse(
+        n, ml, mu, &bb, ldab, nzmax, &mut ptr, &mut ind, &mut vals,
+    )
+    .unwrap();
+    let mut bb3 = vec![-1.0; ldab * n];
+    row_sparse_to_band(n, ml, mu, &mut bb3, ldab, nz_row, &ptr, &ind, &vals)
+        .unwrap();
+    assert_eq!(bb, bb3);
+}
+
+/// Verifies banded LU (`dgbtrf`/`dgbtrs`, `solve_banded`, `rcond_banded`) when
+/// large sub-diagonals force partial-pivoting row swaps and fill-in (`kl = 2`,
+/// `ku = 1`).
+#[test]
+fn test_banded_lu_with_pivoting_matches_dense_lu() {
+    let n = 7;
+    let kl = 2;
+    let ku = 1;
+    let ldab = 2 * kl + ku + 1;
+    let mut a = vec![0.0; n * n];
+    let mut b = vec![0.0; n];
+    for i in 0..n {
+        b[i] = 1.0 + 0.35 * (i as f64);
+        let j_min = i.saturating_sub(kl);
+        let j_max = (i + ku).min(n - 1);
+        for j in j_min..=j_max {
+            a[i * n + j] = match i.cmp(&j) {
+                std::cmp::Ordering::Equal => 0.25 + 0.05 * (i as f64),
+                std::cmp::Ordering::Greater => 3.5 + 0.2 * ((i + j) as f64),
+                std::cmp::Ordering::Less => -1.4 - 0.1 * (j as f64),
+            };
+        }
+    }
+
+    let mut ab = vec![0.0; ldab * n];
+    dense_to_band(n, n, &a, kl, ku, &mut ab, ldab).unwrap();
+
+    let mut lu_ab = ab.clone();
+    let mut ipiv = vec![0usize; n];
+    dgbtrf(n, kl, ku, &mut lu_ab, ldab, &mut ipiv).unwrap();
+    assert!(
+        ipiv.iter().enumerate().any(|(j, &piv)| piv != j),
+        "expected row swaps in pivoted banded test"
+    );
+
+    let mut x_inplace = b.clone();
+    dgbtrs(n, kl, ku, &lu_ab, ldab, &ipiv, &mut x_inplace).unwrap();
+    let x_band = solve_banded(n, kl, ku, &ab, ldab, &b).unwrap();
+    let x_dense = solve_dense(n, &a, &b).unwrap();
+    for i in 0..n {
+        assert_eq!(x_inplace[i].to_bits(), x_band[i].to_bits());
+        assert!((x_band[i] - x_dense[i]).abs() < 1e-13);
+    }
+
+    let rcond = rcond_banded(n, kl, ku, &ab, &lu_ab, ldab, &ipiv).unwrap();
+    assert!(rcond > 0.0 && rcond <= 1.0);
+}
+
+/// Verifies `dgetrs_trans`, `multiply_xa_plus_c`, `clip_block`/`clip_blocks`,
+/// and error reporting on singular or non-finite inputs across dense and
+/// `bcyclic` solvers.
+#[test]
+fn test_dense_transpose_clip_blocks_and_solver_error_paths() {
+    let n = 3;
+    let a = [
+        2.5_f64, -0.8, 1.2, //
+        0.4, 3.1, -0.5, //
+        -1.1, 0.7, 4.2, //
+    ];
+    let mut a_t = [0.0; 9];
+    for i in 0..n {
+        for j in 0..n {
+            a_t[j * n + i] = a[i * n + j];
+        }
+    }
+    let rhs = [1.25_f64, -2.5, 0.75];
+    let mut lu = a;
+    let mut ipiv = [0usize; 3];
+    dgetrf(n, &mut lu, &mut ipiv).unwrap();
+    let mut x_trans = rhs;
+    dgetrs_trans(true, n, &lu, &ipiv, &mut x_trans).unwrap();
+    let x_ref = solve_dense(n, &a_t, &rhs).unwrap();
+    for i in 0..n {
+        assert!((x_trans[i] - x_ref[i]).abs() < 1e-14);
+    }
+
+    let c = [0.5_f64, -1.0, 2.25];
+    let mut xa_c = [0.0; 3];
+    multiply_xa_plus_c(n, &a, &rhs, &c, &mut xa_c).unwrap();
+    for j in 0..n {
+        let expected =
+            (0..n).map(|i| rhs[i] * a[i * n + j]).sum::<f64>() + c[j];
+        assert_eq!(xa_c[j].to_bits(), expected.to_bits());
+    }
+
+    let mut d = [0.01_f64, 0.02, -0.5, 2.0];
+    assert_eq!(clip_block(2, 0.1, &mut d).unwrap(), 3);
+    assert_eq!(d, [0.01, 0.0, -0.5, 2.0]);
+
+    let mut l_blk = [0.02_f64, 0.03, -0.2, 0.4];
+    let mut d_blk = [1.0_f64, -0.05, 0.25, 0.01];
+    let mut u_blk = [0.5_f64, 0.3, 0.04, -1.0];
+    let (d_nnz, tot_nnz) =
+        clip_blocks(2, 0.1, &mut l_blk, &mut d_blk, &mut u_blk).unwrap();
+    assert_eq!(d_nnz, 3);
+    assert_eq!(tot_nnz, 9);
+
+    let sing_dense = [1.0, 2.0, 2.0, 4.0];
+    let mut sing_lu = sing_dense;
+    let mut sing_ipiv = [0usize; 2];
+    assert_eq!(
+        dgetrf(2, &mut sing_lu, &mut sing_ipiv),
+        Err(MtxError::SingularMatrix(1))
+    );
+
+    let lblk = [0.0_f64; 12];
+    let mut dblk = [1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0];
+    let ublk = [0.0_f64; 12];
+    let brhs = [1.0_f64; 6];
+    assert_eq!(
+        solve_block_tridiag_bcyclic(2, 3, &lblk, &dblk, &ublk, &brhs, false),
+        Err(MtxError::SingularMatrix(1))
+    );
+    dblk[0] = f64::NAN;
+    assert!(matches!(
+        solve_block_tridiag_bcyclic(2, 3, &lblk, &dblk, &ublk, &brhs, false),
+        Err(MtxError::NonFiniteInput(_))
+    ));
 }
 
 proptest! {

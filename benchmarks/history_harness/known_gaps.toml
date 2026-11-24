@@ -35,7 +35,8 @@ reason = "Multi-stage pre-MS-to-WD campaign exceeds 300 s wall-time guard with u
 suite = "star"
 case = "1M_thermohaline"
 issue = "#158"
-reason = "Exceeds 300 s wall-time guard with 4 unsupported rotation relaxation controls (change_d_omega_flag, near_zams_relax_initial_surface_rotation_v, new_d_omega_flag, num_steps_to_relax_rotation; #158)."
+reason = "Exceeds 300 s wall-time guard with 2 unsupported rotation controls (change_d_omega_flag, new_d_omega_flag; #158)."
+
 [[gaps]]
 suite = "star"
 case = "20M_pre_ms_to_core_collapse"
@@ -71,11 +72,6 @@ suite = "star"
 case = "c13_pocket"
 issue = "#161"
 reason = "AGB third-dredge-up C13-pocket evolution hits memory/wall-time guard with unsupported controls::atm_off_table_option (#161)."
-[[gaps]]
-suite = "star"
-case = "carbon_kh"
-issue = "#161"
-reason = "Carbon Kelvin-Helmholtz contraction requires unbundled minimal.net and unsupported auto_extend_net / set_cumulative_energy_error_at_step controls (#161)."
 [[gaps]]
 suite = "star"
 case = "cburn_inward"
@@ -158,11 +154,6 @@ issue = "#161"
 reason = "Strict run diverges from step 2 under fixed T(tau) opacity and enters AGB solver retries (789 steps, 135 retries vs MESA 570 steps, 28 retries), exceeding the 900 s wall-time cap (#161, #152, #159)."
 [[gaps]]
 suite = "star"
-case = "irradiated_planet"
-issue = "#154"
-reason = "Diagnostic run (3 ignored &star_job controls: dlogtau_factor, relax_irradiation_max_yrs_dt, relax_irradiation_min_steps) reaches max_age in 124 steps (MESA 127, 0 retries, 0 num_zones diff) with log_L/log_Teff deviations from step 86; needs planetary initial model and column-depth irradiation relaxation (#154)."
-[[gaps]]
-suite = "star"
 case = "magnetic_braking"
 issue = "#157"
 reason = "Case history_columns.list requests unported MLT++ gradT_excess_alpha column (#157) and rotational retry/physics controls (#152, #158)."
@@ -176,11 +167,6 @@ suite = "star"
 case = "make_co_wd"
 issue = "#157"
 reason = "Case history_columns.list requests unported MLT++ gradT_excess_alpha column."
-[[gaps]]
-suite = "star"
-case = "make_env"
-issue = "#154"
-reason = "Envelope initial-model construction and boundary relaxation (#154)."
 [[gaps]]
 suite = "star"
 case = "make_he_wd"
@@ -253,11 +239,6 @@ issue = "#170"
 reason = "Upstream run_star_extras calls GYRE for the initial velocities; GYRE is not ported, so the test-side hook raises and the run does not start (#170)."
 [[gaps]]
 suite = "star"
-case = "rsp_save_and_load_file"
-issue = "#161"
-reason = "Diagnostic run reaches upstream termination within tolerances via test-side extras, but strict validation rejects unported &colors and rsp controls (#161, #162)."
-[[gaps]]
-suite = "star"
 case = "simplex_solar_calibration"
 issue = "#162"
 reason = "Simplex solar calibration optimizer times out under non-upstream simplex/solver loop (#162, #152)."
@@ -326,11 +307,6 @@ suite = "binary"
 case = "double_bh"
 issue = "#161"
 reason = "Component history_columns.list requests unported gradT_excess_alpha/hydro/colors columns (#157, #161), 1 unsupported control remains, and coupled binary orbit awaits #160."
-[[gaps]]
-suite = "binary"
-case = "jdot_gr_check"
-issue = "#160"
-reason = "Strict binary run reaches extras_binary_check_model with binary orbit and masses within tolerance, while LOGS1 initial dt shifts the model 1-5 coarsening cascade in star_age past rel_num_zones = 2% (#160, #161)."
 [[gaps]]
 suite = "binary"
 case = "star_plus_point_mass"
@@ -473,8 +449,8 @@ file = "crates/flexmesa-astero/tests/astero_suite.rs"
 test_name = "test_example_astero_uncapped"
 issue = "#162"
 role = "campaign"
-expect_fail_when_run = false
-reason = "Long-running uncapped astero campaign tracked under #162 and #171. Passes locally after removing the non-upstream limit_num_* pass rejection (samples=1, best chi2 3.81, 653 steps, ending on limit_num_chi2_too_big because best chi2 3.81 exceeds chi2_search_limit1 = 3.0). MESA 26.4.1 (mesa-histories-v1) finishes in 737 steps with best chi2 2.8005 at model 734 and ends on chi2_search_limit2; the astero/example_astero history-harness row remains a declared gap under #162 and #171."
+expect_fail_when_run = true
+reason = "Uncapped astero campaign (#162, #171). It now stops with an explicit error, by design: example_astero's set_constraint_value('Rcz') leaves val unset when no convective boundary is found (upstream reads it undefined; deferred bug #438, DECISIONS #43). MESA 26.4.1 (mesa-histories-v1) finishes in 737 steps, with best chi2 2.8005 at model 734, ending on chi2_search_limit2."
 
 [[test_gaps]]
 kind = "rust_ignore"
@@ -515,24 +491,6 @@ issue = "#162"
 role = "campaign"
 expect_fail_when_run = false
 reason = "Long-running uncapped astero NEWUOA campaign tracked under #162 and scheduled campaign CI."
-
-[[test_gaps]]
-kind = "python_xfail"
-file = "tests/test_e2e_2_tier2.py"
-test_name = "test_accretion_composition_and_super_eddington_nova_wind"
-issue = "#445"
-role = "physics_gap"
-expect_fail_when_run = true
-reason = "This synthetic setup (never run in MESA) relied on the removed relax_initial_mass_to_remove_h_env stand-in; with upstream star_relax_mass_to_remove_H_env (star_lib.f90:1271-1287) the 0.6 Msun ZAMS start has no He core and final_log_tc is 5.10 against the asserted > 6.0."
-
-[[test_gaps]]
-kind = "python_xfail"
-file = "tests/test_e2e_2_tier2.py"
-test_name = "test_synthetic_tier2_make_o_ne_wd_runner_and_restart"
-issue = "#445"
-role = "physics_gap"
-expect_fail_when_run = true
-reason = "This synthetic setup (never run in MESA) relied on the removed relax_initial_mass_to_remove_h_env stand-in; with upstream star_relax_mass_to_remove_H_env the 1.10 Msun ZAMS relax stops on max_number_retries."
 
 [[test_gaps]]
 kind = "python_xfail"
@@ -730,3 +688,23 @@ issue = "#295"
 role = "physics_gap"
 expect_fail_when_run = true
 reason = "Rust AESOPUS evaluates MESA 26.4.1 interp_2d/private/bicub_db.f implicit f32 fvbicub_db basis scalars in strict mode (#433, #161), whereas the frozen JAX twin keeps pure f64 basis scalars per DECISIONS #43; measured max rel diff is 1.713e-8 against rtol=1e-12, atol=1e-12."
+
+[[test_gaps]]
+kind = "rust_ignore"
+crate = "flexmesa-binary"
+file = "crates/flexmesa-binary/tests/binary_160_mesa_parity_test.rs"
+test_name = "star_plus_point_mass_model5_and_model115_match_mesa_26_4_1"
+issue = "#160"
+role = "physics_gap"
+expect_fail_when_run = true
+reason = "With #518's upstream get_face_values arithmetic for the Brunt face values (star_utils.f90:2046-2060), the model-115 period_days, binary_separation and star_1_mass leave the MESA 26.4.1 binary_history.data values by 1.3e-9 to 1.95e-9 against a 1e-9 tolerance (age 6e-12). The case is sensitive at rounding level, downstream of brunt_B (#530)."
+
+[[test_gaps]]
+kind = "rust_ignore"
+crate = "flexmesa-binary"
+file = "crates/flexmesa-binary/tests/binary_160_mesa_parity_test.rs"
+test_name = "star_plus_point_mass_explicit_mdot_model5_and_model110_match_mesa_26_4_1"
+issue = "#160"
+role = "physics_gap"
+expect_fail_when_run = true
+reason = "With #518's upstream get_face_values arithmetic for the Brunt face values (star_utils.f90:2046-2060), the model-110 age leaves the MESA 26.4.1 binary_history.data value by 4.7e-8 (other quantities at or below 3e-12). The Ledoux/semiconvection path downstream of brunt_B is suspected (#530)."

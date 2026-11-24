@@ -136,12 +136,14 @@ pub trait StarExtras {
         Ok(None)
     }
     /// Custom adjusted $\dot{M}$ ($\mathrm{g\,s^{-1}}$) or `None` to keep `current_mdot`.
+    /// Hooks may also mutate `m` (such as `m.controls.mix_wind.accreted_material_j`,
+    /// mirroring `star/other/other_adjust_mdot.f90` and `star/private/winds.f90:44-50`).
     ///
     /// # Errors
     /// Returns [`StarError`] if evaluating custom $\dot{M}$ fails.
     fn other_adjust_mdot(
-        &self,
-        _m: &StarModel,
+        &mut self,
+        _m: &mut StarModel,
         _current_mdot: f64,
     ) -> Result<Option<f64>, StarError> {
         Ok(None)
@@ -651,7 +653,7 @@ impl<'a> StarLogsOptions<'a> {
 
 fn record_logs_step_with_extras(
     lw: &mut StarLogsWriter,
-    model: &StarModel,
+    model: &mut StarModel,
     extras: &dyn StarExtras,
     is_first_step: bool,
     is_terminating: bool,
@@ -660,6 +662,9 @@ fn record_logs_step_with_extras(
     let prof_due = lw.is_profile_due(model, is_first_step, is_terminating);
     if !hist_due && !prof_due {
         return Ok(());
+    }
+    if hist_due {
+        lw.sync_history_target(model);
     }
     let hist_hdr = if hist_due && lw.needs_history_header() {
         extras.extra_history_header_items(model)?
@@ -721,8 +726,25 @@ pub fn run_inlist_stage_with_logs(
     bundle: &InlistBundle,
     extras: &mut dyn StarExtras,
     max_steps_cap: Option<usize>,
-    mut logs_writer: Option<&mut StarLogsWriter>,
+    logs_writer: Option<&mut StarLogsWriter>,
 ) -> Result<StageRunReport, StarError> {
+    let (rep, _) = run_inlist_stage_with_logs_inner(
+        model,
+        bundle,
+        extras,
+        max_steps_cap,
+        logs_writer,
+    )?;
+    Ok(rep)
+}
+
+fn run_inlist_stage_with_logs_inner(
+    model: &mut StarModel,
+    bundle: &InlistBundle,
+    extras: &mut dyn StarExtras,
+    max_steps_cap: Option<usize>,
+    mut logs_writer: Option<&mut StarLogsWriter>,
+) -> Result<(StageRunReport, bool), StarError> {
     let _net_dir_guard = crate::micro::NetSearchDirGuard::new(&bundle.case_dir);
     if logs_writer.is_none() && model.controls.colors.use_colors {
         let _ = crate::mesa_history::load_star_colors_context(
@@ -736,6 +758,7 @@ pub fn run_inlist_stage_with_logs(
         (0, 0, 0);
     let mut history_rows = Vec::new();
     let mut termination_code = String::from("max_steps_cap");
+    let mut terminated_by_extras = false;
     let mut last_default_photo_model: Option<usize> = None;
 
     let job_step_cap = (model.job.steps_to_take_before_terminate >= 0)
@@ -775,9 +798,21 @@ pub fn run_inlist_stage_with_logs(
             if model.job.auto_extend_net {
                 crate::extend_net::extend_net(model, &bundle.case_dir)?;
             }
+            // `before_step_loop` (`star/job/run_star_support.f90:636-640`):
+            // reset cumulative energy error before each step while `star_age`
+            // is below `set_cumulative_energy_error_each_step_if_age_less_than`.
+            if model.star_age
+                < model
+                    .job
+                    .set_cumulative_energy_error_each_step_if_age_less_than
+            {
+                model.aux.cumulative_energy_error =
+                    model.job.new_cumulative_energy_error;
+            }
             match extras.extras_start_step(model) {
                 ExtrasDirective::Terminate(reason) => {
                     termination_code = reason;
+                    terminated_by_extras = true;
                     break;
                 }
                 ExtrasDirective::Error(msg) => {
@@ -816,6 +851,16 @@ pub fn run_inlist_stage_with_logs(
             total_newton_iterations += step_rep.iterations;
             total_retries += step_rep.retries;
 
+            // `after_step_loop` (`star/job/run_star_support.f90:689-692`):
+            // reset `cumulative_energy_error` before `rel_run_E_err` checks,
+            // `extras_finish_step`, and history/profile output.
+            if i64::try_from(model.model_number).is_ok_and(|m| {
+                m == model.job.set_cumulative_energy_error_at_step
+            }) {
+                model.aux.cumulative_energy_error =
+                    model.job.new_cumulative_energy_error;
+            }
+
             let in_step_termination =
                 model.aux.step_hist.termination_code.clone();
             let finish_dir = extras.extras_finish_step(model);
@@ -828,16 +873,18 @@ pub fn run_inlist_stage_with_logs(
                     model.dt,
                     &[],
                 )?;
-                model.save_start_values()?;
-                snapshot_step_start_extras(model);
             }
             let hr = extract_history_row(model);
             history_rows.push(hr);
 
             let mut will_terminate = false;
-            if let Some(code) = in_step_termination.or(check_term_opt) {
+            if let Some(code) = in_step_termination {
                 termination_code = code;
                 will_terminate = true;
+            } else if let Some(code) = check_term_opt {
+                termination_code = code;
+                will_terminate = true;
+                terminated_by_extras = true;
             }
             match finish_dir {
                 ExtrasDirective::Error(msg) => {
@@ -852,6 +899,7 @@ pub fn run_inlist_stage_with_logs(
                     if !will_terminate {
                         termination_code = reason;
                         will_terminate = true;
+                        terminated_by_extras = true;
                     }
                 }
                 ExtrasDirective::KeepGoing => {}
@@ -866,6 +914,18 @@ pub fn run_inlist_stage_with_logs(
             }
             let is_last_cap_step = steps_taken == cap;
             let is_terminating = will_terminate || is_last_cap_step;
+            if model.controls.rsp_flag && model.controls.rsp.write_map {
+                let map_log_dir = logs_writer
+                    .as_deref()
+                    .filter(|lw| !lw.is_explicit_history_file())
+                    .map(|lw| lw.log_dir().to_path_buf());
+                crate::rsp_driver::rsp_after_step_map(
+                    model,
+                    &bundle.case_dir,
+                    map_log_dir.as_deref(),
+                    extras,
+                )?;
+            }
             if let Some(lw) = logs_writer.as_deref_mut() {
                 record_logs_step_with_extras(
                     lw,
@@ -874,6 +934,10 @@ pub fn run_inlist_stage_with_logs(
                     steps_taken == 1,
                     is_terminating,
                 )?;
+            }
+            if !model.controls.rsp_flag {
+                model.save_start_values()?;
+                snapshot_step_start_extras(model);
             }
             // Periodic restart photo output (`star/private/evolve.f90:2340-2361`).
             let photo_interval = model.controls.output.photo_interval;
@@ -907,6 +971,10 @@ pub fn run_inlist_stage_with_logs(
             if will_terminate {
                 break;
             }
+            // `adjust_tau_factor`, `do_rotation_near_zams` and `do_rotation`
+            // after `star_finish_step` returned `keep_going`
+            // (`star/job/run_star_support.f90:752-763`).
+            crate::job_rotation::after_step_rotation_and_tau(model, extras)?;
         }
     }
 
@@ -956,16 +1024,19 @@ pub fn run_inlist_stage_with_logs(
 
     let final_history = history_rows.last().copied().unwrap_or(init_hr);
 
-    Ok(StageRunReport {
-        inlist_name: bundle.entry_inlist.clone(),
-        steps_taken,
-        total_newton_iterations,
-        total_retries,
-        termination_code,
-        runtime_sec: t0.elapsed().as_secs_f64(),
-        final_history,
-        history_rows,
-    })
+    Ok((
+        StageRunReport {
+            inlist_name: bundle.entry_inlist.clone(),
+            steps_taken,
+            total_newton_iterations,
+            total_retries,
+            termination_code,
+            runtime_sec: t0.elapsed().as_secs_f64(),
+            final_history,
+            history_rows,
+        },
+        terminated_by_extras,
+    ))
 }
 
 /// Verifies bit-identical `.photo` restart parity on `model`:
@@ -1169,12 +1240,14 @@ pub fn run_test_suite_case_with_extras(
     let (mut total_steps, mut total_newton, mut total_retries) = (0, 0, 0);
     let mut photo_restart_verified = false;
     let mut terminated_in_init = false;
+    let mut last_stage_terminated_by_extras = false;
     let mut all_required_terminations_ok = true;
 
     for stage in &rn_stages {
         match stage {
             RnStage::CopyCheckpoint { src_mod, dst_mod } => {
                 current_model = None;
+                last_stage_terminated_by_extras = false;
                 let (src, dst) =
                     (case_dir.join(src_mod), case_dir.join(dst_mod));
                 if !src.exists() {
@@ -1252,13 +1325,15 @@ pub fn run_test_suite_case_with_extras(
                     extras,
                 )?;
 
-                let rep = run_inlist_stage_with_logs(
-                    &mut model,
-                    &bundle,
-                    extras,
-                    max_steps_per_stage,
-                    stage_logs.as_mut(),
-                )?;
+                let (rep, stage_terminated_by_extras) =
+                    run_inlist_stage_with_logs_inner(
+                        &mut model,
+                        &bundle,
+                        extras,
+                        max_steps_per_stage,
+                        stage_logs.as_mut(),
+                    )?;
+                last_stage_terminated_by_extras = stage_terminated_by_extras;
 
                 let stage_abnormal = matches!(
                     rep.termination_code.as_str(),
@@ -1324,7 +1399,8 @@ pub fn run_test_suite_case_with_extras(
             | "varcontrol_target < min_allowed_varcontrol_target"
             | "invalid dt_next in timestep_controller"
     );
-    let reached_terminal_stop = !termination_code.is_empty()
+    let reached_terminal_stop = (last_stage_terminated_by_extras
+        || !termination_code.is_empty())
         && termination_code != "max_steps_cap"
         && termination_code != "no_stages_executed"
         && !abnormal_termination;

@@ -233,6 +233,9 @@ fn test_solver_itermin_and_adjust_correction_backtracking_converge() {
     m.solver_skip_global_corr_coeff_limit = false;
     set_hydro_vars(&mut m, false, false).expect("hydro");
     m.save_start_values().expect("start");
+    // Standalone solver call: set `total_internal_energy_old` as the step
+    // driver does before the solve (`evolve.f90:427-436`).
+    flexmesa_star::record_start_of_step_energy_integrals(&mut m);
     m.lnd[3] += 0.02;
     m.pack_xh();
 
@@ -406,7 +409,8 @@ fn test_select_mdot_action_solver_failure_retries_without_force_accept_139() {
     m.omega.fill(2.0e-4);
     flexmesa_star::update_rotation_distortion_factors(&mut m);
     set_hydro_vars(&mut m, false, false).expect("hydro");
-    flexmesa_star::sync_post_henyey_rotation(&mut m, 1.0);
+    flexmesa_star::sync_post_henyey_rotation(&mut m, 1.0)
+        .expect("sync_post_henyey_rotation");
     m.save_start_values().expect("start");
     m.save_old_values();
 
@@ -600,8 +604,13 @@ fn test_sizeb_flailing_check_reproduces_upstream_260_never_fires() {
     );
 }
 
+/// MESA 26.4.1 keeps the `max_timestep_hi_T_limit` switch of a failed try
+/// (`star/private/evolve.f90:705-711`): `prepare_to_retry` recomputes
+/// `max_timestep` from the switched `max_years_for_timestep` and caps the
+/// retry `dt` with it (`:2250-2255`), and `set_current_to_old`
+/// (`star/private/evolve_support.f90:147-240`) restores neither (#510).
 #[test]
-fn test_rejected_trial_reverts_max_timestep_hi_t_limit_mutations() {
+fn test_retry_keeps_max_timestep_hi_t_limit_switch_of_failed_try() {
     struct RejectOnceExtras {
         calls: usize,
         saw_second_try_max_timestep: f64,
@@ -669,26 +678,28 @@ fn test_rejected_trial_reverts_max_timestep_hi_t_limit_mutations() {
     .expect("retry step should succeed");
     assert!(rep.converged);
     assert_eq!(extras.calls, 2);
-    assert!(
-        (model.controls.max_years_for_timestep - orig_max_years).abs()
-            < 1.0e-12,
-        "max_years_for_timestep must revert after rejected hi_t trial"
+    assert_eq!(
+        model.controls.max_years_for_timestep, 0.01,
+        "the hi_T switch of the failed try stays after the step"
+    );
+    assert_eq!(
+        extras.saw_second_try_max_timestep,
+        SECYER * 0.01,
+        "prepare_to_retry recomputes max_timestep from the switched \
+         max_years_for_timestep"
     );
     assert!(
-        (extras.saw_second_try_max_timestep - orig_max_years * SECYER).abs()
-            < 1.0e-3,
-        "prepare_to_retry must compute ts_stop.max_timestep from restored max_years_for_timestep, got {}",
-        extras.saw_second_try_max_timestep
-    );
-    assert!(
-        extras.saw_second_try_dt > 0.05 * SECYER,
-        "retry dt must not be clamped to rejected hi_t_max_years_for_timestep (0.01 yr), got {} s",
+        extras.saw_second_try_dt <= SECYER * 0.01,
+        "retry dt is capped by the switched max_timestep, got {} s",
         extras.saw_second_try_dt
     );
 }
 
+/// `prepare_to_redo` (`star/private/evolve.f90:2148-2172`) and
+/// `set_current_to_old` keep the `max_timestep_hi_T_limit` switch of the
+/// redone try (`:705-711`), so the redo and the accepted step see it (#510).
 #[test]
-fn test_redo_trial_reverts_max_timestep_hi_t_limit_mutations() {
+fn test_redo_keeps_max_timestep_hi_t_limit_switch() {
     struct RedoOnceExtras {
         calls: usize,
         saw_second_try_max_timestep: f64,
@@ -740,13 +751,13 @@ fn test_redo_trial_reverts_max_timestep_hi_t_limit_mutations() {
     .expect("redo step should succeed");
     assert!(redo_rep.converged);
     assert_eq!(redo_extras.calls, 2);
-    assert_eq!(redo_extras.saw_second_try_max_timestep, 0.0);
-    assert_eq!(redo_model.controls.max_years_for_timestep, -1.0);
-    assert_eq!(redo_model.controls.ts_stop.max_timestep, 0.0);
+    assert_eq!(redo_extras.saw_second_try_max_timestep, SECYER * 0.01);
+    assert_eq!(redo_model.controls.max_years_for_timestep, 0.01);
+    assert_eq!(redo_model.controls.ts_stop.max_timestep, SECYER * 0.01);
 }
 
 #[test]
-fn test_relax_uniform_omega_restores_all_timestamps_and_hits_target_on_early_exit()
+fn test_relax_uniform_omega_restores_all_timestamps_and_applies_ramped_omega_on_early_exit()
  {
     let mut model = load_zams_model(
         StarControls {
@@ -781,13 +792,21 @@ fn test_relax_uniform_omega_restores_all_timestamps_and_hits_target_on_early_exi
     assert_eq!(model.time_old_sec, saved_time_old_sec);
     assert_eq!(model.aux.step_hist.time_sec, saved_time_sec);
     assert_eq!(model.aux.step_hist.time_old_sec, saved_time_old_sec);
-    assert!(
-        model
-            .omega
-            .iter()
-            .all(|&w| (w - target_omega).abs() <= 1.0e-18),
-        "early exit must apply exact target_omega rather than interpolated fraction"
-    );
+    // Upstream applies `this_step_omega = frac*new_omega + (1-frac)*starting_omega`
+    // with `frac = (model_number - starting_model_number)/num_steps`, capped at
+    // 1, on the terminating step too (`star/private/relax.f90:1355-1356, 1374,
+    // 1383-1389`). Which step terminates depends on how far the solve moves the
+    // surface omega, so any step of the ramp is accepted; the result must be a
+    // uniform omega on the ramp, never a substitute value.
+    // `set_uniform_omega` ends with `set_rotation_info`, whose `set_omega`
+    // recomputes `omega = j_rot/i_rot` (`hydro_rotation.f90:532, 549-550`),
+    // so the profile is uniform to round-off rather than bit for bit.
+    let on_ramp = (1_u32..=5 + 51).any(|k| {
+        let frac = 1.0_f64.min(f64::from(k) / 5.0_f64);
+        let e = frac * target_omega + (1.0 - frac) * start_omega;
+        model.omega.iter().all(|&w| (w - e).abs() <= 1.0e-14 * e.abs())
+    });
+    assert!(on_ramp, "the terminating step applies the ramped omega, as upstream");
 }
 
 #[test]

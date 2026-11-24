@@ -130,6 +130,9 @@ pub struct AsteroSearchControls {
     pub keep_surface_point: bool,
     /// Whether to add an extrapolated $r = 0$ center point (`add_center_point`).
     pub add_center_point: bool,
+    /// Whether to parse `redistrb.c.pruned.in` at startup and redistribute the
+    /// mesh before ADIPLS (`do_redistribute_mesh`).
+    pub do_redistribute_mesh: bool,
     /// Surface-effect frequency correction scheme (`correction_scheme`).
     pub correction_scheme: String,
     /// Kjeldsen et al. (2008) power-law exponent $b$ (`correction_b`).
@@ -268,10 +271,22 @@ pub struct AsteroSearchControls {
     pub chi2_limit_for_small_timesteps: f64,
     /// Maximum timestep (yr) when $\chi^2 \le \chi^2_{\mathrm{limit}}$ (`max_yrs_dt_chi2_small_limit`).
     pub max_yrs_dt_chi2_small_limit: f64,
-    /// Sigma threshold for entering `hot` timesteps (`sigmas_coeff_for_hot_timesteps`).
-    pub sigmas_coeff_for_hot_timesteps: f64,
-    /// Sigma threshold for entering `warm` timesteps (`sigmas_coeff_for_warm_timesteps`).
-    pub sigmas_coeff_for_warm_timesteps: f64,
+    /// Threshold on $\chi^2$ for "smaller" timesteps (`chi2_limit_for_smaller_timesteps`).
+    pub chi2_limit_for_smaller_timesteps: f64,
+    /// Maximum timestep (yr) below `chi2_limit_for_smaller_timesteps` (`max_yrs_dt_chi2_smaller_limit`).
+    pub max_yrs_dt_chi2_smaller_limit: f64,
+    /// Threshold on $\chi^2$ for "smallest" timesteps (`chi2_limit_for_smallest_timesteps`).
+    pub chi2_limit_for_smallest_timesteps: f64,
+    /// Maximum timestep (yr) below `chi2_limit_for_smallest_timesteps` (`max_yrs_dt_chi2_smallest_limit`).
+    pub max_yrs_dt_chi2_smallest_limit: f64,
+    /// Fewest samples before age and model-number averages are formed (`min_num_samples_for_avg`).
+    pub min_num_samples_for_avg: usize,
+    /// Number of best-$\chi^2$ samples averaged (`max_num_samples_for_avg`).
+    pub max_num_samples_for_avg: usize,
+    /// Stop a track older than the sample average by this many sigma (`avg_age_sigma_limit`).
+    pub avg_age_sigma_limit: f64,
+    /// Same for the model number (`avg_model_number_sigma_limit`).
+    pub avg_model_number_sigma_limit: f64,
     pub(crate) constraint_names: [String; 10],
     pub(crate) indexed_constraints: [SpectroConstraint; 10],
     pub(crate) param_names: [String; 10],
@@ -305,6 +320,8 @@ impl Default for AsteroSearchControls {
             add_atmosphere: false,
             keep_surface_point: false,
             add_center_point: true,
+            // `astero/defaults/astero_search.defaults:1363`: do_redistribute_mesh = .true.
+            do_redistribute_mesh: true,
             correction_scheme: String::from("kjeldsen"),
             correction_b: 4.90,
             correction_factor: 0.0,
@@ -374,8 +391,14 @@ impl Default for AsteroSearchControls {
             max_yrs_dt_when_hot: 1.0e6,
             chi2_limit_for_small_timesteps: -1.0,
             max_yrs_dt_chi2_small_limit: 3.0e5,
-            sigmas_coeff_for_hot_timesteps: 2.0,
-            sigmas_coeff_for_warm_timesteps: 5.0,
+            chi2_limit_for_smaller_timesteps: -1.0,
+            max_yrs_dt_chi2_smaller_limit: 1.0e5,
+            chi2_limit_for_smallest_timesteps: -1.0,
+            max_yrs_dt_chi2_smallest_limit: 5.0e4,
+            min_num_samples_for_avg: 2,
+            max_num_samples_for_avg: 10,
+            avg_age_sigma_limit: 10.0,
+            avg_model_number_sigma_limit: 10.0,
             constraint_names: std::array::from_fn(|_| String::new()),
             indexed_constraints: [SpectroConstraint::default(); 10],
             param_names: std::array::from_fn(|_| String::new()),

@@ -309,7 +309,12 @@ pub(crate) fn do1_mlt_2(
     {
         let fp = model.aux.fp_rot.get(k).copied().unwrap_or(1.0);
         let ft = model.aux.ft_rot.get(k).copied().unwrap_or(1.0);
-        (ft / fp) * base_gradr_fac
+        // `star_data/public/star_data_step_work.inc:153` declares `ft_rot` and
+        // `fp_rot` as `auto_diff_real_star_order1`, so `ft_rot / fp_rot` in
+        // `star/private/turb_info.f90:126` calls `div_self`
+        // (`auto_diff/private/auto_diff_real_star_order1_module.f90:1069-1075`),
+        // evaluating `ft * powm1(fp) = ft * (1.0 / fp)`.
+        (ft * (1.0 / fp)) * base_gradr_fac
     } else {
         base_gradr_fac
     };
@@ -529,7 +534,7 @@ pub(crate) fn do1_mlt_2(
         && model.controls.max_conv_vel_div_csound >= 0.0
         && model.q[k] <= model.controls.output.max_conv_vel_div_csound_maxq
     {
-        (model.interp_val_to_pt(&model.csound, k)
+        (model.face_value_alfa_beta(&model.csound, k)
             * model.controls.max_conv_vel_div_csound)
             .max(0.0)
     } else {
@@ -1328,6 +1333,15 @@ pub fn set_hydro_vars(
     skip_net: bool,
     skip_net_jacobian: bool,
 ) -> Result<(), StarError> {
+    // Match `update_vars` -> `unpack_xh` -> `set_qs`
+    // (`star/private/hydro_vars.f90:225-226, 359-366` and
+    // `star/private/star_utils.f90:712-752`): rebuild `q` from `dq` via
+    // `q[k] = q[k-1] - dq[k-1]` when `.not. RSP_flag` before
+    // `eval_or_restore` invokes `set_m_and_dm` and `set_m_grav_and_grav`
+    // (critical after `do_adjust_mass` sets `q = 1 - sumdq`).
+    if model.nz > 0 && !model.controls.rsp_flag {
+        model.set_qs();
+    }
     MicrophysicsCache::eval_or_restore(model, skip_net, skip_net_jacobian)?;
     let nz = model.nz;
     if nz == 0 {
@@ -1409,9 +1423,8 @@ pub fn set_hydro_vars(
 
     if model.controls.rsp2_flag {
         eval_surf_bc(model)?;
-        if !model.aux.doing_struct_burn_mix {
-            crate::eps_grav::eval_eps_grav(model)?;
-        }
+        // `set_vars` does not evaluate `eps_grav`; the energy equation does
+        // (`star/private/hydro_vars.f90`, `star/private/hydro_energy.f90:389-418`).
         crate::rsp2_ad::update_rsp2_vars_ad(model);
         let alpha = model.controls.mixing_length_alpha;
         for k in 0..nz {
@@ -1448,7 +1461,7 @@ pub fn set_hydro_vars(
             model.sig.fill(0.0);
             update_sig_from_d_mix(model)?;
         }
-        do_brunt_n2(model);
+        do_brunt_n2(model)?;
         if model.controls.u_flag {
             crate::riemann_ad::do_uface_and_pface(model)?;
         }
@@ -1456,7 +1469,7 @@ pub fn set_hydro_vars(
     }
 
     if !model.aux.doing_struct_burn_mix {
-        do_brunt_n2(model);
+        do_brunt_n2(model)?;
         if model.aux.mixing.okay_to_set_mixing_info {
             let skip_set_cz_bdy_mass = !model.aux.mixing.have_new_generation;
             crate::mix_info::set_mixing_info_with_skip(
@@ -1469,9 +1482,8 @@ pub fn set_hydro_vars(
         }
     }
     eval_surf_bc(model)?;
-    if !model.aux.doing_struct_burn_mix {
-        crate::eps_grav::eval_eps_grav(model)?;
-    }
+    // `set_vars` does not evaluate `eps_grav`; the energy equation does
+    // (`star/private/hydro_vars.f90`, `star/private/hydro_energy.f90:389-418`).
     if model.controls.u_flag {
         crate::riemann_ad::do_uface_and_pface(model)?;
     }

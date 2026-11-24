@@ -161,7 +161,36 @@ impl ParsedNetDef {
         filename: &str,
         search_dir: Option<&Path>,
     ) -> Result<(), NetError> {
-        self.read_net_file_with_depth(filename, search_dir, 0)
+        self.read_net_file_with_depth(filename, search_dir, 0)?;
+        self.validate_al26_isomers()
+    }
+
+    fn validate_al26_isomers(&self) -> Result<(), NetError> {
+        let nuclides = NuclideCatalog::builtin_ref();
+        let req_iso = |name: &str| {
+            nuclides
+                .get_nuclide_index(name)
+                .ok_or_else(|| NetError::InvalidReactionOrIso(name.to_string()))
+        };
+        let has_al26 = self.active_isos.contains(&req_iso("al26")?);
+        let has_al26_1 = self.active_isos.contains(&req_iso("al26-1")?);
+        let has_al26_2 = self.active_isos.contains(&req_iso("al26-2")?);
+        if has_al26 && (has_al26_1 || has_al26_2) {
+            return Err(NetError::ParseError(
+                "cannot specify al26 and al26-1 or al26-2".to_string(),
+            ));
+        }
+        if has_al26_1 && !has_al26_2 {
+            return Err(NetError::ParseError(
+                "must specify al26-2 if al26-1 is set".to_string(),
+            ));
+        }
+        if has_al26_2 && !has_al26_1 {
+            return Err(NetError::ParseError(
+                "must specify al26-1 if al26-2 is set".to_string(),
+            ));
+        }
+        Ok(())
     }
 
     fn read_net_file_with_depth(
@@ -429,6 +458,33 @@ impl ParsedNetDef {
         let ih2 = req_iso("h2")?;
         let ihe4 = req_iso("he4")?;
         let ib8 = req_iso("b8")?;
+        let ial26_1 = req_iso("al26-1")?;
+        let ial26_2 = req_iso("al26-2")?;
+
+        // Special-case multi-body and non-pattern reactions from upstream
+        // `net/private/net_initialize.f90:756-799` (`special_loop`).
+        for spec in SPECIAL_CASE_REACTIONS {
+            if !spec.reactants.contains(&e.name.as_str()) {
+                continue;
+            }
+            let mut all_active = true;
+            for &rname in spec.reactants {
+                let rid = req_iso(rname)?;
+                if !self.active_isos.contains(&rid) {
+                    all_active = false;
+                    break;
+                }
+            }
+            if !all_active {
+                continue;
+            }
+            self.add_reaction_by_name(spec.r1)?;
+            if !spec.r2.is_empty() {
+                self.add_reaction_by_name(spec.r2)?;
+                self.reverse_pairs
+                    .push((spec.r1.to_string(), spec.r2.to_string()));
+            }
+        }
 
         let get_active = |z2: isize, n2: isize, active: &HashSet<usize>| {
             if z2 < 0 || n2 < 0 {
@@ -512,6 +568,32 @@ impl ParsedNetDef {
         }
         if let Some(other) = get_active(z + 1, n - 1, &self.active_isos) {
             self.try_pair(other, id, "wk", "wk-minus")?;
+        }
+        // Upstream `net/private/net_initialize.f90:933-951` literally passes
+        // `'wk-h1'` and `'wk-he4'` (hyphenated), which fail lookup against
+        // `_wk_h1_` / `_wk_he4_` reaclib handles and silently cycle; keep
+        // verbatim for strict MESA 26.4.1 parity.
+        if self.active_isos.contains(&ih1) {
+            if let Some(other) = get_active(z - 2, n + 1, &self.active_isos) {
+                self.try_pair(id, other, "wk-h1", "")?;
+            }
+            if let Some(other) = get_active(z + 2, n - 1, &self.active_isos) {
+                self.try_pair(other, id, "wk-h1", "")?;
+            }
+        }
+        if self.active_isos.contains(&ihe4) {
+            if let Some(other) = get_active(z - 3, n - 1, &self.active_isos) {
+                self.try_pair(id, other, "wk-he4", "")?;
+            }
+            if let Some(other) = get_active(z + 3, n + 1, &self.active_isos) {
+                self.try_pair(other, id, "wk-he4", "")?;
+            }
+        }
+        // Al-26 ground/isomer internal transitions (`net_initialize.f90:954-960`).
+        if id == ial26_1 {
+            self.add_reaction_by_name("r_al26-1_to_al26-2")?;
+        } else if id == ial26_2 {
+            self.add_reaction_by_name("r_al26-2_to_al26-1")?;
         }
         Ok(())
     }
@@ -655,3 +737,241 @@ impl ParsedNetDef {
         Ok(())
     }
 }
+
+struct SpecialCaseReaction {
+    reactants: &'static [&'static str],
+    r1: &'static str,
+    r2: &'static str,
+}
+
+const fn special(
+    reactants: &'static [&'static str],
+    r1: &'static str,
+    r2: &'static str,
+) -> SpecialCaseReaction {
+    SpecialCaseReaction { reactants, r1, r2 }
+}
+
+/// Upstream `net/private/net_initialize.f90:2155-2295`
+/// (`init_special_case_reaction_info`, all 51 multi-body / non-pattern rows).
+const SPECIAL_CASE_REACTIONS: &[SpecialCaseReaction] = &[
+    special(&["h1", "h2"], "r_h1_h1_wk_h2", "r_h1_h1_ec_h2"),
+    special(
+        &["neut", "h1", "h2"],
+        "r_neut_h1_h1_to_h1_h2",
+        "r_h1_h2_to_neut_h1_h1",
+    ),
+    special(&["h1", "h2", "h3"], "r_h2_h2_to_h1_h3", "r_h1_h3_to_h2_h2"),
+    special(&["h3", "he3"], "r_he3_ec_h3", ""),
+    special(
+        &["neut", "h2", "he3"],
+        "r_h2_h2_to_neut_he3",
+        "r_neut_he3_to_h2_h2",
+    ),
+    special(&["h1", "he3", "he4"], "r_h1_he3_wk_he4", ""),
+    special(&["h2", "he4"], "r_h2_h2_to_he4", "r_he4_to_h2_h2"),
+    special(
+        &["neut", "h2", "h3", "he4"],
+        "r_h2_h3_to_neut_he4",
+        "r_neut_he4_to_h2_h3",
+    ),
+    special(
+        &["h1", "h2", "he3", "he4"],
+        "r_h2_he3_to_h1_he4",
+        "r_h1_he4_to_h2_he3",
+    ),
+    special(
+        &["h2", "h3", "he3", "he4"],
+        "r_h3_he3_to_h2_he4",
+        "r_h2_he4_to_h3_he3",
+    ),
+    special(
+        &["neut", "h3", "he4"],
+        "r_h3_h3_to_neut_neut_he4",
+        "r_neut_neut_he4_to_h3_h3",
+    ),
+    special(
+        &["h1", "he3", "he4"],
+        "r_he3_he3_to_h1_h1_he4",
+        "r_h1_h1_he4_to_he3_he3",
+    ),
+    special(
+        &["neut", "h1", "he4", "li6"],
+        "r_li6_to_neut_h1_he4",
+        "r_neut_h1_he4_to_li6",
+    ),
+    special(
+        &["neut", "h2", "he4", "li7"],
+        "r_h2_li7_to_neut_he4_he4",
+        "r_neut_he4_he4_to_h2_li7",
+    ),
+    special(
+        &["neut", "h3", "he4", "li7"],
+        "r_h3_li7_to_neut_neut_he4_he4",
+        "r_neut_neut_he4_he4_to_h3_li7",
+    ),
+    special(
+        &["h1", "h2", "li6", "li7"],
+        "r_h1_li7_to_h2_li6",
+        "r_h2_li6_to_h1_li7",
+    ),
+    special(&["be7", "li7"], "r_be7_wk_li7", ""),
+    special(
+        &["h1", "h2", "he4", "be7"],
+        "r_h2_be7_to_h1_he4_he4",
+        "r_h1_he4_he4_to_h2_be7",
+    ),
+    special(
+        &["neut", "he4", "be7"],
+        "r_neut_be7_to_he4_he4",
+        "r_he4_he4_to_neut_be7",
+    ),
+    special(
+        &["h1", "he3", "he4", "be7"],
+        "r_he3_be7_to_h1_h1_he4_he4",
+        "r_h1_h1_he4_he4_to_he3_be7",
+    ),
+    special(
+        &["neut", "h2", "li6", "be7"],
+        "r_neut_be7_to_h2_li6",
+        "r_h2_li6_to_neut_be7",
+    ),
+    special(
+        &["neut", "h3", "li7", "be9"],
+        "r_neut_be9_to_h3_li7",
+        "r_h3_li7_to_neut_be9",
+    ),
+    special(
+        &["neut", "he4", "be9"],
+        "r_be9_to_neut_he4_he4",
+        "r_neut_he4_he4_to_be9",
+    ),
+    special(
+        &["h1", "h2", "he4", "be9"],
+        "r_h1_be9_to_h2_he4_he4",
+        "r_h2_he4_he4_to_h1_be9",
+    ),
+    special(
+        &["neut", "h1", "he4", "b8"],
+        "r_neut_b8_to_h1_he4_he4",
+        "r_h1_he4_he4_to_neut_b8",
+    ),
+    special(
+        &["h1", "he4", "b11"],
+        "r_h1_b11_to_he4_he4_he4",
+        "r_he4_he4_he4_to_h1_b11",
+    ),
+    special(
+        &["neut", "h3", "be9", "b11"],
+        "r_neut_b11_to_h3_be9",
+        "r_h3_be9_to_neut_b11",
+    ),
+    special(&["h1", "he4", "c9"], "r_c9_wk_h1_he4_he4", ""),
+    special(
+        &["neut", "he4", "c11"],
+        "r_neut_c11_to_he4_he4_he4",
+        "r_he4_he4_he4_to_neut_c11",
+    ),
+    special(
+        &["he4", "c12"],
+        "r_he4_he4_he4_to_c12",
+        "r_c12_to_he4_he4_he4",
+    ),
+    special(
+        &["neut", "h2", "c13", "n14"],
+        "r_neut_n14_to_h2_c13",
+        "r_h2_c13_to_neut_n14",
+    ),
+    special(
+        &["neut", "h2", "c14", "n15"],
+        "r_neut_n15_to_h2_c14",
+        "r_h2_c14_to_neut_n15",
+    ),
+    special(
+        &["h1", "he4", "o13", "o15"],
+        "r_he4_o13_to_h1_h1_o15",
+        "r_h1_h1_o15_to_he4_o13",
+    ),
+    special(
+        &["he4", "c12", "ne20"],
+        "r_c12_c12_to_he4_ne20",
+        "r_he4_ne20_to_c12_c12",
+    ),
+    special(
+        &["h1", "c12", "na23"],
+        "r_c12_c12_to_h1_na23",
+        "r_h1_na23_to_c12_c12",
+    ),
+    special(
+        &["neut", "c12", "mg23"],
+        "r_neut_mg23_to_c12_c12",
+        "r_c12_c12_to_neut_mg23",
+    ),
+    special(
+        &["he4", "c12", "o16", "mg24"],
+        "r_c12_o16_to_he4_mg24",
+        "r_he4_mg24_to_c12_o16",
+    ),
+    special(
+        &["h1", "c12", "o16", "al27"],
+        "r_c12_o16_to_h1_al27",
+        "r_h1_al27_to_c12_o16",
+    ),
+    special(
+        &["neut", "c12", "o16", "si27"],
+        "r_neut_si27_to_c12_o16",
+        "r_c12_o16_to_neut_si27",
+    ),
+    special(
+        &["he4", "o16", "si28"],
+        "r_o16_o16_to_he4_si28",
+        "r_he4_si28_to_o16_o16",
+    ),
+    special(
+        &["he4", "c12", "ne20", "si28"],
+        "r_c12_ne20_to_he4_si28",
+        "r_he4_si28_to_c12_ne20",
+    ),
+    special(
+        &["h1", "o16", "p31"],
+        "r_o16_o16_to_h1_p31",
+        "r_h1_p31_to_o16_o16",
+    ),
+    special(
+        &["h1", "c12", "ne20", "p31"],
+        "r_c12_ne20_to_h1_p31",
+        "r_h1_p31_to_c12_ne20",
+    ),
+    special(&["h1", "al25", "s27"], "r_s27_wk_h1_h1_al25", ""),
+    special(
+        &["neut", "o16", "s31"],
+        "r_o16_o16_to_neut_s31",
+        "r_neut_s31_to_o16_o16",
+    ),
+    special(
+        &["neut", "c12", "ne20", "s31"],
+        "r_c12_ne20_to_neut_s31",
+        "r_neut_s31_to_c12_ne20",
+    ),
+    special(&["h1", "p29", "ar31"], "r_ar31_wk_h1_h1_p29", ""),
+    special(
+        &["h1", "he4", "ca36", "ca38"],
+        "r_he4_ca36_to_h1_h1_ca38",
+        "r_h1_h1_ca38_to_he4_ca36",
+    ),
+    special(
+        &["neut", "h1", "h3", "he3", "he4"],
+        "r_h3_he3_to_neut_h1_he4",
+        "",
+    ),
+    special(
+        &["neut", "h1", "he3", "he4", "li7"],
+        "r_he3_li7_to_neut_h1_he4_he4",
+        "",
+    ),
+    special(
+        &["neut", "h1", "h3", "he4", "be7"],
+        "r_h3_be7_to_neut_h1_he4_he4",
+        "",
+    ),
+];

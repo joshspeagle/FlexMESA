@@ -451,6 +451,11 @@ pub struct HydroAuxState {
     /// Whether the model is currently in an initialization relaxation phase
     /// (`doing_relax` in `star_data_def.f90`).
     pub doing_relax: bool,
+    /// `doing_finish_load_model`: true while `finish_load_model` runs
+    /// `set_vars` and the Brunt-Vaisala update
+    /// (`star/private/read_model.f90:161-199`).
+    #[serde(default)]
+    pub doing_finish_load_model: bool,
     /// `need_to_setvars` (`star_data_step_work.inc`), as far as it is ported:
     /// `false` only after `relax_composition_adjust_model` has changed `xa`
     /// without asking for new variables, so the `set_vars_if_needed` calls
@@ -461,6 +466,15 @@ pub struct HydroAuxState {
     /// variables are recomputed whenever they are set, so it stays `true`.
     #[serde(default = "need_to_setvars_default")]
     pub need_to_setvars: bool,
+    /// Rotational mixing coefficients and their inputs from the last
+    /// `set_rotation_mixing_info` / `set_grads` (recomputed by every
+    /// `set_mixing_info`, so not stored in photos).
+    #[serde(skip)]
+    pub rotmix: crate::rotation_mix_info::RotMixArrays,
+    /// Spruit-Tayler start-of-step state for its time smoothing
+    /// (`D_ST_start`, `prev_mesh_D_ST_start`, ...).
+    #[serde(default)]
+    pub st_start: crate::rotation_mix_info::StStartInfo,
     /// Whether the model is currently inside `do_struct_burn_mix`
     /// (`doing_struct_burn_mix` in `star_data_step_work.inc`).
     pub doing_struct_burn_mix: bool,
@@ -470,8 +484,11 @@ pub struct HydroAuxState {
     /// Total internal energy in $\mathrm{erg}$ on the new mesh at the start of
     /// the step (`total_internal_energy_old`, set by
     /// `eval_total_energy_integrals` at `evolve.f90:420-431` and read by
-    /// `set_energy_eqn_scal`, `star_utils.f90:3693`).
-    pub total_internal_energy_start: f64,
+    /// `set_energy_eqn_scal`, `star_utils.f90:3693`). `None` until the step
+    /// driver records it; upstream leaves it undefined until then (NaN only
+    /// with `fill_arrays_with_NaNs`, `evolve.f90:62-65, 245`).
+    #[serde(default)]
+    pub total_internal_energy_start: Option<f64>,
     /// Cumulative global energy conservation error in $\mathrm{erg}$
     /// (`cumulative_energy_error` in `star_data_step_work.inc`).
     pub cumulative_energy_error: f64,
@@ -486,6 +503,19 @@ pub struct HydroAuxState {
     pub chi_t_start: Vec<f64>,
     /// Start-of-step density exponent $\chi_{\rho,\mathrm{start},k}$ (`chiRho_start`).
     pub chi_rho_start: Vec<f64>,
+    /// Start-of-step specific heat at constant volume
+    /// $C_{V,\mathrm{start},k}$ in $\mathrm{erg\,g^{-1}\,K^{-1}}$ (`Cv_start`).
+    #[serde(default)]
+    pub cv_start: Vec<f64>,
+    /// Start-of-step internal energy density derivative
+    /// $(\partial e/\partial\rho)_{T,\mathrm{start},k}$ in
+    /// $\mathrm{erg\,cm^{3}\,g^{-2}}$ (`dE_dRho_start`).
+    #[serde(default)]
+    pub de_drho_start: Vec<f64>,
+    /// Per-cell unscaled energy-equation residual `-dm(k) * dt * resid_ad`
+    /// in $\mathrm{erg}$ (`ergs_error`, `star/private/hydro_energy.f90:114`).
+    #[serde(default)]
+    pub ergs_error: Vec<f64>,
     /// Fraction of Potekhin-Chabrier (`PC`) EOS in cell `k` (`eos_frac_PC`).
     pub eos_frac_pc: Vec<f64>,
     /// Opacity regime blend fractions `[lowT, highT, Type2, Compton]` per cell (`kap_frac_*`).
@@ -535,6 +565,11 @@ pub struct HydroAuxState {
     pub hp_face_old: Vec<f64>,
     /// Start-of-step adiabatic sound speed $c_{s,\mathrm{start},k}$ (`csound_start`).
     pub csound_start: Vec<f64>,
+    /// Newton change of `lnR` this step, `solver_dx(i_lnR, k)` as
+    /// `set_vars_for_solver` stores it before `edit_lnR` rewrites `lnR`
+    /// (`dxh_lnR`, `star/private/solver_support.f90:1311`); zero after
+    /// `unpack_xh` (`star/private/hydro_vars.f90:313`). Length `nz`.
+    pub dxh_lnr: Vec<f64>,
     /// Start-of-step face convective velocity $v_{c,\mathrm{old},k}$ in $\mathrm{cm\,s^{-1}}$ (`mlt_vc_old`).
     pub mlt_vc_old: Vec<f64>,
     /// Whether `mlt_vc` holds valid convective velocities from the prior step (`have_mlt_vc`).
@@ -744,16 +779,22 @@ impl HydroAuxState {
     pub fn new(nz: usize, species: usize) -> Self {
         Self {
             doing_relax: false,
+            doing_finish_load_model: false,
             need_to_setvars: true,
+            rotmix: crate::rotation_mix_info::RotMixArrays::default(),
+            st_start: crate::rotation_mix_info::StStartInfo::default(),
             doing_struct_burn_mix: false,
             total_energy: 0.0,
-            total_internal_energy_start: 0.0,
+            total_internal_energy_start: None,
             cumulative_energy_error: 0.0,
             non_epsnuc_energy_change_from_split_burn: 0.0,
             cp_start: vec![0.0; nz],
             grada_start: vec![0.0; nz],
             chi_t_start: vec![0.0; nz],
             chi_rho_start: vec![0.0; nz],
+            cv_start: vec![0.0; nz],
+            de_drho_start: vec![0.0; nz],
+            ergs_error: vec![0.0; nz],
             eos_frac_pc: vec![0.0; nz],
             kap_frac: vec![[0.0; 4]; nz],
             nonnucneu_channels: vec![[0.0; 5]; nz],
@@ -776,6 +817,7 @@ impl HydroAuxState {
             et_rsp_old: vec![0.0; nz],
             hp_face_old: vec![0.0; nz],
             csound_start: vec![0.0; nz],
+            dxh_lnr: vec![0.0; nz],
             mlt_vc_old: vec![0.0; nz],
             have_mlt_vc: false,
             have_j_rot: false,
@@ -870,6 +912,9 @@ impl HydroAuxState {
             &mut self.grada_start,
             &mut self.chi_t_start,
             &mut self.chi_rho_start,
+            &mut self.cv_start,
+            &mut self.de_drho_start,
+            &mut self.ergs_error,
             &mut self.eos_frac_pc,
             &mut self.latent_ddlnrho,
             &mut self.latent_ddlnt,
@@ -968,6 +1013,8 @@ impl HydroAuxState {
     pub fn save_start(
         &mut self,
         cp: &[f64],
+        cv: &[f64],
+        de_drho: &[f64],
         grada: &[f64],
         chi_t: &[f64],
         chi_rho: &[f64],
@@ -975,6 +1022,8 @@ impl HydroAuxState {
         _mlt_vc: &[f64],
     ) {
         self.cp_start.clone_from_slice(cp);
+        self.cv_start.clone_from_slice(cv);
+        self.de_drho_start.clone_from_slice(de_drho);
         self.grada_start.clone_from_slice(grada);
         self.chi_t_start.clone_from_slice(chi_t);
         self.chi_rho_start.clone_from_slice(chi_rho);

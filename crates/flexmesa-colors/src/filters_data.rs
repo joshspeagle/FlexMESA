@@ -223,7 +223,9 @@ pub const JOHNSON_FILTERS: [FilterCurve; NUM_JOHNSON_FILTERS] = [
         name: "B",
         wavelengths: &JOHNSON_B_WAVELENGTHS,
         transmission: &JOHNSON_B_TRANSMISSION,
-        vega_zero_point: 6.23409444220002772e-09,
+        // Exact `colors/private/synthetic.f90:145-170`
+        // (`compute_vega_zero_point`) on MESA `26.4.1` `vega_flam.csv` + `B.dat`.
+        vega_zero_point: 6.23409444220002690e-09,
         ab_zero_point: 5.55919935245269163e-09,
         st_zero_point: 3.62999999999999925e-09,
     },
@@ -239,7 +241,9 @@ pub const JOHNSON_FILTERS: [FilterCurve; NUM_JOHNSON_FILTERS] = [
         name: "J",
         wavelengths: &JOHNSON_J_WAVELENGTHS,
         transmission: &JOHNSON_J_TRANSMISSION,
-        vega_zero_point: 3.06321675530278865e-10,
+        // Exact `colors/private/synthetic.f90:145-170`
+        // (`compute_vega_zero_point`) on MESA `26.4.1` `vega_flam.csv` + `J.dat`.
+        vega_zero_point: 3.06321675530278813e-10,
         ab_zero_point: 7.04915964405315247e-10,
         st_zero_point: 3.62999999999999967e-09,
     },
@@ -255,7 +259,9 @@ pub const JOHNSON_FILTERS: [FilterCurve; NUM_JOHNSON_FILTERS] = [
         name: "R",
         wavelengths: &JOHNSON_R_WAVELENGTHS,
         transmission: &JOHNSON_R_TRANSMISSION,
-        vega_zero_point: 1.81033471956106077e-09,
+        // Exact `colors/private/synthetic.f90:145-170`
+        // (`compute_vega_zero_point`) on MESA `26.4.1` `vega_flam.csv` + `R.dat`.
+        vega_zero_point: 1.81033471956106057e-09,
         ab_zero_point: 2.28463185920518181e-09,
         st_zero_point: 3.63000000000000049e-09,
     },

@@ -368,15 +368,14 @@ pub(crate) fn parse_fortran_f64(s: &str) -> Result<f64, StarError> {
 }
 
 /// Computes the initial ZAMS timestep in years (`yrs_for_init_timestep` in
-/// `star/private/star_utils.f90:2900-2907`).
+/// `star/private/star_utils.f90:2900-2907`): `1d5` yr for `M <= 1 Msun`, else
+/// `1d5 / M^2.5` (`#160`, `#169`).
 #[must_use]
 pub fn yrs_for_init_timestep(m_msun: f64) -> f64 {
-    if m_msun < 0.3 {
-        1.0e7
-    } else if m_msun <= 30.0 {
-        1.0e5 / flexmesa_math::pow(m_msun, 2.5)
+    if m_msun <= 1.0 {
+        1.0e5
     } else {
-        20.0 * flexmesa_math::pow(30.0 / m_msun, 1.5)
+        1.0e5 / flexmesa_math::pow(m_msun, 2.5)
     }
 }
 

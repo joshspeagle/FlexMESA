@@ -208,13 +208,14 @@ fn test_brunt_b_preserves_unsmoothed_b_and_brunt_n2_respects_gates() {
     let n2_comp_orig = model.aux.brunt_n2_composition_term[k_step];
     assert!(n2_orig.is_finite() && n2_comp_orig > 0.0);
     model.controls.mix_wind.brunt_n2_coefficient = 2.5;
-    do_brunt_n2(&mut model);
+    do_brunt_n2(&mut model).expect("do_brunt_n2");
     assert!(
         (model.brunt_n2[k_step] - 2.5 * n2_orig).abs()
             <= 1.0e-12 * n2_orig.abs().max(1.0)
     );
     assert!(
-        (model.aux.brunt_n2_composition_term[k_step] - 2.5 * n2_comp_orig).abs()
+        (model.aux.brunt_n2_composition_term[k_step] - 2.5 * n2_comp_orig)
+            .abs()
             <= 1.0e-12 * n2_comp_orig.abs().max(1.0)
     );
 
@@ -222,7 +223,7 @@ fn test_brunt_b_preserves_unsmoothed_b_and_brunt_n2_respects_gates() {
     model.controls.mix_wind.brunt_n2_coefficient = 1.0;
     model.controls.mix_wind.min_magnitude_brunt_b = peak_smoothed * 2.0;
     do_brunt_b(&mut model).expect("do_brunt_b");
-    do_brunt_n2(&mut model);
+    do_brunt_n2(&mut model).expect("do_brunt_n2");
     assert_eq!(model.brunt_b[k_step], 0.0);
     assert_eq!(model.brunt_n2[k_step], 0.0);
 }

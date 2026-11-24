@@ -142,7 +142,7 @@ pub fn get_psurf(
         )?;
         Ok(p_s)
     } else if model.controls.rsp.use_prad_for_psurf {
-        Ok(CRAD * flexmesa_math::pow4(model.t[0]) / 3.0)
+        Ok(CRAD * flexmesa_math::powi_f90(model.t[0], 4) / 3.0)
     } else if model.controls.rsp.psurf >= 0.0 {
         Ok(model.controls.rsp.psurf)
     } else {

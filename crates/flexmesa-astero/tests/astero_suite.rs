@@ -459,11 +459,14 @@ fn assert_uncapped_case_passes(case_name: &str) {
     let raw_case = suite_dir.join(case_name);
     let tmp = TempAsteroDirGuard::new(case_name);
     let staged = tmp.root.join(case_name);
-    if case_name == "astero_gyre" {
-        copy_dir_recursive(&raw_case, &staged).expect("copy raw astero_gyre");
+    if matches!(case_name, "astero_gyre" | "astero_adipls") {
+        copy_dir_recursive(&raw_case, &staged).expect("copy raw astero case");
     } else {
-        let raw_err = run_astero_test_suite_case(&raw_case, true, Some(2), true)
-            .expect_err("raw astero case must fail on unsupported controls");
+        let raw_err =
+            run_astero_test_suite_case(&raw_case, true, Some(2), true)
+                .expect_err(
+                    "raw astero case must fail on unsupported controls",
+                );
         assert!(
             matches!(raw_err, StarError::InvalidInput(_))
                 && raw_err.to_string().contains("unsupported control"),
@@ -523,10 +526,10 @@ fn assert_uncapped_case_passes(case_name: &str) {
 
 // These three cases set `astero_just_call_my_extras_check_model`, so they run
 // as plain star runs (`astero/private/astero_run_support.f90:171-174`). These
-// tests attach no extras, so they cover the star run only. `astero_gyre`'s
-// `run_star_extras.f90` (the GYRE frequency check) is ported test-side in
-// `tests/case_extras/astero_extras.py` and runs in the history harness; the
-// ADIPLS check and `freqs.dat` output of the other two are not ported.
+// tests attach no extras, so they cover the star run only. `astero_gyre` and
+// `astero_adipls` have their `run_star_extras.f90` frequency checks ported
+// test-side in `tests/case_extras/astero_extras.py` and run in the history
+// harness; the `freqs.dat` output of `surface_effects` is not ported.
 // One test per case, so the three runs can go in parallel and be placed in
 // different CI shards (`scripts/ci/cargo_test_shard.py`).
 #[test]
@@ -553,7 +556,7 @@ fn test_all_eight_astero_cases_bounded_eight_steps_pass() {
         suite_dir.display()
     );
     let raw_err = run_astero_test_suite_case(
-        &suite_dir.join("astero_adipls"),
+        &suite_dir.join("example_astero"),
         true,
         Some(2),
         true,

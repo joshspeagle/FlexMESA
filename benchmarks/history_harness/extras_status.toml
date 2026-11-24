@@ -107,9 +107,8 @@ digest = "2141345c8c4555b2b0be2c2abf1fdb1d537ba1665f61bae2b70c85801868a6f7"
 [[cases]]
 suite = "star"
 case = "accreted_material_j"
-status = "unported"
+status = "ported"
 digest = "b4135368e3c29a3548353e187b1d36a116943e76a646bd1dac6a8dd9d69b24ee"
-issue = "#231"
 
 [[cases]]
 suite = "star"
@@ -127,9 +126,8 @@ issue = "#231"
 [[cases]]
 suite = "star"
 case = "carbon_kh"
-status = "unported"
+status = "ported"
 digest = "97fc0a9e2d2d709330df035da2d3ebb6141739c63b0b42873019a2f033b1aacc"
-issue = "#231"
 
 [[cases]]
 suite = "star"
@@ -313,9 +311,8 @@ issue = "#231"
 [[cases]]
 suite = "star"
 case = "make_env"
-status = "unported"
+status = "ported"
 digest = "674a09404e9cc19f0fbaf3f9f713d4891954c179e62e778c3edb428cf8298ff5"
-issue = "#231"
 
 [[cases]]
 suite = "star"
@@ -633,9 +630,8 @@ digest = "ccc26a9dff72ae93b3c465d0835e7c171ab6d705f165d18c2693cbcea0378296"
 [[cases]]
 suite = "astero"
 case = "astero_adipls"
-status = "unported"
+status = "ported"
 digest = "8460a8f638a55de952eaf0411d0dcd488dda56bb72ba9aa630cc312be465ee1f"
-issue = "#231"
 
 [[cases]]
 suite = "astero"

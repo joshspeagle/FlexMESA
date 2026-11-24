@@ -747,6 +747,24 @@ pub struct StarJobControls {
     pub change_rotation_flag: bool,
     /// Target `rotation_flag` when `change_rotation_flag` is true (`new_rotation_flag`).
     pub new_rotation_flag: bool,
+    /// Whether to change `D_omega_flag` on startup (`change_D_omega_flag` /
+    /// `change_initial_D_omega_flag`, `.false.` default).
+    #[serde(default)]
+    pub change_d_omega_flag: bool,
+    /// Target `D_omega_flag` (`new_D_omega_flag`, `.false.` default).
+    #[serde(default)]
+    pub new_d_omega_flag: bool,
+    /// Whether to change `am_nu_rot_flag` on startup (`change_am_nu_rot_flag` /
+    /// `change_initial_am_nu_rot_flag`, `.false.` default).
+    #[serde(default)]
+    pub change_am_nu_rot_flag: bool,
+    /// Target `am_nu_rot_flag` (`new_am_nu_rot_flag`, `.false.` default).
+    #[serde(default)]
+    pub new_am_nu_rot_flag: bool,
+    /// Under `D_omega_flag`, set `am_nu_rot = am_nu_factor * D_omega`
+    /// (`use_D_omega_for_am_nu_rot`, `.true.` default).
+    #[serde(default = "default_true")]
+    pub use_d_omega_for_am_nu_rot: bool,
     /// Apply `new_omega` at startup (`set_omega`, `false` default).
     pub set_omega: bool,
     /// Apply `new_omega` only on initial non-restart run (`set_initial_omega`, `false` default).
@@ -765,6 +783,75 @@ pub struct StarJobControls {
     pub set_initial_surface_rotation_v: bool,
     /// Surface equatorial velocity ($\mathrm{km\,s^{-1}}$) on startup (`new_surface_rotation_v`, `0.0` default).
     pub new_surface_rotation_v: f64,
+    /// Relax to a uniform `new_omega` (`relax_omega`, `false` default).
+    pub relax_omega: bool,
+    /// Relax to a uniform `new_omega` on a non-restart start only
+    /// (`relax_initial_omega`, `false` default).
+    pub relax_initial_omega: bool,
+    /// Relax to a uniform $\Omega = $ `new_omega_div_omega_crit`
+    /// $\times\,\Omega_{\mathrm{crit}}$ (`relax_omega_div_omega_crit`, `false` default).
+    pub relax_omega_div_omega_crit: bool,
+    /// As `relax_omega_div_omega_crit`, on a non-restart start only
+    /// (`relax_initial_omega_div_omega_crit`, `false` default).
+    pub relax_initial_omega_div_omega_crit: bool,
+    /// Relax to a uniform $\Omega$ with surface velocity `new_surface_rotation_v`
+    /// (`relax_surface_rotation_v`, `false` default).
+    pub relax_surface_rotation_v: bool,
+    /// As `relax_surface_rotation_v`, on a non-restart start only
+    /// (`relax_initial_surface_rotation_v`, `false` default).
+    pub relax_initial_surface_rotation_v: bool,
+    /// Steps over which the rotation relaxes (`num_steps_to_relax_rotation`,
+    /// `100` default).
+    pub num_steps_to_relax_rotation: isize,
+    /// Maximum timestep while the rotation relaxes, in years
+    /// (`relax_omega_max_yrs_dt`, `1d9` default).
+    pub relax_omega_max_yrs_dt: f64,
+    /// Rotation is switched on near the ZAMS and set from `new_omega` for this
+    /// many steps (`set_near_zams_omega_steps`, `-1` default).
+    pub set_near_zams_omega_steps: isize,
+    /// As `set_near_zams_omega_steps`, from `new_omega_div_omega_crit`
+    /// (`set_near_zams_omega_div_omega_crit_steps`, `-1` default).
+    pub set_near_zams_omega_div_omega_crit_steps: isize,
+    /// As `set_near_zams_omega_steps`, from `new_surface_rotation_v`
+    /// (`set_near_zams_surface_rotation_v_steps`, `-1` default).
+    pub set_near_zams_surface_rotation_v_steps: isize,
+    /// Last model number at which `do_rotation` sets a uniform `new_omega`
+    /// (`set_omega_step_limit`, `-1` default).
+    pub set_omega_step_limit: isize,
+    /// As `set_omega_step_limit`, for `new_omega_div_omega_crit`
+    /// (`set_omega_div_omega_crit_step_limit`, `-1` default).
+    pub set_omega_div_omega_crit_step_limit: isize,
+    /// As `set_omega_step_limit`, for `new_surface_rotation_v`
+    /// (`set_surf_rotation_v_step_limit`, `-1` default).
+    pub set_surf_rotation_v_step_limit: isize,
+    /// Switch rotation on near the ZAMS and relax to `new_omega`
+    /// (`near_zams_relax_omega`, `false` default).
+    pub near_zams_relax_omega: bool,
+    /// Switch rotation on near the ZAMS and relax to
+    /// `new_omega_div_omega_crit` (`near_zams_relax_omega_div_omega_crit`,
+    /// `false` default).
+    pub near_zams_relax_omega_div_omega_crit: bool,
+    /// Switch rotation on near the ZAMS and relax to `new_surface_rotation_v`
+    /// (`near_zams_relax_initial_surface_rotation_v`, `false` default).
+    pub near_zams_relax_initial_surface_rotation_v: bool,
+    /// Set `tau_factor = rho(1)/base_for_adjust_tau_factor_to_surf_density`
+    /// after every step (`adjust_tau_factor_to_surf_density`, `false` default).
+    pub adjust_tau_factor_to_surf_density: bool,
+    /// Density for `adjust_tau_factor_to_surf_density`, in g cm^-3
+    /// (`base_for_adjust_tau_factor_to_surf_density`, `0` default).
+    pub base_for_adjust_tau_factor_to_surf_density: f64,
+    /// Central He4 below which `tau_factor` is set to `set_to_this_tau_factor`
+    /// (`set_tau_factor_after_core_He_burn`, `-1` default).
+    pub set_tau_factor_after_core_he_burn: f64,
+    /// Central C12 below which `tau_factor` is set to `set_to_this_tau_factor`
+    /// (`set_tau_factor_after_core_C_burn`, `-1` default).
+    pub set_tau_factor_after_core_c_burn: f64,
+    /// Central He4 below which `tau_factor` steps toward
+    /// `relax_to_this_tau_factor` (`relax_tau_factor_after_core_He_burn`, `-1` default).
+    pub relax_tau_factor_after_core_he_burn: f64,
+    /// Central C12 below which `tau_factor` steps toward
+    /// `relax_to_this_tau_factor` (`relax_tau_factor_after_core_C_burn`, `-1` default).
+    pub relax_tau_factor_after_core_c_burn: f64,
     /// Whether to set initial stellar age (`set_initial_age`).
     pub set_initial_age: bool,
     /// Initial stellar age in years (`initial_age`).
@@ -789,6 +876,27 @@ pub struct StarJobControls {
     pub seconds_for_initial_dt: f64,
     /// Whether to reset cumulative energy error on startup (`set_initial_cumulative_energy_error`).
     pub set_initial_cumulative_energy_error: bool,
+    /// Whether to reset `cumulative_energy_error` to
+    /// `new_cumulative_energy_error` at run startup or restart
+    /// (`set_cumulative_energy_error`, `.false.` default,
+    /// `star/defaults/star_job.defaults:2371`,
+    /// `star/job/run_star_support.f90:2762-2767`).
+    #[serde(default)]
+    pub set_cumulative_energy_error: bool,
+    /// Model number at which to reset `cumulative_energy_error` to
+    /// `new_cumulative_energy_error`, at startup and at the end of that step
+    /// (`set_cumulative_energy_error_at_step`, `-1` default = disabled,
+    /// `star/defaults/star_job.defaults:2372`,
+    /// `star/job/run_star_support.f90:689-692, 2762-2767`).
+    #[serde(default = "default_neg_one_i64")]
+    pub set_cumulative_energy_error_at_step: i64,
+    /// Age threshold in years below which `cumulative_energy_error` is reset
+    /// to `new_cumulative_energy_error` before each step
+    /// (`set_cumulative_energy_error_each_step_if_age_less_than`, `-1d99`
+    /// default = disabled, `star/defaults/star_job.defaults:2373`,
+    /// `star/job/run_star_support.f90:636-640`).
+    #[serde(default = "default_neg_1e99")]
+    pub set_cumulative_energy_error_each_step_if_age_less_than: f64,
     /// Target cumulative energy error in erg (`new_cumulative_energy_error`).
     pub new_cumulative_energy_error: f64,
     /// Set `cumulative_energy_error` to `new_cumulative_energy_error` at the
@@ -1102,6 +1210,11 @@ impl Default for StarJobControls {
             new_u_flag: false,
             change_rotation_flag: false,
             new_rotation_flag: false,
+            change_d_omega_flag: false,
+            new_d_omega_flag: false,
+            change_am_nu_rot_flag: false,
+            new_am_nu_rot_flag: false,
+            use_d_omega_for_am_nu_rot: true,
             set_omega: false,
             set_initial_omega: false,
             new_omega: 0.0,
@@ -1111,6 +1224,29 @@ impl Default for StarJobControls {
             set_surface_rotation_v: false,
             set_initial_surface_rotation_v: false,
             new_surface_rotation_v: 0.0,
+            relax_omega: false,
+            relax_initial_omega: false,
+            relax_omega_div_omega_crit: false,
+            relax_initial_omega_div_omega_crit: false,
+            relax_surface_rotation_v: false,
+            relax_initial_surface_rotation_v: false,
+            num_steps_to_relax_rotation: 100,
+            relax_omega_max_yrs_dt: 1.0e9,
+            set_near_zams_omega_steps: -1,
+            set_near_zams_omega_div_omega_crit_steps: -1,
+            set_near_zams_surface_rotation_v_steps: -1,
+            set_omega_step_limit: -1,
+            set_omega_div_omega_crit_step_limit: -1,
+            set_surf_rotation_v_step_limit: -1,
+            near_zams_relax_omega: false,
+            near_zams_relax_omega_div_omega_crit: false,
+            near_zams_relax_initial_surface_rotation_v: false,
+            adjust_tau_factor_to_surf_density: false,
+            base_for_adjust_tau_factor_to_surf_density: 0.0,
+            set_tau_factor_after_core_he_burn: -1.0,
+            set_tau_factor_after_core_c_burn: -1.0,
+            relax_tau_factor_after_core_he_burn: -1.0,
+            relax_tau_factor_after_core_c_burn: -1.0,
             set_initial_age: false,
             initial_age: 0.0,
             set_initial_model_number: false,
@@ -1121,6 +1257,9 @@ impl Default for StarJobControls {
             years_for_initial_dt: -1.0,
             seconds_for_initial_dt: -1.0,
             set_initial_cumulative_energy_error: false,
+            set_cumulative_energy_error: false,
+            set_cumulative_energy_error_at_step: -1,
+            set_cumulative_energy_error_each_step_if_age_less_than: -1.0e99,
             new_cumulative_energy_error: 0.0,
             set_cumulative_energy_error_each_relax: true,
             set_uniform_initial_composition: false,
@@ -1226,4 +1365,12 @@ const fn default_max_for_add() -> f64 {
 
 const fn default_true() -> bool {
     true
+}
+
+const fn default_neg_one_i64() -> i64 {
+    -1
+}
+
+const fn default_neg_1e99() -> f64 {
+    -1.0e99
 }

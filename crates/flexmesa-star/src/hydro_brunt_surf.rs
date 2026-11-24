@@ -55,10 +55,11 @@ pub fn do_brunt_b(model: &mut StarModel) -> Result<(), StarError> {
     let ht = crate::micro::builtin_helm_table()?;
 
     for k in 1..nz {
-        let rho_f = model.interp_val_to_pt(&model.rho, k);
-        let t_f = model.interp_val_to_pt(&model.t, k);
-        let chi_t_f = model.interp_val_to_pt(&model.chi_t, k);
-        let chi_rho_f = model.interp_val_to_pt(&model.chi_rho, k);
+        // `get_face_values` (`brunt.f90:207-216`).
+        let rho_f = model.get_face_value(&model.rho, k);
+        let t_f = model.get_face_value(&model.t, k);
+        let chi_t_f = model.get_face_value(&model.chi_t, k);
+        let chi_rho_f = model.get_face_value(&model.chi_rho, k);
 
         let mut delta_lnp = model.ln_peos[k - 1] - model.ln_peos[k];
         if delta_lnp > -1.0e-50 {
@@ -175,7 +176,7 @@ fn eval_gradmux_brunt_b(
 /// Evaluates the Brunt-Väisälä buoyancy frequency squared $N_k^2$ and its
 /// compositional contribution $N_{\mu,k}^2$ at all faces (`do_brunt_N2` in
 /// `star/private/brunt.f90:110-181`).
-pub fn do_brunt_n2(model: &mut StarModel) {
+pub fn do_brunt_n2(model: &mut StarModel) -> Result<(), StarError> {
     let nz = model.nz;
     model.brunt_n2.fill(0.0);
     model.aux.brunt_n2_composition_term.fill(0.0);
@@ -183,38 +184,36 @@ pub fn do_brunt_n2(model: &mut StarModel) {
         || !(model.controls.calculate_brunt_b
             && model.controls.calculate_brunt_n2)
     {
-        return;
+        return Ok(());
     }
 
     let use_mc = model.controls.use_mass_corrections;
     let mut cell_fac = vec![0.0_f64; nz];
     for k in 0..nz {
-        let mut v =
-            (model.rho[k] / model.peos[k]) * (model.chi_t[k] / model.chi_rho[k]);
+        let mut v = (model.rho[k] / model.peos[k])
+            * (model.chi_t[k] / model.chi_rho[k]);
         if use_mc {
             v *= model.aux.mass_correction[k];
         }
         cell_fac[k] = v;
     }
+    // `get_face_values` (`star/private/star_utils.f90:2046-2060`).
     let mut face_fac = vec![0.0_f64; nz];
     face_fac[0] = cell_fac[0];
     for k in 1..nz {
-        face_fac[k] = model.interp_val_to_pt(&cell_fac, k);
+        // `get_face_values` (`brunt.f90:144-145`).
+        face_fac[k] = model.get_face_value(&cell_fac, k);
     }
 
     let min_mag = model.controls.mix_wind.min_magnitude_brunt_b;
-    let has_gradt_sub_grada = model.aux.mixing.gradt_sub_grada.len() == nz;
+    if model.aux.mixing.gradt_sub_grada.len() != nz {
+        return Err(StarError::InvalidInput(String::from(
+            "do_brunt_N2: gradT_sub_grada is unset (star/private/brunt.f90:139)",
+        )));
+    }
     for k in 0..nz {
-        let gradt_sub_grada = if has_gradt_sub_grada {
-            model.aux.mixing.gradt_sub_grada[k]
-        } else {
-            let grada_f = if k == 0 {
-                model.grada[0]
-            } else {
-                model.interp_val_to_pt(&model.grada, k)
-            };
-            model.gradt[k] - grada_f
-        };
+        // `s% gradT_sub_grada(k)` (`brunt.f90:153-154`).
+        let gradt_sub_grada = model.aux.mixing.gradt_sub_grada[k];
         if model.brunt_b[k].abs() < min_mag
             || model.gradt[k] == 0.0
             || !gradt_sub_grada.is_finite()
@@ -224,18 +223,13 @@ pub fn do_brunt_n2(model: &mut StarModel) {
             model.aux.brunt_n2_composition_term[k] = 0.0;
             continue;
         }
-        let g = if model.grav[k] > 0.0 {
-            model.grav[k]
-        } else {
-            let r_k = model.r[k].max(1.0);
-            model.cgrav[k] * model.m_grav[k] / (r_k * r_k)
-        };
-        let f = flexmesa_math::pow2(g) * face_fac[k];
+        let f = flexmesa_math::pow2(model.grav[k]) * face_fac[k];
         if !f.is_finite() || !model.brunt_b[k].is_finite() {
-            model.brunt_b[k] = 0.0;
-            model.brunt_n2[k] = 0.0;
-            model.aux.brunt_n2_composition_term[k] = 0.0;
-            continue;
+            return Err(StarError::MicrophysicsError(format!(
+                "do_brunt_N2: bad f = {f:e} or brunt_B = {:e} at face {} (star/private/brunt.f90:150-157)",
+                model.brunt_b[k],
+                k + 1
+            )));
         }
         model.brunt_n2[k] = f * (model.brunt_b[k] - gradt_sub_grada);
         model.aux.brunt_n2_composition_term[k] = f * model.brunt_b[k];
@@ -248,6 +242,7 @@ pub fn do_brunt_n2(model: &mut StarModel) {
             model.aux.brunt_n2_composition_term[k] *= coeff;
         }
     }
+    Ok(())
 }
 
 /// `get_atm_tau_base` (`star/private/atm_support.f90:150-215`): the base
@@ -368,7 +363,10 @@ fn set_surf_diagnostic_ad(model: &mut StarModel) {
 /// values other than `'T_tau'`, `'table'` and `'irradiated_grey'` cannot be
 /// set (the `fixed_*` options are not ported, and the deprecated options stop
 /// in `get_legacy`, `star/private/atm_support.f90:891-998`).
-fn get_surf_pt(model: &mut StarModel, teff: f64) -> Result<(), StarError> {
+pub(crate) fn get_surf_pt(
+    model: &mut StarModel,
+    teff: f64,
+) -> Result<(), StarError> {
     // `L_surf = s% L(1)`, `R_surf = s% r(1)` and `s% m(1)`, unclamped
     // (`star/private/hydro_vars.f90:817-821, 962-966`).
     let l_surf = model.lum[0];
@@ -531,6 +529,21 @@ fn surf_pt_from_atm(o: &AtmEvalOutput) -> SurfPt {
         dlnp_dlnr: o.dln_p_dln_r,
         dlnp_dlnm: o.dln_p_dln_m,
         dlnp_dlnkap: o.dln_p_dln_kap,
+    }
+}
+
+/// `s% opacity_start(1)`, saved by `save_start_values` before the solve.
+///
+/// # Errors
+/// Returns [`StarError::InvalidInput`] if it was never saved (DECISIONS #43).
+fn opacity_start_1(model: &StarModel) -> Result<f64, StarError> {
+    let kap = model.aux.opacity_start_surf;
+    if kap > 0.0 && kap.is_finite() {
+        Ok(kap)
+    } else {
+        Err(StarError::InvalidInput(format!(
+            "atmosphere kap guess: opacity_start(1) = {kap} is unset during solver iterations (star/private/atm_support.f90:301-306, 769-773; DECISIONS #43)"
+        )))
     }
 }
 
@@ -723,12 +736,10 @@ fn eval_irradiated_surf(model: &mut StarModel) -> Result<SurfPt, StarError> {
         )));
     }
 
-    // `star/private/atm_support.f90:769-773`: hold `kap_for_atm` at
-    // `opacity_start(1)` during solver iterations.
-    let in_solver_iter =
-        model.aux.doing_struct_burn_mix && model.aux.solver_mlt_eval_count > 0;
-    let kap_for_atm = if in_solver_iter && model.aux.opacity_start_surf > 0.0 {
-        model.aux.opacity_start_surf
+    // `if (s% solver_iter > 0) kap_for_atm = s% opacity_start(1)`
+    // (`star/private/atm_support.f90:769-773`).
+    let kap_for_atm = if model.aux.solver_mlt_eval_count > 0 {
+        opacity_start_1(model)?
     } else {
         k0
     };
@@ -832,7 +843,7 @@ fn eval_irradiated_surf(model: &mut StarModel) -> Result<SurfPt, StarError> {
 /// opacity prescriptions (`get_T_tau`, `eos_proc`, and `kap_proc` in
 /// `star/private/atm_support.f90:218-392, 1176-1287`).
 #[allow(clippy::too_many_arguments)]
-fn eval_grey_t_tau_surf(
+pub(crate) fn eval_grey_t_tau_surf(
     model: &StarModel,
     tau_surf: f64,
     l_surf: f64,
@@ -904,16 +915,13 @@ fn eval_grey_t_tau_surf(
     let atm_out = match model.controls.atm_t_tau_opacity {
         AtmTTauOpacity::Fixed => unreachable!("handled above"),
         AtmTTauOpacity::Iterated => {
-            // `star/private/atm_support.f90:301-306`: start iterations from
-            // `opacity_start(1)` during solver iterations for consistency.
-            let in_solver_iter = model.aux.doing_struct_burn_mix
-                && model.aux.solver_mlt_eval_count > 0;
-            let kap_guess =
-                if in_solver_iter && model.aux.opacity_start_surf > 0.0 {
-                    model.aux.opacity_start_surf
-                } else {
-                    model.opacity[0]
-                };
+            // `if (s% solver_iter > 0) kap_guess = s% opacity_start(1)`
+            // (`star/private/atm_support.f90:301-306`).
+            let kap_guess = if model.aux.solver_mlt_eval_count > 0 {
+                opacity_start_1(model)?
+            } else {
+                model.opacity[0]
+            };
             eval_t_tau_uniform(
                 tau_surf,
                 l_surf,

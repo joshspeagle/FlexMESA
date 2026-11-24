@@ -5,9 +5,9 @@
 use crate::rsp_def::{RspState, F_EDD_ISOTROPIC};
 
 impl RspState {
-    /// Returns immutable references to all `48` zone-indexed `RSP` vectors.
+    /// Returns immutable references to all `49` zone-indexed `RSP` vectors.
     #[must_use]
-    pub fn zone_vecs(&self) -> [&[f64]; 48] {
+    pub fn zone_vecs(&self) -> [&[f64]; 49] {
         [
             &self.et_rsp,
             &self.erad_rsp,
@@ -25,6 +25,7 @@ impl RspState {
             &self.chi_rsp,
             &self.coupl_rsp,
             &self.eq_rsp,
+            &self.uq_rsp,
             &self.qq_rsp,
             &self.source_rsp,
             &self.damp_rsp,
@@ -60,8 +61,8 @@ impl RspState {
         ]
     }
 
-    /// Returns mutable references to all `48` zone-indexed `RSP` vectors.
-    pub fn zone_vecs_mut(&mut self) -> [&mut Vec<f64>; 48] {
+    /// Returns mutable references to all `49` zone-indexed `RSP` vectors.
+    pub fn zone_vecs_mut(&mut self) -> [&mut Vec<f64>; 49] {
         [
             &mut self.et_rsp,
             &mut self.erad_rsp,
@@ -79,6 +80,7 @@ impl RspState {
             &mut self.chi_rsp,
             &mut self.coupl_rsp,
             &mut self.eq_rsp,
+            &mut self.uq_rsp,
             &mut self.qq_rsp,
             &mut self.source_rsp,
             &mut self.damp_rsp,

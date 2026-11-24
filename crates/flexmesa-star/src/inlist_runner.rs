@@ -136,12 +136,14 @@ pub trait StarExtras {
         Ok(None)
     }
     /// Custom adjusted $\dot{M}$ ($\mathrm{g\,s^{-1}}$) or `None` to keep `current_mdot`.
+    /// Hooks may also mutate `m` (such as `m.controls.mix_wind.accreted_material_j`,
+    /// mirroring `star/other/other_adjust_mdot.f90` and `star/private/winds.f90:44-50`).
     ///
     /// # Errors
     /// Returns [`StarError`] if evaluating custom $\dot{M}$ fails.
     fn other_adjust_mdot(
-        &self,
-        _m: &StarModel,
+        &mut self,
+        _m: &mut StarModel,
         _current_mdot: f64,
     ) -> Result<Option<f64>, StarError> {
         Ok(None)

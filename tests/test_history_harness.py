@@ -1848,8 +1848,12 @@ def test_flexmesa_import_respects_worker_rust_only_env(
     cam_dir = harness_runner.resolve_case_dir(
         "star", "conserve_angular_momentum"
     )
+    unserved_dir = harness_runner.resolve_case_dir("star", "carbon_kh")
     assert not harness_runner._has_active_extras_handler("star", amj_dir, None)
     assert not harness_runner._has_active_extras_handler(
+        "star", unserved_dir, "tests.case_extras:resolve_case_extras"
+    )
+    assert harness_runner._has_active_extras_handler(
         "star", amj_dir, "tests.case_extras:resolve_case_extras"
     )
     assert harness_runner._has_active_extras_handler(

@@ -399,6 +399,11 @@ fn set_star_control_scalars(
     d.set_item("use_other_alpha_mlt", c.use_other_alpha_mlt)?;
     d.set_item("use_other_wind", c.use_other_wind)?;
     d.set_item("use_other_adjust_mdot", c.use_other_adjust_mdot)?;
+    d.set_item(
+        "use_accreted_material_j",
+        c.mix_wind.use_accreted_material_j,
+    )?;
+    d.set_item("accreted_material_j", c.mix_wind.accreted_material_j)?;
     d.set_item("use_other_torque", c.use_other_torque)?;
     d.set_item("use_other_torque_implicit", c.use_other_torque_implicit)?;
     d.set_item("use_other_energy", c.use_other_energy)?;
@@ -439,6 +444,38 @@ fn set_star_control_scalars(
         PyList::new(py, sets.iter().map(|s| s.mass_full_off))?,
     )?;
     Ok(())
+}
+
+#[allow(clippy::manual_midpoint)]
+fn eval_total_angular_momentum_old(model: &StarModel) -> f64 {
+    if !model.controls.rotation_flag {
+        return 0.0;
+    }
+    let nz_old = model.dq_old.len();
+    let xmstar_old = if model.xmstar_old > 0.0 {
+        model.xmstar_old
+    } else {
+        (model.mstar_old - model.m_center_old).max(0.0)
+    };
+    if nz_old == 0 || xmstar_old == 0.0 || model.aux.j_rot_old.len() < nz_old {
+        return 0.0;
+    }
+    let is_rsp = model.controls.rsp_flag || model.controls.rsp2_flag;
+    (0..nz_old)
+        .map(|k| {
+            let dm_k = model.dq_old[k] * xmstar_old;
+            let dm_bar_k = if k == 0 {
+                0.5 * dm_k
+            } else if k + 1 == nz_old && !is_rsp {
+                let half_prev = 0.5 * (model.dq_old[nz_old - 2] * xmstar_old);
+                half_prev + dm_k
+            } else {
+                let dm_prev = model.dq_old[k - 1] * xmstar_old;
+                0.5 * (dm_prev + dm_k)
+            };
+            dm_bar_k * model.aux.j_rot_old[k]
+        })
+        .sum()
 }
 
 fn set_star_report_scalars(
@@ -503,6 +540,10 @@ fn set_star_report_scalars(
         0.0
     };
     d.set_item("total_angular_momentum", total_j)?;
+    d.set_item(
+        "total_angular_momentum_old",
+        eval_total_angular_momentum_old(model),
+    )?;
 
     let net_iso = PyDict::new(py);
     for (j, name) in model.iso_names.iter().enumerate() {
@@ -694,8 +735,10 @@ fn build_star_snapshot<'py>(
         "top_conv_bdy",
         PyList::new(py, &model.aux.mixing.top_conv_bdy)?,
     )?;
+    d.set_item("generations", model.generations)?;
     d.set_item("star_mass", model.mstar / M_SUN)?;
     d.set_item("mstar_dot", model.mstar_dot)?;
+    d.set_item("mstar_dot_old", model.aux.step_hist.mstar_dot_old)?;
     d.set_item("star_mdot", model.mstar_dot / (M_SUN / SECYER))?;
     d.set_item("teff", model.teff)?;
     d.set_item("surface_l_lsun", surface_l)?;
@@ -812,6 +855,13 @@ fn apply_star_updates(
             "teff_lower_limit" => {
                 model.controls.teff_lower_limit =
                     val.extract::<Option<f64>>()?;
+            }
+            "accreted_material_j" => {
+                model.controls.mix_wind.accreted_material_j =
+                    val.extract::<f64>()?;
+            }
+            "mstar_dot" => {
+                model.mstar_dot = val.extract::<f64>()?;
             }
             other => {
                 return Err(PyValueError::new_err(format!(
@@ -970,6 +1020,109 @@ fn parse_star_directive(
              {default_terminate_code}"
         ))),
     }
+}
+
+fn read_optional_mutated_scalar(
+    snap: &Bound<'_, PyDict>,
+    key: &str,
+    prev_bits: u64,
+) -> PyResult<Option<f64>> {
+    match snap.get_item(key)? {
+        Some(v) if !v.is_none() => {
+            let val = v.extract::<f64>()?;
+            Ok((val.to_bits() != prev_bits).then_some(val))
+        }
+        _ => Ok(None),
+    }
+}
+
+/// Parses a Python `other_adjust_mdot` return value and snapshot mutations.
+///
+/// Preserves legacy `float | None` hooks while allowing hooks to return
+/// `{"mstar_dot": ..., "accreted_material_j": ..., "updates": ...}` or mutate
+/// `snap["mstar_dot"]` / `snap["accreted_material_j"]` directly.
+fn parse_adjust_mdot_result(
+    res: &Bound<'_, PyAny>,
+    snap: &Bound<'_, PyDict>,
+    model: &mut StarModel,
+    current_mdot: f64,
+    pre_bits: (u64, u64),
+) -> PyResult<Option<f64>> {
+    let (pre_mdot_bits, pre_acc_j_bits) = pre_bits;
+    let snap_mdot =
+        read_optional_mutated_scalar(snap, "mstar_dot", pre_mdot_bits)?;
+    let snap_acc_j = read_optional_mutated_scalar(
+        snap,
+        "accreted_material_j",
+        pre_acc_j_bits,
+    )?;
+
+    if res.is_none() {
+        if let Some(j) = snap_acc_j {
+            model.controls.mix_wind.accreted_material_j = j;
+        }
+        if let Some(mdot) = snap_mdot {
+            return Ok(Some(mdot));
+        }
+        if snap_acc_j.is_some() {
+            return Ok(Some(current_mdot));
+        }
+        return Ok(None);
+    }
+
+    if let Ok(d) = res.cast::<PyDict>() {
+        let mut ret_mdot: Option<f64> = None;
+        let mut ret_acc_j: Option<f64> = None;
+        let mut saw_updates = false;
+        for (k_obj, v_obj) in d.iter() {
+            let key: String = k_obj.extract()?;
+            match key.as_str() {
+                "mstar_dot" => {
+                    if !v_obj.is_none() {
+                        ret_mdot = Some(v_obj.extract::<f64>()?);
+                    }
+                }
+                "accreted_material_j" => {
+                    if !v_obj.is_none() {
+                        ret_acc_j = Some(v_obj.extract::<f64>()?);
+                    }
+                }
+                "updates" => {
+                    if let Ok(udict) = v_obj.cast::<PyDict>() {
+                        apply_star_updates(model, udict)?;
+                        saw_updates = true;
+                    } else if !v_obj.is_none() {
+                        return Err(PyValueError::new_err(format!(
+                            "hook returned 'updates' of type {}; expected a \
+                             dict",
+                            v_obj.get_type().name()?
+                        )));
+                    }
+                }
+                other => {
+                    return Err(PyValueError::new_err(format!(
+                        "unsupported star adjust_mdot dict key '{other}'"
+                    )));
+                }
+            }
+        }
+        if let Some(j) = ret_acc_j.or(snap_acc_j) {
+            model.controls.mix_wind.accreted_material_j = j;
+        }
+        if let Some(mdot) = ret_mdot.or(snap_mdot) {
+            return Ok(Some(mdot));
+        }
+        if ret_acc_j.is_some() || snap_acc_j.is_some() || saw_updates {
+            return Ok(Some(model.mstar_dot));
+        }
+        return Ok(None);
+    }
+
+    let mdot = res.extract::<f64>()?;
+    if let Some(j) = snap_acc_j {
+        model.controls.mix_wind.accreted_material_j = j;
+    }
+    Ok(Some(mdot))
 }
 
 /// Callable attached to `other_overshooting_scheme` snapshots so Python hooks
@@ -1594,8 +1747,8 @@ impl StarExtras for PyStarExtrasAdapter {
     }
 
     fn other_adjust_mdot(
-        &self,
-        model: &StarModel,
+        &mut self,
+        model: &mut StarModel,
         current_mdot: f64,
     ) -> Result<Option<f64>, StarError> {
         self.state.take_pending_star_err()?;
@@ -1603,23 +1756,30 @@ impl StarExtras for PyStarExtrasAdapter {
             return Ok(None);
         }
         let case_dir = self.state.staged_dir_string();
+        let pre_mdot_bits = model.mstar_dot.to_bits();
+        let pre_acc_j_bits =
+            model.controls.mix_wind.accreted_material_j.to_bits();
         Python::attach(|py| {
             let snap = build_star_snapshot(py, model, &case_dir, false)
                 .map_err(|e| StarError::InvalidInput(format_py_err(py, &e)))?;
             let res = self
                 .py_obj
                 .bind(py)
-                .call_method1("other_adjust_mdot", (snap, current_mdot))
+                .call_method1("other_adjust_mdot", (&snap, current_mdot))
                 .map_err(|e| {
                     StarError::InvalidInput(format!(
                         "other_adjust_mdot: {}",
                         format_py_err(py, &e)
                     ))
                 })?;
-            if res.is_none() {
-                return Ok(None);
-            }
-            res.extract::<f64>().map(Some).map_err(|e| {
+            parse_adjust_mdot_result(
+                &res,
+                &snap,
+                model,
+                current_mdot,
+                (pre_mdot_bits, pre_acc_j_bits),
+            )
+            .map_err(|e| {
                 StarError::InvalidInput(format!(
                     "other_adjust_mdot: {}",
                     format_py_err(py, &e)

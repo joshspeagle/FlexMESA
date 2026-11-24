@@ -144,9 +144,7 @@ STOCK_EXTRAS_DIGESTS: frozenset[str] = frozenset(
 #   arrays not yet publicly exposed on `StarModel`).
 # - `#156` (element diffusion electric/gravity fields): `WdDiffusionStarExtras`
 #   (`e_field`, `g_field_element_diffusion`).
-# - `#158` / `#159` (mutable `other_adjust_mdot` / rotation-distortion hooks):
-#   `AccretedMaterialJStarExtras` (`accreted_material_j` mutation inside
-#   `other_adjust_mdot`), `PpisnStarExtras` (`other_kap_get`,
+# - `#159` (rotation-distortion hooks): `PpisnStarExtras` (`other_kap_get`,
 #   `other_eval_fp_ft`, `other_before_struct_burn_mix`, `#152`/`#159`/`#161`).
 # - `#161` (opacity/surface-PT/other-physics hooks): `ConductiveFlameStarExtras`
 #   (`other_surface_PT`, `#154`), `MsOpMonoStarExtras` (`op_mono` tables),
@@ -174,6 +172,7 @@ STOCK_EXTRAS_DIGESTS: frozenset[str] = frozenset(
 # runs with default no-op hooks and never counts as a pass, `DECISIONS #32`).
 ADAPTER_SERVED_STAR_HANDLERS: frozenset[str] = frozenset(
     {
+        "AccretedMaterialJStarExtras",
         "AdjustNetStarExtras",
         "CburnInwardStarExtras",
         "CepheidBlueLoopStarExtras",

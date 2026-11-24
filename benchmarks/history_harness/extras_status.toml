@@ -107,9 +107,8 @@ digest = "2141345c8c4555b2b0be2c2abf1fdb1d537ba1665f61bae2b70c85801868a6f7"
 [[cases]]
 suite = "star"
 case = "accreted_material_j"
-status = "unported"
+status = "ported"
 digest = "b4135368e3c29a3548353e187b1d36a116943e76a646bd1dac6a8dd9d69b24ee"
-issue = "#231"
 
 [[cases]]
 suite = "star"

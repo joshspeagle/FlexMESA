@@ -420,6 +420,7 @@ pub fn star_evolve_step_part1(
         revised_max_yr_dt: model.aux.step_hist.revised_max_yr_dt,
         max_years_for_timestep: model.controls.max_years_for_timestep,
         max_timestep: model.controls.ts_stop.max_timestep,
+        accreted_material_j: model.controls.mix_wind.accreted_material_j,
     };
 
     if first_try {
@@ -522,6 +523,7 @@ pub fn star_evolve_step_part1(
             Some(crate::report_utils::eval_ledd_erg_s(model));
     }
     if let Err(e) = set_step_mdot(model, explicit_step_mdot, extras) {
+        model.controls.mix_wind.accreted_material_j = saved.accreted_material_j;
         model.model_number = model.model_number_old;
         return Err(e);
     }
@@ -546,7 +548,7 @@ pub fn star_evolve_step_part1(
 
 /// Evaluates the step's `mstar_dot` (`set_mdot` and `other_adjust_mdot`,
 /// `star/private/evolve.f90:426-427`), restoring the explicit rate when the
-/// `other_adjust_mdot` hook declines.
+/// `other_adjust_mdot` hook declines without mutating `m.mstar_dot`.
 fn set_step_mdot(
     model: &mut StarModel,
     explicit_step_mdot: f64,
@@ -555,11 +557,12 @@ fn set_step_mdot(
     if model.controls.use_other_adjust_mdot {
         let prev_rot_boost = model.aux.step_hist.rotational_mdot_boost_old;
         do_set_mdot_with_extras(model, extras)?;
+        let pre_hook_mdot = model.mstar_dot;
         if let Some(adj_mdot) =
-            extras.other_adjust_mdot(model, model.mstar_dot)?
+            extras.other_adjust_mdot(model, pre_hook_mdot)?
         {
             model.mstar_dot = adj_mdot;
-        } else {
+        } else if model.mstar_dot.to_bits() == pre_hook_mdot.to_bits() {
             model.mstar_dot = explicit_step_mdot;
             model.aux.step_hist.rotational_mdot_boost_old = prev_rot_boost;
         }
@@ -1149,6 +1152,7 @@ pub(crate) fn star_evolve_step_outcome_checked(
         revised_max_yr_dt: model.aux.step_hist.revised_max_yr_dt,
         max_years_for_timestep: model.controls.max_years_for_timestep,
         max_timestep: model.controls.ts_stop.max_timestep,
+        accreted_material_j: model.controls.mix_wind.accreted_material_j,
     };
 
     // Clip `dt_next_in` against `max_age*` (`evolve.f90:1899-1915, 550-555`).
@@ -1248,6 +1252,8 @@ pub(crate) fn star_evolve_step_outcome_checked(
                 Some(crate::report_utils::eval_ledd_erg_s(model));
         }
         if let Err(e) = set_step_mdot(model, explicit_step_mdot, extras) {
+            model.controls.mix_wind.accreted_material_j =
+                saved.accreted_material_j;
             model.model_number = model.model_number_old;
             return Err(e);
         }
@@ -1849,6 +1855,7 @@ struct PreAttemptScalars {
     revised_max_yr_dt: f64,
     max_years_for_timestep: f64,
     max_timestep: f64,
+    accreted_material_j: f64,
 }
 
 fn sync_time_sec_from_age(model: &mut StarModel) {
@@ -1930,6 +1937,7 @@ fn restore_attempt_state(
     // `using_revised_max_yr_dt` or `revised_max_yr_dt`: a value a try set
     // (the `max_timestep_hi_T_limit` switch, `evolve.f90:705-711`, or an
     // `extras_check_model` limit) stays for the retry or redo (#510).
+    model.controls.mix_wind.accreted_material_j = saved.accreted_material_j;
     Ok(restored_remesh)
 }
 

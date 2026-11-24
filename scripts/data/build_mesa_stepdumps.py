@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Build a ``mesa-stepdumps-<version>.tar.zst`` bundle and its manifest.
 
 Packs the MESA 26.4.1 step dumps written by

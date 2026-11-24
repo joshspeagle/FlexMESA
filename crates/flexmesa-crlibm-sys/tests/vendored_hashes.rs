@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Provenance, SHA-256 integrity, safety-comment, and multi-thread reentrancy
 //! tests for `flexmesa-crlibm-sys` (`#165`).
 

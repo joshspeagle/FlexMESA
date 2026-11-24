@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Tier A/B/C (`auto_diff`, `math`, `mtx`) `PyO3` bindings.
 //!
 //! Exposes scalar and contiguous `float64` NumPy array bindings for:

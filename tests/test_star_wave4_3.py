@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Tests for Wave 4.3 convective boundaries, overshooting, structure-burn-mix,
 rotational angular momentum diffusion, and stellar winds (`flexmesa.star`).
 """

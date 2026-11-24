@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Generate the per-case status of upstream extras logic (`#148`, `#231`).
 
 Each upstream case ships `src/run_star_extras.f90` (and, for binaries,

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Issue `#299` tests for photo output scheduling,
 //! `required_termination_code_string`, `x_logical_ctrl`, and terminal/timing
 //! driver controls (`DECISIONS #26`).

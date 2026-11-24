@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Control-driven stellar wind and mass-change driver (`set_mdot`,
 //! `do_set_mdot`, `eval_super_eddington_wind`, `eval_rlo_wind`) matching
 //! `star/private/winds.f90:54-476, 637-703`.

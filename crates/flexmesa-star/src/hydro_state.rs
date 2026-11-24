@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Auxiliary start-of-step thermodynamic arrays, heating channels, turbulent
 //! work/viscosity variables, rotational distortion factors, Rayleigh-Taylor
 //! instability (RTI) profiles, and EOS composition partial derivatives on

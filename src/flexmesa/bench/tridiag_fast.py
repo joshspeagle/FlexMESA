@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Four-stage $5 \\times 5$ block-tridiagonal solver benchmark (`tridiag_fast`).
 
 Evaluates block-tridiagonal Henyey linear system factorization and solve

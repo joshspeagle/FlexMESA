@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Helpers for MESA `26.4.1` logs, `#150` git A/B runs, and CSV writers."""
 
 from __future__ import annotations
@@ -386,7 +386,7 @@ def compare_trajectories_by_age(
     }
 
 
-_BENCH_150_EXAMPLE_RS = """// SPDX-License-Identifier: LGPL-3.0-or-later
+_BENCH_150_EXAMPLE_RS = """// SPDX-License-Identifier: GPL-3.0-or-later
 use std::path::Path;
 use std::time::Instant;
 use flexmesa_star::controls::{StarControls, StarJobControls};

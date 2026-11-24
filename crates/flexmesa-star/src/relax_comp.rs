@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Composition arithmetic for the composition relaxes: `set_y`, `set_z`,
 //! `eval_current_y`/`eval_current_z` and the `do_relax_composition` target
 //! profile (`star/private/adjust_xyz.f90`, `star/private/star_utils.f90`,

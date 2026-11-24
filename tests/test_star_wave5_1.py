@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Wave 5.1 verification tests for multi-species Burgers element diffusion,
 shellular rotation, Spruit-Tayler magnetic dynamo, convective premixing,
 predictive mixing, and white-dwarf crystallization phase separation.

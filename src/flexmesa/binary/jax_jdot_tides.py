@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Differentiable JAX (`float64`) kernels for Kerr black hole ISCO/Eddington
 accretion, orbital angular momentum loss, and Hut (1981) tidal evolution.
 

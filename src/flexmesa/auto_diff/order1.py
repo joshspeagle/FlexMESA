@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """First-order forward-mode dual numbers (`DualOrder1`) as JAX PyTrees.
 
 Provides `DualOrder1` and MESA-compatible fixed-arity subclasses for 1, 2, 4,

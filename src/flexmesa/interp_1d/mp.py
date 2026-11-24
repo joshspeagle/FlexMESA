@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Huynh (1993) and Suresh & Huynh (1997) monotonicity-preserving splines.
 
 References:

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Sub-cell core-boundary mass and boundary-property interpolation
 //! (`get_core_info`, `set_core_info`, `get_info_at_q`) and nuclear burning
 //! category luminosity summation (`star/private/report.f90:76-113` and

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Tests for the step-dump first-divergence comparison (#372)."""
 
 from __future__ import annotations

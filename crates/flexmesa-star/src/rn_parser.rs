@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Upstream MESA `./rn` shell script stage parser (`RnStage`,
 //! `parse_rn_stages`).
 //!

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Tests for raw MESA `26.4.1` benchmark captures and rendered docs."""
 
 from __future__ import annotations

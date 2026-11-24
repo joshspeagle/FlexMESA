@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Coupled orbital angular-momentum derivatives (`do_jdot_{mb,gr,ml,missing_wind,ls}`),
 //! shellular spin conservation across Henyey remeshing, post-step rotational
 //! compositional mixing, and Hut (1981) / Zahn (1977) tidal spin synchronization.

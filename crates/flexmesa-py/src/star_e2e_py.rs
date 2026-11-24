@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! `PyO3` bindings for `flexmesa-star` E2E-0 `inlist` bundle parsing, `./rn`
 //! stage resolution, photo restart parity verification, and multi-stage
 //! `test_suite` case execution (`inlist` and `inlist_runner`).

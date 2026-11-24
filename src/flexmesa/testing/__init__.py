@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Golden baseline parsing and numerical comparison utilities for FlexMESA.
 
 This subpackage provides parsers and numerical assertion helpers for MESA's

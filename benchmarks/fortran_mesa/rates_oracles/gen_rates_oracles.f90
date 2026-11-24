@@ -1,4 +1,4 @@
-! SPDX-License-Identifier: LGPL-3.0-or-later
+! SPDX-License-Identifier: GPL-3.0-or-later
 ! Generate IEEE-754 hex + decimal nuclear reaction rates (`rates`) reference vectors
 ! against compiled MESA 26.4.1 (`librates.a` + `CRMATH`) for #161.
 

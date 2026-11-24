@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Nuclear reaction rates, plasma screening, and weak rates (`rates`).
 
 Ports upstream MESA `rates` (Wave 3b.3) across Safe Rust (`flexmesa-rates`) and

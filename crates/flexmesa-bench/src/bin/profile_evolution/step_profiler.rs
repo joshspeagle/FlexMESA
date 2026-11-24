@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Real-evolution trajectory timer, per-step phase decomposition, and `#150`
 //! waste-removal profiler (`#168`).
 

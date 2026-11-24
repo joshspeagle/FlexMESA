@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Regression test for GitHub issue `#422`: the pre-main-sequence builder
 //! (`build_pre_ms_model`, `star/private/pre_ms_model.f90:34-288`) reproduces
 //! MESA `26.4.1` bit for bit for `star/test_suite/make_zams`.

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Memory-mapped `.safetensors` bundle reader and writer for physics tables.
 
 Enforces row-major (`C`-contiguous) `float64` (`F64`) and `int64` (`I64`)

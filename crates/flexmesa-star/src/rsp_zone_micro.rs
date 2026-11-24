@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Per-zone (`1..=nzn`) microphysical chain-rule derivatives (`RspZoneMicro`),
 //! face pressure scale-height partials (`HpFacePartials`), and convective-flux
 //! filter mode (`LcFilterMode`) shared across `RELAX_ENV` and `do_LINA`.

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Public interface for `flexmesa.auto_diff` (`auto_diff` module port).
 
 Exports first-order forward-mode dual numbers (`DualOrder1` and its fixed-arity

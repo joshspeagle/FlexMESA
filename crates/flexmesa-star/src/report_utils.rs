@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Exact upstream MESA `26.4.1` report scalar evaluators, sub-cell boundary
 //! and burning-zone diagnostics, and fixed-width ASCII log formatters.
 //!

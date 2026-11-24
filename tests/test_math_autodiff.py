@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Golden parity, JAX autodiff, and property tests for `math` and `auto_diff`.
 
 Verifies all 33 functions in upstream MESA's `math/test/test_output.INTRINSIC`

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Raw unscreened nuclear reaction rate evaluation (`set_raw_rate`,
 //! `set_raw_rates`, `eval_reaclib_handle`), `interp_pm` rate-table evaluation,
 //! and Fushiki & Lamb (1987) pycnonuclear triple-alpha (`pycno.f90`).

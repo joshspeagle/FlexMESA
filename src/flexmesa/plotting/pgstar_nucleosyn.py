@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 r"""Upstream ``pgstar`` ``Network`` and ``Production`` nucleosynthesis panels.
 
 Ports ``do_network_panel`` (`star/private/pgstar_network.f90:74-284`) and

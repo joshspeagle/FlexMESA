@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Local mesh-spacing multiplier evaluation, smoothing, and pre-remesh grid
 //! validity checks (`star/private/adjust_mesh_support.f90:1-457`).
 

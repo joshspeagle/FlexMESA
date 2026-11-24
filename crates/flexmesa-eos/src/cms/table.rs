@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Table loader and lazy-loaded slice collection for `CMS` (`eoscms_load_tables.f90`).
 
 pub use crate::cms::config::{

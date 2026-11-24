@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Differentiable JAX kernels for stellar winds, Lagrangian mixing coupling
 (`sig`), and conservative species diffusion (`flexmesa.star`, Wave 4.3).
 """

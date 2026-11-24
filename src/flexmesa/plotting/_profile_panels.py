@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Internal radial profile and Kippenhahn builders for ``compare``."""
 
 from __future__ import annotations

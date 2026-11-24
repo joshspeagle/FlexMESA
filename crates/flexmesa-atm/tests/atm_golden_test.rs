@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Golden parity and partial-derivative tests for `flexmesa-atm` against
 //! upstream MESA `atm/test/test_output` (`tests/fixtures/golden/atm/test_output.txt`).
 

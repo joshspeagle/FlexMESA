@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Derivative-free asteroseismic optimization drivers: Nelder-Mead simplex
 //! (`flexmesa_num::nm_simplex`), Powell trust-region `NEWUOA` / `BOBYQA`
 //! (`flexmesa_num::{newuoa, bobyqa}`), and Cartesian grid scans

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Orbital angular momentum loss ($\dot{J}_{\mathrm{gr}}, \dot{J}_{\mathrm{ml}},
 //! \dot{J}_{\mathrm{mb}}, \dot{J}_{\mathrm{ls}}, \dot{J}_{\mathrm{missing\_wind}}$)
 //! and tidal synchronization/circularization (Hut 1981; Zahn 1977; Hurley, Tout

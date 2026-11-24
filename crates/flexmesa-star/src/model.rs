@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Canonical 1D stellar structure state (`StarModel`) corresponding to
 //! `star_data_def.f90` and `alloc.f90`.
 //!

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 r"""Internal history-region polygon helpers for ``kippenhahn`` (`#173`).
 
 Parses ``mix_type_*`` / ``mix_qtop_*`` / ``mix_relr_*`` and ``burn_type_*`` /

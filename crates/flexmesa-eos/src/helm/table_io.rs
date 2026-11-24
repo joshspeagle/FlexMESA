@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Full `HELM` table parsers, binary cache I/O, and shared MESA data-directory
 //! resolution (`eos/private/helm_alloc.f90`).
 

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 r"""Branchless `@jax.jit` (`float64`) kernels for `RSP` and `RSP2` radial
 stellar pulsation and time-dependent turbulent convection (`hydro_rsp2.f90`
 and `rsp/eval_equations.inc`, resolving Issue #5).

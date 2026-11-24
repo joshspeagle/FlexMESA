@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Face-centered hydrostatic/hydrodynamic momentum equation (`do1_momentum_eqn`)
 //! and kinematic radius-velocity equation (`do1_radius_eqn`) with 3-cell
 //! stencil [`StarAdOrder1`] automatic differentiation

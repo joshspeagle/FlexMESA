@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Pre-main-sequence model builder (`build_pre_ms_model`, `pre_ms_f`,
 //! `build1_pre_ms_model` and `eval_gradT` in
 //! `star/private/pre_ms_model.f90`).

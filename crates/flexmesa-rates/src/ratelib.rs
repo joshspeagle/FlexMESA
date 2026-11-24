@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Analytical NACRE (Angulo et al. 1999) and Timmes (`fxt`) nuclear reaction
 //! rate evaluators ported from `rates/private/ratelib.f90`.
 

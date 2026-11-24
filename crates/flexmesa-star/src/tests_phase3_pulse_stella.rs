@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Phase 3 (`Issue #4`) unit and golden parity tests for all 7 pulsation
 //! exporters (`GYRE`, `FGONG`, `OSC`, `GSM`, `SAIO`, `CAFEIN`, `GR1D`),
 //! `GYRE` 34-mode BVP golden fixture (`gyre/test/test_output`), `ADIPLS`

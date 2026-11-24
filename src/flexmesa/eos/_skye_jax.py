@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Branchless `@jax.jit` (`float64`) 3rd-order jet kernels for `Skye` EOS.
 
 Implements Jermyn et al. (2021, ApJ, 913, 72) third-order Helmholtz free-energy

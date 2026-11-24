@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Built-in Johnson (`B, I, J, M, R, U, V`) filter transmission curves and
 //! photometric zero-point fluxes (`data/colors_data/filters/Generic/Johnson`).
 //!

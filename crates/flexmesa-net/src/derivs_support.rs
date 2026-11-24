@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Reaction-network derivative accumulation helpers, weaklib low-$T$ blending,
 //! and special reaction updates (`net_derivs_support.f90` and `net_eval.f90`).
 

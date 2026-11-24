@@ -1,4 +1,4 @@
-! SPDX-License-Identifier: LGPL-3.0-or-later
+! SPDX-License-Identifier: GPL-3.0-or-later
 ! Generate IEEE-754 hex + decimal nuclear reaction network (`net::net_get`)
 ! oracle vectors against compiled MESA 26.4.1 (`libnet.a` + `librates.a` +
 ! `CRMATH`) for #328 and #161.

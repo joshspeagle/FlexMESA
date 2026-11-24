@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! MESA-to-STELLA `.hyd` and `.abn` exporters (`#172`),
 //! 40-group radiation-hydrodynamics + $^{56}\mathrm{Ni}\to{}^{56}\mathrm{Co}\to{}^{56}\mathrm{Fe}$
 //! homologous expansion light-curve solver, and Sobolev $\mathrm{Fe\,II}\ \lambda 5169.02\,\text{\AA}$

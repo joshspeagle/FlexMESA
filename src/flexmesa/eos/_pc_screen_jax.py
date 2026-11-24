@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Branchless JAX `float64` kernels for `PC` electron-ion screening and mixing.
 
 Ports `FSCRliq8`, `FSCRsol8`, `CORMIX`, and `EOSFI8` (`eos/private/pc_eos.f90`

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Integration tests for `rsp_config`, `rsp_def`, `rsp_eos_kap`, `rsp_eos_inv`,
 //! and lossless `32812` (`RSP`) / `RSP2` `.mod` and `.photo` serialization.
 

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Standalone CLI driver for profiling real stellar evolutions, per-step phase
 //! breakdowns, `#150` waste-removal components, and `N`-star worker-pool
 //! batching (`#168`).

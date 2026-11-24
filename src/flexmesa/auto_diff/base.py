@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Shared typed elementary method mixin (`AutoDiffBase`) for `auto_diff`.
 
 Provides all 32 unary elementary functions (`sin`, `cos`, `exp`, `log`,

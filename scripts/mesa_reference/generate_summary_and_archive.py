@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Generate test-suite summary tables in ``MESA_GROUND_TRUTH_ROOT``.
 
 Reads ``runs/<suite>/<case>/case_result.json`` across ``star``, ``binary``, and

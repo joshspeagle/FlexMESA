@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Bolometric, synthetic filter, and zero-point photometry for ``colors``.
 
 Ports upstream MESA ``colors/private/bolometric.f90`` and ``synthetic.f90``

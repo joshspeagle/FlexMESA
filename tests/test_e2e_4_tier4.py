@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Stage E2E-4 (#95) verification test suite for pulsation, `RSP`, and `astero`
 interfaces without in-library test-case overrides (`#148`).
 """

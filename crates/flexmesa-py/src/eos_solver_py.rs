@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! `PyO3` bindings for `flexmesa-eos` Wave 3a.3 and Wave 3b.1 (`eosDT_get`
 //! 7-level cascade, 4D tabulated EOS evaluators, and `PT`/`DE` inverse solvers).
 

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Opt-in solver step dumps in the record layout of the instrumented MESA
 //! 26.4.1 overlay (`benchmarks/fortran_mesa/stepdumps/stepdump_patch.py`,
 //! `#372`), so that a FlexMESA run can be compared record by record with

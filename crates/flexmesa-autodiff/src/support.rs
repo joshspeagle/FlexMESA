@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Scalar helpers used by the translated `auto_diff` routines.
 //!
 //! `sgn` and `heaviside` follow `auto_diff/private/support_functions.f90:48-68`

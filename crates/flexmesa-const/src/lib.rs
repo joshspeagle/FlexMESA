@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Physical, mathematical, and astronomical constants in CGS units.
 //!
 //! This crate ports upstream MESA's `const_def` module in IEEE-754 double

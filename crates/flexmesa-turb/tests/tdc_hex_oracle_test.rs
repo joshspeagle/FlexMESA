@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! MESA `26.4.1` IEEE-754 hex oracle test for `turb::set_tdc` values and all 16
 //! input `d1Array` partial derivatives (`#328`, `#321`, `DECISIONS #50`).
 

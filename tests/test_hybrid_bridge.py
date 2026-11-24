@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Unit tests for `flexmesa._rust` (`PyO3`), `resolve_backend`, and consistency.
 
 Verifies that:

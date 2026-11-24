@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Core nuclear reaction network (`net`) types, constants, reaction-kind
 //! classifications, and evaluation results (`net/public/net_def.f90`).
 

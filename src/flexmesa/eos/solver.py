@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 r"""Top-level `eosDT_get` 7-level cascade, 4D table evaluators, and `PT`/`DE`
 inverse solvers (`eos/public`).
 

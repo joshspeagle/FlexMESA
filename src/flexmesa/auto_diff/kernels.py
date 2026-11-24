@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Shared JAX `float64` first- and second-derivative kernels for `auto_diff`.
 
 Each unary kernel returns a 3-tuple `(f(x), f'(x), f''(x))` of `float64` JAX

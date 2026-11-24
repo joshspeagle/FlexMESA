@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Overshooting, predictive mixing, convective premixing, stellar wind,
 //! rotational mass-loss enhancement, `eps_mdot`, extra heating, and adaptive
 //! mesh spacing control sub-structs on [`crate::StarControls`]

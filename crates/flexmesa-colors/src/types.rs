@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Scalar trait, physical constants, error types, and enumerations for
 //! `flexmesa-colors` (`colors/public/colors_def.f90` and
 //! `colors/defaults/colors.defaults`).

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Kerr black hole ISCO spin and Eddington accretion rate (Bardeen 1972;
 //! King & Kolb 1999; Podsiadlowski et al. 2003), decoupled Eddington mass
 //! retention vs. radiation-corrected accretion (`binary_mdot.f90:428-622`),

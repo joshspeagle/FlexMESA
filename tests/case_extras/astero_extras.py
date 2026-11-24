@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Upstream `astero/test_suite/*` `set_param` routines from each case's
 `run_star_extras.f90` (`#423`).
 

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Python and JAX hybrid stellar structure model (`StarModel`).
 
 Wraps `flexmesa._rust.RustStarModel` (Tier A/B Safe Rust engine) and exposes

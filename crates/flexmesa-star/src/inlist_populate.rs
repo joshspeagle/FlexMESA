@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Typed control struct population (`InlistBundle::populate_typed_structs`)
 //! mapping flattened `&star_job`, `&eos`, `&kap`, and `&controls` namelist
 //! sections into [`crate::StarJobControls`], [`flexmesa_eos::EosConfig`],

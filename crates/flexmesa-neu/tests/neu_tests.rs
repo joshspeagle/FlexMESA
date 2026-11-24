@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Integration and 100% golden `test_output` parity tests for `flexmesa-neu`.
 //!
 //! Verifies:

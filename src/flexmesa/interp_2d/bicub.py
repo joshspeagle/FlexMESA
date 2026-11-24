@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Two-dimensional C^2 bicubic spline setup (`interp_mkbicub_db`).
 
 Constructs $C^2$ bicubic spline coefficient tables ``[f, f_xx, f_yy, f_xxyy]``

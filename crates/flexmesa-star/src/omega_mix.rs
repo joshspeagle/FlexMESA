@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Substepped implicit rotational angular momentum transport (`do_solve_omega_mix`)
 //! ported from `star/private/solve_omega_mix.f90:20-669` in IEEE-754 `binary128`
 //! ([`flexmesa_math::Quad`]).

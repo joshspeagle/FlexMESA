@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Render MESA `26.4.1` benchmark scorecards and wave reports (`#146`).
 
 Builds the eight public benchmark Markdown pages deterministically from

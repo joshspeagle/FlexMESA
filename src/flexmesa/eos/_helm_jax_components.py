@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Radiation, ideal-ion, and electron-positron `HELM` kernels in JAX.
 
 Ports `helm_radiation.dek`, `helm_ideal_ions.dek`, and

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Bremsstrahlung (`brem_neu`) neutrino energy loss rates and derivatives.
 
 Ports `brem_neu_weak_degen`, `brem_neu_liquid_metal`, and `brem_neu` (Itoh et

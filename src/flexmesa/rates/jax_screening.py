@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Branchless JAX/XLA (`float64`) plasma electrostatic screening kernels.
 
 Provides differentiable `@jax.jit` evaluators for Salpeter (1954),

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Thin accretion disk outer $L_2$ mass-loss fraction following Lu et al.
 //! (2023, MNRAS 519, 1409).
 //!

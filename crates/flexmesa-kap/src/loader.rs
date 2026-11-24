@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Embedded binary table loader (`kap_tables.bin`) for `flexmesa-kap`.
 //!
 //! Lazily unpacks and fits 2D PSPLINE bicubic splines on first access per

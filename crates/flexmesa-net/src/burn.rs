@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Constant- or prescribed-$(T, \rho)$ one-zone nuclear burner (`burn_1_zone`)
 //! and Bader-Deuflhard semi-implicit midpoint extrapolation integrator
 //! (`netint`, `stifbs`, `simpr`, `net_pzextr`) from

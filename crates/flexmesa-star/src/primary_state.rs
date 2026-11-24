@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Compact rollback buffer ([`PrimaryStateBuffer`]) storing evolved stellar
 //! state without cloning controls, derived microphysics tables, net Jacobians,
 //! AD partial vectors, or retry counters.

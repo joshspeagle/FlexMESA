@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Precomputed thermodynamic and composition powers (`NeuInputs`) and weak
 //! interaction coupling constants for `flexmesa-neu`.
 //!

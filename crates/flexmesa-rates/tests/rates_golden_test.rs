@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Golden parity verification for `flexmesa-rates` against all 7 sections of
 //! upstream MESA `rates/test/test_output` (`tests/fixtures/golden/rates/test_output.txt`).
 

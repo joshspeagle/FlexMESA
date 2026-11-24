@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Golden, JAX autodiff, and Hypothesis property tests for `flexmesa.mtx`.
 
 Validates FlexMESA dense (`dgetrf`, `dgetrs`, `solve_dense`, `solve_dense_jax`),

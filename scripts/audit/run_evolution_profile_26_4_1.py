@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Run the `#168` quiet-host stellar evolution profiling campaign (`26.4.1`).
 
 Executes and records raw JSON/CSV artifacts under

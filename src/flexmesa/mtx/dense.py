@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Dense LU factorization, linear system solvers, and JAX differentiable solve.
 
 Stores dense $N \\times N$ matrices in row-major order (`a[i, j]`, `float64`).

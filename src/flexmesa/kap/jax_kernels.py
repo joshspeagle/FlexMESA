@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Native `@jax.jit` (`float64`) opacity kernels for `flexmesa.kap`.
 
 Implements Poutanen (2017) relativistic/degenerate Compton scattering,

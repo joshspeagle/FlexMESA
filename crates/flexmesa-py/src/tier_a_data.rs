@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Tier A (`data`) `PyO3` bindings for `SHA-256` verification and ASCII table
 //! conversion.
 //!

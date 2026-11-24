@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Burgers equation assembly, collision coefficients, and diffusion velocity
 //! evaluation ported from MESA `26.4.1` `star/private/diffusion_support.f90`.
 //!

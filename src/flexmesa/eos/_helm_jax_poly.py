@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """1D and 2D biquintic (`h5`) and bicubic (`h3`) Hermite basis kernels in JAX.
 
 Ports `eos/private/helm_polynomials.f90` (Timmes & Swesty 2000, ApJS, 126, 501)

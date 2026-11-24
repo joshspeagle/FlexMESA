@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Verification suite for `#152` Newton iteration control, `Bdomain`,
 //! backtracking `adjust_correction`, `sizequ`/`sizeB` (`#177`, `#251`),
 //! `restore_mesh_on_retry`, `select_mdot_action` solver-failure retry (`#139`),

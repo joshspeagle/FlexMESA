@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """``do_adjust_mass`` against MESA 26.4.1, zone by zone and bit for bit (#385).
 
 Replays the setup of ``benchmarks/fortran_mesa/adjust_mass_oracle/``: a

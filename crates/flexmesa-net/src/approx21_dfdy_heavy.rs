@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Iron-group rows (`ar36`..`prot`) of `approx21_dydt` and `approx21_dfdy`
 //! (`net/private/net_approx21.f90` lines 1407–1544 and 2374–2652).
 

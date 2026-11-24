@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Third-order Helmholtz free-energy thermodynamic reduction shared by `ideal`
 //! and `Skye` (`eos/private/skye_ideal.f90` and
 //! `eos/private/skye_thermodynamics.f90`).

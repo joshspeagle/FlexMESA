@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Shared IEEE-754 arithmetic and profile-column helpers for `tests.case_extras`
 (`#231`).
 """

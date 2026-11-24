@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Nonlinear `RSP` `HYD` face equations (`acceleration_eqn`, `T_form_of_Fr_eqn`)
 //! and 21-diagonal banded Newton solver (`star/private/rsp_step.f90:60-196,
 //! 744-942, 2585-3120, 3760-3833`).

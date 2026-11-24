@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Hermetic MESA `26.4.1` IEEE-754 binary64 bit-exact parity tests (`0 ULP`)
 //! for `Skye`, `HELM`, `FreeEOS`-`Skye` / `HELM`-`Skye` quintic blends, and
 //! white-dwarf EOS `AUX` outputs on `star/wd_cool_0.6M` (`Ogata`) and

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Strict schema-validated namelist parser for `&astero_search_controls` and
 //! headless `&astero_pgstar_controls` (`DECISIONS #25`).
 //!

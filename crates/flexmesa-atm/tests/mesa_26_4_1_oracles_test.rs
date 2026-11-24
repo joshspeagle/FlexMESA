@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Bit-level MESA `26.4.1` Fortran oracle and `F2-23` surface boundary condition
 //! verification for `flexmesa-atm` (`#161`).
 //!

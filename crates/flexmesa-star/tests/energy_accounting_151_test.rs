@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Integration and unit tests for Issue #151: MESA `26.4.1` total-energy
 //! accounting (`eval_total_energy_integrals`, `okay_energy_conservation`,
 //! `check_rel_error_in_energy`, `eps_grav` energy audit, rotational/TDC/RSP/RSP2

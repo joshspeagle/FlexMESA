@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Asteroseismic and binary evolution diagnostic plots.
 
 Provides echelle diagrams (`plot_echelle_diagram`), frequency separation

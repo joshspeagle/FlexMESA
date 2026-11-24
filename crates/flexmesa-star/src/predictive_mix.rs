@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Verbatim MESA `26.4.1` predictive mixing (`star/private/predictive_mix.f90`).
 //!
 //! Expands convective boundaries outward or inward cell-by-cell under a

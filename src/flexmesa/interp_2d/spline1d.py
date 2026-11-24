@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """One-dimensional C^2 cubic spline helpers (`mkspline_db`, `splinck_db`).
 
 Ports the 1D $C^2$ tridiagonal spline solver (`V_SPLINE_db`, `cspline_db`,

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! `HelmTable` data structure, grid coordinate arrays (`d`, `t`, differences,
 //! and reciprocals), full `2701 x 1001` table loader, and 4-corner cell
 //! stencil extraction (`eos/private/helm_alloc.f90`).

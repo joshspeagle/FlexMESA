@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Face-centered temperature gradient transport equations (`do1_temperature_eqn`,
 //! `do1_dlnT_dm_eqn`, `do1_gradT_eqn`, `do1_alt_dlnT_dm_eqn`, and
 //! `set_RSP_Lsurf_BC`) with 3-cell stencil [`StarAdOrder1`] automatic

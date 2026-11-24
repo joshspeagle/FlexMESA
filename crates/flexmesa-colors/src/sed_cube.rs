@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! 4D Stellar Atmosphere Spectral Energy Distribution (SED) cube representation
 //! and built-in Kurucz2003 + Johnson loader
 //! (`colors/private/colors_utils.f90`).

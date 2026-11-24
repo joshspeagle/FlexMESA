@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Homogeneous envelope abundance construction and $(T, V)$ EOS/opacity
 //! partials for `RSP` (`star/private/rsp_eval_eos_and_kap.f90:1-693` and
 //! `star/private/adjust_xyz.f90:991-1220`).

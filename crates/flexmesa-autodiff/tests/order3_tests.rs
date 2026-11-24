@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Analytical oracle tests for [`flexmesa_autodiff::AutoDiffReal2VarOrder3`].
 
 #![allow(clippy::similar_names)]

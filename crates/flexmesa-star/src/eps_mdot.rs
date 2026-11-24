@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Heating from a change of stellar mass (`star/private/eps_mdot.f90`).
 //!
 //! When mass is added or removed the cells are redefined, and material

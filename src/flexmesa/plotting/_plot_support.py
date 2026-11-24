@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 r"""Shared internal helpers for ``flexmesa.plotting`` panels (`#173`).
 
 Provides canonical MESA ``26.4.1`` mixing-type styles

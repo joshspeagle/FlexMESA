@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! 1D spherical Lagrangian HLLC Riemann hydrodynamic solver and well-balanced
 //! momentum equation (`star/private/hydro_riemann.f90` and
 //! `star/private/hydro_momentum.f90`).

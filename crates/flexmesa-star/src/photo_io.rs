@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Binary `.photo` full-state checkpoint serializer, deserializer, and
 //! 64-bit FNV-1a checksum (`photo_in.f90`, `photo_out.f90`, and `./ck`).
 

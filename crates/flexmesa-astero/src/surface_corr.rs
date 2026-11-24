@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Asteroseismic surface-effect frequency correction routines.
 //!
 //! Implements all five upstream Fortran MESA surface correction schemes:

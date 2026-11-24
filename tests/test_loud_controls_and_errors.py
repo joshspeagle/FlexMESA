@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Issue #147 fail-loudly CLI, report, and Python binding tests."""
 
 from __future__ import annotations

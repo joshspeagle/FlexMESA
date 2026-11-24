@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Bolometric and synthetic stellar photometry (`colors`).
 
 Ports upstream MESA ``colors`` (`colors_def.f90`, `colors_lib.f90`,

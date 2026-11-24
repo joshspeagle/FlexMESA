@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Grey and solar-calibrated $T(\tau)$ atmosphere with depth-varying opacity (`atm_t_tau_varying.f90`).
 //!
 //! Ports `eval_T_tau_varying` (inward `dopri5` integration of

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! IEEE-754 `binary128` arithmetic in software, for upstream `real(qp)`.
 //!
 //! MESA `26.4.1` declares `qp = selected_real_kind(33, 4931)`

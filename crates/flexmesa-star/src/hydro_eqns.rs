@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Coupled 1D Henyey stellar structure and composition residual equations and
 //! analytical block-tridiagonal Jacobian assembly (`hydro_eqns.f90`,
 //! `hydro_momentum.f90`, `hydro_temperature.f90`, `hydro_energy.f90`,

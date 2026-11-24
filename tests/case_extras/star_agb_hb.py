@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 r"""Upstream AGB $^{13}\mathrm{C}$-pocket, horizontal-branch, low-$Z$ header,
 and R CrB envelope-cut `StarExtras` ports (`#231`).
 

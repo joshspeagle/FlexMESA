@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Automated verification of public documentation, links, API directives, and
 executable Python code blocks (`tests/test_docs_snippets.py`).
 """

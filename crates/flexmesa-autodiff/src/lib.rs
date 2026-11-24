@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Forward-mode automatic differentiation (`auto_diff`) for `FlexMESA`.
 //!
 //! This crate ports MESA's `auto_diff` module (`auto_diff/public/auto_diff.f90`

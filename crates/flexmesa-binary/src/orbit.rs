@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Binary orbital mechanics, Eggleton (1983) Roche-lobe geometry, Kepler
 //! relations, and eccentric true-anomaly time grids.
 //!

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Derived Smolec & Moskalik (2008) / Kuhfuss (1986) physical constants and
 //! per-zone / cycle state accumulators for Radial Stellar Pulsation (`RSP` and
 //! `RSP2`, `star/private/rsp_def.f90`).

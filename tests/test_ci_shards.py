@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Checks that the CI Python shards together run every test file once."""
 
 from __future__ import annotations

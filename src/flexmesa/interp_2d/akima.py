@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Akima (1996, ACM Algorithm 760) rectangular-grid bivariate interpolation.
 
 Implements bivariate bicubic polynomial evaluation (`interp_rgbi3p_db`) and

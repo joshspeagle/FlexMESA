@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Tests for `scripts/ci/merge_baseline_candidate.py` (`DECISIONS #51`)."""
 
 from __future__ import annotations

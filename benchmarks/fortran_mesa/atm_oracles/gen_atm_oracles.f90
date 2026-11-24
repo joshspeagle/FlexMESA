@@ -1,4 +1,4 @@
-! SPDX-License-Identifier: LGPL-3.0-or-later
+! SPDX-License-Identifier: GPL-3.0-or-later
 ! Generate IEEE-754 hex + decimal surface atmosphere (`atm` + `F2-23` `atm_support`)
 ! reference vectors with `skip_partials = .false.` against compiled MESA 26.4.1.
 

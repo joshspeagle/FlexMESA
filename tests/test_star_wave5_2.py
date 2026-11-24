@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Verification tests for Wave 5.2: HLLC Riemann hydrodynamics, `RSP2`
 time-dependent turbulent convection, and `GYRE`/`FGONG`/`OSC` pulsation
 structure exporters (Issues #80, #4, and #5).

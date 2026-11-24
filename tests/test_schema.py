@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Unit and property tests for `flexmesa.schema.defaults` and `namelist`.
 
 Tests cover:

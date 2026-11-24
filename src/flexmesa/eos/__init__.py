@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Equation of State (`eos`) module for FlexMESA (Waves 3a & 3b.1).
 
 Exposes the canonical 26-slot thermodynamic state vector (`eos_def`),

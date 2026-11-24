@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Verification suite for Wave 5.4 (`flexmesa.astero` and `flexmesa.plotting`).
 
 Validates:

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """XLA-compilable JAX `float64` Time-Dependent Convection kernel (`tdc_fast`).
 
 Provides fixed-step bisection + damped Newton-Raphson root-finding in

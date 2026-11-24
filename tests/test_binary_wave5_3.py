@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Wave 5.3 verification suite for `flexmesa.binary` (`crates/flexmesa-binary`).
 
 Verifies:

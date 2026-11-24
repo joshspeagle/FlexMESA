@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Real nonsymmetric eigenvalue and right-eigenvector solver (`DGEEV` parity)
 //! using Parlett-Reinsch radix-2 balancing (`dgebal`), Householder upper
 //! Hessenberg reduction (`dgehrd`), Francis implicit double-shift QR Schur

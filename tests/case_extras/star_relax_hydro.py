@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 r"""Upstream relaxation, angular-momentum accretion/conservation, sdB envelope,
 and Riemann-shock `StarExtras` ports (`#231`).
 

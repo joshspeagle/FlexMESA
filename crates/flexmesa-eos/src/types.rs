@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Core equation-of-state (`eos`) result indices, output containers, and error
 //! types (`eos/public/eos_def.f90`).
 //!

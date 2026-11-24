@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Upstream MESA `26.4.1` oracle and physical verification tests for Wave 3a.1
 //! (`flexmesa-eos`: `blend`, `gauss_fermi`, `ion_offset`, `free_energy`, and
 //! `ideal`; `#161`, `T2-15`).

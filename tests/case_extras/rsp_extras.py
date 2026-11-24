@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Upstream `star/test_suite/rsp_*` `run_star_extras.f90` implementations
 (`#148`).
 """

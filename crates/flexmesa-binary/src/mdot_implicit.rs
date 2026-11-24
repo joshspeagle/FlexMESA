@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Implicit Roche-lobe overflow (`"roche_lobe"`, `"Ritter"`, `"Kolb"`, and
 //! Marchant et al. 2016 `"contact"`) bracketing and quadratic/secant/bisection
 //! root-finding solvers (`check_implicit_rlo` and `pick_mdot_for_implicit_rlo`

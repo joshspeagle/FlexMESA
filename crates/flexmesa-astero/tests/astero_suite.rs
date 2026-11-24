@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Integration tests for `flexmesa-astero` across all 8 upstream MESA
 //! `astero/test_suite` cases (`astero_adipls`, `astero_gyre`, `example_astero`,
 //! `fast_from_file`, `fast_newuoa`, `fast_scan_grid`, `fast_simplex`,

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Sparse matrix format conversions (CSR and CSC, 1-based and 0-based).
 
 Ports upstream `mtx_formats.dek` and `mtx_support.f90` while fixing the

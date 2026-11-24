@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Pure Safe Rust RFC 1950 (`zlib`) and RFC 1951 (`DEFLATE`) decompressor.
 //!
 //! Used by [`crate::aesopus_h5`] to read gzip-compressed HDF5 dataset chunks

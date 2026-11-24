@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Pure Safe Rust FIPS 180-4 `SHA-256` digest computation.
 //!
 //! Provides zero-dependency streaming and in-memory `SHA-256` hashing with zero

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Flat `jnp.float64` bivariate 3rd-order Taylor jet kernels (`(..., 10)`).
 
 Ports MESA's `auto_diff_real_2var_order3` (`flexmesa-autodiff/src/order3.rs`,

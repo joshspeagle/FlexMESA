@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 r"""Ionic charge tables, 4D partial pressures, and diffusion (`ionization`).
 
 Ports MESA's `ionization` module (`ionization_def.f90`, `ionization_lib.f90`,

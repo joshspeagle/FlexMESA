@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Two-variable second-order hyperdual numbers (`AutoDiffReal2VarOrder2`).
 
 Ports MESA's `auto_diff_real_2var_order2` (`auto_diff_real_2nd_order`) as a

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Grey irradiated atmosphere boundary condition (`atm_irradiated.f90`).
 //!
 //! Ports `eval_irradiated` from upstream MESA `atm/private/atm_irradiated.f90`,

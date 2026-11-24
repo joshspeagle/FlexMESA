@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Unit and repository-gate tests for `flexmesa.testing.known_gaps_gate`."""
 
 from __future__ import annotations

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Upstream MESA `26.4.1` `binary_history.data` column parser, evaluator, and
 //! incremental flushing file writer (`binary/private/binary_private_def.f90`,
 //! `binary/private/binary_history_specs.f90`, `binary/private/binary_history.f90`,

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Unit and integration tests for Stage `Fidelity-4` ([#115](https://github.com/joshspeagle/FlexMESA/issues/115)):
 //! `.mod` checkpoint round-trip with extended header scalars (`M_center`,
 //! `cumulative_energy_error`) and optional zone columns (`w`, `et_RSP`,

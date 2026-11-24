@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Neutral ideal-gas plus Planckian radiation equation of state
 //! (`eos/private/ideal.f90`).
 //!

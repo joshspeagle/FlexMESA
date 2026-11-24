@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Binary cursor and parser (`FMKAP001` format) for `kap_tables.bin`.
 
 use crate::loader::{

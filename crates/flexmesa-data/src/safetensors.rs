@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Pure Safe Rust `.safetensors` (`F64` and `I64`) encoder and decoder.
 //!
 //! Reads and writes standard `.safetensors` binary buffers (`8`-byte

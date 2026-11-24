@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Verify test-side extras dispatch works identically across renamed folders."""
 
 from __future__ import annotations

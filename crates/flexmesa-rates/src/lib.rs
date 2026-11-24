@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Nuclear reaction rates, plasma electrostatic screening, tabulated weak
 //! reactions, and on-the-fly relativistic Fermi-Dirac electron captures
 //! (`rates`, Wave 3b.3).

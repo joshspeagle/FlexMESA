@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Cell-specific kinetic and gravitational potential energy in `real(qp)`
 //! (`cell_specific_KE_qp`, `cell_start_specific_KE_qp`, `cell_specific_PE_qp`,
 //! `cell_start_specific_PE_qp`, and `get_dke_dt_dpe_dt` in

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! 4D Tabulated Equation of State (`OPAL/SCVH` and `FreeEOS`) evaluation (`tables_4d`).
 //!
 //! Ports the 2D bicubic $(\log_{10} Q, \log_{10} T)$ spline tables and $(X, Z)$

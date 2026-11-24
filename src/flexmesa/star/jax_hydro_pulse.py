@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 r"""Branchless `@jax.jit` kernels for Wave 5.2: HLLC Riemann hydrodynamics,
 Dziembowski pulsation variables, `STELLA` Sobolev optical depths, and `GYRE` /
 `ADIPLS` BVP wrappers (`hydro_riemann.f90`, `hydro_momentum.f90`,

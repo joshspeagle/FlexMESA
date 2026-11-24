@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Complete `&eos` and `&kap` namelist population and validation
 //! (`eos/private/eos_ctrls_io.f90`, `kap/private/kap_ctrls_io.f90`, and
 //! `kap/private/kap_aesopus.f90:91-110`, `#161` `F2-1`).

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Hardwired `approx21` and `approx21_plus_co56` reaction indices, `(p,a)/(p,g)`
 //! branching fractions, and weak rates (`net/private/net_approx21.f90`
 //! lines 163–348 and 2788–3159).

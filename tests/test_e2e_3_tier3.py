@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Stage E2E-3 (#94) verification test suite for massive-star and compact
 `star/test_suite` execution without in-library case overrides (`#148`).
 """

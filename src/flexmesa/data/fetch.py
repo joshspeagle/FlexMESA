@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Download, SHA-256-verify, and unpack ``data-v1`` physics and test bundles.
 
 Can run either through the installed ``flexmesa data`` CLI or directly via

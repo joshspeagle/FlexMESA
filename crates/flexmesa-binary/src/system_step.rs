@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Coupled `BinarySystem::step` / `BinarySystem::try_step` explicit and implicit
 //! RLOF trial loop, single-trial Henyey + first-order Euler orbital update,
 //! irradiation coupling, and binary termination checks

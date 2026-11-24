@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Spherical face mechanical work (`eval_dwork`, `eval1_work`,
 //! `eval_simple_PdV_work`) and cell-specific kinetic/gravitational-potential
 //! energy rates (`cell_specific_KE_qp`, `cell_specific_PE_qp`) for `v_flag` and

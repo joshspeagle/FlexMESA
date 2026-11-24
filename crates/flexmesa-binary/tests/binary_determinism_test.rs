@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Strict-mode multi-thread and repeated-run bit-identity tests for the
 //! coupled binary driver (`#150`).
 

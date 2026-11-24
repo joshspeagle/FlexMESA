@@ -1096,6 +1096,22 @@ pub fn preview_split_merge_amr(
 pub fn remesh_split_merge(
     model: &mut StarModel,
 ) -> Result<(usize, usize), StarError> {
+    remesh_split_merge_with(model, true)
+}
+
+/// [`remesh_split_merge`] with the ending of
+/// [`crate::mesh_remap::execute_adjust_mesh_from_plan_with`]: with
+/// `finish = false` (the step loop) a changed mesh only sets
+/// `need_to_setvars = .true.` (`star/private/adjust_mesh_split_merge.f90:505,
+/// 840`) and `prepare_for_new_step` sets the variables
+/// (`evolve.f90:1891`).
+///
+/// # Errors
+/// As [`remesh_split_merge`].
+pub(crate) fn remesh_split_merge_with(
+    model: &mut StarModel,
+    finish: bool,
+) -> Result<(usize, usize), StarError> {
     if model.controls.rsp2_flag {
         return Err(StarError::InvalidInput(String::from(
             "remesh_split_merge does not support RSP2_flag",
@@ -1243,7 +1259,10 @@ pub fn remesh_split_merge(
         }
     }
 
-    if num_split + num_merge > 0 {
+    if num_split + num_merge > 0 && !finish {
+        model.pack_xh();
+        model.aux.need_to_setvars = true;
+    } else if num_split + num_merge > 0 {
         model.pack_xh();
         model.aux.okay_to_set_mlt_vc = false;
         let hydro_res = set_hydro_vars(model, false, false);

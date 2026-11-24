@@ -1090,6 +1090,22 @@ pub(crate) fn execute_adjust_mesh_from_plan(
     model: &mut StarModel,
     plan: StandardMeshPlan,
 ) -> Result<(), StarError> {
+    execute_adjust_mesh_from_plan_with(model, plan, true)
+}
+
+/// Executes the remap. With `finish = true` it ends by setting the variables
+/// and storing the start and old values, so the model is complete for
+/// stand-alone callers. With `finish = false`, as in the step loop, it ends
+/// like upstream's `remesh` (`star/private/adjust_mesh.f90:36-512`): only
+/// `need_to_setvars = .true.` is set, and `prepare_for_new_step` sets the
+/// variables afterwards (`set_vars_if_needed`, `evolve.f90:1891`), before
+/// `new_generation` stores the old values; `save_start_values` runs in
+/// `do_struct_burn_mix` (`struct_burn_mix.f90:163`).
+pub(crate) fn execute_adjust_mesh_from_plan_with(
+    model: &mut StarModel,
+    plan: StandardMeshPlan,
+    finish: bool,
+) -> Result<(), StarError> {
     let nz_old = plan.nz_old;
     let nz = plan.dq_new.len();
     let species = model.species;
@@ -1790,15 +1806,20 @@ pub(crate) fn execute_adjust_mesh_from_plan(
     }
 
     model.pack_xh();
-    model.aux.okay_to_set_mlt_vc = false;
-    // Upstream clears `have_new_generation` across `prepare_for_new_step`
-    // remeshing (`evolve.f90:377, 384`), causing `set_vars` to pass
-    // `skip_set_cz_bdy_mass = .true.` (`hydro_vars.f90:81`).
-    model.aux.mixing.have_new_generation = false;
-    let hydro_res = set_hydro_vars(model, false, false);
-    model.aux.okay_to_set_mlt_vc = prev_okay_mlt_vc;
-    model.aux.mixing.have_new_generation = prev_have_new_generation;
-    hydro_res?;
+    if finish {
+        model.aux.okay_to_set_mlt_vc = false;
+        // `skip_set_cz_bdy_mass = .true.` as in the `set_vars` of
+        // `prepare_for_new_step` (`evolve.f90:377, 1891`, `hydro_vars.f90:81`).
+        model.aux.mixing.have_new_generation = false;
+        let hydro_res = set_hydro_vars(model, false, false);
+        model.aux.okay_to_set_mlt_vc = prev_okay_mlt_vc;
+        model.aux.mixing.have_new_generation = prev_have_new_generation;
+        hydro_res?;
+    } else {
+        // `remesh` sets `need_to_setvars` (`adjust_mesh_split_merge.f90:505`,
+        // `evolve.f90:1973`) and leaves the variables to `prepare_for_new_step`.
+        model.aux.need_to_setvars = true;
+    }
 
     if model.controls.rotation_flag {
         for k in 0..nz {
@@ -1816,11 +1837,13 @@ pub(crate) fn execute_adjust_mesh_from_plan(
         }
     }
 
-    model.save_start_values()?;
-    model.save_old_values();
-    model.star_age_old = age_old;
-    model.dt_old = dt_old;
-    model.mstar_old = mstar_old;
+    if finish {
+        model.save_start_values()?;
+        model.save_old_values();
+        model.star_age_old = age_old;
+        model.dt_old = dt_old;
+        model.mstar_old = mstar_old;
+    }
     Ok(())
 }
 

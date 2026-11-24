@@ -13,6 +13,7 @@ flexmesa-const = { path = "../flexmesa-const" }
 flexmesa-math = { path = "../flexmesa-math" }
 flexmesa-num = { path = "../flexmesa-num" }
 flexmesa-schema = { path = "../flexmesa-schema" }
+flexmesa-adipls = { path = "../flexmesa-adipls" }
 flexmesa-gyre = { path = "../flexmesa-gyre" }
 flexmesa-star = { path = "../flexmesa-star" }
 

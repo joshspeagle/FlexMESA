@@ -84,7 +84,17 @@ fn test_all_seven_pulsation_exporters_and_double_point_atmosphere_options() {
     model.controls.fgong_ivers = 1300;
     let osc = export_osc(&model, true, false, false).expect("osc");
     assert_eq!(osc.lines().count(), 6 + 3 + 8 * nn);
-    assert!(export_fgong(&model, true, false, true).is_err());
+    let fg_atm =
+        export_fgong(&model, true, false, true).expect("fgong T_tau atm");
+    assert!(fg_atm.lines().count() > 5 + 3 + 8 * nn);
+    for bad_opt in [
+        crate::job_controls::AtmOption::Table,
+        crate::job_controls::AtmOption::IrradiatedGrey,
+    ] {
+        model.controls.atm_option = bad_opt;
+        assert!(export_fgong(&model, true, false, true).is_err());
+    }
+    model.controls.atm_option = crate::job_controls::AtmOption::TTau;
 
     // 4. GSM v110 and v120
     let gsm_110 = export_gsm_data(&model, true, 110);

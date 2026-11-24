@@ -1,20 +1,34 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-//! FGONG pulsation data: `get_fgong_data` (`star/private/pulse_fgong.f90:46-630`)
+//! FGONG pulsation data: `get_fgong_data` (`star/private/pulse_fgong.f90:46-630`),
+//! atmospheric attachment via `build_atm` (`star/private/atm_support.f90:1001-1287`),
 //! and the `pulse_utils` routines only FGONG and OSC use (`eval_face_X`,
 //! `eval_center_X`, `eval_center_d2`, `star/private/pulse_utils.f90`),
-//! transcribed in upstream order of operations (#491).
+//! transcribed in upstream order of operations (#491, #171).
 //!
 //! The producer reads a [`PulseDataInput`] view of the star (MESA cell or
 //! face `k = 1..nz`, surface first, stored 0-based) and returns
 //! `global_data(15)` and `point_data(40, nn)` from the surface inwards, as
 //! [`crate::pulse_write::write_fgong_data`] writes them.
 
-use flexmesa_const::{MixingType, FOUR_THIRDS, PI, RSUN, STANDARD_CGRAV};
-use flexmesa_eos::{
-    eos_dt_get, EosConfig, I_CHI_RHO, I_CHI_T, I_GAMMA1, I_LN_PGAS,
-    NUM_EOS_BASIC_RESULTS,
+use flexmesa_atm::{
+    build_t_tau_uniform, build_t_tau_varying, eval_t_tau_uniform,
+    eval_t_tau_varying, radiation_pressure, AtmEosCallbackResult, AtmError,
+    AtmKapCallbackResult, AtmStructure, ATM_CHIRHO, ATM_CHIT, ATM_CP,
+    ATM_DELTA_R, ATM_GAMMA1, ATM_GRADA, ATM_GRADT, ATM_KAP, ATM_LND,
+    ATM_LNFREE_E, ATM_LNP, ATM_LNT,
 };
+use flexmesa_chem::NuclideCatalog;
+use flexmesa_const::{
+    MixingType, AVO, FOUR_THIRDS, KERG, LN10, PI, RSUN, STANDARD_CGRAV,
+};
+use flexmesa_eos::{
+    eos_dt_get, eos_dt_get_rho, EosConfig, I_CHI_RHO, I_CHI_T, I_ETA, I_GAMMA1,
+    I_LN_FREE_E, I_LN_PGAS, NUM_EOS_BASIC_RESULTS,
+};
+use flexmesa_kap::{get_kap_results, KapConfig};
 
+use crate::controls::StarControls;
+use crate::job_controls::{AtmOption, AtmTTauOpacity, AtmTTauRelation};
 use crate::model::StarModel;
 use crate::pulse_gyre_data::{
     eval_center, eval_center_rho, eval_face, eval_face_a_ast, eval_face_rho,
@@ -74,6 +88,86 @@ pub struct PulseDataInput<'a> {
     /// `s%mixing_region_bottom(s%largest_conv_mixing_region)` (1-based), or
     /// `None` when `s%largest_conv_mixing_region == 0`.
     pub largest_conv_mixing_region_bottom: Option<usize>,
+    /// Optional atmospheric parameters and surface composition metadata read
+    /// when `add_atmosphere = true`.
+    pub atm: Option<PulseAtmInput<'a>>,
+}
+
+/// Atmospheric controls and surface scalar state consumed by `build_atm`
+/// (`star/private/atm_support.f90:1001-1287`) when `get_fgong_data` runs with
+/// `add_atmosphere = true`.
+#[derive(Debug, Clone, Copy)]
+pub struct PulseAtmInput<'a> {
+    /// `s%atm_option`.
+    pub atm_option: AtmOption,
+    /// `s%atm_T_tau_relation`.
+    pub atm_t_tau_relation: AtmTTauRelation,
+    /// `s%atm_T_tau_opacity`.
+    pub atm_t_tau_opacity: AtmTTauOpacity,
+    /// `s%atm_T_tau_errtol`.
+    pub atm_t_tau_errtol: f64,
+    /// `s%atm_T_tau_max_iters`.
+    pub atm_t_tau_max_iters: usize,
+    /// `s%atm_T_tau_max_steps`.
+    pub atm_t_tau_max_steps: usize,
+    /// `s%atm_build_tau_outer`.
+    pub atm_build_tau_outer: f64,
+    /// `s%atm_build_dlogtau`.
+    pub atm_build_dlogtau: f64,
+    /// `s%atm_build_errtol`.
+    pub atm_build_errtol: f64,
+    /// `s%Pextra_factor`.
+    pub pextra_factor: f64,
+    /// `s%tau_factor`.
+    pub tau_factor: f64,
+    /// `s%tau_base`.
+    pub tau_base: f64,
+    /// Surface cell mean atomic mass `s%abar(1)`.
+    pub abar_surf: f64,
+    /// Surface cell mean ion charge `s%zbar(1)`.
+    pub zbar_surf: f64,
+    /// `s%kap_handle` settings.
+    pub kap_config: &'a KapConfig,
+    /// Controls providing `opacity_factor`, `opacity_min`, and `opacity_max`.
+    pub kap_controls: &'a StarControls,
+    /// `s%use_other_kap`.
+    pub use_other_kap: bool,
+    /// `s%use_simple_es_for_kap`.
+    pub use_simple_es_for_kap: bool,
+}
+
+impl<'a> PulseAtmInput<'a> {
+    /// Construct [`PulseAtmInput`] from a [`StarModel`], returning `None` if
+    /// `model.abar` or `model.zbar` is empty.
+    #[must_use]
+    pub fn from_model(model: &'a StarModel) -> Option<Self> {
+        let &abar_surf = model.abar.first()?;
+        let &zbar_surf = model.zbar.first()?;
+        let c = &model.controls;
+        Some(Self {
+            atm_option: c.atm_option,
+            atm_t_tau_relation: c.atm_t_tau_relation,
+            atm_t_tau_opacity: c.atm_t_tau_opacity,
+            atm_t_tau_errtol: c.atm_t_tau_errtol,
+            atm_t_tau_max_iters: c.atm_t_tau_max_iters,
+            atm_t_tau_max_steps: c.atm_t_tau_max_steps,
+            // MESA 26.4.1 `star/defaults/controls.defaults:4741-4743`:
+            // `atm_build_tau_outer = 1d-3`, `atm_build_dlogtau = 0.01` (default-real
+            // literal widened to double, `0x3F84_7AE1_4000_0000`), `atm_build_errtol = 1d-8`.
+            atm_build_tau_outer: 1.0e-3,
+            atm_build_dlogtau: f64::from(0.01_f32),
+            atm_build_errtol: 1.0e-8,
+            pextra_factor: c.pextra_factor,
+            tau_factor: c.tau_factor,
+            tau_base: model.tau_base,
+            abar_surf,
+            zbar_surf,
+            kap_config: &model.kap_config,
+            kap_controls: c,
+            use_other_kap: c.use_other_kap,
+            use_simple_es_for_kap: c.use_simple_es_for_kap,
+        })
+    }
 }
 
 /// 0-based species indices of the `net_iso` entries FGONG and OSC read.
@@ -310,13 +404,387 @@ fn gamma1_derivatives(
     Ok([dlng1_dlnrho, dlng1_dlnp, dlng1_dy])
 }
 
+/// `LOGRHO_TOL` and `LOGPGAS_TOL` in `atm_support::eos_proc`
+/// (`star/private/atm_support.f90:1194-1195`).
+const ATM_LOG_TOL: f64 = 1.0e-11;
+
+/// Maximum Newton iterations in `solve_eos_given_PgasT`
+/// (`star/private/eos_support.f90:345`).
+const ATM_EOS_MAX_ITERS: usize = 100;
+
+/// Precomputed surface envelope quantities shared across all `store_point_data_atm`
+/// rows (`star/private/pulse_fgong.f90:142-151, 240-330`).
+struct SurfaceAtmFgong {
+    lnq: f64,
+    x: f64,
+    l: f64,
+    z: f64,
+    iso_row: [f64; FGONG_IVAR],
+}
+
+impl SurfaceAtmFgong {
+    fn new(
+        s: &PulseDataInput<'_>,
+        k_a0: usize,
+        k_b0: usize,
+        m_outer: f64,
+        abundances: &dyn Fn(
+            &mut [f64],
+            &dyn Fn(Option<usize>) -> Result<f64, GyreDataError>,
+        ) -> Result<(), GyreDataError>,
+    ) -> Result<Self, GyreDataError> {
+        let b = &s.base;
+        let dq = b.dq;
+        let lnq = flexmesa_math::log(at(b.m_grav, 1) / m_outer);
+        let x = eval_face_lim(dq, &s.x, 1, k_a0, k_b0, 0.0, 1.0)?;
+        let z = limit(
+            1.0 - eval_face(dq, &s.x, 1, k_a0, k_b0)?
+                - eval_face(dq, &s.y, 1, k_a0, k_b0)?,
+            0.0,
+            1.0,
+        );
+        let mut iso_row = [0.0_f64; FGONG_IVAR];
+        abundances(&mut iso_row, &|i| s.eval_face_x(i, 1, k_a0, k_b0))?;
+        Ok(Self {
+            lnq,
+            x,
+            l: at(b.l, 1),
+            z,
+            iso_row,
+        })
+    }
+}
+
+fn atm_kap_composition(
+    s: &PulseDataInput<'_>,
+    xa_surf: &[f64],
+) -> (f64, f64, f64, f64, f64, f64) {
+    let catalog = NuclideCatalog::builtin_ref();
+    let (mut xh_s, mut xhe_s, mut xc, mut xn, mut xo, mut xne) =
+        (0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
+    for (j, &cid) in s.chem_id.iter().enumerate() {
+        if let Some(n) = catalog.get_by_id(cid) {
+            match (n.z, n.z_plus_n) {
+                (1, 1 | 2) => xh_s += xa_surf[j],
+                (2, 3 | 4) => xhe_s += xa_surf[j],
+                (6, _) => xc += xa_surf[j],
+                (7, _) => xn += xa_surf[j],
+                (8, _) => xo += xa_surf[j],
+                (10, _) => xne += xa_surf[j],
+                _ => {}
+            }
+        }
+    }
+    let xh_kap = xh_s.clamp(0.0, 1.0);
+    let xhe_kap = xhe_s.clamp(0.0, 1.0);
+    let z_kap = (1.0 - (xh_kap + xhe_kap)).clamp(0.0, 1.0);
+    (xh_kap, z_kap, xc, xn, xo, xne)
+}
+
+/// Builds the atmosphere profile via upstream `build_atm`
+/// (`star/private/atm_support.f90:1001-1287`).
+#[allow(clippy::too_many_lines)]
+fn build_atm_structure(
+    s: &PulseDataInput<'_>,
+) -> Result<AtmStructure, GyreDataError> {
+    let atm = s.atm.as_ref().ok_or(GyreDataError::Upstream(
+        "get_fgong_data: add_atmosphere requires PulseAtmInput",
+    ))?;
+    if atm.atm_option != AtmOption::TTau {
+        return Err(GyreDataError::Unported {
+            what: "add_atmosphere for non-T_tau atm_option (build_atm)",
+            at: "star/private/atm_support.f90:1032-1166",
+        });
+    }
+    if atm.use_other_kap {
+        return Err(GyreDataError::Unported {
+            what: "build_atm with use_other_kap = .true.",
+            at: "star/private/atm_support.f90:1244-1267",
+        });
+    }
+    let sp = s.species;
+    if sp == 0 || s.chem_id.len() != sp || s.xa.len() < sp {
+        return Err(GyreDataError::Upstream(
+            "build_atm: species/chem_id/xa surface slice mismatch",
+        ));
+    }
+    let b = &s.base;
+    if b.r[0] <= 0.0
+        || !b.r[0].is_finite()
+        || b.m_grav[0] <= 0.0
+        || !b.m_grav[0].is_finite()
+    {
+        return Err(GyreDataError::Upstream(
+            "build_atm: invalid surface radius or mass",
+        ));
+    }
+
+    let tau_surf = atm.tau_factor * atm.tau_base;
+    let l = at(b.l, 1);
+    let r = at(b.r, 1);
+    let teff = s.teff;
+    let m = at(b.m_grav, 1);
+    let cgrav = at(b.cgrav, 1);
+    let t_tau_id = atm.atm_t_tau_relation.id();
+    let ht = crate::micro::builtin_helm_table()
+        .map_err(|_| GyreDataError::Upstream("helm table unavailable"))?;
+
+    let xa_surf = &s.xa[0..sp];
+    let abar_surf = atm.abar_surf;
+    let zbar_surf = atm.zbar_surf;
+    let (xh_kap, z_kap, xc_kap, xn_kap, xo_kap, xne_kap) =
+        atm_kap_composition(s, xa_surf);
+
+    let eos_cfg = s.eos_config;
+    let chem_id = s.chem_id;
+    let kap_cfg = atm.kap_config;
+    let ctrl = atm.kap_controls;
+    let use_simple_es = atm.use_simple_es_for_kap;
+
+    let eos_proc =
+        |ln_p: f64, ln_t: f64| -> Result<AtmEosCallbackResult, AtmError> {
+            let t = flexmesa_math::exp(ln_t);
+            let p = flexmesa_math::exp(ln_p);
+            let prad = radiation_pressure(t);
+            let pgas = (p - prad).max(1.0e-99);
+            let rho_guess = ((p / t) * abar_surf / (AVO * KERG)).max(1.0e-40);
+            let inv = eos_dt_get_rho(
+                ht,
+                chem_id,
+                xa_surf,
+                ln_t / LN10,
+                I_LN_PGAS as isize,
+                flexmesa_math::log10(pgas) * LN10,
+                flexmesa_math::log10(rho_guess),
+                ATM_LOG_TOL,
+                ATM_LOG_TOL * LN10,
+                ATM_EOS_MAX_ITERS,
+                eos_cfg,
+            )
+            .map_err(|e| AtmError::CallbackError {
+                context: "build_atm::eos_proc",
+                detail: e.to_string(),
+            })?;
+            Ok(AtmEosCallbackResult {
+                ln_rho: inv.log10_result * LN10,
+                res: inv.eos.res,
+                dres_dln_rho: inv.eos.d_dlnd,
+                dres_dln_t: inv.eos.d_dln_t,
+            })
+        };
+
+    let kap_proc = |ln_rho: f64,
+                    ln_t: f64,
+                    eos: &AtmEosCallbackResult|
+     -> Result<AtmKapCallbackResult, AtmError> {
+        let log_rho = ln_rho / LN10;
+        let log_t = ln_t / LN10;
+        let (kap_raw, dlnkap_dlnd_raw, dlnkap_dlnt_raw) = if use_simple_es {
+            (0.2 * (1.0 + xh_kap), 0.0, 0.0)
+        } else {
+            let out = get_kap_results(
+                kap_cfg,
+                zbar_surf,
+                xh_kap,
+                z_kap,
+                xc_kap,
+                xn_kap,
+                xo_kap,
+                xne_kap,
+                log_rho,
+                log_t,
+                eos.res[I_LN_FREE_E],
+                eos.dres_dln_rho[I_LN_FREE_E],
+                eos.dres_dln_t[I_LN_FREE_E],
+                eos.res[I_ETA],
+                eos.dres_dln_rho[I_ETA],
+                eos.dres_dln_t[I_ETA],
+            )
+            .map_err(|e| AtmError::CallbackError {
+                context: "build_atm::kap_proc",
+                detail: e.to_string(),
+            })?;
+            (out.kap, out.dlnkap_dln_rho, out.dlnkap_dln_t)
+        };
+
+        let opacity_factor =
+            crate::rsp_eos_kap::effective_opacity_factor(ctrl, log_t);
+        let mut kap = kap_raw * opacity_factor;
+        let mut dlnkap_dlnd = dlnkap_dlnd_raw;
+        let mut dlnkap_dlnt = dlnkap_dlnt_raw;
+        if ctrl.opacity_max > 0.0 && kap > ctrl.opacity_max {
+            kap = ctrl.opacity_max;
+            dlnkap_dlnd = 0.0;
+            dlnkap_dlnt = 0.0;
+        }
+        if ctrl.opacity_min > 0.0 && kap < ctrl.opacity_min {
+            kap = ctrl.opacity_min;
+            dlnkap_dlnd = 0.0;
+            dlnkap_dlnt = 0.0;
+        }
+        if kap <= 0.0 || !kap.is_finite() {
+            return Err(AtmError::CallbackError {
+                context: "build_atm::kap_proc",
+                detail: format!("invalid atmosphere opacity kap={kap}"),
+            });
+        }
+        Ok(AtmKapCallbackResult {
+            kap,
+            dlnkap_dln_rho: dlnkap_dlnd,
+            dlnkap_dln_t: dlnkap_dlnt,
+        })
+    };
+
+    let run_uniform =
+        |max_iters: usize| -> Result<AtmStructure, GyreDataError> {
+            let surf = eval_t_tau_uniform(
+                tau_surf,
+                l,
+                r,
+                m,
+                cgrav,
+                at(b.opacity, 1),
+                atm.pextra_factor,
+                t_tau_id,
+                eos_proc,
+                kap_proc,
+                atm.atm_t_tau_errtol,
+                max_iters,
+                true,
+                teff,
+            )
+            .map_err(|_| {
+                GyreDataError::Upstream("build_atm: eval_t_tau_uniform failed")
+            })?;
+
+            build_t_tau_uniform(
+                tau_surf,
+                l,
+                r,
+                teff,
+                m,
+                cgrav,
+                surf.kap,
+                atm.pextra_factor,
+                atm.atm_build_tau_outer,
+                t_tau_id,
+                eos_proc,
+                atm.atm_build_errtol,
+                atm.atm_build_dlogtau,
+            )
+            .map_err(|_| {
+                GyreDataError::Upstream("build_atm: build_t_tau_uniform failed")
+            })
+        };
+
+    match atm.atm_t_tau_opacity {
+        AtmTTauOpacity::Fixed => run_uniform(0),
+        AtmTTauOpacity::Iterated => run_uniform(atm.atm_t_tau_max_iters),
+        AtmTTauOpacity::Varying => {
+            let surf = eval_t_tau_varying(
+                tau_surf,
+                l,
+                r,
+                m,
+                cgrav,
+                t_tau_id,
+                eos_proc,
+                kap_proc,
+                atm.atm_t_tau_errtol,
+                atm.atm_t_tau_max_steps,
+                true,
+                teff,
+            )
+            .map_err(|_| {
+                GyreDataError::Upstream("build_atm: eval_t_tau_varying failed")
+            })?;
+
+            build_t_tau_varying(
+                tau_surf,
+                l,
+                r,
+                teff,
+                m,
+                cgrav,
+                surf.ln_p,
+                atm.atm_build_tau_outer,
+                t_tau_id,
+                eos_proc,
+                kap_proc,
+                atm.atm_build_errtol,
+                atm.atm_build_dlogtau,
+            )
+            .map_err(|_| {
+                GyreDataError::Upstream("build_atm: build_t_tau_varying failed")
+            })
+        }
+    }
+}
+
+/// Populates one FGONG atmosphere row (`star/private/pulse_fgong.f90:240-330`).
+fn store_point_data_atm(
+    s: &PulseDataInput<'_>,
+    atm_pt: &[f64; 19],
+    surf: &SurfaceAtmFgong,
+    p: &mut [f64],
+    r_outer: f64,
+) -> Result<(), GyreDataError> {
+    let b = &s.base;
+    let r = at(b.r, 1) + atm_pt[ATM_DELTA_R];
+    let t = flexmesa_math::exp(atm_pt[ATM_LNT]);
+    let p_tot = flexmesa_math::exp(atm_pt[ATM_LNP]);
+    let rho = flexmesa_math::exp(atm_pt[ATM_LND]);
+    let kap = atm_pt[ATM_KAP];
+    let gamma1 = atm_pt[ATM_GAMMA1];
+    let nabla_ad = atm_pt[ATM_GRADA];
+    let delta = atm_pt[ATM_CHIT] / atm_pt[ATM_CHIRHO];
+    let c_p = atm_pt[ATM_CP];
+    let rec_mu_e = flexmesa_math::exp(atm_pt[ATM_LNFREE_E]);
+
+    let grav = at(b.cgrav, 1) * at(b.m_grav, 1) / (r * r);
+    let n2 =
+        grav * grav * (rho / p_tot) * delta * (nabla_ad - atm_pt[ATM_GRADT]);
+    let a_ast = n2 * r / grav;
+
+    p[0] = r;
+    p[1] = surf.lnq;
+    p[2] = t;
+    p[3] = p_tot;
+    p[4] = rho;
+    p[5] = surf.x;
+    p[6] = surf.l;
+    p[7] = kap;
+    p[8] = 0.0;
+    p[9] = gamma1;
+    p[10] = nabla_ad;
+    p[11] = delta;
+    p[12] = c_p;
+    p[13] = rec_mu_e;
+    p[14] = a_ast;
+    p[15] = 0.0;
+    p[16] = surf.z;
+    p[17] = r_outer - r;
+    p[18] = 0.0;
+
+    let [d1, d2, d3] = gamma1_derivatives(s, 1, rho, t)?;
+    p[25] = d1;
+    p[26] = d2;
+    p[27] = d3;
+
+    for slot in [20usize, 21, 22, 23, 24, 28, 29, 30, 31, 32, 33, 34, 35] {
+        p[slot] = surf.iso_row[slot];
+    }
+    Ok(())
+}
+
 /// `get_fgong_data(id, add_center_point, keep_surface_point,
 /// add_atmosphere, global_data, point_data, ierr)`
 /// (`star/private/pulse_fgong.f90:46-630`).
 ///
 /// # Errors
 ///
-/// [`GyreDataError::Unported`] for an attached atmosphere (`build_atm`);
+/// [`GyreDataError::Unported`] when `add_atmosphere` requests an atmosphere
+/// option other than `T_tau` or `use_other_kap = .true.`;
 /// [`GyreDataError::Upstream`] where upstream stops or reads an undefined
 /// value.
 #[allow(clippy::too_many_lines)]
@@ -330,13 +798,18 @@ pub fn get_fgong_data(
     let nz = b.r.len();
     let (k_a, k_b) = set_segment_indices(b, add_center_point)?;
     let n_sg = k_a.len();
-    if add_atmosphere {
-        return Err(GyreDataError::Unported {
-            what: "add_atmosphere (build_atm)",
-            at: "star/private/pulse_fgong.f90:136-146",
-        });
+    let atm_opt: Option<AtmStructure> = if add_atmosphere {
+        Some(build_atm_structure(s)?)
+    } else {
+        None
+    };
+    let n_atm = atm_opt.as_ref().map_or(0, |a| a.points.len());
+    if add_atmosphere && n_atm < 2 {
+        return Err(GyreDataError::Upstream(
+            "get_fgong_data: build_atm returned fewer than 2 points",
+        ));
     }
-    let nn_atm = 0usize;
+    let nn_atm = n_atm.saturating_sub(1);
     let n_env = nz;
     let nn_env = if keep_surface_point {
         n_env + n_sg - 1
@@ -459,6 +932,14 @@ pub fn get_fgong_data(
     };
 
     let mut j = 0usize;
+    if let Some(ref atm) = atm_opt {
+        let surf =
+            SurfaceAtmFgong::new(s, k_a[0], k_b[0], m_outer, &abundances)?;
+        for atm_pt in &atm.points[..nn_atm] {
+            store_point_data_atm(s, atm_pt, &surf, &mut pd[j], r_outer)?;
+            j += 1;
+        }
+    }
     let mut sg = 0usize;
     for k in 1..=n_env {
         if k == 1 && !keep_surface_point {
@@ -617,6 +1098,7 @@ impl<'a> PulseDataInput<'a> {
             largest_conv_mixing_region_bottom: summary
                 .largest_conv_top_bot
                 .map(|(_, bot)| bot + 1),
+            atm: PulseAtmInput::from_model(model),
         })
     }
 }

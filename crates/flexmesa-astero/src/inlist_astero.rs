@@ -130,6 +130,9 @@ pub struct AsteroSearchControls {
     pub keep_surface_point: bool,
     /// Whether to add an extrapolated $r = 0$ center point (`add_center_point`).
     pub add_center_point: bool,
+    /// Whether to parse `redistrb.c.pruned.in` at startup and redistribute the
+    /// mesh before ADIPLS (`do_redistribute_mesh`).
+    pub do_redistribute_mesh: bool,
     /// Surface-effect frequency correction scheme (`correction_scheme`).
     pub correction_scheme: String,
     /// Kjeldsen et al. (2008) power-law exponent $b$ (`correction_b`).
@@ -317,6 +320,8 @@ impl Default for AsteroSearchControls {
             add_atmosphere: false,
             keep_surface_point: false,
             add_center_point: true,
+            // `astero/defaults/astero_search.defaults:1363`: do_redistribute_mesh = .true.
+            do_redistribute_mesh: true,
             correction_scheme: String::from("kjeldsen"),
             correction_b: 4.90,
             correction_factor: 0.0,

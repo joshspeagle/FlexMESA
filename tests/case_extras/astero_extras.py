@@ -15,7 +15,7 @@ import os
 import re
 from typing import Any
 
-from flexmesa import _rust
+from flexmesa import _rust, constants
 
 _SET_PARAM_RE = re.compile(r"subroutine set_param\(.*?end subroutine set_param")
 
@@ -410,6 +410,146 @@ class AsteroGyreExtras:
             )
 
 
+# `astero/test_suite/astero_adipls/src/run_star_extras.f90`: digests of the
+# routines `AsteroAdiplsExtras` accounts for (normalized source, see
+# `tests.case_extras.normalize_fortran`).
+_ASTERO_ADIPLS_DIGESTS: dict[str, str] = {
+    "extras_check_model": (
+        "ef310f57ef3f02e713e7a384d9d81fee78f4611763b7fd8a69e2f67e76f1a02a"
+    ),
+    "extras_after_evolve": (
+        "7a744898fd7739fe9dd02992308848c1e745875ad82b618ba3e020884ec8bfc5"
+    ),
+    "get_adipls_frequency_info": (
+        "6cabc9b6604361b8220a24a3efa14eec11dc552a4b400b065970cb83421813f3"
+    ),
+    # Never called: `use_other_adipls_mode_info = .false.` by default.
+    "my_other_adipls_mode_info": (
+        "59688e148a14901a14d93c9a961edf562b79bd242c77ef1b192a4a3b6c35a248"
+    ),
+    # Never called: with `astero_just_call_my_extras_check_model = .true.`
+    # astero runs one track with nothing varied
+    # (`astero/private/astero_run_support.f90:171-174`, `:239`), and the case
+    # names no search parameters or constraints.
+    "set_param": (
+        "50db057770e0922de5b5f1f710d466230b4c55a0b9ca6061030f8391deb47fe4"
+    ),
+    "set_constraint_value": (
+        "e7ed93317a3605fd1e41d699c96dae5721ffa3a14a3cecf55e023cef10751e63"
+    ),
+}
+
+
+class AsteroAdiplsExtras:
+    """`astero_adipls`'s `run_star_extras.f90` (`:99-282`), over astero's
+    ADIPLS interface (`_rust.AsteroAdipls`,
+    `astero/private/adipls_support.f90`).
+
+    The case sets `astero_just_call_my_extras_check_model`, so astero runs a
+    plain star run, initializes ADIPLS (including `redistrb.c.pruned.in` when
+    `do_redistribute_mesh = .true.`, `astero_run_support.f90:117-124`) at
+    startup and hands every step to `extras_check_model`. ADIPLS is called
+    every 50 models and after the run for radial modes; the run reports whether
+    the `n_pg = 4` mode lies within 3% of `x_ctrl(1)`.
+    """
+
+    # Every snapshot carries a `star_model` handle for `AsteroAdipls`.
+    wants_star_model = True
+
+    def __init__(self) -> None:
+        self.adipls: Any = None
+        self.expected_freq = 0.0
+        self.actual_freq = 0.0
+        self.okay = False
+        self.last_results: list[tuple[int, int, int, float, float, float]] = []
+        # `(model_number, results)` of every ADIPLS call.
+        self.calls: list[
+            tuple[int, list[tuple[int, int, int, float, float, float]]]
+        ] = []
+
+    def extras_startup(self, state: dict[str, Any], _restart: bool) -> None:
+        """`run_adipls(s, first_time=.true., ...)` for the run
+        (`astero_run_support.f90:117-124`); the case's `extras_startup`
+        (`:111-120`) only calls the output-only `test_suite_startup`."""
+        self.adipls = _rust.AsteroAdipls(str(state["case_dir"]))
+
+    def _get_adipls_frequency_info(
+        self,
+        state: dict[str, Any],
+        store_for_adipls: bool,
+        l_to_match: int,
+        order_to_match: int,
+        expected_freq: float,
+    ) -> tuple[float, bool]:
+        """`get_adipls_frequency_info(...)` (`:215-281`)."""
+        r_cm = constants.RSUN * float(state["photosphere_r"])
+        g_cgs = float(state["cgrav"][0])
+        m_g = constants.MSUN * float(state["star_mass"])
+        results = self.adipls.get_one_el_info(
+            state["star_model"],
+            l_to_match,
+            50.0,
+            1000.0,
+            200,
+            r_cm,
+            g_cgs,
+            m_g,
+            True,
+            False,
+            True,
+            False,
+            store_for_adipls,
+        )
+        self.last_results = list(results)
+        self.calls.append((int(state["model_number"]), list(results)))
+        print()
+        print(f"{'el':>8}{'order':>8}{'freq (microHz)':>20}{'inertia':>20}")
+        okay = expected_freq <= 0.0
+        freq = 0.0
+        for _el, order, _em, inertia, mode_freq, _growth in results:
+            print(
+                f"{l_to_match:8d}{order:8d}{mode_freq:20.10f}{inertia:20.10e}"
+            )
+            if expected_freq > 0.0 and order == order_to_match:
+                freq = mode_freq
+                okay = abs(freq - expected_freq) < (expected_freq * 3.0e-2)
+        return freq, okay
+
+    def extras_check_model(self, state: dict[str, Any]) -> str:
+        """`extras_check_model` (`:170-212`): ADIPLS every 50 models."""
+        if float(state["x_ctrl"][0]) > 0.0:
+            if int(state["model_number"]) % 50 != 0:
+                return "keep_going"
+            self._get_adipls_frequency_info(
+                state,
+                store_for_adipls=True,
+                l_to_match=0,
+                order_to_match=5,
+                expected_freq=-1.0,
+            )
+        return "keep_going"
+
+    def extras_after_evolve(self, state: dict[str, Any]) -> None:
+        """`extras_after_evolve` (`:123-166`): final match against
+        `x_ctrl(1)`; `test_suite_after_evolve` is output only."""
+        if float(state["x_ctrl"][0]) > 0.0:
+            self.expected_freq = float(state["x_ctrl"][0])
+            freq, okay = self._get_adipls_frequency_info(
+                state,
+                store_for_adipls=True,
+                l_to_match=0,
+                order_to_match=4,
+                expected_freq=self.expected_freq,
+            )
+            self.actual_freq = freq
+            self.okay = okay
+            word = "got ok match" if okay else "ERROR: bad match"
+            print(
+                f"{word} for expected frequency"
+                f"{self.actual_freq:20.2f}{self.expected_freq:20.2f}"
+            )
+
+
 def match_astero_extras(norm_star: str, digest: Any) -> Any:
     """Match an astero case's extras from normalized Fortran source.
 
@@ -429,6 +569,14 @@ def match_astero_extras(norm_star: str, digest: Any) -> Any:
     routines = {
         m.group(2): digest(m.group(0)) for m in _ROUTINE_RE.finditer(norm_star)
     }
+    if all(
+        routines.get(name) == d for name, d in _ASTERO_ADIPLS_DIGESTS.items()
+    ) and all(
+        name in _ASTERO_ADIPLS_DIGESTS
+        or d in _STOCK_ROUTINE_DIGESTS.get(name, frozenset())
+        for name, d in routines.items()
+    ):
+        return AsteroAdiplsExtras()
     if all(
         routines.get(name) == d for name, d in _ASTERO_GYRE_DIGESTS.items()
     ) and all(

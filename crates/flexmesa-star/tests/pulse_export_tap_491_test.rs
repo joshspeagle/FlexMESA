@@ -243,6 +243,7 @@ fn run_call(
                     largest_conv_mixing_region_bottom: usize::try_from(bottom)
                         .ok()
                         .filter(|&b| b > 0),
+                    atm: None,
                 };
                 if fmt == "FGONG" {
                     let (g, pd) =

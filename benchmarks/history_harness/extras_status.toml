@@ -630,9 +630,8 @@ digest = "ccc26a9dff72ae93b3c465d0835e7c171ab6d705f165d18c2693cbcea0378296"
 [[cases]]
 suite = "astero"
 case = "astero_adipls"
-status = "unported"
+status = "ported"
 digest = "8460a8f638a55de952eaf0411d0dcd488dda56bb72ba9aa630cc312be465ee1f"
-issue = "#231"
 
 [[cases]]
 suite = "astero"

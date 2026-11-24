@@ -15,6 +15,8 @@ use flexmesa_star::pulse_modes::{
     scan_bounds_from_targets, scan_star_bvp_eigenmodes, PulseModeScanOptions,
 };
 
+use crate::adipls_support::AsteroAdipls;
+use crate::gyre_support::OscResult;
 use crate::inlist_astero::{
     AsteroParamSet, AsteroSearchControls, MAX_CONSTRAINTS,
 };
@@ -248,44 +250,26 @@ pub fn eval_model_astero_sample(
         && (ctrl.weights.chi2_seismo_fraction > 0.0 || sp_obs.is_empty());
     let mut pre_chi2_radial = 0.0_f64;
     if need_modes {
-        let osc_low = ctrl.oscillation_code.trim().to_ascii_lowercase();
-        let outer_bc = match osc_low.as_str() {
-            "gyre" => parse_gyre_outer_bound(case_dir, &ctrl.gyre_input_file)?,
-            "adipls" => OuterBoundKind::AdiplsIsothermal,
-            _ => {
-                return Err(StarError::InvalidInput(format!(
-                    "unrecognized oscillation_code '{}'",
-                    ctrl.oscillation_code
-                )));
+        let osc_trimmed = ctrl.oscillation_code.trim();
+        let mut scanner = if osc_trimmed.eq_ignore_ascii_case("adipls") {
+            DegreeScanner::Adipls(Box::new(AsteroAdipls::init(case_dir, ctrl)?))
+        } else if osc_trimmed.eq_ignore_ascii_case("gyre") {
+            DegreeScanner::Gyre {
+                outer_bc: parse_gyre_outer_bound(
+                    case_dir,
+                    &ctrl.gyre_input_file,
+                )?,
             }
-        };
-        let scan_deg = |l: usize| -> Option<(Vec<f64>, Vec<f64>, Vec<isize>)> {
-            let (nu_lo, nu_hi) = scan_bounds_from_targets(
-                &ctrl.freq_target[l],
-                ctrl.nu_lower_factor,
-                ctrl.nu_upper_factor,
-                dnu_obs,
-            );
-            let n_scan =
-                ((2.0 * (ctrl.nl[l] as f64) * ctrl.iscan_factor[l].max(1.0))
-                    as usize)
-                    .clamp(240, 600);
-            let opts = PulseModeScanOptions {
-                l,
-                freq_min_uhz: nu_lo,
-                freq_max_uhz: nu_hi,
-                n_freq: n_scan,
-                add_center_point: ctrl.add_center_point,
-                keep_surface_point: ctrl.keep_surface_point,
-                add_atmosphere: ctrl.add_atmosphere,
-                outer_bc,
-                inertia_norm: InertiaNormKind::Both,
-            };
-            let raw_modes = scan_star_bvp_eigenmodes(model, &opts);
-            match_degree_modes(&ctrl.freq_target[l], &raw_modes)
+        } else {
+            return Err(StarError::InvalidInput(format!(
+                "unrecognized oscillation_code '{}'",
+                ctrl.oscillation_code
+            )));
         };
         if ctrl.nl[0] > 0 {
-            if let Some((mf, mi, mo)) = scan_deg(0) {
+            if let Some((mf, mi, mo)) =
+                scanner.scan_degree(model, ctrl, 0, dnu_obs, delta_nu_uhz)?
+            {
                 (model_freqs[0], model_inertias[0], model_orders[0]) =
                     (mf, mi, mo);
                 let (c0, adr, cr) = apply_surface_corr(
@@ -317,7 +301,13 @@ pub fn eval_model_astero_sample(
                 if ctrl.nl[l] == 0 {
                     continue;
                 }
-                if let Some((mf, mi, mo)) = scan_deg(l) {
+                if let Some((mf, mi, mo)) = scanner.scan_degree(
+                    model,
+                    ctrl,
+                    l,
+                    dnu_obs,
+                    delta_nu_uhz,
+                )? {
                     (model_freqs[l], model_inertias[l], model_orders[l]) =
                         (mf, mi, mo);
                 } else {
@@ -525,4 +515,100 @@ pub fn eval_model_astero_sample(
         model_inertias,
         model_orders,
     })
+}
+
+enum DegreeScanner {
+    Adipls(Box<AsteroAdipls>),
+    Gyre { outer_bc: OuterBoundKind },
+}
+
+impl DegreeScanner {
+    #[allow(clippy::cast_possible_truncation, clippy::cast_precision_loss)]
+    fn scan_degree(
+        &mut self,
+        model: &StarModel,
+        ctrl: &AsteroSearchControls,
+        l: usize,
+        dnu_obs: f64,
+        delta_nu_model: f64,
+    ) -> Result<Option<(Vec<f64>, Vec<f64>, Vec<isize>)>, StarError> {
+        let (nu_lo, nu_hi) = scan_bounds_from_targets(
+            &ctrl.freq_target[l],
+            ctrl.nu_lower_factor,
+            ctrl.nu_upper_factor,
+            dnu_obs,
+        );
+        match self {
+            Self::Adipls(driver) => {
+                let raw_iscan =
+                    (ctrl.iscan_factor[l] * (ctrl.nl[l] as f64)) as i32;
+                let iscan = raw_iscan.max(1);
+                let store_now = driver.stored_model().is_none();
+                let raw_modes = driver.get_one_el_info(
+                    model,
+                    l,
+                    nu_lo,
+                    nu_hi,
+                    iscan,
+                    delta_nu_model,
+                    store_now,
+                )?;
+                Ok(match_osc_results(&ctrl.freq_target[l], &raw_modes))
+            }
+            Self::Gyre { outer_bc } => {
+                let n_scan = ((2.0
+                    * (ctrl.nl[l] as f64)
+                    * ctrl.iscan_factor[l].max(1.0))
+                    as usize)
+                    .clamp(240, 600);
+                let opts = PulseModeScanOptions {
+                    l,
+                    freq_min_uhz: nu_lo,
+                    freq_max_uhz: nu_hi,
+                    n_freq: n_scan,
+                    add_center_point: ctrl.add_center_point,
+                    keep_surface_point: ctrl.keep_surface_point,
+                    add_atmosphere: ctrl.add_atmosphere,
+                    outer_bc: *outer_bc,
+                    inertia_norm: InertiaNormKind::Both,
+                };
+                let raw_modes = scan_star_bvp_eigenmodes(model, &opts);
+                Ok(match_degree_modes(&ctrl.freq_target[l], &raw_modes))
+            }
+        }
+    }
+}
+
+fn match_osc_results(
+    targets: &[f64],
+    modes: &[OscResult],
+) -> Option<(Vec<f64>, Vec<f64>, Vec<isize>)> {
+    let mut mf = Vec::with_capacity(targets.len());
+    let mut mi = Vec::with_capacity(targets.len());
+    let mut mo = Vec::with_capacity(targets.len());
+    let mut jprev: Option<usize> = None;
+
+    for &target_nu in targets {
+        let start = jprev.map_or(0, |jp| jp + 1);
+        if start >= modes.len() {
+            return None;
+        }
+        let mut best_j = start;
+        let mut best_d = (modes[start].cyclic_freq - target_nu).abs();
+        for (j, m) in modes.iter().enumerate().skip(start) {
+            let d = (m.cyclic_freq - target_nu).abs();
+            if d < best_d {
+                best_d = d;
+                best_j = j;
+            }
+            if m.cyclic_freq > target_nu {
+                break;
+            }
+        }
+        mf.push(modes[best_j].cyclic_freq);
+        mi.push(modes[best_j].inertia.max(1.0e-30));
+        mo.push(isize::try_from(modes[best_j].order).unwrap_or(0));
+        jprev = Some(best_j);
+    }
+    Some((mf, mi, mo))
 }

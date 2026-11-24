@@ -585,6 +585,11 @@ class StarModelHandle:
     def model_number(self) -> int: ...
     def gyre_pulse_data(self, add_center_point: bool, keep_surface_point: bool, add_atmosphere: bool) -> tuple[list[float], list[list[float]]]: ...  # noqa: E501
 
+class AsteroAdipls:
+    """Astero's ADIPLS interface (`astero/private/adipls_support.f90`)."""
+    def __init__(self, case_dir: str) -> None: ...
+    def get_one_el_info(self, model: StarModelHandle, el: int, nu1: float, nu2: float, iscan: int, r_cm: float, g_cgs: float, m_g: float, add_center_point: bool, keep_surface_point: bool, add_atmosphere: bool, do_redistribute_mesh: bool, store_for_adipls: bool) -> list[tuple[int, int, int, float, float, float]]: ...  # noqa: E501
+
 class AsteroGyre:
     """Astero's GYRE interface (`astero/private/gyre_support.f90`)."""
     def __init__(self, case_dir: str, mesa_dir: str) -> None: ...

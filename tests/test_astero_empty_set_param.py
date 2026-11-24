@@ -3,9 +3,10 @@
 
 `astero_adipls`, `astero_gyre` and `surface_effects` share a `set_param`
 that only sets `ierr = 0` and a `set_constraint_value` with only the
-`case default` history-column branch (`#429`). `astero_gyre` is matched
-first by its full port, `AsteroGyreExtras` (`#170`, G3c), so only the
-other two cases get this handler.
+`case default` history-column branch (`#429`). `astero_adipls` and
+`astero_gyre` are matched first by their full ports (`AsteroAdiplsExtras` in
+`#171`, `AsteroGyreExtras` in `#170`), so only `surface_effects` gets this
+handler.
 """
 
 from __future__ import annotations
@@ -21,12 +22,6 @@ from tests.case_extras.astero_extras import (
 
 # Routines of each case that hold case logic the handler does not run.
 _UNPORTED = {
-    "astero_adipls": {
-        "extras_after_evolve",
-        "extras_check_model",
-        "get_adipls_frequency_info",
-        "my_other_adipls_mode_info",
-    },
     "surface_effects": {
         "extras_after_evolve",
         "extras_check_model",

@@ -44,13 +44,13 @@ fn test_astero_unsupported_unused_aliases_and_pgstar_validation() {
     fs::create_dir_all(&unimpl).expect("mkdir");
     fs::write(
         unimpl.join("inlist_astero_search_controls"),
-        "&astero_search_controls\n  do_redistribute_mesh = .true.\n/\n",
+        "&astero_search_controls\n  write_fgong_for_each_model = .true.\n/\n",
     )
     .expect("write");
     let err = parse_astero_search_controls(&unimpl)
         .expect_err("unsupported astero control must fail by default");
     assert!(matches!(err, StarError::InvalidInput(_)));
-    assert!(err.to_string().contains("do_redistribute_mesh"));
+    assert!(err.to_string().contains("write_fgong_for_each_model"));
     assert!(parse_astero_search_controls_with_options(
         &unimpl,
         InlistLoadOptions {

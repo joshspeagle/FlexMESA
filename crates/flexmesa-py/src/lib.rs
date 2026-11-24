@@ -39,11 +39,13 @@
     clippy::unreadable_literal
 )]
 
-/// Tier B/C bindings for Wave 5.4 `astero` (scaling relations, surface effects, optimization).
-pub mod astero_py;
+/// PyO3 bindings for astero's ADIPLS interface (test-side extras).
+pub mod astero_adipls_py;
 /// PyO3 adapter for an `astero` case's own `set_param` (test-side extras).
 pub mod astero_case_hooks_py;
 pub mod astero_gyre_py;
+/// Tier B/C bindings for Wave 5.4 `astero` (scaling relations, surface effects, optimization).
+pub mod astero_py;
 /// Tier B bindings for `atm` (surface boundary conditions, $T(\tau)$, tables).
 pub mod atm_py;
 /// Tier B/C bindings for Wave 5.3 `binary` (orbital mechanics, RLOF, tides, binary evolution).
@@ -308,6 +310,7 @@ fn _rust(m: &Bound<'_, PyModule>) -> PyResult<()> {
     star_wave5_2_py::register(m)?;
     binary_py::register(m)?;
     astero_py::register(m)?;
+    astero_adipls_py::register(m)?;
     astero_gyre_py::register(m)?;
     trace_py::register(m)?;
     wave5_bench_py::register(m)?;

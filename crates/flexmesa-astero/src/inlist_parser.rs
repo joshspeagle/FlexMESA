@@ -55,6 +55,7 @@ pub const ASTERO_SEARCH_CONTROLS_SUPPORTED: &[&str] = &[
     "delta_nu",
     "delta_nu_sigma",
     "delta_param",
+    "do_redistribute_mesh",
     "dt_for_smaller_steps_before_age_target",
     "dydz",
     "eval_chi2_at_target_age_only",
@@ -608,6 +609,9 @@ fn apply_assignment(
         "add_atmosphere" => c.add_atmosphere = expect_bool(sec, a)?,
         "keep_surface_point" => c.keep_surface_point = expect_bool(sec, a)?,
         "add_center_point" => c.add_center_point = expect_bool(sec, a)?,
+        "do_redistribute_mesh" => {
+            c.do_redistribute_mesh = expect_bool(sec, a)?;
+        }
         "correction_scheme" => c.correction_scheme = expect_str(sec, a)?,
         "correction_b" => c.correction_b = expect_f64(sec, a)?,
         "correction_factor" => c.correction_factor = expect_f64(sec, a)?,

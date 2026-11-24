@@ -320,11 +320,6 @@
       "draft": true
     },
     {
-      "number": 471,
-      "title": "chore(license): relicense FlexMESA under GPL-3.0-or-later (#470)",
-      "draft": true
-    },
-    {
       "number": 475,
       "title": "fix(star): finish_load_model before change_net; .mod columns in net order",
       "draft": true
@@ -340,9 +335,29 @@
       "draft": true
     },
     {
-      "number": 482,
-      "title": "feat(gyre): numerics substrate and real LAPACK subset, bit-exact vs MESA 26.4.1 (#170, G1+G2)",
+      "number": 483,
+      "title": "feat(star): port auto_extend_net (extend_net) (#474)",
+      "draft": true
+    },
+    {
+      "number": 484,
+      "title": "feat(gyre): astero_gyre GYRE path, bit-exact vs MESA 26.4.1 (#170, G3)",
       "draft": false
+    },
+    {
+      "number": 487,
+      "title": "fix(binary): binary_pick_next_timestep in upstream's slot; set_star_timesteps and Tlim_binary (#451)",
+      "draft": true
+    },
+    {
+      "number": 489,
+      "title": "fix(star): keep xmstar as read; update_radius as upstream; no eps_mdot fallback",
+      "draft": true
+    },
+    {
+      "number": 490,
+      "title": "feat(star): in-memory get_gyre_data, bit-exact vs MESA 26.4.1 (#170, G3b)",
+      "draft": true
     }
   ],
   "deferred_169": [
@@ -821,6 +836,22 @@
     {
       "number": 480,
       "title": "[Deferred bug] ADIPLS store_model_for_adipls ignores the caller's add_center_point and keep_surface_point",
+      "state": "open",
+      "kind": "upstream-bug",
+      "parity_pending": false,
+      "needs_confirmation": false
+    },
+    {
+      "number": 485,
+      "title": "[Deferred enhancement] Removed FlexMESA departures in the binary timestep (#451)",
+      "state": "open",
+      "kind": "enhancement",
+      "parity_pending": false,
+      "needs_confirmation": false
+    },
+    {
+      "number": 488,
+      "title": "[Deferred bug] cell_specific_PE divides by r(k) with no guard (star_utils.f90:2266)",
       "state": "open",
       "kind": "upstream-bug",
       "parity_pending": false,

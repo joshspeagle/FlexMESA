@@ -13,8 +13,8 @@ Generated mechanically by `flexmesa dashboard render` from [`port_manifest.toml`
 | Strict mode bit-identical across machines (`#165`) | gated in CI by scripts/check_strict_determinism.py (x86_64 vs aarch64, 1 vs 4 threads; 474,062 math vectors + uncapped star/1.3M_ms_high_Z + binary/jdot_gr_check run with unsupported controls ignored; a bit-identity check, not a comparison with MESA) | [#165](https://github.com/joshspeagle/FlexMESA/issues/165) |
 | Strict-mode kernels bit-identical to MESA `26.4.1` (`#165`) | math: 403,258/403,258 CRMATH 0 ULP (70,804 libm <= 1 ULP); 304,760/304,760 probed module hex 0 ULP (10 complete, 15 non-math probed) | [#165](https://github.com/joshspeagle/FlexMESA/issues/165) |
 | Test line coverage (Rust `llvm-cov` / Python `pytest --cov`) | 76.3% (97,612/127,870) / 87.7% (23,577/26,872) | [`coverage_summary.json`](https://github.com/joshspeagle/FlexMESA/blob/main/benchmarks/dashboard/coverage_summary.json) |
-| Road-to-`v0.1.0` packages ([#140](https://github.com/joshspeagle/FlexMESA/issues/140)) & open PRs | 26 closed, 24 open; 7 open PR(s) | [`github_snapshot.json`](https://github.com/joshspeagle/FlexMESA/blob/main/benchmarks/dashboard/github_snapshot.json) |
-| Post-parity deferred backlog ([#169](https://github.com/joshspeagle/FlexMESA/issues/169)) | 60 open (56 upstream bugs, 4 enhancements, 3 `parity-pending`) | [`github_snapshot.json`](https://github.com/joshspeagle/FlexMESA/blob/main/benchmarks/dashboard/github_snapshot.json) |
+| Road-to-`v0.1.0` packages ([#140](https://github.com/joshspeagle/FlexMESA/issues/140)) & open PRs | 26 closed, 24 open; 10 open PR(s) | [`github_snapshot.json`](https://github.com/joshspeagle/FlexMESA/blob/main/benchmarks/dashboard/github_snapshot.json) |
+| Post-parity deferred backlog ([#169](https://github.com/joshspeagle/FlexMESA/issues/169)) | 62 open (57 upstream bugs, 5 enhancements, 3 `parity-pending`) | [`github_snapshot.json`](https://github.com/joshspeagle/FlexMESA/blob/main/benchmarks/dashboard/github_snapshot.json) |
 
 ### 1. Port Coverage by Module (MESA `26.4.1`)
 
@@ -197,8 +197,8 @@ Full scalar diff: [`notes/audit/defaults_diff_26_4_1.md`](https://github.com/jos
 | Phase E | 1 | 1 | [#173](https://github.com/joshspeagle/FlexMESA/issues/173) |
 | Deferred scope | 0 | 1 | [#477](https://github.com/joshspeagle/FlexMESA/issues/477) |
 
-- **Open pull requests (7)**: [#460](https://github.com/joshspeagle/FlexMESA/pull/460) (draft), [#462](https://github.com/joshspeagle/FlexMESA/pull/462) (draft), [#471](https://github.com/joshspeagle/FlexMESA/pull/471) (draft), [#475](https://github.com/joshspeagle/FlexMESA/pull/475) (draft), [#476](https://github.com/joshspeagle/FlexMESA/pull/476) (draft), [#478](https://github.com/joshspeagle/FlexMESA/pull/478) (draft), [#482](https://github.com/joshspeagle/FlexMESA/pull/482).
-- **Post-parity deferred backlog ([#169](https://github.com/joshspeagle/FlexMESA/issues/169))**: `60` open issues (`56` `upstream-bug`, `4` `enhancement`; `3` marked `parity-pending` for upstream restoration before `v0.1.0`).
+- **Open pull requests (10)**: [#460](https://github.com/joshspeagle/FlexMESA/pull/460) (draft), [#462](https://github.com/joshspeagle/FlexMESA/pull/462) (draft), [#475](https://github.com/joshspeagle/FlexMESA/pull/475) (draft), [#476](https://github.com/joshspeagle/FlexMESA/pull/476) (draft), [#478](https://github.com/joshspeagle/FlexMESA/pull/478) (draft), [#483](https://github.com/joshspeagle/FlexMESA/pull/483) (draft), [#484](https://github.com/joshspeagle/FlexMESA/pull/484), [#487](https://github.com/joshspeagle/FlexMESA/pull/487) (draft), [#489](https://github.com/joshspeagle/FlexMESA/pull/489) (draft), [#490](https://github.com/joshspeagle/FlexMESA/pull/490) (draft).
+- **Post-parity deferred backlog ([#169](https://github.com/joshspeagle/FlexMESA/issues/169))**: `62` open issues (`57` `upstream-bug`, `5` `enhancement`; `3` marked `parity-pending` for upstream restoration before `v0.1.0`).
 
 ### 7. Headline History Across Merges
 
@@ -303,4 +303,5 @@ Full scalar diff: [`notes/audit/defaults_diff_26_4_1.md`](https://github.com/jos
 | `2026-11-23` | `851777e` | main merge | 30.7% | 1.1% | 5/106 | 76.3% | 87.7% | 26/49 | 55 |
 | `2026-11-23` | `d72d62b` | main merge | 30.7% | 1.1% | 5/106 | 76.3% | 87.7% | 26/49 | 55 |
 | `2026-11-24` | `b61193e` | main merge | 30.7% | 1.1% | 5/106 | 76.3% | 87.7% | 26/50 | 60 |
+| `2026-11-24` | `f903a65` | main merge | 30.7% | 1.1% | 5/106 | 76.3% | 87.7% | 26/50 | 62 |
 <!-- END GENERATED DASHBOARD -->

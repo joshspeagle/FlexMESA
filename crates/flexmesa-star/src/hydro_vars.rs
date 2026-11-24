@@ -309,7 +309,12 @@ pub(crate) fn do1_mlt_2(
     {
         let fp = model.aux.fp_rot.get(k).copied().unwrap_or(1.0);
         let ft = model.aux.ft_rot.get(k).copied().unwrap_or(1.0);
-        (ft / fp) * base_gradr_fac
+        // `star_data/public/star_data_step_work.inc:153` declares `ft_rot` and
+        // `fp_rot` as `auto_diff_real_star_order1`, so `ft_rot / fp_rot` in
+        // `star/private/turb_info.f90:126` calls `div_self`
+        // (`auto_diff/private/auto_diff_real_star_order1_module.f90:1069-1075`),
+        // evaluating `ft * powm1(fp) = ft * (1.0 / fp)`.
+        (ft * (1.0 / fp)) * base_gradr_fac
     } else {
         base_gradr_fac
     };
@@ -1328,6 +1333,15 @@ pub fn set_hydro_vars(
     skip_net: bool,
     skip_net_jacobian: bool,
 ) -> Result<(), StarError> {
+    // Match `update_vars` -> `unpack_xh` -> `set_qs`
+    // (`star/private/hydro_vars.f90:225-226, 359-366` and
+    // `star/private/star_utils.f90:712-752`): rebuild `q` from `dq` via
+    // `q[k] = q[k-1] - dq[k-1]` when `.not. RSP_flag` before
+    // `eval_or_restore` invokes `set_m_and_dm` and `set_m_grav_and_grav`
+    // (critical after `do_adjust_mass` sets `q = 1 - sumdq`).
+    if model.nz > 0 && !model.controls.rsp_flag {
+        model.set_qs();
+    }
     MicrophysicsCache::eval_or_restore(model, skip_net, skip_net_jacobian)?;
     let nz = model.nz;
     if nz == 0 {

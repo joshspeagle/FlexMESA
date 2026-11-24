@@ -865,3 +865,177 @@ fn test_set_mlt_vars_uses_face_energy_and_lnd_start_per_upstream() {
         "nonzero lnd_start delta must enter TDC through dv_f"
     );
 }
+
+#[test]
+fn test_do1_mlt_2_rotational_ft_fp_uses_auto_diff_reciprocal_zero_ulp() {
+    // 1. Subsurface convection zone 12 (km1 = z11, k0 = z12) from
+    // `star/conserve_angular_momentum`: `ft / fp` differs from `div_self`
+    // (`ft * (1.0 / fp)`) by 2 ULPs, shifting `gradr(12)` from the MESA
+    // oracle `0x3FDF0B65EF25A57B` to `0x3FDF0B65EF25A57D`.
+    let base_case = CASES
+        .iter()
+        .find(|c| c.name == "gyre_in_mesa_ms")
+        .expect("ms fixture");
+    let mut cam = build_two_zone_mlt_model(base_case);
+    cam.controls.rotation_flag = true;
+    cam.controls.mix_wind.mlt_use_rotation_correction = true;
+    cam.controls.mlt_option = flexmesa_turb::MltOption::Cox;
+    cam.aux.doing_struct_burn_mix = true;
+
+    cam.dq[0] = f64::from_bits(0x3D9B_7CDF_D9D7_BDB0);
+    cam.dq[1] = f64::from_bits(0x3D8B_7CDF_D9D7_BDB0);
+    cam.dm[0] = f64::from_bits(0x4485_0D98_8355_A4B5);
+    cam.dm[1] = f64::from_bits(0x4475_0D98_8355_A4B5);
+    cam.m[0] = f64::from_bits(0x46D8_8250_B3B2_A478);
+    cam.m[1] = f64::from_bits(0x46D8_8250_B3B1_FC0B);
+    cam.m_grav[0] = cam.m[0];
+    cam.m_grav[1] = cam.m[1];
+    cam.cgrav[0] = f64::from_bits(0x3E71_EA8B_45ED_F98C);
+    cam.cgrav[1] = cam.cgrav[0];
+    cam.t[0] = f64::from_bits(0x40B9_2C7E_64BE_E841);
+    cam.t[1] = f64::from_bits(0x40B9_C7D6_C151_96CA);
+    cam.ln_t[0] = f64::from_bits(0x4021_8ABE_1196_6435);
+    cam.ln_t[1] = f64::from_bits(0x4021_96F0_17E4_2A46);
+    cam.lnd[0] = f64::from_bits(0xC02E_355B_5DB5_B696);
+    cam.lnd[1] = f64::from_bits(0xC02E_285F_C985_FAA0);
+    cam.rho[0] = f64::from_bits(0x3E92_7F41_FE20_F3CB);
+    cam.rho[1] = f64::from_bits(0x3E92_F8DD_4ECB_85AC);
+    cam.ln_r[0] = f64::from_bits(0x4038_E369_F497_C968);
+    cam.ln_r[1] = f64::from_bits(0x4038_E369_132D_D67C);
+    cam.r[0] = f64::from_bits(0x422D_FCBD_9EEB_6F6A);
+    cam.r[1] = f64::from_bits(0x422D_FCA3_376B_485B);
+    cam.peos[0] = f64::from_bits(0x40FB_9E69_B496_A870);
+    cam.peos[1] = f64::from_bits(0x40FD_042A_E239_1D28);
+    cam.ln_peos[0] = flexmesa_math::log(cam.peos[0]);
+    cam.ln_peos[1] = flexmesa_math::log(cam.peos[1]);
+    cam.opacity[0] = f64::from_bits(0x3FF1_65EA_D36E_B40A);
+    cam.opacity[1] = f64::from_bits(0x3FF5_6BEE_E2C5_CC27);
+    cam.lum[0] = f64::from_bits(0x46E2_E15F_B459_0A80);
+    cam.lum[1] = f64::from_bits(0x46E2_E15F_B459_0B30);
+    cam.aux.fp_rot[0] = f64::from_bits(0x3FEF_FD59_4AF4_DB85);
+    cam.aux.fp_rot[1] = f64::from_bits(0x3FEF_FD59_4AF4_DB85);
+    cam.aux.ft_rot[0] = f64::from_bits(0x3FEF_FFFF_CC2F_F18B);
+    cam.aux.ft_rot[1] = f64::from_bits(0x3FEF_FFFF_CC2F_F18B);
+    set_mlt_vars(&mut cam).expect("set_mlt_vars cam z12");
+    assert_hex_eq(
+        "conserve_angular_momentum z12 gradr",
+        cam.gradr[1],
+        0x3FDF_0B65_EF25_A57B,
+    );
+
+    // 2. Surface face (k = 0) of `star/relax_composition_j_entropy` model 1
+    // (`gradr_mesa = 0x3FC25EE5082ED22D`; direct `ft / fp` yields
+    // `0x3FC25EE5082ED22C`, -1 ULP).
+    let mut rcx = build_two_zone_mlt_model(base_case);
+    rcx.controls.rotation_flag = true;
+    rcx.controls.mix_wind.mlt_use_rotation_correction = true;
+    rcx.controls.mlt_option = flexmesa_turb::MltOption::Cox;
+    rcx.aux.doing_struct_burn_mix = true;
+    rcx.dq[0] = f64::from_bits(0x3D6C_25C2_6849_7679);
+    rcx.dm[0] = f64::from_bits(0x4489_F962_BA19_2299);
+    rcx.m[0] = f64::from_bits(0x470D_8779_ED36_6365);
+    rcx.m_grav[0] = rcx.m[0];
+    rcx.cgrav[0] = f64::from_bits(0x3E71_EA8B_45ED_F98C);
+    rcx.t[0] = f64::from_bits(0x40BE_ED9B_B95C_EB20);
+    rcx.ln_t[0] = f64::from_bits(0x4021_F424_F4E4_1349);
+    rcx.lnd[0] = f64::from_bits(0xC037_8C06_E43F_80DD);
+    rcx.rho[0] = f64::from_bits(0x3DD0_52D8_4B93_3083);
+    rcx.ln_r[0] = f64::from_bits(0x403D_3012_A8D4_E788);
+    rcx.r[0] = f64::from_bits(0x4291_41AD_597F_D066);
+    rcx.peos[0] = f64::from_bits(0x4048_29E0_A6F8_8CF4);
+    rcx.ln_peos[0] = flexmesa_math::log(rcx.peos[0]);
+    rcx.opacity[0] = f64::from_bits(0x3FEB_E9D8_BAB6_4A90);
+    rcx.lum[0] = f64::from_bits(0x47C7_B331_93B7_4CAD);
+    rcx.aux.fp_rot[0] = f64::from_bits(0x3FEE_F814_455E_E066);
+    rcx.aux.ft_rot[0] = f64::from_bits(0x3FEF_F829_69E1_5132);
+    set_mlt_vars(&mut rcx).expect("set_mlt_vars rcx m1 z1");
+    assert_hex_eq(
+        "relax_composition_j_entropy m1 z1 gradr",
+        rcx.gradr[0],
+        0x3FC2_5EE5_082E_D22D,
+    );
+}
+
+#[test]
+fn test_set_hydro_vars_runs_set_qs_after_adjust_mass_and_skips_rsp() {
+    let mod_four_zone = concat!(
+        "            36 -- test model for set_qs in set_hydro_vars\n",
+        "                  version_number   'r24.08.1'\n",
+        "                          M/Msun      1.0970492364091593D+00\n",
+        "                    model_number                           1\n",
+        "                        star_age      1.0000000000000000D+06\n",
+        "                       initial_z      2.0000000000000000D-02\n",
+        "                        n_shells                           4\n",
+        "                        net_name   'basic.net'\n",
+        "                         species                           8\n",
+        "               lnd                        lnT                        lnR                          L                         dq                        h1                        he3                        he4                        c12                        n14                        o16                        ne20                       mg24\n",
+        "    1    -1.9676359044644823D+01     8.1851939348148779D+00     3.1947151226445214D+01     4.2714250882829565D+38     2.4999999999999999D-01     6.8809754269901235D-01     1.8850380503921046D-05     2.9180405246109814D-01     2.3189765162550894D-03     3.3394288965240123D-03     7.5986643013020482D-03     1.8669682735524757D-03     4.9555164717520594D-03\n",
+        "    2    -1.9672000000000000D+01     8.1870000000000000D+00     3.1947110000000000D+01     4.2714251500000000D+38     2.4999999999999999D-01     6.8809754269901235D-01     1.8850380503921046D-05     2.9180405246109814D-01     2.3189765162550894D-03     3.3394288965240123D-03     7.5986643013020482D-03     1.8669682735524757D-03     4.9555164717520594D-03\n",
+        "    3    -1.9668046969873949D+01     8.1918919874162235D+00     3.1947053408994169D+01     4.2714252694795343D+38     2.4999999999999999D-01     6.8809754212691010D-01     1.8850380449969011D-05     2.9180405303398393D-01     2.3189765097329307D-03     3.3394289168501299D-03     7.5986642867684360D-03     1.8669682735524757D-03     4.9555164717520594D-03\n",
+        "    4    -1.9660000000000000D+01     8.1960000000000000D+00     3.1947000000000000D+01     4.2714253500000000D+38     2.4999999999999999D-01     6.8809754212691010D-01     1.8850380449969011D-05     2.9180405303398393D-01     2.3189765097329307D-03     3.3394289168501299D-03     7.5986642867684360D-03     1.8669682735524757D-03     4.9555164717520594D-03\n",
+        "\n",
+        "        previous model\n",
+        "               previous n_shells                           4\n",
+        "           previous mass (grams)      2.1813837557792488D+33\n",
+        "              timestep (seconds)      2.3422496115017467D+09\n",
+        "               dt_next (seconds)      2.8106995338020959D+09\n",
+    );
+    let mut model = read_mod_str(
+        mod_four_zone,
+        StarControls::default(),
+        StarJobControls::default(),
+    )
+    .expect("read 4-zone test .mod");
+
+    // Simulate `adjust_mass.f90:813-825` (`q = 1 - sumdq`) using the exact
+    // outer shell `dq[0..3]` and `xmstar` of `star/hot_cool_wind` model 1.
+    model.xmstar = f64::from_bits(0x4705_7204_821A_98E2);
+    model.mstar = model.xmstar;
+    model.m_center = 0.0;
+    model.dq[0] = f64::from_bits(0x3D71_9799_812D_EA0F);
+    model.dq[1] = f64::from_bits(0x3D70_D434_6704_CFD9);
+    model.dq[2] = f64::from_bits(0x3D70_D434_6704_CFD8);
+    model.dq[3] = 1.0 - (model.dq[0] + model.dq[1] + model.dq[2]);
+    let mut sum_dq = 0.0_f64;
+    for k in 0..model.nz {
+        model.q[k] = 1.0 - sum_dq;
+        sum_dq += model.dq[k];
+    }
+    model.set_m_and_dm();
+    model.set_m_grav_and_grav();
+    assert_hex_eq("pre-set_qs sumdq q[2]", model.q[2], 0x3FEF_FFFF_FFFF_BB28);
+    assert_hex_eq(
+        "pre-set_qs sumdq m_grav[2]",
+        model.m_grav[2],
+        0x4705_7204_821A_6ABF,
+    );
+
+    let mut expected_ref = model.clone();
+    expected_ref.set_qs();
+    expected_ref.set_m_and_dm();
+    expected_ref.set_m_grav_and_grav();
+    set_hydro_vars(&mut expected_ref, false, false)
+        .expect("ref set_hydro_vars");
+
+    set_hydro_vars(&mut model, false, false).expect("set_hydro_vars updates q");
+    assert_hex_eq("post-set_qs q[2]", model.q[2], 0x3FEF_FFFF_FFFF_BB29);
+    assert_hex_eq(
+        "post-set_qs m_grav[2]",
+        model.m_grav[2],
+        0x4705_7204_821A_6AC0,
+    );
+    assert_hex_eq(
+        "post-set_qs gradr[2]",
+        model.gradr[2],
+        expected_ref.gradr[2].to_bits(),
+    );
+
+    // `.not. RSP_flag` guard (`star/private/hydro_vars.f90:225`): RSP leaves
+    // caller `q` untouched inside `set_hydro_vars`.
+    let mut rsp_model = model.clone();
+    rsp_model.controls.rsp_flag = true;
+    rsp_model.q[1] = 0.5;
+    set_hydro_vars(&mut rsp_model, false, false)
+        .expect("set_hydro_vars skips set_qs under rsp_flag");
+    assert_hex_eq("rsp_flag preserves q[1]", rsp_model.q[1], 0.5_f64.to_bits());
+}

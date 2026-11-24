@@ -197,7 +197,7 @@ Full scalar diff: [`notes/audit/defaults_diff_26_4_1.md`](https://github.com/jos
 | Phase E | 1 | 1 | [#173](https://github.com/joshspeagle/FlexMESA/issues/173) |
 | Deferred scope | 0 | 1 | [#477](https://github.com/joshspeagle/FlexMESA/issues/477) |
 
-- **Open pull requests (10)**: [#460](https://github.com/joshspeagle/FlexMESA/pull/460) (draft), [#462](https://github.com/joshspeagle/FlexMESA/pull/462) (draft), [#475](https://github.com/joshspeagle/FlexMESA/pull/475) (draft), [#476](https://github.com/joshspeagle/FlexMESA/pull/476) (draft), [#478](https://github.com/joshspeagle/FlexMESA/pull/478) (draft), [#483](https://github.com/joshspeagle/FlexMESA/pull/483) (draft), [#484](https://github.com/joshspeagle/FlexMESA/pull/484), [#487](https://github.com/joshspeagle/FlexMESA/pull/487) (draft), [#489](https://github.com/joshspeagle/FlexMESA/pull/489) (draft), [#490](https://github.com/joshspeagle/FlexMESA/pull/490) (draft).
+- **Open pull requests (10)**: [#460](https://github.com/joshspeagle/FlexMESA/pull/460) (draft), [#462](https://github.com/joshspeagle/FlexMESA/pull/462) (draft), [#475](https://github.com/joshspeagle/FlexMESA/pull/475) (draft), [#476](https://github.com/joshspeagle/FlexMESA/pull/476) (draft), [#478](https://github.com/joshspeagle/FlexMESA/pull/478) (draft), [#483](https://github.com/joshspeagle/FlexMESA/pull/483) (draft), [#487](https://github.com/joshspeagle/FlexMESA/pull/487) (draft), [#489](https://github.com/joshspeagle/FlexMESA/pull/489) (draft), [#490](https://github.com/joshspeagle/FlexMESA/pull/490) (draft), [#492](https://github.com/joshspeagle/FlexMESA/pull/492).
 - **Post-parity deferred backlog ([#169](https://github.com/joshspeagle/FlexMESA/issues/169))**: `62` open issues (`57` `upstream-bug`, `5` `enhancement`; `3` marked `parity-pending` for upstream restoration before `v0.1.0`).
 
 ### 7. Headline History Across Merges
@@ -305,4 +305,5 @@ Full scalar diff: [`notes/audit/defaults_diff_26_4_1.md`](https://github.com/jos
 | `2026-11-24` | `b61193e` | main merge | 30.7% | 1.1% | 5/106 | 76.3% | 87.7% | 26/50 | 60 |
 | `2026-11-24` | `f903a65` | main merge | 30.7% | 1.1% | 5/106 | 76.3% | 87.7% | 26/50 | 62 |
 | `2026-11-24` | `e734399` | main merge | 30.7% | 1.1% | 5/106 | 76.3% | 87.7% | 26/50 | 62 |
+| `2026-11-24` | `d88e910` | main merge | 30.7% | 1.1% | 5/106 | 76.3% | 87.7% | 26/50 | 62 |
 <!-- END GENERATED DASHBOARD -->

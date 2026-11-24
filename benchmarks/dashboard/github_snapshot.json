@@ -340,11 +340,6 @@
       "draft": true
     },
     {
-      "number": 484,
-      "title": "feat(gyre): astero_gyre GYRE path, bit-exact vs MESA 26.4.1 (#170, G3)",
-      "draft": false
-    },
-    {
       "number": 487,
       "title": "fix(binary): binary_pick_next_timestep in upstream's slot; set_star_timesteps and Tlim_binary (#451)",
       "draft": true
@@ -358,6 +353,11 @@
       "number": 490,
       "title": "feat(star): in-memory get_gyre_data, bit-exact vs MESA 26.4.1 (#170, G3b)",
       "draft": true
+    },
+    {
+      "number": 492,
+      "title": "fix(trace): default --extras-factory to the case manifest, as the harness does",
+      "draft": false
     }
   ],
   "deferred_169": [

@@ -11,13 +11,13 @@ Instead of capping steps or loosening checks to force green runs, unfinished or 
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
 | `star` | 90 | 86 | 4 | 54 | 36 | 53 | 59 | 22 |
 | `binary` | 8 | 8 | 0 | 7 | 1 | 6 | 5 | 3 |
-| `astero` | 8 | 8 | 0 | 1 | 7 | 3 | 7 | 0 |
-| **Total** | **106** | **102** | **4** | **62** | **44** | **62** | **71** | **25** |
+| `astero` | 8 | 8 | 0 | 1 | 7 | 3 | 7 | 1 |
+| **Total** | **106** | **102** | **4** | **62** | **44** | **62** | **71** | **26** |
 
 `Strict-Validated` counts cases whose unmodified inlists pass strict control validation (`#147`). `Diagnostic Runs` counts cases that strict validation rejects and that were rerun with the unsupported controls ignored; their numbers show where the engine stands and can never count as a pass (`DECISIONS #26`). `Reach Upstream Term` counts runs of either kind.
 
 - **Undeclared Failures**: `0`
-- **Within Numeric Tolerance While Governed as Gaps**: `10` cases (`star/carbon_kh` ([#161](https://github.com/joshspeagle/FlexMESA/issues/161)), `star/gyre_in_mesa_bcep` ([#170](https://github.com/joshspeagle/FlexMESA/issues/170)), `star/gyre_in_mesa_ms` ([#170](https://github.com/joshspeagle/FlexMESA/issues/170)), `star/gyre_in_mesa_rsg` ([#170](https://github.com/joshspeagle/FlexMESA/issues/170)), `star/gyre_in_mesa_spb` ([#170](https://github.com/joshspeagle/FlexMESA/issues/170)), `star/gyre_in_mesa_wd` ([#157](https://github.com/joshspeagle/FlexMESA/issues/157)), `star/rsp_save_and_load_file` ([#161](https://github.com/joshspeagle/FlexMESA/issues/161)), `astero/astero_adipls` ([#171](https://github.com/joshspeagle/FlexMESA/issues/171)), `astero/astero_gyre` ([#170](https://github.com/joshspeagle/FlexMESA/issues/170)), `astero/surface_effects` ([#162](https://github.com/joshspeagle/FlexMESA/issues/162))) meet numeric tolerances while remaining declared gaps under active tracking issues.
+- **Within Numeric Tolerance While Governed as Gaps**: `9` cases (`star/carbon_kh` ([#161](https://github.com/joshspeagle/FlexMESA/issues/161)), `star/gyre_in_mesa_bcep` ([#170](https://github.com/joshspeagle/FlexMESA/issues/170)), `star/gyre_in_mesa_ms` ([#170](https://github.com/joshspeagle/FlexMESA/issues/170)), `star/gyre_in_mesa_rsg` ([#170](https://github.com/joshspeagle/FlexMESA/issues/170)), `star/gyre_in_mesa_spb` ([#170](https://github.com/joshspeagle/FlexMESA/issues/170)), `star/gyre_in_mesa_wd` ([#157](https://github.com/joshspeagle/FlexMESA/issues/157)), `star/rsp_save_and_load_file` ([#161](https://github.com/joshspeagle/FlexMESA/issues/161)), `astero/astero_adipls` ([#171](https://github.com/joshspeagle/FlexMESA/issues/171)), `astero/surface_effects` ([#162](https://github.com/joshspeagle/FlexMESA/issues/162))) meet numeric tolerances while remaining declared gaps under active tracking issues.
 
 ## Cases Without a Stored `26.4.1` Reference (`no_reference_yet`)
 

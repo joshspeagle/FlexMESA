@@ -312,12 +312,15 @@ pub fn do_electron_conduction_blouin(
         if frac > 0.0 {
             let rhostar = log_rho_ad - log_rho0;
             let tstar = log_t_ad - log_t0;
-            let (sin_a, cos_a) = flexmesa_math::sin_cos(alpha);
-            let u1 = (tstar * cos_a + rhostar * sin_a) / sig_t;
-            let u2 = (tstar * sin_a - rhostar * cos_a) / sig_rho;
-            let g = (-(u1 * u1) - (u2 * u2)).exp() * a;
-            let h = ((g - 0.5) * b).tanh() * 0.5 + 0.5;
-            -((g * h + 1.0).ln())
+            let sin_a = flexmesa_math::sin(alpha);
+            let cos_a = flexmesa_math::cos(alpha);
+            let term1 =
+                (tstar * cos_a + rhostar * sin_a).pow2() / (sig_t * sig_t);
+            let term2 =
+                (tstar * sin_a - rhostar * cos_a).pow2() / (sig_rho * sig_rho);
+            let g = a * (-term1 - term2).exp();
+            let h = 0.5 * (b * (g - 0.5)).tanh() + 0.5;
+            -(1.0 + g * h).ln()
         } else {
             AutoDiffReal2VarOrder1::from(0.0)
         }
@@ -337,7 +340,7 @@ pub fn do_electron_conduction_blouin(
         B_HE,
     );
 
-    let log_correction = log_corr_h * frac_h + log_corr_he * frac_he;
+    let log_correction = frac_h * log_corr_h + frac_he * log_corr_he;
     kap = flexmesa_math::exp(flexmesa_math::log(kap) + log_correction.val);
     dlnkap_dln_rho += log_correction.d1[0];
     dlnkap_dln_t += log_correction.d1[1];

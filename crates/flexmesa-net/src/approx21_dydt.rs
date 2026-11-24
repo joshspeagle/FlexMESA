@@ -51,6 +51,7 @@ pub fn approx21_dydt(
     dydt.fill(0.0);
 
     // Helper closures using Quad to match Fortran real(qp)
+    // (individual products are evaluated in dp before promoting to qp on sum)
     let m2 = |a: f64, b: f64| Quad::from_f64(a * b);
     let m3 = |a: f64, b: f64, c: f64| Quad::from_f64(a * b * c);
     let m4 = |a: f64, b: f64, c: f64, d: f64| Quad::from_f64(a * b * c * d);
@@ -183,9 +184,11 @@ pub fn approx21_dydt(
         )
         + m3(-y[idx.ife54], y[idx.ihe4], ratd[idx.irfe56_aux4]);
 
-    q_he4 += m4(0.5, y[idx.ihe3], y[idx.ihe3], ratd[idx.ir33])
-        + m3(y[idx.ihe3], y[idx.ihe4], ratd[idx.irhe3ag]);
-    q_he4 += m3(y[idx.io16], y[idx.ih1], ratd[idx.iropg]);
+    // Match MESA net_approx21.f90: a2 = y(ihe3)*y(ihe4)*rate(irhe3ag) remains
+    // live into the CNO block.
+    let a2_he3_he4 = m3(y[idx.ihe3], y[idx.ihe4], ratd[idx.irhe3ag]);
+    q_he4 += m4(0.5, y[idx.ihe3], y[idx.ihe3], ratd[idx.ir33]) + a2_he3_he4;
+    q_he4 += m3(y[idx.io16], y[idx.ih1], ratd[idx.iropg]) + a2_he3_he4;
     if !deriva {
         q_he4 += m4(y[idx.in14], y[idx.ih1], ratd[idx.ifa], ratd[idx.irnpg]);
     } else {

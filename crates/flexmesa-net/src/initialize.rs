@@ -632,9 +632,9 @@ impl NetGeneralInfo {
             let irho = rxn.rho_exp;
             match irho {
                 1 => dtab *= bden,
-                2 => dtab *= bden * bden,
-                3 => dtab *= bden * bden * bden,
-                4 => dtab *= bden * bden * bden * bden,
+                2 => dtab = (dtab * bden) * bden,
+                3 => dtab = ((dtab * bden) * bden) * bden,
+                4 => dtab = (((dtab * bden) * bden) * bden) * bden,
                 _ => {}
             }
             let ddtab = f64::from(irho) * dtab / bden;

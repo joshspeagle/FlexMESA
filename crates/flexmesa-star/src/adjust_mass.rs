@@ -647,9 +647,10 @@ fn do_adjust_mass_core(
             model.xh_start[k * nv + i_lnr] = model.xh[k * nv + i_lnr];
         }
     }
-    if model.controls.rotation_flag {
-        conserve_shell_j_rot_and_distortion(model);
-    }
+    // No rotation refresh here: `update_radius` is the last step of
+    // `do_adjust_mass` (`adjust_mass.f90:430-477, 513`); the rotation
+    // variables are refreshed by `set_rotation_info` in the `set_vars` that
+    // follows (`star/private/hydro_vars.f90:539-541`).
 
     // `set_vars_if_needed` after `do_adjust_mass` (`evolve.f90:593`) unpacks
     // `xh`: `set_qs`, `set_m_and_dm`, `set_dm_bar`

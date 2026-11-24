@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Analytical partial-derivative workspace [`RspHydWork`] and boundary-zeroing
 //! helper for the nonlinear `RSP` `HYD` solver (`star/private/rsp_def.f90:118-137`,
 //! `star/private/rsp_step.f90:2063-2134`).

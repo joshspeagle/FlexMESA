@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Minimal JSON serializer and Linux `/proc/self/status` RSS helpers for
 //! `profile_evolution` (`#168`).
 

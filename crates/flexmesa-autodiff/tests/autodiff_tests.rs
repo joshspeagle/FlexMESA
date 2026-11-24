@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Golden parity and property-based tests for `flexmesa-autodiff`.
 //!
 //! Verifies MESA's `auto_diff/test/src/test_auto_diff.f90` cases across

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Stellar evolution step driver (`star_evolve_step`), automatic retry/redo
 //! cascade on solver or timestep-limit rejection, and multi-step evolutionary
 //! loop (`star_evolve`) corresponding to `star/private/evolve.f90` and

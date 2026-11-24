@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Batch PyO3 bindings (`flexmesa._rust`) for the Wave 5 four-stage benchmark
 //! workloads (`w5_diff_rot`, `w5_riemann_rsp2`, `w5_binary_rlof`, and
 //! `w5_astero_seism`).

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Explicit Runge-Kutta (``rk2``, ``rk4``, ``dopri5``, ``dop853``) integrators.
 
 Ports Hairer & Wanner's Dormand-Prince 5(4) (``num/private/mod_dopri5.f``)

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Verification tests for Wave 3a.1 (`flexmesa.eos`: blend, dfermi, ideal)."""
 
 from __future__ import annotations

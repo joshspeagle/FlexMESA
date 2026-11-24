@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Analytical composition partial derivative (`d_dxa`) verification against
 //! central finite differences across `HELM`, `FreeEOS`, `OPAL/SCVH`, `CMS`,
 //! and the blended `eos_dt_get` cascade.

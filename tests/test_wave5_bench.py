@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Tests for the Wave 5 benchmark suite and FlexMESA regression snapshots.
 
 Checks that:

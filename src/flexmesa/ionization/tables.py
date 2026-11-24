@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 r"""Four-dimensional $(Z, X, \log Q, \log T)$ ionization table evaluators.
 
 Implements the 3-stage interpolator (`eval_ionization`,

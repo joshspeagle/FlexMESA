@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! End-to-end runner and RAII temporary staging (`TempCaseStaging`) for
 //! coupled `astero` pulsation and optimization runs (`#148`).
 

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Type 2 C/O-enhanced opacity evaluation (`kap_eval_co.f90`).
 //!
 //! Mirrors `Get1_kap_CO_Results`, `Get_Kap_for_CO_Z_cubic`, `Get_Kap_for_CO_Z_linear`,

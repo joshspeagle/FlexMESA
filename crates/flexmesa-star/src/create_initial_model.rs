@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Isentropic initial model for a given mass and radius
 //! (`star/private/create_initial_model.f90` at MESA `26.4.1`).
 //!

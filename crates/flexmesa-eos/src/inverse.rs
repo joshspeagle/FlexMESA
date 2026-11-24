@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Inverse `eosDT` root-finding solvers (`eos_dt_get_rho`, `eos_dt_get_t`).
 //!
 //! Ports `get_Rho`, `get_T`, and `do_safe_get_Rho_T` from upstream MESA

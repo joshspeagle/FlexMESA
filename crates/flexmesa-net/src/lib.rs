@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Nuclear reaction networks, analytical Jacobians, `approx21`, and stiff
 //! one-zone burners (`flexmesa-net`, Wave 3b.4).
 //!

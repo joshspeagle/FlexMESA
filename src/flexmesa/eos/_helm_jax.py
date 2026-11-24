@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Branchless JAX `float64` kernels for the `HELM` equation of state.
 
 Ports `helm_sum_totals.dek`, `helm_gammas.dek`, and `do_convert_helm_results`

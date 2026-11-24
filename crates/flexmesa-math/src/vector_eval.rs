@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Shared named-section evaluators and dispatch-overhead microbenchmarks for
 //! MESA `26.4.1` hexadecimal reference vectors (`#165` Items 2, 14, 15, 17).
 

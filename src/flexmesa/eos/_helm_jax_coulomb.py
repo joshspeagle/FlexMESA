@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Branchless JAX Coulomb corrections (`helm_coulomb2.dek`) for `HELM` EOS.
 
 Ports the Yakovlev & Shalybkov (1989) strong-coupling (`plasg >= 1`) and

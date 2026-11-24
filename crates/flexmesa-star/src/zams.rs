@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Zero-Age Main Sequence (ZAMS) model catalog, `interp_q` Lagrangian
 //! interpolation, and `load_zams_model` (`star/private/init_model.f90`).
 

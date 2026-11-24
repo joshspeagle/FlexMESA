@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Record build and runtime provenance for MESA 26.4.1 reference outputs.
 
 Queries OS, kernel, CPU model, MESA version, git tag/commit, archive MD5, MESA

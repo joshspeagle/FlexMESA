@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 # Build and run the MESA 26.4.1 hydro_rotation and solve_omega_mix oracle
 # generator (#158).
 #

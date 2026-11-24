@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Configuration schemas and namelist population for nonlinear Radial Stellar
 //! Pulsation (`RSP1`, `controls.defaults:3063-3333`) and Henyey turbulent-energy
 //! pulsation (`RSP2`, `controls_dev.defaults:59-131`).

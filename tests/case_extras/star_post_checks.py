@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Upstream wind-mass, convective-premixing, white-dwarf electric-field,
 gravity-darkening, and semiconvection `StarExtras` ports (`#231`).
 

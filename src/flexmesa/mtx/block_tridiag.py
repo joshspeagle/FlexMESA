@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Block-tridiagonal matrix-vector products and linear solvers (`mtx`).
 
 Represents a block-tridiagonal matrix across `nz` shells and `nvar` variables

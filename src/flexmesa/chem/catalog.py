@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 r"""Element tables, nuclide catalogs, solar abundance scales, and reaction Q.
 
 Exposes the canonical Safe Rust (`flexmesa-chem`) catalogs and energetics via

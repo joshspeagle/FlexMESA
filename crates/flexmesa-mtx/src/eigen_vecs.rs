@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Right-eigenvector back-substitution (`dtrevc`), balancing back-transform
 //! (`dgebak`), and LAPACK `DGEEV` eigenvector normalization for real Schur
 //! decompositions (`crates/flexmesa-mtx/src/eigen.rs`).

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Multi-stage `inlist` execution driver (`run_inlist_stage`,
 //! `run_test_suite_case`), `run_star_extras` hook trait ([`StarExtras`]),
 //! and bit-identical photo restart verification (`verify_photo_restart_parity`).

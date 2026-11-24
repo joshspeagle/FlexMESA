@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Parser and numerical parity comparator for MESA golden ``test_output`` files.
 
 MESA's standalone module unit-test suites (``<pkg>/test/test_output*``) emit

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Integration tests for GitHub issue `#360`: ZAMS exact-mass interpolation
 //! onto `m1`'s grid (`alfa = 0`), edge mass clamping, and MESA `26.4.1`
 //! first-model `nz` and initial profile comparison (`star/private/init_model.f90`).

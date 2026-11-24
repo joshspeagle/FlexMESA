@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Two-dimensional piecewise-monotonic cubic interpolation (`bipm_db`)."""
 
 from __future__ import annotations

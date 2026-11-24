@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Stage E2E-1 (#92) Tier 1 hydrostatic, solar, mixing, and diffusion
 `test_suite` execution and ZAMS/restart verification suite (`#148`).
 """

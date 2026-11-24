@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Stage `Fidelity-4` (`#115`, closing Epic `#109`) end-to-end verification
 tests for `.mod` checkpoint round-trip fidelity (`M_center`,
 `cumulative_energy_error`, `w`, `w_div_wc`, `alpha_RTI`), multi-step physical

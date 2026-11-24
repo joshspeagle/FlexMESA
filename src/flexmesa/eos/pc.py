@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Potekhin-Chabrier (`PC`) electron-ion plasma EOS (`eospc_eval.f90`).
 
 Provides the Tier B dual-track (`backend="auto" | "rust" | "jax"`) Python and

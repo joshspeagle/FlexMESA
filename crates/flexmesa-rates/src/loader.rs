@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Lazy loader and catalog for the embedded binary nuclear reaction rate table
 //! bundle (`crates/flexmesa-rates/data/rates_tables.bin`).
 

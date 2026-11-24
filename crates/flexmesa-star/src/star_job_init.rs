@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! `&star_job` model initialization, network switching, composition/mass/core
 //! relaxation, and rotational spin-up handlers (`init_or_update_model_from_bundle`,
 //! corresponding to `star/private/init.f90` and `star/private/relax.f90`).

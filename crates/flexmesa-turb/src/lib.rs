@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Convective and diffusive turbulent mixing (`turb`) for `FlexMESA`.
 //!
 //! Ports upstream MESA's `turb` module (`turb/public/turb.f90` and

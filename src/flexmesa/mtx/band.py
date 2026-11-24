@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Banded matrix storage conversions, LU factorization, and linear solvers.
 
 For an $N \\times N$ banded matrix with $k_l$ sub-diagonals and $k_u$

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Workspace governance tests for `#165` Items 4 and 12.
 //!
 //! Verifies that:

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Zone-level equation of state (`do_eos`), thermal neutrino loss (`do_neu`),
 //! Rosseland mean opacity and optical depth (`do_kap`, `get_tau`), and nuclear
 //! reaction network (`do_net`) evaluation (`star/private/micro.f90` and

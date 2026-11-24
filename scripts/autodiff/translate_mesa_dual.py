@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Translate a generated MESA ``auto_diff`` module into Rust functions.
 
 MESA generates each ``auto_diff/private/auto_diff_real_*_module.f90`` with one
@@ -157,7 +157,7 @@ def translate_module(
         re.S,
     )
     parts = [
-        "// SPDX-License-Identifier: LGPL-3.0-or-later",
+        "// SPDX-License-Identifier: GPL-3.0-or-later",
         f"//! Generated from MESA `{tag}` `auto_diff/private/{module}_module.f90`",
         "//! by `scripts/autodiff/translate_mesa_dual.py`. Do not edit by hand:",
         "//! rerun the script against a MESA checkout instead (`#349`).",

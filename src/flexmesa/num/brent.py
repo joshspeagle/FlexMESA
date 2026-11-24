@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Brent (1973) root-finding and univariate local/global minimization (``num``).
 
 Ports ``num/private/mod_brent.f90`` (``eval_brent_safe_zero``,

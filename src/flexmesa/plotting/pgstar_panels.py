@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 r"""Upstream ``pgstar`` ``TRho_Profile``, ``Power``, ``Abundance``, ``Mixing``.
 
 Ports ``TRho_Profile`` (`star/private/pgstar_trho_profile.f90:56-445`),

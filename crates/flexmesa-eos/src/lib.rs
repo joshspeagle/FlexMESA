@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Equation of State (`eos`) engine for `FlexMESA` (Waves 3a & 3b.1).
 //!
 //! Provides the canonical 26-slot thermodynamic result schema (`eos_def`),

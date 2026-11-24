@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Autodiff, JAX, semiconvection, and thermohaline tests for `flexmesa.turb`.
 
 Verifies:

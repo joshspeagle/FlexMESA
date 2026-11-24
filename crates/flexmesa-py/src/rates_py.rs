@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Tier B `PyO3` bindings for `flexmesa-rates` (`rates` nuclear reaction rates,
 //! plasma screening, tabulated weak rates, and Fermi-Dirac electron captures).
 

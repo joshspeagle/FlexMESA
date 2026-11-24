@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 r"""Kippenhahn convective, mixing, and burning diagrams (`#173`).
 
 Ports the static diagnostic content of ``star/private/pgstar_kipp.f90:59-814``

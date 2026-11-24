@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Upstream Fortran MESA (release `26.4.1`, commit
 //! `c8c202662922a22b3efefa824473ad615c623afd`) parity tests for
 //! nonlinear `RSP` `HYD` time integration (`star/private/rsp_step.f90` &

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Integration and numerical-oracle tests for Issue `#158`
 //! (`star/private/solve_omega_mix.f90` `Quad` port + `#153` rotation remap
 //! handoff verification).

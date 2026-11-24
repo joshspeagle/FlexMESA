@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Golden-baseline parity tests for `flexmesa-turb` (`turb/test/test_output`).
 //!
 //! Verifies:

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! `relax_initial_Z` and `relax_initial_Y` through `do_internal_evolve`
 //! (`do_relax_Z`, `star/private/relax.f90:3536-3701`; `do_relax_Y`,
 //! `star/private/relax.f90:3704-3873`), from the built-in 4 Msun ZAMS model

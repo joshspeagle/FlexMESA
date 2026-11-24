@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Closed-form ideal $\gamma$-law $(\rho, E)$ equation of state (`eos_gamma_DE_get`).
 //!
 //! Mirrors `Get_eos_gamma_DE_Results` in `eos/private/eosde_eval.f90`.

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Accreted material composition construction (`get_xa_for_accretion`,
 //! `get_xa_for_standard_metals`, `get_xa`, and `adjust_z_fractions`) matching
 //! `star/private/adjust_xyz.f90:910-1220`.

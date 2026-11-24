@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Publication `matplotlib` figure styling for `FlexMESA`.
 
 Configures AASTeX column and text widths (`3.352 in` and `7.100 in`), Computer

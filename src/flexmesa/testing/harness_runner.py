@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Guarded execution and verdict evaluation for upstream MESA trajectories.
 
 Executes ``star``, ``binary``, and ``astero`` test-suite cases with optional

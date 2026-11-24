@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Coulomb chemical-potential corrections (`DCW1973`, `SLR1982`, `PCR2009`),
 //! electron screening shift (`Throwe1983`, `Itoh2002`), and on-the-fly Fermi-Dirac
 //! phase-space weak rates (`eval_ecapture`, `eval_psi`, `coulomb.f90`).

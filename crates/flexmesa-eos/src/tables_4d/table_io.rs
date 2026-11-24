@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Binary (`FMDTRW01`) and ASCII (`.data`) loaders and 2D bicubic spline builders
 //! for `(X, Z)` `(logQ, logT)` EOS slices (`eos/private/eosdt_load_tables.f90`).
 

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Issue `#147` fail-loudly validation tests for `flexmesa-astero`.
 
 #![forbid(unsafe_code)]

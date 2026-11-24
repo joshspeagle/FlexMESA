@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Coupled RLOF/wind mass-transfer accounting (`adjust_mdots`), `.photo` +
 //! orbital snapshot/redo state management, and single-star Henyey step wrapper
 //! for [`crate::system::BinarySystem`].

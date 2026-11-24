@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Linear Non-Adiabatic (`LINA`) $4N \times 4N$ radial pulsation stability
 //! eigensolver (`do_LINA` in `star/private/rsp_lina.f90:33-1167`).
 

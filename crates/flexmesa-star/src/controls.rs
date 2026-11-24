@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Stellar evolution control structs (`StarControls`, `StarJobControls`),
 //! variable/equation index layouts (`VarLayout`), and error types (`StarError`)
 //! corresponding to `star_data/private/star_controls.inc`,

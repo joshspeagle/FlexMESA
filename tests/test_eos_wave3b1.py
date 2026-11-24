@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Python and JAX tests for Wave 3b.1 4D tabulated EOS and `(P, T)` solvers."""
 
 from __future__ import annotations

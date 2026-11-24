@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Phase 5a Python/PyO3 & JAX verification tests (`Issue #112`, `PR #135`).
 
 Verifies:

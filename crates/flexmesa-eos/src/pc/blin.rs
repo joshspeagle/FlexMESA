@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Blinnikov et al. (1996) relativistic Fermi-Dirac integral fits (`BLIN9`,
 //! `BLIN9a`, `BLIN9b`) from `eos/private/pc_eos.f90` lines 2306-2653.
 

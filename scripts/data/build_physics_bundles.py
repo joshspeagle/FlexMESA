@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Build FlexMESA physics data bundles and embedded crate assets from MESA.
 
 Reconstructs the `data-v1` release assets and embedded `nets.bin` payload from

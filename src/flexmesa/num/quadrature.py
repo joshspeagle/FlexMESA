@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Ridders differentiation and adaptive Simpson 3/8 quadrature (``num``).
 
 Ports ``num/private/mod_num_lib.f90`` numerical differentiation (``dfridr``)

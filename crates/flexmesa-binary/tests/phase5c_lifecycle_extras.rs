@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Unit and integration tests for Issue `#137` coupled binary step-lifecycle
 //! parity (`xa_sub_xa_start`, `1e-12` species normalization guard, symmetric
 //! Strang-split `premix_omega`, `am_d_mix_factor == 0` transport,

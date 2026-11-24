@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Per-zone thermodynamic, geometric, superadiabatic, artificial-viscosity, and
 //! turbulent-pressure evaluation with analytical Jacobian partials for the
 //! nonlinear `RSP` `HYD` solver (`star/private/rsp_step.f90:698-1610`).

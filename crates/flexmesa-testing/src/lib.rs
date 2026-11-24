@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Golden baseline parser and numerical comparison harness for `FlexMESA`.
 //!
 //! MESA's standalone module unit-test suites (`<pkg>/test/test_output*`) emit

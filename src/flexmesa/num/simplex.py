@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Nelder-Mead simplex optimization and Park-Miller ``ran1_zah`` PRNG (``num``).
 
 Ports ``num/private/mod_simplex.f90`` and ``num/private/mod_random.f90`` into

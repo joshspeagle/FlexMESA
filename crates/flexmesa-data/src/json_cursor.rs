@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Minimal Safe Rust JSON header parser for `.safetensors` buffers.
 //!
 //! Parses the UTF-8 JSON header block of a `.safetensors` file (`__metadata__`

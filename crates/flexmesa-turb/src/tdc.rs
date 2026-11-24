@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Time-Dependent Convection solver (`set_tdc`, `turb/private/tdc.f90`).
 //!
 //! Solves the Kuhfuss (1986) / Smolec time-dependent convection energy balance

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Configuration and blend-fraction (`get_cms_alfa`) for the Chabrier-Mazevet-Soubiran
 //! (`CMS`) equation of state (`eos/private/eoscms_eval.f90`).
 

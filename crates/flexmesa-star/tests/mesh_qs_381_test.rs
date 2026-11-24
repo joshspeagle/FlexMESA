@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! `set_qs` and `normalize_dqs` follow upstream `star/private/star_utils.f90`
 //! (tag `26.4.1`, lines 669-752), and the mesh sync leaves a model's `dq`
 //! untouched, as upstream's read path does (`#381`).

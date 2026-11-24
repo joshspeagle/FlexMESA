@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Constant-density variable-temperature one-zone nuclear burner
 //! (`burn_1_zone_const_density`) coupling molar abundances $Y_i = X_i / A_i$
 //! and $\ln T$ at fixed mass density $\rho$ via `eosDT_get` and the

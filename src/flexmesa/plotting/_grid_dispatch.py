@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Internal cell dispatcher and namelist parser for ``pgstar_grid`` (`#173`)."""
 
 from __future__ import annotations

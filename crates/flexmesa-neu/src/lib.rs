@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Thermal neutrino energy loss rates (`neu`).
 //!
 //! Ports MESA's `neu` module (`neu/public/neu_def.f90`,

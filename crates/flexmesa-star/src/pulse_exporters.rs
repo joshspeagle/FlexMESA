@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Additional pulsation exporters: `GSM` (`pulse_gsm.f90`), `SAIO`
 //! (`pulse_saio.f90`, 20 columns), `CAFEIN` (`pulse_cafein.f90`, 35 columns),
 //! and `GR1D` (`pulse_gr1d.f90`, 7 columns), plus unified format dispatch

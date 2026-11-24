@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Mass-coordinate bookkeeping in `real(qp)` (`star/private/mass_utils.f90`).
 //!
 //! When a star gains or loses mass its cells are redefined, and quantities

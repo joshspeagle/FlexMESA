@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Stellar wind mass-loss prescriptions (`Reimers`, `Blocker`, `Vink`,
 //! `Nieuwenhuijzen`, `DeJager`, `VanLoon`, `Bjorklund`, `Dutch`), super-Eddington
 //! winds, Heger et al. (2000) rotational $\Omega/\Omega_{\mathrm{crit}}$ wind

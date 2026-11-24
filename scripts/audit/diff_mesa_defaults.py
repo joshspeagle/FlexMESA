@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Compare FlexMESA Rust control defaults against MESA 26.4.1 ``*.defaults``.
 
 Generates ``notes/audit/defaults_diff_26_4_1.md`` for ``#141`` (feeding

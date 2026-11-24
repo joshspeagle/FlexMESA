@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Parlett-Reinsch radix-2 balancing (`dgebal`) and Householder upper
 //! Hessenberg reduction (`dgehrd`) for `flexmesa-mtx::eigen`.
 

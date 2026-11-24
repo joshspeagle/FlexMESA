@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Sub-model opacity evaluation wrappers (`flexmesa.kap.submodels`).
 
 Exposes direct access to Type 1 fixed-metal tables (`kap_get_fixed_metal`),

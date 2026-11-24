@@ -1,4 +1,4 @@
-! SPDX-License-Identifier: LGPL-3.0-or-later
+! SPDX-License-Identifier: GPL-3.0-or-later
 ! Generate exact 16-digit IEEE-754 hexadecimal input/output reference vectors
 ! from real MESA 26.4.1 (`math_lib` + `crmath` + Fortran platform intrinsics)
 ! for `#165`, `#196`, and `#198`.

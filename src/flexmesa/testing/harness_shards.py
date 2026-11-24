@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Split a harness campaign into shards and merge the shard reports.
 
 A full strict campaign runs every manifest case once. Strict mode is

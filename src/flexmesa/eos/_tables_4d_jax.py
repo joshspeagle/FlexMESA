@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Native `@jax.jit` (`jnp.float64`) 4D EOS table evaluators and blends.
 
 Ports `Do_EoS_Interpolations`, `Eval_Xtable`, `Get1_eosdt_for_X`,

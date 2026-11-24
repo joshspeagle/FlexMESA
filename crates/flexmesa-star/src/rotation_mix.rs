@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Array-level Heger, Langer & Woosley (2000) and Spruit (2002) rotational
 //! instability diffusivities (`rotation_mix_info.f90:493-1345`) and
 //! `update_rotation_mixing_info` (`mix_info.f90:1561-1740`).

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Chugunov, DeWitt & Yakovlev (2007, PhRvD 76, 025028) one-component plasma
 //! electrostatic screening ported from `rates/private/screen_chugunov.f90`.
 

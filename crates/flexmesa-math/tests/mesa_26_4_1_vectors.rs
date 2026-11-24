@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Exact 64-bit IEEE-754 bit-pattern verification of `flexmesa-math` in
 //! `NumericsMode::Strict` against real MESA `26.4.1` (`r26.4.1`) reference
 //! vectors (`>= 10,084` vectors per function across all 41 mapped functions;

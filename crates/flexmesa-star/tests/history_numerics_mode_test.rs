@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! The numerics mode is recorded in history, profile, `.mod` and photo output.
 //!
 //! This test switches the process-wide numerics mode, so it lives in its own

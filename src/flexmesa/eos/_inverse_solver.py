@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 r"""Inverse `(P_gas, T)` and `(rho, T, other)` EOS solvers (`eos/public`).
 
 Provides [`EosPtOutput`], [`EosInverseOutput`], [`eos_pt_get_jax`],

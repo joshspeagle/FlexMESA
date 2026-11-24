@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Damped Newton-Raphson solver for dense, banded, and block-tridiagonal grids.
 
 Ports MESA's Newton-Raphson iteration (``num/private/mod_newton.f90`` and

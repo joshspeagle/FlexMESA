@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Native linearized adiabatic and non-adiabatic radial ($\ell = 0$) and
 //! non-radial ($\ell = 1, 2, 3$) stellar oscillation mode solver on
 //! [`PulsePoint`], `GYRE`, and `FGONG` grids (`star/private/pulse_gyre.f90`,

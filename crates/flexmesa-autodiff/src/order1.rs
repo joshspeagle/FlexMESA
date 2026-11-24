@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Const-generic first-order forward-mode dual numbers (`DualOrder1<N>`).
 //!
 //! `DualOrder1<N>` unifies MESA's `auto_diff_real_1var_order1` ($N = 1$),

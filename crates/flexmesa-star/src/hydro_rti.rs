@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Duffell (2016) Rayleigh-Taylor instability (`RTI`) turbulent diffusivity
 //! profiles (`set_dpdr_drhodr_info`, `set_rti_mixing_info` in
 //! `star/private/mix_info.f90:1966-2237`) and coupled $\alpha_{\mathrm{RTI}}$

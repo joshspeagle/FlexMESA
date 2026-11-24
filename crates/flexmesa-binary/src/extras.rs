@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! User-extensible hooks for coupled [`crate::system::BinarySystem`] evolution
 //! (`run_binary_extras.f90` and coupled `other_wind` callbacks).
 

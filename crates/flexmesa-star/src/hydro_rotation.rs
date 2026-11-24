@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Roche-lobe rotational distortion helpers (`w_div_w_roche_omega`,
 //! `w_div_w_roche_jrot`, `eval_i_rot`, and the Fabry, Marchant & Sana 2022
 //! polynomial fits `rpsi_from_re_factor`, `re_from_rpsi_factor`, `A`, `B`, `C`,

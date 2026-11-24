@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Atomic diffusion collision integrals and Burgers resistance coefficients
 //! following Paquette, Pelletier, Fontaine & Michaud (1986, ApJS 61, 177),
 //! ported from MESA `26.4.1` `star/private/paquette_coeffs.f90`.

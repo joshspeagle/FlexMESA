@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Radiative opacity regime blending (`Get_kap_Results_blend_T`,
 //! `Get_kap_highT_Results`, `Get_kap_lowT_Results` in `kap/private/kap_eval.f90`).
 

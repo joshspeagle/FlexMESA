@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Default values for [`StarControls`] (alignment with MESA release `26.4.1`
 //! `star/defaults/controls.defaults` and `controls_dev.defaults` is tracked in `#149`).
 

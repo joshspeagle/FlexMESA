@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Native JAX 7-level `eosDT_get` cascade and component blend fractions.
 
 Ports `get_HELM_alfa`, `Get_FreeEOS_alfa`, `get_opal_scvh_alfa_and_partials`,

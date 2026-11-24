@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! The mass and composition relaxes of `star/private/relax.f90` at MESA
 //! `26.4.1`, run through [`do_internal_evolve`]: `do_relax_mass`
 //! (`relax.f90:126-313`), `do_relax_mass_scale` (`relax.f90:2195-2336`),

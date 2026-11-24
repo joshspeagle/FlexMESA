@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Per-channel soft and hard timestep limit evaluators (`check_change`,
 //! `check_integer_limit`, `check_dX`, `check_dX_nuc_drop`, structural
 //! `delta_lg*`, nuclear `check_lgL`, `check_lgL_nuc_cat_change`, center

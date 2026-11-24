@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Level-2 IEEE-754 module-hex parity tests for `flexmesa-kap` against MESA
 //! `26.4.1` `kap/test/test_output` (`exact_tested_values.tsv`, 21 outputs) and
 //! star model-1 `kap_get` / `d_opacity_dlnd` / `d_opacity_dlnT` hex oracles.

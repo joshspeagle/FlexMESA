@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Versioned, source-bound, SHA-256-verified runtime cache envelope (`FMCENV01`).
 //!
 //! Layout (`96`-byte little-endian header followed by `payload_len` bytes):

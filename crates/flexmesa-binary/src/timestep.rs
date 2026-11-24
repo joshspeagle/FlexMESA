@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Binary timestep controller (`binary_pick_next_timestep`) and hard-limit retry
 //! checks.
 //!

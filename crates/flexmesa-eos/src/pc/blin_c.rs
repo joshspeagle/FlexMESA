@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! High-degeneracy regime $\chi \ge 14$ (`BLIN9c`) for Blinnikov et al. (1996)
 //! relativistic Fermi-Dirac integrals (`eos/private/pc_eos.f90` lines 2655-2887).
 

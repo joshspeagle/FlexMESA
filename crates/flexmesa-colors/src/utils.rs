@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Photometric quadrature, 1D linear interpolation, and grid search utilities
 //! (`colors/private/colors_utils.f90` and `colors/private/bolometric.f90`).
 //!

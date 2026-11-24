@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Unit, relocation, and live adapter tests for `#231` Batch 2 `case_extras`."""
 
 from __future__ import annotations

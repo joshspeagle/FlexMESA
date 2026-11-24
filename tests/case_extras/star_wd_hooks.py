@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Upstream white-dwarf accretion, AIC electron-capture, and CO/ONe WD
 `StarExtras` ports (`#231`).
 

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Radiative, conductive, and Compton opacity (`kap`) kernels for FlexMESA.
 
 Ports upstream Fortran MESA's `kap` module (`kap_def.f90`, `kap_lib.f90`,

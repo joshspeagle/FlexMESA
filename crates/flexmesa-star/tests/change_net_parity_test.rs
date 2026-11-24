@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Issue `#395` deterministic `0-ULP` IEEE-754 hex parity tests for
 //! [`change_model_network`] against MESA `26.4.1` `adjust_xyz.f90:51-629` and
 //! `net_eval.f90:822-850`.

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Precomputed temperature power factors (`T_Factors`), REACLIB 7-parameter
 //! polynomial evaluator, and detailed-balance reverse rate coefficients
 //! (`rates/private/ratelib.f90`, `rates/private/reaclib_eval.f90`, and

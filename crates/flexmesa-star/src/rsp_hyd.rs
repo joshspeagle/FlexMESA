@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Nonlinear implicit `RSP` `HYD` timestepper (`HYD`, `init_HYD`,
 //! `apply_corrections`, `calculate_energies`, and `rsp_set_Teff` in
 //! `star/private/rsp_step.f90:202-696, 945-1083`).

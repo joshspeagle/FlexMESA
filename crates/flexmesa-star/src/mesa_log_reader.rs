@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Lossless ASCII readers for upstream MESA `26.4.1` `history.data`,
 //! `profileN.data`, `binary_history.data`, and `profiles.index` files (`#163`).
 

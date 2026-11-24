@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Integration and round-trip tests for MESA `26.4.1` `LOGS/history.data`,
 //! `LOGS/profileN.data`, and `LOGS/profiles.index` writers and readers (`#163`).
 

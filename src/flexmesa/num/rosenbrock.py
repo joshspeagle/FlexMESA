@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """L-stable Rosenbrock-Wanner stiff ODE/DAE integrators (``num``).
 
 Ports Hairer & Wanner's Rosenbrock family (``num/private/mod_rosenbrock.f``)

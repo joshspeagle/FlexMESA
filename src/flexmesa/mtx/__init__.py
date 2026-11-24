@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Dense, banded, sparse, and block-tridiagonal linear algebra (`mtx`).
 
 Re-exports dense (`dgetrf`, `dgetrs`, `solve_dense`, `solve_dense_jax`),

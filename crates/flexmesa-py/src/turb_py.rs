@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Tier B (`turb`) `PyO3` bindings for Mixing-Length Theory (`MLT`) and
 //! Time-Dependent Convection (`TDC`).
 //!

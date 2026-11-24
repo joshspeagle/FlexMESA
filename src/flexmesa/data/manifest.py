@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """SHA-256 manifest parser and file integrity verifier for physics tables.
 
 Parses ``manifest.toml`` declarations (``[[tables]]``) into typed

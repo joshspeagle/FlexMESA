@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Native JAX ``float64`` thermal neutrino loss kernels (all 5 Itoh channels).
 
 Implements differentiable pure-JAX ``float64`` kernels for all five Itoh et al.

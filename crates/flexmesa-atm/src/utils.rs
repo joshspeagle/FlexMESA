@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Blackbody relations, Paczynski radiative gradient dilution, and $E_2(x)$
 //! exponential integral interpolation (`atm_utils.f90` and `atm_lib.f90`).
 

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Unit, relocation, adapter-detachment, and error-propagation tests for `#231`
 Batch 3 `StarExtras` and `BinaryExtras` ports (`19` `star` + `2` `binary`
 cases).

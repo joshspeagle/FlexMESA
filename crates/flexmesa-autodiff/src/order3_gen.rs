@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Generated from MESA `26.4.1` `auto_diff/private/auto_diff_real_2var_order3_module.f90`
 //! by `scripts/autodiff/translate_mesa_dual.py`. Do not edit by hand:
 //! rerun the script against a MESA checkout instead (`#349`).

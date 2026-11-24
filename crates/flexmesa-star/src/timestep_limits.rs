@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Top-level adaptive timestep controller (`timestep_controller` and
 //! `do_timestep_limits` in `star/private/timestep.f90:39-381`).
 

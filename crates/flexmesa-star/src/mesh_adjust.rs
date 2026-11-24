@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Adaptive Lagrangian mesh driver (`remesh` in `star/private/adjust_mesh.f90:1-700`),
 //! bridging [`crate::mesh_functions`], [`crate::adjust_mesh_support`],
 //! [`crate::mesh_plan`], [`crate::mesh_remap`], and

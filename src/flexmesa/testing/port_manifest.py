@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Port manifest schema, loader, serializer, and CI validator (`#174`).
 
 Every upstream source file in MESA release ``26.4.1`` (plus bundled ``GYRE``,
@@ -259,7 +259,7 @@ def dump_port_manifest(manifest: PortManifest) -> str:
         Canonical UTF-8 TOML string.
     """
     lines: list[str] = [
-        "# SPDX-License-Identifier: LGPL-3.0-or-later",
+        "# SPDX-License-Identifier: GPL-3.0-or-later",
         "# GENERATED VIA scripts/dashboard/build_port_manifest.py (#174).",
         "# Line counts and SHA-256 digests are computed from MESA 26.4.1.",
         "",

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 # Reproducible MESA 26.4.1 data bundle and verification targets (#164, N1-10).
 
 PYTHON ?= python3

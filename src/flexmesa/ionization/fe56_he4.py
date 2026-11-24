@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 r"""Effective charge of $\mathrm{Fe56}$ in $\mathrm{He4}$ (`mod_ionization`).
 
 Implements the 2D not-a-knot bicubic spline interpolator

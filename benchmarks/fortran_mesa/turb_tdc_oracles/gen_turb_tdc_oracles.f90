@@ -1,4 +1,4 @@
-! SPDX-License-Identifier: LGPL-3.0-or-later
+! SPDX-License-Identifier: GPL-3.0-or-later
 ! Generate IEEE-754 hex + decimal reference vectors against compiled MESA 26.4.1
 ! (`libturb.a` + `libauto_diff.a` + `CRMATH`) for `turb::set_TDC` values and all
 ! 16 input `d1Array` partials across the 32 operating points in upstream

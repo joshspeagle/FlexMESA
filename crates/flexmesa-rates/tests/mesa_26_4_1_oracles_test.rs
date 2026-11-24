@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Bit-level MESA `26.4.1` Fortran oracle verification for `flexmesa-rates` (`#161`).
 //!
 //! Parses `benchmarks/fortran_mesa/rates_oracles/mesa_26_4_1_rates_oracles.tsv`

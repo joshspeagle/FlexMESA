@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Complex arithmetic helper (`Cpx`) and ASCII log writers (`LINA_period_growth.data`,
 //! `LINA_work*.data`, `LINA_eigen*.data`) for `do_LINA` (`rsp_lina.f90:1010-1166`).
 

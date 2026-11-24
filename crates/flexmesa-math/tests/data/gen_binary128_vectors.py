@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Generate IEEE-754 binary128 test vectors from exact rational arithmetic.
 
 Each result is computed with `fractions.Fraction` (exact) and then rounded once

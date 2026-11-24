@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Asteroseismic scaling relations, surface-effect frequency corrections,
 //! separation ratios ($r_{01}, r_{10}, r_{02}$), composite $\chi^2$ evaluation,
 //! optimization drivers, and `astero/test_suite` runner for `FlexMESA`.

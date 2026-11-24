@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Bit-exact IEEE-754 `f64` regression tests for `eval_ecapture_pair`,
 //! `eval_mui_coulomb`, and `eval_vs_coulomb` against MESA 26.4.1
 //! (`rates/test/src/{test_weak.f90, test_ecapture.f90}`).

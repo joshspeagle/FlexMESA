@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! `PyO3` bindings for `flexmesa-star` (`RustStarModel`, ZAMS/pre-MS builders,
 //! `.mod`/`.photo` I/O, parallel zone/face microphysics evaluation, coupled 1D
 //! Henyey solver, convective boundary overshooting, stellar winds, adaptive

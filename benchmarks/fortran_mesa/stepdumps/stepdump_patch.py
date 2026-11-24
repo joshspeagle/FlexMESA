@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Inserts step-dump ``write`` statements into MESA 26.4.1 ``star_solver.f90``.
 
 The patch adds output only: it never changes an expression, a branch taken,

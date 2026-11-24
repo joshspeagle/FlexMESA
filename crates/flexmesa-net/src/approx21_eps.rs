@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Energy generation, category decomposition, and neutrino loss derivatives for
 //! `approx21` and `approx21_plus_co56` (`net/private/net_approx21.f90`
 //! lines 1547–2030 and `net/private/net_eval.f90` lines 443–552).

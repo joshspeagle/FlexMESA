@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 r"""Upstream ``pgstar``/``pgbinary`` track, history, and ``Grid`` builders.
 
 Ports ``History_Track<N>`` and all named two-column evolutionary track windows

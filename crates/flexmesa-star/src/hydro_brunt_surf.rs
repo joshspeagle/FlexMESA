@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Brunt-Väisälä composition gradient and buoyancy frequency (`do_brunt_b`,
 //! `do_brunt_n2` in `star/private/brunt.f90`) and surface atmosphere boundary
 //! conditions (`eval_surf_bc` in `star/private/hydro_vars.f90`).

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Rosenbrock stage tableaux (`Ros3p`, `Ros3pl`, `Rodasp`, `Rodas4`) from
 //! Hairer & Wanner's `mod_rosenbrock.f` (`num/private/mod_rosenbrock.f`).
 

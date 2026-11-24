@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! High-level element diffusion driver and post-step diffusion energy
 //! accounting ported from MESA `26.4.1` `star/private/element_diffusion.f90`.
 

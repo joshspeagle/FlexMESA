@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 # Clean-room local pre-PR verification gate mirroring `.github/workflows/ci.yml`
 # and `.github/workflows/docs.yml`.
 #

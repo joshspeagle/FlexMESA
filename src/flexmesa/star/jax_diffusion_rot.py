@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Differentiable JAX kernels for Wave 5.1 stellar diffusion, shellular
 rotation, Spruit-Tayler magnetic dynamo, and crystallization phase separation.
 """

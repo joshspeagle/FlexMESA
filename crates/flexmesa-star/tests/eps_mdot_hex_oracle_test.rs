@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! MESA `26.4.1` IEEE-754 hex oracle test for `eps_mdot` (`eval_total_energy_profile`,
 //! `calculate_eps_mdot`, `mdot_acoustic_surface`, and `mdot_adiabatic_surface`)
 //! across accreting and mass-losing `1.0 Msun` ZAMS models (`#328`, `#318`).

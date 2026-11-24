@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Dynamic REACLIB reaction handle parser and [`ReactionInfo`] synthesizer
 //! (`rates/private/reaclib_support.f90` and `rates/private/rates_initialize.f90`).
 

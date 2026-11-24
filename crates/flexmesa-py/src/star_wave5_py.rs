@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! `PyO3` bindings for Wave 5 `flexmesa-star` extensions: multi-species Burgers
 //! element diffusion, shellular rotation distortion and Spruit-Tayler magnetic
 //! dynamo, convective premixing, predictive mixing, and white-dwarf

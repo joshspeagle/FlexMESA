@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Full-table verification for `HELM`, `OPAL/SCVH`, `FreeEOS`, `CMS`, and `eos_dt_get`
 //! across multi-zone stellar profiles (`1 M_sun` ZAMS, `0.1 M_sun` brown dwarf,
 //! `0.6 M_sun` white dwarf, and `25 M_sun` massive star).

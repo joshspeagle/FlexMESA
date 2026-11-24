@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Spline evaluation and definite integration (`interp_1d`).
 
 Provides vectorized ``float64`` JAX evaluation of 1D cubic splines and exact

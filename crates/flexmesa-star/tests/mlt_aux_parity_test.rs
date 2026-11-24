@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Bit-exact MESA 26.4.1 `AUX` parity regression tests for MLT/TDC (`#393`).
 //!
 //! Verifies upstream-exact IEEE-754 parity for `gradT` and `mlt_vc` across:

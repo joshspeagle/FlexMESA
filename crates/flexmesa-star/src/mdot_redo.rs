@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Critical-rotation implicit wind-revision redo loop (`setup_for_implicit_mdot_loop`
 //! and `select_mdot_action` in `star/private/evolve.f90:747-1057`, paired with
 //! `set_surf_avg_rotation_info` in `star/private/hydro_rotation.f90:593-744`).

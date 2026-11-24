@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Upstream Fortran MESA `26.4.1` oracle tests for Wave 3a.3 (`PC` liquid and
 //! phase-transition regimes; `#161`, `T2-15`).
 //!

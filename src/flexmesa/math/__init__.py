@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Public interface for `flexmesa.math` (`math` module port).
 
 Re-exports all 33 IEEE-754 `float64` mathematical intrinsics, domain-safe

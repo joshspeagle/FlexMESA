@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Bracketed and derivative-assisted root-finding with JAX implicit VJP.
 
 Ports ``num/private/mod_root.f90`` (``do_look_for_brackets``,

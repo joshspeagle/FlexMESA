@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Declarative MESA `.defaults` and `*_columns.list` schema parser and
 //! Fortran `&namelist` (`inlist`) validator for `FlexMESA`.
 //!

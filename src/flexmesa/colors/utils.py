@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Quadrature, flux dilution, and grid utilities for ``flexmesa.colors``.
 
 Ports upstream MESA ``colors/private/colors_utils.f90`` and

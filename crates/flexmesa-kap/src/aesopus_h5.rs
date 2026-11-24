@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Pure Safe Rust HDF5 loader and cache for MESA `AESOPUS` low-temperature
 //! opacity tables (`kap/private/kap_aesopus.f90:41-325` and
 //! `kap/private/load_kap.f90:121`).

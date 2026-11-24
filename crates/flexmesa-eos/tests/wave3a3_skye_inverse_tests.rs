@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Upstream Fortran MESA `26.4.1` oracle tests for Wave 3a.3 (`Skye` equation of
 //! state, `get_skye_alfa`, `get_skye_alfa_simple`, `eosDT_get` `Skye`/`HELM`
 //! blending, and `eosPT_get` / `eosDT_get_T` / `eosDT_get_Rho` /

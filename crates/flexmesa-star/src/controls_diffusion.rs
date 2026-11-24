@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Element diffusion and white-dwarf phase separation `&controls` matching
 //! MESA `26.4.1` `star/defaults/controls.defaults:6883-7570` and
 //! `star/defaults/controls_dev.defaults:152-161`.

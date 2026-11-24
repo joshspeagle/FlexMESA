@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Validation helpers for ``port_manifest.verify_port_manifest`` (`#174`)."""
 
 from __future__ import annotations

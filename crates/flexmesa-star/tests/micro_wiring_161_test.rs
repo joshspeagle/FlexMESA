@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Issue `#161` (`F2-2`, `F2-3`, `F2-14`, `F2-15`, `F2-24`) star microphysics
 //! call-site alignment tests (`do_eos`, `do_neu`, `do_kap`, `do_net`, and
 //! profile diagnostic columns).

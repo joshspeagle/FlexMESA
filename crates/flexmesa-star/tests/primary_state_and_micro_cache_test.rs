@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Integration tests for `PrimaryStateBuffer` rollback preservation and
 //! `MicrophysicsCache` 0-ULP hit/miss behavior (`#150`).
 

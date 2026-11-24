@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Differentiable JAX (`float64`) staggered-grid and face-microphysics kernels.
 
 Provides pure branchless `@jax.jit` kernels for staggered cell/face geometry,

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Nested dual number of the TDC Newton solver (`auto_diff_real_tdc`).
 
 Mirrors `crates/flexmesa-turb/src/tdc_dual.rs` and upstream

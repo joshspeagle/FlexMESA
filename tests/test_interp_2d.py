@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Golden, autodiff, and property tests for `flexmesa.interp_2d`.
 
 Validates FlexMESA 2D bicubic splines (`interp_mkbicub_db`,

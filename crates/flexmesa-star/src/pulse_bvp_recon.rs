@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Forward-QR / backward-substitution eigenfunction reconstructor, variational
 //! integral $\omega_{\mathrm{int}}$, normalized mode inertia $E_{\mathrm{norm}}$,
 //! quasi-non-adiabatic work integral $\mathrm{d}W/\mathrm{d}x$, Eckart-Scuflaire-Osaki-Takata

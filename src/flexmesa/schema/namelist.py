@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Parser and schema validator for legacy MESA Fortran ``&namelist`` blocks.
 
 Parses Fortran ``&namelist ... /`` blocks (``&eos``, ``&kap``, ``&star_job``,

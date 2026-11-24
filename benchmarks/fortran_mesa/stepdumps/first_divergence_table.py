@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 """First-divergence table: FlexMESA strict runs against MESA 26.4.1 step dumps.
 
 For every ``<suite>/<case>.stepdump`` under ``--dumps`` (written by

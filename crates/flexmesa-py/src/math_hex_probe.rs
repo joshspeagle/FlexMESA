@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Level-2 exact-hex test-suite probes for `math` and `auto_diff` (`#220`).
 
 use flexmesa_autodiff::{

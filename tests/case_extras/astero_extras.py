@@ -11,6 +11,7 @@ dictionary lists the assignments to make, in upstream order.
 
 from __future__ import annotations
 
+import os
 import re
 from typing import Any
 
@@ -256,6 +257,118 @@ _STOCK_ROUTINE_DIGESTS: dict[str, frozenset[str]] = {
 }
 
 
+# `astero/test_suite/astero_gyre/src/run_star_extras.f90`: digests of the
+# routines `AsteroGyreExtras` ports (normalized source, see
+# `tests.case_extras.normalize_fortran`).
+_ASTERO_GYRE_DIGESTS: dict[str, str] = {
+    "extras_check_model": (
+        "eaea7a0e2f96c48df19687bc6398a763b2acf74d6a0287de1eb27fad564805cd"
+    ),
+    "extras_after_evolve": (
+        "02d78ef032b87691ce8e77035f532e06727e548b1b9e9455ef092f892b269961"
+    ),
+    "get_gyre_frequency_info": (
+        "5070d937a88fde9888d78e5f12e35e9e761ad1f4ee9c76bd1ee03be13c624aa4"
+    ),
+    # Never called: with `astero_just_call_my_extras_check_model = .true.`
+    # astero runs one track with nothing varied
+    # (`astero/private/astero_run_support.f90:171-174`, `:239`), and the case
+    # names no search parameters or constraints.
+    "set_param": (
+        "50db057770e0922de5b5f1f710d466230b4c55a0b9ca6061030f8391deb47fe4"
+    ),
+    "set_constraint_value": (
+        "e7ed93317a3605fd1e41d699c96dae5721ffa3a14a3cecf55e023cef10751e63"
+    ),
+}
+
+
+class AsteroGyreExtras:
+    """`astero_gyre`'s `run_star_extras.f90` (`:103-228`), over astero's GYRE
+    interface (`_rust.AsteroGyre`, `astero/private/gyre_support.f90`).
+
+    The case sets `astero_just_call_my_extras_check_model`, so astero runs a
+    plain star run, calls `init_gyre` at startup
+    (`astero/private/astero_run_support.f90:109-115`) and hands every step to
+    this `extras_check_model`. GYRE is called every 50 models and after the
+    run, for radial modes; the run reports whether the `n_pg = 4` mode lies
+    within 3% of `x_ctrl(1)`.
+    """
+
+    # Every snapshot carries a `star_model` handle for GYRE's `set_model`.
+    wants_star_model = True
+
+    def __init__(self) -> None:
+        self.gyre: Any = None
+        self.expected_freq = 0.0
+        self.actual_freq = 0.0
+        self.last_results: list[tuple[int, int, int, float, float, float]] = []
+        # (model_number, results) of every GYRE call, for evidence scripts.
+        self.calls: list[
+            tuple[int, list[tuple[int, int, int, float, float, float]]]
+        ] = []
+
+    def extras_startup(self, state: dict[str, Any], _restart: bool) -> None:
+        """`init_gyre(gyre_input_file)` for the run
+        (`astero_run_support.f90:109-115`); the case's `extras_startup`
+        (`:103-112`) only calls the output-only `test_suite_startup`."""
+        mesa_dir = os.environ.get("MESA_DIR", "") or "mesa"
+        self.gyre = _rust.AsteroGyre(str(state["case_dir"]), mesa_dir)
+
+    def _get_gyre_frequency_info(
+        self, state: dict[str, Any], check_match: bool
+    ) -> bool:
+        """`get_gyre_frequency_info(s, check_match, okay, ierr)`
+        (`:183-228`)."""
+        okay = False
+        l_to_match = 0
+        order_to_match = 4
+        self.expected_freq = float(state["x_ctrl"][0])
+        results = self.gyre.get_modes(state["star_model"], l_to_match, True)
+        self.last_results = list(results)
+        self.calls.append((int(state["model_number"]), list(results)))
+        print()
+        print(
+            f"{'el':>8}{'order':>8}{'freq (microHz)':>20}"
+            f"{'inertia':>20}{'growth rate (s)':>20}"
+        )
+        for _el, order, _em, inertia, freq, growth in results:
+            print(
+                f"{l_to_match:8d}{order:8d}{freq:20.10f}{inertia:20.10e}{growth:20.10e}"
+            )
+            if (
+                check_match
+                and self.expected_freq > 0
+                and not okay
+                and order == order_to_match
+            ):
+                self.actual_freq = freq
+                okay = abs(self.actual_freq - self.expected_freq) < (
+                    self.expected_freq * 3e-2
+                )
+        return okay
+
+    def extras_check_model(self, state: dict[str, Any]) -> str:
+        """`extras_check_model` (`:148-180`): GYRE every 50 models."""
+        if float(state["x_ctrl"][0]) > 0.0:
+            if int(state["model_number"]) % 50 != 0:
+                return "keep_going"
+            print("get gyre frequency info")
+            self._get_gyre_frequency_info(state, False)
+        return "keep_going"
+
+    def extras_after_evolve(self, state: dict[str, Any]) -> None:
+        """`extras_after_evolve` (`:115-144`): final match against
+        `x_ctrl(1)`; `test_suite_after_evolve` is output only."""
+        if float(state["x_ctrl"][0]) > 0.0:
+            okay = self._get_gyre_frequency_info(state, True)
+            word = "got ok match" if okay else "ERROR: bad match"
+            print(
+                f"{word} for expected frequency"
+                f"{self.actual_freq:20.2f}{self.expected_freq:20.2f}"
+            )
+
+
 def match_astero_extras(norm_star: str, digest: Any) -> Any:
     """Match an astero case's extras from normalized Fortran source.
 
@@ -275,6 +388,14 @@ def match_astero_extras(norm_star: str, digest: Any) -> Any:
     routines = {
         m.group(2): digest(m.group(0)) for m in _ROUTINE_RE.finditer(norm_star)
     }
+    if all(
+        routines.get(name) == d for name, d in _ASTERO_GYRE_DIGESTS.items()
+    ) and all(
+        name in _ASTERO_GYRE_DIGESTS
+        or d in _STOCK_ROUTINE_DIGESTS.get(name, frozenset())
+        for name, d in routines.items()
+    ):
+        return AsteroGyreExtras()
     if (
         routines.get("set_constraint_value")
         != _SEARCH_SET_CONSTRAINT_VALUE_DIGEST

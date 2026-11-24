@@ -360,7 +360,8 @@ reason = "Depends on bundled ADIPLS (#171) and astero mode-matching driver (#162
 suite = "astero"
 case = "astero_gyre"
 issue = "#170"
-reason = "Depends on bundled GYRE (#170) and astero mode-matching driver (#162)."
+reason = "GYRE and the case's extras are ported; the star track leaves log_L/log_Teff/log_g track tolerances early on (first star-state difference: model 1, eps_nuc 1 ULP), so the GYRE modes match MESA to 1e-12 through model 350 and to 1e-4 after the mesh diverges near model 400."
+
 [[gaps]]
 suite = "astero"
 case = "example_astero"

@@ -20,6 +20,8 @@
 
 use flexmesa_const::{FOUR_THIRDS, PI, PI4, RSUN};
 
+use crate::model::StarModel;
+
 /// Errors of [`get_gyre_data`].
 #[derive(Debug, Clone, PartialEq)]
 pub enum GyreDataError {
@@ -525,4 +527,78 @@ pub fn get_gyre_data(
     let point_data: Vec<Vec<f64>> =
         (1..=nn).rev().map(|jj| pd[jj].to_vec()).collect();
     Ok((global_data, point_data))
+}
+
+impl<'a> GyreDataInput<'a> {
+    /// The view of a [`StarModel`] that `get_gyre_data` reads, with
+    /// `photosphere_r` from [`crate::report_utils::eval_photosphere_info`],
+    /// the routine that also supplies the `photosphere_r` history column.
+    ///
+    /// # Errors
+    ///
+    /// [`GyreDataError::Upstream`] if a model array is shorter than `nz`.
+    pub fn from_model(model: &'a StarModel) -> Result<Self, GyreDataError> {
+        let nz = model.nz;
+        let take = |v: &'a [f64]| -> Result<&'a [f64], GyreDataError> {
+            v.get(..nz)
+                .ok_or(GyreDataError::Upstream("model array shorter than nz"))
+        };
+        let c = &model.controls;
+        Ok(Self {
+            r: take(&model.r)?,
+            m: take(&model.m)?,
+            m_grav: take(&model.m_grav)?,
+            dm: take(&model.dm)?,
+            dq: take(&model.dq)?,
+            rmid: take(&model.rmid)?,
+            l: take(&model.lum)?,
+            peos: take(&model.peos)?,
+            rho: take(&model.rho)?,
+            t: take(&model.t)?,
+            mu: take(&model.mu)?,
+            brunt_n2: take(&model.brunt_n2)?,
+            grav: take(&model.grav)?,
+            cgrav: take(&model.cgrav)?,
+            gamma1: take(&model.gamma1)?,
+            grada: take(&model.grada)?,
+            chi_t: take(&model.chi_t)?,
+            chi_rho: take(&model.chi_rho)?,
+            grad_t: take(&model.gradt)?,
+            opacity: take(&model.opacity)?,
+            d_opacity_dlnt: take(&model.d_opacity_dlnt)?,
+            d_opacity_dlnd: take(&model.d_opacity_dlnd)?,
+            eps_nuc: take(&model.eps_nuc)?,
+            d_epsnuc_dlnt: take(&model.d_epsnuc_dlnt)?,
+            d_epsnuc_dlnd: take(&model.d_epsnuc_dlnd)?,
+            omega: take(&model.omega)?,
+            photosphere_r: crate::report_utils::eval_photosphere_info(model)
+                .r_rsun,
+            gyre_data_schema: c.gyre_data_schema,
+            rotation_flag: c.rotation_flag,
+            interpolate_rho_for_pulse_data: c.interpolate_rho_for_pulse_data,
+            add_double_points_to_pulse_data: c.add_double_points_to_pulse_data,
+            threshold_grad_mu_for_double_point: c
+                .threshold_grad_mu_for_double_point,
+            max_number_of_double_points: c.max_number_of_double_points,
+            calculate_brunt_n2: c.calculate_brunt_n2,
+        })
+    }
+}
+
+/// `star_get_pulse_data(id, 'GYRE', add_center_point, keep_surface_point,
+/// add_atmosphere, global_data, point_data, ierr)`
+/// (`get_pulse_data`, `star/private/pulse.f90:89-147`, `GYRE` branch) on a
+/// FlexMESA model.
+///
+/// # Errors
+///
+/// As [`GyreDataInput::from_model`] and [`get_gyre_data`].
+pub fn star_get_pulse_data_gyre(
+    model: &StarModel,
+    add_center_point: bool,
+    keep_surface_point: bool,
+    add_atmosphere: bool,
+) -> Result<(Vec<f64>, Vec<Vec<f64>>), GyreDataError> {
+    let input = GyreDataInput::from_model(model)?;
+    get_gyre_data(&input, add_center_point, keep_surface_point, add_atmosphere)
 }

@@ -30,3 +30,25 @@ Given MESA's captured star state, the port reproduces `global_data` and every po
 
 - 10 of 10 calls (15,309 points) on the full capture set;
 - the 2 committed calls (3,081 points) in the test.
+
+## FlexMESA's Own `astero_gyre` Run (Package G3c)
+
+`compare_astero_gyre_run.py` runs FlexMESA's `astero_gyre` with its ported extras (`tests/case_extras/astero_extras.py`, `AsteroGyreExtras`). At each GYRE call it compares two things with the reference run's `pulse_tap` captures:
+
+- the modes that `gyre_call_back` stores: `n_pg`, frequency, inertia and growth rate;
+- the GYRE input that FlexMESA's own model gives.
+
+```bash
+python benchmarks/fortran_mesa/gyre_pulse_data/compare_astero_gyre_run.py \
+    --case-dir "$MESA_DIR/astero/test_suite/astero_gyre" \
+    --histories /path/to/mesa_histories --work /path/to/scratch \
+    --out benchmarks/fortran_mesa/gyre_pulse_data/results/astero_gyre_flexmesa_vs_mesa.tsv
+```
+
+The committed result is in `results/astero_gyre_flexmesa_vs_mesa.tsv`. Through model 350:
+
+- FlexMESA's model has the same number of GYRE points as MESA's;
+- `r`, `P`, `T` and `rho` agree to 1e-12 relative;
+- every mode's frequency agrees to 2e-12 relative.
+
+After the meshes diverge near model 400 (point counts differ by 1 or 2), frequencies agree to 1e-4. None are bit-identical, because the star states are not: the first-divergence report (`flexmesa trace --compare`) finds the first difference at model 1, `eps_nuc` by 1 ULP in one zone. The final check passes, as in MESA: FlexMESA finds the `n_pg = 4` mode at 379.07 µHz, MESA at 379.05 µHz, and the target is 375 µHz within 3%.

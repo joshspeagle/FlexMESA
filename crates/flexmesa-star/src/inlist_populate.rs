@@ -416,11 +416,27 @@ impl InlistBundle {
             fixed_psurf, fixed_vsurf,
         ]);
         ctrl.try_usize_into("controls", &mut c.burn_steps_hard_limit, "burn_steps_hard_limit", 0)?;
+        ctrl.try_f64_into(
+            "controls",
+            &mut c.threshold_grad_mu_for_double_point,
+            "threshold_grad_mu_for_double_point",
+        )?;
+        for (dst, key) in [
+            (&mut c.max_number_of_double_points, "max_number_of_double_points"),
+            (&mut c.gyre_data_schema, "gyre_data_schema"),
+        ] {
+            let mut v = isize::try_from(*dst).unwrap_or(0);
+            ctrl.try_isize_into("controls", &mut v, key)?;
+            *dst = i32::try_from(v).map_err(|_| {
+                StarError::InvalidInput(format!("'&controls::{key}' out of range: {v}"))
+            })?;
+        }
         map_strs!("controls", ctrl, c, [
             zams_filename, cool_wind_rgb_scheme, cool_wind_agb_scheme, phase_separation_option,
         ]);
         map_bools!("controls", ctrl, c, [
             use_ledoux_criterion, calculate_brunt_b, calculate_brunt_n2, do_starspots,
+            add_double_points_to_pulse_data, interpolate_rho_for_pulse_data,
             op_split_burn, accrete_same_as_surface, set_rho_to_dm_div_dv,
             accrete_given_mass_fractions, do_element_diffusion, do_conv_premix,
             do_phase_separation, do_phase_separation_heating, use_other_cgrav,

@@ -1164,6 +1164,9 @@ pub struct PyStarExtrasAdapter {
     has_extra_profile_columns: bool,
     has_extra_history_header_items: bool,
     has_extra_profile_header_items: bool,
+    /// The extras object sets `wants_star_model = True`: every snapshot
+    /// then carries a `star_model` handle (a copy of the model).
+    wants_star_model: bool,
     state: Arc<PyAdapterState>,
 }
 
@@ -1202,6 +1205,8 @@ impl PyStarExtrasAdapter {
                 .hasattr("extra_history_header_items")?,
             has_extra_profile_header_items: b
                 .hasattr("extra_profile_header_items")?,
+            wants_star_model: b.hasattr("wants_star_model")?
+                && b.getattr("wants_star_model")?.is_truthy()?,
             py_obj: Arc::new(obj),
             state: Arc::new(PyAdapterState::default()),
         })
@@ -1213,6 +1218,24 @@ impl PyStarExtrasAdapter {
     /// Returns [`PyRuntimeError`] if any callback previously raised a Python exception.
     pub fn take_pending_py_err(&self) -> PyResult<()> {
         self.state.take_pending_py_err()
+    }
+
+    fn add_model_handle<'py>(
+        &self,
+        py: Python<'py>,
+        snap: Bound<'py, PyDict>,
+        model: &StarModel,
+    ) -> PyResult<Bound<'py, PyDict>> {
+        if self.wants_star_model {
+            snap.set_item(
+                "star_model",
+                Py::new(
+                    py,
+                    crate::astero_gyre_py::PyStarModelHandle::new(model),
+                )?,
+            )?;
+        }
+        Ok(snap)
     }
 
     fn call_directive_hook(
@@ -1230,7 +1253,9 @@ impl PyStarExtrasAdapter {
         }
         let case_dir = self.state.staged_dir_string();
         Python::attach(|py| {
-            let snap = match build_star_snapshot(py, model, &case_dir, false) {
+            let snap = match build_star_snapshot(py, model, &case_dir, false)
+                .and_then(|s| self.add_model_handle(py, s, model))
+            {
                 Ok(s) => s,
                 Err(e) => {
                     return ExtrasDirective::Error(format!(
@@ -1436,6 +1461,7 @@ impl StarExtras for PyStarExtrasAdapter {
         let case_dir = self.state.staged_dir_string();
         Python::attach(|py| {
             let snap = build_star_snapshot(py, model, &case_dir, true)
+                .and_then(|s| self.add_model_handle(py, s, model))
                 .map_err(|e| StarError::InvalidInput(format_py_err(py, &e)))?;
             self.py_obj
                 .bind(py)

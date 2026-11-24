@@ -91,7 +91,8 @@ fn test_extra_history_and_profile_headers_and_columns_format_roundtrip() {
     let row_eval = flexmesa_star::evaluate_star_history_row(
         &model,
         &default_star_history_specs(),
-    );
+    )
+    .expect("history row");
     hist_text.push_str(
         &flexmesa_star::format_star_history_data_line_with_extra(
             &row_eval,

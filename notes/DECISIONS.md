@@ -78,6 +78,7 @@ Scope and the `v0.1.0` definition are in [`SCOPE.md`](SCOPE.md). Work is tracked
 | 61 | The In-House Pulsation Scaffolding Is Removed Package by Package (`#170`, `#171`) | In force | below |
 | 62 | A Reference History That Skips Models Is Compared Only at Its Own Rows (`#459`) | In force | below |
 | 63 | FlexMESA Is Licensed Under `GPL-3.0-or-later` (`#470`) | In force | below |
+| 64 | Test-Side Star Extras Receive a Copy of the Live Model for Library Calls (`#170`) | In force | below |
 
 ## Pre-audit decisions still in force
 
@@ -847,3 +848,12 @@ The text of these four entries predates the audit of 2026-11-16. The decisions s
 - **Alternatives Rejected**:
   - *A separate, optional GPL crate for GYRE, with an LGPL core*: two licences in one project, and cases that need GYRE would require an extra.
   - *Asking GYRE's author for an LGPL grant*: makes the port depend on an outside reply.
+
+## DECISIONS #64: Test-Side Star Extras Receive a Copy of the Live Model for Library Calls (`#170`)
+
+- **Date**: 2026-11-24
+- **Decision**: A test-side extras object that needs the live star model, for example to call GYRE from `astero_gyre`'s `run_star_extras` as upstream does, sets `wants_star_model = True`. It then receives a copy of the model as a `StarModelHandle`, which Rust library entry points such as `AsteroGyre.get_modes` accept. `trace_astero_case` routes extras that define no `set_param` as star extras, so cases with `astero_just_call_my_extras_check_model` run their own extras.
+- **Why**: upstream's per-case extras call library routines (here `gyre_support`) on the current model. Library crates must contain no case logic (`CLAUDE.md`), so the cadence and the final check stay in `tests/case_extras/`, and the library is only called.
+- **Alternatives Rejected**:
+  - *Exposing more snapshot arrays and rebuilding the model in Python*: duplicates the model layout and risks a non-identical input to GYRE.
+  - *A directive round-trip asking Rust to call GYRE*: puts case cadence logic in the library.

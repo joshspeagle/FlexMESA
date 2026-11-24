@@ -267,6 +267,8 @@ fn star_plus_point_mass_model_100_binary_primitives_match_mesa_26_4_1() {
         // (`fr = 0.05`, `fr_limit = 1e-2`) limits step 100 via `b_Tlim_roche`.
         let ts_ctrl = BinaryTimestepControls {
             donor_time_step_yr: 7.406_842e4,
+            // `s_donor% dt` in seconds; used only for a negative max_timestep.
+            donor_dt_sec: 7.406_842e4 * flexmesa_const::SECYER,
             max_timestep_sec: 1.0e99,
             time_delta_coeff: 1.0,
             dt_softening_factor: 0.5,
@@ -296,7 +298,8 @@ fn star_plus_point_mass_model_100_binary_primitives_match_mesa_26_4_1() {
             fe_limit: 1.0e-2,
             fdm: 0.005,
         };
-        let (next_dt_sec, reason) = binary_pick_next_timestep(&ts_ctrl);
+        let (next_dt_sec, reason) =
+            binary_pick_next_timestep(&ts_ctrl).expect("binary timestep");
         assert_eq!(reason, B_TLIM_ROCHE);
         assert!(next_dt_sec > 0.0 && next_dt_sec.is_finite());
     });

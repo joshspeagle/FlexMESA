@@ -166,6 +166,11 @@ pub struct StarControls {
     pub calculate_brunt_b: bool,
     /// Whether to compute the Brunt-Väisälä frequency $N^2$ (`calculate_Brunt_N2`, `true` default).
     pub calculate_brunt_n2: bool,
+    /// Write stellar atmosphere above photosphere into pulsation files
+    /// (`add_atmosphere_to_pulse_data`, `.false.` default,
+    /// `star/defaults/controls.defaults:582`).
+    #[serde(default)]
+    pub add_atmosphere_to_pulse_data: bool,
     /// Add double points at composition jumps to pulsation data
     /// (`add_double_points_to_pulse_data`, `.false.` default,
     /// `star/defaults/controls.defaults:612`).

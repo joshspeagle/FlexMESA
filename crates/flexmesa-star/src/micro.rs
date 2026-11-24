@@ -961,6 +961,12 @@ pub(crate) fn do_eos_fix_pgas_range(
 /// Returns [`StarError::MicrophysicsError`] if EOS evaluation fails or yields
 /// non-physical thermodynamic derivatives in any zone.
 pub fn do_eos(model: &mut StarModel) -> Result<(), StarError> {
+    let report = model.controls.output.report_ierr;
+    let res = do_eos_inner(model);
+    crate::controls_output::report_result_ierr(report, res)
+}
+
+fn do_eos_inner(model: &mut StarModel) -> Result<(), StarError> {
     let nz = model.nz;
     let mut log_rho_zones = Vec::with_capacity(nz);
     let mut log_t_zones = Vec::with_capacity(nz);
@@ -1273,6 +1279,12 @@ pub fn fix_d_eos_dxa_partials(model: &mut StarModel) -> Result<(), StarError> {
 /// Returns [`StarError::InvalidInput`] if `use_other_neu` is active without a
 /// hook, or [`StarError::MicrophysicsError`] if `neu_get` fails.
 pub fn do_neu(model: &mut StarModel) -> Result<(), StarError> {
+    let report = model.controls.output.report_ierr;
+    let res = do_neu_inner(model);
+    crate::controls_output::report_result_ierr(report, res)
+}
+
+fn do_neu_inner(model: &mut StarModel) -> Result<(), StarError> {
     if model.controls.use_other_neu {
         return Err(StarError::InvalidInput(String::from(
             "use_other_neu = .true. requires an other_neu hook",
@@ -1361,14 +1373,47 @@ pub fn do_neu(model: &mut StarModel) -> Result<(), StarError> {
 /// Returns [`StarError::InvalidInput`] if `use_other_kap` is active without a
 /// hook, or [`StarError::MicrophysicsError`] if opacity evaluation fails.
 pub fn do_kap(model: &mut StarModel) -> Result<(), StarError> {
-    if model.nz > 0 {
-        eval_kap_for_range(model, 0, model.nz - 1)?;
-    } else if model.controls.use_other_kap {
-        return Err(StarError::InvalidInput(String::from(
-            "use_other_kap = .true. requires an other_kap hook",
-        )));
+    let report = model.controls.output.report_ierr;
+    let res = (|| {
+        if model.nz > 0 {
+            eval_kap_for_range(model, 0, model.nz - 1)?;
+        } else if model.controls.use_other_kap {
+            return Err(StarError::InvalidInput(String::from(
+                "use_other_kap = .true. requires an other_kap hook",
+            )));
+        }
+        get_tau(model);
+        check_tau_with_report_ierr(model)
+    })();
+    crate::controls_output::report_result_ierr(report, res)
+}
+
+/// Validates optical-depth increments against non-finite values, emitting
+/// upstream cell diagnostics when `report_ierr` is active
+/// (`get_dtau1` and `get_tau` in `star/private/star_utils.f90:846-902`).
+///
+/// # Errors
+/// Returns [`StarError::MicrophysicsError`] if any zone produces a non-finite
+/// `dtau` or `tau`.
+pub fn check_tau_with_report_ierr(model: &StarModel) -> Result<(), StarError> {
+    let nz = model.nz;
+    let report = model.controls.output.report_ierr;
+    for k in 0..nz {
+        let dtau = model.dm[k] * model.opacity[k]
+            / (FOUR_PI * model.rmid[k] * model.rmid[k]);
+        if is_bad(dtau) || is_bad(model.tau[k]) {
+            let zone1 = k + 1;
+            if report {
+                eprintln!(
+                    "get_tau error: dtau({zone1}) = {dtau:.16e}, dm = {:.16e}, opacity = {:.16e}, rmid = {:.16e}",
+                    model.dm[k], model.opacity[k], model.rmid[k]
+                );
+            }
+            return Err(StarError::MicrophysicsError(format!(
+                "get_tau failed at zone {k}: non-finite dtau ({dtau})"
+            )));
+        }
     }
-    get_tau(model);
     Ok(())
 }
 

@@ -514,12 +514,13 @@ pub fn export_pulse_by_format(
     format: &str,
     add_center_point: bool,
 ) -> Result<String, crate::StarError> {
+    let add_atm = model.controls.add_atmosphere_to_pulse_data;
     match format.trim().to_ascii_lowercase().as_str() {
-        "gyre" => export_gyre(model, add_center_point, false, false)
+        "gyre" => export_gyre(model, add_center_point, false, add_atm)
             .map_err(|e| crate::StarError::InvalidInput(e.to_string())),
-        "fgong" => export_fgong(model, add_center_point, false, false)
+        "fgong" => export_fgong(model, add_center_point, false, add_atm)
             .map_err(|e| crate::StarError::InvalidInput(e.to_string())),
-        "osc" => export_osc(model, add_center_point, false, false)
+        "osc" => export_osc(model, add_center_point, false, add_atm)
             .map_err(|e| crate::StarError::InvalidInput(e.to_string())),
         "gsm" => Ok(export_gsm(model, add_center_point)),
         "saio" => Ok(export_saio(model, true, false)),

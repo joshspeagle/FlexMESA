@@ -227,8 +227,13 @@ pub fn write_mod_string(model: &StarModel) -> Result<String, StarError> {
         writeln!(out).unwrap();
     }
 
+    let dt_next_to_write = if model.aux.step_hist.dt_next_unclipped > 0.0 {
+        model.aux.step_hist.dt_next_unclipped
+    } else {
+        model.dt_next
+    };
     let (m_old, dt_old, dt_next) =
-        (model.mstar_old, model.dt_old, model.dt_next);
+        (model.mstar_old, model.dt_old, dt_next_to_write);
     writeln!(out, "\n        previous model").unwrap();
     writeln!(out, "   previous n_shells      {nz:26}").unwrap();
     writeln!(out, "  previous mass (grams)   {m_old:26.16E}").unwrap();

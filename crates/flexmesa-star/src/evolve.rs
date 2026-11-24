@@ -720,13 +720,18 @@ pub fn star_evolve_step_part2(
     };
 
     if matches!(&attempt, Err(e) if !e.is_retriable()) {
+        let err = attempt.expect_err("matched non-retriable StarError above");
+        crate::controls_output::maybe_report_ierr(
+            model.controls.output.report_ierr,
+            &err,
+        );
         abandon_step(
             model,
             state.pre_remesh_model.take(),
             saved,
             state.dt_prev,
         )?;
-        return Err(attempt.expect_err("matched non-retriable StarError above"));
+        return Err(err);
     }
 
     if let Ok(rep) = attempt {
@@ -795,6 +800,10 @@ pub fn star_evolve_step_part2(
     let why_tlim_neg_x = model.why_tlim_neg_x;
     let why = describe_retry_cause(&attempt, force_outer_retry, None);
     let err = attempt.expect_err("handled Ok branch above");
+    crate::controls_output::maybe_report_ierr(
+        model.controls.output.report_ierr,
+        &err,
+    );
     if crate::step_trace::enabled(target_mod) {
         let mut jl = crate::step_trace::JsonLine::new("star_retry");
         jl.field_usize("model", target_mod);
@@ -996,6 +1005,7 @@ pub(crate) fn star_evolve_step_outcome_checked(
         model.aux.step_hist.time_old_sec = model.aux.rsp.time_old_sec;
         model.aux.step_hist.time_sec = model.aux.rsp.time_sec;
         model.dt_next = model.aux.rsp.rsp_dt;
+        model.aux.step_hist.dt_next_unclipped = model.dt_next;
         model.dt_old = model.dt;
         model.doing_first_model_of_run = false;
 
@@ -1643,10 +1653,14 @@ pub(crate) fn star_evolve_step_outcome_checked(
         // Fail immediately on non-retriable configuration, I/O, or termination
         // errors without burning retry budget or shrinking `dt`.
         if matches!(&attempt, Err(e) if !e.is_retriable()) {
-            abandon_step(model, pre_remesh_model.take(), saved, dt_prev)?;
-            return Err(
-                attempt.expect_err("matched non-retriable StarError above")
+            let err =
+                attempt.expect_err("matched non-retriable StarError above");
+            crate::controls_output::maybe_report_ierr(
+                model.controls.output.report_ierr,
+                &err,
             );
+            abandon_step(model, pre_remesh_model.take(), saved, dt_prev)?;
+            return Err(err);
         }
 
         // `prepare_to_retry` (`star/private/evolve.f90:2176-2277`):
@@ -1676,6 +1690,12 @@ pub(crate) fn star_evolve_step_outcome_checked(
 
         retries = next_retries;
         if hit_retry_limit {
+            if let Err(ref err) = attempt {
+                crate::controls_output::maybe_report_ierr(
+                    model.controls.output.report_ierr,
+                    err,
+                );
+            }
             abandon_step(model, pre_remesh_model.take(), saved, dt_prev)?;
             return Err(StarError::StepFailure(Box::new(
                 build_exhausted_step_failure(
@@ -1966,6 +1986,7 @@ fn finalize_accepted_step(
         model.aux.rsp.total_energy_old = rsp2_e_old;
         update_rsp2_cycle_stats(model, dt_try, &mut dt_next);
     }
+    model.aux.step_hist.dt_next_unclipped = dt_next;
     apply_max_age_to_dt_next(model, &mut dt_next);
     model.dt_next = dt_next;
     model.dt_old = dt_try;

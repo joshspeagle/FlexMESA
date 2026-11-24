@@ -252,6 +252,24 @@ pub struct MixWindControls {
     pub min_q_for_uniform_extra_heat: f64,
     /// Outer mass-fraction boundary for `inject_uniform_extra_heat` (`max_q_for_uniform_extra_heat`).
     pub max_q_for_uniform_extra_heat: f64,
+    /// Luminosity of targeted total-energy injection ($\mathrm{erg\,s^{-1}}$, `inject_extra_ergs_sec`, `0.0` default).
+    #[serde(default)]
+    pub inject_extra_ergs_sec: f64,
+    /// Inner mass base for targeted energy injection ($M_\odot$, `base_of_inject_extra_ergs_sec`, `0.0` default).
+    #[serde(default)]
+    pub base_of_inject_extra_ergs_sec: f64,
+    /// Target mass extent for targeted energy injection ($M_\odot$, `total_mass_for_inject_extra_ergs_sec`, `0.0` default).
+    #[serde(default)]
+    pub total_mass_for_inject_extra_ergs_sec: f64,
+    /// Start time for targeted energy injection ($\mathrm{s}$, `start_time_for_inject_extra_ergs_sec`, `-1d99` default).
+    #[serde(default = "default_neg_1e99")]
+    pub start_time_for_inject_extra_ergs_sec: f64,
+    /// Duration of targeted energy injection ($\mathrm{s}$, `duration_for_inject_extra_ergs_sec`, `-1.0` default).
+    #[serde(default = "default_neg_one")]
+    pub duration_for_inject_extra_ergs_sec: f64,
+    /// Target total model energy ($\mathrm{erg}$, `inject_until_reach_model_with_total_energy`, `1d99` default).
+    #[serde(default = "default_pos_1e99")]
+    pub inject_until_reach_model_with_total_energy: f64,
 
     // --- Adaptive Mesh Spacing & Split-Merge AMR (`controls.defaults:5756-6744`) ---
     /// Maximum allowed number of grid zones (`max_allowed_nz`, `8000` default; `<= 0` unlimited).
@@ -979,6 +997,12 @@ impl Default for MixWindControls {
             inject_uniform_extra_heat: 0.0,
             min_q_for_uniform_extra_heat: 0.0,
             max_q_for_uniform_extra_heat: 1.0,
+            inject_extra_ergs_sec: 0.0,
+            base_of_inject_extra_ergs_sec: 0.0,
+            total_mass_for_inject_extra_ergs_sec: 0.0,
+            start_time_for_inject_extra_ergs_sec: -1.0e99,
+            duration_for_inject_extra_ergs_sec: -1.0,
+            inject_until_reach_model_with_total_energy: 1.0e99,
             max_allowed_nz: 8000,
             remesh_max_allowed_logt: 1.0e99,
             mesh_pgas_div_p_exponent: 0.0,
@@ -1317,4 +1341,16 @@ const fn default_st_angsmt() -> f64 {
 
 const fn default_st_angsml() -> f64 {
     1.0e-3
+}
+
+const fn default_neg_one() -> f64 {
+    -1.0
+}
+
+const fn default_neg_1e99() -> f64 {
+    -1.0e99
+}
+
+const fn default_pos_1e99() -> f64 {
+    1.0e99
 }

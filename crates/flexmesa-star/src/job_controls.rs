@@ -870,6 +870,9 @@ pub struct StarJobControls {
     pub initial_number_retries: usize,
     /// Whether to set initial timestep (`set_initial_dt`).
     pub set_initial_dt: bool,
+    /// Whether to cap `dt_next` at `years_for_initial_dt`/`seconds_for_initial_dt` (`limit_initial_dt`, `.false.` default, `star/defaults/star_job.defaults:665`).
+    #[serde(default)]
+    pub limit_initial_dt: bool,
     /// Initial timestep in years (`years_for_initial_dt`).
     pub years_for_initial_dt: f64,
     /// Initial timestep in seconds (`seconds_for_initial_dt`).
@@ -1254,6 +1257,7 @@ impl Default for StarJobControls {
             set_initial_number_retries: true,
             initial_number_retries: 0,
             set_initial_dt: false,
+            limit_initial_dt: false,
             years_for_initial_dt: -1.0,
             seconds_for_initial_dt: -1.0,
             set_initial_cumulative_energy_error: false,

@@ -6,7 +6,9 @@
 //! `star/private/evolve.f90:605-665,1101-1373,1646-1681` and
 //! `star/private/star_utils.f90:2452-2612`.
 
+use flexmesa_const::{M_SUN, SECDAY, SECYER};
 use flexmesa_turb::MltOption;
+use flexmesa_utils::is_bad;
 
 use crate::cell_energy::{
     cell_rsp2_eturb, cell_specific_ke, cell_specific_pe,
@@ -242,6 +244,140 @@ pub fn apply_step_pre_physics(
     apply_step_pre_physics_with_extras(model, dt, &mut extras)
 }
 
+/// Populates `model.aux.extra_heat` from `extra_power_source`,
+/// `inject_uniform_extra_heat`, and targeted energy injection
+/// (`inject_until_reach_model_with_total_energy`, `base_of_inject_extra_ergs_sec`,
+/// `total_mass_for_inject_extra_ergs_sec`, `start_time_for_inject_extra_ergs_sec`,
+/// `duration_for_inject_extra_ergs_sec`), matching `check_for_extra_heat`
+/// (`star/private/evolve.f90:1645-1745`).
+///
+/// # Errors
+/// Returns [`StarError::MicrophysicsError`] if targeted energy injection yields
+/// non-finite specific heating (for example zero duration or empty mass region).
+pub fn apply_extra_heat_controls(
+    model: &mut StarModel,
+    dt: f64,
+) -> Result<(), StarError> {
+    let nz = model.nz;
+    if model.aux.extra_heat.len() != nz {
+        model.aux.extra_heat.resize(nz, 0.0);
+        model.aux.d_extra_heat_dlnd.resize(nz, 0.0);
+        model.aux.d_extra_heat_dlnt.resize(nz, 0.0);
+    }
+    let (extra_src, inject_heat, qmin_raw, qmax_raw) = {
+        let mw = &model.controls.mix_wind;
+        (
+            mw.extra_power_source,
+            mw.inject_uniform_extra_heat,
+            mw.min_q_for_uniform_extra_heat,
+            mw.max_q_for_uniform_extra_heat,
+        )
+    };
+    model.aux.extra_heat.fill(extra_src);
+    model.aux.d_extra_heat_dlnd.fill(0.0);
+    model.aux.d_extra_heat_dlnt.fill(0.0);
+
+    let qmin = qmin_raw.clamp(0.0, 1.0);
+    let qmax = qmax_raw.clamp(0.0, 1.0);
+    if inject_heat != 0.0 && qmax > qmin && nz > 0 {
+        let mut qp1 = 0.0_f64;
+        for k in (0..nz).rev() {
+            let q00 = model.q[k];
+            let q_top = q00.min(qmax);
+            let q_bot = qp1.max(qmin);
+            if q_top > q_bot {
+                model.aux.extra_heat[k] +=
+                    inject_heat * (q_top - q_bot) / model.dq[k].max(1.0e-30);
+            }
+            qp1 = q00;
+        }
+    }
+
+    let target_e = model
+        .controls
+        .mix_wind
+        .inject_until_reach_model_with_total_energy;
+    let total_mass_msun =
+        model.controls.mix_wind.total_mass_for_inject_extra_ergs_sec;
+    let mut e_init = model.aux.step_hist.total_energy_initial;
+    if !model.aux.step_hist.have_initial_energy_integrals {
+        e_init = model.aux.total_energy;
+    }
+    if target_e <= e_init || dt <= 0.0 || total_mass_msun <= 0.0 || nz == 0 {
+        return Ok(());
+    }
+
+    let start_time =
+        model.controls.mix_wind.start_time_for_inject_extra_ergs_sec;
+    if model.time_sec < start_time {
+        return Ok(());
+    }
+
+    let duration = model.controls.mix_wind.duration_for_inject_extra_ergs_sec;
+    let end_time = if duration > 0.0 {
+        start_time + duration
+    } else if let Some(max_sec) =
+        model.controls.max_age_in_seconds.filter(|&v| v > 0.0)
+    {
+        max_sec
+    } else if model.controls.ts_stop.max_age_in_days > 0.0 {
+        model.controls.ts_stop.max_age_in_days * SECDAY
+    } else {
+        model.controls.max_age * SECYER
+    };
+    if model.time_old_sec > end_time {
+        return Ok(());
+    }
+
+    let target_injection_ergs = target_e - e_init;
+    let target_injection_time = end_time - start_time;
+    let inject_ergs_sec = target_injection_ergs / target_injection_time;
+    model.controls.mix_wind.inject_extra_ergs_sec = inject_ergs_sec;
+
+    let left_to_inject = target_e - model.aux.step_hist.total_energy_old;
+    let base_msun = model.controls.mix_wind.base_of_inject_extra_ergs_sec;
+    let xmstar = model.xmstar.max(1.0e-30);
+    let qmin_inj = ((M_SUN * base_msun - model.m_center) / xmstar).max(0.0);
+    let qmax_inj = (qmin_inj + (M_SUN * total_mass_msun) / xmstar).min(1.0);
+    let qspan = qmax_inj - qmin_inj;
+    if qspan <= 0.0 {
+        return Err(StarError::MicrophysicsError(format!(
+            "check_for_extra_heat: empty injection mass range (qmin={qmin_inj}, qmax={qmax_inj})"
+        )));
+    }
+    let mut extra = inject_ergs_sec / (xmstar * qspan);
+    if model.time_sec > end_time || model.time_old_sec < start_time {
+        extra *= (model.time_sec.min(end_time)
+            - model.time_old_sec.max(start_time))
+            / dt;
+    }
+    if left_to_inject < extra * dt * xmstar * qspan {
+        extra = left_to_inject / (dt * xmstar * qspan);
+    }
+    if is_bad(extra) {
+        return Err(StarError::MicrophysicsError(format!(
+            "check_for_extra_heat: non-finite extra heat ({extra}) at model {}",
+            model.model_number
+        )));
+    }
+    let mut qp1 = 0.0_f64;
+    for k in (0..nz).rev() {
+        let q00 = model.q[k];
+        if qp1 >= qmin_inj && q00 <= qmax_inj {
+            model.aux.extra_heat[k] += extra;
+        } else {
+            let qtop = q00.min(qmax_inj);
+            let qbot = qp1.max(qmin_inj);
+            if qtop > qbot {
+                model.aux.extra_heat[k] +=
+                    extra * (qtop - qbot) / model.dq[k].max(1.0e-30);
+            }
+        }
+        qp1 = q00;
+    }
+    Ok(())
+}
+
 /// Runs pre-step operator-split physics hooks with custom
 /// [`crate::inlist_runner::StarExtras`] callbacks (`other_torque`, `other_torque_implicit`) forwarded into
 /// `do_solve_omega_mix_with_extras` when `premix_omega` is enabled
@@ -347,40 +483,7 @@ pub fn apply_step_pre_physics_with_extras(
         model.aux.eps_wd_sedimentation.fill(0.0);
     }
 
-    let (extra_src, inject_heat, qmin_raw, qmax_raw) = {
-        let mw = &model.controls.mix_wind;
-        (
-            mw.extra_power_source,
-            mw.inject_uniform_extra_heat,
-            mw.min_q_for_uniform_extra_heat,
-            mw.max_q_for_uniform_extra_heat,
-        )
-    };
-    if extra_src != 0.0 || inject_heat != 0.0 {
-        if model.aux.extra_heat.len() != nz {
-            model.aux.extra_heat.resize(nz, 0.0);
-            model.aux.d_extra_heat_dlnd.resize(nz, 0.0);
-            model.aux.d_extra_heat_dlnt.resize(nz, 0.0);
-        }
-        model.aux.extra_heat.fill(extra_src);
-        model.aux.d_extra_heat_dlnd.fill(0.0);
-        model.aux.d_extra_heat_dlnt.fill(0.0);
-        let qmin = qmin_raw.clamp(0.0, 1.0);
-        let qmax = qmax_raw.clamp(0.0, 1.0);
-        if inject_heat != 0.0 && qmax > qmin && nz > 0 {
-            let mut qp1 = 0.0_f64;
-            for k in (0..nz).rev() {
-                let q00 = model.q[k];
-                let q_top = q00.min(qmax);
-                let q_bot = qp1.max(qmin);
-                if q_top > q_bot {
-                    model.aux.extra_heat[k] += inject_heat * (q_top - q_bot)
-                        / model.dq[k].max(1.0e-30);
-                }
-                qp1 = q00;
-            }
-        }
-    }
+    apply_extra_heat_controls(model, dt)?;
 
     // `star/private/evolve.f90:648-655`: `do_solve_omega_mix` over half the
     // step, then `set_rotation_info(s, .false., ierr)` and

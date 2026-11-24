@@ -268,7 +268,7 @@ impl InlistBundle {
             load_saved_model, save_model_when_terminate, save_photo_when_terminate,
             save_pulse_data_when_terminate,
             auto_extend_net, set_initial_age, set_initial_model_number,
-            set_initial_number_retries, set_initial_dt,
+            set_initial_number_retries, set_initial_dt, limit_initial_dt,
             set_initial_cumulative_energy_error, set_cumulative_energy_error,
             set_uniform_initial_composition,
             relax_initial_to_xaccrete, set_initial_v_center, set_initial_l_center,
@@ -537,7 +537,8 @@ impl InlistBundle {
         ]);
         map_bools!("controls", ctrl, c, [
             use_ledoux_criterion, calculate_brunt_b, calculate_brunt_n2, do_starspots,
-            add_double_points_to_pulse_data, interpolate_rho_for_pulse_data,
+            add_atmosphere_to_pulse_data, add_double_points_to_pulse_data,
+            interpolate_rho_for_pulse_data,
             op_split_burn, accrete_same_as_surface, set_rho_to_dm_div_dv,
             accrete_given_mass_fractions, do_element_diffusion, do_conv_premix,
             do_phase_separation, do_phase_separation_heating, use_other_cgrav,
@@ -869,7 +870,14 @@ impl InlistBundle {
                 min_abs_u_div_cs_for_dt_div_min_dr_div_cs_limit,
                 min_abs_du_div_cs_for_dt_div_min_dr_div_cs_limit,
                 warn_when_large_rel_run_e_err,
+                warn_when_large_virial_thm_rel_err,
             ]
+        );
+        map_bools!(
+            "controls",
+            ctrl,
+            o,
+            [report_ierr, warn_rates_for_high_temp]
         );
         ctrl.try_usize_into(
             "controls",

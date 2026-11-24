@@ -59,6 +59,51 @@ pub fn build_rate_factors(
     Ok(factors)
 }
 
+/// Returns the first 0-based active zone and clipped $\log_{10} T$ that would
+/// trigger `warn_rates_for_high_temp` during [`do_net`]
+/// (`rates/private/rates_support.f90:90-93` and `star/private/struct_burn_mix.f90:784-796`).
+///
+/// Returns `None` when `warn_rates_for_high_temp` is `.false.` or while
+/// `doing_struct_burn_mix` suppresses high-temperature rate warnings.
+#[must_use]
+pub fn high_temp_rate_warning_zone(model: &StarModel) -> Option<(usize, f64)> {
+    if model.aux.doing_struct_burn_mix
+        || !model.controls.output.warn_rates_for_high_temp
+    {
+        return None;
+    }
+    let max_logt = model.controls.max_logt_for_net;
+    let max_abar = model.controls.max_abar_for_burning;
+    let doing_split =
+        model.aux.doing_struct_burn_mix && model.controls.op_split_burn;
+    let split_min_t = model.controls.op_split_burn_min_t;
+    let mut active_zones = 0..model.nz;
+    active_zones.find_map(|k| {
+        if doing_split {
+            let t_start_k = model
+                .ln_t_start
+                .get(k)
+                .copied()
+                .map_or(model.t[k], flexmesa_math::exp);
+            if t_start_k >= split_min_t {
+                return None;
+            }
+        }
+        if max_abar > 0.0 && model.abar[k] > max_abar {
+            return None;
+        }
+        let mut log_t = model.ln_t[k] / LN10;
+        if max_logt > 0.0 && log_t > max_logt {
+            log_t = max_logt;
+        }
+        if log_t >= flexmesa_net::MAX_SAFE_LOGT_FOR_RATES {
+            Some((k, log_t))
+        } else {
+            None
+        }
+    })
+}
+
 /// Evaluates the nuclear reaction network across all `nz` zones in parallel
 /// using thread-local `NetWorkState` workspaces (`do_net` in
 /// `star/private/net.f90:62-436`).
@@ -71,6 +116,24 @@ pub fn build_rate_factors(
 /// # Errors
 /// Returns [`StarError`] if `rate_factors` lookup or reaction evaluation fails.
 pub fn do_net(
+    model: &mut StarModel,
+    net_info: &NetGeneralInfo,
+    skip_jacobian: bool,
+) -> Result<(), StarError> {
+    if let Some((zone, log_t)) = high_temp_rate_warning_zone(model) {
+        eprintln!(
+            "WARNING: high temperature for rates (zone {}, logT = {:.6} >= {:.6}); rates have been truncated",
+            zone + 1,
+            log_t,
+            flexmesa_net::MAX_SAFE_LOGT_FOR_RATES
+        );
+    }
+    let report = model.controls.output.report_ierr;
+    let res = do_net_inner(model, net_info, skip_jacobian);
+    crate::controls_output::report_result_ierr(report, res)
+}
+
+fn do_net_inner(
     model: &mut StarModel,
     net_info: &NetGeneralInfo,
     skip_jacobian: bool,

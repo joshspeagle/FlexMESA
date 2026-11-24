@@ -140,6 +140,15 @@ pub struct StepHistoryScalars {
     /// (`star/job/run_star_support.f90:211-233`).
     #[serde(skip)]
     pub termination_code: Option<String>,
+    /// Unclipped next timestep $\Delta t_{\mathrm{next,unclipped}}$ in seconds
+    /// captured before `max_age` clipping (`dt_next_unclipped`, `init.f90:558`,
+    /// `evolve.f90:2055, 2077`, `write_model.f90:229`).
+    #[serde(default = "default_neg_one")]
+    pub dt_next_unclipped: f64,
+}
+
+const fn default_neg_one() -> f64 {
+    -1.0
 }
 
 impl Default for StepHistoryScalars {
@@ -208,6 +217,7 @@ impl Default for StepHistoryScalars {
             revised_max_yr_dt: 0.0,
             cumulative_extra_heating: 0.0,
             termination_code: None,
+            dt_next_unclipped: -1.0,
         }
     }
 }

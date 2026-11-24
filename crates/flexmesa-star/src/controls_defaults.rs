@@ -77,6 +77,7 @@ impl Default for StarControls {
             screening_mode: ScreeningMode::Chugunov,
             calculate_brunt_b: true,
             calculate_brunt_n2: true,
+            add_atmosphere_to_pulse_data: false,
             add_double_points_to_pulse_data: false,
             interpolate_rho_for_pulse_data: true,
             threshold_grad_mu_for_double_point: 10.0,

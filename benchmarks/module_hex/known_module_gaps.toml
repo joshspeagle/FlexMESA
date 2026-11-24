@@ -60,12 +60,12 @@ reason = "All 4 interior midpoint bicubic spline coefficients match at 0 ULP; re
 
 [[gaps]]
 module = "colors"
-status = "partial_0_ulp"
-issue = "#161"
-max_declared_ulp = 0
-min_zero_ulp_count = 10
-expect_nonzero_ulp = false
-reason = "All 10 tested Group 1 solar bolometric and UBVRIJM band values match at 0 ULP; remaining 224 grid/SED outputs await probe wiring."
+status = "nonzero_ulp"
+issue = "#198"
+max_declared_ulp = 1
+min_zero_ulp_count = 9
+expect_nonzero_ulp = true
+reason = "9/10 Group 1 solar outputs match at 0 ULP and J differs by 1 ULP from MESA glibc libm vs crlibm::log10_rn tracked in #198; all 234 TSV rows are verified in colors_hex_test.rs (226 at 0 ULP, 8 within 2 ULP under #198)."
 
 [[gaps]]
 module = "num"

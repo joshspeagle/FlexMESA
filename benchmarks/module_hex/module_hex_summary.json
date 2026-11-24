@@ -6,7 +6,7 @@
   "modules_with_executable_probes": 17,
   "modules_passing_0_ulp": 12,
   "total_values_checked": 305967,
-  "total_values_0_ulp": 305967,
+  "total_values_0_ulp": 305966,
   "modules": [
     {
       "module": "const",
@@ -120,13 +120,13 @@
     },
     {
       "module": "colors",
-      "status": "partial_0_ulp",
+      "status": "nonzero_ulp",
       "upstream_exact_values": 234,
       "expected_outputs": 234,
       "checked_values": 10,
-      "zero_ulp_values": 10,
-      "max_ulp": 0,
-      "issue": "#161",
+      "zero_ulp_values": 9,
+      "max_ulp": 1,
+      "issue": "#198",
       "notes": "Group 1 solar bolometric and UBVRIJM outputs."
     },
     {

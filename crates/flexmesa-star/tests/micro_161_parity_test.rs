@@ -571,6 +571,10 @@ fn test_check_pulse_atm_model1_z1_aux_and_surf_bc_probe() {
     with_numerics_mode(NumericsMode::Strict, || {
         set_basic_vars(&mut model).expect("set_basic_vars");
         model.r[0] = exp(model.ln_r[0]);
+        // `get_phot_info` (`star/private/star_utils.f90:1163-1206`) falls back
+        // to `(r_center, l_center)` when `nz = 1` and `tau_factor < 1.0`.
+        model.r_center = model.r[0];
+        model.l_center = model.lum[0];
         do_eos(&mut model).expect("do_eos");
         do_kap(&mut model).expect("do_kap");
         do_neu(&mut model).expect("do_neu");
@@ -592,9 +596,8 @@ fn test_check_pulse_atm_model1_z1_aux_and_surf_bc_probe() {
             cp: 0x41A3_88F3_BA64_F844,
         },
     );
-    // `eval_surf_bc` matches MESA on lnT_surf and Teff at 0 ULP; lnP_surf shows
-    // the 239-ULP shift from `hydro_brunt_surf.rs:512` passing `log(pgas)` vs
-    // MESA `atm_support.f90:1221` passing `log10(pgas) * ln10`.
+    // `eval_surf_bc` matches MESA on `lnT_surf`, `Teff`, and `lnP_surf` at
+    // 0 ULP via `atm_support.f90:1221` (`log10(pgas) * ln10`).
     assert_ulp0(
         "check_pulse_atm eval_surf_bc.lnT_surf",
         model.ln_t_surf_ad.val,
@@ -606,9 +609,9 @@ fn test_check_pulse_atm_model1_z1_aux_and_surf_bc_probe() {
         0x40B5_F066_5F78_3041,
     );
     assert_ulp0(
-        "check_pulse_atm eval_surf_bc.lnP_surf (log(pgas) path)",
+        "check_pulse_atm eval_surf_bc.lnP_surf",
         model.ln_peos_surf_ad.val,
-        0x4024_7529_4814_B3E7,
+        0x4024_7529_4814_B4D6,
     );
 
     // Pin 0-ULP `eval_t_tau_varying` 579-callback parity against MESA 26.4.1
@@ -770,12 +773,22 @@ fn test_check_pulse_atm_model1_z1_aux_and_surf_bc_probe() {
                 < 2.0e-11
         );
 
+        assert_eq!(
+            out_mesa_arg.ln_p.to_bits(),
+            model.ln_peos_surf_ad.val.to_bits(),
+            "eval_surf_bc lnP_surf must match MESA log10(pgas)*ln10 path at 0 ULP"
+        );
         let (out_log_arg, ncall_log) = run_atm_variant(false);
         assert_eq!(ncall_log, 579);
+        assert_ulp0(
+            "atm_t_tau_varying.ln_p_legacy_log",
+            out_log_arg.ln_p,
+            0x4024_7529_4814_B3E7,
+        );
         assert_eq!(
-            out_log_arg.ln_p.to_bits(),
-            model.ln_peos_surf_ad.val.to_bits(),
-            "eval_surf_bc lnP_surf mismatch explained solely by log(pgas) vs log10(pgas)*ln10"
+            ulp_distance(out_log_arg.ln_p, model.ln_peos_surf_ad.val),
+            239,
+            "legacy log(pgas) path shifts lnP_surf by exactly 239 ULP vs log10(pgas)*ln10"
         );
 
         // Call 1 exact (lnRho, lnT) kap_get parity = 0 ULP across (kap, dkr, dkt).

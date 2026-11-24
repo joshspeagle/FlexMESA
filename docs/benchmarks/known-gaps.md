@@ -161,7 +161,7 @@ Every Rust `#[ignore]` and Python `xfail`/`skip` marker in the repository is tra
 
 ## Level-2 Module Hex Reference Gaps (`benchmarks/module_hex/`)
 
-- **Checked vs MESA `26.4.1` `raw_bits_hex`**: `305,967` / `305,967` outputs at `0 ULP` across `17` probed modules (`12` modules complete at `0 ULP`; `348,321` total captured upstream values).
+- **Checked vs MESA `26.4.1` `raw_bits_hex`**: `305,966` / `305,967` outputs at `0 ULP` across `17` probed modules (`12` modules complete at `0 ULP`; `348,321` total captured upstream values).
 
 | Module | Status | Checked / Expected | 0 ULP | Max ULP | Issue | Notes |
 | :--- | :--- | ---: | ---: | ---: | :--- | :--- |
@@ -175,7 +175,7 @@ Every Rust `#[ignore]` and Python `xfail`/`skip` marker in the repository is tra
 | `interp_1d` | `partial_0_ulp` | 22 / 234 | 22 | 0 | [#365](https://github.com/joshspeagle/FlexMESA/issues/365) | test3 (interp_pm asc/desc) & test1 (interp_m3q asc/desc) values. |
 | `interp_2d` | `partial_0_ulp` | 4 / 104 | 4 | 0 | [#365](https://github.com/joshspeagle/FlexMESA/issues/365) | All 4 midpoint bicubic spline coefficients at 0 ULP. |
 | `chem` | `pass_0_ulp` | 1,102 / 1,102 | 1,102 | 0 | none | All 1,102 chem/test/src/test_chem.f90 outputs at 0 ULP (286 Lodders 2003 atom percents + 816 do_tests properties). |
-| `colors` | `partial_0_ulp` | 10 / 234 | 10 | 0 | [#161](https://github.com/joshspeagle/FlexMESA/issues/161) | Group 1 solar bolometric and UBVRIJM outputs. |
+| `colors` | `nonzero_ulp` | 10 / 234 | 9 | 1 | [#198](https://github.com/joshspeagle/FlexMESA/issues/198) | Group 1 solar bolometric and UBVRIJM outputs. |
 | `eos` | `pass_0_ulp` | 391 / 391 | 391 | 0 | none | All 391 eos/test outputs at 0 ULP (320 Do_One, 16 get_Rho_T, 40 test1_eosPT_for_ck, 15 do_test_eos_blend). |
 | `kap` | `pass_0_ulp` | 21 / 21 | 21 | 0 | none | All 21 gs98, CO-enhanced, and AESOPUS outputs at 0 ULP. |
 | `rates` | `pass_0_ulp` | 3,639 / 3,639 | 3,639 | 0 | none | 3,636/3,639 rates outputs at 0 ULP (all 2,763 raw rates, 12 screening, 845/846 weak, 4 Coulomb, 4 Suzuki/weaklib, pycno, r3, 4 rev_c1); 3 Fermi-Dirac ecapture within 29 ULP. |

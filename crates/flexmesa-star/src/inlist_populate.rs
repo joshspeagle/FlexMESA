@@ -510,6 +510,7 @@ impl InlistBundle {
             drag_coefficient, min_q_for_drag, mlt_pturb_factor, pvsc_cq,
             eps_grav_factor,
             velocity_q_upper_bound, velocity_tau_lower_bound, velocity_logt_lower_bound,
+            max_dt_yrs_for_velocity_logt_lower_bound,
             mix_factor, pextra_factor, fspot, xspot, min_kap_for_dprad_dm_eqn,
             fixed_psurf, fixed_vsurf,
         ]);
@@ -537,7 +538,8 @@ impl InlistBundle {
         ]);
         map_bools!("controls", ctrl, c, [
             use_ledoux_criterion, calculate_brunt_b, calculate_brunt_n2, do_starspots,
-            add_atmosphere_to_pulse_data, add_double_points_to_pulse_data,
+            add_atmosphere_to_pulse_data, write_pulse_data_with_profile,
+            add_center_point_to_pulse_data, add_double_points_to_pulse_data,
             interpolate_rho_for_pulse_data,
             op_split_burn, accrete_same_as_surface, set_rho_to_dm_div_dv,
             accrete_given_mass_fractions, do_element_diffusion, do_conv_premix,
@@ -871,6 +873,7 @@ impl InlistBundle {
                 min_abs_du_div_cs_for_dt_div_min_dr_div_cs_limit,
                 warn_when_large_rel_run_e_err,
                 warn_when_large_virial_thm_rel_err,
+                max_safe_logt_for_rates,
             ]
         );
         map_bools!(

@@ -96,7 +96,7 @@ pub fn high_temp_rate_warning_zone(model: &StarModel) -> Option<(usize, f64)> {
         if max_logt > 0.0 && log_t > max_logt {
             log_t = max_logt;
         }
-        if log_t >= flexmesa_net::MAX_SAFE_LOGT_FOR_RATES {
+        if log_t >= model.controls.output.max_safe_logt_for_rates {
             Some((k, log_t))
         } else {
             None
@@ -125,7 +125,7 @@ pub fn do_net(
             "WARNING: high temperature for rates (zone {}, logT = {:.6} >= {:.6}); rates have been truncated",
             zone + 1,
             log_t,
-            flexmesa_net::MAX_SAFE_LOGT_FOR_RATES
+            model.controls.output.max_safe_logt_for_rates
         );
     }
     let report = model.controls.output.report_ierr;

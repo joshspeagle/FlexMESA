@@ -106,6 +106,9 @@ pub struct OutputControls {
     /// Emit a terminal warning when non-split-burn rates reach `max_safe_logT_for_rates` (`warn_rates_for_high_temp`, `.true.` default, `controls.defaults:11604`).
     #[serde(default = "default_true")]
     pub warn_rates_for_high_temp: bool,
+    /// Maximum $\log_{10} T$ above which raw nuclear reaction rates are clamped (`max_safe_logT_for_rates`, `10d0` default, `controls.defaults:11605`).
+    #[serde(default = "default_max_safe_logt_for_rates")]
+    pub max_safe_logt_for_rates: f64,
 }
 
 impl Default for OutputControls {
@@ -159,12 +162,17 @@ impl Default for OutputControls {
             warn_when_large_virial_thm_rel_err: 1.0e-2,
             report_ierr: false,
             warn_rates_for_high_temp: true,
+            max_safe_logt_for_rates: 10.0,
         }
     }
 }
 
 const fn default_warn_when_large_virial_thm_rel_err() -> f64 {
     1.0e-2
+}
+
+const fn default_max_safe_logt_for_rates() -> f64 {
+    10.0
 }
 
 const fn default_true() -> bool {

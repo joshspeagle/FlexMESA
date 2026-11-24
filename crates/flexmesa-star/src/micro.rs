@@ -47,6 +47,7 @@ type NetCacheKey = (
     u64,
     bool,
     bool,
+    u64,
     Vec<(String, String)>,
 );
 static NET_CACHE: OnceLock<Mutex<HashMap<NetCacheKey, Arc<NetGeneralInfo>>>> =
@@ -132,6 +133,7 @@ pub fn get_or_load_net_with_fe56ec(
         1.0,
         false,
         false,
+        flexmesa_net::MAX_SAFE_LOGT_FOR_RATES,
         &[],
     )
 }
@@ -147,6 +149,7 @@ fn get_or_load_net_with_star_params(
     reaction_neuqs_factor: f64,
     use_3a_fl87: bool,
     use_suzuki_weak_rates: bool,
+    max_safe_logt_for_rates: f64,
     special_rate_files: &[(String, String)],
 ) -> Result<Arc<NetGeneralInfo>, StarError> {
     let canonical_dir = search_dir.map(canonical_dir_path);
@@ -160,6 +163,7 @@ fn get_or_load_net_with_star_params(
         reaction_neuqs_factor,
         use_3a_fl87,
         use_suzuki_weak_rates,
+        max_safe_logt_for_rates,
         special_rate_files,
     )
 }
@@ -175,6 +179,7 @@ fn get_or_load_net_with_canonical_dir(
     reaction_neuqs_factor: f64,
     use_3a_fl87: bool,
     use_suzuki_weak_rates: bool,
+    max_safe_logt_for_rates: f64,
     special_rate_files: &[(String, String)],
 ) -> Result<Arc<NetGeneralInfo>, StarError> {
     let key = net_name.trim();
@@ -188,6 +193,7 @@ fn get_or_load_net_with_canonical_dir(
         reaction_neuqs_factor.to_bits(),
         use_3a_fl87,
         use_suzuki_weak_rates,
+        max_safe_logt_for_rates.to_bits(),
         special_rate_files.to_vec(),
     );
     let cache = NET_CACHE.get_or_init(|| Mutex::new(HashMap::new()));
@@ -229,6 +235,7 @@ fn get_or_load_net_with_canonical_dir(
     loaded.reaction_neuqs_factor = reaction_neuqs_factor;
     loaded.use_3a_fl87 = use_3a_fl87;
     loaded.use_suzuki_weak_rates = use_suzuki_weak_rates;
+    loaded.max_safe_logt_for_rates = max_safe_logt_for_rates;
     let info = Arc::new(loaded);
     if let Ok(mut guard) = cache.lock() {
         guard.insert(cache_key, Arc::clone(&info));
@@ -275,6 +282,7 @@ pub fn resolve_model_net(
         c.reaction_neuqs_factor,
         j.use_3a_fl87,
         j.use_suzuki_weak_rates,
+        c.output.max_safe_logt_for_rates,
         &special_rate_files,
     )?;
     if net_info.num_isos != model.species {

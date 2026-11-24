@@ -1752,6 +1752,7 @@ impl ProfilesIndex {
                 ))
             })?;
         }
+        write_pulse_data_sidecar(model, &prof_path)?;
 
         self.entries.push(ProfilesIndexEntry {
             model_number: model.model_number,
@@ -1767,6 +1768,27 @@ impl ProfilesIndex {
         })?;
         Ok(prof_path)
     }
+}
+
+/// Writes `<profile_path>.<pulse_data_format>` alongside a saved profile when
+/// `write_pulse_data_with_profile` is enabled (`star/private/profile.f90:675-686`).
+fn write_pulse_data_sidecar(
+    model: &StarModel,
+    profile_path: &Path,
+) -> Result<(), StarError> {
+    if !model.controls.write_pulse_data_with_profile {
+        return Ok(());
+    }
+    let fmt = model.job.pulse_data_format.trim();
+    let text = crate::pulse_exporters::export_pulse_with_controls(model)?;
+    let pulse_path = PathBuf::from(format!("{}.{}", profile_path.display(), fmt));
+    fs::write(&pulse_path, text).map_err(|e| {
+        StarError::IoError(format!(
+            "failed to write pulsation data {}: {e}",
+            pulse_path.display()
+        ))
+    })?;
+    Ok(())
 }
 
 /// Caller-supplied extra log headers and columns for one converged step.
@@ -2250,6 +2272,7 @@ impl StarLogsWriter {
                     out_path.display()
                 ))
             })?;
+            write_pulse_data_sidecar(model, &out_path)?;
         }
         Ok(())
     }

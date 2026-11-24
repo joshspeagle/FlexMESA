@@ -8,31 +8,47 @@ use std::fs;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use flexmesa_const::{L_SUN, M_SUN, SECDAY, SECYER};
+use flexmesa_const::{LN10, L_SUN, M_SUN, SECDAY, SECYER};
+use flexmesa_net::{
+    NetError, NetGeneralInfo, MAX_SAFE_LOGT_FOR_RATES, RATTAB_THI,
+};
 use flexmesa_star::adjust_mesh_support::{
     get_gval_info, set_delta_gval_max_with_controls,
     OtherMeshDeltaCoeffFactorHandle, OtherMeshDeltaCoeffFactorHook,
 };
-use flexmesa_star::controls::{StarControls, StarError, StarJobControls};
+use flexmesa_star::controls::{
+    StarControls, StarError, StarJobControls, VarLayout,
+};
 use flexmesa_star::controls_output::OutputControls;
+use flexmesa_star::hydro_eqns::HenyeySystem;
+use flexmesa_star::hydro_momentum::do1_radius_eqn;
 use flexmesa_star::inlist::InlistBundle;
 use flexmesa_star::inlist_inventory::{
     CONTROLS_SUPPORTED, CONTROLS_UNUSED, STAR_JOB_SUPPORTED, STAR_JOB_UNUSED,
 };
 use flexmesa_star::inlist_runner::{
-    install_star_aux_hooks, virial_thm_rel_err_exceeds_warn_limit,
+    install_star_aux_hooks, run_inlist_stage_with_logs,
+    virial_thm_rel_err_exceeds_warn_limit, write_pulse_data_to_case_dir,
     DefaultStarExtras, StarExtras,
+};
+use flexmesa_star::mesa_profile::{
+    default_star_profile_specs, ProfilesIndex, StarLogsWriter,
 };
 use flexmesa_star::mesh_functions::{
     num_mesh_functions, set_mesh_function_data, OtherMeshFunctionColumn,
     OtherMeshFunctionsHandle, OtherMeshFunctionsHook,
 };
-use flexmesa_star::micro::check_tau_with_report_ierr;
+use flexmesa_star::micro::{
+    check_tau_with_report_ierr, do_net, resolve_model_net,
+};
 use flexmesa_star::micro_net::high_temp_rate_warning_zone;
 use flexmesa_star::model_io::{read_mod_str, write_mod_string};
 use flexmesa_star::photo_io::{load_photo_bytes, write_photo_bytes};
 use flexmesa_star::pulse::export_fgong;
-use flexmesa_star::pulse_exporters::export_pulse_by_format;
+use flexmesa_star::pulse::export_gyre;
+use flexmesa_star::pulse_exporters::{
+    export_pulse_by_format, export_pulse_with_controls,
+};
 use flexmesa_star::star_job_init::init_or_update_model_from_bundle;
 use flexmesa_star::{
     apply_step_pre_physics, load_zams_model,
@@ -592,7 +608,10 @@ fn test_147_report_ierr_and_warn_rates_for_high_temp_behavior() {
     assert_eq!(high_temp_rate_warning_zone(&model), None);
     model.aux.doing_struct_burn_mix = false;
 
-    model.controls.max_logt_for_net = 10.2;
+    model.controls.max_logt_for_net = 9.95;
+    assert_eq!(high_temp_rate_warning_zone(&model), None);
+    model.controls.max_logt_for_net = 11.0;
+    model.controls.output.max_safe_logt_for_rates = 10.2;
     assert_eq!(high_temp_rate_warning_zone(&model), None);
 
     let photo = write_photo_bytes(&model);
@@ -605,6 +624,8 @@ fn test_147_report_ierr_and_warn_rates_for_high_temp_behavior() {
 fn test_147_inventory_parity_and_excluded_keys_still_rejected() {
     for key in [
         "limit_initial_dt",
+        "save_pulse_data_filename",
+        "save_pulse_data_when_terminate",
         "set_initial_l_center",
         "set_initial_v_center",
     ] {
@@ -613,10 +634,13 @@ fn test_147_inventory_parity_and_excluded_keys_still_rejected() {
     }
     for key in [
         "add_atmosphere_to_pulse_data",
+        "add_center_point_to_pulse_data",
         "base_of_inject_extra_ergs_sec",
         "duration_for_inject_extra_ergs_sec",
         "inject_extra_ergs_sec",
         "inject_until_reach_model_with_total_energy",
+        "max_dt_yrs_for_velocity_logt_lower_bound",
+        "max_safe_logt_for_rates",
         "report_ierr",
         "start_time_for_inject_extra_ergs_sec",
         "total_mass_for_inject_extra_ergs_sec",
@@ -624,6 +648,7 @@ fn test_147_inventory_parity_and_excluded_keys_still_rejected() {
         "use_other_mesh_functions",
         "warn_rates_for_high_temp",
         "warn_when_large_virial_thm_rel_err",
+        "write_pulse_data_with_profile",
     ] {
         assert!(CONTROLS_SUPPORTED.contains(&key), "{key} missing");
         assert!(!CONTROLS_UNUSED.contains(&key), "{key} still in unused");
@@ -632,7 +657,8 @@ fn test_147_inventory_parity_and_excluded_keys_still_rejected() {
     // Keys outside our crate/file scope must remain strictly rejected.
     let tmp = TempCaseGuard::new("excluded");
     for (idx, body) in [
-        "&controls\n  max_safe_logT_for_rates = 10.5d0\n/\n",
+        "&star_job\n  mesa_dir = '../../..'\n/\n",
+        "&controls\n  atm_off_table_option = 'simple'\n/\n",
         "&star_job\n  electron_coulomb_corrections = 'Itoh2002'\n/\n",
         "&star_job\n  ion_coulomb_corrections = 'PCR2009'\n/\n",
         "&star_job\n  new_w_div_wc_flag = .true.\n/\n",
@@ -761,4 +787,310 @@ fn test_147_dt_next_unclipped_mod_save_and_init_fallback() {
         (fallback.dt_next - expected_fallback).abs()
             <= 1.0e-15 * expected_fallback
     );
+}
+
+fn eval_raw_rates_helper(
+    g: &NetGeneralInfo,
+    log_t: f64,
+) -> Result<(Vec<f64>, Vec<f64>), NetError> {
+    let n_rxn = g.num_reactions;
+    let mut r = vec![0.0; n_rxn];
+    let mut dr_dt = vec![0.0; n_rxn];
+    let mut dr_drho = vec![0.0; n_rxn];
+    let temp = flexmesa_math::exp(log_t * LN10);
+    g.eval_raw_rates_from_tables(
+        0.5,
+        log_t,
+        temp,
+        1.0e6,
+        &[],
+        &mut r,
+        &mut dr_dt,
+        &mut dr_drho,
+    )?;
+    Ok((r, dr_dt))
+}
+
+#[test]
+fn test_147_max_safe_logt_for_rates_clamping_and_net_behavior() {
+    assert_eq!(MAX_SAFE_LOGT_FOR_RATES, 10.0);
+    assert_eq!(OutputControls::default().max_safe_logt_for_rates, 10.0);
+
+    let tmp = TempCaseGuard::new("max_safe_logt");
+    let path = tmp.root.join("inlist_logt");
+    fs::write(
+        &path,
+        "&kap\n  Zbase = 0.02d0\n/\n\
+         &controls\n  initial_mass = 1.0d0\n  initial_z = 0.02d0\n  \
+         max_safe_logT_for_rates = 10.5d0\n/\n",
+    )
+    .expect("write logt inlist");
+    let bundle = InlistBundle::from_file(&path).expect("strict parse");
+    assert_eq!(bundle.controls.output.max_safe_logt_for_rates, 10.5);
+
+    let bad = tmp.root.join("inlist_bad_logt");
+    fs::write(&bad, "&controls\n  max_safe_logT_for_rates = 'nope'\n/\n")
+        .expect("write bad");
+    assert!(matches!(
+        InlistBundle::from_file(&bad),
+        Err(StarError::InvalidInput(_))
+    ));
+
+    // Verify `NetGeneralInfo::eval_raw_rates_from_tables` honors `max_safe_logt_for_rates`:
+    // at default `10.0`, `logT = 10.1` clamps to `10.0` with zero `d/dT`; at `10.5`,
+    // `logT = 10.1` evaluates unclipped (non-zero `d/dT`), while
+    // `logT = 10.4 > RATTAB_THI` fails loudly (`rates_support.f90:96-137`).
+    let g_def = NetGeneralInfo::from_name("basic.net").expect("basic.net");
+    assert_eq!(g_def.max_safe_logt_for_rates, 10.0);
+    let mut g_hi = g_def.clone();
+    g_hi.max_safe_logt_for_rates = 10.5;
+
+    let (r_at_10, dr_dt_10) =
+        eval_raw_rates_helper(&g_def, 10.0).expect("eval 10.0");
+    assert!(dr_dt_10.iter().all(|&v| v == 0.0));
+
+    let (r_clamped, dr_dt_clamped) =
+        eval_raw_rates_helper(&g_def, 10.1).expect("eval 10.1 clamped");
+    assert_eq!(r_clamped, r_at_10);
+    assert!(dr_dt_clamped.iter().all(|&v| v == 0.0));
+
+    let (r_unclipped, dr_dt_unclipped) =
+        eval_raw_rates_helper(&g_hi, 10.1).expect("eval 10.1 unclipped");
+    assert!(r_unclipped
+        .iter()
+        .zip(&r_at_10)
+        .any(|(&a, &b)| (a - b).abs() > 0.0));
+    assert!(dr_dt_unclipped.iter().any(|&v| v != 0.0));
+
+    const {
+        assert!(10.4 > RATTAB_THI);
+    }
+    assert!(matches!(
+        eval_raw_rates_helper(&g_hi, 10.4),
+        Err(NetError::IntegrationError(_))
+    ));
+
+    let temp_10_1 = flexmesa_math::exp(10.1 * LN10);
+
+    // Verify `resolve_model_net`, `do_net`, and `high_temp_rate_warning_zone`
+    // propagate `output.max_safe_logt_for_rates` cleanly end-to-end.
+    let mut model =
+        load_zams_model(bundle.controls.clone(), bundle.job.clone())
+            .expect("zams");
+    set_hydro_vars(&mut model, false, false).expect("set_hydro_vars");
+    model.controls.max_logt_for_net = 11.0;
+    model.ln_t[0] = 10.1 * LN10;
+    model.t[0] = temp_10_1;
+    model.controls.output.warn_rates_for_high_temp = true;
+    model.controls.output.max_safe_logt_for_rates = 10.5;
+    assert_eq!(high_temp_rate_warning_zone(&model), None);
+
+    let net_hi = resolve_model_net(&model).expect("resolve 10.5");
+    assert_eq!(net_hi.max_safe_logt_for_rates, 10.5);
+    do_net(&mut model, &net_hi, false).expect("do_net 10.5");
+    let eps_hi = model.eps_nuc[0];
+    let deps_dt_hi = model.d_epsnuc_dlnt[0];
+
+    model.controls.output.max_safe_logt_for_rates = 10.0;
+    let warn_hit = high_temp_rate_warning_zone(&model)
+        .expect("zone 0 at 10.1 warns under 10.0");
+    assert_eq!(warn_hit.0, 0);
+    let net_lo = resolve_model_net(&model).expect("resolve 10.0");
+    assert_eq!(net_lo.max_safe_logt_for_rates, 10.0);
+    do_net(&mut model, &net_lo, false).expect("do_net 10.0");
+    assert!((eps_hi - model.eps_nuc[0]).abs() > 0.0);
+    assert!((deps_dt_hi - model.d_epsnuc_dlnt[0]).abs() > 0.0);
+
+    let photo = write_photo_bytes(&model);
+    let reloaded = load_photo_bytes(&photo).expect("load photo");
+    assert_eq!(reloaded.controls.output.max_safe_logt_for_rates, 10.0);
+}
+
+#[test]
+fn test_147_max_dt_yrs_for_velocity_logt_lower_bound_behavior() {
+    assert_eq!(
+        StarControls::default().max_dt_yrs_for_velocity_logt_lower_bound,
+        1.0e99
+    );
+    let tmp = TempCaseGuard::new("vel_logt_dt");
+    let path = tmp.root.join("inlist_vel_dt");
+    fs::write(
+        &path,
+        "&star_job\n  change_v_flag = .true.\n  new_v_flag = .true.\n/\n\
+         &kap\n  Zbase = 0.02d0\n/\n\
+         &controls\n  initial_mass = 1.0d0\n  initial_z = 0.02d0\n  \
+         velocity_logT_lower_bound = 8.0d0\n  \
+         max_dt_yrs_for_velocity_logT_lower_bound = 0.1d0\n/\n",
+    )
+    .expect("write inlist");
+    let bundle = InlistBundle::from_file(&path).expect("strict parse");
+    assert_eq!(bundle.controls.velocity_logt_lower_bound, 8.0);
+    assert_eq!(
+        bundle.controls.max_dt_yrs_for_velocity_logt_lower_bound,
+        0.1
+    );
+
+    let bad = tmp.root.join("inlist_bad_vel_dt");
+    fs::write(
+        &bad,
+        "&controls\n  max_dt_yrs_for_velocity_logT_lower_bound = 'bad'\n/\n",
+    )
+    .expect("write bad");
+    assert!(matches!(
+        InlistBundle::from_file(&bad),
+        Err(StarError::InvalidInput(_))
+    ));
+
+    let mut extras = DefaultStarExtras;
+    let mut model = init_or_update_model_from_bundle(
+        &bundle,
+        Some(default_zams()),
+        &mut extras,
+    )
+    .expect("init v_flag model");
+    model.layout =
+        VarLayout::with_flags(model.species, true, false, false, false);
+    model.v[0] = 2.0e5;
+    model.v_start[0] = 2.0e5;
+    model.aux.dxh_lnr[0] = 0.0;
+    model.controls.velocity_q_upper_bound = 1.0e99;
+    model.controls.velocity_tau_lower_bound = -1.0e99;
+    let i_dlnr = model.layout.i_dlnr_dt.expect("i_dlnr_dt");
+    let nvar = model.layout.nvar(true);
+    let x_scale = vec![1.0; model.nz * nvar];
+
+    // 1. `dt = 0.05 yr < max_dt_yrs = 0.1 yr` -> `force_zero_v` enforces `v00 / csound_start`.
+    model.dt = 0.05 * SECYER;
+    let mut sys_small = HenyeySystem::new(model.nz, nvar, x_scale.clone());
+    do1_radius_eqn(&model, 0, &mut sys_small);
+    let expected_zero = model.v[0] / model.aux.csound_start[0];
+    assert!(
+        (sys_small.equ[i_dlnr] - expected_zero).abs() < 1.0e-12,
+        "got {:.12e} vs {expected_zero:.12e}",
+        sys_small.equ[i_dlnr]
+    );
+
+    // 2. `dt = 0.20 yr >= max_dt_yrs = 0.1 yr` -> normal radius-velocity equation.
+    model.dt = 0.20 * SECYER;
+    let mut sys_large = HenyeySystem::new(model.nz, nvar, x_scale);
+    do1_radius_eqn(&model, 0, &mut sys_large);
+    let r_start = flexmesa_math::exp(model.ln_r_start[0]);
+    let expected_normal = model.v[0] * model.dt / r_start
+        - flexmesa_math::expm1(model.aux.dxh_lnr[0]);
+    assert!(
+        (sys_large.equ[i_dlnr] - expected_normal).abs() < 1.0e-12,
+        "got {:.12e} vs {expected_normal:.12e}",
+        sys_large.equ[i_dlnr]
+    );
+    assert!((sys_large.equ[i_dlnr] - expected_zero).abs() > 1.0e-6);
+
+    let photo = write_photo_bytes(&model);
+    let reloaded = load_photo_bytes(&photo).expect("load photo");
+    assert_eq!(
+        reloaded.controls.max_dt_yrs_for_velocity_logt_lower_bound,
+        0.1
+    );
+}
+
+#[test]
+fn test_147_pulse_center_profile_sidecar_and_terminate_save() {
+    let def_c = StarControls::default();
+    let def_j = StarJobControls::default();
+    assert!(def_c.add_center_point_to_pulse_data);
+    assert!(!def_c.write_pulse_data_with_profile);
+    assert!(!def_j.save_pulse_data_when_terminate);
+    assert_eq!(def_j.save_pulse_data_filename, "undefined");
+
+    let tmp = TempCaseGuard::new("pulse_controls");
+    let inlist_path = tmp.root.join("inlist_pulse_full");
+    fs::write(
+        &inlist_path,
+        "&star_job\n  save_pulse_data_when_terminate = .true.\n  \
+         save_pulse_data_filename = 'term_pulse.gyre'\n  \
+         write_profile_when_terminate = .true.\n  \
+         filename_for_profile_when_terminate = 'LOGS/term_profile.data'\n/\n\
+         &kap\n  Zbase = 0.02d0\n/\n\
+         &controls\n  initial_mass = 1.0d0\n  initial_z = 0.02d0\n  \
+         max_model_number = 1\n  write_pulse_data_with_profile = .true.\n  \
+         add_center_point_to_pulse_data = .false.\n  \
+         pulse_data_format = 'GYRE'\n/\n",
+    )
+    .expect("write inlist");
+    let bundle = InlistBundle::from_file(&inlist_path).expect("strict parse");
+    assert!(bundle.job.save_pulse_data_when_terminate);
+    assert_eq!(bundle.job.save_pulse_data_filename, "term_pulse.gyre");
+    assert!(bundle.controls.write_pulse_data_with_profile);
+    assert!(!bundle.controls.add_center_point_to_pulse_data);
+
+    let mut model =
+        load_zams_model(bundle.controls.clone(), bundle.job.clone())
+            .expect("zams");
+    // 1. `add_center_point_to_pulse_data`: exact center-point omission vs direct `export_gyre`.
+    let no_center =
+        export_pulse_with_controls(&model).expect("gyre without center");
+    assert_eq!(
+        no_center,
+        export_gyre(&model, false, false, false).expect("direct no-center")
+    );
+    let with_center =
+        export_pulse_by_format(&model, "GYRE", true).expect("gyre with center");
+    let n_no = no_center.lines().count();
+    let n_with = with_center.lines().count();
+    assert_eq!(n_with, n_no + 1);
+
+    // 2. `ProfilesIndex::save_profile` writes `<prof>.<format>` sidecar when enabled.
+    let mut prof_idx = ProfilesIndex::default();
+    let log_dir = tmp.root.join("SIDE_LOGS");
+    let specs = default_star_profile_specs();
+    let prof_path = prof_idx
+        .save_profile(&model, &specs, &log_dir, 1)
+        .expect("save profile + sidecar");
+    let sidecar_path = format!("{}.GYRE", prof_path.display());
+    assert_eq!(
+        fs::read_to_string(&sidecar_path).expect("read sidecar"),
+        no_center
+    );
+
+    // 3. `save_pulse_data_when_terminate` + `write_profile_when_terminate` via `run_inlist_stage`.
+    let mut extras = DefaultStarExtras;
+    let mut logs =
+        StarLogsWriter::for_stage(&model, &tmp.root, &tmp.root, None, None)
+            .expect("logs writer");
+    let rep = run_inlist_stage_with_logs(
+        &mut model,
+        &bundle,
+        &mut extras,
+        None,
+        Some(&mut logs),
+    )
+    .unwrap_or_else(|e| panic!("unexpected error: {e}"));
+    let _ = rep;
+    let expected_term = export_pulse_with_controls(&model).expect("term pulse");
+    assert_eq!(
+        fs::read_to_string(tmp.root.join("term_pulse.gyre"))
+            .expect("term pulse file"),
+        expected_term
+    );
+    assert_eq!(
+        fs::read_to_string(tmp.root.join("LOGS/term_profile.data.GYRE"))
+            .expect("term profile sidecar"),
+        expected_term
+    );
+
+    // `write_pulse_data_to_case_dir` must reject `"undefined"` / empty filename loudly.
+    assert!(matches!(
+        write_pulse_data_to_case_dir(&model, &tmp.root, "undefined"),
+        Err(StarError::InvalidInput(_))
+    ));
+    assert!(matches!(
+        write_pulse_data_to_case_dir(&model, &tmp.root, ""),
+        Err(StarError::InvalidInput(_))
+    ));
+
+    let photo = write_photo_bytes(&model);
+    let reloaded = load_photo_bytes(&photo).expect("load photo");
+    assert!(reloaded.controls.write_pulse_data_with_profile);
+    assert!(!reloaded.controls.add_center_point_to_pulse_data);
+    assert!(reloaded.job.save_pulse_data_when_terminate);
+    assert_eq!(reloaded.job.save_pulse_data_filename, "term_pulse.gyre");
 }

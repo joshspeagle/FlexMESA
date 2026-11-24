@@ -539,6 +539,47 @@ fn write_mod_if_missing(
     Ok(())
 }
 
+/// Exports pulsation data for `model` into `case_dir.join(filename)` using
+/// `model.job.pulse_data_format`, `model.controls.add_center_point_to_pulse_data`,
+/// and `model.controls.add_atmosphere_to_pulse_data`
+/// (`star_export_pulse_data`, `star/job/run_star_support.f90:1283-1290`).
+///
+/// # Errors
+/// Returns [`StarError::InvalidInput`] if `filename` is empty or `"undefined"`,
+/// or if pulsation export fails; returns [`StarError::IoError`] if writing fails.
+pub fn write_pulse_data_to_case_dir(
+    model: &StarModel,
+    case_dir: &Path,
+    filename: &str,
+) -> Result<std::path::PathBuf, StarError> {
+    let trimmed = filename.trim();
+    if trimmed.is_empty() || trimmed.eq_ignore_ascii_case("undefined") {
+        return Err(StarError::InvalidInput(String::from(
+            "save_pulse_data_filename must be set to a valid filename when \
+             saving pulsation data",
+        )));
+    }
+    let out_path = case_dir.join(trimmed);
+    if let Some(parent) = out_path.parent() {
+        if !parent.as_os_str().is_empty() && !parent.exists() {
+            fs::create_dir_all(parent).map_err(|e| {
+                StarError::IoError(format!(
+                    "failed to create parent directory for {}: {e}",
+                    out_path.display()
+                ))
+            })?;
+        }
+    }
+    let text = crate::pulse_exporters::export_pulse_with_controls(model)?;
+    fs::write(&out_path, text).map_err(|e| {
+        StarError::IoError(format!(
+            "failed to write pulsation data {}: {e}",
+            out_path.display()
+        ))
+    })?;
+    Ok(out_path)
+}
+
 /// Telemetry and final state returned by a single `inlist` stage execution.
 #[derive(Debug, Clone)]
 pub struct StageRunReport {
@@ -1083,6 +1124,15 @@ fn run_inlist_stage_with_logs_inner(
     {
         let out_path = bundle.case_dir.join(&model.job.save_model_filename);
         write_mod_if_missing(model, &out_path)?;
+    }
+
+    // Termination pulsation data save (`star/job/run_star_support.f90:793-794,1283-1290`).
+    if !abnormal_termination && model.job.save_pulse_data_when_terminate {
+        let _ = write_pulse_data_to_case_dir(
+            model,
+            &bundle.case_dir,
+            &model.job.save_pulse_data_filename,
+        )?;
     }
 
     let final_history = history_rows.last().copied().unwrap_or(init_hr);

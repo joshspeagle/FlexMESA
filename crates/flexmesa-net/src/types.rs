@@ -36,8 +36,8 @@ pub const NRATTAB: usize = 10001;
 pub const RATTAB_TSTP: f64 = (RATTAB_THI - RATTAB_TLO) / ((NRATTAB - 1) as f64);
 
 /// Maximum $\log_{10} T$ above which raw reaction rates are clamped
-/// (`max_safe_logT_for_rates = 10.30102999d0` in `rates_def.f90`).
-pub const MAX_SAFE_LOGT_FOR_RATES: f64 = 10.301_029_99;
+/// (`max_safe_logT_for_rates = 10d0` in `rates/public/rates_def.f90:818`).
+pub const MAX_SAFE_LOGT_FOR_RATES: f64 = 10.0;
 
 /// Number of reactions in `approx21.net` (`116`).
 pub const APPROX21_NUM_REACTIONS: usize = 116;
@@ -234,6 +234,9 @@ pub struct NetGeneralInfo {
     pub use_3a_fl87: bool,
     /// Use Suzuki et al. (2016) `sd`-shell weak rates (`false` default).
     pub use_suzuki_weak_rates: bool,
+    /// Maximum $\log_{10} T$ above which raw reaction rates are clamped
+    /// (`max_safe_logT_for_rates`, `10.0` default; `rates_def.f90:818`).
+    pub max_safe_logt_for_rates: f64,
 }
 
 impl NetGeneralInfo {

@@ -585,6 +585,7 @@ impl NetGeneralInfo {
             reaction_neuqs_factor: 1.0,
             use_3a_fl87: false,
             use_suzuki_weak_rates: false,
+            max_safe_logt_for_rates: MAX_SAFE_LOGT_FOR_RATES,
         };
         init_screening_tables(&mut info);
         Ok(info)
@@ -604,8 +605,10 @@ impl NetGeneralInfo {
         rate_raw_dt: &mut [f64],
         rate_raw_drho: &mut [f64],
     ) -> Result<(), NetError> {
-        let logtemp = log_t_in.min(MAX_SAFE_LOGT_FOR_RATES);
-        if logtemp > RATTAB_THI {
+        let cap_logt = self.max_safe_logt_for_rates;
+        let clamped = log_t_in >= cap_logt;
+        let logtemp = if clamped { cap_logt } else { log_t_in };
+        if !logtemp.is_finite() || logtemp > RATTAB_THI {
             return Err(NetError::IntegrationError(format!(
                 "logT={logtemp} exceeds RATTAB_THI={RATTAB_THI}"
             )));
@@ -645,7 +648,7 @@ impl NetGeneralInfo {
             let r = poly * dtab;
             rate_raw[i] = r * fac;
             rate_raw_drho[i] = (r * ddtab / dtab) * fac;
-            rate_raw_dt[i] = if logtemp >= MAX_SAFE_LOGT_FOR_RATES {
+            rate_raw_dt[i] = if clamped {
                 0.0
             } else {
                 (dpoly * dtab / bt_ln10) * fac

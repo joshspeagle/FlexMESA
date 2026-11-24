@@ -5,8 +5,8 @@
 
 use flexmesa_const::{AMU, CLIGHT, CRAD, KERG, PI, QE};
 
-use crate::diffusion::eval_effective_kt;
 use crate::controls::StarError;
+use crate::diffusion::eval_effective_kt;
 use crate::model::StarModel;
 
 /// Critical Richardson number $\mathrm{Ri}_{\mathrm{crit}} = 1/4$ (`rotation_mix_info.f90`).
@@ -350,7 +350,14 @@ pub fn update_rotation_distortion_factors(model: &mut StarModel) {
     if nz == 0 {
         return;
     }
-    if model.aux.fp_rot.len() != nz || model.aux.d_fp_rot_dlnr.len() != nz {
+    if model.aux.w_div_wc.len() != nz
+        || model.aux.i_rot.len() != nz
+        || model.aux.d_i_rot_dlnr.len() != nz
+        || model.aux.fp_rot.len() != nz
+        || model.aux.d_fp_rot_dlnr.len() != nz
+        || model.aux.ft_rot.len() != nz
+        || model.aux.d_ft_rot_dlnr.len() != nz
+    {
         model.aux.resize(nz, model.species);
     }
     if !model.controls.rotation_flag {
@@ -364,6 +371,9 @@ pub fn update_rotation_distortion_factors(model: &mut StarModel) {
             model.aux.d_i_rot_dlnr[k] = 2.0 * ir;
         }
         return;
+    }
+    if model.j_rot.len() != nz {
+        model.j_rot.resize(nz, 0.0);
     }
     let max_w = model.controls.mix_wind.w_div_wcrit_max;
     let max_w2 = model.controls.mix_wind.w_div_wcrit_max2;
@@ -381,22 +391,13 @@ pub fn update_rotation_distortion_factors(model: &mut StarModel) {
             false,
         );
         crate::hydro_rotation::set1_i_rot(model, k, r_k);
-        let (fp_s, ft_s) =
-            crate::hydro_rotation::eval_fp_ft_single(model.aux.w_div_wc[k]);
-        if let Some(ref hook) = tidal {
-            let td = hook.0.eval_shell(k, r_k, om_k);
-            let f_sw = td.f_switch;
-            let f_1m = 1.0 - f_sw;
-            model.aux.fp_rot[k] = f_sw * td.fp + f_1m * fp_s;
-            model.aux.d_fp_rot_dlnr[k] = f_sw * td.d_fp_dlnr;
-            model.aux.ft_rot[k] = f_sw * td.ft + f_1m * ft_s;
-            model.aux.d_ft_rot_dlnr[k] = f_sw * td.d_ft_dlnr;
-        } else {
-            model.aux.fp_rot[k] = fp_s;
-            model.aux.d_fp_rot_dlnr[k] = 0.0;
-            model.aux.ft_rot[k] = ft_s;
-            model.aux.d_ft_rot_dlnr[k] = 0.0;
-        }
+        crate::hydro_rotation::apply_face_fp_ft(
+            model,
+            k,
+            r_k,
+            om_k,
+            tidal.as_ref(),
+        );
         model.j_rot[k] = model.aux.i_rot[k] * om_k;
     }
 }

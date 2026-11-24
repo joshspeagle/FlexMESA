@@ -258,6 +258,7 @@ def test_bundles_manifest_and_directory_resolution(
         "mesa_histories",
         "mesa_module_hex",
         "mesa_stepdumps",
+        "mesa_astero_tracks",
     }
     data_pkg_dir = pathlib.Path(fetch.__file__).resolve().parent
     for b in bundles:

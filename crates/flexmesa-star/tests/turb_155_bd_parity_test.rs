@@ -176,6 +176,10 @@ fn build_bd_k375_k376_model() -> StarModel {
     set_basic_vars(&mut model).expect("set_basic_vars");
     do_eos(&mut model).expect("eos");
     do_kap(&mut model).expect("kap");
+    // Pin exact MESA 26.4.1 kap_get 0-ULP parity on k=375 and k=376
+    // (face opacity = 0x40B35E41F74F29B7; Blouin conduction fixed in #464).
+    assert_eq!(model.opacity[0].to_bits(), 0x40B38299E83645D1);
+    assert_eq!(model.opacity[1].to_bits(), 0x40B33BAE2D9EC068);
     model
 }
 
@@ -286,6 +290,11 @@ fn test_k376_mlt_zeta_saturation_0_ulp_and_partials() {
         // sets D = 0.0 (even with alpha_semiconvection == 0), then
         // remove_small_d_limit resets gradT = gradr, vc = 0, D = 0, Gamma = 0.
         let mut model = build_bd_k375_k376_model();
+        // At Gamma ~ 1e14, Zeta = exp(3*log(Gamma) - log(B^3)) sits within
+        // 1 ULP of 1.0; pin Part 1's Zeta >= 1.0 face opacity (0x40B35E41F74F29B4)
+        // so set_mlt_vars deterministically exercises the turb_support.f90:398-430
+        // NoMixing -> unconditional set_semiconvection -> remove_small_d_limit path.
+        model.opacity.fill(f64::from_bits(0x40B35E41F74F29B4));
         set_mlt_vars(&mut model).expect("set_mlt_vars");
         assert_eq!(model.aux.mixing.mlt_mixing_type[1], MixingType::NoMixing);
         assert_eq!(model.gradt[1].to_bits(), 0x4242C4D856BA7448);
@@ -301,6 +310,9 @@ fn test_k376_mlt_zeta_saturation_0_ulp_and_partials() {
         // Part 3: Disabling remove_small_d_limit still yields mlt_d == 0.0
         // because set_semiconvection runs unconditionally and writes D = 0.
         let mut model_no_limit = build_bd_k375_k376_model();
+        model_no_limit
+            .opacity
+            .fill(f64::from_bits(0x40B35E41F74F29B4));
         model_no_limit.controls.mix_wind.remove_small_d_limit = -1.0;
         set_mlt_vars(&mut model_no_limit).expect("set_mlt_vars no limit");
         assert_eq!(

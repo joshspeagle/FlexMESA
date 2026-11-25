@@ -586,19 +586,43 @@ pub fn parse_astero_search_controls_with_options(
     Ok(ctrl)
 }
 
-fn parse_subscript_tokens(sub: &str) -> Result<Vec<Option<usize>>, StarError> {
+#[derive(Clone, Copy)]
+enum SubscriptDim {
+    All,
+    Single(usize),
+    Range(usize, usize),
+}
+
+fn parse_subscript_tokens(sub: &str) -> Result<Vec<SubscriptDim>, StarError> {
     let mut parts = Vec::new();
     for raw in sub.split(',') {
         let t = raw.trim();
         if t == ":" {
-            parts.push(None);
+            parts.push(SubscriptDim::All);
+        } else if let Some((lo_s, hi_s)) = t.split_once(':') {
+            let lo = lo_s.trim().parse::<usize>().map_err(|e| {
+                StarError::InvalidInput(format!(
+                    "invalid astero namelist subscript range '{sub}': {e}"
+                ))
+            })?;
+            let hi = hi_s.trim().parse::<usize>().map_err(|e| {
+                StarError::InvalidInput(format!(
+                    "invalid astero namelist subscript range '{sub}': {e}"
+                ))
+            })?;
+            if hi < lo {
+                return Err(StarError::InvalidInput(format!(
+                    "inverted astero namelist subscript range '{sub}'"
+                )));
+            }
+            parts.push(SubscriptDim::Range(lo, hi));
         } else {
             let idx = t.parse::<usize>().map_err(|e| {
                 StarError::InvalidInput(format!(
                     "invalid astero namelist subscript '{sub}': {e}"
                 ))
             })?;
-            parts.push(Some(idx));
+            parts.push(SubscriptDim::Single(idx));
         }
     }
     Ok(parts)
@@ -625,12 +649,19 @@ fn apply_include_assignment(
             Some(sub) => {
                 for slot in parse_subscript_tokens(sub)? {
                     match slot {
-                        None => c.read_extra_astero_search_inlist = [b; 5],
-                        Some(1..=5) => {
-                            let idx = slot.unwrap_or(1) - 1;
-                            c.read_extra_astero_search_inlist[idx] = b;
+                        SubscriptDim::All => {
+                            c.read_extra_astero_search_inlist = [b; 5];
                         }
-                        Some(idx) => {
+                        SubscriptDim::Single(idx) if (1..=5).contains(&idx) => {
+                            c.read_extra_astero_search_inlist[idx - 1] = b;
+                        }
+                        SubscriptDim::Range(lo, hi) if lo >= 1 && hi <= 5 => {
+                            for idx in lo..=hi {
+                                c.read_extra_astero_search_inlist[idx - 1] = b;
+                            }
+                        }
+                        SubscriptDim::Single(idx)
+                        | SubscriptDim::Range(idx, _) => {
                             return Err(StarError::InvalidInput(format!(
                                 "'&{sec}::{key}({idx})' index must be in 1..=5"
                             )));
@@ -648,15 +679,21 @@ fn apply_include_assignment(
             Some(sub) => {
                 for slot in parse_subscript_tokens(sub)? {
                     match slot {
-                        None => {
+                        SubscriptDim::All => {
                             c.extra_astero_search_inlist_name.fill(s.clone());
                         }
-                        Some(1..=5) => {
-                            let idx = slot.unwrap_or(1) - 1;
-                            c.extra_astero_search_inlist_name[idx]
+                        SubscriptDim::Single(idx) if (1..=5).contains(&idx) => {
+                            c.extra_astero_search_inlist_name[idx - 1]
                                 .clone_from(&s);
                         }
-                        Some(idx) => {
+                        SubscriptDim::Range(lo, hi) if lo >= 1 && hi <= 5 => {
+                            for idx in lo..=hi {
+                                c.extra_astero_search_inlist_name[idx - 1]
+                                    .clone_from(&s);
+                            }
+                        }
+                        SubscriptDim::Single(idx)
+                        | SubscriptDim::Range(idx, _) => {
                             return Err(StarError::InvalidInput(format!(
                                 "'&{sec}::{key}({idx})' index must be in 1..=5"
                             )));
@@ -1067,53 +1104,64 @@ fn apply_assignment(
 
 fn apply_indexed_assignment(
     key: &str,
-    dims: &[Option<usize>],
+    dims: &[SubscriptDim],
     a: &NamelistAssignment,
     c: &mut AsteroSearchControls,
 ) -> Result<(), StarError> {
     let sec = "astero_search_controls";
     if key == "nl" && dims.len() == 1 {
-        let Some(el) = dims[0] else {
-            let v = expect_i64(sec, a)?;
-            if v < 0 {
-                return Err(StarError::InvalidInput(format!(
-                    "negative '&{sec}::nl(:)' = {v}"
-                )));
-            }
-            c.nl = [v as usize; 4];
-            return Ok(());
-        };
-        if el >= 4 {
-            return Err(StarError::InvalidInput(format!(
-                "'&{sec}::nl({el})' degree must be in 0..=3"
-            )));
-        }
         let v = expect_i64(sec, a)?;
         if v < 0 {
             return Err(StarError::InvalidInput(format!(
-                "negative '&{sec}::nl({el})' = {v}"
+                "negative '&{sec}::{key}' = {v}"
             )));
         }
-        c.nl[el] = v as usize;
+        let u = v as usize;
+        match dims[0] {
+            SubscriptDim::All => {
+                c.nl = [u; 4];
+            }
+            SubscriptDim::Single(el) if el < 4 => {
+                c.nl[el] = u;
+            }
+            SubscriptDim::Range(lo, hi) if hi < 4 => {
+                for el in lo..=hi {
+                    c.nl[el] = u;
+                }
+            }
+            SubscriptDim::Single(el) | SubscriptDim::Range(_, el) => {
+                return Err(StarError::InvalidInput(format!(
+                    "'&{sec}::nl({el})' degree must be in 0..=3"
+                )));
+            }
+        }
         return Ok(());
     }
     if key == "iscan_factor" && dims.len() == 1 {
         let v = expect_f64(sec, a)?;
-        let Some(el) = dims[0] else {
-            c.iscan_factor = [v; 4];
-            return Ok(());
-        };
-        if el >= 4 {
-            return Err(StarError::InvalidInput(format!(
-                "'&{sec}::iscan_factor({el})' degree must be in 0..=3"
-            )));
+        match dims[0] {
+            SubscriptDim::All => {
+                c.iscan_factor = [v; 4];
+            }
+            SubscriptDim::Single(el) if el < 4 => {
+                c.iscan_factor[el] = v;
+            }
+            SubscriptDim::Range(lo, hi) if hi < 4 => {
+                for el in lo..=hi {
+                    c.iscan_factor[el] = v;
+                }
+            }
+            SubscriptDim::Single(el) | SubscriptDim::Range(_, el) => {
+                return Err(StarError::InvalidInput(format!(
+                    "'&{sec}::iscan_factor({el})' degree must be in 0..=3"
+                )));
+            }
         }
-        c.iscan_factor[el] = v;
         return Ok(());
     }
     if (key == "freq_target" || key == "freq_sigma") && dims.len() == 2 {
         let v = expect_f64(sec, a)?;
-        let Some(el) = dims[0] else {
+        let SubscriptDim::Single(el) = dims[0] else {
             return Err(StarError::InvalidInput(format!(
                 "unsupported degree wildcard on '&{sec}::{key}' at line {}",
                 a.line_number
@@ -1130,19 +1178,27 @@ fn apply_indexed_assignment(
             &mut c.freq_sigma[el]
         };
         match dims[1] {
-            None => {
+            SubscriptDim::All => {
                 vec.fill(v);
             }
-            Some(0) => {
+            SubscriptDim::Single(0) | SubscriptDim::Range(0, _) => {
                 return Err(StarError::InvalidInput(format!(
                     "'&{sec}::{key}({el},0)' mode index must be >= 1"
                 )));
             }
-            Some(pos) => {
+            SubscriptDim::Single(pos) => {
                 if vec.len() < pos {
                     vec.resize(pos, 0.0);
                 }
                 vec[pos - 1] = v;
+            }
+            SubscriptDim::Range(lo, hi) => {
+                if vec.len() < hi {
+                    vec.resize(hi, 0.0);
+                }
+                for pos in lo..=hi {
+                    vec[pos - 1] = v;
+                }
             }
         }
         return Ok(());
@@ -1150,31 +1206,40 @@ fn apply_indexed_assignment(
     if key == "l0_n_obs" && dims.len() == 1 {
         let v = expect_f64(sec, a)?;
         match dims[0] {
-            None => c.l0_n_obs.fill(v),
-            Some(0) => {
+            SubscriptDim::All => c.l0_n_obs.fill(v),
+            SubscriptDim::Single(0) | SubscriptDim::Range(0, _) => {
                 return Err(StarError::InvalidInput(format!(
                     "'&{sec}::l0_n_obs(0)' index must be >= 1"
                 )));
             }
-            Some(pos) => {
+            SubscriptDim::Single(pos) => {
                 if c.l0_n_obs.len() < pos {
                     c.l0_n_obs.resize(pos, -1.0);
                 }
                 c.l0_n_obs[pos - 1] = v;
+            }
+            SubscriptDim::Range(lo, hi) => {
+                if c.l0_n_obs.len() < hi {
+                    c.l0_n_obs.resize(hi, -1.0);
+                }
+                for pos in lo..=hi {
+                    c.l0_n_obs[pos - 1] = v;
+                }
             }
         }
         return Ok(());
     }
     if dims.len() == 1 {
         let slot_range: Vec<usize> = match dims[0] {
-            None => (0..10).collect(),
-            Some(0) => {
+            SubscriptDim::All => (0..10).collect(),
+            SubscriptDim::Single(0) | SubscriptDim::Range(0, _) => {
                 return Err(StarError::InvalidInput(format!(
                     "'&{sec}::{key}(0)' index must be >= 1"
                 )));
             }
-            Some(idx) if idx <= 10 => vec![idx - 1],
-            Some(idx) => {
+            SubscriptDim::Single(idx) if idx <= 10 => vec![idx - 1],
+            SubscriptDim::Range(lo, hi) if hi <= 10 => (lo - 1..hi).collect(),
+            SubscriptDim::Single(idx) | SubscriptDim::Range(_, idx) => {
                 return Err(StarError::InvalidInput(format!(
                     "'&{sec}::{key}({idx})' exceeds supported slot count (1..=10)"
                 )));
@@ -1352,15 +1417,48 @@ fn finalize_controls(c: &mut AsteroSearchControls) -> Result<(), StarError> {
         }
     }
     for l in 0..4 {
-        let n = c.nl[l]
-            .max(c.freq_target[l].len())
-            .max(c.freq_sigma[l].len());
-        c.freq_target[l].resize(n, 0.0);
-        c.freq_sigma[l].resize(n, 0.0);
-        let pos = c.freq_target[l].iter().take_while(|&&f| f > 0.0).count();
-        c.nl[l] = pos.max(c.nl[l]);
-        c.freq_target[l].truncate(c.nl[l]);
-        c.freq_sigma[l].truncate(c.nl[l]);
+        c.freq_target[l].resize(c.nl[l], 0.0);
+        c.freq_sigma[l].resize(c.nl[l], 0.0);
+        for i in 1..c.nl[l] {
+            if c.freq_target[l][i] <= c.freq_target[l][i - 1] {
+                return Err(StarError::InvalidInput(format!(
+                    "'&astero_search_controls::freq_target({l},{})' ({}) must exceed {} ({})",
+                    i + 1,
+                    c.freq_target[l][i],
+                    i,
+                    c.freq_target[l][i - 1]
+                )));
+            }
+        }
+    }
+    if c.delta_nu <= 0.0
+        && c.nl[0] > 1
+        && c.l0_n_obs.len() >= c.nl[0]
+        && c.l0_n_obs[0] > 0.0
+    {
+        let (mut sum_xy, mut sum_x, mut sum_y, mut sum_x2, mut sum_isig2) =
+            (0.0_f64, 0.0_f64, 0.0_f64, 0.0_f64, 0.0_f64);
+        for i in 0..c.nl[0] {
+            let sig = c.freq_sigma[0][i];
+            let x = c.l0_n_obs[i];
+            if sig <= 0.0 || x <= 0.0 {
+                continue;
+            }
+            let isig2 = 1.0 / (sig * sig);
+            let y = c.freq_target[0][i];
+            sum_xy += x * y * isig2;
+            sum_x += x * isig2;
+            sum_y += y * isig2;
+            sum_x2 += x * x * isig2;
+            sum_isig2 += isig2;
+        }
+        let d = sum_isig2 * sum_x2 - sum_x * sum_x;
+        if d > 0.0 {
+            c.delta_nu = (sum_isig2 * sum_xy - sum_x * sum_y) / d;
+            if c.delta_nu_sigma <= 0.0 {
+                c.delta_nu_sigma = (sum_isig2 / d).sqrt();
+            }
+        }
     }
     Ok(())
 }

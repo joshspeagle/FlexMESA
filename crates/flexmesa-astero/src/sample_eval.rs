@@ -8,7 +8,7 @@ use std::fs;
 use std::path::Path;
 use std::time::Instant;
 
-use flexmesa_const::RSUN;
+use flexmesa_const::{MSUN, RSUN};
 use flexmesa_star::controls::StarError;
 use flexmesa_star::eval_photosphere_info;
 use flexmesa_star::history::extract_history_row;
@@ -30,8 +30,8 @@ use crate::ratios_chi2::{
     interpolate_ratio_r010, interpolate_ratio_r02,
 };
 use crate::scaling::{
-    eval_acoustic_profile, eval_delta_nu_asymptotic,
-    eval_delta_nu_radius_scaling, eval_nu_max,
+    eval_acoustic_profile, eval_delta_nu_asymptotic, DELTA_NU_SUN, NU_MAX_SUN,
+    TEFF_SUN_ASTERO,
 };
 use crate::search_methods::{
     apply_surface_corr, eval_radial_chi2, SurfaceCorrOutput,
@@ -179,17 +179,28 @@ fn eval_spectro_obs(
 }
 
 fn eval_model_delta_nu_and_nu_max(model: &StarModel, teff: f64) -> (f64, f64) {
-    let r_phot_cm = model.surface_r_rsun().max(1.0e-30) * RSUN;
     let phot = eval_photosphere_info(model);
+    let r_phot_cm = phot.r_cm.max(1.0e-30);
     let o = &model.controls.output;
-    let delta_nu_uhz = if o.get_delta_nu_from_scaled_solar
-        && phot.l_lsun > 0.0
-        && o.astero_teff_sun > 0.0
-    {
-        let star_mass = (model.mstar / flexmesa_const::MSUN).max(0.0);
+    let teff_sun = if o.astero_teff_sun > 0.0 {
+        o.astero_teff_sun
+    } else {
+        TEFF_SUN_ASTERO
+    };
+    let nu_max_sun = if o.nu_max_sun > 0.0 {
+        o.nu_max_sun
+    } else {
+        NU_MAX_SUN
+    };
+    let delta_nu_sun = if o.delta_nu_sun > 0.0 {
         o.delta_nu_sun
-            * star_mass.sqrt()
-            * flexmesa_math::pow3(teff / o.astero_teff_sun)
+    } else {
+        DELTA_NU_SUN
+    };
+    let delta_nu_uhz = if o.get_delta_nu_from_scaled_solar && phot.l_lsun > 0.0
+    {
+        let star_mass = (model.mstar / MSUN).max(0.0);
+        delta_nu_sun * star_mass.sqrt() * flexmesa_math::pow3(teff / teff_sun)
             / flexmesa_math::pow(phot.l_lsun, 0.75)
     } else {
         let (_, _, tau_0) = eval_acoustic_profile(
@@ -201,10 +212,15 @@ fn eval_model_delta_nu_and_nu_max(model: &StarModel, teff: f64) -> (f64, f64) {
         if tau_0 > 0.0 {
             eval_delta_nu_asymptotic(tau_0)
         } else {
-            eval_delta_nu_radius_scaling(model.mstar, r_phot_cm)
+            let r_rsun = r_phot_cm / RSUN;
+            delta_nu_sun
+                * (model.mstar / MSUN).sqrt()
+                * flexmesa_math::pow(r_rsun, -1.5)
         }
     };
-    let nu_max_uhz = eval_nu_max(model.mstar, r_phot_cm, teff);
+    let r_rsun = r_phot_cm / RSUN;
+    let nu_max_uhz = nu_max_sun * (model.mstar / MSUN)
+        / (r_rsun * r_rsun * (teff.max(0.0) / teff_sun).sqrt());
     (delta_nu_uhz, nu_max_uhz)
 }
 
@@ -269,7 +285,11 @@ pub fn parse_gyre_outer_bound(
             continue;
         };
         if lhs.trim().eq_ignore_ascii_case("outer_bound") {
-            let val = rhs.trim().trim_matches(|c| c == '\'' || c == '"');
+            let val = rhs
+                .trim()
+                .trim_end_matches(',')
+                .trim()
+                .trim_matches(|c| c == '\'' || c == '"');
             return match val.to_ascii_uppercase().as_str() {
                 "VACUUM" | "ZERO_R" => Ok(OuterBoundKind::Vacuum),
                 "JCD" | "DZIEM" | "UNNO" | "ISOTHERMAL" => {
@@ -317,6 +337,23 @@ pub(crate) fn eval_model_astero_sample_with_output_root(
     case_dir: &Path,
     output_root: &Path,
 ) -> Result<AsteroSampleResult, StarError> {
+    let f_r010 = ctrl.weights.chi2_seismo_r_010_fraction.clamp(0.0, 1.0);
+    let f_r02 = ctrl.weights.chi2_seismo_r_02_fraction.clamp(0.0, 1.0);
+    let f_dnu = ctrl.weights.chi2_seismo_delta_nu_fraction.clamp(0.0, 1.0);
+    let f_numax = ctrl.weights.chi2_seismo_nu_max_fraction.clamp(0.0, 1.0);
+    let f_freq = ctrl
+        .weights
+        .chi2_seismo_freq_fraction
+        .unwrap_or(1.0 - (f_r010 + f_r02 + f_dnu + f_numax))
+        .clamp(0.0, 1.0);
+    if ctrl.weights.chi2_seismo_fraction > 0.0
+        && f_numax > 0.0
+        && (ctrl.nu_max <= 0.0 || ctrl.nu_max_sigma <= 0.0)
+    {
+        return Err(StarError::InvalidInput(String::from(
+            "chi2_seismo_nu_max_fraction > 0 requires positive nu_max and nu_max_sigma",
+        )));
+    }
     let (sp_obs, sp_sig, sp_mod, sp_names, teff, logg, log_l, log_r) =
         eval_spectro_obs(model, ctrl, constraint_values);
     let (mut delta_nu_uhz, nu_max_uhz) =
@@ -326,15 +363,16 @@ pub(crate) fn eval_model_astero_sample_with_output_root(
     } else {
         delta_nu_uhz
     };
-    let numax_obs = if ctrl.nu_max > 0.0 {
-        ctrl.nu_max
-    } else {
-        nu_max_uhz
-    };
+    let numax_obs = ctrl.nu_max;
     let model_nu_max_sun = if model.controls.output.nu_max_sun > 0.0 {
         model.controls.output.nu_max_sun
     } else {
-        ctrl.solar_nu_max
+        NU_MAX_SUN
+    };
+    let model_delta_nu_sun = if model.controls.output.delta_nu_sun > 0.0 {
+        model.controls.output.delta_nu_sun
+    } else {
+        DELTA_NU_SUN
     };
 
     let mut model_freqs: [Vec<f64>; 4] = Default::default();
@@ -354,6 +392,7 @@ pub(crate) fn eval_model_astero_sample_with_output_root(
     let mut mode_match_failed = false;
 
     let need_modes = ctrl.nl.iter().sum::<usize>() > 0
+        && (f_freq + f_r010 + f_r02) > 0.0
         && (ctrl.weights.chi2_seismo_fraction > 0.0 || sp_obs.is_empty());
     let mut pre_chi2_radial = 0.0_f64;
     if need_modes {
@@ -391,6 +430,7 @@ pub(crate) fn eval_model_astero_sample_with_output_root(
                         numax_obs,
                         nu_max_uhz,
                         model_nu_max_sun,
+                        model_delta_nu_sun,
                         &mut delta_nu_uhz,
                     )?;
                     (a_div_r, correction_r) = (sc0.a_div_r, sc0.correction_r);
@@ -457,6 +497,7 @@ pub(crate) fn eval_model_astero_sample_with_output_root(
                 numax_obs,
                 nu_max_uhz,
                 model_nu_max_sun,
+                model_delta_nu_sun,
                 &mut delta_nu_uhz,
             )?;
             (a_div_r, correction_r) = (sc_all.a_div_r, sc_all.correction_r);
@@ -481,6 +522,7 @@ pub(crate) fn eval_model_astero_sample_with_output_root(
                     numax_obs,
                     nu_max_uhz,
                     model_nu_max_sun,
+                    model_delta_nu_sun,
                 )?;
             }
             if ctrl.save_next_best_at_lower_frequency {
@@ -496,6 +538,7 @@ pub(crate) fn eval_model_astero_sample_with_output_root(
                     numax_obs,
                     nu_max_uhz,
                     model_nu_max_sun,
+                    model_delta_nu_sun,
                 )?;
             }
         } else if !mode_match_failed {
@@ -508,39 +551,170 @@ pub(crate) fn eval_model_astero_sample_with_output_root(
         }
     }
 
-    if !mode_match_failed
-        && ctrl.nl[0] > 0
-        && ctrl.nl[1] > 0
-        && ctrl.weights.chi2_seismo_r_010_fraction > 0.0
-    {
-        let obs_r = eval_frequency_ratios_with_trimming(
-            &ctrl.freq_target[0],
-            &ctrl.freq_sigma[0],
-            &ctrl.freq_target[1],
-            &ctrl.freq_sigma[1],
-            dnu_obs,
-            true,
-            0,
-            0,
-            0,
-        );
-        let mod_chk = eval_frequency_ratios_with_trimming(
-            &model_freqs_corr[0],
-            &ctrl.freq_sigma[0],
-            &model_freqs_corr[1],
-            &ctrl.freq_sigma[1],
-            dnu_obs,
-            true,
-            0,
-            0,
-            0,
-        );
-        if obs_r.n == 0
-            || mod_chk.n != obs_r.n
-            || mod_chk.l0_first != obs_r.l0_first
-            || mod_chk.l1_first != obs_r.l1_first
-        {
-            mode_match_failed = true;
+    let mut ratios_n = 0usize;
+    let mut ratios_l0_first = 0usize;
+    let mut ratios_l1_first = 0usize;
+    let (mut r010_obs, mut r010_sig, mut r010_mod) =
+        (Vec::new(), Vec::new(), Vec::new());
+    let (mut obs_r01, mut obs_r01_sigmas, mut model_r01) =
+        (Vec::new(), Vec::new(), Vec::new());
+    let (mut obs_r10, mut obs_r10_sigmas, mut model_r10) =
+        (Vec::new(), Vec::new(), Vec::new());
+    let (mut r02_obs_vec, mut r02_sig_vec, mut r02_mod_vec) =
+        (Vec::new(), Vec::new(), Vec::new());
+    let mut obs_r02 = vec![0.0_f64; ctrl.nl[0]];
+    let mut obs_r02_sigmas = vec![0.0_f64; ctrl.nl[0]];
+    let mut model_r02 = vec![0.0_f64; ctrl.nl[0]];
+
+    if need_modes && !mode_match_failed {
+        if (f_r010 > 0.0 || f_r02 > 0.0) && ctrl.nl[0] > 0 && ctrl.nl[1] > 0 {
+            let obs_r = eval_frequency_ratios_with_trimming(
+                &ctrl.freq_target[0],
+                &ctrl.freq_sigma[0],
+                &ctrl.freq_target[1],
+                &ctrl.freq_sigma[1],
+                dnu_obs,
+                true,
+                0,
+                0,
+                0,
+            );
+            ratios_n = obs_r.n;
+            ratios_l0_first = obs_r.l0_first;
+            ratios_l1_first = obs_r.l1_first;
+            if f_r010 > 0.0 {
+                let mod_chk = eval_frequency_ratios_with_trimming(
+                    &model_freqs_corr[0],
+                    &ctrl.freq_sigma[0],
+                    &model_freqs_corr[1],
+                    &ctrl.freq_sigma[1],
+                    dnu_obs,
+                    true,
+                    0,
+                    0,
+                    0,
+                );
+                if obs_r.n == 0
+                    || mod_chk.n != obs_r.n
+                    || mod_chk.l0_first != obs_r.l0_first
+                    || mod_chk.l1_first != obs_r.l1_first
+                {
+                    mode_match_failed = true;
+                } else {
+                    let mod_r = eval_frequency_ratios_with_trimming(
+                        &model_freqs_corr[0],
+                        &ctrl.freq_sigma[0],
+                        &model_freqs_corr[1],
+                        &ctrl.freq_sigma[1],
+                        dnu_obs,
+                        false,
+                        obs_r.n,
+                        obs_r.l0_first,
+                        obs_r.l1_first,
+                    );
+                    let l0_mod_axis = &model_freqs[0]
+                        [obs_r.l0_first + 1..=obs_r.l0_first + obs_r.n];
+                    let l1_mod_axis = &model_freqs[1]
+                        [obs_r.l1_first + 1..=obs_r.l1_first + obs_r.n];
+                    obs_r01.extend_from_slice(&obs_r.ratios_r01);
+                    obs_r01_sigmas.extend_from_slice(&obs_r.sigmas_r01);
+                    obs_r10.extend_from_slice(&obs_r.ratios_r10);
+                    obs_r10_sigmas.extend_from_slice(&obs_r.sigmas_r10);
+                    for k in 0..obs_r.n {
+                        let f0_obs =
+                            ctrl.freq_target[0][obs_r.l0_first + 1 + k];
+                        let f1_obs =
+                            ctrl.freq_target[1][obs_r.l1_first + 1 + k];
+                        let mr01 = interpolate_ratio_r010(
+                            f0_obs,
+                            l0_mod_axis,
+                            &mod_r.ratios_r01,
+                        );
+                        let mr10 = interpolate_ratio_r010(
+                            f1_obs,
+                            l1_mod_axis,
+                            &mod_r.ratios_r10,
+                        );
+                        if ctrl.trace_chi2_seismo_ratios_info {
+                            println!(
+                                "r01_obs={:.6} r01_mod={:.6} r10_obs={:.6} r10_mod={:.6}",
+                                obs_r.ratios_r01[k],
+                                mr01,
+                                obs_r.ratios_r10[k],
+                                mr10
+                            );
+                        }
+                        model_r01.push(mr01);
+                        model_r10.push(mr10);
+                        r010_obs.push(obs_r.ratios_r01[k]);
+                        r010_obs.push(obs_r.ratios_r10[k]);
+                        r010_sig.push(obs_r.sigmas_r01[k]);
+                        r010_sig.push(obs_r.sigmas_r10[k]);
+                        r010_mod.push(mr01);
+                        r010_mod.push(mr10);
+                    }
+                }
+            }
+        }
+        if !mode_match_failed && f_r02 > 0.0 && ctrl.nl[2] > 0 {
+            if ctrl.nl[0] == 0 || ctrl.nl[1] == 0 || ratios_n == 0 {
+                mode_match_failed = true;
+            } else {
+                let obs_r2 = eval_r02_obs_with_indices(
+                    &ctrl.freq_target[0],
+                    &ctrl.freq_sigma[0],
+                    &ctrl.freq_target[1],
+                    &ctrl.freq_sigma[1],
+                    &ctrl.freq_target[2],
+                    &ctrl.freq_sigma[2],
+                    ratios_n,
+                    ratios_l0_first,
+                    ratios_l1_first,
+                );
+                let (rm, _) = eval_r02_model_with_indices(
+                    &model_freqs_corr[0],
+                    &model_freqs_corr[1],
+                    &model_freqs_corr[2],
+                    ratios_l0_first,
+                    ratios_l1_first,
+                    &obs_r2,
+                );
+                let (_, fm) = eval_r02_model_with_indices(
+                    &model_freqs[0],
+                    &model_freqs_corr[1],
+                    &model_freqs_corr[2],
+                    ratios_l0_first,
+                    ratios_l1_first,
+                    &obs_r2,
+                );
+                for k in 0..obs_r2.ratios_r02.len() {
+                    let s = obs_r2.sigmas_r02[k];
+                    if s > 0.0 && !rm.is_empty() {
+                        let val_m = interpolate_ratio_r02(
+                            obs_r2.r02_freqs[k],
+                            &fm,
+                            &rm,
+                        );
+                        if ctrl.trace_chi2_seismo_ratios_info {
+                            println!(
+                                "r02_obs={:.6} r02_mod={:.6} sigma={:.6}",
+                                obs_r2.ratios_r02[k], val_m, s
+                            );
+                        }
+                        r02_obs_vec.push(obs_r2.ratios_r02[k]);
+                        r02_sig_vec.push(s);
+                        r02_mod_vec.push(val_m);
+                        if k < ctrl.nl[0] {
+                            obs_r02[k] = obs_r2.ratios_r02[k];
+                            obs_r02_sigmas[k] = s;
+                            model_r02[k] = val_m;
+                        }
+                    }
+                }
+                if r02_obs_vec.is_empty() {
+                    mode_match_failed = true;
+                }
+            }
         }
     }
 
@@ -639,138 +813,6 @@ pub(crate) fn eval_model_astero_sample_with_output_root(
                     all_obs.push(f_t);
                     all_sig.push(f_s);
                     all_corr.push(model_freqs_corr[l][i]);
-                }
-            }
-        }
-    }
-
-    let mut ratios_n = 0usize;
-    let mut ratios_l0_first = 0usize;
-    let mut ratios_l1_first = 0usize;
-    let (mut r010_obs, mut r010_sig, mut r010_mod) =
-        (Vec::new(), Vec::new(), Vec::new());
-    let (mut obs_r01, mut obs_r01_sigmas, mut model_r01) =
-        (Vec::new(), Vec::new(), Vec::new());
-    let (mut obs_r10, mut obs_r10_sigmas, mut model_r10) =
-        (Vec::new(), Vec::new(), Vec::new());
-    if (ctrl.weights.chi2_seismo_r_010_fraction > 0.0
-        || ctrl.weights.chi2_seismo_r_02_fraction > 0.0)
-        && ctrl.nl[0] > 0
-        && ctrl.nl[1] > 0
-    {
-        let obs_r = eval_frequency_ratios_with_trimming(
-            &ctrl.freq_target[0],
-            &ctrl.freq_sigma[0],
-            &ctrl.freq_target[1],
-            &ctrl.freq_sigma[1],
-            dnu_obs,
-            true,
-            0,
-            0,
-            0,
-        );
-        ratios_n = obs_r.n;
-        ratios_l0_first = obs_r.l0_first;
-        ratios_l1_first = obs_r.l1_first;
-        if obs_r.n > 0 && ctrl.weights.chi2_seismo_r_010_fraction > 0.0 {
-            let mod_r = eval_frequency_ratios_with_trimming(
-                &model_freqs_corr[0],
-                &ctrl.freq_sigma[0],
-                &model_freqs_corr[1],
-                &ctrl.freq_sigma[1],
-                dnu_obs,
-                false,
-                obs_r.n,
-                obs_r.l0_first,
-                obs_r.l1_first,
-            );
-            let l0_mod_axis =
-                &model_freqs[0][obs_r.l0_first + 1..=obs_r.l0_first + obs_r.n];
-            let l1_mod_axis =
-                &model_freqs[1][obs_r.l1_first + 1..=obs_r.l1_first + obs_r.n];
-            obs_r01.extend_from_slice(&obs_r.ratios_r01);
-            obs_r01_sigmas.extend_from_slice(&obs_r.sigmas_r01);
-            obs_r10.extend_from_slice(&obs_r.ratios_r10);
-            obs_r10_sigmas.extend_from_slice(&obs_r.sigmas_r10);
-            for k in 0..obs_r.n {
-                let f0_obs = ctrl.freq_target[0][obs_r.l0_first + 1 + k];
-                let f1_obs = ctrl.freq_target[1][obs_r.l1_first + 1 + k];
-                let mr01 = interpolate_ratio_r010(
-                    f0_obs,
-                    l0_mod_axis,
-                    &mod_r.ratios_r01,
-                );
-                let mr10 = interpolate_ratio_r010(
-                    f1_obs,
-                    l1_mod_axis,
-                    &mod_r.ratios_r10,
-                );
-                if ctrl.trace_chi2_seismo_ratios_info {
-                    println!(
-                        "r01_obs={:.6} r01_mod={:.6} r10_obs={:.6} r10_mod={:.6}",
-                        obs_r.ratios_r01[k], mr01, obs_r.ratios_r10[k], mr10
-                    );
-                }
-                model_r01.push(mr01);
-                model_r10.push(mr10);
-                r010_obs.push(obs_r.ratios_r01[k]);
-                r010_obs.push(obs_r.ratios_r10[k]);
-                r010_sig.push(obs_r.sigmas_r01[k]);
-                r010_sig.push(obs_r.sigmas_r10[k]);
-                r010_mod.push(mr01);
-                r010_mod.push(mr10);
-            }
-        }
-    }
-
-    let (mut r02_obs_vec, mut r02_sig_vec, mut r02_mod_vec) =
-        (Vec::new(), Vec::new(), Vec::new());
-    let mut obs_r02 = vec![0.0_f64; ctrl.nl[0]];
-    let mut obs_r02_sigmas = vec![0.0_f64; ctrl.nl[0]];
-    let mut model_r02 = vec![0.0_f64; ctrl.nl[0]];
-    if ctrl.weights.chi2_seismo_r_02_fraction > 0.0
-        && ctrl.nl[0] > 0
-        && ctrl.nl[1] > 0
-        && ctrl.nl[2] > 0
-        && ratios_n > 0
-    {
-        let obs_r2 = eval_r02_obs_with_indices(
-            &ctrl.freq_target[0],
-            &ctrl.freq_sigma[0],
-            &ctrl.freq_target[1],
-            &ctrl.freq_sigma[1],
-            &ctrl.freq_target[2],
-            &ctrl.freq_sigma[2],
-            ratios_n,
-            ratios_l0_first,
-            ratios_l1_first,
-        );
-        let (rm, fm) = eval_r02_model_with_indices(
-            &model_freqs_corr[0],
-            &model_freqs_corr[1],
-            &model_freqs_corr[2],
-            ratios_l0_first,
-            ratios_l1_first,
-            &obs_r2,
-        );
-        for k in 0..obs_r2.ratios_r02.len() {
-            let s = obs_r2.sigmas_r02[k];
-            if s > 0.0 && !rm.is_empty() {
-                let val_m =
-                    interpolate_ratio_r02(obs_r2.r02_freqs[k], &fm, &rm);
-                if ctrl.trace_chi2_seismo_ratios_info {
-                    println!(
-                        "r02_obs={:.6} r02_mod={:.6} sigma={:.6}",
-                        obs_r2.ratios_r02[k], val_m, s
-                    );
-                }
-                r02_obs_vec.push(obs_r2.ratios_r02[k]);
-                r02_sig_vec.push(s);
-                r02_mod_vec.push(val_m);
-                if k < ctrl.nl[0] {
-                    obs_r02[k] = obs_r2.ratios_r02[k];
-                    obs_r02_sigmas[k] = s;
-                    model_r02[k] = val_m;
                 }
             }
         }
@@ -891,6 +933,7 @@ fn eval_alt_surface_corr(
     numax_obs: f64,
     nu_max_uhz: f64,
     model_nu_max_sun: f64,
+    model_delta_nu_sun: f64,
 ) -> Result<[Vec<f64>; 4], StarError> {
     let mut alt_mod = Vec::new();
     let mut alt_in = Vec::new();
@@ -920,6 +963,7 @@ fn eval_alt_surface_corr(
         numax_obs,
         nu_max_uhz,
         model_nu_max_sun,
+        model_delta_nu_sun,
         &mut dnu_scratch,
     )?;
     let mut out: [Vec<f64>; 4] = Default::default();
@@ -1090,30 +1134,28 @@ impl DegreeScanner {
                 output_root,
             } => {
                 let el = i32::try_from(l).unwrap_or(0);
-                if !ctrl.gyre_non_ad {
-                    if let Some(drv) = gyre_driver.as_mut() {
-                        let store_now = !*stored_for_gyre;
-                        match drv.get_modes(model, el, store_now) {
-                            Ok(raw_modes) => {
-                                *stored_for_gyre = true;
-                                if ctrl.trace_time_in_oscillation_code {
-                                    if let Some(dt) =
-                                        drv.last_oscillation_elapsed_sec()
-                                    {
-                                        println!(
-                                            "gyre time_in_oscillation_code l={l} elapsed_s={dt:.6}"
-                                        );
-                                    }
+                if let Some(drv) = gyre_driver.as_mut() {
+                    let store_now = !*stored_for_gyre;
+                    match drv.get_modes(model, el, store_now) {
+                        Ok(raw_modes) => {
+                            *stored_for_gyre = true;
+                            if ctrl.trace_time_in_oscillation_code {
+                                if let Some(dt) =
+                                    drv.last_oscillation_elapsed_sec()
+                                {
+                                    println!(
+                                        "gyre time_in_oscillation_code l={l} elapsed_s={dt:.6}"
+                                    );
                                 }
-                                return Ok(match_osc_results_with_alt(
-                                    &ctrl.freq_target[l],
-                                    &raw_modes,
-                                    l,
-                                ));
                             }
-                            Err(e) if e.to_string().contains("not ported") => {}
-                            Err(e) => return Err(e),
+                            return Ok(match_osc_results_with_alt(
+                                &ctrl.freq_target[l],
+                                &raw_modes,
+                                l,
+                            ));
                         }
+                        Err(e) if e.to_string().contains("not ported") => {}
+                        Err(e) => return Err(e),
                     }
                 }
                 let t0 = Instant::now();
@@ -1298,6 +1340,10 @@ fn match_osc_results_with_alt(
     modes: &[OscResult],
     l: usize,
 ) -> Option<MatchedDegreeWithAlt> {
+    let mut order: Vec<usize> = (0..modes.len()).collect();
+    order.sort_by(|&a, &b| {
+        modes[a].cyclic_freq.total_cmp(&modes[b].cyclic_freq)
+    });
     let mut out = MatchedDegreeWithAlt {
         freqs: Vec::with_capacity(targets.len()),
         inertias: Vec::with_capacity(targets.len()),
@@ -1313,12 +1359,13 @@ fn match_osc_results_with_alt(
 
     for (idx, &target_nu) in targets.iter().enumerate() {
         let start = jprev.map_or(0, |jp| jp + 1);
-        if start >= modes.len() {
+        if start >= order.len() {
             return None;
         }
         let mut best_j = start;
-        let mut best_d = (modes[start].cyclic_freq - target_nu).abs();
-        for (j, m) in modes.iter().enumerate().skip(start) {
+        let mut best_d = (modes[order[start]].cyclic_freq - target_nu).abs();
+        for (j, &m_idx) in order.iter().enumerate().skip(start) {
+            let m = &modes[m_idx];
             let d = (m.cyclic_freq - target_nu).abs();
             if d < best_d {
                 best_d = d;
@@ -1328,20 +1375,20 @@ fn match_osc_results_with_alt(
                 break;
             }
         }
-        out.freqs.push(modes[best_j].cyclic_freq);
-        out.inertias.push(modes[best_j].inertia.max(1.0e-30));
-        out.orders
-            .push(isize::try_from(modes[best_j].order).unwrap_or(0));
+        let chosen = &modes[order[best_j]];
+        out.freqs.push(chosen.cyclic_freq);
+        out.inertias.push(chosen.inertia.max(1.0e-30));
+        out.orders.push(isize::try_from(chosen.order).unwrap_or(0));
         if l > 0 {
             if best_j > 0 {
-                let md = &modes[best_j - 1];
+                let md = &modes[order[best_j - 1]];
                 out.freqs_alt_down[idx] = md.cyclic_freq;
                 out.inertias_alt_down[idx] = md.inertia.max(1.0e-30);
                 out.orders_alt_down[idx] =
                     isize::try_from(md.order).unwrap_or(0);
             }
-            if best_j + 1 < modes.len() {
-                let mu = &modes[best_j + 1];
+            if best_j + 1 < order.len() {
+                let mu = &modes[order[best_j + 1]];
                 out.freqs_alt_up[idx] = mu.cyclic_freq;
                 out.inertias_alt_up[idx] = mu.inertia.max(1.0e-30);
                 out.orders_alt_up[idx] = isize::try_from(mu.order).unwrap_or(0);

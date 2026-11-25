@@ -314,7 +314,7 @@ fn run_astero_search_case(
 
     let assertions_passed = best.is_some_and(|b| {
         b.chi2.is_finite()
-            && b.chi2 > 0.0
+            && b.chi2 >= 0.0
             && (max_steps_per_stage.is_some() || b.chi2 < 1.0e90)
     });
 

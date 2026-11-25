@@ -36,6 +36,148 @@ pub enum RnStage {
     },
 }
 
+#[derive(Clone, Copy)]
+enum ShellQuote {
+    None,
+    Single,
+    Double,
+}
+
+#[derive(Clone, Copy)]
+struct IfFrame {
+    parent_active: bool,
+    any_taken: bool,
+    current_active: Option<bool>,
+}
+
+impl IfFrame {
+    fn is_active(self) -> bool {
+        self.parent_active && self.current_active.unwrap_or(true)
+    }
+}
+
+fn join_continued_lines(text: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut cur = String::new();
+    for raw in text.lines() {
+        let line = raw.strip_suffix('\r').unwrap_or(raw);
+        if let Some(prefix) = line.strip_suffix('\\') {
+            cur.push_str(prefix);
+        } else {
+            cur.push_str(line);
+            out.push(std::mem::take(&mut cur));
+        }
+    }
+    if !cur.is_empty() {
+        out.push(cur);
+    }
+    out
+}
+
+fn split_shell_statements(line: &str) -> Vec<Vec<String>> {
+    let mut stmts: Vec<Vec<String>> = Vec::new();
+    let mut toks: Vec<String> = Vec::new();
+    let mut cur = String::new();
+    let mut has_tok = false;
+    let mut quote = ShellQuote::None;
+    let mut escaped = false;
+    let mut chars = line.chars().peekable();
+
+    while let Some(ch) = chars.next() {
+        if escaped {
+            cur.push(ch);
+            has_tok = true;
+            escaped = false;
+            continue;
+        }
+        match quote {
+            ShellQuote::Single => {
+                if ch == '\'' {
+                    quote = ShellQuote::None;
+                } else {
+                    cur.push(ch);
+                }
+                has_tok = true;
+            }
+            ShellQuote::Double => {
+                if ch == '\\' {
+                    if matches!(chars.peek(), Some('"' | '\\' | '$')) {
+                        escaped = true;
+                    } else {
+                        cur.push(ch);
+                    }
+                } else if ch == '"' {
+                    quote = ShellQuote::None;
+                } else {
+                    cur.push(ch);
+                }
+                has_tok = true;
+            }
+            ShellQuote::None => match ch {
+                '#' if !has_tok => break,
+                ';' => {
+                    if has_tok {
+                        toks.push(std::mem::take(&mut cur));
+                        has_tok = false;
+                    }
+                    if !toks.is_empty() {
+                        stmts.push(std::mem::take(&mut toks));
+                    }
+                }
+                '\\' => {
+                    escaped = true;
+                    has_tok = true;
+                }
+                '\'' => {
+                    quote = ShellQuote::Single;
+                    has_tok = true;
+                }
+                '"' => {
+                    quote = ShellQuote::Double;
+                    has_tok = true;
+                }
+                c if c.is_whitespace() => {
+                    if has_tok {
+                        toks.push(std::mem::take(&mut cur));
+                        has_tok = false;
+                    }
+                }
+                _ => {
+                    cur.push(ch);
+                    has_tok = true;
+                }
+            },
+        }
+    }
+    if has_tok {
+        toks.push(cur);
+    }
+    if !toks.is_empty() {
+        stmts.push(toks);
+    }
+    stmts
+}
+
+fn eval_optional_condition(
+    toks: &[String],
+    skip_optional: bool,
+) -> Option<bool> {
+    let has_skip = toks.iter().any(|t| t.contains("MESA_SKIP_OPTIONAL"));
+    let has_run = toks.iter().any(|t| t.contains("MESA_RUN_OPTIONAL"));
+    if !has_skip && !has_run {
+        return None;
+    }
+    let has_z = toks.iter().any(|t| t == "-z");
+    let negated = toks.iter().filter(|t| t.as_str() == "!").count() % 2 == 1;
+    let var_nonempty = if has_run {
+        !skip_optional
+    } else {
+        skip_optional
+    };
+    let base = if has_z { !var_nonempty } else { var_nonempty };
+    Some(if negated { !base } else { base })
+}
+
 /// Parses an upstream MESA `./rn` bash script in `case_dir` into an ordered
 /// sequence of [`RnStage`] steps, honoring `skip_optional`
 /// (`MESA_SKIP_OPTIONAL`).
@@ -69,126 +211,160 @@ pub fn parse_rn_stages(
     })?;
 
     let mut stages = Vec::new();
-    let mut in_skip_if = false;
-    let mut in_else = false;
-    let mut skip_if_is_nonempty = true;
+    let mut if_stack: Vec<IfFrame> = Vec::new();
+    let logical_lines = join_continued_lines(&text);
 
-    for raw_line in text.lines() {
-        let line = raw_line.split('#').next().unwrap_or("").trim();
-        if line.is_empty() {
-            continue;
-        }
-        if line.starts_with("if ")
-            && (line.contains("MESA_SKIP_OPTIONAL")
-                || line.contains("MESA_RUN_OPTIONAL"))
-        {
-            in_skip_if = true;
-            in_else = false;
-            let has_z = line.contains("-z");
-            skip_if_is_nonempty = if line.contains("MESA_RUN_OPTIONAL") {
-                has_z
-            } else {
-                !has_z
-            };
-            continue;
-        }
-        if in_skip_if && (line == "else" || line.starts_with("else ")) {
-            in_else = true;
-            continue;
-        }
-        if in_skip_if && (line == "fi" || line.starts_with("fi ")) {
-            in_skip_if = false;
-            in_else = false;
-            continue;
-        }
-        if in_skip_if {
-            let cond_true = if skip_if_is_nonempty {
-                skip_optional
-            } else {
-                !skip_optional
-            };
-            let active_branch =
-                (cond_true && !in_else) || (!cond_true && in_else);
-            if !active_branch {
+    'lines: for line in logical_lines {
+        for toks in split_shell_statements(&line) {
+            if toks.is_empty() {
                 continue;
             }
-        }
-
-        let toks: Vec<&str> = line.split_whitespace().collect();
-        if toks.is_empty() {
-            continue;
-        }
-        if toks[0] == "return" || toks[0] == "exit" {
-            break;
-        }
-        if toks[0] == "do_one" || toks[0] == "do_one_binary" {
-            let inlist = toks
-                .get(1)
-                .map_or_else(|| String::from("inlist"), |s| (*s).to_string());
-            let output_mod = toks.get(2).map(|s| (*s).to_string());
-            let logs_dir = toks.get(3).map(|s| (*s).to_string());
-            if inlist == "inlist"
-                && !case_dir.join("inlist").exists()
-                && case_dir.join("inlist_multi_stars_job").exists()
-            {
-                let ms_path = case_dir.join("inlist_multi_stars_job");
-                let blocks = parse_namelist_file(&ms_path).map_err(|e| {
-                    StarError::IoError(format!(
-                        "failed parsing '{}': {e}",
-                        ms_path.display()
-                    ))
-                })?;
-                let mut sec = SectionControls::default();
-                for b in &blocks {
-                    for a in &b.assignments {
-                        sec.insert(a);
+            let cur_active =
+                if_stack.last().copied().is_none_or(IfFrame::is_active);
+            match toks[0].as_str() {
+                "if" => {
+                    let branch = eval_optional_condition(&toks, skip_optional);
+                    if_stack.push(IfFrame {
+                        parent_active: cur_active,
+                        any_taken: branch == Some(true),
+                        current_active: branch,
+                    });
+                    continue;
+                }
+                "elif" => {
+                    if let Some(top) = if_stack.last_mut() {
+                        if top.any_taken {
+                            top.current_active = Some(false);
+                        } else if top.current_active.is_some() {
+                            match eval_optional_condition(&toks, skip_optional)
+                            {
+                                Some(true) => {
+                                    top.any_taken = true;
+                                    top.current_active = Some(true);
+                                }
+                                Some(false) => {
+                                    top.current_active = Some(false);
+                                }
+                                None => {
+                                    top.any_taken = true;
+                                    top.current_active = None;
+                                }
+                            }
+                        }
                     }
+                    continue;
                 }
-                let names = sec.try_get_indexed_strings(
-                    "multi_stars_job",
-                    "inlist_names",
-                )?;
-                if names.is_empty() {
-                    return Err(StarError::InvalidInput(format!(
-                        "no 'inlist_names' entries found in '{}'",
-                        ms_path.display()
-                    )));
+                "else" => {
+                    if let Some(top) = if_stack.last_mut() {
+                        if top.any_taken {
+                            top.current_active = Some(false);
+                        } else if let Some(cur) = top.current_active {
+                            let next = !cur;
+                            top.any_taken |= next;
+                            top.current_active = Some(next);
+                        }
+                    }
+                    continue;
                 }
-                for n in names {
+                "fi" => {
+                    let _ = if_stack.pop();
+                    continue;
+                }
+                "then" => continue,
+                _ => {}
+            }
+            if !cur_active {
+                continue;
+            }
+            if toks[0] == "return" || toks[0] == "exit" {
+                break 'lines;
+            }
+            if toks[0] == "do_one" || toks[0] == "do_one_binary" {
+                let inlist = toks
+                    .get(1)
+                    .filter(|s| !s.is_empty())
+                    .cloned()
+                    .unwrap_or_else(|| String::from("inlist"));
+                let output_mod = toks.get(2).filter(|s| !s.is_empty()).cloned();
+                let logs_dir = toks.get(3).filter(|s| !s.is_empty()).cloned();
+                if inlist == "inlist"
+                    && !case_dir.join("inlist").exists()
+                    && case_dir.join("inlist_multi_stars_job").exists()
+                {
+                    let ms_path = case_dir.join("inlist_multi_stars_job");
+                    let blocks =
+                        parse_namelist_file(&ms_path).map_err(|e| {
+                            StarError::IoError(format!(
+                                "failed parsing '{}': {e}",
+                                ms_path.display()
+                            ))
+                        })?;
+                    let mut sec = SectionControls::default();
+                    for b in &blocks {
+                        for a in &b.assignments {
+                            sec.insert(a);
+                        }
+                    }
+                    let names = sec.try_get_indexed_strings(
+                        "multi_stars_job",
+                        "inlist_names",
+                    )?;
+                    if names.is_empty() {
+                        return Err(StarError::InvalidInput(format!(
+                            "no 'inlist_names' entries found in '{}'",
+                            ms_path.display()
+                        )));
+                    }
+                    for n in names {
+                        stages.push(RnStage::DoOne {
+                            inlist: n,
+                            output_mod: None,
+                            logs_dir: None,
+                        });
+                    }
+                } else {
                     stages.push(RnStage::DoOne {
-                        inlist: n,
-                        output_mod: None,
-                        logs_dir: None,
+                        inlist,
+                        output_mod,
+                        logs_dir,
                     });
                 }
-            } else {
+            } else if toks[0] == "cp" {
+                let mut operands = Vec::new();
+                let mut after_sep = false;
+                for arg in &toks[1..] {
+                    if !after_sep && arg == "--" {
+                        after_sep = true;
+                        continue;
+                    }
+                    if !after_sep && arg.starts_with('-') && arg.len() > 1 {
+                        continue;
+                    }
+                    operands.push(arg);
+                }
+                if operands.len() >= 2 {
+                    stages.push(RnStage::CopyCheckpoint {
+                        src_mod: operands[0].clone(),
+                        dst_mod: operands[1].clone(),
+                    });
+                }
+            } else if toks[0] == "./rn1"
+                || toks[0] == "./star"
+                || toks[0] == "./binary"
+            {
+                let inlist = if case_dir.join("inlist_project").exists()
+                    && !case_dir.join("inlist").exists()
+                {
+                    String::from("inlist_project")
+                } else {
+                    String::from("inlist")
+                };
                 stages.push(RnStage::DoOne {
                     inlist,
-                    output_mod,
-                    logs_dir,
+                    output_mod: None,
+                    logs_dir: None,
                 });
             }
-        } else if toks[0] == "cp" && toks.len() >= 3 {
-            stages.push(RnStage::CopyCheckpoint {
-                src_mod: toks[1].to_string(),
-                dst_mod: toks[2].to_string(),
-            });
-        } else if toks[0] == "./rn1"
-            || toks[0] == "./star"
-            || toks[0] == "./binary"
-        {
-            let inlist = if case_dir.join("inlist_project").exists()
-                && !case_dir.join("inlist").exists()
-            {
-                String::from("inlist_project")
-            } else {
-                String::from("inlist")
-            };
-            stages.push(RnStage::DoOne {
-                inlist,
-                output_mod: None,
-                logs_dir: None,
-            });
         }
     }
 

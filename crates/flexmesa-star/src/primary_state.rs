@@ -16,6 +16,7 @@ use crate::hydro_state::{
     OtherOvershootingSchemeHandle, StepHistoryScalars, TidalDeformationHandle,
 };
 use crate::model::StarModel;
+use crate::rotation_mix_info::StStartInfo;
 use crate::rsp_def::RspState;
 use crate::star_ad::{StarAdExt, StarAdOrder1};
 
@@ -48,6 +49,8 @@ fn model_scalar_copy_to_buf(dst: &mut PrimaryStateBuffer, src: &StarModel) {
             species,
             eos_config,
             model_number,
+            model_number_old,
+            generations,
             init_model_number,
             doing_first_model_of_run,
             star_age,
@@ -62,6 +65,7 @@ fn model_scalar_copy_to_buf(dst: &mut PrimaryStateBuffer, src: &StarModel) {
             mstar_start,
             mstar_old,
             xmstar,
+            xmstar_old,
             mstar_dot,
             m_center,
             m_center_old,
@@ -71,6 +75,15 @@ fn model_scalar_copy_to_buf(dst: &mut PrimaryStateBuffer, src: &StarModel) {
             l_center_old,
             v_center,
             v_center_old,
+            k_below_just_added,
+            surf_lns,
+            num_surf_revisions,
+            used_extra_iter_in_solver_for_accretion,
+            using_gold_tolerances,
+            why_tlim_neg_x,
+            solver_skip_global_corr_coeff_limit,
+            solver_first_try_of_step,
+            adjust_j_q,
             tau_base,
             teff
         ]
@@ -84,6 +97,8 @@ fn model_scalar_copy_from_buf(dst: &mut StarModel, src: &PrimaryStateBuffer) {
         [
             eos_config,
             model_number,
+            model_number_old,
+            generations,
             init_model_number,
             doing_first_model_of_run,
             star_age,
@@ -98,6 +113,7 @@ fn model_scalar_copy_from_buf(dst: &mut StarModel, src: &PrimaryStateBuffer) {
             mstar_start,
             mstar_old,
             xmstar,
+            xmstar_old,
             mstar_dot,
             m_center,
             m_center_old,
@@ -107,14 +123,37 @@ fn model_scalar_copy_from_buf(dst: &mut StarModel, src: &PrimaryStateBuffer) {
             l_center_old,
             v_center,
             v_center_old,
+            k_below_just_added,
+            surf_lns,
+            num_surf_revisions,
+            used_extra_iter_in_solver_for_accretion,
+            using_gold_tolerances,
+            why_tlim_neg_x,
+            solver_skip_global_corr_coeff_limit,
+            solver_first_try_of_step,
+            adjust_j_q,
             tau_base,
             teff
         ]
     );
 }
 
-fn rsp_heap_bytes(rsp: &RspState) -> usize {
+fn st_start_heap_bytes(st: &StStartInfo) -> usize {
     sum_vec_bytes!(
+        st,
+        [
+            d_st_start,
+            nu_st_start,
+            prev_mesh_d_st_start,
+            prev_mesh_nu_st_start,
+            prev_mesh_dq
+        ]
+    )
+}
+
+fn rsp_heap_bytes(rsp: &RspState) -> usize {
+    let map_cols: usize = rsp.map_col_names.iter().map(String::len).sum();
+    let vecs = sum_vec_bytes!(
         rsp,
         [
             et_rsp,
@@ -133,6 +172,7 @@ fn rsp_heap_bytes(rsp: &RspState) -> usize {
             chi_rsp,
             coupl_rsp,
             eq_rsp,
+            uq_rsp,
             qq_rsp,
             source_rsp,
             damp_rsp,
@@ -166,7 +206,8 @@ fn rsp_heap_bytes(rsp: &RspState) -> usize {
             workt,
             workc
         ]
-    )
+    );
+    vecs + map_cols
 }
 
 /// Computes live heap bytes of a [`StarModel`]'s primary, grid, mixing, aux,
@@ -302,6 +343,7 @@ pub(crate) fn primary_heap_bytes(model: &StarModel) -> usize {
         + aux_vecs
         + aux.mixing.heap_bytes()
         + name_bytes
+        + st_start_heap_bytes(&aux.st_start)
         + rsp_heap_bytes(&aux.rsp)
 }
 
@@ -329,6 +371,8 @@ pub struct PrimaryStateBuffer {
     pub kap_config: KapConfig,
 
     pub(crate) model_number: usize,
+    pub(crate) model_number_old: usize,
+    pub(crate) generations: u8,
     pub(crate) init_model_number: isize,
     pub(crate) doing_first_model_of_run: bool,
     pub(crate) star_age: f64,
@@ -343,6 +387,7 @@ pub struct PrimaryStateBuffer {
     pub(crate) mstar_start: f64,
     pub(crate) mstar_old: f64,
     pub(crate) xmstar: f64,
+    pub(crate) xmstar_old: f64,
     pub(crate) mstar_dot: f64,
     pub(crate) m_center: f64,
     pub(crate) m_center_old: f64,
@@ -352,6 +397,15 @@ pub struct PrimaryStateBuffer {
     pub(crate) l_center_old: f64,
     pub(crate) v_center: f64,
     pub(crate) v_center_old: f64,
+    pub(crate) k_below_just_added: usize,
+    pub(crate) surf_lns: f64,
+    pub(crate) num_surf_revisions: usize,
+    pub(crate) used_extra_iter_in_solver_for_accretion: bool,
+    pub(crate) using_gold_tolerances: bool,
+    pub(crate) why_tlim_neg_x: bool,
+    pub(crate) solver_skip_global_corr_coeff_limit: bool,
+    pub(crate) solver_first_try_of_step: bool,
+    pub(crate) adjust_j_q: f64,
     pub(crate) tau_base: f64,
     pub(crate) teff: f64,
 
@@ -420,8 +474,11 @@ pub struct PrimaryStateBuffer {
     pub(crate) brunt_n2: Vec<f64>,
 
     pub(crate) doing_relax: bool,
+    pub(crate) doing_finish_load_model: bool,
+    pub(crate) need_to_setvars: bool,
     pub(crate) doing_struct_burn_mix: bool,
     pub(crate) have_mlt_vc: bool,
+    pub(crate) have_j_rot: bool,
     pub(crate) okay_to_set_mlt_vc: bool,
     pub(crate) k_below_const_q: usize,
     pub(crate) k_const_mass: usize,
@@ -488,6 +545,7 @@ pub struct PrimaryStateBuffer {
     pub(crate) diffusion_call_number: usize,
     pub(crate) fixed_gradr_sticky: Vec<bool>,
     pub(crate) mixing: crate::mixing_state::MixingPrimarySnapshot,
+    pub(crate) st_start: StStartInfo,
     pub(crate) step_hist: StepHistoryScalars,
     pub(crate) rsp: RspState,
     pub(crate) tidal_deformation: Option<TidalDeformationHandle>,
@@ -510,6 +568,7 @@ macro_rules! make_empty_buf {
             kap_config: KapConfig::default(),
             dt_limit_ratio_old: 0.0,
             mixing: crate::mixing_state::MixingPrimarySnapshot::default(),
+            st_start: StStartInfo::default(),
             step_hist: StepHistoryScalars::default(),
             rsp: RspState::new(0),
             tidal_deformation: None,
@@ -519,7 +578,14 @@ macro_rules! make_empty_buf {
             other_adjust_mlt_gradt_fraction: None,
             extra_grav_if_nonzero: None,
             model_number: 0,
+            model_number_old: 0,
+            generations: 0,
             init_model_number: 0,
+            k_below_just_added: 1,
+            num_surf_revisions: 0,
+            solver_first_try_of_step: true,
+            adjust_j_q: 1.0,
+            need_to_setvars: true,
             solver_mlt_eval_count: 0,
             diffusion_call_number: 0,
             k_below_const_q: 1,
@@ -562,18 +628,22 @@ impl PrimaryStateBuffer {
             ],
             zeros: [
                 star_age, star_age_old, time_sec, time_old_sec, dt, dt_next,
-                dt_old, mstar, mstar_start, mstar_old, xmstar, mstar_dot,
-                m_center, m_center_old, r_center, r_center_old, l_center,
-                l_center_old, v_center, v_center_old, tau_base, teff,
-                total_energy,
+                dt_old, mstar, mstar_start, mstar_old, xmstar, xmstar_old,
+                mstar_dot, m_center, m_center_old, r_center, r_center_old,
+                l_center, l_center_old, v_center, v_center_old, surf_lns,
+                tau_base, teff, total_energy,
                 cumulative_energy_error,
                 non_epsnuc_energy_change_from_split_burn,
                 crystal_core_boundary_mass, phase_sep_mixing_mass,
                 opacity_start_surf
             ],
             falses: [
-                doing_first_model_of_run, doing_relax, doing_struct_burn_mix,
-                have_mlt_vc, okay_to_set_mlt_vc
+                doing_first_model_of_run,
+                used_extra_iter_in_solver_for_accretion,
+                using_gold_tolerances, why_tlim_neg_x,
+                solver_skip_global_corr_coeff_limit, doing_relax,
+                doing_finish_load_model, doing_struct_burn_mix, have_mlt_vc,
+                have_j_rot, okay_to_set_mlt_vc
             ]
         )
     }
@@ -669,8 +739,11 @@ impl PrimaryStateBuffer {
             a,
             [
                 doing_relax,
+                doing_finish_load_model,
+                need_to_setvars,
                 doing_struct_burn_mix,
                 have_mlt_vc,
+                have_j_rot,
                 okay_to_set_mlt_vc,
                 k_below_const_q,
                 k_const_mass,
@@ -743,6 +816,7 @@ impl PrimaryStateBuffer {
                 j_rot_old,
                 eps_mdot_old,
                 fixed_gradr_sticky,
+                st_start,
                 step_hist,
                 rsp,
                 tidal_deformation,
@@ -857,7 +931,10 @@ impl PrimaryStateBuffer {
                 self,
                 [
                     doing_relax,
+                    doing_finish_load_model,
+                    need_to_setvars,
                     have_mlt_vc,
+                    have_j_rot,
                     okay_to_set_mlt_vc,
                     k_below_const_q,
                     k_const_mass,
@@ -918,6 +995,7 @@ impl PrimaryStateBuffer {
                     omega_old,
                     j_rot_old,
                     eps_mdot_old,
+                    st_start,
                     step_hist,
                     rsp,
                     tidal_deformation,
@@ -976,6 +1054,9 @@ impl PrimaryStateBuffer {
             self,
             [
                 doing_struct_burn_mix,
+                doing_finish_load_model,
+                need_to_setvars,
+                have_j_rot,
                 solver_mlt_eval_count,
                 opacity_start_surf,
                 crystal_core_boundary_mass,
@@ -1139,6 +1220,7 @@ impl PrimaryStateBuffer {
             .map_or(0, |v| size_of_val(v.as_slice()));
         own_vecs
             + name_bytes
+            + st_start_heap_bytes(&self.st_start)
             + rsp_heap_bytes(&self.rsp)
             + self.mixing.heap_bytes()
             + extra_grav

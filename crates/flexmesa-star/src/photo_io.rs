@@ -5,7 +5,6 @@
 use flexmesa_utils::bin_codec;
 
 use crate::controls::{StarControls, StarError, StarJobControls};
-use crate::job_controls::VarLayout;
 use crate::model::StarModel;
 
 const PHOTO_MAGIC: &[u8; 8] = b"FMPHOTO2";
@@ -104,8 +103,10 @@ pub fn load_photo_bytes(bytes: &[u8]) -> Result<StarModel, StarError> {
 }
 
 /// Restores a [`StarModel`] from binary `.photo` restart bytes and applies the
-/// caller-supplied `controls` and `job` settings (updating [`VarLayout`] when
-/// hydrodynamic variable flags change).
+/// caller-supplied `controls` and `job` settings while preserving checkpoint
+/// state owned by `photo_in` (`star/private/photo_in.f90:71-125, 174, 291`:
+/// `initial_z`, structural/rotation flags, `net_name`, revised `max_years_for_timestep`,
+/// unclipped `dt_next` fallback, and `need_to_setvars = true`).
 ///
 /// # Errors
 /// Returns [`StarError::IoError`] if header validation, `numerics_mode`, or
@@ -124,21 +125,35 @@ pub fn read_photo_bytes(
         )));
     }
     let mut model = load_photo_bytes(bytes)?;
-    let layout_changed = model.controls.v_flag != controls.v_flag
-        || model.controls.u_flag != controls.u_flag
-        || model.controls.rsp2_flag != controls.rsp2_flag
-        || model.controls.rti_flag != controls.rti_flag;
+    let photo_initial_z = model.controls.initial_z;
+    let photo_v_flag = model.controls.v_flag;
+    let photo_u_flag = model.controls.u_flag;
+    let photo_rotation_flag = model.controls.rotation_flag;
+    let photo_rsp2_flag = model.controls.rsp2_flag;
+    let photo_rsp_flag = model.controls.rsp_flag;
+    let photo_rti_flag = model.controls.rti_flag;
+    let photo_net_name = model.job.net_name.clone();
+
     model.controls = controls;
     model.job = job;
-    if layout_changed {
-        model.layout = VarLayout::with_flags(
-            model.species,
-            model.controls.v_flag,
-            model.controls.u_flag,
-            model.controls.rsp2_flag,
-            model.controls.rti_flag,
-        );
-        model.resize_zones(model.nz);
+
+    // Restore photo-authoritative state (`photo_in.f90:71-75, 116-124`).
+    model.controls.initial_z = photo_initial_z;
+    model.controls.v_flag = photo_v_flag;
+    model.controls.u_flag = photo_u_flag;
+    model.controls.rotation_flag = photo_rotation_flag;
+    model.controls.rsp2_flag = photo_rsp2_flag;
+    model.controls.rsp_flag = photo_rsp_flag;
+    model.controls.rti_flag = photo_rti_flag;
+    model.job.net_name = photo_net_name;
+    if model.aux.step_hist.using_revised_max_yr_dt {
+        model.controls.max_years_for_timestep =
+            model.aux.step_hist.revised_max_yr_dt;
     }
+    // `photo_in.f90:174, 291`.
+    if model.dt_next <= 0.0 && model.aux.step_hist.dt_next_unclipped > 0.0 {
+        model.dt_next = model.aux.step_hist.dt_next_unclipped;
+    }
+    model.aux.need_to_setvars = true;
     Ok(model)
 }

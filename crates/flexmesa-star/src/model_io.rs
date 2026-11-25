@@ -232,12 +232,13 @@ pub fn write_mod_string(model: &StarModel) -> Result<String, StarError> {
     } else {
         model.dt_next
     };
-    let (m_old, dt_old, dt_next) =
-        (model.mstar_old, model.dt_old, dt_next_to_write);
+    // `write_model.f90:223-229`: `timestep (seconds)` records `s% dt`, not `dt_old`.
+    let (m_old, dt_cur, dt_next) =
+        (model.mstar_old, model.dt, dt_next_to_write);
     writeln!(out, "\n        previous model").unwrap();
     writeln!(out, "   previous n_shells      {nz:26}").unwrap();
     writeln!(out, "  previous mass (grams)   {m_old:26.16E}").unwrap();
-    writeln!(out, "   timestep (seconds)     {dt_old:26.16E}").unwrap();
+    writeln!(out, "   timestep (seconds)     {dt_cur:26.16E}").unwrap();
     writeln!(out, "    dt_next (seconds)     {dt_next:26.16E}").unwrap();
     Ok(out)
 }
@@ -281,11 +282,26 @@ pub fn read_mod_str_with_dir(
     let mut total_energy = 0.0_f64;
     let mut crystal_core_boundary_mass = -1.0_f64;
     let mut header_cols: Vec<String> = Vec::new();
+    let mut file_type_opt: Option<u32> = None;
 
     for line in lines.by_ref() {
         let trimmed = line.trim();
         if trimmed.is_empty() || trimmed.starts_with('!') {
             continue;
+        }
+        if file_type_opt.is_none() {
+            let first_tok = trimmed.split_whitespace().next().unwrap_or("");
+            if let Ok(ft) = first_tok.parse::<u32>() {
+                file_type_opt = Some(ft);
+                // Reject obsolete lnPgas-variable models (`read_model.f90:264-270`).
+                if (ft & (1 << 1)) != 0 {
+                    return Err(StarError::IoError(String::from(
+                        "MESA no longer supports models using lnPgas as a \
+                         structure variable (`star/private/read_model.f90:264-270`)",
+                    )));
+                }
+                continue;
+            }
         }
         if trimmed.starts_with("lnd ") {
             header_cols = trimmed
@@ -376,7 +392,13 @@ pub fn read_mod_str_with_dir(
         }
     }
 
-    if nz == 0 || header_cols.len() < 5 {
+    if nz == 0
+        || header_cols.len() < 5
+        || !m_msun.is_finite()
+        || m_msun < 0.0
+        || !controls.initial_z.is_finite()
+        || controls.initial_z < 0.0
+    {
         return Err(StarError::IoError(String::from("malformed .mod header")));
     }
     let find_col = |name: &str| -> Result<usize, StarError> {
@@ -582,20 +604,56 @@ pub fn read_mod_str_with_dir(
 
     let (mut parsed_mstar_old, mut parsed_dt_old) =
         (model.mstar_old, model.dt_old);
+    let mut saw_prev_model = false;
+    let (mut prev_mass_opt, mut prev_dt_opt, mut prev_dt_next_opt) =
+        (None, None, None);
     for line in lines {
         let t = line.trim();
+        if t.starts_with("previous model") {
+            saw_prev_model = true;
+            continue;
+        }
         let Some(v) = t.split_whitespace().last() else {
             continue;
         };
         if t.starts_with("previous mass (grams)") {
-            parsed_mstar_old = parse_fortran_f64(v)?;
+            let m_old = parse_fortran_f64(v)?;
+            parsed_mstar_old = m_old;
+            prev_mass_opt = Some(m_old);
+            saw_prev_model = true;
         } else if t.starts_with("timestep (seconds)") {
-            parsed_dt_old = parse_fortran_f64(v)?;
-            if dt_yrs.is_none() {
-                model.dt = parsed_dt_old;
-            }
+            // `read_model.f90:490`: `timestep (seconds)` unconditionally sets `s% dt`.
+            let dt_sec = parse_fortran_f64(v)?;
+            parsed_dt_old = dt_sec;
+            model.dt = dt_sec;
+            prev_dt_opt = Some(dt_sec);
+            saw_prev_model = true;
         } else if t.starts_with("dt_next (seconds)") {
-            model.dt_next = parse_fortran_f64(v)?;
+            let dt_next_sec = parse_fortran_f64(v)?;
+            model.dt_next = dt_next_sec;
+            prev_dt_next_opt = Some(dt_next_sec);
+            saw_prev_model = true;
+        }
+    }
+    if saw_prev_model {
+        let missing_or_neg = |opt: Option<f64>| !matches!(opt, Some(v) if v.is_finite() && v >= 0.0);
+        if missing_or_neg(prev_dt_opt) {
+            return Err(StarError::IoError(String::from(
+                "missing or negative dt for previous model \
+                 (`star/private/read_model.f90:505-508`)",
+            )));
+        }
+        if missing_or_neg(prev_mass_opt) {
+            return Err(StarError::IoError(String::from(
+                "missing or negative mstar_old for previous model \
+                 (`star/private/read_model.f90:509-512`)",
+            )));
+        }
+        if missing_or_neg(prev_dt_next_opt) {
+            return Err(StarError::IoError(String::from(
+                "missing or negative dt_next for previous model \
+                 (`star/private/read_model.f90:513-516`)",
+            )));
         }
     }
 
@@ -647,6 +705,8 @@ pub fn read_mod_str_with_dir(
     model.init_model_number = model.model_number as isize;
     model.time_sec = model.star_age * flexmesa_const::SECYER;
     model.time_old_sec = model.star_age_old * flexmesa_const::SECYER;
+    model.aux.step_hist.time_sec = model.time_sec;
+    model.aux.step_hist.time_old_sec = model.time_old_sec;
     model.m_center_old = model.m_center;
     model.xmstar_old = model.xmstar;
     model.r_center_old = model.r_center;

@@ -648,6 +648,8 @@ fn do_merge(
         &mut model.aux.i_rot,
         &mut model.aux.fp_rot,
         &mut model.aux.ft_rot,
+        // `star/private/adjust_mesh_split_merge.f90:656` shifts `alpha_mlt`.
+        &mut model.aux.mixing.alpha_mlt,
     ] {
         if vec.len() >= nz {
             vec.copy_within((ip0 + 1)..nz, ip0);
@@ -854,6 +856,8 @@ fn do_split(
             &mut model.aux.i_rot,
             &mut model.aux.fp_rot,
             &mut model.aux.ft_rot,
+            // `star/private/adjust_mesh_split_merge.f90:1037` shifts `alpha_mlt`.
+            &mut model.aux.mixing.alpha_mlt,
         ] {
             vec.copy_within(i0..nz_old, ip0);
         }
@@ -995,6 +999,8 @@ fn do_split(
     model.dq[ip0] = model.dm[ip0] / model.xmstar;
 
     model.cgrav[ip0] = model.cgrav[i0];
+    // Upstream `star/private/adjust_mesh_split_merge.f90:1239`.
+    model.aux.mixing.alpha_mlt[ip0] = model.aux.mixing.alpha_mlt[i0];
     model.ln_t[ip0] = model.ln_t[i0];
     model.t[ip0] = model.t[i0];
     model.d_mix[ip0] = model.d_mix[i0];

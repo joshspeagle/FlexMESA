@@ -394,6 +394,10 @@ pub fn try_plan_standard_mesh(
             return Ok(None);
         }
     }
+    // Upstream `star/private/adjust_mesh.f90:99-102`.
+    if model.dt < mw.remesh_dt_limit {
+        return Ok(None);
+    }
 
     let mut xa_clean = model.xa.clone();
     clean_up_fractions_slice(&mut xa_clean, nz, model.species, 10.0, 1.0e-2)?;
@@ -634,23 +638,29 @@ fn do_adjust_mesh_with(
             return Ok((0, 0));
         }
     }
+    // Upstream `star/private/adjust_mesh.f90:99-102` returns before
+    // `clean_up_fractions`, `mesh_max_allowed_ratio` clamping, and `do_mesh_plan`.
+    if model.dt < mw.remesh_dt_limit {
+        return Ok((0, 0));
+    }
 
     // Upstream `adjust_mesh.f90:109` runs `clean_up_fractions` on `s% xa`
     // before `check_validity`, `get_gval_info`, and `do_mesh_plan`.
     clean_up_fractions_slice(&mut model.xa, nz, model.species, 10.0, 1.0e-2)?;
+
+    // Upstream `star/private/adjust_mesh.f90:155-159, 280` copies
+    // `mesh_max_allowed_ratio = s% mesh_max_allowed_ratio` before clamping
+    // `s% mesh_max_allowed_ratio = 2.5d0`, so the first remesh uses the
+    // unclamped `mw` copy and subsequent calls see `2.5` (`#250` under `#169`).
+    if from_ctrls && model.controls.mix_wind.mesh_max_allowed_ratio < 2.5 {
+        model.controls.mix_wind.mesh_max_allowed_ratio = 2.5;
+    }
 
     let Some(plan) =
         try_plan_standard_mesh_with_cleaned_xa(model, &mw, &model.xa, true)?
     else {
         return Ok((0, 0));
     };
-    // Upstream `star/private/adjust_mesh.f90:155-159, 280` copies
-    // `mesh_max_allowed_ratio = s% mesh_max_allowed_ratio` before clamping
-    // `s% mesh_max_allowed_ratio = 2.5d0`, so the first remesh uses the
-    // unclamped value and subsequent calls see `2.5` (`#250` under `#169`).
-    if from_ctrls && model.controls.mix_wind.mesh_max_allowed_ratio < 2.5 {
-        model.controls.mix_wind.mesh_max_allowed_ratio = 2.5;
-    }
     let (ns, nm) = (plan.num_splits, plan.num_merges);
     execute_adjust_mesh_from_plan_with(model, plan, finish)?;
     Ok((ns, nm))

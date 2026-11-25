@@ -488,15 +488,34 @@ class SimplexSolarCalibrationStarExtras:
     """Simplex solar-calibration callbacks and `gradr_grada_function` mesh
     weight from
     `star/test_suite/simplex_solar_calibration/src/run_star_extras.f90:41-251`.
+
+    Registers `other_mesh_functions` (`eval_gradr_grada_mesh_fcn`, `:61-62,
+    :211-251`) for the solar evolution run (`inlist_solar`); outer simplex
+    search orchestration (`star_simplex_procs`, `:55-59`) remains `#162`.
     """
 
-    def extras_controls(self, _state: dict[str, Any]) -> None:
-        """Fail loudly because `star_simplex_procs` (`#162`) and
-        `other_mesh_fcn_data` (`#153`) are not exposed (`:41-63`).
-        """
-        raise NotImplementedError(
-            "simplex_solar_calibration: extras_controls registers "
-            "star_simplex_procs (:55-59, #162) and "
-            "how_many_other_mesh_fcns/other_mesh_fcn_data (:61-62, #153), "
-            "which flexmesa-star StarExtras does not expose"
-        )
+    def extras_controls(self, _state: dict[str, Any]) -> dict[str, Any]:
+        """Return empty updates dictionary (`:41-63`)."""
+        return {}
+
+    def extras_startup(self, _state: dict[str, Any], _restart: bool) -> None:
+        """No-op test-suite startup (`:104-113`)."""
+        return None
+
+    def extras_check_model(self, _state: dict[str, Any]) -> str:
+        """Return `keep_going` (`:117-128`)."""
+        return "keep_going"
+
+    def extras_finish_step(self, _state: dict[str, Any]) -> str:
+        """Return `keep_going` (`:180-195`)."""
+        return "keep_going"
+
+    def extras_after_evolve(self, _state: dict[str, Any]) -> None:
+        """No-op test-suite post-evolve (`:198-208`)."""
+        return None
+
+    def other_mesh_functions(
+        self, state: dict[str, Any]
+    ) -> list[tuple[str, bool, list[float]]]:
+        """Return `gradr_grada_function` custom mesh weight (`:211-251`)."""
+        return [eval_gradr_grada_mesh_fcn(state)]

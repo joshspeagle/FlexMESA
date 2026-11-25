@@ -154,8 +154,10 @@ STOCK_EXTRAS_DIGESTS: frozenset[str] = frozenset(
 #   now adapter-served).
 # - `#162` (pulse export & simplex calibration): `CheckPulseAtmStarExtras`
 #   (`star_export_pulse_data('FGONG')` with `add_atmosphere_to_pulse_data`,
-#   `atm_build_tau_outer`, `atm_T_tau_relation` atmosphere integration, `#161`),
-#   `SimplexSolarCalibrationStarExtras` (`star_simplex_procs`, `#153`).
+#   `atm_build_tau_outer`, `atm_T_tau_relation` atmosphere integration, `#161`);
+#   `SimplexSolarCalibrationStarExtras` is adapter-served for
+#   `other_mesh_functions` (`inlist_solar`; `star_simplex_procs`
+#   remains `#162`).
 # - `#231` (custom termination codes): `C13PocketStarExtras`,
 #   `PisnStarExtras` and `WdAicStarExtras` set `termination_code_str(t_xtra*)`
 #   (`star/test_suite/c13_pocket/src/run_star_extras.f90:416`,
@@ -199,6 +201,7 @@ ADAPTER_SERVED_STAR_HANDLERS: frozenset[str] = frozenset(
         "RCrBStarExtras",
         "RspGyreExtras",
         "SemiconvectionStarExtras",
+        "SimplexSolarCalibrationStarExtras",
         "TTauGradrStarExtras",
         "Thermohaline1MStarExtras",
         "WdAccSmallDmStarExtras",

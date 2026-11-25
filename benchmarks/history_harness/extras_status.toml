@@ -476,9 +476,8 @@ digest = "b935b9355a19ef5ddfa885a697659cf13e278a8fd2e57968900c85922e740f24"
 [[cases]]
 suite = "star"
 case = "simplex_solar_calibration"
-status = "unported"
+status = "ported"
 digest = "d623ee286931eb97a29f194fa76636dd1986b7a5499c46ee5eadad6956181a43"
-issue = "#231"
 
 [[cases]]
 suite = "star"

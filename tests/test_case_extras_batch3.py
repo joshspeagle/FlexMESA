@@ -579,8 +579,32 @@ def test_xtra_coeff_os_and_simplex_solar_helpers(
     assert hook_seen["has_cats"] is True
 
     sim = star_ns_wd_simplex.SimplexSolarCalibrationStarExtras()
-    with pytest.raises(NotImplementedError, match="#162"):
-        sim.extras_controls({})
+    assert sim.extras_controls({}) == {}
+    assert sim.extras_startup({}, False) is None
+    assert sim.extras_check_model({}) == "keep_going"
+    assert sim.extras_finish_step({}) == "keep_going"
+    assert sim.extras_after_evolve({}) is None
+    simplex_dir = harness_runner.resolve_case_dir(
+        "star", "simplex_solar_calibration"
+    )
+    assert isinstance(
+        case_extras.resolve_case_extras("star", simplex_dir),
+        star_ns_wd_simplex.SimplexSolarCalibrationStarExtras,
+    )
+    assert sim.other_mesh_functions(
+        {
+            "x_ctrl": [500.0, 0.02, 0.0],
+            "nz": 2,
+            "gradr": [0.42, 0.40],
+            "grada": [0.40, 0.40],
+        }
+    ) == [
+        (
+            "gradr_grada_function",
+            False,
+            [pytest.approx(500.0 * float(fm_math.tanh(1.0)) * 0.02), 0.0],
+        )
+    ]
     assert star_ns_wd_simplex.set_simplex_my_vars({"teff": 5777.0}, True) == (
         5777.0
     )

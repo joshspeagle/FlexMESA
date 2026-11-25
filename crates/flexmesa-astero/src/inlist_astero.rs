@@ -558,9 +558,7 @@ impl Default for AsteroSearchControls {
             adipls_igm1kr: 0,
             adipls_npgmkr: 0,
             read_extra_astero_search_inlist: [false; 5],
-            extra_astero_search_inlist_name: std::array::from_fn(|_| {
-                String::from("undefined")
-            }),
+            extra_astero_search_inlist_name: std::array::from_fn(|_| String::from("undefined")),
             constraint_names: std::array::from_fn(|_| String::new()),
             indexed_constraints: [SpectroConstraint::default(); 10],
             param_names: std::array::from_fn(|_| String::new()),

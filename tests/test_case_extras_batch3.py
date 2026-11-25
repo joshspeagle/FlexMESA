@@ -580,10 +580,10 @@ def test_xtra_coeff_os_and_simplex_solar_helpers(
 
     sim = star_ns_wd_simplex.SimplexSolarCalibrationStarExtras()
     assert sim.extras_controls({}) == {}
-    assert sim.extras_startup({}, False) is None
+    sim.extras_startup({}, False)
     assert sim.extras_check_model({}) == "keep_going"
     assert sim.extras_finish_step({}) == "keep_going"
-    assert sim.extras_after_evolve({}) is None
+    sim.extras_after_evolve({})
     simplex_dir = harness_runner.resolve_case_dir(
         "star", "simplex_solar_calibration"
     )

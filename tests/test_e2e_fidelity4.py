@@ -15,6 +15,7 @@ import pytest
 
 from flexmesa import star
 from flexmesa.testing import case_manifest, known_gaps_gate
+from tests.case_extras import resolve_case_extras
 
 
 def test_fidelity4_mod_and_photo_roundtrip_and_step_redo_reproducibility() -> (
@@ -64,21 +65,28 @@ def test_fidelity4_representative_multi_tier_physical_e2e_execution(
     ):
         cdir = star_ts / cname
         assert cdir.is_dir(), f"Missing upstream case directory: {cdir}"
-        if cname == "gyre_in_mesa_ms":
-            run_dir = tmp_path / "raw" / cname
-            shutil.copytree(cdir, run_dir)
-        else:
+        if cname == "1M_pre_ms_to_wd":
+            # Without its run_star_extras hooks the raw case fails loudly
+            # (`use_other_mesh_delta_coeff_factor` needs its hook).
             with pytest.raises(
                 ValueError,
-                match=r"(unsupported|unknown|unrecognized).*control",
+                match=(
+                    r"(unsupported|unknown|unrecognized).*control"
+                    r"|requires an? (custom )?\w+ hook"
+                ),
             ):
                 star.run_test_suite_case(
                     cdir, max_steps_per_stage=2, verify_restart=True
                 )
-            run_dir = tmp_path / cname
-            star.copy_cleaned_case(cdir, run_dir, suite="star")
+        # Every control is ported, so each raw copy runs with the case's own
+        # run_star_extras hooks.
+        run_dir = tmp_path / "raw" / cname
+        shutil.copytree(cdir, run_dir)
         rep = star.run_test_suite_case(
-            run_dir, max_steps_per_stage=2, verify_restart=True
+            run_dir,
+            max_steps_per_stage=2,
+            verify_restart=True,
+            extras=resolve_case_extras("star", cdir),
         )
         assert rep["tier"] == 0
         assert rep["passed"] is False

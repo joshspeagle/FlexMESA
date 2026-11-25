@@ -234,7 +234,10 @@ def test_e2e_5_tier5_star_and_binary_suites_execution(
             continue
         with pytest.raises(
             ValueError,
-            match=r"(unsupported|unknown|unrecognized).*control",
+            match=(
+                r"(unsupported|unknown|unrecognized).*control"
+                r"|requires an? (custom )?\w+ hook"
+            ),
         ):
             star.run_test_suite_case(
                 raw_case,

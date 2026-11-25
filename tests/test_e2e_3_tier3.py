@@ -21,7 +21,9 @@ _REPRESENTATIVE_TIER3_CASES = (
     "20M_z2m2_high_rotation",
     "tzo",
 )
-_STRICT_VALID_TIER3_CASES = frozenset({"high_mass"})
+_STRICT_VALID_TIER3_CASES = frozenset(
+    {"high_mass", "20M_z2m2_high_rotation", "tzo"}
+)
 
 
 @pytest.mark.parametrize(

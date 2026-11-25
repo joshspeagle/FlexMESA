@@ -8,9 +8,9 @@
   },
   "summary": {
     "total_cases": 106,
-    "strict_pass_cases": 74,
-    "strict_fail_cases": 32,
-    "distinct_unsupported_controls": 113,
+    "strict_pass_cases": 94,
+    "strict_fail_cases": 12,
+    "distinct_unsupported_controls": 53,
     "distinct_unknown_controls": 0,
     "cases_with_headless_plotting": 78,
     "distinct_headless_plotting_keys": 895
@@ -19,11 +19,11 @@
     {
       "section": "star_job",
       "upstream_keys": 455,
-      "supported_keys": 205,
-      "unused_keys": 8,
+      "supported_keys": 210,
+      "unused_keys": 4,
       "headless_gui_keys": 3,
       "terminal_output_keys": 8,
-      "unimplemented_upstream_keys": 231
+      "unimplemented_upstream_keys": 230
     },
     {
       "section": "eos",
@@ -46,11 +46,11 @@
     {
       "section": "controls",
       "upstream_keys": 1448,
-      "supported_keys": 1219,
+      "supported_keys": 1235,
       "unused_keys": 15,
       "headless_gui_keys": 0,
       "terminal_output_keys": 19,
-      "unimplemented_upstream_keys": 195
+      "unimplemented_upstream_keys": 179
     },
     {
       "section": "binary_job",
@@ -73,602 +73,14 @@
     {
       "section": "astero_search_controls",
       "upstream_keys": 153,
-      "supported_keys": 97,
-      "unused_keys": 3,
+      "supported_keys": 153,
+      "unused_keys": 0,
       "headless_gui_keys": 0,
       "terminal_output_keys": 0,
-      "unimplemented_upstream_keys": 53
+      "unimplemented_upstream_keys": 0
     }
   ],
   "unsupported_controls": [
-    {
-      "section": "controls",
-      "key": "warn_rates_for_high_temp",
-      "category": "unimplemented",
-      "case_count": 10,
-      "cases": [
-        "star/12M_pre_ms_to_core_collapse",
-        "star/20M_pre_ms_to_core_collapse",
-        "star/20M_z2m2_high_rotation",
-        "star/ccsn_IIp",
-        "star/conductive_flame",
-        "star/pisn",
-        "star/ppisn",
-        "star/split_burn_big_net",
-        "star/twin_studies",
-        "star/zams_to_cc_80"
-      ]
-    },
-    {
-      "section": "controls",
-      "key": "max_safe_logt_for_rates",
-      "category": "unimplemented",
-      "case_count": 7,
-      "cases": [
-        "star/12M_pre_ms_to_core_collapse",
-        "star/20M_pre_ms_to_core_collapse",
-        "star/20M_z2m2_high_rotation",
-        "star/pisn",
-        "star/split_burn_big_net",
-        "star/twin_studies",
-        "star/zams_to_cc_80"
-      ]
-    },
-    {
-      "section": "astero_search_controls",
-      "key": "best_model_fgong_filename",
-      "category": "unimplemented",
-      "case_count": 6,
-      "cases": [
-        "astero/example_astero",
-        "astero/fast_from_file",
-        "astero/fast_newuoa",
-        "astero/fast_scan_grid",
-        "astero/fast_simplex",
-        "astero/surface_effects"
-      ]
-    },
-    {
-      "section": "astero_search_controls",
-      "key": "best_model_profile_filename",
-      "category": "unimplemented",
-      "case_count": 6,
-      "cases": [
-        "astero/example_astero",
-        "astero/fast_from_file",
-        "astero/fast_newuoa",
-        "astero/fast_scan_grid",
-        "astero/fast_simplex",
-        "astero/surface_effects"
-      ]
-    },
-    {
-      "section": "astero_search_controls",
-      "key": "best_model_save_model_filename",
-      "category": "unimplemented",
-      "case_count": 6,
-      "cases": [
-        "astero/example_astero",
-        "astero/fast_from_file",
-        "astero/fast_newuoa",
-        "astero/fast_scan_grid",
-        "astero/fast_simplex",
-        "astero/surface_effects"
-      ]
-    },
-    {
-      "section": "astero_search_controls",
-      "key": "fgong_postfix",
-      "category": "unimplemented",
-      "case_count": 6,
-      "cases": [
-        "astero/example_astero",
-        "astero/fast_from_file",
-        "astero/fast_newuoa",
-        "astero/fast_scan_grid",
-        "astero/fast_simplex",
-        "astero/surface_effects"
-      ]
-    },
-    {
-      "section": "astero_search_controls",
-      "key": "fgong_prefix",
-      "category": "unimplemented",
-      "case_count": 6,
-      "cases": [
-        "astero/example_astero",
-        "astero/fast_from_file",
-        "astero/fast_newuoa",
-        "astero/fast_scan_grid",
-        "astero/fast_simplex",
-        "astero/surface_effects"
-      ]
-    },
-    {
-      "section": "astero_search_controls",
-      "key": "last_model_save_info_filename",
-      "category": "unimplemented",
-      "case_count": 6,
-      "cases": [
-        "astero/example_astero",
-        "astero/fast_from_file",
-        "astero/fast_newuoa",
-        "astero/fast_scan_grid",
-        "astero/fast_simplex",
-        "astero/surface_effects"
-      ]
-    },
-    {
-      "section": "astero_search_controls",
-      "key": "model_num_digits",
-      "category": "unimplemented",
-      "case_count": 6,
-      "cases": [
-        "astero/example_astero",
-        "astero/fast_from_file",
-        "astero/fast_newuoa",
-        "astero/fast_scan_grid",
-        "astero/fast_simplex",
-        "astero/surface_effects"
-      ]
-    },
-    {
-      "section": "astero_search_controls",
-      "key": "num_digits",
-      "category": "unimplemented",
-      "case_count": 6,
-      "cases": [
-        "astero/example_astero",
-        "astero/fast_from_file",
-        "astero/fast_newuoa",
-        "astero/fast_scan_grid",
-        "astero/fast_simplex",
-        "astero/surface_effects"
-      ]
-    },
-    {
-      "section": "astero_search_controls",
-      "key": "sample_results_postfix",
-      "category": "unimplemented",
-      "case_count": 6,
-      "cases": [
-        "astero/example_astero",
-        "astero/fast_from_file",
-        "astero/fast_newuoa",
-        "astero/fast_scan_grid",
-        "astero/fast_simplex",
-        "astero/surface_effects"
-      ]
-    },
-    {
-      "section": "astero_search_controls",
-      "key": "sample_results_prefix",
-      "category": "unimplemented",
-      "case_count": 6,
-      "cases": [
-        "astero/example_astero",
-        "astero/fast_from_file",
-        "astero/fast_newuoa",
-        "astero/fast_scan_grid",
-        "astero/fast_simplex",
-        "astero/surface_effects"
-      ]
-    },
-    {
-      "section": "astero_search_controls",
-      "key": "save_controls",
-      "category": "unimplemented",
-      "case_count": 6,
-      "cases": [
-        "astero/example_astero",
-        "astero/fast_from_file",
-        "astero/fast_newuoa",
-        "astero/fast_scan_grid",
-        "astero/fast_simplex",
-        "astero/surface_effects"
-      ]
-    },
-    {
-      "section": "astero_search_controls",
-      "key": "save_controls_filename",
-      "category": "unimplemented",
-      "case_count": 6,
-      "cases": [
-        "astero/example_astero",
-        "astero/fast_from_file",
-        "astero/fast_newuoa",
-        "astero/fast_scan_grid",
-        "astero/fast_simplex",
-        "astero/surface_effects"
-      ]
-    },
-    {
-      "section": "astero_search_controls",
-      "key": "save_info_for_last_model",
-      "category": "unimplemented",
-      "case_count": 6,
-      "cases": [
-        "astero/example_astero",
-        "astero/fast_from_file",
-        "astero/fast_newuoa",
-        "astero/fast_scan_grid",
-        "astero/fast_simplex",
-        "astero/surface_effects"
-      ]
-    },
-    {
-      "section": "astero_search_controls",
-      "key": "save_model_for_best_model",
-      "category": "unimplemented",
-      "case_count": 6,
-      "cases": [
-        "astero/example_astero",
-        "astero/fast_from_file",
-        "astero/fast_newuoa",
-        "astero/fast_scan_grid",
-        "astero/fast_simplex",
-        "astero/surface_effects"
-      ]
-    },
-    {
-      "section": "astero_search_controls",
-      "key": "trace_chi2_seismo_delta_nu_info",
-      "category": "unimplemented",
-      "case_count": 6,
-      "cases": [
-        "astero/example_astero",
-        "astero/fast_from_file",
-        "astero/fast_newuoa",
-        "astero/fast_scan_grid",
-        "astero/fast_simplex",
-        "astero/surface_effects"
-      ]
-    },
-    {
-      "section": "astero_search_controls",
-      "key": "trace_chi2_seismo_frequencies_info",
-      "category": "unimplemented",
-      "case_count": 6,
-      "cases": [
-        "astero/example_astero",
-        "astero/fast_from_file",
-        "astero/fast_newuoa",
-        "astero/fast_scan_grid",
-        "astero/fast_simplex",
-        "astero/surface_effects"
-      ]
-    },
-    {
-      "section": "astero_search_controls",
-      "key": "trace_chi2_seismo_nu_max_info",
-      "category": "unimplemented",
-      "case_count": 6,
-      "cases": [
-        "astero/example_astero",
-        "astero/fast_from_file",
-        "astero/fast_newuoa",
-        "astero/fast_scan_grid",
-        "astero/fast_simplex",
-        "astero/surface_effects"
-      ]
-    },
-    {
-      "section": "astero_search_controls",
-      "key": "trace_chi2_seismo_ratios_info",
-      "category": "unimplemented",
-      "case_count": 6,
-      "cases": [
-        "astero/example_astero",
-        "astero/fast_from_file",
-        "astero/fast_newuoa",
-        "astero/fast_scan_grid",
-        "astero/fast_simplex",
-        "astero/surface_effects"
-      ]
-    },
-    {
-      "section": "astero_search_controls",
-      "key": "trace_chi2_spectro_info",
-      "category": "unimplemented",
-      "case_count": 6,
-      "cases": [
-        "astero/example_astero",
-        "astero/fast_from_file",
-        "astero/fast_newuoa",
-        "astero/fast_scan_grid",
-        "astero/fast_simplex",
-        "astero/surface_effects"
-      ]
-    },
-    {
-      "section": "astero_search_controls",
-      "key": "write_best_model_data_for_each_sample",
-      "category": "unimplemented",
-      "case_count": 6,
-      "cases": [
-        "astero/example_astero",
-        "astero/fast_from_file",
-        "astero/fast_newuoa",
-        "astero/fast_scan_grid",
-        "astero/fast_simplex",
-        "astero/surface_effects"
-      ]
-    },
-    {
-      "section": "astero_search_controls",
-      "key": "write_fgong_for_best_model",
-      "category": "unimplemented",
-      "case_count": 6,
-      "cases": [
-        "astero/example_astero",
-        "astero/fast_from_file",
-        "astero/fast_newuoa",
-        "astero/fast_scan_grid",
-        "astero/fast_simplex",
-        "astero/surface_effects"
-      ]
-    },
-    {
-      "section": "astero_search_controls",
-      "key": "write_fgong_for_each_model",
-      "category": "unimplemented",
-      "case_count": 6,
-      "cases": [
-        "astero/example_astero",
-        "astero/fast_from_file",
-        "astero/fast_newuoa",
-        "astero/fast_scan_grid",
-        "astero/fast_simplex",
-        "astero/surface_effects"
-      ]
-    },
-    {
-      "section": "astero_search_controls",
-      "key": "write_profile_for_best_model",
-      "category": "unimplemented",
-      "case_count": 6,
-      "cases": [
-        "astero/example_astero",
-        "astero/fast_from_file",
-        "astero/fast_newuoa",
-        "astero/fast_scan_grid",
-        "astero/fast_simplex",
-        "astero/surface_effects"
-      ]
-    },
-    {
-      "section": "astero_search_controls",
-      "key": "best_model_gyre_filename",
-      "category": "unimplemented",
-      "case_count": 5,
-      "cases": [
-        "astero/example_astero",
-        "astero/fast_from_file",
-        "astero/fast_newuoa",
-        "astero/fast_scan_grid",
-        "astero/fast_simplex"
-      ]
-    },
-    {
-      "section": "astero_search_controls",
-      "key": "gyre_postfix",
-      "category": "unimplemented",
-      "case_count": 5,
-      "cases": [
-        "astero/example_astero",
-        "astero/fast_from_file",
-        "astero/fast_newuoa",
-        "astero/fast_scan_grid",
-        "astero/fast_simplex"
-      ]
-    },
-    {
-      "section": "astero_search_controls",
-      "key": "gyre_prefix",
-      "category": "unimplemented",
-      "case_count": 5,
-      "cases": [
-        "astero/example_astero",
-        "astero/fast_from_file",
-        "astero/fast_newuoa",
-        "astero/fast_scan_grid",
-        "astero/fast_simplex"
-      ]
-    },
-    {
-      "section": "astero_search_controls",
-      "key": "max_num_gyre_points",
-      "category": "unimplemented",
-      "case_count": 5,
-      "cases": [
-        "astero/example_astero",
-        "astero/fast_from_file",
-        "astero/fast_newuoa",
-        "astero/fast_scan_grid",
-        "astero/fast_simplex"
-      ]
-    },
-    {
-      "section": "astero_search_controls",
-      "key": "save_next_best_at_higher_frequency",
-      "category": "unimplemented",
-      "case_count": 5,
-      "cases": [
-        "astero/example_astero",
-        "astero/fast_from_file",
-        "astero/fast_newuoa",
-        "astero/fast_scan_grid",
-        "astero/fast_simplex"
-      ]
-    },
-    {
-      "section": "astero_search_controls",
-      "key": "save_next_best_at_lower_frequency",
-      "category": "unimplemented",
-      "case_count": 5,
-      "cases": [
-        "astero/example_astero",
-        "astero/fast_from_file",
-        "astero/fast_newuoa",
-        "astero/fast_scan_grid",
-        "astero/fast_simplex"
-      ]
-    },
-    {
-      "section": "astero_search_controls",
-      "key": "trace_limits",
-      "category": "unused",
-      "case_count": 5,
-      "cases": [
-        "astero/example_astero",
-        "astero/fast_from_file",
-        "astero/fast_newuoa",
-        "astero/fast_scan_grid",
-        "astero/fast_simplex"
-      ]
-    },
-    {
-      "section": "astero_search_controls",
-      "key": "trace_time_in_oscillation_code",
-      "category": "unimplemented",
-      "case_count": 5,
-      "cases": [
-        "astero/example_astero",
-        "astero/fast_from_file",
-        "astero/fast_newuoa",
-        "astero/fast_scan_grid",
-        "astero/fast_simplex"
-      ]
-    },
-    {
-      "section": "astero_search_controls",
-      "key": "write_gyre_for_best_model",
-      "category": "unimplemented",
-      "case_count": 5,
-      "cases": [
-        "astero/example_astero",
-        "astero/fast_from_file",
-        "astero/fast_newuoa",
-        "astero/fast_scan_grid",
-        "astero/fast_simplex"
-      ]
-    },
-    {
-      "section": "astero_search_controls",
-      "key": "write_gyre_for_each_model",
-      "category": "unimplemented",
-      "case_count": 5,
-      "cases": [
-        "astero/example_astero",
-        "astero/fast_from_file",
-        "astero/fast_newuoa",
-        "astero/fast_scan_grid",
-        "astero/fast_simplex"
-      ]
-    },
-    {
-      "section": "astero_search_controls",
-      "key": "y_frac_he3",
-      "category": "unused",
-      "case_count": 5,
-      "cases": [
-        "astero/example_astero",
-        "astero/fast_from_file",
-        "astero/fast_newuoa",
-        "astero/fast_scan_grid",
-        "astero/fast_simplex"
-      ]
-    },
-    {
-      "section": "astero_search_controls",
-      "key": "restart_scan_grid_from_file",
-      "category": "unimplemented",
-      "case_count": 2,
-      "cases": [
-        "astero/example_astero",
-        "astero/fast_scan_grid"
-      ]
-    },
-    {
-      "section": "astero_search_controls",
-      "key": "restart_simplex_from_file",
-      "category": "unimplemented",
-      "case_count": 2,
-      "cases": [
-        "astero/example_astero",
-        "astero/fast_simplex"
-      ]
-    },
-    {
-      "section": "astero_search_controls",
-      "key": "simplex_alpha",
-      "category": "unimplemented",
-      "case_count": 2,
-      "cases": [
-        "astero/example_astero",
-        "astero/fast_simplex"
-      ]
-    },
-    {
-      "section": "astero_search_controls",
-      "key": "simplex_beta",
-      "category": "unimplemented",
-      "case_count": 2,
-      "cases": [
-        "astero/example_astero",
-        "astero/fast_simplex"
-      ]
-    },
-    {
-      "section": "astero_search_controls",
-      "key": "simplex_delta",
-      "category": "unimplemented",
-      "case_count": 2,
-      "cases": [
-        "astero/example_astero",
-        "astero/fast_simplex"
-      ]
-    },
-    {
-      "section": "astero_search_controls",
-      "key": "simplex_gamma",
-      "category": "unimplemented",
-      "case_count": 2,
-      "cases": [
-        "astero/example_astero",
-        "astero/fast_simplex"
-      ]
-    },
-    {
-      "section": "astero_search_controls",
-      "key": "surf_coef1_name",
-      "category": "unimplemented",
-      "case_count": 2,
-      "cases": [
-        "astero/example_astero",
-        "astero/surface_effects"
-      ]
-    },
-    {
-      "section": "astero_search_controls",
-      "key": "surf_coef2_name",
-      "category": "unimplemented",
-      "case_count": 2,
-      "cases": [
-        "astero/example_astero",
-        "astero/surface_effects"
-      ]
-    },
-    {
-      "section": "controls",
-      "key": "add_atmosphere_to_pulse_data",
-      "category": "unimplemented",
-      "case_count": 2,
-      "cases": [
-        "star/check_pulse_atm",
-        "star/tzo"
-      ]
-    },
     {
       "section": "controls",
       "key": "high_logt_op_mono_full_off",
@@ -691,42 +103,12 @@
     },
     {
       "section": "controls",
-      "key": "report_ierr",
-      "category": "unimplemented",
-      "case_count": 2,
-      "cases": [
-        "star/1.4M_ms_op_mono",
-        "star/tzo"
-      ]
-    },
-    {
-      "section": "controls",
       "key": "use_op_mono_alt_get_kap",
       "category": "unimplemented",
       "case_count": 2,
       "cases": [
         "star/1.4M_ms_op_mono",
         "star/radiative_levitation"
-      ]
-    },
-    {
-      "section": "controls",
-      "key": "use_other_mesh_functions",
-      "category": "unimplemented",
-      "case_count": 2,
-      "cases": [
-        "star/other_physics_hooks",
-        "star/simplex_solar_calibration"
-      ]
-    },
-    {
-      "section": "controls",
-      "key": "warn_when_large_virial_thm_rel_err",
-      "category": "unimplemented",
-      "case_count": 2,
-      "cases": [
-        "star/conductive_flame",
-        "star/make_planets"
       ]
     },
     {
@@ -801,29 +183,11 @@
     },
     {
       "section": "controls",
-      "key": "add_center_point_to_pulse_data",
-      "category": "unimplemented",
-      "case_count": 1,
-      "cases": [
-        "star/tzo"
-      ]
-    },
-    {
-      "section": "controls",
       "key": "atm_off_table_option",
       "category": "unimplemented",
       "case_count": 1,
       "cases": [
         "star/c13_pocket"
-      ]
-    },
-    {
-      "section": "controls",
-      "key": "base_of_inject_extra_ergs_sec",
-      "category": "unimplemented",
-      "case_count": 1,
-      "cases": [
-        "star/ccsn_IIp"
       ]
     },
     {
@@ -842,24 +206,6 @@
       "case_count": 1,
       "cases": [
         "star/ppisn"
-      ]
-    },
-    {
-      "section": "controls",
-      "key": "inject_until_reach_model_with_total_energy",
-      "category": "unimplemented",
-      "case_count": 1,
-      "cases": [
-        "star/ccsn_IIp"
-      ]
-    },
-    {
-      "section": "controls",
-      "key": "max_dt_yrs_for_velocity_logt_lower_bound",
-      "category": "unimplemented",
-      "case_count": 1,
-      "cases": [
-        "star/adjust_net"
       ]
     },
     {
@@ -1053,24 +399,6 @@
     },
     {
       "section": "controls",
-      "key": "start_time_for_inject_extra_ergs_sec",
-      "category": "unimplemented",
-      "case_count": 1,
-      "cases": [
-        "star/ccsn_IIp"
-      ]
-    },
-    {
-      "section": "controls",
-      "key": "total_mass_for_inject_extra_ergs_sec",
-      "category": "unimplemented",
-      "case_count": 1,
-      "cases": [
-        "star/ccsn_IIp"
-      ]
-    },
-    {
-      "section": "controls",
       "key": "use_other_eval_fp_ft",
       "category": "unimplemented",
       "case_count": 1,
@@ -1089,29 +417,11 @@
     },
     {
       "section": "controls",
-      "key": "use_other_mesh_delta_coeff_factor",
-      "category": "unimplemented",
-      "case_count": 1,
-      "cases": [
-        "star/1M_pre_ms_to_wd"
-      ]
-    },
-    {
-      "section": "controls",
       "key": "use_other_surface_pt",
       "category": "unused",
       "case_count": 1,
       "cases": [
         "star/conductive_flame"
-      ]
-    },
-    {
-      "section": "controls",
-      "key": "write_pulse_data_with_profile",
-      "category": "unimplemented",
-      "case_count": 1,
-      "cases": [
-        "star/tzo"
       ]
     },
     {
@@ -1135,15 +445,6 @@
     {
       "section": "star_job",
       "key": "fallback_check_total_energy",
-      "category": "unimplemented",
-      "case_count": 1,
-      "cases": [
-        "star/ccsn_IIp"
-      ]
-    },
-    {
-      "section": "star_job",
-      "key": "limit_initial_dt",
       "category": "unimplemented",
       "case_count": 1,
       "cases": [
@@ -1238,33 +539,6 @@
       "case_count": 1,
       "cases": [
         "star/make_co_wd"
-      ]
-    },
-    {
-      "section": "star_job",
-      "key": "save_pulse_data_when_terminate",
-      "category": "unused",
-      "case_count": 1,
-      "cases": [
-        "star/starspots"
-      ]
-    },
-    {
-      "section": "star_job",
-      "key": "set_initial_l_center",
-      "category": "unused",
-      "case_count": 1,
-      "cases": [
-        "star/ccsn_IIp"
-      ]
-    },
-    {
-      "section": "star_job",
-      "key": "set_initial_v_center",
-      "category": "unused",
-      "case_count": 1,
-      "cases": [
-        "star/ccsn_IIp"
       ]
     },
     {
@@ -5943,7 +5217,6 @@
         "controls::high_logt_op_mono_full_off::unimplemented",
         "controls::high_logt_op_mono_full_on::unimplemented",
         "controls::op_mono_method::unimplemented",
-        "controls::report_ierr::unimplemented",
         "controls::use_op_mono_alt_get_kap::unimplemented"
       ],
       "unknown_controls": [],
@@ -5976,14 +5249,11 @@
     {
       "suite": "star",
       "case": "12M_pre_ms_to_core_collapse",
-      "strict_ok": false,
+      "strict_ok": true,
       "entry_files": [
         "inlist_to_cc_header"
       ],
-      "unsupported_controls": [
-        "controls::max_safe_logt_for_rates::unimplemented",
-        "controls::warn_rates_for_high_temp::unimplemented"
-      ],
+      "unsupported_controls": [],
       "unknown_controls": [],
       "headless_plotting_keys_count": 263,
       "terminal_output_keys": [
@@ -6060,7 +5330,7 @@
     {
       "suite": "star",
       "case": "1M_pre_ms_to_wd",
-      "strict_ok": false,
+      "strict_ok": true,
       "entry_files": [
         "inlist_start_header",
         "inlist_to_end_core_h_burn_header",
@@ -6068,9 +5338,7 @@
         "inlist_to_end_agb_header",
         "inlist_to_wd_header"
       ],
-      "unsupported_controls": [
-        "controls::use_other_mesh_delta_coeff_factor::unimplemented"
-      ],
+      "unsupported_controls": [],
       "unknown_controls": [],
       "headless_plotting_keys_count": 18,
       "terminal_output_keys": [
@@ -6102,14 +5370,11 @@
     {
       "suite": "star",
       "case": "20M_pre_ms_to_core_collapse",
-      "strict_ok": false,
+      "strict_ok": true,
       "entry_files": [
         "inlist_to_cc_header"
       ],
-      "unsupported_controls": [
-        "controls::max_safe_logt_for_rates::unimplemented",
-        "controls::warn_rates_for_high_temp::unimplemented"
-      ],
+      "unsupported_controls": [],
       "unknown_controls": [],
       "headless_plotting_keys_count": 263,
       "terminal_output_keys": [
@@ -6129,14 +5394,11 @@
     {
       "suite": "star",
       "case": "20M_z2m2_high_rotation",
-      "strict_ok": false,
+      "strict_ok": true,
       "entry_files": [
         "inlist_to_end_core_he_burn_header"
       ],
-      "unsupported_controls": [
-        "controls::max_safe_logt_for_rates::unimplemented",
-        "controls::warn_rates_for_high_temp::unimplemented"
-      ],
+      "unsupported_controls": [],
       "unknown_controls": [],
       "headless_plotting_keys_count": 295,
       "terminal_output_keys": [
@@ -6235,13 +5497,11 @@
     {
       "suite": "star",
       "case": "adjust_net",
-      "strict_ok": false,
+      "strict_ok": true,
       "entry_files": [
         "inlist_adjust_net_header"
       ],
-      "unsupported_controls": [
-        "controls::max_dt_yrs_for_velocity_logt_lower_bound::unimplemented"
-      ],
+      "unsupported_controls": [],
       "unknown_controls": [],
       "headless_plotting_keys_count": 68,
       "terminal_output_keys": [
@@ -6320,8 +5580,6 @@
         "inlist_shock_part5_header"
       ],
       "unsupported_controls": [
-        "controls::base_of_inject_extra_ergs_sec::unimplemented",
-        "controls::inject_until_reach_model_with_total_energy::unimplemented",
         "controls::rti_c_x0_frac::unimplemented",
         "controls::rti_c_x_factor::unimplemented",
         "controls::rti_d_mix_floor::unimplemented",
@@ -6333,17 +5591,11 @@
         "controls::rti_smooth_fraction::unimplemented",
         "controls::rti_smooth_iterations::unimplemented",
         "controls::rti_smooth_mass::unimplemented",
-        "controls::start_time_for_inject_extra_ergs_sec::unimplemented",
-        "controls::total_mass_for_inject_extra_ergs_sec::unimplemented",
-        "controls::warn_rates_for_high_temp::unimplemented",
         "star_job::fallback_check_total_energy::unimplemented",
-        "star_job::limit_initial_dt::unimplemented",
         "star_job::remove_center_set_zero_v_center::unimplemented",
         "star_job::remove_fallback_at_each_step::unimplemented",
         "star_job::remove_fallback_speed_limit::unimplemented",
-        "star_job::remove_initial_center_by_entropy::unimplemented",
-        "star_job::set_initial_l_center::unused",
-        "star_job::set_initial_v_center::unused"
+        "star_job::remove_initial_center_by_entropy::unimplemented"
       ],
       "unknown_controls": [],
       "headless_plotting_keys_count": 100,
@@ -6361,13 +5613,11 @@
     {
       "suite": "star",
       "case": "check_pulse_atm",
-      "strict_ok": false,
+      "strict_ok": true,
       "entry_files": [
         "inlist_check_pulse_atm_header"
       ],
-      "unsupported_controls": [
-        "controls::add_atmosphere_to_pulse_data::unimplemented"
-      ],
+      "unsupported_controls": [],
       "unknown_controls": [],
       "headless_plotting_keys_count": 0,
       "terminal_output_keys": [
@@ -6403,9 +5653,7 @@
         "inlist_conductive_flame_header"
       ],
       "unsupported_controls": [
-        "controls::use_other_surface_pt::unused",
-        "controls::warn_rates_for_high_temp::unimplemented",
-        "controls::warn_when_large_virial_thm_rel_err::unimplemented"
+        "controls::use_other_surface_pt::unused"
       ],
       "unknown_controls": [],
       "headless_plotting_keys_count": 109,
@@ -6928,15 +6176,13 @@
     {
       "suite": "star",
       "case": "make_planets",
-      "strict_ok": false,
+      "strict_ok": true,
       "entry_files": [
         "inlist_create_header",
         "inlist_core_header",
         "inlist_evolve_header"
       ],
-      "unsupported_controls": [
-        "controls::warn_when_large_virial_thm_rel_err::unimplemented"
-      ],
+      "unsupported_controls": [],
       "unknown_controls": [],
       "headless_plotting_keys_count": 0,
       "terminal_output_keys": [
@@ -7106,13 +6352,11 @@
     {
       "suite": "star",
       "case": "other_physics_hooks",
-      "strict_ok": false,
+      "strict_ok": true,
       "entry_files": [
         "inlist_other_physics_hooks_header"
       ],
-      "unsupported_controls": [
-        "controls::use_other_mesh_functions::unimplemented"
-      ],
+      "unsupported_controls": [],
       "unknown_controls": [],
       "headless_plotting_keys_count": 0,
       "terminal_output_keys": [
@@ -7126,14 +6370,11 @@
     {
       "suite": "star",
       "case": "pisn",
-      "strict_ok": false,
+      "strict_ok": true,
       "entry_files": [
         "inlist_finish_header"
       ],
-      "unsupported_controls": [
-        "controls::max_safe_logt_for_rates::unimplemented",
-        "controls::warn_rates_for_high_temp::unimplemented"
-      ],
+      "unsupported_controls": [],
       "unknown_controls": [],
       "headless_plotting_keys_count": 288,
       "terminal_output_keys": [
@@ -7161,7 +6402,6 @@
         "controls::initial_he3::unimplemented",
         "controls::use_other_eval_fp_ft::unimplemented",
         "controls::use_other_kap::unused",
-        "controls::warn_rates_for_high_temp::unimplemented",
         "star_job::change_w_div_wc_flag::unimplemented",
         "star_job::max_dt_for_relax_entropy::unimplemented",
         "star_job::max_steps_to_relax_entropy::unimplemented",
@@ -7419,13 +6659,11 @@
     {
       "suite": "star",
       "case": "simplex_solar_calibration",
-      "strict_ok": false,
+      "strict_ok": true,
       "entry_files": [
         "inlist_solar_header"
       ],
-      "unsupported_controls": [
-        "controls::use_other_mesh_functions::unimplemented"
-      ],
+      "unsupported_controls": [],
       "unknown_controls": [],
       "headless_plotting_keys_count": 0,
       "terminal_output_keys": [
@@ -7438,14 +6676,11 @@
     {
       "suite": "star",
       "case": "split_burn_big_net",
-      "strict_ok": false,
+      "strict_ok": true,
       "entry_files": [
         "inlist_big_net_header"
       ],
-      "unsupported_controls": [
-        "controls::max_safe_logt_for_rates::unimplemented",
-        "controls::warn_rates_for_high_temp::unimplemented"
-      ],
+      "unsupported_controls": [],
       "unknown_controls": [],
       "headless_plotting_keys_count": 258,
       "terminal_output_keys": [
@@ -7466,8 +6701,7 @@
         "inlist_starspots_header"
       ],
       "unsupported_controls": [
-        "star_job::mesa_dir::unimplemented",
-        "star_job::save_pulse_data_when_terminate::unused"
+        "star_job::mesa_dir::unimplemented"
       ],
       "unknown_controls": [],
       "headless_plotting_keys_count": 17,
@@ -7499,15 +6733,12 @@
     {
       "suite": "star",
       "case": "twin_studies",
-      "strict_ok": false,
+      "strict_ok": true,
       "entry_files": [
         "inlist_star1_header",
         "inlist_star2_header"
       ],
-      "unsupported_controls": [
-        "controls::max_safe_logt_for_rates::unimplemented",
-        "controls::warn_rates_for_high_temp::unimplemented"
-      ],
+      "unsupported_controls": [],
       "unknown_controls": [],
       "headless_plotting_keys_count": 255,
       "terminal_output_keys": [
@@ -7521,18 +6752,13 @@
     {
       "suite": "star",
       "case": "tzo",
-      "strict_ok": false,
+      "strict_ok": true,
       "entry_files": [
         "inlist_initial_make_header",
         "inlist_initial_post_relax_header",
         "inlist_evolve_tzo_header"
       ],
-      "unsupported_controls": [
-        "controls::add_atmosphere_to_pulse_data::unimplemented",
-        "controls::add_center_point_to_pulse_data::unimplemented",
-        "controls::report_ierr::unimplemented",
-        "controls::write_pulse_data_with_profile::unimplemented"
-      ],
+      "unsupported_controls": [],
       "unknown_controls": [],
       "headless_plotting_keys_count": 334,
       "terminal_output_keys": [
@@ -7699,14 +6925,11 @@
     {
       "suite": "star",
       "case": "zams_to_cc_80",
-      "strict_ok": false,
+      "strict_ok": true,
       "entry_files": [
         "inlist_to_cc_header"
       ],
-      "unsupported_controls": [
-        "controls::max_safe_logt_for_rates::unimplemented",
-        "controls::warn_rates_for_high_temp::unimplemented"
-      ],
+      "unsupported_controls": [],
       "unknown_controls": [],
       "headless_plotting_keys_count": 263,
       "terminal_output_keys": [
@@ -7911,56 +7134,13 @@
     {
       "suite": "astero",
       "case": "example_astero",
-      "strict_ok": false,
+      "strict_ok": true,
       "entry_files": [
         "inlist_example_astero_header",
         "inlist",
         "inlist_astero_search_controls"
       ],
-      "unsupported_controls": [
-        "astero_search_controls::best_model_fgong_filename::unimplemented",
-        "astero_search_controls::best_model_gyre_filename::unimplemented",
-        "astero_search_controls::best_model_profile_filename::unimplemented",
-        "astero_search_controls::best_model_save_model_filename::unimplemented",
-        "astero_search_controls::fgong_postfix::unimplemented",
-        "astero_search_controls::fgong_prefix::unimplemented",
-        "astero_search_controls::gyre_postfix::unimplemented",
-        "astero_search_controls::gyre_prefix::unimplemented",
-        "astero_search_controls::last_model_save_info_filename::unimplemented",
-        "astero_search_controls::max_num_gyre_points::unimplemented",
-        "astero_search_controls::model_num_digits::unimplemented",
-        "astero_search_controls::num_digits::unimplemented",
-        "astero_search_controls::restart_scan_grid_from_file::unimplemented",
-        "astero_search_controls::restart_simplex_from_file::unimplemented",
-        "astero_search_controls::sample_results_postfix::unimplemented",
-        "astero_search_controls::sample_results_prefix::unimplemented",
-        "astero_search_controls::save_controls::unimplemented",
-        "astero_search_controls::save_controls_filename::unimplemented",
-        "astero_search_controls::save_info_for_last_model::unimplemented",
-        "astero_search_controls::save_model_for_best_model::unimplemented",
-        "astero_search_controls::save_next_best_at_higher_frequency::unimplemented",
-        "astero_search_controls::save_next_best_at_lower_frequency::unimplemented",
-        "astero_search_controls::simplex_alpha::unimplemented",
-        "astero_search_controls::simplex_beta::unimplemented",
-        "astero_search_controls::simplex_delta::unimplemented",
-        "astero_search_controls::simplex_gamma::unimplemented",
-        "astero_search_controls::surf_coef1_name::unimplemented",
-        "astero_search_controls::surf_coef2_name::unimplemented",
-        "astero_search_controls::trace_chi2_seismo_delta_nu_info::unimplemented",
-        "astero_search_controls::trace_chi2_seismo_frequencies_info::unimplemented",
-        "astero_search_controls::trace_chi2_seismo_nu_max_info::unimplemented",
-        "astero_search_controls::trace_chi2_seismo_ratios_info::unimplemented",
-        "astero_search_controls::trace_chi2_spectro_info::unimplemented",
-        "astero_search_controls::trace_limits::unused",
-        "astero_search_controls::trace_time_in_oscillation_code::unimplemented",
-        "astero_search_controls::write_best_model_data_for_each_sample::unimplemented",
-        "astero_search_controls::write_fgong_for_best_model::unimplemented",
-        "astero_search_controls::write_fgong_for_each_model::unimplemented",
-        "astero_search_controls::write_gyre_for_best_model::unimplemented",
-        "astero_search_controls::write_gyre_for_each_model::unimplemented",
-        "astero_search_controls::write_profile_for_best_model::unimplemented",
-        "astero_search_controls::y_frac_he3::unused"
-      ],
+      "unsupported_controls": [],
       "unknown_controls": [],
       "headless_plotting_keys_count": 173,
       "terminal_output_keys": [
@@ -7974,47 +7154,12 @@
     {
       "suite": "astero",
       "case": "fast_from_file",
-      "strict_ok": false,
+      "strict_ok": true,
       "entry_files": [
         "inlist_fast_from_file_header",
         "inlist_astero_search_controls"
       ],
-      "unsupported_controls": [
-        "astero_search_controls::best_model_fgong_filename::unimplemented",
-        "astero_search_controls::best_model_gyre_filename::unimplemented",
-        "astero_search_controls::best_model_profile_filename::unimplemented",
-        "astero_search_controls::best_model_save_model_filename::unimplemented",
-        "astero_search_controls::fgong_postfix::unimplemented",
-        "astero_search_controls::fgong_prefix::unimplemented",
-        "astero_search_controls::gyre_postfix::unimplemented",
-        "astero_search_controls::gyre_prefix::unimplemented",
-        "astero_search_controls::last_model_save_info_filename::unimplemented",
-        "astero_search_controls::max_num_gyre_points::unimplemented",
-        "astero_search_controls::model_num_digits::unimplemented",
-        "astero_search_controls::num_digits::unimplemented",
-        "astero_search_controls::sample_results_postfix::unimplemented",
-        "astero_search_controls::sample_results_prefix::unimplemented",
-        "astero_search_controls::save_controls::unimplemented",
-        "astero_search_controls::save_controls_filename::unimplemented",
-        "astero_search_controls::save_info_for_last_model::unimplemented",
-        "astero_search_controls::save_model_for_best_model::unimplemented",
-        "astero_search_controls::save_next_best_at_higher_frequency::unimplemented",
-        "astero_search_controls::save_next_best_at_lower_frequency::unimplemented",
-        "astero_search_controls::trace_chi2_seismo_delta_nu_info::unimplemented",
-        "astero_search_controls::trace_chi2_seismo_frequencies_info::unimplemented",
-        "astero_search_controls::trace_chi2_seismo_nu_max_info::unimplemented",
-        "astero_search_controls::trace_chi2_seismo_ratios_info::unimplemented",
-        "astero_search_controls::trace_chi2_spectro_info::unimplemented",
-        "astero_search_controls::trace_limits::unused",
-        "astero_search_controls::trace_time_in_oscillation_code::unimplemented",
-        "astero_search_controls::write_best_model_data_for_each_sample::unimplemented",
-        "astero_search_controls::write_fgong_for_best_model::unimplemented",
-        "astero_search_controls::write_fgong_for_each_model::unimplemented",
-        "astero_search_controls::write_gyre_for_best_model::unimplemented",
-        "astero_search_controls::write_gyre_for_each_model::unimplemented",
-        "astero_search_controls::write_profile_for_best_model::unimplemented",
-        "astero_search_controls::y_frac_he3::unused"
-      ],
+      "unsupported_controls": [],
       "unknown_controls": [],
       "headless_plotting_keys_count": 173,
       "terminal_output_keys": [
@@ -8028,47 +7173,12 @@
     {
       "suite": "astero",
       "case": "fast_newuoa",
-      "strict_ok": false,
+      "strict_ok": true,
       "entry_files": [
         "inlist_fast_newuoa_header",
         "inlist_astero_search_controls"
       ],
-      "unsupported_controls": [
-        "astero_search_controls::best_model_fgong_filename::unimplemented",
-        "astero_search_controls::best_model_gyre_filename::unimplemented",
-        "astero_search_controls::best_model_profile_filename::unimplemented",
-        "astero_search_controls::best_model_save_model_filename::unimplemented",
-        "astero_search_controls::fgong_postfix::unimplemented",
-        "astero_search_controls::fgong_prefix::unimplemented",
-        "astero_search_controls::gyre_postfix::unimplemented",
-        "astero_search_controls::gyre_prefix::unimplemented",
-        "astero_search_controls::last_model_save_info_filename::unimplemented",
-        "astero_search_controls::max_num_gyre_points::unimplemented",
-        "astero_search_controls::model_num_digits::unimplemented",
-        "astero_search_controls::num_digits::unimplemented",
-        "astero_search_controls::sample_results_postfix::unimplemented",
-        "astero_search_controls::sample_results_prefix::unimplemented",
-        "astero_search_controls::save_controls::unimplemented",
-        "astero_search_controls::save_controls_filename::unimplemented",
-        "astero_search_controls::save_info_for_last_model::unimplemented",
-        "astero_search_controls::save_model_for_best_model::unimplemented",
-        "astero_search_controls::save_next_best_at_higher_frequency::unimplemented",
-        "astero_search_controls::save_next_best_at_lower_frequency::unimplemented",
-        "astero_search_controls::trace_chi2_seismo_delta_nu_info::unimplemented",
-        "astero_search_controls::trace_chi2_seismo_frequencies_info::unimplemented",
-        "astero_search_controls::trace_chi2_seismo_nu_max_info::unimplemented",
-        "astero_search_controls::trace_chi2_seismo_ratios_info::unimplemented",
-        "astero_search_controls::trace_chi2_spectro_info::unimplemented",
-        "astero_search_controls::trace_limits::unused",
-        "astero_search_controls::trace_time_in_oscillation_code::unimplemented",
-        "astero_search_controls::write_best_model_data_for_each_sample::unimplemented",
-        "astero_search_controls::write_fgong_for_best_model::unimplemented",
-        "astero_search_controls::write_fgong_for_each_model::unimplemented",
-        "astero_search_controls::write_gyre_for_best_model::unimplemented",
-        "astero_search_controls::write_gyre_for_each_model::unimplemented",
-        "astero_search_controls::write_profile_for_best_model::unimplemented",
-        "astero_search_controls::y_frac_he3::unused"
-      ],
+      "unsupported_controls": [],
       "unknown_controls": [],
       "headless_plotting_keys_count": 173,
       "terminal_output_keys": [
@@ -8082,48 +7192,12 @@
     {
       "suite": "astero",
       "case": "fast_scan_grid",
-      "strict_ok": false,
+      "strict_ok": true,
       "entry_files": [
         "inlist_fast_scan_grid_header",
         "inlist_astero_search_controls"
       ],
-      "unsupported_controls": [
-        "astero_search_controls::best_model_fgong_filename::unimplemented",
-        "astero_search_controls::best_model_gyre_filename::unimplemented",
-        "astero_search_controls::best_model_profile_filename::unimplemented",
-        "astero_search_controls::best_model_save_model_filename::unimplemented",
-        "astero_search_controls::fgong_postfix::unimplemented",
-        "astero_search_controls::fgong_prefix::unimplemented",
-        "astero_search_controls::gyre_postfix::unimplemented",
-        "astero_search_controls::gyre_prefix::unimplemented",
-        "astero_search_controls::last_model_save_info_filename::unimplemented",
-        "astero_search_controls::max_num_gyre_points::unimplemented",
-        "astero_search_controls::model_num_digits::unimplemented",
-        "astero_search_controls::num_digits::unimplemented",
-        "astero_search_controls::restart_scan_grid_from_file::unimplemented",
-        "astero_search_controls::sample_results_postfix::unimplemented",
-        "astero_search_controls::sample_results_prefix::unimplemented",
-        "astero_search_controls::save_controls::unimplemented",
-        "astero_search_controls::save_controls_filename::unimplemented",
-        "astero_search_controls::save_info_for_last_model::unimplemented",
-        "astero_search_controls::save_model_for_best_model::unimplemented",
-        "astero_search_controls::save_next_best_at_higher_frequency::unimplemented",
-        "astero_search_controls::save_next_best_at_lower_frequency::unimplemented",
-        "astero_search_controls::trace_chi2_seismo_delta_nu_info::unimplemented",
-        "astero_search_controls::trace_chi2_seismo_frequencies_info::unimplemented",
-        "astero_search_controls::trace_chi2_seismo_nu_max_info::unimplemented",
-        "astero_search_controls::trace_chi2_seismo_ratios_info::unimplemented",
-        "astero_search_controls::trace_chi2_spectro_info::unimplemented",
-        "astero_search_controls::trace_limits::unused",
-        "astero_search_controls::trace_time_in_oscillation_code::unimplemented",
-        "astero_search_controls::write_best_model_data_for_each_sample::unimplemented",
-        "astero_search_controls::write_fgong_for_best_model::unimplemented",
-        "astero_search_controls::write_fgong_for_each_model::unimplemented",
-        "astero_search_controls::write_gyre_for_best_model::unimplemented",
-        "astero_search_controls::write_gyre_for_each_model::unimplemented",
-        "astero_search_controls::write_profile_for_best_model::unimplemented",
-        "astero_search_controls::y_frac_he3::unused"
-      ],
+      "unsupported_controls": [],
       "unknown_controls": [],
       "headless_plotting_keys_count": 173,
       "terminal_output_keys": [
@@ -8137,52 +7211,12 @@
     {
       "suite": "astero",
       "case": "fast_simplex",
-      "strict_ok": false,
+      "strict_ok": true,
       "entry_files": [
         "inlist_fast_simplex_header",
         "inlist_astero_search_controls"
       ],
-      "unsupported_controls": [
-        "astero_search_controls::best_model_fgong_filename::unimplemented",
-        "astero_search_controls::best_model_gyre_filename::unimplemented",
-        "astero_search_controls::best_model_profile_filename::unimplemented",
-        "astero_search_controls::best_model_save_model_filename::unimplemented",
-        "astero_search_controls::fgong_postfix::unimplemented",
-        "astero_search_controls::fgong_prefix::unimplemented",
-        "astero_search_controls::gyre_postfix::unimplemented",
-        "astero_search_controls::gyre_prefix::unimplemented",
-        "astero_search_controls::last_model_save_info_filename::unimplemented",
-        "astero_search_controls::max_num_gyre_points::unimplemented",
-        "astero_search_controls::model_num_digits::unimplemented",
-        "astero_search_controls::num_digits::unimplemented",
-        "astero_search_controls::restart_simplex_from_file::unimplemented",
-        "astero_search_controls::sample_results_postfix::unimplemented",
-        "astero_search_controls::sample_results_prefix::unimplemented",
-        "astero_search_controls::save_controls::unimplemented",
-        "astero_search_controls::save_controls_filename::unimplemented",
-        "astero_search_controls::save_info_for_last_model::unimplemented",
-        "astero_search_controls::save_model_for_best_model::unimplemented",
-        "astero_search_controls::save_next_best_at_higher_frequency::unimplemented",
-        "astero_search_controls::save_next_best_at_lower_frequency::unimplemented",
-        "astero_search_controls::simplex_alpha::unimplemented",
-        "astero_search_controls::simplex_beta::unimplemented",
-        "astero_search_controls::simplex_delta::unimplemented",
-        "astero_search_controls::simplex_gamma::unimplemented",
-        "astero_search_controls::trace_chi2_seismo_delta_nu_info::unimplemented",
-        "astero_search_controls::trace_chi2_seismo_frequencies_info::unimplemented",
-        "astero_search_controls::trace_chi2_seismo_nu_max_info::unimplemented",
-        "astero_search_controls::trace_chi2_seismo_ratios_info::unimplemented",
-        "astero_search_controls::trace_chi2_spectro_info::unimplemented",
-        "astero_search_controls::trace_limits::unused",
-        "astero_search_controls::trace_time_in_oscillation_code::unimplemented",
-        "astero_search_controls::write_best_model_data_for_each_sample::unimplemented",
-        "astero_search_controls::write_fgong_for_best_model::unimplemented",
-        "astero_search_controls::write_fgong_for_each_model::unimplemented",
-        "astero_search_controls::write_gyre_for_best_model::unimplemented",
-        "astero_search_controls::write_gyre_for_each_model::unimplemented",
-        "astero_search_controls::write_profile_for_best_model::unimplemented",
-        "astero_search_controls::y_frac_he3::unused"
-      ],
+      "unsupported_controls": [],
       "unknown_controls": [],
       "headless_plotting_keys_count": 173,
       "terminal_output_keys": [
@@ -8196,38 +7230,12 @@
     {
       "suite": "astero",
       "case": "surface_effects",
-      "strict_ok": false,
+      "strict_ok": true,
       "entry_files": [
         "inlist_surface_effects_header",
         "inlist_astero_search_controls"
       ],
-      "unsupported_controls": [
-        "astero_search_controls::best_model_fgong_filename::unimplemented",
-        "astero_search_controls::best_model_profile_filename::unimplemented",
-        "astero_search_controls::best_model_save_model_filename::unimplemented",
-        "astero_search_controls::fgong_postfix::unimplemented",
-        "astero_search_controls::fgong_prefix::unimplemented",
-        "astero_search_controls::last_model_save_info_filename::unimplemented",
-        "astero_search_controls::model_num_digits::unimplemented",
-        "astero_search_controls::num_digits::unimplemented",
-        "astero_search_controls::sample_results_postfix::unimplemented",
-        "astero_search_controls::sample_results_prefix::unimplemented",
-        "astero_search_controls::save_controls::unimplemented",
-        "astero_search_controls::save_controls_filename::unimplemented",
-        "astero_search_controls::save_info_for_last_model::unimplemented",
-        "astero_search_controls::save_model_for_best_model::unimplemented",
-        "astero_search_controls::surf_coef1_name::unimplemented",
-        "astero_search_controls::surf_coef2_name::unimplemented",
-        "astero_search_controls::trace_chi2_seismo_delta_nu_info::unimplemented",
-        "astero_search_controls::trace_chi2_seismo_frequencies_info::unimplemented",
-        "astero_search_controls::trace_chi2_seismo_nu_max_info::unimplemented",
-        "astero_search_controls::trace_chi2_seismo_ratios_info::unimplemented",
-        "astero_search_controls::trace_chi2_spectro_info::unimplemented",
-        "astero_search_controls::write_best_model_data_for_each_sample::unimplemented",
-        "astero_search_controls::write_fgong_for_best_model::unimplemented",
-        "astero_search_controls::write_fgong_for_each_model::unimplemented",
-        "astero_search_controls::write_profile_for_best_model::unimplemented"
-      ],
+      "unsupported_controls": [],
       "unknown_controls": [],
       "headless_plotting_keys_count": 36,
       "terminal_output_keys": [

@@ -627,7 +627,7 @@ def test_flexmesa_trace_and_harness_run_cli_smoke(
             "harness",
             "run",
             "--cases",
-            "adjust_net",
+            "starspots",
             "--max-steps",
             "2",
             "--timeout-sec",

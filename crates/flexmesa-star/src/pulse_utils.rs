@@ -6,8 +6,9 @@
 
 #![allow(missing_docs)]
 
-use flexmesa_const::{FOUR_THIRDS_PI, PI4};
+use flexmesa_const::{FOUR_THIRDS_PI, PI, PI4};
 use flexmesa_eos::{I_GAMMA1, NUM_EOS_BASIC_RESULTS};
+use flexmesa_interp1d::interp_4_to_1;
 
 use crate::model::StarModel;
 
@@ -127,19 +128,11 @@ pub fn eval_center_rho(model: &StarModel, k_b: usize) -> f64 {
         .rmid
         .get(k_b)
         .copied()
-        .unwrap_or(0.5 * model.r[k_b])
-        .max(1.0e-10);
-    let rho1 = model.rho[k_b].max(1.0e-99);
-    let m1 = (model.m[k_b] - 0.5 * model.dm[k_b]).max(0.0);
-    let fit = 0.375
-        * ((5.0 * m1) / (flexmesa_const::PI * flexmesa_math::pow3(r1))
-            - 4.0 * rho1);
-    if fit > 0.1 * rho1 && fit < 10.0 * rho1 {
-        fit
-    } else if k_b >= 1 {
-        let (r_in, r_out) = (model.r[k_b], model.r[k_b - 1]);
-        eval_center_parabolic(r_in, r_out, model.rho[k_b], model.rho[k_b - 1])
-            .max(1.0e-99)
+        .unwrap_or_else(|| 0.5 * model.r[k_b]);
+    let rho1 = model.rho[k_b];
+    let m1 = model.m[k_b] - 0.5 * model.dm[k_b];
+    if r1 > 0.0 {
+        3.0 * (5.0 * m1 / (PI * r1 * r1 * r1) - 4.0 * rho1) / 8.0
     } else {
         rho1
     }
@@ -165,16 +158,16 @@ pub fn set_segment_indices(
     let k_end = if include_last_face { nz } else { nz - 1 };
     let mut cands: Vec<(usize, f64)> = Vec::new();
     for k in 1..k_end {
-        let dlnp = flexmesa_math::log(
-            model.peos[k].max(1.0e-30) / model.peos[k - 1].max(1.0e-30),
-        );
-        let dlnmu = flexmesa_math::log(
-            model.mu[k].max(1.0e-10) / model.mu[k - 1].max(1.0e-10),
-        );
-        let gmu = if dlnp.abs() > 1.0e-14 {
-            dlnmu / dlnp
+        let gmu = if (model.peos[k] - model.peos[k - 1]).abs() > 0.0
+            && model.peos[k] > 0.0
+            && model.peos[k - 1] > 0.0
+            && model.mu[k] > 0.0
+            && model.mu[k - 1] > 0.0
+        {
+            flexmesa_math::log(model.mu[k] / model.mu[k - 1])
+                / flexmesa_math::log(model.peos[k] / model.peos[k - 1])
         } else {
-            model.brunt_b[k]
+            0.0
         };
         if gmu.abs() > grad_mu_threshold {
             cands.push((k, gmu.abs()));
@@ -211,44 +204,48 @@ pub fn eval_face(
     let val = if k_a >= k_b {
         v[k_a]
     } else if k <= k_a {
-        let (d0, d1) = (dq[k_a].max(1.0e-30), dq[k_a + 1].max(1.0e-30));
-        v[k_a] - d0 * (v[k_a + 1] - v[k_a]) / (d0 + d1)
+        let (d0, d1) = (dq[k_a], dq[k_a + 1]);
+        if (d0 + d1).abs() > 0.0 {
+            v[k_a] - d0 * (v[k_a + 1] - v[k_a]) / (d1 + d0)
+        } else {
+            v[k_a]
+        }
     } else if k == k_a + 1 {
-        let (d0, d1) = (dq[k_a].max(1.0e-30), dq[k_a + 1].max(1.0e-30));
-        (v[k_a] * d1 + v[k_a + 1] * d0) / (d0 + d1)
+        let (d0, d1) = (dq[k_a], dq[k_a + 1]);
+        if (d0 + d1).abs() > 0.0 {
+            v[k_a] + d0 * (v[k_a + 1] - v[k_a]) / (d1 + d0)
+        } else {
+            v[k_a]
+        }
     } else if k == k_b {
-        let (dm, db) = (dq[k_b - 1].max(1.0e-30), dq[k_b].max(1.0e-30));
-        (v[k_b] * dm + v[k_b - 1] * db) / (db + dm)
+        let (dm, db) = (dq[k_b - 1], dq[k_b]);
+        if (db + dm).abs() > 0.0 {
+            v[k_b] - db * (v[k_b] - v[k_b - 1]) / (db + dm)
+        } else {
+            v[k_b]
+        }
     } else if k > k_b {
-        let (dm, db) = (dq[k_b - 1].max(1.0e-30), dq[k_b].max(1.0e-30));
-        v[k_b] + db * (v[k_b] - v[k_b - 1]) / (db + dm)
+        let (dm, db) = (dq[k_b - 1], dq[k_b]);
+        if (db + dm).abs() > 0.0 {
+            v[k_b] + db * (v[k_b] - v[k_b - 1]) / (db + dm)
+        } else {
+            v[k_b]
+        }
     } else {
-        let h1 = 0.5 * (dq[k - 2] + dq[k - 1]).max(1.0e-30);
-        let h2 = 0.5 * (dq[k - 1] + dq[k]).max(1.0e-30);
-        let h3 = 0.5 * (dq[k] + dq[k + 1]).max(1.0e-30);
-        let (s1, s2, s3) = (
-            (v[k - 1] - v[k - 2]) / h1,
-            (v[k] - v[k - 1]) / h2,
-            (v[k + 1] - v[k]) / h3,
-        );
-        let (p1, p2) = (
-            (s1 * h2 + s2 * h1) / (h1 + h2),
-            (s2 * h3 + s3 * h2) / (h2 + h3),
-        );
-        let dy1 = if s1 * s2 <= 0.0 {
-            0.0
-        } else {
-            s1.signum() * (2.0 * s1.abs()).min(2.0 * s2.abs()).min(p1.abs())
-        };
-        let dy2 = if s2 * s3 <= 0.0 {
-            0.0
-        } else {
-            s2.signum() * (2.0 * s2.abs()).min(2.0 * s3.abs()).min(p2.abs())
-        };
-        let dx = 0.5 * dq[k - 1];
-        let a = (dy1 + dy2 - 2.0 * s2) / (h2 * h2);
-        let b = (3.0 * s2 - 2.0 * dy1 - dy2) / h2;
-        v[k - 1] + dx * (dy1 + dx * (b + dx * a))
+        interp_4_to_1(
+            0.5 * (dq[k - 2] + dq[k - 1]),
+            0.5 * (dq[k - 1] + dq[k]),
+            0.5 * (dq[k] + dq[k + 1]),
+            0.5 * dq[k - 2] + dq[k - 1],
+            v[k - 2],
+            v[k - 1],
+            v[k],
+            v[k + 1],
+        )
+        .unwrap_or_else(|_| {
+            let (d0, d1) = (dq[k - 1].max(1.0e-30), dq[k].max(1.0e-30));
+            (v[k] * d0 + v[k - 1] * d1) / (d0 + d1)
+        })
     };
     let val = v_lo.map_or(val, |lo| val.max(lo));
     v_hi.map_or(val, |hi| val.min(hi))

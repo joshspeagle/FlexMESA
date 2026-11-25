@@ -5,7 +5,7 @@
 //! `do1_turbulent_energy_eqn`, and `RSP2_adjust_vars_before_call_solver` in
 //! `star/private/hydro_rsp2.f90:1-1243`).
 
-use flexmesa_const::{BOLTZ_SIGMA, LN10, PI4};
+use flexmesa_const::{BOLTZ_SIGMA, PI4};
 
 use crate::model::StarModel;
 use crate::rsp2::{X_CEDE, X_GAMMAR};
@@ -51,30 +51,56 @@ pub(crate) fn is_nonturbulent_cell(model: &StarModel, k: usize) -> bool {
     alpha == 0.0 || k_1based <= n_outer || k_1based > nz.saturating_sub(ibotom)
 }
 
+/// Evaluates `get_scale_height_face_val` (`star/private/star_utils.f90:4021-4046`)
+/// used by `set_RSP2_vars` (`hydro_rsp2.f90:64-66`) when `Hp_face(k) <= 0`.
+#[must_use]
+pub(crate) fn get_scale_height_face_val(model: &StarModel, k: usize) -> f64 {
+    let g = model.cgrav[k];
+    let r = model.r[k];
+    let grav = g * model.m_grav[k] / (r * r);
+    let (p, rho) = if k == 0 {
+        (model.peos[0], model.rho[0])
+    } else {
+        let alfa = model.dq[k - 1] / (model.dq[k - 1] + model.dq[k]);
+        let beta = 1.0 - alfa;
+        (
+            alfa * model.peos[k] + beta * model.peos[k - 1],
+            alfa * model.rho[k] + beta * model.rho[k - 1],
+        )
+    };
+    let mut scale_height = p / (grav * rho);
+    if model.controls.mix_wind.alt_scale_height_flag {
+        let scale_height2 = (p / g).sqrt() / rho;
+        if scale_height2 < scale_height {
+            scale_height = scale_height2;
+        }
+    }
+    scale_height
+}
+
 /// Evaluates `Hp_face_for_rsp2_eqn` (`hydro_rsp2.f90:230-285`) at face `k` (`0..nz`).
 #[must_use]
 pub fn eval_rsp2_hp_face_zone(model: &StarModel, k: usize) -> f64 {
     let r_00 = model.r[k];
-    let d_00 = model.rho[k].max(1.0e-99);
+    let d_00 = model.rho[k];
     let peos_00 = model.peos[k];
     if k > 0 && !model.controls.rsp2.assume_hse {
         let (alfa, beta) = rsp2_face_weights(model, k);
-        let rho_face = alfa * d_00 + beta * model.rho[k - 1].max(1.0e-99);
+        let rho_face = alfa * d_00 + beta * model.rho[k - 1];
         let area = PI4 * r_00 * r_00;
         let dlnp = model.ln_peos[k - 1] - model.ln_peos[k];
-        if dlnp.abs() > 1.0e-30 {
-            return (-model.dm_bar[k] / (area * rho_face * dlnp)).max(1.0);
+        if dlnp != 0.0 {
+            return -model.dm_bar[k] / (area * rho_face * dlnp);
         }
     }
     let peos_div_rho = if k == 0 {
         peos_00 / d_00
     } else {
         let (alfa, beta) = rsp2_face_weights(model, k);
-        alfa * peos_00 / d_00
-            + beta * model.peos[k - 1] / model.rho[k - 1].max(1.0e-99)
+        alfa * (peos_00 / d_00) + beta * (model.peos[k - 1] / model.rho[k - 1])
     };
-    let gm = (model.cgrav[k] * model.m[k]).max(1.0e-30);
-    (r_00 * r_00 * peos_div_rho / gm).max(1.0)
+    let gm = model.cgrav[k] * model.m[k];
+    r_00 * r_00 * peos_div_rho / gm
 }
 
 /// Populates all `RSP2` face and cell arrays on `model.aux.rsp` (`set_RSP2_vars`
@@ -104,12 +130,15 @@ pub fn eval_rsp2_profile_equations(
     }
     for (k, slot) in equ_hp.iter_mut().enumerate() {
         let hp_exp = eval_rsp2_hp_face_ad(model, k).val;
-        let hp_act = model.aux.rsp.hp_face[k].max(1.0);
+        let hp_act = model.aux.rsp.hp_face[k];
         *slot = (hp_exp - hp_act) / hp_exp.max(hp_act);
     }
     for (k, slot) in equ_etrb.iter_mut().enumerate() {
         let w = model.aux.rsp.et_rsp[k].max(0.0).sqrt();
-        if is_nonturbulent_cell(model, k) {
+        if !model.controls.rsp2_flag {
+            let w_s = model.aux.rsp.w_start.get(k).copied().unwrap_or(0.0);
+            *slot = w - w_s;
+        } else if is_nonturbulent_cell(model, k) {
             let cs_s = model
                 .aux
                 .rsp
@@ -130,13 +159,8 @@ pub fn eval_rsp2_profile_equations(
                 .map_or(model.rho[k], flexmesa_math::exp)
                 .max(1.0e-99);
             let ptrb_dv = ptrb * (1.0 / model.rho[k] - 1.0 / rho_s);
-            let logt = model.ln_t[k] / LN10;
             let l_theta = if model.controls.using_velocity_time_centering
                 && model.controls.include_l_in_velocity_time_centering
-                && logt
-                    <= model
-                        .controls
-                        .max_logt_for_include_p_and_l_in_velocity_time_centering
             {
                 model.controls.l_theta_for_velocity_time_centering
             } else {
@@ -162,14 +186,22 @@ pub fn eval_rsp2_profile_equations(
             let esum = d_et + ptrb_dv + dt_dlt_dm
                 - dt * work.coupl[k].val
                 - dt * model.aux.eq_ad[k].val;
-            let e_start = model
-                .energy_start
-                .get(k)
-                .copied()
-                .filter(|&e| e > 0.0)
-                .unwrap_or_else(|| model.energy[k])
-                .max(1.0);
-            let scal_div_dt = (if k == 0 { 1.0e-6 } else { 1.0 }) / e_start;
+            let scal_div_dt = if model.dt > 0.0
+                && model.aux.total_internal_energy_start.is_some()
+            {
+                crate::hydro_energy::set_energy_eqn_scal(model, k)
+                    .unwrap_or(0.0)
+                    / model.dt
+            } else {
+                let e_start = model
+                    .energy_start
+                    .get(k)
+                    .copied()
+                    .filter(|&e| e > 0.0)
+                    .unwrap_or_else(|| model.energy[k])
+                    .max(1.0);
+                (if k == 0 { 1.0e-6 } else { 1.0 }) / e_start
+            };
             *slot = esum * scal_div_dt;
         }
     }
@@ -189,12 +221,21 @@ pub fn rsp2_adjust_vars_before_call_solver(model: &mut StarModel) {
     if alpha == 0.0 || nz < 2 {
         return;
     }
-    let _ = eval_rsp2_profile_equations(model);
+    if model.aux.rsp.pii_rsp.len() != nz
+        || model.aux.rsp.hp_face.len() != nz
+        || model.aux.rsp.hp_face.iter().any(|&h| h <= 0.0)
+    {
+        let _ = eval_rsp2_profile_equations(model);
+    }
     let rsp2 = model.controls.rsp2.clone();
-    // Matches upstream `hydro_rsp2.f90:1209`, which reads `s% RSP_nz_div_IBOTOM`.
-    let ibotom = ((nz as f64) / model.controls.rsp.nz_div_ibotom.max(1.0))
-        .floor()
-        .max(1.0) as usize;
+    // Matches upstream `hydro_rsp2.f90:1197`, which reads `s% RSP_nz_div_IBOTOM`.
+    let ibotom = if model.controls.rsp.nz_div_ibotom > 0.0 {
+        ((nz as f64) / model.controls.rsp.nz_div_ibotom)
+            .floor()
+            .max(1.0) as usize
+    } else {
+        1
+    };
     let k_lo = rsp2.num_outermost_cells_forced_nonturbulent;
     let k_hi = nz.saturating_sub(ibotom);
 
@@ -203,25 +244,23 @@ pub fn rsp2_adjust_vars_before_call_solver(model: &mut StarModel) {
         if w_cur > rsp2.w_min_for_damping {
             continue;
         }
+        let hp_k = model.aux.rsp.hp_face[k];
+        let hp_k1 = model.aux.rsp.hp_face[k + 1];
         let pii_div_hp = 0.5
-            * (model.aux.rsp.pii_rsp[k] / model.aux.rsp.hp_face[k].max(1.0)
-                + model.aux.rsp.pii_rsp[k + 1]
-                    / model.aux.rsp.hp_face[k + 1].max(1.0));
-        let qq = model.chi_t[k]
-            / (model.rho[k] * model.t[k] * model.chi_rho[k]).max(1.0e-99);
-        let source = pii_div_hp * model.t[k] * model.peos[k] * qq
-            / model.cp[k].max(1.0e-30);
-        let hp_cell = 0.5
-            * (model.aux.rsp.hp_face[k].max(1.0)
-                + model.aux.rsp.hp_face[k + 1].max(1.0));
+            * (model.aux.rsp.pii_rsp[k] / hp_k
+                + model.aux.rsp.pii_rsp[k + 1] / hp_k1);
+        let qq =
+            model.chi_t[k] / (model.rho[k] * model.t[k] * model.chi_rho[k]);
+        let source = pii_div_hp * model.t[k] * model.peos[k] * qq / model.cp[k];
+        let hp_cell = 0.5 * (hp_k + hp_k1);
         let damp = (rsp2.alfad * X_CEDE / alpha) / hp_cell;
         let pom = 4.0
             * BOLTZ_SIGMA
             * flexmesa_math::pow2(rsp2.alfar * X_GAMMAR / alpha);
         let pom2 = flexmesa_math::pow3(model.t[k])
             / (flexmesa_math::pow2(model.rho[k])
-                * model.cp[k].max(1.0e-30)
-                * model.opacity[k].max(1.0e-30));
+                * model.cp[k]
+                * model.opacity[k]);
         let dampr = pom * pom2 / (hp_cell * hp_cell);
         let del = dampr * dampr + 4.0 * damp * source;
         if del >= 0.0 && damp > 0.0 {

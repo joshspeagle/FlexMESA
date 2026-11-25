@@ -4,7 +4,7 @@
 //! `do1_rsp2_L_eqn`, `do1_rsp2_Hp_eqn`, and `do1_turbulent_energy_eqn` in
 //! `star/private/hydro_rsp2.f90:67-1172`).
 
-use flexmesa_const::{BOLTZ_SIGMA, CLIGHT, CRAD, LN10, PI, PI4, SQRT_2_DIV_3};
+use flexmesa_const::{BOLTZ_SIGMA, CLIGHT, CRAD, PI, PI4, SQRT_2_DIV_3};
 use flexmesa_eos::{I_CHI_RHO, I_CHI_T, I_CP, I_GRAD_AD, I_LN_E};
 
 use crate::hydro_eqns::HenyeySystem;
@@ -43,7 +43,7 @@ fn wrap_w(model: &StarModel, k: usize, slot: usize) -> StarAdOrder1 {
 
 #[inline]
 fn wrap_hp(model: &StarModel, k: usize, slot: usize) -> StarAdOrder1 {
-    let hp = model.aux.rsp.hp_face[k].max(1.0);
+    let hp = model.aux.rsp.hp_face[k];
     if model.layout.i_hp.is_some() {
         StarAdOrder1::variable(hp, slot)
     } else {
@@ -123,19 +123,10 @@ pub fn eval_rsp2_ptrb_cell_ad(
     let w_ad = wrap_w(model, k, w_slot);
     let ptrb_now = rho_ad * w_ad * w_ad * coeff;
 
-    let logt = model.ln_t[k] / LN10;
-    let p_theta = if model.controls.using_velocity_time_centering
-        && model.controls.include_p_in_velocity_time_centering
-        && logt
-            <= model
-                .controls
-                .max_logt_for_include_p_and_l_in_velocity_time_centering
-    {
-        model.controls.p_theta_for_velocity_time_centering
-    } else {
-        1.0
-    };
-    if p_theta < 1.0 {
+    let time_center = model.controls.using_velocity_time_centering
+        && model.controls.include_p_in_velocity_time_centering;
+    if time_center {
+        let p_theta = model.controls.p_theta_for_velocity_time_centering;
         let pt_s = start_or(&model.aux.rsp.ptrb_start, k, ptrb_now.val);
         ptrb_now * p_theta + (1.0 - p_theta) * pt_s
     } else {
@@ -156,12 +147,9 @@ pub fn eval_rsp2_hp_face_ad(model: &StarModel, k: usize) -> StarAdOrder1 {
         let rho_face = d_00 * alfa + d_m1 * beta;
         let area = r_00 * r_00 * PI4;
         let dlnp = model.ln_peos_ad[k - 1].shift_m1() - model.ln_peos_ad[k];
-        if dlnp.val.abs() > 1.0e-30 {
-            let hp = StarAdOrder1::constant(-model.dm_bar[k])
+        if dlnp.val != 0.0 {
+            return StarAdOrder1::constant(-model.dm_bar[k])
                 / (area * rho_face * dlnp);
-            if hp.val > 1.0 {
-                return hp;
-            }
         }
     }
 
@@ -173,13 +161,8 @@ pub fn eval_rsp2_hp_face_ad(model: &StarModel, k: usize) -> StarAdOrder1 {
         let peos_m1 = wrap_peos_cell(model, k - 1, true);
         (peos_00 / d_00) * alfa + (peos_m1 / d_m1) * beta
     };
-    let gm = (model.cgrav[k] * model.m[k]).max(1.0e-30);
-    let hp = r_00 * r_00 * peos_div_rho * (1.0 / gm);
-    if hp.val >= 1.0 {
-        hp
-    } else {
-        StarAdOrder1::ONE
-    }
+    let gm = model.cgrav[k] * model.m[k];
+    r_00 * r_00 * peos_div_rho * (1.0 / gm)
 }
 
 pub(crate) struct Rsp2AdWork {
@@ -197,8 +180,14 @@ pub(crate) fn build_rsp2_ad_work(model: &mut StarModel) -> Rsp2AdWork {
 
     for k in 0..nz {
         if model.aux.rsp.hp_face[k] <= 0.0 {
-            model.aux.rsp.hp_face[k] =
-                eval_rsp2_hp_face_ad(model, k).val.max(1.0);
+            let hp_init = crate::rsp2_eqns::get_scale_height_face_val(model, k);
+            model.aux.rsp.hp_face[k] = hp_init;
+            if let Some(i_hp) = model.layout.i_hp {
+                let idx = k * model.layout.nvar_hydro + i_hp;
+                if idx < model.xh.len() {
+                    model.xh[idx] = hp_init;
+                }
+            }
         }
     }
 
@@ -248,8 +237,29 @@ pub(crate) fn build_rsp2_ad_work(model: &mut StarModel) -> Rsp2AdWork {
             let grad_ad_f = ga_00 * alfa + ga_m1 * beta;
             let dlnt = lnt_m1 - lnt_00;
             let dlnp = model.ln_peos_ad[k - 1].shift_m1() - model.ln_peos_ad[k];
-            if dlnp.val.abs() > 1.0e-30 {
-                dlnt / dlnp - grad_ad_f
+            let dlnt_dlnp = if dlnp.val == 0.0 {
+                StarAdOrder1::ZERO
+            } else {
+                dlnt / dlnp
+            };
+            let alt_y = if !dlnt_dlnp.val.is_finite() {
+                StarAdOrder1::ZERO
+            } else if model.controls.use_ledoux_criterion
+                && model.controls.calculate_brunt_b
+            {
+                let gl_comp = model
+                    .aux
+                    .mixing
+                    .gradl_composition_term
+                    .get(k)
+                    .copied()
+                    .unwrap_or(0.0);
+                dlnt_dlnp - (grad_ad_f + gl_comp)
+            } else {
+                dlnt_dlnp - grad_ad_f
+            };
+            if alt_y.val.is_finite() {
+                alt_y
             } else {
                 StarAdOrder1::ZERO
             }
@@ -258,10 +268,12 @@ pub(crate) fn build_rsp2_ad_work(model: &mut StarModel) -> Rsp2AdWork {
         if k + 1 < nz {
             let cp_face = cp_00 * alfa + cp_m1 * beta;
             let alfas_alfa = X_ALFAS * alpha;
-            let pii_raw = cp_face * y_face * alfas_alfa;
+            let pii_raw = (cp_face * alfas_alfa) * y_face;
             let pii = if y_face.val > 0.0 && rsp2.use_tdc_enthalpy_flux_limiter
             {
-                let t_face = t_00 * alfa + t_m1 * beta;
+                // Upstream `compute_PII_face` (`hydro_rsp2.f90:567`, #178)
+                // averages `Cp` into `T_face` instead of `T`.
+                let t_face = cp_00 * alfa + cp_m1 * beta;
                 let rho_face = d_00 * alfa + d_m1 * beta;
                 let peos_face = peos_00 * alfa + peos_m1 * beta;
                 let e_00 = wrap_eos_00(model, k, model.ln_e[k], I_LN_E).exp();
@@ -269,9 +281,9 @@ pub(crate) fn build_rsp2_ad_work(model: &mut StarModel) -> Rsp2AdWork {
                     wrap_eos_m1(model, k - 1, model.ln_e[k - 1], I_LN_E).exp();
                 let e_face = e_00 * alfa + e_m1 * beta;
                 let h_face = e_face + peos_face / rho_face;
-                let x_ad = (cp_face * t_face / h_face)
-                    * y_face
-                    * (alfas_alfa / SQRT_2_DIV_3);
+                let x_ad = (((cp_face * t_face / h_face) * alfas_alfa)
+                    * y_face)
+                    / SQRT_2_DIV_3;
                 if x_ad.val.abs() >= 0.95 {
                     let (fl_v, dfl) = rsp2_flux_limiter(x_ad.val);
                     let fl_ad = x_ad.make_unary_operator(fl_v, dfl);
@@ -392,7 +404,7 @@ pub(crate) fn build_rsp2_ad_work(model: &mut StarModel) -> Rsp2AdWork {
             StarAdOrder1::ZERO
         } else {
             let kap_00 = StarAdOrder1::from_dlnd_dlnt_00(
-                model.opacity[k].max(1.0e-30),
+                model.opacity[k],
                 model.d_opacity_dlnd[k],
                 model.d_opacity_dlnt[k],
             );
@@ -421,20 +433,20 @@ pub(crate) fn build_rsp2_ad_work(model: &mut StarModel) -> Rsp2AdWork {
         let t_00 = StarAdOrder1::variable(model.ln_t[k], I_LNT_00).exp();
         let t4_00 = t_00.pow4();
         lr_ad[k] = if k == 0 {
-            area * t4_00 * (rsp2.lsurf_factor * CLIGHT * CRAD)
+            let erad = t4_00 * CRAD;
+            (area * rsp2.lsurf_factor) * CLIGHT * erad
         } else {
             let t_m1 =
                 StarAdOrder1::variable(model.ln_t[k - 1], I_LNT_M1).exp();
             let t4_m1 = t_m1.pow4();
-            let a_dq =
-                model.dq[k - 1] / (model.dq[k - 1] + model.dq[k]).max(1.0e-99);
+            let a_dq = model.dq[k - 1] / (model.dq[k - 1] + model.dq[k]);
             let kap_00 = StarAdOrder1::from_dlnd_dlnt_00(
-                model.opacity[k].max(1.0e-30),
+                model.opacity[k],
                 model.d_opacity_dlnd[k],
                 model.d_opacity_dlnt[k],
             );
             let kap_m1 = StarAdOrder1::from_dlnd_dlnt_m1(
-                model.opacity[k - 1].max(1.0e-30),
+                model.opacity[k - 1],
                 model.d_opacity_dlnd[k - 1],
                 model.d_opacity_dlnt[k - 1],
             );
@@ -452,9 +464,7 @@ pub(crate) fn build_rsp2_ad_work(model: &mut StarModel) -> Rsp2AdWork {
                     }
                 }
             }
-            diff * area
-                * area
-                * (-(CRAD * CLIGHT / 3.0) / model.dm_bar[k].max(1.0e-99))
+            ((diff * (-CRAD * CLIGHT / 3.0)) * (area * area)) / model.dm_bar[k]
         };
         model.aux.rsp.fr_rsp[k] = (lr_ad[k] / area).val;
 
@@ -551,7 +561,9 @@ pub fn eval_and_save_rsp2_eqns(model: &mut StarModel, sys: &mut HenyeySystem) {
     if let Some(i_etrb) = model.layout.i_turbulent_energy {
         for k in 0..nz {
             let w_00 = wrap_w(model, k, I_W_00);
-            let resid_w = if is_nonturbulent_cell(model, k) {
+            let resid_w = if !model.controls.rsp2_flag {
+                w_00 - start_or(&model.aux.rsp.w_start, k, 0.0)
+            } else if is_nonturbulent_cell(model, k) {
                 let cs_s = start_or(&model.aux.rsp.csound_start_rsp, k, 0.0);
                 let cs =
                     (if cs_s > 0.0 { cs_s } else { model.csound[k] }).max(1.0);
@@ -570,12 +582,8 @@ pub fn eval_and_save_rsp2_eqns(model: &mut StarModel, sys: &mut HenyeySystem) {
                 let ptrb_dv =
                     ptrb_ad * (StarAdOrder1::ONE / d_00 - 1.0 / rho_s);
 
-                let logt = model.ln_t[k] / LN10;
                 let l_theta = if model.controls.using_velocity_time_centering
                     && model.controls.include_l_in_velocity_time_centering
-                    && logt <= model
-                        .controls
-                        .max_logt_for_include_p_and_l_in_velocity_time_centering
                 {
                     model.controls.l_theta_for_velocity_time_centering
                 } else {
@@ -595,10 +603,19 @@ pub fn eval_and_save_rsp2_eqns(model: &mut StarModel, sys: &mut HenyeySystem) {
                 let esum = d_et + ptrb_dv + dt_dlt_dm
                     - work.coupl[k] * dt
                     - model.aux.eq_ad[k] * dt;
-                let e_s = start_or(&model.energy_start, k, 0.0);
-                let e_start =
-                    (if e_s > 0.0 { e_s } else { model.energy[k] }).max(1.0);
-                let scal_div_dt = (if k == 0 { 1.0e-6 } else { 1.0 }) / e_start;
+                let scal_div_dt = if model.dt > 0.0
+                    && model.aux.total_internal_energy_start.is_some()
+                {
+                    crate::hydro_energy::set_energy_eqn_scal(model, k)
+                        .unwrap_or(0.0)
+                        / model.dt
+                } else {
+                    let e_s = start_or(&model.energy_start, k, 0.0);
+                    let e_start =
+                        (if e_s > 0.0 { e_s } else { model.energy[k] })
+                            .max(1.0);
+                    (if k == 0 { 1.0e-6 } else { 1.0 }) / e_start
+                };
                 esum * scal_div_dt
             };
             sys.save_eqn_residual(&model.layout, k, i_etrb, &resid_w);

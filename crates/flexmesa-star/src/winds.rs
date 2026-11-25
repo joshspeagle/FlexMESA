@@ -322,7 +322,7 @@ pub fn eval_dutch_wind(
     low_t_scheme: DutchLowTScheme,
     eta: f64,
 ) -> f64 {
-    if eta == 0.0 || l_surf <= 0.0 || m_surf <= 0.0 || t_surf <= 0.0 {
+    if eta <= 0.0 || l_surf <= 0.0 || m_surf <= 0.0 || t_surf <= 0.0 {
         return 0.0;
     }
     let eval_high = || {

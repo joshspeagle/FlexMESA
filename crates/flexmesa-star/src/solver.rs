@@ -732,17 +732,22 @@ pub fn solve_henyey_step(
                 break;
             }
             // Written once sizeB has succeeded, as the MESA overlay does.
-            // `soln` is the negative of upstream's correction `B`, so the
-            // signed `max_correction` (`B(j,k)*correction_weight(j,k)`,
-            // `solver_support.f90:447,492`) is `-mc_raw`; the solver itself
-            // uses only its magnitude (`star_solver.f90:367`).
+            // The signed `max_correction` is `B(j,k)*correction_weight(j,k)`
+            // at the arg max (`solver_support.f90:447,492`). `mc_raw` is its
+            // magnitude and the weights are positive, so the sign is that of
+            // `soln` (upstream's `B`) there; the solver itself uses only the
+            // magnitude (`star_solver.f90:367`).
             if crate::stepdump::active() {
+                let signed_max = match corr_argmax {
+                    Some((k, j)) if soln[k * sys.nvar + j] < 0.0 => -mc_raw,
+                    _ => mc_raw,
+                };
                 stepdump_line(
                     model,
                     sys.nvar,
                     "CORR",
                     &[iter as i64],
-                    &[cn_raw, -mc_raw],
+                    &[cn_raw, signed_max],
                     &stepdump_loc(corr_argmax),
                 );
             }

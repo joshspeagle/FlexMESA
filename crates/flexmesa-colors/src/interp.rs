@@ -162,31 +162,38 @@ impl SedCube {
     ) {
         let nlam = self.wavelengths.len();
         result[..nlam].fill(T::zero());
-        let (ix, hx, hxd, dx) = Self::axis_hermite_basis(&self.teff_grid, teff);
-        let (iy, hy, hyd, dy) =
-            Self::axis_hermite_basis(&self.logg_grid, log_g);
-        let (iz, hz, hzd, dz) =
-            Self::axis_hermite_basis(&self.meta_grid, metallicity);
         let (nx, ny, nz) = (
             self.teff_grid.len(),
             self.logg_grid.len(),
             self.meta_grid.len(),
         );
-        let kx_limit = if nx < 2 || is_dummy_axis(&self.teff_grid) {
-            1
-        } else {
-            2
-        };
-        let ky_limit = if ny < 2 || is_dummy_axis(&self.logg_grid) {
-            1
-        } else {
-            2
-        };
-        let kz_limit = if nz < 2 || is_dummy_axis(&self.meta_grid) {
-            1
-        } else {
-            2
-        };
+        // Match `colors/private/hermite_interp.f90:203-213`: whenever any
+        // axis has fewer than 2 points (`nx < 2 || ny < 2 || nz < 2`), `i >= n`
+        // triggers nearest-point lookup across all wavelengths.
+        if nx < 2 || ny < 2 || nz < 2 {
+            let (ni, nj, nk) = find_nearest_point(
+                teff.val(),
+                log_g.val(),
+                metallicity.val(),
+                &self.teff_grid,
+                &self.logg_grid,
+                &self.meta_grid,
+            );
+            let sed = self.sed_at(ni, nj, nk);
+            let scale = (r / d) * (r / d);
+            for (dst, &src) in result[..nlam].iter_mut().zip(sed.iter()) {
+                *dst = T::from_f64(src) * scale;
+            }
+            return;
+        }
+        let (ix, hx, hxd, dx) = Self::axis_hermite_basis(&self.teff_grid, teff);
+        let (iy, hy, hyd, dy) =
+            Self::axis_hermite_basis(&self.logg_grid, log_g);
+        let (iz, hz, hzd, dz) =
+            Self::axis_hermite_basis(&self.meta_grid, metallicity);
+        let kx_limit = if is_dummy_axis(&self.teff_grid) { 1 } else { 2 };
+        let ky_limit = if is_dummy_axis(&self.logg_grid) { 1 } else { 2 };
+        let kz_limit = if is_dummy_axis(&self.meta_grid) { 1 } else { 2 };
         let (dx_t, dy_t, dz_t) =
             (T::from_f64(dx), T::from_f64(dy), T::from_f64(dz));
 
@@ -353,11 +360,12 @@ impl SedCube {
     }
 
     /// Evaluates the diluted observed SED using 4-nearest-neighbor
-    /// inverse-distance-weighted interpolation (`knn_interp.f90`).
+    /// inverse-distance-weighted interpolation (`knn_interp.f90:63,91-104,183-276`).
     ///
-    /// Normalizes $(T_{\mathrm{eff}}, \log g, [\mathrm{M/H}])$ to $[0, 1]^3$,
-    /// locates the 4 globally closest grid nodes, and blends their SEDs with
-    /// weights $w_k \propto 1 / \max(d_k, 10^{-10})$.
+    /// Normalizes $(T_{\mathrm{eff}}, \log g, [\mathrm{M/H}])$ to $[0, 1]^3$
+    /// via direct division, locates the 4 globally closest grid nodes, blends
+    /// their surface SEDs with weights $w_k \propto 1 / d_k$ (replacing only
+    /// exact $d_k = 0$ with $10^{-10}$), and applies $(R / d)^2$ dilution.
     ///
     /// # Arguments
     /// * `teff` - Effective temperature $T_{\mathrm{eff}}$ in $\mathrm{K}$.
@@ -374,39 +382,62 @@ impl SedCube {
         r: f64,
         d: f64,
     ) -> Vec<f64> {
-        let norm_axis = |grid: &[f64]| -> (f64, f64) {
+        let norm_axis = |grid: &[f64]| -> (bool, f64, f64) {
             if is_dummy_axis(grid) {
-                return (0.0, 0.0);
+                return (false, 0.0, 0.0);
             }
             let min_v = grid.iter().copied().fold(f64::INFINITY, f64::min);
             let max_v = grid.iter().copied().fold(f64::NEG_INFINITY, f64::max);
-            let span = max_v - min_v;
-            (min_v, if span > 0.0 { 1.0 / span } else { 0.0 })
+            (true, min_v, max_v - min_v)
         };
-        let (t_min, t_inv) = norm_axis(&self.teff_grid);
-        let (g_min, g_inv) = norm_axis(&self.logg_grid);
-        let (m_min, m_inv) = norm_axis(&self.meta_grid);
-        let (nt_v, ng_v, nm_v) = (
-            (teff - t_min) * t_inv,
-            (log_g - g_min) * g_inv,
-            (metallicity - m_min) * m_inv,
-        );
+        let norm_coord = |active: bool, min_v: f64, span: f64, v: f64| -> f64 {
+            if active && span > 0.0 {
+                (v - min_v) / span
+            } else {
+                0.0
+            }
+        };
+        let (use_t, t_min, t_span) = norm_axis(&self.teff_grid);
+        let (use_g, g_min, g_span) = norm_axis(&self.logg_grid);
+        let (use_m, m_min, m_span) = norm_axis(&self.meta_grid);
+        let nt_v = norm_coord(use_t, t_min, t_span, teff);
+        let ng_v = norm_coord(use_g, g_min, g_span, log_g);
+        let nm_v = norm_coord(use_m, m_min, m_span, metallicity);
 
         let dg_sq: Vec<f64> = self
             .logg_grid
             .iter()
-            .map(|&gv| flexmesa_math::pow2((gv - g_min) * g_inv - ng_v))
+            .map(|&gv| {
+                if use_g {
+                    let sg = norm_coord(true, g_min, g_span, gv);
+                    flexmesa_math::pow2(sg - ng_v)
+                } else {
+                    0.0
+                }
+            })
             .collect();
         let dm_sq: Vec<f64> = self
             .meta_grid
             .iter()
-            .map(|&mv| flexmesa_math::pow2((mv - m_min) * m_inv - nm_v))
+            .map(|&mv| {
+                if use_m {
+                    let sm = norm_coord(true, m_min, m_span, mv);
+                    flexmesa_math::pow2(sm - nm_v)
+                } else {
+                    0.0
+                }
+            })
             .collect();
 
-        let mut best_d2 = [f64::INFINITY; 4];
+        let mut best_d2 = [f64::MAX; 4];
         let mut best_idx = [(0usize, 0usize, 0usize); 4];
         for (it, &tv) in self.teff_grid.iter().enumerate() {
-            let dt = flexmesa_math::pow2((tv - t_min) * t_inv - nt_v);
+            let dt = if use_t {
+                let st = norm_coord(true, t_min, t_span, tv);
+                flexmesa_math::pow2(st - nt_v)
+            } else {
+                0.0
+            };
             for (ig, &dg) in dg_sq.iter().enumerate() {
                 let dt_dg = dt + dg;
                 for (im, &dm) in dm_sq.iter().enumerate() {
@@ -416,18 +447,24 @@ impl SedCube {
             }
         }
 
-        let inv_w = best_d2.map(|d2| 1.0 / d2.sqrt().max(1.0e-10));
+        let inv_w = best_d2.map(|d2| {
+            let dist = d2.sqrt();
+            let d_safe = if dist == 0.0 { 1.0e-10 } else { dist };
+            1.0 / d_safe
+        });
         let w_sum: f64 = inv_w.iter().sum();
-        let scale = (r / d) * (r / d) / w_sum;
+        let weights = inv_w.map(|w| w / w_sum);
         let nlam = self.wavelengths.len();
         let mut interp = vec![0.0_f64; nlam];
-        for k in 0..4 {
-            let (it, ig, im) = best_idx[k];
+        for (&(it, ig, im), &wk) in best_idx.iter().zip(weights.iter()) {
             let sed = self.sed_at(it, ig, im);
-            let wk = inv_w[k] * scale;
-            for lam in 0..nlam {
-                interp[lam] += wk * sed[lam];
+            for (dst, &src) in interp.iter_mut().zip(sed.iter()) {
+                *dst += wk * src;
             }
+        }
+        let scale = (r / d) * (r / d);
+        for v in &mut interp {
+            *v *= scale;
         }
         interp
     }

@@ -7,17 +7,17 @@
 //! AB ($f_\nu = 3631\,$Jy), and ST
 //! ($f_\lambda = 3.63 \times 10^{-9}\,\mathrm{erg\,s^{-1}\,cm^{-2}\,\AA^{-1}}$)
 //! photon-counting zero-point fluxes:
-//! - `B`: Johnson blue passband ($3600\text{--}5600\,\mathrm{\AA}$, 21 knots).
-//! - `I`: Johnson near-infrared passband ($7000\text{--}11200\,\mathrm{\AA}$,
-//!   22 knots).
-//! - `J`: Johnson $J$ passband ($10400\text{--}14400\,\mathrm{\AA}$, 21 knots).
+//! - `B`: Johnson blue passband ($3700\text{--}5600\,\mathrm{\AA}$, 11 knots).
+//! - `I`: Johnson near-infrared passband ($6800\text{--}12000\,\mathrm{\AA}$,
+//!   26 knots).
+//! - `J`: Johnson $J$ passband ($9600\text{--}15600\,\mathrm{\AA}$, 31 knots).
 //! - `M`: Johnson mid-infrared $M$ passband
-//!   ($43000\text{--}59000\,\mathrm{\AA}$, 17 knots).
-//! - `R`: Johnson red passband ($5200\text{--}9200\,\mathrm{\AA}$, 21 knots).
-//! - `U`: Johnson ultraviolet passband ($3050\text{--}4000\,\mathrm{\AA}$,
-//!   20 knots).
-//! - `V`: Johnson visual passband ($4700\text{--}7000\,\mathrm{\AA}$,
-//!   24 knots).
+//!   ($41000\text{--}63000\,\mathrm{\AA}$, 23 knots).
+//! - `R`: Johnson red passband ($5200\text{--}9600\,\mathrm{\AA}$, 23 knots).
+//! - `U`: Johnson ultraviolet passband ($3000\text{--}4200\,\mathrm{\AA}$,
+//!   13 knots).
+//! - `V`: Johnson visual passband ($4600\text{--}7400\,\mathrm{\AA}$,
+//!   15 knots).
 
 use crate::types::MagSystem;
 

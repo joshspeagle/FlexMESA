@@ -86,10 +86,10 @@ pub use types::{
     PARALLEL_ZONE_THRESHOLD, Z_OVER_X_REF_GS98,
 };
 pub use utils::{
-    compute_interp_radius, dilute_flux, find_bracket_index, find_interval,
-    find_nearest_point, interpolate_array, is_dummy_axis, linear_interpolate,
-    remove_dat, simpson_integration, simpson_integration_fn,
-    trapezoidal_integration,
+    compute_interp_radius, compute_interp_radius_lookup, dilute_flux,
+    find_bracket_index, find_interval, find_nearest_point, interpolate_array,
+    is_dummy_axis, linear_interpolate, remove_dat, simpson_integration,
+    simpson_integration_fn, trapezoidal_integration,
 };
 
 #[cfg(test)]

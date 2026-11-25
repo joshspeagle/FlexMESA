@@ -402,7 +402,13 @@ impl SedCube {
             let zp = JOHNSON_FILTERS[f_idx].zero_point(mag_system);
             let norm = self.filter_norm_integrals[f_idx];
             let syn_flux = iflux.div_f64(norm);
-            out[3 + f_idx] = T::from_f64(-2.5) * syn_flux.div_f64(zp).log10();
+            // Match `colors/private/synthetic.f90:110-120`: return `huge(1.0_dp)`
+            // (`f64::MAX`) when `zero_point_flux <= 0` or `synthetic_flux <= 0`.
+            out[3 + f_idx] = if zp > 0.0 && syn_flux.val() > 0.0 {
+                T::from_f64(-2.5) * syn_flux.div_f64(zp).log10()
+            } else {
+                T::from_f64(f64::MAX)
+            };
         }
         Ok(out)
     }

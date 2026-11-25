@@ -109,7 +109,7 @@ impl SedCube {
     /// # Errors
     /// Returns [`ColorsError`] if the file cannot be read or has invalid
     /// dimensions.
-    #[allow(clippy::cast_sign_loss, clippy::missing_panics_doc)]
+    #[allow(clippy::missing_panics_doc)]
     pub fn from_mesa_flux_cube(path: &Path) -> Result<Self, ColorsError> {
         let bytes = fs::read(path)
             .map_err(|_| ColorsError::BinaryParseError("read flux_cube.bin"))?;
@@ -118,13 +118,56 @@ impl SedCube {
                 "flux_cube.bin header too short",
             ));
         }
-        let nt = i32::from_le_bytes(bytes[0..4].try_into().unwrap()) as usize;
-        let ng = i32::from_le_bytes(bytes[4..8].try_into().unwrap()) as usize;
-        let nm = i32::from_le_bytes(bytes[8..12].try_into().unwrap()) as usize;
-        let nlam =
-            i32::from_le_bytes(bytes[12..16].try_into().unwrap()) as usize;
-        let expected_f64 = nt + ng + nm + nlam + nt * ng * nm * nlam;
-        if bytes.len() != 16 + expected_f64 * 8 {
+        // Match `colors/private/colors_utils.f90:590-618`: reject non-positive
+        // dimensions and validate total byte length with overflow checking.
+        let nt_raw = i32::from_le_bytes(bytes[0..4].try_into().unwrap());
+        let ng_raw = i32::from_le_bytes(bytes[4..8].try_into().unwrap());
+        let nm_raw = i32::from_le_bytes(bytes[8..12].try_into().unwrap());
+        let nlam_raw = i32::from_le_bytes(bytes[12..16].try_into().unwrap());
+        if nt_raw <= 0 || ng_raw <= 0 || nm_raw <= 0 || nlam_raw <= 0 {
+            return Err(ColorsError::BinaryParseError(
+                "flux_cube.bin non-positive dimensions",
+            ));
+        }
+        let nt = usize::try_from(nt_raw).map_err(|_| {
+            ColorsError::BinaryParseError("flux_cube.bin invalid nt")
+        })?;
+        let ng = usize::try_from(ng_raw).map_err(|_| {
+            ColorsError::BinaryParseError("flux_cube.bin invalid ng")
+        })?;
+        let nm = usize::try_from(nm_raw).map_err(|_| {
+            ColorsError::BinaryParseError("flux_cube.bin invalid nm")
+        })?;
+        let nlam = usize::try_from(nlam_raw).map_err(|_| {
+            ColorsError::BinaryParseError("flux_cube.bin invalid nlam")
+        })?;
+        let n_cells = nt
+            .checked_mul(ng)
+            .and_then(|v| v.checked_mul(nm))
+            .ok_or(ColorsError::BinaryParseError(
+                "flux_cube.bin grid size overflow",
+            ))?;
+        let n_flux =
+            n_cells
+                .checked_mul(nlam)
+                .ok_or(ColorsError::BinaryParseError(
+                    "flux_cube.bin flux size overflow",
+                ))?;
+        let expected_f64 = nt
+            .checked_add(ng)
+            .and_then(|v| v.checked_add(nm))
+            .and_then(|v| v.checked_add(nlam))
+            .and_then(|v| v.checked_add(n_flux))
+            .ok_or(ColorsError::BinaryParseError(
+                "flux_cube.bin total count overflow",
+            ))?;
+        let expected_bytes = expected_f64
+            .checked_mul(8)
+            .and_then(|v| v.checked_add(16))
+            .ok_or(ColorsError::BinaryParseError(
+                "flux_cube.bin byte size overflow",
+            ))?;
+        if bytes.len() != expected_bytes {
             return Err(ColorsError::BinaryParseError(
                 "flux_cube.bin size mismatch",
             ));
@@ -151,8 +194,7 @@ impl SedCube {
         // Transpose into row-major `(nt, ng, nm, nlam)` where `ilam` is
         // contiguous for each `(it, ig, im)` node.
         let raw_payload = &bytes[pos..];
-        let n_cells = nt * ng * nm;
-        let mut flux = vec![0.0_f64; n_cells * nlam];
+        let mut flux = vec![0.0_f64; n_flux];
         for ilam in 0..nlam {
             let lam_base = ilam * n_cells;
             for im in 0..nm {
@@ -189,8 +231,27 @@ impl SedCube {
         let nm = u32::from_le_bytes(bytes[16..20].try_into().unwrap()) as usize;
         let nlam =
             u32::from_le_bytes(bytes[20..24].try_into().unwrap()) as usize;
-        let expected_f64 = nt + ng + nm + nlam + nt * ng * nm * nlam;
-        if bytes.len() != 24 + expected_f64 * 8 {
+        if nt == 0 || ng == 0 || nm == 0 || nlam == 0 {
+            return Err(ColorsError::BinaryParseError(
+                "cache non-positive dimensions",
+            ));
+        }
+        let n_flux = nt
+            .checked_mul(ng)
+            .and_then(|v| v.checked_mul(nm))
+            .and_then(|v| v.checked_mul(nlam))
+            .ok_or(ColorsError::BinaryParseError("cache size overflow"))?;
+        let expected_f64 = nt
+            .checked_add(ng)
+            .and_then(|v| v.checked_add(nm))
+            .and_then(|v| v.checked_add(nlam))
+            .and_then(|v| v.checked_add(n_flux))
+            .ok_or(ColorsError::BinaryParseError("cache count overflow"))?;
+        let expected_bytes = expected_f64
+            .checked_mul(8)
+            .and_then(|v| v.checked_add(24))
+            .ok_or(ColorsError::BinaryParseError("cache byte size overflow"))?;
+        if bytes.len() != expected_bytes {
             return Err(ColorsError::BinaryParseError("cache size mismatch"));
         }
         let mut pos = 24usize;
@@ -209,7 +270,7 @@ impl SedCube {
         let logg_grid = read_vec(&mut pos, ng);
         let meta_grid = read_vec(&mut pos, nm);
         let wavelengths = read_vec(&mut pos, nlam);
-        let flux = read_vec(&mut pos, nt * ng * nm * nlam);
+        let flux = read_vec(&mut pos, n_flux);
         Self::from_dense(teff_grid, logg_grid, meta_grid, wavelengths, flux)
     }
 
@@ -218,7 +279,8 @@ impl SedCube {
     ///
     /// # Errors
     /// Returns [`ColorsError::InvalidArrayLength`] if `flux.len()` does not
-    /// equal `nt * ng * nm * n_lambda`.
+    /// equal `nt * ng * nm * n_lambda`, or [`ColorsError::InvalidData`] if grid
+    /// axes or slot mappings are invalid.
     pub fn from_dense(
         teff_grid: Vec<f64>,
         logg_grid: Vec<f64>,
@@ -230,7 +292,18 @@ impl SedCube {
         let ng = logg_grid.len();
         let nm = meta_grid.len();
         let nlam = wavelengths.len();
-        let expected = nt * ng * nm * nlam;
+        let n_cells = nt
+            .checked_mul(ng)
+            .and_then(|v| v.checked_mul(nm))
+            .ok_or(ColorsError::InvalidData {
+                context: "SedCube::from_dense",
+                detail: String::from("grid dimension overflow"),
+            })?;
+        let expected =
+            n_cells.checked_mul(nlam).ok_or(ColorsError::InvalidData {
+                context: "SedCube::from_dense",
+                detail: String::from("flux array dimension overflow"),
+            })?;
         if flux.len() != expected {
             return Err(ColorsError::InvalidArrayLength {
                 context: "SedCube::from_dense",
@@ -238,7 +311,75 @@ impl SedCube {
                 expected,
             });
         }
-        let slot_map: Vec<usize> = (0..(nt * ng * nm)).collect();
+        let slot_map: Vec<usize> = (0..n_cells).collect();
+        Self::from_indexed(
+            teff_grid,
+            logg_grid,
+            meta_grid,
+            wavelengths,
+            slot_map,
+            flux,
+        )
+    }
+
+    /// Constructs an indexed [`SedCube`] from explicit coordinate grids, a
+    /// row-major `(nt, ng, nm)` `slot_map` into `sed_table`, and a flattened
+    /// `(n_slots, n_lambda)` flux buffer (`colors/private/colors_utils.f90:748-791`).
+    ///
+    /// # Errors
+    /// Returns [`ColorsError::InvalidArrayLength`] or [`ColorsError::InvalidData`]
+    /// if dimensions, `slot_map`, or `sed_table` lengths are inconsistent.
+    pub fn from_indexed(
+        teff_grid: Vec<f64>,
+        logg_grid: Vec<f64>,
+        meta_grid: Vec<f64>,
+        wavelengths: Vec<f64>,
+        slot_map: Vec<usize>,
+        sed_table: Vec<f64>,
+    ) -> Result<Self, ColorsError> {
+        let nt = teff_grid.len();
+        let ng = logg_grid.len();
+        let nm = meta_grid.len();
+        let nlam = wavelengths.len();
+        if nt == 0 || ng == 0 || nm == 0 || nlam < 2 {
+            return Err(ColorsError::InvalidData {
+                context: "SedCube::from_indexed",
+                detail: format!(
+                    "expected non-empty axes and >= 2 wavelengths, got \
+                     ({nt}, {ng}, {nm}, {nlam})"
+                ),
+            });
+        }
+        let n_cells = nt
+            .checked_mul(ng)
+            .and_then(|v| v.checked_mul(nm))
+            .ok_or(ColorsError::InvalidData {
+                context: "SedCube::from_indexed",
+                detail: String::from("grid dimension overflow"),
+            })?;
+        if slot_map.len() != n_cells {
+            return Err(ColorsError::InvalidArrayLength {
+                context: "SedCube::from_indexed (slot_map)",
+                got: slot_map.len(),
+                expected: n_cells,
+            });
+        }
+        if sed_table.is_empty() || !sed_table.len().is_multiple_of(nlam) {
+            return Err(ColorsError::InvalidArrayLength {
+                context: "SedCube::from_indexed (sed_table)",
+                got: sed_table.len(),
+                expected: nlam,
+            });
+        }
+        let n_slots = sed_table.len() / nlam;
+        if let Some(&bad_slot) = slot_map.iter().find(|&&s| s >= n_slots) {
+            return Err(ColorsError::InvalidData {
+                context: "SedCube::from_indexed",
+                detail: format!(
+                    "slot_map entry {bad_slot} out of bounds for {n_slots} slots"
+                ),
+            });
+        }
         let (
             filters_on_sed_grid,
             filters_weighted_on_sed_grid,
@@ -251,7 +392,7 @@ impl SedCube {
             meta_grid,
             wavelengths,
             slot_map,
-            sed_table: flux,
+            sed_table,
             filters_on_sed_grid,
             filters_weighted_on_sed_grid,
             filter_norm_integrals,

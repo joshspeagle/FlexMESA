@@ -282,11 +282,15 @@ fn numu(r0: f64, r_th: f64, prandtl: f64, diffratio: f64) -> f64 {
     let mut vars = [maxl_est, lambda_est];
     let mut ok = nr_solve(&mut vars, prandtl, diffratio, r0);
 
+    // Match `turb/private/thermohaline.f90:178-180`: update `ok` (`ierr`)
+    // unconditionally on the perturbed `nr_solve` so a failed perturbed step
+    // never preserves a stale `ok = true` from the unperturbed attempt.
     let mut iter = 1_usize;
     while iter <= 200 && (vars[1] < 0.0 || !ok) {
         vars = [maxl_est, lambda_est];
         let scale = 1.0 + (iter as f64) * 1.0e-2;
-        if nr_solve(&mut vars, prandtl * scale, diffratio, r0 / scale) {
+        ok = nr_solve(&mut vars, prandtl * scale, diffratio, r0 / scale);
+        if ok {
             ok = nr_solve(&mut vars, prandtl, diffratio, r0);
         }
         iter += 1;
@@ -327,7 +331,8 @@ fn analytical_estimate_th(
             pow(ONE_THIRD * omr + omr * omr * (5.0 - 4.0 * phi) / 27.0, 0.25)
         };
         let l4 = pow4(l);
-        let lam = 2.0 * prandtl * phi * l4 * l * l / (1.0 - (1.0 + phi) * l4);
+        let l6 = l4 * l * l;
+        let lam = 2.0 * prandtl * phi * l6 / (1.0 - (1.0 + phi) * l4);
         (l, lam)
     };
     if lambdamax < 0.0 {
@@ -408,4 +413,35 @@ fn thermohaline_rhs(
     let j11 = 2.0 * b_2 * myx[1] + b_1;
 
     ([f0, f1], [[j00, j01], [j10, j11]])
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn numu_solves_brown13_eqs_and_falls_back_cleanly_when_negative_root() {
+        let pr = 1.0e-3;
+        let tau = 1.0e-3;
+        let r0 = 100.0;
+        let r_th = (r0 - 1.0) / (1.0 / tau - 1.0);
+        let (maxl_est, lam_est) = analytical_estimate_th(r_th, pr, tau);
+        let mut vars = [maxl_est, lam_est];
+        assert!(nr_solve(&mut vars, pr, tau, r0));
+        assert!(vars[1] > 0.0);
+        let (res, _) = thermohaline_rhs(vars, pr, tau, r0);
+        assert!(res[0].abs() < 1.0e-12);
+        assert!(res[1].abs() < 1.0e-12);
+
+        // When `R0 > 1 / tau`, eq. (20) has `b0, b1, b2 > 0`, so no non-negative
+        // root `lambda >= 0` exists across any perturbed retry `(r0 / scale)`,
+        // exercising the 200-step retry loop and fallback to `(maxl_est,
+        // lambda_est)` (`turb/private/thermohaline.f90:172-194`).
+        let (est_l, est_lam) = analytical_estimate_th(0.4, pr, tau);
+        let expected_fallback = 1.0
+            + 49.0 * est_lam * est_lam
+                / (tau * est_l * est_l * (est_lam + tau * est_l * est_l));
+        let got = numu(10.0 / tau, 0.4, pr, tau);
+        assert_eq!(got.to_bits(), expected_fallback.to_bits());
+    }
 }

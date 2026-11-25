@@ -3,17 +3,17 @@
 //! and special reaction updates (`net_derivs_support.f90` and `net_eval.f90`).
 
 use flexmesa_chem::NuclideCatalog;
-use flexmesa_const::{AVO, LN2, QCONV};
+use flexmesa_const::{AVO, CLIGHT, KEV, LN2, ME, MEV_TO_ERGS, QCONV};
 use flexmesa_rates::{
-    eval_ecapture_pair, eval_fl_epsnuc_3alf_with_derivs, eval_reaclib_terms,
-    eval_weak_reaction_pair, CoulombMuiOption, CoulombVsOption, RatesCatalog,
-    WeakRateEval, DEFAULT_REACLIB_MIN_T9,
+    eval_ecapture_pair_with_derivs, eval_fl_epsnuc_3alf_with_derivs,
+    eval_reaclib_terms, eval_weak_reaction_pair, CoulombMuiOption,
+    CoulombVsOption, RatesCatalog, WeakRateEval, DEFAULT_REACLIB_MIN_T9,
 };
 
-use flexmesa_math::Quad;
 use crate::types::{
     NetGeneralInfo, IC12, IHE4, IN14, INE20, NUM_CATEGORIES, NUM_RVS,
 };
+use flexmesa_math::Quad;
 
 const ZERO_WEAK: WeakRateEval = WeakRateEval {
     lambda: 0.0,
@@ -212,28 +212,47 @@ pub fn eval_single_weak_blended(
             let beta = 1.0 - alfa;
             let raw_lam = ev.lambda;
             ev.lambda = alfa * raw_lam + beta * low_t_rate;
+            // Matches `rates/private/eval_weak.f90:110-120`: MESA updates
+            // `lambda(i)` first and forms `dlambda_dlnT(i)` with post-blend
+            // `lambda(i)`.
             ev.dlambda_dln_t = alfa * ev.dlambda_dln_t
                 + d_alfa_dln_t * (ev.lambda - low_t_rate);
             ev.dlambda_dln_rho *= alfa;
         }
     }
 
-    let _ = (temp, z2bar, d_eta_dln_t, d_eta_dln_rho);
-    // Optional special electron-capture override when the catalog has an entry
-    // for `(lhs, rhs)`; pairs without special tables keep the weaklib/reaclib rate.
-    if do_ecapture {
-        if let Ok(ec) = eval_ecapture_pair(
-            &e_lhs.name,
-            &e_rhs.name,
-            t9,
-            ye_rho,
-            eta,
-            CoulombMuiOption::Pcr2009,
-            CoulombVsOption::Itoh2002,
-            zbar,
-            abar,
-        ) {
-            ev = ec;
+    let _ = (temp, z2bar);
+    // Optional special electron-capture override matching upstream
+    // `rates/private/eval_ecapture.f90:99-126` (`do_eval_ecapture`): requires a
+    // valid weaklib entry (`ids(i) > 0`), positive thermodynamic inputs, and
+    // sufficient electron degeneracy (`eta + beta >= 2 * beta`); otherwise the
+    // weaklib/low-T evaluation in `ev` is preserved untouched.
+    if do_ecapture
+        && has_weaklib
+        && t9 > 0.0
+        && ye_rho > 0.0
+        && zbar > 0.0
+        && abar > 0.0
+    {
+        let kbt = (1.0e3 * KEV) * t9;
+        let mec2 = ME * CLIGHT * CLIGHT / MEV_TO_ERGS;
+        let beta = mec2 * (1.0 / kbt);
+        if eta + beta >= 2.0 * beta {
+            if let Ok(ec) = eval_ecapture_pair_with_derivs(
+                &e_lhs.name,
+                &e_rhs.name,
+                t9,
+                ye_rho,
+                eta,
+                d_eta_dln_t,
+                d_eta_dln_rho,
+                CoulombMuiOption::Pcr2009,
+                CoulombVsOption::Itoh2002,
+                zbar,
+                abar,
+            ) {
+                ev = ec;
+            }
         }
     }
 

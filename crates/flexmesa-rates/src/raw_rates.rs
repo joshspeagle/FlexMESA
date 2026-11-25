@@ -511,7 +511,9 @@ pub fn eval_reaction_raw(
             Ok(f)
         }
         1 => Ok(cat.eval_rate_table(info.id, temp)?.0),
-        2 => Ok(flexmesa_math::exp(-99.0)),
+        // `raw_rate = -1` special-routine sentinel (`rates/private/raw_rates.f90:358-639`);
+        // network initialization (`crates/flexmesa-net/src/initialize.rs:739`) maps `< 0` -> `exp(-99)`.
+        2 => Ok(-1.0),
         3..=28 => {
             let (fr, rr) = eval_analytic_rate(info.op_code, tf);
             Ok(if info.is_reverse { rr } else { fr })

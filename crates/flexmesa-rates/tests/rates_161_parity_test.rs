@@ -4031,7 +4031,7 @@ fn test_reaclib_weaklib_fixes_op_code_2_and_be7_parity() {
         let cat = RatesCatalog::builtin();
         let nuclides = NuclideCatalog::builtin_ref();
 
-        // 1. op_code == 2 returns exp(-99.0) instead of -1.0 sentinel
+        // 1. op_code == 2 returns -1.0 sentinel (`rates/private/raw_rates.f90:358-639`)
         let mut custom_info = cat.reaction_by_id(1).unwrap().clone();
         custom_info.op_code = 2;
         let tf = TFactors::from_log_t(8.5, flexmesa_math::exp10(8.5));
@@ -4039,10 +4039,10 @@ fn test_reaclib_weaklib_fixes_op_code_2_and_be7_parity() {
             eval_reaction_raw(cat, &custom_info, tf.temp, &tf).unwrap();
         assert_eq!(
             op2_rate.to_bits(),
-            flexmesa_math::exp(-99.0).to_bits(),
-            "op_code == 2 must return exp(-99.0)"
+            (-1.0_f64).to_bits(),
+            "op_code == 2 must return -1.0"
         );
-        assert_eq!(op2_rate.to_bits(), 0x3702_0A71_7E64_A9BC_u64);
+        assert_eq!(op2_rate.to_bits(), 0xBFF0_0000_0000_0000_u64);
 
         // 2. r_al26_wk_mg26: 1 REACLIB term with rflag='w'
         let (rev_al, terms_al) = cat.reaclib_terms("r_al26_wk_mg26").unwrap();
@@ -7307,31 +7307,22 @@ fn test_all_316_raw_rates_four_temperatures_parity() {
             .collect();
         let mut fails = Vec::new();
         let mut max_ulp = 0_u64;
-        let exp99 = flexmesa_math::exp(-99.0).to_bits();
         for &(ir, op_code, ref exp) in RAW_ORACLES {
             for k in 0..4 {
                 let got = set_raw_rate(ir, tfs[k].temp, &tfs[k])
                     .unwrap_or_else(|e| {
                         panic!("set_raw_rate ir={ir} k={k}: {e}")
                     });
-                if op_code == 2 {
-                    assert_eq!(
-                        got.to_bits(),
-                        exp99,
-                        "ir={ir} op_code=2 expected exp(-99)"
-                    );
-                } else {
-                    let ctx = format!("RAW ir={ir} op={op_code} k={k}");
-                    check_field(
-                        &mut fails,
-                        &mut max_ulp,
-                        &ctx,
-                        "rate",
-                        got,
-                        exp[k],
-                        0,
-                    );
-                }
+                let ctx = format!("RAW ir={ir} op={op_code} k={k}");
+                check_field(
+                    &mut fails,
+                    &mut max_ulp,
+                    &ctx,
+                    "rate",
+                    got,
+                    exp[k],
+                    0,
+                );
             }
         }
         assert!(

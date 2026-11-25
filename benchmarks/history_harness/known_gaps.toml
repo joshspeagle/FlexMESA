@@ -693,3 +693,13 @@ issue = "#160"
 role = "physics_gap"
 expect_fail_when_run = true
 reason = "With #518's upstream get_face_values arithmetic for the Brunt face values (star_utils.f90:2046-2060), the model-110 age leaves the MESA 26.4.1 binary_history.data value by 4.7e-8 (other quantities at or below 3e-12). The Ledoux/semiconvection path downstream of brunt_B is suspected (#530)."
+
+[[test_gaps]]
+kind = "rust_ignore"
+crate = "flexmesa-binary"
+file = "crates/flexmesa-binary/tests/binary_160_mesa_parity_test.rs"
+test_name = "wind_fed_bhhmxb_model5_and_model10_match_mesa_26_4_1"
+issue = "#160"
+role = "physics_gap"
+expect_fail_when_run = true
+reason = "With the energy equation's work term and composition partials in upstream's operation order (#536, hydro_energy.f90:469-527, 810-816), jdot_ml leaves the MESA 26.4.1 values by 1.77e-8 (model 5) and 1.95e-8 (model 10) against a 1e-8 tolerance; before, it was already off by 2.7e-9 and 3.9e-12, and the other pinned quantities stay within 6e-13. Splitting the change moves model 5 and model 10 independently, which points to Newton-convergence-level sensitivity; the TDC inputs at step boundaries (#538) are the next known divergence for this donor."

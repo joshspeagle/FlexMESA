@@ -178,6 +178,7 @@ const SUPPORTED_PROFILE_SCALARS: &[&str] = &[
     "nonnucneu_pair",
     "nonnucneu_reco",
     "eps_grav",
+    "dm_eps_grav",
     "signed_log_eps_grav",
     "eps_mdot",
     "ergs_mdot",
@@ -648,9 +649,18 @@ fn eval_profile_scalar(
 
     match name {
         "zone" | "k" => MesaCellValue::Int((k + 1) as i64),
-        "mixing_type" | "mix_type" | "mlt_mixing_type" => {
-            MesaCellValue::Int(i64::from(mix_code))
-        }
+        "mixing_type" | "mix_type" => MesaCellValue::Int(i64::from(mix_code)),
+        // `star/private/profile_getval.f90:1216-1219`: pre-overshoot MLT type.
+        "mlt_mixing_type" => MesaCellValue::Int(i64::from(
+            model
+                .aux
+                .mixing
+                .mlt_mixing_type
+                .get(k)
+                .copied()
+                .unwrap_or(MixingType::NoMixing)
+                .code(),
+        )),
 
         "mass" => MesaCellValue::Float(model.m[k] / M_SUN),
         "log_mass" | "logM" => {
@@ -809,6 +819,10 @@ fn eval_profile_scalar(
             model.aux.nonnucneu_channels.get(k).map_or(0.0, |c| c[4]),
         ),
         "eps_grav" => MesaCellValue::Float(model.eps_grav_ad[k].val),
+        // `star/private/profile_getval.f90:1202-1203`
+        "dm_eps_grav" => {
+            MesaCellValue::Float(model.eps_grav_ad[k].val * model.dm[k])
+        }
         "signed_log_eps_grav" => {
             MesaCellValue::Float(signed_log(model.eps_grav_ad[k].val))
         }
@@ -927,8 +941,15 @@ fn eval_profile_scalar(
                 model.peos[k] / denom
             })
         }
+        // `star/private/profile_getval.f90:1220-1221`
         "mlt_mixing_length" => MesaCellValue::Float(
-            model.controls.mixing_length_alpha * model.scale_height[k],
+            model
+                .aux
+                .mixing
+                .mlt_mixing_length
+                .get(k)
+                .copied()
+                .unwrap_or(0.0),
         ),
         "conv_vel" => MesaCellValue::Float(model.conv_vel[k]),
         "log_conv_vel" => MesaCellValue::Float(safe_log10(model.conv_vel[k])),
@@ -1176,17 +1197,35 @@ fn eval_profile_scalar(
         } else {
             0.0
         }),
-        "fp_rot" => MesaCellValue::Float(model.aux.fp_rot[k]),
-        "ft_rot" => MesaCellValue::Float(model.aux.ft_rot[k]),
+        // `star/private/profile_getval.f90:1482-1485`: alt=1.0 if !rot.
+        "fp_rot" => MesaCellValue::Float(if model.controls.rotation_flag {
+            model.aux.fp_rot[k]
+        } else {
+            1.0
+        }),
+        "ft_rot" => MesaCellValue::Float(if model.controls.rotation_flag {
+            model.aux.ft_rot[k]
+        } else {
+            1.0
+        }),
         "r_equatorial" => {
             MesaCellValue::Float(equatorial_and_polar_r_cm(model, k).0 / R_SUN)
         }
         "r_polar" => {
             MesaCellValue::Float(equatorial_and_polar_r_cm(model, k).1 / R_SUN)
         }
+        // `star/private/profile_getval.f90:1511-1514`
         "r_e_div_r_p" => {
-            let (re, rp) = equatorial_and_polar_r_cm(model, k);
-            MesaCellValue::Float(re / rp.max(1.0e-99))
+            MesaCellValue::Float(if model.controls.rotation_flag {
+                let (re, rp) = equatorial_and_polar_r_cm(model, k);
+                if rp > 1.0 {
+                    re / rp
+                } else {
+                    0.0
+                }
+            } else {
+                0.0
+            })
         }
         "log_r_equatorial" => MesaCellValue::Float(safe_log10(
             equatorial_and_polar_r_cm(model, k).0 / R_SUN,

@@ -401,9 +401,8 @@ pub fn compute_core_masses(model: &StarModel) -> CoreMasses {
                 out.one_core_mass = bdy.mass_msun;
                 out.one_core_k =
                     (bdy.kbdy_1based > 0).then(|| bdy.kbdy_1based - 1);
-                if have_co && have_he {
-                    break;
-                }
+                // `star/private/report.f90:1093-1188` only exits on `hit_fe`,
+                // so deeper Fe/neutron cores remain reachable.
             }
         }
 
@@ -423,9 +422,8 @@ pub fn compute_core_masses(model: &StarModel) -> CoreMasses {
                 out.co_core_mass = bdy.mass_msun;
                 out.co_core_k =
                     (bdy.kbdy_1based > 0).then(|| bdy.kbdy_1based - 1);
-                if have_he {
-                    break;
-                }
+                // `star/private/report.f90:1093-1188` keeps walking past
+                // `hit_co` for any deeper ONe/Fe/neutron-rich core.
             }
         }
 

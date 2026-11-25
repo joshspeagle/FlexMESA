@@ -6,6 +6,7 @@
 
 use std::cell::RefCell;
 use std::collections::HashMap;
+use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, OnceLock};
 
@@ -49,9 +50,64 @@ type NetCacheKey = (
     bool,
     u64,
     Vec<(String, String)>,
+    Option<(u64, u64)>,
 );
 static NET_CACHE: OnceLock<Mutex<HashMap<NetCacheKey, Arc<NetGeneralInfo>>>> =
     OnceLock::new();
+
+#[inline]
+fn resolve_local_file(dir: &Path, file_name: &str) -> Option<PathBuf> {
+    let trimmed = file_name.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    let direct = dir.join(trimmed);
+    if direct.is_file() {
+        return Some(direct);
+    }
+    let nested = dir.join("nets").join(trimmed);
+    if nested.is_file() {
+        return Some(nested);
+    }
+    None
+}
+
+#[inline]
+fn hash_bytes_fnv1a(hash: &mut u64, bytes: &[u8]) {
+    const FNV_PRIME: u64 = 0x0000_0100_0000_01b3;
+    for &b in bytes {
+        *hash ^= u64::from(b);
+        *hash = hash.wrapping_mul(FNV_PRIME);
+    }
+    *hash ^= 0xff;
+    *hash = hash.wrapping_mul(FNV_PRIME);
+}
+
+fn local_net_files_stamp(
+    net_name: &str,
+    canonical_dir: Option<&Path>,
+    special_rate_files: &[(String, String)],
+) -> Option<(u64, u64)> {
+    let dir = canonical_dir?;
+    let mut hash = 0xcbf2_9ce4_8422_2325_u64;
+    let mut total_len = 0_u64;
+    let mut found_local = false;
+    for file_name in std::iter::once(net_name).chain(
+        special_rate_files
+            .iter()
+            .map(|(_, file_name)| file_name.as_str()),
+    ) {
+        if let Some(bytes) = resolve_local_file(dir, file_name)
+            .and_then(|path| fs::read(&path).ok())
+        {
+            found_local = true;
+            total_len = total_len
+                .saturating_add(u64::try_from(bytes.len()).unwrap_or(u64::MAX));
+            hash_bytes_fnv1a(&mut hash, &bytes);
+        }
+    }
+    found_local.then_some((total_len, hash))
+}
 
 thread_local! {
     static ACTIVE_NET_SEARCH_DIR: RefCell<Vec<PathBuf>> =
@@ -183,6 +239,8 @@ fn get_or_load_net_with_canonical_dir(
     special_rate_files: &[(String, String)],
 ) -> Result<Arc<NetGeneralInfo>, StarError> {
     let key = net_name.trim();
+    let local_stamp =
+        local_net_files_stamp(key, canonical_dir, special_rate_files);
     let cache_key = (
         key.to_string(),
         canonical_dir.map(Path::to_path_buf),
@@ -195,6 +253,7 @@ fn get_or_load_net_with_canonical_dir(
         use_suzuki_weak_rates,
         max_safe_logt_for_rates.to_bits(),
         special_rate_files.to_vec(),
+        local_stamp,
     );
     let cache = NET_CACHE.get_or_init(|| Mutex::new(HashMap::new()));
     if let Ok(guard) = cache.lock() {
@@ -581,14 +640,27 @@ pub fn change_model_network_with_adjust(
     model.xa.clone_from(&new_xa);
     model.xa_start = new_xa;
     model.xa_old = new_xa_old;
+    // `star/private/adjust_xyz.f90:116-120`: reset reaction/composition
+    // derivatives and invalidate cached microphysics before the next set_vars.
     model.d_epsnuc_dx.resize(nz * new_species, 0.0);
+    model.d_epsnuc_dx.fill(0.0);
     model.dxdt_nuc.resize(nz * new_species, 0.0);
+    model.dxdt_nuc.fill(0.0);
     model.d_dxdt_nuc_dlnd.resize(nz * new_species, 0.0);
+    model.d_dxdt_nuc_dlnd.fill(0.0);
     model.d_dxdt_nuc_dlnt.resize(nz * new_species, 0.0);
+    model.d_dxdt_nuc_dlnt.fill(0.0);
     model
         .d_dxdt_nuc_dx
         .resize(nz * new_species * new_species, 0.0);
+    model.d_dxdt_nuc_dx.fill(0.0);
     model.aux.resize(nz, new_species);
+    model.aux.d_eps_grav_dx.fill(0.0);
+    model.aux.dln_e_dxa_for_partials.fill(0.0);
+    model.aux.dln_peos_dxa_for_partials.fill(0.0);
+    model.aux.micro_cache.clear();
+    // `star/private/adjust_xyz.f90:159` & `star/private/net.f90:687`.
+    model.aux.need_to_setvars = true;
     Ok(())
 }
 
@@ -795,11 +867,8 @@ pub(crate) fn store_eos_for_cell(
             pgas * d_lnpgas_dxa / peos;
     }
 
-    model.ln_peos_ad[k] = StarAdOrder1::from_dlnd_dlnt_00(
-        ln_peos,
-        d_lnpeos_dlnd,
-        d_lnpeos_dlnt,
-    );
+    model.ln_peos_ad[k] =
+        StarAdOrder1::from_dlnd_dlnt_00(ln_peos, d_lnpeos_dlnd, d_lnpeos_dlnt);
     model.ln_e_ad[k] = StarAdOrder1::from_dlnd_dlnt_00(
         ln_e,
         out.d_dlnd[I_LN_E],

@@ -22,16 +22,18 @@
 //!    system when `(do_burn || do_mix) && species > 0`, or `nvar_hydro` when
 //!    neither burning nor mixing is active.
 
-use flexmesa_chem::NUM_CATEGORIES;
+use flexmesa_chem::{get_composition_info, NuclideCatalog, NUM_CATEGORIES};
 use flexmesa_const::LN10;
+use flexmesa_eos::I_ETA;
 use flexmesa_net::{
-    Burn1ZoneInput, BurnConstDensityInput, burn_1_zone,
-    burn_1_zone_const_density,
+    burn_1_zone, burn_1_zone_const_density, Burn1ZoneInput,
+    BurnConstDensityInput,
 };
 use rayon::prelude::*;
 
 use crate::controls::StarError;
 use crate::micro::{do_eos, do_kap, resolve_model_net, set_basic_vars};
+use crate::micro_net::eval_zone_eps_nuc_categories;
 use crate::mix_info::{
     apply_min_d_mix_floor, compute_convection_sigmas,
     locate_convection_boundaries,
@@ -39,7 +41,7 @@ use crate::mix_info::{
 use crate::model::StarModel;
 pub use crate::omega_mix::solve_omega_mix;
 use crate::overshoot::{apply_overshoot_configs, OvershootConfig};
-use crate::solver::{HenyeySolverReport, solve_henyey_step};
+use crate::solver::{solve_henyey_step, HenyeySolverReport};
 
 struct SplitZoneOutcome {
     k: usize,
@@ -84,15 +86,25 @@ pub fn op_split_burn_zones(
 
     let min_t_split = model.controls.op_split_burn_min_t;
     let min_t_var = model.controls.op_split_burn_min_t_for_variable_t_solver;
+    let max_logt = model.controls.max_logt_for_net;
     let max_abar = model.controls.max_abar_for_burning;
     let eps_nuc_factor = model.controls.eps_nuc_factor;
     let dxdt_nuc_factor = model.controls.dxdt_nuc_factor;
+    let max_abs_eps_nuc = model.controls.max_abs_eps_nuc;
     let screening_mode = model.controls.screening_mode;
+    let use_3a_fl87 = model.job.use_3a_fl87;
+    let use_suzuki = model.job.use_suzuki_weak_rates;
     let burn_eps = model.controls.op_split_burn_eps;
     let burn_odescal = model.controls.op_split_burn_odescal;
     let max_steps = model.controls.burn_steps_hard_limit.max(1);
 
-    let min_v_start = model.v_start.iter().copied().fold(0.0_f64, f64::min);
+    // `star/private/struct_burn_mix.f90:875`: `minval(s% v_start(1:s% nz))`
+    let min_v_start = model
+        .v_start
+        .iter()
+        .take(nz)
+        .copied()
+        .fold(f64::INFINITY, f64::min);
     let skip_burn =
         min_v_start < -model.controls.op_split_burn_eps_nuc_infall_limit;
 
@@ -115,6 +127,7 @@ pub fn op_split_burn_zones(
     let rate_factors = crate::micro::build_rate_factors(&model.job, &net_info)?;
     let weak_rate_factor = model.controls.weak_rate_factor;
     let eos_cfg = &model.eos_config;
+    let catalog = NuclideCatalog::builtin_ref();
 
     let outcomes: Result<Vec<SplitZoneOutcome>, StarError> = split_indices
         .into_par_iter()
@@ -137,7 +150,7 @@ pub fn op_split_burn_zones(
                 });
             }
 
-            let (ending_x, avg_raw, eps_neu, mut cats, nstep_zone) =
+            let (ending_x, avg_raw, eps_neu, _burn_cats, nstep_zone) =
                 if model.t[k] >= min_t_var {
                     let input = BurnConstDensityInput {
                         t_start: 0.0,
@@ -214,7 +227,7 @@ pub fn op_split_burn_zones(
                 xa_after[j] = xc;
                 x_sum += xc;
             }
-            if x_sum > 0.0 {
+            if x_sum > 0.0 && (x_sum - 1.0).abs() > 1.0e-12 {
                 for x in &mut xa_after {
                     *x /= x_sum;
                 }
@@ -222,9 +235,52 @@ pub fn op_split_burn_zones(
             let dxdt_split: Vec<f64> = (0..species)
                 .map(|j| (xa_after[j] - start_x[j]) / dt)
                 .collect();
-            for c in &mut cats {
-                *c *= eps_nuc_factor;
-            }
+
+            // `star/private/struct_burn_mix.f90:1112`: evaluate `do1_net` on
+            // `ending_x` to populate post-burn `eps_nuc_categories`, preserving
+            // `burn_1_zone`'s `eps_neu` (`struct_burn_mix.f90:1130`).
+            let comp_after = get_composition_info(
+                catalog,
+                &net_info.chem_id,
+                &xa_after,
+                true,
+            )
+            .map_err(|e| {
+                StarError::MicrophysicsError(format!(
+                    "post-burn composition error at zone {k}: {e}"
+                ))
+            })?;
+            let eta_k = model.eta.get(k).copied().unwrap_or(0.0);
+            let d_eta_dlnt_k =
+                model.eos_d_dlnt.get(k).map_or(0.0, |row| row[I_ETA]);
+            let d_eta_dlnd_k =
+                model.eos_d_dlnd.get(k).map_or(0.0, |row| row[I_ETA]);
+            let cats = eval_zone_eps_nuc_categories(
+                &net_info,
+                k,
+                &xa_after,
+                model.t[k],
+                log_t,
+                model.rho[k],
+                log_rho,
+                comp_after.abar,
+                comp_after.zbar,
+                comp_after.z2bar,
+                comp_after.ye,
+                eta_k,
+                d_eta_dlnt_k,
+                d_eta_dlnd_k,
+                &rate_factors,
+                weak_rate_factor,
+                screening_mode,
+                use_3a_fl87,
+                use_suzuki,
+                max_logt,
+                max_abar,
+                eps_nuc_factor,
+                dxdt_nuc_factor,
+                max_abs_eps_nuc,
+            )?;
 
             Ok(SplitZoneOutcome {
                 k,
@@ -244,8 +300,9 @@ pub fn op_split_burn_zones(
         let k = out.k;
         let base_s = k * species;
         let base_ss = k * species * species;
+        // `star/private/struct_burn_mix.f90:1107-1135`: update `xa` without
+        // mutating `xa_start` (`save_start_values` snapshots it afterwards).
         model.xa[base_s..base_s + species].copy_from_slice(&out.xa_after);
-        model.xa_start[base_s..base_s + species].copy_from_slice(&out.xa_after);
         model.eps_nuc[k] = out.avg_epsnuc;
         model.aux.burn_avg_epsnuc[k] = out.avg_epsnuc;
         model.aux.eps_nuc_categories[k] = out.eps_cats;
@@ -489,9 +546,11 @@ fn run_struct_burn_mix_core(
         let e_before: f64 =
             (0..model.nz).map(|k| model.energy[k] * model.dm[k]).sum();
         op_split_burn_zones(model, dt)?;
-        set_basic_vars(model)?;
-        do_eos(model)?;
-        do_kap(model)?;
+        // `star/private/struct_burn_mix.f90:112`: `set_vars_if_needed` after
+        // `do_burn` while `doing_struct_burn_mix == true` refreshes EOS, neu,
+        // kap, non-split net, and MLT/grads while preserving split-burn zones.
+        set_hydro_vars(model, false, false)?;
+        model.aux.need_to_setvars = false;
         let e_after: f64 =
             (0..model.nz).map(|k| model.energy[k] * model.dm[k]).sum();
         model.aux.non_epsnuc_energy_change_from_split_burn = e_after - e_before;
@@ -546,6 +605,7 @@ pub fn do_struct_burn_mix(
             model.controls.op_split_burn = saved_op_split;
             return Err(e);
         }
+        model.aux.need_to_setvars = false;
     }
     model.ln_t_start.clone_from(&model.ln_t);
     model.v_start.clone_from(&model.v);

@@ -7,8 +7,8 @@ use flexmesa_chem::{NuclideCatalog, NUM_CATEGORIES};
 use flexmesa_const::{LN10, QCONV};
 use flexmesa_eos::I_ETA;
 use flexmesa_math::exp10;
-use flexmesa_net::derivs::{eval_net_with_work, with_thread_local_work};
 use flexmesa_math::Quad;
+use flexmesa_net::derivs::{eval_net_with_work, with_thread_local_work};
 use flexmesa_net::types::NUM_RVS;
 use flexmesa_net::NetGeneralInfo;
 use flexmesa_utils::is_bad;
@@ -59,6 +59,132 @@ pub fn build_rate_factors(
     Ok(factors)
 }
 
+pub(crate) fn scale_eps_nuc_categories(
+    raw_cats_mev: &[f64; NUM_CATEGORIES],
+    eps_val: f64,
+    eps_fac: f64,
+) -> [f64; NUM_CATEGORIES] {
+    let mut cats = [0.0_f64; NUM_CATEGORIES];
+    let mut eps_cat_sum = 0.0_f64;
+    for (dst, &src) in cats.iter_mut().zip(raw_cats_mev.iter()) {
+        let c_val = QCONV * src;
+        *dst = c_val;
+        eps_cat_sum += c_val;
+    }
+    let alfa = if eps_cat_sum.abs() < 1.0e-10 {
+        1.0
+    } else {
+        eps_val / eps_cat_sum
+    };
+    // `star/private/net.f90:327,366-372`: renormalize by `alfa` first, then
+    // scale by `eps_nuc_factor` when `!= 1`.
+    for c_val in &mut cats {
+        *c_val *= alfa;
+    }
+    if eps_fac != 1.0 {
+        for c_val in &mut cats {
+            *c_val *= eps_fac;
+        }
+    }
+    cats
+}
+
+/// Evaluates `do1_net(..., do_jac = .false.)` on a single zone to populate
+/// post-burn `eps_nuc_categories` (`star/private/struct_burn_mix.f90:1112` and
+/// `star/private/net.f90:180-372`).
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn eval_zone_eps_nuc_categories(
+    net_info: &NetGeneralInfo,
+    zone: usize,
+    xa_k: &[f64],
+    t_in: f64,
+    log_t_in: f64,
+    rho_k: f64,
+    log_rho: f64,
+    abar: f64,
+    zbar: f64,
+    z2bar: f64,
+    ye: f64,
+    eta: f64,
+    d_eta_dlnt: f64,
+    d_eta_dlnd: f64,
+    rate_factors: &[f64],
+    weak_rate_factor: f64,
+    screening_mode: flexmesa_rates::ScreeningMode,
+    use_3a_fl87: bool,
+    use_suzuki: bool,
+    max_logt: f64,
+    max_abar: f64,
+    eps_fac: f64,
+    dxdt_fac: f64,
+    max_abs_eps_nuc: f64,
+) -> Result<[f64; NUM_CATEGORIES], StarError> {
+    if (eps_fac == 0.0 && dxdt_fac == 0.0) || abar > max_abar {
+        return Ok([0.0; NUM_CATEGORIES]);
+    }
+    let species = xa_k.len();
+    let mut t_k = t_in;
+    let mut log_t = log_t_in;
+    if max_logt > 0.0 && log_t > max_logt {
+        log_t = max_logt;
+        t_k = exp10(log_t);
+    }
+    let mut stack_dydt = [[Quad::ZERO; NUM_RVS]; 128];
+    let mut heap_dydt = Vec::new();
+    let dydt: &mut [[Quad; NUM_RVS]] = if species <= 128 {
+        &mut stack_dydt[..species]
+    } else {
+        heap_dydt.resize(species, [Quad::ZERO; NUM_RVS]);
+        &mut heap_dydt[..]
+    };
+    with_thread_local_work(net_info, |w| {
+        let (raw_eps, _, _, _) = eval_net_with_work(
+            net_info,
+            w,
+            dydt,
+            true,
+            xa_k,
+            t_k,
+            log_t,
+            rho_k,
+            log_rho,
+            abar,
+            zbar,
+            z2bar,
+            ye,
+            eta,
+            d_eta_dlnt,
+            d_eta_dlnd,
+            rate_factors,
+            weak_rate_factor,
+            screening_mode,
+            use_3a_fl87,
+            use_suzuki,
+            false,
+        )
+        .map_err(|e| {
+            StarError::MicrophysicsError(format!(
+                "do_net failed at zone {zone}: {e}"
+            ))
+        })?;
+        if is_bad(raw_eps) {
+            return Err(StarError::MicrophysicsError(format!(
+                "do1_net: non-finite eps_nuc ({raw_eps}) at zone {zone}"
+            )));
+        }
+        let eps_val = if raw_eps.abs() > max_abs_eps_nuc {
+            max_abs_eps_nuc.copysign(raw_eps)
+        } else {
+            raw_eps
+        };
+        Ok(scale_eps_nuc_categories(
+            &w.eps_nuc_categories,
+            eps_val,
+            eps_fac,
+        ))
+    })
+}
+
 /// Returns the first 0-based active zone and clipped $\log_{10} T$ that would
 /// trigger `warn_rates_for_high_temp` during [`do_net`]
 /// (`rates/private/rates_support.f90:90-93` and `star/private/struct_burn_mix.f90:784-796`).
@@ -74,22 +200,8 @@ pub fn high_temp_rate_warning_zone(model: &StarModel) -> Option<(usize, f64)> {
     }
     let max_logt = model.controls.max_logt_for_net;
     let max_abar = model.controls.max_abar_for_burning;
-    let doing_split =
-        model.aux.doing_struct_burn_mix && model.controls.op_split_burn;
-    let split_min_t = model.controls.op_split_burn_min_t;
-    let mut active_zones = 0..model.nz;
-    active_zones.find_map(|k| {
-        if doing_split {
-            let t_start_k = model
-                .ln_t_start
-                .get(k)
-                .copied()
-                .map_or(model.t[k], flexmesa_math::exp);
-            if t_start_k >= split_min_t {
-                return None;
-            }
-        }
-        if max_abar > 0.0 && model.abar[k] > max_abar {
+    (0..model.nz).find_map(|k| {
+        if model.abar[k] > max_abar {
             return None;
         }
         let mut log_t = model.ln_t[k] / LN10;
@@ -150,14 +262,33 @@ fn do_net_inner(
             .resize(nz, [0.0; NUM_CATEGORIES]);
     }
 
-    let rate_factors = build_rate_factors(&model.job, net_info)?;
-    let use_3a_fl87 = model.job.use_3a_fl87;
-    let use_suzuki = model.job.use_suzuki_weak_rates;
-
     let max_logt = model.controls.max_logt_for_net;
     let max_abar = model.controls.max_abar_for_burning;
     let eps_fac = model.controls.eps_nuc_factor;
     let dxdt_fac = model.controls.dxdt_nuc_factor;
+    if eps_fac == 0.0 && dxdt_fac == 0.0 {
+        // `star/private/net.f90:59-77`: zero all zones (including
+        // `burn_avg_epsnuc` when `op_split_burn`) and return early.
+        model.eps_nuc[..nz].fill(0.0);
+        model.d_epsnuc_dlnd[..nz].fill(0.0);
+        model.d_epsnuc_dlnt[..nz].fill(0.0);
+        model.d_epsnuc_dx[..nz * species].fill(0.0);
+        model.aux.eps_nuc_categories[..nz].fill([0.0; NUM_CATEGORIES]);
+        model.dxdt_nuc[..nz * species].fill(0.0);
+        model.d_dxdt_nuc_dlnd[..nz * species].fill(0.0);
+        model.d_dxdt_nuc_dlnt[..nz * species].fill(0.0);
+        model.d_dxdt_nuc_dx[..nz * species * species].fill(0.0);
+        model.eps_nuc_neu_total[..nz].fill(0.0);
+        if model.controls.op_split_burn && model.aux.burn_avg_epsnuc.len() >= nz
+        {
+            model.aux.burn_avg_epsnuc[..nz].fill(0.0);
+        }
+        return Ok(());
+    }
+
+    let rate_factors = build_rate_factors(&model.job, net_info)?;
+    let use_3a_fl87 = model.job.use_3a_fl87;
+    let use_suzuki = model.job.use_suzuki_weak_rates;
     let weak_rate_factor = model.controls.weak_rate_factor;
     let max_abs_eps_nuc = model.controls.max_abs_eps_nuc;
     let screening_mode = model.controls.screening_mode;
@@ -237,9 +368,7 @@ fn do_net_inner(
                     }
                 }
 
-                if (eps_fac == 0.0 && dxdt_fac == 0.0)
-                    || abar_slice[k] > max_abar
-                {
+                if abar_slice[k] > max_abar {
                     *eps_k = 0.0;
                     *deps_d_k = 0.0;
                     *deps_t_k = 0.0;
@@ -327,27 +456,11 @@ fn do_net_inner(
                         deps_dt = 0.0;
                     }
 
-                    let mut eps_cat_sum = 0.0_f64;
-                    for c in 0..NUM_CATEGORIES {
-                        let c_val = QCONV * w.eps_nuc_categories[c];
-                        cats_k[c] = c_val;
-                        eps_cat_sum += c_val;
-                    }
-                    let alfa = if eps_cat_sum.abs() < 1.0e-10 {
-                        1.0
-                    } else {
-                        eps_val / eps_cat_sum
-                    };
-                    // `star/private/net.f90:327,366-372`: renormalize by `alfa`
-                    // first, then scale by `eps_nuc_factor` when `!= 1`.
-                    for c_val in cats_k.iter_mut() {
-                        *c_val *= alfa;
-                    }
-                    if eps_fac != 1.0 {
-                        for c_val in cats_k.iter_mut() {
-                            *c_val *= eps_fac;
-                        }
-                    }
+                    *cats_k = scale_eps_nuc_categories(
+                        &w.eps_nuc_categories,
+                        eps_val,
+                        eps_fac,
+                    );
 
                     *eps_k = eps_val * eps_fac;
                     *deps_d_k = deps_drho * rho_k * eps_fac;

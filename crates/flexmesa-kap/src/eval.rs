@@ -17,7 +17,7 @@ use crate::types::{
 };
 use flexmesa_autodiff::AutoDiffReal2VarOrder1;
 use flexmesa_chem::{get_composition_info, NuclideCatalog};
-use flexmesa_math::{exp10, safe_log10};
+use flexmesa_math::{exp10, log10, safe_log10};
 use rayon::prelude::*;
 
 /// Evaluate full radiative, Compton, and electron-conduction opacity at explicit
@@ -112,11 +112,12 @@ pub fn get_kap_results(
             d_eta_dln_t,
         );
         AutoDiffReal2VarOrder1 {
-            val: safe_log10(kc),
+            val: log10(kc),
             d1: [dlnkc_dr, dlnkc_dt],
         }
     } else {
-        AutoDiffReal2VarOrder1::from(0.0)
+        // `kap/private/kap_eval.f90:161, 168`: `kap_compton = 1d-30`, `log10(kap_compton)`.
+        AutoDiffReal2VarOrder1::from(log10(1.0e-30))
     };
 
     let logkap_rad_tbl = if blend.val < 1.0 {
@@ -128,14 +129,15 @@ pub fn get_kap_results(
         kap_fracs[I_FRAC_HIGH_T] = (1.0 - blend.val) * f_high;
         kap_fracs[I_FRAC_TYPE2] = f_type2;
         AutoDiffReal2VarOrder1 {
-            val: safe_log10(kr),
+            val: log10(kr),
             d1: [dlnkr_dr, dlnkr_dt],
         }
     } else {
         kap_fracs[I_FRAC_LOW_T] = 0.0;
         kap_fracs[I_FRAC_HIGH_T] = 0.0;
         kap_fracs[I_FRAC_TYPE2] = 0.0;
-        AutoDiffReal2VarOrder1::from(0.0)
+        // `kap/private/kap_eval.f90:197, 204`: `kap_rad = 1d-30`, `log10(kap_rad)`.
+        AutoDiffReal2VarOrder1::from(log10(1.0e-30))
     };
 
     let logkap_rad = blend * logkap_compton + (one - blend) * logkap_rad_tbl;

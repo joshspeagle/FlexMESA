@@ -1,6 +1,7 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Poutanen (2017) relativistic/degenerate Compton-scattering opacity (`Compton_Opacity`).
 //!
-//! Mirrors `Compton_Opacity` in `kap/private/kap_eval.f90` (lines 147-218), implementing
+//! Mirrors `Compton_Opacity` in `kap/private/kap_eval.f90` (lines 793-872), implementing
 //! the analytical fitting formula of Poutanen (2017, ApJ 835, 119) with exact first-order
 //! forward-mode automatic differentiation (`AutoDiffReal2VarOrder1`).
 
@@ -64,23 +65,22 @@ pub fn compton_opacity(
         ],
     };
 
+    // Match `kap/private/kap_eval.f90:855-865` exact left-to-right operation order.
     let tkev = (t_ad * KEV) * 1.0e-3;
-    let eta_sq = eta_ad * eta_ad;
-    let zeta = (eta_ad * C01 + eta_sq * C02).exp();
-    let zeta_sq = zeta * zeta;
+    let zeta = (C01 * eta_ad + (C02 * eta_ad) * eta_ad).exp();
 
-    let f1 = zeta * C11 + zeta_sq * C12 + 1.0;
-    let f2 = zeta * C21 + zeta_sq * C22 + 1.0;
-    let f3 = zeta * C31 + zeta_sq * C32 + 1.0;
+    let f1 = (1.0 + C11 * zeta) + (C12 * zeta) * zeta;
+    let f2 = (1.0 + C21 * zeta) + (C22 * zeta) * zeta;
+    let f3 = (1.0 + C31 * zeta) + (C32 * zeta) * zeta;
 
-    let alpha = f3 * ALPHA0;
-    let tbr = f2 * T0;
+    let alpha = ALPHA0 * f3;
+    let tbr = T0 * f2;
 
     let ratio = tkev / tbr;
     let ratio_pow = ratio.pow(alpha);
     let mfp = f1 * (1.0 + ratio_pow);
 
-    let kap_ad = ((free_e_ad / AMU) * SIGE) / mfp;
+    let kap_ad = (SIGE * (free_e_ad / AMU)) / mfp;
 
     let kap = kap_ad.val;
     let dlnkap_dln_rho = rho * kap_ad.d1[0] / kap;

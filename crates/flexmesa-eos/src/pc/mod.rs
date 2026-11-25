@@ -188,7 +188,7 @@ pub fn eval_pc_eos_from_weights(
 
     let t = AutoDiffReal2VarOrder1::var1(t_real);
     let rho = AutoDiffReal2VarOrder1::var2(rho_real);
-    let temp = t * (1.0e-6 / UN_T6);
+    let temp = (t * 1.0e-6) / UN_T6;
 
     let start_crystal = config.pc_gamma_start_crystal;
     let full_crystal = config.pc_gamma_full_crystal;
@@ -203,7 +203,7 @@ pub fn eval_pc_eos_from_weights(
         (m.gami_mean - start_crystal) / (full_crystal - start_crystal)
     };
 
-    let tnk = rho * t * (8.31447e7 / m.cmi_mean);
+    let tnk = 8.31447e7 / m.cmi_mean * rho * t;
     let pgas = m.p_nkt * tnk;
     let mut p_nkt = m.p_nkt;
     let mut u_nkt = m.u_nkt;
@@ -214,30 +214,30 @@ pub fn eval_pc_eos_from_weights(
 
     if config.include_radiation {
         let p_tot_nkt = p_nkt + m.prad_nkt;
-        chit = chit * (p_nkt / p_tot_nkt) + m.prad_nkt * 4.0 / p_tot_nkt;
+        chit = chit * (p_nkt / p_tot_nkt) + 4.0 * m.prad_nkt / p_tot_nkt;
         chir = chir * (p_nkt / p_tot_nkt);
         p_nkt = p_tot_nkt;
-        u_nkt = u_nkt + m.prad_nkt * 3.0;
-        s_nk = s_nk + m.prad_nkt * 4.0;
-        cv_nkt = cv_nkt + m.prad_nkt * 12.0;
+        u_nkt = u_nkt + 3.0 * m.prad_nkt;
+        s_nk = s_nk + 4.0 * m.prad_nkt;
+        cv_nkt = cv_nkt + 12.0 * m.prad_nkt;
     }
 
     let p = p_nkt * tnk;
     let n = 1.0 / (abar * AMU);
-    let cv = cv_nkt * (n * KERG);
-    let gamma3 = p / rho * chit / (t * cv) + 1.0;
+    let cv = cv_nkt * n * KERG;
+    let gamma3 = 1.0 + p / rho * chit / (t * cv);
     let gamma1 = chit * (gamma3 - 1.0) + chir;
     let grad_ad = (gamma3 - 1.0) / gamma1;
     let cp = cv * gamma1 / chir;
-    let de_drho = (-chit + 1.0) * p / (rho * rho);
+    let de_drho = (1.0 - chit) * p / (rho * rho);
     let ds_dt = cv / t;
     let ds_drho = -p * chit / (rho * rho * t);
     let mu = AutoDiffReal2VarOrder1::constant(abar / (1.0 + zbar));
     let lnfree_e =
         AutoDiffReal2VarOrder1::constant(flexmesa_math::log(zbar / abar));
     let ln_pgas = pgas.ln();
-    let ln_e = safe_log_order1(u_nkt * t * (n * KERG));
-    let ln_s = safe_log_order1(s_nk * (n * KERG));
+    let ln_e = safe_log_order1(u_nkt * n * KERG * t);
+    let ln_s = safe_log_order1(s_nk * n * KERG);
 
     let mut out = EosEvalOutput::zeros(0);
     let channels: [(usize, AutoDiffReal2VarOrder1); 17] = [

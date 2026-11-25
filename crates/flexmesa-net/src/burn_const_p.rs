@@ -187,7 +187,9 @@ pub fn burn_1_zone_const_p(
             )));
         }
 
-        let just_dxdt = dfdv_opt.is_none();
+        // MESA net_burn_const_p sets skip_jacobian = .false. even when dfdx is
+        // not requested, because paired reactions skip eps_nuc_mev(1) when just_dydt=.true.
+        let just_dxdt = false;
         with_thread_local_work(g, |w| {
             let res = eval_net_result_with_work(
                 g,
@@ -285,7 +287,9 @@ pub fn burn_1_zone_const_p(
     let y_min = input.x_min;
     let y_max = 1.0e99_f64;
     let eloi = 1.0 / tab.elo;
-    let nerror = if tab.no_aux_in_error { num_isos } else { nvar };
+    // Upstream `net_burn_const_p.f90:186` sets `iwork = 0`, so `mod_rosenbrock.f:387,394,729`
+    // resolves `m2 = nvar` and `nerror = nvar` even when `no_aux_in_error` is true.
+    let nerror = nvar;
 
     let mut nfcn = 0_usize;
     let mut njac = 0_usize;

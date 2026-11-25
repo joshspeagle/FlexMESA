@@ -111,10 +111,10 @@ pub fn melange9(
         cmi_mean += y * acmi[ix];
     }
 
-    let uint_rad = temp.pow2().pow2() * RAD;
+    let uint_rad = RAD * temp * temp * temp * temp;
     let press_rad = uint_rad / 3.0;
 
-    let dens0 = rho / 11.20587 * (zmean / cmi_mean);
+    let dens0 = (rho / 11.20587) * zmean / cmi_mean;
     let chi = chemfit(dens0, temp);
     let el = elect11(temp, chi);
     let dens = el.dens;
@@ -122,10 +122,10 @@ pub fn melange9(
     let presse = el.pe_id * dte;
     let uinte = el.ue_id * dte;
 
-    let rs = (dens.recip() * (0.75 / PI)).powf(1.0 / 3.0);
-    let rsi = rs * (cmi_mean * z73 * AUM);
-    let game = (rs * temp).recip();
-    let gami_mean = game * z53;
+    let rs = (0.75 / PI / dens).powf(1.0 / 3.0);
+    let rsi = rs * cmi_mean * z73 * AUM;
+    let game = 1.0 / rs / temp;
+    let gami_mean = z53 * game;
 
     let (liqsol, alfa, beta) = if rsi.val < RSIMELT || gami_mean.val < gami_lo {
         (
@@ -154,7 +154,7 @@ pub fn melange9(
     let densi = dens / zmean;
     let pressi = densi * temp;
     let mut tpt2 = AutoDiffReal2VarOrder1::zero();
-    let ctp = (temp * temp).recip() * (4.0 * PI / AUM);
+    let ctp = 4.0 * PI / AUM / (temp * temp);
 
     for ix in 0..nmix {
         if ay[ix] < TINY {
@@ -165,7 +165,7 @@ pub fn melange9(
             continue;
         }
         let cmi = acmi[ix];
-        let gami = game * flexmesa_math::pow(zion, 5.0 / 3.0);
+        let gami = flexmesa_math::pow(zion, 5.0 / 3.0) * game;
         let dni = densi * ay[ix];
         let pri = dni * temp;
         let c2 = if liqsol == 0 || liqsol == 1 {
@@ -189,7 +189,7 @@ pub fn melange9(
         cv_tot = cv_tot + dni * c2.cv;
         pdlt = pdlt + pri * c2.pdt;
         pdlr = pdlr + pri * c2.pdr;
-        tpt2 = tpt2 + ctp * dni * (zion * zion / cmi);
+        tpt2 = tpt2 + ctp * dni / cmi * (zion * zion);
     }
 
     let tpt = tpt2.sqrt();
@@ -198,7 +198,7 @@ pub fn melange9(
         let uwk = fwk * 2.0;
         uint = uint + uwk * pressi;
         s_tot = s_tot + fwk * densi;
-        press = press + uwk * 0.5 * pressi;
+        press = press + fwk * pressi;
         cv_tot = cv_tot - uwk * densi;
         pdlt = pdlt - fwk * pressi;
         pdlr = pdlr + uwk * pressi;
@@ -216,19 +216,29 @@ pub fn melange9(
                 if ay[j] < TINY || azion[j] <= 0.0 {
                     continue;
                 }
-                let rz = azion[j] / azion[i];
-                let x2 = ay[j] / (ay[i] + ay[j]);
-                let x1 = (1.0 - x2).max(0.0);
-                if x2 < TINY {
+                let rz = AutoDiffReal2VarOrder1::constant(azion[j] / azion[i]);
+                let x2 =
+                    AutoDiffReal2VarOrder1::constant(ay[j] / (ay[i] + ay[j]));
+                let x1 = if 1.0 > x2.val {
+                    1.0 - x2
+                } else {
+                    AutoDiffReal2VarOrder1::zero()
+                };
+                if x2.val < TINY {
                     continue;
                 }
-                let x = x2 / rz + (1.0 - 1.0 / rz) * flexmesa_math::pow(x2, rz);
-                let gami = game * flexmesa_math::pow(azion[i], 5.0 / 3.0);
+                let x = x2 / rz + (1.0 - 1.0 / rz) * x2.pow(rz);
+                let gami = flexmesa_math::pow(azion[i], 5.0 / 3.0) * game;
                 let mut delta_g = 0.012
-                    * (1.0 - 1.0 / (rz * rz))
-                    * (x1 + x2 * flexmesa_math::pow(rz, 5.0 / 3.0));
-                delta_g *= x / x2 * (1.0 - x).max(0.0) / x1;
-                fmix = fmix + gami * (ay[i] * ay[j] * delta_g);
+                    * (1.0 - 1.0 / rz.pow2())
+                    * (x1 + x2 * rz.powf(5.0 / 3.0));
+                let one_minus_x = if 1.0 > x.val {
+                    1.0 - x
+                } else {
+                    AutoDiffReal2VarOrder1::zero()
+                };
+                delta_g = delta_g * x / x2 * one_minus_x / x1;
+                fmix = fmix + ay[i] * ay[j] * gami * delta_g;
             }
         }
         let z = AutoDiffReal2VarOrder1::zero();

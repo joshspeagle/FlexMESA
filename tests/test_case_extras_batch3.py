@@ -9,6 +9,7 @@ from __future__ import annotations
 import math
 import pathlib
 import shutil
+from collections.abc import Sequence
 from typing import Any
 
 import pytest
@@ -326,6 +327,52 @@ def test_dynamo_and_thermohaline_checks() -> None:
     assert th.checks_okay is True
 
 
+def test_dynamo_and_thermohaline_live_snapshots_and_adapter(
+    tmp_path: pathlib.Path,
+) -> None:
+    """`extras_py.rs` exposes `d_es`/`d_st`/`nu_st` and steps 15M/1M cases."""
+    dyn_dir = harness_runner.resolve_case_dir("star", "15M_dynamo")
+    assert isinstance(
+        case_extras.resolve_case_extras("star", dyn_dir),
+        star_rot_mix_checks.Dynamo15MStarExtras,
+    )
+    he_mod = _rust.RustStarModel.from_mod_str(
+        (dyn_dir / "standard_he_burn.mod").read_text(encoding="utf-8")
+    )
+    rot_cols = _rust.star_set_rotation_mixing_info(he_mod)
+    he_snap = _rust.star_extras_snapshot(
+        he_mod, str(tmp_path), include_history=False
+    )
+    assert list(he_snap["d_es"]) == pytest.approx(rot_cols[:, 3])
+    assert list(he_snap["d_st"]) == pytest.approx(rot_cols[:, 5])
+    assert list(he_snap["nu_st"]) == pytest.approx(rot_cols[:, 6])
+
+    rep_dyn = harness_runner.run_trace_inprocess(
+        "star",
+        dyn_dir,
+        tmp_path / "out_15m_dynamo",
+        max_steps=1,
+        allow_unsupported_controls=True,
+        extras_factory="tests.case_extras:resolve_case_extras",
+    )
+    assert int(rep_dyn["total_steps"]) == 3
+
+    th_dir = harness_runner.resolve_case_dir("star", "1M_thermohaline")
+    assert isinstance(
+        case_extras.resolve_case_extras("star", th_dir),
+        star_rot_mix_checks.Thermohaline1MStarExtras,
+    )
+    rep_th = harness_runner.run_trace_inprocess(
+        "star",
+        th_dir,
+        tmp_path / "out_1m_thermohaline",
+        max_steps=1,
+        allow_unsupported_controls=True,
+        extras_factory="tests.case_extras:resolve_case_extras",
+    )
+    assert int(rep_th["total_steps"]) == 1
+
+
 def test_diffusion_smoothness_and_radiative_levitation() -> None:
     """Verify diffusion smoothness and radiative levitation checks."""
     diff = star_rot_mix_checks.DiffusionSmoothnessStarExtras()
@@ -429,45 +476,135 @@ def test_ns_tov_and_wd_cooling_nova_burst_hooks() -> None:
     )
 
 
-def test_xtra_coeff_os_and_simplex_solar_helpers() -> None:
-    """Verify `&xtra_coeff_os` and simplex solar calibration helpers."""
+def test_xtra_coeff_os_and_simplex_solar_helpers(
+    tmp_path: pathlib.Path,
+) -> None:
+    """Verify `&xtra_coeff_os`, `PyOtherMeshDeltaCoeffFactorHook`, and simplex
+    helpers.
+    """
     pm_wd = star_ns_wd_simplex.PreMs1MToWdStarExtras()
     case_dir = harness_runner.resolve_case_dir("star", "1M_pre_ms_to_wd")
+    assert isinstance(
+        case_extras.resolve_case_extras("star", case_dir),
+        star_ns_wd_simplex.PreMs1MToWdStarExtras,
+    )
     pm_wd.extras_controls({"use_other_mesh_delta_coeff_factor": False})
-    with pytest.raises(NotImplementedError, match="#153"):
-        pm_wd.extras_controls(
-            {
-                "use_other_mesh_delta_coeff_factor": True,
-                "case_dir": str(case_dir),
-            }
-        )
+    pm_wd.extras_controls(
+        {
+            "use_other_mesh_delta_coeff_factor": True,
+            "case_dir": str(case_dir),
+        }
+    )
     assert pm_wd.params["xtra_coef_os_below_burn_h"] == 0.15
     conv = int(constants.MixingType.CONVECTIVE_MIXING)
     over = int(constants.MixingType.OVERSHOOT_MIXING)
     nomix = int(constants.MixingType.NO_MIXING)
-    factors = pm_wd.eval_other_mesh_delta_coeff_factor(
-        {
-            "nz": 5,
-            "mesh_delta_coeff_factor": [1.0] * 5,
-            "xa_he4": [0.28, 0.28, 0.28, 0.28, 0.0],
-            "mixing_type": [conv, conv, over, nomix, nomix],
-            "eps_nuc": [0.0, 10.0, 0.0, 0.0, 0.0],
-            "eps_nuc_ipp": [0.0, 8.0, 0.0, 0.0, 0.0],
-            "eps_nuc_icno": [0.0, 1.0, 0.0, 0.0, 0.0],
-            "eps_nuc_i3alf": [0.0] * 5,
-            "peos": [1.0e15] * 5,
-            "rho": [1.0] * 5,
-            "grav": [1.0e5] * 5,
-            "r": [5.0e10, 4.0e10, 3.0e10, 2.99e10, 1.0e10],
-        }
-    )
+    os_snap: dict[str, Any] = {
+        "nz": 5,
+        "mesh_delta_coeff_factor": [1.0] * 5,
+        "xa_he4": [0.28, 0.28, 0.28, 0.28, 0.0],
+        "mixing_type": [conv, conv, over, nomix, nomix],
+        "eps_nuc": [0.0, 10.0, 0.0, 0.0, 0.0],
+        "eps_nuc_ipp": [0.0, 8.0, 0.0, 0.0, 0.0],
+        "eps_nuc_icno": [0.0, 1.0, 0.0, 0.0, 0.0],
+        "eps_nuc_i3alf": [0.0] * 5,
+        "peos": [1.0e15] * 5,
+        "rho": [1.0] * 5,
+        "grav": [1.0e5] * 5,
+        "r": [5.0e10, 4.0e10, 3.0e10, 2.99e10, 1.0e10],
+    }
+    factors = pm_wd.eval_other_mesh_delta_coeff_factor(os_snap)
     assert factors[2] == pytest.approx(0.15)
     assert factors[3] == pytest.approx(0.15)
     assert factors[4] == 1.0
 
+    no_snap_key = {
+        k: v for k, v in os_snap.items() if k != "mesh_delta_coeff_factor"
+    }
+    factors_arg = pm_wd.other_mesh_delta_coeff_factor(no_snap_key, [1.0] * 5)
+    assert factors_arg == factors
+
+    zams = _rust.RustStarModel.from_zams(1.0, 0.02)
+    zams_snap = _rust.star_extras_snapshot(
+        zams, str(tmp_path), include_history=False
+    )
+    nz_zams = int(zams_snap["nz"])
+    assert len(zams_snap["eps_nuc_ipp"]) == nz_zams
+    assert len(zams_snap["eps_nuc_icno"]) == nz_zams
+    assert len(zams_snap["eps_nuc_i3alf"]) == nz_zams
+
+    rep = harness_runner.run_trace_inprocess(
+        "star",
+        case_dir,
+        tmp_path / "out_1m_pre_ms_to_wd",
+        max_steps=1,
+        allow_unsupported_controls=True,
+        extras_factory="tests.case_extras:resolve_case_extras",
+    )
+    assert int(rep["total_steps"]) == 5
+
+    hook_seen: dict[str, Any] = {"calls": 0}
+
+    class _PreMsMeshProbe:
+        def __init__(self) -> None:
+            self._inner = star_ns_wd_simplex.PreMs1MToWdStarExtras()
+
+        def extras_controls(self, _state: dict[str, Any]) -> dict[str, Any]:
+            self._inner.read_inlist_xtra_coeff_os(case_dir)
+            return {"use_other_mesh_delta_coeff_factor": True}
+
+        def other_mesh_delta_coeff_factor(
+            self,
+            state: dict[str, Any],
+            current: Sequence[float] | None = None,
+        ) -> list[float]:
+            hook_seen["calls"] += 1
+            hook_seen["has_cats"] = all(
+                k in state
+                for k in ("eps_nuc_ipp", "eps_nuc_icno", "eps_nuc_i3alf")
+            )
+            return self._inner.other_mesh_delta_coeff_factor(state, current)
+
+    adj_dir = harness_runner.resolve_case_dir("star", "adjust_net")
+    probe_rep = harness_runner.run_trace_inprocess(
+        "star",
+        adj_dir,
+        tmp_path / "out_prems_mesh_probe",
+        max_steps=2,
+        allow_unsupported_controls=True,
+        extras=_PreMsMeshProbe(),
+    )
+    assert int(probe_rep["total_steps"]) >= 1
+    assert hook_seen["calls"] >= 1
+    assert hook_seen["has_cats"] is True
+
     sim = star_ns_wd_simplex.SimplexSolarCalibrationStarExtras()
-    with pytest.raises(NotImplementedError, match="#162"):
-        sim.extras_controls({})
+    assert sim.extras_controls({}) == {}
+    sim.extras_startup({}, False)
+    assert sim.extras_check_model({}) == "keep_going"
+    assert sim.extras_finish_step({}) == "keep_going"
+    sim.extras_after_evolve({})
+    simplex_dir = harness_runner.resolve_case_dir(
+        "star", "simplex_solar_calibration"
+    )
+    assert isinstance(
+        case_extras.resolve_case_extras("star", simplex_dir),
+        star_ns_wd_simplex.SimplexSolarCalibrationStarExtras,
+    )
+    assert sim.other_mesh_functions(
+        {
+            "x_ctrl": [500.0, 0.02, 0.0],
+            "nz": 2,
+            "gradr": [0.42, 0.40],
+            "grada": [0.40, 0.40],
+        }
+    ) == [
+        (
+            "gradr_grada_function",
+            False,
+            [pytest.approx(500.0 * float(fm_math.tanh(1.0)) * 0.02), 0.0],
+        )
+    ]
     assert star_ns_wd_simplex.set_simplex_my_vars({"teff": 5777.0}, True) == (
         5777.0
     )

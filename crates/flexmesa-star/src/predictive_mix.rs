@@ -31,7 +31,9 @@ use crate::model::StarModel;
 /// invalid selector/isotope name, if both `do_conv_premix` and predictive
 /// mixing are enabled simultaneously, if EOS/opacity/MLT evaluation fails, or
 /// if a non-finite `d_mix` value is produced.
-pub fn add_predictive_mixing(model: &mut StarModel) -> Result<usize, StarError> {
+pub fn add_predictive_mixing(
+    model: &mut StarModel,
+) -> Result<usize, StarError> {
     let nz = model.nz;
     let n_bdy = model.aux.mixing.conv_bdy_loc.len();
     if nz < 2 || n_bdy == 0 {
@@ -69,7 +71,7 @@ pub fn add_predictive_mixing(model: &mut StarModel) -> Result<usize, StarError> 
                 continue;
             }
 
-            let match_zone_type = match ps.zone_type.as_str() {
+            let match_zone_type = match ps.zone_type.trim_end() {
                 "burn_H" => burn_h[i],
                 "burn_He" => burn_he[i],
                 "burn_Z" => burn_z[i],
@@ -91,7 +93,7 @@ pub fn add_predictive_mixing(model: &mut StarModel) -> Result<usize, StarError> 
                 conv_bdy_loc.get(i + 1).copied() == Some(0)
             };
 
-            let match_zone_loc = match ps.zone_loc.as_str() {
+            let match_zone_loc = match ps.zone_loc.trim_end() {
                 "core" => is_core_zone,
                 "shell" => !(is_core_zone || is_surf_zone),
                 "surf" => is_surf_zone,
@@ -104,7 +106,7 @@ pub fn add_predictive_mixing(model: &mut StarModel) -> Result<usize, StarError> 
                 }
             };
 
-            let match_bdy_loc = match ps.bdy_loc.as_str() {
+            let match_bdy_loc = match ps.bdy_loc.trim_end() {
                 "bottom" => !top_conv_bdy[i],
                 "top" => top_conv_bdy[i],
                 "any" => true,
@@ -163,38 +165,32 @@ fn do_predictive_mixing(
     let superad_thresh = ps.superad_thresh.max(0.0);
     let catalog = NuclideCatalog::builtin_ref();
 
-    let iso_r: Option<usize> = if ps.avoid_reversal.is_empty() {
+    let ar_name = ps.avoid_reversal.trim();
+    let iso_r: Option<usize> = if ar_name.is_empty() {
         None
-    } else {
-        let entry =
-            catalog
-                .get_by_name(ps.avoid_reversal.trim())
-                .ok_or_else(|| {
-                    StarError::InvalidInput(format!(
-                        "Invalid isotope name in predictive_avoid_reversal: '{}'",
-                        ps.avoid_reversal
-                    ))
-                })?;
+    } else if let Some(entry) = catalog.get_by_name(ar_name) {
         model.net_iso.get(entry.chem_id).copied().flatten()
+    } else {
+        return Err(StarError::InvalidInput(format!(
+            "Invalid isotope name in predictive_avoid_reversal: '{}'",
+            ps.avoid_reversal
+        )));
     };
 
-    let (iso_i, ingest_factor): (Option<usize>, f64) =
-        if ps.limit_ingestion.is_empty() {
-            (None, 0.0)
-        } else {
-            let entry = catalog
-                .get_by_name(ps.limit_ingestion.trim())
-                .ok_or_else(|| {
-                    StarError::InvalidInput(format!(
-                        "Invalid isotope name in predictive_limit_ingestion: '{}'",
-                        ps.limit_ingestion
-                    ))
-                })?;
-            (
-                model.net_iso.get(entry.chem_id).copied().flatten(),
-                ps.ingestion_factor,
-            )
-        };
+    let li_name = ps.limit_ingestion.trim();
+    let (iso_i, ingest_factor): (Option<usize>, f64) = if li_name.is_empty() {
+        (None, 0.0)
+    } else if let Some(entry) = catalog.get_by_name(li_name) {
+        (
+            model.net_iso.get(entry.chem_id).copied().flatten(),
+            ps.ingestion_factor,
+        )
+    } else {
+        return Err(StarError::InvalidInput(format!(
+            "Invalid isotope name in predictive_limit_ingestion: '{}'",
+            ps.limit_ingestion
+        )));
+    };
 
     // Determine cell indices spanning the initial convection zone, including
     // the cells containing the actual convective boundaries (`predictive_mix.f90:283-313`).
@@ -271,7 +267,13 @@ fn do_predictive_mixing(
         let k_top_mz = k_top_mz_i as usize;
         let k_bot_mz = k_bot_mz_i as usize;
 
-        eval_abundances(model, k_bot_mz, k_top_mz, &mut xa_mz, &mut xa_mz_burn)?;
+        eval_abundances(
+            model,
+            k_bot_mz,
+            k_top_mz,
+            &mut xa_mz,
+            &mut xa_mz_burn,
+        )?;
 
         let (k_a, k_b) = eval_mixing_coeffs(
             model,
@@ -338,7 +340,8 @@ fn do_predictive_mixing(
         }
 
         // Check interior faces for split-zone proximity (`superad_thresh`).
-        let superad_min = eval_superad_min(&gradr_arr, &grada_arr, outward, k_a, k_b);
+        let superad_min =
+            eval_superad_min(&gradr_arr, &grada_arr, outward, k_a, k_b);
         if superad_min <= superad_thresh {
             break;
         }
@@ -416,8 +419,8 @@ fn do_predictive_mixing(
     if outward {
         model.aux.mixing.cz_bdy_dq[k_top_cz] = 0.0;
         if k_b_final > 0 {
-            let dg0 =
-                model.aux.mixing.grada_face[k_b_final - 1] - model.gradr[k_b_final - 1];
+            let dg0 = model.aux.mixing.grada_face[k_b_final - 1]
+                - model.gradr[k_b_final - 1];
             let dg1 = grada_arr[k_b_final] - gradr_arr[k_b_final];
             if dg0 * dg1 < 0.0 {
                 let x0 = find0(0.0, dg0, model.dq[k_top_mz], dg1).map_err(
@@ -440,8 +443,8 @@ fn do_predictive_mixing(
         model.aux.mixing.cz_bdy_dq[k_bot_cz] = 0.0;
         if k_b_final + 1 < nz {
             let dg0 = grada_arr[k_b_final] - gradr_arr[k_b_final];
-            let dg1 =
-                model.aux.mixing.grada_face[k_b_final + 1] - model.gradr[k_b_final + 1];
+            let dg1 = model.aux.mixing.grada_face[k_b_final + 1]
+                - model.gradr[k_b_final + 1];
             if dg0 * dg1 < 0.0 {
                 let x0 = find0(0.0, dg0, model.dq[k_bot_mz], dg1).map_err(
                     |e| {
@@ -464,7 +467,12 @@ fn do_predictive_mixing(
     Ok(updated_faces)
 }
 
-fn apply_predicted_face(model: &mut StarModel, k: usize, d_val: f64, vc_val: f64) {
+fn apply_predicted_face(
+    model: &mut StarModel,
+    k: usize,
+    d_val: f64,
+    vc_val: f64,
+) {
     let rho = if k > 0 {
         (model.dq[k - 1] * model.rho[k] + model.dq[k] * model.rho[k - 1])
             / (model.dq[k - 1] + model.dq[k])
@@ -595,6 +603,8 @@ fn eval_mixing_coeffs(
         && model.aux.mixing.alpha_mlt.iter().any(|&v| v > 0.0);
     let result = (|| -> Result<(), StarError> {
         eval_uniform_xa_eos_kap_range(model, k_top_mz, k_bot_mz, xa_mx)?;
+        // `do1_mlt_2` updates each face `k` in place before reading out MLT results.
+        #[allow(clippy::manual_memcpy)]
         for k in k_a..=k_b {
             let alpha_k = if has_alpha {
                 model.aux.mixing.alpha_mlt[k]
@@ -604,7 +614,8 @@ fn eval_mixing_coeffs(
             // Explicitly pass `gradL_composition_term = 0.0` (Schwarzschild).
             let _ = do1_mlt_2(model, k, Some(alpha_k), Some(0.0))?;
             d_out[k] = model.mlt_d[k];
-            vc_out[k] = model.mlt_vc_ad[k].val;
+            // MESA `predictive_mix.f90:806`: `vc(k) = s% mlt_vc(k)`.
+            vc_out[k] = model.mlt_vc[k];
             grada_out[k] = model.aux.mixing.grada_face[k];
             gradr_out[k] = model.gradr[k];
         }

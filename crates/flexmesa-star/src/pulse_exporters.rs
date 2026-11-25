@@ -514,20 +514,51 @@ pub fn export_pulse_by_format(
     format: &str,
     add_center_point: bool,
 ) -> Result<String, crate::StarError> {
+    let add_atm = model.controls.add_atmosphere_to_pulse_data;
     match format.trim().to_ascii_lowercase().as_str() {
-        "gyre" => export_gyre(model, add_center_point, false, false)
+        "gyre" => export_gyre(model, add_center_point, false, add_atm)
             .map_err(|e| crate::StarError::InvalidInput(e.to_string())),
-        "fgong" => export_fgong(model, add_center_point, false, false)
+        "fgong" => export_fgong(model, add_center_point, false, add_atm)
             .map_err(|e| crate::StarError::InvalidInput(e.to_string())),
-        "osc" => export_osc(model, add_center_point, false, false)
+        "osc" => export_osc(model, add_center_point, false, add_atm)
             .map_err(|e| crate::StarError::InvalidInput(e.to_string())),
-        "gsm" => Ok(export_gsm(model, add_center_point)),
-        "saio" => Ok(export_saio(model, true, false)),
-        "cafein" => Ok(export_cafein(model, add_center_point, true, false)),
-        "gr1d" => Ok(export_gr1d(model)),
+        "gsm" => {
+            if add_atm {
+                return Err(crate::StarError::InvalidInput(String::from(
+                    "add_atmosphere_to_pulse_data is not supported for GSM format",
+                )));
+            }
+            Ok(export_gsm(model, add_center_point))
+        }
+        "saio" => Ok(export_saio(model, true, add_atm)),
+        "cafein" => Ok(export_cafein(model, add_center_point, true, add_atm)),
+        "gr1d" => {
+            if add_atm {
+                return Err(crate::StarError::InvalidInput(String::from(
+                    "add_atmosphere_to_pulse_data is not supported for GR1D format",
+                )));
+            }
+            Ok(export_gr1d(model))
+        }
         other => Err(crate::StarError::InvalidInput(format!(
             "unrecognized pulse_data_format '{other}' \
              (expected one of gyre, fgong, osc, gsm, saio, cafein, gr1d)"
         ))),
     }
+}
+
+/// Dispatches pulsation data export using `model`'s `pulse_data_format`,
+/// `add_center_point_to_pulse_data`, and `add_atmosphere_to_pulse_data`
+/// controls (`star_export_pulse_data` in `star/private/pulse.f90`).
+///
+/// # Errors
+/// Propagates formatting or configuration errors from [`export_pulse_by_format`].
+pub fn export_pulse_with_controls(
+    model: &StarModel,
+) -> Result<String, crate::StarError> {
+    export_pulse_by_format(
+        model,
+        &model.job.pulse_data_format,
+        model.controls.add_center_point_to_pulse_data,
+    )
 }

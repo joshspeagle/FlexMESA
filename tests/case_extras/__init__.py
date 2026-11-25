@@ -126,23 +126,19 @@ STOCK_EXTRAS_DIGESTS: frozenset[str] = frozenset(
 # case without failing on state the adapter does not provide. A handler not
 # listed here is written but cannot run yet because its hooks require an
 # unported engine or `StarExtras` capability:
-# - `#152` (solver/timestep/state hooks): `MagneticBrakingStarExtras`
-#   (`other_timestep_limit`), `TzoStarExtras` (`star_set_v_flag`, center mass
-#   and luminosity mutation).
+# - `#152` (solver/timestep/state hooks): `TzoStarExtras`
+#   (`star_set_v_flag`, center mass and luminosity mutation).
 # - `#153` (mesh/surface-cut hooks): `MakeCoWdStarExtras`
-#   (`star_remove_surface_at_cell_k`), `PreMs1MToWdStarExtras`
-#   (`other_mesh_delta_coeff_factor`).
+#   (`star_remove_surface_at_cell_k`).
 # - `#154` (startup/relax/build-model hooks):
 #   `RelaxCompositionJEntropyStarExtras` (`initial_mass` mutation before
 #   model build).
 # - `#155` (per-cell MLT/overshoot/rotation diffusivity hooks):
 #   `PreMs12MCoreCollapseStarExtras`, `PreMs20MCoreCollapseStarExtras`,
 #   `SplitBurnBigNetStarExtras`, `MakePreCcsn13bvnStarExtras` (per-cell
-#   `alpha_mlt(1:nz)`),
-#   `Dynamo15MStarExtras`, `Thermohaline1MStarExtras` (`D_ES`/`D_ST`/`nu_ST`
-#   arrays not yet publicly exposed on `StarModel`).
-# - `#156` (element diffusion electric/gravity fields): `WdDiffusionStarExtras`
-#   (`e_field`, `g_field_element_diffusion`).
+#   `alpha_mlt(1:nz)` is overwritten by `hydro_vars.rs` during `set_vars`
+#   after `inlist_runner.rs` calls `other_alpha_mlt`, plus per-zone
+#   `burn_num_iters` and `dvdt_drag`/`fdotv_drag_energy` are absent).
 # - `#159` (rotation-distortion hooks): `PpisnStarExtras` (`other_kap_get`,
 #   `other_eval_fp_ft`, `other_before_struct_burn_mix`, `#152`/`#159`/`#161`).
 # - `#161` (opacity/surface-PT/other-physics hooks): `ConductiveFlameStarExtras`
@@ -158,8 +154,10 @@ STOCK_EXTRAS_DIGESTS: frozenset[str] = frozenset(
 #   now adapter-served).
 # - `#162` (pulse export & simplex calibration): `CheckPulseAtmStarExtras`
 #   (`star_export_pulse_data('FGONG')` with `add_atmosphere_to_pulse_data`,
-#   `atm_build_tau_outer`, `atm_T_tau_relation` atmosphere integration, `#161`),
-#   `SimplexSolarCalibrationStarExtras` (`star_simplex_procs`, `#153`).
+#   `atm_build_tau_outer`, `atm_T_tau_relation` atmosphere integration, `#161`);
+#   `SimplexSolarCalibrationStarExtras` is adapter-served for
+#   `other_mesh_functions` (`inlist_solar`; `star_simplex_procs`
+#   remains `#162`).
 # - `#231` (custom termination codes): `C13PocketStarExtras`,
 #   `PisnStarExtras` and `WdAicStarExtras` set `termination_code_str(t_xtra*)`
 #   (`star/test_suite/c13_pocket/src/run_star_extras.f90:416`,
@@ -169,7 +167,6 @@ STOCK_EXTRAS_DIGESTS: frozenset[str] = frozenset(
 # - `#152` (extras retry): `MakeSdbStarExtras` returns `retry`
 #   (`star/test_suite/make_sdb/src/run_star_extras.f90:108`), which the step
 #   driver does not implement.
-# - `#170` (bundled GYRE pulsation): `GyreInMesaStarExtras`.
 # - `#172` (CCSN/STELLA + per-cell `alpha_mlt`): `CcsnIIpStarExtras`
 #   (`#154`/`#155`/`#158`/`#172`).
 #
@@ -187,21 +184,29 @@ ADAPTER_SERVED_STAR_HANDLERS: frozenset[str] = frozenset(
         "ConserveAngularMomentumStarExtras",
         "ConvCoreCpmStarExtras",
         "DiffusionSmoothnessStarExtras",
+        "Dynamo15MStarExtras",
         "ExtendedConvectivePenetrationStarExtras",
+        "GyreInMesaStarExtras",
         "Hb2MStarExtras",
         "HighRotDarkeningStarExtras",
         "HighRotation20MZ2m2StarExtras",
         "HotCoolWindStarExtras",
         "HseRiemannStarExtras",
         "LowZStarExtras",
+        "MagneticBrakingStarExtras",
         "MakeEnvStarExtras",
         "MakeONeWdStarExtras",
         "NeutronStarEnvStarExtras",
+        "PreMs1MToWdStarExtras",
         "RCrBStarExtras",
+        "RspGyreExtras",
         "SemiconvectionStarExtras",
+        "SimplexSolarCalibrationStarExtras",
         "TTauGradrStarExtras",
+        "Thermohaline1MStarExtras",
         "WdAccSmallDmStarExtras",
         "WdCool06MStarExtras",
+        "WdDiffusionStarExtras",
         "WdNovaBurstStarExtras",
     }
 )

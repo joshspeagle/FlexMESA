@@ -308,8 +308,13 @@ pub fn do_set_mdot_with_extras(
     } else {
         model.m_grav[0].max(1.0)
     };
-    let t1 = surface_teff(model, l1, model.r[0].max(1.0));
-    let r1 = (l1 / (PI * CRAD * CLIGHT * flexmesa_math::pow4(t1))).sqrt();
+    let r_fallback = if phot.r_cm > 0.0 {
+        phot.r_cm
+    } else {
+        model.r[0].max(1.0)
+    };
+    let t1 = surface_teff(model, l1, r_fallback);
+    let r1 = (l1 / (PI * CRAD * CLIGHT * t1 * t1 * t1 * t1)).sqrt();
     let cgrav = model.cgrav.first().copied().unwrap_or(STANDARD_CGRAV);
 
     let prev_ledd = model

@@ -661,8 +661,11 @@ fn do_adjust_mass_core(
     // (`star/private/hydro_vars.f90:359-365`). `set_qs` belongs to that later
     // `set_vars`, not to `do_adjust_mass`: MESA's `q` when `do_adjust_mass`
     // returns is `revise_q_and_dq`'s (`adjust_mass.f90:812-821`), as the
-    // zone-by-zone MESA oracle `tests/test_adjust_mass_385.py` checks. Moving
-    // `set_qs` into the step driver's post-`do_adjust_mass` `set_vars` is #529.
+    // zone-by-zone MESA oracle `tests/test_adjust_mass_385.py` checks. So no
+    // `set_qs` here. The step driver's `set_vars` (the `need_eps_mdot` branch
+    // below) runs `set_hydro_vars`, which begins with `set_qs`, so `q`, `m`,
+    // `dm` and `dm_bar` leave it as upstream's `unpack_xh` builds them
+    // (#529; `tests/adjust_mass_set_qs_529_test.rs`).
     model.set_m_and_dm();
     // `set_basic_vars` refreshes `m_grav`, `grav`, `r` and `rmid`
     // (`micro.rs`, `hydro_vars.f90:530-534, 758`).
@@ -673,7 +676,9 @@ fn do_adjust_mass_core(
         // (`star/private/hydro_vars.f90:653`).
         set_hydro_vars(model, false, false)?;
         model.aux.need_to_setvars = false;
-        // No `set_qs` here either (#529).
+        // `set_hydro_vars` has already run `set_qs` (`hydro_vars.rs`,
+        // upstream `unpack_xh`, `hydro_vars.f90:359-365`) and rebuilt `m`,
+        // `dm` and `dm_bar` from it; this call only repeats that.
         model.set_m_and_dm();
         // `calculate_eps_mdot` follows `set_vars_if_needed` directly
         // (`evolve.f90:593-596`): no rotation refresh in between.

@@ -462,9 +462,8 @@ pub fn eval_reaclib_inverse_ratio(term: &ReaclibTerm, t9: f64) -> f64 {
 
     let ln_t9 = flexmesa_math::log(t9);
     let t9i = 1.0 / t9;
-    let ln1 = term.inv_c1
-        + term.inv_c2 * t9i
-        + 1.5 * f64::from(term.inv_exp) * ln_t9;
+    let ln1 =
+        term.inv_c1 + term.inv_c2 * t9i + 1.5 * f64::from(term.inv_exp) * ln_t9;
     let fac1 = if ln1 < MAX_LN_LAMBDA {
         flexmesa_math::exp(ln1)
     } else {

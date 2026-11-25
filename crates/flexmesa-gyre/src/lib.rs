@@ -60,6 +60,7 @@
     clippy::semicolon_if_nothing_returned
 )]
 
+pub mod ad;
 pub mod constants;
 pub mod context;
 pub mod crmath;
@@ -71,15 +72,19 @@ pub mod grid;
 pub mod grid_refine;
 pub mod integ;
 pub mod lapack;
+pub mod magnus;
 pub mod math_m;
 pub mod matmul;
 pub mod mesa;
 pub mod mode;
 pub mod model;
+pub mod nad;
 pub mod namelist;
 pub mod par;
 pub mod powi;
+pub mod prox;
 pub mod rad;
+pub mod scalar;
 pub mod search;
 pub mod sysmtx;
 

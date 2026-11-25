@@ -38,6 +38,7 @@ _STRICT_VALID_TIER1_CASES = frozenset(
         "extended_convective_penetration",
         "make_env",
         "carbon_kh",
+        "check_pulse_atm",
     }
 )
 

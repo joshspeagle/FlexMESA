@@ -25,9 +25,10 @@
 //!   `dln_peos_dxa_for_partials` (`hydro_momentum.f90:312-343`)**.
 //! - **Radius equation (`do1_radius_eqn`, `star/private/hydro_momentum.f90:545-601`)** with
 //!   `force_zero_v` bounds (`velocity_q_upper_bound`, `velocity_tau_lower_bound`,
-//!   `velocity_logt_lower_bound`) and optional velocity time-centering.
+//!   `velocity_logt_lower_bound`, `max_dt_yrs_for_velocity_logt_lower_bound`) and
+//!   optional velocity time-centering.
 
-use flexmesa_const::{FOUR_PI, LN10};
+use flexmesa_const::{FOUR_PI, LN10, SECYER};
 
 use crate::hydro_energy::{eval_face_area_time_centered_ad, eval_pvsc_cell_ad};
 use crate::hydro_eqns::HenyeySystem;
@@ -516,12 +517,13 @@ pub fn do1_radius_eqn(model: &StarModel, k: usize, sys: &mut HenyeySystem) {
     };
     let ln_t_ref = model.ln_t_start.get(k).copied().unwrap_or(model.ln_t[k]);
     let logt = ln_t_ref / LN10;
-    // `max_dt_yrs_for_velocity_logT_lower_bound` is not ported (it fails as
-    // an unsupported control); at its default `1d99` the `dt` clause of
-    // `star/private/hydro_momentum.f90:562-564` always holds.
+    // `star/private/hydro_momentum.f90:561-564`.
     let force_zero_v = model.q[k] > model.controls.velocity_q_upper_bound
         || model.tau[k] < model.controls.velocity_tau_lower_bound
-        || logt < model.controls.velocity_logt_lower_bound;
+        || (logt < model.controls.velocity_logt_lower_bound
+            && model.dt
+                < SECYER
+                    * model.controls.max_dt_yrs_for_velocity_logt_lower_bound);
 
     let (vel_curr, vel_start) = if model.controls.v_flag {
         (

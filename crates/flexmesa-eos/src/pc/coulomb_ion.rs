@@ -43,27 +43,27 @@ pub fn fition9(gami: AutoDiffReal2VarOrder1) -> PcIonContrib {
     const SQ32: f64 = 0.8660254038;
 
     let a3 = -SQ32 - A1 / A2.sqrt();
-    let sq_g = gami.sqrt();
-    let f0 = ((gami * (gami + A2)).sqrt()
-        - ((gami / A2).sqrt() + (gami / A2 + 1.0).sqrt()).ln() * A2)
-        * A1
-        + (sq_g - sq_g.atan()) * (2.0 * a3);
-    let u0 = sq_g.pow3()
-        * ((gami + A2).sqrt().recip() * A1 + (gami + 1.0).recip() * a3);
-    let gami2 = gami.pow2();
-    let u = u0 + gami2 * C1 / (gami + G1) + gami2 * C2 / (gami2 + G2);
+    let f0 = A1
+        * ((gami * (A2 + gami)).sqrt()
+            - A2 * ((gami / A2).sqrt() + (1.0 + gami / A2).sqrt()).ln())
+        + 2.0 * a3 * (gami.sqrt() - gami.sqrt().atan());
+    let u0 = gami.sqrt().pow3() * (A1 / (A2 + gami).sqrt() + a3 / (1.0 + gami));
+    let u = u0
+        + C1 * gami * gami / (G1 + gami)
+        + C2 * gami * gami / (G2 + gami * gami);
     let f = f0
-        + (gami - (gami / G1 + 1.0).ln() * G1) * C1
-        + (gami2 / G2 + 1.0).ln() * (0.5 * C2);
-    let cv = -sq_g.pow3()
-        * 0.5
-        * ((gami + A2).sqrt().pow3().recip() * (A1 * A2)
-            + (-gami + 1.0) / (gami + 1.0).pow2() * a3)
-        - gami2
-            * ((gami + G1).pow2().recip() * (C1 * G1)
-                + (-gami2 + G2) / (gami2 + G2).pow2() * C2);
+        + C1 * (gami - G1 * (1.0 + gami / G1).ln())
+        + C2 / 2.0 * (1.0 + gami * gami / G2).ln();
+    let cv = -0.5
+        * gami.sqrt().pow3()
+        * (A1 * A2 / (A2 + gami).sqrt().pow3()
+            + a3 * (1.0 - gami) / (1.0 + gami).pow2())
+        - gami
+            * gami
+            * (C1 * G1 / (G1 + gami).pow2()
+                + C2 * (G2 - gami * gami) / (G2 + gami * gami).pow2());
     let p = u / 3.0;
-    let pdr = (u * 4.0 - cv) / 9.0;
+    let pdr = (4.0 * u - cv) / 9.0;
     let pdt = cv / 3.0;
     let s = u - f;
     PcIonContrib {
@@ -92,7 +92,7 @@ pub fn hlfit12(
     AutoDiffReal2VarOrder1,
     AutoDiffReal2VarOrder1,
     AutoDiffReal2VarOrder1,
-    f64,
+    AutoDiffReal2VarOrder1,
 ) {
     const EPS: f64 = 1.0e-5;
     const TINY: f64 = 1.0e-99;
@@ -164,84 +164,124 @@ pub fn hlfit12(
     };
 
     let mut eta = eta_in;
+    let u1_ad = AutoDiffReal2VarOrder1::constant(u1);
     let (f, u, cv) = if eta.val > 1.0 / EPS {
-        let u = (eta.pow3() * c11).recip() * 3.0;
+        let u = 3.0 / (c11 * eta * eta * eta);
         let f = -u / 3.0;
-        let cv = u * 4.0;
+        let cv = 4.0 * u;
         (f, u, cv)
     } else if eta.val < EPS {
         if eta.val < TINY {
             eta = AutoDiffReal2VarOrder1::constant(TINY);
         }
-        let f = eta.ln() * 3.0 + clm - eta * (1.5 * u1) + eta.pow2() / 24.0;
-        let u = -eta * (1.5 * u1) + eta.pow2() / 12.0 + 3.0;
-        let cv = -eta.pow2() / 12.0 + 3.0;
+        let f = 3.0 * eta.ln() + clm - 1.5 * u1_ad * eta + eta * eta / 24.0;
+        let u = 3.0 - 1.5 * u1_ad * eta + eta * eta / 12.0;
+        let cv = 3.0 - eta * eta / 12.0;
         (f, u, cv)
     } else {
         let b9 = a6 * c9;
         let b11 = a8 * c11;
-        let eta2 = eta.pow2();
-        let up = eta
-            * (eta * (eta * (eta * (eta2 * (eta2 * a8 + a6) + a4) + a3) + a2)
-                + a1)
-            + 1.0;
-        let dn = eta2
-            * (eta2
-                * (eta
-                    * (eta * (eta * (eta2 * (eta2 * b11 + b9) + b7) + b6)
-                        + b5)
-                    + b4)
-                + b2)
-            + b0;
-        let ea = (-eta * alpha).exp();
-        let eb = (-eta * beta).exp();
-        let eg = (-eta * gamma).exp();
-        let f =
-            (-ea + 1.0).ln() + (-eb + 1.0).ln() + (-eg + 1.0).ln() - up / dn;
-        let up1 = eta
-            * (eta
-                * (eta * (eta2 * (eta2 * (8.0 * a8) + 6.0 * a6) + 4.0 * a4)
-                    + 3.0 * a3)
-                + 2.0 * a2)
-            + a1;
-        let up2 = eta
-            * (eta * (eta2 * (eta2 * (56.0 * a8) + 30.0 * a6) + 12.0 * a4)
-                + 6.0 * a3)
-            + 2.0 * a2;
+        let up = 1.0
+            + eta
+                * (a1
+                    + eta
+                        * (a2
+                            + eta
+                                * (a3
+                                    + eta
+                                        * (a4
+                                            + eta
+                                                * eta
+                                                * (a6 + eta * eta * a8)))));
+        let dn = b0
+            + eta
+                * eta
+                * (b2
+                    + eta
+                        * eta
+                        * (b4
+                            + eta
+                                * (b5
+                                    + eta
+                                        * (b6
+                                            + eta
+                                                * (b7
+                                                    + eta
+                                                        * eta
+                                                        * (b9
+                                                            + eta
+                                                                * eta
+                                                                * b11))))));
+        let ea = (-alpha * eta).exp();
+        let eb = (-beta * eta).exp();
+        let eg = (-gamma * eta).exp();
+        let f = (1.0 - ea).ln() + (1.0 - eb).ln() + (1.0 - eg).ln() - up / dn;
+        let up1 = a1
+            + eta
+                * (2.0 * a2
+                    + eta
+                        * (3.0 * a3
+                            + eta
+                                * (4.0 * a4
+                                    + eta
+                                        * eta
+                                        * (6.0 * a6 + eta * eta * 8.0 * a8))));
+        let up2 = 2.0 * a2
+            + eta
+                * (6.0 * a3
+                    + eta
+                        * (12.0 * a4
+                            + eta * eta * (30.0 * a6 + eta * eta * 56.0 * a8)));
         let dn1 = eta
-            * (eta2
-                * (eta
-                    * (eta
-                        * (eta
-                            * (eta2 * (eta2 * (11.0 * b11) + 9.0 * b9)
-                                + 7.0 * b7)
-                            + 6.0 * b6)
-                        + 5.0 * b5)
-                    + 4.0 * b4)
-                + 2.0 * b2);
-        let dn2 = eta2
-            * (eta
-                * (eta
-                    * (eta
-                        * (eta2 * (eta2 * (110.0 * b11) + 72.0 * b9)
-                            + 42.0 * b7)
-                        + 30.0 * b6)
-                    + 20.0 * b5)
-                + 12.0 * b4)
-            + 2.0 * b2;
-        let u_over_eta = ea * alpha / (-ea + 1.0)
-            + eb * beta / (-eb + 1.0)
-            + eg * gamma / (-eg + 1.0)
-            - (up1 * dn - dn1 * up) / dn.pow2();
-        let cv_over_eta2 = ea * (alpha * alpha) / (-ea + 1.0).pow2()
-            + eb * (beta * beta) / (-eb + 1.0).pow2()
-            + eg * (gamma * gamma) / (-eg + 1.0).pow2()
-            + ((up2 * dn - dn2 * up) * dn - (up1 * dn - dn1 * up) * dn1 * 2.0)
-                / dn.pow3();
-        (f, u_over_eta * eta, cv_over_eta2 * eta2)
+            * (2.0 * b2
+                + eta
+                    * eta
+                    * (4.0 * b4
+                        + eta
+                            * (5.0 * b5
+                                + eta
+                                    * (6.0 * b6
+                                        + eta
+                                            * (7.0 * b7
+                                                + eta
+                                                    * eta
+                                                    * (9.0 * b9
+                                                        + eta
+                                                            * eta
+                                                            * 11.0
+                                                            * b11))))));
+        let dn2 = 2.0 * b2
+            + eta
+                * eta
+                * (12.0 * b4
+                    + eta
+                        * (20.0 * b5
+                            + eta
+                                * (30.0 * b6
+                                    + eta
+                                        * (42.0 * b7
+                                            + eta
+                                                * eta
+                                                * (72.0 * b9
+                                                    + eta
+                                                        * eta
+                                                        * 110.0
+                                                        * b11)))));
+        let u_over_eta = alpha * ea / (1.0 - ea)
+            + beta * eb / (1.0 - eb)
+            + gamma * eg / (1.0 - eg)
+            - (up1 * dn - dn1 * up) / (dn * dn);
+        let cv_over_eta2 = alpha * alpha * ea / ((1.0 - ea) * (1.0 - ea))
+            + beta * beta * eb / ((1.0 - eb) * (1.0 - eb))
+            + gamma * gamma * eg / ((1.0 - eg) * (1.0 - eg))
+            + ((up2 * dn - dn2 * up) * dn - 2.0 * (up1 * dn - dn1 * up) * dn1)
+                / (dn * dn * dn);
+        let u = u_over_eta * eta;
+        let cv = cv_over_eta2 * eta * eta;
+        (f, u, cv)
     };
     let s = u - f;
-    (f, u, cv, s, u1)
+    (f, u, cv, s, u1_ad)
 }
 
 /// Evaluate `FHARM12(GAMI, TPT)` for the harmonic bcc Coulomb crystal
@@ -254,16 +294,16 @@ pub fn fharm12(
 ) -> PcIonContrib {
     const CM: f64 = 0.895929256;
     let (f, u, cv_th, s_th, u1) = hlfit12(tpt, 1);
-    let u0 = -gami * CM;
-    let e0 = tpt * (1.5 * u1);
+    let u0 = -CM * gami;
+    let e0 = 1.5 * u1 * tpt;
     let u_th = u + e0;
     let f_th = f + e0;
     let u_harm = u0 + u_th;
     let f_harm = u0 + f_th;
     let s_harm = s_th;
     let p_harm = u0 / 3.0 + u_th / 2.0;
-    let pdt_harm = cv_th * 0.5;
-    let pdr_harm = u0 / 2.25 + u_th * 0.75 - cv_th * 0.25;
+    let pdt_harm = 0.5 * cv_th;
+    let pdr_harm = u0 / 2.25 + 0.75 * u_th - 0.25 * cv_th;
     PcIonContrib {
         f: f_harm,
         u: u_harm,
@@ -282,14 +322,14 @@ pub fn anharm8(
     gami: AutoDiffReal2VarOrder1,
     tpt: AutoDiffReal2VarOrder1,
 ) -> PcIonContrib {
-    const B1: f64 = 0.12;
     const AA: [f64; 3] = [10.9, 247.0, 1.765e5];
 
-    let ck = B1 / AA[0];
-    let tpt2 = tpt.pow2();
-    let tpt4 = tpt2.pow2();
-    let tq = tpt2 * B1 / gami;
-    let tk2 = tpt2 * ck;
+    let b1 = AutoDiffReal2VarOrder1::constant(0.12);
+    let ck = b1 / AA[0];
+    let tpt2 = tpt * tpt;
+    let tpt4 = tpt2 * tpt2;
+    let tq = b1 * tpt2 / gami;
+    let tk2 = ck * tpt2;
     let sup = (-tk2).exp();
     let mut f_ah = AutoDiffReal2VarOrder1::zero();
     let mut u_ah = AutoDiffReal2VarOrder1::zero();
@@ -299,22 +339,23 @@ pub fn anharm8(
     let mut pdr_ah = AutoDiffReal2VarOrder1::zero();
     let mut sup_gn = sup;
 
-    for (idx, &acn) in AA.iter().enumerate() {
-        let cn = (idx + 1) as f64;
+    for (idx, &acn_val) in AA.iter().enumerate() {
+        let cn = AutoDiffReal2VarOrder1::constant((idx + 1) as f64);
         sup_gn = sup_gn / gami;
-        f_ah = f_ah - sup_gn * (acn / cn);
-        u_ah = u_ah + (tk2 * (2.0 / cn) + 1.0) * acn * sup_gn;
-        let pn = tk2 * (acn / cn) + acn / 3.0;
+        let acn = AutoDiffReal2VarOrder1::constant(acn_val);
+        f_ah = f_ah - acn / cn * sup_gn;
+        u_ah = u_ah + (acn * (1.0 + 2.0 * tk2 / cn)) * sup_gn;
+        let pn = acn_val / 3.0 + tk2 * acn_val / cn;
         p_ah = p_ah + pn * sup_gn;
         cv_ah = cv_ah
-            + (tk2 * ((4.0 - 2.0 / cn) * acn)
-                + tpt4 * (4.0 * acn * ck * ck / cn)
-                + (cn + 1.0) * acn)
+            + ((cn + 1.0) * acn_val
+                + (4.0 - 2.0 / cn) * acn_val * tk2
+                + 4.0 * acn_val * ck * ck / cn * tpt4)
                 * sup_gn;
         pdt_ah = pdt_ah
-            + (pn * (tk2 * 2.0 + cn + 1.0) - tk2 * (2.0 * acn / cn)) * sup_gn;
+            + (pn * (1.0 + cn + 2.0 * tk2) - 2.0 / cn * acn_val * tk2) * sup_gn;
         pdr_ah = pdr_ah
-            + (pn * (-tk2 + (1.0 - cn / 3.0)) + tk2 * (acn / cn)) * sup_gn;
+            + (pn * (1.0 - cn / 3.0 - tk2) + acn_val / cn * tk2) * sup_gn;
     }
     f_ah = f_ah - tq;
     u_ah = u_ah - tq;

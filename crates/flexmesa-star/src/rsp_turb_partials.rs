@@ -314,28 +314,18 @@ impl RspTurbPartials {
             };
 
             let tem2 = pom * pom3;
-            dsrc_dr_00 += tem2
-                * grid.t[i]
-                * (mc.dp_dr_00[i] * mc.qqs[i] / mc.cps[i]
-                    + mc.p[i]
-                        * (mc.dqq_dr_00[i] / mc.cps[i]
-                            - mc.qqs[i] * mc.dcp_dr_00[i]
-                                / (mc.cps[i] * mc.cps[i])));
-            dsrc_dr_in += tem2
-                * grid.t[i]
-                * (mc.dp_dr_in[i] * mc.qqs[i] / mc.cps[i]
-                    + mc.p[i]
-                        * (mc.dqq_dr_in[i] / mc.cps[i]
-                            - mc.qqs[i] * mc.dcp_dr_in[i]
-                                / (mc.cps[i] * mc.cps[i])));
-            dsrc_dt_00 += tem2
-                * (pom2 / grid.t[i]
-                    + grid.t[i]
-                        * (mc.dp_dt_00[i] * mc.qqs[i] / mc.cps[i]
-                            + mc.p[i]
-                                * (mc.dqq_dt_00[i] / mc.cps[i]
-                                    - mc.qqs[i] * mc.dcp_dt_00[i]
-                                        / (mc.cps[i] * mc.cps[i]))));
+            dsrc_dt_00 += tem2 / mc.cps[i]
+                * (mc.p[i] * mc.qqs[i]
+                    + grid.t[i] * mc.qqs[i] * mc.dp_dt_00[i]
+                    + grid.t[i] * mc.p[i] * mc.dqq_dt_00[i]
+                    - grid.t[i] * mc.p[i] * mc.qqs[i] / mc.cps[i]
+                        * mc.dcp_dt_00[i]);
+            dsrc_dr_00 += tem2 * grid.t[i] / mc.cps[i]
+                * (mc.qqs[i] * mc.dp_dr_00[i] + mc.p[i] * mc.dqq_dr_00[i]
+                    - mc.p[i] * mc.qqs[i] / mc.cps[i] * mc.dcp_dr_00[i]);
+            dsrc_dr_in += tem2 * grid.t[i] / mc.cps[i]
+                * (mc.qqs[i] * mc.dp_dr_in[i] + mc.p[i] * mc.dqq_dr_in[i]
+                    - mc.p[i] * mc.qqs[i] / mc.cps[i] * mc.dcp_dr_in[i]);
 
             // `star/private/{rsp_lina.f90:419, rsp_relax_env.f90:737}` evaluate `**1.5d0` (#198).
             let pom_d = (dc.cede / alfa)

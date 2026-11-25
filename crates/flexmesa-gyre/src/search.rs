@@ -6,12 +6,14 @@
 
 use std::sync::atomic::{AtomicI32, Ordering};
 
+use crate::ad::{ad_wave_hom, AdBvp};
 use crate::context::Context;
 use crate::ext_real::ExtR;
 use crate::forum::unique_indices;
 use crate::grid::Grid;
-use crate::mode::{rad_wave_hom, Mode};
-use crate::par::{ModePar, NumPar, ScanPar};
+use crate::mode::{rad_wave_hom, Mode, Wave};
+use crate::model::idx;
+use crate::par::{ModePar, NumPar, OscPar, ScanPar};
 use crate::rad::{GyreTap, RadBvp};
 use crate::GyreError;
 
@@ -24,8 +26,7 @@ static ID_M: AtomicI32 = AtomicI32::new(0);
 ///
 /// # Errors
 ///
-/// [`GyreError::Unported`] for file grids, `INVERSE` grids and single- or
-/// zero-point scans; frequency-unit errors.
+/// [`GyreError::Unported`] for file grids; frequency-unit errors.
 pub fn build_scan(
     cx: &Context<'_>,
     sc_p: &[ScanPar],
@@ -70,15 +71,12 @@ fn build_scan_grid(
     let omega_i_max = sc_p.freq_max / cx.freq_scale(&sc_p.freq_max_units)?
         - cx.freq_shift(&sc_p.freq_frame)?;
     if sc_p.n_freq < 1 {
-        return Err(GyreError::Unported {
-            what: "scans with n_freq < 1",
-            at: "search/scan_m.fypp:134-139",
-        });
+        return Ok(());
     } else if sc_p.n_freq == 1 {
-        return Err(GyreError::Unported {
-            what: "scans with n_freq = 1",
-            at: "search/scan_m.fypp:141-158",
-        });
+        if omega_i_max == omega_i_min {
+            omega.push(omega_i_min);
+        }
+        return Ok(());
     }
     if omega_i_max > omega_i_min {
         let omega_g_min = omega_i_min + cx.freq_shift(&sc_p.grid_frame)?;
@@ -92,10 +90,9 @@ fn build_scan_grid(
                         / f64::from(nf - 1)
                 }
                 "INVERSE" => {
-                    return Err(GyreError::Unported {
-                        what: "scan grid_type = 'INVERSE'",
-                        at: "search/scan_m.fypp:180-181",
-                    })
+                    f64::from(nf - 1)
+                        / (f64::from(nf - i) / omega_g_min
+                            + f64::from(i - 1) / omega_g_max)
                 }
                 _ => return Err(GyreError::Abort("invalid grid_type")),
             };
@@ -148,13 +145,112 @@ pub fn check_scan(
     Ok(())
 }
 
+/// Real boundary-value problem supporting discriminant evaluation and
+/// homogeneous eigensolution recovery (`bvp_rt` implementations: [`RadBvp`]
+/// and [`AdBvp`]).
+pub trait RealBvp<'a> {
+    /// Assemble boundary and difference blocks for real `omega`.
+    ///
+    /// # Errors
+    ///
+    /// Component build errors.
+    fn build(
+        &mut self,
+        omega: f64,
+        mode_build: bool,
+        tap: &mut dyn GyreTap,
+    ) -> Result<(), GyreError>;
+
+    /// Factorize the assembled system matrix.
+    ///
+    /// # Errors
+    ///
+    /// LAPACK factorization errors.
+    fn factor(&mut self) -> Result<(), GyreError>;
+
+    /// Determinant of the factorized system matrix.
+    ///
+    /// # Errors
+    ///
+    /// Unfactored matrix or LAPACK errors.
+    fn det(&self) -> Result<ExtR, GyreError>;
+
+    /// Solve for the homogeneous wave at eigenfrequency `omega`.
+    ///
+    /// # Errors
+    ///
+    /// BVP and wave construction errors.
+    fn wave_hom(
+        &mut self,
+        omega: f64,
+        id: i32,
+        tap: &mut dyn GyreTap,
+    ) -> Result<Wave<'a>, GyreError>;
+}
+
+impl<'a> RealBvp<'a> for RadBvp<'a> {
+    fn build(
+        &mut self,
+        omega: f64,
+        mode_build: bool,
+        tap: &mut dyn GyreTap,
+    ) -> Result<(), GyreError> {
+        RadBvp::build(self, omega, mode_build, tap)
+    }
+
+    fn factor(&mut self) -> Result<(), GyreError> {
+        RadBvp::factor(self)
+    }
+
+    fn det(&self) -> Result<ExtR, GyreError> {
+        RadBvp::det(self)
+    }
+
+    fn wave_hom(
+        &mut self,
+        omega: f64,
+        id: i32,
+        tap: &mut dyn GyreTap,
+    ) -> Result<Wave<'a>, GyreError> {
+        rad_wave_hom(self, omega, id, tap)
+    }
+}
+
+impl<'a> RealBvp<'a> for AdBvp<'a> {
+    fn build(
+        &mut self,
+        omega: f64,
+        mode_build: bool,
+        tap: &mut dyn GyreTap,
+    ) -> Result<(), GyreError> {
+        AdBvp::build(self, omega, mode_build, tap)
+    }
+
+    fn factor(&mut self) -> Result<(), GyreError> {
+        AdBvp::factor(self)
+    }
+
+    fn det(&self) -> Result<ExtR, GyreError> {
+        AdBvp::det(self)
+    }
+
+    fn wave_hom(
+        &mut self,
+        omega: f64,
+        id: i32,
+        tap: &mut dyn GyreTap,
+    ) -> Result<Wave<'a>, GyreError> {
+        ad_wave_hom(self, omega, id, tap)
+    }
+}
+
 /// `eval_discrim(bp, st, discrim)` (`discrim_m.fypp:56-73`).
 ///
 /// # Errors
 ///
 /// BVP errors.
-pub fn eval_discrim(
-    bp: &mut RadBvp<'_>,
+pub fn eval_discrim<'a, B: RealBvp<'a>>(
+    bp: &mut B,
     omega: f64,
     tap: &mut dyn GyreTap,
 ) -> Result<ExtR, GyreError> {
@@ -176,27 +272,143 @@ pub enum Stat {
     IterMax,
 }
 
-/// `narrow_brent_xr_` (`root_m.fypp:244-459`) as `solve_root_xr_` calls it
-/// (`relative_tol` absent, both end values present). Returns
-/// `(x_root, stat, n_iter)`.
-fn solve_brent<F>(
+trait BrentScalar: Copy {
+    fn zero() -> Self;
+    fn from_r(r: f64) -> Self;
+    fn abs(self) -> Self;
+    fn neg(self) -> Self;
+    fn add(self, rhs: Self) -> Self;
+    fn sub(self, rhs: Self) -> Self;
+    fn mul(self, rhs: Self) -> Self;
+    fn div(self, rhs: Self) -> Self;
+    fn eq(self, rhs: Self) -> bool;
+    fn lt(self, rhs: Self) -> bool;
+    fn gt(self, rhs: Self) -> bool;
+    fn le(self, rhs: Self) -> bool;
+    fn ge(self, rhs: Self) -> bool;
+}
+
+impl BrentScalar for ExtR {
+    fn zero() -> Self {
+        Self::from_real(0.0)
+    }
+    fn from_r(r: f64) -> Self {
+        Self::from_real(r)
+    }
+    fn abs(self) -> Self {
+        Self::abs(self)
+    }
+    fn neg(self) -> Self {
+        -self
+    }
+    fn add(self, rhs: Self) -> Self {
+        self + rhs
+    }
+    fn sub(self, rhs: Self) -> Self {
+        self - rhs
+    }
+    fn mul(self, rhs: Self) -> Self {
+        self * rhs
+    }
+    fn div(self, rhs: Self) -> Self {
+        self / rhs
+    }
+    fn eq(self, rhs: Self) -> bool {
+        self.ext_eq(rhs)
+    }
+    fn lt(self, rhs: Self) -> bool {
+        Self::lt(self, rhs)
+    }
+    fn gt(self, rhs: Self) -> bool {
+        Self::gt(self, rhs)
+    }
+    fn le(self, rhs: Self) -> bool {
+        Self::le(self, rhs)
+    }
+    fn ge(self, rhs: Self) -> bool {
+        Self::ge(self, rhs)
+    }
+}
+
+impl BrentScalar for f64 {
+    fn zero() -> Self {
+        0.0
+    }
+    fn from_r(r: f64) -> Self {
+        r
+    }
+    fn abs(self) -> Self {
+        Self::abs(self)
+    }
+    fn neg(self) -> Self {
+        -self
+    }
+    fn add(self, rhs: Self) -> Self {
+        self + rhs
+    }
+    fn sub(self, rhs: Self) -> Self {
+        self - rhs
+    }
+    fn mul(self, rhs: Self) -> Self {
+        self * rhs
+    }
+    fn div(self, rhs: Self) -> Self {
+        self / rhs
+    }
+    fn eq(self, rhs: Self) -> bool {
+        self == rhs
+    }
+    fn lt(self, rhs: Self) -> bool {
+        self < rhs
+    }
+    fn gt(self, rhs: Self) -> bool {
+        self > rhs
+    }
+    fn le(self, rhs: Self) -> bool {
+        self <= rhs
+    }
+    fn ge(self, rhs: Self) -> bool {
+        self >= rhs
+    }
+}
+
+/// `narrow_brent_` (`root_m.fypp:244-459`) with `relative_tol` absent.
+/// Returns `(x_root, stat, n_iter)`.
+fn solve_brent_core<T, F>(
     mut eval: F,
-    x_a: ExtR,
-    x_b: ExtR,
-    x_tol: ExtR,
-    n_iter_max: i32,
-    f_x_a: ExtR,
-    f_x_b: ExtR,
-) -> Result<(ExtR, Stat, i32), GyreError>
+    x_a: T,
+    x_b: T,
+    x_tol: T,
+    n_iter_max: Option<i32>,
+    f_x_a: Option<T>,
+    f_x_b: Option<T>,
+) -> Result<(T, Stat, i32), GyreError>
 where
-    F: FnMut(ExtR) -> Result<(ExtR, Stat), GyreError>,
+    T: BrentScalar,
+    F: FnMut(T) -> Result<(T, Stat), GyreError>,
 {
-    let zero = ExtR::from_real(0.0);
-    let r = ExtR::from_real;
+    let zero = T::zero();
+    let r = T::from_r;
     let mut a = x_a;
     let mut b = x_b;
-    let mut f_a = f_x_a;
-    let mut f_b = f_x_b;
+    let mut f_a = if let Some(fa) = f_x_a {
+        fa
+    } else {
+        let (fa, st) = eval(a)?;
+        if st != Stat::Ok {
+            return Ok((b, st, 0));
+        }
+        fa
+    };
+    let mut f_b = if let Some(fb) = f_x_b {
+        fb
+    } else {
+        let (fb, st) = eval(b)?;
+        if st != Stat::Ok {
+            return Ok((b, st, 0));
+        }
+        fb
+    };
     let mut c = b;
     let mut f_c = f_b;
     let mut d = zero;
@@ -208,14 +420,16 @@ where
     let mut stat = Stat::Ok;
     loop {
         i_iter += 1;
-        if i_iter > n_iter_max {
-            stat = Stat::IterMax;
-            break;
+        if let Some(lim) = n_iter_max {
+            if i_iter > lim {
+                stat = Stat::IterMax;
+                break;
+            }
         }
         if f_b.gt(zero) == f_c.gt(zero) {
             c = a;
             f_c = f_a;
-            d = b - a;
+            d = b.sub(a);
             e = d;
         }
         if f_c.abs().lt(f_b.abs()) {
@@ -226,37 +440,43 @@ where
             f_b = f_c;
             f_c = f_a;
         }
-        let tol = r(2.0 * f64::EPSILON) * b.abs() + x_tol;
-        let m = r(0.5) * (c - b);
-        if m.abs().le(tol) || f_b.ext_eq(zero) {
+        let tol = r(2.0 * f64::EPSILON).mul(b.abs()).add(x_tol);
+        let m = r(0.5).mul(c.sub(b));
+        if m.abs().le(tol) || f_b.eq(zero) {
             break;
         }
         if e.abs().lt(tol) || f_a.abs().lt(f_b.abs()) {
             d = m;
             e = d;
         } else {
-            let mut s = f_b / f_a;
+            let mut s = f_b.div(f_a);
             let (mut p, mut q);
-            if a.ext_eq(c) {
-                p = r(2.0) * m * s;
-                q = r(1.0) - s;
+            if a.eq(c) {
+                p = r(2.0).mul(m).mul(s);
+                q = r(1.0).sub(s);
             } else {
-                q = f_a / f_c;
-                let rr = f_b / f_c;
-                p = s * (r(2.0) * m * q * (q - rr) - (b - a) * (rr - r(1.0)));
-                q = (q - r(1.0)) * (rr - r(1.0)) * (s - r(1.0));
+                q = f_a.div(f_c);
+                let rr = f_b.div(f_c);
+                p = s.mul(
+                    r(2.0)
+                        .mul(m)
+                        .mul(q)
+                        .mul(q.sub(rr))
+                        .sub(b.sub(a).mul(rr.sub(r(1.0)))),
+                );
+                q = q.sub(r(1.0)).mul(rr.sub(r(1.0))).mul(s.sub(r(1.0)));
             }
             if p.gt(zero) {
-                q = -q;
+                q = q.neg();
             } else {
-                p = -p;
+                p = p.neg();
             }
             s = e;
             e = d;
-            if (r(2.0) * p).lt(r(3.0) * m * q - (tol * q).abs())
-                && p.lt((r(0.5) * s * q).abs())
+            if r(2.0).mul(p).lt(r(3.0).mul(m).mul(q).sub(tol.mul(q).abs()))
+                && p.lt(r(0.5).mul(s).mul(q).abs())
             {
-                d = p / q;
+                d = p.div(q);
             } else {
                 d = m;
                 e = d;
@@ -265,11 +485,11 @@ where
         a = b;
         f_a = f_b;
         if d.abs().gt(tol) {
-            b = b + d;
+            b = b.add(d);
         } else if m.gt(zero) {
-            b = b + tol;
+            b = b.add(tol);
         } else {
-            b = b - tol;
+            b = b.sub(tol);
         }
         let (fb, st) = eval(b)?;
         f_b = fb;
@@ -281,17 +501,138 @@ where
     Ok((b, stat, i_iter))
 }
 
+/// `solve_root_r_` (`math/root_m.fypp:69-128`, `relative_tol` absent).
+///
+/// # Errors
+///
+/// Unbracketed interval, invalid `r_root_solver`, or callback errors.
+pub fn solve_root_r<F>(
+    eval: F,
+    x_a: f64,
+    x_b: f64,
+    x_tol: f64,
+    nm_p: &NumPar,
+    n_iter_max: Option<i32>,
+) -> Result<(f64, Stat, i32), GyreError>
+where
+    F: FnMut(f64) -> Result<(f64, Stat), GyreError>,
+{
+    match nm_p.r_root_solver.as_str() {
+        "BRENT" => {
+            solve_brent_core(eval, x_a, x_b, x_tol, n_iter_max, None, None)
+        }
+        _ => Err(GyreError::Abort("invalid r_root_solver")),
+    }
+}
+
+/// Propagation discriminant `gamma_` (`grid/grid_util_m.fypp:163-225`).
+fn gamma_turn(
+    cx: &Context<'_>,
+    pt: crate::grid::Point,
+    omega: f64,
+    alpha_gam: f64,
+    alpha_pi: f64,
+) -> Result<f64, GyreError> {
+    let ml = cx.ml;
+    if ml.is_vacuum(pt)? {
+        return Ok(f64::MAX);
+    }
+    let v = ml.coeff(idx::V_2, pt)? * (pt.x * pt.x);
+    let a_s = ml.coeff(idx::AS, pt)?;
+    let u = ml.coeff(idx::U, pt)?;
+    let c_1 = ml.coeff(idx::C_1, pt)?;
+    let gamma_1 = ml.coeff(idx::GAMMA_1, pt)?;
+    let omega_rot = cx.omega_rot(pt)?;
+    let omega_c = cx.omega_c_r(omega_rot, omega);
+    let lambda = cx.lambda_r(omega_rot, omega);
+    let g_4 = -4.0 * v / gamma_1 * c_1 * alpha_gam;
+    let d = a_s - v / gamma_1 - u + 4.0;
+    let g_2 =
+        d * d + 4.0 * v / gamma_1 * a_s * alpha_gam * alpha_pi + 4.0 * lambda;
+    let g_0 = -4.0 * lambda * a_s / c_1 * alpha_pi;
+    let oc2 = omega_c * omega_c;
+    if g_0 != 0.0 {
+        Ok((g_4 * (oc2 * oc2) + g_2 * oc2 + g_0) / oc2)
+    } else {
+        Ok(g_4 * oc2 + g_2)
+    }
+}
+
+/// `find_turn(cx, gr, st, nm_p, os_p, j_turn, x_turn)`
+/// (`grid/grid_util_m.fypp:53-159`), returning 1-based `(j_turn, x_turn)`.
+///
+/// # Errors
+///
+/// Model evaluation or root-solver errors.
+pub fn find_turn(
+    cx: &Context<'_>,
+    gr: &Grid,
+    omega: f64,
+    nm_p: &NumPar,
+    os_p: &OscPar,
+) -> Result<(usize, f64), GyreError> {
+    let mut j_turn = gr.n();
+    let mut x_turn = f64::MAX;
+    let mut gamma_b =
+        gamma_turn(cx, cx.pt_i, omega, os_p.alpha_gam, os_p.alpha_pi)?;
+    if gamma_b <= 0.0 {
+        return Ok((1, cx.pt_i.x));
+    }
+    for j in 1..gr.n() {
+        let gamma_a = gamma_b;
+        gamma_b =
+            gamma_turn(cx, gr.pt[j], omega, os_p.alpha_gam, os_p.alpha_pi)?;
+        if gamma_a > 0.0 && gamma_b <= 0.0 {
+            j_turn = j;
+            let pt_a = gr.pt[j - 1];
+            let pt_b = gr.pt[j];
+            if pt_a.s == pt_b.s {
+                if gamma_a.abs() < f64::EPSILON * gamma_b.abs() {
+                    x_turn = pt_a.x;
+                } else if gamma_b.abs() < f64::EPSILON * gamma_a.abs() {
+                    x_turn = pt_b.x;
+                } else {
+                    let s = pt_a.s;
+                    let (xr, _, _) = solve_root_r(
+                        |x| {
+                            let pt = crate::grid::Point { s, x };
+                            let g = gamma_turn(
+                                cx,
+                                pt,
+                                omega,
+                                os_p.alpha_gam,
+                                os_p.alpha_pi,
+                            )?;
+                            Ok((g, Stat::Ok))
+                        },
+                        pt_a.x,
+                        pt_b.x,
+                        0.0,
+                        nm_p,
+                        None,
+                    )?;
+                    x_turn = xr;
+                }
+            } else {
+                x_turn = pt_a.x;
+            }
+            break;
+        }
+    }
+    Ok((j_turn, x_turn))
+}
+
 /// `bracket_search(bp, omega, omega_min, omega_max, nm_p, process_mode)`
-/// (`bracket_search_m.fypp:59-318`) for the radial BVP. Mode identifiers
-/// come from the process-wide counter `id_m`.
+/// (`bracket_search_m.fypp:59-318`). Mode identifiers come from the
+/// process-wide counter `id_m`.
 ///
 /// # Errors
 ///
 /// BVP and mode-construction errors; a failed root solve is reported and
 /// skipped as upstream does.
 #[allow(clippy::too_many_arguments)]
-pub fn bracket_search<'a>(
-    bp: &mut RadBvp<'a>,
+pub fn bracket_search<'a, B: RealBvp<'a>>(
+    bp: &mut B,
     omega: &[f64],
     omega_min: f64,
     omega_max: f64,
@@ -326,14 +667,14 @@ pub fn bracket_search<'a>(
                 }
             };
             match nm_p.r_root_solver.as_str() {
-                "BRENT" => solve_brent(
+                "BRENT" => solve_brent_core(
                     &mut eval,
                     x_a,
                     x_b,
                     zero,
-                    nm_p.n_iter_max,
-                    discrim[i],
-                    discrim[i + 1],
+                    Some(nm_p.n_iter_max),
+                    Some(discrim[i]),
+                    Some(discrim[i + 1]),
                 )?,
                 _ => return Err(GyreError::Abort("invalid r_root_solver")),
             }
@@ -344,7 +685,7 @@ pub fn bracket_search<'a>(
         }
         // id_m = id_m + 1
         let id = ID_M.fetch_add(1, Ordering::Relaxed) + 1;
-        let wv = rad_wave_hom(bp, x_root.to_real(), id, tap)?;
+        let wv = bp.wave_hom(x_root.to_real(), id, tap)?;
         let md = Mode::new(wv)?;
         let chi = md.wave.discrim.abs()
             / ExtR::max(discrim[i].abs(), discrim[i + 1].abs());

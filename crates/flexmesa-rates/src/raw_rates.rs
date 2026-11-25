@@ -39,9 +39,9 @@ fn builtin_special_rate_index() -> &'static BuiltinSpecialRateIndex {
         if bytes.len() < 12 || &bytes[0..8] != SPECIAL_RATE_BUNDLE_MAGIC {
             return BuiltinSpecialRateIndex { entries };
         }
-        let count = u32::from_le_bytes(
-            bytes[8..12].try_into().unwrap_or([0; 4]),
-        ) as usize;
+        let count =
+            u32::from_le_bytes(bytes[8..12].try_into().unwrap_or([0; 4]))
+                as usize;
         let mut pos = 12_usize;
         for _ in 0..count {
             if pos + 8 > bytes.len() {
@@ -511,6 +511,8 @@ pub fn eval_reaction_raw(
             Ok(f)
         }
         1 => Ok(cat.eval_rate_table(info.id, temp)?.0),
+        // `raw_rate = -1` special-routine sentinel (`rates/private/raw_rates.f90:358-639`);
+        // network initialization (`crates/flexmesa-net/src/initialize.rs:739`) maps `< 0` -> `exp(-99)`.
         2 => Ok(-1.0),
         3..=28 => {
             let (fr, rr) = eval_analytic_rate(info.op_code, tf);
@@ -800,7 +802,10 @@ mod tests {
             None
         ));
         assert!(RateTable1D::exists("r_he4_he4_he4_to_c12_cf88.txt", None));
-        assert!(!RateTable1D::exists("nonexistent_special_rate_xyz.dat", None));
+        assert!(!RateTable1D::exists(
+            "nonexistent_special_rate_xyz.dat",
+            None
+        ));
         assert!(RateTable1D::resolve_and_load(
             "nonexistent_special_rate_xyz.dat",
             None
@@ -827,9 +832,13 @@ mod tests {
         let temp = 1.5e8_f64;
         let tf = TFactors::from_temp(temp);
         let c12_id = cat.reaction_id_by_name("r_c12_ag_o16").unwrap();
-        let jina_c12 =
-            eval_reaction_raw(cat, cat.reaction_by_id(c12_id).unwrap(), temp, &tf)
-                .unwrap();
+        let jina_c12 = eval_reaction_raw(
+            cat,
+            cat.reaction_by_id(c12_id).unwrap(),
+            temp,
+            &tf,
+        )
+        .unwrap();
         let deboer_c12 = c12ag.eval(temp).unwrap().0;
         assert!(deboer_c12 > 0.0 && jina_c12 > 0.0);
         // DeBoer (2017) differs measurably from JINA REACLIB at He-burning T=1.5e8 K

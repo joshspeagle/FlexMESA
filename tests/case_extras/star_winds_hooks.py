@@ -956,13 +956,8 @@ class MagneticBrakingStarExtras:
         self.spindown_ok: bool | None = None
 
     def extras_controls(self, state: dict[str, Any]) -> None:
-        """Require `other_timestep_limit` when enabled (`:38-57`)."""
-        if bool(state["use_other_timestep_limit"]):
-            raise NotImplementedError(
-                "magnetic_braking: extras_controls registers "
-                "other_timestep_limit (:56), which flexmesa-star StarExtras "
-                "does not expose (#152)"
-            )
+        """Accept `use_other_timestep_limit` (`:38-57`)."""
+        _ = bool(state["use_other_timestep_limit"])
 
     def other_torque(self, state: dict[str, Any]) -> list[float]:
         """Compute `extra_jdot` `(nz,)` in $\\mathrm{cm^2\\,s^{-2}}$
@@ -1005,9 +1000,13 @@ class MagneticBrakingStarExtras:
         return extra_jdot
 
     def other_timestep_limit(
-        self, state: dict[str, Any], dt_limit_ratio: float
-    ) -> tuple[str, float]:
+        self,
+        state: dict[str, Any],
+        _skip_hard_limit: bool = False,
+        _dt: float = 0.0,
+    ) -> dict[str, Any]:
         """Evaluate spindown `dt_limit_ratio` (`:270-292`)."""
+        dt_limit_ratio = 0.0
         if (
             self._j_tot > 1.0e50
             and float(state["v_rot_avg_surf"]) > 0.8e5
@@ -1018,7 +1017,7 @@ class MagneticBrakingStarExtras:
                 * float(state["dt"])
                 / self._t_spindown
             )
-        return "keep_going", dt_limit_ratio
+        return {"action": "keep_going", "dt_limit_ratio": dt_limit_ratio}
 
     def extra_profile_columns(
         self, state: dict[str, Any]

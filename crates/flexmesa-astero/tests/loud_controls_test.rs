@@ -44,45 +44,42 @@ fn test_astero_unsupported_unused_aliases_and_pgstar_validation() {
     fs::create_dir_all(&unimpl).expect("mkdir");
     fs::write(
         unimpl.join("inlist_astero_search_controls"),
-        "&astero_search_controls\n  write_fgong_for_each_model = .true.\n/\n",
+        "&astero_search_controls\n  unknown_non_mesa_key = .true.\n/\n",
     )
     .expect("write");
     let err = parse_astero_search_controls(&unimpl)
-        .expect_err("unsupported astero control must fail by default");
+        .expect_err("unknown astero control must fail by default");
     assert!(matches!(err, StarError::InvalidInput(_)));
-    assert!(err.to_string().contains("write_fgong_for_each_model"));
-    assert!(parse_astero_search_controls_with_options(
-        &unimpl,
-        InlistLoadOptions {
-            allow_unsupported_controls: true,
-        },
-    )
-    .is_ok());
+    assert!(err.to_string().contains("unknown_non_mesa_key"));
+    assert!(
+        parse_astero_search_controls_with_options(
+            &unimpl,
+            InlistLoadOptions {
+                allow_unsupported_controls: true,
+            },
+        )
+        .is_err(),
+        "non-upstream key must fail even with allow_unsupported_controls"
+    );
 
-    for (tag, body, key) in [
-        (
-            "unused_trace_limits",
-            "&astero_search_controls\n  trace_limits = .true.\n/\n",
-            "trace_limits",
-        ),
-        (
-            "unused_nonad",
-            "&astero_search_controls\n  gyre_non_ad = .true.\n/\n",
-            "gyre_non_ad",
-        ),
-        (
-            "unused_yhe3",
-            "&astero_search_controls\n  y_frac_he3 = 1.0d-4\n/\n",
-            "y_frac_he3",
-        ),
-    ] {
-        let d = tmp.root.join(tag);
-        fs::create_dir_all(&d).expect("mkdir");
-        fs::write(d.join("inlist_astero_search_controls"), body).expect("w");
-        let e = parse_astero_search_controls(&d)
-            .expect_err("unused astero key must fail by default");
-        assert!(e.to_string().contains(key));
-    }
+    let impl_dir = tmp.root.join("implemented_controls");
+    fs::create_dir_all(&impl_dir).expect("mkdir");
+    fs::write(
+        impl_dir.join("inlist_astero_search_controls"),
+        "&astero_search_controls
+  write_fgong_for_each_model = .true.
+  trace_limits = .true.
+  gyre_non_ad = .true.
+  y_frac_he3 = 2.0d-4
+/\n",
+    )
+    .expect("write");
+    let parsed = parse_astero_search_controls(&impl_dir)
+        .expect("implemented astero controls must parse by default");
+    assert!(parsed.write_fgong_for_each_model);
+    assert!(parsed.trace_limits);
+    assert!(parsed.gyre_non_ad);
+    assert!((parsed.y_frac_he3 - 2.0e-4).abs() <= 1.0e-18);
 
     for (idx, body) in [
         "&astero_search_controls\n  a_div_r = 0.0\n/\n",

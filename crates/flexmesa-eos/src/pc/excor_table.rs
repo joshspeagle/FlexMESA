@@ -182,7 +182,8 @@ pub fn excor7_table_point(rs: f64, game: f64) -> [f64; NVALS_EXCOR7] {
     let eh = 1.0 / theta + t1dh / t1 + e0dh / e0 - e1dh / e1;
     let edh = e * eh;
     let edhh = edh * eh
-        + e * (t1dhh / t1 - pow2(t1dh / t1) + e0dhh / e0 - pow2(e0dh / e0)
+        + e * (t1dhh / t1 - pow2(t1dh / t1) + e0dhh / e0
+            - pow2(e0dh / e0)
             - e1dhh / e1
             + pow2(e1dh / e1)
             - 1.0 / theta2);
@@ -206,8 +207,8 @@ pub fn excor7_table_point(rs: f64, game: f64) -> [f64; NVALS_EXCOR7] {
     let s1 = -c / e * game;
     let s1h = cdh / c - edh / e;
     let s1dh = s1 * s1h;
-    let s1dhh = s1dh * s1h
-        + s1 * (cdhh / c - pow2(cdh / c) - edhh / e + pow2(edh / e));
+    let s1dhh =
+        s1dh * s1h + s1 * (cdhh / c - pow2(cdh / c) - edhh / e + pow2(edh / e));
     let s1dg = -c / e;
     let s1dhg = s1dg * (cdh / c - edh / e);
 
@@ -319,7 +320,8 @@ pub fn excor7_table_point(rs: f64, game: f64) -> [f64; NVALS_EXCOR7] {
     let s4dhh = s4adhh * s4b * s4c
         + s4a * s4bdhh * s4c
         + s4a * s4b * s4cdhh
-        + 2.0 * (s4adh * s4bdh * s4c + s4adh * s4b * s4cdh + s4a * s4bdh * s4cdh);
+        + 2.0
+            * (s4adh * s4bdh * s4c + s4adh * s4b * s4cdh + s4a * s4bdh * s4cdh);
     let s4dg = s4a * s4b * s4cdg;
     let s4dgg = s4a * s4b * s4cdgg;
     let s4dhg = s4a * s4b * s4cdhg + s4cdg * (s4adh * s4b + s4a * s4bdh);
@@ -345,7 +347,8 @@ pub fn excor7_table_point(rs: f64, game: f64) -> [f64; NVALS_EXCOR7] {
     if cvxc.abs() < 1.0e-9 * (game * game * fxcdgg).abs() {
         cvxc = 0.0;
     }
-    let pdlh = theta * (game * fxcdhg - 2.0 * fxcdh - 2.0 * theta * fxcdhh) / 3.0;
+    let pdlh =
+        theta * (game * fxcdhg - 2.0 * fxcdh - 2.0 * theta * fxcdhh) / 3.0;
     let pdlg = game * (fxcdg + game * fxcdgg - 2.0 * theta * fxcdhg) / 3.0;
     let pdrxc = pxc + (pdlg - 2.0 * pdlh) / 3.0;
     let pdtxc = game * (theta * fxcdhg - game * fxcdgg / 3.0)
@@ -493,7 +496,9 @@ impl Excor7Table {
     #[must_use]
     pub fn global() -> &'static Self {
         match numerics_mode() {
-            NumericsMode::Strict => EXCOR7_TABLE_STRICT.get_or_init(Self::build),
+            NumericsMode::Strict => {
+                EXCOR7_TABLE_STRICT.get_or_init(Self::build)
+            }
             NumericsMode::Fast => EXCOR7_TABLE_FAST.get_or_init(Self::build),
         }
     }

@@ -126,20 +126,20 @@ pub fn blin9c(
             }
         }
     } else {
-        let d = chi * temp * 0.5 + 1.0;
+        let d = 1.0 + chi * temp / 2.0;
         let r = (chi * d).sqrt();
-        let rx = chi.recip() * 0.5 + temp * 0.25 / d;
+        let rx = 0.5 / chi + 0.25 * temp / d;
         let rdx = r * rx;
-        let rdt = chi.pow2() * 0.25 / r;
-        let rxx = -chi.pow2().recip() * 0.5 - (temp / d).pow2() * 0.125;
+        let rdt = 0.25 * chi.pow2() / r;
+        let rxx = -0.5 / chi.pow2() - 0.125 * (temp / d).pow2();
         let rdxx = rdx * rx + r * rxx;
-        let rdtt = -rdt * chi * 0.25 / d;
-        let rxt = d.recip() * 0.25 - chi * temp * 0.125 / (d * d);
+        let rdtt = -0.25 * rdt * chi / d;
+        let rxt = 0.25 / d - 0.125 * chi * temp / (d * d);
         let rdxt = rdt * rx + r * rxt;
-        let rxxx = chi.pow3().recip() + (temp / d).pow3() * 0.125;
-        let rdxxx = rdxx * rx + rdx * rxx * 2.0 + r * rxxx;
-        let rxtt = -chi * 0.25 / (d * d) + chi.pow2() * temp * 0.125 / d.pow3();
-        let rdxtt = rdtt * rx + rdt * rxt * 2.0 + r * rxtt;
+        let rxxx = 1.0 / chi.pow3() + 0.125 * (temp / d).pow3();
+        let rdxxx = rdxx * rx + 2.0 * rdx * rxx + r * rxxx;
+        let rxtt = -0.25 / (d * d) * chi + 0.125 * chi.pow2() * temp / d.pow3();
+        let rdxtt = rdtt * rx + 2.0 * rdt * rxt + r * rxtt;
         let rxxt = -rxt * temp / d;
         let rdxxt = rdxt * rx + rdx * rxt + rdt * rxx + r * rxxt;
 
@@ -156,41 +156,41 @@ pub fn blin9c(
 
         for k in 0..3 {
             let kf = k as f64;
-            let dm = chi * temp * (0.5 * (kf + 1.0)) + (kf + 0.5);
-            am[k] = chi.powi(k as i32) * dm / r;
-            let fmx1 = temp * (0.5 * (kf + 1.0)) / dm;
-            let fmx2 = temp * 0.25 / d;
+            let dm = kf + 0.5 + (kf + 1.0) * chi * temp / 2.0;
+            am[k] = chi.powf(kf) * dm / r;
+            let fmx1 = 0.5 * (kf + 1.0) * temp / dm;
+            let fmx2 = 0.25 * temp / d;
             let fmx = (kf - 0.5) / chi + fmx1 - fmx2;
             amdx[k] = am[k] * fmx;
-            let ckm = (0.5 * (kf + 1.0)) / dm;
+            let ckm = 0.5 * (kf + 1.0) / dm;
             let fmt1 = ckm * chi;
-            let fmt2 = chi * 0.25 / d;
+            let fmt2 = 0.25 * chi / d;
             let fmt = fmt1 - fmt2;
             amdt[k] = am[k] * fmt;
             let fmxx =
-                -(kf - 0.5) / chi.pow2() - fmx1 * fmx1 + fmx2 * fmx2 * 2.0;
+                -(kf - 0.5) / chi.pow2() - fmx1 * fmx1 + 2.0 * fmx2 * fmx2;
             amdxx[k] = amdx[k] * fmx + am[k] * fmxx;
-            let fmtt = fmt2 * fmt2 * 2.0 - fmt1 * fmt1;
+            let fmtt = 2.0 * fmt2 * fmt2 - fmt1 * fmt1;
             amdtt[k] = amdt[k] * fmt + am[k] * fmtt;
             amdxt[k] = amdx[k] * fmt
                 + am[k]
-                    * (ckm * (-ckm * chi * temp + 1.0) - d.recip() * 0.25
-                        + chi * temp * 0.125 / (d * d));
+                    * (ckm * (1.0 - ckm * chi * temp) - 0.25 / d
+                        + 0.125 * chi * temp / (d * d));
             if k == 0 {
-                let fmxxx = (2.0 * kf - 1.0) / chi.pow3() + fmx1.pow3() * 2.0
-                    - fmx2.pow3() * 8.0;
-                amdxxx = amdxx[k] * fmx + amdx[k] * fmxx * 2.0 + am[k] * fmxxx;
+                let fmxxx = (2.0 * kf - 1.0) / chi.pow3() + 2.0 * fmx1.pow3()
+                    - 8.0 * fmx2.pow3();
+                amdxxx = amdxx[k] * fmx + 2.0 * amdx[k] * fmxx + am[k] * fmxxx;
                 let fmt1dx = ckm - temp * chi * ckm * ckm;
-                let fmt2dx = (-chi * temp * 0.125 / d + 0.25) / d;
+                let fmt2dx = (0.25 - chi * temp * 0.125 / d) / d;
                 let fmxt = fmt1dx - fmt2dx;
-                let fmttx = fmt2 * fmt2dx * 4.0 - fmt1 * fmt1dx * 2.0;
+                let fmttx = 4.0 * fmt2 * fmt2dx - 2.0 * fmt1 * fmt1dx;
                 amdxtt = amdxt[k] * fmt
                     + amdt[k] * fmxt
                     + amdx[k] * fmtt
                     + am[k] * fmttx;
                 let fmx1dt = ckm - chi * temp * ckm * ckm;
-                let fmx2dt = d.recip() * 0.25 * (-chi * temp * 0.5 / d + 1.0);
-                let fmxxt = fmx2 * fmx2dt * 4.0 - fmx1 * fmx1dt * 2.0;
+                let fmx2dt = 0.25 / d * (1.0 - 0.5 * chi * temp / d);
+                let fmxxt = 4.0 * fmx2 * fmx2dt - 2.0 * fmx1 * fmx1dt;
                 amdxxt = amdxt[k] * fmx
                     + amdx[k] * fmxt
                     + amdt[k] * fmxx
@@ -198,108 +198,108 @@ pub fn blin9c(
             }
         }
 
-        let sq2t = (temp * 2.0).sqrt();
+        let sq2t = (2.0 * temp).sqrt();
         let sq2t3 = sq2t * sq2t * sq2t;
-        let a = chi * temp + sq2t * r + 1.0;
+        let a = 1.0 + chi * temp + sq2t * r;
         let adx = temp + sq2t * rdx;
         let adt = chi + r / sq2t + sq2t * rdt;
         let adxx = sq2t * rdxx;
-        let adtt = -r / sq2t3 + rdt * 2.0 / sq2t + sq2t * rdtt;
-        let adxt = rdx / sq2t + sq2t * rdxt + 1.0;
-        let adxtt = -rdx / sq2t3 + rdxt * 2.0 / sq2t + sq2t * rdxtt;
+        let adtt = -r / sq2t3 + 2.0 / sq2t * rdt + sq2t * rdtt;
+        let adxt = 1.0 + rdx / sq2t + sq2t * rdxt;
+        let adxtt = -rdx / sq2t3 + 2.0 / sq2t * rdxt + sq2t * rdxtt;
         let adxxt = rdxx / sq2t + sq2t * rdxxt;
-        let xt1 = chi + temp.recip();
+        let xt1 = chi + 1.0 / temp;
         let aln = a.log();
-        let fj0 = xt1 * r * 0.5 - aln / sq2t3;
+        let fj0 = 0.5 * xt1 * r - aln / sq2t3;
         let asq3 = a * sq2t3;
         let asq3dx = adx * sq2t3;
-        let fj0dx = (r + xt1 * rdx) * 0.5 - adx / asq3;
-        let fj0dt = (xt1 * rdt - r / temp.pow2()) * 0.5 - adt / asq3
-            + aln * 0.75 / (temp * temp * sq2t);
+        let fj0dx = 0.5 * (r + xt1 * rdx) - adx / asq3;
+        let fj0dt = 0.5 * (xt1 * rdt - r / temp.pow2()) - adt / asq3
+            + 0.75 / (temp * temp * sq2t) * aln;
         let fj0dxx =
-            rdx + xt1 * rdxx * 0.5 + (adx / a).pow2() / sq2t3 - adxx / asq3;
+            rdx + 0.5 * xt1 * rdxx + (adx / a).pow2() / sq2t3 - adxx / asq3;
         let fj0dtt = r / temp.pow3() - rdt / temp.pow2()
-            + xt1 * rdtt * 0.5
-            + adt * 3.0 / (asq3 * temp)
+            + 0.5 * xt1 * rdtt
+            + 3.0 / (asq3 * temp) * adt
             + (adt / a).pow2() / sq2t3
             - adtt / asq3
-            - aln * 1.875 / (temp * temp * temp * sq2t);
-        let bxt = adx * 1.5 / temp + adx * adt / a - adxt;
-        let bxxt = adxx * 1.5 / temp + (adxx * adt + adx * adxt) / a
+            - 1.875 / (temp * temp * temp * sq2t) * aln;
+        let bxt = 1.5 / temp * adx + adx * adt / a - adxt;
+        let bxxt = 1.5 / temp * adxx + (adxx * adt + adx * adxt) / a
             - (adx / a).pow2() * adt
             - adxxt;
-        let fj0dxt = (rdt - rdx / temp.pow2() + xt1 * rdxt) * 0.5 + bxt / asq3;
+        let fj0dxt = 0.5 * (rdt - rdx / temp.pow2() + xt1 * rdxt) + bxt / asq3;
         let fj0xxx = rdxx * 1.5
-            + xt1 * rdxxx * 0.5
-            + (adx * (adxx / a - (adx / a).pow2()) * 2.0 - sq2t * rdxxx
+            + 0.5 * xt1 * rdxxx
+            + (2.0 * adx * (adxx / a - (adx / a).pow2()) - sq2t * rdxxx
                 + adxx / asq3 * asq3dx)
                 / asq3;
         let fj0xtt = rdx / temp.pow3() - rdxt / temp.pow2()
-            + (rdtt + xt1 * rdxtt) * 0.5
-            + (adxt - adt / asq3 * asq3dx) * 3.0 / (temp * asq3)
-            + (adt * (adxt / a - adt * adx / (a * a)) * 2.0 - adxtt
+            + 0.5 * (rdtt + xt1 * rdxtt)
+            + 3.0 / temp * (adxt - adt / asq3 * asq3dx) / asq3
+            + (2.0 * adt * (adxt / a - adt * adx / (a * a)) - adxtt
                 + adtt * asq3dx / asq3)
                 / asq3
-            - adx * 1.875 / (temp * temp * temp * sq2t * a);
-        let fj0xxt = (rdxt * 2.0 - rdxx / temp.pow2() + xt1 * rdxxt) * 0.5
+            - 1.875 / (temp * temp * temp * sq2t) * adx / a;
+        let fj0xxt = 0.5 * (rdxt - rdxx / temp.pow2() + rdxt + xt1 * rdxxt)
             + (bxxt - bxt * asq3dx / asq3) / asq3;
 
         out.w0 = BlinSeries {
-            w: fj0 + am[0] * PI26,
-            wdx: fj0dx + amdx[0] * PI26,
-            wdt: fj0dt + amdt[0] * PI26,
-            wdxx: fj0dxx + amdxx[0] * PI26,
-            wdtt: fj0dtt + amdtt[0] * PI26,
-            wdxt: fj0dxt + amdxt[0] * PI26,
+            w: fj0 + PI26 * am[0],
+            wdx: fj0dx + PI26 * amdx[0],
+            wdt: fj0dt + PI26 * amdt[0],
+            wdxx: fj0dxx + PI26 * amdxx[0],
+            wdtt: fj0dtt + PI26 * amdtt[0],
+            wdxt: fj0dxt + PI26 * amdxt[0],
         };
-        out.w0xxx = fj0xxx + amdxxx * PI26;
-        out.w0xtt = fj0xtt + amdxtt * PI26;
-        out.w0xxt = fj0xxt + amdxxt * PI26;
+        out.w0xxx = fj0xxx + PI26 * amdxxx;
+        out.w0xtt = fj0xtt + PI26 * amdxtt;
+        out.w0xxt = fj0xxt + PI26 * amdxxt;
 
         let fj1 = (r * r * r / 1.5 - fj0) / temp;
-        let fj1dx = (r * r * rdx * 2.0 - fj0dx) / temp;
-        let fj1dt = (r * r * rdt * 2.0 - fj0dt - fj1) / temp;
-        let fj1dxx = (r * rdx * rdx * 4.0 + r * r * rdxx * 2.0 - fj0dxx) / temp;
+        let fj1dx = (2.0 * r * r * rdx - fj0dx) / temp;
+        let fj1dt = (2.0 * r * r * rdt - fj0dt - fj1) / temp;
+        let fj1dxx = (4.0 * r * rdx * rdx + 2.0 * r * r * rdxx - fj0dxx) / temp;
         let fj1dtt =
-            (r * rdt * rdt * 4.0 + r * r * rdtt * 2.0 - fj0dtt - fj1dt * 2.0)
+            (4.0 * r * rdt * rdt + 2.0 * r * r * rdtt - fj0dtt - 2.0 * fj1dt)
                 / temp;
         let fj1dxt =
-            (r * rdx * rdt * 4.0 + r * r * rdxt * 2.0 - fj0dxt - fj1dx) / temp;
+            (4.0 * r * rdx * rdt + 2.0 * r * r * rdxt - fj0dxt - fj1dx) / temp;
 
         out.w1 = BlinSeries {
-            w: fj1 + am[1] * PI26,
-            wdx: fj1dx + amdx[1] * PI26,
-            wdt: fj1dt + amdt[1] * PI26,
-            wdxx: fj1dxx + amdxx[1] * PI26,
-            wdtt: fj1dtt + amdtt[1] * PI26,
-            wdxt: fj1dxt + amdxt[1] * PI26,
+            w: fj1 + PI26 * am[1],
+            wdx: fj1dx + PI26 * amdx[1],
+            wdt: fj1dt + PI26 * amdt[1],
+            wdxx: fj1dxx + PI26 * amdxx[1],
+            wdtt: fj1dtt + PI26 * amdtt[1],
+            wdxt: fj1dxt + PI26 * amdxt[1],
         };
 
-        let fj2 = (chi * r * r * r * 0.5 - fj1 * 1.25) / temp;
+        let fj2 = (0.5 * chi * r * r * r - 1.25 * fj1) / temp;
         let fj2dx =
-            (r * r * r * 0.5 + chi * r * r * rdx * 1.5 - fj1dx * 1.25) / temp;
-        let fj2dt = (chi * r * r * rdt * 1.5 - fj1dt * 1.25 - fj2) / temp;
-        let fj2dxx = (r * rdx * (r + chi * rdx) * 3.0
-            + chi * r * r * rdxx * 1.5
-            - fj1dxx * 1.25)
+            (0.5 * r * r * r + 1.5 * chi * r * r * rdx - 1.25 * fj1dx) / temp;
+        let fj2dt = (1.5 * chi * r * r * rdt - 1.25 * fj1dt - fj2) / temp;
+        let fj2dxx = (3.0 * r * rdx * (r + chi * rdx)
+            + 1.5 * chi * r * r * rdxx
+            - 1.25 * fj1dxx)
             / temp;
-        let fj2dtt = (chi * r * (rdt * rdt + r * rdtt * 0.5) * 3.0
-            - fj1dtt * 1.25
-            - fj2dt * 2.0)
+        let fj2dtt = (3.0 * chi * r * (rdt * rdt + 0.5 * r * rdtt)
+            - 1.25 * fj1dtt
+            - 2.0 * fj2dt)
             / temp;
-        let fj2dxt = (r * rdt * (r + chi * rdx * 2.0) * 1.5
-            + chi * r * r * rdxt * 1.5
-            - fj1dxt * 1.25
+        let fj2dxt = (1.5 * r * rdt * (r + 2.0 * chi * rdx)
+            + 1.5 * chi * r * r * rdxt
+            - 1.25 * fj1dxt
             - fj2dx)
             / temp;
 
         out.w2 = BlinSeries {
-            w: fj2 + am[2] * PI26,
-            wdx: fj2dx + amdx[2] * PI26,
-            wdt: fj2dt + amdt[2] * PI26,
-            wdxx: fj2dxx + amdxx[2] * PI26,
-            wdtt: fj2dtt + amdtt[2] * PI26,
-            wdxt: fj2dxt + amdxt[2] * PI26,
+            w: fj2 + PI26 * am[2],
+            wdx: fj2dx + PI26 * amdx[2],
+            wdt: fj2dt + PI26 * amdt[2],
+            wdxx: fj2dxx + PI26 * amdxx[2],
+            wdtt: fj2dtt + PI26 * amdtt[2],
+            wdxt: fj2dxt + PI26 * amdxt[2],
         };
     }
     out

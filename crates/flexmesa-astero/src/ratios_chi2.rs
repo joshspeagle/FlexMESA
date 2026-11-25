@@ -58,8 +58,8 @@ pub fn match_modes_by_degree(
 
 /// Finds the longest contiguous radial-order subsequence `(seq_first, seq_last)`
 /// (inclusive 0-based indices) where adjacent modes satisfy
-/// $0.5\Delta\nu \le \nu_i - \nu_{i-1} \le 1.5\Delta\nu$ (`get_max_sequence`,
-/// `astero_support.f90:363-391`).
+/// $\nu_i - \nu_{i-1} \le 1.5\Delta\nu$ (`get_max_sequence`,
+/// `astero_support.f90:553-587`).
 #[must_use]
 pub fn get_max_sequence(freqs: &[f64], dnu: f64) -> (usize, usize) {
     let n = freqs.len();
@@ -69,24 +69,36 @@ pub fn get_max_sequence(freqs: &[f64], dnu: f64) -> (usize, usize) {
     if n == 1 || dnu <= 0.0 {
         return (0, n - 1);
     }
-    let (df_min, df_max) = (0.5 * dnu, 1.5 * dnu);
-    let (mut cur_first, mut cur_last) = (0usize, 0usize);
-    let (mut best_first, mut best_last) = (0usize, 0usize);
-    for i in 1..n {
-        let df = freqs[i] - freqs[i - 1];
-        if (df_min..=df_max).contains(&df) {
-            cur_last = i;
-        } else {
-            if cur_last - cur_first > best_last - best_first {
-                (best_first, best_last) = (cur_first, cur_last);
+    let df_max = 1.5 * dnu;
+    let (mut seq_i, mut seq_n) = (0usize, 0usize);
+    let (mut max_seq_i, mut max_seq_n) = (0usize, 0usize);
+    loop {
+        let i = seq_i + seq_n;
+        if i + 1 >= n {
+            break;
+        }
+        seq_i = i;
+        seq_n = 1;
+        for j in seq_i..(n - 1) {
+            if freqs[j + 1] - freqs[j] > df_max {
+                if seq_n > max_seq_n {
+                    max_seq_i = seq_i;
+                    max_seq_n = seq_n;
+                }
+                break;
             }
-            (cur_first, cur_last) = (i, i);
+            seq_n += 1;
         }
     }
-    if cur_last - cur_first > best_last - best_first {
-        (best_first, best_last) = (cur_first, cur_last);
+    if seq_n > max_seq_n {
+        max_seq_i = seq_i;
+        max_seq_n = seq_n;
     }
-    (best_first, best_last)
+    if max_seq_n == 0 {
+        (0, 0)
+    } else {
+        (max_seq_i, max_seq_i + max_seq_n - 1)
+    }
 }
 
 /// Full output of `get_frequency_ratios` (`astero_support.f90:318-416`).
@@ -135,28 +147,35 @@ pub fn eval_frequency_ratios_with_trimming(
     }
     let (l0_first, l1_first, n) = if trim_for_obs {
         let (mut l0_f, mut l0_l) = get_max_sequence(&l0_freqs[..nl0], dnu);
-        let (mut l1_f, l1_l) = get_max_sequence(&l1_freqs[..nl1], dnu);
-        while l1_f <= l1_l && l1_freqs[l1_f] < l0_freqs[l0_f] {
+        let (mut l1_f, mut l1_l) = get_max_sequence(&l1_freqs[..nl1], dnu);
+        // Trim high end of l0 until < last l1 (`astero_support.f90:349-358`).
+        while l0_freqs[l0_l] >= l1_freqs[l1_l] {
+            if l0_l <= l0_f {
+                return FrequencyRatiosR010::default();
+            }
+            l0_l -= 1;
+        }
+        // Trim low end of l1 until > first l0 (`astero_support.f90:361-367`).
+        while l1_freqs[l1_f] <= l0_freqs[l0_f] {
             l1_f += 1;
+            if l1_f > l1_l {
+                return FrequencyRatiosR010::default();
+            }
         }
-        if l1_f > l1_l {
-            return FrequencyRatiosR010::default();
-        }
+        // Trim low end of l0 until only 1 < 1st l1 (`astero_support.f90:370-374`).
         while l0_f < l0_l && l0_freqs[l0_f + 1] < l1_freqs[l1_f] {
             l0_f += 1;
         }
-        if l0_f >= l0_l {
+        // Trim high end of l1 until only 1 > last l0 (`astero_support.f90:377-381`).
+        while l1_l > l1_f && l1_freqs[l1_l - 1] > l0_freqs[l0_l] {
+            l1_l -= 1;
+        }
+        let l0_seq_n = l0_l.saturating_sub(l0_f) + 1;
+        let l1_seq_n = l1_l.saturating_sub(l1_f) + 1;
+        if l0_seq_n != l1_seq_n || l0_seq_n < 3 {
             return FrequencyRatiosR010::default();
         }
-        let (len0, len1) = (l0_l - l0_f, l1_l - l1_f);
-        if len0 > len1 {
-            l0_l = l0_f + len1;
-        }
-        let seq_len = l0_l.saturating_sub(l0_f) + 1;
-        if seq_len < 3 {
-            return FrequencyRatiosR010::default();
-        }
-        (l0_f, l1_f, seq_len - 2)
+        (l0_f, l1_f, l0_seq_n - 2)
     } else if preset_n == 0
         || preset_l0_first + preset_n + 1 >= nl0
         || preset_l1_first + preset_n + 1 >= nl1
@@ -263,6 +282,131 @@ pub fn eval_frequency_ratios_r01_r10(
         );
     }
     (r01, sig_r01, r10, sig_r10)
+}
+
+/// Matched observed $r_{02}$ ratios and fixed `i2_for_r02` pairings
+/// (`get_r02_frequency_ratios`, `astero_support.f90:421-486`).
+#[derive(Debug, Clone, Default)]
+pub struct FrequencyRatiosR02Obs {
+    /// Observed $r_{02}(i)$ ratios (`len = ratios_n`).
+    pub ratios_r02: Vec<f64>,
+    /// Propagated uncertainties $\sigma_{r_{02}}(i)$ (`0.0` when unpaired).
+    pub sigmas_r02: Vec<f64>,
+    /// Central radial mode frequencies $\nu_{0, i + \mathrm{l0\_first}}$ ($\mu\mathrm{Hz}$).
+    pub r02_freqs: Vec<f64>,
+    /// Fixed 0-based `l2` mode index (`None` when unpaired) reused for models.
+    pub i2_for_r02: Vec<Option<usize>>,
+}
+
+/// Computes observed $r_{02}$ ratios and fixes `i2_for_r02(i)` using the
+/// $0.25\Delta\nu$ window around $l=0$ target frequencies (`init = .true.` in
+/// `get_r02_frequency_ratios`, `astero_support.f90:421-486`).
+#[allow(clippy::too_many_arguments)]
+#[must_use]
+pub fn eval_r02_obs_with_indices(
+    l0_freqs: &[f64],
+    l0_sigmas: &[f64],
+    l1_freqs: &[f64],
+    l1_sigmas: &[f64],
+    l2_freqs: &[f64],
+    l2_sigmas: &[f64],
+    ratios_n: usize,
+    l0_first: usize,
+    l1_first: usize,
+) -> FrequencyRatiosR02Obs {
+    let nl0 = l0_freqs.len().min(l0_sigmas.len());
+    let nl1 = l1_freqs.len().min(l1_sigmas.len());
+    let nl2 = l2_freqs.len().min(l2_sigmas.len());
+    if ratios_n == 0
+        || nl0 <= l0_first + ratios_n
+        || nl1 <= l1_first + ratios_n
+        || nl2 == 0
+    {
+        return FrequencyRatiosR02Obs::default();
+    }
+    let mut ratios_r02 = Vec::with_capacity(ratios_n);
+    let mut sigmas_r02 = Vec::with_capacity(ratios_n);
+    let mut r02_freqs = Vec::with_capacity(ratios_n);
+    let mut i2_for_r02 = Vec::with_capacity(ratios_n);
+    for i in 1..=ratios_n {
+        let (i0, i1) = (l0_first + i, l1_first + i);
+        let dnu = l1_freqs[i1] - l1_freqs[i1 - 1];
+        let f0 = l0_freqs[i0];
+        let df = 0.25 * dnu;
+        let (fmin, fmax) = (f0 - df, f0 + df);
+        let mut dfmin = 1.0e99_f64;
+        let mut jmin: Option<usize> = None;
+        for j in 0..nl2 {
+            let f2 = l2_freqs[j];
+            if f2 <= fmax && f2 >= fmin && (f2 - f0).abs() < dfmin {
+                dfmin = (f2 - f0).abs();
+                jmin = Some(j);
+            }
+            if f2 > f0 {
+                break;
+            }
+        }
+        r02_freqs.push(f0);
+        i2_for_r02.push(jmin);
+        if let Some(j) = jmin {
+            let d02 = f0 - l2_freqs[j];
+            ratios_r02.push(d02 / dnu);
+            let s_num = (flexmesa_math::pow2(l0_sigmas[i0])
+                + flexmesa_math::pow2(l2_sigmas[j]))
+            .sqrt();
+            let s_den = (flexmesa_math::pow2(l1_sigmas[i1])
+                + flexmesa_math::pow2(l1_sigmas[i1 - 1]))
+            .sqrt();
+            sigmas_r02.push(
+                (flexmesa_math::pow2(s_num / dnu)
+                    + flexmesa_math::pow2(s_den * d02 / (dnu * dnu)))
+                .sqrt(),
+            );
+        } else {
+            ratios_r02.push(f64::NAN);
+            sigmas_r02.push(0.0);
+        }
+    }
+    FrequencyRatiosR02Obs {
+        ratios_r02,
+        sigmas_r02,
+        r02_freqs,
+        i2_for_r02,
+    }
+}
+
+/// Computes model $r_{02}$ ratios reusing fixed `i2_for_r02` pairings from
+/// observations (`init = .false.` in `get_r02_frequency_ratios`,
+/// `astero_support.f90:466-475`).
+#[must_use]
+pub fn eval_r02_model_with_indices(
+    l0_freqs: &[f64],
+    l1_freqs: &[f64],
+    l2_freqs: &[f64],
+    l0_first: usize,
+    l1_first: usize,
+    obs: &FrequencyRatiosR02Obs,
+) -> (Vec<f64>, Vec<f64>) {
+    let n = obs.i2_for_r02.len();
+    let mut r02 = Vec::with_capacity(n);
+    let mut r02_freqs = Vec::with_capacity(n);
+    for (k, &j_opt) in obs.i2_for_r02.iter().enumerate() {
+        let i = k + 1;
+        let (i0, i1) = (l0_first + i, l1_first + i);
+        if obs.sigmas_r02[k] == 0.0 {
+            continue;
+        }
+        let Some(j) = j_opt else {
+            continue;
+        };
+        if i0 >= l0_freqs.len() || i1 >= l1_freqs.len() || j >= l2_freqs.len() {
+            continue;
+        }
+        let dnu = l1_freqs[i1] - l1_freqs[i1 - 1];
+        r02.push((l0_freqs[i0] - l2_freqs[j]) / dnu);
+        r02_freqs.push(l0_freqs[i0]);
+    }
+    (r02, r02_freqs)
 }
 
 /// Evaluates $r_{02}(i)$ and $\sigma_{r_{02}}(i)$ with `0.25 * dnu` mode pairing

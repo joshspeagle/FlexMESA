@@ -200,8 +200,8 @@ pub fn burn_1_zone_const_density(
                     dfdy[row_n + species] = 0.0;
                 }
                 for j in 0..species {
-                    let d_eps_dy_j = QCONV * w.d_eps_nuc_dy[j];
-                    dfdy[species * nvar + j] = d_eps_dy_j / (cv * temp);
+                    let d_eps_dx_j = QCONV * w.d_eps_nuc_dy[j] / aion[j];
+                    dfdy[species * nvar + j] = d_eps_dx_j / (cv * temp);
                 }
                 let df_t_t = d_eps_nuc_dt / cv
                     - (1.0 + d_cv_dlnt / cv) * eps_nuc / (cv * temp);

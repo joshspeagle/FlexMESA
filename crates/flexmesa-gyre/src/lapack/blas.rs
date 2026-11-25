@@ -97,6 +97,42 @@ pub fn dcopy(n: usize, dx: &[f64], incx: usize, dy: &mut [f64], incy: usize) {
     }
 }
 
+/// `DDOT` (`BLAS/SRC/ddot.f`): dot product `dx . dy` with the 5-way unroll
+/// order of the netlib source.
+#[must_use]
+pub fn ddot(n: usize, dx: &[f64], incx: usize, dy: &[f64], incy: usize) -> f64 {
+    let mut dtemp = 0.0_f64;
+    if n == 0 {
+        return 0.0;
+    }
+    if incx == 1 && incy == 1 {
+        let m = n % 5;
+        if m != 0 {
+            for i in 0..m {
+                dtemp += dx[i] * dy[i];
+            }
+            if n < 5 {
+                return dtemp;
+            }
+        }
+        let mut i = m;
+        while i < n {
+            dtemp = dtemp
+                + dx[i] * dy[i]
+                + dx[i + 1] * dy[i + 1]
+                + dx[i + 2] * dy[i + 2]
+                + dx[i + 3] * dy[i + 3]
+                + dx[i + 4] * dy[i + 4];
+            i += 5;
+        }
+    } else {
+        for i in 0..n {
+            dtemp += dx[i * incx] * dy[i * incy];
+        }
+    }
+    dtemp
+}
+
 /// `DSCAL` (`BLAS/SRC/dscal.f`): `x = da*x` (returns early when `da == 1`).
 pub fn dscal(n: usize, da: f64, dx: &mut [f64], incx: usize) {
     if n == 0 || incx == 0 || da == 1.0 {

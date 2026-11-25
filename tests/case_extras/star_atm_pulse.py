@@ -15,6 +15,7 @@ Covers:
 from __future__ import annotations
 
 import math
+import os
 import pathlib
 from typing import Any
 
@@ -128,62 +129,175 @@ def _t_check_profile_column(
     return [("T_check", vals)]
 
 
+def _fortran_e(x: float, width: int, digits: int) -> str:
+    """Fortran `Ew.d` edit descriptor (`0.ddddE+ee`) for console output."""
+    if x == 0.0 or not math.isfinite(x):
+        mant, exp = 0.0, 0
+    else:
+        exp = math.floor(math.log10(abs(x))) + 1
+        mant = x / 10.0**exp
+        if round(abs(mant), digits) >= 1.0:
+            mant /= 10.0
+            exp += 1
+    sign = "-" if mant < 0 else ""
+    body = f"{sign}0.{abs(round(mant * 10**digits)):0{digits}d}E{exp:+03d}"
+    return body.rjust(width)
+
+
 class GyreInMesaStarExtras:
-    """In-evolution `GYRE` driver hooks shared across the 6 `gyre_in_mesa_*`
-    cases (`star/test_suite/gyre_in_mesa_rsg/src/run_star_extras.f90:43-143`
-    and `star/job/gyre_in_mesa_extras_finish_step.inc:14-178`).
+    """`GYRE`-in-MESA driver shared by the 6 `gyre_in_mesa_*` cases
+    (`star/test_suite/gyre_in_mesa_ms/src/run_star_extras.f90:65-143` and
+    `star/job/gyre_in_mesa_extras_finish_step.inc:14-178`), over GYRE's MESA
+    interface (`_rust.GyreMesa`, `gyre/gyre/src/lib/gyre_mesa_m.fypp`).
+
+    Every `x_integer_ctrl(1)` models (or when a profile is saved and
+    `x_logical_ctrl(1)` is set), the model goes to GYRE with
+    `star_get_pulse_data('GYRE', .FALSE., .FALSE., .FALSE.)`, and up to
+    `x_integer_ctrl(2)` of the modes found for `l = x_integer_ctrl(3)` are
+    reported and stored in the `xtra` arrays (`n_pg`, growth rate and
+    frequency in Hz, and the cycles to double).
     """
 
+    # Every snapshot carries a `star_model` handle for GYRE's `set_model`.
+    wants_star_model = True
+
     def __init__(self) -> None:
+        self.gyre: _rust.GyreMesa | None = None
         self.num_results = 0
+        # s% ixtra1_array, xtra1_array, xtra2_array, xtra3_array of the
+        # modes written by the latest call (1-based upstream).
+        self.ixtra1: list[int] = []
+        self.xtra1: list[float] = []
+        self.xtra2: list[float] = []
+        self.xtra3: list[float] = []
+        # (model_number, [(n_pg, (Re, Im) freq in Hz)]) of every GYRE call,
+        # all modes passed to `process_mode_`, for evidence scripts.
+        self.calls: list[tuple[int, list[tuple[int, tuple[float, float]]]]]
+        self.calls = []
 
     def extras_startup(self, state: dict[str, Any], _restart: bool) -> None:
-        """Skip pre-MS creation; otherwise require bundled `GYRE` (`:65-96`)."""
+        """`init('gyre.in')` and the `set_constant` calls (`:65-96`); the
+        `test_suite_startup` call is output only."""
         if bool(state["create_pre_main_sequence_model"]):
             return
-        raise NotImplementedError(
-            "gyre_in_mesa: extras_startup calls gyre_mesa_m::init('gyre.in') "
-            "(:82-95), which requires the bundled GYRE pulsation port (#170)"
-        )
+        case_dir = pathlib.Path(str(state["case_dir"]))
+        self.gyre = _rust.GyreMesa(str(case_dir / "gyre.in"))
+        mesa_dir = (os.environ.get("MESA_DIR") or "").strip() or "mesa"
+        self.gyre.set_mesa_constants(mesa_dir)
 
     def extras_finish_step(self, state: dict[str, Any]) -> str:
-        """Evaluate step cadence and require `GYRE` when active (`:102-121` and
-        `star/job/gyre_in_mesa_extras_finish_step.inc:14-79`).
-        """
+        """`extras_finish_step` (`:102-121`) and
+        `gyre_in_mesa_extras_finish_step`
+        (`star/job/gyre_in_mesa_extras_finish_step.inc:14-178`)."""
         if bool(state["create_pre_main_sequence_model"]):
             return "keep_going"
         x_int = state["x_integer_ctrl"]
+        x_ctrl = state["x_ctrl"]
+        x_log = state["x_logical_ctrl"]
         step_interval = int(x_int[0])
-        _ = int(x_int[2])
-        _ = float(state["x_ctrl"][1])
-        if bool(state["need_to_save_profiles_now"]) and bool(
-            state["x_logical_ctrl"][0]
-        ):
+        mode_l = int(x_int[2])
+        growth_lim = float(x_ctrl[1])
+        model_number = int(state["model_number"])
+        if bool(state["need_to_save_profiles_now"]) and bool(x_log[0]):
             call_gyre = True
         elif step_interval > 0:
-            call_gyre = (int(state["model_number"]) % step_interval) == 0
+            call_gyre = (model_number % step_interval) == 0
         else:
             call_gyre = False
-        self.num_results = 0
+        self.num_results = 0  # s% ixtra3_array(1)
         if not call_gyre:
             return "keep_going"
-        raise NotImplementedError(
-            "gyre_in_mesa: gyre_in_mesa_extras_finish_step calls "
-            "gyre_mesa_m::set_model and get_modes "
-            "(star/job/gyre_in_mesa_extras_finish_step.inc:51-75), which "
-            "requires the bundled GYRE pulsation port (#170)"
-        )
+        if self.gyre is None:
+            raise RuntimeError(
+                "gyre_in_mesa: extras_finish_step called before "
+                "extras_startup initialized GyreMesa"
+            )
+        # star_get_pulse_data(s%id, 'GYRE', .FALSE., .FALSE., .FALSE., ...)
+        # and set_model(global_data, point_data, s%gyre_data_schema) (:51-57)
+        self.gyre.set_model(state["star_model"], False, False, False)
+        if growth_lim > 0.0:
+            print(
+                f"{'model':>8}{'order':>8}{'freq (Hz)':>20}{'P (sec)':>20}"
+                f"{'P (day)':>20}{'growth (day)':>20}{'growth':>20}"
+                f"{'cycles to double':>20}"
+            )
+        else:
+            print(
+                f"{'model':>8}{'order':>8}{'freq (Hz)':>20}{'P (sec)':>20}"
+                f"{'P (day)':>20}"
+            )
+        modes = self.gyre.get_modes(mode_l)
+        self.calls.append((model_number, list(modes)))
+        self.ixtra1, self.xtra1, self.xtra2, self.xtra3 = [], [], [], []
+        num_written = 0
+        for n_pg, (freq, growth) in modes:
+            # process_mode_ (:82-176)
+            if num_written >= int(x_int[1]):
+                continue
+            num_written += 1
+            self._process_mode(state, model_number, n_pg, freq, growth)
+        self.num_results = num_written
+        return "keep_going"
+
+    def _process_mode(
+        self,
+        state: dict[str, Any],
+        model_number: int,
+        n_pg: int,
+        freq: float,
+        growth: float,
+    ) -> None:
+        """Report and store one mode (`process_mode_`, `:98-176`); `freq`
+        and `growth` are the real and imaginary parts of `md%freq('HZ')`."""
+        freq_target = float(state["x_ctrl"][0])
+        growth_lim = float(state["x_ctrl"][1])
+        write_flag = bool(state["x_logical_ctrl"][1])
+        pi = constants.PI
+        freq_okay = abs(freq - freq_target) < freq_target * 3e-2
+        period = 0.0
+        if growth_lim > 0.0:
+            if growth > 0.0:
+                period = 1.0 / freq
+                print(
+                    f"{model_number:8d}{n_pg:8d}{_fortran_e(freq, 20, 4)}"
+                    f"{period:20.4f}{period / (24 * 3600):20.4f}"
+                    f"{1.0 / (2 * pi * 24 * 3600 * growth):20.4f}"
+                    f"{(2.0 * pi * growth) / freq:20.4f}"
+                    f"{freq / (2.0 * pi * growth):20.4f}"
+                )
+                if freq_okay and growth < growth_lim:
+                    print(" matched target frequency")
+            else:
+                print(
+                    f"{model_number:8d}{n_pg:8d}{_fortran_e(freq, 20, 4)}"
+                    f"{period:20.4f}{period / (24 * 3600):20.4f}"
+                    f"{'stable':>20}"
+                )
+        else:
+            print(
+                f"{model_number:8d}{n_pg:8d}{_fortran_e(freq, 20, 4)}"
+                f"{period:20.4f}{period / (24 * 3600):20.4f}"
+            )
+            if freq_okay:
+                print(" matched target frequency")
+        self.ixtra1.append(n_pg)
+        self.xtra1.append(growth)
+        self.xtra2.append(freq)
+        self.xtra3.append(freq / (2.0 * pi * growth) if growth > 0.0 else -1.0)
+        if write_flag:
+            raise NotImplementedError(
+                "gyre_in_mesa: x_logical_ctrl(2) writes eigenfunction files "
+                "from md%grid(), md%xi_r, md%xi_h and md%dW_dx "
+                "(star/job/gyre_in_mesa_extras_finish_step.inc:148-172), "
+                "which the GyreMesa binding does not expose yet (#170)"
+            )
 
     def extras_after_evolve(self, state: dict[str, Any]) -> None:
-        """Skip pre-MS creation; otherwise require `gyre_mesa_m::final`
-        (`:125-143`).
-        """
+        """`extras_after_evolve` (`:125-143`): `final()` releases GYRE's
+        state; `test_suite_after_evolve` is output only."""
         if bool(state["create_pre_main_sequence_model"]):
             return
-        raise NotImplementedError(
-            "gyre_in_mesa: extras_after_evolve calls gyre_mesa_m::final() "
-            "(:141), which requires the bundled GYRE pulsation port (#170)"
-        )
+        self.gyre = None
 
 
 class TTauGradrStarExtras:

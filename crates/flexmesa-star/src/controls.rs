@@ -166,6 +166,21 @@ pub struct StarControls {
     pub calculate_brunt_b: bool,
     /// Whether to compute the Brunt-Väisälä frequency $N^2$ (`calculate_Brunt_N2`, `true` default).
     pub calculate_brunt_n2: bool,
+    /// Write stellar atmosphere above photosphere into pulsation files
+    /// (`add_atmosphere_to_pulse_data`, `.false.` default,
+    /// `star/defaults/controls.defaults:582`).
+    #[serde(default)]
+    pub add_atmosphere_to_pulse_data: bool,
+    /// Write pulsation data alongside each profile file
+    /// (`write_pulse_data_with_profile`, `.false.` default,
+    /// `star/defaults/controls.defaults:530`).
+    #[serde(default)]
+    pub write_pulse_data_with_profile: bool,
+    /// Prepend a center (`r = 0`) point to pulsation files
+    /// (`add_center_point_to_pulse_data`, `.true.` default,
+    /// `star/defaults/controls.defaults:592`).
+    #[serde(default = "default_true_pulse")]
+    pub add_center_point_to_pulse_data: bool,
     /// Add double points at composition jumps to pulsation data
     /// (`add_double_points_to_pulse_data`, `.false.` default,
     /// `star/defaults/controls.defaults:612`).
@@ -602,6 +617,11 @@ pub struct StarControls {
     pub velocity_tau_lower_bound: f64,
     /// Lower $\log_{10} T$ bound below which velocity is zeroed (`velocity_logT_lower_bound`).
     pub velocity_logt_lower_bound: f64,
+    /// Maximum timestep in years below which `velocity_logT_lower_bound` is enforced
+    /// (`max_dt_yrs_for_velocity_logT_lower_bound`, `1d99` default,
+    /// `star/defaults/controls.defaults:8166`).
+    #[serde(default = "default_max_dt_yrs_for_vel_logt")]
+    pub max_dt_yrs_for_velocity_logt_lower_bound: f64,
     /// Enable nuclear reaction rate terms in `do1_chem_eqns` (`do_burn`).
     pub do_burn: bool,
     /// Enable diffusive mixing terms in `do1_chem_eqns` (`do_mix`).
@@ -970,4 +990,8 @@ const fn default_fgong_ivers() -> i32 {
 
 fn default_format_for_osc_data() -> String {
     String::from("(1P5E19.12,x)")
+}
+
+const fn default_max_dt_yrs_for_vel_logt() -> f64 {
+    1.0e99
 }

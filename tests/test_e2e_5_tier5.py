@@ -234,7 +234,10 @@ def test_e2e_5_tier5_star_and_binary_suites_execution(
             continue
         with pytest.raises(
             ValueError,
-            match=r"(unsupported|unknown|unrecognized).*control",
+            match=(
+                r"(unsupported|unknown|unrecognized).*control"
+                r"|requires an? (custom )?\w+ hook"
+            ),
         ):
             star.run_test_suite_case(
                 raw_case,
@@ -270,7 +273,7 @@ def test_e2e_5_tier5_star_and_binary_suites_execution(
         encoding="utf-8",
     )
     (bad_bin / "inlist1").write_text(
-        "&star_job\n  save_pulse_data_filename = 'p.data'\n/\n"
+        "&star_job\n  echo_at_start = 'hi'\n/\n"
         "&controls\n  initial_mass = 10.0\n/\n",
         encoding="utf-8",
     )

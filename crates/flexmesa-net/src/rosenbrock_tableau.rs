@@ -8,6 +8,7 @@ pub(crate) struct RodasTableau {
     pub(crate) ns: usize,
     pub(crate) gamma: f64,
     pub(crate) elo: f64,
+    #[allow(dead_code)]
     pub(crate) no_aux_in_error: bool,
     pub(crate) newf: [bool; 6],
     pub(crate) alpha: [f64; 6],

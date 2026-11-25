@@ -65,24 +65,24 @@ pub fn blin9(
     temp: AutoDiffReal2VarOrder1,
     chi: AutoDiffReal2VarOrder1,
 ) -> Blin9Output {
-    const CHI1: f64 = 0.6;
-    const CHI2: f64 = 14.0;
-    const XMAX: f64 = 30.0;
-    const DCHI1: f64 = 0.1;
-    const DCHI2: f64 = CHI2 - CHI1 - DCHI1;
-    const XSCAL1: f64 = XMAX / DCHI1;
-    const XSCAL2: f64 = XMAX / DCHI2;
+    let chi1 = AutoDiffReal2VarOrder1::constant(0.6);
+    let chi2 = AutoDiffReal2VarOrder1::constant(14.0);
+    let xmax = AutoDiffReal2VarOrder1::constant(30.0);
+    let dchi1 = AutoDiffReal2VarOrder1::constant(0.1);
+    let dchi2 = chi2 - chi1 - dchi1;
+    let xscal1 = xmax / dchi1;
+    let xscal2 = xmax / dchi2;
 
-    let x1 = (chi - CHI1) * XSCAL1;
-    let x2 = (chi - CHI2) * XSCAL2;
+    let x1 = (chi - chi1) * xscal1;
+    let x2 = (chi - chi2) * xscal2;
 
-    if x1.val < -XMAX {
+    if x1.val < -xmax.val {
         blin9a(temp, chi)
-    } else if x2.val < XMAX {
-        let ((fp, fm), a, b) = if x1.val < XMAX {
-            (fermi10(x1, XMAX), blin9a(temp, chi), blin9b(temp, chi))
+    } else if x2.val < xmax.val {
+        let ((fp, fm), a, b) = if x1.val < xmax.val {
+            (fermi10(x1, xmax.val), blin9a(temp, chi), blin9b(temp, chi))
         } else {
-            (fermi10(x2, XMAX), blin9b(temp, chi), blin9c(temp, chi))
+            (fermi10(x2, xmax.val), blin9b(temp, chi), blin9c(temp, chi))
         };
         Blin9Output {
             w0: blend_series(fp, fm, a.w0, b.w0),
@@ -169,41 +169,37 @@ pub fn blin9a(
             let ac = AC[k][i];
             let au = AU[k][i];
             let aa = flexmesa_math::exp(-au);
-            let sq = (1.0 + 0.5 * au * temp).sqrt();
-            let dn = echi + aa;
-            let dn2 = dn * dn;
-            let dn3 = dn2 * dn;
-            let sq3 = sq * sq * sq;
-            w = w + sq / dn * ac;
-            wdx = wdx + sq / dn2 * ac;
-            wdt = wdt + (sq * dn).recip() * (ac * au);
-            wdxx = wdxx + sq * (echi - aa) / dn3 * ac;
-            wdtt = wdtt - (dn * sq3).recip() * (ac * au * au);
-            wdxt = wdxt + (sq * dn2).recip() * (ac * au);
+            let sq = (1.0 + au * temp / 2.0).sqrt();
+            let dn = aa + echi;
+            w = w + ac * sq / dn;
+            wdx = wdx + ac * sq / (dn * dn);
+            wdt = wdt + ac * au / (sq * dn);
+            wdxx = wdxx + ac * sq * (echi - aa) / dn.pow3();
+            wdtt = wdtt - ac * au * au / (dn * sq * sq * sq);
+            wdxt = wdxt + ac * au / (sq * dn * dn);
             if k == 0 {
                 wdxxx = wdxxx
-                    + sq * (echi * echi - echi * (4.0 * aa) + aa * aa)
-                        / (dn2 * dn2)
-                        * ac;
-                wdxtt = wdxtt - (dn2 * sq3).recip() * (ac * au * au);
-                wdxxt = wdxxt + (echi - aa) / (sq * dn3) * (ac * au);
+                    + ac * sq * (echi * echi - 4.0 * echi * aa + aa * aa)
+                        / (dn * dn * dn * dn);
+                wdxtt = wdxtt - ac * au * au / (dn * dn * sq * sq * sq);
+                wdxxt = wdxxt + ac * au * (echi - aa) / (sq * dn * dn * dn);
             }
         }
 
         let s = BlinSeries {
             w,
             wdx: wdx * echi,
-            wdt: wdt * 0.25,
+            wdt: 0.25 * wdt,
             wdxx: wdxx * echi,
-            wdtt: wdtt * 0.0625,
-            wdxt: wdxt * echi * 0.25,
+            wdtt: 0.0625 * wdtt,
+            wdxt: 0.25 * wdxt * echi,
         };
         match k {
             0 => {
                 out.w0 = s;
                 out.w0xxx = wdxxx * echi;
-                out.w0xtt = wdxtt * echi * 0.0625;
-                out.w0xxt = wdxxt * echi * 0.25;
+                out.w0xtt = 0.0625 * wdxtt * echi;
+                out.w0xxt = 0.25 * wdxxt * echi;
             }
             1 => out.w1 = s,
             _ => out.w2 = s,
@@ -275,74 +271,74 @@ pub fn blin9b(
             let ah_axk = AH[i] * flexmesa_math::powi(ax, k as i32);
             let av = AV[i];
 
-            let ce = ax - 1.0;
-            let echi = (chi * ce).exp();
-            let de = echi + 1.0;
-            let d = chi * temp * (0.5 * ax) + 1.0;
-            let h = chi.powi((k + 1) as i32) * sqchi * d.sqrt() / de;
-            let hx = (kf + 1.5) / chi + temp * (0.25 * ax) / d - echi * ce / de;
+            let ce = AutoDiffReal2VarOrder1::constant(ax - 1.0);
+            let echi = (ce * chi).exp();
+            let de = 1.0 + echi;
+            let d = 1.0 + ax * chi * temp / 2.0;
+            let h = chi.powf(kf + 1.0) * sqchi * d.sqrt() / de;
+            let hx = (kf + 1.5) / chi + 0.25 * ax * temp / d - echi * ce / de;
             let hdx = h * hx;
             let hxx = (kf + 1.5) / (chi * chi)
-                + (temp / d * ax).pow2() * 0.125
+                + 0.125 * (ax * temp / d).pow2()
                 + echi * (ce / de).pow2();
             let hdxx = hdx * hx - h * hxx;
-            let ht = chi * (0.25 * ax) / d;
+            let ht = 0.25 * ax * chi / d;
             let hdt = h * ht;
             let hdtt = -h * ht * ht;
-            let htx = chi.recip() - temp * (0.5 * ax) / d;
+            let htx = 1.0 / chi - 0.5 * ax * temp / d;
             let hdxt = hdx * ht + hdt * htx;
 
-            let xichi = chi + axi;
-            let dxi = xichi * temp * 0.5 + 1.0;
-            let v = xichi.powi(k as i32) * (xichi * dxi).sqrt();
-            let vx = (kf + 0.5) / xichi + temp * 0.25 / dxi;
+            let xichi = axi + chi;
+            let dxi = 1.0 + xichi * temp / 2.0;
+            let v = xichi.powf(kf) * (xichi * dxi).sqrt();
+            let vx = (kf + 0.5) / xichi + 0.25 * temp / dxi;
             let vdx = v * vx;
-            let vt = xichi * 0.25 / dxi;
+            let vt = 0.25 * xichi / dxi;
             let vdt = v * vt;
             let vxx =
-                (kf + 0.5) / (xichi * xichi) + (temp / dxi).pow2() * 0.125;
+                (kf + 0.5) / (xichi * xichi) + 0.125 * (temp / dxi).pow2();
             let vdxx = vdx * vx - v * vxx;
             let vdtt = -v * vt * vt;
-            let vxt = xichi.recip() - temp * 0.5 / dxi;
+            let vxt = 1.0 / xichi - 0.5 * temp / dxi;
             let vdxt = vdt * vxt + vdx * vt;
-
-            w = w + h * ah_axk + v * av;
-            wdx = wdx + hdx * ah_axk + vdx * av;
-            wdt = wdt + hdt * ah_axk + vdt * av;
-            wdxx = wdxx + hdxx * ah_axk + vdxx * av;
-            wdtt = wdtt + hdtt * ah_axk + vdtt * av;
-            wdxt = wdxt + hdxt * ah_axk + vdxt * av;
 
             if k == 0 {
                 let hdxxt = hdxx * ht
                     + hdx * ht * htx
                     + hdxt * htx
-                    + hdt
-                        * ((temp / d * ax).pow2() * 0.25 - (chi * chi).recip());
-                let hdxtt = hdxt * ht - hdx * (chi / d * ax).pow2() * 0.125
+                    + hdt * (0.25 * (ax * temp / d).pow2() - 1.0 / (chi * chi));
+                let hdxtt = hdxt * ht - hdx * 0.125 * (ax * chi / d).pow2()
                     + hdtt * htx
                     + hdt
-                        * (temp * chi * (0.5 * ax) / (d * d) - d.recip())
-                        * (0.5 * ax);
+                        * 0.5
+                        * ax
+                        * (temp * 0.5 * ax * chi / (d * d) - 1.0 / d);
                 let hxxx = (2.0 * kf + 3.0) / chi.pow3()
-                    + (temp / d * ax).pow3() * 0.125
-                    - echi * (-echi + 1.0) * (ce / de).pow3();
-                let hdxxx = hdxx * hx - hdx * hxx * 2.0 + h * hxxx;
+                    + 0.125 * (ax * temp / d).pow3()
+                    - echi * (1.0 - echi) * (ce / de).pow3();
+                let hdxxx = hdxx * hx - 2.0 * hdx * hxx + h * hxxx;
 
-                let vdxxx = vdxx * vx - vdx * vxx * 2.0
+                let vdxxx = vdxx * vx - 2.0 * vdx * vxx
                     + v * ((2.0 * kf + 1.0) / xichi.pow3()
-                        + (temp / dxi).pow3() * 0.125);
-                let vxxt = (-temp * xichi * 0.5 / dxi + 1.0) / dxi;
-                let vdxxt = vdxt * vx + vdx * vxxt * 0.25
+                        + 0.125 * (temp / dxi).pow3());
+                let vxxt = (1.0 - 0.5 * temp * xichi / dxi) / dxi;
+                let vdxxt = vdxt * vx + vdx * 0.25 * vxxt
                     - vdt * vxx
-                    - v * temp * 0.25 / dxi * vxxt;
-                let vdxtt = vdtt * vxt - vdt * vxxt * 0.5 + vdxt * vt
-                    - vdx * (xichi / dxi).pow2() * 0.125;
+                    - v * 0.25 * temp / dxi * vxxt;
+                let vdxtt = vdtt * vxt - vdt * 0.5 * vxxt + vdxt * vt
+                    - vdx * 0.125 * (xichi / dxi).pow2();
 
                 wdxxx = wdxxx + hdxxx * ah_axk + vdxxx * av;
                 wdxtt = wdxtt + hdxtt * ah_axk + vdxtt * av;
                 wdxxt = wdxxt + hdxxt * ah_axk + vdxxt * av;
             }
+
+            w = w + ah_axk * h + av * v;
+            wdx = wdx + ah_axk * hdx + av * vdx;
+            wdt = wdt + ah_axk * hdt + av * vdt;
+            wdxx = wdxx + ah_axk * hdxx + av * vdxx;
+            wdtt = wdtt + ah_axk * hdtt + av * vdtt;
+            wdxt = wdxt + ah_axk * hdxt + av * vdxt;
         }
 
         let s = BlinSeries {

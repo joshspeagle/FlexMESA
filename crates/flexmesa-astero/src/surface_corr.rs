@@ -13,7 +13,7 @@
 use flexmesa_autodiff::DualOrder1;
 use flexmesa_math::pow;
 
-use crate::scaling::eval_radial_delta_nu_ols;
+use crate::scaling::{DELTA_NU_SUN, NU_MAX_SUN};
 
 /// Linearly interpolates radial ($l=0$) mode inertia $\mathcal{I}_0(\nu)$ at
 /// arbitrary frequency `freq` ($\mu\mathrm{Hz}$), clamping to endpoint values
@@ -46,16 +46,90 @@ pub fn interpolate_l0_inertia(
     l0_inertias[n - 1]
 }
 
-/// Estimates radial orders `l0_n_obs(j) = int(l0_obs(1) / delta_nu) + j - 1` when omitted (`astero_support.f90:655-664`).
+/// Estimates radial orders `l0_n_obs` using upstream MESA `init_obs_data`
+/// (`astero_support.f90:655-664`), falling back to `floor(nu_0 / delta_nu)` when
+/// `nu_max <= 0`.
 #[must_use]
-pub fn estimate_l0_n_obs(l0_obs_freqs: &[f64], delta_nu: f64) -> Vec<f64> {
+pub fn estimate_l0_n_obs_with_numax(
+    l0_obs_freqs: &[f64],
+    delta_nu: f64,
+    nu_max: f64,
+    delta_nu_sun: f64,
+    nu_max_sun: f64,
+) -> Vec<f64> {
     if l0_obs_freqs.is_empty() || delta_nu <= 0.0 {
         return Vec::new();
+    }
+    if nu_max > 0.0 && delta_nu_sun > 0.0 && nu_max_sun > 0.0 {
+        let range = l0_obs_freqs[l0_obs_freqs.len() - 1] - l0_obs_freqs[0];
+        let norders =
+            ((range / delta_nu + 0.5).trunc() as isize + 1).max(1) as usize;
+        let nmax =
+            (nu_max / delta_nu) * (delta_nu_sun / nu_max_sun) * 22.6 - 1.6;
+        let n1 = (nmax - (((norders - 1) / 2) as f64)).trunc() as isize;
+        return l0_obs_freqs
+            .iter()
+            .take(norders.min(l0_obs_freqs.len()))
+            .enumerate()
+            .map(|(i, &f)| {
+                if i == 0 {
+                    n1 as f64
+                } else {
+                    let offset = ((f - l0_obs_freqs[0]) / delta_nu + 0.5)
+                        .trunc() as isize;
+                    (n1 + offset) as f64
+                }
+            })
+            .collect();
     }
     let n_first = (l0_obs_freqs[0] / delta_nu).trunc();
     (0..l0_obs_freqs.len())
         .map(|j| n_first + (j as f64))
         .collect()
+}
+
+/// Estimates radial orders `l0_n_obs(j)` when omitted (`astero_support.f90:655-664`).
+#[must_use]
+pub fn estimate_l0_n_obs(l0_obs_freqs: &[f64], delta_nu: f64) -> Vec<f64> {
+    estimate_l0_n_obs_with_numax(
+        l0_obs_freqs,
+        delta_nu,
+        -1.0,
+        DELTA_NU_SUN,
+        NU_MAX_SUN,
+    )
+}
+
+/// Maps internal fitted surface-correction coefficients to upstream exported
+/// `(surf_coef1, surf_coef2)` (`astero/private/astero_support.f90:1280-1334`).
+#[must_use]
+pub fn eval_surf_coefs(
+    scheme: &str,
+    primary: f64,
+    secondary: f64,
+    model_nu_max: f64,
+    nu_max_sun: f64,
+) -> (f64, f64) {
+    match scheme.trim().to_ascii_lowercase().as_str() {
+        "kjeldsen" | "power_law" | "sonoi" => (primary, secondary),
+        "cubic" => {
+            let ratio = if nu_max_sun > 0.0 && model_nu_max > 0.0 {
+                5000.0 * model_nu_max / nu_max_sun
+            } else {
+                5000.0
+            };
+            (primary * ratio * ratio * ratio, 0.0)
+        }
+        "combined" => {
+            let ratio = if nu_max_sun > 0.0 && model_nu_max > 0.0 {
+                5000.0 * model_nu_max / nu_max_sun
+            } else {
+                5000.0
+            };
+            (primary * ratio * ratio * ratio, secondary / ratio)
+        }
+        _ => (0.0, 0.0),
+    }
 }
 
 /// Evaluates the Kjeldsen, Bedding & Christensen-Dalsgaard (2008) radial
@@ -76,34 +150,76 @@ pub fn eval_kjeldsen_corr(
     correction_factor: f64,
 ) -> (Vec<f64>, f64, f64) {
     let n0 = l0_obs_freqs.len().min(l0_model_freqs.len());
-    if n0 == 0 {
+    if n0 == 0
+        || correction_factor <= 0.0
+        || delta_nu_obs <= 0.0
+        || nu_max <= 0.0
+    {
         return (all_model_freqs.to_vec(), 0.0, 1.0);
     }
-    let avg_obs = l0_obs_freqs[..n0].iter().sum::<f64>() / (n0 as f64);
-    let avg_mod = l0_model_freqs[..n0].iter().sum::<f64>() / (n0 as f64);
     let est_orders;
     let orders_slice = if l0_orders.len() >= n0 && l0_orders[0] > 0.0 {
         &l0_orders[..n0]
     } else {
-        est_orders = estimate_l0_n_obs(&l0_obs_freqs[..n0], delta_nu_obs);
+        est_orders = estimate_l0_n_obs_with_numax(
+            &l0_obs_freqs[..n0],
+            delta_nu_obs,
+            nu_max,
+            DELTA_NU_SUN,
+            NU_MAX_SUN,
+        );
         &est_orders
     };
-    let dnu_mod = eval_radial_delta_nu_ols(orders_slice, &l0_model_freqs[..n0]);
-    let denom_r = b_power * (avg_mod / avg_obs.max(1.0e-30))
-        - dnu_mod / delta_nu_obs.max(1.0e-30);
+    let (mut cnt, mut sum_obs, mut sum_mod, mut sum_n) =
+        (0usize, 0.0_f64, 0.0_f64, 0.0_f64);
+    for i in 0..n0 {
+        if l0_obs_freqs[i] < 0.0 {
+            continue;
+        }
+        cnt += 1;
+        sum_obs += l0_obs_freqs[i];
+        sum_mod += l0_model_freqs[i];
+        sum_n += orders_slice.get(i).copied().unwrap_or(i as f64);
+    }
+    if cnt == 0 {
+        return (all_model_freqs.to_vec(), 0.0, 1.0);
+    }
+    let avg_obs = sum_obs / (cnt as f64);
+    let avg_mod = sum_mod / (cnt as f64);
+    let avg_n = sum_n / (cnt as f64);
+    let (mut sum_1, mut sum_2, mut sum_nu_b) = (0.0_f64, 0.0_f64, 0.0_f64);
+    for i in 0..n0 {
+        if l0_obs_freqs[i] < 0.0 {
+            continue;
+        }
+        let n_i = orders_slice.get(i).copied().unwrap_or(i as f64);
+        let dn = n_i - avg_n;
+        sum_1 += (l0_model_freqs[i] - avg_mod) * dn;
+        sum_2 += dn * dn;
+        sum_nu_b += pow(l0_obs_freqs[i] / nu_max, b_power);
+    }
+    if sum_2 == 0.0 || sum_nu_b == 0.0 {
+        return (all_model_freqs.to_vec(), 0.0, 1.0);
+    }
+    let dnu_mod = sum_1 / sum_2;
+    let denom_r = b_power * (avg_mod / avg_obs) - dnu_mod / delta_nu_obs;
     let r_scale = (b_power - 1.0) / denom_r;
-    let sum_nu_b: f64 = l0_obs_freqs[..n0]
-        .iter()
-        .map(|&nu| pow(nu / nu_max.max(1.0e-30), b_power))
-        .sum();
-    let a_val = (avg_obs - r_scale * avg_mod).min(0.0) * (n0 as f64)
-        / sum_nu_b.max(1.0e-30);
+    if r_scale <= 0.0 || !r_scale.is_finite() {
+        return (all_model_freqs.to_vec(), 0.0, 1.0);
+    }
+    let a_val = (avg_obs - r_scale * avg_mod).min(0.0) * (n0 as f64) / sum_nu_b;
     let a_div_r = a_val / r_scale;
 
     let corr = all_model_freqs
         .iter()
         .enumerate()
         .map(|(idx, &f_mod)| {
+            if idx < l0_obs_freqs.len() && l0_obs_freqs[idx] < 0.0 {
+                return f_mod;
+            }
+            if b_power <= 0.0 || f_mod <= 0.0 {
+                return f_mod;
+            }
             let is_l0 =
                 idx < n0 && (f_mod - l0_model_freqs[idx]).abs() <= 1e-12;
             let q_nl = if is_l0 {
@@ -118,7 +234,7 @@ pub fn eval_kjeldsen_corr(
             f_mod
                 + correction_factor
                     * (a_div_r / q_nl)
-                    * pow(f_mod / nu_max.max(1.0e-30), b_power)
+                    * pow(f_mod / nu_max, b_power)
         })
         .collect();
     (corr, a_div_r, r_scale)
@@ -264,9 +380,7 @@ where
         }
         a -= da;
         b -= db;
-        if da.abs() <= 1.0e-14 * a.abs().max(1.0e-30)
-            && db.abs() <= 1.0e-14 * b.abs().max(1.0e-30)
-        {
+        if da.abs() < 1.0e-8 && db.abs() < 1.0e-6 {
             break;
         }
     }

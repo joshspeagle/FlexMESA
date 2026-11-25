@@ -128,14 +128,12 @@ fn test_unknown_section_key_unused_and_removed_aliases_fail_loudly() {
     let unimpl = tmp.root.join("inlist_unimpl");
     fs::write(
         &unimpl,
-        "&controls\n  initial_mass = 1.0d0\n  add_center_point_to_pulse_data = .false.\n/\n",
+        "&controls\n  initial_mass = 1.0d0\n  fill_arrays_with_nans = .true.\n/\n",
     )
     .expect("write");
     let unimpl_err = InlistBundle::from_file(&unimpl)
         .expect_err("unimplemented upstream key must fail by default");
-    assert!(unimpl_err
-        .to_string()
-        .contains("add_center_point_to_pulse_data"));
+    assert!(unimpl_err.to_string().contains("fill_arrays_with_nans"));
 
     assert!(
         InlistBundle::from_file_with_options(
@@ -150,8 +148,8 @@ fn test_unknown_section_key_unused_and_removed_aliases_fail_loudly() {
     for (tag, body, expected) in [
         (
             "unused_job",
-            "&star_job\n  save_pulse_data_filename = 'p.data'\n/\n",
-            "save_pulse_data_filename",
+            "&star_job\n  save_model_number = 42\n/\n",
+            "save_model_number",
         ),
         (
             "unused_bad_max_corr_series",

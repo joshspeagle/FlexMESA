@@ -45,13 +45,12 @@ impl TempCaseStaging {
         copy_dir_tree(orig_case_dir, &staged_dir, 0)?;
         let inlist_dst = staged_dir.join("inlist");
         if !inlist_dst.exists() && staged_dir.join("rn").is_file() {
-            if let Some(first_inlist) =
-                parse_rn_stages(&staged_dir, true)?.into_iter().find_map(
-                    |st| match st {
-                        RnStage::DoOne { inlist, .. } => Some(inlist),
-                        RnStage::CopyCheckpoint { .. } => None,
-                    },
-                )
+            if let Some(first_inlist) = parse_rn_stages(&staged_dir, true)?
+                .into_iter()
+                .find_map(|st| match st {
+                    RnStage::DoOne { inlist, .. } => Some(inlist),
+                    RnStage::CopyCheckpoint { .. } => None,
+                })
             {
                 let src = staged_dir.join(&first_inlist);
                 if src.is_file() {
@@ -228,7 +227,11 @@ pub fn run_astero_test_suite_case_with_hooks(
     // Upstream `astero/private/astero_run_support.f90:115-174` reads and
     // checks `&astero_search_controls` before testing
     // `astero_just_call_my_extras_check_model`.
-    if staging.staged_dir.join("inlist_astero_search_controls").is_file() {
+    if staging
+        .staged_dir
+        .join("inlist_astero_search_controls")
+        .is_file()
+    {
         let _ = parse_astero_search_controls_with_options(
             staging.staged_dir.as_path(),
             inlist_opts,
@@ -327,10 +330,8 @@ fn run_astero_search_case(
     }
     let runtime_sec = t0.elapsed().as_secs_f64();
     let term_tail = search_rep.last_termination.as_str();
-    let effective_term = search_rep
-        .best_termination
-        .as_deref()
-        .unwrap_or(term_tail);
+    let effective_term =
+        search_rep.best_termination.as_deref().unwrap_or(term_tail);
     let stage = StageRunReport {
         inlist_name: String::from("inlist"),
         steps_taken: search_rep.total_steps,

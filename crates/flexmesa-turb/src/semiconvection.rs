@@ -109,19 +109,18 @@ pub fn set_semiconvection<T: TurbScalar>(
     inp: &SemiconvectionInputs<T>,
 ) -> TurbResult<TurbOutput<T>> {
     let zero = T::from_f64(0.0);
-    let rad_cond = T::from_f64(4.0 / 3.0 * CRAD * CLIGHT) * inp.t.pow3()
-        / (inp.opacity * inp.rho);
-    let d = T::from_f64(params.alpha_semiconvection) * rad_cond
-        / (T::from_f64(6.0) * inp.cp * inp.rho)
-        * (inp.gradr - inp.grada)
-        / (inp.gradl - inp.gradr);
+    let rad_cond = (T::from_f64(4.0 / 3.0 * CRAD * CLIGHT) * inp.t.pow3())
+        .div_ad(inp.opacity * inp.rho);
+    let d = ((T::from_f64(params.alpha_semiconvection) * rad_cond)
+        .div_ad(T::from_f64(6.0) * inp.cp * inp.rho)
+        * (inp.gradr - inp.grada))
+        .div_ad(inp.gradl - inp.gradr);
 
-    if d.val().is_nan() {
-        return Err(crate::TurbError::InvalidParameter(
-            "NaN diffusivity in set_semiconvection",
-        ));
-    }
-    if d.val() <= 0.0 {
+    // `if (D%val <= 0) return` (`turb/private/semiconvection.f90:81`):
+    // `D` is `intent(out)`, so the caller receives `d` even on early return,
+    // and `turb_support.f90:422` treats `NaN` or `D < remove_small_D_limit`
+    // identically by falling back to `no_mixing`.
+    if d.val().is_nan() || d.val() <= 0.0 {
         return Ok(TurbOutput {
             gamma: zero,
             grad_t: zero,
@@ -132,7 +131,7 @@ pub fn set_semiconvection<T: TurbScalar>(
         });
     }
 
-    let conv_vel = T::from_f64(3.0) * d / inp.lambda;
+    let conv_vel = (T::from_f64(3.0) * d).div_ad(inp.lambda);
     match params.option {
         SemiconvectionOption::Langer85GradTIsGradr => {
             let grad_t = inp.gradr;
@@ -152,27 +151,31 @@ pub fn set_semiconvection<T: TurbScalar>(
             let bc = T::from_f64(32.0)
                 - T::from_f64(24.0) * inp.beta
                 - inp.beta * inp.beta;
-            let lg = T::from_f64(16.0 * PI * CLIGHT * params.m * params.cgrav)
-                * inp.pr
-                / (inp.p * inp.opacity);
+            let lg =
+                (T::from_f64(16.0 * PI * CLIGHT * params.m * params.cgrav)
+                    * inp.pr)
+                    .div_ad(inp.p * inp.opacity);
             let a0 = T::from_f64(alpha * params.gradl_composition_term) * lg;
             let a1 = T::from_f64(-2.0) * bc * inp.l;
             let a2 = T::from_f64(2.0 * alpha) * bc * inp.grada * lg;
             let a3 = T::from_f64(-2.0) * bc * inp.gradl * lg;
+            let a4 = T::from_f64(32.0) * a0;
+            let a5 = T::from_f64(-36.0) * inp.beta * a0;
+            let a6 = T::from_f64(9.0) * inp.beta * inp.beta * a0;
+            let a = a1 + a2 + a3 + a4 + a5 + a6;
             let b1 = T::from_f64(32.0) - T::from_f64(36.0) * inp.beta
                 + T::from_f64(9.0) * inp.beta * inp.beta;
             let b2 = b1 * a0;
-            let a = a1 + a2 + a3 + b2;
             let b3 = T::from_f64(-2.0) * inp.gradl * inp.l
                 + alpha_t * inp.grada * inp.grada * lg;
-            let b4 = (inp.gradl - alpha_t * inp.grada) * lg;
-            let b5 = T::from_f64(2.0) * bc * (inp.l + b4) - b2;
+            let b4 = (-(alpha_t * inp.grada) + inp.gradl) * lg;
+            let b5 = -b2 + T::from_f64(2.0) * bc * (inp.l + b4);
             let b6 = b2 * inp.grada + bc * b3;
             let b7 = T::from_f64(-4.0 * (alpha - 2.0)) * bc * lg * b6;
             let b = b7 + b5 * b5;
             let div = T::from_f64(2.0 * (alpha - 2.0)) * bc * lg;
             let bsq = b.sqrt();
-            let grad_t = (a + bsq) / div;
+            let grad_t = (a + bsq).div_ad(div);
             let y_face = grad_t - inp.grada;
             Ok(TurbOutput {
                 gamma: zero,

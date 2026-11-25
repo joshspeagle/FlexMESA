@@ -12,11 +12,12 @@ use flexmesa_chem::{
     category_id, category_name, NuclideCatalog, NUM_CATEGORIES,
 };
 use flexmesa_const::{
-    MixingType, BOLTZ_SIGMA, FOUR_PI, LN10, L_SUN, M_SUN, R_SUN, SECYER,
+    MixingType, BOLTZ_SIGMA, FOUR_PI, LN10, L_SUN, M_SUN, R_SUN, SECDAY,
+    SECYER, TWO_PI,
 };
 use flexmesa_eos::{
-    I_FRAC_CMS, I_FRAC_FREE_EOS, I_FRAC_HELM, I_FRAC_IDEAL, I_FRAC_OPAL_SCVH,
-    I_FRAC_PC, I_FRAC_SKYE,
+    I_DE_DRHO, I_FRAC_CMS, I_FRAC_FREE_EOS, I_FRAC_HELM, I_FRAC_IDEAL,
+    I_FRAC_OPAL_SCVH, I_FRAC_PC, I_FRAC_SKYE,
 };
 use flexmesa_schema::strip_fortran_comment;
 
@@ -29,11 +30,12 @@ use crate::mesa_history::{
 use crate::model::StarModel;
 use crate::report_utils::{
     center_avg_x_by_name, center_value, csound_face_at,
-    equatorial_and_polar_r_cm, eval_upstream_omega_crit, format_mesa_dbl,
-    format_mesa_header_str, format_mesa_int, get_ledd, get_lrad_div_ledd,
-    iso_slot_for_chem_id, parse_quoted_include_arg, push_mesa_6line_header,
-    resolve_iso_slot, safe_log10, write_mesa_dbl_width, write_mesa_int_width,
-    StepReportContext, MESA_REF_VERSION_NUMBER, STAR_LOG_COL_WIDTH,
+    equatorial_and_polar_r_cm, eval_astero_report_scalars,
+    eval_upstream_omega_crit, format_mesa_dbl, format_mesa_header_str,
+    format_mesa_int, get_ledd, get_lrad_div_ledd, iso_slot_for_chem_id,
+    parse_quoted_include_arg, push_mesa_6line_header, resolve_iso_slot,
+    safe_log10, write_mesa_dbl_width, write_mesa_int_width, StepReportContext,
+    MESA_REF_VERSION_NUMBER, STAR_LOG_COL_WIDTH,
 };
 
 /// Active column declarations from upstream MESA `26.4.1`
@@ -129,6 +131,7 @@ const SUPPORTED_PROFILE_SCALARS: &[&str] = &[
     "entropy",
     "logS",
     "grada",
+    "dE_dRho",
     "cv",
     "cp",
     "chiRho",
@@ -177,7 +180,10 @@ const SUPPORTED_PROFILE_SCALARS: &[&str] = &[
     "eps_grav",
     "signed_log_eps_grav",
     "eps_mdot",
+    "ergs_mdot",
+    "ergs_error",
     "eps_grav_plus_eps_mdot",
+    "ergs_eps_grav_plus_eps_mdot",
     "extra_heat",
     "net_nuclear_energy",
     "net_energy",
@@ -230,13 +236,22 @@ const SUPPORTED_PROFILE_SCALARS: &[&str] = &[
     "log_D_thrm",
     "log_D_minimum",
     "brunt_B",
+    "brunt_A",
     "brunt_N2",
     "brunt_N2_composition_term",
     "brunt_N2_structure_term",
+    "brunt_N2_dimensionless",
+    "brunt_N_dimensionless",
     "brunt_N",
+    "brunt_frequency",
+    "log_brunt_nu",
     "sign_brunt_N2",
     "lamb_S",
     "lamb_S2",
+    "log_lamb_Sl1",
+    "log_lamb_Sl2",
+    "log_lamb_Sl3",
+    "log_lamb_Sl10",
     "grav",
     "log_g",
     "v",
@@ -282,6 +297,7 @@ const SUPPORTED_PROFILE_SCALARS: &[&str] = &[
     "log_acoustic_depth",
     "acoustic_radius",
     "log_acoustic_radius",
+    "acoustic_r_div_R_phot",
     "eps_nuc_plus_nuc_neu",
     "cgrav_factor",
     "rsp_Hp_face",
@@ -509,14 +525,20 @@ struct ProfilePrefixCache {
     dq_prefix: Vec<f64>,
     acoustic_depth: Vec<f64>,
     acoustic_radius: Vec<f64>,
+    photosphere_acoustic_r: f64,
 }
 
 impl ProfilePrefixCache {
-    fn build(model: &StarModel, specs: &[ProfileColumnSpec]) -> Self {
+    fn build(
+        model: &StarModel,
+        ctx: &StepReportContext,
+        specs: &[ProfileColumnSpec],
+    ) -> Self {
         let nz = model.nz;
         let mut need_dm = false;
         let mut need_dq = false;
         let mut need_ac = false;
+        let mut need_phot_ac_r = false;
         for sp in specs {
             if let ProfileColumnSpec::Scalar(n) = sp {
                 match *n {
@@ -526,6 +548,10 @@ impl ProfilePrefixCache {
                     | "log_acoustic_depth"
                     | "acoustic_radius"
                     | "log_acoustic_radius" => need_ac = true,
+                    "acoustic_r_div_R_phot" => {
+                        need_ac = true;
+                        need_phot_ac_r = true;
+                    }
                     _ => {}
                 }
             }
@@ -579,11 +605,17 @@ impl ProfilePrefixCache {
         } else {
             (Vec::new(), Vec::new())
         };
+        let photosphere_acoustic_r = if need_phot_ac_r {
+            eval_astero_report_scalars(model, &ctx.phot).0
+        } else {
+            0.0
+        };
         Self {
             dm_prefix,
             dq_prefix,
             acoustic_depth,
             acoustic_radius,
+            photosphere_acoustic_r,
         }
     }
 }
@@ -709,6 +741,7 @@ fn eval_profile_scalar(
         "entropy" => MesaCellValue::Float(model.entropy[k]),
         "logS" => MesaCellValue::Float(model.ln_s[k] / LN10),
         "grada" => MesaCellValue::Float(model.grada[k]),
+        "dE_dRho" => MesaCellValue::Float(model.eos_res[k][I_DE_DRHO]),
         "cv" => MesaCellValue::Float(model.cv[k]),
         "cp" => MesaCellValue::Float(model.cp[k]),
         "chiRho" => MesaCellValue::Float(model.chi_rho[k]),
@@ -780,9 +813,20 @@ fn eval_profile_scalar(
             MesaCellValue::Float(signed_log(model.eps_grav_ad[k].val))
         }
         "eps_mdot" => MesaCellValue::Float(model.eps_mdot[k]),
+        "ergs_mdot" => {
+            MesaCellValue::Float(model.eps_mdot[k] * model.dm[k] * model.dt)
+        }
+        "ergs_error" => MesaCellValue::Float(
+            model.aux.ergs_error.get(k).copied().unwrap_or(0.0),
+        ),
         "eps_grav_plus_eps_mdot" => {
             MesaCellValue::Float(model.eps_grav_ad[k].val + model.eps_mdot[k])
         }
+        "ergs_eps_grav_plus_eps_mdot" => MesaCellValue::Float(
+            (model.eps_grav_ad[k].val + model.eps_mdot[k])
+                * model.dm[k]
+                * model.dt,
+        ),
         "extra_heat" => MesaCellValue::Float(model.aux.extra_heat[k]),
         "net_nuclear_energy" => {
             let en = model.eps_nuc[k] - model.non_nuc_neu[k];
@@ -961,9 +1005,44 @@ fn eval_profile_scalar(
                 0.0
             })
         }
+        "brunt_A" => {
+            MesaCellValue::Float(if model.controls.calculate_brunt_n2 {
+                model.brunt_n2[k] * model.r[k] / model.grav[k].max(1.0e-99)
+            } else {
+                0.0
+            })
+        }
+        "brunt_N2_dimensionless" | "brunt_N_dimensionless" => {
+            MesaCellValue::Float(if model.controls.calculate_brunt_n2 {
+                let omega_dyn2 = (3.0 * model.cgrav[0] * model.m_grav[0]
+                    / flexmesa_math::pow3(model.r[0].max(1.0e-99)))
+                .max(1.0e-99);
+                if name == "brunt_N2_dimensionless" {
+                    model.brunt_n2[k] / omega_dyn2
+                } else {
+                    (model.brunt_n2[k].max(0.0) / omega_dyn2).sqrt()
+                }
+            } else {
+                0.0
+            })
+        }
         "brunt_N" => {
             MesaCellValue::Float(if model.controls.calculate_brunt_n2 {
                 model.brunt_n2[k].max(0.0).sqrt()
+            } else {
+                0.0
+            })
+        }
+        "brunt_frequency" => {
+            MesaCellValue::Float(if model.controls.calculate_brunt_n2 {
+                (SECDAY / TWO_PI) * model.brunt_n2[k].max(0.0).sqrt()
+            } else {
+                0.0
+            })
+        }
+        "log_brunt_nu" => {
+            MesaCellValue::Float(if model.controls.calculate_brunt_n2 {
+                safe_log10((1.0e6 / TWO_PI) * model.brunt_n2[k].max(0.0).sqrt())
             } else {
                 0.0
             })
@@ -983,6 +1062,17 @@ fn eval_profile_scalar(
         "lamb_S2" => {
             let s = 2.0_f64.sqrt() * cs_f / model.r[k].max(1.0e-99);
             MesaCellValue::Float(s * s)
+        }
+        "log_lamb_Sl1" | "log_lamb_Sl2" | "log_lamb_Sl3" | "log_lamb_Sl10" => {
+            let l_factor = match name {
+                "log_lamb_Sl1" => 2.0_f64,
+                "log_lamb_Sl2" => 6.0_f64,
+                "log_lamb_Sl3" => 12.0_f64,
+                _ => 110.0_f64,
+            };
+            let nu_lamb_uhz = (1.0e6 / TWO_PI) * l_factor.sqrt() * cs_f
+                / model.r[k].max(1.0e-99);
+            MesaCellValue::Float(safe_log10(nu_lamb_uhz))
         }
         "grav" => MesaCellValue::Float(model.grav[k]),
         "log_g" => MesaCellValue::Float(safe_log10(model.grav[k])),
@@ -1185,6 +1275,13 @@ fn eval_profile_scalar(
         "acoustic_depth" => MesaCellValue::Float(prefixes.acoustic_depth[k]),
         "log_acoustic_depth" => {
             MesaCellValue::Float(safe_log10(prefixes.acoustic_depth[k]))
+        }
+        "acoustic_r_div_R_phot" => {
+            MesaCellValue::Float(if prefixes.photosphere_acoustic_r > 0.0 {
+                prefixes.acoustic_radius[k] / prefixes.photosphere_acoustic_r
+            } else {
+                0.0
+            })
         }
 
         // `p_rsp_*` scalar columns (`star/private/profile_getval.f90:1924-2020`).
@@ -1503,7 +1600,7 @@ fn format_star_profile_parts_with_extras_impl(
     } else {
         nz
     };
-    let prefixes = ProfilePrefixCache::build(model, specs);
+    let prefixes = ProfilePrefixCache::build(model, ctx, specs);
     let mut body = String::with_capacity(n_rows * col_refs.len() * 41);
 
     for row_idx in 0..n_rows {
@@ -1752,6 +1849,7 @@ impl ProfilesIndex {
                 ))
             })?;
         }
+        write_pulse_data_sidecar(model, &prof_path)?;
 
         self.entries.push(ProfilesIndexEntry {
             model_number: model.model_number,
@@ -1767,6 +1865,28 @@ impl ProfilesIndex {
         })?;
         Ok(prof_path)
     }
+}
+
+/// Writes `<profile_path>.<pulse_data_format>` alongside a saved profile when
+/// `write_pulse_data_with_profile` is enabled (`star/private/profile.f90:675-686`).
+fn write_pulse_data_sidecar(
+    model: &StarModel,
+    profile_path: &Path,
+) -> Result<(), StarError> {
+    if !model.controls.write_pulse_data_with_profile {
+        return Ok(());
+    }
+    let fmt = model.job.pulse_data_format.trim();
+    let text = crate::pulse_exporters::export_pulse_with_controls(model)?;
+    let pulse_path =
+        PathBuf::from(format!("{}.{}", profile_path.display(), fmt));
+    fs::write(&pulse_path, text).map_err(|e| {
+        StarError::IoError(format!(
+            "failed to write pulsation data {}: {e}",
+            pulse_path.display()
+        ))
+    })?;
+    Ok(())
 }
 
 /// Caller-supplied extra log headers and columns for one converged step.
@@ -1861,7 +1981,10 @@ impl StarLogsWriter {
     where
         F: FnOnce(
             &StarModel,
-        ) -> Result<(Vec<(String, f64)>, Vec<(String, Vec<f64>)>), StarError>,
+        ) -> Result<
+            (Vec<(String, f64)>, Vec<(String, Vec<f64>)>),
+            StarError,
+        >,
     {
         let o = &model.controls.output;
         let ctrl_log_dir = o.log_directory.trim();
@@ -1933,8 +2056,7 @@ impl StarLogsWriter {
             write_profiles_override,
         };
         if model.job.profile_starting_model && write_profs {
-            let (extra_hdr, extra_cols) =
-                fetch_starting_profile_extras(model)?;
+            let (extra_hdr, extra_cols) = fetch_starting_profile_extras(model)?;
             let ctx = StepReportContext::compute(model);
             out.profiles_index.save_profile_with_ctx_and_extras(
                 model,
@@ -2250,6 +2372,7 @@ impl StarLogsWriter {
                     out_path.display()
                 ))
             })?;
+            write_pulse_data_sidecar(model, &out_path)?;
         }
         Ok(())
     }
@@ -2317,8 +2440,7 @@ pub fn parse_rsp_map_columns(
             continue;
         }
         for tok in code.split_whitespace() {
-            let Some(col) =
-                resolve_single_map_token(tok, cat, extra_col_names)
+            let Some(col) = resolve_single_map_token(tok, cat, extra_col_names)
             else {
                 return Err(StarError::InvalidInput(format!(
                     "map_columns.list line {line_no}: unsupported or unknown profile column {tok:?}"
@@ -2438,7 +2560,7 @@ pub fn format_rsp_map_rows(
         }
     }
     let ctx = StepReportContext::compute(model);
-    let prefixes = ProfilePrefixCache::build(model, &builtin_specs);
+    let prefixes = ProfilePrefixCache::build(model, &ctx, &builtin_specs);
     let mut out =
         String::with_capacity((nz / stride + 1) * (cols.len() * 19 + 25));
 
@@ -2481,4 +2603,218 @@ pub fn format_rsp_map_rows(
         }
     }
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use flexmesa_const::STANDARD_CGRAV;
+
+    fn eval_float(
+        name: &'static str,
+        model: &StarModel,
+        ctx: &StepReportContext,
+        prefixes: &ProfilePrefixCache,
+        k: usize,
+    ) -> f64 {
+        match eval_profile_scalar(name, model, ctx, prefixes, k) {
+            MesaCellValue::Float(v) => v,
+            MesaCellValue::Int(v) => v as f64,
+        }
+    }
+
+    #[test]
+    fn test_eval_profile_scalar_supports_train9_astero_and_solar_columns() {
+        let col_text = "\
+dE_dRho
+ergs_mdot
+ergs_error
+ergs_eps_grav_plus_eps_mdot
+brunt_A
+brunt_N2_dimensionless
+brunt_N_dimensionless
+brunt_frequency
+log_brunt_nu
+log_lamb_Sl1
+log_lamb_Sl2
+log_lamb_Sl3
+log_lamb_Sl10
+acoustic_r_div_R_phot
+";
+        let specs = parse_star_profile_columns(col_text, None)
+            .expect("all 14 newly wired profile columns must parse");
+        assert_eq!(specs.len(), 14);
+
+        let mut model = StarModel::new(
+            2,
+            vec![1],
+            crate::StarJobControls::default(),
+            crate::StarControls::default(),
+        );
+        model.controls.calculate_brunt_n2 = true;
+        model.mstar = M_SUN;
+        model.dt = 1.0e5;
+        model.m = vec![M_SUN, 0.5 * M_SUN];
+        model.m_grav = vec![M_SUN, 0.5 * M_SUN];
+        model.dm = vec![0.5 * M_SUN, 0.5 * M_SUN];
+        model.dq = vec![0.5, 0.5];
+        model.r = vec![R_SUN, 0.5 * R_SUN];
+        model.r_center = 0.0;
+        model.t = vec![5777.0, 1.0e6];
+        model.rho = vec![1.0e-7, 1.0];
+        model.lum = vec![L_SUN, 0.8 * L_SUN];
+        model.teff = 5777.0;
+        model.opacity = vec![0.5, 1.0];
+        model.tau = vec![1.0, 2.0];
+        model.csound = vec![1.0e6, 2.0e6];
+        model.cgrav = vec![STANDARD_CGRAV, STANDARD_CGRAV];
+        model.grav = vec![2.74e4, 5.48e4];
+        model.eos_res[0][I_DE_DRHO] = -1.25e12;
+        model.eos_res[1][I_DE_DRHO] = 3.5e13;
+        model.eps_mdot = vec![2.5, -1.5];
+        model.eps_grav_ad[0].val = 7.5;
+        model.eps_grav_ad[1].val = 4.5;
+        model.aux.ergs_error = vec![1.25e32, -2.5e31];
+        model.brunt_n2 = vec![4.0e-6, -9.0e-6];
+
+        let ctx = StepReportContext::compute(&model);
+        let prefixes = ProfilePrefixCache::build(&model, &ctx, &specs);
+        let omega_dyn2 = 3.0 * model.cgrav[0] * model.m_grav[0]
+            / flexmesa_math::pow3(model.r[0]);
+
+        // Zone 0 (positive N^2, surface photosphere at r[0] since tau[0] >= 2/3).
+        assert!(
+            (eval_float("dE_dRho", &model, &ctx, &prefixes, 0) + 1.25e12).abs()
+                <= 1e-12
+        );
+        assert!(
+            (eval_float("ergs_mdot", &model, &ctx, &prefixes, 0)
+                - 2.5 * 0.5 * M_SUN * 1.0e5)
+                .abs()
+                <= 1e-12 * (2.5 * 0.5 * M_SUN * 1.0e5)
+        );
+        assert!(
+            (eval_float("ergs_error", &model, &ctx, &prefixes, 0) - 1.25e32)
+                .abs()
+                <= 1e-12
+        );
+        assert!(
+            (eval_float(
+                "ergs_eps_grav_plus_eps_mdot",
+                &model,
+                &ctx,
+                &prefixes,
+                0
+            ) - 10.0 * 0.5 * M_SUN * 1.0e5)
+                .abs()
+                <= 1e-12 * (10.0 * 0.5 * M_SUN * 1.0e5)
+        );
+        let expected_a0 = 4.0e-6 * R_SUN / 2.74e4;
+        assert!(
+            (eval_float("brunt_A", &model, &ctx, &prefixes, 0) - expected_a0)
+                .abs()
+                <= 1e-12
+        );
+        let expected_n2_dim0 = 4.0e-6 / omega_dyn2;
+        assert!(
+            (eval_float("brunt_N2_dimensionless", &model, &ctx, &prefixes, 0)
+                - expected_n2_dim0)
+                .abs()
+                <= 1e-12
+        );
+        assert!(
+            (eval_float("brunt_N_dimensionless", &model, &ctx, &prefixes, 0)
+                - expected_n2_dim0.sqrt())
+            .abs()
+                <= 1e-12
+        );
+        let expected_freq0 = (SECDAY / TWO_PI) * 4.0e-6_f64.sqrt();
+        assert!(
+            (eval_float("brunt_frequency", &model, &ctx, &prefixes, 0)
+                - expected_freq0)
+                .abs()
+                <= 1e-12
+        );
+        let expected_log_nu0 = safe_log10((1.0e6 / TWO_PI) * 4.0e-6_f64.sqrt());
+        assert!(
+            (eval_float("log_brunt_nu", &model, &ctx, &prefixes, 0)
+                - expected_log_nu0)
+                .abs()
+                <= 1e-12
+        );
+
+        let cs_f1 = csound_face_at(&model, 1);
+        for (col, l_fac) in [
+            ("log_lamb_Sl1", 2.0_f64),
+            ("log_lamb_Sl2", 6.0_f64),
+            ("log_lamb_Sl3", 12.0_f64),
+            ("log_lamb_Sl10", 110.0_f64),
+        ] {
+            let expected = safe_log10(
+                (1.0e6 / TWO_PI) * l_fac.sqrt() * cs_f1 / model.r[1],
+            );
+            assert!(
+                (eval_float(col, &model, &ctx, &prefixes, 1) - expected).abs()
+                    <= 1e-12
+            );
+        }
+
+        // Zone 1 (negative N^2: dimensionless N^2 and A keep sign; frequency clamps at 0).
+        let expected_a1 = -9.0e-6 * (0.5 * R_SUN) / 5.48e4;
+        assert!(
+            (eval_float("brunt_A", &model, &ctx, &prefixes, 1) - expected_a1)
+                .abs()
+                <= 1e-12
+        );
+        assert!(
+            (eval_float("brunt_N2_dimensionless", &model, &ctx, &prefixes, 1)
+                - (-9.0e-6 / omega_dyn2))
+                .abs()
+                <= 1e-12
+        );
+        assert_eq!(
+            eval_float("brunt_N_dimensionless", &model, &ctx, &prefixes, 1),
+            0.0
+        );
+        assert_eq!(
+            eval_float("brunt_frequency", &model, &ctx, &prefixes, 1),
+            0.0
+        );
+        assert_eq!(
+            eval_float("log_brunt_nu", &model, &ctx, &prefixes, 1),
+            safe_log10(0.0)
+        );
+
+        // Acoustic radius fraction: 1.0 at r_phot = r[0], dr1/cs1 / (dr0/cs0 + dr1/cs1) at zone 1.
+        assert!(
+            (eval_float("acoustic_r_div_R_phot", &model, &ctx, &prefixes, 0)
+                - 1.0)
+                .abs()
+                <= 1e-12
+        );
+        let t0 = (0.5 * R_SUN) / 1.0e6;
+        let t1 = (0.5 * R_SUN) / 2.0e6;
+        assert!(
+            (eval_float("acoustic_r_div_R_phot", &model, &ctx, &prefixes, 1)
+                - (t1 / (t0 + t1)))
+                .abs()
+                <= 1e-12
+        );
+
+        let rendered = format_star_profile_text(&model, &specs);
+        assert!(rendered.contains("acoustic_r_div_R_phot"));
+        assert!(rendered.contains("ergs_eps_grav_plus_eps_mdot"));
+
+        // Gated on calculate_Brunt_N2 = false.
+        model.controls.calculate_brunt_n2 = false;
+        for col in [
+            "brunt_A",
+            "brunt_N2_dimensionless",
+            "brunt_N_dimensionless",
+            "brunt_frequency",
+            "log_brunt_nu",
+        ] {
+            assert_eq!(eval_float(col, &model, &ctx, &prefixes, 0), 0.0);
+        }
+    }
 }

@@ -24,6 +24,7 @@ flexmesa-colors = { path = "../flexmesa-colors" }
 flexmesa-const = { path = "../flexmesa-const" }
 flexmesa-data = { path = "../flexmesa-data" }
 flexmesa-eos = { path = "../flexmesa-eos" }
+flexmesa-gyre = { path = "../flexmesa-gyre" }
 flexmesa-interp1d = { path = "../flexmesa-interp1d" }
 flexmesa-interp2d = { path = "../flexmesa-interp2d" }
 flexmesa-ionization = { path = "../flexmesa-ionization" }

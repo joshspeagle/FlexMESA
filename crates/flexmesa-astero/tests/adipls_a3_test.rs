@@ -283,6 +283,7 @@ fn test_sample_eval_adipls_branch_without_fake_fallback() {
     ctrl.add_atmosphere = false;
     ctrl.add_center_point = true;
     ctrl.keep_surface_point = false;
+    ctrl.do_redistribute_mesh = false;
     ctrl.nu_lower_factor = 0.8;
     ctrl.nu_upper_factor = 1.2;
     ctrl.weights.chi2_seismo_fraction = 1.0;

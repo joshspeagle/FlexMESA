@@ -9,7 +9,7 @@ use std::sync::{Arc, Mutex, OnceLock};
 use flexmesa_chem::NuclideCatalog;
 use flexmesa_const::{LN10, MEV2GR};
 use flexmesa_interp1d::{interp_m3q, CubicCoeffs};
-use flexmesa_math::exp10;
+use flexmesa_math::{exp, exp10};
 use flexmesa_rates::{
     eval_reaction_raw, eval_reaction_raw_with_overrides, RateTable1D,
     RatesCatalog, ReactionInfo, TFactors,
@@ -209,7 +209,7 @@ fn classify_reaclib_kinds(
                 continue;
             }
         } else if num_in1 > 1 || num_in2 > 1 || num_out1 > 1 || num_out2 > 1 {
-            kinds[i] = if r_ir > ir {
+            kinds[i] = if r_ir == 0 {
                 ReaclibKind::Other
             } else {
                 ReaclibKind::GeneralTwoTwo
@@ -585,6 +585,7 @@ impl NetGeneralInfo {
             reaction_neuqs_factor: 1.0,
             use_3a_fl87: false,
             use_suzuki_weak_rates: false,
+            max_safe_logt_for_rates: MAX_SAFE_LOGT_FOR_RATES,
         };
         init_screening_tables(&mut info);
         Ok(info)
@@ -604,8 +605,10 @@ impl NetGeneralInfo {
         rate_raw_dt: &mut [f64],
         rate_raw_drho: &mut [f64],
     ) -> Result<(), NetError> {
-        let logtemp = log_t_in.min(MAX_SAFE_LOGT_FOR_RATES);
-        if logtemp > RATTAB_THI {
+        let cap_logt = self.max_safe_logt_for_rates;
+        let clamped = log_t_in >= cap_logt;
+        let logtemp = if clamped { cap_logt } else { log_t_in };
+        if !logtemp.is_finite() || logtemp > RATTAB_THI {
             return Err(NetError::IntegrationError(format!(
                 "logT={logtemp} exceeds RATTAB_THI={RATTAB_THI}"
             )));
@@ -645,7 +648,7 @@ impl NetGeneralInfo {
             let r = poly * dtab;
             rate_raw[i] = r * fac;
             rate_raw_drho[i] = (r * ddtab / dtab) * fac;
-            rate_raw_dt[i] = if logtemp >= MAX_SAFE_LOGT_FOR_RATES {
+            rate_raw_dt[i] = if clamped {
                 0.0
             } else {
                 (dpoly * dtab / bt_ln10) * fac
@@ -704,6 +707,49 @@ fn compute_net_identity_id(
         }
     }
     h
+}
+
+/// Builds the `NRATTAB` cubic spline for one reaction's raw rate table.
+///
+/// Maps `weaklib_only` (`op_code == 2`) sentinel returns (`< 0.0`, returned by
+/// raw REACLIB evaluation before `eval_weak` lookup) to `exp(-99.0)`, matching
+/// MESA REACLIB initialization (`coefficients(1) = -99.0`).
+fn spline_reaction_rate_table<E, F>(
+    rxn: &ReactionInfo,
+    logttab: &[f64],
+    ttab: &[f64],
+    label: &str,
+    eval_fn: F,
+) -> Result<Arc<Vec<CubicCoeffs>>, NetError>
+where
+    E: std::fmt::Display,
+    F: Fn(f64, &TFactors) -> Result<f64, E>,
+{
+    let mut y = Vec::with_capacity(NRATTAB);
+    for idx in 0..NRATTAB {
+        let tf = TFactors::from_log_t(logttab[idx], ttab[idx]);
+        let raw = eval_fn(ttab[idx], &tf).map_err(|e| {
+            NetError::IntegrationError(format!(
+                "failed to evaluate {label} '{}': {e}",
+                rxn.name
+            ))
+        })?;
+        // Weaklib-only reactions hold `-99.0` in REACLIB slot 1 so raw table
+        // evaluation yields `exp(-99.0)` instead of the `-1.0` sentinel.
+        let rate = if rxn.op_code == 2 && raw < 0.0 {
+            exp(-99.0_f64)
+        } else {
+            raw
+        };
+        y.push(rate);
+    }
+    let coeffs = interp_m3q(logttab, &y).map_err(|e| {
+        NetError::IntegrationError(format!(
+            "failed to spline {label} '{}': {e}",
+            rxn.name
+        ))
+    })?;
+    Ok(Arc::new(coeffs))
 }
 
 fn build_rate_tables_with_overrides(
@@ -798,25 +844,14 @@ fn build_rate_tables_with_overrides(
         let built: Vec<(String, Arc<Vec<CubicCoeffs>>)> = uncached
             .par_iter()
             .map(|rxn| {
-                let mut y = Vec::with_capacity(NRATTAB);
-                for idx in 0..NRATTAB {
-                    let tf = TFactors::from_log_t(logttab[idx], ttab[idx]);
-                    let rate = eval_reaction_raw(cat, rxn, ttab[idx], &tf)
-                        .map_err(|e| {
-                            NetError::IntegrationError(format!(
-                                "failed to evaluate reaction '{}': {e}",
-                                rxn.name
-                            ))
-                        })?;
-                    y.push(rate);
-                }
-                let coeffs = interp_m3q(logttab, &y).map_err(|e| {
-                    NetError::IntegrationError(format!(
-                        "failed to spline reaction '{}': {e}",
-                        rxn.name
-                    ))
-                })?;
-                Ok((rxn.name.clone(), Arc::new(coeffs)))
+                let arc_coeffs = spline_reaction_rate_table(
+                    rxn,
+                    logttab,
+                    ttab,
+                    "reaction",
+                    |t, tf| eval_reaction_raw(cat, rxn, t, tf),
+                )?;
+                Ok((rxn.name.clone(), arc_coeffs))
             })
             .collect::<Result<Vec<_>, NetError>>()?;
         let mut guard = cache_mutex.lock().map_err(|e| {
@@ -839,32 +874,23 @@ fn build_rate_tables_with_overrides(
                 .par_iter()
                 .map(|(rxn_idx, rev_name)| {
                     let rxn = &reactions[*rxn_idx];
-                    let mut y = Vec::with_capacity(NRATTAB);
-                    for idx in 0..NRATTAB {
-                        let tf = TFactors::from_log_t(logttab[idx], ttab[idx]);
-                        let rate = eval_reaction_raw_with_overrides(
-                            cat,
-                            rxn,
-                            ttab[idx],
-                            &tf,
-                            &override_map,
-                            rev_name.as_deref(),
-                        )
-                        .map_err(|e| {
-                            NetError::IntegrationError(format!(
-                                "failed to evaluate overridden reaction '{}': {e}",
-                                rxn.name
-                            ))
-                        })?;
-                        y.push(rate);
-                    }
-                    let coeffs = interp_m3q(logttab, &y).map_err(|e| {
-                        NetError::IntegrationError(format!(
-                            "failed to spline overridden reaction '{}': {e}",
-                            rxn.name
-                        ))
-                    })?;
-                    Ok((*rxn_idx, Arc::new(coeffs)))
+                    let arc_coeffs = spline_reaction_rate_table(
+                        rxn,
+                        logttab,
+                        ttab,
+                        "overridden reaction",
+                        |t, tf| {
+                            eval_reaction_raw_with_overrides(
+                                cat,
+                                rxn,
+                                t,
+                                tf,
+                                &override_map,
+                                rev_name.as_deref(),
+                            )
+                        },
+                    )?;
+                    Ok((*rxn_idx, arc_coeffs))
                 })
                 .collect::<Result<HashMap<_, _>, NetError>>()?
         };

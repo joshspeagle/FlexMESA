@@ -97,6 +97,18 @@ pub struct OutputControls {
     pub min_abs_du_div_cs_for_dt_div_min_dr_div_cs_limit: f64,
     /// Relative cumulative energy error threshold emitting a warning (`warn_when_large_rel_run_E_err`, `0.1` default, `controls.defaults:11618`).
     pub warn_when_large_rel_run_e_err: f64,
+    /// Relative virial theorem error threshold emitting a warning (`warn_when_large_virial_thm_rel_err`, `1d-2` default, `controls.defaults:11650`).
+    #[serde(default = "default_warn_when_large_virial_thm_rel_err")]
+    pub warn_when_large_virial_thm_rel_err: f64,
+    /// Emit terminal diagnostics and abort `get_tau` on internal errors (`report_ierr`, `.false.` default, `controls.defaults:11473`).
+    #[serde(default)]
+    pub report_ierr: bool,
+    /// Emit a terminal warning when non-split-burn rates reach `max_safe_logT_for_rates` (`warn_rates_for_high_temp`, `.true.` default, `controls.defaults:11604`).
+    #[serde(default = "default_true")]
+    pub warn_rates_for_high_temp: bool,
+    /// Maximum $\log_{10} T$ above which raw nuclear reaction rates are clamped (`max_safe_logT_for_rates`, `10d0` default, `controls.defaults:11605`).
+    #[serde(default = "default_max_safe_logt_for_rates")]
+    pub max_safe_logt_for_rates: f64,
 }
 
 impl Default for OutputControls {
@@ -147,6 +159,45 @@ impl Default for OutputControls {
             min_abs_u_div_cs_for_dt_div_min_dr_div_cs_limit: 0.8,
             min_abs_du_div_cs_for_dt_div_min_dr_div_cs_limit: 0.01,
             warn_when_large_rel_run_e_err: 0.1,
+            warn_when_large_virial_thm_rel_err: 1.0e-2,
+            report_ierr: false,
+            warn_rates_for_high_temp: true,
+            max_safe_logt_for_rates: 10.0,
         }
     }
+}
+
+const fn default_warn_when_large_virial_thm_rel_err() -> f64 {
+    1.0e-2
+}
+
+const fn default_max_safe_logt_for_rates() -> f64 {
+    10.0
+}
+
+const fn default_true() -> bool {
+    true
+}
+
+/// Emits a `report_ierr` diagnostic to stderr when `report_ierr` is active
+/// (`star/defaults/controls.defaults:11466-11473`).
+pub(crate) fn maybe_report_ierr(
+    report_ierr: bool,
+    err: &crate::controls::StarError,
+) {
+    if report_ierr {
+        eprintln!("report_ierr: {err}");
+    }
+}
+
+/// Emits a `report_ierr` diagnostic to stderr before returning `res` when `report_ierr` is active
+/// (`star/defaults/controls.defaults:11466-11473`).
+pub(crate) fn report_result_ierr<T>(
+    report_ierr: bool,
+    res: Result<T, crate::controls::StarError>,
+) -> Result<T, crate::controls::StarError> {
+    if let Err(ref err) = res {
+        maybe_report_ierr(report_ierr, err);
+    }
+    res
 }

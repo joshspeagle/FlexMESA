@@ -237,15 +237,21 @@ def test_rsp_and_astero_raw_cases_rejected_and_cleaned_copies_smoke(
     for case_name in ("example_astero", "surface_effects"):
         raw_ast = root / "astero" / "test_suite" / case_name
         assert raw_ast.is_dir(), f"Missing upstream case: {raw_ast}"
-        with pytest.raises(
-            ValueError,
-            match=r"(unsupported|unknown|unrecognized).*control",
-        ):
-            astero.run_astero_test_suite_case(
-                raw_ast,
-                max_steps_per_stage=2,
-                verify_restart=True,
-            )
+        # `surface_effects` now runs its raw inlists without extras;
+        # `example_astero` still needs its set_param hook.
+        if case_name == "example_astero":
+            with pytest.raises(
+                ValueError,
+                match=(
+                    r"(unsupported|unknown|unrecognized).*control"
+                    r"|no set_param hook was supplied"
+                ),
+            ):
+                astero.run_astero_test_suite_case(
+                    raw_ast,
+                    max_steps_per_stage=2,
+                    verify_restart=True,
+                )
         clean_ast = tmp_path / case_name
         star.copy_cleaned_case(raw_ast, clean_ast, suite="astero")
         ast_rep = astero.run_astero_test_suite_case(

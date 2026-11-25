@@ -43,6 +43,7 @@
 pub mod astero_adipls_py;
 /// PyO3 adapter for an `astero` case's own `set_param` (test-side extras).
 pub mod astero_case_hooks_py;
+/// PyO3 bindings for astero's GYRE interface (`astero/private/gyre_support.f90`).
 pub mod astero_gyre_py;
 /// Tier B/C bindings for Wave 5.4 `astero` (scaling relations, surface effects, optimization).
 pub mod astero_py;
@@ -66,6 +67,8 @@ pub mod eos_py;
 pub mod eos_solver_py;
 /// PyO3 callback adapters and RSP/GYRE helpers for test-side extras.
 pub mod extras_py;
+/// GYRE's `gyre_mesa_m` interface for test-side star extras (`#170`).
+pub mod gyre_mesa_py;
 /// Tier B bindings for 1D piecewise-monotonic and MP cubic interpolation.
 pub mod interp_1d;
 /// Tier B bindings for 2D bicubic and piecewise-monotonic interpolation.
@@ -312,6 +315,7 @@ fn _rust(m: &Bound<'_, PyModule>) -> PyResult<()> {
     astero_py::register(m)?;
     astero_adipls_py::register(m)?;
     astero_gyre_py::register(m)?;
+    gyre_mesa_py::register(m)?;
     trace_py::register(m)?;
     wave5_bench_py::register(m)?;
     Ok(())

@@ -4,7 +4,9 @@
 //! (`flexmesa_num::{newuoa, bobyqa}`), and Cartesian grid scans
 //! (`astero/private/astero_run_support.f90:366-982`).
 
-use flexmesa_num::{bobyqa, newuoa, nm_simplex, NumError, SimplexConfig};
+use flexmesa_num::{
+    bobyqa, newuoa, nm_simplex, r8_uniform_01, NumError, SimplexConfig,
+};
 use flexmesa_star::StarError;
 
 /// Minimizes a scalar objective `eval_fn(x)` over bounded parameter space
@@ -132,6 +134,55 @@ pub(crate) fn try_simplex_minimize_with_budget<F>(
     enforce_bounds: bool,
     adaptive_random_search: bool,
     seed: i32,
+    eval_fn: F,
+) -> Result<(Vec<f64>, f64, usize), StarError>
+where
+    F: FnMut(&[f64]) -> Result<f64, StarError>,
+{
+    try_simplex_minimize_with_config(
+        x_first,
+        x_lower,
+        x_upper,
+        max_iters,
+        max_evals,
+        x_atol,
+        x_rtol,
+        chi2_tol,
+        centroid_weight_power,
+        enforce_bounds,
+        adaptive_random_search,
+        seed,
+        1.0,
+        2.0,
+        0.5,
+        0.5,
+        None,
+        eval_fn,
+    )
+}
+
+/// Full Nelder-Mead minimization supporting upstream `simplex_alpha/beta/gamma/delta`
+/// and warm-starting from an existing `(simplex, f)` (`restart_simplex_from_file`,
+/// `astero/private/astero_run_support.f90:858-980`, `num/private/mod_simplex.f90:30-384`).
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn try_simplex_minimize_with_config<F>(
+    x_first: &[f64],
+    x_lower: &[f64],
+    x_upper: &[f64],
+    max_iters: usize,
+    max_evals: usize,
+    x_atol: f64,
+    x_rtol: f64,
+    chi2_tol: f64,
+    centroid_weight_power: f64,
+    enforce_bounds: bool,
+    adaptive_random_search: bool,
+    seed: i32,
+    alpha: f64,
+    beta: f64,
+    gamma: f64,
+    delta: f64,
+    initial_simplex: Option<(Vec<Vec<f64>>, Vec<f64>)>,
     mut eval_fn: F,
 ) -> Result<(Vec<f64>, f64, usize), StarError>
 where
@@ -141,15 +192,38 @@ where
     if n == 0 || max_evals == 0 {
         return Ok((Vec::new(), 0.0, 0));
     }
+    if let Some((simplex_in, f_in)) = initial_simplex {
+        return run_simplex_from_initial(
+            n,
+            &x_lower[..n],
+            &x_upper[..n],
+            simplex_in,
+            f_in,
+            max_iters,
+            max_evals,
+            x_atol,
+            x_rtol,
+            chi2_tol,
+            centroid_weight_power,
+            enforce_bounds,
+            adaptive_random_search,
+            seed,
+            alpha,
+            beta,
+            gamma,
+            delta,
+            eval_fn,
+        );
+    }
     let cfg = SimplexConfig {
         max_iters,
         max_evals,
         x_tol: x_rtol.max(x_atol).max(1.0e-12),
         f_tol: chi2_tol.max(0.0),
-        alpha: 1.0,
-        beta: 2.0,
-        gamma: 0.5,
-        delta: 0.5,
+        alpha,
+        beta,
+        gamma,
+        delta,
         enforce_bounds,
         adaptive_random_search,
         seed,
@@ -212,6 +286,208 @@ where
         }
     }
     Ok((best_x, best_f, evals))
+}
+
+#[allow(clippy::too_many_arguments)]
+fn run_simplex_from_initial<F>(
+    n: usize,
+    x_lower: &[f64],
+    x_upper: &[f64],
+    mut simplex: Vec<Vec<f64>>,
+    mut f: Vec<f64>,
+    max_iters: usize,
+    max_evals: usize,
+    x_atol: f64,
+    x_rtol: f64,
+    chi2_tol: f64,
+    centroid_weight_power: f64,
+    enforce_bounds: bool,
+    adaptive_random_search: bool,
+    mut seed: i32,
+    alpha: f64,
+    beta: f64,
+    gamma: f64,
+    delta: f64,
+    mut eval_fn: F,
+) -> Result<(Vec<f64>, f64, usize), StarError>
+where
+    F: FnMut(&[f64]) -> Result<f64, StarError>,
+{
+    if simplex.len() != n + 1 || f.len() != n + 1 {
+        return Err(StarError::InvalidInput(format!(
+            "simplex restart requires n+1={} vertices, got {} and {}",
+            n + 1,
+            simplex.len(),
+            f.len()
+        )));
+    }
+    let mut num_evals = 0usize;
+    let mut num_iters = 0usize;
+    let mut l_best = 0usize;
+    for j in 1..=n {
+        if f[j] < f[l_best] {
+            l_best = j;
+        }
+    }
+    let mut best_x = simplex[l_best][..n].to_vec();
+    let mut best_f = f[l_best];
+
+    let mut eval_pt =
+        |pt: &[f64], evals: &mut usize| -> Result<f64, StarError> {
+            let clamped: Vec<f64>;
+            let probe = if enforce_bounds {
+                for j in 0..n {
+                    if pt[j] < x_lower[j] || pt[j] > x_upper[j] {
+                        return Ok(1.0e99);
+                    }
+                }
+                clamped = (0..n)
+                    .map(|i| pt[i].clamp(x_lower[i], x_upper[i]))
+                    .collect();
+                clamped.as_slice()
+            } else {
+                &pt[..n]
+            };
+            *evals += 1;
+            let val = eval_fn(probe)?;
+            if val < best_f {
+                best_f = val;
+                best_x = probe.to_vec();
+            }
+            Ok(val)
+        };
+
+    loop {
+        num_iters += 1;
+        let (mut h, mut l) = (0usize, 0usize);
+        for j in 1..=n {
+            if f[j] > f[h] {
+                h = j;
+            }
+            if f[j] < f[l] {
+                l = j;
+            }
+        }
+        let mut s = None;
+        for j in 0..=n {
+            if j == h {
+                continue;
+            }
+            if s.is_none_or(|si| f[j] > f[si]) {
+                s = Some(j);
+            }
+        }
+        let s = s.unwrap_or(l);
+        if f[l] < chi2_tol {
+            best_f = f[l];
+            best_x = simplex[l][..n].to_vec();
+            break;
+        }
+        let mut term_val_x = 0.0_f64;
+        for j in 0..=n {
+            if j == l {
+                continue;
+            }
+            for i in 0..n {
+                let denom = x_atol
+                    + x_rtol * simplex[j][i].abs().max(simplex[l][i].abs());
+                if denom > 0.0 {
+                    let t = (simplex[j][i] - simplex[l][i]).abs() / denom;
+                    if t > term_val_x {
+                        term_val_x = t;
+                    }
+                }
+            }
+        }
+        if term_val_x <= 1.0 || num_iters > max_iters || num_evals >= max_evals
+        {
+            best_f = f[l];
+            best_x = simplex[l][..n].to_vec();
+            break;
+        }
+        let mut c = vec![0.0_f64; n];
+        let mut sum_weight = 0.0_f64;
+        for j in 0..=n {
+            if j == h {
+                continue;
+            }
+            let w = if centroid_weight_power == 0.0 {
+                1.0
+            } else {
+                let inv = 1.0 / f[j].max(1.0e-30);
+                if (centroid_weight_power - 1.0).abs() <= 1.0e-15 {
+                    inv
+                } else {
+                    flexmesa_math::pow(inv, centroid_weight_power)
+                }
+            };
+            for i in 0..n {
+                c[i] += simplex[j][i] * w;
+            }
+            sum_weight += w;
+        }
+        for ci in &mut c {
+            *ci /= sum_weight;
+        }
+        let x_reflect: Vec<f64> = (0..n)
+            .map(|i| c[i] + alpha * (c[i] - simplex[h][i]))
+            .collect();
+        let f_reflect = eval_pt(&x_reflect, &mut num_evals)?;
+        if f_reflect < f[s] {
+            simplex[h].clone_from(&x_reflect);
+            f[h] = f_reflect;
+            if f_reflect < f[l] && num_evals < max_evals {
+                let x_expand: Vec<f64> = (0..n)
+                    .map(|i| c[i] + beta * (x_reflect[i] - c[i]))
+                    .collect();
+                let f_expand = eval_pt(&x_expand, &mut num_evals)?;
+                if f_expand < f[l] {
+                    simplex[h] = x_expand;
+                    f[h] = f_expand;
+                }
+            }
+        } else {
+            let x_contract: Vec<f64> = if f_reflect < f[h] {
+                (0..n)
+                    .map(|i| c[i] + gamma * (x_reflect[i] - c[i]))
+                    .collect()
+            } else {
+                (0..n)
+                    .map(|i| c[i] + gamma * (simplex[h][i] - c[i]))
+                    .collect()
+            };
+            let f_contract = eval_pt(&x_contract, &mut num_evals)?;
+            if f_contract < f[h].min(f_reflect) {
+                simplex[h] = x_contract;
+                f[h] = f_contract;
+            } else if adaptive_random_search {
+                let x_ars: Vec<f64> = (0..n)
+                    .map(|i| {
+                        x_lower[i]
+                            + r8_uniform_01(&mut seed)
+                                * (x_upper[i] - x_lower[i])
+                    })
+                    .collect();
+                let f_ars = eval_pt(&x_ars, &mut num_evals)?;
+                if f_ars < f[h] {
+                    simplex[h] = x_ars;
+                    f[h] = f_ars;
+                }
+            } else {
+                for j in 0..=n {
+                    if j == l || num_evals >= max_evals {
+                        continue;
+                    }
+                    for i in 0..n {
+                        simplex[j][i] = simplex[l][i]
+                            + delta * (simplex[j][i] - simplex[l][i]);
+                    }
+                    f[j] = eval_pt(&simplex[j], &mut num_evals)?;
+                }
+            }
+        }
+    }
+    Ok((best_x, best_f, num_evals))
 }
 
 /// Maps normalized trust-region coordinate $u_i \in [-1, 1]$ to physical
@@ -320,15 +596,11 @@ where
         r_beg,
         r_end,
         max_evals_eff,
-        1.0e10,
+        1.0e6,
         |u_try| -> Result<f64, NumError> {
             if evals >= max_evals_eff {
-                return Ok(best_f.min(1.0e10));
+                return Ok(best_f.min(1.0e6));
             }
-            let out_pen: f64 = u_try[..n]
-                .iter()
-                .map(|&ui| flexmesa_math::pow2((ui.abs() - 1.0).max(0.0)))
-                .sum();
             let phys: Vec<f64> = (0..n)
                 .map(|i| {
                     map_bobyqa_param(
@@ -350,11 +622,10 @@ where
                 best_f = f;
                 best_x = phys;
             }
-            let f_pen = f + 1.0e4 * out_pen;
             Ok(if n_eff > n {
-                f_pen + 1.0e-6 * flexmesa_math::pow2(u_try[n])
+                f + 1.0e-6 * flexmesa_math::pow2(u_try[n])
             } else {
-                f_pen
+                f
             })
         },
     );

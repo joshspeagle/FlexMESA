@@ -400,6 +400,11 @@ pub fn load_or_build_cms_slice(
     )
 }
 
+/// Cache key suffix distinguishing rebuilt CMS `(logT, logRho)` slices
+/// whose axis grids match upstream sequential step addition (`cms/table.rs`)
+/// from earlier cached `v1` files on disk.
+const CMS_CACHE_STEM_SUFFIX: &str = ".cms2";
+
 #[doc(hidden)]
 pub fn load_or_build_cms_slice_in(
     flex_dir: &Path,
@@ -407,11 +412,12 @@ pub fn load_or_build_cms_slice_in(
     cache_root: Option<&Path>,
     stem: &str,
 ) -> Result<CmsXTable, EosError> {
+    let cache_stem = format!("{stem}{CMS_CACHE_STEM_SUFFIX}");
     let raw_bin = flex_dir.join("eos_4d_raw").join(format!("{stem}.raw"));
     if raw_bin.is_file() {
         return load_or_populate_slice_cache_in(
             "load_or_build_cms_slice",
-            stem,
+            &cache_stem,
             &raw_bin,
             *CMS_SLICE_BIN_MAGIC,
             cache_root,
@@ -426,7 +432,7 @@ pub fn load_or_build_cms_slice_in(
             data_dir.join("eosCMS_data").join(format!("{stem}.data"));
         return load_or_populate_slice_cache_in(
             "load_or_build_cms_slice",
-            stem,
+            &cache_stem,
             &ascii_path,
             *CMS_SLICE_BIN_MAGIC,
             cache_root,
@@ -1289,6 +1295,53 @@ mod tests {
         assert!(
             err.to_string().contains("SHA-256 mismatch"),
             "unexpected err: {err}"
+        );
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_cms_slice_cache_uses_cms2_suffix_and_ignores_stale_v1() {
+        let dir = make_temp_dir("cms2_suffix");
+        let data_dir = dir.join("data");
+        let cache_v1 = dir.join("cache").join("v1");
+        let raw_dir = data_dir.join("eos_4d_raw");
+        std::fs::create_dir_all(&raw_dir).expect("mkdir raw");
+
+        let cms_stem = "mesa-CMS_suffix_test";
+        let cms_raw_path = raw_dir.join(format!("{cms_stem}.raw"));
+        std::fs::write(&cms_raw_path, build_synthetic_cms_raw_bytes(false))
+            .expect("write cms raw");
+        let sha = compute_sha256_file(&cms_raw_path).expect("hash cms raw");
+        let stale_file =
+            slice_cache_path(&cache_v1, cms_stem, &sha, numerics_mode());
+        std::fs::create_dir_all(stale_file.parent().expect("parent"))
+            .expect("mkdir cache slices");
+        std::fs::write(&stale_file, b"stale_v1_axis_grid_payload")
+            .expect("write stale v1");
+
+        let built = load_or_build_cms_slice_in(
+            &data_dir,
+            None,
+            Some(&cache_v1),
+            cms_stem,
+        )
+        .expect("build cms2 slice ignoring stale v1");
+        let reloaded = load_or_build_cms_slice_in(
+            &data_dir,
+            None,
+            Some(&cache_v1),
+            cms_stem,
+        )
+        .expect("reload cms2 slice");
+        assert_eq!(built.dense, reloaded.dense);
+
+        let cms2_stem = format!("{cms_stem}{CMS_CACHE_STEM_SUFFIX}");
+        let cms2_file =
+            slice_cache_path(&cache_v1, &cms2_stem, &sha, numerics_mode());
+        assert!(
+            cms2_file.is_file(),
+            "expected cms2 cache file at {cms2_file:?}"
         );
 
         let _ = std::fs::remove_dir_all(&dir);

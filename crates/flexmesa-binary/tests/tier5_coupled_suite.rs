@@ -824,7 +824,7 @@ fn test_recursive_binary_inlists_and_all_8_cases_capped_4_steps() {
     .expect("write synthetic binary inlist");
     fs::write(
         bad_tmp.root.join("inlist1"),
-        "&star_job\n  save_pulse_data_filename = 'p.data'\n/\n\
+        "&star_job\n  echo_at_start = 'hi'\n/\n\
          &controls\n  initial_mass = 10.0\n/\n",
     )
     .expect("write synthetic unsupported inlist1");

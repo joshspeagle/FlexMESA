@@ -438,6 +438,7 @@ pub(crate) fn init_or_update_model_from_bundle_outcome(
     // the next one loads, and a binary seed is a freshly loaded model, so
     // neither is a restart: every `.not. restart` control applies.
     let restart = false;
+    let had_existing_model = existing_model.is_some();
     let mut model = if let Some(prev) = existing_model {
         prev
     } else if job.load_saved_model {
@@ -496,6 +497,25 @@ pub(crate) fn init_or_update_model_from_bundle_outcome(
         }
         load_zams_model(controls.clone(), job.clone())?
     };
+
+    // Multi-stage handoffs carry a `.mod`-equivalent model across stages;
+    // restore pre-clip `dt_next_unclipped` when `max_age` clipped `dt_next` to
+    // `0` (`write_model.f90:229`) and apply MESA's `dt_next <= 0` fallback
+    // (`init.f90:932, 1015-1016`).
+    if model.dt_next <= 0.0
+        && (had_existing_model || did_load_saved_model)
+        && model.aux.step_hist.dt_next_unclipped > 0.0
+    {
+        model.dt_next = model.aux.step_hist.dt_next_unclipped;
+    }
+    if had_existing_model {
+        model.aux.step_hist.dt_next_unclipped = -1.0;
+    }
+    if model.dt_next <= 0.0 {
+        model.dt_next =
+            crate::zams::yrs_for_init_timestep(model.controls.initial_mass)
+                * SECYER;
+    }
 
     // Preserve active model state across stages / `.mod` loads unless overridden
     let preserved_net = model.job.net_name.clone();
@@ -622,6 +642,16 @@ pub(crate) fn init_or_update_model_from_bundle_outcome(
             model.dt_next = job.years_for_initial_dt * SECYER;
         } else if job.seconds_for_initial_dt > 0.0 {
             model.dt_next = job.seconds_for_initial_dt;
+        }
+    }
+    // `limit_initial_dt` caps `dt_next` without increasing it
+    // (`star/job/run_star_support.f90:1977-1986`).
+    if job.limit_initial_dt && !restart {
+        if job.years_for_initial_dt > 0.0 {
+            model.dt_next =
+                model.dt_next.min(job.years_for_initial_dt * SECYER);
+        } else if job.seconds_for_initial_dt > 0.0 {
+            model.dt_next = model.dt_next.min(job.seconds_for_initial_dt);
         }
     }
 

@@ -32,9 +32,11 @@ pub fn eosfi8(
     }
     let game = gami / flexmesa_math::pow(zion, 5.0 / 3.0);
     let xc = excor7(rs, game);
-    let cotpt = (3.0 / AUM / cmi).sqrt() / flexmesa_math::pow(zion, 7.0 / 6.0);
+    let cotpt = AutoDiffReal2VarOrder1::constant(
+        (3.0 / AUM / cmi).sqrt() / flexmesa_math::pow(zion, 7.0 / 6.0),
+    );
     let tpt = gami / rs.sqrt() * cotpt;
-    let fid_ion = (tpt * tpt / gami).ln() * 1.5 - 1.323515;
+    let fid_ion = 1.5 * (tpt * tpt / gami).ln() - 1.323515;
 
     let (
         fion,
@@ -91,13 +93,13 @@ pub fn eosfi8(
         fscr_liq8(rs, game, zion)?
     };
 
-    let fc0 = scr.f + xc.f * zion;
-    let uc0 = scr.u + xc.u * zion;
-    let pc0 = scr.p + xc.p * zion;
-    let sc0 = scr.s + xc.s * zion;
-    let cv0 = scr.cv + xc.cv * zion;
-    let pdt0 = scr.pdt + xc.pdt * zion;
-    let pdr0 = scr.pdr + xc.pdr * zion;
+    let fc0 = scr.f + zion * xc.f;
+    let uc0 = scr.u + zion * xc.u;
+    let pc0 = scr.p + zion * xc.p;
+    let sc0 = scr.s + zion * xc.s;
+    let cv0 = scr.cv + zion * xc.cv;
+    let pdt0 = scr.pdt + zion * xc.pdt;
+    let pdr0 = scr.pdr + zion * xc.pdr;
 
     let c1 = PcIonContrib {
         f: fion + fc0,

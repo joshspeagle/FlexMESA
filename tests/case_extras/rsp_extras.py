@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import os
 import pathlib
 import re
 from typing import Any
@@ -146,24 +147,122 @@ class RspPeriodLimitExtras:
 class RspGyreExtras(RspPeriodLimitExtras):
     """`rsp_gyre` extras (`star/test_suite/rsp_gyre/src/run_star_extras.f90`).
 
-    Only the period-limit `extras_finish_step` inherited from the base class
-    (`star/test_suite/rsp_gyre/src/run_star_extras.inc:16-47`) is ported.
-    Upstream's `rsp_set_gyre_linear_analysis`
-    (`star/test_suite/rsp_gyre/src/run_star_extras.f90:64-264`) calls GYRE.
+    Inherits the period-limit `extras_finish_step`
+    (`star/test_suite/rsp_gyre/src/run_star_extras.inc:16-47`) and implements
+    `rsp_set_gyre_linear_analysis`
+    (`star/test_suite/rsp_gyre/src/run_star_extras.f90:64-264`) over
+    `_rust.GyreMesa`.
     """
+
+    # Snapshots handed to `other_rsp_linear_analysis` carry `star_model`.
+    wants_star_model = True
 
     def other_rsp_linear_analysis(
         self,
-        _state: dict[str, Any],
+        state: dict[str, Any],
         _gyre_str: str,
-        _case_dir: str,
+        case_dir: str,
         _log_dir: str | None,
     ) -> dict[str, Any]:
-        """Fail loudly: the upstream routine needs GYRE."""
-        raise NotImplementedError(
-            "rsp_gyre: upstream run_star_extras.f90 calls GYRE, which is "
-            "not ported (#170)"
-        )
+        """Compute initial RSP velocities and linear period using `GYRE`."""
+        resolved_dir = pathlib.Path(case_dir or str(state["case_dir"]))
+        gyre = _rust.GyreMesa(str(resolved_dir / "gyre.in"))
+        mesa_dir = (os.environ.get("MESA_DIR") or "").strip() or "mesa"
+        gyre.set_mesa_constants(mesa_dir)
+        gyre.set_model(state["star_model"], False, False, False)
+
+        modes = gyre.get_modes_full(0)
+        max_modes = 3
+        periods = [0.0] * max_modes
+        growth_rates = [0.0] * max_modes
+        npts = [0] * max_modes
+        v_modes: list[list[float]] = [[] for _ in range(max_modes)]
+        num_written = 0
+        for md in modes:
+            if num_written >= max_modes:
+                continue
+            num_written += 1
+            freq_re, freq_im = md.freq
+            if md.n_pg < 1 or md.n_pg > max_modes:
+                continue
+            idx = md.n_pg - 1
+            periods[idx] = 1.0 / freq_re
+            growth_rates[idx] = 4.0 * constants.PI * freq_im / freq_re
+            npts[idx] = len(md.x)
+            v_modes[idx] = [xr for xr, _xi in md.xi_r]
+
+        x_ctrl = state["x_ctrl"]
+        amix1 = float(x_ctrl[3])
+        amix2 = float(x_ctrl[4])
+        velkm = float(x_ctrl[5])
+        if amix1 + amix2 > 1.0:
+            raise ValueError(
+                "rsp_gyre: x_ctrl(4) + x_ctrl(5) exceeds 1.0 in "
+                "rsp_set_gyre_linear_analysis"
+            )
+        amix_f = 1.0 - (amix1 + amix2)
+
+        nz = int(state["nz"])
+        expected_n = nz - 1
+        if amix_f > 0.0 and npts[0] != expected_n:
+            raise RuntimeError(
+                f"rsp_gyre: fundamental npts={npts[0]} != nz-1={expected_n}; "
+                "interpolation from GYRE grid to model is unimplemented"
+            )
+        if amix1 > 0.0 and npts[1] != expected_n:
+            raise RuntimeError(
+                f"rsp_gyre: 1st overtone npts={npts[1]} != nz-1={expected_n}; "
+                "interpolation from GYRE grid to model is unimplemented"
+            )
+        if amix2 > 0.0 and npts[2] != expected_n:
+            raise RuntimeError(
+                f"rsp_gyre: 2nd overtone npts={npts[2]} != nz-1={expected_n}; "
+                "interpolation from GYRE grid to model is unimplemented"
+            )
+
+        v_star = [0.0] * nz
+        if velkm != 0.0 and expected_n > 0:
+
+            def _mode_val(m_idx: int, pt_idx: int) -> float:
+                arr = v_modes[m_idx]
+                return arr[pt_idx] if arr else 0.0
+
+            surf_idx = expected_n - 1
+            v_surf = (
+                amix_f * _mode_val(0, surf_idx)
+                + amix1 * _mode_val(1, surf_idx)
+                + amix2 * _mode_val(2, surf_idx)
+            )
+            if v_surf == 0.0:
+                raise ValueError(
+                    "rsp_gyre: zero surface radial displacement at outer point"
+                )
+            scale = 1.0e5 * velkm / v_surf
+            for i in range(expected_n):
+                k = nz - 1 - i
+                v_star[k] = scale * (
+                    amix_f * _mode_val(0, i)
+                    + amix1 * _mode_val(1, i)
+                    + amix2 * _mode_val(2, i)
+                )
+            if nz >= 2:
+                v_star[0] = v_star[1]
+
+        mode_idx = int(state["mode_for_setting_periodlin"])
+        if mode_idx < 0 or mode_idx >= max_modes or periods[mode_idx] <= 0.0:
+            raise ValueError(
+                "rsp_gyre: missing solved period for "
+                f"mode_for_setting_periodlin={mode_idx}"
+            )
+
+        return {
+            "handled": True,
+            "v": v_star,
+            "v_center": 0.0,
+            "rsp_period": periods[mode_idx],
+            "lina_periods": periods,
+            "lina_growth_rates": growth_rates,
+        }
 
 
 class RspCheck2ndCrossingExtras(RspPeriodLimitExtras):

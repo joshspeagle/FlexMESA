@@ -143,8 +143,8 @@ pub fn net_get(
         rate_factors,
         weak_rate_factor,
         screening_mode,
-        false,
-        false,
+        g.use_3a_fl87,
+        g.use_suzuki_weak_rates,
         false,
         false,
     )
@@ -193,8 +193,8 @@ pub fn net_get_symbolic_d_dxdt_dx(
         rate_factors,
         weak_rate_factor,
         screening_mode,
-        false,
-        false,
+        g.use_3a_fl87,
+        g.use_suzuki_weak_rates,
         false,
         true,
     )?;

@@ -293,12 +293,32 @@ pub trait StarExtras {
     ) -> Option<crate::hydro_state::OtherAdjustMltGradtFractionHandle> {
         None
     }
+
+    /// Optional custom mesh spacing functions handle installed onto
+    /// `model.aux.other_mesh_functions` (`other_mesh_functions` in
+    /// `star/other/other_mesh_functions.f90`).
+    fn other_mesh_functions_handle(
+        &self,
+    ) -> Option<crate::mesh_functions::OtherMeshFunctionsHandle> {
+        None
+    }
+
+    /// Optional custom local mesh multiplier handle installed onto
+    /// `model.aux.other_mesh_delta_coeff_factor`
+    /// (`other_mesh_delta_coeff_factor` in
+    /// `star/other/other_mesh_delta_coeff_factor.f90`).
+    fn other_mesh_delta_coeff_factor_handle(
+        &self,
+    ) -> Option<crate::adjust_mesh_support::OtherMeshDeltaCoeffFactorHandle>
+    {
+        None
+    }
 }
 
-/// Installs any `other_overshooting_scheme` and
-/// `other_adjust_mlt_gradT_fraction` handles exposed by `extras` onto
-/// `model.aux` without clearing handles already installed directly by
-/// `extras_controls`.
+/// Installs any `other_overshooting_scheme`, `other_adjust_mlt_gradT_fraction`,
+/// `other_mesh_functions`, and `other_mesh_delta_coeff_factor` handles exposed
+/// by `extras` onto `model.aux` without clearing handles already installed
+/// directly by `extras_controls`.
 pub fn install_star_aux_hooks<E: StarExtras + ?Sized>(
     extras: &E,
     model: &mut StarModel,
@@ -308,6 +328,12 @@ pub fn install_star_aux_hooks<E: StarExtras + ?Sized>(
     }
     if let Some(handle) = extras.other_adjust_mlt_gradt_fraction_handle() {
         model.aux.other_adjust_mlt_gradt_fraction = Some(handle);
+    }
+    if let Some(handle) = extras.other_mesh_functions_handle() {
+        model.aux.other_mesh_functions = Some(handle);
+    }
+    if let Some(handle) = extras.other_mesh_delta_coeff_factor_handle() {
+        model.aux.other_mesh_delta_coeff_factor = Some(handle);
     }
 }
 
@@ -398,6 +424,36 @@ pub fn rel_run_e_err_exceeds_warn_limit(model: &StarModel) -> Option<f64> {
     }
 }
 
+/// Checks whether `abs(1 + total_gravitational_energy_end / virial_thm_P_avg)`
+/// exceeds `warn_when_large_virial_thm_rel_err` for static non-rotating models
+/// without `u`/`v`, mass corrections, nonzero inner core mass, or mass
+/// loss/accretion, matching `star/job/run_star_support.f90:707-715`.
+#[must_use]
+pub fn virial_thm_rel_err_exceeds_warn_limit(model: &StarModel) -> Option<f64> {
+    let c = &model.controls;
+    if c.rotation_flag
+        || c.u_flag
+        || c.use_mass_corrections
+        || c.v_flag
+        || model.m_center > 0.0
+        || model.mstar_dot != 0.0
+    {
+        return None;
+    }
+    let virial = model.aux.step_hist.virial_thm_p_avg;
+    if virial == 0.0 || !virial.is_finite() {
+        return None;
+    }
+    let rel_err = (1.0
+        + model.aux.step_hist.total_gravitational_energy_end / virial)
+        .abs();
+    if rel_err > c.output.warn_when_large_virial_thm_rel_err {
+        Some(rel_err)
+    } else {
+        None
+    }
+}
+
 /// Writes a binary `.photo` checkpoint inside `case_dir` using
 /// [`try_write_photo_bytes`], matching `star_write_photo`
 /// (`star/public/star_lib.f90:492-502`), `output`
@@ -481,6 +537,47 @@ fn write_mod_if_missing(
         })?;
     }
     Ok(())
+}
+
+/// Exports pulsation data for `model` into `case_dir.join(filename)` using
+/// `model.job.pulse_data_format`, `model.controls.add_center_point_to_pulse_data`,
+/// and `model.controls.add_atmosphere_to_pulse_data`
+/// (`star_export_pulse_data`, `star/job/run_star_support.f90:1283-1290`).
+///
+/// # Errors
+/// Returns [`StarError::InvalidInput`] if `filename` is empty or `"undefined"`,
+/// or if pulsation export fails; returns [`StarError::IoError`] if writing fails.
+pub fn write_pulse_data_to_case_dir(
+    model: &StarModel,
+    case_dir: &Path,
+    filename: &str,
+) -> Result<std::path::PathBuf, StarError> {
+    let trimmed = filename.trim();
+    if trimmed.is_empty() || trimmed.eq_ignore_ascii_case("undefined") {
+        return Err(StarError::InvalidInput(String::from(
+            "save_pulse_data_filename must be set to a valid filename when \
+             saving pulsation data",
+        )));
+    }
+    let out_path = case_dir.join(trimmed);
+    if let Some(parent) = out_path.parent() {
+        if !parent.as_os_str().is_empty() && !parent.exists() {
+            fs::create_dir_all(parent).map_err(|e| {
+                StarError::IoError(format!(
+                    "failed to create parent directory for {}: {e}",
+                    out_path.display()
+                ))
+            })?;
+        }
+    }
+    let text = crate::pulse_exporters::export_pulse_with_controls(model)?;
+    fs::write(&out_path, text).map_err(|e| {
+        StarError::IoError(format!(
+            "failed to write pulsation data {}: {e}",
+            out_path.display()
+        ))
+    })?;
+    Ok(out_path)
 }
 
 /// Telemetry and final state returned by a single `inlist` stage execution.
@@ -968,6 +1065,13 @@ fn run_inlist_stage_with_logs_inner(
                     model.model_number, rel_err
                 );
             }
+            if let Some(rel_err) = virial_thm_rel_err_exceeds_warn_limit(model)
+            {
+                eprintln!(
+                    "WARNING: virial_thm_rel_err  {}  {:.16e}",
+                    model.model_number, rel_err
+                );
+            }
             if will_terminate {
                 break;
             }
@@ -1020,6 +1124,15 @@ fn run_inlist_stage_with_logs_inner(
     {
         let out_path = bundle.case_dir.join(&model.job.save_model_filename);
         write_mod_if_missing(model, &out_path)?;
+    }
+
+    // Termination pulsation data save (`star/job/run_star_support.f90:793-794,1283-1290`).
+    if !abnormal_termination && model.job.save_pulse_data_when_terminate {
+        let _ = write_pulse_data_to_case_dir(
+            model,
+            &bundle.case_dir,
+            &model.job.save_pulse_data_filename,
+        )?;
     }
 
     let final_history = history_rows.last().copied().unwrap_or(init_hr);

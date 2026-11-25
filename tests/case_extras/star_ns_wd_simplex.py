@@ -21,6 +21,7 @@ Covers:
 from __future__ import annotations
 
 import pathlib
+from collections.abc import Sequence
 from typing import Any
 
 from flexmesa import constants
@@ -158,10 +159,12 @@ class PreMs1MToWdStarExtras:
 
     def __init__(self) -> None:
         self.params: dict[str, float] = dict(_XTRA_COEFF_DEFAULTS)
+        self._loaded_xtra_coeff_os = False
 
     def read_inlist_xtra_coeff_os(self, case_dir: pathlib.Path | str) -> None:
         """Read `inlist_xtra_coeff_os` namelist (`:2-49` of `xtra_coeff_os`)."""
         self.params = dict(_XTRA_COEFF_DEFAULTS)
+        self._loaded_xtra_coeff_os = False
         nml_path = pathlib.Path(case_dir) / "inlist_xtra_coeff_os"
         raw = nml_path.read_text(encoding="utf-8")
         in_nml = False
@@ -187,20 +190,15 @@ class PreMs1MToWdStarExtras:
             self.params[key_low] = _parse_fortran_float(val_str.rstrip(","))
         if not found:
             raise ValueError(f"Missing &xtra_coeff_os namelist in {nml_path}")
+        self._loaded_xtra_coeff_os = True
 
     def extras_controls(self, state: dict[str, Any]) -> None:
-        """Skip when `use_other_mesh_delta_coeff_factor` is false; else read
-        `inlist_xtra_coeff_os` and require `#153` (`:42-59`).
+        """Read `inlist_xtra_coeff_os` when
+        `use_other_mesh_delta_coeff_factor` is true (`:42-59`).
         """
         if not bool(state["use_other_mesh_delta_coeff_factor"]):
             return
         self.read_inlist_xtra_coeff_os(str(state["case_dir"]))
-        raise NotImplementedError(
-            "1M_pre_ms_to_wd: extras_controls registers "
-            "s% other_mesh_delta_coeff_factor "
-            "(star/test_suite/1M_pre_ms_to_wd/src/run_star_extras.f90:49), "
-            "which flexmesa-star StarExtras does not expose (#153)"
-        )
 
     def _select_os_pair(
         self, direction: str, max_eps: float, eps_h: float, eps_he: float
@@ -222,11 +220,30 @@ class PreMs1MToWdStarExtras:
     def eval_other_mesh_delta_coeff_factor(
         self, state: dict[str, Any]
     ) -> list[float]:
+        """Evaluate `s% mesh_delta_coeff_factor(1:nz)` from snapshot
+        `mesh_delta_coeff_factor` (`:52-256` of `xtra_coeff_os.inc`).
+        """
+        return self.other_mesh_delta_coeff_factor(
+            state, state["mesh_delta_coeff_factor"]
+        )
+
+    def other_mesh_delta_coeff_factor(
+        self,
+        state: dict[str, Any],
+        current: Sequence[float] | None = None,
+    ) -> list[float]:
         """Evaluate `s% mesh_delta_coeff_factor(1:nz)` (`:52-256` of
         `xtra_coeff_os.inc`).
         """
+        if not self._loaded_xtra_coeff_os and state.get("case_dir"):
+            nml_path = (
+                pathlib.Path(str(state["case_dir"])) / "inlist_xtra_coeff_os"
+            )
+            if nml_path.is_file():
+                self.read_inlist_xtra_coeff_os(str(state["case_dir"]))
         nz = int(state["nz"])
-        factors = [float(v) for v in state["mesh_delta_coeff_factor"][:nz]]
+        base = state["mesh_delta_coeff_factor"] if current is None else current
+        factors = [float(v) for v in base[:nz]]
         coef_keys = [
             k
             for k in self.params
@@ -471,15 +488,34 @@ class SimplexSolarCalibrationStarExtras:
     """Simplex solar-calibration callbacks and `gradr_grada_function` mesh
     weight from
     `star/test_suite/simplex_solar_calibration/src/run_star_extras.f90:41-251`.
+
+    Registers `other_mesh_functions` (`eval_gradr_grada_mesh_fcn`, `:61-62,
+    :211-251`) for the solar evolution run (`inlist_solar`); outer simplex
+    search orchestration (`star_simplex_procs`, `:55-59`) remains `#162`.
     """
 
-    def extras_controls(self, _state: dict[str, Any]) -> None:
-        """Fail loudly because `star_simplex_procs` (`#162`) and
-        `other_mesh_fcn_data` (`#153`) are not exposed (`:41-63`).
-        """
-        raise NotImplementedError(
-            "simplex_solar_calibration: extras_controls registers "
-            "star_simplex_procs (:55-59, #162) and "
-            "how_many_other_mesh_fcns/other_mesh_fcn_data (:61-62, #153), "
-            "which flexmesa-star StarExtras does not expose"
-        )
+    def extras_controls(self, _state: dict[str, Any]) -> dict[str, Any]:
+        """Return empty updates dictionary (`:41-63`)."""
+        return {}
+
+    def extras_startup(self, _state: dict[str, Any], _restart: bool) -> None:
+        """No-op test-suite startup (`:104-113`)."""
+        return None
+
+    def extras_check_model(self, _state: dict[str, Any]) -> str:
+        """Return `keep_going` (`:117-128`)."""
+        return "keep_going"
+
+    def extras_finish_step(self, _state: dict[str, Any]) -> str:
+        """Return `keep_going` (`:180-195`)."""
+        return "keep_going"
+
+    def extras_after_evolve(self, _state: dict[str, Any]) -> None:
+        """No-op test-suite post-evolve (`:198-208`)."""
+        return None
+
+    def other_mesh_functions(
+        self, state: dict[str, Any]
+    ) -> list[tuple[str, bool, list[float]]]:
+        """Return `gradr_grada_function` custom mesh weight (`:211-251`)."""
+        return [eval_gradr_grada_mesh_fcn(state)]

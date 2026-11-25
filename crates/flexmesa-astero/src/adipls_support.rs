@@ -4,23 +4,28 @@
 //! solver (`astero/private/adipls_support.f90` and
 //! `astero/private/astero_support.f90:108-156`).
 
-use std::path::Path;
+use std::fmt::Write as _;
+use std::fs;
+use std::path::{Path, PathBuf};
+use std::time::Instant;
 
 use flexmesa_adipls::{
     dfsig_from_delta_nu, fgong_amdl, parse_adipls_pruned_file,
     parse_redistrb_pruned_file, resolve_store_model_flags,
     sig_fac_adipls_support, sig_fac_astero_support, sig_from_nu_uhz,
     store_amdl, AdiplsCallerFlags, AdiplsControlState, AdiplsError,
-    AdiplsInput, AdiplsSolver, AsteroDefPulseFlags, FgongModel, RedistrbInput,
-    SetAdiplsControlsArgs, StoreAmdlOutput,
+    AdiplsInput, AdiplsSolver, AsteroDefPulseFlags, DefaultSigoutHandler,
+    FgongModel, NoopTapObserver, RedistrbInput, SetAdiplsControlsArgs,
+    SigoutArgs, SigoutHandler, StoreAmdlOutput,
 };
 use flexmesa_const::{RSUN, STANDARD_CGRAV};
 use flexmesa_star::controls::StarError;
 use flexmesa_star::eval_photosphere_info;
 use flexmesa_star::model::StarModel;
+use flexmesa_star::pulse::default_fgong_header;
 use flexmesa_star::pulse_fgong::{get_fgong_data, PulseDataInput};
 use flexmesa_star::pulse_gyre_data::GyreDataError;
-use flexmesa_star::pulse_write::FGONG_IVAR;
+use flexmesa_star::pulse_write::{fortran_1pe, write_fgong_data, FGONG_IVAR};
 
 use crate::gyre_support::OscResult;
 use crate::inlist_astero::AsteroSearchControls;
@@ -29,12 +34,29 @@ use crate::inlist_astero::AsteroSearchControls;
 /// `adipls_support` lifecycle (`init`, `store_model_for_adipls`,
 /// `do_adipls_get_one_el_info`, `get_one_el_info`).
 #[derive(Debug, Clone)]
+#[allow(clippy::struct_excessive_bools)]
 pub struct AsteroAdipls {
     solver: AdiplsSolver,
     redistrb_input: Option<RedistrbInput>,
     astero_def_flags: AsteroDefPulseFlags,
     default_add_atmosphere: bool,
     stored_model: Option<StoreAmdlOutput>,
+    adipls_irotkr: i32,
+    adipls_nprtkr: i32,
+    adipls_igm1kr: i32,
+    adipls_npgmkr: i32,
+    write_fgong_for_each_model: bool,
+    fgong_prefix: String,
+    fgong_postfix: String,
+    model_num_digits: usize,
+    astero_results_dir: PathBuf,
+    mode_output_dir: PathBuf,
+    save_mode_model_number: isize,
+    save_mode_filename: String,
+    el_to_save: i32,
+    order_to_save: i32,
+    trace_time_in_oscillation_code: bool,
+    last_oscillation_elapsed_sec: Option<f64>,
 }
 
 impl AsteroAdipls {
@@ -100,7 +122,41 @@ impl AsteroAdipls {
             },
             default_add_atmosphere: ctrl.add_atmosphere,
             stored_model: None,
+            adipls_irotkr: ctrl.adipls_irotkr,
+            adipls_nprtkr: ctrl.adipls_nprtkr,
+            adipls_igm1kr: ctrl.adipls_igm1kr,
+            adipls_npgmkr: ctrl.adipls_npgmkr,
+            write_fgong_for_each_model: ctrl.write_fgong_for_each_model,
+            fgong_prefix: ctrl.fgong_prefix.clone(),
+            fgong_postfix: ctrl.fgong_postfix.clone(),
+            model_num_digits: ctrl.model_num_digits,
+            astero_results_dir: case_dir.join(&ctrl.astero_results_directory),
+            mode_output_dir: case_dir.to_path_buf(),
+            save_mode_model_number: ctrl.save_mode_model_number,
+            save_mode_filename: ctrl.save_mode_filename.clone(),
+            el_to_save: ctrl.el_to_save,
+            order_to_save: ctrl.order_to_save,
+            trace_time_in_oscillation_code: ctrl.trace_time_in_oscillation_code,
+            last_oscillation_elapsed_sec: None,
         })
+    }
+
+    /// Redirects per-model FGONG and eigenfunction output roots (e.g. when
+    /// running under an explicit `output_root`).
+    pub fn set_output_root(
+        &mut self,
+        output_root: &Path,
+        results_subdir: &str,
+    ) {
+        self.mode_output_dir = output_root.to_path_buf();
+        self.astero_results_dir = output_root.join(results_subdir);
+    }
+
+    /// Wall-clock duration in seconds of the most recent ADIPLS solver call,
+    /// populated on every [`Self::get_one_el_info`] / [`Self::do_adipls_get_one_el_info`].
+    #[must_use]
+    pub const fn last_oscillation_elapsed_sec(&self) -> Option<f64> {
+        self.last_oscillation_elapsed_sec
     }
 
     /// Borrow the underlying [`AdiplsInput`] parsed from `adipls.c.pruned.in`.
@@ -198,6 +254,39 @@ impl AsteroAdipls {
             resolved.add_atmosphere,
         )
         .map_err(|e| map_pulse_err(&e))?;
+
+        if self.write_fgong_for_each_model {
+            fs::create_dir_all(&self.astero_results_dir).map_err(|e| {
+                StarError::IoError(format!(
+                    "failed creating astero_results_directory '{}': {e}",
+                    self.astero_results_dir.display()
+                ))
+            })?;
+            let num_str = format!(
+                "{:0width$}",
+                model.model_number,
+                width = self.model_num_digits
+            );
+            let fgong_path = self.astero_results_dir.join(format!(
+                "{}{}{}",
+                self.fgong_prefix.trim(),
+                num_str,
+                self.fgong_postfix.trim()
+            ));
+            let text = write_fgong_data(
+                &global_data,
+                &point_data,
+                &default_fgong_header(),
+                model.controls.fgong_ivers,
+            )
+            .map_err(|e| StarError::InvalidInput(e.to_string()))?;
+            fs::write(&fgong_path, text).map_err(|e| {
+                StarError::IoError(format!(
+                    "failed writing FGONG file '{}': {e}",
+                    fgong_path.display()
+                ))
+            })?;
+        }
 
         let nn = point_data.len();
         let mut flat = Vec::with_capacity(nn * FGONG_IVAR);
@@ -383,10 +472,10 @@ impl AsteroAdipls {
             sig2,
             dfsig,
             nsig: 2,
-            irotkr: 0,
-            nprtkr: 0,
-            igm1kr: 0,
-            npgmkr: 0,
+            irotkr: self.adipls_irotkr,
+            nprtkr: self.adipls_nprtkr,
+            igm1kr: self.adipls_igm1kr,
+            npgmkr: self.adipls_npgmkr,
         });
 
         let stored = self.stored_model.as_ref().ok_or_else(|| {
@@ -394,10 +483,62 @@ impl AsteroAdipls {
                 "ADIPLS store_for_adipls = false called before store_model",
             ))
         })?;
+        let save_active = self.save_mode_model_number > 0
+            && model.model_number.cast_signed() == self.save_mode_model_number
+            && l == self.el_to_save;
+        let save_path = resolve_mode_save_path(
+            &self.mode_output_dir,
+            &self.save_mode_filename,
+        );
+        let mut itrsig = controls.cadi_param.itrsig;
+        let iscan_eff = controls.cadi_param.iscan;
+        if iscan_eff > 1 && itrsig > 1 {
+            itrsig = 1;
+        }
+        let inp = self.solver.input();
+        let nfmod1 = inp.out.nfmode / 10;
+        let nfmode_lo = inp.out.nfmode % 10;
+        let nfmscn = i32::from(
+            (iscan_eff > 1 && itrsig != 1 && nfmode_lo > 0)
+                || (inp.int_ctrl.itmax == 0 && nfmod1 == 1),
+        );
+        let mut handler = AdiplsModeSaveSigoutHandler {
+            inner: DefaultSigoutHandler::new(
+                inp,
+                controls.coutpt.irotkr,
+                controls.coutpt.nprtkr,
+                controls.coutpt.igm1kr,
+                controls.coutpt.npgmkr,
+                nfmscn,
+                self.solver.setup().nobs_stmx,
+            ),
+            save_active,
+            target_el: self.el_to_save,
+            target_order: self.order_to_save,
+            save_path,
+            save_err: None,
+        };
+        let t0 = Instant::now();
+        let mut obs = NoopTapObserver;
         let call_out = self
             .solver
-            .run_call(&controls, &stored.x, &stored.aa, stored.data)
+            .run_call_with_hooks(
+                &controls,
+                &stored.x,
+                &stored.aa,
+                stored.data,
+                &mut obs,
+                &mut handler,
+            )
             .map_err(map_adipls_err)?;
+        let elapsed = t0.elapsed().as_secs_f64();
+        self.last_oscillation_elapsed_sec = Some(elapsed);
+        if self.trace_time_in_oscillation_code {
+            eprintln!("time in adipls: {elapsed:.6} s");
+        }
+        if let Some(err) = handler.save_err.take() {
+            return Err(err);
+        }
         if call_out.ierr_param != 0 {
             return Err(StarError::MicrophysicsError(format!(
                 "ADIPLS returned non-zero ierr_param={}",
@@ -405,8 +546,10 @@ impl AsteroAdipls {
             )));
         }
 
-        let mut modes: Vec<OscResult> = call_out
-            .modes
+        let mut modes: Vec<OscResult> = handler
+            .inner
+            .state
+            .mode_store
             .records
             .into_iter()
             .map(|m| OscResult {
@@ -420,6 +563,109 @@ impl AsteroAdipls {
             .collect();
         modes.sort_by(|a, b| a.cyclic_freq.total_cmp(&b.cyclic_freq));
         Ok(modes)
+    }
+}
+
+fn resolve_mode_save_path(base_dir: &Path, raw: &str) -> PathBuf {
+    let trimmed = raw.trim();
+    let rel = if trimmed.is_empty() {
+        "save_mode.data"
+    } else {
+        trimmed
+    };
+    let p = Path::new(rel);
+    if p.is_absolute() {
+        p.to_path_buf()
+    } else {
+        base_dir.join(p)
+    }
+}
+
+struct AdiplsModeSaveSigoutHandler {
+    inner: DefaultSigoutHandler,
+    save_active: bool,
+    target_el: i32,
+    target_order: i32,
+    save_path: PathBuf,
+    save_err: Option<StarError>,
+}
+
+impl SigoutHandler for AdiplsModeSaveSigoutHandler {
+    fn on_sigout(
+        &mut self,
+        args: &mut SigoutArgs<'_>,
+    ) -> Result<(), AdiplsError> {
+        let before = self.inner.state.mode_store.records.len();
+        self.inner.on_sigout(args)?;
+        if !self.save_active || self.save_err.is_some() {
+            return Ok(());
+        }
+        let after = self.inner.state.mode_store.records.len();
+        if after <= before {
+            return Ok(());
+        }
+        let rec = &self.inner.state.mode_store.records[after - 1];
+        if rec.el != self.target_el || rec.order != self.target_order {
+            return Ok(());
+        }
+        let skip =
+            usize::from(args.x.first().is_some_and(|v| v.abs() < 1.0e-20));
+        let nn = args.nn.min(args.x.len());
+        let mut buf = String::new();
+        let _ = writeln!(
+            buf,
+            "{:>8}{:>8}{:>8}{:>20}{:>20}{:>20}",
+            "el", "order", "em", "freq (microHz)", "inertia", "nn"
+        );
+        let _ = writeln!(
+            buf,
+            "{:8}{:8}{:8}{:20.10}{}{:20}",
+            rec.el,
+            rec.order,
+            rec.em,
+            rec.cyclic_freq_uhz,
+            fortran_1pe(rec.inertia, 20, 10, None),
+            nn.saturating_sub(skip)
+        );
+        let _ = writeln!(
+            buf,
+            "x = r/R;  y_r = xi_r/R;  y_h = xi_h*l*(l+1)/R;  displacement xi normalized to xi_r = R at surface."
+        );
+        let _ =
+            writeln!(buf, "{:>6}{:>26}{:>26}{:>26}", "i", "x", "y_r", "y_h");
+        for idx in skip..nn {
+            let base = idx * args.iy;
+            let y_r = args.y.get(base).copied().unwrap_or(0.0);
+            let y_h = if rec.el > 0 {
+                args.y.get(base + 1).copied().unwrap_or(0.0)
+            } else {
+                0.0
+            };
+            let _ = writeln!(
+                buf,
+                "{:6}{}{}{}",
+                idx - skip + 1,
+                fortran_1pe(args.x[idx], 26, 16, None),
+                fortran_1pe(y_r, 26, 16, None),
+                fortran_1pe(y_h, 26, 16, None),
+            );
+        }
+        if let Some(parent) = self.save_path.parent() {
+            if let Err(e) = fs::create_dir_all(parent) {
+                self.save_err = Some(StarError::IoError(format!(
+                    "failed creating save_mode_filename parent '{}': {e}",
+                    parent.display()
+                )));
+                return Ok(());
+            }
+        }
+        if let Err(e) = fs::write(&self.save_path, buf) {
+            self.save_err = Some(StarError::IoError(format!(
+                "failed writing save_mode_filename '{}': {e}",
+                self.save_path.display()
+            )));
+        }
+        Ok(())
     }
 }
 

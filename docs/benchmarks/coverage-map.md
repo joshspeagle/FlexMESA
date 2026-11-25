@@ -57,7 +57,7 @@ Compared against MESA `26.4.1` `.defaults` schemas, **248 / 1,444** `&controls` 
 | `star &controls` | 1,444 | 1,179 | 1,179 | 0 | 0 | 17 | 248 |
 | `star &star_job` | 455 | 196 | 196 | 0 | 0 | 1 | 258 |
 | `binary &binary_controls + &binary_job` | 209 | 145 | 145 | 0 | 0 | 1 | 63 |
-| `astero &astero_search_controls` | 150 | 136 | 136 | 0 | 0 | 2 | 12 |
+| `astero &astero_search_controls` | 150 | 137 | 137 | 0 | 0 | 1 | 12 |
 | `eos &eos` | 102 | 60 | 60 | 0 | 0 | 0 | 42 |
 | `kap &kap` | 36 | 21 | 21 | 0 | 0 | 0 | 15 |
 

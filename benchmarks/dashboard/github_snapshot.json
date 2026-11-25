@@ -101,7 +101,7 @@
     },
     {
       "phase": "Phase C",
-      "open": 16,
+      "open": 20,
       "closed": 14,
       "issues": [
         {
@@ -253,6 +253,26 @@
           "number": 453,
           "title": "[Extras] make_env: star_lib public API subset for case extras, and create_env as a test-side hook",
           "state": "closed"
+        },
+        {
+          "number": 536,
+          "title": "[Parity] irradiated_planet evolve stage: dlnE_dt Jacobian partials in lnR and species differ by 1 ulp from MESA",
+          "state": "open"
+        },
+        {
+          "number": 537,
+          "title": "[Parity] hb_2M: net d_eps_nuc_dRho differs by 1 ulp from MESA at model 64 zone 1810 (pp_and_cno_extras)",
+          "state": "open"
+        },
+        {
+          "number": 538,
+          "title": "[Parity] TDC inputs at step boundaries: full set_hydro_vars after the solve and no reset_starting_vectors",
+          "state": "open"
+        },
+        {
+          "number": 539,
+          "title": "[Parity] star/magnetic_braking: pass/fail flips on the upstream eval_slope summation order",
+          "state": "open"
         }
       ]
     },

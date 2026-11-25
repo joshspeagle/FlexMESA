@@ -5,9 +5,9 @@
 //! and `do_prune_mesh_surface` in `star/private/mesh_adjust.f90:1-2889` and
 //! `star/private/adjust_mesh.f90:36-580`).
 
-use flexmesa_chem::{NuclideCatalog, get_composition_info};
-use flexmesa_const::{FOUR_THIRDS_PI, LN10, ONE_THIRD};
-use flexmesa_eos::{I_LN_E, eos_dt_get_t};
+use flexmesa_chem::{get_composition_info, NuclideCatalog};
+use flexmesa_const::{FOUR_THIRDS_PI, LN10, ONE_THIRD, STANDARD_CGRAV};
+use flexmesa_eos::{eos_dt_get_t, I_LN_E};
 use flexmesa_interp1d::interpolate_vector_pm;
 
 use crate::adjust_mesh_support::{
@@ -1176,12 +1176,20 @@ pub(crate) fn execute_adjust_mesh_from_plan_with(
     let d_mix_old = model.d_mix.clone();
     let old_r = model.r.clone();
     let old_rho = model.rho.clone();
+    let cgrav_old = model.cgrav.clone();
     let (age_old, dt_old, mstar_old) =
         (model.star_age_old, model.dt_old, model.mstar_old);
     let prev_okay_mlt_vc = model.aux.okay_to_set_mlt_vc;
     let prev_have_new_generation = model.aux.mixing.have_new_generation;
 
     model.resize_zones(nz);
+    let default_cgrav = cgrav_old.first().copied().unwrap_or(STANDARD_CGRAV);
+    for k in 0..nz {
+        model.cgrav[k] = cgrav_old
+            .get(comes_from[k])
+            .copied()
+            .unwrap_or(default_cgrav);
+    }
     model.dq.copy_from_slice(&plan.dq_new);
     fix_tail_dq(&mut model.dq)?;
     model.set_qs();
@@ -1750,7 +1758,11 @@ pub(crate) fn execute_adjust_mesh_from_plan_with(
                     };
                 }
                 let cand = avg_energy + delta_e;
-                if cand <= 0.0 { avg_energy } else { cand }
+                if cand <= 0.0 {
+                    avg_energy
+                } else {
+                    cand
+                }
             };
         energy_new[k] = target_e;
 
@@ -1957,6 +1969,8 @@ pub fn do_prune_mesh_surface(
         &mut model.mlt_vc,
         &mut model.j_rot,
         &mut model.omega,
+        &mut model.cgrav,
+        &mut model.aux.mass_correction,
         &mut model.aux.i_rot,
         &mut model.aux.fp_rot,
         &mut model.aux.ft_rot,

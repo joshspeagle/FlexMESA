@@ -86,19 +86,38 @@ pub fn eval1_a_times_v_face_v_flag_ad(
             v_f
         }
     } else {
-        let dt = model.dt.max(1.0e-30);
-        let r_f = lnr_f.exp();
+        // `u_face_ad%val = (s% r(k) - s% r_start(k))/s% dt` with
+        // `d1Array(i_lnR_00) = s% r(k)/s% dt`, both halved first when time
+        // centering (`star/private/hydro_energy.f90:810-816`).
+        let dt = model.dt;
+        let r_f = model.r[f_idx];
         let rs_f = flexmesa_math::exp(lnr_s_f);
-        let scale = if vel_tc { 0.5 / dt } else { 1.0 / dt };
-        (r_f - rs_f) * scale
+        let mut u_face = StarAdOrder1::ZERO;
+        if vel_tc {
+            u_face.val = 0.5 * (r_f - rs_f) / dt;
+            u_face.d1[I_LNR_00] = 0.5 * r_f / dt;
+        } else {
+            u_face.val = (r_f - rs_f) / dt;
+            u_face.d1[I_LNR_00] = r_f / dt;
+        }
+        u_face
     };
     area_f * vc_f
 }
 
+/// `s% dlnPeos_dxa_for_partials(j, cell)` (0 when the partials are not set).
+fn dlnp_dxa(model: &StarModel, cell: usize, j: usize) -> f64 {
+    model
+        .aux
+        .dln_peos_dxa_for_partials
+        .get(cell * model.species + j)
+        .copied()
+        .unwrap_or(0.0)
+}
+
 /// Evaluates face mechanical power $W_f = A_f v_{c,f} P_{\mathrm{face},f}$ in
-/// $\mathrm{erg\,s^{-1}}$ and composition-derivative prefactors
-/// `(fac_dxa00, fac_dxam1)` multiplying `dln_peos_dxa[f_idx, j]` and
-/// `dln_peos_dxa[f_idx - 1, j]` (`eval1_work` in
+/// $\mathrm{erg\,s^{-1}}$ and its composition partials
+/// `(d_work_dxa00, d_work_dxam1)`, one entry per species (`eval1_work` in
 /// `star/private/hydro_energy.f90:634-813`).
 #[must_use]
 pub fn eval1_work_v_flag_ad(
@@ -106,12 +125,17 @@ pub fn eval1_work_v_flag_ad(
     f_idx: usize,
     skip_peos: bool,
     vel_tc: bool,
-) -> (StarAdOrder1, f64, f64) {
+) -> (StarAdOrder1, Vec<f64>, Vec<f64>) {
+    let sp = model.species;
     if f_idx >= model.nz {
         let p_in = model.peos_start.last().copied().unwrap_or(0.0);
         let work_center =
             FOUR_PI * model.r_center * model.r_center * p_in * model.v_center;
-        return (StarAdOrder1::constant(work_center), 0.0, 0.0);
+        return (
+            StarAdOrder1::constant(work_center),
+            vec![0.0; sp],
+            vec![0.0; sp],
+        );
     }
     let av_ad = eval1_a_times_v_face_v_flag_ad(model, f_idx, vel_tc);
     let (alfa, beta) = if f_idx > 0 {
@@ -125,8 +149,11 @@ pub fn eval1_work_v_flag_ad(
         1.0
     };
 
-    let (peos_ad, fac_dxa00, fac_dxam1) = if skip_peos {
-        (StarAdOrder1::ZERO, 0.0, 0.0)
+    // `d_Pface_dxa00` and `d_Pface_dxam1` (`hydro_energy.f90:674-700`).
+    let mut d_pface_dxa00 = vec![0.0; sp];
+    let mut d_pface_dxam1 = vec![0.0; sp];
+    let peos_ad = if skip_peos {
+        StarAdOrder1::ZERO
     } else {
         let p_s_l = model
             .peos_start
@@ -149,14 +176,24 @@ pub fn eval1_work_v_flag_ad(
         } else {
             StarAdOrder1::ZERO
         };
-        let av_val = av_ad.val;
-        let f_00 = av_val * alfa * p_theta * model.peos[f_idx];
-        let f_m1 = if f_idx > 0 {
-            av_val * beta * p_theta * model.peos[f_idx - 1]
+        if f_idx > 0 {
+            for j in 0..sp {
+                d_pface_dxa00[j] = alfa * dlnp_dxa(model, f_idx, j) * p_theta
+                    * model.peos[f_idx];
+            }
+            for j in 0..sp {
+                d_pface_dxam1[j] = beta
+                    * dlnp_dxa(model, f_idx - 1, j)
+                    * p_theta
+                    * model.peos[f_idx - 1];
+            }
         } else {
-            0.0
-        };
-        (pl_ad * alfa + pr_ad * beta, f_00, f_m1)
+            for j in 0..sp {
+                d_pface_dxa00[j] =
+                    dlnp_dxa(model, f_idx, j) * p_theta * model.peos[f_idx];
+            }
+        }
+        pl_ad * alfa + pr_ad * beta
     };
 
     let pvsc_ad = if model.controls.use_pvsc_art_visc {
@@ -212,35 +249,60 @@ pub fn eval1_work_v_flag_ad(
     };
 
     let p_face_ad = peos_ad + pvsc_ad + ptrb_ad + mlt_pturb_ad;
-    (av_ad * p_face_ad, fac_dxa00, fac_dxam1)
+    // `d_work_dxa00(j) = Av_face*d_Pface_dxa00(j)` (`hydro_energy.f90:771-775`).
+    let av_face = av_ad.val;
+    let d_work_dxa00 = d_pface_dxa00.iter().map(|d| av_face * d).collect();
+    let d_work_dxam1 = d_pface_dxam1.iter().map(|d| av_face * d).collect();
+    (av_ad * p_face_ad, d_work_dxa00, d_work_dxam1)
+}
+
+/// Composition partials of the work difference across cell `k`
+/// (`d_dwork_dxam1`, `d_dwork_dxa00`, `d_dwork_dxap1` of `eval_dwork`), one
+/// entry per species, not yet divided by `dm`.
+pub struct DworkDxa {
+    /// `d_dwork_dxam1`.
+    pub dxam1: Vec<f64>,
+    /// `d_dwork_dxa00`.
+    pub dxa00: Vec<f64>,
+    /// `d_dwork_dxap1`.
+    pub dxap1: Vec<f64>,
 }
 
 /// Evaluates spherical mechanical work divergence
-/// $dW/dm = (W_k - W_{k+1}) / \Delta m_k$ and 3-cell composition-derivative
-/// prefactors `(fac_dm_dxam1, fac_dm_dxa00, fac_dm_dxap1)` (`eval_dwork` in
-/// `star/private/hydro_energy.f90:582-630`).
+/// $dW/dm = (W_k - W_{k+1}) / \Delta m_k$ (`eval_dwork` and
+/// `setup_dwork_dm` in `star/private/hydro_energy.f90:163-190, 561-610`) and
+/// the composition partials of $W_k - W_{k+1}$.
 #[must_use]
 pub fn eval_v_flag_dwork_dm_ad(
     model: &StarModel,
     k: usize,
     skip_peos: bool,
     vel_tc: bool,
-) -> (StarAdOrder1, f64, f64, f64) {
-    let dm_k = model.dm[k].max(1.0e-30);
-    let (work_00, fac_00_dxa00, fac_00_dxam1) =
+) -> (StarAdOrder1, DworkDxa) {
+    let dm_k = model.dm[k];
+    let (work_00, d_work_00_dxa00, d_work_00_dxam1) =
         eval1_work_v_flag_ad(model, k, skip_peos, vel_tc);
-    let (work_p1_raw, fac_p1_dxap1, fac_p1_dxa00) =
+    let (work_p1_raw, d_work_p1_dxap1, d_work_p1_dxa00) =
         eval1_work_v_flag_ad(model, k + 1, skip_peos, vel_tc);
     let work_p1 = if k + 1 < model.nz {
         work_p1_raw.shift_p1()
     } else {
         work_p1_raw
     };
+    // `hydro_energy.f90:588-592`.
+    let dxa00 = d_work_00_dxa00
+        .iter()
+        .zip(&d_work_p1_dxa00)
+        .map(|(a, b)| a - b)
+        .collect();
+    let dxap1 = d_work_p1_dxap1.iter().map(|d| -d).collect();
     (
         (work_00 - work_p1) / dm_k,
-        fac_00_dxam1 / dm_k,
-        (fac_00_dxa00 - fac_p1_dxa00) / dm_k,
-        -fac_p1_dxap1 / dm_k,
+        DworkDxa {
+            dxam1: d_work_00_dxam1,
+            dxa00,
+            dxap1,
+        },
     )
 }
 
@@ -272,30 +334,40 @@ pub(crate) fn eval_simple_pdv_p_tot_ad(
     (p_tot_ad, p_theta)
 }
 
-/// Evaluates `eval_simple_PdV_work` divided by $\Delta m_k$ (`P_tot * (A_k v_{c,k}
-/// - A_{k+1} v_{c,k+1}) / dm_k`) and diagonal composition prefactor `fac_dm_dxa00`
-/// (`star/private/hydro_energy.f90:830-879`).
+/// Evaluates `eval_simple_PdV_work` divided by $\Delta m_k$, `(P_tot * dV)/dm_k`
+/// with `dV = A_k v_{c,k} - A_{k+1} v_{c,k+1}` (`setup_dwork_dm` and
+/// `eval_simple_PdV_work`, `star/private/hydro_energy.f90:163-190, 824-877`),
+/// and `d_dwork_dxa00`, one entry per species, not yet divided by `dm`.
 #[must_use]
 pub fn eval_v_flag_simple_pdv_dm_ad(
     model: &StarModel,
     k: usize,
     skip_peos: bool,
     vel_tc: bool,
-) -> (StarAdOrder1, f64) {
-    let dm_k = model.dm[k].max(1.0e-30);
+) -> (StarAdOrder1, Vec<f64>) {
+    let dm_k = model.dm[k];
     let av_00 = eval1_a_times_v_face_v_flag_ad(model, k, vel_tc);
     let av_p1 = if k + 1 < model.nz {
         eval1_a_times_v_face_v_flag_ad(model, k + 1, vel_tc).shift_p1()
     } else {
         eval1_a_times_v_face_v_flag_ad(model, model.nz, vel_tc)
     };
-    let dv_dm = (av_00 - av_p1) / dm_k;
+    let dv = av_00 - av_p1;
 
     let (p_tot_ad, p_theta) = eval_simple_pdv_p_tot_ad(model, k, skip_peos);
-    let fac_dm_dxa00 = if skip_peos {
-        0.0
-    } else {
-        p_theta * model.peos[k] * dv_dm.val
-    };
-    (p_tot_ad * dv_dm, fac_dm_dxa00)
+    // `d_Ptot_dxa(j) = alfa*(Peos(k)*dlnPeos_dxa_for_partials(j,k))`
+    // (`star/private/star_utils.f90:3403-3406`) and
+    // `d_dwork_dxa00(j) = d_Ptot_dxa(j)*(Av_face00 - Av_facep1)`
+    // (`hydro_energy.f90:867-869`).
+    let dav = av_00.val - av_p1.val;
+    let d_dwork_dxa00 = (0..model.species)
+        .map(|j| {
+            if skip_peos {
+                0.0
+            } else {
+                p_theta * (model.peos[k] * dlnp_dxa(model, k, j)) * dav
+            }
+        })
+        .collect();
+    ((p_tot_ad * dv) / dm_k, d_dwork_dxa00)
 }

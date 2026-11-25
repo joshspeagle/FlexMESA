@@ -27,8 +27,8 @@ use crate::edd_wind::{
 use crate::extras::{BinaryExtras, DefaultBinaryExtras};
 use crate::inlist::BinaryInlistControls;
 use crate::mdot::{
-    eval_arras_mdot_thin, eval_kolb_mdot_eccentric, eval_kolb_mdot_thick,
-    eval_ritter_mdot_eccentric,
+    eval_arras_mdot_thin, eval_kolb_mdot_eccentric_photosphere,
+    eval_kolb_mdot_thick_photosphere, eval_ritter_mdot_eccentric,
 };
 use crate::system_jdot::{
     star_photosphere_radius_cm, EdotBreakdown, JdotBreakdown,
@@ -504,8 +504,8 @@ pub fn prepare_coupled_mdots(
 
 /// Evaluates coupled winds, Bondi-Hoyle wind transfer, decoupled Eddington
 /// retention vs. radiation-corrected accretion (`binary_mdot.f90:428-622`), and
-/// configures `donor` and optional `accretor` `mass_change`, `mstar_dot`, and
-/// `accreted_material_j` before calling `star_evolve_step`.
+/// configures `donor` and optional `accretor` `mstar_dot`, accretion
+/// composition, and `accreted_material_j` before `star_evolve_step_part2`.
 #[allow(clippy::too_many_arguments)]
 pub fn prepare_coupled_mdots_with_extras(
     ctrl: &BinaryInlistControls,
@@ -635,12 +635,11 @@ pub fn prepare_coupled_mdots_with_extras(
     let w_tr_d = w_d * f_wt_d;
     let w_tr_a = w_a * f_wt_a;
     let donor_net_mdot = mtransfer_rate + w_d - w_tr_a;
-    donor.controls.mass_change = mtransfer_rate / MSUN * SECYER;
-    donor.controls.use_other_adjust_mdot = true;
+    // `binary/private/binary_mdot.f90:548-550` and
+    // `star/private/evolve_support.f90:100`: upstream sets `s_donor% mstar_dot`
+    // directly without mutating `mass_change` or `use_other_adjust_mdot` (so
+    // `part1` snapshots `mstar_dot_old` per step).
     donor.controls.mix_wind.use_accreted_material_j = false;
-    if donor.aux.step_hist.mstar_dot_old == 0.0 && donor.model_number > 0 {
-        donor.aux.step_hist.mstar_dot_old = donor.mstar_dot;
-    }
     donor.mstar_dot = donor_net_mdot;
 
     let mut out = CoupledMdotAccounting {
@@ -671,11 +670,8 @@ pub fn prepare_coupled_mdots_with_extras(
         let actual_tr = mtransfer_rate * fixed_xfer + w_tr_d;
         let retained = (-actual_tr).max(0.0);
         let acc_net_mdot = retained + w_a;
-        acc.controls.mass_change = retained / MSUN * SECYER;
-        acc.controls.use_other_adjust_mdot = true;
-        if acc.aux.step_hist.mstar_dot_old == 0.0 && acc.model_number > 0 {
-            acc.aux.step_hist.mstar_dot_old = acc.mstar_dot;
-        }
+        // `binary/private/binary_mdot.f90:552-560`: upstream updates
+        // `s_accretor% mstar_dot` directly without touching `mass_change`.
         acc.mstar_dot = acc_net_mdot;
         if retained > 0.0 && donor.nz > 0 && donor.species == acc.species {
             acc.controls.accrete_same_as_surface = false;
@@ -705,11 +701,15 @@ pub fn prepare_coupled_mdots_with_extras(
             ctrl.do_j_accretion && acc_net_mdot > 0.0;
         acc.controls.mix_wind.accreted_material_j = out.accreted_material_j;
         out.component_mdot = [donor_net_mdot, acc_net_mdot];
-        out.mdot_system_transfer = [
-            mtransfer_rate * ctrl.mass_transfer_alpha,
-            mtransfer_rate * ctrl.mass_transfer_beta,
-        ];
-        out.mdot_system_cct = mtransfer_rate * ctrl.mass_transfer_delta;
+        // `binary/private/binary_mdot.f90:605-614`: only ascribe `alpha`/`beta`/`delta`
+        // outflows when net RLOF + donor wind transfer leaves the donor (`< 0`).
+        if mtransfer_rate + w_tr_d < 0.0 {
+            out.mdot_system_transfer = [
+                mtransfer_rate * ctrl.mass_transfer_alpha,
+                mtransfer_rate * ctrl.mass_transfer_beta,
+            ];
+            out.mdot_system_cct = mtransfer_rate * ctrl.mass_transfer_delta;
+        }
     }
     Ok(out)
 }
@@ -753,12 +753,10 @@ pub fn eval_scheme_explicit_mdot_with_steps(
         return Ok(0.0);
     }
     let (m_d, r_d) = (donor.mstar, RSUN * eval_photosphere_info(donor).r_rsun);
-    let (rho0, p0, t0, mu0) = (
-        donor.rho[0].max(1.0e-30),
-        donor.peos[0].max(1.0),
-        donor.t[0].max(10.0),
-        donor.mu[0].max(0.5),
-    );
+    // `binary/private/binary_mdot.f90:693-697, 800-804, 843-847`: upstream
+    // reads raw zone-1 `rho`, `Peos`, `T`, and `mu` without synthetic floors.
+    let (rho0, p0, t0, mu0) =
+        (donor.rho[0], donor.peos[0], donor.t[0], donor.mu[0]);
     let mdot = if scheme.eq_ignore_ascii_case("Arras") {
         eval_arras_mdot_thin(m_d, m_accretor, separation, r_d, rho0, t0, mu0)
     } else if scheme.eq_ignore_ascii_case("Kolb") {
@@ -775,10 +773,13 @@ pub fn eval_scheme_explicit_mdot_with_steps(
             true,
             anomaly_steps,
         );
+        // `binary/private/binary_mdot.f90:775, 913`: upstream gates the
+        // optically thick Kolb integral on photospheric `b% r(b% d_i)`.
         let thick = if eccentricity > 0.0 {
-            eval_kolb_mdot_eccentric(
+            eval_kolb_mdot_eccentric_photosphere(
                 m_d,
                 m_accretor,
+                r_d,
                 rl_donor,
                 eccentricity,
                 &donor.r,
@@ -789,9 +790,10 @@ pub fn eval_scheme_explicit_mdot_with_steps(
                 anomaly_steps,
             )
         } else {
-            eval_kolb_mdot_thick(
+            eval_kolb_mdot_thick_photosphere(
                 m_d,
                 m_accretor,
+                r_d,
                 rl_donor,
                 &donor.r,
                 &donor.peos,
@@ -823,9 +825,9 @@ pub fn eval_scheme_explicit_mdot_with_steps(
     Ok(mdot)
 }
 
-/// Blends explicit mass-transfer rate with the previous step's rate (`cur_mdot_frac`)
-/// and caps at `max_explicit_abs_mdot` ($M_\odot\,\mathrm{yr}^{-1}$)
-/// (`binary_evolve.f90:445-447`).
+/// Blends explicit mass-transfer rate with the previous step's rate (`cur_mdot_frac`),
+/// clamping positive explicit rates to zero before blending (`binary_evolve.f90:439-447`),
+/// and caps at `max_explicit_abs_mdot` ($M_\odot\,\mathrm{yr}^{-1}$).
 #[must_use]
 pub fn blend_explicit_mdot(
     prev_mdot: f64,
@@ -834,7 +836,10 @@ pub fn blend_explicit_mdot(
     max_explicit_abs_mdot_msun_yr: f64,
 ) -> f64 {
     let w = cur_mdot_frac.clamp(0.0, 1.0);
-    let blended = prev_mdot * w + explicit_mdot * (1.0 - w);
+    // `binary/private/binary_evolve.f90:439-445`: zero positive `new_mdot`
+    // before blending `cur_mdot_frac*mtransfer_rate + (1-cur_mdot_frac)*new_mdot`.
+    let clamped_explicit = explicit_mdot.min(0.0);
+    let blended = prev_mdot * w + clamped_explicit * (1.0 - w);
     let cap_cgs = max_explicit_abs_mdot_msun_yr.max(0.0) * (MSUN / SECYER);
     blended.min(0.0).max(-cap_cgs)
 }
@@ -943,15 +948,18 @@ pub(crate) fn sync_vars_for_new_step_star(
 pub(crate) struct StarAttemptPart1 {
     part1: StarStepPart1State,
     saved_age_limits: (f64, Option<f64>, f64),
-    saved_other_wind: bool,
+    saved_other_wind: Option<bool>,
     op_split: bool,
 }
 
 impl StarAttemptPart1 {
-    /// Restores the caller's saved age limits and `use_other_wind` flag if an
-    /// intermediate binary hook fails before [`finish_single_star_attempt`].
+    /// Restores the caller's saved age limits and optional masked
+    /// `use_other_wind` flag if an intermediate binary hook fails before
+    /// [`finish_single_star_attempt_with_extras`].
     pub(crate) fn restore_guards(self, star: &mut StarModel) {
-        star.controls.use_other_wind = self.saved_other_wind;
+        if let Some(prev) = self.saved_other_wind {
+            star.controls.use_other_wind = prev;
+        }
         (
             star.controls.max_age,
             star.controls.max_age_in_seconds,
@@ -960,27 +968,25 @@ impl StarAttemptPart1 {
     }
 }
 
-/// Runs `star_evolve_step_part1` with binary age-limit masking so
-/// `prepare_coupled_mdots_with_extras` runs on the post-`part1` star state
-/// (`run_binary_support.f90:456-500`), leaving `star.controls.use_other_wind`
-/// untouched for `extras.other_wind`.
-pub(crate) fn begin_single_star_attempt(
+fn begin_single_star_attempt_core(
     star: &mut StarModel,
     dt_try: f64,
     first_try: bool,
     allow_remesh: bool,
+    extras: &mut dyn StarExtras,
+    mask_other_wind: bool,
 ) -> Result<StarAttemptPart1, StarError> {
+    // `run_binary_support.f90:456-503` & `star/private/evolve_support.f90:100`:
+    // run `star_evolve_step_part1` while deferring `max_age*` checks to the
+    // binary loop, without overriding `use_other_adjust_mdot` or freezing
+    // `mstar_dot_old` so `part1` snapshots each previous step's `mstar_dot`.
     let saved_age_limits = (
         std::mem::replace(&mut star.controls.max_age, 1.0e36),
         star.controls.max_age_in_seconds.take(),
         std::mem::replace(&mut star.controls.ts_stop.max_age_in_days, -1.0),
     );
-    let saved_other_wind =
-        std::mem::replace(&mut star.controls.use_other_wind, false);
-    if star.aux.step_hist.mstar_dot_old == 0.0 && star.model_number > 0 {
-        star.aux.step_hist.mstar_dot_old = star.mstar_dot;
-    }
-    star.controls.use_other_adjust_mdot = true;
+    let saved_other_wind = mask_other_wind
+        .then(|| std::mem::replace(&mut star.controls.use_other_wind, false));
     star.dt = dt_try;
     star.dt_next = dt_try;
     let do_remesh = allow_remesh
@@ -988,17 +994,16 @@ pub(crate) fn begin_single_star_attempt(
         && star.controls.mesh_delta_coeff > 0.0
         && dt_try >= star.controls.mix_wind.remesh_dt_limit;
     let op_split = star.controls.op_split_burn;
-    let mut extras = DefaultStarExtras;
     let part1_res = star_evolve_step_part1(
         star,
         first_try,
         allow_remesh,
         do_remesh,
-        &mut extras,
+        extras,
     );
-    // Expose `star.controls.use_other_wind` to binary wind hooks between
-    // part 1 and part 2.
-    star.controls.use_other_wind = saved_other_wind;
+    if let Some(prev) = saved_other_wind {
+        star.controls.use_other_wind = prev;
+    }
     match part1_res {
         Ok(part1) => Ok(StarAttemptPart1 {
             part1,
@@ -1017,31 +1022,77 @@ pub(crate) fn begin_single_star_attempt(
     }
 }
 
-/// Runs `star_evolve_step_part2` and restores masked star controls
-/// (`run_binary_support.f90:503`).
-pub(crate) fn finish_single_star_attempt(
+/// Runs `star_evolve_step_part1` with binary-coupled [`StarWindExtrasAdapter`]
+/// (`run_binary_support.f90:456-500`) so `extras.other_wind_cgs` applies during
+/// `part1` whenever `star.controls.use_other_wind` is enabled.
+pub(crate) fn begin_single_star_attempt_with_extras(
+    star: &mut StarModel,
+    dt_try: f64,
+    first_try: bool,
+    allow_remesh: bool,
+    star_idx: usize,
+    ignore_rlof: bool,
+    extras: &mut dyn BinaryExtras,
+) -> Result<StarAttemptPart1, StarError> {
+    let mut adapter = StarWindExtrasAdapter {
+        extras: RefCell::new(extras),
+        star_idx,
+        ignore_rlof,
+    };
+    begin_single_star_attempt_core(
+        star,
+        dt_try,
+        first_try,
+        allow_remesh,
+        &mut adapter,
+        false,
+    )
+}
+
+fn finish_single_star_attempt_core(
     star: &mut StarModel,
     state: StarAttemptPart1,
     first_try: bool,
+    extras: &mut dyn StarExtras,
 ) -> Result<StarStepAttemptOutcome, StarError> {
-    let saved_other_wind =
-        std::mem::replace(&mut star.controls.use_other_wind, false);
-    let mut extras = DefaultStarExtras;
+    let masked_wind = state
+        .saved_other_wind
+        .map(|_| std::mem::replace(&mut star.controls.use_other_wind, false));
     let res = star_evolve_step_part2(
         star,
         state.part1,
         first_try,
         state.op_split,
         true,
-        &mut extras,
+        extras,
     );
-    star.controls.use_other_wind = saved_other_wind;
+    if let Some(prev) = masked_wind {
+        star.controls.use_other_wind = prev;
+    }
     (
         star.controls.max_age,
         star.controls.max_age_in_seconds,
         star.controls.ts_stop.max_age_in_days,
     ) = state.saved_age_limits;
     res
+}
+
+/// Runs `star_evolve_step_part2` with binary-coupled [`StarWindExtrasAdapter`]
+/// and restores deferred star limits (`run_binary_support.f90:503`).
+pub(crate) fn finish_single_star_attempt_with_extras(
+    star: &mut StarModel,
+    state: StarAttemptPart1,
+    first_try: bool,
+    star_idx: usize,
+    ignore_rlof: bool,
+    extras: &mut dyn BinaryExtras,
+) -> Result<StarStepAttemptOutcome, StarError> {
+    let mut adapter = StarWindExtrasAdapter {
+        extras: RefCell::new(extras),
+        star_idx,
+        ignore_rlof,
+    };
+    finish_single_star_attempt_core(star, state, first_try, &mut adapter)
 }
 
 /// Advances a single [`StarModel`] through ONE non-looping
@@ -1061,9 +1112,16 @@ pub fn evolve_single_star_attempt(
     first_try: bool,
     allow_remesh: bool,
 ) -> Result<StarStepAttemptOutcome, StarError> {
-    let state =
-        begin_single_star_attempt(star, dt_try, first_try, allow_remesh)?;
-    finish_single_star_attempt(star, state, first_try)
+    let mut extras = DefaultStarExtras;
+    let state = begin_single_star_attempt_core(
+        star,
+        dt_try,
+        first_try,
+        allow_remesh,
+        &mut extras,
+        true,
+    )?;
+    finish_single_star_attempt_core(star, state, first_try, &mut extras)
 }
 
 /// Advances a single [`StarModel`] through `star_evolve_step` at trial timestep

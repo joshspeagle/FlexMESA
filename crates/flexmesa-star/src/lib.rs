@@ -144,6 +144,8 @@ pub mod pulse_utils;
 pub mod pulse_write;
 pub mod relax;
 pub mod relax_comp;
+pub mod relax_entropy;
+pub mod remove_surface_cut;
 pub(crate) mod relax_driver;
 pub(crate) mod relax_mass_comp;
 pub mod report_utils;

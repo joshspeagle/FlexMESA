@@ -306,3 +306,83 @@ pub fn compute_interp_radius(
         + axis_dist_sq(m_grid, metallicity))
     .sqrt()
 }
+
+/// Computes the normalized Euclidean distance from `(teff, log_g, metallicity)`
+/// to the nearest populated row in `(lu_teff, lu_logg, lu_meta)`
+/// (`colors/private/bolometric.f90:111-189`).
+///
+/// Unlike [`compute_interp_radius`], which assumes a dense Cartesian product
+/// of three independent 1D grids, this evaluates the joint row-wise minimum
+/// across `lookup_table.csv` rows so incomplete grids (such as `Kurucz2003all`
+/// missing high-$T_{\mathrm{eff}}$ low-$\log g$ corners) never report a zero
+/// radius to unpopulated grid combinations.
+///
+/// # Errors
+/// Returns [`ColorsError::InvalidArrayLength`] if the lookup arrays are empty
+/// or differ in length.
+pub fn compute_interp_radius_lookup(
+    teff: f64,
+    log_g: f64,
+    metallicity: f64,
+    lu_teff: &[f64],
+    lu_logg: &[f64],
+    lu_meta: &[f64],
+) -> Result<f64, ColorsError> {
+    const EPS: f64 = 1.0e-12;
+    let n = lu_teff.len();
+    if lu_logg.len() != n || lu_meta.len() != n || n == 0 {
+        let got = if lu_logg.len() == n {
+            lu_meta.len()
+        } else {
+            lu_logg.len()
+        };
+        return Err(ColorsError::InvalidArrayLength {
+            context: "compute_interp_radius_lookup",
+            got,
+            expected: n.max(1),
+        });
+    }
+
+    let axis_stats = |arr: &[f64], val: f64| -> (bool, f64, f64, f64) {
+        if is_dummy_axis(arr) {
+            return (false, 0.0, 1.0, 0.0);
+        }
+        let min_v = arr.iter().copied().fold(f64::INFINITY, f64::min);
+        let max_v = arr.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+        let range = (max_v - min_v).max(EPS);
+        let norm_v = (val - min_v) / range;
+        (true, min_v, range, norm_v)
+    };
+
+    let (use_t, t_min, t_range, norm_t) = axis_stats(lu_teff, teff);
+    let (use_g, g_min, g_range, norm_g) = axis_stats(lu_logg, log_g);
+    let (use_m, m_min, m_range, norm_m) = axis_stats(lu_meta, metallicity);
+
+    let mut d_min = f64::MAX;
+    for ((&lt, &lg), &lm) in
+        lu_teff.iter().zip(lu_logg.iter()).zip(lu_meta.iter())
+    {
+        let mut d = 0.0_f64;
+        if use_t {
+            let grid_t = (lt - t_min) / t_range;
+            let dt = norm_t - grid_t;
+            d += dt * dt;
+        }
+        if use_g {
+            let grid_g = (lg - g_min) / g_range;
+            let dg = norm_g - grid_g;
+            d += dg * dg;
+        }
+        if use_m {
+            let grid_m = (lm - m_min) / m_range;
+            let dm = norm_m - grid_m;
+            d += dm * dm;
+        }
+        let dist = d.sqrt();
+        if dist < d_min {
+            d_min = dist;
+        }
+    }
+
+    Ok(d_min)
+}

@@ -188,9 +188,83 @@ pub fn eval_kolb_mdot_thick(
         * integral
 }
 
+/// Evaluates the Kolb & Ritter (1990) optically thick Roche-lobe overflow
+/// mass transfer rate $\dot{M}_{\mathrm{thick}} \le 0$ ($\mathrm{g\,s^{-1}}$)
+/// gated on photospheric overflow `r_donor > rl_donor`
+/// (`get_info_for_kolb` in `binary/private/binary_mdot.f90:764-788`).
+#[allow(clippy::too_many_arguments)]
+#[must_use]
+pub fn eval_kolb_mdot_thick_photosphere(
+    m_donor: f64,
+    m_accretor: f64,
+    r_donor: f64,
+    rl_donor: f64,
+    r_profile: &[f64],
+    p_profile: &[f64],
+    t_profile: &[f64],
+    mu_profile: &[f64],
+    gamma1_profile: &[f64],
+) -> f64 {
+    // `binary/private/binary_mdot.f90:775`: `if (b% r(b% d_i) - b% rl(b% d_i) > 0.0d0)`
+    if r_donor <= rl_donor {
+        return 0.0;
+    }
+    eval_kolb_mdot_thick(
+        m_donor,
+        m_accretor,
+        rl_donor,
+        r_profile,
+        p_profile,
+        t_profile,
+        mu_profile,
+        gamma1_profile,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn integrate_kolb_mdot_eccentric(
+    m_donor: f64,
+    m_accretor: f64,
+    rl_donor: f64,
+    eccentricity: f64,
+    r_profile: &[f64],
+    p_profile: &[f64],
+    t_profile: &[f64],
+    mu_profile: &[f64],
+    gamma1_profile: &[f64],
+    anomaly_steps: usize,
+) -> f64 {
+    let one_m_e2 = 1.0 - eccentricity * eccentricity;
+    let (theta_co, time_co) = build_anomaly_grid(anomaly_steps, eccentricity);
+    let n = theta_co.len();
+    let mut mdot_prev = 0.0_f64;
+    let mut dm = 0.0_f64;
+    for i in 0..n {
+        let rl_i = rl_donor * one_m_e2
+            / (1.0 + eccentricity * flexmesa_math::cos(theta_co[i]));
+        let mdot_i = eval_kolb_mdot_thick(
+            m_donor,
+            m_accretor,
+            rl_i,
+            r_profile,
+            p_profile,
+            t_profile,
+            mu_profile,
+            gamma1_profile,
+        );
+        if i > 0 {
+            dm += 0.5 * (mdot_prev + mdot_i) * (time_co[i] - time_co[i - 1]);
+        }
+        mdot_prev = mdot_i;
+    }
+    dm
+}
+
 /// Evaluates the phase-averaged Kolb & Ritter (1990) optically thick mass
 /// transfer rate $\dot{M}_{\mathrm{thick}} \le 0$ ($\mathrm{g\,s^{-1}}$) over
-/// an eccentric orbit (`get_info_for_kolb_eccentric` in `binary_mdot.f90:898-948`).
+/// an eccentric orbit (`get_info_for_kolb_eccentric` in `binary_mdot.f90:898-948`),
+/// checking `r_profile[0]` against periastron Roche radius when photospheric
+/// `r_donor` is not supplied separately.
 #[allow(clippy::too_many_arguments)]
 #[must_use]
 pub fn eval_kolb_mdot_eccentric(
@@ -224,29 +298,73 @@ pub fn eval_kolb_mdot_eccentric(
     if r_profile[0] < rl_donor * one_m_e2 / (1.0 + eccentricity) {
         return 0.0;
     }
-    let (theta_co, time_co) = build_anomaly_grid(anomaly_steps, eccentricity);
-    let n = theta_co.len();
-    let mut mdot_prev = 0.0_f64;
-    let mut dm = 0.0_f64;
-    for i in 0..n {
-        let rl_i = rl_donor * one_m_e2
-            / (1.0 + eccentricity * flexmesa_math::cos(theta_co[i]));
-        let mdot_i = eval_kolb_mdot_thick(
+    integrate_kolb_mdot_eccentric(
+        m_donor,
+        m_accretor,
+        rl_donor,
+        eccentricity,
+        r_profile,
+        p_profile,
+        t_profile,
+        mu_profile,
+        gamma1_profile,
+        anomaly_steps,
+    )
+}
+
+/// Evaluates the phase-averaged Kolb & Ritter (1990) optically thick mass
+/// transfer rate $\dot{M}_{\mathrm{thick}} \le 0$ ($\mathrm{g\,s^{-1}}$) over
+/// an eccentric orbit gated on photospheric radius `r_donor`
+/// (`get_info_for_kolb` in `binary/private/binary_mdot.f90:775` and
+/// `get_info_for_kolb_eccentric` in `binary/private/binary_mdot.f90:913`).
+#[allow(clippy::too_many_arguments)]
+#[must_use]
+pub fn eval_kolb_mdot_eccentric_photosphere(
+    m_donor: f64,
+    m_accretor: f64,
+    r_donor: f64,
+    rl_donor: f64,
+    eccentricity: f64,
+    r_profile: &[f64],
+    p_profile: &[f64],
+    t_profile: &[f64],
+    mu_profile: &[f64],
+    gamma1_profile: &[f64],
+    anomaly_steps: usize,
+) -> f64 {
+    if r_profile.is_empty() {
+        return 0.0;
+    }
+    if eccentricity <= 0.0 {
+        return eval_kolb_mdot_thick_photosphere(
             m_donor,
             m_accretor,
-            rl_i,
+            r_donor,
+            rl_donor,
             r_profile,
             p_profile,
             t_profile,
             mu_profile,
             gamma1_profile,
         );
-        if i > 0 {
-            dm += 0.5 * (mdot_prev + mdot_i) * (time_co[i] - time_co[i - 1]);
-        }
-        mdot_prev = mdot_i;
     }
-    dm
+    let one_m_e2 = 1.0 - eccentricity * eccentricity;
+    // `binary/private/binary_mdot.f90:913`: `if (b% r(b% d_i) < b% rl(b% d_i) * (1-e*e)/(1+e)) return`
+    if r_donor < rl_donor * one_m_e2 / (1.0 + eccentricity) {
+        return 0.0;
+    }
+    integrate_kolb_mdot_eccentric(
+        m_donor,
+        m_accretor,
+        rl_donor,
+        eccentricity,
+        r_profile,
+        p_profile,
+        t_profile,
+        mu_profile,
+        gamma1_profile,
+        anomaly_steps,
+    )
 }
 
 /// Evaluates the Arras optically thin Roche-lobe overflow mass transfer rate
@@ -318,6 +436,12 @@ pub fn eval_edot_enhancement_isotropic(
     let n = theta_co.len();
     let one_m_e2 = 1.0 - eccentricity * eccentricity;
     let m_tot = (m_donor + m_accretor).max(1.0);
+    // `binary/private/binary_edot.f90:216` & `binary/private/binary_mdot.f90:913`:
+    // `get_info_for_kolb_eccentric` adds thick overflow to `mdot_donor_theta` only when
+    // photospheric `b% r(b% d_i) >= b% rl(b% d_i) * (1 - e^2) / (1 + e)`.
+    let include_kolb_thick = is_kolb_scheme
+        && !r_profile.is_empty()
+        && r_donor >= rl_donor * one_m_e2 / (1.0 + eccentricity);
     let mut edot_prev = 0.0_f64;
     let mut de = 0.0_f64;
     for i in 0..n {
@@ -334,7 +458,7 @@ pub fn eval_edot_enhancement_isotropic(
             mu_surf,
             is_kolb_scheme,
         );
-        if is_kolb_scheme && !r_profile.is_empty() {
+        if include_kolb_thick {
             mdot_i += eval_kolb_mdot_thick(
                 m_donor,
                 m_accretor,

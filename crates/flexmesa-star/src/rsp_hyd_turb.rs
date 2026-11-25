@@ -161,6 +161,20 @@ pub fn calc_source_sink(
         model.aux.rsp.damp_rsp[k0] = 0.0;
         model.aux.rsp.dampr_rsp[k0] = 0.0;
         model.aux.rsp.coupl_rsp[k0] = 0.0;
+        wk.dc_dr_out[i] = 0.0;
+        wk.dc_dr_00[i] = 0.0;
+        wk.dc_dr_in[i] = 0.0;
+        wk.dc_dr_in2[i] = 0.0;
+        wk.dc_dvol_out[i] = 0.0;
+        wk.dc_dvol_00[i] = 0.0;
+        wk.dc_dvol_in[i] = 0.0;
+        wk.dc_dt_out[i] = 0.0;
+        wk.dc_dt_00[i] = 0.0;
+        wk.dc_dt_in[i] = 0.0;
+        wk.dc_der_out[i] = 0.0;
+        wk.dc_der_00[i] = 0.0;
+        wk.dc_der_in[i] = 0.0;
+        wk.dc_dw_00[i] = 0.0;
         return;
     }
     let ki = k0 + 1;
@@ -295,7 +309,8 @@ pub fn calc_source_sink(
                 * (2.0 * vol_k * wk.dvol_dr_00[i]
                     - vol_k
                         * vol_k
-                        * (wk.dcp_dr_00[i] / cp_k + wk.dk_dr_00[i] / op_k))
+                        * ((1.0 / cp_k) * wk.dcp_dr_00[i]
+                            + (1.0 / op_k) * wk.dk_dr_00[i]))
                 / (cp_k * op_k);
         dampr_p[2] = tem_r
             * (hp0 * wk.dhp_dr_in[i] + hpi * wk.dhp_dr_00[i - 1])
@@ -320,7 +335,8 @@ pub fn calc_source_sink(
                 * vol_k
                 * (3.0 * t_k * t_k
                     - flexmesa_math::pow3(t_k)
-                        * (wk.dcp_dt[i] / cp_k + wk.dk_dt[i] / op_k))
+                        * ((1.0 / cp_k) * wk.dcp_dt[i]
+                            + (1.0 / op_k) * wk.dk_dt[i]))
                 / (cp_k * op_k);
         dampr_p[9] = tem_r * hpi * wk.dhp_dt_00[i - 1];
         dampr_p[10] = tem_r * hp0 * wk.dhp_der_out[i];

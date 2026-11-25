@@ -17,7 +17,7 @@ use crate::photometry::{
 use crate::sed_cube::{builtin_sed_cube_arc, SedCube};
 use crate::types::{ColorsError, MagSystem};
 use crate::utils::{
-    compute_interp_radius, interpolate_array, remove_dat,
+    compute_interp_radius_lookup, interpolate_array, remove_dat,
     simpson_integration_fn,
 };
 
@@ -86,6 +86,12 @@ pub struct ColorsEvalOutput {
 pub struct ColorsContext {
     /// Loaded atmosphere SED cube.
     pub cube: Arc<SedCube>,
+    /// Lookup-table `teff` values (`colors/public/colors_def.f90:64`).
+    pub lu_teff: Vec<f64>,
+    /// Lookup-table `logg` values (`colors/public/colors_def.f90:62`).
+    pub lu_logg: Vec<f64>,
+    /// Lookup-table metallicity values (`colors/public/colors_def.f90:63`).
+    pub lu_meta: Vec<f64>,
     /// Minimum metallicity `[M/H]` from `lookup_table.csv` (`minval(lu_meta)`).
     pub lu_meta_min: f64,
     /// Maximum metallicity `[M/H]` from `lookup_table.csv` (`maxval(lu_meta)`).
@@ -196,8 +202,8 @@ impl ColorsContext {
             });
         }
 
-        let (cube, lu_meta_min, lu_meta_max) =
-            load_stellar_atmosphere(cfg.stellar_atm, case_dir)?;
+        let atm = load_stellar_atmosphere(cfg.stellar_atm, case_dir)?;
+        let cube = atm.cube;
 
         let vega_opt = load_optional_vega(cfg.vega_sed, case_dir)?;
         let filters = load_instrument_filters(
@@ -249,8 +255,11 @@ impl ColorsContext {
 
         Ok(Self {
             cube,
-            lu_meta_min,
-            lu_meta_max,
+            lu_teff: atm.lu_teff,
+            lu_logg: atm.lu_logg,
+            lu_meta: atm.lu_meta,
+            lu_meta_min: atm.lu_meta_min,
+            lu_meta_max: atm.lu_meta_max,
             filters,
             filters_on_sed_grid,
             filter_norm_integrals,
@@ -307,14 +316,14 @@ impl ColorsContext {
             self.lu_meta_min
         };
 
-        let interp_rad = compute_interp_radius(
+        let interp_rad = compute_interp_radius_lookup(
             t_eff,
             log_g,
             m_div_h,
-            &self.cube.teff_grid,
-            &self.cube.logg_grid,
-            &self.cube.meta_grid,
-        );
+            &self.lu_teff,
+            &self.lu_logg,
+            &self.lu_meta,
+        )?;
         let fluxes = self.cube.eval_sed_hermite_generic(
             t_eff,
             log_g,
@@ -398,6 +407,16 @@ fn normalize_rel_key(raw: &str) -> String {
     raw.trim().trim_end_matches('/').to_ascii_lowercase()
 }
 
+fn is_canon_builtin_key(raw: &str, canon: &str) -> bool {
+    !is_explicit_relative(raw)
+        && raw
+            .trim()
+            .trim_start_matches('/')
+            .trim_end_matches('/')
+            .to_ascii_lowercase()
+            == canon
+}
+
 fn is_explicit_relative(raw: &str) -> bool {
     let t = raw.trim();
     t.starts_with("./") || t.starts_with("../")
@@ -461,10 +480,18 @@ fn resolve_colors_path(
             return Ok(as_path.to_path_buf());
         }
         let stripped = trimmed.trim_start_matches('/');
-        for (root, _) in candidate_roots() {
+        for (root, is_mesa) in candidate_roots() {
             let cand = root.join(stripped);
             if matches_kind(&cand) {
                 return Ok(cand);
+            }
+            if !is_mesa {
+                if let Some(without_data) = stripped.strip_prefix("data/") {
+                    let cand2 = root.join(without_data);
+                    if matches_kind(&cand2) {
+                        return Ok(cand2);
+                    }
+                }
             }
         }
         return Err(ColorsError::IoError {
@@ -510,31 +537,87 @@ fn resolve_colors_path(
     })
 }
 
+struct LoadedAtmosphere {
+    cube: Arc<SedCube>,
+    lu_teff: Vec<f64>,
+    lu_logg: Vec<f64>,
+    lu_meta: Vec<f64>,
+    lu_meta_min: f64,
+    lu_meta_max: f64,
+}
+
+fn populated_lookup_points(cube: &SedCube) -> (Vec<f64>, Vec<f64>, Vec<f64>) {
+    let mut lu_t = Vec::new();
+    let mut lu_g = Vec::new();
+    let mut lu_m = Vec::new();
+    for (it, &t) in cube.teff_grid.iter().enumerate() {
+        for (ig, &g) in cube.logg_grid.iter().enumerate() {
+            for (im, &m) in cube.meta_grid.iter().enumerate() {
+                if cube.sed_at(it, ig, im).iter().any(|&f| f != 0.0) {
+                    lu_t.push(t);
+                    lu_g.push(g);
+                    lu_m.push(m);
+                }
+            }
+        }
+    }
+    if lu_t.is_empty() {
+        for &t in &cube.teff_grid {
+            for &g in &cube.logg_grid {
+                for &m in &cube.meta_grid {
+                    lu_t.push(t);
+                    lu_g.push(g);
+                    lu_m.push(m);
+                }
+            }
+        }
+    }
+    (lu_t, lu_g, lu_m)
+}
+
 fn load_stellar_atmosphere(
     stellar_atm: &str,
     case_dir: Option<&Path>,
-) -> Result<(Arc<SedCube>, f64, f64), ColorsError> {
-    let key = normalize_rel_key(stellar_atm);
+) -> Result<LoadedAtmosphere, ColorsError> {
     match resolve_colors_path(stellar_atm, case_dir, true) {
         Ok(dir) => {
             let lookup_path = dir.join("lookup_table.csv");
             let entries = load_lookup_table_entries(&lookup_path)?;
-            let (meta_min, meta_max) =
-                iter_min_max(entries.iter().map(|r| r.meta));
+            let lu_teff: Vec<f64> = entries.iter().map(|r| r.teff).collect();
+            let lu_logg: Vec<f64> = entries.iter().map(|r| r.logg).collect();
+            let lu_meta: Vec<f64> = entries.iter().map(|r| r.meta).collect();
+            let (lu_meta_min, lu_meta_max) =
+                iter_min_max(lu_meta.iter().copied());
             let cube_path = dir.join("flux_cube.bin");
             let cube = if cube_path.is_file() {
                 load_or_cached_flux_cube(&cube_path)?
             } else {
                 Arc::new(load_atmosphere_from_sed_files(&dir, &entries)?)
             };
-            Ok((cube, meta_min, meta_max))
+            Ok(LoadedAtmosphere {
+                cube,
+                lu_teff,
+                lu_logg,
+                lu_meta,
+                lu_meta_min,
+                lu_meta_max,
+            })
         }
         Err(err) => {
-            if !is_explicit_relative(stellar_atm) && key == CANON_KURUCZ_ATM {
+            if is_canon_builtin_key(stellar_atm, CANON_KURUCZ_ATM) {
                 let cube = builtin_sed_cube_arc();
-                let (meta_min, meta_max) =
-                    iter_min_max(cube.meta_grid.iter().copied());
-                Ok((cube, meta_min, meta_max))
+                let (lu_teff, lu_logg, lu_meta) =
+                    populated_lookup_points(&cube);
+                let (lu_meta_min, lu_meta_max) =
+                    iter_min_max(lu_meta.iter().copied());
+                Ok(LoadedAtmosphere {
+                    cube,
+                    lu_teff,
+                    lu_logg,
+                    lu_meta,
+                    lu_meta_min,
+                    lu_meta_max,
+                })
             } else {
                 Err(err)
             }
@@ -706,12 +789,9 @@ fn iter_min_max(vals: impl Iterator<Item = f64>) -> (f64, f64) {
 fn unique_sorted_axis(values: impl Iterator<Item = f64>) -> Vec<f64> {
     let mut out: Vec<f64> = values.collect();
     out.sort_by(f64::total_cmp);
-    out.dedup_by(|a, b| (*a - *b).abs() <= 1.0e-12);
+    // Match `colors/private/colors_utils.f90:714` (`1.0e-10_dp` uniqueness tol).
+    out.dedup_by(|a, b| (*a - *b).abs() < 1.0e-10);
     out
-}
-
-fn find_axis_slot(axis: &[f64], val: f64) -> Option<usize> {
-    axis.iter().position(|&v| (v - val).abs() <= 1.0e-9)
 }
 
 fn load_sed_file(path: &Path) -> Result<(Vec<f64>, Vec<f64>), ColorsError> {
@@ -753,46 +833,72 @@ fn load_atmosphere_from_sed_files(
     dir: &Path,
     rows: &[LookupRow],
 ) -> Result<SedCube, ColorsError> {
+    const MATCH_TOL: f64 = 1.0e-10;
     let teff_grid = unique_sorted_axis(rows.iter().map(|r| r.teff));
     let logg_grid = unique_sorted_axis(rows.iter().map(|r| r.logg));
     let meta_grid = unique_sorted_axis(rows.iter().map(|r| r.meta));
     let (nt, ng, nm) = (teff_grid.len(), logg_grid.len(), meta_grid.len());
-    let (first_wave, _) = load_sed_file(&dir.join(&rows[0].file_name))?;
-    let nlam = first_wave.len();
-    let mut flux = vec![0.0_f64; nt * ng * nm * nlam];
-    let mut populated = vec![false; nt * ng * nm];
 
-    for row in rows {
-        let (Some(it), Some(ig), Some(im)) = (
-            find_axis_slot(&teff_grid, row.teff),
-            find_axis_slot(&logg_grid, row.logg),
-            find_axis_slot(&meta_grid, row.meta),
-        ) else {
-            continue;
-        };
-        let (w_row, f_row) = load_sed_file(&dir.join(&row.file_name))?;
-        let resampled = if w_row == first_wave {
-            f_row
+    // Build `(it, ig, im) -> lu_idx` via L1 nearest-row lookup so incomplete
+    // atmosphere grids match `colors/private/colors_utils.f90:748-791`.
+    let mut grid_to_lu = Vec::with_capacity(nt * ng * nm);
+    for &tv in &teff_grid {
+        for &gv in &logg_grid {
+            for &mv in &meta_grid {
+                let mut best_idx = 0usize;
+                let mut best_dist = f64::MAX;
+                for (idx, row) in rows.iter().enumerate() {
+                    let dist = (row.teff - tv).abs()
+                        + (row.logg - gv).abs()
+                        + (row.meta - mv).abs();
+                    if dist < best_dist {
+                        best_dist = dist;
+                        best_idx = idx;
+                    }
+                    if best_dist < MATCH_TOL {
+                        break;
+                    }
+                }
+                grid_to_lu.push(best_idx);
+            }
+        }
+    }
+
+    // Load each referenced lookup row once, setting canonical wavelengths from
+    // the first loaded SED (`colors/private/colors_utils.f90:999-1045`).
+    let (first_wave, first_flux) =
+        load_sed_file(&dir.join(&rows[grid_to_lu[0]].file_name))?;
+    let mut sed_table = Vec::new();
+    let mut row_to_slot: Vec<Option<usize>> = vec![None; rows.len()];
+    let mut slot_map = Vec::with_capacity(grid_to_lu.len());
+
+    sed_table.extend_from_slice(&first_flux);
+    row_to_slot[grid_to_lu[0]] = Some(0);
+    let mut next_slot = 1usize;
+
+    for &lu_idx in &grid_to_lu {
+        let slot = if let Some(existing) = row_to_slot[lu_idx] {
+            existing
         } else {
-            interpolate_array(&w_row, &f_row, &first_wave)?
+            let (w_row, f_row) =
+                load_sed_file(&dir.join(&rows[lu_idx].file_name))?;
+            let resampled = if w_row == first_wave {
+                f_row
+            } else {
+                interpolate_array(&w_row, &f_row, &first_wave)?
+            };
+            sed_table.extend_from_slice(&resampled);
+            let assigned = next_slot;
+            row_to_slot[lu_idx] = Some(assigned);
+            next_slot += 1;
+            assigned
         };
-        let cell = (it * ng + ig) * nm + im;
-        let off = cell * nlam;
-        flux[off..off + nlam].copy_from_slice(&resampled);
-        populated[cell] = true;
+        slot_map.push(slot);
     }
 
-    if let Some(missing) = populated.iter().position(|&p| !p) {
-        return Err(ColorsError::InvalidData {
-            context: "load_atmosphere_from_sed_files",
-            detail: format!(
-                "incomplete atmosphere grid in '{}': missing cell index {missing}",
-                dir.display()
-            ),
-        });
-    }
-
-    SedCube::from_dense(teff_grid, logg_grid, meta_grid, first_wave, flux)
+    SedCube::from_indexed(
+        teff_grid, logg_grid, meta_grid, first_wave, slot_map, sed_table,
+    )
 }
 
 struct VegaSpectrum {
@@ -804,11 +910,10 @@ fn load_optional_vega(
     vega_sed: &str,
     case_dir: Option<&Path>,
 ) -> Result<Option<VegaSpectrum>, ColorsError> {
-    let key = normalize_rel_key(vega_sed);
     match resolve_colors_path(vega_sed, case_dir, false) {
         Ok(path) => Ok(Some(load_vega_file(&path)?)),
         Err(err) => {
-            if !is_explicit_relative(vega_sed) && key == CANON_VEGA_SED {
+            if is_canon_builtin_key(vega_sed, CANON_VEGA_SED) {
                 Ok(None)
             } else {
                 Err(err)
@@ -822,19 +927,27 @@ fn load_vega_file(path: &Path) -> Result<VegaSpectrum, ColorsError> {
         path: path.display().to_string(),
         detail: e.to_string(),
     })?;
-    let mut lines = text.lines().map(str::trim).filter(|l| !l.is_empty());
-    let Some(_) = lines.next() else {
+    let mut lines = text
+        .lines()
+        .map(str::trim)
+        .filter(|l| !l.is_empty() && !l.starts_with('#'))
+        .peekable();
+    let Some(&first) = lines.peek() else {
         return Err(ColorsError::InvalidData {
             context: "load_vega_file",
             detail: format!("empty Vega SED file '{}'", path.display()),
         });
     };
+    let first_tok = first
+        .split(|c: char| c == ',' || c.is_ascii_whitespace())
+        .find(|t| !t.is_empty())
+        .unwrap_or("");
+    if first_tok.parse::<f64>().is_err() {
+        lines.next();
+    }
     let mut wavelengths = Vec::new();
     let mut fluxes = Vec::new();
     for line in lines {
-        if line.starts_with('#') {
-            continue;
-        }
         let mut toks = line
             .split(|c: char| c == ',' || c.is_ascii_whitespace())
             .filter(|t| !t.is_empty());
@@ -936,7 +1049,6 @@ fn load_instrument_filters(
     vega_opt: Option<&VegaSpectrum>,
     case_dir: Option<&Path>,
 ) -> Result<Vec<LoadedFilter>, ColorsError> {
-    let key = normalize_rel_key(instrument);
     match resolve_colors_path(instrument, case_dir, true) {
         Ok(dir) => {
             let Some(vega) = vega_opt else {
@@ -948,17 +1060,26 @@ fn load_instrument_filters(
                     ),
                 });
             };
-            let basename = dir
-                .file_name()
-                .and_then(|s| s.to_str())
-                .ok_or_else(|| ColorsError::InvalidControl {
-                    name: "instrument",
-                    detail: format!(
-                        "invalid UTF-8 directory name '{}'",
-                        dir.display()
-                    ),
-                })?;
-            let index_path = dir.join(basename);
+            let basename_os = if let Some(name) = dir.file_name() {
+                name.to_os_string()
+            } else {
+                let canon =
+                    dir.canonicalize().map_err(|e| ColorsError::IoError {
+                        path: dir.display().to_string(),
+                        detail: e.to_string(),
+                    })?;
+                canon
+                    .file_name()
+                    .ok_or_else(|| ColorsError::InvalidControl {
+                        name: "instrument",
+                        detail: format!(
+                            "cannot determine index filename for '{}'",
+                            dir.display()
+                        ),
+                    })?
+                    .to_os_string()
+            };
+            let index_path = dir.join(&basename_os);
             let index_text = fs::read_to_string(&index_path).map_err(|e| {
                 ColorsError::IoError {
                     path: index_path.display().to_string(),
@@ -994,11 +1115,9 @@ fn load_instrument_filters(
             Ok(out)
         }
         Err(err) => {
-            if !is_explicit_relative(instrument) && key == CANON_JOHNSON_INST {
+            if is_canon_builtin_key(instrument, CANON_JOHNSON_INST) {
                 builtin_johnson_loaded_filters(vega_opt)
-            } else if !is_explicit_relative(instrument)
-                && key == CANON_GAIA_INST
-            {
+            } else if is_canon_builtin_key(instrument, CANON_GAIA_INST) {
                 builtin_gaia_loaded_filters(vega_opt)
             } else {
                 Err(err)

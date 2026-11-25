@@ -184,7 +184,6 @@ pub fn eval_composition_moments_generic<T: ChemScalar>(
     for (i, &xi) in x.iter().enumerate().take(n) {
         let ai = T::from_f64(props.a[i]);
         let zi = T::from_f64(props.z[i]);
-        let z2i = T::from_f64(props.z[i] * props.z[i]);
         let wi = T::from_f64(props.w[i]);
         let z53i = T::from_f64(props.z53[i]);
         let yi = xi / ai;
@@ -196,7 +195,9 @@ pub fn eval_composition_moments_generic<T: ChemScalar>(
         sumx = sumx + xi;
         sumy = sumy + yi;
         sum_yz = sum_yz + yi * zi;
-        sum_yz2 = sum_yz2 + yi * z2i;
+        // Left-to-right `(yi * zi) * zi` matches MESA `chem_lib.f90:224`
+        // (`sum(y(1:num_isos)*z(1:num_isos)*z(1:num_isos)) * abar`).
+        sum_yz2 = sum_yz2 + yi * zi * zi;
         sum_yz53 = sum_yz53 + yi * z53i;
         mass_correction = mass_correction + yi * wi;
     }

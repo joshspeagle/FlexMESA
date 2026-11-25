@@ -1,14 +1,14 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Electron thermal conduction opacity (`condint.f90`).
 //!
 //! Implements the Potekhin (1999) / Cassisi et al. (2007) electron thermal
 //! conductivity bicubic spline table (`condtabl.data`) and the Blouin et al.
 //! (2020, ApJ 899, 46) analytical moderate-coupling correction for H and He.
 
-use crate::spline::do_kap_interpolations;
+use crate::spline::{do_kap_interpolations, fit_bicubic_zero_first_deriv};
 use crate::types::{KapConfig, KapError};
 use flexmesa_autodiff::AutoDiffReal2VarOrder1;
 use flexmesa_const::{BOLTZ_SIGMA, ILN10};
-use flexmesa_interp2d::{interp_mkbicub_db, BicubicBc};
 use flexmesa_math::exp10;
 use std::sync::OnceLock;
 
@@ -93,24 +93,10 @@ fn init_potekhin() -> Result<PotekhinTable, KapError> {
             }
         }
 
-        let (coeffs, _, _) = interp_mkbicub_db(
-            &log_rhos,
-            &log_ts,
-            &z_slice,
-            BicubicBc::ZeroFirstDeriv,
-            &[],
-            BicubicBc::ZeroFirstDeriv,
-            &[],
-            BicubicBc::ZeroFirstDeriv,
-            &[],
-            BicubicBc::ZeroFirstDeriv,
-            &[],
-        )
-        .map_err(|_| {
-            KapError::NumericalFailure(
-                "interp_mkbicub_db failed on condtabl.data",
-            )
-        })?;
+        // `kap/private/condint.f90:115-125`: homogeneous zero-slope BCs
+        // (`ibc* = 3`) via `mkspline_db` -> `cspline_db` -> `V_SPLINE_db`.
+        let (coeffs, _, _) =
+            fit_bicubic_zero_first_deriv(&log_rhos, &log_ts, &z_slice)?;
         f_ary.push(coeffs);
     }
 
@@ -205,9 +191,9 @@ pub fn do_electron_conduction_potekhin(
     let zlog = flexmesa_math::log10(zbar.max(1.0e-30))
         .clamp(tbl.log_zs[0], tbl.log_zs[NUM_LOG_ZS - 1]);
 
-    let (log_k, mut dlog_k_dlog_rho, mut dlog_k_dlog_t) = if zlog
-        <= tbl.log_zs[0]
-    {
+    // `kap/private/condint.f90:189-236`: only zero clipped derivatives inside
+    // the Z-interpolation `else` branch; un-interpolated edge Z calls preserve `get1`.
+    let (log_k, dlog_k_dlog_rho, dlog_k_dlog_t) = if zlog <= tbl.log_zs[0] {
         eval_potekhin_z_slice(tbl, 0, log_rho, log_t)
     } else if zlog >= tbl.log_zs[NUM_LOG_ZS - 1] {
         eval_potekhin_z_slice(tbl, NUM_LOG_ZS - 1, log_rho, log_t)
@@ -227,19 +213,18 @@ pub fn do_electron_conduction_potekhin(
             eval_potekhin_z_slice(tbl, i2, log_rho, log_t);
         let alfa = (zlog - tbl.log_zs[i1]) / (tbl.log_zs[i2] - tbl.log_zs[i1]);
         let beta = 1.0 - alfa;
-        (
-            alfa * lk2 + beta * lk1,
-            alfa * dlk2_dr + beta * dlk1_dr,
-            alfa * dlk2_dt + beta * dlk1_dt,
-        )
+        let dlk_dr = if clipped_log_rho {
+            0.0
+        } else {
+            alfa * dlk2_dr + beta * dlk1_dr
+        };
+        let dlk_dt = if clipped_log_t {
+            0.0
+        } else {
+            alfa * dlk2_dt + beta * dlk1_dt
+        };
+        (alfa * lk2 + beta * lk1, dlk_dr, dlk_dt)
     };
-
-    if clipped_log_rho {
-        dlog_k_dlog_rho = 0.0;
-    }
-    if clipped_log_t {
-        dlog_k_dlog_t = 0.0;
-    }
 
     let logkap = 3.0 * log_t_in - log_rho_in - log_k
         + flexmesa_math::log10(16.0 * BOLTZ_SIGMA / 3.0);

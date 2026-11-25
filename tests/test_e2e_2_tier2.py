@@ -334,37 +334,49 @@ def test_upstream_irradiated_planet_runs_unmodified_with_relaxes_ported() -> (
     assert np.isfinite(rep["final_teff"]) and rep["final_teff"] > 0.0
 
 
-def test_upstream_tier2_make_co_wd_fails_strictly_on_unported_controls(
+def test_upstream_tier2_make_co_wd_runs_unmodified_with_relax_to_star_cut(
     tmp_path: pathlib.Path,
 ) -> None:
-    """Verify unmodified make_co_wd fails strictly under `#147` and its
-    cleaned copy stops with the named error for the unported
-    `remove_surface_by_relax_to_star_cut` (`#436`).
+    """Verify unmodified make_co_wd is accepted strictly now that
+    `remove_surface_by_relax_to_star_cut` (`do_relax_to_star_cut`,
+    star/private/remove_shells.f90:1156-1404) is ported (`#436`), and runs
+    its first stages. The envelope cut is reached through
+    `star_remove_surface_at_cell_k` in the case's `run_star_extras`
+    (`#153`), which these two-step stages do not reach.
     """
-    _check_tier2_case("make_co_wd", tmp_path)
+    _check_tier2_case("make_co_wd", tmp_path, strict_rejects=False)
 
 
-def _check_tier2_case(case_name: str, tmp_path: pathlib.Path) -> None:
-    """Runs one Tier 2 case unmodified, then cleaned (see the tests above)."""
+def _check_tier2_case(
+    case_name: str, tmp_path: pathlib.Path, strict_rejects: bool = True
+) -> None:
+    """Runs one Tier 2 case unmodified, then cleaned (see the tests above).
+
+    With `strict_rejects=False` the unmodified case must be accepted, and it
+    is run directly in place of the cleaned copy.
+    """
     base = known_gaps_gate.require_mesa_test_inputs_dir()
     if base is None:
         return
     case_dir = base / "star" / "test_suite" / case_name
     assert case_dir.is_dir(), f"Upstream case directory not found: {case_dir}"
 
-    with pytest.raises(
-        ValueError,
-        match=r"(unsupported|unknown|unrecognized).*control",
-    ):
-        e2e.run_test_suite_case(
-            case_dir,
-            skip_optional=True,
-            max_steps_per_stage=2,
-            verify_restart=True,
-        )
-
-    clean_dir = tmp_path / case_name
-    e2e.copy_cleaned_case(case_dir, clean_dir, suite="star")
+    if strict_rejects:
+        with pytest.raises(
+            ValueError,
+            match=r"(unsupported|unknown|unrecognized).*control",
+        ):
+            e2e.run_test_suite_case(
+                case_dir,
+                skip_optional=True,
+                max_steps_per_stage=2,
+                verify_restart=True,
+            )
+        clean_dir = tmp_path / case_name
+        e2e.copy_cleaned_case(case_dir, clean_dir, suite="star")
+    else:
+        clean_dir = tmp_path / case_name
+        shutil.copytree(case_dir, clean_dir)
 
     def run() -> dict[str, Any]:
         return e2e.run_test_suite_case(
@@ -377,15 +389,6 @@ def _check_tier2_case(case_name: str, tmp_path: pathlib.Path) -> None:
     gap = cleaned_case_gaps.DECLARED_STAR_STOPS.get(case_name)
     if gap is not None:
         cleaned_case_gaps.assert_declared_stop(gap, run)
-        return
-    if case_name == "make_co_wd":
-        # `remove_surface_by_relax_to_star_cut` (`do_relax_to_star_cut`,
-        # star/private/remove_shells.f90:1156-1404) is not ported (#436).
-        with pytest.raises(
-            ValueError,
-            match=r"remove_surface_by_relax_to_star_cut.*not ported",
-        ):
-            run()
         return
     rep = run()
     assert rep["case_name"] == case_name

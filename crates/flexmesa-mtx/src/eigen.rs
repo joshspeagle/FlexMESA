@@ -33,11 +33,9 @@ pub struct EigenResult {
     pub vr: Vec<f64>,
 }
 
-/// Computes the Givens rotation `(cs, sn)` that reduces a $2 \times 2$ block to
-/// standardized real Schur form (`dlanv2`) and returns
-/// `(a_out, b_out, c_out, d_out, cs, sn, wr1, wi1, wr2, wi2)`.
+/// Core $2 \times 2$ Schur standardization (`dlanv2`) assuming well-scaled inputs.
 #[inline]
-fn standardize_2x2(
+fn standardize_2x2_core(
     a: f64,
     b: f64,
     c: f64,
@@ -108,6 +106,39 @@ fn standardize_2x2(
     }
 }
 
+/// Computes the Givens rotation `(cs, sn)` that reduces a $2 \times 2$ block to
+/// standardized real Schur form (`dlanv2`) and returns
+/// `(a_out, b_out, c_out, d_out, cs, sn, wr1, wi1, wr2, wi2)`.
+#[inline]
+fn standardize_2x2(
+    a: f64,
+    b: f64,
+    c: f64,
+    d: f64,
+) -> (f64, f64, f64, f64, f64, f64, f64, f64, f64, f64) {
+    // Rescale only at extreme magnitudes so normal inputs stay 0-ULP identical
+    // while avoiding overflow/underflow in `p*p + b*c` and post-rotation checks.
+    let scale = a.abs().max(b.abs()).max(c.abs()).max(d.abs());
+    if scale > 1.0e150 || (scale > 0.0 && scale < 1.0e-150) {
+        let (aa, bb, cc, dd, cs, sn, wr1, wi1, wr2, wi2) =
+            standardize_2x2_core(a / scale, b / scale, c / scale, d / scale);
+        (
+            aa * scale,
+            bb * scale,
+            cc * scale,
+            dd * scale,
+            cs,
+            sn,
+            wr1 * scale,
+            wi1 * scale,
+            wr2 * scale,
+            wi2 * scale,
+        )
+    } else {
+        standardize_2x2_core(a, b, c, d)
+    }
+}
+
 /// Constructs a 2- or 3-element Householder reflector `(tau, u1, u2, beta)`
 /// mapping `(x0, x1, x2)` to `(beta, 0, 0)`.
 #[inline]
@@ -157,7 +188,7 @@ fn schur_qr(
 
     let mut h_norm = 0.0_f64;
     for i in ilo..=ihi {
-        for j in i.saturating_sub(1)..=ihi {
+        for j in i.saturating_sub(1).max(ilo)..=ihi {
             h_norm = flexmesa_math::hypot(h_norm, h[i * n + j]);
         }
     }

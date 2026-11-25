@@ -77,6 +77,13 @@ struct AsteroTrackExtras<'a, 'h> {
     astero_using_revised_max_yr_dt: bool,
     astero_revised_max_yr_dt: f64,
     astero_max_dt_next: f64,
+    /// Current `constraint_value(i)` buffer initialized to `0.0` matching
+    /// `astero/private/astero_run_support.f90:165`.
+    constraint_values: [f64; MAX_CONSTRAINTS],
+    /// Model number already checked by `extras_check_model` (`None` if not yet
+    /// checked or after `Redo`), so `extras_after_evolve` only evaluates the
+    /// final model when termination preempted `extras_check_model`.
+    checked_model_number: Option<usize>,
     eval_error: Option<StarError>,
 }
 
@@ -139,11 +146,107 @@ impl SampleAverages {
 }
 
 impl AsteroTrackExtras<'_, '_> {
-    fn set_max_years_dt(model: &mut StarModel, max_yrs: f64) {
-        let yrs = max_yrs.max(1.0);
-        model.controls.max_years_for_timestep = yrs;
-        model.dt = model.dt.min(yrs * SECYER);
-        model.dt_next = model.dt_next.min(yrs * SECYER);
+    fn constraint_slot_is_read(&self, idx: usize) -> bool {
+        let c = self.ctrl.indexed_constraints[idx];
+        c.include || (c.sigmas_coeff != 0.0 && c.sigma > 0.0)
+    }
+
+    fn is_unset_constraint_err(err: &StarError) -> bool {
+        match err {
+            StarError::InvalidInput(msg) => {
+                msg.contains("set_constraint_value('Rcz')")
+                    && msg.contains("unset")
+            }
+            _ => false,
+        }
+    }
+
+    /// `do_astero_extras_check_model` checking-age timestep logic
+    /// (`astero/private/extras_support.f90:83-146`).
+    fn apply_checking_age_dt_limit(
+        &mut self,
+        model: &mut StarModel,
+    ) -> Result<(), ExtrasDirective> {
+        if self.ctrl.num_smaller_steps_before_age_target == 0
+            || self.ctrl.dt_for_smaller_steps_before_age_target <= 0.0
+        {
+            self.eval_error = Some(StarError::InvalidInput(String::from(
+                "must set positive num_smaller_steps_before_age_target and \
+                 dt_for_smaller_steps_before_age_target when checking age \
+                 (astero/private/extras_support.f90:84-89)",
+            )));
+            return Err(ExtrasDirective::Terminate(String::from(
+                "AsteroAgeControlsError",
+            )));
+        }
+        if self.ctrl.age_target > model.star_age {
+            let remaining_years = self.ctrl.age_target - model.star_age;
+            if self.astero_using_revised_max_yr_dt
+                && self.astero_revised_max_yr_dt > 0.0
+            {
+                model.controls.max_years_for_timestep =
+                    self.astero_revised_max_yr_dt;
+            }
+            let cur_max = if model.controls.max_years_for_timestep > 0.0 {
+                model.controls.max_years_for_timestep
+            } else if self.ctrl.max_yrs_dt_when_cold > 0.0 {
+                self.ctrl.max_yrs_dt_when_cold
+            } else {
+                1.0e99
+            };
+            let j = self.ctrl.num_smaller_steps_before_age_target as f64;
+            let n_rem = (remaining_years / cur_max + 1.0e-6).floor();
+            if remaining_years <= cur_max {
+                model.controls.max_years_for_timestep = remaining_years;
+                self.astero_using_revised_max_yr_dt = true;
+                self.astero_revised_max_yr_dt =
+                    model.controls.max_years_for_timestep;
+                self.astero_max_dt_next =
+                    model.controls.max_years_for_timestep * SECYER;
+            } else if n_rem <= j {
+                let prev_max_years = cur_max;
+                let dt_sm = self.ctrl.dt_for_smaller_steps_before_age_target;
+                let i = (remaining_years / dt_sm + 1.0e-6).floor().max(0.0);
+                model.controls.max_years_for_timestep =
+                    if (i + 1.0e-9) * dt_sm < remaining_years {
+                        remaining_years / (i + 1.0)
+                    } else if i > 0.0 {
+                        remaining_years / i
+                    } else {
+                        remaining_years
+                    };
+                let min_max = prev_max_years
+                    * model.controls.ts_stop.reduction_factor_for_max_timestep;
+                if model.controls.max_years_for_timestep < min_max {
+                    model.controls.max_years_for_timestep = min_max;
+                }
+                self.astero_using_revised_max_yr_dt = true;
+                self.astero_revised_max_yr_dt =
+                    model.controls.max_years_for_timestep;
+                if model.dt_next / SECYER
+                    > model.controls.max_years_for_timestep
+                {
+                    self.astero_max_dt_next =
+                        model.controls.max_years_for_timestep * SECYER;
+                }
+            }
+        } else if self.ctrl.include_age_in_chi2_spectro {
+            let dt_sm = self.ctrl.dt_for_smaller_steps_before_age_target;
+            if (model.controls.max_years_for_timestep - dt_sm).abs()
+                > dt_sm * 1.0e-2
+            {
+                self.eval_error = Some(StarError::InvalidInput(format!(
+                    "bad max_years_for_timestep ({}) vs \
+                     dt_for_smaller_steps_before_age_target ({dt_sm}) \
+                     (astero/private/extras_support.f90:138-145)",
+                    model.controls.max_years_for_timestep
+                )));
+                return Err(ExtrasDirective::Terminate(String::from(
+                    "AsteroBadMaxYearsTimestep",
+                )));
+            }
+        }
+        Ok(())
     }
 
     /// Redo the step with `dt = max_yrs` and hold the timestep for 10
@@ -182,28 +285,46 @@ impl AsteroTrackExtras<'_, '_> {
 
     /// `constraint_value(i)` for every named constraint, from the case's
     /// `set_constraint_value` (`astero/private/extras_support.f90:204-209`);
-    /// unnamed slots stay `0.0` (`astero_run_support.f90:165`).
+    /// unnamed slots keep the `0.0` initial `constraint_value` buffer
+    /// (`astero_run_support.f90:165`).
+    ///
+    /// Upstream `astero/work/src/run_star_extras.f90:96-105` leaves `val`
+    /// unset (with `ierr = 0`) when `'Rcz'` finds no convective-zone base in
+    /// `0.25..0.9 Rsun`. Case hooks raise an unset error on that branch so any
+    /// slot actually read (`include_constraint_in_chi2_spectro` or active
+    /// `sigmas_coeff`) aborts loudly, whereas unused slots leave
+    /// `constraint_values[i]` unchanged. Unknown column errors from
+    /// `star_get_history_output`
+    /// (`astero/work/src/run_star_extras.f90:108-109`) always abort.
     fn eval_constraint_values(
         &mut self,
         model: &StarModel,
     ) -> Result<[f64; MAX_CONSTRAINTS], StarError> {
-        let mut values = [0.0_f64; MAX_CONSTRAINTS];
         for (i, raw) in self.ctrl.constraint_names.iter().enumerate() {
             let name = raw.trim();
             if name.is_empty() {
                 continue;
             }
-            let hook = self.hooks.as_deref_mut().ok_or_else(|| {
-                StarError::InvalidInput(format!(
-                    "astero constraint '{name}' needs the case's \
-                     set_constraint_value from its run_star_extras.f90 \
-                     (astero/private/extras_support.f90:204-209), but no \
-                     case hook was supplied"
-                ))
-            })?;
-            values[i] = hook.set_constraint_value(model, self.ctrl, name)?;
+            let slot_used = self.constraint_slot_is_read(i);
+            let res = {
+                let hook = self.hooks.as_deref_mut().ok_or_else(|| {
+                    StarError::InvalidInput(format!(
+                        "astero constraint '{name}' needs the case's \
+                         set_constraint_value from its run_star_extras.f90 \
+                         (astero/private/extras_support.f90:204-209), but no \
+                         case hook was supplied"
+                    ))
+                })?;
+                hook.set_constraint_value(model, self.ctrl, name)
+            };
+            match res {
+                Ok(val) => self.constraint_values[i] = val,
+                Err(err)
+                    if !slot_used && Self::is_unset_constraint_err(&err) => {}
+                Err(err) => return Err(err),
+            }
         }
-        Ok(values)
+        Ok(self.constraint_values)
     }
 
     /// `check_too_many_bad` (`astero/private/extras_support.f90:492-502`).
@@ -351,84 +472,21 @@ impl AsteroTrackExtras<'_, '_> {
         }
         None
     }
-}
 
-impl StarExtras for AsteroTrackExtras<'_, '_> {
-    fn extras_start_step(&mut self, model: &mut StarModel) -> ExtrasDirective {
-        let checking_age = self.ctrl.eval_chi2_at_target_age_only
-            || self.ctrl.include_age_in_chi2_spectro;
-        if checking_age && model.star_age < self.ctrl.age_target {
-            let rem = (self.ctrl.age_target - model.star_age).max(1.0);
-            if self.astero_using_revised_max_yr_dt
-                && self.astero_revised_max_yr_dt > 0.0
-            {
-                model.controls.max_years_for_timestep =
-                    self.astero_revised_max_yr_dt;
-            }
-            let cur_max = if model.controls.max_years_for_timestep > 0.0 {
-                model.controls.max_years_for_timestep
-            } else {
-                self.ctrl.max_yrs_dt_when_cold
-            }
-            .max(1.0);
-            if rem <= cur_max {
-                Self::set_max_years_dt(model, rem);
-                self.astero_using_revised_max_yr_dt = true;
-                self.astero_revised_max_yr_dt =
-                    model.controls.max_years_for_timestep;
-                self.astero_max_dt_next =
-                    model.controls.max_years_for_timestep * SECYER;
-            } else if self.ctrl.num_smaller_steps_before_age_target > 0
-                && self.ctrl.dt_for_smaller_steps_before_age_target > 0.0
-            {
-                let n_steps = self.ctrl.num_smaller_steps_before_age_target;
-                if ((rem / cur_max + 1.0e-6).floor() as usize) <= n_steps {
-                    let dt_sm =
-                        self.ctrl.dt_for_smaller_steps_before_age_target;
-                    let i = (rem / dt_sm + 1.0e-6).floor().max(0.0);
-                    let mut next_max = if (i + 1.0e-9) * dt_sm < rem {
-                        rem / (i + 1.0)
-                    } else if i > 0.0 {
-                        rem / i
-                    } else {
-                        rem
-                    };
-                    let min_max = cur_max
-                        * model
-                            .controls
-                            .ts_stop
-                            .reduction_factor_for_max_timestep;
-                    if next_max < min_max {
-                        next_max = min_max;
-                    }
-                    Self::set_max_years_dt(model, next_max);
-                    self.astero_using_revised_max_yr_dt = true;
-                    self.astero_revised_max_yr_dt =
-                        model.controls.max_years_for_timestep;
-                    if model.dt_next / SECYER
-                        > model.controls.max_years_for_timestep
-                    {
-                        self.astero_max_dt_next =
-                            model.controls.max_years_for_timestep * SECYER;
-                    }
-                }
-            }
-        }
-        ExtrasDirective::KeepGoing
-    }
-
-    fn extras_check_model(&mut self, model: &mut StarModel) -> ExtrasDirective {
+    fn run_check_model_core(
+        &mut self,
+        model: &mut StarModel,
+    ) -> ExtrasDirective {
         // `do_astero_extras_check_model`
         // (`astero/private/extras_support.f90:56-669`), in upstream's order.
         self.astero_max_dt_next = 1.0e99;
         let checking_age = self.ctrl.eval_chi2_at_target_age_only
             || self.ctrl.include_age_in_chi2_spectro;
-        if self.ctrl.eval_chi2_at_target_age_only
-            && model.star_age < self.ctrl.age_target
-        {
-            return ExtrasDirective::KeepGoing;
-        }
-        if !checking_age {
+        if checking_age {
+            if let Err(dir) = self.apply_checking_age_dt_limit(model) {
+                return dir;
+            }
+        } else {
             // `:147-150`: every model starts "cold"; the limits below raise
             // the timestep class again when the model passes them.
             if self
@@ -440,13 +498,20 @@ impl StarExtras for AsteroTrackExtras<'_, '_> {
             }
             model.controls.max_years_for_timestep =
                 self.ctrl.max_yrs_dt_when_cold;
-        } else if self.ctrl.include_age_in_chi2_spectro
+        }
+        if self.ctrl.include_age_in_chi2_spectro
             && self
                 .ctrl
                 .min_age_for_chi2
                 .is_some_and(|m| model.star_age < m)
         {
             // `:152`.
+            return ExtrasDirective::KeepGoing;
+        }
+        if self.ctrl.eval_chi2_at_target_age_only
+            && model.star_age < self.ctrl.age_target
+        {
+            // `:153`.
             return ExtrasDirective::KeepGoing;
         }
 
@@ -590,10 +655,50 @@ impl StarExtras for AsteroTrackExtras<'_, '_> {
 
         self.save_best_and_final_checks(model, &sample)
     }
+}
+
+impl StarExtras for AsteroTrackExtras<'_, '_> {
+    fn extras_check_model(&mut self, model: &mut StarModel) -> ExtrasDirective {
+        let dir = self.run_check_model_core(model);
+        self.checked_model_number = if matches!(dir, ExtrasDirective::Redo) {
+            None
+        } else {
+            Some(model.model_number)
+        };
+        dir
+    }
 
     fn extras_finish_step(&mut self, model: &mut StarModel) -> ExtrasDirective {
         model.dt_next = model.dt_next.min(self.astero_max_dt_next);
         ExtrasDirective::KeepGoing
+    }
+
+    fn extras_after_evolve(
+        &mut self,
+        model: &mut StarModel,
+    ) -> Result<(), StarError> {
+        // `astero_extras_after_evolve` (`astero/private/extras_support.f90:1109-1115`)
+        // evaluates `do_astero_extras_check_model` when evolution stopped on an
+        // early limit (`max_age`, `max_model_number`) before `extras_check_model`
+        // ran on the final model.
+        let needs_final_check = (self.ctrl.eval_chi2_at_target_age_only
+            && model.star_age >= self.ctrl.age_target)
+            || (self.ctrl.include_age_in_chi2_spectro
+                && self
+                    .ctrl
+                    .max_age_for_chi2
+                    .is_some_and(|m| model.star_age >= m))
+            || self.ctrl.save_info_for_last_model;
+        if needs_final_check
+            && self.checked_model_number != Some(model.model_number)
+        {
+            let _ = self.run_check_model_core(model);
+            self.checked_model_number = Some(model.model_number);
+            if let Some(err) = self.eval_error.take() {
+                return Err(err);
+            }
+        }
+        Ok(())
     }
 }
 
@@ -858,6 +963,8 @@ fn run_track(
         astero_using_revised_max_yr_dt: false,
         astero_revised_max_yr_dt: bundle.controls.max_years_for_timestep,
         astero_max_dt_next: 1.0e99,
+        constraint_values: [0.0; MAX_CONSTRAINTS],
+        checked_model_number: None,
         eval_error: None,
     };
     let mut model =
@@ -1254,9 +1361,100 @@ pub fn run_star_astero_with_case_hooks(
 
 #[cfg(test)]
 mod tests {
-    use super::{SampleAverages, FAILED_TRACK_CHI2};
-    use crate::inlist_astero::{AsteroSearchControls, MAX_CONSTRAINTS};
+    use std::path::Path;
+
+    use flexmesa_const::SECYER;
+    use flexmesa_star::controls::{
+        AtmOption, AtmTTauOpacity, AtmTTauRelation, StarControls, StarError,
+        StarJobControls,
+    };
+    use flexmesa_star::inlist::InlistBundle;
+    use flexmesa_star::inlist_runner::{ExtrasDirective, StarExtras};
+    use flexmesa_star::model::StarModel;
+    use flexmesa_star::{load_zams_model, set_hydro_vars};
+
+    use super::{
+        AsteroCaseHooks, AsteroTrackExtras, SampleAverages, FAILED_TRACK_CHI2,
+    };
+    use crate::inlist_astero::{
+        AsteroSearchControls, SpectroConstraint, MAX_CONSTRAINTS,
+    };
     use crate::sample_eval::AsteroSampleResult;
+
+    struct ScriptedHooks {
+        rcz_result: Result<f64, &'static str>,
+        calls: usize,
+    }
+
+    impl AsteroCaseHooks for ScriptedHooks {
+        fn set_param(
+            &mut self,
+            _bundle: &mut InlistBundle,
+            _ctrl: &AsteroSearchControls,
+            _name: &str,
+            _val: f64,
+        ) -> Result<(), StarError> {
+            Ok(())
+        }
+
+        fn set_constraint_value(
+            &mut self,
+            model: &StarModel,
+            _ctrl: &AsteroSearchControls,
+            name: &str,
+        ) -> Result<f64, StarError> {
+            self.calls += 1;
+            match name {
+                "Teff" => Ok(model.teff),
+                "Rcz" => self
+                    .rcz_result
+                    .map_err(|msg| StarError::InvalidInput(String::from(msg))),
+                other => Err(StarError::InvalidInput(format!(
+                    "unknown history column '{other}'"
+                ))),
+            }
+        }
+    }
+
+    fn zams_model() -> StarModel {
+        let controls = StarControls {
+            zbase: 0.02,
+            calculate_brunt_n2: true,
+            atm_option: AtmOption::TTau,
+            atm_t_tau_relation: AtmTTauRelation::Eddington,
+            atm_t_tau_opacity: AtmTTauOpacity::Fixed,
+            ..StarControls::default()
+        };
+        let mut model = load_zams_model(controls, StarJobControls::default())
+            .expect("zams");
+        set_hydro_vars(&mut model, false, true).expect("set_hydro_vars");
+        model
+    }
+
+    fn make_extras<'a, 'h>(
+        ctrl: &'a AsteroSearchControls,
+        hooks: &'h mut ScriptedHooks,
+        root: &'a Path,
+    ) -> AsteroTrackExtras<'a, 'h> {
+        AsteroTrackExtras {
+            ctrl,
+            hooks: Some(hooks),
+            params: ctrl.first_params(),
+            sample_number: 1,
+            case_dir: root,
+            output_root: root,
+            best_sample: None,
+            best_model: None,
+            averages: SampleAverages::NONE,
+            bad_count: 0,
+            astero_using_revised_max_yr_dt: false,
+            astero_revised_max_yr_dt: 1.0e8,
+            astero_max_dt_next: 1.0e99,
+            constraint_values: [0.0; MAX_CONSTRAINTS],
+            checked_model_number: None,
+            eval_error: None,
+        }
+    }
 
     fn sample(
         chi2: f64,
@@ -1338,5 +1536,171 @@ mod tests {
         let few = SampleAverages::from_samples(&samples[..1], &ctrl);
         assert_eq!(few.age, 1.0e99);
         assert_eq!(few.model_number_sigma, 1.0e99);
+    }
+
+    /// Verifies `checking_age` runs in `extras_check_model`, never clamps sub-
+    /// 1-yr `remaining_years` to `1.0`, leaves `model.dt` untouched, and lets
+    /// `extras_finish_step` enforce `astero_max_dt_next` (`extras_support.f90:90-102,935`).
+    #[test]
+    fn checking_age_subyear_remaining_not_clamped_and_finish_caps_dt_next() {
+        let ctrl = AsteroSearchControls {
+            eval_chi2_at_target_age_only: true,
+            age_target: 100.25,
+            num_smaller_steps_before_age_target: 50,
+            dt_for_smaller_steps_before_age_target: 1.0,
+            ..AsteroSearchControls::default()
+        };
+
+        let mut model = zams_model();
+        model.model_number = 5;
+        model.star_age = 100.0;
+        model.controls.max_years_for_timestep = 10.0;
+        model.dt = 10.0 * SECYER;
+        model.dt_next = 10.0 * SECYER;
+
+        let root = std::env::temp_dir();
+        let mut hooks = ScriptedHooks {
+            rcz_result: Ok(0.71),
+            calls: 0,
+        };
+        let mut extras = make_extras(&ctrl, &mut hooks, &root);
+
+        assert!(matches!(
+            extras.extras_start_step(&mut model),
+            ExtrasDirective::KeepGoing
+        ));
+        assert!(matches!(
+            extras.extras_check_model(&mut model),
+            ExtrasDirective::KeepGoing
+        ));
+        assert!(
+            (model.controls.max_years_for_timestep - 0.25).abs() <= 1.0e-12
+        );
+        assert!((model.dt - 10.0 * SECYER).abs() <= 1.0);
+        assert!((extras.astero_max_dt_next - 0.25 * SECYER).abs() <= 1.0);
+        assert_eq!(extras.checked_model_number, Some(5));
+
+        assert!(matches!(
+            extras.extras_finish_step(&mut model),
+            ExtrasDirective::KeepGoing
+        ));
+        assert!((model.dt_next - 0.25 * SECYER).abs() <= 1.0);
+    }
+
+    /// Verifies `checking_age` smooth step decay (`n <= j`) and `extras_after_evolve`
+    /// scoring when `do_check_limits` preempts `extras_check_model`
+    /// (`extras_support.f90:103-134,1109-1115`).
+    #[test]
+    fn checking_age_decay_and_after_evolve_when_check_model_bypassed() {
+        let mut ctrl = AsteroSearchControls {
+            eval_chi2_at_target_age_only: true,
+            age_target: 1000.0,
+            num_smaller_steps_before_age_target: 50,
+            dt_for_smaller_steps_before_age_target: 2.0,
+            min_age_limit: 0.0,
+            lnuc_div_l_limit: 0.0,
+            ..AsteroSearchControls::default()
+        };
+        ctrl.weights.chi2_seismo_fraction = 0.0;
+        ctrl.constraint_names[0] = String::from("Teff");
+        ctrl.indexed_constraints[0] = SpectroConstraint {
+            include: true,
+            target: 5777.0,
+            sigma: 65.0,
+            sigmas_coeff: 0.0,
+        };
+
+        let mut model = zams_model();
+        model.model_number = 6;
+        model.star_age = 900.0;
+        model.controls.max_years_for_timestep = 10.0;
+        model.controls.ts_stop.reduction_factor_for_max_timestep = 0.98;
+        model.dt_next = 10.0 * SECYER;
+
+        let root = std::env::temp_dir();
+        let mut hooks = ScriptedHooks {
+            rcz_result: Ok(0.71),
+            calls: 0,
+        };
+        let mut extras = make_extras(&ctrl, &mut hooks, &root);
+
+        assert!(matches!(
+            extras.extras_check_model(&mut model),
+            ExtrasDirective::KeepGoing
+        ));
+        assert!((model.controls.max_years_for_timestep - 9.8).abs() <= 1.0e-12);
+        assert!((extras.astero_max_dt_next - 9.8 * SECYER).abs() <= 1.0);
+        assert!(extras.best_sample.is_none());
+
+        // Simulate `max_age` termination on model 7 bypassing `extras_check_model`.
+        model.model_number = 7;
+        model.star_age = 1000.0;
+        extras
+            .extras_after_evolve(&mut model)
+            .expect("extras_after_evolve scores final target-age model");
+        let best = extras.best_sample.as_ref().expect("best_sample saved");
+        assert_eq!(best.model_number, 7);
+        assert!((best.age_yr - 1000.0).abs() <= 1.0e-12);
+        assert_eq!(extras.checked_model_number, Some(7));
+
+        // Re-invoking `extras_after_evolve` on an already checked model is a no-op.
+        extras
+            .extras_after_evolve(&mut model)
+            .expect("idempotent extras_after_evolve");
+        assert_eq!(hooks.calls, 1);
+    }
+
+    /// Verifies `eval_constraint_values` preserves prior buffer entries only
+    /// when an inactive `'Rcz'` slot leaves `val` unset, while active slots
+    /// and unknown columns always abort (`astero_run_support.f90:165`,
+    /// `extras_support.f90:204-209`).
+    #[test]
+    fn eval_constraint_values_preserves_prior_only_on_unused_unset_rcz() {
+        let mut ctrl = AsteroSearchControls::default();
+        ctrl.constraint_names[5] = String::from("Rcz");
+        let model = zams_model();
+        let root = std::env::temp_dir();
+
+        {
+            let mut hooks = ScriptedHooks {
+                rcz_result: Err(
+                    "set_constraint_value('Rcz'): no convective-zone base \
+                     between 0.25 and 0.9 Rsun, so upstream leaves val unset",
+                ),
+                calls: 0,
+            };
+            let mut extras = make_extras(&ctrl, &mut hooks, &root);
+            let vals = extras
+                .eval_constraint_values(&model)
+                .expect("inactive unset Rcz retains 0.0");
+            assert!((vals[5] - 0.0).abs() <= 1.0e-15);
+
+            extras.constraint_values[5] = 0.712;
+            let vals2 = extras
+                .eval_constraint_values(&model)
+                .expect("inactive unset Rcz retains prior 0.712");
+            assert!((vals2[5] - 0.712).abs() <= 1.0e-15);
+        }
+
+        // Making the slot read (include or limit) must reject the same unset error.
+        ctrl.indexed_constraints[5].include = true;
+        {
+            let mut hooks = ScriptedHooks {
+                rcz_result: Err("set_constraint_value('Rcz'): val left unset"),
+                calls: 0,
+            };
+            let mut extras = make_extras(&ctrl, &mut hooks, &root);
+            assert!(extras.eval_constraint_values(&model).is_err());
+        }
+
+        // Unknown column name must fail even when slot is inactive.
+        ctrl.indexed_constraints[5].include = false;
+        ctrl.constraint_names[5] = String::from("bogus_col");
+        let mut hooks = ScriptedHooks {
+            rcz_result: Ok(0.71),
+            calls: 0,
+        };
+        let mut extras = make_extras(&ctrl, &mut hooks, &root);
+        assert!(extras.eval_constraint_values(&model).is_err());
     }
 }

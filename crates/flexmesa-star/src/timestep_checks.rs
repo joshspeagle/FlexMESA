@@ -87,11 +87,15 @@ pub(crate) fn collect_mixing_boundary_qs(model: &StarModel) -> Vec<f64> {
         let is_mix = model.mixing_type[k] != MixingType::NoMixing;
         if in_mix {
             if !is_mix {
-                qs.push(model.q[k]);
+                let dq_off =
+                    model.aux.mixing.cz_bdy_dq.get(k).copied().unwrap_or(0.0);
+                qs.push(model.q[k] - dq_off);
                 in_mix = false;
             }
         } else if is_mix {
-            qs.push(model.q[k]);
+            let dq_off =
+                model.aux.mixing.cz_bdy_dq.get(k).copied().unwrap_or(0.0);
+            qs.push(model.q[k] - dq_off);
             in_mix = true;
         }
     }
@@ -732,10 +736,13 @@ pub(crate) fn check_structural_limits(
         let c_idx = nz - 1;
         if model.ln_t_start.len() == nz {
             let p_cat = compute_power_categories(model);
-            let l_surf_lsun = model.surface_l_lsun();
+            // `star/private/timestep.f90:1324-1325, 1380-1381` compares
+            // `L_nuc_burn_total / L_phot` against `Lnuc_div_L_zams_limit`.
+            let l_phot_lsun =
+                crate::report_utils::eval_photosphere_info(model).l_lsun;
             let before_near_zams = model.xh_mass[c_idx] > 0.1
-                && l_surf_lsun > 0.0
-                && (p_cat.power_nuc_burn / l_surf_lsun)
+                && l_phot_lsun > 0.0
+                && (p_cat.power_nuc_burn / l_phot_lsun)
                     < model.controls.lnuc_div_l_zams_limit;
 
             if !(ts.delta_lgt_cntr_limit_only_after_near_zams
@@ -834,11 +841,8 @@ pub(crate) fn check_structural_limits(
             || ts.delta_log_eps_nuc_hard_limit > 0.0)
     {
         let conv_bdy_locs = collect_conv_boundary_locs(model);
-        let limit_ratio = if ts.delta_log_eps_nuc_limit > 0.0 {
-            flexmesa_math::exp10(ts.delta_log_eps_nuc_limit)
-        } else {
-            1.0
-        };
+        // `star/private/timestep.f90:1449-1450`.
+        let limit_ratio = flexmesa_math::exp10(ts.delta_log_eps_nuc_limit);
         let mut max_eps_ratio = limit_ratio;
         let mut found_eps = false;
         'zoneloop: for k in 0..nz {
@@ -903,16 +907,16 @@ fn check_one_lgl_burn(
         lim *= drop_factor;
         hard_lim *= drop_factor;
     }
-    let lgl = flexmesa_math::log10(new_l);
+    let lgl = flexmesa_math::safe_log10(new_l);
     if lgl < lgl_min {
         return Ok(0.0);
     }
     if max_other_l > 0.0
-        && flexmesa_math::log10(max_other_l) - relative_limit > lgl
+        && flexmesa_math::safe_log10(max_other_l) - relative_limit > lgl
     {
         return Ok(0.0);
     }
-    let abs_change = (lgl - flexmesa_math::log10(old_l)).abs();
+    let abs_change = (lgl - flexmesa_math::safe_log10(old_l)).abs();
     if hard_lim > 0.0 && abs_change > hard_lim && !skip_hard {
         return Err(format!("{msg} hard limit"));
     }
@@ -1074,7 +1078,7 @@ pub(crate) fn check_luminosity_and_hr_limits(
     let l_surf = model.surface_l_lsun();
     if !model.aux.doing_relax {
         if model.teff > 0.0 && sh.teff_old > 0.0 {
-            let dt_eff = flexmesa_math::log10(model.teff / sh.teff_old);
+            let dt_eff = flexmesa_math::safe_log10(model.teff / sh.teff_old);
             ratio = ratio.max(check_change(
                 dt_eff,
                 ts.delta_lgteff_limit,
@@ -1102,13 +1106,16 @@ pub(crate) fn check_luminosity_and_hr_limits(
         )?);
     }
 
-    // `check_delta_HR` (`star/private/timestep.f90:1990-2020`, ungated by `doing_relax` or `delta_lgL_limit_L_min`)
-    if l_surf > 0.0
+    // `check_delta_HR` (`star/private/timestep.f90:1990-2020`, ungated by
+    // `doing_relax` or `delta_lgL_limit_L_min`, using `L_phot` for the
+    // current step; `sh.l_surf_old` stands in for `L_phot_old`).
+    let l_phot = crate::report_utils::eval_photosphere_info(model).l_lsun;
+    if l_phot > 0.0
         && sh.l_surf_old > 0.0
         && model.teff > 0.0
         && sh.teff_old > 0.0
     {
-        let dlgl = flexmesa_math::log10(l_surf / sh.l_surf_old);
+        let dlgl = flexmesa_math::log10(l_phot / sh.l_surf_old);
         let dlgteff = flexmesa_math::log10(model.teff / sh.teff_old);
         let dhr = (flexmesa_math::pow2(ts.delta_hr_ds_l * dlgl)
             + flexmesa_math::pow2(ts.delta_hr_ds_teff * dlgteff))

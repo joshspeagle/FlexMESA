@@ -280,7 +280,9 @@ pub fn compute_model_correction_norms_in_solver(
     let c = &model.controls;
     let layout = &model.layout;
     let nvar_hydro = layout.nvar_hydro.min(nvar);
-    let include_chem = nvar > nvar_hydro;
+    // `sizeB` checks `s% do_burn .or. s% do_mix`
+    // (`star/private/solver_support.f90:400, 466`).
+    let include_chem = nvar > nvar_hydro && (c.do_burn || c.do_mix);
     let lum_surf_start = model
         .lum_start
         .first()
@@ -340,7 +342,8 @@ pub fn compute_model_correction_norms_in_solver(
                     0.1 * cs_s + model.u.get(k).copied().unwrap_or(0.0).abs();
                 if denom == 0.0 { 0.0 } else { 1.0 / denom }
             } else if layout.i_w == Some(j) {
-                if !c.include_w_in_correction_limits {
+                // `star/private/solver_support.f90:368-379`.
+                if !c.rsp2_flag || !c.include_w_in_correction_limits {
                     continue;
                 }
                 let w_k = model

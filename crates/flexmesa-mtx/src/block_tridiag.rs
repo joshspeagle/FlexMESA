@@ -32,12 +32,21 @@ pub(crate) fn check_blocks(
     dblk: &[f64],
     ublk: &[f64],
 ) -> Result<usize, MtxError> {
-    let blk_sz = nvar * nvar;
+    let Some(blk_sz) = nvar.checked_mul(nvar) else {
+        return Err(MtxError::InvalidParameter(
+            "nvar * nvar overflows usize in block-tridiagonal",
+        ));
+    };
+    let Some(total_blk) = nz.checked_mul(blk_sz) else {
+        return Err(MtxError::InvalidParameter(
+            "nz * nvar * nvar overflows usize in block-tridiagonal",
+        ));
+    };
     if nvar == 0
         || nz == 0
-        || lblk.len() != nz * blk_sz
-        || dblk.len() != nz * blk_sz
-        || ublk.len() != nz * blk_sz
+        || lblk.len() != total_blk
+        || dblk.len() != total_blk
+        || ublk.len() != total_blk
     {
         return Err(MtxError::DimensionMismatch(
             "slice lengths do not match (nz, nvar) for block-tridiagonal",
@@ -468,6 +477,12 @@ pub fn solve_block_tridiagonal(
     ublk: &[f64],
     rhs: &[f64],
 ) -> Result<Vec<f64>, MtxError> {
+    let _ = check_blocks(nvar, nz, lblk, dblk, ublk)?;
+    if rhs.len() != nz * nvar {
+        return Err(MtxError::DimensionMismatch(
+            "rhs length does not match nz * nvar in solve_block_tridiagonal",
+        ));
+    }
     let mut d_work = dblk.to_vec();
     let mut u_work = ublk.to_vec();
     let mut ipiv = vec![0usize; nz * nvar];

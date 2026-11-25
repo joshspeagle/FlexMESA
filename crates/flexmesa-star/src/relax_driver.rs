@@ -390,8 +390,11 @@ pub(crate) fn do_internal_evolve(
     if model.doing_first_model_of_run {
         model.num_retries = 0;
         model.time_sec = 0.0;
+        model.time_old_sec = 0.0;
         model.aux.step_hist.time_sec = 0.0;
+        model.aux.step_hist.time_old_sec = 0.0;
         model.star_age = 0.0;
+        model.star_age_old = 0.0;
         model.aux.step_hist.model_number_for_last_retry = Some(0);
         model.controls.output.photo_interval = 0;
         model.controls.output.profile_interval = 0;
@@ -473,6 +476,9 @@ pub(crate) fn do_internal_evolve(
     }
 
     model.aux.doing_relax = false;
+    // Matches `star/private/relax.f90:4141-4142`.
+    model.aux.need_to_setvars = true;
+    model.aux.st_start.have_st_start_info = false;
     let finished_okay = matches!(
         termination.as_deref(),
         Some(RELAX_FINISHED_OKAY | EXTRAS_CHECK_MODEL)

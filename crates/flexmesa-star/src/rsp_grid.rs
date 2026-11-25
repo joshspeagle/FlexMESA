@@ -4,8 +4,8 @@
 //! and `EOP` volume root-finder (`star/private/rsp_lina.f90:1170-1204`, `star/private/rsp_relax_env.f90:36-124`),
 //! and `StarModel` synchronization helpers (`star/private/rsp_def.f90:513-622, 778-861`, `star/private/rsp.f90:154-201`).
 
-use flexmesa_math::Quad;
 use flexmesa_const::{MixingType, CRAD, PI};
+use flexmesa_math::Quad;
 
 use crate::controls::StarError;
 use crate::model::StarModel;
@@ -425,7 +425,8 @@ pub fn cleanup_for_lina(
 }
 
 /// Applies exact `lnR`/`lnT`/`lnd` round-trip rounding and updates `Vol`, `L`,
-/// `mixing_type`, `R_center`, and `M_center` (`copy_results` in `star/private/rsp_def.f90:778-861`).
+/// `gradT`, `P_face_ad`, `mixing_type`, `R_center`, and `M_center`
+/// (`copy_results` in `star/private/rsp_def.f90:778-861`).
 pub fn copy_results(model: &mut StarModel, dc: &RspDerivedConsts) {
     let nzn = model.nz;
     for i in 1..=nzn {
@@ -437,6 +438,16 @@ pub fn copy_results(model: &mut StarModel, dc: &RspDerivedConsts) {
         model.ln_t[k] = flexmesa_math::log(model.t[k]);
         model.t[k] = flexmesa_math::exp(model.ln_t[k]);
         model.peos[k] = model.pgas[k] + model.prad[k];
+        let yf = model.aux.rsp.y_face_rsp[k];
+        if k < model.aux.mixing.gradt_sub_grada.len() {
+            model.aux.mixing.gradt_sub_grada[k] = yf;
+        }
+        if k > 0 {
+            model.gradt[k] = yf + 0.5 * (model.grada[k - 1] + model.grada[k]);
+        }
+    }
+    if nzn > 1 {
+        model.gradt[0] = model.gradt[1];
     }
     for k in 0..nzn {
         let r_in = if k + 1 < nzn {
@@ -476,6 +487,13 @@ pub fn copy_results(model: &mut StarModel, dc: &RspDerivedConsts) {
                     - vol_rev * model.dm[k] / dc.p43,
                 1.0 / 3.0,
             );
+        }
+    }
+    if nzn > 0 && model.aux.p_face_ad.len() >= nzn {
+        model.aux.p_face_ad[0].val = model.peos[0];
+        for k in 1..nzn {
+            model.aux.p_face_ad[k].val =
+                0.5 * (model.peos[k] + model.peos[k - 1]);
         }
     }
     model.m_center = model.mstar - model.xmstar;

@@ -1158,16 +1158,18 @@ pub fn eval_coupled_edot_breakdown(
         let rl_d = eval_rlobe(m_donor, m_accretor, separation);
         let r_d_phot = star_photosphere_radius_cm(donor);
         let is_kolb = ctrl.mdot_scheme.eq_ignore_ascii_case("Kolb");
+        // `binary/private/binary_edot.f90:216` & `binary/private/binary_mdot.f90:843-847`:
+        // pass raw surface `rho(1)`, `Peos(1)`, `T(1)`, and `mu(1)` without clamps.
         let mut enh = eval_edot_enhancement_isotropic(
             m_donor,
             m_accretor,
             r_d_phot,
             rl_d,
             eccentricity,
-            donor.rho[0].max(1.0e-30),
-            donor.peos[0].max(1.0),
-            donor.t[0].max(10.0),
-            donor.mu[0].max(0.5),
+            donor.rho[0],
+            donor.peos[0],
+            donor.t[0],
+            donor.mu[0],
             &donor.r,
             &donor.peos,
             &donor.t,

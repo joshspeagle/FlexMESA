@@ -323,45 +323,34 @@ pub fn solve_dense_multi(
     Ok(sol)
 }
 
-/// Estimates the 1-norm reciprocal condition number
-/// $\mathrm{rcond} = (\|A\|_1 \|A^{-1}\|_1)^{-1}$ from $A$ and its LU factors
-/// using Hager's 1-norm estimator (`dgecon`).
-///
-/// # Errors
-///
-/// Propagates any dimension error from [`dgetrs_trans`].
-pub fn rcond_dense(
+/// Shared 5-iteration Hager/Higham 1-norm reciprocal condition number estimator
+/// matching LAPACK `DLACN2` / `DGECON` / `DGBCON` (`mtx/public/mtx_rcond.dek:27,61`).
+#[allow(clippy::cast_precision_loss)]
+pub(crate) fn hager_rcond_1norm<F>(
     n: usize,
-    a_mat: &[f64],
-    lu: &[f64],
-    ipiv: &[usize],
-) -> Result<f64, MtxError> {
-    if n == 0 || a_mat.len() != n * n || lu.len() != n * n || ipiv.len() != n {
-        return Err(MtxError::DimensionMismatch(
-            "a_mat and lu must have length n * n and ipiv must have length n",
-        ));
-    }
-    let mut anorm = 0.0_f64;
-    for j in 0..n {
-        let mut col_sum = 0.0;
-        for i in 0..n {
-            col_sum += a_mat[i * n + j].abs();
-        }
-        anorm = anorm.max(col_sum);
-    }
+    anorm: f64,
+    mut solve: F,
+) -> Result<f64, MtxError>
+where
+    F: FnMut(bool, &mut [f64]) -> Result<(), MtxError>,
+{
     if anorm == 0.0 {
         return Ok(0.0);
     }
-
     let inv_n = 1.0 / (n as f64);
     let mut trial = vec![inv_n; n];
     let mut ainv_norm = 0.0_f64;
     for _iter in 0..5 {
         let mut sol = trial.clone();
-        if dgetrs_trans(false, n, lu, ipiv, &mut sol).is_err() {
-            return Ok(0.0);
+        match solve(false, &mut sol) {
+            Ok(()) => {}
+            Err(MtxError::SingularMatrix(_)) => return Ok(0.0),
+            Err(err) => return Err(err),
         }
         let est: f64 = sol.iter().map(|v| v.abs()).sum();
+        if !est.is_finite() {
+            return Ok(0.0);
+        }
         if est <= ainv_norm {
             break;
         }
@@ -370,8 +359,10 @@ pub fn rcond_dense(
             .iter()
             .map(|&v| if v >= 0.0 { 1.0 } else { -1.0 })
             .collect();
-        if dgetrs_trans(true, n, lu, ipiv, &mut dual_vec).is_err() {
-            return Ok(0.0);
+        match solve(true, &mut dual_vec) {
+            Ok(()) => {}
+            Err(MtxError::SingularMatrix(_)) => return Ok(0.0),
+            Err(err) => return Err(err),
         }
         let mut max_idx = 0;
         let mut max_z = dual_vec[0].abs();
@@ -386,7 +377,7 @@ pub fn rcond_dense(
             .zip(trial.iter())
             .map(|(zi, xi)| zi * xi)
             .sum();
-        if max_z <= z_dot_x {
+        if !max_z.is_finite() || !z_dot_x.is_finite() || max_z <= z_dot_x {
             break;
         }
         trial.fill(0.0);
@@ -396,6 +387,48 @@ pub fn rcond_dense(
         return Ok(0.0);
     }
     Ok(1.0 / (anorm * ainv_norm))
+}
+
+/// Estimates the 1-norm reciprocal condition number
+/// $\mathrm{rcond} = (\|A\|_1 \|A^{-1}\|_1)^{-1}$ from $A$ and its LU factors
+/// using Hager's 1-norm estimator (`dgecon`, `mtx/public/mtx_rcond.dek:3-28`).
+///
+/// # Errors
+///
+/// Returns [`MtxError::DimensionMismatch`] if matrix/vector lengths do not
+/// match `n`, [`MtxError::NonFiniteInput`] if `a_mat` or `lu` contains
+/// `NaN`/`Inf`, or [`MtxError::InvalidParameter`] if `ipiv` contains an
+/// out-of-bounds pivot index.
+pub fn rcond_dense(
+    n: usize,
+    a_mat: &[f64],
+    lu: &[f64],
+    ipiv: &[usize],
+) -> Result<f64, MtxError> {
+    if n == 0 || a_mat.len() != n * n || lu.len() != n * n || ipiv.len() != n {
+        return Err(MtxError::DimensionMismatch(
+            "a_mat and lu must have length n * n and ipiv must have length n",
+        ));
+    }
+    if is_bad_slice(a_mat) || is_bad_slice(lu) {
+        return Err(MtxError::NonFiniteInput(
+            "a_mat or lu contains NaN/Inf in rcond_dense",
+        ));
+    }
+    if ipiv.iter().any(|&p| p >= n) {
+        return Err(MtxError::InvalidParameter(
+            "pivot index out of bounds in rcond_dense",
+        ));
+    }
+    let mut anorm = 0.0_f64;
+    for j in 0..n {
+        let mut col_sum = 0.0;
+        for i in 0..n {
+            col_sum += a_mat[i * n + j].abs();
+        }
+        anorm = anorm.max(col_sum);
+    }
+    hager_rcond_1norm(n, anorm, |trans, v| dgetrs_trans(trans, n, lu, ipiv, v))
 }
 
 /// Solves $A(p) x(p) = b(p)$ with first-order forward-mode dual numbers

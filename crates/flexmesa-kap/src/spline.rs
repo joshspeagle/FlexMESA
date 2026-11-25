@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! 2D bicubic spline evaluation and grid-location helpers for `flexmesa-kap`.
 //!
 //! Mirrors `kap/private/kap_eval_support.f90` (`locate_log`, `locate_logR`,
@@ -238,12 +239,18 @@ fn check_grid_uniform(grid: &[f64]) -> Result<bool, KapError> {
     Ok(uniform)
 }
 
-/// 1D not-a-knot $C^2$ cubic spline matching upstream PSPLINE / MESA's
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum KapSplineBc {
+    NotAKnot,
+    ZeroFirstDeriv,
+}
+
+/// 1D $C^2$ cubic spline matching upstream PSPLINE / MESA's
 /// `mkspline_db` -> `cspline_db` -> `V_SPLINE_db` floating-point evaluation
 /// order (including `cspline_db`'s `(half, sixth)` scaling and `(s_next - s_i) / h`
 /// before multiplying by `6.0`, preserving 0-ULP edge endpoint parity when
-/// $x_{N-1} - x_{N-2}$ is not a power of 2).
-fn mkspline_not_a_knot(x: &[f64], y: &[f64]) -> Vec<f64> {
+/// $x_{N-1} - x_{N-2}$ is not a power of 2; `bicub_db.f:1228-1231, 3047-3051, 3256-3390`).
+fn mkspline_1d(x: &[f64], y: &[f64], bc: KapSplineBc) -> Vec<f64> {
     let n = x.len();
     let mut f = vec![[0.0_f64; 4]; n];
     for (node, &val) in f.iter_mut().zip(y.iter()) {
@@ -259,19 +266,34 @@ fn mkspline_not_a_knot(x: &[f64], y: &[f64]) -> Vec<f64> {
         f[i][2] = f[i + 1][2] - f[i][2];
     }
 
-    // Not-a-knot boundary conditions (`imin = 1`, `imax = n - 2` in 0-based).
-    f[1][1] = f[0][3] + 2.0 * f[1][3];
-    f[1][2] = f[1][2] * f[1][3] / (f[0][3] + f[1][3]);
-    f[n - 2][1] = 2.0 * f[n - 3][3] + f[n - 2][3];
-    f[n - 2][2] = f[n - 2][2] * f[n - 3][3] / (f[n - 2][3] + f[n - 3][3]);
+    let (imin, imax) = match bc {
+        KapSplineBc::NotAKnot => {
+            // Not-a-knot boundary conditions (`imin = 1`, `imax = n - 2` in 0-based).
+            f[1][1] = f[0][3] + 2.0 * f[1][3];
+            f[1][2] = f[1][2] * f[1][3] / (f[0][3] + f[1][3]);
+            f[n - 2][1] = 2.0 * f[n - 3][3] + f[n - 2][3];
+            f[n - 2][2] =
+                f[n - 2][2] * f[n - 3][3] / (f[n - 2][3] + f[n - 3][3]);
+            (1, n - 2)
+        }
+        KapSplineBc::ZeroFirstDeriv => {
+            // Homogeneous zero-slope boundary conditions (`k_bc1 = k_bcn = 3`,
+            // `imin = 0`, `imax = n - 1` in 0-based; `bicub_db.f:3256-3275`).
+            f[0][1] = 2.0 * f[0][3];
+            f[0][2] = (f[1][0] - f[0][0]) / f[0][3] - 0.0;
+            f[n - 1][1] = 2.0 * f[n - 2][3];
+            f[n - 1][2] = -(f[n - 1][0] - f[n - 2][0]) / f[n - 2][3] + 0.0;
+            (0, n - 1)
+        }
+    };
 
-    for i in 2..=(n - 2) {
-        let t = if i == n - 2 {
+    for i in (imin + 1)..=imax {
+        let t = if bc == KapSplineBc::NotAKnot && i == imax {
             (f[i - 1][3] - f[i][3]) / f[i - 1][1]
         } else {
             f[i - 1][3] / f[i - 1][1]
         };
-        let diag_off = if i == 2 {
+        let diag_off = if bc == KapSplineBc::NotAKnot && i == imin + 1 {
             f[i - 1][3] - f[i - 2][3]
         } else {
             f[i - 1][3]
@@ -280,10 +302,10 @@ fn mkspline_not_a_knot(x: &[f64], y: &[f64]) -> Vec<f64> {
         f[i][2] -= t * f[i - 1][2];
     }
 
-    f[n - 2][2] /= f[n - 2][1];
-    for ib in 1..=(n - 3) {
-        let i = (n - 2) - ib;
-        let upper = if i == 1 {
+    f[imax][2] /= f[imax][1];
+    for ib in 1..=(imax - imin) {
+        let i = imax - ib;
+        let upper = if bc == KapSplineBc::NotAKnot && i == imin {
             f[i][3] - f[i - 1][3]
         } else {
             f[i][3]
@@ -291,11 +313,13 @@ fn mkspline_not_a_knot(x: &[f64], y: &[f64]) -> Vec<f64> {
         f[i][2] = (f[i][2] - upper * f[i + 1][2]) / f[i][1];
     }
 
-    f[0][3] = x[1] - x[0];
-    f[n - 2][3] = x[n - 1] - x[n - 2];
-    f[0][2] = (f[1][2] * (f[0][3] + f[1][3]) - f[2][2] * f[0][3]) / f[1][3];
-    f[n - 1][2] =
-        f[n - 2][2] + (f[n - 2][2] - f[n - 3][2]) * f[n - 2][3] / f[n - 3][3];
+    if bc == KapSplineBc::NotAKnot {
+        f[0][3] = x[1] - x[0];
+        f[n - 2][3] = x[n - 1] - x[n - 2];
+        f[0][2] = (f[1][2] * (f[0][3] + f[1][3]) - f[2][2] * f[0][3]) / f[1][3];
+        f[n - 1][2] = f[n - 2][2]
+            + (f[n - 2][2] - f[n - 3][2]) * f[n - 2][3] / f[n - 3][3];
+    }
 
     for i in 0..(n - 1) {
         let h = f[i][3];
@@ -331,21 +355,56 @@ pub fn fit_bicubic_not_a_knot(
     log_ts: &[f64],
     raw_vals: &[f64],
 ) -> Result<(Vec<[f64; 4]>, bool, bool), KapError> {
+    fit_bicubic_with_bc(log_rs, log_ts, raw_vals, KapSplineBc::NotAKnot)
+}
+
+/// Fit a 2D PSPLINE bicubic spline with homogeneous zero-slope boundary conditions
+/// (`ibc = 3`, used by `condint.f90:115-125`) from a flat `(nx, ny)` row-major array
+/// (`raw_vals[i_r * ny + j_t]`).
+///
+/// Returns `(coeffs, ili_log_rs, ili_log_ts)`.
+///
+/// # Errors
+/// Returns [`KapError::NumericalFailure`] if grid coordinates are invalid or `nx`/`ny < 4`.
+pub fn fit_bicubic_zero_first_deriv(
+    log_rs: &[f64],
+    log_ts: &[f64],
+    raw_vals: &[f64],
+) -> Result<(Vec<[f64; 4]>, bool, bool), KapError> {
+    fit_bicubic_with_bc(log_rs, log_ts, raw_vals, KapSplineBc::ZeroFirstDeriv)
+}
+
+fn fit_bicubic_with_bc(
+    log_rs: &[f64],
+    log_ts: &[f64],
+    raw_vals: &[f64],
+    bc: KapSplineBc,
+) -> Result<(Vec<[f64; 4]>, bool, bool), KapError> {
     let nx = log_rs.len();
     let ny = log_ts.len();
     if raw_vals.len() != nx * ny {
         return Err(KapError::NumericalFailure(
-            "mismatched raw_vals length in fit_bicubic_not_a_knot",
+            "mismatched raw_vals length in fit_bicubic",
         ));
     }
     let ili_x = check_grid_uniform(log_rs)?;
     let ili_y = check_grid_uniform(log_ts)?;
 
     let mut coeffs = vec![[0.0_f64; 4]; nx * ny];
-    for j_t in 0..ny {
-        for i_r in 0..nx {
-            let v = raw_vals[j_t * nx + i_r];
-            coeffs[i_r * ny + j_t][0] = if v.is_finite() { v } else { 0.0 };
+    match bc {
+        KapSplineBc::NotAKnot => {
+            for j_t in 0..ny {
+                for i_r in 0..nx {
+                    let v = raw_vals[j_t * nx + i_r];
+                    coeffs[i_r * ny + j_t][0] =
+                        if v.is_finite() { v } else { 0.0 };
+                }
+            }
+        }
+        KapSplineBc::ZeroFirstDeriv => {
+            for (dst, &v) in coeffs.iter_mut().zip(raw_vals.iter()) {
+                dst[0] = if v.is_finite() { v } else { 0.0 };
+            }
         }
     }
 
@@ -354,7 +413,7 @@ pub fn fit_bicubic_not_a_knot(
         for i_r in 0..nx {
             x_slice[i_r] = coeffs[i_r * ny + j_t][0];
         }
-        let fxx = mkspline_not_a_knot(log_rs, &x_slice);
+        let fxx = mkspline_1d(log_rs, &x_slice, bc);
         for i_r in 0..nx {
             coeffs[i_r * ny + j_t][1] = fxx[i_r];
         }
@@ -365,7 +424,7 @@ pub fn fit_bicubic_not_a_knot(
         for j_t in 0..ny {
             y_slice[j_t] = coeffs[i_r * ny + j_t][0];
         }
-        let fyy = mkspline_not_a_knot(log_ts, &y_slice);
+        let fyy = mkspline_1d(log_ts, &y_slice, bc);
         for j_t in 0..ny {
             coeffs[i_r * ny + j_t][2] = fyy[j_t];
         }
@@ -373,7 +432,7 @@ pub fn fit_bicubic_not_a_knot(
         for j_t in 0..ny {
             y_slice[j_t] = coeffs[i_r * ny + j_t][1];
         }
-        let fxxyy = mkspline_not_a_knot(log_ts, &y_slice);
+        let fxxyy = mkspline_1d(log_ts, &y_slice, bc);
         for j_t in 0..ny {
             coeffs[i_r * ny + j_t][3] = fxxyy[j_t];
         }

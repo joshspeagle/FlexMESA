@@ -50,7 +50,9 @@ pub fn q_bisection_search(
     let (mut q_lb, _) = compute_q(info_p, set_y(y_is_positive, *lower_bound_z));
     let (mut q_ub, _) = compute_q(info_p, set_y(y_is_positive, *upper_bound_z));
 
-    if is_bad(q_lb) || is_bad(q_ub) || q_lb * q_ub > 0.0 {
+    // Match `turb/private/tdc_support.f90:133`: reject only same-sign
+    // brackets so opposite-sign `+-Inf` values at extreme `Z` still bisect.
+    if q_lb * q_ub > 0.0 {
         return Err(TurbError::TdcConvergenceFailure(
             "Initial Z window does not bracket Q(Z) = 0",
         ));
@@ -61,10 +63,19 @@ pub fn q_bisection_search(
         z = 0.5 * (*upper_bound_z + *lower_bound_z);
         let (q, _) = compute_q(info_p, set_y(y_is_positive, z));
 
-        if q * q_ub > 0.0 {
+        // Match `turb/private/tdc_support.f90:161-173`: test endpoint signs
+        // directly rather than multiplying so sub-`1e-154` residuals cannot
+        // underflow `q * q_ub` to zero and stall bisection.
+        if q > 0.0 && q_ub > 0.0 {
             *upper_bound_z = z;
             q_ub = q;
-        } else if q * q_lb > 0.0 {
+        } else if q > 0.0 && q_lb > 0.0 {
+            *lower_bound_z = z;
+            q_lb = q;
+        } else if q < 0.0 && q_ub < 0.0 {
+            *upper_bound_z = z;
+            q_ub = q;
+        } else if q < 0.0 && q_lb < 0.0 {
             *lower_bound_z = z;
             q_lb = q;
         }
@@ -119,10 +130,19 @@ pub fn dq_dz_bisection_search(
         let (q, _) = compute_q(info, y);
         let dq = q.d1[0];
 
-        if dq * dq_ub > 0.0 {
+        // Match `turb/private/tdc_support.f90:284-296`: test derivative signs
+        // directly so tiny `dQ/dZ` near `Z = -100` cannot underflow
+        // `dq * dq_ub`.
+        if dq > 0.0 && dq_ub > 0.0 {
             ub = z;
             dq_ub = dq;
-        } else if dq * dq_lb > 0.0 {
+        } else if dq > 0.0 && dq_lb > 0.0 {
+            lb = z;
+            dq_lb = dq;
+        } else if dq < 0.0 && dq_ub < 0.0 {
+            ub = z;
+            dq_ub = dq;
+        } else if dq < 0.0 && dq_lb < 0.0 {
             lb = z;
             dq_lb = dq;
         }
@@ -273,9 +293,9 @@ pub fn bracket_plus_newton_search<T: TdcLift>(
             // A step past a bound went too far in the right direction; take
             // the midpoint to that bound instead.
             if z_new.val() > upper_bound_z.val() {
-                z_new = (z + upper_bound_z) / lift(2.0);
+                z_new = (z + upper_bound_z).div_real(2.0);
             } else if z_new.val() < lower_bound_z.val() {
-                z_new = (z + lower_bound_z) / lift(2.0);
+                z_new = (z + lower_bound_z).div_real(2.0);
             }
 
             y = set_y(y_is_positive, z_new);
@@ -283,7 +303,10 @@ pub fn bracket_plus_newton_search<T: TdcLift>(
             if qc.val().abs() < q.val().abs() {
                 break;
             }
-            correction = lift(0.5) * correction;
+            // `1.0 / 2.0 == 0.5` is exact in IEEE-754, matching
+            // `0.5d0 * correction` (`turb/private/tdc.f90:335`) without
+            // `0.0 * val`.
+            correction = correction.div_real(2.0);
         }
 
         // `Z_new%d1val1 = 1d0; Z = Z_new` (`tdc.f90:341-342`).
@@ -303,4 +326,76 @@ pub fn bracket_plus_newton_search<T: TdcLift>(
     }
 
     Ok((T::unconvert(y), iter_taken))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn sample_tdc_info(a0: f64, c0: f64, l: f64, l0: f64) -> TdcInfo<f64> {
+        TdcInfo {
+            include_mlt_corr_to_tdc: false,
+            use_tdc_enthalpy_flux_limiter: false,
+            mixing_length_alpha: 2.0,
+            tdc_alpha_c: 1.0,
+            tdc_alpha_s: 1.0,
+            tdc_alpha_d: 1.0,
+            tdc_alpha_r: 0.0,
+            tdc_alpha_pt: 0.0,
+            dt: 1.0,
+            a0,
+            c0,
+            l,
+            l0,
+            gradl: 0.4,
+            grada: 0.4,
+            t: 1.0e5,
+            rho: 1.0,
+            dv: 0.0,
+            cp: 1.0e8,
+            kap: 1.0,
+            hp: 1.0e9,
+            gamma: 1.0,
+            eq_div_w: 0.0,
+            h: 1.0e13,
+        }
+    }
+
+    #[test]
+    fn q_bisection_handles_sub_1e154_residuals_and_neg_inf_upper_bound() {
+        let tiny = sample_tdc_info(0.0, 0.0, 2.0e-180, 1.0e-180);
+        let mut lb = -100.0;
+        let mut ub = 100.0;
+        let z = q_bisection_search(&tiny, true, &mut lb, &mut ub)
+            .expect("sub-1e-154 bracket must bisect cleanly");
+        assert!(ub - lb < 1.0);
+        let (q_lb, _) = compute_q(&tiny, set_y(true, lb));
+        let (q_ub, _) = compute_q(&tiny, set_y(true, ub));
+        assert!(q_lb > 0.0 && q_ub < 0.0);
+        assert!(lb <= z && z <= ub);
+
+        let huge = sample_tdc_info(0.0, 1.0e270, 2.0e250, 1.0e250);
+        let (_, af_ub) = compute_q(&huge, set_y(true, 100.0));
+        let (q_huge_ub, _) = compute_q(&huge, set_y(true, 100.0));
+        assert!(af_ub.is_finite());
+        assert_eq!(q_huge_ub, f64::NEG_INFINITY);
+        let mut lb_h = -100.0;
+        let mut ub_h = 100.0;
+        let z_h = q_bisection_search(&huge, true, &mut lb_h, &mut ub_h)
+            .expect("opposite-sign -Inf upper bound must bisect cleanly");
+        assert!(ub_h - lb_h < 1.0);
+        assert!(lb_h <= z_h && z_h <= ub_h);
+    }
+
+    #[test]
+    fn dq_dz_bisection_handles_sub_1e154_derivatives() {
+        let tiny = sample_tdc_info(1.0e5, 1.0e-180, 1.0e-180, 1.0e-180);
+        let z0 = af_bisection_search(&tiny, -10.0, 10.0)
+            .expect("Af_bisection_search must locate cutoff");
+        let z1 = dq_dz_bisection_search(&tiny.to_z_dual(), -10.0, z0)
+            .expect("sub-1e-154 dQ/dZ bracket must bisect cleanly");
+        assert!((-10.0..=z0).contains(&z1));
+        let (_, af) = compute_q(&tiny, set_y(false, z1));
+        assert!(af > 0.0);
+    }
 }

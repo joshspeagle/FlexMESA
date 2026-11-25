@@ -3,9 +3,7 @@
 //! and `select_mdot_action` in `star/private/evolve.f90:747-1057`, paired with
 //! `set_surf_avg_rotation_info` in `star/private/hydro_rotation.f90:593-744`).
 
-use flexmesa_const::{
-    CLIGHT, CRAD, FOUR_PI, M_SUN, PI, SECYER, STANDARD_CGRAV,
-};
+use flexmesa_const::{CLIGHT, CRAD, M_SUN, PI, SECYER, STANDARD_CGRAV};
 
 use crate::model::StarModel;
 
@@ -25,138 +23,39 @@ pub enum SelectMdotAction {
 
 /// Evaluates optical-depth mass-averaged $\langle \Omega / \Omega_{\mathrm{crit}} \rangle_{\mathrm{surf}}$
 /// across $[\tau_{\min}, \tau_{\max}]$ (`set_surf_avg_rotation_info` in
-/// `star/private/hydro_rotation.f90:593-744`).
+/// `star/private/hydro_rotation.f90:588-739`).
 pub fn eval_surf_avg_w_div_w_crit(model: &mut StarModel) -> f64 {
-    let nz = model.nz;
-    if !model.controls.rotation_flag || nz < 2 {
+    if !model.controls.rotation_flag || model.nz < 2 {
         return 0.0;
     }
     // `call set_rotation_info(s, .true., ierr)`
-    // (`star/private/hydro_rotation.f90:616-620`): keeps
-    // `w_div_w_crit_roche`.
+    // (`star/private/hydro_rotation.f90:616-620`): keeps `w_div_w_crit_roche`.
     crate::hydro_rotation::set_rotation_info(model, true);
 
-    let tau_min = model.controls.mix_wind.surf_avg_tau_min.max(0.0);
-    let tau_max = model.controls.mix_wind.surf_avg_tau.max(tau_min + 1.0e-6);
-    let tau0 = (model.controls.tau_factor * model.tau_base).max(0.0);
-
-    let mut tau = tau0;
-    let mut dm_sum = 0.0_f64;
-    let mut lrad_div_ledd_sum = 0.0_f64;
-
-    let eval_face_lrad_div_ledd = |m: &StarModel, k: usize| -> f64 {
-        let j = if k == 0 { 1 } else { k };
-        let cgrav_j = m.cgrav[j];
-        if cgrav_j <= 0.0 {
-            return 0.0;
-        }
-        let del_m = m.dm_bar.get(j).copied().unwrap_or(m.dm[j]).max(1.0e-30);
-        let del_t4 =
-            flexmesa_math::pow4(m.t[j - 1]) - flexmesa_math::pow4(m.t[j]);
-        let area = FOUR_PI * m.r[j] * m.r[j];
-        let denom = (FOUR_PI * cgrav_j * m.m_grav[j].max(1.0)).max(1.0);
-        (-(area * area * CRAD * (del_t4 / del_m) / 3.0) / denom).max(0.0)
-    };
-
-    for k in 0..(nz - 1) {
-        let kap = model.opacity[k].max(1.0e-6);
-        let rmid = model
-            .rmid
-            .get(k)
-            .copied()
-            .filter(|&v| v > 0.0)
-            .unwrap_or_else(|| 0.5 * (model.r[k] + model.r[k + 1]))
-            .max(1.0);
-        let mut dm = model.dm[k].max(0.0);
-        let dtau = (dm * kap / (FOUR_PI * rmid * rmid)).max(1.0e-30);
-        if tau + dtau <= tau_min {
-            tau += dtau;
-            continue;
-        }
-        if tau < tau_max {
-            if tau < tau_min {
-                dm *= (tau + dtau - tau_min) / dtau;
-            } else if tau + dtau > tau_max {
-                dm *= (tau_max - tau) / dtau;
-            }
-        }
-        dm_sum += dm;
-        lrad_div_ledd_sum += dm * eval_face_lrad_div_ledd(model, k);
-        tau += dtau;
-        if tau >= tau_max {
-            break;
-        }
+    // Upstream reads `s% surf_avg_tau_min` and `s% surf_avg_tau`. If a Rust
+    // caller customized `mix_wind.surf_avg_tau*` directly while leaving
+    // `output.surf_avg_tau*` at its defaults `(1.0, 100.0)`, apply those bounds
+    // temporarily around `eval_surf_avg_rotation_info`.
+    let mw_taus = (
+        model.controls.mix_wind.surf_avg_tau_min,
+        model.controls.mix_wind.surf_avg_tau,
+    );
+    let out_taus = (
+        model.controls.output.surf_avg_tau_min,
+        model.controls.output.surf_avg_tau,
+    );
+    let forward_mw_override = mw_taus != out_taus && out_taus == (1.0, 100.0);
+    if forward_mw_override {
+        model.controls.output.surf_avg_tau_min = mw_taus.0;
+        model.controls.output.surf_avg_tau = mw_taus.1;
     }
-
-    let lrad_div_ledd_avg = if dm_sum > 0.0 {
-        lrad_div_ledd_sum / dm_sum
-    } else {
-        eval_face_lrad_div_ledd(model, 0)
-    };
-    let gamma_factor = 1.0 - lrad_div_ledd_avg.clamp(0.0, 0.9999);
-
-    let has_tidal_def = model.aux.tidal_deformation.is_some();
-    let max_w = model.controls.mix_wind.w_div_wcrit_max.clamp(0.0, 0.99);
-    let eval_r_eq = |m: &StarModel, idx: usize| -> f64 {
-        let r_i = m.r[idx].max(1.0);
-        if has_tidal_def {
-            return r_i;
-        }
-        let om_c = (m.cgrav[idx].max(0.0) * m.m_grav[idx].max(1.0)
-            / flexmesa_math::pow3(r_i))
-        .sqrt()
-        .max(1.0e-30);
-        let w = (m.omega[idx].abs() / om_c).min(max_w);
-        let w2 = w * w;
-        let w4 = w2 * w2;
-        r_i * (1.0 + w2 / 6.0 - 0.005124 * w4 + 0.06562 * w4 * w2).max(1.0)
-    };
-
-    tau = tau0;
-    dm_sum = 0.0;
-    let mut w_div_wc_sum = 0.0_f64;
-    for k in 0..(nz - 1) {
-        let kap = model.opacity[k].max(1.0e-6);
-        let rmid =
-            (0.5 * (eval_r_eq(model, k) + eval_r_eq(model, k + 1))).max(1.0);
-        let mut dm = model.dm[k].max(0.0);
-        let dtau = (dm * kap / (FOUR_PI * rmid * rmid)).max(1.0e-30);
-        if tau + dtau <= tau_min {
-            tau += dtau;
-            continue;
-        }
-        if tau < tau_max {
-            if tau < tau_min {
-                dm *= (tau + dtau - tau_min) / dtau;
-            } else if tau + dtau > tau_max {
-                dm *= (tau_max - tau) / dtau;
-            }
-        }
-        let cgrav = 0.5 * (model.cgrav[k] + model.cgrav[k + 1]);
-        let mmid = (0.5 * (model.m_grav[k] + model.m_grav[k + 1])).max(1.0);
-        let om = 0.5 * (model.omega[k] + model.omega[k + 1]);
-        let om_crit = (gamma_factor * cgrav * mmid / (rmid * rmid * rmid))
-            .sqrt()
-            .max(1.0e-30);
-        dm_sum += dm;
-        w_div_wc_sum += dm * (om / om_crit).abs();
-        tau += dtau;
-        if tau >= tau_max {
-            break;
-        }
+    let w_div_w_crit =
+        crate::report_utils::eval_surf_avg_rotation_info(model).w_div_w_crit;
+    if forward_mw_override {
+        model.controls.output.surf_avg_tau_min = out_taus.0;
+        model.controls.output.surf_avg_tau = out_taus.1;
     }
-
-    if dm_sum > 0.0 {
-        w_div_wc_sum / dm_sum
-    } else {
-        let r0 = eval_r_eq(model, 0);
-        let cgrav = model.cgrav.first().copied().unwrap_or(STANDARD_CGRAV);
-        let om_crit = (gamma_factor * cgrav * model.m_grav[0].max(1.0)
-            / (r0 * r0 * r0))
-            .sqrt()
-            .max(1.0e-30);
-        (model.omega[0] / om_crit).abs()
-    }
+    w_div_w_crit
 }
 
 /// Per-attempt state machine for implicit wind and `max_mdot_redo_cnt`
@@ -207,8 +106,7 @@ impl MdotRedoState {
 
         let mut ignored_first_step = false;
         let mut mdot_redo_cnt = 0_usize;
-        if max_cnt > 0
-            && was_in_limit
+        if was_in_limit
             && has_prev_generation
             && mdot_old.abs() > 0.0
             && ((model.mstar_dot - mdot_old) / mdot_old).abs() + 1.0 > rev_fac
@@ -454,7 +352,7 @@ impl MdotRedoState {
                 } else {
                     mstar_dot * rev_fac
                 };
-                if (mstar_dot_prev - self.explicit_mdot).abs() > 0.0 {
+                if mstar_dot_prev != self.explicit_mdot {
                     nxt = nxt.min(self.explicit_mdot);
                 }
                 if -nxt > self.max_wind_mdot {

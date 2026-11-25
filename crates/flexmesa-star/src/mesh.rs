@@ -191,14 +191,29 @@ impl StarModel {
         }
     }
 
-    /// Updates face radii `r`, cell volumetric mid-radii `rmid`, and face
-    /// gravitational acceleration `grav` (`set_m_grav_and_grav` in
-    /// `hydro_vars.f90`).
+    /// Updates face radii `r`, gravitational masses `m_grav` (applying
+    /// baryonic `mass_correction` when `use_mass_corrections` is enabled,
+    /// `star/private/star_utils.f90:387-410`), cell volumetric mid-radii
+    /// `rmid`, and face gravitational acceleration `grav`.
     pub fn set_m_grav_and_grav(&mut self) {
         let nz = self.nz;
+        if nz == 0 {
+            return;
+        }
+        if self.controls.use_mass_corrections {
+            let mc_nz =
+                self.aux.mass_correction.get(nz - 1).copied().unwrap_or(1.0);
+            self.m_grav[nz - 1] = self.m_center + self.dm[nz - 1] * mc_nz;
+            for k in (0..nz - 1).rev() {
+                let mc =
+                    self.aux.mass_correction.get(k).copied().unwrap_or(1.0);
+                self.m_grav[k] = self.m_grav[k + 1] + self.dm[k] * mc;
+            }
+        } else {
+            self.m_grav[..nz].copy_from_slice(&self.m[..nz]);
+        }
         for k in 0..nz {
             self.r[k] = flexmesa_math::exp(self.ln_r[k]);
-            self.m_grav[k] = self.m[k];
             self.grav[k] =
                 self.cgrav[k] * self.m_grav[k] / (self.r[k] * self.r[k]);
         }
@@ -485,7 +500,8 @@ impl StarModel {
         self.xa_start.clone_from(&self.xa);
         self.xa_sub_xa_start.clear();
         self.xh_start.clone_from(&self.xh);
-        self.aux.opacity_start_surf = self.opacity.first().copied().unwrap_or(0.0);
+        self.aux.opacity_start_surf =
+            self.opacity.first().copied().unwrap_or(0.0);
         let mut de_drho = vec![0.0; self.nz];
         for (dst, row) in de_drho.iter_mut().zip(self.eos_res.iter()) {
             *dst = row[I_DE_DRHO];

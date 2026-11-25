@@ -10,7 +10,7 @@
 //! Medin-Cumming phase tables are absent from upstream `26.4.1`.
 
 use flexmesa_chem::NuclideCatalog;
-use flexmesa_const::{CRAD, FOUR_PI, MixingType};
+use flexmesa_const::{MixingType, CRAD, FOUR_PI};
 use flexmesa_eos::{eos_dt_get, I_LN_PGAS, I_PHASE};
 use flexmesa_utils::is_bad;
 
@@ -254,9 +254,14 @@ fn do_2component_phase_separation(
     model.eos_config.skye.skye_use_ion_offsets = false;
 
     let result = (|| -> Result<(), StarError> {
-        let mut unsmoothed_brunt_b = vec![0.0_f64; nz];
+        if model.aux.mixing.unsmoothed_brunt_b.len() != nz {
+            model.aux.mixing.resize(nz);
+        }
+        if model.brunt_b.len() != nz {
+            model.brunt_b.resize(nz, 0.0);
+        }
 
-        update_model_range(model, 0, nz - 1, false, &mut unsmoothed_brunt_b)?;
+        update_model_range(model, 0, nz - 1, false)?;
         let energy_before = model.energy.clone();
 
         for k in (0..=kstart).rev() {
@@ -282,18 +287,11 @@ fn do_2component_phase_separation(
                 ));
             }
 
-            move_one_zone(
-                model,
-                k,
-                components,
-                idx_light,
-                idx_heavy,
-                &mut unsmoothed_brunt_b,
-            )?;
-            mix_outward(model, k - 1, 0, &mut unsmoothed_brunt_b)?;
+            move_one_zone(model, k, components, idx_light, idx_heavy)?;
+            mix_outward(model, k - 1, 0)?;
         }
 
-        update_model_range(model, 0, nz - 1, false, &mut unsmoothed_brunt_b)?;
+        update_model_range(model, 0, nz - 1, false)?;
 
         // `phase_separation.f90:135-137` divides by `dt` unconditionally.
         for k in 0..nz {
@@ -312,14 +310,12 @@ fn do_2component_phase_separation(
     result
 }
 
-#[allow(clippy::too_many_arguments)]
 fn move_one_zone(
     model: &mut StarModel,
     k: usize,
     components: PhaseComponents,
     idx_light: usize,
     idx_heavy: usize,
-    unsmoothed_brunt_b: &mut [f64],
 ) -> Result<(), StarError> {
     let species = model.species;
     let nz = model.nz;
@@ -338,22 +334,19 @@ fn move_one_zone(
     model.xa[k * species + idx_heavy] = xfac * (x_heavy + dx_heavy);
     model.xa[k * species + idx_light] = xfac * (x_light - dx_heavy);
 
-    let dq_ratio = model.dq[k] / model.dq[k - 1];
     let x_light_above = model.xa[(k - 1) * species + idx_light];
     let x_heavy_above = model.xa[(k - 1) * species + idx_heavy];
-    model.xa[(k - 1) * species + idx_light] =
-        x_light_above + xfac * dx_heavy * dq_ratio;
-    model.xa[(k - 1) * species + idx_heavy] =
-        x_heavy_above - xfac * dx_heavy * dq_ratio;
+    let dx_above = (xfac * dx_heavy * model.dq[k]) / model.dq[k - 1];
+    model.xa[(k - 1) * species + idx_light] = x_light_above + dx_above;
+    model.xa[(k - 1) * species + idx_heavy] = x_heavy_above - dx_above;
 
-    update_model_range(model, k - 1, nz - 1, true, unsmoothed_brunt_b)
+    update_model_range(model, k - 1, nz - 1, true)
 }
 
 fn mix_outward(
     model: &mut StarModel,
     kbot: usize,
     min_mix_zones: usize,
-    unsmoothed_brunt_b: &mut [f64],
 ) -> Result<(), StarError> {
     let nz = model.nz;
     let species = model.species;
@@ -402,16 +395,10 @@ fn mix_outward(
             ));
         }
 
-        update_model_range(
-            model,
-            ktop - 1,
-            (ktop + 1).min(nz - 1),
-            use_brunt,
-            unsmoothed_brunt_b,
-        )?;
+        update_model_range(model, ktop - 1, (ktop + 1).min(nz - 1), use_brunt)?;
 
         if use_brunt {
-            let b_term = unsmoothed_brunt_b[ktop];
+            let b_term = model.aux.mixing.unsmoothed_brunt_b[ktop];
             let grada = model.aux.mixing.grada_face[ktop];
             let gradr = model.gradr[ktop];
             if b_term + grada - gradr > 0.0 {
@@ -422,26 +409,20 @@ fn mix_outward(
         }
     }
 
-    update_model_range(
-        model,
-        last_ktop,
-        (kbot + 1).min(nz - 1),
-        true,
-        unsmoothed_brunt_b,
-    )
+    update_model_range(model, last_ktop, (kbot + 1).min(nz - 1), true)
 }
 
-/// Refreshes constant-`Pgas` EOS (`fix_Pgas = .true.`), opacities, optional
-/// unsmoothed Brassard Brunt-B (`brunt.f90:231-313`) over zones `kc_t..=kc_b`,
-/// then MLT over interior faces `kc_t + 1..=kc_b` through
-/// [`crate::hydro_vars::set_mlt_vars_range`]
+/// Refreshes constant-`Pgas` EOS (`fix_Pgas = .true.`), `set_micro_vars` face
+/// fields (`csound_start`, `P_face_ad`) and opacities, optional Brassard Brunt-B
+/// (`brunt.f90:74-105, 231-315`) storing `aux.mixing.unsmoothed_brunt_b` and
+/// applying `threshold_smoothing` to `model.brunt_b`, then MLT over interior
+/// faces `kc_t + 1..=kc_b` through [`crate::hydro_vars::set_mlt_vars_range`]
 /// (`star/private/phase_separation.f90:333-398`).
 fn update_model_range(
     model: &mut StarModel,
     kc_t: usize,
     kc_b: usize,
     do_brunt: bool,
-    unsmoothed_brunt_b: &mut [f64],
 ) -> Result<(), StarError> {
     let nz = model.nz;
     let species = model.species;
@@ -454,12 +435,33 @@ fn update_model_range(
     //    helper (`phase_separation.f90:355-361`, `micro.f90:321-545`).
     do_eos_fix_pgas_range(model, kc_t, kc_hi)?;
 
-    // 2. Opacities over kc_t..=kc_hi via shared `micro.rs` helper
-    //    (`phase_separation.f90:365-370`, `micro.f90:548-664`).
+    // 2. Micro-variable face refresh (`set_micro_vars` with `skip_eos = .true.`,
+    //    `skip_net = .true.`, `skip_neu = .true.`, `skip_kap = .false.` in
+    //    `phase_separation.f90:365-370`, `micro.f90:84-103`, `micro.f90:548-664`).
+    if model.aux.csound_start.len() != nz {
+        model.aux.csound_start.resize(nz, 0.0);
+    }
+    if model.aux.p_face_ad.len() != nz {
+        model.aux.p_face_ad.resize(nz, StarAdOrder1::ZERO);
+    }
+    for k in kc_t..=kc_hi {
+        if model.aux.csound_start[k] < 0.0 {
+            model.aux.csound_start[k] = model.csound[k];
+        }
+        if !model.controls.u_flag {
+            model.aux.p_face_ad[k].val = if k == 0 {
+                model.peos[0]
+            } else {
+                let alfa = model.dq[k - 1] / (model.dq[k - 1] + model.dq[k]);
+                let beta = 1.0 - alfa;
+                alfa * model.peos[k] + beta * model.peos[k - 1]
+            };
+        }
+    }
     eval_kap_for_range(model, kc_t, kc_hi)?;
 
-    // 3. Unsmoothed Brunt-B (Brassard finite-difference EOS at face (rho, T),
-    //    matching `phase_separation.f90:373-383` and `brunt.f90:231-315`).
+    // 3. Brassard Brunt-B (`brunt.f90:74-105, 231-315`) storing
+    //    `unsmoothed_brunt_b` and applying `threshold_smoothing` across `0..nz`.
     if do_brunt {
         if !model.controls.calculate_brunt_b {
             return Err(StarError::InvalidInput(String::from(
@@ -467,10 +469,17 @@ fn update_model_range(
                  (`star/private/phase_separation.f90:375-377`)",
             )));
         }
+        if model.aux.mixing.unsmoothed_brunt_b.len() != nz {
+            model.aux.mixing.resize(nz);
+        }
+        if model.brunt_b.len() != nz {
+            model.brunt_b.resize(nz, 0.0);
+        }
         let ht = builtin_helm_table()?;
         for k in kc_t..=kc_hi {
             if k == 0 {
-                unsmoothed_brunt_b[0] = 0.0;
+                model.aux.mixing.unsmoothed_brunt_b[0] = 0.0;
+                model.brunt_b[0] = 0.0;
                 continue;
             }
             let alfa = model.dq[k - 1] / (model.dq[k - 1] + model.dq[k]);
@@ -507,8 +516,9 @@ fn update_model_range(
                     "phase_separation brunt_B EOS(k) failed at face {k}: {e}"
                 ))
             })?;
-            let lnp1 =
-                flexmesa_math::log(prad_face + flexmesa_math::exp(out1.res[I_LN_PGAS]));
+            let lnp1 = flexmesa_math::log(
+                prad_face + flexmesa_math::exp(out1.res[I_LN_PGAS]),
+            );
 
             let out2 = eos_dt_get(
                 ht,
@@ -523,8 +533,9 @@ fn update_model_range(
                     "phase_separation brunt_B EOS(k-1) failed at face {k}: {e}"
                 ))
             })?;
-            let lnp2 =
-                flexmesa_math::log(prad_face + flexmesa_math::exp(out2.res[I_LN_PGAS]));
+            let lnp2 = flexmesa_math::log(
+                prad_face + flexmesa_math::exp(out2.res[I_LN_PGAS]),
+            );
 
             let mut delta_lnp = model.ln_peos[k - 1] - model.ln_peos[k];
             if delta_lnp > -1.0e-50 {
@@ -538,9 +549,9 @@ fn update_model_range(
             if model.controls.use_mass_corrections
                 && model.aux.mass_correction.len() == nz
             {
-                let delta_ln_mbar = flexmesa_math::log(
-                    model.aux.mass_correction[k - 1],
-                ) - flexmesa_math::log(model.aux.mass_correction[k]);
+                let delta_ln_mbar =
+                    flexmesa_math::log(model.aux.mass_correction[k - 1])
+                        - flexmesa_math::log(model.aux.mass_correction[k]);
                 b_k -= chi_rho_face * delta_ln_mbar / delta_lnp / chi_t_face;
             }
             if !b_k.is_finite() {
@@ -548,8 +559,20 @@ fn update_model_range(
                     "non-finite unsmoothed_brunt_B at face {k}"
                 )));
             }
-            unsmoothed_brunt_b[k] = b_k;
+            model.aux.mixing.unsmoothed_brunt_b[k] = b_k;
             model.brunt_b[k] = b_k;
+        }
+        let ns = model.controls.mix_wind.num_cells_for_smooth_brunt_b;
+        if ns > 0 {
+            let thresh = model.controls.mix_wind.threshold_for_smooth_brunt_b;
+            let mut work = vec![0.0_f64; nz];
+            crate::mixing_state::threshold_smoothing(
+                &mut model.brunt_b[..nz],
+                thresh,
+                ns,
+                false,
+                &mut work,
+            );
         }
     }
 

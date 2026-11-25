@@ -244,6 +244,21 @@ fn eval_frozen_pde_system(
     sys
 }
 
+/// Sets `dxh_lnd` and `dxh_lnT` to `lnd - lnd_start` and `lnT - lnT_start`,
+/// standing in for the accumulated Newton corrections that
+/// `set_vars_for_solver` stores (`star/private/solver_support.f90:1142,
+/// 1328`) and that `eps_grav` reads, when a test moves `lnd` or `lnT`
+/// directly.
+fn sync_dxh_with_start(model: &mut StarModel) {
+    let nz = model.nz;
+    model.aux.dxh_lnd.resize(nz, 0.0);
+    model.aux.dxh_lnt.resize(nz, 0.0);
+    for k in 0..nz {
+        model.aux.dxh_lnd[k] = model.lnd[k] - model.lnd_start[k];
+        model.aux.dxh_lnt[k] = model.ln_t[k] - model.ln_t_start[k];
+    }
+}
+
 #[allow(clippy::too_many_lines)]
 fn assert_tridiagonal_jacobian_matches_fd(
     base_model: &StarModel,
@@ -258,6 +273,7 @@ fn assert_tridiagonal_jacobian_matches_fd(
     // fixed across solver iterations.
     m0.aux.doing_struct_burn_mix = true;
     m0.pack_xh();
+    sync_dxh_with_start(&mut m0);
     let sys0 =
         eval_iterate(&mut m0, include_chem).expect("baseline eqns");
     let (nz, nvar, nvar_hydro) = (sys0.nz, sys0.nvar, m0.layout.nvar_hydro);
@@ -279,6 +295,7 @@ fn assert_tridiagonal_jacobian_matches_fd(
                 m.xh[k_var * nvar_hydro + j_var] += sgn * delta;
                 m.unpack_xh();
                 m.set_m_grav_and_grav();
+                sync_dxh_with_start(&mut m);
                 eval_iterate(&mut m, include_chem).expect("hydro fd")
             };
             let (sys_p, sys_m) = (perturb_h(1.0), perturb_h(-1.0));

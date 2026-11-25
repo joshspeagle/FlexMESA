@@ -461,6 +461,11 @@ pub struct HydroAuxState {
     /// Whether the model is currently in an initialization relaxation phase
     /// (`doing_relax` in `star_data_def.f90`).
     pub doing_relax: bool,
+    /// Target of a running `do_relax_entropy`, whose
+    /// `entropy_relax_other_energy` is installed as `other_energy`
+    /// (`star/private/relax.f90:761`). `None` outside that relax.
+    #[serde(skip)]
+    pub relax_entropy: Option<crate::relax_entropy::RelaxEntropyTarget>,
     /// `doing_finish_load_model`: true while `finish_load_model` runs
     /// `set_vars` and the Brunt-Vaisala update
     /// (`star/private/read_model.f90:161-199`).
@@ -580,6 +585,16 @@ pub struct HydroAuxState {
     /// (`dxh_lnR`, `star/private/solver_support.f90:1311`); zero after
     /// `unpack_xh` (`star/private/hydro_vars.f90:313`). Length `nz`.
     pub dxh_lnr: Vec<f64>,
+    /// Newton change of `lnd` this step, `solver_dx(i_lnd, k)` as
+    /// `set_vars_for_solver` stores it (`dxh_lnd`,
+    /// `star/private/solver_support.f90:1328`); zero after `unpack_xh`
+    /// (`star/private/hydro_vars.f90:301`). Length `nz`.
+    pub dxh_lnd: Vec<f64>,
+    /// Newton change of `lnT` this step, `solver_dx(i_lnT, k)` as
+    /// `set_vars_for_solver` stores it (`dxh_lnT`,
+    /// `star/private/solver_support.f90:1142`); zero after `unpack_xh`
+    /// (`star/private/hydro_vars.f90:307`). Length `nz`.
+    pub dxh_lnt: Vec<f64>,
     /// Start-of-step face convective velocity $v_{c,\mathrm{old},k}$ in $\mathrm{cm\,s^{-1}}$ (`mlt_vc_old`).
     pub mlt_vc_old: Vec<f64>,
     /// Whether `mlt_vc` holds valid convective velocities from the prior step (`have_mlt_vc`).
@@ -789,6 +804,7 @@ impl HydroAuxState {
     pub fn new(nz: usize, species: usize) -> Self {
         Self {
             doing_relax: false,
+            relax_entropy: None,
             doing_finish_load_model: false,
             need_to_setvars: true,
             rotmix: crate::rotation_mix_info::RotMixArrays::default(),
@@ -828,6 +844,8 @@ impl HydroAuxState {
             hp_face_old: vec![0.0; nz],
             csound_start: vec![0.0; nz],
             dxh_lnr: vec![0.0; nz],
+            dxh_lnd: vec![0.0; nz],
+            dxh_lnt: vec![0.0; nz],
             mlt_vc_old: vec![0.0; nz],
             have_mlt_vc: false,
             have_j_rot: false,

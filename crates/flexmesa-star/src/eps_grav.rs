@@ -156,11 +156,15 @@ fn eval_eps_grav_std_cell_with_ctx(
         return Ok(StarAdOrder1::ZERO);
     }
 
-    let lnd_00 = StarAdOrder1::variable(model.lnd[k], I_LND_00);
     let lnt_00 = StarAdOrder1::variable(model.ln_t[k], I_LNT_00);
 
-    let dlnd_dt = (lnd_00 - model.lnd_start[k]) / dt;
-    let dlnt_dt = (lnt_00 - model.ln_t_start[k]) / dt;
+    // `wrap_dxh_lnd(s,k)/s% dt` and `wrap_dxh_lnT(s,k)/s% dt`
+    // (`star/private/eps_grav.f90:152-153`): the accumulated Newton
+    // corrections, which round differently from `lnd - lnd_start`.
+    let dlnd_dt =
+        StarAdOrder1::variable(model.aux.dxh_lnd[k], I_LND_00) / dt;
+    let dlnt_dt =
+        StarAdOrder1::variable(model.aux.dxh_lnt[k], I_LNT_00) / dt;
     let t_ad = lnt_00.exp();
 
     let eos_ad = |val: f64, slot: usize| {
@@ -335,7 +339,7 @@ fn fill_d_eps_grav_dx_cell(
         // `(Peos(k) / Rho(k)) * dlnPeos_dxa_for_partials(j,k) * dxh_lnd(k) / dt`
         let e_k = model.energy[k];
         let p_div_rho = model.peos[k] / model.rho[k];
-        let dxh_lnd = model.lnd[k] - model.lnd_start[k];
+        let dxh_lnd = model.aux.dxh_lnd[k];
         for j in 0..species {
             let dlne_dx = model
                 .aux

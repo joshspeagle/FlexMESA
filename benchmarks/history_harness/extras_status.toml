@@ -338,9 +338,8 @@ issue = "#231"
 [[cases]]
 suite = "star"
 case = "make_sdb"
-status = "unported"
+status = "ported"
 digest = "9092ad80d4c0b222806c3c712650afea4ab964b1c0d1604060acbde68c5b460a"
-issue = "#231"
 
 [[cases]]
 suite = "star"

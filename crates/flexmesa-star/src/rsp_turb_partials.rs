@@ -179,8 +179,10 @@ impl RspTurbPartials {
             v.fill(0.0);
         }
 
-        if alfa == 0.0 {
-            grid.et[1..=nzn].fill(0.0);
+        if nzn == 0 || alfa == 0.0 {
+            if nzn > 0 {
+                grid.et[1..=nzn].fill(0.0);
+            }
             return;
         }
 
@@ -271,7 +273,7 @@ impl RspTurbPartials {
                     + grid.y_face[i] * 0.5 * mc.dcp_dt_00[i + 1]);
         }
 
-        for i in (dc.ibotom + 1)..nzn {
+        for i in (dc.ibotom.max(1) + 1)..nzn {
             let pom = 0.5
                 * (pii[i] / grid.hp_face[i] + pii[i - 1] / grid.hp_face[i - 1]);
             let pom2 = grid.t[i] * mc.p[i] * mc.qqs[i] / mc.cps[i];
@@ -536,7 +538,7 @@ impl RspTurbPartials {
             }
         }
 
-        for i in (dc.ibotom + 1)..nzn {
+        for i in (dc.ibotom.max(1) + 1)..nzn {
             if alfap != 0.0 {
                 self.pturb[i] = alfap * grid.et[i] / grid.vol[i];
                 self.dptrb_dw_00[i] = alfap / grid.vol[i];

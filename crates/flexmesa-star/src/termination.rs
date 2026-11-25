@@ -5,9 +5,7 @@
 //! 1918-1966`), and `check_termination_limits` compatibility wrappers.
 
 use flexmesa_chem::NuclideCatalog;
-use flexmesa_const::{
-    AMU, CLIGHT, KERG, LN10, M_SUN, R_SUN, SECDAY, SECYER,
-};
+use flexmesa_const::{AMU, CLIGHT, KERG, LN10, M_SUN, R_SUN, SECDAY, SECYER};
 use flexmesa_turb::MixingType;
 
 use crate::controls::StarError;
@@ -601,7 +599,7 @@ fn check_xa_limits_block(
         }
         let Some(cid) = catalog.get_nuclide_index(name) else {
             return Some(LimitCheckOutcome::Terminate {
-                code: code.to_owned(),
+                code: String::new(),
                 reason: format!("invalid species '{name}' for {code}"),
             });
         };
@@ -645,10 +643,16 @@ fn eval_check_limits_core(
         (0_isize, -1_isize, 1.0e99)
     };
 
-    let species_mass_for_min_limit =
-        get_species_mass_msun(model, catalog, &c.star_species_mass_min_limit_iso);
-    let species_mass_for_max_limit =
-        get_species_mass_msun(model, catalog, &c.star_species_mass_max_limit_iso);
+    let species_mass_for_min_limit = get_species_mass_msun(
+        model,
+        catalog,
+        &c.star_species_mass_min_limit_iso,
+    );
+    let species_mass_for_max_limit = get_species_mass_msun(
+        model,
+        catalog,
+        &c.star_species_mass_max_limit_iso,
+    );
 
     let csound_surf = csound_face_at(model, 0);
     let (v_surf, v_div_csound_max, max_abs_vel) =
@@ -693,7 +697,8 @@ fn eval_check_limits_core(
             0.0
         } else {
             v_surf
-                / (2.0 * model.cgrav[0] * model.m[0] / (ctx.phot.r_rsun * R_SUN))
+                / (2.0 * model.cgrav[0] * model.m[0]
+                    / (ctx.phot.r_rsun * R_SUN))
                     .max(1.0e-99)
                     .sqrt()
         };
@@ -761,9 +766,9 @@ fn eval_check_limits_core(
         || ts.delta_nu_upper_limit > 0.0
         || ts.delta_pg_lower_limit > 0.0
         || ts.delta_pg_upper_limit > 0.0;
-    let (delta_nu, delta_pg) = if need_astero && ctx.phot.l_lsun > 0.0 {
+    let (delta_nu, delta_pg) = if need_astero {
         let (_, dnu, _, dpg) = eval_astero_report_scalars(model, &ctx.phot);
-        (dnu, dpg)
+        (if ctx.phot.l_lsun > 0.0 { dnu } else { 0.0 }, dpg)
     } else {
         (0.0, 0.0)
     };
@@ -1179,7 +1184,8 @@ fn eval_check_limits_core(
             ts.fe_core_mass_limit,
             "fe_core_mass_limit",
         );
-    } else if ctx.cores.neutron_rich_core_mass >= ts.neutron_rich_core_mass_limit
+    } else if ctx.cores.neutron_rich_core_mass
+        >= ts.neutron_rich_core_mass_limit
     {
         outcome = compare_to_target(
             model,
@@ -1423,8 +1429,9 @@ fn eval_check_limits_core(
             lim,
             "log_L_upper_limit",
         );
-    } else if let Some(lim) =
-        c.log_g_lower_limit.filter(|&lim| log_surface_gravity <= lim)
+    } else if let Some(lim) = c
+        .log_g_lower_limit
+        .filter(|&lim| log_surface_gravity <= lim)
     {
         outcome = compare_to_target(
             model,
@@ -1433,8 +1440,9 @@ fn eval_check_limits_core(
             lim,
             "log_g_lower_limit",
         );
-    } else if let Some(lim) =
-        c.log_g_upper_limit.filter(|&lim| log_surface_gravity >= lim)
+    } else if let Some(lim) = c
+        .log_g_upper_limit
+        .filter(|&lim| log_surface_gravity >= lim)
     {
         outcome = compare_to_target(
             model,
@@ -1454,8 +1462,9 @@ fn eval_check_limits_core(
             lim,
             "power_nuc_burn_upper_limit",
         );
-    } else if let Some(lim) =
-        ts.power_h_burn_upper_limit.filter(|&lim| power_h_burn >= lim)
+    } else if let Some(lim) = ts
+        .power_h_burn_upper_limit
+        .filter(|&lim| power_h_burn >= lim)
     {
         outcome = compare_to_target(
             model,
@@ -1475,8 +1484,9 @@ fn eval_check_limits_core(
             lim,
             "power_he_burn_upper_limit",
         );
-    } else if let Some(lim) =
-        ts.power_z_burn_upper_limit.filter(|&lim| power_z_burn >= lim)
+    } else if let Some(lim) = ts
+        .power_z_burn_upper_limit
+        .filter(|&lim| power_z_burn >= lim)
     {
         outcome = compare_to_target(
             model,
@@ -1496,8 +1506,9 @@ fn eval_check_limits_core(
             lim,
             "power_nuc_burn_lower_limit",
         );
-    } else if let Some(lim) =
-        ts.power_h_burn_lower_limit.filter(|&lim| power_h_burn < lim)
+    } else if let Some(lim) = ts
+        .power_h_burn_lower_limit
+        .filter(|&lim| power_h_burn < lim)
     {
         outcome = compare_to_target(
             model,
@@ -1517,8 +1528,9 @@ fn eval_check_limits_core(
             lim,
             "power_he_burn_lower_limit",
         );
-    } else if let Some(lim) =
-        ts.power_z_burn_lower_limit.filter(|&lim| power_z_burn < lim)
+    } else if let Some(lim) = ts
+        .power_z_burn_lower_limit
+        .filter(|&lim| power_z_burn < lim)
     {
         outcome = compare_to_target(
             model,
@@ -1549,7 +1561,7 @@ fn eval_check_limits_core(
         let e_end = model.aux.step_hist.total_energy_end;
         let e_err = model.aux.step_hist.error_in_energy_conservation;
         let rel_ok = if e_end == 0.0 && e_err == 0.0 {
-            true
+            ts.hard_limit_for_rel_error_in_energy_conservation > 0.0
         } else if e_end != 0.0 {
             (e_err / e_end).abs()
                 < ts.hard_limit_for_rel_error_in_energy_conservation

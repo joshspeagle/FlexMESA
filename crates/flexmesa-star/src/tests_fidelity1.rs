@@ -44,7 +44,19 @@ fn build_solar_test_model(v_flag: bool) -> StarModel {
     crate::hydro_vars::set_hydro_vars(&mut model, false, false)
         .expect("valid hydro vars");
     crate::evolve_support::record_start_of_step_energy_integrals(&mut model);
+    sync_dxh_with_start(&mut model);
     model
+}
+
+/// Sets `dxh_lnd` and `dxh_lnT` to `lnd - lnd_start` and `lnT - lnT_start`,
+/// standing in for the accumulated Newton corrections that
+/// `set_vars_for_solver` stores (`star/private/solver_support.f90:1142,
+/// 1328`) when a test moves `lnd` or `lnT` directly.
+fn sync_dxh_with_start(model: &mut StarModel) {
+    for k in 0..model.nz {
+        model.aux.dxh_lnd[k] = model.lnd[k] - model.lnd_start[k];
+        model.aux.dxh_lnt[k] = model.ln_t[k] - model.ln_t_start[k];
+    }
 }
 
 #[test]
@@ -82,18 +94,21 @@ fn test_eps_grav_time_centering_pc_blending_and_latent_heat_match_fortran() {
     let orig_lnd = model.lnd[k];
     model.lnd[k] = orig_lnd + eps;
     model.rho[k] = flexmesa_math::exp(model.lnd[k]);
+    sync_dxh_with_start(&mut model);
     crate::micro::do_eos(&mut model).expect("do_eos +eps");
     let tc_p = eval_eps_grav_std_cell(&model, k)
         .expect("eval_eps_grav_std_cell +eps")
         .val;
     model.lnd[k] = orig_lnd - eps;
     model.rho[k] = flexmesa_math::exp(model.lnd[k]);
+    sync_dxh_with_start(&mut model);
     crate::micro::do_eos(&mut model).expect("do_eos -eps");
     let tc_m = eval_eps_grav_std_cell(&model, k)
         .expect("eval_eps_grav_std_cell -eps")
         .val;
     model.lnd[k] = orig_lnd;
     model.rho[k] = flexmesa_math::exp(orig_lnd);
+    sync_dxh_with_start(&mut model);
     crate::micro::do_eos(&mut model).expect("do_eos restore");
     let fd_dlnd = (tc_p - tc_m) / (2.0 * eps);
     assert!(
@@ -269,13 +284,17 @@ fn test_hydro_energy_pressure_time_centering_pvsc_pturb_and_chem_partials() {
 
     let scal = crate::hydro_energy::set_energy_eqn_scal(&model, k)
         .expect("energy scal");
-    let (_, fac_m1, fac_00, fac_p1) =
+    // `unpack_res18` (`star/private/hydro_energy.f90:469-527`); the
+    // `dlnPeos_dxa` values set above (-0.42, -0.31, -0.53) enter through
+    // `d_dwork_dxa*`.
+    let (_, dxa) =
         crate::hydro_work::eval_v_flag_dwork_dm_ad(&model, k, false, true);
+    let dm = model.dm[k];
     let expected_d00 = scal * model.d_epsnuc_dx[base]
-        - scal * (model.energy[k] / model.dt) * 0.85
-        - scal * fac_00 * (-0.42);
-    let expected_dm1 = -scal * fac_m1 * (-0.31);
-    let expected_dp1 = -scal * fac_p1 * (-0.53);
+        + -(scal * (model.energy[k] / model.dt) * 0.85)
+        + -(scal * dxa.dxa00[0] / dm);
+    let expected_dm1 = -(scal * dxa.dxam1[0] / dm);
+    let expected_dp1 = -(scal * dxa.dxap1[0] / dm);
     assert!(
         (dblk_chem - expected_d00).abs() / expected_d00.abs().max(1.0e-20)
             < 1.0e-12
@@ -501,6 +520,7 @@ fn test_eval_eps_grav_composition_finite_difference_partials_and_d_eps_grav_dx()
     // Shift density, temperature, and convert 5% H1 -> He4 (burning heats).
     model.lnd[k] += 0.02;
     model.ln_t[k] += 0.015;
+    sync_dxh_with_start(&mut model);
     model.xa[base + i_h1] -= 0.05;
     model.xa[base + i_he4] += 0.05;
     crate::micro::set_basic_vars(&mut model).expect("set_basic_vars pert");

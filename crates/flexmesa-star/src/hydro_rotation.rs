@@ -84,8 +84,7 @@ pub fn w_div_w_roche_omega(
         return 0.0;
     }
 
-    let mut dimless_rpsi = rpsi
-        * flexmesa_math::pow(omega.abs(), TWO_THIRDS)
+    let mut dimless_rpsi = rpsi * flexmesa_math::pow(omega.abs(), TWO_THIRDS)
         / flexmesa_math::pow(cgrav * m_phi, ONE_THIRD);
 
     let mut wr;
@@ -107,7 +106,8 @@ pub fn w_div_w_roche_omega(
             );
 
         if dimless_rpsi.abs() > rpsi_lim1 {
-            dimless_rpsi = roche_sigmoid(dimless_rpsi.abs(), rpsi_lim1, rpsi_lim2);
+            dimless_rpsi =
+                roche_sigmoid(dimless_rpsi.abs(), rpsi_lim1, rpsi_lim2);
         }
     } else {
         wr = max_w;
@@ -258,7 +258,9 @@ pub fn eval_i_rot_dual(
         let w6 = w.pow6();
         let lg_one_sub_w4 = (1.0 - w4).log();
         let re = r * (1.0 + w2 / 6.0 - 0.0002507 * w4 + 0.06075 * w6);
-        let b = 1.0 + w2 / 5.0 - 0.2735 * w4 - 0.4327 * w6
+        let b = 1.0 + w2 / 5.0
+            - 0.2735 * w4
+            - 0.4327 * w6
             - ((3.0 / 2.0) * 0.5583) * lg_one_sub_w4;
         let a = 1.0 - 0.1076 * w4 - 0.2336 * w6 - 0.5583 * lg_one_sub_w4;
         TWO_THIRDS * re.pow2() * b / a
@@ -306,6 +308,21 @@ pub fn eval_fp_ft_single(w_div_w_crit_roche: f64) -> (f64, f64) {
     (fp.val, ft.val)
 }
 
+/// Evaluates single-star Roche distortion factors and deformed radii
+/// `(fp_rot, ft_rot, r_polar, r_equatorial)` matching `eval_fp_ft` in
+/// `star/private/hydro_rotation.f90:748-806` (Fabry, Marchant & Sana 2022).
+#[must_use]
+pub fn eval_fp_ft(r: f64, w_div_w_crit_roche: f64) -> (f64, f64, f64, f64) {
+    let w = w_div_w_crit_roche.abs();
+    let w2 = w * w;
+    let w4 = w2 * w2;
+    let w6 = w4 * w2;
+    let (fp, ft) = eval_fp_ft_single_dual(w);
+    let r_equatorial = (r * re_from_rpsi_factor(w2, w4, w6)).max(r);
+    let r_polar = (r_equatorial / (1.0 + 0.5 * w2)).min(r);
+    (fp.val, ft.val, r_polar, r_equatorial)
+}
+
 /// Updates `model.aux.i_rot[k]` and `model.aux.d_i_rot_dlnr[k]` at face `k`
 /// for volume-equivalent radius `r` ($\mathrm{cm}$), blending optional binary
 /// tidal deformation (`set1_i_rot` in `star/private/hydro_rotation.f90:317-336`).
@@ -342,7 +359,10 @@ pub fn set_i_rot(model: &mut StarModel, skip_w_div_w_crit_roche: bool) {
     if nz == 0 {
         return;
     }
-    if model.aux.w_div_wc.len() != nz || model.aux.i_rot.len() != nz {
+    if model.aux.w_div_wc.len() != nz
+        || model.aux.i_rot.len() != nz
+        || model.aux.d_i_rot_dlnr.len() != nz
+    {
         model.aux.resize(nz, model.species);
     }
     let max_w = model.controls.mix_wind.w_div_wcrit_max;
@@ -364,11 +384,50 @@ pub fn set_i_rot(model: &mut StarModel, skip_w_div_w_crit_roche: bool) {
     }
 }
 
+/// Computes `i_rot` from `j_rot / omega` when `omega != 0`, falling back to
+/// [`update1_i_rot_from_xh`] at non-rotating faces
+/// (`set_i_rot_from_omega_and_j_rot` in
+/// `star/private/hydro_rotation.f90:247-264`).
+pub fn set_i_rot_from_omega_and_j_rot(model: &mut StarModel) {
+    let nz = model.nz;
+    if nz == 0 {
+        return;
+    }
+    if model.aux.i_rot.len() != nz || model.aux.d_i_rot_dlnr.len() != nz {
+        model.aux.resize(nz, model.species);
+    }
+    for k in 0..nz {
+        if model.omega[k] == 0.0 {
+            update1_i_rot_from_xh(model, k);
+        } else {
+            model.aux.i_rot[k] = model.j_rot[k] / model.omega[k];
+            model.aux.d_i_rot_dlnr[k] = 0.0;
+        }
+    }
+}
+
+/// Sets specific angular momentum `j_rot[k] = i_rot[k] * omega[k]` across all
+/// faces (`set_j_rot` in `star/private/hydro_rotation.f90:266-275`).
+pub fn set_j_rot(model: &mut StarModel) {
+    let n = model
+        .nz
+        .min(model.j_rot.len())
+        .min(model.aux.i_rot.len())
+        .min(model.omega.len());
+    for k in 0..n {
+        model.j_rot[k] = model.aux.i_rot[k] * model.omega[k];
+    }
+}
+
 /// Sets face angular velocity `omega[k] = j_rot[k] / i_rot[k]` across all
 /// faces (`set_omega` in `star/private/hydro_rotation.f90:277-287`).
 pub fn set_omega(model: &mut StarModel) {
-    let nz = model.nz;
-    for k in 0..nz {
+    let n = model
+        .nz
+        .min(model.omega.len())
+        .min(model.j_rot.len())
+        .min(model.aux.i_rot.len());
+    for k in 0..n {
         model.omega[k] = model.j_rot[k] / model.aux.i_rot[k];
     }
 }
@@ -432,41 +491,53 @@ pub fn use_xh_to_update_i_rot_and_j_rot(model: &mut StarModel) {
         );
         update1_i_rot_from_xh(model, k);
     }
-    for k in 0..nz {
-        model.j_rot[k] = model.aux.i_rot[k] * model.omega[k];
+    set_j_rot(model);
+}
+
+pub(crate) fn apply_face_fp_ft(
+    model: &mut StarModel,
+    k: usize,
+    r_k: f64,
+    om_k: f64,
+    tidal: Option<&crate::hydro_state::TidalDeformationHandle>,
+) {
+    let (fp_s, ft_s) = eval_fp_ft_single(model.aux.w_div_wc[k]);
+    if let Some(hook) = tidal {
+        let td = hook.0.eval_shell(k, r_k, om_k);
+        let f_sw = td.f_switch;
+        let f_1m = 1.0 - f_sw;
+        model.aux.fp_rot[k] = f_sw * td.fp + f_1m * fp_s;
+        model.aux.d_fp_rot_dlnr[k] = f_sw * td.d_fp_dlnr;
+        model.aux.ft_rot[k] = f_sw * td.ft + f_1m * ft_s;
+        model.aux.d_ft_rot_dlnr[k] = f_sw * td.d_ft_dlnr;
+    } else {
+        model.aux.fp_rot[k] = fp_s;
+        model.aux.d_fp_rot_dlnr[k] = 0.0;
+        model.aux.ft_rot[k] = ft_s;
+        model.aux.d_ft_rot_dlnr[k] = 0.0;
     }
 }
 
 /// Updates `i_rot`, `omega` (from `j_rot`), and Roche distortion factors
 /// `fp_rot` and `ft_rot` across all faces (`set_rotation_info` in
 /// `star/private/hydro_rotation.f90:537-586`).
-pub fn set_rotation_info(
-    model: &mut StarModel,
-    skip_w_div_w_crit_roche: bool,
-) {
+pub fn set_rotation_info(model: &mut StarModel, skip_w_div_w_crit_roche: bool) {
     let nz = model.nz;
     if !model.controls.rotation_flag || nz == 0 {
         return;
+    }
+    if model.aux.fp_rot.len() != nz
+        || model.aux.d_fp_rot_dlnr.len() != nz
+        || model.aux.ft_rot.len() != nz
+        || model.aux.d_ft_rot_dlnr.len() != nz
+    {
+        model.aux.resize(nz, model.species);
     }
     set_i_rot(model, skip_w_div_w_crit_roche);
     set_omega(model);
     let tidal = model.aux.tidal_deformation.clone();
     for k in 0..nz {
-        let (fp_s, ft_s) = eval_fp_ft_single(model.aux.w_div_wc[k]);
-        if let Some(ref hook) = tidal {
-            let td = hook.0.eval_shell(k, model.r[k], model.omega[k]);
-            let f_sw = td.f_switch;
-            let f_1m = 1.0 - f_sw;
-            model.aux.fp_rot[k] = f_sw * td.fp + f_1m * fp_s;
-            model.aux.d_fp_rot_dlnr[k] = f_sw * td.d_fp_dlnr;
-            model.aux.ft_rot[k] = f_sw * td.ft + f_1m * ft_s;
-            model.aux.d_ft_rot_dlnr[k] = f_sw * td.d_ft_dlnr;
-        } else {
-            model.aux.fp_rot[k] = fp_s;
-            model.aux.d_fp_rot_dlnr[k] = 0.0;
-            model.aux.ft_rot[k] = ft_s;
-            model.aux.d_ft_rot_dlnr[k] = 0.0;
-        }
+        apply_face_fp_ft(model, k, model.r[k], model.omega[k], tidal.as_ref());
     }
 }
 
@@ -503,8 +574,8 @@ pub fn get1_am_sig(
         let am_nu_e00 = am_nu[k].max(0.0);
         let am_nu_ep1 = am_nu[k + 1].max(0.0);
         // Meynet, Maeder, & Mowlavi, A&A 416, 1023-1036, 2004, eqn 51 with f = 1/2.
-        let d_val =
-            2.0 * (am_nu_e00 * am_nu_ep1) / (am_nu_e00 + am_nu_ep1).max(1.0e-99);
+        let d_val = 2.0 * (am_nu_e00 * am_nu_ep1)
+            / (am_nu_e00 + am_nu_ep1).max(1.0e-99);
         let r = 0.5 * (model.r[k] + model.r[k + 1]);
         let s1 = FOUR_PI * r * r * model.rho[k];
         am_sig[k] = s1 * s1 * d_val / model.dm[k];
@@ -593,11 +664,27 @@ mod tests {
     #[test]
     fn test_w_div_w_roche_zero_inputs_return_exact_zero() {
         assert_eq!(
-            w_div_w_roche_jrot(R_SUN, M_SUN, 0.0, STANDARD_CGRAV, 0.89, 0.90, false),
+            w_div_w_roche_jrot(
+                R_SUN,
+                M_SUN,
+                0.0,
+                STANDARD_CGRAV,
+                0.89,
+                0.90,
+                false
+            ),
             0.0
         );
         assert_eq!(
-            w_div_w_roche_omega(R_SUN, M_SUN, 0.0, STANDARD_CGRAV, 0.89, 0.90, false),
+            w_div_w_roche_omega(
+                R_SUN,
+                M_SUN,
+                0.0,
+                STANDARD_CGRAV,
+                0.89,
+                0.90,
+                false
+            ),
             0.0
         );
     }
@@ -660,11 +747,27 @@ mod tests {
     fn test_w_div_w_roche_hard_cap_and_sigmoid_asymptote_match_upstream() {
         // Hard cap when `w_div_wc_flag = false` returns exact `max_w`.
         assert_eq!(
-            w_div_w_roche_jrot(R_SUN, M_SUN, 1.0e22, STANDARD_CGRAV, 0.89, 0.90, false),
+            w_div_w_roche_jrot(
+                R_SUN,
+                M_SUN,
+                1.0e22,
+                STANDARD_CGRAV,
+                0.89,
+                0.90,
+                false
+            ),
             0.89
         );
         assert_eq!(
-            w_div_w_roche_omega(R_SUN, M_SUN, 1.0e-1, STANDARD_CGRAV, 0.89, 0.90, false),
+            w_div_w_roche_omega(
+                R_SUN,
+                M_SUN,
+                1.0e-1,
+                STANDARD_CGRAV,
+                0.89,
+                0.90,
+                false
+            ),
             0.89
         );
 
@@ -700,10 +803,7 @@ mod tests {
     #[test]
     fn test_eval_i_rot_closed_forms_and_paxton_2019_polynomial() {
         assert_eq!(eval_i_rot(R_SUN, 0.6, true), TWO_THIRDS * R_SUN * R_SUN);
-        assert_eq!(
-            eval_i_rot(R_SUN, 0.0, false),
-            TWO_THIRDS * (R_SUN * R_SUN)
-        );
+        assert_eq!(eval_i_rot(R_SUN, 0.0, false), TWO_THIRDS * (R_SUN * R_SUN));
 
         let expected_06 = 3.921_503_060_173_274e21;
         let got_06 = eval_i_rot(R_SUN, 0.6, false);

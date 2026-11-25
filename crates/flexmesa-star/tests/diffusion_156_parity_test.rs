@@ -22,7 +22,8 @@ use flexmesa_star::micro::{do_eos, set_basic_vars};
 use flexmesa_star::{
     apply_step_pre_physics, do_element_diffusion_step,
     do_phase_separation_step, finish_element_diffusion, load_zams_model,
-    set_hydro_vars, StarControls, StarJobControls, StarModel,
+    set_hydro_vars, threshold_smoothing, StarAdExt, StarAdOrder1, StarControls,
+    StarJobControls, StarModel,
 };
 
 const WD_SPECIES: [&str; 11] = [
@@ -786,5 +787,175 @@ fn test_wd_diffusion_m1408_1409_states_match_mesa_26_4_1_and_cgs_sensitivity() {
             max_shift > 0.0,
             "rho/lnd perturbation must propagate through CGS diffusion"
         );
+    });
+}
+
+#[test]
+fn test_phase_separation_persists_unsmoothed_brunt_b_and_smooths_brunt_b() {
+    with_numerics_mode(NumericsMode::Strict, || {
+        let mut no_smooth = build_crystallizing_co_wd_with_diffusion();
+        let nz = no_smooth.nz;
+        let dt = no_smooth.dt;
+        no_smooth.controls.mix_wind.num_cells_for_smooth_brunt_b = 0;
+
+        let mut with_smooth = no_smooth.clone();
+        with_smooth.controls.mix_wind.num_cells_for_smooth_brunt_b = 2;
+        with_smooth.controls.mix_wind.threshold_for_smooth_brunt_b = 0.0;
+
+        // Seed stale sentinels so we verify `unsmoothed_brunt_b` is updated
+        // across every zone re-evaluated by `do_brunt_B`.
+        no_smooth.aux.mixing.unsmoothed_brunt_b.fill(-999.0);
+        with_smooth.aux.mixing.unsmoothed_brunt_b.fill(-999.0);
+
+        do_phase_separation_step(&mut no_smooth, dt)
+            .expect("phase separation without brunt smoothing");
+        do_phase_separation_step(&mut with_smooth, dt)
+            .expect("phase separation with brunt smoothing");
+
+        // `mix_outward` must use `unsmoothed_brunt_b`, keeping final
+        // composition, boundaries, and unsmoothed Brunt-B bit-identical.
+        assert_eq!(
+            with_smooth.aux.crystal_core_boundary_mass.to_bits(),
+            no_smooth.aux.crystal_core_boundary_mass.to_bits()
+        );
+        assert_eq!(
+            with_smooth.aux.phase_sep_mixing_mass.to_bits(),
+            no_smooth.aux.phase_sep_mixing_mass.to_bits()
+        );
+        for (i, (&a, &b)) in
+            with_smooth.xa.iter().zip(no_smooth.xa.iter()).enumerate()
+        {
+            assert_eq!(a.to_bits(), b.to_bits(), "xa[{i}] mismatch");
+        }
+        for k in 0..nz {
+            assert_eq!(
+                with_smooth.aux.mixing.unsmoothed_brunt_b[k].to_bits(),
+                no_smooth.aux.mixing.unsmoothed_brunt_b[k].to_bits(),
+                "unsmoothed_brunt_b[{k}] must match regardless of smoothing"
+            );
+        }
+
+        // At least the crystallization/mixing front must overwrite the `-999`
+        // sentinel, and `no_smooth` must leave `brunt_b == unsmoothed_brunt_b`
+        // on those refreshed zones while `with_smooth` smooths `brunt_b[..nz]`.
+        let mut refreshed = 0_usize;
+        let mut max_smooth_diff = 0.0_f64;
+        for k in 0..nz {
+            let ub = no_smooth.aux.mixing.unsmoothed_brunt_b[k];
+            if ub.to_bits() != (-999.0_f64).to_bits() {
+                refreshed += 1;
+                assert_eq!(no_smooth.brunt_b[k].to_bits(), ub.to_bits());
+            }
+            max_smooth_diff = max_smooth_diff
+                .max((with_smooth.brunt_b[k] - no_smooth.brunt_b[k]).abs());
+        }
+        assert!(refreshed > 0, "expected refreshed unsmoothed_brunt_b zones");
+        assert!(
+            max_smooth_diff > 1.0e-12,
+            "expected threshold_smoothing to smooth model.brunt_b, diff={max_smooth_diff}"
+        );
+
+        // Verify exact `threshold_smoothing` semantics on single-pass input
+        // matching `brunt.f90:100-103`.
+        let mut expected = no_smooth.brunt_b.clone();
+        let mut work = vec![0.0_f64; nz];
+        threshold_smoothing(&mut expected, 0.0, 2, false, &mut work);
+        assert_eq!(expected[0].to_bits(), no_smooth.brunt_b[0].to_bits());
+        assert_eq!(
+            expected[nz - 1].to_bits(),
+            no_smooth.brunt_b[nz - 1].to_bits()
+        );
+    });
+}
+
+#[test]
+fn test_phase_separation_set_micro_vars_updates_csound_start_and_p_face_ad() {
+    with_numerics_mode(NumericsMode::Strict, || {
+        let mut model = build_crystallizing_co_wd_with_diffusion();
+        let nz = model.nz;
+        let dt = model.dt;
+
+        // Zone 0 kept positive to check `< 0` guard (`micro.f90:85`); zones
+        // `1..nz` negative to verify `csound_start(k) = csound(k)`.
+        model.aux.csound_start.fill(-1.0);
+        model.aux.csound_start[0] = 1.2345e8;
+        model.aux.p_face_ad.fill(StarAdOrder1::ZERO);
+        model.controls.u_flag = false;
+
+        do_phase_separation_step(&mut model, dt)
+            .expect("phase separation with u_flag = false");
+
+        assert_eq!(model.aux.csound_start[0].to_bits(), 1.2345e8_f64.to_bits());
+        // Unmixed outer He envelope zones (`k = 1..3`) are only touched by the
+        // final full-star `update_model_range`, so `csound_start` equals `csound`;
+        // deeper zones (`4..nz`) latch on their first `update_model_range` pass.
+        for k in 1..3 {
+            assert_eq!(
+                model.aux.csound_start[k].to_bits(),
+                model.csound[k].to_bits(),
+                "zone {k}: csound_start must update to post-fix_Pgas csound"
+            );
+        }
+        for (k, &cs) in
+            model.aux.csound_start.iter().enumerate().take(nz).skip(1)
+        {
+            assert!(
+                cs > 0.0 && cs.is_finite(),
+                "zone {k}: negative csound_start must latch to finite csound"
+            );
+        }
+        assert_eq!(
+            model.aux.p_face_ad[0].val.to_bits(),
+            model.peos[0].to_bits(),
+            "surface p_face_ad[0] must equal peos[0]"
+        );
+        for k in 1..nz {
+            let alfa = model.dq[k - 1] / (model.dq[k - 1] + model.dq[k]);
+            let beta = 1.0 - alfa;
+            let want = alfa * model.peos[k] + beta * model.peos[k - 1];
+            assert_eq!(
+                model.aux.p_face_ad[k].val.to_bits(),
+                want.to_bits(),
+                "face {k}: p_face_ad.val must match micro.f90:96-99"
+            );
+        }
+
+        // Verify once `csound_start >= 0`, a subsequent `do_phase_separation_step`
+        // call leaves `csound_start` bit-identical (`micro.f90:85`).
+        let latched_csound_start = model.aux.csound_start.clone();
+        model.aux.crystal_core_boundary_mass = 0.0;
+        do_phase_separation_step(&mut model, dt).expect(
+            "second phase separation must preserve latched csound_start",
+        );
+        for (k, (&after, &before)) in model
+            .aux
+            .csound_start
+            .iter()
+            .zip(latched_csound_start.iter())
+            .enumerate()
+        {
+            assert_eq!(
+                after.to_bits(),
+                before.to_bits(),
+                "zone {k}: csound_start >= 0 must not overwrite"
+            );
+        }
+
+        // Verify `!u_flag` guard leaves `p_face_ad` untouched when `u_flag = true`
+        // (`micro.f90:93, 99`).
+        let mut m_uflag = build_crystallizing_co_wd_with_diffusion();
+        m_uflag.controls.u_flag = true;
+        for p in &mut m_uflag.aux.p_face_ad {
+            p.val = -42.0;
+        }
+        do_phase_separation_step(&mut m_uflag, dt)
+            .expect("phase separation with u_flag = true");
+        for (k, p) in m_uflag.aux.p_face_ad.iter().enumerate() {
+            assert_eq!(
+                p.val.to_bits(),
+                (-42.0_f64).to_bits(),
+                "face {k}: p_face_ad must stay untouched when u_flag = true"
+            );
+        }
     });
 }

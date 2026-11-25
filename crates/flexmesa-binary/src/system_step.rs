@@ -32,9 +32,10 @@ use crate::system_jdot::{
     star_photosphere_radius_cm, EdotBreakdown,
 };
 use crate::system_rlof::{
-    apply_point_mass_retention, begin_single_star_attempt, blend_explicit_mdot,
-    eval_scheme_explicit_mdot_with_steps, finish_single_star_attempt,
-    prepare_coupled_mdots_with_extras, sync_vars_for_new_step_star,
+    begin_single_star_attempt_with_extras, blend_explicit_mdot,
+    eval_scheme_explicit_mdot_with_steps,
+    finish_single_star_attempt_with_extras, prepare_coupled_mdots_with_extras,
+    sync_vars_for_new_step_star,
 };
 use crate::timestep::{
     binary_pick_next_timestep, check_binary_hard_limits,
@@ -1679,13 +1680,17 @@ impl BinarySystem {
         };
 
         let donor_id = self.donor_i;
+        let ignore_rlof = self.ignore_rlof_flag;
         let donor_part1 =
             flexmesa_star::stepdump::with_star_id(donor_id, || {
-                begin_single_star_attempt(
+                begin_single_star_attempt_with_extras(
                     &mut self.donor,
                     dt_try,
                     first_try,
                     false,
+                    donor_id,
+                    ignore_rlof,
+                    extras,
                 )
             })?;
         let dt_star_try = self.donor.dt;
@@ -1695,11 +1700,14 @@ impl BinarySystem {
                 match flexmesa_star::stepdump::with_star_id(
                     3 - donor_id,
                     || {
-                        begin_single_star_attempt(
+                        begin_single_star_attempt_with_extras(
                             s2,
                             dt_star_try,
                             first_try,
                             false,
+                            3 - donor_id,
+                            ignore_rlof,
+                            extras,
                         )
                     },
                 ) {
@@ -1761,10 +1769,13 @@ impl BinarySystem {
         // `donor_i` and the accretor `3 - donor_i` (#372).
         let donor_conv =
             match flexmesa_star::stepdump::with_star_id(donor_id, || {
-                finish_single_star_attempt(
+                finish_single_star_attempt_with_extras(
                     &mut self.donor,
                     donor_part1,
                     first_try,
+                    donor_id,
+                    ignore_rlof,
+                    extras,
                 )
             }) {
                 Ok(StarStepAttemptOutcome::Converged(conv)) => conv,
@@ -1789,33 +1800,22 @@ impl BinarySystem {
                 }
             };
         let dt_used = donor_conv.dt;
-        let extra_w_d =
-            (self.donor.mstar_dot - acct.component_mdot[0]).min(0.0);
-        if extra_w_d < 0.0 {
-            acct.mdot_wind_intrinsic[0] += extra_w_d;
-            let dw_tr = extra_w_d * acct.wind_xfer_fraction[0];
-            acct.mdot_wind_transfer[0] += dw_tr;
-            acct.mdot_system_wind[0] += extra_w_d - dw_tr;
-            if let Some((m_pm, m_bh_eq)) = pm_state {
-                let mtr = if self.ignore_rlof_flag {
-                    0.0
-                } else {
-                    trial_mdot.min(0.0)
-                };
-                let w_tr_d = acct.mdot_wind_transfer[0];
-                apply_point_mass_retention(
-                    &mut acct,
-                    &self.donor,
-                    &self.controls,
-                    m_pm,
-                    m_bh_eq,
-                    mtr,
-                    w_tr_d,
-                    self.donor.mstar_dot,
-                );
-            } else {
-                acct.component_mdot[0] = self.donor.mstar_dot;
-            }
+        let mtr = if ignore_rlof {
+            0.0
+        } else {
+            trial_mdot.min(0.0)
+        };
+        // `binary/private/binary_evolve.f90:266-317`: sync donor
+        // `component_mdot` and `mdot_system_wind` when `part2` (`iwind` /
+        // `mdot_redo`) revised `mstar_dot`, leaving point-mass accretor
+        // accounting from `adjust_mdots` untouched.
+        if self.donor.mstar_dot.to_bits() != acct.component_mdot[0].to_bits() {
+            let delta_d = self.donor.mstar_dot - acct.component_mdot[0];
+            acct.mdot_wind_intrinsic[0] += delta_d;
+            acct.component_mdot[0] = self.donor.mstar_dot;
+            acct.mdot_system_wind[0] = self.donor.mstar_dot - mtr
+                + acct.mdot_wind_transfer[1]
+                - acct.mdot_wind_transfer[0];
         }
         let mut acc_conv: Option<StarStepConverged> = None;
         if let (Some(p1_a), BinaryCompanion::Star(ref mut s2)) =
@@ -1823,7 +1823,16 @@ impl BinarySystem {
         {
             let conv_a = match flexmesa_star::stepdump::with_star_id(
                 3 - donor_id,
-                || finish_single_star_attempt(s2, p1_a, first_try),
+                || {
+                    finish_single_star_attempt_with_extras(
+                        s2,
+                        p1_a,
+                        first_try,
+                        3 - donor_id,
+                        ignore_rlof,
+                        extras,
+                    )
+                },
             )? {
                 StarStepAttemptOutcome::Converged(conv) => conv,
                 StarStepAttemptOutcome::Retry { cause, .. } => {
@@ -1836,13 +1845,21 @@ impl BinarySystem {
             if conv_a.dt < 0.999_999 * dt_used {
                 return Ok(SingleTrialOutcome::CutDt(conv_a.dt));
             }
-            let extra_w_a = (s2.mstar_dot - acct.component_mdot[1]).min(0.0);
-            if extra_w_a < 0.0 {
-                acct.mdot_wind_intrinsic[1] += extra_w_a;
-                let dw_tr = extra_w_a * acct.wind_xfer_fraction[1];
-                acct.mdot_wind_transfer[1] += dw_tr;
-                acct.mdot_system_wind[1] += extra_w_a - dw_tr;
+            // `binary/private/binary_evolve.f90:270, 308-310`: sync accretor
+            // `component_mdot` and `mdot_system_wind` when `part2` revised it.
+            if s2.mstar_dot.to_bits() != acct.component_mdot[1].to_bits() {
+                let delta_a = s2.mstar_dot - acct.component_mdot[1];
+                let fixed_xfer = (1.0
+                    - self.controls.mass_transfer_alpha
+                    - self.controls.mass_transfer_beta
+                    - self.controls.mass_transfer_delta)
+                    .clamp(0.0, 1.0);
+                acct.mdot_wind_intrinsic[1] += delta_a;
                 acct.component_mdot[1] = s2.mstar_dot;
+                acct.mdot_system_wind[1] = s2.mstar_dot
+                    + mtr * fixed_xfer
+                    + acct.mdot_wind_transfer[0]
+                    - acct.mdot_wind_transfer[1];
             }
             acc_conv = Some(conv_a);
         }

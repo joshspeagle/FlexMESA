@@ -145,16 +145,39 @@ where
         &AtmEosCallbackResult,
     ) -> Result<AtmKapCallbackResult, AtmError>,
 {
-    if l <= 0.0 || r <= 0.0 || m <= 0.0 {
+    if is_bad(l)
+        || is_bad(r)
+        || is_bad(m)
+        || is_bad(cgrav)
+        || is_bad(tau_surf)
+        || is_bad(teff)
+        || is_bad(pextra_factor)
+        || l <= 0.0
+        || r <= 0.0
+        || m <= 0.0
+        || cgrav <= 0.0
+        || tau_surf <= 0.0
+        || teff <= 0.0
+        || pextra_factor < 0.0
+    {
         return Err(AtmError::InvalidArgument {
             context: "eval_t_tau_uniform",
-            detail: "require L, R, M > 0".to_string(),
+            detail: "require finite L, R, M, cgrav, tau_surf, Teff > 0 and Pextra_factor >= 0"
+                .to_string(),
         });
     }
     if kap_guess <= 0.0 || is_bad(kap_guess) {
         return Err(AtmError::InvalidArgument {
             context: "eval_t_tau_uniform",
             detail: format!("require kap_guess > 0, got {kap_guess}"),
+        });
+    }
+    if max_iters > 0 && (is_bad(errtol) || errtol <= 0.0) {
+        return Err(AtmError::InvalidArgument {
+            context: "eval_t_tau_uniform",
+            detail: format!(
+                "require finite errtol > 0 when max_iters > 0, got {errtol}"
+            ),
         });
     }
     let g = cgrav * m / (r * r);
@@ -302,10 +325,37 @@ pub fn build_t_tau_uniform<E>(
 where
     E: FnMut(f64, f64) -> Result<AtmEosCallbackResult, AtmError>,
 {
-    if dlogtau <= 0.0 {
+    if is_bad(dlogtau) || dlogtau <= 0.0 {
         return Err(AtmError::InvalidArgument {
             context: "build_t_tau_uniform",
             detail: format!("require dlogtau > 0, got {dlogtau}"),
+        });
+    }
+    if is_bad(l)
+        || is_bad(r)
+        || is_bad(m)
+        || is_bad(teff)
+        || is_bad(cgrav)
+        || is_bad(kap)
+        || is_bad(pextra_factor)
+        || is_bad(tau_surf)
+        || is_bad(tau_outer)
+        || is_bad(errtol)
+        || l <= 0.0
+        || r <= 0.0
+        || m <= 0.0
+        || teff <= 0.0
+        || cgrav <= 0.0
+        || kap <= 0.0
+        || pextra_factor < 0.0
+        || tau_surf <= 0.0
+        || tau_outer <= 0.0
+        || errtol <= 0.0
+    {
+        return Err(AtmError::InvalidArgument {
+            context: "build_t_tau_uniform",
+            detail: "require finite positive stellar, opacity, optical-depth, and tolerance inputs"
+                .to_string(),
         });
     }
     if tau_outer > tau_surf {

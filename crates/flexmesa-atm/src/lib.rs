@@ -115,10 +115,18 @@ where
         &AtmEosCallbackResult,
     ) -> Result<AtmKapCallbackResult, AtmError>,
 {
-    if l <= 0.0 || r <= 0.0 || m <= 0.0 {
+    if !l.is_finite()
+        || !r.is_finite()
+        || !m.is_finite()
+        || l <= 0.0
+        || r <= 0.0
+        || m <= 0.0
+    {
         return Err(AtmError::InvalidArgument {
             context: "eval_t_tau_atm",
-            detail: format!("require L, R, M > 0, got L={l}, R={r}, M={m}"),
+            detail: format!(
+                "require finite L, R, M > 0, got L={l}, R={r}, M={m}"
+            ),
         });
     }
     let t_tau_id = get_t_tau_id(t_tau_relation)?;
@@ -237,10 +245,18 @@ where
             ),
         });
     }
-    if l <= 0.0 || r <= 0.0 || m <= 0.0 {
+    if !l.is_finite()
+        || !r.is_finite()
+        || !m.is_finite()
+        || l <= 0.0
+        || r <= 0.0
+        || m <= 0.0
+    {
         return Err(AtmError::InvalidArgument {
             context: "eval_table_atm",
-            detail: format!("require L, R, M > 0, got L={l}, R={r}, M={m}"),
+            detail: format!(
+                "require finite L, R, M > 0, got L={l}, R={r}, M={m}"
+            ),
         });
     }
     let table_id = get_table_id(atm_table)?;

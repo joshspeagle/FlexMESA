@@ -190,14 +190,19 @@ fn eval_f(nvar: usize, nz: usize, equ: &[f64]) -> f64 {
     0.5 * sum_sq
 }
 
+/// Evaluates the line-search directional derivative $\nabla f \cdot B$ using
+/// per-variable radial dot products matching `eval_slope`
+/// (`star/private/star_solver.f90:1911-1919`).
 #[inline]
 fn eval_slope(nvar: usize, nz: usize, grad_f: &[f64], soln: &[f64]) -> f64 {
     let mut slope = 0.0_f64;
     for i in 0..nvar {
+        let mut dot_i = 0.0_f64;
         for k in 0..nz {
             let idx = k * nvar + i;
-            slope += grad_f[idx] * soln[idx];
+            dot_i += grad_f[idx] * soln[idx];
         }
+        slope += dot_i;
     }
     slope
 }
@@ -558,9 +563,14 @@ pub fn solve_henyey_step(
 
     model.pack_xh();
     // The variables were set from `xh` before the solve (`unpack_xh`), which
-    // zeroes `dxh_lnR` (`star/private/hydro_vars.f90:308-313`).
+    // zeroes `dxh_lnd`, `dxh_lnT` and `dxh_lnR`
+    // (`star/private/hydro_vars.f90:296-313`).
     model.aux.dxh_lnr.clear();
     model.aux.dxh_lnr.resize(nz, 0.0);
+    model.aux.dxh_lnd.clear();
+    model.aux.dxh_lnd.resize(nz, 0.0);
+    model.aux.dxh_lnt.clear();
+    model.aux.dxh_lnt.resize(nz, 0.0);
     let xh_start_buf = build_xh_start_buffer(model);
     let mut solver_dx = vec![0.0_f64; nz * nvar];
     for k in 0..nz {
@@ -722,17 +732,22 @@ pub fn solve_henyey_step(
                 break;
             }
             // Written once sizeB has succeeded, as the MESA overlay does.
-            // `soln` is the negative of upstream's correction `B`, so the
-            // signed `max_correction` (`B(j,k)*correction_weight(j,k)`,
-            // `solver_support.f90:447,492`) is `-mc_raw`; the solver itself
-            // uses only its magnitude (`star_solver.f90:367`).
+            // The signed `max_correction` is `B(j,k)*correction_weight(j,k)`
+            // at the arg max (`solver_support.f90:447,492`). `mc_raw` is its
+            // magnitude and the weights are positive, so the sign is that of
+            // `soln` (upstream's `B`) there; the solver itself uses only the
+            // magnitude (`star_solver.f90:367`).
             if crate::stepdump::active() {
+                let signed_max = match corr_argmax {
+                    Some((k, j)) if soln[k * sys.nvar + j] < 0.0 => -mc_raw,
+                    _ => mc_raw,
+                };
                 stepdump_line(
                     model,
                     sys.nvar,
                     "CORR",
                     &[iter as i64],
-                    &[cn_raw, -mc_raw],
+                    &[cn_raw, signed_max],
                     &stepdump_loc(corr_argmax),
                 );
             }

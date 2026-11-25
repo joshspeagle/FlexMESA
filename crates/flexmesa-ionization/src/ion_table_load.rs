@@ -25,19 +25,19 @@ use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
-use flexmesa_interp2d::{BicubicBc, interp_mkbicub_db};
+use flexmesa_interp2d::{interp_mkbicub_db, BicubicBc};
 use flexmesa_math::{exp10, log10};
 use flexmesa_utils::cache_envelope::{
     read_verified_cache, write_verified_cache_atomic,
 };
-use flexmesa_utils::sha256::{Sha256Hasher, compute_sha256_bytes};
+use flexmesa_utils::sha256::{compute_sha256_bytes, Sha256Hasher};
 use flexmesa_utils::{
     is_bad, resolve_flexmesa_cache_dir, resolve_flexmesa_data_dir,
 };
 use rayon::prelude::*;
 
 use crate::{
-    ION_XS, ION_ZS, IonError, IonScalar, NUM_ION_VALS, NUM_ION_XS,
+    IonError, IonScalar, ION_XS, ION_ZS, NUM_ION_VALS, NUM_ION_XS,
     NUM_ION_XS_FOR_Z, NUM_ION_ZS,
 };
 
@@ -50,7 +50,7 @@ const ION_TABLES_MANIFEST_NAME: &str = "ion_tables_full.toml";
 const FMION_MAGIC: &[u8; 8] = b"FMION001";
 const FMION_HEADER_BYTES: usize = 24;
 const ION_CACHE_MAGIC: &[u8; 8] = b"FMIONCA1";
-const ION_CACHE_BUILDER_VERSION: u32 = 1;
+const ION_CACHE_BUILDER_VERSION: u32 = 2;
 
 /// Minimum accepted `ion_*.data` format version (`min_version = 49`,
 /// `ionization/public/ionization_def.f90:91`).
@@ -558,9 +558,10 @@ fn resolve_ion_data_dir() -> Result<Option<PathBuf>, IonError> {
 }
 
 fn ion_cache_path(cache_root: &Path, source_sha: &str) -> PathBuf {
-    cache_root
-        .join("ionization")
-        .join(format!("ionization_full.{}.bin", &source_sha[..16]))
+    cache_root.join("ionization").join(format!(
+        "ionization_full.{}.v{ION_CACHE_BUILDER_VERSION}.bin",
+        &source_sha[..16]
+    ))
 }
 
 fn fmion_err(detail: String) -> IonError {
@@ -1302,6 +1303,60 @@ mod tests {
     }
 
     #[test]
+    fn test_ion_cache_v2_path_ignores_stale_v1_and_rejects_v2_builder_mismatch()
+    {
+        let dir = std::env::temp_dir()
+            .join(format!("flexmesa_ion_cache_v2_{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        let cache_v1 = dir.join("cache").join("v1");
+        let sha = compute_sha256_bytes(ION_TABLES_FULL_BIN);
+
+        // Plant a legacy v1 filename (without `.v2.`); v2 loader must ignore it
+        // rather than failing or reading stale pre-fix spline coefficients.
+        let ion_dir = cache_v1.join("ionization");
+        fs::create_dir_all(&ion_dir).expect("mkdir ion cache dir");
+        let stale_v1_path =
+            ion_dir.join(format!("ionization_full.{}.bin", &sha[..16]));
+        fs::write(&stale_v1_path, b"stale_v1_pre_2206693f_payload")
+            .expect("write stale v1");
+
+        let grid = IonTableGrid::load_or_verify_cache_in(None, Some(&cache_v1))
+            .expect("rebuild v2 ion cache ignoring stale v1");
+        assert!(
+            stale_v1_path.is_file(),
+            "stale v1 file should remain intact"
+        );
+
+        let v2_path = ion_cache_path(&cache_v1, &sha);
+        assert!(v2_path.is_file(), "expected v2 cache file at {v2_path:?}");
+        assert!(
+            v2_path
+                .file_name()
+                .is_some_and(|n| n.to_string_lossy().ends_with(".v2.bin")),
+            "unexpected v2 filename: {v2_path:?}"
+        );
+
+        // Overwrite the `.v2.bin` path with builder_version = 1 inside a valid
+        // envelope -> verified reader must still fail loudly on version mismatch.
+        write_verified_cache_atomic(
+            &v2_path,
+            1,
+            ION_CACHE_MAGIC,
+            &sha,
+            &grid.encode_cache_payload().expect("encode ion payload"),
+        )
+        .expect("overwrite v2 cache with builder_version=1");
+        let err = IonTableGrid::load_or_verify_cache_in(None, Some(&cache_v1))
+            .expect_err("v2 path with builder_version=1 must fail loudly");
+        assert!(
+            matches!(err, IonError::Io(ref msg) if msg.contains("builder version mismatch")),
+            "expected IonError::Io builder version mismatch, got {err:?}"
+        );
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
     fn test_ion_decode_cache_payload_rejects_malformed_inputs_without_panic() {
         assert!(matches!(
             IonTableGrid::decode_cache_payload(&[]),
@@ -1732,8 +1787,8 @@ mod tests {
     }
 
     #[test]
-    fn test_build_table_splines_zeros_non_finite_coefficients_matching_upstream()
-     {
+    fn test_build_table_splines_zeros_non_finite_coefficients_matching_upstream(
+    ) {
         let log_qs = [-6.0_f64, -5.9, -5.8, -5.7];
         let log_ts = [3.0_f64, 3.1, 3.2, 3.3];
         let mut raw = vec![vec![0.0_f64; 16]; NUM_ION_VALS];

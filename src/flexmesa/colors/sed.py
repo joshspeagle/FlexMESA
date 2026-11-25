@@ -313,22 +313,43 @@ def eval_sed_knn_jax(
     g_v = jnp.asarray(log_g, dtype=jnp.float64)
     m_v = jnp.asarray(metallicity, dtype=jnp.float64)
 
-    t_inv = 1.0 / jnp.maximum(grid.teff_grid[-1] - grid.teff_grid[0], 1.0e-12)
-    g_inv = 1.0 / jnp.maximum(grid.logg_grid[-1] - grid.logg_grid[0], 1.0e-12)
-    m_inv = 1.0 / jnp.maximum(grid.meta_grid[-1] - grid.meta_grid[0], 1.0e-12)
+    # Normalised coordinates by direct division, `(x - min)/(max - min)`
+    # (`colors/private/knn_interp.f90:212-243`); the built-in grid has no
+    # dummy or degenerate axis. The static grid is normalised on the host
+    # with IEEE division. Under `jit`, XLA rewrites division by a constant
+    # into multiplication by its reciprocal, which is not correctly rounded
+    # and can leave an exact grid node at a nonzero distance, bypassing
+    # upstream's `dist == 0` branch; the optimization barrier keeps the
+    # target's division a true division.
+    tg = np.asarray(grid.teff_grid, dtype=np.float64)
+    gg = np.asarray(grid.logg_grid, dtype=np.float64)
+    mg = np.asarray(grid.meta_grid, dtype=np.float64)
+    t_min, t_span = float(tg.min()), float(tg.max() - tg.min())
+    g_min, g_span = float(gg.min()), float(gg.max() - gg.min())
+    m_min, m_span = float(mg.min()), float(mg.max() - mg.min())
+    bounds = jax.lax.optimization_barrier(
+        jnp.asarray(
+            [t_min, t_span, g_min, g_span, m_min, m_span], dtype=jnp.float64
+        )
+    )
 
-    nt_v = (t_v - grid.teff_grid[0]) * t_inv
-    ng_v = (g_v - grid.logg_grid[0]) * g_inv
-    nm_v = (m_v - grid.meta_grid[0]) * m_inv
+    nt_v = (t_v - bounds[0]) / bounds[1]
+    ng_v = (g_v - bounds[2]) / bounds[3]
+    nm_v = (m_v - bounds[4]) / bounds[5]
 
-    dt2 = ((grid.teff_grid - grid.teff_grid[0]) * t_inv - nt_v) ** 2
-    dg2 = ((grid.logg_grid - grid.logg_grid[0]) * g_inv - ng_v) ** 2
-    dm2 = ((grid.meta_grid - grid.meta_grid[0]) * m_inv - nm_v) ** 2
+    dt2 = (jnp.asarray((tg - t_min) / t_span) - nt_v) ** 2
+    dg2 = (jnp.asarray((gg - g_min) / g_span) - ng_v) ** 2
+    dm2 = (jnp.asarray((mg - m_min) / m_span) - nm_v) ** 2
+    # `dist = dt + dg + dm` summed in that order (`knn_interp.f90:249`).
     d2_flat = (
         dt2[:, None, None] + dg2[None, :, None] + dm2[None, None, :]
     ).reshape(-1)
+    # Strict `<` insertion keeps the first-visited node on ties, which a
+    # stable sort over the (teff, logg, meta) loop order reproduces.
     order = jnp.argsort(d2_flat, stable=True)[:4]
-    top_d = jnp.maximum(jnp.sqrt(d2_flat[order]), 1.0e-10)
+    # Only an exact zero distance becomes `1e-10` (`knn_interp.f90:92`).
+    top_d = jnp.sqrt(d2_flat[order])
+    top_d = jnp.where(top_d == 0.0, 1.0e-10, top_d)
     top_s = grid.sed_table[grid.slot_map[order]]
     inv_w = 1.0 / top_d
     w_norm = (inv_w / jnp.sum(inv_w))[:, None]

@@ -303,10 +303,36 @@ fn ps_errfunc(
 /// inversion failure, `T < 150 K` during integration, opacity failure, or no
 /// convergence within `max_tries_for_create_initial_model`.
 pub fn build_initial_model(
-    mut controls: StarControls,
+    controls: StarControls,
     job: StarJobControls,
     eos_cfg: EosConfig,
     kap_cfg: KapConfig,
+) -> Result<StarModel, StarError> {
+    build_initial_model_with_configs(controls, job, eos_cfg, kap_cfg, None)
+}
+
+/// Builds the isentropic initial model with an optional `search_dir` for
+/// custom nuclear reaction network files (`build_initial_model`,
+/// `star/private/create_initial_model.f90:70-247`, and `model_builder`,
+/// `star/private/init.f90:929-966`).
+///
+/// When `job.change_net` is enabled and `job.new_net_name` is non-empty, loads
+/// that network (`do_micro_change_net` in `init.f90:950-955` and
+/// `initial_model_change_net` in `run_star_support.f90:1695`); otherwise loads
+/// `job.net_name` (or `basic.net` if empty). Sets `model.job.net_name` to the
+/// loaded network name.
+///
+/// # Errors
+/// Returns [`StarError`] where upstream sets `ierr /= 0` or stops: invalid
+/// mass or radius, more than four hydro variables, network or composition
+/// failure, EOS inversion failure, `T < 150 K` during integration, opacity
+/// failure, or no convergence within `max_tries_for_create_initial_model`.
+pub fn build_initial_model_with_configs(
+    mut controls: StarControls,
+    mut job: StarJobControls,
+    eos_cfg: EosConfig,
+    kap_cfg: KapConfig,
+    search_dir: Option<&std::path::Path>,
 ) -> Result<StarModel, StarError> {
     // `create_star` (`init.f90:893`).
     if controls.initial_y < 0.0 {
@@ -318,13 +344,17 @@ pub fn build_initial_model(
     controls.rotation_flag = false;
 
     // `model_builder` calls `do_micro_change_net` instead of `set_net` when
-    // `initial_model_change_net` is set (`init.f90:951-953`); not wired here.
-    if job.change_net {
-        return Err(StarError::InvalidInput(String::from(
-            "create_initial_model with change_net/change_initial_net is not yet implemented (#154)",
-        )));
-    }
-    let net = get_or_load_net(DEFAULT_NET_NAME, None)?;
+    // `initial_model_change_net` is set (`init.f90:950-955`,
+    // `run_star_support.f90:1695`).
+    let net_name = if job.change_net && !job.new_net_name.trim().is_empty() {
+        job.new_net_name.trim()
+    } else if !job.net_name.trim().is_empty() {
+        job.net_name.trim()
+    } else {
+        DEFAULT_NET_NAME
+    };
+    let net = get_or_load_net(net_name, search_dir)?;
+    job.net_name = net_name.to_string();
     let chem_id = net.chem_id.clone();
 
     let layout = VarLayout::with_flags(

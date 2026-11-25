@@ -127,48 +127,51 @@ STOCK_EXTRAS_DIGESTS: frozenset[str] = frozenset(
 # listed here is written but cannot run yet because its hooks require an
 # unported engine or `StarExtras` capability:
 # - `#152` (solver/timestep/state hooks): `TzoStarExtras`
-#   (`star_set_v_flag`, center mass and luminosity mutation).
+#   (`star_set_v_flag`, `m_center`/`xmstar`/`L_center` mutations at `:108-125`,
+#   and custom `t_xtra1` `'PASS: Have reached requested NS mass'` at `:143`).
 # - `#153` (mesh/surface-cut hooks): `MakeCoWdStarExtras`
-#   (`star_remove_surface_at_cell_k`).
-# - `#154` (startup/relax/build-model hooks):
-#   `RelaxCompositionJEntropyStarExtras` (`initial_mass` mutation before
-#   model build).
-# - `#155` (per-cell MLT/overshoot/rotation diffusivity hooks):
-#   `PreMs12MCoreCollapseStarExtras`, `PreMs20MCoreCollapseStarExtras`,
-#   `SplitBurnBigNetStarExtras`, `MakePreCcsn13bvnStarExtras` (per-cell
-#   `alpha_mlt(1:nz)` is overwritten by `hydro_vars.rs` during `set_vars`
-#   after `inlist_runner.rs` calls `other_alpha_mlt`, plus per-zone
-#   `burn_num_iters` and `dvdt_drag`/`fdotv_drag_energy` are absent).
-# - `#159` (rotation-distortion hooks): `PpisnStarExtras` (`other_kap_get`,
-#   `other_eval_fp_ft`, `other_before_struct_burn_mix`, `#152`/`#159`/`#161`).
+#   (`star_remove_surface_at_cell_k` at `:207`).
+# - `#154` (relaxation & custom `t_xtra1` hooks):
+#   `RelaxCompositionJEntropyStarExtras` (custom `t_xtra1` termination strings
+#   at `:141, 144, 340`, missing `l(1)` radial array in `extras_py.rs`, and
+#   `#154` composition/J/entropy relaxation controls; `initial_mass` update in
+#   `extras_controls` is now supported in `apply_star_updates`).
+# - `#155` (per-cell MLT/drag/burn diagnostics):
+#   `PreMs12MCoreCollapseStarExtras`, `PreMs20MCoreCollapseStarExtras`
+#   (`20M_pre_ms_to_core_collapse` and `zams_to_cc_80`),
+#   `SplitBurnBigNetStarExtras`, `MakePreCcsn13bvnStarExtras` (all enable
+#   `use_other_alpha_mlt` whose per-cell `alpha_mlt(1:nz)` is overwritten by
+#   `hydro_vars.rs` during `set_vars` after `inlist_runner.rs` calls
+#   `other_alpha_mlt`, plus `burn_num_iters` at `split_burn_big_net:129` and
+#   `dvdt_drag`/`fdotv_drag_energy` at `make_pre_ccsn_13bvn:151, 187-188` are
+#   absent from `extras_py.rs`).
+# - `#159` (rotation-distortion hooks): `PpisnStarExtras` (`other_kap_get` at
+#   `:136`, `other_eval_fp_ft` at `:135`, `other_before_struct_burn_mix` at
+#   `:134`, plus `#152`/`#154`/`#231`).
 # - `#161` (opacity/surface-PT/other-physics hooks): `ConductiveFlameStarExtras`
-#   (`other_surface_PT`, `warn_rates_for_high_temp`, custom `t_xtra1`, `#150`;
-#   `other_build_initial_model` now adapter-served),
-#   `MsOpMonoStarExtras` (`op_mono` tables), `RadiativeLevitationStarExtras`
-#   (`set_op_mono_factors`), `OtherPhysicsHooksStarExtras` (`other_kap_get`,
-#   `other_eos_results`, `other_screening`, `other_rate_get`,
-#   `other_close_gaps`, `other_pressure`, `use_other_mesh_functions` /
-#   `use_other_mesh_delta_coeff_factor` namelist inventory;
-#   `other_overshooting_scheme`, `other_timestep_limit`,
-#   `other_mesh_delta_coeff_factor`, `other_mesh_functions`, `other_wind` are
-#   now adapter-served).
+#   (`other_surface_PT` at `:211`, custom `t_xtra1` `'flame reached halfway
+#   point'` at `:488-489`, `other_photo_read`/`write` at `:214-215`),
+#   `MsOpMonoStarExtras` (`op_mono_data_path` absent from `extras_controls`
+#   snapshot at `:50-65` and `op_mono` opacities `#286`),
+#   `RadiativeLevitationStarExtras` (`set_op_mono_factors` at `:89`, `#286`),
+#   `OtherPhysicsHooksStarExtras` (`other_kap_get` at `:63`,
+#   `other_eos_results` at `:66`, `other_screening` at `:72`,
+#   `other_rate_get` at `:75`, `other_close_gaps` at `:78`,
+#   `other_pressure` at `:81`).
 # - `#162` (pulse export & simplex calibration): `CheckPulseAtmStarExtras`
-#   (`star_export_pulse_data('FGONG')` with `add_atmosphere_to_pulse_data`,
-#   `atm_build_tau_outer`, `atm_T_tau_relation` atmosphere integration, `#161`);
+#   (`star_export_pulse_data('FGONG')` at `:122-127`, `atm_build_tau_outer` and
+#   pulse-data atmosphere flags absent from `extras_py.rs`),
 #   `SimplexSolarCalibrationStarExtras` is adapter-served for
-#   `other_mesh_functions` (`inlist_solar`; `star_simplex_procs`
+#   `other_mesh_functions` (`inlist_solar`; `star_simplex_procs` at `:55-59`
 #   remains `#162`).
-# - `#231` (custom termination codes): `C13PocketStarExtras`,
-#   `PisnStarExtras` and `WdAicStarExtras` set `termination_code_str(t_xtra*)`
-#   (`star/test_suite/c13_pocket/src/run_star_extras.f90:416`,
-#   `star/test_suite/pisn/src/run_star_extras.f90:227`,
-#   `star/test_suite/wd_aic/src/run_star_extras.f90:149`) and the case
-#   manifest requires those strings; the adapter reports only the hook name.
-# - `#152` (extras retry): `MakeSdbStarExtras` returns `retry`
-#   (`star/test_suite/make_sdb/src/run_star_extras.f90:108`), which the step
-#   driver does not implement.
+# - `#231` (custom termination codes & photo hooks): `C13PocketStarExtras`
+#   (custom `t_xtra1` at `:416, 442` and `other_photo_read`/`write` at
+#   `:100-101`), `PisnStarExtras` (custom `t_xtra1` `'Star is unbound'` at
+#   `:227`, `other_photo_read`/`write` at `:59-60`, and `other_remove_surface`
+#   at `:56-77`), and `WdAicStarExtras` (custom `t_xtra1..4` at
+#   `:149, 158, 161, 169`).
 # - `#172` (CCSN/STELLA + per-cell `alpha_mlt`): `CcsnIIpStarExtras`
-#   (`#154`/`#155`/`#158`/`#172`).
+#   (`#154`/`#155`/`#172`).
 #
 # Attaching an unserved handler stops a run that otherwise takes steps, so
 # `resolve_case_extras` leaves it detached and the case stays `unported` (it
@@ -196,6 +199,7 @@ ADAPTER_SERVED_STAR_HANDLERS: frozenset[str] = frozenset(
         "MagneticBrakingStarExtras",
         "MakeEnvStarExtras",
         "MakeONeWdStarExtras",
+        "MakeSdbStarExtras",
         "NeutronStarEnvStarExtras",
         "PreMs1MToWdStarExtras",
         "RCrBStarExtras",

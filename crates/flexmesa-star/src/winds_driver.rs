@@ -218,18 +218,25 @@ fn eval_wind_for_scheme(
     z_surf: f64,
     cgrav: f64,
 ) -> Result<f64, StarError> {
-    let scheme = WindScheme::parse_name(scheme_name).ok_or_else(|| {
-        StarError::InvalidInput(format!(
-            "unknown name for wind scheme : {scheme_name}"
-        ))
-    })?;
-    let use_other =
-        model.controls.use_other_wind || scheme == WindScheme::Other;
-    if !use_other && scheme == WindScheme::None {
-        return Ok(0.0);
-    }
-    let reimers_base =
-        4.0e-13 * (l1 * r1 / m1) / (L_SUN * R_SUN / M_SUN);
+    // Match `star/private/winds.f90:319-406`: `use_other` overrides scheme-name
+    // matching so `use_other_wind = true` allows custom descriptive scheme strings
+    // (such as `'Kudritzki'` or `'Grafener'`) without rejecting them.
+    let use_other = model.controls.use_other_wind
+        || scheme_name.trim().eq_ignore_ascii_case("other");
+    let scheme = if use_other {
+        WindScheme::Other
+    } else {
+        let parsed = WindScheme::parse_name(scheme_name).ok_or_else(|| {
+            StarError::InvalidInput(format!(
+                "unknown name for wind scheme : {scheme_name}"
+            ))
+        })?;
+        if parsed == WindScheme::None {
+            return Ok(0.0);
+        }
+        parsed
+    };
+    let reimers_base = 4.0e-13 * (l1 * r1 / m1) / (L_SUN * R_SUN / M_SUN);
     if reimers_base <= 0.0 || !reimers_base.is_finite() {
         return Err(StarError::InvalidInput(format!(
             "bad value for wind: {reimers_base} (L1={l1}, R1={r1}, M1={m1})"
@@ -348,14 +355,10 @@ pub fn do_set_mdot_with_extras(
     }
 
     // 2. Single-star RLO wind (`eval_rlo_wind`, `winds.f90:104-116, 661-703`).
-    let rlo_mdot = eval_rlo_wind(
-        model,
-        l1 / L_SUN,
-        r1 / R_SUN,
-        t1,
-        &mut xfer_ratio,
-    ) * M_SUN
-        / SECYER;
+    let rlo_mdot =
+        eval_rlo_wind(model, l1 / L_SUN, r1 / R_SUN, t1, &mut xfer_ratio)
+            * M_SUN
+            / SECYER;
     model.aux.step_hist.doing_rlo_wind = rlo_mdot != 0.0;
     if model.aux.step_hist.doing_rlo_wind && rlo_mdot > wind_mdot {
         wind_mdot = rlo_mdot;
@@ -494,7 +497,8 @@ pub fn do_set_mdot_with_extras(
         if starting_t_center > mw.max_t_center_for_any_mass_loss {
             wind_mdot = 0.0;
         } else if starting_t_center > mw.max_t_center_for_full_mass_loss {
-            wind_mdot *= (mw.max_t_center_for_any_mass_loss - starting_t_center)
+            wind_mdot *= (mw.max_t_center_for_any_mass_loss
+                - starting_t_center)
                 / (mw.max_t_center_for_any_mass_loss
                     - mw.max_t_center_for_full_mass_loss);
         }
@@ -589,7 +593,8 @@ fn apply_rotation_enhancement(
 
     let wind_mdot_prev = -model.aux.step_hist.mstar_dot_old;
     if wind_mdot > 0.0 && wind_mdot_prev > 0.0 {
-        wind_mdot = wind_mdot.min(mw.max_mdot_jump_for_rotation * wind_mdot_prev);
+        wind_mdot =
+            wind_mdot.min(mw.max_mdot_jump_for_rotation * wind_mdot_prev);
     }
 
     if wind_mdot >= 0.0 && mw.max_wind > 0.0 {
@@ -600,5 +605,8 @@ fn apply_rotation_enhancement(
     }
 
     model.mstar_dot = -wind_mdot;
+    // Note: upstream writes current-step `s% rotational_mdot_boost = enhancement`
+    // (`winds.f90:474`), reset to `0d0` at `do_step_part1` (`evolve.f90:316`);
+    // FlexMESA stores it in `rotational_mdot_boost_old` for history/retry callers.
     model.aux.step_hist.rotational_mdot_boost_old = enhancement;
 }

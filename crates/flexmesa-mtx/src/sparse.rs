@@ -1,7 +1,9 @@
 //! Dense-to-sparse (CSR/CSC, 1-based and 0-based) conversions (`mtx`).
 //!
-//! Matches upstream `mtx_formats.dek` and `mtx_support.f90` while fixing the
-//! upstream 0-based index bounds bugs in `row_sparse_0_based_to_dense`.
+//! Matches upstream `mtx/public/mtx_formats.dek:34-429` and
+//! `mtx/private/mtx_support.f90:36-468` while fixing the upstream 0-based
+//! index bounds bug in `row_sparse_0_based_to_dense`
+//! (`mtx/private/mtx_support.f90:428-447`, `DECISIONS #43`).
 //!
 //! # Storage Conventions
 //!

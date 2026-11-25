@@ -35,9 +35,9 @@ pub(crate) fn eval_d_mix_non_rotation_vec(model: &StarModel) -> Vec<f64> {
             Some(MixingType::NoMixing | MixingType::RotationMixing) | None => {
                 0.0
             }
-            Some(_) => {
-                (model.d_mix[k] - d_rot.get(k).copied().unwrap_or(0.0)).max(0.0)
-            }
+            Some(_) => (model.d_mix.get(k).copied().unwrap_or(0.0)
+                - d_rot.get(k).copied().unwrap_or(0.0))
+            .max(0.0),
         })
         .collect()
 }
@@ -113,6 +113,7 @@ pub fn update_rotation_mixing_info(
         }
     }
     model.aux.rotmix.d_mix_rotation.resize(nz, 0.0);
+    model.aux.rotmix.d_mix_rotation[0] = 0.0;
     model.aux.rotmix.d_mix_rotation[1..nz]
         .copy_from_slice(&d_mix_rotation[1..nz]);
 
@@ -149,8 +150,9 @@ pub fn update_rotation_mixing_info(
     let am_nu_visc = neg_or(mw.am_nu_visc_factor, mw.d_visc_factor);
 
     // `:1673-1676`.
+    let ye_center = model.ye.get(nz - 1).copied().unwrap_or(0.0);
     let set_min_am_nu_non_rot = mw.set_min_am_nu_non_rot
-        && model.ye[nz - 1] >= mw.min_center_ye_for_min_am_nu_non_rot
+        && ye_center >= mw.min_center_ye_for_min_am_nu_non_rot
         && !mw.set_uniform_am_nu_non_rot;
 
     // `:1685-1688`.
@@ -371,4 +373,83 @@ pub(crate) fn sync_post_henyey_rotation(
     }
     crate::hydro_rotation::set_rotation_info(model, false);
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use flexmesa_const::MixingType;
+
+    use super::{eval_d_mix_non_rotation_vec, update_rotation_mixing_info};
+    use crate::controls::{StarControls, StarJobControls};
+    use crate::zams::load_zams_model;
+
+    fn rotating_zams_1m() -> crate::model::StarModel {
+        let mut ctrl = StarControls {
+            initial_mass: 1.0,
+            zbase: 0.02,
+            rotation_flag: true,
+            ..StarControls::default()
+        };
+        ctrl.mix_wind.am_d_mix_factor = 1.0 / 30.0;
+        ctrl.mix_wind.d_dsi_factor = 0.0;
+        ctrl.mix_wind.d_sh_factor = 1.0;
+        ctrl.mix_wind.d_ssi_factor = 1.0;
+        ctrl.mix_wind.d_es_factor = 1.0;
+        ctrl.mix_wind.d_gsf_factor = 1.0;
+        ctrl.mix_wind.d_st_factor = 1.0;
+        let mut model =
+            load_zams_model(ctrl, StarJobControls::default()).expect("1M ZAMS");
+        model.omega.fill(2.0e-5);
+        crate::rotation::update_rotation_distortion_factors(&mut model);
+        crate::hydro_vars::set_hydro_vars(&mut model, false, false)
+            .expect("set_hydro_vars");
+        model
+    }
+
+    #[test]
+    fn test_eval_d_mix_non_rotation_vec_reconstructs_when_cache_missing() {
+        let mut m = rotating_zams_1m();
+        let nz = m.nz;
+        assert!(nz > 4);
+        m.aux.mixing.have_mixing_info = false;
+        m.aux.mixing.d_mix_non_rotation.clear();
+        m.aux.rotmix.d_mix_rotation.resize(nz, 0.0);
+        m.aux.rotmix.d_mix_rotation[1] = 250.0;
+        m.aux.rotmix.d_mix_rotation[2] = 500.0;
+        m.mixing_type[1] = MixingType::RotationMixing;
+        m.d_mix[1] = 250.0;
+        m.mixing_type[2] = MixingType::ConvectiveMixing;
+        m.d_mix[2] = 1.5e12 + 500.0;
+        m.mixing_type[3] = MixingType::NoMixing;
+        m.d_mix[3] = 999.0;
+
+        let got = eval_d_mix_non_rotation_vec(&m);
+        assert_eq!(got.len(), nz);
+        assert_eq!(got[1], 0.0);
+        assert!((got[2] - 1.5e12).abs() <= 1.0e-3);
+        assert_eq!(got[3], 0.0);
+    }
+
+    #[test]
+    fn test_update_rotation_mixing_info_clears_face0_and_handles_flags() {
+        let mut m = rotating_zams_1m();
+        let nz = m.nz;
+        m.aux.rotmix.d_mix_rotation.resize(nz, 1234.0);
+        m.controls.d_omega_flag = false;
+        m.controls.am_nu_rot_flag = true;
+        m.controls.mix_wind.smooth_am_nu_rot = 2;
+        m.controls.mix_wind.nu_omega_mixing_rate = 1.0;
+        m.dt = 1.0e10;
+
+        let d_rot =
+            update_rotation_mixing_info(&mut m).expect("am_nu_rot_flag update");
+        assert_eq!(d_rot[0], 0.0);
+        assert_eq!(m.aux.rotmix.d_mix_rotation[0], 0.0);
+        assert_eq!(m.aux.am_nu_rot[0], 0.0);
+
+        // `doing_finish_load_model` zeroes `am_nu_rot` (`mix_info.f90:1810`).
+        m.aux.doing_finish_load_model = true;
+        update_rotation_mixing_info(&mut m).expect("finish load model zeros");
+        assert!(m.aux.am_nu_rot[..nz].iter().all(|&v| v == 0.0));
+    }
 }

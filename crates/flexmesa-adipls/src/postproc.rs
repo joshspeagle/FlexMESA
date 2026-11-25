@@ -934,24 +934,53 @@ impl SigoutState {
         }
     }
 
-    /// Replicate ADIPLS `nscfil(unit)` (`adipls/adipack.c/gensr/ofiles.c.f:205-232,
-    /// 317-353`): returns `true` if `unit > 0`, mapped in `files`, and not
-    /// opened as a scratch file (2nd+ `/dev/null` mapping).
+    /// Replicate ADIPLS `nscfil(unit)` (`adipls/adipack.c/adipls/adipls.c.d.f:
+    /// 1256-1262, 1508-1522` and `adipls/adipack.c/gensr/ofiles.c.f:103-110,
+    /// 205-232, 317-374`): returns `true` iff `unit > 0`, mapped in `files`,
+    /// opened by ADIPLS (as opposed to an unactivated optional unit such as
+    /// `4 '0'` when `nfmode == 0`), and not mapped to a 2nd+ `/dev/null`
+    /// scratch slot.
     #[must_use]
     pub fn nscfil(&self, unit: i32) -> bool {
         if unit <= 0 {
             return false;
         }
+        let Some(target_idx) = self.files.iter().position(|e| e.unit == unit)
+        else {
+            return false;
+        };
+
+        let nfmode_lo = self.out.nfmode % 10;
+        let open_units = [
+            (self.out.istdpr > 0 && self.out.istdpr != 6)
+                .then_some(self.out.istdpr),
+            (self.dsn.idslog > 0).then_some(self.dsn.idslog),
+            (self.dsn.idsgsm > 0).then_some(self.dsn.idsgsm),
+            (self.dsn.idsssm > 0).then_some(self.dsn.idsssm),
+            (nfmode_lo >= 1 && self.dsn.idsefn > 0).then_some(self.dsn.idsefn),
+            (self.out.irotkr >= 1 && self.dsn.idsrkr > 0)
+                .then_some(self.dsn.idsrkr),
+            (self.out.igm1kr == 1 && self.dsn.idsgkr > 0)
+                .then_some(self.dsn.idsgkr),
+        ];
+
         let mut null_count = 0_usize;
-        for entry in &self.files {
-            if entry.path == "/dev/null" {
-                null_count += 1;
+        let mut target_open = false;
+        for open_unit in open_units.into_iter().flatten() {
+            let Some(idx) = self.files.iter().position(|e| e.unit == open_unit)
+            else {
+                continue;
+            };
+            let is_dev_null = self.files[idx].path == "/dev/null";
+            if is_dev_null {
+                null_count = (null_count + 1).min(9);
             }
-            if entry.unit == unit {
-                return entry.path != "/dev/null" || null_count <= 1;
+            let open_state = !is_dev_null || null_count == 1;
+            if idx == target_idx {
+                target_open = open_state;
             }
         }
-        false
+        target_open
     }
 }
 

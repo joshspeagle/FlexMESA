@@ -185,7 +185,9 @@ pub fn approx21_dydt(
         + m3(-y[idx.ife54], y[idx.ihe4], ratd[idx.irfe56_aux4]);
 
     // Match MESA net_approx21.f90: a2 = y(ihe3)*y(ihe4)*rate(irhe3ag) remains
-    // live into the CNO block.
+    // live into the CNO block, so the He4 equation adds it a second time
+    // (`net/private/net_approx21.f90:1105, 1110-1113`; deferred upstream bug
+    // #526).
     let a2_he3_he4 = m3(y[idx.ihe3], y[idx.ihe4], ratd[idx.irhe3ag]);
     q_he4 += m4(0.5, y[idx.ihe3], y[idx.ihe3], ratd[idx.ir33]) + a2_he3_he4;
     q_he4 += m3(y[idx.io16], y[idx.ih1], ratd[idx.iropg]) + a2_he3_he4;

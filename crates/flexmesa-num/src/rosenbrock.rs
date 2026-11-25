@@ -463,6 +463,7 @@ where
     let mut nrejct = 0usize;
     let mut reject = false;
     let mut last = false;
+    let mut nsing = 0usize;
     let mut hacc = 0.0_f64;
     let mut erracc = 0.0_f64;
 
@@ -523,13 +524,28 @@ where
         };
 
         // Inner step-retry loop (`GOTO 2` in `mod_rosenbrock.f`): reuses f0/J
-        loop {
+        // and halves h on LU singularity (GOTO 80, max 5) or trial-stage
+        // error / non-finite error norm (GOTO 81).
+        'retry: loop {
             if nstep > nmax || h.abs() <= hprev.abs() * 1.0e-30 {
                 return Err(NumError::ConvergenceFailed(
                     "rosenbrock exceeded max_steps or step reduction limit",
                 ));
             }
-            let (lu, ipiv) = factor_matrix(n, &j_mat, h * rc.gamma)?;
+            let (lu, ipiv) = match factor_matrix(n, &j_mat, h * rc.gamma) {
+                Ok(fact) => fact,
+                Err(e @ NumError::InvalidParameter(_)) => return Err(e),
+                Err(e) => {
+                    nsing += 1;
+                    if nsing >= 5 {
+                        return Err(e);
+                    }
+                    h *= 0.5;
+                    reject = true;
+                    last = false;
+                    continue 'retry;
+                }
+            };
             let mut g_stages: Vec<Vec<f64>> = Vec::with_capacity(rc.s);
             let mut f_stg_cur = f0.clone();
             let mut f_stg_1 = f0.clone();
@@ -546,7 +562,18 @@ where
                             y_stg[i] = y[i] + sum;
                         }
                         nfcn += 1;
-                        let fs = fcn(t + rc.alpha[stg] * h, &y_stg)?;
+                        let fs = match fcn(t + rc.alpha[stg] * h, &y_stg) {
+                            Ok(v) => v,
+                            Err(e @ NumError::InvalidParameter(_)) => {
+                                return Err(e);
+                            }
+                            Err(_) => {
+                                h *= 0.5;
+                                reject = true;
+                                last = false;
+                                continue 'retry;
+                            }
+                        };
                         if fs.len() != n {
                             return Err(NumError::InvalidParameter(
                                 "derivative vector length mismatch in \
@@ -597,7 +624,16 @@ where
                         }
                     }
                 }
-                let g_i = solve_stage(n, &lu, &ipiv, &rhs)?;
+                let g_i = match solve_stage(n, &lu, &ipiv, &rhs) {
+                    Ok(v) => v,
+                    Err(e @ NumError::InvalidParameter(_)) => return Err(e),
+                    Err(_) => {
+                        h *= 0.5;
+                        reject = true;
+                        last = false;
+                        continue 'retry;
+                    }
+                };
                 g_stages.push(g_i);
             }
 
@@ -623,9 +659,10 @@ where
             }
             let err = (err_sq / (n as f64)).sqrt();
             if !err.is_finite() {
-                return Err(NumError::NonFiniteValue(
-                    "non-finite local error in rosenbrock",
-                ));
+                h *= 0.5;
+                reject = true;
+                last = false;
+                continue 'retry;
             }
 
             let mut fac =

@@ -36,7 +36,7 @@ pub const DT_SLICE_BIN_MAGIC: &[u8; 8] = b"FMDT4D01";
 pub const CMS_SLICE_BIN_MAGIC: &[u8; 8] = b"FMCMS001";
 
 /// Builder version stamped into `FMCENV01` headers for 4D EOS slice caches.
-pub const SLICE_CACHE_BUILDER_VERSION: u32 = 1;
+pub const SLICE_CACHE_BUILDER_VERSION: u32 = 2;
 
 const VERTEX_BYTES: usize = NUM_EOS_TABLE_VALS * 4 * 8;
 
@@ -86,13 +86,12 @@ fn encode_dt_vertex(v: &EosDtVertex, out: &mut [u8; VERTEX_BYTES]) {
     }
 }
 
-/// Cache file for one slice, one source file and one numerics mode.
+/// Cache file for one slice, one source file, one builder version, and one numerics mode.
 ///
-/// The fitted coefficients depend on the numerics mode: the `CMS` build takes
-/// `safe_log` of `Cp` and `Cv` (`cms/table.rs`), and `flexmesa_math::log` is
-/// correctly rounded in strict mode and the platform routine in fast mode.
-/// A slice built in one mode must therefore never be served to the other, so
-/// the mode is part of the file name.
+/// The fitted coefficients depend on both the spline builder (`SLICE_CACHE_BUILDER_VERSION`)
+/// and the numerics mode (`CMS` takes `safe_log` of `Cp` and `Cv` in `cms/table.rs`, where
+/// `flexmesa_math::log` is correctly rounded in strict mode and the platform routine in fast mode).
+/// Including both in the filename ensures stale older caches rebuild cleanly without colliding.
 fn slice_cache_path(
     cache_root: &Path,
     stem: &str,
@@ -100,7 +99,7 @@ fn slice_cache_path(
     mode: NumericsMode,
 ) -> PathBuf {
     cache_root.join("eos_4d_slices").join(format!(
-        "{stem}.{}.{}.bin",
+        "{stem}.{}.v{SLICE_CACHE_BUILDER_VERSION}.{}.bin",
         &source_sha256[..16],
         mode.as_str()
     ))
@@ -1061,12 +1060,12 @@ mod tests {
         assert_eq!(
             strict,
             root.join("eos_4d_slices")
-                .join("mesa-CMS_000x.0123456789abcdef.strict.bin")
+                .join("mesa-CMS_000x.0123456789abcdef.v2.strict.bin")
         );
         assert_eq!(
             fast,
             root.join("eos_4d_slices")
-                .join("mesa-CMS_000x.0123456789abcdef.fast.bin")
+                .join("mesa-CMS_000x.0123456789abcdef.v2.fast.bin")
         );
     }
 
@@ -1241,6 +1240,79 @@ mod tests {
             .expect_err("truncated cache must fail");
         assert!(
             err.to_string().contains("length mismatch"),
+            "unexpected err: {err}"
+        );
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_slice_cache_v2_path_ignores_stale_v1_and_rejects_v2_builder_mismatch(
+    ) {
+        let dir = make_temp_dir("v2_builder_invalidation");
+        let data_dir = dir.join("data");
+        let cache_v1 = dir.join("cache").join("v1");
+        let raw_dir = data_dir.join("eos_4d_raw");
+        std::fs::create_dir_all(&raw_dir).expect("mkdir raw");
+
+        let stem = "mesa-eosDT_v2_invalidation_test";
+        let raw_path = raw_dir.join(format!("{stem}.raw"));
+        std::fs::write(&raw_path, build_synthetic_dt_raw_bytes(false))
+            .expect("write raw");
+        let sha = compute_sha256_file(&raw_path).expect("hash dt raw");
+
+        // Plant a legacy v1 filename (without `.v2.`); v2 loader must ignore it
+        // and rebuild cleanly at `.v2.<mode>.bin`.
+        let slices_dir = cache_v1.join("eos_4d_slices");
+        std::fs::create_dir_all(&slices_dir).expect("mkdir eos_4d_slices");
+        let mode_str = numerics_mode().as_str();
+        let stale_v1_path =
+            slices_dir.join(format!("{stem}.{}.{mode_str}.bin", &sha[..16]));
+        std::fs::write(&stale_v1_path, b"stale_v1_spline_payload")
+            .expect("write stale v1");
+
+        let (built, maybe_cache) = load_or_build_dt_slice_with_cache_path_in(
+            &data_dir,
+            None,
+            Some(&cache_v1),
+            EosDtTableKind::OpalScvh,
+            stem,
+        )
+        .expect("build v2 slice ignoring stale v1");
+        assert!(
+            stale_v1_path.is_file(),
+            "stale v1 file should remain intact"
+        );
+        let v2_path = maybe_cache.expect("expected v2 cache path");
+        assert!(v2_path.is_file(), "expected v2 cache file at {v2_path:?}");
+        assert!(
+            v2_path.file_name().is_some_and(|n| {
+                let s = n.to_string_lossy();
+                s.contains(".v2.") && s.ends_with(&format!(".{mode_str}.bin"))
+            }),
+            "unexpected v2 filename: {v2_path:?}"
+        );
+
+        // Overwrite the `.v2.` path with builder_version = 1 inside a valid
+        // envelope -> verified reader must still fail loudly on version mismatch.
+        write_verified_cache_atomic(
+            &v2_path,
+            1,
+            DT_SLICE_BIN_MAGIC,
+            &sha,
+            &encode_dt_slice_bytes(&built).expect("encode dt payload"),
+        )
+        .expect("overwrite v2 slice with builder_version=1");
+        let err = load_or_build_dt_slice_with_cache_path_in(
+            &data_dir,
+            None,
+            Some(&cache_v1),
+            EosDtTableKind::OpalScvh,
+            stem,
+        )
+        .expect_err("v2 slice path with builder_version=1 must fail loudly");
+        assert!(
+            err.to_string().contains("builder version mismatch"),
             "unexpected err: {err}"
         );
 

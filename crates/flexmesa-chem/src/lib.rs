@@ -20,8 +20,9 @@
 //!   [`get_composition_info_zones`].
 //!
 //! # Index and Memory-Order Contract
-//! - Element IDs (`e_h = 1 .. e_cn = 112`) and nuclide IDs (`chem_id >= 1`)
-//!   preserve upstream 1-based MESA integer identifiers (`0` for `neut`).
+//! - Element IDs (`0` for `neut`, `e_h = 1 .. e_cn = 112`) and nuclide IDs
+//!   (`chem_id >= 1`, starting at `1` for `neut`) preserve upstream MESA
+//!   integer identifiers (`chem_def.f90` / `isotopes.data`).
 //! - Solar metal mass-fraction arrays (`[f64; 112]`) use 0-based index `z - 1`
 //!   for atomic number $Z \in [1, 112]$.
 //! - Multi-zone abundance buffers (`x_zones`) use row-major `(n_zones,
@@ -76,7 +77,8 @@ pub use elements::{
     NUM_CHEM_ELEMENTS, T_PART,
 };
 pub use nuclides::{
-    builtin_nuclide_rows, NuclideCatalog, NuclideEntry, DEL_MN, DEL_MP,
+    builtin_nuclide_rows, generate_nuclide_set, get_nuclide_index_in_set,
+    NuclideCatalog, NuclideEntry, NuclideSetEntry, DEL_MN, DEL_MP,
 };
 pub use solar_ag89::{
     ag89_yesol, ag89_zsol, chem_get_solar, chem_xsol, get_stable_mass_frac,
@@ -270,7 +272,9 @@ mod tests {
         }
 
         if let Some(test_out_path) =
-            flexmesa_utils::require_mesa_test_input_path("chem/test/test_output")
+            flexmesa_utils::require_mesa_test_input_path(
+                "chem/test/test_output",
+            )
         {
             let text = std::fs::read_to_string(&test_out_path)
                 .expect("read test_output");

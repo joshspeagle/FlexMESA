@@ -191,16 +191,18 @@ pub fn solar_cno_fraction(scale: SolarScale, catalog: &NuclideCatalog) -> f64 {
 ///   - \log_{10}\!\left(\frac{Z_\odot}{1 - Z_\odot - Y_\odot}\right).$$
 ///
 /// # Errors
-/// Returns [`ChemError::InvalidInput`] if $X \le 0$ or $Z \le 0$.
+/// Returns [`ChemError::InvalidInput`] if $X$ or $Z$ is non-finite or $\le 0$.
 pub fn chem_m_div_h(
     x: f64,
     z: f64,
     scale: SolarScale,
 ) -> Result<f64, ChemError> {
-    if x <= 0.0 || z <= 0.0 {
+    if !x.is_finite() || !z.is_finite() || x <= 0.0 || z <= 0.0 {
         return Err(ChemError::InvalidInput {
             context: "chem_m_div_h",
-            detail: format!("x ({x}) and z ({z}) must be strictly positive"),
+            detail: format!(
+                "x ({x}) and z ({z}) must be finite and strictly positive"
+            ),
         });
     }
     let (ysol, zsol) = scale.bulk_yz();

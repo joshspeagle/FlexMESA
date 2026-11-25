@@ -162,7 +162,9 @@ pub fn category_name(id: usize) -> Option<&'static str> {
 /// Return the 1-based partition function temperature index for $T_9$ (in GK).
 ///
 /// Performs an 8-step binary search over [`T_PART`], matching
-/// `get_partition_fcn_indx(T9)` in `chem_lib.f90`.
+/// `get_partition_fcn_indx(T9)` in `chem/public/chem_lib.f90:560-593`
+/// (returning `0` for $T_9 < 0.10$, `1..=23` on $[0.10, 10.0)$, and `23` for
+/// $T_9 \ge 10.0$ where upstream falls through the missing early return).
 #[must_use]
 pub fn get_partition_fcn_indx(t9: f64) -> usize {
     let mut low: usize = 1;

@@ -12,8 +12,8 @@
 //! $$\frac{\Delta t_{n+1}}{\Delta t_n} =
 //!   \mathcal{L}\!\left((r_n r_{n-1} \Delta t_{n-1} / \Delta t_n)^{1/4}\right),$$
 //! where $\mathcal{L}(x) = 1 + \kappa \arctan((x - 1)/\kappa)$ with
-//! $\kappa = 10$ is the smooth arctangent limiter (`filter_limit` in
-//! `timestep.f90:2398`).
+//! $\kappa = 10$ is the smooth arctangent limiter (`limiter` in
+//! `timestep.f90:2417-2424`).
 
 use crate::model::StarModel;
 
@@ -75,8 +75,8 @@ pub struct TimestepReport {
     pub reason: TimestepLimitReason,
 }
 
-/// Smooth arctangent step-ratio limiter (`filter_limit` in
-/// `timestep.f90:2398`):
+/// Smooth arctangent step-ratio limiter (`limiter` in
+/// `timestep.f90:2417-2424`):
 /// $$\mathcal{L}(x) = 1 + \kappa \arctan\!\left(\frac{x - 1}{\kappa}\right),
 ///   \qquad \kappa = 10.$$
 #[must_use]
@@ -245,7 +245,7 @@ pub fn pick_next_timestep(
     dx_nuc_drop_limit: f64,
 ) -> TimestepReport {
     let varcontrol = eval_varcontrol(model);
-    let vc_target = model.controls.varcontrol_target.max(1.0e-12);
+    let vc_target = model.controls.varcontrol_target.max(1.0e-99);
     let ratio_vc = varcontrol / vc_target;
     let ratio_burn = eval_dx_nuc_drop_ratio(model, dx_nuc_drop_limit, 1.0e-4);
 

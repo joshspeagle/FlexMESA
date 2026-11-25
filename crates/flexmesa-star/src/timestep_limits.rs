@@ -9,14 +9,14 @@ use crate::inlist_runner::{DefaultStarExtras, ExtrasDirective, StarExtras};
 use crate::mesa_history::{eval_min_cell_collapse_time, eval_min_dr_div_cs};
 use crate::model::StarModel;
 use crate::timestep::{
-    TimestepAction, TimestepLimitReason, TimestepReport, h211_limtr,
-    eval_varcontrol,
+    eval_varcontrol, h211_limtr, TimestepAction, TimestepLimitReason,
+    TimestepReport,
 };
 use crate::timestep_checks::{
-    CheckFailure, check_change, check_cntr_abundance_limits, check_dx_limits,
+    check_change, check_cntr_abundance_limits, check_dx_limits,
     check_dx_nuc_drop_full, check_integer_limit,
     check_luminosity_and_hr_limits, check_structural_limits,
-    collect_mixing_boundary_qs,
+    collect_mixing_boundary_qs, CheckFailure,
 };
 
 fn check_mass_mdot_courant_and_energy(
@@ -46,9 +46,9 @@ fn check_mass_mdot_courant_and_energy(
 
     // `check_delta_mdot` (`star/private/timestep.f90:1884-1912`)
     let (mdot, mdot_old) = (model.mstar_dot, model.aux.step_hist.mstar_dot_old);
-    let denom = mw.delta_mdot_atol * (M_SUN / SECYER)
+    let denom = (mw.delta_mdot_atol * M_SUN) / SECYER
         + mw.delta_mdot_rtol * mdot.abs().max(mdot_old.abs());
-    if denom > 0.0 {
+    if denom > 0.0 && mdot != mdot_old {
         let delta_mdot = (mdot - mdot_old).abs() / denom;
         if delta_mdot != 0.0 {
             let lim = mw.delta_mdot_limit * coeff;
@@ -188,7 +188,8 @@ pub(crate) fn timestep_controller_with_extras(
     let skip_hard_limit = if model.controls.ts_stop.never_skip_hard_limits {
         false
     } else {
-        model.aux.step_hist.timestep_hold >= model.model_number
+        (model.aux.step_hist.timestep_hold > 0
+            && model.aux.step_hist.timestep_hold >= model.model_number)
             || (model.controls.ts_stop.relax_hard_limits_after_retry
                 && model.aux.step_hist.model_number_for_last_retry
                     == Some(model.model_number))
@@ -227,8 +228,13 @@ pub(crate) fn timestep_controller_with_extras(
         ))
     };
 
-    let log_max_t =
-        model.ln_t.iter().copied().fold(f64::NEG_INFINITY, f64::max) / LN_10;
+    let log_max_t = model
+        .ln_t
+        .iter()
+        .take(model.nz)
+        .copied()
+        .fold(f64::NEG_INFINITY, f64::max)
+        / LN_10;
     let mut dt_limit_ratio = r_vc;
     let mut reason = TimestepLimitReason::Varcontrol;
 
@@ -309,7 +315,7 @@ pub(crate) fn timestep_controller_with_extras(
             "num_solver_iterations",
             skip_hard_limit,
         ) {
-            Ok(r) => r.max(r_other),
+            Ok(r) => r,
             Err(m) => {
                 return retry_rep(
                     m,
@@ -322,6 +328,7 @@ pub(crate) fn timestep_controller_with_extras(
         let max_lnt_start = model
             .ln_t_start
             .iter()
+            .take(model.nz)
             .copied()
             .fold(f64::NEG_INFINITY, f64::max);
         if c.op_split_burn
@@ -330,7 +337,7 @@ pub(crate) fn timestep_controller_with_extras(
         {
             match check_integer_limit(
                 ts.burn_steps_limit,
-                c.burn_steps_hard_limit as isize,
+                isize::try_from(c.burn_steps_hard_limit).unwrap_or(isize::MAX),
                 sh.burn_max_num_substeps,
                 "num_burn_solver_steps",
                 skip_hard_limit,
@@ -445,16 +452,20 @@ pub(crate) fn timestep_controller_with_extras(
                 }
             };
 
+        // Ordered after `star_data_def.inc:43-103` `Tlim_*` enum indices so
+        // exact ties select the same dominant limiter as Fortran `maxloc`.
         let candidates = [
             (r_sub, TimestepLimitReason::SolverOrSubsteps),
             (r_dx_abs.max(r_dx_rel), TimestepLimitReason::AbundanceChange),
-            (r_struct.max(r_jq), TimestepLimitReason::StructuralChange),
+            (r_struct, TimestepLimitReason::StructuralChange),
             (r_cntr_x, TimestepLimitReason::AbundanceChange),
             (r_lum, TimestepLimitReason::LuminosityChange),
             (r_mass, TimestepLimitReason::MassChange),
             (r_cour, TimestepLimitReason::CourantOrCollapse),
-            (r_erg, TimestepLimitReason::EnergyConservation),
             (r_burn, TimestepLimitReason::NuclearBurn),
+            (r_jq, TimestepLimitReason::StructuralChange),
+            (r_erg, TimestepLimitReason::EnergyConservation),
+            (r_other, TimestepLimitReason::SolverOrSubsteps),
         ];
         for &(r, why) in &candidates {
             if r > dt_limit_ratio {
@@ -509,16 +520,11 @@ pub(crate) fn timestep_controller_with_extras(
         }
     }
 
-
-    let force_dt = if ts.force_timestep > 0.0 {
-        ts.force_timestep
-    } else if ts.force_timestep_years > 0.0 {
-        ts.force_timestep_years * SECYER
-    } else {
-        0.0
-    };
-    if force_dt > 0.0 {
-        dt_next = force_dt;
+    // `timestep.f90:49-53`: `timestep_controller` checks only `force_timestep > 0`;
+    // `force_timestep_years` is applied at step start in `prepare_for_new_step`
+    // (`evolve.f90:1925-1928`).
+    if ts.force_timestep > 0.0 {
+        dt_next = ts.force_timestep;
         reason = TimestepLimitReason::MaxTimestep;
     } else {
         let mut max_dt = if ts.max_timestep > 0.0 {

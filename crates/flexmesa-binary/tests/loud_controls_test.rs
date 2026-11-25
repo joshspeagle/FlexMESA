@@ -203,11 +203,14 @@ fn test_binary_option_strings_and_removed_clamps_fail_loudly() {
         1.2,
     )
     .expect("valid default solver");
-    assert!(
-        solver
-            .evaluate_trial("Arras", 0, 10, 0.0, 0.0, -1.0, -1.0, 0.8)
-            .is_err()
-    );
+    // Upstream `binary/private/binary_mdot.f90:157,646,675-681` supports
+    // `"Arras"` in implicit RLOF trials alongside `"Ritter"` and `"Kolb"`.
+    assert!(solver
+        .evaluate_trial("bogus_scheme", 0, 10, 0.0, 0.0, -1.0, -1.0, 0.8)
+        .is_err());
+    assert!(solver
+        .evaluate_trial("Arras", 1, 10, 0.0, 0.0, -1.0, -1.0, 0.8)
+        .is_ok());
 
     let donor = load_zams_model(
         StarControls {

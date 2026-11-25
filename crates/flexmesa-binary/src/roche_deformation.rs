@@ -97,15 +97,30 @@ impl RocheTable2D {
     }
 
     /// Evaluates the 2D Steffen piecewise-monotonic cubic interpolant at
-    /// `(lq, ar)` (`interp_evbipm_db` in `binary_roche_deformation.f90:133-197`).
+    /// `(lq, ar_in)` (`eval_fp`/`interp_evbipm_db` in
+    /// `binary_roche_deformation.f90:133-197` and `bipm_db.f90:51-118`).
     #[must_use]
     pub fn eval(&self, lq: f64, ar_in: f64) -> f64 {
         let (nx, ny) = (self.xs.len(), self.ys.len());
-        if nx < 2 || ny < 2 {
+        if nx < 2 || ny < 2 || !lq.is_finite() || !ar_in.is_finite() {
             return f64::NAN;
         }
-        let x = lq.clamp(self.xs[0], self.xs[nx - 1] - 1.0e-12);
-        let y = ar_in.clamp(self.ys[0], self.ys[ny - 1] - 2.0 * ROCHE_NUDGE);
+        let x_top = (self.xs[nx - 1] - 1.0e-12).max(self.xs[0]);
+        let x = if lq >= self.xs[nx - 1] {
+            x_top
+        } else if lq < self.xs[0] {
+            self.xs[0]
+        } else {
+            lq
+        };
+        let y_top = (self.ys[ny - 1] - 2.0 * ROCHE_NUDGE).max(self.ys[0]);
+        let y = if ar_in >= self.ys[ny - 1] {
+            y_top
+        } else if ar_in < self.ys[0] {
+            self.ys[0]
+        } else {
+            ar_in
+        };
         let ix = self
             .xs
             .partition_point(|&xv| xv <= x)
@@ -117,7 +132,18 @@ impl RocheTable2D {
             .saturating_sub(1)
             .min(ny - 2);
         let (ix0, ix1) = (ix.saturating_sub(1), (ix + 2).min(nx - 1));
-        let (iy0, iy1) = (iy.saturating_sub(1), (iy + 2).min(ny - 1));
+        let (iy0, iy1) = if ny >= 4 {
+            let jlo = if iy == 0 {
+                0
+            } else if iy >= ny - 2 {
+                ny - 4
+            } else {
+                iy - 1
+            };
+            (jlo, jlo + 3)
+        } else {
+            (0, ny - 1)
+        };
         let (x_sub, y_sub) = (&self.xs[ix0..=ix1], &self.ys[iy0..=iy1]);
         let mut col_vals = [0.0_f64; 4];
         for (ky, jy) in (iy0..=iy1).enumerate() {
@@ -155,41 +181,61 @@ fn parse_float_token(tok: &str) -> Result<f64, StarError> {
     })
 }
 
-fn steffen_slope_at(xs: &[f64], ys: &[f64], k: usize) -> f64 {
-    let n = xs.len();
-    if n < 2 {
-        return 0.0;
+fn fortran_sign1(v: f64) -> f64 {
+    if v < 0.0 {
+        -1.0
+    } else {
+        1.0
     }
-    if k == 0 {
-        return (ys[1] - ys[0]) / (xs[1] - xs[0]).max(1.0e-30);
-    }
-    if k + 1 >= n {
-        return (ys[n - 1] - ys[n - 2]) / (xs[n - 1] - xs[n - 2]).max(1.0e-30);
-    }
-    let (h0, h1) = (
-        (xs[k] - xs[k - 1]).max(1.0e-30),
-        (xs[k + 1] - xs[k]).max(1.0e-30),
-    );
-    let (d0, d1) = ((ys[k] - ys[k - 1]) / h0, (ys[k + 1] - ys[k]) / h1);
-    if d0 * d1 <= 0.0 {
-        return 0.0;
-    }
-    let p = (d0 * h1 + d1 * h0) / (h0 + h1);
-    d0.signum() * p.abs().min(2.0 * d0.abs()).min(2.0 * d1.abs())
 }
 
 fn steffen_1d_local(xs: &[f64], ys: &[f64], k: usize, x: f64) -> f64 {
-    let h = (xs[k + 1] - xs[k]).max(1.0e-30);
-    let t = ((x - xs[k]) / h).clamp(0.0, 1.0);
-    let (s0, s1, omt) = (
-        steffen_slope_at(xs, ys, k),
-        steffen_slope_at(xs, ys, k + 1),
-        1.0 - t,
-    );
-    (1.0 + 2.0 * t) * omt * omt * ys[k]
-        + t * omt * omt * h * s0
-        + t * t * (3.0 - 2.0 * t) * ys[k + 1]
-        + t * t * (t - 1.0) * h * s1
+    let n = xs.len();
+    if n < 2 || k + 1 >= n {
+        return f64::NAN;
+    }
+    if n == 2 {
+        let h0 = (xs[1] - xs[0]).max(1.0e-30);
+        let s0 = (ys[1] - ys[0]) / h0;
+        let dx = x - xs[0];
+        return ys[0] + dx * s0;
+    }
+    let mut h = [0.0_f64; 3];
+    let mut s = [0.0_f64; 3];
+    let mut d = [0.0_f64; 4];
+    for i in 0..(n - 1) {
+        h[i] = (xs[i + 1] - xs[i]).max(1.0e-30);
+        s[i] = (ys[i + 1] - ys[i]) / h[i];
+    }
+    let p0 = s[0] * (1.0 + h[0] / (h[0] + h[1])) - s[1] * h[0] / (h[0] + h[1]);
+    d[0] = if p0 * s[0] <= 0.0 {
+        0.0
+    } else if p0.abs() > 2.0 * s[0].abs() {
+        2.0 * s[0]
+    } else {
+        p0
+    };
+    for i in 1..(n - 1) {
+        let p_i = (s[i - 1] * h[i] + s[i] * h[i - 1]) / (h[i - 1] + h[i]);
+        d[i] = (fortran_sign1(s[i - 1]) + fortran_sign1(s[i]))
+            * s[i - 1].abs().min(s[i].abs()).min(0.5 * p_i.abs());
+    }
+    let m = n - 1;
+    let pn = s[m - 1] * (1.0 + h[m - 1] / (h[m - 1] + h[m - 2]))
+        - s[m - 2] * h[m - 1] / (h[m - 1] + h[m - 2]);
+    d[m] = if pn * s[m - 1] <= 0.0 {
+        0.0
+    } else if pn.abs() > 2.0 * s[m - 1].abs() {
+        2.0 * s[m - 1]
+    } else {
+        pn
+    };
+    let c0 = ys[k];
+    let c1 = d[k];
+    let c2 = (3.0 * s[k] - 2.0 * d[k] - d[k + 1]) / h[k];
+    let c3 = (d[k] + d[k + 1] - 2.0 * s[k]) / (h[k] * h[k]);
+    let dx = x - xs[k];
+    c0 + dx * (c1 + dx * (c2 + dx * c3))
 }
 
 /// Complete collection of Fabry et al. (2022) Roche-potential tables.

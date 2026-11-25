@@ -485,8 +485,11 @@ pub fn do_in_out_neu(
 
     let q_net = q - qneu;
     eps_nuc_mev[0] += rvs[0] * q_net;
-    eps_nuc_mev[1] += Quad::from_f64(rvs[1] * q_net - rvs[0] * dqneu_dt);
-    eps_nuc_mev[2] += Quad::from_f64(rvs[2] * q_net - rvs[0] * dqneu_drho);
+    // Accumulate left-to-right in `Quad` (`net_derivs_support.f90:174-175`).
+    eps_nuc_mev[1] += rvs[1] * q_net;
+    eps_nuc_mev[1] -= rvs[0] * dqneu_dt;
+    eps_nuc_mev[2] += rvs[2] * q_net;
+    eps_nuc_mev[2] -= rvs[0] * dqneu_drho;
 
     w.eps_nuc_categories[icat] += rvs[0] * q_net;
     w.eps_neu_total += rvs[0] * qneu;

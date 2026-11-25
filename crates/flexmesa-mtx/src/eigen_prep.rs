@@ -94,23 +94,39 @@ pub(crate) fn balance_matrix(
             if c == 0.0 || r == 0.0 {
                 continue;
             }
+            let mut ca = 0.0_f64;
+            for row in 0..=ihi {
+                ca = ca.max(a[row * n + i].abs());
+            }
+            let mut ra = 0.0_f64;
+            for col in ilo..n {
+                ra = ra.max(a[i * n + col].abs());
+            }
             let mut f = 1.0_f64;
             let s = c + r;
-            while c < r / SCLFAC
-                && f.max(c) < sfmax2
-                && r.min(r / SCLFAC) > sfmin2
+            let mut g = r / SCLFAC;
+            while c < g
+                && f.max(c).max(ca) < sfmax2
+                && r.min(g).min(ra) > sfmin2
             {
                 f *= SCLFAC;
                 c *= SCLFAC;
+                ca *= SCLFAC;
                 r /= SCLFAC;
+                g /= SCLFAC;
+                ra /= SCLFAC;
             }
-            while c / SCLFAC >= r
-                && r < sfmax2
-                && f.min(c).min(c / SCLFAC) > sfmin2
+            g = c / SCLFAC;
+            while g >= r
+                && r.max(ra) < sfmax2
+                && f.min(c).min(g).min(ca) > sfmin2
             {
                 f /= SCLFAC;
                 c /= SCLFAC;
+                g /= SCLFAC;
+                ca /= SCLFAC;
                 r *= SCLFAC;
+                ra *= SCLFAC;
             }
             if (c + r) >= FACTOR * s {
                 continue;

@@ -136,6 +136,66 @@ fn cdiv_guarded(a: f64, b: f64, c: f64, d: f64, smin: f64) -> (f64, f64) {
     }
 }
 
+/// Rescales accumulated eigenvector entries `[split..=end]` and remaining
+/// RHS `[0..split]` whenever any component exceeds `1.0e100` (`DTREVC` guard).
+fn rescale_backsub_real(
+    rhs: &mut [f64],
+    y: &mut [f64],
+    split: usize,
+    end: usize,
+) {
+    let mut peak = 0.0_f64;
+    for &v in &rhs[..split] {
+        peak = peak.max(v.abs());
+    }
+    for &v in &y[split..=end] {
+        peak = peak.max(v.abs());
+    }
+    if peak > 1.0e100 {
+        let inv = 1.0 / peak;
+        for v in &mut rhs[..split] {
+            *v *= inv;
+        }
+        for v in &mut y[split..=end] {
+            *v *= inv;
+        }
+    }
+}
+
+/// Rescales accumulated complex eigenvector `(y_r, y_i)` and remaining RHS
+/// `(rhs_r, rhs_i)` whenever any entry exceeds `1.0e100` (`DTREVC` guard).
+fn rescale_backsub_complex(
+    rhs_r: &mut [f64],
+    rhs_i: &mut [f64],
+    y_r: &mut [f64],
+    y_i: &mut [f64],
+    split: usize,
+    end: usize,
+) {
+    let mut peak = 0.0_f64;
+    for (&vr, &vi) in rhs_r[..split].iter().zip(rhs_i[..split].iter()) {
+        peak = peak.max(vr.abs()).max(vi.abs());
+    }
+    for (&yr, &yi) in y_r[split..=end].iter().zip(y_i[split..=end].iter()) {
+        peak = peak.max(yr.abs()).max(yi.abs());
+    }
+    if peak > 1.0e100 {
+        let inv = 1.0 / peak;
+        for v in &mut rhs_r[..split] {
+            *v *= inv;
+        }
+        for v in &mut rhs_i[..split] {
+            *v *= inv;
+        }
+        for v in &mut y_r[split..=end] {
+            *v *= inv;
+        }
+        for v in &mut y_i[split..=end] {
+            *v *= inv;
+        }
+    }
+}
+
 /// Computes right eigenvectors of a real quasi-triangular Schur matrix `t` and
 /// accumulates $V = Z Y$ into row-major `vr` (`dtrevc` right-only).
 pub(crate) fn compute_schur_right_eigenvectors(
@@ -183,6 +243,7 @@ pub(crate) fn compute_schur_right_eigenvectors(
                             t[r * n + j1] * sol[0] + t[r * n + j2] * sol[1];
                     }
                     j -= 2;
+                    rescale_backsub_real(&mut rhs_r, &mut y_r, j, ki);
                 } else {
                     let diag = t[j_curr * n + j_curr] - wr_k;
                     let d_safe = if diag.abs() < smin {
@@ -190,12 +251,25 @@ pub(crate) fn compute_schur_right_eigenvectors(
                     } else {
                         diag
                     };
+                    if d_safe.abs() < 1.0
+                        && rhs_r[j_curr].abs() > 1.0e100 * d_safe.abs()
+                    {
+                        let scale = (d_safe.abs() / rhs_r[j_curr].abs())
+                            .max(f64::MIN_POSITIVE);
+                        for v in &mut rhs_r[..j] {
+                            *v *= scale;
+                        }
+                        for v in &mut y_r[j..=ki] {
+                            *v *= scale;
+                        }
+                    }
                     let yj = rhs_r[j_curr] / d_safe;
                     y_r[j_curr] = yj;
                     for r in 0..j_curr {
                         rhs_r[r] -= t[r * n + j_curr] * yj;
                     }
                     j -= 1;
+                    rescale_backsub_real(&mut rhs_r, &mut y_r, j, ki);
                 }
             }
             for row in 0..n {
@@ -262,6 +336,14 @@ pub(crate) fn compute_schur_right_eigenvectors(
                         rhs_i[r] -= t1 * sol[2] + t2 * sol[3];
                     }
                     j -= 2;
+                    rescale_backsub_complex(
+                        &mut rhs_r,
+                        &mut rhs_i,
+                        &mut y_r,
+                        &mut y_i,
+                        j,
+                        ki + 1,
+                    );
                 } else {
                     let (yr, yi) = cdiv_guarded(
                         rhs_r[j_curr],
@@ -278,6 +360,14 @@ pub(crate) fn compute_schur_right_eigenvectors(
                         rhs_i[r] -= tj * yi;
                     }
                     j -= 1;
+                    rescale_backsub_complex(
+                        &mut rhs_r,
+                        &mut rhs_i,
+                        &mut y_r,
+                        &mut y_i,
+                        j,
+                        ki + 1,
+                    );
                 }
             }
 
@@ -334,27 +424,55 @@ pub(crate) fn backtransform_and_normalize_right_vecs(
     let mut j = 0usize;
     while j < n {
         if wi[j] == 0.0 {
-            let mut norm2 = 0.0_f64;
-            let mut max_abs = -1.0_f64;
+            let mut max_abs = 0.0_f64;
             let mut sign = 1.0_f64;
             for i in 0..n {
                 let v = vr[i * n + j];
-                norm2 += v * v;
                 if v.abs() > max_abs {
                     max_abs = v.abs();
                     sign = if v < 0.0 { -1.0 } else { 1.0 };
                 }
             }
-            let inv = if norm2 > 0.0 {
-                sign / norm2.sqrt()
+            if max_abs > 1.0e100 || (max_abs > 0.0 && max_abs < 1.0e-100) {
+                let mut norm2 = 0.0_f64;
+                for i in 0..n {
+                    let scaled = vr[i * n + j] / max_abs;
+                    vr[i * n + j] = scaled;
+                    norm2 += scaled * scaled;
+                }
+                let inv = sign / norm2.sqrt();
+                for i in 0..n {
+                    vr[i * n + j] *= inv;
+                }
             } else {
-                1.0
-            };
-            for i in 0..n {
-                vr[i * n + j] *= inv;
+                let mut norm2 = 0.0_f64;
+                for i in 0..n {
+                    let v = vr[i * n + j];
+                    norm2 += v * v;
+                }
+                let inv = if norm2 > 0.0 {
+                    sign / norm2.sqrt()
+                } else {
+                    1.0
+                };
+                for i in 0..n {
+                    vr[i * n + j] *= inv;
+                }
             }
             j += 1;
         } else {
+            let mut max_c = 0.0_f64;
+            for i in 0..n {
+                max_c =
+                    max_c.max(vr[i * n + j].abs()).max(vr[i * n + j + 1].abs());
+            }
+            if max_c > 1.0e100 || (max_c > 0.0 && max_c < 1.0e-100) {
+                let inv_c = 1.0 / max_c;
+                for i in 0..n {
+                    vr[i * n + j] *= inv_c;
+                    vr[i * n + j + 1] *= inv_c;
+                }
+            }
             let mut norm2 = 0.0_f64;
             let mut max_mag2 = -1.0_f64;
             let (mut best_r, mut best_i) = (1.0_f64, 0.0_f64);

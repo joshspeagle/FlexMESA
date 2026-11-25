@@ -92,6 +92,44 @@ pub fn parse_block_tridiagonal_text(
     Ok((nvar, nz, lblk, dblk, ublk))
 }
 
+/// Extracts `(per_line, width)` for the 3rd parenthesized Fortran format
+/// descriptor in Harwell-Boeing header line 4 (e.g., `(5E27.16)` -> `(5, 27)`).
+fn parse_hb_val_format(hdr4: &str) -> Option<(usize, usize)> {
+    let third = hdr4.split('(').nth(3)?.split(')').next()?.trim();
+    let kind_idx = third.find(['E', 'e', 'D', 'd', 'F', 'f', 'G', 'g'])?;
+    let per_str = &third[..kind_idx];
+    let per_line = if per_str.is_empty() {
+        1
+    } else {
+        per_str.parse::<usize>().ok()?
+    };
+    let width_str = third[(kind_idx + 1)..].split('.').next()?;
+    let width = width_str.parse::<usize>().ok()?;
+    if per_line > 0 && width > 0 {
+        Some((per_line, width))
+    } else {
+        None
+    }
+}
+
+/// Parses one Harwell-Boeing value token, accepting Fortran `D`/`d` exponents.
+fn parse_hb_float_token(tok: &str) -> Result<f64, MtxError> {
+    let clean: String = tok
+        .chars()
+        .filter(|c| !c.is_ascii_whitespace())
+        .map(|c| match c {
+            'D' | 'd' => 'e',
+            other => other,
+        })
+        .collect();
+    if clean.is_empty() {
+        return Err(MtxError::ParseError("empty HB float"));
+    }
+    clean
+        .parse::<f64>()
+        .map_err(|_| MtxError::ParseError("invalid HB float"))
+}
+
 /// Parses a single $N_{\mathrm{var}} \times N_{\mathrm{var}}$ Harwell-Boeing
 /// `RUA` block from `line_iter` into row-major `blk`.
 ///
@@ -115,9 +153,10 @@ where
     let hdr3 = line_iter
         .next()
         .ok_or(MtxError::ParseError("unexpected EOF at HB line 3"))?;
-    let _hdr4 = line_iter
+    let hdr4 = line_iter
         .next()
         .ok_or(MtxError::ParseError("unexpected EOF at HB line 4"))?;
+    let val_fmt = parse_hb_val_format(hdr4);
 
     let mut l3 = hdr3.split_whitespace();
     let _mxtype = l3.next().ok_or(MtxError::ParseError("missing MXTYPE"))?;
@@ -152,6 +191,9 @@ where
             );
         }
     }
+    if colptr.len() != ncol + 1 {
+        return Err(MtxError::ParseError("HB colptr count mismatch"));
+    }
     let mut rowind = Vec::with_capacity(nnz);
     while rowind.len() < nnz {
         let row_str = line_iter
@@ -164,19 +206,55 @@ where
             );
         }
     }
+    if rowind.len() != nnz {
+        return Err(MtxError::ParseError("HB rowind count mismatch"));
+    }
     let mut values = Vec::with_capacity(nnz);
     while values.len() < nnz {
         let row_str = line_iter
             .next()
             .ok_or(MtxError::ParseError("unexpected EOF in values"))?;
-        for tok in row_str.split_whitespace() {
-            let clean = tok.replace('D', "E").replace('d', "e");
-            values.push(
-                clean
-                    .parse::<f64>()
-                    .map_err(|_| MtxError::ParseError("invalid HB float"))?,
-            );
+        // Honor Fortran fixed-width `VALFMT` records (e.g. `(5E27.16)`), where
+        // an internal blank such as `0 .000...` still belongs to one slot
+        // (`mtx/private/mtx_support.f90:890`).
+        let parsed_fixed = if let Some((per_line, width)) = val_fmt {
+            if row_str.is_ascii()
+                && !row_str.is_empty()
+                && row_str.len() % width == 0
+                && row_str.len() / width <= per_line
+            {
+                let mut fixed_vals = Vec::with_capacity(row_str.len() / width);
+                let mut ok = true;
+                for chunk in row_str.as_bytes().chunks_exact(width) {
+                    if let Ok(slot_str) = std::str::from_utf8(chunk) {
+                        if let Ok(v) = parse_hb_float_token(slot_str) {
+                            fixed_vals.push(v);
+                            continue;
+                        }
+                    }
+                    ok = false;
+                    break;
+                }
+                if ok {
+                    values.extend(fixed_vals);
+                    true
+                } else {
+                    false
+                }
+            } else {
+                false
+            }
+        } else {
+            false
+        };
+        if !parsed_fixed {
+            for tok in row_str.split_whitespace() {
+                values.push(parse_hb_float_token(tok)?);
+            }
         }
+    }
+    if values.len() != nnz {
+        return Err(MtxError::ParseError("HB values count mismatch"));
     }
     column_sparse_to_dense(nvar, nvar, blk, nnz, &colptr, &rowind, &values)
 }

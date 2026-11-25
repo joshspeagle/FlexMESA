@@ -239,13 +239,19 @@ pub fn dgbtrf(
     Ok(())
 }
 
-/// Solves $A x = b$ in-place using the banded LU factorization from [`dgbtrf`].
+/// Solves $A x = b$ (when `trans == false`) or $A^{\top} x = b$ (when
+/// `trans == true`) in-place using the banded LU factorization from
+/// [`dgbtrf`], matching LAPACK `DGBTRS`.
 ///
 /// # Errors
 ///
-/// Returns [`MtxError::InvalidParameter`] or [`MtxError::DimensionMismatch`] on
-/// invalid shapes, or [`MtxError::SingularMatrix`] if a diagonal entry is zero.
-pub fn dgbtrs(
+/// Returns [`MtxError::InvalidParameter`] if dimensions or pivot indices are
+/// invalid, [`MtxError::DimensionMismatch`] on buffer size mismatch,
+/// [`MtxError::NonFiniteInput`] if inputs contain `NaN`/`Inf`, or
+/// [`MtxError::SingularMatrix`] if a diagonal pivot entry is zero.
+#[allow(clippy::too_many_arguments)]
+pub fn dgbtrs_trans(
+    trans: bool,
     n: usize,
     kl: usize,
     ku: usize,
@@ -264,44 +270,93 @@ pub fn dgbtrs(
             "ab, ipiv, or b length mismatch in dgbtrs",
         ));
     }
-    if is_bad_slice(ab) || is_bad_slice(b) {
+    if is_bad_slice(&ab[..(ldab * n)]) || is_bad_slice(b) {
         return Err(MtxError::NonFiniteInput("ab or rhs b contains NaN/Inf"));
+    }
+    if ipiv.iter().any(|&l| l >= n) {
+        return Err(MtxError::InvalidParameter("pivot index out of bounds"));
     }
 
     let diag = ldab - 1 - kl;
-    for j in 0..n {
-        let lm = kl.min(n - 1 - j);
-        let l = ipiv[j];
-        if l >= n {
-            return Err(MtxError::InvalidParameter(
-                "pivot index out of bounds",
-            ));
+    if !trans {
+        for j in 0..n {
+            let lm = kl.min(n - 1 - j);
+            let l = ipiv[j];
+            if l != j {
+                b.swap(l, j);
+            }
+            let bj = b[j];
+            for i in 1..=lm {
+                let idx = j + i;
+                b[idx] =
+                    flexmesa_math::fma(-ab[(diag + i) * n + j], bj, b[idx]);
+            }
         }
-        if l != j {
-            b.swap(l, j);
-        }
-        let bj = b[j];
-        for i in 1..=lm {
-            let idx = j + i;
-            b[idx] = flexmesa_math::fma(-ab[(diag + i) * n + j], bj, b[idx]);
-        }
-    }
 
-    for j in (0..n).rev() {
-        let u_jj = ab[diag * n + j];
-        if u_jj == 0.0 {
-            return Err(MtxError::SingularMatrix(j));
+        for j in (0..n).rev() {
+            let u_jj = ab[diag * n + j];
+            if u_jj == 0.0 {
+                return Err(MtxError::SingularMatrix(j));
+            }
+            b[j] /= u_jj;
+            let bj = b[j];
+            let lm = j.min(kl + ku);
+            for k in 1..=lm {
+                let row = diag - k;
+                let idx = j - k;
+                b[idx] = flexmesa_math::fma(-ab[row * n + j], bj, b[idx]);
+            }
         }
-        b[j] /= u_jj;
-        let bj = b[j];
-        let lm = j.min(kl + ku);
-        for k in 1..=lm {
-            let row = diag - k;
-            let idx = j - k;
-            b[idx] = flexmesa_math::fma(-ab[row * n + j], bj, b[idx]);
+    } else {
+        // Solve U^T y = b, then apply M^T where M A = U (LAPACK `DGBTRS('T')`).
+        for j in 0..n {
+            let u_jj = ab[diag * n + j];
+            if u_jj == 0.0 {
+                return Err(MtxError::SingularMatrix(j));
+            }
+            let mut sum = b[j];
+            let lm = j.min(kl + ku);
+            for k in 1..=lm {
+                let row = diag - k;
+                sum = flexmesa_math::fma(-ab[row * n + j], b[j - k], sum);
+            }
+            b[j] = sum / u_jj;
+        }
+
+        for j in (0..n).rev() {
+            let lm = kl.min(n - 1 - j);
+            let mut sum = b[j];
+            for i in 1..=lm {
+                sum =
+                    flexmesa_math::fma(-ab[(diag + i) * n + j], b[j + i], sum);
+            }
+            b[j] = sum;
+            let l = ipiv[j];
+            if l != j {
+                b.swap(l, j);
+            }
         }
     }
     Ok(())
+}
+
+/// Solves $A x = b$ in-place using the banded LU factorization from [`dgbtrf`].
+///
+/// # Errors
+///
+/// Returns [`MtxError::InvalidParameter`] or [`MtxError::DimensionMismatch`] on
+/// invalid shapes, [`MtxError::NonFiniteInput`] on non-finite inputs, or
+/// [`MtxError::SingularMatrix`] if a diagonal entry is zero.
+pub fn dgbtrs(
+    n: usize,
+    kl: usize,
+    ku: usize,
+    ab: &[f64],
+    ldab: usize,
+    ipiv: &[usize],
+    b: &mut [f64],
+) -> Result<(), MtxError> {
+    dgbtrs_trans(false, n, kl, ku, ab, ldab, ipiv, b)
 }
 
 /// Solves a banded system $A x = b$ given `ab` of shape `(ldab, n)` with
@@ -332,11 +387,14 @@ pub fn solve_banded(
 }
 
 /// Estimates the 1-norm reciprocal condition number of a banded matrix from its
-/// unfactored band buffer `ab` and factored LU buffer `lu_ab`.
+/// unfactored band buffer `ab` and factored LU buffer `lu_ab` using Hager's
+/// 1-norm estimator (matching LAPACK `DGBCON`, `mtx/public/mtx_rcond.dek:32-62`).
 ///
 /// # Errors
 ///
-/// Propagates any dimension error from [`dgbtrs`].
+/// Returns [`MtxError::InvalidParameter`] on invalid band/pivot bounds,
+/// [`MtxError::DimensionMismatch`] on buffer size mismatch, or
+/// [`MtxError::NonFiniteInput`] if `ab` or `lu_ab` contains `NaN`/`Inf`.
 pub fn rcond_banded(
     n: usize,
     kl: usize,
@@ -356,6 +414,16 @@ pub fn rcond_banded(
             "buffer length mismatch in rcond_banded",
         ));
     }
+    if is_bad_slice(&ab[..(ldab * n)]) || is_bad_slice(&lu_ab[..(ldab * n)]) {
+        return Err(MtxError::NonFiniteInput(
+            "ab or lu_ab contains NaN/Inf in rcond_banded",
+        ));
+    }
+    if ipiv.iter().any(|&p| p >= n) {
+        return Err(MtxError::InvalidParameter(
+            "pivot index out of bounds in rcond_banded",
+        ));
+    }
     let diag = ldab - 1 - kl;
     let mut anorm = 0.0_f64;
     for j in 0..n {
@@ -368,17 +436,7 @@ pub fn rcond_banded(
         }
         anorm = anorm.max(col_sum);
     }
-    if anorm == 0.0 {
-        return Ok(0.0);
-    }
-    let inv_n = 1.0 / (n as f64);
-    let mut y = vec![inv_n; n];
-    if dgbtrs(n, kl, ku, lu_ab, ldab, ipiv, &mut y).is_err() {
-        return Ok(0.0);
-    }
-    let ainv_est: f64 = y.iter().map(|v| v.abs()).sum();
-    if ainv_est == 0.0 || !ainv_est.is_finite() {
-        return Ok(0.0);
-    }
-    Ok(1.0 / (anorm * ainv_est))
+    crate::dense::hager_rcond_1norm(n, anorm, |trans, v| {
+        dgbtrs_trans(trans, n, kl, ku, lu_ab, ldab, ipiv, v)
+    })
 }

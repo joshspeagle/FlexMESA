@@ -10,8 +10,9 @@
 //! matrix entry $A_{i,j}$ resides at `row = (ldab - 1 - ml) + i - j` and
 //! column `j`.
 //! - [`band_to_row_sparse`] and [`band_to_col_sparse`] emit 1-based CSR/CSC
-//!   index arrays matching upstream MESA (`mtx_lib.f90`).
-//! - [`find_loc_in_sparse`] supports both 0-based and 1-based sparse layouts.
+//!   index arrays matching upstream MESA (`mtx/private/mtx_support.f90:525-680`).
+//! - [`find_loc_in_sparse`] matches `mtx/public/mtx_formats.dek:261-280` across
+//!   both 0-based and 1-based sparse layouts with checked bounds (`DECISIONS #43`).
 
 use crate::{MtxError, SparseFormat};
 
@@ -311,9 +312,10 @@ pub fn find_loc_in_sparse(
         return Err(MtxError::InvalidParameter("ia pointer out of bounds"));
     }
     if let Some(h) = hint {
-        let next_0 = (h + 1).saturating_sub(base);
-        if next_0 >= start && next_0 < end && ja[next_0] == inner {
-            return Ok(Some(next_0 + base));
+        if let Some(next_0) = h.checked_add(1).map(|v| v.saturating_sub(base)) {
+            if next_0 >= start && next_0 < end && ja[next_0] == inner {
+                return Ok(Some(next_0 + base));
+            }
         }
     }
     for (offset, &val) in ja[start..end].iter().enumerate() {

@@ -30,14 +30,18 @@ mod dense_ops;
 pub mod eigen;
 mod eigen_prep;
 mod eigen_vecs;
+pub mod precond;
 pub mod sparse;
 mod sparse_band;
 
 pub use band::{
     band_multiply_xa, band_to_dense, dense_to_band, dgbtrf, dgbtrs,
-    rcond_banded, solve_banded,
+    dgbtrs_trans, rcond_banded, solve_banded,
 };
-pub use bcyclic::solve_block_tridiag_bcyclic;
+pub use bcyclic::{
+    bcyclic_factor, bcyclic_solve, solve_block_tridiag_bcyclic,
+    BcyclicFactorization,
+};
 pub use block_io::{
     parse_block_tridiagonal_text, write_block_tridiagonal_text,
     BlockTridiagData,
@@ -56,6 +60,13 @@ pub use dense_ops::{
     multiply_xa_plus_c,
 };
 pub use eigen::{dgeev_eigenvalues, dgeev_right, EigenResult};
+pub use precond::{
+    compute_band_preconditioner, compute_block_left_preconditioner,
+    compute_block_preconditioner, dgbequ, dgbsvx_banded,
+    dgbsvx_banded_from_bands, dgbsvx_block_tridiagonal, dgeequ, dlaqgb, dlaqge,
+    solve_banded_equilibrated, solve_dense_equilibrated, Equilibration,
+    EquilibrationFactors, PreconditionedSolve,
+};
 pub use sparse::{
     col_sparse_0_based_to_dense, column_sparse_to_dense, dense_to_col_0_based,
     dense_to_col_sparse, dense_to_col_sparse_with_diag,

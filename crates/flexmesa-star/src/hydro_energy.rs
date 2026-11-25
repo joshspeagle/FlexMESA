@@ -559,9 +559,13 @@ pub(crate) fn do1_energy_eqn_with_ergs_error(
         && model.dt > 0.0
         && !model.ln_r_start.is_empty();
 
-    let mut dwork_fac_m1 = 0.0_f64;
-    let mut dwork_fac_00 = 0.0_f64;
-    let mut dwork_fac_p1 = 0.0_f64;
+    // `d_dwork_dxam1`, `d_dwork_dxa00`, `d_dwork_dxap1` (zero unless a work
+    // term with `Peos` is evaluated; `hydro_energy.f90:163-190`).
+    let mut d_dwork = crate::hydro_work::DworkDxa {
+        dxam1: Vec::new(),
+        dxa00: Vec::new(),
+        dxap1: Vec::new(),
+    };
     let mut has_dedt_dxa = false;
 
     let esum = if u_flag_only {
@@ -591,20 +595,18 @@ pub(crate) fn do1_energy_eqn_with_ergs_error(
             has_dedt_dxa = true;
             let de_dt = setup_de_dt(model, k, dt);
             if simple_pdv {
-                let (dwork_dm, fac_00) =
+                let (dwork_dm, dxa00) =
                     crate::hydro_work::eval_v_flag_simple_pdv_dm_ad(
                         model, k, false, vel_tc,
                     );
-                dwork_fac_00 = fac_00;
+                d_dwork.dxa00 = dxa00;
                 -dl_dm + sources + others - d_eturb_dt - dwork_dm - de_dt
             } else {
-                let (dwork_dm, f_m1, f_00, f_p1) =
+                let (dwork_dm, dxa) =
                     crate::hydro_work::eval_v_flag_dwork_dm_ad(
                         model, k, false, vel_tc,
                     );
-                dwork_fac_m1 = f_m1;
-                dwork_fac_00 = f_00;
-                dwork_fac_p1 = f_p1;
+                d_dwork = dxa;
                 let dke_dt =
                     crate::hydro_work::eval_v_flag_dke_dt_ad(model, k, dt);
                 let dpe_dt =
@@ -627,20 +629,18 @@ pub(crate) fn do1_energy_eqn_with_ergs_error(
                 .controls
                 .use_p_d_1_div_rho_form_of_work_when_time_centering_velocity;
         if simple_pdv {
-            let (dwork_dm, fac_00) =
+            let (dwork_dm, dxa00) =
                 crate::hydro_work::eval_v_flag_simple_pdv_dm_ad(
                     model, k, false, vel_tc,
                 );
-            dwork_fac_00 = fac_00;
+            d_dwork.dxa00 = dxa00;
             -dl_dm + sources + others - d_eturb_dt - dwork_dm - de_dt
         } else {
-            let (dwork_dm, f_m1, f_00, f_p1) =
+            let (dwork_dm, dxa) =
                 crate::hydro_work::eval_v_flag_dwork_dm_ad(
                     model, k, false, vel_tc,
                 );
-            dwork_fac_m1 = f_m1;
-            dwork_fac_00 = f_00;
-            dwork_fac_p1 = f_p1;
+            d_dwork = dxa;
             let dpe_dt = crate::hydro_work::eval_cell_dpe_dt_ad(model, k, dt);
             -dl_dm + sources + others - d_eturb_dt - dwork_dm - dpe_dt - de_dt
         }
@@ -655,67 +655,56 @@ pub(crate) fn do1_energy_eqn_with_ergs_error(
     if include_chem {
         let sp = model.species;
         let base = k * sp;
-        // `unpack_res18` (`star/private/hydro_energy.f90:477-484`).
+        let dm = model.dm[k];
+        // `unpack_res18` (`star/private/hydro_energy.f90:469-527`): each
+        // species partial is accumulated term by term into `dxa00`,
+        // `dxam1` and `dxap1`, starting from zero.
         let active_nuc_dxa = !(model.controls.nonlocal_nico_decay_heat
             || doing_op_split_burn)
             && model.controls.dxdt_nuc_factor > 0.0;
-        let dlnp = |cell: usize, j: usize| {
-            model
-                .aux
-                .dln_peos_dxa_for_partials
-                .get(cell * sp + j)
-                .copied()
-                .unwrap_or(0.0)
-        };
+        let dw = |v: &Vec<f64>, j: usize| v.get(j).copied().unwrap_or(0.0);
         for j in 0..sp {
             let ivar = model.layout.chem_var_index(j);
-            let mut d_equ_dx = if active_nuc_dxa {
-                scal * model.d_epsnuc_dx[base + j]
-            } else {
-                0.0
-            };
+            let mut dxa00 = 0.0_f64;
+            if active_nuc_dxa {
+                dxa00 += scal * model.d_epsnuc_dx[base + j];
+            }
             if has_dedt_dxa {
+                // `-scal*(s%energy(k)/dt)*s% dlnE_dxa_for_partials(j,k)`
+                // (`hydro_energy.f90:491-495`).
                 let dlne_dx = model
                     .aux
                     .dln_e_dxa_for_partials
                     .get(base + j)
                     .copied()
                     .unwrap_or(0.0);
-                d_equ_dx -= scal
-                    * ((model.energy[k] / dt) * dlne_dx
-                        + dwork_fac_00 * dlnp(k, j));
-                if k > 0 && dwork_fac_m1 != 0.0 {
-                    sys.add_partial(
-                        k,
-                        i_equ,
-                        k - 1,
-                        ivar,
-                        -scal * dwork_fac_m1 * dlnp(k - 1, j),
-                    );
-                }
-                if k + 1 < model.nz && dwork_fac_p1 != 0.0 {
-                    sys.add_partial(
-                        k,
-                        i_equ,
-                        k + 1,
-                        ivar,
-                        -scal * dwork_fac_p1 * dlnp(k + 1, j),
-                    );
-                }
+                dxa00 += -(scal * (model.energy[k] / dt) * dlne_dx);
             } else if !doing_op_split_burn
                 && (model.controls.dxdt_nuc_factor > 0.0
                     || model.controls.mix_factor > 0.0)
             {
-                // `star/private/hydro_energy.f90:494-500`.
+                // `star/private/hydro_energy.f90:497-503`.
                 let deg_dx = model
                     .aux
                     .d_eps_grav_dx
                     .get(base + j)
                     .copied()
                     .unwrap_or(0.0);
-                d_equ_dx += scal * deg_dx;
+                dxa00 += scal * deg_dx;
             }
-            sys.add_partial(k, i_equ, k, ivar, d_equ_dx);
+            // `-scal*d_dwork_dxa00(j)/dm` (`hydro_energy.f90:506-510`).
+            dxa00 += -(scal * dw(&d_dwork.dxa00, j) / dm);
+            sys.add_partial(k, i_equ, k, ivar, dxa00);
+            if k > 0 {
+                // `hydro_energy.f90:511-517`.
+                let dxam1 = -(scal * dw(&d_dwork.dxam1, j) / dm);
+                sys.add_partial(k, i_equ, k - 1, ivar, dxam1);
+            }
+            if k + 1 < model.nz {
+                // `hydro_energy.f90:518-524`.
+                let dxap1 = -(scal * dw(&d_dwork.dxap1, j) / dm);
+                sys.add_partial(k, i_equ, k + 1, ivar, dxap1);
+            }
         }
     }
     Ok(ergs_error_k)

@@ -284,13 +284,17 @@ fn test_hydro_energy_pressure_time_centering_pvsc_pturb_and_chem_partials() {
 
     let scal = crate::hydro_energy::set_energy_eqn_scal(&model, k)
         .expect("energy scal");
-    let (_, fac_m1, fac_00, fac_p1) =
+    // `unpack_res18` (`star/private/hydro_energy.f90:469-527`); the
+    // `dlnPeos_dxa` values set above (-0.42, -0.31, -0.53) enter through
+    // `d_dwork_dxa*`.
+    let (_, dxa) =
         crate::hydro_work::eval_v_flag_dwork_dm_ad(&model, k, false, true);
+    let dm = model.dm[k];
     let expected_d00 = scal * model.d_epsnuc_dx[base]
-        - scal * (model.energy[k] / model.dt) * 0.85
-        - scal * fac_00 * (-0.42);
-    let expected_dm1 = -scal * fac_m1 * (-0.31);
-    let expected_dp1 = -scal * fac_p1 * (-0.53);
+        + -(scal * (model.energy[k] / model.dt) * 0.85)
+        + -(scal * dxa.dxa00[0] / dm);
+    let expected_dm1 = -(scal * dxa.dxam1[0] / dm);
+    let expected_dp1 = -(scal * dxa.dxap1[0] / dm);
     assert!(
         (dblk_chem - expected_d00).abs() / expected_d00.abs().max(1.0e-20)
             < 1.0e-12

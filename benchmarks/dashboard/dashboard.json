@@ -21,7 +21,7 @@
         "verified_total": 5640,
         "pct_ported": 35.1,
         "pct_verified": 4.7,
-        "rust_lines": 104130,
+        "rust_lines": 106658,
         "python_jax_lines": 3978
       },
       {
@@ -55,7 +55,7 @@
         "verified_total": 0,
         "pct_ported": 18.7,
         "pct_verified": 0.0,
-        "rust_lines": 13447,
+        "rust_lines": 13650,
         "python_jax_lines": 1244
       },
       {
@@ -72,7 +72,7 @@
         "verified_total": 0,
         "pct_ported": 0.0,
         "pct_verified": 0.0,
-        "rust_lines": 11107,
+        "rust_lines": 11481,
         "python_jax_lines": 1295
       },
       {
@@ -89,7 +89,7 @@
         "verified_total": 0,
         "pct_ported": 0.0,
         "pct_verified": 0.0,
-        "rust_lines": 15897,
+        "rust_lines": 15969,
         "python_jax_lines": 9911
       },
       {
@@ -106,7 +106,7 @@
         "verified_total": 0,
         "pct_ported": 0.0,
         "pct_verified": 0.0,
-        "rust_lines": 7282,
+        "rust_lines": 7328,
         "python_jax_lines": 3359
       },
       {
@@ -123,7 +123,7 @@
         "verified_total": 0,
         "pct_ported": 0.0,
         "pct_verified": 0.0,
-        "rust_lines": 11229,
+        "rust_lines": 11253,
         "python_jax_lines": 728
       },
       {
@@ -174,7 +174,7 @@
         "verified_total": 0,
         "pct_ported": 0.0,
         "pct_verified": 0.0,
-        "rust_lines": 2710,
+        "rust_lines": 2876,
         "python_jax_lines": 984
       },
       {
@@ -191,7 +191,7 @@
         "verified_total": 0,
         "pct_ported": 66.5,
         "pct_verified": 0.0,
-        "rust_lines": 2858,
+        "rust_lines": 2989,
         "python_jax_lines": 3116
       },
       {
@@ -208,7 +208,7 @@
         "verified_total": 0,
         "pct_ported": 0.0,
         "pct_verified": 0.0,
-        "rust_lines": 2361,
+        "rust_lines": 2627,
         "python_jax_lines": 930
       },
       {
@@ -225,7 +225,7 @@
         "verified_total": 0,
         "pct_ported": 0.0,
         "pct_verified": 0.0,
-        "rust_lines": 4535,
+        "rust_lines": 4590,
         "python_jax_lines": 1033
       },
       {
@@ -242,8 +242,8 @@
         "verified_total": 0,
         "pct_ported": 0.0,
         "pct_verified": 0.0,
-        "rust_lines": 3935,
-        "python_jax_lines": 1500
+        "rust_lines": 4318,
+        "python_jax_lines": 1521
       },
       {
         "module": "num",
@@ -259,7 +259,7 @@
         "verified_total": 0,
         "pct_ported": 0.0,
         "pct_verified": 0.0,
-        "rust_lines": 5220,
+        "rust_lines": 5300,
         "python_jax_lines": 3587
       },
       {
@@ -276,7 +276,7 @@
         "verified_total": 0,
         "pct_ported": 0.0,
         "pct_verified": 0.0,
-        "rust_lines": 4179,
+        "rust_lines": 5976,
         "python_jax_lines": 1775
       },
       {
@@ -293,7 +293,7 @@
         "verified_total": 0,
         "pct_ported": 0.0,
         "pct_verified": 0.0,
-        "rust_lines": 1205,
+        "rust_lines": 1190,
         "python_jax_lines": 1311
       },
       {
@@ -310,7 +310,7 @@
         "verified_total": 0,
         "pct_ported": 0.9,
         "pct_verified": 0.0,
-        "rust_lines": 2687,
+        "rust_lines": 2697,
         "python_jax_lines": 2288
       },
       {
@@ -593,21 +593,21 @@
         "total": 90,
         "mesa_26_4_1_ref": 86,
         "no_reference_yet": 4,
-        "strict_validated": 66,
-        "diagnostic_runs": 24,
-        "reached_termination": 57,
-        "within_numeric_tol": 36,
-        "passing": 30,
-        "declared_gaps": 50,
+        "strict_validated": 79,
+        "diagnostic_runs": 11,
+        "reached_termination": 64,
+        "within_numeric_tol": 41,
+        "passing": 34,
+        "declared_gaps": 46,
         "undeclared_failures": 0
       },
       "binary": {
         "total": 8,
         "mesa_26_4_1_ref": 8,
         "no_reference_yet": 0,
-        "strict_validated": 7,
-        "diagnostic_runs": 1,
-        "reached_termination": 6,
+        "strict_validated": 8,
+        "diagnostic_runs": 0,
+        "reached_termination": 7,
         "within_numeric_tol": 4,
         "passing": 4,
         "declared_gaps": 4,
@@ -626,20 +626,26 @@
         "undeclared_failures": 0
       }
     },
-    "within_tol_non_pass": [],
+    "within_tol_non_pass": [
+      {
+        "suite": "star",
+        "case": "starspots",
+        "issue": "#158"
+      }
+    ],
     "gaps_by_issue": {
       "#161": 21,
-      "#154": 10,
       "#162": 9,
+      "#154": 7,
       "#157": 6,
       "#170": 6,
       "#158": 5,
       "#160": 3,
-      "#156": 2,
       "#231": 2,
-      "#152": 1,
       "#153": 1,
-      "#171": 1
+      "#156": 1,
+      "#171": 1,
+      "#539": 1
     },
     "comparison_figures_count": 0
   },
@@ -657,12 +663,12 @@
     {
       "namelist": "star &star_job",
       "upstream_scalars": 455,
-      "matched_in_flexmesa": 196,
-      "defaults_agree": 196,
+      "matched_in_flexmesa": 205,
+      "defaults_agree": 205,
       "value_mismatch": 0,
       "disabled_limit_none": 0,
       "skipped_unparseable_rust": 1,
-      "unimplemented": 258
+      "unimplemented": 249
     },
     {
       "namelist": "binary &binary_controls + &binary_job",
@@ -1078,7 +1084,7 @@
     }
   },
   "skips": {
-    "rust_ignore_count": 15,
+    "rust_ignore_count": 16,
     "rust_ignores": [
       {
         "location": "crates/flexmesa-astero/tests/astero_suite.rs:606",
@@ -1114,6 +1120,11 @@
         "location": "crates/flexmesa-binary/tests/binary_160_mesa_parity_test.rs:278",
         "reason": "leaves the MESA 26.4.1 pin after #518's upstream Brunt face arithmetic; tracked in #160 (#530)",
         "issues": "#160, #518, #530"
+      },
+      {
+        "location": "crates/flexmesa-binary/tests/binary_160_mesa_parity_test.rs:420",
+        "reason": "jdot_ml leaves the MESA 26.4.1 pin after the upstream-order energy-equation partials (#536); tracked in #160 (#538)",
+        "issues": "#160, #536, #538"
       },
       {
         "location": "crates/flexmesa-binary/tests/tier5_coupled_suite.rs:1057",
@@ -1374,8 +1385,8 @@
       },
       {
         "phase": "Phase C",
-        "open": 16,
-        "closed": 14,
+        "open": 18,
+        "closed": 16,
         "issues": [
           {
             "number": 152,
@@ -1526,6 +1537,26 @@
             "number": 453,
             "title": "[Extras] make_env: star_lib public API subset for case extras, and create_env as a test-side hook",
             "state": "closed"
+          },
+          {
+            "number": 536,
+            "title": "[Parity] irradiated_planet evolve stage: dlnE_dt Jacobian partials in lnR and species differ by 1 ulp from MESA",
+            "state": "closed"
+          },
+          {
+            "number": 537,
+            "title": "[Parity] hb_2M: net d_eps_nuc_dRho differs by 1 ulp from MESA at model 64 zone 1810 (pp_and_cno_extras)",
+            "state": "closed"
+          },
+          {
+            "number": 538,
+            "title": "[Parity] TDC inputs at step boundaries: full set_hydro_vars after the solve and no reset_starting_vectors",
+            "state": "open"
+          },
+          {
+            "number": 539,
+            "title": "[Parity] star/magnetic_braking: pass/fail flips on the upstream eval_slope summation order",
+            "state": "open"
           }
         ]
       },
@@ -3582,6 +3613,19 @@
       "python_cov_pct": "87.8",
       "closed_140": "29",
       "total_140": "50",
+      "deferred_169": "71"
+    },
+    {
+      "date_utc": "2026-11-25",
+      "commit": "4fd18fc",
+      "event": "main merge",
+      "engine_ported_pct": "30.7",
+      "all_verified_pct": "1.1",
+      "cases_passing": "39",
+      "rust_cov_pct": "77.0",
+      "python_cov_pct": "87.8",
+      "closed_140": "31",
+      "total_140": "54",
       "deferred_169": "71"
     }
   ]

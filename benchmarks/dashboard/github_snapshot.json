@@ -101,8 +101,8 @@
     },
     {
       "phase": "Phase C",
-      "open": 20,
-      "closed": 14,
+      "open": 18,
+      "closed": 16,
       "issues": [
         {
           "number": 152,
@@ -257,12 +257,12 @@
         {
           "number": 536,
           "title": "[Parity] irradiated_planet evolve stage: dlnE_dt Jacobian partials in lnR and species differ by 1 ulp from MESA",
-          "state": "open"
+          "state": "closed"
         },
         {
           "number": 537,
           "title": "[Parity] hb_2M: net d_eps_nuc_dRho differs by 1 ulp from MESA at model 64 zone 1810 (pp_and_cno_extras)",
-          "state": "open"
+          "state": "closed"
         },
         {
           "number": 538,

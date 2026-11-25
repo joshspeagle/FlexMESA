@@ -461,6 +461,11 @@ pub struct HydroAuxState {
     /// Whether the model is currently in an initialization relaxation phase
     /// (`doing_relax` in `star_data_def.f90`).
     pub doing_relax: bool,
+    /// Target of a running `do_relax_entropy`, whose
+    /// `entropy_relax_other_energy` is installed as `other_energy`
+    /// (`star/private/relax.f90:761`). `None` outside that relax.
+    #[serde(skip)]
+    pub relax_entropy: Option<crate::relax_entropy::RelaxEntropyTarget>,
     /// `doing_finish_load_model`: true while `finish_load_model` runs
     /// `set_vars` and the Brunt-Vaisala update
     /// (`star/private/read_model.f90:161-199`).
@@ -789,6 +794,7 @@ impl HydroAuxState {
     pub fn new(nz: usize, species: usize) -> Self {
         Self {
             doing_relax: false,
+            relax_entropy: None,
             doing_finish_load_model: false,
             need_to_setvars: true,
             rotmix: crate::rotation_mix_info::RotMixArrays::default(),

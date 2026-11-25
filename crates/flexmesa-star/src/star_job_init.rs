@@ -21,6 +21,9 @@ use crate::relax::{
     set_uniform_initial_composition,
 };
 use crate::relax_comp::{parse_composition_profile_str, set_y, set_z};
+use crate::relax_entropy::{
+    do_relax_entropy, parse_entropy_profile_str, RelaxEntropyTarget,
+};
 use crate::relax_driver::{
     RelaxOmegaKind, do_relax_num_steps, do_relax_to_radiative_core,
     do_relax_uniform_omega,
@@ -184,7 +187,7 @@ fn finish_load_model(
 /// `model_builder` can relax it (`finish_load_model` and the energy integrals,
 /// `star/private/init.f90:1031-1075`; `doing_first_model_of_run = .true.`,
 /// `star/private/init.f90:921`).
-fn prepare_new_model_for_relax(
+pub(crate) fn prepare_new_model_for_relax(
     model: &mut StarModel,
     extras: &mut dyn StarExtras,
 ) -> Result<(), StarError> {
@@ -268,6 +271,49 @@ fn do_relax_initial_composition(
         &profile,
         extras,
     )
+}
+
+/// `do_relax_initial_entropy` (`star/job/run_star_support.f90:2891-3009`)
+/// for `get_entropy_for_relax_from_eos = ''`: reads the target entropy from
+/// `relax_entropy_filename` and runs `star_relax_entropy`
+/// (`star/public/star_lib.f90:1444-1459`).
+///
+/// # Errors
+/// Returns [`StarError`] when the file cannot be opened or read, when
+/// `get_entropy_for_relax_from_eos` is not `''`, or when the relax fails.
+/// The `'eosDT'`, `'eosPT'` and `'eosDE'` options are not ported (#436),
+/// and upstream runs any other value through the `'eosDE'` branch (#534).
+fn do_relax_initial_entropy(
+    model: &mut StarModel,
+    job: &StarJobControls,
+    case_dir: &Path,
+    extras: &mut dyn StarExtras,
+) -> Result<(), StarError> {
+    let path = case_dir.join(job.relax_entropy_filename.trim());
+    let text = fs::read_to_string(&path).map_err(|e| {
+        StarError::IoError(format!(
+            "failed to open {} (star/job/run_star_support.f90:2918-2923): {e}",
+            path.display()
+        ))
+    })?;
+    match job.get_entropy_for_relax_from_eos.as_str() {
+        "" => {}
+        // `'eosDT'`, `'eosPT'` and `'eosDE'` are not ported. An invalid value
+        // sets `ierr = 1` (`star/job/run_star_support.f90:2932-2939`) without
+        // returning, the read loop overwrites `ierr`, and every row takes the
+        // final `else` (`eosDE`) branch (#534), so it shares that error.
+        _ => {
+            return Err(StarError::InvalidInput(format!(
+                "get_entropy_for_relax_from_eos = '{}' \
+                 (star/job/run_star_support.f90:2941-2994) is not ported \
+                 (#436)",
+                job.get_entropy_for_relax_from_eos
+            )));
+        }
+    }
+    let (xq, entropy) = parse_entropy_profile_str(&text)?;
+    let target = RelaxEntropyTarget::new(&xq, &entropy)?;
+    do_relax_entropy(model, job.max_steps_to_relax_entropy, target, extras)
 }
 
 /// The relaxes `model_builder` applies to a new pre-main-sequence model
@@ -810,13 +856,15 @@ pub(crate) fn init_or_update_model_from_bundle_outcome(
              star/job/run_star_support.f90:2240-2243) is not ported (#436)",
         )));
     }
-    if (job.relax_initial_angular_momentum || job.relax_initial_entropy)
-        && !restart
-    {
+    if job.relax_initial_angular_momentum && !restart {
         return Err(StarError::InvalidInput(String::from(
-            "relax_initial_angular_momentum / relax_initial_entropy \
-             (star/job/run_star_support.f90:2251-2259) are not ported (#436)",
+            "relax_initial_angular_momentum \
+             (star/job/run_star_support.f90:2251-2254) is not ported (#436)",
         )));
+    }
+    if job.relax_initial_entropy && !restart {
+        ready_for_relax(&mut model, extras)?;
+        do_relax_initial_entropy(&mut model, &job, &bundle.case_dir, extras)?;
     }
     // Change Z before Y, since changing Z can change Y
     // (`star/job/run_star_support.f90:2289-2308`).
@@ -932,15 +980,11 @@ pub(crate) fn init_or_update_model_from_bundle_outcome(
             extras,
         )?;
     }
-    if job.remove_surface_by_relax_to_star_cut {
-        // `do_remove_surface` with `remove_surface_by_relax_to_star_cut`
-        // calls `do_relax_to_star_cut` (`star/private/remove_shells.f90:
-        // 1024-1035, 1156-1404`), which is not ported.
-        return Err(StarError::InvalidInput(String::from(
-            "remove_surface_by_relax_to_star_cut (do_relax_to_star_cut, \
-             star/private/remove_shells.f90:1156-1404) is not ported (#436)",
-        )));
-    }
+    // `do_remove_surface` (`star/job/run_star_support.f90:3458-3564`) acts
+    // only through its `remove_surface_*` selectors, none of which `FlexMESA`
+    // reads, so `remove_surface_by_relax_to_star_cut` alone changes nothing
+    // here. It routes a removal made by `remove_surface_at_cell_k` to
+    // `do_relax_to_star_cut` (`crate::remove_surface_cut`).
 
     // Rotation relaxes, after `do_remove_surface`
     // (`star/job/run_star_support.f90:2593-2652`).

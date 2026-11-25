@@ -6,9 +6,9 @@ Generated mechanically against **MESA 26.4.1** (git tag `26.4.1`, commit `c8c202
 ## Summary
 
 - **Total manifest cases scanned**: `106`
-- **Cases passing strict `#147` validation**: `94`
-- **Cases rejected by strict `#147` validation**: `12`
-- **Distinct unsupported physics/solver controls encountered**: `53`
+- **Cases passing strict `#147` validation**: `95`
+- **Cases rejected by strict `#147` validation**: `11`
+- **Distinct unsupported physics/solver controls encountered**: `46`
 - **Distinct unknown/misspelled controls encountered**: `0`
 - **Cases using headless plotting controls (`#173` / `DECISIONS #25`)**: `78` (`895` distinct keys)
 
@@ -16,7 +16,7 @@ Generated mechanically against **MESA 26.4.1** (git tag `26.4.1`, commit `c8c202
 
 | Section | Upstream `26.4.1` | Supported | Unused (`#147`) | Headless GUI (`#173`) | Terminal output (`DECISIONS #26`) | Unimplemented |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `&star_job` | 455 | 210 | 4 | 3 | 8 | 230 |
+| `&star_job` | 455 | 219 | 4 | 3 | 8 | 221 |
 | `&eos` | 102 | 91 | 0 | 0 | 9 | 2 |
 | `&kap` | 51 | 39 | 0 | 0 | 10 | 2 |
 | `&controls` | 1448 | 1235 | 15 | 0 | 19 | 179 |
@@ -33,11 +33,7 @@ Generated mechanically against **MESA 26.4.1** (git tag `26.4.1`, commit `c8c202
 | `&controls::use_op_mono_alt_get_kap` | `unimplemented` | 2 | `star/1.4M_ms_op_mono`, `star/radiative_levitation` |
 | `&star_job::electron_coulomb_corrections` | `unimplemented` | 2 | `star/custom_rates`, `star/wd_aic` |
 | `&star_job::ion_coulomb_corrections` | `unimplemented` | 2 | `star/custom_rates`, `star/wd_aic` |
-| `&star_job::max_dt_for_relax_entropy` | `unimplemented` | 2 | `star/make_co_wd`, `star/ppisn` |
-| `&star_job::max_steps_to_relax_entropy` | `unimplemented` | 2 | `star/make_co_wd`, `star/ppisn` |
 | `&star_job::new_w_div_wc_flag` | `unimplemented` | 2 | `star/high_rot_darkening`, `star/ppisn` |
-| `&star_job::num_timescales_for_relax_entropy` | `unimplemented` | 2 | `star/make_co_wd`, `star/ppisn` |
-| `&star_job::timescale_for_relax_entropy` | `unimplemented` | 2 | `star/make_co_wd`, `star/ppisn` |
 | `&controls::atm_off_table_option` | `unimplemented` | 1 | `star/c13_pocket` |
 | `&controls::fill_arrays_with_nans` | `unimplemented` | 1 | `star/ppisn` |
 | `&controls::initial_he3` | `unimplemented` | 1 | `star/ppisn` |
@@ -75,9 +71,6 @@ Generated mechanically against **MESA 26.4.1** (git tag `26.4.1`, commit `c8c202
 | `&star_job::remove_fallback_at_each_step` | `unimplemented` | 1 | `star/ccsn_IIp` |
 | `&star_job::remove_fallback_speed_limit` | `unimplemented` | 1 | `star/ccsn_IIp` |
 | `&star_job::remove_initial_center_by_entropy` | `unimplemented` | 1 | `star/ccsn_IIp` |
-| `&star_job::remove_surface_do_entropy` | `unimplemented` | 1 | `star/make_co_wd` |
-| `&star_job::remove_surface_do_jrot` | `unimplemented` | 1 | `star/make_co_wd` |
-| `&star_job::remove_surface_turn_off_energy_sources_and_sinks` | `unimplemented` | 1 | `star/make_co_wd` |
 | `&star_job::special_weak_states_file` | `unimplemented` | 1 | `star/wd_aic` |
 | `&star_job::special_weak_transitions_file` | `unimplemented` | 1 | `star/wd_aic` |
 | `&star_job::use_special_weak_rates` | `unimplemented` | 1 | `star/wd_aic` |
@@ -224,7 +217,7 @@ Per `DECISIONS #25` (matching upstream `USE_PGSTAR = NO`), keys in `&pgstar`, `&
 | `star` | `low_z` | `pass` | 0 | 0 | 0 |
 | `star` | `magnetic_braking` | `pass` | 0 | 0 | 56 |
 | `star` | `make_brown_dwarf` | `pass` | 0 | 0 | 19 |
-| `star` | `make_co_wd` | `fail_unsupported` | 7 | 0 | 29 |
+| `star` | `make_co_wd` | `pass` | 0 | 0 | 29 |
 | `star` | `make_env` | `pass` | 0 | 0 | 0 |
 | `star` | `make_he_wd` | `pass` | 0 | 0 | 0 |
 | `star` | `make_metals` | `pass` | 0 | 0 | 0 |
@@ -240,7 +233,7 @@ Per `DECISIONS #25` (matching upstream `USE_PGSTAR = NO`), keys in `&pgstar`, `&
 | `star` | `ns_he` | `fail_unsupported` | 8 | 0 | 64 |
 | `star` | `other_physics_hooks` | `pass` | 0 | 0 | 0 |
 | `star` | `pisn` | `pass` | 0 | 0 | 288 |
-| `star` | `ppisn` | `fail_unsupported` | 10 | 0 | 76 |
+| `star` | `ppisn` | `fail_unsupported` | 6 | 0 | 76 |
 | `star` | `radiative_levitation` | `fail_unsupported` | 4 | 0 | 14 |
 | `star` | `relax_composition_j_entropy` | `pass` | 0 | 0 | 0 |
 | `star` | `rsp_BEP` | `pass` | 0 | 0 | 75 |

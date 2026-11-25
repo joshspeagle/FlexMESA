@@ -426,7 +426,15 @@ impl InlistBundle {
             timescale_for_relax_composition,
         ]);
         sj.try_usize_into("star_job", &mut j.num_steps_to_relax_composition, "num_steps_to_relax_composition", 0)?;
-        map_strs!("star_job", sj, j, [relax_composition_filename]);
+        map_strs!("star_job", sj, j, [
+            relax_composition_filename, relax_entropy_filename,
+            get_entropy_for_relax_from_eos,
+        ]);
+        map_f64s!("star_job", sj, j, [
+            timescale_for_relax_entropy, max_dt_for_relax_entropy,
+            num_timescales_for_relax_entropy,
+        ]);
+        sj.try_usize_into("star_job", &mut j.max_steps_to_relax_entropy, "max_steps_to_relax_entropy", 0)?;
         map_bools!("star_job", sj, j, [
             set_tau_factor, set_initial_tau_factor, relax_tau_factor, relax_initial_tau_factor,
             relax_core, relax_initial_core, relax_m_center, relax_initial_m_center,
@@ -451,7 +459,9 @@ impl InlistBundle {
         sj.try_f64_into("star_job", &mut j.column_depth_for_irradiation, "irrad_col_depth")?;
         map_bools!("star_job", sj, j, [
             relax_initial_mass_to_remove_h_env, relax_mass_to_remove_h_env,
-            remove_surface_by_relax_to_star_cut,
+            remove_surface_by_relax_to_star_cut, remove_surface_do_jrot,
+            remove_surface_do_entropy,
+            remove_surface_turn_off_energy_sources_and_sinks,
         ]);
         sj.try_f64_into("star_job", &mut j.extra_mass_retained_by_remove_h_env, "extra_mass_retained_by_remove_H_env")?;
         if let Some(b) = sj.try_any_bool("star_job", &["change_initial_rti_flag", "change_rti_flag"])? {

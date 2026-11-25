@@ -277,9 +277,19 @@ pub fn apply_extra_heat_controls(
     model.aux.d_extra_heat_dlnd.fill(0.0);
     model.aux.d_extra_heat_dlnt.fill(0.0);
 
+    // `use_other_energy` replaces the uniform injection
+    // (`star/private/evolve.f90:1649-1655`); the entropy relax is the one
+    // `other_energy` routine ported (`star/private/relax.f90:919-945`).
+    if let Some(target) = model.aux.relax_entropy.clone() {
+        target.apply_other_energy(model)?;
+    }
     let qmin = qmin_raw.clamp(0.0, 1.0);
     let qmax = qmax_raw.clamp(0.0, 1.0);
-    if inject_heat != 0.0 && qmax > qmin && nz > 0 {
+    if model.aux.relax_entropy.is_none()
+        && inject_heat != 0.0
+        && qmax > qmin
+        && nz > 0
+    {
         let mut qp1 = 0.0_f64;
         for k in (0..nz).rev() {
             let q00 = model.q[k];

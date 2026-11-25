@@ -8,9 +8,9 @@
   },
   "summary": {
     "total_cases": 106,
-    "strict_pass_cases": 94,
-    "strict_fail_cases": 12,
-    "distinct_unsupported_controls": 53,
+    "strict_pass_cases": 95,
+    "strict_fail_cases": 11,
+    "distinct_unsupported_controls": 46,
     "distinct_unknown_controls": 0,
     "cases_with_headless_plotting": 78,
     "distinct_headless_plotting_keys": 895
@@ -19,11 +19,11 @@
     {
       "section": "star_job",
       "upstream_keys": 455,
-      "supported_keys": 210,
+      "supported_keys": 219,
       "unused_keys": 4,
       "headless_gui_keys": 3,
       "terminal_output_keys": 8,
-      "unimplemented_upstream_keys": 230
+      "unimplemented_upstream_keys": 221
     },
     {
       "section": "eos",
@@ -133,51 +133,11 @@
     },
     {
       "section": "star_job",
-      "key": "max_dt_for_relax_entropy",
-      "category": "unimplemented",
-      "case_count": 2,
-      "cases": [
-        "star/make_co_wd",
-        "star/ppisn"
-      ]
-    },
-    {
-      "section": "star_job",
-      "key": "max_steps_to_relax_entropy",
-      "category": "unimplemented",
-      "case_count": 2,
-      "cases": [
-        "star/make_co_wd",
-        "star/ppisn"
-      ]
-    },
-    {
-      "section": "star_job",
       "key": "new_w_div_wc_flag",
       "category": "unimplemented",
       "case_count": 2,
       "cases": [
         "star/high_rot_darkening",
-        "star/ppisn"
-      ]
-    },
-    {
-      "section": "star_job",
-      "key": "num_timescales_for_relax_entropy",
-      "category": "unimplemented",
-      "case_count": 2,
-      "cases": [
-        "star/make_co_wd",
-        "star/ppisn"
-      ]
-    },
-    {
-      "section": "star_job",
-      "key": "timescale_for_relax_entropy",
-      "category": "unimplemented",
-      "case_count": 2,
-      "cases": [
-        "star/make_co_wd",
         "star/ppisn"
       ]
     },
@@ -512,33 +472,6 @@
       "case_count": 1,
       "cases": [
         "star/ccsn_IIp"
-      ]
-    },
-    {
-      "section": "star_job",
-      "key": "remove_surface_do_entropy",
-      "category": "unimplemented",
-      "case_count": 1,
-      "cases": [
-        "star/make_co_wd"
-      ]
-    },
-    {
-      "section": "star_job",
-      "key": "remove_surface_do_jrot",
-      "category": "unimplemented",
-      "case_count": 1,
-      "cases": [
-        "star/make_co_wd"
-      ]
-    },
-    {
-      "section": "star_job",
-      "key": "remove_surface_turn_off_energy_sources_and_sinks",
-      "category": "unimplemented",
-      "case_count": 1,
-      "cases": [
-        "star/make_co_wd"
       ]
     },
     {
@@ -6072,7 +6005,7 @@
     {
       "suite": "star",
       "case": "make_co_wd",
-      "strict_ok": false,
+      "strict_ok": true,
       "entry_files": [
         "inlist_zams_header",
         "inlist_to_end_he_core_burn_header",
@@ -6080,15 +6013,7 @@
         "inlist_remove_env_header",
         "inlist_settle_header"
       ],
-      "unsupported_controls": [
-        "star_job::max_dt_for_relax_entropy::unimplemented",
-        "star_job::max_steps_to_relax_entropy::unimplemented",
-        "star_job::num_timescales_for_relax_entropy::unimplemented",
-        "star_job::remove_surface_do_entropy::unimplemented",
-        "star_job::remove_surface_do_jrot::unimplemented",
-        "star_job::remove_surface_turn_off_energy_sources_and_sinks::unimplemented",
-        "star_job::timescale_for_relax_entropy::unimplemented"
-      ],
+      "unsupported_controls": [],
       "unknown_controls": [],
       "headless_plotting_keys_count": 29,
       "terminal_output_keys": [
@@ -6403,11 +6328,7 @@
         "controls::use_other_eval_fp_ft::unimplemented",
         "controls::use_other_kap::unused",
         "star_job::change_w_div_wc_flag::unimplemented",
-        "star_job::max_dt_for_relax_entropy::unimplemented",
-        "star_job::max_steps_to_relax_entropy::unimplemented",
-        "star_job::new_w_div_wc_flag::unimplemented",
-        "star_job::num_timescales_for_relax_entropy::unimplemented",
-        "star_job::timescale_for_relax_entropy::unimplemented"
+        "star_job::new_w_div_wc_flag::unimplemented"
       ],
       "unknown_controls": [],
       "headless_plotting_keys_count": 76,

@@ -1062,9 +1062,20 @@ pub struct StarJobControls {
     /// Mass kept above the He core in $M_\odot$
     /// (`extra_mass_retained_by_remove_H_env`, default `5d-3`).
     pub extra_mass_retained_by_remove_h_env: f64,
-    /// `remove_surface_by_relax_to_star_cut`. Not ported: a run that sets it
-    /// stops with an error (#436).
+    /// `remove_surface_by_relax_to_star_cut`: `do_remove_surface` relaxes to
+    /// the trimmed model instead of cutting the mesh
+    /// (`star/private/remove_shells.f90:1024-1035`, default `.false.`).
     pub remove_surface_by_relax_to_star_cut: bool,
+    /// `remove_surface_do_jrot`: relax `j_rot` too (default `.false.`;
+    /// `star/defaults/star_job_dev.defaults:45`).
+    pub remove_surface_do_jrot: bool,
+    /// `remove_surface_do_entropy`: relax the entropy profile (default
+    /// `.true.`; `star/defaults/star_job_dev.defaults:46`).
+    pub remove_surface_do_entropy: bool,
+    /// `remove_surface_turn_off_energy_sources_and_sinks`: zero
+    /// `non_nuc_neu_factor` and `eps_nuc_factor` during the relax (default
+    /// `.true.`; `star/defaults/star_job_dev.defaults:47`).
+    pub remove_surface_turn_off_energy_sources_and_sinks: bool,
     /// `set_v_center`: set `v_center` to `new_v_center`
     /// (`star/job/run_star_support.f90:2370-2374`).
     pub set_v_center: bool,
@@ -1087,8 +1098,29 @@ pub struct StarJobControls {
     pub set_to_this_irrad_flux: f64,
     /// `relax_initial_angular_momentum` (not ported; an error, #436).
     pub relax_initial_angular_momentum: bool,
-    /// `relax_initial_entropy` (not ported; an error, #436).
+    /// `relax_initial_entropy`: relax to the entropy profile in
+    /// `relax_entropy_filename` (`star/job/run_star_support.f90:2256-2259,
+    /// 2891-3009`).
     pub relax_initial_entropy: bool,
+    /// Entropy profile file for `relax_initial_entropy`
+    /// (`relax_entropy_filename`, default empty).
+    pub relax_entropy_filename: String,
+    /// `get_entropy_for_relax_from_eos`: `''` reads the entropy from
+    /// `relax_entropy_filename`; `'eosDT'`, `'eosPT'` and `'eosDE'` derive it
+    /// from the file's two state variables (not ported, #436).
+    pub get_entropy_for_relax_from_eos: String,
+    /// Step limit of the entropy relax (`max_steps_to_relax_entropy`,
+    /// default `1000`).
+    pub max_steps_to_relax_entropy: usize,
+    /// Relaxation timescale in years
+    /// (`timescale_for_relax_entropy`, default `1d-9`).
+    pub timescale_for_relax_entropy: f64,
+    /// Largest timestep of the entropy relax in years
+    /// (`max_dt_for_relax_entropy`, default `1d-9`).
+    pub max_dt_for_relax_entropy: f64,
+    /// Number of timescales to relax for
+    /// (`num_timescales_for_relax_entropy`, default `100`).
+    pub num_timescales_for_relax_entropy: f64,
     /// Whether to change Rayleigh-Taylor instability flag (`change_initial_RTI_flag`).
     pub change_initial_rti_flag: bool,
     /// Target RTI flag (`new_RTI_flag`).
@@ -1330,6 +1362,9 @@ impl Default for StarJobControls {
             relax_mass_to_remove_h_env: false,
             extra_mass_retained_by_remove_h_env: 5.0e-3,
             remove_surface_by_relax_to_star_cut: false,
+            remove_surface_do_jrot: false,
+            remove_surface_do_entropy: true,
+            remove_surface_turn_off_energy_sources_and_sinks: true,
             set_v_center: false,
             set_initial_v_center: false,
             new_v_center: 0.0,
@@ -1340,6 +1375,12 @@ impl Default for StarJobControls {
             set_to_this_irrad_flux: 0.0,
             relax_initial_angular_momentum: false,
             relax_initial_entropy: false,
+            relax_entropy_filename: String::new(),
+            get_entropy_for_relax_from_eos: String::new(),
+            max_steps_to_relax_entropy: 1000,
+            timescale_for_relax_entropy: 1.0e-9,
+            max_dt_for_relax_entropy: 1.0e-9,
+            num_timescales_for_relax_entropy: 100.0,
             change_initial_rti_flag: false,
             new_rti_flag: false,
             required_termination_code_string: Vec::new(),

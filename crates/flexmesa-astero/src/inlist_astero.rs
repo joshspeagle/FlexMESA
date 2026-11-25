@@ -635,8 +635,18 @@ impl AsteroSearchControls {
                              name: &str,
                              required: bool|
              -> Result<f64, StarError> {
-                if col_idx <= 0 {
+                // `do_get_parameters_from_file`
+                // (`astero/private/astero_run_support.f90:277-318`) only reads
+                // `filedata(file_column_for_param(i))` when `vary_param(i)` is
+                // true; non-varied parameters keep `first_param(i)`
+                // (`extras_support.f90:974-988`).
+                if !required {
                     return Ok(fallback);
+                }
+                if col_idx <= 0 {
+                    return Err(StarError::InvalidInput(format!(
+                        "need to set positive file_column_for_param for varied parameter '{name}'"
+                    )));
                 }
                 let idx = (col_idx as usize) - 1;
                 let Some(tok) = tokens.get(idx) else {

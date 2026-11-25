@@ -86,7 +86,10 @@ impl OvershootConfig {
 /// # Errors
 /// Returns [`StarError::InvalidInput`] if `i` is out of range or `k` falls
 /// outside `0..nz-1`.
-pub fn eval_conv_bdy_k(model: &StarModel, i: usize) -> Result<usize, StarError> {
+pub fn eval_conv_bdy_k(
+    model: &StarModel,
+    i: usize,
+) -> Result<usize, StarError> {
     let mx = &model.aux.mixing;
     if i >= mx.conv_bdy_loc.len() || i >= mx.top_conv_bdy.len() {
         return Err(StarError::InvalidInput(format!(
@@ -195,7 +198,14 @@ pub fn eval_conv_bdy_hp(model: &StarModel, i: usize) -> Result<f64, StarError> {
                         "Double top boundary in overshoot; i={i}"
                     )));
                 }
-                model.r[mx.conv_bdy_loc[i - 1]]
+                let loc = mx.conv_bdy_loc[i - 1];
+                *model.r.get(loc).ok_or_else(|| {
+                    StarError::InvalidInput(format!(
+                        "eval_conv_bdy_hp: conv_bdy_loc[{}]={loc} out of bounds (nz={})",
+                        i - 1,
+                        model.nz
+                    ))
+                })?
             };
             (model.r[k], rb)
         } else {
@@ -203,12 +213,26 @@ pub fn eval_conv_bdy_hp(model: &StarModel, i: usize) -> Result<f64, StarError> {
             let rt = if i + 1 == mx.conv_bdy_loc.len() {
                 model.r[0]
             } else {
+                if i + 1 >= mx.top_conv_bdy.len() {
+                    return Err(StarError::InvalidInput(format!(
+                        "eval_conv_bdy_hp: top_conv_bdy len {} shorter than conv_bdy_loc len {}",
+                        mx.top_conv_bdy.len(),
+                        mx.conv_bdy_loc.len()
+                    )));
+                }
                 if !mx.top_conv_bdy[i + 1] {
                     return Err(StarError::InvalidInput(format!(
                         "Double bottom boundary in overshoot; i={i}"
                     )));
                 }
-                model.r[mx.conv_bdy_loc[i + 1]]
+                let loc = mx.conv_bdy_loc[i + 1];
+                *model.r.get(loc).ok_or_else(|| {
+                    StarError::InvalidInput(format!(
+                        "eval_conv_bdy_hp: conv_bdy_loc[{}]={loc} out of bounds (nz={})",
+                        i + 1,
+                        model.nz
+                    ))
+                })?
             };
             (rt, rb)
         };
@@ -296,7 +320,10 @@ impl OverBdyAnchorCache {
     ///
     /// # Errors
     /// Returns [`StarError::InvalidInput`] if radius bracketing fails.
-    pub fn eval_at(&self, f0: f64) -> Result<(usize, f64, f64, f64), StarError> {
+    pub fn eval_at(
+        &self,
+        f0: f64,
+    ) -> Result<(usize, f64, f64, f64), StarError> {
         eval_over_bdy_params_slices(
             self.nz,
             &self.r,
@@ -468,7 +495,8 @@ fn eval_overshoot_profile(
     let star_mass = model.mstar / M_SUN;
     if star_mass < mass_full_on {
         if star_mass > mass_full_off {
-            let w = (star_mass - mass_full_off) / (mass_full_on - mass_full_off);
+            let w =
+                (star_mass - mass_full_off) / (mass_full_on - mass_full_off);
             let factor = 0.5 * (1.0 - flexmesa_math::cospi(w));
             f *= factor;
             f0 *= factor;
@@ -659,162 +687,163 @@ fn apply_evaluated_overshoot_to_model(
 pub fn add_overshooting(model: &mut StarModel) -> Result<(), StarError> {
     let nz = model.nz;
     let n_bdy = model.aux.mixing.conv_bdy_loc.len();
-    if nz < 3 || n_bdy == 0 {
-        return Ok(());
-    }
     let sets = model.controls.mix_wind.overshoot_sets.clone();
-    if !sets.iter().any(|s| !s.scheme.trim().is_empty()) {
-        return Ok(());
-    }
-    let min_q = model.controls.mix_wind.min_overshoot_q;
-    let d_min = model.controls.mix_wind.overshoot_d_min;
+    // Upstream runs `check_loop` (`overshoot.f90:309-323`) on `d_mix(1:nz)` even
+    // when `num_conv_boundaries == 0` or every `overshoot_scheme` is blank.
+    if n_bdy > 0 && sets.iter().any(|s| !s.scheme.trim_end().is_empty()) {
+        let min_q = model.controls.mix_wind.min_overshoot_q;
+        let d_min = model.controls.mix_wind.overshoot_d_min;
 
-    let mut d_arr = vec![0.0_f64; nz];
-    let mut vc_arr = vec![0.0_f64; nz];
+        let mut d_arr = vec![0.0_f64; nz];
+        let mut vc_arr = vec![0.0_f64; nz];
 
-    for i in 0..n_bdy {
-        if model.aux.mixing.conv_bdy_q[i] < min_q {
-            continue;
-        }
-        if model.aux.mixing.conv_bdy_loc[i] == 0 {
-            continue;
-        }
-
-        let bh = model.aux.mixing.burn_h_conv_region[i];
-        let bhe = model.aux.mixing.burn_he_conv_region[i];
-        let bz = model.aux.mixing.burn_z_conv_region[i];
-        let top = model.aux.mixing.top_conv_bdy[i];
-        let is_core = i == 0 && model.r_center == 0.0 && top;
-
-        for (j, set) in sets.iter().enumerate() {
-            // Upstream MESA `26.4.1` compares selector strings case-sensitively
-            // (`star/private/overshoot.f90:101-177`), ignoring trailing blanks
-            // per Fortran character comparison semantics.
-            let scheme_str = set.scheme.trim_end();
-            if scheme_str.is_empty() {
+        for i in 0..n_bdy {
+            if model.aux.mixing.conv_bdy_q[i] < min_q {
+                continue;
+            }
+            if model.aux.mixing.conv_bdy_loc[i] == 0 {
                 continue;
             }
 
-            let match_zone_type = match set.zone_type.trim_end() {
-                "burn_H" => bh,
-                "burn_He" => bhe,
-                "burn_Z" => bz,
-                "nonburn" => !(bh || bhe || bz),
-                "any" => true,
-                other => {
-                    return Err(StarError::InvalidInput(format!(
-                        "Invalid overshoot_zone_type({}): '{}'",
-                        j + 1,
-                        other
-                    )));
+            let bh = model.aux.mixing.burn_h_conv_region[i];
+            let bhe = model.aux.mixing.burn_he_conv_region[i];
+            let bz = model.aux.mixing.burn_z_conv_region[i];
+            let top = model.aux.mixing.top_conv_bdy[i];
+            let is_core = i == 0 && model.r_center == 0.0 && top;
+
+            for (j, set) in sets.iter().enumerate() {
+                // Upstream MESA `26.4.1` compares selector strings case-sensitively
+                // (`star/private/overshoot.f90:101-177`), ignoring trailing blanks
+                // per Fortran character comparison semantics.
+                let scheme_str = set.scheme.trim_end();
+                if scheme_str.is_empty() {
+                    continue;
                 }
-            };
-            let match_zone_loc = match set.zone_loc.trim_end() {
-                "core" => is_core,
-                "shell" => !is_core,
-                "any" => true,
-                other => {
-                    return Err(StarError::InvalidInput(format!(
-                        "Invalid overshoot_zone_loc({}): '{}'",
-                        j + 1,
-                        other
-                    )));
-                }
-            };
-            let match_bdy_loc = match set.bdy_loc.trim_end() {
-                "bottom" => !top,
-                "top" => top,
-                "any" => true,
-                other => {
-                    return Err(StarError::InvalidInput(format!(
-                        "Invalid overshoot_bdy_loc({}): '{}'",
-                        j + 1,
-                        other
-                    )));
-                }
-            };
 
-            if !(match_zone_type && match_zone_loc && match_bdy_loc) {
-                continue;
-            }
-
-            if scheme_str == "none" {
-                break;
-            }
-
-            let k_cb = eval_conv_bdy_k(model, i)?;
-            d_arr.fill(0.0);
-            vc_arr.fill(0.0);
-
-            let (k_a, k_b) = if scheme_str == "other" {
-                let Some(hook) = model.aux.other_overshooting_scheme.clone()
-                else {
-                    return Err(StarError::InvalidInput(format!(
-                        "overshoot_scheme({}) = 'other' requires a custom other_overshooting_scheme hook (default null_other_overshooting_scheme returns ierr = -1)",
-                        j + 1
-                    )));
-                };
-                match hook.eval_overshooting(
-                    model,
-                    i,
-                    j,
-                    &mut d_arr,
-                    &mut vc_arr,
-                )? {
-                    Some((ka, kb)) => {
-                        if ka >= nz || kb >= nz {
-                            return Err(StarError::InvalidInput(format!(
-                                "other_overshooting_scheme returned out-of-range bounds (k_a={ka}, k_b={kb}) for nz={nz}"
-                            )));
-                        }
-                        for k in 0..nz {
-                            if !d_arr[k].is_finite() || !vc_arr[k].is_finite() {
-                                return Err(StarError::InvalidInput(format!(
-                                    "other_overshooting_scheme produced non-finite value at face {k}: D={}, vc={}",
-                                    d_arr[k], vc_arr[k]
-                                )));
-                            }
-                        }
-                        (ka, kb)
+                let match_zone_type = match set.zone_type.trim_end() {
+                    "burn_H" => bh,
+                    "burn_He" => bhe,
+                    "burn_Z" => bz,
+                    "nonburn" => !(bh || bhe || bz),
+                    "any" => true,
+                    other => {
+                        return Err(StarError::InvalidInput(format!(
+                            "Invalid overshoot_zone_type({}): '{}'",
+                            j + 1,
+                            other
+                        )));
                     }
-                    None => {
+                };
+                let match_zone_loc = match set.zone_loc.trim_end() {
+                    "core" => is_core,
+                    "shell" => !is_core,
+                    "any" => true,
+                    other => {
+                        return Err(StarError::InvalidInput(format!(
+                            "Invalid overshoot_zone_loc({}): '{}'",
+                            j + 1,
+                            other
+                        )));
+                    }
+                };
+                let match_bdy_loc = match set.bdy_loc.trim_end() {
+                    "bottom" => !top,
+                    "top" => top,
+                    "any" => true,
+                    other => {
+                        return Err(StarError::InvalidInput(format!(
+                            "Invalid overshoot_bdy_loc({}): '{}'",
+                            j + 1,
+                            other
+                        )));
+                    }
+                };
+
+                if !(match_zone_type && match_zone_loc && match_bdy_loc) {
+                    continue;
+                }
+
+                if scheme_str == "none" {
+                    break;
+                }
+
+                let k_cb = eval_conv_bdy_k(model, i)?;
+                d_arr.fill(0.0);
+                vc_arr.fill(0.0);
+
+                let (k_a, k_b) = if scheme_str == "other" {
+                    let Some(hook) =
+                        model.aux.other_overshooting_scheme.clone()
+                    else {
                         return Err(StarError::InvalidInput(format!(
                             "overshoot_scheme({}) = 'other' requires a custom other_overshooting_scheme hook (default null_other_overshooting_scheme returns ierr = -1)",
                             j + 1
                         )));
+                    };
+                    match hook.eval_overshooting(
+                        model,
+                        i,
+                        j,
+                        &mut d_arr,
+                        &mut vc_arr,
+                    )? {
+                        Some((ka, kb)) => {
+                            if ka >= nz || kb >= nz {
+                                return Err(StarError::InvalidInput(format!(
+                                    "other_overshooting_scheme returned out-of-range bounds (k_a={ka}, k_b={kb}) for nz={nz}"
+                                )));
+                            }
+                            for k in 0..nz {
+                                if !d_arr[k].is_finite()
+                                    || !vc_arr[k].is_finite()
+                                {
+                                    return Err(StarError::InvalidInput(format!(
+                                        "other_overshooting_scheme produced non-finite value at face {k}: D={}, vc={}",
+                                        d_arr[k], vc_arr[k]
+                                    )));
+                                }
+                            }
+                            (ka, kb)
+                        }
+                        None => {
+                            return Err(StarError::InvalidInput(format!(
+                                "overshoot_scheme({}) = 'other' requires a custom other_overshooting_scheme hook (default null_other_overshooting_scheme returns ierr = -1)",
+                                j + 1
+                            )));
+                        }
                     }
-                }
-            } else {
-                let scheme = match scheme_str {
-                    "exponential" => OvershootScheme::Exponential,
-                    "step" => OvershootScheme::Step,
-                    other => {
-                        return Err(StarError::InvalidInput(format!(
-                            "Invalid overshoot_scheme({}): '{other}'",
-                            j + 1
-                        )));
-                    }
+                } else {
+                    let scheme = match scheme_str {
+                        "exponential" => OvershootScheme::Exponential,
+                        "step" => OvershootScheme::Step,
+                        other => {
+                            return Err(StarError::InvalidInput(format!(
+                                "Invalid overshoot_scheme({}): '{other}'",
+                                j + 1
+                            )));
+                        }
+                    };
+                    eval_overshoot_profile(
+                        model,
+                        i,
+                        scheme,
+                        set.f,
+                        set.f0,
+                        set.d0,
+                        set.delta0,
+                        set.mass_full_on,
+                        set.mass_full_off,
+                        d_min,
+                        &mut d_arr,
+                        &mut vc_arr,
+                    )?
                 };
-                eval_overshoot_profile(
-                    model,
-                    i,
-                    scheme,
-                    set.f,
-                    set.f0,
-                    set.d0,
-                    set.delta0,
-                    set.mass_full_on,
-                    set.mass_full_off,
-                    d_min,
-                    &mut d_arr,
-                    &mut vc_arr,
-                )?
-            };
 
-            apply_evaluated_overshoot_to_model(
-                model, i, k_cb, k_a, k_b, &d_arr, &vc_arr, d_min,
-            )?;
-            break;
+                apply_evaluated_overshoot_to_model(
+                    model, i, k_cb, k_a, k_b, &d_arr, &vc_arr, d_min,
+                )?;
+                break;
+            }
         }
     }
 
@@ -889,8 +918,10 @@ pub fn apply_overshoot_configs(
     if active == 0 {
         return Ok(());
     }
-    let saved_sets =
-        std::mem::replace(&mut model.controls.mix_wind.overshoot_sets, temp_sets);
+    let saved_sets = std::mem::replace(
+        &mut model.controls.mix_wind.overshoot_sets,
+        temp_sets,
+    );
     let saved_d_min = model.controls.mix_wind.overshoot_d_min;
     model.controls.mix_wind.overshoot_d_min = d_min_override;
     let res = add_overshooting(model);

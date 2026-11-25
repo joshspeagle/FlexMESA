@@ -172,6 +172,9 @@ fn is_bad(x: f64) -> bool {
 /// smoothed outer neighbour.
 pub(crate) fn smooth_in_place(dc: &mut [f64]) {
     let sz = dc.len();
+    if sz < 2 {
+        return;
+    }
     dc[0] = (3.0 * dc[0] + dc[1]) / 4.0;
     for k in 1..(sz - 1) {
         dc[k] = (dc[k - 1] + 2.0 * dc[k] + dc[k + 1]) / 4.0;
@@ -228,63 +231,18 @@ pub(crate) fn set_grad_density_and_temperature(model: &mut StarModel) {
     smooth_in_place(&mut rm.grad_temperature[..nz]);
 }
 
-/// `weighted_smoothing(dd, n, ns, preserve_sign, ddold)`
-/// (`star/private/star_utils.f90:2777-2830`): binomial weights over
-/// `2*ns + 1` cells, leaving the end cells unchanged.
-pub(crate) fn weighted_smoothing(
-    dd: &mut [f64],
-    ns: usize,
-    preserve_sign: bool,
-) {
-    let n = dd.len();
-    let ddold = dd.to_vec();
-    let nweight = ns;
-    let mweight = 2 * nweight + 1;
-    let mut weight = vec![0.0_f64; mweight];
-    weight[0] = 1.0;
-    for i in 1..mweight {
-        // `do j = i+1, 2, -1` (1-based) => 0-based `j = i ..= 1`.
-        for j in (1..=i).rev() {
-            weight[j] += weight[j - 1];
-        }
-    }
-    for i in 1..n.saturating_sub(1) {
-        let mut sweight = 0.0_f64;
-        dd[i] = 0.0;
-        let v0 = ddold[i];
-        // `do j = i, max(1, i-nweight), -1`
-        let jlo = i.saturating_sub(nweight);
-        for j in (jlo..=i).rev() {
-            let k = j + nweight - i;
-            if preserve_sign && v0 * ddold[j] <= 0.0 {
-                break;
-            }
-            sweight += weight[k];
-            dd[i] += ddold[j] * weight[k];
-        }
-        // `do j = i+1, min(n, i+nweight)`
-        let jhi = (n - 1).min(i + nweight);
-        for j in (i + 1)..=jhi {
-            let k = j + nweight - i;
-            if preserve_sign && v0 * ddold[j] <= 0.0 {
-                break;
-            }
-            sweight += weight[k];
-            dd[i] += ddold[j] * weight[k];
-        }
-        if sweight > 0.0 {
-            let inv = 1.0 / sweight;
-            dd[i] *= inv;
-        }
-    }
-}
-
 /// `smooth_for_rotation` (`rotation_mix_info.f90:1126-1134`).
 pub(crate) fn smooth_for_rotation(v: &mut [f64], width: i64) {
-    if width <= 0 {
+    if width <= 0 || v.len() < 3 {
         return;
     }
-    weighted_smoothing(v, width as usize, false);
+    let mut work = vec![0.0_f64; v.len()];
+    crate::mixing_state::weighted_smoothing(
+        v,
+        width as usize,
+        false,
+        &mut work,
+    );
 }
 
 /// `zero_if_convective` (`rotation_mix_info.f90:1349-1357`).
@@ -1184,7 +1142,11 @@ fn do_st(model: &mut StarModel, su: &Setup) -> Result<(), StarError> {
         let angsmt = mw.st_angsmt;
         let mstar_old = model.mstar_old;
         let prev_dq = &st.prev_mesh_dq;
-        let prev_nz = st.prev_mesh_nz;
+        let prev_nz = st
+            .prev_mesh_nz
+            .min(prev_dq.len())
+            .min(st.prev_mesh_d_st_start.len())
+            .min(st.prev_mesh_nu_st_start.len());
         let mut k0 = 1_usize; // 1-based
         let mut prev_out_q = 0.0_f64;
         let mut prev_q = 1.0_f64;
@@ -1492,7 +1454,7 @@ pub(crate) fn mix_rotational_coefficient(
     variant: MixVariant,
 ) -> Result<(), StarError> {
     let nz = v.len();
-    if dt == 0.0 {
+    if nz == 0 || dt == 0.0 {
         return Ok(());
     }
     let conv = |k: usize| mixing_type[k] == MixingType::ConvectiveMixing;

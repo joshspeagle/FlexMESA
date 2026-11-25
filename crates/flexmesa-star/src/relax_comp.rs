@@ -703,21 +703,9 @@ impl RelaxCompositionInterpolants {
                 model.nz, model.species, self.species
             )));
         }
-        if model.dq.len() < model.nz {
-            return Err(StarError::InvalidInput(format!(
-                "dq length {} < nz {}",
-                model.dq.len(),
-                model.nz
-            )));
-        }
-
+        let xq_star = cell_center_xq(model)?;
         let nz = model.nz;
         let species = model.species;
-        let mut xq_star = vec![0.0_f64; nz];
-        xq_star[0] = 0.5 * model.dq[0];
-        for k in 1..nz {
-            xq_star[k] = xq_star[k - 1] + 0.5 * (model.dq[k] + model.dq[k - 1]);
-        }
 
         let mut vals = vec![0.0_f64; nz * species];
         for j in 0..species {
@@ -780,5 +768,462 @@ impl RelaxCompositionInterpolants {
             abs_sum += (*xa_val - tgt_val).abs();
         }
         Ok(abs_sum / ((nz * species) as f64))
+    }
+}
+
+/// Computes cell-center exterior mass coordinates `xq = 1 - q` (dimensionless)
+/// for `model`, matching `xq(1) = dq(1) / 2` and `xq(k) = xq(k-1) + (dq(k) + dq(k-1)) / 2`
+/// (`star/private/relax.f90:493-495, 899-902, 1156-1159`).
+///
+/// # Errors
+/// Returns [`StarError::InvalidInput`] if `model.nz == 0` or
+/// `model.dq.len() < model.nz`.
+pub fn cell_center_xq(model: &StarModel) -> Result<Vec<f64>, StarError> {
+    if model.nz == 0 {
+        return Err(StarError::InvalidInput(
+            "cell_center_xq requires nonzero nz".to_string(),
+        ));
+    }
+    if model.dq.len() < model.nz {
+        return Err(StarError::InvalidInput(format!(
+            "dq length {} < nz {}",
+            model.dq.len(),
+            model.nz
+        )));
+    }
+    let nz = model.nz;
+    let mut xq_star = vec![0.0_f64; nz];
+    xq_star[0] = 0.5 * model.dq[0];
+    for k in 1..nz {
+        xq_star[k] = xq_star[k - 1] + 0.5 * (model.dq[k] + model.dq[k - 1]);
+    }
+    Ok(xq_star)
+}
+
+/// Tabulated scalar target profile for `do_relax_angular_momentum` and
+/// `do_relax_entropy` (`star/job/run_star_support.f90:2847-3005`).
+#[derive(Debug, Clone, PartialEq)]
+pub struct ScalarProfile {
+    /// Number of radial target points (`num_pts >= 2`).
+    pub num_pts: usize,
+    /// Exterior mass coordinate $x_q = 1 - q$ (dimensionless, monotonic, `len = num_pts`).
+    pub xq: Vec<f64>,
+    /// Target profile values at each `xq` knot (e.g. specific angular momentum
+    /// in $\mathrm{cm^2\,s^{-1}}$ or specific entropy in $\mathrm{erg\,g^{-1}\,K^{-1}}$).
+    pub values: Vec<f64>,
+}
+
+/// Source interpretation for `relax_entropy_filename` columns matching
+/// `get_entropy_for_relax_from_eos` (`star/job/run_star_support.f90:2932-2995`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum EntropyProfileSource {
+    /// Columns are `(xq, entropy)` directly (`''`).
+    #[default]
+    Direct,
+    /// Columns are `(xq, rho, T)` evaluated via `eosDT_get` (`'eosDT'`).
+    EosDt,
+    /// Columns are `(xq, P_gas, T)` evaluated via `eosPT_get` (`'eosPT'`).
+    EosPt,
+    /// Columns are `(xq, rho, E)` evaluated via `eosDT_get_T` (`'eosDE'`).
+    EosDe,
+}
+
+impl EntropyProfileSource {
+    /// Parses upstream `get_entropy_for_relax_from_eos` string (`''`, `'eosDT'`,
+    /// `'eosPT'`, or `'eosDE'`).
+    ///
+    /// # Errors
+    /// Returns [`StarError::InvalidInput`] for any other value.
+    pub fn from_mesa_str(raw: &str) -> Result<Self, StarError> {
+        match raw.trim() {
+            "" => Ok(Self::Direct),
+            "eosDT" => Ok(Self::EosDt),
+            "eosPT" => Ok(Self::EosPt),
+            "eosDE" => Ok(Self::EosDe),
+            other => Err(StarError::InvalidInput(format!(
+                "invalid value for get_entropy_for_relax_from_eos = {other}"
+            ))),
+        }
+    }
+}
+
+fn next_finite_fortran_f64<'a>(
+    tokens: &mut impl Iterator<Item = &'a str>,
+    profile_kind: &str,
+    field: &str,
+    row_1based: usize,
+) -> Result<f64, StarError> {
+    let tok = tokens.next().ok_or_else(|| {
+        StarError::InvalidInput(format!(
+            "missing {field} at {profile_kind} row {row_1based}"
+        ))
+    })?;
+    let val = crate::zams::parse_fortran_f64(tok)?;
+    if !val.is_finite() {
+        return Err(StarError::InvalidInput(format!(
+            "non-finite {field} at {profile_kind} row {row_1based}"
+        )));
+    }
+    Ok(val)
+}
+
+fn parse_scalar_header<'a>(
+    lines: &mut impl Iterator<Item = &'a str>,
+    profile_kind: &str,
+) -> Result<usize, StarError> {
+    let header = lines.next().ok_or_else(|| {
+        StarError::InvalidInput(format!(
+            "{profile_kind} is empty; expected num_pts"
+        ))
+    })?;
+    let tok = header.split_whitespace().next().ok_or_else(|| {
+        StarError::InvalidInput(format!(
+            "missing num_pts in {profile_kind} header"
+        ))
+    })?;
+    let num_pts: usize = tok.parse().map_err(|e| {
+        StarError::InvalidInput(format!(
+            "invalid num_pts in {profile_kind} header: {e}"
+        ))
+    })?;
+    if num_pts < 2 {
+        return Err(StarError::InvalidInput(format!(
+            "{profile_kind} requires num_pts >= 2, got {num_pts}"
+        )));
+    }
+    Ok(num_pts)
+}
+
+/// Parses a two-column `(xq, value)` ASCII relaxation profile (`num_pts` header
+/// followed by `num_pts` rows of `xq value`, supporting `D`/`d` exponents)
+/// matching `do_relax_initial_angular_momentum` and the direct branch of
+/// `do_relax_initial_entropy` (`star/job/run_star_support.f90:2857-2944`).
+///
+/// # Errors
+/// Returns [`StarError::InvalidInput`] if the header is missing or invalid,
+/// `num_pts < 2`, any token is non-numeric/non-finite, or fewer than `num_pts`
+/// rows exist.
+pub fn parse_scalar_profile_str(
+    content: &str,
+    profile_kind: &str,
+) -> Result<ScalarProfile, StarError> {
+    let mut lines = content
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty());
+    let num_pts = parse_scalar_header(&mut lines, profile_kind)?;
+
+    let mut xq = Vec::with_capacity(num_pts);
+    let mut values = Vec::with_capacity(num_pts);
+    for pt_idx in 0..num_pts {
+        let row_1based = pt_idx + 1;
+        let row = lines.next().ok_or_else(|| {
+            StarError::InvalidInput(format!(
+                "{profile_kind} truncated at row {row_1based} of {num_pts}"
+            ))
+        })?;
+        let mut tokens = row.split_whitespace();
+        xq.push(next_finite_fortran_f64(
+            &mut tokens,
+            profile_kind,
+            "xq",
+            row_1based,
+        )?);
+        values.push(next_finite_fortran_f64(
+            &mut tokens,
+            profile_kind,
+            "value",
+            row_1based,
+        )?);
+    }
+
+    Ok(ScalarProfile {
+        num_pts,
+        xq,
+        values,
+    })
+}
+
+/// Parses `relax_angular_momentum_filename` content into a [`ScalarProfile`]
+/// (`star/job/run_star_support.f90:2847-2889`).
+///
+/// # Errors
+/// Returns [`StarError::InvalidInput`] if parsing fails.
+pub fn parse_angular_momentum_profile_str(
+    content: &str,
+) -> Result<ScalarProfile, StarError> {
+    parse_scalar_profile_str(content, "angular momentum profile")
+}
+
+/// Parses direct `relax_entropy_filename` content `(xq, entropy)` into a
+/// [`ScalarProfile`] (`star/job/run_star_support.f90:2891-2944`).
+///
+/// # Errors
+/// Returns [`StarError::InvalidInput`] if parsing fails.
+pub fn parse_entropy_profile_str(
+    content: &str,
+) -> Result<ScalarProfile, StarError> {
+    parse_scalar_profile_str(content, "entropy profile")
+}
+
+/// Parses `relax_entropy_filename` content with optional EOS conversion
+/// (`''`, `'eosDT'`, `'eosPT'`, or `'eosDE'`, matching
+/// `do_relax_initial_entropy` in `star/job/run_star_support.f90:2891-3005`).
+///
+/// # Errors
+/// Returns [`StarError::InvalidInput`] if parsing, zone lookup, or EOS
+/// evaluation fails.
+pub fn parse_entropy_profile_with_eos_str(
+    content: &str,
+    source: EntropyProfileSource,
+    model: &StarModel,
+    eos_cfg: &flexmesa_eos::EosConfig,
+) -> Result<ScalarProfile, StarError> {
+    if source == EntropyProfileSource::Direct {
+        return parse_entropy_profile_str(content);
+    }
+    let nz = model.nz;
+    let species = model.species;
+    if nz == 0
+        || species == 0
+        || model.q.len() < nz
+        || model.xa.len() != nz * species
+        || model.chem_id.len() != species
+    {
+        return Err(StarError::InvalidInput(
+            "entropy EOS profile requires valid non-empty model arrays"
+                .to_string(),
+        ));
+    }
+
+    let profile_kind = "entropy EOS profile";
+    let mut lines = content
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty());
+    let num_pts = parse_scalar_header(&mut lines, profile_kind)?;
+
+    let ht = crate::micro::builtin_helm_table()?;
+    let catalog = flexmesa_chem::NuclideCatalog::builtin_ref();
+    let mut xq = Vec::with_capacity(num_pts);
+    let mut values = Vec::with_capacity(num_pts);
+
+    for pt_idx in 0..num_pts {
+        let row_1based = pt_idx + 1;
+        let row = lines.next().ok_or_else(|| {
+            StarError::InvalidInput(format!(
+                "{profile_kind} truncated at row {row_1based} of {num_pts}"
+            ))
+        })?;
+        let mut tokens = row.split_whitespace();
+        let xq_i = next_finite_fortran_f64(
+            &mut tokens,
+            profile_kind,
+            "xq",
+            row_1based,
+        )?;
+        let var1 = next_finite_fortran_f64(
+            &mut tokens,
+            profile_kind,
+            "var1",
+            row_1based,
+        )?;
+        let var2 = next_finite_fortran_f64(
+            &mut tokens,
+            profile_kind,
+            "var2",
+            row_1based,
+        )?;
+        if var1 <= 0.0 || var2 <= 0.0 {
+            return Err(StarError::InvalidInput(format!(
+                "{profile_kind} requires positive EOS inputs at row \
+                 {row_1based}, got ({var1}, {var2})"
+            )));
+        }
+
+        // Nearest zone matching `1 - q(k) <= xq(i) <= 1 - q(k+1)` (`run_star_support.f90:2947-2951`).
+        let mut zone = nz - 1;
+        for k in 0..(nz - 1) {
+            if (1.0 - model.q[k]) <= xq_i && (1.0 - model.q[k + 1]) >= xq_i {
+                zone = k;
+                break;
+            }
+        }
+        let xa_k = &model.xa[zone * species..(zone + 1) * species];
+        let ln_s = match source {
+            EntropyProfileSource::Direct => unreachable!(),
+            EntropyProfileSource::EosDt => {
+                let out = flexmesa_eos::eos_dt_get(
+                    ht,
+                    var1,
+                    var2,
+                    &model.chem_id,
+                    xa_k,
+                    eos_cfg,
+                )
+                .map_err(|e| {
+                    StarError::InvalidInput(format!("eosDT_get failed: {e}"))
+                })?;
+                out.res[flexmesa_eos::I_LN_S]
+            }
+            EntropyProfileSource::EosPt => {
+                let out = flexmesa_eos::eos_pt_get_with_linear(
+                    ht,
+                    &model.chem_id,
+                    xa_k,
+                    flexmesa_math::log10(var1),
+                    flexmesa_math::log10(var2),
+                    Some(var1),
+                    Some(var2),
+                    eos_cfg,
+                )
+                .map_err(|e| {
+                    StarError::InvalidInput(format!("eosPT_get failed: {e}"))
+                })?;
+                out.eos.res[flexmesa_eos::I_LN_S]
+            }
+            EntropyProfileSource::EosDe => {
+                let (abar_k, zbar_k) = if let (Some(a), Some(z)) = (
+                    model.abar.get(zone).copied().filter(|&v| v > 0.0),
+                    model.zbar.get(zone).copied().filter(|&v| v >= 0.0),
+                ) {
+                    (a, z)
+                } else {
+                    let comp = flexmesa_chem::get_composition_info(
+                        catalog,
+                        &model.chem_id,
+                        xa_k,
+                        true,
+                    )
+                    .map_err(|e| {
+                        StarError::InvalidInput(format!(
+                            "eosDE composition info failed: {e}"
+                        ))
+                    })?;
+                    (comp.abar, comp.zbar)
+                };
+                let t_guess_gas = 2.0 * var2 * abar_k * flexmesa_const::MP
+                    / (3.0 * flexmesa_const::KERG * (1.0 + zbar_k));
+                let t_guess_rad =
+                    flexmesa_math::pow(var2 / flexmesa_const::CRAD, 0.25);
+                let log_t_guess =
+                    flexmesa_math::log10(t_guess_gas.min(t_guess_rad));
+                let log_t_tol = 1.0e-8;
+                let log_e_tol = 1.0e-8;
+                let max_iters = 20;
+                let inv = flexmesa_eos::eos_dt_get_t(
+                    ht,
+                    &model.chem_id,
+                    xa_k,
+                    flexmesa_math::log10(var1),
+                    flexmesa_eos::I_LN_E as isize,
+                    flexmesa_math::log10(var2) * flexmesa_const::LN10,
+                    log_t_guess,
+                    log_t_tol,
+                    log_e_tol * flexmesa_const::LN10,
+                    max_iters,
+                    eos_cfg,
+                )
+                .map_err(|e| {
+                    StarError::InvalidInput(format!(
+                        "eosDT_get_T (as eosDE) failed: {e}"
+                    ))
+                })?;
+                inv.eos.res[flexmesa_eos::I_LN_S]
+            }
+        };
+        xq.push(xq_i);
+        values.push(flexmesa_math::exp(ln_s));
+    }
+
+    Ok(ScalarProfile {
+        num_pts,
+        xq,
+        values,
+    })
+}
+
+/// Steffen (1990) piecewise-monotonic cubic spline interpolant for 1D scalar
+/// relaxation targets (`do_relax_entropy` and `do_relax_angular_momentum`,
+/// `star/private/relax.f90:788-807, 1044-1063`).
+#[derive(Debug, Clone, PartialEq)]
+pub struct RelaxScalarInterpolant {
+    xq: Vec<f64>,
+    coeffs: Vec<flexmesa_interp1d::CubicCoeffs>,
+}
+
+impl RelaxScalarInterpolant {
+    /// Constructs the piecewise-monotonic spline from tabulated `(xq, values)`
+    /// slices (`interp_pm` in `store_rpar`, `relax.f90:803-805, 1059-1061`).
+    ///
+    /// # Errors
+    /// Returns [`StarError::InvalidInput`] if slices differ in length, have
+    /// fewer than 2 points, or `interp_pm` rejects `xq`.
+    pub fn from_slices(xq: &[f64], values: &[f64]) -> Result<Self, StarError> {
+        if xq.len() != values.len() || xq.len() < 2 {
+            return Err(StarError::InvalidInput(format!(
+                "scalar relax interpolant requires matching slices of len >= 2, \
+                 got ({}, {})",
+                xq.len(),
+                values.len()
+            )));
+        }
+        let coeffs = flexmesa_interp1d::interp_pm(xq, values).map_err(|e| {
+            StarError::InvalidInput(format!("scalar interp_pm failed: {e}"))
+        })?;
+        Ok(Self {
+            xq: xq.to_vec(),
+            coeffs,
+        })
+    }
+
+    /// Constructs the interpolant from a parsed [`ScalarProfile`].
+    ///
+    /// # Errors
+    /// Returns [`StarError::InvalidInput`] if `profile` has inconsistent lengths
+    /// or `interp_pm` rejects `profile.xq`.
+    pub fn from_profile(profile: &ScalarProfile) -> Result<Self, StarError> {
+        if profile.xq.len() != profile.num_pts
+            || profile.values.len() != profile.num_pts
+        {
+            return Err(StarError::InvalidInput(
+                "invalid ScalarProfile dimensions for interp_pm".to_string(),
+            ));
+        }
+        Self::from_slices(&profile.xq, &profile.values)
+    }
+
+    /// Number of target profile knots.
+    #[must_use]
+    pub fn num_pts(&self) -> usize {
+        self.xq.len()
+    }
+
+    /// Target exterior mass coordinates `xq = 1 - q` (dimensionless).
+    #[must_use]
+    pub fn xq(&self) -> &[f64] {
+        &self.xq
+    }
+
+    /// Interpolates the scalar target profile onto cell centers `xq_star` of
+    /// `model`, returning `(xq_star, vals)` (`interp_values` in
+    /// `relax.f90:905, 939, 1162, 1191`).
+    ///
+    /// # Errors
+    /// Returns [`StarError::InvalidInput`] if `model.nz == 0`, `model.dq` is
+    /// shorter than `model.nz`, or `interp_values` fails.
+    pub fn interpolate_to_model(
+        &self,
+        model: &StarModel,
+    ) -> Result<(Vec<f64>, Vec<f64>), StarError> {
+        let xq_star = cell_center_xq(model)?;
+        let vals =
+            flexmesa_interp1d::interp_values(&self.xq, &self.coeffs, &xq_star)
+                .map_err(|e| {
+                    StarError::InvalidInput(format!(
+                        "scalar interp_values failed: {e}"
+                    ))
+                })?;
+        Ok((xq_star, vals))
     }
 }

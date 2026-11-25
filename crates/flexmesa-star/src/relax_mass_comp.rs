@@ -10,20 +10,27 @@
 //! the `interp_pm` target profile) lives in [`crate::relax_comp`]; this module
 //! holds only the evolve loops.
 
+use std::path::Path;
+
 use flexmesa_const::{FOUR_THIRDS_PI, M_SUN, ONE_THIRD, SECYER};
 
 use crate::controls::StarError;
 use crate::core_boundaries::k_for_q_1based;
-use crate::inlist_runner::StarExtras;
+use crate::hydro_state::{
+    OtherAdjustMltGradtFractionHandle, OtherOvershootingSchemeHandle,
+};
+use crate::inlist::InlistBundle;
+use crate::inlist_runner::{ExtrasDirective, RspBuildOutcome, StarExtras};
 use crate::model::StarModel;
 use crate::relax_comp::{
     eval_current_y, eval_current_z, set_y, set_z, CompositionProfile,
-    RelaxCompositionInterpolants,
+    RelaxCompositionInterpolants, RelaxScalarInterpolant,
 };
 use crate::relax_driver::{
     do_internal_evolve, setup_before_relax, turn_off_winds, RelaxHookResult,
     RelaxHooks, RELAX_FINISHED_OKAY,
 };
+use crate::rsp_eos_kap::RspChemCache;
 
 /// `min_z` (`star/private/relax.f90:58`).
 const MIN_Z: f64 = 1.0e-12;
@@ -841,7 +848,6 @@ pub(crate) fn do_relax_core(
     model.controls.max_years_for_timestep = max_years_for_timestep;
     res
 }
-
 /// `set_new_mass_for_relax_M_center` (`star/private/relax.f90:2477-2488`).
 fn set_new_mass_for_relax_m_center(model: &mut StarModel, new_mass: f64) {
     model.mstar = new_mass * M_SUN;
@@ -946,7 +952,6 @@ pub(crate) fn do_relax_m_center(
     model.controls.max_years_for_timestep = max_years_for_timestep;
     res
 }
-
 /// `before_evolve_relax_tau_factor` and `relax_tau_factor_check_model`
 /// (`star/private/relax.f90:1442-1502`).
 struct RelaxTauFactor {
@@ -1106,5 +1111,477 @@ pub(crate) fn do_relax_irradiation(
     let res = do_internal_evolve(model, &mut hooks, true, extras);
     model.controls.max_model_number = max_model_number;
     model.controls.max_years_for_timestep = max_years_for_timestep;
+    res
+}
+
+/// Configuration for [`do_relax_angular_momentum`] matching MESA `&star_job`
+/// defaults (`star/defaults/star_job.defaults:1083-1088`,
+/// `star/private/relax.f90:947-1232`).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct RelaxAngularMomentumConfig {
+    /// Angular momentum relaxation timescale $\tau_J$ in years
+    /// (`timescale_for_relax_angular_momentum`, `1e-10` default).
+    pub timescale_for_relax_angular_momentum: f64,
+    /// Maximum timestep during angular momentum relaxation in years
+    /// (`max_dt_for_relax_angular_momentum`, `1e-9` default).
+    pub max_dt_for_relax_angular_momentum: f64,
+    /// Target relaxation duration in units of
+    /// `timescale_for_relax_angular_momentum`
+    /// (`num_timescales_for_relax_angular_momentum`, `1000.0` default).
+    pub num_timescales_for_relax_angular_momentum: f64,
+    /// Hold constant $\Omega$ across innermost cells where `xq > xq_last`
+    /// (`relax_angular_momentum_constant_omega_center`, `true` default).
+    pub constant_omega_center: bool,
+}
+
+impl Default for RelaxAngularMomentumConfig {
+    fn default() -> Self {
+        Self {
+            timescale_for_relax_angular_momentum: 1.0e-10,
+            max_dt_for_relax_angular_momentum: 1.0e-9,
+            num_timescales_for_relax_angular_momentum: 1000.0,
+            constant_omega_center: true,
+        }
+    }
+}
+
+/// Evaluates `angular_momentum_relax_other_torque`
+/// (`star/private/relax.f90:1171-1232`) across every zone of `model`.
+fn eval_relax_extra_jdot(
+    interpolant: &RelaxScalarInterpolant,
+    config: RelaxAngularMomentumConfig,
+    model: &StarModel,
+) -> Result<Vec<f64>, StarError> {
+    let nz = model.nz;
+    if model.j_rot.len() < nz {
+        return Err(StarError::InvalidInput(format!(
+            "do_relax_angular_momentum requires j_rot length {} >= nz {nz}",
+            model.j_rot.len()
+        )));
+    }
+    let (xq_star, vals) = interpolant.interpolate_to_model(model)?;
+    let mut jdot = vec![0.0_f64; nz];
+    let dt = model.dt;
+    if !dt.is_finite() || dt <= 0.0 {
+        return Ok(jdot);
+    }
+    let tau_sec = config.timescale_for_relax_angular_momentum * SECYER;
+    let factor = 1.0 - flexmesa_math::exp(-dt / tau_sec);
+    for k in 0..nz {
+        jdot[k] = factor * (vals[k] - model.j_rot[k]) / dt;
+    }
+    if config.constant_omega_center {
+        if let Some(&x_last) = interpolant.xq().last() {
+            if model.aux.i_rot.len() < nz {
+                return Err(StarError::InvalidInput(format!(
+                    "do_relax_angular_momentum requires i_rot length {} >= nz \
+                     {nz}",
+                    model.aux.i_rot.len()
+                )));
+            }
+            // Matches `relax.f90:1208-1213` (full loop scan without exit).
+            let mut k_inner: Option<usize> = None;
+            for k in 1..nz {
+                if xq_star[k] > x_last {
+                    k_inner = Some(k - 1);
+                }
+            }
+            if let Some(ki) = k_inner {
+                let i_rot_ki = model.aux.i_rot[ki];
+                if !i_rot_ki.is_finite() || i_rot_ki <= 0.0 {
+                    return Err(StarError::ConvergenceFailure(format!(
+                        "relax_angular_momentum non-positive i_rot[{ki}] = \
+                         {i_rot_ki}"
+                    )));
+                }
+                let omega_target = vals[ki] / i_rot_ki;
+                for k in (ki + 1)..nz {
+                    let j_rot_target = omega_target * model.aux.i_rot[k];
+                    jdot[k] = factor * (j_rot_target - model.j_rot[k]) / dt;
+                }
+            }
+        }
+    }
+    Ok(jdot)
+}
+
+/// Delegating [`StarExtras`] adapter that supplies `other_torque` during
+/// [`do_relax_angular_momentum`] while forwarding all other hooks to `inner`.
+struct RelaxExtrasAdapter<'a> {
+    inner: &'a mut dyn StarExtras,
+    interpolant: &'a RelaxScalarInterpolant,
+    config: RelaxAngularMomentumConfig,
+}
+
+impl StarExtras for RelaxExtrasAdapter<'_> {
+    fn extras_controls(
+        &mut self,
+        model: &mut StarModel,
+    ) -> Result<(), StarError> {
+        self.inner.extras_controls(model)
+    }
+
+    fn extras_startup(
+        &mut self,
+        m: &mut StarModel,
+        r: bool,
+    ) -> Result<(), StarError> {
+        self.inner.extras_startup(m, r)
+    }
+
+    fn extras_start_step(&mut self, m: &mut StarModel) -> ExtrasDirective {
+        self.inner.extras_start_step(m)
+    }
+
+    fn extras_check_model(&mut self, m: &mut StarModel) -> ExtrasDirective {
+        self.inner.extras_check_model(m)
+    }
+
+    fn other_timestep_limit(
+        &mut self,
+        m: &mut StarModel,
+        skip_hard_limit: bool,
+        dt: f64,
+    ) -> (ExtrasDirective, f64) {
+        self.inner.other_timestep_limit(m, skip_hard_limit, dt)
+    }
+
+    fn extras_finish_step(&mut self, m: &mut StarModel) -> ExtrasDirective {
+        self.inner.extras_finish_step(m)
+    }
+
+    fn extras_after_evolve(
+        &mut self,
+        m: &mut StarModel,
+    ) -> Result<(), StarError> {
+        self.inner.extras_after_evolve(m)
+    }
+
+    fn other_cgrav(&self, m: &mut StarModel) -> Result<(), StarError> {
+        self.inner.other_cgrav(m)
+    }
+
+    fn other_alpha_mlt(&self, m: &mut StarModel) {
+        self.inner.other_alpha_mlt(m);
+    }
+
+    fn other_wind(
+        &self,
+        m: &StarModel,
+        l: f64,
+        ms: f64,
+        r: f64,
+        t: f64,
+    ) -> Result<Option<f64>, StarError> {
+        self.inner.other_wind(m, l, ms, r, t)
+    }
+
+    fn other_adjust_mdot(
+        &mut self,
+        m: &mut StarModel,
+        current_mdot: f64,
+    ) -> Result<Option<f64>, StarError> {
+        self.inner.other_adjust_mdot(m, current_mdot)
+    }
+
+    fn other_torque(&self, m: &StarModel) -> Option<Vec<f64>> {
+        eval_relax_extra_jdot(self.interpolant, self.config, m).ok()
+    }
+
+    fn apply_other_torque(
+        &mut self,
+        m: &mut StarModel,
+    ) -> Result<(), StarError> {
+        let jdot = eval_relax_extra_jdot(self.interpolant, self.config, m)?;
+        m.aux.extra_jdot.resize(m.nz, 0.0);
+        m.aux.extra_jdot[..m.nz].copy_from_slice(&jdot);
+        Ok(())
+    }
+
+    fn other_torque_implicit(
+        &mut self,
+        _m: &mut StarModel,
+    ) -> Result<(), StarError> {
+        Ok(())
+    }
+
+    fn other_energy(&self, m: &StarModel) -> Option<Vec<f64>> {
+        self.inner.other_energy(m)
+    }
+
+    fn other_build_initial_model(
+        &mut self,
+        bundle: &InlistBundle,
+    ) -> Result<Option<StarModel>, StarError> {
+        self.inner.other_build_initial_model(bundle)
+    }
+
+    fn other_rsp_build_model(
+        &mut self,
+        bundle: &InlistBundle,
+    ) -> Result<Option<RspBuildOutcome>, StarError> {
+        self.inner.other_rsp_build_model(bundle)
+    }
+
+    fn other_rsp_linear_analysis(
+        &mut self,
+        model: &mut StarModel,
+        chem: &RspChemCache,
+        log_dir: Option<&Path>,
+    ) -> Result<bool, StarError> {
+        self.inner.other_rsp_linear_analysis(model, chem, log_dir)
+    }
+
+    fn extra_history_columns(&self, m: &StarModel) -> Vec<(String, f64)> {
+        self.inner.extra_history_columns(m)
+    }
+
+    fn extra_profile_columns(
+        &self,
+        m: &StarModel,
+    ) -> Result<Vec<(String, Vec<f64>)>, StarError> {
+        self.inner.extra_profile_columns(m)
+    }
+
+    fn extra_history_header_items(
+        &self,
+        m: &StarModel,
+    ) -> Result<Vec<(String, f64)>, StarError> {
+        self.inner.extra_history_header_items(m)
+    }
+
+    fn extra_profile_header_items(
+        &self,
+        m: &StarModel,
+    ) -> Result<Vec<(String, f64)>, StarError> {
+        self.inner.extra_profile_header_items(m)
+    }
+
+    fn set_staged_case_dir(&mut self, case_dir: &Path) {
+        self.inner.set_staged_case_dir(case_dir);
+    }
+
+    fn other_overshooting_scheme_handle(
+        &self,
+    ) -> Option<OtherOvershootingSchemeHandle> {
+        self.inner.other_overshooting_scheme_handle()
+    }
+
+    fn other_adjust_mlt_gradt_fraction_handle(
+        &self,
+    ) -> Option<OtherAdjustMltGradtFractionHandle> {
+        self.inner.other_adjust_mlt_gradt_fraction_handle()
+    }
+}
+
+fn validate_angular_momentum_relax_inputs(
+    timescale: f64,
+    max_dt: f64,
+    num_timescales: f64,
+    xq: &[f64],
+    values: &[f64],
+) -> Result<RelaxScalarInterpolant, StarError> {
+    if !timescale.is_finite() || timescale <= 0.0 {
+        return Err(StarError::InvalidInput(format!(
+            "timescale_for_relax_angular_momentum must be positive and finite, \
+             got {timescale}"
+        )));
+    }
+    if !max_dt.is_finite() || max_dt <= 0.0 {
+        return Err(StarError::InvalidInput(format!(
+            "max_dt_for_relax_angular_momentum must be positive and finite, \
+             got {max_dt}"
+        )));
+    }
+    if !num_timescales.is_finite() || num_timescales < 0.0 {
+        return Err(StarError::InvalidInput(format!(
+            "num_timescales_for_relax_angular_momentum must be non-negative and \
+             finite, got {num_timescales}"
+        )));
+    }
+    if values.len() != xq.len() || values.len() < 2 {
+        return Err(StarError::InvalidInput(format!(
+            "do_relax_angular_momentum requires matching slices of len >= 2, \
+             got ({}, {})",
+            xq.len(),
+            values.len()
+        )));
+    }
+    if values.iter().any(|&v| !v.is_finite()) {
+        return Err(StarError::InvalidInput(String::from(
+            "do_relax_angular_momentum requires finite target values",
+        )));
+    }
+    RelaxScalarInterpolant::from_slices(xq, values)
+}
+
+struct SavedScalarRelaxState {
+    max_model_number: Option<usize>,
+    dxdt_nuc_factor: f64,
+    mix_factor: f64,
+    do_element_diffusion: bool,
+    dt_next: f64,
+    star_age: f64,
+    star_age_old: f64,
+    time_sec: f64,
+    time_old_sec: f64,
+    hist_time_sec: f64,
+    hist_time_old_sec: f64,
+}
+
+impl SavedScalarRelaxState {
+    fn enter(
+        model: &mut StarModel,
+        max_steps_to_use: usize,
+        max_dt_years: f64,
+    ) -> (Self, usize) {
+        let max_model_number_target = model
+            .model_number
+            .saturating_add(max_steps_to_use)
+            .saturating_add(1);
+        let saved = Self {
+            max_model_number: model.controls.max_model_number,
+            dxdt_nuc_factor: model.controls.dxdt_nuc_factor,
+            mix_factor: model.controls.mix_factor,
+            do_element_diffusion: model.controls.do_element_diffusion,
+            dt_next: model.dt_next,
+            star_age: model.star_age,
+            star_age_old: model.star_age_old,
+            time_sec: model.time_sec,
+            time_old_sec: model.time_old_sec,
+            hist_time_sec: model.aux.step_hist.time_sec,
+            hist_time_old_sec: model.aux.step_hist.time_old_sec,
+        };
+        model.controls.max_model_number = Some(max_model_number_target);
+        model.controls.dxdt_nuc_factor = 0.0;
+        model.controls.mix_factor = 0.0;
+        model.controls.do_element_diffusion = false;
+        model.dt_next = model.dt_next.min(max_dt_years * SECYER);
+        model.star_age = 0.0;
+        model.star_age_old = 0.0;
+        model.time_sec = 0.0;
+        model.time_old_sec = 0.0;
+        model.aux.step_hist.time_sec = 0.0;
+        model.aux.step_hist.time_old_sec = 0.0;
+        (saved, max_model_number_target)
+    }
+
+    fn restore(self, model: &mut StarModel) {
+        model.controls.max_model_number = self.max_model_number;
+        model.dt_next = self.dt_next;
+        model.controls.dxdt_nuc_factor = self.dxdt_nuc_factor;
+        model.controls.mix_factor = self.mix_factor;
+        model.controls.do_element_diffusion = self.do_element_diffusion;
+        model.star_age = self.star_age;
+        model.star_age_old = self.star_age_old;
+        model.time_sec = self.time_sec;
+        model.time_old_sec = self.time_old_sec;
+        model.aux.step_hist.time_sec = self.hist_time_sec;
+        model.aux.step_hist.time_old_sec = self.hist_time_old_sec;
+    }
+}
+
+/// `before_evolve_relax_angular_momentum`,
+/// `relax_angular_momentum_adjust_model`, and
+/// `relax_angular_momentum_check_model` (`star/private/relax.f90:1067-1169`).
+struct RelaxAngularMomentum<'a> {
+    interpolant: &'a RelaxScalarInterpolant,
+    config: RelaxAngularMomentumConfig,
+    max_model_number: usize,
+}
+
+impl RelaxHooks for RelaxAngularMomentum<'_> {
+    fn before_evolve(
+        &mut self,
+        model: &mut StarModel,
+    ) -> Result<(), StarError> {
+        setup_before_relax(model);
+        Ok(())
+    }
+
+    fn check_model(
+        &mut self,
+        model: &mut StarModel,
+    ) -> Result<RelaxHookResult, StarError> {
+        let (_, vals) = self.interpolant.interpolate_to_model(model)?;
+        if vals.iter().any(|v| !v.is_finite()) {
+            return Err(StarError::ConvergenceFailure(
+                "relax_angular_momentum_check_model produced non-finite \
+                 target"
+                    .to_string(),
+            ));
+        }
+        if model.star_age
+            >= self.config.timescale_for_relax_angular_momentum
+                * self.config.num_timescales_for_relax_angular_momentum
+            || model.model_number >= self.max_model_number
+        {
+            return Ok(RelaxHookResult::Terminate(String::from(
+                RELAX_FINISHED_OKAY,
+            )));
+        }
+        Ok(RelaxHookResult::KeepGoing)
+    }
+}
+
+/// `do_relax_angular_momentum` (`star/private/relax.f90:947-1232`): relaxes
+/// specific angular momentum `j_rot` toward `(xq, angular_momentum)` via
+/// explicit torque over
+/// `num_timescales_for_relax_angular_momentum * timescale_for_relax_angular_momentum`
+/// years (or at most `max_steps_to_use` steps) with nuclear burning, mixing,
+/// angular-momentum diffusion (`am_d_mix_factor`), and element diffusion
+/// disabled.
+///
+/// # Errors
+/// Returns [`StarError::InvalidInput`] for non-positive or non-finite timing
+/// controls or invalid profile grids, or [`StarError`] when the internal
+/// evolution loop fails.
+pub fn do_relax_angular_momentum(
+    model: &mut StarModel,
+    max_steps_to_use: usize,
+    angular_momentum: &[f64],
+    xq: &[f64],
+    config: RelaxAngularMomentumConfig,
+    extras: &mut dyn StarExtras,
+) -> Result<(), StarError> {
+    let interpolant = validate_angular_momentum_relax_inputs(
+        config.timescale_for_relax_angular_momentum,
+        config.max_dt_for_relax_angular_momentum,
+        config.num_timescales_for_relax_angular_momentum,
+        xq,
+        angular_momentum,
+    )?;
+
+    let (saved, max_model_number_target) = SavedScalarRelaxState::enter(
+        model,
+        max_steps_to_use,
+        config.max_dt_for_relax_angular_momentum,
+    );
+    let am_d_mix_factor = model.controls.mix_wind.am_d_mix_factor;
+    let max_timestep = model.controls.ts_stop.max_timestep;
+    let use_other_torque = model.controls.use_other_torque;
+    model.controls.mix_wind.am_d_mix_factor = 0.0;
+    model.controls.ts_stop.max_timestep =
+        config.max_dt_for_relax_angular_momentum * SECYER;
+    model.controls.use_other_torque = true;
+
+    let mut hooks = RelaxAngularMomentum {
+        interpolant: &interpolant,
+        config,
+        max_model_number: max_model_number_target,
+    };
+    let mut adapter = RelaxExtrasAdapter {
+        inner: extras,
+        interpolant: &interpolant,
+        config,
+    };
+    let res = do_internal_evolve(model, &mut hooks, true, &mut adapter);
+
+    saved.restore(model);
+    model.controls.mix_wind.am_d_mix_factor = am_d_mix_factor;
+    model.controls.ts_stop.max_timestep = max_timestep;
+    model.controls.use_other_torque = use_other_torque;
+    model.aux.extra_jdot.fill(0.0);
+    model.aux.extra_omegadot.fill(0.0);
     res
 }

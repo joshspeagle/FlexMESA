@@ -6,6 +6,14 @@
 
 use crate::controls::{StarError, StarJobControls};
 use crate::model::StarModel;
+pub use crate::relax_comp::{
+    cell_center_xq, parse_angular_momentum_profile_str,
+    parse_entropy_profile_str, parse_entropy_profile_with_eos_str,
+    EntropyProfileSource, RelaxScalarInterpolant, ScalarProfile,
+};
+pub use crate::relax_mass_comp::{
+    do_relax_angular_momentum, RelaxAngularMomentumConfig,
+};
 
 /// `set_uniform_initial_composition` (`star/job/run_star_support.f90:2198-2234`):
 /// replaces every zone's mass fractions with the uniform mixture that

@@ -42,12 +42,15 @@ pub fn do_brunt_b(model: &mut StarModel) -> Result<(), StarError> {
     if model.aux.mixing.unsmoothed_brunt_b.len() != nz {
         model.aux.mixing.resize(nz);
     }
+    if !model.controls.calculate_brunt_b {
+        // `brunt.f90:53-57`: set `brunt_B` and `unsmoothed_brunt_B` to NaN.
+        model.brunt_b.fill(f64::NAN);
+        model.aux.mixing.unsmoothed_brunt_b.fill(f64::NAN);
+        return Ok(());
+    }
     model.brunt_b.fill(0.0);
     model.aux.mixing.unsmoothed_brunt_b.fill(0.0);
     model.aux.brunt_n2_composition_term.fill(0.0);
-    if !model.controls.calculate_brunt_b {
-        return Ok(());
-    }
 
     let species = model.species;
     let use_gradmux = model.controls.use_brunt_gradmux_form || species == 0;
@@ -178,14 +181,18 @@ fn eval_gradmux_brunt_b(
 /// `star/private/brunt.f90:110-181`).
 pub fn do_brunt_n2(model: &mut StarModel) -> Result<(), StarError> {
     let nz = model.nz;
-    model.brunt_n2.fill(0.0);
-    model.aux.brunt_n2_composition_term.fill(0.0);
-    if nz == 0
-        || !(model.controls.calculate_brunt_b
-            && model.controls.calculate_brunt_n2)
-    {
+    if nz == 0 {
         return Ok(());
     }
+    if !(model.controls.calculate_brunt_b && model.controls.calculate_brunt_n2)
+    {
+        // `brunt.f90:128-132`: set `brunt_N2` and composition term to NaN.
+        model.brunt_n2.fill(f64::NAN);
+        model.aux.brunt_n2_composition_term.fill(f64::NAN);
+        return Ok(());
+    }
+    model.brunt_n2.fill(0.0);
+    model.aux.brunt_n2_composition_term.fill(0.0);
 
     let use_mc = model.controls.use_mass_corrections;
     let mut cell_fac = vec![0.0_f64; nz];
@@ -304,6 +311,18 @@ pub fn eval_surf_bc(model: &mut StarModel) -> Result<(), StarError> {
     let phot = crate::report_utils::eval_photosphere_info(model);
     let teff = atm_black_body_t(phot.l_erg, phot.r_cm);
     model.teff = teff;
+    if model.controls.rsp_flag {
+        // `hydro_vars.f90:421-433`: `RSP_flag` sets `T_surf = T(1)` and
+        // `P_surf = Peos(1)` with zero atmosphere partials.
+        model.surf_pt = SurfPt {
+            ln_t: model.ln_t[0],
+            ln_p: model.ln_peos[0],
+            ..SurfPt::default()
+        };
+        model.ln_peos_surf_ad = StarAdOrder1::constant(model.ln_peos[0]);
+        model.ln_t_surf_ad = StarAdOrder1::constant(model.ln_t[0]);
+        return Ok(());
+    }
     if model.controls.do_starspots {
         // `starspot_tweak_PT` before `get_surf_PT` and `starspot_restore_PT`
         // after it (`hydro_vars.f90:443-456`,
@@ -727,7 +746,7 @@ fn eval_irradiated_surf(model: &mut StarModel) -> Result<SurfPt, StarError> {
 
     let l_surf = model.lum[0];
     let r_surf = model.r[0];
-    let m_surf = model.m_grav[0];
+    let m_surf = model.m[0];
     let cgrav = model.cgrav[0];
     let k0 = model.opacity[0];
     if !k0.is_finite() || k0 <= 0.0 {

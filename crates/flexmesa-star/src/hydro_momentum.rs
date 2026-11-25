@@ -185,12 +185,21 @@ pub fn get_area_info_opt_time_center(
     model: &StarModel,
     k: usize,
 ) -> (StarAdOrder1, StarAdOrder1) {
-    let r_00 = wrap_r_00(model, k);
+    let r_00 = if model.r[k] > 0.0 {
+        wrap_r_00(model, k)
+    } else {
+        StarAdOrder1::variable(model.ln_r[k], I_LNR_00).exp()
+    };
     let r2_00 = r_00.pow2();
-    if model.controls.is_velocity_time_centered(model.model_number_old) {
+    if model
+        .controls
+        .is_velocity_time_centered(model.model_number_old)
+    {
         // `r_start(k)` is saved from `r(k) = exp(lnR(k))` at the start of the
         // step; `ln_r_start` holds that `lnR(k)`.
-        let r_start = flexmesa_math::exp(model.ln_r_start[k]);
+        let r_start = flexmesa_math::exp(
+            model.ln_r_start.get(k).copied().unwrap_or(model.ln_r[k]),
+        );
         let area = FOUR_PI * (r2_00 + r_00 * r_start + r_start * r_start) / 3.0;
         let inv_r2 = 1.0 / (r_00 * r_start);
         (area, inv_r2)
@@ -361,29 +370,37 @@ pub fn expected_non_hse_term(model: &StarModel, k: usize) -> StarAdOrder1 {
         .unwrap_or(StarAdOrder1::ZERO);
 
     let dt = model.dt;
-    let has_vel = (model.controls.v_flag || model.controls.u_flag) && dt > 0.0;
-    if has_vel {
-        let (v_curr, v_st) = if model.controls.v_flag {
-            (model.v[k], model.v_start[k])
+    // Upstream applies Lagrangian acceleration, drag, and `Uq_ad` only when
+    // `v_flag` is active (`hydro_momentum.f90:401-438`).
+    if model.controls.v_flag && dt > 0.0 {
+        let ln_t_old_k =
+            model.ln_t_old.get(k).copied().unwrap_or(model.ln_t[k]);
+        let local_v_flag =
+            ln_t_old_k / LN10 >= model.controls.velocity_logt_lower_bound;
+        let v_00 = StarAdOrder1::variable(model.v[k], I_V_00);
+        let dv_dt = if local_v_flag {
+            let v_st = model.v_start.get(k).copied().unwrap_or(model.v[k]);
+            (v_00 - v_st) / dt
         } else {
-            (model.u[k], model.u_start[k])
+            // `hydro_momentum.f90:413-422`: assume `v_start = 0` and
+            // constant acceleration over `dt`.
+            2.0 * v_00 / dt
         };
-        let v_00 = StarAdOrder1::variable(v_curr, I_V_00);
-        let dv_dt = (v_00 - v_st) / dt;
         non_hse = non_hse - dv_dt;
 
-        if model.controls.v_flag
+        if model.q[k] > model.controls.min_q_for_drag
             && model.controls.drag_coefficient > 0.0
-            && model.q[k] > model.controls.min_q_for_drag
         {
-            // `drag = -s% drag_coefficient*v_00/s% dt` (`hydro_momentum.f90:410`).
-            non_hse = non_hse + -(model.controls.drag_coefficient * v_00 / dt);
+            // `drag = -s% drag_coefficient*v_00/s% dt` (`hydro_momentum.f90:424-428`).
+            non_hse = non_hse - model.controls.drag_coefficient * v_00 / dt;
         }
-    }
 
-    if let Some(&uq) = model.aux.uq_ad.get(k) {
-        if uq.val != 0.0 || uq.d1.iter().any(|&d| d != 0.0) {
-            non_hse = non_hse + uq;
+        if model.controls.rsp2_flag {
+            if let Some(&uq) = model.aux.uq_ad.get(k) {
+                if uq.val != 0.0 || uq.d1.iter().any(|&d| d != 0.0) {
+                    non_hse = non_hse + uq;
+                }
+            }
         }
     }
 
@@ -525,37 +542,41 @@ pub fn do1_radius_eqn(model: &StarModel, k: usize, sys: &mut HenyeySystem) {
                 < SECYER
                     * model.controls.max_dt_yrs_for_velocity_logt_lower_bound);
 
-    let (vel_curr, vel_start) = if model.controls.v_flag {
-        (
-            model.v[k],
-            model.v_start.get(k).copied().unwrap_or(model.v[k]),
-        )
-    } else {
-        (
-            model.u[k],
-            model.u_start.get(k).copied().unwrap_or(model.u[k]),
-        )
-    };
-    let v_var = StarAdOrder1::variable(vel_curr, I_V_00);
     let resid = if force_zero_v {
-        // `resid_ad = v00/s% csound_start(k)` (`hydro_momentum.f90:565-574`).
-        v_var / model.aux.csound_start[k]
+        // `resid_ad = v00/s% csound_start(k)` (`hydro_momentum.f90:565-574`),
+        // checking `u_flag` before `v_flag`.
+        let vel_curr = if model.controls.u_flag {
+            model.u[k]
+        } else {
+            model.v[k]
+        };
+        let v00 = StarAdOrder1::variable(vel_curr, I_V_00);
+        v00 / model.aux.csound_start[k]
     } else {
-        let vel_tc =
-            model.controls.is_velocity_time_centered(model.model_number_old);
-        let v_ad = if model.controls.u_flag && !model.controls.v_flag {
-            let uf_ad = model.aux.u_face_ad.get(k).copied().unwrap_or(v_var);
+        let vel_tc = model
+            .controls
+            .is_velocity_time_centered(model.model_number_old);
+        let v_ad = if model.controls.v_flag {
+            let v_var = StarAdOrder1::variable(model.v[k], I_V_00);
             if vel_tc {
+                let v_st = model.v_start.get(k).copied().unwrap_or(model.v[k]);
+                (v_var + v_st) * 0.5
+            } else {
+                v_var
+            }
+        } else if model.controls.u_flag {
+            let u_var = StarAdOrder1::variable(model.u[k], I_V_00);
+            let uf_ad = model.aux.u_face_ad.get(k).copied().unwrap_or(u_var);
+            if vel_tc {
+                let u_st = model.u_start.get(k).copied().unwrap_or(model.u[k]);
                 let uf_s =
-                    model.aux.u_face_start.get(k).copied().unwrap_or(vel_start);
+                    model.aux.u_face_start.get(k).copied().unwrap_or(u_st);
                 (uf_ad + uf_s) * 0.5
             } else {
                 uf_ad
             }
-        } else if vel_tc {
-            (v_var + vel_start) * 0.5
         } else {
-            v_var
+            StarAdOrder1::ZERO
         };
         // `dxh_lnR = wrap_dxh_lnR(s,k)` carries the Newton change of `lnR`
         // before `edit_lnR` (`auto_diff_support.f90:977-984`), and
@@ -565,7 +586,9 @@ pub fn do1_radius_eqn(model: &StarModel, k: usize, sys: &mut HenyeySystem) {
         let dr_div_r0_actual = dxh_lnr.expm1();
         // `dr_div_r0_expected = v00*s% dt/s% r_start(k)` (`:585-586`), with
         // `r_start = exp(lnR_start)` as `set_rv_info` sets `r`.
-        let r_start = flexmesa_math::exp(model.ln_r_start[k]);
+        let r_start = flexmesa_math::exp(
+            model.ln_r_start.get(k).copied().unwrap_or(model.ln_r[k]),
+        );
         let dr_div_r0_expected = v_ad * model.dt / r_start;
         dr_div_r0_expected - dr_div_r0_actual
     };

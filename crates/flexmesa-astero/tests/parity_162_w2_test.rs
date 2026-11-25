@@ -261,7 +261,7 @@ fn test_unused_rcz_unset_allowed_on_inactive_slot() {
     // Inactive `'Rcz'` slot (`include_constraint_in_chi2_spectro = .false.` and
     // `sigmas_coeff_for_constraint_limit = 0`) keeps `constraint_value = 0.0`
     // (`astero/private/astero_run_support.f90:165`,
-    // `example_astero/src/run_star_extras.f90:72,96-105`).
+    // `astero/test_suite/example_astero/src/run_star_extras.f90:72,96-105`).
     let (sample, stage, _end) = run_constraint_subcase(
         "rcz_unused_ok",
         "&astero_search_controls

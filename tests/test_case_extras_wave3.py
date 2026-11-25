@@ -35,9 +35,6 @@ _EXPECTED_UNPORTED_STAR: dict[str, type[Any]] = {
     "relax_composition_j_entropy": (
         star_extras.RelaxCompositionJEntropyStarExtras
     ),
-    "simplex_solar_calibration": (
-        star_extras.SimplexSolarCalibrationStarExtras
-    ),
     "split_burn_big_net": star_extras.SplitBurnBigNetStarExtras,
     "tzo": star_extras.TzoStarExtras,
     "wd_aic": star_extras.WdAicStarExtras,

@@ -288,13 +288,14 @@ impl AsteroTrackExtras<'_, '_> {
     /// unnamed slots keep the `0.0` initial `constraint_value` buffer
     /// (`astero_run_support.f90:165`).
     ///
-    /// Upstream `run_star_extras.f90:96-105` leaves `val` unset (with
-    /// `ierr = 0`) when `'Rcz'` finds no convective-zone base in
+    /// Upstream `astero/work/src/run_star_extras.f90:96-105` leaves `val`
+    /// unset (with `ierr = 0`) when `'Rcz'` finds no convective-zone base in
     /// `0.25..0.9 Rsun`. Case hooks raise an unset error on that branch so any
     /// slot actually read (`include_constraint_in_chi2_spectro` or active
     /// `sigmas_coeff`) aborts loudly, whereas unused slots leave
     /// `constraint_values[i]` unchanged. Unknown column errors from
-    /// `star_get_history_output` (`run_star_extras.f90:108-109`) always abort.
+    /// `star_get_history_output`
+    /// (`astero/work/src/run_star_extras.f90:108-109`) always abort.
     fn eval_constraint_values(
         &mut self,
         model: &StarModel,

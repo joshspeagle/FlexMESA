@@ -105,10 +105,10 @@ Cases lacking a committed MESA `26.4.1` baseline report `no reference yet` and c
 | `binary` | `star_plus_point_mass_explicit_mdot` | [#160](https://github.com/joshspeagle/FlexMESA/issues/160) | `xa_central_lower_limit` | `xa_central_lower_limit` (521 steps; strict) | Explicit RLOF star+point-mass age and component masses differ from MESA 26.4.1. |
 | `binary` | `wind_fed_bhhmxb` | [#160](https://github.com/joshspeagle/FlexMESA/issues/160) | `xa_central_lower_limit` | `timeout` (297 steps; strict) | Strict binary run passes BH Eddington and wind-budget checks, while implicit RLOF exceeds the 300 s wall-time cap with component mass and age drift (#160, #144). |
 | `astero` | `example_astero` | [#162](https://github.com/joshspeagle/FlexMESA/issues/162) | `xtra1` | `error` (0 steps; strict) | Asteroseismic search driver and in-house pulsation scaffolding (#162, #171). |
-| `astero` | `fast_from_file` | [#162](https://github.com/joshspeagle/FlexMESA/issues/162) | `xtra1` | `error` (0 steps; strict) | Asteroseismic from_file driver and in-house pulsation scaffolding (#162, #171). |
+| `astero` | `fast_from_file` | [#162](https://github.com/joshspeagle/FlexMESA/issues/162) | `xtra1` | `astero_from_file_samples=2_best_chi2=6.745860e-1_term=limit_num_chi2_too_big` (1018 steps; strict) | Asteroseismic from_file driver and in-house pulsation scaffolding (#162, #171). |
 | `astero` | `fast_newuoa` | [#162](https://github.com/joshspeagle/FlexMESA/issues/162) | `xtra1` | `error` (0 steps; strict) | Asteroseismic NEWUOA optimizer times out with in-house pulsation scaffolding (#162, #171). |
-| `astero` | `fast_scan_grid` | [#162](https://github.com/joshspeagle/FlexMESA/issues/162) | `xtra1` | `error` (0 steps; strict) | Asteroseismic scan_grid driver and in-house pulsation scaffolding (#162, #171). |
-| `astero` | `fast_simplex` | [#162](https://github.com/joshspeagle/FlexMESA/issues/162) | `xtra1` | `error` (0 steps; strict) | Asteroseismic simplex optimizer and in-house pulsation scaffolding (#162, #171). |
+| `astero` | `fast_scan_grid` | [#162](https://github.com/joshspeagle/FlexMESA/issues/162) | `xtra1` | `astero_scan_grid_samples=4_best_chi2=7.650287e-1_term=limit_num_chi2_too_big` (1765 steps; strict) | Asteroseismic scan_grid driver and in-house pulsation scaffolding (#162, #171). |
+| `astero` | `fast_simplex` | [#162](https://github.com/joshspeagle/FlexMESA/issues/162) | `xtra1` | `astero_simplex_samples=6_best_chi2=4.606467e-2_term=chi2_search_limit2` (2724 steps; strict) | Asteroseismic simplex optimizer and in-house pulsation scaffolding (#162, #171). |
 
 ## Declared Test-Suite Gaps (`[[test_gaps]]`, 37 Markers)
 

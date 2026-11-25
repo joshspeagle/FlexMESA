@@ -13,7 +13,7 @@ Generated mechanically by `flexmesa harness` from `benchmarks/history_harness/ca
 | Cases awaiting `26.4.1` reference (`no reference yet`) | 4 |
 | Cases selected in this table | 106 |
 | Cases executed in this run | 106 |
-| Cases accepted by strict control validation (`#147`) | 81 (74 took at least one step) |
+| Cases accepted by strict control validation (`#147`) | 81 (77 took at least one step) |
 | Cases rejected by strict validation and rerun as diagnostic (unsupported controls ignored; never a pass) | 25 (21 took at least one step) |
 | Strict runs reaching upstream termination | 65 |
 | Diagnostic runs reaching upstream termination | 1 |
@@ -129,10 +129,10 @@ Generated mechanically by `flexmesa harness` from `benchmarks/history_harness/ca
 | `astero` | `astero_adipls` | `mesa_26_4_1` | `xa_central_lower_limit` | strict | `xa_central_lower_limit` | 465 (465) | 0 (0) | - | - | 0.13% (2) | +0.00% | `log_L`: 5.139e-06 | - | #171 | scaffolding (#171) |
 | `astero` | `astero_gyre` | `mesa_26_4_1` | `xa_central_lower_limit` | strict | `xa_central_lower_limit` | 465 (465) | 0 (0) | - | - | 0.13% (2) | +0.00% | `log_L`: 5.139e-06 | - | - | pass |
 | `astero` | `example_astero` | `mesa_26_4_1` | `xtra1` | strict | - | 0 (737) | 0 (0) | - | - | 0.00% (0) | +44.60% | `log_L`: 2.919e-09 | - | #162 | declared gap (#162) |
-| `astero` | `fast_from_file` | `mesa_26_4_1` | `xtra1` | strict | - | 0 (508) | 0 (0) | - | - | 1.80% (9) | +0.16% | `log_L`: 2.566e-03 | - | #162 | declared gap (#162) |
+| `astero` | `fast_from_file` | `mesa_26_4_1` | `xtra1` | strict | `astero_from_file_samples=2_best_chi2=6.745860e-1_term=limit_num_chi2_too_big` | 1018 (508) | 0 (0) | - | - | 1.80% (9) | +0.16% | `log_L`: 2.566e-03 | - | #162 | declared gap (#162) |
 | `astero` | `fast_newuoa` | `mesa_26_4_1` | `xtra1` | strict | - | 0 (479) | 0 (0) | - | - | 0.00% (0) | +0.00% | `log_L`: 1.349e-08 | - | #162 | declared gap (#162) |
-| `astero` | `fast_scan_grid` | `mesa_26_4_1` | `xtra1` | strict | - | 0 (470) | 0 (0) | - | - | 0.00% (0) | +0.00% | `log_L`: 1.910e-08 | - | #162 | declared gap (#162) |
-| `astero` | `fast_simplex` | `mesa_26_4_1` | `xtra1` | strict | - | 0 (408) | 0 (0) | - | - | 0.00% (0) | +0.32% | `log_L`: 9.174e-09 | - | #162 | declared gap (#162) |
+| `astero` | `fast_scan_grid` | `mesa_26_4_1` | `xtra1` | strict | `astero_scan_grid_samples=4_best_chi2=7.650287e-1_term=limit_num_chi2_too_big` | 1765 (470) | 0 (0) | - | - | 0.00% (0) | +0.00% | `log_L`: 1.910e-08 | - | #162 | declared gap (#162) |
+| `astero` | `fast_simplex` | `mesa_26_4_1` | `xtra1` | strict | `astero_simplex_samples=6_best_chi2=4.606467e-2_term=chi2_search_limit2` | 2724 (408) | 0 (0) | - | - | 0.00% (0) | -0.00% | `log_L`: 9.174e-09 | - | #162 | declared gap (#162) |
 | `astero` | `surface_effects` | `mesa_26_4_1` | `max_model_number` | strict | `max_model_number` | 1 (1) | 0 (0) | 5.0 [5] (5.0 [5]) | - | 0.00% (0) | +0.00% | - | - | #162 | scaffolding (#171) |
 
 ## Convective-Core Track Comparisons (`mass_conv_core`, `#155`)
@@ -189,10 +189,20 @@ MESA's `astero` search evolves one track per objective evaluation and keeps only
 | Suite | Case | Track | Kind | Rows (MESA) | First Div Step | Max Track Diff | Within Tol |
 | :--- | :--- | ---: | :--- | ---: | ---: | :--- | :--- |
 | `astero` | `example_astero` | 1 | prefix | 168 (17) | - | `log_L`: 2.919e-09 | no |
-| `astero` | `fast_from_file` | 1 | prefix | 509 (508) | - | `log_L`: 2.566e-03 | no |
+| `astero` | `fast_from_file` | 1 | full | 509 (508) | - | `log_L`: 2.566e-03 | no |
+| `astero` | `fast_from_file` | 2 | full | 509 (508) | - | `log_L`: 2.566e-03 | no |
 | `astero` | `fast_newuoa` | 1 | prefix | 481 (480) | - | `log_L`: 1.349e-08 | yes |
-| `astero` | `fast_scan_grid` | 1 | prefix | 481 (481) | - | `log_L`: 1.910e-08 | yes |
-| `astero` | `fast_simplex` | 1 | prefix | 311 (310) | - | `log_L`: 9.174e-09 | no |
+| `astero` | `fast_scan_grid` | 1 | full | 481 (481) | - | `log_L`: 1.910e-08 | yes |
+| `astero` | `fast_scan_grid` | 2 | full | 235 (235) | - | `log_L`: 2.889e-08 | yes |
+| `astero` | `fast_scan_grid` | 3 | full | 579 (579) | - | `log_L`: 1.489e-08 | yes |
+| `astero` | `fast_scan_grid` | 4 | full | 470 (470) | - | `log_L`: 4.815e-08 | yes |
+| `astero` | `fast_simplex` | 1 | full | 311 (311) | - | `log_L`: 9.174e-09 | yes |
+| `astero` | `fast_simplex` | 2 | full | 298 (298) | - | `log_L`: 1.359e-08 | yes |
+| `astero` | `fast_simplex` | 3 | full | 391 (391) | - | `log_L`: 1.780e-08 | yes |
+| `astero` | `fast_simplex` | 4 | full | 499 (499) | - | `log_L`: 2.102e-08 | yes |
+| `astero` | `fast_simplex` | 5 | full | 364 (364) | - | `log_L`: 6.338e-08 | yes |
+| `astero` | `fast_simplex` | 6 | full | 453 (453) | - | `log_L`: 2.806e-08 | yes |
+| `astero` | `fast_simplex` | 7 | full | 408 (408) | - | `log_L`: 3.221e-08 | yes |
 
 ## Energy Conservation Track Comparisons (`log_rel_run_E_err`, `#151`)
 
@@ -228,7 +238,7 @@ Generated mechanically from `baseline_run_26_4_1.json` / harness comparisons aga
 | `star` | `wd_c_core_ignition` | strict | `power_nuc_burn_upper_limit` | 708 (668) | `log_rel_run_E_err` | -2.112 | -2.112 | +2.130e-04 | 5.794e-04 | 2.576e-07 | #161 |
 | `star` | `wd_he_shell_ignition` | strict | `timeout` | 835 (1112) | `log_rel_run_E_err` | -2.239 | -2.228 | -1.115e-02 | 2.144e-02 | 5.939e-03 | #154 |
 | `astero` | `example_astero` | strict | - | 0 (737) | `log_rel_run_E_err` | -10.482 | - | - | - | - | #162 |
-| `astero` | `fast_from_file` | strict | - | 0 (508) | `log_rel_run_E_err` | -10.104 | - | - | - | - | #162 |
+| `astero` | `fast_from_file` | strict | `astero_from_file_samples=2_best_chi2=6.745860e-1_term=limit_num_chi2_too_big` | 1018 (508) | `log_rel_run_E_err` | -10.104 | - | - | - | - | #162 |
 | `astero` | `fast_newuoa` | strict | - | 0 (479) | `log_rel_run_E_err` | -10.062 | - | - | - | - | #162 |
-| `astero` | `fast_scan_grid` | strict | - | 0 (470) | `log_rel_run_E_err` | -10.041 | - | - | - | - | #162 |
-| `astero` | `fast_simplex` | strict | - | 0 (408) | `log_rel_run_E_err` | -10.187 | - | - | - | - | #162 |
+| `astero` | `fast_scan_grid` | strict | `astero_scan_grid_samples=4_best_chi2=7.650287e-1_term=limit_num_chi2_too_big` | 1765 (470) | `log_rel_run_E_err` | -10.041 | - | - | - | - | #162 |
+| `astero` | `fast_simplex` | strict | `astero_simplex_samples=6_best_chi2=4.606467e-2_term=chi2_search_limit2` | 2724 (408) | `log_rel_run_E_err` | -10.187 | - | - | - | - | #162 |

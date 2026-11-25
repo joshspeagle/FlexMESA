@@ -436,7 +436,7 @@ impl<'a> Mode<'a> {
     ///
     /// # Errors
     ///
-    /// [`GyreError::Unported`] for `l /= 0`; eigenfunction errors.
+    /// Eigenfunction, model, or turning-point errors during classification.
     pub fn new(wv: Wave<'a>) -> Result<Self, GyreError> {
         let mut wave = wv;
         let y_1_ref = wave.y_i(1, wave.j_ref);
@@ -492,8 +492,11 @@ impl<'a> Mode<'a> {
             )?;
             let j_i = j_turn + 1;
             let j_o = if y_1[n - 1] == 0.0 { n - 1 } else { n };
-            let (n_c, n_a) =
-                count_windings(&y_1[j_i - 1..j_o], &y_2[j_i - 1..j_o]);
+            let (n_c, n_a) = if j_i <= j_o {
+                count_windings(&y_1[j_i - 1..j_o], &y_2[j_i - 1..j_o])
+            } else {
+                (0, 0)
+            };
             self.n_p = n_a;
             self.n_g = n_c;
             self.n_pg = if self.n_p >= self.n_g {
@@ -544,7 +547,7 @@ impl<'a> Mode<'a> {
 ///
 /// # Errors
 ///
-/// Component errors; segmented grids are unported.
+/// Component and wave construction errors.
 pub fn rad_wave_hom<'a>(
     bp: &mut RadBvp<'a>,
     omega: f64,

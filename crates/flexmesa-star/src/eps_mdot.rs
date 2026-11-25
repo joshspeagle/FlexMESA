@@ -129,7 +129,12 @@ fn q(x: f64) -> Quad {
 /// `interpolate_onto_faces` (`eps_mdot.f90:48-62`). `vec` is zero-based
 /// (`vec[j - 1]` is upstream's `vec(j)`), `dm` is one-based `real(qp)`, and
 /// `j` is upstream's face index in `1..=nz + 1`.
-fn interpolate_onto_faces(vec: &[f64], dm: &[Quad], nz: usize, j: usize) -> f64 {
+fn interpolate_onto_faces(
+    vec: &[f64],
+    dm: &[Quad],
+    nz: usize,
+    j: usize,
+) -> f64 {
     let mut interp = 0.0;
     if j == 1 {
         interp = vec[0];
@@ -228,7 +233,7 @@ impl LeakState<'_> {
                             - self.delta_m
                                 * pass_frac
                                 * self.eps_mdot_per_total_mass[1])
-                        .to_f64();
+                            .to_f64();
                         self.mdot_adiabatic_surface +=
                             (1.0 - self.leak_frac[i_end]) * excess[ju];
                         self.accumulated[i] +=
@@ -387,8 +392,8 @@ pub struct EpsMdotSurface {
 ///
 /// # Errors
 ///
-/// Returns `InvalidInput` for RSP or RSP2 models, and when `record` does not
-/// match the model's zone count.
+/// Returns `InvalidInput` when `record` does not match the model's zone count
+/// or `model.nz < 2`.
 pub fn calculate_eps_mdot(
     model: &mut StarModel,
     record: &AdjustMassRecord,
@@ -398,6 +403,15 @@ pub fn calculate_eps_mdot(
     model.eps_mdot.resize(nz, 0.0);
     if model.mstar_dot == 0.0 || dt <= 0.0 {
         model.eps_mdot.fill(0.0);
+        let sh = &mut model.aux.step_hist;
+        sh.mdot_adiabatic_surface = 0.0;
+        sh.mdot_acoustic_surface = 0.0;
+        sh.total_internal_energy_after_adjust_mass = 0.0;
+        sh.total_gravitational_energy_after_adjust_mass = 0.0;
+        sh.total_radial_kinetic_energy_after_adjust_mass = 0.0;
+        sh.total_rotational_kinetic_energy_after_adjust_mass = 0.0;
+        sh.total_turbulent_energy_after_adjust_mass = 0.0;
+        sh.total_energy_after_adjust_mass = 0.0;
         return Ok(EpsMdotSurface::default());
     }
     if record.dm_before.len() != nz
@@ -409,6 +423,7 @@ pub fn calculate_eps_mdot(
             record.dm_before.len()
         )));
     }
+    model.aux.need_to_setvars = true;
     let delta_m = model.mstar_dot * dt;
 
     // `compute_prev_mesh_dm` (`adjust_mass.f90:103-132`).
@@ -451,7 +466,11 @@ pub fn calculate_eps_mdot(
     let zero = Quad::ZERO;
     let mut total_mass_through_cell = zero_slot(nz);
     for j in 1..=nz {
-        let inflow = if mass_flux[j] > zero { mass_flux[j] } else { zero };
+        let inflow = if mass_flux[j] > zero {
+            mass_flux[j]
+        } else {
+            zero
+        };
         let outflow = if mass_flux[j + 1] < zero {
             mass_flux[j + 1]
         } else {
@@ -570,7 +589,11 @@ mod tests {
         let zero = Quad::ZERO;
         let mut tmtc = zero_slot(nz);
         for j in 1..=nz {
-            let inflow = if mass_flux[j] > zero { mass_flux[j] } else { zero };
+            let inflow = if mass_flux[j] > zero {
+                mass_flux[j]
+            } else {
+                zero
+            };
             let outflow = if mass_flux[j + 1] < zero {
                 mass_flux[j + 1]
             } else {
@@ -593,10 +616,8 @@ mod tests {
             &eps1,
             &leak1,
         );
-        let redistributed: f64 = (1..=nz)
-            .map(|j| acc[j] * dm_new[j - 1])
-            .sum::<f64>()
-            + mdot_ad;
+        let redistributed: f64 =
+            (1..=nz).map(|j| acc[j] * dm_new[j - 1]).sum::<f64>() + mdot_ad;
         let original: f64 = (1..=nz)
             .map(|j| eps1[j] * dm_new[j - 1] * tmtc[j].to_f64())
             .sum();

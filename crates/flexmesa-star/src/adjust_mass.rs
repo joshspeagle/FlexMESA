@@ -11,14 +11,14 @@ use flexmesa_math::Quad;
 
 use crate::controls::StarError;
 use crate::core_boundaries::dominant_species_index;
-use crate::eps_mdot::{AdjustMassRecord, calculate_eps_mdot};
+use crate::eps_mdot::{calculate_eps_mdot, AdjustMassRecord};
 use crate::hydro_rotation::{
     eval_i_rot, w_div_w_roche_jrot, w_div_w_roche_omega,
 };
 use crate::hydro_vars::set_hydro_vars;
-use flexmesa_num::search::binary_search_1based;
 use crate::micro::set_basic_vars;
 use crate::model::StarModel;
+use flexmesa_num::search::binary_search_1based;
 
 /// Evaluates `delta_m = dt * mstar_dot` with the upstream super-Eddington
 /// override and `min_star_mass_for_loss` / `max_star_mass_for_gain` gates
@@ -59,6 +59,16 @@ pub fn compute_delta_m(
         )));
     }
     Ok(delta_m)
+}
+
+/// Resets boundary indices and mass-change heating state on zero-$\Delta M$ /
+/// degenerate steps (`adjust_mass.f90:212-230`).
+fn reset_zero_mass_change_state(model: &mut StarModel) {
+    model.aux.k_below_const_q = 1;
+    model.aux.k_const_mass = 0;
+    model.k_below_just_added = 1;
+    model.eps_mdot.fill(0.0);
+    model.aux.step_hist.clear_adjust_mass_energy_fields();
 }
 
 /// Applies the 3-region pseudo-Lagrangian mass adjustment (`do_adjust_mass` in
@@ -106,8 +116,7 @@ pub fn do_adjust_mass_with_dt(
 ) -> Result<(), StarError> {
     let nz = model.nz;
     if delta_m == 0.0 || nz < 3 {
-        model.eps_mdot.fill(0.0);
-        model.aux.step_hist.clear_adjust_mass_energy_fields();
+        reset_zero_mass_change_state(model);
         return Ok(());
     }
     if dt > 0.0 {
@@ -153,18 +162,12 @@ pub fn do_adjust_mass_step(
 ) -> Result<(), StarError> {
     let nz = model.nz;
     if dt <= 0.0 || nz < 3 {
-        model.aux.k_below_const_q = 1;
-        model.aux.k_const_mass = 0;
-        model.eps_mdot.fill(0.0);
-        model.aux.step_hist.clear_adjust_mass_energy_fields();
+        reset_zero_mass_change_state(model);
         return Ok(());
     }
     let mut delta_m = compute_delta_m(model, dt)?;
     if delta_m == 0.0 {
-        model.aux.k_below_const_q = 1;
-        model.aux.k_const_mass = 0;
-        model.eps_mdot.fill(0.0);
-        model.aux.step_hist.clear_adjust_mass_energy_fields();
+        reset_zero_mass_change_state(model);
         return Ok(());
     }
 
@@ -226,7 +229,6 @@ fn revise_q_and_dq_upstream(
     explicit_ka_kb: Option<(usize, usize)>,
 ) -> Result<RevisedMesh, StarError> {
     let nz = model.nz;
-    let mw = &model.controls.mix_wind;
 
     // `mold_o_mnew_qp = q1/q2`, `mold_o_mnew = mold_o_mnew_qp`
     // (`adjust_mass.f90:653-656`).
@@ -253,87 +255,92 @@ fn revise_q_and_dq_upstream(
         xq[k] = xq[k - 1] + dq[k - 1];
     }
 
-    let (k_a, k_b, qfrac_qp_final) = if let Some((ka_in, kb_in)) = explicit_ka_kb {
-        let ka = ka_in.clamp(1, nz.saturating_sub(2));
-        let mut kb = kb_in.clamp(ka + 1, nz - 1);
-        let xq_a = xq[ka];
-        let mut qf;
-        loop {
-            let xq_b_old = xq[kb];
-            let xq_b_new = dq_acc + xq_b_old * mold_o_mnew;
-            qf = qfrac_qp(xq_b_new, xq_a, xq_b_old);
-            if qf.to_f64() > 0.0 || kb + 1 >= nz {
-                break;
-            }
-            kb += 1;
-        }
-        (ka, kb, qf)
-    } else {
-        let lnt_lim_a = LN10 * mw.max_logt_for_k_below_const_q;
-        let lnt_lim_b = LN10 * mw.max_logt_for_k_const_mass;
-        let lnt_max =
-            model.ln_t.iter().copied().fold(f64::NEG_INFINITY, f64::max);
-        let lnt_a = lnt_max.min(lnt_lim_a);
-        let lnt_b = lnt_max.min(lnt_lim_b);
-        let max_q_a = mold_o_mnew;
-
-        let min_k_a = 4.min(nz.saturating_sub(2)).max(1);
-        let mut ka = min_k_a;
-        for k in min_k_a..(nz - 1) {
-            ka = k;
-            if 1.0 - xq[k] > max_q_a {
-                continue;
-            }
-            if 1.0 - xq[k] <= mw.min_q_for_k_below_const_q
-                || model.ln_t[k] >= lnt_a
-            {
-                break;
-            }
-        }
-        let xq_a = xq[ka];
-
-        let kb_start = (ka + 1).min(nz - 1);
-        let mut kb = kb_start;
-        for k in kb_start..nz {
-            kb = k;
-            if 1.0 - xq[k] > mw.max_q_for_k_const_mass {
-                continue;
-            }
-            if 1.0 - xq[k] <= mw.min_q_for_k_const_mass
-                || model.ln_t[k] >= lnt_b
-            {
-                break;
-            }
-        }
-
-        let mut xq_b_old = xq[kb];
-        let mut xq_b_new = dq_acc + xq_b_old * mold_o_mnew;
-        let qf = loop {
-            let qf_qp = qfrac_qp(xq_b_new, xq_a, xq_b_old);
-            let qf_cur = qf_qp.to_f64();
-            if kb + 1 >= nz {
-                break qf_qp;
-            }
-            if kb - ka > 10 {
-                if qf_cur > 0.67 && qf_cur < 1.50 {
-                    break qf_qp;
+    let (k_a, k_b, qfrac_qp_final) =
+        if let Some((ka_in, kb_in)) = explicit_ka_kb {
+            let ka = ka_in.clamp(1, nz.saturating_sub(2));
+            let mut kb = kb_in.clamp(ka + 1, nz - 1);
+            let xq_a = xq[ka];
+            let mut qf;
+            loop {
+                let xq_b_old = xq[kb];
+                let xq_b_new = dq_acc + xq_b_old * mold_o_mnew;
+                qf = qfrac_qp(xq_b_new, xq_a, xq_b_old);
+                if qf.to_f64() > 0.0 || kb + 1 >= nz {
+                    break;
                 }
-                if qf_cur > 0.50
-                    && qf_cur < 2.00
-                    && dominant_species_index(model.cell_xa(kb))
-                        != dominant_species_index(model.cell_xa(kb + 1))
+                kb += 1;
+            }
+            (ka, kb, qf)
+        } else {
+            // Upstream mutates `s% max_q_for_k_below_const_q = mold_o_mnew`
+            // (`adjust_mass.f90:657`).
+            model.controls.mix_wind.max_q_for_k_below_const_q = mold_o_mnew;
+            let mw = &model.controls.mix_wind;
+            let lnt_lim_a = LN10 * mw.max_logt_for_k_below_const_q;
+            let lnt_lim_b = LN10 * mw.max_logt_for_k_const_mass;
+            let lnt_max =
+                model.ln_t.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+            let lnt_a = lnt_max.min(lnt_lim_a);
+            let lnt_b = lnt_max.min(lnt_lim_b);
+            let max_q_a = mold_o_mnew;
+
+            let min_k_a = 4.min(nz.saturating_sub(2)).max(1);
+            let mut ka = min_k_a;
+            for k in min_k_a..(nz - 1) {
+                ka = k;
+                if 1.0 - xq[k] > max_q_a {
+                    continue;
+                }
+                if 1.0 - xq[k] <= mw.min_q_for_k_below_const_q
+                    || model.ln_t[k] >= lnt_a
                 {
-                    // `adjust_mass.f90:753`: `kB = max(1, kB-5)` (0-based `max(0, kb-5)`).
-                    kb = kb.saturating_sub(5);
-                    break qf_qp;
+                    break;
                 }
             }
-            kb += 1;
-            xq_b_old = xq[kb];
-            xq_b_new = dq_acc + xq_b_old * mold_o_mnew;
+            let xq_a = xq[ka];
+
+            let kb_start = (ka + 1).min(nz - 1);
+            let mut kb = kb_start;
+            for k in kb_start..nz {
+                kb = k;
+                if 1.0 - xq[k] > mw.max_q_for_k_const_mass {
+                    continue;
+                }
+                if 1.0 - xq[k] <= mw.min_q_for_k_const_mass
+                    || model.ln_t[k] >= lnt_b
+                {
+                    break;
+                }
+            }
+
+            let mut xq_b_old = xq[kb];
+            let mut xq_b_new = dq_acc + xq_b_old * mold_o_mnew;
+            let qf = loop {
+                let qf_qp = qfrac_qp(xq_b_new, xq_a, xq_b_old);
+                let qf_cur = qf_qp.to_f64();
+                if kb + 1 >= nz {
+                    break qf_qp;
+                }
+                if kb - ka > 10 {
+                    if qf_cur > 0.67 && qf_cur < 1.50 {
+                        break qf_qp;
+                    }
+                    if qf_cur > 0.50
+                        && qf_cur < 2.00
+                        && dominant_species_index(model.cell_xa(kb))
+                            != dominant_species_index(model.cell_xa(kb + 1))
+                    {
+                        // `adjust_mass.f90:753`: `kB = max(1, kB-5)` (0-based `max(0, kb-5)`).
+                        kb = kb.saturating_sub(5);
+                        break qf_qp;
+                    }
+                }
+                kb += 1;
+                xq_b_old = xq[kb];
+                xq_b_new = dq_acc + xq_b_old * mold_o_mnew;
+            };
+            (ka, kb, qf)
         };
-        (ka, kb, qf)
-    };
 
     // `qfrac = qfrac_qp` (`adjust_mass.f90:743-744`).
     let qfrac = qfrac_qp_final.to_f64();
@@ -377,11 +384,8 @@ fn revise_q_and_dq_upstream(
     let sub1 = |adjust: Quad| {
         (frac_qp * adjust * new_xmstar / old_xmstar - Quad::ONE).to_f64()
     };
-    let frac_sub1 = [
-        sub1(Quad::ONE),
-        sub1(qfrac_qp_final),
-        sub1(mold_o_mnew_qp),
-    ];
+    let frac_sub1 =
+        [sub1(Quad::ONE), sub1(qfrac_qp_final), sub1(mold_o_mnew_qp)];
 
     // Set `q` from `dq` and close `dq[nz-1] = q[nz-1]` (`adjust_mass.f90:813-826`)
     // using upstream's plain left-to-right running sum.
@@ -429,10 +433,7 @@ fn do_adjust_mass_core(
         }
     }
     if delta_m == 0.0 || nz < 3 {
-        model.aux.k_below_const_q = 1;
-        model.aux.k_const_mass = 0;
-        model.eps_mdot.fill(0.0);
-        model.aux.step_hist.clear_adjust_mass_energy_fields();
+        reset_zero_mass_change_state(model);
         return Ok(());
     }
     // `star/private/adjust_mass.f90:234`.
@@ -617,13 +618,7 @@ fn do_adjust_mass_core(
             &new_cell_mass,
         )?;
         if model.controls.mix_wind.do_adjust_j_lost {
-            adjust_j_lost(
-                model,
-                old_mstar,
-                &new_cell_mass,
-                starting_j_rot_surf,
-                j_removed,
-            )?;
+            adjust_j_lost(model, old_mstar, starting_j_rot_surf, j_removed)?;
         }
         // Upstream also remaps `D_omega` and `am_nu_rot` here under
         // `D_omega_flag` / `am_nu_rot_flag`
@@ -805,6 +800,31 @@ fn set_xa(
     first_err.map_or(Ok(()), Err)
 }
 
+/// Finds the 0-based source cell containing `xm_outer` in monotonically
+/// non-decreasing exterior-mass coordinates (`binary_search` + interval checks
+/// in `set1_xa` / `set1_omega`, `adjust_mass.f90:935-985, 1316-1345`).
+fn find_old_outer_cell(
+    old_xbdy: &[f64],
+    nz: usize,
+    xm_outer: f64,
+) -> Option<usize> {
+    if xm_outer >= old_xbdy[nz - 1] {
+        return Some(nz - 1);
+    }
+    let loc = binary_search_1based(&old_xbdy[..nz], xm_outer, 0);
+    if loc == 0 || loc > nz {
+        return None;
+    }
+    let k_outer = loc - 1;
+    if xm_outer < old_xbdy[k_outer] {
+        return None;
+    }
+    if k_outer < nz - 1 && old_xbdy[k_outer + 1] <= xm_outer {
+        return None;
+    }
+    Some(k_outer)
+}
+
 /// One cell of [`set_xa`]: line-by-line port of `set1_xa`
 /// (`star/private/adjust_mass.f90`), with 0-based `k` and `kk`.
 #[allow(clippy::too_many_arguments)]
@@ -855,21 +875,8 @@ fn set1_xa(
     } else {
         // New cell entirely composed of old material.
         msum.fill(0.0);
-        if xm_outer >= old_xbdy[nz - 1] {
-            k_outer = nz - 1;
-        } else {
-            let loc = binary_search_1based(&old_xbdy[..nz], xm_outer, 0);
-            if loc == 0 || loc > nz {
-                return Err(fail());
-            }
-            k_outer = loc - 1;
-            if xm_outer < old_xbdy[k_outer] {
-                return Err(fail());
-            }
-            if k_outer < nz - 1 && old_xbdy[k_outer + 1] <= xm_outer {
-                return Err(fail());
-            }
-        }
+        k_outer =
+            find_old_outer_cell(old_xbdy, nz, xm_outer).ok_or_else(fail)?;
     }
 
     for kk in k_outer..nz {
@@ -1140,14 +1147,13 @@ fn set1_omega(
         dm_sum = dm;
         xm_outer = old_xout[0];
         0
-    } else if xm_outer >= old_xout[nz - 1] {
-        nz - 1
     } else {
-        // Largest `idx` with `old_xout[idx] <= xm_outer` and `old_xout[idx+1] > xm_outer`.
-        old_xout
-            .partition_point(|&x| x <= xm_outer)
-            .saturating_sub(1)
-            .min(nz - 1)
+        find_old_outer_cell(old_xout, nz, xm_outer).ok_or_else(|| {
+            StarError::ConvergenceFailure(format!(
+                "set1_omega: failed to bracket xm_outer={xm_outer} at cell {}",
+                k + 1
+            ))
+        })?
     };
 
     for kk in k_outer..nz {
@@ -1253,13 +1259,13 @@ fn compute_angular_momentum_removed(
 fn adjust_j_lost(
     model: &mut StarModel,
     old_mstar: f64,
-    new_dm: &[f64],
     starting_j_rot_surf: f64,
     j_removed: f64,
 ) -> Result<(), StarError> {
     let nz = model.nz;
     let mass_lost = old_mstar - model.mstar;
     if mass_lost <= 0.0 {
+        model.adjust_j_q = 1.0;
         return Ok(());
     }
 
@@ -1268,6 +1274,7 @@ fn adjust_j_lost(
         + (1.0 - mw.adjust_j_fraction) * j_removed;
     let delta_j = actual_j_lost - j_removed;
     if delta_j == 0.0 {
+        model.adjust_j_q = 1.0;
         return Ok(());
     }
 
@@ -1276,7 +1283,7 @@ fn adjust_j_lost(
     let mut last_k = nz - 1;
     for k in 0..nz {
         let dmm1 = dm00;
-        dm00 = new_dm[k];
+        dm00 = model.dm[k];
         let dm_f = 0.5 * (dmm1 + dm00);
         j_sum += dm_f * model.j_rot[k];
         if j_sum < mw.min_j_div_delta_j * delta_j.abs()
@@ -1298,14 +1305,15 @@ fn adjust_j_lost(
     let mut denom = 0.0_f64;
     for k in 0..last_k {
         let dmm1 = dm00;
-        dm00 = new_dm[k];
+        dm00 = model.dm[k];
         let dm_f = 0.5 * (dmm1 + dm00);
         denom += (model.q[k] - qlast) * model.j_rot[k] * dm_f;
     }
     if denom.abs() > 1.0e-99 {
         let frac = -delta_j / denom;
         for k in 0..last_k {
-            model.j_rot[k] *= frac * (model.q[k] - qlast) + 1.0;
+            let j_new = (frac * (model.q[k] - qlast) + 1.0) * model.j_rot[k];
+            model.j_rot[k] = j_new;
             set1_irot(model, k, true);
             model.omega[k] = model.j_rot[k] / model.aux.i_rot[k];
         }

@@ -72,8 +72,10 @@ pub(crate) fn calc_lt(
 ) -> RspLtOut {
     let nzn = wk.nzn;
     let k_f = nzn + 1 - i;
+    // `I <= IBOTOM` (`star/private/rsp_step.f90:2158`); safe when `ibotom == 0`
+    // because `i == nzn` returns above so `ko = k0 - 1 >= 0`.
     if i == 0
-        || i <= dc.ibotom.max(1)
+        || i <= dc.ibotom
         || i == nzn
         || dc.alfa == 0.0
         || dc.alfat == 0.0
@@ -131,7 +133,9 @@ pub(crate) fn calc_lc(
     i: usize,
 ) -> RspLcOut {
     let nzn = wk.nzn;
-    if i == 0 || i <= dc.ibotom.max(1) || i == nzn || dc.alfa == 0.0 {
+    // `I <= IBOTOM` (`star/private/rsp_step.f90:2237`); safe when `ibotom == 0`
+    // because `i == nzn` returns above so `ko = k0 - 1 >= 0`.
+    if i == 0 || i <= dc.ibotom || i == nzn || dc.alfa == 0.0 {
         if i > 0 && i <= nzn {
             model.aux.rsp.lc_rsp[nzn - i] = 0.0;
         }

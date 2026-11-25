@@ -284,5 +284,7 @@ pub fn zero_boundaries(
     for i in 1..=dc.ibotom.min(wk.nzn) {
         clear_i(model, wk, i);
     }
-    clear_i(model, wk, wk.nzn);
+    if wk.nzn > 0 {
+        clear_i(model, wk, wk.nzn);
+    }
 }

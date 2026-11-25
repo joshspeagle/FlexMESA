@@ -144,6 +144,10 @@ pub(crate) fn total_energy_eqn(
         + xp_00.xp * dv
         + erad_tw * u_factor * u_div_r
         - dt * model.aux.rsp.eq_rsp[k0];
+    // `s% ergs_error(k) = s% dm(k)*residual` (`star/private/rsp_step.f90:3256`).
+    if k0 < model.aux.ergs_error.len() {
+        model.aux.ergs_error[k0] = model.dm[k0] * residual;
+    }
     band.hr[it] = -residual;
 
     let h = &mut band.hd[it];

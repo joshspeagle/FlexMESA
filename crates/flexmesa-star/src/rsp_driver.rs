@@ -9,7 +9,7 @@ use std::path::{Path, PathBuf};
 
 use flexmesa_const::{CLIGHT, CRAD, PI, SECYER};
 
-use crate::controls::{StarError, StarJobControls};
+use crate::controls::{StarControls, StarError, StarJobControls};
 use crate::inlist::InlistBundle;
 use crate::inlist_runner::{DefaultStarExtras, RspBuildOutcome, StarExtras};
 use crate::mesa_profile::{
@@ -34,7 +34,46 @@ use crate::rsp_stats::{
 };
 use crate::star_job_init::resolve_model_path;
 
+fn effective_max_timestep_factor(controls: &StarControls) -> f64 {
+    if controls.rsp.max_timestep_factor == 1.2 {
+        controls.ts_stop.max_timestep_factor
+    } else {
+        controls.rsp.max_timestep_factor
+    }
+}
+
+fn effective_max_timestep(controls: &StarControls) -> f64 {
+    match (
+        controls.rsp.max_timestep > 0.0,
+        controls.ts_stop.max_timestep > 0.0,
+    ) {
+        (true, true) => {
+            controls.rsp.max_timestep.min(controls.ts_stop.max_timestep)
+        }
+        (true, false) => controls.rsp.max_timestep,
+        (false, true) => controls.ts_stop.max_timestep,
+        (false, false) => 0.0,
+    }
+}
+
+fn effective_force_timestep(controls: &StarControls) -> f64 {
+    if controls.rsp.force_timestep > 0.0 {
+        controls.rsp.force_timestep
+    } else if controls.ts_stop.force_timestep > 0.0 {
+        controls.ts_stop.force_timestep
+    } else if controls.ts_stop.force_timestep_years > 0.0 {
+        controls.ts_stop.force_timestep_years * SECYER
+    } else {
+        0.0
+    }
+}
+
 fn apply_rsp_job_overrides(model: &mut StarModel, job: &StarJobControls) {
+    // `star/job/run_star_support.f90:1949-1986` (`set_tau_factor`, `limit_initial_dt`).
+    if job.set_tau_factor || job.set_initial_tau_factor {
+        model.controls.tau_factor = job.set_to_this_tau_factor;
+        model.aux.rsp.rsp_tau_factor = job.set_to_this_tau_factor;
+    }
     if job.set_initial_age {
         model.star_age = job.initial_age;
         model.star_age_old = job.initial_age;
@@ -56,6 +95,26 @@ fn apply_rsp_job_overrides(model: &mut StarModel, job: &StarJobControls) {
             model.dt = job.seconds_for_initial_dt;
             model.dt_next = model.dt;
             model.aux.rsp.rsp_dt = model.dt;
+        }
+    }
+    if job.limit_initial_dt {
+        let cap = if job.years_for_initial_dt > 0.0 {
+            Some(job.years_for_initial_dt * SECYER)
+        } else if job.seconds_for_initial_dt > 0.0 {
+            Some(job.seconds_for_initial_dt)
+        } else {
+            None
+        };
+        if let Some(cap) = cap {
+            if model.dt_next > 0.0 {
+                model.dt_next = model.dt_next.min(cap);
+            }
+            if model.dt > 0.0 {
+                model.dt = model.dt.min(cap);
+            }
+            if model.aux.rsp.rsp_dt > 0.0 {
+                model.aux.rsp.rsp_dt = model.aux.rsp.rsp_dt.min(cap);
+            }
         }
     }
 }
@@ -123,7 +182,7 @@ pub(crate) fn init_rsp_model_from_bundle(
             prev.controls = controls.clone();
             prev.controls.rsp_flag = true;
             prev.controls.v_flag = true;
-            if !job.set_tau_factor {
+            if !job.set_tau_factor && !job.set_initial_tau_factor {
                 prev.controls.tau_factor = prev_tau;
             }
             prev.eos_config = bundle.eos_config;
@@ -210,10 +269,9 @@ pub fn rsp_setup_model(
         } else {
             model.dt
         };
-        if model.controls.rsp.max_timestep > 0.0
-            && dt_init > model.controls.rsp.max_timestep
-        {
-            dt_init = model.controls.rsp.max_timestep;
+        let max_dt_ctrl = effective_max_timestep(&model.controls);
+        if max_dt_ctrl > 0.0 && dt_init > max_dt_ctrl {
+            dt_init = max_dt_ctrl;
         }
         model.aux.rsp.rsp_dt = dt_init;
         model.aux.rsp.rsp_tau_factor = model.controls.tau_factor;
@@ -288,6 +346,24 @@ pub fn rsp_setup_model(
             model.aux.rsp.rsp_dt * model.controls.rsp.initial_dt_factor;
         model.dt = model.dt_next;
     }
+    if model.controls.max_years_for_timestep > 0.0 {
+        let cap_yr = model.controls.max_years_for_timestep * SECYER;
+        if model.dt_next > 0.0 {
+            model.dt_next = model.dt_next.min(cap_yr);
+        }
+        if model.dt > 0.0 {
+            model.dt = model.dt.min(cap_yr);
+        }
+    }
+    let max_dt_ctrl = effective_max_timestep(&model.controls);
+    if max_dt_ctrl > 0.0 {
+        if model.dt_next > 0.0 {
+            model.dt_next = model.dt_next.min(max_dt_ctrl);
+        }
+        if model.dt > 0.0 {
+            model.dt = model.dt.min(max_dt_ctrl);
+        }
+    }
     if model.controls.rsp.use_other_rsp_build_model
         && model.controls.rsp.set_psurf_to_multiple_of_initial_p1 > 0.0
     {
@@ -346,8 +422,31 @@ pub fn rsp_one_step_with_extras(
     if !model.aux.rsp.have_set_velocities {
         model.aux.rsp.just_set_velocities = true;
         if model.controls.rsp.use_other_rsp_linear_analysis {
-            // Populate microphysics, `gradT`, and `brunt_N2` before calling
-            // `other_rsp_linear_analysis` (`star/private/rsp.f90:441-458`).
+            // Populate homogeneous `RSP` composition, microphysics, `gradT`,
+            // and `brunt_N2` before calling `other_rsp_linear_analysis`
+            // (`star/private/rsp.f90:441-466`).
+            for k in 0..nz {
+                if k < model.abar.len() {
+                    model.abar[k] = chem.abar;
+                }
+                if k < model.zbar.len() {
+                    model.zbar[k] = chem.zbar;
+                }
+                if k < model.xh_mass.len() {
+                    model.xh_mass[k] = chem.x;
+                }
+                if k < model.yhe_mass.len() {
+                    model.yhe_mass[k] = chem.y;
+                }
+                if k < model.z_mass.len() {
+                    model.z_mass[k] = chem.z;
+                }
+                if model.species == chem.xa.len()
+                    && model.xa.len() >= nz * model.species
+                {
+                    model.cell_xa_mut(k).copy_from_slice(&chem.xa);
+                }
+            }
             crate::hydro_vars::set_hydro_vars(model, false, false)?;
             for k in 0..nz {
                 let yf =
@@ -368,6 +467,7 @@ pub fn rsp_one_step_with_extras(
                     "use_other_rsp_linear_analysis = .true. requires an other_rsp_linear_analysis hook",
                 )));
             }
+            model.aux.rsp.have_set_velocities = true;
         } else {
             get_lina_info(model, &chem, &dc, log_dir)?;
         }
@@ -378,11 +478,14 @@ pub fn rsp_one_step_with_extras(
             model.dt = model.aux.rsp.rsp_dt;
         }
         model.aux.cumulative_energy_error = 0.0;
+        model.aux.step_hist.cumulative_energy_error_old = 0.0;
         model.aux.rsp.time_sec = 0.0;
         model.aux.rsp.time_old_sec = 0.0;
         set_random_velocities(model);
     }
 
+    // `s% do_history_file = s% RSP_have_set_velocities` (`rsp.f90:483`).
+    model.controls.output.do_history_file = model.aux.rsp.have_set_velocities;
     if model.controls.rsp.max_dt > 0.0 && model.dt > model.controls.rsp.max_dt {
         model.dt = model.controls.rsp.max_dt;
     }
@@ -402,14 +505,16 @@ fn do1_step(
     let nz = model.nz;
     model.aux.rsp.id_step += 1;
 
+    let max_dt_fac = effective_max_timestep_factor(&model.controls);
     let mut target_dt = (model.aux.rsp.period
         / (model.controls.rsp_target_steps_per_cycle.max(1) as f64))
-        .min(model.dt * model.controls.rsp.max_timestep_factor);
+        .min(model.dt * max_dt_fac);
     if model.controls.rsp.max_dt > 0.0 {
         target_dt = target_dt.min(model.controls.rsp.max_dt);
     }
-    if model.controls.rsp.max_timestep > 0.0 {
-        target_dt = target_dt.min(model.controls.rsp.max_timestep);
+    let max_dt_ctrl = effective_max_timestep(&model.controls);
+    if max_dt_ctrl > 0.0 {
+        target_dt = target_dt.min(max_dt_ctrl);
     }
     model.dt = target_dt;
 
@@ -418,8 +523,9 @@ fn do1_step(
     if model.dt > max_dt {
         model.dt = max_dt;
     }
-    if model.controls.rsp.force_timestep > 0.0 {
-        model.dt = model.controls.rsp.force_timestep;
+    let force_dt = effective_force_timestep(&model.controls);
+    if force_dt > 0.0 {
+        model.dt = force_dt;
     }
     if !(model.dt > 0.0 && model.dt.is_finite()) {
         return Err(StarError::InvalidInput(format!(

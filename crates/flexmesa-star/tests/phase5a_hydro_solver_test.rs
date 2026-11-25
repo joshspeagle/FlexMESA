@@ -244,7 +244,6 @@ fn eval_frozen_pde_system(
     sys
 }
 
-#[allow(clippy::too_many_lines)]
 /// Sets `dxh_lnd` and `dxh_lnT` to `lnd - lnd_start` and `lnT - lnT_start`,
 /// standing in for the accumulated Newton corrections that
 /// `set_vars_for_solver` stores (`star/private/solver_support.f90:1142,
@@ -260,6 +259,7 @@ fn sync_dxh_with_start(model: &mut StarModel) {
     }
 }
 
+#[allow(clippy::too_many_lines)]
 fn assert_tridiagonal_jacobian_matches_fd(
     base_model: &StarModel,
     include_chem: bool,

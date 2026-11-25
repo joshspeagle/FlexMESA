@@ -275,6 +275,8 @@ pub fn set_vars_for_solver(
 
     model.xh.resize(nz * nvar_hydro, 0.0);
     model.aux.dxh_lnr.resize(nz, 0.0);
+    model.aux.dxh_lnd.resize(nz, 0.0);
+    model.aux.dxh_lnt.resize(nz, 0.0);
     let i_lnd = model.layout.i_lnd;
     let i_lnt = model.layout.i_lnt;
     let i_lnr = model.layout.i_lnr;
@@ -335,6 +337,9 @@ pub fn set_vars_for_solver(
         }
         model.ln_t[k] = lnt_k;
         model.t[k] = t_k;
+        // `s% dxh_lnT(k) = s% solver_dx(i_lnT,k)`
+        // (`star/private/solver_support.f90:1142`).
+        model.aux.dxh_lnt[k] = solver_dx[s_base + i_lnt];
 
         // `L` check (`solver_support.f90:1189-1200, 1033-1049`).
         let lum_k = model.xh[h_base + i_lum];
@@ -455,6 +460,9 @@ pub fn set_vars_for_solver(
         }
         model.lnd[k] = lnd_k;
         model.rho[k] = rho_k;
+        // `s% dxh_lnd(k) = s% solver_dx(i_lnd,k)`
+        // (`star/private/solver_support.f90:1328`).
+        model.aux.dxh_lnd[k] = solver_dx[s_base + i_lnd];
 
         // `check1_chem` (`solver_support.f90:1374-1477`).
         if include_chem && model.species > 0 {

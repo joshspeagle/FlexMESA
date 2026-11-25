@@ -1350,3 +1350,308 @@ fn test_rsp_relax_env_and_lina_periods_parity_t2c_and_delta_scuti_mesa_26_4_1()
     assert_relax_lina_oracle(t2c_controls(), &t2c_want);
     assert_relax_lina_oracle(delta_scuti_controls(), &ds_want);
 }
+
+// Independent `real(qp)` reference matching `star/private/star_utils.f90:2184-2277`.
+fn quad_ke_pe_oracle(m: &StarModel) -> (f64, f64) {
+    use flexmesa_math::Quad;
+
+    let nz = m.nz;
+    let qhalf = Quad::from_f64(0.5);
+    let mut ke_sum = 0.0_f64;
+    let mut pe_sum = 0.0_f64;
+    for i in 1..=nz {
+        let k = nz - i;
+        let mbar = if m.controls.use_mass_corrections {
+            Quad::from_f64(m.aux.mass_correction[k])
+        } else {
+            Quad::from_f64(1.0)
+        };
+        let v0 = Quad::from_f64(m.v[k]);
+        let v1 =
+            Quad::from_f64(if k + 1 < nz { m.v[k + 1] } else { m.v_center });
+        let ke = (qhalf * mbar * (qhalf * (v0 * v0 + v1 * v1))).to_f64();
+        ke_sum += ke * m.dm[k];
+
+        let (rp1, mp1, gp1) = if k + 1 < nz {
+            (m.r[k + 1], m.m_grav[k + 1], m.cgrav[k + 1])
+        } else {
+            (m.r_center, m.m_center, m.cgrav[nz - 1])
+        };
+        let g_inner = if rp1 <= 0.0 {
+            Quad::from_f64(0.0)
+        } else {
+            -(Quad::from_f64(gp1) * Quad::from_f64(mp1) / Quad::from_f64(rp1))
+        };
+        let g_outer = -(Quad::from_f64(m.cgrav[k])
+            * Quad::from_f64(m.m_grav[k])
+            / Quad::from_f64(m.r[k]));
+        let pe = (qhalf * mbar * (g_inner + g_outer)).to_f64();
+        pe_sum += pe * m.dm[k];
+    }
+    (ke_sum, pe_sum)
+}
+
+#[test]
+fn test_rsp_calculate_energies_uses_quad_ke_pe_and_mass_correction() {
+    use flexmesa_const::STANDARD_CGRAV;
+    use flexmesa_star::rsp_hyd::calculate_energies;
+    use flexmesa_star::RspConfig;
+
+    let mut ctrl = StarControls {
+        v_flag: true,
+        rsp_flag: true,
+        rsp: RspConfig {
+            nz: 2,
+            ..RspConfig::default()
+        },
+        ..StarControls::default()
+    };
+    let mut model =
+        StarModel::new(2, vec![1], StarJobControls::default(), ctrl.clone());
+    model.dm = vec![1.0e28, 2.0e28];
+    model.m_grav = vec![1.1e33, 1.09e33];
+    model.m_center = 1.08e33;
+    model.r = vec![7.0e10, 6.9e10];
+    model.r_center = 6.8e10;
+    model.cgrav = vec![STANDARD_CGRAV, STANDARD_CGRAV];
+    model.v = vec![1.0e5 + 3.0_f64.sqrt(), 1.0e5 - 2.0_f64.sqrt()];
+    model.v_center = 5.0e4;
+    model.aux.rsp.egas_rsp = vec![1.5e12, 1.8e12];
+    model.aux.rsp.erad_rsp = vec![2.5e11, 3.0e11];
+    model.aux.rsp.et_rsp = vec![9.0e8, 1.6e9];
+    model.lum = vec![1.0e35, 1.0e35];
+    model.lum_start = vec![1.0e35, 1.0e35];
+    model.l_center = 1.0e35;
+    model.dt = 100.0;
+
+    let dc = RspDerivedConsts::from_config(&model.controls.rsp, 2);
+    let wk = RspHydWork::from_model(&model);
+    let _ = calculate_energies(&mut model, &dc, &wk);
+    let (expected_kin, expected_grav) = quad_ke_pe_oracle(&model);
+    assert_eq!(model.aux.rsp.ekin.to_bits(), expected_kin.to_bits());
+    assert_eq!(model.aux.rsp.egrv.to_bits(), expected_grav.to_bits());
+    assert_eq!(
+        model.aux.rsp.etot.to_bits(),
+        (model.aux.rsp.ethe
+            + model.aux.rsp.ekin
+            + model.aux.rsp.econ
+            + model.aux.rsp.egrv)
+            .to_bits()
+    );
+
+    model.controls.use_mass_corrections = true;
+    model.aux.mass_correction = vec![0.95, 1.05];
+    let _ = calculate_energies(&mut model, &dc, &wk);
+    let (expected_kin_m, expected_grav_m) = quad_ke_pe_oracle(&model);
+    assert_eq!(model.aux.rsp.ekin.to_bits(), expected_kin_m.to_bits());
+    assert_eq!(model.aux.rsp.egrv.to_bits(), expected_grav_m.to_bits());
+    assert_ne!(model.aux.rsp.ekin.to_bits(), expected_kin.to_bits());
+    assert_ne!(model.aux.rsp.egrv.to_bits(), expected_grav.to_bits());
+
+    // Exact rational PE oracle: -0.5 * (1/3 + 1/7) = -5/21.
+    ctrl.rsp.nz = 1;
+    let mut rat = StarModel::new(1, vec![1], StarJobControls::default(), ctrl);
+    rat.dm = vec![1.0];
+    rat.cgrav = vec![1.0];
+    rat.m_grav = vec![1.0];
+    rat.r = vec![3.0];
+    rat.m_center = 1.0;
+    rat.r_center = 7.0;
+    rat.aux.rsp.egas_rsp = vec![0.0];
+    rat.aux.rsp.erad_rsp = vec![0.0];
+    let dc1 = RspDerivedConsts::from_config(&rat.controls.rsp, 1);
+    let wk1 = RspHydWork::from_model(&rat);
+    let _ = calculate_energies(&mut rat, &dc1, &wk1);
+    let exact_pe = -5.0_f64 / 21.0;
+    assert!((rat.aux.rsp.egrv - exact_pe).abs() <= 1.0e-15);
+}
+
+#[test]
+#[allow(clippy::manual_midpoint)]
+fn test_rsp_copy_results_updates_gradt_and_p_face_ad_mesa_26_4_1() {
+    use flexmesa_star::rsp_grid::copy_results;
+    use flexmesa_star::{RspConfig, StarAdOrder1};
+
+    let ctrl = StarControls {
+        v_flag: true,
+        rsp_flag: true,
+        rsp: RspConfig {
+            nz: 3,
+            ..RspConfig::default()
+        },
+        ..StarControls::default()
+    };
+    let mut model =
+        StarModel::new(3, vec![1], StarJobControls::default(), ctrl);
+    model.r = vec![1.0e11, 9.8e10, 9.6e10];
+    model.r_center = 9.4e10;
+    model.dm = vec![1.0e28, 1.0e28, 1.0e28];
+    model.mstar = 4.0e33;
+    model.xmstar = 3.0e28;
+    model.t = vec![6.0e3, 7.0e3, 8.0e3];
+    model.pgas = vec![1.0e4, 2.0e4, 4.0e4];
+    model.prad = vec![1.0e2, 2.0e2, 4.0e2];
+    model.aux.rsp.et_rsp = vec![0.0, 1.0e9, 4.0e9];
+    model.aux.rsp.fr_rsp = vec![1.0e10, 1.1e10, 1.2e10];
+    model.grada = vec![0.25, 0.30, 0.35];
+    model.aux.rsp.y_face_rsp = vec![0.0, 0.12, -0.04];
+
+    model.gradt = vec![-999.0; 3];
+    model.aux.mixing.gradt_sub_grada = vec![-999.0; 3];
+    model.aux.p_face_ad = vec![StarAdOrder1::constant(-999.0); 3];
+
+    let dc = RspDerivedConsts::from_config(&model.controls.rsp, 3);
+    copy_results(&mut model, &dc);
+
+    // `star/private/rsp_def.f90:809-814`: gradT from Y_face and average grada.
+    let want_gt1 = 0.12_f64 + 0.5 * (0.25 + 0.30);
+    let want_gt2 = -0.04_f64 + 0.5 * (0.30 + 0.35);
+    assert_eq!(model.gradt[1].to_bits(), want_gt1.to_bits());
+    assert_eq!(model.gradt[2].to_bits(), want_gt2.to_bits());
+    assert_eq!(model.gradt[0].to_bits(), model.gradt[1].to_bits());
+    assert_eq!(model.aux.mixing.gradt_sub_grada, vec![0.0, 0.12, -0.04]);
+
+    // `star/private/rsp_def.f90:848-855`: P_face_ad surface and face averages.
+    let want_peos: [f64; 3] = [1.01e4, 2.02e4, 4.04e4];
+    for k in 0..3 {
+        assert_eq!(
+            model.peos[k].to_bits(),
+            (model.pgas[k] + model.prad[k]).to_bits()
+        );
+    }
+    assert_eq!(model.aux.p_face_ad[0].val.to_bits(), want_peos[0].to_bits());
+    assert_eq!(
+        model.aux.p_face_ad[1].val.to_bits(),
+        (0.5 * (want_peos[1] + want_peos[0])).to_bits()
+    );
+    assert_eq!(
+        model.aux.p_face_ad[2].val.to_bits(),
+        (0.5 * (want_peos[2] + want_peos[1])).to_bits()
+    );
+}
+
+#[test]
+fn test_rsp_eos_inv_degas_and_de_use_lnt_guess_and_fallback() {
+    use flexmesa_star::{
+        eval1_mesa_eos_de_and_kap, eval1_mesa_eos_degas_and_kap,
+    };
+
+    let raw = fs::read_to_string(
+        golden_rsp_dir().join("rsp_Type_II_Cepheid_init_26_4_1.mod"),
+    )
+    .expect("read t2c init mod");
+    let mut model =
+        read_mod_str(&raw, StarControls::default(), base_job(false))
+            .expect("parse t2c init mod");
+    let chem = RspChemCache::from_model_zone0(&model).expect("chem cache");
+
+    for &k in &[45_usize, 110] {
+        let t0 = flexmesa_math::exp(model.ln_t[k]);
+        let v0 = 1.0 / flexmesa_math::exp(model.lnd[k]);
+        let base =
+            eval1_mesa_eos_and_kap(&mut model, &chem, Some(k), true, t0, v0)
+                .expect("base eos");
+
+        // Stale linear `t` far outside table is bypassed by `ln_t / LN10`
+        // (`star/private/rsp_eval_eos_and_kap.f90:368, 506`).
+        model.t[k] = 1.0e20;
+        let (t_degas, _) = eval1_mesa_eos_degas_and_kap(
+            &mut model, &chem, k, true, base.egas, v0,
+        )
+        .expect("eos_degas with valid ln_t");
+        assert!((t_degas - t0).abs() <= 1.0e-10 * t0);
+        assert!((model.t[k] - t0).abs() <= 1.0e-10 * t0);
+
+        model.t[k] = 1.0e-5;
+        let (t_de, _) = eval1_mesa_eos_de_and_kap(
+            &mut model,
+            &chem,
+            k,
+            true,
+            base.egas + base.erad,
+            v0,
+        )
+        .expect("eos_de with valid ln_t");
+        assert!((t_de - t0).abs() <= 1.0e-10 * t0);
+        assert!((model.t[k] - t0).abs() <= 1.0e-10 * t0);
+
+        // Fallback when `ln_t` is uninitialized (`0.0`): uses `log10(t)`.
+        model.ln_t[k] = 0.0;
+        model.t[k] = t0 * 1.02;
+        let (t_fb, _) = eval1_mesa_eos_degas_and_kap(
+            &mut model, &chem, k, true, base.egas, v0,
+        )
+        .expect("eos_degas fallback");
+        assert!((t_fb - t0).abs() <= 1.0e-10 * t0);
+    }
+}
+
+#[test]
+fn test_rsp_delta_scuti_map_rotation_period8_boundaries_mesa_26_4_1() {
+    use flexmesa_star::rsp_driver::rsp_after_step_map;
+    use flexmesa_star::DefaultStarExtras;
+
+    let tmp = RspTempDir::new("ds_map_boundary");
+    let case_dir = tmp.root.join("case");
+    let log_dir = case_dir.join("LOGS");
+    fs::create_dir_all(&case_dir).expect("create case dir");
+    fs::write(case_dir.join("map_columns.list"), "temperature\n")
+        .expect("write map_columns.list");
+
+    let raw = fs::read_to_string(
+        golden_rsp_dir().join("rsp_Delta_Scuti_init_26_4_1.mod"),
+    )
+    .expect("read ds init mod");
+    let mut ctrl = delta_scuti_controls();
+    ctrl.rsp_flag = true;
+    ctrl.rsp.write_map = true;
+    ctrl.rsp.map_first_period = 8;
+    ctrl.rsp.map_last_period = 8;
+    ctrl.rsp.map_history_filename = String::from("map_history.data");
+    let mut model =
+        read_mod_str(&raw, ctrl, base_job(false)).expect("parse ds init mod");
+    model.aux.rsp.period = 5000.0;
+    model.aux.rsp.time_sec = 32500.0;
+
+    // Period 7 underway (`num_periods == 6`, models 5810..5816 in `Delta_Scuti`):
+    // `IP + 1 = 7 < 8`, so `LOGS/history.data` stays active (`rsp.f90:510`).
+    model.aux.rsp.num_periods = 6;
+    rsp_after_step_map(
+        &mut model,
+        &case_dir,
+        Some(&log_dir),
+        &DefaultStarExtras,
+    )
+    .expect("map check before period 8");
+    assert!(!model.aux.rsp.writing_map);
+    assert!(!model.controls.output.need_to_set_history_names_etc);
+    assert_eq!(model.controls.output.star_history_name, "history.data");
+
+    // Step 5817 completes period 7 (`num_periods == 7`, `IP + 1 == 8`):
+    // opens `map.data` and rotates `star_history_name` to `map_history.data`.
+    model.aux.rsp.num_periods = 7;
+    rsp_after_step_map(
+        &mut model,
+        &case_dir,
+        Some(&log_dir),
+        &DefaultStarExtras,
+    )
+    .expect("map check at period 8 open");
+    assert!(model.aux.rsp.writing_map);
+    assert!(!model.aux.rsp.done_writing_map);
+    assert!(model.controls.output.need_to_set_history_names_etc);
+    assert_eq!(model.controls.output.star_history_name, "map_history.data");
+    assert!(log_dir.join("map.data").exists());
+
+    // Period 8 finishes (`num_periods == 8 == map_last_period`): closes map
+    // (`star/private/rsp.f90:559-564`).
+    model.aux.rsp.num_periods = 8;
+    rsp_after_step_map(
+        &mut model,
+        &case_dir,
+        Some(&log_dir),
+        &DefaultStarExtras,
+    )
+    .expect("map check at period 8 close");
+    assert!(model.aux.rsp.done_writing_map);
+}

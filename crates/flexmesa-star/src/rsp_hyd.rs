@@ -151,7 +151,8 @@ pub fn get_psurf(
 }
 
 /// Evaluates thermal, turbulent, kinetic, gravitational, and radiated energies
-/// (`calculate_energies` in `rsp_step.f90:537-577`, `star_utils.f90:2215-2290`).
+/// (`calculate_energies` in `rsp_step.f90:537-577`,
+/// `star_utils.f90:2176-2277`).
 pub fn calculate_energies(
     model: &mut StarModel,
     dc: &RspDerivedConsts,
@@ -173,25 +174,8 @@ pub fn calculate_energies(
         };
         ethe += e_therm * dm;
         econ += flexmesa_math::pow2(wk.w[k0]) * dm;
-
-        let v1 = if k0 + 1 < nzn {
-            model.v[k0 + 1]
-        } else {
-            model.v_center
-        };
-        let ke_spec =
-            0.25 * (flexmesa_math::pow2(model.v[k0]) + flexmesa_math::pow2(v1));
-        ekin += ke_spec * dm;
-
-        let (rp1, mp1, gp1) = if k0 + 1 == nzn {
-            (model.r_center, model.m_center, model.cgrav[nzn - 1])
-        } else {
-            (model.r[k0 + 1], model.m_grav[k0 + 1], model.cgrav[k0 + 1])
-        };
-        let gravp1 = if rp1 <= 0.0 { 0.0 } else { -gp1 * mp1 / rp1 };
-        let grav00 = -model.cgrav[k0] * model.m_grav[k0] / model.r[k0];
-        let pe_spec = 0.5 * (gravp1 + grav00);
-        egrv += pe_spec * dm;
+        ekin += crate::cell_energy::cell_specific_ke(model, k0) * dm;
+        egrv += crate::cell_energy::cell_specific_pe(model, k0) * dm;
     }
 
     let total_radiation = if model.controls.rsp.hydro_only {

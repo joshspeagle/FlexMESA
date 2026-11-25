@@ -100,8 +100,23 @@ pub fn eval1_mesa_t_given_dp(
     })
 }
 
+/// Derives the initial $\log_{10} T$ guess from `model.ln_t[cell_k] / LN10`
+/// (`star/private/rsp_eval_eos_and_kap.f90:368, 506`), falling back to
+/// `log10(t_guess)` when `ln_t` is unavailable or unset.
+fn log_t_guess_from_cell(model: &StarModel, cell_k: usize) -> f64 {
+    if let Some(&ln_t) = model.ln_t.get(cell_k) {
+        if ln_t.is_finite()
+            && (ln_t != 0.0 || model.t.get(cell_k).copied() == Some(1.0))
+        {
+            return ln_t / LN10;
+        }
+    }
+    let t_guess = model.t.get(cell_k).copied().unwrap_or(1.0e4).max(100.0);
+    flexmesa_math::log10(t_guess)
+}
+
 /// Solves $e_{\mathrm{gas}}(1/V, T) = e_{\mathrm{gas}}$ for $T$ and evaluates
-/// `RSP` EOS + opacity (`eval1_mesa_eosDEgas_and_kap`, `rsp_eval_eos_and_kap.f90:409-504`).
+/// `RSP` EOS + opacity (`eval1_mesa_eosDEgas_and_kap`, `rsp_eval_eos_and_kap.f90:325-460`).
 pub fn eval1_mesa_eos_degas_and_kap(
     model: &mut StarModel,
     chem: &RspChemCache,
@@ -110,7 +125,6 @@ pub fn eval1_mesa_eos_degas_and_kap(
     egas: f64,
     vol: f64,
 ) -> Result<(f64, RspEosKapOut), StarError> {
-    let t_guess = model.t.get(cell_k).copied().unwrap_or(1.0e4).max(100.0);
     let inv = eos_dt_get_t(
         crate::micro::builtin_helm_table()?,
         &chem.chem_id,
@@ -118,7 +132,7 @@ pub fn eval1_mesa_eos_degas_and_kap(
         flexmesa_math::log10(1.0 / vol),
         WHICH_OTHER_EGAS,
         egas,
-        flexmesa_math::log10(t_guess),
+        log_t_guess_from_cell(model, cell_k),
         1.0e-11,
         egas.abs() * 1.0e-11,
         100,
@@ -134,7 +148,7 @@ pub fn eval1_mesa_eos_degas_and_kap(
 }
 
 /// Solves $e(1/V, T) = e$ for $T$ and evaluates `RSP` EOS + opacity
-/// (`eval1_mesa_eosDE_and_kap`, `rsp_eval_eos_and_kap.f90:507-591`).
+/// (`eval1_mesa_eosDE_and_kap`, `rsp_eval_eos_and_kap.f90:463-591`).
 pub fn eval1_mesa_eos_de_and_kap(
     model: &mut StarModel,
     chem: &RspChemCache,
@@ -143,7 +157,6 @@ pub fn eval1_mesa_eos_de_and_kap(
     energy: f64,
     vol: f64,
 ) -> Result<(f64, RspEosKapOut), StarError> {
-    let t_guess = model.t.get(cell_k).copied().unwrap_or(1.0e4).max(100.0);
     let inv = eos_dt_get_t(
         crate::micro::builtin_helm_table()?,
         &chem.chem_id,
@@ -151,7 +164,7 @@ pub fn eval1_mesa_eos_de_and_kap(
         flexmesa_math::log10(1.0 / vol),
         I_LN_E as isize,
         flexmesa_math::log(energy),
-        flexmesa_math::log10(t_guess),
+        log_t_guess_from_cell(model, cell_k),
         1.0e-11,
         1.0e-11 * LN10,
         100,

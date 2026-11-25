@@ -95,8 +95,10 @@ pub use jdot_tides::{
 pub use mdot::{
     ImplicitMdotSolver, ImplicitRlofSolver, ImplicitStepAction,
     eval_arras_mdot_thin, eval_edot_enhancement_isotropic,
-    eval_kolb_mdot_eccentric, eval_kolb_mdot_thick, eval_ritter_mdot_eccentric,
-    eval_ritter_mdot_thin, kolb_f3, update_change_factor_after_step,
+    eval_kolb_mdot_eccentric, eval_kolb_mdot_eccentric_photosphere,
+    eval_kolb_mdot_thick, eval_kolb_mdot_thick_photosphere,
+    eval_ritter_mdot_eccentric, eval_ritter_mdot_thin, kolb_f3,
+    update_change_factor_after_step,
 };
 pub use orbit::{
     build_anomaly_grid, eval_j_orb, eval_l2_overflow_limit,

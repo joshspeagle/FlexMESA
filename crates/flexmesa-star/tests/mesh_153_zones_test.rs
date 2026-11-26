@@ -133,9 +133,9 @@ fn test_do_adjust_mesh_resets_cgrav_to_standard_cgrav_on_merge_and_split() {
     };
     let check_standard = |m: &StarModel, what: &str| {
         assert_eq!(m.cgrav.len(), m.nz);
-        for k in 0..m.nz {
+        for (k, cgrav_k) in m.cgrav.iter().enumerate() {
             assert_eq!(
-                m.cgrav[k].to_bits(),
+                cgrav_k.to_bits(),
                 STANDARD_CGRAV.to_bits(),
                 "cgrav at {what} zone {k} is not standard_cgrav"
             );

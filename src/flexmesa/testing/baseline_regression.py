@@ -34,7 +34,7 @@ RESOURCE_LIMITED_STATUSES: frozenset[str] = frozenset({"timeout", "oom_killed"})
 
 #: Run status of a case stopped by ``--early-stop-on-divergence``: a tracked
 #: column was already out of tolerance, so the case cannot pass
-#: (``DECISIONS #68``). Checked as a prefix of the baseline row.
+#: (``DECISIONS #69``). Checked as a prefix of the baseline row.
 EARLY_STOP_STATUS = "diverged"
 
 _EARLY_STOP_MODEL_RE = re.compile(r"\(model (\d+)\)")

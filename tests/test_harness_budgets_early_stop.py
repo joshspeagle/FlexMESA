@@ -5,7 +5,7 @@ The early divergence check is judged against the final comparison on real
 committed MESA ``26.4.1`` reference histories: a partial history that the
 early check flags must also fail the final along-track comparison of the
 complete run, and a run that passes the final comparison must never be
-flagged at any prefix (``DECISIONS #68``).
+flagged at any prefix (``DECISIONS #69``).
 """
 
 from __future__ import annotations
@@ -27,6 +27,7 @@ from flexmesa.testing import (
     harness_runner,
     harness_shards,
     history_compare,
+    stage_steps,
     trace_cli,
 )
 
@@ -262,7 +263,7 @@ def test_early_stop_refuses_baseline_updating_runs(extra: list[str]) -> None:
     ns = trace_cli._build_harness_parser().parse_args(
         ["run", "--early-stop-on-divergence", *extra]
     )
-    assert "DECISIONS #68" in trace_cli._early_stop_refusal(ns)
+    assert "DECISIONS #69" in trace_cli._early_stop_refusal(ns)
     assert (
         trace_cli.harness_main(["run", "--early-stop-on-divergence", *extra])
         == 1
@@ -697,3 +698,201 @@ def test_dense_run_against_a_sparse_reference_is_judged_at_reference_rows(
         assert (
             early_stop.find_early_divergence(ref, _slice(run, m), spec) is None
         )
+
+
+# ---------------------------------------------------------------------------
+# Per-stage step counts
+# ---------------------------------------------------------------------------
+
+
+def test_mesa_stage_steps_cover_every_case_and_match_known_stages() -> None:
+    table = stage_steps.load_mesa_stage_steps()
+    assert len(table) == 106
+    assert table[("star", "make_planets")] == (76, 22, 112)
+    assert table[("star", "high_z")] == (445,)
+
+
+def test_stage_deltas_align_stages_from_the_end() -> None:
+    mesa = (76, 22, 112)
+    full = stage_steps.stage_deltas((76, 22, 113), mesa)
+    assert [d.delta for d in full] == [0, 0, 1]
+    skipped = stage_steps.stage_deltas((22, 112), mesa)
+    assert [(d.stage, d.mesa) for d in skipped] == [(1, 22), (2, 112)]
+    extra = stage_steps.stage_deltas((5, 22, 112), (22, 112))
+    assert extra[0].mesa is None and extra[0].delta is None
+
+
+def test_step_bound_adds_the_larger_margin() -> None:
+    assert stage_steps.step_bound(100, 5, 0.02) == 105
+    assert stage_steps.step_bound(1000, 5, 0.02) == 1020
+
+
+def _executed_pass(baseline_records: list[Record]) -> Record:
+    return next(r for r in baseline_records if r.verdict == "pass")
+
+
+def test_pass_with_other_step_count_is_a_warning_not_a_verdict_change(
+    baseline_records: list[Record],
+) -> None:
+    base = _executed_pass(baseline_records)
+    mesa = stage_steps.load_mesa_stage_steps()[(base.suite, base.case)]
+    same = dataclasses.replace(base, stage_steps=mesa, mesa_stage_steps=mesa)
+    assert not same.step_count_differs
+    off = dataclasses.replace(
+        base,
+        stage_steps=(*mesa[:-1], mesa[-1] + 3),
+        mesa_stage_steps=mesa,
+    )
+    assert off.step_count_differs
+    assert off.verdict == "pass"
+    row = case_report.record_to_dict(off)
+    assert row["stage_step_deltas"][-1] == 3
+    assert row["step_count_differs"] is True
+    manifest = case_manifest.load_case_manifest()
+    summary = case_report.build_report_payload(
+        manifest, [off], {}, numerics_mode="strict"
+    )["summary"]
+    assert summary["passes_with_step_count_differences"] == [
+        f"{base.suite}/{base.case}"
+    ]
+    md = case_report.render_case_table_markdown(manifest, [off])
+    assert "Step counts that differ from MESA" in md
+    assert "(warning)" in md
+    assert (
+        "Step counts that differ"
+        not in case_report.render_case_table_markdown(manifest, [same])
+    )
+    # The committed baseline carries no run-side stage counts.
+    assert "stage_steps" not in case_report.record_to_dict(base)
+
+
+def test_monitor_stops_a_run_past_the_mesa_step_count(
+    manifest: case_manifest.HarnessManifest, tmp_path: pathlib.Path
+) -> None:
+    spec = _spec(manifest, ("star", "high_z"))
+    lines = ["# note", "model_number\tstar_age\tlog_L"]
+    lines += [f"{i}\t{float(i)}\t{0.1 * i}" for i in range(1, 12)]
+    path = tmp_path / "history.data"
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    bound = stage_steps.step_bound(5, 5, 0.02)
+    mon = early_stop.EarlyStopMonitor(
+        spec, None, excess_limit=bound, mesa_stage_steps=5
+    )
+    request = mon(path)
+    assert request is not None and request.status == "diverged"
+    assert request.message == (
+        "diverged: exceeded MESA's step count at stage 1 (11 vs 5)"
+    )
+    ok = early_stop.EarlyStopMonitor(
+        spec, None, excess_limit=11, mesa_stage_steps=5
+    )
+    assert ok(path) is None
+
+
+def test_stop_on_excess_steps_is_refused_for_baseline_updates() -> None:
+    ns = trace_cli._build_harness_parser().parse_args(
+        ["run", "--stop-on-excess-steps", "--update-baseline", "b.json"]
+    )
+    assert "--stop-on-excess-steps" in trace_cli._early_stop_refusal(ns)
+
+
+def _stored_pass_rows(
+    key: tuple[str, str], stages: tuple[int, ...]
+) -> dict[tuple[str, str], dict[str, object]]:
+    """Return the committed baseline row of ``key`` with run stage counts."""
+    root = case_manifest.repo_root()
+    raw = json.loads(
+        (
+            root / "benchmarks" / "history_harness" / "baseline_run_26_4_1.json"
+        ).read_text(encoding="utf-8")
+    )
+    row = next(
+        r
+        for r in raw["cases"]
+        if (r["suite"], r["case"]) == key and r["executed"]
+    )
+    assert row["verdict"] == "pass"
+    return {key: {**row, "stage_steps": list(stages)}}
+
+
+def _verdict(
+    key: tuple[str, str],
+    stages: tuple[int, ...],
+    *,
+    enforce: bool,
+    gaps: dict[tuple[str, str], case_manifest.KnownGapSpec] | None = None,
+) -> Record:
+    manifest = case_manifest.load_case_manifest()
+    use = case_manifest.load_known_gaps() if gaps is None else gaps
+    rows = _stored_pass_rows(key, stages)
+    records = case_report.records_from_stored_rows(
+        manifest, use, rows, enforce_step_counts=enforce
+    )
+    return next(r for r in records if (r.suite, r.case) == key)
+
+
+def test_enforced_step_counts_relabel_a_pass_with_another_stage_count() -> None:
+    key = ("star", "high_mass")
+    mesa = stage_steps.load_mesa_stage_steps()[key]
+    same = _verdict(key, mesa, enforce=True)
+    assert same.verdict == "pass"
+    off = _verdict(key, (mesa[-1] + 2,), enforce=True)
+    assert off.verdict == "fail (step count)"
+    assert off.is_undeclared_failure
+    assert off.error_message == (
+        "step count differs from MESA at stage 1 "
+        f"({mesa[-1] + 2} vs {mesa[-1]})"
+    )
+
+
+def test_unenforced_step_count_difference_keeps_the_pass_verdict() -> None:
+    key = ("star", "high_mass")
+    mesa = stage_steps.load_mesa_stage_steps()[key]
+    off = _verdict(key, (mesa[-1] + 2,), enforce=False)
+    assert off.verdict == "pass"
+    assert off.step_count_differs
+    assert not off.is_undeclared_failure
+
+
+def test_enforced_step_counts_check_every_stage_of_a_multi_stage_case() -> None:
+    key = ("star", "make_planets")
+    mesa = stage_steps.load_mesa_stage_steps()[key]
+    assert mesa == (76, 22, 112)
+    assert _verdict(key, mesa, enforce=True).verdict == "pass"
+    early = _verdict(key, (76, 23, 112), enforce=True)
+    assert early.verdict == "fail (step count)"
+    assert "stage 2 (23 vs 22)" in early.error_message
+
+
+def test_enforced_step_count_difference_of_a_declared_gap_stays_declared() -> (
+    None
+):
+    key = ("star", "high_mass")
+    mesa = stage_steps.load_mesa_stage_steps()[key]
+    gap = case_manifest.KnownGapSpec(
+        suite="star", case="high_mass", issue="#1", reason="test"
+    )
+    rec = _verdict(key, (mesa[-1] + 1,), enforce=True, gaps={key: gap})
+    assert rec.verdict == "declared gap (#1)"
+    assert not rec.is_undeclared_failure
+
+
+def test_a_missing_mesa_step_count_is_not_compared() -> None:
+    assert _case_verdict.first_step_difference((5, 6), ()) == ""
+    assert _case_verdict.first_step_difference((), (5,)) == ""
+    assert _case_verdict.first_step_difference((5,), (5,)) == ""
+
+
+def test_enforce_flag_is_off_by_default_and_recorded_for_shards() -> None:
+    parser = trace_cli._build_harness_parser()
+    assert not parser.parse_args(["run"]).enforce_step_counts
+    assert parser.parse_args(
+        ["run", "--enforce-step-counts"]
+    ).enforce_step_counts
+    assert "enforce_step_counts" in harness_shards.RUN_SETTING_KEYS
+
+
+def test_rust_worker_script_reports_stage_model_numbers() -> None:
+    script = harness_runner._RUST_WORKER_BOOTSTRAP
+    assert "'stage_steps'" in script and "'model_number'" in script
+    compile(script, "<worker>", "exec")

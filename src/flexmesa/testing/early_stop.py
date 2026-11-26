@@ -5,7 +5,7 @@ The history harness judges a finished run by comparing its history with the
 stored MESA reference along the independent coordinate (``DECISIONS #27``,
 ``compare_histories``). A case whose partial history already violates an
 along-track tolerance cannot pass, so a fast loop may stop it instead of
-waiting for upstream's termination condition (``DECISIONS #68``).
+waiting for upstream's termination condition (``DECISIONS #69``).
 
 The along-track check of the final comparison evaluates, on a grid that
 contains every interior row of the run, the distance between the run and the
@@ -39,6 +39,7 @@ from flexmesa.testing import (
     _case_verdict,
     case_manifest,
     history_compare,
+    stage_steps,
 )
 
 __all__ = [
@@ -290,16 +291,25 @@ class EarlyStopMonitor:
         step_limit: Stop once the run's last ``model_number`` reaches this
             value, or ``None`` for no step bound.
         step_message: Report line used when the step bound stops the case.
+        excess_limit: Stop once the run's last ``model_number`` exceeds this
+            (MESA's step count of the stage plus a margin), or ``None``.
+        mesa_stage_steps: MESA's step count of that stage, for the report.
     """
 
     spec: case_manifest.CaseManifestEntry
     ref: history_compare.HistoryTable | None
     step_limit: int | None = None
     step_message: str = ""
+    excess_limit: int | None = None
+    mesa_stage_steps: int = 0
 
     def __call__(self, path: pathlib.Path) -> StopRequest | None:
         """Check the partial history at ``path`` (see class docstring)."""
-        if self.ref is None and self.step_limit is None:
+        if (
+            self.ref is None
+            and self.step_limit is None
+            and self.excess_limit is None
+        ):
             return None
         run = read_partial_history(path)
         if run is None:
@@ -308,9 +318,17 @@ class EarlyStopMonitor:
             hit = find_early_divergence(self.ref, run, self.spec)
             if hit is not None:
                 return StopRequest("diverged", hit.message())
+        if self.excess_limit is not None and "model_number" in run.columns:
+            last = round(float(run.columns["model_number"][-1]))
+            if last > self.excess_limit:
+                return StopRequest(
+                    "diverged",
+                    "diverged: exceeded MESA's step count at stage 1 "
+                    f"({last} vs {self.mesa_stage_steps})",
+                )
         if self.step_limit is not None and "model_number" in run.columns:
-            last = float(run.columns["model_number"][-1])
-            if math.isfinite(last) and last >= self.step_limit:
+            last_model = float(run.columns["model_number"][-1])
+            if math.isfinite(last_model) and last_model >= self.step_limit:
                 return StopRequest("timeout", self.step_message)
         return None
 
@@ -345,6 +363,10 @@ def build_monitor(
     mesa_steps: int | None,
     step_factor: float | None,
     root_dir: pathlib.Path | None = None,
+    stop_on_excess_steps: bool = False,
+    mesa_stage_steps: tuple[int, ...] = (),
+    margin_abs: int = 5,
+    margin_frac: float = 0.02,
 ) -> EarlyStopMonitor | None:
     """Build the polling hook of one case, or ``None`` when none applies.
 
@@ -359,6 +381,12 @@ def build_monitor(
         mesa_steps: Step count of the MESA reference run, for the step bound.
         step_factor: Stop at ``step_factor * mesa_steps`` steps, or ``None``.
         root_dir: Manifest directory against which reference paths resolve.
+        stop_on_excess_steps: Stop a single-stage ``star`` case that passes
+            MESA's step count of its stage by more than the margin.
+        mesa_stage_steps: MESA's per-stage step counts (the last stage is
+            the one a single-stage case runs).
+        margin_abs: Smallest margin of the excess-step stop, in steps.
+        margin_frac: Margin as a fraction of MESA's step count.
 
     Returns:
         The monitor, or ``None`` when neither check applies to the case.
@@ -388,6 +416,16 @@ def build_monitor(
             f"stopped at the step bound: model {limit} reached "
             f"({step_factor:g} x {mesa_steps} MESA steps)"
         )
-    if ref is None and limit is None:
+    excess: int | None = None
+    mesa_last = 0
+    if (
+        stop_on_excess_steps
+        and spec.suite == "star"
+        and mesa_stage_steps
+        and single_stage_star_case(case_dir)
+    ):
+        mesa_last = mesa_stage_steps[-1]
+        excess = stage_steps.step_bound(mesa_last, margin_abs, margin_frac)
+    if ref is None and limit is None and excess is None:
         return None
-    return EarlyStopMonitor(spec, ref, limit, message)
+    return EarlyStopMonitor(spec, ref, limit, message, excess, mesa_last)

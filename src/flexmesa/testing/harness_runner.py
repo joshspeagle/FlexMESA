@@ -185,11 +185,27 @@ def proc_rss_gb(pid: int) -> float:
     return _proc_rss_kb(pid) / 1.0e6
 
 
-#: File names of the per-track ``astero`` search histories (``#430``).
-#: Seconds between polls of a running case by its monitor (``DECISIONS #68``).
+#: Seconds between polls of a running case by its monitor (``DECISIONS #69``).
 MONITOR_INTERVAL_SEC = 10.0
+#: File names of the per-track ``astero`` search histories (``#430``).
 RUN_TRACK_GLOB = "sample_[0-9][0-9][0-9][0-9]_history.data"
 RUN_TRACK_RE = re.compile(r"^sample_(\d{4})_history\.data$")
+
+
+def stage_model_numbers(rep: dict[str, Any]) -> tuple[int, ...]:
+    """Return the model number at the end of each stage of a trace report.
+
+    Args:
+        rep: Report of a ``star`` trace (``stages[*].model_number``).
+
+    Returns:
+        The per-stage model numbers; empty for reports without stages.
+    """
+    return tuple(
+        int(st["model_number"])
+        for st in rep.get("stages", ())
+        if "model_number" in st
+    )
 
 
 def _sole_history(out_target: pathlib.Path) -> bool:
@@ -548,6 +564,11 @@ _RUST_WORKER_BOOTSTRAP = "\n".join(
         "payload = {",
         "    'termination_code': rep.get('termination_code', ''),",
         "    'total_steps': int(rep.get('total_steps', 0)),",
+        "    'stage_steps': [",
+        "        int(st['model_number'])",
+        "        for st in rep.get('stages', ())",
+        "        if 'model_number' in st",
+        "    ],",
         "    'total_retries': int(",
         "        rep.get('total_retries', rep.get('binary_retries', 0))",
         "    ),",
@@ -781,6 +802,9 @@ def _run_traced_worker(
                 status="ok",
                 termination_code=str(payload.get("termination_code", "")),
                 steps=int(payload.get("total_steps", 0)),
+                stage_steps=tuple(
+                    int(n) for n in payload.get("stage_steps", ())
+                ),
                 retries=rep_retries,
                 wall_time_sec=wall,
                 peak_rss_gb=max(
@@ -973,6 +997,7 @@ def _run_traced_case_once(
             status="ok",
             termination_code=str(rep.get("termination_code", "")),
             steps=int(rep.get("total_steps", 0)),
+            stage_steps=stage_model_numbers(rep),
             retries=rep_retries,
             wall_time_sec=wall,
             peak_rss_gb=proc_rss_gb(os.getpid()),

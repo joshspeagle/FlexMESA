@@ -7,7 +7,7 @@ each case a wall-time budget of ``max(K x its recorded wall time, floor)``
 capped at ``--timeout-sec``, and ``--mesa-step-factor`` bounds its steps at
 a multiple of the step count of the MESA reference run. A case stopped by
 either bound is inconclusive and is compared as a prefix of its baseline row
-(``DECISIONS #59``, ``DECISIONS #68``).
+(``DECISIONS #59``, ``DECISIONS #69``).
 
 The committed baseline records wall times as zero so that it diffs
 deterministically (``DECISIONS #58``), so the wall times come from a

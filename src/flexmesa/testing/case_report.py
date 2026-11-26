@@ -145,6 +145,19 @@ def summarize_records(
         "declared_known_gaps": n_declared_gaps_total,
         "undeclared_failures": undeclared_failures,
         "stale_known_gaps": stale_known_gaps,
+        # Present only when a run reported stage step counts, so a summary
+        # rebuilt from stored baseline rows is unchanged (DECISIONS #69).
+        **(
+            {
+                "passes_with_step_count_differences": [
+                    f"{r.suite}/{r.case}"
+                    for r in records
+                    if r.verdict == "pass" and r.step_count_differs
+                ]
+            }
+            if any(r.stage_steps for r in records)
+            else {}
+        ),
     }
 
 
@@ -193,6 +206,11 @@ def record_to_dict(rec: harness_runner.CaseHarnessRecord) -> dict[str, Any]:
         ),
         "error_message": rec.error_message,
     }
+    if rec.stage_steps:
+        out["stage_steps"] = list(rec.stage_steps)
+        out["mesa_stage_steps"] = list(rec.mesa_stage_steps)
+        out["stage_step_deltas"] = [d.delta for d in rec.stage_step_deltas]
+        out["step_count_differs"] = rec.step_count_differs
     if rec.component_comparisons:
         out["component_comparisons"] = {
             k: history_compare.comparison_to_dict(v)
@@ -704,6 +722,42 @@ def _fmt_final_age_diff(rec: harness_runner.CaseHarnessRecord) -> str:
     return "-"
 
 
+def _render_stage_step_section(
+    records: list[harness_runner.CaseHarnessRecord],
+) -> list[str]:
+    """Render the cases whose stage step counts differ from MESA's.
+
+    The section appears only when a run reported per-stage step counts. A
+    passing case in it is a warning, not a change of verdict (``DECISIONS
+    #69``). Each stage is ``FlexMESA / MESA`` as the model number reached at
+    the end of the stage.
+    """
+    rows = [r for r in records if r.step_count_differs]
+    if not rows:
+        return []
+    lines = [
+        "",
+        "## Step counts that differ from MESA",
+        "",
+        "Model number at the end of each stage, FlexMESA / MESA. A `pass` in "
+        "this list is a warning: the trajectory is within tolerance but "
+        "takes other steps than MESA.",
+        "",
+        "| Suite | Case | Verdict | Stages (FlexMESA / MESA) |",
+        "| :-- | :-- | :-- | :-- |",
+    ]
+    for r in rows:
+        stages = ", ".join(
+            f"{d.run} / {d.mesa if d.mesa is not None else '-'}"
+            for d in r.stage_step_deltas
+        )
+        warn = " (warning)" if r.verdict == "pass" else ""
+        lines.append(
+            f"| `{r.suite}` | `{r.case}` | {r.verdict}{warn} | {stages} |"
+        )
+    return lines
+
+
 def render_case_table_markdown(
     manifest: case_manifest.HarnessManifest,
     records: list[harness_runner.CaseHarnessRecord],
@@ -864,6 +918,7 @@ def render_case_table_markdown(
     lines.extend(_render_mass_loss_section(records))
     lines.extend(_render_search_track_section(records))
     lines.extend(_render_energy_conservation_section(records))
+    lines.extend(_render_stage_step_section(records))
     lines.append("")
     return "\n".join(lines)
 
@@ -933,6 +988,7 @@ def records_from_stored_rows(
     base_dir: pathlib.Path | None = None,
     *,
     max_steps: int | None = None,
+    enforce_step_counts: bool = False,
 ) -> list[harness_runner.CaseHarnessRecord]:
     """Rebuild ``CaseHarnessRecord`` entries from stored JSON case rows.
 
@@ -946,6 +1002,8 @@ def records_from_stored_rows(
             :func:`record_to_dict`) keyed by ``(suite, case)``.
         base_dir: Directory against which manifest reference paths resolve.
         max_steps: Step cap the stored runs used, or ``None`` when uncapped.
+        enforce_step_counts: Judge stored stage step counts as ``DECISIONS
+            #70`` requires (see ``evaluate_case_record``).
 
     Returns:
         One record per manifest entry, in manifest order; entries without a
@@ -977,6 +1035,7 @@ def records_from_stored_rows(
             controls_ignored=bool(stored.get("controls_ignored", False)),
             n_controls_ignored=int(stored.get("n_controls_ignored", 0)),
             strict_rejection=str(stored.get("strict_rejection", "")),
+            stage_steps=tuple(int(n) for n in stored.get("stage_steps", ())),
             iters=int(raw_iters) if raw_iters is not None else None,
             mean_iters=(
                 float(raw_mean_iters) if raw_mean_iters is not None else None
@@ -1041,6 +1100,7 @@ def records_from_stored_rows(
                     stored.get("has_component_error", False)
                 ),
                 precomputed_mesa_stats=pre_mesa,
+                enforce_step_counts=enforce_step_counts,
             )
         )
     return records

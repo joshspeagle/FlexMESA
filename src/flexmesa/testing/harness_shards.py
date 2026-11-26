@@ -38,6 +38,8 @@ RUN_SETTING_KEYS: tuple[str, ...] = (
     "budget_from_baseline",
     "mesa_step_factor",
     "early_stop_on_divergence",
+    "stop_on_excess_steps",
+    "enforce_step_counts",
 )
 
 

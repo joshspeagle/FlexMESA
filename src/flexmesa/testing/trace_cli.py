@@ -7,6 +7,7 @@ import argparse
 import concurrent.futures
 import contextlib
 import dataclasses
+import functools
 import json
 import os
 import pathlib
@@ -25,6 +26,7 @@ from flexmesa.testing import (
     harness_budgets,
     harness_runner,
     harness_shards,
+    stage_steps,
     stepdump_compare,
 )
 
@@ -89,6 +91,7 @@ def _run_worker(argv: list[str]) -> int:
     payload = {
         "termination_code": rep.get("termination_code", ""),
         "total_steps": int(rep.get("total_steps", 0)),
+        "stage_steps": list(harness_runner.stage_model_numbers(rep)),
         "total_retries": int(
             rep.get("total_retries", rep.get("binary_retries", 0))
         ),
@@ -459,7 +462,7 @@ def _build_harness_parser() -> argparse.ArgumentParser:
             "--json-out report given with --wall-times-json; a case without "
             "one keeps --timeout-sec. A case stopped by its budget is "
             "inconclusive and is compared as a prefix of its baseline row "
-            "(DECISIONS #59, #68)."
+            "(DECISIONS #59, #69)."
         ),
     )
     p_run.add_argument(
@@ -502,8 +505,45 @@ def _build_harness_parser() -> argparse.ArgumentParser:
             "comparison, and stop it with 'fail (early stop)' as soon as a "
             "tracked column is out of tolerance. It never stops a case the "
             "final comparison would pass. Refused with --update-baseline, "
-            "--save-baseline and --max-steps (DECISIONS #68)."
+            "--save-baseline and --max-steps (DECISIONS #69)."
         ),
+    )
+    p_run.add_argument(
+        "--stop-on-excess-steps",
+        action="store_true",
+        help=(
+            "Stop a single-stage star case that runs past MESA's step count "
+            "(model number at the end of the stage) plus a margin, and "
+            "report it as 'fail (early stop)': 'diverged: exceeded MESA's "
+            "step count at stage S (N vs M)'. The margin is "
+            "max(--step-margin-abs, --step-margin-frac x MESA steps). "
+            "Refused with --update-baseline, --save-baseline and "
+            "--max-steps (DECISIONS #69)."
+        ),
+    )
+    p_run.add_argument(
+        "--enforce-step-counts",
+        action="store_true",
+        help=(
+            "Apply DECISIONS #70: a case that is otherwise a pass but ends "
+            "any stage at another model number than MESA 26.4.1 is "
+            "'fail (step count)'. Off by default, when the differences are "
+            "only reported (stage_step_deltas, step_count_differs). It "
+            "relabels passes, so a gate against a baseline recorded without "
+            "it reports them as regressions."
+        ),
+    )
+    p_run.add_argument(
+        "--step-margin-abs",
+        type=_non_negative_int,
+        default=5,
+        help="Smallest margin of --stop-on-excess-steps (default 5 steps).",
+    )
+    p_run.add_argument(
+        "--step-margin-frac",
+        type=_positive_float,
+        default=0.02,
+        help="Relative margin of --stop-on-excess-steps (default 0.02).",
     )
     p_run.add_argument(
         "--early-stop-interval-sec",
@@ -678,6 +718,11 @@ def _case_timeout(
     return float(ns.timeout_sec)
 
 
+@functools.cache
+def _mesa_stage_steps() -> dict[tuple[str, str], tuple[int, ...]]:
+    return stage_steps.load_mesa_stage_steps()
+
+
 def _monitor_factory(
     ns: argparse.Namespace, entry: case_manifest.CaseManifestEntry
 ) -> Callable[[pathlib.Path], early_stop.RunMonitor | None] | None:
@@ -685,8 +730,13 @@ def _monitor_factory(
     budget = ns.budgets.get(entry.key)
     step_factor = budget.step_factor if budget is not None else None
     mesa_steps = budget.mesa_steps if budget is not None else None
-    if not ns.early_stop_on_divergence and step_factor is None:
+    if (
+        not ns.early_stop_on_divergence
+        and not ns.stop_on_excess_steps
+        and step_factor is None
+    ):
         return None
+    mesa_stage = _mesa_stage_steps().get(entry.key, ())
     base_dir = pathlib.Path(ns.manifest).parent if ns.manifest else None
 
     def build(case_dir: pathlib.Path) -> early_stop.RunMonitor | None:
@@ -697,6 +747,10 @@ def _monitor_factory(
             mesa_steps=mesa_steps,
             step_factor=step_factor,
             root_dir=base_dir,
+            stop_on_excess_steps=bool(ns.stop_on_excess_steps),
+            mesa_stage_steps=mesa_stage,
+            margin_abs=int(ns.step_margin_abs),
+            margin_frac=float(ns.step_margin_frac),
         )
 
     return build
@@ -708,16 +762,21 @@ def _early_stop_refusal(ns: argparse.Namespace) -> str:
     An early-stopped case has a truncated history, so it must never become a
     baseline row, and a step-capped smoke run has no tolerance verdict.
     """
-    if not ns.early_stop_on_divergence:
+    if not (ns.early_stop_on_divergence or ns.stop_on_excess_steps):
         return ""
+    flag = (
+        "--early-stop-on-divergence"
+        if ns.early_stop_on_divergence
+        else "--stop-on-excess-steps"
+    )
     if ns.update_baseline or ns.save_baseline:
         return (
-            "--early-stop-on-divergence cannot be combined with "
+            f"{flag} cannot be combined with "
             "--update-baseline or --save-baseline: an early-stopped case "
-            "has a truncated history (DECISIONS #68)"
+            "has a truncated history (DECISIONS #69)"
         )
     if ns.max_steps is not None:
-        return "--early-stop-on-divergence cannot be combined with --max-steps"
+        return f"{flag} cannot be combined with --max-steps"
     return ""
 
 
@@ -855,6 +914,7 @@ def _execute_one_entry(
         Callable[[pathlib.Path], early_stop.RunMonitor | None] | None
     ) = None,
     monitor_interval_sec: float = harness_runner.MONITOR_INTERVAL_SEC,
+    enforce_step_counts: bool = False,
 ) -> harness_runner.CaseHarnessRecord:
     case_dir = harness_runner.resolve_case_dir(
         entry.suite, entry.case, mesa_dir=mesa_dir
@@ -880,6 +940,7 @@ def _execute_one_entry(
         outcome,
         max_steps=max_steps,
         root_dir=base_dir,
+        enforce_step_counts=enforce_step_counts,
     )
 
 
@@ -922,6 +983,7 @@ def _run_selected_entries(
                 base_dir,
                 _monitor_factory(ns, entry),
                 ns.early_stop_interval_sec,
+                bool(ns.enforce_step_counts),
             )
             records.append(rec)
             _append_progress(work_root, rec)
@@ -952,6 +1014,7 @@ def _run_selected_entries(
                 base_dir,
                 _monitor_factory(ns, entry),
                 ns.early_stop_interval_sec,
+                bool(ns.enforce_step_counts),
             ): idx
             for idx, entry in enumerate(selected)
         }
@@ -1189,12 +1252,12 @@ def _handle_merge_subcommand(ns: argparse.Namespace) -> int:
             file=sys.stderr,
         )
         return 1
-    if settings["early_stop_on_divergence"] and (
-        ns.save_baseline or ns.update_baseline
-    ):
+    if (
+        settings["early_stop_on_divergence"] or settings["stop_on_excess_steps"]
+    ) and (ns.save_baseline or ns.update_baseline):
         print(
             "the shards used --early-stop-on-divergence; their truncated "
-            "histories cannot become baseline rows (DECISIONS #68)",
+            "histories cannot become baseline rows (DECISIONS #69)",
             file=sys.stderr,
         )
         return 1
@@ -1220,7 +1283,12 @@ def _handle_merge_subcommand(ns: argparse.Namespace) -> int:
     gaps = case_manifest.load_known_gaps(ns.known_gaps)
     base_dir = pathlib.Path(ns.manifest).parent if ns.manifest else None
     all_records = case_report.records_from_stored_rows(
-        manifest, gaps, merged.rows, base_dir, max_steps=ns.max_steps
+        manifest,
+        gaps,
+        merged.rows,
+        base_dir,
+        max_steps=ns.max_steps,
+        enforce_step_counts=bool(settings["enforce_step_counts"]),
     )
     records = [r for r in all_records if (r.suite, r.case) in merged.rows]
     run_info = dict(settings)
@@ -1387,6 +1455,12 @@ def harness_main(argv: list[str] | None = None) -> int:
         ),
         "mesa_step_factor": ns.mesa_step_factor,
         "early_stop_on_divergence": bool(ns.early_stop_on_divergence),
+        "enforce_step_counts": bool(ns.enforce_step_counts),
+        "stop_on_excess_steps": (
+            [ns.step_margin_abs, ns.step_margin_frac]
+            if ns.stop_on_excess_steps
+            else None
+        ),
         "budgeted_cases": [_label(k) for k in sorted(ns.budgeted_keys)],
     }
     return _report_and_gate(

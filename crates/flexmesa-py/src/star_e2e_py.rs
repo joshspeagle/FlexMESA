@@ -231,6 +231,7 @@ pub(crate) fn case_report_to_pydict<'py>(
         let sdict = PyDict::new(py);
         sdict.set_item("inlist_name", &st.inlist_name)?;
         sdict.set_item("steps_taken", st.steps_taken)?;
+        sdict.set_item("model_number", st.final_history.model_number)?;
         sdict
             .set_item("total_newton_iterations", st.total_newton_iterations)?;
         sdict.set_item("total_retries", st.total_retries)?;

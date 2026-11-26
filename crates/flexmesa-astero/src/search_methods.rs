@@ -27,7 +27,7 @@ use crate::optimize::{
     try_bobyqa_minimize, try_newuoa_minimize, try_simplex_minimize_with_config,
 };
 use crate::sample_eval::AsteroSampleResult;
-use crate::scaling::{eval_radial_delta_nu_ols, DELTA_NU_SUN, NU_MAX_SUN};
+use crate::scaling::eval_radial_delta_nu_ols;
 use crate::surface_corr::{
     estimate_l0_n_obs_with_numax, eval_combined_corr, eval_cubic_corr,
     eval_kjeldsen_corr, eval_power_law_corr, eval_sonoi_corr, eval_surf_coefs,
@@ -123,65 +123,41 @@ fn set_param_slot(p: &mut AsteroParamSet, name: &str, value: f64) {
 
 fn active_search_params(
     ctrl: &AsteroSearchControls,
-) -> Result<Vec<(String, AsteroSearchParam)>, StarError> {
-    let mut out = Vec::new();
-    if ctrl.param_names.iter().any(|s| !s.trim().is_empty()) {
-        for (i, raw) in ctrl.param_names.iter().enumerate() {
-            let name = raw.trim();
-            if name.is_empty() {
-                continue;
-            }
-            let p = ctrl.indexed_params[i];
-            if p.vary {
-                if p.min >= p.max {
-                    return Err(StarError::InvalidInput(format!(
-                        "min_param >= max_param for '{name}' ({} >= {})",
-                        p.min, p.max
-                    )));
-                }
-                out.push((String::from(name), p));
-            }
-        }
-        return Ok(out);
-    }
-    let fallback = [
-        ("initial_mass", ctrl.mass),
-        ("initial_y", ctrl.y),
-        ("initial_feh", ctrl.feh_param),
-        ("alpha", ctrl.alpha),
-        ("f_ov", ctrl.f_ov),
-        ("my_param1", ctrl.my_param[0]),
-        ("my_param2", ctrl.my_param[1]),
-        ("my_param3", ctrl.my_param[2]),
+) -> Vec<(usize, AsteroSearchParam)> {
+    let all = [
+        ctrl.mass,
+        ctrl.y,
+        ctrl.feh_param,
+        ctrl.alpha,
+        ctrl.f_ov,
+        ctrl.my_param[0],
+        ctrl.my_param[1],
+        ctrl.my_param[2],
     ];
-    for (name, p) in fallback {
-        if p.vary {
-            if p.min >= p.max {
-                return Err(StarError::InvalidInput(format!(
-                    "min_param >= max_param for '{name}' ({} >= {})",
-                    p.min, p.max
-                )));
-            }
-            out.push((String::from(name), p));
-        }
-    }
-    Ok(out)
+    all.into_iter()
+        .enumerate()
+        .filter(|(_, p)| p.vary && p.max > p.min)
+        .collect()
 }
 
 fn apply_varied_slice(
     ctrl: &AsteroSearchControls,
-    active: &[(String, AsteroSearchParam)],
+    active: &[(usize, AsteroSearchParam)],
     vals: &[f64],
 ) -> AsteroParamSet {
     let mut p = ctrl.first_params();
-    for (i, raw) in ctrl.param_names.iter().enumerate() {
-        let name = raw.trim();
-        if !name.is_empty() {
-            set_param_slot(&mut p, name, ctrl.indexed_params[i].first);
+    for (&(idx, _), &v) in active.iter().zip(vals.iter()) {
+        match idx {
+            0 => p.initial_mass = v,
+            1 => p.initial_y = v,
+            2 => p.initial_feh = v,
+            3 => p.alpha = v,
+            4 => p.f_ov = v,
+            5 => p.my_param1 = v,
+            6 => p.my_param2 = v,
+            7 => p.my_param3 = v,
+            _ => {}
         }
-    }
-    for ((name, _), &v) in active.iter().zip(vals.iter()) {
-        set_param_slot(&mut p, name, v);
     }
     p
 }
@@ -190,7 +166,7 @@ pub(crate) fn extract_simplex_restart(
     ctrl: &AsteroSearchControls,
     samples: &[AsteroSampleResult],
 ) -> Result<(Vec<AsteroSampleResult>, Vec<Vec<f64>>, Vec<f64>), StarError> {
-    let active = active_search_params(ctrl)?;
+    let active = active_search_params(ctrl);
     let nvar = active.len();
     if nvar == 0 {
         return Err(StarError::InvalidInput(String::from(
@@ -215,7 +191,17 @@ pub(crate) fn extract_simplex_restart(
         f_vals.push(s.chi2);
         let row: Vec<f64> = active
             .iter()
-            .map(|(name, _)| param_slot_value(&s.params, name).unwrap_or(0.0))
+            .map(|&(p_idx, _)| match p_idx {
+                0 => s.params.initial_mass,
+                1 => s.params.initial_y,
+                2 => s.params.initial_feh,
+                3 => s.params.alpha,
+                4 => s.params.f_ov,
+                5 => s.params.my_param1,
+                6 => s.params.my_param2,
+                7 => s.params.my_param3,
+                _ => 0.0,
+            })
             .collect();
         vertices.push(row);
     }
@@ -232,7 +218,7 @@ pub(crate) fn run_simplex_driver(
     initial_simplex: Option<(Vec<Vec<f64>>, Vec<f64>)>,
     eval_fn: &mut impl FnMut(AsteroParamSet) -> Result<f64, StarError>,
 ) -> Result<(), StarError> {
-    let active = active_search_params(ctrl)?;
+    let active = active_search_params(ctrl);
     if active.is_empty() {
         let _ = eval_fn(ctrl.first_params())?;
         return Ok(());
@@ -270,7 +256,7 @@ pub(crate) fn run_powell_driver(
     bounded: bool,
     eval_fn: &mut impl FnMut(AsteroParamSet) -> Result<f64, StarError>,
 ) -> Result<(), StarError> {
-    let active = active_search_params(ctrl)?;
+    let active = active_search_params(ctrl);
     if active.is_empty() {
         let _ = eval_fn(ctrl.first_params())?;
         return Ok(());
@@ -784,7 +770,7 @@ pub(crate) fn write_search_results_table(
 
     let mut meta: Vec<(&str, String, bool)> = Vec::new();
     meta.push(("samples", fmt_int_field(samples.len(), ifmt), true));
-    if let Some(tot) = total_grid_points.filter(|&t| t > 0) {
+    if let Some(tot) = total_grid_points {
         meta.push(("total", fmt_int_field(tot, ifmt), true));
     }
     meta.push(("version_number", fmt_txt_field("\"flexmesa\"", tfmt), false));
@@ -844,7 +830,7 @@ pub(crate) fn write_search_results_table(
     headers.push(String::from("ratios_l1_first"));
 
     let include_seismo_cols = ctrl.weights.chi2_seismo_fraction > 0.0;
-    let max_ratios_n = samples.iter().map(|s| s.ratios_n).max().unwrap_or(0);
+    let first_ratios_n = samples.first().map_or(0, |s| s.ratios_n);
     if include_seismo_cols {
         for l in 0..4 {
             for j in 1..=ctrl.nl[l] {
@@ -856,7 +842,7 @@ pub(crate) fn write_search_results_table(
                 headers.push(format!("l{l}_inertia_{j}"));
             }
         }
-        for j in 1..=max_ratios_n {
+        for j in 1..=first_ratios_n {
             headers.push(format!("r01_obs_{j}"));
             headers.push(format!("r01_obs_sigmas_{j}"));
             headers.push(format!("r01_{j}"));
@@ -936,7 +922,7 @@ pub(crate) fn write_search_results_table(
                     buf.push_str(&fmt_dbl_field(ine, dfmt));
                 }
             }
-            for j in 0..max_ratios_n {
+            for j in 0..first_ratios_n {
                 buf.push_str(&fmt_dbl_field(
                     s.obs_r01.get(j).copied().unwrap_or(0.0),
                     dfmt,
@@ -1065,24 +1051,6 @@ pub(crate) fn read_samples_from_file(
         })
     };
 
-    let header_toks: Vec<&str> = lines[5].split_whitespace().collect();
-    let header_ratios_n = header_toks
-        .iter()
-        .filter(|h| {
-            h.strip_prefix("r01_obs_").is_some_and(|rest| {
-                !rest.is_empty() && rest.bytes().all(|b| b.is_ascii_digit())
-            })
-        })
-        .count();
-    let header_r02_n = header_toks
-        .iter()
-        .filter(|h| {
-            h.strip_prefix("r02_obs_").is_some_and(|rest| {
-                !rest.is_empty() && rest.bytes().all(|b| b.is_ascii_digit())
-            })
-        })
-        .count();
-
     let mut samples = Vec::with_capacity(num_samples);
     for (row_idx, raw_line) in
         lines.iter().skip(6).take(num_samples).enumerate()
@@ -1153,15 +1121,6 @@ pub(crate) fn read_samples_from_file(
         let mut model_freqs_corr: [Vec<f64>; 4] = Default::default();
         let mut model_inertias: [Vec<f64>; 4] = Default::default();
         let mut model_orders: [Vec<isize>; 4] = Default::default();
-        let mut obs_r01 = Vec::new();
-        let mut obs_r01_sigmas = Vec::new();
-        let mut model_r01 = Vec::new();
-        let mut obs_r10 = Vec::new();
-        let mut obs_r10_sigmas = Vec::new();
-        let mut model_r10 = Vec::new();
-        let mut obs_r02 = Vec::new();
-        let mut obs_r02_sigmas = Vec::new();
-        let mut model_r02 = Vec::new();
         if ctrl.weights.chi2_seismo_fraction > 0.0
             && cursor + 6 * nl_row.iter().sum::<usize>() <= toks.len()
         {
@@ -1179,48 +1138,6 @@ pub(crate) fn read_samples_from_file(
                     model_freqs[l].push(f_m);
                     model_freqs_corr[l].push(f_c);
                     model_inertias[l].push(ine);
-                }
-            }
-            let ratio_cols = header_ratios_n.max(ratios_n);
-            if ratio_cols > 0 && cursor + 6 * ratio_cols <= toks.len() {
-                for j in 0..ratio_cols {
-                    let r01o =
-                        parse_f64_tok(next_tok(&mut cursor)?, "r01_obs")?;
-                    let r01s =
-                        parse_f64_tok(next_tok(&mut cursor)?, "r01_sig")?;
-                    let r01m = parse_f64_tok(next_tok(&mut cursor)?, "r01")?;
-                    let r10o =
-                        parse_f64_tok(next_tok(&mut cursor)?, "r10_obs")?;
-                    let r10s =
-                        parse_f64_tok(next_tok(&mut cursor)?, "r10_sig")?;
-                    let r10m = parse_f64_tok(next_tok(&mut cursor)?, "r10")?;
-                    if j < ratios_n {
-                        obs_r01.push(r01o);
-                        obs_r01_sigmas.push(r01s);
-                        model_r01.push(r01m);
-                        obs_r10.push(r10o);
-                        obs_r10_sigmas.push(r10s);
-                        model_r10.push(r10m);
-                    }
-                }
-            }
-            let r02_cols = if ctrl.weights.chi2_seismo_r_02_fraction > 0.0 {
-                header_r02_n.max(nl_row[0])
-            } else {
-                0
-            };
-            if r02_cols > 0 && cursor + 3 * r02_cols <= toks.len() {
-                for j in 0..r02_cols {
-                    let r02o =
-                        parse_f64_tok(next_tok(&mut cursor)?, "r02_obs")?;
-                    let r02s =
-                        parse_f64_tok(next_tok(&mut cursor)?, "r02_sig")?;
-                    let r02m = parse_f64_tok(next_tok(&mut cursor)?, "r02")?;
-                    if j < nl_row[0] {
-                        obs_r02.push(r02o);
-                        obs_r02_sigmas.push(r02s);
-                        model_r02.push(r02m);
-                    }
                 }
             }
         }
@@ -1265,15 +1182,15 @@ pub(crate) fn read_samples_from_file(
             ratios_n,
             ratios_l0_first,
             ratios_l1_first,
-            obs_r01,
-            obs_r01_sigmas,
-            model_r01,
-            obs_r10,
-            obs_r10_sigmas,
-            model_r10,
-            obs_r02,
-            obs_r02_sigmas,
-            model_r02,
+            obs_r01: Vec::new(),
+            obs_r01_sigmas: Vec::new(),
+            model_r01: Vec::new(),
+            obs_r10: Vec::new(),
+            obs_r10_sigmas: Vec::new(),
+            model_r10: Vec::new(),
+            obs_r02: Vec::new(),
+            obs_r02_sigmas: Vec::new(),
+            model_r02: Vec::new(),
             model_freqs_alt_up: Default::default(),
             model_freqs_corr_alt_up: Default::default(),
             model_inertias_alt_up: Default::default(),
@@ -1353,7 +1270,7 @@ pub(crate) fn eval_radial_chi2(
         .zip(ctrl.freq_sigma[0].iter())
         .zip(corr_l0.iter())
     {
-        if obs >= 0.0 && sig > 0.0 {
+        if obs > 0.0 && sig > 0.0 {
             let d = (mc - obs) / sig;
             sum += d * d;
             n += 1;
@@ -1387,20 +1304,17 @@ pub(crate) fn apply_surface_corr(
     numax_obs: f64,
     nu_max_model: f64,
     nu_max_sun: f64,
-    delta_nu_sun: f64,
     delta_nu_uhz: &mut f64,
 ) -> Result<SurfaceCorrOutput, StarError> {
-    let nu_max_sun_eff = if nu_max_sun > 0.0 {
-        nu_max_sun
-    } else {
-        NU_MAX_SUN
-    };
-    let delta_nu_sun_eff = if delta_nu_sun > 0.0 {
-        delta_nu_sun
-    } else {
-        DELTA_NU_SUN
-    };
-    let cf = ctrl.correction_factor.max(0.0);
+    if ctrl.correction_factor <= 0.0 {
+        return Ok(SurfaceCorrOutput {
+            corrected: all_mod.to_vec(),
+            a_div_r: 0.0,
+            correction_r: 1.0,
+            surf_coef1: 0.0,
+            surf_coef2: 0.0,
+        });
+    }
     let scheme = ctrl.correction_scheme.trim().to_ascii_lowercase();
     match scheme.as_str() {
         "" | "none" => Ok(SurfaceCorrOutput {
@@ -1411,7 +1325,7 @@ pub(crate) fn apply_surface_corr(
             surf_coef2: 0.0,
         }),
         "kjeldsen" => {
-            if cf <= 0.0 || mod_l0.is_empty() {
+            if mod_l0.is_empty() {
                 return Ok(SurfaceCorrOutput {
                     corrected: all_mod.to_vec(),
                     a_div_r: 0.0,
@@ -1427,11 +1341,11 @@ pub(crate) fn apply_surface_corr(
                     &ctrl.freq_target[0],
                     dnu_obs,
                     numax_obs,
-                    delta_nu_sun_eff,
-                    nu_max_sun_eff,
+                    ctrl.solar_delta_nu,
+                    ctrl.solar_nu_max,
                 )
             };
-            let (mut c, adr, cr) = eval_kjeldsen_corr(
+            let (c, adr, cr) = eval_kjeldsen_corr(
                 &ctrl.freq_target[0],
                 mod_l0,
                 in_l0,
@@ -1441,21 +1355,14 @@ pub(crate) fn apply_surface_corr(
                 all_in,
                 numax_obs,
                 ctrl.correction_b,
-                cf,
+                ctrl.correction_factor,
             );
-            for (ci, (&obs, &orig)) in
-                c.iter_mut().zip(all_obs.iter().zip(all_mod.iter()))
-            {
-                if obs < 0.0 {
-                    *ci = orig;
-                }
-            }
             let dnu_m = eval_radial_delta_nu_ols(&n_obs, mod_l0);
-            if dnu_obs > 0.0 && numax_obs > 0.0 && dnu_m > 0.0 {
+            if dnu_m > 0.0 {
                 *delta_nu_uhz = dnu_m;
             }
             let (sc1, sc2) =
-                eval_surf_coefs(&scheme, adr, cr, nu_max_model, nu_max_sun_eff);
+                eval_surf_coefs(&scheme, adr, cr, nu_max_model, nu_max_sun);
             Ok(SurfaceCorrOutput {
                 corrected: c,
                 a_div_r: adr,
@@ -1465,10 +1372,15 @@ pub(crate) fn apply_surface_corr(
             })
         }
         "cubic" => {
-            let (c, a3) =
-                eval_cubic_corr(all_obs, all_sig, all_mod, all_in, cf);
+            let (c, a3) = eval_cubic_corr(
+                all_obs,
+                all_sig,
+                all_mod,
+                all_in,
+                ctrl.correction_factor,
+            );
             let (sc1, sc2) =
-                eval_surf_coefs(&scheme, a3, 0.0, nu_max_model, nu_max_sun_eff);
+                eval_surf_coefs(&scheme, a3, 0.0, nu_max_model, nu_max_sun);
             Ok(SurfaceCorrOutput {
                 corrected: c,
                 a_div_r: a3,
@@ -1478,15 +1390,15 @@ pub(crate) fn apply_surface_corr(
             })
         }
         "combined" => {
-            let (c, a3, a_neg1) =
-                eval_combined_corr(all_obs, all_sig, all_mod, all_in, cf);
-            let (sc1, sc2) = eval_surf_coefs(
-                &scheme,
-                a3,
-                a_neg1,
-                nu_max_model,
-                nu_max_sun_eff,
+            let (c, a3, a_neg1) = eval_combined_corr(
+                all_obs,
+                all_sig,
+                all_mod,
+                all_in,
+                ctrl.correction_factor,
             );
+            let (sc1, sc2) =
+                eval_surf_coefs(&scheme, a3, a_neg1, nu_max_model, nu_max_sun);
             Ok(SurfaceCorrOutput {
                 corrected: c,
                 a_div_r: a3,
@@ -1504,10 +1416,10 @@ pub(crate) fn apply_surface_corr(
                 mod_l0,
                 in_l0,
                 nu_max_model,
-                cf,
+                ctrl.correction_factor,
             );
             let (sc1, sc2) =
-                eval_surf_coefs(&scheme, a, b, nu_max_model, nu_max_sun_eff);
+                eval_surf_coefs(&scheme, a, b, nu_max_model, nu_max_sun);
             Ok(SurfaceCorrOutput {
                 corrected: c,
                 a_div_r: a,
@@ -1525,10 +1437,10 @@ pub(crate) fn apply_surface_corr(
                 mod_l0,
                 in_l0,
                 nu_max_model,
-                cf,
+                ctrl.correction_factor,
             );
             let (sc1, sc2) =
-                eval_surf_coefs(&scheme, a, b, nu_max_model, nu_max_sun_eff);
+                eval_surf_coefs(&scheme, a, b, nu_max_model, nu_max_sun);
             Ok(SurfaceCorrOutput {
                 corrected: c,
                 a_div_r: a,

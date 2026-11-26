@@ -1,14 +1,16 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //! Derivative-free asteroseismic optimization drivers: Nelder-Mead simplex
-//! (`num/private/mod_simplex.f90`), Powell trust-region `NEWUOA` / `BOBYQA`
+//! (`flexmesa_num::nm_simplex`), Powell trust-region `NEWUOA` / `BOBYQA`
 //! (`flexmesa_num::{newuoa, bobyqa}`), and Cartesian grid scans
 //! (`astero/private/astero_run_support.f90:366-982`).
 
-use flexmesa_num::{bobyqa, newuoa, r8_uniform_01, NumError};
+use flexmesa_num::{
+    bobyqa, newuoa, nm_simplex, r8_uniform_01, NumError, SimplexConfig,
+};
 use flexmesa_star::StarError;
 
 /// Minimizes a scalar objective `eval_fn(x)` over bounded parameter space
-/// `x_lower <= x <= x_upper` using MESA's Nelder-Mead simplex algorithm
+/// `x_lower <= x <= x_upper` using `flexmesa_num::nm_simplex`
 /// (`mod_simplex.f90:30-384`, `astero_run_support.f90:710-808`).
 ///
 /// Returns `(x_best, f_best, num_evaluations)`.
@@ -43,9 +45,8 @@ where
     )
 }
 
-/// Full-featured Nelder-Mead wrapper (`num/private/mod_simplex.f90`)
-/// supporting `simplex_enforce_bounds`, `simplex_adaptive_random_search`, and
-/// `simplex_seed`.
+/// Full-featured Nelder-Mead wrapper around `flexmesa_num::nm_simplex`
+/// supporting `simplex_enforce_bounds`, `simplex_adaptive_random_search`, and `simplex_seed`.
 #[allow(clippy::too_many_arguments)]
 pub fn simplex_minimize_with_options<F>(
     x_first: &[f64],
@@ -192,13 +193,12 @@ where
         return Ok((Vec::new(), 0.0, 0));
     }
     if let Some((simplex_in, f_in)) = initial_simplex {
-        return run_simplex_loop(
+        return run_simplex_from_initial(
             n,
             &x_lower[..n],
             &x_upper[..n],
             simplex_in,
             f_in,
-            0,
             max_iters,
             max_evals,
             x_atol,
@@ -215,151 +215,86 @@ where
             eval_fn,
         );
     }
-
-    // Port `set_initial_simplex` from `num/private/mod_simplex.f90:210-257`:
-    // column `n` holds un-clamped `x_first`, and each displaced vertex `j`
-    // retries halving toward `x_first` up to 20 times on callback error.
-    let mut num_evals = 0usize;
-    let mut simplex = vec![vec![0.0_f64; n]; n + 1];
-    let mut f = vec![0.0_f64; n + 1];
-    simplex[n].copy_from_slice(&x_first[..n]);
-    let (v_last, early_last) = eval_simplex_point(
-        n,
-        &simplex[n],
-        &x_lower[..n],
-        &x_upper[..n],
-        enforce_bounds,
-        chi2_tol,
-        &mut num_evals,
-        &mut eval_fn,
-    )?;
-    f[n] = v_last;
-    if early_last {
-        return Ok((simplex[n].clone(), v_last, num_evals));
-    }
-
-    for j in 0..n {
-        simplex[j].copy_from_slice(&x_first[..n]);
-        let span = x_upper[j] - x_lower[j];
-        simplex[j][j] = if x_upper[j] - x_first[j] < x_first[j] - x_lower[j] {
-            x_first[j] - 0.25 * span
-        } else {
-            x_first[j] + 0.25 * span
-        };
-        let mut okay = false;
-        let mut last_err: Option<StarError> = None;
-        for _ in 0..20 {
-            match eval_simplex_point(
-                n,
-                &simplex[j],
-                &x_lower[..n],
-                &x_upper[..n],
-                enforce_bounds,
-                chi2_tol,
-                &mut num_evals,
-                &mut eval_fn,
-            ) {
-                Ok((val, early)) => {
-                    f[j] = val;
-                    okay = true;
-                    if early {
-                        let best_idx = best_simplex_vertex(j, n, &f);
-                        return Ok((
-                            simplex[best_idx][..n].to_vec(),
-                            f[best_idx],
-                            num_evals,
-                        ));
-                    }
-                    break;
-                }
-                Err(err) => {
-                    last_err = Some(err);
-                    simplex[j][j] = 0.5 * (simplex[j][j] + x_first[j]);
-                    if (simplex[j][j] - x_first[j]).abs()
-                        < 1.0e-12 * (1.0 + x_first[j].abs())
-                    {
-                        break;
-                    }
-                }
-            }
-        }
-        if !okay {
-            return Err(last_err.unwrap_or_else(|| {
-                StarError::ConvergenceFailure(
-                    "failed to get value for initial simplex point".to_string(),
-                )
-            }));
-        }
-    }
-
-    run_simplex_loop(
-        n,
-        &x_lower[..n],
-        &x_upper[..n],
-        simplex,
-        f,
-        num_evals,
+    let cfg = SimplexConfig {
         max_iters,
         max_evals,
-        x_atol,
-        x_rtol,
-        chi2_tol,
-        centroid_weight_power,
-        enforce_bounds,
-        adaptive_random_search,
-        seed,
+        x_tol: x_rtol.max(x_atol).max(1.0e-12),
+        f_tol: chi2_tol.max(0.0),
         alpha,
         beta,
         gamma,
         delta,
-        eval_fn,
-    )
-}
-
-fn best_simplex_vertex(up_to: usize, n: usize, f: &[f64]) -> usize {
-    let mut best = n;
-    for idx in 0..=up_to {
-        if f[idx] < f[best] {
-            best = idx;
-        }
+        enforce_bounds,
+        adaptive_random_search,
+        seed,
+        centroid_weight_power,
+    };
+    // Upstream `num/private/mod_simplex.f90:218-236` sets `simplex(:, n+1) = x_first`
+    // without clamping when `enforce_bounds == false` (allowing initial trial
+    // coordinates outside `[x_lower, x_upper]` while using the span for scale).
+    let x_init: Vec<f64> = if enforce_bounds {
+        (0..n)
+            .map(|i| x_first[i].clamp(x_lower[i], x_upper[i]))
+            .collect()
+    } else {
+        x_first[..n].to_vec()
+    };
+    let mut best_x = x_init.clone();
+    let mut best_f = f64::INFINITY;
+    let mut evals = 0usize;
+    let mut cb_err: Option<StarError> = None;
+    let res =
+        nm_simplex(n, &x_lower[..n], &x_upper[..n], &x_init, &cfg, |x_try| {
+            let x_eval: Vec<f64> = if enforce_bounds {
+                (0..n)
+                    .map(|i| x_try[i].clamp(x_lower[i], x_upper[i]))
+                    .collect()
+            } else {
+                x_try[..n].to_vec()
+            };
+            let f = match eval_fn(&x_eval) {
+                Ok(v) => v,
+                Err(e) => {
+                    cb_err = Some(e);
+                    return Err(NumError::ConvergenceFailed(
+                        "simplex callback error",
+                    ));
+                }
+            };
+            evals += 1;
+            if f < best_f {
+                best_f = f;
+                best_x = x_eval;
+            }
+            Ok(f)
+        });
+    if let Some(err) = cb_err {
+        return Err(err);
     }
-    best
-}
-
-#[allow(clippy::too_many_arguments)]
-fn eval_simplex_point<F>(
-    n: usize,
-    pt: &[f64],
-    x_lower: &[f64],
-    x_upper: &[f64],
-    enforce_bounds: bool,
-    chi2_tol: f64,
-    evals: &mut usize,
-    eval_fn: &mut F,
-) -> Result<(f64, bool), StarError>
-where
-    F: FnMut(&[f64]) -> Result<f64, StarError>,
-{
-    if enforce_bounds {
-        for j in 0..n {
-            if pt[j] < x_lower[j] || pt[j] > x_upper[j] {
-                return Ok((1.0e99, false));
+    match res {
+        Ok(r) => {
+            if r.f_min < best_f {
+                best_f = r.f_min;
+                best_x = r.x_min;
             }
         }
+        Err(NumError::ConvergenceFailed(_)) => {}
+        Err(other) => {
+            return Err(StarError::ConvergenceFailure(format!(
+                "nm_simplex failed: {other}"
+            )));
+        }
     }
-    *evals += 1;
-    let val = eval_fn(&pt[..n])?;
-    Ok((val, val < chi2_tol))
+    Ok((best_x, best_f, evals))
 }
 
 #[allow(clippy::too_many_arguments)]
-fn run_simplex_loop<F>(
+fn run_simplex_from_initial<F>(
     n: usize,
     x_lower: &[f64],
     x_upper: &[f64],
     mut simplex: Vec<Vec<f64>>,
     mut f: Vec<f64>,
-    mut num_evals: usize,
     max_iters: usize,
     max_evals: usize,
     x_atol: f64,
@@ -386,6 +321,7 @@ where
             f.len()
         )));
     }
+    let mut num_evals = 0usize;
     let mut num_iters = 0usize;
     let mut l_best = 0usize;
     for j in 1..=n {
@@ -395,34 +331,31 @@ where
     }
     let mut best_x = simplex[l_best][..n].to_vec();
     let mut best_f = f[l_best];
-    if best_f < chi2_tol {
-        return Ok((best_x, best_f, num_evals));
-    }
 
-    macro_rules! eval_and_check {
-        ($pt:expr) => {{
-            let (val, hit_tol) = eval_simplex_point(
-                n,
-                $pt,
-                x_lower,
-                x_upper,
-                enforce_bounds,
-                chi2_tol,
-                &mut num_evals,
-                &mut eval_fn,
-            )?;
-            let valid = !enforce_bounds
-                || (0..n).all(|j| $pt[j] >= x_lower[j] && $pt[j] <= x_upper[j]);
-            if valid && val < best_f {
+    let mut eval_pt =
+        |pt: &[f64], evals: &mut usize| -> Result<f64, StarError> {
+            let clamped: Vec<f64>;
+            let probe = if enforce_bounds {
+                for j in 0..n {
+                    if pt[j] < x_lower[j] || pt[j] > x_upper[j] {
+                        return Ok(1.0e99);
+                    }
+                }
+                clamped = (0..n)
+                    .map(|i| pt[i].clamp(x_lower[i], x_upper[i]))
+                    .collect();
+                clamped.as_slice()
+            } else {
+                &pt[..n]
+            };
+            *evals += 1;
+            let val = eval_fn(probe)?;
+            if val < best_f {
                 best_f = val;
-                best_x = $pt[..n].to_vec();
+                best_x = probe.to_vec();
             }
-            if hit_tol {
-                return Ok((best_x, best_f, num_evals));
-            }
-            val
-        }};
-    }
+            Ok(val)
+        };
 
     loop {
         num_iters += 1;
@@ -445,6 +378,11 @@ where
             }
         }
         let s = s.unwrap_or(l);
+        if f[l] < chi2_tol {
+            best_f = f[l];
+            best_x = simplex[l][..n].to_vec();
+            break;
+        }
         let mut term_val_x = 0.0_f64;
         for j in 0..=n {
             if j == l {
@@ -461,11 +399,10 @@ where
                 }
             }
         }
-        if term_val_x <= 1.0 || num_iters > max_iters || num_evals > max_evals {
-            if f[l] < best_f {
-                best_f = f[l];
-                best_x = simplex[l][..n].to_vec();
-            }
+        if term_val_x <= 1.0 || num_iters > max_iters || num_evals >= max_evals
+        {
+            best_f = f[l];
+            best_x = simplex[l][..n].to_vec();
             break;
         }
         let mut c = vec![0.0_f64; n];
@@ -495,15 +432,15 @@ where
         let x_reflect: Vec<f64> = (0..n)
             .map(|i| c[i] + alpha * (c[i] - simplex[h][i]))
             .collect();
-        let f_reflect = eval_and_check!(&x_reflect);
+        let f_reflect = eval_pt(&x_reflect, &mut num_evals)?;
         if f_reflect < f[s] {
             simplex[h].clone_from(&x_reflect);
             f[h] = f_reflect;
-            if f_reflect < f[l] {
+            if f_reflect < f[l] && num_evals < max_evals {
                 let x_expand: Vec<f64> = (0..n)
                     .map(|i| c[i] + beta * (x_reflect[i] - c[i]))
                     .collect();
-                let f_expand = eval_and_check!(&x_expand);
+                let f_expand = eval_pt(&x_expand, &mut num_evals)?;
                 if f_expand < f[l] {
                     simplex[h] = x_expand;
                     f[h] = f_expand;
@@ -519,39 +456,33 @@ where
                     .map(|i| c[i] + gamma * (simplex[h][i] - c[i]))
                     .collect()
             };
-            let f_contract = eval_and_check!(&x_contract);
+            let f_contract = eval_pt(&x_contract, &mut num_evals)?;
             if f_contract < f[h].min(f_reflect) {
                 simplex[h] = x_contract;
                 f[h] = f_contract;
             } else if adaptive_random_search {
-                for _ in 0..100 {
-                    if num_evals > max_evals {
-                        break;
-                    }
-                    let x_ars: Vec<f64> = (0..n)
-                        .map(|i| {
-                            x_lower[i]
-                                + r8_uniform_01(&mut seed)
-                                    * (x_upper[i] - x_lower[i])
-                        })
-                        .collect();
-                    let f_ars = eval_and_check!(&x_ars);
-                    if f_ars <= f[h] {
-                        simplex[h] = x_ars;
-                        f[h] = f_ars;
-                        break;
-                    }
+                let x_ars: Vec<f64> = (0..n)
+                    .map(|i| {
+                        x_lower[i]
+                            + r8_uniform_01(&mut seed)
+                                * (x_upper[i] - x_lower[i])
+                    })
+                    .collect();
+                let f_ars = eval_pt(&x_ars, &mut num_evals)?;
+                if f_ars < f[h] {
+                    simplex[h] = x_ars;
+                    f[h] = f_ars;
                 }
             } else {
                 for j in 0..=n {
-                    if j == l {
+                    if j == l || num_evals >= max_evals {
                         continue;
                     }
                     for i in 0..n {
                         simplex[j][i] = simplex[l][i]
                             + delta * (simplex[j][i] - simplex[l][i]);
                     }
-                    f[j] = eval_and_check!(&simplex[j]);
+                    f[j] = eval_pt(&simplex[j], &mut num_evals)?;
                 }
             }
         }
@@ -559,10 +490,10 @@ where
     Ok((best_x, best_f, num_evals))
 }
 
-/// Maps trust-region coordinate $u_i$ to physical parameter $p_i$ with
+/// Maps normalized trust-region coordinate $u_i \in [-1, 1]$ to physical
+/// parameter $p_i \in [p_{\min,i}, p_{\max,i}]$ with
 /// $u_i = 0 \mapsto p_{\mathrm{first},i}$, matching `bobyqa_param` in
-/// `astero_run_support.f90:631-638` (unclamped so `NEWUOA` can extrapolate
-/// while `BOBYQA` enforces $u_i \in [-1, 1]$ via box bounds).
+/// `astero_run_support.f90:631-638`.
 #[inline]
 #[must_use]
 pub fn map_bobyqa_param(
@@ -571,10 +502,11 @@ pub fn map_bobyqa_param(
     p_lower: f64,
     p_upper: f64,
 ) -> f64 {
-    if u > 0.0 {
-        p_first + u * (p_upper - p_first)
+    let u_c = u.clamp(-1.0, 1.0);
+    if u_c > 0.0 {
+        p_first + u_c * (p_upper - p_first)
     } else {
-        p_first + u * (p_first - p_lower)
+        p_first + u_c * (p_first - p_lower)
     }
 }
 
@@ -645,7 +577,11 @@ where
     let mut u = vec![0.0_f64; n_eff];
     let r_beg = rhobeg.max(1.0e-6);
     let r_end = rhoend.clamp(1.0e-12, r_beg);
-    let max_evals_eff = max_evals;
+    let max_evals_eff = if rhoend >= r_beg {
+        max_evals.min(npt + 1)
+    } else {
+        max_evals
+    };
     let mut best_x: Vec<f64> = (0..n)
         .map(|i| x_first[i].clamp(x_lower[i], x_upper[i]))
         .collect();
@@ -757,7 +693,11 @@ where
     let xu = vec![1.0_f64; n_eff];
     let r_beg = rhobeg.clamp(1.0e-6, 0.95);
     let r_end = rhoend.clamp(1.0e-12, r_beg);
-    let max_evals_eff = max_evals;
+    let max_evals_eff = if rhoend >= r_beg {
+        max_evals.min(npt + 1)
+    } else {
+        max_evals
+    };
     let mut best_x: Vec<f64> = (0..n)
         .map(|i| x_first[i].clamp(x_lower[i], x_upper[i]))
         .collect();
@@ -774,10 +714,10 @@ where
         r_beg,
         r_end,
         max_evals_eff,
-        1.0e6,
+        1.0e10,
         |u_try| -> Result<f64, NumError> {
             if evals >= max_evals_eff {
-                return Ok(best_f.min(1.0e6));
+                return Ok(best_f.min(1.0e10));
             }
             let phys: Vec<f64> = (0..n)
                 .map(|i| {

@@ -133,9 +133,8 @@ pub fn eval_delta_nu_radius_scaling(m_g: f64, r_phot_cm: f64) -> f64 {
 #[must_use]
 pub fn eval_nu_max(m_g: f64, r_phot_cm: f64, teff_k: f64) -> f64 {
     let r_rsun = r_phot_cm / RSUN;
-    let teff = teff_k.max(0.0);
     NU_MAX_SUN * (m_g / MSUN)
-        / (r_rsun * r_rsun * (teff / TEFF_SUN_ASTERO).sqrt())
+        / (r_rsun * r_rsun * (teff_k / TEFF_SUN_ASTERO).sqrt())
 }
 
 /// Evaluates the isothermal surface acoustic cutoff frequency $\nu_{\mathrm{ac}}$
@@ -214,7 +213,7 @@ pub fn eval_delta_pg_bildsten2012(
         let rk = r[k].max(1.0);
         let cs2 = csound_face[k] * csound_face[k];
         let sl2 = 2.0 * cs2 / (rk * rk);
-        if omega2 >= sl2 {
+        if !entered_g_cavity && omega2 >= sl2 {
             continue;
         }
         let dr = (r_mid[k - 1] - r_mid[k]).max(0.0);

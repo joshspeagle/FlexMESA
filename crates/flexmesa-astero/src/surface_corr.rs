@@ -214,14 +214,14 @@ pub fn eval_kjeldsen_corr(
         .iter()
         .enumerate()
         .map(|(idx, &f_mod)| {
+            if idx < l0_obs_freqs.len() && l0_obs_freqs[idx] < 0.0 {
+                return f_mod;
+            }
             if b_power <= 0.0 || f_mod <= 0.0 {
                 return f_mod;
             }
             let is_l0 =
                 idx < n0 && (f_mod - l0_model_freqs[idx]).abs() <= 1e-12;
-            if is_l0 && idx < l0_obs_freqs.len() && l0_obs_freqs[idx] < 0.0 {
-                return f_mod;
-            }
             let q_nl = if is_l0 {
                 1.0
             } else if idx < all_inertias.len() && !l0_model_freqs.is_empty() {

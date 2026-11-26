@@ -657,19 +657,18 @@ pub fn eval_astero_chi2(
     } else {
         0.0
     };
-    let f_r010 = weights.chi2_seismo_r_010_fraction.clamp(0.0, 1.0);
-    let f_r02 = weights.chi2_seismo_r_02_fraction.clamp(0.0, 1.0);
-    let f_dnu = weights.chi2_seismo_delta_nu_fraction.clamp(0.0, 1.0);
-    let f_numax = weights.chi2_seismo_nu_max_fraction.clamp(0.0, 1.0);
-    let f_freq = weights
-        .chi2_seismo_freq_fraction
-        .unwrap_or(1.0 - (f_r010 + f_r02 + f_dnu + f_numax))
-        .clamp(0.0, 1.0);
-    let chi2_seismo = f_r010 * chi2_r010
-        + f_r02 * chi2_r02
+    let f_freq = weights.chi2_seismo_freq_fraction.unwrap_or_else(|| {
+        (1.0 - (weights.chi2_seismo_r_010_fraction
+            + weights.chi2_seismo_r_02_fraction
+            + weights.chi2_seismo_delta_nu_fraction
+            + weights.chi2_seismo_nu_max_fraction))
+            .clamp(0.0, 1.0)
+    });
+    let chi2_seismo = weights.chi2_seismo_r_010_fraction * chi2_r010
+        + weights.chi2_seismo_r_02_fraction * chi2_r02
         + f_freq * chi2_freq
-        + f_dnu * chi2_dnu
-        + f_numax * chi2_numax;
+        + weights.chi2_seismo_delta_nu_fraction * chi2_dnu
+        + weights.chi2_seismo_nu_max_fraction * chi2_numax;
     let chi2_spectro = eval_component_chi2(
         spectro_obs,
         spectro_sigmas,

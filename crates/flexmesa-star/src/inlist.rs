@@ -323,6 +323,11 @@ pub struct InlistBundle {
     /// `kap`, `controls`, `pgstar`, `binary_job`, `binary_controls`, `pgbinary`,
     /// `astero_search_controls`, `simplex_search_controls`, etc.).
     pub sections: HashMap<String, SectionControls>,
+    /// Whether the run continues past unsupported upstream controls
+    /// (`--allow-unsupported-controls`, `#147`, `DECISIONS #26`). Checks made
+    /// after the inlists are read (for example an `other_*` hook flag whose
+    /// case handler is not ported) honour it the same way.
+    pub allow_unsupported_controls: bool,
 }
 
 impl InlistBundle {
@@ -454,6 +459,7 @@ impl InlistBundle {
             kap_config: KapConfig::default(),
             validation_report: ControlValidationReport::default(),
             sections,
+            allow_unsupported_controls: options.allow_unsupported_controls,
         };
         let report = bundle.validate_star_sections();
         report

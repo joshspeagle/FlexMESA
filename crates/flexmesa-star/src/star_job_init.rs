@@ -397,8 +397,87 @@ pub fn init_or_update_model_from_bundle(
     }
 }
 
+std::thread_local! {
+    static ACTIVE_EXTRAS_HOOKS: std::cell::RefCell<
+        Vec<crate::hydro_state::HydroAuxState>,
+    > = const { std::cell::RefCell::new(Vec::new()) };
+}
+
+/// Scopes the case's `other_*` hooks to every model created on this thread
+/// while it is alive, as upstream's procedure pointers are set on the star in
+/// `extras_controls` before the model is built or loaded
+/// (`star/job/run_star_support.f90:429-459`).
+struct ExtrasHooksGuard {
+    _private: (),
+}
+
+impl ExtrasHooksGuard {
+    fn new(hooks: &crate::hydro_state::HydroAuxState) -> Self {
+        ACTIVE_EXTRAS_HOOKS.with(|stack| stack.borrow_mut().push(hooks.clone()));
+        Self { _private: () }
+    }
+}
+
+impl Drop for ExtrasHooksGuard {
+    fn drop(&mut self) {
+        ACTIVE_EXTRAS_HOOKS.with(|stack| {
+            let _ = stack.borrow_mut().pop();
+        });
+    }
+}
+
+/// Installs the hooks of the innermost active [`ExtrasHooksGuard`], if any,
+/// on a newly created model.
+pub(crate) fn apply_active_extras_hooks(model: &mut StarModel) {
+    ACTIVE_EXTRAS_HOOKS.with(|stack| {
+        if let Some(hooks) = stack.borrow().last() {
+            carry_extras_hooks(hooks, model);
+        }
+    });
+}
+
 /// Copies the hooks `extras_controls` installed on the pre-load star onto the
 /// loaded model (upstream installs them on the one `s`, so they persist).
+/// A `use_other_*` flag whose case handler is not ported (no hook installed
+/// after `extras_controls`) is an unsupported control (`#147`): a strict run
+/// is rejected with the standard message, and under
+/// `--allow-unsupported-controls` the flag is cleared so the run continues as
+/// a diagnostic run that ignored it (`DECISIONS #26`). Upstream always has the
+/// case's procedure set (`star/job/run_star_support.f90:429-459`), so there
+/// is no defined behaviour without one.
+///
+/// # Errors
+/// Returns [`StarError::InvalidInput`] in a strict run when a flag is set
+/// without its hook.
+fn reject_hook_flags_without_handler(
+    shell: &mut StarModel,
+    allow_unsupported_controls: bool,
+) -> Result<(), StarError> {
+    let mut missing: Vec<(String, String)> = Vec::new();
+    if shell.controls.use_other_cgrav && shell.aux.other_cgrav.is_none() {
+        missing.push((String::from("controls"), String::from("use_other_cgrav")));
+        if allow_unsupported_controls {
+            shell.controls.use_other_cgrav = false;
+        }
+    }
+    if shell.controls.use_other_alpha_mlt && shell.aux.other_alpha_mlt.is_none() {
+        missing.push((String::from("controls"), String::from("use_other_alpha_mlt")));
+        if allow_unsupported_controls {
+            shell.controls.use_other_alpha_mlt = false;
+        }
+    }
+    if missing.is_empty() {
+        return Ok(());
+    }
+    let report = flexmesa_schema::ControlValidationReport {
+        unsupported_controls: missing,
+        ..Default::default()
+    };
+    report
+        .into_result(allow_unsupported_controls)
+        .map_err(|e| StarError::InvalidInput(e.to_string()))
+}
+
 fn carry_extras_hooks(
     src: &crate::hydro_state::HydroAuxState,
     model: &mut StarModel,
@@ -450,12 +529,18 @@ pub(crate) fn init_or_update_model_from_bundle_outcome(
         shell.eos_config = bundle.eos_config;
         shell.kap_config = bundle.kap_config.clone();
         extras.extras_controls(&mut shell)?;
+        crate::inlist_runner::install_star_aux_hooks(&*extras, &mut shell);
+        reject_hook_flags_without_handler(
+            &mut shell,
+            bundle.allow_unsupported_controls,
+        )?;
         let mut b = bundle.clone();
         b.controls = shell.controls;
         b.job = shell.job;
         (b, shell.aux)
     };
     let bundle = &bundle;
+    let _hooks_guard = ExtrasHooksGuard::new(&hooks);
     match crate::rsp_driver::init_rsp_model_from_bundle(
         bundle,
         &mut existing_model,

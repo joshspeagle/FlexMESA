@@ -264,7 +264,11 @@ def test_star_and_binary_boundary_guards(tmp_path: pathlib.Path) -> None:
 
     with pytest.raises(ValueError, match="nz >= 2"):
         model.set_primary_state(
-            _arr(0.0), _arr(12.0), _arr(20.0), _arr(1e33), _arr(1.0),
+            _arr(0.0),
+            _arr(12.0),
+            _arr(20.0),
+            _arr(1e33),
+            _arr(1.0),
             np.zeros((1, sp), dtype=np.float64),
         )
     with pytest.raises(ValueError, match="overshoot"):

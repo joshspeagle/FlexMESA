@@ -42,7 +42,16 @@ pub fn write_mod_string(model: &StarModel) -> Result<String, StarError> {
             || model.aux.have_mlt_vc
             || model.mlt_vc.iter().any(|&x| x != 0.0));
 
-    let mut file_type = 4_u32;
+    // `write_model.f90:74-77`: `prev_flag = (s% nz_old == s% nz .and.
+    // s% generations > 1)` sets `bit_for_2models` (2) and gates the
+    // "previous model" block (`:218-231`). `dq_old` is copied with the other
+    // old-model vectors when upstream sets `s% nz_old = s% nz`
+    // (`evolve_support.f90:81`), so its length stands for `nz_old`.
+    let prev_flag = model.generations > 1 && model.dq_old.len() == nz;
+    let mut file_type = 0_u32;
+    if prev_flag {
+        file_type |= 4;
+    }
     if write_v {
         file_type |= 8;
     }
@@ -227,6 +236,9 @@ pub fn write_mod_string(model: &StarModel) -> Result<String, StarError> {
         writeln!(out).unwrap();
     }
 
+    if !prev_flag {
+        return Ok(out);
+    }
     let dt_next_to_write = if model.aux.step_hist.dt_next_unclipped > 0.0 {
         model.aux.step_hist.dt_next_unclipped
     } else {
@@ -604,13 +616,15 @@ pub fn read_mod_str_with_dir(
 
     let (mut parsed_mstar_old, mut parsed_dt_old) =
         (model.mstar_old, model.dt_old);
-    let mut saw_prev_model = false;
+    // `read_model.f90:433-436`: the previous-model properties are read only
+    // when the header sets `bit_for_2models` (2); otherwise any trailing block
+    // is ignored.
+    let do_read_prev = file_type_opt.is_some_and(|ft| ft & (1 << 2) != 0);
     let (mut prev_mass_opt, mut prev_dt_opt, mut prev_dt_next_opt) =
         (None, None, None);
-    for line in lines {
+    for line in lines.filter(|_| do_read_prev) {
         let t = line.trim();
         if t.starts_with("previous model") {
-            saw_prev_model = true;
             continue;
         }
         let Some(v) = t.split_whitespace().last() else {
@@ -620,22 +634,19 @@ pub fn read_mod_str_with_dir(
             let m_old = parse_fortran_f64(v)?;
             parsed_mstar_old = m_old;
             prev_mass_opt = Some(m_old);
-            saw_prev_model = true;
         } else if t.starts_with("timestep (seconds)") {
             // `read_model.f90:490`: `timestep (seconds)` unconditionally sets `s% dt`.
             let dt_sec = parse_fortran_f64(v)?;
             parsed_dt_old = dt_sec;
             model.dt = dt_sec;
             prev_dt_opt = Some(dt_sec);
-            saw_prev_model = true;
         } else if t.starts_with("dt_next (seconds)") {
             let dt_next_sec = parse_fortran_f64(v)?;
             model.dt_next = dt_next_sec;
             prev_dt_next_opt = Some(dt_next_sec);
-            saw_prev_model = true;
         }
     }
-    if saw_prev_model {
+    if do_read_prev {
         let missing_or_neg = |opt: Option<f64>| !matches!(opt, Some(v) if v.is_finite() && v >= 0.0);
         if missing_or_neg(prev_dt_opt) {
             return Err(StarError::IoError(String::from(

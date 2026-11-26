@@ -324,7 +324,25 @@ fn mod_io_roundtrips_dt_and_validates_lnpgas_and_previous_model() {
         loaded.time_sec.to_bits()
     );
 
-    // 3. write_mod_string emits `s% dt`, not `s% dt_old`, on `timestep (seconds)`.
+    // 3. A first-generation model has no previous model to write: upstream's
+    // `prev_flag` (`write_model.f90:74-77`) clears `bit_for_2models` and the
+    // block (`:218-231`), so the file reloads without the dt_next checks.
+    assert_eq!(loaded.generations, 1);
+    let first_gen = write_mod_string(&loaded).expect("write_mod_string");
+    assert!(!first_gen.contains("previous model"));
+    let header_ft: u32 = first_gen
+        .lines()
+        .find(|l| l.contains("-- model for mesa/star"))
+        .and_then(|l| l.split_whitespace().next())
+        .and_then(|t| t.parse().ok())
+        .expect("file_type header");
+    assert_eq!(header_ft & 4, 0);
+    read_mod_str(&first_gen, loaded.controls.clone(), loaded.job.clone())
+        .expect("first-generation .mod reloads");
+
+    // 4. With a stored previous model (`generations > 1`, `nz_old == nz`),
+    // write_mod_string emits `s% dt`, not `s% dt_old`, on `timestep (seconds)`.
+    loaded.generations = 2;
     loaded.dt = 9.876_543_21e8;
     loaded.dt_old = 1.111_111_11e7;
     let exported = write_mod_string(&loaded).expect("write_mod_string");
@@ -341,7 +359,7 @@ fn mod_io_roundtrips_dt_and_validates_lnpgas_and_previous_model() {
             .expect("round-trip exported .mod");
     assert!((reloaded.dt - loaded.dt).abs() <= 1.0e-15 * loaded.dt);
 
-    // 4. Reject incomplete or negative `previous model` entries (`read_model.f90:505-516`).
+    // 5. Reject incomplete or negative `previous model` entries (`read_model.f90:505-516`).
     let missing_dt_next = "\n\
         previous model\n\
                previous n_shells                           2\n\

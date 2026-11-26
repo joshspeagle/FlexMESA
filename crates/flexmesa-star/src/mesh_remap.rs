@@ -1176,20 +1176,21 @@ pub(crate) fn execute_adjust_mesh_from_plan_with(
     let d_mix_old = model.d_mix.clone();
     let old_r = model.r.clone();
     let old_rho = model.rho.clone();
-    let cgrav_old = model.cgrav.clone();
     let (age_old, dt_old, mstar_old) =
         (model.star_age_old, model.dt_old, model.mstar_old);
     let prev_okay_mlt_vc = model.aux.okay_to_set_mlt_vc;
     let prev_have_new_generation = model.aux.mixing.have_new_generation;
 
     model.resize_zones(nz);
-    let default_cgrav = cgrav_old.first().copied().unwrap_or(STANDARD_CGRAV);
-    for k in 0..nz {
-        model.cgrav[k] = cgrav_old
-            .get(comes_from[k])
-            .copied()
-            .unwrap_or(default_cgrav);
-    }
+    // `resize_star_info_arrays` (`star/private/adjust_mesh.f90:319`) runs
+    // `star_info_arrays` with `do_copy_pointers_and_resize`, which sets
+    // `s% cgrav(1:nz) = standard_cgrav` (`star/private/alloc.f90:965-969`).
+    // The remap below (`cell_specific_PE` in `do1_lnT`,
+    // `star/private/mesh_adjust.f90:1465`; `adjust1_omega`, `:2100`)
+    // therefore sees `standard_cgrav` in every zone, also when
+    // `use_other_cgrav` is set; the hook's values return at the next
+    // `set_hydro_vars`.
+    model.cgrav.fill(STANDARD_CGRAV);
     model.dq.copy_from_slice(&plan.dq_new);
     fix_tail_dq(&mut model.dq)?;
     model.set_qs();

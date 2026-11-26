@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //! Standalone zero-`$MESA_DIR` unit and MESA `26.4.1` parity tests for
-//! `#153` adaptive mesh planning, mesh function weighting, gravitational mass
-//! and `cgrav` remapping, surface pruning, and remapping conservation.
+//! `#153` adaptive mesh planning, mesh function weighting, gravitational
+//! mass and the `cgrav` reset on remesh, surface pruning, and remapping
+//! conservation.
 
 #![forbid(unsafe_code)]
 #![allow(
@@ -114,44 +115,36 @@ fn test_set_m_grav_and_grav_respects_use_mass_corrections() {
     }
 }
 
-/// Verify `do_adjust_mesh` remaps `model.cgrav` onto each new cell via
-/// `comes_from` on both net merges (`nz_new < nz_old`) and net splits
-/// (`nz_new > nz_old`), rather than truncating/padding `model.cgrav` in place.
+/// Verify `do_adjust_mesh` leaves `s% cgrav(1:nz) = standard_cgrav` on both
+/// net merges (`nz_new < nz_old`) and net splits (`nz_new > nz_old`), as
+/// upstream's `resize_star_info_arrays` (`star/private/adjust_mesh.f90:319`)
+/// does through `do_copy_pointers_and_resize`
+/// (`star/private/alloc.f90:965-969`), even when the old mesh carried a
+/// zone-dependent `other_cgrav`-style profile.
 #[test]
-fn test_do_adjust_mesh_remaps_cgrav_by_comes_from_without_truncation() {
-    // A non-standard `cgrav` profile survives the post-remesh `set_vars` only
-    // through an installed `other_cgrav` hook (`set_cgrav`,
-    // `star/private/hydro_vars.f90:763-776`); this identity hook leaves the
-    // remapped values in place so the remap itself is what is checked.
-    struct KeepCgrav;
-    impl flexmesa_star::hydro_state::StarModelHook for KeepCgrav {
-        fn apply(
-            &self,
-            _model: &mut StarModel,
-        ) -> Result<(), flexmesa_star::StarError> {
-            Ok(())
-        }
-    }
+fn test_do_adjust_mesh_resets_cgrav_to_standard_cgrav_on_merge_and_split() {
     let mut model = solar_zams_model(1.0);
-    model.controls.use_other_cgrav = true;
-    model.aux.other_cgrav = Some(
-        flexmesa_star::hydro_state::StarModelHookHandle::new(KeepCgrav),
-    );
     let c2 = CLIGHT * CLIGHT;
-    let assign_profile = |m: &mut StarModel| -> Vec<f64> {
-        let mut out = Vec::with_capacity(m.nz);
+    let assign_profile = |m: &mut StarModel| {
         for k in 0..m.nz {
             let f3 = 1.0 - (2.0 * STANDARD_CGRAV * m.m[k]) / (m.r[k] * c2);
-            let cg = STANDARD_CGRAV / f3 + (k as f64) * 1.0e-11;
-            m.cgrav[k] = cg;
-            out.push(cg);
+            m.cgrav[k] = STANDARD_CGRAV / f3 + (k as f64) * 1.0e-11;
         }
-        out
+    };
+    let check_standard = |m: &StarModel, what: &str| {
+        assert_eq!(m.cgrav.len(), m.nz);
+        for k in 0..m.nz {
+            assert_eq!(
+                m.cgrav[k].to_bits(),
+                STANDARD_CGRAV.to_bits(),
+                "cgrav at {what} zone {k} is not standard_cgrav"
+            );
+        }
     };
 
     // Pass 1: coarsen ZAMS grid (`nz_new < nz_old`).
     let nz_old = model.nz;
-    let cgrav_old = assign_profile(&mut model);
+    assign_profile(&mut model);
     model.controls.mesh_delta_coeff = 1.8;
     let cfg_merge = MeshFunctionConfig::from_controls(&model.controls);
     let plan_merge = try_plan_standard_mesh(&model, &cfg_merge)
@@ -160,25 +153,12 @@ fn test_do_adjust_mesh_remaps_cgrav_by_comes_from_without_truncation() {
     assert!(plan_merge.dq_new.len() < nz_old, "expected net merge");
     let _ =
         do_adjust_mesh(&mut model, &cfg_merge).expect("do_adjust_mesh merge");
-    assert_eq!(model.cgrav.len(), model.nz);
     assert_eq!(model.nz, plan_merge.dq_new.len());
-    for (k, &ko) in plan_merge.comes_from.iter().enumerate() {
-        assert_eq!(
-            model.cgrav[k].to_bits(),
-            cgrav_old[ko].to_bits(),
-            "cgrav mismatch at merged zone {k} (comes_from={ko})"
-        );
-        let exp_grav =
-            model.cgrav[k] * model.m_grav[k] / (model.r[k] * model.r[k]);
-        assert!(
-            (model.grav[k] - exp_grav).abs() <= 1.0e-14 * exp_grav.abs(),
-            "grav mismatch at merged zone {k}"
-        );
-    }
+    check_standard(&model, "merged");
 
     // Pass 2: refine from the coarsened grid (`nz_new > nz_coarse`).
     let nz_coarse = model.nz;
-    let cgrav_coarse = assign_profile(&mut model);
+    assign_profile(&mut model);
     model.controls.mesh_delta_coeff = 0.35;
     let cfg_split = MeshFunctionConfig::from_controls(&model.controls);
     let plan_split = try_plan_standard_mesh(&model, &cfg_split)
@@ -187,21 +167,8 @@ fn test_do_adjust_mesh_remaps_cgrav_by_comes_from_without_truncation() {
     assert!(plan_split.dq_new.len() > nz_coarse, "expected net split");
     let _ =
         do_adjust_mesh(&mut model, &cfg_split).expect("do_adjust_mesh split");
-    assert_eq!(model.cgrav.len(), model.nz);
     assert_eq!(model.nz, plan_split.dq_new.len());
-    for (k, &ko) in plan_split.comes_from.iter().enumerate() {
-        assert_eq!(
-            model.cgrav[k].to_bits(),
-            cgrav_coarse[ko].to_bits(),
-            "cgrav mismatch at split zone {k} (comes_from={ko})"
-        );
-        let exp_grav =
-            model.cgrav[k] * model.m_grav[k] / (model.r[k] * model.r[k]);
-        assert!(
-            (model.grav[k] - exp_grav).abs() <= 1.0e-14 * exp_grav.abs(),
-            "grav mismatch at split zone {k}"
-        );
-    }
+    check_standard(&model, "split");
     let sum_dq: f64 = model.dq.iter().sum();
     assert!((sum_dq - 1.0).abs() < 1.0e-14);
 }

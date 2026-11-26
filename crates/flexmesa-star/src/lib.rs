@@ -147,6 +147,7 @@ pub mod relax_comp;
 pub(crate) mod relax_driver;
 pub mod relax_entropy;
 pub(crate) mod relax_mass_comp;
+pub mod remove_center;
 pub mod remove_surface_cut;
 pub(crate) mod replay_tap;
 pub mod report_utils;
@@ -448,6 +449,9 @@ pub use report_utils::{
 pub use riemann::{
     eval_hllc_face, eval_hllc_surface_face, eval_riemann_momentum_residual,
     eval_riemann_profile, HllcFaceState,
+};
+pub use remove_center::{
+    do_remove_center, do_remove_center_by_entropy, do_remove_inner_fraction_q,
 };
 pub use riemann_ad::{
     calc_ptot_cell_ad, do1_riemann_momentum_eqn, do_uface_and_pface,

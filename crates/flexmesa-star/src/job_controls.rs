@@ -1134,6 +1134,26 @@ pub struct StarJobControls {
     pub steps_to_take_before_terminate: isize,
     /// Inner temperature cut in K (`remove_initial_center_by_temperature`, `<= 0` disables).
     pub remove_initial_center_by_temperature: f64,
+    /// Inner specific entropy cut in $k_{\mathrm{B}}/\mathrm{baryon}$ for
+    /// initial non-restart models (`remove_initial_center_by_entropy`,
+    /// `<= 0` disables; `star/defaults/star_job.defaults:2059`).
+    #[serde(default)]
+    pub remove_initial_center_by_entropy: f64,
+    /// Inner specific entropy cut in $k_{\mathrm{B}}/\mathrm{baryon}$ applied on
+    /// startup including restarts (`remove_center_by_entropy`, `<= 0` disables;
+    /// `star/defaults/star_job.defaults:2092`).
+    #[serde(default)]
+    pub remove_center_by_entropy: f64,
+    /// If true, force `v_center = 0` when removing the center instead of setting
+    /// it to the inner boundary velocity (`remove_center_set_zero_v_center`;
+    /// `star/defaults/star_job.defaults:2140`).
+    #[serde(default)]
+    pub remove_center_set_zero_v_center: bool,
+    /// If true, adjust `L_center` to the luminosity at the cut boundary when
+    /// removing the center (`remove_center_adjust_L_center`;
+    /// `star/defaults/star_job.defaults:2173`).
+    #[serde(default = "default_true")]
+    pub remove_center_adjust_l_center: bool,
     /// Whether `pgstar` live plotting was requested in the inlist (accepted as no-op).
     pub pgstar_flag: bool,
     /// MESA installation directory (`mesa_dir`, `star/defaults/star_job.defaults:10-18`).
@@ -1397,6 +1417,10 @@ impl Default for StarJobControls {
             required_termination_code_string: Vec::new(),
             steps_to_take_before_terminate: -1,
             remove_initial_center_by_temperature: 0.0,
+            remove_initial_center_by_entropy: 0.0,
+            remove_center_by_entropy: 0.0,
+            remove_center_set_zero_v_center: false,
+            remove_center_adjust_l_center: true,
             pgstar_flag: false,
             mesa_dir: String::new(),
             history_columns_file: String::new(),

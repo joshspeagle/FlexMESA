@@ -102,7 +102,7 @@
     {
       "phase": "Phase C",
       "open": 18,
-      "closed": 16,
+      "closed": 17,
       "issues": [
         {
           "number": 152,
@@ -267,11 +267,16 @@
         {
           "number": 538,
           "title": "[Parity] TDC inputs at step boundaries: full set_hydro_vars after the solve and no reset_starting_vectors",
-          "state": "open"
+          "state": "closed"
         },
         {
           "number": 539,
           "title": "[Parity] star/magnetic_braking: pass/fail flips on the upstream eval_slope summation order",
+          "state": "open"
+        },
+        {
+          "number": 541,
+          "title": "[Parity] other_cgrav is applied once per step instead of at every set_vars and set_final_vars",
           "state": "open"
         }
       ]

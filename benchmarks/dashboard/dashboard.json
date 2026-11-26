@@ -21,8 +21,8 @@
         "verified_total": 5640,
         "pct_ported": 35.1,
         "pct_verified": 4.7,
-        "rust_lines": 106658,
-        "python_jax_lines": 3978
+        "rust_lines": 106768,
+        "python_jax_lines": 3987
       },
       {
         "module": "star_data",
@@ -455,8 +455,8 @@
       "upstream_panel_modules": 46
     },
     "infrastructure_lines": {
-      "rust_bridge_testing_bench": 21969,
-      "python_testing_bench": 18223
+      "rust_bridge_testing_bench": 21977,
+      "python_testing_bench": 18227
     }
   },
   "numerics": {
@@ -595,10 +595,10 @@
         "no_reference_yet": 4,
         "strict_validated": 79,
         "diagnostic_runs": 11,
-        "reached_termination": 64,
-        "within_numeric_tol": 41,
-        "passing": 34,
-        "declared_gaps": 46,
+        "reached_termination": 65,
+        "within_numeric_tol": 45,
+        "passing": 38,
+        "declared_gaps": 42,
         "undeclared_failures": 0
       },
       "binary": {
@@ -634,17 +634,16 @@
       }
     ],
     "gaps_by_issue": {
-      "#161": 21,
+      "#161": 20,
       "#162": 9,
-      "#154": 7,
+      "#154": 6,
       "#157": 6,
       "#170": 6,
       "#158": 5,
       "#160": 3,
-      "#231": 2,
-      "#153": 1,
       "#156": 1,
       "#171": 1,
+      "#231": 1,
       "#539": 1
     },
     "comparison_figures_count": 0
@@ -1386,7 +1385,7 @@
       {
         "phase": "Phase C",
         "open": 18,
-        "closed": 16,
+        "closed": 17,
         "issues": [
           {
             "number": 152,
@@ -1551,11 +1550,16 @@
           {
             "number": 538,
             "title": "[Parity] TDC inputs at step boundaries: full set_hydro_vars after the solve and no reset_starting_vectors",
-            "state": "open"
+            "state": "closed"
           },
           {
             "number": 539,
             "title": "[Parity] star/magnetic_braking: pass/fail flips on the upstream eval_slope summation order",
+            "state": "open"
+          },
+          {
+            "number": 541,
+            "title": "[Parity] other_cgrav is applied once per step instead of at every set_vars and set_final_vars",
             "state": "open"
           }
         ]
@@ -3626,6 +3630,19 @@
       "python_cov_pct": "87.8",
       "closed_140": "31",
       "total_140": "54",
+      "deferred_169": "71"
+    },
+    {
+      "date_utc": "2026-11-26",
+      "commit": "ef0d47c",
+      "event": "main merge",
+      "engine_ported_pct": "30.7",
+      "all_verified_pct": "1.1",
+      "cases_passing": "43",
+      "rust_cov_pct": "77.0",
+      "python_cov_pct": "87.8",
+      "closed_140": "32",
+      "total_140": "55",
       "deferred_169": "71"
     }
   ]

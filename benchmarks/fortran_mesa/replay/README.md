@@ -2,14 +2,15 @@
 
 A step dump (`../stepdumps/`) says *where* in a run `FlexMESA` first departs from MESA 26.4.1: which model, which solver iteration, which zone. Record/replay says *which routine* is responsible. An instrumented overlay build of MESA 26.4.1 appends one record per call of a chosen routine during a real test-suite run, holding the call context and every input and output as IEEE-754 bit patterns. The `flexmesa-replay` tool then calls the matching `FlexMESA` port with exactly the captured inputs and compares the outputs bit for bit. A routine whose calls all replay identically is cleared, and the divergence lies in the arguments its caller assembled; a routine with a differing call is the place to look, and the report names the call, the output and the bits.
 
-The first family is the convection kernel: `set_TDC` and `set_MLT` (`turb/public/turb.f90:114-204, 275-292`), captured at their four call sites in `Get_results` (`star/private/turb_support.f90:328-334`, `:349-355` with `gradr_scaled`, `:366-369`, `:384-387` with `gradr_scaled`) and replayed through `flexmesa_turb::set_tdc` and `flexmesa_turb::set_mlt`.
+The families are the convection kernel and the cell EOS. The convection kernel is `set_TDC` and `set_MLT` (`turb/public/turb.f90:114-204, 275-292`), captured at their four call sites in `Get_results` (`star/private/turb_support.f90:328-334`, `:349-355` with `gradr_scaled`, `:366-369`, `:384-387` with `gradr_scaled`) and replayed through `flexmesa_turb::set_tdc` and `flexmesa_turb::set_mlt`.
 
 ## Files
 
 | File | Role |
 | :--- | :--- |
-| `replay_patch.py` | Inserts the capture calls and their writer into `star/private/turb_support.f90`. Output only: no MESA expression, branch or order of arithmetic changes. Documents the record format. |
+| `replay_patch.py` | Inserts the capture calls into `star/private/turb_support.f90` and `micro.f90`, and the shared writers into `star_utils.f90`. Output only: no MESA expression, branch or order of arithmetic changes. Documents the record format. |
 | `run_capture.py` | Builds the overlay (this patch plus the step-dump patch), runs cases with capture on, and writes `<case>.replay` and `<case>.stepdump` with a provenance header. |
+| `scripts/data/build_mesa_replay.py` | Packs captures into a `mesa-replay-<version>.tar.zst` bundle with `PROVENANCE.json` and a per-file SHA-256 manifest. |
 | `crates/flexmesa-replay` | Reads a capture, replays each record and reports per-family results. |
 
 ## Recipe
@@ -60,6 +61,39 @@ Two upstream calling conventions are recorded rather than assumed:
 
 "Identical" means every output value, every one of the 33 partial lanes, `mixing_type`, `tdc_num_iters` and `ierr`. Only sites 1 and 3 occurred in these windows (no `use_superad_reduction` rescaling with `Gamma_factor > 1`, and no `k = 0` calls). The convection kernels are therefore cleared for the first models of these cases: any difference in `gradT`, `Y_face`, `conv_vel` or `D` there comes from the arguments `do1_mlt_2` assembles, not from `set_tdc` or `set_mlt`. A one-bit change to one captured input or output is detected and reported with its field and bits (negative control in `crates/flexmesa-replay/tests/replay_roundtrip_test.rs`, and by hand on a real capture).
 
+## The cell EOS (`EOS`)
+
+After the `get_eos` call of `do_eos_for_cell` (`star/private/micro.f90:357-361`), the overlay writes an `EOS` record (site 6) with that call's inputs (`chem_id`, `xa(1:species)`, `Rho`, `logRho`, `T`, `logT`) and results (`res(1:26)`, `d_dlnd`, `d_dlnT`, `d_dxa(1:2, 1:species)` in column-major order, `ierr`), each vector written as type `v` (bit patterns joined by commas). The EOS handle's controls are not arguments, so before the first `EOS` record of a run the overlay writes one `CONFIG EOS` line with every control of `EoS_General_Info` (`eos/public/eos_def.f90`) read from `s% eos_handle`, as `name=value` entries (reals as bit patterns, strings quoted with blanks written as `~`, arrays element by element).
+
+`flexmesa-replay` builds its `EosConfig` from that line, mapping the controls as `flexmesa-star` maps the `&eos` namelist, and refuses a line with an unknown or missing control, a hook (`use_other_eos_component`, `use_other_eos_results`), `dbg`, or table files other than the bundled ones. It then calls `flexmesa_eos::eos_dt_get_zones_with_logs`, the entry point of `flexmesa-star`'s `do_eos`, on the captured inputs (returning `ierr = -1` for `logRho < -25` as upstream `get_eos` does, `star/private/eos_support.f90:70-76`) and compares all 78 results and the `2 x species` composition partials bit for bit. Reports name each component (`res(lnE)`, `d_dlnd(frac_Skye)`, `d_dxa(lnPgas, species 3)`). `FlexMESA`'s tap writes the same `EOS` record for every cell EOS result `store_eos_for_cell` stores, so `flexmesa-replay compare` also matches the EOS inputs `FlexMESA` passes with MESA's call by call.
+
+### EOS result (MESA 26.4.1, SDK `x86_64-linux-26.6.1`, `gfortran 15.2.0`, 4 OpenMP threads, `--models 2`)
+
+Eighteen star cases (the near-miss and cluster cases of `#546`), first two models of the first `./rn` stage; RSP cases with `--window-models 2` (RSP has its own solver, so the step dump neither stops the run nor records it):
+
+| Case | `EOS` | `TDC` | `MLT` | Replay |
+| :--- | ---: | ---: | ---: | :--- |
+| `star/12M_pre_ms_to_core_collapse` | 51,137 | 42,174 | 0 | all identical |
+| `star/20M_pre_ms_to_core_collapse` | 46,278 | 40,661 | 0 | all identical |
+| `star/5M_cepheid_blue_loop` | 32,638 | 33,660 | 0 | all identical |
+| `star/accreted_material_j` | 29,099 | 19,563 | 1,074 | all identical |
+| `star/check_pulse_atm` | 56,230 | 21,913 | 10,194 | all identical |
+| `star/conserve_angular_momentum` | 13,651 | 13,651 | 0 | all identical |
+| `star/high_z` | 18,383 | 11,461 | 1,390 | all identical |
+| `star/magnetic_braking` | 36,832 | 0 | 68,158 | all identical |
+| `star/ns_c` | 94,512 | 39,343 | 20,063 | 15 `EOS` calls differ |
+| `star/ns_h` | 28,170 | 27,810 | 0 | all identical |
+| `star/ns_he` | 35,524 | 0 | 499 | all identical |
+| `star/rsp_Delta_Scuti` | 600 | 0 | 0 | all identical |
+| `star/rsp_Type_II_Cepheid` | 800 | 0 | 0 | all identical |
+| `star/split_burn_big_net` | 70,952 | 0 | 24,936 | all identical |
+| `star/starspots` | 172,752 | 0 | 205,608 | all identical |
+| `star/tzo` | 12,182 | 0 | 2,262 | all identical |
+| `star/wd_cool_0.6M` | 27,851 | 0 | 175 | all identical |
+| `star/zams_to_cc_80` | 43,210 | 35,961 | 0 | all identical |
+
+In total 770,786 of 770,801 `EOS` calls, all 286,197 `TDC` calls and all 334,359 `MLT` calls replay bit for bit. The 15 differing `EOS` calls of `star/ns_c` lie where the FreeEOS and Skye components blend in a carbon-dominated envelope (first at model 1, solver iteration 1, `k = 214`, `logRho = 1.617`, `logT = 7.315`, `frac_FreeEOS = 0.975`, `frac_Skye = 0.025`): MESA returns `d_dlnd(frac_FreeEOS) = d_dlnd(frac_Skye) = 0` where `FlexMESA` returns `+1.17e-30` and `-1.17e-30`, and in four of the calls the blended results and their partials differ by 1 to about 400 ulp (up to 12,032 ulp in `d_dlnd(Cp)`). These are findings for the EOS blend, not changed here.
+
 ## Comparing the arguments FlexMESA assembles (`GETR`)
 
 Replay clears a kernel; it cannot check the caller, because `Get_results` reads star state beyond its arguments. For that the overlay also writes, after the `Get_results` call in `do1_mlt_eval` (`star/private/turb_support.f90:188-192`), a `GETR` record with that call's arguments (`r`, `L`, `T`, `P`, `opacity`, `rho`, `dV`, `chiRho`, `chiT`, `Cp`, `gradr`, `grada`, `scale_height`, `iso`, `XH1`, `cgrav`, `m`, `gradL_composition_term`, `mixing_length_alpha`, `alpha_semiconvection`, `thermohaline_coeff`, `energy`) and results (`mixing_type`, `gradT`, `Y_face`, `conv_vel`, `D`, `Gamma`). `FlexMESA` writes the same `GETR`, `TDC` and `MLT` records for its own run from a tap in `crates/flexmesa-star/src/replay_tap.rs`, called from `do1_mlt_2`:
@@ -81,13 +115,12 @@ First results (MESA as above, 3 solved models; `FlexMESA` at this branch with `-
 
 ## Data volume
 
-A `TDC` record averages about 2.5 kB (16 auto-diff inputs and 4 auto-diff outputs, typically 4 to 6 nonzero lanes each); an `MLT` record about 1.5 kB. A sweep calls the kernel once per face, and a model takes one sweep per solver iteration plus two or three at the start of the step, so an 800-zone model with 4 solver iterations writes about 6,000 records, or 15 MB. gzip reduces a capture by a factor of about 3. Captures stay out of git; a later versioned data bundle would hold the captures CI replays (`DECISIONS #67`).
+A `TDC` record averages about 2.5 kB (16 auto-diff inputs and 4 auto-diff outputs, typically 4 to 6 nonzero lanes each); an `MLT` record about 1.5 kB. A sweep calls the kernel once per face, and a model takes one sweep per solver iteration plus two or three at the start of the step, so an 800-zone model with 4 solver iterations writes about 6,000 records, or 15 MB. gzip reduces a capture by a factor of about 3. An `EOS` record is 2 to 8 kB, growing with the number of species (`xa`, `d_dxa` and `chem_id` scale with it). Captures stay out of git; `scripts/data/build_mesa_replay.py` packs them into a versioned bundle (`DECISIONS #67`), and `crates/flexmesa-replay/tests/data/accreted_material_j_sample.replay` (80 `TDC`, 60 `MLT` and 120 `EOS` records of a real capture, 0.57 MB) lets CI exercise the replay path without it.
 
 ## Extending the pattern
 
 Each new family needs the same three pieces: a capture call after the routine's call site in an overlay patch (one `write` per call, inputs and outputs, under the critical section), a `SCHEMA` line, and a replay function in `flexmesa-replay` that calls the port and compares every output. The constraint that decides where to capture is that replay must be able to call the port without star state, so the record has to hold the routine's complete input, including configuration.
 
-- **EOS** (`eosDT_get`, `eos/public/eos_lib.f90:108`, called from `star/private/eos_support.f90:78` for each cell from `micro.f90`). Inputs: `species`, `chem_id`, `xa(species)`, `Rho`, `logRho`, `T`, `logT`; outputs: `res(num_eos_basic_results)`, `d_dlnd`, `d_dlnT`, `d_dxa(:, species)`, `ierr`. The EOS handle's controls (component blends, `Zfrac` limits, `use_*` flags) are not arguments: record them once per run as a `CONFIG` line read from the handle, and have the replay tool build its EOS handle from that line and fail on any control it does not know. An 8-species cell is about 300 values, 5 kB per call, about 15 MB per 800-zone model with 4 iterations.
 - **kap** (`kap_get`, called from `star/private/kap_support.f90:489`). Inputs (`kap/public/kap_lib.f90:161-166`): `species`, `chem_id`, `xa`, `logRho`, `logT`, `lnfree_e` and its two partials, `eta` and its two partials; outputs: `kap_fracs`, `kap`, `dlnkap_dlnRho`, `dlnkap_dlnT`, `dlnkap_dxa`, `ierr`. The opacity tables and blending controls go in a `CONFIG` line as for EOS. About 1 kB per call.
 - **net** (`net_get`, called from `star/private/net.f90:245`). Inputs (`net/public/net_lib.f90:550-558`): `x`, `temp`, `rho` and their logarithms, `abar`, `zbar`, `z2bar`, `ye`, `eta` and its partials, `rate_factors`, `weak_rate_factor`, `reaction_Qs`, `reaction_neuQs`, `screening_mode`; outputs: `eps_nuc` and its partials, `dxdt`, `d_dxdt_dRho`, `d_dxdt_dT`, `d_dxdt_dx`. The Jacobian `d_dxdt_dx` is `species x species`: about 1,000 values for `approx21`, but 240,000 for a 495-isotope network. Write it sparse (nonzero entries only) and restrict the window with a zone list (`FLEXMESA_REPLAY_ZONES`) for large networks. The net handle (network file, rate selections, cached rate tables) is configuration and is recorded per run.
 

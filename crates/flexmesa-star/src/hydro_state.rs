@@ -446,6 +446,50 @@ impl std::fmt::Debug for OtherAdjustMltGradtFractionHandle {
     }
 }
 
+/// Callback trait for the `other_*` hooks that `set_hydro_vars` calls with
+/// only the star as argument: `other_cgrav` (`set_cgrav`,
+/// `star/private/hydro_vars.f90:763-776`) and `other_alpha_mlt`
+/// (`star/private/hydro_vars.f90:572-579`).
+pub trait StarModelHook: Send + Sync {
+    /// Updates the model in place (`call s% other_<name>(s% id, ierr)`).
+    ///
+    /// # Errors
+    /// Returns [`crate::controls::StarError`] if the hook fails (`ierr /= 0`).
+    fn apply(
+        &self,
+        model: &mut crate::model::StarModel,
+    ) -> Result<(), crate::controls::StarError>;
+}
+
+/// Cloneable reference-counted handle wrapping a [`StarModelHook`].
+#[derive(Clone)]
+pub struct StarModelHookHandle(pub std::sync::Arc<dyn StarModelHook>);
+
+impl StarModelHookHandle {
+    /// Wraps a [`StarModelHook`] implementation in a handle.
+    #[must_use]
+    pub fn new(hook: impl StarModelHook + 'static) -> Self {
+        Self(std::sync::Arc::new(hook))
+    }
+
+    /// Invokes the underlying hook.
+    ///
+    /// # Errors
+    /// Propagates any [`crate::controls::StarError`] returned by the hook.
+    pub fn apply(
+        &self,
+        model: &mut crate::model::StarModel,
+    ) -> Result<(), crate::controls::StarError> {
+        self.0.apply(model)
+    }
+}
+
+impl std::fmt::Debug for StarModelHookHandle {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("StarModelHookHandle(..)")
+    }
+}
+
 const fn default_k_below_const_q() -> usize {
     1
 }
@@ -702,6 +746,14 @@ pub struct HydroAuxState {
     #[serde(skip)]
     pub other_adjust_mlt_gradt_fraction:
         Option<OtherAdjustMltGradtFractionHandle>,
+    /// Optional custom effective gravitational constant hook (`other_cgrav`),
+    /// called from `set_cgrav` (`star/private/hydro_vars.f90:763-776`).
+    #[serde(skip)]
+    pub other_cgrav: Option<StarModelHookHandle>,
+    /// Optional custom mixing-length `alpha_mlt` hook (`other_alpha_mlt`,
+    /// `star/private/hydro_vars.f90:572-579`).
+    #[serde(skip)]
+    pub other_alpha_mlt: Option<StarModelHookHandle>,
     /// Brunt-Väisälä composition buoyancy term $N_{\mu,k}^2$ in $\mathrm{s^{-2}}$ (`brunt_N2_composition_term`).
     pub brunt_n2_composition_term: Vec<f64>,
     /// Binomial-smoothed Ledoux composition buoyancy term $B_{\mathrm{smooth},k}$ (`smoothed_brunt_B`).
@@ -899,6 +951,8 @@ impl HydroAuxState {
             binary_other_torque_implicit: None,
             other_overshooting_scheme: None,
             other_adjust_mlt_gradt_fraction: None,
+            other_cgrav: None,
+            other_alpha_mlt: None,
             brunt_n2_composition_term: vec![0.0; nz],
             smoothed_brunt_b: vec![0.0; nz],
             mass_correction: vec![1.0; nz],

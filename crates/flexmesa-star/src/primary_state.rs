@@ -13,7 +13,8 @@ use flexmesa_kap::KapConfig;
 use crate::controls::{StarError, VarLayout};
 use crate::hydro_state::{
     BinaryOtherTorqueHandle, OtherAdjustMltGradtFractionHandle,
-    OtherOvershootingSchemeHandle, StepHistoryScalars, TidalDeformationHandle,
+    OtherOvershootingSchemeHandle, StarModelHookHandle, StepHistoryScalars,
+    TidalDeformationHandle,
 };
 use crate::model::StarModel;
 use crate::rotation_mix_info::StStartInfo;
@@ -555,6 +556,8 @@ pub struct PrimaryStateBuffer {
         Option<OtherOvershootingSchemeHandle>,
     pub(crate) other_adjust_mlt_gradt_fraction:
         Option<OtherAdjustMltGradtFractionHandle>,
+    pub(crate) other_cgrav: Option<StarModelHookHandle>,
+    pub(crate) other_alpha_mlt: Option<StarModelHookHandle>,
     pub(crate) extra_grav_if_nonzero: Option<Vec<StarAdOrder1>>,
 }
 
@@ -576,6 +579,8 @@ macro_rules! make_empty_buf {
             binary_other_torque_implicit: None,
             other_overshooting_scheme: None,
             other_adjust_mlt_gradt_fraction: None,
+            other_cgrav: None,
+            other_alpha_mlt: None,
             extra_grav_if_nonzero: None,
             model_number: 0,
             model_number_old: 0,
@@ -823,7 +828,9 @@ impl PrimaryStateBuffer {
                 binary_other_torque,
                 binary_other_torque_implicit,
                 other_overshooting_scheme,
-                other_adjust_mlt_gradt_fraction
+                other_adjust_mlt_gradt_fraction,
+                other_cgrav,
+                other_alpha_mlt
             ]
         );
         let has_nonzero = a
@@ -1002,7 +1009,9 @@ impl PrimaryStateBuffer {
                     binary_other_torque,
                     binary_other_torque_implicit,
                     other_overshooting_scheme,
-                    other_adjust_mlt_gradt_fraction
+                    other_adjust_mlt_gradt_fraction,
+                    other_cgrav,
+                    other_alpha_mlt
                 ]
             );
             a.solver_mlt_eval_count = 0;

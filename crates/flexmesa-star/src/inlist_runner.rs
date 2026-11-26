@@ -111,15 +111,6 @@ pub trait StarExtras {
     ) -> Result<(), StarError> {
         Ok(())
     }
-    /// Custom effective gravitational constant profile $G_{\mathrm{eff}}(k)$.
-    ///
-    /// # Errors
-    /// Returns [`StarError`] if evaluating or validating `model.cgrav` fails.
-    fn other_cgrav(&self, _m: &mut StarModel) -> Result<(), StarError> {
-        Ok(())
-    }
-    /// Custom mixing-length parameter profile $\alpha_{\mathrm{MLT}}(k)$.
-    fn other_alpha_mlt(&self, _m: &mut StarModel) {}
     /// Custom wind mass-loss rate $\dot{M}$ ($M_\odot\,\mathrm{yr^{-1}}$).
     ///
     /// # Errors
@@ -293,6 +284,25 @@ pub trait StarExtras {
         None
     }
 
+    /// Optional custom effective gravitational constant profile
+    /// $G_{\mathrm{eff}}(k)$ installed onto `model.aux.other_cgrav`
+    /// (`other_cgrav`, called from `set_cgrav` in
+    /// `star/private/hydro_vars.f90:763-776`).
+    fn other_cgrav_handle(
+        &self,
+    ) -> Option<crate::hydro_state::StarModelHookHandle> {
+        None
+    }
+
+    /// Optional custom mixing-length parameter profile
+    /// $\alpha_{\mathrm{MLT}}(k)$ installed onto `model.aux.other_alpha_mlt`
+    /// (`other_alpha_mlt`, `star/private/hydro_vars.f90:572-579`).
+    fn other_alpha_mlt_handle(
+        &self,
+    ) -> Option<crate::hydro_state::StarModelHookHandle> {
+        None
+    }
+
     /// Optional custom mesh spacing functions handle installed onto
     /// `model.aux.other_mesh_functions` (`other_mesh_functions` in
     /// `star/other/other_mesh_functions.f90`).
@@ -315,7 +325,8 @@ pub trait StarExtras {
 }
 
 /// Installs any `other_overshooting_scheme`, `other_adjust_mlt_gradT_fraction`,
-/// `other_mesh_functions`, and `other_mesh_delta_coeff_factor` handles exposed
+/// `other_cgrav`, `other_alpha_mlt`, `other_mesh_functions`, and
+/// `other_mesh_delta_coeff_factor` handles exposed
 /// by `extras` onto `model.aux` without clearing handles already installed
 /// directly by `extras_controls`.
 pub fn install_star_aux_hooks<E: StarExtras + ?Sized>(
@@ -327,6 +338,12 @@ pub fn install_star_aux_hooks<E: StarExtras + ?Sized>(
     }
     if let Some(handle) = extras.other_adjust_mlt_gradt_fraction_handle() {
         model.aux.other_adjust_mlt_gradt_fraction = Some(handle);
+    }
+    if let Some(handle) = extras.other_cgrav_handle() {
+        model.aux.other_cgrav = Some(handle);
+    }
+    if let Some(handle) = extras.other_alpha_mlt_handle() {
+        model.aux.other_alpha_mlt = Some(handle);
     }
     if let Some(handle) = extras.other_mesh_functions_handle() {
         model.aux.other_mesh_functions = Some(handle);
@@ -921,12 +938,11 @@ fn run_inlist_stage_with_logs_inner(
                 }
                 ExtrasDirective::KeepGoing => {}
             }
-            if model.controls.use_other_cgrav {
-                extras.other_cgrav(model)?;
-            }
-            if model.controls.use_other_alpha_mlt {
-                extras.other_alpha_mlt(model);
-            }
+            // Upstream has no per-step `other_cgrav` / `other_alpha_mlt` call:
+            // both run inside `set_hydro_vars` (`set_cgrav`,
+            // `star/private/hydro_vars.f90:525,763-776`; `other_alpha_mlt`,
+            // `star/private/hydro_vars.f90:572-579`) from the installed
+            // `model.aux` handles.
 
             let (step_rep, check_term_opt) =
                 match star_evolve_step_outcome_with_extras(

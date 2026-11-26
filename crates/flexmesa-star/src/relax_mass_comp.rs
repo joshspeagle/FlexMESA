@@ -1257,14 +1257,6 @@ impl StarExtras for RelaxExtrasAdapter<'_> {
         self.inner.extras_after_evolve(m)
     }
 
-    fn other_cgrav(&self, m: &mut StarModel) -> Result<(), StarError> {
-        self.inner.other_cgrav(m)
-    }
-
-    fn other_alpha_mlt(&self, m: &mut StarModel) {
-        self.inner.other_alpha_mlt(m);
-    }
-
     fn other_wind(
         &self,
         m: &StarModel,
@@ -1371,6 +1363,18 @@ impl StarExtras for RelaxExtrasAdapter<'_> {
         &self,
     ) -> Option<OtherAdjustMltGradtFractionHandle> {
         self.inner.other_adjust_mlt_gradt_fraction_handle()
+    }
+
+    fn other_cgrav_handle(
+        &self,
+    ) -> Option<crate::hydro_state::StarModelHookHandle> {
+        self.inner.other_cgrav_handle()
+    }
+
+    fn other_alpha_mlt_handle(
+        &self,
+    ) -> Option<crate::hydro_state::StarModelHookHandle> {
+        self.inner.other_alpha_mlt_handle()
     }
 }
 

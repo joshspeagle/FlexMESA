@@ -106,8 +106,7 @@ fn total_angular_momentum_cgs(model: &StarModel) -> f64 {
 }
 
 #[test]
-fn test_species_energy_and_untouched_zone_angular_momentum_are_conserved_f4_26()
-{
+fn test_species_energy_and_total_angular_momentum_are_conserved_f4_26() {
     let mut ctrl = StarControls {
         initial_mass: 2.0,
         initial_z: 0.02,
@@ -158,8 +157,6 @@ fn test_species_energy_and_untouched_zone_angular_momentum_are_conserved_f4_26()
     }
     set_hydro_vars(&mut model, false, false).expect("set_hydro_vars");
 
-    let omega_before = model.omega.clone();
-    let j_rot_before = model.j_rot.clone();
     let sp_before = species_masses(&model);
     let ie_before: f64 = model
         .dm
@@ -205,26 +202,18 @@ fn test_species_energy_and_untouched_zone_angular_momentum_are_conserved_f4_26()
         "relative IE change {rel_ie:.3e} exceeded upstream cap"
     );
 
-    // 3. Global angular momentum conservation AND exact bit-identity (`0 ULP`)
-    //    on untouched outer zones (`0..150`) (`F4-26`, `mesh_adjust.f90:1994-1998`).
+    // 3. Global angular momentum conservation (`F4-26`). Upstream
+    //    `adjust_omega` recomputes `j_rot = j_tot/dq_sum`, `i_rot` and
+    //    `omega = j_rot/i_rot` for every new cell, unchanged cells included
+    //    (`star/private/mesh_adjust.f90:1943-1952, 2097-2103`), so untouched
+    //    zones are not preserved bit-for-bit; that per-cell recomputation is
+    //    checked in `mesh_adjust_omega_153_parity_test.rs` (#153, #559).
     let j_after = total_angular_momentum_cgs(&model);
     let rel_j = (j_after - j_before).abs() / j_before.abs();
     assert!(
         rel_j < 1.0e-13,
         "total angular momentum drifted: rel_j={rel_j:.3e}"
     );
-    for k in 30..150 {
-        assert_eq!(
-            model.omega[k].to_bits(),
-            omega_before[k].to_bits(),
-            "untouched zone {k} omega was rescaled instead of preserved bit-for-bit"
-        );
-        assert_eq!(
-            model.j_rot[k].to_bits(),
-            j_rot_before[k].to_bits(),
-            "untouched zone {k} j_rot was rescaled instead of preserved bit-for-bit"
-        );
-    }
 
     // 4. Degenerate `eta >= -1e-6` branch skips `solve_eos_given_DE` (`mesh_adjust.f90:1767`).
     let mut m_deg = model.clone();

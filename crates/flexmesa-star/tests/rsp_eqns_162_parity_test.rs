@@ -897,6 +897,7 @@ fn test_rsp_driver_energy_integrals_and_bundle_overrides_zero_mesa_dir() {
         kap_config: KapConfig::default(),
         validation_report: ControlValidationReport::default(),
         sections: HashMap::new(),
+        allow_unsupported_controls: false,
     };
     let updated = init_or_update_model_from_bundle(
         &bundle,

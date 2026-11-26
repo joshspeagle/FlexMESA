@@ -618,8 +618,11 @@ def test_flexmesa_trace_and_harness_run_cli_smoke(
     # so the library must not produce it.
     assert not (ast_out / "freqs.dat").exists()
 
-    # Smoke harness run on a case with remaining unsupported controls writes
-    # Markdown + JSON with full 106-case counts and diagnostic fallback labels.
+    # Smoke harness run writes Markdown + JSON with full 106-case counts.
+    # `starspots` sets only `&star_job::mesa_dir` beyond the ported controls,
+    # which is a supported key since #548 (`star/defaults/star_job.defaults:
+    # 10-18`), so the unmodified inlists pass strict validation and the run
+    # is labelled as a strict smoke run, not a diagnostic.
     md_out = tmp_path / "smoke_table.md"
     js_out = tmp_path / "smoke_table.json"
     rc_h = cli.main(
@@ -643,16 +646,13 @@ def test_flexmesa_trace_and_harness_run_cli_smoke(
     payload = json.loads(js_out.read_text(encoding="utf-8"))
     assert payload["summary"]["total_cases"] == 106
     assert payload["summary"]["selected_cases"] == 1
-    # Strict validation rejects the unmodified upstream inlists (#147), so
-    # the harness reruns the case as a diagnostic and labels it as such.
     smoke_case = payload["cases"][0]
-    assert smoke_case["verdict"] == "smoke: 2 steps (controls ignored)"
-    assert smoke_case["controls_ignored"] is True
-    assert smoke_case["n_controls_ignored"] > 0
-    assert "unsupported control" in smoke_case["strict_rejection"]
-    assert payload["summary"]["diagnostic_cases"] == 1
-    assert payload["summary"]["strict_validated_cases"] == 0
-    assert "diagnostic (" in md_out.read_text(encoding="utf-8")
+    assert smoke_case["verdict"] == "smoke: 2 steps"
+    assert smoke_case["controls_ignored"] is False
+    assert smoke_case["n_controls_ignored"] == 0
+    assert not smoke_case["strict_rejection"]
+    assert payload["summary"]["diagnostic_cases"] == 0
+    assert payload["summary"]["strict_validated_cases"] == 1
 
     # Undeclared failure under --gate must return exit code 1. `timing` is
     # the shortest uncapped star case (50 steps); the reference below is

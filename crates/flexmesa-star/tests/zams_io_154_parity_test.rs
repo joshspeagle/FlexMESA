@@ -94,7 +94,8 @@ fn zams_parse_ascii_stops_index_scan_at_any_non_positive_sentinel() {
     let sp_cols =
         ["h1", "he3", "he4", "c12", "n14", "o16", "ne20", "mg24"].join(" ");
     let mut text = format!(
-        "initial_z 0.02\n\
+        "net_name 'basic.net'\n\
+         initial_z 0.02\n\
          initial_y 0.28\n\
          M/Msun n_shells\n\
          {:.8} {}\n\
@@ -153,11 +154,13 @@ fn zams_mass_interpolation_remaps_upper_species_by_chem_id_oracle() {
     let cat_orig = ZamsCatalog {
         initial_z: builtin.initial_z,
         initial_y: builtin.initial_y,
+        net_name: builtin.net_name.clone(),
         models: vec![e1.clone(), e2_orig.clone()],
     };
     let cat_perm = ZamsCatalog {
         initial_z: builtin.initial_z,
         initial_y: builtin.initial_y,
+        net_name: builtin.net_name.clone(),
         models: vec![e1.clone(), e2_perm],
     };
 
@@ -206,6 +209,7 @@ fn zams_mass_interpolation_remaps_upper_species_by_chem_id_oracle() {
     let cat_bad = ZamsCatalog {
         initial_z: builtin.initial_z,
         initial_y: builtin.initial_y,
+        net_name: builtin.net_name.clone(),
         models: vec![e1, e2_bad],
     };
     let err = load_zams_model_from_catalog(
@@ -408,6 +412,9 @@ fn photo_restart_preserves_checkpoint_z_flags_net_and_unclipped_dt() {
         },
     )
     .expect("load zams");
+    // The loaded ZAMS model is on the catalog's net (`init_model.f90:185`);
+    // the checkpointed net name below stands for a later `change_net`.
+    model.job.net_name = String::from("o18_and_ne22.net");
     model.dt_next = 0.0;
     model.aux.step_hist.dt_next_unclipped = 1.234e9;
     model.aux.step_hist.using_revised_max_yr_dt = true;

@@ -79,8 +79,8 @@ _MESA_TEST_INPUTS_ANCHOR_RE = re.compile(
     r"\b.*\bmesa_test_inputs\b"
 )
 _BUNDLE_ORACLE_ID_RE = re.compile(
-    r"\b(?:mesa-module-hex-v1(?:\.tar\.zst)?|FLEXMESA_ADIPLS_CAPTURES|"
-    r"FLEXMESA_PULSE_TAP_DIR|mesa-astero-tracks)\b"
+    r"\b(?:mesa-module-hex-v1(?:\.tar\.zst)?|mesa-replay-v1(?:\.tar\.zst)?|"
+    r"FLEXMESA_ADIPLS_CAPTURES|FLEXMESA_PULSE_TAP_DIR|mesa-astero-tracks)\b"
 )
 _UPSTREAM_MESA_ANCHOR_RE = re.compile(
     rf"\b(?:{_MESA_PKGS})/"
@@ -113,6 +113,7 @@ _ORACLE_CODE_SIGNALS_RE = re.compile(
     r"load_golden_outputs|"
     r"parse_golden_file|"
     r"data/pulse_fortran_format|"
+    r"data/[\w./-]+\.replay|"
     r"fmt_oracle_expected\.txt|"
     r"tests/data/mesa_26_4_1_|"
     r"mesa_26_4_1_gyre_|"
@@ -576,6 +577,39 @@ def _verify_golden_fixture_origin(
     return None
 
 
+def _verify_replay_fixture_origin(
+    replay_path: pathlib.Path,
+    rel_label: str,
+) -> str | None:
+    """Check header metadata on a cited `.replay` fixture for MESA origin."""
+    if not replay_path.is_file():
+        return None
+    snippet = "\n".join(
+        replay_path.read_text(encoding="utf-8", errors="replace").splitlines()[
+            :40
+        ]
+    )
+    low = snippet.lower()
+    has_mesa_origin = bool(_MESA_ORIGIN_RE.search(snippet))
+    if ("self-generated" in low or "regression snapshot" in low) and (
+        not has_mesa_origin
+    ):
+        return (
+            f"cited replay fixture {rel_label!r} looks self-generated "
+            "rather than MESA-origin"
+        )
+    if not re.search(
+        r"^\s*#\s*mesa_version:\s*r?26\.4\.1\b",
+        snippet,
+        flags=re.MULTILINE | re.IGNORECASE,
+    ):
+        return (
+            f"cited replay fixture {rel_label!r} declares replay data "
+            "without MESA 26.4.1 origin"
+        )
+    return None
+
+
 def _path_tokens_for_code_check(rel: str) -> tuple[str, ...]:
     """Return concrete path or filename markers expected in test code."""
     clean = rel.rstrip("/")
@@ -671,6 +705,7 @@ def validate_oracle_provenance(
             is_dir_ref = rel.endswith("/")
             rel_no_slash = rel.rstrip("/")
             golden_files_to_check: list[tuple[pathlib.Path, str]] = []
+            replay_files_to_check: list[tuple[pathlib.Path, str]] = []
             if "*" in rel_no_slash or "?" in rel_no_slash:
                 parts = pathlib.PurePosixPath(rel_no_slash).parts
                 split_idx = next(
@@ -699,6 +734,8 @@ def validate_oracle_provenance(
                                 "tests/fixtures/golden/"
                             ):
                                 golden_files_to_check.append((m, rel))
+                            if m.suffix == ".replay":
+                                replay_files_to_check.append((m, rel))
             else:
                 target = repo_root / rel_no_slash
                 if not target.exists():
@@ -706,18 +743,29 @@ def validate_oracle_provenance(
                         f"{rec.path}: cited provenance path {rel!r} "
                         "does not exist on disk"
                     )
-                elif rel_no_slash.startswith("tests/fixtures/golden/"):
-                    if target.is_file():
-                        golden_files_to_check.append((target, rel))
+                else:
+                    if rel_no_slash.startswith("tests/fixtures/golden/"):
+                        if target.is_file():
+                            golden_files_to_check.append((target, rel))
+                        elif target.is_dir() and is_dir_ref:
+                            for f in sorted(target.iterdir()):
+                                if f.is_file():
+                                    golden_files_to_check.append((f, rel))
+                    if target.is_file() and target.suffix == ".replay":
+                        replay_files_to_check.append((target, rel))
                     elif target.is_dir() and is_dir_ref:
                         for f in sorted(target.iterdir()):
-                            if f.is_file():
-                                golden_files_to_check.append((f, rel))
+                            if f.is_file() and f.suffix == ".replay":
+                                replay_files_to_check.append((f, rel))
 
             for g_file, g_label in golden_files_to_check:
                 g_err = _verify_golden_fixture_origin(g_file, g_label)
                 if g_err:
                     errors.append(f"{rec.path}: {g_err}")
+            for r_file, r_label in replay_files_to_check:
+                r_err = _verify_replay_fixture_origin(r_file, r_label)
+                if r_err:
+                    errors.append(f"{rec.path}: {r_err}")
 
             if any(tok in code for tok in _path_tokens_for_code_check(rel)):
                 matched_any_in_code = True
@@ -744,6 +792,11 @@ def validate_oracle_provenance(
                     f"{rec.path}: cites {bid!r} in provenance without "
                     f"referencing `{bid}` in test code"
                 )
+        elif bid.startswith("mesa-replay-v1") and "replay" not in code:
+            errors.append(
+                f"{rec.path}: cites {bid!r} in provenance without referencing "
+                "`replay` in test code"
+            )
         elif bid == "mesa-astero-tracks" and "mesa-astero-tracks" not in code:
             errors.append(
                 f"{rec.path}: cites {bid!r} in provenance without referencing "

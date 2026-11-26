@@ -323,6 +323,61 @@ def test_taxonomy_enforces_oracle_provenance_and_evidence_in_code(
     errs = test_taxonomy.verify_test_taxonomy(repo)
     assert any("without MESA 26.4.1 origin" in e for e in errs)
 
+    # 5. Replay fixtures require MESA 26.4.1 origin headers.
+    replay_dir = repo / "crates" / "flexmesa-replay" / "tests" / "data"
+    replay_dir.mkdir(parents=True)
+    replay_sample = replay_dir / "sample.replay"
+    replay_sample.write_text("# compiler: local\nRUN\n", encoding="utf-8")
+    replay_test = (
+        repo / "crates" / "flexmesa-replay" / "tests" / "mesa_sample_test.rs"
+    )
+    replay_test.write_text(
+        'const SAMPLE: &str = include_str!("data/sample.replay");\n'
+        "#[test]\n"
+        "fn replays_sample() {\n"
+        "    assert!(!SAMPLE.is_empty());\n"
+        "}\n",
+        encoding="utf-8",
+    )
+    replay_entries = (
+        test_taxonomy.TestFileRecord(
+            path="crates/flexmesa-turb/tests/mlt_oracle_test.rs",
+            language="rust",
+            module="turb",
+            kind="oracle",
+            provenance="MESA 26.4.1 turb/private/mlt.f90 hex",
+        ),
+        test_taxonomy.TestFileRecord(
+            path="tests/test_turb_invariants.py",
+            language="python",
+            module="turb",
+            kind="invariant",
+        ),
+        test_taxonomy.TestFileRecord(
+            path="crates/flexmesa-replay/tests/mesa_sample_test.rs",
+            language="rust",
+            module="tooling",
+            kind="oracle",
+            provenance=(
+                "crates/flexmesa-replay/tests/data/sample.replay "
+                "(MESA r26.4.1; #552)"
+            ),
+        ),
+    )
+    (repo / test_taxonomy.DEFAULT_TAXONOMY_REL).write_text(
+        test_taxonomy.dump_test_taxonomy(
+            test_taxonomy.TestTaxonomy(schema_version=1, entries=replay_entries)
+        ),
+        encoding="utf-8",
+    )
+    errs = test_taxonomy.verify_test_taxonomy(repo)
+    assert any("cited replay fixture" in e for e in errs)
+    replay_sample.write_text(
+        "# mesa_version: r26.4.1\n# compiler: gfortran 15.2.0\nRUN\n",
+        encoding="utf-8",
+    )
+    assert test_taxonomy.verify_test_taxonomy(repo) == []
+
 
 def test_taxonomy_enforces_restricted_vocabulary_mislabel_gate(
     tmp_path: pathlib.Path,

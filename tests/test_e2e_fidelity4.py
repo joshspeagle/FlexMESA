@@ -78,15 +78,32 @@ def test_fidelity4_representative_multi_tier_physical_e2e_execution(
                 star.run_test_suite_case(
                     cdir, max_steps_per_stage=2, verify_restart=True
                 )
-        # Every control is ported, so each raw copy runs with the case's own
-        # run_star_extras hooks.
         run_dir = tmp_path / "raw" / cname
         shutil.copytree(cdir, run_dir)
+        if cname == "20M_z2m2_high_rotation":
+            # The inlist sets `use_other_alpha_mlt`
+            # (`inlist_to_end_core_he_burn:134`) and the test-side handler
+            # does not port `other_alpha_mlt` (#155), so a strict run is
+            # rejected (#541, DECISIONS #26). The run below is diagnostic.
+            with pytest.raises(
+                ValueError,
+                match=r"unsupported control.*use_other_alpha_mlt",
+            ):
+                star.run_test_suite_case(
+                    run_dir,
+                    max_steps_per_stage=2,
+                    verify_restart=True,
+                    extras=resolve_case_extras("star", cdir),
+                )
+        # Every other control is ported, so each raw copy runs with the
+        # case's own run_star_extras hooks (diagnostic for the one case whose
+        # `other_alpha_mlt` hook is not ported).
         rep = star.run_test_suite_case(
             run_dir,
             max_steps_per_stage=2,
             verify_restart=True,
             extras=resolve_case_extras("star", cdir),
+            allow_unsupported_controls=cname == "20M_z2m2_high_rotation",
         )
         assert rep["tier"] == 0
         assert rep["passed"] is False

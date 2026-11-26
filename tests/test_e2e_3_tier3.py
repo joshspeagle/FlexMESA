@@ -21,9 +21,12 @@ _REPRESENTATIVE_TIER3_CASES = (
     "20M_z2m2_high_rotation",
     "tzo",
 )
-_STRICT_VALID_TIER3_CASES = frozenset(
-    {"high_mass", "20M_z2m2_high_rotation", "tzo"}
-)
+# `20M_z2m2_high_rotation` (`use_other_alpha_mlt`) and `tzo`
+# (`use_other_cgrav`) set a hook flag whose test-side handler is not ported,
+# so their raw copies are rejected as unsupported controls (#541) and take the
+# cleaned-copy path below.
+_STRICT_VALID_TIER3_CASES = frozenset({"high_mass"})
+_HOOK_UNPORTED_TIER3_CASES = frozenset({"20M_z2m2_high_rotation", "tzo"})
 
 
 @pytest.mark.parametrize(
@@ -155,6 +158,9 @@ def test_upstream_mesa_tier3_test_suite_case_with_restart_reproducibility(
             skip_optional=True,
             max_steps_per_stage=2,
             verify_restart=True,
+            # The cleaned copy keeps the unported hook flag, so these cases
+            # run in the diagnostic mode (the flag is cleared, DECISIONS #26).
+            allow_unsupported_controls=case_name in _HOOK_UNPORTED_TIER3_CASES,
         )
 
     gap = cleaned_case_gaps.DECLARED_STAR_STOPS.get(case_name)

@@ -146,9 +146,9 @@ fn cms_trapezoid(
 ) -> AutoDiffReal2VarOrder1 {
     if x < min_any {
         AutoDiffReal2VarOrder1::zero()
-    } else if x <= min_all {
+    } else if x < min_all {
         (x - min_any) / (min_all - min_any)
-    } else if x <= max_all {
+    } else if x < max_all {
         AutoDiffReal2VarOrder1::constant(1.0)
     } else if x < max_any {
         (x - max_any) / (max_all - max_any)
@@ -159,7 +159,7 @@ fn cms_trapezoid(
 
 /// Computes the raw `CMS` blend fraction `(alfa, d_alfa_dlogT, d_alfa_dlogRho)`.
 ///
-/// Mirrors `Get_CMS_alfa` in `eos/private/eoscms_eval.f90` (lines 38..149).
+/// Mirrors `Get_CMS_alfa` in `eos/private/eoscms_eval.f90` (lines 68..148).
 #[must_use]
 pub fn get_cms_alfa(
     cfg: &CmsConfig,
@@ -167,6 +167,7 @@ pub fn get_cms_alfa(
     log_t: f64,
     z: f64,
 ) -> (f64, f64, f64) {
+    let _ = z;
     let log_rho_ad = AutoDiffReal2VarOrder1::var1(log_rho);
     let log_t_ad = AutoDiffReal2VarOrder1::var2(log_t);
     let log_q_ad = log_rho_ad - 2.0 * log_t_ad + 12.0;
@@ -193,20 +194,6 @@ pub fn get_cms_alfa(
         cfg.logq_max_for_any_cms,
     );
 
-    let blend_z = if cfg.max_z_for_any_cms <= 0.0
-        || cfg.max_z_for_all_cms <= 0.0
-        || z <= cfg.max_z_for_all_cms
-    {
-        AutoDiffReal2VarOrder1::constant(1.0)
-    } else if z >= cfg.max_z_for_any_cms {
-        AutoDiffReal2VarOrder1::zero()
-    } else {
-        AutoDiffReal2VarOrder1::constant(
-            (z - cfg.max_z_for_any_cms)
-                / (cfg.max_z_for_all_cms - cfg.max_z_for_any_cms),
-        )
-    };
-
-    let blend = blend_z * blend_log_t * blend_log_rho * blend_log_q;
+    let blend = blend_log_rho * blend_log_t * blend_log_q;
     (1.0 - blend.val, -blend.d1[1], -blend.d1[0])
 }

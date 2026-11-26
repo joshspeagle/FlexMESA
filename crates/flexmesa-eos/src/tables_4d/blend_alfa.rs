@@ -495,11 +495,13 @@ pub fn get_opal_scvh_alfa_and_partials(
         }
     };
 
+    // Upstream `eos/private/eosdt_eval.f90:1450-1456` reduces `alfa` by `zfactor`
+    // in `(Z_no_HELM, Z_all_HELM)`.
     if z > z_no_helm && z < z_all_helm && alfa < 1.0 {
         let zfactor = (z - z_no_helm) / (z_all_helm - z_no_helm);
-        alfa = zfactor + (1.0 - zfactor) * alfa;
-        d_alfa_dlog_rho *= 1.0 - zfactor;
-        d_alfa_dlog_t *= 1.0 - zfactor;
+        alfa *= zfactor;
+        d_alfa_dlog_rho *= zfactor;
+        d_alfa_dlog_t *= zfactor;
     }
 
     Ok((alfa, d_alfa_dlog_rho, d_alfa_dlog_t))

@@ -85,6 +85,14 @@ pub fn eos_pt_get_with_linear(
         })?;
     let pgas = linear_pgas.unwrap_or_else(|| exp10(log_pgas));
     let t = linear_t.unwrap_or_else(|| exp10(log_t));
+    if !(pgas > 0.0 && t > 0.0 && pgas.is_finite() && t.is_finite()) {
+        return Err(EosError::InvalidState {
+            context: "eos_pt_get_with_linear",
+            detail: format!(
+                "non-positive or non-finite state (Pgas={pgas:e}, T={t:e})"
+            ),
+        });
+    }
 
     let rho_guess = pgas * comp.abar * MP / (KERG * t * (1.0 + comp.zbar));
     let log_rho_guess = flexmesa_math::log10(rho_guess);

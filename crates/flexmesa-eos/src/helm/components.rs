@@ -244,8 +244,8 @@ pub fn eval_ideal_ions(
     let detaidd = dxnidd * xx;
     let detaidt = -1.5 * tempinv;
     let detaida = dxnida * xx - 1.5 * ytot1;
-    let detaiddd = -detaidd * detaidd;
-    let detaidda = dxnidda * xx - dxnidd * dxnida * xx * xx;
+    let detaiddd = (0.0 - dxnidd * dxnidd * xx) * xx;
+    let detaidda = (dxnidda - dxnidd * dxnida * xx) * xx;
     let detaidtt = 1.5 * tempinv * tempinv;
     let detaidaa = (dxnidaa - dxnida * dxnida * xx) * xx + 1.5 * ytot1 * ytot1;
     let etaion = HelmThermoVar {
@@ -265,22 +265,23 @@ pub fn eval_ideal_ions(
     let mut sion_val =
         (eion_val + pion_val * deninv) * tempinv - etaion_val * y;
     let mut dsiondd =
-        (dpiondd - pion_val * deninv) * deninv * tempinv - detaidd * y;
+        (0.0 + (dpiondd - pion_val * deninv) * deninv) * tempinv - detaidd * y;
     let mut dsiondt = ((deiondt + dpiondt * deninv)
         - (eion_val + pion_val * deninv) * tempinv)
         * tempinv
         - detaidt * y;
     let mut dsionda =
-        (deionda + dpionda * deninv) * tempinv + etaion_val * z - detaida * y;
-    let mut dsionddd =
-        2.0 * (pion_val * deninv - dpiondd) * deninv * deninv * tempinv
-            - detaiddd * y;
+        (deionda + dpionda * deninv) * tempinv - detaida * y + etaion_val * z;
+    let mut dsionddd = (0.0
+        + (0.0 - (2.0 * dpiondd - 2.0 * pion_val * deninv) * deninv) * deninv)
+        * tempinv
+        - detaiddd * y;
     let mut dsionddt = 0.0;
     let mut dsiondda = (deiondda + (dpiondda - dpionda * deninv) * deninv)
         * tempinv
-        + detaidd * z
-        - detaidda * y;
-    let mut dsiondtt = (-2.0 * (deiondt + dpiondt * deninv) * tempinv
+        - detaidda * y
+        + detaidd * z;
+    let mut dsiondtt = (-(2.0 * (deiondt + dpiondt * deninv) * tempinv)
         + 2.0 * (eion_val + pion_val * deninv) * tempinv * tempinv)
         * tempinv
         - detaidtt * y;
@@ -288,33 +289,60 @@ pub fn eval_ideal_ions(
         - (deionda + dpionda * deninv) * tempinv)
         * tempinv
         + detaidt * z;
-    let mut dsiondaa = (deiondaa + dpiondaa * deninv) * tempinv
-        - 2.0 * etaion_val * z * ytot1
-        + 2.0 * detaida * z
-        - detaidaa * y;
+    let mut dsiondaa = (deiondaa + dpiondaa * deninv) * tempinv - detaidaa * y
+        + detaida * z
+        + detaida * z
+        - 2.0 * etaion_val * z * ytot1;
 
-    if sion_val < 0.0 {
-        let s0 = 1.0e3;
-        let denom = s0 + sion_val;
-        let denom2 = denom * denom;
-        let denom3 = denom2 * denom;
-        let s0_sq = s0 * s0;
-        sion_val = s0 * sion_val / denom;
-        dsionddd =
-            s0_sq * (dsionddd / denom2 - 2.0 * dsiondd * dsiondd / denom3);
-        dsionddt =
-            s0_sq * (dsionddt / denom2 - 2.0 * dsiondd * dsiondt / denom3);
-        dsiondda =
-            s0_sq * (dsiondda / denom2 - 2.0 * dsiondd * dsionda / denom3);
-        dsiondtt =
-            s0_sq * (dsiondtt / denom2 - 2.0 * dsiondt * dsiondt / denom3);
-        dsiondta =
-            s0_sq * (dsiondta / denom2 - 2.0 * dsiondt * dsionda / denom3);
-        dsiondaa =
-            s0_sq * (dsiondaa / denom2 - 2.0 * dsionda * dsionda / denom3);
-        dsiondd = s0_sq * dsiondd / denom2;
-        dsiondt = s0_sq * dsiondt / denom2;
-        dsionda = s0_sq * dsionda / denom2;
+    // Exponential rolloff to zero when `sion < sion0 = 1e3`
+    // (`eos/private/helm_declare_local_variables.dek:61`,
+    // `eos/private/helm_ideal_ions.dek:146-220`).
+    let sion0 = 1.0e3_f64;
+    if sion_val < sion0 {
+        let mut sionfactor = 1.0 - sion_val / sion0;
+        sionfactor = flexmesa_math::exp(-sionfactor * sionfactor);
+        if sionfactor < 1.0e-20 {
+            sionfactor = 1.0e-20;
+        }
+        let sion_new = sion0 * sionfactor;
+
+        let dsionfactord = dsiondd / sion0;
+        let dsionfactort = dsiondt / sion0;
+        let dsionfactora = dsionda / sion0;
+        let roll = 1.0 - sion_val / sion0;
+
+        let dsiondd_new = sionfactor * 2.0 * roll * dsiondd;
+        let dsionddd_new = dsionfactord * 2.0 * roll * dsiondd
+            + sionfactor * 2.0 * (-dsiondd / sion0) * dsiondd
+            + sionfactor * 2.0 * roll * dsionddd;
+        let dsionddt_new = 0.0;
+        let dsiondda_new = dsionfactora * 2.0 * roll * dsiondd
+            + sionfactor * 2.0 * (-dsionda / sion0) * dsiondd
+            + sionfactor * 2.0 * roll * dsiondda;
+
+        let dsiondt_new = sionfactor * 2.0 * roll * dsiondt;
+        let dsiondtt_new = dsionfactort * 2.0 * roll * dsiondt
+            + sionfactor * 2.0 * (-dsiondt / sion0) * dsiondt
+            + sionfactor * 2.0 * roll * dsiondtt;
+        let dsiondta_new = dsionfactora * 2.0 * roll * dsiondt
+            + sionfactor * 2.0 * (-dsionda / sion0) * dsiondt
+            + sionfactor * 2.0 * roll * dsiondta;
+
+        let dsionda_new = sionfactor * 2.0 * roll * dsionda;
+        let dsiondaa_new = dsionfactora * 2.0 * roll * dsionda
+            + sionfactor * 2.0 * (-dsionda / sion0) * dsionda
+            + sionfactor * 2.0 * roll * dsiondaa;
+
+        sion_val = sion_new;
+        dsiondd = dsiondd_new;
+        dsiondt = dsiondt_new;
+        dsionda = dsionda_new;
+        dsionddd = dsionddd_new;
+        dsionddt = dsionddt_new;
+        dsiondda = dsiondda_new;
+        dsiondtt = dsiondtt_new;
+        dsiondta = dsiondta_new;
+        dsiondaa = dsiondaa_new;
     }
 
     let sion = HelmThermoVar {

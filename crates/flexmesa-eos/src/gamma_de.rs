@@ -5,10 +5,11 @@
 
 use crate::types::{
     I_CHI_RHO, I_CHI_T, I_CP, I_CV, I_DE_DRHO, I_DS_DRHO, I_DS_DT, I_ETA,
-    I_FRAC_IDEAL, I_GAMMA1, I_GAMMA3, I_GRAD_AD, I_LN_E, I_LN_FREE_E,
-    I_LN_PGAS, I_LN_S, I_MU, NUM_EOS_BASIC_RESULTS,
+    I_GAMMA1, I_GAMMA3, I_GRAD_AD, I_LN_E, I_LN_FREE_E, I_LN_PGAS, I_LN_S,
+    I_MU, NUM_EOS_BASIC_RESULTS,
 };
-use flexmesa_const::{AVO, KERG};
+use flexmesa_const::{AVO, KERG, LN10};
+use flexmesa_utils::is_bad;
 
 /// Result of the closed-form ideal $\gamma$-law $(\rho, E)$ evaluation (`eos_gamma_de_get`).
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -53,7 +54,7 @@ pub fn eos_gamma_de_get(
 
     let raw_s =
         cv * flexmesa_math::log(p / flexmesa_math::pow(rho, gamma)) + 1.0e9;
-    let entropy = if raw_s.is_nan() || raw_s <= 0.0 {
+    let entropy = if is_bad(raw_s) || raw_s <= 0.0 {
         1.0e-99
     } else {
         raw_s
@@ -67,14 +68,15 @@ pub fn eos_gamma_de_get(
     d_dlnd[I_LN_PGAS] = 1.0;
     d_dln_t[I_LN_PGAS] = 1.0;
 
-    res[I_LN_E] = flexmesa_math::log(energy);
+    res[I_LN_E] = flexmesa_math::log10(energy) * LN10;
     d_dlnd[I_LN_E] = 0.0;
     d_dln_t[I_LN_E] = 1.0;
 
     // Upstream `Get_eos_gamma_DE_Results` (`eos/private/eosde_eval.f90:84-104`)
     // sets `d_dlnRho_const_T(i_lnS) = 0`, `d_dlnT_const_Rho(i_lnS) = 0`,
     // `res(i_dS_dT) = 0`, `res(i_dS_dRho) = 0`, `res(i_mu) = 1 / abar`,
-    // `res(i_lnfree_e) = -1e99`, and `res(i_eta) = 0`.
+    // `res(i_lnfree_e) = -1e99`, `res(i_eta) = 0`, and leaves
+    // `res(i_frac_ideal) = 0`.
     res[I_LN_S] = flexmesa_math::log(entropy);
     d_dlnd[I_LN_S] = 0.0;
     d_dln_t[I_LN_S] = 0.0;
@@ -95,7 +97,6 @@ pub fn eos_gamma_de_get(
     res[I_GAMMA1] = gamma;
     res[I_GAMMA3] = gamma;
     res[I_ETA] = 0.0;
-    res[I_FRAC_IDEAL] = 1.0;
 
     EosGammaDeOutput {
         t,

@@ -4,6 +4,7 @@
 //! `eos/private/helm_gammas.dek`, and `eos/private/helm_store_results.dek`.
 
 use flexmesa_const::CLIGHT;
+use flexmesa_utils::is_bad;
 
 use crate::helm::components::{eval_ideal_ions, eval_radiation, HelmThermoVar};
 use crate::helm::coulomb::eval_helm_coulomb;
@@ -21,7 +22,7 @@ use crate::helm::{
     H_DSD, H_DSDA, H_DSDD, H_DSDT, H_DSDZ, H_DST, H_DSTA, H_DSTT, H_DSTZ,
     H_DSZ, H_DXNEA, H_DXNED, H_DXNET, H_DXNEZ, H_EGAS, H_ERAD, H_ETAELE,
     H_ETOT, H_GAM1, H_GAM2, H_GAM3, H_NABAD, H_PGAS, H_PLASG, H_PRAD, H_PTOT,
-    H_SGAS, H_SRAD, H_STOT, H_VALID, H_XNE, H_XNI, NUM_HELM_RESULTS,
+    H_SGAS, H_SRAD, H_STOT, H_XNE, H_XNI, NUM_HELM_RESULTS,
 };
 
 /// Configuration parameters for the `HELM` equation of state (`eos.defaults`).
@@ -74,7 +75,7 @@ impl Default for HelmConfig {
 ///
 /// # Errors
 /// Returns `Err(ierr)` if out of bounds or thermodynamically inconsistent
-/// (`dsepdt < 0`, `cv < 0`, `gam1 < 0`).
+/// (`gam1_gas < 0`, gas/total `dfk < 0`, or non-finite `gam3`).
 #[allow(clippy::too_many_arguments)]
 pub fn helmeos2(
     table: &HelmTable,
@@ -86,7 +87,12 @@ pub fn helmeos2(
     zbar: f64,
     config: &HelmConfig,
 ) -> Result<([f64; NUM_HELM_RESULTS], bool), i32> {
-    if !(abar > 0.0 && zbar > 0.0 && temp_in > 0.0 && den_in > 0.0) {
+    let zbar_valid = if config.include_elec_pos {
+        zbar > 0.0
+    } else {
+        zbar >= 0.0
+    };
+    if !(abar > 0.0 && zbar_valid && temp_in > 0.0 && den_in > 0.0) {
         return Err(1);
     }
     let ytot1 = 1.0 / abar;
@@ -163,7 +169,7 @@ pub fn helmeos2(
         temp, den, &pres, &ener, &entr, &pgas, &egas, &sgas, &prad, &erad,
         &srad, &etaele, &xni, &xnefer, plasg, &mut res,
     )?;
-    res[H_VALID - 1] = 1.0;
+    // Upstream `helm.f90:296` leaves `helm_res(h_crp:h_valid) = 0`.
     Ok((res, off_table))
 }
 
@@ -188,9 +194,34 @@ fn store_gammas_and_results(
 ) -> Result<(), i32> {
     let tempinv = 1.0 / temp;
     let deninv = 1.0 / den;
+    let clight2 = CLIGHT * CLIGHT;
+
+    // Gas-only consistency checks (`eos/private/helm_gammas.dek:11-127`).
+    let presinv_gas = 1.0 / pgas.val;
+    let ww_gas = temp * presinv_gas;
+    let chit_gas = ww_gas * pgas.dt;
+    let chid_gas = (den * presinv_gas) * pgas.dd;
+    let cv_gas = egas.dt;
+    let ww_g = pgas.val * deninv;
+    let zz_g = 1.0 / cv_gas;
+    let z_g = tempinv * zz_g;
+    let xx_g = chit_gas * z_g;
+    let x_gas = ww_g * xx_g;
+    let gam1_gas = chit_gas * x_gas + chid_gas;
+    if gam1_gas < 0.0 {
+        return Err(-1);
+    }
+    let x_gas_cs = egas.val + clight2;
+    let z_gas_cs = 1.0 + x_gas_cs * den * presinv_gas;
+    let xx_gas_cs = 1.0 / z_gas_cs;
+    let dfk_gas = gam1_gas * xx_gas_cs;
+    if dfk_gas < 0.0 {
+        return Err(-1);
+    }
+
     let presinv = 1.0 / pres.val;
 
-    // Match upstream eos/private/helm_gammas.dek operation-for-operation.
+    // Match upstream eos/private/helm_gammas.dek:140-246 operation-for-operation.
     let ww = temp * presinv;
     let yy = -ww * presinv * pres.dt;
     let chit = ww * pres.dt;
@@ -208,9 +239,6 @@ fn store_gammas_and_results(
     let dchiddz = yy * pres.dz + ww * pres.ddz;
 
     let cv = ener.dt;
-    if cv < 0.0 {
-        return Err(-1);
-    }
     let dcvdd = ener.ddt;
     let dcvdt = ener.dtt;
     let dcvda = ener.dta;
@@ -231,11 +259,11 @@ fn store_gammas_and_results(
         + (dchitdt * z - dfk * dcvdt) * ww;
     let dgam3da = pres.da * deninv * xx + (dchitda * z - dfk * dcvda) * ww;
     let dgam3dz = pres.dz * deninv * xx + (dchitdz * z - dfk * dcvdz) * ww;
-
-    let gam1 = chit * x + chid;
-    if gam1 < 0.0 {
+    if is_bad(gam3) {
         return Err(-1);
     }
+
+    let gam1 = chit * x + chid;
     let dgam1dd = dchitdd * x + chit * dgam3dd + dchiddd;
     let dgam1dt = dchitdt * x + chit * dgam3dt + dchiddt;
     let dgam1da = dchitda * x + chit * dgam3da + dchidda;
@@ -266,7 +294,7 @@ fn store_gammas_and_results(
     let dcpda = dcvda * ww + zz * dgam1da + yy * dchidda;
     let dcpdz = dcvdz * ww + zz * dgam1dz + yy * dchiddz;
 
-    let x_cs = ener.val + CLIGHT * CLIGHT;
+    let x_cs = ener.val + clight2;
     let z_cs = 1.0 + x_cs * den * presinv;
     let dfk_cs = gam1 * (1.0 / z_cs);
     if dfk_cs < 0.0 {

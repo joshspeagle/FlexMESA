@@ -260,9 +260,9 @@ fn capture_whose_schema_differs_from_the_tool_is_rejected() {
 
 #[test]
 fn record_of_a_family_without_replay_is_rejected() {
-    let text = "RUN\nSCHEMA EOS k:i\nEOS 1\n";
+    let text = "RUN\nSCHEMA KAP k:i\nKAP 1\n";
     let err = flexmesa_replay::replay(Cursor::new(text)).unwrap_err();
-    assert!(err.0.contains("no replay for record family `EOS`"), "{err}");
+    assert!(err.0.contains("no replay for record family `KAP`"), "{err}");
 }
 
 #[test]

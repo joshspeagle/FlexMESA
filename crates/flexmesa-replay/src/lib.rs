@@ -12,7 +12,11 @@
 //! - `TDC`: `set_TDC` (`turb/public/turb.f90:114-204`) through
 //!   [`flexmesa_turb::set_tdc`];
 //! - `MLT`: `set_MLT` (`turb/public/turb.f90:275-292`) through
-//!   [`flexmesa_turb::set_mlt`].
+//!   [`flexmesa_turb::set_mlt`];
+//! - `EOS`: the cell `get_eos` call of `do_eos_for_cell`
+//!   (`star/private/micro.f90:357-361`, `eosDT_get`) through
+//!   [`flexmesa_eos::eos_dt_get_zones_with_logs`], configured from the
+//!   run's `CONFIG EOS` line ([`eos`]).
 //!
 //! Records of a caller's arguments (`GETR`, `Get_results`) depend on star
 //! state and cannot be replayed stand-alone; [`argdiff`] instead compares a
@@ -26,6 +30,7 @@
 
 pub mod argdiff;
 pub mod compare;
+pub mod eos;
 pub mod record;
 pub mod turb;
 
@@ -43,8 +48,8 @@ pub struct ReplaySummary {
     pub header: Vec<String>,
     /// Per-family results.
     pub families: BTreeMap<String, FamilySummary>,
-    /// Argument records (`GETR`), which are compared with
-    /// [`argdiff::compare_captures`] rather than replayed.
+    /// Records compared with [`argdiff::compare_captures`] rather than
+    /// replayed (`GETR`).
     pub argument_records: usize,
 }
 
@@ -67,12 +72,17 @@ pub fn replay<R: BufRead>(reader: R) -> Result<ReplaySummary, FormatError> {
     let mut cap = CaptureReader::new(reader);
     let mut summary = ReplaySummary::default();
     let mut checked: BTreeSet<String> = BTreeSet::new();
+    // EOS configuration of the latest `CONFIG EOS` line, by its sequence
+    // number, and the HELM table (loaded on the first EOS record).
+    let mut eos_cfg: Option<(usize, flexmesa_eos::EosConfig)> = None;
+    let mut helm: Option<&'static flexmesa_eos::HelmTable> = None;
     while let Some(rec) = cap.next_record()? {
         if !checked.contains(&rec.family) {
             let expected = match rec.family.as_str() {
                 "TDC" => turb::TDC_SCHEMA,
                 "MLT" => turb::MLT_SCHEMA,
                 "GETR" => turb::GETR_SCHEMA,
+                "EOS" => eos::EOS_SCHEMA,
                 other => {
                     return Err(FormatError(format!(
                         "line {}: no replay for record family `{other}`",
@@ -88,6 +98,32 @@ pub fn replay<R: BufRead>(reader: R) -> Result<ReplaySummary, FormatError> {
         let outcome = match rec.family.as_str() {
             "TDC" => turb::replay_tdc(&rec)?,
             "MLT" => turb::replay_mlt(&rec)?,
+            "EOS" => {
+                let (seq, line) = cap.config("EOS").ok_or_else(|| {
+                    FormatError(format!(
+                        "line {}: EOS record before any CONFIG EOS line",
+                        rec.line
+                    ))
+                })?;
+                let cfg = match &mut eos_cfg {
+                    Some((s, c)) if *s == seq => &*c,
+                    slot => {
+                        let c = eos::eos_config_from_config(
+                            line.split_whitespace(),
+                        )?;
+                        &slot.insert((seq, c)).1
+                    }
+                };
+                let ht = if let Some(h) = helm {
+                    h
+                } else {
+                    let h = flexmesa_eos::HelmTable::builtin()
+                        .map_err(|e| FormatError(format!("HELM table: {e}")))?;
+                    helm = Some(h);
+                    h
+                };
+                eos::replay_eos(&rec, cfg, ht)?
+            }
             _ => {
                 summary.argument_records += 1;
                 continue;

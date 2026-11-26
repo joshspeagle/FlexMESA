@@ -70,6 +70,8 @@ fn index<R: BufRead>(reader: R) -> Result<Indexed, FormatError> {
         let Some(tag) = toks.next() else { continue };
         match tag {
             "RUN" => run += 1,
+            // Configuration lines feed stand-alone replay only.
+            "CONFIG" => {}
             "SCHEMA" => {
                 let family = toks.next().ok_or_else(|| {
                     FormatError(format!("line {line_no}: bare SCHEMA"))
@@ -167,6 +169,23 @@ fn compare_fields(
             }
             (Value::Real(x), Value::Real(y)) => out.diff.real(&field, *x, *y),
             (Value::Ad(x), Value::Ad(y)) => out.diff.ad(&field, x, y),
+            (Value::Vec(x), Value::Vec(y)) => {
+                if x.len() == y.len() {
+                    for (i, (a, b)) in x.iter().zip(y).enumerate() {
+                        out.diff.real(
+                            &crate::eos::element_name(&field, i),
+                            *a,
+                            *b,
+                        );
+                    }
+                } else {
+                    out.diff.discrete(
+                        &format!("{field} length"),
+                        &x.len(),
+                        &y.len(),
+                    );
+                }
+            }
             (Value::Int(x), Value::Int(y)) => out.diff.discrete(&field, x, y),
             (Value::Logical(x), Value::Logical(y)) => {
                 out.diff.discrete(&field, x, y);

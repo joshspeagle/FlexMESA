@@ -9,6 +9,7 @@ description = "Replays routine calls captured from an instrumented MESA 26.4.1 t
 
 [dependencies]
 flexmesa-autodiff = { path = "../flexmesa-autodiff" }
+flexmesa-eos = { path = "../flexmesa-eos" }
 flexmesa-turb = { path = "../flexmesa-turb" }
 
 [lints]

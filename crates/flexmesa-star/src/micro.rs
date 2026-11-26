@@ -757,6 +757,9 @@ pub(crate) fn store_eos_for_cell(
     k: usize,
     out: &EosEvalOutput,
 ) -> Result<(), StarError> {
+    if crate::replay_tap::active(model) {
+        crate::replay_tap::eos(model, k, out);
+    }
     ensure_eos_aux_len(model);
     for i in 0..NUM_EOS_BASIC_RESULTS {
         if is_bad(out.res[i] + out.d_dlnd[i] + out.d_dln_t[i]) {

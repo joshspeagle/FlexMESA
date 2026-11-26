@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""Inserts record/replay capture calls into MESA 26.4.1 ``turb_support.f90``.
+"""Inserts record/replay capture calls into MESA 26.4.1 ``star/private``.
 
 The patch adds output only. It never changes an expression, a branch taken,
 or the order of any arithmetic of MESA: after each of the four kernel calls
@@ -16,6 +16,13 @@ value then passes through. After the ``Get_results`` call in
 ``GETR``, site 5) with that call's arguments and results: the values the
 caller assembled, which ``FlexMESA``'s tap (``FLEXMESA_REPLAY_TAP``) writes
 for its own run so the two can be compared call by call.
+
+It also inserts, after the cell EOS call of ``do_eos_for_cell``
+(``star/private/micro.f90:357-361``), one writer call (family ``EOS``,
+site 6) with that ``get_eos`` call's inputs and results. The shared output
+unit, model window and field writers are appended to ``star_utils.f90``
+(``fm_replay_unit``, ``fm_put_*``), which ``star/make/makefile_base``
+compiles before ``turb_support.f90`` and ``micro.f90``.
 
 A record is written only when the environment variable ``FLEXMESA_REPLAY``
 names an output file, and only for the first ``FLEXMESA_REPLAY_MODELS``
@@ -34,7 +41,7 @@ Line format (fields separated by one space)::
     SCHEMA <family> <name>:<type> ...
     <family> <field> <field> ...
 
-with ``<family>`` one of ``TDC``, ``MLT`` and ``GETR`` and types
+with ``<family>`` one of ``TDC``, ``MLT``, ``GETR`` and ``EOS`` and types
 
 * ``i``: integer (``I0``);
 * ``l``: logical (``T`` or ``F``);
@@ -43,13 +50,16 @@ with ``<family>`` one of ``TDC``, ``MLT`` and ``GETR`` and types
 * ``a``: ``auto_diff_real_star_order1``: the value's bit pattern followed by
   ``/<lane>:<bits>`` for every ``d1Array`` lane (1-based, of 33) whose bit
   pattern is not ``+0.0``; a lane that holds ``-0.0`` is written.
+* ``v``: a ``real(dp)`` vector: the bit patterns of its elements joined by
+  commas (``EOS`` results ``res(1:26)``, ``d_dlnd``, ``d_dlnT``, and
+  ``d_dxa(1:2, 1:species)`` in column-major order).
 
 The ``SCHEMA`` lines below are the single definition of field order; the
 replay tool checks them exactly.
 
 Usage::
 
-    python replay_patch.py <overlay>/star/private/turb_support.f90
+    python replay_patch.py <overlay>/star/private
 """
 
 from __future__ import annotations
@@ -88,6 +98,12 @@ GETR_SCHEMA = (
     "gradL_composition_term:r mixing_length_alpha:r alpha_semiconvection:r "
     "thermohaline_coeff:r energy:a out_mixing_type:i out_gradT:a "
     "out_Y_face:a out_conv_vel:a out_D:a out_Gamma:a out_ierr:i"
+)
+
+EOS_SCHEMA = (
+    f"{CONTEXT} "
+    "chem_id:s xa:v Rho:r logRho:r T:r logT:r out_res:v out_d_dlnd:v "
+    "out_d_dlnT:v out_d_dxa:v out_ierr:i"
 )
 
 # (start anchor of the call statement, last line of the statement, family,
@@ -136,7 +152,11 @@ DECL = "      integer :: fm_iters_in\n"
 
 # Module procedures appended before ``end module turb_support``. They read
 # their arguments and write; they assign nothing MESA reads.
-HELPER = f"""
+# Shared procedures appended to ``star_utils`` (compiled before
+# ``turb_support`` and ``micro``, ``star/make/makefile_base``), so every
+# capture site writes through one unit and one model window. They read
+# their arguments and write; they assign nothing MESA reads.
+COMMON = f"""
    ! Added by the {MARKER} overlay (FlexMESA record/replay capture):
    ! output only, no arithmetic of MESA.
    integer function fm_replay_unit(s) result(u)
@@ -160,6 +180,7 @@ HELPER = f"""
             write(unit, '(A)') 'SCHEMA TDC {TDC_SCHEMA}'
             write(unit, '(A)') 'SCHEMA MLT {MLT_SCHEMA}'
             write(unit, '(A)') 'SCHEMA GETR {GETR_SCHEMA}'
+            write(unit, '(A)') 'SCHEMA EOS {EOS_SCHEMA}'
             call get_environment_variable('{MARKER}_MODELS', path, status=st)
             if (st == 0 .and. len_trim(path) > 0) read(path, *) nmax
             call get_environment_variable('{MARKER}_FIRST', path, status=st)
@@ -237,6 +258,101 @@ HELPER = f"""
    end subroutine fm_put_a
 
 
+   subroutine fm_put_v(buf, n, x)
+      ! A real vector: bit patterns joined by commas, one field.
+      character(len=*), intent(inout) :: buf
+      integer, intent(inout) :: n
+      real(dp), intent(in) :: x(:)
+      integer :: i
+      buf(n+1:n+1) = ' '
+      n = n + 1
+      do i = 1, size(x)
+         if (i > 1) then
+            buf(n+1:n+1) = ','
+            n = n + 1
+         end if
+         write(buf(n+1:n+16), '(Z16.16)') transfer(x(i), 0_8)
+         n = n + 16
+      end do
+   end subroutine fm_put_v
+
+
+   subroutine fm_kv_name(buf, n, name)
+      ! ' <name>=' of a CONFIG entry.
+      character(len=*), intent(inout) :: buf
+      integer, intent(inout) :: n
+      character(len=*), intent(in) :: name
+      buf(n+1:n+2+len(name)) = ' ' // name // '='
+      n = n + 2 + len(name)
+   end subroutine fm_kv_name
+
+
+   subroutine fm_kv_r(buf, n, name, x)
+      character(len=*), intent(inout) :: buf
+      integer, intent(inout) :: n
+      character(len=*), intent(in) :: name
+      real(dp), intent(in) :: x
+      call fm_kv_name(buf, n, name)
+      write(buf(n+1:n+16), '(Z16.16)') transfer(x, 0_8)
+      n = n + 16
+   end subroutine fm_kv_r
+
+
+   subroutine fm_kv_i(buf, n, name, i)
+      character(len=*), intent(inout) :: buf
+      integer, intent(inout) :: n
+      character(len=*), intent(in) :: name
+      integer, intent(in) :: i
+      character(len=24) :: tmp
+      call fm_kv_name(buf, n, name)
+      write(tmp, '(I0)') i
+      buf(n+1:n+len_trim(tmp)) = trim(tmp)
+      n = n + len_trim(tmp)
+   end subroutine fm_kv_i
+
+
+   subroutine fm_kv_l(buf, n, name, x)
+      character(len=*), intent(inout) :: buf
+      integer, intent(inout) :: n
+      character(len=*), intent(in) :: name
+      logical, intent(in) :: x
+      call fm_kv_name(buf, n, name)
+      if (x) then
+         buf(n+1:n+1) = 'T'
+      else
+         buf(n+1:n+1) = 'F'
+      end if
+      n = n + 1
+   end subroutine fm_kv_l
+
+
+   subroutine fm_kv_s(buf, n, name, x)
+      ! A string control between single quotes; blanks inside it are
+      ! written as '~' so that the entry stays one token.
+      character(len=*), intent(inout) :: buf
+      integer, intent(inout) :: n
+      character(len=*), intent(in) :: name, x
+      integer :: i
+      call fm_kv_name(buf, n, name)
+      buf(n+1:n+1) = "'"
+      n = n + 1
+      do i = 1, len_trim(x)
+         if (x(i:i) == ' ') then
+            buf(n+1:n+1) = '~'
+         else
+            buf(n+1:n+1) = x(i:i)
+         end if
+         n = n + 1
+      end do
+      buf(n+1:n+1) = "'"
+      n = n + 1
+   end subroutine fm_kv_s
+
+
+"""
+
+# Writers appended to ``turb_support``.
+TURB_WRITERS = """
    subroutine fm_replay_tdc(s, k, site, iters_in, &
          conv_vel_start, mixing_length_alpha, TDC_alpha_D, TDC_alpha_R, &
          TDC_alpha_Pt, dt, cgrav, m, report, &
@@ -443,6 +559,251 @@ HELPER = f"""
 
 """
 
+
+# Controls of the EOS handle (``EoS_General_Info``,
+# ``eos/public/eos_def.f90``) written once per run as a ``CONFIG EOS`` line
+# before the first ``EOS`` record: ``(name, type, count)`` with types as in
+# the record schemas (``r``, ``l``, ``i``, ``s``) and ``count > 1`` for an
+# array written element by element as ``name(i)``. The replay tool builds
+# its ``EosConfig`` from this line and refuses a line with a control it does
+# not know or without one it needs.
+EOS_CONFIG_FIELDS: tuple[tuple[str, str, int], ...] = (
+    *(
+        (n, "r", 1)
+        for n in (
+            "Z_all_HELM",
+            "logT_all_HELM",
+            "logT_low_all_HELM",
+            "coulomb_temp_cut_HELM",
+            "coulomb_den_cut_HELM",
+        )
+    ),
+    ("use_OPAL_SCVH", "l", 1),
+    *(
+        (n, "r", 1)
+        for n in (
+            "logT_low_all_SCVH",
+            "logT_all_OPAL",
+            "logRho1_OPAL_SCVH_limit",
+            "logRho2_OPAL_SCVH_limit",
+            "logRho_min_OPAL_SCVH_limit",
+            "logQ_max_OPAL_SCVH",
+            "logQ_min_OPAL_SCVH",
+            "Z_all_OPAL",
+        )
+    ),
+    ("use_FreeEOS", "l", 1),
+    *(
+        (n, "r", 1)
+        for n in (
+            "logQ_max_FreeEOS_hi",
+            "logQ_max_FreeEOS_lo",
+            "logQ_min_FreeEOS_hi",
+            "logQ_min_FreeEOS_lo",
+            "logRho_min_FreeEOS_hi",
+            "logRho_min_FreeEOS_lo",
+            "logRho_max_FreeEOS_hi",
+            "logRho_max_FreeEOS_lo",
+            "logT_min_FreeEOS_hi",
+            "logT_min_FreeEOS_lo",
+            "logT_max_FreeEOS_hi",
+            "logT_max_FreeEOS_lo",
+            "logQ_cut_FreeEOS_lo_Z_max",
+            "logQ_cut_lo_Z_FreeEOS_hi",
+            "logQ_cut_lo_Z_FreeEOS_lo",
+            "logQ_cut_hi_Z_FreeEOS_hi",
+            "logQ_cut_hi_Z_FreeEOS_lo",
+            "logRho_cut_FreeEOS_hi",
+            "logRho_cut_FreeEOS_lo",
+            "logT_cut_FreeEOS_hi",
+            "logT_cut_FreeEOS_lo",
+        )
+    ),
+    ("suffix_for_FreeEOS_Z", "s", 15),
+    ("use_CMS", "l", 1),
+    ("CMS_use_fixed_composition", "l", 1),
+    ("CMS_fixed_composition_index", "i", 1),
+    *(
+        (n, "r", 1)
+        for n in (
+            "max_Z_for_any_CMS",
+            "max_Z_for_all_CMS",
+            "logQ_max_for_any_CMS",
+            "logQ_max_for_all_CMS",
+            "logQ_min_for_any_CMS",
+            "logQ_min_for_all_CMS",
+            "logRho_max_for_all_CMS",
+            "logRho_max_for_any_CMS",
+            "logRho_min_for_all_CMS",
+            "logRho_min_for_any_CMS",
+            "logT_max_for_all_CMS",
+            "logT_max_for_any_CMS",
+            "logT_min_for_all_CMS",
+            "logT_min_for_any_CMS",
+            "logT_max_for_all_CMS_pure_He",
+            "logT_max_for_any_CMS_pure_He",
+        )
+    ),
+    ("use_PC", "l", 1),
+    ("mass_fraction_limit_for_PC", "r", 1),
+    ("logRho1_PC_limit", "r", 1),
+    ("logRho2_PC_limit", "r", 1),
+    ("PC_use_Gamma_limit_instead_of_T", "l", 1),
+    *(
+        (n, "r", 1)
+        for n in (
+            "logT1_PC_limit",
+            "logT2_PC_limit",
+            "log_Gamma_e_all_HELM",
+            "Gamma_e_all_HELM",
+            "log_Gamma_e_all_PC",
+            "tiny_fuzz",
+            "PC_Gamma_start_crystal",
+            "PC_Gamma_full_crystal",
+        )
+    ),
+    ("use_Skye", "l", 1),
+    ("Skye_use_ion_offsets", "l", 1),
+    ("mass_fraction_limit_for_Skye", "r", 1),
+    ("Skye_min_gamma_for_solid", "r", 1),
+    ("Skye_max_gamma_for_liquid", "r", 1),
+    ("Skye_solid_mixing_rule", "s", 1),
+    ("use_simple_Skye_blends", "l", 1),
+    *(
+        (n, "r", 1)
+        for n in (
+            "logRho_min_for_any_Skye",
+            "logRho_min_for_all_Skye",
+            "logT_min_for_any_Skye",
+            "logT_min_for_all_Skye",
+        )
+    ),
+    *(
+        (n, "l", 1)
+        for n in (
+            "include_radiation",
+            "include_elec_pos",
+            "eosDT_use_linear_interp_for_X",
+            "eosDT_use_linear_interp_to_HELM",
+        )
+    ),
+    ("eosDT_file_prefix", "s", 1),
+    ("okay_to_convert_ierr_to_skip", "l", 1),
+    ("use_other_eos_component", "l", 1),
+    ("use_other_eos_results", "l", 1),
+    ("dbg", "l", 1),
+    ("eos_ctrl", "r", 10),
+    ("eos_integer_ctrl", "i", 10),
+    ("eos_logical_ctrl", "l", 10),
+    ("eos_character_ctrl", "s", 10),
+)
+
+
+def _eos_config_writer() -> str:
+    """Fortran statements appending every ``EOS_CONFIG_FIELDS`` entry of
+    the handle ``rq`` to ``buf``."""
+    lines = []
+    for name, kind, count in EOS_CONFIG_FIELDS:
+        for i in range(1, count + 1):
+            label = name if count == 1 else f"{name}({i})"
+            lines.append(
+                f"           call fm_kv_{kind}(buf, n, '{label}', rq% {label})"
+            )
+    return "\n".join(lines) + "\n"
+
+
+COMMON_NAMES = (
+    "fm_replay_unit, fm_put_i, fm_put_l, fm_put_s, fm_put_r, fm_put_a, "
+    "fm_put_v, fm_kv_r, fm_kv_i, fm_kv_l, fm_kv_s"
+)
+STAR_UTILS_PUBLIC_ANCHOR = (
+    "      private\n      public :: eval_min_cell_collapse_time\n"
+)
+STAR_UTILS_END = "      end module star_utils\n"
+
+# The cell EOS call of ``do_eos_for_cell`` (``star/private/micro.f90:357-361``)
+# and the writer appended to ``micro``.
+EOS_CALL = (
+    "    call get_eos( &\n"
+    "         s, k, s% xa(:,k), &\n"
+    "         s% rho(k), logRho, s% T(k), logT, &\n"
+    "         res, s% d_eos_dlnd(:,k), s% d_eos_dlnT(:,k), &\n"
+    "         s% d_eos_dxa(:,:,k), ierr)\n"
+)
+EOS_RECORD = (
+    "    call fm_replay_eos(s, k, 6, s% xa(:,k), &\n"
+    "         s% rho(k), logRho, s% T(k), logT, &\n"
+    "         res, s% d_eos_dlnd(:,k), s% d_eos_dlnT(:,k), &\n"
+    "         s% d_eos_dxa(:,:,k), ierr)\n"
+)
+MICRO_END = "end module micro\n"
+EOS_CONFIG_WRITER = _eos_config_writer()
+EOS_WRITER = f"""
+
+  ! Added by the {MARKER} overlay: output only, no arithmetic of MESA.
+  subroutine fm_replay_eos(s, k, site, xa, Rho, logRho, T, logT, &
+        res, d_dlnd, d_dlnT, d_dxa, ierr)
+     ! Arguments and results of the get_eos call in do_eos_for_cell
+     ! (micro.f90:357-361); read only.
+     use star_utils, only: {COMMON_NAMES}
+     use eos_lib, only: eos_ptr
+     use eos_def, only: EoS_General_Info
+     type (star_info), pointer :: s
+     integer, intent(in) :: k, site, ierr
+     real(dp), intent(in) :: xa(:), Rho, logRho, T, logT
+     real(dp), intent(in) :: res(:), d_dlnd(:), d_dlnT(:), d_dxa(:,:)
+     character(len=65536) :: buf
+     character(len=16) :: tmp
+     integer :: n, u, j, ierr_rq
+     type (EoS_General_Info), pointer :: rq
+     logical, save :: config_written = .false.
+!$omp critical (fm_replay)
+     u = fm_replay_unit(s)
+     if (u /= 0 .and. .not. config_written) then
+        ! The handle's controls, once per run, before its first EOS record.
+        config_written = .true.
+        buf = 'CONFIG EOS'
+        n = 10
+        call eos_ptr(s% eos_handle, rq, ierr_rq)
+        if (ierr_rq == 0) then
+{EOS_CONFIG_WRITER}        end if
+        write(u, '(A)') buf(1:n)
+     end if
+     if (u /= 0) then
+        buf = 'EOS'
+        n = 3
+        call fm_put_i(buf, n, site)
+        call fm_put_i(buf, n, s% id)
+        call fm_put_i(buf, n, s% model_number)
+        call fm_put_i(buf, n, s% solver_iter)
+        call fm_put_i(buf, n, k)
+        do j = 1, s% species
+           write(tmp, '(I0)') s% chem_id(j)
+           if (j == 1) then
+              buf(n+1:n+1+len_trim(tmp)) = ' ' // trim(tmp)
+              n = n + 1 + len_trim(tmp)
+           else
+              buf(n+1:n+1+len_trim(tmp)) = ',' // trim(tmp)
+              n = n + 1 + len_trim(tmp)
+           end if
+        end do
+        call fm_put_v(buf, n, xa(1:s% species))
+        call fm_put_r(buf, n, Rho)
+        call fm_put_r(buf, n, logRho)
+        call fm_put_r(buf, n, T)
+        call fm_put_r(buf, n, logT)
+        call fm_put_v(buf, n, res)
+        call fm_put_v(buf, n, d_dlnd)
+        call fm_put_v(buf, n, d_dlnT)
+        call fm_put_v(buf, n, reshape(d_dxa, [size(d_dxa)]))
+        call fm_put_i(buf, n, ierr)
+        write(u, '(A)') buf(1:n)
+     end if
+!$omp end critical (fm_replay)
+  end subroutine fm_replay_eos
+
+"""
+
 END_ANCHOR = "end module turb_support\n"
 
 
@@ -481,14 +842,16 @@ def _insert_record(
     return text[:i] + before + call + record + text[j:]
 
 
-def patch_text(text: str) -> str:
-    """Returns ``text`` with the record/replay capture inserted.
+def _replace_once(text: str, anchor: str, new: str, what: str) -> str:
+    """Returns ``text`` with the single ``anchor`` replaced by ``new``."""
+    count = text.count(anchor)
+    if count != 1:
+        raise ValueError(f"{what}: anchor found {count} times")
+    return text.replace(anchor, new)
 
-    Args:
-        text: Contents of upstream ``star/private/turb_support.f90``.
 
-    Returns:
-        The patched source.
+def patch_turb_support(text: str) -> str:
+    """Returns ``turb_support.f90`` with the TDC, MLT and GETR captures.
 
     Raises:
         ValueError: If an anchor does not occur exactly once, or the file is
@@ -498,21 +861,57 @@ def patch_text(text: str) -> str:
         raise ValueError("turb_support.f90 is already patched")
     for start, end, family, site in CALLS:
         text = _insert_record(text, start, end, family, site)
-    if text.count(DECL_ANCHOR) != 1:
-        raise ValueError("Get_results declaration anchor not unique")
-    text = text.replace(DECL_ANCHOR, DECL_ANCHOR + DECL)
-    if text.count(END_ANCHOR) != 1:
-        raise ValueError("end module anchor not unique")
-    return text.replace(END_ANCHOR, HELPER + END_ANCHOR)
+    text = _replace_once(
+        text, DECL_ANCHOR, DECL_ANCHOR + DECL, "Get_results declarations"
+    )
+    return _replace_once(
+        text, END_ANCHOR, TURB_WRITERS + END_ANCHOR, "end module turb_support"
+    )
+
+
+def patch_star_utils(text: str) -> str:
+    """Returns ``star_utils.f90`` with the shared unit and field writers."""
+    if MARKER in text:
+        raise ValueError("star_utils.f90 is already patched")
+    text = _replace_once(
+        text,
+        STAR_UTILS_PUBLIC_ANCHOR,
+        STAR_UTILS_PUBLIC_ANCHOR + f"      public :: {COMMON_NAMES}\n",
+        "star_utils public list",
+    )
+    return _replace_once(
+        text, STAR_UTILS_END, COMMON + STAR_UTILS_END, "end module star_utils"
+    )
+
+
+def patch_micro(text: str) -> str:
+    """Returns ``micro.f90`` with the cell EOS capture (family ``EOS``)."""
+    if MARKER in text:
+        raise ValueError("micro.f90 is already patched")
+    text = _replace_once(text, EOS_CALL, EOS_CALL + EOS_RECORD, "get_eos call")
+    return _replace_once(
+        text, MICRO_END, EOS_WRITER + MICRO_END, "end module micro"
+    )
+
+
+# File (under ``star/private/``) to its patch.
+PATCHES = {
+    "star_utils.f90": patch_star_utils,
+    "turb_support.f90": patch_turb_support,
+    "micro.f90": patch_micro,
+}
 
 
 def main() -> None:
-    """CLI entry point."""
-    path = pathlib.Path(sys.argv[1])
-    path.write_text(
-        patch_text(path.read_text(encoding="utf-8")), encoding="utf-8"
-    )
-    print(f"patched {path}")
+    """CLI entry point: patches every file of ``PATCHES`` under a
+    ``star/private`` directory given as the argument."""
+    private = pathlib.Path(sys.argv[1])
+    for name, patch in PATCHES.items():
+        path = private / name
+        path.write_text(
+            patch(path.read_text(encoding="utf-8")), encoding="utf-8"
+        )
+        print(f"patched {path}")
 
 
 if __name__ == "__main__":

@@ -8,6 +8,7 @@
 //! # <provenance header lines>
 //! RUN
 //! SCHEMA <family> <name>:<type> ...
+//! CONFIG <family> <name>=<value> ...
 //! <family> <field> <field> ...
 //! ```
 //!
@@ -60,6 +61,8 @@ pub enum FieldType {
     Real,
     /// `auto_diff_real_star_order1` value and nonzero lanes (`a`).
     Ad,
+    /// `real(dp)` vector, bit patterns joined by commas (`v`).
+    Vec,
 }
 
 impl FieldType {
@@ -70,6 +73,7 @@ impl FieldType {
             "s" => Ok(Self::Str),
             "r" => Ok(Self::Real),
             "a" => Ok(Self::Ad),
+            "v" => Ok(Self::Vec),
             _ => Err(FormatError(format!("unknown field type `{code}`"))),
         }
     }
@@ -88,6 +92,8 @@ pub enum Value {
     Real(f64),
     /// Auto-diff value with all [`STAR_AD_LANES`] lanes, exact bits.
     Ad(Box<MesaAd>),
+    /// Real vector, exact bits.
+    Vec(Vec<f64>),
     /// `NA`: the writer had no value for this field (any type).
     Missing,
 }
@@ -174,6 +180,15 @@ pub fn encode_ad(x: &MesaAd) -> String {
     s
 }
 
+/// Encodes a real vector as the overlay does (`v`).
+#[must_use]
+pub fn encode_vec(x: &[f64]) -> String {
+    x.iter()
+        .map(|v| encode_real(*v))
+        .collect::<Vec<_>>()
+        .join(",")
+}
+
 fn bits(tok: &str) -> Result<f64, FormatError> {
     u64::from_str_radix(tok, 16)
         .map(f64::from_bits)
@@ -241,6 +256,9 @@ impl Record {
                 FieldType::Str => Value::Str((*tok).to_string()),
                 FieldType::Real => Value::Real(bits(tok)?),
                 FieldType::Ad => Value::Ad(Box::new(parse_ad(tok)?)),
+                FieldType::Vec => Value::Vec(
+                    tok.split(',').map(bits).collect::<Result<_, _>>()?,
+                ),
             };
             values.insert(name.clone(), v);
         }
@@ -345,12 +363,16 @@ impl Record {
 ///
 /// Header (`#`) lines are kept in [`CaptureReader::header`]; `RUN` lines
 /// advance the run index; `SCHEMA` lines define (or must repeat) a family's
-/// field list; every other line is a record of a family with a schema.
+/// field list; `CONFIG` lines replace a family's configuration
+/// ([`CaptureReader::config`]); every other line is a record of a family
+/// with a schema.
 pub struct CaptureReader<R> {
     lines: std::io::Lines<R>,
     line_no: usize,
     run: usize,
     schemas: HashMap<String, Schema>,
+    configs: HashMap<String, (usize, String)>,
+    config_count: usize,
     /// Provenance header lines, without the leading `# `.
     pub header: Vec<String>,
 }
@@ -363,8 +385,17 @@ impl<R: std::io::BufRead> CaptureReader<R> {
             line_no: 0,
             run: 0,
             schemas: HashMap::new(),
+            configs: HashMap::new(),
+            config_count: 0,
             header: Vec::new(),
         }
+    }
+
+    /// Latest `CONFIG <family>` line read so far: a sequence number that
+    /// changes with every `CONFIG` line, and the entries after the family.
+    #[must_use]
+    pub fn config(&self, family: &str) -> Option<(usize, &str)> {
+        self.configs.get(family).map(|(n, s)| (*n, s.as_str()))
     }
 
     /// Schema of `family`, once its `SCHEMA` line has been read.
@@ -390,6 +421,18 @@ impl<R: std::io::BufRead> CaptureReader<R> {
             let Some(tag) = toks.next() else { continue };
             match tag {
                 "RUN" => self.run += 1,
+                "CONFIG" => {
+                    let family = toks.next().ok_or_else(|| {
+                        FormatError(format!(
+                            "line {}: bare CONFIG",
+                            self.line_no
+                        ))
+                    })?;
+                    self.config_count += 1;
+                    let rest = toks.collect::<Vec<_>>().join(" ");
+                    self.configs
+                        .insert(family.to_string(), (self.config_count, rest));
+                }
                 "SCHEMA" => {
                     let family = toks.next().ok_or_else(|| {
                         FormatError(format!(

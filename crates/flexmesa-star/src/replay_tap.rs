@@ -6,8 +6,9 @@
 //! output file. When enabled, the convection code writes the records the
 //! MESA overlay of `benchmarks/fortran_mesa/replay/` writes, in the same
 //! format and the same lane layout: one `GETR` record per `Get_results`
-//! evaluation (the arguments `FlexMESA` assembled and the results), and one
-//! `TDC` or `MLT` record per kernel call. `flexmesa-replay compare` then
+//! evaluation (the arguments `FlexMESA` assembled and the results), one
+//! `TDC` or `MLT` record per kernel call, and one `EOS` record per cell EOS
+//! result stored for a zone (`do_eos_for_cell`). `flexmesa-replay compare` then
 //! matches them with a MESA capture call by call.
 //!
 //! The tap reads values and writes text; it assigns nothing the engine
@@ -22,7 +23,11 @@ use std::fs::{File, OpenOptions};
 use std::io::{BufWriter, Write as _};
 use std::sync::{Mutex, OnceLock};
 
-use flexmesa_replay::record::{encode_ad, encode_real, MesaAd, NOT_AVAILABLE};
+use flexmesa_eos::EosEvalOutput;
+use flexmesa_replay::eos::EOS_SCHEMA;
+use flexmesa_replay::record::{
+    encode_ad, encode_real, encode_vec, MesaAd, NOT_AVAILABLE,
+};
 use flexmesa_replay::turb::{GETR_SCHEMA, MLT_SCHEMA, TDC_SCHEMA};
 use flexmesa_turb::{
     MltInputs, MltOption, MltParams, TdcInputs, TdcOutput, TdcParams,
@@ -75,6 +80,7 @@ fn tap() -> Option<&'static Mutex<Tap>> {
         let _ = writeln!(out, "SCHEMA TDC {}", squash(TDC_SCHEMA));
         let _ = writeln!(out, "SCHEMA MLT {}", squash(MLT_SCHEMA));
         let _ = writeln!(out, "SCHEMA GETR {}", squash(GETR_SCHEMA));
+        let _ = writeln!(out, "SCHEMA EOS {}", squash(EOS_SCHEMA));
         Some(Mutex::new(Tap {
             out,
             nmax: env_usize("FLEXMESA_REPLAY_TAP_MODELS").unwrap_or(1),
@@ -321,6 +327,32 @@ pub(crate) fn get_results(model: &StarModel, k: usize, a: &GetResultsArgs) {
         ad(&a.out.conv_vel),
         ad(&a.out.d),
         ad(&a.out.gamma),
+        "0".to_string(),
+    ];
+    emit(&f.join(" "));
+}
+
+/// Writes an `EOS` record for the cell EOS result `out` about to be stored
+/// for zone `k` (0-based), with the inputs `do_eos_for_cell` passes to
+/// `get_eos` (`star/private/micro.f90:357-361`): `xa(:,k)`, `rho(k)`,
+/// `lnd(k)/ln10`, `T(k)`, `lnT(k)/ln10`.
+pub(crate) fn eos(model: &StarModel, k: usize, out: &EosEvalOutput) {
+    let s = model.species;
+    let chem: Vec<String> =
+        model.chem_id.iter().map(ToString::to_string).collect();
+    let d_dxa: Vec<f64> = out.d_dxa.iter().flatten().copied().collect();
+    let f = [
+        context("EOS", 6, model, k),
+        chem.join(","),
+        encode_vec(&model.xa[k * s..(k + 1) * s]),
+        encode_real(model.rho[k]),
+        encode_real(model.lnd[k] / flexmesa_const::LN10),
+        encode_real(model.t[k]),
+        encode_real(model.ln_t[k] / flexmesa_const::LN10),
+        encode_vec(&out.res),
+        encode_vec(&out.d_dlnd),
+        encode_vec(&out.d_dln_t),
+        encode_vec(&d_dxa),
         "0".to_string(),
     ];
     emit(&f.join(" "));

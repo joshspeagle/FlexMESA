@@ -74,10 +74,11 @@ def build_overlay(
         else:
             target.symlink_to(entry)
     private = overlay / "star" / "private"
-    for name, patch in (
-        ("turb_support.f90", replay_patch.patch_text),
-        ("star_solver.f90", stepdump_patch.patch_text),
-    ):
+    patches = {
+        **replay_patch.PATCHES,
+        "star_solver.f90": stepdump_patch.patch_text,
+    }
+    for name, patch in patches.items():
         src = private / name
         src.write_text(patch(src.read_text(encoding="utf-8")), encoding="utf-8")
     star = overlay / "star"
@@ -114,6 +115,31 @@ def _header(
     return lines
 
 
+def _write_stepdump(
+    ident: str,
+    dump: pathlib.Path,
+    out: pathlib.Path,
+    case_root: pathlib.Path,
+    case: str,
+    models: int,
+    meta: dict[str, str],
+    first: str,
+    status: str,
+) -> None:
+    """Writes the step dump of the capture run next to its capture."""
+    suite = ident.split("/", 1)[0]
+    meta_dump = {**meta, "first_model": first}
+    run_stepdumps._write_dump(
+        ident,
+        dump,
+        out / suite / f"{case}.stepdump",
+        case_root / case,
+        models,
+        meta_dump,
+        status,
+    )
+
+
 def run_case(
     ident: str,
     env: dict[str, str],
@@ -123,6 +149,7 @@ def run_case(
     first_model: int | None,
     timeout_sec: int,
     meta: dict[str, str],
+    window_models: int | None = None,
 ) -> str:
     """Runs one case with capture on and writes its output files.
 
@@ -136,6 +163,10 @@ def run_case(
             first model of the run.
         timeout_sec: Wall-clock limit for build and run.
         meta: Build provenance from ``run_stepdumps.build_meta``.
+        window_models: Distinct model numbers captured per star, for runs
+            the step dump does not stop (RSP cases, whose solver writes no
+            step dump); ``None`` leaves the window open up to the step
+            dump's stop.
 
     Returns:
         A one-line status.
@@ -155,7 +186,9 @@ def run_case(
         # open: a loaded model keeps its saved model number until
         # set_initial_model_number resets it, so a count of distinct model
         # numbers would not line up with the solved models.
-        f"{replay_patch.MARKER}_MODELS": str(UNBOUNDED_MODELS),
+        f"{replay_patch.MARKER}_MODELS": str(
+            window_models if window_models is not None else UNBOUNDED_MODELS
+        ),
         stepdump_patch.MARKER: str(dump),
         f"{stepdump_patch.MARKER}_STEPS": str(models),
         f"{stepdump_patch.MARKER}_STOP": "1",
@@ -168,22 +201,23 @@ def run_case(
         return f"{ident}: {status}, no capture"
     first = str(first_model) if first_model is not None else "first of run"
     header = _header(case_root / case, ident, models, first, meta)
+    if window_models is not None:
+        header.append(
+            f"# capture_window_models: {window_models} distinct model "
+            "numbers per star (the step dump does not stop this run)"
+        )
     dest = out / suite / f"{case}.replay"
     dest.parent.mkdir(parents=True, exist_ok=True)
     with dest.open("w", encoding="utf-8") as fh:
         fh.write("\n".join(header) + "\n")
         with raw.open(encoding="utf-8") as src:
             shutil.copyfileobj(src, fh)
-    meta_dump = {**meta, "first_model": first}
-    run_stepdumps._write_dump(
-        ident,
-        dump,
-        out / suite / f"{case}.stepdump",
-        case_root / case,
-        models,
-        meta_dump,
-        status,
-    )
+    if not dump.exists():
+        status += ", no step dump"
+    else:
+        _write_stepdump(
+            ident, dump, out, case_root, case, models, meta, first, status
+        )
     counts: dict[str, int] = {}
     with raw.open(encoding="utf-8") as src:
         for line in src:
@@ -203,6 +237,13 @@ def main() -> None:
     parser.add_argument("--out", type=pathlib.Path, required=True)
     parser.add_argument("--models", type=int, default=1)
     parser.add_argument("--first-model", type=int, default=None)
+    parser.add_argument(
+        "--window-models",
+        type=int,
+        default=None,
+        help="Capture only this many distinct model numbers per star (for "
+        "RSP cases, which the step dump does not stop).",
+    )
     parser.add_argument("--timeout-sec", type=int, default=1800)
     parser.add_argument("--cases", nargs="+", required=True)
     parser.add_argument(
@@ -234,6 +275,7 @@ def main() -> None:
                 args.first_model,
                 args.timeout_sec,
                 meta,
+                args.window_models,
             ),
             flush=True,
         )

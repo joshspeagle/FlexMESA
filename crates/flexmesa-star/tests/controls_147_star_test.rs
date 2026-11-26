@@ -1184,8 +1184,9 @@ fn test_147_atm_off_table_option_parse_and_c13_pocket() {
 fn test_147_atm_off_table_option_eval_surf_bc_and_roundtrip() {
     // `eval_surf_bc` -> `get_table` (`star/private/atm_support.f90:604-650`):
     // when `alfa == 0.0` (on-table solar ZAMS), `atm_off_table_option` is not
-    // checked; when `alfa > 0.0`, `'T_tau'` succeeds, `''` raises
-    // `MicrophysicsError`, and unrecognized values raise `InvalidInput`.
+    // checked; when `alfa > 0.0`, `'T_tau'` succeeds, whereas both `''`
+    // (`mesa_error` + `stop`) and unrecognized values raise non-retriable
+    // `InvalidInput`.
     let mut base_table_model = default_zams();
     base_table_model.controls.atm_option = AtmOption::Table;
     base_table_model.controls.atm_table = String::from("tau_100");
@@ -1221,8 +1222,12 @@ fn test_147_atm_off_table_option_eval_surf_bc_and_roundtrip() {
     let err_blank = eval_surf_bc(&mut off_blank)
         .expect_err("off-table '' must fail loudly");
     assert!(
-        matches!(err_blank, StarError::MicrophysicsError(_)),
-        "expected MicrophysicsError for empty atm_off_table_option, got {err_blank}"
+        matches!(err_blank, StarError::InvalidInput(_)),
+        "expected InvalidInput for empty atm_off_table_option, got {err_blank}"
+    );
+    assert!(
+        !err_blank.is_retriable(),
+        "empty atm_off_table_option must not trigger step retries: {err_blank}"
     );
 
     let mut off_bogus = base_table_model;

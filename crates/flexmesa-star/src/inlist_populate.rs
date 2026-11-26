@@ -663,6 +663,12 @@ impl InlistBundle {
                 )));
             }
         }
+        // Upstream (`star/private/atm_support.f90:604-634`) checks
+        // `atm_off_table_option` only during evaluation when `atm_option ==
+        // 'table'` and `alfa /= 0`; under FlexMESA's fail-loudly inlist
+        // contract (`#147`), unknown strings are rejected eagerly at parse
+        // time (while `get_table` also keeps the evaluation check for
+        // programmatic callers).
         if let Some(s) = ctrl.try_get_str("controls", "atm_off_table_option")? {
             c.atm_off_table_option = match s.trim_end() {
                 "T_tau" => String::from("T_tau"),

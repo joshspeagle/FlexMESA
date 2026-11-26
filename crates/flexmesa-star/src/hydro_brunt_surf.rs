@@ -450,11 +450,12 @@ pub(crate) fn get_surf_pt(
 ///
 /// # Errors
 /// Returns [`StarError::InvalidInput`] when `tau_factor /= 1`
-/// (`atm_support.f90:491-494`, a `mesa_error` upstream) or when `alfa /= 0`
-/// with an unrecognized `atm_off_table_option`
+/// (`atm_support.f90:491-494`, a `mesa_error` upstream), when `alfa /= 0` with
+/// `atm_off_table_option == ""` (`atm_support.f90:623-627`, upstream
+/// `mesa_error` + `stop`; non-retriable so evolution aborts immediately), or
+/// when `alfa /= 0` with an unrecognized `atm_off_table_option`
 /// (`atm_support.f90:629-633`), and [`StarError::MicrophysicsError`] for
-/// `L < 0`, `atm_off_table_option == ""` when `alfa /= 0`
-/// (`atm_support.f90:623-627`), or a failing table or `T_tau` evaluation.
+/// `L < 0` or a failing table or `T_tau` evaluation.
 fn get_table(
     model: &mut StarModel,
     l: f64,
@@ -527,7 +528,13 @@ fn get_table(
                 eval_grey_t_tau_surf(model, tau, l, r, m, cgrav, teff)?
             }
             "" => {
-                return Err(StarError::MicrophysicsError(String::from(
+                // `atm_support.f90:623-627` calls `mesa_error` + `stop` rather
+                // than returning an `ierr` retry. `StarError::MicrophysicsError`
+                // has `is_retriable() == true` (`job_controls.rs:195-200`) and
+                // `Terminated` breaks `star_evolve` as a normal stop
+                // (`evolve.rs:2160`), whereas `InvalidInput` is non-retriable
+                // (`evolve.rs:722`) and immediately aborts evolution loudly.
+                return Err(StarError::InvalidInput(String::from(
                     "Attempt to interpolate outside atmosphere table with empty atm_off_table_option (star/private/atm_support.f90:623-627)",
                 )));
             }

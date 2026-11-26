@@ -338,6 +338,11 @@
       "number": 545,
       "title": "fix(star): TDC scale source, scale floors and m follow MESA 26.4.1 (#543)",
       "draft": false
+    },
+    {
+      "number": 553,
+      "title": "fix(star): case hooks inside set_hydro_vars, full post-burn set_vars, hook flags without handlers are unsupported (#541)",
+      "draft": false
     }
   ],
   "deferred_169": [
@@ -904,6 +909,14 @@
     {
       "number": 534,
       "title": "[Deferred bug] do_relax_initial_entropy runs the eosDE path for an invalid get_entropy_for_relax_from_eos value",
+      "state": "open",
+      "kind": "upstream-bug",
+      "parity_pending": false,
+      "needs_confirmation": false
+    },
+    {
+      "number": 557,
+      "title": "[Deferred bug] do1_mlt_eval reads xa(0,k) for XH1 when the network has no h1",
       "state": "open",
       "kind": "upstream-bug",
       "parity_pending": false,

@@ -32,7 +32,7 @@ use flexmesa_net::{
 use rayon::prelude::*;
 
 use crate::controls::StarError;
-use crate::micro::{do_eos, do_kap, resolve_model_net, set_basic_vars};
+use crate::micro::resolve_model_net;
 use crate::micro_net::eval_zone_eps_nuc_categories;
 use crate::mix_info::{
     apply_min_d_mix_floor, compute_convection_sigmas,

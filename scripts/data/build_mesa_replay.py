@@ -72,7 +72,7 @@ def _scan(path: pathlib.Path) -> tuple[dict[str, str], dict[str, int]]:
             key, _, val = raw[1:].decode("utf-8").partition(":")
             head.setdefault(key.strip(), val.strip())
             continue
-        tag = raw.split(b" ", 1)[0].decode("ascii")
+        tag = raw.split(b" ", 1)[0].strip().decode("ascii")
         if tag in ("", "RUN", "SCHEMA", "CONFIG"):
             continue
         counts[tag] = counts.get(tag, 0) + 1

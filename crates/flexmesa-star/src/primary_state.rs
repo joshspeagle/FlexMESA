@@ -539,7 +539,6 @@ pub struct PrimaryStateBuffer {
     pub(crate) omega_old: Vec<f64>,
     pub(crate) j_rot_old: Vec<f64>,
     pub(crate) eps_mdot_old: Vec<f64>,
-    pub(crate) solver_mlt_eval_count: usize,
     pub(crate) opacity_start_surf: f64,
     pub(crate) crystal_core_boundary_mass: f64,
     pub(crate) phase_sep_mixing_mass: f64,
@@ -591,7 +590,6 @@ macro_rules! make_empty_buf {
             solver_first_try_of_step: true,
             adjust_j_q: 1.0,
             need_to_setvars: true,
-            solver_mlt_eval_count: 0,
             diffusion_call_number: 0,
             k_below_const_q: 1,
             k_const_mass: 0,
@@ -756,7 +754,6 @@ impl PrimaryStateBuffer {
                 total_internal_energy_start,
                 cumulative_energy_error,
                 non_epsnuc_energy_change_from_split_burn,
-                solver_mlt_eval_count,
                 opacity_start_surf,
                 crystal_core_boundary_mass,
                 phase_sep_mixing_mass,
@@ -1014,7 +1011,9 @@ impl PrimaryStateBuffer {
                     other_alpha_mlt
                 ]
             );
-            a.solver_mlt_eval_count = 0;
+            // A new try starts outside the solver (`prepare_for_new_try`,
+            // `star/private/evolve.f90:2019`).
+            a.solver_iter = 0;
             a.fixed_gradr_sticky.fill(false);
             self.mixing.restore_pre_hydro(&mut a.mixing);
             if let Some(ref eg) = self.extra_grav_if_nonzero {
@@ -1066,7 +1065,6 @@ impl PrimaryStateBuffer {
                 doing_finish_load_model,
                 need_to_setvars,
                 have_j_rot,
-                solver_mlt_eval_count,
                 opacity_start_surf,
                 crystal_core_boundary_mass,
                 phase_sep_mixing_mass,

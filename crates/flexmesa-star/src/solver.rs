@@ -605,7 +605,6 @@ pub fn solve_henyey_step(
     let saved_doing_sbm = model.aux.doing_struct_burn_mix;
     // `iter = 0; s% solver_iter = iter` (`star/private/star_solver.f90:190-191`).
     model.aux.solver_iter = 0;
-    model.aux.solver_mlt_eval_count = 0;
     model.aux.fixed_gradr_sticky.resize(nz, false);
     model.aux.fixed_gradr_sticky.fill(false);
     model.aux.doing_struct_burn_mix = true;
@@ -694,7 +693,6 @@ pub fn solve_henyey_step(
     } else {
         while !passed_tol_tests {
             iter_used = iter;
-            model.aux.solver_mlt_eval_count = iter;
             model.total_num_solver_iterations += 1;
 
             let (tol_rn, tol_mr) = active_residual_tolerances_with_gold(

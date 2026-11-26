@@ -418,7 +418,7 @@ fn test_eval_surf_bc_t_tau_opacity_fixed_iterated_varying_and_inlist() {
     model.controls.atm_t_tau_opacity = AtmTTauOpacity::Iterated;
     model.aux.opacity_start_surf = kap_orig;
     model.aux.doing_struct_burn_mix = true;
-    model.aux.solver_mlt_eval_count = 1;
+    model.aux.solver_iter = 1;
     eval_surf_bc(&mut model).expect("eval_surf_bc iterated in solver iter");
     let lnp_iter_ad = model.ln_peos_surf_ad;
     let lnt_iter_ad = model.ln_t_surf_ad;
@@ -456,7 +456,7 @@ fn test_eval_surf_bc_t_tau_opacity_fixed_iterated_varying_and_inlist() {
     // at fixed `g`, so `dlnP/dL`, `dlnT/dL`, and `dlnT/dlnR` match central
     // finite differences while `dlnP/dlnR == -2 * L * dlnP/dL`.
     model.aux.doing_struct_burn_mix = false;
-    model.aux.solver_mlt_eval_count = 0;
+    model.aux.solver_iter = 0;
     model.opacity[0] = kap_orig;
     model.controls.atm_t_tau_opacity = AtmTTauOpacity::Varying;
     eval_surf_bc(&mut model).expect("eval_surf_bc varying");

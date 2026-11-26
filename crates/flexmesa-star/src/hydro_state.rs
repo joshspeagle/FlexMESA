@@ -778,11 +778,6 @@ pub struct HydroAuxState {
     pub j_rot_old: Vec<f64>,
     /// Previous-step mass-change heating rate $\epsilon_{\dot{M},\mathrm{old},k}$ for step retry.
     pub eps_mdot_old: Vec<f64>,
-    /// Active Newton iteration index (`s% solver_iter` in `star_solver.f90:191,
-    /// 284, 610` and `turb_info.f90:56`) during `do_struct_burn_mix`, preserved
-    /// at solve exit for post-solve rotation conservation and reset by the
-    /// post-solve `set_mlt_vars` pass.
-    pub solver_mlt_eval_count: usize,
     /// Start-of-step outermost-zone Rosseland opacity $\kappa_{\mathrm{start},1}$
     /// (`s% opacity_start(1)` in `star/private/atm_support.f90:303`) used as the
     /// initial guess for `'iterated'` $T(\tau)$ atmospheres during solver iterations.
@@ -964,7 +959,6 @@ impl HydroAuxState {
             omega_old: vec![0.0; nz],
             j_rot_old: vec![0.0; nz],
             eps_mdot_old: vec![0.0; nz],
-            solver_mlt_eval_count: 0,
             opacity_start_surf: 0.0,
             fixed_gradr_sticky: vec![false; nz],
             mixing: crate::mixing_state::MixingAuxState::new(nz),

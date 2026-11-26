@@ -12,14 +12,59 @@ use std::path::PathBuf;
 
 use flexmesa_const::{AVO, KERG};
 use flexmesa_math::exp;
+use flexmesa_star::hydro_state::{StarModelHook, StarModelHookHandle};
 use flexmesa_star::inlist::InlistBundle;
 use flexmesa_star::inlist_inventory::{STAR_JOB_SUPPORTED, STAR_JOB_UNUSED};
-use flexmesa_star::inlist_runner::DefaultStarExtras;
+use flexmesa_star::inlist_runner::{DefaultStarExtras, StarExtras};
 use flexmesa_star::{
     do_remove_center, do_remove_center_by_entropy, do_remove_inner_fraction_q,
     init_or_update_model_from_bundle, load_zams_model, star_evolve_step,
-    StarControls, StarError, StarJobControls,
+    StarControls, StarError, StarJobControls, StarModel,
 };
+
+struct CcsnIipAlphaMltHook;
+
+impl StarModelHook for CcsnIipAlphaMltHook {
+    fn apply(&self, model: &mut StarModel) -> Result<(), StarError> {
+        // Mirrors `star/test_suite/ccsn_IIp/src/run_star_extras.f90:138-161`:
+        // `X_MLT_ALPHA = 21`, `X_MLT_OTHER = 22`, `X_MLT_H_LIM = 23` (1-based).
+        let alpha_h = model.controls.x_ctrl[20];
+        let alpha_other = model.controls.x_ctrl[21];
+        let h_limit = model.controls.x_ctrl[22];
+        let Some(h1_idx) = model.iso_names.iter().position(|n| n == "h1")
+        else {
+            return Ok(());
+        };
+        if alpha_h <= 0.0 || alpha_other <= 0.0 {
+            return Ok(());
+        }
+        let species = model.species;
+        for (k, slot) in model
+            .aux
+            .mixing
+            .alpha_mlt
+            .iter_mut()
+            .take(model.nz)
+            .enumerate()
+        {
+            let x_h1 = model.xa[k * species + h1_idx];
+            *slot = if x_h1 >= h_limit {
+                alpha_h
+            } else {
+                alpha_other
+            };
+        }
+        Ok(())
+    }
+}
+
+struct CcsnIipAlphaMltExtras;
+
+impl StarExtras for CcsnIipAlphaMltExtras {
+    fn other_alpha_mlt_handle(&self) -> Option<StarModelHookHandle> {
+        Some(StarModelHookHandle::new(CcsnIipAlphaMltHook))
+    }
+}
 
 struct TempCaseGuard {
     root: PathBuf,
@@ -109,8 +154,14 @@ fn test_remove_center_controls_inventory_defaults_and_strict_parse() {
     );
 
     let defaults = StarJobControls::default();
-    assert_eq!(defaults.remove_initial_center_by_entropy.to_bits(), 0.0_f64.to_bits());
-    assert_eq!(defaults.remove_center_by_entropy.to_bits(), 0.0_f64.to_bits());
+    assert_eq!(
+        defaults.remove_initial_center_by_entropy.to_bits(),
+        0.0_f64.to_bits()
+    );
+    assert_eq!(
+        defaults.remove_center_by_entropy.to_bits(),
+        0.0_f64.to_bits()
+    );
     assert!(!defaults.remove_center_set_zero_v_center);
     assert!(defaults.remove_center_adjust_l_center);
 
@@ -153,10 +204,7 @@ fn test_remove_center_controls_inventory_defaults_and_strict_parse() {
 fn test_ccsn_iip_infall_init_excises_to_850_zones_and_evolves_strictly() {
     let inlist_path = ccsn_iip_inlist_path();
     let bundle = InlistBundle::from_file(&inlist_path).unwrap_or_else(|e| {
-        panic!(
-            "strict parse of {} failed: {e}",
-            inlist_path.display()
-        )
+        panic!("strict parse of {} failed: {e}", inlist_path.display())
     });
     assert_eq!(
         bundle.validation_report.unsupported_controls.len(),
@@ -171,7 +219,7 @@ fn test_ccsn_iip_infall_init_excises_to_850_zones_and_evolves_strictly() {
     assert!(!bundle.job.remove_center_set_zero_v_center);
     assert!(bundle.job.remove_center_adjust_l_center);
 
-    let mut extras = DefaultStarExtras;
+    let mut extras = CcsnIipAlphaMltExtras;
     let mut model =
         init_or_update_model_from_bundle(&bundle, None, &mut extras)
             .expect("initialize ccsn_IIp/inlist_infall_header");
@@ -235,8 +283,8 @@ fn test_ccsn_iip_infall_init_excises_to_850_zones_and_evolves_strictly() {
     assert_eq!(model_always.v_center.to_bits(), model.v_center.to_bits());
 
     // Evolve >= 3 steps strictly without overriding unsupported controls.
-    let do_remesh = model.controls.okay_to_remesh
-        && model.controls.mesh_delta_coeff > 0.0;
+    let do_remesh =
+        model.controls.okay_to_remesh && model.controls.mesh_delta_coeff > 0.0;
     let op_split = model.controls.op_split_burn;
     for step in 1..=3 {
         let rep = star_evolve_step(&mut model, do_remesh, op_split, true)

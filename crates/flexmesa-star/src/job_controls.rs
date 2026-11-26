@@ -1141,7 +1141,7 @@ pub struct StarJobControls {
     pub remove_initial_center_by_entropy: f64,
     /// Inner specific entropy cut in $k_{\mathrm{B}}/\mathrm{baryon}$ applied on
     /// startup including restarts (`remove_center_by_entropy`, `<= 0` disables;
-    /// `star/defaults/star_job.defaults:2092`).
+    /// `star/defaults/star_job.defaults:2114`).
     #[serde(default)]
     pub remove_center_by_entropy: f64,
     /// If true, force `v_center = 0` when removing the center instead of setting

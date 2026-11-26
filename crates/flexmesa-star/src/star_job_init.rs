@@ -86,9 +86,10 @@ fn load_saved_mod(
 /// read from a `.mod` file (`restart = .false.`).
 ///
 /// Mesh quantities (`set_qs`, `set_m_and_dm`, `set_m_grav_and_grav`,
-/// `set_dm_bar`) come from `sync_mesh_and_pack`; the arrays upstream clears at
-/// `read_model.f90:131-149` are freshly zeroed by the reader. Upstream's
-/// `s% total_angular_momentum` (`:170`) and `do_report` (`:197`) are derived
+/// `set_dm_bar`) come from `sync_mesh_and_pack`, and the scratch/aux vectors
+/// at `read_model.f90:133-145, 157-159` are reset explicitly below before
+/// `set_vars` so both fresh loads and `do_remove_center` start cleanly.
+/// Upstream's `s% total_angular_momentum` (`:170`) and `do_report` (`:197`) are derived
 /// quantities that FlexMESA evaluates on demand from the model arrays
 /// (`report_utils`), so no stored state corresponds to them.
 ///

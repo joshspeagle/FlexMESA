@@ -1240,6 +1240,12 @@ kind = "oracle"
 provenance = "MESA 26.4.1 star/private/relax.f90:3536-3873 relax_initial_Z / relax_initial_Y IEEE-754 hex zone oracles (#422)"
 
 [[tests]]
+path = "crates/flexmesa-star/tests/remove_center_test.rs"
+language = "rust"
+module = "star"
+kind = "invariant"
+
+[[tests]]
 path = "crates/flexmesa-star/tests/rotation_158_test.rs"
 language = "rust"
 module = "star"

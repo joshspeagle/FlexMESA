@@ -8,7 +8,7 @@ Generated mechanically against **MESA 26.4.1** (git tag `26.4.1`, commit `c8c202
 - **Total manifest cases scanned**: `106`
 - **Cases passing strict `#147` validation**: `97`
 - **Cases rejected by strict `#147` validation**: `9`
-- **Distinct unsupported physics/solver controls encountered**: `44`
+- **Distinct unsupported physics/solver controls encountered**: `42`
 - **Distinct unknown/misspelled controls encountered**: `0`
 - **Cases using headless plotting controls (`#173` / `DECISIONS #25`)**: `78` (`895` distinct keys)
 
@@ -16,7 +16,7 @@ Generated mechanically against **MESA 26.4.1** (git tag `26.4.1`, commit `c8c202
 
 | Section | Upstream `26.4.1` | Supported | Unused (`#147`) | Headless GUI (`#173`) | Terminal output (`DECISIONS #26`) | Unimplemented |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `&star_job` | 455 | 220 | 4 | 3 | 8 | 220 |
+| `&star_job` | 455 | 224 | 4 | 3 | 8 | 216 |
 | `&eos` | 102 | 91 | 0 | 0 | 9 | 2 |
 | `&kap` | 51 | 39 | 0 | 0 | 10 | 2 |
 | `&controls` | 1448 | 1236 | 15 | 0 | 19 | 178 |
@@ -65,10 +65,8 @@ Generated mechanically against **MESA 26.4.1** (git tag `26.4.1`, commit `c8c202
 | `&star_job::fallback_check_total_energy` | `unimplemented` | 1 | `star/ccsn_IIp` |
 | `&star_job::rate_cache_suffix` | `unimplemented` | 1 | `star/custom_rates` |
 | `&star_job::rate_tables_dir` | `unimplemented` | 1 | `star/custom_rates` |
-| `&star_job::remove_center_set_zero_v_center` | `unimplemented` | 1 | `star/ccsn_IIp` |
 | `&star_job::remove_fallback_at_each_step` | `unimplemented` | 1 | `star/ccsn_IIp` |
 | `&star_job::remove_fallback_speed_limit` | `unimplemented` | 1 | `star/ccsn_IIp` |
-| `&star_job::remove_initial_center_by_entropy` | `unimplemented` | 1 | `star/ccsn_IIp` |
 | `&star_job::special_weak_states_file` | `unimplemented` | 1 | `star/wd_aic` |
 | `&star_job::special_weak_transitions_file` | `unimplemented` | 1 | `star/wd_aic` |
 | `&star_job::use_special_weak_rates` | `unimplemented` | 1 | `star/wd_aic` |
@@ -189,7 +187,7 @@ Per `DECISIONS #25` (matching upstream `USE_PGSTAR = NO`), keys in `&pgstar`, `&
 | `star` | `c13_pocket` | `pass` | 0 | 0 | 100 |
 | `star` | `carbon_kh` | `pass` | 0 | 0 | 81 |
 | `star` | `cburn_inward` | `pass` | 0 | 0 | 66 |
-| `star` | `ccsn_IIp` | `fail_unsupported` | 16 | 0 | 100 |
+| `star` | `ccsn_IIp` | `fail_unsupported` | 14 | 0 | 100 |
 | `star` | `check_pulse_atm` | `pass` | 0 | 0 | 0 |
 | `star` | `check_redo` | `pass` | 0 | 0 | 3 |
 | `star` | `conductive_flame` | `fail_unsupported` | 1 | 0 | 109 |

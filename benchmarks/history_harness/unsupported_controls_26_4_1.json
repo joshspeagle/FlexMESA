@@ -10,7 +10,7 @@
     "total_cases": 106,
     "strict_pass_cases": 97,
     "strict_fail_cases": 9,
-    "distinct_unsupported_controls": 44,
+    "distinct_unsupported_controls": 42,
     "distinct_unknown_controls": 0,
     "cases_with_headless_plotting": 78,
     "distinct_headless_plotting_keys": 895
@@ -19,11 +19,11 @@
     {
       "section": "star_job",
       "upstream_keys": 455,
-      "supported_keys": 220,
+      "supported_keys": 224,
       "unused_keys": 4,
       "headless_gui_keys": 3,
       "terminal_output_keys": 8,
-      "unimplemented_upstream_keys": 220
+      "unimplemented_upstream_keys": 216
     },
     {
       "section": "eos",
@@ -422,15 +422,6 @@
     },
     {
       "section": "star_job",
-      "key": "remove_center_set_zero_v_center",
-      "category": "unimplemented",
-      "case_count": 1,
-      "cases": [
-        "star/ccsn_IIp"
-      ]
-    },
-    {
-      "section": "star_job",
       "key": "remove_fallback_at_each_step",
       "category": "unimplemented",
       "case_count": 1,
@@ -441,15 +432,6 @@
     {
       "section": "star_job",
       "key": "remove_fallback_speed_limit",
-      "category": "unimplemented",
-      "case_count": 1,
-      "cases": [
-        "star/ccsn_IIp"
-      ]
-    },
-    {
-      "section": "star_job",
-      "key": "remove_initial_center_by_entropy",
       "category": "unimplemented",
       "case_count": 1,
       "cases": [
@@ -5505,10 +5487,8 @@
         "controls::rti_smooth_iterations::unimplemented",
         "controls::rti_smooth_mass::unimplemented",
         "star_job::fallback_check_total_energy::unimplemented",
-        "star_job::remove_center_set_zero_v_center::unimplemented",
         "star_job::remove_fallback_at_each_step::unimplemented",
-        "star_job::remove_fallback_speed_limit::unimplemented",
-        "star_job::remove_initial_center_by_entropy::unimplemented"
+        "star_job::remove_fallback_speed_limit::unimplemented"
       ],
       "unknown_controls": [],
       "headless_plotting_keys_count": 100,

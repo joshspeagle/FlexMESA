@@ -124,6 +124,22 @@ pub fn star_parse_inlist_bundle<'py>(
     dict.set_item("change_net", bundle.job.change_net)?;
     dict.set_item("new_net_name", &bundle.job.new_net_name)?;
     dict.set_item(
+        "remove_initial_center_by_entropy",
+        bundle.job.remove_initial_center_by_entropy,
+    )?;
+    dict.set_item(
+        "remove_center_by_entropy",
+        bundle.job.remove_center_by_entropy,
+    )?;
+    dict.set_item(
+        "remove_center_set_zero_v_center",
+        bundle.job.remove_center_set_zero_v_center,
+    )?;
+    dict.set_item(
+        "remove_center_adjust_L_center",
+        bundle.job.remove_center_adjust_l_center,
+    )?;
+    dict.set_item(
         "required_termination_code_string",
         &bundle.job.required_termination_code_string,
     )?;

@@ -114,11 +114,6 @@ issue = "#158"
 reason = "Case history_columns.list requests unported gravity-darkening grav_dark_L_polar column."
 [[gaps]]
 suite = "star"
-case = "high_z"
-issue = "#161"
-reason = "Strict run reaches xa_central_lower_limit (445 steps and 0 retries matching MESA 26.4.1, all final tolerances pass) with num_zones (2.74%) and track deviations from step 3 (#161, #153)."
-[[gaps]]
-suite = "star"
 case = "hot_cool_wind"
 issue = "#161"
 reason = "Strict run diverges from step 2 under fixed T(tau) opacity and enters AGB solver retries (789 steps, 135 retries vs MESA 570 steps, 28 retries), exceeding the 900 s wall-time cap (#161, #152, #159)."

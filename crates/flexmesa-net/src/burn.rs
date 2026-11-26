@@ -4,9 +4,14 @@
 //! (`netint`, `stifbs`, `simpr`, `net_pzextr`) from
 //! `net/private/net_burn.f90` and `net/private/net_burn_support.f90`.
 
-use flexmesa_chem::{get_composition_info, NuclideCatalog, NUM_CATEGORIES};
+use flexmesa_chem::{
+    get_composition_info, NuclideCatalog, SpeciesProps, NUM_CATEGORIES,
+};
 use flexmesa_const::QCONV;
-use flexmesa_eos::{eos_dt_get, EosConfig, HelmTable, I_ETA};
+use flexmesa_eos::{
+    eos_dt_get_from_weights_with_tables, CmsTableSet, EosConfig, EosDtTableSet,
+    HelmTable, I_ETA,
+};
 use flexmesa_interp1d::{interp_pm, interp_value};
 use flexmesa_math::exp10;
 use flexmesa_rates::ScreeningMode;
@@ -14,8 +19,8 @@ use flexmesa_utils::is_bad;
 
 use crate::burn_stepper::netint;
 use crate::derivs::{eval_net_with_work, with_thread_local_work};
-use flexmesa_math::Quad;
 use crate::types::{NetError, NetGeneralInfo, NUM_RVS};
+use flexmesa_math::Quad;
 
 /// Configuration and history inputs for [`burn_1_zone`].
 #[derive(Debug, Clone)]
@@ -200,6 +205,10 @@ pub fn burn_1_zone(
 
     let nuclides = NuclideCatalog::builtin_ref();
     let aion = collect_aion(nuclides, &g.chem_id)?;
+    let species_props = SpeciesProps::from_catalog(nuclides, &g.chem_id)
+        .map_err(|e| NetError::IntegrationError(e.to_string()))?;
+    let dt_tables = EosDtTableSet::builtin();
+    let cms_tables = CmsTableSet::builtin();
     let mut ending_y: Vec<f64> = input
         .starting_x
         .iter()
@@ -248,8 +257,28 @@ pub fn burn_1_zone(
             get_composition_info(nuclides, &g.chem_id, &buf.x_buf, false)
                 .map_err(|e| NetError::IntegrationError(e.to_string()))?;
 
-        let eos = eos_dt_get(ht, rho, temp, &g.chem_id, &buf.x_buf, eos_cfg)
-            .map_err(|e| NetError::IntegrationError(e.to_string()))?;
+        // Pass `(rho, lg_rho, temp, lg_t)` directly without recomputing `log10(exp10)`
+        // round-trips (`net/private/net_burn.f90:418-421`).
+        let eos = eos_dt_get_from_weights_with_tables(
+            ht,
+            dt_tables,
+            cms_tables,
+            comp.xh,
+            comp.xz,
+            rho,
+            lg_rho,
+            temp,
+            lg_t,
+            comp.abar,
+            comp.zbar,
+            &buf.x_buf,
+            &species_props.z_int,
+            &species_props.z,
+            &species_props.w,
+            &species_props.a,
+            eos_cfg,
+        )
+        .map_err(|e| NetError::IntegrationError(e.to_string()))?;
         let eta = eos.res[I_ETA];
         let d_eta_dlnt = eos.d_dln_t[I_ETA];
         let d_eta_dlnrho = eos.d_dlnd[I_ETA];
@@ -281,14 +310,44 @@ pub fn burn_1_zone(
                 false,
             )?;
             if let Some(f) = f_out {
-                for j in 0..species {
-                    let src = input.dxdt_source_term.map_or(0.0, |s| s[j]);
-                    f[j] = buf.dydt_buf[j][0].to_f64() + src / aion[j];
+                if g.doing_approx21 {
+                    for j in 0..species {
+                        let src = input.dxdt_source_term.map_or(0.0, |s| s[j]);
+                        f[j] = buf.dydt_buf[j][0].to_f64() + src / aion[j];
+                    }
+                } else {
+                    // Match `net/private/net_eval.f90:566` (`dxdt = aion * dydt`)
+                    // followed by `net/private/net_burn.f90:449` (`f = dxdt / aion`).
+                    for j in 0..species {
+                        let dxdt_j = (Quad::from_f64(aion[j])
+                            * buf.dydt_buf[j][0])
+                            .to_f64();
+                        let base_f = dxdt_j / aion[j];
+                        f[j] = if let Some(s) = input.dxdt_source_term {
+                            base_f + s[j] / aion[j]
+                        } else {
+                            base_f
+                        };
+                    }
                 }
             }
             if let Some(dfdy) = dfdy_out {
-                dfdy[..species * species]
-                    .copy_from_slice(&w.d_dydt_dy[..species * species]);
+                if g.doing_approx21 {
+                    dfdy[..species * species]
+                        .copy_from_slice(&w.d_dydt_dy[..species * species]);
+                } else {
+                    // Match `net/private/net_eval.f90:570-571` and
+                    // `net/private/net_burn.f90:461` `aion` round-trip.
+                    for i in 0..species {
+                        let a_i = aion[i];
+                        let row = i * species;
+                        for j in 0..species {
+                            let a_j = aion[j];
+                            let d_dxdt_dx = w.d_dydt_dy[row + j] * a_i / a_j;
+                            dfdy[row + j] = d_dxdt_dx * a_j / a_i;
+                        }
+                    }
+                }
             }
             let mut cats = [0.0_f64; NUM_CATEGORIES];
             for c in 0..NUM_CATEGORIES {

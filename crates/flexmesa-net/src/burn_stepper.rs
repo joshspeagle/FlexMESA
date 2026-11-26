@@ -386,12 +386,14 @@ where
 
     for _nn in 2..=nstep {
         for i in 0..nvar {
-            yout[i] = flexmesa_math::fma(h, yout[i], -del[i]);
+            // Unfused multiply-subtract matching `net/private/net_burn_support.f90:515`.
+            yout[i] = h * yout[i] - del[i];
         }
         dgetrs(nvar, dmat, ipiv, yout)
             .map_err(|e| NetError::IntegrationError(e.to_string()))?;
         for i in 0..nvar {
-            del[i] = flexmesa_math::fma(2.0_f64, yout[i], del[i]);
+            // Unfused multiply-add matching `net/private/net_burn_support.f90:529`.
+            del[i] += 2.0_f64 * yout[i];
             ytemp[i] += del[i];
         }
         x += h;
@@ -399,7 +401,8 @@ where
     }
 
     for i in 0..nvar {
-        yout[i] = flexmesa_math::fma(h, yout[i], -del[i]);
+        // Unfused multiply-subtract matching `net/private/net_burn_support.f90:549`.
+        yout[i] = h * yout[i] - del[i];
     }
     dgetrs(nvar, dmat, ipiv, yout)
         .map_err(|e| NetError::IntegrationError(e.to_string()))?;

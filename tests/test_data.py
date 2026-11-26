@@ -260,7 +260,10 @@ def test_bundles_manifest_and_directory_resolution(
         "mesa_stepdumps",
         "mesa_astero_tracks",
         "mesa_pulse_export",
+        "mesa_replay",
     }
+    on_demand = {b.name for b in bundles if b.on_demand}
+    assert on_demand == {"mesa_replay"}
     data_pkg_dir = pathlib.Path(fetch.__file__).resolve().parent
     for b in bundles:
         assert manifest.is_valid_sha256_hex(b.archive_sha256)
@@ -518,3 +521,111 @@ def test_fetch_and_cli_verify_unpack_and_reject_corrupted_archives(
             source_dir=bad_src,
             quiet=True,
         )
+
+
+def _write_on_demand_fixture(
+    tmp_path: pathlib.Path,
+) -> tuple[pathlib.Path, pathlib.Path]:
+    """Write a staging dir and `bundles.toml` with an on-demand bundle."""
+    import hashlib
+    import io
+    import tarfile
+
+    src_dir = tmp_path / "staging"
+    src_dir.mkdir()
+    (tmp_path / "bundle_hashes").mkdir()
+    blocks = []
+    for name, rel, body, od in [
+        ("mini_big", "mini_big/a.replay", b"big oracle\n", True),
+        ("mini_small", "mini_small/b.dump", b"small\n", False),
+    ]:
+        buf = io.BytesIO()
+        with tarfile.open(fileobj=buf, mode="w") as tf:
+            info = tarfile.TarInfo(rel)
+            info.size = len(body)
+            tf.addfile(info, io.BytesIO(body))
+        arc = _compress_zst_bytes(buf.getvalue())
+        (src_dir / f"{name}.tar.zst").write_bytes(arc)
+        (tmp_path / "bundle_hashes" / f"{name}.sha256.tsv").write_text(
+            f"# sha256\tsize_bytes\trelpath\n"
+            f"{hashlib.sha256(body).hexdigest()}\t{len(body)}\t{rel}\n",
+            encoding="utf-8",
+        )
+        blocks.append(
+            f'[[bundles]]\nname = "{name}"\narchive = "{name}.tar.zst"\n'
+            f'kind = "tar_zst"\nbundle_root = "data"\n'
+            f'target_relpath = "{name}"\n'
+            f'sentinel_relpaths = ["{rel}"]\n'
+            f'manifest_file = "bundle_hashes/{name}.sha256.tsv"\n'
+            f'archive_sha256 = "{hashlib.sha256(arc).hexdigest()}"\n'
+            f"archive_size_bytes = {len(arc)}\n"
+            f'unpacked_sha256 = ""\nunpacked_size_bytes = {len(body)}\n'
+            f"test_only = true\non_demand = {str(od).lower()}\n"
+        )
+    toml = tmp_path / "bundles.toml"
+    toml.write_text(
+        '[release]\nrepo = "joshspeagle/FlexMESA"\ntag = "data-v1"\n\n'
+        + "\n".join(blocks),
+        encoding="utf-8",
+    )
+    return src_dir, toml
+
+
+def test_on_demand_bundles_are_opt_in_for_selection_fetch_and_verify(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: pathlib.Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """On-demand bundles are only fetched, verified and listed when named."""
+    src_dir, toml = _write_on_demand_fixture(tmp_path)
+    orig_loader = fetch.load_bundles_manifest
+    monkeypatch.setattr(
+        fetch,
+        "load_bundles_manifest",
+        lambda manifest_path=None: orig_loader(toml),
+    )
+    bundles = orig_loader(toml)[2]
+    by_name = {b.name: b for b in bundles}
+    assert by_name["mini_big"].on_demand
+    assert not by_name["mini_small"].on_demand
+
+    def chosen(**kw: Any) -> list[str]:
+        return [b.name for b in fetch.select_bundles(bundles, **kw)]
+
+    assert chosen() == []
+    assert chosen(include_test_inputs=True) == ["mini_small"]
+    assert chosen(names=["mini_big"]) == ["mini_big"]
+    assert chosen(include_test_inputs=True, names=["mini_big"]) == ["mini_big"]
+    with pytest.raises(ValueError, match=r"Unknown bundle.*no_such"):
+        fetch.select_bundles(bundles, names=["no_such"])
+
+    dd = tmp_path / "data"
+    base = ["data", "fetch", "--data-dir", str(dd), "--quiet"]
+    base += ["--source-dir", str(src_dir)]
+    assert cli.main([*base, "--include-test-inputs"]) == 0
+    assert (dd / "mini_small" / "b.dump").is_file()
+    assert not (dd / "mini_big").exists()
+
+    # Default verify neither requires nor reports the absent on-demand bundle.
+    vbase = ["data", "verify", "--data-dir", str(dd), "--quiet"]
+    assert cli.main([*vbase, "--include-test-inputs"]) == 0
+    capsys.readouterr()
+    assert cli.main(["data", "status", "--data-dir", str(dd)]) == 0
+    out = capsys.readouterr().out
+    assert "mini_big" in out and "ABSENT" in out and "--bundle mini_big" in out
+
+    assert cli.main([*vbase, "--bundle", "mini_big"]) == 1
+    assert cli.main([*base, "--bundle", "mini_big"]) == 0
+    assert (dd / "mini_big" / "a.replay").is_file()
+    assert cli.main([*vbase, "--bundle", "mini_big"]) == 0
+    # Once installed, its files are expected by the default verification.
+    assert cli.main([*vbase, "--include-test-inputs"]) == 0
+    assert cli.main(["data", "status", "--data-dir", str(dd)]) == 0
+    assert "PRESENT" in capsys.readouterr().out
+
+    with pytest.raises(SystemExit) as exc:
+        cli.main([*base, "--bundle", "no_such"])
+    assert exc.value.code == 2
+    assert "Unknown bundle" in capsys.readouterr().err
+    with pytest.raises(SystemExit):
+        cli.main([*vbase, "--bundle", "no_such"])

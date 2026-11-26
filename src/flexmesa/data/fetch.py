@@ -21,7 +21,7 @@ import sys
 import tarfile
 import tomllib
 import urllib.request
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from typing import IO, Any
 
 
@@ -71,6 +71,7 @@ class ReleaseBundle:
     bundle_root: str = "data"
     manifest_file: str = ""
     manifest_dir: str = ""
+    on_demand: bool = False
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
@@ -308,6 +309,7 @@ def load_bundles_manifest(
                 bundle_root=str(entry.get("bundle_root", default_root)),
                 manifest_file=str(entry.get("manifest_file", "")),
                 manifest_dir=str(path.parent),
+                on_demand=bool(entry.get("on_demand", False)),
             )
         )
     return repo, tag, tuple(items)
@@ -384,6 +386,44 @@ def _resolve_bundle_target_root(
     if bundle.bundle_root == "mesa_module_hex":
         return resolve_mesa_module_hex_dir(data_dir=data_root)
     return data_root
+
+
+def select_bundles(
+    bundles: Sequence[ReleaseBundle],
+    *,
+    include_test_inputs: bool = False,
+    names: Sequence[str] | None = None,
+) -> tuple[ReleaseBundle, ...]:
+    """Choose the bundles an operation acts on.
+
+    Args:
+        bundles: Every declared bundle.
+        include_test_inputs: Include ``test_only`` bundles. Ignored when
+            ``names`` is given.
+        names: Explicit bundle names. Only these are selected, whether or
+            not they are ``test_only`` or ``on_demand``.
+
+    Returns:
+        The selected bundles in declaration order. Without ``names``,
+        ``on_demand`` bundles are never selected.
+
+    Raises:
+        ValueError: If a name in ``names`` is not a declared bundle.
+    """
+    if names:
+        known = {b.name for b in bundles}
+        unknown = sorted(set(names) - known)
+        if unknown:
+            raise ValueError(
+                f"Unknown bundle name(s) {', '.join(unknown)}; "
+                f"declared bundles: {', '.join(sorted(known))}"
+            )
+        return tuple(b for b in bundles if b.name in set(names))
+    return tuple(
+        b
+        for b in bundles
+        if not b.on_demand and (include_test_inputs or not b.test_only)
+    )
 
 
 def _sha256_file(path: pathlib.Path) -> str:
@@ -601,8 +641,15 @@ def verify_bundles(
     mesa_test_dest: str | pathlib.Path | None = None,
     manifest_path: pathlib.Path | None = None,
     quiet: bool = False,
+    names: Sequence[str] | None = None,
 ) -> bool:
-    """Verify unpacked ``data-v1`` bundles and per-file SHA-256 manifests."""
+    """Verify unpacked ``data-v1`` bundles and per-file SHA-256 manifests.
+
+    With ``names``, only those bundles are verified (see
+    :func:`select_bundles`) and the scan for unexpected files is skipped,
+    since the other bundles' files share the directory. Without it, files
+    of an installed ``on_demand`` bundle are expected, not reported.
+    """
     data_root = resolve_data_dir(dest)
     test_root = resolve_mesa_test_inputs_dir(mesa_test_dest, data_dir=data_root)
     _, _, bundles = load_bundles_manifest(manifest_path)
@@ -622,9 +669,22 @@ def verify_bundles(
             pass
     all_ok = True
     expected_by_root: dict[pathlib.Path, set[str]] = {}
+    selected = select_bundles(
+        bundles, include_test_inputs=include_test_inputs, names=names
+    )
     for b in bundles:
-        if b.test_only and not include_test_inputs:
-            continue
+        if b.on_demand and b not in selected:
+            od_root = _resolve_bundle_target_root(b, data_root, test_root)
+            od_allowed = expected_by_root.setdefault(od_root, set())
+            od_allowed.add(
+                _stamp_path(od_root, b).relative_to(od_root).as_posix()
+            )
+            od_ok, od_entries = _collect_manifest_relpaths(
+                b.manifest_file, pathlib.Path(b.manifest_dir or manifest_dir)
+            )
+            if od_ok:
+                od_allowed.update(rel for _, _, rel in od_entries)
+    for b in selected:
         root = _resolve_bundle_target_root(b, data_root, test_root)
         allowed = expected_by_root.setdefault(root, set())
         stamp_rel = _stamp_path(root, b).relative_to(root).as_posix()
@@ -655,6 +715,8 @@ def verify_bundles(
             _load_valid_safetensors_relpaths(data_root, manifest_dir)
         )
     for root, allowed in sorted(expected_by_root.items()):
+        if names:
+            break
         extra = _find_unexpected_entries(root, allowed)
         if extra:
             all_ok = False
@@ -781,6 +843,7 @@ def fetch_bundles(
     source_dir: str | pathlib.Path | None = None,
     base_url: str | None = None,
     quiet: bool = False,
+    names: Sequence[str] | None = None,
 ) -> pathlib.Path:
     """Ensure all required ``data-v1`` bundles are verified and unpacked.
 
@@ -794,6 +857,9 @@ def fetch_bundles(
             archives (for offline/staging installation).
         base_url: Optional override for the GitHub Release download base URL.
         quiet: Suppress progress lines when ``True``.
+        names: Explicit bundle names to fetch instead of the default
+            selection. This is the only way to fetch an ``on_demand``
+            bundle (see :func:`select_bundles`).
 
     Returns:
         Resolved physics data directory ``pathlib.Path``.
@@ -825,9 +891,9 @@ def fetch_bundles(
         except (KeyError, OSError):
             pass
 
-    for bundle in bundles:
-        if bundle.test_only and not include_test_inputs:
-            continue
+    for bundle in select_bundles(
+        bundles, include_test_inputs=include_test_inputs, names=names
+    ):
         target_root = _resolve_bundle_target_root(bundle, data_root, test_root)
         if is_bundle_ready(target_root, bundle):
             if not quiet:
@@ -916,6 +982,18 @@ def build_parser(
         ),
     )
     p_fetch.add_argument(
+        "--bundle",
+        action="append",
+        dest="bundle",
+        metavar="NAME",
+        default=None,
+        help=(
+            "Fetch only this bundle (repeatable), including opt-in "
+            "on-demand bundles such as mesa_replay. Replaces the default "
+            "selection."
+        ),
+    )
+    p_fetch.add_argument(
         "--source-dir",
         type=pathlib.Path,
         default=None,
@@ -942,6 +1020,17 @@ def build_parser(
         "--include-test-inputs",
         action="store_true",
         help="Also verify MESA 26.4.1 test-input, history, and hex bundles.",
+    )
+    p_verify.add_argument(
+        "--bundle",
+        action="append",
+        dest="bundle",
+        metavar="NAME",
+        default=None,
+        help=(
+            "Verify only this bundle (repeatable), including opt-in "
+            "on-demand bundles such as mesa_replay."
+        ),
     )
     p_verify.add_argument(
         "--quiet",
@@ -991,6 +1080,11 @@ def main(argv: list[str] | None = None) -> int:
     """CLI entry point for ``python -m flexmesa.data``."""
     parser = build_parser()
     args = parser.parse_args(argv)
+    if getattr(args, "bundle", None):
+        try:
+            select_bundles(load_bundles_manifest()[2], names=args.bundle)
+        except ValueError as exc:
+            parser.error(str(exc))
     if args.subcommand == "fetch":
         fetch_bundles(
             dest=args.dest,
@@ -998,6 +1092,7 @@ def main(argv: list[str] | None = None) -> int:
             mesa_test_dest=args.mesa_test_dest,
             source_dir=args.source_dir,
             quiet=bool(args.quiet),
+            names=args.bundle,
         )
         return 0
     if args.subcommand == "status":
@@ -1027,8 +1122,16 @@ def main(argv: list[str] | None = None) -> int:
         )
         for b in bundles:
             root = _resolve_bundle_target_root(b, data_root, test_root)
-            state = "READY" if is_bundle_ready(root, b) else "MISSING"
-            kind_tag = " [test-only]" if b.test_only else ""
+            ready = is_bundle_ready(root, b)
+            if b.on_demand:
+                state = "PRESENT" if ready else "ABSENT"
+                kind_tag = (
+                    f" [optional, on demand: "
+                    f"flexmesa data fetch --bundle {b.name}]"
+                )
+            else:
+                state = "READY" if ready else "MISSING"
+                kind_tag = " [test-only]" if b.test_only else ""
             print(f"  - {b.name:18s} {state:8s} ({b.archive}){kind_tag}")
         return 0
     if args.subcommand == "verify":
@@ -1037,6 +1140,7 @@ def main(argv: list[str] | None = None) -> int:
             include_test_inputs=bool(args.include_test_inputs),
             mesa_test_dest=args.mesa_test_dest,
             quiet=bool(args.quiet),
+            names=args.bundle,
         )
         return 0 if ok else 1
     if args.subcommand == "path":

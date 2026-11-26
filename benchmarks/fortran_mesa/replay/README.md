@@ -13,6 +13,18 @@ The families are the convection kernel and the cell EOS. The convection kernel i
 | `scripts/data/build_mesa_replay.py` | Packs captures into a `mesa-replay-<version>.tar.zst` bundle with `PROVENANCE.json` and a per-file SHA-256 manifest. |
 | `crates/flexmesa-replay` | Reads a capture, replays each record and reports per-family results. |
 
+## Getting the captures
+
+The captures behind the tables below are published as the opt-in data bundle `mesa-replay-v1` (664 MB compressed, 4.7 GB unpacked), which `flexmesa data fetch --include-test-inputs` does not download:
+
+```bash
+flexmesa data fetch --bundle mesa_replay
+flexmesa data verify --bundle mesa_replay
+cargo run --release -p flexmesa-replay -- "$(flexmesa data path)/mesa_replay/star/accreted_material_j.replay"
+```
+
+It unpacks to `mesa_replay/star/<case>.replay` and `<case>.stepdump` (18 cases, first two models) under the data directory, with `mesa_replay/PROVENANCE.json` and a per-file `SHA-256` manifest checked by `verify`. No test depends on it: CI replays the committed sample in `crates/flexmesa-replay/tests/data/`. Replaying needs the EOS tables of the default bundles (`flexmesa data fetch`).
+
 ## Recipe
 
 Capture (the pristine tree is never modified; the overlay holds real copies of `star/`, `lib/` and `include/` and links to the rest):

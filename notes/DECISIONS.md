@@ -85,6 +85,7 @@ Scope and the `v0.1.0` definition are in [`SCOPE.md`](SCOPE.md). Work is tracked
 | 68 | `&star_job::mesa_dir` Is an Installation-Location Key, Stored but Not Used to Resolve Data (`#548`) | In force | below |
 | 69 | Per-Case Budgets, the `passes` Preset and the Early Divergence Stop in the History Harness (`#554`) | In force | below |
 | 70 | A Passing Case Takes Exactly MESA's Step Count in Every Stage, and E2E Work Is Triaged by Run Time (`#546`, `#554`) | In force | below |
+| 71 | Large Oracle Bundles Are Opt-In (`#552`) | In force | below |
 | 73 | Train Campaigns Run on GitHub Actions at 1,500 s per Case, with Step Counts Enforced (`#546`, `#576`) | In force | below |
 
 ## Pre-audit decisions still in force
@@ -943,6 +944,16 @@ The text of these four entries predates the audit of 2026-11-16. The decisions s
   - *History tolerances alone*: they allow passes whose step count differs from MESA, hiding departures.
   - *A step-count tolerance*: any difference already means a departure.
   - *Working cases in table order*: long cases cost up to 85 minutes of MESA time per run and slow every loop.
+
+## DECISIONS #71: Large Oracle Bundles Are Opt-In (`#552`)
+
+- **Date**: 2026-11-26
+- **Decision**: A release bundle declared in `bundles.toml` with `on_demand = true` is never fetched by `flexmesa data fetch` or `--include-test-inputs`, and is not required by `flexmesa data verify` or `flexmesa data status` to report a complete install. `flexmesa data fetch --bundle NAME` and `flexmesa data verify --bundle NAME` (repeatable) act on exactly the named bundles; an unknown name is an error. `status` lists an on-demand bundle as optional and says whether it is present, and a default `verify` accepts its files if installed. The first such bundle is `mesa_replay` (`mesa-replay-v1`, record/replay oracles; 664 MB compressed, 4.7 GB unpacked). No test depends on an on-demand bundle: CI exercises the replay path with the committed 0.57 MB sample.
+- **Why**: CI and every new checkout run `flexmesa data fetch --include-test-inputs`. Adding 4.7 GB there would slow every job and exhaust cache and disk budgets for data that only a person localizing a divergence needs. The bundle still gets what `DECISIONS #67` asks of oracle data: a pinned archive `SHA-256`, a per-file manifest and a stamp.
+- **Alternatives Rejected**:
+  - *Declare it as an ordinary `test_only` bundle*: it would be downloaded by every CI job and `--include-test-inputs` run.
+  - *Keep it undeclared and local only*: no integrity check, no provenance, and no way for another machine to reproduce a replay result.
+  - *Split into small and large halves*: the sample already covers CI, and two bundles would double the bookkeeping.
 
 ## DECISIONS #73: Train Campaigns Run on GitHub Actions at 1,500 s per Case, with Step Counts Enforced (`#546`, `#576`)
 

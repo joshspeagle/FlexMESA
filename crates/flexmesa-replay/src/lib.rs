@@ -23,6 +23,12 @@
 //! MESA capture with the same records written by `FlexMESA`'s own tap
 //! (`flexmesa-star`, `FLEXMESA_REPLAY_TAP`), call by call.
 //!
+//! The full captures (first two models of 18 star cases) are the opt-in data
+//! bundle `mesa_replay`: `flexmesa data fetch --bundle mesa_replay` unpacks
+//! `mesa_replay/star/<case>.replay` under the data directory (it is not part
+//! of `--include-test-inputs`: 4.7 GB unpacked). Replaying `EOS` records reads
+//! the EOS tables of the default `flexmesa data fetch`.
+//!
 //! The comparison is strict-mode only: replay runs under the default
 //! numerics mode of `flexmesa-math`.
 

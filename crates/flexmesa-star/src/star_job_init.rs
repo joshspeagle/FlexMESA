@@ -507,10 +507,41 @@ fn carry_extras_hooks(
     }
 }
 
+/// As [`init_or_update_model_from_bundle`], for a model the caller has just
+/// read from a ZAMS catalog (a binary component seed). Upstream loads such a
+/// model through `model_builder`'s `do_load_zams_model` route, which ends in
+/// `finish_load_model` before the `&star_job` controls apply
+/// (`star/private/init.f90:1007-1016, 1046`), unlike a model carried over
+/// from an earlier stage.
+///
+/// # Errors
+/// As [`init_or_update_model_from_bundle`].
+pub fn init_model_from_zams_seed(
+    bundle: &InlistBundle,
+    seed: StarModel,
+    extras: &mut dyn StarExtras,
+) -> Result<StarModel, StarError> {
+    match init_or_update_model_impl(bundle, Some(seed), extras, true)? {
+        InitModelOutcome::Model(m) => Ok(*m),
+        InitModelOutcome::Terminate(reason) => Err(StarError::InvalidInput(
+            format!("stage terminated during initialization: {reason}"),
+        )),
+    }
+}
+
 pub(crate) fn init_or_update_model_from_bundle_outcome(
+    bundle: &InlistBundle,
+    existing_model: Option<StarModel>,
+    extras: &mut dyn StarExtras,
+) -> Result<InitModelOutcome, StarError> {
+    init_or_update_model_impl(bundle, existing_model, extras, false)
+}
+
+fn init_or_update_model_impl(
     bundle: &InlistBundle,
     mut existing_model: Option<StarModel>,
     extras: &mut dyn StarExtras,
+    existing_is_zams_seed: bool,
 ) -> Result<InitModelOutcome, StarError> {
     let _net_dir_guard = NetSearchDirGuard::new(&bundle.case_dir);
     // `extras_controls` runs after `star_setup` reads the inlists and before
@@ -569,6 +600,8 @@ pub(crate) fn init_or_update_model_from_bundle_outcome(
     let mut did_create_pre_ms = false;
     let mut did_create_initial_model = false;
     let mut did_load_saved_model = false;
+    let mut did_load_zams_model =
+        existing_is_zams_seed && existing_model.is_some();
     // Upstream's `restart` is a photo restart only
     // (`star/job/run_star_support.f90:433-442`). A model carried over from an
     // earlier `./rn` stage stands for the `.mod` file that stage saved and
@@ -632,6 +665,7 @@ pub(crate) fn init_or_update_model_from_bundle_outcome(
                 controls.initial_y
             )));
         }
+        did_load_zams_model = true;
         load_zams_model(controls.clone(), job.clone())?
     };
 
@@ -707,7 +741,11 @@ pub(crate) fn init_or_update_model_from_bundle_outcome(
     // (`star/job/run_star_support.f90:1912-1916`); its `set_vars` sets the
     // `mlt_D` that `set_new_abundances` reads in `get_test_lgT`
     // (`star/private/adjust_xyz.f90:617-626`).
-    if did_load_saved_model {
+    // `model_builder` ends the `do_load_zams_model` route in the same
+    // `finish_load_model` (`star/private/init.f90:1007-1016, 1046`), so
+    // `do_star_job_controls_after` (e.g. `star_surface_omega_crit`) sees the
+    // `set_vars` state of the loaded ZAMS model.
+    if did_load_saved_model || did_load_zams_model {
         finish_load_model(&mut model, extras)?;
     }
 

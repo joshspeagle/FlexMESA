@@ -1,0 +1,15 @@
+[package]
+name = "flexmesa-replay"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "Replays routine calls captured from an instrumented MESA 26.4.1 through the FlexMESA ports"
+
+[dependencies]
+flexmesa-autodiff = { path = "../flexmesa-autodiff" }
+flexmesa-turb = { path = "../flexmesa-turb" }
+
+[lints]
+workspace = true

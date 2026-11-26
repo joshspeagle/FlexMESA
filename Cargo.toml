@@ -28,6 +28,7 @@ members = [
   "crates/flexmesa-astero",
   "crates/flexmesa-gyre",
   "crates/flexmesa-adipls",
+  "crates/flexmesa-replay",
   "crates/flexmesa-bench",
   "crates/flexmesa-py",
 ]

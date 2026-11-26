@@ -492,6 +492,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "flexmesa-replay"
+version = "0.1.0"
+dependencies = [
+ "flexmesa-autodiff",
+ "flexmesa-turb",
+]
+
+[[package]]
 name = "flexmesa-schema"
 version = "0.1.0"
 dependencies = [

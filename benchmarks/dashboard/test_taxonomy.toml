@@ -1,0 +1,1912 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# W4 test-suite classification & per-routine MESA 26.4.1 oracle map.
+# Schema enforced by `flexmesa.testing.test_taxonomy` (#563).
+
+[metadata]
+schema_version = 1
+
+[[tests]]
+path = "crates/flexmesa-adipls/tests/adipls_a0_captures_parity_test.rs"
+language = "rust"
+module = "adipls"
+kind = "oracle"
+provenance = "MESA 26.4.1 Package A0 ADIPLS captures archive (FLEXMESA_ADIPLS_CAPTURES; 0-ULP when present, #171)"
+
+[[tests]]
+path = "crates/flexmesa-adipls/tests/adipls_a1_ci_test.rs"
+language = "rust"
+module = "adipls"
+kind = "invariant"
+
+[[tests]]
+path = "crates/flexmesa-adipls/tests/adipls_a2a_ci_test.rs"
+language = "rust"
+module = "adipls"
+kind = "invariant"
+
+[[tests]]
+path = "crates/flexmesa-adipls/tests/adipls_a2a_taps_parity_test.rs"
+language = "rust"
+module = "adipls"
+kind = "oracle"
+provenance = "MESA 26.4.1 Package A0 ADIPLS boundary tap vectors (FLEXMESA_ADIPLS_CAPTURES; #171)"
+
+[[tests]]
+path = "crates/flexmesa-adipls/tests/adipls_a2b_ci_test.rs"
+language = "rust"
+module = "adipls"
+kind = "invariant"
+
+[[tests]]
+path = "crates/flexmesa-adipls/tests/adipls_a2b_modes_parity_test.rs"
+language = "rust"
+module = "adipls"
+kind = "oracle"
+provenance = "benchmarks/fortran_mesa/adipls_oracles/data/*.taps.tsv (MESA 26.4.1 Package A2b, #171)"
+
+[[tests]]
+path = "crates/flexmesa-adipls/tests/adipls_core_171_parity_test.rs"
+language = "rust"
+module = "adipls"
+kind = "invariant"
+mislabel_reason = "#563: W4 audit found no real-MESA 26.4.1 oracle comparison; rename away from restricted vocabulary under W4 (#563)"
+
+[[tests]]
+path = "crates/flexmesa-astero/tests/adipls_a3_test.rs"
+language = "rust"
+module = "astero"
+kind = "oracle"
+provenance = "MESA 26.4.1 Package A0 ADIPLS captures (FLEXMESA_ADIPLS_CAPTURES a0tap/modes.tsv) & AMDL oracle (#171)"
+
+[[tests]]
+path = "crates/flexmesa-astero/tests/astero_suite.rs"
+language = "rust"
+module = "astero"
+kind = "invariant"
+
+[[tests]]
+path = "crates/flexmesa-astero/tests/chi2_delta_nu_511_test.rs"
+language = "rust"
+module = "astero"
+kind = "invariant"
+
+[[tests]]
+path = "crates/flexmesa-astero/tests/controls_162_parity_test.rs"
+language = "rust"
+module = "astero"
+kind = "invariant"
+mislabel_reason = "#563: W4 audit found no real-MESA 26.4.1 oracle comparison; rename away from restricted vocabulary under W4 (#563)"
+
+[[tests]]
+path = "crates/flexmesa-astero/tests/loud_controls_test.rs"
+language = "rust"
+module = "astero"
+kind = "invariant"
+
+[[tests]]
+path = "crates/flexmesa-astero/tests/parity_162_w2_test.rs"
+language = "rust"
+module = "astero"
+kind = "invariant"
+mislabel_reason = "#563: W4 audit found no real-MESA 26.4.1 oracle comparison; rename away from restricted vocabulary under W4 (#563)"
+
+[[tests]]
+path = "crates/flexmesa-atm/tests/atm_161_parity_test.rs"
+language = "rust"
+module = "atm"
+kind = "oracle"
+provenance = "MESA 26.4.1 atm/test/test_output and atm_get/atm_eval_T_tau hex oracle vectors (#161)"
+
+[[tests]]
+path = "crates/flexmesa-atm/tests/atm_golden_test.rs"
+language = "rust"
+module = "atm"
+kind = "oracle"
+provenance = "Upstream MESA 26.4.1 atm/test/test_output pinned atmosphere tables & T(tau) values"
+
+[[tests]]
+path = "crates/flexmesa-atm/tests/atm_module_hex_test.rs"
+language = "rust"
+module = "atm"
+kind = "oracle"
+provenance = "mesa-module-hex-v1.tar.zst bundle & benchmarks/module_hex atm IEEE-754 hex oracles (#144, #165)"
+
+[[tests]]
+path = "crates/flexmesa-atm/tests/atm_numerics_mode_test.rs"
+language = "rust"
+module = "atm"
+kind = "invariant"
+
+[[tests]]
+path = "crates/flexmesa-atm/tests/mesa_26_4_1_oracles_test.rs"
+language = "rust"
+module = "atm"
+kind = "oracle"
+provenance = "benchmarks/fortran_mesa/atm_oracles/mesa_26_4_1_atm_oracles.tsv (libatm.a + CRMATH, #161)"
+
+[[tests]]
+path = "crates/flexmesa-autodiff/tests/autodiff_tests.rs"
+language = "rust"
+module = "auto_diff"
+kind = "invariant"
+
+[[tests]]
+path = "crates/flexmesa-autodiff/tests/golden_suite_tests.rs"
+language = "rust"
+module = "auto_diff"
+kind = "oracle"
+provenance = "Upstream MESA 26.4.1 auto_diff/test/test_output scalar/multi-order dual vectors"
+
+[[tests]]
+path = "crates/flexmesa-autodiff/tests/order3_tests.rs"
+language = "rust"
+module = "auto_diff"
+kind = "invariant"
+
+[[tests]]
+path = "crates/flexmesa-bench/tests/bench_tests.rs"
+language = "rust"
+module = "tooling"
+kind = "invariant"
+
+[[tests]]
+path = "crates/flexmesa-binary/tests/binary_160_mesa_parity_test.rs"
+language = "rust"
+module = "binary"
+kind = "oracle"
+provenance = "MESA 26.4.1 binary/test/test_output & binary/private IEEE-754 hex/decimal captures (#160)"
+
+[[tests]]
+path = "crates/flexmesa-binary/tests/binary_530_parity_test.rs"
+language = "rust"
+module = "binary"
+kind = "invariant"
+mislabel_reason = "#563: W4 audit found no real-MESA 26.4.1 oracle comparison; rename away from restricted vocabulary under W4 (#563)"
+
+[[tests]]
+path = "crates/flexmesa-binary/tests/binary_core_160_parity_test.rs"
+language = "rust"
+module = "binary"
+kind = "invariant"
+mislabel_reason = "#563: W4 audit found no real-MESA 26.4.1 oracle comparison; rename away from restricted vocabulary under W4 (#563)"
+
+[[tests]]
+path = "crates/flexmesa-binary/tests/binary_counters_test.rs"
+language = "rust"
+module = "binary"
+kind = "invariant"
+
+[[tests]]
+path = "crates/flexmesa-binary/tests/binary_determinism_test.rs"
+language = "rust"
+module = "binary"
+kind = "invariant"
+
+[[tests]]
+path = "crates/flexmesa-binary/tests/binary_history_numerics_mode_test.rs"
+language = "rust"
+module = "binary"
+kind = "invariant"
+
+[[tests]]
+path = "crates/flexmesa-binary/tests/binary_logs_roundtrip_test.rs"
+language = "rust"
+module = "binary"
+kind = "invariant"
+
+[[tests]]
+path = "crates/flexmesa-binary/tests/binary_rlof_mesa_state_test.rs"
+language = "rust"
+module = "binary"
+kind = "oracle"
+provenance = "benchmarks/fortran_mesa/binary_rlof_fixture/instrumented/{zams_model0,first_call_state}_26_4_1.tsv (#360, #363)"
+
+[[tests]]
+path = "crates/flexmesa-binary/tests/binary_rlof_stepdump_test.rs"
+language = "rust"
+module = "binary"
+kind = "oracle"
+provenance = "benchmarks/fortran_mesa/binary_rlof_fixture/instrumented/{first_call_state,solver_calls}_26_4_1.tsv (#363, #372)"
+
+[[tests]]
+path = "crates/flexmesa-binary/tests/checkpoint_child_process_restart_test.rs"
+language = "rust"
+module = "binary"
+kind = "invariant"
+
+[[tests]]
+path = "crates/flexmesa-binary/tests/loud_controls_test.rs"
+language = "rust"
+module = "binary"
+kind = "invariant"
+
+[[tests]]
+path = "crates/flexmesa-binary/tests/phase5c_lifecycle_extras.rs"
+language = "rust"
+module = "binary"
+kind = "invariant"
+
+[[tests]]
+path = "crates/flexmesa-binary/tests/star_plus_point_mass_parity_test.rs"
+language = "rust"
+module = "binary"
+kind = "invariant"
+mislabel_reason = "#446/#563: filename uses parity and includes inline decimal binary_history model-100 constants alongside Ritter/Kolb/Arras analytical checks without a committed TSV, hex capture, or test_output loader"
+
+[[tests]]
+path = "crates/flexmesa-binary/tests/tier5_coupled_suite.rs"
+language = "rust"
+module = "binary"
+kind = "invariant"
+
+[[tests]]
+path = "crates/flexmesa-chem/tests/chem_161_numerics_mode_test.rs"
+language = "rust"
+module = "chem"
+kind = "invariant"
+
+[[tests]]
+path = "crates/flexmesa-chem/tests/chem_161_parity_test.rs"
+language = "rust"
+module = "chem"
+kind = "oracle"
+provenance = "MESA 26.4.1 chem/test/test_output & nuclide table IEEE-754 hex oracles (#161)"
+
+[[tests]]
+path = "crates/flexmesa-chem/tests/chem_module_hex_test.rs"
+language = "rust"
+module = "chem"
+kind = "oracle"
+provenance = "mesa-module-hex-v1.tar.zst bundle (MESA 26.4.1 chem module IEEE-754 hex outputs)"
+
+[[tests]]
+path = "crates/flexmesa-colors/tests/colors_26_4_1_parity_test.rs"
+language = "rust"
+module = "colors"
+kind = "oracle"
+provenance = "Upstream MESA 26.4.1 colors/test/test_output & colors/test/src/test_colors.f90 reference cases (#161)"
+
+[[tests]]
+path = "crates/flexmesa-colors/tests/colors_hex_test.rs"
+language = "rust"
+module = "colors"
+kind = "oracle"
+provenance = "Upstream MESA 26.4.1 colors/test/src/test_colors.f90 eval_colors & 234 SED bin IEEE-754 hex outputs (DECISIONS #23)"
+
+[[tests]]
+path = "crates/flexmesa-const/tests/const_tests.rs"
+language = "rust"
+module = "const"
+kind = "oracle"
+provenance = "Upstream MESA 26.4.1 const/test/test_output pinned double-precision constants"
+routines = [
+  "const/public/const_def.f90::do_const_init",
+  "const/public/const_lib.f90::const_init",
+]
+
+[[tests]]
+path = "crates/flexmesa-crlibm-sys/tests/vendored_hashes.rs"
+language = "rust"
+module = "math"
+kind = "invariant"
+
+[[tests]]
+path = "crates/flexmesa-data/tests/data_tests.rs"
+language = "rust"
+module = "utils"
+kind = "invariant"
+
+[[tests]]
+path = "crates/flexmesa-eos/tests/eos_blend_helm_161_parity_test.rs"
+language = "rust"
+module = "eos"
+kind = "invariant"
+mislabel_reason = "#563: W4 audit found no real-MESA 26.4.1 oracle comparison; rename away from restricted vocabulary under W4 (#563)"
+
+[[tests]]
+path = "crates/flexmesa-eos/tests/eos_dxa_partials_test.rs"
+language = "rust"
+module = "eos"
+kind = "invariant"
+
+[[tests]]
+path = "crates/flexmesa-eos/tests/eos_module_hex_test.rs"
+language = "rust"
+module = "eos"
+kind = "oracle"
+provenance = "mesa-module-hex-v1.tar.zst bundle (MESA 26.4.1 eos module IEEE-754 hex outputs)"
+
+[[tests]]
+path = "crates/flexmesa-eos/tests/eos_pc_skye_161_parity_test.rs"
+language = "rust"
+module = "eos"
+kind = "invariant"
+mislabel_reason = "#563: W4 audit found no real-MESA 26.4.1 oracle comparison; rename away from restricted vocabulary under W4 (#563)"
+
+[[tests]]
+path = "crates/flexmesa-eos/tests/excor7_data_oracle_test.rs"
+language = "rust"
+module = "eos"
+kind = "oracle"
+provenance = "benchmarks/fortran_mesa/excor7_oracles/excor7_26_4_1_checksum.tsv (MESA 26.4.1 EXCOR7.data SHA-256 & values, #161)"
+
+[[tests]]
+path = "crates/flexmesa-eos/tests/mesa_26_4_1_component_oracles_test.rs"
+language = "rust"
+module = "eos"
+kind = "oracle"
+provenance = "benchmarks/fortran_mesa/eos_oracles/mesa_26_4_1_eos_oracles.tsv (libeos.a HELM/PC/Skye/blend, #161)"
+
+[[tests]]
+path = "crates/flexmesa-eos/tests/raw_slices_fit_finite_test.rs"
+language = "rust"
+module = "eos"
+kind = "invariant"
+
+[[tests]]
+path = "crates/flexmesa-eos/tests/runtime_cache_numerics_mode_test.rs"
+language = "rust"
+module = "eos"
+kind = "invariant"
+
+[[tests]]
+path = "crates/flexmesa-eos/tests/wave3a1_golden_tests.rs"
+language = "rust"
+module = "eos"
+kind = "oracle"
+provenance = "benchmarks/fortran_mesa/eos_oracles/mesa_26_4_1_eos_oracles.tsv & eos/test/test_output (do_test_eos_blend, Wave 3a.1)"
+
+[[tests]]
+path = "crates/flexmesa-eos/tests/wave3a2_helm_regimes_tests.rs"
+language = "rust"
+module = "eos"
+kind = "oracle"
+provenance = "benchmarks/fortran_mesa/eos_oracles/mesa_26_4_1_eos_oracles.tsv (HELM T/rho regimes)"
+
+[[tests]]
+path = "crates/flexmesa-eos/tests/wave3a2_helm_tests.rs"
+language = "rust"
+module = "eos"
+kind = "oracle"
+provenance = "benchmarks/fortran_mesa/eos_oracles/mesa_26_4_1_eos_oracles.tsv (HELM core points)"
+
+[[tests]]
+path = "crates/flexmesa-eos/tests/wave3a3_pc_solid_tests.rs"
+language = "rust"
+module = "eos"
+kind = "oracle"
+provenance = "benchmarks/fortran_mesa/eos_oracles/mesa_26_4_1_eos_oracles.tsv (PC solid/melting)"
+
+[[tests]]
+path = "crates/flexmesa-eos/tests/wave3a3_pc_tests.rs"
+language = "rust"
+module = "eos"
+kind = "oracle"
+provenance = "benchmarks/fortran_mesa/eos_oracles/mesa_26_4_1_eos_oracles.tsv (PC liquid/mix)"
+
+[[tests]]
+path = "crates/flexmesa-eos/tests/wave3a3_skye_inverse_tests.rs"
+language = "rust"
+module = "eos"
+kind = "oracle"
+provenance = "benchmarks/fortran_mesa/eos_oracles/mesa_26_4_1_eos_oracles.tsv (Skye & inverse solvers)"
+
+[[tests]]
+path = "crates/flexmesa-eos/tests/wave3b1_full_tables_tests.rs"
+language = "rust"
+module = "eos"
+kind = "invariant"
+
+[[tests]]
+path = "crates/flexmesa-eos/tests/wave3b1_golden_tests.rs"
+language = "rust"
+module = "eos"
+kind = "oracle"
+provenance = "tests/fixtures/golden/eos/test_output.txt (MESA 26.4.1 OPAL/SCVH/FreeEOS/CMS)"
+
+[[tests]]
+path = "crates/flexmesa-gyre/tests/g1_vectors.rs"
+language = "rust"
+module = "gyre"
+kind = "oracle"
+provenance = "crates/flexmesa-gyre/tests/data/mesa_26_4_1_gyre_g1_vectors.tsv & benchmarks/fortran_mesa/gyre_g1_vectors/ (#170)"
+
+[[tests]]
+path = "crates/flexmesa-gyre/tests/g2_vectors.rs"
+language = "rust"
+module = "gyre"
+kind = "oracle"
+provenance = "crates/flexmesa-gyre/tests/data/mesa_26_4_1_gyre_g2_vectors.tsv & benchmarks/fortran_mesa/gyre_g2_vectors/ (#170)"
+
+[[tests]]
+path = "crates/flexmesa-gyre/tests/g3_astero_gyre.rs"
+language = "rust"
+module = "gyre"
+kind = "oracle"
+provenance = "benchmarks/fortran_mesa/gyre_oracles/data/astero__* (MESA 26.4.1 GYRE radial adiabatic, #170)"
+
+[[tests]]
+path = "crates/flexmesa-gyre/tests/g4_gyre_in_mesa_ms.rs"
+language = "rust"
+module = "gyre"
+kind = "oracle"
+provenance = "benchmarks/fortran_mesa/gyre_oracles/data/star__gyre_in_mesa_ms__* (MESA 26.4.1 nonadiabatic, #170)"
+
+[[tests]]
+path = "crates/flexmesa-gyre/tests/g4_zlapack_vectors.rs"
+language = "rust"
+module = "gyre"
+kind = "oracle"
+provenance = "crates/flexmesa-gyre/tests/data/mesa_26_4_1_gyre_g4_vectors.tsv & benchmarks/fortran_mesa/gyre_oracles/data (#170)"
+
+[[tests]]
+path = "crates/flexmesa-gyre/tests/g5_eig_vectors.rs"
+language = "rust"
+module = "gyre"
+kind = "oracle"
+provenance = "crates/flexmesa-gyre/tests/data/mesa_26_4_1_gyre_g5_eig_vectors.tsv & benchmarks/fortran_mesa/gyre_oracles/ (#170)"
+
+[[tests]]
+path = "crates/flexmesa-gyre/tests/g5_gyre_in_mesa.rs"
+language = "rust"
+module = "gyre"
+kind = "oracle"
+provenance = "benchmarks/fortran_mesa/gyre_oracles/data/star__gyre_in_mesa_* (6 MESA 26.4.1 cases, #170)"
+
+[[tests]]
+path = "crates/flexmesa-gyre/tests/gyre_core_170_parity_test.rs"
+language = "rust"
+module = "gyre"
+kind = "invariant"
+mislabel_reason = "#563: W4 audit found no real-MESA 26.4.1 oracle comparison; rename away from restricted vocabulary under W4 (#563)"
+
+[[tests]]
+path = "crates/flexmesa-interp1d/tests/interp1d_161_parity_test.rs"
+language = "rust"
+module = "interp_1d"
+kind = "oracle"
+provenance = "MESA 26.4.1 interp_1d IEEE-754 hex oracles & interp_1d/test/test_output (#161)"
+
+[[tests]]
+path = "crates/flexmesa-interp1d/tests/interp1d_module_hex_test.rs"
+language = "rust"
+module = "interp_1d"
+kind = "oracle"
+provenance = "mesa-module-hex-v1.tar.zst bundle (MESA 26.4.1 interp_1d IEEE-754 hex outputs)"
+
+[[tests]]
+path = "crates/flexmesa-interp1d/tests/interp1d_tests.rs"
+language = "rust"
+module = "interp_1d"
+kind = "oracle"
+provenance = "Upstream MESA 26.4.1 interp_1d/test/test_output pinned interpolants & derivatives"
+
+[[tests]]
+path = "crates/flexmesa-interp2d/tests/interp2d_161_parity_test.rs"
+language = "rust"
+module = "interp_2d"
+kind = "oracle"
+provenance = "MESA 26.4.1 interp_2d/test/test_output IEEE-754 hex oracles (#161)"
+
+[[tests]]
+path = "crates/flexmesa-interp2d/tests/interp2d_module_hex_test.rs"
+language = "rust"
+module = "interp_2d"
+kind = "oracle"
+provenance = "mesa-module-hex-v1.tar.zst bundle (MESA 26.4.1 interp_2d IEEE-754 hex outputs)"
+routines = [
+  "interp_2d/private/bipm_db.f90::do_evbipm_db",
+  "interp_2d/private/bipm_db.f90::do_mkbipm_db",
+]
+
+[[tests]]
+path = "crates/flexmesa-interp2d/tests/interp2d_tests.rs"
+language = "rust"
+module = "interp_2d"
+kind = "oracle"
+provenance = "Upstream MESA 26.4.1 interp_2d/test/test_output (test2D_db & test_akima_db)"
+routines = [
+  "interp_2d/private/bipm_db.f90::do_evbipm_db",
+  "interp_2d/private/bipm_db.f90::do_mkbipm_db",
+]
+
+[[tests]]
+path = "crates/flexmesa-ionization/tests/fe56_he4_hex_test.rs"
+language = "rust"
+module = "ionization"
+kind = "oracle"
+provenance = "Upstream MESA 26.4.1 ionization/test/src/test_ionization.f90 & ionization/data/ionization_data/z_fe56_he4.data bit-pattern oracle (#413)"
+
+[[tests]]
+path = "crates/flexmesa-ionization/tests/ion_161_numerics_mode_test.rs"
+language = "rust"
+module = "ionization"
+kind = "invariant"
+
+[[tests]]
+path = "crates/flexmesa-ionization/tests/ion_cache_numerics_mode_test.rs"
+language = "rust"
+module = "ionization"
+kind = "invariant"
+
+[[tests]]
+path = "crates/flexmesa-kap/tests/kap_161_end_to_end_parity_test.rs"
+language = "rust"
+module = "kap"
+kind = "oracle"
+provenance = "MESA 26.4.1 kap/private/kap_eval.f90 & kap/private/condint.f90 kap_get end-to-end IEEE-754 hex oracles (#161)"
+
+[[tests]]
+path = "crates/flexmesa-kap/tests/kap_161_parity_test.rs"
+language = "rust"
+module = "kap"
+kind = "oracle"
+provenance = "MESA 26.4.1 kap/private/kap_eval.f90 & kap/private/kap_eval_co.f90 radiative/conductive/compton IEEE-754 hex oracles (#161)"
+
+[[tests]]
+path = "crates/flexmesa-kap/tests/kap_cache_numerics_mode_test.rs"
+language = "rust"
+module = "kap"
+kind = "invariant"
+
+[[tests]]
+path = "crates/flexmesa-kap/tests/kap_golden_test.rs"
+language = "rust"
+module = "kap"
+kind = "oracle"
+provenance = "Upstream MESA 26.4.1 kap/test/test_output & kap/private/kap_eval.f90 pinned opacity outputs"
+
+[[tests]]
+path = "crates/flexmesa-kap/tests/kap_module_hex_test.rs"
+language = "rust"
+module = "kap"
+kind = "oracle"
+provenance = "mesa-module-hex-v1.tar.zst bundle (MESA 26.4.1 kap IEEE-754 hex outputs)"
+
+[[tests]]
+path = "crates/flexmesa-math/tests/math_tests.rs"
+language = "rust"
+module = "math"
+kind = "oracle"
+provenance = "Upstream MESA 26.4.1 math/test/test_output.INTRINSIC pinned 33 function outputs"
+
+[[tests]]
+path = "crates/flexmesa-math/tests/mesa_26_4_1_vectors.rs"
+language = "rust"
+module = "math"
+kind = "oracle"
+provenance = "benchmarks/fortran_mesa/math_hex_vectors/mesa_26_4_1_math_vectors.txt (CRMATH IEEE-754 hex)"
+
+[[tests]]
+path = "crates/flexmesa-math/tests/quad_tests.rs"
+language = "rust"
+module = "math"
+kind = "invariant"
+
+[[tests]]
+path = "crates/flexmesa-math/tests/routing_governance.rs"
+language = "rust"
+module = "math"
+kind = "invariant"
+
+[[tests]]
+path = "crates/flexmesa-mtx/tests/block_tests.rs"
+language = "rust"
+module = "mtx"
+kind = "oracle"
+provenance = "Upstream MESA 26.4.1 mtx/test/test_output block_tri_data golden outputs"
+
+[[tests]]
+path = "crates/flexmesa-mtx/tests/eigen_test.rs"
+language = "rust"
+module = "mtx"
+kind = "invariant"
+
+[[tests]]
+path = "crates/flexmesa-mtx/tests/mtx_161_parity_test.rs"
+language = "rust"
+module = "mtx"
+kind = "oracle"
+provenance = "MESA 26.4.1 mtx/test/test_output & LAPACK IEEE-754 hex oracles (#161)"
+
+[[tests]]
+path = "crates/flexmesa-mtx/tests/mtx_module_hex_test.rs"
+language = "rust"
+module = "mtx"
+kind = "oracle"
+provenance = "mesa-module-hex-v1.tar.zst bundle (MESA 26.4.1 mtx IEEE-754 hex outputs)"
+
+[[tests]]
+path = "crates/flexmesa-mtx/tests/mtx_tests.rs"
+language = "rust"
+module = "mtx"
+kind = "oracle"
+provenance = "Upstream MESA 26.4.1 mtx/test/test_output (test_square1, test_square2, banded)"
+
+[[tests]]
+path = "crates/flexmesa-net/tests/case_nets_w1_test.rs"
+language = "rust"
+module = "net"
+kind = "invariant"
+
+[[tests]]
+path = "crates/flexmesa-net/tests/net_537_hb2m_dlnd_test.rs"
+language = "rust"
+module = "net"
+kind = "oracle"
+provenance = "MESA 26.4.1 net/private/net_eval.f90 & star/test_suite/hb_2M d_eps_nuc_dlnd IEEE-754 hex oracle (#537)"
+
+[[tests]]
+path = "crates/flexmesa-net/tests/net_burn_161_parity_test.rs"
+language = "rust"
+module = "net"
+kind = "oracle"
+provenance = "MESA 26.4.1 net/private/net_burn.f90 & net/private/net_eval.f90 burn/net_get IEEE-754 hex oracles (#161)"
+
+[[tests]]
+path = "crates/flexmesa-net/tests/net_ecapture_161_test.rs"
+language = "rust"
+module = "net"
+kind = "oracle"
+provenance = "MESA 26.4.1 rates/private/eval_ecapture.f90 & net/private/net_eval.f90 electron-capture IEEE-754 hex oracles (#161)"
+
+[[tests]]
+path = "crates/flexmesa-net/tests/net_golden_test.rs"
+language = "rust"
+module = "net"
+kind = "oracle"
+provenance = "Upstream MESA 26.4.1 net/test/test_output pinned reaction & burn outputs"
+
+[[tests]]
+path = "crates/flexmesa-net/tests/net_hex_oracle_test.rs"
+language = "rust"
+module = "net"
+kind = "oracle"
+provenance = "benchmarks/fortran_mesa/net_oracles/mesa_26_4_1_net_oracles.tsv (#161)"
+
+[[tests]]
+path = "crates/flexmesa-net/tests/net_jacobian_test.rs"
+language = "rust"
+module = "net"
+kind = "invariant"
+
+[[tests]]
+path = "crates/flexmesa-net/tests/net_module_hex_test.rs"
+language = "rust"
+module = "net"
+kind = "oracle"
+provenance = "mesa-module-hex-v1.tar.zst bundle (MESA 26.4.1 net IEEE-754 hex outputs)"
+
+[[tests]]
+path = "crates/flexmesa-net/tests/special_reactions_test.rs"
+language = "rust"
+module = "net"
+kind = "invariant"
+
+[[tests]]
+path = "crates/flexmesa-neu/tests/mesa_26_4_1_oracles_test.rs"
+language = "rust"
+module = "neu"
+kind = "oracle"
+provenance = "benchmarks/fortran_mesa/neu_oracles/mesa_26_4_1_neu_oracles.tsv (libneu.a + CRMATH, #161)"
+routines = [
+  "neu/private/mod_neu.f90::ifermi12",
+  "neu/private/mod_neu.f90::zfermim12",
+  "neu/public/neu_lib.f90::neu_get",
+]
+
+[[tests]]
+path = "crates/flexmesa-neu/tests/neu_161_parity_test.rs"
+language = "rust"
+module = "neu"
+kind = "invariant"
+mislabel_reason = "#563: W4 audit found no real-MESA 26.4.1 oracle comparison; rename away from restricted vocabulary under W4 (#563)"
+
+[[tests]]
+path = "crates/flexmesa-neu/tests/neu_tests.rs"
+language = "rust"
+module = "neu"
+kind = "oracle"
+provenance = "Upstream MESA 26.4.1 neu/test/test_output pinned neutrino cooling vectors"
+routines = [
+  "neu/private/mod_neu.f90::neutrinos",
+  "neu/public/neu_lib.f90::neu_get",
+]
+
+[[tests]]
+path = "crates/flexmesa-num/tests/interp_num_161_parity_test.rs"
+language = "rust"
+module = "num"
+kind = "oracle"
+provenance = "MESA 26.4.1 num/test/test_output & ODE/root IEEE-754 hex oracles (#161)"
+
+[[tests]]
+path = "crates/flexmesa-num/tests/num_module_hex_test.rs"
+language = "rust"
+module = "num"
+kind = "oracle"
+provenance = "mesa-module-hex-v1.tar.zst bundle (MESA 26.4.1 num IEEE-754 hex outputs)"
+
+[[tests]]
+path = "crates/flexmesa-num/tests/num_tests.rs"
+language = "rust"
+module = "num"
+kind = "oracle"
+provenance = "Upstream MESA 26.4.1 num/test/test_output root-finding & quadrature golden values"
+
+[[tests]]
+path = "crates/flexmesa-num/tests/ode_benchmarks_tests.rs"
+language = "rust"
+module = "num"
+kind = "oracle"
+provenance = "Upstream MESA 26.4.1 num/test/test_output ODE/DAE/PDE stiff problems (vdpol/medakzo/beam)"
+
+[[tests]]
+path = "crates/flexmesa-num/tests/ode_newton_tests.rs"
+language = "rust"
+module = "num"
+kind = "invariant"
+
+[[tests]]
+path = "crates/flexmesa-rates/tests/ecapture_hex_test.rs"
+language = "rust"
+module = "rates"
+kind = "oracle"
+provenance = "MESA 26.4.1 rates/test/src/test_ecapture.f90 & rates/test/src/test_weak.f90 IEEE-754 hex vectors (#161)"
+
+[[tests]]
+path = "crates/flexmesa-rates/tests/mesa_26_4_1_oracles_test.rs"
+language = "rust"
+module = "rates"
+kind = "oracle"
+provenance = "benchmarks/fortran_mesa/rates_oracles/mesa_26_4_1_rates_oracles.tsv (librates.a, #161)"
+
+[[tests]]
+path = "crates/flexmesa-rates/tests/rates_161_parity_test.rs"
+language = "rust"
+module = "rates"
+kind = "oracle"
+provenance = "MESA 26.4.1 rates/private/raw_rates.f90 screen/Suzuki/REACLIB/Coulomb IEEE-754 hex oracles (#161)"
+
+[[tests]]
+path = "crates/flexmesa-rates/tests/rates_golden_test.rs"
+language = "rust"
+module = "rates"
+kind = "oracle"
+provenance = "tests/fixtures/golden/rates/test_output.txt (upstream MESA 26.4.1 rates/test/test_output)"
+
+[[tests]]
+path = "crates/flexmesa-schema/tests/schema_tests.rs"
+language = "rust"
+module = "utils"
+kind = "invariant"
+
+[[tests]]
+path = "crates/flexmesa-star/tests/adjust_mass_set_qs_529_test.rs"
+language = "rust"
+module = "star"
+kind = "invariant"
+
+[[tests]]
+path = "crates/flexmesa-star/tests/approx21_516_parity_test.rs"
+language = "rust"
+module = "star"
+kind = "oracle"
+provenance = "MESA 26.4.1 net/private/net_approx21.f90:1113 & star/test_suite/20M_z2m2_high_rotation IEEE-754 hex captures (#516)"
+
+[[tests]]
+path = "crates/flexmesa-star/tests/atm_irradiated_w1_test.rs"
+language = "rust"
+module = "star"
+kind = "invariant"
+
+[[tests]]
+path = "crates/flexmesa-star/tests/change_net_parity_test.rs"
+language = "rust"
+module = "star"
+kind = "oracle"
+provenance = "MESA 26.4.1 star/private/adjust_xyz.f90:51-629 & star/private/net_eval.f90:822-850 IEEE-754 hex oracle captures (#154)"
+
+[[tests]]
+path = "crates/flexmesa-star/tests/colors_namelist_test.rs"
+language = "rust"
+module = "star"
+kind = "invariant"
+
+[[tests]]
+path = "crates/flexmesa-star/tests/controls_147_star_test.rs"
+language = "rust"
+module = "star"
+kind = "invariant"
+
+[[tests]]
+path = "crates/flexmesa-star/tests/conv_core_cpm_mesh_parity_test.rs"
+language = "rust"
+module = "star"
+kind = "invariant"
+mislabel_reason = "#563: W4 audit found no real-MESA 26.4.1 oracle comparison; rename away from restricted vocabulary under W4 (#563)"
+
+[[tests]]
+path = "crates/flexmesa-star/tests/diffusion_156_parity_test.rs"
+language = "rust"
+module = "star"
+kind = "oracle"
+provenance = "MESA 26.4.1 star/test_suite/wd_cool_0.6M & star/test_suite/wd_diffusion Skye EOS zone IEEE-754 hex oracles (#156)"
+
+[[tests]]
+path = "crates/flexmesa-star/tests/diffusion_phase_sep_156_test.rs"
+language = "rust"
+module = "star"
+kind = "oracle"
+provenance = "benchmarks/fortran_mesa/diffusion_oracles/mesa_26_4_1_diffusion_oracles.tsv (#156)"
+routines = [
+  "star/private/diffusion.f90::do_solve_diffusion",
+  "star/private/diffusion_support.f90::get_matrix_coeffs",
+  "star/private/paquette_coeffs.f90::free_collision_integrals",
+  "star/private/paquette_coeffs.f90::initialise_collision_integrals",
+  "star/private/paquette_coeffs.f90::paquette_coefficients",
+  "star/private/phase_separation.f90::do_phase_separation",
+]
+
+[[tests]]
+path = "crates/flexmesa-star/tests/diffusion_xa_parity_test.rs"
+language = "rust"
+module = "star"
+kind = "oracle"
+provenance = "MESA 26.4.1 star/private/element_diffusion.f90:562 element_diffusion step xa IEEE-754 hex oracles (#156)"
+routines = ["star/private/element_diffusion.f90::do_element_diffusion"]
+
+[[tests]]
+path = "crates/flexmesa-star/tests/energy_accounting_151_test.rs"
+language = "rust"
+module = "star"
+kind = "invariant"
+
+[[tests]]
+path = "crates/flexmesa-star/tests/eos_neu_161_parity_test.rs"
+language = "rust"
+module = "star"
+kind = "oracle"
+provenance = "MESA 26.4.1 eos/private/eosdt_eval.f90 & neu/private/mod_neu.f90 microphysics IEEE-754 hex oracles (#161)"
+routines = [
+  "neu/private/mod_neu.f90::neutrinos",
+  "neu/public/neu_lib.f90::neu_get",
+]
+
+[[tests]]
+path = "crates/flexmesa-star/tests/eos_wd_aux_parity_test.rs"
+language = "rust"
+module = "star"
+kind = "oracle"
+provenance = "MESA 26.4.1 star/test_suite/wd_cool_0.6M & star/test_suite/wd_diffusion eos_wd IEEE-754 hex oracles (#161)"
+
+[[tests]]
+path = "crates/flexmesa-star/tests/eps_mdot_hex_oracle_test.rs"
+language = "rust"
+module = "star"
+kind = "oracle"
+provenance = "benchmarks/fortran_mesa/eps_mdot_oracles/mesa_26_4_1_eps_mdot_oracles.tsv (#151)"
+routines = ["star/private/eps_mdot.f90::calculate_eps_mdot"]
+
+[[tests]]
+path = "crates/flexmesa-star/tests/eps_nuc_aux_parity_test.rs"
+language = "rust"
+module = "star"
+kind = "oracle"
+provenance = "MESA 26.4.1 star/private/net_eval.f90:146-149 & rates/private/rates_initialize.f90:807-810 eps_nuc IEEE-754 hex oracles (#161)"
+
+[[tests]]
+path = "crates/flexmesa-star/tests/equ_he3_parity_test.rs"
+language = "rust"
+module = "star"
+kind = "oracle"
+provenance = "MESA 26.4.1 star/private/net_eval.f90:274 & star/test_suite/1.3M_ms_high_Z equ_he3 dXdt IEEE-754 hex oracles (#161)"
+routines = ["star/private/hydro_chem_eqns.f90::do1_chem_eqns"]
+
+[[tests]]
+path = "crates/flexmesa-star/tests/extras_231_hooks_test.rs"
+language = "rust"
+module = "star"
+kind = "invariant"
+
+[[tests]]
+path = "crates/flexmesa-star/tests/extras_profile_header_test.rs"
+language = "rust"
+module = "star"
+kind = "invariant"
+
+[[tests]]
+path = "crates/flexmesa-star/tests/hist_prof_152_parity_test.rs"
+language = "rust"
+module = "star"
+kind = "invariant"
+mislabel_reason = "#563: W4 audit found no real-MESA 26.4.1 oracle comparison; rename away from restricted vocabulary under W4 (#563)"
+
+[[tests]]
+path = "crates/flexmesa-star/tests/history_columns_w1_test.rs"
+language = "rust"
+module = "star"
+kind = "invariant"
+
+[[tests]]
+path = "crates/flexmesa-star/tests/history_numerics_mode_test.rs"
+language = "rust"
+module = "star"
+kind = "invariant"
+
+[[tests]]
+path = "crates/flexmesa-star/tests/hydro_riem_152_parity_test.rs"
+language = "rust"
+module = "star"
+kind = "invariant"
+mislabel_reason = "#563: W4 audit found no real-MESA 26.4.1 oracle comparison; rename away from restricted vocabulary under W4 (#563)"
+
+[[tests]]
+path = "crates/flexmesa-star/tests/io_controls_299_test.rs"
+language = "rust"
+module = "star"
+kind = "invariant"
+
+[[tests]]
+path = "crates/flexmesa-star/tests/kap_161_parity_test.rs"
+language = "rust"
+module = "star"
+kind = "oracle"
+provenance = "MESA 26.4.1 star/private/kap_support.f90 & star/test_suite/make_brown_dwarf do_kap_for_cell IEEE-754 hex oracles (#161)"
+
+[[tests]]
+path = "crates/flexmesa-star/tests/kap_aux_parity_test.rs"
+language = "rust"
+module = "star"
+kind = "oracle"
+provenance = "MESA 26.4.1 kap/private/kap_eval.f90:345-365 star kap aux IEEE-754 hex oracles (#161)"
+
+[[tests]]
+path = "crates/flexmesa-star/tests/loud_controls_test.rs"
+language = "rust"
+module = "star"
+kind = "invariant"
+
+[[tests]]
+path = "crates/flexmesa-star/tests/mass_mdot_153_parity_test.rs"
+language = "rust"
+module = "star"
+kind = "invariant"
+mislabel_reason = "#563: W4 audit found no real-MESA 26.4.1 oracle comparison; rename away from restricted vocabulary under W4 (#563)"
+
+[[tests]]
+path = "crates/flexmesa-star/tests/mesa_logs_roundtrip_test.rs"
+language = "rust"
+module = "star"
+kind = "oracle"
+provenance = "Verbatim MESA 26.4.1 star/test/LOGS/{history.data,profile*.data,profiles.index} captures (#163)"
+
+[[tests]]
+path = "crates/flexmesa-star/tests/mesh_153_zones_test.rs"
+language = "rust"
+module = "star"
+kind = "invariant"
+
+[[tests]]
+path = "crates/flexmesa-star/tests/mesh_planner_153_test.rs"
+language = "rust"
+module = "star"
+kind = "invariant"
+
+[[tests]]
+path = "crates/flexmesa-star/tests/mesh_qs_381_test.rs"
+language = "rust"
+module = "star"
+kind = "invariant"
+
+[[tests]]
+path = "crates/flexmesa-star/tests/mesh_split_153_parity_test.rs"
+language = "rust"
+module = "star"
+kind = "invariant"
+mislabel_reason = "#563: W4 audit found no real-MESA 26.4.1 oracle comparison; rename away from restricted vocabulary under W4 (#563)"
+
+[[tests]]
+path = "crates/flexmesa-star/tests/micro_161_parity_test.rs"
+language = "rust"
+module = "star"
+kind = "oracle"
+provenance = "MESA 26.4.1 star/private/star_utils.f90:1163-1206 & eos/private/eospt_eval.f90:530 microphysics IEEE-754 hex oracles (#161)"
+routines = ["star/private/neu.f90::do_neu_for_cell"]
+
+[[tests]]
+path = "crates/flexmesa-star/tests/micro_aux_parity_test.rs"
+language = "rust"
+module = "star"
+kind = "oracle"
+provenance = "MESA 26.4.1 star/private/micro.f90 & star/test_suite/make_brown_dwarf Model-1 zone-level IEEE-754 hex oracles (#464)"
+
+[[tests]]
+path = "crates/flexmesa-star/tests/micro_controls_161_test.rs"
+language = "rust"
+module = "star"
+kind = "invariant"
+
+[[tests]]
+path = "crates/flexmesa-star/tests/micro_sbm_161_parity_test.rs"
+language = "rust"
+module = "star"
+kind = "invariant"
+mislabel_reason = "#563: W4 audit found no real-MESA 26.4.1 oracle comparison; rename away from restricted vocabulary under W4 (#563)"
+
+[[tests]]
+path = "crates/flexmesa-star/tests/micro_wiring_161_test.rs"
+language = "rust"
+module = "star"
+kind = "invariant"
+
+[[tests]]
+path = "crates/flexmesa-star/tests/mix_mltpp_157_parity_test.rs"
+language = "rust"
+module = "star"
+kind = "invariant"
+mislabel_reason = "#563: W4 audit found no real-MESA 26.4.1 oracle comparison; rename away from restricted vocabulary under W4 (#563)"
+
+[[tests]]
+path = "crates/flexmesa-star/tests/mixing_boundaries_155_test.rs"
+language = "rust"
+module = "star"
+kind = "invariant"
+
+[[tests]]
+path = "crates/flexmesa-star/tests/mlt_aux_parity_test.rs"
+language = "rust"
+module = "star"
+kind = "oracle"
+provenance = "MESA 26.4.1 star/private/hydro_vars.f90:225,541 & star/private/hydro_rotation.f90:501-543 MLT IEEE-754 hex oracles (#161)"
+routines = ["star/private/turb_info.f90::set_mlt_vars"]
+
+[[tests]]
+path = "crates/flexmesa-star/tests/newton_retry_semantics_152_test.rs"
+language = "rust"
+module = "star"
+kind = "invariant"
+
+[[tests]]
+path = "crates/flexmesa-star/tests/omega_mix_158_test.rs"
+language = "rust"
+module = "star"
+kind = "oracle"
+provenance = "benchmarks/fortran_mesa/omega_mix_oracles/mesa_26_4_1_omega_mix_oracles.tsv (#158)"
+routines = ["star/private/solve_omega_mix.f90::do_solve_omega_mix"]
+
+[[tests]]
+path = "crates/flexmesa-star/tests/other_overshoot_hook_test.rs"
+language = "rust"
+module = "star"
+kind = "invariant"
+
+[[tests]]
+path = "crates/flexmesa-star/tests/overshoot_mix_157_parity_test.rs"
+language = "rust"
+module = "star"
+kind = "invariant"
+mislabel_reason = "#563: W4 audit found no real-MESA 26.4.1 oracle comparison; rename away from restricted vocabulary under W4 (#563)"
+
+[[tests]]
+path = "crates/flexmesa-star/tests/phase5a_hydro_solver_test.rs"
+language = "rust"
+module = "star"
+kind = "invariant"
+
+[[tests]]
+path = "crates/flexmesa-star/tests/phase5a_solver_norms_and_burn_test.rs"
+language = "rust"
+module = "star"
+kind = "invariant"
+
+[[tests]]
+path = "crates/flexmesa-star/tests/phase5b_fidelity2_test.rs"
+language = "rust"
+module = "star"
+kind = "invariant"
+
+[[tests]]
+path = "crates/flexmesa-star/tests/pre_ms_build_422_test.rs"
+language = "rust"
+module = "star"
+kind = "oracle"
+provenance = "MESA 26.4.1 star/private/pre_ms_model.f90:34-288 & star/test_suite/make_zams IEEE-754 hex zone oracle (#422)"
+
+[[tests]]
+path = "crates/flexmesa-star/tests/primary_state_and_micro_cache_test.rs"
+language = "rust"
+module = "star"
+kind = "invariant"
+
+[[tests]]
+path = "crates/flexmesa-star/tests/pulse_export_tap_491_test.rs"
+language = "rust"
+module = "star"
+kind = "oracle"
+provenance = "FLEXMESA_PULSE_TAP_DIR & star/private/pulse_gyre.f90 (MESA 26.4.1 pulse_export_tap captures, #491)"
+
+[[tests]]
+path = "crates/flexmesa-star/tests/pulse_fgong_atm_test.rs"
+language = "rust"
+module = "star"
+kind = "invariant"
+
+[[tests]]
+path = "crates/flexmesa-star/tests/pulse_gyre_data_g3b.rs"
+language = "rust"
+module = "star"
+kind = "oracle"
+provenance = "benchmarks/fortran_mesa/gyre_pulse_data/data/gyre_eval_*.tsv (#170)"
+
+[[tests]]
+path = "crates/flexmesa-star/tests/pulse_rsp2_162_parity_test.rs"
+language = "rust"
+module = "star"
+kind = "invariant"
+mislabel_reason = "#563: W4 audit found no real-MESA 26.4.1 oracle comparison; rename away from restricted vocabulary under W4 (#563)"
+
+[[tests]]
+path = "crates/flexmesa-star/tests/pulse_write_491_test.rs"
+language = "rust"
+module = "star"
+kind = "oracle"
+provenance = "crates/flexmesa-star/tests/data/pulse_fortran_format/fmt_oracle_expected.txt & star/private/pulse_gyre.f90 (#491)"
+
+[[tests]]
+path = "crates/flexmesa-star/tests/relax_154_parity_test.rs"
+language = "rust"
+module = "star"
+kind = "invariant"
+mislabel_reason = "#154/#540/#563: filename uses parity and contains inline decimal profile constants for make_brown_dwarf/15M_dynamo alongside relax/profile invariant tests without a committed hex dump, TSV artifact, or test_output loader"
+
+[[tests]]
+path = "crates/flexmesa-star/tests/relax_comp_parity_test.rs"
+language = "rust"
+module = "star"
+kind = "oracle"
+provenance = "MESA 26.4.1 star/private/adjust_xyz.f90:659-680 & star/private/relax.f90:500 IEEE-754 hex zone oracles (#154)"
+
+[[tests]]
+path = "crates/flexmesa-star/tests/relax_z_y_test.rs"
+language = "rust"
+module = "star"
+kind = "oracle"
+provenance = "MESA 26.4.1 star/private/relax.f90:3536-3873 relax_initial_Z / relax_initial_Y IEEE-754 hex zone oracles (#422)"
+
+[[tests]]
+path = "crates/flexmesa-star/tests/rotation_158_parity_test.rs"
+language = "rust"
+module = "star"
+kind = "invariant"
+mislabel_reason = "#563: W4 audit found no real-MESA 26.4.1 oracle comparison; rename away from restricted vocabulary under W4 (#563)"
+
+[[tests]]
+path = "crates/flexmesa-star/tests/rotmix_oracle_158_test.rs"
+language = "rust"
+module = "star"
+kind = "oracle"
+provenance = "benchmarks/fortran_mesa/rotmix_oracles/mesa_26_4_1_rotmix_20M_model2.txt (#158)"
+routines = ["star/private/mix_info.f90::update_rotation_mixing_info"]
+
+[[tests]]
+path = "crates/flexmesa-star/tests/rsp2_test.rs"
+language = "rust"
+module = "star"
+kind = "invariant"
+
+[[tests]]
+path = "crates/flexmesa-star/tests/rsp_build_lina_test.rs"
+language = "rust"
+module = "star"
+kind = "oracle"
+provenance = "tests/fixtures/golden/rsp/{lina_26_4_1.tsv,rsp_*_init_26_4_1.mod,crossing_5m_26_4_1.tsv} (#5, #141)"
+routines = [
+  "star/private/rsp.f90::build_rsp_model",
+  "star/private/rsp_build.f90::do_rsp_build",
+]
+
+[[tests]]
+path = "crates/flexmesa-star/tests/rsp_crossing_test.rs"
+language = "rust"
+module = "star"
+kind = "oracle"
+provenance = "tests/fixtures/golden/rsp/{crossing_5m_26_4_1.tsv,7B_2nd_crossing_26_4_1.data} (#5, #141)"
+
+[[tests]]
+path = "crates/flexmesa-star/tests/rsp_eqns_162_parity_test.rs"
+language = "rust"
+module = "star"
+kind = "invariant"
+mislabel_reason = "#563: W4 audit found no real-MESA 26.4.1 oracle comparison; rename away from restricted vocabulary under W4 (#563)"
+
+[[tests]]
+path = "crates/flexmesa-star/tests/rsp_hyd_step_test.rs"
+language = "rust"
+module = "star"
+kind = "oracle"
+provenance = "tests/fixtures/golden/rsp/rsp_*_step1_26_4_1.mod (#5, #141)"
+
+[[tests]]
+path = "crates/flexmesa-star/tests/rsp_io_eos_test.rs"
+language = "rust"
+module = "star"
+kind = "oracle"
+provenance = "tests/fixtures/golden/rsp/rsp_*_{cycle0,init_26_4_1,step1_26_4_1}.mod lossless serialization & oracle"
+
+[[tests]]
+path = "crates/flexmesa-star/tests/rsp_parity_test.rs"
+language = "rust"
+module = "star"
+kind = "oracle"
+provenance = "MESA 26.4.1 star/test_suite/rsp_Type_II_Cepheid & star/private/rsp_def.f90:440-449 IEEE-754 hex oracles (#463)"
+routines = [
+  "star/private/rsp_def.f90::copy_results",
+  "star/private/rsp_def.f90::finish_after_build_model",
+  "star/private/rsp_def.f90::set_star_vars",
+  "star/private/rsp_lina.f90::do_LINA",
+]
+
+[[tests]]
+path = "crates/flexmesa-star/tests/solver_rti_152_parity_test.rs"
+language = "rust"
+module = "star"
+kind = "invariant"
+mislabel_reason = "#563: W4 audit found no real-MESA 26.4.1 oracle comparison; rename away from restricted vocabulary under W4 (#563)"
+
+[[tests]]
+path = "crates/flexmesa-star/tests/step_trace_jsonl_test.rs"
+language = "rust"
+module = "star"
+kind = "invariant"
+
+[[tests]]
+path = "crates/flexmesa-star/tests/t8_quick_passes_test.rs"
+language = "rust"
+module = "star"
+kind = "invariant"
+
+[[tests]]
+path = "crates/flexmesa-star/tests/timestep_term_152_parity_test.rs"
+language = "rust"
+module = "star"
+kind = "invariant"
+mislabel_reason = "#563: W4 audit found no real-MESA 26.4.1 oracle comparison; rename away from restricted vocabulary under W4 (#563)"
+
+[[tests]]
+path = "crates/flexmesa-star/tests/turb_155_bd_parity_test.rs"
+language = "rust"
+module = "star"
+kind = "oracle"
+provenance = "MESA 26.4.1 star/private/turb_support.f90:398-430 & turb/private/mlt.f90:170-179 make_brown_dwarf IEEE-754 hex oracles (#155)"
+routines = [
+  "star/private/turb_info.f90::set_mlt_vars",
+  "turb/private/mlt.f90::calc_MLT",
+  "turb/private/semiconvection.f90::calc_semiconvection",
+  "turb/public/turb.f90::set_MLT",
+  "turb/public/turb.f90::set_semiconvection",
+  "turb/public/turb.f90::set_thermohaline",
+]
+
+[[tests]]
+path = "crates/flexmesa-star/tests/tzo_winds_colors_cols_test.rs"
+language = "rust"
+module = "star"
+kind = "invariant"
+
+[[tests]]
+path = "crates/flexmesa-star/tests/wave5_integration_test.rs"
+language = "rust"
+module = "star"
+kind = "invariant"
+
+[[tests]]
+path = "crates/flexmesa-star/tests/winds_159_parity_test.rs"
+language = "rust"
+module = "star"
+kind = "oracle"
+provenance = "MESA 26.4.1 star/private/winds.f90 & star/test_suite/hot_cool_wind IEEE-754 hex oracles (#159)"
+routines = [
+  "star/private/winds.f90::do_set_mdot",
+  "star/private/winds.f90::eval_rlo_wind",
+  "star/private/winds.f90::eval_super_eddington_wind",
+]
+
+[[tests]]
+path = "crates/flexmesa-star/tests/winds_159_v2_parity_test.rs"
+language = "rust"
+module = "star"
+kind = "invariant"
+mislabel_reason = "#563: W4 audit found no real-MESA 26.4.1 oracle comparison; rename away from restricted vocabulary under W4 (#563)"
+
+[[tests]]
+path = "crates/flexmesa-star/tests/winds_mass_stops_159_test.rs"
+language = "rust"
+module = "star"
+kind = "invariant"
+
+[[tests]]
+path = "crates/flexmesa-star/tests/zams_360_test.rs"
+language = "rust"
+module = "star"
+kind = "oracle"
+provenance = "benchmarks/fortran_mesa/zams_1p0_oracle/zams_model0_1p0Msun_26_4_1.tsv (#360)"
+routines = ["star/private/init_model.f90::get_zams_model"]
+
+[[tests]]
+path = "crates/flexmesa-star/tests/zams_io_154_parity_test.rs"
+language = "rust"
+module = "star"
+kind = "invariant"
+mislabel_reason = "#563: W4 audit found no real-MESA 26.4.1 oracle comparison; rename away from restricted vocabulary under W4 (#563)"
+
+[[tests]]
+path = "crates/flexmesa-testing/tests/golden_tests.rs"
+language = "rust"
+module = "tooling"
+kind = "invariant"
+
+[[tests]]
+path = "crates/flexmesa-turb/tests/tdc_hex_oracle_test.rs"
+language = "rust"
+module = "turb"
+kind = "oracle"
+provenance = "benchmarks/fortran_mesa/turb_tdc_oracles/mesa_26_4_1_turb_tdc_oracles.tsv (#161)"
+
+[[tests]]
+path = "crates/flexmesa-turb/tests/turb_161_parity_test.rs"
+language = "rust"
+module = "turb"
+kind = "invariant"
+mislabel_reason = "#563: W4 audit found no real-MESA 26.4.1 oracle comparison; rename away from restricted vocabulary under W4 (#563)"
+
+[[tests]]
+path = "crates/flexmesa-turb/tests/turb_autodiff_and_mixing_tests.rs"
+language = "rust"
+module = "turb"
+kind = "invariant"
+
+[[tests]]
+path = "crates/flexmesa-turb/tests/turb_module_hex_test.rs"
+language = "rust"
+module = "turb"
+kind = "oracle"
+provenance = "mesa-module-hex-v1.tar.zst bundle (MESA 26.4.1 turb module IEEE-754 hex outputs, #434)"
+routines = ["turb/public/turb.f90::set_MLT"]
+
+[[tests]]
+path = "crates/flexmesa-turb/tests/turb_tests.rs"
+language = "rust"
+module = "turb"
+kind = "oracle"
+provenance = "Upstream MESA 26.4.1 turb/test/test_output pinned MLT/TDC values"
+routines = [
+  "turb/private/mlt.f90::calc_MLT",
+  "turb/public/turb.f90::set_MLT",
+]
+
+[[tests]]
+path = "crates/flexmesa-utils/tests/utils_tests.rs"
+language = "rust"
+module = "utils"
+kind = "invariant"
+
+[[tests]]
+path = "tests/test_adjust_mass_385.py"
+language = "python"
+module = "star"
+kind = "oracle"
+provenance = "benchmarks/fortran_mesa/adjust_mass_oracle/adjust_mass_4msun_26_4_1.tsv (#385)"
+
+[[tests]]
+path = "tests/test_astero_empty_set_param.py"
+language = "python"
+module = "astero"
+kind = "invariant"
+
+[[tests]]
+path = "tests/test_astero_plotting_wave5_4.py"
+language = "python"
+module = "astero"
+kind = "invariant"
+
+[[tests]]
+path = "tests/test_astero_search_tracks.py"
+language = "python"
+module = "astero"
+kind = "invariant"
+
+[[tests]]
+path = "tests/test_bench.py"
+language = "python"
+module = "tooling"
+kind = "regression"
+
+[[tests]]
+path = "tests/test_benchmark_provenance.py"
+language = "python"
+module = "tooling"
+kind = "invariant"
+
+[[tests]]
+path = "tests/test_binary_wave5_3.py"
+language = "python"
+module = "binary"
+kind = "oracle"
+provenance = "Upstream MESA 26.4.1 binary/test/test_output (pick_next_timestep_rl & eval_L2_mass_loss_fraction)"
+routines = ["binary/private/binary_disk.f90::eval_L2_mass_loss_fraction"]
+
+[[tests]]
+path = "tests/test_case_extras_batch1.py"
+language = "python"
+module = "star"
+kind = "invariant"
+
+[[tests]]
+path = "tests/test_case_extras_batch2.py"
+language = "python"
+module = "star"
+kind = "invariant"
+
+[[tests]]
+path = "tests/test_case_extras_batch3.py"
+language = "python"
+module = "star"
+kind = "invariant"
+
+[[tests]]
+path = "tests/test_case_extras_batch4.py"
+language = "python"
+module = "star"
+kind = "invariant"
+
+[[tests]]
+path = "tests/test_case_extras_relocation.py"
+language = "python"
+module = "star"
+kind = "invariant"
+
+[[tests]]
+path = "tests/test_case_extras_wave3.py"
+language = "python"
+module = "star"
+kind = "invariant"
+
+[[tests]]
+path = "tests/test_checkpoints_and_counters.py"
+language = "python"
+module = "star"
+kind = "invariant"
+
+[[tests]]
+path = "tests/test_chem.py"
+language = "python"
+module = "chem"
+kind = "oracle"
+provenance = "Upstream MESA 26.4.1 chem/test/test_output pinned nuclide & solar abundance tables"
+
+[[tests]]
+path = "tests/test_ci_merge_baseline.py"
+language = "python"
+module = "tooling"
+kind = "invariant"
+
+[[tests]]
+path = "tests/test_ci_shards.py"
+language = "python"
+module = "tooling"
+kind = "invariant"
+
+[[tests]]
+path = "tests/test_colors.py"
+language = "python"
+module = "colors"
+kind = "oracle"
+provenance = "Upstream MESA 26.4.1 colors/test/test_output pinned 14 SED/BC golden cases"
+
+[[tests]]
+path = "tests/test_constants_utils.py"
+language = "python"
+module = "const"
+kind = "oracle"
+provenance = "Upstream MESA 26.4.1 const/test/test_output & utils/test/test_output pinned outputs"
+routines = [
+  "const/public/const_def.f90::do_const_init",
+  "const/public/const_lib.f90::const_init",
+]
+
+[[tests]]
+path = "tests/test_dashboard.py"
+language = "python"
+module = "tooling"
+kind = "invariant"
+
+[[tests]]
+path = "tests/test_data.py"
+language = "python"
+module = "utils"
+kind = "invariant"
+
+[[tests]]
+path = "tests/test_data_provenance.py"
+language = "python"
+module = "utils"
+kind = "invariant"
+
+[[tests]]
+path = "tests/test_docs_snippets.py"
+language = "python"
+module = "tooling"
+kind = "invariant"
+
+[[tests]]
+path = "tests/test_e2e_0_runner.py"
+language = "python"
+module = "star"
+kind = "invariant"
+
+[[tests]]
+path = "tests/test_e2e_1_tier1.py"
+language = "python"
+module = "star"
+kind = "invariant"
+
+[[tests]]
+path = "tests/test_e2e_2_tier2.py"
+language = "python"
+module = "star"
+kind = "invariant"
+
+[[tests]]
+path = "tests/test_e2e_3_tier3.py"
+language = "python"
+module = "star"
+kind = "invariant"
+
+[[tests]]
+path = "tests/test_e2e_4_tier4.py"
+language = "python"
+module = "star"
+kind = "invariant"
+
+[[tests]]
+path = "tests/test_e2e_5_tier5.py"
+language = "python"
+module = "binary"
+kind = "invariant"
+
+[[tests]]
+path = "tests/test_e2e_fidelity4.py"
+language = "python"
+module = "star"
+kind = "invariant"
+
+[[tests]]
+path = "tests/test_eos_wave3a1.py"
+language = "python"
+module = "eos"
+kind = "oracle"
+provenance = "tests/fixtures/golden/eos/test_output.txt & benchmarks/fortran_mesa/eos_oracles/ (#161)"
+
+[[tests]]
+path = "tests/test_eos_wave3a2.py"
+language = "python"
+module = "eos"
+kind = "oracle"
+provenance = "benchmarks/fortran_mesa/eos_oracles/mesa_26_4_1_eos_oracles.tsv (HELM)"
+
+[[tests]]
+path = "tests/test_eos_wave3a3.py"
+language = "python"
+module = "eos"
+kind = "oracle"
+provenance = "benchmarks/fortran_mesa/eos_oracles/mesa_26_4_1_eos_oracles.tsv (PC/Skye/eosDT_get)"
+
+[[tests]]
+path = "tests/test_eos_wave3b1.py"
+language = "python"
+module = "eos"
+kind = "oracle"
+provenance = "tests/fixtures/golden/eos/test_output.txt & benchmarks/fortran_mesa/eos_oracles/ (4D EOS)"
+
+[[tests]]
+path = "tests/test_evolution_profile.py"
+language = "python"
+module = "tooling"
+kind = "invariant"
+
+[[tests]]
+path = "tests/test_extras_profile_columns.py"
+language = "python"
+module = "star"
+kind = "invariant"
+
+[[tests]]
+path = "tests/test_golden.py"
+language = "python"
+module = "tooling"
+kind = "invariant"
+
+[[tests]]
+path = "tests/test_gyre_mesa_py.py"
+language = "python"
+module = "gyre"
+kind = "invariant"
+
+[[tests]]
+path = "tests/test_harness_campaign_tiers.py"
+language = "python"
+module = "tooling"
+kind = "invariant"
+
+[[tests]]
+path = "tests/test_history_harness.py"
+language = "python"
+module = "tooling"
+kind = "invariant"
+
+[[tests]]
+path = "tests/test_hybrid_bridge.py"
+language = "python"
+module = "tooling"
+kind = "invariant"
+
+[[tests]]
+path = "tests/test_interp_1d.py"
+language = "python"
+module = "interp_1d"
+kind = "oracle"
+provenance = "Upstream MESA 26.4.1 interp_1d/test/test_output pinned values"
+
+[[tests]]
+path = "tests/test_interp_2d.py"
+language = "python"
+module = "interp_2d"
+kind = "oracle"
+provenance = "Upstream MESA 26.4.1 interp_2d/test/test_output pinned values"
+routines = [
+  "interp_2d/private/bipm_db.f90::do_evbipm_db",
+  "interp_2d/private/bipm_db.f90::do_mkbipm_db",
+]
+
+[[tests]]
+path = "tests/test_ionization.py"
+language = "python"
+module = "ionization"
+kind = "oracle"
+provenance = "Upstream MESA 26.4.1 ionization/test/test_output pinned values"
+
+[[tests]]
+path = "tests/test_known_gaps_gate.py"
+language = "python"
+module = "tooling"
+kind = "invariant"
+
+[[tests]]
+path = "tests/test_loud_controls_and_errors.py"
+language = "python"
+module = "star"
+kind = "invariant"
+
+[[tests]]
+path = "tests/test_math_autodiff.py"
+language = "python"
+module = "math"
+kind = "oracle"
+provenance = "Upstream MESA 26.4.1 math/test/test_output.INTRINSIC & auto_diff/test/test_output"
+
+[[tests]]
+path = "tests/test_measure_mesa_spread.py"
+language = "python"
+module = "tooling"
+kind = "invariant"
+
+[[tests]]
+path = "tests/test_mesa_defaults_parity.py"
+language = "python"
+module = "star"
+kind = "oracle"
+provenance = "Upstream MESA 26.4.1 unmodified *.defaults namelist files in mesa_test_inputs (#149)"
+
+[[tests]]
+path = "tests/test_mesa_paper_figures.py"
+language = "python"
+module = "tooling"
+kind = "invariant"
+
+[[tests]]
+path = "tests/test_mesh_planner_153.py"
+language = "python"
+module = "star"
+kind = "invariant"
+
+[[tests]]
+path = "tests/test_module_hex_gate.py"
+language = "python"
+module = "tooling"
+kind = "invariant"
+
+[[tests]]
+path = "tests/test_mtx.py"
+language = "python"
+module = "mtx"
+kind = "oracle"
+provenance = "Upstream MESA 26.4.1 mtx/test/test_output pinned dense/block-tridiagonal outputs"
+
+[[tests]]
+path = "tests/test_neu.py"
+language = "python"
+module = "neu"
+kind = "oracle"
+provenance = "Upstream MESA 26.4.1 neu/test/test_output & benchmarks/fortran_mesa/neu_oracles/"
+routines = [
+  "neu/private/mod_neu.f90::neutrinos",
+  "neu/public/neu_lib.f90::neu_get",
+]
+
+[[tests]]
+path = "tests/test_num.py"
+language = "python"
+module = "num"
+kind = "oracle"
+provenance = "Upstream MESA 26.4.1 num/test/test_output pinned values"
+
+[[tests]]
+path = "tests/test_numerics_mode.py"
+language = "python"
+module = "math"
+kind = "invariant"
+
+[[tests]]
+path = "tests/test_other_overshoot_hook.py"
+language = "python"
+module = "star"
+kind = "invariant"
+
+[[tests]]
+path = "tests/test_phase5a_review.py"
+language = "python"
+module = "star"
+kind = "invariant"
+
+[[tests]]
+path = "tests/test_plotting_compare.py"
+language = "python"
+module = "plotting"
+kind = "invariant"
+
+[[tests]]
+path = "tests/test_plotting_inc2.py"
+language = "python"
+module = "plotting"
+kind = "invariant"
+
+[[tests]]
+path = "tests/test_plotting_inc3.py"
+language = "python"
+module = "plotting"
+kind = "invariant"
+
+[[tests]]
+path = "tests/test_schema.py"
+language = "python"
+module = "utils"
+kind = "invariant"
+
+[[tests]]
+path = "tests/test_smoke.py"
+language = "python"
+module = "tooling"
+kind = "invariant"
+
+[[tests]]
+path = "tests/test_star_wave4_1.py"
+language = "python"
+module = "star"
+kind = "invariant"
+
+[[tests]]
+path = "tests/test_star_wave4_2.py"
+language = "python"
+module = "star"
+kind = "invariant"
+
+[[tests]]
+path = "tests/test_star_wave4_3.py"
+language = "python"
+module = "star"
+kind = "invariant"
+
+[[tests]]
+path = "tests/test_star_wave4_4.py"
+language = "python"
+module = "star"
+kind = "invariant"
+
+[[tests]]
+path = "tests/test_star_wave5_1.py"
+language = "python"
+module = "star"
+kind = "oracle"
+provenance = "benchmarks/fortran_mesa/diffusion_oracles/mesa_26_4_1_diffusion_oracles.tsv (Caplan/Blouin)"
+
+[[tests]]
+path = "tests/test_star_wave5_2.py"
+language = "python"
+module = "star"
+kind = "invariant"
+
+[[tests]]
+path = "tests/test_stepdump_compare.py"
+language = "python"
+module = "tooling"
+kind = "invariant"
+
+[[tests]]
+path = "tests/test_strict_determinism_script.py"
+language = "python"
+module = "tooling"
+kind = "invariant"
+
+[[tests]]
+path = "tests/test_test_taxonomy.py"
+language = "python"
+module = "tooling"
+kind = "invariant"
+
+[[tests]]
+path = "tests/test_turb.py"
+language = "python"
+module = "turb"
+kind = "oracle"
+provenance = "Upstream MESA 26.4.1 turb/test/test_output pinned MLT/TDC values"
+routines = [
+  "turb/private/mlt.f90::calc_MLT",
+  "turb/public/turb.f90::set_MLT",
+]
+
+[[tests]]
+path = "tests/test_turb_autodiff.py"
+language = "python"
+module = "turb"
+kind = "invariant"
+
+[[tests]]
+path = "tests/test_wave4_bench.py"
+language = "python"
+module = "star"
+kind = "oracle"
+provenance = "tests/fixtures/golden/star_test/history.data (MESA 26.4.1 4 Msun ZAMS history) + bench snapshots"
+
+[[tests]]
+path = "tests/test_wave5_bench.py"
+language = "python"
+module = "star"
+kind = "regression"
+
+[[tests]]
+path = "tests/unit/test_kap_wave3b2.py"
+language = "python"
+module = "kap"
+kind = "oracle"
+provenance = "tests/fixtures/golden/kap/test_output.txt (MESA 26.4.1 kap/test/test_output)"
+
+[[tests]]
+path = "tests/unit/test_kap_wave3b2_jax.py"
+language = "python"
+module = "kap"
+kind = "invariant"
+
+[[tests]]
+path = "tests/unit/test_net_atm_wave3b4.py"
+language = "python"
+module = "net"
+kind = "oracle"
+provenance = "benchmarks/fortran_mesa/atm_oracles/mesa_26_4_1_atm_oracles.tsv & atm/test/test_output & net/test/test_output"
+
+[[tests]]
+path = "tests/unit/test_rates_wave3b3.py"
+language = "python"
+module = "rates"
+kind = "oracle"
+provenance = "tests/fixtures/golden/rates/test_output.txt & benchmarks/fortran_mesa/rates_oracles/"

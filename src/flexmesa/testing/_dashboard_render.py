@@ -375,6 +375,7 @@ def _render_controls_health_and_work(
     rs_ov = cov["rust"]["overall"]
     py_ov = cov["python"]["overall"]
     skips = data["skips"]
+    tax = data.get("test_taxonomy")
     gh = data["github"]
     hh_tot = _summarize_harness(data["harness"]["by_suite"])
 
@@ -431,7 +432,54 @@ def _render_controls_health_and_work(
         ]
     )
 
+    if isinstance(tax, dict) and tax.get("total_files", 0) > 0:
+        bk = tax["by_kind"]
+        lines.append(
+            "- **Test classification & listed routine oracles "
+            "(`W4`, `#563`)**: "
+            f"`{bk['oracle']['files']}` oracle files, "
+            f"`{bk['invariant']['files']}` invariant files, "
+            f"`{bk['regression']['files']}` regression files "
+            f"(out of `{tax['total_files']}` test files totaling "
+            f"`{tax['total_tests']:,}` test functions); "
+            f"`{tax['mislabeled_count']}` tracked mislabeled files; "
+            f"`{tax['listed_oracle_routines_total']}` / "
+            f"`{tax['mapped_routines_total']}` mapped MESA routines "
+            f"(`{tax['listed_oracle_routines_pct']:.1f}%`) "
+            "have a listed oracle test."
+        )
+
     if detailed:
+        if isinstance(tax, dict) and tax.get("by_module"):
+            lines.extend(
+                [
+                    "",
+                    "#### Test Classification & Routines with a Listed "
+                    "Oracle Test (W4)",
+                    "",
+                    "| Module | Oracle Files | Invariant Files | "
+                    "Regression Files | Tracked Mislabeled | "
+                    "Routines with Listed Oracle Test |",
+                    "| :--- | ---: | ---: | ---: | ---: | ---: |",
+                    *(
+                        "| "
+                        f"`{row['module']}` | "
+                        f"`{row['oracle_files']}` | "
+                        f"`{row['invariant_files']}` | "
+                        f"`{row['regression_files']}` | "
+                        f"`{row['mislabeled_files']}` | "
+                        + (
+                            f"`{row['listed_oracle_routines']}/"
+                            f"{row['mapped_routines']}` "
+                            f"(`{row['listed_oracle_routines_pct']:.1f}%`)"
+                            if row["mapped_routines"] > 0
+                            else "`-`"
+                        )
+                        + " |"
+                        for row in tax["by_module"]
+                    ),
+                ]
+            )
         lines.extend(
             [
                 "",

@@ -26,6 +26,7 @@ from flexmesa.testing import (
     _dashboard_render,
     case_manifest,
     port_manifest,
+    test_taxonomy,
 )
 
 HISTORY_HEADER = (
@@ -108,6 +109,9 @@ def build_dashboard_data(
         "coverage": cov_data,
         "skips": _dashboard_collect.collect_ignored_and_skipped_tests(
             repo_root
+        ),
+        "test_taxonomy": _dashboard_collect.collect_test_taxonomy(
+            repo_root, loaded_manifest
         ),
         "github": gh_data,
         "history": load_history_tsv(dash_dir / "history.tsv"),
@@ -254,6 +258,13 @@ def verify_all_dashboard_invariants(
 
     for loc in data["skips"]["unlinked_locations"]:
         errors.append(f"{loc}: #[ignore]/xfail/skip lacks an #<issue> link")
+    errors.extend(
+        test_taxonomy.verify_test_taxonomy(
+            repo_root,
+            taxonomy_path=dash_dir / "test_taxonomy.toml",
+            manifest_path=dash_dir / "port_manifest.toml",
+        )
+    )
     return errors
 
 

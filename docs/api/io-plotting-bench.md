@@ -100,6 +100,8 @@ print(
 
 ::: flexmesa.testing.module_hex_gate
 
+::: flexmesa.testing.test_taxonomy
+
 ---
 
 ## Publication-Styled Diagnostic Plotting (`flexmesa.plotting`)

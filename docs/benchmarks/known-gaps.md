@@ -192,7 +192,7 @@ from flexmesa.testing import case_manifest
 manifest = case_manifest.load_case_manifest()
 gaps = case_manifest.load_known_gaps()
 assert len(manifest.cases) == 106
-assert len(gaps) == 63
+assert len(gaps) == 59
 no_ref = [
     c.case for c in manifest.cases
     if c.reference_status == "no_reference_yet"

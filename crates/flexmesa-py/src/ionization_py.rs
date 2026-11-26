@@ -212,6 +212,15 @@ fn py_ion_eval_ionization_dual<'py>(
     log10_rho: f64,
     log10_t: f64,
 ) -> PyResult<(Bound<'py, PyArray1<f64>>, Bound<'py, PyArray2<f64>>)> {
+    if !z.is_finite()
+        || !x.is_finite()
+        || !log10_rho.is_finite()
+        || !log10_t.is_finite()
+    {
+        return Err(PyValueError::new_err(
+            "z, x, log10_rho, and log10_t must be finite",
+        ));
+    }
     let zd = DualOrder1::<4>::independent(z, 0);
     let xd = DualOrder1::<4>::independent(x, 1);
     let lrhod = DualOrder1::<4>::independent(log10_rho, 2);
@@ -263,6 +272,15 @@ fn py_ion_eval_ionization_zones<'py>(
             "z, x, log10_rho, and log10_t must have equal length",
         ));
     }
+    if z_s.iter().any(|&v| !v.is_finite())
+        || x_s.iter().any(|&v| !v.is_finite())
+        || lrho_s.iter().any(|&v| !v.is_finite())
+        || lt_s.iter().any(|&v| !v.is_finite())
+    {
+        return Err(PyValueError::new_err(
+            "z, x, log10_rho, and log10_t must contain only finite values",
+        ));
+    }
     let grid = IonTableGrid::builtin_checked()
         .map_err(|e| PyValueError::new_err(e.to_string()))?;
     let (zv, xv, lrhov, ltv) =
@@ -284,8 +302,23 @@ fn py_ion_chi_info(
     log10_t: f64,
     rho: f64,
     log10_rho: f64,
-) -> (f64, f64, f64, f64) {
-    chi_info(a1, z1, t, log10_t, rho, log10_rho)
+) -> PyResult<(f64, f64, f64, f64)> {
+    if !a1.is_finite()
+        || a1 <= 0.0
+        || !z1.is_finite()
+        || z1 <= 0.0
+        || !t.is_finite()
+        || t <= 0.0
+        || !rho.is_finite()
+        || rho <= 0.0
+        || !log10_t.is_finite()
+        || !log10_rho.is_finite()
+    {
+        return Err(PyValueError::new_err(
+            "chi_info requires finite inputs with a1, z1, t, rho > 0",
+        ));
+    }
+    Ok(chi_info(a1, z1, t, log10_t, rho, log10_rho))
 }
 
 /// Compute $\chi_{\mathrm{eff}}$ (`chi_effective` in `mod_ionization.f90`).
@@ -300,8 +333,21 @@ fn py_ion_chi_effective(
     c2: f64,
     z1: f64,
     z2: f64,
-) -> f64 {
-    chi_effective(chi, c0, c1, c2, z1, z2)
+) -> PyResult<f64> {
+    if !chi.is_finite()
+        || !c0.is_finite()
+        || !c1.is_finite()
+        || !c2.is_finite()
+        || !z1.is_finite()
+        || z1 <= 0.0
+        || !z2.is_finite()
+        || z2 <= 0.0
+    {
+        return Err(PyValueError::new_err(
+            "chi_effective requires finite inputs with z1, z2 > 0",
+        ));
+    }
+    Ok(chi_effective(chi, c0, c1, c2, z1, z2))
 }
 
 /// Compute whole-number typical charge (`eval_typical_charge`).
@@ -318,6 +364,21 @@ fn py_ion_eval_typical_charge(
     rho: f64,
     log10_rho: f64,
 ) -> PyResult<f64> {
+    if !abar.is_finite()
+        || abar <= 0.0
+        || !free_e.is_finite()
+        || free_e <= 0.0
+        || !t.is_finite()
+        || t <= 0.0
+        || !rho.is_finite()
+        || rho <= 0.0
+        || !log10_t.is_finite()
+        || !log10_rho.is_finite()
+    {
+        return Err(PyValueError::new_err(
+            "eval_typical_charge requires finite inputs with abar, free_e, t, rho > 0",
+        ));
+    }
     eval_typical_charge(
         builtin_catalog(),
         cid,

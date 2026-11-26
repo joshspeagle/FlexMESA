@@ -8,14 +8,14 @@
 //!
 //! Exposes the static periodic table, Anders & Grevesse (1989) + Lodders (2003)
 //! 286-isotope catalog, 10 solar elemental abundance scales (`AG89`..`AAG21`),
-//! built-in [`NuclideCatalog`] (cached in a process-wide [`OnceLock`]),
+//! built-in `NuclideCatalog` (cached in a process-wide [`OnceLock`]),
 //! `reaction_Qtotal`, and single/multi-zone `get_composition_info`.
 //!
 //! # Architecture & Performance Notes
-//! - The 347-entry built-in [`NuclideCatalog`] is initialized once per process
-//!   in [`builtin_catalog`] and shared lock-free across Python and `rayon`
+//! - The 347-entry built-in `NuclideCatalog` is initialized once per process
+//!   in `builtin_catalog` and shared lock-free across Python and `rayon`
 //!   worker threads.
-//! - [`py_chem_get_composition_info_zones`] borrows a 2D C-contiguous `float64`
+//! - `py_chem_get_composition_info_zones` borrows a 2D C-contiguous `float64`
 //!   NumPy array zero-copy via `PyReadonlyArray2::as_slice`, releases the GIL,
 //!   and evaluates all 10 composition moment columns across the persistent
 //!   4-thread `rayon` worker pool when `parallel=True` and `nz >= 64`.
@@ -86,14 +86,29 @@ fn py_chem_category_name(id: usize) -> Option<String> {
 /// Return the 1-based partition function temperature index for $T_9$
 /// ($\mathrm{GK}$).
 #[pyfunction]
-fn py_chem_get_partition_fcn_indx(t9: f64) -> usize {
-    get_partition_fcn_indx(t9)
+fn py_chem_get_partition_fcn_indx(t9: f64) -> PyResult<usize> {
+    if !t9.is_finite() || t9 < 0.0 {
+        return Err(PyValueError::new_err(format!(
+            "t9 must be finite and non-negative, got {t9}"
+        )));
+    }
+    Ok(get_partition_fcn_indx(t9))
 }
 
 /// Generate short nuclide names from $(Z, A)$ arrays.
 #[pyfunction]
-fn py_chem_generate_nuclide_names(z: Vec<usize>, a: Vec<usize>) -> Vec<String> {
-    generate_nuclide_names(&z, &a)
+fn py_chem_generate_nuclide_names(
+    z: Vec<usize>,
+    a: Vec<usize>,
+) -> PyResult<Vec<String>> {
+    if z.len() != a.len() {
+        return Err(PyValueError::new_err(format!(
+            "z length ({}) != a length ({})",
+            z.len(),
+            a.len()
+        )));
+    }
+    Ok(generate_nuclide_names(&z, &a))
 }
 
 /// Generate long nuclide names from $(Z, A)$ arrays.
@@ -101,8 +116,15 @@ fn py_chem_generate_nuclide_names(z: Vec<usize>, a: Vec<usize>) -> Vec<String> {
 fn py_chem_generate_long_nuclide_names(
     z: Vec<usize>,
     a: Vec<usize>,
-) -> Vec<String> {
-    generate_long_nuclide_names(&z, &a)
+) -> PyResult<Vec<String>> {
+    if z.len() != a.len() {
+        return Err(PyValueError::new_err(format!(
+            "z length ({}) != a length ({})",
+            z.len(),
+            a.len()
+        )));
+    }
+    Ok(generate_long_nuclide_names(&z, &a))
 }
 
 /// Return the 1-based `chem_id` for a nuclide name (`"o16"`, `"fe56"`, etc.).
@@ -193,8 +215,21 @@ fn py_chem_get_stable_mass_frac(
     z: Vec<usize>,
     a: Vec<usize>,
     abun_in: Vec<f64>,
-) -> Vec<f64> {
-    get_stable_mass_frac(&z, &a, &abun_in)
+) -> PyResult<Vec<f64>> {
+    if z.len() != a.len() || z.len() != abun_in.len() {
+        return Err(PyValueError::new_err(format!(
+            "z ({}), a ({}), and abun_in ({}) must have equal length",
+            z.len(),
+            a.len(),
+            abun_in.len()
+        )));
+    }
+    if abun_in.iter().any(|&v| !v.is_finite()) {
+        return Err(PyValueError::new_err(
+            "abun_in must contain only finite values",
+        ));
+    }
+    Ok(get_stable_mass_frac(&z, &a, &abun_in))
 }
 
 /// Return the 112-element solar metal mass-fraction array for `scale`.

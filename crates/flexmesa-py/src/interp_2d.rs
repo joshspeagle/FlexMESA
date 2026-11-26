@@ -173,15 +173,26 @@ fn interp_evbicub_batch<'py>(
             "interp_evbicub_batch requires nx >= 4 and ny >= 4",
         ));
     }
-    flexmesa_interp2d::splinck_db(xs, 1.0e-3, "x")
+    let ilinx = flexmesa_interp2d::splinck_db(xs, 1.0e-3, "x")
         .map_err(|e| PyValueError::new_err(e.to_string()))?;
-    flexmesa_interp2d::splinck_db(ys, 1.0e-3, "y")
+    let iliny = flexmesa_interp2d::splinck_db(ys, 1.0e-3, "y")
         .map_err(|e| PyValueError::new_err(e.to_string()))?;
     let coeffs = slice_to_coeffs4(cf)?;
     if coeffs.len() != xs.len().saturating_mul(ys.len()) {
         return Err(PyValueError::new_err(
             "coeffs_flat length must equal nx * ny * 4",
         ));
+    }
+    if coeffs.iter().any(|c| c.iter().any(|&v| !v.is_finite())) {
+        return Err(PyValueError::new_err(
+            "coeffs_flat contains non-finite value",
+        ));
+    }
+    for (&qx, &qy) in xq.iter().zip(yq) {
+        flexmesa_interp2d::herm2xy_prevalidated_db(
+            qx, qy, xs, ys, ilinx, iliny,
+        )
+        .map_err(|e| PyValueError::new_err(e.to_string()))?;
     }
     let (xqv, yqv, xsv, ysv, cfv) = (
         xq.to_vec(),
@@ -190,9 +201,22 @@ fn interp_evbicub_batch<'py>(
         ys.to_vec(),
         coeffs.to_vec(),
     );
-    eval_batch_2d(py, xqv.len(), parallel, 64, move |k| {
-        eval_bicub_prevalidated(xqv[k], yqv[k], &xsv, &ysv, &cfv)
-    })
+    if ilinx && iliny {
+        eval_batch_2d(py, xqv.len(), parallel, 64, move |k| {
+            eval_bicub_prevalidated(xqv[k], yqv[k], &xsv, &ysv, &cfv)
+        })
+    } else {
+        eval_batch_2d(py, xqv.len(), parallel, 64, move |k| {
+            match flexmesa_interp2d::interp_evbicub_prevalidated_db(
+                xqv[k], yqv[k], &xsv, &ysv, ilinx, iliny, &cfv,
+            ) {
+                Ok(v) => {
+                    [v.f, v.df_dx, v.df_dy, v.d2f_dx2, v.d2f_dy2, v.d2f_dxdy]
+                }
+                Err(_) => [f64::NAN; 6],
+            }
+        })
+    }
 }
 
 /// Constructs 2D piecewise-monotonic cubic spline coefficients `(nx, ny, 4)`.

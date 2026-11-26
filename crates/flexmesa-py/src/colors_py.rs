@@ -140,6 +140,37 @@ fn py_colors_builtin_grid(py: Python<'_>) -> PyResult<PyBuiltinGrid<'_>> {
     ))
 }
 
+/// Validates finiteness and physical bounds for SED inputs.
+fn validate_sed_inputs(
+    teff: f64,
+    log_g: f64,
+    metallicity: f64,
+    r: f64,
+    d: f64,
+) -> PyResult<()> {
+    if !teff.is_finite() || teff <= 0.0 {
+        return Err(PyValueError::new_err(format!(
+            "teff must be finite and strictly positive, got {teff}"
+        )));
+    }
+    if !log_g.is_finite() || !metallicity.is_finite() {
+        return Err(PyValueError::new_err(
+            "log_g and metallicity must be finite",
+        ));
+    }
+    if !r.is_finite() || r < 0.0 {
+        return Err(PyValueError::new_err(format!(
+            "r must be finite and non-negative, got {r}"
+        )));
+    }
+    if !d.is_finite() || d <= 0.0 {
+        return Err(PyValueError::new_err(format!(
+            "d must be finite and strictly positive, got {d}"
+        )));
+    }
+    Ok(())
+}
+
 /// Evaluates the diluted stellar SED `(wavelengths, fluxes)` at
 /// `(teff, log_g, metallicity, r, d)` using `method` (`"Hermite"`, `"Linear"`,
 /// or `"KNN"`).
@@ -164,6 +195,7 @@ fn py_colors_eval_sed<'py>(
     d: f64,
     method: &str,
 ) -> PyResult<(Bound<'py, PyArray1<f64>>, Bound<'py, PyArray1<f64>>)> {
+    validate_sed_inputs(teff, log_g, metallicity, r, d)?;
     let m = SedInterpMethod::parse(method).map_err(py_err)?;
     let cube = builtin_sed_cube();
     let fluxes = cube.eval_sed(teff, log_g, metallicity, r, d, m);
@@ -199,6 +231,7 @@ fn py_colors_eval_colors<'py>(
     mag_system: &str,
     method: &str,
 ) -> PyResult<Bound<'py, PyArray1<f64>>> {
+    validate_sed_inputs(teff, log_g, metallicity, r, d)?;
     let sys = MagSystem::parse(mag_system).map_err(py_err)?;
     let m = SedInterpMethod::parse(method).map_err(py_err)?;
     let out = builtin_sed_cube()
@@ -223,6 +256,7 @@ fn py_colors_eval_colors_dual<'py>(
     d: f64,
     mag_system: &str,
 ) -> PyResult<(Bound<'py, PyArray1<f64>>, Bound<'py, PyArray2<f64>>)> {
+    validate_sed_inputs(teff, log_g, metallicity, r, d)?;
     let sys = MagSystem::parse(mag_system).map_err(py_err)?;
     let dual_out = builtin_sed_cube()
         .eval_colors_dual(teff, log_g, metallicity, r, d, sys)
@@ -270,8 +304,11 @@ fn py_colors_eval_colors_zones<'py>(
         metallicity.as_slice()?.to_vec(),
         r.as_slice()?.to_vec(),
     );
+    for k in 0..nz {
+        validate_sed_inputs(tv[k], gv[k], mv[k], rv[k], d)?;
+    }
     let cube = builtin_sed_cube();
-    eval_batch_2d::<NUM_COLORS_OUT, _>(
+    let out = eval_batch_2d::<NUM_COLORS_OUT, _>(
         py,
         nz,
         parallel,
@@ -280,7 +317,13 @@ fn py_colors_eval_colors_zones<'py>(
             cube.eval_colors(tv[k], gv[k], mv[k], rv[k], d, sys, m)
                 .unwrap_or([f64::NAN; NUM_COLORS_OUT])
         },
-    )
+    )?;
+    if out.readonly().as_slice()?.iter().any(|v| v.is_nan()) {
+        return Err(PyValueError::new_err(
+            "eval_colors_zones quadrature failed",
+        ));
+    }
+    Ok(out)
 }
 
 /// Evaluates composite non-uniform Simpson quadrature
@@ -310,7 +353,18 @@ fn py_colors_dilute_flux<'py>(
     r: f64,
     d: f64,
 ) -> PyResult<PyArr1<'py>> {
-    let out = dilute_flux(surface_flux.as_slice()?, r, d);
+    if !r.is_finite() || r < 0.0 || !d.is_finite() || d <= 0.0 {
+        return Err(PyValueError::new_err(
+            "dilute_flux requires finite r >= 0 and d > 0",
+        ));
+    }
+    let sf = surface_flux.as_slice()?;
+    if sf.iter().any(|&v| !v.is_finite()) {
+        return Err(PyValueError::new_err(
+            "surface_flux must contain only finite values",
+        ));
+    }
+    let out = dilute_flux(sf, r, d);
     Ok(PyArray1::from_vec(py, out))
 }
 

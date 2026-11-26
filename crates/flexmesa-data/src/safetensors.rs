@@ -33,6 +33,9 @@
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::Path;
+use std::sync::atomic::{AtomicU64, Ordering};
+
+static TMP_SEQ: AtomicU64 = AtomicU64::new(0);
 
 use crate::json_cursor::{
     format_metadata_entry, format_tensor_entry, parse_safetensors_header,
@@ -178,7 +181,11 @@ fn build_tensor_header_entry(
         }
         TensorData::Int64 { .. } => "I64",
     };
-    let end = offset + byte_len;
+    let end = offset.checked_add(byte_len).ok_or_else(|| {
+        DataError::ValidationError(format!(
+            "payload byte offset overflow for {name:?}"
+        ))
+    })?;
     let entry =
         format_tensor_entry(name, dtype_str, tensor.shape(), offset, end);
     Ok((entry, byte_len))
@@ -212,7 +219,12 @@ pub fn encode_safetensors_bytes(
             require_finite,
         )?;
         header_parts.push(entry);
-        total_payload += n_bytes;
+        total_payload =
+            total_payload.checked_add(n_bytes).ok_or_else(|| {
+                DataError::ValidationError(
+                    "SafeTensors total payload size overflow".to_owned(),
+                )
+            })?;
     }
     let mut header_json = format!("{{{}}}", header_parts.join(","));
     while !header_json.len().is_multiple_of(8) {
@@ -294,12 +306,13 @@ pub fn decode_safetensors_bytes(
     require_finite: bool,
 ) -> Result<SafeTensorBundle, DataError> {
     let (header_str, payload) = split_header_and_payload(data)?;
-    let (metadata, raw_descs) = parse_safetensors_header(header_str)?;
+    let (metadata, mut raw_descs) = parse_safetensors_header(header_str)?;
     if raw_descs.is_empty() {
         return Err(DataError::ValidationError(
             "SafeTensors header contains zero tensors".to_owned(),
         ));
     }
+    raw_descs.sort_by_key(|(_, (_, _, begin, _))| *begin);
     let mut tensors = BTreeMap::new();
     let mut expected_offset = 0usize;
     for (name, (dtype, shape, begin, end)) in raw_descs {
@@ -351,16 +364,25 @@ pub fn save_safetensors_file(
             message: err.to_string(),
         })?;
     }
-    let tmp_path =
-        path.with_extension(format!("safetensors.tmp.{}", std::process::id()));
-    fs::write(&tmp_path, &bytes).map_err(|err| DataError::IoError {
-        path: tmp_path.display().to_string(),
-        message: err.to_string(),
-    })?;
-    fs::rename(&tmp_path, path).map_err(|err| DataError::IoError {
-        path: path.display().to_string(),
-        message: err.to_string(),
-    })?;
+    let seq = TMP_SEQ.fetch_add(1, Ordering::Relaxed);
+    let tmp_path = path.with_extension(format!(
+        "safetensors.tmp.{}.{seq}",
+        std::process::id()
+    ));
+    if let Err(err) = fs::write(&tmp_path, &bytes) {
+        let _ = fs::remove_file(&tmp_path);
+        return Err(DataError::IoError {
+            path: tmp_path.display().to_string(),
+            message: err.to_string(),
+        });
+    }
+    if let Err(err) = fs::rename(&tmp_path, path) {
+        let _ = fs::remove_file(&tmp_path);
+        return Err(DataError::IoError {
+            path: path.display().to_string(),
+            message: err.to_string(),
+        });
+    }
     Ok(digest)
 }
 

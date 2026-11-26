@@ -78,6 +78,21 @@ impl<'a> JsonCursor<'a> {
     /// and `\t` while preserving multi-byte UTF-8 characters.
     ///
     /// Returns [`DataError::ParseError`] on unterminated strings or escapes.
+    fn read_hex_u16(&mut self) -> Result<u16, DataError> {
+        let hex = self.text.get(self.pos..self.pos + 4).ok_or_else(|| {
+            DataError::ParseError(
+                "truncated \\uXXXX escape in JSON header".to_owned(),
+            )
+        })?;
+        self.pos += 4;
+        u16::from_str_radix(hex, 16).map_err(|_| {
+            DataError::ParseError(format!(
+                "invalid \\uXXXX escape \\u{hex} in JSON header"
+            ))
+        })
+    }
+
+    /// Parse a JSON double-quoted string with RFC 8259 escape decoding.
     pub(crate) fn parse_string(&mut self) -> Result<String, DataError> {
         self.consume(b'"')?;
         let mut out = String::new();
@@ -92,12 +107,61 @@ impl<'a> JsonCursor<'a> {
                         DataError::ParseError("unterminated escape".to_owned())
                     })?;
                 self.pos += esc.len_utf8();
-                out.push(match esc {
-                    'n' => '\n',
-                    'r' => '\r',
-                    't' => '\t',
-                    other => other,
-                });
+                match esc {
+                    '"' => out.push('"'),
+                    '\\' => out.push('\\'),
+                    '/' => out.push('/'),
+                    'b' => out.push('\x08'),
+                    'f' => out.push('\x0c'),
+                    'n' => out.push('\n'),
+                    'r' => out.push('\r'),
+                    't' => out.push('\t'),
+                    'u' => {
+                        let code = self.read_hex_u16()?;
+                        if (0xD800..=0xDBFF).contains(&code) {
+                            if !self.text[self.pos..].starts_with("\\u") {
+                                return Err(DataError::ParseError(
+                                    "unpaired UTF-16 high surrogate in JSON string"
+                                        .to_owned(),
+                                ));
+                            }
+                            self.pos += 2;
+                            let low = self.read_hex_u16()?;
+                            if !(0xDC00..=0xDFFF).contains(&low) {
+                                return Err(DataError::ParseError(
+                                    "invalid UTF-16 low surrogate in JSON string"
+                                        .to_owned(),
+                                ));
+                            }
+                            let cp = 0x10000
+                                + ((u32::from(code) - 0xD800) << 10)
+                                + (u32::from(low) - 0xDC00);
+                            let decoded =
+                                char::from_u32(cp).ok_or_else(|| {
+                                    DataError::ParseError(
+                                        "invalid Unicode scalar in JSON string"
+                                            .to_owned(),
+                                    )
+                                })?;
+                            out.push(decoded);
+                        } else {
+                            let decoded = char::from_u32(u32::from(code))
+                                .ok_or_else(|| {
+                                    DataError::ParseError(
+                                        "unpaired UTF-16 low surrogate in \
+                                             JSON string"
+                                            .to_owned(),
+                                    )
+                                })?;
+                            out.push(decoded);
+                        }
+                    }
+                    other => {
+                        return Err(DataError::ParseError(format!(
+                            "invalid JSON escape sequence \\{other}"
+                        )));
+                    }
+                }
             } else {
                 out.push(ch);
             }
@@ -178,15 +242,22 @@ impl<'a> JsonCursor<'a> {
 /// Wraps `s` in ASCII double quotes and escapes control characters and quotes
 /// so the returned string is a valid JSON string literal.
 pub(crate) fn escape_json_str(s: &str) -> String {
+    use std::fmt::Write as _;
+
     let mut out = String::with_capacity(s.len() + 2);
     out.push('"');
     for ch in s.chars() {
         match ch {
             '"' => out.push_str("\\\""),
             '\\' => out.push_str("\\\\"),
+            '\x08' => out.push_str("\\b"),
+            '\x0c' => out.push_str("\\f"),
             '\n' => out.push_str("\\n"),
             '\r' => out.push_str("\\r"),
             '\t' => out.push_str("\\t"),
+            c if (c as u32) < 0x20 => {
+                let _ = write!(out, "\\u{:04x}", c as u32);
+            }
             c => out.push(c),
         }
     }

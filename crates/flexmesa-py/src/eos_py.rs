@@ -9,7 +9,9 @@ use flexmesa_eos::{
     min_distance_to_polygon, quintic_blend, EosEvalOutput,
     EOS_BASIC_RESULT_NAMES, IDEAL_MASS_FRACTION_LIMIT, NUM_EOS_BASIC_RESULTS,
 };
-use numpy::{PyArray1, PyArray2, PyReadonlyArray1, PyReadonlyArray2};
+use numpy::{
+    PyArray1, PyArray2, PyArrayMethods, PyReadonlyArray1, PyReadonlyArray2,
+};
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 
@@ -210,6 +212,21 @@ pub fn eos_compute_ion_offset_from_za(
     let a_s = a
         .as_slice()
         .map_err(|_| PyValueError::new_err("a must be contiguous"))?;
+    if xa_s.len() != z.len() || xa_s.len() != a_s.len() {
+        return Err(PyValueError::new_err(format!(
+            "xa ({}), z ({}), and a ({}) must have equal length",
+            xa_s.len(),
+            z.len(),
+            a_s.len()
+        )));
+    }
+    if xa_s.iter().any(|&v| !v.is_finite())
+        || a_s.iter().any(|&v| !v.is_finite() || v <= 0.0)
+    {
+        return Err(PyValueError::new_err(
+            "xa must be finite and a must be finite and positive",
+        ));
+    }
     Ok(compute_ion_offset_from_za(xa_s, &z, a_s))
 }
 
@@ -303,22 +320,35 @@ pub fn eos_eval_ideal_zones<'py>(
         .as_slice()
         .map_err(|_| PyValueError::new_err("a must be contiguous"))?
         .to_vec();
-    let sp = xa_v.len().min(w_v.len()).min(a_v.len());
-    if abar <= 0.0 || !xa_v[..sp].iter().any(|&x| x > IDEAL_MASS_FRACTION_LIMIT)
+    if xa_v.len() != w_v.len() || xa_v.len() != a_v.len() {
+        return Err(PyValueError::new_err(format!(
+            "xa ({}), weights ({}), and a ({}) must have equal length",
+            xa_v.len(),
+            w_v.len(),
+            a_v.len()
+        )));
+    }
+    if !abar.is_finite()
+        || abar <= 0.0
+        || !zbar.is_finite()
+        || xa_v.iter().any(|&x| !x.is_finite())
+        || w_v.iter().any(|&w| !w.is_finite() || w <= 0.0)
+        || a_v.iter().any(|&av| !av.is_finite() || av <= 0.0)
+        || !xa_v.iter().any(|&x| x > IDEAL_MASS_FRACTION_LIMIT)
     {
         return Err(PyValueError::new_err(
             "invalid composition for eos_eval_ideal_zones",
         ));
     }
-    if t_s.iter().any(|&t| t <= 0.0 || t.is_nan())
-        || r_s.iter().any(|&r| r <= 0.0 || r.is_nan())
+    if t_s.iter().any(|&t| !t.is_finite() || t <= 0.0)
+        || r_s.iter().any(|&r| !r.is_finite() || r <= 0.0)
     {
         return Err(PyValueError::new_err(
             "all temp and rho values must be strictly positive",
         ));
     }
     let nz = t_s.len();
-    eval_batch_2d::<78, _>(py, nz, parallel, 64, move |k| {
+    let out_arr = eval_batch_2d::<78, _>(py, nz, parallel, 64, move |k| {
         let mut row = [f64::NAN; 78];
         if let Ok(out) = eval_ideal_eos_from_weights(
             t_s[k], r_s[k], abar, zbar, &xa_v, &w_v, &a_v,
@@ -330,7 +360,13 @@ pub fn eos_eval_ideal_zones<'py>(
                 .copy_from_slice(&out.d_dln_t);
         }
         row
-    })
+    })?;
+    if out_arr.readonly().as_slice()?.iter().any(|v| v.is_nan()) {
+        return Err(PyValueError::new_err(
+            "eos_eval_ideal_zones failed on invalid zone state",
+        ));
+    }
+    Ok(out_arr)
 }
 
 /// Registers `flexmesa-eos` bindings on the `flexmesa._rust` module.

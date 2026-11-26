@@ -308,7 +308,7 @@ impl InlistBundle {
         ]);
         map_strs!("star_job", sj, j, [
             save_model_filename, save_photo_filename, save_pulse_data_filename,
-            h_he_net, co_net, adv_net,
+            h_he_net, co_net, adv_net, mesa_dir,
             history_columns_file, profile_columns_file, filename_for_profile_when_terminate,
         ]);
         if let Some(list) = sj.indexed.get("required_termination_code_string") {

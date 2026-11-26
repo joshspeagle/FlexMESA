@@ -656,8 +656,9 @@ fn test_147_inventory_parity_and_excluded_keys_still_rejected() {
 
     // Keys outside our crate/file scope must remain strictly rejected.
     let tmp = TempCaseGuard::new("excluded");
+    // (`mesa_dir` left this list when it became a supported
+    // installation-location key, `DECISIONS #68`.)
     for (idx, body) in [
-        "&star_job\n  mesa_dir = '../../..'\n/\n",
         "&controls\n  atm_off_table_option = 'simple'\n/\n",
         "&star_job\n  electron_coulomb_corrections = 'Itoh2002'\n/\n",
         "&star_job\n  ion_coulomb_corrections = 'PCR2009'\n/\n",

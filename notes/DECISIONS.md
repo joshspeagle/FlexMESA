@@ -82,6 +82,7 @@ Scope and the `v0.1.0` definition are in [`SCOPE.md`](SCOPE.md). Work is tracked
 | 65 | Astero Search Cases Are Compared Track by Track (`#430`) | In force | below |
 | 66 | `extras_controls` Runs Before the Model Load, as Upstream (`#453`) | In force | below |
 | 67 | Work Is Chosen by Distance to Pass and Divergence Cluster, with a Layered Fidelity Instrument Stack and Parallel Agents (`#546`) | In force | below |
+| 68 | `&star_job::mesa_dir` Is an Installation-Location Key, Stored but Not Used to Resolve Data (`#548`) | In force | below |
 | 70 | A Passing Case Takes Exactly MESA's Step Count in Every Stage, and E2E Work Is Triaged by Run Time (`#546`, `#554`) | In force | below |
 
 ## Pre-audit decisions still in force
@@ -900,6 +901,15 @@ The text of these four entries predates the audit of 2026-11-16. The decisions s
   - *Choose work by upstream departures found in audits*: produces large diffs that often move no case (Train 10 and 11 experience).
   - *A full campaign as the main feedback loop*: 2.5 hours per answer; step dumps and replay oracles answer in minutes.
   - *Serial work by the orchestrating agent only*: leaves the machine and the agent budget idle.
+
+## DECISIONS #68: `&star_job::mesa_dir` Is an Installation-Location Key, Stored but Not Used to Resolve Data (`#548`)
+
+- **Date**: 2026-11-26
+- **Decision**: `mesa_dir` is a supported `&star_job` key. It is parsed into `StarJobControls::mesa_dir` and changes no path lookup. Upstream uses it for two things: (1) when non-blank it replaces `$MESA_DIR` as the root of the data tree, `mesa_data_dir = mesa_dir//'/data'` (`const/public/const_def.f90:186-198`, reached from `starlib_init` through `star/private/star_private_def.f90:445`); `FlexMESA` reads the same MESA `26.4.1` data from its verified bundles; (2) output-only fallbacks: the default `star/defaults/history_columns.list` and `profile_columns.list` (`star/private/history_specs.f90:116-119`, `star/private/profile.f90:85-88`), which `FlexMESA` embeds, and the `stop_warnings_for_rel_E_err` sentinel file (`star/job/run_star_support.f90:1124`), which only silences a terminal warning. A requested column-list file that is missing remains an explicit error.
+- **Why**: `star/starspots`, the only `26.4.1` test case that sets `mesa_dir` (`'../../..'`), ran to `max_age` with no failing column but was reported `diagnostic (1 controls ignored)` because of this key. The key has no physics effect.
+- **Alternatives Rejected**:
+  - *Route `mesa_dir` through a process-global override of every `$MESA_DIR` lookup (EOS, opacity, ionization, colors, Roche tables, case staging, `GYRE_DIR`)*: an inlist-relative path such as `'../../..'` would then depend on where the case is staged and would weaken the guarantee that data come from the verified bundles, for no observable change.
+  - *Keep the key unsupported*: leaves a case that reaches upstream's termination permanently diagnostic for a key that cannot move a trajectory.
 
 ## DECISIONS #70: A Passing Case Takes Exactly MESA's Step Count in Every Stage, and E2E Work Is Triaged by Run Time (`#546`, `#554`)
 

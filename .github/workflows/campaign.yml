@@ -16,11 +16,11 @@ on:
       case_timeout_sec:
         description: "Per-case timeout in seconds"
         required: false
-        default: "600"
+        default: "1500"
       harness_shards:
         description: "Number of parallel shards of the full harness"
         required: false
-        default: "8"
+        default: "16"
       short_budget_sec:
         description: >-
           Optional shorter budget (s) for cases whose baseline row ended on
@@ -124,7 +124,7 @@ jobs:
       - name: List shard indices
         id: plan
         env:
-          N_SHARDS: ${{ inputs.harness_shards || '8' }}
+          N_SHARDS: ${{ inputs.harness_shards || '16' }}
         run: |
           python3 -c "import json, os; n = int(os.environ['N_SHARDS']); assert 1 <= n <= 64, n; print('shards=' + json.dumps(list(range(1, n + 1))))" >> "$GITHUB_OUTPUT"
 
@@ -155,10 +155,10 @@ jobs:
 
       - name: Execute one shard of the strict harness with RSS and time budgets
         env:
-          N_SHARDS: ${{ inputs.harness_shards || '8' }}
+          N_SHARDS: ${{ inputs.harness_shards || '16' }}
           JOBS: ${{ inputs.harness_jobs || '2' }}
           MAX_RSS: ${{ inputs.max_rss_gb || '5.5' }}
-          TIMEOUT: ${{ inputs.case_timeout_sec || '600' }}
+          TIMEOUT: ${{ inputs.case_timeout_sec || '1500' }}
           SHORT_BUDGET: ${{ inputs.short_budget_sec || '' }}
         run: |
           OUT_DIR="${{ runner.temp }}/campaign-harness-shard"
@@ -171,6 +171,7 @@ jobs:
           flexmesa harness run \
             --preset all \
             --numerics-mode strict \
+            --enforce-step-counts \
             --shard "${{ matrix.shard }}/$N_SHARDS" \
             --jobs "$JOBS" \
             --timeout-sec "$TIMEOUT" \

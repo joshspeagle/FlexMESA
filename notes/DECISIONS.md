@@ -85,6 +85,7 @@ Scope and the `v0.1.0` definition are in [`SCOPE.md`](SCOPE.md). Work is tracked
 | 68 | `&star_job::mesa_dir` Is an Installation-Location Key, Stored but Not Used to Resolve Data (`#548`) | In force | below |
 | 69 | Per-Case Budgets, the `passes` Preset and the Early Divergence Stop in the History Harness (`#554`) | In force | below |
 | 70 | A Passing Case Takes Exactly MESA's Step Count in Every Stage, and E2E Work Is Triaged by Run Time (`#546`, `#554`) | In force | below |
+| 73 | Train Campaigns Run on GitHub Actions at 1,500 s per Case, with Step Counts Enforced (`#546`, `#576`) | In force | below |
 
 ## Pre-audit decisions still in force
 
@@ -942,3 +943,15 @@ The text of these four entries predates the audit of 2026-11-16. The decisions s
   - *History tolerances alone*: they allow passes whose step count differs from MESA, hiding departures.
   - *A step-count tolerance*: any difference already means a departure.
   - *Working cases in table order*: long cases cost up to 85 minutes of MESA time per run and slow every loop.
+
+## DECISIONS #73: Train Campaigns Run on GitHub Actions at 1,500 s per Case, with Step Counts Enforced (`#546`, `#576`)
+
+- **Date**: 2026-11-26
+- **Decision**:
+  - The strict campaign that gates a train runs on GitHub Actions (`campaign.yml`, dispatched on the train branch with `harness_only`), in 16 shards with a per-case budget of 1,500 s. The baseline is regenerated from that run. Local runs keep the 600 s budget of `DECISIONS #57` and are used for development and for single-case evidence.
+  - Every harness invocation in CI passes `--enforce-step-counts` (`DECISIONS #70`): a case within tolerance whose per-stage step counts differ from MESA `26.4.1` is `fail (step count)` unless it is a declared gap.
+- **Why**: a local campaign needs a quiet machine for about three hours, which idles every lane sharing it. Hosted runners are two to three times slower than the development machine: at 600 s, seven baseline passes ended on the budget there on 2026-11-26 (for example `1.5M_with_diffusion`, 470 s locally, reached 199 of 430 steps). Strict results do not depend on the machine, so a longer budget on the slower machine changes which cases finish, not what they compute.
+- **Alternatives Rejected**:
+  - *600 s on hosted runners*: cases that pass locally come back `inconclusive (timeout)`.
+  - *Local campaigns only*: one train a day at best, with every lane frozen while it runs.
+  - *Leaving enforcement to a flag chosen per run*: the pass count would then depend on who ran the harness.

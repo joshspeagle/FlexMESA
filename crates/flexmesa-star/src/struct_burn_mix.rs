@@ -31,7 +31,6 @@ use flexmesa_net::{
 use rayon::prelude::*;
 
 use crate::controls::StarError;
-use crate::hydro_vars::set_hydro_vars;
 use crate::micro::{do_eos, do_kap, resolve_model_net, set_basic_vars};
 use crate::mix_info::{
     apply_min_d_mix_floor, compute_convection_sigmas,
@@ -543,7 +542,7 @@ pub fn do_struct_burn_mix(
 
     // `set_vars_if_needed` (`star/private/evolve.f90:580-666`).
     if model.aux.need_to_setvars {
-        if let Err(e) = set_hydro_vars(model, false, false) {
+        if let Err(e) = crate::hydro_vars::set_vars(model) {
             model.controls.op_split_burn = saved_op_split;
             return Err(e);
         }
@@ -593,7 +592,24 @@ pub fn do_struct_burn_mix(
     // `irradiation_heat` keeps its start-of-step value
     // (`star/private/hydro_vars.f90:91-164`).
     let irradiation_heat = model.aux.irradiation_heat.clone();
-    let final_res = set_hydro_vars(model, false, false);
+    // `set_final_vars` (`star/private/hydro_vars.f90:91-164`) reruns only
+    // what the last solver evaluation skipped: with `need_to_setvars`
+    // false the basic, micro and MLT variables, and so `mlt_vc`, stay as
+    // the last solver iteration left them.
+    let skip = !model.aux.need_to_setvars;
+    let final_res = crate::hydro_vars::set_hydro_vars_with_skips(
+        model,
+        false,
+        false,
+        crate::hydro_vars::SetHydroVarsSkips {
+            micro: skip,
+            mlt: skip,
+            ..crate::hydro_vars::SetHydroVarsSkips::default()
+        },
+    );
+    if final_res.is_ok() {
+        model.aux.need_to_setvars = false;
+    }
     model.aux.irradiation_heat = irradiation_heat;
     model.aux.mixing.okay_to_set_mixing_info = prev_ok_mix;
     if op_split_burn {

@@ -8,11 +8,6 @@
 
 [[gaps]]
 suite = "star"
-case = "1.3M_ms_high_Z"
-issue = "#153"
-reason = "Strict run reaches exact MESA 26.4.1 log_L_upper_limit (219 steps, 0 retries, all final tolerances pass); fails only rel_num_zones track tolerance (2.28% > 2.0%, first_diverging_step = 82) (#153)."
-[[gaps]]
-suite = "star"
 case = "12M_pre_ms_to_core_collapse"
 issue = "#161"
 reason = "Core-collapse evolution exceeds wall-time guard with unported high-T opacity/rate and rotation controls (#161, #158)."
@@ -42,11 +37,6 @@ suite = "star"
 case = "20M_z2m2_high_rotation"
 issue = "#157"
 reason = "Case history_columns.list requests unported MLT++ gradT_excess_alpha column (rotation also tracked in #158)."
-[[gaps]]
-suite = "star"
-case = "5M_cepheid_blue_loop"
-issue = "#231"
-reason = "Strict run hits test-side extras_check_model instead of star_species_mass_min_limit (248 steps, 4 retries matching MESA 26.4.1, num_zones max track diff 1.08%) with log_Teff, log_L, log_R, and log_center_Rho deviations (#231, #155)."
 [[gaps]]
 suite = "star"
 case = "7M_prems_to_AGB"
@@ -87,11 +77,6 @@ suite = "star"
 case = "conserve_angular_momentum"
 issue = "#158"
 reason = "Diagnostic run reaches he_core_mass_limit with 2 unsupported rotational controls (change_d_omega_flag, new_d_omega_flag; #158)."
-[[gaps]]
-suite = "star"
-case = "custom_colors"
-issue = "#161"
-reason = "Strict validation rejects unported &colors and relaxation controls, and history_columns.list requests unported phase_of_evolution and colors columns (#161)."
 [[gaps]]
 suite = "star"
 case = "custom_rates"
@@ -247,11 +232,6 @@ suite = "star"
 case = "wd_cool_0.6M"
 issue = "#156"
 reason = "Strict run reaches log_center_temp_lower_limit (218 steps vs MESA 219, 3 retries matching MESA 26.4.1) with rel_star_age (-0.66%), num_zones (3.21%), and cooling-track deviations from step 37 (#156, #152)."
-[[gaps]]
-suite = "star"
-case = "wd_he_shell_ignition"
-issue = "#154"
-reason = "Accreting WD He-shell ignition awaits mass-change relaxation control star_job::dlogtau_factor (#154)."
 [[gaps]]
 suite = "star"
 case = "wd_nova_burst"

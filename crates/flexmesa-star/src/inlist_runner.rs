@@ -12,7 +12,6 @@ use crate::controls::StarError;
 use crate::evolve::{star_evolve_step, star_evolve_step_outcome_with_extras};
 use crate::evolve_support::snapshot_step_start_extras;
 use crate::history::{extract_history_row, HistoryRow};
-use crate::hydro_vars::set_hydro_vars;
 use crate::inlist::{InlistBundle, InlistLoadOptions};
 use crate::mesa_profile::{StarLogsWriter, StarStepLogExtras};
 use crate::model::StarModel;
@@ -962,14 +961,13 @@ fn run_inlist_stage_with_logs_inner(
                 model.aux.step_hist.termination_code.clone();
             let finish_dir = extras.extras_finish_step(model);
             model.mstar_start = model.mstar;
+            // History and profiles are written from the variables the step
+            // left (`set_final_vars`, `star/private/hydro_vars.f90:91-164`):
+            // `after_step_loop` (`star/job/run_star_support.f90:662-765`) and
+            // `star_finish_step` do not set the variables again, so `mlt_vc`
+            // and the mixing state keep their end-of-step values.
             if !model.controls.rsp_flag {
                 model.sync_mesh_and_pack()?;
-                set_hydro_vars(model, false, false)?;
-                crate::struct_burn_mix::refresh_mixing_state(
-                    model,
-                    model.dt,
-                    &[],
-                )?;
             }
             let hr = extract_history_row(model);
             history_rows.push(hr);

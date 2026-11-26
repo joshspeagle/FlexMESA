@@ -41,6 +41,15 @@ class StarModel(_arrays.StarModelArrays):
         """Initialize a `StarModel` from a `RustStarModel` instance."""
         self._rust_model = rust_model
 
+    def copy(self) -> StarModel:
+        """Return an independent copy of the full model state.
+
+        Unlike `set_primary_state`, the copy also carries the start-of-step,
+        solver and mixing state (for example the TDC `mlt_vc` that a step
+        starts from), so a step taken on each copy starts from the same state.
+        """
+        return type(self)(self._rust_model.copy())
+
     @classmethod
     def from_zams(
         cls,

@@ -19,7 +19,6 @@ use crate::conv_premix::do_conv_premix;
 use crate::element_diffusion::{
     do_element_diffusion_step, finish_element_diffusion,
 };
-use crate::hydro_vars::set_hydro_vars;
 use crate::mesh_adjust::{MeshFunctionConfig, do_adjust_mesh_for_step};
 use crate::model::StarModel;
 use crate::phase_separation::do_phase_separation_step;
@@ -416,7 +415,7 @@ pub fn apply_step_pre_physics_with_extras(
     // Refresh hydro and mixing info before operator-split pre-physics
     // (`evolve.f90:569,606`): `set_vars_if_needed`.
     if model.aux.need_to_setvars {
-        set_hydro_vars(model, false, false)?;
+        crate::hydro_vars::set_vars(model)?;
         // `star/private/hydro_vars.f90:653`.
         model.aux.need_to_setvars = false;
     }
@@ -439,7 +438,7 @@ pub fn apply_step_pre_physics_with_extras(
         // `do_conv_premix` sets `need_to_setvars` (`conv_premix.f90:176`).
         if model.aux.need_to_setvars {
             model.unpack_xh();
-            set_hydro_vars(model, false, false)?;
+            crate::hydro_vars::set_vars(model)?;
             model.aux.need_to_setvars = false;
         }
         if dt > 0.0 {
@@ -464,7 +463,7 @@ pub fn apply_step_pre_physics_with_extras(
         // `set_hydro_vars` and `do_element_diffusion` (#156).
         if model.aux.need_to_setvars {
             model.unpack_xh();
-            set_hydro_vars(model, false, false)?;
+            crate::hydro_vars::set_vars(model)?;
             model.aux.need_to_setvars = false;
         }
     } else {
@@ -482,7 +481,7 @@ pub fn apply_step_pre_physics_with_extras(
         // `set_vars_if_needed(s, dt, 'after element diffusion')`
         // (`star/private/evolve.f90:637`, flag from `element_diffusion.f90:93`).
         if model.aux.need_to_setvars {
-            set_hydro_vars(model, false, false)?;
+            crate::hydro_vars::set_vars(model)?;
             model.aux.need_to_setvars = false;
         }
         finish_element_diffusion(model, dt);
@@ -523,7 +522,7 @@ pub fn apply_step_pre_physics_with_extras(
         }
         crate::hydro_rotation::set_rotation_info(model, false);
         if model.aux.need_to_setvars {
-            set_hydro_vars(model, false, false)?;
+            crate::hydro_vars::set_vars(model)?;
             // `star/private/hydro_vars.f90:653`.
             model.aux.need_to_setvars = false;
         }
@@ -804,7 +803,7 @@ pub fn set_vars_for_new_step(model: &mut StarModel) -> Result<(), StarError> {
     model.aux.mixing.okay_to_set_mixing_info = true;
     let prev_have_new_generation = model.aux.mixing.have_new_generation;
     model.aux.mixing.have_new_generation = false;
-    let res = set_hydro_vars(model, false, false);
+    let res = crate::hydro_vars::set_vars(model);
     model.aux.mixing.have_new_generation = prev_have_new_generation;
     res?;
     // `set_vars` ends with `need_to_setvars = .false.`
@@ -828,7 +827,7 @@ pub fn set_vars_for_new_try(model: &mut StarModel) -> Result<(), StarError> {
         return Ok(());
     }
     model.aux.mixing.okay_to_set_mixing_info = true;
-    set_hydro_vars(model, false, false)?;
+    crate::hydro_vars::set_vars(model)?;
     // `star/private/hydro_vars.f90:653`.
     model.aux.need_to_setvars = false;
     Ok(())
@@ -866,7 +865,7 @@ pub fn remesh_star_before_step(
         // `set_start_of_step_info(s, 'before do_mesh')` sets the variables
         // (`star/private/evolve.f90:1884`).
         model.aux.mixing.okay_to_set_mixing_info = true;
-        set_hydro_vars(model, false, false)?;
+        crate::hydro_vars::set_vars(model)?;
         let snap = PrimaryStateBuffer::from_model(model);
         let mesh_cfg = MeshFunctionConfig::from_controls(&model.controls);
         // `do_mesh` sets `need_to_setvars = .true.` and remeshes

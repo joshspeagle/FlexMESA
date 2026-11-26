@@ -125,6 +125,14 @@ macro_rules! impl_py_star_model {
                 Ok(PyBytes::new(py, &bytes))
             }
 
+            /// Returns an independent copy of the full model state, including
+            /// the start-of-step, solver and mixing state that
+            /// `set_primary_state` does not reset.
+            #[must_use]
+            pub fn copy(&self) -> Self {
+                self.clone()
+            }
+
             /// Evaluates zone and face microphysics (`set_hydro_vars`).
             #[pyo3(signature = (skip_net=false, skip_net_jacobian=false))]
             pub fn eval_hydro_vars(

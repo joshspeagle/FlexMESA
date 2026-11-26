@@ -15,7 +15,8 @@ use flexmesa_eos::{
 use flexmesa_turb::{
     set_mlt, set_semiconvection, set_tdc, set_thermohaline, MltInputs,
     MltOption, MltParams, SemiconvectionInputs, SemiconvectionParams,
-    TdcInputs, TdcParams, ThermohalineInputs, ThermohalineParams,
+    TdcInputs, TdcParams, ThermohalineInputs, ThermohalineOption,
+    ThermohalineParams,
 };
 
 use crate::controls::StarError;
@@ -779,10 +780,12 @@ pub(crate) fn do1_mlt_2(
                     .get(k)
                     .copied()
                     .unwrap_or(0);
+                let th_option = model.controls.thermohaline_option;
+                let xh1 = thermohaline_xh1(model, k, th_option)?;
                 let th_params = ThermohalineParams {
-                    option: model.controls.thermohaline_option,
+                    option: th_option,
                     gradl_composition_term,
-                    xh1: model.xh_mass[k],
+                    xh1,
                     thermohaline_coeff: model.controls.thermohaline_coeff,
                     species: driving_species_for_cid(iso_cid),
                 };
@@ -924,6 +927,39 @@ pub(crate) fn do1_mlt_2(
     }
 
     Ok(make_gradr_sticky)
+}
+
+/// `XH1` for `set_thermohaline` at face `k` (0-based): the `h1` mass
+/// fraction `XH1 = s% xa(s% net_iso(ih1),k)`
+/// (`star/private/turb_support.f90:174`), not `X`, the summed hydrogen
+/// isotopes (#556).
+///
+/// Upstream reads `xa(0,k)`, outside the array, when the network has no
+/// `h1` (#557). Only the `Traxler_Garaud_Stellmach_11` and
+/// `Brown_Garaud_Stellmach_13` options read `XH1`
+/// (`turb/private/thermohaline.f90:69`); for them that path is an explicit
+/// error (DECISIONS #43). `Kippenhahn` does not read it, and gets `NaN`.
+///
+/// # Errors
+/// Returns [`StarError::InvalidInput`] when the network has no `h1` and
+/// `option` reads `XH1`.
+pub(crate) fn thermohaline_xh1(
+    model: &StarModel,
+    k: usize,
+    option: ThermohalineOption,
+) -> Result<f64, StarError> {
+    let h1 = flexmesa_chem::NuclideCatalog::builtin_ref()
+        .get_by_name("h1")
+        .and_then(|e| model.net_iso.get(e.chem_id).copied().flatten());
+    match (h1, option) {
+        (Some(j), _) => Ok(model.xa[k * model.species + j]),
+        (None, ThermohalineOption::Kippenhahn) => Ok(f64::NAN),
+        (None, _) => Err(StarError::InvalidInput(String::from(
+            "thermohaline XH1: the network has no h1, where upstream reads \
+             xa(0,k) outside the array (star/private/turb_support.f90:174; \
+             #557, DECISIONS #43)",
+        ))),
+    }
 }
 
 fn set_no_mixing_face(
@@ -1627,4 +1663,62 @@ pub(crate) fn set_hydro_vars_with_skips(
         crate::riemann_ad::do_uface_and_pface(model)?;
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::controls::{StarControls, StarJobControls};
+
+    fn cid(name: &str) -> usize {
+        flexmesa_chem::NuclideCatalog::builtin_ref()
+            .get_by_name(name)
+            .expect("isotope in the catalog")
+            .chem_id
+    }
+
+    fn model(names: &[&str], xa: &[f64]) -> StarModel {
+        let mut m = StarModel::new(
+            2,
+            names.iter().map(|n| cid(n)).collect(),
+            StarJobControls::default(),
+            StarControls::default(),
+        );
+        m.xa = xa.to_vec();
+        m
+    }
+
+    /// `turb_support.f90:174`: `XH1 = xa(h1,k)`, not `X = h1 + h2` (#556).
+    #[test]
+    fn thermohaline_xh1_is_the_h1_mass_fraction_not_summed_hydrogen() {
+        // Zone 1 (0-based) has h1 = 0.25, h2 = 0.125, he4 = 0.625.
+        let m = model(
+            &["h1", "h2", "he4"],
+            &[0.5, 0.25, 0.25, 0.25, 0.125, 0.625],
+        );
+        let x = thermohaline_xh1(
+            &m,
+            1,
+            ThermohalineOption::BrownGaraudStellmach13,
+        )
+        .unwrap();
+        assert_eq!(x.to_bits(), 0.25_f64.to_bits());
+    }
+
+    /// #557: no `h1` in the network is an explicit error for the options
+    /// that read `XH1`, and an unread `NaN` for `Kippenhahn`.
+    #[test]
+    fn thermohaline_xh1_without_h1_errors_only_for_options_that_read_it() {
+        let m = model(&["he4", "c12"], &[0.5, 0.5, 0.5, 0.5]);
+        for opt in [
+            ThermohalineOption::BrownGaraudStellmach13,
+            ThermohalineOption::TraxlerGaraudStellmach11,
+        ] {
+            let err = thermohaline_xh1(&m, 0, opt).unwrap_err();
+            assert!(format!("{err}").contains("#557"), "{err}");
+        }
+        assert!(thermohaline_xh1(&m, 0, ThermohalineOption::Kippenhahn)
+            .unwrap()
+            .is_nan());
+    }
 }

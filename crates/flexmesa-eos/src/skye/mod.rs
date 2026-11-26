@@ -84,9 +84,16 @@ pub fn get_skye_alfa(
     zbar: f64,
 ) -> (f64, f64, f64) {
     let skye_blend_width = 0.1_f64;
-    let t_ion = 7.3_f64.max(flexmesa_math::log10(1.0e5 * zbar * zbar))
+    // Upstream evaluates `1d5 * pow2(zbar)` and `abar * pow3(zbar)`
+    // (`eos/private/skye.f90:69`, `eos/private/skye.f90:73-74`,
+    // `eos/private/skye.f90:77`), where `pow2` and `pow3` associate as
+    // `1d5 * (zbar * zbar)` and `abar * ((zbar * zbar) * zbar)`
+    // (`math/private/math_pown.f90:74-91`) rather than left-to-right.
+    let t_ion = 7.3_f64
+        .max(flexmesa_math::log10(1.0e5 * flexmesa_math::pow2(zbar)))
         + skye_blend_width;
-    let rho_ion = 2.3_f64.max(flexmesa_math::log10(abar * zbar * zbar * zbar))
+    let rho_ion = 2.3_f64
+        .max(flexmesa_math::log10(abar * flexmesa_math::pow3(zbar)))
         + skye_blend_width;
     let rad_log =
         flexmesa_math::log10(abar * MP * CRAD / (3.0 * KERG * (zbar + 1.0)));

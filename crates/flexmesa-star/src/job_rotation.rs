@@ -250,11 +250,10 @@ fn do_rotation(model: &mut StarModel) {
         let w = model.job.new_omega;
         crate::relax::apply_uniform_rotation(model, w);
     } else if mn <= model.job.set_omega_div_omega_crit_step_limit {
-        // `star_surface_omega_crit`: `set_surf_avg_rotation_info`, then
-        // `omega_crit_avg_surf` (`star/public/star_lib.f90:2338-2350`).
-        let surf = crate::report_utils::eval_surf_avg_rotation_info(model);
-        model.job.new_omega =
-            model.job.new_omega_div_omega_crit * surf.omega_crit;
+        // `star_surface_omega_crit` (`star/public/star_lib.f90:2338-2350`,
+        // `star/job/run_star_support.f90:982-983`).
+        let omega_crit = crate::report_utils::star_surface_omega_crit(model);
+        model.job.new_omega = model.job.new_omega_div_omega_crit * omega_crit;
         let w = model.job.new_omega;
         crate::relax::apply_uniform_rotation(model, w);
     }

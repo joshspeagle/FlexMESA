@@ -6,7 +6,7 @@
 use std::fs;
 use std::path::Path;
 
-use flexmesa_const::{M_SUN, R_SUN, SECYER, STANDARD_CGRAV};
+use flexmesa_const::{M_SUN, SECYER};
 
 use crate::controls::{StarControls, StarError, StarJobControls, VarLayout};
 use crate::job_controls::{AtmOption, AtmTTauOpacity, AtmTTauRelation};
@@ -899,23 +899,25 @@ pub(crate) fn init_or_update_model_from_bundle_outcome(
         let new_omega = job.new_surface_rotation_v * 1.0e5 / model.r[0];
         apply_uniform_rotation(&mut model, new_omega);
     }
-    if model.controls.rotation_flag
-        && (job.set_omega_div_omega_crit
-            || (job.set_initial_omega_div_omega_crit && !restart))
-    {
-        let r_surf = model.r.first().copied().unwrap_or(R_SUN).max(1.0);
-        let g_surf = model
-            .cgrav
-            .first()
-            .copied()
-            .filter(|&g| g > 0.0)
-            .unwrap_or(STANDARD_CGRAV);
-        let omega_crit =
-            (g_surf * model.mstar / flexmesa_math::pow3(r_surf)).sqrt();
-        apply_uniform_rotation(
-            &mut model,
-            job.new_omega_div_omega_crit * omega_crit,
-        );
+    // `new_omega = new_omega_div_omega_crit*star_surface_omega_crit(id,
+    // ierr)`, in two separate blocks (`set_omega_div_omega_crit` and
+    // `set_initial_omega_div_omega_crit .and. .not. restart`,
+    // `star/job/run_star_support.f90:2166-2184`). When both are set the second
+    // block recomputes the surface-averaged critical rate on the rotating
+    // model, so they are not merged.
+    let set_div_crit = [
+        job.set_omega_div_omega_crit,
+        job.set_initial_omega_div_omega_crit && !restart,
+    ];
+    for apply in set_div_crit {
+        if model.controls.rotation_flag && apply {
+            let omega_crit =
+                crate::report_utils::star_surface_omega_crit(&mut model);
+            apply_uniform_rotation(
+                &mut model,
+                job.new_omega_div_omega_crit * omega_crit,
+            );
+        }
     }
 
     // 4. Composition and mass, in upstream's order

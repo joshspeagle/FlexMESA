@@ -44,11 +44,6 @@ issue = "#161"
 reason = "Strict multi-stage pre-MS-to-AGB run reaches log_L_upper_limit (768 steps vs MESA 721, 23 retries vs MESA 14) with num_zones (21.02%) and track deviations from step 125 (#161, #153, #155)."
 [[gaps]]
 suite = "star"
-case = "accreted_material_j"
-issue = "#158"
-reason = "Strict run lacks unported use_other_adjust_mdot hook behavior, diverges at step 1, evolves into post-He burning, and hits the 5.5 GB memory guard (#158, #152)."
-[[gaps]]
-suite = "star"
 case = "c13_pocket"
 issue = "#161"
 reason = "AGB third-dredge-up C13-pocket evolution hits memory/wall-time guard with unsupported controls::atm_off_table_option (#161)."

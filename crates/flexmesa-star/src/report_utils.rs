@@ -750,6 +750,21 @@ pub struct SurfAvgRotationInfo {
     pub log_rho: f64,
 }
 
+/// Surface-averaged critical angular velocity $\Omega_{\mathrm{crit,surf}}$
+/// in $\mathrm{rad\,s^{-1}}$ (`star_surface_omega_crit` in
+/// `star/public/star_lib.f90:2338-2350`).
+///
+/// Upstream calls `set_surf_avg_rotation_info`, which first runs
+/// `set_rotation_info(s, .true., ierr)` (`hydro_rotation.f90:617`) and so
+/// refreshes `i_rot`, `omega = j_rot/i_rot`, `fp_rot` and `ft_rot` on the
+/// model before averaging, and returns `omega_crit_avg_surf`.
+pub fn star_surface_omega_crit(model: &mut StarModel) -> f64 {
+    if model.controls.rotation_flag {
+        crate::hydro_rotation::set_rotation_info(model, true);
+    }
+    eval_surf_avg_rotation_info(model).omega_crit
+}
+
 /// Evaluates [`SurfAvgRotationInfo`] matching `set_surf_avg_rotation_info`
 /// (`star/private/hydro_rotation.f90:588-739`).
 #[must_use]

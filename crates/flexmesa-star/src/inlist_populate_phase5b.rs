@@ -6,8 +6,12 @@
 use flexmesa_schema::ControlValue;
 
 use crate::controls::StarError;
-use crate::inlist::{InlistBundle, SectionControls};
+use crate::inlist::{InlistBundle, SectionControls, NUM_XA_LIMITS};
 use crate::inlist_populate::{map_bools, map_f64s, map_opt_f64s, map_strs};
+
+/// Maximum accretion species slots in MESA
+/// (`star_data/public/star_data_def.inc:365`).
+const MAX_NUM_ACCRETION_SPECIES: usize = 250;
 
 fn apply_fortran_1based<T, F>(
     ctrl: &SectionControls,
@@ -365,6 +369,17 @@ impl InlistBundle {
             }
         }
         ctrl.try_usize_into("controls", &mut mw.num_accretion_species, "num_accretion_species", 0)?;
+        // `star_data/public/star_data_def.inc:365` sizes `accretion_species_id`
+        // and `accretion_species_xa` to `max_num_accretion_species = 250`, and
+        // `star/private/adjust_xyz.f90:921-935` loops `j = 1, s% num_accretion_species`
+        // without bounds checking. Exceeding 250 reads past those arrays and
+        // has no defined behaviour to reproduce (`DECISIONS #43`, deferred `#566`).
+        if mw.num_accretion_species > MAX_NUM_ACCRETION_SPECIES {
+            return Err(StarError::InvalidInput(format!(
+                "'&controls::num_accretion_species' ({}) exceeds max_num_accretion_species ({MAX_NUM_ACCRETION_SPECIES}) (DECISIONS #43, deferred #566)",
+                mw.num_accretion_species
+            )));
+        }
         if let Some(v) = ctrl.try_get_i64("controls", "accretion_zfracs")? {
             mw.accretion_zfracs = v as i32;
         }
@@ -450,8 +465,10 @@ impl InlistBundle {
         apply_fortran_1based(ctrl, "predictive_avoid_reversal", n_pr, |i, v| mw.predictive_sets[i].avoid_reversal = v, val_str)?;
         apply_fortran_1based(ctrl, "predictive_limit_ingestion", n_pr, |i, v| mw.predictive_sets[i].limit_ingestion = v, val_str)?;
         apply_fortran_1based(ctrl, "predictive_ingestion_factor", n_pr, |i, v| mw.predictive_sets[i].ingestion_factor = v, val_f64)?;
+        // `star/private/ctrls_io.f90:1112-1114`, `star/private/predictive_mix.f90:88-142`:
+        // Fortran `select case` pads trailing blanks only; leading blanks fail to match.
         for (idx, set) in mw.predictive_sets.iter().enumerate() {
-            let zt = set.zone_type.trim();
+            let zt = set.zone_type.trim_end();
             if !matches!(zt, "" | "any" | "burn_H" | "burn_He" | "burn_Z" | "nonburn") {
                 return Err(StarError::InvalidInput(format!(
                     "unrecognized '&controls::predictive_zone_type({})' = '{}'",
@@ -459,7 +476,7 @@ impl InlistBundle {
                     set.zone_type
                 )));
             }
-            let zl = set.zone_loc.trim();
+            let zl = set.zone_loc.trim_end();
             if !matches!(zl, "" | "any" | "core" | "shell" | "surf") {
                 return Err(StarError::InvalidInput(format!(
                     "unrecognized '&controls::predictive_zone_loc({})' = '{}'",
@@ -467,7 +484,7 @@ impl InlistBundle {
                     set.zone_loc
                 )));
             }
-            let bl = set.bdy_loc.trim();
+            let bl = set.bdy_loc.trim_end();
             if !matches!(bl, "" | "any" | "top" | "bottom") {
                 return Err(StarError::InvalidInput(format!(
                     "unrecognized '&controls::predictive_bdy_loc({})' = '{}'",
@@ -631,14 +648,46 @@ impl InlistBundle {
             "num_adjusted_dt_steps_before_max_age",
             0,
         )?;
-        ts.xa_surface_lower_limit_species = ctrl.try_get_indexed_strings("controls", "xa_surface_lower_limit_species")?;
-        ts.xa_surface_lower_limit = ctrl.try_get_indexed_f64s("controls", "xa_surface_lower_limit")?;
-        ts.xa_surface_upper_limit_species = ctrl.try_get_indexed_strings("controls", "xa_surface_upper_limit_species")?;
-        ts.xa_surface_upper_limit = ctrl.try_get_indexed_f64s("controls", "xa_surface_upper_limit")?;
-        ts.xa_average_lower_limit_species = ctrl.try_get_indexed_strings("controls", "xa_average_lower_limit_species")?;
-        ts.xa_average_lower_limit = ctrl.try_get_indexed_f64s("controls", "xa_average_lower_limit")?;
-        ts.xa_average_upper_limit_species = ctrl.try_get_indexed_strings("controls", "xa_average_upper_limit_species")?;
-        ts.xa_average_upper_limit = ctrl.try_get_indexed_f64s("controls", "xa_average_upper_limit")?;
+        ts.xa_surface_lower_limit_species = ctrl.try_get_indexed_strings_bounded(
+            "controls",
+            "xa_surface_lower_limit_species",
+            Some(NUM_XA_LIMITS),
+        )?;
+        ts.xa_surface_lower_limit = ctrl.try_get_indexed_f64s_bounded(
+            "controls",
+            "xa_surface_lower_limit",
+            Some(NUM_XA_LIMITS),
+        )?;
+        ts.xa_surface_upper_limit_species = ctrl.try_get_indexed_strings_bounded(
+            "controls",
+            "xa_surface_upper_limit_species",
+            Some(NUM_XA_LIMITS),
+        )?;
+        ts.xa_surface_upper_limit = ctrl.try_get_indexed_f64s_bounded(
+            "controls",
+            "xa_surface_upper_limit",
+            Some(NUM_XA_LIMITS),
+        )?;
+        ts.xa_average_lower_limit_species = ctrl.try_get_indexed_strings_bounded(
+            "controls",
+            "xa_average_lower_limit_species",
+            Some(NUM_XA_LIMITS),
+        )?;
+        ts.xa_average_lower_limit = ctrl.try_get_indexed_f64s_bounded(
+            "controls",
+            "xa_average_lower_limit",
+            Some(NUM_XA_LIMITS),
+        )?;
+        ts.xa_average_upper_limit_species = ctrl.try_get_indexed_strings_bounded(
+            "controls",
+            "xa_average_upper_limit_species",
+            Some(NUM_XA_LIMITS),
+        )?;
+        ts.xa_average_upper_limit = ctrl.try_get_indexed_f64s_bounded(
+            "controls",
+            "xa_average_upper_limit",
+            Some(NUM_XA_LIMITS),
+        )?;
         map_opt_f64s!("controls", ctrl, ts, [
             non_fe_core_infall_limit, power_h_burn_upper_limit,
             power_h_burn_lower_limit, power_he_burn_lower_limit,

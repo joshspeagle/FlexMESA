@@ -617,14 +617,19 @@ pub(crate) fn populate_diffusion_controls(
         "diffusion_maxsteps_for_isolve",
         0,
     )?;
+    // `star/private/ctrls_io.f90:1807`, `star/private/diffusion.f90:482`,
+    // `num/public/num_solvers_options.dek:7-24`: Fortran `==` pads trailing
+    // blanks only and is case-sensitive.
     if let Some(solver_name) =
         ctrl.try_get_str("controls", "diffusion_isolve_solver")?
     {
-        match solver_name.trim().to_ascii_lowercase().as_str() {
+        match solver_name.trim_end() {
             "ros2_solver" | "rose2_solver" | "ros3p_solver"
             | "ros3pl_solver" | "rodas3_solver" | "rodas4_solver"
             | "rodasp_solver" => {
-                solver_name.trim().clone_into(&mut d.diffusion_isolve_solver);
+                solver_name
+                    .trim_end()
+                    .clone_into(&mut d.diffusion_isolve_solver);
             }
             other => {
                 return Err(StarError::InvalidInput(format!(

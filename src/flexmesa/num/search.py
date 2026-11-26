@@ -324,29 +324,50 @@ def two_piece_linear_coeffs(
     x1: float,
     x2: float,
 ) -> tuple[float, float, float]:
-    """Solves for two-piece linear weights ``(a, b, c)`` on ``(x0, x1, x2)``.
+    """Solves for two-piece linear weights ``(a0, a1, a2)`` on ``(x0, x1, x2)``.
+
+    Mirrors ``two_piece_linear_coeffs`` in MESA ``num/public/num_lib.f90``
+    (lines 580-613) in upstream's order of operations: the weight of the far
+    node on the segment holding ``x`` is computed first and clipped to
+    ``[0, 1]``, and the near node takes one minus that weight. A query
+    outside ``[x0, x2]`` takes the nearest endpoint's coefficients.
 
     Args:
-        x: Query point inside ``[min(x0, x2), max(x0, x2)]`` (arbitrary units).
+        x: Query point (arbitrary units).
         x0: First grid abscissa (arbitrary units).
         x1: Middle grid abscissa (arbitrary units).
         x2: Third grid abscissa (arbitrary units).
 
     Returns:
-        Tuple ``(a, b, c)`` such that $f(x) = a f(x_0) + b f(x_1) + c f(x_2)$.
+        Tuple ``(a0, a1, a2)`` such that
+        $f(x) = a_0 f(x_0) + a_1 f(x_1) + a_2 f(x_2)$.
 
     Raises:
-        ValueError: If ``(x0, x1, x2)`` is not monotonic or ``x`` is out of
-            bounds.
+        ValueError: If ``(x0, x1, x2)`` is not strictly monotonic, or if
+            ``x`` is NaN (upstream leaves the coefficients unset).
     """
-    if not (
-        (x0 < x1 < x2 and x0 <= x <= x2) or (x0 > x1 > x2 and x2 <= x <= x0)
-    ):
-        raise ValueError("x outside monotonic (x0, x1, x2) range")
-    if x == x1:
-        return 0.0, 1.0, 0.0
-    if (x0 < x1 and x < x1) or (x0 > x1 and x > x1):
-        a = float((x1 - x) / (x1 - x0))
-        return a, 1.0 - a, 0.0
-    c = float((x - x1) / (x2 - x1))
-    return 0.0, 1.0 - c, c
+    if x0 < x1 < x2:
+        if x <= x0:
+            return 1.0, 0.0, 0.0
+        if x >= x2:
+            return 0.0, 0.0, 1.0
+        if x <= x1:
+            a1 = min(1.0, max(0.0, (x - x0) / (x1 - x0)))
+            return 1.0 - a1, a1, 0.0
+        if x < x2:
+            a2 = min(1.0, max(0.0, (x - x1) / (x2 - x1)))
+            return 0.0, 1.0 - a2, a2
+    elif x0 > x1 > x2:
+        if x >= x0:
+            return 1.0, 0.0, 0.0
+        if x <= x2:
+            return 0.0, 0.0, 1.0
+        if x >= x1:
+            a1 = min(1.0, max(0.0, (x - x0) / (x1 - x0)))
+            return 1.0 - a1, a1, 0.0
+        if x > x2:
+            a2 = min(1.0, max(0.0, (x - x1) / (x2 - x1)))
+            return 0.0, 1.0 - a2, a2
+    else:
+        raise ValueError("(x0, x1, x2) not strictly monotonic")
+    raise ValueError("x is NaN; upstream leaves the coefficients unset")

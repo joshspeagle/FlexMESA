@@ -59,7 +59,7 @@ def test_case_manifest_covers_all_106_mesa_26_4_1_cases_and_known_gaps() -> (
         by_key[("star", "1.3M_ms_high_Z")].required_termination
         == "log_L_upper_limit"
     )
-    assert gaps[("star", "1.3M_ms_high_Z")].issue == "#153"
+    assert gaps[("star", "conserve_angular_momentum")].issue == "#158"
 
     root = case_manifest.repo_root()
     for entry in manifest.cases:

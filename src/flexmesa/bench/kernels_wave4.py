@@ -524,15 +524,19 @@ def bench_star_evolve_step(
     lnt0 = base.ln_t.copy()
     lnr0 = base.ln_r.copy()
     lum0 = base.lum.copy()
-    dq0 = base.dq.copy()
-    xa0 = base.xa.copy()
+
+    # Each run steps a full copy of the prepared model: the step starts from
+    # carried state (start values, TDC `mlt_vc`) that `set_primary_state`
+    # does not reset, as in MESA 26.4.1 (`star/private/hydro_vars.f90:
+    # 128-135`).
+    start = base.copy()
 
     def _run(op_split: bool, use_bcyc: bool) -> _ArrF64:
-        base.set_primary_state(lnd0, lnt0, lnr0, lum0, dq0, xa0)
-        base.step_struct_burn_mix(
+        model = start.copy()
+        model.step_struct_burn_mix(
             dt, op_split_burn=op_split, use_bcyclic=use_bcyc
         )
-        return base.ln_t + base.lnd + base.xa[:, 0]
+        return model.ln_t + model.lnd + model.xa[:, 0]
 
     s0, v0 = _h.measure_and_capture(
         n_warmup, n_repeats, lambda: _run(False, False)

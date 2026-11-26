@@ -149,7 +149,7 @@ def test_port_manifest_rejects_verified_without_artifact_or_test() -> None:
         target,
         status=port_manifest.PortStatus.CASE_LEVEL_EVIDENCE,
         evidence_artifacts=("notes/audit/case_table.md",),
-        harness_cases=("star/1.3M_ms_high_Z",),
+        harness_cases=("star/conserve_angular_momentum",),
     )
     mutated_2 = dataclasses.replace(
         manifest,

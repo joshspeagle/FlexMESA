@@ -150,7 +150,6 @@ impl SectionControls {
         }
         Ok(found)
     }
-
 }
 
 impl InlistBundle {

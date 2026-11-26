@@ -11,7 +11,11 @@ one record holding every input and every output of that call. Before each
 ``set_TDC`` call it copies ``s% tdc_num_iters(k)`` to a local, because
 ``get_TDC_solution`` leaves its ``intent(out)`` iteration count unassigned on
 its radiative early exits (``turb/private/tdc.f90:55,113``) and the caller's
-value then passes through.
+value then passes through. After the ``Get_results`` call in
+``do1_mlt_eval`` (``:188-192``) it inserts one more writer call (family
+``GETR``, site 5) with that call's arguments and results: the values the
+caller assembled, which ``FlexMESA``'s tap (``FLEXMESA_REPLAY_TAP``) writes
+for its own run so the two can be compared call by call.
 
 A record is written only when the environment variable ``FLEXMESA_REPLAY``
 names an output file, and only for the first ``FLEXMESA_REPLAY_MODELS``
@@ -30,7 +34,7 @@ Line format (fields separated by one space)::
     SCHEMA <family> <name>:<type> ...
     <family> <field> <field> ...
 
-with ``<family>`` one of ``TDC`` and ``MLT`` and types
+with ``<family>`` one of ``TDC``, ``MLT`` and ``GETR`` and types
 
 * ``i``: integer (``I0``);
 * ``l``: logical (``T`` or ``F``);
@@ -77,6 +81,15 @@ MLT_SCHEMA = (
     "out_mixing_type:i out_ierr:i"
 )
 
+GETR_SCHEMA = (
+    f"{CONTEXT} "
+    "MLT_option:s r:a L:a T:a P:a opacity:a rho:a dV:a chiRho:a chiT:a Cp:a "
+    "gradr:a grada:a scale_height:a iso:i XH1:r cgrav:r m:r "
+    "gradL_composition_term:r mixing_length_alpha:r alpha_semiconvection:r "
+    "thermohaline_coeff:r energy:a out_mixing_type:i out_gradT:a "
+    "out_Y_face:a out_conv_vel:a out_D:a out_Gamma:a out_ierr:i"
+)
+
 # (start anchor of the call statement, last line of the statement, family,
 # site id). Site ids: 1 and 2 are the plain and superad-reduction set_TDC
 # calls, 3 and 4 the plain and superad-reduction set_MLT calls.
@@ -106,6 +119,12 @@ CALLS: list[tuple[str, str, str, int]] = [
         "mixing_type, max_conv_vel, ierr)\n",
         "mlt",
         4,
+    ),
+    (
+        "\n         call Get_results(s, k, MLT_option, &\n",
+        "mixing_type, gradT, Y_face, mlt_vc, D, Gamma, energy, ierr)\n",
+        "getr",
+        5,
     ),
 ]
 
@@ -140,6 +159,7 @@ HELPER = f"""
             write(unit, '(A)') 'RUN'
             write(unit, '(A)') 'SCHEMA TDC {TDC_SCHEMA}'
             write(unit, '(A)') 'SCHEMA MLT {MLT_SCHEMA}'
+            write(unit, '(A)') 'SCHEMA GETR {GETR_SCHEMA}'
             call get_environment_variable('{MARKER}_MODELS', path, status=st)
             if (st == 0 .and. len_trim(path) > 0) read(path, *) nmax
             call get_environment_variable('{MARKER}_FIRST', path, status=st)
@@ -355,6 +375,72 @@ HELPER = f"""
 !$omp end critical (fm_replay)
    end subroutine fm_replay_mlt
 
+
+   subroutine fm_replay_getr(s, k, site, MLT_option, &
+         r, L, T, P, opacity, rho, dV, chiRho, chiT, Cp, gradr, grada, &
+         scale_height, iso, XH1, cgrav, m, gradL_composition_term, &
+         mixing_length_alpha, alpha_semiconvection, thermohaline_coeff, &
+         mixing_type, gradT, Y_face, conv_vel, D, Gamma, energy, ierr)
+      ! Argument list of Get_results (turb_support.f90:198-212) as called
+      ! from do1_mlt_eval (:188-192), after the context; read only.
+      type (star_info), pointer :: s
+      integer, intent(in) :: k, site
+      character (len=*), intent(in) :: MLT_option
+      type(auto_diff_real_star_order1), intent(in) :: r, L, T, P, opacity, &
+         rho, dV, chiRho, chiT, Cp, gradr, grada, scale_height, energy
+      integer, intent(in) :: iso
+      real(dp), intent(in) :: XH1, cgrav, m, gradL_composition_term, &
+         mixing_length_alpha, alpha_semiconvection, thermohaline_coeff
+      integer, intent(in) :: mixing_type, ierr
+      type(auto_diff_real_star_order1), intent(in) :: gradT, Y_face, &
+         conv_vel, D, Gamma
+      character(len=65536) :: buf
+      integer :: n, u
+!$omp critical (fm_replay)
+      u = fm_replay_unit(s)
+      if (u /= 0) then
+         buf = 'GETR'
+         n = 4
+         call fm_put_i(buf, n, site)
+         call fm_put_i(buf, n, s% id)
+         call fm_put_i(buf, n, s% model_number)
+         call fm_put_i(buf, n, s% solver_iter)
+         call fm_put_i(buf, n, k)
+         call fm_put_s(buf, n, MLT_option)
+         call fm_put_a(buf, n, r)
+         call fm_put_a(buf, n, L)
+         call fm_put_a(buf, n, T)
+         call fm_put_a(buf, n, P)
+         call fm_put_a(buf, n, opacity)
+         call fm_put_a(buf, n, rho)
+         call fm_put_a(buf, n, dV)
+         call fm_put_a(buf, n, chiRho)
+         call fm_put_a(buf, n, chiT)
+         call fm_put_a(buf, n, Cp)
+         call fm_put_a(buf, n, gradr)
+         call fm_put_a(buf, n, grada)
+         call fm_put_a(buf, n, scale_height)
+         call fm_put_i(buf, n, iso)
+         call fm_put_r(buf, n, XH1)
+         call fm_put_r(buf, n, cgrav)
+         call fm_put_r(buf, n, m)
+         call fm_put_r(buf, n, gradL_composition_term)
+         call fm_put_r(buf, n, mixing_length_alpha)
+         call fm_put_r(buf, n, alpha_semiconvection)
+         call fm_put_r(buf, n, thermohaline_coeff)
+         call fm_put_a(buf, n, energy)
+         call fm_put_i(buf, n, mixing_type)
+         call fm_put_a(buf, n, gradT)
+         call fm_put_a(buf, n, Y_face)
+         call fm_put_a(buf, n, conv_vel)
+         call fm_put_a(buf, n, D)
+         call fm_put_a(buf, n, Gamma)
+         call fm_put_i(buf, n, ierr)
+         write(u, '(A)') buf(1:n)
+      end if
+!$omp end critical (fm_replay)
+   end subroutine fm_replay_getr
+
 """
 
 END_ANCHOR = "end module turb_support\n"
@@ -377,6 +463,10 @@ def _insert_record(
     call = text[i:j]
     first = start[1:]
     indent = first[: len(first) - len(first.lstrip())]
+    if family == "getr":
+        head = "call Get_results(s, k, "
+        repl = f"call fm_replay_getr(s, k, {site}, "
+        return text[:i] + call + call.replace(head, repl, 1) + text[j:]
     kernel = "set_TDC" if family == "tdc" else "set_MLT"
     head = f"call {kernel}("
     if family == "tdc":

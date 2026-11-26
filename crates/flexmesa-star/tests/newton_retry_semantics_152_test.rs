@@ -18,14 +18,14 @@ use flexmesa_star::solver_norms::{
 };
 use flexmesa_star::solver_support::{apply_bdomain, set_vars_for_solver};
 use flexmesa_star::{
-    StarControls, StarError, StarJobControls, StarModel, TimestepAction,
     load_zams_model, set_hydro_vars, solve_henyey_step, star_evolve_step,
-    timestep_controller,
+    timestep_controller, StarControls, StarError, StarJobControls, StarModel,
+    TimestepAction,
 };
 
 #[test]
-fn test_sizequ_double_counts_chemistry_residuals_and_sizeb_matches_upstream_251()
- {
+fn test_sizequ_double_counts_chemistry_residuals_and_sizeb_matches_upstream_251(
+) {
     let mut m = load_zams_model(
         StarControls {
             initial_mass: 1.0,
@@ -757,8 +757,8 @@ fn test_redo_keeps_max_timestep_hi_t_limit_switch() {
 }
 
 #[test]
-fn test_relax_uniform_omega_restores_all_timestamps_and_applies_ramped_omega_on_early_exit()
- {
+fn test_relax_uniform_omega_restores_all_timestamps_and_applies_ramped_omega_on_early_exit(
+) {
     let mut model = load_zams_model(
         StarControls {
             initial_mass: 1.0,
@@ -804,9 +804,15 @@ fn test_relax_uniform_omega_restores_all_timestamps_and_applies_ramped_omega_on_
     let on_ramp = (1_u32..=5 + 51).any(|k| {
         let frac = 1.0_f64.min(f64::from(k) / 5.0_f64);
         let e = frac * target_omega + (1.0 - frac) * start_omega;
-        model.omega.iter().all(|&w| (w - e).abs() <= 1.0e-14 * e.abs())
+        model
+            .omega
+            .iter()
+            .all(|&w| (w - e).abs() <= 1.0e-14 * e.abs())
     });
-    assert!(on_ramp, "the terminating step applies the ramped omega, as upstream");
+    assert!(
+        on_ramp,
+        "the terminating step applies the ramped omega, as upstream"
+    );
 }
 
 #[test]

@@ -589,8 +589,10 @@ fn test_rsp_lina_and_steffen_edges_match_mesa_26_4_1_5m_reference() {
 
 #[test]
 fn test_rsp_check_2nd_crossing_on_7m_mesa_test_suite() {
-    let rel = "star/test_suite/rsp_check_2nd_crossing/history_logs/history_7M.data";
-    let Some(hist_path) = flexmesa_utils::require_mesa_test_input_path(rel) else {
+    let rel =
+        "star/test_suite/rsp_check_2nd_crossing/history_logs/history_7M.data";
+    let Some(hist_path) = flexmesa_utils::require_mesa_test_input_path(rel)
+    else {
         return;
     };
     let case_dir = hist_path

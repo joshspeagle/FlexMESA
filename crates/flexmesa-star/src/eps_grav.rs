@@ -100,10 +100,8 @@ fn eval_eps_grav_composition_term(
         &model.eos_config,
     )?;
     let e_with_xa_start = flexmesa_math::exp(eos_xa_start.res[I_LN_E]);
-    let d_e_with_xa_start_dlnd =
-        eos_xa_start.d_dlnd[I_LN_E] * e_with_xa_start;
-    let d_e_with_xa_start_dlnt =
-        eos_xa_start.d_dln_t[I_LN_E] * e_with_xa_start;
+    let d_e_with_xa_start_dlnd = eos_xa_start.d_dlnd[I_LN_E] * e_with_xa_start;
+    let d_e_with_xa_start_dlnt = eos_xa_start.d_dln_t[I_LN_E] * e_with_xa_start;
 
     // `star/private/micro.f90:499-500` and `star/private/eps_grav.f90:322-324`.
     let de_drho_for_partials = model.eos_d_dlnd[k][I_LN_E] * e / rho;
@@ -164,10 +162,8 @@ fn eval_eps_grav_std_cell_with_ctx(
     // `wrap_dxh_lnd(s,k)/s% dt` and `wrap_dxh_lnT(s,k)/s% dt`
     // (`star/private/eps_grav.f90:152-153`): the accumulated Newton
     // corrections, which round differently from `lnd - lnd_start`.
-    let dlnd_dt =
-        StarAdOrder1::variable(model.aux.dxh_lnd[k], I_LND_00) / dt;
-    let dlnt_dt =
-        StarAdOrder1::variable(model.aux.dxh_lnt[k], I_LNT_00) / dt;
+    let dlnd_dt = StarAdOrder1::variable(model.aux.dxh_lnd[k], I_LND_00) / dt;
+    let dlnt_dt = StarAdOrder1::variable(model.aux.dxh_lnt[k], I_LNT_00) / dt;
     let t_ad = lnt_00.exp();
 
     let eos_ad = |val: f64, slot: usize| {
@@ -408,9 +404,12 @@ pub fn eval_eps_grav(model: &mut StarModel) -> Result<(), StarError> {
 
     if need_ctx {
         let ctx = EosZoneContext::new(&model.chem_id)?;
-        let cell_results: Result<Vec<(StarAdOrder1, bool)>, StarError> = (0..nz)
+        let cell_results: Result<Vec<(StarAdOrder1, bool)>, StarError> = (0
+            ..nz)
             .into_par_iter()
-            .map(|k| eval_eps_grav_cell(model, k, gam_off, gam_span, Some(&ctx)))
+            .map(|k| {
+                eval_eps_grav_cell(model, k, gam_off, gam_span, Some(&ctx))
+            })
             .collect();
         for (k, (ad, used_std)) in cell_results?.into_iter().enumerate() {
             model.eps_grav_ad[k] = ad;

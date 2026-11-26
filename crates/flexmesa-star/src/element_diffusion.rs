@@ -3,7 +3,7 @@
 //! accounting ported from MESA `26.4.1` `star/private/element_diffusion.f90`.
 
 use flexmesa_chem::NuclideCatalog;
-use flexmesa_const::{AMU, MixingType, PI4, QE};
+use flexmesa_const::{MixingType, AMU, PI4, QE};
 use flexmesa_eos::I_PHASE;
 
 use crate::controls_diffusion::MAX_NUM_DIFFUSION_CLASSES;
@@ -246,8 +246,7 @@ pub fn do_element_diffusion_step(
         nzhi = (3 * nzhi + (nz - 1)) / 4;
     }
 
-    if model.controls.do_phase_separation
-        && dctrl.phase_separation_no_diffusion
+    if model.controls.do_phase_separation && dctrl.phase_separation_no_diffusion
     {
         for k in 0..=nzhi {
             if model.mixing_type[k] == MixingType::PhaseSeparationMixing {
@@ -377,16 +376,10 @@ pub fn do_element_diffusion_step(
         .and_then(|iso| model.net_iso.get(iso.chem_id).copied().flatten())
         .is_some();
 
-    let max_steps = model
-        .controls
-        .ts_stop
-        .diffusion_steps_hard_limit
-        .max(0) as usize;
-    let max_iters_total = model
-        .controls
-        .ts_stop
-        .diffusion_iters_hard_limit
-        .max(0) as usize;
+    let max_steps =
+        model.controls.ts_stop.diffusion_steps_hard_limit.max(0) as usize;
+    let max_iters_total =
+        model.controls.ts_stop.diffusion_iters_hard_limit.max(0) as usize;
 
     let diffusion_factor_vec: Vec<f64> = (0..nc)
         .map(|j| dctrl.diffusion_class_factor.get(j).copied().unwrap_or(1.0))

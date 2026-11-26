@@ -435,7 +435,12 @@ mod tests {
 
     /// Sum of the overlaps involving cell `j` of mesh 1 (or cell `k` of mesh
     /// 2 when `col == 1`).
-    fn overlap_sum(ci: &CompressedIntersect, nz: usize, col: usize, cell: i32) -> Quad {
+    fn overlap_sum(
+        ci: &CompressedIntersect,
+        nz: usize,
+        col: usize,
+        cell: i32,
+    ) -> Quad {
         let mut acc = AccurateReal::ZERO;
         for i in 1..=2 * nz {
             if ci.ranges[i][col] == cell {
@@ -468,8 +473,12 @@ mod tests {
         assert_eq!(reconstruct_xm(&dm1, 2), Quad::from(5.0));
         for j in 1..=nz + 1 {
             for k in 1..=nz + 1 {
-                let want = reconstruct_m(&dm1, nz, j) - reconstruct_m(&dm2, nz, k);
-                assert_eq!(accurate_mass_difference(&dm1, &dm2, j, k, nz), want);
+                let want =
+                    reconstruct_m(&dm1, nz, j) - reconstruct_m(&dm2, nz, k);
+                assert_eq!(
+                    accurate_mass_difference(&dm1, &dm2, j, k, nz),
+                    want
+                );
             }
         }
     }
@@ -570,7 +579,8 @@ mod tests {
         // Mass loss: new cell 1 is 0.75 of old cell 1 and 0.25 of old cell 2.
         let dm_new = one_based(&[1.0, 1.5, 1.5, 1.0]);
         let dm_old = one_based(&[2.0, 1.75, 1.5, 1.0]);
-        let lost = integrate_conserved(&vals_old, &outside, &dm_new, &dm_old, nz, 1);
+        let lost =
+            integrate_conserved(&vals_old, &outside, &dm_new, &dm_old, nz, 1);
         assert_eq!(lost[1][0], 0.75 * 8.0 + 0.25 * 4.0);
         assert_eq!(lost[2][0], 4.0);
         assert_eq!(lost[4][0], 1.0);
@@ -579,7 +589,8 @@ mod tests {
         // material; new cell 2 is 0.25 outside, 0.25 old cell 1, 0.5 old 2.
         let dm_new = one_based(&[1.0, 1.0, 1.5, 1.0]);
         let dm_old = one_based(&[0.25, 0.5, 1.5, 1.0]);
-        let gained = integrate_conserved(&vals_old, &outside, &dm_new, &dm_old, nz, 1);
+        let gained =
+            integrate_conserved(&vals_old, &outside, &dm_new, &dm_old, nz, 1);
         assert_eq!(gained[1][0], 16.0);
         assert_eq!(gained[2][0], 0.25 * 16.0 + 0.25 * 8.0 + 0.5 * 4.0);
         assert_eq!(gained[3][0], 2.0);
@@ -609,7 +620,11 @@ mod tests {
         // Deeper cells did not move.
         for j in 2..=nz {
             for i in 1..=4_i32 {
-                let want = if usize::try_from(i).unwrap() == j { 1.0 } else { 0.0 };
+                let want = if usize::try_from(i).unwrap() == j {
+                    1.0
+                } else {
+                    0.0
+                };
                 assert_eq!(f(i, j), want, "pf({i},{j})");
             }
         }

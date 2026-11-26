@@ -5,8 +5,8 @@
 #![forbid(unsafe_code)]
 
 use flexmesa_star::{
-    PrimaryStateBuffer, StarControls, StarError, StarJobControls,
-    load_zams_model, set_hydro_vars, star_evolve_step,
+    load_zams_model, set_hydro_vars, star_evolve_step, PrimaryStateBuffer,
+    StarControls, StarError, StarJobControls,
 };
 
 fn assert_bits_eq(label: &str, actual: &[f64], expected_bits: &[u64]) {
@@ -177,8 +177,7 @@ fn test_non_retriable_star_error_fails_immediately_with_zero_retries() {
 }
 
 #[test]
-fn test_primary_state_buffer_preserves_omega_when_solver_iter_nonzero()
- {
+fn test_primary_state_buffer_preserves_omega_when_solver_iter_nonzero() {
     let ctrl = StarControls {
         initial_mass: 1.5,
         rotation_flag: true,

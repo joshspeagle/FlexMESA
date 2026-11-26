@@ -22,8 +22,8 @@ use crate::mesh_functions::{
 };
 use crate::mesh_plan::do_mesh_plan_with_xa;
 pub use crate::mesh_remap::{
-    CellType, StandardMeshPlan, classify_new_cells, compute_monotone_xa_slopes,
-    do_prune_mesh_surface, remap_onto_dq, solve_cell_lnt_for_energy,
+    classify_new_cells, compute_monotone_xa_slopes, do_prune_mesh_surface,
+    remap_onto_dq, solve_cell_lnt_for_energy, CellType, StandardMeshPlan,
 };
 use crate::mesh_remap::{
     clean_up_fractions_slice, compute_xqs, count_plan_splits_and_merges,

@@ -6,11 +6,9 @@
 //! conservation, and `timestep_controller` retry / `star_evolve` termination.
 
 use flexmesa_const::{
-    CLIGHT, FOUR_PI, L_SUN, M_SUN, MixingType, SECYER, STANDARD_CGRAV,
+    MixingType, CLIGHT, FOUR_PI, L_SUN, M_SUN, SECYER, STANDARD_CGRAV,
 };
 use flexmesa_star::{
-    DiffusionScheme, DutchLowTScheme, EnergyEqnOption, MeshFunctionConfig,
-    StarControls, StarError, StarJobControls, StarModel, TimestepAction,
     add_overshooting, apply_predictive_mixing_from_controls,
     apply_step_pre_physics, check_termination_limits, compute_core_masses,
     do_adjust_mass_step, do_adjust_mesh, do_conv_premix, do_element_diffusion,
@@ -19,6 +17,8 @@ use flexmesa_star::{
     eval_omega_crit, eval_van_loon_wind, eval_vink_wind, find_mass_flux,
     load_zams_model, locate_convection_boundaries, set_basic_vars,
     set_hydro_vars, star_evolve, star_evolve_step, timestep_controller,
+    DiffusionScheme, DutchLowTScheme, EnergyEqnOption, MeshFunctionConfig,
+    StarControls, StarError, StarJobControls, StarModel, TimestepAction,
 };
 
 fn rel_err(a: f64, b: f64) -> f64 {
@@ -211,11 +211,10 @@ fn test_do_set_mdot_bjorklund_dutch_and_rotational_boost_match_analytic_laws() {
     model.controls.rotation_flag = true;
     model.controls.mix_wind.mdot_omega_power = 0.43;
     model.omega.fill(0.5 * omega_crit);
-    let surf_rot = flexmesa_star::report_utils::eval_surf_avg_rotation_info(&model);
-    let expected_boost = flexmesa_math::pow(
-        (1.0 - surf_rot.v_div_v_crit).max(1.0e-22),
-        -0.43,
-    );
+    let surf_rot =
+        flexmesa_star::report_utils::eval_surf_avg_rotation_info(&model);
+    let expected_boost =
+        flexmesa_math::pow((1.0 - surf_rot.v_div_v_crit).max(1.0e-22), -0.43);
     let mdot_rot = do_set_mdot(&mut model).expect("rotational mdot");
     assert!(mdot_rot < mdot_no_rot);
     assert!(rel_err(mdot_rot / mdot_no_rot, expected_boost) < 1.0e-12);
@@ -228,8 +227,8 @@ fn test_do_set_mdot_bjorklund_dutch_and_rotational_boost_match_analytic_laws() {
 }
 
 #[test]
-fn test_do_adjust_mass_step_and_eps_mdot_conserve_accreted_species_and_angular_momentum()
- {
+fn test_do_adjust_mass_step_and_eps_mdot_conserve_accreted_species_and_angular_momentum(
+) {
     let mut ctrl = StarControls {
         mass_change: 1.0e-6,
         accrete_same_as_surface: false,
@@ -315,10 +314,7 @@ fn test_overshoot_16_param_sets_and_brunt_b_cutoff_follow_mesa_rules() {
     set_hydro_vars(&mut base, false, false).expect("set_hydro_vars");
     let n_bdy = locate_convection_boundaries(&mut base)
         .expect("locate_convection_boundaries");
-    assert!(
-        n_bdy > 0,
-        "4 Msun ZAMS must have convective core"
-    );
+    assert!(n_bdy > 0, "4 Msun ZAMS must have convective core");
 
     let mut m_exp = base.clone();
     {
@@ -369,8 +365,8 @@ fn test_overshoot_16_param_sets_and_brunt_b_cutoff_follow_mesa_rules() {
         .count();
 
     assert!(n_ov_exp > 0, "expected OvershootMixing zones from set 0");
-    let hp_cb = flexmesa_star::eval_conv_bdy_hp(&base, 0)
-        .expect("eval_conv_bdy_hp");
+    let hp_cb =
+        flexmesa_star::eval_conv_bdy_hp(&base, 0).expect("eval_conv_bdy_hp");
     let (_k_ob, r_ob, d_ob, _vc_ob) =
         flexmesa_star::eval_over_bdy_params(&base, 0, 0.005)
             .expect("eval_over_bdy_params");
@@ -424,7 +420,10 @@ fn test_conv_premix_predictive_mixing_and_extra_heat_in_evolve_step() {
     // trial-mixed Schwarzschild criterion.
     m_pred.controls.do_conv_premix = false;
     m_pred.controls.use_ledoux_criterion = true;
-    m_pred.controls.mix_wind.num_cells_for_smooth_gradl_composition_term = 0;
+    m_pred
+        .controls
+        .mix_wind
+        .num_cells_for_smooth_gradl_composition_term = 0;
     m_pred.controls.mix_wind.num_cells_for_smooth_brunt_b = 0;
     let _ = locate_convection_boundaries(&mut m_pred)
         .expect("locate_convection_boundaries");
@@ -504,13 +503,11 @@ fn test_conv_premix_predictive_mixing_and_extra_heat_in_evolve_step() {
         .expect("evolve_step Dedt");
     assert!(rep_dedt.converged);
     assert!(m_heat.aux.total_energy.is_finite());
-    assert!(
-        m_heat
-            .aux
-            .step_hist
-            .error_in_energy_conservation
-            .is_finite()
-    );
+    assert!(m_heat
+        .aux
+        .step_hist
+        .error_in_energy_conservation
+        .is_finite());
 
     m_heat.controls.energy_eqn_option = EnergyEqnOption::EpsGrav;
     let rep_eps = star_evolve_step(&mut m_heat, false, false, true)
@@ -518,19 +515,17 @@ fn test_conv_premix_predictive_mixing_and_extra_heat_in_evolve_step() {
     assert!(rep_eps.converged);
     // `#151` (`star/private/evolve.f90:1356-1357`): `eps_grav` mode computes
     // the genuine global total-energy conservation error rather than `0.0`.
-    assert!(
-        m_heat
-            .aux
-            .step_hist
-            .error_in_energy_conservation
-            .is_finite()
-    );
+    assert!(m_heat
+        .aux
+        .step_hist
+        .error_in_energy_conservation
+        .is_finite());
     assert_ne!(m_heat.aux.step_hist.error_in_energy_conservation, 0.0);
 }
 
 #[test]
-fn test_timestep_controller_hard_limit_triggers_retry_and_termination_stops_evolve()
- {
+fn test_timestep_controller_hard_limit_triggers_retry_and_termination_stops_evolve(
+) {
     let mut model = load_zams_model(
         StarControls {
             zbase: 0.02,
@@ -575,8 +570,8 @@ fn test_timestep_controller_hard_limit_triggers_retry_and_termination_stops_evol
 }
 
 #[test]
-fn test_element_diffusion_pure_h_envelope_preserves_unit_composition_and_do_kap()
- {
+fn test_element_diffusion_pure_h_envelope_preserves_unit_composition_and_do_kap(
+) {
     let mut m = load_zams_model(
         StarControls {
             zbase: 0.02,

@@ -135,7 +135,9 @@ fn custom_zfrac_array(
     Ok(zfrac)
 }
 
-fn get_xa_for_standard_metals(model: &StarModel) -> Result<Vec<f64>, StarError> {
+fn get_xa_for_standard_metals(
+    model: &StarModel,
+) -> Result<Vec<f64>, StarError> {
     let mw = &model.controls.mix_wind;
     standard_metals_xa(
         &model.chem_id,
@@ -361,7 +363,8 @@ fn adjust_z_fractions(
         if jskip == Some(j) || z_num[j] <= 2 {
             continue;
         }
-        let frac = 1.0e-2 * lodders03_element_atom_percent(names[j]) * weights[j];
+        let frac =
+            1.0e-2 * lodders03_element_atom_percent(names[j]) * weights[j];
         if frac == 0.0 {
             continue;
         }

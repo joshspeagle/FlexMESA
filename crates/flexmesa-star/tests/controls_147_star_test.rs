@@ -44,12 +44,12 @@ use flexmesa_star::micro::{
 use flexmesa_star::micro_net::high_temp_rate_warning_zone;
 use flexmesa_star::model_io::{read_mod_str, write_mod_string};
 use flexmesa_star::photo_io::{load_photo_bytes, write_photo_bytes};
-use flexmesa_star::rn_parser::{parse_rn_stages, RnStage};
 use flexmesa_star::pulse::export_fgong;
 use flexmesa_star::pulse::export_gyre;
 use flexmesa_star::pulse_exporters::{
     export_pulse_by_format, export_pulse_with_controls,
 };
+use flexmesa_star::rn_parser::{parse_rn_stages, RnStage};
 use flexmesa_star::star_job_init::init_or_update_model_from_bundle;
 use flexmesa_star::{
     apply_step_pre_physics, eval_surf_bc, load_zams_model,
@@ -1147,9 +1147,9 @@ fn test_147_atm_off_table_option_parse_and_c13_pocket() {
 
     // 2. Strict parse (`allow_unsupported_controls = false`) of upstream
     // `star/test_suite/c13_pocket` passes with zero unsupported controls.
-    if let Some(c13_dir) =
-        flexmesa_utils::require_mesa_test_input_path("star/test_suite/c13_pocket")
-    {
+    if let Some(c13_dir) = flexmesa_utils::require_mesa_test_input_path(
+        "star/test_suite/c13_pocket",
+    ) {
         let stages = parse_rn_stages(&c13_dir, false)
             .expect("parse c13_pocket rn stages");
         let mut saw_c13_header = false;

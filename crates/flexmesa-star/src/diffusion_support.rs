@@ -324,11 +324,9 @@ pub fn get_matrix_coeffs(
         )?;
 
         if inp.diffusion_use_cgs_solver {
-            let mut ef = BOLTZM
-                * inp.t_face[k]
-                * inp.dln_t_dr_face[k]
-                * out.e_at[k]
-                + AMU * inp.grav[k] * out.e_ap[k];
+            let mut ef =
+                BOLTZM * inp.t_face[k] * inp.dln_t_dr_face[k] * out.e_at[k]
+                    + AMU * inp.grav[k] * out.e_ap[k];
             for j in 0..nc {
                 ef += BOLTZM
                     * inp.t_face[k]
@@ -362,8 +360,7 @@ pub fn get_matrix_coeffs(
         for i in 0..nc {
             let mut vtot = out.v_advection_face[face_nc_lo + i];
             for j in 0..nc {
-                vtot -= out.sigma_lnc[face_mat_lo + i * nc + j]
-                    * dc_dr_face[j]
+                vtot -= out.sigma_lnc[face_mat_lo + i * nc + j] * dc_dr_face[j]
                     / c_face[j];
             }
             out.v_total_face[face_nc_lo + i] = vtot;
@@ -686,18 +683,8 @@ pub fn get1_burgers_coeffs(
         let mut ath = vec![0.0_f64; m * m];
 
         paquette_coefficients(
-            rho,
-            t,
-            m,
-            a,
-            &charge,
-            &na,
-            &mut ddiff,
-            &mut kdiff,
-            zdiff,
-            zdiff1,
-            zdiff2,
-            &mut ath,
+            rho, t, m, a, &charge, &na, &mut ddiff, &mut kdiff, zdiff, zdiff1,
+            zdiff2, &mut ath,
         );
 
         if !diffusion_use_paquette {
@@ -775,8 +762,8 @@ pub fn get1_burgers_coeffs(
     for i in 0..m {
         for j in 0..m {
             let xij = 2.3939e3 * t * lambda / (charge[i] * charge[j]).abs();
-            cl[i * m + j] =
-                0.81245 * flexmesa_math::log1p(0.18769 * flexmesa_math::pow(xij, 1.2));
+            cl[i * m + j] = 0.81245
+                * flexmesa_math::log1p(0.18769 * flexmesa_math::pow(xij, 1.2));
         }
     }
 
@@ -1102,8 +1089,12 @@ pub fn get1_diffusion_velocities(
                     * ax[j * m + i];
             }
             vln_p[i] = ap[i] * AMU * grav * diffusion_factor[i] * limit_coeff;
-            vln_t[i] =
-                at[i] * BOLTZM * t * dln_t_dr * diffusion_factor[i] * limit_coeff;
+            vln_t[i] = at[i]
+                * BOLTZM
+                * t
+                * dln_t_dr
+                * diffusion_factor[i]
+                * limit_coeff;
             vrad[i] = ar[i] * diffusion_factor[i] * limit_coeff;
             vgt[i] = vln_p[i] + vln_t[i] + vrad[i];
         }
@@ -1120,7 +1111,8 @@ pub fn get1_diffusion_velocities(
     } else {
         let tau0 = 6.0e13 * SECYER;
         let t2pt5 = flexmesa_math::pow(t / T_UNIT, 2.5);
-        let coef = limit_coeff * RSUN * t2pt5 / (rho / RHO_UNIT) * (RSUN / tau0);
+        let coef =
+            limit_coeff * RSUN * t2pt5 / (rho / RHO_UNIT) * (RSUN / tau0);
         let coef_vrad =
             (limit_coeff / t) * RSUN * RSUN * t2pt5 / (rho / RHO_UNIT) / tau0;
 
@@ -1637,7 +1629,8 @@ pub fn solve_burgers_cgs_with_thermal(
                 for l in 0..m {
                     if l != j {
                         let idx = i * m + l;
-                        s += 2.5 * kdiff[idx] * zdiff[idx] * a[l] / (a[i] + a[l]);
+                        s += 2.5 * kdiff[idx] * zdiff[idx] * a[l]
+                            / (a[i] + a[l]);
                     }
                 }
                 delta[row * n + j] = s;
@@ -1765,16 +1758,25 @@ pub fn get_sm_coeffs(
 ) -> f64 {
     // Table IV coefficients indexed by [no - 1][mo - 1]
     const A1: [[f64; 3]; 2] = [[1.4660, 0.52094, 0.30346], [0.0, 0.85401, 0.0]];
-    const A2: [[f64; 3]; 2] = [[-1.7836, 0.25153, 0.23739], [0.0, -0.22898, 0.0]];
-    const A3: [[f64; 3]; 2] = [[1.4313, -1.1337, -0.62167], [0.0, -0.60059, 0.0]];
-    const A4: [[f64; 3]; 2] = [[-0.55833, 1.2155, 0.56110], [0.0, 0.80591, 0.0]];
-    const A5: [[f64; 3]; 2] = [[0.061162, -0.43784, -0.18046], [0.0, -0.30555, 0.0]];
+    const A2: [[f64; 3]; 2] =
+        [[-1.7836, 0.25153, 0.23739], [0.0, -0.22898, 0.0]];
+    const A3: [[f64; 3]; 2] =
+        [[1.4313, -1.1337, -0.62167], [0.0, -0.60059, 0.0]];
+    const A4: [[f64; 3]; 2] =
+        [[-0.55833, 1.2155, 0.56110], [0.0, 0.80591, 0.0]];
+    const A5: [[f64; 3]; 2] =
+        [[0.061162, -0.43784, -0.18046], [0.0, -0.30555, 0.0]];
 
-    const B0: [[f64; 3]; 2] = [[0.081033, 0.20572, 0.68375], [0.0, 0.43475, 0.0]];
-    const B1: [[f64; 3]; 2] = [[-0.091336, -0.16536, -0.38459], [0.0, -0.21147, 0.0]];
-    const B2: [[f64; 3]; 2] = [[0.051760, 0.061572, 0.10711], [0.0, 0.11116, 0.0]];
-    const B3: [[f64; 3]; 2] = [[-0.50026, -0.12770, 0.10649], [0.0, 0.19665, 0.0]];
-    const B4: [[f64; 3]; 2] = [[0.17044, 0.066993, 0.028760], [0.0, 0.15195, 0.0]];
+    const B0: [[f64; 3]; 2] =
+        [[0.081033, 0.20572, 0.68375], [0.0, 0.43475, 0.0]];
+    const B1: [[f64; 3]; 2] =
+        [[-0.091336, -0.16536, -0.38459], [0.0, -0.21147, 0.0]];
+    const B2: [[f64; 3]; 2] =
+        [[0.051760, 0.061572, 0.10711], [0.0, 0.11116, 0.0]];
+    const B3: [[f64; 3]; 2] =
+        [[-0.50026, -0.12770, 0.10649], [0.0, 0.19665, 0.0]];
+    const B4: [[f64; 3]; 2] =
+        [[0.17044, 0.066993, 0.028760], [0.0, 0.15195, 0.0]];
 
     let (lambda, kappa) = lam_sm(nc, m, rho, t, z, nd);
 
@@ -1860,14 +1862,13 @@ pub fn lam_sm(
 ) -> (f64, f64) {
     let tiny_n = 1.0e-20;
     let ne = nd[m - 1];
-    let ef =
-        (HBAR * HBAR * flexmesa_math::pow(3.0 * PI * PI * ne, 2.0 / 3.0))
-            / (2.0 * ME);
+    let ef = (HBAR * HBAR * flexmesa_math::pow(3.0 * PI * PI * ne, 2.0 / 3.0))
+        / (2.0 * ME);
     let lam_e = flexmesa_math::pow(
         PI4 * QE * QE * ne
             / (flexmesa_math::pow2(BOLTZM * t)
                 + flexmesa_math::pow2((2.0 / 3.0) * ef))
-                .sqrt(),
+            .sqrt(),
         -0.5,
     );
 
@@ -1884,7 +1885,10 @@ pub fn lam_sm(
 
     let mut lam_sum = 1.0 / flexmesa_math::pow2(lam_e);
     for i in 0..nc {
-        let ai = flexmesa_math::pow(z[i] * QE / (FOUR_THIRDS_PI * rhotot), ONE_THIRD);
+        let ai = flexmesa_math::pow(
+            z[i] * QE / (FOUR_THIRDS_PI * rhotot),
+            ONE_THIRD,
+        );
         let gam_is = z[i] * z[i] * QE * QE / (ai * BOLTZM * t);
         let lam_i = if nd[i] < tiny_n {
             1.0e99
@@ -1931,8 +1935,7 @@ pub fn get_cbf_coeffs(
         zp6bar += flexmesa_math::pow(z[j], 0.6) * nd[j] / ni_sum;
     }
 
-    let (omegap, ai, _lam_e, kappa) =
-        kappa_cbf(nc, m, rho, t, abar, zbar, nd);
+    let (omegap, ai, _lam_e, kappa) = kappa_cbf(nc, m, rho, t, abar, zbar, nd);
     let dstar_ocp = get_dstar_ocp(gamma, kappa);
     let docp = dstar_ocp * ai * ai * omegap;
 
@@ -1971,7 +1974,9 @@ pub fn get_dstar_ocp(gamma: f64, kappa: f64) -> f64 {
     let bk = b0 * flexmesa_math::exp(-b1 * flexmesa_math::pow(kappa, b2));
     let ck = c0 + c1 * bitsafe_erf_fit(c2 * flexmesa_math::pow(kappa, c3));
 
-    (PI / 3.0).sqrt() * ak * flexmesa_math::pow(gamma, -2.5)
+    (PI / 3.0).sqrt()
+        * ak
+        * flexmesa_math::pow(gamma, -2.5)
         * flexmesa_math::exp(-bk * gamma)
         / flexmesa_math::log(
             1.0 + ck * flexmesa_math::pow(gamma, -1.5) / 3.0_f64.sqrt(),
@@ -1992,14 +1997,13 @@ pub fn kappa_cbf(
     nd: &[f64],
 ) -> (f64, f64, f64, f64) {
     let ne = nd[m - 1];
-    let ef =
-        (HBAR * HBAR * flexmesa_math::pow(3.0 * PI * PI * ne, 2.0 / 3.0))
-            / (2.0 * ME);
+    let ef = (HBAR * HBAR * flexmesa_math::pow(3.0 * PI * PI * ne, 2.0 / 3.0))
+        / (2.0 * ME);
     let lam_e_sm = flexmesa_math::pow(
         PI4 * QE * QE * ne
             / (flexmesa_math::pow2(BOLTZM * t)
                 + flexmesa_math::pow2((2.0 / 3.0) * ef))
-                .sqrt(),
+            .sqrt(),
         -0.5,
     );
 
@@ -2015,8 +2019,7 @@ pub fn kappa_cbf(
     for &n_i in &nd[..nc] {
         ni_tot += n_i;
     }
-    let omegap =
-        (PI4 * ni_tot * zbar * zbar * QE * QE / (abar * AMU)).sqrt();
+    let omegap = (PI4 * ni_tot * zbar * zbar * QE * QE / (abar * AMU)).sqrt();
     let ai = flexmesa_math::pow(3.0 / (PI4 * ni_tot), ONE_THIRD);
     let kappa = ai / lam_e;
     (omegap, ai, lam_e, kappa)

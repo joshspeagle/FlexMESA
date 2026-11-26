@@ -34,8 +34,8 @@ use crate::hydro_energy::{eval_face_area_time_centered_ad, eval_pvsc_cell_ad};
 use crate::hydro_eqns::HenyeySystem;
 use crate::model::StarModel;
 use crate::star_ad::{
-    StarAdExt, StarAdOrder1, I_LND_00, I_LND_M1, I_LNR_00, I_LNT_00, I_V_00, I_V_M1,
-    I_V_P1,
+    StarAdExt, StarAdOrder1, I_LND_00, I_LND_M1, I_LNR_00, I_LNT_00, I_V_00,
+    I_V_M1, I_V_P1,
 };
 
 /// Evaluates the pressure time-centering weight $\theta_P \in [0, 1]$ at cell
@@ -44,7 +44,9 @@ use crate::star_ad::{
 #[inline]
 pub fn eval_p_theta(model: &StarModel, k: usize) -> f64 {
     let logt = model.ln_t[k] / LN10;
-    if model.controls.is_velocity_time_centered(model.model_number_old)
+    if model
+        .controls
+        .is_velocity_time_centered(model.model_number_old)
         && model.controls.include_p_in_velocity_time_centering
         && logt
             <= model
@@ -89,11 +91,12 @@ pub fn eval_time_centered_hse_geom_ad(
 ) -> (StarAdOrder1, StarAdOrder1) {
     let lnr_k = StarAdOrder1::variable(model.ln_r[k], I_LNR_00);
     let r_k = lnr_k.exp();
-    let using_v_tc =
-        model.controls.is_velocity_time_centered(model.model_number_old)
-            && (model.controls.v_flag || model.controls.u_flag)
-            && model.dt > 0.0
-            && !model.ln_r_start.is_empty();
+    let using_v_tc = model
+        .controls
+        .is_velocity_time_centered(model.model_number_old)
+        && (model.controls.v_flag || model.controls.u_flag)
+        && model.dt > 0.0
+        && !model.ln_r_start.is_empty();
     let lnr_start_k = model.ln_r_start.get(k).copied().unwrap_or(model.ln_r[k]);
     let r2 = if using_v_tc {
         let r_start = flexmesa_math::exp(lnr_start_k).max(1.0);
@@ -306,7 +309,8 @@ fn setup_rti_momentum_terms(
     }
     let dvdt_diffusion = if model.controls.dudt_rti_diffusion_factor > 0.0 {
         let fac = model.controls.dudt_rti_diffusion_factor;
-        let sigm1 = fac * model.aux.sigmid_rti.get(k - 1).copied().unwrap_or(0.0);
+        let sigm1 =
+            fac * model.aux.sigmid_rti.get(k - 1).copied().unwrap_or(0.0);
         let sig00 = fac * model.aux.sigmid_rti.get(k).copied().unwrap_or(0.0);
         let v_val = |idx: usize| {
             if model.controls.v_flag {
@@ -412,7 +416,11 @@ pub fn expected_non_hse_term(model: &StarModel, k: usize) -> StarAdOrder1 {
 /// `get_dPtot_face_info`, `hydro_momentum.f90:470-478`) for cell `cell`,
 /// placed in the `m1` slots when `shift_m1`.
 #[must_use]
-pub fn calc_ptot_ad_tw(model: &StarModel, cell: usize, shift_m1: bool) -> StarAdOrder1 {
+pub fn calc_ptot_ad_tw(
+    model: &StarModel,
+    cell: usize,
+    shift_m1: bool,
+) -> StarAdOrder1 {
     let (peos_ad, _) = eval_cell_peos_time_centered_ad(model, cell, shift_m1);
     let mut pvsc_ad = StarAdOrder1::ZERO;
     if model.controls.use_pvsc_art_visc && model.controls.v_flag {
@@ -449,7 +457,11 @@ pub fn do1_momentum_eqn(model: &StarModel, k: usize, sys: &mut HenyeySystem) {
         calc_ptot_ad_tw(model, k - 1, true)
     };
     let dptot_ad = ptotm1_ad - ptot00_ad;
-    let (alfa, beta) = if k == 0 { (1.0, 0.0) } else { model.get_face_weights(k) };
+    let (alfa, beta) = if k == 0 {
+        (1.0, 0.0)
+    } else {
+        model.get_face_weights(k)
+    };
     let ptotavg_ad = if k == 0 {
         ptot00_ad
     } else {
@@ -458,14 +470,17 @@ pub fn do1_momentum_eqn(model: &StarModel, k: usize, sys: &mut HenyeySystem) {
     let iptotavg_ad = 1.0 / ptotavg_ad;
     // `setup_d_mlt_Pturb`
     let vc_old = model.aux.mlt_vc_old.get(k).copied().unwrap_or(0.0);
-    let d_mlt_pturb_ad = if model.controls.mlt_pturb_factor > 0.0 && vc_old > 0.0 {
-        let rho_00 = wrap_d_00(model, k);
-        let rho_m1 = wrap_d_m1(model, k);
-        model.controls.mlt_pturb_factor * flexmesa_math::pow2(vc_old) * (rho_m1 - rho_00)
-            / 3.0
-    } else {
-        StarAdOrder1::ZERO
-    };
+    let d_mlt_pturb_ad =
+        if model.controls.mlt_pturb_factor > 0.0 && vc_old > 0.0 {
+            let rho_00 = wrap_d_00(model, k);
+            let rho_m1 = wrap_d_m1(model, k);
+            model.controls.mlt_pturb_factor
+                * flexmesa_math::pow2(vc_old)
+                * (rho_m1 - rho_00)
+                / 3.0
+        } else {
+            StarAdOrder1::ZERO
+        };
     // `setup_RTI_terms`
     let rti_terms_ad = setup_rti_momentum_terms(model, k, dm_div_a_ad);
 
@@ -477,8 +492,9 @@ pub fn do1_momentum_eqn(model: &StarModel, k: usize, sys: &mut HenyeySystem) {
     // `auto_diff_real_star_order1` and only then assigned to the accurate
     // type, whose compensator is then zero (`set_acc_adr`,
     // `num/public/accurate_sum_auto_diff_star_order1.f90`).
-    let resid1_ad = other_dm_div_a_ad + grav_dm_div_a_ad - dptot_ad - d_mlt_pturb_ad
-        + rti_terms_dm_div_a_ad;
+    let resid1_ad =
+        other_dm_div_a_ad + grav_dm_div_a_ad - dptot_ad - d_mlt_pturb_ad
+            + rti_terms_dm_div_a_ad;
     let resid = resid1_ad * iptotavg_ad;
 
     let i_equ = model.layout.i_dv_dt;
@@ -507,8 +523,11 @@ pub fn do1_momentum_eqn(model: &StarModel, k: usize, sys: &mut HenyeySystem) {
             let ivar = model.layout.chem_var_index(j);
             let d_ptot00_dxa00 = d_ptot_dxa(k, j);
             let d_dptot_dxa00 = -d_ptot00_dxa00;
-            let d_ptotavg_dxa00 =
-                if k == 0 { d_ptot00_dxa00 } else { alfa * d_ptot00_dxa00 };
+            let d_ptotavg_dxa00 = if k == 0 {
+                d_ptot00_dxa00
+            } else {
+                alfa * d_ptot00_dxa00
+            };
             let d_iptotavg_dxa00 = -iptotavg * d_ptotavg_dxa00 / ptotavg;
             let d_residual_dxa00 =
                 resid1 * d_iptotavg_dxa00 - iptotavg * d_dptot_dxa00;

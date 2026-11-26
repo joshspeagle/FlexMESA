@@ -12,14 +12,14 @@
 //! the timescale $\tau$ (`timescale_for_relax_entropy`).
 
 use flexmesa_const::SECYER;
-use flexmesa_interp1d::{CubicCoeffs, interp_pm, interp_values};
+use flexmesa_interp1d::{interp_pm, interp_values, CubicCoeffs};
 
 use crate::controls::StarError;
 use crate::inlist_runner::StarExtras;
 use crate::model::StarModel;
 use crate::relax_driver::{
-    RELAX_FINISHED_OKAY, RelaxHookResult, RelaxHooks, do_internal_evolve,
-    setup_before_relax,
+    do_internal_evolve, setup_before_relax, RelaxHookResult, RelaxHooks,
+    RELAX_FINISHED_OKAY,
 };
 
 /// Termination code of a failed target interpolation. Upstream sets
@@ -334,10 +334,8 @@ mod tests {
 
     #[test]
     fn target_rejects_non_monotonic_knots() {
-        assert!(
-            RelaxEntropyTarget::new(&[0.0, 1.0, 0.5], &[1.0, 2.0, 3.0])
-                .is_err()
-        );
+        assert!(RelaxEntropyTarget::new(&[0.0, 1.0, 0.5], &[1.0, 2.0, 3.0])
+            .is_err());
     }
 
     /// A 1 Msun ZAMS model and a target entropy profile equal to

@@ -58,10 +58,10 @@ pub(crate) fn eval_uniform_xa_eos_kap_range(
     let catalog = NuclideCatalog::builtin_ref();
     let comp_raw = get_composition_info(catalog, &model.chem_id, xa_mx, true)
         .map_err(|e| {
-            StarError::MicrophysicsError(format!(
-                "composition error in predictive_mix: {e}"
-            ))
-        })?;
+        StarError::MicrophysicsError(format!(
+            "composition error in predictive_mix: {e}"
+        ))
+    })?;
     let zbar = comp_raw.zbar;
     let ht = builtin_helm_table()?;
     let species = model.species;
@@ -160,17 +160,13 @@ pub(crate) fn eval_eos_kap_range_by_mode(
             .into_par_iter()
             .map(|k| {
                 let xa_k = &model.xa[k * species..(k + 1) * species];
-                let c = get_composition_info(
-                    catalog,
-                    &model.chem_id,
-                    xa_k,
-                    true,
-                )
-                .map_err(|e| {
-                    StarError::MicrophysicsError(format!(
-                        "composition error at zone {k}: {e}"
-                    ))
-                })?;
+                let c =
+                    get_composition_info(catalog, &model.chem_id, xa_k, true)
+                        .map_err(|e| {
+                        StarError::MicrophysicsError(format!(
+                            "composition error at zone {k}: {e}"
+                        ))
+                    })?;
                 let xh = c.xh.clamp(0.0, 1.0);
                 let xhe = c.xhe.clamp(0.0, 1.0);
                 let z = (1.0 - (xh + xhe)).clamp(0.0, 1.0);
@@ -224,14 +220,16 @@ pub(crate) fn eval_eos_kap_range_by_mode(
         let t = &model.t;
         let pt_results: Vec<(usize, f64, f64, EosEvalOutput)> = pt_cells
             .par_iter()
-            .map(|&k| -> Result<(usize, f64, f64, EosEvalOutput), StarError> {
-                let xa_k = &xa[k * species..(k + 1) * species];
-                let (lnd_out, rho_out, eos) = solve_fix_pgas_cell(
-                    ht, chem_id, xa_k, k, ln_t[k], t[k], ln_pgas[k], lnd[k],
-                    eos_cfg,
-                )?;
-                Ok((k, lnd_out, rho_out, eos))
-            })
+            .map(
+                |&k| -> Result<(usize, f64, f64, EosEvalOutput), StarError> {
+                    let xa_k = &xa[k * species..(k + 1) * species];
+                    let (lnd_out, rho_out, eos) = solve_fix_pgas_cell(
+                        ht, chem_id, xa_k, k, ln_t[k], t[k], ln_pgas[k],
+                        lnd[k], eos_cfg,
+                    )?;
+                    Ok((k, lnd_out, rho_out, eos))
+                },
+            )
             .collect::<Result<Vec<_>, _>>()?;
         for (k, lnd_new, rho_new, out) in pt_results {
             model.lnd[k] = lnd_new;
@@ -342,11 +340,7 @@ impl CellRangeSnapshot {
     /// Captures all composition, density, EOS, and opacity state across
     /// `k_lo..=k_hi`.
     #[must_use]
-    pub(crate) fn capture(
-        model: &StarModel,
-        k_lo: usize,
-        k_hi: usize,
-    ) -> Self {
+    pub(crate) fn capture(model: &StarModel, k_lo: usize, k_hi: usize) -> Self {
         let sp = model.species;
         let sp_lo = k_lo * sp;
         let sp_hi = (k_hi + 1) * sp;
@@ -512,11 +506,7 @@ pub(crate) struct FaceMltSnapshot {
 impl FaceMltSnapshot {
     /// Captures all face MLT outputs over `k_lo..=k_hi`.
     #[must_use]
-    pub(crate) fn capture(
-        model: &StarModel,
-        k_lo: usize,
-        k_hi: usize,
-    ) -> Self {
+    pub(crate) fn capture(model: &StarModel, k_lo: usize, k_hi: usize) -> Self {
         let r = k_lo..=k_hi;
         let m = &model.aux.mixing;
         Self {

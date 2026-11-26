@@ -487,15 +487,18 @@ pub fn read_mod_str_with_dir(
     // change_net / change_initial_net is applied later, after
     // `finish_load_model`, by `do_star_job_controls_after`
     // (`star/job/run_star_support.f90:1912-1916`).
-    let (chem_id, perm): (Vec<usize>, Vec<usize>) =
-        if job.net_name.trim().is_empty() {
-            (col_chem_id.clone(), (0..species).collect())
-        } else {
-            let net = crate::micro::get_or_load_net(&job.net_name, search_dir)?;
-            let net_chem_id = net.chem_id.clone();
-            let mut perm = Vec::with_capacity(species);
-            for (n, cid) in iso_names.iter().zip(&col_chem_id) {
-                let j = net_chem_id.iter().position(|c| c == cid).ok_or_else(
+    let (chem_id, perm): (Vec<usize>, Vec<usize>) = if job
+        .net_name
+        .trim()
+        .is_empty()
+    {
+        (col_chem_id.clone(), (0..species).collect())
+    } else {
+        let net = crate::micro::get_or_load_net(&job.net_name, search_dir)?;
+        let net_chem_id = net.chem_id.clone();
+        let mut perm = Vec::with_capacity(species);
+        for (n, cid) in iso_names.iter().zip(&col_chem_id) {
+            let j = net_chem_id.iter().position(|c| c == cid).ok_or_else(
                     || {
                         StarError::IoError(format!(
                             "Mod file has isotope {n} but that is not in the net {} (`star/private/read_model.f90:412-420`)",
@@ -503,21 +506,21 @@ pub fn read_mod_str_with_dir(
                         ))
                     },
                 )?;
-                perm.push(j);
-            }
-            // DECISIONS #43, deferred #472: with fewer columns than net species upstream
-            // leaves the remaining `xa` rows unset (`set_net` sets
-            // `s% species` from the net, `star/private/net.f90:626`, while
-            // only `species` columns are read).
-            if net_chem_id.len() != species {
-                return Err(StarError::IoError(format!(
+            perm.push(j);
+        }
+        // DECISIONS #43, deferred #472: with fewer columns than net species upstream
+        // leaves the remaining `xa` rows unset (`set_net` sets
+        // `s% species` from the net, `star/private/net.f90:626`, while
+        // only `species` columns are read).
+        if net_chem_id.len() != species {
+            return Err(StarError::IoError(format!(
                     ".mod has {species} isotope columns but net {} has {} species; upstream reads unset abundances here (`star/private/read_model.f90:405-420`, `star/private/net.f90:626`; DECISIONS #43, deferred #472)",
                     job.net_name,
                     net_chem_id.len()
                 )));
-            }
-            (net_chem_id, perm)
-        };
+        }
+        (net_chem_id, perm)
+    };
 
     let mut model = StarModel::new(nz, chem_id, job.clone(), controls);
     model.aux.have_j_rot = j_rot_idx.is_some();
@@ -730,7 +733,7 @@ pub fn read_mod_str_with_dir(
 }
 
 pub use crate::photo_io::{
-    PHOTO_FORMAT_VERSION, compute_photo_checksum, load_photo_bytes,
-    photo_numerics_mode, read_photo_bytes, try_write_photo_bytes,
-    write_photo_bytes,
+    compute_photo_checksum, load_photo_bytes, photo_numerics_mode,
+    read_photo_bytes, try_write_photo_bytes, write_photo_bytes,
+    PHOTO_FORMAT_VERSION,
 };

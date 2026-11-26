@@ -465,7 +465,11 @@ fn test_zams_360_1msun_model0_matches_mesa_26_4_1_hex_dump_at_0_ulp() {
             u64::from_str_radix(cols[4], 16).expect("parse L hex"),
         ));
     }
-    assert_eq!(rows.len(), 3813, "MESA 26.4.1 1.0 Msun ZAMS0 nz must be 3813");
+    assert_eq!(
+        rows.len(),
+        3813,
+        "MESA 26.4.1 1.0 Msun ZAMS0 nz must be 3813"
+    );
 
     let model = load_zams_model(
         StarControls {

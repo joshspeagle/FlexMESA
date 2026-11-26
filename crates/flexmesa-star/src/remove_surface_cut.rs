@@ -19,10 +19,10 @@ use crate::inlist_runner::StarExtras;
 use crate::micro::change_model_network_with_adjust;
 use crate::model::StarModel;
 use crate::relax_comp::CompositionProfile;
-use crate::relax_entropy::{RelaxEntropyTarget, do_relax_entropy};
+use crate::relax_entropy::{do_relax_entropy, RelaxEntropyTarget};
 use crate::relax_mass_comp::do_relax_composition;
 use crate::star_job_init::prepare_new_model_for_relax;
-use crate::zams::{ZamsCatalog, load_zams_model_from_catalog};
+use crate::zams::{load_zams_model_from_catalog, ZamsCatalog};
 
 /// Net that the ZAMS model is loaded on (`remove_shells.f90:1303`).
 const ZAMS_NET: &str = "basic.net";
@@ -448,9 +448,7 @@ mod tests {
         remove_surface_at_cell_k(&mut model, 1, None, &mut ex).unwrap();
         remove_surface_at_cell_k(&mut model, 0, None, &mut ex).unwrap();
         // The mesh-pruning removal is not ported.
-        assert!(
-            remove_surface_at_cell_k(&mut model, 5, None, &mut ex).is_err()
-        );
+        assert!(remove_surface_at_cell_k(&mut model, 5, None, &mut ex).is_err());
         model.job.remove_surface_by_relax_to_star_cut = true;
         model.r_center = 1.0e8;
         let e = remove_surface_at_cell_k(&mut model, 5, None, &mut ex)

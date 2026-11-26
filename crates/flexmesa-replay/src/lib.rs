@@ -14,11 +14,17 @@
 //! - `MLT`: `set_MLT` (`turb/public/turb.f90:275-292`) through
 //!   [`flexmesa_turb::set_mlt`].
 //!
+//! Records of a caller's arguments (`GETR`, `Get_results`) depend on star
+//! state and cannot be replayed stand-alone; [`argdiff`] instead compares a
+//! MESA capture with the same records written by `FlexMESA`'s own tap
+//! (`flexmesa-star`, `FLEXMESA_REPLAY_TAP`), call by call.
+//!
 //! The comparison is strict-mode only: replay runs under the default
 //! numerics mode of `flexmesa-math`.
 
 #![forbid(unsafe_code)]
 
+pub mod argdiff;
 pub mod compare;
 pub mod record;
 pub mod turb;
@@ -37,6 +43,9 @@ pub struct ReplaySummary {
     pub header: Vec<String>,
     /// Per-family results.
     pub families: BTreeMap<String, FamilySummary>,
+    /// Argument records (`GETR`), which are compared with
+    /// [`argdiff::compare_captures`] rather than replayed.
+    pub argument_records: usize,
 }
 
 impl ReplaySummary {
@@ -63,6 +72,7 @@ pub fn replay<R: BufRead>(reader: R) -> Result<ReplaySummary, FormatError> {
             let expected = match rec.family.as_str() {
                 "TDC" => turb::TDC_SCHEMA,
                 "MLT" => turb::MLT_SCHEMA,
+                "GETR" => turb::GETR_SCHEMA,
                 other => {
                     return Err(FormatError(format!(
                         "line {}: no replay for record family `{other}`",
@@ -77,7 +87,11 @@ pub fn replay<R: BufRead>(reader: R) -> Result<ReplaySummary, FormatError> {
         }
         let outcome = match rec.family.as_str() {
             "TDC" => turb::replay_tdc(&rec)?,
-            _ => turb::replay_mlt(&rec)?,
+            "MLT" => turb::replay_mlt(&rec)?,
+            _ => {
+                summary.argument_records += 1;
+                continue;
+            }
         };
         let fam = summary.families.entry(rec.family.clone()).or_default();
         match outcome {

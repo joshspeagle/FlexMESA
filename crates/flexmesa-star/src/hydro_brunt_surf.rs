@@ -271,15 +271,14 @@ pub(crate) fn get_atm_tau_base(
                 ))
             }),
         AtmOption::Table => {
-            let table_id = crate::inlist_populate::atm_table_id(
-                &controls.atm_table,
-            )
-            .ok_or_else(|| {
-                StarError::MicrophysicsError(format!(
+            let table_id =
+                crate::inlist_populate::atm_table_id(&controls.atm_table)
+                    .ok_or_else(|| {
+                        StarError::MicrophysicsError(format!(
                     "Call to get_table_id failed in get_atm_tau_base: {:?}",
                     controls.atm_table
                 ))
-            })?;
+                    })?;
             get_table_base(table_id).map_err(|e| {
                 StarError::MicrophysicsError(format!(
                     "Call to atm_get_table_base failed in get_atm_tau_base: {e}"

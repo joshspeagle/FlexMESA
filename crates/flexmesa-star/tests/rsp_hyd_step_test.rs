@@ -15,10 +15,10 @@ use flexmesa_kap::{KapCoOption, KapConfig, KapLowTOption, KapOption};
 use flexmesa_star::inlist_runner::StarExtras;
 use flexmesa_star::rsp_eos_kap::RspChemCache;
 use flexmesa_star::{
-    do_brunt_b, do_brunt_n2, do_rsp_build_model, export_gyre,
-    read_mod_str, rsp_setup_model, solve_gyre_mesa_modes, star_evolve_step,
-    star_evolve_step_with_extras, verify_photo_restart_parity, write_mod_string,
-    StarControls, StarError, StarJobControls, StarModel,
+    do_brunt_b, do_brunt_n2, do_rsp_build_model, export_gyre, read_mod_str,
+    rsp_setup_model, solve_gyre_mesa_modes, star_evolve_step,
+    star_evolve_step_with_extras, verify_photo_restart_parity,
+    write_mod_string, StarControls, StarError, StarJobControls, StarModel,
 };
 
 fn golden_rsp_dir() -> PathBuf {

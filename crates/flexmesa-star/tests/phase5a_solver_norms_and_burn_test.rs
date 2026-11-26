@@ -7,10 +7,10 @@ use flexmesa_const::SECYER;
 use flexmesa_star::photo_io::{read_photo_bytes, write_photo_bytes};
 use flexmesa_star::solver_norms::compute_residual_norms;
 use flexmesa_star::{
-    StarControls, StarError, StarJobControls, StarModel,
     active_solver_tolerances, change_model_network,
     compute_model_correction_norms, do_struct_burn_mix, load_zams_model,
-    set_hydro_vars, solve_henyey_step, star_evolve_step,
+    set_hydro_vars, solve_henyey_step, star_evolve_step, StarControls,
+    StarError, StarJobControls, StarModel,
 };
 
 fn usize_to_f64(n: usize) -> f64 {
@@ -94,8 +94,8 @@ fn build_compact_zams(
 }
 
 #[test]
-fn test_coupled_u_flag_hllc_henyey_step_converges_to_strict_residual_tolerances()
- {
+fn test_coupled_u_flag_hllc_henyey_step_converges_to_strict_residual_tolerances(
+) {
     let controls_full = StarControls {
         u_flag: true,
         v_flag: false,
@@ -159,8 +159,8 @@ fn test_coupled_u_flag_hllc_henyey_step_converges_to_strict_residual_tolerances(
 }
 
 #[test]
-fn test_multi_isotope_approx21_coupled_and_variable_t_const_density_op_split_burn_converge()
- {
+fn test_multi_isotope_approx21_coupled_and_variable_t_const_density_op_split_burn_converge(
+) {
     let mut model = load_zams_model(
         StarControls {
             zbase: 0.02,

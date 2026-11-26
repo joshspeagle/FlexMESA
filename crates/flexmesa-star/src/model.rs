@@ -18,7 +18,7 @@
 //!   and `brunt_n2[k]`.
 
 use flexmesa_chem::NuclideCatalog;
-use flexmesa_const::{L_SUN, M_SUN, MixingType, R_SUN, SECYER, STANDARD_CGRAV};
+use flexmesa_const::{MixingType, L_SUN, M_SUN, R_SUN, SECYER, STANDARD_CGRAV};
 use flexmesa_eos::{EosConfig, NUM_EOS_BASIC_RESULTS};
 use flexmesa_kap::KapConfig;
 

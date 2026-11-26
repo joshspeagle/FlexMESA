@@ -314,7 +314,11 @@ pub fn compute_model_correction_norms_in_solver(
                     continue;
                 }
                 let denom = 0.1 * lum_surf_start + model.lum[k].abs();
-                if denom == 0.0 { 0.0 } else { 1.0 / denom }
+                if denom == 0.0 {
+                    0.0
+                } else {
+                    1.0 / denom
+                }
             } else if layout.i_v == Some(j) {
                 if !c.include_v_in_correction_limits {
                     continue;
@@ -327,7 +331,11 @@ pub fn compute_model_correction_norms_in_solver(
                     .unwrap_or(model.csound[k]);
                 let denom =
                     0.1 * cs_s + model.v.get(k).copied().unwrap_or(0.0).abs();
-                if denom == 0.0 { 0.0 } else { 1.0 / denom }
+                if denom == 0.0 {
+                    0.0
+                } else {
+                    1.0 / denom
+                }
             } else if layout.i_u == Some(j) {
                 if !c.include_u_in_correction_limits {
                     continue;
@@ -340,7 +348,11 @@ pub fn compute_model_correction_norms_in_solver(
                     .unwrap_or(model.csound[k]);
                 let denom =
                     0.1 * cs_s + model.u.get(k).copied().unwrap_or(0.0).abs();
-                if denom == 0.0 { 0.0 } else { 1.0 / denom }
+                if denom == 0.0 {
+                    0.0
+                } else {
+                    1.0 / denom
+                }
             } else if layout.i_w == Some(j) {
                 // `star/private/solver_support.f90:368-379`.
                 if !c.rsp2_flag || !c.include_w_in_correction_limits {
@@ -640,7 +652,11 @@ pub fn active_residual_tolerances_with_gold(
     };
 
     if iter >= it2 {
-        if iter < it3 { (rn2, mr2) } else { (rn3, mr3) }
+        if iter < it3 {
+            (rn2, mr2)
+        } else {
+            (rn3, mr3)
+        }
     } else {
         (rn1, mr1)
     }

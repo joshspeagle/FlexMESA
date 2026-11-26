@@ -197,7 +197,13 @@ impl Default for DiffusionControls {
             diffusion_screening_for_radaccel: true,
             diffusion_use_full_net: false,
             diffusion_num_classes: 5,
-            diffusion_class_representative: vec![String::from("h1"), String::from("he3"), String::from("he4"), String::from("o16"), String::from("fe56")],
+            diffusion_class_representative: vec![
+                String::from("h1"),
+                String::from("he3"),
+                String::from("he4"),
+                String::from("o16"),
+                String::from("fe56"),
+            ],
             diffusion_class_a_max: vec![2.0, 3.0, 4.0, 16.0, 10000.0],
             diffusion_class_typical_charge: vec![1.0, 2.0, 2.0, 8.0, 21.0],
             diffusion_class_factor: vec![1.0; MAX_NUM_DIFFUSION_CLASSES],
@@ -333,7 +339,11 @@ pub(crate) fn populate_diffusion_controls(
     ctrl: &SectionControls,
     d: &mut DiffusionControls,
 ) -> Result<(), StarError> {
-    ctrl.try_bool_into("controls", &mut d.show_diffusion_info, "show_diffusion_info")?;
+    ctrl.try_bool_into(
+        "controls",
+        &mut d.show_diffusion_info,
+        "show_diffusion_info",
+    )?;
     ctrl.try_bool_into(
         "controls",
         &mut d.show_diffusion_substep_info,
@@ -344,7 +354,11 @@ pub(crate) fn populate_diffusion_controls(
         &mut d.show_diffusion_timing,
         "show_diffusion_timing",
     )?;
-    ctrl.try_f64_into("controls", &mut d.diffusion_dt_limit, "diffusion_dt_limit")?;
+    ctrl.try_f64_into(
+        "controls",
+        &mut d.diffusion_dt_limit,
+        "diffusion_dt_limit",
+    )?;
     ctrl.try_bool_into(
         "controls",
         &mut d.diffusion_use_paquette,

@@ -36,6 +36,18 @@ pub const MLT_SCHEMA: &str = "site:i id:i model:i solver_iter:i k:i \
     opacity:a gradr:a grada:a gradL:a max_conv_vel:r out_Gamma:a out_gradT:a \
     out_Y_face:a out_conv_vel:a out_D:a out_mixing_type:i out_ierr:i";
 
+/// `SCHEMA GETR` field list of `replay_patch.py` (`GETR_SCHEMA`): the
+/// arguments and results of the `Get_results` call in `do1_mlt_eval`
+/// (`star/private/turb_support.f90:188-192`). `Get_results` reads star state
+/// beyond its arguments, so these records are compared between MESA and
+/// `FlexMESA` (see [`crate::argdiff`]) rather than replayed.
+pub const GETR_SCHEMA: &str = "site:i id:i model:i solver_iter:i k:i \
+    MLT_option:s r:a L:a T:a P:a opacity:a rho:a dV:a chiRho:a chiT:a Cp:a \
+    gradr:a grada:a scale_height:a iso:i XH1:r cgrav:r m:r \
+    gradL_composition_term:r mixing_length_alpha:r alpha_semiconvection:r \
+    thermohaline_coeff:r energy:a out_mixing_type:i out_gradT:a \
+    out_Y_face:a out_conv_vel:a out_D:a out_Gamma:a out_ierr:i";
+
 /// Outcome of replaying one record.
 pub enum Replayed {
     /// The kernel ran (or failed where MESA also failed); differences found.

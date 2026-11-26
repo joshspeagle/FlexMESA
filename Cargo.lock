@@ -527,6 +527,7 @@ dependencies = [
  "flexmesa-neu",
  "flexmesa-num",
  "flexmesa-rates",
+ "flexmesa-replay",
  "flexmesa-schema",
  "flexmesa-turb",
  "flexmesa-utils",

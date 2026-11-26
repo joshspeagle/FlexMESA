@@ -9,10 +9,10 @@ use std::path::Path;
 use flexmesa_const::{M_SUN, SECYER};
 
 use crate::controls::{StarControls, StarError, StarJobControls, VarLayout};
-use crate::job_controls::{AtmOption, AtmTTauOpacity, AtmTTauRelation};
 use crate::hydro_vars::set_hydro_vars;
 use crate::inlist::InlistBundle;
 use crate::inlist_runner::StarExtras;
+use crate::job_controls::{AtmOption, AtmTTauOpacity, AtmTTauRelation};
 use crate::micro::{resolve_model_net, NetSearchDirGuard};
 use crate::model::StarModel;
 use crate::model_io::read_mod_str_with_dir;
@@ -21,12 +21,12 @@ use crate::relax::{
     set_uniform_initial_composition,
 };
 use crate::relax_comp::{parse_composition_profile_str, set_y, set_z};
+use crate::relax_driver::{
+    do_relax_num_steps, do_relax_to_radiative_core, do_relax_uniform_omega,
+    RelaxOmegaKind,
+};
 use crate::relax_entropy::{
     do_relax_entropy, parse_entropy_profile_str, RelaxEntropyTarget,
-};
-use crate::relax_driver::{
-    RelaxOmegaKind, do_relax_num_steps, do_relax_to_radiative_core,
-    do_relax_uniform_omega,
 };
 use crate::relax_mass_comp::{
     do_relax_composition, do_relax_core, do_relax_irradiation,
@@ -350,7 +350,8 @@ fn relax_after_create_pre_ms_model(
         );
         do_relax_mass_scale(model, initial_mass, dlgm, years, extras)?;
     }
-    let (num_steps, dt_next) = (model.job.pre_ms_relax_num_steps, model.dt_next);
+    let (num_steps, dt_next) =
+        (model.job.pre_ms_relax_num_steps, model.dt_next);
     do_relax_num_steps(model, num_steps, dt_next, extras)?;
     if model.job.pre_ms_relax_to_start_radiative_core {
         do_relax_to_radiative_core(model, extras)?;
@@ -413,7 +414,8 @@ struct ExtrasHooksGuard {
 
 impl ExtrasHooksGuard {
     fn new(hooks: &crate::hydro_state::HydroAuxState) -> Self {
-        ACTIVE_EXTRAS_HOOKS.with(|stack| stack.borrow_mut().push(hooks.clone()));
+        ACTIVE_EXTRAS_HOOKS
+            .with(|stack| stack.borrow_mut().push(hooks.clone()));
         Self { _private: () }
     }
 }
@@ -455,13 +457,18 @@ fn reject_hook_flags_without_handler(
 ) -> Result<(), StarError> {
     let mut missing: Vec<(String, String)> = Vec::new();
     if shell.controls.use_other_cgrav && shell.aux.other_cgrav.is_none() {
-        missing.push((String::from("controls"), String::from("use_other_cgrav")));
+        missing
+            .push((String::from("controls"), String::from("use_other_cgrav")));
         if allow_unsupported_controls {
             shell.controls.use_other_cgrav = false;
         }
     }
-    if shell.controls.use_other_alpha_mlt && shell.aux.other_alpha_mlt.is_none() {
-        missing.push((String::from("controls"), String::from("use_other_alpha_mlt")));
+    if shell.controls.use_other_alpha_mlt && shell.aux.other_alpha_mlt.is_none()
+    {
+        missing.push((
+            String::from("controls"),
+            String::from("use_other_alpha_mlt"),
+        ));
         if allow_unsupported_controls {
             shell.controls.use_other_alpha_mlt = false;
         }
@@ -718,7 +725,8 @@ fn init_or_update_model_impl(
     // The model's `tau_factor` (as saved in a `.mod` file) replaces the
     // inlist value unless the inlist just set it
     // (`star/private/read_model.f90:307-315`).
-    if (preserved_tau - model.controls.tau_factor).abs() > preserved_tau * 1.0e-9
+    if (preserved_tau - model.controls.tau_factor).abs()
+        > preserved_tau * 1.0e-9
         && model.controls.tau_factor != job.set_to_this_tau_factor
     {
         model.controls.tau_factor = preserved_tau;
@@ -1156,7 +1164,9 @@ fn init_or_update_model_impl(
                 continue;
             }
             ready_for_relax(&mut model, extras)?;
-            do_relax_uniform_omega(&mut model, kind, target, n, dt_yrs, extras)?;
+            do_relax_uniform_omega(
+                &mut model, kind, target, n, dt_yrs, extras,
+            )?;
             if i == 4 {
                 // `s% job% new_omega = new_surface_rotation_v*1d5/s% r(1)`
                 // after `relax_surface_rotation_v` only (`:2633`).

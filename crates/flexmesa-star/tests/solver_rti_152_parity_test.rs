@@ -7,7 +7,7 @@
 #![forbid(unsafe_code)]
 
 use flexmesa_chem::NuclideCatalog;
-use flexmesa_const::{FOUR_PI, L_SUN, LN10, M_SUN, MixingType};
+use flexmesa_const::{MixingType, FOUR_PI, LN10, L_SUN, M_SUN};
 use flexmesa_star::hydro_eqns::HenyeySystem;
 use flexmesa_star::report_utils::{
     csound_face_at, eval_photosphere_info, eval_shock_info,
@@ -15,10 +15,10 @@ use flexmesa_star::report_utils::{
 use flexmesa_star::solver::compute_corr_coeff;
 use flexmesa_star::solver_norms::compute_model_correction_norms;
 use flexmesa_star::{
-    StarControls, StarJobControls, StarModel, TimestepAction,
     do1_dalpha_rti_dt_eqn, eval_alpha_rti_sources, eval_h211_factor,
     eval_varcontrol, load_zams_model, set_dpdr_drhodr_info, set_hydro_vars,
-    set_rti_mixing_info, solve_henyey_step, timestep_controller,
+    set_rti_mixing_info, solve_henyey_step, timestep_controller, StarControls,
+    StarJobControls, StarModel, TimestepAction,
 };
 
 fn usize_to_f64(n: usize) -> f64 {

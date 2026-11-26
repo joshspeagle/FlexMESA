@@ -88,6 +88,8 @@ pub enum Value {
     Real(f64),
     /// Auto-diff value with all [`STAR_AD_LANES`] lanes, exact bits.
     Ad(Box<MesaAd>),
+    /// `NA`: the writer had no value for this field (any type).
+    Missing,
 }
 
 /// Ordered field list of one record family, from its `SCHEMA` line.
@@ -149,6 +151,29 @@ pub struct Record {
     values: HashMap<String, Value>,
 }
 
+/// Token written for a field the writer has no value for.
+pub const NOT_AVAILABLE: &str = "NA";
+
+/// Encodes a real as the overlay does (`Z16.16`: 16 upper-case hex digits).
+#[must_use]
+pub fn encode_real(x: f64) -> String {
+    format!("{:016X}", x.to_bits())
+}
+
+/// Encodes an auto-diff value as the overlay does: the value's bits, then
+/// `/<lane>:<bits>` for every lane (1-based) whose bits are not `+0.0`.
+#[must_use]
+pub fn encode_ad(x: &MesaAd) -> String {
+    use std::fmt::Write as _;
+    let mut s = encode_real(x.val);
+    for (i, d) in x.d1.iter().enumerate() {
+        if d.to_bits() != 0 {
+            let _ = write!(s, "/{}:{:016X}", i + 1, d.to_bits());
+        }
+    }
+    s
+}
+
 fn bits(tok: &str) -> Result<f64, FormatError> {
     u64::from_str_radix(tok, 16)
         .map(f64::from_bits)
@@ -196,6 +221,10 @@ impl Record {
         }
         let mut values = HashMap::with_capacity(toks.len());
         for (tok, (name, ty)) in toks.iter().zip(&schema.fields) {
+            if *tok == NOT_AVAILABLE {
+                values.insert(name.clone(), Value::Missing);
+                continue;
+            }
             let v = match ty {
                 FieldType::Int => Value::Int(tok.parse().map_err(|e| {
                     FormatError(format!("line {line}: {name}=`{tok}`: {e}"))
@@ -221,6 +250,12 @@ impl Record {
             run,
             values,
         })
+    }
+
+    /// Field by name, if the schema has it.
+    #[must_use]
+    pub fn value(&self, name: &str) -> Option<&Value> {
+        self.values.get(name)
     }
 
     fn get(&self, name: &str) -> Result<&Value, FormatError> {

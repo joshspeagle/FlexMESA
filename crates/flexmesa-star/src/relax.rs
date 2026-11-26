@@ -202,4 +202,3 @@ pub fn excise_core_by_temperature(
     *model = trimmed;
     Ok(())
 }
-

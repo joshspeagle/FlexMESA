@@ -101,8 +101,8 @@ fn test_uniform_rotation_sets_rotation_flag_and_w_div_wc() {
 }
 
 #[test]
-fn test_mod_load_resets_num_retries_by_default_and_initializes_dt_limit_ratio_old_zero()
-{
+fn test_mod_load_resets_num_retries_by_default_and_initializes_dt_limit_ratio_old_zero(
+) {
     use crate::inlist::InlistBundle;
     use crate::inlist_runner::DefaultStarExtras;
     use crate::star_job_init::{
@@ -187,10 +187,8 @@ fn test_mod_load_resets_num_retries_by_default_and_initializes_dt_limit_ratio_ol
     //    on a `.mod` load and on a model carried over from an earlier stage,
     //    which upstream loads from the saved `.mod` file: only a photo
     //    restart is a `restart` (`star/job/run_star_support.f90:433-442`).
-    let tmp_dir = std::env::temp_dir().join(format!(
-        "flexmesa_retry_reset_test_{}",
-        std::process::id()
-    ));
+    let tmp_dir = std::env::temp_dir()
+        .join(format!("flexmesa_retry_reset_test_{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&tmp_dir);
     std::fs::create_dir_all(&tmp_dir).expect("create temp dir");
     let mod_path = tmp_dir.join("seed.mod");
@@ -213,10 +211,7 @@ fn test_mod_load_resets_num_retries_by_default_and_initializes_dt_limit_ratio_ol
     let bundle_preserve = InlistBundle::from_file(&inlist_preserve)
         .expect("inlist_preserve strict parse");
     assert_eq!(
-        bundle_preserve
-            .validation_report
-            .unsupported_controls
-            .len(),
+        bundle_preserve.validation_report.unsupported_controls.len(),
         0
     );
     assert!(!bundle_preserve.job.set_initial_number_retries);

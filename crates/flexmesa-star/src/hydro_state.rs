@@ -493,6 +493,12 @@ pub struct HydroAuxState {
     /// Whether the model is currently inside `do_struct_burn_mix`
     /// (`doing_struct_burn_mix` in `star_data_step_work.inc`).
     pub doing_struct_burn_mix: bool,
+    /// Current Newton iteration of the hydro solve (`solver_iter` in
+    /// `star_data_step_work.inc`): `0` before the first iteration and outside
+    /// the solver, set by `star_solver.f90:191,284,610` and reset to `0` by
+    /// `struct_burn_mix.f90:207` and `evolve.f90:2009,2019`.
+    #[serde(default)]
+    pub solver_iter: usize,
     /// Total integrated model energy $E_{\mathrm{tot}}$ in $\mathrm{erg}$
     /// (`total_energy` in `star_data_step_work.inc`).
     pub total_energy: f64,
@@ -810,6 +816,7 @@ impl HydroAuxState {
             rotmix: crate::rotation_mix_info::RotMixArrays::default(),
             st_start: crate::rotation_mix_info::StStartInfo::default(),
             doing_struct_burn_mix: false,
+            solver_iter: 0,
             total_energy: 0.0,
             total_internal_energy_start: None,
             cumulative_energy_error: 0.0,

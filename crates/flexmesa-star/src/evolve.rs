@@ -505,6 +505,8 @@ pub fn star_evolve_step_part1(
     // check inside the step sees the number of the model being computed.
     let target_mod = model.model_number_old + 1;
     model.model_number = target_mod;
+    // `s% solver_iter = 0` (`star/private/evolve.f90:2009, 2019`).
+    model.aux.solver_iter = 0;
     // `need_to_setvars = .true.  ! always start fresh` and
     // `set_current_to_old` (`star/private/evolve.f90:319, 401`), then
     // `set_start_of_step_info`'s `set_vars_if_needed` (`evolve.f90:409`).

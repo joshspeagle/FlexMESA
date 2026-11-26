@@ -613,16 +613,21 @@ pub(crate) fn do1_mlt_2(
             };
             let dv_f = (StarAdOrder1::constant(1.0) / rho_f)
                 - (StarAdOrder1::constant(1.0) / rho_start_f);
-            let l_ref = if model.aux.doing_struct_burn_mix
-                && model.lum_start.len() == nz
-            {
+            // Scale for the TDC luminosity equation
+            // (`star/private/turb_support.f90:319-325`): `L` when
+            // `s% solver_iter == 0`, otherwise `L_start`.
+            let l_ref = if model.aux.solver_iter == 0 {
+                &model.lum
+            } else if model.lum_start.len() == nz {
                 &model.lum_start
             } else {
-                &model.lum
+                return Err(StarError::MicrophysicsError(String::from(
+                    "TDC scale needs L_start inside the solver \
+                     (`star/private/turb_support.f90:324`), but it is unset",
+                )));
             };
-            let l_max =
-                l_ref.iter().copied().fold(f64::NEG_INFINITY, f64::max).max(0.0);
-            let scale = l_ref[k].abs().max(1.0e-3 * l_max).max(1.0e-30);
+            let l_max = l_ref.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+            let scale = l_ref[k].abs().max(1.0e-3 * l_max);
             let tdc_params = TdcParams {
                 conv_vel_start: vc_old,
                 mixing_length_alpha,
@@ -633,7 +638,7 @@ pub(crate) fn do1_mlt_2(
                 tdc_alpha_s: model.controls.tdc_alpha_s,
                 dt: model.dt,
                 cgrav: cgrav_k,
-                m: m_grav_k.max(1.0),
+                m: m_grav_k,
                 scale,
                 max_conv_vel,
                 include_mlt_corr_to_tdc: model.controls.include_mlt_corr_to_tdc,
@@ -812,7 +817,7 @@ pub(crate) fn do1_mlt_2(
                     alpha_semiconvection: model.controls.alpha_semiconvection,
                     cgrav: cgrav_k,
                     gradl_composition_term,
-                    m: m_grav_k.max(1.0),
+                    m: m_grav_k,
                 };
                 let sc_in = SemiconvectionInputs {
                     l: lum_k,

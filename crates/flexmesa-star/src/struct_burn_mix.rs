@@ -549,7 +549,11 @@ fn run_struct_burn_mix_core(
         // `star/private/struct_burn_mix.f90:112`: `set_vars_if_needed` after
         // `do_burn` while `doing_struct_burn_mix == true` refreshes EOS, neu,
         // kap, non-split net, and MLT/grads while preserving split-burn zones.
-        set_hydro_vars(model, false, false)?;
+        // `do_burn` always ends with `need_to_setvars = .true.`
+        // (`struct_burn_mix.f90:918`), so this is a full `set_vars`, including
+        // `reset_starting_vectors` (`hydro_vars.f90:80`).
+        crate::hydro_vars::set_vars(model)?;
+        // `star/private/hydro_vars.f90:653`.
         model.aux.need_to_setvars = false;
         let e_after: f64 =
             (0..model.nz).map(|k| model.energy[k] * model.dm[k]).sum();

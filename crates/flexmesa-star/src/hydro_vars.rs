@@ -24,7 +24,9 @@ use crate::micro_cache::MicrophysicsCache;
 use crate::mixing_state::driving_species_for_cid;
 use crate::model::StarModel;
 use crate::rotation::update_rotation_distortion_factors;
-use crate::star_ad::{StarAdExt, StarAdOrder1, I_LNR_00, I_L_00};
+use crate::star_ad::{
+    StarAdExt, StarAdOrder1, I_LND_00, I_LND_M1, I_LNR_00, I_L_00,
+};
 
 /// Evaluates face-centered radiative, adiabatic, Ledoux, and actual temperature
 /// gradients ($\nabla_{\mathrm{rad}}, \nabla_{\mathrm{ad}}, \nabla_L, \nabla_T$),
@@ -42,15 +44,7 @@ use crate::star_ad::{StarAdExt, StarAdOrder1, I_LNR_00, I_L_00};
 /// Returns [`StarError::MicrophysicsError`] if `set_mlt` / `set_tdc` fails at
 /// any face.
 pub fn set_mlt_vars(model: &mut StarModel) -> Result<(), StarError> {
-    if model.controls.rotation_flag && !model.aux.doing_struct_burn_mix {
-        if model.j_rot.iter().any(|&j| j != 0.0)
-            || model.omega.iter().all(|&w| w == 0.0)
-        {
-            crate::hydro_rotation::set_rotation_info(model, true);
-        } else {
-            update_rotation_distortion_factors(model);
-        }
-    }
+    refresh_rotation_info_outside_solver(model);
     let nz = model.nz;
     if nz == 0 {
         return Ok(());
@@ -66,6 +60,21 @@ pub fn set_mlt_vars(model: &mut StarModel) -> Result<(), StarError> {
         model.aux.fixed_gradr_sticky.fill(false);
     }
     set_mlt_vars_range(model, 0, nz - 1)
+}
+
+/// Refreshes the rotation information that `set_hydro_vars` sets outside the
+/// solver iterations (`star/private/hydro_vars.f90:540-543`, `skip_rotation`
+/// is false there), whether or not MLT is evaluated.
+fn refresh_rotation_info_outside_solver(model: &mut StarModel) {
+    if model.controls.rotation_flag && !model.aux.doing_struct_burn_mix {
+        if model.j_rot.iter().any(|&j| j != 0.0)
+            || model.omega.iter().all(|&w| w == 0.0)
+        {
+            crate::hydro_rotation::set_rotation_info(model, true);
+        } else {
+            update_rotation_distortion_factors(model);
+        }
+    }
 }
 
 /// Evaluates `do1_mlt_2` over the inclusive face range `k_lo..=k_hi` and
@@ -512,9 +521,11 @@ pub(crate) fn do1_mlt_2(
         model.controls.mlt_option
     };
 
+    // `if (k <= 0 .or. s%dt <= 0d0) using_TDC = .false.` with 1-based `k`
+    // (`star/private/turb_support.f90:232`): every face, the surface face
+    // included, may use TDC.
     let using_tdc = mlt_opt == MltOption::Tdc
         && model.aux.have_mlt_vc
-        && k > 0
         && model.dt > 0.0
         && !(model.mstar_dot.abs() > 1.0e-99 && k < model.aux.k_const_mass);
 
@@ -583,25 +594,25 @@ pub(crate) fn do1_mlt_2(
             } else {
                 e_00 * alfa + wrap_e_cell(model, k - 1).shift_m1() * beta_w
             };
-            let ref_lnd = if model.lnd_start.len() == nz
-                && model.lnd_start.iter().any(|&v| v != 0.0)
-            {
-                Some(&model.lnd_start)
-            } else if model.lnd_old.len() == nz {
-                Some(&model.lnd_old)
+            // `dV = 1d0/rho - 1d0/rho_start` with `rho_start = get_rho_start_face`
+            // (`star/private/turb_support.f90:166-168`, `star_utils.f90:3811-3822`):
+            // `wrap_d_00_start`/`wrap_d_m1_start` carry `rho_start` with the
+            // partial `d/dlnd = rho_start` (`auto_diff_support.f90:288-306`).
+            let rho_start_00 = flexmesa_math::exp(model.lnd_start[k]);
+            let mut d_00_start = StarAdOrder1::ZERO;
+            d_00_start.val = rho_start_00;
+            d_00_start.d1[I_LND_00] = rho_start_00;
+            let rho_start_f = if k == 0 {
+                d_00_start
             } else {
-                None
+                let rho_start_m1 = flexmesa_math::exp(model.lnd_start[k - 1]);
+                let mut d_m1_start = StarAdOrder1::ZERO;
+                d_m1_start.val = rho_start_m1;
+                d_m1_start.d1[I_LND_M1] = rho_start_m1;
+                d_00_start * alfa + d_m1_start * beta_w
             };
-            let dv_f = if let Some(lnd_ref) = ref_lnd {
-                let rho_start_00 = flexmesa_math::exp(lnd_ref[k]);
-                let rho_start_m1 = flexmesa_math::exp(lnd_ref[k - 1]);
-                let rho_start_f =
-                    (rho_start_00 * alfa + rho_start_m1 * beta_w).max(1.0e-30);
-                (StarAdOrder1::constant(1.0) / rho_f)
-                    - StarAdOrder1::constant(1.0 / rho_start_f)
-            } else {
-                StarAdOrder1::ZERO
-            };
+            let dv_f = (StarAdOrder1::constant(1.0) / rho_f)
+                - (StarAdOrder1::constant(1.0) / rho_start_f);
             let l_ref = if model.aux.doing_struct_burn_mix
                 && model.lum_start.len() == nz
             {
@@ -1330,6 +1341,80 @@ pub fn set_hydro_vars(
     skip_net: bool,
     skip_net_jacobian: bool,
 ) -> Result<(), StarError> {
+    set_hydro_vars_with_skips(
+        model,
+        skip_net,
+        skip_net_jacobian,
+        SetHydroVarsSkips::default(),
+    )
+}
+
+/// The `set_hydro_vars` skip flags that `set_final_vars` sets from
+/// `.not. s% need_to_setvars` (`star/private/hydro_vars.f90:91-164`).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub(crate) struct SetHydroVarsSkips {
+    /// `skip_basic_vars` and `skip_micro_vars` (with `skip_eos`, `skip_kap`,
+    /// `skip_neu`, `skip_net`): keep the basic and microphysics variables of
+    /// the last evaluation.
+    pub(crate) micro: bool,
+    /// `skip_mlt`: keep the MLT/TDC results of the last evaluation, including
+    /// `alpha_mlt`, `gradr_factor` and `mlt_vc`.
+    pub(crate) mlt: bool,
+    /// `set_vars` calls `reset_starting_vectors` before `set_hydro_vars`
+    /// (`star/private/hydro_vars.f90:80`), so the start values are refilled
+    /// from the current state (`hydro_vars.f90:719-741`).
+    pub(crate) reset_starting_vectors: bool,
+}
+
+/// Refills the start values that `set_basic_vars` sets after
+/// `reset_starting_vectors` (`star/private/star_utils.f90:1563-1580`,
+/// `star/private/hydro_vars.f90:719-741`): `lnd_start` (and so `rho_start`),
+/// `lnT_start`, `r_start`, and `v_start`, `u_start` and `alpha_RTI_start`
+/// when those variables are in use.
+fn fill_reset_starting_vectors(model: &mut StarModel) {
+    model.lnd_start.clone_from(&model.lnd);
+    model.ln_t_start.clone_from(&model.ln_t);
+    model.ln_r_start.clone_from(&model.ln_r);
+    if model.controls.v_flag {
+        model.v_start.clone_from(&model.v);
+    }
+    if model.controls.u_flag {
+        model.u_start.clone_from(&model.u);
+    }
+    if model.controls.rti_flag {
+        model.aux.alpha_rti_start.clone_from(&model.aux.alpha_rti);
+    }
+}
+
+/// `set_vars` (`star/private/hydro_vars.f90:60-85`): resets the start values
+/// to the current state and evaluates all variables.
+///
+/// # Errors
+/// Returns the [`StarError`] of [`set_hydro_vars`].
+pub(crate) fn set_vars(model: &mut StarModel) -> Result<(), StarError> {
+    set_hydro_vars_with_skips(
+        model,
+        false,
+        false,
+        SetHydroVarsSkips {
+            reset_starting_vectors: true,
+            ..SetHydroVarsSkips::default()
+        },
+    )
+}
+
+/// [`set_hydro_vars`] with upstream's `skip_micro_vars` and `skip_mlt`
+/// (`star/private/hydro_vars.f90:509-603`).
+///
+/// # Errors
+/// Returns [`StarError`] if any microphysics, MLT, mixing, or boundary
+/// evaluation fails.
+pub(crate) fn set_hydro_vars_with_skips(
+    model: &mut StarModel,
+    skip_net: bool,
+    skip_net_jacobian: bool,
+    skips: SetHydroVarsSkips,
+) -> Result<(), StarError> {
     // Match `update_vars` -> `unpack_xh` -> `set_qs`
     // (`star/private/hydro_vars.f90:225-226, 359-366` and
     // `star/private/star_utils.f90:712-752`): rebuild `q` from `dq` via
@@ -1339,7 +1424,12 @@ pub fn set_hydro_vars(
     if model.nz > 0 && !model.controls.rsp_flag {
         model.set_qs();
     }
-    MicrophysicsCache::eval_or_restore(model, skip_net, skip_net_jacobian)?;
+    if skips.reset_starting_vectors {
+        fill_reset_starting_vectors(model);
+    }
+    if !skips.micro {
+        MicrophysicsCache::eval_or_restore(model, skip_net, skip_net_jacobian)?;
+    }
     let nz = model.nz;
     if nz == 0 {
         return Ok(());
@@ -1386,7 +1476,9 @@ pub fn set_hydro_vars(
         }
     }
 
-    if !model.controls.rsp_flag {
+    if skips.mlt {
+        refresh_rotation_info_outside_solver(model);
+    } else if !model.controls.rsp_flag {
         if !model.aux.doing_struct_burn_mix
             && model.aux.mixing.okay_to_set_mixing_info
         {

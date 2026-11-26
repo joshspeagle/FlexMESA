@@ -1199,6 +1199,11 @@ pub fn solve_henyey_step(
         ))));
     }
 
+    // The last action of a converged solve evaluated the accepted state, and
+    // upstream's `set_hydro_vars` ends with `s% need_to_setvars = .false.`
+    // (`star/private/hydro_vars.f90:653`), so `set_final_vars` skips the
+    // basic, micro and MLT variables (`hydro_vars.f90:129-135`).
+    model.aux.need_to_setvars = false;
     Ok(HenyeySolverReport {
         converged: true,
         iterations: iter_used,

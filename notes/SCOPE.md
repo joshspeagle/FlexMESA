@@ -36,7 +36,8 @@ issue #145; the work is tracked in issue #140 and mirrored in
 ## v0.1.0
 
 Every case in the MESA 26.4.1 test suites (90 star, 8 binary, 8 astero) runs
-its unmodified inlists to upstream's termination condition and meets its
+its unmodified inlists to upstream's termination condition, taking exactly as
+many steps in each stage as MESA's own run (DECISIONS #70), and meets its
 history-harness tolerances in strict mode; module golden tests pass exactly;
 strict mode is bit-identical across machines; there are no undeclared gaps
 and no departures from upstream.

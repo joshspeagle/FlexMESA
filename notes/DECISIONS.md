@@ -82,6 +82,7 @@ Scope and the `v0.1.0` definition are in [`SCOPE.md`](SCOPE.md). Work is tracked
 | 65 | Astero Search Cases Are Compared Track by Track (`#430`) | In force | below |
 | 66 | `extras_controls` Runs Before the Model Load, as Upstream (`#453`) | In force | below |
 | 67 | Work Is Chosen by Distance to Pass and Divergence Cluster, with a Layered Fidelity Instrument Stack and Parallel Agents (`#546`) | In force | below |
+| 70 | A Passing Case Takes Exactly MESA's Step Count in Every Stage, and E2E Work Is Triaged by Run Time (`#546`, `#554`) | In force | below |
 
 ## Pre-audit decisions still in force
 
@@ -899,3 +900,16 @@ The text of these four entries predates the audit of 2026-11-16. The decisions s
   - *Choose work by upstream departures found in audits*: produces large diffs that often move no case (Train 10 and 11 experience).
   - *A full campaign as the main feedback loop*: 2.5 hours per answer; step dumps and replay oracles answer in minutes.
   - *Serial work by the orchestrating agent only*: leaves the machine and the agent budget idle.
+
+## DECISIONS #70: A Passing Case Takes Exactly MESA's Step Count in Every Stage, and E2E Work Is Triaged by Run Time (`#546`, `#554`)
+
+- **Date**: 2026-11-26
+- **Decision**:
+  - **Exact step counts.** Until `v0.1.0`, a case counts as passing only if every stage takes exactly as many steps as MESA `26.4.1`'s own run of that stage, in addition to the existing pass criteria (`CLAUDE.md`, `notes/SCOPE.md`). The harness compares per-stage step counts taken from the stored real-MESA runs (`#554`). A run that departs from MESA's count is reported as diverged at that stage. After `v0.1.0`, once the JAX layer is ported and the test suite captures correct behaviour independently of MESA, this requirement may be relaxed by a later decision.
+  - **Run-time triage.** E2E work is ordered by how long a case takes to run, shortest first. Long-running cases are deferred unless they belong to a divergence cluster whose fix is expected to move several cases.
+- **Why**: a faithful strict-mode port agrees with MESA step by step, so a different step count means some behaviour departs from upstream even when the history stays inside tolerance. On 2026-11-26, 38 of 43 passes already matched MESA's step count exactly. Short cases give the fastest feedback.
+- **Alternatives Rejected**:
+  - *History tolerances alone*: they allow passes whose step count differs from MESA, hiding departures.
+  - *A step-count tolerance*: any difference already means a departure.
+  - *Working cases in table order*: long cases cost up to 85 minutes of MESA time per run and slow every loop.
+- **Note**: numbers `#68` and `#69` are taken by open branches (`#548`, `#554`).

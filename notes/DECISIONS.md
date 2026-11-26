@@ -86,6 +86,7 @@ Scope and the `v0.1.0` definition are in [`SCOPE.md`](SCOPE.md). Work is tracked
 | 69 | Per-Case Budgets, the `passes` Preset and the Early Divergence Stop in the History Harness (`#554`) | In force | below |
 | 70 | A Passing Case Takes Exactly MESA's Step Count in Every Stage, and E2E Work Is Triaged by Run Time (`#546`, `#554`) | In force | below |
 | 71 | Large Oracle Bundles Are Opt-In (`#552`) | In force | below |
+| 72 | Every Test File Is Listed in `test_taxonomy.toml` with Enforced Provenance and Checked Routine Maps (`#563`) | In force | below |
 | 73 | Train Campaigns Run on GitHub Actions at 1,500 s per Case, with Step Counts Enforced (`#546`, `#576`) | In force | below |
 
 ## Pre-audit decisions still in force
@@ -954,6 +955,17 @@ The text of these four entries predates the audit of 2026-11-16. The decisions s
   - *Declare it as an ordinary `test_only` bundle*: it would be downloaded by every CI job and `--include-test-inputs` run.
   - *Keep it undeclared and local only*: no integrity check, no provenance, and no way for another machine to reproduce a replay result.
   - *Split into small and large halves*: the sample already covers CI, and two bundles would double the bookkeeping.
+
+## DECISIONS #72: Every Test File Is Listed in `test_taxonomy.toml` with Enforced Provenance and Checked Routine Maps (`#563`)
+
+- **Date**: 2026-11-26
+- **Decision**: Every Rust integration test file (`crates/*/tests/*.rs`) and Python test file (`tests/test_*.py`) is listed in `benchmarks/dashboard/test_taxonomy.toml` with a single classification (`oracle`, `invariant`, or `regression`). `python -m flexmesa.testing.test_taxonomy --check` fails on unlisted or stale test files, rejects `oracle` entries lacking an existing MESA-origin artifact path (plus MESA version header for `tests/fixtures/golden/`) and non-comment code linkage, and confirms that each listed routine maps to a non-comment, non-string symbol in the test file. Dashboard and CLI counts report files by kind (never per-test counts on mixed files) and label the manifest ratio as `Routines with Listed Oracle Test`.
+- **Why**: Naming and status claims drifted from what tests actually checked (27 `*_parity_test.rs` files assert self-generated or invariant checks without MESA output, and mixed files cannot support per-test oracle counts without per-function classification). A checked ledger prevents silent drift as new tests land and gives W4 test harmonization a machine-checked starting inventory.
+- **Alternatives Rejected**:
+  - *Infer test kind heuristically from filenames or numeric literals*: misclassifies `*_parity_test.rs` invariant suites and synthetic floating-point literals as MESA oracles.
+  - *Advisory inventory without a CI gate*: falls stale on the next pull request that adds or renames a test file.
+  - *Block `#563` on per-test-function annotations across all 1,523 tests*: delays the ledger and gate behind work now owned by Lane E (W4).
+- **Note**: number `#71` is reserved by `#552`.
 
 ## DECISIONS #73: Train Campaigns Run on GitHub Actions at 1,500 s per Case, with Step Counts Enforced (`#546`, `#576`)
 

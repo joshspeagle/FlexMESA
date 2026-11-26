@@ -152,6 +152,11 @@ pub struct BinarySystem {
     pub binary_age_yr: f64,
     /// Completed binary step count.
     pub model_number: usize,
+    /// Number of stored binary generations (`b% generations` in
+    /// `binary/public/binary_data.inc:47` and
+    /// `binary/private/run_binary_support.f90:584, 995-1002`).
+    #[serde(default)]
+    pub generations: u8,
     /// Next maximum timestep (s).
     pub max_timestep_sec: f64,
     /// Reason code (`B_TLIM_*`) of the binary timestep limit (`b% dt_why_reason`).
@@ -270,6 +275,21 @@ impl BinarySystem {
         donor: StarModel,
         controls: BinaryInlistControls,
     ) -> Result<Self, StarError> {
+        Self::from_controls_point_mass_with_job(donor, controls, true)
+    }
+
+    pub(crate) fn from_controls_point_mass_before_startup(
+        donor: StarModel,
+        controls: BinaryInlistControls,
+    ) -> Result<Self, StarError> {
+        Self::from_controls_point_mass_with_job(donor, controls, false)
+    }
+
+    fn from_controls_point_mass_with_job(
+        donor: StarModel,
+        controls: BinaryInlistControls,
+        apply_job_controls: bool,
+    ) -> Result<Self, StarError> {
         let m2 = controls.m2_msun * MSUN;
         let m_bh_eq = bh_initial_equatorial_mass(m2, controls.initial_bh_spin);
         let companion = BinaryCompanion::PointMass {
@@ -277,7 +297,14 @@ impl BinarySystem {
             m_bh_zero_eq_g: m_bh_eq,
             is_black_hole: controls.use_radiation_corrected_transfer_rate,
         };
-        Self::from_controls_inner(donor, companion, 2, 1, controls)
+        Self::from_controls_inner(
+            donor,
+            companion,
+            2,
+            1,
+            controls,
+            apply_job_controls,
+        )
     }
 
     /// Constructs a two-star [`BinarySystem`] from [`BinaryInlistControls`].
@@ -292,6 +319,22 @@ impl BinarySystem {
             0,
             1,
             controls,
+            true,
+        )
+    }
+
+    pub(crate) fn from_controls_two_stars_before_startup(
+        donor: StarModel,
+        accretor: StarModel,
+        controls: BinaryInlistControls,
+    ) -> Result<Self, StarError> {
+        Self::from_controls_inner(
+            donor,
+            BinaryCompanion::Star(Box::new(accretor)),
+            0,
+            1,
+            controls,
+            false,
         )
     }
 
@@ -301,6 +344,7 @@ impl BinarySystem {
         point_mass_i: usize,
         donor_i: usize,
         controls: BinaryInlistControls,
+        apply_job_controls: bool,
     ) -> Result<Self, StarError> {
         flexmesa_math::math_init();
         let m_d = donor.mstar;
@@ -308,9 +352,11 @@ impl BinarySystem {
             BinaryCompanion::PointMass { mass_g, .. } => *mass_g,
             BinaryCompanion::Star(s2) => s2.mstar,
         };
-        let eccentricity = controls
-            .initial_eccentricity
-            .clamp(controls.min_eccentricity, controls.max_eccentricity);
+        // `binary/private/binary_evolve.f90:106-118, 331-335`: initial orbit
+        // uses `initial_eccentricity` directly; `[min_eccentricity,
+        // max_eccentricity]` clamping runs inside `binary_evolve_step` after
+        // `edot`.
+        let eccentricity = controls.initial_eccentricity;
         let (separation, period) = if controls.initial_period_in_days > 0.0 {
             let p = controls.initial_period_in_days * SECDAY;
             (separation_from_period(m_d, m_a, p), p)
@@ -386,13 +432,13 @@ impl BinarySystem {
             separation,
             eccentricity,
         );
-        let ignore_rlof = if controls.change_initial_ignore_rlof_flag
-            || controls.change_ignore_rlof_flag
-        {
-            controls.new_ignore_rlof_flag
-        } else {
-            false
-        };
+        // `binary/private/binary_evolve.f90:137-138`: abort if
+        // `is_bad(b% rl_relative_gap(1))` or `is_bad(b% rl_relative_gap(2))`.
+        if !rl_relative_gap[0].is_finite() || !rl_relative_gap[1].is_finite() {
+            return Err(StarError::InvalidInput(format!(
+                "binarydata_init: invalid rl_relative_gap {rl_relative_gap:?}"
+            )));
+        }
 
         let eq_bh_init = match &companion {
             BinaryCompanion::PointMass { m_bh_zero_eq_g, .. } => {
@@ -421,6 +467,7 @@ impl BinarySystem {
             jdot: 0.0,
             binary_age_yr: 0.0,
             model_number: 0,
+            generations: 0,
             max_timestep_sec: 1.0e99,
             dt_why_reason: 0,
             mass_transfer_alpha: controls.mass_transfer_alpha,
@@ -433,7 +480,7 @@ impl BinarySystem {
             controls,
             point_mass_i,
             donor_i,
-            ignore_rlof_flag: ignore_rlof,
+            ignore_rlof_flag: false,
             eq_initial_bh_mass: eq_bh_init,
             // `binarydata_init` calls `set_{period,separation}_eccentricity` ->
             // `set_angular_momentum_j` (`binary_utils.f90:200`), which sets
@@ -455,7 +502,9 @@ impl BinarySystem {
             star_b_omega_avg_surf: [0.0; 2],
             tide_sync_scratch: BinaryTorqueScratch::default(),
         };
-        sys.apply_binary_job_controls_after(false)?;
+        if apply_job_controls {
+            sys.apply_binary_job_controls_after(false)?;
+        }
         sys.refresh_binary_star_baselines();
         sys.refresh_tidal_deformation_hooks(false)?;
         Ok(sys)
@@ -666,12 +715,10 @@ impl BinarySystem {
         self.angular_momentum_j + s_d + s_a - self.cumulative_j_ext
     }
 
-    /// Updates `ignore_rlof_flag` (`binary_set_ignore_rlof_flag`).
+    /// Updates `ignore_rlof_flag` (`binary_set_ignore_rlof_flag` in
+    /// `binary_utils.f90:33-45`).
     pub fn set_ignore_rlof_flag(&mut self, flag: bool) {
         self.ignore_rlof_flag = flag;
-        if flag {
-            self.mtransfer_rate = 0.0;
-        }
     }
 
     /// Updates `eq_initial_bh_mass` in grams (`b% eq_initial_bh_mass`), keeping
@@ -689,7 +736,7 @@ impl BinarySystem {
 
     /// Updates orbital period `period_sec` (s) and `eccentricity`, recomputing
     /// $a$, $J_{\mathrm{orb}}$, and $R_L$, and setting `ignore_hard_limits_this_step`
-    /// (`set_period_eccentricity` -> `set_angular_momentum_j` in `binary_utils.f90:146-202`).
+    /// (`set_period_eccentricity` -> `set_angular_momentum_j` in `binary/private/binary_utils.f90:146-202`).
     pub fn set_period_eccentricity(
         &mut self,
         period_sec: f64,
@@ -697,10 +744,7 @@ impl BinarySystem {
     ) -> Result<(), StarError> {
         let (m_d, m_a) = (self.donor.mstar, self.accretor_mass_g());
         self.period = period_sec;
-        self.eccentricity = eccentricity.clamp(
-            self.controls.min_eccentricity,
-            self.controls.max_eccentricity,
-        );
+        self.eccentricity = eccentricity;
         self.separation = separation_from_period(m_d, m_a, self.period);
         self.angular_momentum_j =
             eval_j_orb(m_d, m_a, self.separation, self.eccentricity);
@@ -721,7 +765,8 @@ impl BinarySystem {
 
     /// Updates orbital separation `separation_cm` (cm) and `eccentricity`,
     /// recomputing $P$, $J_{\mathrm{orb}}$, and $R_L$, and setting
-    /// `ignore_hard_limits_this_step` (`set_separation_eccentricity` in `binary_utils.f90:163-202`).
+    /// `ignore_hard_limits_this_step` (`set_separation_eccentricity` in
+    /// `binary/private/binary_utils.f90:163-202`).
     pub fn set_separation_eccentricity(
         &mut self,
         separation_cm: f64,
@@ -729,10 +774,7 @@ impl BinarySystem {
     ) -> Result<(), StarError> {
         let (m_d, m_a) = (self.donor.mstar, self.accretor_mass_g());
         self.separation = separation_cm;
-        self.eccentricity = eccentricity.clamp(
-            self.controls.min_eccentricity,
-            self.controls.max_eccentricity,
-        );
+        self.eccentricity = eccentricity;
         self.period = period_from_separation(m_d, m_a, self.separation);
         self.angular_momentum_j =
             eval_j_orb(m_d, m_a, self.separation, self.eccentricity);
@@ -752,7 +794,7 @@ impl BinarySystem {
     }
 
     /// Updates point-mass primary mass `m1_msun` ($M_\odot$) when `point_mass_i == 1`
-    /// (`set_m1` in `binary_utils.f90:105-124`).
+    /// (`set_m1` in `binary/private/binary_utils.f90:105-124`).
     pub fn set_m1(&mut self, m1_msun: f64) -> Result<(), StarError> {
         if self.point_mass_i != 1 {
             return Err(StarError::InvalidInput(String::from(
@@ -768,7 +810,7 @@ impl BinarySystem {
     }
 
     /// Updates point-mass secondary mass `m2_msun` ($M_\odot$) when `point_mass_i == 2`
-    /// (`set_m2` in `binary_utils.f90:126-144`).
+    /// (`set_m2` in `binary/private/binary_utils.f90:126-144`).
     pub fn set_m2(&mut self, m2_msun: f64) -> Result<(), StarError> {
         if self.point_mass_i != 2 {
             return Err(StarError::InvalidInput(String::from(
@@ -784,16 +826,19 @@ impl BinarySystem {
     }
 
     /// Applies `&binary_job` `change_*` / `change_initial_*` overrides
-    /// (`do_binary_job_controls_after` in `run_binary_support.f90:894-1014`).
+    /// (`do_binary_job_controls_after` in `binary/private/run_binary_support.f90:894-1014`).
     pub fn apply_binary_job_controls_after(
         &mut self,
         restart: bool,
     ) -> Result<(), StarError> {
         let c = self.controls.clone();
-        if c.change_ignore_rlof_flag
-            || (c.change_initial_ignore_rlof_flag && !restart)
+        let mut changed = false;
+        if (c.change_ignore_rlof_flag
+            || (c.change_initial_ignore_rlof_flag && !restart))
+            && c.new_ignore_rlof_flag != self.ignore_rlof_flag
         {
             self.set_ignore_rlof_flag(c.new_ignore_rlof_flag);
+            changed = true;
         }
         if (c.change_point_mass_i
             || (c.change_initial_point_mass_i && !restart))
@@ -807,16 +852,25 @@ impl BinarySystem {
                 ))
             })?;
             self.set_point_mass_i(new_pm)?;
+            changed = true;
         }
         if (c.change_m1 || (c.change_initial_m1 && !restart))
+            // Reproduces `binary/private/run_binary_support.f90:945` verbatim
+            // (`b% m(1) /= b% job% new_m1`, comparing grams with `Msun`; `#565`
+            // under `#169`).
             && self.star_masses_g()[0] != c.new_m1
         {
             self.set_m1(c.new_m1)?;
+            changed = true;
         }
         if (c.change_m2 || (c.change_initial_m2 && !restart))
+            // Reproduces `binary/private/run_binary_support.f90:957` verbatim
+            // (`b% m(2) /= b% job% new_m2`, comparing grams with `Msun`; `#565`
+            // under `#169`).
             && self.star_masses_g()[1] != c.new_m2
         {
             self.set_m2(c.new_m2)?;
+            changed = true;
         }
         if (c.change_period_eccentricity
             || (c.change_initial_period_eccentricity && !restart))
@@ -827,6 +881,7 @@ impl BinarySystem {
                 c.new_period * SECDAY,
                 c.new_eccentricity,
             )?;
+            changed = true;
         }
         if (c.change_separation_eccentricity
             || (c.change_initial_separation_eccentricity && !restart))
@@ -837,6 +892,24 @@ impl BinarySystem {
                 c.new_separation * RSUN,
                 c.new_eccentricity,
             )?;
+            changed = true;
+        }
+        if changed {
+            // `binary/private/run_binary_support.f90:995-1012` and
+            // `binary/private/binary_evolve.f90:501-570` (`binary_finish_step`):
+            // reset `generations = 0` on active stars and the binary so a
+            // step-1 retry preserves job overrides without mutating stellar
+            // `*_start`/`*_old` arrays or baselines. `BinarySystem` captures
+            // its `"old"` snapshot at step entry (`system_step.rs`), and
+            // `doing_first_model_of_run` / unchanged `mtransfer_rate` leaves
+            // `change_factor` unchanged here.
+            if self.point_mass_i != self.donor_i {
+                self.donor.generations = 0;
+            }
+            if let BinaryCompanion::Star(ref mut s2) = self.companion {
+                s2.generations = 0;
+            }
+            self.generations = 0;
         }
         Ok(())
     }

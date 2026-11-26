@@ -122,6 +122,7 @@
     1. Upstream's inlists run unmodified, with only the logic present in upstream's own `run_star_extras.f90` or `run_binary_extras.f90`.
     2. Evolution reaches upstream's own physical or extras termination condition uncapped.
     3. Named history quantities match a stored real-MESA `26.4.1` history within the tolerances declared in the case manifest.
+    4. Every stage takes exactly as many steps as MESA `26.4.1`'s own run of that stage (`DECISIONS #70`); a different step count means something departs from upstream. The harness enforces this once per-stage MESA step counts are recorded (`#554`).
   - Any run with a step cap or without a real-MESA `26.4.1` history comparison must be reported strictly as `"smoke: N steps"`. A case whose `26.4.1` reference history is not yet available is reported as `"no reference yet"`, never as passing or failing.
   - A run that continued past unsupported controls (`--allow-unsupported-controls`, `#147`) did not do what the inlist asks. The harness reports it as `"diagnostic (N controls ignored)"` and it never counts as passing (`DECISIONS #26`).
   - Every trajectory-changing pull request must include the script-generated before-and-after case table and trajectory comparison figure (`#143`, `#173`).

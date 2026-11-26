@@ -499,6 +499,76 @@ impl Mul for Quad {
     }
 }
 
+/// Exact quotient `floor(a * 2^115 / b)` of two significands in `[2^112, 2^113)`
+/// with bit 0 set if the division is inexact (the input `round_pack` expects).
+///
+/// Knuth's Algorithm D (`TAOCP` vol. 2, 4.3.1) on `32`-bit limbs: `b` is
+/// normalised by a left shift of `15` so that its top limb has its high bit
+/// set, which bounds the quotient-digit estimate error by two. The result is
+/// bit-identical to the bit-serial restoring division it replaces
+/// (`div_sig_bitserial` in the unit tests), because both compute the exact
+/// integer quotient and the exact "remainder is non-zero" flag.
+#[inline]
+fn div_sig(a: u128, b: u128) -> u128 {
+    const BASE: u64 = 1 << 32;
+    debug_assert!(a >> FRAC_BITS == 1 && b >> FRAC_BITS == 1);
+    let v = b << 15;
+    let vn = [v as u32, (v >> 32) as u32, (v >> 64) as u32, (v >> 96) as u32];
+    // Numerator `a * 2^115 * 2^15 = (a << 2) * 2^128`: the low four limbs
+    // are zero and the high four hold `a << 2` (at most 115 bits, below `v`).
+    let hi = a << 2;
+    let mut un = [
+        0_u32,
+        0,
+        0,
+        0,
+        hi as u32,
+        (hi >> 32) as u32,
+        (hi >> 64) as u32,
+        (hi >> 96) as u32,
+    ];
+    let mut quo = 0_u128;
+    for j in (0..4).rev() {
+        let num = (u64::from(un[j + 4]) << 32) | u64::from(un[j + 3]);
+        let mut qhat = num / u64::from(vn[3]);
+        let mut rhat = num % u64::from(vn[3]);
+        while qhat >= BASE
+            || qhat * u64::from(vn[2]) > ((rhat << 32) | u64::from(un[j + 2]))
+        {
+            qhat -= 1;
+            rhat += u64::from(vn[3]);
+            if rhat >= BASE {
+                break;
+            }
+        }
+        // Multiply and subtract `qhat * v` from `un[j..=j + 4]`.
+        let mut borrow = 0_i64;
+        for i in 0..4 {
+            let prod = qhat * u64::from(vn[i]);
+            let diff =
+                i64::from(un[i + j]) - borrow - (prod & 0xffff_ffff) as i64;
+            un[i + j] = diff as u32;
+            borrow = (prod >> 32) as i64 - (diff >> 32);
+        }
+        let diff = i64::from(un[j + 4]) - borrow;
+        un[j + 4] = diff as u32;
+        if diff < 0 {
+            // `qhat` was one too large: add `v` back.
+            qhat -= 1;
+            let mut carry = 0_u64;
+            for i in 0..4 {
+                let sum = u64::from(un[i + j]) + u64::from(vn[i]) + carry;
+                un[i + j] = sum as u32;
+                carry = sum >> 32;
+            }
+            un[j + 4] = un[j + 4].wrapping_add(carry as u32);
+        }
+        quo |= u128::from(qhat as u32) << (32 * j);
+    }
+    let inexact = (un[0] | un[1] | un[2] | un[3]) != 0;
+    quo | u128::from(inexact)
+}
+
 impl Div for Quad {
     type Output = Self;
     fn div(self, rhs: Self) -> Self {
@@ -514,21 +584,10 @@ impl Div for Quad {
             }
             (Class::Zero(_), _) | (_, Class::Inf(_)) => Self(sign_bits),
             (Class::Finite(a), Class::Finite(b)) => {
-                // Restoring long division producing
                 // `floor(a.sig * 2^115 / b.sig)`, which lies in
                 // `(2^114, 2^116)`, with the remainder folded into the sticky
-                // bit.
-                let mut rem = a.sig;
-                let mut quo = 0_u128;
-                for _ in 0..=WORK_TOP {
-                    quo <<= 1;
-                    if rem >= b.sig {
-                        rem -= b.sig;
-                        quo |= 1;
-                    }
-                    rem <<= 1;
-                }
-                round_pack(sign, a.exp - b.exp, quo | u128::from(rem != 0))
+                // bit (`div_sig`).
+                round_pack(sign, a.exp - b.exp, div_sig(a.sig, b.sig))
             }
         }
     }
@@ -613,4 +672,61 @@ impl_quad_f64_ops! {
     Sub sub SubAssign sub_assign;
     Mul mul MulAssign mul_assign;
     Div div DivAssign div_assign;
+}
+
+#[cfg(test)]
+mod div_sig_tests {
+    use super::{div_sig, FRAC_BITS, WORK_TOP};
+
+    /// The restoring long division that `div_sig` replaces.
+    fn div_sig_bitserial(a: u128, b: u128) -> u128 {
+        let mut rem = a;
+        let mut quo = 0_u128;
+        for _ in 0..=WORK_TOP {
+            quo <<= 1;
+            if rem >= b {
+                rem -= b;
+                quo |= 1;
+            }
+            rem <<= 1;
+        }
+        quo | u128::from(rem != 0)
+    }
+
+    /// `SplitMix64` step, for a dependency-free deterministic sequence.
+    fn next(s: &mut u64) -> u64 {
+        *s = s.wrapping_add(0x9e37_79b9_7f4a_7c15);
+        let mut z = *s;
+        z = (z ^ (z >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
+        z = (z ^ (z >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
+        z ^ (z >> 31)
+    }
+
+    fn sig(s: &mut u64, mode: u64) -> u128 {
+        let frac_mask = (1_u128 << FRAC_BITS) - 1;
+        let r = (u128::from(next(s)) << 64) | u128::from(next(s));
+        let f = match mode % 4 {
+            0 => r & frac_mask,
+            1 => frac_mask - (r & 0xff),     // just below 2^113
+            2 => r & 0xff,                   // just above 2^112
+            _ => (r & frac_mask) & !0xffff_ffff, // many trailing zeros
+        };
+        (1_u128 << FRAC_BITS) | f
+    }
+
+    #[test]
+    fn test_div_sig_matches_bit_serial_division_on_random_and_edge_inputs() {
+        let mut s = 0x1234_5678_9abc_def0_u64;
+        for i in 0..2_000_000_u64 {
+            let ma = next(&mut s) % 4;
+            let a = sig(&mut s, ma);
+            let mb = next(&mut s) % 4;
+            let b = sig(&mut s, mb);
+            assert_eq!(div_sig(a, b), div_sig_bitserial(a, b), "iter {i}");
+        }
+        let one = 1_u128 << FRAC_BITS;
+        for (a, b) in [(one, one), (one, 2 * one - 1), (2 * one - 1, one)] {
+            assert_eq!(div_sig(a, b), div_sig_bitserial(a, b));
+        }
+    }
 }

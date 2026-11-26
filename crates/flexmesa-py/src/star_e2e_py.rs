@@ -6,7 +6,8 @@
 use std::path::Path;
 
 use flexmesa_astero::{
-    run_astero_test_suite_case_with_case_hooks, AsteroCaseHooks,
+    run_astero_test_suite_case_with_case_hooks,
+    run_astero_test_suite_case_with_hooks, AsteroCaseHooks,
 };
 use flexmesa_binary::{
     BinaryCaseRunReport, BinaryLogsOptions,
@@ -325,12 +326,31 @@ pub fn star_run_astero_test_suite_case<'py>(
     allow_unsupported_controls: bool,
     extras: Option<Py<PyAny>>,
 ) -> PyResult<Bound<'py, PyDict>> {
-    let mut set_param =
-        crate::astero_case_hooks_py::adapter_from_extras(py, extras)?;
     let dir = Path::new(case_dir).to_path_buf();
     let load_opts = InlistLoadOptions {
         allow_unsupported_controls,
     };
+    let is_case_hooks = match &extras {
+        Some(obj) => obj.bind(py).hasattr("set_param")?,
+        None => true,
+    };
+    if !is_case_hooks {
+        let rep = run_with_star_extras(py, extras, |ex| {
+            run_astero_test_suite_case_with_hooks(
+                &dir,
+                skip_optional,
+                max_steps_per_stage,
+                verify_restart,
+                StarLogsOptions::default(),
+                load_opts,
+                None,
+                Some(ex),
+            )
+        })?;
+        return case_report_to_pydict(py, &rep);
+    }
+    let mut set_param =
+        crate::astero_case_hooks_py::adapter_from_extras(py, extras)?;
     let rep = py
         .detach(|| {
             run_astero_test_suite_case_with_case_hooks(

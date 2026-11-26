@@ -45,7 +45,6 @@ _EXPECTED_UNPORTED_ASTERO: dict[str, type[Any]] = {
     "fast_from_file": astero_extras.FastFromFileAsteroExtras,
     "fast_scan_grid": astero_extras.SearchAsteroExtras,
     "fast_simplex": astero_extras.SearchAsteroExtras,
-    "surface_effects": astero_extras.EmptySetParamAsteroExtras,
 }
 
 _SDB_OBS: list[dict[str, Any]] = []
@@ -336,7 +335,7 @@ def test_relax_composition_j_entropy_surface_l_lsun_fallback_and_guard(
 
 
 def test_wave3_ledger_counts_and_unported_audit() -> None:
-    """All 18 unported `star` and 5 `astero` cases match ledger and guards."""
+    """All 17 unported `star` and 4 `astero` cases match ledger and guards."""
     for case_name, expected_cls in _EXPECTED_UNPORTED_STAR.items():
         case_dir = harness_runner.resolve_case_dir("star", case_name)
         assert (

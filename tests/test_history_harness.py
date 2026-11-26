@@ -613,9 +613,8 @@ def test_flexmesa_trace_and_harness_run_cli_smoke(
         == 0
     )
     assert (ast_out / "LOGS" / "history.data").is_file()
-    # `freqs.dat` is written by upstream's own
-    # `surface_effects/src/run_star_extras.f90`, which is not ported (#148),
-    # so the library must not produce it.
+    # `freqs.dat` is written into staged `state["case_dir"]` by
+    # `SurfaceEffectsExtras` (`#569`), never into the `--out` directory.
     assert not (ast_out / "freqs.dat").exists()
 
     # Smoke harness run writes Markdown + JSON with full 106-case counts.

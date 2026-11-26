@@ -662,6 +662,5 @@ issue = "#231"
 [[cases]]
 suite = "astero"
 case = "surface_effects"
-status = "unported"
+status = "ported"
 digest = "99a0248052519e5b719e2f93bbf9ecb5433cbb8749d4e2545f4e10733e9cd4fc"
-issue = "#231"

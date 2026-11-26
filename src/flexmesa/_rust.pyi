@@ -572,6 +572,8 @@ def astero_eval_delta_pg(r: _ArrF64, r_mid: _ArrF64, brunt_n2: _ArrF64, csound_f
 def astero_eval_glitch_acoustic_depths(r: _ArrF64, csound: _ArrF64, gradr: _ArrF64, grada: _ArrF64, gamma1: _ArrF64, t: _ArrF64, r_center: float) -> tuple[float, float, float]: ...  # noqa: E501
 def astero_eval_radial_delta_nu_ols(n_orders: _ArrF64, model_freqs: _ArrF64) -> float: ...  # noqa: E501
 def astero_match_modes_by_degree(obs_freqs: _ArrF64, cand_freqs: _ArrF64, cand_inertias: _ArrF64, cand_orders: _ArrI32) -> tuple[_ArrF64, _ArrF64, _ArrI32]: ...  # noqa: E501
+def astero_interpolate_l0_inertia(freq: float, l0_freqs: _ArrF64, l0_inertias: _ArrF64) -> float: ...  # noqa: E501
+def astero_parse_search_controls(case_dir: str, allow_unsupported_controls: bool = False) -> dict[str, Any]: ...  # noqa: E501
 def astero_eval_surface_correction(scheme: str, obs_freqs: _ArrF64, obs_sigmas: _ArrF64, model_freqs: _ArrF64, model_inertias: _ArrF64, l0_obs_freqs: _ArrF64, l0_model_freqs: _ArrF64, l0_inertias: _ArrF64, l0_orders: _ArrF64, delta_nu_obs: float, nu_max: float, b_power: float, correction_factor: float) -> dict[str, Any]: ...  # noqa: E501
 def astero_eval_ratios_r01_r10(l0_freqs: _ArrF64, l0_sigs: _ArrF64, l1_freqs: _ArrF64, l1_sigs: _ArrF64) -> dict[str, _ArrF64]: ...  # noqa: E501
 def astero_eval_ratios_r02(l0_freqs: _ArrF64, l0_sigs: _ArrF64, l1_freqs: _ArrF64, l1_sigs: _ArrF64, l2_freqs: _ArrF64, l2_sigs: _ArrF64) -> tuple[_ArrF64, _ArrF64]: ...  # noqa: E501
@@ -629,6 +631,7 @@ class AsteroAdipls:
     """Astero's ADIPLS interface (`astero/private/adipls_support.f90`)."""
     def __init__(self, case_dir: str) -> None: ...
     def get_one_el_info(self, model: StarModelHandle, el: int, nu1: float, nu2: float, iscan: int, r_cm: float, g_cgs: float, m_g: float, add_center_point: bool, keep_surface_point: bool, add_atmosphere: bool, do_redistribute_mesh: bool, store_for_adipls: bool) -> list[tuple[int, int, int, float, float, float]]: ...  # noqa: E501
+    def get_astero_one_el_info(self, model: StarModelHandle, el: int, nu1: float, nu2: float, iscan: int, delta_nu_model: float, store_for_adipls: bool) -> list[tuple[int, int, int, float, float, float]]: ...  # noqa: E501
 
 class AsteroGyre:
     """Astero's GYRE interface (`astero/private/gyre_support.f90`)."""

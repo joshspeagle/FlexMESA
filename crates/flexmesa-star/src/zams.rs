@@ -63,6 +63,10 @@ pub struct ZamsCatalog {
     pub models: Vec<ZamsEntry>,
 }
 
+/// Quote characters that may delimit a Fortran character value: the
+/// apostrophe and the double quote.
+const FORTRAN_QUOTES: [char; 2] = ['\u{27}', '\u{22}'];
+
 impl ZamsCatalog {
     /// Returns the built-in $Z = 0.02, Y = 0.28$ ZAMS catalog (`basic.net`,
     /// 8 species: `h1, he3, he4, c12, n14, o16, ne20, mg24`).
@@ -202,7 +206,7 @@ impl ZamsCatalog {
                 net_name = trimmed
                     .split_whitespace()
                     .nth(1)
-                    .map(|tok| tok.trim_matches(['\'', '"']).to_string());
+                    .map(|tok| tok.trim_matches(FORTRAN_QUOTES).to_string());
             } else if trimmed.starts_with("M/Msun") {
                 break;
             }

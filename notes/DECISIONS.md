@@ -81,6 +81,7 @@ Scope and the `v0.1.0` definition are in [`SCOPE.md`](SCOPE.md). Work is tracked
 | 64 | Test-Side Star Extras Receive a Copy of the Live Model for Library Calls (`#170`) | In force | below |
 | 65 | Astero Search Cases Are Compared Track by Track (`#430`) | In force | below |
 | 66 | `extras_controls` Runs Before the Model Load, as Upstream (`#453`) | In force | below |
+| 67 | Work Is Chosen by Distance to Pass and Divergence Cluster, with a Layered Fidelity Instrument Stack and Parallel Agents (`#546`) | In force | below |
 
 ## Pre-audit decisions still in force
 
@@ -884,3 +885,17 @@ The text of these four entries predates the audit of 2026-11-16. The decisions s
 - **Why**: upstream's `make_env` `extras_controls` runs `create_env`, which writes `start.mod` that the load then reads. With the old order, that file did not exist when the load ran.
 - **Alternatives Rejected**:
   - *A separate pre-load hook used only by `make_env`*: two hooks where upstream has one, and the order of every other case's `extras_controls` would still differ from upstream.
+
+## DECISIONS #67: Work Is Chosen by Distance to Pass and Divergence Cluster, with a Layered Fidelity Instrument Stack and Parallel Agents (`#546`)
+
+- **Date**: 2026-11-26
+- **Decision**:
+  - **Goal order.** The `v0.1.0` goals are, in order: (1) a full port into Safe Rust, Python and JAX; (2) full fidelity to MESA `26.4.1`; (3) E2E reproduction of the 106 cases; (4) function-level reproduction of MESA outputs as the internal fidelity suite; (5) general tests harmonized with 3 and 4, each test being an oracle, invariant or regression snapshot; (6) an efficient, parallel development cycle. The plan and its workstreams are tracked in `#546` under `#140`.
+  - **Work selection.** Work is chosen by distance to pass (cases that reach upstream's termination and fail few columns) and by first-divergence cluster. Fidelity fixes stay required, and each is tied to evidence: a case, a step dump or a replay oracle.
+  - **Instrument stack.** Mismatches are localized top-down: history harness, then step dumps, then record/replay routine oracles captured from an instrumented MESA `26.4.1`, then `module_hex` kernels. Captured oracle data that CI runs is published as a versioned data bundle like the existing MESA bundles; local-only captures are not committed.
+  - **Agents.** Agent subagents (Claude and Gemini) work in parallel, each in its own worktree. They commit to their own `<issue>-<slug>` branches and never to `main`. Every component branch is reviewed by the orchestrating agent before it joins a train.
+- **Why**: on 2026-11-26 one change moved strict passes (+4 in about 6 hours), while most effort went to integration and to fixes that moved no measured case. The project lead judged the cycle too slow and the test suite not organized for matching upstream.
+- **Alternatives Rejected**:
+  - *Choose work by upstream departures found in audits*: produces large diffs that often move no case (Train 10 and 11 experience).
+  - *A full campaign as the main feedback loop*: 2.5 hours per answer; step dumps and replay oracles answer in minutes.
+  - *Serial work by the orchestrating agent only*: leaves the machine and the agent budget idle.

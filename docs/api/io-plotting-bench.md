@@ -78,6 +78,12 @@ print(
 
 ::: flexmesa.testing.harness_shards
 
+`flexmesa.testing.harness_budgets` derives per-case wall-time and step budgets for a campaign from recorded wall times and the MESA step counts (`flexmesa harness run --budget-from-baseline`, `--mesa-step-factor`), and `flexmesa.testing.early_stop` stops a running `star` case once its partial history is out of an along-track tolerance (`--early-stop-on-divergence`, `#554`, `DECISIONS #68`).
+
+::: flexmesa.testing.harness_budgets
+
+::: flexmesa.testing.early_stop
+
 ::: flexmesa.testing.port_manifest
 
 ::: flexmesa.testing.dashboard

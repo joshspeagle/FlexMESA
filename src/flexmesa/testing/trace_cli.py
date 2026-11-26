@@ -6,11 +6,13 @@ from __future__ import annotations
 import argparse
 import concurrent.futures
 import contextlib
+import dataclasses
 import json
 import os
 import pathlib
 import sys
 import tempfile
+from collections.abc import Callable
 from typing import Any
 
 from flexmesa import _dispatch
@@ -19,6 +21,8 @@ from flexmesa.testing import (
     baseline_regression,
     case_manifest,
     case_report,
+    early_stop,
+    harness_budgets,
     harness_runner,
     harness_shards,
     stepdump_compare,
@@ -321,6 +325,7 @@ def _select_entries(
     manifest: case_manifest.HarnessManifest,
     preset: str,
     cases_filter: list[str] | None,
+    passing: frozenset[tuple[str, str]] = frozenset(),
 ) -> list[case_manifest.CaseManifestEntry]:
     if cases_filter:
         wanted = set(cases_filter)
@@ -334,6 +339,8 @@ def _select_entries(
         return selected
     if preset == "pr-ci":
         return [e for e in manifest.cases if e.pr_ci]
+    if preset == "passes":
+        return [e for e in manifest.cases if e.key in passing]
     if preset == "has-reference":
         return [
             e
@@ -382,8 +389,13 @@ def _build_harness_parser() -> argparse.ArgumentParser:
     p_run.add_argument("--mesa-dir", default=None)
     p_run.add_argument(
         "--preset",
-        choices=("pr-ci", "has-reference", "all"),
+        choices=("pr-ci", "has-reference", "passes", "all"),
         default="pr-ci",
+        help=(
+            "Cases to run: 'pr-ci', 'has-reference', 'passes' (the cases "
+            "whose committed baseline verdict is pass), or 'all'. "
+            "--cases overrides it."
+        ),
     )
     p_run.add_argument(
         "--cases",
@@ -437,6 +449,69 @@ def _build_harness_parser() -> argparse.ArgumentParser:
         ),
     )
     p_run.add_argument(
+        "--budget-from-baseline",
+        action="store_true",
+        help=(
+            "Give each case a wall-time budget of max(K x its recorded wall "
+            "time, floor) capped at --timeout-sec (K=--budget-factor, "
+            "floor=--budget-floor-sec). The committed baseline stores wall "
+            "times as zero, so the recorded times come from a previous "
+            "--json-out report given with --wall-times-json; a case without "
+            "one keeps --timeout-sec. A case stopped by its budget is "
+            "inconclusive and is compared as a prefix of its baseline row "
+            "(DECISIONS #59, #68)."
+        ),
+    )
+    p_run.add_argument(
+        "--wall-times-json",
+        default=None,
+        help=(
+            "Harness --json-out report whose wall_time_sec values feed "
+            "--budget-from-baseline."
+        ),
+    )
+    p_run.add_argument(
+        "--budget-factor",
+        type=_positive_float,
+        default=2.0,
+        help="Multiple K of the recorded wall time (default 2).",
+    )
+    p_run.add_argument(
+        "--budget-floor-sec",
+        type=_positive_float,
+        default=120.0,
+        help="Smallest derived wall-time budget in seconds (default 120).",
+    )
+    p_run.add_argument(
+        "--mesa-step-factor",
+        type=_positive_float,
+        default=None,
+        metavar="M",
+        help=(
+            "Stop a case once its history reaches M x the step count of its "
+            "MESA reference run (off by default). Reported like a budget "
+            "cut-off: inconclusive, compared as a prefix of the baseline."
+        ),
+    )
+    p_run.add_argument(
+        "--early-stop-on-divergence",
+        action="store_true",
+        help=(
+            "While a star case runs, check its partial history against the "
+            "MESA reference with the along-track tolerance test of the final "
+            "comparison, and stop it with 'fail (early stop)' as soon as a "
+            "tracked column is out of tolerance. It never stops a case the "
+            "final comparison would pass. Refused with --update-baseline, "
+            "--save-baseline and --max-steps (DECISIONS #68)."
+        ),
+    )
+    p_run.add_argument(
+        "--early-stop-interval-sec",
+        type=_positive_float,
+        default=harness_runner.MONITOR_INTERVAL_SEC,
+        help="Seconds between early-stop and step-bound checks (default 10).",
+    )
+    p_run.add_argument(
         "--shard",
         type=_shard_arg,
         default=None,
@@ -448,6 +523,7 @@ def _build_harness_parser() -> argparse.ArgumentParser:
             "with 'flexmesa harness merge'."
         ),
     )
+    p_run.set_defaults(budgets={}, budgeted_keys=frozenset())
     p_run.add_argument("--max-rss-gb", type=float, default=6.0)
     p_run.add_argument("--markdown-out", default=None)
     p_run.add_argument("--json-out", default=None)
@@ -596,7 +672,133 @@ def _case_timeout(
     """Return the wall-clock budget of one case (``--short-budget-sec``)."""
     if entry.key in ns.short_budget_keys:
         return float(ns.short_budget_sec)
+    budget = ns.budgets.get(entry.key)
+    if budget is not None:
+        return float(budget.timeout_sec)
     return float(ns.timeout_sec)
+
+
+def _monitor_factory(
+    ns: argparse.Namespace, entry: case_manifest.CaseManifestEntry
+) -> Callable[[pathlib.Path], early_stop.RunMonitor | None] | None:
+    """Return the builder of the polling hook of one case, if any applies."""
+    budget = ns.budgets.get(entry.key)
+    step_factor = budget.step_factor if budget is not None else None
+    mesa_steps = budget.mesa_steps if budget is not None else None
+    if not ns.early_stop_on_divergence and step_factor is None:
+        return None
+    base_dir = pathlib.Path(ns.manifest).parent if ns.manifest else None
+
+    def build(case_dir: pathlib.Path) -> early_stop.RunMonitor | None:
+        return early_stop.build_monitor(
+            entry,
+            case_dir,
+            early_stop=bool(ns.early_stop_on_divergence),
+            mesa_steps=mesa_steps,
+            step_factor=step_factor,
+            root_dir=base_dir,
+        )
+
+    return build
+
+
+def _early_stop_refusal(ns: argparse.Namespace) -> str:
+    """Return why ``--early-stop-on-divergence`` cannot be used, or ``""``.
+
+    An early-stopped case has a truncated history, so it must never become a
+    baseline row, and a step-capped smoke run has no tolerance verdict.
+    """
+    if not ns.early_stop_on_divergence:
+        return ""
+    if ns.update_baseline or ns.save_baseline:
+        return (
+            "--early-stop-on-divergence cannot be combined with "
+            "--update-baseline or --save-baseline: an early-stopped case "
+            "has a truncated history (DECISIONS #68)"
+        )
+    if ns.max_steps is not None:
+        return "--early-stop-on-divergence cannot be combined with --max-steps"
+    return ""
+
+
+def _baseline_records(
+    ns: argparse.Namespace,
+) -> list[harness_runner.CaseHarnessRecord]:
+    """Return the baseline records, or ``[]`` when no baseline is present.
+
+    Raises:
+        FileNotFoundError: If ``--baseline-json`` names a missing file.
+    """
+    try:
+        _, _, records = case_report.build_manifest_inventory_records(
+            ns.manifest, ns.known_gaps, ns.baseline_json
+        )
+    except FileNotFoundError:
+        if ns.baseline_json is not None:
+            raise
+        return []
+    return records
+
+
+def _case_budgets(
+    ns: argparse.Namespace,
+    selected: list[case_manifest.CaseManifestEntry],
+    base_records: list[harness_runner.CaseHarnessRecord],
+) -> dict[tuple[str, str], harness_budgets.CaseBudget]:
+    """Return the per-case budgets of this run (empty when none apply).
+
+    Raises:
+        ValueError: If ``--budget-from-baseline`` has no recorded wall times
+            to work from.
+    """
+    if not ns.budget_from_baseline and ns.mesa_step_factor is None:
+        return {}
+    wall_times: dict[tuple[str, str], float] = {}
+    if ns.budget_from_baseline:
+        if ns.wall_times_json is not None:
+            wall_times = harness_budgets.load_wall_times(ns.wall_times_json)
+        else:
+            wall_times = {
+                (b.suite, b.case): b.wall_time_sec
+                for b in base_records
+                if b.executed
+                and b.wall_time_sec > 0.0
+                and b.run_status
+                not in baseline_regression.RESOURCE_LIMITED_STATUSES
+            }
+        if not wall_times:
+            raise ValueError(
+                "the baseline stores wall times as zero (DECISIONS #58); "
+                "give --wall-times-json with a previous harness --json-out "
+                "report"
+            )
+    budgets = harness_budgets.derive_budgets(
+        selected,
+        base_records,
+        wall_times,
+        timeout_sec=float(ns.timeout_sec),
+        factor=float(ns.budget_factor),
+        floor_sec=float(ns.budget_floor_sec),
+        step_factor=ns.mesa_step_factor,
+    )
+    if not ns.budget_from_baseline:
+        # Only the step bound applies; the time budget stays --timeout-sec.
+        budgets = {
+            k: dataclasses.replace(b, timeout_sec=float(ns.timeout_sec))
+            for k, b in budgets.items()
+        }
+    n_timed = sum(1 for b in budgets.values() if b.from_baseline)
+    print(
+        f"[harness] per-case budgets: {n_timed} of {len(budgets)} cases have "
+        f"a wall-time budget below {ns.timeout_sec:g} s"
+        + (
+            f"; step bound {ns.mesa_step_factor:g} x MESA steps"
+            if ns.mesa_step_factor is not None
+            else ""
+        ),
+        flush=True,
+    )
+    return budgets
 
 
 def _write_json_file(path_str: str, payload: dict[str, object]) -> None:
@@ -649,6 +851,10 @@ def _execute_one_entry(
     timeout_sec: float | None,
     max_rss_gb: float | None,
     base_dir: pathlib.Path | None,
+    monitor_factory: (
+        Callable[[pathlib.Path], early_stop.RunMonitor | None] | None
+    ) = None,
+    monitor_interval_sec: float = harness_runner.MONITOR_INTERVAL_SEC,
 ) -> harness_runner.CaseHarnessRecord:
     case_dir = harness_runner.resolve_case_dir(
         entry.suite, entry.case, mesa_dir=mesa_dir
@@ -665,6 +871,8 @@ def _execute_one_entry(
         extras_factory=eff_extras_factory,
         timeout_sec=timeout_sec,
         max_rss_gb=max_rss_gb,
+        monitor=monitor_factory(case_dir) if monitor_factory else None,
+        monitor_interval_sec=monitor_interval_sec,
     )
     return harness_runner.evaluate_case_record(
         entry,
@@ -712,6 +920,8 @@ def _run_selected_entries(
                 _case_timeout(ns, entry),
                 ns.max_rss_gb,
                 base_dir,
+                _monitor_factory(ns, entry),
+                ns.early_stop_interval_sec,
             )
             records.append(rec)
             _append_progress(work_root, rec)
@@ -740,6 +950,8 @@ def _run_selected_entries(
                 _case_timeout(ns, entry),
                 ns.max_rss_gb,
                 base_dir,
+                _monitor_factory(ns, entry),
+                ns.early_stop_interval_sec,
             ): idx
             for idx, entry in enumerate(selected)
         }
@@ -904,7 +1116,9 @@ def _report_and_gate(
             ns.manifest, ns.known_gaps, ns.update_baseline
         )
         merged = baseline_regression.merge_records_into_baseline(
-            records, base_records, short_budget=short_keys
+            records,
+            base_records,
+            short_budget=short_keys | ns.budgeted_keys,
         )
         _write_json_file(
             ns.update_baseline,
@@ -975,6 +1189,23 @@ def _handle_merge_subcommand(ns: argparse.Namespace) -> int:
             file=sys.stderr,
         )
         return 1
+    if settings["early_stop_on_divergence"] and (
+        ns.save_baseline or ns.update_baseline
+    ):
+        print(
+            "the shards used --early-stop-on-divergence; their truncated "
+            "histories cannot become baseline rows (DECISIONS #68)",
+            file=sys.stderr,
+        )
+        return 1
+    if settings["budget_from_baseline"] and ns.save_baseline:
+        print(
+            "--save-baseline records full-budget runs; the shards used "
+            "--budget-from-baseline",
+            file=sys.stderr,
+        )
+        return 1
+    ns.budgeted_keys = merged.budgeted_cases
     ns.numerics_mode = str(settings["numerics_mode"])
     ns.max_steps = settings["max_steps"]
     ns.allow_unsupported_controls = bool(settings["allow_unsupported_controls"])
@@ -997,6 +1228,9 @@ def _handle_merge_subcommand(ns: argparse.Namespace) -> int:
     run_info["merged_shards"] = len(payloads)
     run_info["short_budget_cases"] = [
         _label(k) for k in sorted(merged.short_budget_cases)
+    ]
+    run_info["budgeted_cases"] = [
+        _label(k) for k in sorted(merged.budgeted_cases)
     ]
     run_info["selected_cases"] = [_label((r.suite, r.case)) for r in records]
     return _report_and_gate(
@@ -1049,6 +1283,24 @@ def harness_main(argv: list[str] | None = None) -> int:
             )
             return 1
 
+    refusal = _early_stop_refusal(ns)
+    if refusal:
+        print(refusal, file=sys.stderr)
+        return 1
+    if ns.budget_from_baseline and ns.short_budget_sec is not None:
+        print(
+            "--budget-from-baseline replaces --short-budget-sec; give one",
+            file=sys.stderr,
+        )
+        return 1
+    if ns.budget_from_baseline and ns.save_baseline:
+        print(
+            "--save-baseline records full-budget runs; it cannot be "
+            "combined with --budget-from-baseline",
+            file=sys.stderr,
+        )
+        return 1
+
     print(
         f"[harness] upstream reference: "
         f"{fetch.load_upstream_reference().summary_line()}",
@@ -1056,7 +1308,13 @@ def harness_main(argv: list[str] | None = None) -> int:
     )
     manifest = case_manifest.load_case_manifest(ns.manifest)
     gaps = case_manifest.load_known_gaps(ns.known_gaps)
-    selected = _select_entries(manifest, ns.preset, ns.cases)
+    base_records = _baseline_records(ns)
+    selected = _select_entries(
+        manifest,
+        ns.preset,
+        ns.cases,
+        harness_budgets.passing_keys(base_records),
+    )
     if ns.shard is not None:
         selected = harness_shards.shard_entries(
             selected, ns.shard[0], ns.shard[1], _costly_keys(ns)
@@ -1067,6 +1325,14 @@ def harness_main(argv: list[str] | None = None) -> int:
             flush=True,
         )
     ns.short_budget_keys = _short_budget_keys(ns, selected)
+    try:
+        ns.budgets = _case_budgets(ns, selected, base_records)
+    except (ValueError, OSError) as exc:
+        print(f"cannot derive per-case budgets: {exc}", file=sys.stderr)
+        return 1
+    ns.budgeted_keys = frozenset(
+        k for k, b in ns.budgets.items() if b.from_baseline
+    )
     if ns.short_budget_keys:
         print(
             f"[harness] {len(ns.short_budget_keys)} cases whose baseline run "
@@ -1110,6 +1376,18 @@ def harness_main(argv: list[str] | None = None) -> int:
         "shard": list(ns.shard) if ns.shard is not None else None,
         "short_budget_cases": [_label(k) for k in sorted(ns.short_budget_keys)],
         "selected_cases": [_label(e.key) for e in selected],
+        "budget_from_baseline": (
+            {
+                "factor": ns.budget_factor,
+                "floor_sec": ns.budget_floor_sec,
+                "wall_times_json": ns.wall_times_json is not None,
+            }
+            if ns.budget_from_baseline
+            else None
+        ),
+        "mesa_step_factor": ns.mesa_step_factor,
+        "early_stop_on_divergence": bool(ns.early_stop_on_divergence),
+        "budgeted_cases": [_label(k) for k in sorted(ns.budgeted_keys)],
     }
     return _report_and_gate(
         ns,

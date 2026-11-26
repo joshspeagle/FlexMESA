@@ -16,10 +16,12 @@ cases is restricted to what a prefix can show.
 from __future__ import annotations
 
 import dataclasses
+import re
 
 from flexmesa.testing import _case_verdict
 
 __all__ = [
+    "EARLY_STOP_STATUS",
     "BaselineRegression",
     "budget_limited_keys",
     "find_baseline_regressions",
@@ -29,6 +31,13 @@ __all__ = [
 #: Run statuses that say the run was cut off by a resource budget, so the
 #: comparison with the baseline is inconclusive and is not counted.
 RESOURCE_LIMITED_STATUSES: frozenset[str] = frozenset({"timeout", "oom_killed"})
+
+#: Run status of a case stopped by ``--early-stop-on-divergence``: a tracked
+#: column was already out of tolerance, so the case cannot pass
+#: (``DECISIONS #68``). Checked as a prefix of the baseline row.
+EARLY_STOP_STATUS = "diverged"
+
+_EARLY_STOP_MODEL_RE = re.compile(r"\(model (\d+)\)")
 
 
 @dataclasses.dataclass(frozen=True)
@@ -143,6 +152,56 @@ def _short_budget_regression(
     return "", ""
 
 
+def _early_stop_regression(
+    rec: _case_verdict.CaseHarnessRecord,
+    base: _case_verdict.CaseHarnessRecord,
+) -> tuple[str, str]:
+    """Compare an early-stopped run with its baseline row.
+
+    The early stop proves that the run cannot pass, so a baseline row that
+    completed within the manifest tolerances got worse. Otherwise the run is
+    checked as a prefix of the baseline row (``_short_budget_regression``)
+    and against the model at which the baseline first left a track
+    tolerance.
+
+    Args:
+        rec: Record of the run stopped by the divergence check.
+        base: Baseline record of the same case.
+
+    Returns:
+        ``(kind, detail)``, both empty when no regression is found.
+    """
+    if (
+        base.run_status not in RESOURCE_LIMITED_STATUSES
+        and base.executed
+        and _within_tolerance(base)
+    ):
+        return (
+            "left tolerance",
+            f"baseline within manifest tolerances; {rec.error_message}",
+        )
+    # The stop was deliberate, so the run is a prefix of the baseline row
+    # like a budget cut-off, never "ended before the baseline's step count".
+    prefix = dataclasses.replace(rec, run_status="timeout")
+    kind, detail = _short_budget_regression(prefix, base)
+    if kind:
+        return kind, detail
+    b_cmp = base.comparison
+    match = _EARLY_STOP_MODEL_RE.search(rec.error_message)
+    if (
+        match is not None
+        and b_cmp is not None
+        and b_cmp.first_diverging_step is not None
+        and int(match.group(1)) < b_cmp.first_diverging_step
+    ):
+        return (
+            "diverges from MESA earlier",
+            f"baseline first left a track tolerance at model "
+            f"{b_cmp.first_diverging_step}; {rec.error_message}",
+        )
+    return "", ""
+
+
 def find_baseline_regressions(
     records: list[_case_verdict.CaseHarnessRecord],
     baseline_records: list[_case_verdict.CaseHarnessRecord],
@@ -181,6 +240,13 @@ def find_baseline_regressions(
     for rec in records:
         base = by_key.get((rec.suite, rec.case))
         if base is None or not rec.executed:
+            continue
+        if rec.run_status == EARLY_STOP_STATUS:
+            kind, detail = _early_stop_regression(rec, base)
+            if kind:
+                found.append(
+                    BaselineRegression(rec.suite, rec.case, kind, detail)
+                )
             continue
         if (rec.suite, rec.case) in short_budget and (
             base.run_status == "timeout"

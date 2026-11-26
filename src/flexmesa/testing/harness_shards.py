@@ -35,6 +35,9 @@ RUN_SETTING_KEYS: tuple[str, ...] = (
     "timeout_sec",
     "short_budget_sec",
     "max_rss_gb",
+    "budget_from_baseline",
+    "mesa_step_factor",
+    "early_stop_on_divergence",
 )
 
 
@@ -97,6 +100,8 @@ class MergedShards:
         rows: Executed case rows keyed by ``(suite, case)``.
         settings: The run settings shared by every shard.
         short_budget_cases: ``(suite, case)`` keys run with the short budget.
+        budgeted_cases: ``(suite, case)`` keys that ran with a wall-time
+            budget derived from the baseline (``--budget-from-baseline``).
         problems: Reasons the shards do not form one complete campaign
             (missing or repeated shards, repeated cases); empty when they
             do.
@@ -105,6 +110,7 @@ class MergedShards:
     rows: dict[tuple[str, str], dict[str, Any]]
     settings: dict[str, Any]
     short_budget_cases: frozenset[tuple[str, str]]
+    budgeted_cases: frozenset[tuple[str, str]]
     problems: tuple[str, ...]
 
 
@@ -158,8 +164,10 @@ def merge_shard_payloads(payloads: list[dict[str, Any]]) -> MergedShards:
 
     rows: dict[tuple[str, str], dict[str, Any]] = {}
     short: set[tuple[str, str]] = set()
+    budgeted: set[tuple[str, str]] = set()
     for payload, run in zip(payloads, runs, strict=True):
         short.update(_label_key(c) for c in run.get("short_budget_cases", ()))
+        budgeted.update(_label_key(c) for c in run.get("budgeted_cases", ()))
         for row in payload.get("cases", ()):
             if not row.get("executed"):
                 continue
@@ -174,5 +182,6 @@ def merge_shard_payloads(payloads: list[dict[str, Any]]) -> MergedShards:
         rows=rows,
         settings=settings,
         short_budget_cases=frozenset(short),
+        budgeted_cases=frozenset(budgeted),
         problems=tuple(problems),
     )

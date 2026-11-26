@@ -83,6 +83,7 @@ Scope and the `v0.1.0` definition are in [`SCOPE.md`](SCOPE.md). Work is tracked
 | 66 | `extras_controls` Runs Before the Model Load, as Upstream (`#453`) | In force | below |
 | 67 | Work Is Chosen by Distance to Pass and Divergence Cluster, with a Layered Fidelity Instrument Stack and Parallel Agents (`#546`) | In force | below |
 | 68 | `&star_job::mesa_dir` Is an Installation-Location Key, Stored but Not Used to Resolve Data (`#548`) | In force | below |
+| 69 | Per-Case Budgets, the `passes` Preset and the Early Divergence Stop in the History Harness (`#554`) | In force | below |
 | 70 | A Passing Case Takes Exactly MESA's Step Count in Every Stage, and E2E Work Is Triaged by Run Time (`#546`, `#554`) | In force | below |
 
 ## Pre-audit decisions still in force
@@ -911,6 +912,21 @@ The text of these four entries predates the audit of 2026-11-16. The decisions s
   - *Route `mesa_dir` through a process-global override of every `$MESA_DIR` lookup (EOS, opacity, ionization, colors, Roche tables, case staging, `GYRE_DIR`)*: an inlist-relative path such as `'../../..'` would then depend on where the case is staged and would weaken the guarantee that data come from the verified bundles, for no observable change.
   - *Keep the key unsupported*: leaves a case that reaches upstream's termination permanently diagnostic for a key that cannot move a trajectory.
 
+## DECISIONS #69: Per-Case Budgets, the `passes` Preset and the Early Divergence Stop in the History Harness (`#554`)
+
+- **Date**: 2026-11-26
+- **Decision**:
+  1. **Per-case budgets.** `flexmesa harness run --budget-from-baseline` gives each case a wall-time budget of `max(K x its recorded wall time, floor)` capped at `--timeout-sec` (`--budget-factor K`, default 2; `--budget-floor-sec`, default 120). The committed baseline stores wall times as zero (`DECISIONS #58`), so the recorded times come from a previous harness `--json-out` report given with `--wall-times-json`; without one the option fails loudly. A case with no recorded time, or whose baseline row ended on a budget, keeps `--timeout-sec`. `--mesa-step-factor M` additionally stops a case once its history reaches `M x` the step count of its MESA reference run (off by default). A case stopped by either bound has run status `timeout`, verdict `inconclusive (timeout)`, and is compared as a prefix of its baseline row (`DECISIONS #59`); no new comparison exists. `--save-baseline` is refused with `--budget-from-baseline`, and `--update-baseline` keeps the baseline row of a case cut off by its derived budget.
+  2. **`passes` preset.** `--preset passes` selects the cases whose committed baseline verdict is `pass`. `--cases` still overrides every preset.
+  3. **Early divergence stop.** `--early-stop-on-divergence` polls the partial `history.data` of a running `star` case every `--early-stop-interval-sec` (10 s) and applies the along-track tolerance test of the final comparison to the rows written so far. The check evaluates the final comparison's own distance, tolerance and bad-value rules only at points the final comparison also evaluates: the complete interior rows of the run (all but the last collapsed row), or the reference rows they span for a sparse reference or a discrete column. A flagged point therefore fails the final comparison of any longer run with the same rows, so the check never stops a case the final comparison would pass. Final-value tolerances are defined only at termination and are never used. The stopped case has run status `diverged`, verdict `fail (early stop)` (an undeclared failure) or `declared gap (#N)` when it is a declared gap, and its error message names the tolerance key, the coordinate value, the model number and the two values. Against the baseline it is a regression `left tolerance` when the baseline row was within tolerances, otherwise a prefix check that fails when the early stop precedes the model at which the baseline first left a track tolerance.
+  4. **Early stop is never used for baseline-updating runs.** An early-stopped case has a truncated history. `--early-stop-on-divergence` is refused with `--update-baseline`, `--save-baseline` and `--max-steps`, and `harness merge` refuses to update or save a baseline from shards that used it. The check applies only to single-stage `star` cases with a MESA `26.4.1` reference and exactly one history file in the output; every other case runs without it.
+- **Why**: the iteration loop for pass gates and drift hunting spent most of its time on cases that had already left tolerance or were running to a budget that fits no case. Stopping them early shortens the loop without changing what a pass means: only runs that cannot pass, or runs that are checked as prefixes under `DECISIONS #59`, end early.
+- **Limits**: the committed wall times are zero, so the budgets depend on a report from a comparable machine. The early stop is a `star`-suite tool; binary and astero cases run to their budget. A run stopped early shows only the part up to the stop, so its final values, step counts and later divergences are not measured.
+- **Alternatives Rejected**:
+  - *Store real wall times in the baseline*: breaks its deterministic diffs (`DECISIONS #58`).
+  - *Run the full `compare_histories` on the partial history*: its grid, its span rule and its tie collapse at the last row differ between a prefix and the final run, so a prefix verdict is not a bound on the final verdict.
+  - *Make early stop the default for gate runs*: a gate run that ends early has no final values and cannot refresh the baseline.
+  - *A new `budget` run status*: budget cut-offs are already inconclusive prefixes; a second status would need its own comparison.
 ## DECISIONS #70: A Passing Case Takes Exactly MESA's Step Count in Every Stage, and E2E Work Is Triaged by Run Time (`#546`, `#554`)
 
 - **Date**: 2026-11-26

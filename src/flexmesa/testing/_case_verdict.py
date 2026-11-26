@@ -36,8 +36,9 @@ class TraceRunOutcome:
     Attributes:
         suite: Suite name (``"star"``, ``"binary"``, or ``"astero"``).
         case: Case directory name.
-        status: Execution status (``"ok"``, ``"error"``, ``"timeout"``, or
-            ``"oom_killed"``).
+        status: Execution status (``"ok"``, ``"error"``, ``"timeout"``,
+            ``"oom_killed"``, or ``"diverged"`` for a case stopped by
+            ``--early-stop-on-divergence``, ``DECISIONS #68``).
         termination_code: Observed termination code (or empty string on crash).
         steps: Total evolutionary steps completed before exit.
         retries: Total step retries recorded.
@@ -905,6 +906,12 @@ def evaluate_case_record(
             # never counts as passing, and the baseline gate checks it as a
             # prefix of the committed row (DECISIONS #59).
             verdict = f"inconclusive ({outcome.status})"
+        elif outcome.status == "diverged":
+            # Stopped by --early-stop-on-divergence: a tracked column was
+            # already out of its along-track tolerance, so the case cannot
+            # pass (DECISIONS #68). The column and age are in the message.
+            verdict = "fail (early stop)"
+            is_undeclared = True
         else:
             verdict = "fail (undeclared)"
             is_undeclared = True

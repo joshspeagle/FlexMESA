@@ -248,3 +248,12 @@ flexmesa harness run --preset all --numerics-mode strict --jobs 2 --timeout-sec 
 flexmesa harness run --preset all --shard 1/8 --json-out shard_1.json
 flexmesa harness merge shard_*.json --markdown-out case_table.md --json-out case_table.json --save-baseline baseline_candidate.json --gate
 ```
+
+Three more options make a loop on a subset of cases cheaper without changing what a pass means (`DECISIONS #68`). `--preset passes` selects the cases whose committed baseline verdict is `pass` (`--cases` still overrides every preset). `--budget-from-baseline` gives each case a wall-time budget of `max(K x its recorded wall time, floor)` capped at `--timeout-sec`, with `K` set by `--budget-factor` (default 2) and the floor by `--budget-floor-sec` (default 120 s). The committed baseline stores wall times as zero, so the recorded times come from a previous `--json-out` report given with `--wall-times-json`. `--mesa-step-factor M` also stops a case once its history reaches `M` times the step count of its MESA reference run. A case stopped by either bound is reported as `inconclusive (timeout)` and is checked as a prefix of its baseline row, as for any budget cut-off.
+
+`--early-stop-on-divergence` is for fast loops and pass gates. While a `star` case runs, the harness checks its partial history every `--early-stop-interval-sec` seconds with the along-track tolerance test of the final comparison. As soon as a tracked column is out of tolerance the case cannot pass, so it is stopped and reported as `fail (early stop)` (or `declared gap (#N)` for a declared gap), with the column, the age and the model number where it left tolerance. The check only uses points that the final comparison also evaluates, so it never stops a case that the final comparison would pass; final-value tolerances are never used. An early-stopped case has a truncated history, so the option is refused with `--update-baseline`, `--save-baseline` and `--max-steps`:
+
+```bash
+flexmesa harness run --preset passes --budget-from-baseline --wall-times-json previous_report.json --jobs 2 --gate
+flexmesa harness run --cases star/high_z star/hot_cool_wind --early-stop-on-divergence
+```

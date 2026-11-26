@@ -115,14 +115,22 @@ fn test_eps_grav_time_centering_pc_blending_and_latent_heat_match_fortran() {
         (tc.d1[I_LND_00] - fd_dlnd).abs() / fd_dlnd.abs().max(1.0) < 1.0e-5
     );
 
-    // 2. Latent heat terms
+    // 2. Latent heat terms: the current-step term enters the centred
+    // `eps_grav` and the start-of-step term enters `eps_grav_start`, so each
+    // carries the weight 1/2 (`star/private/eps_grav.f90:165-182`).
     model.aux.latent_ddlnrho[k] = 2.5e12;
     model.aux.latent_ddlnt[k] = -1.8e12;
+    model.aux.latent_ddlnrho_start[k] = 1.5e12;
+    model.aux.latent_ddlnt_start[k] = -0.6e12;
     let with_lat =
         eval_eps_grav_std_cell(&model, k).expect("eval_eps_grav_std_cell lat");
     let expected_lat = tc.val
-        - (dlnd_dt * model.aux.latent_ddlnrho[k]
-            + dlnt_dt * model.aux.latent_ddlnt[k]);
+        - 0.5
+            * (dlnd_dt * model.aux.latent_ddlnrho[k]
+                + dlnt_dt * model.aux.latent_ddlnt[k])
+        - 0.5
+            * (dlnd_dt * model.aux.latent_ddlnrho_start[k]
+                + dlnt_dt * model.aux.latent_ddlnt_start[k]);
     assert!(
         (with_lat.val - expected_lat).abs() / expected_lat.abs().max(1.0)
             < 1.0e-12

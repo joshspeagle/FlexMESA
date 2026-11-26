@@ -214,10 +214,6 @@ issue = "#161"
 reason = "Strict run hits power_nuc_burn_upper_limit at step 1 (23 retries vs MESA 668 steps, 9 retries) (#161, #152)."
 [[gaps]]
 suite = "star"
-case = "wd_cool_0.6M"
-issue = "#156"
-reason = "Strict run reaches log_center_temp_lower_limit (218 steps vs MESA 219, 3 retries matching MESA 26.4.1) with rel_star_age (-0.66%), num_zones (3.21%), and cooling-track deviations from step 37 (#156, #152)."
-[[gaps]]
 suite = "star"
 case = "wd_he_shell_ignition"
 issue = "#587"

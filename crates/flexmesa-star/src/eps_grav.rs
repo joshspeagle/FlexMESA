@@ -25,7 +25,10 @@
 //!   and multiplicative `eps_grav_factor` (`eps_grav.f90:67, 187-191`).
 
 use flexmesa_const::LN10;
-use flexmesa_eos::{I_CHI_RHO, I_CHI_T, I_CP, I_GRAD_AD, I_LN_E};
+use flexmesa_eos::{
+    I_CHI_RHO, I_CHI_T, I_CP, I_GRAD_AD, I_LATENT_DDLNRHO, I_LATENT_DDLNT,
+    I_LN_E,
+};
 use flexmesa_utils::is_bad;
 use rayon::prelude::*;
 
@@ -182,10 +185,20 @@ fn eval_eps_grav_std_cell_with_ctx(
     let one_m_grada_chit = StarAdOrder1::ONE - grada_ad * chi_t_ad;
     let grada_chirho = grada_ad * chi_rho_ad;
 
+    // MESA I, Equation (12) (`star/private/eps_grav.f90:162-163`).
     let mut eps_grav =
         -t_ad * cp_ad * (one_m_grada_chit * dlnt_dt - grada_chirho * dlnd_dt);
 
-    // Optional time-centering (`eps_grav.f90:157-165`):
+    // Phase-transition latent heat, `wrap_latent_ddlnRho_00` and
+    // `wrap_latent_ddlnT_00` with their EOS partials
+    // (`star/private/eps_grav.f90:164-169`,
+    // `star/private/auto_diff_support.f90:853-862`), before the time
+    // centering.
+    let latent_ddlnrho = eos_ad(model.aux.latent_ddlnrho[k], I_LATENT_DDLNRHO);
+    let latent_ddlnt = eos_ad(model.aux.latent_ddlnt[k], I_LATENT_DDLNT);
+    eps_grav = eps_grav - (dlnd_dt * latent_ddlnrho + dlnt_dt * latent_ddlnt);
+
+    // Optional time-centering (`eps_grav.f90:172-184`):
     // Evaluates start-of-step thermodynamic prefactors multiplying the live
     // `dlnt_dt` and `dlnd_dt` `StarAdOrder1` time derivatives.
     if model.controls.use_time_centered_eps_grav && !model.aux.doing_relax {
@@ -220,16 +233,13 @@ fn eval_eps_grav_std_cell_with_ctx(
         let t_s = flexmesa_math::exp(model.ln_t_start[k]);
         let one_m_s = 1.0 - grada_s * chi_t_s;
         let gc_s = grada_s * chi_rho_s;
-        let eps_grav_start =
+        let mut eps_grav_start =
             (dlnt_dt * one_m_s - dlnd_dt * gc_s) * (-t_s * cp_s);
+        // Start-of-step latent heat (`eps_grav.f90:179-180`).
+        eps_grav_start = eps_grav_start
+            - (dlnd_dt * model.aux.latent_ddlnrho_start[k]
+                + dlnt_dt * model.aux.latent_ddlnt_start[k]);
         eps_grav = eps_grav * 0.5 + eps_grav_start * 0.5;
-    }
-
-    // Phase-transition latent heat (`eps_grav.f90:167-170`):
-    let lat_rho = model.aux.latent_ddlnrho.get(k).copied().unwrap_or(0.0);
-    let lat_t = model.aux.latent_ddlnt.get(k).copied().unwrap_or(0.0);
-    if lat_rho != 0.0 || lat_t != 0.0 {
-        eps_grav = eps_grav - (dlnd_dt * lat_rho + dlnt_dt * lat_t);
     }
 
     // Finite-difference composition term (`eps_grav.f90:187-191, 262-399`):

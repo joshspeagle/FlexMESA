@@ -593,6 +593,14 @@ pub struct HydroAuxState {
     pub latent_ddlnrho: Vec<f64>,
     /// Phase-transition latent heat temperature derivative (`latent_ddlnT`).
     pub latent_ddlnt: Vec<f64>,
+    /// Start-of-step `latent_ddlnRho` (`latent_ddlnRho_start`,
+    /// `star/private/struct_burn_mix.f90:326`).
+    #[serde(default)]
+    pub latent_ddlnrho_start: Vec<f64>,
+    /// Start-of-step `latent_ddlnT` (`latent_ddlnT_start`,
+    /// `star/private/struct_burn_mix.f90:325`).
+    #[serde(default)]
+    pub latent_ddlnt_start: Vec<f64>,
     /// Composition partial derivatives $\partial\epsilon_{\mathrm{grav},k}/\partial X_{j,k}$
     /// (`d_eps_grav_dx`, `len = nz * species`).
     pub d_eps_grav_dx: Vec<f64>,
@@ -880,6 +888,8 @@ impl HydroAuxState {
             nonnucneu_channels: vec![[0.0; 5]; nz],
             latent_ddlnrho: vec![0.0; nz],
             latent_ddlnt: vec![0.0; nz],
+            latent_ddlnrho_start: vec![0.0; nz],
+            latent_ddlnt_start: vec![0.0; nz],
             d_eps_grav_dx: vec![0.0; nz * species],
             burn_avg_epsnuc: vec![0.0; nz],
             eps_nuc_categories: vec![[0.0; flexmesa_chem::NUM_CATEGORIES]; nz],
@@ -1001,6 +1011,8 @@ impl HydroAuxState {
             &mut self.eos_frac_pc,
             &mut self.latent_ddlnrho,
             &mut self.latent_ddlnt,
+            &mut self.latent_ddlnrho_start,
+            &mut self.latent_ddlnt_start,
             &mut self.burn_avg_epsnuc,
             &mut self.extra_heat,
             &mut self.d_extra_heat_dlnd,
@@ -1111,6 +1123,11 @@ impl HydroAuxState {
         self.chi_t_start.clone_from_slice(chi_t);
         self.chi_rho_start.clone_from_slice(chi_rho);
         self.csound_start.clone_from_slice(csound);
+        // `s% latent_ddlnT_start(k) = s% latent_ddlnT(k)` and
+        // `s% latent_ddlnRho_start(k) = s% latent_ddlnRho(k)`
+        // (`star/private/struct_burn_mix.f90:325-326`).
+        self.latent_ddlnt_start.clone_from(&self.latent_ddlnt);
+        self.latent_ddlnrho_start.clone_from(&self.latent_ddlnrho);
         self.etrb_start.clone_from(&self.etrb);
         self.alpha_rti_start.clone_from(&self.alpha_rti);
     }

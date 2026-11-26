@@ -1391,6 +1391,28 @@ fn fill_reset_starting_vectors(model: &mut StarModel) {
     }
 }
 
+/// `set_cgrav` (`star/private/hydro_vars.f90:763-776`): the installed
+/// `other_cgrav` hook when `use_other_cgrav`, else `cgrav(1:nz) =
+/// standard_cgrav`.
+///
+/// # Errors
+/// Returns [`StarError`] if `use_other_cgrav` is set without an installed
+/// hook, or if the hook fails.
+fn set_cgrav(model: &mut StarModel) -> Result<(), StarError> {
+    if model.controls.use_other_cgrav {
+        let hook = model.aux.other_cgrav.clone().ok_or_else(|| {
+            StarError::InvalidInput(String::from(
+                "use_other_cgrav is set but no other_cgrav hook is installed",
+            ))
+        })?;
+        hook.apply(model)
+    } else {
+        let nz = model.nz;
+        model.cgrav[..nz].fill(flexmesa_const::STANDARD_CGRAV);
+        Ok(())
+    }
+}
+
 /// `set_vars` (`star/private/hydro_vars.f90:60-85`): resets the start values
 /// to the current state and evaluates all variables.
 ///
@@ -1438,6 +1460,17 @@ pub(crate) fn set_hydro_vars_with_skips(
     let nz = model.nz;
     if nz == 0 {
         return Ok(());
+    }
+    // `if (.not. skip_other_cgrav) call set_cgrav(s, ierr)` after the micro
+    // variables and before `set_m_grav_and_grav`
+    // (`star/private/hydro_vars.f90:525,533`). `skip_other_cgrav` is set only
+    // by the solver's `set_vars_for_solver`
+    // (`star/private/solver_support.f90:837`), i.e. while
+    // `doing_struct_burn_mix`; `set_vars` and `set_final_vars` run it
+    // (`star/private/hydro_vars.f90:122,182`).
+    if !model.aux.doing_struct_burn_mix {
+        set_cgrav(model)?;
+        model.set_m_grav_and_grav();
     }
     // `update_vars` sets `irradiation_heat` (`star/private/hydro_vars.f90:
     // 258-265`) only from `set_vars`; the solver's `set_vars_for_solver` and
@@ -1492,6 +1525,15 @@ pub(crate) fn set_hydro_vars_with_skips(
             }
             model.aux.mixing.alpha_mlt[..nz]
                 .fill(model.controls.mixing_length_alpha);
+            // `star/private/hydro_vars.f90:572-579`.
+            if model.controls.use_other_alpha_mlt {
+                let hook = model.aux.other_alpha_mlt.clone().ok_or_else(|| {
+                    StarError::InvalidInput(String::from(
+                        "use_other_alpha_mlt is set but no other_alpha_mlt hook is installed",
+                    ))
+                })?;
+                hook.apply(model)?;
+            }
         }
         if model.controls.mix_wind.use_t_tau_gradr_factor {
             let t_tau_id = model.controls.atm_t_tau_relation.id();

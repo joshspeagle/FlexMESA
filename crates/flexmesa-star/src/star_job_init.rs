@@ -143,9 +143,9 @@ fn finish_load_model(
 
     // `read_model.f90:157-159`: `okay_to_set_mlt_vc` is set by the reader
     // from `have_mlt_vc` (`model_io::read_mod_str_with_dir`).
-    if model.controls.use_other_cgrav {
-        extras.other_cgrav(model)?;
-    }
+    // `other_cgrav` runs inside the `set_vars` below (`set_cgrav`,
+    // `star/private/hydro_vars.f90:525,763-776`) from the installed handle.
+    crate::inlist_runner::install_star_aux_hooks(&*extras, model);
     // `set_vars` with `doing_finish_load_model = .true.`
     // (`read_model.f90:161-168`): under `D_omega_flag` / `am_nu_rot_flag`
     // it zeroes `D_omega` and `am_nu_rot`
@@ -203,9 +203,9 @@ pub(crate) fn prepare_new_model_for_relax(
     model.init_model_number = model.model_number as isize;
     model.doing_first_model_of_run = true;
     model.sync_mesh_and_pack()?;
-    if model.controls.use_other_cgrav {
-        extras.other_cgrav(model)?;
-    }
+    // `other_cgrav` runs inside the `set_vars` below (`set_cgrav`,
+    // `star/private/hydro_vars.f90:525,763-776`) from the installed handle.
+    crate::inlist_runner::install_star_aux_hooks(&*extras, model);
     // `finish_load_model` runs `set_vars` with `doing_finish_load_model`
     // (`star/private/init.f90:1045`, `star/private/read_model.f90:161-168`).
     model.aux.doing_finish_load_model = true;
@@ -411,6 +411,12 @@ fn carry_extras_hooks(
     if src.other_adjust_mlt_gradt_fraction.is_some() {
         aux.other_adjust_mlt_gradt_fraction
             .clone_from(&src.other_adjust_mlt_gradt_fraction);
+    }
+    if src.other_cgrav.is_some() {
+        aux.other_cgrav.clone_from(&src.other_cgrav);
+    }
+    if src.other_alpha_mlt.is_some() {
+        aux.other_alpha_mlt.clone_from(&src.other_alpha_mlt);
     }
     if src.other_mesh_functions.is_some() {
         aux.other_mesh_functions
@@ -1059,9 +1065,9 @@ pub(crate) fn init_or_update_model_from_bundle_outcome(
         }
     }
     model.sync_mesh_and_pack()?;
-    if model.controls.use_other_cgrav {
-        extras.other_cgrav(&mut model)?;
-    }
+    // `other_cgrav` runs inside the `set_vars` below (`set_cgrav`,
+    // `star/private/hydro_vars.f90:525,763-776`) from the installed handle.
+    crate::inlist_runner::install_star_aux_hooks(&*extras, &mut model);
 
     set_hydro_vars(&mut model, false, false)?;
     if model.controls.rsp2_flag {

@@ -544,7 +544,17 @@ impl StarModel {
             mstar_dot: 0.0,
             m_center: 0.0,
             m_center_old: 0.0,
-            xmstar_old: 0.0,
+            // Match `StarModel::new`'s pre-step `mstar_old`/`m_center_old`
+            // defaults (`mstar = M_center + xmstar` in
+            // `star_data/public/star_data_step_input.inc:26-28`). Upstream
+            // leaves `*_old` scalars unset at init
+            // (`star/private/init_model.f90:89-91`, `star/private/alloc.f90`)
+            // until `new_generation` populates them
+            // (`star/private/evolve_support.f90:84-86`), and
+            // `set_current_to_old` restores `xmstar = xmstar_old` before
+            // `set_m_and_dm` (`star/private/evolve_support.f90:157-159`,
+            // `star/private/star_utils.f90:635-648`).
+            xmstar_old: mstar,
             r_center: 0.0,
             r_center_old: 0.0,
             l_center: 0.0,

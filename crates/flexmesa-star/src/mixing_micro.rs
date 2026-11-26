@@ -152,9 +152,10 @@ pub(crate) fn eval_eos_kap_range_by_mode(
     let ht = builtin_helm_table()?;
     let species = model.species;
 
-    // Refresh cell composition moments (`basic_composition_info` + `get_XYZ`
-    // clamping in `star/private/star_utils.f90:2029-2043`) across `k_lo..=k_hi`.
-    let comp_results: Vec<(f64, f64, f64, f64, f64, f64, f64, f64)> =
+    // Refresh cell composition moments (`basic_composition_info` in
+    // `star/private/micro.f90:321-324` + `get_XYZ` clamping in
+    // `star/private/star_utils.f90:2029-2043`) across `k_lo..=k_hi`.
+    let comp_results: Vec<(f64, f64, f64, f64, f64, f64, f64, f64, f64)> =
         (k_lo..=k_hi)
             .into_par_iter()
             .map(|k| {
@@ -173,10 +174,20 @@ pub(crate) fn eval_eos_kap_range_by_mode(
                 let xh = c.xh.clamp(0.0, 1.0);
                 let xhe = c.xhe.clamp(0.0, 1.0);
                 let z = (1.0 - (xh + xhe)).clamp(0.0, 1.0);
-                Ok((c.abar, c.zbar, c.z2bar, c.z53bar, c.ye, xh, xhe, z))
+                Ok((
+                    c.abar,
+                    c.zbar,
+                    c.z2bar,
+                    c.z53bar,
+                    c.ye,
+                    c.mass_correction,
+                    xh,
+                    xhe,
+                    z,
+                ))
             })
             .collect::<Result<Vec<_>, StarError>>()?;
-    for (offset, (abar, zbar, z2bar, z53bar, ye, xh, xhe, z)) in
+    for (offset, (abar, zbar, z2bar, z53bar, ye, mc, xh, xhe, z)) in
         comp_results.into_iter().enumerate()
     {
         let k = k_lo + offset;
@@ -185,6 +196,7 @@ pub(crate) fn eval_eos_kap_range_by_mode(
         model.z2bar[k] = z2bar;
         model.z53bar[k] = z53bar;
         model.ye[k] = ye;
+        model.aux.mass_correction[k] = mc;
         model.xh_mass[k] = xh;
         model.yhe_mass[k] = xhe;
         model.z_mass[k] = z;
@@ -284,6 +296,7 @@ pub(crate) struct CellRangeSnapshot {
     pub(crate) z2bar: Vec<f64>,
     pub(crate) z53bar: Vec<f64>,
     pub(crate) ye: Vec<f64>,
+    pub(crate) mass_correction: Vec<f64>,
     pub(crate) xh_mass: Vec<f64>,
     pub(crate) yhe_mass: Vec<f64>,
     pub(crate) z_mass: Vec<f64>,
@@ -354,6 +367,7 @@ impl CellRangeSnapshot {
             z2bar: model.z2bar[r.clone()].to_vec(),
             z53bar: model.z53bar[r.clone()].to_vec(),
             ye: model.ye[r.clone()].to_vec(),
+            mass_correction: model.aux.mass_correction[r.clone()].to_vec(),
             xh_mass: model.xh_mass[r.clone()].to_vec(),
             yhe_mass: model.yhe_mass[r.clone()].to_vec(),
             z_mass: model.z_mass[r.clone()].to_vec(),
@@ -411,6 +425,8 @@ impl CellRangeSnapshot {
         model.z2bar[r.clone()].copy_from_slice(&self.z2bar);
         model.z53bar[r.clone()].copy_from_slice(&self.z53bar);
         model.ye[r.clone()].copy_from_slice(&self.ye);
+        model.aux.mass_correction[r.clone()]
+            .copy_from_slice(&self.mass_correction);
         model.xh_mass[r.clone()].copy_from_slice(&self.xh_mass);
         model.yhe_mass[r.clone()].copy_from_slice(&self.yhe_mass);
         model.z_mass[r.clone()].copy_from_slice(&self.z_mass);

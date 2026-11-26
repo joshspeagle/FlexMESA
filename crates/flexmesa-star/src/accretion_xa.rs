@@ -256,7 +256,8 @@ fn get_xa(
 
     let species = chem_id.len();
     let mut xa = vec![0.0_f64; species];
-    // `net_iso(ih1)`, `net_iso(ih2)`, ... (`adjust_xyz.f90:1129-1141`).
+    // `net_iso(ih1)`, `net_iso(ih2)`, ...
+    // (`star/private/adjust_xyz.f90:1133-1145`).
     let idx_of = |name: &str| {
         chem_id.iter().position(|&cid| {
             catalog.get_by_id(cid).is_some_and(|iso| iso.name == name)
@@ -271,6 +272,15 @@ fn get_xa(
         xa[i2] = h2;
         if let Some(i1) = idx_h1 {
             xa[i1] = h1;
+        } else {
+            // Upstream unconditionally writes `xa(net_iso(ih1)) = h1` here
+            // (`star/private/adjust_xyz.f90:1132-1136`), which writes `xa(0)`
+            // out of bounds whenever `h2` is in the net and `h1` is absent;
+            // there is no defined behaviour to reproduce (DECISIONS #43,
+            // deferred #564).
+            return Err(StarError::InvalidInput(String::from(
+                "get_xa: h2 in net without h1 hits upstream out-of-bounds xa(0) write (star/private/adjust_xyz.f90:1134-1136; DECISIONS #43, #564)",
+            )));
         }
     } else if let Some(i1) = idx_h1 {
         xa[i1] = h1 + h2;

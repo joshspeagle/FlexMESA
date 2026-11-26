@@ -236,7 +236,8 @@ pub fn eval_suzuki_one(
 /// Evaluates weak reaction rates for `(lhs_name, rhs_name)` at `(t9, ye_rho)`
 /// using either `weaklib` (`use_suzuki = false`) or `Suzuki2016` (`use_suzuki = true`),
 /// falling back to `weaklib` when `(log_t, l_ye_rho)` lies outside the `Suzuki2016`
-/// grid bounds (`eval_weak.f90:225-268`, `suzuki_tables.f90:144-155`).
+/// grid bounds (`rates/private/eval_weak.f90:225-268`,
+/// `rates/private/suzuki_tables.f90:144-155`).
 ///
 /// # Errors
 /// Returns [`RatesError::UnknownWeakPair`] if `(lhs_name, rhs_name)` is not found.
@@ -247,6 +248,55 @@ pub fn eval_weak_reaction_pair(
     ye_rho: f64,
     use_suzuki: bool,
 ) -> Result<WeakRateEval, RatesError> {
+    eval_weak_reaction_pair_with_override(
+        lhs_name, rhs_name, t9_in, ye_rho, use_suzuki, None,
+    )
+}
+
+/// Evaluates weak reaction rates for `(lhs_name, rhs_name)` at `(t9, ye_rho)`
+/// with an optional custom [`WeakTable`] override (from `weak_rate_list.txt`,
+/// `rates/private/eval_weak.f90:225-268`).
+///
+/// When `override_table` is `Some(table)`, `table` is evaluated directly via
+/// `eval_weaklib_one` (matching MESA user weak-table replacement of
+/// `weak_reactions_tables` in `rates/private/load_weak.f90:624`) so pairs
+/// outside built-in `weaklib` are also supported. When `None`, falls back to
+/// the built-in `Suzuki2016` (if `use_suzuki` and in bounds) or `weaklib`
+/// catalogs.
+///
+/// # Errors
+/// Returns [`RatesError::UnknownWeakPair`] if `(lhs_name, rhs_name)` is not found
+/// when `override_table` is `None`, or [`RatesError::InvalidTableData`] if a
+/// custom table has fewer than two grid points along either axis.
+pub fn eval_weak_reaction_pair_with_override(
+    lhs_name: &str,
+    rhs_name: &str,
+    t9_in: f64,
+    ye_rho: f64,
+    use_suzuki: bool,
+    override_table: Option<&WeakTable>,
+) -> Result<WeakRateEval, RatesError> {
+    if let Some(wtab) = override_table {
+        if wtab.t9s.len() < 2 || wtab.lyerhos.len() < 2 {
+            return Err(RatesError::InvalidTableData(format!(
+                "custom weak table for '{} -> {}' must have at least 2 points per axis",
+                wtab.lhs_name, wtab.rhs_name
+            )));
+        }
+        let expected = wtab.t9s.len().saturating_mul(wtab.lyerhos.len());
+        if wtab.ldecay.len() != expected
+            || wtab.lcapture.len() != expected
+            || wtab.lneutrino.len() != expected
+        {
+            return Err(RatesError::InvalidTableData(format!(
+                "custom weak table for '{} -> {}' has mismatched grid size (expected {expected})",
+                wtab.lhs_name, wtab.rhs_name
+            )));
+        }
+        let l_ye_rho = flexmesa_math::log10(ye_rho.max(1.0e-99));
+        return Ok(eval_weaklib_one(wtab, t9_in, l_ye_rho));
+    }
+
     let cat = RatesCatalog::builtin();
     let wtab = cat.weak_by_pair(lhs_name, rhs_name)?;
     let t9 = t9_in.clamp(wtab.t9s[0], wtab.t9s[wtab.t9s.len() - 1]);

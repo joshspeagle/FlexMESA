@@ -41,11 +41,13 @@ pub mod screen_chugunov;
 pub mod tfactors;
 pub mod types;
 pub mod weak;
+pub mod weak_h5;
 
 pub use ecapture::{
     eval_ecapnuc_rate, eval_ecapture_pair, eval_ecapture_pair_with_derivs,
-    eval_ecapture_pair_with_tables, eval_mui_coulomb,
-    eval_mui_coulomb_with_derivs, eval_vs_coulomb, eval_vs_coulomb_with_derivs,
+    eval_ecapture_pair_with_tables, eval_ecapture_pair_with_tables_and_context,
+    eval_mui_coulomb, eval_mui_coulomb_with_derivs, eval_vs_coulomb,
+    eval_vs_coulomb_with_derivs,
 };
 pub use loader::{EcaptureTables, RatesCatalog, SuzukiTable, WeakTable};
 pub use ratelib::eval_analytic_rate;
@@ -68,7 +70,11 @@ pub use types::{
 };
 pub use weak::{
     bilinear_interp_2d, eval_suzuki_one, eval_weak_reaction_pair,
-    eval_weaklib_one,
+    eval_weak_reaction_pair_with_override, eval_weaklib_one,
+};
+pub use weak_h5::{
+    load_rate_tables_dir, load_weak_table_hdf5, load_weak_table_hdf5_bytes,
+    parse_weak_rate_name, LoadedRateTables,
 };
 
 #[cfg(test)]

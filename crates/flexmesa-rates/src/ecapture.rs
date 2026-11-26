@@ -384,6 +384,48 @@ fn eval_ecapture_with_data(
     zbar: f64,
     abar: f64,
 ) -> Result<WeakRateEval, RatesError> {
+    let temp = t9 * 1.0e9;
+    let ye = zbar / abar;
+    let den = ye_rho / ye;
+    eval_ecapture_with_data_and_context(
+        states_i,
+        states_f,
+        trans,
+        z_lhs,
+        z_rhs,
+        q_tot,
+        temp,
+        den,
+        t9,
+        eta_k,
+        d_etak_dln_t,
+        d_etak_dln_rho,
+        which_mui,
+        which_vs,
+        zbar,
+        abar,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn eval_ecapture_with_data_and_context(
+    states_i: &[(f64, f64)],
+    states_f: &[(f64, f64)],
+    trans: &[(usize, usize, f64)],
+    z_lhs: f64,
+    z_rhs: f64,
+    q_tot: f64,
+    temp: f64,
+    den: f64,
+    t9: f64,
+    eta_k: f64,
+    d_etak_dln_t: f64,
+    d_etak_dln_rho: f64,
+    which_mui: CoulombMuiOption,
+    which_vs: CoulombVsOption,
+    zbar: f64,
+    abar: f64,
+) -> Result<WeakRateEval, RatesError> {
     let kbt_val = (1.0e3 * KEV) * t9; // MeV
     let kbt = AutoDiffReal2VarOrder1::new(kbt_val, [kbt_val, 0.0]);
     let mec2 = ME * CLIGHT * CLIGHT / MEV_TO_ERGS; // MeV
@@ -406,9 +448,6 @@ fn eval_ecapture_with_data(
         });
     }
 
-    let temp = t9 * 1.0e9;
-    let ye = zbar / abar;
-    let den = ye_rho / ye;
     let (game, rs) = coulomb_plasma_params_ad(temp, den, zbar, abar);
     let dmu = eval_mui_coulomb_ad(which_mui, game, rs, zbar, z_lhs)
         - eval_mui_coulomb_ad(which_mui, game, rs, zbar, z_rhs);
@@ -622,6 +661,53 @@ pub fn eval_ecapture_pair_with_tables(
         q_tot,
         t9,
         ye_rho,
+        eta_k,
+        d_etak_dln_t,
+        d_etak_dln_rho,
+        which_mui,
+        which_vs,
+        zbar,
+        abar,
+    )
+}
+
+/// Evaluates on-the-fly electron-capture and $\beta^-$-decay rates with custom
+/// nuclear state and transition tables ([`EcaptureTables`]) using exact
+/// `net/private/net_eval.f90:707` Coulomb context `(temp, rho)` rather than
+/// reconstructing $(T, \rho)$ from $(T_9, Y_e \rho, \bar{Z}/\bar{A})$.
+///
+/// # Errors
+/// Returns [`RatesError::UnknownWeakPair`] if `(lhs_name, rhs_name)` is not in
+/// `tables`, or [`RatesError::InvalidTableData`] if an isotope or state index is
+/// invalid.
+#[allow(clippy::too_many_arguments)]
+pub fn eval_ecapture_pair_with_tables_and_context(
+    tables: &EcaptureTables,
+    lhs_name: &str,
+    rhs_name: &str,
+    temp: f64,
+    rho: f64,
+    t9: f64,
+    eta_k: f64,
+    d_etak_dln_t: f64,
+    d_etak_dln_rho: f64,
+    which_mui: CoulombMuiOption,
+    which_vs: CoulombVsOption,
+    zbar: f64,
+    abar: f64,
+) -> Result<WeakRateEval, RatesError> {
+    let (states_i, states_f, trans, z_lhs, z_rhs, q_tot) =
+        tables.pair_data(lhs_name, rhs_name)?;
+    eval_ecapture_with_data_and_context(
+        states_i,
+        states_f,
+        trans,
+        z_lhs,
+        z_rhs,
+        q_tot,
+        temp,
+        rho,
+        t9,
         eta_k,
         d_etak_dln_t,
         d_etak_dln_rho,

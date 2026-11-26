@@ -62,14 +62,16 @@ impl ScreeningMode {
 }
 
 /// Ion chemical-potential Coulomb shift formulation (`which_mui_coulomb` in
-/// `rates_def.f90`).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// `rates/public/rates_def.f90` and `rates/public/rates_lib.f90:929-954`).
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize,
+)]
 pub enum CoulombMuiOption {
     /// Zero Coulomb shift (`No_Coulomb = 0`).
     None = 0,
-    /// DeWitt, Graboske & Cooper (1973) two-component fit (`DCW1973 = 1`).
+    /// DeWitt, Graboske & Cooper (1973) two-component fit (`DCW1973` / `DGC1973` = 1).
     Dcw1973 = 1,
-    /// Slattery, Doolen & DeWitt (1982) liquid OCP fit (`SLR1982 = 2`).
+    /// Slattery, Doolen & DeWitt (1982) liquid OCP fit (`SLR1982` / `I1993` = 2).
     Slr1982 = 2,
     /// Potekhin, Chabrier & Rogers (2009) electron-ion + ion-ion fit
     /// (`PCR2009 = 3`).
@@ -78,7 +80,8 @@ pub enum CoulombMuiOption {
 
 impl CoulombMuiOption {
     /// Parses a [`CoulombMuiOption`] from a case-insensitive name or integer
-    /// code (`"none"`, `"dcw1973"`, `"slr1982"`, `"pcr2009"`).
+    /// code (`"none"`, `"dcw1973"`, `"dgc1973"`, `"slr1982"`, `"i1993"`,
+    /// `"pcr2009"`).
     ///
     /// # Errors
     /// Returns [`RatesError::InvalidOption`] if `name` is unrecognized.
@@ -96,20 +99,22 @@ impl CoulombMuiOption {
 }
 
 /// Electron screening potential shift $V_s$ formulation (`which_vs_coulomb` in
-/// `rates_def.f90`).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// `rates/public/rates_def.f90` and `rates/public/rates_lib.f90:956-971`).
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize,
+)]
 pub enum CoulombVsOption {
     /// Zero electron screening shift (`No_Screening = 0`).
     None = 0,
-    /// Throwe (1983) Thomas-Fermi approximation (`Throwe1983 = 1`).
+    /// Throwe (1983) Thomas-Fermi approximation (`Throwe1983` / `ThomasFermi` = 1).
     Throwe1983 = 1,
-    /// Itoh et al. (2002) linear-response screening shift (`Itoh2002 = 2`).
+    /// Itoh et al. (2002) linear-response screening shift (`Itoh2002` = 2).
     Itoh2002 = 2,
 }
 
 impl CoulombVsOption {
     /// Parses a [`CoulombVsOption`] from a case-insensitive name or integer
-    /// code (`"none"`, `"throwe1983"`, `"itoh2002"`).
+    /// code (`"none"`, `"throwe1983"`, `"thomasfermi"`, `"itoh2002"`).
     ///
     /// # Errors
     /// Returns [`RatesError::InvalidOption`] if `name` is unrecognized.

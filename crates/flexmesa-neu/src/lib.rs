@@ -281,18 +281,42 @@ pub fn neu_get(
     log10_tlim: f64,
     flags: NeuFlags,
 ) -> Result<NeuResult, NeuError> {
-    let temp = match (t_opt, log10_t_opt) {
-        (Some(t), _) => t,
-        (None, Some(lt)) => exp10(lt),
+    let (temp, logtemp) = match (t_opt, log10_t_opt) {
         (None, None) => return Err(NeuError::MissingTemperature),
+        (Some(t), _) if t <= 0.0 || is_bad(t) => {
+            return Err(NeuError::InvalidInput(
+                "T must be positive and finite",
+            ));
+        }
+        (_, Some(lt)) if lt > 20.0 || is_bad(lt) => {
+            return Err(NeuError::InvalidInput("log10_T exceeds 20 or is NaN"));
+        }
+        (Some(t), Some(lt)) => (t, lt),
+        (Some(t), None) => {
+            let lt = log10(t);
+            if lt > 20.0 || is_bad(lt) {
+                return Err(NeuError::InvalidInput(
+                    "log10_T exceeds 20 or is NaN",
+                ));
+            }
+            (t, lt)
+        }
+        (None, Some(lt)) if lt <= LOG10_TMIN_NEU => {
+            // `mod_neu.f90:223-228` returns zero for `logT <= log10Tmin_neu`
+            // before `exp10(logT)`, avoiding false errors when `exp10`
+            // underflows `f64` on strongly negative `log10_T`.
+            (0.0, lt)
+        }
+        (None, Some(lt)) => {
+            let t = exp10(lt);
+            if t <= 0.0 || is_bad(t) {
+                return Err(NeuError::InvalidInput(
+                    "T must be positive and finite",
+                ));
+            }
+            (t, lt)
+        }
     };
-    if temp <= 0.0 || is_bad(temp) {
-        return Err(NeuError::InvalidInput("T must be positive and finite"));
-    }
-    let logtemp = log10_t_opt.unwrap_or_else(|| log10(temp));
-    if logtemp > 20.0 || is_bad(logtemp) {
-        return Err(NeuError::InvalidInput("log10_T exceeds 20 or is NaN"));
-    }
     let den = match (rho_opt, log10_rho_opt) {
         (Some(r), _) => r,
         (None, Some(lr)) => exp10(lr),

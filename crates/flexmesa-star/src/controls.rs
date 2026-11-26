@@ -80,6 +80,13 @@ pub struct StarControls {
     pub atm_option: AtmOption,
     /// Named atmosphere table when `atm_option == AtmOption::Table` (e.g., `"photosphere"`).
     pub atm_table: String,
+    /// Off-table fallback behavior when `atm_option == AtmOption::Table` and
+    /// `(Teff, log g)` lies near or outside the loaded atmosphere table
+    /// (`atm_off_table_option`, `'T_tau'` default; `'T_tau'` or `''`;
+    /// `star/defaults/controls.defaults:4328-4335` and
+    /// `star/private/atm_support.f90:604-650`).
+    #[serde(default = "default_atm_off_table_option")]
+    pub atm_off_table_option: String,
     /// Grey $T(\tau)$ relation (`AtmTTauRelation::Eddington` default).
     pub atm_t_tau_relation: AtmTTauRelation,
     /// Grey $T(\tau)$ opacity prescription (`atm_T_tau_opacity`, `AtmTTauOpacity::Fixed` default).
@@ -938,6 +945,10 @@ const fn default_one() -> f64 {
 
 const fn default_max_abs_eps_nuc() -> f64 {
     1.0e99
+}
+
+fn default_atm_off_table_option() -> String {
+    String::from("T_tau")
 }
 
 const fn default_atm_t_tau_errtol() -> f64 {

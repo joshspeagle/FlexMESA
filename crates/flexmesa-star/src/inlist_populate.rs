@@ -663,6 +663,17 @@ impl InlistBundle {
                 )));
             }
         }
+        if let Some(s) = ctrl.try_get_str("controls", "atm_off_table_option")? {
+            c.atm_off_table_option = match s.trim_end() {
+                "T_tau" => String::from("T_tau"),
+                "" => String::new(),
+                other => {
+                    return Err(StarError::InvalidInput(format!(
+                        "unrecognized '&controls::atm_off_table_option' option '{other}' (`star/private/atm_support.f90:606-634`)"
+                    )));
+                }
+            };
+        }
         if let Some(s) = ctrl.try_get_str("controls", "atm_t_tau_relation")? {
             c.atm_t_tau_relation = match s.trim().to_ascii_lowercase().as_str() {
                 "eddington" => AtmTTauRelation::Eddington,

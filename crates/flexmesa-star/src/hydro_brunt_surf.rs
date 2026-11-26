@@ -443,14 +443,18 @@ pub(crate) fn get_surf_pt(
 /// to the `T_tau` base when completely off the table and back to the table
 /// base otherwise.
 ///
-/// `atm_off_table_option` is not a supported control, so it always has its
-/// default `'T_tau'` (`star/defaults/controls.defaults:4335`).
+/// When `alfa /= 0.0`, `atm_off_table_option` selects `'T_tau'` (fall back to
+/// `get_T_tau`) or `''` (fail loudly because off-table interpolation is
+/// disallowed; `star/private/atm_support.f90:604-650`). When `alfa == 0.0`,
+/// `atm_off_table_option` is not checked.
 ///
 /// # Errors
 /// Returns [`StarError::InvalidInput`] when `tau_factor /= 1`
-/// (`atm_support.f90:491-494`, a `mesa_error` upstream) and
-/// [`StarError::MicrophysicsError`] for `L < 0` or a failing table or `T_tau`
-/// evaluation.
+/// (`atm_support.f90:491-494`, a `mesa_error` upstream) or when `alfa /= 0`
+/// with an unrecognized `atm_off_table_option`
+/// (`atm_support.f90:629-633`), and [`StarError::MicrophysicsError`] for
+/// `L < 0`, `atm_off_table_option == ""` when `alfa /= 0`
+/// (`atm_support.f90:623-627`), or a failing table or `T_tau` evaluation.
 fn get_table(
     model: &mut StarModel,
     l: f64,
@@ -513,12 +517,26 @@ fn get_table(
             })?;
         surf_pt_from_atm(&out)
     };
-    // `atm_support.f90:604-650`: `atm_off_table_option = 'T_tau'`.
+    // `atm_support.f90:604-650`: `select case (s% atm_off_table_option)`.
     let a = if alfa == 0.0 {
         SurfPt::default()
     } else {
-        let tau = model.tau_base;
-        eval_grey_t_tau_surf(model, tau, l, r, m, cgrav, teff)?
+        match model.controls.atm_off_table_option.trim_end() {
+            "T_tau" => {
+                let tau = model.tau_base;
+                eval_grey_t_tau_surf(model, tau, l, r, m, cgrav, teff)?
+            }
+            "" => {
+                return Err(StarError::MicrophysicsError(String::from(
+                    "Attempt to interpolate outside atmosphere table with empty atm_off_table_option (star/private/atm_support.f90:623-627)",
+                )));
+            }
+            other => {
+                return Err(StarError::InvalidInput(format!(
+                    "Unknown value for atm_off_table_option: '{other}' (star/private/atm_support.f90:629-633)"
+                )));
+            }
+        }
     };
     // `atm_support.f90:654-668`: values and raw partials blended separately.
     Ok(SurfPt {

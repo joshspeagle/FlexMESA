@@ -663,6 +663,7 @@ pub const CONTROLS_SUPPORTED: &[&str] = &[
     "atm_irradiated_opacity",
     "atm_irradiated_p_surf",
     "atm_irradiated_t_eq",
+    "atm_off_table_option",
     "atm_option",
     "atm_t_tau_errtol",
     "atm_t_tau_max_iters",

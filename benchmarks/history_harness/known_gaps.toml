@@ -59,11 +59,6 @@ issue = "#161"
 reason = "Case history_columns.list requests unported hydro shock and bolometric colors columns."
 [[gaps]]
 suite = "star"
-case = "check_pulse_atm"
-issue = "#161"
-reason = "Atmosphere boundary reconstruction departs from MESA 26.4.1 (#161, #162)."
-[[gaps]]
-suite = "star"
 case = "conductive_flame"
 issue = "#161"
 reason = "Case uses unported use_other_build_initial_model and use_other_surface_pt custom-physics hooks (#154, #161)."

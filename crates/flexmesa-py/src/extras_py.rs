@@ -672,6 +672,23 @@ impl PreLoadStarState {
     }
 }
 
+/// The `s% add_center_point_to_pulse_data` and
+/// `s% add_atmosphere_to_pulse_data` controls that extras pass to
+/// `star_export_pulse_data` (`star/private/pulse.f90:43-86`).
+fn set_pulse_data_controls(
+    d: &Bound<'_, PyDict>,
+    c: &StarControls,
+) -> PyResult<()> {
+    d.set_item(
+        "add_center_point_to_pulse_data",
+        c.add_center_point_to_pulse_data,
+    )?;
+    d.set_item(
+        "add_atmosphere_to_pulse_data",
+        c.add_atmosphere_to_pulse_data,
+    )
+}
+
 fn set_star_control_scalars(
     d: &Bound<'_, PyDict>,
     model: &StarModel,
@@ -693,6 +710,7 @@ fn set_star_control_scalars(
         "atm_t_tau_opacity",
         atm_t_tau_opacity_name(c.atm_t_tau_opacity),
     )?;
+    set_pulse_data_controls(d, c)?;
     d.set_item("log_l_upper_limit", c.log_l_upper_limit.unwrap_or(1.0e99))?;
     d.set_item("teff_lower_limit", c.teff_lower_limit.unwrap_or(-1.0e99))?;
     d.set_item("max_age", c.max_age)?;

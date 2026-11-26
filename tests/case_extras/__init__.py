@@ -158,9 +158,7 @@ STOCK_EXTRAS_DIGESTS: frozenset[str] = frozenset(
 #   `other_eos_results` at `:66`, `other_screening` at `:72`,
 #   `other_rate_get` at `:75`, `other_close_gaps` at `:78`,
 #   `other_pressure` at `:81`).
-# - `#162` (pulse export & simplex calibration): `CheckPulseAtmStarExtras`
-#   (`star_export_pulse_data('FGONG')` at `:122-127`, `atm_build_tau_outer` and
-#   pulse-data atmosphere flags absent from `extras_py.rs`),
+# - `#162` (pulse export & simplex calibration):
 #   `SimplexSolarCalibrationStarExtras` is adapter-served for
 #   `other_mesh_functions` (`inlist_solar`; `star_simplex_procs` at `:55-59`
 #   remains `#162`).
@@ -183,6 +181,7 @@ ADAPTER_SERVED_STAR_HANDLERS: frozenset[str] = frozenset(
         "CarbonKhStarExtras",
         "CburnInwardStarExtras",
         "CepheidBlueLoopStarExtras",
+        "CheckPulseAtmStarExtras",
         "CheckRedoStarExtras",
         "ConserveAngularMomentumStarExtras",
         "ConvCoreCpmStarExtras",

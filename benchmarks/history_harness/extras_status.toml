@@ -142,9 +142,8 @@ issue = "#231"
 [[cases]]
 suite = "star"
 case = "check_pulse_atm"
-status = "unported"
+status = "ported"
 digest = "72406cb13cd6fad0b127de9755592acc848d372f72060dc3e033cd1e89027c49"
-issue = "#231"
 
 [[cases]]
 suite = "star"

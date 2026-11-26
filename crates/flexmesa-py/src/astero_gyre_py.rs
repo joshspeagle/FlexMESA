@@ -38,6 +38,24 @@ impl PyStarModelHandle {
         .map_err(|e| PyRuntimeError::new_err(e.to_string()))
     }
 
+    /// `star_export_pulse_data(id, 'FGONG', filename, ...)` on the model:
+    /// the text upstream writes to `filename`
+    /// (`star/private/pulse.f90:43-86`).
+    fn fgong_pulse_text(
+        &self,
+        add_center_point: bool,
+        keep_surface_point: bool,
+        add_atmosphere: bool,
+    ) -> PyResult<String> {
+        flexmesa_star::export_fgong(
+            &self.model,
+            add_center_point,
+            keep_surface_point,
+            add_atmosphere,
+        )
+        .map_err(|e| PyRuntimeError::new_err(e.to_string()))
+    }
+
     /// The model number.
     #[getter]
     fn model_number(&self) -> usize {

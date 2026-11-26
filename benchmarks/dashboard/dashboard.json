@@ -21,7 +21,7 @@
         "verified_total": 5640,
         "pct_ported": 35.1,
         "pct_verified": 4.7,
-        "rust_lines": 106768,
+        "rust_lines": 108147,
         "python_jax_lines": 3987
       },
       {
@@ -55,7 +55,7 @@
         "verified_total": 0,
         "pct_ported": 18.7,
         "pct_verified": 0.0,
-        "rust_lines": 13650,
+        "rust_lines": 13698,
         "python_jax_lines": 1244
       },
       {
@@ -89,7 +89,7 @@
         "verified_total": 0,
         "pct_ported": 0.0,
         "pct_verified": 0.0,
-        "rust_lines": 15969,
+        "rust_lines": 16021,
         "python_jax_lines": 9911
       },
       {
@@ -157,7 +157,7 @@
         "verified_total": 0,
         "pct_ported": 83.9,
         "pct_verified": 0.0,
-        "rust_lines": 1948,
+        "rust_lines": 1972,
         "python_jax_lines": 2673
       },
       {
@@ -225,7 +225,7 @@
         "verified_total": 0,
         "pct_ported": 0.0,
         "pct_verified": 0.0,
-        "rust_lines": 4590,
+        "rust_lines": 4600,
         "python_jax_lines": 1033
       },
       {
@@ -3635,6 +3635,19 @@
     {
       "date_utc": "2026-11-26",
       "commit": "ef0d47c",
+      "event": "main merge",
+      "engine_ported_pct": "30.7",
+      "all_verified_pct": "1.1",
+      "cases_passing": "43",
+      "rust_cov_pct": "77.0",
+      "python_cov_pct": "87.8",
+      "closed_140": "32",
+      "total_140": "55",
+      "deferred_169": "71"
+    },
+    {
+      "date_utc": "2026-11-26",
+      "commit": "6705948",
       "event": "main merge",
       "engine_ported_pct": "30.7",
       "all_verified_pct": "1.1",

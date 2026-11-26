@@ -757,7 +757,7 @@ fn eval_irradiated_surf(model: &mut StarModel) -> Result<SurfPt, StarError> {
 
     // `if (s% solver_iter > 0) kap_for_atm = s% opacity_start(1)`
     // (`star/private/atm_support.f90:769-773`).
-    let kap_for_atm = if model.aux.solver_mlt_eval_count > 0 {
+    let kap_for_atm = if model.aux.solver_iter > 0 {
         opacity_start_1(model)?
     } else {
         k0
@@ -936,7 +936,7 @@ pub(crate) fn eval_grey_t_tau_surf(
         AtmTTauOpacity::Iterated => {
             // `if (s% solver_iter > 0) kap_guess = s% opacity_start(1)`
             // (`star/private/atm_support.f90:301-306`).
-            let kap_guess = if model.aux.solver_mlt_eval_count > 0 {
+            let kap_guess = if model.aux.solver_iter > 0 {
                 opacity_start_1(model)?
             } else {
                 model.opacity[0]

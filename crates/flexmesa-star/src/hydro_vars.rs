@@ -44,7 +44,6 @@ use crate::star_ad::{
 /// Returns [`StarError::MicrophysicsError`] if `set_mlt` / `set_tdc` fails at
 /// any face.
 pub fn set_mlt_vars(model: &mut StarModel) -> Result<(), StarError> {
-    refresh_rotation_info_outside_solver(model);
     let nz = model.nz;
     if nz == 0 {
         return Ok(());
@@ -55,18 +54,17 @@ pub fn set_mlt_vars(model: &mut StarModel) -> Result<(), StarError> {
     if model.aux.mixing.mlt_mixing_type.len() != nz {
         model.aux.mixing.resize(nz);
     }
-    if !model.aux.doing_struct_burn_mix {
-        model.aux.solver_mlt_eval_count = 0;
-        model.aux.fixed_gradr_sticky.fill(false);
-    }
+    // Upstream `set_mlt_vars` (`star/private/turb_info.f90:40-67`) does not
+    // clear `fixed_gradr_for_rest_of_solver_iters`; `set_hydro_vars` does,
+    // under `.not. skip_mixing_info` (`star/private/hydro_vars.f90:567-570`).
     set_mlt_vars_range(model, 0, nz - 1)
 }
 
-/// Refreshes the rotation information that `set_hydro_vars` sets outside the
-/// solver iterations (`star/private/hydro_vars.f90:540-543`, `skip_rotation`
-/// is false there), whether or not MLT is evaluated.
+/// Refreshes the rotation information that `set_hydro_vars` sets before the
+/// gradients (`star/private/hydro_vars.f90:539-543`; `skip_rotation` is false
+/// for every caller of `set_hydro_vars`), whether or not MLT is evaluated.
 fn refresh_rotation_info_outside_solver(model: &mut StarModel) {
-    if model.controls.rotation_flag && !model.aux.doing_struct_burn_mix {
+    if model.controls.rotation_flag {
         if model.j_rot.iter().any(|&j| j != 0.0)
             || model.omega.iter().all(|&w| w == 0.0)
         {
@@ -98,11 +96,8 @@ pub(crate) fn set_mlt_vars_range(
     if model.aux.mixing.mlt_mixing_type.len() != nz {
         model.aux.mixing.resize(nz);
     }
-    let solver_iter = if model.aux.doing_struct_burn_mix {
-        model.aux.solver_mlt_eval_count
-    } else {
-        0
-    };
+    // `s% solver_iter > 3` (`star/private/turb_info.f90:56`).
+    let solver_iter = model.aux.solver_iter;
     for k in k_lo..=k_hi {
         let make_sticky = do1_mlt_2(model, k, None, None)?;
         if make_sticky
@@ -487,8 +482,8 @@ pub(crate) fn do1_mlt_2(
         make_gradr_sticky = max_lnt_start / LN10
             >= mw.min_logt_for_make_gradr_sticky_in_solver_iters;
     }
+    // `star/private/turb_info.f90:220`: no solver-iteration test here.
     if make_gradr_sticky
-        && model.aux.doing_struct_burn_mix
         && model.aux.fixed_gradr_sticky.get(k).copied().unwrap_or(false)
     {
         set_no_mixing_face(
@@ -1346,11 +1341,16 @@ pub fn set_hydro_vars(
     skip_net: bool,
     skip_net_jacobian: bool,
 ) -> Result<(), StarError> {
+    // The Newton solver evaluates its variables through this function
+    // (`eval_henyey_equations_into`) while `doing_struct_burn_mix`; that is
+    // upstream's `set_vars_for_solver` skip set
+    // (`star/private/solver_support.f90:825-837`).
+    let solver = model.aux.doing_struct_burn_mix;
     set_hydro_vars_with_skips(
         model,
         skip_net,
         skip_net_jacobian,
-        SetHydroVarsSkips::default(),
+        SetHydroVarsSkips { solver, ..SetHydroVarsSkips::default() },
     )
 }
 
@@ -1369,6 +1369,14 @@ pub(crate) struct SetHydroVarsSkips {
     /// (`star/private/hydro_vars.f90:80`), so the start values are refilled
     /// from the current state (`hydro_vars.f90:719-741`).
     pub(crate) reset_starting_vectors: bool,
+    /// The skip set of the solver's `set_vars_for_solver`
+    /// (`star/private/solver_support.f90:825-837`): `skip_other_cgrav`,
+    /// `skip_m_grav_and_grav`, `skip_grads`, `skip_rotation`, `skip_brunt`,
+    /// `skip_mixing_info` and `skip_set_cz_bdy_mass`, and no irradiation
+    /// update. `set_vars` and `set_final_vars` pass all of these as false
+    /// (`star/private/hydro_vars.f90:62-85,91-164`), including the post-burn
+    /// `set_vars` inside `do_struct_burn_mix` (`struct_burn_mix.f90:112`).
+    pub(crate) solver: bool,
 }
 
 /// Refills the start values that `set_basic_vars` sets after
@@ -1463,19 +1471,15 @@ pub(crate) fn set_hydro_vars_with_skips(
     }
     // `if (.not. skip_other_cgrav) call set_cgrav(s, ierr)` after the micro
     // variables and before `set_m_grav_and_grav`
-    // (`star/private/hydro_vars.f90:525,533`). `skip_other_cgrav` is set only
-    // by the solver's `set_vars_for_solver`
-    // (`star/private/solver_support.f90:837`), i.e. while
-    // `doing_struct_burn_mix`; `set_vars` and `set_final_vars` run it
-    // (`star/private/hydro_vars.f90:122,182`).
-    if !model.aux.doing_struct_burn_mix {
+    // (`star/private/hydro_vars.f90:525,533`).
+    if !skips.solver {
         set_cgrav(model)?;
         model.set_m_grav_and_grav();
     }
     // `update_vars` sets `irradiation_heat` (`star/private/hydro_vars.f90:
-    // 258-265`) only from `set_vars`; the solver's `set_vars_for_solver` and
-    // `set_final_vars` leave it as it was at the start of the step.
-    if !model.aux.doing_struct_burn_mix {
+    // 258-265`) from `set_vars`; the solver leaves it, and `set_final_vars`
+    // restores the start-of-step value at its call site.
+    if !skips.solver {
         set_irradiation_heat(model);
     }
     if model.aux.mixing.mlt_mixing_type.len() != nz {
@@ -1483,13 +1487,16 @@ pub(crate) fn set_hydro_vars_with_skips(
     }
     let sig_was_zero = model.sig.iter().all(|&s| s == 0.0);
 
-    if !model.aux.doing_struct_burn_mix {
+    // `set_rotation_info` before `do_brunt_B` and `set_grads`
+    // (`star/private/hydro_vars.f90:539-543`).
+    if !skips.solver {
+        refresh_rotation_info_outside_solver(model);
         do_brunt_b(model)?;
         crate::mixing_state::set_grads(model);
     }
 
     // `other_adjust_mlt_gradT_fraction` (`star/private/hydro_vars.f90:555-560`).
-    if !model.aux.doing_struct_burn_mix
+    if !skips.solver
         && model.aux.mixing.okay_to_set_mixing_info
         && !model.controls.rsp2_flag
     {
@@ -1514,12 +1521,8 @@ pub(crate) fn set_hydro_vars_with_skips(
         }
     }
 
-    if skips.mlt {
-        refresh_rotation_info_outside_solver(model);
-    } else if !model.controls.rsp_flag {
-        if !model.aux.doing_struct_burn_mix
-            && model.aux.mixing.okay_to_set_mixing_info
-        {
+    if !skips.mlt && !model.controls.rsp_flag {
+        if !skips.solver && model.aux.mixing.okay_to_set_mixing_info {
             if model.controls.mix_wind.make_gradr_sticky_in_solver_iters {
                 model.aux.fixed_gradr_sticky.fill(false);
             }
@@ -1593,7 +1596,7 @@ pub(crate) fn set_hydro_vars_with_skips(
                     model.gradt[k] - grada_f;
             }
         }
-        if !model.aux.doing_struct_burn_mix && sig_was_zero {
+        if !skips.solver && sig_was_zero {
             model.sig.fill(0.0);
             update_sig_from_d_mix(model)?;
         }
@@ -1604,7 +1607,7 @@ pub(crate) fn set_hydro_vars_with_skips(
         return Ok(());
     }
 
-    if !model.aux.doing_struct_burn_mix {
+    if !skips.solver {
         do_brunt_n2(model)?;
         if model.aux.mixing.okay_to_set_mixing_info {
             let skip_set_cz_bdy_mass = !model.aux.mixing.have_new_generation;

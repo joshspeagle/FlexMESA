@@ -119,7 +119,24 @@ fn test_set_m_grav_and_grav_respects_use_mass_corrections() {
 /// (`nz_new > nz_old`), rather than truncating/padding `model.cgrav` in place.
 #[test]
 fn test_do_adjust_mesh_remaps_cgrav_by_comes_from_without_truncation() {
+    // A non-standard `cgrav` profile survives the post-remesh `set_vars` only
+    // through an installed `other_cgrav` hook (`set_cgrav`,
+    // `star/private/hydro_vars.f90:763-776`); this identity hook leaves the
+    // remapped values in place so the remap itself is what is checked.
+    struct KeepCgrav;
+    impl flexmesa_star::hydro_state::StarModelHook for KeepCgrav {
+        fn apply(
+            &self,
+            _model: &mut StarModel,
+        ) -> Result<(), flexmesa_star::StarError> {
+            Ok(())
+        }
+    }
     let mut model = solar_zams_model(1.0);
+    model.controls.use_other_cgrav = true;
+    model.aux.other_cgrav = Some(
+        flexmesa_star::hydro_state::StarModelHookHandle::new(KeepCgrav),
+    );
     let c2 = CLIGHT * CLIGHT;
     let assign_profile = |m: &mut StarModel| -> Vec<f64> {
         let mut out = Vec::with_capacity(m.nz);

@@ -18,7 +18,8 @@ pub const STAR_DEF_VERSION: i32 = 19;
 
 /// Serializes a [`StarModel`] into an upstream MESA ASCII `.mod` string
 /// (`write_model.f90`), preserving the exact `file_type` bitmask (`32812` for
-/// `RSP`), core boundary headers, and `RSP` / `RSP2` zone columns.
+/// `RSP` with a stored previous model), core boundary headers, and `RSP` /
+/// `RSP2` zone columns.
 ///
 /// # Errors
 /// Returns [`StarError::IoError`] if formatting fails.

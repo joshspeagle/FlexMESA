@@ -31,6 +31,8 @@ struct CachedMicroKey {
     species: usize,
     chem_id: Vec<usize>,
     net_name: String,
+    change_net: bool,
+    new_net_name: String,
     rsp_flag: bool,
     rsp2_flag: bool,
     screening_mode: ScreeningMode,
@@ -60,6 +62,7 @@ struct CachedMicroKey {
     min_t_for_neu_bits: u64,
     non_nuc_neu_factor_bits: u64,
     max_logt_for_net_bits: u64,
+    max_safe_logt_for_rates_bits: u64,
     net_logtcut_lo_bits: u64,
     net_logtcut_lim_bits: u64,
     max_abar_for_burning_bits: u64,
@@ -89,6 +92,8 @@ impl Default for CachedMicroKey {
             species: 0,
             chem_id: Vec::new(),
             net_name: String::new(),
+            change_net: false,
+            new_net_name: String::new(),
             rsp_flag: false,
             rsp2_flag: false,
             screening_mode: ScreeningMode::Chugunov,
@@ -118,6 +123,7 @@ impl Default for CachedMicroKey {
             min_t_for_neu_bits: 0,
             non_nuc_neu_factor_bits: 0,
             max_logt_for_net_bits: 0,
+            max_safe_logt_for_rates_bits: 0,
             net_logtcut_lo_bits: 0,
             net_logtcut_lim_bits: 0,
             max_abar_for_burning_bits: 0,
@@ -181,6 +187,8 @@ impl CachedMicroKey {
             || self.min_t_for_neu_bits != c.min_t_for_neu.to_bits()
             || self.non_nuc_neu_factor_bits != c.non_nuc_neu_factor.to_bits()
             || self.max_logt_for_net_bits != c.max_logt_for_net.to_bits()
+            || self.max_safe_logt_for_rates_bits
+                != c.output.max_safe_logt_for_rates.to_bits()
             || self.net_logtcut_lo_bits != c.net_logtcut_lo.to_bits()
             || self.net_logtcut_lim_bits != c.net_logtcut_lim.to_bits()
             || self.max_abar_for_burning_bits
@@ -197,6 +205,8 @@ impl CachedMicroKey {
                 != c.min_t_for_fe56ec_fake_factor.to_bits()
             || self.chem_id != model.chem_id
             || self.net_name != j.net_name
+            || self.change_net != j.change_net
+            || self.new_net_name != j.new_net_name
             || self.reaction_for_special_factor != j.reaction_for_special_factor
             || self.filename_of_special_rate != j.filename_of_special_rate
             || self.special_rate_factor_bits.len()
@@ -242,6 +252,8 @@ impl CachedMicroKey {
         self.species = model.species;
         self.chem_id.clone_from(&model.chem_id);
         self.net_name.clone_from(&j.net_name);
+        self.change_net = j.change_net;
+        self.new_net_name.clone_from(&j.new_net_name);
         self.rsp_flag = c.rsp_flag;
         self.rsp2_flag = c.rsp2_flag;
         self.screening_mode = c.screening_mode;
@@ -282,6 +294,8 @@ impl CachedMicroKey {
         self.min_t_for_neu_bits = c.min_t_for_neu.to_bits();
         self.non_nuc_neu_factor_bits = c.non_nuc_neu_factor.to_bits();
         self.max_logt_for_net_bits = c.max_logt_for_net.to_bits();
+        self.max_safe_logt_for_rates_bits =
+            c.output.max_safe_logt_for_rates.to_bits();
         self.net_logtcut_lo_bits = c.net_logtcut_lo.to_bits();
         self.net_logtcut_lim_bits = c.net_logtcut_lim.to_bits();
         self.max_abar_for_burning_bits = c.max_abar_for_burning.to_bits();

@@ -20,8 +20,7 @@ use flexmesa_math::pow;
 #[must_use]
 pub fn eval_rlobe(m1: f64, m2: f64, a: f64) -> f64 {
     let q = pow(m1 / m2, ONE_THIRD);
-    let q2 = q * q;
-    a * 0.49 * q2 / (0.6 * q2 + flexmesa_math::log1p(q))
+    a * 0.49 * q * q / (0.6 * q * q + flexmesa_math::log1p(q))
 }
 
 /// Forward-mode dual-number variant of [`eval_rlobe`] over `(m1, m2, a)`.
@@ -32,8 +31,7 @@ pub fn eval_rlobe_ad<const N: usize>(
     a: DualOrder1<N>,
 ) -> DualOrder1<N> {
     let q = (m1 / m2).powf(ONE_THIRD);
-    let q2 = q * q;
-    a * (q2 * 0.49) / (q2 * 0.6 + (q + 1.0).ln())
+    a * 0.49 * q * q / (0.6 * q * q + q.log1p())
 }
 
 /// Evaluates the dimensionless relative Roche-lobe gap at periastron:
@@ -61,7 +59,7 @@ pub fn eval_rl_relative_gap(r: f64, rl: f64, eccentricity: f64) -> f64 {
 pub fn separation_from_period(m1: f64, m2: f64, period: f64) -> f64 {
     let p_over_2pi = period / (2.0 * PI);
     let gm = STANDARD_CGRAV * (m1 + m2);
-    pow(gm * p_over_2pi * p_over_2pi, ONE_THIRD)
+    pow(gm * flexmesa_math::pow2(p_over_2pi), ONE_THIRD)
 }
 
 /// Computes the orbital period $P$ (s) from orbital separation $a$ (cm) and
@@ -152,7 +150,8 @@ pub fn build_anomaly_grid(
                 sqrt_factor * flexmesa_math::tan(0.5 * theta),
             ) - e_sqrt_1me2 * flexmesa_math::sin(theta)
                 / (1.0 + e * flexmesa_math::cos(theta)))
-                / (2.0 * PI);
+                / 2.0
+                / PI;
         // For theta in (pi, 2*pi), atan(sqrt_factor * tan(theta/2)) < 0
         // (and at theta = pi, tan(pi/2) -> -inf in IEEE-754 float64), so
         // adding 1.0 whenever `t_norm < 0.0` (or `i > n / 2` in 1-based even-n

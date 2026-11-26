@@ -20,8 +20,7 @@ use crate::report_utils::center_value;
 /// of `iso` over the single cell `k` (0-based here), or `0` when `iso` is
 /// not in the net.
 fn current_abundance_at_point(model: &StarModel, iso: &str, k: usize) -> f64 {
-    let Some(cid) = NuclideCatalog::builtin_ref().get_nuclide_index(iso)
-    else {
+    let Some(cid) = NuclideCatalog::builtin_ref().get_nuclide_index(iso) else {
         return 0.0;
     };
     let Some(j) = model.net_iso.get(cid).copied().flatten() else {
@@ -83,6 +82,9 @@ pub fn extend_net(
     }
 
     let nz = model.nz;
+    if nz == 0 {
+        return Ok(false);
+    }
     let log_max_temperature = model
         .ln_t
         .iter()
@@ -132,9 +134,11 @@ mod tests {
     /// A ZAMS model on `h_he_net` with the centre set to `(h1, he4)` and
     /// `log_max_temperature` raised to `lg_tmax`.
     fn basic_net_model(h1: f64, he4: f64, lg_tmax: f64) -> StarModel {
-        let mut m =
-            load_zams_model(StarControls::default(), StarJobControls::default())
-                .expect("1 Msun ZAMS should load");
+        let mut m = load_zams_model(
+            StarControls::default(),
+            StarJobControls::default(),
+        )
+        .expect("1 Msun ZAMS should load");
         assert_eq!(m.job.net_name.trim(), m.job.h_he_net.trim());
         let cat = NuclideCatalog::builtin_ref();
         let jh = m.net_iso[cat.get_nuclide_index("h1").unwrap()].unwrap();

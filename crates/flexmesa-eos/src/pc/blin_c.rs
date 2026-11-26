@@ -20,11 +20,6 @@ pub fn blin9c(
 
     if (chi * temp).val < 0.1 {
         let sqchi = chi.sqrt();
-        let chi2 = chi * chi;
-        let chi3 = chi2 * chi;
-        let chi4 = chi2 * chi2;
-        let temp2 = temp * temp;
-        let pi26_2_07 = 0.7 * PI26 * PI26;
 
         for k in 0..3 {
             let mut w = AutoDiffReal2VarOrder1::zero();
@@ -40,69 +35,76 @@ pub fn blin9c(
 
             for j in 0..=4 {
                 let cnu = (k + j) as f64 + 0.5;
-                let chinu = chi.powi((k + j) as i32) * sqchi;
+                let chinu = chi.powf((k + j) as f64) * sqchi;
                 let f = chinu
                     * (chi / (cnu + 1.0)
-                        + chi.recip() * (PI26 * cnu)
-                        + chi3.recip()
-                            * (pi26_2_07 * cnu * (cnu - 1.0) * (cnu - 2.0)));
+                        + PI26 * cnu / chi
+                        + 0.7 * PI26 * PI26 * cnu * (cnu - 1.0) * (cnu - 2.0)
+                            / chi.pow3());
                 let fdx = chinu
-                    * (chi2.recip() * (PI26 * cnu * (cnu - 1.0))
-                        + chi4.recip()
-                            * (pi26_2_07
-                                * cnu
-                                * (cnu - 1.0)
-                                * (cnu - 2.0)
-                                * (cnu - 3.0))
-                        + 1.0);
-                let fdxx = (chinu / chi * cnu)
-                    * (chi2.recip() * (PI26 * (cnu - 1.0) * (cnu - 2.0))
-                        + chi4.recip()
-                            * (pi26_2_07
-                                * (cnu - 1.0)
-                                * (cnu - 2.0)
-                                * (cnu - 3.0)
-                                * (cnu - 4.0))
-                        + 1.0);
-                let fdxxx = (chinu / chi2 * (cnu * (cnu - 1.0)))
-                    * (chi2.recip() * (PI26 * (cnu - 2.0) * (cnu - 3.0))
-                        + chi4.recip()
-                            * (pi26_2_07
-                                * (cnu - 2.0)
-                                * (cnu - 3.0)
-                                * (cnu - 4.0)
-                                * (cnu - 5.0))
-                        + 1.0);
+                    * (1.0
+                        + PI26 * cnu * (cnu - 1.0) / chi.pow2()
+                        + 0.7
+                            * PI26
+                            * PI26
+                            * cnu
+                            * (cnu - 1.0)
+                            * (cnu - 2.0)
+                            * (cnu - 3.0)
+                            / chi.pow4());
+                let fdxx = chinu / chi
+                    * cnu
+                    * (1.0
+                        + PI26 * (cnu - 1.0) * (cnu - 2.0) / chi.pow2()
+                        + 0.7
+                            * PI26
+                            * PI26
+                            * (cnu - 1.0)
+                            * (cnu - 2.0)
+                            * (cnu - 3.0)
+                            * (cnu - 4.0)
+                            / chi.pow4());
+                let fdxxx = chinu / chi.pow2()
+                    * cnu
+                    * (cnu - 1.0)
+                    * (1.0
+                        + PI26 * (cnu - 2.0) * (cnu - 3.0) / chi.pow2()
+                        + 0.7
+                            * PI26
+                            * PI26
+                            * (cnu - 2.0)
+                            * (cnu - 3.0)
+                            * (cnu - 4.0)
+                            * (cnu - 5.0)
+                            / chi.pow4());
                 if j == 0 {
                     w = f;
                     wdx = fdx;
                     wdxx = fdxx;
                     wdxxx = fdxxx;
                 } else if j == 1 {
-                    c = temp * 0.25;
+                    c = 0.25 * temp;
                     w = w + c * f;
                     wdx = wdx + c * fdx;
                     wdxx = wdxx + c * fdxx;
-                    wdt = f * 0.25;
-                    wdxt = fdx * 0.25;
+                    wdt = f / 4.0;
+                    wdxt = fdx / 4.0;
                     wdtt = AutoDiffReal2VarOrder1::zero();
                     wdxxx = wdxxx + c * fdxxx;
-                    wdxxt = fdxx * 0.25;
+                    wdxxt = fdxx / 4.0;
                     wdxtt = AutoDiffReal2VarOrder1::zero();
                 } else {
                     let jf = j as f64;
-                    c = -c * temp * ((2.0 * jf - 3.0) / (4.0 * jf));
-                    let cj_t = c * jf / temp;
-                    let cjj1_t2 = c * (jf * (jf - 1.0)) / temp2;
+                    c = -c / jf * (2.0 * jf - 3.0) / 4.0 * temp;
                     w = w + c * f;
                     wdx = wdx + c * fdx;
-                    wdt = wdt + cj_t * f;
+                    wdt = wdt + c * jf / temp * f;
                     wdxx = wdxx + c * fdxx;
-                    wdtt = wdtt + cjj1_t2 * f;
-                    wdxt = wdxt + cj_t * fdx;
+                    wdtt = wdtt + c * jf * (jf - 1.0) / temp.pow2() * f;
+                    wdxt = wdxt + c * jf / temp * fdx;
                     wdxxx = wdxxx + c * fdxxx;
-                    wdxtt = wdxtt + cjj1_t2 * fdx;
-                    wdxxt = wdxxt + cj_t * fdxx;
+                    wdxtt = wdxtt + c * jf * (jf - 1.0) / temp.pow2() * fdx;
+                    wdxxt = wdxxt + c * jf / temp * fdxx;
                 }
             }
 

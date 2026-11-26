@@ -86,6 +86,12 @@ fn test_all_seven_rsp_golden_mods_and_photos_roundtrip_losslessly() {
         .unwrap_or_else(|e| panic!("parse {fname}: {e}"));
         assert!(m1.controls.rsp_flag && m1.controls.v_flag);
 
+        // The fixtures carry a previous model (`bit_for_2models`); loading
+        // resets `generations` to 1 (`read_model.f90:438,463`), and upstream
+        // writes that bit and block only when `generations > 1`
+        // (`write_model.f90:74-77`), so mark a stored previous model to
+        // round-trip the full `32812` file.
+        m1.generations = 2;
         let serialized = write_mod_string(&m1).expect("write_mod_string");
         assert!(serialized.contains("         32812 -- model for mesa/star"));
         let m2 = read_mod_str(

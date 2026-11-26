@@ -881,15 +881,23 @@ pub fn stevft(
         }
     }
 
+    if nn == 0 || iasn == 0 {
+        return Ok(());
+    }
     if *nev1 <= nibc + 5 {
         *nev1 = nibc;
     }
     if nn > 30 && *nev1 >= nn - 30 {
         *nev1 = nn - 30;
     }
-    if !(*nev1 - nibc).is_multiple_of(iasn) {
-        let nstp = (*nev1 - nibc) / iasn + 1;
-        *nev1 = nibc + nstp * iasn;
+    let iasn_s = iasn.cast_signed();
+    if iasn_s > 0 {
+        let diff = (*nev1).cast_signed() - nibc.cast_signed();
+        if diff % iasn_s != 0 {
+            let nstp = diff / iasn_s + 1;
+            let aligned = nibc.cast_signed() + nstp * iasn_s;
+            *nev1 = usize::try_from(aligned).unwrap_or(nibc).max(1);
+        }
     }
     if cincnt.xfit == -1.0_f64 {
         *nfit = *nev1;
@@ -918,13 +926,15 @@ pub fn rsnfit(
     if nn == 0 || x.len() < nn {
         return;
     }
-    let lo = 10_usize.min(nn).max(nibc.min(nn)).max(1);
-    let hi = nn.saturating_sub(10).max(lo).min(nn);
+    let safe_lo = nibc.min(nn).max(1);
+    let lo = 10_usize.min(nn).max(safe_lo);
+    let hi_10 = nn.saturating_sub(10).max(safe_lo).min(nn);
+    let hi_clamp = hi_10.max(lo);
     let nn_i32 = i32::try_from(nn).unwrap_or(i32::MAX);
 
     if nftrcs == 0 {
         let lo_i32 = i32::try_from(lo).unwrap_or(1);
-        let hi_i32 = i32::try_from(hi).unwrap_or(nn_i32);
+        let hi_i32 = i32::try_from(hi_10).unwrap_or(nn_i32);
         #[allow(clippy::cast_precision_loss)]
         let nfit_f = (*nfit) as f32;
         #[allow(clippy::cast_precision_loss)]
@@ -938,7 +948,9 @@ pub fn rsnfit(
             let cand = (nfit_f + step_f).round() as i32;
             cand.min(hi_i32)
         };
-        *nfit = usize::try_from(new_nfit).unwrap_or(lo).clamp(lo, hi);
+        *nfit = usize::try_from(new_nfit)
+            .unwrap_or(safe_lo)
+            .clamp(safe_lo, nn);
     } else {
         let dx = 0.05_f64 * (*xfit1).min(1.0_f64 - *xfit1);
         if *nftcnt % 2 == 1 {
@@ -953,13 +965,13 @@ pub fn rsnfit(
                 break;
             }
         }
-        *nfit = nf.clamp(lo, hi);
+        *nfit = nf.clamp(lo, hi_clamp);
     }
 
     if ((*nfit).cast_signed() - nibc.cast_signed()).rem_euclid(2) != 0 {
         if *nfit < nn {
             *nfit += 1;
-        } else if *nfit > 1 {
+        } else if *nfit > safe_lo {
             *nfit -= 1;
         }
     }
@@ -988,6 +1000,9 @@ pub fn takata(
 ) -> Result<i32, AdiplsError> {
     #[allow(clippy::approx_constant)]
     const PI_TAKATA: f64 = 3.141_593_f64;
+    if nn == 0 || iasn == 0 {
+        return Ok(0);
+    }
     let g = cgrav;
     let r3 = powi_f90(data[1], 3);
     let r2 = data[1] * data[1];
@@ -1035,6 +1050,9 @@ pub fn takata(
         if k == 1 || (k - 2) % iasn == 0 {
             let k0 = k - 1;
             let k1 = k0 + iasn;
+            if k1 >= nn {
+                continue;
+            }
             let phx1 = yy1[k0];
             let phy1 = yy2[k0];
             let phx2 = yy1[k1];
@@ -1108,13 +1126,16 @@ pub fn order(
         irsord
     };
 
+    if nn == 0 || iasn == 0 {
+        return Ok(());
+    }
     let nn0 = nn - 1;
     let phxmin = eprufl * y[nn0 * iy].abs().max(y[nn0 * iy + 2].abs());
 
     let mut ns = if x[0] == 0.0_f64 { 2_usize } else { 1_usize };
     let nsr = if data[6] < 0.0_f64 { nn } else { nn - 1 };
 
-    if (nsr - ns) % iasn != 0 {
+    if nsr < ns || (nsr - ns) % iasn != 0 {
         return Ok(());
     }
 

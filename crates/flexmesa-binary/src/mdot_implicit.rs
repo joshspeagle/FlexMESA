@@ -232,7 +232,7 @@ impl ImplicitRlofSolver {
             false,
             false,
         );
-        let max_abs = self.max_implicit_abs_mdot_msun_yr * (MSUN / SECYER);
+        let max_abs = self.max_implicit_abs_mdot_msun_yr * MSUN / SECYER;
         let mut mdot = initial_mdot_g_s.min(0.0).max(-max_abs);
         let limit = max_tries;
         for iter in 1..=(limit + 1) {
@@ -365,7 +365,6 @@ impl ImplicitMdotSolver {
         use_sum: bool,
         report_progress: bool,
     ) -> Self {
-        let u = MSUN / SECYER;
         Self {
             tolerance,
             tiny_factor,
@@ -373,10 +372,10 @@ impl ImplicitMdotSolver {
             max_change_factor,
             num_tries_for_increase_change_factor,
             change_factor_increase,
-            max_abs_mdot_cgs: max_abs_msun_yr * u,
-            roche_min_mdot_cgs: roche_min_msun_yr * u,
-            min_mdot_for_implicit_cgs: min_imp_msun_yr * u,
-            starting_mdot_cgs: starting_msun_yr * u,
+            max_abs_mdot_cgs: max_abs_msun_yr * MSUN / SECYER,
+            roche_min_mdot_cgs: roche_min_msun_yr * MSUN / SECYER,
+            min_mdot_for_implicit_cgs: min_imp_msun_yr * MSUN / SECYER,
+            starting_mdot_cgs: starting_msun_yr * MSUN / SECYER,
             solver_mode,
             use_quadratic: solver_mode != ImplicitSolverMode::Bisect,
             use_sum,
@@ -415,14 +414,13 @@ impl ImplicitMdotSolver {
         if !self.report_progress {
             return;
         }
-        let u_inv = SECYER / MSUN;
         let mdot_hi = if self.have_hi {
-            -self.mdot_hi * u_inv
+            -self.mdot_hi / MSUN * SECYER
         } else {
             f64::MAX
         };
         let mdot_lo = if self.have_lo {
-            -self.mdot_lo * u_inv
+            -self.mdot_lo / MSUN * SECYER
         } else {
             -f64::MAX
         };
@@ -432,8 +430,8 @@ impl ImplicitMdotSolver {
             num_tries,
             ctx.donor_i,
             self.change_factor,
-            -curr_mdot * u_inv,
-            -next_mdot * u_inv,
+            -curr_mdot / MSUN * SECYER,
+            -next_mdot / MSUN * SECYER,
             mdot_hi,
             mdot_lo,
             ctx.rl_gaps_by_star[0],
@@ -502,11 +500,15 @@ impl ImplicitMdotSolver {
         let is_roche = scheme_low == "roche_lobe";
         let is_contact = scheme_low == "contact";
         if !is_roche && !is_contact {
-            if scheme_low != "ritter" && scheme_low != "kolb" {
+            if scheme_low != "ritter"
+                && scheme_low != "kolb"
+                && scheme_low != "arras"
+            {
                 return Err(StarError::InvalidInput(format!(
                     concat!(
                         "unsupported implicit mdot_scheme '{}' ",
-                        "(expected 'roche_lobe', 'contact', 'Ritter', or 'Kolb')"
+                        "(expected 'roche_lobe', 'contact', 'Ritter', 'Kolb', ",
+                        "or 'Arras')"
                     ),
                     scheme
                 )));
@@ -724,13 +726,13 @@ impl ImplicitMdotSolver {
                 self.mdot_hi = mdot;
                 self.f_hi = f;
             }
-            cubic_mdot.unwrap_or(0.5 * (self.mdot_hi + self.mdot_lo))
+            cubic_mdot.unwrap_or((self.mdot_hi + self.mdot_lo) / 2.0)
         } else if self.have_lo {
             if f < 0.0 {
                 self.mdot_hi = mdot;
                 self.f_hi = f;
                 self.have_hi = true;
-                0.5 * (self.mdot_hi + self.mdot_lo)
+                (self.mdot_hi + self.mdot_lo) / 2.0
             } else {
                 self.mdot_lo = mdot;
                 self.f_lo = f;
@@ -741,7 +743,7 @@ impl ImplicitMdotSolver {
                 self.mdot_lo = mdot;
                 self.f_lo = f;
                 self.have_lo = true;
-                0.5 * (self.mdot_hi + self.mdot_lo)
+                (self.mdot_hi + self.mdot_lo) / 2.0
             } else {
                 self.mdot_hi = mdot;
                 self.f_hi = f;
@@ -959,7 +961,9 @@ mod tests {
             .unwrap();
         assert_eq!(
             a1,
-            ImplicitStepAction::TryNextMdot(-ctrl.starting_mdot * u)
+            ImplicitStepAction::TryNextMdot(
+                -ctrl.starting_mdot * MSUN / SECYER
+            )
         );
         // Try 2 (unbracketed, `mod(2, 2) == 0`): boosts `change_factor` `1.2 -> 1.44`.
         let a2 = solver
@@ -967,7 +971,7 @@ mod tests {
                 "roche_lobe",
                 2,
                 3,
-                -ctrl.starting_mdot * u,
+                -ctrl.starting_mdot * MSUN / SECYER,
                 0.0,
                 0.01,
                 -0.5,
@@ -983,7 +987,7 @@ mod tests {
                 "roche_lobe",
                 3,
                 3,
-                -1.44 * ctrl.starting_mdot * u,
+                -ctrl.starting_mdot * MSUN / SECYER * 1.44,
                 0.0,
                 0.01,
                 -0.5,
@@ -1068,7 +1072,9 @@ mod tests {
                     "Ritter", 1, 20, 0.0, exp_active, 0.0, -0.5, 0.8
                 )
                 .unwrap(),
-            ImplicitStepAction::TryNextMdot(-r_ctrl.starting_mdot * u)
+            ImplicitStepAction::TryNextMdot(
+                -r_ctrl.starting_mdot * MSUN / SECYER,
+            )
         );
 
         // Post-step `change_factor`: unchanged on step 1 or when `mtransfer_rate_old == mtransfer_rate`.

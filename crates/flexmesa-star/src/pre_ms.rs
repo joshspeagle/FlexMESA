@@ -53,13 +53,9 @@ const IMAX: usize = 100;
 /// `min_mass_for_create_pre_ms` (`star/private/init.f90:877`).
 const MIN_MASS_FOR_CREATE_PRE_MS: f64 = 0.03;
 /// `&controls initial_he3` default (`star/defaults/controls.defaults:87`).
-/// The key is not parsed, and an inlist that sets it is rejected as an
-/// unsupported control, so the default always applies.
+/// `StarControls` does not yet carry `&controls::initial_he3` (distinct from
+/// `&star_job::initial_he3`), so pre-MS uses the upstream default `-1.0`.
 const CONTROLS_INITIAL_HE3: f64 = -1.0;
-/// `&star_job dump_missing_metals_into_heaviest` default
-/// (`star/defaults/star_job.defaults:739`). Not parsed; an inlist that sets
-/// it is rejected as an unsupported control.
-const DUMP_MISSING_METALS_INTO_HEAVIEST: bool = true;
 
 /// `Radiation_Pressure` (`eos/public/eos_lib.f90:88-92`).
 fn radiation_pressure(t: f64) -> f64 {
@@ -852,7 +848,7 @@ pub fn build_pre_ms_model_with_configs(
         initial_he3,
         initial_he4,
         job.initial_zfracs,
-        DUMP_MISSING_METALS_INTO_HEAVIEST,
+        job.dump_missing_metals_into_heaviest,
     )?;
     let sum_xa: f64 = xa.iter().sum();
     if (1.0 - sum_xa).abs() > 1.0e-8 {

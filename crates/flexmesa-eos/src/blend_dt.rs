@@ -344,6 +344,14 @@ pub fn eos_dt_get_from_weights_with_tables(
     a_baryon: &[f64],
     cfg: &EosConfig,
 ) -> Result<EosEvalOutput, EosError> {
+    if !(rho > 0.0 && t > 0.0 && rho.is_finite() && t.is_finite()) {
+        return Err(EosError::InvalidState {
+            context: "eos_dt_get_from_weights_with_tables",
+            detail: format!(
+                "non-positive or non-finite state (rho={rho:e}, T={t:e})"
+            ),
+        });
+    }
     let eval_lvl6 = || {
         // Upstream MESA 26.4.1 `eos/private/eosdt_eval.f90:728,749-750` passes
         // `(d_alfa_dlogRho, d_alfa_dlogT)` into `get_HELM_alfa(..., alfa,

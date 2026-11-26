@@ -188,6 +188,10 @@ impl IonTableGrid {
         log10_rho: T,
         log10_t: T,
     ) -> QtBasis<T> {
+        // Match `z36th = 1d0/36d0` and left-to-right `z36th * hx2 * hy2`
+        // multiplication order in `ionization/private/ion_tables_eval.f90:460,
+        // 512-514` (differs by 1 ULP from `hx2 * hy2 * (sixth * sixth)`).
+        const Z36TH: f64 = 1.0 / 36.0;
         let raw_q = log10_rho - T::from_f64(2.0) * log10_t + T::from_f64(12.0);
         let (iq, q0, q1, qc) =
             locate_axis(raw_q, self.log_q_min, self.del_log_q, self.num_log_qs);
@@ -214,9 +218,9 @@ impl IonTableGrid {
             qx: [xp, xpi, xp * (xp * xp - one), xpi * (xpi * xpi - one)],
             ty: [yp, ypi, yp * (yp * yp - one), ypi * (ypi * ypi - one)],
             scales: [
-                T::from_f64(hx2 * ONE_SIXTH),
-                T::from_f64(hy2 * ONE_SIXTH),
-                T::from_f64(hx2 * hy2 * (ONE_SIXTH * ONE_SIXTH)),
+                T::from_f64(ONE_SIXTH * hx2),
+                T::from_f64(ONE_SIXTH * hy2),
+                T::from_f64(Z36TH * hx2 * hy2),
             ],
         }
     }
@@ -284,6 +288,12 @@ impl IonTableGrid {
             return Err(IonError::InvalidInput {
                 context: "eval_ionization",
                 detail: "Rho and T must be positive and finite".to_string(),
+            });
+        }
+        if is_bad(lt_val) || is_bad(lrho_val) {
+            return Err(IonError::InvalidInput {
+                context: "eval_ionization",
+                detail: "log10_Rho and log10_T must be finite".to_string(),
             });
         }
         Ok(self.eval_generic(z, x, lrho_val, lt_val))

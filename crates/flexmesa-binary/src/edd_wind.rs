@@ -277,16 +277,13 @@ pub fn eval_bondi_hoyle_wind_fraction(
     if separation <= 0.0 || r_donor <= 0.0 || m_donor <= 0.0 || beta_bh <= 0.0 {
         return 0.0;
     }
-    let v_orb2 = STANDARD_CGRAV * (m_donor + m_accretor) / separation;
-    let v_wind2 = 2.0 * beta_bh * STANDARD_CGRAV * m_donor / r_donor;
-    let gm_over_vw2 = STANDARD_CGRAV * m_accretor / v_wind2;
-    let denom = 2.0
-        * separation
-        * separation
-        * (1.0 - eccentricity * eccentricity).max(1.0e-12).sqrt();
-    let raw = (alpha_bh / denom)
-        * (gm_over_vw2 * gm_over_vw2)
-        * pow(1.0 + v_orb2 / v_wind2, -1.5);
+    let v_orb = (STANDARD_CGRAV * (m_donor + m_accretor) / separation).sqrt();
+    let v_wind = (2.0 * beta_bh * STANDARD_CGRAV * m_donor / r_donor).sqrt();
+    let raw = alpha_bh
+        / pow2(separation)
+        / (2.0 * (1.0 - pow2(eccentricity)).max(1.0e-12).sqrt())
+        * pow2(STANDARD_CGRAV * m_accretor / pow2(v_wind))
+        * pow(1.0 + pow2(v_orb / v_wind), -1.5);
     raw.clamp(0.0, max_frac)
 }
 
@@ -312,7 +309,7 @@ pub fn eval_accreted_material_j(
         )
     } else {
         (
-            (1.7 * STANDARD_CGRAV * m_accretor * r_min.max(0.0)).sqrt(),
+            (STANDARD_CGRAV * m_accretor * 1.7 * r_min.max(0.0)).sqrt(),
             1,
         )
     }

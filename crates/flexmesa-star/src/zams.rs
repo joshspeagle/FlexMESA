@@ -198,11 +198,7 @@ impl ZamsCatalog {
         let mut index_masses: Vec<f64> = Vec::new();
         for line in lines.by_ref() {
             let t = line.trim();
-            if t == "1"
-                || t.starts_with("-1.")
-                || t.starts_with("-1 ")
-                || t == "-1"
-            {
+            if t == "1" {
                 break;
             }
             if t.is_empty() {
@@ -210,9 +206,12 @@ impl ZamsCatalog {
             }
             if let Some(tok) = t.split_whitespace().next() {
                 if let Ok(m_idx) = parse_fortran_f64(tok) {
-                    if m_idx > 0.0 {
-                        index_masses.push(m_idx);
+                    if m_idx <= 0.0 {
+                        // Upstream `get1_zams_model` stops on `m2 <= 0`
+                        // (`star/private/init_model.f90:212`).
+                        break;
                     }
+                    index_masses.push(m_idx);
                 }
             }
         }
@@ -594,9 +593,22 @@ pub fn load_zams_model_from_catalog(
             model.lum[k] = alfa * e1.lum[k] + beta * lum2[k];
         }
 
-        for j in 0..species {
+        if e2.species != species {
+            return Err(StarError::InvalidInput(format!(
+                "ZAMS mass bracket species count mismatch: {} vs {}",
+                species, e2.species
+            )));
+        }
+        for (j, &cid) in e1.chem_id.iter().enumerate() {
+            let j2 = e2.chem_id.iter().position(|&id| id == cid).ok_or_else(
+                || {
+                    StarError::InvalidInput(format!(
+                        "ZAMS upper mass bracket missing chem_id {cid}"
+                    ))
+                },
+            )?;
             let x2_col: Vec<f64> =
-                (0..e2.nz).map(|k| e2.xa[k * species + j]).collect();
+                (0..e2.nz).map(|k| e2.xa[k * species + j2]).collect();
             let x2_interp = interp_q(&e2.dq, &x2_col, &e1.dq)?;
             for k in 0..nz {
                 let x1_kj = e1.xa[k * species + j];
@@ -614,7 +626,13 @@ pub fn load_zams_model_from_catalog(
     // Upstream `alloc_star_data` initializes `model_number = 0` (`star/private/init.f90:367`).
     (model.model_number, model.star_age) = (0, 0.0);
     let dt_sec = yrs_for_init_timestep(m_effective) * SECYER;
-    (model.dt, model.dt_next, model.dt_old) = (dt_sec, dt_sec, 0.0);
+    // `model_builder` (`star/private/init.f90:1052-1053`).
+    let dt_next = if model.controls.max_years_for_timestep > 0.0 {
+        dt_sec.min(SECYER * model.controls.max_years_for_timestep)
+    } else {
+        dt_sec
+    };
+    (model.dt, model.dt_next, model.dt_old) = (dt_sec, dt_next, 0.0);
     model.finish_init_model()?;
     Ok(model)
 }

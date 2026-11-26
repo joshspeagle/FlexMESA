@@ -622,6 +622,7 @@ const SUPPORTED_SCALAR_COLUMNS: &[&str] = &[
     "acoustic_cutoff",
     "acoustic_radius",
     "burn_solver_maxsteps",
+    "rotation_solver_steps",
     "diffusion_solver_steps",
     "diffusion_solver_iters",
     "tot_E",

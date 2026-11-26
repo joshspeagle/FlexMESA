@@ -23,9 +23,7 @@ use crate::blend::{is_contained, min_distance_to_polygon};
 use crate::free_energy::{
     compute_f_ideal_ion, compute_f_rad, compute_xne, pack_for_export,
 };
-use crate::helm::{
-    HelmTable, HELM_LOGDHI, HELM_LOGDLO, HELM_LOGTHI, HELM_LOGTLO,
-};
+use crate::helm::HelmTable;
 use crate::ion_offset::compute_ion_offset_from_za;
 use crate::types::{EosError, EosEvalOutput, I_FRAC_SKYE};
 
@@ -79,7 +77,7 @@ impl Default for SkyeConfig {
 /// polygon (pure `Skye`) and `alfa = 1` outside (no `Skye`).
 #[must_use]
 pub fn get_skye_alfa(
-    _ht: &HelmTable,
+    ht: &HelmTable,
     log_rho: f64,
     log_t: f64,
     abar: f64,
@@ -90,19 +88,18 @@ pub fn get_skye_alfa(
         + skye_blend_width;
     let rho_ion = 2.3_f64.max(flexmesa_math::log10(abar * zbar * zbar * zbar))
         + skye_blend_width;
-    let rad_offset =
-        flexmesa_math::log10(abar * MP * CRAD / (3.0 * KERG * (zbar + 1.0)))
-            - 6.0;
+    let rad_log =
+        flexmesa_math::log10(abar * MP * CRAD / (3.0 * KERG * (zbar + 1.0)));
 
     let bounds: [[f64; 2]; 8] = [
-        [HELM_LOGDLO, 8.3],
-        [HELM_LOGDLO, t_ion],
+        [ht.logdlo, 8.3],
+        [ht.logdlo, t_ion],
         [rho_ion, t_ion],
-        [rho_ion, HELM_LOGTLO],
-        [HELM_LOGDHI, HELM_LOGTLO],
-        [HELM_LOGDHI, HELM_LOGTHI],
-        [3.0 * HELM_LOGTHI + rad_offset, HELM_LOGTHI],
-        [3.0 * 8.3 + rad_offset, 8.3],
+        [rho_ion, ht.logtlo],
+        [ht.logdhi, ht.logtlo],
+        [ht.logdhi, ht.logthi],
+        [3.0 * ht.logthi + rad_log - 6.0, ht.logthi],
+        [3.0 * 8.3 + rad_log - 6.0, 8.3],
     ];
 
     let p = [

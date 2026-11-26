@@ -21,12 +21,13 @@
 //!   (`set_RSP_Lsurf_BC`, `hydro_eqns.f90:961-983`)** when
 //!   `use_rsp_l_eqn_outer_bc` is enabled.
 
-use flexmesa_const::{CLIGHT, CRAD, FOUR_PI, L_SUN};
+use flexmesa_const::{MixingType, CLIGHT, CRAD, FOUR_PI, LN10, L_SUN};
 
 use crate::hydro_eqns::HenyeySystem;
 use crate::hydro_momentum::{
     eval_cell_peos_time_centered_ad, eval_mlt_pturb_cell_ad,
-    expected_hse_grav_and_area, wrap_peos_00, wrap_peos_m1,
+    expected_hse_grav_and_area, get_area_info_opt_time_center, wrap_peos_00,
+    wrap_peos_m1,
 };
 use crate::model::StarModel;
 use crate::star_ad::{
@@ -49,42 +50,42 @@ pub fn interp_p_point_ad(model: &StarModel, k: usize) -> StarAdOrder1 {
 }
 
 /// Evaluates the RSP outer Stefan-Boltzmann luminosity boundary condition at
-/// `k = 0` (`set_RSP_Lsurf_BC` in `star/private/hydro_eqns.f90:961-983`).
+/// `k = 0` (`set_RSP_Lsurf_BC` in `star/private/hydro_temperature.f90:318-388`).
 pub fn set_rsp_lsurf_bc(model: &StarModel, sys: &mut HenyeySystem) {
     if model.nz == 0 {
         return;
     }
+    let (area_ad, _) = get_area_info_opt_time_center(model, 0);
     let lum_0 = StarAdOrder1::variable(model.lum[0], I_L_00);
-    let r_0 = StarAdOrder1::variable(model.ln_r[0], I_LNR_00).exp();
     let t_0 = StarAdOrder1::variable(model.ln_t[0], I_LNT_00).exp();
-    // Upstream `set_RSP_Lsurf_BC`: `L1 = 0.5 * 4 * pi * r(1)^2 * (c * a / 4) * T(1)^4`
-    // (`0.5` Eddington outer boundary radiation flux factor in RSP).
-    let sigma_sb = 0.25 * CLIGHT * CRAD;
-    let l_rad_surf = (0.5 * FOUR_PI * sigma_sb) * (r_0 * r_0) * t_0.pow4();
-    let l_scale = model
+    // `rhs_ad = s%RSP2_Lsurf_factor * area_ad * clight * (crad * pow4(T_surf))`
+    // (`hydro_temperature.f90:348-370`).
+    let rhs_ad = model.controls.rsp2.lsurf_factor
+        * area_ad
+        * CLIGHT
+        * (CRAD * t_0.pow4());
+    let resid_ad = lum_0 - rhs_ad;
+    let max_l_start = model
         .lum_start
-        .first()
+        .iter()
         .copied()
-        .unwrap_or(L_SUN)
-        .abs()
-        .max(L_SUN);
-    let resid = (lum_0 - l_rad_surf) / l_scale;
+        .fold(f64::NEG_INFINITY, f64::max);
+    let scale = if max_l_start > 0.0 && max_l_start.is_finite() {
+        max_l_start
+    } else {
+        L_SUN
+    };
+    let resid = resid_ad / scale;
     sys.save_eqn_residual(&model.layout, 0, model.layout.i_equ_l, &resid);
 }
 
 /// Evaluates the direct $\nabla_T$ temperature equation at interior face `k >= 1`
-/// (`do1_gradT_eqn` in `star/private/hydro_temperature.f90:53-112`).
+/// (`do1_gradT_eqn` in `star/private/hydro_temperature.f90:158-204`).
 fn do1_gradt_eqn(model: &StarModel, k: usize, sys: &mut HenyeySystem) {
-    let (alfa, beta) = model.get_face_weights(k);
-    let (p_00, _) = eval_cell_peos_time_centered_ad(model, k, false);
-    let (p_m1, _) = eval_cell_peos_time_centered_ad(model, k - 1, true);
-    let p_face = p_00 * alfa + p_m1 * beta;
-    let dln_p = (p_m1 - p_00) / p_face;
-
-    let t_00 = StarAdOrder1::variable(model.ln_t[k], I_LNT_00).exp();
-    let t_m1 = StarAdOrder1::variable(model.ln_t[k - 1], I_LNT_M1).exp();
-    let t_face = t_00 * alfa + t_m1 * beta;
-    let dln_t = (t_m1 - t_00) / t_face;
+    let lnt_00 = StarAdOrder1::variable(model.ln_t[k], I_LNT_00);
+    let lnt_m1 = StarAdOrder1::variable(model.ln_t[k - 1], I_LNT_M1);
+    let dln_t = lnt_m1 - lnt_00;
+    let dln_p = model.ln_peos_ad[k - 1].shift_m1() - model.ln_peos_ad[k];
 
     let resid = model.gradt_ad[k] * dln_p - dln_t;
     sys.save_eqn_residual(&model.layout, k, model.layout.i_equ_l, &resid);
@@ -92,27 +93,44 @@ fn do1_gradt_eqn(model: &StarModel, k: usize, sys: &mut HenyeySystem) {
 
 /// Evaluates the radiation-pressure gradient temperature equation with optional
 /// Levermore & Pomraning (1981) flux limiting at interior face `k >= 1`
-/// (`do1_alt_dlnT_dm_eqn` in `star/private/hydro_temperature.f90:77-160`).
+/// (`do1_alt_dlnT_dm_eqn` in `star/private/hydro_temperature.f90:37-155`).
 fn do1_alt_dlnt_dm_eqn(model: &StarModel, k: usize, sys: &mut HenyeySystem) {
-    let e_start = model.energy_start.get(k).copied().unwrap_or(1.0);
+    let e_start = model
+        .energy_start
+        .get(k)
+        .copied()
+        .unwrap_or(model.energy[k]);
     let rho_start = model
         .lnd_start
         .get(k)
-        .map_or(1.0, |&v| flexmesa_math::exp(v));
-    let scale = (e_start * rho_start).abs().max(1.0e-30);
-    let dm_bar = model.dm_bar[k].max(1.0e-30);
+        .copied()
+        .map_or_else(|| model.rho[k], flexmesa_math::exp);
+    let raw_scale = e_start * rho_start;
+    let scale = if raw_scale != 0.0 && raw_scale.is_finite() {
+        raw_scale
+    } else {
+        1.0e-30
+    };
+    let dm_bar = if model.dm_bar[k] == 0.0 {
+        1.0e-30
+    } else {
+        model.dm_bar[k]
+    };
 
     let lum_k = StarAdOrder1::variable(model.lum[k], I_L_00);
     let r_k = StarAdOrder1::variable(model.ln_r[k], I_LNR_00).exp();
-    let area = FOUR_PI * r_k * r_k;
+    let area = FOUR_PI * (r_k * r_k);
     let area2 = area * area;
 
-    let lrad_ad = if model.gradr[k] > 0.0
+    let lrad_ad = if model.ln_t[k] / LN10
+        <= model.controls.mix_wind.max_logt_for_mlt
+        && model.mixing_type[k] == MixingType::ConvectiveMixing
+        && model.gradr[k] > 0.0
         && (model.gradr[k] - model.gradt[k]).abs()
             > model.gradr[k].abs() * 1.0e-5
-        && model.gradr_ad[k].val.abs() > 1.0e-30
+        && model.gradr_ad[k].val != 0.0
     {
-        lum_k * (model.gradt_ad[k] / model.gradr_ad[k])
+        lum_k * model.gradt_ad[k] / model.gradr_ad[k]
     } else {
         lum_k
     };
@@ -127,7 +145,7 @@ fn do1_alt_dlnt_dm_eqn(model: &StarModel, k: usize, sys: &mut HenyeySystem) {
         kap_f = StarAdOrder1::constant(model.controls.min_kap_for_dprad_dm_eqn);
     }
 
-    let mut d_p_rad_expected = -(kap_f * lrad_ad * dm_bar) / (area2 * CLIGHT);
+    let mut d_p_rad_expected = -(dm_bar * kap_f * lrad_ad) / (CLIGHT * area2);
 
     let t_00 = StarAdOrder1::variable(model.ln_t[k], I_LNT_00).exp();
     let t_m1 = StarAdOrder1::variable(model.ln_t[k - 1], I_LNT_M1).exp();
@@ -138,10 +156,9 @@ fn do1_alt_dlnt_dm_eqn(model: &StarModel, k: usize, sys: &mut HenyeySystem) {
     let d_p_rad_actual = prad_m1 - prad_00;
 
     if model.controls.use_flux_limiting_with_dprad_dm_form {
-        let denom = (kap_f * (t4_m1 + t4_00) * (0.5 * dm_bar))
-            .max(StarAdOrder1::constant(1.0e-99));
-        let flx_r = (area * (t4_m1 - t4_00).abs()) / denom;
-        let flx_lambda = (flx_r * 3.0 + 6.0) / ((flx_r + 3.0) * flx_r + 6.0);
+        let flx_r = (area * (t4_m1 - t4_00).abs() / dm_bar)
+            / (kap_f * 0.5 * (t4_m1 + t4_00));
+        let flx_lambda = (6.0 + 3.0 * flx_r) / (6.0 + (3.0 + flx_r) * flx_r);
         d_p_rad_expected = d_p_rad_expected / flx_lambda;
     }
 

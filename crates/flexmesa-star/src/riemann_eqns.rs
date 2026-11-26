@@ -8,30 +8,11 @@
 
 use flexmesa_const::FOUR_PI;
 
-use crate::hydro_energy::eval_face_area_time_centered_ad;
 use crate::hydro_eqns::HenyeySystem;
-use crate::hydro_momentum::eval_p_theta;
+use crate::hydro_momentum::{eval_p_theta, get_area_info_opt_time_center};
 use crate::model::StarModel;
 use crate::riemann_ad::calc_ptot_cell_ad;
-use crate::star_ad::{
-    StarAdExt, StarAdOrder1, I_LNR_00, I_V_00, I_V_M1, I_V_P1,
-};
-
-fn eval_face_inv_r2_ad(
-    model: &StarModel,
-    k: usize,
-    using_v_tc: bool,
-) -> StarAdOrder1 {
-    let lnr_k = StarAdOrder1::variable(model.ln_r[k], I_LNR_00);
-    let r_k = lnr_k.exp();
-    if using_v_tc {
-        let lnr_s = model.ln_r_start.get(k).copied().unwrap_or(model.ln_r[k]);
-        let r_s = flexmesa_math::exp(lnr_s).max(1.0);
-        StarAdOrder1::ONE / (r_k * r_s).max(StarAdOrder1::ONE)
-    } else {
-        StarAdOrder1::ONE / (r_k * r_k).max(StarAdOrder1::ONE)
-    }
-}
+use crate::star_ad::{StarAdExt, StarAdOrder1, I_V_00, I_V_M1, I_V_P1};
 
 /// Evaluates the cell-centered Lagrangian momentum residual `do1_dudt_eqn`
 /// (`star/private/hydro_riemann.f90:72-290`) for zone `k` (`k == 0` uses
@@ -46,40 +27,18 @@ pub fn do1_riemann_momentum_eqn(
         return;
     }
     let nz = model.nz;
-    let dt = model.dt.max(1.0e-30);
-    let using_v_tc =
-        model.controls.is_velocity_time_centered(model.model_number_old)
-            && model.dt > 0.0
-            && !model.ln_r_start.is_empty();
+    let dt = if model.dt > 0.0 { model.dt } else { 1.0e-30 };
 
-    let lnr_00 = StarAdOrder1::variable(model.ln_r[k], I_LNR_00);
-    let lnr_s_00 = model.ln_r_start.get(k).copied().unwrap_or(model.ln_r[k]);
-    let area_00 = eval_face_area_time_centered_ad(lnr_00, lnr_s_00, using_v_tc);
-    let inv_r2_00 = eval_face_inv_r2_ad(model, k, using_v_tc);
-
+    let (area_00, inv_r2_00) = get_area_info_opt_time_center(model, k);
     let (area_p1, inv_r2_p1) = if k + 1 < nz {
-        let lnr_p1_unshifted =
-            StarAdOrder1::variable(model.ln_r[k + 1], I_LNR_00);
-        let lnr_s_p1 = model
-            .ln_r_start
-            .get(k + 1)
-            .copied()
-            .unwrap_or(model.ln_r[k + 1]);
-        (
-            eval_face_area_time_centered_ad(
-                lnr_p1_unshifted,
-                lnr_s_p1,
-                using_v_tc,
-            )
-            .shift_p1(),
-            eval_face_inv_r2_ad(model, k + 1, using_v_tc).shift_p1(),
-        )
+        let (a_p1, ir2_p1) = get_area_info_opt_time_center(model, k + 1);
+        (a_p1.shift_p1(), ir2_p1.shift_p1())
     } else {
         (StarAdOrder1::ZERO, StarAdOrder1::ZERO)
     };
 
     let p_out = if k == 0 {
-        p_surf_opt.unwrap_or(model.ln_peos_surf_ad.exp())
+        p_surf_opt.unwrap_or_else(|| model.ln_peos_surf_ad.exp())
     } else {
         model
             .aux
@@ -117,8 +76,9 @@ pub fn do1_riemann_momentum_eqn(
         1.0
     };
     let dm_half = 0.5 * model.dm[k];
-    let gs_r =
-        inv_r2_00 * (-model.cgrav[k] * fp_00 * model.m_grav[k] * dm_half);
+    // `setup_gravity_source` (`hydro_riemann.f90:235-249`): uses `s% m(k)` and
+    // `s% m(k+1)` (`gsL = 0` at `k == nz`).
+    let gs_r = inv_r2_00 * (-model.cgrav[k] * fp_00 * model.m[k] * dm_half);
     let gs_l = if k + 1 < nz {
         let fp_p1 = if model.controls.rotation_flag
             && model.controls.use_gravity_rotation_correction
@@ -127,8 +87,7 @@ pub fn do1_riemann_momentum_eqn(
         } else {
             1.0
         };
-        inv_r2_p1
-            * (-model.cgrav[k + 1] * fp_p1 * model.m_grav[k + 1] * dm_half)
+        inv_r2_p1 * (-model.cgrav[k + 1] * fp_p1 * model.m[k + 1] * dm_half)
     } else {
         StarAdOrder1::ZERO
     };
@@ -167,23 +126,16 @@ pub fn do1_riemann_momentum_eqn(
         StarAdOrder1::ZERO
     };
 
-    let dm_k = model.dm[k].max(1.0e-30);
-    let mut dudt_expected = (flux_in - flux_out
+    let dm_k = if model.dm[k] == 0.0 {
+        1.0e-30
+    } else {
+        model.dm[k]
+    };
+    let dudt_expected = (flux_in - flux_out
         + geometry_source
         + gravity_source
         + diffusion_source)
         / dm_k;
-    if let Some(&eg) = model.aux.extra_grav.get(k) {
-        if eg.val != 0.0 || eg.d1.iter().any(|&d| d != 0.0) {
-            dudt_expected = dudt_expected + eg;
-        }
-    }
-    if model.controls.drag_coefficient > 0.0
-        && model.q[k] > model.controls.min_q_for_drag
-    {
-        dudt_expected =
-            dudt_expected - u_00 * (model.controls.drag_coefficient / dt);
-    }
 
     let u_start_k = model.u_start.get(k).copied().unwrap_or(model.u[k]);
     let dudt_actual = (u_00 - u_start_k) / dt;
@@ -193,15 +145,19 @@ pub fn do1_riemann_momentum_eqn(
         .get(k)
         .copied()
         .unwrap_or(model.energy[k]);
-    let ie_plus_ke = (e_start_k + 0.5 * u_start_k * u_start_k).max(1.0);
+    let ie_plus_ke_raw = e_start_k + 0.5 * u_start_k * u_start_k;
+    let ie_plus_ke = if ie_plus_ke_raw > 0.0 {
+        ie_plus_ke_raw
+    } else {
+        1.0
+    };
     let cs_start_k = model
         .aux
         .csound_start
         .get(k)
         .copied()
         .filter(|&c| c > 0.0)
-        .unwrap_or(model.csound[k])
-        .max(1.0);
+        .unwrap_or(model.csound[k]);
     let mut scal = dt * u_start_k.abs().max(cs_start_k) / ie_plus_ke;
     if k == 0 {
         scal *= 1.0e-2;
@@ -221,17 +177,12 @@ pub(crate) fn eval1_work_u_flag_ad(
             FOUR_PI * model.r_center * model.r_center * p_in * model.v_center,
         );
     }
-    let using_v_tc =
-        model.controls.is_velocity_time_centered(model.model_number_old)
-            && model.dt > 0.0
-            && !model.ln_r_start.is_empty();
-    let lnr_f = StarAdOrder1::variable(model.ln_r[f_idx], I_LNR_00);
-    let lnr_s_f = model
-        .ln_r_start
-        .get(f_idx)
-        .copied()
-        .unwrap_or(model.ln_r[f_idx]);
-    let area_f = eval_face_area_time_centered_ad(lnr_f, lnr_s_f, using_v_tc);
+    let using_v_tc = model
+        .controls
+        .is_velocity_time_centered(model.model_number_old)
+        && model.dt > 0.0
+        && !model.ln_r_start.is_empty();
+    let (area_f, _) = get_area_info_opt_time_center(model, f_idx);
 
     let uf_ad = model
         .aux

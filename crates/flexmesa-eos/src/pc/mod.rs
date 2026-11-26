@@ -140,15 +140,6 @@ pub fn get_pc_alfa(
     }
 }
 
-#[inline(always)]
-fn safe_log_order1(x: AutoDiffReal2VarOrder1) -> AutoDiffReal2VarOrder1 {
-    if x.val < 1.0e-99 {
-        AutoDiffReal2VarOrder1::constant(flexmesa_math::log(1.0e-99_f64))
-    } else {
-        x.ln()
-    }
-}
-
 /// Evaluate `Get_PC_Results` / `get_PC_for_eosdt` (`eospc_eval.f90` lines
 /// 99-363) directly from species mass fractions `xa`, atomic charges `azion`,
 /// and atomic weights `acmi` (`\mathrm{amu}`).
@@ -236,8 +227,8 @@ pub fn eval_pc_eos_from_weights(
     let lnfree_e =
         AutoDiffReal2VarOrder1::constant(flexmesa_math::log(zbar / abar));
     let ln_pgas = pgas.ln();
-    let ln_e = safe_log_order1(u_nkt * n * KERG * t);
-    let ln_s = safe_log_order1(s_nk * n * KERG);
+    let ln_e = (u_nkt * n * KERG * t).safe_log();
+    let ln_s = (s_nk * n * KERG).safe_log();
 
     let mut out = EosEvalOutput::zeros(0);
     let channels: [(usize, AutoDiffReal2VarOrder1); 17] = [

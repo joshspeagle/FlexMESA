@@ -375,15 +375,29 @@ fn test_hydro_temperature_gradt_dprad_lp_limiter_and_rsp_lsurf_bc() {
     let nvar = model.layout.nvar(false);
     let x_scale = compute_x_scale(&model, false);
 
-    // 1. RSP Lsurf BC at k = 0
+    // 1. RSP Lsurf BC at k = 0 (`star/private/hydro_temperature.f90:358,369`)
     model.controls.use_rsp_l_eqn_outer_bc = true;
     let mut sys_rsp = HenyeySystem::new(model.nz, nvar, x_scale.clone());
     do1_temperature_eqn(&model, 0, &mut sys_rsp);
     let r_0 = flexmesa_math::exp(model.ln_r[0]);
     let t_0 = flexmesa_math::exp(model.ln_t[0]);
-    let sigma_sb = 0.25 * CLIGHT * CRAD;
-    let l_rad = 0.5 * FOUR_PI * sigma_sb * r_0 * r_0 * flexmesa_math::pow4(t_0);
-    let l_scale = model.lum_start[0].abs().max(flexmesa_const::L_SUN);
+    let l_rad = model.controls.rsp2.lsurf_factor
+        * FOUR_PI
+        * r_0
+        * r_0
+        * CLIGHT
+        * CRAD
+        * flexmesa_math::pow4(t_0);
+    let max_l_start = model
+        .lum_start
+        .iter()
+        .copied()
+        .fold(f64::NEG_INFINITY, f64::max);
+    let l_scale = if max_l_start > 0.0 && max_l_start.is_finite() {
+        max_l_start
+    } else {
+        flexmesa_const::L_SUN
+    };
     let expected_rsp = (model.lum[0] - l_rad) / l_scale;
     assert!((sys_rsp.equ[model.layout.i_equ_l] - expected_rsp).abs() < 1.0e-12);
 

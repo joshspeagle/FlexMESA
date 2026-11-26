@@ -7,8 +7,6 @@
 //! [`crate::pulse_write`] (#491), plus the $T(\tau)$ atmosphere of the
 //! in-house pulsation grid ([`build_pulse_atmosphere_points`]).
 
-use std::fmt::Write as _;
-
 use flexmesa_const::PI4;
 
 use crate::model::StarModel;
@@ -99,15 +97,6 @@ pub fn build_pulse_atmosphere_points(
     atm
 }
 
-pub(crate) fn write_5e16(out: &mut String, vals: &[f64]) {
-    for chunk in vals.chunks(5) {
-        for &v in chunk {
-            let _ = write!(out, "{v:16.9E}");
-        }
-        out.push('\n');
-    }
-}
-
 /// `star_export_pulse_data(id, data_format, filename, add_center_point,
 /// keep_surface_point, add_atmosphere, ierr)` for the text formats `GYRE`,
 /// `FGONG` and `OSC` (`export_pulse_data`, `star/private/pulse.f90:43-86`):
@@ -127,7 +116,7 @@ pub fn export_pulse_data_text(
 ) -> Result<String, PulseWriteError> {
     let get_err = |e: GyreDataError| PulseWriteError::Upstream(e.to_string());
     let c = &model.controls;
-    match data_format.trim() {
+    match data_format.trim().to_ascii_uppercase().as_str() {
         "GYRE" => {
             let (g, pd) = star_get_pulse_data_gyre(
                 model,

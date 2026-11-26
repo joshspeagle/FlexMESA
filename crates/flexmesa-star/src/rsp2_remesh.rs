@@ -73,6 +73,8 @@ pub fn remesh_for_rsp2(model: &mut StarModel) -> Result<(), StarError> {
 
     set_hydro_vars(model, true, true)?;
     seed_rsp2_w_from_mlt_vc_if_needed(model)?;
+    crate::hydro_brunt_surf::eval_surf_bc(model)?;
+    let p_surf = flexmesa_math::exp(model.surf_pt.ln_p);
 
     // 1. Old exterior mass coordinates `xm_old` (`0..=nz_old`) and `xm_mid_old`.
     let mut xm_old = vec![0.0_f64; nz_old + 1];
@@ -186,7 +188,7 @@ pub fn remesh_for_rsp2(model: &mut StarModel) -> Result<(), StarError> {
         let col_new = interpolate_vector_pm(&xm_mid_old, &col_old, &xm_mid)
             .map_err(pm_err)?;
         for k in 0..nz {
-            xa_new[k * species + j] = col_new[k].max(0.0);
+            xa_new[k * species + j] = col_new[k];
         }
     }
     for k in 0..nz {
@@ -217,10 +219,16 @@ pub fn remesh_for_rsp2(model: &mut StarModel) -> Result<(), StarError> {
         next.aux.rsp.w_start[k] = wk;
     }
     next.xa = xa_new;
-    next.normalize_dqs()?;
-    next.set_qs();
+    next.m[0] = next.mstar;
+    next.q[0] = 1.0;
+    next.dq[0] = next.dm[0] / next.xmstar;
+    for k in 1..nz {
+        next.m[k] = next.m[k - 1] - next.dm[k - 1];
+        next.dq[k] = next.dm[k] / next.xmstar;
+        next.q[k] = next.q[k - 1] - next.dq[k - 1];
+    }
     next.set_xqs();
-    next.set_m_and_dm();
+    next.set_dm_bar();
     next.set_m_grav_and_grav();
 
     for k in 0..nz {
@@ -240,12 +248,11 @@ pub fn remesh_for_rsp2(model: &mut StarModel) -> Result<(), StarError> {
         next.lnd[k] = flexmesa_math::log(next.rho[k]);
     }
 
-    // 6. Revise `ln_t` for quasi-hydrostatic equilibrium (`327-418`).
+    // 6. Revise `ln_t` for quasi-hydrostatic equilibrium (`327-418`) using pre-remesh `P_surf`.
     crate::micro::set_basic_vars(&mut next)?;
     crate::micro::do_eos(&mut next)?;
     crate::micro::do_kap(&mut next)?;
-    crate::hydro_brunt_surf::eval_surf_bc(&mut next)?;
-    let mut p_m1 = flexmesa_math::exp(next.ln_peos_surf_ad.val);
+    let mut p_m1 = p_surf;
     for k in 0..nz {
         let dm_face = if k + 1 < nz {
             next.dm_bar[k]
@@ -278,8 +285,8 @@ pub fn remesh_for_rsp2(model: &mut StarModel) -> Result<(), StarError> {
                 "remesh_for_rsp2 eos_dt_get_t at zone {k}: {e}"
             ))
         })?;
-        next.ln_t[k] = flexmesa_math::log(inv.linear_result);
-        next.t[k] = inv.linear_result;
+        next.ln_t[k] = inv.log10_result * LN10;
+        next.t[k] = flexmesa_math::exp(next.ln_t[k]);
         p_m1 = p_00;
     }
 

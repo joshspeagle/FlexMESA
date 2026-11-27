@@ -97,6 +97,7 @@
   flexmesa dashboard render
   flexmesa dashboard check
   ```
+  Single cases run on hosted runners without the shared machine's compute slots through `case-run.yml` (modes `harness`, `trace`, `compare`; one job per case, at most 16): `gh workflow run case-run.yml --ref <branch> -f cases="star/high_z star/ns_h" -f mode=compare`.
   The strict campaign that gates a train runs on GitHub Actions (`campaign.yml` dispatched on the train branch with `harness_only`, 16 shards, 3,000 s per case; `DECISIONS #73`), and the baseline is regenerated from that run. Locally, run at most one full FlexMESA or MESA campaign at a time with `--jobs 2 --max-rss-gb 5.5 --timeout-sec 600` (scheduled campaign budget, `DECISIONS #57`); running FlexMESA and MESA campaigns concurrently exhausts 15 GiB hosts. Reuse the committed `benchmarks/history_harness/baseline_run_26_4_1.json` as the `before` snapshot whenever `main` has zero un-baselined engine commits since the last recorded baseline; when a fresh `before` run is required, build a non-editable wheel from a detached `main` worktree so active development environments are not modified while heavy campaigns stay serialized. Keep CI `timeout-minutes` headroom at `>= 45` minutes for Rust workspace and E2E jobs and `>= 75` minutes for `cargo llvm-cov` so post-step `Swatinem/rust-cache` uploads complete on cold runners.
 
 ## How to Pick Up an Audit Package (`#140`)

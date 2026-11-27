@@ -1,0 +1,285 @@
+name: Case Run
+
+# Runs a chosen set of upstream test cases on hosted runners, one job per
+# case, for any branch (dispatch with `--ref <branch>`; the workflow file must
+# exist on the default branch for the dispatch to be accepted). Intended for
+# single-case strict runs and first-divergence comparisons that would
+# otherwise occupy the shared development machine.
+#
+#   gh workflow run case-run.yml --ref <branch> \
+#     -f cases="star/high_z star/ns_h" -f mode=compare
+#
+# Modes:
+#   harness  strict `flexmesa harness run` on the case with
+#            --enforce-step-counts; case table (Markdown and JSON) uploaded.
+#   trace    `flexmesa trace` of the case; trace directory uploaded.
+#   compare  trace plus --compare against the MESA step dump of the case
+#            from the `mesa_stepdumps` bundle, or from `window` of the
+#            `mesa_stepdump_windows` bundle when the ref declares it. The job
+#            fails when the dumps differ (exit status 2); the job summary
+#            names the first differing record.
+
+on:
+  workflow_dispatch:
+    inputs:
+      cases:
+        description: >-
+          Space-separated suite/case list from the case manifest (at most 16),
+          for example "star/high_z star/ns_h"
+        required: true
+        type: string
+      mode:
+        description: "harness, trace, or compare"
+        required: false
+        type: choice
+        default: harness
+        options:
+          - harness
+          - trace
+          - compare
+      window:
+        description: >-
+          compare only: window id in the mesa_stepdump_windows bundle (empty
+          uses the first-model dump of the mesa_stepdumps bundle)
+        required: false
+        type: string
+        default: ""
+      timeout_sec:
+        description: "Per-case timeout in seconds"
+        required: false
+        type: string
+        default: "3000"
+      max_rss_gb:
+        description: "Per-case RSS memory budget in GiB"
+        required: false
+        type: string
+        default: "5.5"
+
+permissions:
+  contents: read
+
+# Reruns of the same request queue behind each other; a different request on
+# the same ref (other cases, mode or window) runs alongside. Nothing cancels
+# a run in progress, so another lane's run is never lost.
+concurrency:
+  group: case-run-${{ github.ref }}-${{ inputs.mode }}-${{ inputs.window }}-${{ inputs.cases }}
+  cancel-in-progress: false
+
+env:
+  OMP_NUM_THREADS: "4"
+  OPENBLAS_NUM_THREADS: "4"
+  MKL_NUM_THREADS: "4"
+  RAYON_NUM_THREADS: "4"
+  JAX_PLATFORMS: "cpu"
+
+jobs:
+  plan:
+    name: Validate Inputs and Plan Jobs
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+      job_minutes: ${{ steps.plan.outputs.job_minutes }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Validate inputs against the case manifest
+        id: plan
+        env:
+          CASES: ${{ inputs.cases }}
+          MODE: ${{ inputs.mode }}
+          WINDOW: ${{ inputs.window }}
+          TIMEOUT_SEC: ${{ inputs.timeout_sec }}
+          MAX_RSS_GB: ${{ inputs.max_rss_gb }}
+        run: python scripts/ci/case_run_inputs.py plan --github-output "$GITHUB_OUTPUT"
+
+  build:
+    name: Build Release Wheel
+    needs: plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      # Python, pip install and the data fetch are skipped here: this job only
+      # compiles. The case jobs install the wheel and fetch the bundles.
+      - name: Set up toolchain
+        uses: ./.github/actions/setup-flexmesa
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          install-python-pkg: "false"
+          fetch-args: "status"
+          rust-cache-key: case-run
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Build a non-editable release wheel
+        run: |
+          python -m pip install --upgrade pip "maturin==1.16.0"
+          MATURIN_PEP517_ARGS="--profile=release" \
+            python -m pip wheel --no-build-isolation --no-deps -w dist .
+
+      - name: Upload wheel
+        uses: actions/upload-artifact@v7
+        with:
+          name: case-run-wheel
+          retention-days: 3
+          if-no-files-found: error
+          path: dist/*.whl
+
+  case:
+    name: ${{ inputs.mode }} ${{ matrix.suite }}/${{ matrix.case }}
+    needs: [plan, build]
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ fromJSON(needs.plan.outputs.job_minutes) }}
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Download wheel
+        uses: actions/download-artifact@v8
+        with:
+          name: case-run-wheel
+          path: ${{ runner.temp }}/wheel
+
+      # The wheel is imported, not the checkout's src/. The harness reads the
+      # case manifest and reference histories from the working directory.
+      - name: Install FlexMESA from the wheel
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install "${{ runner.temp }}"/wheel/*.whl
+
+      - name: Cache FlexMESA data and test bundles
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/flexmesa
+          key: flexmesa-data-v1-${{ hashFiles('src/flexmesa/data/bundles.toml') }}
+
+      - name: Fetch verified physics and test bundles
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          command -v zstd >/dev/null || (sudo apt-get update && sudo apt-get install -y zstd)
+          python3 src/flexmesa/data/fetch.py fetch --include-test-inputs
+          echo "FLEXMESA_DATA_DIR=$HOME/.cache/flexmesa/data" >> "$GITHUB_ENV"
+          echo "MESA_DIR=$HOME/.cache/flexmesa/mesa_test_inputs" >> "$GITHUB_ENV"
+
+      - name: Run the case
+        id: run
+        env:
+          MODE: ${{ inputs.mode }}
+          WINDOW: ${{ inputs.window }}
+          TIMEOUT_SEC: ${{ inputs.timeout_sec }}
+          MAX_RSS_GB: ${{ inputs.max_rss_gb }}
+          SUITE: ${{ matrix.suite }}
+          CASE: ${{ matrix.case }}
+          CASE_ID: ${{ matrix.id }}
+        run: |
+          OUT_DIR="${{ runner.temp }}/case-run"
+          mkdir -p "$OUT_DIR"
+          LOG="$OUT_DIR/run.log"
+          STATUS=0
+          case "$MODE" in
+            harness)
+              flexmesa harness run \
+                --cases "$SUITE/$CASE" \
+                --numerics-mode strict \
+                --enforce-step-counts \
+                --jobs 1 \
+                --timeout-sec "$TIMEOUT_SEC" \
+                --max-rss-gb "$MAX_RSS_GB" \
+                --work-dir "$OUT_DIR/logs" \
+                --markdown-out "$OUT_DIR/case_table.md" \
+                --json-out "$OUT_DIR/case_table.json" \
+                > "$LOG" 2>&1 || STATUS=$?
+              ;;
+            trace)
+              flexmesa trace "$SUITE" "$CASE" \
+                --out "$OUT_DIR/trace" \
+                --numerics-mode strict \
+                --timeout-sec "$TIMEOUT_SEC" \
+                --max-rss-gb "$MAX_RSS_GB" \
+                > "$LOG" 2>&1 || STATUS=$?
+              ;;
+            compare)
+              DUMP=$(python scripts/ci/case_run_inputs.py dump \
+                --suite "$SUITE" --case "$CASE" --window "$WINDOW" \
+                --mesa-dir "$MESA_DIR") || { echo "no step dump" > "$LOG"; STATUS=1; }
+              if [ "$STATUS" -eq 0 ]; then
+                # Unsupported controls are ignored so the case reaches its
+                # first solver call; the case may not do what its inlist
+                # asks (DECISIONS #26), so read a difference with that in mind.
+                flexmesa trace "$SUITE" "$CASE" \
+                  --out "$OUT_DIR/trace" \
+                  --numerics-mode strict \
+                  --allow-unsupported-controls \
+                  --timeout-sec "$TIMEOUT_SEC" \
+                  --max-rss-gb "$MAX_RSS_GB" \
+                  --compare "$DUMP" \
+                  > "$LOG" 2>&1 || STATUS=$?
+              fi
+              ;;
+          esac
+          cat "$LOG"
+          {
+            echo "## $MODE $SUITE/$CASE"
+            echo ""
+            case "$MODE" in
+              harness)
+                echo "Exit status: $STATUS"
+                echo ""
+                cat "$OUT_DIR/case_table.md" 2>/dev/null || tail -n 20 "$LOG"
+                ;;
+              trace)
+                echo "Exit status: $STATUS"
+                echo ""
+                echo '```'
+                tail -n 5 "$LOG"
+                echo '```'
+                ;;
+              compare)
+                if [ "$STATUS" -eq 0 ]; then
+                  echo "Verdict: bit-identical to the MESA step dump."
+                elif [ "$STATUS" -eq 2 ]; then
+                  echo "Verdict: differs from the MESA step dump (first difference below)."
+                else
+                  echo "Verdict: run failed (exit status $STATUS)."
+                fi
+                echo ""
+                echo '```'
+                head -n 40 "$LOG"
+                echo '```'
+                ;;
+            esac
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "$STATUS" > "$OUT_DIR/exit_status.txt"
+          exit "$STATUS"
+
+      - name: Upload case outputs
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: case-run-${{ inputs.mode }}-${{ matrix.id }}
+          retention-days: 14
+          if-no-files-found: ignore
+          path: ${{ runner.temp }}/case-run/

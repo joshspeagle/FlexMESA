@@ -185,9 +185,10 @@ fn test_op_split_burn_zones_xa_start_infall_fold_and_do1_net_categories() {
         );
     }
 
-    // 3. Categories match do1_net on the post-burn xa (`struct_burn_mix.f90:1112`).
+    // 3. Categories match do1_net on the post-burn xa with the pre-burn
+    //    `abar`, `zbar`, `z2bar`, `ye` and `eta` that `burn1_zone`'s final
+    //    `do1_net` reads (`struct_burn_mix.f90:1112`, `net.f90:260-266`).
     let mut net_ref = model.clone();
-    set_basic_vars(&mut net_ref).expect("post-burn basic_vars");
     let net_info = resolve_model_net(&net_ref).expect("resolve_model_net");
     do_net(&mut net_ref, &net_info, true).expect("do1_net categories");
     for c in 0..NUM_CATEGORIES {

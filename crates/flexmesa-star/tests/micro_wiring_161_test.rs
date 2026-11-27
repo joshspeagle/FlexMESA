@@ -337,10 +337,11 @@ fn test_op_split_burn_zones_threads_rate_factors_weak_fl87_and_unscaled_neu() {
     let (eps_base, neu_base, xc12_base) = setup(1.0, 1.0, false, None);
     assert!(eps_base > 0.0 && neu_base > 0.0 && xc12_base > 0.0);
 
-    // 1. `eps_nuc_factor` scales `burn_avg_epsnuc` (while `eps_nuc` stays `0`
-    //    until `apply_burn_avg_epsnuc`) and `eps_nuc_neu_total` stays unscaled.
+    // 1. `burn_avg_epsnuc` is stored unscaled by `eps_nuc_factor`
+    //    (`struct_burn_mix.f90:910`; `eps_nuc` stays `0` until
+    //    `apply_burn_avg_epsnuc`) and `eps_nuc_neu_total` stays unscaled.
     let (eps_3x, neu_3x, _) = setup(3.0, 1.0, false, None);
-    assert!((eps_3x - 3.0 * eps_base).abs() <= 1.0e-12 * eps_3x);
+    assert!((eps_3x - eps_base).abs() <= 1.0e-12 * eps_3x);
     assert!((neu_3x - neu_base).abs() <= 1.0e-13 * neu_base);
 
     // 2. `special_rate_factor` suppresses 3-alpha `c12` synthesis when set to `0`.

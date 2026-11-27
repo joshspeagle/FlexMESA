@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-//! Standalone zero-`$MESA_DIR` MESA `26.4.1` `turb` parity tests (`#161`).
+//! Standalone zero-`$MESA_DIR` `turb` invariant tests (`#161`).
 //!
 //! Exercises regimes and code paths across `mlt`, `semiconvection`,
 //! `thermohaline`, `tdc`, and `tdc_dual` relevant to `star/1M_thermohaline`,

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-//! Regression, operation-order parity, and edge-branch coverage tests for
+//! Operation-order invariant and edge-branch coverage tests for
 //! `PC` (`pc/*`) and `Skye` (`skye/*`) EOS modules (`#161`).
 
 #![forbid(unsafe_code)]
@@ -259,9 +259,10 @@ fn test_pc_excor7_analytic_outside_table_order_and_fd_partials() {
             );
         }
 
-        // Exact MESA left-to-right operation-order witness at (rs=2.5, game=1.5):
-        // theta = 0.543 * 2.5 / 1.5 = 0.905 -> verify scalar-first polynomial bits
-        // match Fortran PC_EOS line-by-line rather than constant-last regroupings.
+        // Exact MESA left-to-right operation-order witness at
+        // (rs=2.5, game=1.5): theta = 0.543 * 2.5 / 1.5 = 0.905 -> verify
+        // scalar-first polynomial bits match upstream PC_EOS line-by-line
+        // rather than constant-last regroupings.
         let ana_w = excor7_analytic(
             AutoDiffReal2VarOrder1::var1(2.5),
             AutoDiffReal2VarOrder1::var2(1.5),
@@ -650,7 +651,7 @@ fn test_pc_untested_branches_and_component_consistency() {
 }
 
 #[test]
-fn test_skye_get_alfa_table_bounds_and_rad_order_parity() {
+fn test_skye_get_alfa_table_bounds_and_rad_order() {
     with_numerics_mode(NumericsMode::Strict, || {
         let ht = HelmTable::builtin().expect("builtin HELM table");
         let abar = 12.0_f64;

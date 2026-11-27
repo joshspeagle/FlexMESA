@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #![forbid(unsafe_code)]
-//! Parity and analytical invariant tests for `flexmesa-neu` (`#161`).
+//! Analytical invariant tests for `flexmesa-neu` (`#161`).
 //!
 //! Covers edge cases in `neu_get` (`mod_neu.f90:223-419`), `brem_neu`
 //! weak-degeneracy / liquid-metal blending (`mod_neu.f90:1208-1280`),

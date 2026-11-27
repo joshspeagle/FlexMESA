@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #![forbid(unsafe_code)]
-//! Issue `#161` MESA `26.4.1` parity tests for `flexmesa-eos` non-`PC`/non-`Skye`
+//! Issue `#161` invariant tests for `flexmesa-eos` non-`PC`/non-`Skye`
 //! modules (`gamma_de`, `helm::components`, `helm::eval`, `cms::config`,
 //! `tables_4d::blend_alfa`, `blend_dt`, and `eos_pt`).
 

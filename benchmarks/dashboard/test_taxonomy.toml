@@ -301,11 +301,10 @@ module = "utils"
 kind = "invariant"
 
 [[tests]]
-path = "crates/flexmesa-eos/tests/eos_blend_helm_161_parity_test.rs"
+path = "crates/flexmesa-eos/tests/eos_blend_helm_161_test.rs"
 language = "rust"
 module = "eos"
 kind = "invariant"
-mislabel_reason = "#563: W4 audit found no real-MESA 26.4.1 oracle comparison; rename away from restricted vocabulary under W4 (#563)"
 
 [[tests]]
 path = "crates/flexmesa-eos/tests/eos_dxa_partials_test.rs"
@@ -321,11 +320,10 @@ kind = "oracle"
 provenance = "mesa-module-hex-v1.tar.zst bundle (MESA 26.4.1 eos module IEEE-754 hex outputs)"
 
 [[tests]]
-path = "crates/flexmesa-eos/tests/eos_pc_skye_161_parity_test.rs"
+path = "crates/flexmesa-eos/tests/eos_pc_skye_161_test.rs"
 language = "rust"
 module = "eos"
 kind = "invariant"
-mislabel_reason = "#563: W4 audit found no real-MESA 26.4.1 oracle comparison; rename away from restricted vocabulary under W4 (#563)"
 
 [[tests]]
 path = "crates/flexmesa-eos/tests/eos_skye_blend_570_test.rs"
@@ -720,11 +718,10 @@ routines = [
 ]
 
 [[tests]]
-path = "crates/flexmesa-neu/tests/neu_161_parity_test.rs"
+path = "crates/flexmesa-neu/tests/neu_161_test.rs"
 language = "rust"
 module = "neu"
 kind = "invariant"
-mislabel_reason = "#563: W4 audit found no real-MESA 26.4.1 oracle comparison; rename away from restricted vocabulary under W4 (#563)"
 
 [[tests]]
 path = "crates/flexmesa-neu/tests/neu_tests.rs"
@@ -1440,11 +1437,10 @@ kind = "oracle"
 provenance = "benchmarks/fortran_mesa/turb_tdc_oracles/mesa_26_4_1_turb_tdc_oracles.tsv (#161)"
 
 [[tests]]
-path = "crates/flexmesa-turb/tests/turb_161_parity_test.rs"
+path = "crates/flexmesa-turb/tests/turb_161_test.rs"
 language = "rust"
 module = "turb"
 kind = "invariant"
-mislabel_reason = "#563: W4 audit found no real-MESA 26.4.1 oracle comparison; rename away from restricted vocabulary under W4 (#563)"
 
 [[tests]]
 path = "crates/flexmesa-turb/tests/turb_autodiff_and_mixing_tests.rs"

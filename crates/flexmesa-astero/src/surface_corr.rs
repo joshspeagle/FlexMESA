@@ -119,7 +119,7 @@ pub fn eval_surf_coefs(
             } else {
                 5000.0
             };
-            (primary * ratio * ratio * ratio, 0.0)
+            (primary * flexmesa_math::pow3(ratio), 0.0)
         }
         "combined" => {
             let ratio = if nu_max_sun > 0.0 && model_nu_max > 0.0 {
@@ -127,7 +127,7 @@ pub fn eval_surf_coefs(
             } else {
                 5000.0
             };
-            (primary * ratio * ratio * ratio, secondary / ratio)
+            (primary * flexmesa_math::pow3(ratio), secondary / ratio)
         }
         _ => (0.0, 0.0),
     }

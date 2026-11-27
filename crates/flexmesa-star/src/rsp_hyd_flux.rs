@@ -153,14 +153,22 @@ pub(crate) fn calc_lc(
     let r_k = model.r[k0];
     let pii = model.aux.rsp.pii_rsp[k0];
 
-    let pom0 =
-        dc.p4 * r_k * r_k * (dc.alfac / dc.alfas) * 0.5 * (t0 / v0 + to / vo);
+    let pom0 = dc.p4
+        * flexmesa_math::pow2(r_k)
+        * (dc.alfac / dc.alfas)
+        * 0.5
+        * (t0 / v0 + to / vo);
     let lc_00 = pom0 * pii * pom3;
     model.aux.rsp.lc_rsp[k0] = lc_00;
 
     let dlc_dw_00 = pom0 * pii * 0.5;
     let dlc_dw_out = if i >= nzn - 1 { 0.0 } else { pom0 * pii * 0.5 };
-    let pom2 = dc.p4 * r_k * r_k * pii * pom3 * 0.5 * (dc.alfac / dc.alfas);
+    let pom2 = dc.p4
+        * flexmesa_math::pow2(r_k)
+        * pii
+        * pom3
+        * 0.5
+        * (dc.alfac / dc.alfas);
     let pom = pom0 * pom3;
 
     RspLcOut {

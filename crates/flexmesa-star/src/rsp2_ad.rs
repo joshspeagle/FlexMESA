@@ -121,7 +121,7 @@ pub fn eval_rsp2_ptrb_cell_ad(
     };
     let rho_ad = StarAdOrder1::variable(model.lnd[k], lnd_slot).exp();
     let w_ad = wrap_w(model, k, w_slot);
-    let ptrb_now = rho_ad * w_ad * w_ad * coeff;
+    let ptrb_now = rho_ad * w_ad.pow2() * coeff;
 
     let time_center = model.controls.using_velocity_time_centering
         && model.controls.include_p_in_velocity_time_centering;

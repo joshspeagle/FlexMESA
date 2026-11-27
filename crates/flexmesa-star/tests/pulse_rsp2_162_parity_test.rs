@@ -136,8 +136,8 @@ fn test_pulse_cafein_matches_mesa_formulas_log_deriv_and_formatting() {
     let m_star = model.m_grav[0];
     let cgrav1 = model.cgrav[0];
     let s_units = (flexmesa_math::pow3(r_star) / (cgrav1 * m_star)).sqrt();
-    let erg_units = cgrav1 * m_star * m_star / r_star;
-    let k_units = cgrav1 * m_star * m_star / (r_star * CGAS);
+    let erg_units = cgrav1 * flexmesa_math::pow2(m_star) / r_star;
+    let k_units = cgrav1 * flexmesa_math::pow2(m_star) / (r_star * CGAS);
     assert_eq!(g[1].to_bits(), (r_star / R_SUN).to_bits());
     assert_eq!(g[11].to_bits(), k_units.to_bits());
 

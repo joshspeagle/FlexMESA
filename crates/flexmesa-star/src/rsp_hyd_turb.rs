@@ -276,7 +276,8 @@ pub fn calc_source_sink(
     let d_damp_der_00 = tem_d * (wk.dhp_der_00[i] + wk.dhp_der_out[i - 1]);
     let d_damp_der_out = tem_d * wk.dhp_der_out[i];
     let d_damp_der_in = tem_d * wk.dhp_der_00[i - 1];
-    let d_damp_dw_00 = 3.0 * (dc.cede / dc.alfa) / pom2_d * w_k * w_k;
+    let d_damp_dw_00 =
+        3.0 * (dc.cede / dc.alfa) / pom2_d * flexmesa_math::pow2(w_k);
 
     let mut dampr_p = [0.0_f64; 14];
     if dc.gammar == 0.0 {
@@ -284,7 +285,7 @@ pub fn calc_source_sink(
     } else {
         let pom_r =
             (dc.gammar * dc.gammar) / (dc.alfa * dc.alfa) * 4.0 * dc.sig;
-        let pom2a = flexmesa_math::pow3(t_k) * vol_k * vol_k;
+        let pom2a = flexmesa_math::pow3(t_k) * flexmesa_math::pow2(vol_k);
         let pom2b = 1.0 / (cp_k * op_k);
         let pom2_r = pom2a * pom2b;
         let pom3_r = w_k * w_k;
@@ -331,9 +332,8 @@ pub fn calc_source_sink(
         dampr_p[8] = tem_r
             * (hp0 * wk.dhp_dt_00[i] + hpi * wk.dhp_dt_out[i - 1])
             + tem_r2
-                * vol_k
-                * vol_k
-                * (3.0 * t_k * t_k
+                * flexmesa_math::pow2(vol_k)
+                * (3.0 * flexmesa_math::pow2(t_k)
                     - flexmesa_math::pow3(t_k)
                         * ((1.0 / cp_k) * wk.dcp_dt[i]
                             + (1.0 / op_k) * wk.dk_dt[i]))

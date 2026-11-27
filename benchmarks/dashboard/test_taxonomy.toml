@@ -88,6 +88,12 @@ module = "astero"
 kind = "invariant"
 
 [[tests]]
+path = "crates/flexmesa-astero/tests/pown_grouping_581c_test.rs"
+language = "rust"
+module = "astero"
+kind = "invariant"
+
+[[tests]]
 path = "crates/flexmesa-atm/tests/atm_161_parity_test.rs"
 language = "rust"
 module = "atm"
@@ -1192,6 +1198,12 @@ kind = "invariant"
 
 [[tests]]
 path = "crates/flexmesa-star/tests/pown_grouping_581_test.rs"
+language = "rust"
+module = "star"
+kind = "invariant"
+
+[[tests]]
+path = "crates/flexmesa-star/tests/pown_grouping_581c_test.rs"
 language = "rust"
 module = "star"
 kind = "invariant"

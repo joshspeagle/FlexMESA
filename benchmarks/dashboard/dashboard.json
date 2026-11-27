@@ -2065,9 +2065,9 @@
     ],
     "open_pull_requests": [
       {
-        "number": 603,
-        "title": "bench(gyre): commit the generator recipe for the G4 complex LAPACK/BLAS vectors (#602)",
-        "draft": false
+        "number": 609,
+        "title": "Train 14 (draft): manifest terminations checked against MESA, remove-center port, oracle tests, harness step counts",
+        "draft": true
       }
     ],
     "deferred_169": [
@@ -4198,6 +4198,19 @@
     {
       "date_utc": "2026-11-27",
       "commit": "72660d6",
+      "event": "main merge",
+      "engine_ported_pct": "30.7",
+      "all_verified_pct": "1.1",
+      "cases_passing": "46",
+      "rust_cov_pct": "77.0",
+      "python_cov_pct": "87.8",
+      "closed_140": "32",
+      "total_140": "56",
+      "deferred_169": "75"
+    },
+    {
+      "date_utc": "2026-11-27",
+      "commit": "2456762",
       "event": "main merge",
       "engine_ported_pct": "30.7",
       "all_verified_pct": "1.1",

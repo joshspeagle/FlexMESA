@@ -340,8 +340,8 @@
   ],
   "open_pull_requests": [
     {
-      "number": 615,
-      "title": "Train 15 (draft): powN grouping, per-zone other_alpha_mlt, step-dump diagnostics",
+      "number": 639,
+      "title": "Train 16 (draft): #573 complete, solver and hydro parity fixes, pisn, tzo, routine tooling",
       "draft": true
     }
   ],
@@ -944,6 +944,38 @@
       "state": "open",
       "kind": "upstream-bug",
       "parity_pending": true,
+      "needs_confirmation": false
+    },
+    {
+      "number": 617,
+      "title": "[Deferred bug] Timestep-limit indices collide: Tlim_lg_XSi_cntr equals Tlim_lg_XNe_cntr and Tlim_XH_cntr equals Tlim_lg_XO_cntr",
+      "state": "open",
+      "kind": "upstream-bug",
+      "parity_pending": true,
+      "needs_confirmation": false
+    },
+    {
+      "number": 635,
+      "title": "[Deferred bug] hydro_rotation/rotation_mix_info/relax: retrograde cap sign drop, uninit tidal_frac, PRIVATE(ierr), set_ST xmageta0+xmageta1 div, and relax omega unit comparison",
+      "state": "open",
+      "kind": "upstream-bug",
+      "parity_pending": false,
+      "needs_confirmation": false
+    },
+    {
+      "number": 636,
+      "title": "[Deferred bug] hydro_vars/atm_support: missing log() in fixed_Teff/fixed_Tsurf lnP_surf, set_grads OOB for nz<=4, set_cgrav ierr overwrite, and eos_proc missing return on error",
+      "state": "open",
+      "kind": "upstream-bug",
+      "parity_pending": false,
+      "needs_confirmation": false
+    },
+    {
+      "number": 638,
+      "title": "[Deferred bug] eps_grav/hydro_riemann/hydro_temperature: missing ierr on bad composition term, i_L_00 index in d_uface_domega, mlt_vc_old(k) index, and OMP stop",
+      "state": "open",
+      "kind": "upstream-bug",
+      "parity_pending": false,
       "needs_confirmation": false
     }
   ]

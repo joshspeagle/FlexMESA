@@ -21,7 +21,7 @@
         "verified_total": 5640,
         "pct_ported": 35.1,
         "pct_verified": 4.7,
-        "rust_lines": 111018,
+        "rust_lines": 111279,
         "python_jax_lines": 3987
       },
       {
@@ -55,7 +55,7 @@
         "verified_total": 0,
         "pct_ported": 18.7,
         "pct_verified": 0.0,
-        "rust_lines": 13799,
+        "rust_lines": 13916,
         "python_jax_lines": 1244
       },
       {
@@ -123,7 +123,7 @@
         "verified_total": 0,
         "pct_ported": 0.0,
         "pct_verified": 0.0,
-        "rust_lines": 11372,
+        "rust_lines": 11499,
         "python_jax_lines": 728
       },
       {
@@ -455,7 +455,7 @@
       "upstream_panel_modules": 46
     },
     "infrastructure_lines": {
-      "rust_bridge_testing_bench": 22847,
+      "rust_bridge_testing_bench": 22857,
       "python_testing_bench": 23447
     }
   },
@@ -593,12 +593,12 @@
         "total": 90,
         "mesa_26_4_1_ref": 86,
         "no_reference_yet": 4,
-        "strict_validated": 74,
-        "diagnostic_runs": 16,
-        "reached_termination": 74,
-        "within_numeric_tol": 56,
-        "passing": 50,
-        "declared_gaps": 33,
+        "strict_validated": 78,
+        "diagnostic_runs": 12,
+        "reached_termination": 75,
+        "within_numeric_tol": 59,
+        "passing": 55,
+        "declared_gaps": 30,
         "undeclared_failures": 0
       },
       "binary": {
@@ -654,14 +654,13 @@
       }
     ],
     "gaps_by_issue": {
-      "#161": 15,
+      "#161": 13,
       "#162": 7,
       "#154": 6,
       "#157": 5,
-      "#587": 4,
       "#158": 3,
+      "#587": 3,
       "#160": 2,
-      "#170": 2,
       "#231": 1
     },
     "comparison_figures_count": 0
@@ -1295,14 +1294,14 @@
     "unlinked_locations": []
   },
   "test_taxonomy": {
-    "total_files": 303,
-    "total_tests": 1733,
+    "total_files": 312,
+    "total_tests": 1772,
     "by_kind": {
       "oracle": {
         "files": 131
       },
       "invariant": {
-        "files": 170
+        "files": 179
       },
       "regression": {
         "files": 2
@@ -1310,12 +1309,12 @@
     },
     "by_language": {
       "rust": {
-        "files": 214,
-        "tests": 1057
+        "files": 220,
+        "tests": 1078
       },
       "python": {
-        "files": 89,
-        "tests": 676
+        "files": 92,
+        "tests": 694
       }
     },
     "mislabeled_count": 2,
@@ -1413,10 +1412,10 @@
       {
         "module": "star",
         "oracle_files": 38,
-        "invariant_files": 74,
+        "invariant_files": 78,
         "regression_files": 1,
-        "total_files": 113,
-        "total_tests": 681,
+        "total_files": 117,
+        "total_tests": 698,
         "mislabeled_files": 2,
         "mapped_routines": 189,
         "listed_oracle_routines": 25,
@@ -1425,10 +1424,10 @@
       {
         "module": "binary",
         "oracle_files": 5,
-        "invariant_files": 12,
+        "invariant_files": 13,
         "regression_files": 0,
-        "total_files": 17,
-        "total_tests": 86,
+        "total_files": 18,
+        "total_tests": 90,
         "mislabeled_files": 0,
         "mapped_routines": 70,
         "listed_oracle_routines": 2,
@@ -1437,10 +1436,10 @@
       {
         "module": "astero",
         "oracle_files": 1,
-        "invariant_files": 8,
+        "invariant_files": 9,
         "regression_files": 0,
-        "total_files": 9,
-        "total_tests": 55,
+        "total_files": 10,
+        "total_tests": 56,
         "mislabeled_files": 0,
         "mapped_routines": 0,
         "listed_oracle_routines": 0,
@@ -1701,10 +1700,10 @@
       {
         "module": "tooling",
         "oracle_files": 2,
-        "invariant_files": 30,
+        "invariant_files": 33,
         "regression_files": 1,
-        "total_files": 33,
-        "total_tests": 283,
+        "total_files": 36,
+        "total_tests": 300,
         "mislabeled_files": 0,
         "mapped_routines": 0,
         "listed_oracle_routines": 0,
@@ -2054,8 +2053,8 @@
     ],
     "open_pull_requests": [
       {
-        "number": 615,
-        "title": "Train 15 (draft): powN grouping, per-zone other_alpha_mlt, step-dump diagnostics",
+        "number": 639,
+        "title": "Train 16 (draft): #573 complete, solver and hydro parity fixes, pisn, tzo, routine tooling",
         "draft": true
       }
     ],
@@ -2658,6 +2657,38 @@
         "state": "open",
         "kind": "upstream-bug",
         "parity_pending": true,
+        "needs_confirmation": false
+      },
+      {
+        "number": 617,
+        "title": "[Deferred bug] Timestep-limit indices collide: Tlim_lg_XSi_cntr equals Tlim_lg_XNe_cntr and Tlim_XH_cntr equals Tlim_lg_XO_cntr",
+        "state": "open",
+        "kind": "upstream-bug",
+        "parity_pending": true,
+        "needs_confirmation": false
+      },
+      {
+        "number": 635,
+        "title": "[Deferred bug] hydro_rotation/rotation_mix_info/relax: retrograde cap sign drop, uninit tidal_frac, PRIVATE(ierr), set_ST xmageta0+xmageta1 div, and relax omega unit comparison",
+        "state": "open",
+        "kind": "upstream-bug",
+        "parity_pending": false,
+        "needs_confirmation": false
+      },
+      {
+        "number": 636,
+        "title": "[Deferred bug] hydro_vars/atm_support: missing log() in fixed_Teff/fixed_Tsurf lnP_surf, set_grads OOB for nz<=4, set_cgrav ierr overwrite, and eos_proc missing return on error",
+        "state": "open",
+        "kind": "upstream-bug",
+        "parity_pending": false,
+        "needs_confirmation": false
+      },
+      {
+        "number": 638,
+        "title": "[Deferred bug] eps_grav/hydro_riemann/hydro_temperature: missing ierr on bad composition term, i_L_00 index in d_uface_domega, mlt_vc_old(k) index, and OMP stop",
+        "state": "open",
+        "kind": "upstream-bug",
+        "parity_pending": false,
         "needs_confirmation": false
       }
     ]
@@ -4248,6 +4279,19 @@
       "closed_140": "32",
       "total_140": "56",
       "deferred_169": "75"
+    },
+    {
+      "date_utc": "2026-11-27",
+      "commit": "6197a69",
+      "event": "main merge",
+      "engine_ported_pct": "30.7",
+      "all_verified_pct": "1.1",
+      "cases_passing": "62",
+      "rust_cov_pct": "77.0",
+      "python_cov_pct": "87.8",
+      "closed_140": "32",
+      "total_140": "56",
+      "deferred_169": "79"
     }
   ]
 }

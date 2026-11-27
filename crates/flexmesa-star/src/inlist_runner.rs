@@ -921,6 +921,11 @@ fn run_inlist_stage_with_logs_inner(
         }
     } else {
         for _ in 0..cap {
+            // Step dump with a selected stage: stop once its window is done.
+            if crate::stepdump::stop_after_window() {
+                termination_code = String::from("stepdump_window_done");
+                break;
+            }
             // `before_step_loop` (`star/job/run_star_support.f90:567-577`)
             // runs before `extras_start_step` (`:191-194`).
             if model.job.enable_adaptive_network {
@@ -1408,6 +1413,7 @@ pub fn run_test_suite_case_with_extras(
                 output_mod,
                 logs_dir,
             } => {
+                crate::stepdump::begin_stage();
                 let bundle = InlistBundle::from_file_in_case_dir_with_options(
                     case_dir, inlist, load_opts,
                 )?;
@@ -1502,6 +1508,10 @@ pub fn run_test_suite_case_with_extras(
                 stage_reports.push(rep);
                 current_model = Some(model);
                 if stage_abnormal || stage_term_mismatch {
+                    break;
+                }
+                // A selected step-dump stage is the last one that matters.
+                if crate::stepdump::selected_stage_ended() {
                     break;
                 }
             }

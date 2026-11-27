@@ -48,17 +48,38 @@ def test_header_parse_stops_at_first_record_line() -> None:
     assert fdt.parse_header(text) == {"stage": "2", "first_model": "90"}
 
 
-def test_window_with_later_stage_or_occurrence_is_skipped() -> None:
-    assert "stage 2" in fdt.window_skip_reason({"stage": "2"})
-    assert "occurrence 2" in fdt.window_skip_reason({"occurrence": "2"})
-    assert fdt.window_skip_reason({"stage": "1", "occurrence": "1"}) == ""
+def test_later_stage_is_skipped_only_for_suites_without_stage_marks() -> None:
+    assert "stage 2" in fdt.window_skip_reason({"stage": "2"}, "binary")
+    assert fdt.window_skip_reason({"stage": "2"}, "star") == ""
+    assert fdt.window_skip_reason({"occurrence": "2"}, "binary") == ""
     assert fdt.window_skip_reason({}) == ""
+
+
+def test_selector_args_follow_the_header_stage_and_occurrence() -> None:
+    assert fdt.window_selector_args({"stage": "2"}) == ["--stage", "2"]
+    assert fdt.window_selector_args({"stage": "all", "occurrence": "2"}) == [
+        "--occurrence",
+        "2",
+    ]
+    both = {"stage": "3", "occurrence": "2"}
+    assert fdt.window_selector_args(both) == [
+        "--stage",
+        "3",
+        "--occurrence",
+        "2",
+    ]
+    assert fdt.window_selector_args({"stage": "all", "occurrence": "1"}) == []
 
 
 def test_max_steps_is_none_at_run_start_and_past_window_otherwise() -> None:
     assert fdt.window_max_steps({"first_model": "first of the run"}) is None
     got = fdt.window_max_steps({"first_model": "70", "steps_per_star": "12"})
     assert got is not None and got > 70 + 12
+
+
+def test_max_steps_is_none_in_a_selected_stage() -> None:
+    head = {"first_model": "90", "steps_per_star": "12", "stage": "2"}
+    assert fdt.window_max_steps(head) is None
 
 
 def test_ranking_orders_by_mesa_model_and_output_is_deterministic() -> None:

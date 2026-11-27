@@ -32,6 +32,13 @@ from flexmesa.testing import (
 )
 
 
+def _positive_int(raw: str) -> int:
+    val = int(raw)
+    if val < 1:
+        raise argparse.ArgumentTypeError(f"must be >= 1, got {val}")
+    return val
+
+
 def _non_negative_int(raw: str) -> int:
     val = int(raw)
     if val < 0:
@@ -211,6 +218,31 @@ def _build_trace_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--stage",
+        type=_positive_int,
+        default=None,
+        metavar="S",
+        help=(
+            "With --compare: dump only the S-th stage of a multi-inlist case "
+            "that reaches the solver (1-based; one MESA process per ./rn "
+            "stage). Earlier stages run without dumping and the run stops "
+            "after the window. Default: the stage recorded in the MESA "
+            "dump's header, else every stage."
+        ),
+    )
+    parser.add_argument(
+        "--occurrence",
+        type=_positive_int,
+        default=None,
+        metavar="K",
+        help=(
+            "With --compare: the window opens the K-th time the model "
+            "number rises to the dump's first model (a relax phase restarts "
+            "the numbering). Default: the occurrence in the MESA dump's "
+            "header, else 1."
+        ),
+    )
+    parser.add_argument(
         "--ignore",
         nargs="*",
         default=[],
@@ -246,6 +278,37 @@ def _stepdump_window(mesa_dump: pathlib.Path) -> tuple[int, int | None]:
     return steps, first
 
 
+def _stepdump_selectors(
+    mesa_dump: pathlib.Path,
+    stage: int | None,
+    occurrence: int | None,
+) -> tuple[int | None, int]:
+    """Returns the stage and occurrence of the window to dump.
+
+    Args:
+        mesa_dump: MESA dump whose ``# stage:`` and ``# occurrence:`` header
+            lines (``all`` and ``1`` when absent) give the defaults.
+        stage: Explicit ``--stage`` or ``None``.
+        occurrence: Explicit ``--occurrence`` or ``None``.
+
+    Returns:
+        ``(stage, occurrence)``; ``stage`` is ``None`` for every stage.
+    """
+    head: dict[str, str] = {}
+    with mesa_dump.open(encoding="utf-8") as fh:
+        for line in fh:
+            if not line.startswith("#"):
+                break
+            key, _, val = line[1:].partition(":")
+            head[key.strip()] = val.strip()
+    if stage is None and head.get("stage", "all").isdigit():
+        stage = int(head["stage"])
+    if occurrence is None:
+        occ = head.get("occurrence", "1")
+        occurrence = int(occ) if occ.isdigit() and int(occ) > 0 else 1
+    return stage, occurrence
+
+
 def trace_main(argv: list[str] | None = None) -> int:
     """Execute ``flexmesa trace star|binary|astero <case>``.
 
@@ -260,7 +323,10 @@ def trace_main(argv: list[str] | None = None) -> int:
     if cli_args and cli_args[0] == "_worker":
         return _run_worker(cli_args[1:])
 
-    ns = _build_trace_parser().parse_args(cli_args)
+    parser = _build_trace_parser()
+    ns = parser.parse_args(cli_args)
+    if ns.compare is None and (ns.stage or ns.occurrence):
+        parser.error("--stage and --occurrence need --compare")
     eff_mode = harness_runner.resolve_effective_numerics_mode(ns.numerics_mode)
     flex_dump: pathlib.Path | None = None
     if ns.compare is not None:
@@ -274,9 +340,19 @@ def trace_main(argv: list[str] | None = None) -> int:
             os.environ["FLEXMESA_STEPDUMP_FIRST"] = str(first)
         else:
             os.environ.pop("FLEXMESA_STEPDUMP_FIRST", None)
-        if first is None and ns.max_steps is None:
+        stage, occurrence = _stepdump_selectors(
+            pathlib.Path(ns.compare), ns.stage, ns.occurrence
+        )
+        os.environ["FLEXMESA_STEPDUMP_OCCURRENCE"] = str(occurrence)
+        if stage is None:
+            os.environ.pop("FLEXMESA_STEPDUMP_STAGE", None)
+        else:
+            os.environ["FLEXMESA_STEPDUMP_STAGE"] = str(stage)
+        if first is None and stage is None and ns.max_steps is None:
             # A window at the start of the run needs only its own models; a
-            # later window runs up to the timeout or --max-steps.
+            # later window runs up to the timeout or --max-steps. A selected
+            # stage stops itself after the window, and the earlier stages
+            # must run to their own end, so no cap applies.
             ns.max_steps = steps
     case_dir = harness_runner.resolve_case_dir(
         ns.suite, ns.case, mesa_dir=ns.mesa_dir

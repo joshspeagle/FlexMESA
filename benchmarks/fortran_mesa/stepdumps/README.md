@@ -188,12 +188,24 @@ python first_divergence_table.py --dumps <dir of suite/case.stepdump> \
     --work <scratch> --markdown-out table.md --json-out table.json
 ```
 
-FlexMESA's own dump (`crates/flexmesa-star/src/stepdump.rs`) honours
-`FLEXMESA_STEPDUMP_STEPS` and `FLEXMESA_STEPDUMP_FIRST` and has no occurrence
-or stage selector. A MESA window with `--occurrence` above 1 or a `--stage`
-therefore compares only against a FlexMESA dump that opens at the same place
-in its run; until the FlexMESA dump gains the selectors, such a window is read
-directly (it is a complete dump) rather than through `--compare`.
+FlexMESA's own dump (`crates/flexmesa-star/src/stepdump.rs`) takes the same
+window selectors as the MESA patch, through `flexmesa trace --compare`:
+
+| `flexmesa trace` option | Environment variable | Meaning |
+| :--- | :--- | :--- |
+| (from the dump) | `FLEXMESA_STEPDUMP_STEPS` | Models dumped per star. |
+| (from the dump) | `FLEXMESA_STEPDUMP_FIRST` | First model of the window. |
+| `--occurrence K` | `FLEXMESA_STEPDUMP_OCCURRENCE` | The window opens at the K-th rise of the model number to the first model. |
+| `--stage S` | `FLEXMESA_STEPDUMP_STAGE` | Dump only the S-th stage that reaches the solver. Earlier stages run without dumping and uncapped; the run stops after the window. |
+
+Without the options, `trace --compare` takes the stage and occurrence from
+the MESA dump's `# stage:` and `# occurrence:` header lines, so a window
+dump compares against the run that matches it. The FlexMESA dump records the
+same header lines. A stage is one `./rn` inlist stage that reaches the solver,
+as a MESA process counts once it writes a `RUN` record. Only the `star` runner
+marks stage boundaries, so `--stage` above 1 is for `star` cases; a later stage
+of a `binary` or `astero` case is skipped by `first_divergence_table.py`.
+The case-run workflow passes both options from the window id.
 
 ## The mid-run window bundle
 

@@ -2038,6 +2038,12 @@ module = "tooling"
 kind = "invariant"
 
 [[tests]]
+path = "tests/test_trace_stage_selector.py"
+language = "python"
+module = "tooling"
+kind = "invariant"
+
+[[tests]]
 path = "tests/test_stepdump_windows.py"
 language = "python"
 module = "tooling"

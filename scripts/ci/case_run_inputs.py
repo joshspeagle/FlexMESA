@@ -39,6 +39,9 @@ MAX_RSS_LIMIT_GB = 14.0
 WINDOWS_BUNDLE = "mesa_stepdump_windows"
 _NAME_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.+-]*")
 _WINDOW_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,63}")
+# <case>_s<stage>_k<occurrence>_m<first model>_n<models>; the case name may
+# itself contain underscores, so the four trailing fields anchor the match.
+_WINDOW_FIELDS_RE = re.compile(r"_s(\d+)_k(\d+)_m(\d+)_n(\d+)")
 
 
 class InputError(ValueError):
@@ -186,6 +189,36 @@ def resolve_dump(
     return path
 
 
+def window_trace_args(window: str) -> list[str]:
+    """Returns the ``flexmesa trace`` options that select a window.
+
+    Args:
+        window: Window id ``<case>_s<S>_k<K>_m<M>_n<N>`` (stage, occurrence,
+            first model, models), or empty for the first window of the run.
+
+    Returns:
+        ``--stage S`` when ``S > 1`` and ``--occurrence K`` when ``K > 1``;
+        empty for the default window.
+
+    Raises:
+        InputError: If a non-empty id has no such fields.
+    """
+    if not window:
+        return []
+    found = _WINDOW_FIELDS_RE.search(window)
+    if found is None or found.end() != len(window):
+        raise InputError(
+            f"window id has no _s<S>_k<K>_m<M>_n<N> fields: {window!r}"
+        )
+    stage, occ = int(found.group(1)), int(found.group(2))
+    args: list[str] = []
+    if stage > 1:
+        args += ["--stage", str(stage)]
+    if occ > 1:
+        args += ["--occurrence", str(occ)]
+    return args
+
+
 def main(argv: list[str] | None = None) -> int:
     """Runs the ``plan`` or ``dump`` subcommand."""
     parser = argparse.ArgumentParser(description=__doc__)
@@ -197,10 +230,14 @@ def main(argv: list[str] | None = None) -> int:
     p_dump.add_argument("--case", required=True)
     p_dump.add_argument("--window", default="")
     p_dump.add_argument("--mesa-dir", type=pathlib.Path, required=True)
+    p_args = sub.add_parser("window-args")
+    p_args.add_argument("--window", default="")
     ns = parser.parse_args(argv)
     root = pathlib.Path.cwd()
     try:
-        if ns.cmd == "plan":
+        if ns.cmd == "window-args":
+            print(" ".join(window_trace_args(ns.window)))
+        elif ns.cmd == "plan":
             outputs = plan(os.environ, root)
             with ns.github_output.open("a", encoding="utf-8") as fh:
                 for key, val in outputs.items():

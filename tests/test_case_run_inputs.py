@@ -116,3 +116,27 @@ def test_resolve_dump_reports_missing_dump_and_unknown_case(
         cri.resolve_dump(tmp_path, "star", "ns_h", "", KNOWN)
     with pytest.raises(cri.InputError, match="manifest"):
         cri.resolve_dump(tmp_path, "star", "nope", "", KNOWN)
+
+
+def test_window_trace_args_read_stage_and_occurrence_from_the_id() -> None:
+    assert cri.window_trace_args("ns_h_s2_k1_m90_n12") == ["--stage", "2"]
+    assert cri.window_trace_args("wd_stable_h_burn_s1_k2_m70_n12") == [
+        "--occurrence",
+        "2",
+    ]
+    assert cri.window_trace_args("make_planets_s3_k2_m9_n3") == [
+        "--stage",
+        "3",
+        "--occurrence",
+        "2",
+    ]
+
+
+def test_window_trace_args_default_window_selects_nothing() -> None:
+    assert cri.window_trace_args("") == []
+    assert cri.window_trace_args("x_s1_k1_m1_n3") == []
+
+
+def test_window_trace_args_reject_an_id_without_window_fields() -> None:
+    with pytest.raises(cri.InputError):
+        cri.window_trace_args("ns_h_window")

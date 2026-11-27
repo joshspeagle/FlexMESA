@@ -235,10 +235,17 @@ jobs:
                 # Unsupported controls are ignored so the case reaches its
                 # first solver call; the case may not do what its inlist
                 # asks (DECISIONS #26), so read a difference with that in mind.
+                # The window id carries stage and occurrence (_s<S>_k<K>_...).
+                WINDOW_ARGS=$(python scripts/ci/case_run_inputs.py window-args \
+                  --window "$WINDOW") || { echo "bad window id" > "$LOG"; STATUS=1; }
+              fi
+              if [ "$STATUS" -eq 0 ]; then
+                # shellcheck disable=SC2086
                 flexmesa trace "$SUITE" "$CASE" \
                   --out "$OUT_DIR/trace" \
                   --numerics-mode strict \
                   --allow-unsupported-controls \
+                  $WINDOW_ARGS \
                   --timeout-sec "$TIMEOUT_SEC" \
                   --max-rss-gb "$MAX_RSS_GB" \
                   --compare "$DUMP" \

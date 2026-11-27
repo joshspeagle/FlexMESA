@@ -450,8 +450,8 @@ pub fn eval_surface_and_center_work(model: &StarModel) -> (f64, f64) {
         && model
             .controls
             .use_p_d_1_div_rho_form_of_work_when_time_centering_velocity;
-    let skip_peos = !u_flag_only
-        && model.controls.energy_eqn_option == EnergyEqnOption::EpsGrav;
+    // `skip_P = eps_grav_form` (`star/private/hydro_energy.f90:166`).
+    let skip_peos = eps_grav_form(model);
 
     let p_in = model.peos_start.get(nz - 1).copied().unwrap_or(0.0);
     let work_inward_at_center =
@@ -571,7 +571,10 @@ pub(crate) fn do1_energy_eqn_with_ergs_error(
         let total_rates =
             crate::riemann_ad::eval_u_flag_total_energy_rates_ad(model, k, dt);
         -dl_dm + sources + others - d_eturb_dt - total_rates
-    } else if v_flag_only {
+    } else if v_flag_only || eps_grav_form(model) {
+        // The hydrostatic `eps_grav` form reaches here too: upstream always
+        // subtracts `dwork_dm` evaluated with `skip_P = eps_grav_form`
+        // (`star/private/hydro_energy.f90:102-104,166-192`).
         let simple_pdv = vel_tc
             && model
                 .controls
@@ -618,8 +621,6 @@ pub(crate) fn do1_energy_eqn_with_ergs_error(
                     - de_dt
             }
         }
-    } else if eps_grav_form(model) {
-        -dl_dm + sources + others - d_eturb_dt + model.eps_grav_ad[k]
     } else {
         has_dedt_dxa = true;
         let de_dt = setup_de_dt(model, k, dt);

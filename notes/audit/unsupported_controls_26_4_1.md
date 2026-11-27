@@ -6,9 +6,9 @@ Generated mechanically against **MESA 26.4.1** (git tag `26.4.1`, commit `c8c202
 ## Summary
 
 - **Total manifest cases scanned**: `106`
-- **Cases passing strict `#147` validation**: `96`
-- **Cases rejected by strict `#147` validation**: `10`
-- **Distinct unsupported physics/solver controls encountered**: `45`
+- **Cases passing strict `#147` validation**: `97`
+- **Cases rejected by strict `#147` validation**: `9`
+- **Distinct unsupported physics/solver controls encountered**: `44`
 - **Distinct unknown/misspelled controls encountered**: `0`
 - **Cases using headless plotting controls (`#173` / `DECISIONS #25`)**: `78` (`895` distinct keys)
 

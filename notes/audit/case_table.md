@@ -19,8 +19,8 @@ Generated mechanically by `flexmesa harness` from `benchmarks/history_harness/ca
 | Diagnostic runs reaching upstream termination | 4 |
 | Acceptance passes against MESA `26.4.1` (`pass`) | 44 |
 | Interim `0b2e6bb` comparisons within manifest tolerance | 0 |
-| Declared known gaps (`known_gaps.toml`) | 58 |
-| Undeclared failures | 0 |
+| Declared known gaps (`known_gaps.toml`) | 56 |
+| Undeclared failures | 2 |
 
 ## Per-Case Status and Reference Availability
 
@@ -49,7 +49,7 @@ Generated mechanically by `flexmesa harness` from `benchmarks/history_harness/ca
 | `star` | `carbon_kh` | `mesa_26_4_1` | `log_center_density_upper_limit` | strict | `log_center_density_upper_limit` | 2362 (2362) | 0 (0) | 2.0 [4848] (2.0 [487/238r]) | - | 0.00% (0) | +0.00% | `log_Teff`: 0.000e+00 | - | - | pass |
 | `star` | `cburn_inward` | `mesa_26_4_1` | `extras_finish_step` | strict | `timeout` | 213 (459) | 7 (12) | 10.0 [2130] (7.4 [3406]) | - | 3.11% (40) | -4.18% | `log_L`: 5.238e-02 | 14 | #157 | declared gap (#157) |
 | `star` | `ccsn_IIp` | `mesa_26_4_1` | `extras_finish_step` | diagnostic (2 controls ignored) | `redo_limit` | 0 (286) | 0 (0) | - (5.3 [164/31r]) | - | - | - | - | - | #161 | declared gap (#161) |
-| `star` | `check_pulse_atm` | `mesa_26_4_1` | `max_model_number` | strict | `max_model_number` | 75 (75) | 0 (0) | 8.2 [618] (8.1 [130/16r]) | - | 0.63% (5) | -0.04% | `log_R`: 1.408e-02 | 10 | #161 | declared gap (#161) |
+| `star` | `check_pulse_atm` | `mesa_26_4_1` | `max_model_number` | strict | `max_model_number` | 75 (75) | 0 (0) | 8.2 [618] (8.1 [130/16r]) | - | 0.63% (5) | -0.04% | `log_R`: 1.408e-02 | 10 | - | fail (undeclared) |
 | `star` | `check_redo` | `mesa_26_4_1` | `xa_central_lower_limit` | strict | `xa_central_lower_limit` | 108 (108) | 0 (0) | 8.6 [925] (8.3 [192/23r]) | - | 0.00% (0) | +0.00% | `log_Teff`: 0.000e+00 | - | - | pass |
 | `star` | `conductive_flame` | `mesa_26_4_1` | `flame reached halfway point` | diagnostic (1 controls ignored) | - | 0 (459) | 0 (0) | - (9.9 [466/47r]) | - | - | - | - | - | #161 | declared gap (#161) |
 | `star` | `conserve_angular_momentum` | `mesa_26_4_1` | `he_core_mass_limit` | strict | `he_core_mass_limit` | 507 (537) | 0 (0) | 6.0 [3028] (6.0 [328/55r]) | - | 8.35% (123) | +0.00% | `log_L`: 1.206e-01 | 269 | #158 | declared gap (#158) |
@@ -112,7 +112,7 @@ Generated mechanically by `flexmesa harness` from `benchmarks/history_harness/ca
 | `star` | `wd_acc_small_dm` | `mesa_26_4_1` | `max_age` | strict | `max_age` | 89 (89) | 0 (0) | 4.2 [375] (4.4 [83/19r]) | - | 0.00% (0) | +0.00% | `log_Teff`: 0.000e+00 | - | - | pass |
 | `star` | `wd_aic` | `mesa_26_4_1` | `PASS: A=20 electron captures have started a thermal runaway in the core` | diagnostic (5 controls ignored) | `timeout` | 1090 (524) | 144 (28) | 7.8 [8453] (8.4 [453/54r]) | - | 7.70% (80) | +2.01% | `log_center_T`: 2.948e-01 | 138 | #161 | declared gap (#161) |
 | `star` | `wd_c_core_ignition` | `mesa_26_4_1` | `power_nuc_burn_upper_limit` | strict | `power_nuc_burn_upper_limit` | 647 (668) | 7 (9) | 5.0 [3262] (5.3 [362/68r]) | - | 10.33% (126) | +0.00% | `log_center_T`: 2.568e-01 | 380 | #161 | declared gap (#161) |
-| `star` | `wd_cool_0.6M` | `mesa_26_4_1` | `log_center_temp_lower_limit` | strict | `log_center_temp_lower_limit` | 220 (219) | 3 (3) | 5.9 [1292] (5.8 [133/23r]) | - | 0.77% (10) | -0.94% | `log_L`: 8.944e-03 | 181 | #156 | declared gap (#156) |
+| `star` | `wd_cool_0.6M` | `mesa_26_4_1` | `log_center_temp_lower_limit` | strict | `log_center_temp_lower_limit` | 220 (219) | 3 (3) | 5.9 [1292] (5.8 [133/23r]) | - | 0.77% (10) | -0.94% | `log_L`: 8.944e-03 | 181 | - | fail (undeclared) |
 | `star` | `wd_diffusion` | `mesa_26_4_1` | `Teff_lower_limit` | strict | `Teff_lower_limit` | 153 (153) | 2 (2) | 5.6 [862] (5.6 [862]) | - | 0.00% (0) | +0.00% | `log_Teff`: 0.000e+00 | - | - | pass |
 | `star` | `wd_he_shell_ignition` | `mesa_26_4_1` | `power_he_burn_upper_limit` | strict | `power_he_burn_upper_limit` | 1111 (1112) | 16 (16) | 3.6 [3974] (3.6 [401/112r]) | - | 1.49% (19) | -0.00% | `log_L`: 1.327e-03 | - | #587 | declared gap (#587) |
 | `star` | `wd_nova_burst` | `mesa_26_4_1` | `extras_check_model` | strict | `extras_check_model` | 487 (480) | 18 (19) | 6.3 [2997] (6.0 [578/97r]) | - | 30.97% (581) | +0.00% | `log_L`: 4.769e+00 | 229 | #161 | declared gap (#161) |
@@ -275,7 +275,7 @@ Model number at the end of each stage, FlexMESA / MESA. A `pass` in this list is
 | `star` | `rsp_Type_II_Cepheid` | declared gap (#162) | 14680 / 14683 |
 | `star` | `twin_studies` | declared gap (#154) | 537 / 80, 252 / 80 |
 | `star` | `wd_c_core_ignition` | declared gap (#161) | 647 / 668 |
-| `star` | `wd_cool_0.6M` | declared gap (#156) | 220 / 219 |
+| `star` | `wd_cool_0.6M` | fail (undeclared) | 220 / 219 |
 | `star` | `wd_he_shell_ignition` | declared gap (#587) | 1111 / 1112 |
 | `star` | `wd_nova_burst` | declared gap (#161) | 11 / 11, 476 / 480 |
 | `star` | `wd_stable_h_burn` | declared gap (#154) | 826 / 829 |

@@ -8,9 +8,9 @@
   },
   "summary": {
     "total_cases": 106,
-    "strict_pass_cases": 96,
-    "strict_fail_cases": 10,
-    "distinct_unsupported_controls": 45,
+    "strict_pass_cases": 97,
+    "strict_fail_cases": 9,
+    "distinct_unsupported_controls": 44,
     "distinct_unknown_controls": 0,
     "cases_with_headless_plotting": 78,
     "distinct_headless_plotting_keys": 895

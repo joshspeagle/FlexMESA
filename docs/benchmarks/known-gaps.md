@@ -9,14 +9,14 @@ Instead of capping steps or loosening checks to force green runs, unfinished or 
 
 | Suite | Target Cases | Stored `26.4.1` Refs | `no_reference_yet` | Strict-Validated | Diagnostic Runs | Reach Upstream Term | Declared Gaps | Verified Pass |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| `star` | 90 | 86 | 4 | 72 | 18 | 68 | 41 | 39 |
+| `star` | 90 | 86 | 4 | 72 | 18 | 68 | 39 | 39 |
 | `binary` | 8 | 8 | 0 | 8 | 0 | 8 | 4 | 4 |
 | `astero` | 8 | 8 | 0 | 8 | 0 | 3 | 5 | 1 |
-| **Total** | **106** | **102** | **4** | **88** | **18** | **79** | **50** | **44** |
+| **Total** | **106** | **102** | **4** | **88** | **18** | **79** | **48** | **44** |
 
 `Strict-Validated` counts cases whose unmodified inlists pass strict control validation (`#147`). `Diagnostic Runs` counts cases that strict validation rejects and that were rerun with the unsupported controls ignored; their numbers show where the engine stands and can never count as a pass (`DECISIONS #26`). `Reach Upstream Term` counts runs of either kind.
 
-- **Undeclared Failures**: `0`
+- **Undeclared Failures**: `2`
 - **Within Numeric Tolerance While Governed as Gaps**: `13` cases (`star/gyre_in_mesa_bcep` ([#170](https://github.com/joshspeagle/FlexMESA/issues/170)), `star/gyre_in_mesa_ms` ([#170](https://github.com/joshspeagle/FlexMESA/issues/170)), `star/gyre_in_mesa_rsg` ([#170](https://github.com/joshspeagle/FlexMESA/issues/170)), `star/gyre_in_mesa_spb` ([#170](https://github.com/joshspeagle/FlexMESA/issues/170)), `star/gyre_in_mesa_wd` ([#157](https://github.com/joshspeagle/FlexMESA/issues/157)), `star/high_z` ([#587](https://github.com/joshspeagle/FlexMESA/issues/587)), `star/make_planets` ([#587](https://github.com/joshspeagle/FlexMESA/issues/587)), `star/ns_h` ([#587](https://github.com/joshspeagle/FlexMESA/issues/587)), `star/rsp_gyre` ([#170](https://github.com/joshspeagle/FlexMESA/issues/170)), `star/wd_he_shell_ignition` ([#587](https://github.com/joshspeagle/FlexMESA/issues/587)), `binary/wind_fed_bhhmxb` ([#587](https://github.com/joshspeagle/FlexMESA/issues/587)), `astero/astero_adipls` ([#171](https://github.com/joshspeagle/FlexMESA/issues/171)), `astero/surface_effects` ([#162](https://github.com/joshspeagle/FlexMESA/issues/162))) meet numeric tolerances while remaining declared gaps under active tracking issues.
 
 ## Cases Without a Stored `26.4.1` Reference (`no_reference_yet`)
@@ -34,18 +34,17 @@ Cases lacking a committed MESA `26.4.1` baseline report `no reference yet` and c
 
 | Tracking Issue | Declared Case Count | Primary Focus |
 | :--- | ---: | :--- |
-| [#161](https://github.com/joshspeagle/FlexMESA/issues/161) | 18 | Restore upstream EOS, opacity, network, and atm control paths |
+| [#161](https://github.com/joshspeagle/FlexMESA/issues/161) | 17 | Restore upstream EOS, opacity, network, and atm control paths |
 | [#162](https://github.com/joshspeagle/FlexMESA/issues/162) | 8 | Align `astero` search and chi-squared drivers |
 | [#154](https://github.com/joshspeagle/FlexMESA/issues/154) | 6 | Align `timestep.rs` and `star` mass-change `do_adjust_mass` |
 | [#157](https://github.com/joshspeagle/FlexMESA/issues/157) | 5 | Restore MLT/TDC controls and remove non-upstream fallbacks |
 | [#587](https://github.com/joshspeagle/FlexMESA/issues/587) | 5 | Open #140 parity sub-issue |
 | [#158](https://github.com/joshspeagle/FlexMESA/issues/158) | 3 | Align shellular rotation solver variables and Spruit-Tayler |
 | [#160](https://github.com/joshspeagle/FlexMESA/issues/160) | 2 | Align coupled `BinarySystem` step ordering, tides, and RLOF |
-| [#156](https://github.com/joshspeagle/FlexMESA/issues/156) | 1 | Port full Burgers element diffusion and radiative levitation |
 | [#170](https://github.com/joshspeagle/FlexMESA/issues/170) | 1 | Integrate bundled `GYRE` oscillation eigensolver |
 | [#231](https://github.com/joshspeagle/FlexMESA/issues/231) | 1 | Open #140 parity sub-issue |
 
-## Complete Known-Gaps Registry (50 Cases)
+## Complete Known-Gaps Registry (48 Cases)
 
 | Suite | Case | Issue | Expected Term | Baseline Outcome | Mechanism |
 | :--- | :--- | :--- | :--- | :--- | :--- |
@@ -59,7 +58,6 @@ Cases lacking a committed MESA `26.4.1` baseline report `no reference yet` and c
 | `star` | `c13_pocket` | [#161](https://github.com/joshspeagle/FlexMESA/issues/161) | `one thermal pulse cycle complete` | `timeout` (667 steps; diagnostic (1 controls ignored)) | AGB third-dredge-up C13-pocket evolution hits memory/wall-time guard with unsupported controls::atm_off_table_option (#161). |
 | `star` | `cburn_inward` | [#157](https://github.com/joshspeagle/FlexMESA/issues/157) | `extras_finish_step` | `timeout` (213 steps; strict) | Case history_columns.list requests unported MLT++ gradT_excess_alpha column. |
 | `star` | `ccsn_IIp` | [#161](https://github.com/joshspeagle/FlexMESA/issues/161) | `extras_finish_step` | `redo_limit` (0 steps; diagnostic (2 controls ignored)) | Case history_columns.list requests unported hydro shock and bolometric colors columns. |
-| `star` | `check_pulse_atm` | [#161](https://github.com/joshspeagle/FlexMESA/issues/161) | `max_model_number` | `max_model_number` (75 steps; strict) | Atmosphere boundary reconstruction departs from MESA 26.4.1 (#161, #162). |
 | `star` | `conductive_flame` | [#161](https://github.com/joshspeagle/FlexMESA/issues/161) | `flame reached halfway point` | `error` (0 steps; diagnostic (1 controls ignored)) | Case uses unported use_other_build_initial_model and use_other_surface_pt custom-physics hooks (#154, #161). |
 | `star` | `conserve_angular_momentum` | [#158](https://github.com/joshspeagle/FlexMESA/issues/158) | `he_core_mass_limit` | `he_core_mass_limit` (507 steps; strict) | Diagnostic run reaches he_core_mass_limit with 2 unsupported rotational controls (change_d_omega_flag, new_d_omega_flag; #158). |
 | `star` | `custom_rates` | [#161](https://github.com/joshspeagle/FlexMESA/issues/161) | `log_center_temp_upper_limit` | `max_model_number` (600 steps; diagnostic (4 controls ignored)) | Custom rate table evolution fails to converge after retries (#161, #152). |
@@ -85,7 +83,6 @@ Cases lacking a committed MESA `26.4.1` baseline report `no reference yet` and c
 | `star` | `tzo` | [#161](https://github.com/joshspeagle/FlexMESA/issues/161) | `PASS: Have reached requested NS mass` | `timeout` (924 steps; diagnostic (1 controls ignored)) | Case history_columns.list requests unported colors add_abs_mag and hydro shock columns. |
 | `star` | `wd_aic` | [#161](https://github.com/joshspeagle/FlexMESA/issues/161) | `PASS: A=20 electron captures have started a thermal runaway in the core` | `timeout` (1090 steps; diagnostic (5 controls ignored)) | Accretion-induced collapse WD requires unbundled wd_aic.net and unsupported Coulomb/weak-rate controls (#161). |
 | `star` | `wd_c_core_ignition` | [#161](https://github.com/joshspeagle/FlexMESA/issues/161) | `power_nuc_burn_upper_limit` | `power_nuc_burn_upper_limit` (647 steps; strict) | Strict run hits power_nuc_burn_upper_limit at step 1 (23 retries vs MESA 668 steps, 9 retries) (#161, #152). |
-| `star` | `wd_cool_0.6M` | [#156](https://github.com/joshspeagle/FlexMESA/issues/156) | `log_center_temp_lower_limit` | `log_center_temp_lower_limit` (220 steps; strict) | Strict run reaches log_center_temp_lower_limit (218 steps vs MESA 219, 3 retries matching MESA 26.4.1) with rel_star_age (-0.66%), num_zones (3.21%), and cooling-track deviations from step 37 (#156, #152). |
 | `star` | `wd_he_shell_ignition` | [#587](https://github.com/joshspeagle/FlexMESA/issues/587) | `power_he_burn_upper_limit` | `power_he_burn_upper_limit` (1111 steps; strict) | Within every MESA 26.4.1 history tolerance but takes a different number of steps than MESA per stage (FlexMESA [1111] vs MESA [1112]), which DECISIONS #70 does not count as a pass (#587). |
 | `star` | `wd_nova_burst` | [#161](https://github.com/joshspeagle/FlexMESA/issues/161) | `extras_check_model` | `extras_check_model` (487 steps; strict) | Classical nova burst strict validation rejects unported star_job::auto_extend_net, and diagnostic runs hit the 300 s wall-time cap (#161, #144, #231). |
 | `star` | `wd_stable_h_burn` | [#154](https://github.com/joshspeagle/FlexMESA/issues/154) | `star_mass_max_limit` | `star_mass_max_limit` (826 steps; strict) | Stable H-burning accreting WD awaits mass-change relaxation controls star_job::dlgm_per_step and star_job::dlogtau_factor (#154). |
@@ -185,7 +182,7 @@ from flexmesa.testing import case_manifest
 manifest = case_manifest.load_case_manifest()
 gaps = case_manifest.load_known_gaps()
 assert len(manifest.cases) == 106
-assert len(gaps) == 58
+assert len(gaps) == 56
 no_ref = [
     c.case for c in manifest.cases
     if c.reference_status == "no_reference_yet"

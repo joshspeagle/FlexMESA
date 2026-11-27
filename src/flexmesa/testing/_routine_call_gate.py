@@ -5,13 +5,25 @@ Enforces `DECISIONS #65-#68` / `#563` Wave 3b-1 routine-claim rules:
 - Rust bare calls count only when imported from or path-qualified by the
   target `flexmesa_<crate>` (including `use ...::sym as alias` and glob
   imports scoped to the mapped Rust module).
-- Locally defined `fn sym` functions in test files never satisfy claims.
+- Locally defined `fn sym` functions and `let`-bound locals (`let sym = ...`)
+  in test files never satisfy bare-call claims.
 - Struct field reads (`z.d1val1`, `o16.binding_energy`) never satisfy claims.
 - Method calls (`x.sym(...)`) count only when the mapped Rust target symbol is
   a method on a type whose type (or constructor) is imported/referenced from the
   target crate.
+- Calls inside `#[ignore]` / `#[cfg(any())]` Rust items or `@pytest.mark.skip`
+  / `@unittest.skip` Python definitions do not satisfy claims.
 - Python claims count only when the callee resolves in the AST to a name
-  imported from `flexmesa._rust` (or an attribute on `_rust`).
+  imported from `flexmesa._rust` (or via `_rust` / `flexmesa._rust`).
+
+Known static-analysis limitations:
+- `Type::meth` method calls verify that `Type` (or one of its constructors) is
+  referenced from the target crate and `.meth(...)` is called somewhere in the
+  file, without full Rust type inference tying the specific receiver
+  expression to `Type`.
+- Python AST matching does not perform control-flow reachability, so calls
+  inside never-invoked unskipped helper functions or aliases bound to a locally
+  reassigned `_rust` name are not distinguished at runtime.
 """
 
 from __future__ import annotations
@@ -19,7 +31,7 @@ from __future__ import annotations
 import ast
 import pathlib
 import re
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
 
 _RUST_USE_RE = re.compile(r"\b(?:pub(?:\([^)]*\))?\s+)?use\s+([^;]+);")
@@ -27,6 +39,9 @@ _RUST_FN_DEF_RE = re.compile(
     r"\bfn\s+([A-Za-z_][A-Za-z0-9_]*)\s*(?:<[^;{}]*?>)?\s*\("
 )
 _RUST_LET_VAR_RE = re.compile(r"\blet\s+(?:mut\s+)?([A-Za-z_][A-Za-z0-9_]*)\b")
+_RUST_DISABLED_ATTR_RE = re.compile(
+    r"(?<!\w)#\[\s*(?:ignore(?:\s*=[^\]\n]*)?|cfg\s*\(\s*any\s*\(\s*\)\s*\))\s*\]"
+)
 _RUST_DOT_MEMBER_RE = re.compile(r"(?<!\.)\.\s*([A-Za-z_][A-Za-z0-9_]*)")
 _RUST_METHOD_CALL_RE = re.compile(
     r"(?<!\.)\.\s*([A-Za-z_][A-Za-z0-9_]*)\s*(?:::<[^;{}]*?>)?\s*\("
@@ -166,6 +181,56 @@ def _expand_rust_use_tree(
     return [(full, local)]
 
 
+def _strip_disabled_rust_items(code: str) -> str:
+    """Strip Rust items annotated with `#[ignore]` or `#[cfg(any())]`."""
+    out: list[str] = []
+    pos = 0
+    n = len(code)
+    for match in _RUST_DISABLED_ATTR_RE.finditer(code):
+        start = match.start()
+        if start < pos:
+            continue
+        out.append(code[pos:start])
+        out.append(" ")
+        i = match.end()
+        paren_bracket_depth = 0
+        body_start = -1
+        semi_end = -1
+        while i < n:
+            ch = code[i]
+            if ch in "([":
+                paren_bracket_depth += 1
+            elif ch in ")]":
+                if paren_bracket_depth > 0:
+                    paren_bracket_depth -= 1
+            elif paren_bracket_depth == 0:
+                if ch == "{":
+                    body_start = i
+                    break
+                if ch == ";":
+                    semi_end = i + 1
+                    break
+                if ch == "}":
+                    break
+            i += 1
+        if body_start != -1:
+            brace_depth = 1
+            j = body_start + 1
+            while j < n and brace_depth > 0:
+                if code[j] == "{":
+                    brace_depth += 1
+                elif code[j] == "}":
+                    brace_depth -= 1
+                j += 1
+            pos = j
+        elif semi_end != -1:
+            pos = semi_end
+        else:
+            pos = match.end()
+    out.append(code[pos:])
+    return "".join(out)
+
+
 def extract_rust_evidence(code: str) -> RustCallEvidence:
     """Parse stripped Rust test code into crate-scoped call evidence.
 
@@ -209,15 +274,17 @@ def extract_rust_evidence(code: str) -> RustCallEvidence:
             if len(segs) == 1 or orig == orig.lower():
                 path_prefixes.setdefault(crate, set()).add(local)
 
-    body_raw = _RUST_USE_RE.sub(" ", code)
+    body_raw = _strip_disabled_rust_items(_RUST_USE_RE.sub(" ", code))
     local_fn_defs = set(_RUST_FN_DEF_RE.findall(body_raw)) - {"_test_fn"}
     body = _RUST_FN_DEF_RE.sub("fn _def(", body_raw)
     local_vars = set(_RUST_LET_VAR_RE.findall(body))
     method_calls = frozenset(_RUST_METHOD_CALL_RE.findall(body))
     body_no_dots = _RUST_DOT_MEMBER_RE.sub(" ", body)
 
-    bare_calls = frozenset(_RUST_BARE_CALL_RE.findall(body_no_dots)) - (
-        local_fn_defs
+    bare_calls = (
+        frozenset(_RUST_BARE_CALL_RE.findall(body_no_dots))
+        - local_fn_defs
+        - local_vars
     )
     bare_refs = (
         frozenset(_RUST_BARE_REF_RE.findall(body_no_dots))
@@ -245,6 +312,30 @@ def extract_rust_evidence(code: str) -> RustCallEvidence:
     )
 
 
+def _is_skip_decorator(dec: ast.expr) -> bool:
+    """Return True if decorator unconditionally marks a test/class skipped."""
+    target = dec.func if isinstance(dec, ast.Call) else dec
+    if not isinstance(target, ast.Attribute) or target.attr != "skip":
+        return False
+    val = target.value
+    if isinstance(val, ast.Attribute) and val.attr == "mark":
+        return isinstance(val.value, ast.Name) and val.value.id == "pytest"
+    return isinstance(val, ast.Name) and val.id in {"mark", "unittest"}
+
+
+def _iter_active_ast_nodes(root: ast.AST) -> Iterator[ast.AST]:
+    """Yield AST nodes outside `@pytest.mark.skip` / `@unittest.skip` items."""
+    stack: list[ast.AST] = [root]
+    while stack:
+        node = stack.pop()
+        if isinstance(
+            node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
+        ) and any(_is_skip_decorator(d) for d in node.decorator_list):
+            continue
+        yield node
+        stack.extend(ast.iter_child_nodes(node))
+
+
 def extract_python_evidence(path: pathlib.Path) -> PythonCallEvidence:
     """Resolve `flexmesa._rust` imports and `_rust`-rooted calls via AST."""
     try:
@@ -252,6 +343,7 @@ def extract_python_evidence(path: pathlib.Path) -> PythonCallEvidence:
     except SyntaxError:
         return PythonCallEvidence(imports_rust=False, called_syms=frozenset())
 
+    active_nodes = list(_iter_active_ast_nodes(tree))
     rust_mods: set[str] = set()
     fm_mods: set[str] = set()
     direct_syms: dict[str, str] = {}
@@ -259,7 +351,7 @@ def extract_python_evidence(path: pathlib.Path) -> PythonCallEvidence:
     rust_glob = False
     imports_rust = False
 
-    for node in ast.walk(tree):
+    for node in active_nodes:
         if isinstance(
             node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
         ):
@@ -292,7 +384,7 @@ def extract_python_evidence(path: pathlib.Path) -> PythonCallEvidence:
                         direct_syms[alias.asname or alias.name] = alias.name
 
     called_syms: set[str] = set()
-    for node in ast.walk(tree):
+    for node in active_nodes:
         if not isinstance(node, ast.Call):
             continue
         func = node.func
@@ -313,6 +405,7 @@ def extract_python_evidence(path: pathlib.Path) -> PythonCallEvidence:
                 and isinstance(recv.value, ast.Name)
                 and recv.value.id in fm_mods
             ):
+                imports_rust = True
                 called_syms.add(func.attr)
 
     return PythonCallEvidence(

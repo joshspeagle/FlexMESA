@@ -169,3 +169,7 @@ print(
 ::: flexmesa.testing.routine_backlog
 
 ::: flexmesa.testing.routine_table
+
+`flexmesa.testing.artifact_compare` judges a case that takes zero steps and writes a result file (`star/rsp_check_2nd_crossing`): it parses the file and compares every field with the committed MESA `26.4.1` copy at the precision of the upstream format statement (`DECISIONS #76`, `#606`).
+
+::: flexmesa.testing.artifact_compare

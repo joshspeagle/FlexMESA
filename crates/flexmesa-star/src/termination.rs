@@ -750,12 +750,8 @@ fn eval_check_limits_core(
     let power_h_burn = ctx.powers.power_h_burn;
     let power_he_burn = ctx.powers.power_he_burn;
     let power_z_burn = ctx.powers.power_z_burn;
-    let teff = if model.teff > 0.0 {
-        model.teff
-    } else {
-        ctx.phot.black_body_t
-    };
-    let log_teff = safe_log10(teff);
+    // `star/private/do_one_utils.f90:657`: `log_Teff = safe_log10(s% Teff)`.
+    let log_teff = safe_log10(model.teff);
     let lnuc_div_l = if ctx.phot.l_lsun > 0.0 {
         power_nuc_burn / ctx.phot.l_lsun
     } else {
@@ -1219,19 +1215,24 @@ fn eval_check_limits_core(
             ts.abs_diff_lg_lh_lg_ls_limit,
             "abs_diff_lg_LH_lg_Ls_limit",
         );
-    } else if let Some(lim) = c.teff_lower_limit.filter(|&lim| teff <= lim) {
+    } else if let Some(lim) =
+        c.teff_lower_limit.filter(|&lim| model.teff <= lim)
+    {
+        // `star/private/do_one_utils.f90:958-964`: compare `s% Teff` directly.
         outcome = compare_to_target(
             model,
             "Teff <= Teff_lower_limit",
-            teff,
+            model.teff,
             lim,
             "Teff_lower_limit",
         );
-    } else if let Some(lim) = c.teff_upper_limit.filter(|&lim| teff >= lim) {
+    } else if let Some(lim) =
+        c.teff_upper_limit.filter(|&lim| model.teff >= lim)
+    {
         outcome = compare_to_target(
             model,
             "Teff >= Teff_upper_limit",
-            teff,
+            model.teff,
             lim,
             "Teff_upper_limit",
         );
@@ -1895,4 +1896,253 @@ pub fn check_termination_limits_with_history(
     let ctx = StepReportContext::compute(model);
     let phase = eval_phase_of_evolution(model, &ctx, false);
     eval_check_limits_core(model, &ctx, phase)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::controls::{StarControls, StarJobControls};
+    use flexmesa_const::{L_SUN, STANDARD_CGRAV};
+
+    fn make_solar_test_model() -> StarModel {
+        let cat = NuclideCatalog::builtin_ref();
+        let ih1 = cat.get_nuclide_index("h1").expect("h1 nuclide");
+        let ihe4 = cat.get_nuclide_index("he4").expect("he4 nuclide");
+        let controls = StarControls {
+            initial_mass: 1.0,
+            initial_z: 0.02,
+            zbase: 0.02,
+            ..StarControls::default()
+        };
+        let nz = 4_usize;
+        let mut model = StarModel::new(
+            nz,
+            vec![ih1, ihe4],
+            StarJobControls::default(),
+            controls,
+        );
+        model.mstar = M_SUN;
+        model.xmstar = M_SUN;
+        model.dt = 1000.0 * SECYER;
+        for k in 0..nz {
+            let frac = (nz - k) as f64 / (nz as f64);
+            model.dq[k] = 1.0 / (nz as f64);
+            model.q[k] = frac;
+            model.dm[k] = M_SUN / (nz as f64);
+            model.m[k] = frac * M_SUN;
+            model.m_grav[k] = model.m[k];
+            model.r[k] = frac * R_SUN;
+            model.rmid[k] = (frac - 0.5 / (nz as f64)).max(1.0e-3) * R_SUN;
+            model.ln_r[k] = flexmesa_math::log(model.r[k]);
+            model.t[k] = 1.0e4 * (1.0 + k as f64);
+            model.ln_t[k] = flexmesa_math::log(model.t[k]);
+            model.rho[k] = 1.0e-4 * (1.0 + k as f64);
+            model.lnd[k] = flexmesa_math::log(model.rho[k]);
+            model.peos[k] = 1.0e6;
+            model.pgas[k] = 1.0e6;
+            model.ln_peos[k] = flexmesa_math::log(1.0e6);
+            model.ln_pgas[k] = flexmesa_math::log(1.0e6);
+            model.ln_s[k] = 20.0;
+            model.entropy[k] = flexmesa_math::exp(20.0) * AMU / KERG;
+            model.gamma1[k] = 5.0 / 3.0;
+            model.gam[k] = 1.0;
+            model.ye[k] = 0.85;
+            model.csound[k] = 1.0e6;
+            model.opacity[k] = 1.0;
+            model.grav[k] =
+                STANDARD_CGRAV * model.m[k] / (model.r[k] * model.r[k]);
+            model.lum[k] = L_SUN;
+            model.cell_xa_mut(k)[0] = 0.7;
+            model.cell_xa_mut(k)[1] = 0.3;
+            model.xh_mass[k] = 0.7;
+            model.yhe_mass[k] = 0.3;
+        }
+        model.ln_t_surf_ad.val = model.ln_t[0];
+        model
+    }
+
+    #[test]
+    fn test_log_teff_non_positive_or_non_finite_uses_safe_log10_without_black_body_fallback(
+    ) {
+        let base = make_solar_test_model();
+        let ctx = StepReportContext::compute(&base);
+        assert!(ctx.phot.black_body_t > 3000.0);
+        assert!(safe_log10(ctx.phot.black_body_t) > 3.4);
+
+        let safe_zero = safe_log10(0.0);
+        assert_eq!(safe_zero.to_bits(), 0xc058_bfff_ffff_ffff);
+
+        let cases = [
+            (0.0_f64, 0xc058_bfff_ffff_ffff_u64, safe_zero),
+            (-500.0_f64, 0xc058_bfff_ffff_ffff_u64, safe_zero),
+            (f64::NAN, (-99.0_f64).to_bits(), -99.0),
+            (f64::INFINITY, (-99.0_f64).to_bits(), -99.0),
+        ];
+
+        for (teff, expected_bits, expected_val) in cases {
+            assert_eq!(safe_log10(teff).to_bits(), expected_bits);
+
+            for lim in [-50.0, 3.0] {
+                let mut m = base.clone();
+                m.teff = teff;
+                m.controls.log_teff_lower_limit = Some(lim);
+                let out = do_check_limits(&mut m, Some(&ctx), false)
+                    .expect("log_Teff_lower_limit check");
+                assert!(
+                    matches!(
+                        out,
+                        LimitCheckOutcome::Terminate { ref code, .. }
+                            if code == "log_Teff_lower_limit"
+                    ),
+                    "teff={teff:?}, lim={lim}: expected Terminate, got {out:?}"
+                );
+            }
+
+            // Exact value verification through `compare_to_target`.
+            let mut m_exact = base.clone();
+            m_exact.teff = teff;
+            m_exact.controls.ts_stop.when_to_stop_atol = 0.0;
+            m_exact.controls.ts_stop.when_to_stop_rtol = 0.0;
+            m_exact.controls.log_teff_lower_limit = Some(expected_val);
+            let out_exact = do_check_limits(&mut m_exact, Some(&ctx), false)
+                .expect("exact log_Teff match");
+            assert!(
+                matches!(
+                    out_exact,
+                    LimitCheckOutcome::Terminate { ref code, .. }
+                        if code == "log_Teff_lower_limit"
+                ),
+                "teff={teff:?}: exact target hit failed, got {out_exact:?}"
+            );
+
+            let mut m_redo = base.clone();
+            m_redo.teff = teff;
+            m_redo.controls.ts_stop.when_to_stop_atol = 0.0;
+            m_redo.controls.ts_stop.when_to_stop_rtol = 0.0;
+            m_redo.controls.log_teff_lower_limit = Some(-50.0);
+            let out_redo = do_check_limits(&mut m_redo, Some(&ctx), false)
+                .expect("redo formatted value");
+            let expected_str = format!("value={expected_val:.6e}");
+            assert!(
+                matches!(
+                    out_redo,
+                    LimitCheckOutcome::Redo { ref reason, .. }
+                        if reason.contains(&expected_str)
+                ),
+                "teff={teff:?}: expected '{expected_str}', got {out_redo:?}"
+            );
+
+            // Upper limit below log10(black_body_t) must NOT trigger.
+            for pass_ctx in [Some(&ctx), None] {
+                let mut m_upper = base.clone();
+                m_upper.teff = teff;
+                m_upper.controls.log_teff_upper_limit = Some(3.0);
+                let out_upper = do_check_limits(&mut m_upper, pass_ctx, false)
+                    .expect("log_Teff_upper_limit check");
+                assert_eq!(
+                    out_upper,
+                    LimitCheckOutcome::KeepGoing,
+                    "teff={teff:?}: must not trigger upper limit via black_body_t"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_log_teff_positive_and_teff_limits_match_upstream() {
+        let base = make_solar_test_model();
+        let ctx = StepReportContext::compute(&base);
+        assert!(ctx.phot.black_body_t > 3000.0);
+
+        let expected_log_teff = safe_log10(5777.0);
+
+        // Positive `model.teff` stays within open limits.
+        let mut m_keep = base.clone();
+        m_keep.teff = 5777.0;
+        m_keep.controls.log_teff_lower_limit = Some(expected_log_teff - 0.01);
+        m_keep.controls.log_teff_upper_limit = Some(expected_log_teff + 0.01);
+        assert_eq!(
+            do_check_limits(&mut m_keep, Some(&ctx), false)
+                .expect("keep going within log_teff limits"),
+            LimitCheckOutcome::KeepGoing
+        );
+
+        // Exact lower and upper `log_Teff` hits with zero stopping tolerance.
+        let mut m_lo = base.clone();
+        m_lo.teff = 5777.0;
+        m_lo.controls.ts_stop.when_to_stop_atol = 0.0;
+        m_lo.controls.ts_stop.when_to_stop_rtol = 0.0;
+        m_lo.controls.log_teff_lower_limit = Some(expected_log_teff);
+        assert!(matches!(
+            do_check_limits(&mut m_lo, Some(&ctx), false)
+                .expect("positive log_Teff_lower_limit"),
+            LimitCheckOutcome::Terminate { ref code, .. }
+                if code == "log_Teff_lower_limit"
+        ));
+
+        let mut m_hi = base.clone();
+        m_hi.teff = 5777.0;
+        m_hi.controls.ts_stop.when_to_stop_atol = 0.0;
+        m_hi.controls.ts_stop.when_to_stop_rtol = 0.0;
+        m_hi.controls.log_teff_upper_limit = Some(expected_log_teff);
+        assert!(matches!(
+            do_check_limits(&mut m_hi, Some(&ctx), false)
+                .expect("positive log_Teff_upper_limit"),
+            LimitCheckOutcome::Terminate { ref code, .. }
+                if code == "log_Teff_upper_limit"
+        ));
+
+        // `Teff_lower_limit` / `Teff_upper_limit` also read `model.teff`
+        // directly (`star/private/do_one_utils.f90:958-964`).
+        for teff in [0.0, -500.0] {
+            let mut m_tlo = base.clone();
+            m_tlo.teff = teff;
+            m_tlo.controls.teff_lower_limit = Some(1000.0);
+            assert!(matches!(
+                do_check_limits(&mut m_tlo, Some(&ctx), false)
+                    .expect("Teff_lower_limit"),
+                LimitCheckOutcome::Terminate { ref code, .. }
+                    if code == "Teff_lower_limit"
+            ));
+
+            let mut m_thi = base.clone();
+            m_thi.teff = teff;
+            m_thi.controls.teff_upper_limit = Some(3000.0);
+            assert_eq!(
+                do_check_limits(&mut m_thi, Some(&ctx), false)
+                    .expect("Teff_upper_limit keep going"),
+                LimitCheckOutcome::KeepGoing
+            );
+        }
+
+        let mut m_nan = base.clone();
+        m_nan.teff = f64::NAN;
+        m_nan.controls.teff_lower_limit = Some(1000.0);
+        m_nan.controls.teff_upper_limit = Some(3000.0);
+        assert_eq!(
+            do_check_limits(&mut m_nan, Some(&ctx), false)
+                .expect("NaN Teff keep going"),
+            LimitCheckOutcome::KeepGoing
+        );
+
+        let mut m_pos = base.clone();
+        m_pos.teff = 5777.0;
+        m_pos.controls.teff_lower_limit = Some(5777.0);
+        assert!(matches!(
+            do_check_limits(&mut m_pos, Some(&ctx), false)
+                .expect("positive Teff_lower_limit"),
+            LimitCheckOutcome::Terminate { ref code, .. }
+                if code == "Teff_lower_limit"
+        ));
+
+        let mut m_pos_hi = base;
+        m_pos_hi.teff = 5777.0;
+        m_pos_hi.controls.teff_upper_limit = Some(5777.0);
+        assert!(matches!(
+            do_check_limits(&mut m_pos_hi, Some(&ctx), false)
+                .expect("positive Teff_upper_limit"),
+            LimitCheckOutcome::Terminate { ref code, .. }
+                if code == "Teff_upper_limit"
+        ));
+    }
 }

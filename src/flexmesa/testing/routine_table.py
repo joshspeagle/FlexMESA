@@ -101,6 +101,21 @@ def status_ceiling(
     return port_manifest.PortStatus.PORTED_UNVERIFIED
 
 
+def _credited(keys: list[str], routines: list[list[Any]]) -> set[int]:
+    """Return ``id()`` of the routine rows that unambiguous keys name.
+
+    A bare key credits the one routine of that name; a ``parent::name`` key
+    credits only the contained procedure it names. A key that matches no
+    routine or several credits nothing (the gate reports it).
+    """
+    out: set[int] = set()
+    for key in keys:
+        hits = routine_gate.match_routines(key, routines)
+        if len(hits) == 1:
+            out.add(id(hits[0]))
+    return out
+
+
 def oracle_routine_ids(repo_root: pathlib.Path) -> set[str]:
     """Return ``<upstream path>::<routine>`` ids listed by ``oracle`` tests."""
     tax = test_taxonomy.load_test_taxonomy(
@@ -148,20 +163,19 @@ def build_table(
         rec = inventory["files"].get(entry.upstream_path)
         if rec is None:
             continue
-        good = {
-            k.lower()
+        usable = [
+            k
             for k, _ in entry.routine_map
             if (entry.upstream_path, k) not in bad
-        }
-        good_oracle = {
-            k.lower()
-            for k, _ in entry.routine_map
-            if (entry.upstream_path, k) not in bad
-            and f"{entry.upstream_path}::{k}" in oracle_ids
-        }
+        ]
         routines = rec["routines"]
-        mapped = [r for r in routines if r[0].lower() in good]
-        oracle = [r for r in routines if r[0].lower() in good_oracle]
+        mapped_ids = _credited(usable, routines)
+        oracle_ids_here = _credited(
+            [k for k in usable if f"{entry.upstream_path}::{k}" in oracle_ids],
+            routines,
+        )
+        mapped = [r for r in routines if id(r) in mapped_ids]
+        oracle = [r for r in routines if id(r) in oracle_ids_here]
         in_routines = _union_lines([(r[3], r[4]) for r in routines])
         mapped_lines = _union_lines([(r[3], r[4]) for r in mapped])
         oracle_lines = _union_lines([(r[3], r[4]) for r in oracle])
@@ -187,7 +201,6 @@ def build_table(
             entry.module in port_manifest.CORE_ENGINE_MODULES
             and entry.status.value in routine_backlog.BACKLOG_STATUSES
         ):
-            mapped_ids = {id(r) for r in mapped}
             backlog.extend(
                 {
                     "upstream_path": entry.upstream_path,

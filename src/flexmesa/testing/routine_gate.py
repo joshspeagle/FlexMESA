@@ -3,9 +3,12 @@
 
 Two checks run over every ``routine_map`` entry of ``port_manifest.toml``:
 
-* ``routine_key``: the key names a routine of that upstream file in
+* ``routine_key``: the key names exactly one routine of that upstream file in
   ``benchmarks/dashboard/routine_inventory.json`` (Fortran names are matched
-  without regard to case);
+  without regard to case). A key is either a bare name or ``parent::name``
+  for a contained procedure. A bare name that matches more than one routine
+  of the file (for example three contained ``check`` procedures) is a
+  violation, and the qualified form must be used;
 * ``fn_item``: every symbol of the mapped target ``<path>::<sym>[+<sym>...]``
   exists as a function item (``fn`` in Rust, ``def`` in Python) in that file.
   A struct, constant, or enum with the right name does not satisfy it.
@@ -63,6 +66,28 @@ class Violation:
         return (self.check, self.upstream_path, self.routine, self.detail)
 
 
+def match_routines(key: str, routines: list[list[Any]]) -> list[list[Any]]:
+    """Return the inventory routines that a ``routine_map`` key names.
+
+    Args:
+        key: ``name`` or ``parent::name`` (case-insensitive). The parent is the
+            enclosing routine recorded in the inventory.
+        routines: Inventory rows ``[name, kind, parent, first, last]``.
+
+    Returns:
+        Matching rows. A usable key matches exactly one; none means the key
+        is unknown and several mean it is ambiguous.
+    """
+    parent, sep, name = key.rpartition("::")
+    name = name.lower()
+    if not sep:
+        return [r for r in routines if r[0].lower() == name]
+    parent = parent.lower()
+    return [
+        r for r in routines if r[0].lower() == name and r[2].lower() == parent
+    ]
+
+
 def _fn_names(
     repo_root: pathlib.Path, rel: str, cache: dict[str, set[str]]
 ) -> set[str] | None:
@@ -96,13 +121,25 @@ def collect_violations(
         if not entry.routine_map:
             continue
         rec = files.get(entry.upstream_path)
-        known = {r[0].lower() for r in rec["routines"]} if rec else set()
         for key, target in entry.routine_map:
             up = entry.upstream_path
             if rec is None:
                 out.append(Violation("routine_key", up, key, target, "<file>"))
-            elif key.lower() not in known:
-                out.append(Violation("routine_key", up, key, target, key))
+            else:
+                n = len(match_routines(key, rec["routines"]))
+                if n == 0:
+                    out.append(Violation("routine_key", up, key, target, key))
+                elif n > 1:
+                    out.append(
+                        Violation(
+                            "routine_key",
+                            up,
+                            key,
+                            target,
+                            f"{key} (ambiguous, {n} routines; "
+                            "use parent::name)",
+                        )
+                    )
             rel, _, syms = target.partition("::")
             names = _fn_names(repo_root, rel, cache)
             for sym in (s.strip() for s in syms.split("+")):

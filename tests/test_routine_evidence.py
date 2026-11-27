@@ -11,6 +11,7 @@ import pytest
 from flexmesa.testing import (
     port_manifest,
     routine_backlog,
+    routine_gate,
     routine_inventory,
     routine_table,
 )
@@ -208,3 +209,97 @@ def test_committed_table_oracle_counts_do_not_exceed_mapped_counts() -> None:
         )
         assert entry.module in core
         assert entry.status.value in routine_backlog.BACKLOG_STATUSES
+
+
+def _dup_inventory() -> dict[str, Any]:
+    return {
+        "files": {
+            "star/private/x.f90": {
+                "lines": 60,
+                "outside": 0,
+                "routines": [
+                    ["outer_a", "subroutine", "", 1, 20],
+                    ["check", "subroutine", "outer_a", 5, 8],
+                    ["outer_b", "subroutine", "", 21, 40],
+                    ["check", "subroutine", "outer_b", 25, 30],
+                    ["check", "function", "outer_b", 31, 36],
+                    ["solo", "subroutine", "", 41, 60],
+                ],
+            }
+        }
+    }
+
+
+def _dup_manifest(
+    tmp_path: pathlib.Path, keys: tuple[str, ...]
+) -> port_manifest.PortManifest:
+    (tmp_path / "crates").mkdir(exist_ok=True)
+    (tmp_path / "crates" / "a.rs").write_text(
+        "pub fn f_one() {}\n", encoding="utf-8"
+    )
+    entry = port_manifest.PortManifestEntry(
+        upstream_path="star/private/x.f90",
+        module="star",
+        upstream_lines=60,
+        upstream_sha256="0" * 64,
+        status=S.PARTIAL,
+        flexmesa_files=("crates/a.rs",),
+        routine_map=tuple((k, "crates/a.rs::f_one") for k in keys),
+    )
+    return port_manifest.PortManifest(
+        schema_version=1,
+        upstream_version="r26.4.1",
+        upstream_commit="c",
+        archive_md5="m",
+        entries=(entry,),
+    )
+
+
+@pytest.mark.parametrize(
+    ("key", "expected"),
+    [
+        ("outer_a::check", []),
+        ("OUTER_A::Check", []),
+        ("solo", []),
+        ("check", ["ambiguous"]),
+        ("outer_b::check", ["ambiguous"]),
+        ("outer_a::nope", ["outer_a::nope"]),
+        ("outer_b::solo", ["outer_b::solo"]),
+    ],
+)
+def test_gate_accepts_parent_qualified_keys_and_rejects_ambiguous_bare_keys(
+    tmp_path: pathlib.Path, key: str, expected: list[str]
+) -> None:
+    """Qualified keys name one contained procedure; bare duplicates fail."""
+    manifest = _dup_manifest(tmp_path, (key,))
+    got = routine_gate.collect_violations(manifest, _dup_inventory(), tmp_path)
+    assert len(got) == len(expected)
+    for v, want in zip(got, expected, strict=True):
+        assert v.check == "routine_key"
+        assert want in v.detail
+
+
+def test_table_credits_only_the_qualified_contained_procedure(
+    tmp_path: pathlib.Path,
+) -> None:
+    """``outer_a::check`` credits 4 lines, not the other two checks."""
+    manifest = _dup_manifest(tmp_path, ("outer_a::check", "solo"))
+    ids = {"star/private/x.f90::outer_a::check"}
+    t = routine_table.build_table(
+        manifest, _dup_inventory(), tmp_path, oracle_ids=ids, gaps=[]
+    )
+    row = _row(t)
+    assert (row["routines_mapped"], row["routines_oracle"]) == (2, 1)
+    assert row["lines_in_mapped_routines"] == 4 + 20
+    assert row["lines_in_oracle_routines"] == 4
+
+
+def test_table_credits_nothing_for_an_ambiguous_bare_key(
+    tmp_path: pathlib.Path,
+) -> None:
+    """The gate flags a bare duplicate, so the table gives it no credit."""
+    manifest = _dup_manifest(tmp_path, ("check",))
+    t = routine_table.build_table(
+        manifest, _dup_inventory(), tmp_path, oracle_ids=set(), gaps=[]
+    )
+    assert _row(t)["routines_mapped"] == 0

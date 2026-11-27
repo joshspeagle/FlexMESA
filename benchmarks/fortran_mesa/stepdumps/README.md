@@ -90,6 +90,13 @@ later output is wanted next to the dump (histories, terminal output in the
 case's scratch copy). The `DONE` record is written once either way, when the
 first star dumps its last model.
 
+A window that ends on the last model of its stage never meets a later model,
+so the patch cannot write `DONE` there. With `--stage` (and no
+`--keep-running`) `run_stepdumps.py` watches the raw file: when the selected
+process has written records and the next stage has started, or the whole run
+has exited, it appends `DONE`, and in the first case stops the remaining
+stages. A stage that ends before the window opens gets no `DONE`.
+
 ## What is recorded
 
 The `#` header carries `steps_per_star`, `first_model`, `occurrence` and

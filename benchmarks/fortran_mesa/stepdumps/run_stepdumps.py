@@ -68,8 +68,10 @@ import hashlib
 import os
 import pathlib
 import shutil
+import signal
 import subprocess
 import sys
+import time
 from concurrent import futures
 
 HERE = pathlib.Path(__file__).resolve().parent
@@ -78,6 +80,7 @@ import stepdump_patch  # noqa: E402
 import xtra_patch  # noqa: E402
 
 REPO = HERE.parents[2]
+POLL_SEC = 5.0  # how often a watched run is checked for a finished stage
 RUN_CASE = REPO / "scripts" / "mesa_reference" / "run_mesa_case_26_4_1.sh"
 SUITES = ("star", "binary", "astero")
 OMP_THREADS = 4
@@ -314,7 +317,9 @@ def run_case(
         # Records are appended, and the patch numbers its processes by the
         # RUN records already in the file, so a rerun starts from none.
         raw.unlink(missing_ok=True)
-        status = _run(ident, run_env, timeout_sec)
+        stage = int(meta["stage"]) if meta.get("stage") else 0
+        watch = stage if not meta.get("keep_running") else 0
+        status = _run(ident, run_env, timeout_sec, raw, watch)
     if not raw.exists():
         return f"{ident}: {status}, no dump"
     out = _write_dump(ident, raw, dest, case_root / case, steps, meta, status)
@@ -354,22 +359,91 @@ def _case_root(
     return overlay / "star" / f"stepdump_cases_{work.name}"
 
 
-def _run(ident: str, run_env: dict[str, str], timeout_sec: int) -> str:
-    """Runs one case through the reference runner; returns its status."""
+def _run(
+    ident: str,
+    run_env: dict[str, str],
+    timeout_sec: int,
+    raw: pathlib.Path | None = None,
+    stage: int = 0,
+) -> str:
+    """Runs one case through the reference runner; returns its status.
+
+    With ``stage`` and ``raw`` given, the run is watched: the patch writes
+    ``DONE`` only when it sees a model after the window, which a stage that
+    ends on the window's last model never does. When the selected stage's
+    process has ended with the window open (the next stage has written its
+    ``RUN`` record, or the whole run has exited), ``DONE`` is appended to
+    ``raw`` and, if a later stage started, the run is stopped.
+    """
     suite, case = ident.split("/", 1)
-    try:
-        proc = subprocess.run(
-            ["bash", str(RUN_CASE), suite, case],
-            env=run_env,
-            capture_output=True,
-            text=True,
-            timeout=timeout_sec,
-            check=False,
-        )
-        status = f"rc={proc.returncode}"
-    except subprocess.TimeoutExpired:
-        status = "timeout"
+    proc = subprocess.Popen(
+        ["bash", str(RUN_CASE), suite, case],
+        env=run_env,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        start_new_session=True,
+    )
+    deadline = time.monotonic() + timeout_sec
+    status = ""
+    while True:
+        try:
+            proc.wait(timeout=POLL_SEC)
+            status = f"rc={proc.returncode}"
+            break
+        except subprocess.TimeoutExpired:
+            pass
+        if time.monotonic() > deadline:
+            status = "timeout"
+            break
+        if stage and raw is not None and raw.exists():
+            state = stage_window_state(raw.read_text().splitlines(), stage)
+            if state == "ended_open":
+                status = "stage ended with the window open"
+                break
+    if proc.poll() is None:
+        os.killpg(proc.pid, signal.SIGTERM)
+        try:
+            proc.wait(timeout=30)
+        except subprocess.TimeoutExpired:
+            os.killpg(proc.pid, signal.SIGKILL)
+            proc.wait()
+    if stage and raw is not None and raw.exists() and status != "timeout":
+        state = stage_window_state(raw.read_text().splitlines(), stage)
+        if state in ("ended_open", "running_open"):
+            with raw.open("a", encoding="utf-8") as fh:
+                fh.write("DONE\n")
+            status += "; DONE appended at the end of the stage"
     return status
+
+
+def stage_window_state(records: list[str], stage: int) -> str:
+    """Classifies the selected stage's section of a raw dump.
+
+    Args:
+        records: Raw dump lines; each process starts with ``RUN``.
+        stage: 1-based number of the selected process.
+
+    Returns:
+        ``"not_started"`` (fewer than ``stage`` processes yet);
+        ``"running_closed"`` (``DONE`` written, or the window has not
+        opened and the stage is still running); ``"running_open"`` (window
+        open, no later stage yet); ``"ended_open"`` (a later process has
+        started while the window was open without ``DONE``);
+        ``"ended_unopened"`` (a later process started and the window never
+        opened).
+    """
+    runs = [i for i, line in enumerate(records) if line == "RUN"]
+    if len(runs) < stage:
+        return "not_started"
+    end = runs[stage] if len(runs) > stage else len(records)
+    section = records[runs[stage - 1] : end]
+    opened = any(line.startswith("CALL ") for line in section)
+    ended = len(runs) > stage
+    if "DONE" in section:
+        return "running_closed"
+    if not opened:
+        return "ended_unopened" if ended else "running_closed"
+    return "ended_open" if ended else "running_open"
 
 
 def _write_dump(

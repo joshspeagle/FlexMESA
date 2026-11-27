@@ -579,17 +579,18 @@ pub(crate) fn do1_mlt_2(
         if using_tdc {
             // `Eq_div_w = compute_tdc_Eq_div_w_face(s, k, ierr)` when
             // `(v_flag .or. u_flag) .and. using_TDC .and. TDC_alpha_M > 0`
-            // (`star/private/turb_support.f90:238-243`) is not ported; a zero
-            // `Eq_div_w` would be a silent default.
-            if (model.controls.v_flag || model.controls.u_flag)
+            // (`star/private/turb_support.f90:236-243`); the call also
+            // stores `Eq_ad(k)` and `Eq(k)` (`tdc_hydro.f90:352-353`).
+            let eq_div_w = if (model.controls.v_flag || model.controls.u_flag)
                 && model.controls.tdc_alpha_m > 0.0
             {
-                return Err(StarError::InvalidInput(String::from(
-                    "TDC with TDC_alpha_M > 0 and v_flag or u_flag needs \
-                     compute_tdc_Eq_div_w_face, which is not ported \
-                     (`star/private/turb_support.f90:238-243`)",
-                )));
-            }
+                let (eq_face, eq_out) =
+                    crate::tdc_hydro::compute_tdc_eq_div_w_face(model, k);
+                store_tdc_eq(model, k, eq_out);
+                eq_face
+            } else {
+                StarAdOrder1::ZERO
+            };
             let vc_old = if model.aux.okay_to_set_mlt_vc {
                 model.aux.mlt_vc_old.get(k).copied().unwrap_or(0.0)
             } else {
@@ -644,7 +645,7 @@ pub(crate) fn do1_mlt_2(
                 scale_height: scale_height_ad,
                 gradl: gradl_f,
                 grada: grada_face_ad,
-                eq_div_w: StarAdOrder1::ZERO,
+                eq_div_w,
                 grav: grav_f,
                 energy: e_f,
             };
@@ -984,6 +985,18 @@ pub(crate) fn do1_mlt_2(
     }
 
     Ok(make_gradr_sticky)
+}
+
+/// Stores `s% Eq_ad(k) = Eq_face*w_00` and `s% Eq(k)`, the output side
+/// effect of `compute_tdc_Eq_div_w_face` (`star/private/tdc_hydro.f90:352-353`).
+fn store_tdc_eq(model: &mut StarModel, k: usize, eq_out: StarAdOrder1) {
+    let nz = model.nz;
+    if model.aux.eq_ad.len() != nz {
+        model.aux.eq_ad.resize(nz, StarAdOrder1::ZERO);
+    }
+    model.aux.rsp.resize(nz);
+    model.aux.eq_ad[k] = eq_out;
+    model.aux.rsp.eq_rsp[k] = eq_out.val;
 }
 
 /// `XH1` for `set_thermohaline` at face `k` (0-based): the `h1` mass
@@ -1791,22 +1804,6 @@ pub(crate) fn set_hydro_vars_with_skips(
                 hook.apply(model)?;
             }
         }
-        // `set_viscosity_vars_TDC` (`star/private/hydro_vars.f90:602-610`)
-        // is not ported. `steps_before_use_tdc` can switch `MLT_option` to
-        // `TDC` during a run (`star/private/evolve.f90:390-396`), so it is
-        // included in the test.
-        if model.controls.tdc_alpha_m > 0.0
-            && (model.controls.mlt_option == MltOption::Tdc
-                || (!model.aux.doing_relax
-                    && model.controls.steps_before_use_tdc > 0))
-            && !model.controls.rsp2_flag
-        {
-            return Err(StarError::InvalidInput(String::from(
-                "set_viscosity_vars_TDC is not ported; it is required when \
-                 TDC_alpha_M > 0 and MLT_option = 'TDC' \
-                 (`star/private/hydro_vars.f90:602-610`)",
-            )));
-        }
         if model.controls.mix_wind.use_t_tau_gradr_factor {
             let t_tau_id = model.controls.atm_t_tau_relation.id();
             for k in 0..nz {
@@ -1821,6 +1818,15 @@ pub(crate) fn set_hydro_vars_with_skips(
             }
         } else {
             model.aux.mixing.gradr_factor[..nz].fill(1.0);
+        }
+
+        // `star/private/hydro_vars.f90:602-610`. `RSP_flag` never reaches
+        // here (`.not. s% RSP_flag` above), but the test is upstream's.
+        if model.controls.tdc_alpha_m > 0.0
+            && crate::tdc_hydro::effective_mlt_option(model) == MltOption::Tdc
+            && !(model.controls.rsp2_flag || model.controls.rsp_flag)
+        {
+            crate::tdc_hydro::set_viscosity_vars_tdc(model)?;
         }
 
         set_mlt_vars(model)?;

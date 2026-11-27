@@ -312,8 +312,7 @@ pub fn setup_sources_and_others(
     }
 
     // `star/private/hydro_energy.f90:264-277`: `RSP2` reads `s% Eq_ad(k)`;
-    // the TDC branch builds `Eq_ad` from `compute_tdc_Eq_div_w_face`
-    // (`star/private/tdc_hydro.f90`), which is not ported.
+    // the TDC branch builds `Eq_ad` from `compute_tdc_Eq_div_w_face`.
     let eq_ad = if model.controls.rsp2_flag {
         model
             .aux
@@ -322,13 +321,11 @@ pub fn setup_sources_and_others(
             .copied()
             .unwrap_or(StarAdOrder1::ZERO)
     } else if model.controls.tdc_alpha_m > 0.0
-        && model.controls.mlt_option == MltOption::Tdc
+        && crate::tdc_hydro::effective_mlt_option(model) == MltOption::Tdc
         && model.controls.tdc_include_eturb_in_energy_equation
         && (model.controls.v_flag || model.controls.u_flag)
     {
-        return Err(StarError::InvalidInput(format!(
-            "energy equation at cell {k}: TDC eddy-viscous heating with TDC_include_eturb_in_energy_equation needs compute_tdc_Eq_div_w_face, which is not ported (star/private/hydro_energy.f90:268-277)"
-        )));
+        crate::tdc_hydro::tdc_energy_eq_ad(model, k)
     } else {
         StarAdOrder1::ZERO
     };

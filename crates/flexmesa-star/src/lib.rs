@@ -195,6 +195,7 @@ pub mod stella;
 pub mod step_trace;
 pub mod stepdump;
 pub mod struct_burn_mix;
+pub mod tdc_hydro;
 pub mod termination;
 pub mod timestep;
 mod timestep_checks;

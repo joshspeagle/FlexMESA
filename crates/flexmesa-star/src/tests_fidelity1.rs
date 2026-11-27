@@ -1078,20 +1078,225 @@ fn test_eval1_work_pvsc_time_centred_with_captured_pvsc_start() {
     assert!((w_off - expected_plain).abs() <= 1.0e-14 * expected_plain.abs());
 }
 
-/// The TDC eddy-viscous heating term needs `compute_tdc_Eq_div_w_face`
-/// (`star/private/hydro_energy.f90:268-277`), which is not ported, so the
-/// energy equation stops instead of using zero.
-#[test]
-fn test_tdc_eturb_heating_in_energy_equation_is_an_explicit_error() {
+/// A `v_flag` model with TDC eddy viscosity on (`TDC_alpha_M > 0`,
+/// `MLT_option = 'TDC'`), velocity time centering off, and a set
+/// `mlt_vc_ad` profile.
+fn tdc_viscosity_test_model() -> StarModel {
     let mut model = build_solar_test_model(true);
-    let k = 4;
     model.controls.rsp2_flag = false;
     model.controls.mlt_option = MltOption::Tdc;
     model.controls.tdc_alpha_m = 0.25;
-    model.controls.tdc_include_eturb_in_energy_equation = true;
-    assert!(setup_sources_and_others(&model, k).is_err());
+    model.controls.using_velocity_time_centering = false;
+    model.controls.steps_before_use_velocity_time_centering = -1;
+    for k in 0..model.nz {
+        model.mlt_vc_ad[k] = StarAdOrder1::from_dlnd_dlnt_00(
+            1.0e5 * (1.0 + 0.1 * (k as f64)),
+            2.0e3,
+            -1.0e3,
+        );
+        // Shear the velocity field so `d(v/r)/dr` is not small.
+        model.v[k] = -1.0e4 * (1.0 + 0.3 * flexmesa_math::sin(k as f64));
+    }
+    model
+}
+
+/// Hand evaluation of `compute_tdc_Eq_div_w_face` at an interior face `k`
+/// for `v_flag` without time centering, written from
+/// `star/private/tdc_hydro.f90:234-355` and `star_utils.f90:3785-4018`
+/// with plain `f64` arithmetic.
+fn hand_eq_div_w_face(model: &StarModel, k: usize) -> f64 {
+    let (alfa, beta) = model.get_face_weights(k);
+    let v00 = 0.5 * (model.v[k] + model.v[k + 1]);
+    let vm1 = 0.5 * (model.v[k] + model.v[k - 1]);
+    let r00 = 0.5 * (model.r[k] + model.r[k + 1]);
+    let rm1 = 0.5 * (model.r[k] + model.r[k - 1]);
+    let d_v_div_r = vm1 / rm1 - v00 / r00;
+    let rho = alfa * model.rho[k] + beta * model.rho[k - 1];
+    let p = alfa * model.peos[k] + beta * model.peos[k - 1];
+    let g = model.cgrav[k];
+    let grav = g * model.m_grav[k] / (model.r[k] * model.r[k]);
+    let mut hp = p / (grav * rho);
+    if model.controls.mix_wind.alt_scale_height_flag {
+        let hp2 = (p / g).sqrt() / rho;
+        if hp2 < hp {
+            hp = hp2;
+        }
+    }
+    let dmbar = 0.5 * (model.dm[k] + model.dm[k - 1]);
+    let alfam_alfa =
+        model.controls.tdc_alpha_m * model.controls.mixing_length_alpha;
+    let f = (16.0 / 3.0) * std::f64::consts::PI * alfam_alfa / dmbar;
+    let chi = f * rho * rho * flexmesa_math::pow6(model.r[k]) * d_v_div_r * hp;
+    4.0 * std::f64::consts::PI * chi * d_v_div_r / dmbar
+}
+
+/// `compute_tdc_Eq_div_w_face` against a hand evaluation of the upstream
+/// formulas, its `v_00` and `lnR_00` partials against central finite
+/// differences, and the zero at the forced-nonturbulent inner cells
+/// (`star/private/tdc_hydro.f90:311-355`).
+#[test]
+fn test_tdc_eq_div_w_face_value_partials_and_forced_inner_cells() {
+    use crate::tdc_hydro::compute_tdc_eq_div_w_face;
+    let mut model = tdc_viscosity_test_model();
+    let k = model.nz / 2;
+    let (eq, eq_out) = compute_tdc_eq_div_w_face(&model, k);
+    let expected = hand_eq_div_w_face(&model, k);
+    assert!(expected != 0.0);
+    assert!(
+        (eq.val - expected).abs() <= 1.0e-13 * expected.abs(),
+        "{} vs {expected}",
+        eq.val
+    );
+    // `s% Eq_ad(k) = Eq_face*w_00` with `w_00 = mlt_vc_ad(k)/sqrt_2_div_3`.
+    let w = model.mlt_vc_ad[k].val / flexmesa_const::SQRT_2_DIV_3;
+    assert!((eq_out.val - eq.val * w).abs() <= 1.0e-14 * (eq.val * w).abs());
+
+    let h = 1.0e-6;
+    let v0 = model.v[k];
+    let dv = h * v0.abs();
+    model.v[k] = v0 + dv;
+    let up = compute_tdc_eq_div_w_face(&model, k).0.val;
+    model.v[k] = v0 - dv;
+    let down = compute_tdc_eq_div_w_face(&model, k).0.val;
+    model.v[k] = v0;
+    let fd = (up - down) / (2.0 * dv);
+    assert!(
+        (eq.d1[I_V_00] - fd).abs() <= 1.0e-6 * fd.abs(),
+        "v_00: ad {} vs fd {fd}",
+        eq.d1[I_V_00]
+    );
+    let r0 = model.r[k];
+    model.r[k] = r0 * flexmesa_math::exp(h);
+    let up = compute_tdc_eq_div_w_face(&model, k).0.val;
+    model.r[k] = r0 * flexmesa_math::exp(-h);
+    let down = compute_tdc_eq_div_w_face(&model, k).0.val;
+    model.r[k] = r0;
+    let fd = (up - down) / (2.0 * h);
+    let ad = eq.d1[crate::star_ad::I_LNR_00];
+    assert!(
+        (ad - fd).abs() <= 1.0e-6 * fd.abs(),
+        "lnR_00: ad {ad} vs fd {fd}"
+    );
+
+    let nz = model.nz;
+    model
+        .controls
+        .mix_wind
+        .tdc_num_innermost_cells_forced_nonturbulent = nz - k;
+    assert_eq!(compute_tdc_eq_div_w_face(&model, k).0.val, 0.0);
+    model
+        .controls
+        .mix_wind
+        .tdc_num_innermost_cells_forced_nonturbulent = nz - k - 1;
+    assert_eq!(compute_tdc_eq_div_w_face(&model, k).0.val, eq.val);
+}
+
+/// The energy equation's TDC heating term
+/// `0.5*(Eq_div_w(k)*mlt_vc_ad(k) + shift_p1(Eq_div_w(k+1))*shift_p1(mlt_vc_ad(k+1)))/sqrt_2_div_3`
+/// enters `sources` only with `TDC_include_eturb_in_energy_equation`
+/// (`star/private/hydro_energy.f90:264-277,304-308`).
+#[test]
+fn test_tdc_eturb_heating_enters_energy_sources() {
+    use crate::tdc_hydro::{compute_tdc_eq_div_w_face, tdc_energy_eq_ad};
+    let mut model = tdc_viscosity_test_model();
+    let k = model.nz / 2;
+    let eq_ad = tdc_energy_eq_ad(&model, k);
+    let e00 = compute_tdc_eq_div_w_face(&model, k).0.val;
+    let ep1 = compute_tdc_eq_div_w_face(&model, k + 1).0.val;
+    let expected = 0.5
+        * (e00 * model.mlt_vc_ad[k].val + ep1 * model.mlt_vc_ad[k + 1].val)
+        * (1.0 / flexmesa_const::SQRT_2_DIV_3);
+    // `auto_diff` divides by a real as `powm1(y)*x`
+    // (`auto_diff/private/auto_diff_real_star_order1_module.f90:1077-1085`).
+    assert_eq!(eq_ad.val, expected);
+
     model.controls.tdc_include_eturb_in_energy_equation = false;
-    assert!(setup_sources_and_others(&model, k).is_ok());
+    let (sources_off, _, _) =
+        setup_sources_and_others(&model, k).expect("sources");
+    model.controls.tdc_include_eturb_in_energy_equation = true;
+    let (sources_on, _, _) =
+        setup_sources_and_others(&model, k).expect("sources");
+    let diff = sources_on.val - sources_off.val;
+    assert!(
+        (diff - eq_ad.val).abs()
+            <= 1.0e-12 * eq_ad.val.abs().max(sources_on.val.abs()),
+        "{diff} vs {}",
+        eq_ad.val
+    );
+}
+
+/// `compute_tdc_Uq_face` (`star/private/tdc_hydro.f90:358-392`) against a
+/// hand evaluation of `4*pi*(Chi_cell(k-1) - Chi_cell(k))/(r(k)*dm_bar(k))`
+/// with `compute_Chi_cell` (`:150-231`), and its entry in the momentum
+/// equation's non-HSE term (`star/private/hydro_momentum.f90:433-438`).
+#[test]
+fn test_tdc_uq_face_value_and_momentum_term() {
+    use crate::tdc_hydro::compute_tdc_uq_face;
+    let mut model = tdc_viscosity_test_model();
+    let k = model.nz / 2;
+    let pi = std::f64::consts::PI;
+    let hp_face = |model: &StarModel, j: usize| {
+        crate::tdc_hydro::get_scale_height_face(model, j).val
+    };
+    let chi_cell = |model: &StarModel, j: usize| {
+        let hp_cell = 0.5 * (hp_face(model, j) + hp_face(model, j + 1));
+        let d_v_div_r =
+            model.v[j] / model.r[j] - model.v[j + 1] / model.r[j + 1];
+        let w = 0.5 * (model.mlt_vc_ad[j].val + model.mlt_vc_ad[j + 1].val)
+            / flexmesa_const::SQRT_2_DIV_3;
+        let alfam_alfa =
+            model.controls.tdc_alpha_m * model.controls.mixing_length_alpha;
+        let f = (16.0 / 3.0) * pi * alfam_alfa / model.dm[j];
+        let r6 = 0.5
+            * (flexmesa_math::pow6(model.r[j])
+                + flexmesa_math::pow6(model.r[j + 1]));
+        f * model.rho[j] * model.rho[j] * r6 * d_v_div_r * hp_cell * w
+    };
+    let expected = 4.0 * pi * (chi_cell(&model, k - 1) - chi_cell(&model, k))
+        / (model.r[k] * model.dm_bar[k]);
+    let uq = compute_tdc_uq_face(&model, k);
+    assert!(expected != 0.0);
+    assert!(
+        (uq.val - expected).abs() <= 1.0e-12 * expected.abs(),
+        "{} vs {expected}",
+        uq.val
+    );
+
+    let with_uq = crate::hydro_momentum::expected_non_hse_term(&model, k);
+    model.controls.tdc_alpha_m = 0.0;
+    let without = crate::hydro_momentum::expected_non_hse_term(&model, k);
+    assert_eq!(with_uq.val, (without + uq).val);
+
+    // Forced-nonturbulent outer cells give zero.
+    model.controls.tdc_alpha_m = 0.25;
+    model
+        .controls
+        .mix_wind
+        .tdc_num_outermost_cells_forced_nonturbulent = k + 1;
+    assert_eq!(compute_tdc_uq_face(&model, k).val, 0.0);
+}
+
+/// `set_viscosity_vars_TDC` (`star/private/tdc_hydro.f90:40-89`) stores
+/// `Eq_ad = Eq_div_w*w`, `Eq`, `Chi` and `Uq` for every face, and zeroes
+/// them without `v_flag` or `u_flag`.
+#[test]
+fn test_set_viscosity_vars_tdc_stores_outputs() {
+    let mut model = tdc_viscosity_test_model();
+    let k = model.nz / 2;
+    crate::tdc_hydro::set_viscosity_vars_tdc(&mut model).expect("tdc vars");
+    let (_, eq_out) = crate::tdc_hydro::compute_tdc_eq_div_w_face(&model, k);
+    assert_eq!(model.aux.eq_ad[k].val, eq_out.val);
+    assert_eq!(model.aux.rsp.eq_rsp[k], eq_out.val);
+    assert_eq!(
+        model.aux.rsp.uq_rsp[k],
+        crate::tdc_hydro::compute_tdc_uq_face(&model, k).val
+    );
+    assert!(model.aux.rsp.chi_rsp[k] != 0.0);
+    assert!(model.aux.rsp.hp_face.iter().all(|&h| h > 0.0));
+    model.controls.v_flag = false;
+    crate::tdc_hydro::set_viscosity_vars_tdc(&mut model).expect("tdc vars");
+    assert_eq!(model.aux.eq_ad[k].val, 0.0);
+    assert_eq!(model.aux.rsp.uq_rsp[k], 0.0);
 }
 
 /// `eval_simple_PdV_work` with `mlt_Pturb_factor > 0` and velocity time
@@ -1182,4 +1387,45 @@ fn test_u_flag_simple_pdv_work_form_is_an_explicit_error() {
     let err = do1_energy_eqn(&model, k, false, &mut sys)
         .expect_err("u_flag simple PdV work");
     assert!(err.to_string().contains("hydro_energy.f90:170-175"));
+}
+
+/// `compute_tdc_Uq_dm_cell` for `u_flag` (`star/private/tdc_hydro.f90:395-445`):
+/// `4*pi*(Chi_div_w_face(k)*w(k) - Chi_div_w_face(k+1)*w(k+1))/r_cell` with
+/// `r_cell = 0.5*(r(k) + r(k+1))` and the `u_flag` form of `d(v/r)/dr`,
+/// `u(k-1)/r(k-1) - u(k)/r(k)` (`:578-616`), evaluated by hand.
+#[test]
+fn test_tdc_uq_dm_cell_u_flag_value() {
+    let mut model = tdc_viscosity_test_model();
+    model.controls.v_flag = false;
+    model.controls.u_flag = true;
+    for k in 0..model.nz {
+        model.u[k] = model.v[k];
+    }
+    let k = model.nz / 2;
+    let pi = std::f64::consts::PI;
+    let chi_div_w = |model: &StarModel, j: usize| {
+        let (alfa, beta) = model.get_face_weights(j);
+        let d_v_div_r =
+            model.u[j - 1] / model.r[j - 1] - model.u[j] / model.r[j];
+        let rho = alfa * model.rho[j] + beta * model.rho[j - 1];
+        let hp = crate::tdc_hydro::get_scale_height_face(model, j).val;
+        let dmbar = 0.5 * (model.dm[j] + model.dm[j - 1]);
+        let alfam_alfa =
+            model.controls.tdc_alpha_m * model.controls.mixing_length_alpha;
+        let f = (16.0 / 3.0) * pi * alfam_alfa / dmbar;
+        f * rho * rho * flexmesa_math::pow6(model.r[j]) * d_v_div_r * hp
+    };
+    let w = |j: usize| model.mlt_vc_ad[j].val / flexmesa_const::SQRT_2_DIV_3;
+    let r_cell = 0.5 * (model.r[k] + model.r[k + 1]);
+    let expected = 4.0
+        * pi
+        * (chi_div_w(&model, k) * w(k) - chi_div_w(&model, k + 1) * w(k + 1))
+        / r_cell;
+    let uq = crate::tdc_hydro::compute_tdc_uq_dm_cell(&model, k);
+    assert!(expected != 0.0);
+    assert!(
+        (uq.val - expected).abs() <= 1.0e-12 * expected.abs(),
+        "{} vs {expected}",
+        uq.val
+    );
 }

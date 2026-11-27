@@ -95,8 +95,8 @@ fn load_saved_mod(
 ///
 /// # Errors
 /// Returns [`StarError::InvalidInput`] on paths whose callees are not ported
-/// here (`RSP_setup_part1` / `RSP_setup_part2`, `set_viscosity_vars_TDC`),
-/// and propagates `set_vars` and brunt errors.
+/// here (`RSP_setup_part1` / `RSP_setup_part2`), and propagates `set_vars`,
+/// `set_viscosity_vars_TDC` and brunt errors.
 pub(crate) fn finish_load_model(
     model: &mut StarModel,
     extras: &mut dyn StarExtras,
@@ -108,16 +108,6 @@ pub(crate) fn finish_load_model(
     if model.controls.rsp_flag {
         return Err(StarError::InvalidInput(String::from(
             "finish_load_model: RSP_setup_part1 is not ported on the load_saved_model path (star/private/read_model.f90:150-156)",
-        )));
-    }
-    // `set_viscosity_vars_TDC` (`star/private/tdc_hydro.f90:40-89`), called
-    // at `read_model.f90:164-167`, is not ported.
-    if model.controls.tdc_alpha_m > 0.0
-        && model.controls.mlt_option == flexmesa_turb::MltOption::Tdc
-        && !(model.controls.rsp2_flag || model.controls.rsp_flag)
-    {
-        return Err(StarError::InvalidInput(String::from(
-            "finish_load_model: set_viscosity_vars_TDC (star/private/tdc_hydro.f90:40-89) is not ported; required when TDC_alpha_M > 0 and MLT_option = 'TDC' (star/private/read_model.f90:164-167)",
         )));
     }
     model.layout = VarLayout::with_flags(
@@ -192,6 +182,16 @@ pub(crate) fn finish_load_model(
         }
         model.pack_xh();
         crate::rsp2_ad::update_rsp2_vars_ad(model);
+    }
+    // `set_viscosity_vars_TDC` after `set_vars` (`read_model.f90:164-167`).
+    if model.controls.tdc_alpha_m > 0.0
+        && model.controls.mlt_option == flexmesa_turb::MltOption::Tdc
+        && !(model.controls.rsp2_flag || model.controls.rsp_flag)
+    {
+        if let Err(e) = crate::tdc_hydro::set_viscosity_vars_tdc(model) {
+            model.aux.doing_finish_load_model = false;
+            return Err(e);
+        }
     }
     model.aux.doing_finish_load_model = false;
 

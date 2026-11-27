@@ -131,11 +131,19 @@ pub fn do1_riemann_momentum_eqn(
     } else {
         model.dm[k]
     };
-    let dudt_expected = (flux_in - flux_out
+    let mut sum_ad = flux_in - flux_out
         + geometry_source
         + gravity_source
-        + diffusion_source)
-        / dm_k;
+        + diffusion_source;
+    // Turbulent eddy viscous force `Uq*dm` for TDC
+    // (`star/private/hydro_riemann.f90:127-136`).
+    if crate::tdc_hydro::effective_mlt_option(model)
+        == flexmesa_turb::MltOption::Tdc
+        && model.controls.tdc_alpha_m > 0.0
+    {
+        sum_ad = sum_ad + crate::tdc_hydro::compute_tdc_uq_dm_cell(model, k);
+    }
+    let dudt_expected = sum_ad / dm_k;
 
     let u_start_k = model.u_start.get(k).copied().unwrap_or(model.u[k]);
     let dudt_actual = (u_00 - u_start_k) / dt;

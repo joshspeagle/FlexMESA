@@ -280,8 +280,9 @@ fn test_rsp2_24slot_analytical_jacobian_matches_finite_differences() {
     // difference also sees `csound` move with `lnd` and `lnT`.
     let n_outer = model.controls.rsp2.num_outermost_cells_forced_nonturbulent;
     #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-    let ibotom = (nz as f64 / model.controls.rsp2.nz_div_ibotom) as usize;
-    let nonturbulent = |k: usize| k + 1 <= n_outer || k + 1 > nz - ibotom;
+    let ibotom = (f64::from(u32::try_from(nz).expect("nz fits u32"))
+        / model.controls.rsp2.nz_div_ibotom) as usize;
+    let nonturbulent = |k: usize| k < n_outer || k + 1 > nz - ibotom;
 
     for &k_row in &[0_usize, 15, nz - 1] {
         for dk in -1_i32..=1 {

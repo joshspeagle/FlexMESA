@@ -46,7 +46,7 @@ reason = "Strict multi-stage pre-MS-to-AGB run reaches log_L_upper_limit (768 st
 suite = "star"
 case = "c13_pocket"
 issue = "#161"
-reason = "AGB third-dredge-up C13-pocket evolution hits memory/wall-time guard with unsupported controls::atm_off_table_option (#161)."
+reason = "Strict run (all controls supported) ends on the 3000 s campaign budget at 1843 steps (MESA 1949) with log_L out of tolerance from step 281 (#161)."
 [[gaps]]
 suite = "star"
 case = "cburn_inward"

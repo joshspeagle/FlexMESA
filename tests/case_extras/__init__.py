@@ -129,10 +129,11 @@ STOCK_EXTRAS_DIGESTS: frozenset[str] = frozenset(
 # - `#153` (mesh/surface-cut hooks): `MakeCoWdStarExtras`
 #   (`star_remove_surface_at_cell_k` at `:207`).
 # - `#154` (relaxation & custom `t_xtra1` hooks):
-#   `RelaxCompositionJEntropyStarExtras` (custom `t_xtra1` termination strings
-#   at `:141, 144, 340`, missing `l(1)` radial array in `extras_py.rs`, and
-#   `#154` composition/J/entropy relaxation controls; `initial_mass` update in
-#   `extras_controls` is now supported in `apply_star_updates`).
+#   `RelaxCompositionJEntropyStarExtras` is adapter-served (`initial_mass`
+#   handoff in `extras_controls`, 5-file `.dat` export in `extras_finish_step`,
+#   and `t_xtra1` custom termination strings via `DECISIONS #77` at
+#   `:141, 144, 340`; optional stages 1-2 skip under `MESA_SKIP_OPTIONAL=t`
+#   with `standard_create_input.mod`/`standard_relaxed.mod`).
 # - `#155` (per-cell drag/burn diagnostics; per-cell `other_alpha_mlt` and
 #   `burn_num_iters` are now adapter-served via `#231`):
 #   `PreMs12MCoreCollapseStarExtras`, `PreMs20MCoreCollapseStarExtras`
@@ -200,6 +201,7 @@ ADAPTER_SERVED_STAR_HANDLERS: frozenset[str] = frozenset(
         "PreMs1MToWdStarExtras",
         "PreMs20MCoreCollapseStarExtras",
         "RCrBStarExtras",
+        "RelaxCompositionJEntropyStarExtras",
         "RspGyreExtras",
         "SemiconvectionStarExtras",
         "SimplexSolarCalibrationStarExtras",

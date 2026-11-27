@@ -44,8 +44,8 @@ def _surface_luminosity_erg_s(state: dict[str, Any]) -> float:
 
 
 class RelaxCompositionJEntropyStarExtras:
-    """Relaxation-profile file generator and target `(Teff, L)` checker from
-    `star/test_suite/relax_composition_j_entropy/src/run_star_extras.f90:33-363`.
+    """Relaxation-profile generator and `(Teff, L)` checker
+    (`star/test_suite/relax_composition_j_entropy/src/run_star_extras.f90`).
     """
 
     def __init__(self) -> None:
@@ -82,23 +82,16 @@ class RelaxCompositionJEntropyStarExtras:
         self.target_l = _parse_fortran_float(t_lines[1])
         return init_mass
 
-    def extras_controls(self, state: dict[str, Any]) -> None:
-        """Load part-2 targets and guard custom `t_xtra1` and `#154` relaxation
-        (`:41-105`).
+    def extras_controls(self, state: dict[str, Any]) -> dict[str, float] | None:
+        """Load part-2 targets and return `initial_mass` when
+        `x_integer_ctrl(1) == 2` (`:41-105`).
         """
         if int(state["x_integer_ctrl"][0]) != 2:
-            return
+            return None
         init_mass = self.load_part2_targets(str(state["case_dir"]))
-        raise NotImplementedError(
-            "relax_composition_j_entropy: loaded initial_mass="
-            f"{init_mass!r} (:77), but stages 1-2 require custom "
-            "termination_code_str(t_xtra1) strings (:141, 144, 340) and "
-            "part-2 composition/J/entropy relaxation (#154, #231)"
-        )
+        return {"initial_mass": init_mass}
 
-    def extras_check_model(
-        self, state: dict[str, Any]
-    ) -> str | tuple[str, str]:
+    def extras_check_model(self, state: dict[str, Any]) -> str | dict[str, str]:
         """Verify relaxed `(Teff, L(1))` within 0.5% in part 2 (`:124-159`)."""
         if int(state["x_integer_ctrl"][0]) == 2:
             teff = float(state["teff"])
@@ -113,14 +106,24 @@ class RelaxCompositionJEntropyStarExtras:
             )
             if bad_teff or bad_l:
                 self.within_tolerance = False
-                return ("terminate", "Relaxed model does not match input")
+                return {
+                    "action": "terminate",
+                    "termination_code_slot": "t_xtra1",
+                    "termination_code_str": (
+                        "Relaxed model does not match input"
+                    ),
+                }
             self.within_tolerance = True
-            return ("terminate", "Values for Teff and L are within tolerance")
+            return {
+                "action": "terminate",
+                "termination_code_slot": "t_xtra1",
+                "termination_code_str": (
+                    "Values for Teff and L are within tolerance"
+                ),
+            }
         return "keep_going"
 
-    def extras_finish_step(
-        self, state: dict[str, Any]
-    ) -> str | tuple[str, str]:
+    def extras_finish_step(self, state: dict[str, Any]) -> str | dict[str, str]:
         """Write the 5 relaxation `.dat` files once `Teff < 8000 K` in part 1
         (`:232-348`).
         """
@@ -128,7 +131,11 @@ class RelaxCompositionJEntropyStarExtras:
             teff = float(state["teff"])
             if teff < 8000.0:
                 self._write_relax_files(state)
-                return ("terminate", "produced files for relax")
+                return {
+                    "action": "terminate",
+                    "termination_code_slot": "t_xtra1",
+                    "termination_code_str": "produced files for relax",
+                }
         return "keep_going"
 
     def _build_zone_relax_tables(

@@ -1,0 +1,15 @@
+# FlexMESA astero/surface_effects run vs MESA 26.4.1 reference run, per oscillation call (#612)
+# reference: mesa_histories bundle runs/astero/surface_effects/pulse_tap/modes.tsv (MESA r26.4.1, git tag 26.4.1, gfortran 15.2.0, SDK x86_64-linux-26.6.1)
+# generator: benchmarks/fortran_mesa/gyre_pulse_data/compare_pulse_live_run.py
+# command: python benchmarks/fortran_mesa/gyre_pulse_data/compare_pulse_live_run.py --suite astero --case surface_effects --histories /path/to/mesa_histories --work /path/to/scratch --out benchmarks/fortran_mesa/gyre_pulse_data/results/astero_surface_effects_flexmesa_vs_mesa.tsv
+# extras: SurfaceEffectsExtras (surface_effects); units: frequency microHz, growth rad/s
+# flexmesa engine commit (last change under crates/): 5a68ae84
+# flexmesa run: 1 steps, termination max_model_number, wall 10 s, numerics strict
+# columns *_n: values compared; *_bitexact: values with equal binary64 bits; *_max_rel: max |a-b|/|b| over compared values (n/a: not exposed by the extras)
+# summary: calls compared 1, calls only in FlexMESA [], calls only in MESA []
+# summary: modes only in FlexMESA 0, modes only in MESA 0, calls with different mode order 0
+# summary: freq: 110 compared, 110 bit-identical, max relative difference 0.000e+00
+# summary: inertia: 110 compared, 110 bit-identical, max relative difference 0.000e+00
+# summary: growth: 110 compared, 110 bit-identical, max relative difference 0.000e+00
+model_number	occurrence	n_modes	n_modes_mesa	n_common	order_same	freq_n	freq_bitexact	freq_max_rel	inertia_n	inertia_bitexact	inertia_max_rel	growth_n	growth_bitexact	growth_max_rel	n_pg_only_flexmesa	n_pg_only_mesa
+954	0	110	110	110	1	110	110	0.000e+00	110	110	0.000e+00	110	110	0.000e+00	-	-

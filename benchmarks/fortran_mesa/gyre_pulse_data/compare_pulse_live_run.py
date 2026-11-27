@@ -7,9 +7,10 @@ subclass of the case's own extras handler. The subclass only records; it does
 not change what the handler computes. Each oscillation call (a model number
 and the modes returned) is matched with the reference run's call at the same
 model number (the k-th call at a model number against the k-th reference
-call there) and then mode by mode on `(l, m, n_pg)`. Per quantity (frequency,
-inertia, growth rate) the result gives the number of values compared, how
-many are bit-identical, and the maximum relative difference. Calls and modes
+call there) and then mode by mode on `(l, m, n_pg)` (the k-th repeat of a
+label on one side against the k-th repeat on the other). Per quantity
+(frequency, inertia, growth rate) the result gives the number of values
+compared, how many are bit-identical, and the maximum relative difference. Calls and modes
 present on one side only are counted. A quantity the extras do not expose is
 reported as unavailable, not compared.
 
@@ -17,7 +18,10 @@ Handlers covered: `GyreInMesaStarExtras` (frequency and growth rate as the
 real and imaginary parts of the mode frequency in Hz; no inertia),
 `RspGyreExtras` (every mode of `GyreMesa.get_modes_full`; frequency and
 growth rate only), `AsteroAdiplsExtras` and `AsteroGyreExtras` (their
-`calls` lists: frequency in microHz, inertia, growth rate).
+`calls` lists: frequency in microHz, inertia, growth rate) and
+`SurfaceEffectsExtras` (the `l = 0..3` modes of its one `extras_after_evolve`
+ADIPLS pass, taken as one call at the final model number, as MESA's tap
+records them).
 """
 
 from __future__ import annotations
@@ -125,6 +129,25 @@ def _group_by_occurrence(calls: Sequence[Call]) -> dict[tuple[int, int], Call]:
     return out
 
 
+def _index_modes(
+    modes: Sequence[ModeRec],
+) -> dict[tuple[int, int, int, int], ModeRec]:
+    """Key modes by `(l, m, n_pg, k)`, `k` counting repeats of `(l, m, n_pg)`.
+
+    MESA's ADIPLS can label several modes of one call with the same order
+    (`astero/surface_effects` has three `l = 0, n_pg = 32` modes). The k-th
+    repeat on one side is matched with the k-th repeat on the other.
+    """
+    seen: dict[tuple[int, int, int], int] = {}
+    out: dict[tuple[int, int, int, int], ModeRec] = {}
+    for md in modes:
+        base = (md.ell, md.m, md.n_pg)
+        k = seen.get(base, 0)
+        seen[base] = k + 1
+        out[(*base, k)] = md
+    return out
+
+
 def compare_calls(mine: Sequence[Call], ref: Sequence[Call]) -> Comparison:
     """Compare FlexMESA's oscillation calls with MESA's.
 
@@ -133,7 +156,8 @@ def compare_calls(mine: Sequence[Call], ref: Sequence[Call]) -> Comparison:
         ref: MESA's calls in the same form.
 
     Returns:
-        Per-call and total comparison. A mode is matched by `(l, m, n_pg)`.
+        Per-call and total comparison. A mode is matched by `(l, m, n_pg)` and
+        repeat index.
         `order_same` is true when the matched modes appear in the same
         relative order on both sides.
     """
@@ -145,14 +169,12 @@ def compare_calls(mine: Sequence[Call], ref: Sequence[Call]) -> Comparison:
     for key in sorted(set(a) & set(b)):
         ma = a[key][1]
         mb = b[key][1]
-        ia = {(m.ell, m.m, m.n_pg): m for m in ma}
-        ib = {(m.ell, m.m, m.n_pg): m for m in mb}
+        ia = _index_modes(ma)
+        ib = _index_modes(mb)
         common = [k for k in ib if k in ia]
         modes_only_a += len(ia) - len(common)
         modes_only_b += len(ib) - len(common)
-        order_same = common == [
-            (m.ell, m.m, m.n_pg) for m in ma if (m.ell, m.m, m.n_pg) in ib
-        ]
+        order_same = common == [k for k in ia if k in ib]
         stats = {q: QuantityStat() for q in QUANTITIES}
         for k in common:
             for q in QUANTITIES:
@@ -365,7 +387,8 @@ def make_recorder(handler: Any) -> tuple[Any, str, Any]:
 
     Returns:
         `(recorder, kind, extract)`: the recorder instance to attach to the
-        run, a label (`star_gyre`, `rsp_gyre`, `adipls` or `astero_gyre`),
+        run, a label (`star_gyre`, `rsp_gyre`, `adipls`, `astero_gyre` or
+        `surface_effects`),
         and a function returning the recorded `list[Call]` after the run.
         The recorder shares the handler's state and adds recording only.
     """
@@ -424,6 +447,33 @@ def make_recorder(handler: Any) -> tuple[Any, str, Any]:
                 for mn, modes in rec.recorded
             ],
         )
+    if isinstance(handler, astero_extras.SurfaceEffectsExtras):
+
+        class SurfaceEffectsRecorder(cls):  # type: ignore[valid-type, misc]
+            def extras_after_evolve(self, state: dict[str, Any]) -> None:
+                self.model_number = int(state["model_number"])
+                super().extras_after_evolve(state)
+
+            def _extract_and_match_modes(
+                self, star_model: Any, l0_orders: Any
+            ) -> None:
+                super()._extract_and_match_modes(star_model, l0_orders)
+                self.recorded.append(
+                    (
+                        self.model_number,
+                        [
+                            row
+                            for el in sorted(self.raw_modes)
+                            for row in self.raw_modes[el]
+                        ],
+                    )
+                )
+
+        rec = SurfaceEffectsRecorder.__new__(SurfaceEffectsRecorder)
+        rec.__dict__.update(handler.__dict__)
+        rec.recorded = []
+        rec.model_number = 0
+        return rec, "surface_effects", lambda: from_astero_calls(rec.recorded)
     if isinstance(handler, astero_extras.AsteroAdiplsExtras):
         return handler, "adipls", lambda: from_astero_calls(handler.calls)
     if isinstance(handler, astero_extras.AsteroGyreExtras):

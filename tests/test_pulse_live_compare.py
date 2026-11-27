@@ -102,3 +102,20 @@ def test_reference_loader_reads_hex_columns(tmp_path: pathlib.Path) -> None:
     p.write_text("\t".join(cols) + "\n" + "\t".join(row) + "\n")
     calls = M.load_reference(p, "freq_Hz_hex", "growth_rate_Hz_hex")
     assert calls == [(20, [M.ModeRec(0, 0, 3, 2.5, 0.25, -1.5)])]
+
+
+def test_repeated_order_label_in_one_call_matches_by_repeat_index() -> None:
+    # MESA's ADIPLS can return several modes with one (l, m, n_pg) label.
+    ref = [(3, [_mode(32, 1.0), _mode(32, 1.0), _mode(32, 2.0)])]
+    mine = [(3, [_mode(32, 1.0), _mode(32, 1.0), _mode(32, 2.0)])]
+    cmp = M.compare_calls(mine, ref)
+    assert cmp.calls[0].n_common == 3
+    assert cmp.totals["freq"].compared == 3
+    assert cmp.totals["freq"].bit_identical == 3
+    assert cmp.modes_only_flexmesa == cmp.modes_only_mesa == 0
+    assert cmp.calls[0].order_same
+    # A differing third repeat is a difference, not a collapsed key.
+    off = [(3, [_mode(32, 1.0), _mode(32, 1.0), _mode(32, 2.5)])]
+    cmp = M.compare_calls(off, ref)
+    assert cmp.totals["freq"].bit_identical == 2
+    assert cmp.totals["freq"].max_rel == pytest.approx(0.25)

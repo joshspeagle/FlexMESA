@@ -1,6 +1,6 @@
 # Routine-map review records (`DECISIONS #79`)
 
-A review record lets a pull request raise a file in `benchmarks/dashboard/port_manifest.toml` from `absent` to `partial` without changing that file's implementing Rust or Python files. The evidence is a sampled lane A review of the file's `routine_map`. The exception covers no other status change. `ported_unverified` still requires a change to the implementing files, and the verified tiers still require evidence artifacts.
+A review record lets a pull request raise a file in `benchmarks/dashboard/port_manifest.toml` from `absent` to `partial` without changing that file's implementing Rust or Python files. The evidence is a sampled independent review of the file's `routine_map`. The exception covers no other status change. `ported_unverified` still requires a change to the implementing files, and the verified tiers still require evidence artifacts.
 
 ## What a record is
 

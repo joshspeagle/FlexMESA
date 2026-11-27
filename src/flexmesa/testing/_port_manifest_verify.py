@@ -18,8 +18,9 @@ from flexmesa.testing import (
     routine_inventory,
 )
 
-# Lane A routine-map review records that evidence a raise from ``absent`` to
-# ``partial`` without a change to the implementing files (`DECISIONS #79`).
+# Independent routine-map review records that evidence a raise from
+# ``absent`` to ``partial`` without a change to the implementing files
+# (`DECISIONS #79`).
 REVIEW_RECORD_DIR = "notes/audit/routine_map_reviews/"
 _REVIEW_INT_KEYS = (
     "seed",
@@ -480,8 +481,8 @@ def _verify_base_diff_and_immutability(
             if changed_paths & set(entry.flexmesa_files):
                 continue
             if prev.status == st.ABSENT and entry.status == st.PARTIAL:
-                # `DECISIONS #79`: a lane A review record may stand in for a
-                # code change, for this raise only.
+                # `DECISIONS #79`: an independent review record may stand
+                # in for a code change, for this raise only.
                 if review_state is None:
                     review_state = _load_review_state(
                         manifest, repo_root, changed_paths, errors

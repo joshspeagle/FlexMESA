@@ -213,7 +213,9 @@ def _render_headline_and_modules(data: dict[str, Any]) -> list[str]:
         "status**, never by lines of Rust or Python written. No file starts "
         "as verified; raising a status requires a pull request that supplies "
         "the corresponding routine counterparts or generated MESA `26.4.1` "
-        "evidence.",
+        "evidence. A raise from absent to partial may instead rest on a "
+        "sampled independent review of the file's routine map, recorded in "
+        "`notes/audit/routine_map_reviews/` (`DECISIONS #79`).",
         "",
         "| Module | Upstream LOC | Absent | Stub | Partial | "
         "Ported (unverified) | Kernel ref. vectors | Case-level evidence | "

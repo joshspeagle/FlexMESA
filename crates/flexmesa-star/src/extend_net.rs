@@ -92,7 +92,7 @@ pub fn extend_net(
         .copied()
         .fold(f64::NEG_INFINITY, f64::max)
         / LN10;
-    let log_center_density = center_value(model, &model.lnd) / LN10;
+    let log_center_density = center_value(model, &model.lnd)? / LN10;
 
     if net_name == model.job.co_net.trim() {
         if log_max_temperature > 9.0 || log_center_density > 9.0 {

@@ -877,6 +877,20 @@ fn eval_total_angular_momentum_old(model: &StarModel) -> f64 {
         .sum()
 }
 
+fn set_star_center_scalars(
+    d: &Bound<'_, PyDict>,
+    model: &StarModel,
+) -> PyResult<()> {
+    for (key, iso) in [
+        ("center_h1", "h1"),
+        ("center_he4", "he4"),
+        ("center_c12", "c12"),
+    ] {
+        d.set_item(key, center_avg_x_by_name(model, iso).map_err(to_py_err)?)?;
+    }
+    Ok(())
+}
+
 fn set_star_report_scalars(
     py: Python<'_>,
     d: &Bound<'_, PyDict>,
@@ -891,9 +905,7 @@ fn set_star_report_scalars(
     let mix = eval_conv_and_mx_summary(model);
     let surf_rot = eval_surf_avg_rotation_info(model);
 
-    d.set_item("center_h1", center_avg_x_by_name(model, "h1"))?;
-    d.set_item("center_he4", center_avg_x_by_name(model, "he4"))?;
-    d.set_item("center_c12", center_avg_x_by_name(model, "c12"))?;
+    set_star_center_scalars(d, model)?;
     d.set_item("he_core_mass", cores.he_core_mass)?;
     d.set_item("co_core_mass", cores.co_core_mass)?;
     d.set_item("one_core_mass", cores.one_core_mass)?;
@@ -919,12 +931,14 @@ fn set_star_report_scalars(
     d.set_item("w_div_w_crit_avg_surf", surf_rot.w_div_w_crit)?;
     d.set_item("omega_avg_surf", surf_rot.omega)?;
     d.set_item("v_rot_avg_surf", surf_rot.v_rot_cm_s)?;
-    d.set_item(
-        "log_center_temperature",
-        center_value(model, &model.ln_t) / LN10,
-    )?;
-    d.set_item("log_center_density", center_value(model, &model.lnd) / LN10)?;
-    d.set_item("center_omega", center_value(model, &model.omega))?;
+    for (key, arr, div_ln10) in [
+        ("log_center_temperature", &model.ln_t[..], true),
+        ("log_center_density", &model.lnd[..], true),
+        ("center_omega", &model.omega[..], false),
+    ] {
+        let v = center_value(model, arr).map_err(to_py_err)?;
+        d.set_item(key, if div_ln10 { v / LN10 } else { v })?;
+    }
     d.set_item("log_dt", safe_log10(model.dt / SECYER))?;
     d.set_item("log_l", safe_log10(model.surface_l_lsun()))?;
     d.set_item("log_teff", safe_log10(model.teff))?;
@@ -3237,15 +3251,15 @@ fn set_binary_star_scalars(
     d.set_item(format!("{prefix}_mstar_dot"), star.mstar_dot)?;
     d.set_item(
         format!("{prefix}_center_h1"),
-        center_avg_x_by_name(star, "h1"),
+        center_avg_x_by_name(star, "h1").map_err(to_py_err)?,
     )?;
     d.set_item(
         format!("{prefix}_center_he4"),
-        center_avg_x_by_name(star, "he4"),
+        center_avg_x_by_name(star, "he4").map_err(to_py_err)?,
     )?;
     d.set_item(
         format!("{prefix}_center_c12"),
-        center_avg_x_by_name(star, "c12"),
+        center_avg_x_by_name(star, "c12").map_err(to_py_err)?,
     )?;
     if let Some(y) = surface_iso_frac(star, "he4") {
         d.set_item(format!("{prefix}_surface_he4"), y)?;

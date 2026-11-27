@@ -55,10 +55,10 @@ impl BinarySystem {
     /// (`binary/private/binary_timestep.f90:287-317`). `center_h1` is
     /// `s% center_h1`, the central average set by `do_report`
     /// (`star/private/report.f90:259`, `center_avg_x`).
-    pub(crate) fn update_stage_varcontrol(&mut self) {
+    pub(crate) fn update_stage_varcontrol(&mut self) -> Result<(), StarError> {
         let c = &self.controls;
         let two_stars = self.point_mass_i == 0;
-        let donor_h1 = center_avg_x_by_name(&self.donor, "h1");
+        let donor_h1 = center_avg_x_by_name(&self.donor, "h1")?;
         if self.mtransfer_rate.abs() / MSUN * SECYER > 1.0e-20 {
             let vc = if donor_h1 > 1.0e-12 && c.varcontrol_case_a > 0.0 {
                 Some(c.varcontrol_case_a)
@@ -86,7 +86,7 @@ impl BinarySystem {
             }
             if two_stars {
                 if let BinaryCompanion::Star(ref mut s2) = self.companion {
-                    if center_avg_x_by_name(s2, "h1") > 1.0e-12 {
+                    if center_avg_x_by_name(s2, "h1")? > 1.0e-12 {
                         if vc_ms > 0.0 {
                             s2.controls.varcontrol_target = vc_ms;
                         }
@@ -96,5 +96,6 @@ impl BinarySystem {
                 }
             }
         }
+        Ok(())
     }
 }

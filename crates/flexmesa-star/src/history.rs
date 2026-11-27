@@ -77,12 +77,16 @@ pub fn extract_history_row(model: &StarModel) -> HistoryRow {
     let mix = eval_conv_and_mx_summary(model);
 
     let log_center_t = if nz > 0 {
-        center_value(model, &model.ln_t) / LN10
+        center_value(model, &model.ln_t)
+            .expect("extract_history_row: ln_t/dq length mismatch")
+            / LN10
     } else {
         0.0
     };
     let log_center_rho = if nz > 0 {
-        center_value(model, &model.lnd) / LN10
+        center_value(model, &model.lnd)
+            .expect("extract_history_row: lnd/dq length mismatch")
+            / LN10
     } else {
         -99.0
     };
@@ -108,9 +112,24 @@ pub fn extract_history_row(model: &StarModel) -> HistoryRow {
         log_g: safe_log10(model.grav.first().copied().unwrap_or(0.0)),
         log_center_t,
         log_center_rho,
-        center_h1: center_avg_x_by_name(model, "h1"),
-        center_he4: center_avg_x_by_name(model, "he4"),
-        center_c12: center_avg_x_by_name(model, "c12"),
+        center_h1: if nz > 0 {
+            center_avg_x_by_name(model, "h1")
+                .expect("extract_history_row: center_h1")
+        } else {
+            0.0
+        },
+        center_he4: if nz > 0 {
+            center_avg_x_by_name(model, "he4")
+                .expect("extract_history_row: center_he4")
+        } else {
+            0.0
+        },
+        center_c12: if nz > 0 {
+            center_avg_x_by_name(model, "c12")
+                .expect("extract_history_row: center_c12")
+        } else {
+            0.0
+        },
         mass_conv_core: mix.mass_conv_core,
         he_core_mass: cores.he_core_mass,
         co_core_mass: cores.co_core_mass,

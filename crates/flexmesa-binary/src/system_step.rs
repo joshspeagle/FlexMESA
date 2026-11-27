@@ -1612,7 +1612,7 @@ impl BinarySystem {
         let (max_dt, reason) = binary_pick_next_timestep(&ctrl)?;
         self.dt_why_reason = reason;
         self.max_timestep_sec = max_dt;
-        self.update_stage_varcontrol();
+        self.update_stage_varcontrol()?;
         self.ignore_hard_limits_this_step = false;
         Ok(TrialDecision::KeepGoing)
     }

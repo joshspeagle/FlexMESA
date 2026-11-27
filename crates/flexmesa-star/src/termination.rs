@@ -432,25 +432,26 @@ fn has_burn_he_conv_region(model: &StarModel) -> bool {
     false
 }
 
-/// Evaluates `phase_of_evolution` matching `set_phase_of_evolution` in
-/// `star/private/star_utils.f90:2910-2969`.
-#[must_use]
-pub fn eval_phase_of_evolution(
+fn eval_phase_of_evolution_checked(
     model: &StarModel,
     ctx: &StepReportContext,
     doing_first_model_of_run: bool,
-) -> i32 {
+) -> Result<i32, StarError> {
     if model.nz == 0 || doing_first_model_of_run {
-        return PHASE_STARTING;
+        return Ok(PHASE_STARTING);
     }
     let catalog = NuclideCatalog::builtin_ref();
-    let center_h1 = species_col_index(model, catalog, "h1")
-        .map_or(1.0e99, |j| center_avg_x_slot(model, Some(j)));
-    let center_he4 = species_col_index(model, catalog, "he4")
-        .map_or(1.0e99, |j| center_avg_x_slot(model, Some(j)));
+    let center_h1 = match species_col_index(model, catalog, "h1") {
+        Some(j) => center_avg_x_slot(model, Some(j))?,
+        None => 1.0e99,
+    };
+    let center_he4 = match species_col_index(model, catalog, "he4") {
+        Some(j) => center_avg_x_slot(model, Some(j))?,
+        None => 1.0e99,
+    };
 
-    let log_center_t = center_value(model, &model.ln_t) / LN10;
-    if model.aux.doing_relax {
+    let log_center_t = center_value(model, &model.ln_t)? / LN10;
+    Ok(if model.aux.doing_relax {
         PHASE_RELAX
     } else if ctx.phot.logg > 6.0 {
         PHASE_WDCS
@@ -487,7 +488,19 @@ pub fn eval_phase_of_evolution(
         PHASE_PREMS
     } else {
         PHASE_STARTING
-    }
+    })
+}
+
+/// Evaluates `phase_of_evolution` matching `set_phase_of_evolution` in
+/// `star/private/star_utils.f90:2910-2969`.
+#[must_use]
+pub fn eval_phase_of_evolution(
+    model: &StarModel,
+    ctx: &StepReportContext,
+    doing_first_model_of_run: bool,
+) -> i32 {
+    eval_phase_of_evolution_checked(model, ctx, doing_first_model_of_run)
+        .expect("eval_phase_of_evolution: invalid model array lengths")
 }
 
 /// Evaluates and stores `model.aux.step_hist.phase_of_evolution` matching
@@ -585,8 +598,8 @@ fn check_xa_limits_block(
     is_upper: bool,
     region: &str,
     code: &str,
-    eval_avg: impl Fn(&StarModel, usize) -> f64,
-) -> Option<LimitCheckOutcome> {
+    eval_avg: impl Fn(&StarModel, usize) -> Result<f64, StarError>,
+) -> Result<Option<LimitCheckOutcome>, StarError> {
     let n = species_names.len().min(limits.len());
     for j in 0..n {
         let lim = limits[j];
@@ -598,15 +611,15 @@ fn check_xa_limits_block(
             continue;
         }
         let Some(cid) = catalog.get_nuclide_index(name) else {
-            return Some(LimitCheckOutcome::Terminate {
+            return Ok(Some(LimitCheckOutcome::Terminate {
                 code: String::new(),
                 reason: format!("invalid species '{name}' for {code}"),
-            });
+            }));
         };
         let Some(i) = iso_slot_for_chem_id(model, cid) else {
             continue;
         };
-        let avg_x = eval_avg(model, i);
+        let avg_x = eval_avg(model, i)?;
         let hit = if is_upper { avg_x > lim } else { avg_x < lim };
         if hit {
             let desc = if is_upper {
@@ -614,10 +627,10 @@ fn check_xa_limits_block(
             } else {
                 format!("have dropped below {region} lower limit for {name}")
             };
-            return Some(compare_to_target(model, &desc, avg_x, lim, code));
+            return Ok(Some(compare_to_target(model, &desc, avg_x, lim, code)));
         }
     }
-    None
+    Ok(None)
 }
 
 fn eval_check_limits_core(
@@ -716,12 +729,12 @@ fn eval_check_limits_core(
     // separately from `log_surface_luminosity = log10(max(1d-99, L(1)/Lsun))`.
     let log_surface_luminosity = safe_log10(model.surface_l_lsun());
 
-    let center_gamma = center_value(model, &model.gam);
-    let center_degeneracy = center_value(model, &model.eta);
-    let center_ye = center_value(model, &model.ye);
-    let log_center_temperature = center_value(model, &model.ln_t) / LN10;
-    let log_center_density = center_value(model, &model.lnd) / LN10;
-    let center_entropy = ctx.center_entropy(model);
+    let center_gamma = center_value(model, &model.gam)?;
+    let center_degeneracy = center_value(model, &model.eta)?;
+    let center_ye = center_value(model, &model.ye)?;
+    let log_center_temperature = center_value(model, &model.ln_t)? / LN10;
+    let log_center_density = center_value(model, &model.lnd)? / LN10;
+    let center_entropy = ctx.center_entropy(model)?;
     let max_lns = model
         .ln_s
         .iter()
@@ -741,10 +754,14 @@ fn eval_check_limits_core(
         .fold(f64::NEG_INFINITY, f64::max)
         / LN10;
 
-    let center_h1 = species_col_index(model, catalog, "h1")
-        .map_or(0.0, |j| center_avg_x_slot(model, Some(j)));
-    let center_he4 = species_col_index(model, catalog, "he4")
-        .map_or(0.0, |j| center_avg_x_slot(model, Some(j)));
+    let center_h1 = match species_col_index(model, catalog, "h1") {
+        Some(j) => center_avg_x_slot(model, Some(j))?,
+        None => 0.0,
+    };
+    let center_he4 = match species_col_index(model, catalog, "he4") {
+        Some(j) => center_avg_x_slot(model, Some(j))?,
+        None => 0.0,
+    };
 
     let power_nuc_burn = ctx.powers.power_nuc_burn;
     let power_h_burn = ctx.powers.power_h_burn;
@@ -1734,7 +1751,7 @@ fn eval_check_limits_core(
         "central",
         "xa_central_lower_limit",
         |m, j| center_avg_x_slot(m, Some(j)),
-    ) {
+    )? {
         return Ok(res);
     }
     if let Some(res) = check_xa_limits_block(
@@ -1746,7 +1763,7 @@ fn eval_check_limits_core(
         "central",
         "xa_central_upper_limit",
         |m, j| center_avg_x_slot(m, Some(j)),
-    ) {
+    )? {
         return Ok(res);
     }
     if let Some(res) = check_xa_limits_block(
@@ -1757,8 +1774,8 @@ fn eval_check_limits_core(
         false,
         "surface",
         "xa_surface_lower_limit",
-        |m, j| surface_avg_x_slot(m, Some(j)),
-    ) {
+        |m, j| Ok(surface_avg_x_slot(m, Some(j))),
+    )? {
         return Ok(res);
     }
     if let Some(res) = check_xa_limits_block(
@@ -1769,12 +1786,12 @@ fn eval_check_limits_core(
         true,
         "surface",
         "xa_surface_upper_limit",
-        |m, j| surface_avg_x_slot(m, Some(j)),
-    ) {
+        |m, j| Ok(surface_avg_x_slot(m, Some(j))),
+    )? {
         return Ok(res);
     }
-    let avg_dot_dq = |m: &StarModel, i: usize| -> f64 {
-        (0..m.nz).map(|k| m.dq[k] * m.cell_xa(k)[i]).sum()
+    let avg_dot_dq = |m: &StarModel, i: usize| -> Result<f64, StarError> {
+        Ok((0..m.nz).map(|k| m.dq[k] * m.cell_xa(k)[i]).sum())
     };
     if let Some(res) = check_xa_limits_block(
         model,
@@ -1785,7 +1802,7 @@ fn eval_check_limits_core(
         "average",
         "xa_average_lower_limit",
         avg_dot_dq,
-    ) {
+    )? {
         return Ok(res);
     }
     if let Some(res) = check_xa_limits_block(
@@ -1797,7 +1814,7 @@ fn eval_check_limits_core(
         "average",
         "xa_average_upper_limit",
         avg_dot_dq,
-    ) {
+    )? {
         return Ok(res);
     }
 
@@ -1859,8 +1876,11 @@ pub fn do_check_limits(
         owned_ctx = StepReportContext::compute(model);
         &owned_ctx
     };
-    let phase =
-        eval_phase_of_evolution(model, report_ctx, doing_first_model_of_run);
+    let phase = eval_phase_of_evolution_checked(
+        model,
+        report_ctx,
+        doing_first_model_of_run,
+    )?;
     model.aux.step_hist.phase_of_evolution = phase;
     eval_check_limits_core(model, report_ctx, phase)
 }
@@ -1894,7 +1914,7 @@ pub fn check_termination_limits_with_history(
         return Ok(LimitCheckOutcome::KeepGoing);
     }
     let ctx = StepReportContext::compute(model);
-    let phase = eval_phase_of_evolution(model, &ctx, false);
+    let phase = eval_phase_of_evolution_checked(model, &ctx, false)?;
     eval_check_limits_core(model, &ctx, phase)
 }
 

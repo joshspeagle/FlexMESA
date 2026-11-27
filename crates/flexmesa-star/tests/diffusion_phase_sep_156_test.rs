@@ -1339,7 +1339,8 @@ fn test_phase_sep_brunt_b_mode_rejection_and_unconditional_solid_shutoff() {
     // 3. Unconditional solid-core mixing shutoff when `do_phase_separation = false`
     //    (`star/private/turb_info.f90:144-152`): `set_hydro_vars` must still mark
     //    crystallized zones (`phase > 0.5 && mu > 1.7`) as `Crystallized` with
-    //    `d_mix == 0`, `sig == 0`, `gradt == gradr` even with sentinel boundary masses.
+    //    `d_mix == 0`, `gradt == gradr` even with sentinel boundary masses
+    //    (`sig` is left unchanged, #161).
     let mut m_off = build_wd_phase_sep_model(false);
     m_off.controls.do_phase_separation = false;
     m_off.aux.crystal_core_boundary_mass = -1.0;

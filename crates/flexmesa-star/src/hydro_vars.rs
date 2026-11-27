@@ -136,8 +136,9 @@ pub(crate) fn switch_to_radiative(model: &mut StarModel, k: usize) {
     model.mlt_vc[k] = 0.0;
     model.gradt_ad[k] = model.gradr_ad[k];
     model.gradt[k] = model.gradt_ad[k].val;
-    model.aux.mixing.gradt_sub_grada[k] =
-        model.gradt[k] - model.aux.mixing.grada_face[k];
+    // Upstream `switch_to_radiative` leaves `s% gradT_sub_grada(k)` as it was
+    // (`star/private/turb_info.f90:389-399`); only `adjust_gradT_fraction`
+    // writes it (`turb_info.f90:354`).
 }
 
 /// Wraps cell `k`'s specific internal energy `model.energy[k]` as a
@@ -532,16 +533,18 @@ pub(crate) fn do1_mlt_2(
         grada_face_ad
     };
 
-    let max_conv_vel = if k > 0
-        && model.controls.max_conv_vel_div_csound >= 0.0
-        && model.q[k] <= model.controls.output.max_conv_vel_div_csound_maxq
-    {
-        (model.face_value_alfa_beta(&model.csound, k)
-            * model.controls.max_conv_vel_div_csound)
-            .max(0.0)
-    } else {
-        1.0e99
-    };
+    // `if (k > 0)` with upstream's 1-based `k` (`star/private/
+    // turb_support.f90:271-279`): the surface face (`k = 0` here) is capped
+    // like every other face; only the pre-MS `get_gradT` call (upstream
+    // `k = 0`) is not, and it does not pass through this routine. No sign
+    // gate and no clamp; `csound_face(k)` is `star/private/micro.f90:94-100`.
+    let max_conv_vel =
+        if model.q[k] <= model.controls.output.max_conv_vel_div_csound_maxq {
+            model.face_value_alfa_beta(&model.csound, k)
+                * model.controls.max_conv_vel_div_csound
+        } else {
+            1.0e99
+        };
 
     // `starspot_tweak_gradr` before `Get_results`
     // (`star/private/turb_support.f90:183-187`,
@@ -574,6 +577,19 @@ pub(crate) fn do1_mlt_2(
 
     if !bad_params {
         if using_tdc {
+            // `Eq_div_w = compute_tdc_Eq_div_w_face(s, k, ierr)` when
+            // `(v_flag .or. u_flag) .and. using_TDC .and. TDC_alpha_M > 0`
+            // (`star/private/turb_support.f90:238-243`) is not ported; a zero
+            // `Eq_div_w` would be a silent default.
+            if (model.controls.v_flag || model.controls.u_flag)
+                && model.controls.tdc_alpha_m > 0.0
+            {
+                return Err(StarError::InvalidInput(String::from(
+                    "TDC with TDC_alpha_M > 0 and v_flag or u_flag needs \
+                     compute_tdc_Eq_div_w_face, which is not ported \
+                     (`star/private/turb_support.f90:238-243`)",
+                )));
+            }
             let vc_old = if model.aux.okay_to_set_mlt_vc {
                 model.aux.mlt_vc_old.get(k).copied().unwrap_or(0.0)
             } else {
@@ -1131,10 +1147,10 @@ fn set_no_mixing_face(
     model.aux.mixing.grada_face[k] = grada_face_ad.val;
     model.gradt_ad[k] = gradr_ad;
     model.gradt[k] = gradr_ad.val;
-    model.aux.mixing.mlt_gradt[k] = gradr_ad.val;
+    // Upstream `set_no_mixing` writes neither `s% mlt_gradT` nor
+    // `s% gradT_sub_grada` (`star/private/turb_info.f90:291-332`).
     let y_face_ad = gradr_ad - grada_face_ad;
     model.aux.mixing.y_face[k] = y_face_ad.val;
-    model.aux.mixing.gradt_sub_grada[k] = gradr_ad.val - grada_face_ad.val;
     model.mlt_vc_ad[k] = StarAdOrder1::ZERO;
     if model.aux.okay_to_set_mlt_vc {
         model.mlt_vc[k] = 0.0;
@@ -1271,7 +1287,10 @@ fn adjust_gradt_excess(model: &mut StarModel, k: usize) {
         return;
     }
     if log_tau < mw.gradt_excess_min_log_tau_full_on {
-        gradt_excess_alpha *= (log_tau - mw.gradt_excess_max_log_tau_full_off)
+        // `alpha*(log_tau - off)/(on - off)` evaluates left to right
+        // (`star/private/turb_info.f90:372-375`).
+        gradt_excess_alpha = gradt_excess_alpha
+            * (log_tau - mw.gradt_excess_max_log_tau_full_off)
             / (mw.gradt_excess_min_log_tau_full_on
                 - mw.gradt_excess_max_log_tau_full_off);
     }
@@ -1307,13 +1326,19 @@ pub fn set_gradt_excess_alpha(model: &mut StarModel) {
         return;
     }
     let nz = model.nz;
-    let h1_c = model.xh_mass[nz - 1];
-    if h1_c > mw.gradt_excess_max_center_h1 {
-        model.aux.mixing.gradt_excess_alpha = 0.0;
-        return;
-    }
-    let he4_c = model.yhe_mass[nz - 1];
-    if he4_c < mw.gradt_excess_min_center_he4 {
+    // Each composition test applies only when the net contains the isotope
+    // (`net_iso(ih1) /= 0`, `net_iso(ihe4) /= 0`; `star/private/
+    // turb_info.f90:427-440`), on the center zone's `xa`.
+    let catalog = flexmesa_chem::NuclideCatalog::builtin_ref();
+    let center_xa = |name: &str| -> Option<f64> {
+        let iso = catalog
+            .get_by_name(name)
+            .and_then(|e| model.net_iso.get(e.chem_id).copied().flatten())?;
+        Some(model.xa[(nz - 1) * model.species + iso])
+    };
+    if center_xa("h1").is_some_and(|x| x > mw.gradt_excess_max_center_h1)
+        || center_xa("he4").is_some_and(|x| x < mw.gradt_excess_min_center_he4)
+    {
         model.aux.mixing.gradt_excess_alpha = 0.0;
         return;
     }
@@ -1462,11 +1487,8 @@ fn redo_convective_region(
     let top_r = model.r[k_top];
     let top_hp = model.scale_height[k_top];
     let dr = top_r - bot_r;
-    let alpha_k = if model.aux.mixing.alpha_mlt[k_top] > 0.0 {
-        model.aux.mixing.alpha_mlt[k_top]
-    } else {
-        model.controls.mixing_length_alpha
-    };
+    // `s% alpha_mlt(k)` is read as is (`star/private/turb_info.f90:578`).
+    let alpha_k = model.aux.mixing.alpha_mlt[k_top];
     if dr < alpha_k * top_hp.min(bot_hp) {
         for kk in k_top..=k_bot {
             if dr < model.aux.mixing.mlt_mixing_length[kk] {
@@ -1682,7 +1704,6 @@ pub(crate) fn set_hydro_vars_with_skips(
     if model.aux.mixing.mlt_mixing_type.len() != nz {
         model.aux.mixing.resize(nz);
     }
-    let sig_was_zero = model.sig.iter().all(|&s| s == 0.0);
 
     // `set_rotation_info` before `do_brunt_B` and `set_grads`
     // (`star/private/hydro_vars.f90:539-543`).
@@ -1734,6 +1755,22 @@ pub(crate) fn set_hydro_vars_with_skips(
                 })?;
                 hook.apply(model)?;
             }
+        }
+        // `set_viscosity_vars_TDC` (`star/private/hydro_vars.f90:602-610`)
+        // is not ported. `steps_before_use_tdc` can switch `MLT_option` to
+        // `TDC` during a run (`star/private/evolve.f90:390-396`), so it is
+        // included in the test.
+        if model.controls.tdc_alpha_m > 0.0
+            && (model.controls.mlt_option == MltOption::Tdc
+                || (!model.aux.doing_relax
+                    && model.controls.steps_before_use_tdc > 0))
+            && !model.controls.rsp2_flag
+        {
+            return Err(StarError::InvalidInput(String::from(
+                "set_viscosity_vars_TDC is not ported; it is required when \
+                 TDC_alpha_M > 0 and MLT_option = 'TDC' \
+                 (`star/private/hydro_vars.f90:602-610`)",
+            )));
         }
         if model.controls.mix_wind.use_t_tau_gradr_factor {
             let t_tau_id = model.controls.atm_t_tau_relation.id();
@@ -1790,10 +1827,6 @@ pub(crate) fn set_hydro_vars_with_skips(
                 model.aux.mixing.gradt_sub_grada[k] = model.gradt[k] - grada_f;
             }
         }
-        if !skips.solver && sig_was_zero {
-            model.sig.fill(0.0);
-            update_sig_from_d_mix(model)?;
-        }
         do_brunt_n2(model)?;
         if model.controls.u_flag {
             crate::riemann_ad::do_uface_and_pface(model)?;
@@ -1809,9 +1842,6 @@ pub(crate) fn set_hydro_vars_with_skips(
                 model,
                 skip_set_cz_bdy_mass,
             )?;
-            if sig_was_zero {
-                update_sig_from_d_mix(model)?;
-            }
         }
     }
     eval_surf_bc(model)?;
@@ -1894,5 +1924,35 @@ mod tests {
             assert_eq!(m.mlt_d[1], 0.0);
             assert_eq!(m.aux.mixing.mlt_mixing_type[1], mix_type);
         }
+    }
+
+    /// `turb_info.f90:291-332, 389-399`: neither `set_no_mixing` nor
+    /// `switch_to_radiative` writes `gradT_sub_grada`; `set_no_mixing` does not
+    /// write `mlt_gradT` either.
+    #[test]
+    fn no_mixing_paths_leave_gradt_sub_grada_and_mlt_gradt_unchanged() {
+        let mut m = model(&["h1", "he4"], &[0.5, 0.5, 0.5, 0.5]);
+        m.aux.mixing.gradt_sub_grada = vec![0.125; m.nz];
+        m.aux.mixing.mlt_gradt = vec![0.25; m.nz];
+        let mut gr = StarAdOrder1::ZERO;
+        gr.val = 0.4;
+        let mut ga = StarAdOrder1::ZERO;
+        ga.val = 0.3;
+        set_no_mixing_face(
+            &mut m,
+            1,
+            ga,
+            gr,
+            StarAdOrder1::ZERO,
+            1.0,
+            MixingType::NoMixing,
+        );
+        assert_eq!(m.aux.mixing.gradt_sub_grada[1], 0.125);
+        assert_eq!(m.aux.mixing.mlt_gradt[1], 0.25);
+        assert_eq!(m.gradt[1], 0.4);
+        m.gradr_ad[0] = gr;
+        switch_to_radiative(&mut m, 0);
+        assert_eq!(m.aux.mixing.gradt_sub_grada[0], 0.125);
+        assert_eq!(m.gradt[0], 0.4);
     }
 }

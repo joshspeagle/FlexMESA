@@ -540,8 +540,9 @@ pub use termination::{
     PHASE_WDCS, PHASE_ZACHEB, PHASE_ZAMS,
 };
 pub use timestep::{
-    eval_h211_factor, eval_varcontrol, filter_limit,
-    pick_next_timestep, TimestepAction, TimestepLimitReason, TimestepReport,
+    eval_h211_factor, eval_varcontrol, filter_limit, pick_next_timestep,
+    TimestepAction, TimestepLimitReason, TimestepReport, TLIM_BINARY,
+    TLIM_NEG_X,
 };
 pub use timestep_limits::timestep_controller;
 pub use winds::{

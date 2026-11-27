@@ -138,6 +138,14 @@ pub(crate) mod tlim {
     pub const NUM_TLIM: usize = OTHER_TIMESTEP_LIMIT;
 }
 
+/// Binary timestep limit reason code (`Tlim_binary`, 1-based;
+/// `star_data/public/star_data_def.inc:100`).
+pub const TLIM_BINARY: usize = tlim::BINARY;
+
+/// Negative mass fraction hard limit reason code (`Tlim_neg_X`, 1-based;
+/// `star_data/public/star_data_def.inc:84`).
+pub const TLIM_NEG_X: usize = tlim::NEG_X;
+
 /// The `dt_limit_ratio(1:numTlim)` array of `do_timestep_limits`.
 pub(crate) type DtLimitRatios = [f64; tlim::NUM_TLIM];
 

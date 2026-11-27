@@ -22,6 +22,24 @@ pub const B_TLIM_SEP: i32 = 5;
 pub const B_TLIM_ECC: i32 = 6;
 /// Component mass change limit (`fdm`).
 pub const B_TLIM_DM: i32 = 7;
+/// Highest binary timestep limit code (`b_numTlim`, `binary_def.f90:46`).
+pub const B_NUM_TLIM: i32 = B_TLIM_DM;
+
+/// Returns `binary_dt_why_str(reason)` (`binary_private_def.f90:223-231`) or
+/// `" "` when out of `1..=B_NUM_TLIM` (`binary_timestep.f90:64-68`).
+#[must_use]
+pub fn binary_dt_why_str(reason: i32) -> &'static str {
+    match reason {
+        B_TLIM_COMP => "b_companion",
+        B_TLIM_ROCHE => "b_RL",
+        B_TLIM_JORB => "b_jorb",
+        B_TLIM_ENV => "b_envelope",
+        B_TLIM_SEP => "b_separation",
+        B_TLIM_ECC => "b_eccentricity",
+        B_TLIM_DM => "b_deltam",
+        _ => " ",
+    }
+}
 
 /// Specific binary hard-limit violation triggered inside
 /// `binary_pick_next_timestep` (`binary/private/binary_timestep.f90:168-262`).

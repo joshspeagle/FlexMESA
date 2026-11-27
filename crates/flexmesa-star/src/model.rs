@@ -163,6 +163,9 @@ pub struct StarModel {
     pub using_gold_tolerances: bool,
     /// Whether the last trial failed on `xa < min_xa_hard_limit` (`why_Tlim == Tlim_neg_X`).
     pub why_tlim_neg_x: bool,
+    /// Last 1-based timestep limit code (`why_Tlim`; `0` before first pick).
+    #[serde(default)]
+    pub why_tlim: usize,
     /// Whether the active `star_solver` call skips `corr_coeff_limit` (`skip_global_corr_coeff_limit`).
     pub solver_skip_global_corr_coeff_limit: bool,
     /// Whether the active `star_solver` call is on `first_try` of the step (`first_try`).
@@ -567,6 +570,7 @@ impl StarModel {
             used_extra_iter_in_solver_for_accretion: false,
             using_gold_tolerances: false,
             why_tlim_neg_x: false,
+            why_tlim: 0,
             solver_skip_global_corr_coeff_limit: false,
             solver_first_try_of_step: true,
             step_retry_cnt: 0,

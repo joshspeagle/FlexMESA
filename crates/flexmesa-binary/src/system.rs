@@ -161,6 +161,13 @@ pub struct BinarySystem {
     pub max_timestep_sec: f64,
     /// Reason code (`B_TLIM_*`) of the binary timestep limit (`b% dt_why_reason`).
     pub dt_why_reason: i32,
+    /// Formatted binary timestep reason string (`dt_why_str(Tlim_binary)` in
+    /// `binary/private/binary_timestep.f90:64-68`).
+    #[serde(default)]
+    pub dt_why_str_binary: String,
+    /// Common-envelope evolution flag (`CE_flag`; unported, errors if `true`).
+    #[serde(default)]
+    pub ce_flag: bool,
     /// Non-conservative mass transfer fraction lost from donor ($\alpha_{\mathrm{mt}}$).
     pub mass_transfer_alpha: f64,
     /// Fraction lost from vicinity of accretor ($\beta_{\mathrm{mt}}$).
@@ -470,6 +477,8 @@ impl BinarySystem {
             generations: 0,
             max_timestep_sec: 1.0e99,
             dt_why_reason: 0,
+            dt_why_str_binary: String::new(),
+            ce_flag: false,
             mass_transfer_alpha: controls.mass_transfer_alpha,
             mass_transfer_beta: controls.mass_transfer_beta,
             mass_transfer_delta: controls.mass_transfer_delta,
@@ -1075,6 +1084,7 @@ impl BinarySystem {
             model_number: self.model_number,
             max_timestep_sec: self.max_timestep_sec,
             dt_why_reason: self.dt_why_reason,
+            ce_flag: self.ce_flag,
             change_factor: self.change_factor,
             using_jdot_mb: self.using_jdot_mb,
             cumulative_j_ext: self.cumulative_j_ext,
@@ -1098,6 +1108,21 @@ impl BinarySystem {
     pub(crate) fn restore_snapshot(
         &mut self,
         snap: &BinaryStepSnapshot,
+    ) -> Result<(), StarError> {
+        self.restore_snapshot_inner(snap, true)
+    }
+
+    pub(crate) fn restore_snapshot_skip_companion(
+        &mut self,
+        snap: &BinaryStepSnapshot,
+    ) -> Result<(), StarError> {
+        self.restore_snapshot_inner(snap, false)
+    }
+
+    fn restore_snapshot_inner(
+        &mut self,
+        snap: &BinaryStepSnapshot,
+        restore_companion: bool,
     ) -> Result<(), StarError> {
         if snap.point_mass_i == 0
             && matches!(self.companion, BinaryCompanion::PointMass { .. })
@@ -1139,6 +1164,12 @@ impl BinarySystem {
         self.model_number = snap.model_number;
         self.max_timestep_sec = snap.max_timestep_sec;
         self.dt_why_reason = snap.dt_why_reason;
+        self.dt_why_str_binary = if snap.dt_why_reason == 0 {
+            String::new()
+        } else {
+            String::from(crate::timestep::binary_dt_why_str(snap.dt_why_reason))
+        };
+        self.ce_flag = snap.ce_flag;
         self.change_factor = snap.change_factor;
         self.using_jdot_mb = snap.using_jdot_mb;
         self.cumulative_j_ext = snap.cumulative_j_ext;
@@ -1158,7 +1189,7 @@ impl BinarySystem {
                 }
                 None
             }
-            BinaryCompanion::Star(s2) => Some(&mut **s2),
+            BinaryCompanion::Star(s2) => restore_companion.then_some(&mut **s2),
         };
         snap.restore_stars(&mut self.donor, comp_mut)?;
         self.refresh_tidal_deformation_hooks(false)?;

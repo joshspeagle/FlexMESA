@@ -472,6 +472,7 @@ pub fn set_vars_for_solver(
                 for j in 0..species {
                     if model.xa[c_base + j] < min_xa_hard_limit {
                         model.why_tlim_neg_x = true;
+                        model.why_tlim = crate::timestep::TLIM_NEG_X;
                         return Err(StarError::ConvergenceFailure(format!(
                             "some xa < min_xa_hard_limit at zone {k}"
                         )));

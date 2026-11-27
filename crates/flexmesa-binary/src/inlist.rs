@@ -332,6 +332,29 @@ pub struct BinaryInlistControls {
     pub std_distance_for_irradiation: f64,
     /// Ceiling on donor irradiation flux in $\mathrm{erg\,cm^{-2}\,s^{-1}}$ (`max_F_irr`).
     pub max_f_irr: f64,
+
+    // --- Unported binary driver hook / CE switches (fail loudly when true) ---
+    /// CE trigger (`CE_begin_at_max_implicit_abs_mdot`, unported).
+    #[serde(default)]
+    pub ce_begin_at_max_implicit_abs_mdot: bool,
+    /// Enable custom `other_check_implicit_rlo` hook (unported).
+    #[serde(default)]
+    pub use_other_check_implicit_rlo: bool,
+    /// Enable custom `other_implicit_function_to_solve` hook (unported).
+    #[serde(default)]
+    pub use_other_implicit_function_to_solve: bool,
+    /// Enable custom `other_rlo_mdot` hook (`use_other_rlo_mdot`, unported).
+    #[serde(default)]
+    pub use_other_rlo_mdot: bool,
+    /// Enable custom `other_adjust_mdots` hook (unported).
+    #[serde(default)]
+    pub use_other_adjust_mdots: bool,
+    /// Enable custom `other_mdot_edd` hook (`use_other_mdot_edd`, unported).
+    #[serde(default)]
+    pub use_other_mdot_edd: bool,
+    /// Enable custom `other_accreted_material_j` hook (unported).
+    #[serde(default)]
+    pub use_other_accreted_material_j: bool,
 }
 
 impl Default for BinaryInlistControls {
@@ -483,8 +506,79 @@ impl Default for BinaryInlistControls {
             irrad_flux_at_std_distance: -1.0,
             std_distance_for_irradiation: -1.0,
             max_f_irr: 5.0e12,
+            ce_begin_at_max_implicit_abs_mdot: false,
+            use_other_check_implicit_rlo: false,
+            use_other_implicit_function_to_solve: false,
+            use_other_rlo_mdot: false,
+            use_other_adjust_mdots: false,
+            use_other_mdot_edd: false,
+            use_other_accreted_material_j: false,
         }
     }
+}
+
+/// Rejects unported common-envelope and binary `use_other_*` driver controls
+/// when switched on (`CE_flag`, `CE_begin_at_max_implicit_abs_mdot`,
+/// `use_other_{check_implicit_rlo,implicit_function_to_solve,rlo_mdot,
+/// adjust_mdots,mdot_edd,accreted_material_j}`).
+///
+/// # Errors
+/// Returns [`StarError::InvalidInput`] identifying the unported control and
+/// its upstream MESA `26.4.1` `file:line`.
+pub fn ensure_no_unported_binary_driver_controls(
+    ctrl: &BinaryInlistControls,
+    ce_flag: bool,
+) -> Result<(), StarError> {
+    if ce_flag {
+        return Err(StarError::InvalidInput(String::from(
+            "CE_flag = true (run_binary_support.f90:389,417,498,511; \
+             binary_mdot.f90:113,149) is not ported in flexmesa-binary",
+        )));
+    }
+    for (flag, name, loc) in [
+        (
+            ctrl.ce_begin_at_max_implicit_abs_mdot,
+            "CE_begin_at_max_implicit_abs_mdot",
+            "binary_evolve.f90:492",
+        ),
+        (
+            ctrl.use_other_check_implicit_rlo,
+            "use_other_check_implicit_rlo",
+            "binary_evolve.f90:413",
+        ),
+        (
+            ctrl.use_other_implicit_function_to_solve,
+            "use_other_implicit_function_to_solve",
+            "binary_mdot.f90:88",
+        ),
+        (
+            ctrl.use_other_rlo_mdot,
+            "use_other_rlo_mdot",
+            "binary_evolve.f90:429; binary_mdot.f90:102,163",
+        ),
+        (
+            ctrl.use_other_adjust_mdots,
+            "use_other_adjust_mdots",
+            "binary_mdot.f90:504",
+        ),
+        (
+            ctrl.use_other_mdot_edd,
+            "use_other_mdot_edd",
+            "binary_mdot.f90:518",
+        ),
+        (
+            ctrl.use_other_accreted_material_j,
+            "use_other_accreted_material_j",
+            "binary_mdot.f90:565",
+        ),
+    ] {
+        if flag {
+            return Err(StarError::InvalidInput(format!(
+                "{name} = true ({loc}) is not ported in flexmesa-binary"
+            )));
+        }
+    }
+    Ok(())
 }
 
 impl BinaryInlistControls {
@@ -549,6 +643,7 @@ impl BinaryInlistControls {
     }
 
     fn validate_values(&mut self) -> Result<(), StarError> {
+        ensure_no_unported_binary_driver_controls(self, false)?;
         if !self.initial_bh_spin.is_finite() {
             return Err(StarError::InvalidInput(format!(
                 "invalid '&binary_controls::initial_bh_spin' = {} (must be finite)",
@@ -854,6 +949,25 @@ impl BinaryInlistControls {
             (
                 &mut self.use_accretor_luminosity_for_irrad,
                 "use_accretor_luminosity_for_irrad",
+            ),
+            (
+                &mut self.ce_begin_at_max_implicit_abs_mdot,
+                "ce_begin_at_max_implicit_abs_mdot",
+            ),
+            (
+                &mut self.use_other_check_implicit_rlo,
+                "use_other_check_implicit_rlo",
+            ),
+            (
+                &mut self.use_other_implicit_function_to_solve,
+                "use_other_implicit_function_to_solve",
+            ),
+            (&mut self.use_other_rlo_mdot, "use_other_rlo_mdot"),
+            (&mut self.use_other_adjust_mdots, "use_other_adjust_mdots"),
+            (&mut self.use_other_mdot_edd, "use_other_mdot_edd"),
+            (
+                &mut self.use_other_accreted_material_j,
+                "use_other_accreted_material_j",
             ),
         ] {
             s.try_bool_into("binary_controls", dst, key)?;

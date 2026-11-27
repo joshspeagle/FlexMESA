@@ -477,7 +477,10 @@ fn implicit_star_limit_redo_preserves_solver_progress() {
     let dt_yr = 1.0e4;
     d_ctrl.ts_stop.when_to_stop_atol = 1.0e-2;
     d_ctrl.ts_stop.when_to_stop_rtol = 0.0;
-    d_ctrl.ts_stop.redo_limit = 8;
+    // `#619`: MESA `run_binary_support.f90:585-603` + `evolve.f90:2160-2168`
+    // counts implicit RLOF redos (`max_tries_to_achieve = 30`) toward
+    // `redo_limit` alongside star-limit halvings.
+    d_ctrl.ts_stop.redo_limit = 40;
     let mut donor = load_zams_model(d_ctrl, StarJobControls::default())
         .expect("1.0 Msun ZAMS");
     donor.controls.max_age = donor.star_age + 0.5 * dt_yr;

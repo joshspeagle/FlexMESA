@@ -92,6 +92,7 @@ pub(crate) fn timestep_controller_with_extras(
     let r_vc = varcontrol / vc_target;
     let retry_fac = model.controls.ts_stop.timestep_factor_for_retries;
     if r_vc > model.controls.ts_stop.varcontrol_dt_limit_ratio_hard_max {
+        model.why_tlim = tlim::STRUC;
         let rep = TimestepReport {
             dt_next: model.dt * retry_fac,
             varcontrol,
@@ -151,6 +152,7 @@ pub(crate) fn timestep_controller_with_extras(
                     dt_limit_ratio[why - 1] = r_ext;
                 }
                 ExtrasDirective::Retry => {
+                    model.why_tlim = why;
                     return retry_rep(
                         String::from("other_timestep_limit retry"),
                         dt_done,
@@ -190,6 +192,7 @@ pub(crate) fn timestep_controller_with_extras(
                 match $call {
                     Ok(()) => {}
                     Err(CheckFailure::Retry(m)) => {
+                        model.why_tlim = $tl;
                         return retry_rep(m, dt_done, $tl);
                     }
                     Err(CheckFailure::Fatal(e)) => return Err(e),
@@ -551,6 +554,7 @@ pub(crate) fn timestep_controller_with_extras(
     }
 
     model.dt_next = dt_next;
+    model.why_tlim = i_limit;
     model.dt_limit_ratio_old = dt_limit_ratio.max(1.0e-10);
     Ok((
         TimestepAction::KeepGoing,

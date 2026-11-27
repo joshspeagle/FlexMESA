@@ -828,6 +828,10 @@ pub struct HydroAuxState {
     pub opacity_start_surf: f64,
     /// Per-face sticky radiative latch (`fixed_gradr_for_rest_of_solver_iters` in `turb_info.f90:56-61`).
     pub fixed_gradr_sticky: Vec<bool>,
+    /// Mass-weighted composition of mass removed on the active `delta_m < 0`
+    /// step (`xa_removed`, `star/private/adjust_mass.f90:292-314`).
+    #[serde(default)]
+    pub xa_removed: Vec<f64>,
     /// Auxiliary mixing, MLT, convective-boundary, and Brunt-smoothing state.
     pub mixing: crate::mixing_state::MixingAuxState,
     /// Per-step scalar history, solver/substep counters, and retry-hold state.
@@ -1008,6 +1012,7 @@ impl HydroAuxState {
             eps_mdot_old: vec![0.0; nz],
             opacity_start_surf: 0.0,
             fixed_gradr_sticky: vec![false; nz],
+            xa_removed: vec![0.0; species],
             mixing: crate::mixing_state::MixingAuxState::new(nz),
             step_hist: StepHistoryScalars::default(),
             crystal_core_boundary_mass: -1.0,
@@ -1139,6 +1144,7 @@ impl HydroAuxState {
         self.diffusion_dx.resize(n_sp, 0.0);
         self.burn_num_iters.resize(nz, 0);
         self.fixed_gradr_sticky.resize(nz, false);
+        self.xa_removed.resize(species, 0.0);
         self.mixing.resize(nz);
         self.rsp.resize(nz);
     }

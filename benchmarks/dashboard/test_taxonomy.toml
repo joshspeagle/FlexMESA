@@ -190,6 +190,12 @@ module = "binary"
 kind = "invariant"
 
 [[tests]]
+path = "crates/flexmesa-binary/tests/binary_driver_619_test.rs"
+language = "rust"
+module = "binary"
+kind = "invariant"
+
+[[tests]]
 path = "crates/flexmesa-binary/tests/binary_evolve_hist_160_test.rs"
 language = "rust"
 module = "binary"

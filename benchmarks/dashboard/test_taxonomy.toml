@@ -1441,6 +1441,12 @@ module = "star"
 kind = "invariant"
 
 [[tests]]
+path = "crates/flexmesa-star/tests/timestep_slots_616_test.rs"
+language = "rust"
+module = "star"
+kind = "invariant"
+
+[[tests]]
 path = "crates/flexmesa-star/tests/turb_155_bd_parity_test.rs"
 language = "rust"
 module = "star"

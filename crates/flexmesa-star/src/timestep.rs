@@ -15,6 +15,7 @@
 //! $\kappa = 10$ is the smooth arctangent limiter (`limiter` in
 //! `timestep.f90:2417-2424`).
 
+use crate::controls::StarError;
 use crate::model::StarModel;
 
 /// Outcome of [`crate::timestep_limits::timestep_controller`] on a completed
@@ -61,6 +62,117 @@ pub enum TimestepLimitReason {
     MinTimestepFactor,
 }
 
+/// Timestep limit identifiers (`Tlim_*` in `star_data/public/star_data_def.inc`,
+/// MESA `26.4.1`), 1-based as upstream. `dt_limit_ratio(Tlim_*)` slots are
+/// stored at index `Tlim_* - 1`.
+///
+/// The index chain is copied from upstream, including the two collisions
+/// `LG_XSI_CNTR == LG_XNE_CNTR` and `XH_CNTR == LG_XO_CNTR`
+/// (`star_data_def.inc` defines `Tlim_lg_XSi_cntr = Tlim_lg_XC_cntr + 1`),
+/// recorded in issue #617. Both pairs share one `dt_limit_ratio` slot.
+pub(crate) mod tlim {
+    pub const STRUC: usize = 1;
+    pub const MAX_TIMESTEP_FACTOR: usize = STRUC + 1;
+    pub const MIN_TIMESTEP_FACTOR: usize = MAX_TIMESTEP_FACTOR + 1;
+    pub const SOLVER: usize = MIN_TIMESTEP_FACTOR + 1;
+    pub const NUM_BURN_STEPS: usize = SOLVER + 1;
+    pub const NUM_DIFF_SOLVER_STEPS: usize = NUM_BURN_STEPS + 1;
+    pub const DX: usize = NUM_DIFF_SOLVER_STEPS + 1;
+    pub const DX_DIV_X: usize = DX + 1;
+    pub const DL_DIV_L: usize = DX_DIV_X + 1;
+    pub const DLGP: usize = DL_DIV_L + 1;
+    pub const DLGRHO: usize = DLGP + 1;
+    pub const DLGE: usize = DLGRHO + 1;
+    pub const DLGT: usize = DLGE + 1;
+    pub const DLGR: usize = DLGT + 1;
+    pub const DLGL_NUC_CAT: usize = DLGR + 1;
+    pub const DLGL_H: usize = DLGL_NUC_CAT + 1;
+    pub const DLGL_HE: usize = DLGL_H + 1;
+    pub const DLGL_Z: usize = DLGL_HE + 1;
+    pub const DLGL_NUC: usize = DLGL_Z + 1;
+    pub const DLGTEFF: usize = DLGL_NUC + 1;
+    pub const DLGRHO_CNTR: usize = DLGTEFF + 1;
+    pub const DLGP_CNTR: usize = DLGRHO_CNTR + 1;
+    pub const DLGT_CNTR: usize = DLGP_CNTR + 1;
+    pub const DLGT_MAX: usize = DLGT_CNTR + 1;
+    pub const DLGT_MAX_AT_HIGH_T: usize = DLGT_MAX + 1;
+    pub const LG_XH_CNTR: usize = DLGT_MAX_AT_HIGH_T + 1;
+    pub const DMSTAR: usize = LG_XH_CNTR + 1;
+    pub const DT_DIV_DT_CELL_COLLAPSE: usize = DMSTAR + 1;
+    pub const DT_DIV_MIN_DR_DIV_CS: usize = DT_DIV_DT_CELL_COLLAPSE + 1;
+    pub const LGL: usize = DT_DIV_MIN_DR_DIV_CS + 1;
+    pub const FORCE_TIMESTEP: usize = LGL + 1;
+    pub const MAX_TIMESTEP: usize = FORCE_TIMESTEP + 1;
+    pub const TIMESTEP_HOLD: usize = MAX_TIMESTEP + 1;
+    pub const DX_DIV_X_CNTR: usize = TIMESTEP_HOLD + 1;
+    pub const LG_XHE_CNTR: usize = DX_DIV_X_CNTR + 1;
+    pub const LG_XC_CNTR: usize = LG_XHE_CNTR + 1;
+    pub const LG_XNE_CNTR: usize = LG_XC_CNTR + 1;
+    pub const LG_XO_CNTR: usize = LG_XNE_CNTR + 1;
+    /// Upstream defines this as `Tlim_lg_XC_cntr + 1`, which equals
+    /// [`LG_XNE_CNTR`] (issue #617).
+    pub const LG_XSI_CNTR: usize = LG_XC_CNTR + 1;
+    /// Equals [`LG_XO_CNTR`] because `LG_XSI_CNTR` collides (issue #617).
+    pub const XH_CNTR: usize = LG_XSI_CNTR + 1;
+    pub const XHE_CNTR: usize = XH_CNTR + 1;
+    pub const XC_CNTR: usize = XHE_CNTR + 1;
+    pub const XNE_CNTR: usize = XC_CNTR + 1;
+    pub const XO_CNTR: usize = XNE_CNTR + 1;
+    pub const XSI_CNTR: usize = XO_CNTR + 1;
+    pub const DX_NUC_DROP: usize = XSI_CNTR + 1;
+    pub const NEG_X: usize = DX_NUC_DROP + 1;
+    pub const BAD_XSUM: usize = NEG_X + 1;
+    pub const DLGL_POWER_PHOTO: usize = BAD_XSUM + 1;
+    pub const DELTA_HR: usize = DLGL_POWER_PHOTO + 1;
+    pub const DLOG_EPS_NUC: usize = DELTA_HR + 1;
+    pub const NUM_DIFF_SOLVER_ITERS: usize = DLOG_EPS_NUC + 1;
+    pub const DEL_MDOT: usize = NUM_DIFF_SOLVER_ITERS + 1;
+    pub const ADJUST_J_Q: usize = DEL_MDOT + 1;
+    pub const DELTA_YE_HIGH_T: usize = ADJUST_J_Q + 1;
+    pub const ERROR_IN_ENERGY_CONSERVATION: usize = DELTA_YE_HIGH_T + 1;
+    pub const RETRY: usize = ERROR_IN_ENERGY_CONSERVATION + 1;
+    pub const BINARY: usize = RETRY + 1;
+    pub const ERROR_OTHER: usize = BINARY + 1;
+    pub const OTHER_TIMESTEP_LIMIT: usize = ERROR_OTHER + 1;
+    /// `numTlim`.
+    pub const NUM_TLIM: usize = OTHER_TIMESTEP_LIMIT;
+}
+
+/// The `dt_limit_ratio(1:numTlim)` array of `do_timestep_limits`.
+pub(crate) type DtLimitRatios = [f64; tlim::NUM_TLIM];
+
+/// Coarse [`TimestepLimitReason`] for an upstream `Tlim_*` index.
+#[must_use]
+pub(crate) fn reason_for_tlim(i_limit: usize) -> TimestepLimitReason {
+    #[allow(clippy::wildcard_imports)]
+    use tlim::*;
+    use TimestepLimitReason as R;
+    match i_limit {
+        MAX_TIMESTEP_FACTOR => R::MaxTimestepFactor,
+        MIN_TIMESTEP_FACTOR => R::MinTimestepFactor,
+        SOLVER
+        | NUM_BURN_STEPS
+        | NUM_DIFF_SOLVER_STEPS
+        | NUM_DIFF_SOLVER_ITERS
+        | OTHER_TIMESTEP_LIMIT => R::SolverOrSubsteps,
+        DX | DX_DIV_X | DX_DIV_X_CNTR | LG_XH_CNTR | LG_XHE_CNTR
+        | LG_XC_CNTR | LG_XNE_CNTR | LG_XO_CNTR | XHE_CNTR | XC_CNTR
+        | XNE_CNTR | XO_CNTR | XSI_CNTR => R::AbundanceChange,
+        DL_DIV_L | DLGP | DLGRHO | DLGE | DLGT | DLGR | DLGRHO_CNTR
+        | DLGP_CNTR | DLGT_CNTR | DLGT_MAX | DLGT_MAX_AT_HIGH_T
+        | DLOG_EPS_NUC | ADJUST_J_Q | DELTA_YE_HIGH_T => R::StructuralChange,
+        DLGL_NUC_CAT | DLGL_H | DLGL_HE | DLGL_Z | DLGL_NUC | DLGTEFF | LGL
+        | DLGL_POWER_PHOTO | DELTA_HR => R::LuminosityChange,
+        DMSTAR | DEL_MDOT => R::MassChange,
+        DT_DIV_DT_CELL_COLLAPSE | DT_DIV_MIN_DR_DIV_CS => R::CourantOrCollapse,
+        DX_NUC_DROP => R::NuclearBurn,
+        ERROR_IN_ENERGY_CONSERVATION => R::EnergyConservation,
+        FORCE_TIMESTEP | MAX_TIMESTEP => R::MaxTimestep,
+        TIMESTEP_HOLD => R::TimestepHold,
+        _ => R::Varcontrol,
+    }
+}
+
 /// Summary of the timestep selection pass (`pick_next_timestep` and
 /// [`crate::timestep_limits::timestep_controller`] in `timestep.f90`).
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -73,6 +185,8 @@ pub struct TimestepReport {
     pub dt_limit_ratio: f64,
     /// Dominant constraint determining $\Delta t_{\mathrm{next}}$.
     pub reason: TimestepLimitReason,
+    /// Upstream `s% why_Tlim` (1-based `Tlim_*` index) behind `reason`.
+    pub why_tlim: usize,
 }
 
 /// Smooth arctangent step-ratio limiter (`limiter` in
@@ -96,19 +210,10 @@ pub fn filter_limit(x: f64) -> f64 {
 /// `star/private/timestep.f90:2339-2341`. Both Safe Rust and `eval_varcontrol_jax` preserve
 /// this exact upstream expression for 16-digit cross-backend parity.
 fn smoothed_var_sum(v: &[f64], v_old: &[f64]) -> f64 {
+    // Callers guarantee `nz >= 3` and equal lengths (`eval_varcontrol`).
     let nz = v.len();
-    if nz == 0 || v_old.len() != nz {
-        return 0.0;
-    }
-    if nz < 4 {
-        return v
-            .iter()
-            .zip(v_old.iter())
-            .map(|(a, b)| (a - b).abs())
-            .sum::<f64>();
-    }
     let mut sum = 0.0_f64;
-    for k in 2..nz - 2 {
+    for k in 2..nz.saturating_sub(2) {
         let s_new: f64 = v[k - 2..=k + 2].iter().sum();
         let s_old: f64 = v_old[k - 2..=k + 2].iter().sum();
         sum += (s_new - s_old).abs() / 5.0;
@@ -129,19 +234,34 @@ fn smoothed_var_sum(v: &[f64], v_old: &[f64]) -> f64 {
 /// snapshot using a 5-point boxcar filter (`eval_varcontrol` in
 /// `timestep.f90:2299-2364`; lines `2326-2335` explicitly exclude `L`, `v`,
 /// `u`, `w`, `Hp`, `j_rot`, `w_div_wc`, `alpha_RTI`, and `Et_RSP`).
-#[must_use]
-pub fn eval_varcontrol(model: &StarModel) -> f64 {
+///
+/// # Errors
+///
+/// Upstream stops with `mesa_error` when `xh_old` is not associated
+/// (`timestep.f90:2312-2314`) and reads outside the arrays for `nz < 3`,
+/// which has no defined behaviour to reproduce, so a missing or mismatched
+/// `*_old` snapshot or `nz < 3` returns an error.
+pub fn eval_varcontrol(model: &StarModel) -> Result<f64, StarError> {
     let nz = model.nz;
-    if nz == 0
+    if nz < 3
+        || model.lnd.len() < nz
+        || model.ln_t.len() < nz
+        || model.ln_r.len() < nz
         || model.lnd_old.len() != nz
         || model.ln_t_old.len() != nz
         || model.ln_r_old.len() != nz
     {
-        return 0.0;
+        return Err(StarError::InvalidInput(format!(
+            "eval_varcontrol: needs nz >= 3 and matching *_old arrays \
+             (nz = {nz}, lnd_old = {}, ln_t_old = {}, ln_r_old = {})",
+            model.lnd_old.len(),
+            model.ln_t_old.len(),
+            model.ln_r_old.len()
+        )));
     }
-    let sum_lnd = smoothed_var_sum(&model.lnd, &model.lnd_old) / 3.0;
-    let sum_lnt = smoothed_var_sum(&model.ln_t, &model.ln_t_old);
-    let sum_lnr = smoothed_var_sum(&model.ln_r, &model.ln_r_old);
+    let sum_lnd = smoothed_var_sum(&model.lnd[..nz], &model.lnd_old) / 3.0;
+    let sum_lnt = smoothed_var_sum(&model.ln_t[..nz], &model.ln_t_old);
+    let sum_lnr = smoothed_var_sum(&model.ln_r[..nz], &model.ln_r_old);
 
     let sumscales = model.lnd_old[0].abs().max(1.0)
         + model.ln_t_old[0].abs().max(1.0)
@@ -149,39 +269,7 @@ pub fn eval_varcontrol(model: &StarModel) -> f64 {
     let nterms = (3 * nz) as f64;
     // `sumvar = sumvar/sumscales; varcontrol = sumvar/nterms`
     // (`star/private/timestep.f90:2355-2357`).
-    (sum_lnd + sum_lnt + sum_lnr) / sumscales / nterms
-}
-
-/// Evaluates the maximum fractional nuclear fuel depletion ratio
-/// $w_{\mathrm{burn}} = \max_{k, j} \max(X_{\mathrm{old},j,k} - X_{j,k}, 0)
-/// / \Delta X_{\mathrm{limit}}$ across zones where
-/// $X_{\mathrm{old},j,k} \ge X_{\min}$.
-#[must_use]
-pub fn eval_dx_nuc_drop_ratio(
-    model: &StarModel,
-    dx_nuc_drop_limit: f64,
-    dx_nuc_drop_min_x_limit: f64,
-) -> f64 {
-    let nz = model.nz;
-    let species = model.species;
-    if nz == 0
-        || species == 0
-        || dx_nuc_drop_limit <= 0.0
-        || model.xa_old.len() != nz * species
-    {
-        return 0.0;
-    }
-    let mut max_drop = 0.0_f64;
-    for k in 0..nz {
-        for j in 0..species.min(3) {
-            let x_old = model.xa_old[k * species + j];
-            if x_old >= dx_nuc_drop_min_x_limit {
-                let drop = (x_old - model.xa[k * species + j]).max(0.0);
-                max_drop = max_drop.max(drop);
-            }
-        }
-    }
-    max_drop / dx_nuc_drop_limit
+    Ok((sum_lnd + sum_lnt + sum_lnr) / sumscales / nterms)
 }
 
 /// The low-pass controller's limited step ratio `limtr`, with `order = 1`
@@ -238,16 +326,31 @@ pub fn eval_h211_factor(
 /// (2006) H211 filtered next timestep $\Delta t_{\mathrm{next}}$, updating
 /// `model.dt_next` and `model.dt_limit_ratio_old` (`pick_next_timestep` in
 /// `timestep.f90:102-320`).
+///
+/// # Errors
+///
+/// Propagates [`eval_varcontrol`] errors.
 pub fn pick_next_timestep(
     model: &mut StarModel,
     max_timestep_factor: f64,
     min_timestep_factor: f64,
-    dx_nuc_drop_limit: f64,
-) -> TimestepReport {
-    let varcontrol = eval_varcontrol(model);
+) -> Result<TimestepReport, StarError> {
+    let varcontrol = eval_varcontrol(model)?;
     let vc_target = model.controls.varcontrol_target.max(1.0e-99);
     let ratio_vc = varcontrol / vc_target;
-    let ratio_burn = eval_dx_nuc_drop_ratio(model, dx_nuc_drop_limit, 1.0e-4);
+    // The `check_dX_nuc_drop` port (`timestep.f90:2100-2241`). This helper
+    // reports ratios only, so the hard-limit retry that belongs to
+    // `timestep_controller` is not applied here.
+    let log_max_t = model
+        .ln_t
+        .iter()
+        .take(model.nz)
+        .copied()
+        .fold(f64::NEG_INFINITY, f64::max)
+        / flexmesa_const::LN10;
+    let ratio_burn =
+        crate::timestep_checks::check_dx_nuc_drop_full(model, true, log_max_t)
+            .expect("hard limit is skipped, so the check cannot fail");
 
     let (dt_limit_ratio, base_reason) = if ratio_burn > ratio_vc {
         (ratio_burn, TimestepLimitReason::NuclearBurn)
@@ -276,10 +379,15 @@ pub fn pick_next_timestep(
     model.dt_next = dt_next;
     model.dt_limit_ratio_old = dt_limit_ratio.max(1.0e-10);
 
-    TimestepReport {
+    Ok(TimestepReport {
         dt_next,
         varcontrol,
         dt_limit_ratio,
         reason,
-    }
+        why_tlim: if reason == TimestepLimitReason::NuclearBurn {
+            tlim::DX_NUC_DROP
+        } else {
+            tlim::STRUC
+        },
+    })
 }

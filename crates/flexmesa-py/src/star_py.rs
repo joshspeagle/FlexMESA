@@ -378,22 +378,20 @@ macro_rules! impl_py_star_model {
 
             /// Computes `(dt_next, varcontrol, dt_limit_ratio)` via H211 filter.
             #[pyo3(signature = (
-                max_timestep_factor=1.2, min_timestep_factor=0.5,
-                dx_nuc_drop_limit=1.0e-2
+                max_timestep_factor=1.2, min_timestep_factor=0.5
             ))]
             pub fn pick_next_timestep(
                 &mut self,
                 max_timestep_factor: f64,
                 min_timestep_factor: f64,
-                dx_nuc_drop_limit: f64,
-            ) -> (f64, f64, f64) {
+            ) -> PyResult<(f64, f64, f64)> {
                 let r = pick_next_timestep(
                     &mut self.inner,
                     max_timestep_factor,
                     min_timestep_factor,
-                    dx_nuc_drop_limit,
-                );
-                (r.dt_next, r.varcontrol, r.dt_limit_ratio)
+                )
+                .map_err(to_py_err)?;
+                Ok((r.dt_next, r.varcontrol, r.dt_limit_ratio))
             }
 
             /// Executes a single evolutionary step (`star_evolve_step`).

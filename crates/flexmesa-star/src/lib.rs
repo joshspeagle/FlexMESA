@@ -540,7 +540,7 @@ pub use termination::{
     PHASE_WDCS, PHASE_ZACHEB, PHASE_ZAMS,
 };
 pub use timestep::{
-    eval_dx_nuc_drop_ratio, eval_h211_factor, eval_varcontrol, filter_limit,
+    eval_h211_factor, eval_varcontrol, filter_limit,
     pick_next_timestep, TimestepAction, TimestepLimitReason, TimestepReport,
 };
 pub use timestep_limits::timestep_controller;

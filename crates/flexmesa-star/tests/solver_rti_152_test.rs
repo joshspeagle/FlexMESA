@@ -436,7 +436,7 @@ fn test_timestep_dlog_eps_nuc_and_burn_lgl_safe_log10_limits() {
     let (act_safe, rep_safe) = timestep_controller(&mut model);
     assert!(matches!(act_safe, TimestepAction::KeepGoing));
     assert!(rep_safe.dt_next.is_finite() && rep_safe.dt_next > 0.0);
-    assert_eq!(eval_varcontrol(&model), 0.0);
+    assert_eq!(eval_varcontrol(&model).expect("varcontrol"), 0.0);
     let (h211_fac, _, _) = eval_h211_factor(1.0, 1.0, 1.0e5, 1.0e5, 2.0, 0.5);
     assert!((h211_fac - 1.0).abs() <= 1.0e-12);
 }

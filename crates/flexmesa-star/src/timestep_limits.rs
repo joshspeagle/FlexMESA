@@ -2,144 +2,32 @@
 //! Top-level adaptive timestep controller (`timestep_controller` and
 //! `do_timestep_limits` in `star/private/timestep.f90:39-381`).
 
-use flexmesa_const::{LN10 as LN_10, M_SUN, SECYER};
+use flexmesa_const::SECYER;
 
 use crate::controls::StarError;
 use crate::inlist_runner::{DefaultStarExtras, ExtrasDirective, StarExtras};
-use crate::mesa_history::{eval_min_cell_collapse_time, eval_min_dr_div_cs};
 use crate::model::StarModel;
 use crate::timestep::{
-    eval_varcontrol, h211_limtr, TimestepAction, TimestepLimitReason,
-    TimestepReport,
+    eval_varcontrol, h211_limtr, reason_for_tlim, tlim, DtLimitRatios,
+    TimestepAction, TimestepLimitReason, TimestepReport,
 };
 use crate::timestep_checks::{
-    check_change, check_cntr_abundance_limits, check_dx_limits,
-    check_dx_nuc_drop_full, check_integer_limit,
-    check_luminosity_and_hr_limits, check_structural_limits,
-    collect_mixing_boundary_qs, CheckFailure,
+    check_adjust_j_q, check_delta_hr, check_delta_lgl, check_delta_mdot,
+    check_delta_mstar, check_dl_div_l, check_dlg_e_change, check_dlg_p_change,
+    check_dlg_p_cntr_change, check_dlg_r_change, check_dlg_rho_change,
+    check_dlg_rho_cntr_change, check_dlg_t_change, check_dlg_t_cntr_change,
+    check_dlg_t_max_at_high_t_change, check_dlg_t_max_change,
+    check_dlg_teff_change, check_dlog_eps_nuc_change,
+    check_dt_div_dt_cell_collapse, check_dt_div_min_dr_div_cs,
+    check_dx_div_x_cntr, check_dx_limits, check_dx_nuc_drop,
+    check_dye_hight_change, check_integer_limit, check_lg_xc_cntr,
+    check_lg_xh_cntr, check_lg_xhe_cntr, check_lg_xne_cntr, check_lg_xo_cntr,
+    check_lg_xsi_cntr, check_lgl_h_change, check_lgl_he_change,
+    check_lgl_nuc_cat_change, check_lgl_nuc_change,
+    check_lgl_power_photo_change, check_lgl_z_change,
+    check_rel_error_in_energy, check_xc_cntr, check_xh_cntr, check_xhe_cntr,
+    check_xne_cntr, check_xo_cntr, check_xsi_cntr, CheckFailure, LimitCtx,
 };
-
-fn check_mass_mdot_courant_and_energy(
-    model: &StarModel,
-    skip_hard_limit: bool,
-) -> Result<(f64, f64, f64, f64), (String, TimestepLimitReason)> {
-    let c = &model.controls;
-    let ts = &c.ts_stop;
-    let mw = &c.mix_wind;
-    let coeff = ts.time_delta_coeff;
-    let dt = model.dt;
-
-    // `check_delta_mstar` (`star/private/timestep.f90:1915-1938`)
-    let mut r_mass = if model.mstar > 0.0 && model.mstar_old > 0.0 {
-        check_change(
-            flexmesa_math::log10(model.mstar / model.mstar_old).abs(),
-            ts.delta_lg_star_mass_limit,
-            ts.delta_lg_star_mass_hard_limit,
-            coeff,
-            "delta_lg_star_mass_hard_limit",
-            skip_hard_limit,
-        )
-        .map_err(|m| (m, TimestepLimitReason::MassChange))?
-    } else {
-        0.0
-    };
-
-    // `check_delta_mdot` (`star/private/timestep.f90:1884-1912`)
-    let (mdot, mdot_old) = (model.mstar_dot, model.aux.step_hist.mstar_dot_old);
-    let denom = (mw.delta_mdot_atol * M_SUN) / SECYER
-        + mw.delta_mdot_rtol * mdot.abs().max(mdot_old.abs());
-    if denom > 0.0 && mdot != mdot_old {
-        let delta_mdot = (mdot - mdot_old).abs() / denom;
-        if delta_mdot != 0.0 {
-            let lim = mw.delta_mdot_limit * coeff;
-            let hard_lim = mw.delta_mdot_hard_limit * coeff;
-            if hard_lim > 0.0 && !skip_hard_limit && delta_mdot > hard_lim {
-                return Err((
-                    String::from("delta_mdot_hard_limit"),
-                    TimestepLimitReason::MassChange,
-                ));
-            }
-            if lim > 0.0 {
-                let r_mdot = delta_mdot / lim;
-                if r_mdot > 1.0 {
-                    r_mass = r_mass.max(r_mdot);
-                }
-            }
-        }
-    }
-
-    if model.aux.doing_relax {
-        return Ok((r_mass, 0.0, 0.0, 0.0));
-    }
-
-    // `check_adjust_J_q` (`star/private/timestep.f90:1941-1958`)
-    let r_jq =
-        if c.rotation_flag && mw.do_adjust_j_lost && model.mstar_dot < 0.0 {
-            check_change(
-                1.0 - model.adjust_j_q,
-                1.0 - ts.adjust_j_q_limit,
-                1.0 - ts.adjust_j_q_hard_limit,
-                coeff,
-                "check_adjust_J_q",
-                false,
-            )
-            .map_err(|m| (m, TimestepLimitReason::StructuralChange))?
-        } else {
-            0.0
-        };
-
-    // `check_rel_error_in_energy` (`star/private/timestep.f90:2023-2043`)
-    let sh = &model.aux.step_hist;
-    let r_erg = if sh.total_energy_end.abs() > 1.0e-30 {
-        check_change(
-            (sh.error_in_energy_conservation / sh.total_energy_end).abs(),
-            ts.limit_for_rel_error_in_energy_conservation,
-            ts.hard_limit_for_rel_error_in_energy_conservation,
-            coeff,
-            "hard_limit_for_rel_error_in_energy_conservation",
-            false,
-        )
-        .map_err(|m| (m, TimestepLimitReason::EnergyConservation))?
-    } else {
-        0.0
-    };
-
-    // `check_dt_div_dt_cell_collapse` & `check_dt_div_min_dr_div_cs` (`timestep.f90:2046-2097`)
-    let mut r_courant = 0.0_f64;
-    let dt_coll = eval_min_cell_collapse_time(model);
-    if dt_coll >= 1.0e-30 {
-        r_courant = r_courant.max(
-            check_change(
-                dt / dt_coll,
-                ts.dt_div_dt_cell_collapse_limit,
-                ts.dt_div_dt_cell_collapse_hard_limit,
-                coeff,
-                "dt_div_dt_cell_collapse",
-                skip_hard_limit,
-            )
-            .map_err(|m| (m, TimestepLimitReason::CourantOrCollapse))?,
-        );
-    }
-
-    if ts.dt_div_min_dr_div_cs_limit > 0.0 {
-        let (dt_x, _) = eval_min_dr_div_cs(model);
-        if dt_x > 0.0 {
-            r_courant = r_courant.max(
-                check_change(
-                    dt / dt_x,
-                    ts.dt_div_min_dr_div_cs_limit,
-                    ts.dt_div_min_dr_div_cs_hard_limit,
-                    coeff,
-                    "dt_div_min_dr_div_cs",
-                    skip_hard_limit,
-                )
-                .map_err(|m| (m, TimestepLimitReason::CourantOrCollapse))?,
-            );
-        }
-    }
-
-    Ok((r_mass, r_jq, r_erg, r_courant))
-}
 
 /// Evaluates all soft and hard timestep limits (`timestep_controller` and
 /// `do_timestep_limits` in `star/private/timestep.f90:39-381`), updating
@@ -157,6 +45,7 @@ pub fn timestep_controller(
                 varcontrol: 0.0,
                 dt_limit_ratio: 0.0,
                 reason: TimestepLimitReason::Varcontrol,
+                why_tlim: tlim::STRUC,
             },
         ),
     }
@@ -167,24 +56,6 @@ pub(crate) fn timestep_controller_with_extras(
     model: &mut StarModel,
     extras: &mut dyn StarExtras,
 ) -> Result<(TimestepAction, TimestepReport, bool), StarError> {
-    if model.controls.varcontrol_target
-        < model.controls.ts_stop.min_allowed_varcontrol_target
-    {
-        let rep = TimestepReport {
-            dt_next: model.dt,
-            varcontrol: 0.0,
-            dt_limit_ratio: 0.0,
-            reason: TimestepLimitReason::Varcontrol,
-        };
-        return Ok((
-            TimestepAction::Terminate(String::from(
-                "varcontrol_target < min_allowed_varcontrol_target",
-            )),
-            rep,
-            false,
-        ));
-    }
-
     let skip_hard_limit = if model.controls.ts_stop.never_skip_hard_limits {
         false
     } else {
@@ -195,7 +66,28 @@ pub(crate) fn timestep_controller_with_extras(
                     == Some(model.model_number))
     };
 
-    let varcontrol = eval_varcontrol(model);
+    let varcontrol = eval_varcontrol(model)?;
+    // `check_varcontrol_limit` (`timestep.f90:2244-2290`) evaluates
+    // `eval_varcontrol` before testing `min_allowed_varcontrol_target`.
+    if model.controls.varcontrol_target
+        < model.controls.ts_stop.min_allowed_varcontrol_target
+    {
+        let rep = TimestepReport {
+            dt_next: model.dt,
+            varcontrol: 0.0,
+            dt_limit_ratio: 0.0,
+            reason: TimestepLimitReason::Varcontrol,
+            why_tlim: tlim::STRUC,
+        };
+        return Ok((
+            TimestepAction::Terminate(String::from(
+                "varcontrol_target < min_allowed_varcontrol_target",
+            )),
+            rep,
+            false,
+        ));
+    }
+
     let vc_target = model.controls.varcontrol_target.max(1.0e-99);
     let r_vc = varcontrol / vc_target;
     let retry_fac = model.controls.ts_stop.timestep_factor_for_retries;
@@ -205,6 +97,7 @@ pub(crate) fn timestep_controller_with_extras(
             varcontrol,
             dt_limit_ratio: r_vc,
             reason: TimestepLimitReason::Varcontrol,
+            why_tlim: tlim::STRUC,
         };
         return Ok((
             TimestepAction::Retry(String::from(
@@ -215,67 +108,66 @@ pub(crate) fn timestep_controller_with_extras(
         ));
     }
 
-    let retry_rep = |msg: String, dt_try: f64, reason: TimestepLimitReason| {
+    let retry_rep = |msg: String, dt_try: f64, i_limit: usize| {
         Ok((
             TimestepAction::Retry(msg),
             TimestepReport {
                 dt_next: dt_try * retry_fac,
                 varcontrol,
                 dt_limit_ratio: r_vc,
-                reason,
+                reason: reason_for_tlim(i_limit),
+                why_tlim: i_limit,
             },
             false,
         ))
     };
 
+    // `dt_limit_ratio(1:numTlim)` (`timestep.f90:99`); `Tlim_*` is 1-based.
+    let mut dt_limit_ratio: DtLimitRatios = [0.0; tlim::NUM_TLIM];
+    dt_limit_ratio[tlim::STRUC - 1] = r_vc;
     let log_max_t = model
         .ln_t
         .iter()
         .take(model.nz)
         .copied()
         .fold(f64::NEG_INFINITY, f64::max)
-        / LN_10;
-    let mut dt_limit_ratio = r_vc;
-    let mut reason = TimestepLimitReason::Varcontrol;
+        / flexmesa_const::LN10;
 
     if !model.doing_first_model_of_run {
         let dt_done = model.dt;
-        let mut r_other = 0.0_f64;
         if model.controls.ts_stop.use_other_timestep_limit {
             let (dir, r_ext) =
                 extras.other_timestep_limit(model, skip_hard_limit, dt_done);
+            let why = tlim::OTHER_TIMESTEP_LIMIT;
+            let stop_rep = |dt_next: f64| TimestepReport {
+                dt_next,
+                varcontrol,
+                dt_limit_ratio: r_vc,
+                reason: reason_for_tlim(why),
+                why_tlim: why,
+            };
             match dir {
                 ExtrasDirective::KeepGoing => {
-                    r_other = r_ext;
+                    dt_limit_ratio[why - 1] = r_ext;
                 }
                 ExtrasDirective::Retry => {
                     return retry_rep(
                         String::from("other_timestep_limit retry"),
                         dt_done,
-                        TimestepLimitReason::SolverOrSubsteps,
+                        why,
                     );
                 }
                 ExtrasDirective::Redo => {
                     return Ok((
                         TimestepAction::KeepGoing,
-                        TimestepReport {
-                            dt_next: dt_done,
-                            varcontrol,
-                            dt_limit_ratio: r_vc,
-                            reason: TimestepLimitReason::SolverOrSubsteps,
-                        },
+                        stop_rep(dt_done),
                         true,
                     ));
                 }
                 ExtrasDirective::Terminate(code) => {
                     return Ok((
                         TimestepAction::Terminate(code),
-                        TimestepReport {
-                            dt_next: dt_done,
-                            varcontrol,
-                            dt_limit_ratio: r_vc,
-                            reason: TimestepLimitReason::SolverOrSubsteps,
-                        },
+                        stop_rep(dt_done),
                         false,
                     ));
                 }
@@ -285,12 +177,34 @@ pub(crate) fn timestep_controller_with_extras(
             }
         }
 
+        let ctx = LimitCtx::new(model, skip_hard_limit);
         let c = &model.controls;
         let ts = &c.ts_stop;
         let sh = &model.aux.step_hist;
 
-        // `star/private/timestep.f90:436-440`: start from
-        // `solver_iters_timestep_limit` (which `star/private/relax.f90:3999-4000`
+        // Each check mirrors one `do_timestep_limits` call: it writes its
+        // `Tlim_*` slot and `return_now` reports a hard-limit retry under that
+        // index (`timestep.f90:370-379`).
+        macro_rules! run {
+            ($tl:expr, $call:expr) => {
+                match $call {
+                    Ok(()) => {}
+                    Err(CheckFailure::Retry(m)) => {
+                        return retry_rep(m, dt_done, $tl);
+                    }
+                    Err(CheckFailure::Fatal(e)) => return Err(e),
+                }
+            };
+        }
+        macro_rules! slot {
+            ($tl:expr) => {
+                &mut dt_limit_ratio[$tl - 1]
+            };
+        }
+        let int_limit = |r: Result<f64, String>| r.map_err(CheckFailure::Retry);
+
+        // `check_solver_iters_timestep_limit` (`timestep.f90:427-445`): start
+        // from `solver_iters_timestep_limit` (which `relax.f90:3999-4000`
         // replaces with `relax_solver_iters_timestep_limit` while relaxing when
         // that control is nonzero), then let the gold limit override it.
         let mut solver_lim = if model.aux.doing_relax
@@ -308,23 +222,18 @@ pub(crate) fn timestep_controller_with_extras(
         } else {
             sh.last_solver_iterations
         };
-        let mut r_sub = match check_integer_limit(
-            solver_lim,
-            -1,
-            solver_iters,
-            "num_solver_iterations",
-            skip_hard_limit,
-        ) {
-            Ok(r) => r,
-            Err(m) => {
-                return retry_rep(
-                    m,
-                    dt_done,
-                    TimestepLimitReason::SolverOrSubsteps,
-                );
-            }
-        };
+        run!(tlim::SOLVER, {
+            int_limit(check_integer_limit(
+                solver_lim,
+                -1,
+                solver_iters,
+                "num_solver_iterations",
+                skip_hard_limit,
+            ))
+            .map(|r| dt_limit_ratio[tlim::SOLVER - 1] = r)
+        });
 
+        // `check_burn_steps_limit` (`timestep.f90:411-424`).
         let max_lnt_start = model
             .ln_t_start
             .iter()
@@ -335,145 +244,203 @@ pub(crate) fn timestep_controller_with_extras(
             && max_lnt_start.is_finite()
             && flexmesa_math::exp(max_lnt_start) >= c.op_split_burn_min_t
         {
-            match check_integer_limit(
-                ts.burn_steps_limit,
-                isize::try_from(c.burn_steps_hard_limit).unwrap_or(isize::MAX),
-                sh.burn_max_num_substeps,
-                "num_burn_solver_steps",
-                skip_hard_limit,
-            ) {
-                Ok(r) => r_sub = r_sub.max(r),
-                Err(m) => {
-                    return retry_rep(
-                        m,
-                        dt_done,
-                        TimestepLimitReason::SolverOrSubsteps,
-                    );
-                }
-            }
+            run!(tlim::NUM_BURN_STEPS, {
+                int_limit(check_integer_limit(
+                    ts.burn_steps_limit,
+                    isize::try_from(c.burn_steps_hard_limit)
+                        .unwrap_or(isize::MAX),
+                    sh.burn_max_num_substeps,
+                    "num_burn_solver_steps",
+                    skip_hard_limit,
+                ))
+                .map(|r| dt_limit_ratio[tlim::NUM_BURN_STEPS - 1] = r)
+            });
         }
+        // `check_diffusion_steps_limit` and `check_diffusion_iters_limit`
+        // (`timestep.f90:448-473`).
         if c.do_element_diffusion {
-            for res in [
-                check_integer_limit(
+            run!(tlim::NUM_DIFF_SOLVER_STEPS, {
+                int_limit(check_integer_limit(
                     ts.diffusion_steps_limit,
                     ts.diffusion_steps_hard_limit,
                     sh.num_diffusion_solver_steps,
                     "num_diffusion_solver_steps",
                     skip_hard_limit,
-                ),
-                check_integer_limit(
+                ))
+                .map(|r| dt_limit_ratio[tlim::NUM_DIFF_SOLVER_STEPS - 1] = r)
+            });
+            run!(tlim::NUM_DIFF_SOLVER_ITERS, {
+                int_limit(check_integer_limit(
                     ts.diffusion_iters_limit,
                     ts.diffusion_iters_hard_limit,
                     sh.num_diffusion_solver_iters,
                     "num_diffusion_solver_iters",
                     skip_hard_limit,
-                ),
-            ] {
-                match res {
-                    Ok(r) => r_sub = r_sub.max(r),
-                    Err(m) => {
-                        return retry_rep(
-                            m,
-                            dt_done,
-                            TimestepLimitReason::SolverOrSubsteps,
-                        );
-                    }
-                }
-            }
+                ))
+                .map(|r| dt_limit_ratio[tlim::NUM_DIFF_SOLVER_ITERS - 1] = r)
+            });
         }
 
-        let mix_bdy_q = collect_mixing_boundary_qs(model);
-        let (r_dx_abs, r_dx_rel) = match check_dx_limits(
-            model,
-            skip_hard_limit,
-            &mix_bdy_q,
-            log_max_t,
-        ) {
-            Ok(pair) => pair,
-            Err(CheckFailure::Retry(m)) => {
-                return retry_rep(
-                    m,
-                    dt_done,
-                    TimestepLimitReason::AbundanceChange,
-                );
-            }
-            Err(CheckFailure::Fatal(e)) => return Err(e),
-        };
-        let r_struct = match check_structural_limits(model, skip_hard_limit) {
-            Ok(r) => r,
-            Err(m) => {
-                return retry_rep(
-                    m,
-                    dt_done,
-                    TimestepLimitReason::StructuralChange,
-                );
-            }
-        };
-        let r_cntr_x = match check_cntr_abundance_limits(model, skip_hard_limit)
-        {
-            Ok(r) => r,
-            Err(m) => {
-                return retry_rep(
-                    m,
-                    dt_done,
-                    TimestepLimitReason::AbundanceChange,
-                );
-            }
-        };
-        let r_lum = match check_luminosity_and_hr_limits(
-            model,
-            skip_hard_limit,
-            log_max_t,
-            &mix_bdy_q,
-        ) {
-            Ok(r) => r,
-            Err(m) => {
-                return retry_rep(
-                    m,
-                    dt_done,
-                    TimestepLimitReason::LuminosityChange,
-                );
-            }
-        };
-        let (r_mass, r_jq, r_erg, r_cour) =
-            match check_mass_mdot_courant_and_energy(model, skip_hard_limit) {
-                Ok(t) => t,
-                Err((m, why)) => return retry_rep(m, dt_done, why),
-            };
-        let r_burn =
-            match check_dx_nuc_drop_full(model, skip_hard_limit, log_max_t) {
-                Ok(r) => r,
-                Err(m) => {
-                    return retry_rep(
-                        m,
-                        dt_done,
-                        TimestepLimitReason::NuclearBurn,
-                    );
-                }
-            };
+        // `check_dX` reports its hard-limit retry under `Tlim_dX_div_X`
+        // (`timestep.f90:149`).
+        run!(tlim::DX_DIV_X, {
+            check_dx_limits(
+                model,
+                skip_hard_limit,
+                &ctx.mix_bdy_q,
+                ctx.log_max_t,
+            )
+            .map(|(dx, dx_div_x)| {
+                dt_limit_ratio[tlim::DX - 1] = dx;
+                dt_limit_ratio[tlim::DX_DIV_X - 1] = dx_div_x;
+            })
+        });
+        run!(tlim::DL_DIV_L, check_dl_div_l(&ctx, slot!(tlim::DL_DIV_L)));
+        run!(tlim::DLGP, check_dlg_p_change(&ctx, slot!(tlim::DLGP)));
+        run!(
+            tlim::DLGRHO,
+            check_dlg_rho_change(&ctx, slot!(tlim::DLGRHO))
+        );
+        run!(tlim::DLGT, check_dlg_t_change(&ctx, slot!(tlim::DLGT)));
+        run!(tlim::DLGE, check_dlg_e_change(&ctx, slot!(tlim::DLGE)));
+        run!(tlim::DLGR, check_dlg_r_change(&ctx, slot!(tlim::DLGR)));
+        run!(
+            tlim::DLGL_NUC_CAT,
+            check_lgl_nuc_cat_change(&ctx, slot!(tlim::DLGL_NUC_CAT))
+        );
+        run!(tlim::DLGL_H, check_lgl_h_change(&ctx, slot!(tlim::DLGL_H)));
+        run!(
+            tlim::DLGL_HE,
+            check_lgl_he_change(&ctx, slot!(tlim::DLGL_HE))
+        );
+        run!(tlim::DLGL_Z, check_lgl_z_change(&ctx, slot!(tlim::DLGL_Z)));
+        run!(
+            tlim::DLGL_POWER_PHOTO,
+            check_lgl_power_photo_change(&ctx, slot!(tlim::DLGL_POWER_PHOTO))
+        );
+        run!(
+            tlim::DLGL_NUC,
+            check_lgl_nuc_change(&ctx, slot!(tlim::DLGL_NUC))
+        );
+        run!(
+            tlim::DLGTEFF,
+            check_dlg_teff_change(&ctx, slot!(tlim::DLGTEFF))
+        );
+        run!(
+            tlim::DLGRHO_CNTR,
+            check_dlg_rho_cntr_change(&ctx, slot!(tlim::DLGRHO_CNTR))
+        );
+        run!(
+            tlim::DLGT_CNTR,
+            check_dlg_t_cntr_change(&ctx, slot!(tlim::DLGT_CNTR))
+        );
+        run!(
+            tlim::DLGT_MAX,
+            check_dlg_t_max_change(&ctx, slot!(tlim::DLGT_MAX))
+        );
+        run!(
+            tlim::DLGT_MAX_AT_HIGH_T,
+            check_dlg_t_max_at_high_t_change(
+                &ctx,
+                slot!(tlim::DLGT_MAX_AT_HIGH_T)
+            )
+        );
+        run!(
+            tlim::DLGP_CNTR,
+            check_dlg_p_cntr_change(&ctx, slot!(tlim::DLGP_CNTR))
+        );
+        run!(
+            tlim::DELTA_YE_HIGH_T,
+            check_dye_hight_change(&ctx, slot!(tlim::DELTA_YE_HIGH_T))
+        );
+        run!(
+            tlim::DLOG_EPS_NUC,
+            check_dlog_eps_nuc_change(&ctx, slot!(tlim::DLOG_EPS_NUC))
+        );
+        run!(
+            tlim::DX_DIV_X_CNTR,
+            check_dx_div_x_cntr(&ctx, slot!(tlim::DX_DIV_X_CNTR))
+        );
+        run!(
+            tlim::LG_XH_CNTR,
+            check_lg_xh_cntr(&ctx, slot!(tlim::LG_XH_CNTR))
+        );
+        run!(
+            tlim::LG_XHE_CNTR,
+            check_lg_xhe_cntr(&ctx, slot!(tlim::LG_XHE_CNTR))
+        );
+        run!(
+            tlim::LG_XC_CNTR,
+            check_lg_xc_cntr(&ctx, slot!(tlim::LG_XC_CNTR))
+        );
+        run!(
+            tlim::LG_XNE_CNTR,
+            check_lg_xne_cntr(&ctx, slot!(tlim::LG_XNE_CNTR))
+        );
+        run!(
+            tlim::LG_XO_CNTR,
+            check_lg_xo_cntr(&ctx, slot!(tlim::LG_XO_CNTR))
+        );
+        // Issue #617: upstream `Tlim_lg_XSi_cntr` equals `Tlim_lg_XNe_cntr` and
+        // `Tlim_XH_cntr` equals `Tlim_lg_XO_cntr` (`star_data_def.inc`), so the
+        // silicon and hydrogen checks assign the slot that the neon and oxygen
+        // checks just filled. Reproduced as upstream has it.
+        run!(
+            tlim::LG_XSI_CNTR,
+            check_lg_xsi_cntr(&ctx, slot!(tlim::LG_XSI_CNTR))
+        );
+        run!(tlim::XH_CNTR, check_xh_cntr(&ctx, slot!(tlim::XH_CNTR)));
+        run!(tlim::XHE_CNTR, check_xhe_cntr(&ctx, slot!(tlim::XHE_CNTR)));
+        run!(tlim::XC_CNTR, check_xc_cntr(&ctx, slot!(tlim::XC_CNTR)));
+        run!(tlim::XNE_CNTR, check_xne_cntr(&ctx, slot!(tlim::XNE_CNTR)));
+        run!(tlim::XO_CNTR, check_xo_cntr(&ctx, slot!(tlim::XO_CNTR)));
+        run!(tlim::XSI_CNTR, check_xsi_cntr(&ctx, slot!(tlim::XSI_CNTR)));
+        run!(tlim::DMSTAR, check_delta_mstar(&ctx, slot!(tlim::DMSTAR)));
+        run!(
+            tlim::DEL_MDOT,
+            check_delta_mdot(&ctx, slot!(tlim::DEL_MDOT))
+        );
+        run!(
+            tlim::ADJUST_J_Q,
+            check_adjust_j_q(&ctx, slot!(tlim::ADJUST_J_Q))
+        );
+        run!(tlim::LGL, check_delta_lgl(&ctx, slot!(tlim::LGL)));
+        run!(
+            tlim::DT_DIV_DT_CELL_COLLAPSE,
+            check_dt_div_dt_cell_collapse(
+                &ctx,
+                slot!(tlim::DT_DIV_DT_CELL_COLLAPSE)
+            )
+        );
+        run!(
+            tlim::DT_DIV_MIN_DR_DIV_CS,
+            check_dt_div_min_dr_div_cs(&ctx, slot!(tlim::DT_DIV_MIN_DR_DIV_CS))
+        );
+        run!(tlim::DELTA_HR, check_delta_hr(&ctx, slot!(tlim::DELTA_HR)));
+        run!(
+            tlim::ERROR_IN_ENERGY_CONSERVATION,
+            check_rel_error_in_energy(
+                &ctx,
+                slot!(tlim::ERROR_IN_ENERGY_CONSERVATION)
+            )
+        );
+        run!(
+            tlim::DX_NUC_DROP,
+            check_dx_nuc_drop(&ctx, slot!(tlim::DX_NUC_DROP))
+        );
+    }
 
-        // Ordered after `star_data_def.inc:43-103` `Tlim_*` enum indices so
-        // exact ties select the same dominant limiter as Fortran `maxloc`.
-        let candidates = [
-            (r_sub, TimestepLimitReason::SolverOrSubsteps),
-            (r_dx_abs.max(r_dx_rel), TimestepLimitReason::AbundanceChange),
-            (r_struct, TimestepLimitReason::StructuralChange),
-            (r_cntr_x, TimestepLimitReason::AbundanceChange),
-            (r_lum, TimestepLimitReason::LuminosityChange),
-            (r_mass, TimestepLimitReason::MassChange),
-            (r_cour, TimestepLimitReason::CourantOrCollapse),
-            (r_burn, TimestepLimitReason::NuclearBurn),
-            (r_jq, TimestepLimitReason::StructuralChange),
-            (r_erg, TimestepLimitReason::EnergyConservation),
-            (r_other, TimestepLimitReason::SolverOrSubsteps),
-        ];
-        for &(r, why) in &candidates {
-            if r > dt_limit_ratio {
-                dt_limit_ratio = r;
-                reason = why;
-            }
+    // `i_limit = maxloc(dt_limit_ratio(1:numTlim), dim=1)` (`timestep.f90:332`):
+    // the first maximum wins.
+    let mut i_limit = tlim::STRUC;
+    let mut dt_limit_ratio_max = dt_limit_ratio[0];
+    for (i, &r) in dt_limit_ratio.iter().enumerate() {
+        if r > dt_limit_ratio_max {
+            dt_limit_ratio_max = r;
+            i_limit = i + 1;
         }
     }
+    let dt_limit_ratio = dt_limit_ratio_max;
 
     let c = &model.controls;
     let ts = &c.ts_stop;
@@ -500,23 +467,41 @@ pub(crate) fn timestep_controller_with_extras(
                 model.dt_old,
             )
     } else {
-        model.dt * 1.0 / ratio_floored
+        let dt_first_order = model.dt * 1.0 / ratio_floored;
+        // `timestep.f90:2400`: upstream stops when the fallback gives zero.
+        if dt_first_order == 0.0 {
+            return Err(StarError::InvalidInput(String::from(
+                "filter_dt_next: dt_next is zero",
+            )));
+        }
+        dt_first_order
     };
     // `star/private/timestep.f90:343-363`.
     let hit_max = max_tf > 0.0 && dt_next > max_tf * model.dt;
     if hit_max {
         dt_next = max_tf * model.dt;
+        // `timestep.f90:343-352`.
+        if dt_next == 0.0 {
+            return Err(StarError::InvalidInput(String::from(
+                "filter_dt_next: dt_next is zero",
+            )));
+        }
     }
     let hit_min = min_tf > 0.0 && dt_next < min_tf * model.dt;
     if hit_min {
         dt_next = min_tf * model.dt;
+        if dt_next == 0.0 {
+            return Err(StarError::InvalidInput(String::from(
+                "filter_dt_next: dt_next is zero",
+            )));
+        }
     }
 
-    if reason == TimestepLimitReason::Varcontrol {
+    if i_limit == tlim::STRUC {
         if hit_max {
-            reason = TimestepLimitReason::MaxTimestepFactor;
+            i_limit = tlim::MAX_TIMESTEP_FACTOR;
         } else if hit_min {
-            reason = TimestepLimitReason::MinTimestepFactor;
+            i_limit = tlim::MIN_TIMESTEP_FACTOR;
         }
     }
 
@@ -525,7 +510,7 @@ pub(crate) fn timestep_controller_with_extras(
     // (`evolve.f90:1925-1928`).
     if ts.force_timestep > 0.0 {
         dt_next = ts.force_timestep;
-        reason = TimestepLimitReason::MaxTimestep;
+        i_limit = tlim::FORCE_TIMESTEP;
     } else {
         let mut max_dt = if ts.max_timestep > 0.0 {
             ts.max_timestep
@@ -537,22 +522,24 @@ pub(crate) fn timestep_controller_with_extras(
         }
         if dt_next > max_dt {
             dt_next = max_dt;
-            reason = TimestepLimitReason::MaxTimestep;
+            i_limit = tlim::MAX_TIMESTEP;
         }
         if model.aux.step_hist.timestep_hold > model.model_number
             && dt_next > model.dt
         {
             dt_next = model.dt;
-            reason = TimestepLimitReason::TimestepHold;
+            i_limit = tlim::TIMESTEP_HOLD;
         }
     }
 
+    let reason = reason_for_tlim(i_limit);
     if !dt_next.is_finite() || dt_next <= 0.0 {
         let rep = TimestepReport {
             dt_next: model.dt,
             varcontrol,
             dt_limit_ratio,
             reason,
+            why_tlim: i_limit,
         };
         return Ok((
             TimestepAction::Terminate(String::from(
@@ -572,6 +559,7 @@ pub(crate) fn timestep_controller_with_extras(
             varcontrol,
             dt_limit_ratio,
             reason,
+            why_tlim: i_limit,
         },
         false,
     ))

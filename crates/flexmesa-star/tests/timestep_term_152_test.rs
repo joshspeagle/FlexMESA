@@ -58,7 +58,7 @@ fn test_eval_varcontrol_and_h211_closed_form_identities_zero_mesa_dir() {
     // center `k = 5`, and `k = 1`, while omitting the `k = 4` dead store.
     let expected_sumscales = 2.0 + 15.0 + 25.0;
     let expected_vc = (5.0 * delta) / expected_sumscales / 18.0;
-    let vc = eval_varcontrol(&model);
+    let vc = eval_varcontrol(&model).expect("varcontrol");
     assert!(
         (vc - expected_vc).abs() / expected_vc <= 1.0e-14,
         "expected varcontrol={expected_vc:.16e}, got {vc:.16e}"
@@ -93,7 +93,7 @@ fn test_eval_varcontrol_and_h211_closed_form_identities_zero_mesa_dir() {
 
     // `pick_next_timestep` floors `varcontrol_target` at `1e-99` (`timestep.f90:2272`).
     model.controls.varcontrol_target = 1.0e-30;
-    let rep = pick_next_timestep(&mut model, 1.2, 0.5, 0.0);
+    let rep = pick_next_timestep(&mut model, 1.2, 0.5).expect("pick");
     let expected_ratio = expected_vc / 1.0e-30;
     assert!(
         (rep.dt_limit_ratio - expected_ratio).abs() / expected_ratio <= 1.0e-14,
@@ -593,4 +593,18 @@ fn test_termination_cascade_max_model_number_phase_first_model_and_redos() {
         LimitCheckOutcome::Terminate { ref code, .. }
             if code == "fe_core_infall_limit"
     ));
+}
+
+#[test]
+fn test_eval_varcontrol_without_old_snapshot_returns_error() {
+    // Upstream stops with `mesa_error` when `xh_old` is not associated
+    // (`timestep.f90:2312-2314`) instead of returning a default.
+    let mut model = StarModel::new(
+        6,
+        vec![1],
+        StarJobControls::default(),
+        StarControls::default(),
+    );
+    model.lnd_old.clear();
+    assert!(eval_varcontrol(&model).is_err());
 }

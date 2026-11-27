@@ -375,6 +375,100 @@ def test_gate_checks_routine_key_and_function_item(
     assert [(v.check, v.detail) for v in got] == expected
 
 
+_TYPED_RS = """\
+pub struct AdTrans;
+pub struct AdBvp<T>(T);
+pub trait Build { fn build(&self); }
+impl AdTrans { pub fn new() -> Self { AdTrans } fn helper() { fn inner() {} } }
+impl<T: Clone> AdBvp<T> {
+    pub fn new(t: T) -> Self { AdBvp(t) }
+    pub fn solve(&self) where T: Copy {}
+}
+impl Build for AdTrans { fn build(&self) {} }
+impl<T> Build for AdBvp<T> where T: Clone { fn build(&self) {} }
+pub fn unique_fn() {}
+// fn commented_out() {}
+"""
+
+
+def _typed_violations(
+    tmp_path: pathlib.Path, target: str
+) -> list[tuple[str, str]]:
+    manifest, inv = _mini_repo(tmp_path, target, "Real_Routine")
+    (tmp_path / "crates" / "a.rs").write_text(_TYPED_RS, encoding="utf-8")
+    got = routine_gate.collect_violations(manifest, inv, tmp_path)
+    return [(v.check, v.detail) for v in got]
+
+
+@pytest.mark.parametrize(
+    "target",
+    [
+        "crates/a.rs::AdTrans::new",
+        "crates/a.rs::AdBvp::new+AdBvp::solve",
+        "crates/a.rs::AdTrans::build+AdBvp::build",
+        "crates/a.rs::unique_fn+AdBvp::new",
+        "crates/a.rs::solve",
+    ],
+)
+def test_gate_accepts_qualified_inherent_generic_and_trait_methods(
+    tmp_path: pathlib.Path, target: str
+) -> None:
+    """Qualified targets resolve through inherent, generic, and trait impls."""
+    assert _typed_violations(tmp_path, target) == []
+
+
+@pytest.mark.parametrize(
+    ("target", "detail"),
+    [
+        ("crates/a.rs::AdBvp::helper", "AdBvp::helper"),
+        ("crates/a.rs::AdTrans::solve", "AdTrans::solve"),
+        ("crates/a.rs::Missing::new", "Missing::new"),
+        ("crates/a.rs::AdTrans::inner", "AdTrans::inner"),
+        ("crates/a.rs::AdTrans::commented_out", "AdTrans::commented_out"),
+    ],
+)
+def test_gate_rejects_qualified_target_whose_type_lacks_the_method(
+    tmp_path: pathlib.Path, target: str, detail: str
+) -> None:
+    """A wrong type, a nested fn, or a free fn does not satisfy ``Type::fn``."""
+    assert _typed_violations(tmp_path, target) == [("fn_item", detail)]
+
+
+@pytest.mark.parametrize(
+    ("target", "detail"),
+    [
+        (
+            "crates/a.rs::new",
+            "new (ambiguous, 2 fn items; use Type::new)",
+        ),
+        (
+            "crates/a.rs::build",
+            "build (ambiguous, 3 fn items; use Type::build)",
+        ),
+    ],
+)
+def test_gate_rejects_bare_name_defined_more_than_once(
+    tmp_path: pathlib.Path, target: str, detail: str
+) -> None:
+    """A bare name shared by several ``fn`` items is ambiguous."""
+    assert _typed_violations(tmp_path, target) == [("fn_item", detail)]
+
+
+def test_split_target_symbols_and_call_gate_leaf_symbols_agree() -> None:
+    """The call-site gate reads ``Type::fn`` as a method, not a module path."""
+    from flexmesa.testing import _port_parsers, _routine_call_gate
+
+    syms = "AdBvp::new+AdMatch::new+free_fn"
+    assert _port_parsers.split_target_symbols(syms) == [
+        ("AdBvp", "new"),
+        ("AdMatch", "new"),
+        (None, "free_fn"),
+    ]
+    assert _routine_call_gate.parse_target_symbols(
+        f"crates/flexmesa-gyre/src/ad.rs::{syms}"
+    ) == {"new", "free_fn"}
+
+
 def _write_mini_repo(
     tmp_path: pathlib.Path, target: str, allow: list[routine_gate.Violation]
 ) -> None:

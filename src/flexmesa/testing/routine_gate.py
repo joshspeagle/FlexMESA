@@ -11,7 +11,13 @@ Two checks run over every ``routine_map`` entry of ``port_manifest.toml``:
   violation, and the qualified form must be used;
 * ``fn_item``: every symbol of the mapped target ``<path>::<sym>[+<sym>...]``
   exists as a function item (``fn`` in Rust, ``def`` in Python) in that file.
-  A struct, constant, or enum with the right name does not satisfy it.
+  A struct, constant, or enum with the right name does not satisfy it. A
+  symbol is a bare name or a type-qualified method ``Type::name``. A
+  qualified symbol requires an ``impl`` block for ``Type`` in the file (an
+  inherent impl, a generic impl, or ``impl Trait for Type``) that holds
+  ``fn name``. A bare Rust name is a violation when the file defines more than
+  one ``fn`` of that name (free functions and methods together), because it
+  cannot say which one is meant; use ``Type::name``.
 
 Two structural checks run without an allow-list:
 
@@ -154,10 +160,26 @@ def na_rows(na: Any, routines: list[list[Any]]) -> list[Any]:
     return rows
 
 
+@dataclasses.dataclass(frozen=True)
+class _FileFns:
+    """Function items of one target file.
+
+    Attributes:
+        counts: Occurrences of each function name (Rust: free functions and
+            methods together; Python: every ``def``).
+        methods: Rust impl self type to its method names (empty for Python).
+        is_rust: Whether the file is Rust (the ambiguity rule applies).
+    """
+
+    counts: dict[str, int]
+    methods: dict[str, set[str]]
+    is_rust: bool
+
+
 def _fn_names(
-    repo_root: pathlib.Path, rel: str, cache: dict[str, set[str]]
-) -> set[str] | None:
-    """Return function-item names defined in ``rel`` (``None`` if absent)."""
+    repo_root: pathlib.Path, rel: str, cache: dict[str, _FileFns]
+) -> _FileFns | None:
+    """Return function items defined in ``rel`` (``None`` if absent)."""
     if rel in cache:
         return cache[rel]
     path = repo_root / rel
@@ -166,12 +188,33 @@ def _fn_names(
     text = path.read_text(encoding="utf-8")
     if path.suffix == ".rs":
         text = _port_parsers.strip_rust_comments_and_strings(text)
-        pat = r"\bfn\s+([A-Za-z_][A-Za-z0-9_]*)\b"
+        fns = _FileFns(
+            _port_parsers.rust_fn_counts(text),
+            _port_parsers.rust_impl_methods(text),
+            True,
+        )
     else:
         pat = r"^\s*(?:async\s+)?def\s+([A-Za-z_][A-Za-z0-9_]*)\b"
-    names = set(re.findall(pat, text, flags=re.MULTILINE))
-    cache[rel] = names
-    return names
+        counts: dict[str, int] = {}
+        for name in re.findall(pat, text, flags=re.MULTILINE):
+            counts[name] = counts.get(name, 0) + 1
+        fns = _FileFns(counts, {}, False)
+    cache[rel] = fns
+    return fns
+
+
+def _symbol_problem(fns: _FileFns, owner: str | None, sym: str) -> str | None:
+    """Return the ``detail`` for a failing symbol, or ``None`` if it passes."""
+    if owner is not None:
+        if sym in fns.methods.get(owner, set()):
+            return None
+        return f"{owner}::{sym}"
+    n = fns.counts.get(sym, 0)
+    if n == 0:
+        return sym
+    if fns.is_rust and n > 1:
+        return f"{sym} (ambiguous, {n} fn items; use Type::{sym})"
+    return None
 
 
 def collect_violations(
@@ -181,7 +224,7 @@ def collect_violations(
 ) -> list[Violation]:
     """Return every ``routine_map`` entry failing a gate check, sorted."""
     out: list[Violation] = []
-    cache: dict[str, set[str]] = {}
+    cache: dict[str, _FileFns] = {}
     files = inventory.get("files", {})
     for entry in manifest.entries:
         if not entry.routine_map:
@@ -207,13 +250,14 @@ def collect_violations(
                         )
                     )
             rel, _, syms = target.partition("::")
-            names = _fn_names(repo_root, rel, cache)
-            for sym in (s.strip() for s in syms.split("+")):
-                if names is None:
+            fns = _fn_names(repo_root, rel, cache)
+            for owner, sym in _port_parsers.split_target_symbols(syms):
+                if fns is None:
                     out.append(Violation("fn_item", up, key, target, rel))
                     break
-                if sym not in names:
-                    out.append(Violation("fn_item", up, key, target, sym))
+                problem = _symbol_problem(fns, owner, sym)
+                if problem is not None:
+                    out.append(Violation("fn_item", up, key, target, problem))
     return sorted(out)
 
 

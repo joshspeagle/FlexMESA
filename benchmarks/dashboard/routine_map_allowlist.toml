@@ -6,7 +6,7 @@
 
 [counts]
 routine_key = 1
-fn_item = 12
+fn_item = 14
 
 [[allow]]
 check = "fn_item"
@@ -91,6 +91,20 @@ upstream_path = "star/private/rsp_eval_eos_and_kap.f90"
 routine = "restart_rsp_eos_and_kap"
 target = "crates/flexmesa-star/src/rsp_eos_kap.rs::RspChemCache"
 detail = "RspChemCache"
+
+[[allow]]
+check = "fn_item"
+upstream_path = "turb/private/tdc_support.f90"
+routine = "convert"
+target = "crates/flexmesa-turb/src/tdc_dual.rs::convert"
+detail = "convert (ambiguous, 3 fn items; use Type::convert)"
+
+[[allow]]
+check = "fn_item"
+upstream_path = "turb/private/tdc_support.f90"
+routine = "unconvert"
+target = "crates/flexmesa-turb/src/tdc_dual.rs::unconvert"
+detail = "unconvert (ambiguous, 3 fn items; use Type::unconvert)"
 
 [[allow]]
 check = "routine_key"

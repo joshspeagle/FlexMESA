@@ -374,3 +374,130 @@ def extract_flexmesa_symbols(path: pathlib.Path) -> set[str]:
                 out.add(sym)
         return out
     return set()
+
+
+_RUST_IMPL_RE = re.compile(r"\bimpl\b")
+_RUST_FN_RE = re.compile(r"\bfn\s+([A-Za-z_][A-Za-z0-9_]*)\b")
+_RUST_IDENT_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+
+
+def split_target_symbols(syms_raw: str) -> list[tuple[str | None, str]]:
+    """Split the symbol part of a ``routine_map`` target.
+
+    The symbol part is ``sym[+sym...]``, where each ``sym`` is a function
+    name or a type-qualified method ``Type::method``.
+
+    Args:
+        syms_raw: Text after the first ``::`` of ``<path>::<symbols>``.
+
+    Returns:
+        ``(type, name)`` pairs in order; ``type`` is ``None`` for an
+        unqualified symbol. Empty items are dropped.
+    """
+    out: list[tuple[str | None, str]] = []
+    for item in syms_raw.split("+"):
+        item = item.strip()
+        if not item:
+            continue
+        owner, sep, name = item.rpartition("::")
+        owner = owner.split("::")[-1].strip()
+        out.append((owner if sep and owner else None, name.strip()))
+    return out
+
+
+def _skip_angle(text: str, i: int) -> int:
+    """Return the index after the ``<...>`` group starting at ``text[i]``."""
+    depth = 0
+    while i < len(text):
+        ch = text[i]
+        if ch == "<":
+            depth += 1
+        elif ch == ">" and text[i - 1] != "-":
+            depth -= 1
+            if depth == 0:
+                return i + 1
+        i += 1
+    return i
+
+
+def _impl_self_type(header: str) -> str | None:
+    """Return the self type name of an ``impl`` header (after ``impl``)."""
+    header = header.strip()
+    if header.startswith("<"):
+        header = header[_skip_angle(header, 0) :].strip()
+    header = re.split(r"\bwhere\b", header, maxsplit=1)[0]
+    # A trait impl is `Trait<..> for Type<..>`; take what follows `for`.
+    depth = 0
+    for_at = -1
+    for m in re.finditer(r"[<>]|\bfor\b", header):
+        tok = m.group(0)
+        if tok == "<":
+            depth += 1
+        elif tok == ">" and header[m.start() - 1] != "-":
+            depth -= 1
+        elif depth == 0:
+            for_at = m.end()
+    if for_at >= 0:
+        header = header[for_at:]
+    header = re.sub(r"^[\s&*]*(?:mut\b|const\b|dyn\b)?\s*", "", header.strip())
+    idents = _RUST_IDENT_RE.findall(header.split("<", 1)[0])
+    return idents[-1] if idents else None
+
+
+def rust_impl_methods(stripped: str) -> dict[str, set[str]]:
+    """Map each ``impl`` self type to the ``fn`` names of its impl blocks.
+
+    Inherent impls (``impl Type``), generic impls (``impl<T> Type<T>``), and
+    trait impls (``impl Trait for Type``) all contribute to ``Type``. Only
+    items directly in the impl body count, not functions nested in method
+    bodies.
+
+    Args:
+        stripped: Rust source from ``strip_rust_comments_and_strings``.
+
+    Returns:
+        Mapping from type name to the set of method names.
+    """
+    out: dict[str, set[str]] = {}
+    for m in _RUST_IMPL_RE.finditer(stripped):
+        open_at = stripped.find("{", m.end())
+        semi_at = stripped.find(";", m.end())
+        if open_at < 0 or 0 <= semi_at < open_at:
+            continue
+        tname = _impl_self_type(stripped[m.end() : open_at])
+        if tname is None:
+            continue
+        depth = 0
+        body_start = open_at + 1
+        pos = open_at
+        methods = out.setdefault(tname, set())
+        item_start = body_start
+        while pos < len(stripped):
+            ch = stripped[pos]
+            if ch == "{":
+                if depth == 1:
+                    methods.update(
+                        _RUST_FN_RE.findall(stripped[item_start:pos])[:1]
+                    )
+                depth += 1
+            elif ch == "}":
+                depth -= 1
+                if depth == 0:
+                    break
+                if depth == 1:
+                    item_start = pos + 1
+            elif ch == ";" and depth == 1:
+                methods.update(
+                    _RUST_FN_RE.findall(stripped[item_start:pos])[:1]
+                )
+                item_start = pos + 1
+            pos += 1
+    return out
+
+
+def rust_fn_counts(stripped: str) -> dict[str, int]:
+    """Count ``fn name`` occurrences (free functions and methods together)."""
+    counts: dict[str, int] = {}
+    for name in _RUST_FN_RE.findall(stripped):
+        counts[name] = counts.get(name, 0) + 1
+    return counts

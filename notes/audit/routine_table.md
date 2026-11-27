@@ -54,7 +54,7 @@ The fractions answer different questions. The whole-file figure counts every lin
 | `rates` | 26 | 477 | 0 | 0 | 0 | 477 | 0 | 17,217 | 0 | 0 | 0 | 14,276 | 2,941 | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% |
 | `neu` | 4 | 15 | 11 | 0 | 0 | 4 | 4 | 2,184 | 1,586 | 0 | 0 | 428 | 170 | 72.6% | 0.0% | 72.6% | 18.5% | 83.9% |
 | `atm` | 19 | 93 | 0 | 0 | 0 | 93 | 0 | 6,853 | 0 | 0 | 0 | 5,350 | 1,503 | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% |
-| `turb` | 6 | 25 | 18 | 0 | 0 | 7 | 6 | 2,033 | 980 | 0 | 0 | 447 | 606 | 48.2% | 0.0% | 48.2% | 17.5% | 66.5% |
+| `turb` | 6 | 25 | 16 | 0 | 0 | 9 | 6 | 2,033 | 968 | 0 | 0 | 459 | 606 | 47.6% | 0.0% | 47.6% | 17.5% | 66.5% |
 | `chem` | 7 | 67 | 0 | 0 | 0 | 67 | 0 | 4,195 | 0 | 0 | 0 | 3,330 | 865 | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% |
 | `ionization` | 22 | 67 | 0 | 0 | 0 | 67 | 0 | 3,859 | 0 | 0 | 0 | 3,055 | 804 | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% |
 | `colors` | 10 | 89 | 0 | 0 | 0 | 89 | 0 | 3,823 | 0 | 0 | 0 | 3,155 | 668 | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% |
@@ -487,7 +487,7 @@ Candidates for a reviewed raise to `ported_unverified`. Largest ten:
 | `turb/private/mlt.f90` | `turb` | ported_unverified | kernel_reference_vectors | 183 | 1 | 1 | 0 | 0 | 1 | 129 | 0 | 0 | 0 | 54 |
 | `turb/private/semiconvection.f90` | `turb` | ported_unverified | kernel_reference_vectors | 131 | 1 | 1 | 0 | 0 | 1 | 75 | 0 | 0 | 0 | 56 |
 | `turb/private/tdc.f90` | `turb` | ported_unverified | partial | 381 | 2 | 1 | 0 | 0 | 0 | 167 | 0 | 0 | 150 | 64 |
-| `turb/private/tdc_support.f90` | `turb` | partial | partial | 681 | 11 | 10 | 0 | 0 | 0 | 415 | 0 | 0 | 33 | 233 |
+| `turb/private/tdc_support.f90` | `turb` | partial | partial | 681 | 11 | 8 | 0 | 0 | 0 | 403 | 0 | 0 | 45 | 233 |
 | `turb/private/thermohaline.f90` | `turb` | ported_unverified | partial | 363 | 6 | 1 | 0 | 0 | 0 | 43 | 0 | 0 | 264 | 56 |
 | `turb/public/turb.f90` | `turb` | ported_unverified | kernel_reference_vectors | 294 | 4 | 4 | 0 | 0 | 4 | 151 | 0 | 0 | 0 | 143 |
 | `utils/private/utils_idict.f90` | `utils` | partial | - | 525 | 20 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 472 | 53 |

@@ -185,6 +185,20 @@ def _make_archive_include_resolver(
     return _resolve
 
 
+def _hint_symbol_exists(
+    rel_fm: str,
+    owner: str | None,
+    sym: str,
+    sym_cache: dict[str, set[str]],
+) -> bool:
+    """Return whether a hinted symbol (bare or ``Type::method``) exists."""
+    if owner is None:
+        return sym in sym_cache[rel_fm]
+    text = (REPO_ROOT / rel_fm).read_text(encoding="utf-8")
+    stripped = _port_parsers.strip_rust_comments_and_strings(text)
+    return sym in _port_parsers.rust_impl_methods(stripped).get(owner, set())
+
+
 def _build_routine_map(
     upstream_path: str,
     source_text: str,
@@ -214,7 +228,8 @@ def _build_routine_map(
             target = hints[proc]
             rel_fm, syms_raw = target.split("::", 1)
             if rel_fm in flexmesa_files and all(
-                s in sym_cache[rel_fm] for s in syms_raw.split("+")
+                _hint_symbol_exists(rel_fm, owner, s, sym_cache)
+                for owner, s in _port_parsers.split_target_symbols(syms_raw)
             ):
                 rmap[proc] = target
                 continue

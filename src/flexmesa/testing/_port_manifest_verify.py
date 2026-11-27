@@ -185,11 +185,21 @@ def _verify_entry_upstream_and_routines(
                     fm_path
                 )
             avail = sym_cache[rel_fm]
-            for sym in syms_raw.split("+"):
-                clean_sym = sym.strip()
-                if not clean_sym or clean_sym not in avail:
+            for owner, clean_sym in _port_parsers.split_target_symbols(
+                syms_raw
+            ):
+                if owner is not None:
+                    found = clean_sym in _port_parsers.rust_impl_methods(
+                        _port_parsers.strip_rust_comments_and_strings(
+                            fm_path.read_text(encoding="utf-8")
+                        )
+                    ).get(owner, set())
+                else:
+                    found = bool(clean_sym) and clean_sym in avail
+                if not found:
+                    shown = f"{owner}::{clean_sym}" if owner else clean_sym
                     errors.append(
-                        f"{up}: symbol {clean_sym!r} not found in {rel_fm}"
+                        f"{up}: symbol {shown!r} not found in {rel_fm}"
                     )
 
 

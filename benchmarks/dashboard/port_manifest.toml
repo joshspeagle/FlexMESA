@@ -1520,8 +1520,10 @@ module = "atm"
 upstream_lines = 334
 upstream_sha256 = "e0ae9d8196a53a178bff0f1caa154537c75502e08153ae852a62f50bcbd57918"
 status = "partial"
-flexmesa_files = ["crates/flexmesa-atm/src/lib.rs"]
+flexmesa_files = ["crates/flexmesa-atm/src/irradiated.rs"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
+[files.routine_map]
+"eval_irradiated" = "crates/flexmesa-atm/src/irradiated.rs::eval_irradiated"
 
 [[files]]
 upstream_path = "atm/private/atm_t_tau_relations.f90"
@@ -1529,8 +1531,12 @@ module = "atm"
 upstream_lines = 367
 upstream_sha256 = "83be2dd60ef4a06e57a2f86cabb5b1d44bf01ee414feb8db43bd0c41276dd57a"
 status = "partial"
-flexmesa_files = ["crates/flexmesa-atm/src/lib.rs"]
+flexmesa_files = ["crates/flexmesa-atm/src/t_tau_relations.rs"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
+[files.routine_map]
+"eval_T_tau" = "crates/flexmesa-atm/src/t_tau_relations.rs::eval_t_tau"
+"eval_T_tau_dq_dtau" = "crates/flexmesa-atm/src/t_tau_relations.rs::eval_t_tau_dq_dtau"
+"get_T_tau_base" = "crates/flexmesa-atm/src/t_tau_relations.rs::get_t_tau_base"
 
 [[files]]
 upstream_path = "atm/private/atm_t_tau_uniform.f90"
@@ -1538,8 +1544,11 @@ module = "atm"
 upstream_lines = 702
 upstream_sha256 = "235432ea8971cc1fd6a380e729d25585e993738d7f153d63b6e83bd5f86963c5"
 status = "partial"
-flexmesa_files = ["crates/flexmesa-atm/src/lib.rs"]
+flexmesa_files = ["crates/flexmesa-atm/src/t_tau_uniform.rs"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
+[files.routine_map]
+"build_T_tau_uniform" = "crates/flexmesa-atm/src/t_tau_uniform.rs::build_t_tau_uniform"
+"eval_T_tau_uniform" = "crates/flexmesa-atm/src/t_tau_uniform.rs::eval_t_tau_uniform"
 
 [[files]]
 upstream_path = "atm/private/atm_t_tau_varying.f90"
@@ -1547,8 +1556,11 @@ module = "atm"
 upstream_lines = 824
 upstream_sha256 = "b87a6638575b10f4316b38f63d177977c0652d3b66c51f27a1f888dd985ebad5"
 status = "partial"
-flexmesa_files = ["crates/flexmesa-atm/src/lib.rs"]
+flexmesa_files = ["crates/flexmesa-atm/src/t_tau_varying.rs"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
+[files.routine_map]
+"build_T_tau_varying" = "crates/flexmesa-atm/src/t_tau_varying.rs::build_t_tau_varying"
+"eval_T_tau_varying" = "crates/flexmesa-atm/src/t_tau_varying.rs::eval_t_tau_varying"
 
 [[files]]
 upstream_path = "atm/private/atm_table.f90"
@@ -1556,8 +1568,12 @@ module = "atm"
 upstream_lines = 447
 upstream_sha256 = "b4942b7a4139bd1e28d32b5b63b2a22f93d2943c7fa41f8af5337e99603f1e23"
 status = "partial"
-flexmesa_files = ["crates/flexmesa-atm/src/lib.rs"]
+flexmesa_files = ["crates/flexmesa-atm/src/table.rs"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
+[files.routine_map]
+"eval_table" = "crates/flexmesa-atm/src/table.rs::eval_table"
+"get_table_alfa_beta" = "crates/flexmesa-atm/src/table.rs::get_table_alfa_beta"
+"get_table_base" = "crates/flexmesa-atm/src/table.rs::get_table_base"
 
 [[files]]
 upstream_path = "atm/private/atm_utils.f90"
@@ -1565,8 +1581,12 @@ module = "atm"
 upstream_lines = 207
 upstream_sha256 = "9832ae436836e08da1afa3bb9501f27746d243183bd42cdf6c857fc068a66bf6"
 status = "partial"
-flexmesa_files = ["crates/flexmesa-atm/src/lib.rs"]
+flexmesa_files = ["crates/flexmesa-atm/src/utils.rs"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
+[files.routine_map]
+"eval_E2" = "crates/flexmesa-atm/src/utils.rs::eval_e2"
+"eval_Paczynski_gradr" = "crates/flexmesa-atm/src/utils.rs::eval_paczynski_gradr"
+"eval_Teff_g" = "crates/flexmesa-atm/src/utils.rs::eval_teff_g"
 
 [[files]]
 upstream_path = "atm/private/e2_pairs.dek"
@@ -1583,8 +1603,10 @@ module = "atm"
 upstream_lines = 684
 upstream_sha256 = "674d7603fcb66327b13a1eae50cad1afef22a9b8d85a3c7d5bbb53e6c0f855e4"
 status = "partial"
-flexmesa_files = ["crates/flexmesa-atm/src/lib.rs"]
+flexmesa_files = ["crates/flexmesa-atm/src/table.rs"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
+[files.routine_map]
+"get_table_values" = "crates/flexmesa-atm/src/table.rs::get_table_values"
 
 [[files]]
 upstream_path = "atm/public/atm_def.f90"
@@ -1601,8 +1623,12 @@ module = "atm"
 upstream_lines = 93
 upstream_sha256 = "037dbd3857436d9d5249552154ac81251d61593836ff5e09153a27c85537a45e"
 status = "partial"
-flexmesa_files = ["crates/flexmesa-atm/src/lib.rs"]
+flexmesa_files = ["crates/flexmesa-atm/src/utils.rs"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
+[files.routine_map]
+"atm_L" = "crates/flexmesa-atm/src/utils.rs::atm_l"
+"atm_Teff" = "crates/flexmesa-atm/src/utils.rs::atm_teff"
+"atm_black_body_T" = "crates/flexmesa-atm/src/utils.rs::atm_black_body_t"
 
 [[files]]
 upstream_path = "auto_diff/private/auto_diff_real_15var_order1_module.f90"
@@ -2405,8 +2431,11 @@ module = "chem"
 upstream_lines = 2654
 upstream_sha256 = "dd029774fe5049c46c982e3389dfdfa95123fea9f4024310cda3602ebafb794a"
 status = "partial"
-flexmesa_files = ["crates/flexmesa-chem/src/lib.rs"]
+flexmesa_files = ["crates/flexmesa-chem/src/elements.rs", "crates/flexmesa-chem/src/nuclides.rs"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
+[files.routine_map]
+"category_id" = "crates/flexmesa-chem/src/elements.rs::category_id"
+"get_nuclide_index" = "crates/flexmesa-chem/src/nuclides.rs::get_nuclide_index"
 
 [[files]]
 upstream_path = "chem/public/chem_lib.f90"
@@ -2414,8 +2443,28 @@ module = "chem"
 upstream_lines = 717
 upstream_sha256 = "da9d393862a70ea7b15a292c73fad1f7cd8a2cd374d3dcbfcef7ec4433bced44"
 status = "partial"
-flexmesa_files = ["crates/flexmesa-chem/src/lib.rs"]
+flexmesa_files = ["crates/flexmesa-chem/src/composition.rs", "crates/flexmesa-chem/src/elements.rs", "crates/flexmesa-chem/src/nuclides.rs", "crates/flexmesa-chem/src/solar_ag89.rs", "crates/flexmesa-chem/src/solar_scales.rs"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
+routine_map_partial = ["generate_nuclide_names"]
+[files.routine_map]
+"binding_energy" = "crates/flexmesa-chem/src/nuclides.rs::binding_energy"
+"chem_M_div_h" = "crates/flexmesa-chem/src/solar_scales.rs::chem_m_div_h"
+"chem_Xsol" = "crates/flexmesa-chem/src/solar_ag89.rs::chem_xsol"
+"chem_get_element_id" = "crates/flexmesa-chem/src/elements.rs::chem_get_element_id"
+"chem_get_solar" = "crates/flexmesa-chem/src/solar_ag89.rs::chem_get_solar"
+"generate_long_nuclide_names" = "crates/flexmesa-chem/src/elements.rs::generate_long_nuclide_names"
+"generate_nuclide_names" = "crates/flexmesa-chem/src/elements.rs::generate_nuclide_names"
+"generate_nuclide_set" = "crates/flexmesa-chem/src/nuclides.rs::generate_nuclide_set"
+"get_Q" = "crates/flexmesa-chem/src/nuclides.rs::get_q"
+"get_composition_info" = "crates/flexmesa-chem/src/composition.rs::get_composition_info"
+"get_mass_excess" = "crates/flexmesa-chem/src/nuclides.rs::get_mass_excess"
+"get_nuclide_index_in_set" = "crates/flexmesa-chem/src/nuclides.rs::get_nuclide_index_in_set"
+"get_partition_fcn_indx" = "crates/flexmesa-chem/src/elements.rs::get_partition_fcn_indx"
+"get_stable_mass_frac" = "crates/flexmesa-chem/src/solar_ag89.rs::get_stable_mass_frac"
+"lodders03_element_atom_percent" = "crates/flexmesa-chem/src/solar_ag89.rs::lodders03_element_atom_percent"
+"lookup_ZN" = "crates/flexmesa-chem/src/nuclides.rs::lookup_zn"
+"lookup_ZN_isomeric_state" = "crates/flexmesa-chem/src/nuclides.rs::lookup_zn_isomeric_state"
+"reaction_Qtotal" = "crates/flexmesa-chem/src/nuclides.rs::reaction_qtotal"
 
 [[files]]
 upstream_path = "colors/private/bolometric.f90"
@@ -2423,8 +2472,10 @@ module = "colors"
 upstream_lines = 191
 upstream_sha256 = "b87214f999e4b4fddee369483d8bad5b2484bc59823ea6551a4b9b42dfb4804f"
 status = "partial"
-flexmesa_files = ["crates/flexmesa-colors/src/lib.rs"]
+flexmesa_files = ["crates/flexmesa-colors/src/photometry.rs"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
+[files.routine_map]
+"calculate_bolometric_phot" = "crates/flexmesa-colors/src/photometry.rs::calculate_bolometric_phot"
 
 [[files]]
 upstream_path = "colors/private/colors_ctrls_io.f90"
@@ -2448,8 +2499,16 @@ module = "colors"
 upstream_lines = 1111
 upstream_sha256 = "56caee0255ebfb68dfa03dd54ff600e0e994b9484657af963e9726f5b2d3f20a"
 status = "partial"
-flexmesa_files = ["crates/flexmesa-colors/src/lib.rs"]
+flexmesa_files = ["crates/flexmesa-colors/src/utils.rs"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
+[files.routine_map]
+"dilute_flux" = "crates/flexmesa-colors/src/utils.rs::dilute_flux"
+"find_bracket_index" = "crates/flexmesa-colors/src/utils.rs::find_bracket_index"
+"find_interval" = "crates/flexmesa-colors/src/utils.rs::find_interval"
+"find_nearest_point" = "crates/flexmesa-colors/src/utils.rs::find_nearest_point"
+"remove_dat" = "crates/flexmesa-colors/src/utils.rs::remove_dat"
+"simpson_integration" = "crates/flexmesa-colors/src/utils.rs::simpson_integration"
+"trapezoidal_integration" = "crates/flexmesa-colors/src/utils.rs::trapezoidal_integration"
 
 [[files]]
 upstream_path = "colors/private/hermite_interp.f90"
@@ -2466,8 +2525,10 @@ module = "colors"
 upstream_lines = 438
 upstream_sha256 = "eeebc82d2d0fc362ec5fd28ad7dc165f75c5c4ef51bc9baf74030a20b7cfc0f1"
 status = "partial"
-flexmesa_files = ["crates/flexmesa-colors/src/lib.rs"]
+flexmesa_files = ["crates/flexmesa-colors/src/utils.rs"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
+[files.routine_map]
+"interpolate_array" = "crates/flexmesa-colors/src/utils.rs::interpolate_array"
 
 [[files]]
 upstream_path = "colors/private/linear_interp.f90"
@@ -2484,8 +2545,14 @@ module = "colors"
 upstream_lines = 230
 upstream_sha256 = "54cac867ed00a7820d7fd36ed6293b01e8129ceb6bb35a63413d9af99829e0aa"
 status = "partial"
-flexmesa_files = ["crates/flexmesa-colors/src/lib.rs"]
+flexmesa_files = ["crates/flexmesa-colors/src/photometry.rs"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
+routine_map_partial = ["calculate_synthetic"]
+[files.routine_map]
+"calculate_synthetic" = "crates/flexmesa-colors/src/photometry.rs::calculate_synthetic"
+"compute_ab_zero_point" = "crates/flexmesa-colors/src/photometry.rs::compute_ab_zero_point"
+"compute_st_zero_point" = "crates/flexmesa-colors/src/photometry.rs::compute_st_zero_point"
+"compute_vega_zero_point" = "crates/flexmesa-colors/src/photometry.rs::compute_vega_zero_point"
 
 [[files]]
 upstream_path = "colors/public/colors_def.f90"
@@ -4974,8 +5041,15 @@ module = "interp_1d"
 upstream_lines = 712
 upstream_sha256 = "752d1c35e83158fba96415c2b4377cd0016d30a38678d43bbb3228c0d4a67740"
 status = "partial"
-flexmesa_files = ["crates/flexmesa-interp1d/src/lib.rs"]
+flexmesa_files = ["crates/flexmesa-interp1d/src/eval.rs", "crates/flexmesa-interp1d/src/mp.rs"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
+[files.routine_map]
+"do_integrate_values" = "crates/flexmesa-interp1d/src/eval.rs::integrate_values"
+"do_interp_values" = "crates/flexmesa-interp1d/src/eval.rs::interp_values"
+"do_interp_values_and_slopes" = "crates/flexmesa-interp1d/src/eval.rs::interp_values_and_slopes"
+"median" = "crates/flexmesa-interp1d/src/mp.rs::median"
+"minmod" = "crates/flexmesa-interp1d/src/mp.rs::minmod"
+"minmod4" = "crates/flexmesa-interp1d/src/mp.rs::minmod4"
 
 [[files]]
 upstream_path = "interp_1d/private/interp_1d_misc_sg.f90"
@@ -5017,8 +5091,10 @@ module = "interp_1d"
 upstream_lines = 458
 upstream_sha256 = "9e93c7177155d712717485326a6ceb4189a06d339d705ea0008c6dcf97e613da"
 status = "partial"
-flexmesa_files = ["crates/flexmesa-interp1d/src/lib.rs"]
+flexmesa_files = ["crates/flexmesa-interp1d/src/pm.rs"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
+[files.routine_map]
+"mk_pmcub" = "crates/flexmesa-interp1d/src/pm.rs::mk_pmcub"
 
 [[files]]
 upstream_path = "interp_1d/private/interp_1d_pm_autodiff.f90"
@@ -5052,8 +5128,28 @@ module = "interp_1d"
 upstream_lines = 894
 upstream_sha256 = "dbf373701198dff432271fa90d0dd6c8a1f98ef561269cc84e5442aaeebabe0d"
 status = "partial"
-flexmesa_files = ["crates/flexmesa-interp1d/src/lib.rs"]
+flexmesa_files = ["crates/flexmesa-interp1d/src/eval.rs", "crates/flexmesa-interp1d/src/mp.rs", "crates/flexmesa-interp1d/src/pm.rs", "crates/flexmesa-interp1d/src/remesh.rs"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
+[files.routine_map]
+"integrate_values" = "crates/flexmesa-interp1d/src/eval.rs::integrate_values"
+"interp_3_to_1" = "crates/flexmesa-interp1d/src/remesh.rs::interp_3_to_1"
+"interp_3_to_2" = "crates/flexmesa-interp1d/src/remesh.rs::interp_3_to_2"
+"interp_4_to_1" = "crates/flexmesa-interp1d/src/remesh.rs::interp_4_to_1"
+"interp_4pt_pm" = "crates/flexmesa-interp1d/src/pm.rs::interp_4pt_pm"
+"interp_m3" = "crates/flexmesa-interp1d/src/mp.rs::interp_m3"
+"interp_m3a" = "crates/flexmesa-interp1d/src/mp.rs::interp_m3a"
+"interp_m3b" = "crates/flexmesa-interp1d/src/mp.rs::interp_m3b"
+"interp_m3q" = "crates/flexmesa-interp1d/src/mp.rs::interp_m3q"
+"interp_pm" = "crates/flexmesa-interp1d/src/pm.rs::interp_pm"
+"interp_pm_autodiff" = "crates/flexmesa-interp1d/src/pm.rs::interp_pm_autodiff"
+"interp_pm_slopes_only" = "crates/flexmesa-interp1d/src/pm.rs::interp_pm_slopes_only"
+"interp_value" = "crates/flexmesa-interp1d/src/eval.rs::interp_value"
+"interp_value_and_slope" = "crates/flexmesa-interp1d/src/eval.rs::interp_value_and_slope"
+"interp_values" = "crates/flexmesa-interp1d/src/eval.rs::interp_values"
+"interp_values_and_slopes" = "crates/flexmesa-interp1d/src/eval.rs::interp_values_and_slopes"
+"interp_values_autodiff" = "crates/flexmesa-interp1d/src/remesh.rs::interp_values_autodiff"
+"interpolate_vector" = "crates/flexmesa-interp1d/src/remesh.rs::interpolate_vector"
+"interpolate_vector_pm" = "crates/flexmesa-interp1d/src/remesh.rs::interpolate_vector_pm"
 
 [[files]]
 upstream_path = "interp_1d/public/interp_1d_lib_sg.f90"
@@ -5069,8 +5165,10 @@ module = "interp_2d"
 upstream_lines = 1217
 upstream_sha256 = "180ee58d08a1d8d6af6836682214c22e6b7e0956cfff291c110917de1b00bbe1"
 status = "partial"
-flexmesa_files = ["crates/flexmesa-interp2d/src/lib.rs"]
+flexmesa_files = ["crates/flexmesa-interp2d/src/akima_pd.rs"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
+[files.routine_map]
+"RGPD3P_db" = "crates/flexmesa-interp2d/src/akima_pd.rs::rgpd3p_db"
 
 [[files]]
 upstream_path = "interp_2d/private/akima760_sg.f"
@@ -5086,8 +5184,15 @@ module = "interp_2d"
 upstream_lines = 3487
 upstream_sha256 = "a0bf0b9e66ad9bad79a143861ae736b15e26805810d884247e6fb7455e1b1f73"
 status = "partial"
-flexmesa_files = ["crates/flexmesa-interp2d/src/lib.rs"]
+flexmesa_files = ["crates/flexmesa-interp2d/src/bicub_eval.rs", "crates/flexmesa-interp2d/src/spline1d.rs"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
+routine_map_partial = ["V_SPLINE_db", "evbicub_db"]
+[files.routine_map]
+"V_SPLINE_db" = "crates/flexmesa-interp2d/src/spline1d.rs::v_spline_db"
+"evbicub_db" = "crates/flexmesa-interp2d/src/bicub_eval.rs::interp_evbicub_db"
+"herm2xy_db" = "crates/flexmesa-interp2d/src/bicub_eval.rs::herm2xy_db"
+"mkspline_db" = "crates/flexmesa-interp2d/src/spline1d.rs::mkspline_db"
+"splinck_db" = "crates/flexmesa-interp2d/src/spline1d.rs::splinck_db"
 
 [[files]]
 upstream_path = "interp_2d/private/bicub_sg.f"
@@ -5140,8 +5245,20 @@ module = "interp_2d"
 upstream_lines = 226
 upstream_sha256 = "86a7c0a2a979ebf89ea556be8142928aeb7c5f15731b7ec805e0a26acfd822e8"
 status = "partial"
-flexmesa_files = ["crates/flexmesa-interp2d/src/lib.rs"]
+flexmesa_files = ["crates/flexmesa-interp2d/src/akima.rs", "crates/flexmesa-interp2d/src/bicub.rs", "crates/flexmesa-interp2d/src/bicub_eval.rs", "crates/flexmesa-interp2d/src/bipm.rs", "crates/flexmesa-interp2d/src/renka790.rs", "crates/flexmesa-interp2d/src/spline1d.rs"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
+routine_map_partial = ["interp_cs2grd_db", "interp_cshep2_db", "interp_evbicub_db", "interp_rgbi3p_db", "interp_rgsf3p_db"]
+[files.routine_map]
+"interp_cs2grd_db" = "crates/flexmesa-interp2d/src/renka790.rs::interp_cs2grd_db"
+"interp_cs2val_db" = "crates/flexmesa-interp2d/src/renka790.rs::interp_cs2val_db"
+"interp_cshep2_db" = "crates/flexmesa-interp2d/src/renka790.rs::interp_cshep2_db"
+"interp_evbicub_db" = "crates/flexmesa-interp2d/src/bicub_eval.rs::interp_evbicub_db"
+"interp_evbipm_db" = "crates/flexmesa-interp2d/src/bipm.rs::interp_evbipm_db"
+"interp_mkbicub_db" = "crates/flexmesa-interp2d/src/bicub.rs::interp_mkbicub_db"
+"interp_mkbipm_db" = "crates/flexmesa-interp2d/src/bipm.rs::interp_mkbipm_db"
+"interp_mkspline_db" = "crates/flexmesa-interp2d/src/spline1d.rs::mkspline_db"
+"interp_rgbi3p_db" = "crates/flexmesa-interp2d/src/akima.rs::interp_rgbi3p_db"
+"interp_rgsf3p_db" = "crates/flexmesa-interp2d/src/akima.rs::interp_rgsf3p_db"
 
 [[files]]
 upstream_path = "interp_2d/public/interp_2d_lib_sg.f90"
@@ -5311,8 +5428,11 @@ module = "ionization"
 upstream_lines = 237
 upstream_sha256 = "d05067183770c22dadb4b2e35d4726607d3e4b813c55375eed3ae95bb8e0b2b8"
 status = "partial"
-flexmesa_files = ["crates/flexmesa-ionization/src/lib.rs"]
+flexmesa_files = ["crates/flexmesa-ionization/src/typical_charge.rs"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
+[files.routine_map]
+"chi_effective" = "crates/flexmesa-ionization/src/typical_charge.rs::chi_effective"
+"chi_info" = "crates/flexmesa-ionization/src/typical_charge.rs::chi_info"
 
 [[files]]
 upstream_path = "ionization/public/ionization_def.f90"
@@ -5329,8 +5449,11 @@ module = "ionization"
 upstream_lines = 92
 upstream_sha256 = "546d4b0d1347d993e72a943026177d011e1591d8c978fdef224d3a64acfbf531"
 status = "partial"
-flexmesa_files = ["crates/flexmesa-ionization/src/lib.rs"]
+flexmesa_files = ["crates/flexmesa-ionization/src/fe56_he4.rs", "crates/flexmesa-ionization/src/ion_table.rs"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
+[files.routine_map]
+"eval_charge_of_Fe56_in_He4" = "crates/flexmesa-ionization/src/fe56_he4.rs::eval_charge_of_fe56_in_he4"
+"eval_ionization" = "crates/flexmesa-ionization/src/ion_table.rs::eval_ionization"
 
 [[files]]
 upstream_path = "kap/other/other_compton_opacity.f90"
@@ -5466,8 +5589,11 @@ module = "kap"
 upstream_lines = 449
 upstream_sha256 = "78b18c9ccc5b244fe0b53349236870af15d71365b70d25167873a997ffa1475d"
 status = "partial"
-flexmesa_files = ["crates/flexmesa-kap/src/lib.rs"]
+flexmesa_files = ["crates/flexmesa-kap/src/conduction.rs"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
+[files.routine_map]
+"do_electron_conduction" = "crates/flexmesa-kap/src/conduction.rs::do_electron_conduction"
+"init_potekhin" = "crates/flexmesa-kap/src/conduction.rs::init_potekhin"
 
 [[files]]
 upstream_path = "kap/private/cubic_interpolator.f90"
@@ -5484,8 +5610,11 @@ module = "kap"
 upstream_lines = 608
 upstream_sha256 = "4704f516b5af1dfaa020a735e3596302c4fa0fb56b4ab44b2d777f676d36ff71"
 status = "partial"
-flexmesa_files = ["crates/flexmesa-kap/src/lib.rs"]
+flexmesa_files = ["crates/flexmesa-kap/src/low_t.rs"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
+routine_map_partial = ["AESOPUS_get"]
+[files.routine_map]
+"AESOPUS_get" = "crates/flexmesa-kap/src/low_t.rs::aesopus_get"
 
 [[files]]
 upstream_path = "kap/private/kap_ctrls_io.f90"
@@ -5502,8 +5631,14 @@ module = "kap"
 upstream_lines = 874
 upstream_sha256 = "c7ddba42f54f7b6fa32969b1e7b802fd76d013ec920613bc52bdcbddf9340d93"
 status = "partial"
-flexmesa_files = ["crates/flexmesa-kap/src/lib.rs"]
+flexmesa_files = ["crates/flexmesa-kap/src/blend.rs", "crates/flexmesa-kap/src/compton.rs", "crates/flexmesa-kap/src/eval.rs"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
+routine_map_partial = ["combine_rad_with_conduction", "get_kap_Results", "get_kap_Results_blend_T"]
+[files.routine_map]
+"Compton_Opacity" = "crates/flexmesa-kap/src/compton.rs::compton_opacity"
+"combine_rad_with_conduction" = "crates/flexmesa-kap/src/eval.rs::combine_rad_with_conduction"
+"get_kap_Results" = "crates/flexmesa-kap/src/eval.rs::get_kap_results"
+"get_kap_Results_blend_T" = "crates/flexmesa-kap/src/blend.rs::get_kap_results_blend_t"
 
 [[files]]
 upstream_path = "kap/private/kap_eval_co.f90"
@@ -5511,8 +5646,10 @@ module = "kap"
 upstream_lines = 1241
 upstream_sha256 = "0b2f6a93e7f822709cae496511f0686c0ecb75e7e76afa1ab4d66451275dfc39"
 status = "partial"
-flexmesa_files = ["crates/flexmesa-kap/src/lib.rs"]
+flexmesa_files = ["crates/flexmesa-kap/src/co.rs"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
+[files.routine_map]
+"Get1_kap_CO_Results" = "crates/flexmesa-kap/src/co.rs::get1_kap_co_results"
 
 [[files]]
 upstream_path = "kap/private/kap_eval_fixed.f90"
@@ -5520,8 +5657,11 @@ module = "kap"
 upstream_lines = 762
 upstream_sha256 = "d7b85d22a82e28595b56e8030e38f4f7934842a576dee5b7403c399322149e8a"
 status = "partial"
-flexmesa_files = ["crates/flexmesa-kap/src/lib.rs"]
+flexmesa_files = ["crates/flexmesa-kap/src/fixed.rs"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
+routine_map_partial = ["Get1_kap_fixed_metal_Results"]
+[files.routine_map]
+"Get1_kap_fixed_metal_Results" = "crates/flexmesa-kap/src/fixed.rs::get1_kap_fixed_metal_results"
 
 [[files]]
 upstream_path = "kap/private/kap_eval_support.f90"
@@ -5529,8 +5669,12 @@ module = "kap"
 upstream_lines = 311
 upstream_sha256 = "f0196024c55e5c86683c5f8e0226c74e8aefcf1c70e2d4720b8df98624fe05cc"
 status = "partial"
-flexmesa_files = ["crates/flexmesa-kap/src/lib.rs"]
+flexmesa_files = ["crates/flexmesa-kap/src/spline.rs"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
+[files.routine_map]
+"do_kap_interpolations" = "crates/flexmesa-kap/src/spline.rs::do_kap_interpolations"
+"locate_logR" = "crates/flexmesa-kap/src/spline.rs::locate_log"
+"locate_logT" = "crates/flexmesa-kap/src/spline.rs::locate_log"
 
 [[files]]
 upstream_path = "kap/private/kapcn.f90"
@@ -5538,8 +5682,10 @@ module = "kap"
 upstream_lines = 441
 upstream_sha256 = "c47f439e387bae7a5d16f90272394a96aafa3babcc84af05104533e3c0b04b1f"
 status = "partial"
-flexmesa_files = ["crates/flexmesa-kap/src/lib.rs"]
+flexmesa_files = ["crates/flexmesa-kap/src/low_t.rs"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
+[files.routine_map]
+"kapCN_get" = "crates/flexmesa-kap/src/low_t.rs::kapcn_get"
 
 [[files]]
 upstream_path = "kap/private/load_co_kap.f90"
@@ -5547,8 +5693,10 @@ module = "kap"
 upstream_lines = 913
 upstream_sha256 = "8511974e1ba86bb40181d62c069119b0f3348f54b9dec800ca1a5e8cd9e8505e"
 status = "partial"
-flexmesa_files = ["crates/flexmesa-kap/src/lib.rs"]
+flexmesa_files = ["crates/flexmesa-kap/src/loader.rs"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
+[files.routine_map]
+"get_dX_lookup" = "crates/flexmesa-kap/src/loader.rs::get_dx_lookup"
 
 [[files]]
 upstream_path = "kap/private/load_kap.f90"
@@ -5637,8 +5785,10 @@ module = "kap"
 upstream_lines = 834
 upstream_sha256 = "c4271ed5c4fd16b01cf1570b190b54a1ad2ebad32c8d2dd0538b993b3b309651"
 status = "partial"
-flexmesa_files = ["crates/flexmesa-kap/src/lib.rs"]
+flexmesa_files = ["crates/flexmesa-kap/src/spline.rs"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
+[files.routine_map]
+"get_output_string" = "crates/flexmesa-kap/src/spline.rs::get_output_string"
 
 [[files]]
 upstream_path = "kap/public/kap_lib.f90"
@@ -5646,8 +5796,14 @@ module = "kap"
 upstream_lines = 868
 upstream_sha256 = "7ced181ca4636da7c161f8ae7ba177c9de1a8ff9d76bea8f87915d25b096b749"
 status = "partial"
-flexmesa_files = ["crates/flexmesa-kap/src/lib.rs"]
+flexmesa_files = ["crates/flexmesa-kap/src/blend.rs", "crates/flexmesa-kap/src/compton.rs", "crates/flexmesa-kap/src/conduction.rs", "crates/flexmesa-kap/src/eval.rs"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
+routine_map_partial = ["kap_get", "kap_get_radiative_opacity"]
+[files.routine_map]
+"kap_get" = "crates/flexmesa-kap/src/eval.rs::kap_get+kap_get_zones"
+"kap_get_compton_opacity" = "crates/flexmesa-kap/src/compton.rs::compton_opacity"
+"kap_get_elect_cond_opacity" = "crates/flexmesa-kap/src/conduction.rs::do_electron_conduction"
+"kap_get_radiative_opacity" = "crates/flexmesa-kap/src/blend.rs::get_kap_results_blend_t"
 
 [[files]]
 upstream_path = "math/private/math_io.f90"
@@ -5715,8 +5871,11 @@ module = "mtx"
 upstream_lines = 603
 upstream_sha256 = "ce0347809cfc8be32756ce97ea971f27c3fa711a868c082759949201d9bb799e"
 status = "partial"
-flexmesa_files = ["crates/flexmesa-mtx/src/lib.rs"]
+flexmesa_files = ["crates/flexmesa-mtx/src/bcyclic.rs"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
+[files.routine_map]
+"bcyclic_factor" = "crates/flexmesa-mtx/src/bcyclic.rs::bcyclic_factor"
+"bcyclic_solve" = "crates/flexmesa-mtx/src/bcyclic.rs::bcyclic_solve"
 
 [[files]]
 upstream_path = "mtx/private/mtx_support.f90"
@@ -5724,8 +5883,17 @@ module = "mtx"
 upstream_lines = 1099
 upstream_sha256 = "6d7789243a9782d00e9bbebddd156fa406eb7d7904ffcf13592de47ab1ddc64f"
 status = "partial"
-flexmesa_files = ["crates/flexmesa-mtx/src/lib.rs"]
+flexmesa_files = ["crates/flexmesa-mtx/src/band.rs", "crates/flexmesa-mtx/src/sparse.rs", "crates/flexmesa-mtx/src/sparse_band.rs"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
+routine_map_partial = ["do_band_to_column_sparse", "do_band_to_row_sparse", "do_dense_to_row_sparse"]
+[files.routine_map]
+"do_band_to_column_sparse" = "crates/flexmesa-mtx/src/sparse_band.rs::band_to_column_sparse"
+"do_band_to_dense" = "crates/flexmesa-mtx/src/band.rs::band_to_dense"
+"do_band_to_row_sparse" = "crates/flexmesa-mtx/src/sparse_band.rs::band_to_row_sparse"
+"do_column_sparse_to_band" = "crates/flexmesa-mtx/src/sparse_band.rs::column_sparse_to_band"
+"do_dense_to_band" = "crates/flexmesa-mtx/src/band.rs::dense_to_band"
+"do_dense_to_row_sparse" = "crates/flexmesa-mtx/src/sparse.rs::dense_to_row_sparse"
+"do_row_sparse_to_band" = "crates/flexmesa-mtx/src/sparse_band.rs::row_sparse_to_band"
 
 [[files]]
 upstream_path = "mtx/private/my_lapack95.f90"
@@ -5840,8 +6008,29 @@ module = "mtx"
 upstream_lines = 429
 upstream_sha256 = "cbbaaa0e9aca1a18cb09f23a451d26ab47c6cb1e7880acc0e162a7527ed71dec"
 status = "partial"
-flexmesa_files = ["crates/flexmesa-mtx/src/lib.rs"]
-notes = "seeded from coverage-map.md section 7: partial / uncompared"
+flexmesa_files = ["crates/flexmesa-mtx/src/band.rs", "crates/flexmesa-mtx/src/sparse.rs", "crates/flexmesa-mtx/src/sparse_band.rs"]
+notes = "seeded from coverage-map.md section 7: partial / uncompared; row_sparse_0_based_to_dense applies DECISIONS #43 0-based bounds fix"
+routine_map_partial = ["row_sparse_0_based_to_dense"]
+[files.routine_map]
+"band_to_col_sparse_with_diag" = "crates/flexmesa-mtx/src/sparse_band.rs::band_to_col_sparse_with_diag"
+"band_to_column_sparse" = "crates/flexmesa-mtx/src/sparse_band.rs::band_to_column_sparse"
+"band_to_dense" = "crates/flexmesa-mtx/src/band.rs::band_to_dense"
+"band_to_row_sparse" = "crates/flexmesa-mtx/src/sparse_band.rs::band_to_row_sparse"
+"band_to_row_sparse_with_diag" = "crates/flexmesa-mtx/src/sparse_band.rs::band_to_row_sparse_with_diag"
+"col_sparse_0_based_to_dense" = "crates/flexmesa-mtx/src/sparse.rs::col_sparse_0_based_to_dense"
+"column_sparse_to_band" = "crates/flexmesa-mtx/src/sparse_band.rs::column_sparse_to_band"
+"column_sparse_to_dense" = "crates/flexmesa-mtx/src/sparse.rs::column_sparse_to_dense"
+"dense_to_band" = "crates/flexmesa-mtx/src/band.rs::dense_to_band"
+"dense_to_col_0_based" = "crates/flexmesa-mtx/src/sparse.rs::dense_to_col_0_based"
+"dense_to_col_sparse_with_diag" = "crates/flexmesa-mtx/src/sparse.rs::dense_to_col_sparse_with_diag"
+"dense_to_col_with_diag_0_based" = "crates/flexmesa-mtx/src/sparse.rs::dense_to_col_with_diag_0_based"
+"dense_to_row_0_based" = "crates/flexmesa-mtx/src/sparse.rs::dense_to_row_0_based"
+"dense_to_row_sparse" = "crates/flexmesa-mtx/src/sparse.rs::dense_to_row_sparse"
+"dense_to_row_sparse_with_diag" = "crates/flexmesa-mtx/src/sparse.rs::dense_to_row_sparse_with_diag"
+"dense_to_row_with_diag_0_based" = "crates/flexmesa-mtx/src/sparse.rs::dense_to_row_with_diag_0_based"
+"dense_to_sparse_with_diag" = "crates/flexmesa-mtx/src/sparse.rs::dense_to_sparse_with_diag"
+"find_loc_in_sparse" = "crates/flexmesa-mtx/src/sparse_band.rs::find_loc_in_sparse"
+"row_sparse_0_based_to_dense" = "crates/flexmesa-mtx/src/sparse.rs::row_sparse_0_based_to_dense"
 
 [[files]]
 upstream_path = "mtx/public/mtx_jac.dek"
@@ -5867,8 +6056,19 @@ module = "mtx"
 upstream_lines = 340
 upstream_sha256 = "190e4d4bb71638225b263ba5232bff6fc3daa425138cec5d66b4a8fbb35ae769"
 status = "partial"
-flexmesa_files = ["crates/flexmesa-mtx/src/lib.rs"]
+flexmesa_files = ["crates/flexmesa-mtx/src/band.rs", "crates/flexmesa-mtx/src/block_tridiag.rs", "crates/flexmesa-mtx/src/dense_ops.rs", "crates/flexmesa-mtx/src/lib.rs", "crates/flexmesa-mtx/src/precond.rs", "crates/flexmesa-mtx/src/sparse.rs", "crates/flexmesa-mtx/src/sparse_band.rs"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
+routine_map_partial = ["DGBSVX_banded", "DGBSVX_block_tridiagonal", "decsol_option", "decsol_option_str", "is_block_tridiagonal_decsol"]
+[files.routine_map]
+"DGBSVX_banded" = "crates/flexmesa-mtx/src/precond.rs::dgbsvx_banded_from_bands"
+"DGBSVX_block_tridiagonal" = "crates/flexmesa-mtx/src/precond.rs::dgbsvx_block_tridiagonal"
+"band_multiply_xa" = "crates/flexmesa-mtx/src/band.rs::band_multiply_xa"
+"block_dble_mv" = "crates/flexmesa-mtx/src/block_tridiag.rs::block_dble_mv"
+"block_multiply_xa" = "crates/flexmesa-mtx/src/block_tridiag.rs::block_multiply_xa"
+"decsol_option" = "crates/flexmesa-mtx/src/lib.rs::decsol_option"
+"decsol_option_str" = "crates/flexmesa-mtx/src/lib.rs::decsol_option_str"
+"is_block_tridiagonal_decsol" = "crates/flexmesa-mtx/src/lib.rs::is_block_tridiagonal_decsol"
+"multiply_xa" = "crates/flexmesa-mtx/src/dense_ops.rs::multiply_xa"
 
 [[files]]
 upstream_path = "mtx/public/mtx_null_decsol.dek"
@@ -5930,8 +6130,21 @@ module = "net"
 upstream_lines = 3374
 upstream_sha256 = "e643adb6b5fd60887d797c96ff3d7d6b2b126ed20babccf18063be1a7f5016de"
 status = "partial"
-flexmesa_files = ["crates/flexmesa-net/src/lib.rs"]
-notes = "seeded from coverage-map.md section 7: partial / uncompared"
+flexmesa_files = ["crates/flexmesa-net/src/approx21.rs", "crates/flexmesa-net/src/approx21_dfdy.rs", "crates/flexmesa-net/src/approx21_dydt.rs", "crates/flexmesa-net/src/approx21_eps.rs", "crates/flexmesa-net/src/approx21_eval.rs", "crates/flexmesa-net/src/approx21_special.rs", "crates/flexmesa-net/src/parser.rs"]
+notes = "seeded from coverage-map.md section 7: partial / uncompared; approx21_dydt omits is_bad/mesa_error check and reorders quad/product summation (#659)"
+routine_map_partial = ["approx21_d_epsneu_dy", "approx21_dydt", "approx21_eps_info", "approx21_weak_rates"]
+[files.routine_map]
+"approx21_d_epsneu_dy" = "crates/flexmesa-net/src/approx21_eps.rs::approx21_d_epsneu_dy"
+"approx21_dfdT_dfdRho" = "crates/flexmesa-net/src/approx21_eval.rs::approx21_dfdt_dfdrho"
+"approx21_dfdy" = "crates/flexmesa-net/src/approx21_dfdy.rs::approx21_dfdy"
+"approx21_dydt" = "crates/flexmesa-net/src/approx21_dydt.rs::approx21_dydt"
+"approx21_eps_info" = "crates/flexmesa-net/src/approx21_eps.rs::approx21_eps_info"
+"approx21_eval_PPII_fraction" = "crates/flexmesa-net/src/approx21_eps.rs::approx21_eval_ppii_fraction"
+"approx21_pa_pg_fractions" = "crates/flexmesa-net/src/approx21.rs::approx21_pa_pg_fractions"
+"approx21_special_reactions" = "crates/flexmesa-net/src/approx21_special.rs::approx21_special_reactions"
+"approx21_weak_rates" = "crates/flexmesa-net/src/approx21.rs::approx21_weak_rates"
+"eval_fe56ec_fake_factor" = "crates/flexmesa-net/src/approx21_dydt.rs::eval_fe56ec_fake_factor"
+"mark_approx21" = "crates/flexmesa-net/src/parser.rs::mark_approx21"
 
 [[files]]
 upstream_path = "net/private/net_burn.f90"
@@ -5939,8 +6152,11 @@ module = "net"
 upstream_lines = 475
 upstream_sha256 = "81095d869c6edcd941138d0c4eb860df3aaf6de59e227133f608769bb9af98c6"
 status = "partial"
-flexmesa_files = ["crates/flexmesa-net/src/lib.rs"]
+flexmesa_files = ["crates/flexmesa-net/src/burn.rs"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
+routine_map_partial = ["burn_1_zone"]
+[files.routine_map]
+"burn_1_zone" = "crates/flexmesa-net/src/burn.rs::burn_1_zone"
 
 [[files]]
 upstream_path = "net/private/net_burn_const_density.f90"
@@ -5957,8 +6173,11 @@ module = "net"
 upstream_lines = 583
 upstream_sha256 = "b2077aac6c81a6dfc6755dd97b5c560f69f2f2fc9c6e4305262ab19c49794253"
 status = "partial"
-flexmesa_files = ["crates/flexmesa-net/src/lib.rs"]
+flexmesa_files = ["crates/flexmesa-net/src/burn_const_p.rs"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
+routine_map_partial = ["burn_1_zone_const_P"]
+[files.routine_map]
+"burn_1_zone_const_P" = "crates/flexmesa-net/src/burn_const_p.rs::burn_1_zone_const_p"
 
 [[files]]
 upstream_path = "net/private/net_burn_support.f90"
@@ -5966,8 +6185,14 @@ module = "net"
 upstream_lines = 641
 upstream_sha256 = "897e9ea4504765ecb5f33f6d4264a19576c86953b3f69c7f1c56c6859d5b4af2"
 status = "partial"
-flexmesa_files = ["crates/flexmesa-net/src/lib.rs"]
+flexmesa_files = ["crates/flexmesa-net/src/burn_stepper.rs"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
+routine_map_partial = ["netint"]
+[files.routine_map]
+"net_pzextr" = "crates/flexmesa-net/src/burn_stepper.rs::net_pzextr"
+"netint" = "crates/flexmesa-net/src/burn_stepper.rs::netint"
+"simpr" = "crates/flexmesa-net/src/burn_stepper.rs::simpr"
+"stifbs" = "crates/flexmesa-net/src/burn_stepper.rs::stifbs"
 
 [[files]]
 upstream_path = "net/private/net_derivs.f90"
@@ -5975,8 +6200,13 @@ module = "net"
 upstream_lines = 1833
 upstream_sha256 = "7e9066f4a6619405c9ec959c2db283c8022f9425fdb361ce4db57ec20938496f"
 status = "partial"
-flexmesa_files = ["crates/flexmesa-net/src/lib.rs"]
+flexmesa_files = ["crates/flexmesa-net/src/derivs.rs", "crates/flexmesa-net/src/derivs_support.rs"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
+routine_map_partial = ["get1_derivs", "get_derivs", "update_special_rates"]
+[files.routine_map]
+"get1_derivs" = "crates/flexmesa-net/src/derivs.rs::get1_derivs"
+"get_derivs" = "crates/flexmesa-net/src/derivs.rs::get_derivs"
+"update_special_rates" = "crates/flexmesa-net/src/derivs_support.rs::update_special_rates"
 
 [[files]]
 upstream_path = "net/private/net_derivs_support.f90"
@@ -5984,8 +6214,12 @@ module = "net"
 upstream_lines = 454
 upstream_sha256 = "01e7b2896719984c3c0663219217fbbebb80463123c1ac42bc0a7599dec9a6d9"
 status = "partial"
-flexmesa_files = ["crates/flexmesa-net/src/lib.rs"]
-notes = "seeded from coverage-map.md section 7: partial / uncompared"
+flexmesa_files = ["crates/flexmesa-net/src/derivs_support.rs"]
+notes = "seeded from coverage-map.md section 7: partial / uncompared; do_in_out_neu omits check_balance and deriv_flgs"
+routine_map_partial = ["do_in_out", "do_in_out_neu"]
+[files.routine_map]
+"do_in_out" = "crates/flexmesa-net/src/derivs_support.rs::do_in_out"
+"do_in_out_neu" = "crates/flexmesa-net/src/derivs_support.rs::do_in_out_neu"
 
 [[files]]
 upstream_path = "net/private/net_eval.f90"
@@ -6025,8 +6259,10 @@ module = "net"
 upstream_lines = 566
 upstream_sha256 = "825e2189b9305f04d7adf92403f176dce7804db624534809155633f23af6afc4"
 status = "partial"
-flexmesa_files = ["crates/flexmesa-net/src/lib.rs"]
+flexmesa_files = ["crates/flexmesa-net/src/screen.rs"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
+[files.routine_map]
+"screen_net" = "crates/flexmesa-net/src/screen.rs::screen_net"
 
 [[files]]
 upstream_path = "net/public/burner_const_density_get_eos_info.inc"
@@ -6061,8 +6297,16 @@ module = "net"
 upstream_lines = 1210
 upstream_sha256 = "167060f4a53cf6afa708fbd91a41b48031d485862dbd24944043c2d1a5b06bb7"
 status = "partial"
-flexmesa_files = ["crates/flexmesa-net/src/lib.rs"]
+flexmesa_files = ["crates/flexmesa-net/src/burn.rs", "crates/flexmesa-net/src/burn_const_density.rs", "crates/flexmesa-net/src/burn_const_p.rs", "crates/flexmesa-net/src/lib.rs", "crates/flexmesa-net/src/parser.rs"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
+routine_map_partial = ["net_1_zone_burn", "net_1_zone_burn_const_P", "net_1_zone_burn_const_density", "net_get", "net_get_symbolic_d_dxdt_dx", "read_net_file"]
+[files.routine_map]
+"net_1_zone_burn" = "crates/flexmesa-net/src/burn.rs::burn_1_zone"
+"net_1_zone_burn_const_P" = "crates/flexmesa-net/src/burn_const_p.rs::burn_1_zone_const_p"
+"net_1_zone_burn_const_density" = "crates/flexmesa-net/src/burn_const_density.rs::burn_1_zone_const_density"
+"net_get" = "crates/flexmesa-net/src/lib.rs::net_get"
+"net_get_symbolic_d_dxdt_dx" = "crates/flexmesa-net/src/lib.rs::net_get_symbolic_d_dxdt_dx"
+"read_net_file" = "crates/flexmesa-net/src/parser.rs::read_net_file"
 
 [[files]]
 upstream_path = "neu/plotter/src/neu_plotter.f90"
@@ -6154,8 +6398,11 @@ module = "num"
 upstream_lines = 2243
 upstream_sha256 = "fe535f20c8fd23d0066236359bd0cbbcda297c3270a2000a059d526f133f5c4a"
 status = "partial"
-flexmesa_files = ["crates/flexmesa-num/src/lib.rs"]
+flexmesa_files = ["crates/flexmesa-num/src/bobyqa.rs"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
+routine_map_partial = ["do_BOBYQA"]
+[files.routine_map]
+"do_BOBYQA" = "crates/flexmesa-num/src/bobyqa.rs::bobyqa"
 
 [[files]]
 upstream_path = "num/private/mod_brent.f90"
@@ -6163,8 +6410,12 @@ module = "num"
 upstream_lines = 707
 upstream_sha256 = "0d840b4586e73c9522906f78c96a00d3c9a5e975fd2ae2d0f18dcb107342296f"
 status = "partial"
-flexmesa_files = ["crates/flexmesa-num/src/lib.rs"]
+flexmesa_files = ["crates/flexmesa-num/src/brent.rs"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
+routine_map_partial = ["eval_local_min"]
+[files.routine_map]
+"eval_brent_safe_zero" = "crates/flexmesa-num/src/brent.rs::brent_safe_zero"
+"eval_local_min" = "crates/flexmesa-num/src/brent.rs::local_min"
 
 [[files]]
 upstream_path = "num/private/mod_dc_decsol.f"
@@ -6181,8 +6432,11 @@ module = "num"
 upstream_lines = 836
 upstream_sha256 = "2aa4b218c8db615f34f630d9758f14a9986bee05c2dd0e70261e1f2d57605b3d"
 status = "partial"
-flexmesa_files = ["crates/flexmesa-num/src/lib.rs"]
+flexmesa_files = ["crates/flexmesa-num/src/rk.rs"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
+routine_map_partial = ["do_dop853"]
+[files.routine_map]
+"do_dop853" = "crates/flexmesa-num/src/rk.rs::dop853"
 
 [[files]]
 upstream_path = "num/private/mod_dopri5.f"
@@ -6190,8 +6444,11 @@ module = "num"
 upstream_lines = 645
 upstream_sha256 = "1ee7c9cb42217441028fa8dbea2600d39ef3536a64c0f8f7684fd3ddcc6d99b5"
 status = "partial"
-flexmesa_files = ["crates/flexmesa-num/src/lib.rs"]
+flexmesa_files = ["crates/flexmesa-num/src/rk.rs"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
+routine_map_partial = ["do_dopri5"]
+[files.routine_map]
+"do_dopri5" = "crates/flexmesa-num/src/rk.rs::dopri5"
 
 [[files]]
 upstream_path = "num/private/mod_integrate.f90"
@@ -6199,8 +6456,12 @@ module = "num"
 upstream_lines = 114
 upstream_sha256 = "565d13064576bb37f64df9e4c99de969ec0fae580cf9bcbe41bfe7de1a255a27"
 status = "partial"
-flexmesa_files = ["crates/flexmesa-num/src/lib.rs"]
-notes = "seeded from coverage-map.md section 7: partial / uncompared"
+flexmesa_files = ["crates/flexmesa-num/src/quadrature.rs"]
+notes = "seeded from coverage-map.md section 7: partial / uncompared; simp38 omits args and ierr propagation"
+routine_map_partial = ["integrator", "simp38"]
+[files.routine_map]
+"integrator" = "crates/flexmesa-num/src/quadrature.rs::integrator_rec"
+"simp38" = "crates/flexmesa-num/src/quadrature.rs::simp38"
 
 [[files]]
 upstream_path = "num/private/mod_newton.f90"
@@ -6217,8 +6478,11 @@ module = "num"
 upstream_lines = 1583
 upstream_sha256 = "a3058f944be98d7f4595b79f8b2b5ec9e008cc5b9271b615f364bebf655a0226"
 status = "partial"
-flexmesa_files = ["crates/flexmesa-num/src/lib.rs"]
+flexmesa_files = ["crates/flexmesa-num/src/newuoa.rs"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
+routine_map_partial = ["do_newuoa"]
+[files.routine_map]
+"do_newuoa" = "crates/flexmesa-num/src/newuoa.rs::newuoa"
 
 [[files]]
 upstream_path = "num/private/mod_qsort.f90"
@@ -6235,8 +6499,13 @@ module = "num"
 upstream_lines = 376
 upstream_sha256 = "5bae0dd70ed8ea755d450f7fc4bb1130715c32be5402127b26ff67e446e32a7d"
 status = "partial"
-flexmesa_files = ["crates/flexmesa-num/src/lib.rs"]
-notes = "seeded from coverage-map.md section 7: partial / uncompared"
+flexmesa_files = ["crates/flexmesa-num/src/simplex.rs"]
+notes = "seeded from coverage-map.md section 7: partial / uncompared; r8_uniform_01 differs on seed 0 fallback"
+routine_map_partial = ["i4_uniform", "perm_uniform", "r8_uniform_01"]
+[files.routine_map]
+"i4_uniform" = "crates/flexmesa-num/src/simplex.rs::i4_uniform"
+"perm_uniform" = "crates/flexmesa-num/src/simplex.rs::perm_uniform"
+"r8_uniform_01" = "crates/flexmesa-num/src/simplex.rs::r8_uniform_01"
 
 [[files]]
 upstream_path = "num/private/mod_root.f90"
@@ -6244,8 +6513,13 @@ module = "num"
 upstream_lines = 277
 upstream_sha256 = "797a6faadefd27f3d92ecc582f8fdec43e10848f382a97075cd03f5a8d6d54d1"
 status = "partial"
-flexmesa_files = ["crates/flexmesa-num/src/lib.rs"]
+flexmesa_files = ["crates/flexmesa-num/src/root.rs"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
+routine_map_partial = ["do_look_for_brackets", "do_safe_root_with_guess"]
+[files.routine_map]
+"do_look_for_brackets" = "crates/flexmesa-num/src/root.rs::look_for_brackets"
+"do_safe_root_with_brackets" = "crates/flexmesa-num/src/root.rs::safe_root_with_brackets"
+"do_safe_root_with_guess" = "crates/flexmesa-num/src/root.rs::safe_root_with_guess"
 
 [[files]]
 upstream_path = "num/private/mod_rosenbrock.f"
@@ -6262,8 +6536,11 @@ module = "num"
 upstream_lines = 386
 upstream_sha256 = "4a956ff9675680096d72bf1c987b834c9583a80fcfb5286310fce4421c60a3f6"
 status = "partial"
-flexmesa_files = ["crates/flexmesa-num/src/lib.rs"]
+flexmesa_files = ["crates/flexmesa-num/src/simplex.rs"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
+routine_map_partial = ["do_simplex"]
+[files.routine_map]
+"do_simplex" = "crates/flexmesa-num/src/simplex.rs::nm_simplex"
 
 [[files]]
 upstream_path = "num/private/mod_solout_root.f90"
@@ -6323,8 +6600,10 @@ module = "num"
 upstream_lines = 285
 upstream_sha256 = "b7e88113362ad35056b9c5c0d69aef4d8f1a325da700e458245951a08e1cdb8e"
 status = "partial"
-flexmesa_files = ["crates/flexmesa-num/src/lib.rs"]
+flexmesa_files = ["crates/flexmesa-num/src/accurate_sum.rs"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
+[files.routine_map]
+"neumaier_sum" = "crates/flexmesa-num/src/accurate_sum.rs::neumaier_sum_qp"
 
 [[files]]
 upstream_path = "num/public/accurate_sum_auto_diff_star_order1.f90"
@@ -6350,8 +6629,11 @@ module = "num"
 upstream_lines = 259
 upstream_sha256 = "aa04c7f457f5bd9d36fe9f2de62ed3d97707d86ae7a91313e9222de786644b03"
 status = "partial"
-flexmesa_files = ["crates/flexmesa-num/src/lib.rs"]
-notes = "seeded from coverage-map.md section 7: partial / uncompared"
+flexmesa_files = ["crates/flexmesa-num/src/search.rs"]
+notes = "seeded from coverage-map.md section 7: partial / uncompared; binary_search omits loc=-1 and val==vec(1) branches"
+routine_map_partial = ["binary_search"]
+[files.routine_map]
+"binary_search" = "crates/flexmesa-num/src/search.rs::binary_search"
 
 [[files]]
 upstream_path = "num/public/num_bobyqa.dek"
@@ -6359,8 +6641,11 @@ module = "num"
 upstream_lines = 106
 upstream_sha256 = "e2e4b4b81f6d1321d4c5145ca94d28697d37a3b52e5e243ec717deb3c8f4a79c"
 status = "partial"
-flexmesa_files = ["crates/flexmesa-num/src/lib.rs"]
+flexmesa_files = ["crates/flexmesa-num/src/bobyqa.rs"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
+routine_map_partial = ["bobyqa"]
+[files.routine_map]
+"bobyqa" = "crates/flexmesa-num/src/bobyqa.rs::bobyqa"
 
 [[files]]
 upstream_path = "num/public/num_bobyqa_proc.dek"
@@ -6377,8 +6662,13 @@ module = "num"
 upstream_lines = 225
 upstream_sha256 = "a1d39b96715ee851ef7eb8db2a38c8520cc1f488f965c1ed66ea2e2a66e51157"
 status = "partial"
-flexmesa_files = ["crates/flexmesa-num/src/lib.rs"]
+flexmesa_files = ["crates/flexmesa-num/src/brent.rs"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
+routine_map_partial = ["brent_global_min", "brent_local_min"]
+[files.routine_map]
+"brent_global_min" = "crates/flexmesa-num/src/brent.rs::brent_global_min"
+"brent_local_min" = "crates/flexmesa-num/src/brent.rs::brent_local_min"
+"brent_safe_zero" = "crates/flexmesa-num/src/brent.rs::brent_safe_zero"
 
 [[files]]
 upstream_path = "num/public/num_def.f90"
@@ -6395,8 +6685,11 @@ module = "num"
 upstream_lines = 55
 upstream_sha256 = "84bb49c36d580e72d38b2b9b6cb77a284fddc9b5f0672745044e36e36d11e0b8"
 status = "partial"
-flexmesa_files = ["crates/flexmesa-num/src/lib.rs"]
+flexmesa_files = ["crates/flexmesa-num/src/quadrature.rs"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
+routine_map_partial = ["dfridr"]
+[files.routine_map]
+"dfridr" = "crates/flexmesa-num/src/quadrature.rs::dfridr"
 
 [[files]]
 upstream_path = "num/public/num_dfx.dek"
@@ -6413,8 +6706,11 @@ module = "num"
 upstream_lines = 183
 upstream_sha256 = "3351fbcb0a451772ca3977253817f8c75acd6cad8aa42759890f1905d59c3ecd"
 status = "partial"
-flexmesa_files = ["crates/flexmesa-num/src/lib.rs"]
+flexmesa_files = ["crates/flexmesa-num/src/rk.rs"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
+routine_map_partial = ["dop853"]
+[files.routine_map]
+"dop853" = "crates/flexmesa-num/src/rk.rs::dop853"
 
 [[files]]
 upstream_path = "num/public/num_dopri5.dek"
@@ -6422,8 +6718,11 @@ module = "num"
 upstream_lines = 183
 upstream_sha256 = "0ab3c564de0080b174cbd3fa4aa290a383fe96b831416f31bed2db7bb49d927e"
 status = "partial"
-flexmesa_files = ["crates/flexmesa-num/src/lib.rs"]
+flexmesa_files = ["crates/flexmesa-num/src/rk.rs"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
+routine_map_partial = ["dopri5"]
+[files.routine_map]
+"dopri5" = "crates/flexmesa-num/src/rk.rs::dopri5"
 
 [[files]]
 upstream_path = "num/public/num_fcn.dek"
@@ -6485,8 +6784,16 @@ module = "num"
 upstream_lines = 626
 upstream_sha256 = "f64e090c1f634cdd3eaabe42bf797727dd62f5feb51d12fee473d3d05d234672"
 status = "partial"
-flexmesa_files = ["crates/flexmesa-num/src/lib.rs"]
-notes = "seeded from coverage-map.md section 7: partial / uncompared"
+flexmesa_files = ["crates/flexmesa-num/src/bobyqa.rs", "crates/flexmesa-num/src/brent.rs", "crates/flexmesa-num/src/newuoa.rs", "crates/flexmesa-num/src/quadrature.rs", "crates/flexmesa-num/src/rk.rs", "crates/flexmesa-num/src/root.rs", "crates/flexmesa-num/src/search.rs", "crates/flexmesa-num/src/simplex.rs"]
+notes = "seeded from coverage-map.md section 7: partial / uncompared; find_max_quadratic applies DECISIONS #43 concavity/peak validation fix"
+routine_map_partial = ["find0", "find0_quadratic", "find_max_quadratic", "integrate"]
+[files.routine_map]
+"find0" = "crates/flexmesa-num/src/search.rs::find0"
+"find0_quadratic" = "crates/flexmesa-num/src/search.rs::find0_quadratic"
+"find_max_quadratic" = "crates/flexmesa-num/src/search.rs::find_max_quadratic"
+"integrate" = "crates/flexmesa-num/src/quadrature.rs::integrate"
+"linear_interp" = "crates/flexmesa-num/src/search.rs::linear_interp"
+"two_piece_linear_coeffs" = "crates/flexmesa-num/src/search.rs::two_piece_linear_coeffs"
 
 [[files]]
 upstream_path = "num/public/num_mas.dek"
@@ -6512,8 +6819,11 @@ module = "num"
 upstream_lines = 64
 upstream_sha256 = "6a6eea132002e97549e672457f84f82b42b12efdec97b68a634fcc125d84e32d"
 status = "partial"
-flexmesa_files = ["crates/flexmesa-num/src/lib.rs"]
+flexmesa_files = ["crates/flexmesa-num/src/newuoa.rs"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
+routine_map_partial = ["newuoa"]
+[files.routine_map]
+"newuoa" = "crates/flexmesa-num/src/newuoa.rs::newuoa"
 
 [[files]]
 upstream_path = "num/public/num_newuoa_proc.dek"
@@ -6538,8 +6848,10 @@ module = "num"
 upstream_lines = 41
 upstream_sha256 = "9d083c9aaaed49003dbb9e89389de71b246a27001e25fdfcf7f0a9ad98ea7258"
 status = "partial"
-flexmesa_files = ["crates/flexmesa-num/src/lib.rs"]
+flexmesa_files = ["crates/flexmesa-num/src/rk.rs"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
+[files.routine_map]
+"rk2" = "crates/flexmesa-num/src/rk.rs::rk2"
 
 [[files]]
 upstream_path = "num/public/num_rk4.dek"
@@ -6547,8 +6859,10 @@ module = "num"
 upstream_lines = 53
 upstream_sha256 = "dc1f4835ce0dc9120139c3c6e962777609adcee67898c23c9b048e45d08693b8"
 status = "partial"
-flexmesa_files = ["crates/flexmesa-num/src/lib.rs"]
+flexmesa_files = ["crates/flexmesa-num/src/rk.rs"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
+[files.routine_map]
+"rk4" = "crates/flexmesa-num/src/rk.rs::rk4"
 
 [[files]]
 upstream_path = "num/public/num_rodas3.dek"
@@ -6628,8 +6942,14 @@ module = "num"
 upstream_lines = 144
 upstream_sha256 = "c2ba456234ab2291d34ec5f042ad0cf126bdc440a5c4659bd695e8815eb5cb6c"
 status = "partial"
-flexmesa_files = ["crates/flexmesa-num/src/lib.rs"]
+flexmesa_files = ["crates/flexmesa-num/src/root.rs"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
+routine_map_partial = ["look_for_brackets", "safe_root_with_guess", "safe_root_without_brackets"]
+[files.routine_map]
+"look_for_brackets" = "crates/flexmesa-num/src/root.rs::look_for_brackets"
+"safe_root_with_brackets" = "crates/flexmesa-num/src/root.rs::safe_root_with_brackets"
+"safe_root_with_guess" = "crates/flexmesa-num/src/root.rs::safe_root_with_guess"
+"safe_root_without_brackets" = "crates/flexmesa-num/src/root.rs::safe_root_without_brackets"
 
 [[files]]
 upstream_path = "num/public/num_safe_root_x.dek"
@@ -6637,8 +6957,13 @@ module = "num"
 upstream_lines = 76
 upstream_sha256 = "4a35a0129ed0b8df967ae66cac3d2118c7d54f0b1002eba4d7ba0e50209aecdf"
 status = "partial"
-flexmesa_files = ["crates/flexmesa-num/src/lib.rs"]
+flexmesa_files = ["crates/flexmesa-num/src/root.rs"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
+routine_map_partial = ["look_for_brackets", "safe_root_with_guess"]
+[files.routine_map]
+"look_for_brackets" = "crates/flexmesa-num/src/root.rs::look_for_brackets"
+"safe_root_with_brackets" = "crates/flexmesa-num/src/root.rs::safe_root_with_brackets"
+"safe_root_with_guess" = "crates/flexmesa-num/src/root.rs::safe_root_with_guess"
 
 [[files]]
 upstream_path = "num/public/num_simplex.dek"
@@ -6646,8 +6971,11 @@ module = "num"
 upstream_lines = 146
 upstream_sha256 = "a09fc1d8d0dd38b74c17c46a170ef8b34bb4914d64a83d0cf74d54c7794cdb8e"
 status = "partial"
-flexmesa_files = ["crates/flexmesa-num/src/lib.rs"]
+flexmesa_files = ["crates/flexmesa-num/src/simplex.rs"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
+routine_map_partial = ["NM_simplex"]
+[files.routine_map]
+"NM_simplex" = "crates/flexmesa-num/src/simplex.rs::nm_simplex"
 
 [[files]]
 upstream_path = "num/public/num_simplex_fcn.dek"
@@ -6718,8 +7046,11 @@ module = "rates"
 upstream_lines = 350
 upstream_sha256 = "a0ded3b7226d3634e2dccb724b08fc17a0d4c856b349333f98e4ad17ad2e94fe"
 status = "partial"
-flexmesa_files = ["crates/flexmesa-rates/src/lib.rs"]
+flexmesa_files = ["crates/flexmesa-rates/src/ecapture.rs"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
+[files.routine_map]
+"do_Vs_coulomb" = "crates/flexmesa-rates/src/ecapture.rs::eval_vs_coulomb+eval_vs_coulomb_with_derivs"
+"do_mui_coulomb" = "crates/flexmesa-rates/src/ecapture.rs::eval_mui_coulomb+eval_mui_coulomb_with_derivs"
 
 [[files]]
 upstream_path = "rates/private/eval_ecapture.f90"
@@ -6772,8 +7103,10 @@ module = "rates"
 upstream_lines = 308
 upstream_sha256 = "d1283b2415329fe39b1f332836d206f41c20e71ca35c25cd86a53023726093d8"
 status = "partial"
-flexmesa_files = ["crates/flexmesa-rates/src/lib.rs"]
+flexmesa_files = ["crates/flexmesa-rates/src/raw_rates.rs"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
+[files.routine_map]
+"FL_epsnuc_3alf" = "crates/flexmesa-rates/src/raw_rates.rs::eval_fl_epsnuc_3alf+eval_fl_epsnuc_3alf_with_derivs"
 
 [[files]]
 upstream_path = "rates/private/ratelib.f90"
@@ -6781,8 +7114,38 @@ module = "rates"
 upstream_lines = 4619
 upstream_sha256 = "0a2fee330c11988740fb2f7a903942e5d1311300dcf3c2c4ea2351fed74a9961"
 status = "partial"
-flexmesa_files = ["crates/flexmesa-rates/src/lib.rs"]
+flexmesa_files = ["crates/flexmesa-rates/src/ratelib.rs", "crates/flexmesa-rates/src/tfactors.rs"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
+[files.routine_map]
+"rate_b8ep" = "crates/flexmesa-rates/src/ratelib.rs::rate_b8ep"
+"rate_be7em_fxt" = "crates/flexmesa-rates/src/ratelib.rs::rate_be7em_fxt"
+"rate_be7pg_nacre" = "crates/flexmesa-rates/src/ratelib.rs::rate_be7pg_nacre"
+"rate_c12ag_nacre" = "crates/flexmesa-rates/src/ratelib.rs::rate_c12ag_nacre"
+"rate_c12c12_fxt_multi" = "crates/flexmesa-rates/src/ratelib.rs::rate_c12c12_fxt_multi"
+"rate_c12o16_fxt" = "crates/flexmesa-rates/src/ratelib.rs::rate_c12o16_fxt"
+"rate_c12pg_nacre" = "crates/flexmesa-rates/src/ratelib.rs::rate_c12pg_nacre"
+"rate_c13pg_nacre" = "crates/flexmesa-rates/src/ratelib.rs::rate_c13pg_nacre"
+"rate_dpg_fxt" = "crates/flexmesa-rates/src/ratelib.rs::rate_dpg_fxt"
+"rate_dpg_nacre" = "crates/flexmesa-rates/src/ratelib.rs::rate_dpg_nacre"
+"rate_f19pa_nacre" = "crates/flexmesa-rates/src/ratelib.rs::rate_f19pa_nacre"
+"rate_he3he3_nacre" = "crates/flexmesa-rates/src/ratelib.rs::rate_he3he3_nacre"
+"rate_he3he4_nacre" = "crates/flexmesa-rates/src/ratelib.rs::rate_he3he4_nacre"
+"rate_he3ng_fxt" = "crates/flexmesa-rates/src/ratelib.rs::rate_he3ng_fxt"
+"rate_hep_fxt" = "crates/flexmesa-rates/src/ratelib.rs::rate_hep_fxt"
+"rate_li7pa_nacre" = "crates/flexmesa-rates/src/ratelib.rs::rate_li7pa_nacre"
+"rate_n13pg_nacre" = "crates/flexmesa-rates/src/ratelib.rs::rate_n13pg_nacre"
+"rate_n14pg_nacre" = "crates/flexmesa-rates/src/ratelib.rs::rate_n14pg_nacre"
+"rate_ne20pg_nacre" = "crates/flexmesa-rates/src/ratelib.rs::rate_ne20pg_nacre"
+"rate_o16ag_nacre" = "crates/flexmesa-rates/src/ratelib.rs::rate_o16ag_nacre"
+"rate_o16o16g_fxt" = "crates/flexmesa-rates/src/ratelib.rs::rate_o16o16g_fxt"
+"rate_o16pg_nacre" = "crates/flexmesa-rates/src/ratelib.rs::rate_o16pg_nacre"
+"rate_o18pa_nacre" = "crates/flexmesa-rates/src/ratelib.rs::rate_o18pa_nacre"
+"rate_pep_fxt" = "crates/flexmesa-rates/src/ratelib.rs::rate_pep_fxt"
+"rate_png_fxt" = "crates/flexmesa-rates/src/ratelib.rs::rate_png_fxt"
+"rate_pp_nacre" = "crates/flexmesa-rates/src/ratelib.rs::rate_pp_nacre"
+"rnacre" = "crates/flexmesa-rates/src/ratelib.rs::rnacre"
+"rnacre_rev" = "crates/flexmesa-rates/src/ratelib.rs::rnacre_rev"
+"tfactors" = "crates/flexmesa-rates/src/tfactors.rs::from_log_t+from_temp"
 
 [[files]]
 upstream_path = "rates/private/rates_initialize.f90"
@@ -6826,8 +7189,12 @@ module = "rates"
 upstream_lines = 1140
 upstream_sha256 = "5bf45a46436eb4d83f721e364ee37a4b61f8c8e5ad5fe7f930e50898ff5d53d2"
 status = "partial"
-flexmesa_files = ["crates/flexmesa-rates/src/lib.rs"]
+flexmesa_files = ["crates/flexmesa-rates/src/raw_rates.rs"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
+routine_map_partial = ["set_raw_rate", "set_raw_rates"]
+[files.routine_map]
+"set_raw_rate" = "crates/flexmesa-rates/src/raw_rates.rs::set_raw_rate"
+"set_raw_rates" = "crates/flexmesa-rates/src/raw_rates.rs::set_raw_rates"
 
 [[files]]
 upstream_path = "rates/private/reaclib_eval.f90"
@@ -6933,8 +7300,14 @@ module = "rates"
 upstream_lines = 974
 upstream_sha256 = "b79b9ef58c4ffdf1055df4015f150659612f54faa0c07fdb07daa2d52fbf0c27"
 status = "partial"
-flexmesa_files = ["crates/flexmesa-rates/src/lib.rs"]
+flexmesa_files = ["crates/flexmesa-rates/src/ecapture.rs", "crates/flexmesa-rates/src/raw_rates.rs", "crates/flexmesa-rates/src/screen.rs"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
+routine_map_partial = ["screen_pair"]
+[files.routine_map]
+"eval_FL_epsnuc_3alf" = "crates/flexmesa-rates/src/raw_rates.rs::eval_fl_epsnuc_3alf+eval_fl_epsnuc_3alf_with_derivs"
+"eval_ecapnuc_rate" = "crates/flexmesa-rates/src/ecapture.rs::eval_ecapnuc_rate"
+"eval_salpeter_screening" = "crates/flexmesa-rates/src/screen.rs::screen_salpeter"
+"screen_pair" = "crates/flexmesa-rates/src/screen.rs::screen_pair"
 
 [[files]]
 upstream_path = "star/job/gyre_in_mesa_extras_finish_step.inc"

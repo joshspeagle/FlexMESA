@@ -99,6 +99,7 @@ language = "rust"
 module = "atm"
 kind = "oracle"
 provenance = "MESA 26.4.1 atm/test/test_output and atm_get/atm_eval_T_tau hex oracle vectors (#161)"
+routines = ["atm/private/atm_irradiated.f90::eval_irradiated", "atm/private/atm_t_tau_relations.f90::eval_T_tau", "atm/private/atm_t_tau_relations.f90::eval_T_tau_dq_dtau", "atm/private/atm_t_tau_relations.f90::get_T_tau_base", "atm/private/atm_t_tau_uniform.f90::build_T_tau_uniform", "atm/private/atm_t_tau_uniform.f90::eval_T_tau_uniform", "atm/private/atm_t_tau_varying.f90::build_T_tau_varying", "atm/private/atm_t_tau_varying.f90::eval_T_tau_varying", "atm/private/atm_table.f90::eval_table", "atm/private/atm_table.f90::get_table_alfa_beta", "atm/private/atm_table.f90::get_table_base", "atm/private/atm_utils.f90::eval_E2", "atm/private/table_atm.f90::get_table_values", "atm/public/atm_lib.f90::atm_Teff"]
 
 [[tests]]
 path = "crates/flexmesa-atm/tests/atm_golden_test.rs"
@@ -106,6 +107,7 @@ language = "rust"
 module = "atm"
 kind = "oracle"
 provenance = "Upstream MESA 26.4.1 atm/test/test_output pinned atmosphere tables & T(tau) values"
+routines = ["atm/private/atm_irradiated.f90::eval_irradiated", "atm/private/atm_t_tau_relations.f90::eval_T_tau", "atm/private/atm_t_tau_relations.f90::eval_T_tau_dq_dtau", "atm/private/atm_t_tau_relations.f90::get_T_tau_base", "atm/private/atm_t_tau_uniform.f90::build_T_tau_uniform", "atm/private/atm_t_tau_uniform.f90::eval_T_tau_uniform", "atm/private/atm_t_tau_varying.f90::build_T_tau_varying", "atm/private/atm_t_tau_varying.f90::eval_T_tau_varying", "atm/private/atm_table.f90::eval_table", "atm/private/atm_table.f90::get_table_alfa_beta", "atm/private/atm_table.f90::get_table_base", "atm/private/atm_utils.f90::eval_E2", "atm/public/atm_lib.f90::atm_L", "atm/public/atm_lib.f90::atm_Teff"]
 
 [[tests]]
 path = "crates/flexmesa-atm/tests/atm_module_hex_test.rs"
@@ -113,6 +115,7 @@ language = "rust"
 module = "atm"
 kind = "oracle"
 provenance = "mesa-module-hex-v1.tar.zst bundle & benchmarks/module_hex atm IEEE-754 hex oracles (#144, #165)"
+routines = ["atm/private/atm_irradiated.f90::eval_irradiated", "atm/private/atm_t_tau_relations.f90::get_T_tau_base", "atm/private/atm_t_tau_uniform.f90::eval_T_tau_uniform", "atm/private/atm_t_tau_varying.f90::eval_T_tau_varying", "atm/private/atm_table.f90::eval_table", "atm/public/atm_lib.f90::atm_Teff"]
 
 [[tests]]
 path = "crates/flexmesa-atm/tests/atm_numerics_mode_test.rs"
@@ -126,6 +129,7 @@ language = "rust"
 module = "atm"
 kind = "oracle"
 provenance = "benchmarks/fortran_mesa/atm_oracles/mesa_26_4_1_atm_oracles.tsv (libatm.a + CRMATH, #161)"
+routines = ["atm/private/atm_irradiated.f90::eval_irradiated", "atm/private/atm_t_tau_relations.f90::eval_T_tau", "atm/private/atm_t_tau_relations.f90::eval_T_tau_dq_dtau", "atm/private/atm_t_tau_relations.f90::get_T_tau_base", "atm/private/atm_table.f90::eval_table", "atm/private/atm_table.f90::get_table_alfa_beta", "atm/private/atm_table.f90::get_table_base", "atm/private/atm_utils.f90::eval_E2", "atm/private/atm_utils.f90::eval_Paczynski_gradr", "atm/public/atm_lib.f90::atm_Teff"]
 
 [[tests]]
 path = "crates/flexmesa-autodiff/tests/autodiff_tests.rs"
@@ -276,6 +280,7 @@ language = "rust"
 module = "chem"
 kind = "oracle"
 provenance = "MESA 26.4.1 chem/test/test_output & nuclide table IEEE-754 hex oracles (#161)"
+routines = ["chem/public/chem_def.f90::category_id", "chem/public/chem_def.f90::get_nuclide_index", "chem/public/chem_lib.f90::binding_energy", "chem/public/chem_lib.f90::chem_M_div_h", "chem/public/chem_lib.f90::chem_Xsol", "chem/public/chem_lib.f90::chem_get_element_id", "chem/public/chem_lib.f90::chem_get_solar", "chem/public/chem_lib.f90::generate_long_nuclide_names", "chem/public/chem_lib.f90::generate_nuclide_names", "chem/public/chem_lib.f90::generate_nuclide_set", "chem/public/chem_lib.f90::get_Q", "chem/public/chem_lib.f90::get_composition_info", "chem/public/chem_lib.f90::get_mass_excess", "chem/public/chem_lib.f90::get_nuclide_index_in_set", "chem/public/chem_lib.f90::get_partition_fcn_indx", "chem/public/chem_lib.f90::get_stable_mass_frac", "chem/public/chem_lib.f90::lodders03_element_atom_percent", "chem/public/chem_lib.f90::lookup_ZN", "chem/public/chem_lib.f90::lookup_ZN_isomeric_state", "chem/public/chem_lib.f90::reaction_Qtotal"]
 
 [[tests]]
 path = "crates/flexmesa-chem/tests/chem_module_hex_test.rs"
@@ -283,6 +288,7 @@ language = "rust"
 module = "chem"
 kind = "oracle"
 provenance = "mesa-module-hex-v1.tar.zst bundle (MESA 26.4.1 chem module IEEE-754 hex outputs)"
+routines = ["chem/public/chem_def.f90::get_nuclide_index", "chem/public/chem_lib.f90::chem_Xsol", "chem/public/chem_lib.f90::get_composition_info", "chem/public/chem_lib.f90::lodders03_element_atom_percent", "chem/public/chem_lib.f90::reaction_Qtotal"]
 
 [[tests]]
 path = "crates/flexmesa-colors/tests/colors_26_4_1_parity_test.rs"
@@ -290,6 +296,7 @@ language = "rust"
 module = "colors"
 kind = "oracle"
 provenance = "Upstream MESA 26.4.1 colors/test/test_output & colors/test/src/test_colors.f90 reference cases (#161)"
+routines = ["colors/private/bolometric.f90::calculate_bolometric_phot", "colors/private/synthetic.f90::calculate_synthetic", "colors/private/synthetic.f90::compute_ab_zero_point", "colors/private/synthetic.f90::compute_st_zero_point", "colors/private/synthetic.f90::compute_vega_zero_point"]
 
 [[tests]]
 path = "crates/flexmesa-colors/tests/colors_hex_test.rs"
@@ -517,6 +524,7 @@ language = "rust"
 module = "interp_1d"
 kind = "oracle"
 provenance = "MESA 26.4.1 interp_1d IEEE-754 hex oracles & interp_1d/test/test_output (#161)"
+routines = ["interp_1d/private/interp_1d_misc.f90::do_interp_values_and_slopes", "interp_1d/public/interp_1d_lib.f90::interp_m3q", "interp_1d/public/interp_1d_lib.f90::interp_pm", "interp_1d/public/interp_1d_lib.f90::interp_value_and_slope", "interp_1d/public/interp_1d_lib.f90::interp_values_and_slopes"]
 
 [[tests]]
 path = "crates/flexmesa-interp1d/tests/interp1d_module_hex_test.rs"
@@ -524,6 +532,7 @@ language = "rust"
 module = "interp_1d"
 kind = "oracle"
 provenance = "mesa-module-hex-v1.tar.zst bundle (MESA 26.4.1 interp_1d IEEE-754 hex outputs)"
+routines = ["interp_1d/private/interp_1d_misc.f90::do_integrate_values", "interp_1d/private/interp_1d_misc.f90::do_interp_values", "interp_1d/public/interp_1d_lib.f90::integrate_values", "interp_1d/public/interp_1d_lib.f90::interp_3_to_2", "interp_1d/public/interp_1d_lib.f90::interp_4pt_pm", "interp_1d/public/interp_1d_lib.f90::interp_m3q", "interp_1d/public/interp_1d_lib.f90::interp_pm", "interp_1d/public/interp_1d_lib.f90::interp_values"]
 
 [[tests]]
 path = "crates/flexmesa-interp1d/tests/interp1d_tests.rs"
@@ -531,6 +540,7 @@ language = "rust"
 module = "interp_1d"
 kind = "oracle"
 provenance = "Upstream MESA 26.4.1 interp_1d/test/test_output pinned interpolants & derivatives"
+routines = ["interp_1d/private/interp_1d_misc.f90::do_integrate_values", "interp_1d/private/interp_1d_misc.f90::do_interp_values", "interp_1d/private/interp_1d_misc.f90::do_interp_values_and_slopes", "interp_1d/public/interp_1d_lib.f90::integrate_values", "interp_1d/public/interp_1d_lib.f90::interp_3_to_1", "interp_1d/public/interp_1d_lib.f90::interp_3_to_2", "interp_1d/public/interp_1d_lib.f90::interp_4_to_1", "interp_1d/public/interp_1d_lib.f90::interp_4pt_pm", "interp_1d/public/interp_1d_lib.f90::interp_m3a", "interp_1d/public/interp_1d_lib.f90::interp_m3b", "interp_1d/public/interp_1d_lib.f90::interp_m3q", "interp_1d/public/interp_1d_lib.f90::interp_pm", "interp_1d/public/interp_1d_lib.f90::interp_pm_slopes_only", "interp_1d/public/interp_1d_lib.f90::interp_value_and_slope", "interp_1d/public/interp_1d_lib.f90::interp_values", "interp_1d/public/interp_1d_lib.f90::interp_values_and_slopes", "interp_1d/public/interp_1d_lib.f90::interpolate_vector_pm"]
 
 [[tests]]
 path = "crates/flexmesa-interp2d/tests/interp2d_161_parity_test.rs"
@@ -538,6 +548,7 @@ language = "rust"
 module = "interp_2d"
 kind = "oracle"
 provenance = "MESA 26.4.1 interp_2d/test/test_output IEEE-754 hex oracles (#161)"
+routines = ["interp_2d/private/bicub_db.f::mkspline_db", "interp_2d/public/interp_2d_lib_db.f90::interp_mkbicub_db", "interp_2d/public/interp_2d_lib_db.f90::interp_mkspline_db"]
 
 [[tests]]
 path = "crates/flexmesa-interp2d/tests/interp2d_module_hex_test.rs"
@@ -545,10 +556,7 @@ language = "rust"
 module = "interp_2d"
 kind = "oracle"
 provenance = "mesa-module-hex-v1.tar.zst bundle (MESA 26.4.1 interp_2d IEEE-754 hex outputs)"
-routines = [
-  "interp_2d/private/bipm_db.f90::do_evbipm_db",
-  "interp_2d/private/bipm_db.f90::do_mkbipm_db",
-]
+routines = ["interp_2d/private/bicub_db.f::evbicub_db", "interp_2d/private/bipm_db.f90::do_evbipm_db", "interp_2d/private/bipm_db.f90::do_mkbipm_db", "interp_2d/public/interp_2d_lib_db.f90::interp_evbicub_db", "interp_2d/public/interp_2d_lib_db.f90::interp_evbipm_db", "interp_2d/public/interp_2d_lib_db.f90::interp_mkbicub_db", "interp_2d/public/interp_2d_lib_db.f90::interp_mkbipm_db"]
 
 [[tests]]
 path = "crates/flexmesa-interp2d/tests/interp2d_tests.rs"
@@ -556,10 +564,7 @@ language = "rust"
 module = "interp_2d"
 kind = "oracle"
 provenance = "Upstream MESA 26.4.1 interp_2d/test/test_output (test2D_db & test_akima_db)"
-routines = [
-  "interp_2d/private/bipm_db.f90::do_evbipm_db",
-  "interp_2d/private/bipm_db.f90::do_mkbipm_db",
-]
+routines = ["interp_2d/private/bicub_db.f::evbicub_db", "interp_2d/private/bipm_db.f90::do_evbipm_db", "interp_2d/private/bipm_db.f90::do_mkbipm_db", "interp_2d/public/interp_2d_lib_db.f90::interp_cs2grd_db", "interp_2d/public/interp_2d_lib_db.f90::interp_cs2val_db", "interp_2d/public/interp_2d_lib_db.f90::interp_cshep2_db", "interp_2d/public/interp_2d_lib_db.f90::interp_evbicub_db", "interp_2d/public/interp_2d_lib_db.f90::interp_evbipm_db", "interp_2d/public/interp_2d_lib_db.f90::interp_mkbicub_db", "interp_2d/public/interp_2d_lib_db.f90::interp_mkbipm_db", "interp_2d/public/interp_2d_lib_db.f90::interp_rgbi3p_db", "interp_2d/public/interp_2d_lib_db.f90::interp_rgsf3p_db"]
 
 [[tests]]
 path = "crates/flexmesa-ionization/tests/fe56_he4_hex_test.rs"
@@ -567,6 +572,7 @@ language = "rust"
 module = "ionization"
 kind = "oracle"
 provenance = "Upstream MESA 26.4.1 ionization/test/src/test_ionization.f90 & ionization/data/ionization_data/z_fe56_he4.data bit-pattern oracle (#413)"
+routines = ["ionization/public/ionization_lib.f90::eval_charge_of_Fe56_in_He4"]
 
 [[tests]]
 path = "crates/flexmesa-ionization/tests/ion_161_numerics_mode_test.rs"
@@ -586,6 +592,7 @@ language = "rust"
 module = "kap"
 kind = "oracle"
 provenance = "MESA 26.4.1 kap/private/kap_eval.f90 & kap/private/condint.f90 kap_get end-to-end IEEE-754 hex oracles (#161)"
+routines = ["kap/private/condint.f90::do_electron_conduction", "kap/private/kap_eval.f90::Compton_Opacity", "kap/private/kap_eval.f90::get_kap_Results", "kap/private/kap_eval.f90::get_kap_Results_blend_T", "kap/public/kap_lib.f90::kap_get_compton_opacity", "kap/public/kap_lib.f90::kap_get_elect_cond_opacity", "kap/public/kap_lib.f90::kap_get_radiative_opacity"]
 
 [[tests]]
 path = "crates/flexmesa-kap/tests/kap_161_parity_test.rs"
@@ -593,6 +600,7 @@ language = "rust"
 module = "kap"
 kind = "oracle"
 provenance = "MESA 26.4.1 kap/private/kap_eval.f90 & kap/private/kap_eval_co.f90 radiative/conductive/compton IEEE-754 hex oracles (#161)"
+routines = ["kap/private/kap_eval.f90::get_kap_Results", "kap/private/kap_eval.f90::get_kap_Results_blend_T", "kap/public/kap_lib.f90::kap_get_radiative_opacity"]
 
 [[tests]]
 path = "crates/flexmesa-kap/tests/kap_cache_numerics_mode_test.rs"
@@ -606,6 +614,7 @@ language = "rust"
 module = "kap"
 kind = "oracle"
 provenance = "Upstream MESA 26.4.1 kap/test/test_output & kap/private/kap_eval.f90 pinned opacity outputs"
+routines = ["kap/private/condint.f90::do_electron_conduction", "kap/private/kap_aesopus.f90::AESOPUS_get", "kap/private/kap_eval.f90::Compton_Opacity", "kap/private/kap_eval.f90::get_kap_Results", "kap/private/kap_eval_co.f90::Get1_kap_CO_Results", "kap/private/kap_eval_fixed.f90::Get1_kap_fixed_metal_Results", "kap/private/kapcn.f90::kapCN_get", "kap/public/kap_lib.f90::kap_get", "kap/public/kap_lib.f90::kap_get_compton_opacity", "kap/public/kap_lib.f90::kap_get_elect_cond_opacity"]
 
 [[tests]]
 path = "crates/flexmesa-kap/tests/kap_module_hex_test.rs"
@@ -613,6 +622,7 @@ language = "rust"
 module = "kap"
 kind = "oracle"
 provenance = "mesa-module-hex-v1.tar.zst bundle (MESA 26.4.1 kap IEEE-754 hex outputs)"
+routines = ["kap/private/kap_eval.f90::get_kap_Results", "kap/public/kap_lib.f90::kap_get"]
 
 [[tests]]
 path = "crates/flexmesa-math/tests/math_tests.rs"
@@ -646,6 +656,7 @@ language = "rust"
 module = "mtx"
 kind = "oracle"
 provenance = "Upstream MESA 26.4.1 mtx/test/test_output block_tri_data golden outputs"
+routines = ["mtx/public/mtx_lib.f90::block_dble_mv", "mtx/public/mtx_lib.f90::block_multiply_xa"]
 
 [[tests]]
 path = "crates/flexmesa-mtx/tests/eigen_test.rs"
@@ -659,6 +670,7 @@ language = "rust"
 module = "mtx"
 kind = "oracle"
 provenance = "MESA 26.4.1 mtx/test/test_output & LAPACK IEEE-754 hex oracles (#161)"
+routines = ["mtx/private/bcyclic.f90::bcyclic_factor", "mtx/private/bcyclic.f90::bcyclic_solve", "mtx/private/mtx_support.f90::do_dense_to_band", "mtx/public/mtx_formats.dek::dense_to_band", "mtx/public/mtx_formats.dek::find_loc_in_sparse", "mtx/public/mtx_lib.f90::DGBSVX_banded", "mtx/public/mtx_lib.f90::DGBSVX_block_tridiagonal", "mtx/public/mtx_lib.f90::block_dble_mv", "mtx/public/mtx_lib.f90::multiply_xa"]
 
 [[tests]]
 path = "crates/flexmesa-mtx/tests/mtx_module_hex_test.rs"
@@ -666,6 +678,7 @@ language = "rust"
 module = "mtx"
 kind = "oracle"
 provenance = "mesa-module-hex-v1.tar.zst bundle (MESA 26.4.1 mtx IEEE-754 hex outputs)"
+routines = ["mtx/public/mtx_lib.f90::multiply_xa"]
 
 [[tests]]
 path = "crates/flexmesa-mtx/tests/mtx_tests.rs"
@@ -673,6 +686,7 @@ language = "rust"
 module = "mtx"
 kind = "oracle"
 provenance = "Upstream MESA 26.4.1 mtx/test/test_output (test_square1, test_square2, banded)"
+routines = ["mtx/private/mtx_support.f90::do_band_to_column_sparse", "mtx/private/mtx_support.f90::do_band_to_dense", "mtx/private/mtx_support.f90::do_band_to_row_sparse", "mtx/private/mtx_support.f90::do_column_sparse_to_band", "mtx/private/mtx_support.f90::do_dense_to_band", "mtx/private/mtx_support.f90::do_dense_to_row_sparse", "mtx/private/mtx_support.f90::do_row_sparse_to_band", "mtx/public/mtx_formats.dek::band_to_col_sparse_with_diag", "mtx/public/mtx_formats.dek::band_to_column_sparse", "mtx/public/mtx_formats.dek::band_to_dense", "mtx/public/mtx_formats.dek::band_to_row_sparse", "mtx/public/mtx_formats.dek::band_to_row_sparse_with_diag", "mtx/public/mtx_formats.dek::col_sparse_0_based_to_dense", "mtx/public/mtx_formats.dek::column_sparse_to_band", "mtx/public/mtx_formats.dek::column_sparse_to_dense", "mtx/public/mtx_formats.dek::dense_to_band", "mtx/public/mtx_formats.dek::dense_to_col_0_based", "mtx/public/mtx_formats.dek::dense_to_row_0_based", "mtx/public/mtx_formats.dek::dense_to_row_sparse", "mtx/public/mtx_formats.dek::dense_to_sparse_with_diag", "mtx/public/mtx_formats.dek::find_loc_in_sparse", "mtx/public/mtx_formats.dek::row_sparse_0_based_to_dense", "mtx/public/mtx_lib.f90::band_multiply_xa", "mtx/public/mtx_lib.f90::decsol_option", "mtx/public/mtx_lib.f90::decsol_option_str", "mtx/public/mtx_lib.f90::is_block_tridiagonal_decsol", "mtx/public/mtx_lib.f90::multiply_xa"]
 
 [[tests]]
 path = "crates/flexmesa-net/tests/burn_simpr_161_test.rs"
@@ -692,6 +706,7 @@ language = "rust"
 module = "net"
 kind = "oracle"
 provenance = "MESA 26.4.1 net/private/net_eval.f90 & star/test_suite/hb_2M d_eps_nuc_dlnd IEEE-754 hex oracle (#537)"
+routines = ["net/public/net_lib.f90::net_get"]
 
 [[tests]]
 path = "crates/flexmesa-net/tests/net_burn_161_parity_test.rs"
@@ -699,6 +714,7 @@ language = "rust"
 module = "net"
 kind = "oracle"
 provenance = "MESA 26.4.1 net/private/net_burn.f90 & net/private/net_eval.f90 burn/net_get IEEE-754 hex oracles (#161)"
+routines = ["net/private/net_burn.f90::burn_1_zone", "net/private/net_burn_const_p.f90::burn_1_zone_const_P", "net/public/net_lib.f90::net_1_zone_burn", "net/public/net_lib.f90::net_1_zone_burn_const_P", "net/public/net_lib.f90::net_1_zone_burn_const_density", "net/public/net_lib.f90::net_get", "net/public/net_lib.f90::net_get_symbolic_d_dxdt_dx"]
 
 [[tests]]
 path = "crates/flexmesa-net/tests/net_ecapture_161_test.rs"
@@ -713,6 +729,7 @@ language = "rust"
 module = "net"
 kind = "oracle"
 provenance = "Upstream MESA 26.4.1 net/test/test_output pinned reaction & burn outputs"
+routines = ["net/private/net_burn.f90::burn_1_zone", "net/private/net_burn_const_p.f90::burn_1_zone_const_P", "net/public/net_lib.f90::net_1_zone_burn", "net/public/net_lib.f90::net_1_zone_burn_const_P"]
 
 [[tests]]
 path = "crates/flexmesa-net/tests/net_hex_oracle_test.rs"
@@ -720,6 +737,7 @@ language = "rust"
 module = "net"
 kind = "oracle"
 provenance = "benchmarks/fortran_mesa/net_oracles/mesa_26_4_1_net_oracles.tsv (#161)"
+routines = ["net/public/net_lib.f90::net_get"]
 
 [[tests]]
 path = "crates/flexmesa-net/tests/net_jacobian_test.rs"
@@ -733,6 +751,7 @@ language = "rust"
 module = "net"
 kind = "oracle"
 provenance = "mesa-module-hex-v1.tar.zst bundle (MESA 26.4.1 net IEEE-754 hex outputs)"
+routines = ["net/private/net_burn.f90::burn_1_zone", "net/private/net_burn_const_p.f90::burn_1_zone_const_P", "net/public/net_lib.f90::net_1_zone_burn", "net/public/net_lib.f90::net_1_zone_burn_const_P", "net/public/net_lib.f90::net_get"]
 
 [[tests]]
 path = "crates/flexmesa-net/tests/net_weak_lowt_161_test.rs"
@@ -781,6 +800,7 @@ language = "rust"
 module = "num"
 kind = "oracle"
 provenance = "MESA 26.4.1 num/test/test_output & ODE/root IEEE-754 hex oracles (#161)"
+routines = ["num/private/mod_dop853.f::do_dop853", "num/private/mod_dopri5.f::do_dopri5", "num/public/num_dop853.dek::dop853", "num/public/num_dopri5.dek::dopri5"]
 
 [[tests]]
 path = "crates/flexmesa-num/tests/num_module_hex_test.rs"
@@ -788,6 +808,7 @@ language = "rust"
 module = "num"
 kind = "oracle"
 provenance = "mesa-module-hex-v1.tar.zst bundle (MESA 26.4.1 num IEEE-754 hex outputs)"
+routines = ["num/private/mod_dop853.f::do_dop853", "num/private/mod_dopri5.f::do_dopri5", "num/private/mod_root.f90::do_look_for_brackets", "num/private/mod_root.f90::do_safe_root_with_brackets", "num/public/num_brent.dek::brent_global_min", "num/public/num_brent.dek::brent_local_min", "num/public/num_dop853.dek::dop853", "num/public/num_dopri5.dek::dopri5", "num/public/num_lib.f90::find0_quadratic", "num/public/num_lib.f90::find_max_quadratic", "num/public/num_lib.f90::integrate", "num/public/num_safe_root.dek::look_for_brackets", "num/public/num_safe_root.dek::safe_root_with_brackets", "num/public/num_safe_root.dek::safe_root_without_brackets", "num/public/num_safe_root_x.dek::look_for_brackets", "num/public/num_safe_root_x.dek::safe_root_with_brackets"]
 
 [[tests]]
 path = "crates/flexmesa-num/tests/num_tests.rs"
@@ -795,6 +816,7 @@ language = "rust"
 module = "num"
 kind = "oracle"
 provenance = "Upstream MESA 26.4.1 num/test/test_output root-finding & quadrature golden values"
+routines = ["num/private/mod_bobyqa.f::do_BOBYQA", "num/private/mod_brent.f90::eval_brent_safe_zero", "num/private/mod_brent.f90::eval_local_min", "num/private/mod_newuoa.f::do_newuoa", "num/private/mod_root.f90::do_look_for_brackets", "num/private/mod_root.f90::do_safe_root_with_brackets", "num/private/mod_root.f90::do_safe_root_with_guess", "num/private/mod_simplex.f90::do_simplex", "num/public/num_bobyqa.dek::bobyqa", "num/public/num_brent.dek::brent_global_min", "num/public/num_brent.dek::brent_local_min", "num/public/num_brent.dek::brent_safe_zero", "num/public/num_newuoa.dek::newuoa", "num/public/num_safe_root.dek::look_for_brackets", "num/public/num_safe_root.dek::safe_root_with_brackets", "num/public/num_safe_root.dek::safe_root_with_guess", "num/public/num_safe_root.dek::safe_root_without_brackets", "num/public/num_safe_root_x.dek::look_for_brackets", "num/public/num_safe_root_x.dek::safe_root_with_brackets", "num/public/num_safe_root_x.dek::safe_root_with_guess", "num/public/num_simplex.dek::NM_simplex"]
 
 [[tests]]
 path = "crates/flexmesa-num/tests/ode_benchmarks_tests.rs"
@@ -802,6 +824,7 @@ language = "rust"
 module = "num"
 kind = "oracle"
 provenance = "Upstream MESA 26.4.1 num/test/test_output ODE/DAE/PDE stiff problems (vdpol/medakzo/beam)"
+routines = ["num/private/mod_dop853.f::do_dop853", "num/private/mod_dopri5.f::do_dopri5", "num/public/num_dop853.dek::dop853", "num/public/num_dopri5.dek::dopri5"]
 
 [[tests]]
 path = "crates/flexmesa-num/tests/ode_newton_tests.rs"
@@ -815,6 +838,7 @@ language = "rust"
 module = "rates"
 kind = "oracle"
 provenance = "MESA 26.4.1 rates/test/src/test_ecapture.f90 & rates/test/src/test_weak.f90 IEEE-754 hex vectors (#161)"
+routines = ["rates/private/eval_coulomb.f90::do_Vs_coulomb", "rates/private/eval_coulomb.f90::do_mui_coulomb"]
 
 [[tests]]
 path = "crates/flexmesa-rates/tests/mesa_26_4_1_oracles_test.rs"
@@ -822,6 +846,7 @@ language = "rust"
 module = "rates"
 kind = "oracle"
 provenance = "benchmarks/fortran_mesa/rates_oracles/mesa_26_4_1_rates_oracles.tsv (librates.a, #161)"
+routines = ["rates/private/eval_coulomb.f90::do_Vs_coulomb", "rates/private/eval_coulomb.f90::do_mui_coulomb", "rates/private/pycno.f90::FL_epsnuc_3alf", "rates/private/ratelib.f90::tfactors", "rates/private/raw_rates.f90::set_raw_rate", "rates/public/rates_lib.f90::eval_FL_epsnuc_3alf", "rates/public/rates_lib.f90::screen_pair"]
 
 [[tests]]
 path = "crates/flexmesa-rates/tests/rates_161_parity_test.rs"
@@ -829,6 +854,7 @@ language = "rust"
 module = "rates"
 kind = "oracle"
 provenance = "MESA 26.4.1 rates/private/raw_rates.f90 screen/Suzuki/REACLIB/Coulomb IEEE-754 hex oracles (#161)"
+routines = ["rates/private/eval_coulomb.f90::do_Vs_coulomb", "rates/private/eval_coulomb.f90::do_mui_coulomb", "rates/private/pycno.f90::FL_epsnuc_3alf", "rates/private/ratelib.f90::tfactors", "rates/private/raw_rates.f90::set_raw_rate", "rates/public/rates_lib.f90::eval_FL_epsnuc_3alf", "rates/public/rates_lib.f90::eval_ecapnuc_rate", "rates/public/rates_lib.f90::screen_pair"]
 
 [[tests]]
 path = "crates/flexmesa-rates/tests/rates_golden_test.rs"
@@ -836,6 +862,7 @@ language = "rust"
 module = "rates"
 kind = "oracle"
 provenance = "tests/fixtures/golden/rates/test_output.txt (upstream MESA 26.4.1 rates/test/test_output)"
+routines = ["rates/private/eval_coulomb.f90::do_Vs_coulomb", "rates/private/eval_coulomb.f90::do_mui_coulomb", "rates/private/pycno.f90::FL_epsnuc_3alf", "rates/private/ratelib.f90::tfactors", "rates/private/raw_rates.f90::set_raw_rates", "rates/public/rates_lib.f90::eval_FL_epsnuc_3alf", "rates/public/rates_lib.f90::screen_pair"]
 
 [[tests]]
 path = "crates/flexmesa-replay/tests/argdiff_test.rs"

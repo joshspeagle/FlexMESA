@@ -1047,6 +1047,10 @@ def evaluate_case_record(
             art_notes.append("artifact not compared")
         elif not artifact_comparison.ok:
             art_notes.append(artifact_comparison.message)
+        # A stored row re-judged at merge already carries these notes in
+        # its error message; append each note once so merging is idempotent.
+        present = comp_err.split("; ") if comp_err else []
+        art_notes = [n for n in art_notes if n not in present]
         if art_notes:
             comp_err = "; ".join(filter(None, [comp_err, *art_notes]))
         tol_ok = (

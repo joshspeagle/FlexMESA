@@ -199,37 +199,18 @@ pub fn compute_x_scale_into(
             x_scale[base + iw] = w_s.max(1.0);
         }
         if let Some(ihp) = layout.i_hp {
-            let hp = model
-                .xh_start
-                .get(k * layout.nvar_hydro + ihp)
-                .copied()
-                .unwrap_or_else(|| {
-                    model.aux.rsp.hp_face.get(k).copied().unwrap_or(1.0)
-                })
-                .abs();
+            let hp = model.xh_start[k * layout.nvar_hydro + ihp].abs();
             x_scale[base + ihp] = hp.max(1.0);
         }
         if let Some(ia) = layout.i_alpha_rti {
-            let a_s = model
-                .aux
-                .alpha_rti_start
-                .get(k)
-                .copied()
-                .unwrap_or_else(|| {
-                    model.aux.alpha_rti.get(k).copied().unwrap_or(0.0)
-                })
-                .abs();
+            let a_s = model.aux.alpha_rti_start[k].abs();
             x_scale[base + ia] = a_s.max(1.0);
         }
         if include_chem {
             let xa_min = model.controls.xa_scale;
             for j in 0..model.species {
                 let ivar = layout.chem_var_index(j);
-                let xa_s = model
-                    .xa_start
-                    .get(k * model.species + j)
-                    .copied()
-                    .unwrap_or_else(|| model.xa[k * model.species + j]);
+                let xa_s = model.xa_start[k * model.species + j];
                 x_scale[base + ivar] = xa_s.max(xa_min);
             }
         }
@@ -793,7 +774,9 @@ fn check_unported_eval_equ_switches(
 /// cover all `nz` zones: `lnd_start`, `ln_t_start`, `ln_r_start` (`s% r_start`),
 /// `lum_start`, `mlt_vc_old`, `v_start` with `v_flag`, `u_start` with `u_flag`,
 /// and with `RSP2_flag` the `w_start`, `Ptrb_start` (`ptrb_start`),
-/// `csound_start`, `Lt_start` and `energy_start` arrays. Upstream allocates
+/// `csound_start`, `Lt_start` and `energy_start` arrays, `alpha_RTI_start`
+/// with an `alpha_RTI` variable, `xa_start` (`nz*species`) and, with an `Hp`
+/// variable, `xh_start` (`nz*nvar_hydro`). Upstream allocates
 /// all of them with the model (`star/private/alloc.f90`) and sets them at the
 /// start of the step (`set_start_of_step_info` and `set_basic_vars`,
 /// `star/private/hydro_vars.f90:719-744`; `mlt_vc_old` in `new_generation`,
@@ -811,7 +794,24 @@ pub(crate) fn check_start_of_step_arrays(
     let c = &model.controls;
     let rsp = &model.aux.rsp;
     let layout = &model.layout;
-    let checks: [(&str, usize, bool); 12] = [
+    let sized: [(&str, usize, usize, bool); 2] = [
+        (
+            "xh_start",
+            model.xh_start.len(),
+            nz * layout.nvar_hydro,
+            layout.i_hp.is_some(),
+        ),
+        ("xa_start", model.xa_start.len(), nz * model.species, true),
+    ];
+    for (name, len, need_len, needed) in sized {
+        if needed && len < need_len {
+            return Err(StarError::InvalidInput(format!(
+                "{name} has {len} entries where the equations read \
+                 {need_len} (nz = {nz})"
+            )));
+        }
+    }
+    let checks: [(&str, usize, bool); 13] = [
         ("lnd_start", model.lnd_start.len(), true),
         ("ln_t_start", model.ln_t_start.len(), true),
         ("ln_r_start", model.ln_r_start.len(), true),
@@ -836,6 +836,11 @@ pub(crate) fn check_start_of_step_arrays(
         ("csound_start_rsp", rsp.csound_start_rsp.len(), c.rsp2_flag),
         ("lt_start", rsp.lt_start.len(), c.rsp2_flag),
         ("energy_start", model.energy_start.len(), c.rsp2_flag),
+        (
+            "alpha_rti_start",
+            model.aux.alpha_rti_start.len(),
+            layout.i_alpha_rti.is_some(),
+        ),
     ];
     for (name, len, needed) in checks {
         if needed && len < nz {

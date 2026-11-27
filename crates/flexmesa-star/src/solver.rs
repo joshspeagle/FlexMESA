@@ -135,20 +135,10 @@ fn build_xh_start_buffer(model: &StarModel) -> Vec<f64> {
             buf[base + iw] = model.aux.rsp.w_start[k];
         }
         if let Some(ihp) = layout.i_hp {
-            buf[base + ihp] = model
-                .xh_start
-                .get(base + ihp)
-                .copied()
-                .filter(|&v| v != 0.0)
-                .unwrap_or_else(|| {
-                    model.aux.rsp.hp_face.get(k).copied().unwrap_or(1.0)
-                });
+            buf[base + ihp] = model.xh_start[base + ihp];
         }
         if let Some(ia) = layout.i_alpha_rti {
-            buf[base + ia] =
-                model.aux.alpha_rti_start.get(k).copied().unwrap_or_else(
-                    || model.aux.alpha_rti.get(k).copied().unwrap_or(0.0),
-                );
+            buf[base + ia] = model.aux.alpha_rti_start[k];
         }
     }
     buf
@@ -585,11 +575,7 @@ pub fn solve_henyey_step(
             let c_base = k * species;
             let s_base = k * nvar + nvar_hydro;
             for j in 0..species {
-                let xs = model
-                    .xa_start
-                    .get(c_base + j)
-                    .copied()
-                    .unwrap_or(model.xa[c_base + j]);
+                let xs = model.xa_start[c_base + j];
                 let dx_kj = model.xa[c_base + j] - xs;
                 model.xa_sub_xa_start[c_base + j] = dx_kj;
                 solver_dx[s_base + j] = dx_kj;

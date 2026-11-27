@@ -178,6 +178,12 @@ module = "binary"
 kind = "invariant"
 
 [[tests]]
+path = "crates/flexmesa-binary/tests/binary_evolve_hist_160_test.rs"
+language = "rust"
+module = "binary"
+kind = "invariant"
+
+[[tests]]
 path = "crates/flexmesa-binary/tests/binary_history_numerics_mode_test.rs"
 language = "rust"
 module = "binary"

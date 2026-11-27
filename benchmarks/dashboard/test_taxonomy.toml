@@ -1191,6 +1191,12 @@ module = "star"
 kind = "invariant"
 
 [[tests]]
+path = "crates/flexmesa-star/tests/pown_grouping_581_test.rs"
+language = "rust"
+module = "star"
+kind = "invariant"
+
+[[tests]]
 path = "crates/flexmesa-star/tests/pre_ms_build_422_test.rs"
 language = "rust"
 module = "star"

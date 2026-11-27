@@ -936,9 +936,10 @@ pub(crate) fn do1_mlt_2(
     model.mlt_d[k] = d_f.val;
     let area_rho = FOUR_PI * flexmesa_math::pow2(model.r[k]) * rho_f.val;
     let cdc_val = model.mlt_d[k] * flexmesa_math::pow2(area_rho);
-    let area_rho_ad = FOUR_PI * r_k * r_k * rho_f;
+    // `star/private/turb_info.f90:272`: `pow2(pi4*pow2(s% r(k))*rho_face_ad)`.
+    let area_rho_ad = FOUR_PI * r_k.pow2() * rho_f;
     model.mlt_cdc[k] = cdc_val;
-    model.mlt_cdc_ad[k] = d_f * area_rho_ad * area_rho_ad;
+    model.mlt_cdc_ad[k] = d_f * area_rho_ad.pow2();
     model.mlt_gamma[k] = gamma_f.val;
     model.gradr_ad[k] = gradr_ad;
     model.gradr[k] = gradr_ad.val;

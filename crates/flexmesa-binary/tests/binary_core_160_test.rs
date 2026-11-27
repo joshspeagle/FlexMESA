@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-//! Standalone zero-`$MESA_DIR` MESA `26.4.1` parity tests for the `#160`
+//! Standalone zero-`$MESA_DIR` invariant tests for the `#160`
 //! `binary_core` modules (`mdot_implicit`, `edd_wind`, `orbit`,
 //! `roche_deformation`, `jdot_tides`, `disk`, and `timestep`).
 
@@ -100,7 +100,7 @@ fn ref_mk_pm(x: &[f64], y: &[f64]) -> Vec<[f64; 4]> {
     c
 }
 
-/// Independent full-table reference evaluator matching MESA `do_mkbipm_db` +
+/// Independent full-table analytical evaluator matching MESA `do_mkbipm_db` +
 /// `do_evbipm_db` (`interp_2d/private/bipm_db.f90:28-118`).
 fn ref_bipm_eval(table: &RocheTable2D, xget: f64, yget: f64) -> f64 {
     let nx = table.xs.len();
@@ -162,7 +162,7 @@ fn ref_bipm_eval(table: &RocheTable2D, xget: f64, yget: f64) -> f64 {
 }
 
 #[test]
-fn test_mdot_implicit_unit_conversion_order_and_arras_parity() {
+fn test_mdot_implicit_unit_conversion_order_and_arras() {
     let mut ctrl = BinaryInlistControls {
         mdot_scheme: String::from("Arras"),
         solver_type: String::from("bisect"),
@@ -827,7 +827,7 @@ fn test_jdot_tides_disk_and_timestep_contracts() {
 }
 
 #[test]
-fn test_eval_rlobe_and_ad_left_to_right_1ulp_witness_parity() {
+fn test_eval_rlobe_and_ad_left_to_right_1ulp_witness() {
     // Deterministic witnesses where left-to-right `a * 0.49 * q * q /
     // (0.6 * q * q + log1p(q))` (`binary_utils.f90:211`) differs from `q2 = q * q`
     // regroupings by >= 1 ULP while `eval_rlobe` and `eval_rlobe_ad(...).val`

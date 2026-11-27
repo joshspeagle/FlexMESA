@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-//! Regression and MESA `26.4.1` parity tests for `star_plus_point_mass` and
+//! Invariant tests for `star_plus_point_mass` and
 //! `star_plus_point_mass_explicit_mdot` allowlisted binary physics (`#446`).
 //!
 //! Verifies that optically thin RLOF rates (`eval_ritter_mdot_thin`,
@@ -165,7 +165,7 @@ fn eval_ritter_mdot_eccentric_stays_nonzero_below_minus_100_scale_heights() {
 }
 
 #[test]
-fn eval_arras_mdot_thin_matches_mesa_fortran_without_exponent_cap() {
+fn eval_arras_mdot_thin_matches_upstream_without_exponent_cap() {
     with_numerics_mode(NumericsMode::Strict, || {
         let m_donor = 5.0 * MSUN;
         let m_accretor = 10.0 * MSUN;

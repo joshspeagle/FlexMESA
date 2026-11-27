@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-//! MESA `26.4.1` regression and parity tests for binary mass-transfer,
+//! Invariant tests for binary mass-transfer,
 //! eccentricity-enhancement, and coupled `part1` -> `adjust_mdots` -> `part2`
 //! wind/RLOF accounting (`#160`, `#530`).
 //!
 //! Zero external MESA installation required: all checks verify self-contained
-//! closed-form oracles and coupled `BinarySystem` invariants.
+//! closed-form identities and coupled `BinarySystem` invariants.
 
 #![forbid(unsafe_code)]
 

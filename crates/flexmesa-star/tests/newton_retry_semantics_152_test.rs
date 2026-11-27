@@ -474,7 +474,9 @@ fn test_redo_limit_terminates_and_delta_mdot_hard_limit_retries() {
         ),
         "expected Terminated(redo_limit), got {redo_err:?}"
     );
-    assert_eq!(redo_model.num_redos, 3);
+    // `redo_limit = 2` executes 2 redos and abandons on the 3rd request without
+    // incrementing `num_redos`, matching `LimitCheckOutcome::Redo` & `retry_limit`.
+    assert_eq!(redo_model.num_redos, 2);
 
     // Verify `check_delta_mdot` moved into `timestep_controller`.
     let mut mdot_model = load_zams_model(

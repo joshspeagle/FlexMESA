@@ -1004,6 +1004,12 @@ provenance = "MESA 26.4.1 star/private/net_eval.f90:274 & star/test_suite/1.3M_m
 routines = ["star/private/hydro_chem_eqns.f90::do1_chem_eqns"]
 
 [[tests]]
+path = "crates/flexmesa-star/tests/evolve_driver_618_test.rs"
+language = "rust"
+module = "star"
+kind = "invariant"
+
+[[tests]]
 path = "crates/flexmesa-star/tests/extras_231_hooks_test.rs"
 language = "rust"
 module = "star"

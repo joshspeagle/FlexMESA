@@ -72,7 +72,9 @@ def replay_check(body: str, tapped: pathlib.Path) -> tuple[int, int]:
             good += 1
         else:
             bad = next(
-                k for k, (a, b) in enumerate(zip(vals, got[0])) if a != b
+                k
+                for k, (a, b) in enumerate(zip(vals, got[0], strict=False))
+                if a != b
             )
             print(f"replay mismatch: gesvd_tap {ident} at output {bad}")
     return good, total
@@ -123,8 +125,7 @@ def main() -> int:
         f"# tapped_inputs_sha256 (taps files by name): {h.hexdigest()}",
         f"# replay: {good}/{total} tapped ZGESVD calls reproduce GYRE's"
         " own S, U, VH and INFO bit for bit",
-        "# columns: section id real_inputs int_inputs real_outputs"
-        " int_outputs",
+        "# columns: section id real_inputs int_inputs real_outputs int_outputs",
         "# reals: IEEE-754 binary64 bit patterns in hex, complex values as"
         " (re, im); ints decimal; '-' empty",
         "# from the taps: gesvd_tap records (inputs and GYRE's outputs),"

@@ -4,7 +4,7 @@
 # command: python benchmarks/fortran_mesa/gyre_pulse_data/compare_pulse_live_run.py --suite astero --case astero_adipls --histories <mesa_histories> --work <scratch> --out benchmarks/fortran_mesa/gyre_pulse_data/results/astero_astero_adipls_flexmesa_vs_mesa.tsv
 # extras: AsteroAdiplsExtras (adipls); units: frequency microHz, growth rad/s
 # flexmesa engine commit (last change under crates/): 5a68ae84
-# flexmesa run: 465 steps, termination xa_central_lower_limit, wall 232 s, numerics strict
+# flexmesa run: 465 steps, termination xa_central_lower_limit, wall 300 s, numerics strict
 # columns *_n: values compared; *_bitexact: values with equal binary64 bits; *_max_rel: max |a-b|/|b| over compared values (n/a: not exposed by the extras)
 # summary: calls compared 10, calls only in FlexMESA [], calls only in MESA []
 # summary: modes only in FlexMESA 0, modes only in MESA 0, calls with different mode order 0

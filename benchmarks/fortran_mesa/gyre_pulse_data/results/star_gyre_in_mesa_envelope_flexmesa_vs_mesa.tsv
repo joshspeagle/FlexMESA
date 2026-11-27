@@ -4,7 +4,7 @@
 # command: python benchmarks/fortran_mesa/gyre_pulse_data/compare_pulse_live_run.py --suite star --case gyre_in_mesa_envelope --histories <mesa_histories> --work <scratch> --out benchmarks/fortran_mesa/gyre_pulse_data/results/star_gyre_in_mesa_envelope_flexmesa_vs_mesa.tsv
 # extras: GyreInMesaStarExtras (star_gyre); units: frequency Hz, growth = imaginary part in Hz
 # flexmesa engine commit (last change under crates/): 5a68ae84
-# flexmesa run: 129 steps, termination max_model_number, wall 61 s, numerics strict
+# flexmesa run: 129 steps, termination max_model_number, wall 66 s, numerics strict
 # columns *_n: values compared; *_bitexact: values with equal binary64 bits; *_max_rel: max |a-b|/|b| over compared values (n/a: not exposed by the extras)
 # summary: calls compared 5, calls only in FlexMESA [], calls only in MESA []
 # summary: modes only in FlexMESA 1, modes only in MESA 0, calls with different mode order 0

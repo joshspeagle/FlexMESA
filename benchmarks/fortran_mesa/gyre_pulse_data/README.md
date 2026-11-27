@@ -68,7 +68,7 @@ References are MESA `26.4.1` runs in the `mesa_histories` bundle (gfortran 15.2.
 
 | Case | Calls | Modes (freq) | Frequency bit-identical, max rel. | Growth rate bit-identical, max rel. | Inertia | One-sided |
 | :--- | ---: | ---: | :--- | :--- | :--- | :--- |
-| `star/gyre_in_mesa_rsg` | 10 | 50 | 40, 1.6e-10 | 40, 1.1e-10 | not exposed | none |
+| `star/gyre_in_mesa_rsg` | 10 | 50 | 50, 0 | 50, 0 | not exposed | none |
 | `star/gyre_in_mesa_spb` | 51 | 511 | 511, 0 | 511, 0 | not exposed | none |
 | `star/gyre_in_mesa_bcep` | 54 | 192 | 192, 0 | 192, 0 | not exposed | none |
 | `star/gyre_in_mesa_ms` | 61 | 244 | 244, 0 | 244, 0 | not exposed | none |
@@ -78,7 +78,6 @@ References are MESA `26.4.1` runs in the `mesa_histories` bundle (gfortran 15.2.
 
 Observations from the files:
 
-- In `gyre_in_mesa_rsg` the calls at models 2 to 16 are bit-identical, and the calls at models 18 and 20 differ at 1e-11 to 1e-10.
 - In `gyre_in_mesa_envelope` no frequency is bit-identical, with differences from 8e-15 to 9.6e-13. At model 939 FlexMESA returns an `n_pg = 4` mode that MESA's call does not.
 - In `rsp_gyre` GYRE is called once (model 1, at the model build), and the run takes 6215 steps and ends at its `extras_finish_step` termination.
 - Whether the star states are bit-identical at each call was not measured here. The comparison covers GYRE's or ADIPLS's output only.

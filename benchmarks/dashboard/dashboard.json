@@ -21,7 +21,7 @@
         "verified_total": 5640,
         "pct_ported": 35.1,
         "pct_verified": 4.7,
-        "rust_lines": 108538,
+        "rust_lines": 110596,
         "python_jax_lines": 3987
       },
       {
@@ -55,7 +55,7 @@
         "verified_total": 0,
         "pct_ported": 18.7,
         "pct_verified": 0.0,
-        "rust_lines": 13703,
+        "rust_lines": 13799,
         "python_jax_lines": 1244
       },
       {
@@ -89,7 +89,7 @@
         "verified_total": 0,
         "pct_ported": 0.0,
         "pct_verified": 0.0,
-        "rust_lines": 16021,
+        "rust_lines": 16028,
         "python_jax_lines": 9911
       },
       {
@@ -379,7 +379,7 @@
         "pct_ported": 0.0,
         "pct_verified": 0.0,
         "rust_lines": 5189,
-        "python_jax_lines": 2676
+        "python_jax_lines": 2780
       },
       {
         "module": "gyre",
@@ -455,8 +455,8 @@
       "upstream_panel_modules": 46
     },
     "infrastructure_lines": {
-      "rust_bridge_testing_bench": 22576,
-      "python_testing_bench": 19615
+      "rust_bridge_testing_bench": 22709,
+      "python_testing_bench": 20984
     }
   },
   "numerics": {
@@ -593,12 +593,12 @@
         "total": 90,
         "mesa_26_4_1_ref": 86,
         "no_reference_yet": 4,
-        "strict_validated": 72,
-        "diagnostic_runs": 18,
-        "reached_termination": 68,
-        "within_numeric_tol": 49,
-        "passing": 39,
-        "declared_gaps": 41,
+        "strict_validated": 73,
+        "diagnostic_runs": 17,
+        "reached_termination": 73,
+        "within_numeric_tol": 52,
+        "passing": 41,
+        "declared_gaps": 38,
         "undeclared_failures": 0
       },
       "binary": {
@@ -654,7 +654,7 @@
       }
     ],
     "gaps_by_issue": {
-      "#161": 18,
+      "#161": 17,
       "#162": 9,
       "#154": 6,
       "#157": 6,
@@ -662,7 +662,6 @@
       "#587": 5,
       "#158": 3,
       "#160": 2,
-      "#156": 1,
       "#171": 1,
       "#231": 1
     },
@@ -672,12 +671,12 @@
     {
       "namelist": "star &controls",
       "upstream_scalars": 1444,
-      "matched_in_flexmesa": 1179,
-      "defaults_agree": 1179,
+      "matched_in_flexmesa": 1180,
+      "defaults_agree": 1180,
       "value_mismatch": 0,
       "disabled_limit_none": 0,
       "skipped_unparseable_rust": 17,
-      "unimplemented": 248
+      "unimplemented": 247
     },
     {
       "namelist": "star &star_job",
@@ -1296,6 +1295,434 @@
     ],
     "unlinked_locations": []
   },
+  "test_taxonomy": {
+    "total_files": 294,
+    "total_tests": 1638,
+    "by_kind": {
+      "oracle": {
+        "files": 128
+      },
+      "invariant": {
+        "files": 164
+      },
+      "regression": {
+        "files": 2
+      }
+    },
+    "by_language": {
+      "rust": {
+        "files": 212,
+        "tests": 1043
+      },
+      "python": {
+        "files": 82,
+        "tests": 595
+      }
+    },
+    "mislabeled_count": 9,
+    "mislabeled_files": [
+      {
+        "path": "crates/flexmesa-data/tests/data_161_parity_test.rs",
+        "kind": "invariant",
+        "module": "utils",
+        "mislabel_reason": "#563: W4 audit found boundary/JSON/safetensors invariant checks with no MESA 26.4.1 oracle comparison; rename away from restricted vocabulary under W4 (#563)"
+      },
+      {
+        "path": "crates/flexmesa-net/tests/burn_simpr_161_parity_test.rs",
+        "kind": "invariant",
+        "module": "net",
+        "mislabel_reason": "#563: W4 audit found mass-conservation and determinism checks with no MESA 26.4.1 oracle comparison; rename away from restricted vocabulary under W4 (#563)"
+      },
+      {
+        "path": "crates/flexmesa-net/tests/net_weak_lowt_161_parity_test.rs",
+        "kind": "invariant",
+        "module": "net",
+        "mislabel_reason": "#563: W4 audit found analytical rate/dxdt consistency checks with no committed MESA 26.4.1 oracle artifact; rename away from restricted vocabulary under W4 (#563)"
+      },
+      {
+        "path": "crates/flexmesa-star/tests/elem_diff_156_parity_test.rs",
+        "kind": "invariant",
+        "module": "star",
+        "mislabel_reason": "#563: W4 audit found self-contained element-diffusion solver/accounting invariant checks with no MESA 26.4.1 oracle comparison; rename away from restricted vocabulary under W4 (#563)"
+      },
+      {
+        "path": "crates/flexmesa-star/tests/mesh_adjust_omega_153_parity_test.rs",
+        "kind": "invariant",
+        "module": "star",
+        "mislabel_reason": "#563: W4 audit found self-contained adjust_omega control-volume invariant checks with no MESA 26.4.1 oracle comparison; rename away from restricted vocabulary under W4 (#563)"
+      },
+      {
+        "path": "crates/flexmesa-star/tests/pulse_rsp2_162_parity_test.rs",
+        "kind": "invariant",
+        "module": "star",
+        "mislabel_reason": "#563: W4 audit found no real-MESA 26.4.1 oracle comparison; rename away from restricted vocabulary under W4 (#563)"
+      },
+      {
+        "path": "crates/flexmesa-star/tests/rsp_eqns_162_parity_test.rs",
+        "kind": "invariant",
+        "module": "star",
+        "mislabel_reason": "#563: W4 audit found no real-MESA 26.4.1 oracle comparison; rename away from restricted vocabulary under W4 (#563)"
+      },
+      {
+        "path": "crates/flexmesa-star/tests/zams_io_154_parity_test.rs",
+        "kind": "invariant",
+        "module": "star",
+        "mislabel_reason": "#563: W4 audit found no real-MESA 26.4.1 oracle comparison; rename away from restricted vocabulary under W4 (#563)"
+      },
+      {
+        "path": "tests/test_py_bindings_161_parity.py",
+        "kind": "invariant",
+        "module": "tooling",
+        "mislabel_reason": "#563: W4 audit found PyO3 boundary guards and analytical checks with no MESA 26.4.1 oracle comparison; rename away from restricted vocabulary under W4 (#563)"
+      }
+    ],
+    "mapped_routines_total": 249,
+    "listed_oracle_routines_total": 39,
+    "listed_oracle_routines_pct": 15.7,
+    "listed_oracle_routine_ids": [
+      "binary/private/binary_disk.f90::eval_L2_mass_loss_fraction",
+      "const/public/const_def.f90::do_const_init",
+      "const/public/const_lib.f90::const_init",
+      "interp_2d/private/bipm_db.f90::do_evbipm_db",
+      "interp_2d/private/bipm_db.f90::do_mkbipm_db",
+      "neu/private/mod_neu.f90::ifermi12",
+      "neu/private/mod_neu.f90::neutrinos",
+      "neu/private/mod_neu.f90::zfermim12",
+      "neu/public/neu_lib.f90::neu_get",
+      "star/private/diffusion.f90::do_solve_diffusion",
+      "star/private/diffusion_support.f90::get_matrix_coeffs",
+      "star/private/element_diffusion.f90::do_element_diffusion",
+      "star/private/eps_mdot.f90::calculate_eps_mdot",
+      "star/private/hydro_chem_eqns.f90::do1_chem_eqns",
+      "star/private/init_model.f90::get_zams_model",
+      "star/private/mix_info.f90::update_rotation_mixing_info",
+      "star/private/neu.f90::do_neu_for_cell",
+      "star/private/overshoot_utils.f90::eval_conv_bdy_Hp",
+      "star/private/overshoot_utils.f90::eval_conv_bdy_r",
+      "star/private/paquette_coeffs.f90::free_collision_integrals",
+      "star/private/paquette_coeffs.f90::initialise_collision_integrals",
+      "star/private/paquette_coeffs.f90::paquette_coefficients",
+      "star/private/phase_separation.f90::do_phase_separation",
+      "star/private/rsp.f90::build_rsp_model",
+      "star/private/rsp_build.f90::do_rsp_build",
+      "star/private/rsp_def.f90::copy_results",
+      "star/private/rsp_def.f90::finish_after_build_model",
+      "star/private/rsp_def.f90::set_star_vars",
+      "star/private/rsp_lina.f90::do_LINA",
+      "star/private/solve_omega_mix.f90::do_solve_omega_mix",
+      "star/private/turb_info.f90::set_mlt_vars",
+      "star/private/winds.f90::do_set_mdot",
+      "star/private/winds.f90::eval_rlo_wind",
+      "star/private/winds.f90::eval_super_eddington_wind",
+      "turb/private/mlt.f90::calc_MLT",
+      "turb/private/semiconvection.f90::calc_semiconvection",
+      "turb/public/turb.f90::set_MLT",
+      "turb/public/turb.f90::set_semiconvection",
+      "turb/public/turb.f90::set_thermohaline"
+    ],
+    "by_module": [
+      {
+        "module": "star",
+        "oracle_files": 37,
+        "invariant_files": 74,
+        "regression_files": 1,
+        "total_files": 112,
+        "total_tests": 671,
+        "mislabeled_files": 5,
+        "mapped_routines": 189,
+        "listed_oracle_routines": 25,
+        "listed_oracle_routines_pct": 13.2
+      },
+      {
+        "module": "binary",
+        "oracle_files": 4,
+        "invariant_files": 13,
+        "regression_files": 0,
+        "total_files": 17,
+        "total_tests": 86,
+        "mislabeled_files": 0,
+        "mapped_routines": 36,
+        "listed_oracle_routines": 1,
+        "listed_oracle_routines_pct": 2.8
+      },
+      {
+        "module": "astero",
+        "oracle_files": 1,
+        "invariant_files": 8,
+        "regression_files": 0,
+        "total_files": 9,
+        "total_tests": 53,
+        "mislabeled_files": 0,
+        "mapped_routines": 0,
+        "listed_oracle_routines": 0,
+        "listed_oracle_routines_pct": 0.0
+      },
+      {
+        "module": "eos",
+        "oracle_files": 15,
+        "invariant_files": 6,
+        "regression_files": 0,
+        "total_files": 21,
+        "total_tests": 81,
+        "mislabeled_files": 0,
+        "mapped_routines": 0,
+        "listed_oracle_routines": 0,
+        "listed_oracle_routines_pct": 0.0
+      },
+      {
+        "module": "kap",
+        "oracle_files": 5,
+        "invariant_files": 2,
+        "regression_files": 0,
+        "total_files": 7,
+        "total_tests": 34,
+        "mislabeled_files": 0,
+        "mapped_routines": 0,
+        "listed_oracle_routines": 0,
+        "listed_oracle_routines_pct": 0.0
+      },
+      {
+        "module": "net",
+        "oracle_files": 7,
+        "invariant_files": 5,
+        "regression_files": 0,
+        "total_files": 12,
+        "total_tests": 44,
+        "mislabeled_files": 2,
+        "mapped_routines": 0,
+        "listed_oracle_routines": 0,
+        "listed_oracle_routines_pct": 0.0
+      },
+      {
+        "module": "rates",
+        "oracle_files": 5,
+        "invariant_files": 0,
+        "regression_files": 0,
+        "total_files": 5,
+        "total_tests": 25,
+        "mislabeled_files": 0,
+        "mapped_routines": 0,
+        "listed_oracle_routines": 0,
+        "listed_oracle_routines_pct": 0.0
+      },
+      {
+        "module": "neu",
+        "oracle_files": 3,
+        "invariant_files": 1,
+        "regression_files": 0,
+        "total_files": 4,
+        "total_tests": 25,
+        "mislabeled_files": 0,
+        "mapped_routines": 12,
+        "listed_oracle_routines": 4,
+        "listed_oracle_routines_pct": 33.3
+      },
+      {
+        "module": "atm",
+        "oracle_files": 4,
+        "invariant_files": 1,
+        "regression_files": 0,
+        "total_files": 5,
+        "total_tests": 28,
+        "mislabeled_files": 0,
+        "mapped_routines": 0,
+        "listed_oracle_routines": 0,
+        "listed_oracle_routines_pct": 0.0
+      },
+      {
+        "module": "turb",
+        "oracle_files": 4,
+        "invariant_files": 3,
+        "regression_files": 0,
+        "total_files": 7,
+        "total_tests": 22,
+        "mislabeled_files": 0,
+        "mapped_routines": 8,
+        "listed_oracle_routines": 5,
+        "listed_oracle_routines_pct": 62.5
+      },
+      {
+        "module": "chem",
+        "oracle_files": 3,
+        "invariant_files": 1,
+        "regression_files": 0,
+        "total_files": 4,
+        "total_tests": 17,
+        "mislabeled_files": 0,
+        "mapped_routines": 0,
+        "listed_oracle_routines": 0,
+        "listed_oracle_routines_pct": 0.0
+      },
+      {
+        "module": "ionization",
+        "oracle_files": 2,
+        "invariant_files": 2,
+        "regression_files": 0,
+        "total_files": 4,
+        "total_tests": 16,
+        "mislabeled_files": 0,
+        "mapped_routines": 0,
+        "listed_oracle_routines": 0,
+        "listed_oracle_routines_pct": 0.0
+      },
+      {
+        "module": "colors",
+        "oracle_files": 3,
+        "invariant_files": 0,
+        "regression_files": 0,
+        "total_files": 3,
+        "total_tests": 16,
+        "mislabeled_files": 0,
+        "mapped_routines": 0,
+        "listed_oracle_routines": 0,
+        "listed_oracle_routines_pct": 0.0
+      },
+      {
+        "module": "num",
+        "oracle_files": 5,
+        "invariant_files": 1,
+        "regression_files": 0,
+        "total_files": 6,
+        "total_tests": 45,
+        "mislabeled_files": 0,
+        "mapped_routines": 0,
+        "listed_oracle_routines": 0,
+        "listed_oracle_routines_pct": 0.0
+      },
+      {
+        "module": "mtx",
+        "oracle_files": 5,
+        "invariant_files": 1,
+        "regression_files": 0,
+        "total_files": 6,
+        "total_tests": 34,
+        "mislabeled_files": 0,
+        "mapped_routines": 0,
+        "listed_oracle_routines": 0,
+        "listed_oracle_routines_pct": 0.0
+      },
+      {
+        "module": "interp_1d",
+        "oracle_files": 4,
+        "invariant_files": 0,
+        "regression_files": 0,
+        "total_files": 4,
+        "total_tests": 18,
+        "mislabeled_files": 0,
+        "mapped_routines": 0,
+        "listed_oracle_routines": 0,
+        "listed_oracle_routines_pct": 0.0
+      },
+      {
+        "module": "interp_2d",
+        "oracle_files": 4,
+        "invariant_files": 0,
+        "regression_files": 0,
+        "total_files": 4,
+        "total_tests": 14,
+        "mislabeled_files": 0,
+        "mapped_routines": 2,
+        "listed_oracle_routines": 2,
+        "listed_oracle_routines_pct": 100.0
+      },
+      {
+        "module": "auto_diff",
+        "oracle_files": 1,
+        "invariant_files": 2,
+        "regression_files": 0,
+        "total_files": 3,
+        "total_tests": 13,
+        "mislabeled_files": 0,
+        "mapped_routines": 0,
+        "listed_oracle_routines": 0,
+        "listed_oracle_routines_pct": 0.0
+      },
+      {
+        "module": "math",
+        "oracle_files": 3,
+        "invariant_files": 4,
+        "regression_files": 0,
+        "total_files": 7,
+        "total_tests": 45,
+        "mislabeled_files": 0,
+        "mapped_routines": 0,
+        "listed_oracle_routines": 0,
+        "listed_oracle_routines_pct": 0.0
+      },
+      {
+        "module": "const",
+        "oracle_files": 2,
+        "invariant_files": 0,
+        "regression_files": 0,
+        "total_files": 2,
+        "total_tests": 9,
+        "mislabeled_files": 0,
+        "mapped_routines": 2,
+        "listed_oracle_routines": 2,
+        "listed_oracle_routines_pct": 100.0
+      },
+      {
+        "module": "utils",
+        "oracle_files": 0,
+        "invariant_files": 7,
+        "regression_files": 0,
+        "total_files": 7,
+        "total_tests": 43,
+        "mislabeled_files": 1,
+        "mapped_routines": 0,
+        "listed_oracle_routines": 0,
+        "listed_oracle_routines_pct": 0.0
+      },
+      {
+        "module": "gyre",
+        "oracle_files": 7,
+        "invariant_files": 2,
+        "regression_files": 0,
+        "total_files": 9,
+        "total_tests": 28,
+        "mislabeled_files": 0,
+        "mapped_routines": 0,
+        "listed_oracle_routines": 0,
+        "listed_oracle_routines_pct": 0.0
+      },
+      {
+        "module": "adipls",
+        "oracle_files": 3,
+        "invariant_files": 4,
+        "regression_files": 0,
+        "total_files": 7,
+        "total_tests": 28,
+        "mislabeled_files": 0,
+        "mapped_routines": 0,
+        "listed_oracle_routines": 0,
+        "listed_oracle_routines_pct": 0.0
+      },
+      {
+        "module": "plotting",
+        "oracle_files": 0,
+        "invariant_files": 3,
+        "regression_files": 0,
+        "total_files": 3,
+        "total_tests": 35,
+        "mislabeled_files": 0,
+        "mapped_routines": 0,
+        "listed_oracle_routines": 0,
+        "listed_oracle_routines_pct": 0.0
+      },
+      {
+        "module": "tooling",
+        "oracle_files": 1,
+        "invariant_files": 24,
+        "regression_files": 1,
+        "total_files": 26,
+        "total_tests": 208,
+        "mislabeled_files": 1,
+        "mapped_routines": 0,
+        "listed_oracle_routines": 0,
+        "listed_oracle_routines_pct": 0.0
+      }
+    ]
+  },
   "github": {
     "repo": "joshspeagle/FlexMESA",
     "tracker_issue": 140,
@@ -1637,11 +2064,6 @@
       }
     ],
     "open_pull_requests": [
-      {
-        "number": 598,
-        "title": "Train 13: 44 -> 46 strict passes; Skye blend grouping, eps_grav latent heat, replay oracles, test taxonomy, binary history, RSP builder exits",
-        "draft": true
-      },
       {
         "number": 603,
         "title": "bench(gyre): commit the generator recipe for the G4 complex LAPACK/BLAS vectors (#602)",
@@ -3767,6 +4189,19 @@
       "engine_ported_pct": "30.7",
       "all_verified_pct": "1.1",
       "cases_passing": "44",
+      "rust_cov_pct": "77.0",
+      "python_cov_pct": "87.8",
+      "closed_140": "32",
+      "total_140": "56",
+      "deferred_169": "75"
+    },
+    {
+      "date_utc": "2026-11-27",
+      "commit": "72660d6",
+      "event": "main merge",
+      "engine_ported_pct": "30.7",
+      "all_verified_pct": "1.1",
+      "cases_passing": "46",
       "rust_cov_pct": "77.0",
       "python_cov_pct": "87.8",
       "closed_140": "32",

@@ -27,6 +27,13 @@ pub struct StepHistoryScalars {
     pub power_photo_old: f64,
     /// Previous step total nuclear luminosity in $L_\odot$ (`power_nuc_burn_old`).
     pub power_nuc_burn_old: f64,
+    /// Burning powers `[h, he, z, photo, nuc]` in $L_\odot$ at entry to the
+    /// current step, before its remesh: what upstream carries in
+    /// `s% power_*` from the previous `set_power_info` call until
+    /// `new_generation` copies it into `power_*_old`
+    /// (`star/private/evolve.f90:715`, `evolve_support.f90:94-99`).
+    #[serde(default)]
+    pub prestep_powers: Option<[f64; 5]>,
     /// Previous step rotational mass-loss boost factor (`rotational_mdot_boost`).
     pub rotational_mdot_boost_old: f64,
     /// Whether the previous step invoked the critical-rotation implicit wind limit (`was_in_implicit_wind_limit`).
@@ -162,6 +169,7 @@ impl Default for StepHistoryScalars {
             power_z_burn_old: -1.0,
             power_photo_old: -1.0,
             power_nuc_burn_old: -1.0,
+            prestep_powers: None,
             rotational_mdot_boost_old: 1.0,
             was_in_implicit_wind_limit: false,
             last_solver_iterations: 0,

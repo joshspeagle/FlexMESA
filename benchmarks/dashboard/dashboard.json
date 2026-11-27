@@ -1296,14 +1296,14 @@
     "unlinked_locations": []
   },
   "test_taxonomy": {
-    "total_files": 294,
-    "total_tests": 1638,
+    "total_files": 295,
+    "total_tests": 1645,
     "by_kind": {
       "oracle": {
         "files": 128
       },
       "invariant": {
-        "files": 164
+        "files": 165
       },
       "regression": {
         "files": 2
@@ -1315,8 +1315,8 @@
         "tests": 1043
       },
       "python": {
-        "files": 82,
-        "tests": 595
+        "files": 83,
+        "tests": 602
       }
     },
     "mislabeled_count": 9,
@@ -1712,10 +1712,10 @@
       {
         "module": "tooling",
         "oracle_files": 1,
-        "invariant_files": 24,
+        "invariant_files": 25,
         "regression_files": 1,
-        "total_files": 26,
-        "total_tests": 208,
+        "total_files": 27,
+        "total_tests": 215,
         "mislabeled_files": 1,
         "mapped_routines": 0,
         "listed_oracle_routines": 0,
@@ -4211,6 +4211,19 @@
     {
       "date_utc": "2026-11-27",
       "commit": "2456762",
+      "event": "main merge",
+      "engine_ported_pct": "30.7",
+      "all_verified_pct": "1.1",
+      "cases_passing": "46",
+      "rust_cov_pct": "77.0",
+      "python_cov_pct": "87.8",
+      "closed_140": "32",
+      "total_140": "56",
+      "deferred_169": "75"
+    },
+    {
+      "date_utc": "2026-11-27",
+      "commit": "8857ff2",
       "event": "main merge",
       "engine_ported_pct": "30.7",
       "all_verified_pct": "1.1",

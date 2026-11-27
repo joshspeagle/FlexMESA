@@ -121,7 +121,7 @@ Full scalar diff: [`notes/audit/defaults_diff_26_4_1.md`](https://github.com/jos
 - **Python package statement coverage (`pytest --cov`)**: **87.8%** (`23,723` / `27,031` statements across `27` subpackages).
 - **Ignored / skipped tests**: `15` Rust `#[ignore]` ([#143](https://github.com/joshspeagle/FlexMESA/issues/143), [#154](https://github.com/joshspeagle/FlexMESA/issues/154), [#160](https://github.com/joshspeagle/FlexMESA/issues/160), [#162](https://github.com/joshspeagle/FlexMESA/issues/162), [#518](https://github.com/joshspeagle/FlexMESA/issues/518), [#530](https://github.com/joshspeagle/FlexMESA/issues/530)) and `22` Python `xfail`/`skip` ([#43](https://github.com/joshspeagle/FlexMESA/issues/43), [#154](https://github.com/joshspeagle/FlexMESA/issues/154), [#156](https://github.com/joshspeagle/FlexMESA/issues/156), [#161](https://github.com/joshspeagle/FlexMESA/issues/161), [#291](https://github.com/joshspeagle/FlexMESA/issues/291), [#295](https://github.com/joshspeagle/FlexMESA/issues/295), [#340](https://github.com/joshspeagle/FlexMESA/issues/340), [#349](https://github.com/joshspeagle/FlexMESA/issues/349), [#358](https://github.com/joshspeagle/FlexMESA/issues/358), [#402](https://github.com/joshspeagle/FlexMESA/issues/402), [#413](https://github.com/joshspeagle/FlexMESA/issues/413), [#420](https://github.com/joshspeagle/FlexMESA/issues/420), [#433](https://github.com/joshspeagle/FlexMESA/issues/433); `0` unlinked).
 - **Static & documentation gates**: `cargo clippy --all-targets -- -D warnings`, `RUSTDOCFLAGS='-D warnings' cargo doc`, `ruff check`, `ruff format --check`, `mypy --strict`, `mkdocs build --strict`, and MESA `26.4.1` `file:line` citation resolution enforced in CI.
-- **Test classification & listed routine oracles (`W4`, `#563`)**: `128` oracle files, `164` invariant files, `2` regression files (out of `294` test files totaling `1,638` test functions); `9` tracked mislabeled files; `39` / `249` mapped MESA routines (`15.7%`) have a listed oracle test.
+- **Test classification & listed routine oracles (`W4`, `#563`)**: `128` oracle files, `165` invariant files, `2` regression files (out of `295` test files totaling `1,645` test functions); `9` tracked mislabeled files; `39` / `249` mapped MESA routines (`15.7%`) have a listed oracle test.
 
 #### Test Classification & Routines with a Listed Oracle Test (W4)
 
@@ -151,7 +151,7 @@ Full scalar diff: [`notes/audit/defaults_diff_26_4_1.md`](https://github.com/jos
 | `gyre` | `7` | `2` | `0` | `0` | `-` |
 | `adipls` | `3` | `4` | `0` | `0` | `-` |
 | `plotting` | `0` | `3` | `0` | `0` | `-` |
-| `tooling` | `1` | `24` | `1` | `1` | `-` |
+| `tooling` | `1` | `25` | `1` | `1` | `-` |
 
 #### Rust Line Coverage by Crate (`cargo llvm-cov`)
 
@@ -356,4 +356,5 @@ Full scalar diff: [`notes/audit/defaults_diff_26_4_1.md`](https://github.com/jos
 | `2026-11-27` | `8cc7650` | main merge | 30.7% | 1.1% | 44/106 | 77.0% | 87.8% | 32/56 | 75 |
 | `2026-11-27` | `72660d6` | main merge | 30.7% | 1.1% | 46/106 | 77.0% | 87.8% | 32/56 | 75 |
 | `2026-11-27` | `2456762` | main merge | 30.7% | 1.1% | 46/106 | 77.0% | 87.8% | 32/56 | 75 |
+| `2026-11-27` | `8857ff2` | main merge | 30.7% | 1.1% | 46/106 | 77.0% | 87.8% | 32/56 | 75 |
 <!-- END GENERATED DASHBOARD -->

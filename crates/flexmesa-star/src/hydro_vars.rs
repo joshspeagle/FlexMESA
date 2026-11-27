@@ -496,22 +496,10 @@ pub(crate) fn do1_mlt_2(
 
     let tap_on = crate::replay_tap::active(model);
 
-    // `Get_results` (`star/private/turb_support.f90:198-510`). Upstream picks
-    // `MLT_option` on the first try of the step, before `prepare_for_new_try`
-    // advances `model_number` (`star/private/evolve.f90:390-396, 2012`), so
-    // the threshold is tested against the previous generation's number.
-    let mlt_opt =
-        if !model.aux.doing_relax && model.controls.steps_before_use_tdc > 0 {
-            if (model.model_number_old as isize)
-                >= model.controls.steps_before_use_tdc
-            {
-                MltOption::Tdc
-            } else {
-                MltOption::Cox
-            }
-        } else {
-            model.controls.mlt_option
-        };
+    // `Get_results` (`star/private/turb_support.f90:198-510`) reads
+    // `s% MLT_option`, which `steps_before_use_TDC` switches at the start of
+    // each step (`crate::tdc_hydro::set_mlt_option_for_new_step`).
+    let mlt_opt = model.controls.mlt_option;
 
     // `if (k <= 0 .or. s%dt <= 0d0) using_TDC = .false.` with 1-based `k`
     // (`star/private/turb_support.f90:232`): every face, the surface face
@@ -591,11 +579,22 @@ pub(crate) fn do1_mlt_2(
             } else {
                 StarAdOrder1::ZERO
             };
-            let vc_old = if model.aux.okay_to_set_mlt_vc {
-                model.aux.mlt_vc_old.get(k).copied().unwrap_or(0.0)
+            // `conv_vel_start = mlt_vc_old(k)` when `okay_to_set_mlt_vc`,
+            // else `mlt_vc(k)` (`star/private/turb_support.f90:314-318`).
+            // A missing or short array has no upstream value.
+            let (vc_src, vc_name) = if model.aux.okay_to_set_mlt_vc {
+                (&model.aux.mlt_vc_old, "mlt_vc_old")
             } else {
-                model.mlt_vc.get(k).copied().unwrap_or(0.0)
+                (&model.mlt_vc, "mlt_vc")
             };
+            let vc_old = *vc_src.get(k).ok_or_else(|| {
+                StarError::MicrophysicsError(format!(
+                    "TDC conv_vel_start needs {vc_name}({k}) \
+                     (`star/private/turb_support.f90:314-318`), but it has \
+                     {} entries for nz = {nz}",
+                    vc_src.len()
+                ))
+            })?;
             let (dv_f, e_f) = face_dv_and_energy(model, k, alfa, beta_w, rho_f);
             // Scale for the TDC luminosity equation
             // (`star/private/turb_support.f90:319-325`): `L` when
@@ -1650,7 +1649,7 @@ pub(crate) fn set_hydro_vars_with_skips(
         // `star/private/hydro_vars.f90:602-610`. `RSP_flag` never reaches
         // here (`.not. s% RSP_flag` above), but the test is upstream's.
         if model.controls.tdc_alpha_m > 0.0
-            && crate::tdc_hydro::effective_mlt_option(model) == MltOption::Tdc
+            && model.controls.mlt_option == MltOption::Tdc
             && !(model.controls.rsp2_flag || model.controls.rsp_flag)
         {
             crate::tdc_hydro::set_viscosity_vars_tdc(model)?;

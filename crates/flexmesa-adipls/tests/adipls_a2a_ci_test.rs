@@ -741,15 +741,25 @@ fn test_solve_helpers_matching_rsnfit_f32_stevft_order_takata_signew_setlog() {
     // `signew` exact arithmetic and window bounds + `setlog`
     let mut cry = 0_i32;
     assert!(
-        (signew(1, 1, 4.0, 0.5, 0.0, 10.0, &mut cry).unwrap() - 4.5_f64).abs()
+        (signew(1, 1, 4.0, 0.5, 0.0, 10.0, &mut cry)
+            .unwrap()
+            .expect("defined sig")
+            - 4.5_f64)
+            .abs()
             < 1.0e-14_f64
     );
     assert_eq!(cry, 1);
     assert!(
-        (signew(1, 2, 4.0, 0.5, 0.0, 10.0, &mut cry).unwrap() - 6.25_f64).abs()
+        (signew(1, 2, 4.0, 0.5, 0.0, 10.0, &mut cry)
+            .unwrap()
+            .expect("defined sig")
+            - 6.25_f64)
+            .abs()
             < 1.0e-14_f64
     );
-    let _ = signew(1, 1, 9.8, 0.5, 0.0, 10.0, &mut cry).unwrap();
+    assert_eq!(signew(1, 1, 9.8, 0.5, 0.0, 10.0, &mut cry).unwrap(), None);
+    assert_eq!(cry, -1);
+    assert_eq!(signew(1, 9, 4.0, 0.5, 0.0, 10.0, &mut cry).unwrap(), None);
     assert_eq!(cry, -1);
 
     let mut slog: Vec<AdiStatusLogEntry> = Vec::new();

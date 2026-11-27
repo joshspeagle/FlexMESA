@@ -4,8 +4,8 @@
 
 use flexmesa_adipls::{
     order, parse_adipls_pruned_in, rsnfit, sigout, stevft, takata, AdiFileUnit,
-    AmdlAa, BcsDat, Cincnt, Cprcns, Csummm, RhsDat, RotDat, SigoutArgs,
-    SigoutState, TapRecorder,
+    AdiplsError, AmdlAa, BcsDat, Cincnt, Cprcns, Csummm, RhsDat, RotDat,
+    SigoutArgs, SigoutState, TapRecorder,
 };
 use flexmesa_const::STANDARD_CGRAV;
 use flexmesa_math::sin;
@@ -214,7 +214,8 @@ fn test_stevft_small_grid_alignment_and_zero_iasn_guard() {
 #[test]
 fn test_takata_and_order_coarse_and_single_point_guards() {
     // 1. `takata` (`takata.d.f:67-72`) with `iasn = 2` on odd `nn = 101`:
-    //    `k = 100` yields `k0 = 99, k1 = 101 == nn`, which previously indexed OOB.
+    //    `k = 1` reads unset `yy(:, 3)` (`1 + iasn`) and `k = 100` reads
+    //    `k + iasn > nn`; under DECISIONS #43 (#655, #657) this fails loudly.
     let (data101, x101, aa101) = build_uniform_sphere_test_amdl(101);
     let mut y101 = vec![0.0_f64; 8 * 101];
     for (n, &xn) in x101.iter().enumerate() {
@@ -222,48 +223,40 @@ fn test_takata_and_order_coarse_and_single_point_guards() {
         y101[n * 8] = xn * sin(phase);
         y101[n * 8 + 1] = xn;
     }
-    let iord_iasn2 = takata(
-        &x101,
-        &y101,
-        101,
-        2,
-        &data101,
-        &aa101,
-        8,
-        15.0_f64,
-        STANDARD_CGRAV,
-    )
-    .expect("takata iasn=2 on odd nn=101 must not index OOB");
-    assert!(iord_iasn2 >= 0);
-    assert_eq!(
+    let run_takata = |x: &[f64], y: &[f64], nn, iasn| {
         takata(
-            &x101,
-            &y101,
-            101,
-            0,
+            x,
+            y,
+            nn,
+            iasn,
             &data101,
             &aa101,
             8,
             15.0_f64,
-            STANDARD_CGRAV
+            STANDARD_CGRAV,
         )
-        .expect("takata iasn=0"),
-        0
-    );
+    };
+    let err_iasn2 = run_takata(&x101, &y101, 101, 2)
+        .expect_err("takata iasn=2 must return explicit error (#655, #657)");
+    assert!(matches!(
+        err_iasn2,
+        AdiplsError::Solver {
+            routine: "takata",
+            ..
+        }
+    ));
+    let err_iasn0 = run_takata(&x101, &y101, 101, 0)
+        .expect_err("takata iasn=0 must return explicit error (#655)");
+    assert!(matches!(
+        err_iasn0,
+        AdiplsError::Solver {
+            routine: "takata",
+            ..
+        }
+    ));
     assert_eq!(
-        takata(
-            &[],
-            &[],
-            0,
-            1,
-            &data101,
-            &aa101,
-            8,
-            15.0_f64,
-            STANDARD_CGRAV
-        )
-        .expect("takata nn=0"),
-        0
+        run_takata(&[], &[], 0, 1).expect("takata nn=0 returns 1"),
+        1
     );
 
     // 3. `order` (`order.d.f:117-123`) on `nn = 1, x[0] = 0.0` (`ns = 2, nsr = 1`):

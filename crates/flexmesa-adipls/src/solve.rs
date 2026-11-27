@@ -978,16 +978,8 @@ pub fn rsnfit(
     *xfit1 = x[*nfit - 1];
 }
 
-/// Takata (2006) dipolar ($l = 1$) radial order classifier matching `takata`
-/// (`adipls/adipack.c/adipls/takata.d.f:1-96`).
-///
-/// Preserves upstream's literal `pi = 3.141593_f64` (`takata.d.f:37`),
-/// `powi_f90(data[1], 3)`, and `data[1].powi(2) -> data[1] * data[1]`.
-///
-/// # Errors
-/// Propagates [`AdiplsError`] from `aa.get(...)`.
 #[allow(clippy::too_many_arguments, clippy::similar_names)]
-pub fn takata(
+fn populate_takata_yy(
     x: &[f64],
     y: &[f64],
     nn: usize,
@@ -997,18 +989,14 @@ pub fn takata(
     iy: usize,
     sig: f64,
     cgrav: f64,
-) -> Result<i32, AdiplsError> {
+) -> Result<Vec<Option<[f64; 2]>>, AdiplsError> {
     #[allow(clippy::approx_constant)]
     const PI_TAKATA: f64 = 3.141_593_f64;
-    if nn == 0 || iasn == 0 {
-        return Ok(0);
-    }
     let g = cgrav;
     let r3 = powi_f90(data[1], 3);
     let r2 = data[1] * data[1];
 
-    let mut yy1 = vec![0.0_f64; nn];
-    let mut yy2 = vec![0.0_f64; nn];
+    let mut yy: Vec<Option<[f64; 2]>> = vec![None; nn];
 
     for n in 1..=nn {
         if n == 1 || (n - 2) % iasn == 0 {
@@ -1030,19 +1018,80 @@ pub fn takata(
                         * rho_n);
                 let t2_n = -y[y_base + 2] / (3.0_f64 * x[n0])
                     - dphipdr_n / (3.0_f64 * gr_n);
-                yy1[n0] = (j_n * y[y_base] / x[n0]) + t2_n;
-                yy2[n0] = j_n * y[y_base + 1] * g * data[0] * sig
+                let yy1_n = (j_n * y[y_base] / x[n0]) + t2_n;
+                let yy2_n = j_n * y[y_base + 1] * g * data[0] * sig
                     / (2.0_f64 * gr_n * r2)
                     + j_n * y[y_base + 2] / x[n0]
                     + t2_n;
+                yy[n0] = Some([yy1_n, yy2_n]);
             }
         }
     }
 
-    if x[0] == 0.0_f64 && nn >= 2 {
-        yy1[0] = yy1[1];
-        yy2[0] = yy2[1];
+    if x[0] == 0.0_f64 {
+        let Some(second) = yy.get(1).copied().flatten() else {
+            return Err(AdiplsError::Solver {
+                routine: "takata",
+                message: format!(
+                    "takata center copy x[0]==0 reads unset yy(2) (nn={nn}; #657, takata.d.f:58-63, DECISIONS #43)"
+                ),
+            });
+        };
+        yy[0] = Some(second);
     }
+
+    Ok(yy)
+}
+
+/// Takata (2006) dipolar ($l = 1$) radial order classifier matching `takata`
+/// (`adipls/adipack.c/adipls/takata.d.f:1-96`).
+///
+/// Preserves upstream's literal `pi = 3.141593_f64` (`takata.d.f:37`),
+/// `powi_f90(data[1], 3)`, and `data[1].powi(2) -> data[1] * data[1]`, and
+/// returns `Ok(1)` for `nn == 0` (`iord = iordp - iordg + 1 = 1`,
+/// `takata.d.f:87-88`).
+///
+/// # Errors
+/// Returns [`AdiplsError::InvalidModel`] when non-empty slice lengths are
+/// inconsistent with `nn` or `iy < 4`, propagates [`AdiplsError`] from
+/// `aa.get(...)`, and returns [`AdiplsError::Solver`] when `iasn == 0`
+/// (`mod(n-2, 0)` undefined) or when the center copy (`takata.d.f:58-63`) or
+/// counting loop (`takata.d.f:67-72`) would read an unset or out-of-range
+/// `yy` point (`#655`, `#657`, `DECISIONS #43`).
+#[allow(clippy::too_many_arguments, clippy::similar_names)]
+pub fn takata(
+    x: &[f64],
+    y: &[f64],
+    nn: usize,
+    iasn: usize,
+    data: &[f64; 8],
+    aa: &AmdlAa,
+    iy: usize,
+    sig: f64,
+    cgrav: f64,
+) -> Result<i32, AdiplsError> {
+    if iasn == 0 {
+        return Err(AdiplsError::Solver {
+            routine: "takata",
+            message: String::from(
+                "takata requires iasn >= 1 (mod(n-2, 0) is undefined; #655, DECISIONS #43)",
+            ),
+        });
+    }
+    if nn == 0 {
+        return Ok(1);
+    }
+    if x.len() < nn || iy < 4 || y.len() < nn * iy {
+        return Err(AdiplsError::InvalidModel {
+            message: format!(
+                "takata dimensions invalid: nn={nn}, x.len()={}, iy={iy}, y.len()={}",
+                x.len(),
+                y.len()
+            ),
+        });
+    }
+
+    let yy = populate_takata_yy(x, y, nn, iasn, data, aa, iy, sig, cgrav)?;
 
     let mut iordp = 0_i32;
     let mut iordg = 0_i32;
@@ -1050,13 +1099,17 @@ pub fn takata(
         if k == 1 || (k - 2) % iasn == 0 {
             let k0 = k - 1;
             let k1 = k0 + iasn;
-            if k1 >= nn {
-                continue;
-            }
-            let phx1 = yy1[k0];
-            let phy1 = yy2[k0];
-            let phx2 = yy1[k1];
-            let phy2 = yy2[k1];
+            let (Some([phx1, phy1]), Some([phx2, phy2])) =
+                (yy[k0], yy.get(k1).copied().flatten())
+            else {
+                return Err(AdiplsError::Solver {
+                    routine: "takata",
+                    message: format!(
+                        "takata read unset yy point at k={k}, k+iasn={} (nn={nn}, iasn={iasn}; #657, takata.d.f:67-72, DECISIONS #43)",
+                        k + iasn
+                    ),
+                });
+            };
             let dfyy = phx2 * phy1 - phx1 * phy2;
             if phx1 * phx2 <= 0.0_f64 && dfyy < 0.0_f64 {
                 iordp += 1;
@@ -1216,8 +1269,14 @@ pub fn order(
 }
 
 /// Step trial squared frequency $\sigma^2$, matching `signew`
-/// (`adipls/adipack.c/adipls/signew.n.d.f:1-371`) for `itrsig == 1` (`|itrsig| >= 2` external
-/// summary files fail loudly).
+/// (`adipls/adipack.c/adipls/signew.n.d.f:1-371`) for `itrsig == 1`
+/// (`|itrsig| >= 2` external summary files fail loudly).
+///
+/// Returns `Ok(None)` and sets `*icry = -1` when `nsig` is outside `1..=3`
+/// (`signew.n.d.f:116-123`) or when `notwin(sgtrw1, sgtrw2, sign)` rejects the
+/// trial frequency (`signew.n.d.f:128-135`), matching upstream leaving its
+/// function result unassigned rather than fabricating `sigp` (`#656`, `#658`,
+/// `DECISIONS #43`).
 ///
 /// # Errors
 /// Returns [`AdiplsError::UnsupportedControl`] if `|itrsig| >= 2`.
@@ -1230,7 +1289,7 @@ pub fn signew(
     sgtrw1: f64,
     sgtrw2: f64,
     icry: &mut i32,
-) -> Result<f64, AdiplsError> {
+) -> Result<Option<f64>, AdiplsError> {
     let itrsga = itrsig.abs();
     *icry = 1;
 
@@ -1255,16 +1314,45 @@ pub fn signew(
         }
         isig * s * s
     } else {
+        // Upstream leaves `signew` unassigned on invalid `nsig`
+        // (`signew.n.d.f:116-123`; deferred #658, DECISIONS #43).
         *icry = -1;
-        return Ok(sigp);
+        return Ok(None);
     };
 
     if notwin(sgtrw1, sgtrw2, sign) {
+        // Upstream leaves `signew` unassigned outside the window
+        // (`signew.n.d.f:128-135`; deferred #658, DECISIONS #43).
         *icry = -1;
-        Ok(sigp)
+        Ok(None)
     } else {
-        Ok(sign)
+        Ok(Some(sign))
     }
+}
+
+/// Call [`signew`] for a caller that immediately uses the returned frequency,
+/// failing loudly with [`AdiplsError::Solver`] when upstream leaves `signew`
+/// unassigned on `icry == -1` (`#656`, `#658`, `DECISIONS #43`).
+#[allow(clippy::too_many_arguments, clippy::similar_names)]
+pub(crate) fn signew_defined(
+    itrsig: i32,
+    nsig: i32,
+    sigp: f64,
+    dfsig: f64,
+    sgtrw1: f64,
+    sgtrw2: f64,
+    icry: &mut i32,
+    routine: &'static str,
+    target: &str,
+) -> Result<f64, AdiplsError> {
+    signew(itrsig, nsig, sigp, dfsig, sgtrw1, sgtrw2, icry)?.ok_or_else(|| {
+        AdiplsError::Solver {
+            routine,
+            message: format!(
+                "signew left {target} unassigned on icry=-1 (nsig={nsig}, sgtrw=[{sgtrw1}, {sgtrw2}]); undefined upstream read (#658, DECISIONS #43)"
+            ),
+        }
+    })
 }
 
 /// Mixed p/g-mode frequency scan stepping function (`nsig == 4`), matching
@@ -1811,9 +1899,10 @@ pub fn sigsol(
 /// matching `sigscn` (`adipls/adipack.c/adipls/sigscn.c.d.f:1-442`).
 ///
 /// # Errors
-/// Returns [`AdiplsError::UnsupportedControl`] if `nsig` is outside `1..=4` or
-/// propagates errors from [`stevft`], [`sigint`], [`signew`], [`sigsol`], and
-/// `sigout_handler`.
+/// Returns [`AdiplsError::UnsupportedControl`] if `nsig` is outside `1..=4`,
+/// returns [`AdiplsError::Solver`] if [`signew`] leaves the frequency
+/// unassigned on `icry == -1` (`#658`, `DECISIONS #43`), or propagates errors
+/// from [`stevft`], [`sigint`], [`signew`], [`sigsol`], and `sigout_handler`.
 #[allow(
     clippy::too_many_arguments,
     clippy::too_many_lines,
@@ -1930,7 +2019,10 @@ pub fn sigscn(
             sig = if *nsig == 4 {
                 signw_pg(sig1, sig2, *iscan, isig, icry, ctx.signw_pg_state)
             } else {
-                signew(1, *nsig, sigp, dsigs, sgtrw1, sgtrw2, icry)?
+                signew_defined(
+                    1, *nsig, sigp, dsigs, sgtrw1, sgtrw2, icry, "sigscn",
+                    "sig",
+                )?
             };
         }
 
@@ -2226,5 +2318,283 @@ pub fn sigscn(
             continue;
         }
         return Ok(());
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::parser::parse_adipls_pruned_in;
+    use flexmesa_const::STANDARD_CGRAV;
+    use flexmesa_math::{cos, sin};
+
+    const PRUNED_IN: &str = "\
+2  'amdl.mesa'
+9  'ttt.adipls.prt'
+11 'agsm.mesa'
+15 'ttt.adipls.ssm'
+16 'ttt.adipls.fsm'
+-1 ''
+mod.osc.cst.int.out
+,,,,,,,
+,,1,,,,,,,,,,,,,,,,,,,,
+   0,3,0,1,,,,,,,
+    1,  220,   ,    1,10,,,,,,,,
+,2,100,1000,,,,,,,,,,,,
+,,,,,,,,,,,,,,,,
+6.67430e-8
+,,0,,
+1,,,,,,,,,,,,,,,
+5,0,0.99,,,,,,,,,,,,,,
+,,,,,-1,,,,,,,,,,,,,,
+9,10,,20,1,,,,,,,,
+1,,,,,,,,,,,,,,,
+0,,,,6,,,,,,
+,,,,,-5000,100,,,,,,,,,,,,,,,,,,,,,,,,
+";
+
+    fn build_takata_model(x: &[f64]) -> ([f64; 8], AmdlAa, Vec<f64>) {
+        let nn = x.len();
+        let mut aa = AmdlAa::new_unset(nn);
+        aa.set_row(1, vec![1.0_f64; nn]).unwrap();
+        aa.set_row(2, vec![1.0_f64; nn]).unwrap();
+        aa.set_row(3, vec![5.0_f64 / 3.0_f64; nn]).unwrap();
+        aa.set_row(4, vec![0.0_f64; nn]).unwrap();
+        aa.set_row(5, vec![1.5_f64; nn]).unwrap();
+        aa.set_row(10, vec![1.0_f64; nn]).unwrap();
+
+        let mut y = vec![0.0_f64; 8 * nn];
+        for (n, &xn) in x.iter().enumerate() {
+            let phase = std::f64::consts::PI * 2.5_f64 * xn;
+            y[n * 8] = xn * sin(phase);
+            y[n * 8 + 1] = -xn * cos(phase);
+        }
+        let data = [
+            1.989e33_f64,
+            6.9599e10_f64,
+            1.0_f64,
+            1.0_f64,
+            0.0_f64,
+            0.0_f64,
+            -1.0_f64,
+            0.0_f64,
+        ];
+        (data, aa, y)
+    }
+
+    #[test]
+    fn test_655_takata_nn_zero_and_iasn_zero() {
+        let (data, aa, _) = build_takata_model(&[0.0, 0.5, 1.0]);
+        assert_eq!(
+            takata(&[], &[], 0, 1, &data, &aa, 8, 10.0, STANDARD_CGRAV)
+                .expect("nn=0 yields iord=1"),
+            1
+        );
+
+        let err_zero =
+            takata(&[], &[], 0, 0, &data, &aa, 8, 10.0, STANDARD_CGRAV)
+                .expect_err("iasn=0 must fail loudly (#655)");
+        assert!(matches!(
+            err_zero,
+            AdiplsError::Solver {
+                routine: "takata",
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn test_655_takata_iasn2_unset_one_plus_iasn_and_oob_errors() {
+        let x4 = [0.0, 0.25, 0.5, 1.0];
+        let (data4, aa4, y4) = build_takata_model(&x4);
+        let err_unset =
+            takata(&x4, &y4, 4, 2, &data4, &aa4, 8, 10.0, STANDARD_CGRAV)
+                .expect_err("iasn=2 reads unset yy(:, 1 + iasn) (#655)");
+        match err_unset {
+            AdiplsError::Solver { routine, message } => {
+                assert_eq!(routine, "takata");
+                assert!(message.contains("#657"));
+                assert!(message.contains("DECISIONS #43"));
+                assert!(message.contains("k+iasn=3"));
+            }
+            other => panic!("unexpected error: {other:?}"),
+        }
+
+        let x2 = [0.0, 1.0];
+        let (data2, aa2, y2) = build_takata_model(&x2);
+        let err_oob =
+            takata(&x2, &y2, 2, 2, &data2, &aa2, 8, 10.0, STANDARD_CGRAV)
+                .expect_err("k + iasn >= nn must fail loudly (#655)");
+        match err_oob {
+            AdiplsError::Solver { routine, message } => {
+                assert_eq!(routine, "takata");
+                assert!(message.contains("#657"));
+                assert!(message.contains("DECISIONS #43"));
+            }
+            other => panic!("unexpected error: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_655_takata_nonpositive_x_for_n_gt_1_errors() {
+        let x_mid_zero = [0.0, 0.25, 0.0, 0.75, 1.0];
+        let (data, aa, y) = build_takata_model(&x_mid_zero);
+        let err_mid =
+            takata(&x_mid_zero, &y, 5, 1, &data, &aa, 8, 10.0, STANDARD_CGRAV)
+                .expect_err("x[n] <= 0 for n > 1 leaves yy unset (#655)");
+        assert!(matches!(
+            err_mid,
+            AdiplsError::Solver {
+                routine: "takata",
+                ..
+            }
+        ));
+
+        let x_second_zero = [0.0, 0.0, 0.5, 1.0];
+        let (data2, aa2, y2) = build_takata_model(&x_second_zero);
+        let err_center = takata(
+            &x_second_zero,
+            &y2,
+            4,
+            1,
+            &data2,
+            &aa2,
+            8,
+            10.0,
+            STANDARD_CGRAV,
+        )
+        .expect_err("x[1] <= 0 leaves center copy unset (#655)");
+        assert!(matches!(
+            err_center,
+            AdiplsError::Solver {
+                routine: "takata",
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn test_655_takata_valid_center_zero_iasn_one_passes() {
+        let x: Vec<f64> = (0..=100).map(|k| f64::from(k) / 100.0).collect();
+        let (data, aa, y) = build_takata_model(&x);
+        let iord = takata(&x, &y, 101, 1, &data, &aa, 8, 10.0, STANDARD_CGRAV)
+            .expect("valid x[0]==0 iasn=1 takata must pass");
+        assert_eq!(iord, 3);
+    }
+
+    #[test]
+    fn test_656_signew_returns_none_and_signew_defined_errors() {
+        let mut icry = 0_i32;
+        assert_eq!(
+            signew(1, 0, 4.0, 0.5, 0.0, -1.0, &mut icry)
+                .expect("invalid nsig returns Ok(None)"),
+            None
+        );
+        assert_eq!(icry, -1);
+
+        assert_eq!(
+            signew(1, 1, 4.8, 0.5, 1.0, 5.0, &mut icry)
+                .expect("out-of-window trial returns Ok(None)"),
+            None
+        );
+        assert_eq!(icry, -1);
+
+        let err_def = signew_defined(
+            1, 1, 4.8, 0.5, 1.0, 5.0, &mut icry, "direct", "sig",
+        )
+        .expect_err("defined-frequency caller must fail loudly (#658)");
+        match err_def {
+            AdiplsError::Solver { routine, message } => {
+                assert_eq!(routine, "direct");
+                assert!(message.contains("#658"));
+                assert!(message.contains("DECISIONS #43"));
+            }
+            other => panic!("unexpected error: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_656_sigscn_errors_when_signew_returns_icry_minus1() {
+        let mut icry = 0_i32;
+        let input = parse_adipls_pruned_in(PRUNED_IN).unwrap();
+        let mut cincnt = Cincnt::from_input(&input);
+        let mut bcs = BcsDat::default();
+        let mut rot = RotDat::default();
+        let x: Vec<f64> = (0..=40).map(|k| f64::from(k) / 40.0).collect();
+        let (data, aa, _) = build_takata_model(&x);
+        let mut rhs = RhsDat {
+            el: 0.0,
+            ell: 0.0,
+            alb: 1.0,
+            data,
+            ..RhsDat::default()
+        };
+        let mut csexpc = Csexpc::default();
+        let mut cnrkbc = Cnrkbc::default();
+        let cprcns = Cprcns::default();
+        let mut kdgbcs = 0;
+        let mut xcache = XlmultCache::default();
+        let mut pg_state = SignwPgState::default();
+        let mut csummm = Csummm::zeroed();
+        let mut slog = Vec::new();
+        let mut ctx = SolverContext {
+            rhs: &mut rhs,
+            rot: &mut rot,
+            bcs: &mut bcs,
+            cincnt: &mut cincnt,
+            csexpc: &mut csexpc,
+            cnrkbc: &mut cnrkbc,
+            cprcns: &cprcns,
+            kdgbcs: &mut kdgbcs,
+            cgrav: STANDARD_CGRAV,
+            xlmult_cache: &mut xcache,
+            signw_pg_state: &mut pg_state,
+            csummm: &mut csummm,
+            iordtr: 0,
+            status_log: &mut slog,
+        };
+        let mut y = vec![0.0_f64; 8 * 43];
+        let mut iscan = 4_i32;
+        let mut nsig = 1_i32;
+        let mut nev1 = 2_usize;
+        let mut nfit = 20_usize;
+        let mut istsb1 = 1_i32;
+        let mut obs = NoopTapObserver;
+        let mut sigout = NoopSigoutHandler;
+        let err_scn = sigscn(
+            4.0,
+            10.0,
+            &mut iscan,
+            &mut nsig,
+            0,
+            &x,
+            &mut y,
+            8,
+            1,
+            2,
+            41,
+            41,
+            5,
+            &mut nev1,
+            &mut nfit,
+            &mut istsb1,
+            &mut icry,
+            0,
+            3.0,
+            5.0,
+            &aa,
+            &mut ctx,
+            &mut obs,
+            &mut sigout,
+        )
+        .expect_err("sigscn must error when signew leaves sig unassigned");
+        match err_scn {
+            AdiplsError::Solver { routine, message } => {
+                assert_eq!(routine, "sigscn");
+                assert!(message.contains("#658"));
+                assert!(message.contains("DECISIONS #43"));
+            }
+            other => panic!("unexpected error: {other:?}"),
+        }
     }
 }

@@ -1,0 +1,957 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Verified not-applicable upstream routines across audited core-engine partial files (#610).
+# Every entry's (upstream_path, routine, parent, first, last) matches benchmarks/dashboard/routine_inventory.json.
+
+[[na]]
+upstream_path = "astero/private/astero_support.f90"
+routine = "get_kjeldsen_nonradial_freq_corr_alt_up"
+parent = ""
+first = 780
+last = 782
+category = "stub"
+reason = "Empty upstream placeholder subroutine with commented-out mesa_error."
+
+[[na]]
+upstream_path = "astero/private/astero_support.f90"
+routine = "get_kjeldsen_nonradial_freq_corr_alt_down"
+parent = ""
+first = 785
+last = 787
+category = "stub"
+reason = "Empty upstream placeholder subroutine with commented-out mesa_error."
+
+[[na]]
+upstream_path = "astero/private/extras_support.f90"
+routine = "alloc_extra_info"
+parent = ""
+first = 1147
+last = 1151
+category = "stub"
+reason = "Empty Fortran extra-info allocation hook setting num_ints=0, num_dbls=0."
+
+[[na]]
+upstream_path = "astero/private/extras_support.f90"
+routine = "unpack_extra_info"
+parent = ""
+first = 1154
+last = 1158
+category = "stub"
+reason = "Empty Fortran photo-unpack hook for zero extra_info scalars."
+
+[[na]]
+upstream_path = "astero/private/extras_support.f90"
+routine = "store_extra_info"
+parent = ""
+first = 1161
+last = 1165
+category = "stub"
+reason = "Empty Fortran photo-pack hook for zero extra_info scalars."
+
+[[na]]
+upstream_path = "astero/private/extras_support.f90"
+routine = "move_extra_info"
+parent = ""
+first = 1168
+last = 1236
+category = "fortran_mem"
+reason = "Empty-payload Fortran extra_info photo/state move boilerplate."
+
+[[na]]
+upstream_path = "astero/private/extras_support.f90"
+routine = "move_dbl"
+parent = "move_extra_info"
+first = 1199
+last = 1208
+category = "fortran_mem"
+reason = "Contained pointer-swap helper inside unused move_extra_info boilerplate."
+
+[[na]]
+upstream_path = "astero/private/extras_support.f90"
+routine = "move_int"
+parent = "move_extra_info"
+first = 1210
+last = 1219
+category = "fortran_mem"
+reason = "Contained pointer-swap helper inside unused move_extra_info boilerplate."
+
+[[na]]
+upstream_path = "astero/private/extras_support.f90"
+routine = "move_flg"
+parent = "move_extra_info"
+first = 1221
+last = 1234
+category = "fortran_mem"
+reason = "Contained pointer-swap helper inside unused move_extra_info boilerplate."
+
+[[na]]
+upstream_path = "astero/public/astero_def.f90"
+routine = "init_astero_def"
+parent = ""
+first = 658
+last = 670
+category = "fortran_global"
+reason = "Zeroes Fortran module globals/pointers; replaced by AsteroSearchControls::default()."
+
+[[na]]
+upstream_path = "astero/public/astero_def.f90"
+routine = "init_sample_ptrs"
+parent = ""
+first = 719
+last = 741
+category = "fortran_mem"
+reason = "Nullifies Fortran sample pointer arrays; replaced by owned Vec<AsteroSampleResult>."
+
+[[na]]
+upstream_path = "astero/public/astero_def.f90"
+routine = "alloc_sample_ptrs"
+parent = ""
+first = 744
+last = 778
+category = "fortran_mem"
+reason = "Allocates/grows Fortran sample pointer arrays; replaced by Rust Vec growth."
+
+[[na]]
+upstream_path = "astero/public/astero_def.f90"
+routine = "realloc_double2_modes"
+parent = ""
+first = 784
+last = 810
+category = "fortran_mem"
+reason = "Reallocates Fortran 2D real mode pointer array; replaced by Rust Vec<Vec<f64>>."
+
+[[na]]
+upstream_path = "astero/public/astero_def.f90"
+routine = "realloc_integer2_modes"
+parent = ""
+first = 813
+last = 839
+category = "fortran_mem"
+reason = "Reallocates Fortran 2D integer mode pointer array; replaced by Rust Vec<Vec<i32>>."
+
+[[na]]
+upstream_path = "astero/public/astero_def.f90"
+routine = "read_astero_pgstar_controls"
+parent = ""
+first = 943
+last = 953
+category = "pgstar_plotting"
+reason = "Reads PGPLOT &astero_pgstar controls for graphical plotting."
+
+[[na]]
+upstream_path = "astero/public/astero_def.f90"
+routine = "read1_astero_pgstar_inlist"
+parent = ""
+first = 956
+last = 1009
+category = "pgstar_plotting"
+reason = "Opens/reads Fortran &astero_pgstar namelist inlist files."
+
+[[na]]
+upstream_path = "astero/public/astero_def.f90"
+routine = "done"
+parent = "read_samples_from_file"
+first = 1576
+last = 1579
+category = "fortran_io"
+reason = "Contained Fortran I/O cleanup helper closing unit iounit in read_samples_from_file."
+
+[[na]]
+upstream_path = "astero/public/astero_def.f90"
+routine = "failed"
+parent = "read1_sample_from_file"
+first = 1686
+last = 1693
+category = "fortran_io"
+reason = "Contained Fortran iostat failure reporter in read1_sample_from_file; replaced by Result."
+
+[[na]]
+upstream_path = "astero/public/astero_def.f90"
+routine = "read1_dbl"
+parent = "read1_sample_from_file"
+first = 1695
+last = 1699
+category = "fortran_io"
+reason = "Contained Fortran list-directed float parser in read1_sample_from_file; replaced by split_sample_row_tokens."
+
+[[na]]
+upstream_path = "astero/public/astero_def.f90"
+routine = "read1_int"
+parent = "read1_sample_from_file"
+first = 1701
+last = 1705
+category = "fortran_io"
+reason = "Contained Fortran list-directed int parser in read1_sample_from_file; replaced by split_sample_row_tokens."
+
+[[na]]
+upstream_path = "binary/private/binary_ctrls_io.f90"
+routine = "set_binary_controls_for_writing"
+parent = ""
+first = 549
+last = 745
+category = "fortran_global"
+reason = "Copies fields from binary_info back into Fortran module-global namelist variables prior to Fortran NAMELIST I/O, which is unnecessary on Rust BinaryInlistControls."
+
+[[na]]
+upstream_path = "binary/private/binary_evolve.f90"
+routine = "binary_after_evolve"
+parent = ""
+first = 643
+last = 696
+category = "fortran_mem"
+reason = "Deallocates and nullifies 12 Fortran pointer arrays (theta_co, time_co, mdot_donor_theta, edot_theta, e1, e2, CE_*) on binary_info after evolution ends, which Rust RAII handles automatically."
+
+[[na]]
+upstream_path = "binary/private/binary_history.f90"
+routine = "dealloc"
+parent = "do_binary_history_info"
+first = 347
+last = 352
+category = "fortran_mem"
+reason = "Deallocates four temporary Fortran pointer arrays (extra_header_item_*, extra_col_*) inside do_binary_history_info, which Rust Vec drop semantics replace."
+
+[[na]]
+upstream_path = "binary/private/binary_history_specs.f90"
+routine = "count_specs"
+parent = "add_binary_history_columns"
+first = 141
+last = 149
+category = "fortran_mem"
+reason = "Scans the fixed-capacity Fortran integer pointer array spec(:) for its first zero sentinel to compute active count, whereas Rust Vec tracks length directly."
+
+[[na]]
+upstream_path = "binary/private/binary_history_specs.f90"
+routine = "make_room"
+parent = "add_binary_history_columns"
+first = 152
+last = 158
+category = "fortran_mem"
+reason = "Manually reallocates and zero-pads the Fortran spec(:) integer buffer via realloc_integer, which Rust Vec::push replaces automatically."
+
+[[na]]
+upstream_path = "binary/private/binary_history_specs.f90"
+routine = "error"
+parent = "add_binary_history_columns"
+first = 178
+last = 181
+category = "fortran_io"
+reason = "Closes the open Fortran file unit iounit and sets ierr = -1 on parse failure, which is replaced by Rust Result/StarError propagation and RAII file handles."
+
+[[na]]
+upstream_path = "binary/private/binary_job_ctrls_io.f90"
+routine = "set_binary_job_controls_for_writing"
+parent = ""
+first = 197
+last = 242
+category = "fortran_global"
+reason = "Copies b% job fields back into Fortran module-global namelist variables prior to Fortran NAMELIST I/O, which is unnecessary on Rust BinaryInlistControls."
+
+[[na]]
+upstream_path = "binary/private/binary_roche_deformation.f90"
+routine = "assign_stars"
+parent = ""
+first = 338
+last = 361
+category = "fortran_global"
+reason = "Dereferences global star_ptr/binary_ptr handle tables to test b% s1% id == s% id and return (this_star, other_star) indices, whereas Rust BinarySystem binds BinaryTidalDeformationHook per component directly."
+
+[[na]]
+upstream_path = "binary/public/binary_def.f90"
+routine = "binary_ptr"
+parent = ""
+first = 261
+last = 266
+category = "fortran_global"
+reason = "Delegates binary_id to get_binary_ptr to index the global Fortran binary_handles(:) array into a pointer, whereas Rust passes &BinarySystem / &mut BinarySystem directly."
+
+[[na]]
+upstream_path = "binary/public/binary_def.f90"
+routine = "get_binary_ptr"
+parent = ""
+first = 269
+last = 279
+category = "fortran_global"
+reason = "Validates binary_id bounds against max_binary_handles and returns a pointer into global binary_handles(:), which Rust ownership eliminates."
+
+[[na]]
+upstream_path = "binary/public/binary_def.f90"
+routine = "init_binary_data"
+parent = ""
+first = 288
+last = 290
+category = "stub"
+reason = "Empty Fortran subroutine stub containing no statements in MESA 26.4.1."
+
+[[na]]
+upstream_path = "star/job/other_extras.f90"
+routine = "warn_run_star_extras"
+parent = ""
+first = 181
+last = 204
+category = "debug"
+reason = "Prints Fortran procedure-pointer and `./clean`/`./mk` compilation diagnostics and halts; replaced by static `StarExtras` trait dispatch (`warn_run_star_extras` is terminal-output-only in `inlist_inventory.rs`)."
+
+[[na]]
+upstream_path = "star/job/run_star_support.f90"
+routine = "null_binary_controls"
+parent = ""
+first = 278
+last = 282
+category = "stub"
+reason = "No-op placeholder callback passed in place of binary_controls for single-star runs."
+
+[[na]]
+upstream_path = "star/job/run_star_support.f90"
+routine = "check_if_want_to_stop_warnings"
+parent = ""
+first = 1117
+last = 1134
+category = "fortran_io"
+reason = "Opens sentinel file in mesa_dir to suppress Fortran stdout energy-error warnings."
+
+[[na]]
+upstream_path = "star/job/run_star_support.f90"
+routine = "failed"
+parent = ""
+first = 1151
+last = 1156
+category = "fortran_io"
+reason = "Logs Fortran ierr error message to stdout."
+
+[[na]]
+upstream_path = "star/job/run_star_support.f90"
+routine = "show_times"
+parent = ""
+first = 1159
+last = 1257
+category = "debug"
+reason = "Formats and sorts per-module wall-clock profiling breakdowns onto Fortran stdout."
+
+[[na]]
+upstream_path = "star/job/run_star_support.f90"
+routine = "save1"
+parent = "show_times"
+first = 1244
+last = 1254
+category = "debug"
+reason = "Appends a named timer entry into show_times arrays."
+
+[[na]]
+upstream_path = "star/job/run_star_support.f90"
+routine = "write_colors_info"
+parent = ""
+first = 1301
+last = 1310
+category = "stub"
+reason = "Empty MESA 26.4.1 '!TODO: implement me' subroutine."
+
+[[na]]
+upstream_path = "star/job/run_star_support.f90"
+routine = "error"
+parent = "read_items"
+first = 1375
+last = 1379
+category = "fortran_io"
+reason = "Closes Fortran iounit and sets ierr = -1 inside read_items."
+
+[[na]]
+upstream_path = "star/job/run_star_support.f90"
+routine = "do_report_mass_not_fe56"
+parent = ""
+first = 1420
+last = 1444
+category = "fortran_io"
+reason = "Diagnostic stdout dump of non-Fe56 shell mass when report_mass_not_fe56 is set."
+
+[[na]]
+upstream_path = "star/job/run_star_support.f90"
+routine = "do_report_cell_for_xm"
+parent = ""
+first = 1447
+last = 1474
+category = "debug"
+reason = "Diagnostic stdout dump of cell thermodynamics at exterior mass report_cell_for_xm."
+
+[[na]]
+upstream_path = "star/job/run_star_support.f90"
+routine = "do_read_star_job_and_return_id"
+parent = ""
+first = 1555
+last = 1601
+category = "fortran_global"
+reason = "Allocates global star_info slot via id_from_read_star_job module global for Fortran run_star interop."
+
+[[na]]
+upstream_path = "star/job/run_star_support.f90"
+routine = "do_read_star_job"
+parent = ""
+first = 1606
+last = 1611
+category = "fortran_global"
+reason = "Global-state wrapper delegating to do_read_star_job_and_return_id."
+
+[[na]]
+upstream_path = "star/job/run_star_support.f90"
+routine = "before_evolve"
+parent = ""
+first = 1889
+last = 1893
+category = "stub"
+reason = "Empty 5-line default callback only setting ierr = 0 (distinct from RelaxHooks::before_evolve in relax.f90)."
+
+[[na]]
+upstream_path = "star/job/run_star_support.f90"
+routine = "add_fpe_checks"
+parent = ""
+first = 3612
+last = 3632
+category = "debug"
+reason = "Reads MESA_FPE_CHECKS_ON environment variable to toggle NaN-filling array checks."
+
+[[na]]
+upstream_path = "star/job/run_star_support.f90"
+routine = "pgstar_env_check"
+parent = ""
+first = 3680
+last = 3703
+category = "pgstar_plotting"
+reason = "Reads MESA_FORCE_PGSTAR_FLAG environment variable to override pgstar_flag."
+
+[[na]]
+upstream_path = "star/private/adjust_mass.f90"
+routine = "do_alloc"
+parent = "do_adjust_mass"
+first = 579
+last = 585
+category = "fortran_mem"
+reason = "Allocates Fortran `allocate_work_array` pointers, replaced by Rust local `Vec`s."
+
+[[na]]
+upstream_path = "star/private/adjust_mass.f90"
+routine = "dealloc"
+parent = "do_adjust_mass"
+first = 587
+last = 590
+category = "fortran_mem"
+reason = "Returns Fortran `return_work_array` pointers, replaced by automatic Rust RAII drops."
+
+[[na]]
+upstream_path = "star/private/adjust_mass.f90"
+routine = "do_work_arrays"
+parent = "do_adjust_mass"
+first = 592
+last = 602
+category = "fortran_mem"
+reason = "Dispatches Fortran work-array allocation and deallocation around `do_adjust_mass`, unneeded in Rust."
+
+[[na]]
+upstream_path = "star/private/adjust_xyz.f90"
+routine = "realloc"
+parent = "do_composition_fixup"
+first = 182
+last = 186
+category = "fortran_mem"
+reason = "Reallocates 1D Fortran real pointer arrays during network change, replaced by Rust `Vec::resize`."
+
+[[na]]
+upstream_path = "star/private/adjust_xyz.f90"
+routine = "realloc_reactions"
+parent = "do_composition_fixup"
+first = 188
+last = 192
+category = "fortran_mem"
+reason = "Reallocates Fortran reaction-index pointer arrays, handled automatically by Rust `Vec` reallocation."
+
+[[na]]
+upstream_path = "star/private/adjust_xyz.f90"
+routine = "realloc_integer"
+parent = "do_composition_fixup"
+first = 194
+last = 198
+category = "fortran_mem"
+reason = "Reallocates 1D Fortran integer pointer arrays, replaced by Rust `Vec::resize`."
+
+[[na]]
+upstream_path = "star/private/adjust_xyz.f90"
+routine = "cleanup"
+parent = "read_xa"
+first = 808
+last = 810
+category = "fortran_io"
+reason = "Closes Fortran unit `iounit` opened by `read_xa`, handled automatically by RAII file drop in Rust."
+
+[[na]]
+upstream_path = "star/private/do_one_utils.f90"
+routine = "write_terminal_header"
+parent = ""
+first = 58
+last = 65
+category = "fortran_io"
+reason = "Guards and emits MESA formatted ASCII terminal table headers omitted by FlexMESA."
+
+[[na]]
+upstream_path = "star/private/do_one_utils.f90"
+routine = "do_show_log_description"
+parent = ""
+first = 68
+last = 113
+category = "fortran_io"
+reason = "Prints explanatory terminal column descriptions to Fortran stdout."
+
+[[na]]
+upstream_path = "star/private/do_one_utils.f90"
+routine = "do_show_terminal_header"
+parent = ""
+first = 116
+last = 132
+category = "fortran_io"
+reason = "Writes terminal column headers to stdout and optional extra_terminal_output_file."
+
+[[na]]
+upstream_path = "star/private/do_one_utils.f90"
+routine = "output_terminal_header"
+parent = ""
+first = 135
+last = 227
+category = "fortran_io"
+reason = "Formats multi-line ASCII terminal header tables onto a Fortran I/O unit."
+
+[[na]]
+upstream_path = "star/private/do_one_utils.f90"
+routine = "do_terminal_summary"
+parent = ""
+first = 230
+last = 246
+category = "fortran_io"
+reason = "Writes per-step terminal summary lines to stdout and optional extra_terminal_output_file."
+
+[[na]]
+upstream_path = "star/private/do_one_utils.f90"
+routine = "output_terminal_summary"
+parent = ""
+first = 249
+last = 504
+category = "fortran_io"
+reason = "Formats 3-line ASCII terminal step summaries onto a Fortran I/O unit."
+
+[[na]]
+upstream_path = "star/private/do_one_utils.f90"
+routine = "show_trace_history_values"
+parent = "output_terminal_summary"
+first = 457
+last = 501
+category = "fortran_io"
+reason = "Prints trace_history_value_name scalars to Fortran terminal I/O units."
+
+[[na]]
+upstream_path = "star/private/evolve.f90"
+routine = "test_set_undefined"
+parent = "do_evolve_step_part1"
+first = 87
+last = 277
+category = "debug"
+reason = "Resets scalar/array step-work fields to -999 or NaN for uninitialized-memory debugging."
+
+[[na]]
+upstream_path = "star/private/evolve.f90"
+routine = "failed"
+parent = "do_step_part1"
+first = 457
+last = 467
+category = "fortran_io"
+reason = "Prints Fortran ierr diagnostic message inside do_step_part1."
+
+[[na]]
+upstream_path = "star/private/evolve.f90"
+routine = "failed"
+parent = "do_step_part2"
+first = 734
+last = 744
+category = "fortran_io"
+reason = "Prints Fortran ierr diagnostic message inside do_step_part2."
+
+[[na]]
+upstream_path = "star/private/evolve.f90"
+routine = "show_debug"
+parent = "do_step_part2"
+first = 1060
+last = 1098
+category = "debug"
+reason = "Hardcoded k=1205 thermodynamic debug printout to stdout inside do_step_part2."
+
+[[na]]
+upstream_path = "star/private/evolve.f90"
+routine = "debug"
+parent = ""
+first = 1603
+last = 1623
+category = "debug"
+reason = "Stubbed-out debug printout subroutine returning immediately on line 1610."
+
+[[na]]
+upstream_path = "star/private/evolve.f90"
+routine = "failed"
+parent = "set_start_of_step_info"
+first = 1797
+last = 1806
+category = "fortran_io"
+reason = "Prints Fortran ierr diagnostic message inside set_start_of_step_info."
+
+[[na]]
+upstream_path = "star/private/evolve.f90"
+routine = "failed"
+parent = "prepare_for_new_step"
+first = 1946
+last = 1956
+category = "fortran_io"
+reason = "Prints Fortran ierr diagnostic message inside prepare_for_new_step."
+
+[[na]]
+upstream_path = "star/private/evolve.f90"
+routine = "report_problems"
+parent = ""
+first = 2280
+last = 2284
+category = "fortran_io"
+reason = "Prints 'stopping because of problems' message to Fortran stdout."
+
+[[na]]
+upstream_path = "star/private/evolve.f90"
+routine = "check"
+parent = "finish_step"
+first = 2370
+last = 2385
+category = "debug"
+reason = "Checks number_iounits_allocated() inside finish_step to detect leaked Fortran unit handles."
+
+[[na]]
+upstream_path = "star/private/evolve_support.f90"
+routine = "copy_to_old"
+parent = "new_generation"
+first = 125
+last = 143
+category = "fortran_mem"
+reason = "Contained Fortran array copy helper inside new_generation; Rust clones vectors directly in save_old_values."
+
+[[na]]
+upstream_path = "star/private/history.f90"
+routine = "dealloc"
+parent = "do_history_info"
+first = 505
+last = 532
+category = "fortran_mem"
+reason = "Nullifies and deallocates temporary Fortran heap column arrays inside do_history_info."
+
+[[na]]
+upstream_path = "star/private/history.f90"
+routine = "show_regions"
+parent = "do_history_info"
+first = 792
+last = 806
+category = "debug"
+reason = "dbg-gated Fortran diagnostic stdout printout of mixing regions inside do_history_info."
+
+[[na]]
+upstream_path = "star/private/history_specs.f90"
+routine = "count_specs"
+parent = "add_history_columns"
+first = 406
+last = 414
+category = "fortran_mem"
+reason = "Scans the fixed-capacity zero-terminated Fortran spec(:) array to count populated history column entries."
+
+[[na]]
+upstream_path = "star/private/history_specs.f90"
+routine = "make_room"
+parent = "add_history_columns"
+first = 417
+last = 423
+category = "fortran_mem"
+reason = "Reallocates the raw Fortran integer spec(:) array via realloc_integer."
+
+[[na]]
+upstream_path = "star/private/history_specs.f90"
+routine = "do_colors"
+parent = "add_history_columns"
+first = 456
+last = 469
+category = "stub"
+reason = "Upstream body is completely commented out (ierr = 0 only; marked TODO old module)."
+
+[[na]]
+upstream_path = "star/private/history_specs.f90"
+routine = "error"
+parent = "add_history_columns"
+first = 491
+last = 494
+category = "fortran_io"
+reason = "Closes the Fortran iounit and sets ierr = -1 on history column parse failure."
+
+[[na]]
+upstream_path = "star/private/hydro_eqns.f90"
+routine = "dump_equ"
+parent = "eval_equ_for_solver"
+first = 311
+last = 327
+category = "debug"
+reason = "Debug helper printing every cell's Henyey equation residuals when `dbg` is enabled."
+
+[[na]]
+upstream_path = "star/private/hydro_eqns.f90"
+routine = "unpack"
+parent = "eval_equ_for_solver"
+first = 329
+last = 371
+category = "fortran_mem"
+reason = "Binds local Fortran pointers and unpacks scalar fields from `star_info`, unnecessary in Rust `&StarModel` methods."
+
+[[na]]
+upstream_path = "star/private/hydro_temperature.f90"
+routine = "set_xtras"
+parent = "do1_gradT_eqn"
+first = 209
+last = 229
+category = "debug"
+reason = "Populates diagnostic `xtra1_array..xtra6_array` slots and is only called in a commented-out `!call set_xtras` line in upstream `hydro_temperature.f90:205`."
+
+[[na]]
+upstream_path = "star/private/hydro_vars.f90"
+routine = "do_alloc"
+parent = "set_grads"
+first = 1135
+last = 1138
+category = "fortran_mem"
+reason = "Fortran pointer array allocation helper inside set_grads replaced by local Vec allocation in Rust."
+
+[[na]]
+upstream_path = "star/private/hydro_vars.f90"
+routine = "dealloc"
+parent = "set_grads"
+first = 1140
+last = 1142
+category = "fortran_mem"
+reason = "Fortran pointer array deallocation helper inside set_grads handled automatically by Rust Drop."
+
+[[na]]
+upstream_path = "star/private/hydro_vars.f90"
+routine = "do_work_arrays"
+parent = "set_grads"
+first = 1144
+last = 1159
+category = "fortran_mem"
+reason = "Fortran alloc_work_array driver inside set_grads replaced by stack/Vec storage in Rust."
+
+[[na]]
+upstream_path = "star/private/micro.f90"
+routine = "debug"
+parent = "set_micro_vars"
+first = 208
+last = 219
+category = "debug"
+reason = "Hardcoded k=1469 composition debug print helper inside set_micro_vars."
+
+[[na]]
+upstream_path = "star/private/micro.f90"
+routine = "show_stuff"
+parent = "do_kap_for_cell"
+first = 680
+last = 752
+category = "debug"
+reason = "Cell-level EOS/kap stdout debug dump helper inside do_kap_for_cell."
+
+[[na]]
+upstream_path = "star/private/micro.f90"
+routine = "shutdown_microphys"
+parent = ""
+first = 757
+last = 764
+category = "fortran_global"
+reason = "Tears down Fortran global mutable module state (eos_shutdown, kap_shutdown, net_shutdown); unneeded with Rust static/RAII caches."
+
+[[na]]
+upstream_path = "star/private/mix_info.f90"
+routine = "realloc"
+parent = "locate_convection_boundaries"
+first = 750
+last = 786
+category = "fortran_mem"
+reason = "Fortran dynamic array reallocation helper inside locate_convection_boundaries replaced by Vec::push() in Rust."
+
+[[na]]
+upstream_path = "star/private/mix_info.f90"
+routine = "realloc"
+parent = "locate_mixing_boundaries"
+first = 927
+last = 963
+category = "fortran_mem"
+reason = "Fortran dynamic array reallocation helper inside locate_mixing_boundaries replaced by Vec::push() in Rust."
+
+[[na]]
+upstream_path = "star/private/net.f90"
+routine = "show_stuff"
+parent = ""
+first = 422
+last = 558
+category = "debug"
+reason = "Stdout debug printer sorting reaction rates and dumping dxdt_nuc/abundances/thermo scalars for a zone."
+
+[[na]]
+upstream_path = "star/private/photo_in.f90"
+routine = "read_part_number"
+parent = "read_star_photo"
+first = 297
+last = 305
+category = "fortran_io"
+reason = "Contained unformatted Fortran binary section-marker reader in read_star_photo."
+
+[[na]]
+upstream_path = "star/private/photo_in.f90"
+routine = "failed"
+parent = "read_star_photo"
+first = 307
+last = 316
+category = "fortran_io"
+reason = "Contained Fortran iostat error helper in read_star_photo; replaced by Result."
+
+[[na]]
+upstream_path = "star/private/photo_out.f90"
+routine = "write_part_number"
+parent = "output_star_photo"
+first = 171
+last = 175
+category = "fortran_io"
+reason = "Contained unformatted Fortran binary section-marker writer in output_star_photo."
+
+[[na]]
+upstream_path = "star/private/profile.f90"
+routine = "count_specs"
+parent = "add_profile_columns"
+first = 215
+last = 223
+category = "fortran_mem"
+reason = "Scans the fixed-capacity zero-terminated Fortran profile spec(:) array."
+
+[[na]]
+upstream_path = "star/private/profile.f90"
+routine = "make_room"
+parent = "add_profile_columns"
+first = 226
+last = 232
+category = "fortran_mem"
+reason = "Reallocates the raw Fortran profile spec(:) integer array via realloc_integer."
+
+[[na]]
+upstream_path = "star/private/profile.f90"
+routine = "error"
+parent = "add_profile_columns"
+first = 252
+last = 255
+category = "fortran_io"
+reason = "Closes Fortran iounit and sets ierr = -1 on profile list parse failure."
+
+[[na]]
+upstream_path = "star/private/profile.f90"
+routine = "dealloc"
+parent = "do_save_profiles"
+first = 1017
+last = 1019
+category = "fortran_mem"
+reason = "Deallocates temporary Fortran heap vectors at the end of do_save_profiles."
+
+[[na]]
+upstream_path = "star/private/report.f90"
+routine = "failed"
+parent = "do_report"
+first = 447
+last = 453
+category = "fortran_io"
+reason = "Logs Fortran ierr status messages to stdout inside do_report instead of returning typed Result errors."
+
+[[na]]
+upstream_path = "star/private/star_utils.f90"
+routine = "report_xa_bad_nums"
+parent = ""
+first = 354
+last = 367
+category = "debug"
+reason = "Diagnostic loop scanning xa and writing non-finite abundances to Fortran stdout."
+
+[[na]]
+upstream_path = "star/private/star_utils.f90"
+routine = "check_dequ"
+parent = "store_partials"
+first = 1697
+last = 1711
+category = "debug"
+reason = "OpenMP-guarded debug validation printing bad Jacobian entries inside store_partials."
+
+[[na]]
+upstream_path = "star/private/star_utils.f90"
+routine = "show_matrix"
+parent = ""
+first = 2988
+last = 3007
+category = "debug"
+reason = "Diagnostic stdout printer formatting an nvar x nvar Jacobian matrix block."
+
+[[na]]
+upstream_path = "star/private/star_utils.f90"
+routine = "write_to_extra_terminal_output_file"
+parent = ""
+first = 3525
+last = 3546
+category = "fortran_io"
+reason = "Opens extra_terminal_output_file via Fortran unit and appends diagnostic terminal strings."
+
+[[na]]
+upstream_path = "star/private/star_utils.f90"
+routine = "write_eos_call_info"
+parent = ""
+first = 3549
+last = 3608
+category = "debug"
+reason = "OpenMP-guarded diagnostic stdout dump of cell EOS variables for debugging failures."
+
+[[na]]
+upstream_path = "star/private/struct_burn_mix.f90"
+routine = "test"
+parent = "do_struct_burn_mix"
+first = 213
+last = 222
+category = "debug"
+reason = "Hardcoded stdout debug print of dominant eps_nuc_categories at cell nz inside do_struct_burn_mix."
+
+[[na]]
+upstream_path = "star/private/struct_burn_mix.f90"
+routine = "burn_finish_substep"
+parent = "burn1_zone"
+first = 1178
+last = 1206
+category = "stub"
+reason = "Documented upstream no-op callback stub ('does nothing other than set ierr = 0') for net_1_zone_burn_const_density."
+
+[[na]]
+upstream_path = "star_data/public/star_data_def.f90"
+routine = "star_ptr"
+parent = ""
+first = 115
+last = 120
+category = "fortran_global"
+reason = "Looks up star_info pointer from Fortran global star_handles(:) table; replaced by owned &mut StarModel."
+
+[[na]]
+upstream_path = "star_data/public/star_data_def.f90"
+routine = "get_star_ptr"
+parent = ""
+first = 122
+last = 132
+category = "fortran_global"
+reason = "Looks up star_info pointer from Fortran global star_handles(:); replaced by owned &mut StarModel."
+
+[[na]]
+upstream_path = "star_data/public/star_data_def.f90"
+routine = "do_star_def_init"
+parent = ""
+first = 154
+last = 159
+category = "fortran_global"
+reason = "Sets ierr = 0 and calls result_reason_init to populate Fortran global result_reason_str table."

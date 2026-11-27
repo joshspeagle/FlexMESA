@@ -1111,7 +1111,23 @@ upstream_lines = 1127
 upstream_sha256 = "ac5b23f3675f5b78640dea55fa054e78177aadabcd1072c29ac4dae3fc1e9689"
 status = "partial"
 flexmesa_files = ["crates/flexmesa-astero/src/inlist_parser.rs", "crates/flexmesa-astero/src/optimize.rs", "crates/flexmesa-astero/src/search_driver.rs", "crates/flexmesa-astero/src/search_methods.rs"]
+routine_map_partial = ["do_bobyqa_or_newuoa", "do_get_parameters_from_file", "do_get_parameters_from_file::do1_grid", "do_param", "do_run_star_astero", "do_scan_grid", "do_scan_grid::do1_grid", "do_simplex", "eval1", "set_starting_values", "set_xs", "zero_best_info"]
 notes = "seeded from coverage-map.md (partial): quick. 4/22 names"
+[files.routine_map]
+"bobyqa_param" = "crates/flexmesa-astero/src/optimize.rs::map_bobyqa_param"
+"do_bobyqa_or_newuoa" = "crates/flexmesa-astero/src/search_methods.rs::run_powell_driver"
+"do_get_parameters_from_file" = "crates/flexmesa-astero/src/search_driver.rs::run_star_astero_with_case_hooks"
+"do_get_parameters_from_file::do1_grid" = "crates/flexmesa-astero/src/search_driver.rs::run_star_astero_with_case_hooks"
+"do_param" = "crates/flexmesa-astero/src/search_methods.rs::scan_grid_do_param"
+"do_run_star_astero" = "crates/flexmesa-astero/src/search_driver.rs::run_star_astero_with_case_hooks"
+"do_scan_grid" = "crates/flexmesa-astero/src/search_driver.rs::run_star_astero_with_case_hooks"
+"do_scan_grid::do1_grid" = "crates/flexmesa-astero/src/search_driver.rs::run_star_astero_with_case_hooks"
+"do_simplex" = "crates/flexmesa-astero/src/search_methods.rs::run_simplex_driver"
+"eval1" = "crates/flexmesa-astero/src/search_driver.rs::run_track"
+"set_sample_averages" = "crates/flexmesa-astero/src/search_driver.rs::from_samples"
+"set_starting_values" = "crates/flexmesa-astero/src/search_methods.rs::build_scan_grid_params+scan_grid_do_param"
+"set_xs" = "crates/flexmesa-astero/src/search_methods.rs::run_simplex_driver"
+"zero_best_info" = "crates/flexmesa-astero/src/search_driver.rs::failed_sample_result"
 
 [[files]]
 upstream_path = "astero/private/astero_support.f90"
@@ -1119,8 +1135,50 @@ module = "astero"
 upstream_lines = 1530
 upstream_sha256 = "d039d6eaaeb5aa9a00e276d8486dccc6bae6ccaaf0817ea90324c046ec3031dc"
 status = "partial"
-flexmesa_files = ["crates/flexmesa-astero/src/ratios_chi2.rs", "crates/flexmesa-astero/src/scaling.rs", "crates/flexmesa-astero/src/surface_corr.rs"]
+flexmesa_files = ["crates/flexmesa-astero/src/ratios_chi2.rs", "crates/flexmesa-astero/src/sample_eval.rs", "crates/flexmesa-astero/src/scaling.rs", "crates/flexmesa-astero/src/search_methods.rs", "crates/flexmesa-astero/src/surface_corr.rs"]
+routine_map_partial = ["find_closest", "find_next_down", "find_next_up", "get_chi2", "get_combined_all_freq_corr", "get_combined_freq_corr", "get_combined_freq_corr_alt_down", "get_combined_freq_corr_alt_up", "get_cubic_all_freq_corr", "get_cubic_freq_corr", "get_cubic_freq_corr_alt_down", "get_cubic_freq_corr_alt_up", "get_freq_corr", "get_frequency_ratios", "get_kjeldsen_freq_corr", "get_kjeldsen_freq_corr_alt_down", "get_kjeldsen_freq_corr_alt_up", "get_kjeldsen_nonradial_freq_corr", "get_kjeldsen_radial_freq_corr", "get_no_freq_corr", "get_no_freq_corr_alt_down", "get_no_freq_corr_alt_up", "get_one_el_info", "get_power_law_all_freq_corr", "get_power_law_freq_corr", "get_power_law_freq_corr_alt_down", "get_power_law_freq_corr_alt_up", "get_r02_frequency_ratios", "get_sonoi_all_freq_corr", "get_sonoi_freq_corr", "get_sonoi_freq_corr_alt_down", "get_sonoi_freq_corr_alt_up", "init_obs_data", "interpolate_ratio_r02", "set_to_closest"]
 notes = "seeded from coverage-map.md (partial): quick. 10/43 names"
+[files.routine_map]
+"find_closest" = "crates/flexmesa-astero/src/sample_eval.rs::match_osc_results_with_alt"
+"find_next_down" = "crates/flexmesa-astero/src/sample_eval.rs::match_osc_results_with_alt"
+"find_next_up" = "crates/flexmesa-astero/src/sample_eval.rs::match_osc_results_with_alt"
+"get_chi2" = "crates/flexmesa-astero/src/ratios_chi2.rs::eval_astero_chi2"
+"get_combined_all_freq_corr" = "crates/flexmesa-astero/src/surface_corr.rs::eval_combined_corr"
+"get_combined_freq_corr" = "crates/flexmesa-astero/src/surface_corr.rs::eval_combined_corr"
+"get_combined_freq_corr_alt_down" = "crates/flexmesa-astero/src/sample_eval.rs::eval_alt_surface_corr"
+"get_combined_freq_corr_alt_up" = "crates/flexmesa-astero/src/sample_eval.rs::eval_alt_surface_corr"
+"get_cubic_all_freq_corr" = "crates/flexmesa-astero/src/surface_corr.rs::eval_cubic_corr"
+"get_cubic_freq_corr" = "crates/flexmesa-astero/src/surface_corr.rs::eval_cubic_corr"
+"get_cubic_freq_corr_alt_down" = "crates/flexmesa-astero/src/sample_eval.rs::eval_alt_surface_corr"
+"get_cubic_freq_corr_alt_up" = "crates/flexmesa-astero/src/sample_eval.rs::eval_alt_surface_corr"
+"get_freq_corr" = "crates/flexmesa-astero/src/search_methods.rs::apply_surface_corr"
+"get_frequency_ratios" = "crates/flexmesa-astero/src/ratios_chi2.rs::eval_frequency_ratios_r01_r10"
+"get_kjeldsen_freq_corr" = "crates/flexmesa-astero/src/surface_corr.rs::eval_kjeldsen_corr"
+"get_kjeldsen_freq_corr_alt_down" = "crates/flexmesa-astero/src/sample_eval.rs::eval_alt_surface_corr"
+"get_kjeldsen_freq_corr_alt_up" = "crates/flexmesa-astero/src/sample_eval.rs::eval_alt_surface_corr"
+"get_kjeldsen_nonradial_freq_corr" = "crates/flexmesa-astero/src/surface_corr.rs::eval_kjeldsen_corr"
+"get_kjeldsen_radial_freq_corr" = "crates/flexmesa-astero/src/surface_corr.rs::eval_kjeldsen_corr"
+"get_max_sequence" = "crates/flexmesa-astero/src/ratios_chi2.rs::get_max_sequence"
+"get_no_freq_corr" = "crates/flexmesa-astero/src/search_methods.rs::apply_surface_corr"
+"get_no_freq_corr_alt_down" = "crates/flexmesa-astero/src/sample_eval.rs::eval_alt_surface_corr"
+"get_no_freq_corr_alt_up" = "crates/flexmesa-astero/src/sample_eval.rs::eval_alt_surface_corr"
+"get_one_el_info" = "crates/flexmesa-astero/src/sample_eval.rs::scan_degree"
+"get_power_law_all_freq_corr" = "crates/flexmesa-astero/src/surface_corr.rs::eval_power_law_corr"
+"get_power_law_freq_corr" = "crates/flexmesa-astero/src/surface_corr.rs::eval_power_law_corr"
+"get_power_law_freq_corr_alt_down" = "crates/flexmesa-astero/src/sample_eval.rs::eval_alt_surface_corr"
+"get_power_law_freq_corr_alt_up" = "crates/flexmesa-astero/src/sample_eval.rs::eval_alt_surface_corr"
+"get_r02_frequency_ratios" = "crates/flexmesa-astero/src/ratios_chi2.rs::eval_frequency_ratios_r02"
+"get_sonoi_all_freq_corr" = "crates/flexmesa-astero/src/surface_corr.rs::eval_sonoi_corr"
+"get_sonoi_freq_corr" = "crates/flexmesa-astero/src/surface_corr.rs::eval_sonoi_corr"
+"get_sonoi_freq_corr_alt_down" = "crates/flexmesa-astero/src/sample_eval.rs::eval_alt_surface_corr"
+"get_sonoi_freq_corr_alt_up" = "crates/flexmesa-astero/src/sample_eval.rs::eval_alt_surface_corr"
+"init_obs_data" = "crates/flexmesa-astero/src/surface_corr.rs::estimate_l0_n_obs_with_numax+estimate_l0_n_obs"
+"interpolate_l0_inertia" = "crates/flexmesa-astero/src/surface_corr.rs::interpolate_l0_inertia"
+"interpolate_ratio_r010" = "crates/flexmesa-astero/src/ratios_chi2.rs::interpolate_ratio_r010"
+"interpolate_ratio_r02" = "crates/flexmesa-astero/src/ratios_chi2.rs::interpolate_ratio_r02"
+"power_law" = "crates/flexmesa-astero/src/surface_corr.rs::power_law_term"
+"set_to_closest" = "crates/flexmesa-astero/src/sample_eval.rs::match_osc_results_with_alt"
+"sonoi" = "crates/flexmesa-astero/src/surface_corr.rs::sonoi_term"
 
 [[files]]
 upstream_path = "astero/private/extras_support.f90"
@@ -1128,8 +1186,23 @@ module = "astero"
 upstream_lines = 1238
 upstream_sha256 = "bde32f69e4304fb2e7b3bd0b4d44d11d3195bc57566cbdc7384e3c6598fd6e5c"
 status = "partial"
-flexmesa_files = ["crates/flexmesa-astero/src/sample_eval.rs", "crates/flexmesa-astero/src/search_driver.rs"]
+flexmesa_files = ["crates/flexmesa-astero/src/sample_eval.rs", "crates/flexmesa-astero/src/search_driver.rs", "crates/flexmesa-astero/src/search_methods.rs"]
+routine_map_partial = ["astero_extras_after_evolve", "astero_extras_check_model", "astero_extras_controls", "astero_extras_finish_step", "check_limits", "do_astero_extras_check_model", "final_checks", "get_all_el_info", "have_all_l0_freqs", "store_best_info", "write_best"]
 notes = "seeded from coverage-map.md (partial): quick. 2/28 names"
+[files.routine_map]
+"astero_extras_after_evolve" = "crates/flexmesa-astero/src/search_driver.rs::extras_after_evolve"
+"astero_extras_check_model" = "crates/flexmesa-astero/src/search_driver.rs::extras_check_model"
+"astero_extras_controls" = "crates/flexmesa-astero/src/search_driver.rs::apply_params_to_bundle"
+"astero_extras_finish_step" = "crates/flexmesa-astero/src/search_driver.rs::extras_finish_step"
+"check_limits" = "crates/flexmesa-astero/src/search_driver.rs::check_limits"
+"check_too_many_bad" = "crates/flexmesa-astero/src/search_driver.rs::check_too_many_bad"
+"do_astero_extras_check_model" = "crates/flexmesa-astero/src/search_driver.rs::run_check_model_core"
+"final_checks" = "crates/flexmesa-astero/src/search_driver.rs::final_age_stop+save_best_and_final_checks"
+"get_all_el_info" = "crates/flexmesa-astero/src/sample_eval.rs::eval_model_astero_sample_with_output_root"
+"get_chi2_spectro" = "crates/flexmesa-astero/src/sample_eval.rs::eval_spectro_and_delta_nu_chi2"
+"have_all_l0_freqs" = "crates/flexmesa-astero/src/sample_eval.rs::eval_model_astero_sample_with_output_root"
+"store_best_info" = "crates/flexmesa-astero/src/search_driver.rs::save_best_and_final_checks"
+"write_best" = "crates/flexmesa-astero/src/search_methods.rs::format_show_best_report"
 
 [[files]]
 upstream_path = "astero/private/gyre_support.f90"
@@ -1169,8 +1242,30 @@ module = "astero"
 upstream_lines = 1709
 upstream_sha256 = "27196ab3107a3ca9b3e90de1287ad2dd4742e9d64096094a1929b800d2c91b2d"
 status = "partial"
-flexmesa_files = ["crates/flexmesa-astero/src/inlist_astero.rs"]
+flexmesa_files = ["crates/flexmesa-astero/src/gyre_support.rs", "crates/flexmesa-astero/src/inlist_astero.rs", "crates/flexmesa-astero/src/inlist_parser.rs", "crates/flexmesa-astero/src/search_methods.rs"]
+routine_map_partial = ["read1_astero_search_inlist", "read1_sample_from_file", "read_astero_search_controls", "read_samples_from_file", "save_sample_results_to_file", "set_sample_index_by_chi2", "show1_sample_results", "show_all_sample_results", "show_best", "show_best_el_info", "show_best_r010_ratios_info", "show_best_r02_ratios_info", "show_sample_header", "store_new_oscillation_results", "write1", "write_astero_search_controls"]
 notes = "seeded from coverage-map.md (partial): quick. 1/36 names"
+[files.routine_map]
+"read1_astero_search_inlist" = "crates/flexmesa-astero/src/inlist_parser.rs::parse_astero_search_controls_with_options+resolve_extra_astero_includes+apply_include_assignment"
+"read1_sample_from_file" = "crates/flexmesa-astero/src/search_methods.rs::read_samples_from_file+split_sample_row_tokens"
+"read_astero_search_controls" = "crates/flexmesa-astero/src/inlist_parser.rs::parse_astero_search_controls_with_options"
+"read_samples_from_file" = "crates/flexmesa-astero/src/search_methods.rs::read_samples_from_file"
+"save_sample_results_to_file" = "crates/flexmesa-astero/src/search_methods.rs::write_search_results_table"
+"set_sample_index_by_chi2" = "crates/flexmesa-astero/src/search_methods.rs::write_search_results_table"
+"show1_sample_results" = "crates/flexmesa-astero/src/search_methods.rs::write_search_results_table"
+"show_all_sample_results" = "crates/flexmesa-astero/src/search_methods.rs::write_search_results_table"
+"show_best" = "crates/flexmesa-astero/src/search_methods.rs::format_show_best_report"
+"show_best_el_info" = "crates/flexmesa-astero/src/search_methods.rs::format_show_best_report"
+"show_best_r010_ratios_info" = "crates/flexmesa-astero/src/search_methods.rs::format_show_best_report"
+"show_best_r02_ratios_info" = "crates/flexmesa-astero/src/search_methods.rs::format_show_best_report"
+"show_sample_header" = "crates/flexmesa-astero/src/search_methods.rs::write_search_results_table"
+"store_new_oscillation_results" = "crates/flexmesa-astero/src/gyre_support.rs::get_modes"
+"write1" = "crates/flexmesa-astero/src/search_methods.rs::format_show_best_report"
+"write1_dbl" = "crates/flexmesa-astero/src/search_methods.rs::fmt_dbl_field"
+"write1_int" = "crates/flexmesa-astero/src/search_methods.rs::fmt_isize_field"
+"write_astero_search_controls" = "crates/flexmesa-astero/src/inlist_astero.rs::format_namelist+write_controls_if_requested"
+"write_int" = "crates/flexmesa-astero/src/search_methods.rs::fmt_int_field"
+"write_txt" = "crates/flexmesa-astero/src/search_methods.rs::fmt_txt_field"
 
 [[files]]
 upstream_path = "astero/public/astero_lib.f90"
@@ -1178,8 +1273,16 @@ module = "astero"
 upstream_lines = 146
 upstream_sha256 = "bcc5e34f91adcd79f81cbf3486e7dc0a456ea947756454690322daf2b66f5772"
 status = "partial"
-flexmesa_files = ["crates/flexmesa-astero/src/lib.rs"]
+flexmesa_files = ["crates/flexmesa-astero/src/adipls_support.rs", "crates/flexmesa-astero/src/gyre_support.rs", "crates/flexmesa-astero/src/lib.rs", "crates/flexmesa-astero/src/sample_eval.rs", "crates/flexmesa-astero/src/search_driver.rs", "crates/flexmesa-astero/src/surface_corr.rs"]
+routine_map_partial = ["adipls_get_one_el_info", "astero_get_kjeldsen_radial_freq_corr", "astero_get_one_el_info", "astero_gyre_get_modes", "run_star_astero"]
 notes = "seeded from coverage-map.md (partial): quick. 2/7 names"
+[files.routine_map]
+"adipls_get_one_el_info" = "crates/flexmesa-astero/src/adipls_support.rs::get_one_el_info"
+"astero_get_kjeldsen_radial_freq_corr" = "crates/flexmesa-astero/src/surface_corr.rs::eval_kjeldsen_corr"
+"astero_get_one_el_info" = "crates/flexmesa-astero/src/sample_eval.rs::scan_degree"
+"astero_gyre_get_modes" = "crates/flexmesa-astero/src/gyre_support.rs::get_modes"
+"astero_interpolate_l0_inertia" = "crates/flexmesa-astero/src/surface_corr.rs::interpolate_l0_inertia"
+"run_star_astero" = "crates/flexmesa-astero/src/search_driver.rs::run_star_astero"
 
 [[files]]
 upstream_path = "astero/public/set_star_astero_procs.inc"
@@ -1633,8 +1736,15 @@ module = "binary"
 upstream_lines = 821
 upstream_sha256 = "ba500200d02ecf78c90e8269a1ef847458efa5e555cf9ff5af13be18e2d7544e"
 status = "partial"
-flexmesa_files = ["crates/flexmesa-binary/src/inlist.rs"]
+flexmesa_files = ["crates/flexmesa-binary/src/inlist.rs", "crates/flexmesa-star/src/inlist.rs"]
+routine_map_partial = ["do_one_binary_setup", "read_binary_controls", "read_binary_controls_file", "set_default_binary_controls", "store_binary_controls"]
 notes = "seeded from coverage-map.md (partial): quick. 111/179 names read"
+[files.routine_map]
+"do_one_binary_setup" = "crates/flexmesa-binary/src/inlist.rs::from_inlist_file_with_options"
+"read_binary_controls" = "crates/flexmesa-binary/src/inlist.rs::from_inlist_file"
+"read_binary_controls_file" = "crates/flexmesa-star/src/inlist.rs::load_sections_in_case_dir+resolve_section_includes+load_file_recursive"
+"set_default_binary_controls" = "crates/flexmesa-binary/src/inlist.rs::default"
+"store_binary_controls" = "crates/flexmesa-binary/src/inlist.rs::apply_binary_controls"
 
 [[files]]
 upstream_path = "binary/private/binary_disk.f90"
@@ -1682,7 +1792,17 @@ upstream_lines = 698
 upstream_sha256 = "2c49289735a153e5637eebefe2329ca9cd1b1beee83410cd752f0b5295cb74db"
 status = "partial"
 flexmesa_files = ["crates/flexmesa-binary/src/orbit.rs", "crates/flexmesa-binary/src/system.rs", "crates/flexmesa-binary/src/system_step.rs"]
+routine_map_partial = ["binary_check_model", "binary_evolve_step", "binary_finish_step", "binary_prepare_to_redo", "binary_prepare_to_retry", "binary_set_current_to_old", "binarydata_init", "set_donor_star"]
 notes = "seeded from coverage-map.md (partial): quick. 2/9 names; orbit update uses midpoint substeps (lead L5)"
+[files.routine_map]
+"binary_check_model" = "crates/flexmesa-binary/src/system_step.rs::try_step_with_extras+eval_binary_overflow_termination"
+"binary_evolve_step" = "crates/flexmesa-binary/src/system_step.rs::run_single_trial"
+"binary_finish_step" = "crates/flexmesa-binary/src/system_step.rs::finish_accepted_step"
+"binary_prepare_to_redo" = "crates/flexmesa-binary/src/system_step.rs::try_step_with_extras"
+"binary_prepare_to_retry" = "crates/flexmesa-binary/src/system_step.rs::prepare_outer_retry"
+"binary_set_current_to_old" = "crates/flexmesa-binary/src/system.rs::restore_snapshot"
+"binarydata_init" = "crates/flexmesa-binary/src/system.rs::from_controls_inner"
+"set_donor_star" = "crates/flexmesa-binary/src/system.rs::maybe_switch_donor_at_step_start+swap_donor_and_accretor"
 
 [[files]]
 upstream_path = "binary/private/binary_history.f90"
@@ -1690,8 +1810,24 @@ module = "binary"
 upstream_lines = 880
 upstream_sha256 = "06e088238f0cb501d152f1a45a247e3ac7b47c020b956093685fd1ba7a79a4d3"
 status = "partial"
-flexmesa_files = ["crates/flexmesa-binary/src/binary_history.rs"]
+flexmesa_files = ["crates/flexmesa-binary/src/binary_history.rs", "crates/flexmesa-star/src/report_utils.rs"]
+routine_map_partial = ["binary_history_getval", "data_for_binary_history_columns", "do_binary_history_info", "do_col", "do_col_pass1", "do_col_pass2", "do_col_pass3", "do_extra_col", "do_int_val", "do_name", "do_val", "write_binary_history_info", "write_string", "write_val"]
 notes = "updated for #163: binary_history.data writer (partial; CE columns under #160)"
+[files.routine_map]
+"binary_history_getval" = "crates/flexmesa-binary/src/binary_history.rs::evaluate_binary_history_row"
+"data_for_binary_history_columns" = "crates/flexmesa-binary/src/binary_history.rs::evaluate_binary_history_row+binary_history_row_as_f64_pairs"
+"do_binary_history_info" = "crates/flexmesa-binary/src/binary_history.rs::write_evaluated_row_with_extra+format_binary_history_file_header_with_extra+format_binary_history_data_line"
+"do_col" = "crates/flexmesa-binary/src/binary_history.rs::format_binary_history_file_header_with_extra+format_binary_history_data_line"
+"do_col_pass1" = "crates/flexmesa-binary/src/binary_history.rs::format_binary_history_file_header_with_extra"
+"do_col_pass2" = "crates/flexmesa-binary/src/binary_history.rs::format_binary_history_file_header_with_extra"
+"do_col_pass3" = "crates/flexmesa-binary/src/binary_history.rs::evaluate_binary_history_row+format_binary_history_data_line"
+"do_extra_col" = "crates/flexmesa-binary/src/binary_history.rs::format_binary_history_file_header_with_extra+write_evaluated_row_with_extra"
+"do_int_val" = "crates/flexmesa-star/src/report_utils.rs::write_mesa_int_width"
+"do_name" = "crates/flexmesa-binary/src/binary_history.rs::format_binary_history_file_header_with_extra"
+"do_val" = "crates/flexmesa-star/src/report_utils.rs::write_mesa_dbl_width"
+"write_binary_history_info" = "crates/flexmesa-binary/src/binary_history.rs::write_step"
+"write_string" = "crates/flexmesa-star/src/report_utils.rs::format_mesa_header_str_width"
+"write_val" = "crates/flexmesa-binary/src/binary_history.rs::format_binary_history_file_header_with_extra"
 
 [[files]]
 upstream_path = "binary/private/binary_history_specs.f90"
@@ -1700,7 +1836,13 @@ upstream_lines = 286
 upstream_sha256 = "4b223a2d1cec4c95d919b9ac64fbc96b5389305f0ead7cd0a0577e901c1dfbba"
 status = "partial"
 flexmesa_files = ["crates/flexmesa-binary/src/binary_history.rs"]
+routine_map_partial = ["add_binary_history_columns", "do1_binary_history_spec", "insert_spec", "set_binary_history_columns"]
 notes = "updated for #163: binary_history_columns.list parser (partial; #160)"
+[files.routine_map]
+"add_binary_history_columns" = "crates/flexmesa-binary/src/binary_history.rs::parse_binary_history_columns+parse_binary_history_columns_rec+resolve_binary_col_file_path"
+"do1_binary_history_spec" = "crates/flexmesa-binary/src/binary_history.rs::parse_binary_history_columns_rec"
+"insert_spec" = "crates/flexmesa-binary/src/binary_history.rs::push_unique_binary_spec"
+"set_binary_history_columns" = "crates/flexmesa-binary/src/binary_history.rs::resolve_binary_history_columns"
 
 [[files]]
 upstream_path = "binary/private/binary_irradiation.f90"
@@ -1745,8 +1887,14 @@ module = "binary"
 upstream_lines = 331
 upstream_sha256 = "eb66ed37ae3a25c9edb23eaaf3ffa7a1dfbb9fc375dd7a3a21063bf658733ae0"
 status = "partial"
-flexmesa_files = ["crates/flexmesa-binary/src/inlist.rs"]
+flexmesa_files = ["crates/flexmesa-binary/src/inlist.rs", "crates/flexmesa-star/src/inlist.rs"]
+routine_map_partial = ["do_read_binary_job", "read_binary_job_file", "set_default_binary_job_controls", "store_binary_job_controls"]
 notes = "seeded from coverage-map.md (partial): quick. 5/30 names"
+[files.routine_map]
+"do_read_binary_job" = "crates/flexmesa-binary/src/inlist.rs::from_inlist_file_with_options"
+"read_binary_job_file" = "crates/flexmesa-star/src/inlist.rs::load_sections_in_case_dir+resolve_section_includes+load_file_recursive"
+"set_default_binary_job_controls" = "crates/flexmesa-binary/src/inlist.rs::default"
+"store_binary_job_controls" = "crates/flexmesa-binary/src/inlist.rs::apply_binary_job"
 
 [[files]]
 upstream_path = "binary/private/binary_mdot.f90"
@@ -1755,21 +1903,23 @@ upstream_lines = 1023
 upstream_sha256 = "3c5f33ed6afdaf11fbd7b19c5242fc028e4d2c9303ce818e81e3e3289e152eaa"
 status = "ported_unverified"
 flexmesa_files = ["crates/flexmesa-binary/src/edd_wind.rs", "crates/flexmesa-binary/src/mdot.rs", "crates/flexmesa-binary/src/mdot_implicit.rs", "crates/flexmesa-binary/src/system_rlof.rs"]
+routine_map_partial = ["adjust_mdots", "calculate_kolb_mdot_thick", "check_implicit_rlo", "eval_mdot_edd", "pick_mdot_for_implicit_rlo", "rlo_mdot", "set_accretion_composition"]
 notes = "seeded from coverage-map.md (ported): quick. 11/14 names"
 [files.routine_map]
-"adjust_mdots" = "crates/flexmesa-binary/src/system_rlof.rs::prepare_coupled_mdots"
-"calculate_kolb_mdot_thick" = "crates/flexmesa-binary/src/mdot.rs::eval_kolb_mdot_thick"
-"check_implicit_rlo" = "crates/flexmesa-binary/src/mdot_implicit.rs::ImplicitMdotSolver"
+"adjust_mdots" = "crates/flexmesa-binary/src/system_rlof.rs::prepare_coupled_mdots+prepare_coupled_mdots_with_extras+apply_point_mass_retention"
+"calculate_kolb_mdot_thick" = "crates/flexmesa-binary/src/mdot.rs::eval_kolb_mdot_thick+kolb_f3"
+"check_implicit_rlo" = "crates/flexmesa-binary/src/mdot_implicit.rs::evaluate_trial_with_context+evaluate_trial"
+"check_implicit_rlo::report_rlo_iter" = "crates/flexmesa-binary/src/mdot_implicit.rs::emit_progress_row+emit_progress_header_if_needed"
 "eval_accreted_material_j" = "crates/flexmesa-binary/src/edd_wind.rs::eval_accreted_material_j"
-"eval_mdot_edd" = "crates/flexmesa-binary/src/edd_wind.rs::eval_mdot_edd"
+"eval_mdot_edd" = "crates/flexmesa-binary/src/edd_wind.rs::eval_mdot_edd+eval_mdot_edd_with_overrides"
 "get_info_for_arras" = "crates/flexmesa-binary/src/mdot.rs::eval_arras_mdot_thin"
-"get_info_for_kolb" = "crates/flexmesa-binary/src/mdot.rs::eval_kolb_mdot_thick"
-"get_info_for_kolb_eccentric" = "crates/flexmesa-binary/src/mdot.rs::eval_kolb_mdot_eccentric"
+"get_info_for_kolb" = "crates/flexmesa-binary/src/mdot.rs::eval_kolb_mdot_thick_photosphere+eval_kolb_mdot_thick"
+"get_info_for_kolb_eccentric" = "crates/flexmesa-binary/src/mdot.rs::eval_kolb_mdot_eccentric_photosphere+eval_kolb_mdot_eccentric+integrate_kolb_mdot_eccentric"
 "get_info_for_ritter" = "crates/flexmesa-binary/src/mdot.rs::eval_ritter_mdot_thin"
 "get_info_for_ritter_eccentric" = "crates/flexmesa-binary/src/mdot.rs::eval_ritter_mdot_eccentric"
-"pick_mdot_for_implicit_rlo" = "crates/flexmesa-binary/src/mdot_implicit.rs::record_and_propose"
-"rlo_mdot" = "crates/flexmesa-binary/src/system_rlof.rs::eval_scheme_explicit_mdot"
-"set_accretion_composition" = "crates/flexmesa-binary/src/system_rlof.rs::surface_h1_and_he4"
+"pick_mdot_for_implicit_rlo" = "crates/flexmesa-binary/src/mdot_implicit.rs::record_and_propose+record_and_propose_with_ctx+mesa_find0_quadratic+mesa_find0"
+"rlo_mdot" = "crates/flexmesa-binary/src/system_rlof.rs::eval_scheme_explicit_mdot+eval_scheme_explicit_mdot_with_steps"
+"set_accretion_composition" = "crates/flexmesa-binary/src/system_rlof.rs::prepare_coupled_mdots_with_extras"
 
 [[files]]
 upstream_path = "binary/private/binary_photos.f90"
@@ -1796,12 +1946,14 @@ status = "partial"
 flexmesa_files = ["crates/flexmesa-binary/src/roche_deformation.rs"]
 notes = "seeded from coverage-map.md (ported): quick. 9/11 names; downgraded to partial (unmapped public routines: build_roche_interpolators, roche_psi, assign_stars, synchronicity)"
 [files.routine_map]
+"build_roche_interpolators" = "crates/flexmesa-binary/src/roche_deformation.rs::from_dir+global+resolve_roche_data_dir"
 "eval_fp" = "crates/flexmesa-binary/src/roche_deformation.rs::eval_fp"
 "eval_ft" = "crates/flexmesa-binary/src/roche_deformation.rs::eval_ft"
 "eval_irot" = "crates/flexmesa-binary/src/roche_deformation.rs::eval_irot"
 "eval_psi" = "crates/flexmesa-binary/src/roche_deformation.rs::eval_psi"
 "roche_fp_ft" = "crates/flexmesa-binary/src/roche_deformation.rs::roche_fp_ft"
 "roche_irot" = "crates/flexmesa-binary/src/roche_deformation.rs::roche_irot"
+"setup_interpolator" = "crates/flexmesa-binary/src/roche_deformation.rs::parse_ascii+eval"
 "synchronicity" = "crates/flexmesa-binary/src/roche_deformation.rs::eval_synchronicity_switch"
 
 [[files]]
@@ -1811,6 +1963,7 @@ upstream_lines = 461
 upstream_sha256 = "ba211f3d808577d59c848e804220317d31a28a1bdd4e799a1c1b5593196190c9"
 status = "partial"
 flexmesa_files = ["crates/flexmesa-binary/src/jdot_tides.rs", "crates/flexmesa-binary/src/system_jdot.rs"]
+routine_map_partial = ["sync_spin_orbit_torque"]
 notes = "seeded from coverage-map.md (partial): quick. 3/8 names"
 [files.routine_map]
 "f2" = "crates/flexmesa-binary/src/jdot_tides.rs::hut_f2"
@@ -1819,6 +1972,7 @@ notes = "seeded from coverage-map.md (partial): quick. 3/8 names"
 "f5" = "crates/flexmesa-binary/src/jdot_tides.rs::hut_f5"
 "get_tsync" = "crates/flexmesa-binary/src/jdot_tides.rs::eval_tsync"
 "k_div_T" = "crates/flexmesa-binary/src/jdot_tides.rs::eval_k_div_t_convective+eval_k_div_t_radiative"
+"sync_spin_orbit_torque" = "crates/flexmesa-binary/src/system_jdot.rs::apply"
 "sync_spin_to_orbit" = "crates/flexmesa-binary/src/system_jdot.rs::eval_sync_spin_to_orbit_delta_j"
 
 [[files]]
@@ -1828,10 +1982,11 @@ upstream_lines = 325
 upstream_sha256 = "4297eafb6b1c13e326b9b865c045b014120afc8c79fcab4aa0e3ee8dc1749039"
 status = "partial"
 flexmesa_files = ["crates/flexmesa-binary/src/system_step.rs", "crates/flexmesa-binary/src/timestep.rs"]
+routine_map_partial = ["binary_pick_next_timestep", "set_star_timesteps"]
 notes = "seeded from coverage-map.md (ported): quick; downgraded to partial (unmapped public routines: set_star_timesteps)"
 [files.routine_map]
-"binary_pick_next_timestep" = "crates/flexmesa-binary/src/timestep.rs::binary_pick_next_timestep"
-"set_star_timesteps" = "crates/flexmesa-binary/src/system_step.rs::set_star_timesteps"
+"binary_pick_next_timestep" = "crates/flexmesa-binary/src/timestep.rs::binary_pick_next_timestep+check_binary_hard_limits+step_changes"
+"set_star_timesteps" = "crates/flexmesa-binary/src/system_step.rs::set_star_timesteps+prepare_outer_retry"
 
 [[files]]
 upstream_path = "binary/private/binary_utils.f90"
@@ -1840,9 +1995,11 @@ upstream_lines = 215
 upstream_sha256 = "eccdf15e514abc894a00e77abf7c1f376a0308fea7d2d25c9b8e2d4b42470c99"
 status = "partial"
 flexmesa_files = ["crates/flexmesa-binary/src/orbit.rs", "crates/flexmesa-binary/src/system.rs"]
+routine_map_partial = ["set_angular_momentum_j"]
 notes = "seeded from coverage-map.md (ported): quick. 6/9 names; downgraded to partial (unmapped public routines: set_ignore_rlof_flag, set_point_mass_i, set_model_twins_flag, set_m1, set_m2)"
 [files.routine_map]
 "eval_rlobe" = "crates/flexmesa-binary/src/orbit.rs::eval_rlobe"
+"set_angular_momentum_j" = "crates/flexmesa-binary/src/orbit.rs::eval_j_orb+eval_rl_relative_gap"
 "set_ignore_rlof_flag" = "crates/flexmesa-binary/src/system.rs::set_ignore_rlof_flag"
 "set_m1" = "crates/flexmesa-binary/src/system.rs::set_m1"
 "set_m2" = "crates/flexmesa-binary/src/system.rs::set_m2"
@@ -1965,8 +2122,14 @@ module = "binary"
 upstream_lines = 1016
 upstream_sha256 = "f2d71a745ed0e4bf52b0da32a1a3e853cd2bcf7ff964d913178563845241f0d8"
 status = "partial"
-flexmesa_files = ["crates/flexmesa-binary/src/e2e.rs", "crates/flexmesa-binary/src/system.rs", "crates/flexmesa-binary/src/system_init.rs"]
+flexmesa_files = ["crates/flexmesa-binary/src/e2e.rs", "crates/flexmesa-binary/src/system.rs", "crates/flexmesa-binary/src/system_init.rs", "crates/flexmesa-binary/src/system_step.rs"]
+routine_map_partial = ["binary_controls", "do_binary_job_controls_after", "do_run1_binary"]
 notes = "seeded from coverage-map.md (partial): quick. 2/6 names"
+[files.routine_map]
+"binary_controls" = "crates/flexmesa-binary/src/e2e.rs::init_binary_star_component"
+"do_binary_job_controls_after" = "crates/flexmesa-binary/src/system.rs::apply_binary_job_controls_after"
+"do_run1_binary" = "crates/flexmesa-binary/src/e2e.rs::run_binary_test_suite_case_with_extras"
+"worst_result" = "crates/flexmesa-binary/src/system_step.rs::combine_worst_result"
 
 [[files]]
 upstream_path = "binary/public/binary_controls.inc"
@@ -2001,20 +2164,23 @@ module = "binary"
 upstream_lines = 272
 upstream_sha256 = "7a17a0308b14693341848924aeb1b273f6094ea3126411cf3a1f1856ff43c8f4"
 status = "partial"
-flexmesa_files = ["crates/flexmesa-binary/src/disk.rs", "crates/flexmesa-binary/src/edd_wind.rs", "crates/flexmesa-binary/src/jdot_tides.rs", "crates/flexmesa-binary/src/orbit.rs", "crates/flexmesa-binary/src/system.rs"]
+flexmesa_files = ["crates/flexmesa-binary/src/disk.rs", "crates/flexmesa-binary/src/e2e.rs", "crates/flexmesa-binary/src/edd_wind.rs", "crates/flexmesa-binary/src/jdot_tides.rs", "crates/flexmesa-binary/src/orbit.rs", "crates/flexmesa-binary/src/system.rs"]
+routine_map_partial = ["binary_eval_wind_xfer_fractions", "run1_binary"]
 notes = "seeded from coverage-map.md (partial): quick. 3/19 names"
 [files.routine_map]
-"binary_L2_mass_loss_fraction" = "crates/flexmesa-binary/src/disk.rs::eval_l2_mass_loss_fraction"
 "binary_compute_k_div_T" = "crates/flexmesa-binary/src/jdot_tides.rs::eval_k_div_t_convective+eval_k_div_t_radiative"
 "binary_eval_accreted_material_j" = "crates/flexmesa-binary/src/edd_wind.rs::eval_accreted_material_j"
 "binary_eval_mdot_edd" = "crates/flexmesa-binary/src/edd_wind.rs::eval_mdot_edd"
 "binary_eval_rlobe" = "crates/flexmesa-binary/src/orbit.rs::eval_rlobe"
+"binary_eval_wind_xfer_fractions" = "crates/flexmesa-binary/src/edd_wind.rs::eval_bondi_hoyle_wind_fraction"
+"binary_L2_mass_loss_fraction" = "crates/flexmesa-binary/src/disk.rs::eval_l2_mass_loss_fraction"
 "binary_set_ignore_rlof_flag" = "crates/flexmesa-binary/src/system.rs::set_ignore_rlof_flag"
 "binary_set_m1" = "crates/flexmesa-binary/src/system.rs::set_m1"
 "binary_set_m2" = "crates/flexmesa-binary/src/system.rs::set_m2"
 "binary_set_period_eccentricity" = "crates/flexmesa-binary/src/system.rs::set_period_eccentricity"
 "binary_set_point_mass_i" = "crates/flexmesa-binary/src/system.rs::set_point_mass_i"
 "binary_set_separation_eccentricity" = "crates/flexmesa-binary/src/system.rs::set_separation_eccentricity"
+"run1_binary" = "crates/flexmesa-binary/src/e2e.rs::run_binary_test_suite_case_with_extras"
 
 [[files]]
 upstream_path = "binary/public/binary_pgbinary.f90"
@@ -5244,8 +5410,22 @@ module = "net"
 upstream_lines = 852
 upstream_sha256 = "2a49e1f6990efcb7845dc529120f6fed5bbb7086b1a513bcfea0d92397973488"
 status = "partial"
-flexmesa_files = ["crates/flexmesa-net/src/lib.rs"]
+flexmesa_files = ["crates/flexmesa-net/src/approx21_eps.rs", "crates/flexmesa-net/src/approx21_eval.rs", "crates/flexmesa-net/src/approx21_special.rs", "crates/flexmesa-net/src/derivs.rs", "crates/flexmesa-net/src/derivs_support.rs", "crates/flexmesa-net/src/lib.rs", "crates/flexmesa-star/src/mesh_remap.rs"]
+routine_map_partial = ["do_clean1", "do_clean_up_fractions", "eval_net", "eval_net_approx21_procs", "get_Qs_rfe56ec", "get_approx21_eps_info", "get_rates_with_screening", "get_weaklib_rates", "store_partials"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
+[files.routine_map]
+"approx21_rates" = "crates/flexmesa-net/src/approx21_eval.rs::eval_net_approx21_into"
+"do_clean1" = "crates/flexmesa-star/src/mesh_remap.rs::clean_up_fractions_slice"
+"do_clean_up_fractions" = "crates/flexmesa-star/src/mesh_remap.rs::clean_up_fractions_slice"
+"eval_net" = "crates/flexmesa-net/src/derivs.rs::eval_net+eval_net_result_with_work+eval_net_with_work+eval_net_setup"
+"eval_net_approx21_procs" = "crates/flexmesa-net/src/approx21_eval.rs::eval_net_approx21_procs+eval_net_approx21_into"
+"get_approx21_eps_info" = "crates/flexmesa-net/src/approx21_eps.rs::approx21_eps_info"
+"get_Qs_rfe56ec" = "crates/flexmesa-net/src/approx21_special.rs::get_qs_rfe56ec"
+"get_rates_with_screening" = "crates/flexmesa-net/src/derivs.rs::eval_net_setup+eval_net_result_with_work+eval_net_with_work"
+"get_weaklib_rates" = "crates/flexmesa-net/src/derivs_support.rs::get_weaklib_rates+eval_single_weak_blended"
+"set_molar_abundances" = "crates/flexmesa-net/src/derivs.rs::eval_net_setup"
+"store_partials" = "crates/flexmesa-net/src/derivs.rs::eval_net_result_with_work"
+"unpack_for_export" = "crates/flexmesa-net/src/derivs.rs::eval_net_result_with_work"
 
 [[files]]
 upstream_path = "net/private/net_initialize.f90"
@@ -5327,7 +5507,7 @@ notes = "seeded from coverage-map.md section 7 (unverified)"
 "phot_neu" = "crates/flexmesa-neu/src/phot.rs::phot_neu"
 "plas_neu" = "crates/flexmesa-neu/src/pair_plas.rs::plas_neu"
 "reco_neu" = "crates/flexmesa-neu/src/reco.rs::reco_neu"
-"set_inputs" = "crates/flexmesa-neu/src/inputs.rs::NeuInputs"
+"set_inputs" = "crates/flexmesa-neu/src/inputs.rs::new"
 "zfermim12" = "crates/flexmesa-neu/src/reco.rs::zfermim12"
 
 [[files]]
@@ -6212,7 +6392,18 @@ upstream_lines = 207
 upstream_sha256 = "66385c10a3593381de95074aa23e8b73ee72db7205a5f78acf4622cf3031ba9d"
 status = "partial"
 flexmesa_files = ["crates/flexmesa-star/src/inlist_runner.rs"]
+routine_map_partial = ["null_data_for_extra_history_columns", "null_data_for_extra_profile_columns", "null_how_many_extra_history_columns", "null_how_many_extra_profile_columns"]
 notes = "seeded from coverage-map.md (partial): deep. 6 extras hooks + 6 `other_*` hooks vs upstream 10 extras procedures and 51 `use_other_*` controls (18 `use_other_*` names occur in the crate)"
+[files.routine_map]
+"null_data_for_extra_history_columns" = "crates/flexmesa-star/src/inlist_runner.rs::extra_history_columns"
+"null_data_for_extra_profile_columns" = "crates/flexmesa-star/src/inlist_runner.rs::extra_profile_columns"
+"null_extras_after_evolve" = "crates/flexmesa-star/src/inlist_runner.rs::extras_after_evolve"
+"null_extras_check_model" = "crates/flexmesa-star/src/inlist_runner.rs::extras_check_model"
+"null_extras_finish_step" = "crates/flexmesa-star/src/inlist_runner.rs::extras_finish_step"
+"null_extras_start_step" = "crates/flexmesa-star/src/inlist_runner.rs::extras_start_step"
+"null_extras_startup" = "crates/flexmesa-star/src/inlist_runner.rs::extras_startup"
+"null_how_many_extra_history_columns" = "crates/flexmesa-star/src/inlist_runner.rs::extra_history_columns"
+"null_how_many_extra_profile_columns" = "crates/flexmesa-star/src/inlist_runner.rs::extra_profile_columns"
 
 [[files]]
 upstream_path = "star/job/run_star.f90"
@@ -6231,8 +6422,29 @@ module = "star"
 upstream_lines = 3705
 upstream_sha256 = "f3c68364e228b6241dda500711694b3430b48346d1dc337d8f75e7e3d3465ce2"
 status = "partial"
-flexmesa_files = ["crates/flexmesa-star/src/inlist_runner.rs", "crates/flexmesa-star/src/star_job_init.rs"]
+flexmesa_files = ["crates/flexmesa-star/src/extend_net.rs", "crates/flexmesa-star/src/inlist_runner.rs", "crates/flexmesa-star/src/job_rotation.rs", "crates/flexmesa-star/src/star_job_init.rs"]
+routine_map_partial = ["after_evolve_loop", "after_step_loop", "before_step_loop", "do_evolve_one_step", "do_load1_star", "do_relax_initial_composition", "do_relax_initial_entropy", "do_saves", "do_star_job_controls_after", "do_star_job_controls_before", "extend_net", "run1_star", "terminate_normal_evolve_loop"]
 notes = "seeded from coverage-map.md (partial): deep. Stage loop over `rn` scripts and `&star_job` actions (25% of names). No `LOGS/history.data`/profile/photo files written by the runner (only `.mod`, inlist_runner.rs:127-141), no pgstar, no `do_star_job_controls_after` parity"
+[files.routine_map]
+"adjust_tau_factor" = "crates/flexmesa-star/src/job_rotation.rs::adjust_tau_factor"
+"after_evolve_loop" = "crates/flexmesa-star/src/inlist_runner.rs::run_inlist_stage_with_logs_inner"
+"after_step_loop" = "crates/flexmesa-star/src/inlist_runner.rs::run_inlist_stage_with_logs_inner"
+"before_step_loop" = "crates/flexmesa-star/src/inlist_runner.rs::run_inlist_stage_with_logs_inner"
+"change_net" = "crates/flexmesa-star/src/extend_net.rs::change_net"
+"do_evolve_one_step" = "crates/flexmesa-star/src/inlist_runner.rs::run_inlist_stage_with_logs_inner"
+"do_load1_star" = "crates/flexmesa-star/src/star_job_init.rs::init_or_update_model_impl"
+"do_relax_initial_composition" = "crates/flexmesa-star/src/star_job_init.rs::do_relax_initial_composition"
+"do_relax_initial_entropy" = "crates/flexmesa-star/src/star_job_init.rs::do_relax_initial_entropy"
+"do_rotation" = "crates/flexmesa-star/src/job_rotation.rs::do_rotation"
+"do_rotation_near_zams" = "crates/flexmesa-star/src/job_rotation.rs::do_rotation_near_zams"
+"do_saves" = "crates/flexmesa-star/src/inlist_runner.rs::write_photo_to_case_dir+write_mod_if_missing+write_pulse_data_to_case_dir"
+"do_star_job_controls_after" = "crates/flexmesa-star/src/star_job_init.rs::init_or_update_model_impl"
+"do_star_job_controls_before" = "crates/flexmesa-star/src/star_job_init.rs::init_or_update_model_impl"
+"extend_net" = "crates/flexmesa-star/src/extend_net.rs::extend_net"
+"relax_tau_factor" = "crates/flexmesa-star/src/job_rotation.rs::relax_tau_factor"
+"run1_star" = "crates/flexmesa-star/src/inlist_runner.rs::run_inlist_stage+run_inlist_stage_with_logs+run_inlist_stage_with_logs_inner"
+"terminate_normal_evolve_loop" = "crates/flexmesa-star/src/inlist_runner.rs::run_inlist_stage_with_logs_inner"
+"termination_code_string_okay" = "crates/flexmesa-star/src/inlist_runner.rs::termination_code_string_okay"
 
 [[files]]
 upstream_path = "star/job/standard_run_star_extras.dek"
@@ -6720,13 +6932,23 @@ module = "star"
 upstream_lines = 1624
 upstream_sha256 = "aa005fd513ef41b49b39594d08d495ab9286857c4633773195afe810df546159"
 status = "partial"
-flexmesa_files = ["crates/flexmesa-star/src/adjust_mass.rs", "crates/flexmesa-star/src/accretion_xa.rs"]
+flexmesa_files = ["crates/flexmesa-star/src/accretion_xa.rs", "crates/flexmesa-star/src/adjust_mass.rs", "crates/flexmesa-star/src/eps_mdot.rs"]
+routine_map_partial = ["adjust_J_lost", "do_adjust_mass", "revise_q_and_dq", "save_for_eps_mdot", "set1_irot", "set1_omega", "set_omega_adjust_mass", "update_radius"]
 notes = "updated for #159: compute_delta_m, revise_q_and_dq, set_xa, get_xa_for_accretion, set_omega_adjust_mass, adjust_j_lost, smooth_outer_xa, verbatim #263 crossing-step clamp; set_D_omega, xa_removed/angular_momentum_removed fields, and use_other_j_for_adjust_J_lost not ported"
 [files.routine_map]
-"do_adjust_mass" = "crates/flexmesa-star/src/adjust_mass.rs::do_adjust_mass_step"
-"compute_prev_mesh_dm" = "crates/flexmesa-star/src/adjust_mass.rs::do_adjust_mass_step"
+"adjust_J_lost" = "crates/flexmesa-star/src/adjust_mass.rs::adjust_j_lost"
+"angular_momentum_removed" = "crates/flexmesa-star/src/adjust_mass.rs::compute_angular_momentum_removed"
 "compute_delta_m" = "crates/flexmesa-star/src/adjust_mass.rs::compute_delta_m"
-"get_xa_for_accretion" = "crates/flexmesa-star/src/accretion_xa.rs::get_xa_for_accretion"
+"compute_prev_mesh_dm" = "crates/flexmesa-star/src/eps_mdot.rs::calculate_eps_mdot"
+"do_adjust_mass" = "crates/flexmesa-star/src/adjust_mass.rs::do_adjust_mass+do_adjust_mass_with_dt+do_adjust_mass_step+do_adjust_mass_core+smooth_outer_xa"
+"revise_q_and_dq" = "crates/flexmesa-star/src/adjust_mass.rs::revise_q_and_dq_upstream"
+"save_for_eps_mdot" = "crates/flexmesa-star/src/adjust_mass.rs::do_adjust_mass_core"
+"set1_irot" = "crates/flexmesa-star/src/adjust_mass.rs::set1_irot"
+"set1_omega" = "crates/flexmesa-star/src/adjust_mass.rs::set1_omega"
+"set1_xa" = "crates/flexmesa-star/src/adjust_mass.rs::set1_xa"
+"set_omega_adjust_mass" = "crates/flexmesa-star/src/adjust_mass.rs::set_omega_adjust_mass"
+"set_xa" = "crates/flexmesa-star/src/adjust_mass.rs::set_xa"
+"update_radius" = "crates/flexmesa-star/src/adjust_mass.rs::update_radius"
 
 [[files]]
 upstream_path = "star/private/adjust_mesh.f90"
@@ -6735,9 +6957,12 @@ upstream_lines = 700
 upstream_sha256 = "32f17e8edbb32fb4c697e60e5d3a94a62b3833a3b90879010423959fe8c5c504"
 status = "ported_unverified"
 flexmesa_files = ["crates/flexmesa-star/src/mesh_adjust.rs", "crates/flexmesa-star/src/mesh_remap.rs"]
+routine_map_partial = ["remesh"]
 notes = "updated for #153: remesh driver, set_types_of_new_cells, okay_to_merge, and mesh_max_allowed_ratio clamp (#250)"
 [files.routine_map]
-"remesh" = "crates/flexmesa-star/src/mesh_adjust.rs::do_adjust_mesh+plan_mesh"
+"remesh" = "crates/flexmesa-star/src/mesh_adjust.rs::do_adjust_mesh+do_adjust_mesh_for_step+do_adjust_mesh_with+try_plan_standard_mesh+try_plan_standard_mesh_with_cleaned_xa+suppressed_by_evolve_guards+plan_mesh+eval_effective_mesh_delta_coeff+eval_mesh_gval+effective_mix_wind_controls"
+"remesh::get_num_gvals" = "crates/flexmesa-star/src/mesh_adjust.rs::try_plan_standard_mesh_with_cleaned_xa"
+"remesh::set_types_of_new_cells" = "crates/flexmesa-star/src/mesh_remap.rs::classify_new_cells"
 
 [[files]]
 upstream_path = "star/private/adjust_mesh_split_merge.f90"
@@ -6746,9 +6971,27 @@ upstream_lines = 1461
 upstream_sha256 = "6417841843978a7ec9244eab70047b9e8406b00664cf6feff4cf5bf45de1f8bf"
 status = "ported_unverified"
 flexmesa_files = ["crates/flexmesa-star/src/adjust_mesh_split_merge.rs"]
+routine_map_partial = ["amr", "biggest_smallest", "do_merge", "do_split", "remesh_split_merge", "update_xh_eos_and_kap"]
 notes = "updated for #153: remesh_split_merge optical-depth/radius split-merge AMR (#242 loud guard on flipped_hybrid_zoning)"
 [files.routine_map]
-"remesh_split_merge" = "crates/flexmesa-star/src/adjust_mesh_split_merge.rs::remesh_split_merge"
+"amr" = "crates/flexmesa-star/src/adjust_mesh_split_merge.rs::remesh_split_merge_with"
+"amr::merge1" = "crates/flexmesa-star/src/adjust_mesh_split_merge.rs::remesh_split_merge_with"
+"amr::split1" = "crates/flexmesa-star/src/adjust_mesh_split_merge.rs::remesh_split_merge_with"
+"biggest_smallest" = "crates/flexmesa-star/src/adjust_mesh_split_merge.rs::biggest_smallest"
+"biggest_smallest::check_merge_limits" = "crates/flexmesa-star/src/adjust_mesh_split_merge.rs::biggest_smallest"
+"do_merge" = "crates/flexmesa-star/src/adjust_mesh_split_merge.rs::do_merge"
+"do_split" = "crates/flexmesa-star/src/adjust_mesh_split_merge.rs::do_split"
+"emergency_merge" = "crates/flexmesa-star/src/adjust_mesh_split_merge.rs::emergency_merge_1based"
+"emergency_split" = "crates/flexmesa-star/src/adjust_mesh_split_merge.rs::emergency_split_1based"
+"get1_grad" = "crates/flexmesa-star/src/adjust_mesh_split_merge.rs::get1_grad"
+"get_cell_energies" = "crates/flexmesa-star/src/adjust_mesh_split_merge.rs::get_cell_energies"
+"get_dV" = "crates/flexmesa-star/src/adjust_mesh_split_merge.rs::get_dv"
+"get_star_PE" = "crates/flexmesa-star/src/adjust_mesh_split_merge.rs::get_star_pe"
+"minmod" = "crates/flexmesa-star/src/adjust_mesh_split_merge.rs::minmod3"
+"remesh_split_merge" = "crates/flexmesa-star/src/adjust_mesh_split_merge.rs::remesh_split_merge+remesh_split_merge_with"
+"revise_star_radius" = "crates/flexmesa-star/src/adjust_mesh_split_merge.rs::revise_star_radius"
+"split1_non_negative" = "crates/flexmesa-star/src/adjust_mesh_split_merge.rs::split1_non_negative"
+"update_xh_eos_and_kap" = "crates/flexmesa-star/src/adjust_mesh_split_merge.rs::update_xh_eos"
 
 [[files]]
 upstream_path = "star/private/adjust_mesh_support.f90"
@@ -6757,10 +7000,20 @@ upstream_lines = 457
 upstream_sha256 = "ddbd5ed6b3a656483e718d6f6780889f5d0b8bcf2b33185eb8541ebff7fe5ec0"
 status = "ported_unverified"
 flexmesa_files = ["crates/flexmesa-star/src/adjust_mesh_support.rs"]
+routine_map_partial = ["get_gval_info", "get_gval_info::do1_dlog_eps_dlogP_coef", "get_gval_info::set_delta_gval_max"]
 notes = "updated for #153: get_gval_info, mesh_dlog_*_dlogP_extra, xtra_coef_*, mesh_delta_coeff_for_highT (#243), and check_validity"
 [files.routine_map]
 "check_validity" = "crates/flexmesa-star/src/adjust_mesh_support.rs::check_validity"
-"get_gval_info" = "crates/flexmesa-star/src/adjust_mesh_support.rs::get_gval_info"
+"decreasing_outward" = "crates/flexmesa-star/src/adjust_mesh_support.rs::decreasing_outward"
+"get_gval_info" = "crates/flexmesa-star/src/adjust_mesh_support.rs::get_gval_info+get_gval_info_with_controls+get_gval_info_with_controls_and_xa"
+"get_gval_info::blend_coef" = "crates/flexmesa-star/src/adjust_mesh_support.rs::blend_coef"
+"get_gval_info::do1_dlog_eps_dlogP_coef" = "crates/flexmesa-star/src/adjust_mesh_support.rs::do1_dlog_eps_dlogp_coef"
+"get_gval_info::do_mesh_dlogX_dlogP_coef" = "crates/flexmesa-star/src/adjust_mesh_support.rs::do_mesh_dlogx_dlogp_coef"
+"get_gval_info::set_delta_gval_max" = "crates/flexmesa-star/src/adjust_mesh_support.rs::set_delta_gval_max_with_controls"
+"increasing_inward" = "crates/flexmesa-star/src/adjust_mesh_support.rs::increasing_inward"
+"increasing_outward" = "crates/flexmesa-star/src/adjust_mesh_support.rs::increasing_outward"
+"single_peak" = "crates/flexmesa-star/src/adjust_mesh_support.rs::single_peak"
+"smooth_gvals" = "crates/flexmesa-star/src/adjust_mesh_support.rs::smooth_gvals"
 
 [[files]]
 upstream_path = "star/private/adjust_net.f90"
@@ -6776,8 +7029,29 @@ module = "star"
 upstream_lines = 1468
 upstream_sha256 = "e6c10eeea32a31f56bd5bc063ac90877f6e4dd1ccfd7af3c77caff30a9591083"
 status = "partial"
-flexmesa_files = ["crates/flexmesa-star/src/adjust_mass.rs", "crates/flexmesa-star/src/relax.rs", "crates/flexmesa-star/src/relax_comp.rs"]
+flexmesa_files = ["crates/flexmesa-star/src/accretion_xa.rs", "crates/flexmesa-star/src/adjust_mass.rs", "crates/flexmesa-star/src/micro.rs", "crates/flexmesa-star/src/relax.rs", "crates/flexmesa-star/src/relax_comp.rs", "crates/flexmesa-star/src/star_lib.rs"]
+routine_map_partial = ["change_net", "change_small_net", "convert", "do_composition_fixup", "do_xa", "get_xa_for_accretion", "set_abundance_ratio", "set_composition", "set_new_abundances", "set_standard_composition", "set_uniform_composition", "set_x_new", "set_y", "set_z"]
 notes = "seeded from coverage-map.md (partial): quick. Uniform/Y/Z rescale present (per-zone scaling of H, He, metals groups); `set_standard_composition`/zfracs choices, `set_abundance_ratios`, `change_net` remap rules, `get_xa_for_standard_metals` not found (6/31 names)"
+[files.routine_map]
+"adjust_z_fractions" = "crates/flexmesa-star/src/accretion_xa.rs::adjust_z_fractions"
+"change_net" = "crates/flexmesa-star/src/micro.rs::change_model_network_with_adjust+change_model_network"
+"change_small_net" = "crates/flexmesa-star/src/micro.rs::change_model_network_with_adjust+change_model_network"
+"convert" = "crates/flexmesa-star/src/relax_comp.rs::set_z"
+"do_change_to_xa_for_accretion" = "crates/flexmesa-star/src/star_lib.rs::change_to_xa_for_accretion"
+"do_composition_fixup" = "crates/flexmesa-star/src/micro.rs::change_model_network_with_adjust"
+"do_xa" = "crates/flexmesa-star/src/micro.rs::change_model_network_with_adjust"
+"get_test_lgT" = "crates/flexmesa-star/src/micro.rs::get_test_log10_t"
+"get_xa" = "crates/flexmesa-star/src/accretion_xa.rs::get_xa"
+"get_xa_for_accretion" = "crates/flexmesa-star/src/accretion_xa.rs::get_xa_for_accretion"
+"get_xa_for_standard_metals" = "crates/flexmesa-star/src/accretion_xa.rs::get_xa_for_standard_metals+standard_metals_xa"
+"set_abundance_ratio" = "crates/flexmesa-star/src/relax_comp.rs::set_abundance_ratio"
+"set_composition" = "crates/flexmesa-star/src/relax.rs::set_uniform_initial_composition"
+"set_new_abundances" = "crates/flexmesa-star/src/micro.rs::remap_xa_for_network"
+"set_standard_composition" = "crates/flexmesa-star/src/relax.rs::set_uniform_initial_composition"
+"set_uniform_composition" = "crates/flexmesa-star/src/relax.rs::set_uniform_initial_composition"
+"set_x_new" = "crates/flexmesa-star/src/micro.rs::remap_xa_for_network"
+"set_y" = "crates/flexmesa-star/src/relax_comp.rs::set_y"
+"set_z" = "crates/flexmesa-star/src/relax_comp.rs::set_z"
 
 [[files]]
 upstream_path = "star/private/alloc.f90"
@@ -6793,8 +7067,27 @@ module = "star"
 upstream_lines = 1289
 upstream_sha256 = "4dbef8bf57a9ad88aa531b5b21c587b116e498b0b85fb38a7f8ad1d126212f58"
 status = "partial"
-flexmesa_files = ["crates/flexmesa-star/src/hydro_brunt_surf.rs"]
+flexmesa_files = ["crates/flexmesa-atm/src/types.rs", "crates/flexmesa-star/src/hydro_brunt_surf.rs", "crates/flexmesa-star/src/pulse_fgong.rs"]
+routine_map_partial = ["build_T_tau", "build_atm", "eos_proc", "get_T_tau", "get_atm_PT", "get_irradiated", "get_table", "get_table_id", "kap_proc", "kap_proc_for_get_T_tau", "kap_proc_for_get_irradiated"]
 notes = "seeded from coverage-map.md (partial): deep. Has `T_tau` with fixed opacity (4 relations), `table` (7 tables, off-table blend), `simple_photosphere`. Missing: `irradiated_grey`, `Paczynski_grey`, `fixed_Teff/Tsurf/Psurf/Psurf_and_Tsurf`, `atm_T_tau_opacity = varying/iterated`, `build_atm` (atmosphere structure for pulse output), `T_tau_gradr_factor`. Adds a non-upstream table proxy (C1-15)"
+[files.routine_map]
+"build_atm" = "crates/flexmesa-star/src/pulse_fgong.rs::build_atm_structure"
+"build_T_tau" = "crates/flexmesa-star/src/pulse_fgong.rs::build_atm_structure"
+"eos_proc" = "crates/flexmesa-star/src/hydro_brunt_surf.rs::atm_eos_proc"
+"eos_proc_for_build_T_tau" = "crates/flexmesa-star/src/pulse_fgong.rs::build_atm_structure"
+"eos_proc_for_get_irradiated" = "crates/flexmesa-star/src/hydro_brunt_surf.rs::eval_irradiated_surf"
+"eos_proc_for_get_T_tau" = "crates/flexmesa-star/src/hydro_brunt_surf.rs::eval_grey_t_tau_surf"
+"get_atm_PT" = "crates/flexmesa-star/src/hydro_brunt_surf.rs::get_surf_pt"
+"get_atm_tau_base" = "crates/flexmesa-star/src/hydro_brunt_surf.rs::get_atm_tau_base"
+"get_irradiated" = "crates/flexmesa-star/src/hydro_brunt_surf.rs::eval_irradiated_surf"
+"get_T_tau" = "crates/flexmesa-star/src/hydro_brunt_surf.rs::eval_grey_t_tau_surf"
+"get_T_tau_id" = "crates/flexmesa-atm/src/types.rs::get_t_tau_id"
+"get_table" = "crates/flexmesa-star/src/hydro_brunt_surf.rs::get_table"
+"get_table_id" = "crates/flexmesa-atm/src/types.rs::get_table_id"
+"kap_proc" = "crates/flexmesa-star/src/hydro_brunt_surf.rs::atm_kap_proc"
+"kap_proc_for_build_T_tau" = "crates/flexmesa-star/src/pulse_fgong.rs::build_atm_structure"
+"kap_proc_for_get_irradiated" = "crates/flexmesa-star/src/hydro_brunt_surf.rs::eval_irradiated_surf"
+"kap_proc_for_get_T_tau" = "crates/flexmesa-star/src/hydro_brunt_surf.rs::eval_grey_t_tau_surf"
 
 [[files]]
 upstream_path = "star/private/auto_diff_support.f90"
@@ -6802,8 +7095,19 @@ module = "star"
 upstream_lines = 1460
 upstream_sha256 = "f779283daa37ed7a74c712cd5620e72c1fd0b56f467a6e71adf9f5f2197a1f32"
 status = "partial"
-flexmesa_files = ["crates/flexmesa-star/src/hydro_brunt_surf.rs", "crates/flexmesa-star/src/hydro_energy.rs", "crates/flexmesa-star/src/hydro_eqns.rs", "crates/flexmesa-star/src/hydro_momentum.rs", "crates/flexmesa-star/src/hydro_rti.rs", "crates/flexmesa-star/src/hydro_state.rs", "crates/flexmesa-star/src/hydro_temperature.rs", "crates/flexmesa-star/src/hydro_vars.rs", "crates/flexmesa-star/src/hydro_work.rs", "crates/flexmesa-star/src/rsp2_ad.rs", "crates/flexmesa-star/src/star_ad.rs"]
+flexmesa_files = ["crates/flexmesa-star/src/hydro_brunt_surf.rs", "crates/flexmesa-star/src/hydro_energy.rs", "crates/flexmesa-star/src/hydro_eqns.rs", "crates/flexmesa-star/src/hydro_momentum.rs", "crates/flexmesa-star/src/hydro_rti.rs", "crates/flexmesa-star/src/hydro_state.rs", "crates/flexmesa-star/src/hydro_temperature.rs", "crates/flexmesa-star/src/hydro_vars.rs", "crates/flexmesa-star/src/hydro_work.rs", "crates/flexmesa-star/src/mix_info.rs", "crates/flexmesa-star/src/rsp2_ad.rs", "crates/flexmesa-star/src/star_ad.rs"]
+routine_map_partial = ["get_RSP2_conv_velocity"]
 notes = "seeded from coverage-map.md (partial): quick. 3/118 wrapper names; Rust builds stencil duals ad hoc"
+[files.routine_map]
+"get_RSP2_conv_velocity" = "crates/flexmesa-star/src/mix_info.rs::set_mixing_info_with_skip"
+"shift_m1" = "crates/flexmesa-star/src/star_ad.rs::StarAdOrder1::shift_m1"
+"shift_p1" = "crates/flexmesa-star/src/star_ad.rs::StarAdOrder1::shift_p1"
+"wrap_d_00" = "crates/flexmesa-star/src/hydro_momentum.rs::wrap_d_00"
+"wrap_d_m1" = "crates/flexmesa-star/src/hydro_momentum.rs::wrap_d_m1"
+"wrap_e_00" = "crates/flexmesa-star/src/hydro_energy.rs::wrap_e_cell_00"
+"wrap_Peos_00" = "crates/flexmesa-star/src/hydro_momentum.rs::wrap_peos_00"
+"wrap_Peos_m1" = "crates/flexmesa-star/src/hydro_momentum.rs::wrap_peos_m1"
+"wrap_r_00" = "crates/flexmesa-star/src/hydro_momentum.rs::wrap_r_00"
 
 [[files]]
 upstream_path = "star/private/brunt.f90"
@@ -6842,8 +7146,16 @@ module = "star"
 upstream_lines = 4272
 upstream_sha256 = "1aa84beac20e10233eeee6cdcbd62607865ed62426c7a5b2b93d4bda7aa6f216"
 status = "partial"
-flexmesa_files = ["crates/flexmesa-schema/src/namelist.rs", "crates/flexmesa-star/src/inlist.rs", "crates/flexmesa-star/src/inlist_populate.rs", "crates/flexmesa-star/src/inlist_populate_limits.rs", "crates/flexmesa-star/src/inlist_populate_phase5b.rs"]
+flexmesa_files = ["crates/flexmesa-schema/src/namelist.rs", "crates/flexmesa-star/src/controls_defaults.rs", "crates/flexmesa-star/src/inlist.rs", "crates/flexmesa-star/src/inlist_populate.rs", "crates/flexmesa-star/src/inlist_populate_limits.rs", "crates/flexmesa-star/src/inlist_populate_phase5b.rs"]
+routine_map_partial = ["check_controls", "do_one_setup", "read_controls", "read_controls_file", "set_default_controls", "store_controls"]
 notes = "seeded from coverage-map.md (partial): deep. 593/1375 `&controls` names read; unknown names silently ignored (C1-13); no `write_controls`/`get_control`/`set_control`"
+[files.routine_map]
+"check_controls" = "crates/flexmesa-star/src/inlist_populate.rs::populate_controls_physics"
+"do_one_setup" = "crates/flexmesa-star/src/inlist.rs::from_file_in_case_dir_with_options+from_file"
+"read_controls" = "crates/flexmesa-star/src/inlist.rs::from_file_in_case_dir_with_options"
+"read_controls_file" = "crates/flexmesa-star/src/inlist.rs::load_sections_in_case_dir+load_file_recursive+resolve_section_includes"
+"set_default_controls" = "crates/flexmesa-star/src/controls_defaults.rs::default"
+"store_controls" = "crates/flexmesa-star/src/inlist_populate.rs::populate_controls_physics+populate_controls_output+populate_typed_structs_with_options"
 
 [[files]]
 upstream_path = "star/private/diffusion.f90"
@@ -6852,11 +7164,28 @@ upstream_lines = 2050
 upstream_sha256 = "3957f16470a93dc5a7456299ae9e9812af7fba94ab9023efffc3c5c09ac9a109"
 status = "kernel_reference_vectors"
 flexmesa_files = ["crates/flexmesa-star/src/diffusion.rs"]
+routine_map_partial = ["do_solve_diffusion::BE_solve", "do_solve_diffusion::do_step_loop", "do_solve_diffusion::solve_with_isolve", "do_solve_diffusion::update_coeffs", "factor_and_solve_matrix"]
 evidence_artifacts = ["benchmarks/fortran_mesa/diffusion_oracles/mesa_26_4_1_diffusion_oracles.tsv"]
 evidence_tests = ["crates/flexmesa-star/tests/diffusion_phase_sep_156_test.rs"]
 notes = "updated for #156: do_solve_diffusion tested against MESA 26.4.1 hex oracles for BE_solve (be_thoul_solar, be_cgs_caplan_wd) and all 7 Rosenbrock isolve solvers (ros2, rose2, ros3p, ros3pl, rodas3, rodas4, rodasp on the 12-zone solar profile): exact steps_used, X_final rtol=1e-12 (atol=1e-14), v_total/E_field/g_field rtol=1e-11 (atol=1e-25)"
 [files.routine_map]
+"adjust_timestep" = "crates/flexmesa-star/src/diffusion.rs::adjust_timestep"
+"adjust_timestep::limiter" = "crates/flexmesa-star/src/diffusion.rs::adjust_timestep"
 "do_solve_diffusion" = "crates/flexmesa-star/src/diffusion.rs::do_solve_diffusion"
+"do_solve_diffusion::BE_solve" = "crates/flexmesa-star/src/diffusion.rs::do_solve_diffusion"
+"do_solve_diffusion::do_step_loop" = "crates/flexmesa-star/src/diffusion.rs::do_solve_diffusion"
+"do_solve_diffusion::fcn_blk_dble" = "crates/flexmesa-star/src/diffusion.rs::do_solve_diffusion"
+"do_solve_diffusion::jac_blk_dble" = "crates/flexmesa-star/src/diffusion.rs::do_solve_diffusion"
+"do_solve_diffusion::solve_with_isolve" = "crates/flexmesa-star/src/diffusion.rs::do_solve_diffusion+ros_table+from_name"
+"do_solve_diffusion::update_coeffs" = "crates/flexmesa-star/src/diffusion.rs::do_solve_diffusion"
+"do_solve_diffusion::update_for_new_vars" = "crates/flexmesa-star/src/diffusion.rs::do_solve_diffusion"
+"factor_and_solve_matrix" = "crates/flexmesa-star/src/diffusion.rs::do_solve_diffusion"
+"get1_dX_dt" = "crates/flexmesa-star/src/diffusion.rs::get1_dx_dt"
+"get1_eqn_matrix_entries" = "crates/flexmesa-star/src/diffusion.rs::get1_eqn_matrix_entries"
+"get_dX_dt" = "crates/flexmesa-star/src/diffusion.rs::get_dx_dt"
+"get_eqn_matrix_entries" = "crates/flexmesa-star/src/diffusion.rs::get_eqn_matrix_entries"
+"get_timescale" = "crates/flexmesa-star/src/diffusion.rs::get_timescale"
+"positivity" = "crates/flexmesa-star/src/diffusion.rs::positivity"
 "set_diffusion_classes" = "crates/flexmesa-star/src/diffusion.rs::set_diffusion_classes"
 
 [[files]]
@@ -6866,7 +7195,21 @@ upstream_lines = 1746
 upstream_sha256 = "f303dfdb628e5fdb8ba4a6e1b9de3851313fd2a55d745865eb6af7b9395d2809"
 status = "partial"
 flexmesa_files = ["crates/flexmesa-star/src/diffusion_procs.rs"]
+routine_map_partial = ["fix_negative_masses", "fix_single_point_extremes", "fix_species_conservation", "fixup", "redistribute_mass", "set_new_xa", "setup_struct_info", "smooth_x"]
 notes = "updated for #156: fixup, fix_single_point_extremes, fix_negative_masses, fix_species_conservation, smooth_x, get1_dx_dm, redistribute_mass, get_limit_coeffs, setup_struct_info (#288 2-zone smoothing guard), and set_new_xa ported; calc_g_rad_mombarg/calc_g_rad_hu/update_rad_accel_face fail loudly pending op_mono (#286)"
+[files.routine_map]
+"fix_negative_masses" = "crates/flexmesa-star/src/diffusion_procs.rs::fix_negative_masses"
+"fix_single_point_extremes" = "crates/flexmesa-star/src/diffusion_procs.rs::fix_single_point_extremes"
+"fix_species_conservation" = "crates/flexmesa-star/src/diffusion_procs.rs::fix_species_conservation"
+"fixup" = "crates/flexmesa-star/src/diffusion_procs.rs::fixup"
+"get1_dX_dm" = "crates/flexmesa-star/src/diffusion_procs.rs::get1_dx_dm"
+"get_limit_coeffs" = "crates/flexmesa-star/src/diffusion_procs.rs::get_limit_coeffs"
+"redistribute_mass" = "crates/flexmesa-star/src/diffusion_procs.rs::redistribute_mass"
+"redistribute_mass::integrate_mass" = "crates/flexmesa-star/src/diffusion_procs.rs::redistribute_mass"
+"set_new_xa" = "crates/flexmesa-star/src/diffusion_procs.rs::set_new_xa"
+"setup_struct_info" = "crates/flexmesa-star/src/diffusion_procs.rs::setup_struct_info"
+"setup_struct_info::do1" = "crates/flexmesa-star/src/diffusion_procs.rs::setup_struct_info"
+"smooth_x" = "crates/flexmesa-star/src/diffusion_procs.rs::smooth_x"
 
 [[files]]
 upstream_path = "star/private/diffusion_support.f90"
@@ -6875,11 +7218,27 @@ upstream_lines = 1800
 upstream_sha256 = "85042b8bd1fd19e6379a3d88f582e78f3aa5642e9527ede4f62fce84bdee7777"
 status = "kernel_reference_vectors"
 flexmesa_files = ["crates/flexmesa-star/src/diffusion_support.rs"]
+routine_map_partial = ["do1_solve_thoul_hu", "get1_burgers_coeffs", "get1_gradient_coeffs", "solve_burgers_cgs_no_thermal", "solve_burgers_cgs_with_thermal"]
 evidence_artifacts = ["benchmarks/fortran_mesa/diffusion_oracles/mesa_26_4_1_diffusion_oracles.tsv"]
 evidence_tests = ["crates/flexmesa-star/tests/diffusion_phase_sep_156_test.rs"]
 notes = "updated for #156: get_matrix_coeffs tested across all 8 transport/Burgers regimes (pure_coulomb, paquette, sm thoul/cgs low/blend/high eta, caplan blend/pure) against MESA 26.4.1 hex oracles (AD_face rtol=1e-12; E/g_field, v_*, GT_face, D_self, SIG_face, sigma_lnC rtol=1e-11, atol=1e-25..1e-30); get_Dstar_OCP tested at rtol=1e-14 on 3 (Gamma, kappa) points"
 [files.routine_map]
+"bitsafe_erf_fit" = "crates/flexmesa-star/src/diffusion_support.rs::bitsafe_erf_fit"
+"do1_solve_thoul_hu" = "crates/flexmesa-star/src/diffusion_support.rs::do1_solve_thoul_hu"
+"get1_burgers_coeffs" = "crates/flexmesa-star/src/diffusion_support.rs::get1_burgers_coeffs"
+"get1_coeffs_face" = "crates/flexmesa-star/src/diffusion_support.rs::get1_coeffs_face"
+"get1_CXZn_face" = "crates/flexmesa-star/src/diffusion_support.rs::get1_cxzn_face"
+"get1_diffusion_velocities" = "crates/flexmesa-star/src/diffusion_support.rs::get1_diffusion_velocities"
+"get1_flow_coeffs" = "crates/flexmesa-star/src/diffusion_support.rs::get1_flow_coeffs"
+"get1_gradient_coeffs" = "crates/flexmesa-star/src/diffusion_support.rs::get1_gradient_coeffs"
+"get_CBF_coeffs" = "crates/flexmesa-star/src/diffusion_support.rs::get_cbf_coeffs"
+"get_Dstar_OCP" = "crates/flexmesa-star/src/diffusion_support.rs::get_dstar_ocp"
 "get_matrix_coeffs" = "crates/flexmesa-star/src/diffusion_support.rs::get_matrix_coeffs"
+"get_SM_coeffs" = "crates/flexmesa-star/src/diffusion_support.rs::get_sm_coeffs"
+"kappa_CBF" = "crates/flexmesa-star/src/diffusion_support.rs::kappa_cbf"
+"lam_SM" = "crates/flexmesa-star/src/diffusion_support.rs::lam_sm"
+"solve_burgers_cgs_no_thermal" = "crates/flexmesa-star/src/diffusion_support.rs::solve_burgers_cgs_no_thermal"
+"solve_burgers_cgs_with_thermal" = "crates/flexmesa-star/src/diffusion_support.rs::solve_burgers_cgs_with_thermal"
 
 [[files]]
 upstream_path = "star/private/do_one_utils.f90"
@@ -6890,7 +7249,9 @@ status = "partial"
 flexmesa_files = ["crates/flexmesa-star/src/termination.rs"]
 notes = "updated for #159: full do_check_limits, compare_to_target (when_to_stop_rtol/atol), all 13 stop_at_phase_* checks, verbatim #264/#265; terminal/log formatting not ported"
 [files.routine_map]
-"do_check_limits" = "crates/flexmesa-star/src/termination.rs::do_check_limits"
+"compare_to_target" = "crates/flexmesa-star/src/termination.rs::compare_to_target"
+"do_check_limits" = "crates/flexmesa-star/src/termination.rs::do_check_limits+eval_check_limits_core"
+"get_species_mass" = "crates/flexmesa-star/src/termination.rs::get_species_mass_msun"
 
 [[files]]
 upstream_path = "star/private/element_diffusion.f90"
@@ -6899,9 +7260,12 @@ upstream_lines = 582
 upstream_sha256 = "2c6236cad67e3f5f3fb72208e01a8b99b10e5a86cda8a0e2bc0f986abf7a43f9"
 status = "ported_unverified"
 flexmesa_files = ["crates/flexmesa-star/src/element_diffusion.rs"]
+routine_map_partial = ["do_element_diffusion"]
 notes = "updated for #156: do_element_diffusion_step and finish_element_diffusion (eps_diffusion, eps_WD_sedimentation, loud diffusion_dump_call_number stop, #272/#287 OOB guards, #273 verbatim early return); radiative levitation (op_mono) fails loudly pending #286"
 [files.routine_map]
-"do_element_diffusion" = "crates/flexmesa-star/src/element_diffusion.rs::do_element_diffusion_step"
+"do_element_diffusion" = "crates/flexmesa-star/src/element_diffusion.rs::do_element_diffusion_step+maxloc_species+do_element_diffusion"
+"do_element_diffusion::set1_extras" = "crates/flexmesa-star/src/element_diffusion.rs::do_element_diffusion_step"
+"do_element_diffusion::set_extras" = "crates/flexmesa-star/src/element_diffusion.rs::do_element_diffusion_step"
 "finish_element_diffusion" = "crates/flexmesa-star/src/element_diffusion.rs::finish_element_diffusion"
 
 [[files]]
@@ -6910,8 +7274,13 @@ module = "star"
 upstream_lines = 413
 upstream_sha256 = "b5a0f3896d61be48fb9eec226c24810ad2068ddf1245d10d43ed3f923c4c9b7c"
 status = "partial"
-flexmesa_files = ["crates/flexmesa-star/src/micro.rs", "crates/flexmesa-star/src/pre_ms.rs"]
+flexmesa_files = ["crates/flexmesa-star/src/micro.rs", "crates/flexmesa-star/src/pre_ms.rs", "crates/flexmesa-star/src/star_lib.rs"]
+routine_map_partial = ["solve_eos_given_PgasT_auto"]
 notes = "seeded from coverage-map.md (partial): quick. `get_eos` path only; `solve_eos_given_DE/PgasT/...` helpers and `eos_frac_*` reporting not found (0/8 names)"
+[files.routine_map]
+"get_eos" = "crates/flexmesa-star/src/micro.rs::eval_cell"
+"solve_eos_given_PgasT" = "crates/flexmesa-star/src/star_lib.rs::star_solve_eos_given_pgas_t"
+"solve_eos_given_PgasT_auto" = "crates/flexmesa-star/src/star_lib.rs::star_solve_eos_given_pgas_t_auto"
 
 [[files]]
 upstream_path = "star/private/eps_grav.f90"
@@ -6947,8 +7316,26 @@ module = "star"
 upstream_lines = 2403
 upstream_sha256 = "101795067cd3ba193a0289d55fc2412f49c5251d38bd5240b51e68c2e868e748"
 status = "partial"
-flexmesa_files = ["crates/flexmesa-star/src/evolve.rs", "crates/flexmesa-star/src/evolve_support.rs", "crates/flexmesa-star/src/mdot_redo.rs"]
+flexmesa_files = ["crates/flexmesa-star/src/evolve.rs", "crates/flexmesa-star/src/evolve_support.rs", "crates/flexmesa-star/src/inlist_runner.rs", "crates/flexmesa-star/src/mdot_redo.rs"]
+routine_map_partial = ["check_for_extra_heat", "do_evolve_step_part1", "do_evolve_step_part2", "do_step_part1", "do_step_part2", "do_step_part2::okay_energy_conservation", "do_step_part2::select_mdot_action", "finish_step", "pick_next_timestep", "prepare_for_new_step", "prepare_for_new_try", "prepare_to_redo", "prepare_to_retry", "set_start_of_step_info"]
 notes = "updated for #152: retry/redo flow, restore_mesh_on_retry, select_mdot_action (#139), max_age* clipping, min_timestep_limit/max_number_retries/redo_limit terminations, and do_adjust_mesh wiring (#153). Still missing: adjust_net, remove_shells, and remaining other_* hooks (#154, #159)"
+[files.routine_map]
+"check_for_extra_heat" = "crates/flexmesa-star/src/evolve_support.rs::apply_extra_heat_controls"
+"do_evolve_step_part1" = "crates/flexmesa-star/src/evolve.rs::star_evolve_step_part1+star_evolve_step_outcome_checked"
+"do_evolve_step_part2" = "crates/flexmesa-star/src/evolve.rs::star_evolve_step_part2+star_evolve_step_outcome_checked"
+"do_mesh" = "crates/flexmesa-star/src/evolve_support.rs::remesh_star_before_step"
+"do_step_part1" = "crates/flexmesa-star/src/evolve.rs::star_evolve_step_part1+star_evolve_step_outcome_checked"
+"do_step_part2" = "crates/flexmesa-star/src/evolve.rs::star_evolve_step_part2+star_evolve_step_outcome_checked"
+"do_step_part2::okay_energy_conservation" = "crates/flexmesa-star/src/evolve_support.rs::update_step_energy_conservation"
+"do_step_part2::select_mdot_action" = "crates/flexmesa-star/src/mdot_redo.rs::select_action+select_action_with_extras"
+"do_step_part2::setup_for_implicit_mdot_loop" = "crates/flexmesa-star/src/mdot_redo.rs::setup+setup_with_generation"
+"finish_step" = "crates/flexmesa-star/src/inlist_runner.rs::run_inlist_stage_with_logs_inner+write_photo_to_case_dir"
+"pick_next_timestep" = "crates/flexmesa-star/src/evolve.rs::star_pick_next_timestep_after_step+apply_max_age_to_dt_next+finalize_accepted_step"
+"prepare_for_new_step" = "crates/flexmesa-star/src/evolve.rs::star_evolve_step_outcome_checked+star_evolve_step_part1"
+"prepare_for_new_try" = "crates/flexmesa-star/src/evolve.rs::star_evolve_step_part1+star_evolve_step_outcome_checked"
+"prepare_to_redo" = "crates/flexmesa-star/src/evolve.rs::restore_from_old+restore_attempt_state+star_evolve_step_outcome_checked"
+"prepare_to_retry" = "crates/flexmesa-star/src/evolve.rs::restore_from_old+restore_attempt_state+star_evolve_step_outcome_checked"
+"set_start_of_step_info" = "crates/flexmesa-star/src/evolve_support.rs::set_vars_for_new_try+snapshot_step_start_extras"
 
 [[files]]
 upstream_path = "star/private/evolve_support.f90"
@@ -6956,8 +7343,12 @@ module = "star"
 upstream_lines = 305
 upstream_sha256 = "075e367c470a7e2450e26ab861634e8e706fe40de2dce8b1469657d15a970253"
 status = "partial"
-flexmesa_files = ["crates/flexmesa-star/src/evolve.rs", "crates/flexmesa-star/src/evolve_support.rs"]
+flexmesa_files = ["crates/flexmesa-star/src/evolve.rs", "crates/flexmesa-star/src/evolve_support.rs", "crates/flexmesa-star/src/mesh.rs"]
+routine_map_partial = ["new_generation", "set_current_to_old"]
 notes = "updated for #152: new_generation, set_current_to_old / restore_from_old (M/R/L/v_center, time_sec, mlt_vc), and prepare_for_new_step / prepare_for_new_try; output_to_file photo/history hooks live in inlist_runner.rs"
+[files.routine_map]
+"new_generation" = "crates/flexmesa-star/src/mesh.rs::save_old_values"
+"set_current_to_old" = "crates/flexmesa-star/src/evolve.rs::restore_from_old"
 
 [[files]]
 upstream_path = "star/private/gravity_darkening.f90"
@@ -6973,8 +7364,46 @@ module = "star"
 upstream_lines = 3449
 upstream_sha256 = "9e812742db79a735453226882aa07ca92a9fabc8200885d5c86f565e316e37fe"
 status = "partial"
-flexmesa_files = ["crates/flexmesa-star/src/mesa_history.rs"]
+flexmesa_files = ["crates/flexmesa-star/src/mesa_history.rs", "crates/flexmesa-star/src/report_utils.rs"]
+routine_map_partial = ["do_binary_col", "do_col", "do_col_pass2", "do_col_pass3", "do_color_col", "do_extra_col", "do_get_data_for_history_columns", "do_history_info", "do_int_val", "do_name", "do_val", "get1_hist_value", "get_history_specs", "history_getval", "set_burn_types", "write_history_info", "write_integer", "write_string", "write_val"]
 notes = "updated for #163: selectable history_columns.list writer (partial; microphysics columns under #161)"
+[files.routine_map]
+"category_L" = "crates/flexmesa-star/src/mesa_history.rs::evaluate_star_history_row_with_ctx"
+"count_output_burn_regions" = "crates/flexmesa-star/src/mesa_history.rs::evaluate_star_history_row_with_ctx"
+"count_output_mix_regions" = "crates/flexmesa-star/src/mesa_history.rs::evaluate_star_history_row_with_ctx"
+"count_regions" = "crates/flexmesa-star/src/report_utils.rs::count_regions"
+"cz_max_log_x" = "crates/flexmesa-star/src/mesa_history.rs::eval_scalar_column"
+"cz_top_max_log_x" = "crates/flexmesa-star/src/mesa_history.rs::eval_scalar_column"
+"do_binary_col" = "crates/flexmesa-star/src/mesa_history.rs::format_star_history_file_header_with_extra+format_star_history_data_line_with_extra"
+"do_col" = "crates/flexmesa-star/src/mesa_history.rs::format_star_history_file_header_with_extras+format_star_history_data_line_with_extra"
+"do_col_pass1" = "crates/flexmesa-star/src/report_utils.rs::push_mesa_6line_header"
+"do_col_pass2" = "crates/flexmesa-star/src/mesa_history.rs::column_name"
+"do_col_pass3" = "crates/flexmesa-star/src/mesa_history.rs::format_star_history_data_line_with_extra+evaluate_star_history_row_with_ctx"
+"do_color_col" = "crates/flexmesa-star/src/mesa_history.rs::write_step_with_ctx_and_extras"
+"do_extra_col" = "crates/flexmesa-star/src/mesa_history.rs::format_star_history_file_header_with_extras+format_star_history_data_line_with_extra"
+"do_get_data_for_history_columns" = "crates/flexmesa-star/src/mesa_history.rs::evaluate_star_history_row+evaluate_star_history_row_with_ctx"
+"do_history_info" = "crates/flexmesa-star/src/mesa_history.rs::write_step_with_ctx_and_extras+format_star_history_file_header_with_extras+format_star_history_data_line_with_extra"
+"do_int_val" = "crates/flexmesa-star/src/mesa_history.rs::format_star_history_data_line_with_extra"
+"do_name" = "crates/flexmesa-star/src/mesa_history.rs::format_star_history_file_header_with_extras"
+"do_val" = "crates/flexmesa-star/src/mesa_history.rs::format_star_history_data_line_with_extra"
+"find_weakest_mixing_region" = "crates/flexmesa-star/src/report_utils.rs::eval_history_mixing_regions"
+"get1_hist_value" = "crates/flexmesa-star/src/mesa_history.rs::star_get_history_output"
+"get_history_specs" = "crates/flexmesa-star/src/mesa_history.rs::parse_star_history_columns"
+"history_getval" = "crates/flexmesa-star/src/mesa_history.rs::eval_scalar_column+evaluate_star_history_row_with_ctx"
+"if_rot" = "crates/flexmesa-star/src/mesa_history.rs::eval_scalar_column"
+"interpolate_burn_bdy_q" = "crates/flexmesa-star/src/report_utils.rs::eval_history_burning_regions"
+"interpolate_burn_bdy_r" = "crates/flexmesa-star/src/report_utils.rs::eval_history_burning_regions"
+"max_eps_nuc_log_x" = "crates/flexmesa-star/src/mesa_history.rs::eval_scalar_column"
+"prune_weak_mixing_regions" = "crates/flexmesa-star/src/report_utils.rs::eval_history_mixing_regions"
+"region_top" = "crates/flexmesa-star/src/report_utils.rs::region_top_0based"
+"remove_region" = "crates/flexmesa-star/src/report_utils.rs::remove_region"
+"set_burn_types" = "crates/flexmesa-star/src/report_utils.rs::eval_history_burning_regions"
+"set_mix_types" = "crates/flexmesa-star/src/report_utils.rs::eval_history_mixing_regions"
+"star_avg_x" = "crates/flexmesa-star/src/report_utils.rs::star_avg_x_slot"
+"write_history_info" = "crates/flexmesa-star/src/mesa_history.rs::write_step+write_step_with_extra+write_step_with_ctx_and_extra+write_step_with_ctx_and_extras"
+"write_integer" = "crates/flexmesa-star/src/report_utils.rs::write_mesa_int_width+format_mesa_int_width+format_mesa_int"
+"write_string" = "crates/flexmesa-star/src/report_utils.rs::format_mesa_header_str_width+format_mesa_header_str"
+"write_val" = "crates/flexmesa-star/src/report_utils.rs::write_mesa_dbl_width+format_mesa_dbl_width+format_mesa_dbl"
 
 [[files]]
 upstream_path = "star/private/history_specs.f90"
@@ -6983,7 +7412,17 @@ upstream_lines = 783
 upstream_sha256 = "152bbcf21a18ced4e34e000ae76e19144e63bede8719dffc953538ddb8142515"
 status = "partial"
 flexmesa_files = ["crates/flexmesa-star/src/mesa_history.rs"]
+routine_map_partial = ["add_history_columns", "do1", "do1_history_spec", "set_history_columns"]
 notes = "updated for #163: recursive history_columns.list parser (partial; #161)"
+[files.routine_map]
+"add_history_columns" = "crates/flexmesa-star/src/mesa_history.rs::parse_star_history_columns+parse_history_columns_inner"
+"do1" = "crates/flexmesa-star/src/mesa_history.rs::parse_history_columns_inner"
+"do1_history_spec" = "crates/flexmesa-star/src/mesa_history.rs::parse_history_columns_inner"
+"do1_nuclide" = "crates/flexmesa-star/src/mesa_history.rs::parse_iso_prefix_query+insert_nuclide_spec"
+"do1_rates_category" = "crates/flexmesa-star/src/mesa_history.rs::parse_history_columns_inner"
+"do_abundances" = "crates/flexmesa-star/src/mesa_history.rs::insert_all_active_abundances"
+"insert_spec" = "crates/flexmesa-star/src/mesa_history.rs::push_unique_spec"
+"set_history_columns" = "crates/flexmesa-star/src/mesa_history.rs::resolve_star_history_columns"
 
 [[files]]
 upstream_path = "star/private/hydro_alpha_rti_eqns.f90"
@@ -7015,9 +7454,24 @@ upstream_lines = 879
 upstream_sha256 = "5ffffe7a035f5c0d3f8db03691d13a7b46d9fa8f526940869f98624120ff4a98"
 status = "ported_unverified"
 flexmesa_files = ["crates/flexmesa-star/src/hydro_energy.rs", "crates/flexmesa-star/src/hydro_work.rs"]
+routine_map_partial = ["eval1_A_times_v_face_ad", "eval1_work", "eval_dwork", "eval_simple_PdV_work", "get1_energy_eqn", "get1_energy_eqn::setup_d_turbulent_energy_dt", "get1_energy_eqn::setup_de_dt_and_friends", "get1_energy_eqn::setup_dwork_dm", "get1_energy_eqn::setup_eps_grav", "get1_energy_eqn::setup_sources_and_others", "get1_energy_eqn::unpack_res18"]
 notes = "seeded from coverage-map.md (ported): quick. 11/17 routine names; not checked term by term (another auditor)"
 [files.routine_map]
 "do1_energy_eqn" = "crates/flexmesa-star/src/hydro_energy.rs::do1_energy_eqn"
+"eval1_A_times_v_face_ad" = "crates/flexmesa-star/src/hydro_work.rs::eval1_a_times_v_face_v_flag_ad"
+"eval1_work" = "crates/flexmesa-star/src/hydro_work.rs::eval1_work_v_flag_ad"
+"eval_dwork" = "crates/flexmesa-star/src/hydro_work.rs::eval_v_flag_dwork_dm_ad"
+"eval_simple_PdV_work" = "crates/flexmesa-star/src/hydro_work.rs::eval_v_flag_simple_pdv_dm_ad+eval_simple_pdv_p_tot_ad"
+"get1_energy_eqn" = "crates/flexmesa-star/src/hydro_energy.rs::do1_energy_eqn_with_ergs_error"
+"get1_energy_eqn::init" = "crates/flexmesa-star/src/hydro_energy.rs::do1_energy_eqn_with_ergs_error+setup_sources_and_others"
+"get1_energy_eqn::setup_d_turbulent_energy_dt" = "crates/flexmesa-star/src/hydro_energy.rs::setup_d_turbulent_energy_dt"
+"get1_energy_eqn::setup_de_dt_and_friends" = "crates/flexmesa-star/src/hydro_energy.rs::setup_de_dt+do1_energy_eqn_with_ergs_error"
+"get1_energy_eqn::setup_dL_dm" = "crates/flexmesa-star/src/hydro_energy.rs::setup_dl_dm+eval_l_theta"
+"get1_energy_eqn::setup_dwork_dm" = "crates/flexmesa-star/src/hydro_energy.rs::do1_energy_eqn_with_ergs_error+eval_surface_and_center_work"
+"get1_energy_eqn::setup_eps_grav" = "crates/flexmesa-star/src/hydro_energy.rs::eps_grav_form+do1_energy_eqn_with_ergs_error"
+"get1_energy_eqn::setup_RTI_diffusion" = "crates/flexmesa-star/src/hydro_energy.rs::setup_rti_diffusion+wrap_e_cell_00"
+"get1_energy_eqn::setup_sources_and_others" = "crates/flexmesa-star/src/hydro_energy.rs::setup_sources_and_others"
+"get1_energy_eqn::unpack_res18" = "crates/flexmesa-star/src/hydro_energy.rs::do1_energy_eqn_with_ergs_error"
 
 [[files]]
 upstream_path = "star/private/hydro_eqns.f90"
@@ -7062,7 +7516,19 @@ upstream_lines = 459
 upstream_sha256 = "d960faa4066ae8072c70e5efd45cf173b68fa9c84977546092b270cc88c4ab34"
 status = "partial"
 flexmesa_files = ["crates/flexmesa-star/src/riemann.rs", "crates/flexmesa-star/src/riemann_ad.rs", "crates/flexmesa-star/src/riemann_eqns.rs"]
+routine_map_partial = ["do1_Riemann_momentum_eqn", "do1_dudt_eqn", "do1_uface_and_Pface", "do_surf_Riemann_dudt_eqn", "do_uface_and_Pface", "get_G", "setup_diffusion_source", "setup_geometry_source", "setup_gravity_source", "setup_momentum_flux"]
 notes = "seeded from coverage-map.md (partial): quick. HLLC faces present; PPM/face reconstruction absent (see reconstructed_face_support)"
+[files.routine_map]
+"do1_dudt_eqn" = "crates/flexmesa-star/src/riemann_eqns.rs::do1_riemann_momentum_eqn"
+"do1_Riemann_momentum_eqn" = "crates/flexmesa-star/src/riemann_eqns.rs::do1_riemann_momentum_eqn"
+"do1_uface_and_Pface" = "crates/flexmesa-star/src/riemann_ad.rs::do_uface_and_pface"
+"do_surf_Riemann_dudt_eqn" = "crates/flexmesa-star/src/riemann_eqns.rs::do1_riemann_momentum_eqn"
+"do_uface_and_Pface" = "crates/flexmesa-star/src/riemann_ad.rs::do_uface_and_pface"
+"get_G" = "crates/flexmesa-star/src/riemann_ad.rs::do_uface_and_pface"
+"setup_diffusion_source" = "crates/flexmesa-star/src/riemann_eqns.rs::do1_riemann_momentum_eqn"
+"setup_geometry_source" = "crates/flexmesa-star/src/riemann_eqns.rs::do1_riemann_momentum_eqn"
+"setup_gravity_source" = "crates/flexmesa-star/src/riemann_eqns.rs::do1_riemann_momentum_eqn"
+"setup_momentum_flux" = "crates/flexmesa-star/src/riemann_eqns.rs::do1_riemann_momentum_eqn"
 
 [[files]]
 upstream_path = "star/private/hydro_rotation.f90"
@@ -7070,8 +7536,34 @@ module = "star"
 upstream_lines = 922
 upstream_sha256 = "6c45474eba5219b2c42f3985912a57a8065e298ddef27c431eac84ed6d963625"
 status = "partial"
-flexmesa_files = ["crates/flexmesa-star/src/hydro_rotation.rs", "crates/flexmesa-star/src/rotation.rs"]
+flexmesa_files = ["crates/flexmesa-star/src/hydro_rotation.rs", "crates/flexmesa-star/src/relax.rs", "crates/flexmesa-star/src/report_utils.rs", "crates/flexmesa-star/src/rotation.rs"]
+routine_map_partial = ["blend_tidal_values", "eval_fp_ft", "eval_i_rot", "set1_i_rot", "set_i_rot", "set_rotation_info", "set_surf_avg_rotation_info", "set_uniform_omega", "use_xh_to_update_i_rot", "use_xh_to_update_i_rot_and_j_rot"]
 notes = "updated for #158: w_div_w_roche_jrot/omega, roche_a/c, eval_i_rot/eval_i_rot_dual, eval_fp_ft_single/eval_fp_ft_single_dual, set1_i_rot, update1_i_rot_from_xh, set_i_rot, set_omega, set_rotation_info, get1_am_sig, get_rotation_sigmas, and total_angular_momentum match MESA 26.4.1 hex oracles at 0 ULP in omega_mix_158_test.rs; file stays partial while remaining w_div_wc/j_rot_flag solver routines (compute_j_fluxes_and_extra_jdot, set_uniform_omega, set_i_rot_from_omega_and_j_rot, use_xh_to_update_i_rot) are unported"
+[files.routine_map]
+"A" = "crates/flexmesa-star/src/hydro_rotation.rs::roche_a"
+"B" = "crates/flexmesa-star/src/hydro_rotation.rs::roche_b"
+"blend_tidal_values" = "crates/flexmesa-star/src/hydro_rotation.rs::set1_i_rot+apply_face_fp_ft"
+"C" = "crates/flexmesa-star/src/hydro_rotation.rs::roche_c"
+"eval_fp_ft" = "crates/flexmesa-star/src/hydro_rotation.rs::eval_fp_ft+eval_fp_ft_single+eval_fp_ft_single_dual"
+"eval_i_rot" = "crates/flexmesa-star/src/hydro_rotation.rs::eval_i_rot+eval_i_rot_dual"
+"get1_am_sig" = "crates/flexmesa-star/src/hydro_rotation.rs::get1_am_sig"
+"get_rotation_sigmas" = "crates/flexmesa-star/src/hydro_rotation.rs::get_rotation_sigmas"
+"re_from_rpsi_factor" = "crates/flexmesa-star/src/hydro_rotation.rs::re_from_rpsi_factor"
+"rpsi_from_re_factor" = "crates/flexmesa-star/src/hydro_rotation.rs::rpsi_from_re_factor"
+"set1_i_rot" = "crates/flexmesa-star/src/hydro_rotation.rs::set1_i_rot"
+"set_i_rot" = "crates/flexmesa-star/src/hydro_rotation.rs::set_i_rot"
+"set_i_rot_from_omega_and_j_rot" = "crates/flexmesa-star/src/hydro_rotation.rs::set_i_rot_from_omega_and_j_rot"
+"set_j_rot" = "crates/flexmesa-star/src/hydro_rotation.rs::set_j_rot"
+"set_omega" = "crates/flexmesa-star/src/hydro_rotation.rs::set_omega"
+"set_rotation_info" = "crates/flexmesa-star/src/hydro_rotation.rs::set_rotation_info+apply_face_fp_ft"
+"set_surf_avg_rotation_info" = "crates/flexmesa-star/src/report_utils.rs::eval_surf_avg_rotation_info"
+"set_uniform_omega" = "crates/flexmesa-star/src/relax.rs::apply_uniform_rotation"
+"sigmoid" = "crates/flexmesa-star/src/hydro_rotation.rs::roche_sigmoid"
+"update1_i_rot_from_xh" = "crates/flexmesa-star/src/hydro_rotation.rs::update1_i_rot_from_xh"
+"use_xh_to_update_i_rot" = "crates/flexmesa-star/src/hydro_rotation.rs::use_xh_to_update_i_rot"
+"use_xh_to_update_i_rot_and_j_rot" = "crates/flexmesa-star/src/hydro_rotation.rs::use_xh_to_update_i_rot_and_j_rot"
+"w_div_w_roche_jrot" = "crates/flexmesa-star/src/hydro_rotation.rs::w_div_w_roche_jrot"
+"w_div_w_roche_omega" = "crates/flexmesa-star/src/hydro_rotation.rs::w_div_w_roche_omega"
 
 [[files]]
 upstream_path = "star/private/hydro_rsp2.f90"
@@ -7079,8 +7571,44 @@ module = "star"
 upstream_lines = 1243
 upstream_sha256 = "8deb696db0ba4f7e960d70752dc4c9bfe259afb3db6d3a6add8067b6f4f24e76"
 status = "partial"
-flexmesa_files = ["crates/flexmesa-star/src/rsp2.rs", "crates/flexmesa-star/src/rsp2_ad.rs", "crates/flexmesa-star/src/rsp2_eqns.rs"]
+flexmesa_files = ["crates/flexmesa-star/src/mesh.rs", "crates/flexmesa-star/src/rsp2.rs", "crates/flexmesa-star/src/rsp2_ad.rs", "crates/flexmesa-star/src/rsp2_eqns.rs"]
+routine_map_partial = ["Hp_face_for_rsp2_eqn", "Hp_face_for_rsp2_val", "compute_Eq_cell", "compute_Uq_face", "compute_Y_face", "compute_d_v_div_r_opt_time_center", "do1_rsp2_Hp_eqn", "do1_rsp2_L_eqn", "do1_turbulent_energy_eqn", "set_RSP2_vars", "set_etrb_start_vars", "setup_Ptrb_dV_ad", "setup_dt_Eq_ad"]
 notes = "seeded from coverage-map.md (partial): quick. 12/34 names"
+[files.routine_map]
+"compute_C" = "crates/flexmesa-star/src/rsp2_ad.rs::build_rsp2_ad_work"
+"compute_Chi_cell" = "crates/flexmesa-star/src/rsp2_ad.rs::build_rsp2_ad_work"
+"compute_D" = "crates/flexmesa-star/src/rsp2_ad.rs::build_rsp2_ad_work"
+"compute_d_v_div_r" = "crates/flexmesa-star/src/rsp2_ad.rs::build_rsp2_ad_work"
+"compute_d_v_div_r_opt_time_center" = "crates/flexmesa-star/src/rsp2_ad.rs::build_rsp2_ad_work"
+"compute_Dr" = "crates/flexmesa-star/src/rsp2_ad.rs::build_rsp2_ad_work"
+"compute_Eq_cell" = "crates/flexmesa-star/src/rsp2_ad.rs::build_rsp2_ad_work"
+"compute_L_face" = "crates/flexmesa-star/src/rsp2_ad.rs::build_rsp2_ad_work+eval_and_save_rsp2_eqns"
+"compute_L_terms" = "crates/flexmesa-star/src/rsp2_ad.rs::build_rsp2_ad_work+eval_and_save_rsp2_eqns"
+"compute_Lc" = "crates/flexmesa-star/src/rsp2_ad.rs::build_rsp2_ad_work"
+"compute_Lc_terms" = "crates/flexmesa-star/src/rsp2_ad.rs::build_rsp2_ad_work"
+"compute_Lr" = "crates/flexmesa-star/src/rsp2_ad.rs::build_rsp2_ad_work"
+"compute_Lt" = "crates/flexmesa-star/src/rsp2_ad.rs::build_rsp2_ad_work"
+"compute_PII_face" = "crates/flexmesa-star/src/rsp2_ad.rs::build_rsp2_ad_work"
+"compute_Source" = "crates/flexmesa-star/src/rsp2_ad.rs::build_rsp2_ad_work"
+"compute_Uq_face" = "crates/flexmesa-star/src/rsp2.rs::compute_rsp2_uq_face"
+"compute_Y_face" = "crates/flexmesa-star/src/rsp2_ad.rs::build_rsp2_ad_work"
+"do1_rsp2_Hp_eqn" = "crates/flexmesa-star/src/rsp2_ad.rs::eval_and_save_rsp2_eqns"
+"do1_rsp2_L_eqn" = "crates/flexmesa-star/src/rsp2_ad.rs::eval_and_save_rsp2_eqns"
+"do1_turbulent_energy_eqn" = "crates/flexmesa-star/src/rsp2_ad.rs::eval_and_save_rsp2_eqns"
+"flux_limiter_function" = "crates/flexmesa-star/src/rsp2.rs::rsp2_flux_limiter"
+"get_RSP2_alfa_beta_face_weights" = "crates/flexmesa-star/src/rsp2_eqns.rs::rsp2_face_weights"
+"Hp_cell_for_Chi" = "crates/flexmesa-star/src/rsp2_ad.rs::wrap_hp_cell"
+"Hp_face_for_rsp2_eqn" = "crates/flexmesa-star/src/rsp2_ad.rs::eval_rsp2_hp_face_ad"
+"Hp_face_for_rsp2_val" = "crates/flexmesa-star/src/rsp2_eqns.rs::eval_rsp2_hp_face_zone"
+"RSP2_adjust_vars_before_call_solver" = "crates/flexmesa-star/src/rsp2_eqns.rs::rsp2_adjust_vars_before_call_solver"
+"set_etrb_start_vars" = "crates/flexmesa-star/src/mesh.rs::save_start_values"
+"set_RSP2_vars" = "crates/flexmesa-star/src/rsp2_ad.rs::update_rsp2_vars_ad"
+"setup_d_turbulent_energy" = "crates/flexmesa-star/src/rsp2_ad.rs::eval_and_save_rsp2_eqns"
+"setup_dt_C_ad" = "crates/flexmesa-star/src/rsp2_ad.rs::eval_and_save_rsp2_eqns"
+"setup_dt_dLt_dm_ad" = "crates/flexmesa-star/src/rsp2_ad.rs::eval_and_save_rsp2_eqns"
+"setup_dt_Eq_ad" = "crates/flexmesa-star/src/rsp2_ad.rs::eval_and_save_rsp2_eqns"
+"setup_Ptrb_dV_ad" = "crates/flexmesa-star/src/rsp2_ad.rs::eval_and_save_rsp2_eqns"
+"wrap_Hp_cell" = "crates/flexmesa-star/src/rsp2_ad.rs::wrap_hp_cell"
 
 [[files]]
 upstream_path = "star/private/hydro_rsp2_support.f90"
@@ -7089,7 +7617,23 @@ upstream_lines = 445
 upstream_sha256 = "a393df84a2fba4a74b722bb42853a9fe580b6464345c3b2f057c28d43cf7239f"
 status = "partial"
 flexmesa_files = ["crates/flexmesa-star/src/rsp2_remesh.rs"]
+routine_map_partial = ["get_PT_surf", "remesh_for_RSP2", "revise_lnT_for_QHSE", "set_Hp_face", "setvars"]
 notes = "seeded from coverage-map.md (partial): quick. 1/14 names"
+[files.routine_map]
+"check_new_lnR" = "crates/flexmesa-star/src/rsp2_remesh.rs::remesh_for_rsp2"
+"find_xm_anchor" = "crates/flexmesa-star/src/rsp2_remesh.rs::remesh_for_rsp2"
+"get_PT_surf" = "crates/flexmesa-star/src/rsp2_remesh.rs::remesh_for_rsp2"
+"interpolate1_cell_val" = "crates/flexmesa-star/src/rsp2_remesh.rs::remesh_for_rsp2"
+"interpolate1_face_val" = "crates/flexmesa-star/src/rsp2_remesh.rs::remesh_for_rsp2"
+"interpolate1_xa" = "crates/flexmesa-star/src/rsp2_remesh.rs::remesh_for_rsp2"
+"remesh_for_RSP2" = "crates/flexmesa-star/src/rsp2_remesh.rs::remesh_for_rsp2"
+"rescale_xa" = "crates/flexmesa-star/src/rsp2_remesh.rs::remesh_for_rsp2"
+"revise_lnT_for_QHSE" = "crates/flexmesa-star/src/rsp2_remesh.rs::remesh_for_rsp2"
+"set_Hp_face" = "crates/flexmesa-star/src/rsp2_remesh.rs::remesh_for_rsp2"
+"set_new_lnd" = "crates/flexmesa-star/src/rsp2_remesh.rs::remesh_for_rsp2"
+"set_xm_new" = "crates/flexmesa-star/src/rsp2_remesh.rs::remesh_for_rsp2"
+"set_xm_old" = "crates/flexmesa-star/src/rsp2_remesh.rs::remesh_for_rsp2"
+"setvars" = "crates/flexmesa-star/src/rsp2_remesh.rs::remesh_for_rsp2"
 
 [[files]]
 upstream_path = "star/private/hydro_temperature.f90"
@@ -7098,7 +7642,14 @@ upstream_lines = 464
 upstream_sha256 = "9dea369d1d05ef1a9018e8e35747e4cdbf848b62f7d18f0f68c4aeaf6a1bbc84"
 status = "partial"
 flexmesa_files = ["crates/flexmesa-star/src/hydro_temperature.rs"]
+routine_map_partial = ["do1_alt_dlnT_dm_eqn", "do1_dlnT_dm_eqn", "do1_gradT_eqn", "eval_dlnPdm_qhse", "set_RSP_Lsurf_BC"]
 notes = "seeded from coverage-map.md (partial): quick. `do1_gradT_eqn`, `do1_alt_dlnT_dm_eqn`, `do1_dlnT_dm_eqn` present; 191 vs 509 lines"
+[files.routine_map]
+"do1_alt_dlnT_dm_eqn" = "crates/flexmesa-star/src/hydro_temperature.rs::do1_alt_dlnt_dm_eqn"
+"do1_dlnT_dm_eqn" = "crates/flexmesa-star/src/hydro_temperature.rs::do1_temperature_eqn"
+"do1_gradT_eqn" = "crates/flexmesa-star/src/hydro_temperature.rs::do1_gradt_eqn"
+"eval_dlnPdm_qhse" = "crates/flexmesa-star/src/hydro_temperature.rs::eval_dlnpdm_qhse"
+"set_RSP_Lsurf_BC" = "crates/flexmesa-star/src/hydro_temperature.rs::set_rsp_lsurf_bc"
 
 [[files]]
 upstream_path = "star/private/hydro_vars.f90"
@@ -7106,8 +7657,21 @@ module = "star"
 upstream_lines = 1163
 upstream_sha256 = "8ff7fb41bb28819f649e6842fb97d98678876de7298fa3a24cd57463f70b9bb9"
 status = "partial"
-flexmesa_files = ["crates/flexmesa-star/src/hydro_brunt_surf.rs", "crates/flexmesa-star/src/hydro_vars.rs", "crates/flexmesa-star/src/micro.rs"]
+flexmesa_files = ["crates/flexmesa-star/src/evolve_support.rs", "crates/flexmesa-star/src/hydro_brunt_surf.rs", "crates/flexmesa-star/src/hydro_vars.rs", "crates/flexmesa-star/src/mesh.rs", "crates/flexmesa-star/src/micro.rs", "crates/flexmesa-star/src/mixing_state.rs", "crates/flexmesa-star/src/struct_burn_mix.rs"]
+routine_map_partial = ["get_surf_PT", "set_Teff_info_for_eqns", "set_final_vars", "set_grads", "set_hydro_vars", "set_vars", "set_vars_if_needed", "unpack_xh", "update_vars"]
 notes = "seeded from coverage-map.md (partial): deep. `set_hydro_vars` order of micro/MLT/brunt/surf present; `set_vars_if_needed`/`update_vars` skip logic, `set_Teff` variants, `set_cgrav`/`other_cgrav` flow simplified"
+[files.routine_map]
+"compute_smoothed_brunt_B" = "crates/flexmesa-star/src/mixing_state.rs::set_grads"
+"get_surf_PT" = "crates/flexmesa-star/src/hydro_brunt_surf.rs::get_surf_pt"
+"set_cgrav" = "crates/flexmesa-star/src/hydro_vars.rs::set_cgrav"
+"set_final_vars" = "crates/flexmesa-star/src/struct_burn_mix.rs::do_struct_burn_mix"
+"set_grads" = "crates/flexmesa-star/src/mixing_state.rs::set_grads"
+"set_hydro_vars" = "crates/flexmesa-star/src/hydro_vars.rs::set_hydro_vars+set_hydro_vars_with_skips"
+"set_Teff_info_for_eqns" = "crates/flexmesa-star/src/hydro_brunt_surf.rs::eval_surf_bc"
+"set_vars" = "crates/flexmesa-star/src/hydro_vars.rs::set_vars"
+"set_vars_if_needed" = "crates/flexmesa-star/src/evolve_support.rs::set_vars_for_new_step+set_vars_for_new_try"
+"unpack_xh" = "crates/flexmesa-star/src/mesh.rs::unpack_xh"
+"update_vars" = "crates/flexmesa-star/src/hydro_vars.rs::set_hydro_vars_with_skips+set_irradiation_heat"
 
 [[files]]
 upstream_path = "star/private/init.f90"
@@ -7147,7 +7711,10 @@ upstream_lines = 526
 upstream_sha256 = "c69ddb86cbacf2a9445cf22ade171dbb2b8920fe3c1621428c6ef1f580a6b5ee"
 status = "partial"
 flexmesa_files = ["crates/flexmesa-star/src/micro.rs"]
+routine_map_partial = ["get_kap"]
 notes = "seeded from coverage-map.md (partial): quick. Single `kap_get`; `op_mono`, `use_other_kap`, compton/`kap_frac_*` bookkeeping not found (0/5 names)"
+[files.routine_map]
+"get_kap" = "crates/flexmesa-star/src/micro.rs::eval_kap_for_range"
 
 [[files]]
 upstream_path = "star/private/magnetic_diffusion.f90"
@@ -7155,8 +7722,14 @@ module = "star"
 upstream_lines = 137
 upstream_sha256 = "d4fda55a5362623282dd81f0dd66ed7d7663a92a138dabb88b71fd4d71cb2549"
 status = "partial"
-flexmesa_files = ["crates/flexmesa-star/src/rotation.rs"]
+flexmesa_files = ["crates/flexmesa-star/src/rotation.rs", "crates/flexmesa-star/src/rotation_mix_info.rs"]
 notes = "seeded from coverage-map.md (partial): quick. 0/5 names; one function"
+[files.routine_map]
+"calc_eta" = "crates/flexmesa-star/src/rotation_mix_info.rs::calc_eta"
+"calc_sige" = "crates/flexmesa-star/src/rotation_mix_info.rs::calc_sige"
+"sige1" = "crates/flexmesa-star/src/rotation_mix_info.rs::sige1"
+"sige2" = "crates/flexmesa-star/src/rotation_mix_info.rs::sige2"
+"sige3" = "crates/flexmesa-star/src/rotation_mix_info.rs::sige3"
 
 [[files]]
 upstream_path = "star/private/mass_utils.f90"
@@ -7184,10 +7757,36 @@ upstream_lines = 2889
 upstream_sha256 = "21de1bff546d7533fffc57c205448543f3a4ac239aab4ac06c14e8991ecf24e5"
 status = "ported_unverified"
 flexmesa_files = ["crates/flexmesa-star/src/mesh_remap.rs"]
+routine_map_partial = ["adjust1_etrb", "adjust1_omega", "adjust_omega", "do1_lnT", "do_Hp_face", "do_L", "do_etrb", "do_lnR_and_lnd", "do_mesh_adjust", "do_mesh_adjust::check_species_conservation", "do_prune_mesh_surface::prune1", "do_prune_mesh_surface::prune1_ad", "do_xa"]
 notes = "updated for #153: do_mesh_adjust, do_lnR_and_lnd, do_xa, set_lnT_for_energy, do_v/do_u/do_etrb (#244), adjust_omega, and do_prune_mesh_surface"
 [files.routine_map]
-"do_mesh_adjust" = "crates/flexmesa-star/src/mesh_remap.rs::execute_adjust_mesh_from_plan+remap_onto_dq"
+"adjust1_etrb" = "crates/flexmesa-star/src/mesh_remap.rs::execute_adjust_mesh_from_plan_with+unchanged_face_for_vel+adjust1_control_volume"
+"adjust1_omega" = "crates/flexmesa-star/src/mesh_remap.rs::execute_adjust_mesh_from_plan_with+adjust1_control_volume"
+"adjust1_u" = "crates/flexmesa-star/src/mesh_remap.rs::unchanged_face_for_vel+adjust1_control_volume"
+"adjust1_v" = "crates/flexmesa-star/src/mesh_remap.rs::unchanged_face_for_vel+adjust1_control_volume"
+"adjust_omega" = "crates/flexmesa-star/src/mesh_remap.rs::execute_adjust_mesh_from_plan_with+adjust1_control_volume+total_angular_momentum"
+"do1_lnT" = "crates/flexmesa-star/src/mesh_remap.rs::execute_adjust_mesh_from_plan_with+solve_cell_lnt_for_energy+get_old_value_integral"
+"do_alpha_RTI" = "crates/flexmesa-star/src/mesh_remap.rs::execute_adjust_mesh_from_plan_with+do_interp_pt_val"
+"do_etrb" = "crates/flexmesa-star/src/mesh_remap.rs::execute_adjust_mesh_from_plan_with+unchanged_face_for_vel+adjust1_control_volume"
+"do_Hp_face" = "crates/flexmesa-star/src/mesh_remap.rs::execute_adjust_mesh_from_plan_with+do_interp_pt_val"
+"do_interp_cell_val" = "crates/flexmesa-star/src/mesh_remap.rs::do_interp_cell_val"
+"do_interp_pt_val" = "crates/flexmesa-star/src/mesh_remap.rs::do_interp_pt_val"
+"do_L" = "crates/flexmesa-star/src/mesh_remap.rs::execute_adjust_mesh_from_plan_with+do_interp_pt_val"
+"do_lnR_and_lnd" = "crates/flexmesa-star/src/mesh_remap.rs::do_lnr_and_lnd"
+"do_lnR_and_lnd::set1_new_r" = "crates/flexmesa-star/src/mesh_remap.rs::do_lnr_and_lnd"
+"do_mesh_adjust" = "crates/flexmesa-star/src/mesh_remap.rs::execute_adjust_mesh_from_plan+execute_adjust_mesh_from_plan_with+remap_onto_dq+build_plan_for_given_dq"
+"do_mesh_adjust::check_species_conservation" = "crates/flexmesa-star/src/mesh_remap.rs::execute_adjust_mesh_from_plan_with"
 "do_prune_mesh_surface" = "crates/flexmesa-star/src/mesh_remap.rs::do_prune_mesh_surface"
+"do_prune_mesh_surface::prune1" = "crates/flexmesa-star/src/mesh_remap.rs::do_prune_mesh_surface"
+"do_prune_mesh_surface::prune1_ad" = "crates/flexmesa-star/src/mesh_remap.rs::do_prune_mesh_surface"
+"do_u" = "crates/flexmesa-star/src/mesh_remap.rs::execute_adjust_mesh_from_plan_with+unchanged_face_for_vel+adjust1_control_volume"
+"do_v" = "crates/flexmesa-star/src/mesh_remap.rs::execute_adjust_mesh_from_plan_with+unchanged_face_for_vel+adjust1_control_volume"
+"do_xa" = "crates/flexmesa-star/src/mesh_remap.rs::execute_adjust_mesh_from_plan_with+compute_upstream_xa_lpp+get_xq_integral_col"
+"get1_lpp" = "crates/flexmesa-star/src/mesh_remap.rs::get1_lpp_zone"
+"get1_lpp::set_const" = "crates/flexmesa-star/src/mesh_remap.rs::get1_lpp_zone"
+"get_old_integral" = "crates/flexmesa-star/src/mesh_remap.rs::get_old_value_integral"
+"get_old_value_integral" = "crates/flexmesa-star/src/mesh_remap.rs::get_old_value_integral"
+"get_xq_integral" = "crates/flexmesa-star/src/mesh_remap.rs::get_xq_integral_col"
 "set_lnT_for_energy" = "crates/flexmesa-star/src/mesh_remap.rs::solve_cell_lnt_for_energy"
 "set_lnT_for_energy_with_tol" = "crates/flexmesa-star/src/mesh_remap.rs::solve_cell_lnt_for_energy"
 
@@ -7220,8 +7819,19 @@ module = "star"
 upstream_lines = 766
 upstream_sha256 = "5a75a4c4540996446a4f7d1f99a173f72864a175f5b61f6ecfb6a332b591c40d"
 status = "partial"
-flexmesa_files = ["crates/flexmesa-star/src/micro.rs"]
+flexmesa_files = ["crates/flexmesa-star/src/micro.rs", "crates/flexmesa-star/src/micro_cache.rs", "crates/flexmesa-star/src/mixing_micro.rs", "crates/flexmesa-star/src/star_lib.rs"]
+routine_map_partial = ["do_eos", "do_eos_for_cell", "do_eos_for_cell::store_stuff", "do_kap_for_cell", "set_eos_with_mask", "set_micro_vars", "set_micro_vars::do1_neu_kap", "set_micro_vars::set_eos", "store_eos_for_cell"]
 notes = "seeded from coverage-map.md (partial): quick. `set_micro_vars` sequence present; `set_eos_with_mask`, `shutdown_microphys`, `other_*` hooks absent"
+[files.routine_map]
+"do_eos" = "crates/flexmesa-star/src/micro.rs::do_eos+do_eos_inner"
+"do_eos_for_cell" = "crates/flexmesa-star/src/star_lib.rs::star_do_eos_for_cell"
+"do_eos_for_cell::store_stuff" = "crates/flexmesa-star/src/micro.rs::store_eos_for_cell"
+"do_kap_for_cell" = "crates/flexmesa-star/src/micro.rs::eval_kap_for_range"
+"set_eos_with_mask" = "crates/flexmesa-star/src/mixing_micro.rs::eval_eos_kap_range_by_mode"
+"set_micro_vars" = "crates/flexmesa-star/src/micro_cache.rs::eval_raw_microphysics+eval_or_restore+eval_or_restore_inner"
+"set_micro_vars::do1_neu_kap" = "crates/flexmesa-star/src/micro.rs::do_neu_inner+eval_kap_for_range"
+"set_micro_vars::set_eos" = "crates/flexmesa-star/src/micro_cache.rs::eval_raw_microphysics"
+"store_eos_for_cell" = "crates/flexmesa-star/src/micro.rs::store_eos_for_cell"
 
 [[files]]
 upstream_path = "star/private/mix_info.f90"
@@ -7229,16 +7839,40 @@ module = "star"
 upstream_lines = 2438
 upstream_sha256 = "99b856783b44304e0d739ee3adbb065537f266a116a188ae3480b2415a4908a0"
 status = "partial"
-flexmesa_files = ["crates/flexmesa-star/src/hydro_rti.rs", "crates/flexmesa-star/src/mix_info.rs", "crates/flexmesa-star/src/mixing_state.rs", "crates/flexmesa-star/src/rotation.rs", "crates/flexmesa-star/src/rotation_mix.rs"]
+flexmesa_files = ["crates/flexmesa-star/src/hydro_rti.rs", "crates/flexmesa-star/src/hydro_vars.rs", "crates/flexmesa-star/src/mix_info.rs", "crates/flexmesa-star/src/mixing_state.rs", "crates/flexmesa-star/src/rotation.rs", "crates/flexmesa-star/src/rotation_mix.rs"]
+routine_map_partial = ["add_RTI_turbulence", "close_convection_gaps", "close_semiconvection_gaps", "close_thermohaline_gaps", "do1", "end_of_convective_region", "get_RTI_sigmas", "locate_convection_boundaries", "remove_embedded_semiconvection", "remove_mixing_singletons", "remove_thermohaline_dropouts", "remove_tiny_mixing", "set_am_nu_rot", "set_cz_boundary_info", "set_mixing_info::check", "set_use_gradr"]
 notes = "Ported under #155: verbatim set_mixing_info ordering, glitch/gap/singleton/dropout/embedded-semiconvection cleanup, do_mix_envelope, set_cz_boundary_info, set_cz_bdy_mass, locate_{convection,mixing}_boundaries, min_D_mix, D_mix_zero_region, and get_convection_sigmas (reproducing #268); updated under #158 with update_rotation_mixing_info (am_nu_omega, am_nu_j). Remaining: do_smoothing_by_mass (#158) and custom other_D_mix/other_after_set_mixing_info hooks (#231)."
 [files.routine_map]
-"set_mixing_info" = "crates/flexmesa-star/src/mix_info.rs::set_mixing_info"
-"set_RTI_mixing_info" = "crates/flexmesa-star/src/hydro_rti.rs::set_rti_mixing_info"
-"update_rotation_mixing_info" = "crates/flexmesa-star/src/rotation_mix.rs::update_rotation_mixing_info"
-"set_dPdr_dRhodr_info" = "crates/flexmesa-star/src/hydro_rti.rs::set_dpdr_drhodr_info"
+"add_RTI_turbulence" = "crates/flexmesa-star/src/mix_info.rs::add_rti_turbulence"
+"clean_region" = "crates/flexmesa-star/src/mix_info.rs::clean_embedded_region"
+"close_convection_gaps" = "crates/flexmesa-star/src/mix_info.rs::clean_mixing_glitches_from_controls"
+"close_gaps" = "crates/flexmesa-star/src/mix_info.rs::close_gaps"
+"close_semiconvection_gaps" = "crates/flexmesa-star/src/mix_info.rs::clean_mixing_glitches_from_controls"
+"close_thermohaline_gaps" = "crates/flexmesa-star/src/mix_info.rs::clean_mixing_glitches_from_controls"
+"do1" = "crates/flexmesa-star/src/mix_info.rs::taper_sig_region"
+"do1_region" = "crates/flexmesa-star/src/mix_info.rs::taper_sig_region"
+"do_mix_envelope" = "crates/flexmesa-star/src/mix_info.rs::do_mix_envelope"
+"end_of_convective_region" = "crates/flexmesa-star/src/mix_info.rs::end_of_convective_region"
+"end_of_mixing_region" = "crates/flexmesa-star/src/mix_info.rs::end_of_mixing_region"
 "get_convection_sigmas" = "crates/flexmesa-star/src/mix_info.rs::compute_convection_sigmas"
-"set_dxdt_mix" = "crates/flexmesa-star/src/mix_info.rs::eval_dxdt_mix"
+"get_RTI_sigmas" = "crates/flexmesa-star/src/hydro_rti.rs::get_rti_sigmas"
+"locate_convection_boundaries" = "crates/flexmesa-star/src/mix_info.rs::locate_convection_boundaries_in_place"
+"locate_mixing_boundaries" = "crates/flexmesa-star/src/mix_info.rs::locate_mixing_boundaries_in_place"
+"remove_embedded_semiconvection" = "crates/flexmesa-star/src/mix_info.rs::remove_embedded_semiconvection_zones"
+"remove_embedded_semiconvection::check" = "crates/flexmesa-star/src/mix_info.rs::remove_embedded_semiconvection_zones"
+"remove_mixing_singletons" = "crates/flexmesa-star/src/mix_info.rs::remove_mixing_singletons"
+"remove_thermohaline_dropouts" = "crates/flexmesa-star/src/mix_info.rs::remove_thermohaline_dropouts"
+"remove_tiny_mixing" = "crates/flexmesa-star/src/mix_info.rs::remove_tiny_mixing"
+"set_am_nu_rot" = "crates/flexmesa-star/src/rotation_mix.rs::set_am_nu_rot"
 "set_cz_bdy_mass" = "crates/flexmesa-star/src/mix_info.rs::set_cz_bdy_mass"
+"set_cz_boundary_info" = "crates/flexmesa-star/src/mix_info.rs::set_cz_boundary_info"
+"set_dPdr_dRhodr_info" = "crates/flexmesa-star/src/hydro_rti.rs::set_dpdr_drhodr_info"
+"set_dxdt_mix" = "crates/flexmesa-star/src/mix_info.rs::eval_dxdt_mix"
+"set_mixing_info" = "crates/flexmesa-star/src/mix_info.rs::set_mixing_info"
+"set_mixing_info::check" = "crates/flexmesa-star/src/mix_info.rs::check_d_mix_finite"
+"set_RTI_mixing_info" = "crates/flexmesa-star/src/hydro_rti.rs::set_rti_mixing_info"
+"set_use_gradr" = "crates/flexmesa-star/src/hydro_vars.rs::switch_to_radiative"
+"update_rotation_mixing_info" = "crates/flexmesa-star/src/rotation_mix.rs::update_rotation_mixing_info"
 
 [[files]]
 upstream_path = "star/private/mod_typical_charge.f90"
@@ -7257,8 +7891,17 @@ module = "star"
 upstream_lines = 813
 upstream_sha256 = "240e1e3b9ea027ef3cc0d9665bf462a24dd63487bd886eaefc7876b3cb3c7417"
 status = "partial"
-flexmesa_files = ["crates/flexmesa-star/src/micro.rs", "crates/flexmesa-star/src/micro_net.rs"]
+flexmesa_files = ["crates/flexmesa-star/src/inlist_populate.rs", "crates/flexmesa-star/src/micro.rs", "crates/flexmesa-star/src/micro_net.rs"]
+routine_map_partial = ["default_set_rate_factors", "do1_net", "do_micro_change_net", "do_net", "get_screening_mode", "net_tables", "set_net"]
 notes = "seeded from coverage-map.md (partial): quick. `do_net` present; `set_rate_factors`/`other_net_get`, `op_mono_factors`, `net_tables`, weak-rate options, `save_rates` absent; adds non-upstream `min_logt_for_net` (C1-9)"
+[files.routine_map]
+"default_set_rate_factors" = "crates/flexmesa-star/src/micro_net.rs::build_rate_factors"
+"do1_net" = "crates/flexmesa-star/src/micro_net.rs::do_net_inner+scale_eps_nuc_categories+eval_zone_eps_nuc_categories"
+"do_micro_change_net" = "crates/flexmesa-star/src/micro.rs::change_model_network+change_model_network_with_adjust+resolve_model_net"
+"do_net" = "crates/flexmesa-star/src/micro_net.rs::do_net+do_net_inner+high_temp_rate_warning_zone"
+"get_screening_mode" = "crates/flexmesa-star/src/inlist_populate.rs::populate_controls_physics"
+"net_tables" = "crates/flexmesa-star/src/micro.rs::get_or_load_net_with_canonical_dir+resolve_model_net"
+"set_net" = "crates/flexmesa-star/src/micro.rs::resolve_model_net+get_or_load_net+get_or_load_net_with_fe56ec+get_or_load_net_with_star_params+get_or_load_net_with_canonical_dir+change_model_network_with_adjust"
 
 [[files]]
 upstream_path = "star/private/neu.f90"
@@ -7658,7 +8301,10 @@ upstream_lines = 320
 upstream_sha256 = "b51c3098035d230ce93af5babce140346f49e8da65e9fa0f9fea061ba2196e46"
 status = "partial"
 flexmesa_files = ["crates/flexmesa-star/src/photo_io.rs"]
+routine_map_partial = ["read_star_photo"]
 notes = "seeded from coverage-map.md (partial): quick. Own binary format; cannot read upstream photos; equivalent role"
+[files.routine_map]
+"read_star_photo" = "crates/flexmesa-star/src/photo_io.rs::read_photo_bytes+load_photo_bytes"
 
 [[files]]
 upstream_path = "star/private/photo_out.f90"
@@ -7667,7 +8313,10 @@ upstream_lines = 179
 upstream_sha256 = "61a9ce57ba8eac0d90458bf4479fe7cc1b86f37e99cd0f6cdb883e157f664ca3"
 status = "partial"
 flexmesa_files = ["crates/flexmesa-star/src/photo_io.rs"]
+routine_map_partial = ["output_star_photo"]
 notes = "seeded from coverage-map.md (partial): quick. Own format"
+[files.routine_map]
+"output_star_photo" = "crates/flexmesa-star/src/photo_io.rs::try_write_photo_bytes+write_photo_bytes"
 
 [[files]]
 upstream_path = "star/private/pre_ms_model.f90"
@@ -7697,8 +8346,27 @@ module = "star"
 upstream_lines = 1186
 upstream_sha256 = "672578a263d4eca16eae52f81705118bc296ab45722aa6877358673bf3aed1cd"
 status = "partial"
-flexmesa_files = ["crates/flexmesa-star/src/mesa_profile.rs"]
+flexmesa_files = ["crates/flexmesa-star/src/mesa_log_reader.rs", "crates/flexmesa-star/src/mesa_profile.rs"]
+routine_map_partial = ["add_profile_columns", "do_abundance_col", "do_col", "do_extra_col", "do_integer", "do_profile_info", "do_save_profiles", "do_string", "do_val", "get_model_profile_filename", "make_room_for_profile_info", "pick_model_profile_number", "read_profiles_info", "write_profile_info"]
 notes = "updated for #163: profileN.data and profiles.index priority writer (partial; #161)"
+[files.routine_map]
+"add_profile_columns" = "crates/flexmesa-star/src/mesa_profile.rs::parse_star_profile_columns+parse_profile_columns_inner"
+"do_abundance_col" = "crates/flexmesa-star/src/mesa_profile.rs::format_star_profile_parts_with_extras_impl+build"
+"do_col" = "crates/flexmesa-star/src/mesa_profile.rs::format_star_profile_parts_with_extras_impl+eval_profile_scalar"
+"do_extra_col" = "crates/flexmesa-star/src/mesa_profile.rs::format_star_profile_parts_with_extras_impl+validate_extra_profile_inputs"
+"do_integer" = "crates/flexmesa-star/src/mesa_profile.rs::format_star_profile_parts_with_extras_impl"
+"do_profile_info" = "crates/flexmesa-star/src/mesa_profile.rs::format_star_profile_text+format_star_profile_text_with_extras+format_star_profile_parts_with_extras_impl"
+"do_save_profiles" = "crates/flexmesa-star/src/mesa_profile.rs::save_profile_with_ctx_and_extras+write_pulse_data_sidecar"
+"do_string" = "crates/flexmesa-star/src/mesa_profile.rs::format_star_profile_parts_with_extras_impl"
+"do_val" = "crates/flexmesa-star/src/mesa_profile.rs::format_star_profile_parts_with_extras_impl"
+"get_model_profile_filename" = "crates/flexmesa-star/src/mesa_profile.rs::save_profile_with_ctx_and_extras"
+"insert_spec" = "crates/flexmesa-star/src/mesa_profile.rs::push_unique_prof"
+"make_room_for_profile_info" = "crates/flexmesa-star/src/mesa_profile.rs::save_profile_with_ctx_and_extras"
+"pick_model_profile_number" = "crates/flexmesa-star/src/mesa_profile.rs::save_profile_with_ctx_and_extras"
+"read_profiles_info" = "crates/flexmesa-star/src/mesa_log_reader.rs::read_profiles_index_str+read_profiles_index_file"
+"set_profile_columns" = "crates/flexmesa-star/src/mesa_profile.rs::resolve_star_profile_columns"
+"write_profile_info" = "crates/flexmesa-star/src/mesa_profile.rs::save_profile+save_profile_with_ctx_and_extras+format_star_profile_text"
+"write_profiles_list" = "crates/flexmesa-star/src/mesa_profile.rs::format_text"
 
 [[files]]
 upstream_path = "star/private/profile_getval.f90"
@@ -7707,7 +8375,14 @@ upstream_lines = 2466
 upstream_sha256 = "36d8b7f9b3a98ff636be758419269eb992279439e1f99c0dcdfe4662bcea3d1c"
 status = "partial"
 flexmesa_files = ["crates/flexmesa-star/src/mesa_profile.rs"]
+routine_map_partial = ["do1_nuclide", "do1_profile_spec", "get_profile_id", "get_profile_val", "getval_for_profile"]
 notes = "updated for #163: profile column evaluator (partial; #161)"
+[files.routine_map]
+"do1_nuclide" = "crates/flexmesa-star/src/mesa_profile.rs::parse_profile_columns_inner"
+"do1_profile_spec" = "crates/flexmesa-star/src/mesa_profile.rs::parse_profile_columns_inner"
+"get_profile_id" = "crates/flexmesa-star/src/mesa_profile.rs::resolve_single_map_token+match_profile_scalar"
+"get_profile_val" = "crates/flexmesa-star/src/mesa_profile.rs::eval_profile_scalar"
+"getval_for_profile" = "crates/flexmesa-star/src/mesa_profile.rs::eval_profile_scalar+build"
 
 [[files]]
 upstream_path = "star/private/pulse.f90"
@@ -7716,7 +8391,12 @@ upstream_lines = 185
 upstream_sha256 = "dae4945cfd8ea3cd3f8c196305ea87ea1d9d7fefa10bf2f4c34cfc13ab6b376d"
 status = "partial"
 flexmesa_files = ["crates/flexmesa-star/src/pulse.rs", "crates/flexmesa-star/src/pulse_exporters.rs"]
+routine_map_partial = ["export_pulse_data", "get_pulse_data", "write_pulse_data"]
 notes = "seeded from coverage-map.md (partial): quick"
+[files.routine_map]
+"export_pulse_data" = "crates/flexmesa-star/src/pulse_exporters.rs::export_pulse_by_format"
+"get_pulse_data" = "crates/flexmesa-star/src/pulse_exporters.rs::export_pulse_by_format"
+"write_pulse_data" = "crates/flexmesa-star/src/pulse_exporters.rs::export_pulse_by_format"
 
 [[files]]
 upstream_path = "star/private/pulse_cafein.f90"
@@ -7725,7 +8405,14 @@ upstream_lines = 722
 upstream_sha256 = "52b329e8c177ba885aa04d89668bc135bbd8a3aafbd49cf37cda69b4d58940e2"
 status = "partial"
 flexmesa_files = ["crates/flexmesa-star/src/pulse_exporters.rs"]
+routine_map_partial = ["get_cafein_data", "store_point_data_ctr", "store_point_data_env"]
 notes = "seeded from coverage-map.md (partial): quick. 0/6 names; exporter present by format name"
+[files.routine_map]
+"get_cafein_data" = "crates/flexmesa-star/src/pulse_exporters.rs::get_cafein_data"
+"log_deriv" = "crates/flexmesa-star/src/pulse_exporters.rs::log_deriv"
+"store_point_data_ctr" = "crates/flexmesa-star/src/pulse_exporters.rs::get_cafein_data"
+"store_point_data_env" = "crates/flexmesa-star/src/pulse_exporters.rs::get_cafein_data"
+"write_cafein_data" = "crates/flexmesa-star/src/pulse_exporters.rs::write_cafein_data"
 
 [[files]]
 upstream_path = "star/private/pulse_fgong.f90"
@@ -7733,8 +8420,15 @@ module = "star"
 upstream_lines = 710
 upstream_sha256 = "79294505f8ff8759341a9f9a9cb0fa3decd9a843fd9f57bbe85b779f9c8992c1"
 status = "partial"
-flexmesa_files = ["crates/flexmesa-star/src/pulse.rs"]
+flexmesa_files = ["crates/flexmesa-star/src/pulse.rs", "crates/flexmesa-star/src/pulse_fgong.rs", "crates/flexmesa-star/src/pulse_write.rs"]
+routine_map_partial = ["get_fgong_data", "store_point_data_atm"]
 notes = "seeded from coverage-map.md (partial): quick"
+[files.routine_map]
+"get_fgong_data" = "crates/flexmesa-star/src/pulse_fgong.rs::get_fgong_data"
+"store_point_data_atm" = "crates/flexmesa-star/src/pulse_fgong.rs::store_point_data_atm"
+"store_point_data_ctr" = "crates/flexmesa-star/src/pulse_fgong.rs::get_fgong_data"
+"store_point_data_env" = "crates/flexmesa-star/src/pulse_fgong.rs::get_fgong_data"
+"write_fgong_data" = "crates/flexmesa-star/src/pulse_write.rs::write_fgong_data"
 
 [[files]]
 upstream_path = "star/private/pulse_gr1d.f90"
@@ -7743,7 +8437,10 @@ upstream_lines = 182
 upstream_sha256 = "c577dccaa6d7fc471380b7a385633d158651b88dfc3d9e39e2026b8f0257d2b3"
 status = "partial"
 flexmesa_files = ["crates/flexmesa-star/src/pulse_exporters.rs"]
+routine_map_partial = ["get_gr1d_data"]
 notes = "seeded from coverage-map.md (partial): quick"
+[files.routine_map]
+"get_gr1d_data" = "crates/flexmesa-star/src/pulse_exporters.rs::get_gr1d_data_strict"
 
 [[files]]
 upstream_path = "star/private/pulse_gsm.f90"
@@ -7759,8 +8456,14 @@ module = "star"
 upstream_lines = 476
 upstream_sha256 = "c0d93ce9bbed98a4ccc94a5d379d64f6ef640f5a61fbc9d1c42bb5dd00db73da"
 status = "partial"
-flexmesa_files = ["crates/flexmesa-star/src/pulse.rs"]
+flexmesa_files = ["crates/flexmesa-star/src/pulse.rs", "crates/flexmesa-star/src/pulse_gyre_data.rs", "crates/flexmesa-star/src/pulse_write.rs"]
+routine_map_partial = ["get_gyre_data", "store_point_data_ctr", "store_point_data_env"]
 notes = "seeded from coverage-map.md (partial): quick"
+[files.routine_map]
+"get_gyre_data" = "crates/flexmesa-star/src/pulse_gyre_data.rs::get_gyre_data+star_get_pulse_data_gyre"
+"store_point_data_ctr" = "crates/flexmesa-star/src/pulse_gyre_data.rs::get_gyre_data"
+"store_point_data_env" = "crates/flexmesa-star/src/pulse_gyre_data.rs::get_gyre_data"
+"write_gyre_data" = "crates/flexmesa-star/src/pulse_write.rs::write_gyre_data"
 
 [[files]]
 upstream_path = "star/private/pulse_osc.f90"
@@ -7768,8 +8471,14 @@ module = "star"
 upstream_lines = 608
 upstream_sha256 = "3cd219c8468f58567795084a5a079a6915a37d7cdceb098433bb48ebfb34e184"
 status = "partial"
-flexmesa_files = ["crates/flexmesa-star/src/pulse.rs"]
+flexmesa_files = ["crates/flexmesa-star/src/pulse.rs", "crates/flexmesa-star/src/pulse_osc.rs", "crates/flexmesa-star/src/pulse_write.rs"]
+routine_map_partial = ["get_osc_data", "store_point_data_ctr", "store_point_data_env", "write_osc_data"]
 notes = "seeded from coverage-map.md (partial): quick"
+[files.routine_map]
+"get_osc_data" = "crates/flexmesa-star/src/pulse_osc.rs::get_osc_data"
+"store_point_data_ctr" = "crates/flexmesa-star/src/pulse_osc.rs::get_osc_data"
+"store_point_data_env" = "crates/flexmesa-star/src/pulse_osc.rs::get_osc_data"
+"write_osc_data" = "crates/flexmesa-star/src/pulse_write.rs::write_osc_data"
 
 [[files]]
 upstream_path = "star/private/pulse_saio.f90"
@@ -7778,7 +8487,13 @@ upstream_lines = 347
 upstream_sha256 = "7efa580aa7a6e64a56dde03be2c733c844404b755908a91548e4880474412b09"
 status = "partial"
 flexmesa_files = ["crates/flexmesa-star/src/pulse_exporters.rs"]
+routine_map_partial = ["get_saio_data", "store_saio_data_atm", "store_saio_data_env"]
 notes = "seeded from coverage-map.md (partial): quick"
+[files.routine_map]
+"get_saio_data" = "crates/flexmesa-star/src/pulse_exporters.rs::export_saio+get_saio_data_strict"
+"store_saio_data_atm" = "crates/flexmesa-star/src/pulse_exporters.rs::export_saio"
+"store_saio_data_env" = "crates/flexmesa-star/src/pulse_exporters.rs::export_saio"
+"write_saio_data" = "crates/flexmesa-star/src/pulse_exporters.rs::write_saio_data"
 
 [[files]]
 upstream_path = "star/private/pulse_utils.f90"
@@ -7805,8 +8520,19 @@ module = "star"
 upstream_lines = 986
 upstream_sha256 = "e36873acc786d6be0fb0b451b0e006341f7019e828d347f4d6bba6332a3971d5"
 status = "partial"
-flexmesa_files = ["crates/flexmesa-star/src/model_io.rs"]
+flexmesa_files = ["crates/flexmesa-star/src/model_io.rs", "crates/flexmesa-star/src/star_job_init.rs"]
+routine_map_partial = ["do_read_saved_model", "finish_load_model", "get_chem_col_names", "match_keyword", "match_keyword_for_string", "read1_model", "read_prev", "read_prev_properties", "read_properties"]
 notes = "seeded from coverage-map.md (partial): quick. Reads header and columns; `read_properties` variants, `mlt_vc`/`RSP` extras partially; error handling replaced by defaults (lead L6)"
+[files.routine_map]
+"do_read_saved_model" = "crates/flexmesa-star/src/model_io.rs::read_mod_str_with_dir+read_mod_str"
+"finish_load_model" = "crates/flexmesa-star/src/star_job_init.rs::finish_load_model"
+"get_chem_col_names" = "crates/flexmesa-star/src/model_io.rs::read_mod_str_with_dir"
+"match_keyword" = "crates/flexmesa-star/src/model_io.rs::read_mod_str_with_dir"
+"match_keyword_for_string" = "crates/flexmesa-star/src/model_io.rs::read_mod_str_with_dir"
+"read1_model" = "crates/flexmesa-star/src/model_io.rs::read_mod_str_with_dir"
+"read_prev" = "crates/flexmesa-star/src/model_io.rs::read_mod_str_with_dir"
+"read_prev_properties" = "crates/flexmesa-star/src/model_io.rs::read_mod_str_with_dir"
+"read_properties" = "crates/flexmesa-star/src/model_io.rs::read_mod_str_with_dir"
 
 [[files]]
 upstream_path = "star/private/relax.f90"
@@ -7831,8 +8557,27 @@ module = "star"
 upstream_lines = 1419
 upstream_sha256 = "9a49293bcf589937f71f1f3fa53ad15562f460667eb8415fe3bd630f0c98d642"
 status = "partial"
-flexmesa_files = ["crates/flexmesa-star/src/core_boundaries.rs", "crates/flexmesa-star/src/history.rs"]
+flexmesa_files = ["crates/flexmesa-star/src/core_boundaries.rs", "crates/flexmesa-star/src/history.rs", "crates/flexmesa-star/src/mesa_history.rs", "crates/flexmesa-star/src/report_utils.rs", "crates/flexmesa-star/src/termination.rs"]
+routine_map_partial = ["center_value_eps_burn", "do_report", "set_power_info"]
 notes = "seeded from coverage-map.md (partial): quick. Core masses and power categories; most of `do_report` integrals absent"
+[files.routine_map]
+"center_omega_div_omega_crit" = "crates/flexmesa-star/src/mesa_history.rs::eval_scalar_column"
+"center_value_eps_burn" = "crates/flexmesa-star/src/report_utils.rs::compute"
+"do_report" = "crates/flexmesa-star/src/report_utils.rs::compute"
+"find_conv_mx_regions" = "crates/flexmesa-star/src/report_utils.rs::eval_conv_and_mx_summary"
+"find_epsnuc_zone" = "crates/flexmesa-star/src/report_utils.rs::eval_epsnuc_zones"
+"find_mx_regions" = "crates/flexmesa-star/src/report_utils.rs::eval_conv_and_mx_summary"
+"get_burn_zone_info" = "crates/flexmesa-star/src/report_utils.rs::eval_epsnuc_zones"
+"get_core_info" = "crates/flexmesa-star/src/core_boundaries.rs::compute_core_masses"
+"get_info_at_q" = "crates/flexmesa-star/src/core_boundaries.rs::get_info_at_q"
+"get_mixing_regions" = "crates/flexmesa-star/src/report_utils.rs::eval_conv_and_mx_summary"
+"interp2" = "crates/flexmesa-star/src/core_boundaries.rs::get_info_at_q"
+"interp3" = "crates/flexmesa-star/src/core_boundaries.rs::get_info_at_q"
+"set_core_info" = "crates/flexmesa-star/src/core_boundaries.rs::eval_set_core_info"
+"set_mass_conv_core" = "crates/flexmesa-star/src/report_utils.rs::eval_conv_and_mx_summary"
+"set_mass_semiconv_core" = "crates/flexmesa-star/src/report_utils.rs::eval_conv_and_mx_summary"
+"set_min_gamma1" = "crates/flexmesa-star/src/termination.rs::eval_min_gamma1"
+"set_power_info" = "crates/flexmesa-star/src/core_boundaries.rs::compute_power_categories"
 
 [[files]]
 upstream_path = "star/private/rotation_mix_info.f90"
@@ -7840,8 +8585,22 @@ module = "star"
 upstream_lines = 1371
 upstream_sha256 = "359be2afe05882d1832893da456f96547e88bd0e0f5fd234374ab5c762667384"
 status = "partial"
-flexmesa_files = ["crates/flexmesa-star/src/rotation.rs", "crates/flexmesa-star/src/rotation_mix.rs"]
+flexmesa_files = ["crates/flexmesa-star/src/rotation.rs", "crates/flexmesa-star/src/rotation_mix.rs", "crates/flexmesa-star/src/rotation_mix_info.rs"]
+routine_map_partial = ["set_ST", "set_rotation_mixing_info", "setup"]
 notes = "seeded from coverage-map.md (partial): quick. Heger-type DSI/SH/SSI/ES/GSF and Spruit-Tayler present by name; smoothing and `D_omega`/`am_nu` time smoothing not found (2/13 names)"
+[files.routine_map]
+"mix_D_omega" = "crates/flexmesa-star/src/rotation_mix_info.rs::mix_rotational_coefficient"
+"set_D_DSI" = "crates/flexmesa-star/src/rotation_mix_info.rs::set_d_dsi"
+"set_D_ES" = "crates/flexmesa-star/src/rotation_mix_info.rs::set_d_es"
+"set_D_GSF" = "crates/flexmesa-star/src/rotation_mix_info.rs::set_d_gsf"
+"set_D_SH" = "crates/flexmesa-star/src/rotation_mix_info.rs::set_d_sh"
+"set_D_SSI" = "crates/flexmesa-star/src/rotation_mix_info.rs::set_d_ssi"
+"set_rotation_mixing_info" = "crates/flexmesa-star/src/rotation_mix_info.rs::set_rotation_mixing_info+do_st+set_d_omega"
+"set_ST" = "crates/flexmesa-star/src/rotation_mix_info.rs::set_st"
+"setup" = "crates/flexmesa-star/src/rotation_mix_info.rs::setup"
+"smooth_for_rotation" = "crates/flexmesa-star/src/rotation_mix_info.rs::smooth_for_rotation"
+"zero_if_convective" = "crates/flexmesa-star/src/rotation_mix_info.rs::zero_if_convective"
+"zero_if_tiny" = "crates/flexmesa-star/src/rotation_mix_info.rs::zero_if_tiny"
 
 [[files]]
 upstream_path = "star/private/rsp.f90"
@@ -7877,26 +8636,27 @@ upstream_lines = 863
 upstream_sha256 = "9e7806a1fe241f32ac8f61de5309643a6091419b329629a3103d4d4ab2ebb151"
 status = "ported_unverified"
 flexmesa_files = ["crates/flexmesa-star/src/rsp_def.rs", "crates/flexmesa-star/src/rsp_grid.rs", "crates/flexmesa-star/src/rsp_state_io.rs", "crates/flexmesa-star/src/rsp_stats.rs"]
+routine_map_partial = ["init_allocate"]
 notes = "seeded from coverage-map.md (ported): quick"
 [files.routine_map]
-"check_R" = "crates/flexmesa-star/src/rsp_grid.rs::finish_after_build_model"
 "check_for_T_or_P_inversions" = "crates/flexmesa-star/src/rsp_grid.rs::finish_after_build_model"
+"check_R" = "crates/flexmesa-star/src/rsp_grid.rs::finish_after_build_model"
 "cleanup_for_LINA" = "crates/flexmesa-star/src/rsp_grid.rs::cleanup_for_lina"
 "copy_from_xh_to_rsp" = "crates/flexmesa-star/src/rsp_grid.rs::copy_from_xh_to_rsp"
 "copy_results" = "crates/flexmesa-star/src/rsp_grid.rs::copy_results"
 "finish_after_build_model" = "crates/flexmesa-star/src/rsp_grid.rs::finish_after_build_model"
 "finish_rsp_photo_in" = "crates/flexmesa-star/src/rsp_state_io.rs::unpack_scalars"
-"init_allocate" = "crates/flexmesa-star/src/rsp_def.rs::RspState"
-"init_def" = "crates/flexmesa-star/src/rsp_def.rs::RspDerivedConsts"
+"init_allocate" = "crates/flexmesa-star/src/rsp_def.rs::new"
+"init_def" = "crates/flexmesa-star/src/rsp_def.rs::from_config"
 "init_free" = "crates/flexmesa-star/src/rsp_def.rs::RspState"
-"rsp_WORK" = "crates/flexmesa-star/src/rsp_stats.rs::calculate_work_integrals"
-"rsp_WORKC" = "crates/flexmesa-star/src/rsp_stats.rs::calculate_work_integrals"
-"rsp_WORKQ" = "crates/flexmesa-star/src/rsp_stats.rs::calculate_work_integrals"
-"rsp_WORKT" = "crates/flexmesa-star/src/rsp_stats.rs::calculate_work_integrals"
 "rsp_dump_for_debug" = "crates/flexmesa-star/src/rsp_def.rs::RspState"
 "rsp_phase_time0" = "crates/flexmesa-star/src/rsp_def.rs::RspState"
 "rsp_photo_in" = "crates/flexmesa-star/src/rsp_state_io.rs::unpack_scalars"
 "rsp_photo_out" = "crates/flexmesa-star/src/rsp_state_io.rs::pack_scalars"
+"rsp_WORK" = "crates/flexmesa-star/src/rsp_stats.rs::calculate_work_integrals"
+"rsp_WORKC" = "crates/flexmesa-star/src/rsp_stats.rs::calculate_work_integrals"
+"rsp_WORKQ" = "crates/flexmesa-star/src/rsp_stats.rs::calculate_work_integrals"
+"rsp_WORKT" = "crates/flexmesa-star/src/rsp_stats.rs::calculate_work_integrals"
 "set_build_vars" = "crates/flexmesa-star/src/rsp_grid.rs::finish_build_rsp_model"
 "set_star_vars" = "crates/flexmesa-star/src/rsp_grid.rs::set_star_vars_rsp"
 "turn_off_time_weighting" = "crates/flexmesa-star/src/rsp_def.rs::turn_off_time_weighting"
@@ -7913,19 +8673,19 @@ notes = "seeded from coverage-map.md (ported): quick. 15/16 names"
 [files.routine_map]
 "eval1_gamma_PT_getRho" = "crates/flexmesa-star/src/rsp_eos_inv.rs::eval1_gamma_pt_get_rho"
 "eval1_kap" = "crates/flexmesa-star/src/rsp_eos_kap.rs::eval1_kap_with_eos"
-"eval1_mesa_Rho_given_PT" = "crates/flexmesa-star/src/rsp_eos_inv.rs::eval1_mesa_rho_given_pt"
-"eval1_mesa_T_given_DP" = "crates/flexmesa-star/src/rsp_eos_inv.rs::eval1_mesa_t_given_dp"
+"eval1_mesa_eos_and_kap" = "crates/flexmesa-star/src/rsp_eos_kap.rs::eval1_mesa_eos_and_kap"
 "eval1_mesa_eosDE_and_kap" = "crates/flexmesa-star/src/rsp_eos_inv.rs::eval1_mesa_eos_de_and_kap"
 "eval1_mesa_eosDEgas_and_kap" = "crates/flexmesa-star/src/rsp_eos_inv.rs::eval1_mesa_eos_degas_and_kap"
-"eval1_mesa_eos_and_kap" = "crates/flexmesa-star/src/rsp_eos_kap.rs::eval1_mesa_eos_and_kap"
+"eval1_mesa_Rho_given_PT" = "crates/flexmesa-star/src/rsp_eos_inv.rs::eval1_mesa_rho_given_pt"
+"eval1_mesa_T_given_DP" = "crates/flexmesa-star/src/rsp_eos_inv.rs::eval1_mesa_t_given_dp"
 "eval_mesa_eos_and_kap" = "crates/flexmesa-star/src/rsp_eos_kap.rs::eval_mesa_eos_and_kap"
 "get_surf_P_T_kap" = "crates/flexmesa-star/src/rsp_eos_inv.rs::get_surf_p_t_kap"
-"init_for_rsp_eos_and_kap" = "crates/flexmesa-star/src/rsp_eos_kap.rs::RspChemCache"
-"restart_rsp_eos_and_kap" = "crates/flexmesa-star/src/rsp_eos_kap.rs::RspChemCache"
+"init_for_rsp_eos_and_kap" = "crates/flexmesa-star/src/rsp_eos_kap.rs::from_controls"
+"restart_rsp_eos_and_kap" = "crates/flexmesa-star/src/rsp_eos_kap.rs::from_model_zone0"
 "set_Rho_for_new_Pgas" = "crates/flexmesa-star/src/rsp_eos_inv.rs::set_rho_for_new_pgas"
-"set_T_for_new_Pgas" = "crates/flexmesa-star/src/rsp_eos_inv.rs::set_t_for_new_pgas"
 "set_T_for_new_egas" = "crates/flexmesa-star/src/rsp_eos_inv.rs::set_t_for_new_egas"
 "set_T_for_new_energy" = "crates/flexmesa-star/src/rsp_eos_inv.rs::set_t_for_new_energy"
+"set_T_for_new_Pgas" = "crates/flexmesa-star/src/rsp_eos_inv.rs::set_t_for_new_pgas"
 "update_eos_and_kap" = "crates/flexmesa-star/src/rsp_eos_kap.rs::eval_mesa_eos_and_kap"
 
 [[files]]
@@ -8056,8 +8816,14 @@ module = "star"
 upstream_lines = 1763
 upstream_sha256 = "367272b93ad201ccf3423c244e1222af016970520d7ba24b1b254f05bb590807"
 status = "partial"
-flexmesa_files = ["crates/flexmesa-star/src/inlist_populate.rs"]
+flexmesa_files = ["crates/flexmesa-star/src/inlist.rs", "crates/flexmesa-star/src/inlist_populate.rs", "crates/flexmesa-star/src/job_controls.rs"]
+routine_map_partial = ["do_read_star_job", "read_star_job_file", "set_default_star_job_controls", "store_star_job_controls"]
 notes = "seeded from coverage-map.md (partial): deep. 104/419 names read, ~59 used"
+[files.routine_map]
+"do_read_star_job" = "crates/flexmesa-star/src/inlist.rs::from_file_in_case_dir_with_options+from_file"
+"read_star_job_file" = "crates/flexmesa-star/src/inlist.rs::load_sections_in_case_dir+load_file_recursive+resolve_section_includes"
+"set_default_star_job_controls" = "crates/flexmesa-star/src/job_controls.rs::default"
+"store_star_job_controls" = "crates/flexmesa-star/src/inlist_populate.rs::populate_star_job"
 
 [[files]]
 upstream_path = "star/private/star_private_def.f90"
@@ -8081,9 +8847,21 @@ module = "star"
 upstream_lines = 1940
 upstream_sha256 = "517a4a50c6790c57c4035bcf7d7bd04ad08e610d5d65467e3b3a86fa54e7aa88"
 status = "ported_unverified"
-flexmesa_files = ["crates/flexmesa-star/src/solver.rs", "crates/flexmesa-star/src/solver_support.rs"]
+flexmesa_files = ["crates/flexmesa-star/src/solver.rs", "crates/flexmesa-star/src/solver_norms.rs", "crates/flexmesa-star/src/solver_support.rs"]
+routine_map_partial = ["do_solver", "do_solver::adjust_correction", "do_solver::do_equations", "do_solver::do_solver_work", "do_solver::factor_mtx", "do_solver::set_param_defaults", "do_solver::solve_equ", "do_solver::solve_mtx"]
 notes = "updated for #152: do_solver_work, adjust_correction (quadratic/cubic backtracking via block_multiply_xa), apply_coeff, retry max_tries schedule, solver_itermin, tiny_corr_coeff_limit, and high-T correction tolerance relaxation"
 [files.routine_map]
+"do_solver" = "crates/flexmesa-star/src/solver.rs::solve_henyey_step"
+"do_solver::adjust_correction" = "crates/flexmesa-star/src/solver.rs::solve_henyey_step+next_line_search_alam"
+"do_solver::apply_coeff" = "crates/flexmesa-star/src/solver.rs::apply_coeff"
+"do_solver::do_equations" = "crates/flexmesa-star/src/solver.rs::solve_henyey_step"
+"do_solver::do_solver_work" = "crates/flexmesa-star/src/solver.rs::solve_henyey_step"
+"do_solver::eval_f" = "crates/flexmesa-star/src/solver.rs::eval_f"
+"do_solver::eval_slope" = "crates/flexmesa-star/src/solver.rs::eval_slope"
+"do_solver::factor_mtx" = "crates/flexmesa-star/src/solver.rs::solve_linear_henyey_system"
+"do_solver::set_param_defaults" = "crates/flexmesa-star/src/solver.rs::solve_henyey_step+compute_corr_coeff"
+"do_solver::solve_equ" = "crates/flexmesa-star/src/solver.rs::solve_linear_henyey_system"
+"do_solver::solve_mtx" = "crates/flexmesa-star/src/solver.rs::solve_linear_henyey_system"
 "solver" = "crates/flexmesa-star/src/solver.rs::solve_henyey_step"
 
 [[files]]
@@ -8092,8 +8870,126 @@ module = "star"
 upstream_lines = 4149
 upstream_sha256 = "66d1c0f237d3e885d44cd820b994058e699677f21e9205fbcde639b905db8d12"
 status = "partial"
-flexmesa_files = ["crates/flexmesa-star/src/core_boundaries.rs", "crates/flexmesa-star/src/evolve_support.rs", "crates/flexmesa-star/src/hydro_state.rs", "crates/flexmesa-star/src/mesh.rs"]
+flexmesa_files = ["crates/flexmesa-astero/src/scaling.rs", "crates/flexmesa-star/src/adjust_net.rs", "crates/flexmesa-star/src/cell_energy.rs", "crates/flexmesa-star/src/core_boundaries.rs", "crates/flexmesa-star/src/eps_mdot.rs", "crates/flexmesa-star/src/evolve_support.rs", "crates/flexmesa-star/src/hydro_brunt_surf.rs", "crates/flexmesa-star/src/hydro_energy.rs", "crates/flexmesa-star/src/hydro_eqns.rs", "crates/flexmesa-star/src/hydro_momentum.rs", "crates/flexmesa-star/src/hydro_rotation.rs", "crates/flexmesa-star/src/hydro_state.rs", "crates/flexmesa-star/src/hydro_vars.rs", "crates/flexmesa-star/src/inlist_runner.rs", "crates/flexmesa-star/src/job_rotation.rs", "crates/flexmesa-star/src/mesa_history.rs", "crates/flexmesa-star/src/mesh.rs", "crates/flexmesa-star/src/mesh_remap.rs", "crates/flexmesa-star/src/micro.rs", "crates/flexmesa-star/src/mixing_state.rs", "crates/flexmesa-star/src/pulse_gyre_data.rs", "crates/flexmesa-star/src/relax_comp.rs", "crates/flexmesa-star/src/report_utils.rs", "crates/flexmesa-star/src/rotation_mix_info.rs", "crates/flexmesa-star/src/rsp2_ad.rs", "crates/flexmesa-star/src/rsp2_eqns.rs", "crates/flexmesa-star/src/rsp_grid.rs", "crates/flexmesa-star/src/solver_support.rs", "crates/flexmesa-star/src/star_utils.rs", "crates/flexmesa-star/src/termination.rs", "crates/flexmesa-star/src/zams.rs"]
+routine_map_partial = ["calc_Ptot_ad_tw", "calc_Ptrb_ad_tw", "cell_start_specific_PE_qp", "e00", "em1", "ep1", "get_Lrad_div_Ledd", "get_Pvsc_ad", "get_area_info_opt_time_center", "get_delta_Pg_bildsten2012", "get_delta_Pg_traditional", "get_dke_dt_dpe_dt", "get_grada_face", "get_gradr_face", "get_rho_face", "get_scale_height_face", "get_scale_height_face_val", "get_string_for_model_number", "get_tau", "min_dr_div_cs", "save_eqn_residual_info", "set_abs_du_div_cs", "set_m_and_dm", "set_m_grav_and_grav", "set_phot_info", "set_rmid", "set_scale_height", "set_xqs", "store_partials", "unpack_residual_partials"]
 notes = "seeded from coverage-map.md (partial): quick. 31/158 routine names"
+[files.routine_map]
+"after_C_burn" = "crates/flexmesa-star/src/job_rotation.rs::after_c_burn"
+"after_He_burn" = "crates/flexmesa-star/src/job_rotation.rs::after_he_burn"
+"calc_Ptot_ad_tw" = "crates/flexmesa-star/src/hydro_momentum.rs::calc_ptot_ad_tw+eval_mlt_pturb_cell_ad+eval_cell_peos_time_centered_ad"
+"calc_Ptrb_ad_tw" = "crates/flexmesa-star/src/rsp2_ad.rs::eval_rsp2_ptrb_cell_ad"
+"cell_specific_KE" = "crates/flexmesa-star/src/cell_energy.rs::cell_specific_ke"
+"cell_specific_KE_qp" = "crates/flexmesa-star/src/cell_energy.rs::cell_specific_ke_qp"
+"cell_specific_PE" = "crates/flexmesa-star/src/cell_energy.rs::cell_specific_pe"
+"cell_specific_PE_qp" = "crates/flexmesa-star/src/cell_energy.rs::cell_specific_pe_qp"
+"cell_specific_rotational_energy" = "crates/flexmesa-star/src/cell_energy.rs::cell_specific_rotational_energy"
+"cell_specific_total_energy" = "crates/flexmesa-star/src/cell_energy.rs::cell_specific_total_energy"
+"cell_start_specific_KE_qp" = "crates/flexmesa-star/src/cell_energy.rs::get_dke_dt_dpe_dt+specific_ke_qp"
+"cell_start_specific_PE_qp" = "crates/flexmesa-star/src/cell_energy.rs::get_dke_dt_dpe_dt+specific_pe_qp"
+"center_avg_x" = "crates/flexmesa-star/src/report_utils.rs::center_avg_x_slot+center_avg_x_by_name"
+"center_value" = "crates/flexmesa-star/src/report_utils.rs::center_value+center_value_by"
+"conv_time_scale" = "crates/flexmesa-star/src/report_utils.rs::eval_conv_time_scale_zone"
+"current_min_xa_hard_limit" = "crates/flexmesa-star/src/solver_support.rs::current_min_xa_hard_limit"
+"current_sum_xa_hard_limit" = "crates/flexmesa-star/src/solver_support.rs::current_sum_xa_hard_limit"
+"e00" = "crates/flexmesa-star/src/hydro_eqns.rs::add_partial"
+"em1" = "crates/flexmesa-star/src/hydro_eqns.rs::add_partial"
+"ep1" = "crates/flexmesa-star/src/hydro_eqns.rs::add_partial"
+"eval_csound" = "crates/flexmesa-star/src/micro.rs::store_eos_for_cell"
+"eval_current_abundance" = "crates/flexmesa-star/src/relax_comp.rs::eval_current_abundance"
+"eval_current_y" = "crates/flexmesa-star/src/relax_comp.rs::eval_current_y"
+"eval_current_z" = "crates/flexmesa-star/src/relax_comp.rs::eval_current_z"
+"eval_deltaM_total_energy_integrals" = "crates/flexmesa-star/src/evolve_support.rs::eval_delta_m_total_energy_integrals+eval_energy_integrals_kernel"
+"eval_irradiation_heat" = "crates/flexmesa-star/src/hydro_vars.rs::eval_irradiation_heat"
+"eval_kh_timescale" = "crates/flexmesa-star/src/report_utils.rs::compute"
+"eval_Ledd" = "crates/flexmesa-star/src/report_utils.rs::eval_ledd_erg_s"
+"eval_min_cell_collapse_time" = "crates/flexmesa-star/src/mesa_history.rs::eval_min_cell_collapse_time"
+"eval_total_energy_integrals" = "crates/flexmesa-star/src/evolve_support.rs::eval_total_energy_integrals"
+"eval_total_energy_profile" = "crates/flexmesa-star/src/eps_mdot.rs::eval_total_energy_profile"
+"get1_lpp" = "crates/flexmesa-star/src/mesh_remap.rs::get1_lpp_zone"
+"get_area_info_opt_time_center" = "crates/flexmesa-star/src/hydro_momentum.rs::get_area_info_opt_time_center"
+"get_average_Y_and_Z" = "crates/flexmesa-star/src/relax_comp.rs::eval_current_y_and_z"
+"get_ChiRho_face" = "crates/flexmesa-star/src/hydro_vars.rs::do1_mlt_2"
+"get_ChiT_face" = "crates/flexmesa-star/src/hydro_vars.rs::do1_mlt_2"
+"get_Cp_face" = "crates/flexmesa-star/src/hydro_vars.rs::do1_mlt_2"
+"get_delta_Pg_bildsten2012" = "crates/flexmesa-star/src/report_utils.rs::eval_astero_report_scalars"
+"get_delta_Pg_traditional" = "crates/flexmesa-astero/src/scaling.rs::eval_delta_pg_traditional"
+"get_dke_dt_dpe_dt" = "crates/flexmesa-star/src/cell_energy.rs::get_dke_dt_dpe_dt"
+"get_dtau1" = "crates/flexmesa-star/src/micro.rs::get_tau+check_tau_with_report_ierr"
+"get_e_face" = "crates/flexmesa-star/src/hydro_vars.rs::face_dv_and_energy"
+"get_ejecta_mass" = "crates/flexmesa-star/src/termination.rs::get_ejecta_mass"
+"get_face_values" = "crates/flexmesa-star/src/mesh.rs::get_face_value"
+"get_face_weights" = "crates/flexmesa-star/src/mesh.rs::get_face_weights"
+"get_grada_face" = "crates/flexmesa-star/src/hydro_vars.rs::do1_mlt_2"
+"get_gradr_face" = "crates/flexmesa-star/src/hydro_vars.rs::do1_mlt_2"
+"get_kap_face" = "crates/flexmesa-star/src/hydro_vars.rs::do1_mlt_2"
+"get_Ledd" = "crates/flexmesa-star/src/report_utils.rs::get_ledd"
+"get_lnR_from_xh" = "crates/flexmesa-star/src/mesh.rs::unpack_xh"
+"get_lnT_from_xh" = "crates/flexmesa-star/src/mesh.rs::unpack_xh"
+"get_Lrad_div_Ledd" = "crates/flexmesa-star/src/mix_info.rs::eval_lrad_div_ledd"
+"get_name_for_restart_file" = "crates/flexmesa-star/src/inlist_runner.rs::photo_restart_filename"
+"get_Peos_face" = "crates/flexmesa-star/src/hydro_vars.rs::do1_mlt_2"
+"get_phot_info" = "crates/flexmesa-star/src/report_utils.rs::eval_photosphere_info"
+"get_Prad_face" = "crates/flexmesa-star/src/hydro_vars.rs::do1_mlt_2"
+"get_Pvsc_ad" = "crates/flexmesa-star/src/hydro_energy.rs::eval_pvsc_cell_ad"
+"get_QQ_cell" = "crates/flexmesa-star/src/rsp2_ad.rs::build_rsp2_ad_work"
+"get_r_and_lnR_from_xh" = "crates/flexmesa-star/src/mesh.rs::unpack_xh"
+"get_r_from_xh" = "crates/flexmesa-star/src/hydro_rotation.rs::update1_i_rot_from_xh"
+"get_remnant_mass" = "crates/flexmesa-star/src/termination.rs::get_remnant_mass"
+"get_rho_and_lnd_from_xh" = "crates/flexmesa-star/src/mesh.rs::unpack_xh"
+"get_rho_face" = "crates/flexmesa-star/src/hydro_vars.rs::do1_mlt_2"
+"get_rho_start_face" = "crates/flexmesa-star/src/hydro_vars.rs::face_dv_and_energy"
+"get_scale_height_face" = "crates/flexmesa-star/src/hydro_vars.rs::do1_mlt_2"
+"get_scale_height_face_val" = "crates/flexmesa-star/src/rsp2_eqns.rs::get_scale_height_face_val"
+"get_shock_info" = "crates/flexmesa-star/src/report_utils.rs::eval_shock_info"
+"get_shock_location_info" = "crates/flexmesa-star/src/report_utils.rs::eval_shock_info"
+"get_string_for_model_number" = "crates/flexmesa-star/src/adjust_net.rs::string_for_model_number"
+"get_T_and_lnT_from_xh" = "crates/flexmesa-star/src/mesh.rs::unpack_xh"
+"get_T_face" = "crates/flexmesa-star/src/hydro_vars.rs::do1_mlt_2"
+"get_tau" = "crates/flexmesa-star/src/micro.rs::get_tau+check_tau_with_report_ierr"
+"get_XYZ" = "crates/flexmesa-star/src/micro.rs::set_basic_vars+eval_kap_for_range"
+"init_random" = "crates/flexmesa-star/src/rsp_grid.rs::MesaRanmar::new"
+"interp_q" = "crates/flexmesa-star/src/zams.rs::interp_q"
+"interp_val_to_pt" = "crates/flexmesa-star/src/pulse_gyre_data.rs::interp_val_to_pt+interp_val_to_pt_slices"
+"k_for_q" = "crates/flexmesa-star/src/core_boundaries.rs::k_for_q_1based"
+"min_dr_div_cs" = "crates/flexmesa-star/src/mesa_history.rs::eval_min_dr_div_cs"
+"no_data_for_extra_profile_columns" = "crates/flexmesa-star/src/inlist_runner.rs::extra_profile_columns"
+"no_extra_profile_columns" = "crates/flexmesa-star/src/inlist_runner.rs::extra_profile_columns"
+"normalize_dqs" = "crates/flexmesa-star/src/mesh.rs::normalize_dqs_slice+normalize_dqs"
+"omega_crit" = "crates/flexmesa-star/src/report_utils.rs::eval_upstream_omega_crit"
+"rand" = "crates/flexmesa-star/src/rsp_grid.rs::next_f64"
+"reset_starting_vectors" = "crates/flexmesa-star/src/hydro_vars.rs::fill_reset_starting_vectors"
+"safe_div_val" = "crates/flexmesa-star/src/rotation_mix_info.rs::safe_div_val"
+"save_eqn_residual_info" = "crates/flexmesa-star/src/hydro_eqns.rs::save_eqn_residual"
+"set_abs_du_div_cs" = "crates/flexmesa-star/src/mesa_history.rs::eval_min_dr_div_cs"
+"set_conv_time_scales" = "crates/flexmesa-star/src/report_utils.rs::eval_conv_time_scales"
+"set_dm_bar" = "crates/flexmesa-star/src/mesh.rs::set_dm_bar"
+"set_energy_eqn_scal" = "crates/flexmesa-star/src/hydro_energy.rs::set_energy_eqn_scal"
+"set_luminosity_by_category" = "crates/flexmesa-star/src/evolve_support.rs::eval_lum_by_category_erg_s"
+"set_m_and_dm" = "crates/flexmesa-star/src/mesh.rs::set_m_and_dm"
+"set_m_grav_and_grav" = "crates/flexmesa-star/src/mesh.rs::set_m_grav_and_grav"
+"set_phase_of_evolution" = "crates/flexmesa-star/src/termination.rs::set_phase_of_evolution+eval_phase_of_evolution"
+"set_phot_info" = "crates/flexmesa-star/src/hydro_brunt_surf.rs::eval_surf_bc"
+"set_qs" = "crates/flexmesa-star/src/mesh.rs::set_qs_slice+set_qs"
+"set_rmid" = "crates/flexmesa-star/src/solver_support.rs::set_vars_for_solver"
+"set_rv_info" = "crates/flexmesa-star/src/solver_support.rs::set_vars_for_solver"
+"set_scale_height" = "crates/flexmesa-star/src/hydro_vars.rs::do1_mlt_2+set_no_mixing_face"
+"set_xqs" = "crates/flexmesa-star/src/mesh.rs::set_xqs"
+"smooth" = "crates/flexmesa-star/src/rotation_mix_info.rs::smooth_in_place"
+"store_lnd_in_xh" = "crates/flexmesa-star/src/mesh.rs::pack_xh"
+"store_lnR_in_xh" = "crates/flexmesa-star/src/mesh.rs::pack_xh"
+"store_lnT_in_xh" = "crates/flexmesa-star/src/mesh.rs::pack_xh"
+"store_partials" = "crates/flexmesa-star/src/hydro_eqns.rs::add_partial+save_eqn_residual"
+"store_r_in_xh" = "crates/flexmesa-star/src/mesh.rs::pack_xh"
+"store_rho_in_xh" = "crates/flexmesa-star/src/star_utils.rs::use_xh_to_set_rho_to_dm_div_dv"
+"store_T_in_xh" = "crates/flexmesa-star/src/mesh.rs::pack_xh"
+"surface_avg_x" = "crates/flexmesa-star/src/report_utils.rs::surface_avg_x_slot+surface_avg_x_by_name"
+"threshold_smoothing" = "crates/flexmesa-star/src/mixing_state.rs::threshold_smoothing"
+"total_angular_momentum" = "crates/flexmesa-star/src/hydro_rotation.rs::total_angular_momentum"
+"unpack_residual_partials" = "crates/flexmesa-star/src/hydro_eqns.rs::save_eqn_residual"
+"unpack_residual_partials::unpack1" = "crates/flexmesa-star/src/hydro_eqns.rs::add_stencil_partials"
+"use_xh_to_set_rho_to_dm_div_dV" = "crates/flexmesa-star/src/star_utils.rs::use_xh_to_set_rho_to_dm_div_dv+set_rho_to_dm_div_dv_for_new_step"
+"weighted_smoothing" = "crates/flexmesa-star/src/mixing_state.rs::weighted_smoothing"
+"yrs_for_init_timestep" = "crates/flexmesa-star/src/zams.rs::yrs_for_init_timestep"
 
 [[files]]
 upstream_path = "star/private/starspots.f90"
@@ -8109,8 +9005,24 @@ module = "star"
 upstream_lines = 1213
 upstream_sha256 = "ef05f02cb24bb5217d13e3ff2126e96a53f36aaf533f9a8334d25ca9d0303518"
 status = "partial"
-flexmesa_files = ["crates/flexmesa-star/src/struct_burn_mix.rs"]
+flexmesa_files = ["crates/flexmesa-star/src/evolve.rs", "crates/flexmesa-star/src/mesh.rs", "crates/flexmesa-star/src/solver.rs", "crates/flexmesa-star/src/solver_norms.rs", "crates/flexmesa-star/src/solver_support.rs", "crates/flexmesa-star/src/struct_burn_mix.rs"]
+routine_map_partial = ["RTI_check_after_converge", "burn1_zone", "check_after_converge", "do_burn", "do_mix_omega", "do_solver", "do_solver_converge", "do_struct_burn_mix", "hydro_solver_step", "hydro_solver_step::newt", "save_start_values", "set_tol_correction", "set_xh"]
 notes = "seeded from coverage-map.md (partial): deep-ish. `do_struct_burn_mix`, op-split `burn1_zone` loop, convergence call present; `do_mix_omega`, `set_tol_correction` by T regime, `RTI_check_after_converge`, `check_after_converge` absent"
+[files.routine_map]
+"burn1_zone" = "crates/flexmesa-star/src/struct_burn_mix.rs::op_split_burn_zones"
+"check_after_converge" = "crates/flexmesa-star/src/solver_support.rs::check_after_converge"
+"do_burn" = "crates/flexmesa-star/src/struct_burn_mix.rs::op_split_burn_zones"
+"do_mix_omega" = "crates/flexmesa-star/src/evolve.rs::run_post_henyey_omega_mix"
+"do_solver" = "crates/flexmesa-star/src/solver.rs::solve_henyey_step"
+"do_solver_converge" = "crates/flexmesa-star/src/solver.rs::solve_henyey_step"
+"do_struct_burn_mix" = "crates/flexmesa-star/src/struct_burn_mix.rs::do_struct_burn_mix+run_struct_burn_mix_core"
+"hydro_solver_step" = "crates/flexmesa-star/src/solver.rs::solve_henyey_step"
+"hydro_solver_step::newt" = "crates/flexmesa-star/src/solver.rs::solve_henyey_step"
+"RTI_check_after_converge" = "crates/flexmesa-star/src/solver_support.rs::rti_check_after_converge"
+"save_start_values" = "crates/flexmesa-star/src/mesh.rs::save_start_values"
+"set_surf_info" = "crates/flexmesa-star/src/struct_burn_mix.rs::run_struct_burn_mix_core"
+"set_tol_correction" = "crates/flexmesa-star/src/solver_norms.rs::active_correction_tolerances"
+"set_xh" = "crates/flexmesa-star/src/mesh.rs::pack_xh"
 
 [[files]]
 upstream_path = "star/private/tdc_hydro.f90"
@@ -8148,6 +9060,7 @@ upstream_lines = 2432
 upstream_sha256 = "1a4419ba2e0122a462c824534aa17596902b3cc7ff62d2a3091acbadde1b8378"
 status = "ported_unverified"
 flexmesa_files = ["crates/flexmesa-star/src/timestep.rs", "crates/flexmesa-star/src/timestep_checks.rs", "crates/flexmesa-star/src/timestep_limits.rs"]
+routine_map_partial = ["check_burn_steps_limit", "check_dX", "check_delta_HR", "do_timestep_limits", "timestep_controller"]
 notes = "updated for #152: H211 and first-order dt controller plus all timestep.f90 limiters including check_dYe_highT_change, check_dlog_eps_nuc_change, check_adjust_J_q, check_dX_div_X_cntr, check_lgL_nuc_cat_change, Ne/O/Si center checks, #177 X/Y check_dX, and #253 guard"
 [files.routine_map]
 "timestep_controller" = "crates/flexmesa-star/src/timestep_limits.rs::timestep_controller+timestep_controller_with_extras"
@@ -8220,14 +9133,21 @@ module = "star"
 upstream_lines = 608
 upstream_sha256 = "74af2ec21c22460ccb041c904a54e9a0f228187a677b0c423875347e0ef4d5ed"
 status = "ported_unverified"
-flexmesa_files = ["crates/flexmesa-star/src/hydro_vars.rs", "crates/flexmesa-star/src/mixing_state.rs", "crates/flexmesa-star/src/mix_info.rs"]
+flexmesa_files = ["crates/flexmesa-star/src/hydro_vars.rs", "crates/flexmesa-star/src/mixing_state.rs", "crates/flexmesa-star/src/mix_info.rs", "crates/flexmesa-star/src/star_lib.rs"]
+routine_map_partial = ["check_for_redo_MLT::end_of_convective_region", "do1_mlt_2::set_no_mixing", "do1_mlt_2::store_results", "set_gradT_excess_alpha", "set_mlt_vars"]
 notes = "Ported under #155: verbatim set_mlt_vars, do1_mlt_2, adjust_gradT_fraction, adjust_gradT_excess, set_gradT_excess_alpha, switch_to_radiative/adiabatic, and separation of mlt_mixing_type/mlt_D from mixing_type/D_mix."
 [files.routine_map]
-"set_mlt_vars" = "crates/flexmesa-star/src/hydro_vars.rs::set_mlt_vars"
-"do1_mlt_2" = "crates/flexmesa-star/src/hydro_vars.rs::do1_mlt_2"
-"switch_to_radiative" = "crates/flexmesa-star/src/hydro_vars.rs::switch_to_radiative"
+"adjust_gradT_excess" = "crates/flexmesa-star/src/mix_info.rs::adjust_gradt_excess"
+"adjust_gradT_fraction" = "crates/flexmesa-star/src/mix_info.rs::adjust_gradt_fraction"
 "check_for_redo_MLT" = "crates/flexmesa-star/src/hydro_vars.rs::check_for_redo_mlt"
-"set_gradT_excess_alpha" = "crates/flexmesa-star/src/mix_info.rs::set_gradt_excess_alpha"
+"check_for_redo_MLT::end_of_convective_region" = "crates/flexmesa-star/src/hydro_vars.rs::redo_convective_region"
+"check_for_redo_MLT::redo1_mlt" = "crates/flexmesa-star/src/hydro_vars.rs::redo_convective_region"
+"do1_mlt_2" = "crates/flexmesa-star/src/hydro_vars.rs::do1_mlt_2"
+"do1_mlt_2::set_no_mixing" = "crates/flexmesa-star/src/hydro_vars.rs::set_no_mixing_face"
+"do1_mlt_2::store_results" = "crates/flexmesa-star/src/hydro_vars.rs::do1_mlt_2"
+"set_gradT_excess_alpha" = "crates/flexmesa-star/src/mix_info.rs::set_gradt_excess_alpha+eval_lrad_div_ledd"
+"set_mlt_vars" = "crates/flexmesa-star/src/hydro_vars.rs::set_mlt_vars+set_mlt_vars_range"
+"switch_to_radiative" = "crates/flexmesa-star/src/hydro_vars.rs::switch_to_radiative"
 
 [[files]]
 upstream_path = "star/private/turb_support.f90"
@@ -8235,12 +9155,15 @@ module = "star"
 upstream_lines = 512
 upstream_sha256 = "4fc87a16c865370ecb0205a68ba7f79b5a9ac4e915a6e8c07e2d4ce3fcc332c6"
 status = "ported_unverified"
-flexmesa_files = ["crates/flexmesa-star/src/hydro_vars.rs"]
+flexmesa_files = ["crates/flexmesa-star/src/hydro_vars.rs", "crates/flexmesa-star/src/pre_ms.rs"]
+routine_map_partial = ["Get_results", "do1_mlt_eval", "get_gradT"]
 notes = "Ported under #155: verbatim get_results, set_superad_reduction (reproducing #267), check_if_must_fall_back_to_MLT, alt scale height, and removal of invented F4-3 latch and F2-19 surface gradr factor."
 [files.routine_map]
-"get_gradT" = "crates/flexmesa-star/src/hydro_vars.rs::do1_mlt_2"
-"do1_mlt_eval" = "crates/flexmesa-star/src/hydro_vars.rs::do1_mlt_2"
-"Get_results" = "crates/flexmesa-star/src/hydro_vars.rs::do1_mlt_2"
+"check_if_must_fall_back_to_MLT" = "crates/flexmesa-star/src/hydro_vars.rs::do1_mlt_2"
+"do1_mlt_eval" = "crates/flexmesa-star/src/hydro_vars.rs::do1_mlt_2+face_dv_and_energy+thermohaline_xh1+starspot_tweak_gradr+tap_get_results"
+"get_gradT" = "crates/flexmesa-star/src/pre_ms.rs::get_grad_t"
+"Get_results" = "crates/flexmesa-star/src/hydro_vars.rs::do1_mlt_2+eval_superad_reduction+thermohaline_xh1+tap_get_results"
+"Get_results::set_superad_reduction" = "crates/flexmesa-star/src/hydro_vars.rs::eval_superad_reduction"
 
 [[files]]
 upstream_path = "star/private/winds.f90"
@@ -9619,9 +10542,11 @@ module = "turb"
 upstream_lines = 381
 upstream_sha256 = "7d653824883b736a241943da0a103117a94b6095156c72df9cf4af911e4a13b9"
 status = "ported_unverified"
-flexmesa_files = ["crates/flexmesa-turb/src/tdc.rs"]
+flexmesa_files = ["crates/flexmesa-turb/src/tdc.rs", "crates/flexmesa-turb/src/tdc_search.rs"]
+routine_map_partial = ["bracket_plus_Newton_search"]
 notes = "seeded from coverage-map.md section 7 (unverified)"
 [files.routine_map]
+"bracket_plus_Newton_search" = "crates/flexmesa-turb/src/tdc_search.rs::bracket_plus_newton_search"
 "get_TDC_solution" = "crates/flexmesa-turb/src/tdc.rs::get_tdc_solution"
 
 [[files]]
@@ -9634,15 +10559,16 @@ flexmesa_files = ["crates/flexmesa-turb/src/tdc_dual.rs", "crates/flexmesa-turb/
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
 [files.routine_map]
 "Af_bisection_search" = "crates/flexmesa-turb/src/tdc_search.rs::af_bisection_search"
-"Q_bisection_search" = "crates/flexmesa-turb/src/tdc_search.rs::q_bisection_search"
 "compute_Q" = "crates/flexmesa-turb/src/tdc_support.rs::compute_q"
-"convert" = "crates/flexmesa-turb/src/tdc_dual.rs::convert"
+"convert" = "crates/flexmesa-turb/src/tdc_dual.rs::f64::convert+DualOrder1::convert"
 "dQdZ_bisection_search" = "crates/flexmesa-turb/src/tdc_search.rs::dq_dz_bisection_search"
 "eval_Af" = "crates/flexmesa-turb/src/tdc_support.rs::eval_af"
 "eval_xis" = "crates/flexmesa-turb/src/tdc_support.rs::eval_xis"
+"flux_limiter_function" = "crates/flexmesa-turb/src/tdc_support.rs::flux_limiter_function"
+"Q_bisection_search" = "crates/flexmesa-turb/src/tdc_search.rs::q_bisection_search"
 "safe_tanh" = "crates/flexmesa-turb/src/tdc_support.rs::safe_tanh"
 "set_Y" = "crates/flexmesa-turb/src/tdc_support.rs::set_y"
-"unconvert" = "crates/flexmesa-turb/src/tdc_dual.rs::unconvert"
+"unconvert" = "crates/flexmesa-turb/src/tdc_dual.rs::f64::unconvert+DualOrder1::unconvert"
 
 [[files]]
 upstream_path = "turb/private/thermohaline.f90"
@@ -9651,9 +10577,15 @@ upstream_lines = 363
 upstream_sha256 = "da5e83aa591b1b2d50e3100e882c254f4ef8a21989b6b1837e3217a77bc8a877"
 status = "ported_unverified"
 flexmesa_files = ["crates/flexmesa-turb/src/thermohaline.rs"]
+routine_map_partial = ["NR"]
 notes = "seeded from coverage-map.md section 7 (unverified)"
 [files.routine_map]
+"analytical_estimate_th" = "crates/flexmesa-turb/src/thermohaline.rs::analytical_estimate_th"
 "get_D_thermohaline" = "crates/flexmesa-turb/src/thermohaline.rs::get_d_thermohaline"
+"get_diff_coeffs" = "crates/flexmesa-turb/src/thermohaline.rs::get_diff_coeffs"
+"NR" = "crates/flexmesa-turb/src/thermohaline.rs::nr_solve"
+"numu" = "crates/flexmesa-turb/src/thermohaline.rs::numu"
+"thermohaline_rhs" = "crates/flexmesa-turb/src/thermohaline.rs::thermohaline_rhs"
 
 [[files]]
 upstream_path = "turb/public/turb.f90"

@@ -10,7 +10,7 @@ Every routine is at one level. Lines are credited to a routine for its own lines
 
 * `full`: the `routine_map` names the routine, the target passes the `routine_map` gate, and the routine is not listed in `routine_map_partial`.
 * `partial`: mapped as above and listed in the file's `routine_map_partial`, because the Rust counterpart implements only part of the upstream routine.
-* `N/A`: declared not applicable to a Rust port in `benchmarks/dashboard/port_status_na.toml` (0 declared). Never counted as mapped and never removed from a denominator; both fractions are shown.
+* `N/A`: declared not applicable to a Rust port in `benchmarks/dashboard/port_status_na.toml` (106 declared). Never counted as mapped and never removed from a denominator; both fractions are shown.
 * `unmapped`: none of the above.
 * `oracle`: the routine is mapped in full and a test file classified `oracle` in the taxonomy lists its `<upstream path>::<routine>` id in its `routines` field. This is the taxonomy's own record of per-routine oracle cover; it is a listing, not a call-site check.
 * `exercised` (reached by a strict-pass history case) is not derived.
@@ -22,21 +22,21 @@ Every routine is at one level. Lines are credited to a routine for its own lines
 | Measure | Value |
 | :--- | ---: |
 | Upstream lines | 144,952 |
-| Lines in routines mapped in full | 22,681 |
-| Lines in routines mapped in part | 0 |
-| Lines in not-applicable routines | 0 |
-| Lines in unmapped routines | 100,653 |
+| Lines in routines mapped in full | 31,559 |
+| Lines in routines mapped in part | 44,081 |
+| Lines in not-applicable routines | 2,535 |
+| Lines in unmapped routines | 45,159 |
 | Lines outside routines | 21,618 |
-| Lines in routines with oracle evidence | 4,911 |
-| Line-weighted full-mapping fraction (all lines) | 15.6% |
-| Line-weighted partial-mapping fraction (all lines) | 0.0% |
-| Full-mapping fraction excluding not-applicable lines | 15.6% |
-| Partial-mapping fraction excluding not-applicable lines | 0.0% |
-| Not-applicable fraction of all lines | 0.0% |
-| Line-weighted oracle fraction | 3.4% |
-| Whole-file ported fraction (existing headline) | 31.1% |
-| Routines (full / partial / N/A / unmapped / total) | 272 / 0 / 0 / 2,316 / 2,588 |
-| Routines with oracle evidence | 25 |
+| Lines in routines with oracle evidence | 4,469 |
+| Line-weighted full-mapping fraction (all lines) | 21.8% |
+| Line-weighted partial-mapping fraction (all lines) | 30.4% |
+| Full-mapping fraction excluding not-applicable lines | 22.2% |
+| Partial-mapping fraction excluding not-applicable lines | 31.0% |
+| Not-applicable fraction of all lines | 1.7% |
+| Line-weighted oracle fraction | 3.1% |
+| Whole-file ported fraction (existing headline) | 30.7% |
+| Routines (full / partial / N/A / unmapped / total) | 628 / 489 / 106 / 1,365 / 2,588 |
+| Routines with oracle evidence | 23 |
 
 The fractions answer different questions. The whole-file figure counts every line of a file whose hand-set status is ported; the line-weighted figures count only the own lines of routines that carry the named evidence. Neither is a statement about agreement with MESA.
 
@@ -44,17 +44,17 @@ The fractions answer different questions. The whole-file figure counts every lin
 
 | Module | Files | Routines | Full | Partial | N/A | Unmapped | Oracle | Upstream lines | Lines full | Lines partial | Lines N/A | Lines unmapped | Outside routines | Full | Partial | Full excl. N/A | Oracle | Whole-file ported |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| `star` | 173 | 2,176 | 203 | 0 | 0 | 1,973 | 25 | 120,509 | 19,973 | 0 | 0 | 87,878 | 12,658 | 16.6% | 0.0% | 16.6% | 4.1% | 35.6% |
-| `star_data` | 12 | 5 | 0 | 0 | 0 | 5 | 0 | 4,870 | 0 | 0 | 0 | 49 | 4,821 | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% |
-| `binary` | 47 | 218 | 69 | 0 | 0 | 149 | 0 | 11,638 | 2,708 | 0 | 0 | 6,173 | 2,757 | 23.3% | 0.0% | 23.3% | 0.0% | 18.7% |
-| `astero` | 14 | 189 | 0 | 0 | 0 | 189 | 0 | 7,935 | 0 | 0 | 0 | 6,553 | 1,382 | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% |
+| `star` | 173 | 2,176 | 549 | 359 | 72 | 1,196 | 23 | 120,509 | 29,174 | 36,546 | 1,843 | 40,288 | 12,658 | 24.2% | 30.3% | 24.6% | 3.7% | 35.1% |
+| `star_data` | 12 | 5 | 0 | 0 | 3 | 2 | 0 | 4,870 | 0 | 0 | 23 | 26 | 4,821 | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% |
+| `binary` | 47 | 218 | 65 | 51 | 11 | 91 | 0 | 11,638 | 2,124 | 3,963 | 367 | 2,427 | 2,757 | 18.3% | 34.1% | 18.8% | 0.0% | 18.7% |
+| `astero` | 14 | 189 | 14 | 79 | 20 | 76 | 0 | 7,935 | 261 | 3,572 | 302 | 2,418 | 1,382 | 3.3% | 45.0% | 3.4% | 0.0% | 0.0% |
 | `eos` | 57 | 326 | 108 | 0 | 0 | 218 | 30 | 28,666 | 6,791 | 0 | 0 | 14,724 | 7,151 | 23.7% | 0.0% | 23.7% | 6.1% | 0.0% |
 | `kap` | 38 | 311 | 0 | 0 | 0 | 311 | 0 | 22,430 | 0 | 0 | 0 | 19,985 | 2,445 | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% |
-| `net` | 16 | 195 | 0 | 0 | 0 | 195 | 0 | 13,452 | 0 | 0 | 0 | 12,219 | 1,233 | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% |
+| `net` | 16 | 195 | 3 | 9 | 0 | 183 | 0 | 13,452 | 90 | 688 | 0 | 11,441 | 1,233 | 0.7% | 5.1% | 0.7% | 0.0% | 0.0% |
 | `rates` | 26 | 477 | 0 | 0 | 0 | 477 | 0 | 17,217 | 0 | 0 | 0 | 14,276 | 2,941 | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% |
-| `neu` | 4 | 15 | 11 | 0 | 0 | 4 | 4 | 2,184 | 1,586 | 0 | 0 | 428 | 170 | 72.6% | 0.0% | 72.6% | 18.5% | 83.9% |
+| `neu` | 4 | 15 | 12 | 0 | 0 | 3 | 4 | 2,184 | 1,653 | 0 | 0 | 361 | 170 | 75.7% | 0.0% | 75.7% | 18.5% | 83.9% |
 | `atm` | 19 | 93 | 0 | 0 | 0 | 93 | 0 | 6,853 | 0 | 0 | 0 | 5,350 | 1,503 | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% |
-| `turb` | 6 | 25 | 16 | 0 | 0 | 9 | 6 | 2,033 | 968 | 0 | 0 | 459 | 606 | 47.6% | 0.0% | 47.6% | 17.5% | 66.5% |
+| `turb` | 6 | 25 | 23 | 2 | 0 | 0 | 6 | 2,033 | 1,191 | 236 | 0 | 0 | 606 | 58.6% | 11.6% | 58.6% | 17.5% | 66.5% |
 | `chem` | 7 | 67 | 0 | 0 | 0 | 67 | 0 | 4,195 | 0 | 0 | 0 | 3,330 | 865 | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% |
 | `ionization` | 22 | 67 | 0 | 0 | 0 | 67 | 0 | 3,859 | 0 | 0 | 0 | 3,055 | 804 | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% |
 | `colors` | 10 | 89 | 0 | 0 | 0 | 89 | 0 | 3,823 | 0 | 0 | 0 | 3,155 | 668 | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% |
@@ -82,35 +82,36 @@ The ceiling is the highest status that the routine evidence of a file supports. 
 
 `case_level_evidence` is never a ceiling because the `exercised` level is not derived. Contained procedures count as routines. A ceiling over the hand-set status is a candidate for review, not a raise: the table reads no status as evidence and changes none, and nothing gates on this section.
 
-### Hand-set status above the ceiling (39 files)
+### Hand-set status above the ceiling (37 files)
 
 Files whose status needs more than the routine evidence gives. Files with no ceiling claim are not listed; 5 files with a ported status have no ceiling claim. Largest ten:
 
 | File | Status | Ceiling | Lines | Routines | Full | Partial | N/A | Oracle |
 | :--- | :--- | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
 | `star/private/rsp_step.f90` | ported_unverified | partial | 3,834 | 53 | 27 | 0 | 0 | 0 |
-| `star/private/mesh_adjust.f90` | ported_unverified | partial | 2,889 | 39 | 4 | 0 | 0 | 0 |
-| `star/private/timestep.f90` | ported_unverified | partial | 2,432 | 64 | 3 | 0 | 0 | 0 |
-| `star/private/diffusion.f90` | kernel_reference_vectors | partial | 2,050 | 30 | 2 | 0 | 0 | 1 |
-| `star/private/star_solver.f90` | ported_unverified | partial | 1,940 | 35 | 1 | 0 | 0 | 0 |
-| `star/private/diffusion_support.f90` | kernel_reference_vectors | partial | 1,800 | 16 | 1 | 0 | 0 | 1 |
-| `neu/private/mod_neu.f90` | ported_unverified | partial | 1,715 | 12 | 10 | 0 | 0 | 3 |
+| `star/private/mesh_adjust.f90` | ported_unverified | partial | 2,889 | 39 | 16 | 13 | 0 | 0 |
+| `star/private/timestep.f90` | ported_unverified | partial | 2,432 | 64 | 58 | 5 | 0 | 0 |
+| `star/private/diffusion.f90` | kernel_reference_vectors | partial | 2,050 | 30 | 13 | 5 | 0 | 1 |
+| `star/private/star_solver.f90` | ported_unverified | partial | 1,940 | 35 | 4 | 8 | 0 | 0 |
+| `star/private/diffusion_support.f90` | kernel_reference_vectors | partial | 1,800 | 16 | 11 | 5 | 0 | 1 |
+| `neu/private/mod_neu.f90` | ported_unverified | partial | 1,715 | 12 | 11 | 0 | 0 | 3 |
 | `star/private/conv_premix.f90` | ported_unverified | partial | 1,561 | 16 | 1 | 0 | 0 | 0 |
 | `star/private/solver_support.f90` | ported_unverified | partial | 1,547 | 21 | 7 | 0 | 0 | 0 |
-| `star/private/adjust_mesh_split_merge.f90` | ported_unverified | partial | 1,461 | 22 | 1 | 0 | 0 | 0 |
+| `star/private/adjust_mesh_split_merge.f90` | ported_unverified | partial | 1,461 | 22 | 12 | 6 | 0 | 0 |
 
-### `partial` files with every applicable routine mapped in full (8 files)
+### `partial` files with every applicable routine mapped in full (9 files)
 
 Candidates for a reviewed raise to `ported_unverified`. Largest ten:
 
 | File | Status | Ceiling | Lines | Routines | Full | Partial | N/A | Oracle |
 | :--- | :--- | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
+| `turb/private/tdc_support.f90` | partial | ported_unverified | 681 | 11 | 11 | 0 | 0 | 0 |
 | `star/private/mass_utils.f90` | partial | ported_unverified | 594 | 9 | 9 | 0 | 0 | 0 |
 | `eos/private/skye_coulomb_solid.f90` | partial | ported_unverified | 348 | 8 | 8 | 0 | 0 | 0 |
-| `binary/private/binary_timestep.f90` | partial | ported_unverified | 325 | 2 | 2 | 0 | 0 | 0 |
 | `eos/private/skye_thermodynamics.f90` | partial | ported_unverified | 241 | 3 | 3 | 0 | 0 | 0 |
 | `eos/private/helm_polynomials.f90` | partial | ported_unverified | 185 | 22 | 22 | 0 | 0 | 0 |
 | `eos/private/skye_coulomb_liquid.f90` | partial | ported_unverified | 181 | 4 | 4 | 0 | 0 | 0 |
+| `star/private/magnetic_diffusion.f90` | partial | ported_unverified | 137 | 5 | 5 | 0 | 0 | 0 |
 | `eos/private/eosde_eval.f90` | partial | kernel_reference_vectors | 113 | 1 | 1 | 0 | 0 | 1 |
 | `eos/private/ion_offset.f90` | partial | kernel_reference_vectors | 84 | 1 | 1 | 0 | 0 | 1 |
 
@@ -118,11 +119,11 @@ Candidates for a reviewed raise to `ported_unverified`. Largest ten:
 
 | File | Module | Status | Ceiling | Lines | Routines | Full | Partial | N/A | Oracle | Lines full | Lines partial | Lines N/A | Lines unmapped | Outside |
 | :--- | :--- | :--- | :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| `astero/private/astero_run_support.f90` | `astero` | partial | - | 1,127 | 22 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 1,058 | 69 |
-| `astero/private/astero_support.f90` | `astero` | partial | - | 1,530 | 43 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 1,415 | 115 |
-| `astero/private/extras_support.f90` | `astero` | partial | - | 1,238 | 28 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 1,162 | 76 |
-| `astero/public/astero_def.f90` | `astero` | partial | - | 1,709 | 31 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 1,005 | 704 |
-| `astero/public/astero_lib.f90` | `astero` | partial | - | 146 | 6 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 88 | 58 |
+| `astero/private/astero_run_support.f90` | `astero` | partial | partial | 1,127 | 22 | 2 | 12 | 0 | 0 | 66 | 686 | 0 | 306 | 69 |
+| `astero/private/astero_support.f90` | `astero` | partial | partial | 1,530 | 43 | 5 | 35 | 2 | 0 | 111 | 1,280 | 6 | 18 | 115 |
+| `astero/private/extras_support.f90` | `astero` | partial | partial | 1,238 | 28 | 2 | 11 | 7 | 0 | 38 | 771 | 84 | 269 | 76 |
+| `astero/public/astero_def.f90` | `astero` | partial | partial | 1,709 | 31 | 4 | 16 | 11 | 0 | 41 | 752 | 212 | 0 | 704 |
+| `astero/public/astero_lib.f90` | `astero` | partial | partial | 146 | 6 | 1 | 5 | 0 | 0 | 5 | 83 | 0 | 0 | 58 |
 | `atm/private/atm_irradiated.f90` | `atm` | partial | - | 334 | 2 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 294 | 40 |
 | `atm/private/atm_t_tau_relations.f90` | `atm` | partial | - | 367 | 11 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 311 | 56 |
 | `atm/private/atm_t_tau_uniform.f90` | `atm` | partial | - | 702 | 6 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 655 | 47 |
@@ -143,27 +144,27 @@ Candidates for a reviewed raise to `ported_unverified`. Largest ten:
 | `auto_diff/private/support_functions.f90` | `auto_diff` | partial | - | 135 | 9 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 77 | 58 |
 | `auto_diff/public/auto_diff.f90` | `auto_diff` | partial | - | 30 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 30 |
 | `binary/job/run_binary.f90` | `binary` | ported_unverified | ported_unverified | 44 | 1 | 1 | 0 | 0 | 0 | 17 | 0 | 0 | 0 | 27 |
-| `binary/private/binary_ctrls_io.f90` | `binary` | partial | - | 821 | 9 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 568 | 253 |
+| `binary/private/binary_ctrls_io.f90` | `binary` | partial | partial | 821 | 9 | 0 | 5 | 1 | 0 | 0 | 302 | 197 | 69 | 253 |
 | `binary/private/binary_disk.f90` | `binary` | ported_unverified | ported_unverified | 318 | 7 | 7 | 0 | 0 | 0 | 265 | 0 | 0 | 0 | 53 |
 | `binary/private/binary_edot.f90` | `binary` | ported_unverified | ported_unverified | 231 | 4 | 4 | 0 | 0 | 0 | 186 | 0 | 0 | 0 | 45 |
-| `binary/private/binary_evolve.f90` | `binary` | partial | - | 698 | 9 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 654 | 44 |
-| `binary/private/binary_history.f90` | `binary` | partial | - | 880 | 21 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 835 | 45 |
-| `binary/private/binary_history_specs.f90` | `binary` | partial | - | 286 | 7 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 244 | 42 |
+| `binary/private/binary_evolve.f90` | `binary` | partial | partial | 698 | 9 | 0 | 8 | 1 | 0 | 0 | 600 | 54 | 0 | 44 |
+| `binary/private/binary_history.f90` | `binary` | partial | partial | 880 | 21 | 0 | 14 | 1 | 0 | 0 | 662 | 6 | 167 | 45 |
+| `binary/private/binary_history_specs.f90` | `binary` | partial | partial | 286 | 7 | 0 | 4 | 3 | 0 | 0 | 224 | 20 | 0 | 42 |
 | `binary/private/binary_irradiation.f90` | `binary` | ported_unverified | ported_unverified | 62 | 1 | 1 | 0 | 0 | 0 | 28 | 0 | 0 | 0 | 34 |
 | `binary/private/binary_jdot.f90` | `binary` | ported_unverified | ported_unverified | 330 | 7 | 7 | 0 | 0 | 0 | 290 | 0 | 0 | 0 | 40 |
 | `binary/private/binary_job_controls.inc` | `binary` | partial | - | 43 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 43 |
-| `binary/private/binary_job_ctrls_io.f90` | `binary` | partial | - | 331 | 8 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 244 | 87 |
-| `binary/private/binary_mdot.f90` | `binary` | ported_unverified | partial | 1,023 | 14 | 12 | 0 | 0 | 0 | 686 | 0 | 0 | 287 | 50 |
-| `binary/private/binary_roche_deformation.f90` | `binary` | partial | partial | 416 | 11 | 7 | 0 | 0 | 0 | 210 | 0 | 0 | 141 | 65 |
-| `binary/private/binary_tides.f90` | `binary` | partial | partial | 461 | 8 | 7 | 0 | 0 | 0 | 357 | 0 | 0 | 57 | 47 |
-| `binary/private/binary_timestep.f90` | `binary` | partial | ported_unverified | 325 | 2 | 2 | 0 | 0 | 0 | 289 | 0 | 0 | 0 | 36 |
-| `binary/private/binary_utils.f90` | `binary` | partial | partial | 215 | 9 | 7 | 0 | 0 | 0 | 130 | 0 | 0 | 42 | 43 |
+| `binary/private/binary_job_ctrls_io.f90` | `binary` | partial | partial | 331 | 8 | 0 | 4 | 1 | 0 | 0 | 118 | 46 | 80 | 87 |
+| `binary/private/binary_mdot.f90` | `binary` | ported_unverified | partial | 1,023 | 14 | 7 | 7 | 0 | 0 | 288 | 685 | 0 | 0 | 50 |
+| `binary/private/binary_roche_deformation.f90` | `binary` | partial | partial | 416 | 11 | 9 | 0 | 1 | 0 | 291 | 0 | 24 | 36 | 65 |
+| `binary/private/binary_tides.f90` | `binary` | partial | partial | 461 | 8 | 7 | 1 | 0 | 0 | 357 | 57 | 0 | 0 | 47 |
+| `binary/private/binary_timestep.f90` | `binary` | partial | partial | 325 | 2 | 0 | 2 | 0 | 0 | 0 | 289 | 0 | 0 | 36 |
+| `binary/private/binary_utils.f90` | `binary` | partial | partial | 215 | 9 | 7 | 1 | 0 | 0 | 130 | 22 | 0 | 20 | 43 |
 | `binary/private/binary_wind.f90` | `binary` | ported_unverified | ported_unverified | 173 | 3 | 3 | 0 | 0 | 0 | 137 | 0 | 0 | 0 | 36 |
-| `binary/private/run_binary_support.f90` | `binary` | partial | - | 1,016 | 4 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 975 | 41 |
+| `binary/private/run_binary_support.f90` | `binary` | partial | partial | 1,016 | 4 | 1 | 3 | 0 | 0 | 22 | 953 | 0 | 0 | 41 |
 | `binary/public/binary_controls.inc` | `binary` | partial | - | 190 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 190 |
 | `binary/public/binary_data.inc` | `binary` | partial | - | 326 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 326 |
-| `binary/public/binary_def.f90` | `binary` | partial | - | 292 | 4 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 25 | 267 |
-| `binary/public/binary_lib.f90` | `binary` | partial | partial | 272 | 17 | 11 | 0 | 0 | 0 | 113 | 0 | 0 | 111 | 48 |
+| `binary/public/binary_def.f90` | `binary` | partial | - | 292 | 4 | 0 | 0 | 3 | 0 | 0 | 0 | 20 | 5 | 267 |
+| `binary/public/binary_lib.f90` | `binary` | partial | partial | 272 | 17 | 11 | 2 | 0 | 0 | 113 | 51 | 0 | 60 | 48 |
 | `chem/private/chem_isos_io.f90` | `chem` | partial | - | 233 | 4 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 200 | 33 |
 | `chem/private/lodders_mod.f90` | `chem` | partial | - | 106 | 2 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 76 | 30 |
 | `chem/private/nuclide_set_mod.f90` | `chem` | partial | - | 112 | 3 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 80 | 32 |
@@ -281,14 +282,14 @@ Candidates for a reviewed raise to `ported_unverified`. Largest ten:
 | `net/private/net_burn_support.f90` | `net` | partial | - | 641 | 4 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 596 | 45 |
 | `net/private/net_derivs.f90` | `net` | partial | - | 1,833 | 13 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 1,789 | 44 |
 | `net/private/net_derivs_support.f90` | `net` | partial | - | 454 | 7 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 385 | 69 |
-| `net/private/net_eval.f90` | `net` | partial | - | 852 | 13 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 800 | 52 |
+| `net/private/net_eval.f90` | `net` | partial | partial | 852 | 13 | 3 | 9 | 0 | 0 | 90 | 688 | 0 | 22 | 52 |
 | `net/private/net_initialize.f90` | `net` | partial | - | 2,300 | 41 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 2,206 | 94 |
 | `net/private/net_screen.f90` | `net` | partial | - | 566 | 10 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 525 | 41 |
 | `net/public/burner_const_density_get_eos_info.inc` | `net` | partial | - | 15 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 15 | 0 |
 | `net/public/burner_finish_substep.inc` | `net` | partial | - | 7 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 7 | 0 |
 | `net/public/net_def.f90` | `net` | partial | - | 625 | 11 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 276 | 349 |
 | `net/public/net_lib.f90` | `net` | partial | - | 1,210 | 45 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 1,063 | 147 |
-| `neu/private/mod_neu.f90` | `neu` | ported_unverified | partial | 1,715 | 12 | 10 | 0 | 0 | 3 | 1,552 | 0 | 0 | 76 | 87 |
+| `neu/private/mod_neu.f90` | `neu` | ported_unverified | partial | 1,715 | 12 | 11 | 0 | 0 | 3 | 1,619 | 0 | 0 | 9 | 87 |
 | `neu/public/neu_def.f90` | `neu` | ported_unverified | - | 46 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 46 |
 | `neu/public/neu_lib.f90` | `neu` | ported_unverified | kernel_reference_vectors | 71 | 1 | 1 | 0 | 0 | 1 | 34 | 0 | 0 | 0 | 37 |
 | `num/private/decomc.dek` | `num` | partial | - | 429 | 2 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 425 | 4 |
@@ -378,55 +379,55 @@ Candidates for a reviewed raise to `ported_unverified`. Largest ten:
 | `rates/private/weaklib_tables.f90` | `rates` | partial | - | 514 | 12 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 456 | 58 |
 | `rates/public/rates_def.f90` | `rates` | partial | - | 1,295 | 24 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 377 | 918 |
 | `rates/public/rates_lib.f90` | `rates` | partial | - | 974 | 55 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 828 | 146 |
-| `star/job/other_extras.f90` | `star` | partial | - | 207 | 10 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 144 | 63 |
+| `star/job/other_extras.f90` | `star` | partial | partial | 207 | 10 | 5 | 4 | 1 | 0 | 64 | 56 | 24 | 0 | 63 |
 | `star/job/run_star.f90` | `star` | ported_unverified | ported_unverified | 48 | 1 | 1 | 0 | 0 | 0 | 22 | 0 | 0 | 0 | 26 |
-| `star/job/run_star_support.f90` | `star` | partial | - | 3,705 | 49 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 3,560 | 145 |
-| `star/private/adjust_mass.f90` | `star` | partial | partial | 1,624 | 18 | 3 | 0 | 0 | 0 | 433 | 0 | 0 | 1,122 | 69 |
-| `star/private/adjust_mesh.f90` | `star` | ported_unverified | partial | 700 | 14 | 1 | 0 | 0 | 0 | 509 | 0 | 0 | 154 | 37 |
-| `star/private/adjust_mesh_split_merge.f90` | `star` | ported_unverified | partial | 1,461 | 22 | 1 | 0 | 0 | 0 | 44 | 0 | 0 | 1,343 | 74 |
-| `star/private/adjust_mesh_support.f90` | `star` | ported_unverified | partial | 457 | 12 | 2 | 0 | 0 | 0 | 104 | 0 | 0 | 304 | 49 |
-| `star/private/adjust_xyz.f90` | `star` | partial | - | 1,468 | 31 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 1,373 | 95 |
-| `star/private/atm_support.f90` | `star` | partial | - | 1,289 | 19 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 1,227 | 62 |
-| `star/private/auto_diff_support.f90` | `star` | partial | - | 1,460 | 118 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 1,286 | 174 |
+| `star/job/run_star_support.f90` | `star` | partial | partial | 3,705 | 49 | 6 | 13 | 14 | 0 | 220 | 1,823 | 299 | 1,218 | 145 |
+| `star/private/adjust_mass.f90` | `star` | partial | partial | 1,624 | 18 | 5 | 8 | 3 | 0 | 369 | 1,092 | 22 | 72 | 69 |
+| `star/private/adjust_mesh.f90` | `star` | ported_unverified | partial | 700 | 14 | 2 | 1 | 0 | 0 | 65 | 509 | 0 | 89 | 37 |
+| `star/private/adjust_mesh_split_merge.f90` | `star` | ported_unverified | partial | 1,461 | 22 | 12 | 6 | 0 | 0 | 259 | 1,070 | 0 | 58 | 74 |
+| `star/private/adjust_mesh_support.f90` | `star` | ported_unverified | partial | 457 | 12 | 8 | 3 | 0 | 0 | 190 | 207 | 0 | 11 | 49 |
+| `star/private/adjust_xyz.f90` | `star` | partial | partial | 1,468 | 31 | 5 | 14 | 4 | 0 | 276 | 846 | 18 | 233 | 95 |
+| `star/private/atm_support.f90` | `star` | partial | partial | 1,289 | 19 | 6 | 11 | 0 | 0 | 178 | 904 | 0 | 145 | 62 |
+| `star/private/auto_diff_support.f90` | `star` | partial | partial | 1,460 | 118 | 8 | 1 | 0 | 0 | 75 | 12 | 0 | 1,199 | 174 |
 | `star/private/brunt.f90` | `star` | ported_unverified | partial | 335 | 5 | 2 | 0 | 0 | 0 | 133 | 0 | 0 | 157 | 45 |
 | `star/private/conv_premix.f90` | `star` | ported_unverified | partial | 1,561 | 16 | 1 | 0 | 0 | 0 | 101 | 0 | 0 | 1,347 | 113 |
-| `star/private/ctrls_io.f90` | `star` | partial | - | 4,272 | 10 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 3,698 | 574 |
-| `star/private/diffusion.f90` | `star` | kernel_reference_vectors | partial | 2,050 | 30 | 2 | 0 | 0 | 1 | 462 | 0 | 0 | 1,518 | 70 |
-| `star/private/diffusion_procs.f90` | `star` | partial | - | 1,746 | 17 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 1,677 | 69 |
-| `star/private/diffusion_support.f90` | `star` | kernel_reference_vectors | partial | 1,800 | 16 | 1 | 0 | 0 | 1 | 201 | 0 | 0 | 1,487 | 112 |
-| `star/private/do_one_utils.f90` | `star` | partial | partial | 1,544 | 16 | 1 | 0 | 0 | 0 | 867 | 0 | 0 | 610 | 67 |
-| `star/private/element_diffusion.f90` | `star` | ported_unverified | partial | 582 | 6 | 2 | 0 | 0 | 1 | 424 | 0 | 0 | 122 | 36 |
-| `star/private/eos_support.f90` | `star` | partial | - | 413 | 8 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 336 | 77 |
+| `star/private/ctrls_io.f90` | `star` | partial | partial | 4,272 | 10 | 0 | 6 | 0 | 0 | 0 | 1,886 | 0 | 1,812 | 574 |
+| `star/private/diffusion.f90` | `star` | kernel_reference_vectors | partial | 2,050 | 30 | 13 | 5 | 0 | 1 | 1,126 | 509 | 0 | 345 | 70 |
+| `star/private/diffusion_procs.f90` | `star` | partial | partial | 1,746 | 17 | 4 | 8 | 0 | 0 | 285 | 898 | 0 | 494 | 69 |
+| `star/private/diffusion_support.f90` | `star` | kernel_reference_vectors | partial | 1,800 | 16 | 11 | 5 | 0 | 1 | 805 | 883 | 0 | 0 | 112 |
+| `star/private/do_one_utils.f90` | `star` | partial | partial | 1,544 | 16 | 3 | 0 | 7 | 0 | 901 | 0 | 437 | 139 | 67 |
+| `star/private/element_diffusion.f90` | `star` | ported_unverified | partial | 582 | 6 | 3 | 1 | 0 | 0 | 38 | 414 | 0 | 94 | 36 |
+| `star/private/eos_support.f90` | `star` | partial | partial | 413 | 8 | 2 | 1 | 0 | 0 | 102 | 47 | 0 | 187 | 77 |
 | `star/private/eps_grav.f90` | `star` | ported_unverified | partial | 408 | 6 | 2 | 0 | 0 | 0 | 40 | 0 | 0 | 321 | 47 |
 | `star/private/eps_mdot.f90` | `star` | ported_unverified | ported_unverified | 706 | 6 | 6 | 0 | 0 | 1 | 634 | 0 | 0 | 0 | 72 |
-| `star/private/evolve.f90` | `star` | partial | - | 2,403 | 26 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 2,331 | 72 |
-| `star/private/evolve_support.f90` | `star` | partial | - | 305 | 5 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 267 | 38 |
-| `star/private/history.f90` | `star` | partial | - | 3,449 | 43 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 3,389 | 60 |
-| `star/private/history_specs.f90` | `star` | partial | - | 783 | 15 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 706 | 77 |
+| `star/private/evolve.f90` | `star` | partial | partial | 2,403 | 26 | 2 | 14 | 9 | 0 | 68 | 1,936 | 315 | 12 | 72 |
+| `star/private/evolve_support.f90` | `star` | partial | partial | 305 | 5 | 0 | 2 | 1 | 0 | 0 | 189 | 19 | 59 | 38 |
+| `star/private/history.f90` | `star` | partial | partial | 3,449 | 43 | 17 | 19 | 2 | 0 | 307 | 2,803 | 43 | 236 | 60 |
+| `star/private/history_specs.f90` | `star` | partial | partial | 783 | 15 | 4 | 4 | 4 | 0 | 55 | 566 | 34 | 51 | 77 |
 | `star/private/hydro_alpha_rti_eqns.f90` | `star` | ported_unverified | ported_unverified | 195 | 1 | 1 | 0 | 0 | 0 | 161 | 0 | 0 | 0 | 34 |
 | `star/private/hydro_chem_eqns.f90` | `star` | ported_unverified | partial | 224 | 3 | 2 | 0 | 0 | 1 | 175 | 0 | 0 | 13 | 36 |
-| `star/private/hydro_energy.f90` | `star` | ported_unverified | partial | 879 | 17 | 1 | 0 | 0 | 0 | 19 | 0 | 0 | 812 | 48 |
-| `star/private/hydro_eqns.f90` | `star` | partial | partial | 1,164 | 18 | 12 | 0 | 0 | 0 | 893 | 0 | 0 | 220 | 51 |
+| `star/private/hydro_energy.f90` | `star` | ported_unverified | partial | 879 | 17 | 4 | 11 | 0 | 0 | 89 | 720 | 0 | 22 | 48 |
+| `star/private/hydro_eqns.f90` | `star` | partial | partial | 1,164 | 18 | 12 | 0 | 2 | 0 | 893 | 0 | 60 | 160 | 51 |
 | `star/private/hydro_momentum.f90` | `star` | ported_unverified | partial | 603 | 15 | 4 | 0 | 0 | 0 | 127 | 0 | 0 | 422 | 54 |
-| `star/private/hydro_riemann.f90` | `star` | partial | - | 459 | 10 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 396 | 63 |
-| `star/private/hydro_rotation.f90` | `star` | partial | - | 922 | 26 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 831 | 91 |
-| `star/private/hydro_rsp2.f90` | `star` | partial | - | 1,243 | 34 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 1,135 | 108 |
-| `star/private/hydro_rsp2_support.f90` | `star` | partial | - | 445 | 14 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 407 | 38 |
-| `star/private/hydro_temperature.f90` | `star` | partial | - | 464 | 6 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 411 | 53 |
-| `star/private/hydro_vars.f90` | `star` | partial | - | 1,163 | 19 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 1,089 | 74 |
+| `star/private/hydro_riemann.f90` | `star` | partial | partial | 459 | 10 | 0 | 10 | 0 | 0 | 0 | 396 | 0 | 0 | 63 |
+| `star/private/hydro_rotation.f90` | `star` | partial | partial | 922 | 26 | 14 | 10 | 0 | 0 | 302 | 446 | 0 | 83 | 91 |
+| `star/private/hydro_rsp2.f90` | `star` | partial | partial | 1,243 | 34 | 21 | 13 | 0 | 0 | 624 | 511 | 0 | 0 | 108 |
+| `star/private/hydro_rsp2_support.f90` | `star` | partial | partial | 445 | 14 | 9 | 5 | 0 | 0 | 165 | 242 | 0 | 0 | 38 |
+| `star/private/hydro_temperature.f90` | `star` | partial | partial | 464 | 6 | 0 | 5 | 1 | 0 | 0 | 390 | 21 | 0 | 53 |
+| `star/private/hydro_vars.f90` | `star` | partial | partial | 1,163 | 19 | 2 | 9 | 3 | 0 | 26 | 891 | 23 | 149 | 74 |
 | `star/private/init.f90` | `star` | stub | - | 1,232 | 27 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 1,130 | 102 |
 | `star/private/init_model.f90` | `star` | ported_unverified | partial | 468 | 7 | 1 | 0 | 0 | 1 | 68 | 0 | 0 | 359 | 41 |
 | `star/private/ionization_potentials.f90` | `star` | ported_unverified | - | 596 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 558 | 38 |
-| `star/private/kap_support.f90` | `star` | partial | - | 526 | 5 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 480 | 46 |
-| `star/private/magnetic_diffusion.f90` | `star` | partial | - | 137 | 5 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 62 | 75 |
+| `star/private/kap_support.f90` | `star` | partial | partial | 526 | 5 | 0 | 1 | 0 | 0 | 0 | 321 | 0 | 159 | 46 |
+| `star/private/magnetic_diffusion.f90` | `star` | partial | ported_unverified | 137 | 5 | 5 | 0 | 0 | 0 | 62 | 0 | 0 | 0 | 75 |
 | `star/private/mass_utils.f90` | `star` | partial | ported_unverified | 594 | 9 | 9 | 0 | 0 | 0 | 441 | 0 | 0 | 0 | 153 |
-| `star/private/mesh_adjust.f90` | `star` | ported_unverified | partial | 2,889 | 39 | 4 | 0 | 0 | 0 | 486 | 0 | 0 | 2,293 | 110 |
+| `star/private/mesh_adjust.f90` | `star` | ported_unverified | partial | 2,889 | 39 | 16 | 13 | 0 | 0 | 1,118 | 1,500 | 0 | 161 | 110 |
 | `star/private/mesh_functions.f90` | `star` | ported_unverified | partial | 327 | 6 | 2 | 0 | 0 | 0 | 213 | 0 | 0 | 70 | 44 |
 | `star/private/mesh_plan.f90` | `star` | ported_unverified | partial | 1,301 | 14 | 1 | 0 | 0 | 0 | 163 | 0 | 0 | 1,092 | 46 |
-| `star/private/micro.f90` | `star` | partial | - | 766 | 12 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 710 | 56 |
-| `star/private/mix_info.f90` | `star` | partial | partial | 2,438 | 37 | 7 | 0 | 0 | 1 | 987 | 0 | 0 | 1,351 | 100 |
+| `star/private/micro.f90` | `star` | partial | partial | 766 | 12 | 0 | 9 | 3 | 0 | 0 | 617 | 93 | 0 | 56 |
+| `star/private/mix_info.f90` | `star` | partial | partial | 2,438 | 37 | 14 | 16 | 2 | 1 | 1,295 | 833 | 74 | 136 | 100 |
 | `star/private/mod_typical_charge.f90` | `star` | ported_unverified | partial | 111 | 4 | 1 | 0 | 0 | 0 | 11 | 0 | 0 | 40 | 60 |
-| `star/private/net.f90` | `star` | partial | - | 813 | 10 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 754 | 59 |
+| `star/private/net.f90` | `star` | partial | partial | 813 | 10 | 0 | 7 | 1 | 0 | 0 | 586 | 137 | 31 | 59 |
 | `star/private/neu.f90` | `star` | ported_unverified | ported_unverified | 129 | 2 | 2 | 0 | 0 | 1 | 93 | 0 | 0 | 0 | 36 |
 | `star/private/overshoot.f90` | `star` | ported_unverified | ported_unverified | 329 | 1 | 1 | 0 | 0 | 0 | 292 | 0 | 0 | 0 | 37 |
 | `star/private/overshoot_exp.f90` | `star` | ported_unverified | ported_unverified | 176 | 1 | 1 | 0 | 0 | 0 | 143 | 0 | 0 | 0 | 33 |
@@ -434,28 +435,28 @@ Candidates for a reviewed raise to `ported_unverified`. Largest ten:
 | `star/private/overshoot_utils.f90` | `star` | ported_unverified | ported_unverified | 376 | 4 | 4 | 0 | 0 | 2 | 334 | 0 | 0 | 0 | 42 |
 | `star/private/paquette_coeffs.f90` | `star` | kernel_reference_vectors | kernel_reference_vectors | 721 | 3 | 3 | 0 | 0 | 3 | 656 | 0 | 0 | 0 | 65 |
 | `star/private/phase_separation.f90` | `star` | kernel_reference_vectors | partial | 400 | 7 | 1 | 0 | 0 | 1 | 14 | 0 | 0 | 340 | 46 |
-| `star/private/photo_in.f90` | `star` | partial | - | 320 | 3 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 288 | 32 |
-| `star/private/photo_out.f90` | `star` | partial | - | 179 | 2 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 147 | 32 |
+| `star/private/photo_in.f90` | `star` | partial | partial | 320 | 3 | 0 | 1 | 2 | 0 | 0 | 269 | 19 | 0 | 32 |
+| `star/private/photo_out.f90` | `star` | partial | partial | 179 | 2 | 0 | 1 | 1 | 0 | 0 | 142 | 5 | 0 | 32 |
 | `star/private/pre_ms_model.f90` | `star` | ported_unverified | partial | 738 | 6 | 1 | 0 | 0 | 0 | 252 | 0 | 0 | 445 | 41 |
 | `star/private/predictive_mix.f90` | `star` | ported_unverified | partial | 965 | 6 | 1 | 0 | 0 | 0 | 159 | 0 | 0 | 760 | 46 |
-| `star/private/profile.f90` | `star` | partial | - | 1,186 | 23 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 1,120 | 66 |
-| `star/private/profile_getval.f90` | `star` | partial | - | 2,466 | 14 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 2,394 | 72 |
-| `star/private/pulse.f90` | `star` | partial | - | 185 | 3 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 138 | 47 |
-| `star/private/pulse_cafein.f90` | `star` | partial | - | 722 | 6 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 680 | 42 |
-| `star/private/pulse_fgong.f90` | `star` | partial | - | 710 | 5 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 660 | 50 |
-| `star/private/pulse_gr1d.f90` | `star` | partial | - | 182 | 3 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 144 | 38 |
-| `star/private/pulse_gyre.f90` | `star` | partial | - | 476 | 5 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 435 | 41 |
-| `star/private/pulse_osc.f90` | `star` | partial | - | 608 | 5 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 559 | 49 |
-| `star/private/pulse_saio.f90` | `star` | partial | - | 347 | 4 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 307 | 40 |
+| `star/private/profile.f90` | `star` | partial | partial | 1,186 | 23 | 3 | 14 | 4 | 0 | 75 | 984 | 23 | 38 | 66 |
+| `star/private/profile_getval.f90` | `star` | partial | partial | 2,466 | 14 | 0 | 5 | 0 | 0 | 0 | 2,189 | 0 | 205 | 72 |
+| `star/private/pulse.f90` | `star` | partial | partial | 185 | 3 | 0 | 3 | 0 | 0 | 0 | 138 | 0 | 0 | 47 |
+| `star/private/pulse_cafein.f90` | `star` | partial | partial | 722 | 6 | 2 | 3 | 0 | 0 | 99 | 479 | 0 | 102 | 42 |
+| `star/private/pulse_fgong.f90` | `star` | partial | partial | 710 | 5 | 3 | 2 | 0 | 0 | 321 | 339 | 0 | 0 | 50 |
+| `star/private/pulse_gr1d.f90` | `star` | partial | partial | 182 | 3 | 0 | 1 | 0 | 0 | 0 | 51 | 0 | 93 | 38 |
+| `star/private/pulse_gyre.f90` | `star` | partial | partial | 476 | 5 | 1 | 3 | 0 | 0 | 56 | 335 | 0 | 44 | 41 |
+| `star/private/pulse_osc.f90` | `star` | partial | partial | 608 | 5 | 0 | 4 | 0 | 0 | 0 | 458 | 0 | 101 | 49 |
+| `star/private/pulse_saio.f90` | `star` | partial | partial | 347 | 4 | 1 | 3 | 0 | 0 | 48 | 259 | 0 | 0 | 40 |
 | `star/private/pulse_utils.f90` | `star` | ported_unverified | ported_unverified | 525 | 9 | 9 | 0 | 0 | 0 | 466 | 0 | 0 | 0 | 59 |
-| `star/private/read_model.f90` | `star` | partial | - | 986 | 13 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 896 | 90 |
+| `star/private/read_model.f90` | `star` | partial | partial | 986 | 13 | 0 | 9 | 0 | 0 | 0 | 786 | 0 | 110 | 90 |
 | `star/private/relax.f90` | `star` | stub | - | 4,340 | 128 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 4,096 | 244 |
-| `star/private/report.f90` | `star` | partial | - | 1,419 | 23 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 1,359 | 60 |
-| `star/private/rotation_mix_info.f90` | `star` | partial | - | 1,371 | 13 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 1,315 | 56 |
+| `star/private/report.f90` | `star` | partial | partial | 1,419 | 23 | 14 | 3 | 1 | 0 | 693 | 406 | 7 | 253 | 60 |
+| `star/private/rotation_mix_info.f90` | `star` | partial | partial | 1,371 | 13 | 9 | 3 | 0 | 0 | 496 | 808 | 0 | 11 | 56 |
 | `star/private/rsp.f90` | `star` | ported_unverified | partial | 1,030 | 19 | 6 | 0 | 0 | 1 | 339 | 0 | 0 | 621 | 70 |
 | `star/private/rsp_build.f90` | `star` | ported_unverified | partial | 986 | 18 | 1 | 0 | 0 | 1 | 253 | 0 | 0 | 680 | 53 |
-| `star/private/rsp_def.f90` | `star` | ported_unverified | partial | 863 | 22 | 17 | 0 | 0 | 3 | 497 | 0 | 0 | 182 | 184 |
-| `star/private/rsp_eval_eos_and_kap.f90` | `star` | ported_unverified | partial | 1,047 | 16 | 14 | 0 | 0 | 0 | 860 | 0 | 0 | 112 | 75 |
+| `star/private/rsp_def.f90` | `star` | ported_unverified | partial | 863 | 22 | 18 | 1 | 0 | 3 | 543 | 51 | 0 | 85 | 184 |
+| `star/private/rsp_eval_eos_and_kap.f90` | `star` | ported_unverified | ported_unverified | 1,047 | 16 | 16 | 0 | 0 | 0 | 972 | 0 | 0 | 0 | 75 |
 | `star/private/rsp_lina.f90` | `star` | ported_unverified | ported_unverified | 1,269 | 3 | 3 | 0 | 0 | 1 | 1,225 | 0 | 0 | 0 | 44 |
 | `star/private/rsp_relax_env.f90` | `star` | ported_unverified | ported_unverified | 1,335 | 2 | 2 | 0 | 0 | 0 | 1,296 | 0 | 0 | 0 | 39 |
 | `star/private/rsp_step.f90` | `star` | ported_unverified | partial | 3,834 | 53 | 27 | 0 | 0 | 0 | 2,057 | 0 | 0 | 1,490 | 287 |
@@ -463,14 +464,13 @@ Candidates for a reviewed raise to `ported_unverified`. Largest ten:
 | `star/private/solve_omega_mix.f90` | `star` | kernel_reference_vectors | partial | 669 | 7 | 1 | 0 | 0 | 1 | 306 | 0 | 0 | 330 | 33 |
 | `star/private/solver_support.f90` | `star` | ported_unverified | partial | 1,547 | 21 | 7 | 0 | 0 | 0 | 634 | 0 | 0 | 839 | 74 |
 | `star/private/star_bcyclic.f90` | `star` | ported_unverified | partial | 981 | 15 | 3 | 0 | 0 | 0 | 284 | 0 | 0 | 625 | 72 |
-| `star/private/star_job_ctrls_io.f90` | `star` | partial | - | 1,763 | 9 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 1,211 | 552 |
-| `star/private/star_solver.f90` | `star` | ported_unverified | partial | 1,940 | 35 | 1 | 0 | 0 | 0 | 52 | 0 | 0 | 1,847 | 41 |
-| `star/private/star_utils.f90` | `star` | partial | - | 4,149 | 156 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 3,660 | 489 |
-| `star/private/struct_burn_mix.f90` | `star` | partial | - | 1,213 | 19 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 1,150 | 63 |
-| `star/private/tdc_hydro.f90` | `star` | ported_unverified | partial | 658 | 16 | 11 | 0 | 0 | 0 | 467 | 0 | 0 | 128 | 63 |
-| `star/private/timestep.f90` | `star` | ported_unverified | partial | 2,432 | 64 | 3 | 0 | 0 | 0 | 112 | 0 | 0 | 2,159 | 161 |
-| `star/private/turb_info.f90` | `star` | ported_unverified | partial | 608 | 12 | 5 | 0 | 0 | 1 | 380 | 0 | 0 | 172 | 56 |
-| `star/private/turb_support.f90` | `star` | ported_unverified | partial | 512 | 5 | 3 | 0 | 0 | 0 | 387 | 0 | 0 | 71 | 54 |
+| `star/private/star_job_ctrls_io.f90` | `star` | partial | partial | 1,763 | 9 | 0 | 4 | 0 | 0 | 0 | 591 | 0 | 620 | 552 |
+| `star/private/star_solver.f90` | `star` | ported_unverified | partial | 1,940 | 35 | 4 | 8 | 0 | 0 | 115 | 890 | 0 | 894 | 41 |
+| `star/private/star_utils.f90` | `star` | partial | partial | 4,149 | 156 | 86 | 30 | 5 | 0 | 1,941 | 1,022 | 131 | 566 | 489 |
+| `star/private/struct_burn_mix.f90` | `star` | partial | partial | 1,213 | 19 | 1 | 13 | 2 | 0 | 6 | 1,045 | 39 | 60 | 63 |
+| `star/private/timestep.f90` | `star` | ported_unverified | partial | 2,432 | 64 | 58 | 5 | 0 | 0 | 1,687 | 574 | 0 | 10 | 161 |
+| `star/private/turb_info.f90` | `star` | ported_unverified | partial | 608 | 12 | 6 | 5 | 0 | 0 | 305 | 240 | 0 | 7 | 56 |
+| `star/private/turb_support.f90` | `star` | ported_unverified | partial | 512 | 5 | 2 | 3 | 0 | 0 | 71 | 387 | 0 | 0 | 54 |
 | `star/private/winds.f90` | `star` | ported_unverified | partial | 706 | 14 | 4 | 0 | 0 | 3 | 361 | 0 | 0 | 302 | 43 |
 | `star/private/write_model.f90` | `star` | ported_unverified | partial | 281 | 4 | 1 | 0 | 0 | 0 | 207 | 0 | 0 | 39 | 35 |
 | `star/public/star_def.f90` | `star` | ported_unverified | - | 26 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 26 |
@@ -480,16 +480,16 @@ Candidates for a reviewed raise to `ported_unverified`. Largest ten:
 | `star_data/private/star_job_controls_dev.inc` | `star_data` | partial | - | 25 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 25 |
 | `star_data/private/star_job_controls_params.inc` | `star_data` | partial | - | 2 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 2 |
 | `star_data/public/star_data.inc` | `star_data` | partial | - | 14 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 14 |
-| `star_data/public/star_data_def.f90` | `star_data` | partial | - | 161 | 4 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 42 | 119 |
+| `star_data/public/star_data_def.f90` | `star_data` | partial | - | 161 | 4 | 0 | 0 | 3 | 0 | 0 | 0 | 23 | 19 | 119 |
 | `star_data/public/star_data_def.inc` | `star_data` | partial | - | 1,195 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 1,195 |
 | `star_data/public/star_data_procedures.inc` | `star_data` | partial | - | 210 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 210 |
 | `star_data/public/star_data_step_input.inc` | `star_data` | partial | - | 208 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 208 |
 | `star_data/public/star_data_step_work.inc` | `star_data` | partial | - | 1,192 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 1,192 |
 | `turb/private/mlt.f90` | `turb` | ported_unverified | kernel_reference_vectors | 183 | 1 | 1 | 0 | 0 | 1 | 129 | 0 | 0 | 0 | 54 |
 | `turb/private/semiconvection.f90` | `turb` | ported_unverified | kernel_reference_vectors | 131 | 1 | 1 | 0 | 0 | 1 | 75 | 0 | 0 | 0 | 56 |
-| `turb/private/tdc.f90` | `turb` | ported_unverified | partial | 381 | 2 | 1 | 0 | 0 | 0 | 167 | 0 | 0 | 150 | 64 |
-| `turb/private/tdc_support.f90` | `turb` | partial | partial | 681 | 11 | 8 | 0 | 0 | 0 | 403 | 0 | 0 | 45 | 233 |
-| `turb/private/thermohaline.f90` | `turb` | ported_unverified | partial | 363 | 6 | 1 | 0 | 0 | 0 | 43 | 0 | 0 | 264 | 56 |
+| `turb/private/tdc.f90` | `turb` | ported_unverified | partial | 381 | 2 | 1 | 1 | 0 | 0 | 167 | 150 | 0 | 0 | 64 |
+| `turb/private/tdc_support.f90` | `turb` | partial | ported_unverified | 681 | 11 | 11 | 0 | 0 | 0 | 448 | 0 | 0 | 0 | 233 |
+| `turb/private/thermohaline.f90` | `turb` | ported_unverified | partial | 363 | 6 | 5 | 1 | 0 | 0 | 221 | 86 | 0 | 0 | 56 |
 | `turb/public/turb.f90` | `turb` | ported_unverified | kernel_reference_vectors | 294 | 4 | 4 | 0 | 0 | 4 | 151 | 0 | 0 | 0 | 143 |
 | `utils/private/utils_idict.f90` | `utils` | partial | - | 525 | 20 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 472 | 53 |
 | `utils/private/utils_nan.f90` | `utils` | partial | - | 32 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 32 |
@@ -499,7 +499,7 @@ Candidates for a reviewed raise to `ported_unverified`. Largest ten:
 
 ## Backlog of unmapped core-engine routines
 
-1,878 routines in core-engine files with status `stub`, `partial`, or `absent` have no gate-checked `routine_map` entry (76,812 own lines). Partial and not-applicable routines are not in the backlog. Some may already be implemented without a map entry; the table cannot tell.
+1,117 routines in core-engine files with status `stub`, `partial`, or `absent` have no gate-checked `routine_map` entry (32,533 own lines). Partial and not-applicable routines are not in the backlog. Some may already be implemented without a map entry; the table cannot tell.
 
 ### How cases are attributed, and its limits
 
@@ -519,43 +519,43 @@ The 40 largest backlog routines with no case named. The full list is in the JSON
 
 | # | Upstream file | Routine | Cases | Lines | Basis | Cases named |
 | ---: | :--- | :--- | ---: | ---: | :--- | :--- |
-| 1 | `star/private/profile_getval.f90` | `getval_for_profile` | 0 | 2,014 | - | - |
-| 2 | `star/private/history.f90` | `history_getval` | 0 | 1,794 | - | - |
-| 3 | `star/private/ctrls_io.f90` | `store_controls` | 0 | 1,720 | - | - |
-| 4 | `star/private/ctrls_io.f90` | `set_controls_for_writing` | 0 | 1,716 | - | - |
-| 5 | `star/private/alloc.f90` | `star_info_arrays` | 0 | 981 | - | - |
-| 6 | `star/job/run_star_support.f90` | `do_star_job_controls_after` | 0 | 901 | - | - |
-| 7 | `binary/private/run_binary_support.f90` | `do_run1_binary` | 0 | 798 | - | - |
-| 8 | `star/private/star_profile_def.f90` | `profile_column_names_init` | 0 | 710 | - | - |
-| 9 | `star/private/star_history_def.f90` | `history_column_names_init` | 0 | 690 | - | - |
-| 10 | `star/private/star_job_ctrls_io.f90` | `store_star_job_controls` | 0 | 505 | - | - |
-| 11 | `star/private/history.f90` | `do_history_info` | 0 | 504 | - | - |
-| 12 | `star/private/star_job_ctrls_io.f90` | `set_star_job_controls_for_writing` | 0 | 504 | - | - |
-| 13 | `star/private/evolve.f90` | `okay_energy_conservation` | 0 | 498 | - | - |
-| 14 | `astero/private/extras_support.f90` | `do_astero_extras_check_model` | 0 | 444 | - | - |
-| 15 | `star/private/profile.f90` | `do_profile_info` | 0 | 379 | - | - |
-| 16 | `star/private/adjust_xyz.f90` | `set_new_abundances` | 0 | 373 | - | - |
-| 17 | `star/private/init.f90` | `set_starting_star_data` | 0 | 348 | - | - |
-| 18 | `star/private/history_specs.f90` | `add_history_columns` | 0 | 347 | - | - |
-| 19 | `star/private/report.f90` | `do_report` | 0 | 323 | - | - |
-| 20 | `star/private/kap_support.f90` | `get_kap` | 0 | 321 | - | - |
-| 21 | `star/job/run_star_support.f90` | `do_remove_center` | 0 | 317 | - | - |
-| 22 | `star/private/rotation_mix_info.f90` | `set_rotation_mixing_info` | 0 | 304 | - | - |
-| 23 | `star/private/rotation_mix_info.f90` | `setup` | 0 | 294 | - | - |
-| 24 | `star/private/net.f90` | `do1_net` | 0 | 289 | - | - |
-| 25 | `star/private/init.f90` | `model_builder` | 0 | 281 | - | - |
-| 26 | `star/private/star_private_def.f90` | `star_private_def_init` | 0 | 277 | - | - |
-| 27 | `star/private/evolve.f90` | `select_mdot_action` | 0 | 270 | - | - |
-| 28 | `star/private/photo_in.f90` | `read_star_photo` | 0 | 269 | - | - |
-| 29 | `binary/private/binary_history.f90` | `do_binary_history_info` | 0 | 264 | - | - |
-| 30 | `star/private/relax.f90` | `do_internal_evolve` | 0 | 263 | - | - |
-| 31 | `star/private/atm_support.f90` | `get_table` | 0 | 260 | - | - |
-| 32 | `star/private/diffusion_procs.f90` | `redistribute_mass` | 0 | 253 | - | - |
-| 33 | `star/private/hydro_vars.f90` | `get_surf_PT` | 0 | 252 | - | - |
-| 34 | `star/private/remove_shells.f90` | `do_relax_to_star_cut` | 0 | 249 | - | - |
-| 35 | `star/private/evolve.f90` | `do_step_part2` | 0 | 245 | - | - |
-| 36 | `star/private/pulse_cafein.f90` | `get_cafein_data` | 0 | 245 | - | - |
-| 37 | `star/private/read_model.f90` | `do_read_saved_model` | 0 | 245 | - | - |
-| 38 | `binary/private/binary_history.f90` | `binary_history_getval` | 0 | 243 | - | - |
-| 39 | `star/private/pulse_gyre.f90` | `get_gyre_data` | 0 | 239 | - | - |
-| 40 | `star/private/adjust_mass.f90` | `set1_xa` | 0 | 235 | - | - |
+| 1 | `star/private/ctrls_io.f90` | `set_controls_for_writing` | 0 | 1,716 | - | - |
+| 2 | `star/private/alloc.f90` | `star_info_arrays` | 0 | 981 | - | - |
+| 3 | `star/private/star_profile_def.f90` | `profile_column_names_init` | 0 | 710 | - | - |
+| 4 | `star/private/star_history_def.f90` | `history_column_names_init` | 0 | 690 | - | - |
+| 5 | `star/private/star_job_ctrls_io.f90` | `set_star_job_controls_for_writing` | 0 | 504 | - | - |
+| 6 | `star/private/init.f90` | `set_starting_star_data` | 0 | 348 | - | - |
+| 7 | `star/job/run_star_support.f90` | `do_remove_center` | 0 | 317 | - | - |
+| 8 | `star/private/init.f90` | `model_builder` | 0 | 281 | - | - |
+| 9 | `star/private/star_private_def.f90` | `star_private_def_init` | 0 | 277 | - | - |
+| 10 | `star/private/relax.f90` | `do_internal_evolve` | 0 | 263 | - | - |
+| 11 | `star/private/remove_shells.f90` | `do_relax_to_star_cut` | 0 | 249 | - | - |
+| 12 | `binary/private/binary_do_one_utils.f90` | `output_binary_terminal_summary` | 0 | 234 | - | - |
+| 13 | `star/private/init.f90` | `alloc_star_data` | 0 | 216 | - | - |
+| 14 | `star/private/adjust_net.f90` | `check_adjust_net` | 0 | 210 | - | - |
+| 15 | `star/job/run_star_support.f90` | `do_before_evolve_loop` | 0 | 186 | - | - |
+| 16 | `star/private/create_initial_model.f90` | `build_initial_model` | 0 | 176 | - | - |
+| 17 | `binary/private/binary_ce.f90` | `CE_init` | 0 | 164 | - | - |
+| 18 | `star/private/diffusion_procs.f90` | `calc_g_rad_mombarg` | 0 | 161 | - | - |
+| 19 | `star/job/gyre_in_mesa_extras_set_velocities.inc` | `gyre_in_mesa_extras_set_velocities` | 0 | 157 | - | - |
+| 20 | `star/private/remove_shells.f90` | `do_remove_surface` | 0 | 156 | - | - |
+| 21 | `star/private/star_private_def.f90` | `stardata_init` | 0 | 153 | - | - |
+| 22 | `star/other/sample_pgstar_plot.f90` | `plot` | 0 | 150 | - | - |
+| 23 | `star/private/create_initial_model.f90` | `PSerrfunc` | 0 | 141 | - | - |
+| 24 | `star/private/alloc.f90` | `set_var_info` | 0 | 137 | - | - |
+| 25 | `star/private/diffusion_procs.f90` | `calc_g_rad_hu` | 0 | 128 | - | - |
+| 26 | `star/job/run_star_support.f90` | `do_remove_initial_surface` | 0 | 123 | - | - |
+| 27 | `astero/private/adipls_support.f90` | `do_adipls_get_one_el_info` | 0 | 116 | - | - |
+| 28 | `astero/private/adipls_support.f90` | `store_amdl` | 0 | 115 | - | - |
+| 29 | `binary/private/binary_photos.f90` | `binary_photo_read` | 0 | 115 | - | - |
+| 30 | `star/job/multi_stars_extras.inc` | `do_run_multi_stars` | 0 | 111 | - | - |
+| 31 | `star/private/atm_support.f90` | `get_legacy` | 0 | 108 | - | - |
+| 32 | `star/job/run_star_support.f90` | `do_remove_surface` | 0 | 107 | - | - |
+| 33 | `star/private/set_flags.f90` | `set_RSP2_flag` | 0 | 107 | - | - |
+| 34 | `star/private/tdc_hydro_support.f90` | `set_xm_new2` | 0 | 105 | - | - |
+| 35 | `astero/private/adipls_support.f90` | `fgong_amdl` | 0 | 104 | - | - |
+| 36 | `star/private/pulse_cafein.f90` | `store_point_data_atm` | 0 | 102 | - | - |
+| 37 | `star/private/pulse_osc.f90` | `store_point_data_atm` | 0 | 101 | - | - |
+| 38 | `binary/private/binary_ce.f90` | `CE_binary_evolve_step` | 0 | 100 | - | - |
+| 39 | `star/private/remove_shells.f90` | `do_remove_fallback` | 0 | 100 | - | - |
+| 40 | `binary/private/binary_private_def.f90` | `binary_history_column_names_init` | 0 | 99 | - | - |

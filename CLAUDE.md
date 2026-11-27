@@ -8,7 +8,7 @@
 2. [`notes/SCOPE.md`](notes/SCOPE.md): written scope and the `v0.1.0` definition (`90 star`, `8 binary`, and `8 astero` cases in MESA `26.4.1` running unmodified inlists to upstream's termination and meeting strict-mode history-harness tolerances; exact module goldens; cross-machine bit-identical strict mode; zero undeclared gaps; zero departures from upstream).
 3. [`notes/audit/README.md`](notes/audit/README.md), [`notes/audit/TRACKER.md`](notes/audit/TRACKER.md), [`notes/audit/measurements.md`](notes/audit/measurements.md), and [`notes/audit/coverage-map.md`](notes/audit/coverage-map.md): whole-repository audit findings (`T1-*`, `T2-*`, `C1-*`, `F1-*` to `F4-*`, `N1-*`, `G1-*`) and baseline measurements against real Fortran MESA.
 4. [`notes/DECISIONS.md`](notes/DECISIONS.md): the decisions in force, with an index of every numbered decision; superseded entries are in `notes/archive/DECISIONS-archive.md`.
-5. Standing path-scoped rules in [`.claude/rules/verification-and-governance.md`](.claude/rules/verification-and-governance.md) and [`.claude/rules/docs-upkeep.md`](.claude/rules/docs-upkeep.md) (mirrored byte-for-byte in `.agents/rules/`).
+5. Standing path-scoped rules in [`.claude/rules/verification-and-governance.md`](.claude/rules/verification-and-governance.md) and [`.claude/rules/docs-upkeep.md`](.claude/rules/docs-upkeep.md) (the `.agents/rules/` entries are symlinks to these canonical files).
 6. **Local coordination (agents on the shared development machine)**: before claiming work, starting heavy compute, or running a harness campaign, read `.coordination/README.md` in the primary checkout. The directory is git-ignored and is not part of the public repository; it holds the agreed plan, lane ownership, compute slots that every heavy command goes through, and an append-only board for claims and requests between agents. GitHub issues and pull requests remain the durable public record.
 
 *(Note: The pre-audit roadmap, milestone log and question list are archived unmaintained in `notes/archive/` (`PLAN.md`, `LOG.md`, `QUESTIONS.md`), together with superseded decisions (`DECISIONS-archive.md`). They and `docs/benchmarks/` contain unsupported completion and parity claims (`#142`, `#146`). Do not edit archived files and do not create new hand-written status files; progress is reported only by the generated case table (`notes/audit/case_table.md`) and dashboard (`#174`).)*
@@ -19,10 +19,10 @@
 | :--- | :--- |
 | `crates/` | Canonical Safe Rust Cargo workspace crates (`#![forbid(unsafe_code)]` across all crates except `flexmesa-crlibm-sys`, the sole `crlibm` FFI wrapper crate; `#165`) and `flexmesa-py` (`PyO3` extension bridge) |
 | `src/flexmesa/` | Python front end and derived `float64` JAX layer (`star`, `binary`, and `astero` JAX engine twins are frozen under `#166`) |
-| `tests/` | Python `pytest` and `hypothesis` suite (`test_docs_snippets.py` checks documentation links, API directives, snippets, and rule mirrors) |
+| `tests/` | Python `pytest` and `hypothesis` suite (`test_docs_snippets.py` checks documentation links, API directives, snippets, and that the `.agents/rules/` entries are symlinks to the canonical rule files) |
 | `benchmarks/` | Benchmark harnesses, including Fortran MESA comparators in `benchmarks/fortran_mesa/` (`#146`) |
 | `docs/` | MkDocs Material documentation website (`mkdocs.yml`) |
-| `.claude/rules/` | Standing repository rules (`verification-and-governance.md`, `docs-upkeep.md`), mirrored in `.agents/rules/` |
+| `.claude/rules/` | Standing repository rules (`verification-and-governance.md`, `docs-upkeep.md`), linked from `.agents/rules/` by symlinks |
 | `notes/` | Written scope (`SCOPE.md`), decisions in force (`DECISIONS.md`), audit registers and generated case table (`audit/`), and unmaintained pre-audit documents (`archive/`); see `notes/README.md` |
 
 ## Architecture, Reference & Numerics Contract (`notes/SCOPE.md`, `#141`, `#165`, `#166`)

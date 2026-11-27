@@ -114,11 +114,6 @@ issue = "#154"
 reason = "Case requires custom other_wind hook alongside unported massive-star relaxation, rotation, retry, and net controls (#154, #152, #158, #161, #231)."
 [[gaps]]
 suite = "star"
-case = "relax_composition_j_entropy"
-issue = "#154"
-reason = "Strict run reaches xa_central_lower_limit in [260] steps (MESA [260]); every compared column is within tolerance; held because the case's run_star_extras handler is not ported (Train 14 campaign; #154)."
-[[gaps]]
-suite = "star"
 case = "rsp_Delta_Scuti"
 issue = "#162"
 reason = "Strict run reaches extras_finish_step in [7973] steps (MESA [7973]); final values out of tolerance: rel_star_age; MESA writes models 5820 to 7973 to map_history.data, which the reference does not include, so the comparison ends at model 5810 (Train 14 campaign; #162)."

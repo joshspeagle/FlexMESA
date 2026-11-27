@@ -1125,9 +1125,9 @@ fn hand_eq_div_w_face(model: &StarModel, k: usize) -> f64 {
     let dmbar = 0.5 * (model.dm[k] + model.dm[k - 1]);
     let alfam_alfa =
         model.controls.tdc_alpha_m * model.controls.mixing_length_alpha;
-    let f = (16.0 / 3.0) * std::f64::consts::PI * alfam_alfa / dmbar;
+    let f = (16.0 / 3.0) * flexmesa_const::PI * alfam_alfa / dmbar;
     let chi = f * rho * rho * flexmesa_math::pow6(model.r[k]) * d_v_div_r * hp;
-    4.0 * std::f64::consts::PI * chi * d_v_div_r / dmbar
+    4.0 * flexmesa_const::PI * chi * d_v_div_r / dmbar
 }
 
 /// `compute_tdc_Eq_div_w_face` against a hand evaluation of the upstream
@@ -1234,7 +1234,7 @@ fn test_tdc_uq_face_value_and_momentum_term() {
     use crate::tdc_hydro::compute_tdc_uq_face;
     let mut model = tdc_viscosity_test_model();
     let k = model.nz / 2;
-    let pi = std::f64::consts::PI;
+    let pi = flexmesa_const::PI;
     let hp_face = |model: &StarModel, j: usize| {
         crate::tdc_hydro::get_scale_height_face(model, j).val
     };
@@ -1441,7 +1441,7 @@ fn test_tdc_uq_dm_cell_u_flag_value() {
         model.u[k] = model.v[k];
     }
     let k = model.nz / 2;
-    let pi = std::f64::consts::PI;
+    let pi = flexmesa_const::PI;
     let chi_div_w = |model: &StarModel, j: usize| {
         let (alfa, beta) = model.get_face_weights(j);
         let d_v_div_r =

@@ -26,6 +26,7 @@ from flexmesa.testing import (
     _dashboard_render,
     case_manifest,
     port_manifest,
+    routine_gate,
     test_taxonomy,
 )
 
@@ -264,6 +265,9 @@ def verify_all_dashboard_invariants(
             taxonomy_path=dash_dir / "test_taxonomy.toml",
             manifest_path=dash_dir / "port_manifest.toml",
         )
+    )
+    errors.extend(
+        routine_gate.verify_routine_map(repo_root, manifest, mesa_dir)
     )
     return errors
 

@@ -26,8 +26,9 @@ on:
       short_budget_sec:
         description: >-
           Optional shorter budget (s) for cases whose baseline row ended on
-          the time budget; empty runs every case with case_timeout_sec and
-          saves a baseline candidate
+          the time budget; when set, the generated per-case budgets are not
+          used. Empty runs every case with case_timeout_sec (or, if that is
+          empty too, its generated budget) and saves a baseline candidate
         required: false
         default: ""
       harness_only:
@@ -173,9 +174,11 @@ jobs:
           # Each case gets its generated budget (--case-budgets), and the
           # shards are packed by budget; a case_timeout_sec input replaces
           # the budgets for every case. Cases without a budget row get
-          # 3000 s. No --gate here: the merge job gates the whole campaign.
+          # 3000 s. A short_budget_sec dispatch uses its own budgets instead
+          # (the harness rejects the two together). No --gate here: the merge
+          # job gates the whole campaign.
           BUDGET_ARGS=(--timeout-sec "${TIMEOUT:-3000}")
-          if [ -z "$TIMEOUT" ]; then
+          if [ -z "$TIMEOUT" ] && [ -z "$SHORT_BUDGET" ]; then
             BUDGET_ARGS+=(--case-budgets benchmarks/history_harness/case_budgets.toml)
           fi
           flexmesa harness run \

@@ -534,6 +534,40 @@ pub fn compute_power_categories(model: &StarModel) -> PowerCategories {
     }
 }
 
+/// Records the burning powers carried into a new step, before the remesh.
+///
+/// Upstream sets `s% power_h_burn` and friends only in `set_power_info` at
+/// the end of a step (`star/private/evolve.f90:715`), so at the start of the
+/// next step they still hold that step's end values while `do_mesh` rezones
+/// (`evolve.f90:1884`). `new_generation` then copies them to `power_*_old`
+/// (`evolve_support.f90:94-99`). The model state at step entry is the
+/// state `set_power_info` saw, so the powers are evaluated here, before
+/// [`crate::evolve_support::remesh_star_before_step`].
+pub fn stash_prestep_powers(model: &mut StarModel) {
+    let p = compute_power_categories(model);
+    model.aux.step_hist.prestep_powers = Some([
+        p.power_h_burn,
+        p.power_he_burn,
+        p.power_z_burn,
+        p.power_photo,
+        p.power_nuc_burn,
+    ]);
+}
+
+/// Overwrites the `power_*_old` snapshot with the powers stashed by
+/// [`stash_prestep_powers`] (`new_generation`, `evolve_support.f90:94-99`).
+/// Does nothing when no step has stashed powers.
+pub fn apply_prestep_powers_to_old(model: &mut StarModel) {
+    if let Some([h, he, z, photo, nuc]) = model.aux.step_hist.prestep_powers {
+        let sh = &mut model.aux.step_hist;
+        sh.power_h_burn_old = h;
+        sh.power_he_burn_old = he;
+        sh.power_z_burn_old = z;
+        sh.power_photo_old = photo;
+        sh.power_nuc_burn_old = nuc;
+    }
+}
+
 /// Snapshots end-of-step scalar luminosities, $T_{\mathrm{eff}}$, $\dot{M}$,
 /// and rotational `*_old` profiles into [`crate::hydro_state::HydroAuxState`].
 pub fn snapshot_step_history_old(model: &mut StarModel) {

@@ -11,9 +11,14 @@ dictionary lists the assignments to make, in upstream order.
 
 from __future__ import annotations
 
+import math
 import os
+import pathlib
 import re
 from typing import Any
+
+import numpy as np
+from numpy.typing import NDArray
 
 from flexmesa import _rust, constants
 
@@ -181,18 +186,20 @@ class FastFromFileAsteroExtras(SearchAsteroExtras):
 
 
 class EmptySetParamAsteroExtras:
-    """`set_param` and `set_constraint_value` of `astero_adipls`,
-    `astero_gyre` and `surface_effects`.
+    """Fallback `set_param` and `set_constraint_value` handler for unported
+    non-search astero cases.
 
-    Upstream `set_param` only sets `ierr = 0`
+    `astero_adipls`, `astero_gyre`, and `surface_effects` share a
+    `set_param` that only sets `ierr = 0`
     (`astero/test_suite/astero_adipls/src/run_star_extras.f90:86-96`,
-    `astero_gyre` `:91-100`, `surface_effects` `:92-100`), and
-    `set_constraint_value` has only the `case default` branch that reads the
+    `astero_gyre` `:91-100`, `surface_effects` `:92-100`) and a
+    `set_constraint_value` with only the `case default` branch that reads the
     history column of that name (`astero_adipls` `:58-83`, `astero_gyre`
-    `:63-88`, `surface_effects` `:64-89`). These cases set
-    `astero_just_call_my_extras_check_model`, so the search calls neither
-    routine; they are ported so that the case's own versions, not another
-    case's, would run if it did.
+    `:63-88`, `surface_effects` `:64-89`). All three cases now resolve to
+    full star-hook handlers (`AsteroAdiplsExtras`, `AsteroGyreExtras`,
+    `SurfaceEffectsExtras`), leaving this class as the fallback if another
+    case shares those empty search routines while other routines remain
+    unported.
 
     Attributes:
         unported_routines: Names of the case's other extras routines that
@@ -550,6 +557,675 @@ class AsteroAdiplsExtras:
             )
 
 
+# `astero/test_suite/surface_effects/src/run_star_extras.f90` (with
+# `src/targets.inc` inlined by `load_fortran_source`): digests of every
+# non-stock routine `SurfaceEffectsExtras` accounts for.
+_SURFACE_EFFECTS_DIGESTS: dict[str, str] = {
+    # `extras_startup` (`:103-117`, including `src/targets.inc`).
+    "extras_startup": (
+        "d80b5d64a4cfd438f062796accd207272dff93d21e805142b00a40e20d698063"
+    ),
+    # `extras_after_evolve` and contained check helpers (`:120-330`).
+    "extras_after_evolve": (
+        "da6b3a33ad455a6c62bc986c888d114915f68f7e997de13d624dfb225de6572a"
+    ),
+    # `extras_check_model` (`:334-360`): dead `.false.` branch, returns
+    # `keep_going`.
+    "extras_check_model": (
+        "e4d8e1a79ef6db17c9314f65b4ba9146a14f7b977024762202be0d48452ed9a1"
+    ),
+    # `astero_just_call_my_extras_check_model = .true.` runs no search hooks;
+    # `_EMPTY_SET_PARAM_DIGEST` and `_DEFAULT_SET_CONSTRAINT_VALUE_DIGEST`.
+    "set_param": (
+        "50db057770e0922de5b5f1f710d466230b4c55a0b9ca6061030f8391deb47fe4"
+    ),
+    "set_constraint_value": (
+        "e7ed93317a3605fd1e41d699c96dae5721ffa3a14a3cecf55e023cef10751e63"
+    ),
+}
+
+_TARGETS_LINE_RE = re.compile(r"^\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*=\s*(.+?)\s*$")
+_REQUIRED_TARGETS = (
+    "target_a3",
+    "target_b1",
+    "target_b3",
+    "target_p0",
+    "target_p1",
+    "target_s0",
+    "target_s1",
+    "target_a_div_r",
+)
+_PERFECT_TOL = 1.0e-12
+_SOLAR_TOL = 10.0
+
+
+def _parse_targets_inc(path: pathlib.Path) -> dict[str, float]:
+    """Parse `astero/test_suite/surface_effects/src/targets.inc`."""
+    if not path.is_file():
+        raise FileNotFoundError(f"Missing targets file: {path}")
+    targets: dict[str, float] = {}
+    raw_lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+    for lineno, raw_line in enumerate(raw_lines, start=1):
+        code = raw_line.split("!", 1)[0].strip()
+        if not code:
+            continue
+        match = _TARGETS_LINE_RE.match(code)
+        if match is None:
+            raise ValueError(f"Malformed line {lineno} in {path}: {raw_line!r}")
+        key = match.group(1).lower()
+        if key not in _REQUIRED_TARGETS:
+            raise ValueError(f"Unexpected target key {key!r} in {path}")
+        if key in targets:
+            raise ValueError(f"Duplicate target key {key!r} in {path}")
+        val = float(_rust.parse_fortran_float(match.group(2).strip()))
+        if not math.isfinite(val):
+            raise ValueError(
+                f"Non-finite target value for {key!r} in {path}: {val!r}"
+            )
+        targets[key] = val
+    missing = [key for key in _REQUIRED_TARGETS if key not in targets]
+    if missing:
+        raise ValueError(f"Missing required targets in {path}: {missing}")
+    return targets
+
+
+def _check_okay(name: str, val: float, tgt: float, tol: float) -> bool:
+    """Upstream `check_okay`
+    (`astero/test_suite/surface_effects/src/run_star_extras.f90:290-302`)."""
+    rel_err = val / tgt - 1.0
+    passed = math.isfinite(rel_err) and abs(rel_err) < tol
+    tag = "" if passed else "    FAILED"
+    print(f"{name:>26}{val:26.16E}{tgt:26.16E}{rel_err:26.16E}{tag}")
+    return passed
+
+
+def _check_negative(name: str, val: float) -> bool:
+    """Upstream `check_negative`
+    (`astero/test_suite/surface_effects/src/run_star_extras.f90:304-315`)."""
+    if not math.isfinite(val) or val > 0.0:
+        print(f"{name:>26}{val:26.16E}{'<= 0':>26}{'FAILED':>36}")
+        return False
+    return True
+
+
+def _check_positive(name: str, val: float) -> bool:
+    """Upstream `check_positive`
+    (`astero/test_suite/surface_effects/src/run_star_extras.f90:317-328`)."""
+    if not math.isfinite(val) or val < 0.0:
+        print(f"{name:>26}{val:26.16E}{'>= 0':>26}{'FAILED':>36}")
+        return False
+    return True
+
+
+class SurfaceEffectsExtras:
+    """`astero/test_suite/surface_effects/src/run_star_extras.f90:103-360`
+    over Safe Rust `AsteroAdipls` and surface corrections (`#569`).
+
+    The case sets `astero_just_call_my_extras_check_model = .true.`, so astero
+    runs a single `star` evolution and invokes `extras_startup`,
+    `extras_check_model`, and `extras_after_evolve`. After evolution,
+    `extras_after_evolve` computes `l = 0..3` ADIPLS modes, updates
+    `delta_nu_model` from `l = 0` modes via OLS, matches observed targets,
+    writes `freqs.dat` into the run's working directory (`state["case_dir"]`),
+    and evaluates both perfect-data parameter recovery checks (`< 1e-12`) and
+    solar-data surface correction checks against `src/targets.inc`.
+    """
+
+    wants_star_model = True
+
+    def __init__(self) -> None:
+        self.adipls: Any = None
+        self.ctrl: dict[str, Any] = {}
+        self.targets: dict[str, float] = {}
+        self.freqs_dat_path: pathlib.Path | None = None
+        self.raw_modes: dict[
+            int, list[tuple[int, int, int, float, float, float]]
+        ] = {}
+        self.matched_modes: dict[
+            int,
+            tuple[NDArray[np.float64], NDArray[np.float64], NDArray[np.int32]],
+        ] = {}
+        self.delta_nu_model = 0.0
+        self.perfect_results: dict[str, float] = {}
+        self.solar_results: dict[str, float] = {}
+        self.okay = False
+
+    def extras_startup(self, state: dict[str, Any], _restart: bool) -> None:
+        """Initialize controls, ADIPLS solver, and `src/targets.inc`."""
+        case_dir = pathlib.Path(str(state["case_dir"]))
+        self.ctrl = _rust.astero_parse_search_controls(str(case_dir))
+        self.adipls = _rust.AsteroAdipls(str(case_dir))
+        self.targets = _parse_targets_inc(case_dir / "src" / "targets.inc")
+        self.freqs_dat_path = None
+        self.raw_modes = {}
+        self.matched_modes = {}
+        self.delta_nu_model = 0.0
+        self.perfect_results = {}
+        self.solar_results = {}
+        self.okay = False
+
+    def extras_check_model(self, state: dict[str, Any]) -> str:
+        """Upstream `extras_check_model` (`:334-360`): always `keep_going`."""
+        del state
+        return "keep_going"
+
+    def _extract_and_match_modes(
+        self,
+        star_model: Any,
+        l0_orders: NDArray[np.float64],
+    ) -> None:
+        """Extract `l = 0..3` ADIPLS modes and match observed frequencies."""
+        nl: list[int] = [int(v) for v in self.ctrl["nl"]]
+        freq_target: list[list[float]] = self.ctrl["freq_target"]
+        freq_sigma: list[list[float]] = self.ctrl["freq_sigma"]
+        nu_lo = float(self.ctrl["nu_lower_factor"])
+        nu_hi = float(self.ctrl["nu_upper_factor"])
+        iscan_factor: list[float] = [
+            float(v) for v in self.ctrl["iscan_factor"]
+        ]
+
+        for el in range(4):
+            nl_el = nl[el]
+            if nl_el <= 0:
+                raise ValueError(f"Expected nl[{el}] > 0, got {nl_el}")
+            if len(freq_target[el]) < nl_el or len(freq_sigma[el]) < nl_el:
+                raise ValueError(
+                    f"freq_target/freq_sigma too short for nl[{el}]={nl_el}"
+                )
+            obs_f = np.asarray(freq_target[el][:nl_el], dtype=np.float64)
+            nu1 = nu_lo * float(obs_f[0])
+            nu2 = nu_hi * float(obs_f[-1])
+            iscan = round(iscan_factor[el]) * nl_el
+            if iscan < 1:
+                raise ValueError(f"Invalid iscan={iscan} for el={el}")
+            dnu_arg = 0.0 if el == 0 else self.delta_nu_model
+            raw = self.adipls.get_astero_one_el_info(
+                star_model, el, nu1, nu2, iscan, dnu_arg, True
+            )
+            if not raw:
+                raise RuntimeError(f"failed to find l={el} modes")
+            self.raw_modes[el] = list(raw)
+            cand_orders = np.asarray([row[1] for row in raw], dtype=np.int32)
+            cand_inertias = np.asarray(
+                [row[3] for row in raw], dtype=np.float64
+            )
+            cand_freqs = np.asarray([row[4] for row in raw], dtype=np.float64)
+            mf, mi, mo = _rust.astero_match_modes_by_degree(
+                obs_f, cand_freqs, cand_inertias, cand_orders
+            )
+            if len(mf) != nl_el or len(mi) != nl_el or len(mo) != nl_el:
+                raise RuntimeError(
+                    f"failed to match frequencies for l={el}: "
+                    f"matched {len(mf)} of {nl_el}"
+                )
+            self.matched_modes[el] = (mf, mi, mo)
+            if el == 0:
+                self._update_radial_delta_nu_model(obs_f, mf, l0_orders)
+
+    def _update_radial_delta_nu_model(
+        self,
+        obs_f: NDArray[np.float64],
+        mf: NDArray[np.float64],
+        l0_orders: NDArray[np.float64],
+    ) -> None:
+        """Update `delta_nu_model` via OLS with upstream guards
+        (`astero/private/astero_support.f90:182-207`, `:677-687`)."""
+        corr_fac = float(self.ctrl["correction_factor"])
+        nl_0 = int(self.ctrl["nl"][0])
+        delta_nu_obs = float(self.ctrl["delta_nu"])
+        nu_max = float(self.ctrl["nu_max"])
+        b_pow = float(self.ctrl["correction_b"])
+        if corr_fac <= 0.0 or nl_0 <= 0 or delta_nu_obs <= 0.0 or nu_max <= 0.0:
+            return
+        valid = obs_f >= 0.0
+        cnt = int(np.count_nonzero(valid))
+        if cnt == 0:
+            return
+        avg_nu_obs = float(np.sum(obs_f[valid])) / float(cnt)
+        if avg_nu_obs <= 0.0:
+            return
+        avg_radial_n = float(np.sum(l0_orders[valid])) / float(cnt)
+        avg_nu_model = float(np.sum(mf[valid])) / float(cnt)
+        sum_1 = 0.0
+        sum_2 = 0.0
+        sum_3 = 0.0
+        for f_obs_val, f_mod_val, n_val in zip(
+            obs_f[valid], mf[valid], l0_orders[valid], strict=True
+        ):
+            dn = float(n_val) - avg_radial_n
+            sum_1 += (float(f_mod_val) - avg_nu_model) * dn
+            sum_2 += dn * dn
+            sum_3 += float(_rust.pow(float(f_obs_val) / nu_max, b_pow))
+        if sum_2 == 0.0 or sum_3 == 0.0:
+            return
+        dnu_mod = sum_1 / sum_2
+        if not math.isfinite(dnu_mod):
+            raise RuntimeError(f"Invalid radial delta_nu_model={dnu_mod}")
+        self.delta_nu_model = dnu_mod
+
+    def _write_freqs_dat(self, case_dir: pathlib.Path) -> pathlib.Path:
+        """Write `freqs.dat` matching
+        `astero/test_suite/surface_effects/src/run_star_extras.f90:163-178`."""
+        nl: list[int] = [int(v) for v in self.ctrl["nl"]]
+        freq_target: list[list[float]] = self.ctrl["freq_target"]
+        freq_sigma: list[list[float]] = self.ctrl["freq_sigma"]
+        out_path = case_dir / "freqs.dat"
+        lines = [
+            f"{'l':>5}{'obs':>26}{'obs_sigma':>26}{'freq':>26}{'inertia':>26}\n"
+        ]
+        for el in range(4):
+            mf, mi, _mo = self.matched_modes[el]
+            for i in range(nl[el]):
+                lines.append(
+                    f"{el:5d}"
+                    f"{float(freq_target[el][i]):26.16E}"
+                    f"{float(freq_sigma[el][i]):26.16E}"
+                    f"{float(mf[i]):26.16E}"
+                    f"{float(mi[i]):26.16E}\n"
+                )
+        out_path.write_text("".join(lines), encoding="utf-8")
+        return out_path
+
+    def _run_perfect_checks(
+        self,
+        all_obs_s: NDArray[np.float64],
+        all_mod_f: NDArray[np.float64],
+        all_mod_i: NDArray[np.float64],
+        l0_obs_f: NDArray[np.float64],
+        l0_mf: NDArray[np.float64],
+        l0_mi: NDArray[np.float64],
+        l0_orders: NDArray[np.float64],
+    ) -> bool:
+        """Run perfect-data checks
+        (`astero/test_suite/surface_effects/src/run_star_extras.f90:180-245`)."""
+        dnu_obs = float(self.ctrl["delta_nu"])
+        nu_max = float(self.ctrl["nu_max"])
+        b_pow = float(self.ctrl["correction_b"])
+        corr_fac = float(self.ctrl["correction_factor"])
+
+        print()
+        print("comparing to perfect data")
+        print()
+        print(
+            f"{'parameter':>26}{'result':>26}{'target':>26}"
+            f"{'result/target-1':>26}"
+        )
+        print()
+
+        # Kjeldsen left commented out in upstream `:189-192`.
+        okay = True
+
+        tgt_a3 = self.targets["target_a3"]
+        all_mod_f3 = all_mod_f * all_mod_f * all_mod_f
+        test_cubic = all_mod_f + tgt_a3 * all_mod_f3 / all_mod_i
+        res_cubic = _rust.astero_eval_surface_correction(
+            "cubic",
+            test_cubic,
+            all_obs_s,
+            all_mod_f,
+            all_mod_i,
+            l0_obs_f,
+            l0_mf,
+            l0_mi,
+            l0_orders,
+            dnu_obs,
+            nu_max,
+            b_pow,
+            corr_fac,
+        )
+        a3 = float(res_cubic["p0"])
+        okay = _check_okay("a3", a3, tgt_a3, _PERFECT_TOL) and okay
+
+        tgt_b3 = self.targets["target_b3"]
+        tgt_b1 = self.targets["target_b1"]
+        test_comb = (
+            all_mod_f + (tgt_b1 / all_mod_f + tgt_b3 * all_mod_f3) / all_mod_i
+        )
+        res_comb = _rust.astero_eval_surface_correction(
+            "combined",
+            test_comb,
+            all_obs_s,
+            all_mod_f,
+            all_mod_i,
+            l0_obs_f,
+            l0_mf,
+            l0_mi,
+            l0_orders,
+            dnu_obs,
+            nu_max,
+            b_pow,
+            corr_fac,
+        )
+        b3 = float(res_comb["p0"])
+        b1 = float(res_comb["p1"])
+        okay = _check_okay("b3", b3, tgt_b3, _PERFECT_TOL) and okay
+        okay = _check_okay("b1", b1, tgt_b1, _PERFECT_TOL) and okay
+
+        tgt_p0 = self.targets["target_p0"]
+        tgt_p1 = self.targets["target_p1"]
+        pl_vals: list[float] = []
+        for el in range(4):
+            mf, mi, _mo = self.matched_modes[el]
+            for f_val, i_val in zip(mf, mi, strict=True):
+                f_m = float(f_val)
+                shift = tgt_p0 * _rust.pow(f_m / nu_max, tgt_p1)
+                if el > 0:
+                    e0 = _rust.astero_interpolate_l0_inertia(f_m, l0_mf, l0_mi)
+                    shift *= e0 / float(i_val)
+                pl_vals.append(f_m + shift)
+        test_pl = np.asarray(pl_vals, dtype=np.float64)
+        res_pl = _rust.astero_eval_surface_correction(
+            "power_law",
+            test_pl,
+            all_obs_s,
+            all_mod_f,
+            all_mod_i,
+            l0_obs_f,
+            l0_mf,
+            l0_mi,
+            l0_orders,
+            dnu_obs,
+            nu_max,
+            b_pow,
+            corr_fac,
+        )
+        p0 = float(res_pl["p0"])
+        p1 = float(res_pl["p1"])
+        okay = _check_okay("p0", p0, tgt_p0, _PERFECT_TOL) and okay
+        okay = _check_okay("p1", p1, tgt_p1, _PERFECT_TOL) and okay
+
+        tgt_s0 = self.targets["target_s0"]
+        tgt_s1 = self.targets["target_s1"]
+        sonoi_vals: list[float] = []
+        for el in range(4):
+            mf, mi, _mo = self.matched_modes[el]
+            for f_val, i_val in zip(mf, mi, strict=True):
+                f_m = float(f_val)
+                shift = (
+                    tgt_s0
+                    * nu_max
+                    * (1.0 - 1.0 / (1.0 + _rust.pow(f_m / nu_max, tgt_s1)))
+                )
+                if el > 0:
+                    e0 = _rust.astero_interpolate_l0_inertia(f_m, l0_mf, l0_mi)
+                    shift *= e0 / float(i_val)
+                sonoi_vals.append(f_m + shift)
+        test_sonoi = np.asarray(sonoi_vals, dtype=np.float64)
+        res_sonoi = _rust.astero_eval_surface_correction(
+            "sonoi",
+            test_sonoi,
+            all_obs_s,
+            all_mod_f,
+            all_mod_i,
+            l0_obs_f,
+            l0_mf,
+            l0_mi,
+            l0_orders,
+            dnu_obs,
+            nu_max,
+            b_pow,
+            corr_fac,
+        )
+        s0 = float(res_sonoi["p0"])
+        s1 = float(res_sonoi["p1"])
+        okay = _check_okay("s0", s0, tgt_s0, _PERFECT_TOL) and okay
+        okay = _check_okay("s1", s1, tgt_s1, _PERFECT_TOL) and okay
+
+        self.perfect_results = {
+            "a3": a3,
+            "b3": b3,
+            "b1": b1,
+            "p0": p0,
+            "p1": p1,
+            "s0": s0,
+            "s1": s1,
+        }
+        return okay
+
+    def _run_solar_checks(
+        self,
+        all_obs_f: NDArray[np.float64],
+        all_obs_s: NDArray[np.float64],
+        all_mod_f: NDArray[np.float64],
+        all_mod_i: NDArray[np.float64],
+        l0_obs_f: NDArray[np.float64],
+        l0_obs_s: NDArray[np.float64],
+        l0_mf: NDArray[np.float64],
+        l0_mi: NDArray[np.float64],
+        l0_orders: NDArray[np.float64],
+        okay: bool,
+    ) -> bool:
+        """Run solar-data checks
+        (`astero/test_suite/surface_effects/src/run_star_extras.f90:247-285`)."""
+        dnu_obs = float(self.ctrl["delta_nu"])
+        nu_max = float(self.ctrl["nu_max"])
+        b_pow = float(self.ctrl["correction_b"])
+        corr_fac = float(self.ctrl["correction_factor"])
+
+        print()
+        print("comparing to solar data")
+        print()
+        print(
+            f"{'parameter':>26}{'result':>26}{'target':>26}"
+            f"{'result/target-1':>26}"
+        )
+        print()
+
+        res_kj = _rust.astero_eval_surface_correction(
+            "kjeldsen",
+            l0_obs_f,
+            l0_obs_s,
+            l0_mf,
+            l0_mi,
+            l0_obs_f,
+            l0_mf,
+            l0_mi,
+            l0_orders,
+            dnu_obs,
+            nu_max,
+            b_pow,
+            corr_fac,
+        )
+        a_div_r = float(res_kj["p0"])
+        okay = (
+            _check_okay(
+                "a_div_r", a_div_r, self.targets["target_a_div_r"], _SOLAR_TOL
+            )
+            and okay
+        )
+
+        res_cubic = _rust.astero_eval_surface_correction(
+            "cubic",
+            all_obs_f,
+            all_obs_s,
+            all_mod_f,
+            all_mod_i,
+            l0_obs_f,
+            l0_mf,
+            l0_mi,
+            l0_orders,
+            dnu_obs,
+            nu_max,
+            b_pow,
+            corr_fac,
+        )
+        a3_sol = float(res_cubic["p0"])
+        _check_okay("a3", a3_sol, self.targets["target_a3"], _SOLAR_TOL)
+        okay = _check_negative("a3", a3_sol) and okay
+
+        res_comb = _rust.astero_eval_surface_correction(
+            "combined",
+            all_obs_f,
+            all_obs_s,
+            all_mod_f,
+            all_mod_i,
+            l0_obs_f,
+            l0_mf,
+            l0_mi,
+            l0_orders,
+            dnu_obs,
+            nu_max,
+            b_pow,
+            corr_fac,
+        )
+        b3_sol = float(res_comb["p0"])
+        b1_sol = float(res_comb["p1"])
+        _check_okay("b3", b3_sol, self.targets["target_b3"], _SOLAR_TOL)
+        okay = _check_negative("b3", b3_sol) and okay
+        _check_okay("b1", b1_sol, self.targets["target_b1"], _SOLAR_TOL)
+
+        res_pl = _rust.astero_eval_surface_correction(
+            "power_law",
+            all_obs_f,
+            all_obs_s,
+            all_mod_f,
+            all_mod_i,
+            l0_obs_f,
+            l0_mf,
+            l0_mi,
+            l0_orders,
+            dnu_obs,
+            nu_max,
+            b_pow,
+            corr_fac,
+        )
+        p0_sol = float(res_pl["p0"])
+        p1_sol = float(res_pl["p1"])
+        _check_okay("p0", p0_sol, self.targets["target_p0"], _SOLAR_TOL)
+        okay = _check_negative("p0", p0_sol) and okay
+        _check_okay("p1", p1_sol, self.targets["target_p1"], _SOLAR_TOL)
+
+        res_sonoi = _rust.astero_eval_surface_correction(
+            "sonoi",
+            all_obs_f,
+            all_obs_s,
+            all_mod_f,
+            all_mod_i,
+            l0_obs_f,
+            l0_mf,
+            l0_mi,
+            l0_orders,
+            dnu_obs,
+            nu_max,
+            b_pow,
+            corr_fac,
+        )
+        s0_sol = float(res_sonoi["p0"])
+        s1_sol = float(res_sonoi["p1"])
+        _check_okay("s0", s0_sol, self.targets["target_s0"], _SOLAR_TOL)
+        okay = _check_negative("s0", s0_sol) and okay
+        _check_okay("s1", s1_sol, self.targets["target_s1"], _SOLAR_TOL)
+        okay = _check_positive("s1", s1_sol) and okay
+
+        self.solar_results = {
+            "a_div_r": a_div_r,
+            "a3": a3_sol,
+            "b3": b3_sol,
+            "b1": b1_sol,
+            "p0": p0_sol,
+            "p1": p1_sol,
+            "s0": s0_sol,
+            "s1": s1_sol,
+        }
+        return okay
+
+    def extras_after_evolve(self, state: dict[str, Any]) -> None:
+        """Extract `l = 0..3` modes, write `freqs.dat`, and check fits.
+
+        Upstream `test_suite_after_evolve` (`:286`) is testhub/timing output
+        only.
+        """
+        if self.adipls is None or not self.ctrl or not self.targets:
+            raise RuntimeError(
+                "SurfaceEffectsExtras.extras_startup must run before "
+                "extras_after_evolve"
+            )
+        osc_code = str(self.ctrl["oscillation_code"]).strip().lower()
+        if osc_code != "adipls":
+            raise ValueError(
+                "SurfaceEffectsExtras requires oscillation_code='adipls', "
+                f"got {osc_code!r}"
+            )
+        nl: list[int] = [int(v) for v in self.ctrl["nl"]]
+        if len(nl) != 4:
+            raise ValueError(f"Expected 4 entries in nl, got {len(nl)}")
+        l0_n_raw = [float(v) for v in self.ctrl["l0_n_obs"]]
+        if len(l0_n_raw) < nl[0]:
+            raise ValueError(
+                f"l0_n_obs length ({len(l0_n_raw)}) < nl[0] ({nl[0]})"
+            )
+        l0_orders = np.asarray(l0_n_raw[: nl[0]], dtype=np.float64)
+        if not np.all(np.isfinite(l0_orders)) or bool(np.any(l0_orders <= 0.0)):
+            raise ValueError(
+                "l0_n_obs must contain positive finite orders for all "
+                f"nl[0]={nl[0]} radial modes"
+            )
+
+        self.raw_modes = {}
+        self.matched_modes = {}
+        self.delta_nu_model = 0.0
+        self._extract_and_match_modes(state["star_model"], l0_orders)
+
+        case_dir = pathlib.Path(str(state["case_dir"]))
+        self.freqs_dat_path = self._write_freqs_dat(case_dir)
+
+        freq_target: list[list[float]] = self.ctrl["freq_target"]
+        freq_sigma: list[list[float]] = self.ctrl["freq_sigma"]
+        all_obs_f = np.concatenate(
+            [
+                np.asarray(freq_target[el][: nl[el]], dtype=np.float64)
+                for el in range(4)
+            ]
+        )
+        all_obs_s = np.concatenate(
+            [
+                np.asarray(freq_sigma[el][: nl[el]], dtype=np.float64)
+                for el in range(4)
+            ]
+        )
+        all_mod_f = np.concatenate(
+            [self.matched_modes[el][0] for el in range(4)]
+        )
+        all_mod_i = np.concatenate(
+            [self.matched_modes[el][1] for el in range(4)]
+        )
+        l0_obs_f = np.asarray(freq_target[0][: nl[0]], dtype=np.float64)
+        l0_obs_s = np.asarray(freq_sigma[0][: nl[0]], dtype=np.float64)
+        l0_mf, l0_mi, _l0_mo = self.matched_modes[0]
+
+        okay = self._run_perfect_checks(
+            all_obs_s,
+            all_mod_f,
+            all_mod_i,
+            l0_obs_f,
+            l0_mf,
+            l0_mi,
+            l0_orders,
+        )
+        okay = self._run_solar_checks(
+            all_obs_f,
+            all_obs_s,
+            all_mod_f,
+            all_mod_i,
+            l0_obs_f,
+            l0_obs_s,
+            l0_mf,
+            l0_mi,
+            l0_orders,
+            okay,
+        )
+        self.okay = okay
+        print()
+        if okay:
+            print("all tests are within tolerances")
+        print()
+        # Upstream `call test_suite_after_evolve(s, ierr)`
+        # (`astero/test_suite/surface_effects/src/run_star_extras.f90:286`,
+        # `star/job/test_suite_extras.inc:94-107`) writes testhub/timing
+        # output only with no physical state or termination effect, matching
+        # `AsteroGyreExtras` and `AsteroAdiplsExtras`.
+
+
 def match_astero_extras(norm_star: str, digest: Any) -> Any:
     """Match an astero case's extras from normalized Fortran source.
 
@@ -585,6 +1261,14 @@ def match_astero_extras(norm_star: str, digest: Any) -> Any:
         for name, d in routines.items()
     ):
         return AsteroGyreExtras()
+    if all(
+        routines.get(name) == d for name, d in _SURFACE_EFFECTS_DIGESTS.items()
+    ) and all(
+        name in _SURFACE_EFFECTS_DIGESTS
+        or d in _STOCK_ROUTINE_DIGESTS.get(name, frozenset())
+        for name, d in routines.items()
+    ):
+        return SurfaceEffectsExtras()
     unported = tuple(
         name
         for name, d in routines.items()

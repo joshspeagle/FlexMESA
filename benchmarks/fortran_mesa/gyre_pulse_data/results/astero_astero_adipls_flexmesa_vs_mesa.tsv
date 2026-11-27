@@ -1,0 +1,24 @@
+# FlexMESA astero/astero_adipls run vs MESA 26.4.1 reference run, per oscillation call (#612)
+# reference: mesa_histories bundle runs/astero/astero_adipls/pulse_tap/modes.tsv (MESA r26.4.1, git tag 26.4.1, gfortran 15.2.0, SDK x86_64-linux-26.6.1)
+# generator: benchmarks/fortran_mesa/gyre_pulse_data/compare_pulse_live_run.py
+# command: python benchmarks/fortran_mesa/gyre_pulse_data/compare_pulse_live_run.py --suite astero --case astero_adipls --histories <mesa_histories> --work <scratch> --out benchmarks/fortran_mesa/gyre_pulse_data/results/astero_astero_adipls_flexmesa_vs_mesa.tsv
+# extras: AsteroAdiplsExtras (adipls); units: frequency microHz, growth rad/s
+# flexmesa engine commit (last change under crates/): 5a68ae84
+# flexmesa run: 465 steps, termination xa_central_lower_limit, wall 300 s, numerics strict
+# columns *_n: values compared; *_bitexact: values with equal binary64 bits; *_max_rel: max |a-b|/|b| over compared values (n/a: not exposed by the extras)
+# summary: calls compared 10, calls only in FlexMESA [], calls only in MESA []
+# summary: modes only in FlexMESA 0, modes only in MESA 0, calls with different mode order 0
+# summary: freq: 92 compared, 92 bit-identical, max relative difference 0.000e+00
+# summary: inertia: 92 compared, 92 bit-identical, max relative difference 0.000e+00
+# summary: growth: 92 compared, 92 bit-identical, max relative difference 0.000e+00
+model_number	occurrence	n_modes	n_modes_mesa	n_common	order_same	freq_n	freq_bitexact	freq_max_rel	inertia_n	inertia_bitexact	inertia_max_rel	growth_n	growth_bitexact	growth_max_rel	n_pg_only_flexmesa	n_pg_only_mesa
+50	0	7	7	7	1	7	7	0.000e+00	7	7	0.000e+00	7	7	0.000e+00	-	-
+100	0	7	7	7	1	7	7	0.000e+00	7	7	0.000e+00	7	7	0.000e+00	-	-
+150	0	8	8	8	1	8	8	0.000e+00	8	8	0.000e+00	8	8	0.000e+00	-	-
+200	0	8	8	8	1	8	8	0.000e+00	8	8	0.000e+00	8	8	0.000e+00	-	-
+250	0	9	9	9	1	9	9	0.000e+00	9	9	0.000e+00	9	9	0.000e+00	-	-
+300	0	9	9	9	1	9	9	0.000e+00	9	9	0.000e+00	9	9	0.000e+00	-	-
+350	0	10	10	10	1	10	10	0.000e+00	10	10	0.000e+00	10	10	0.000e+00	-	-
+400	0	10	10	10	1	10	10	0.000e+00	10	10	0.000e+00	10	10	0.000e+00	-	-
+450	0	12	12	12	1	12	12	0.000e+00	12	12	0.000e+00	12	12	0.000e+00	-	-
+465	0	12	12	12	1	12	12	0.000e+00	12	12	0.000e+00	12	12	0.000e+00	-	-

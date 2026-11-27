@@ -303,7 +303,12 @@ impl InlistBundle {
             new_mass, new_z, new_y, core_avg_rho, core_avg_eps, new_r_center, new_l_center,
             new_omega, new_omega_div_omega_crit, new_surface_rotation_v,
             relax_omega_max_yrs_dt, base_for_adjust_tau_factor_to_surf_density,
-            remove_initial_center_by_temperature, new_v_center, set_to_this_irrad_flux,
+            remove_initial_center_by_temperature,
+            remove_initial_center_by_entropy, remove_center_by_entropy,
+            new_v_center, set_to_this_irrad_flux,
+        ]);
+        map_bools!("star_job", sj, j, [
+            remove_center_set_zero_v_center, remove_center_adjust_l_center,
         ]);
         map_strs!("star_job", sj, j, [
             save_model_filename, save_photo_filename, save_pulse_data_filename,

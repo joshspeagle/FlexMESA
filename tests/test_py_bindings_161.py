@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""Standalone PyO3 boundary and analytical oracle tests for `flexmesa._rust`."""
+"""Standalone PyO3 boundary and analytical tests for `flexmesa._rust`."""
 
 from __future__ import annotations
 
@@ -23,7 +23,7 @@ def _arr(*vals: float) -> np.ndarray:
     return np.asarray(vals, dtype=np.float64)
 
 
-def test_interp_evbicub_batch_nonuniform_oracle_and_guards() -> None:
+def test_interp_evbicub_batch_nonuniform_consistency_and_guards() -> None:
     """Non-uniform grids match `interp_evbicub_db`; bad queries/tables raise."""
     x = _arr(0.0, 0.15, 0.7, 2.0, 5.5)
     y = _arr(-2.0, -0.5, 0.25, 1.5, 4.0)
@@ -87,7 +87,7 @@ def test_chem_boundary_length_and_finiteness_guards() -> None:
             _rust.py_chem_get_partition_fcn_indx(bad_t9)
 
 
-def test_colors_domain_and_radius_zero_oracle() -> None:
+def test_colors_domain_and_radius_zero_contract() -> None:
     """Colors wrappers enforce d > 0, r >= 0, finite coords, error checking."""
     zero_r = _rust.py_colors_eval_colors(5778.0, 4.44, 0.0, 0.0, _D_10PC_CM)
     assert float(zero_r[0]) == 99.0
@@ -146,7 +146,7 @@ def test_ionization_domain_and_finiteness_guards() -> None:
             )
 
 
-def test_eos_ideal_gamma_de_and_inverse_boundary_oracles() -> None:
+def test_eos_ideal_gamma_de_and_inverse_boundary_contracts() -> None:
     """EOS ideal/ion-offset/gamma_de/inverse reject bad inputs."""
     with pytest.raises(ValueError, match="equal length"):
         _rust.eos_compute_ion_offset_from_za(
@@ -155,7 +155,7 @@ def test_eos_ideal_gamma_de_and_inverse_boundary_oracles() -> None:
     with pytest.raises(ValueError, match="positive"):
         _rust.eos_compute_ion_offset_from_za(_arr(1.0), [1], _arr(0.0))
 
-    # Ideal gas single-species analytic oracle: P_gas = (N_A k_B / A) * rho * T.
+    # Ideal gas single-species formula: P_gas = (N_A k_B / A) * rho * T.
     rho_val, temp_val, abar = 1.0e-5, 1.0e5, 1.0
     out_zones = _rust.eos_eval_ideal_zones(
         _arr(temp_val),
@@ -197,7 +197,7 @@ def test_eos_ideal_gamma_de_and_inverse_boundary_oracles() -> None:
                 False,
             )
 
-    # Closed-form gamma_de oracle: T = (gamma - 1) * E / (N_A * k_B / abar).
+    # Closed-form gamma_de relation: T = (gamma - 1) * E / (N_A * k_B / abar).
     gamma, energy = 5.0 / 3.0, 2.5e13
     t_got, logt_got, res, _, _ = _rust.eos_eval_gamma_de_get(
         12.0, 6.0, 1.0e3, energy, gamma
@@ -236,7 +236,7 @@ def test_eos_ideal_gamma_de_and_inverse_boundary_oracles() -> None:
         _rust.eos_eval_pt_get_pgas(math.inf, 0, 10.0, cids, xa)
 
 
-def test_rates_rev_ratio_coeff1_oracle_and_guards() -> None:
+def test_rates_rev_ratio_coeff1_antisymmetry_and_guards() -> None:
     """Detailed balance coefficient obeys antisymmetry and checks lengths."""
     fwd = _rust.rates_compute_rev_ratio_coeff1(
         [12.0, 4.002603], [0.0, 0.0], [15.994915], [0.0]
@@ -341,7 +341,7 @@ def test_star_and_binary_boundary_guards(tmp_path: pathlib.Path) -> None:
         )
 
 
-def test_astero_boundary_guards_and_optimizer_oracle() -> None:
+def test_astero_boundary_guards_and_optimizer_contract() -> None:
     """Astero wrappers catch length mismatches and avoid optimizer panics."""
     r = _arr(3.0e10, 2.0e10, 1.0e10)
     cs = _arr(1.0e7, 2.0e7, 3.0e7)

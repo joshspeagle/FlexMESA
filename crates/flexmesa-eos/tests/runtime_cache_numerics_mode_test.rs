@@ -119,7 +119,7 @@ fn write_dt_raw_slice(path: &Path) {
     fs::write(path, out).expect("write dt raw");
 }
 
-fn write_mesa_helm_fortran_cache(path: &Path) {
+fn write_synthetic_helm_unformatted_cache(path: &Path) {
     fs::create_dir_all(path.parent().expect("parent")).expect("mkdir");
     let file = fs::File::create(path).expect("create helm_table.bin");
     let mut w = BufWriter::with_capacity(4 * 1024 * 1024, file);
@@ -259,7 +259,7 @@ fn test_helm_runtime_cache_is_bit_identical_between_strict_and_fast_modes() {
     let empty_data = root.join("empty_helm_data");
     fs::create_dir_all(&empty_data).expect("mkdir empty_helm_data");
     let mesa_data = root.join("mesa_data");
-    write_mesa_helm_fortran_cache(
+    write_synthetic_helm_unformatted_cache(
         &mesa_data
             .join("eosDT_data")
             .join("cache")

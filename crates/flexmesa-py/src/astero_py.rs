@@ -2,6 +2,8 @@
 //! `PyO3` bindings for Wave 5.4 `astero` scaling relations, surface corrections,
 //! frequency ratios, $\chi^2$ evaluation, and optimization drivers.
 
+use std::path::Path;
+
 use flexmesa_astero::{
     eval_acoustic_profile, eval_astero_chi2, eval_combined_corr,
     eval_cubic_corr, eval_delta_nu_asymptotic, eval_delta_nu_radius_scaling,
@@ -9,14 +11,17 @@ use flexmesa_astero::{
     eval_delta_pg_traditional, eval_frequency_ratios_r01_r10,
     eval_frequency_ratios_r02, eval_glitch_acoustic_depths, eval_kjeldsen_corr,
     eval_nu_ac, eval_nu_max, eval_power_law_corr, eval_radial_delta_nu_ols,
-    eval_sonoi_corr, match_modes_by_degree, scan_cartesian_grid,
+    eval_sonoi_corr, interpolate_l0_inertia, match_modes_by_degree,
+    parse_astero_search_controls_with_options, scan_cartesian_grid,
     try_bobyqa_minimize, try_simplex_minimize_with_options, AsteroChi2Weights,
 };
-use flexmesa_star::StarError;
+use flexmesa_star::{InlistLoadOptions, StarError};
 use numpy::{PyArray1, PyReadonlyArray1};
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
+
+use crate::star_helpers_py::to_py_err;
 
 fn as_slice<'a, T: numpy::Element>(
     arr: &'a PyReadonlyArray1<'_, T>,
@@ -317,6 +322,64 @@ fn ensure_radial_inertia_lengths(
         )));
     }
     Ok(())
+}
+
+/// Linearly interpolates radial ($l=0$) mode inertia at `freq` ($\mu\mathrm{Hz}$)
+/// (`astero/private/astero_support.f90:702-724`).
+#[pyfunction]
+pub fn astero_interpolate_l0_inertia(
+    freq: f64,
+    l0_freqs: PyReadonlyArray1<'_, f64>,
+    l0_inertias: PyReadonlyArray1<'_, f64>,
+) -> PyResult<f64> {
+    let freqs = as_slice(&l0_freqs)?;
+    let inertias = as_slice(&l0_inertias)?;
+    if freqs.len() != inertias.len() {
+        return Err(PyValueError::new_err(format!(
+            "l0_freqs length ({}) must equal l0_inertias length ({})",
+            freqs.len(),
+            inertias.len()
+        )));
+    }
+    Ok(interpolate_l0_inertia(freq, freqs, inertias))
+}
+
+/// Parses `&astero_search_controls` in `case_dir` into a dictionary
+/// (`astero/private/astero_run_support.f90:70-155`).
+#[pyfunction]
+#[pyo3(signature = (case_dir, allow_unsupported_controls=false))]
+pub fn astero_parse_search_controls<'py>(
+    py: Python<'py>,
+    case_dir: &str,
+    allow_unsupported_controls: bool,
+) -> PyResult<Bound<'py, PyDict>> {
+    let load_opts = InlistLoadOptions {
+        allow_unsupported_controls,
+    };
+    let ctrl = parse_astero_search_controls_with_options(
+        Path::new(case_dir),
+        load_opts,
+    )
+    .map_err(to_py_err)?;
+    let d = PyDict::new(py);
+    d.set_item("oscillation_code", ctrl.oscillation_code)?;
+    d.set_item("delta_nu", ctrl.delta_nu)?;
+    d.set_item("nu_max", ctrl.nu_max)?;
+    d.set_item("correction_scheme", ctrl.correction_scheme)?;
+    d.set_item("correction_b", ctrl.correction_b)?;
+    d.set_item("correction_factor", ctrl.correction_factor)?;
+    d.set_item("nu_lower_factor", ctrl.nu_lower_factor)?;
+    d.set_item("nu_upper_factor", ctrl.nu_upper_factor)?;
+    d.set_item("iscan_factor", ctrl.iscan_factor.to_vec())?;
+    d.set_item("nl", ctrl.nl.to_vec())?;
+    d.set_item("freq_target", ctrl.freq_target.to_vec())?;
+    d.set_item("freq_sigma", ctrl.freq_sigma.to_vec())?;
+    d.set_item("l0_n_obs", ctrl.l0_n_obs)?;
+    d.set_item("add_atmosphere", ctrl.add_atmosphere)?;
+    d.set_item("keep_surface_point", ctrl.keep_surface_point)?;
+    d.set_item("add_center_point", ctrl.add_center_point)?;
+    d.set_item("do_redistribute_mesh", ctrl.do_redistribute_mesh)?;
+    Ok(d)
 }
 
 /// Evaluates a surface-effect frequency correction (`kjeldsen`, `cubic`,
@@ -717,6 +780,8 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(astero_eval_glitch_acoustic_depths, m)?)?;
     m.add_function(wrap_pyfunction!(astero_eval_radial_delta_nu_ols, m)?)?;
     m.add_function(wrap_pyfunction!(astero_match_modes_by_degree, m)?)?;
+    m.add_function(wrap_pyfunction!(astero_interpolate_l0_inertia, m)?)?;
+    m.add_function(wrap_pyfunction!(astero_parse_search_controls, m)?)?;
     m.add_function(wrap_pyfunction!(astero_eval_surface_correction, m)?)?;
     m.add_function(wrap_pyfunction!(astero_eval_ratios_r01_r10, m)?)?;
     m.add_function(wrap_pyfunction!(astero_eval_ratios_r02, m)?)?;

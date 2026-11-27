@@ -1,0 +1,65 @@
+# FlexMESA star/gyre_in_mesa_spb run vs MESA 26.4.1 reference run, per oscillation call (#612)
+# reference: mesa_histories bundle runs/star/gyre_in_mesa_spb/pulse_tap/modes.tsv (MESA r26.4.1, git tag 26.4.1, gfortran 15.2.0, SDK x86_64-linux-26.6.1)
+# generator: benchmarks/fortran_mesa/gyre_pulse_data/compare_pulse_live_run.py
+# command: python benchmarks/fortran_mesa/gyre_pulse_data/compare_pulse_live_run.py --suite star --case gyre_in_mesa_spb --histories <mesa_histories> --work <scratch> --out benchmarks/fortran_mesa/gyre_pulse_data/results/star_gyre_in_mesa_spb_flexmesa_vs_mesa.tsv
+# extras: GyreInMesaStarExtras (star_gyre); units: frequency Hz, growth = imaginary part in Hz
+# flexmesa engine commit (last change under crates/): 5a68ae84
+# flexmesa run: 103 steps, termination xa_central_lower_limit, wall 208 s, numerics strict
+# columns *_n: values compared; *_bitexact: values with equal binary64 bits; *_max_rel: max |a-b|/|b| over compared values (n/a: not exposed by the extras)
+# summary: calls compared 51, calls only in FlexMESA [], calls only in MESA []
+# summary: modes only in FlexMESA 0, modes only in MESA 0, calls with different mode order 0
+# summary: freq: 511 compared, 511 bit-identical, max relative difference 0.000e+00
+# summary: inertia: not exposed by the extras, not compared
+# summary: growth: 511 compared, 511 bit-identical, max relative difference 0.000e+00
+model_number	occurrence	n_modes	n_modes_mesa	n_common	order_same	freq_n	freq_bitexact	freq_max_rel	inertia_n	inertia_bitexact	inertia_max_rel	growth_n	growth_bitexact	growth_max_rel	n_pg_only_flexmesa	n_pg_only_mesa
+2	0	10	10	10	1	10	10	0.000e+00	n/a	n/a	n/a	10	10	0.000e+00	-	-
+4	0	10	10	10	1	10	10	0.000e+00	n/a	n/a	n/a	10	10	0.000e+00	-	-
+6	0	10	10	10	1	10	10	0.000e+00	n/a	n/a	n/a	10	10	0.000e+00	-	-
+8	0	10	10	10	1	10	10	0.000e+00	n/a	n/a	n/a	10	10	0.000e+00	-	-
+10	0	10	10	10	1	10	10	0.000e+00	n/a	n/a	n/a	10	10	0.000e+00	-	-
+12	0	11	11	11	1	11	11	0.000e+00	n/a	n/a	n/a	11	11	0.000e+00	-	-
+14	0	11	11	11	1	11	11	0.000e+00	n/a	n/a	n/a	11	11	0.000e+00	-	-
+16	0	11	11	11	1	11	11	0.000e+00	n/a	n/a	n/a	11	11	0.000e+00	-	-
+18	0	10	10	10	1	10	10	0.000e+00	n/a	n/a	n/a	10	10	0.000e+00	-	-
+20	0	10	10	10	1	10	10	0.000e+00	n/a	n/a	n/a	10	10	0.000e+00	-	-
+22	0	10	10	10	1	10	10	0.000e+00	n/a	n/a	n/a	10	10	0.000e+00	-	-
+24	0	10	10	10	1	10	10	0.000e+00	n/a	n/a	n/a	10	10	0.000e+00	-	-
+26	0	10	10	10	1	10	10	0.000e+00	n/a	n/a	n/a	10	10	0.000e+00	-	-
+28	0	10	10	10	1	10	10	0.000e+00	n/a	n/a	n/a	10	10	0.000e+00	-	-
+30	0	10	10	10	1	10	10	0.000e+00	n/a	n/a	n/a	10	10	0.000e+00	-	-
+32	0	10	10	10	1	10	10	0.000e+00	n/a	n/a	n/a	10	10	0.000e+00	-	-
+34	0	10	10	10	1	10	10	0.000e+00	n/a	n/a	n/a	10	10	0.000e+00	-	-
+36	0	10	10	10	1	10	10	0.000e+00	n/a	n/a	n/a	10	10	0.000e+00	-	-
+38	0	10	10	10	1	10	10	0.000e+00	n/a	n/a	n/a	10	10	0.000e+00	-	-
+40	0	9	9	9	1	9	9	0.000e+00	n/a	n/a	n/a	9	9	0.000e+00	-	-
+42	0	10	10	10	1	10	10	0.000e+00	n/a	n/a	n/a	10	10	0.000e+00	-	-
+44	0	11	11	11	1	11	11	0.000e+00	n/a	n/a	n/a	11	11	0.000e+00	-	-
+46	0	11	11	11	1	11	11	0.000e+00	n/a	n/a	n/a	11	11	0.000e+00	-	-
+48	0	10	10	10	1	10	10	0.000e+00	n/a	n/a	n/a	10	10	0.000e+00	-	-
+50	0	10	10	10	1	10	10	0.000e+00	n/a	n/a	n/a	10	10	0.000e+00	-	-
+52	0	10	10	10	1	10	10	0.000e+00	n/a	n/a	n/a	10	10	0.000e+00	-	-
+54	0	10	10	10	1	10	10	0.000e+00	n/a	n/a	n/a	10	10	0.000e+00	-	-
+56	0	11	11	11	1	11	11	0.000e+00	n/a	n/a	n/a	11	11	0.000e+00	-	-
+58	0	10	10	10	1	10	10	0.000e+00	n/a	n/a	n/a	10	10	0.000e+00	-	-
+60	0	10	10	10	1	10	10	0.000e+00	n/a	n/a	n/a	10	10	0.000e+00	-	-
+62	0	10	10	10	1	10	10	0.000e+00	n/a	n/a	n/a	10	10	0.000e+00	-	-
+64	0	9	9	9	1	9	9	0.000e+00	n/a	n/a	n/a	9	9	0.000e+00	-	-
+66	0	10	10	10	1	10	10	0.000e+00	n/a	n/a	n/a	10	10	0.000e+00	-	-
+68	0	11	11	11	1	11	11	0.000e+00	n/a	n/a	n/a	11	11	0.000e+00	-	-
+70	0	10	10	10	1	10	10	0.000e+00	n/a	n/a	n/a	10	10	0.000e+00	-	-
+72	0	10	10	10	1	10	10	0.000e+00	n/a	n/a	n/a	10	10	0.000e+00	-	-
+74	0	9	9	9	1	9	9	0.000e+00	n/a	n/a	n/a	9	9	0.000e+00	-	-
+76	0	10	10	10	1	10	10	0.000e+00	n/a	n/a	n/a	10	10	0.000e+00	-	-
+78	0	10	10	10	1	10	10	0.000e+00	n/a	n/a	n/a	10	10	0.000e+00	-	-
+80	0	9	9	9	1	9	9	0.000e+00	n/a	n/a	n/a	9	9	0.000e+00	-	-
+82	0	10	10	10	1	10	10	0.000e+00	n/a	n/a	n/a	10	10	0.000e+00	-	-
+84	0	10	10	10	1	10	10	0.000e+00	n/a	n/a	n/a	10	10	0.000e+00	-	-
+86	0	10	10	10	1	10	10	0.000e+00	n/a	n/a	n/a	10	10	0.000e+00	-	-
+88	0	10	10	10	1	10	10	0.000e+00	n/a	n/a	n/a	10	10	0.000e+00	-	-
+90	0	9	9	9	1	9	9	0.000e+00	n/a	n/a	n/a	9	9	0.000e+00	-	-
+92	0	10	10	10	1	10	10	0.000e+00	n/a	n/a	n/a	10	10	0.000e+00	-	-
+94	0	10	10	10	1	10	10	0.000e+00	n/a	n/a	n/a	10	10	0.000e+00	-	-
+96	0	9	9	9	1	9	9	0.000e+00	n/a	n/a	n/a	9	9	0.000e+00	-	-
+98	0	10	10	10	1	10	10	0.000e+00	n/a	n/a	n/a	10	10	0.000e+00	-	-
+100	0	10	10	10	1	10	10	0.000e+00	n/a	n/a	n/a	10	10	0.000e+00	-	-
+102	0	10	10	10	1	10	10	0.000e+00	n/a	n/a	n/a	10	10	0.000e+00	-	-

@@ -354,6 +354,11 @@ pub fn star_evolve_step_part1(
     let explicit_step_mdot = model.mstar_dot;
 
     model.aux.okay_to_set_mlt_vc = false;
+    // Burning powers as of the end of the previous step, before `do_mesh`
+    // (`evolve.f90:715, 1884`); `new_generation` copies them below.
+    if first_try {
+        crate::core_boundaries::stash_prestep_powers(model);
+    }
     let (num_splits, num_merges, mut pre_remesh_model) =
         if first_try && do_remesh {
             match remesh_star_before_step(model, dt_prev) {
@@ -380,6 +385,8 @@ pub fn star_evolve_step_part1(
     // (`star/private/evolve_support.f90:80`); a retry enters with
     // `model_number` restored to the pre-step value, so this is idempotent.
     model.save_old_values();
+    // `power_*_old` come from the pre-remesh values (`evolve_support.f90:94-99`).
+    crate::core_boundaries::apply_prestep_powers_to_old(model);
     // `new_generation` ends with `need_to_setvars = .true.`
     // (`star/private/evolve_support.f90:121`).
     model.aux.need_to_setvars = true;
@@ -1101,6 +1108,9 @@ pub(crate) fn star_evolve_step_outcome_checked(
     // `save_old_values()` copies `mlt_vc` into `mlt_vc_old` (`evolve.f90:321`,
     // `evolve_support.f90:58, 193-195`).
     model.aux.okay_to_set_mlt_vc = false;
+    // Burning powers as of the end of the previous step, before `do_mesh`
+    // (`evolve.f90:715, 1884`); `new_generation` copies them below.
+    crate::core_boundaries::stash_prestep_powers(model);
     let (mut num_splits, mut num_merges, mut pre_remesh_model) = if do_remesh {
         match remesh_star_before_step(model, dt_prev) {
             Ok(res) => res,
@@ -1123,6 +1133,8 @@ pub(crate) fn star_evolve_step_outcome_checked(
     // `new_generation` stores `model_number_old = model_number`
     // (`star/private/evolve_support.f90:80`).
     model.save_old_values();
+    // `power_*_old` come from the pre-remesh values (`evolve_support.f90:94-99`).
+    crate::core_boundaries::apply_prestep_powers_to_old(model);
     // `new_generation` ends with `need_to_setvars = .true.`
     // (`star/private/evolve_support.f90:121`).
     model.aux.need_to_setvars = true;

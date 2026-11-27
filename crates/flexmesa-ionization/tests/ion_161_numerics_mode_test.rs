@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #![forbid(unsafe_code)]
-//! Parity, continuity, AD, and validation tests for `flexmesa-ionization`
+//! Regression, continuity, AD, and validation tests for `flexmesa-ionization`
 //! (`#161`).
 //!
 //! Runs in a dedicated `*numerics_mode_test.rs` binary per issue #210
@@ -396,7 +396,7 @@ fn test_fe56_he4_methods_modes_dual_and_domain_bounds() {
 }
 
 #[test]
-fn test_typical_charge_chi_and_potentials_parity() {
+fn test_typical_charge_chi_and_potentials_formula_consistency() {
     let cat = NuclideCatalog::builtin();
 
     with_numerics_mode(NumericsMode::Strict, || {

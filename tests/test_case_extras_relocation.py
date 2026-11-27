@@ -11,7 +11,7 @@ import pytest
 from flexmesa import _rust
 from flexmesa.testing import harness_runner
 from tests.case_extras import resolve_case_extras
-from tests.case_extras.astero_extras import EmptySetParamAsteroExtras
+from tests.case_extras.astero_extras import SurfaceEffectsExtras
 from tests.case_extras.binary_extras import JdotGrCheckBinaryExtras
 from tests.case_extras.rsp_extras import RspPeriodLimitExtras
 from tests.case_extras.star_extras import CheckRedoStarExtras
@@ -52,10 +52,10 @@ def test_resolve_case_extras_ignores_directory_name(
     ast_a = _copy_case("astero", "surface_effects", tmp_path / "delta_dir")
     ast_b = _copy_case("astero", "surface_effects", tmp_path / "kappa_dir")
     assert isinstance(
-        resolve_case_extras("astero", ast_a), EmptySetParamAsteroExtras
+        resolve_case_extras("astero", ast_a), SurfaceEffectsExtras
     )
     assert isinstance(
-        resolve_case_extras("astero", ast_b), EmptySetParamAsteroExtras
+        resolve_case_extras("astero", ast_b), SurfaceEffectsExtras
     )
 
 

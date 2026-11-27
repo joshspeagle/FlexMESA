@@ -93,7 +93,7 @@ fn test_eval_total_energy_integrals_quad_pe_ke_rotation_tdc_rsp_and_rsp2() {
     m.m_grav = vec![1.0e31, 9.0e30, 7.0e30, 4.0e30];
     // Include a sub-centimeter radius at the innermost zone and check its
     // analytic PE directly (`-0.5 * cgrav * m_grav / r`) so no spurious
-    // `r.max(1.0)` clamp can hide behind a self-oracle.
+    // `r.max(1.0)` clamp can hide behind a self-check.
     m.r = vec![4.0e10, 3.0e10, 2.0e10, 0.5];
     m.energy = vec![1.5e14, 2.5e14, 3.5e14, 4.5e14];
     m.v = vec![5.0e5, 4.0e5, 3.0e5, 2.0e5];
@@ -494,9 +494,9 @@ fn test_adjust_mass_records_phase1_mdot_energy_accounting() {
 
 /// Verifies `.photo` v30 roundtrip preserves `have_initial_energy_integrals`,
 /// `total_energy_initial`, `cumulative_energy_error`, and bit-exact restart
-/// parity (`photo_out.f90:69-70`).
+/// consistency (`photo_out.f90:69-70`).
 #[test]
-fn test_photo_v30_preserves_initial_energy_integrals_and_restart_parity() {
+fn test_photo_v30_preserves_initial_energy_integrals_and_restart_identity() {
     assert_eq!(PHOTO_FORMAT_VERSION, 30);
     let mut model = solar_zams(EnergyEqnOption::Dedt);
     model.dt = 1.0e5 * SECYER;
@@ -728,7 +728,7 @@ fn test_velocity_time_centering_transition_step_is_consistent() {
 /// `assemble_henyey_system`, resizes all three in `resize_zones`, and leaves
 /// the solver trajectory bit-identical (`#152`).
 #[test]
-fn test_cv_de_drho_start_ergs_error_snapshot_resize_and_trajectory_parity() {
+fn test_cv_de_drho_start_ergs_error_snapshot_resize_and_step_accounting() {
     let mut model = solar_zams(EnergyEqnOption::EpsGrav);
     model.dt = 1.0e5 * SECYER;
     model.dt_next = model.dt;

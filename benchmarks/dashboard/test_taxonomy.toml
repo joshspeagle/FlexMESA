@@ -231,7 +231,8 @@ kind = "invariant"
 path = "crates/flexmesa-binary/tests/star_plus_point_mass_test.rs"
 language = "rust"
 module = "binary"
-kind = "invariant"
+kind = "oracle"
+provenance = "benchmarks/history_harness/reference_histories/binary/star_plus_point_mass.data (MESA r26.4.1, gfortran 15.2.0, SDK x86_64-linux-26.6.1, date 20261115, model 100; #446, #594)"
 
 [[tests]]
 path = "crates/flexmesa-binary/tests/tier5_coupled_suite.rs"
@@ -291,11 +292,10 @@ module = "math"
 kind = "invariant"
 
 [[tests]]
-path = "crates/flexmesa-data/tests/data_161_parity_test.rs"
+path = "crates/flexmesa-data/tests/data_161_test.rs"
 language = "rust"
 module = "utils"
 kind = "invariant"
-mislabel_reason = "#563: W4 audit found boundary/JSON/safetensors invariant checks with no MESA 26.4.1 oracle comparison; rename away from restricted vocabulary under W4 (#563)"
 
 [[tests]]
 path = "crates/flexmesa-data/tests/data_tests.rs"
@@ -321,6 +321,7 @@ language = "rust"
 module = "eos"
 kind = "oracle"
 provenance = "mesa-module-hex-v1.tar.zst bundle (MESA 26.4.1 eos module IEEE-754 hex outputs)"
+routines = ["eos/private/eos_blend.f90::is_contained", "eos/private/eos_blend.f90::min_distance_to_polygon", "eos/private/eosdt_eval.f90::Get_eosDT_Results", "eos/private/eosdt_eval.f90::get_Rho", "eos/private/eosdt_eval.f90::get_T", "eos/private/eospt_eval.f90::Get_PT_Results_using_DT", "eos/public/eos_lib.f90::eosDT_get", "eos/public/eos_lib.f90::eosDT_get_Rho", "eos/public/eos_lib.f90::eosDT_get_T", "eos/public/eos_lib.f90::eosPT_get"]
 
 [[tests]]
 path = "crates/flexmesa-eos/tests/eos_pc_skye_161_test.rs"
@@ -334,6 +335,7 @@ language = "rust"
 module = "eos"
 kind = "oracle"
 provenance = "MESA 26.4.1 (gfortran 15.2.0, SDK x86_64-linux-26.6.1) #552 cell EOS replay captures of eos/private/skye.f90 and eos/private/eosdt_eval.f90 (star/ns_c and star/wd_c_core_ignition; #570)"
+routines = ["eos/private/eosdt_eval.f90::Get_eosDT_Results", "eos/private/skye.f90::Get_Skye_alfa"]
 
 [[tests]]
 path = "crates/flexmesa-eos/tests/excor7_data_oracle_test.rs"
@@ -348,6 +350,7 @@ language = "rust"
 module = "eos"
 kind = "oracle"
 provenance = "benchmarks/fortran_mesa/eos_oracles/mesa_26_4_1_eos_oracles.tsv (libeos.a HELM/PC/Skye/blend, #161)"
+routines = ["eos/private/eosdt_eval.f90::Get_eosDT_Results", "eos/private/eospc_eval.f90::get_PC_for_eosdt", "eos/private/skye.f90::get_Skye_for_eosdt", "eos/public/eos_lib.f90::eosDT_get"]
 
 [[tests]]
 path = "crates/flexmesa-eos/tests/raw_slices_fit_finite_test.rs"
@@ -367,6 +370,7 @@ language = "rust"
 module = "eos"
 kind = "oracle"
 provenance = "benchmarks/fortran_mesa/eos_oracles/mesa_26_4_1_eos_oracles.tsv & eos/test/test_output (do_test_eos_blend, Wave 3a.1)"
+routines = ["eos/private/eos_blend.f90::is_contained", "eos/private/eos_blend.f90::min_distance_to_polygon", "eos/private/gauss_fermi.f90::dfermi", "eos/private/ideal.f90::get_ideal_eos_results", "eos/private/ideal.f90::get_ideal_for_eosdt", "eos/private/ion_offset.f90::compute_ion_offset", "eos/public/eos_lib.f90::eos_fermi_dirac_integral"]
 
 [[tests]]
 path = "crates/flexmesa-eos/tests/wave3a2_helm_regimes_tests.rs"
@@ -374,6 +378,7 @@ language = "rust"
 module = "eos"
 kind = "oracle"
 provenance = "benchmarks/fortran_mesa/eos_oracles/mesa_26_4_1_eos_oracles.tsv (HELM T/rho regimes)"
+routines = ["eos/private/eos_helm_eval.f90::get_helm_for_eosdt", "eos/private/helm.f90::helmeos2", "eos/public/eos_lib.f90::helmeos2_eval"]
 
 [[tests]]
 path = "crates/flexmesa-eos/tests/wave3a2_helm_tests.rs"
@@ -388,6 +393,7 @@ language = "rust"
 module = "eos"
 kind = "oracle"
 provenance = "benchmarks/fortran_mesa/eos_oracles/mesa_26_4_1_eos_oracles.tsv (PC solid/melting)"
+routines = ["eos/private/eosdt_eval.f90::Get_eosDT_Results", "eos/private/eospc_eval.f90::Get_PC_alfa", "eos/private/eospc_eval.f90::get_PC_for_eosdt", "eos/public/eos_lib.f90::eosDT_get"]
 
 [[tests]]
 path = "crates/flexmesa-eos/tests/wave3a3_pc_tests.rs"
@@ -395,6 +401,7 @@ language = "rust"
 module = "eos"
 kind = "oracle"
 provenance = "benchmarks/fortran_mesa/eos_oracles/mesa_26_4_1_eos_oracles.tsv (PC liquid/mix)"
+routines = ["eos/private/eospc_eval.f90::get_PC_for_eosdt"]
 
 [[tests]]
 path = "crates/flexmesa-eos/tests/wave3a3_skye_inverse_tests.rs"
@@ -402,6 +409,7 @@ language = "rust"
 module = "eos"
 kind = "oracle"
 provenance = "benchmarks/fortran_mesa/eos_oracles/mesa_26_4_1_eos_oracles.tsv (Skye & inverse solvers)"
+routines = ["eos/private/eosde_eval.f90::Get_eos_gamma_DE_Results", "eos/private/eosdt_eval.f90::Get_eosDT_Results", "eos/private/eosdt_eval.f90::get_Rho", "eos/private/eosdt_eval.f90::get_T", "eos/private/eospt_eval.f90::Get_PT_Results_using_DT", "eos/private/skye.f90::Get_Skye_alfa", "eos/private/skye.f90::Get_Skye_alfa_simple", "eos/private/skye.f90::get_Skye_for_eosdt", "eos/public/eos_lib.f90::eosDT_get", "eos/public/eos_lib.f90::eosDT_get_Rho", "eos/public/eos_lib.f90::eosDT_get_T", "eos/public/eos_lib.f90::eosPT_get", "eos/public/eos_lib.f90::eos_gamma_DE_get"]
 
 [[tests]]
 path = "crates/flexmesa-eos/tests/wave3b1_full_tables_tests.rs"
@@ -415,6 +423,7 @@ language = "rust"
 module = "eos"
 kind = "oracle"
 provenance = "tests/fixtures/golden/eos/test_output.txt (MESA 26.4.1 OPAL/SCVH/FreeEOS/CMS)"
+routines = ["eos/private/eoscms_eval.f90::get_CMS_for_eosdt", "eos/private/eosdt_eval.f90::Get_eosDT_Results", "eos/private/eosdt_eval.f90::get1_for_eosdt", "eos/private/eosdt_eval.f90::get_Rho", "eos/private/eosdt_eval.f90::get_T", "eos/private/eospt_eval.f90::Get_PT_Results_using_DT", "eos/private/eospt_eval.f90::get_Pgas", "eos/private/eospt_eval.f90::get_T", "eos/public/eos_lib.f90::eosDT_get", "eos/public/eos_lib.f90::eosDT_get_Rho", "eos/public/eos_lib.f90::eosDT_get_T", "eos/public/eos_lib.f90::eosPT_get", "eos/public/eos_lib.f90::eosPT_get_T"]
 
 [[tests]]
 path = "crates/flexmesa-gyre/tests/g1_vectors.rs"
@@ -635,11 +644,10 @@ kind = "oracle"
 provenance = "Upstream MESA 26.4.1 mtx/test/test_output (test_square1, test_square2, banded)"
 
 [[tests]]
-path = "crates/flexmesa-net/tests/burn_simpr_161_parity_test.rs"
+path = "crates/flexmesa-net/tests/burn_simpr_161_test.rs"
 language = "rust"
 module = "net"
 kind = "invariant"
-mislabel_reason = "#563: W4 audit found mass-conservation and determinism checks with no MESA 26.4.1 oracle comparison; rename away from restricted vocabulary under W4 (#563)"
 
 [[tests]]
 path = "crates/flexmesa-net/tests/case_nets_w1_test.rs"
@@ -696,11 +704,10 @@ kind = "oracle"
 provenance = "mesa-module-hex-v1.tar.zst bundle (MESA 26.4.1 net IEEE-754 hex outputs)"
 
 [[tests]]
-path = "crates/flexmesa-net/tests/net_weak_lowt_161_parity_test.rs"
+path = "crates/flexmesa-net/tests/net_weak_lowt_161_test.rs"
 language = "rust"
 module = "net"
 kind = "invariant"
-mislabel_reason = "#563: W4 audit found analytical rate/dxdt consistency checks with no committed MESA 26.4.1 oracle artifact; rename away from restricted vocabulary under W4 (#563)"
 
 [[tests]]
 path = "crates/flexmesa-net/tests/special_reactions_test.rs"
@@ -806,6 +813,13 @@ module = "tooling"
 kind = "invariant"
 
 [[tests]]
+path = "crates/flexmesa-replay/tests/mesa_regimes_sample_test.rs"
+language = "rust"
+module = "tooling"
+kind = "oracle"
+provenance = "crates/flexmesa-replay/tests/data/wd_cool_0p6m_sample.replay, crates/flexmesa-replay/tests/data/ns_h_simple_skye_sample.replay, crates/flexmesa-replay/tests/data/split_burn_henyey_80sp_sample.replay, crates/flexmesa-replay/tests/data/tzo_cox_mlt_sample.replay (MESA r26.4.1, gfortran 15.2.0, SDK x86_64-linux-26.6.1; #552, #591)"
+
+[[tests]]
 path = "crates/flexmesa-replay/tests/mesa_sample_test.rs"
 language = "rust"
 module = "tooling"
@@ -899,11 +913,10 @@ provenance = "MESA 26.4.1 star/private/element_diffusion.f90:562 element_diffusi
 routines = ["star/private/element_diffusion.f90::do_element_diffusion"]
 
 [[tests]]
-path = "crates/flexmesa-star/tests/elem_diff_156_parity_test.rs"
+path = "crates/flexmesa-star/tests/elem_diff_156_test.rs"
 language = "rust"
 module = "star"
 kind = "invariant"
-mislabel_reason = "#563: W4 audit found self-contained element-diffusion solver/accounting invariant checks with no MESA 26.4.1 oracle comparison; rename away from restricted vocabulary under W4 (#563)"
 
 [[tests]]
 path = "crates/flexmesa-star/tests/energy_accounting_151_test.rs"
@@ -1040,11 +1053,10 @@ module = "star"
 kind = "invariant"
 
 [[tests]]
-path = "crates/flexmesa-star/tests/mesh_adjust_omega_153_parity_test.rs"
+path = "crates/flexmesa-star/tests/mesh_adjust_omega_153_test.rs"
 language = "rust"
 module = "star"
 kind = "invariant"
-mislabel_reason = "#563: W4 audit found self-contained adjust_omega control-volume invariant checks with no MESA 26.4.1 oracle comparison; rename away from restricted vocabulary under W4 (#563)"
 
 [[tests]]
 path = "crates/flexmesa-star/tests/mesh_planner_153_test.rs"
@@ -1220,10 +1232,11 @@ kind = "oracle"
 provenance = "crates/flexmesa-star/tests/data/pulse_fortran_format/fmt_oracle_expected.txt & star/private/pulse_gyre.f90 (#491)"
 
 [[tests]]
-path = "crates/flexmesa-star/tests/relax_154_test.rs"
+path = "crates/flexmesa-star/tests/relax_154_parity_test.rs"
 language = "rust"
 module = "star"
-kind = "invariant"
+kind = "oracle"
+provenance = "benchmarks/fortran_mesa/relax_154_oracles/samples/create_initial_model_pp_and_cno_extras.sample, benchmarks/fortran_mesa/relax_154_oracles/samples/make_brown_dwarf_basic_net.sample, benchmarks/fortran_mesa/relax_154_oracles/samples/pre_ms_15m_dynamo.sample (MESA r26.4.1, gfortran 15.2.0, SDK x86_64-linux-26.6.1; #154, #595)"
 
 [[tests]]
 path = "crates/flexmesa-star/tests/relax_comp_parity_test.rs"
@@ -1238,6 +1251,12 @@ language = "rust"
 module = "star"
 kind = "oracle"
 provenance = "MESA 26.4.1 star/private/relax.f90:3536-3873 relax_initial_Z / relax_initial_Y IEEE-754 hex zone oracles (#422)"
+
+[[tests]]
+path = "crates/flexmesa-star/tests/remove_center_test.rs"
+language = "rust"
+module = "star"
+kind = "invariant"
 
 [[tests]]
 path = "crates/flexmesa-star/tests/rotation_158_test.rs"
@@ -1407,11 +1426,10 @@ provenance = "benchmarks/fortran_mesa/zams_1p0_oracle/zams_model0_1p0Msun_26_4_1
 routines = ["star/private/init_model.f90::get_zams_model"]
 
 [[tests]]
-path = "crates/flexmesa-star/tests/zams_io_154_parity_test.rs"
+path = "crates/flexmesa-star/tests/zams_io_154_test.rs"
 language = "rust"
 module = "star"
 kind = "invariant"
-mislabel_reason = "#563: W4 audit found no real-MESA 26.4.1 oracle comparison; rename away from restricted vocabulary under W4 (#563)"
 
 [[tests]]
 path = "crates/flexmesa-testing/tests/golden_tests.rs"
@@ -1425,6 +1443,7 @@ language = "rust"
 module = "turb"
 kind = "oracle"
 provenance = "benchmarks/fortran_mesa/turb_tdc_oracles/mesa_26_4_1_turb_tdc_oracles.tsv (#161)"
+routines = ["turb/public/turb.f90::set_TDC"]
 
 [[tests]]
 path = "crates/flexmesa-turb/tests/turb_161_test.rs"
@@ -1444,7 +1463,7 @@ language = "rust"
 module = "turb"
 kind = "oracle"
 provenance = "mesa-module-hex-v1.tar.zst bundle (MESA 26.4.1 turb module IEEE-754 hex outputs, #434)"
-routines = ["turb/public/turb.f90::set_MLT"]
+routines = ["turb/private/mlt.f90::calc_MLT", "turb/public/turb.f90::set_MLT", "turb/public/turb.f90::set_TDC"]
 
 [[tests]]
 path = "crates/flexmesa-turb/tests/turb_tests.rs"
@@ -1452,10 +1471,7 @@ language = "rust"
 module = "turb"
 kind = "oracle"
 provenance = "Upstream MESA 26.4.1 turb/test/test_output pinned MLT/TDC values"
-routines = [
-  "turb/private/mlt.f90::calc_MLT",
-  "turb/public/turb.f90::set_MLT",
-]
+routines = ["turb/private/mlt.f90::calc_MLT", "turb/public/turb.f90::set_MLT", "turb/public/turb.f90::set_TDC"]
 
 [[tests]]
 path = "crates/flexmesa-utils/tests/utils_tests.rs"
@@ -1469,6 +1485,12 @@ language = "python"
 module = "star"
 kind = "oracle"
 provenance = "benchmarks/fortran_mesa/adjust_mass_oracle/adjust_mass_4msun_26_4_1.tsv (#385)"
+
+[[tests]]
+path = "tests/test_artifact_compare.py"
+language = "python"
+module = "tooling"
+kind = "invariant"
 
 [[tests]]
 path = "tests/test_astero_empty_set_param.py"
@@ -1506,7 +1528,7 @@ language = "python"
 module = "binary"
 kind = "oracle"
 provenance = "Upstream MESA 26.4.1 binary/test/test_output (pick_next_timestep_rl & eval_L2_mass_loss_fraction)"
-routines = ["binary/private/binary_disk.f90::eval_L2_mass_loss_fraction"]
+routines = ["binary/private/binary_disk.f90::eval_L2_mass_loss_fraction", "binary/public/binary_lib.f90::binary_L2_mass_loss_fraction"]
 
 [[tests]]
 path = "tests/test_case_extras_batch1.py"
@@ -1665,6 +1687,7 @@ language = "python"
 module = "eos"
 kind = "oracle"
 provenance = "tests/fixtures/golden/eos/test_output.txt & benchmarks/fortran_mesa/eos_oracles/ (#161)"
+routines = ["eos/private/eos_blend.f90::is_contained", "eos/private/eos_blend.f90::min_distance_to_polygon", "eos/private/gauss_fermi.f90::dfermi", "eos/private/ideal.f90::get_ideal_eos_results", "eos/private/ideal.f90::get_ideal_for_eosdt", "eos/public/eos_lib.f90::eos_fermi_dirac_integral"]
 
 [[tests]]
 path = "tests/test_eos_wave3a2.py"
@@ -1672,6 +1695,7 @@ language = "python"
 module = "eos"
 kind = "oracle"
 provenance = "benchmarks/fortran_mesa/eos_oracles/mesa_26_4_1_eos_oracles.tsv (HELM)"
+routines = ["eos/private/eos_helm_eval.f90::get_helm_for_eosdt"]
 
 [[tests]]
 path = "tests/test_eos_wave3a3.py"
@@ -1679,6 +1703,7 @@ language = "python"
 module = "eos"
 kind = "oracle"
 provenance = "benchmarks/fortran_mesa/eos_oracles/mesa_26_4_1_eos_oracles.tsv (PC/Skye/eosDT_get)"
+routines = ["eos/private/eosde_eval.f90::Get_eos_gamma_DE_Results", "eos/private/eosdt_eval.f90::Get_eosDT_Results", "eos/private/eosdt_eval.f90::get_Rho", "eos/private/eosdt_eval.f90::get_T", "eos/private/eospc_eval.f90::Get_PC_alfa", "eos/private/eospc_eval.f90::get_PC_for_eosdt", "eos/private/eospt_eval.f90::Get_PT_Results_using_DT", "eos/private/skye.f90::Get_Skye_alfa", "eos/private/skye.f90::Get_Skye_alfa_simple", "eos/private/skye.f90::get_Skye_for_eosdt", "eos/public/eos_lib.f90::eosDT_get", "eos/public/eos_lib.f90::eosDT_get_Rho", "eos/public/eos_lib.f90::eosDT_get_T", "eos/public/eos_lib.f90::eosPT_get", "eos/public/eos_lib.f90::eos_gamma_DE_get"]
 
 [[tests]]
 path = "tests/test_eos_wave3b1.py"
@@ -1686,6 +1711,7 @@ language = "python"
 module = "eos"
 kind = "oracle"
 provenance = "tests/fixtures/golden/eos/test_output.txt & benchmarks/fortran_mesa/eos_oracles/ (4D EOS)"
+routines = ["eos/private/eos_helm_eval.f90::get_helm_for_eosdt", "eos/private/eoscms_eval.f90::get_CMS_for_eosdt", "eos/private/eosdt_eval.f90::Get_eosDT_Results", "eos/private/eosdt_eval.f90::get1_for_eosdt", "eos/private/eosdt_eval.f90::get_Rho", "eos/private/eosdt_eval.f90::get_T", "eos/private/eospt_eval.f90::Get_PT_Results_using_DT", "eos/private/eospt_eval.f90::get_Pgas", "eos/private/eospt_eval.f90::get_T", "eos/public/eos_lib.f90::eosDT_get", "eos/public/eos_lib.f90::eosDT_get_Rho", "eos/public/eos_lib.f90::eosDT_get_T", "eos/public/eos_lib.f90::eosPT_get", "eos/public/eos_lib.f90::eosPT_get_T"]
 
 [[tests]]
 path = "tests/test_evolution_profile.py"
@@ -1793,6 +1819,12 @@ kind = "oracle"
 provenance = "Upstream MESA 26.4.1 unmodified *.defaults namelist files in mesa_test_inputs (#149)"
 
 [[tests]]
+path = "tests/test_mesa_terminations.py"
+language = "python"
+module = "tooling"
+kind = "invariant"
+
+[[tests]]
 path = "tests/test_mesa_paper_figures.py"
 language = "python"
 module = "tooling"
@@ -1872,11 +1904,22 @@ module = "plotting"
 kind = "invariant"
 
 [[tests]]
-path = "tests/test_py_bindings_161_parity.py"
+path = "tests/test_py_bindings_161.py"
 language = "python"
 module = "tooling"
 kind = "invariant"
-mislabel_reason = "#563: W4 audit found PyO3 boundary guards and analytical checks with no MESA 26.4.1 oracle comparison; rename away from restricted vocabulary under W4 (#563)"
+
+[[tests]]
+path = "tests/test_routine_evidence.py"
+language = "python"
+module = "tooling"
+kind = "invariant"
+
+[[tests]]
+path = "tests/test_routine_inventory.py"
+language = "python"
+module = "tooling"
+kind = "invariant"
 
 [[tests]]
 path = "tests/test_schema.py"
@@ -1934,6 +1977,12 @@ module = "tooling"
 kind = "invariant"
 
 [[tests]]
+path = "tests/test_stepdump_windows.py"
+language = "python"
+module = "tooling"
+kind = "invariant"
+
+[[tests]]
 path = "tests/test_strict_determinism_script.py"
 language = "python"
 module = "tooling"
@@ -1951,10 +2000,7 @@ language = "python"
 module = "turb"
 kind = "oracle"
 provenance = "Upstream MESA 26.4.1 turb/test/test_output pinned MLT/TDC values"
-routines = [
-  "turb/private/mlt.f90::calc_MLT",
-  "turb/public/turb.f90::set_MLT",
-]
+routines = ["turb/private/mlt.f90::calc_MLT", "turb/public/turb.f90::set_MLT", "turb/public/turb.f90::set_TDC"]
 
 [[tests]]
 path = "tests/test_turb_autodiff.py"
@@ -2001,3 +2047,9 @@ language = "python"
 module = "rates"
 kind = "oracle"
 provenance = "tests/fixtures/golden/rates/test_output.txt & benchmarks/fortran_mesa/rates_oracles/"
+
+[[tests]]
+path = "tests/test_pulse_live_compare.py"
+language = "python"
+module = "gyre"
+kind = "invariant"

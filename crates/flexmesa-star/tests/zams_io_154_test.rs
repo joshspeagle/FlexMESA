@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-//! Standalone parity tests for ZAMS loading, pre-MS composition options,
+//! Standalone unit tests for ZAMS loading, pre-MS composition options,
 //! `.mod`/`.photo` checkpoint serialization, [`PrimaryStateBuffer`] rollback
 //! coverage, and `./rn` shell script parsing (issue #154).
 
@@ -135,7 +135,7 @@ fn zams_parse_ascii_stops_index_scan_at_any_non_positive_sentinel() {
 }
 
 #[test]
-fn zams_mass_interpolation_remaps_upper_species_by_chem_id_oracle() {
+fn zams_mass_interpolation_remaps_upper_species_by_chem_id() {
     let builtin = ZamsCatalog::builtin();
     let e1 = builtin
         .models

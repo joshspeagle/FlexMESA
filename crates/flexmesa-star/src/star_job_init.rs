@@ -86,9 +86,10 @@ fn load_saved_mod(
 /// read from a `.mod` file (`restart = .false.`).
 ///
 /// Mesh quantities (`set_qs`, `set_m_and_dm`, `set_m_grav_and_grav`,
-/// `set_dm_bar`) come from `sync_mesh_and_pack`; the arrays upstream clears at
-/// `read_model.f90:131-149` are freshly zeroed by the reader. Upstream's
-/// `s% total_angular_momentum` (`:170`) and `do_report` (`:197`) are derived
+/// `set_dm_bar`) come from `sync_mesh_and_pack`, and the scratch/aux vectors
+/// at `read_model.f90:133-145, 157-159` are reset explicitly below before
+/// `set_vars` so both fresh loads and `do_remove_center` start cleanly.
+/// Upstream's `s% total_angular_momentum` (`:170`) and `do_report` (`:197`) are derived
 /// quantities that FlexMESA evaluates on demand from the model arrays
 /// (`report_utils`), so no stored state corresponds to them.
 ///
@@ -96,7 +97,7 @@ fn load_saved_mod(
 /// Returns [`StarError::InvalidInput`] on paths whose callees are not ported
 /// here (`RSP_setup_part1` / `RSP_setup_part2`, `set_viscosity_vars_TDC`),
 /// and propagates `set_vars` and brunt errors.
-fn finish_load_model(
+pub(crate) fn finish_load_model(
     model: &mut StarModel,
     extras: &mut dyn StarExtras,
 ) -> Result<(), StarError> {
@@ -141,19 +142,41 @@ fn finish_load_model(
         model.pack_xh();
     }
 
-    // `read_model.f90:157-159`: `okay_to_set_mlt_vc` is set by the reader
-    // from `have_mlt_vc` (`model_io::read_mod_str_with_dir`).
+    // `read_model.f90:133-145, 157-159`: reset scratch/aux vectors before
+    // `set_vars` so both fresh loads and `do_remove_center` start cleanly.
+    // `okay_to_set_mlt_vc` is set from `have_mlt_vc` (`read_mod_str_with_dir`).
     // `other_cgrav` runs inside the `set_vars` below (`set_cgrav`,
     // `star/private/hydro_vars.f90:525,763-776`) from the installed handle.
+    model.d_mix.fill(0.0);
+    model.aux.mixing.adjust_mlt_gradt_fraction.fill(-1.0);
+    model.eps_mdot.fill(0.0);
+    model.eps_grav_ad.fill(
+        <crate::star_ad::StarAdOrder1 as crate::star_ad::StarAdExt>::ZERO,
+    );
+    model.aux.ergs_error.fill(0.0);
+    if model.controls.do_element_diffusion {
+        model.aux.edv.fill(0.0);
+    }
+    if model.controls.u_flag {
+        model.aux.u_face_ad.fill(
+            <crate::star_ad::StarAdOrder1 as crate::star_ad::StarAdExt>::ZERO,
+        );
+        model.aux.p_face_ad.fill(
+            <crate::star_ad::StarAdOrder1 as crate::star_ad::StarAdExt>::ZERO,
+        );
+    }
+    if !model.aux.have_mlt_vc {
+        model.aux.okay_to_set_mlt_vc = true;
+    }
     crate::inlist_runner::install_star_aux_hooks(&*extras, model);
     // `set_vars` with `doing_finish_load_model = .true.`
-    // (`read_model.f90:161-168`): under `D_omega_flag` / `am_nu_rot_flag`
-    // it zeroes `D_omega` and `am_nu_rot`
-    // (`star/private/rotation_mix_info.f90:255-258`,
+    // (`read_model.f90:161-168`): refreshes starting vectors and evaluates
+    // hydro/micro vars; under `D_omega_flag` / `am_nu_rot_flag` it zeroes
+    // `D_omega` and `am_nu_rot` (`star/private/rotation_mix_info.f90:255-258`,
     // `star/private/mix_info.f90:1810-1813`). The `RSP` `unpack_xh` branch
     // (`star/private/hydro_vars.f90:225`) is excluded above.
     model.aux.doing_finish_load_model = true;
-    if let Err(e) = set_hydro_vars(model, false, false) {
+    if let Err(e) = crate::hydro_vars::set_vars(model) {
         model.aux.doing_finish_load_model = false;
         return Err(e);
     }
@@ -215,6 +238,7 @@ pub(crate) fn prepare_new_model_for_relax(
     model.save_start_values()?;
     model.save_old_values();
     model.m_center_old = model.m_center;
+    model.xmstar_old = model.xmstar;
     model.r_center_old = model.r_center;
     model.l_center_old = model.l_center;
     model.v_center_old = model.v_center;
@@ -968,12 +992,12 @@ fn init_or_update_model_impl(
 
     // 4. Composition and mass, in upstream's order
     // (`star/job/run_star_support.f90:2198-2487`), with `restart = false`.
-    let mut relax_ready = did_create_pre_ms;
-    let mut ready_for_relax =
+    let relax_ready = std::cell::Cell::new(did_create_pre_ms);
+    let ready_for_relax =
         |m: &mut StarModel, ex: &mut dyn StarExtras| -> Result<(), StarError> {
-            if !relax_ready {
+            if !relax_ready.get() {
                 prepare_new_model_for_relax(m, ex)?;
-                relax_ready = true;
+                relax_ready.set(true);
             }
             Ok(())
         };
@@ -1081,6 +1105,43 @@ fn init_or_update_model_impl(
             job.core_avg_eps,
             extras,
         )?;
+    }
+    // `star/job/run_star_support.f90:2499` and `3147-3162`: excise inner core
+    // by specific entropy in $k_{\mathrm{B}}/\mathrm{baryon}$ after `relax_core`
+    // and before `relax_M_center` (`run_star_support.f90:2502`). Ensure mesh
+    // `m`/`dm`/`q` and EOS `ln_s` are valid if an earlier step left
+    // `need_to_setvars` or uninitialized EOS state.
+    let want_initial_entropy_cut =
+        job.remove_initial_center_by_entropy > 0.0 && !restart;
+    let want_entropy_cut = job.remove_center_by_entropy > 0.0;
+    if want_initial_entropy_cut || want_entropy_cut {
+        let needs_vars = model.aux.need_to_setvars
+            || model.ln_s.len() != model.nz
+            || model.m.len() != model.nz
+            || model.dm.len() != model.nz
+            || model.q.len() != model.nz
+            || model.m.first().copied().unwrap_or(0.0) <= 0.0
+            || model.ln_s.iter().all(|&x| x == 0.0);
+        if needs_vars {
+            model.sync_mesh_and_pack()?;
+            set_hydro_vars(&mut model, false, false)?;
+            model.aux.need_to_setvars = false;
+        }
+        if want_initial_entropy_cut {
+            crate::remove_center::do_remove_center_by_entropy(
+                &mut model,
+                job.remove_initial_center_by_entropy,
+                extras,
+            )?;
+        }
+        if want_entropy_cut {
+            crate::remove_center::do_remove_center_by_entropy(
+                &mut model,
+                job.remove_center_by_entropy,
+                extras,
+            )?;
+        }
+        relax_ready.set(false);
     }
     if job.relax_m_center || (job.relax_initial_m_center && !restart) {
         ready_for_relax(&mut model, extras)?;
@@ -1215,6 +1276,7 @@ fn init_or_update_model_impl(
     model.save_start_values()?;
     model.save_old_values();
     model.m_center_old = model.m_center;
+    model.xmstar_old = model.xmstar;
     model.r_center_old = model.r_center;
     model.l_center_old = model.l_center;
     model.v_center_old = model.v_center;

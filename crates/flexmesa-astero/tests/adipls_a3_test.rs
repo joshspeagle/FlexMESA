@@ -270,6 +270,24 @@ fn test_adipls_get_one_el_info_reuses_store_and_sorts_modes() {
         ),
         Err(StarError::InvalidInput(_))
     ));
+
+    // `get_one_el_info` honors `default_do_redistribute_mesh`
+    // (`astero_support.f90:134`).
+    dir.write_file("redistrb.c.pruned.in", REDISTRB_PRUNED_IN);
+    let mut ctrl_redist = ctrl;
+    ctrl_redist.do_redistribute_mesh = true;
+    let mut driver_redist =
+        AsteroAdipls::init_with_redistribute(&dir.path, &ctrl_redist, true)
+            .expect("init with redistrb");
+    let err_get_redist = driver_redist
+        .get_one_el_info(&model, 0, 1000.0, 3500.0, 120, 135.0, true)
+        .expect_err(
+            "get_one_el_info with do_redistribute_mesh = true must fail",
+        );
+    assert!(matches!(
+        err_get_redist,
+        StarError::InvalidInput(ref msg) if msg.contains("do_redistribute_mesh")
+    ));
 }
 
 #[test]

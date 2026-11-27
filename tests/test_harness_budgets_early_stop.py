@@ -712,6 +712,44 @@ def test_mesa_stage_steps_cover_every_case_and_match_known_stages() -> None:
     assert table[("star", "high_z")] == (445,)
 
 
+@pytest.mark.parametrize(
+    ("status", "termination", "message", "rejection"),
+    [
+        ("timeout", "timeout", "exceeded 600 s", ""),
+        ("error", "", "unsupported control x", "unsupported control x"),
+    ],
+)
+def test_row_keeps_mesa_stage_steps_when_the_run_has_none(
+    manifest: case_manifest.HarnessManifest,
+    status: str,
+    termination: str,
+    message: str,
+    rejection: str,
+) -> None:
+    """A timed-out or rejected run still reports MESA's stage counts."""
+    key = ("star", "make_planets")
+    spec = _spec(manifest, key)
+    outcome = _case_verdict.TraceRunOutcome(
+        suite=key[0],
+        case=key[1],
+        status=status,
+        termination_code=termination,
+        steps=0,
+        retries=0,
+        wall_time_sec=1.0,
+        peak_rss_gb=0.1,
+        history_path=None,
+        error_message=message,
+        strict_rejection=rejection,
+    )
+    rec = _case_verdict.evaluate_case_record(spec, {}, outcome)
+    assert rec.stage_steps == ()
+    row = case_report.record_to_dict(rec)
+    assert row["mesa_stage_steps"] == [76, 22, 112]
+    assert "stage_steps" not in row
+    assert not rec.step_count_differs
+
+
 def test_stage_deltas_align_stages_from_the_end() -> None:
     mesa = (76, 22, 112)
     full = stage_steps.stage_deltas((76, 22, 113), mesa)

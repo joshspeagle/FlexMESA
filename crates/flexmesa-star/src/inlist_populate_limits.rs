@@ -27,6 +27,31 @@ impl InlistBundle {
         ctrl.try_usize_into("controls", &mut c.max_tries_after_10_retries, "max_tries_after_10_retries", 1)?;
         ctrl.try_usize_into("controls", &mut c.max_tries_after_20_retries, "max_tries_after_20_retries", 1)?;
         ctrl.try_usize_into("controls", &mut c.solver_itermin, "solver_itermin", 0)?;
+        // Solver partials self-test (`star/defaults/controls.defaults:11525-11539`).
+        ctrl.try_f64_into("controls", &mut c.solver_test_partials_dx_0, "solver_test_partials_dx_0")?;
+        ctrl.try_i64_into("controls", &mut c.solver_test_partials_k, "solver_test_partials_k")?;
+        ctrl.try_i64_into("controls", &mut c.solver_test_partials_k_low, "solver_test_partials_k_low")?;
+        ctrl.try_i64_into("controls", &mut c.solver_test_partials_k_high, "solver_test_partials_k_high")?;
+        ctrl.try_i64_into("controls", &mut c.solver_test_partials_call_number, "solver_test_partials_call_number")?;
+        ctrl.try_i64_into("controls", &mut c.solver_test_partials_iter_number, "solver_test_partials_iter_number")?;
+        map_strs!("controls", ctrl, c, [
+            solver_test_partials_var_name, solver_test_partials_sink_name,
+            solver_test_partials_equ_name,
+        ]);
+        // `star/private/star_solver.f90:635-639` runs the self-test (and then
+        // `mesa_error`s, `star_solver.f90:675`) only when `dx_0 > 0`, `k > 0`,
+        // `solver_call_number == call_number` and `solver_iter == iter_number`.
+        // `solver_call_number` counts from 1 (`struct_burn_mix.f90:390`), so a
+        // call number below 1 never fires. Firing is not ported: fail loudly.
+        if c.solver_test_partials_dx_0 > 0.0
+            && c.solver_test_partials_k > 0
+            && c.solver_test_partials_call_number >= 1
+            && c.solver_test_partials_iter_number >= 0
+        {
+            return Err(StarError::InvalidInput(String::from(
+                "'&controls::solver_test_partials_*' selects a reachable solver partials self-test (dx_0 > 0, k > 0, call_number >= 1); the self-test is not ported (star/private/star_solver.f90:635-675)",
+            )));
+        }
         ctrl.try_usize_into(
             "controls",
             &mut c.solver_itermin_until_reduce_min_corr_coeff,

@@ -1,0 +1,48 @@
+ call star_do1_rsp_build model Teff L        2138   4565.1728388509073        5013.2872830716597
+            P(days)         growth
+  0       0.24733E+02    -0.63967E-01
+ call star_do1_rsp_build model Teff L        2155   4668.5226760955802        5180.8522214310478
+            P(days)         growth
+  0       0.23045E+02    -0.55492E-01
+ call star_do1_rsp_build model Teff L        2168   4773.9895822988192        5264.4859505737741
+            P(days)         growth
+  0       0.21253E+02    -0.42418E-01
+ call star_do1_rsp_build model Teff L        2179   4875.1026537149201        5318.0428302769833
+            P(days)         growth
+  0       0.19673E+02    -0.27407E-01
+ call star_do1_rsp_build model Teff L        2189   4979.4170844287546        5357.4429886307571
+            P(days)         growth
+  0       0.18176E+02    -0.10597E-01
+ call star_do1_rsp_build model Teff L        2198   5079.6528760317387        5387.7468237445892
+            P(days)         growth
+  0       0.16869E+02     0.51467E-02
+ call star_do1_rsp_build model Teff L        2207   5182.7352467495284        5414.7931289799835
+            P(days)         growth
+  0       0.15652E+02     0.21116E-01
+ call star_do1_rsp_build model Teff L        2216   5288.7667573921208        5439.7770273293509
+            P(days)         growth
+  0       0.14519E+02     0.36276E-01
+ call star_do1_rsp_build model Teff L        2225   5396.8562137997933        5463.0569989347969
+            P(days)         growth
+  0       0.13481E+02     0.46493E-01
+ call star_do1_rsp_build model Teff L        2234   5506.6495161906414        5484.9964883685998
+            P(days)         growth
+  0       0.12535E+02     0.48070E-01
+ call star_do1_rsp_build model Teff L        2243   5618.7054574642443        5506.1430132998967
+            P(days)         growth
+  0       0.11662E+02     0.42078E-01
+ call star_do1_rsp_build model Teff L        2251   5719.3244873469121        5524.4905989259723
+            P(days)         growth
+  0       0.10953E+02     0.32642E-01
+ call star_do1_rsp_build model Teff L        2259   5823.7118647801981        5543.8767666124522
+            P(days)         growth
+  0       0.10283E+02     0.22855E-01
+ call star_do1_rsp_build model Teff L        2267   5929.1124374537649        5563.5335935500934
+            P(days)         growth
+  0       0.96666E+01     0.98851E-02
+ call star_do1_rsp_build model Teff L        2275   6035.7671042992442        5584.4385330151472
+            P(days)         growth
+  0       0.90994E+01    -0.50722E-02
+ call star_do1_rsp_build model Teff L        2283   6141.1541872791468        5607.6494646286574
+            P(days)         growth
+  0       0.85897E+01    -0.16720E-01

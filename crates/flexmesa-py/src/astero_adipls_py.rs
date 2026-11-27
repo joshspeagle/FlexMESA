@@ -7,11 +7,23 @@
 use std::path::Path;
 
 use flexmesa_astero::adipls_support::AsteroAdipls;
+use flexmesa_astero::gyre_support::OscResult;
 use flexmesa_astero::parse_astero_search_controls;
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
 
 use crate::astero_gyre_py::PyStarModelHandle;
+
+fn osc_results_to_tuples(
+    results: Vec<OscResult>,
+) -> Vec<(i32, i32, i32, f64, f64, f64)> {
+    results
+        .into_iter()
+        .map(|r| {
+            (r.el, r.order, r.em, r.inertia, r.cyclic_freq, r.growth_rate)
+        })
+        .collect()
+}
 
 /// `run_adipls` startup and `do_adipls_get_one_el_info` for one astero run.
 #[pyclass(name = "AsteroAdipls", module = "flexmesa._rust", unsendable)]
@@ -88,12 +100,37 @@ impl PyAsteroAdipls {
                 1.0,
             )
             .map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
-        Ok(res
-            .into_iter()
-            .map(|r| {
-                (r.el, r.order, r.em, r.inertia, r.cyclic_freq, r.growth_rate)
-            })
-            .collect())
+        Ok(osc_results_to_tuples(res))
+    }
+
+    /// Evaluates `get_one_el_info` (`astero/private/astero_support.f90:55-315`)
+    /// using photospheric geometry and `sig_fac_astero_support`, returning
+    /// `(el, order, em, inertia, cyclic_freq, growth_rate)` sorted by ascending
+    /// frequency.
+    #[allow(clippy::too_many_arguments)]
+    fn get_astero_one_el_info(
+        &mut self,
+        model: &PyStarModelHandle,
+        el: usize,
+        nu1: f64,
+        nu2: f64,
+        iscan: i32,
+        delta_nu_model: f64,
+        store_for_adipls: bool,
+    ) -> PyResult<Vec<(i32, i32, i32, f64, f64, f64)>> {
+        let res = self
+            .inner
+            .get_one_el_info(
+                &model.model,
+                el,
+                nu1,
+                nu2,
+                iscan,
+                delta_nu_model,
+                store_for_adipls,
+            )
+            .map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
+        Ok(osc_results_to_tuples(res))
     }
 }
 

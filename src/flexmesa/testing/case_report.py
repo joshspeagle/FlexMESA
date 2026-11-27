@@ -15,6 +15,7 @@ from typing import Any
 
 from flexmesa.testing import (
     _case_verdict,
+    artifact_compare,
     case_manifest,
     harness_runner,
     history_compare,
@@ -206,9 +207,12 @@ def record_to_dict(rec: harness_runner.CaseHarnessRecord) -> dict[str, Any]:
         ),
         "error_message": rec.error_message,
     }
+    if rec.stage_steps or rec.mesa_stage_steps:
+        # MESA's counts do not depend on how FlexMESA's run ended, so a row
+        # whose run timed out, was rejected or errored still carries them.
+        out["mesa_stage_steps"] = list(rec.mesa_stage_steps)
     if rec.stage_steps:
         out["stage_steps"] = list(rec.stage_steps)
-        out["mesa_stage_steps"] = list(rec.mesa_stage_steps)
         out["stage_step_deltas"] = [d.delta for d in rec.stage_step_deltas]
         out["step_count_differs"] = rec.step_count_differs
     if rec.component_comparisons:
@@ -218,6 +222,10 @@ def record_to_dict(rec: harness_runner.CaseHarnessRecord) -> dict[str, Any]:
         }
     if rec.has_component_error:
         out["has_component_error"] = True
+    if rec.artifact_comparison is not None:
+        out["artifact_comparison"] = artifact_compare.comparison_to_dict(
+            rec.artifact_comparison
+        )
     return out
 
 
@@ -1084,6 +1092,7 @@ def records_from_stored_rows(
             if isinstance(raw_comp, dict)
             else None
         )
+        raw_art = stored.get("artifact_comparison")
         raw_ccomps = stored.get("component_comparisons")
         ccomps = (
             {
@@ -1108,6 +1117,11 @@ def records_from_stored_rows(
                 ),
                 precomputed_mesa_stats=pre_mesa,
                 enforce_step_counts=enforce_step_counts,
+                artifact_comparison=(
+                    artifact_compare.comparison_from_dict(raw_art)
+                    if isinstance(raw_art, dict)
+                    else None
+                ),
             )
         )
     return records

@@ -125,7 +125,7 @@ fn write_synthetic_colors_fixture(dir: &Path) {
 }
 
 #[test]
-fn test_colors_defaults_and_schema_inventory_parity() {
+fn test_colors_defaults_and_schema_inventory() {
     assert!(!is_known_upstream_only_section("colors"));
     let d = ColorsControls::default();
     assert!(!d.use_colors);
@@ -390,7 +390,7 @@ fn test_colors_ab_st_and_flat_csv_export() {
 }
 
 #[test]
-fn test_builtin_solar_johnson_parity() {
+fn test_builtin_solar_johnson_history_columns() {
     let cc = ColorsControls {
         use_colors: true,
         ..ColorsControls::default()

@@ -1,15 +1,18 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-//! Invariant tests for `star_plus_point_mass` and
-//! `star_plus_point_mass_explicit_mdot` allowlisted binary physics (`#446`).
+//! Invariant and MESA `26.4.1` oracle tests for `star_plus_point_mass` and
+//! `star_plus_point_mass_explicit_mdot` allowlisted binary physics (`#446`,
+//! `#594`).
 //!
 //! Verifies that optically thin RLOF rates (`eval_ritter_mdot_thin`,
 //! `eval_ritter_mdot_eccentric`, `eval_arras_mdot_thin`) evaluate
 //! `exp(exponent)` verbatim to `binary/private/binary_mdot.f90` without the
 //! artificial `-100.0` sub-threshold cutoff or `+60.0`/`+80.0` upper caps,
-//! and pins orbital/gravitational-wave/Roche-lobe invariants at MESA `26.4.1`
-//! `star_plus_point_mass` model 100.
+//! and compares orbital/gravitational-wave/Roche-lobe primitives against row
+//! `100` of the committed MESA `26.4.1` `star_plus_point_mass.data` history.
 
 #![forbid(unsafe_code)]
+
+use std::path::Path;
 
 use flexmesa_binary::{
     binary_pick_next_timestep, eval_arras_mdot_thin, eval_j_orb, eval_jdot_gr,
@@ -21,6 +24,7 @@ use flexmesa_const::{
     CLIGHT, KERG, MP, MSUN, ONE_THIRD, PI, RSUN, SECDAY, SECYER, STANDARD_CGRAV,
 };
 use flexmesa_math::{exp, log10, pow, with_numerics_mode, NumericsMode};
+use flexmesa_star::{read_mesa_log_file, MesaHeaderValue};
 
 #[test]
 fn eval_ritter_mdot_thin_evaluates_deep_sub_rlof_and_overflow_without_clamps() {
@@ -210,19 +214,58 @@ fn eval_arras_mdot_thin_matches_upstream_without_exponent_cap() {
     });
 }
 
+fn load_star_plus_point_mass_model_100() -> ([f64; 5], [f64; 4]) {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join(
+        "../../benchmarks/history_harness/reference_histories/binary/\
+         star_plus_point_mass.data",
+    );
+    let tbl = read_mesa_log_file(&path)
+        .expect("read MESA 26.4.1 star_plus_point_mass reference history");
+    assert_eq!(
+        tbl.header_value("version_number"),
+        Some(&MesaHeaderValue::Text(String::from("r26.4.1")))
+    );
+    assert_eq!(
+        tbl.header_value("compiler"),
+        Some(&MesaHeaderValue::Text(String::from("gfortran")))
+    );
+    assert_eq!(
+        tbl.header_value("build"),
+        Some(&MesaHeaderValue::Text(String::from("15.2.0")))
+    );
+    let idx = tbl
+        .column("model_number")
+        .expect("model_number column")
+        .iter()
+        .position(|&m| (m - 100.0).abs() < 0.5)
+        .expect("model 100 row");
+    let col = |name: &str| -> f64 {
+        tbl.column(name)
+            .unwrap_or_else(|| panic!("missing column {name}"))[idx]
+    };
+    (
+        [
+            col("star_1_mass") * MSUN,
+            col("star_2_mass") * MSUN,
+            col("period_days") * SECDAY,
+            col("binary_separation") * RSUN,
+            col("rl_1") * RSUN,
+        ],
+        [
+            col("rl_2") * RSUN,
+            col("J_orb"),
+            col("jdot_gr"),
+            col("rl_relative_overflow_1"),
+        ],
+    )
+}
+
 #[test]
 fn star_plus_point_mass_model_100_binary_primitives_match_mesa_26_4_1() {
     with_numerics_mode(NumericsMode::Strict, || {
-        // MESA 26.4.1 `binary/star_plus_point_mass` `binary_history.data` model 100.
-        let m1 = 4.999_996_518_448_367 * MSUN;
-        let m2 = 1.000_000_348_155_163_4e1 * MSUN;
-        let period_sec = 9.940_122_515_806_085e-1 * SECDAY;
-        let sep_ref = 1.033_703_615_482_002_3e1 * RSUN;
-        let rl1_ref = 3.315_997_526_825_342 * RSUN;
-        let rl2_ref = 4.548_340_672_954_489 * RSUN;
-        let j_orb_ref = 2.507_811_966_037_817_2e53_f64;
-        let jdot_gr_ref = -4.343_937_364_961_423_4e35_f64;
-        let gap1_ref = -3.934_319_250_341_292e-3_f64;
+        let (masses_orb, rl_and_j) = load_star_plus_point_mass_model_100();
+        let [m1, m2, period_sec, sep_ref, rl1_ref] = masses_orb;
+        let [rl2_ref, j_orb_ref, jdot_gr_ref, gap1_ref] = rl_and_j;
 
         let sep = separation_from_period(m1, m2, period_sec);
         let period_from_sep = period_from_separation(m1, m2, sep_ref);

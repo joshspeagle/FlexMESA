@@ -52,3 +52,42 @@ The committed result is in `results/astero_gyre_flexmesa_vs_mesa.tsv`. Through m
 - every mode's frequency agrees to 2e-12 relative.
 
 After the meshes diverge near model 400 (point counts differ by 1 or 2), frequencies agree to 1e-4. None are bit-identical, because the star states are not: the first-divergence report (`flexmesa trace --compare`) finds the first difference at model 1, `eps_nuc` by 1 ULP in one zone. The final check passes, as in MESA: FlexMESA finds the `n_pg = 4` mode at 379.07 µHz, MESA at 379.05 µHz, and the target is 375 µHz within 3%.
+
+## Live-Run Comparison for Other Cases (`#612`)
+
+`compare_pulse_live_run.py` generalises the comparison above to any `star` or `astero` case whose extras make oscillation calls. It runs the case through the in-process trace entry point (strict mode, the manifest's extras factory) with a recording subclass of the case's own extras handler, which records and changes nothing. Each call is matched with the reference call at the same model number, and each mode on `(l, m, n_pg)`. Per quantity it reports the values compared, the bit-identical count and the maximum relative difference, and it lists calls or modes present on one side only. Quantities the extras do not expose are reported as not compared (`GyreInMesaStarExtras` and `RspGyreExtras` expose frequency and growth rate only, not inertia).
+
+```bash
+python benchmarks/fortran_mesa/gyre_pulse_data/compare_pulse_live_run.py \
+    --suite star --case gyre_in_mesa_rsg \
+    --histories /path/to/mesa_histories --work /path/to/scratch \
+    --out benchmarks/fortran_mesa/gyre_pulse_data/results/star_gyre_in_mesa_rsg_flexmesa_vs_mesa.tsv
+```
+
+References are MESA `26.4.1` runs in the `mesa_histories` bundle (gfortran 15.2.0, SDK `x86_64-linux-26.6.1`). Result files, one per case, are in `results/`; their headers carry the command and the engine commit.
+
+| Case | Calls | Modes (freq) | Frequency bit-identical, max rel. | Growth rate bit-identical, max rel. | Inertia | One-sided |
+| :--- | ---: | ---: | :--- | :--- | :--- | :--- |
+| `star/gyre_in_mesa_rsg` | 10 | 50 | 50, 0 | 50, 0 | not exposed | none |
+| `star/gyre_in_mesa_spb` | 51 | 511 | 511, 0 | 511, 0 | not exposed | none |
+| `star/gyre_in_mesa_bcep` | 54 | 192 | 192, 0 | 192, 0 | not exposed | none |
+| `star/gyre_in_mesa_ms` | 61 | 244 | 244, 0 | 244, 0 | not exposed | none |
+| `star/gyre_in_mesa_envelope` | 5 | 18 | 0, 9.6e-13 | 0, 3.0e-11 | not exposed | 1 mode (`n_pg = 4` at model 939, FlexMESA only) |
+| `star/rsp_gyre` | 1 | 4 | 0, 3.6e-14 | 0, 1.2e-11 | not exposed | none |
+| `astero/astero_adipls` | 10 | 92 | 92, 0 | 92, 0 | 92 of 92, 0 | none |
+| `astero/surface_effects` | 1 | 110 | 110, 0 | 110, 0 | 110 of 110, 0 | none |
+
+Observations from the files:
+
+- In `gyre_in_mesa_envelope` no frequency is bit-identical, with differences from 8e-15 to 9.6e-13. At model 939 FlexMESA returns an `n_pg = 4` mode that MESA's call does not.
+- In `rsp_gyre` GYRE is called once (model 1, at the model build), and the run takes 6215 steps and ends at its `extras_finish_step` termination.
+- `surface_effects` makes one ADIPLS pass (`l = 0..3`, 110 modes, MESA's tap shows one call at model 954). The case loads a model saved at model 953 and takes one step (`max_model_number = 0`), so the star state at the call is MESA's loaded model plus one FlexMESA step, not an evolution from the zero-age model. Three `l = 0` modes carry the label `n_pg = 32` and three `l = 2` modes carry `n_pg = 31` in MESA's own output; they are matched by repeat index. Reference files record `growth_rate_rad_s` as 0 for ADIPLS.
+- Whether the star states are bit-identical at each call was not measured here. The comparison covers GYRE's or ADIPLS's output only.
+
+### Code Path of Each Case's Oscillation Calls
+
+- **`gyre_in_mesa_*` (five star cases).** `GyreInMesaStarExtras` (`tests/case_extras/star_atm_pulse.py:184,217,229`) calls `_rust.GyreMesa(...)`, `set_model` and `get_modes`. These go to `crates/flexmesa-py/src/gyre_mesa_py.rs:115,146`, which call `flexmesa_star::pulse_gyre_data::star_get_pulse_data_gyre` (`gyre_mesa_py.rs:123`, a port of `get_gyre_data`, not a solver) and `flexmesa_gyre::mesa::GyreMesa::set_model`/`get_modes` (`crates/flexmesa-gyre/src/mesa.rs:95,126`). `flexmesa-gyre` does not depend on `flexmesa-star` (`crates/flexmesa-gyre/Cargo.toml`), so none of `pulse_bvp`, `pulse_bvp_recon`, `pulse_modes`, `scan_star_bvp_eigenmodes` or `eval_linear_oscillation_modes` is reachable from it. There is no fallback: an unsupported option returns `GyreError::Unported`, which reaches Python as `RuntimeError`.
+- **`rsp_gyre`.** `RspGyreExtras.other_rsp_linear_analysis` (`tests/case_extras/rsp_extras.py:169-174`) uses the same `GyreMesa` calls (`get_modes_full`, `gyre_mesa_py.rs:159`). The engine reaches it through `crates/flexmesa-py/src/extras_py.rs:2846`; with `use_other_rsp_linear_analysis` set and no hook result, the driver returns an error (`crates/flexmesa-star/src/rsp_driver.rs:466`), not a fallback to another solver. The path is the same as above.
+- **`astero_adipls`.** `AsteroAdiplsExtras` (`tests/case_extras/astero_extras.py:481,495`) calls `_rust.AsteroAdipls` and `get_one_el_info` (`crates/flexmesa-py/src/astero_adipls_py.rs:64`), then `AsteroAdipls::do_adipls_get_one_el_info` (`crates/flexmesa-astero/src/adipls_support.rs:381`), `run_adipls_one_el` (`:416`) and `flexmesa_adipls` `run_call_with_hooks` (`:531`). `flexmesa-adipls` depends only on `flexmesa-const` and `flexmesa-math`. The case sets `astero_just_call_my_extras_check_model`, so the astero search driver is not run (`crates/flexmesa-astero/src/e2e.rs:245`).
+- **Where the in-house solver is still reachable.** `scan_star_bvp_eigenmodes` is called only from the silent fallback in `crates/flexmesa-astero/src/sample_eval.rs:1093-1136`, which belongs to the astero search path (`search_driver.rs`) and not to the five cases above. `eval_linear_oscillation_modes` is exposed as `star_eval_linear_oscillation_modes` (`crates/flexmesa-py/src/star_e2e_py.rs:411-417`) and used by `tests/test_e2e_4_tier4.py`. `solve_bvp_eigenmodes` is exposed as `star_solve_gyre_mesa_modes_full` (`crates/flexmesa-py/src/extras_py.rs:408`), which no case extras or test calls. None of these is on the path of a case listed in the table.
+- **`astero/surface_effects`.** `SurfaceEffectsExtras` (`tests/case_extras/astero_extras.py:660`) calls `_rust.AsteroAdipls.get_astero_one_el_info` (`crates/flexmesa-py/src/astero_adipls_py.rs:111`), then `AsteroAdipls::get_one_el_info` (`crates/flexmesa-astero/src/adipls_support.rs:332`), `run_adipls_one_el` and `flexmesa_adipls`, the same ADIPLS port as `astero_adipls`. Mode matching is `astero_match_modes_by_degree` (`crates/flexmesa-astero/src/ratios_chi2.rs:10`, no solver call) and the surface corrections are `astero_eval_surface_correction` (`crates/flexmesa-astero/src/surface_corr.rs`, which imports only `flexmesa_autodiff` and `flexmesa_math`). `flexmesa-astero` depends on `flexmesa-star` for the FGONG data port (`get_fgong_data`, `write_fgong_data`), which is data preparation, not an eigenmode solver. None of `scan_star_bvp_eigenmodes`, `pulse_bvp`, `pulse_bvp_recon`, `pulse_modes` or `eval_linear_oscillation_modes` is reachable: the only caller of `scan_star_bvp_eigenmodes` is the search path (`crates/flexmesa-astero/src/sample_eval.rs:1136`), which the case does not enter because it sets `astero_just_call_my_extras_check_model`. This is a reading of the source, not a runtime trace.

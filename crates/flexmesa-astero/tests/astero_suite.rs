@@ -631,3 +631,15 @@ fn test_fast_simplex_uncapped() {
 fn test_fast_newuoa_uncapped() {
     assert_uncapped_case_passes("fast_newuoa");
 }
+
+#[test]
+fn test_interpolate_l0_inertia_empty_returns_zero() {
+    assert_eq!(
+        interpolate_l0_inertia(1100.0, &[], &[]).to_bits(),
+        0.0_f64.to_bits()
+    );
+    assert_eq!(
+        interpolate_l0_inertia(1100.0, &[1000.0], &[]).to_bits(),
+        0.0_f64.to_bits()
+    );
+}

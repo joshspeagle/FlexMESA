@@ -1,0 +1,100 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# GENERATED VIA python -m flexmesa.testing.routine_gate --write-allowlist (#611).
+# routine_map entries that failed a gate check when the gate was
+# introduced. The gate allows these and nothing else, and fails
+# when an entry here stops violating, so this file only shrinks.
+
+[counts]
+routine_key = 1
+fn_item = 12
+
+[[allow]]
+check = "fn_item"
+upstream_path = "binary/private/binary_mdot.f90"
+routine = "check_implicit_rlo"
+target = "crates/flexmesa-binary/src/mdot_implicit.rs::ImplicitMdotSolver"
+detail = "ImplicitMdotSolver"
+
+[[allow]]
+check = "fn_item"
+upstream_path = "const/public/const_def.f90"
+routine = "do_const_init"
+target = "crates/flexmesa-const/src/lib.rs::PI"
+detail = "PI"
+
+[[allow]]
+check = "fn_item"
+upstream_path = "const/public/const_lib.f90"
+routine = "const_init"
+target = "crates/flexmesa-const/src/lib.rs::PI"
+detail = "PI"
+
+[[allow]]
+check = "fn_item"
+upstream_path = "neu/private/mod_neu.f90"
+routine = "set_inputs"
+target = "crates/flexmesa-neu/src/inputs.rs::NeuInputs"
+detail = "NeuInputs"
+
+[[allow]]
+check = "fn_item"
+upstream_path = "star/private/ionization_potentials.f90"
+routine = "set_ionization_potentials"
+target = "crates/flexmesa-ionization/src/potentials_data.rs::IONIZATION_POTENTIALS"
+detail = "IONIZATION_POTENTIALS"
+
+[[allow]]
+check = "fn_item"
+upstream_path = "star/private/rsp_def.f90"
+routine = "init_allocate"
+target = "crates/flexmesa-star/src/rsp_def.rs::RspState"
+detail = "RspState"
+
+[[allow]]
+check = "fn_item"
+upstream_path = "star/private/rsp_def.f90"
+routine = "init_def"
+target = "crates/flexmesa-star/src/rsp_def.rs::RspDerivedConsts"
+detail = "RspDerivedConsts"
+
+[[allow]]
+check = "fn_item"
+upstream_path = "star/private/rsp_def.f90"
+routine = "init_free"
+target = "crates/flexmesa-star/src/rsp_def.rs::RspState"
+detail = "RspState"
+
+[[allow]]
+check = "fn_item"
+upstream_path = "star/private/rsp_def.f90"
+routine = "rsp_dump_for_debug"
+target = "crates/flexmesa-star/src/rsp_def.rs::RspState"
+detail = "RspState"
+
+[[allow]]
+check = "fn_item"
+upstream_path = "star/private/rsp_def.f90"
+routine = "rsp_phase_time0"
+target = "crates/flexmesa-star/src/rsp_def.rs::RspState"
+detail = "RspState"
+
+[[allow]]
+check = "fn_item"
+upstream_path = "star/private/rsp_eval_eos_and_kap.f90"
+routine = "init_for_rsp_eos_and_kap"
+target = "crates/flexmesa-star/src/rsp_eos_kap.rs::RspChemCache"
+detail = "RspChemCache"
+
+[[allow]]
+check = "fn_item"
+upstream_path = "star/private/rsp_eval_eos_and_kap.f90"
+routine = "restart_rsp_eos_and_kap"
+target = "crates/flexmesa-star/src/rsp_eos_kap.rs::RspChemCache"
+detail = "RspChemCache"
+
+[[allow]]
+check = "routine_key"
+upstream_path = "star/private/adjust_mass.f90"
+routine = "get_xa_for_accretion"
+target = "crates/flexmesa-star/src/accretion_xa.rs::get_xa_for_accretion"
+detail = "get_xa_for_accretion"

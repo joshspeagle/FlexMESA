@@ -205,6 +205,22 @@ test_only = true
 on_demand = true
 description = "MESA 26.4.1 record/replay routine oracles (#552) for the first 2 models of 18 star cases: 770,801 cell EOS calls, 286,197 TDC calls, 334,359 MLT calls and the Get_results arguments (IEEE-754 hex), with the matching step dumps (write-statement overlay, SDK 26.6.1, gfortran 15.2.0; replay with flexmesa-replay). Opt-in: 664 MB compressed, 4.7 GB unpacked; fetch with flexmesa data fetch --bundle mesa_replay."
 
+[[bundles]]
+name = "mesa_stepdump_windows"
+archive = "mesa-stepdump-windows-v1.tar.zst"
+kind = "tar_zst"
+bundle_root = "data"
+target_relpath = "mesa_stepdump_windows"
+manifest_file = "bundle_hashes/mesa_stepdump_windows.sha256.tsv"
+sentinel_relpaths = ["mesa_stepdump_windows/PROVENANCE.json", "mesa_stepdump_windows/windows.toml", "mesa_stepdump_windows/ns_h_s2_k1_m90_n12/star/ns_h.stepdump"]
+archive_sha256 = "d34be3c8c45100871b24119fa1e529d0b62091255ac734eb4a88bf11e02cd7e0"
+archive_size_bytes = 55500998
+unpacked_sha256 = ""
+unpacked_size_bytes = 243160942
+test_only = true
+on_demand = true
+description = "MESA 26.4.1 mid-run solver step-dump windows (#608): 31 windows (stage, occurrence, first model, steps) of 15 cases, same records as mesa_stepdumps (write-statement overlay, SDK 26.6.1, gfortran 15.2.0). Opt-in; fetch with flexmesa data fetch --bundle mesa_stepdump_windows."
+
 [embedded_ionization]
 name = "ion_tables_full"
 format = "FMION001"

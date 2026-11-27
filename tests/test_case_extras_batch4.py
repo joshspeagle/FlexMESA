@@ -6,8 +6,10 @@ graduation).
 
 from __future__ import annotations
 
+import csv
 import pathlib
 import shutil
+import struct
 import tomllib
 from typing import Any
 
@@ -15,6 +17,7 @@ import numpy as np
 import pytest
 
 from flexmesa import _rust, constants
+from flexmesa.data import fetch
 from flexmesa.testing import harness_runner
 from tests import case_extras
 from tests.case_extras import astero_extras, binary_extras, star_extras
@@ -758,3 +761,347 @@ def test_astero_adipls_runs_strict_live_through_pyo3_adapter(
         extras_factory="tests.case_extras:resolve_case_extras",
     )
     assert int(rep["total_steps"]) == 50
+
+
+def _load_adipls_mode_oracle(
+    tsv_path: pathlib.Path,
+) -> list[tuple[int, int, int, float, float]]:
+    """Return `(el, order, em, cyclic_freq_uhz, inertia)` from an oracle TSV."""
+    rows: list[tuple[int, int, int, float, float]] = []
+    for line in tsv_path.read_text(encoding="utf-8").splitlines():
+        if not line.startswith("MODE\t"):
+            continue
+        parts = line.split("\t")
+        el = int(parts[3])
+        order = int(parts[4])
+        em = int(parts[5])
+        freq = struct.unpack(">d", bytes.fromhex(parts[6]))[0]
+        inertia = struct.unpack(">d", bytes.fromhex(parts[7]))[0]
+        rows.append((el, order, em, freq, inertia))
+    return rows
+
+
+def _load_pulse_tap_mode_oracle(
+    tsv_path: pathlib.Path,
+) -> dict[int, list[tuple[int, float, float]]]:
+    """Return `{el: [(n_pg, freq_uhz, inertia), ...]}` from `modes.tsv`."""
+    assert tsv_path.is_file(), f"Missing MESA pulse_tap oracle: {tsv_path}"
+    by_el: dict[int, list[tuple[int, float, float]]] = {}
+    with tsv_path.open("r", encoding="utf-8", newline="") as handle:
+        reader = csv.DictReader(handle, delimiter="\t")
+        for row in reader:
+            el = int(row["l"])
+            order = int(row["n_pg"])
+            freq = struct.unpack(
+                ">d", bytes.fromhex(row["freq_uHz_bits"].removeprefix("0x"))
+            )[0]
+            inertia = struct.unpack(
+                ">d", bytes.fromhex(row["inertia_bits"].removeprefix("0x"))
+            )[0]
+            by_el.setdefault(el, []).append((order, freq, inertia))
+    return by_el
+
+
+def test_surface_effects_resolution_relocation_and_ledger(
+    tmp_path: pathlib.Path,
+) -> None:
+    """`surface_effects` resolves regardless of dir name and ledger status."""
+    orig = harness_runner.resolve_case_dir("astero", "surface_effects")
+    matched = case_extras.match_case_extras("astero", orig)
+    assert isinstance(matched, astero_extras.SurfaceEffectsExtras)
+    resolved = case_extras.resolve_case_extras("astero", orig)
+    assert isinstance(resolved, astero_extras.SurfaceEffectsExtras)
+    assert not hasattr(resolved, "set_param")
+    assert getattr(resolved, "unported_routines", ()) == ()
+    assert case_extras.classify_case_extras("astero", orig) == "ported"
+
+    relocated = tmp_path / "renamed_surface_effects_case"
+    shutil.copytree(orig, relocated)
+    assert isinstance(
+        case_extras.resolve_case_extras("astero", relocated),
+        astero_extras.SurfaceEffectsExtras,
+    )
+
+    repo_root = pathlib.Path(__file__).resolve().parents[1]
+    ledger_path = repo_root / "benchmarks/history_harness/extras_status.toml"
+    ledger = tomllib.loads(ledger_path.read_text(encoding="utf-8"))
+    entries = [
+        row
+        for row in ledger["cases"]
+        if row["suite"] == "astero" and row["case"] == "surface_effects"
+    ]
+    assert len(entries) == 1
+    assert entries[0]["status"] == "ported"
+    assert "issue" not in entries[0]
+
+
+def test_surface_effects_pyo3_bindings_and_error_guards(
+    zams_star_model: _rust.RustStarModel, tmp_path: pathlib.Path
+) -> None:
+    """Test `astero_parse_search_controls`, `astero_interpolate_l0_inertia`,
+    `get_astero_one_el_info`, and `SurfaceEffectsExtras` error guards.
+    """
+    orig = harness_runner.resolve_case_dir("astero", "surface_effects")
+    ctrl = _rust.astero_parse_search_controls(str(orig))
+    assert ctrl["oscillation_code"] == "adipls"
+    assert ctrl["delta_nu"] == pytest.approx(135.54)
+    assert ctrl["nu_max"] == pytest.approx(3090.0)
+    assert ctrl["correction_scheme"] == "kjeldsen"
+    assert ctrl["correction_b"] == pytest.approx(4.9)
+    assert ctrl["correction_factor"] == pytest.approx(1.0)
+    assert ctrl["nu_lower_factor"] == pytest.approx(0.8)
+    assert ctrl["nu_upper_factor"] == pytest.approx(1.2)
+    assert ctrl["iscan_factor"] == [15.0, 15.0, 15.0, 15.0]
+    assert ctrl["nl"] == [23, 21, 20, 17]
+    assert ctrl["l0_n_obs"] == [float(n) for n in range(6, 29)]
+    assert [len(v) for v in ctrl["freq_target"]] == [23, 21, 20, 17]
+    assert [len(v) for v in ctrl["freq_sigma"]] == [23, 21, 20, 17]
+    assert ctrl["add_atmosphere"] is False
+    assert ctrl["keep_surface_point"] is False
+    assert ctrl["add_center_point"] is True
+    assert ctrl["do_redistribute_mesh"] is False
+
+    bad_dir = tmp_path / "missing_controls"
+    bad_dir.mkdir()
+    with pytest.raises((FileNotFoundError, ValueError, RuntimeError, OSError)):
+        _rust.astero_parse_search_controls(str(bad_dir))
+
+    unk_dir = tmp_path / "unknown_control"
+    unk_dir.mkdir()
+    (unk_dir / "inlist_astero_search_controls").write_text(
+        "&astero_search_controls\n  not_a_real_key_xyz = .true.\n/\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match=r"unsupported|unknown|not_a_real_key"):
+        _rust.astero_parse_search_controls(str(unk_dir), False)
+    with pytest.raises(ValueError, match=r"unsupported|unknown|not_a_real_key"):
+        _rust.astero_parse_search_controls(str(unk_dir), True)
+
+    pg_ok = tmp_path / "pgstar_valid"
+    pg_ok.mkdir()
+    (pg_ok / "inlist").write_text(
+        "&star_job\n  pgstar_flag = .true.\n/\n", encoding="utf-8"
+    )
+    (pg_ok / "inlist_astero_search_controls").write_text(
+        "&astero_search_controls\n"
+        "  oscillation_code = 'adipls'\n"
+        "/\n"
+        "&astero_pgstar_controls\n"
+        "  echelle_win_flag = .true.\n"
+        "/\n",
+        encoding="utf-8",
+    )
+    parsed_pg = _rust.astero_parse_search_controls(str(pg_ok), False)
+    assert parsed_pg["oscillation_code"] == "adipls"
+
+    pg_bad = tmp_path / "pgstar_bogus_active"
+    pg_bad.mkdir()
+    (pg_bad / "inlist").write_text(
+        "&star_job\n  pgstar_flag = .true.\n/\n", encoding="utf-8"
+    )
+    (pg_bad / "inlist_astero_search_controls").write_text(
+        "&astero_search_controls\n"
+        "  oscillation_code = 'adipls'\n"
+        "/\n"
+        "&astero_pgstar_controls\n"
+        "  bogus_astero_plot_key = 1\n"
+        "/\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match=r"bogus_astero_plot_key|unknown"):
+        _rust.astero_parse_search_controls(str(pg_bad), False)
+
+    pg_inactive = tmp_path / "pgstar_bogus_inactive"
+    pg_inactive.mkdir()
+    (pg_inactive / "inlist").write_text(
+        "&star_job\n  pgstar_flag = .false.\n/\n", encoding="utf-8"
+    )
+    (pg_inactive / "inlist_astero_search_controls").write_text(
+        "&astero_search_controls\n"
+        "  oscillation_code = 'adipls'\n"
+        "/\n"
+        "&astero_pgstar_controls\n"
+        "  bogus_astero_plot_key = 1\n"
+        "/\n",
+        encoding="utf-8",
+    )
+    assert (
+        _rust.astero_parse_search_controls(str(pg_inactive), False)[
+            "oscillation_code"
+        ]
+        == "adipls"
+    )
+    assert (
+        _rust.astero_parse_search_controls(str(orig), True)["oscillation_code"]
+        == "adipls"
+    )
+
+    l0_f = np.array([1000.0, 1200.0, 1400.0], dtype=np.float64)
+    l0_i = np.array([1.0, 3.0, 7.0], dtype=np.float64)
+    assert _rust.astero_interpolate_l0_inertia(900.0, l0_f, l0_i) == (
+        pytest.approx(1.0)
+    )
+    assert _rust.astero_interpolate_l0_inertia(1100.0, l0_f, l0_i) == (
+        pytest.approx(2.0)
+    )
+    assert _rust.astero_interpolate_l0_inertia(1500.0, l0_f, l0_i) == (
+        pytest.approx(7.0)
+    )
+    empty = np.array([], dtype=np.float64)
+    assert _rust.astero_interpolate_l0_inertia(1100.0, empty, empty) == (
+        pytest.approx(0.0)
+    )
+    with pytest.raises(ValueError, match="length"):
+        _rust.astero_interpolate_l0_inertia(
+            1100.0, l0_f, np.array([1.0, 2.0], dtype=np.float64)
+        )
+
+    snap = _rust.star_extras_snapshot(
+        zams_star_model, str(tmp_path), include_history=False
+    )
+    del snap
+    captured: dict[str, Any] = {}
+
+    class _HandleCapture:
+        wants_star_model = True
+
+        def extras_after_evolve(self, state: dict[str, Any]) -> None:
+            captured["handle"] = state["star_model"]
+
+    case_copy = tmp_path / "surface_cap"
+    shutil.copytree(orig, case_copy)
+    _rust.trace_astero_case(
+        str(case_copy),
+        str(tmp_path / "cap_out"),
+        max_steps_per_stage=1,
+        allow_unsupported_controls=False,
+        extras=_HandleCapture(),
+    )
+    handle = captured["handle"]
+    adipls = _rust.AsteroAdipls(str(orig))
+    with pytest.raises(RuntimeError, match="before store_model"):
+        adipls.get_astero_one_el_info(handle, 0, 800.0, 4000.0, 200, 0.0, False)
+    with pytest.raises(RuntimeError, match="overflows i32"):
+        adipls.get_astero_one_el_info(
+            handle, 1 << 40, 800.0, 4000.0, 200, 0.0, True
+        )
+    modes_l0 = adipls.get_astero_one_el_info(
+        handle, 0, 800.0, 4200.0, 345, 0.0, True
+    )
+    assert len(modes_l0) >= 23
+    assert all(m[0] == 0 and m[3] > 0.0 and m[4] > 0.0 for m in modes_l0)
+    assert [m[4] for m in modes_l0] == sorted(m[4] for m in modes_l0)
+    modes_l1 = adipls.get_astero_one_el_info(
+        handle, 1, 900.0, 4200.0, 315, 135.5, False
+    )
+    assert len(modes_l1) >= 21
+    assert all(m[0] == 1 for m in modes_l1)
+
+    no_targets = tmp_path / "no_targets"
+    shutil.copytree(orig, no_targets)
+    (no_targets / "src" / "targets.inc").unlink()
+    ex = astero_extras.SurfaceEffectsExtras()
+    with pytest.raises(RuntimeError, match="extras_startup"):
+        ex.extras_after_evolve(
+            {"case_dir": str(no_targets), "star_model": handle}
+        )
+    with pytest.raises(FileNotFoundError):
+        ex.extras_startup({"case_dir": str(no_targets)}, False)
+
+    bad_targets = tmp_path / "bad_targets"
+    shutil.copytree(orig, bad_targets)
+    (bad_targets / "src" / "targets.inc").write_text(
+        "target_a3 = -1.0d-18\n", encoding="utf-8"
+    )
+    with pytest.raises(ValueError, match="Missing required targets"):
+        ex.extras_startup({"case_dir": str(bad_targets)}, False)
+
+
+def test_surface_effects_live_strict_and_mesa_mode_oracles(
+    tmp_path: pathlib.Path,
+) -> None:
+    """Uncapped strict run matches `SurfaceEffectsExtras` checks and MESA 26.4.1
+    ADIPLS mode frequency oracles (`c000002`, `c000004`).
+    """
+    orig = harness_runner.resolve_case_dir("astero", "surface_effects")
+    work_case = tmp_path / "surface_effects"
+    shutil.copytree(orig, work_case)
+
+    ex = astero_extras.SurfaceEffectsExtras()
+    rep = _rust.trace_astero_case(
+        str(work_case),
+        str(tmp_path / "out_surface_effects"),
+        max_steps_per_stage=None,
+        allow_unsupported_controls=False,
+        numerics_mode="strict",
+        extras=ex,
+    )
+    assert rep["passed"] is True
+    assert rep["assertions_passed"] is True
+    assert ex.okay is True
+
+    for key in ("a3", "b3", "b1", "p0", "p1", "s0", "s1"):
+        val = ex.perfect_results[key]
+        tgt = ex.targets[f"target_{key}"]
+        assert abs(val / tgt - 1.0) < 1.0e-12
+
+    a_div_r = ex.solar_results["a_div_r"]
+    assert abs(a_div_r / ex.targets["target_a_div_r"] - 1.0) < 10.0
+    assert a_div_r < 0.0
+    assert ex.solar_results["a3"] <= 0.0
+    assert ex.solar_results["b3"] <= 0.0
+    assert ex.solar_results["p0"] <= 0.0
+    assert ex.solar_results["s0"] <= 0.0
+    assert ex.solar_results["s1"] >= 0.0
+    assert ex.delta_nu_model > 100.0
+
+    freqs_path = work_case / "freqs.dat"
+    assert ex.freqs_dat_path == freqs_path
+    assert freqs_path.is_file()
+    dat_lines = freqs_path.read_text(encoding="utf-8").splitlines()
+    assert len(dat_lines) == 82
+    assert dat_lines[0].split() == ["l", "obs", "obs_sigma", "freq", "inertia"]
+
+    repo_root = pathlib.Path(__file__).resolve().parents[1]
+    oracle_dir = repo_root / "benchmarks/fortran_mesa/adipls_oracles/data"
+    oracle_l1 = _load_adipls_mode_oracle(
+        oracle_dir / "astero__surface_effects__c000002.modes.tsv"
+    )
+    oracle_l3 = _load_adipls_mode_oracle(
+        oracle_dir / "astero__surface_effects__c000004.modes.tsv"
+    )
+    # `benchmarks/fortran_mesa/adipls_oracles/results/libm_effect.tsv` shows
+    # ADIPLS matches MESA at 0 ULP across all 110 `surface_effects` modes on the
+    # same model; `rel=1e-5` (freq) / `1e-4` (inertia) envelopes the 1-step
+    # `flexmesa-star` evolution residual before `extras_after_evolve`.
+    for el, oracle_rows in ((1, oracle_l1), (3, oracle_l3)):
+        by_order = {row[1]: (row[4], row[3]) for row in ex.raw_modes[el]}
+        assert len(oracle_rows) > 10
+        for _el, order, _em, freq_ref, inertia_ref in oracle_rows:
+            assert order in by_order
+            freq_got, inertia_got = by_order[order]
+            assert freq_got == pytest.approx(freq_ref, rel=1.0e-5)
+            assert inertia_got == pytest.approx(inertia_ref, rel=1.0e-4)
+
+    pulse_tap_path = (
+        fetch.resolve_mesa_histories_dir()
+        / "runs/astero/surface_effects/pulse_tap/modes.tsv"
+    )
+    pulse_tap = _load_pulse_tap_mode_oracle(pulse_tap_path)
+    expected_counts = {0: 31, 1: 27, 2: 28, 3: 24}
+    for el, count in expected_counts.items():
+        # ADIPLS emits multiple modes at the same `n_pg` (`l=0, n_pg=32` and
+        # `l=2, n_pg=31`), so compare sorted `(n_pg, freq, inertia)` tuples
+        # 1-to-1.
+        tap_rows = sorted(pulse_tap[el])
+        got_rows = sorted((row[1], row[4], row[3]) for row in ex.raw_modes[el])
+        assert len(tap_rows) == count
+        assert len(got_rows) == count
+        for (order_got, freq_got, inertia_got), (
+            order_ref,
+            freq_ref,
+            inertia_ref,
+        ) in zip(got_rows, tap_rows, strict=True):
+            assert order_got == order_ref
+            assert freq_got == pytest.approx(freq_ref, rel=1.0e-5)
+            assert inertia_got == pytest.approx(inertia_ref, rel=1.0e-4)

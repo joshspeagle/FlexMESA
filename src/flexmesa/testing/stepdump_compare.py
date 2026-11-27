@@ -39,6 +39,8 @@ _LAYOUT: dict[str, tuple[int, int]] = {
     "AUX": (1, 0),
     "EQU": (1, 0),
 }
+# Every record type the parser reads; any other type is skipped and counted.
+_KNOWN_TAGS = frozenset(_LAYOUT) | {"NAMES", "EQNAMES"}
 AUX_COLUMNS = (
     "Peos",
     "opacity",
@@ -109,6 +111,9 @@ class StepDump:
         eqnames: Star id -> equation names.
         nvar_hydro: Star id -> hydro variables per zone.
         blocks: Star id -> model blocks in order of appearance.
+        skipped: Record type -> count of lines of a type this parser does not
+            know (diagnostic records added by a patched solver, for
+            example). They are left out of every comparison.
     """
 
     header: list[str] = dataclasses.field(default_factory=list)
@@ -118,6 +123,7 @@ class StepDump:
     blocks: dict[int, list[ModelBlock]] = dataclasses.field(
         default_factory=dict
     )
+    skipped: dict[str, int] = dataclasses.field(default_factory=dict)
 
 
 def bits_to_float(bits: int) -> float:
@@ -193,6 +199,9 @@ def parse_dump(text: str) -> StepDump:
                 break
             continue
         if tag == "DONE":
+            continue
+        if tag not in _KNOWN_TAGS:
+            dump.skipped[tag] = dump.skipped.get(tag, 0) + 1
             continue
         seen_records = True
         if tag == "NAMES":
@@ -604,6 +613,12 @@ def format_report(
         The report text.
     """
     lines = [f"MESA dump: {h}" for h in mesa.header if h.startswith("case")]
+    for who, dump in (("MESA", mesa), ("FlexMESA", flex)):
+        if dump.skipped:
+            kinds = ", ".join(
+                f"{k} x{n}" for k, n in sorted(dump.skipped.items())
+            )
+            lines.append(f"{who} dump: skipped unknown record types: {kinds}")
     if div is None:
         n = sum(len(v) for v in mesa.blocks.values())
         lines.append(f"no difference in {n} model(s): bit-identical records")

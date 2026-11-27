@@ -719,6 +719,33 @@ pub struct StarControls {
     pub gold2_tol_max_residual3: f64,
     /// Minimum Newton iterations per hydro solve (`solver_itermin`, `2` default).
     pub solver_itermin: usize,
+    /// Finite-difference step for the solver partials self-test (`solver_test_partials_dx_0`, `-1` default; `star/defaults/controls.defaults:11525`). Inert unless the full trigger set holds (`star/private/star_solver.f90:635-639`).
+    #[serde(default = "default_solver_test_partials_neg_f64")]
+    pub solver_test_partials_dx_0: f64,
+    /// Cell index for the solver partials self-test (`solver_test_partials_k`, `-1` default; `controls.defaults:11526`).
+    #[serde(default = "default_solver_test_partials_neg_i64")]
+    pub solver_test_partials_k: i64,
+    /// First cell of the tested range (`solver_test_partials_k_low`, `-1` default; `controls.defaults:11527`).
+    #[serde(default = "default_solver_test_partials_neg_i64")]
+    pub solver_test_partials_k_low: i64,
+    /// Last cell of the tested range (`solver_test_partials_k_high`, `-1` default; `controls.defaults:11528`).
+    #[serde(default = "default_solver_test_partials_neg_i64")]
+    pub solver_test_partials_k_high: i64,
+    /// Solver call number at which the self-test fires (`solver_test_partials_call_number`, `-1` default; `controls.defaults:11538`). Never equals `solver_call_number` (counted from 1, `struct_burn_mix.f90:390`) while negative.
+    #[serde(default = "default_solver_test_partials_neg_i64")]
+    pub solver_test_partials_call_number: i64,
+    /// Solver iteration at which the self-test fires (`solver_test_partials_iter_number`, `-1` default; `controls.defaults:11539`).
+    #[serde(default = "default_solver_test_partials_neg_i64")]
+    pub solver_test_partials_iter_number: i64,
+    /// Variable name for the self-test (`solver_test_partials_var_name`, blank default; `controls.defaults:11533`). Only read by the self-test and terminal diagnostics.
+    #[serde(default)]
+    pub solver_test_partials_var_name: String,
+    /// Sink isotope name for the self-test (`solver_test_partials_sink_name`, blank default; `controls.defaults:11534`).
+    #[serde(default)]
+    pub solver_test_partials_sink_name: String,
+    /// Equation name for the self-test (`solver_test_partials_equ_name`, blank default; `controls.defaults:11535`).
+    #[serde(default)]
+    pub solver_test_partials_equ_name: String,
     /// Iteration count before reducing `min_corr_coeff` (`solver_itermin_until_reduce_min_corr_coeff`, `8` default).
     pub solver_itermin_until_reduce_min_corr_coeff: usize,
     /// Reduced `min_corr_coeff` after `solver_itermin_until_reduce_min_corr_coeff` (`solver_reduced_min_corr_coeff`, `0.1` default).
@@ -945,6 +972,14 @@ const fn default_one() -> f64 {
 
 const fn default_max_abs_eps_nuc() -> f64 {
     1.0e99
+}
+
+const fn default_solver_test_partials_neg_f64() -> f64 {
+    -1.0
+}
+
+const fn default_solver_test_partials_neg_i64() -> i64 {
+    -1
 }
 
 fn default_atm_off_table_option() -> String {

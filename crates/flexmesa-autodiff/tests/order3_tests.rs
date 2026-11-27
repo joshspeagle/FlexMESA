@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-//! Analytical oracle tests for [`flexmesa_autodiff::AutoDiffReal2VarOrder3`].
+//! Analytical identity tests for
+//! [`flexmesa_autodiff::AutoDiffReal2VarOrder3`].
 
 #![allow(clippy::similar_names)]
 
@@ -69,7 +70,7 @@ fn test_order3_polynomial_and_differentiate_operators_match_exact_partials() {
 }
 
 #[test]
-fn test_order3_transcendental_quotient_and_pow_match_analytic_oracle() {
+fn test_order3_transcendental_quotient_and_pow_match_analytic_identities() {
     // f(x, y) = exp(0.5 * x) * ln(y) / sqrt(x)
     // Test via product of exp(0.5 * x - 0.5 * ln(x)) * ln(y) versus direct
     // quotient and sqrt.

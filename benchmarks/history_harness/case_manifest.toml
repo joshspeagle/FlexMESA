@@ -303,8 +303,6 @@ case = "gyre_in_mesa_bcep"
 reference_status = "mesa_26_4_1"
 reference_path = "benchmarks/history_harness/reference_histories/star/gyre_in_mesa_bcep.data"
 required_termination = "xa_central_lower_limit"
-uses_pulsation_scaffolding = true
-scaffolding_issue = "#170"
 
 [[cases]]
 suite = "star"
@@ -321,8 +319,6 @@ case = "gyre_in_mesa_ms"
 reference_status = "mesa_26_4_1"
 reference_path = "benchmarks/history_harness/reference_histories/star/gyre_in_mesa_ms.data"
 required_termination = "xa_central_lower_limit"
-uses_pulsation_scaffolding = true
-scaffolding_issue = "#170"
 
 [[cases]]
 suite = "star"
@@ -330,8 +326,6 @@ case = "gyre_in_mesa_rsg"
 reference_status = "mesa_26_4_1"
 reference_path = "benchmarks/history_harness/reference_histories/star/gyre_in_mesa_rsg.data"
 required_termination = "max_model_number|extras_finish_step"
-uses_pulsation_scaffolding = true
-scaffolding_issue = "#170"
 
 [[cases]]
 suite = "star"
@@ -339,8 +333,6 @@ case = "gyre_in_mesa_spb"
 reference_status = "mesa_26_4_1"
 reference_path = "benchmarks/history_harness/reference_histories/star/gyre_in_mesa_spb.data"
 required_termination = "xa_central_lower_limit"
-uses_pulsation_scaffolding = true
-scaffolding_issue = "#170"
 
 [[cases]]
 suite = "star"
@@ -612,6 +604,38 @@ reference_status = "no_reference_yet"
 reference_path = ""
 required_termination = "other_rsp_build_model"
 
+# Artifact comparison (#606): the case takes 0 steps, so it has no history. The
+# hook's file is compared with the committed MESA 26.4.1 copy. Every tolerance
+# is the print precision of the upstream format statement, one unit in the last
+# printed digit, not a fitted value (to be confirmed by the project lead before
+# the case is switched to reference_status = "mesa_26_4_1_artifact"):
+#   header       1pd26.16     17 significant digits
+#   model_*      1pd20.10     11 significant digits
+#   edge, table  f20.10       1e-10 absolute
+#   stdout_*     list-directed Teff, L (17 digits); E-format P, growth (5 digits)
+# Model numbers and table offsets must be equal.
+[cases.artifact]
+file = "7B_2nd_crossing.data"
+reference = "benchmarks/history_harness/reference_artifacts/star/rsp_check_2nd_crossing/7B_2nd_crossing.data"
+parser = "rsp_instability_strip"
+required_steps = 0
+stdout_reference = "benchmarks/history_harness/reference_artifacts/star/rsp_check_2nd_crossing/models_stdout.txt"
+
+[cases.artifact.tolerances]
+header = { sig_digits = 17 }
+model_period = { sig_digits = 11 }
+model_growth = { sig_digits = 11 }
+model_teff = { sig_digits = 11 }
+model_lum = { sig_digits = 11 }
+model_age = { sig_digits = 11 }
+edge = { abs = 1e-10 }
+table_teff = { abs = 1e-10 }
+table_lum = { abs = 1e-10 }
+stdout_teff = { sig_digits = 17 }
+stdout_lum = { sig_digits = 17 }
+stdout_period = { sig_digits = 5 }
+stdout_growth = { sig_digits = 5 }
+
 [[cases]]
 suite = "star"
 case = "rsp_gyre"
@@ -641,7 +665,7 @@ suite = "star"
 case = "simplex_solar_calibration"
 reference_status = "mesa_26_4_1"
 reference_path = "benchmarks/history_harness/reference_histories/star/simplex_solar_calibration.data"
-required_termination = "max_model_number|extras_finish_step"
+required_termination = "extras_check_model"
 
 [[cases]]
 suite = "star"
@@ -820,8 +844,6 @@ case = "astero_adipls"
 reference_status = "mesa_26_4_1"
 reference_path = "benchmarks/history_harness/reference_histories/astero/astero_adipls.data"
 required_termination = "xa_central_lower_limit"
-uses_pulsation_scaffolding = true
-scaffolding_issue = "#171"
 
 [[cases]]
 suite = "astero"
@@ -846,7 +868,7 @@ case = "fast_from_file"
 reference_status = "mesa_26_4_1"
 reference_path = "thinned/astero/fast_from_file.data"
 track_reference_dir = "astero/fast_from_file"
-required_termination = "xtra1"
+required_termination = "limit_num_chi2_too_big"
 uses_pulsation_scaffolding = true
 scaffolding_issue = "#170"
 
@@ -856,7 +878,7 @@ case = "fast_newuoa"
 reference_status = "mesa_26_4_1"
 reference_path = "thinned/astero/fast_newuoa.data"
 track_reference_dir = "astero/fast_newuoa"
-required_termination = "xtra1"
+required_termination = "age_target"
 
 [[cases]]
 suite = "astero"
@@ -864,7 +886,7 @@ case = "fast_scan_grid"
 reference_status = "mesa_26_4_1"
 reference_path = "thinned/astero/fast_scan_grid.data"
 track_reference_dir = "astero/fast_scan_grid"
-required_termination = "xtra1"
+required_termination = "limit_num_chi2_too_big"
 uses_pulsation_scaffolding = true
 scaffolding_issue = "#171"
 
@@ -874,7 +896,7 @@ case = "fast_simplex"
 reference_status = "mesa_26_4_1"
 reference_path = "thinned/astero/fast_simplex.data"
 track_reference_dir = "astero/fast_simplex"
-required_termination = "xtra1"
+required_termination = "chi2_search_limit2"
 uses_pulsation_scaffolding = true
 scaffolding_issue = "#171"
 
@@ -884,5 +906,3 @@ case = "surface_effects"
 reference_status = "mesa_26_4_1"
 reference_path = "benchmarks/history_harness/reference_histories/astero/surface_effects.data"
 required_termination = "max_model_number"
-uses_pulsation_scaffolding = true
-scaffolding_issue = "#171"

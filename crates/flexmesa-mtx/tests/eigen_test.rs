@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-//! Verification tests for `flexmesa_mtx::eigen` (`DGEEV` parity across exact
+//! Residual and invariant tests for `flexmesa_mtx::eigen` (`DGEEV` across exact
 //! closed-form, companion, isolated-row/col, and $600 \times 600$ multiscale
 //! `LINA`-structured nonsymmetric eigensystems).
 
@@ -54,7 +54,7 @@ fn max_eigenpair_rel_residual(n: usize, a: &[f64], res: &EigenResult) -> f64 {
 }
 
 #[test]
-fn test_dgeev_right_2x2_companion_and_isolated_permutations_match_oracle() {
+fn test_dgeev_right_2x2_companion_and_isolated_permutations_residuals() {
     let a2 = [2.0, -5.0, 1.0, 2.0];
     let r2 = dgeev_right(2, &a2).expect("2x2 complex solve");
     assert!((r2.wr[0] - 2.0).abs() < 1.0e-14);

@@ -76,12 +76,14 @@ test -f "$REPO_ROOT/rust-toolchain.toml"
 "$RUFF_BIN" format --check --line-length 80 "$REPO_ROOT/src" "$REPO_ROOT/tests" \
   "$REPO_ROOT/scripts/docs" \
   "$REPO_ROOT/scripts/audit/diff_mesa_defaults.py" \
+  "$REPO_ROOT/scripts/audit/mesa_terminations.py" \
   "$REPO_ROOT/scripts/data/build_physics_bundles.py" \
   "$REPO_ROOT/scripts/check_strict_determinism.py" \
   "$REPO_ROOT/scripts/mesa_reference/measure_mesa_spread.py"
 "$RUFF_BIN" check "$REPO_ROOT/src" "$REPO_ROOT/tests" \
   "$REPO_ROOT/scripts/docs" \
   "$REPO_ROOT/scripts/audit/diff_mesa_defaults.py" \
+  "$REPO_ROOT/scripts/audit/mesa_terminations.py" \
   "$REPO_ROOT/scripts/data/build_physics_bundles.py" \
   "$REPO_ROOT/scripts/check_strict_determinism.py" \
   "$REPO_ROOT/scripts/mesa_reference/measure_mesa_spread.py"
@@ -89,6 +91,7 @@ test -f "$REPO_ROOT/rust-toolchain.toml"
   "$REPO_ROOT/src" "$REPO_ROOT/tests" \
   "$REPO_ROOT/scripts/docs" \
   "$REPO_ROOT/scripts/audit/diff_mesa_defaults.py" \
+  "$REPO_ROOT/scripts/audit/mesa_terminations.py" \
   "$REPO_ROOT/scripts/data/build_physics_bundles.py" \
   "$REPO_ROOT/scripts/check_strict_determinism.py" \
   "$REPO_ROOT/scripts/mesa_reference/measure_mesa_spread.py"
@@ -101,6 +104,7 @@ PYTHONPATH="$REPO_ROOT/src" "$PYTHON_BIN" -m flexmesa.testing.module_hex_gate \
 "$PYTHON_BIN" "$REPO_ROOT/scripts/docs/render_coverage_map_page.py" --repo-root "$REPO_ROOT" --check
 "$PYTHON_BIN" "$REPO_ROOT/scripts/docs/render_pgstar_coverage.py" --repo-root "$REPO_ROOT" --check
 "$PYTHON_BIN" "$REPO_ROOT/scripts/audit/render_extras_status.py" --repo-root "$REPO_ROOT" --check
+"$PYTHON_BIN" "$REPO_ROOT/scripts/audit/mesa_terminations.py" --repo-root "$REPO_ROOT" --check
 "$PYTHON_BIN" "$REPO_ROOT/scripts/docs/render_benchmark_pages.py" --repo-root "$REPO_ROOT" --check
 "$PYTHON_BIN" "$REPO_ROOT/scripts/build_docs_figures.py"
 if git -C "$REPO_ROOT" rev-parse --verify origin/main >/dev/null 2>&1; then

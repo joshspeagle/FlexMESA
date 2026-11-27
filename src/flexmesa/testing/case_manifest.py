@@ -14,11 +14,14 @@ import re
 import tomllib
 from typing import Any, Literal
 
+from flexmesa.testing import artifact_compare
+
 SuiteName = Literal["star", "binary", "astero"]
 ReferenceStatus = Literal[
     "no_reference_yet",
     "interim_0b2e6bb",
     "mesa_26_4_1",
+    "mesa_26_4_1_artifact",
 ]
 
 VALID_SUITES: tuple[str, ...] = ("star", "binary", "astero")
@@ -26,6 +29,7 @@ VALID_REFERENCE_STATUSES: tuple[str, ...] = (
     "no_reference_yet",
     "interim_0b2e6bb",
     "mesa_26_4_1",
+    "mesa_26_4_1_artifact",
 )
 _ISSUE_RE = re.compile(r"^#[1-9][0-9]*$")
 _DEFAULT_STAR_FINAL_TOLERANCES: dict[str, float] = {
@@ -115,7 +119,8 @@ class CaseManifestEntry:
         case: Upstream test-case directory name.
         reference_status: Availability and provenance of stored reference data
             (``"no_reference_yet"``, ``"interim_0b2e6bb"``, or
-            ``"mesa_26_4_1"``).
+            ``"mesa_26_4_1"``, or ``"mesa_26_4_1_artifact"`` for a case that
+            takes zero steps and is judged by its ``artifact`` table, ``#606``).
         reference_path: Repository-relative path to the stored reference file
             (empty string when ``reference_status == "no_reference_yet"``).
         required_termination: Expected upstream termination code string (may
@@ -156,6 +161,11 @@ class CaseManifestEntry:
             search cases, whose ``LOGS/history.data`` keeps only the last
             track (``#430``). Empty when the case is compared against
             ``reference_path`` alone.
+        artifact: Optional ``[cases.artifact]`` declaration for a case with
+            no history (``#606``). It is judged in place of the history
+            comparison when ``reference_status`` is
+            ``"mesa_26_4_1_artifact"``; with ``"no_reference_yet"`` the
+            comparison is reported but the verdict does not use it.
     """
 
     suite: SuiteName
@@ -176,6 +186,7 @@ class CaseManifestEntry:
     extras_issue: str = ""
     departures: tuple[DepartureSpec, ...] = ()
     track_reference_dir: str = ""
+    artifact: artifact_compare.ArtifactSpec | None = None
     component_independent_var: str = "star_age"
     component_final_tolerances: dict[str, float] = dataclasses.field(
         default_factory=lambda: dict(_DEFAULT_STAR_FINAL_TOLERANCES)
@@ -448,6 +459,27 @@ def load_case_manifest(
 
         extras_factory = str(raw.get("extras_factory", def_ext_factory)).strip()
         track_ref_dir = str(raw.get("track_reference_dir", "")).strip()
+        artifact_raw = raw.get("artifact")
+        artifact = (
+            artifact_compare.parse_spec(artifact_raw, ctx)
+            if artifact_raw is not None
+            else None
+        )
+        if ref_status == "mesa_26_4_1_artifact" and (
+            artifact is None or ref_path != artifact.reference
+        ):
+            raise ValueError(
+                f"{ctx}: status 'mesa_26_4_1_artifact' needs an artifact "
+                "table whose reference equals reference_path"
+            )
+        if artifact is not None and ref_status not in (
+            "no_reference_yet",
+            "mesa_26_4_1_artifact",
+        ):
+            raise ValueError(
+                f"{ctx}: an artifact table needs status 'no_reference_yet' "
+                "or 'mesa_26_4_1_artifact'"
+            )
         if track_ref_dir and (suite != "astero" or ref_status != "mesa_26_4_1"):
             raise ValueError(
                 f"{ctx}: track_reference_dir needs suite 'astero' and "
@@ -485,6 +517,7 @@ def load_case_manifest(
                 extras_issue=extras_ledger.get((suite, case), ("", ""))[1],
                 departures=tuple(deps),
                 track_reference_dir=track_ref_dir,
+                artifact=artifact,
                 component_independent_var=star_x,
                 component_final_tolerances=comp_ftol,
                 component_track_tolerances=comp_ttol,

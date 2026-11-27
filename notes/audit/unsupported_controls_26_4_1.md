@@ -6,9 +6,9 @@ Generated mechanically against **MESA 26.4.1** (git tag `26.4.1`, commit `c8c202
 ## Summary
 
 - **Total manifest cases scanned**: `106`
-- **Cases passing strict `#147` validation**: `97`
-- **Cases rejected by strict `#147` validation**: `9`
-- **Distinct unsupported physics/solver controls encountered**: `44`
+- **Cases passing strict `#147` validation**: `98`
+- **Cases rejected by strict `#147` validation**: `8`
+- **Distinct unsupported physics/solver controls encountered**: `34`
 - **Distinct unknown/misspelled controls encountered**: `0`
 - **Cases using headless plotting controls (`#173` / `DECISIONS #25`)**: `78` (`895` distinct keys)
 
@@ -16,10 +16,10 @@ Generated mechanically against **MESA 26.4.1** (git tag `26.4.1`, commit `c8c202
 
 | Section | Upstream `26.4.1` | Supported | Unused (`#147`) | Headless GUI (`#173`) | Terminal output (`DECISIONS #26`) | Unimplemented |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `&star_job` | 455 | 220 | 4 | 3 | 8 | 220 |
+| `&star_job` | 455 | 224 | 4 | 3 | 8 | 216 |
 | `&eos` | 102 | 91 | 0 | 0 | 9 | 2 |
 | `&kap` | 51 | 39 | 0 | 0 | 10 | 2 |
-| `&controls` | 1448 | 1236 | 15 | 0 | 19 | 178 |
+| `&controls` | 1448 | 1245 | 15 | 0 | 19 | 169 |
 | `&binary_job` | 37 | 22 | 0 | 1 | 1 | 13 |
 | `&binary_controls` | 176 | 124 | 0 | 0 | 2 | 50 |
 | `&astero_search_controls` | 153 | 153 | 0 | 0 | 0 | 0 |
@@ -49,14 +49,6 @@ Generated mechanically against **MESA 26.4.1** (git tag `26.4.1`, commit `c8c202
 | `&controls::rti_smooth_fraction` | `unimplemented` | 1 | `star/ccsn_IIp` |
 | `&controls::rti_smooth_iterations` | `unimplemented` | 1 | `star/ccsn_IIp` |
 | `&controls::rti_smooth_mass` | `unimplemented` | 1 | `star/ccsn_IIp` |
-| `&controls::solver_test_partials_dx_0` | `unimplemented` | 1 | `star/ns_he` |
-| `&controls::solver_test_partials_equ_name` | `unimplemented` | 1 | `star/ns_he` |
-| `&controls::solver_test_partials_iter_number` | `unimplemented` | 1 | `star/ns_he` |
-| `&controls::solver_test_partials_k` | `unimplemented` | 1 | `star/ns_he` |
-| `&controls::solver_test_partials_k_high` | `unimplemented` | 1 | `star/ns_he` |
-| `&controls::solver_test_partials_k_low` | `unimplemented` | 1 | `star/ns_he` |
-| `&controls::solver_test_partials_sink_name` | `unimplemented` | 1 | `star/ns_he` |
-| `&controls::solver_test_partials_var_name` | `unimplemented` | 1 | `star/ns_he` |
 | `&controls::use_other_eval_fp_ft` | `unimplemented` | 1 | `star/ppisn` |
 | `&controls::use_other_kap` | `unused` | 1 | `star/ppisn` |
 | `&controls::use_other_surface_pt` | `unused` | 1 | `star/conductive_flame` |
@@ -65,10 +57,8 @@ Generated mechanically against **MESA 26.4.1** (git tag `26.4.1`, commit `c8c202
 | `&star_job::fallback_check_total_energy` | `unimplemented` | 1 | `star/ccsn_IIp` |
 | `&star_job::rate_cache_suffix` | `unimplemented` | 1 | `star/custom_rates` |
 | `&star_job::rate_tables_dir` | `unimplemented` | 1 | `star/custom_rates` |
-| `&star_job::remove_center_set_zero_v_center` | `unimplemented` | 1 | `star/ccsn_IIp` |
 | `&star_job::remove_fallback_at_each_step` | `unimplemented` | 1 | `star/ccsn_IIp` |
 | `&star_job::remove_fallback_speed_limit` | `unimplemented` | 1 | `star/ccsn_IIp` |
-| `&star_job::remove_initial_center_by_entropy` | `unimplemented` | 1 | `star/ccsn_IIp` |
 | `&star_job::special_weak_states_file` | `unimplemented` | 1 | `star/wd_aic` |
 | `&star_job::special_weak_transitions_file` | `unimplemented` | 1 | `star/wd_aic` |
 | `&star_job::use_special_weak_rates` | `unimplemented` | 1 | `star/wd_aic` |
@@ -189,7 +179,7 @@ Per `DECISIONS #25` (matching upstream `USE_PGSTAR = NO`), keys in `&pgstar`, `&
 | `star` | `c13_pocket` | `pass` | 0 | 0 | 100 |
 | `star` | `carbon_kh` | `pass` | 0 | 0 | 81 |
 | `star` | `cburn_inward` | `pass` | 0 | 0 | 66 |
-| `star` | `ccsn_IIp` | `fail_unsupported` | 16 | 0 | 100 |
+| `star` | `ccsn_IIp` | `fail_unsupported` | 14 | 0 | 100 |
 | `star` | `check_pulse_atm` | `pass` | 0 | 0 | 0 |
 | `star` | `check_redo` | `pass` | 0 | 0 | 3 |
 | `star` | `conductive_flame` | `fail_unsupported` | 1 | 0 | 109 |
@@ -228,7 +218,7 @@ Per `DECISIONS #25` (matching upstream `USE_PGSTAR = NO`), keys in `&pgstar`, `&
 | `star` | `make_zams_ultra_high_mass` | `pass` | 0 | 0 | 0 |
 | `star` | `ns_c` | `pass` | 0 | 0 | 254 |
 | `star` | `ns_h` | `pass` | 0 | 0 | 58 |
-| `star` | `ns_he` | `fail_unsupported` | 8 | 0 | 64 |
+| `star` | `ns_he` | `pass` | 0 | 0 | 64 |
 | `star` | `other_physics_hooks` | `pass` | 0 | 0 | 0 |
 | `star` | `pisn` | `pass` | 0 | 0 | 288 |
 | `star` | `ppisn` | `fail_unsupported` | 6 | 0 | 76 |

@@ -19,6 +19,7 @@ from typing import Any
 from flexmesa import _dispatch
 from flexmesa.data import fetch
 from flexmesa.testing import (
+    artifact_compare,
     baseline_regression,
     case_manifest,
     case_report,
@@ -921,6 +922,10 @@ def _execute_one_entry(
     )
     out_dir = work_root / entry.suite / entry.case
     eff_extras_factory = extras_factory or entry.extras_factory or None
+    if entry.artifact is not None:
+        # A file left by an earlier run must not stand in for this run's.
+        (case_dir / entry.artifact.file).unlink(missing_ok=True)
+        (out_dir / entry.artifact.file).unlink(missing_ok=True)
     outcome = harness_runner.run_case_with_diagnostic(
         entry.suite,
         case_dir,
@@ -941,7 +946,34 @@ def _execute_one_entry(
         max_steps=max_steps,
         root_dir=base_dir,
         enforce_step_counts=enforce_step_counts,
+        artifact_comparison=_compare_run_artifact(
+            entry, outcome, [case_dir, out_dir], base_dir
+        ),
     )
+
+
+def _compare_run_artifact(
+    entry: case_manifest.CaseManifestEntry,
+    outcome: harness_runner.TraceRunOutcome,
+    run_dirs: list[pathlib.Path],
+    base_dir: pathlib.Path | None,
+) -> artifact_compare.ArtifactComparison | None:
+    """Compare the run's artifact with its `MESA` reference (``#606``).
+
+    Returns ``None`` when the case declares no artifact. A run that did not
+    finish (status other than ``ok``) is compared too, so a partial file is
+    reported as differing rather than ignored.
+    """
+    if entry.artifact is None:
+        return None
+    roots = [case_manifest.repo_root()]
+    if base_dir is not None:
+        roots.insert(0, base_dir)
+    root = next(
+        (r for r in roots if (r / entry.artifact.reference).is_file()),
+        roots[-1],
+    )
+    return artifact_compare.compare_files(entry.artifact, root, run_dirs)
 
 
 def _append_progress(

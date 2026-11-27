@@ -208,6 +208,39 @@ def test_python_inlist_and_runner_loud_failures_and_opt_out() -> None:
             )
 
 
+def test_parse_inlist_bundle_exposes_remove_center_entropy_keys(
+    tmp_path: pathlib.Path,
+) -> None:
+    """Verify `star.parse_inlist_bundle` exposes the 4 entropy-cut keys."""
+    inlist_default = tmp_path / "inlist_default"
+    inlist_default.write_text(
+        "&controls\n  initial_mass = 1.0\n/\n",
+        encoding="utf-8",
+    )
+    default_bundle = star.parse_inlist_bundle(str(inlist_default))
+    assert default_bundle["remove_initial_center_by_entropy"] == 0.0
+    assert default_bundle["remove_center_by_entropy"] == 0.0
+    assert default_bundle["remove_center_set_zero_v_center"] is False
+    assert default_bundle["remove_center_adjust_L_center"] is True
+
+    inlist_custom = tmp_path / "inlist_custom"
+    inlist_custom.write_text(
+        "&star_job\n"
+        "  remove_initial_center_by_entropy = 4.0\n"
+        "  remove_center_by_entropy = 3.5\n"
+        "  remove_center_set_zero_v_center = .true.\n"
+        "  remove_center_adjust_L_center = .false.\n"
+        "/\n"
+        "&controls\n  initial_mass = 1.0\n/\n",
+        encoding="utf-8",
+    )
+    custom_bundle = star.parse_inlist_bundle(str(inlist_custom))
+    assert custom_bundle["remove_initial_center_by_entropy"] == 4.0
+    assert custom_bundle["remove_center_by_entropy"] == 3.5
+    assert custom_bundle["remove_center_set_zero_v_center"] is True
+    assert custom_bundle["remove_center_adjust_L_center"] is False
+
+
 def test_extras_missing_hooks_callback_errors_and_redo_fail_loudly(
     tmp_path: pathlib.Path,
 ) -> None:

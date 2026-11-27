@@ -41,7 +41,7 @@ const BINARY_CASES: [&str; 8] = [
     "wind_fed_bhhmxb",
 ];
 
-/// Exact Peters (1964) GW separation oracle
+/// Exact Peters (1964) GW separation solution
 /// (`binary/test_suite/jdot_gr_check/src/run_binary_extras.f90:99-120`).
 fn eval_gr_expected_separation_rsun(
     a0_rsun: f64,
@@ -59,7 +59,7 @@ fn eval_gr_expected_separation_rsun(
     pow(a4, 0.25) / RSUN
 }
 
-/// Exact Tauris & van den Heuvel (2006) non-conservative separation oracle
+/// Exact Tauris & van den Heuvel (2006) non-conservative separation solution
 /// (`binary/test_suite/jdot_ml_check/src/run_binary_extras.f90:99-132`).
 fn eval_tauris_vdh_expected_separation_rsun(
     a0_rsun: f64,
@@ -209,7 +209,7 @@ fn species_frac(
         .map_or(fallback, |j| star.cell_xa(k)[j])
 }
 
-trait TestOracleExtras: BinaryExtras {
+trait TestCaseExtras: BinaryExtras {
     fn max_rel_err(&self) -> f64 {
         0.0
     }
@@ -254,7 +254,7 @@ impl BinaryExtras for JdotGrCheckExtras {
     }
 }
 
-impl TestOracleExtras for JdotGrCheckExtras {
+impl TestCaseExtras for JdotGrCheckExtras {
     fn max_rel_err(&self) -> f64 {
         self.max_rel_err
     }
@@ -295,7 +295,7 @@ impl BinaryExtras for JdotMlCheckExtras {
     }
 }
 
-impl TestOracleExtras for JdotMlCheckExtras {
+impl TestCaseExtras for JdotMlCheckExtras {
     fn max_rel_err(&self) -> f64 {
         self.max_rel_err
     }
@@ -327,7 +327,7 @@ impl BinaryExtras for JdotLsCheckExtras {
     }
 }
 
-impl TestOracleExtras for JdotLsCheckExtras {
+impl TestCaseExtras for JdotLsCheckExtras {
     fn max_rel_err(&self) -> f64 {
         self.max_rel_err
     }
@@ -386,7 +386,7 @@ impl BinaryExtras for WindFedBhHmxbExtras {
     }
 }
 
-impl TestOracleExtras for WindFedBhHmxbExtras {
+impl TestCaseExtras for WindFedBhHmxbExtras {
     fn max_rel_err(&self) -> f64 {
         self.max_rel_err
     }
@@ -415,7 +415,7 @@ impl BinaryExtras for PointMassEddExtras {
     }
 }
 
-impl TestOracleExtras for PointMassEddExtras {
+impl TestCaseExtras for PointMassEddExtras {
     fn failed(&self) -> bool {
         self.failed_mid_run
     }
@@ -561,15 +561,15 @@ impl BinaryExtras for DoubleBhExtras {
     }
 }
 
-impl TestOracleExtras for DoubleBhExtras {
+impl TestCaseExtras for DoubleBhExtras {
     fn failed(&self) -> bool {
         self.failed_mid_run || self.max_qhe_diff > 0.2
     }
 }
 
-struct DefaultOracleExtras;
-impl BinaryExtras for DefaultOracleExtras {}
-impl TestOracleExtras for DefaultOracleExtras {}
+struct DefaultCaseExtras;
+impl BinaryExtras for DefaultCaseExtras {}
+impl TestCaseExtras for DefaultCaseExtras {}
 
 fn a0_rsun_from_ctrl(bctrl: &BinaryInlistControls) -> f64 {
     if bctrl.initial_separation_in_rsuns > 0.0 {
@@ -583,10 +583,10 @@ fn a0_rsun_from_ctrl(bctrl: &BinaryInlistControls) -> f64 {
     }
 }
 
-fn build_test_oracle_extras(
+fn build_test_case_extras(
     case_name: &str,
     bctrl: &BinaryInlistControls,
-) -> Box<dyn TestOracleExtras> {
+) -> Box<dyn TestCaseExtras> {
     let a0_rsun = a0_rsun_from_ctrl(bctrl);
     let q0 = bctrl.m1_msun / bctrl.m2_msun.max(1.0e-12);
     match case_name {
@@ -613,7 +613,7 @@ fn build_test_oracle_extras(
             max_qhe_diff: 0.0,
             failed_mid_run: false,
         }),
-        _ => Box::new(DefaultOracleExtras),
+        _ => Box::new(DefaultCaseExtras),
     }
 }
 
@@ -877,7 +877,7 @@ fn test_recursive_binary_inlists_and_all_8_cases_capped_4_steps() {
         let case_dir = cleaned_suite.join(case_name);
         let bctrl =
             BinaryInlistControls::from_case_dir(&case_dir).expect("bctrl");
-        let mut extras = build_test_oracle_extras(case_name, &bctrl);
+        let mut extras = build_test_case_extras(case_name, &bctrl);
         let rep = run_binary_test_suite_case_with_extras(
             &case_dir,
             Some(4),
@@ -891,7 +891,7 @@ fn test_recursive_binary_inlists_and_all_8_cases_capped_4_steps() {
             "capped case {} must stop at MaxStepsCap without passing: {rep:?}",
             rep.case_name
         );
-        assert!(!extras.failed(), "oracle failed in {case_name}");
+        assert!(!extras.failed(), "extras check failed in {case_name}");
         assert_eq!(rep.total_steps, 4);
         match rep.case_name.as_str() {
             "jdot_gr_check" => assert!(extras.max_rel_err() < 1.0e-2),
@@ -1030,7 +1030,7 @@ fn assert_slow_uncapped_case(
     case_name: &str,
 ) -> (
     flexmesa_binary::BinaryCaseRunReport,
-    Box<dyn TestOracleExtras>,
+    Box<dyn TestCaseExtras>,
 ) {
     let suite_dir =
         resolve_suite_dir().expect("MESA_DIR binary/test_suite must exist");
@@ -1039,7 +1039,7 @@ fn assert_slow_uncapped_case(
     copy_cleaned_binary_case(&suite_dir.join(case_name), &cleaned)
         .expect("clean uncapped binary case");
     let bctrl = BinaryInlistControls::from_case_dir(&cleaned).expect("bctrl");
-    let mut extras = build_test_oracle_extras(case_name, &bctrl);
+    let mut extras = build_test_case_extras(case_name, &bctrl);
     let rep = run_binary_test_suite_case_with_extras(
         &cleaned,
         None,
@@ -1049,7 +1049,10 @@ fn assert_slow_uncapped_case(
     )
     .unwrap_or_else(|e| panic!("uncapped {case_name} failed: {e}"));
     assert!(rep.passed, "uncapped {case_name} report failed: {rep:?}");
-    assert!(!extras.failed(), "oracle failed in uncapped {case_name}");
+    assert!(
+        !extras.failed(),
+        "extras check failed in uncapped {case_name}"
+    );
     (rep, extras)
 }
 

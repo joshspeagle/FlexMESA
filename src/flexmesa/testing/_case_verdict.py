@@ -17,7 +17,7 @@ import re
 import numpy as np
 
 from flexmesa.data import fetch
-from flexmesa.testing import case_manifest, history_compare
+from flexmesa.testing import artifact_compare, case_manifest, history_compare
 from flexmesa.testing import stage_steps as stage_steps_mod
 
 MASS_LOSS_AUGMENT_COLUMNS: tuple[str, ...] = (
@@ -176,6 +176,7 @@ class CaseHarnessRecord:
     mesa_iters_rows: int = 0
     stage_steps: tuple[int, ...] = ()
     mesa_stage_steps: tuple[int, ...] = ()
+    artifact_comparison: artifact_compare.ArtifactComparison | None = None
 
     @property
     def stage_step_deltas(self) -> tuple[stage_steps_mod.StageDelta, ...]:
@@ -580,7 +581,7 @@ def extract_reference_run_stats(
     or ``num_iters``, supplements missing fields from ``LOGS1/history.data``
     when available.
     """
-    if spec.reference_status == "no_reference_yet" or not spec.reference_path:
+    if not has_history_reference(spec):
         return history_compare.HistoryRunStats()
     tbl = ref_tbl
     if tbl is None:
@@ -684,6 +685,18 @@ def _mesa_stage_steps(key: tuple[str, str]) -> tuple[int, ...]:
     return _mesa_stage_table().get(key, ())
 
 
+def has_history_reference(spec: case_manifest.CaseManifestEntry) -> bool:
+    """Return whether ``spec`` has a stored `MESA` history to compare with.
+
+    A case judged by its artifact (``mesa_26_4_1_artifact``, ``#606``) has a
+    reference file but no history.
+    """
+    return bool(spec.reference_path) and spec.reference_status not in (
+        "no_reference_yet",
+        "mesa_26_4_1_artifact",
+    )
+
+
 def evaluate_case_record(
     spec: case_manifest.CaseManifestEntry,
     known_gaps: dict[tuple[str, str], case_manifest.KnownGapSpec],
@@ -698,6 +711,7 @@ def evaluate_case_record(
     precomputed_has_component_error: bool = False,
     precomputed_mesa_stats: history_compare.HistoryRunStats | None = None,
     enforce_step_counts: bool = False,
+    artifact_comparison: artifact_compare.ArtifactComparison | None = None,
 ) -> CaseHarnessRecord:
     """Combine manifest metadata, run outcome, and comparison into a verdict.
 
@@ -709,6 +723,15 @@ def evaluate_case_record(
     compared track by track (:func:`compare_search_tracks`, ``#430``): the
     per-track comparisons go to ``component_comparisons`` and the first
     track's comparison is the record's primary ``comparison``.
+
+    A case with ``reference_status = "mesa_26_4_1_artifact"`` (``#606``)
+    takes no evolution steps. It passes only when ``artifact_comparison``
+    (the run's file against the committed `MESA` file) is within every
+    declared tolerance, the run took exactly ``artifact.required_steps``
+    steps, and it ended with the required termination. Failures use the
+    ordinary wording and the first field out of tolerance goes in the
+    error message. For other statuses the comparison is only attached to
+    the record.
     """
     gap = known_gaps.get(spec.key)
     gap_issue = gap.issue if gap is not None else ""
@@ -762,11 +785,7 @@ def evaluate_case_record(
     run_iters = outcome.iters
     run_mean_iters = outcome.mean_iters
 
-    if (
-        comp is None
-        and spec.reference_status != "no_reference_yet"
-        and spec.reference_path
-    ):
+    if comp is None and has_history_reference(spec):
         ref_file = resolve_reference_history_path(
             spec.reference_path, root_dir=base
         )
@@ -859,8 +878,7 @@ def evaluate_case_record(
         )
     elif (
         spec.suite == "binary"
-        and spec.reference_status != "no_reference_yet"
-        and spec.reference_path
+        and has_history_reference(spec)
         and outcome.history_path is not None
     ):
         expected_ver_c = fetch.load_upstream_reference().version_number
@@ -908,17 +926,40 @@ def evaluate_case_record(
     # A run that continued past unsupported controls (#147 opt-out) did not
     # do what the inlist asks. Its numbers are diagnostic and it can never
     # satisfy the tolerance condition of any verdict.
-    tol_ok = (
-        comp is not None
-        and comp.within_final_tolerances
-        and comp.within_track_tolerances
-        and not has_comp_err
-        and all(
-            c.within_final_tolerances and c.within_track_tolerances
-            for c in comp_map.values()
+    if spec.reference_status == "mesa_26_4_1_artifact" and spec.artifact:
+        # Both sides take zero steps (DECISIONS #70): a different count, or
+        # a missing or differing file, is a failure with its own message.
+        steps_ok = outcome.steps == spec.artifact.required_steps
+        art_notes = []
+        if not steps_ok:
+            art_notes.append(
+                f"run took {outcome.steps} steps, MESA "
+                f"{spec.artifact.required_steps}"
+            )
+        if artifact_comparison is None:
+            art_notes.append("artifact not compared")
+        elif not artifact_comparison.ok:
+            art_notes.append(artifact_comparison.message)
+        if art_notes:
+            comp_err = "; ".join(filter(None, [comp_err, *art_notes]))
+        tol_ok = (
+            artifact_comparison is not None
+            and artifact_comparison.ok
+            and steps_ok
+            and not outcome.controls_ignored
         )
-        and not outcome.controls_ignored
-    )
+    else:
+        tol_ok = (
+            comp is not None
+            and comp.within_final_tolerances
+            and comp.within_track_tolerances
+            and not has_comp_err
+            and all(
+                c.within_final_tolerances and c.within_track_tolerances
+                for c in comp_map.values()
+            )
+            and not outcome.controls_ignored
+        )
     smoke_note = " (controls ignored)" if outcome.controls_ignored else ""
     run_stages = outcome.stage_steps
     mesa_stages = _mesa_stage_steps(spec.key)
@@ -1036,6 +1077,7 @@ def evaluate_case_record(
         mean_iters=run_mean_iters,
         stage_steps=run_stages,
         mesa_stage_steps=mesa_stages,
+        artifact_comparison=artifact_comparison,
         mesa_steps=mesa_stats.steps if mesa_stats is not None else None,
         mesa_retries=mesa_stats.retries if mesa_stats is not None else None,
         mesa_iters=mesa_stats.iters_sum if mesa_stats is not None else None,

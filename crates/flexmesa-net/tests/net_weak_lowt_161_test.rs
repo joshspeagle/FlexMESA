@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-//! Standalone MESA `26.4.1` parity tests for dynamically added weaklib-only
+//! Standalone analytical consistency tests for dynamically added weaklib-only
 //! low-temperature reaction placeholders (`also_in_reaclib = .false.`,
 //! `coefficients(1) = -99.0` in `rates/private/reaclib_input.f90:279-294`,
 //! `rates/private/rates_initialize.f90:403-459`,

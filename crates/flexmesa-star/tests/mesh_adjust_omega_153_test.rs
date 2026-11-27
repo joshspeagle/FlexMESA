@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-//! Integration tests for `#153` `adjust_omega` control-volume remapping parity
+//! Integration tests for `#153` `adjust_omega` control-volume remapping
 //! on `CellType::Unchanged` faces (`star/private/mesh_adjust.f90:232-236,
 //! 1943-2112`).
 

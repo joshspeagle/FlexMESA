@@ -159,3 +159,17 @@ print(
 ::: flexmesa.bench.kernels_wave4
 
 ::: flexmesa.bench.kernels_wave5
+
+`flexmesa.testing.routine_inventory` reads the committed list of every subroutine and function in the upstream MESA `26.4.1` Fortran files with its line span (`benchmarks/dashboard/routine_inventory.json`, generated from the MESA source by `scripts/dashboard/build_routine_inventory.py`, `#611`). `flexmesa.testing.routine_gate` checks that every `routine_map` key in the port manifest is a routine of that upstream file and that every mapped target is an existing Rust `fn` item. `flexmesa.testing.routine_table` derives the per-module and per-file counts of mapped routines and lines (`notes/audit/routine_table.md`). `flexmesa.testing.routine_backlog` attributes unmapped routines to the declared-gap cases whose reasons name them.
+
+::: flexmesa.testing.routine_inventory
+
+::: flexmesa.testing.routine_gate
+
+::: flexmesa.testing.routine_backlog
+
+::: flexmesa.testing.routine_table
+
+`flexmesa.testing.artifact_compare` judges a case that takes zero steps and writes a result file (`star/rsp_check_2nd_crossing`): it parses the file and compares every field with the committed MESA `26.4.1` copy at the precision of the upstream format statement (`DECISIONS #76`, `#606`).
+
+::: flexmesa.testing.artifact_compare

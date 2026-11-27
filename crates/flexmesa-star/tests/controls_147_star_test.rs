@@ -1246,3 +1246,89 @@ fn test_147_atm_off_table_option_eval_surf_bc_and_roundtrip() {
     let reloaded = load_photo_bytes(&photo).expect("load photo");
     assert_eq!(reloaded.controls.atm_off_table_option, "");
 }
+
+#[test]
+fn test_147_solver_test_partials_defaults_inert_values_and_reachable_trigger() {
+    // `star/defaults/controls.defaults:11525-11539`.
+    let d = StarControls::default();
+    assert_eq!(d.solver_test_partials_dx_0, -1.0);
+    for v in [
+        d.solver_test_partials_k,
+        d.solver_test_partials_k_low,
+        d.solver_test_partials_k_high,
+        d.solver_test_partials_call_number,
+        d.solver_test_partials_iter_number,
+    ] {
+        assert_eq!(v, -1);
+    }
+    assert_eq!(d.solver_test_partials_var_name, "");
+
+    let tmp = TempCaseGuard::new("solver_test_partials");
+    let parse = |body: &str| {
+        let path = tmp.root.join("inlist_stp");
+        fs::write(&path, format!("&controls\n{body}\n/\n"))
+            .expect("write inlist");
+        InlistBundle::from_file(&path)
+    };
+
+    // The values set by star/test_suite/ns_he/inlist_to_flash leave
+    // `solver_test_partials_call_number` at -1, so the self-test of
+    // `star_solver.f90:635-639` never fires: accepted and inert.
+    let bundle = parse(
+        "solver_test_partials_dx_0 = 1d-2\n solver_test_partials_k = 81\n \
+         solver_test_partials_k_low = 80\n solver_test_partials_k_high = 83\n \
+         solver_test_partials_iter_number = 9\n \
+         solver_test_partials_var_name = 'all'\n \
+         solver_test_partials_equ_name = 'all'\n \
+         solver_test_partials_sink_name = 'si28'",
+    )
+    .expect("inert self-test controls parse");
+    let c = &bundle.controls;
+    assert_eq!(c.solver_test_partials_dx_0, 1.0e-2);
+    assert_eq!(c.solver_test_partials_k, 81);
+    assert_eq!(c.solver_test_partials_k_low, 80);
+    assert_eq!(c.solver_test_partials_k_high, 83);
+    assert_eq!(c.solver_test_partials_iter_number, 9);
+    assert_eq!(c.solver_test_partials_call_number, -1);
+    assert_eq!(c.solver_test_partials_var_name, "all");
+    assert_eq!(c.solver_test_partials_equ_name, "all");
+    assert_eq!(c.solver_test_partials_sink_name, "si28");
+
+    // A reachable trigger (call_number >= 1) is not ported: fail loudly.
+    let err = parse(
+        "solver_test_partials_dx_0 = 1d-2\n solver_test_partials_k = 81\n \
+         solver_test_partials_call_number = 24\n \
+         solver_test_partials_iter_number = 9",
+    )
+    .expect_err("reachable solver partials self-test must be rejected");
+    assert!(
+        matches!(err, StarError::InvalidInput(_)),
+        "expected InvalidInput, got {err}"
+    );
+}
+
+#[test]
+fn test_147_ns_he_inlists_parse_strict_without_unsupported_controls() {
+    if let Some(dir) =
+        flexmesa_utils::require_mesa_test_input_path("star/test_suite/ns_he")
+    {
+        let stages = parse_rn_stages(&dir, false).expect("parse ns_he rn");
+        let mut n = 0;
+        for stage in &stages {
+            let RnStage::DoOne { inlist, .. } = stage else {
+                continue;
+            };
+            let bundle = InlistBundle::from_file_in_case_dir(&dir, inlist)
+                .unwrap_or_else(|e| {
+                    panic!("strict parse of {inlist} failed: {e}")
+                });
+            assert!(
+                bundle.validation_report.unsupported_controls.is_empty(),
+                "unsupported controls in {inlist}: {:?}",
+                bundle.validation_report.unsupported_controls
+            );
+            n += 1;
+        }
+        assert!(n > 0, "expected ns_he stages");
+    }
+}

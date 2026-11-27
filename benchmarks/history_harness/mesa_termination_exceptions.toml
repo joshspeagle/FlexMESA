@@ -1,0 +1,234 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Cases whose manifest `required_termination` is not the `termination code:`
+# MESA 26.4.1 printed for the final stage (`#604`, DECISIONS #75). Checked by
+# scripts/audit/mesa_terminations.py.
+#
+# kind:
+#   hook_without_code       an extras hook returns terminate and upstream
+#                           leaves termination_code unset, so MESA prints no
+#                           code; the manifest names the hook.
+#   binary_message          the binary module prints its own message as the
+#                           code; the manifest names the control.
+#   multi_stage_final_hook  as hook_without_code, for the last of several
+#                           stages whose earlier stages printed a code.
+#   result_reason           the run ends with a `terminated evolution:` reason
+#                           and no termination code.
+#   after_evolve_code       upstream sets termination_code in
+#                           extras_after_evolve, after MESA printed its codes.
+#   hook_error_exit         a hook ends the run by returning an error.
+#   astero_search_message   the final sample of an astero search ends in
+#                           astero_extras_check_model terminating with no
+#                           code; the manifest names the FlexMESA search
+#                           summary `_term=` code that maps to that message.
+#   no_mesa_run             no completed MESA run exists (skipped upstream or
+#                           timed out); the value rests on the upstream line.
+#
+# source:      MESA-root-relative `file:line` at tag 26.4.1.
+# source_text: text that must occur on that line (checked at generation).
+# message:     text MESA printed, which must occur in the stored out.txt.
+
+[[exceptions]]
+suite = "star"
+case = "5M_cepheid_blue_loop"
+manifest = "extras_check_model"
+kind = "hook_without_code"
+source = "star/test_suite/5M_cepheid_blue_loop/src/run_star_extras.f90:127"
+source_text = "extras_check_model = terminate"
+message = "crossed blue edge to start 3rd crossing"
+
+[[exceptions]]
+suite = "star"
+case = "rsp_BEP"
+manifest = "extras_finish_step"
+kind = "hook_without_code"
+source = "star/test_suite/rsp_BEP/src/run_star_extras.f90:125"
+source_text = "extras_finish_step = terminate"
+message = "good match for period"
+
+[[exceptions]]
+suite = "star"
+case = "rsp_BLAP"
+manifest = "extras_finish_step"
+kind = "hook_without_code"
+source = "star/test_suite/rsp_BLAP/src/run_star_extras.f90:124"
+source_text = "extras_finish_step = terminate"
+message = "good match for period"
+
+[[exceptions]]
+suite = "star"
+case = "rsp_Cepheid"
+manifest = "extras_finish_step"
+kind = "hook_without_code"
+source = "star/test_suite/rsp_Cepheid/src/run_star_extras.f90:125"
+source_text = "extras_finish_step = terminate"
+message = "good match for period"
+
+[[exceptions]]
+suite = "star"
+case = "rsp_Delta_Scuti"
+manifest = "extras_finish_step"
+kind = "hook_without_code"
+source = "star/test_suite/rsp_Delta_Scuti/src/run_star_extras.f90:124"
+source_text = "extras_finish_step = terminate"
+message = "good match for period"
+
+[[exceptions]]
+suite = "star"
+case = "rsp_RR_Lyrae"
+manifest = "extras_finish_step"
+kind = "hook_without_code"
+source = "star/test_suite/rsp_RR_Lyrae/src/run_star_extras.f90:124"
+source_text = "extras_finish_step = terminate"
+message = "good match for period"
+
+[[exceptions]]
+suite = "star"
+case = "rsp_Type_II_Cepheid"
+manifest = "extras_finish_step"
+kind = "hook_without_code"
+source = "star/test_suite/rsp_Type_II_Cepheid/src/run_star_extras.f90:124"
+source_text = "extras_finish_step = terminate"
+message = "good match for period"
+
+[[exceptions]]
+suite = "star"
+case = "rsp_gyre"
+manifest = "extras_finish_step"
+kind = "hook_without_code"
+source = "star/test_suite/rsp_gyre/src/run_star_extras.inc:46"
+source_text = "extras_finish_step = terminate"
+message = "good match for period"
+
+[[exceptions]]
+suite = "star"
+case = "rsp_save_and_load_file"
+manifest = "extras_finish_step"
+kind = "multi_stage_final_hook"
+source = "star/test_suite/rsp_save_and_load_file/src/run_star_extras.f90:125"
+source_text = "extras_finish_step = terminate"
+message = "good match for period"
+
+[[exceptions]]
+suite = "star"
+case = "simplex_solar_calibration"
+manifest = "extras_check_model"
+kind = "hook_without_code"
+source = "star/test_suite/simplex_solar_calibration/src/simplex_search_run_support.f90:1296"
+source_text = "do_simplex_extras_check_model = terminate"
+message = "have reached age_target"
+
+[[exceptions]]
+suite = "star"
+case = "twin_studies"
+manifest = "forced_stop"
+kind = "result_reason"
+source = "star/job/multi_stars_extras.inc:96"
+source_text = "s% result_reason = forced_stop"
+message = "terminated evolution: forced_stop"
+
+[[exceptions]]
+suite = "star"
+case = "rsp_check_2nd_crossing"
+manifest = "other_rsp_build_model"
+kind = "hook_error_exit"
+source = "star/test_suite/rsp_check_2nd_crossing/src/run_star_extras.f90:357"
+source_text = "ierr = -1"
+message = "failed in other_rsp_build_model"
+
+[[exceptions]]
+suite = "star"
+case = "1.4M_ms_op_mono"
+manifest = "max_model_number"
+kind = "no_mesa_run"
+source = "star/test_suite/1.4M_ms_op_mono/inlist_1.4M_ms_op_mono:47"
+source_text = "max_model_number = 10"
+message = "this test was intentionally skipped"
+
+[[exceptions]]
+suite = "star"
+case = "radiative_levitation"
+manifest = "max_age"
+kind = "no_mesa_run"
+source = "star/test_suite/radiative_levitation/inlist_radiative_levitation:15"
+source_text = "required_termination_code_string = 'max_age'"
+message = "this test was intentionally skipped"
+
+[[exceptions]]
+suite = "star"
+case = "make_pre_ccsn_13bvn"
+manifest = "fe_core_infall_limit"
+kind = "no_mesa_run"
+source = "star/test_suite/make_pre_ccsn_13bvn/inlist_to_cc:24"
+source_text = "fe_core_infall_limit = 3d7"
+
+[[exceptions]]
+suite = "binary"
+case = "double_bh"
+manifest = "extras_binary_finish_step"
+kind = "hook_without_code"
+source = "binary/test_suite/double_bh/src/run_binary_extras.f90:245"
+source_text = "extras_binary_finish_step = terminate"
+message = "Terminate due to helium depletion"
+
+[[exceptions]]
+suite = "binary"
+case = "jdot_gr_check"
+manifest = "extras_binary_check_model"
+kind = "hook_without_code"
+source = "binary/test_suite/jdot_gr_check/src/run_binary_extras.f90:163"
+source_text = "extras_binary_check_model = terminate"
+message = "terminate due to beginning of RLO"
+
+[[exceptions]]
+suite = "binary"
+case = "evolve_both_stars"
+manifest = "accretor_overflow_terminate"
+kind = "binary_message"
+source = "binary/private/binary_evolve.f90:461"
+source_text = "Terminate because accretor (r-rl)/rl > accretor_overflow_terminate"
+message = "Terminate because accretor (r-rl)/rl > accretor_overflow_terminate"
+
+[[exceptions]]
+suite = "astero"
+case = "example_astero"
+manifest = "xtra1"
+kind = "after_evolve_code"
+source = "astero/test_suite/example_astero/src/run_star_extras.f90:214"
+source_text = "s% termination_code = t_xtra1"
+message = "chi square within limit"
+
+[[exceptions]]
+suite = "astero"
+case = "fast_from_file"
+manifest = "limit_num_chi2_too_big"
+kind = "astero_search_message"
+source = "astero/private/extras_support.f90:524"
+source_text = "have reached too many bad chi2 limit"
+message = "have reached too many bad chi2 limit"
+
+[[exceptions]]
+suite = "astero"
+case = "fast_newuoa"
+manifest = "age_target"
+kind = "astero_search_message"
+source = "astero/private/extras_support.f90:511"
+source_text = "have reached age_target"
+message = "have reached age_target"
+
+[[exceptions]]
+suite = "astero"
+case = "fast_scan_grid"
+manifest = "limit_num_chi2_too_big"
+kind = "astero_search_message"
+source = "astero/private/extras_support.f90:524"
+source_text = "have reached too many bad chi2 limit"
+message = "have reached too many bad chi2 limit"
+
+[[exceptions]]
+suite = "astero"
+case = "fast_simplex"
+manifest = "chi2_search_limit2"
+kind = "astero_search_message"
+source = "astero/private/extras_support.f90:517"
+source_text = "have reached chi2_search_limit2"
+message = "have reached chi2_search_limit2"

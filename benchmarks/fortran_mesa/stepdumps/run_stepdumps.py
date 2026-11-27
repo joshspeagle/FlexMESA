@@ -9,15 +9,30 @@ Builds a private overlay of a compiled MESA 26.4.1 tree in which only
 ``MESA_SKIP_OPTIONAL=t``, as for the stored reference histories) with the dump
 switched on. Each run stops after ``--steps`` models per star. By default
 these are the first models of the run, so the dump covers the start of the
-first ``./rn`` stage. With ``--first-model N`` the dump starts at model number
-``N`` instead, which reaches later in the run (and into later stages, whose
-earlier stages then run to completion first).
+first ``./rn`` stage. The window can be placed later in the run:
+
+* ``--first-model N``: the dump starts at model number ``N``.
+* ``--occurrence K``: with ``--first-model``, the window opens the K-th time
+  the model number rises to ``N`` (default 1). Model numbers restart when a
+  relax phase is followed by the evolve phase, so ``--first-model 70
+  --occurrence 2`` selects model 70 of the second phase.
+* ``--stage S``: only the S-th process of the case (1-based; every ``RUN``
+  section of a multi-inlist ``rn``) is dumped. Earlier stages run to
+  completion first.
+* ``--keep-running``: the run continues past the window instead of stopping
+  when it is dumped (a ``DONE`` record still marks the end of the window).
+  A selected ``--stage`` needs no such option: earlier stages are never
+  stopped, only the selected one.
 
 Output, per case, ``<out>/<suite>/<case>.stepdump``: a header of ``#`` lines
 recording the MESA version, compiler and SDK (``data/version_number``,
 ``gfortran -dumpfullversion``, ``mesasdk_version``), the window, the thread
 count and the SHA-256 of every inlist, followed by the records documented in
-``stepdump_patch.py``.
+``stepdump_patch.py``. The window is recorded in the ``stage``,
+``occurrence``, ``first_model`` and ``steps_per_star`` lines. A dump written
+by a patched solver is complete, and ``stepdump_compare`` skips record types
+it does not know (and reports their count), so a dump that carries extra
+diagnostic records compares as it is.
 
 The pristine tree is never modified: the overlay holds real copies of
 ``star/``, ``lib/`` and ``include/`` and symbolic links for everything else,
@@ -29,6 +44,7 @@ Usage::
     python run_stepdumps.py --mesa-dir "$MESA_DIR" \\
         --mesasdk-root "$MESASDK_ROOT" --scratch <empty directory> \\
         --out <output directory> [--steps 3] [--jobs 2] \\
+        [--first-model 70 --occurrence 2 --stage 2 --keep-running] \\
         [--cases star/1.5M_with_diffusion binary/evolve_both_stars ...]
 
 Without ``--cases`` every case of the three test suites runs. Linking may need
@@ -175,6 +191,8 @@ def _header(
         f"# omp_num_threads: {OMP_THREADS}",
         f"# steps_per_star: {steps}",
         f"# first_model: {meta.get('first_model', 'first of the run')}",
+        f"# occurrence: {meta.get('occurrence', '1')}",
+        f"# stage: {meta.get('stage', 'all')}",
         "# produced by: benchmarks/fortran_mesa/stepdumps/run_stepdumps.py "
         "(write statements only, MESA_SKIP_OPTIONAL=t); "
         "values are IEEE-754 binary64 bit patterns in hexadecimal",
@@ -213,17 +231,30 @@ def run_case(
     """
     suite, case = ident.split("/", 1)
     dest = out / suite / f"{case}.stepdump"
-    window = f"# first_model: {meta.get('first_model', 'first of the run')}"
-    steps_line = f"# steps_per_star: {steps}"
+    window = [
+        f"# first_model: {meta.get('first_model', 'first of the run')}",
+        f"# steps_per_star: {steps}",
+        f"# occurrence: {meta.get('occurrence', '1')}",
+        f"# stage: {meta.get('stage', 'all')}",
+    ]
     if dest.exists():
         old = dest.read_text(encoding="utf-8")
-        if window not in old or steps_line not in old:
+        # A dump from before ``occurrence`` and ``stage`` existed has the
+        # default of each.
+        old_lines = set(old.splitlines())
+        for key, default in (("occurrence", "1"), ("stage", "all")):
+            if not any(x.startswith(f"# {key}:") for x in old_lines):
+                old_lines.add(f"# {key}: {default}")
+        if not all(w in old_lines for w in window):
             raise SystemExit(f"{dest}: exists with a different window")
         if "\nDONE\n" in old:
             return f"{ident}: kept existing complete dump"
     # The window is part of the raw file name, so a run with another window
     # never reuses these records.
-    tag = f"s{steps}_f{meta.get('first_model', 'start')}"
+    tag = (
+        f"s{steps}_f{meta.get('first_model', 'start')}"
+        f"_k{meta.get('occurrence', '1')}_st{meta.get('stage', 'all')}"
+    )
     raw = work / f"{suite}__{case}__{tag}.raw"
     case_root = _case_root(env, suite, case, work / tag)
     if (case_root / case).exists() and not raw.exists():
@@ -233,11 +264,15 @@ def run_case(
         "OUT": str(case_root),
         stepdump_patch.MARKER: str(raw),
         f"{stepdump_patch.MARKER}_STEPS": str(steps),
-        f"{stepdump_patch.MARKER}_STOP": "1",
     }
+    if not meta.get("keep_running"):
+        run_env[f"{stepdump_patch.MARKER}_STOP"] = "1"
     if (case_root / case).exists():
         status = "reused earlier run"
     else:
+        # Records are appended, and the patch numbers its processes by the
+        # RUN records already in the file, so a rerun starts from none.
+        raw.unlink(missing_ok=True)
         status = _run(ident, run_env, timeout_sec)
     if not raw.exists():
         return f"{ident}: {status}, no dump"
@@ -295,11 +330,31 @@ def _write_dump(
 ) -> str:
     """Writes the header and the raw records to ``dest``."""
     records = raw.read_text(encoding="utf-8").splitlines()
+    if meta.get("stage"):
+        # The other processes of the case wrote only their RUN line.
+        records = _selected_section(records)
     dest.parent.mkdir(parents=True, exist_ok=True)
     header = _header(case_dir, ident, steps, meta)
     dest.write_text("\n".join(header + records) + "\n", encoding="utf-8")
     done = "DONE" in records
     return f"{ident}: {status}, {len(records)} records, done={done}"
+
+
+def _selected_section(records: list[str]) -> list[str]:
+    """Returns ``records`` without the ``RUN`` lines that have no records.
+
+    Args:
+        records: Raw dump lines; each process starts with ``RUN``.
+
+    Returns:
+        The lines of the processes that wrote records.
+    """
+    out: list[str] = []
+    for i, line in enumerate(records):
+        if line == "RUN" and (i + 1 == len(records) or records[i + 1] == "RUN"):
+            continue
+        out.append(line)
+    return out
 
 
 def main() -> None:
@@ -315,6 +370,26 @@ def main() -> None:
         type=int,
         default=None,
         help="First model number dumped (a window later in the run).",
+    )
+    parser.add_argument(
+        "--occurrence",
+        type=int,
+        default=1,
+        help="With --first-model: open the window the K-th time the model "
+        "number rises to it (model numbers restart between a relax phase "
+        "and the evolve phase). Default 1.",
+    )
+    parser.add_argument(
+        "--stage",
+        type=int,
+        default=None,
+        help="Dump only the S-th process of the case (1-based RUN section "
+        "of a multi-inlist rn). Default every stage.",
+    )
+    parser.add_argument(
+        "--keep-running",
+        action="store_true",
+        help="Do not stop the run after the window is dumped.",
     )
     parser.add_argument("--jobs", type=int, default=2)
     parser.add_argument("--timeout-sec", type=int, default=1800)
@@ -334,9 +409,20 @@ def main() -> None:
             raise SystemExit("--scratch must be empty or absent")
         build_overlay(mesa_dir, overlay, env)
     meta = build_meta(mesa_dir, env)
+    if args.occurrence < 1 or (args.stage is not None and args.stage < 1):
+        raise SystemExit("--occurrence and --stage are 1-based")
+    if args.occurrence > 1 and args.first_model is None:
+        raise SystemExit("--occurrence needs --first-model")
     if args.first_model is not None:
         env[f"{stepdump_patch.MARKER}_FIRST"] = str(args.first_model)
         meta["first_model"] = str(args.first_model)
+    env[f"{stepdump_patch.MARKER}_OCCURRENCE"] = str(args.occurrence)
+    meta["occurrence"] = str(args.occurrence)
+    if args.stage is not None:
+        env[f"{stepdump_patch.MARKER}_STAGE"] = str(args.stage)
+        meta["stage"] = str(args.stage)
+    if args.keep_running:
+        meta["keep_running"] = "1"
     cases = args.cases or list_cases(mesa_dir)
     work = scratch / "cases"
     work.mkdir(parents=True, exist_ok=True)

@@ -89,6 +89,7 @@ Scope and the `v0.1.0` definition are in [`SCOPE.md`](SCOPE.md). Work is tracked
 | 72 | Every Test File Is Listed in `test_taxonomy.toml` with Enforced Provenance and Checked Routine Maps (`#563`) | In force | below |
 | 73 | Train Campaigns Run on GitHub Actions at 3,000 s per Case, with Step Counts Enforced (`#546`, `#576`, `#598`) | In force | below |
 | 75 | Harness Expectations Are Checked Against MESA's Own Output; a Hook Terminate Without a Code Is Named by Its Hook (`#604`) | In force | below |
+| 76 | A Case That Takes Zero Steps and Writes a Result File Is Judged on That File (`#606`) | In force | below |
 
 ## Pre-audit decisions still in force
 
@@ -993,3 +994,18 @@ The text of these four entries predates the audit of 2026-11-16. The decisions s
   - *A `none` token for "no termination code"*: it would not say which upstream condition ended the run, so a run ended by a different hook would also match.
   - *Trusting the collector's summary field of the stored runs*: it labels hook terminations heuristically and mislabels at least two cases; the printed output and the upstream source are the evidence.
 - **Note**: number `#74` is reserved by `#586`.
+
+## DECISIONS #76: A Case That Takes Zero Steps and Writes a Result File Is Judged on That File (`#606`)
+
+- **Date**: 2026-11-27 (project lead)
+- **Decision**:
+  - A case that takes zero steps in MESA `26.4.1` and ends in an extras hook after writing a result file is judged by a `[cases.artifact]` table in `case_manifest.toml` (`reference_status = "mesa_26_4_1_artifact"`). It passes only if every declared field of the file FlexMESA writes agrees with the committed MESA copy within tolerance, the run takes the declared step count on both sides, and it ends as `required_termination` says. Verdict wording is unchanged; a failure names the first field out of tolerance.
+  - The tolerance of a field is the precision of the upstream format statement that printed it: one unit in the last printed digit, or one unit of the last decimal place for fixed-point fields. Integers (model numbers, table offsets) must be equal.
+  - The MESA file is committed with its provenance (version string, compiler, SDK, checksum of the bundle it came from) and is regenerated and checked by script (`scripts/mesa_reference/extract_artifact_reference.py`).
+- **Why**: `star/rsp_check_2nd_crossing` takes no evolution step. It scans a row of RSP models, writes the instability-strip edges and periods to `7B_2nd_crossing.data` and exits through its hook, so there is no history to compare and the step-count rule (`DECISIONS #70`) says nothing when both sides take zero steps. Reported as `no reference yet`, a wrong hook would never be seen. The first measurement (2026-11-27) had the structure equal (16 models, 11 table rows) and 82 of 138 fields within print precision, with periods agreeing to about `1e-10` relative and the strip edges to about `1e-4` K.
+- **Alternatives Rejected**:
+  - *Tolerances fitted to the current output*: that makes the pass (`DECISIONS #9`).
+  - *A synthetic history built from the scan*: a reference MESA did not write.
+  - *Leaving the case at `no reference yet`*: it would stay unmeasured.
+  - *Judging the printed per-model lines only*: they carry 5 digits where the file carries 11.
+- **Note**: the case's status is switched, with its declared gap, in the pull request that brings the hook fixes of `#606`; until then the comparison is built and the case stays `no reference yet`.

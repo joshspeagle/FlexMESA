@@ -230,6 +230,7 @@ impl Default for StarControls {
             op_split_burn_min_t_for_variable_t_solver: 1.0e99,
             burn_steps_hard_limit: 20_000,
             nonlocal_nico_decay_heat: false,
+            nonlocal_nico_kap_gamma: 0.0,
             do_premix_heating: true,
             sig_term_limit: 1.0e13,
             fe56ec_fake_factor: 1.0e-7,

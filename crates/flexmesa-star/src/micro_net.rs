@@ -4,7 +4,7 @@
 //! `star/job/run_star_support.f90:1493-1524`.
 
 use flexmesa_chem::{NuclideCatalog, NUM_CATEGORIES};
-use flexmesa_const::{LN10, QCONV};
+use flexmesa_const::{FOUR_PI, LN10, QCONV};
 use flexmesa_eos::I_ETA;
 use flexmesa_math::exp10;
 use flexmesa_math::Quad;
@@ -143,7 +143,10 @@ pub(crate) fn eval_zone_eps_nuc_categories(
             net_info,
             w,
             dydt,
-            true,
+            // `star/private/struct_burn_mix.f90:1112` reaches `net_get` with
+            // `just_dxdt = .false.` (`star/private/net.f90:245-246`); paired
+            // reactions skip their energy categories when it is set.
+            false,
             xa_k,
             t_k,
             log_t,
@@ -190,6 +193,27 @@ pub(crate) fn eval_zone_eps_nuc_categories(
             net_info.doing_approx21,
         ))
     })
+}
+
+/// Rejects networks that lack `h1` or `he4` (`star/private/net.f90:658-663`:
+/// "mesa/star requires both h1 and he4 in net isotopes").
+///
+/// # Errors
+/// Returns [`StarError::MicrophysicsError`] when either isotope is absent.
+pub fn require_h1_and_he4(net_info: &NetGeneralInfo) -> Result<(), StarError> {
+    let catalog = NuclideCatalog::builtin_ref();
+    let has = |name: &str| {
+        catalog
+            .get_by_name(name)
+            .is_some_and(|iso| net_info.chem_id.contains(&iso.chem_id))
+    };
+    if has("h1") && has("he4") {
+        Ok(())
+    } else {
+        Err(StarError::MicrophysicsError(
+            "mesa/star requires both h1 and he4 in net isotopes".to_string(),
+        ))
+    }
 }
 
 /// Returns the first 0-based active zone and clipped $\log_{10} T$ that would
@@ -239,6 +263,7 @@ pub fn do_net(
     net_info: &NetGeneralInfo,
     skip_jacobian: bool,
 ) -> Result<(), StarError> {
+    require_h1_and_he4(net_info)?;
     if let Some((zone, log_t)) = high_temp_rate_warning_zone(model) {
         eprintln!(
             "WARNING: high temperature for rates (zone {}, logT = {:.6} >= {:.6}); rates have been truncated",
@@ -314,6 +339,26 @@ fn do_net_inner(
         .iter()
         .map(|&cid| catalog.get_by_id(cid).map_or(1.0, |n| n.z_plus_n as f64))
         .collect();
+
+    // `star/private/net.f90:301-309`: with `nonlocal_NiCo_kap_gamma > 0` and
+    // no non-local decay heat, `eps_nuc(k)` is scaled by `1 - exp(-tau)`,
+    // where `tau` accumulates `dm/(4 pi rmid^2)` over zones `1..k` and is then
+    // multiplied by the gamma-ray opacity. Zones skipped by split burning or
+    // `max_abar_for_burning` still contribute to the running sum.
+    let kap_gamma = model.controls.nonlocal_nico_kap_gamma;
+    let tau_gamma: Vec<f64> =
+        if kap_gamma > 0.0 && !model.controls.nonlocal_nico_decay_heat {
+            let mut acc = 0.0_f64;
+            (0..nz)
+                .map(|kk| {
+                    acc += model.dm[kk]
+                        / (FOUR_PI * model.rmid[kk] * model.rmid[kk]);
+                    acc * kap_gamma
+                })
+                .collect()
+        } else {
+            Vec::new()
+        };
 
     let t_slice = &model.t;
     let lnt_slice = &model.ln_t;
@@ -423,7 +468,10 @@ fn do_net_inner(
                             net_info,
                             w,
                             dydt,
-                            skip_jacobian,
+                            // `star/private/net.f90:245-246` always passes
+                            // `just_dxdt = .false.`; `skip_jacobian` only
+                            // discards the partials below.
+                            false,
                             xa_k,
                             t_k,
                             log_t,
@@ -459,6 +507,9 @@ fn do_net_inner(
                     // clamp `|eps_nuc| <= max_abs_eps_nuc` (zeroing partials),
                     // and renormalize `eps_nuc_categories` before `eps_nuc_factor`.
                     let mut eps_val = raw_eps;
+                    if !tau_gamma.is_empty() {
+                        eps_val *= 1.0 - flexmesa_math::exp(-tau_gamma[k]);
+                    }
                     let mut deps_drho = raw_deps_drho;
                     let mut deps_dt = if clipped_t { 0.0 } else { raw_deps_dt };
                     let clamped_eps = eps_val.abs() > max_abs_eps_nuc;
@@ -646,5 +697,176 @@ mod tests {
                 "cat {c} mismatch between do_net and eval_zone"
             );
         }
+    }
+
+    /// General (non-approx21) nets must keep paired-reaction energy categories
+    /// in the post-burn `do1_net` call, because upstream reaches `net_get`
+    /// with `just_dxdt = .false.` (`star/private/net.f90:245-246`).
+    #[test]
+    fn test_eval_zone_eps_nuc_categories_matches_do_net_general_net() {
+        let g = NetGeneralInfo::from_name("co_burn_plus.net")
+            .expect("co_burn_plus.net");
+        let cat = NuclideCatalog::builtin_ref();
+        let job = StarJobControls {
+            net_name: String::from("co_burn_plus.net"),
+            ..Default::default()
+        };
+        let ctrls = StarControls {
+            initial_z: 0.02,
+            zbase: 0.02,
+            ..Default::default()
+        };
+        let mut model = StarModel::new(1, g.chem_id.clone(), job, ctrls);
+        model.eos_config = EosConfig::default();
+        model.lnd[0] = 6.0 * LN10;
+        model.ln_t[0] = 9.2 * LN10;
+        model.ln_r[0] = 20.0;
+        model.dq[0] = 1.0;
+        model.mstar = 1.988_409_870_698_051e33;
+        model.xmstar = model.mstar;
+        model.dm[0] = model.mstar;
+        model.xa.fill(1.0e-20);
+        for (iso, val) in [
+            ("he4", 0.05),
+            ("c12", 0.25),
+            ("o16", 0.45),
+            ("ne20", 0.20),
+            ("mg24", 0.05),
+        ] {
+            let p = g
+                .chem_id
+                .iter()
+                .position(|&c| cat.get_by_id(c).is_some_and(|n| n.name == iso))
+                .expect("iso in co_burn_plus.net");
+            model.xa[p] = val;
+        }
+        let s: f64 = model.xa.iter().sum();
+        for v in &mut model.xa {
+            *v /= s;
+        }
+        set_basic_vars(&mut model).expect("set_basic_vars");
+        do_eos(&mut model).expect("do_eos");
+        let net_info = resolve_model_net(&model).expect("resolve_model_net");
+        do_net(&mut model, &net_info, false).expect("do_net");
+        let rf = build_rate_factors(&model.job, &net_info).expect("rf");
+        let zone_cats = eval_zone_eps_nuc_categories(
+            &net_info,
+            0,
+            &model.xa,
+            model.t[0],
+            model.ln_t[0] / LN10,
+            model.rho[0],
+            model.lnd[0] / LN10,
+            model.abar[0],
+            model.zbar[0],
+            model.z2bar[0],
+            model.ye[0],
+            model.eta[0],
+            model.eos_d_dlnt[0][I_ETA],
+            model.eos_d_dlnd[0][I_ETA],
+            &rf,
+            model.controls.weak_rate_factor,
+            model.controls.screening_mode,
+            model.job.use_3a_fl87,
+            model.job.use_suzuki_weak_rates,
+            model.controls.max_logt_for_net,
+            model.controls.max_abar_for_burning,
+            model.controls.eps_nuc_factor,
+            model.controls.dxdt_nuc_factor,
+            model.controls.max_abs_eps_nuc,
+        )
+        .expect("eval_zone_eps_nuc_categories");
+        let total: f64 = zone_cats.iter().map(|c| c.abs()).sum();
+        assert!(total > 0.0, "paired categories were dropped");
+        for c in 0..NUM_CATEGORIES {
+            assert_eq!(
+                zone_cats[c].to_bits(),
+                model.aux.eps_nuc_categories[0][c].to_bits(),
+                "cat {c} mismatch between do_net and eval_zone"
+            );
+        }
+
+        // `skip_jacobian` only discards partials; categories are unchanged.
+        let cats_full = model.aux.eps_nuc_categories[0];
+        do_net(&mut model, &net_info, true).expect("do_net skip_jacobian");
+        for c in 0..NUM_CATEGORIES {
+            assert_eq!(
+                cats_full[c].to_bits(),
+                model.aux.eps_nuc_categories[0][c].to_bits(),
+                "cat {c} changed under skip_jacobian"
+            );
+        }
+    }
+
+    /// `nonlocal_NiCo_kap_gamma > 0` scales `eps_nuc` by `1 - exp(-tau)` with
+    /// `tau = kap * dm / (4 pi rmid^2)` for a single zone
+    /// (`star/private/net.f90:301-309`).
+    #[test]
+    fn test_nonlocal_nico_kap_gamma_attenuates_eps_nuc() {
+        let g = NetGeneralInfo::from_name("basic.net").expect("basic.net");
+        let cat = NuclideCatalog::builtin_ref();
+        let job = StarJobControls {
+            net_name: String::from("basic.net"),
+            ..Default::default()
+        };
+        let ctrls = StarControls {
+            initial_z: 0.02,
+            zbase: 0.02,
+            ..Default::default()
+        };
+        let mut model = StarModel::new(1, g.chem_id.clone(), job, ctrls);
+        model.eos_config = EosConfig::default();
+        model.lnd[0] = 2.0 * LN10;
+        model.ln_t[0] = 7.4 * LN10;
+        model.ln_r[0] = 20.0;
+        model.dq[0] = 1.0;
+        model.mstar = 1.988_409_870_698_051e33;
+        model.xmstar = model.mstar;
+        model.dm[0] = model.mstar;
+        model.xa.fill(1.0e-20);
+        for (iso, val) in [("h1", 0.70), ("he4", 0.28), ("c12", 0.02)] {
+            let p = g
+                .chem_id
+                .iter()
+                .position(|&c| cat.get_by_id(c).is_some_and(|n| n.name == iso))
+                .expect("iso in basic.net");
+            model.xa[p] = val;
+        }
+        let s: f64 = model.xa.iter().sum();
+        for v in &mut model.xa {
+            *v /= s;
+        }
+        set_basic_vars(&mut model).expect("set_basic_vars");
+        do_eos(&mut model).expect("do_eos");
+        model.rmid[0] = 1.0e10;
+        let net_info = resolve_model_net(&model).expect("resolve_model_net");
+        do_net(&mut model, &net_info, false).expect("do_net");
+        let eps_plain = model.eps_nuc[0];
+        assert!(eps_plain != 0.0);
+
+        let kap = 1.0e-30;
+        model.controls.nonlocal_nico_kap_gamma = kap;
+        do_net(&mut model, &net_info, false).expect("do_net kap_gamma");
+        let tau = model.dm[0] / (FOUR_PI * 1.0e10 * 1.0e10) * kap;
+        let want = eps_plain * (1.0 - flexmesa_math::exp(-tau));
+        assert!(tau > 0.0 && tau < 1.0, "tau = {tau}");
+        assert_eq!(model.eps_nuc[0].to_bits(), want.to_bits());
+
+        model.controls.nonlocal_nico_decay_heat = true;
+        do_net(&mut model, &net_info, false).expect("do_net decay_heat");
+        assert_eq!(model.eps_nuc[0].to_bits(), eps_plain.to_bits());
+    }
+
+    #[test]
+    fn test_require_h1_and_he4_accepts_basic_net_and_rejects_missing_isotope() {
+        let mut g = NetGeneralInfo::from_name("basic.net").expect("basic.net");
+        assert!(require_h1_and_he4(&g).is_ok());
+        let he4 = NuclideCatalog::builtin_ref()
+            .get_by_name("he4")
+            .expect("he4")
+            .chem_id;
+        g.chem_id.retain(|&c| c != he4);
+        let err = require_h1_and_he4(&g).expect_err("he4 missing");
+        assert!(err.to_string().contains("h1 and he4"), "{err}");
     }
 }

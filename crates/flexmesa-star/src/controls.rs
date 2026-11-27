@@ -520,6 +520,8 @@ pub struct StarControls {
     pub burn_steps_hard_limit: usize,
     /// Whether non-local $^{56}\mathrm{Ni}/^{56}\mathrm{Co}$ decay heating replaces local `eps_nuc` (`nonlocal_NiCo_decay_heat`).
     pub nonlocal_nico_decay_heat: bool,
+    /// Gamma-ray opacity ($\mathrm{cm^2\,g^{-1}}$) for local $^{56}\mathrm{Ni}/^{56}\mathrm{Co}$ heating attenuation (`nonlocal_NiCo_kap_gamma`, default `0`).
+    pub nonlocal_nico_kap_gamma: f64,
     /// Whether convective premixing energy release is included (`do_premix_heating`).
     pub do_premix_heating: bool,
     /// Whether to cap diffusive `sig` at `sig_term_limit` (`sig_term_limit`, `1e13` default).

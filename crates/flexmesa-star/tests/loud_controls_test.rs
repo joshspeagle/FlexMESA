@@ -438,3 +438,33 @@ fn test_missing_files_stages_and_removed_clamps_behave_strictly() {
         Err(StarError::InvalidInput(_))
     ));
 }
+
+/// Net hooks and weak-rate switches that `flexmesa-star` does not implement
+/// are rejected by default instead of being silently ignored
+/// (`star/defaults/controls.defaults:11758-11769`,
+/// `star/defaults/star_job.defaults:2716`), while
+/// `nonlocal_NiCo_kap_gamma` (`star/private/net.f90:301-309`) is accepted.
+#[test]
+fn test_unported_net_hooks_fail_loudly_and_nico_kap_gamma_is_accepted() {
+    let tmp = TempCaseGuard::new("net_hooks");
+    for (tag, section, key) in [
+        ("net_get", "controls", "use_other_net_get"),
+        ("screening", "controls", "use_other_screening"),
+        ("rate_get", "controls", "use_other_rate_get"),
+        ("net_derivs", "controls", "use_other_net_derivs"),
+        ("weak", "star_job", "use_special_weak_rates"),
+    ] {
+        let path = tmp.root.join(format!("inlist_{tag}"));
+        fs::write(&path, format!("&{section}\n  {key} = .true.\n/\n"))
+            .expect("write");
+        let err = InlistBundle::from_file(&path)
+            .expect_err("unported net hook must fail by default");
+        assert!(err.to_string().contains(key), "{err}");
+    }
+    let ok = tmp.root.join("inlist_kap_gamma");
+    fs::write(&ok, "&controls\n  nonlocal_NiCo_kap_gamma = 0.03d0\n/\n")
+        .expect("write");
+    let bundle = InlistBundle::from_file(&ok).expect("kap_gamma is supported");
+    assert_eq!(bundle.controls.nonlocal_nico_kap_gamma, 0.03);
+    assert_eq!(StarControls::default().nonlocal_nico_kap_gamma, 0.0);
+}

@@ -1335,6 +1335,7 @@ pub const CONTROLS_SUPPORTED: &[&str] = &[
     "non_fe_core_rebound_limit",
     "non_nuc_neu_factor",
     "nonlocal_nico_decay_heat",
+    "nonlocal_nico_kap_gamma",
     "nu_max_sun",
     "nu_omega_mixing_across_convection_boundary",
     "nu_omega_mixing_rate",

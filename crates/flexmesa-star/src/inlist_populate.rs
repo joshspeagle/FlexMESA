@@ -501,7 +501,7 @@ impl InlistBundle {
         map_f64s!("controls", ctrl, c, [
             initial_mass, initial_z, initial_y, min_timestep_limit, mixing_length_alpha,
             alpha_semiconvection, thermohaline_coeff, min_d_mix,
-            opacity_factor, non_nuc_neu_factor,
+            opacity_factor, non_nuc_neu_factor, nonlocal_nico_kap_gamma,
             max_logt_for_net, max_abar_for_burning,
             eps_nuc_factor, dxdt_nuc_factor,
             mesh_delta_coeff, varcontrol_target, mass_change, accretion_h1, accretion_he4,

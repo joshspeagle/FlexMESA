@@ -88,7 +88,8 @@ impl IsolveSolver {
     ///
     /// Returns [`StarError::InvalidInput`] for any unrecognized solver name.
     pub fn from_name(name: &str) -> Result<Self, StarError> {
-        match name.trim() {
+        // Fortran `==` pads trailing blanks only (`num_solvers_options.dek`).
+        match name.trim_end() {
             "ros2_solver" => Ok(Self::Ros2),
             "rose2_solver" => Ok(Self::Rose2),
             "ros3p_solver" => Ok(Self::Ros3p),
@@ -1078,7 +1079,10 @@ pub fn do_solve_diffusion(
                                     acc += tbl.ra[is][l] * ak[l][j];
                                 }
                                 let yj = y[j] + acc;
-                                if yj < y_min || yj > y_max || !yj.is_finite() {
+                                // NaN passes this test as in upstream
+                                // (`mod_rosenbrock.f:956,999`); the later
+                                // `is_bad(err)` test rejects it.
+                                if yj < y_min || yj > y_max {
                                     stage_cut_tenth = true;
                                     break;
                                 }
@@ -1250,7 +1254,10 @@ pub fn do_solve_diffusion(
                         acc += tbl.ros_m[l] * ak[l][j];
                     }
                     let yj = y[j] + acc;
-                    if yj < y_min || yj > y_max || !yj.is_finite() {
+                    // NaN passes this test as in upstream
+                    // (`mod_rosenbrock.f:956,999`); the later
+                    // `is_bad(err)` test rejects it.
+                    if yj < y_min || yj > y_max {
                         out_of_range = true;
                         break;
                     }
@@ -2160,7 +2167,10 @@ pub fn set_diffusion_classes(
     } else {
         for (i, &a_val) in species_a.iter().enumerate() {
             let mut cls = nc - 1;
-            for (j, &a_max) in class_a_max.iter().enumerate().take(nc - 1) {
+            for j in 0..nc - 1 {
+                // Unset `class_A_max` slots are zero upstream
+                // (`ctrls_io.f90:743-746`).
+                let a_max = class_a_max.get(j).copied().unwrap_or(0.0);
                 if a_val <= a_max {
                     cls = j;
                     break;
@@ -2531,4 +2541,25 @@ pub fn eval_wd_sedimentation_heating(
         eps_wd += (x_mass[i] / (ai * AMU)) * v_gt[i] * f_e;
     }
     eps_wd.max(0.0)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Species heavier than every set `class_A_max` threshold land in the
+    /// last class; unset slots count as zero, as upstream zero-fills them.
+    #[test]
+    fn set_diffusion_classes_treats_unset_a_max_as_zero() {
+        let a = [1.0, 4.0, 16.0, 56.0];
+        let class = set_diffusion_classes(7, &a, &[2.0, 4.0], false);
+        assert_eq!(class, vec![0, 1, 6, 6]);
+    }
+
+    #[test]
+    fn isolve_solver_name_matches_trailing_blanks_only() {
+        assert!(IsolveSolver::from_name("ros2_solver   ").is_ok());
+        assert!(IsolveSolver::from_name(" ros2_solver").is_err());
+        assert!(IsolveSolver::from_name("ROS2_SOLVER").is_err());
+    }
 }

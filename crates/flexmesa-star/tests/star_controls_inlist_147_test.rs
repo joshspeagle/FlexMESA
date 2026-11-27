@@ -277,12 +277,30 @@ fn test_147_trim_end_and_num_accretion_species_bound() {
     assert_eq!(b.controls.mix_wind.num_accretion_species, 250);
     assert_eq!(b.controls.diffusion.diffusion_isolve_solver, "ros2_solver");
 
+    // Upstream copies `diffusion_isolve_solver` unchecked at load
+    // (`star/private/ctrls_io.f90:1807`) and rejects unknown names only when
+    // the isolve path runs (`star/private/diffusion.f90:482`).
+    for (idx, body) in [
+        "&controls\n  diffusion_isolve_solver = ' ros2_solver'\n/\n",
+        "&controls\n  diffusion_isolve_solver = 'ROS2_SOLVER'\n/\n",
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let p = tmp.root.join(format!("inlist_solver_{idx}"));
+        fs::write(&p, body).expect("write solver inlist");
+        let b = InlistBundle::from_file(&p).expect("loads unchecked");
+        let name = &b.controls.diffusion.diffusion_isolve_solver;
+        assert!(
+            flexmesa_star::diffusion::IsolveSolver::from_name(name).is_err(),
+            "leading blank or wrong case must fail at use"
+        );
+    }
+
     for (idx, body) in [
         "&controls\n  predictive_mix(1) = .true.\n  predictive_zone_type(1) = ' burn_H'\n/\n",
         "&controls\n  predictive_mix(1) = .true.\n  predictive_zone_loc(1) = ' core'\n/\n",
         "&controls\n  predictive_mix(1) = .true.\n  predictive_bdy_loc(1) = ' top'\n/\n",
-        "&controls\n  diffusion_isolve_solver = ' ros2_solver'\n/\n",
-        "&controls\n  diffusion_isolve_solver = 'ROS2_SOLVER'\n/\n",
         "&controls\n  num_accretion_species = 251\n/\n",
     ]
     .into_iter()

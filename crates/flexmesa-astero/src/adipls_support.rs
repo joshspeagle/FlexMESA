@@ -40,6 +40,7 @@ pub struct AsteroAdipls {
     redistrb_input: Option<RedistrbInput>,
     astero_def_flags: AsteroDefPulseFlags,
     default_add_atmosphere: bool,
+    default_do_redistribute_mesh: bool,
     stored_model: Option<StoreAmdlOutput>,
     adipls_irotkr: i32,
     adipls_nprtkr: i32,
@@ -121,6 +122,7 @@ impl AsteroAdipls {
                 keep_surface_point: ctrl.keep_surface_point,
             },
             default_add_atmosphere: ctrl.add_atmosphere,
+            default_do_redistribute_mesh: do_redistribute_mesh,
             stored_model: None,
             adipls_irotkr: ctrl.adipls_irotkr,
             adipls_nprtkr: ctrl.adipls_nprtkr,
@@ -322,8 +324,10 @@ impl AsteroAdipls {
     /// `sig_fac_astero_support(R, G, M)`.
     ///
     /// # Errors
-    /// Returns [`StarError`] if geometry is invalid, storing fails,
-    /// `store_for_adipls = false` before any model was stored, or ADIPLS fails.
+    /// Returns [`StarError`] if geometry is invalid,
+    /// `do_redistribute_mesh = true` was configured at startup (`srdist` not
+    /// ported), storing fails, `store_for_adipls = false` before any model was
+    /// stored, or ADIPLS fails.
     #[allow(clippy::too_many_arguments)]
     pub fn get_one_el_info(
         &mut self,
@@ -347,6 +351,8 @@ impl AsteroAdipls {
         let g_cgs = STANDARD_CGRAV;
         let m_g = model.m_grav[0];
         let sig_fac = sig_fac_astero_support(r_cm, g_cgs, m_g);
+        // `astero/private/astero_support.f90:134` passes `do_redistribute_mesh`
+        // (default `.true.` in `astero_search.defaults:1363`), not `.false.`.
         self.run_adipls_one_el(
             model,
             el,
@@ -356,7 +362,7 @@ impl AsteroAdipls {
             sig_fac,
             delta_nu_model,
             self.default_add_atmosphere,
-            false,
+            self.default_do_redistribute_mesh,
             store_for_adipls,
             0,
             1.0,

@@ -6,6 +6,7 @@ graduation).
 
 from __future__ import annotations
 
+import csv
 import pathlib
 import shutil
 import struct
@@ -16,6 +17,7 @@ import numpy as np
 import pytest
 
 from flexmesa import _rust, constants
+from flexmesa.data import fetch
 from flexmesa.testing import harness_runner
 from tests import case_extras
 from tests.case_extras import astero_extras, binary_extras, star_extras
@@ -779,6 +781,27 @@ def _load_adipls_mode_oracle(
     return rows
 
 
+def _load_pulse_tap_mode_oracle(
+    tsv_path: pathlib.Path,
+) -> dict[int, list[tuple[int, float, float]]]:
+    """Return `{el: [(n_pg, freq_uhz, inertia), ...]}` from `modes.tsv`."""
+    assert tsv_path.is_file(), f"Missing MESA pulse_tap oracle: {tsv_path}"
+    by_el: dict[int, list[tuple[int, float, float]]] = {}
+    with tsv_path.open("r", encoding="utf-8", newline="") as handle:
+        reader = csv.DictReader(handle, delimiter="\t")
+        for row in reader:
+            el = int(row["l"])
+            order = int(row["n_pg"])
+            freq = struct.unpack(
+                ">d", bytes.fromhex(row["freq_uHz_bits"].removeprefix("0x"))
+            )[0]
+            inertia = struct.unpack(
+                ">d", bytes.fromhex(row["inertia_bits"].removeprefix("0x"))
+            )[0]
+            by_el.setdefault(el, []).append((order, freq, inertia))
+    return by_el
+
+
 def test_surface_effects_resolution_relocation_and_ledger(
     tmp_path: pathlib.Path,
 ) -> None:
@@ -926,7 +949,7 @@ def test_surface_effects_pyo3_bindings_and_error_guards(
     )
     empty = np.array([], dtype=np.float64)
     assert _rust.astero_interpolate_l0_inertia(1100.0, empty, empty) == (
-        pytest.approx(1.0)
+        pytest.approx(0.0)
     )
     with pytest.raises(ValueError, match="length"):
         _rust.astero_interpolate_l0_inertia(
@@ -1047,11 +1070,38 @@ def test_surface_effects_live_strict_and_mesa_mode_oracles(
     oracle_l3 = _load_adipls_mode_oracle(
         oracle_dir / "astero__surface_effects__c000004.modes.tsv"
     )
+    # `benchmarks/fortran_mesa/adipls_oracles/results/libm_effect.tsv` shows
+    # ADIPLS matches MESA at 0 ULP across all 110 `surface_effects` modes on the
+    # same model; `rel=1e-5` (freq) / `1e-4` (inertia) envelopes the 1-step
+    # `flexmesa-star` evolution residual before `extras_after_evolve`.
     for el, oracle_rows in ((1, oracle_l1), (3, oracle_l3)):
         by_order = {row[1]: (row[4], row[3]) for row in ex.raw_modes[el]}
         assert len(oracle_rows) > 10
         for _el, order, _em, freq_ref, inertia_ref in oracle_rows:
             assert order in by_order
             freq_got, inertia_got = by_order[order]
+            assert freq_got == pytest.approx(freq_ref, rel=1.0e-5)
+            assert inertia_got == pytest.approx(inertia_ref, rel=1.0e-4)
+
+    pulse_tap_path = (
+        fetch.resolve_mesa_histories_dir()
+        / "runs/astero/surface_effects/pulse_tap/modes.tsv"
+    )
+    pulse_tap = _load_pulse_tap_mode_oracle(pulse_tap_path)
+    expected_counts = {0: 31, 1: 27, 2: 28, 3: 24}
+    for el, count in expected_counts.items():
+        # ADIPLS emits multiple modes at the same `n_pg` (`l=0, n_pg=32` and
+        # `l=2, n_pg=31`), so compare sorted `(n_pg, freq, inertia)` tuples
+        # 1-to-1.
+        tap_rows = sorted(pulse_tap[el])
+        got_rows = sorted((row[1], row[4], row[3]) for row in ex.raw_modes[el])
+        assert len(tap_rows) == count
+        assert len(got_rows) == count
+        for (order_got, freq_got, inertia_got), (
+            order_ref,
+            freq_ref,
+            inertia_ref,
+        ) in zip(got_rows, tap_rows, strict=True):
+            assert order_got == order_ref
             assert freq_got == pytest.approx(freq_ref, rel=1.0e-5)
             assert inertia_got == pytest.approx(inertia_ref, rel=1.0e-4)

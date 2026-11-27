@@ -17,7 +17,7 @@ use crate::scaling::{DELTA_NU_SUN, NU_MAX_SUN};
 
 /// Linearly interpolates radial ($l=0$) mode inertia $\mathcal{I}_0(\nu)$ at
 /// arbitrary frequency `freq` ($\mu\mathrm{Hz}$), clamping to endpoint values
-/// outside $[\nu_{0,1}, \nu_{0,N_0}]$.
+/// outside $[\nu_{0,1}, \nu_{0,N_0}]$ and returning `0.0` when $N_0 = 0$.
 ///
 /// Corresponds to `interpolate_l0_inertia` in `astero_support.f90:702-724`.
 #[must_use]
@@ -28,7 +28,8 @@ pub fn interpolate_l0_inertia(
 ) -> f64 {
     let n = l0_freqs.len().min(l0_inertias.len());
     if n == 0 {
-        return 1.0;
+        // `astero_support.f90:706-707`: `inertia = 0; if (nl(0) == 0) return`.
+        return 0.0;
     }
     if n == 1 || freq <= l0_freqs[0] {
         return l0_inertias[0];

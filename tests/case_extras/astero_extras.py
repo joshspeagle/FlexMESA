@@ -760,14 +760,48 @@ class SurfaceEffectsExtras:
                 )
             self.matched_modes[el] = (mf, mi, mo)
             if el == 0:
-                dnu_mod = float(
-                    _rust.astero_eval_radial_delta_nu_ols(l0_orders, mf)
-                )
-                if not math.isfinite(dnu_mod) or dnu_mod <= 0.0:
-                    raise RuntimeError(
-                        f"Invalid radial delta_nu_model={dnu_mod}"
-                    )
-                self.delta_nu_model = dnu_mod
+                self._update_radial_delta_nu_model(obs_f, mf, l0_orders)
+
+    def _update_radial_delta_nu_model(
+        self,
+        obs_f: NDArray[np.float64],
+        mf: NDArray[np.float64],
+        l0_orders: NDArray[np.float64],
+    ) -> None:
+        """Update `delta_nu_model` via OLS with upstream guards
+        (`astero/private/astero_support.f90:182-207`, `:677-687`)."""
+        corr_fac = float(self.ctrl["correction_factor"])
+        nl_0 = int(self.ctrl["nl"][0])
+        delta_nu_obs = float(self.ctrl["delta_nu"])
+        nu_max = float(self.ctrl["nu_max"])
+        b_pow = float(self.ctrl["correction_b"])
+        if corr_fac <= 0.0 or nl_0 <= 0 or delta_nu_obs <= 0.0 or nu_max <= 0.0:
+            return
+        valid = obs_f >= 0.0
+        cnt = int(np.count_nonzero(valid))
+        if cnt == 0:
+            return
+        avg_nu_obs = float(np.sum(obs_f[valid])) / float(cnt)
+        if avg_nu_obs <= 0.0:
+            return
+        avg_radial_n = float(np.sum(l0_orders[valid])) / float(cnt)
+        avg_nu_model = float(np.sum(mf[valid])) / float(cnt)
+        sum_1 = 0.0
+        sum_2 = 0.0
+        sum_3 = 0.0
+        for f_obs_val, f_mod_val, n_val in zip(
+            obs_f[valid], mf[valid], l0_orders[valid], strict=True
+        ):
+            dn = float(n_val) - avg_radial_n
+            sum_1 += (float(f_mod_val) - avg_nu_model) * dn
+            sum_2 += dn * dn
+            sum_3 += float(_rust.pow(float(f_obs_val) / nu_max, b_pow))
+        if sum_2 == 0.0 or sum_3 == 0.0:
+            return
+        dnu_mod = sum_1 / sum_2
+        if not math.isfinite(dnu_mod):
+            raise RuntimeError(f"Invalid radial delta_nu_model={dnu_mod}")
+        self.delta_nu_model = dnu_mod
 
     def _write_freqs_dat(self, case_dir: pathlib.Path) -> pathlib.Path:
         """Write `freqs.dat` matching
@@ -822,7 +856,8 @@ class SurfaceEffectsExtras:
         okay = True
 
         tgt_a3 = self.targets["target_a3"]
-        test_cubic = all_mod_f + tgt_a3 * (all_mod_f**3) / all_mod_i
+        all_mod_f3 = all_mod_f * all_mod_f * all_mod_f
+        test_cubic = all_mod_f + tgt_a3 * all_mod_f3 / all_mod_i
         res_cubic = _rust.astero_eval_surface_correction(
             "cubic",
             test_cubic,
@@ -844,8 +879,7 @@ class SurfaceEffectsExtras:
         tgt_b3 = self.targets["target_b3"]
         tgt_b1 = self.targets["target_b1"]
         test_comb = (
-            all_mod_f
-            + (tgt_b1 / all_mod_f + tgt_b3 * (all_mod_f**3)) / all_mod_i
+            all_mod_f + (tgt_b1 / all_mod_f + tgt_b3 * all_mod_f3) / all_mod_i
         )
         res_comb = _rust.astero_eval_surface_correction(
             "combined",
@@ -1096,7 +1130,11 @@ class SurfaceEffectsExtras:
         return okay
 
     def extras_after_evolve(self, state: dict[str, Any]) -> None:
-        """Extract `l = 0..3` modes, write `freqs.dat`, and check fits."""
+        """Extract `l = 0..3` modes, write `freqs.dat`, and check fits.
+
+        Upstream `test_suite_after_evolve` (`:286`) is testhub/timing output
+        only.
+        """
         if self.adipls is None or not self.ctrl or not self.targets:
             raise RuntimeError(
                 "SurfaceEffectsExtras.extras_startup must run before "
@@ -1181,6 +1219,11 @@ class SurfaceEffectsExtras:
         if okay:
             print("all tests are within tolerances")
         print()
+        # Upstream `call test_suite_after_evolve(s, ierr)`
+        # (`astero/test_suite/surface_effects/src/run_star_extras.f90:286`,
+        # `star/job/test_suite_extras.inc:94-107`) writes testhub/timing
+        # output only with no physical state or termination effect, matching
+        # `AsteroGyreExtras` and `AsteroAdiplsExtras`.
 
 
 def match_astero_extras(norm_star: str, digest: Any) -> Any:

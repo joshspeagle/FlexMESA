@@ -1,7 +1,8 @@
-// SPDX-License-Identifier: GPL-3.0-only
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Reference LAPACK 3.12.0 LU routines (`SRC/dgetrf.f`, `dgetrf2.f`,
-//! `dgetrs.f`, `dgecon.f`, `dgerfs.f`, `dgesvx.f`), double precision, as the
-//! MESA SDK `26.6.1` builds them (`gfortran -O2 -fPIC`).
+//! `dgetrs.f`, `dgecon.f`, `dgerfs.f`, `dgesvx.f`, modified BSD licence),
+//! double precision, as the MESA SDK `26.6.1` builds them
+//! (`gfortran -O2 -fPIC`).
 
 use super::aux::{
     dgeequ, dlacn2, dlacpy, dlange, dlantr, dlaqge, dlaswp, dlatrs, fmax,
@@ -570,4 +571,83 @@ pub fn dgesvx(
         out.info = n + 1;
     }
     Ok(out)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn dgesvx_equilibrated_2x2_matches_reference_lapack_bit_for_bit() {
+        // Column-major A = [[1e12, 2.0], [1.0, 3e-12]] * [1, 2] = [1e12 + 4, 1 + 6e-12].
+        let mut a = [1.0e12_f64, 1.0, 2.0, 3.0e-12];
+        let mut af = [0.0_f64; 4];
+        let mut ipiv = [0_usize; 2];
+        let mut b = [1.0e12_f64 + 4.0, 1.0 + 6.0e-12];
+        let mut x = [0.0_f64; 2];
+
+        let out = dgesvx(
+            b'E', b'N', 2, 1, &mut a, &mut af, &mut ipiv, &mut b, &mut x,
+        )
+        .expect("equilibrated 2x2 dgesvx");
+
+        assert_eq!(out.info, 0);
+        assert_eq!(out.equed, b'B');
+        assert_eq!(x[0].to_bits(), 0x3FEF_FFFF_FFFF_FFFC);
+        assert_eq!(x[1].to_bits(), 0x4000_005D_3811_7FFF);
+        assert_eq!(out.rcond.to_bits(), 0x3FB5_5555_5555_5556);
+        assert_eq!(out.ferr[0].to_bits(), 0x3F55_D3EF_7980_951C);
+        assert_eq!(out.berr[0].to_bits(), 0x3A3F_FFFF_FFFF_7344);
+    }
+
+    #[test]
+    fn dgesvx_reports_info_n_plus_1_on_near_singular_and_zero_pivot() {
+        // 1. Non-zero determinant (`det == f64::EPSILON`), `rcond < eps` -> `info = 3`.
+        let mut a1 = [1.0_f64, 1.0, 1.0, 1.0 + f64::EPSILON];
+        let mut af1 = [0.0_f64; 4];
+        let mut ipiv1 = [0_usize; 2];
+        let mut b1 = [1.0_f64, 2.0];
+        let mut x1 = [0.0_f64; 2];
+        let out1 = dgesvx(
+            b'E', b'N', 2, 1, &mut a1, &mut af1, &mut ipiv1, &mut b1, &mut x1,
+        )
+        .expect("near-singular unscaled dgesvx");
+        assert_eq!(out1.info, 3);
+        assert_eq!(out1.equed, b'N');
+        assert_eq!(out1.rcond.to_bits(), 0x3C90_0000_0000_0000);
+        assert!(out1.rcond < dlamch::EPS);
+
+        // 2. Ill-scaled near-singular system equilibrated (`EQUED = 'B'`), still `info = 3`.
+        let mut a2 = [
+            1.0e10_f64,
+            1.0e2,
+            1.0e-10,
+            1.0e-18 * (1.0 + 2.0 * f64::EPSILON),
+        ];
+        let mut af2 = [0.0_f64; 4];
+        let mut ipiv2 = [0_usize; 2];
+        let mut b2 = [1.0_f64, 1.0e-8];
+        let mut x2 = [0.0_f64; 2];
+        let out2 = dgesvx(
+            b'E', b'N', 2, 1, &mut a2, &mut af2, &mut ipiv2, &mut b2, &mut x2,
+        )
+        .expect("near-singular equilibrated dgesvx");
+        assert_eq!(out2.info, 3);
+        assert_eq!(out2.equed, b'B');
+        assert_eq!(out2.rcond.to_bits(), 0x3C98_0000_0000_0000);
+        assert!(out2.rcond < dlamch::EPS);
+
+        // 3. Exact zero pivot -> `info = 2`, `rcond = 0.0`.
+        let mut a3 = [1.0_f64, 2.0, 1.0, 2.0];
+        let mut af3 = [0.0_f64; 4];
+        let mut ipiv3 = [0_usize; 2];
+        let mut b3 = [1.0_f64, 1.0];
+        let mut x3 = [0.0_f64; 2];
+        let out3 = dgesvx(
+            b'E', b'N', 2, 1, &mut a3, &mut af3, &mut ipiv3, &mut b3, &mut x3,
+        )
+        .expect("exact singular dgesvx");
+        assert_eq!(out3.info, 2);
+        assert_eq!(out3.rcond.to_bits(), 0);
+    }
 }

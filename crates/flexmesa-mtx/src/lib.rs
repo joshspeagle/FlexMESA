@@ -4,9 +4,10 @@
 //! (`dgetrf`, `dgetrs`), banded (`dgbtrf`, `dgbtrs`), and block-tridiagonal
 //! (`block_thomas_factor`, `block_thomas_solve`, `solve_block_tridiag_bcyclic`)
 //! linear systems, forward-mode implicit differentiation for parameter-varying
-//! linear systems (`solve_dense_dual`), and bidirectional conversions across
-//! dense, banded, compressed-row sparse (CSR), and compressed-column sparse
-//! (CSC) formats.
+//! linear systems (`solve_dense_dual`), Reference LAPACK/BLAS real auxiliary,
+//! BLAS, and LU routines (`lapack`, including `dgesvx`), and bidirectional
+//! conversions across dense, banded, compressed-row sparse (CSR), and
+//! compressed-column sparse (CSC) formats.
 
 #![forbid(unsafe_code)]
 #![allow(
@@ -30,6 +31,7 @@ mod dense_ops;
 pub mod eigen;
 mod eigen_prep;
 mod eigen_vecs;
+pub mod lapack;
 pub mod precond;
 pub mod sparse;
 mod sparse_band;

@@ -9,7 +9,7 @@ use flexmesa_chem::NuclideCatalog;
 use crate::approx21::Approx21Indices;
 use crate::derivs_support::fl_epsnuc_3alf_with_derivs;
 use crate::reaction_synth::synthesize_reaction_info;
-use crate::types::NetGeneralInfo;
+use crate::types::{NetError, NetGeneralInfo};
 
 /// Cached standard reaction $Q$ and $Q_\nu$ values used by `approx21_eps_info`.
 #[derive(Debug, Clone, Copy)]
@@ -64,7 +64,8 @@ pub struct Approx21ReactionQs {
     pub qrhe4_rebuild: f64,
 }
 
-static APPROX21_QS: OnceLock<Approx21ReactionQs> = OnceLock::new();
+static APPROX21_QS: OnceLock<Result<Approx21ReactionQs, String>> =
+    OnceLock::new();
 
 impl Approx21ReactionQs {
     /// Returns a copy with all standard reaction neutrino $Q_\nu$ entries
@@ -87,107 +88,134 @@ impl Approx21ReactionQs {
     }
 }
 
-fn q_pair(name: &str) -> (f64, f64) {
-    synthesize_reaction_info(name, 0)
-        .map_or((0.0, 0.0), |r| (r.std_q, r.std_qneu))
+pub(crate) fn q_pair(name: &str) -> Result<(f64, f64), NetError> {
+    let rxn = synthesize_reaction_info(name, 0)?;
+    Ok((rxn.std_q, rxn.std_qneu))
+}
+
+fn build_approx21_qs() -> Result<Approx21ReactionQs, NetError> {
+    let (qtotal_rpp, qneu_rpp) = q_pair("rpp_to_he3")?;
+    let (qr33, _) = q_pair("r_he3_he3_to_h1_h1_he4")?;
+    let (qtotal_rpp2, qneu_rpp2) = q_pair("r34_pp2")?;
+    let (qtotal_rpp3, qneu_rpp3) = q_pair("r34_pp3")?;
+    let (qtotal_rcpg, qneu_rcpg) = q_pair("rc12_to_n14")?;
+    let (qtotal_rnpg, qneu_rnpg) = q_pair("rn14_to_c12")?;
+    let (qtotal_ropg, qneu_ropg) = q_pair("ro16_to_n14")?;
+    let (qrn14_to_o16, _) = q_pair("rn14_to_o16")?;
+    let (qtotal_rpen, qneu_rpen) = q_pair("rprot_to_neut")?;
+    let (qtotal_rnep, qneu_rnep) = q_pair("rneut_to_prot")?;
+    let (qtotal_rni56ec, qneu_rni56ec) = q_pair("rni56ec_to_co56")?;
+    let (qtotal_rco56ec, qneu_rco56ec) = q_pair("rco56ec_to_fe56")?;
+    let (qrn14ag, _) = q_pair("rn14ag_lite")?;
+    let (qr3alf, _) = q_pair("r_he4_he4_he4_to_c12")?;
+    let (qrc12ag, _) = q_pair("r_c12_ag_o16")?;
+    let (qro16ag, _) = q_pair("r_o16_ag_ne20")?;
+    let (qr1212, _) = q_pair("r1212")?;
+    let (qr1216_to_mg24, _) = q_pair("r1216_to_mg24")?;
+    let (qr1216_to_si28, _) = q_pair("r1216_to_si28")?;
+    let (qr1616a, _) = q_pair("r1616a")?;
+    let (qr1616g, _) = q_pair("r1616g")?;
+    let (qrne20ag, _) = q_pair("r_ne20_ag_mg24")?;
+    let (qrmg24ag, _) = q_pair("r_mg24_ag_si28")?;
+    let (qrsi28ag, _) = q_pair("r_si28_ag_s32")?;
+    let (qrs32ag, _) = q_pair("r_s32_ag_ar36")?;
+    let (qrar36ag, _) = q_pair("r_ar36_ag_ca40")?;
+    let (qrca40ag, _) = q_pair("r_ca40_ag_ti44")?;
+    let (qrti44ag, _) = q_pair("r_ti44_ag_cr48")?;
+    let (qrcr48ag, _) = q_pair("r_cr48_ag_fe52")?;
+    let (qrfe52ag, _) = q_pair("r_fe52_ag_ni56")?;
+    let (qrfe52neut_to_fe54, _) = q_pair("rfe52neut_to_fe54")?;
+    let (qrfe52aprot_to_fe54, _) = q_pair("rfe52aprot_to_fe54")?;
+    let (qrfe54ng_to_fe56, _) = q_pair("rfe54ng_to_fe56")?;
+    let (qrfe54aprot_to_fe56, _) = q_pair("rfe54aprot_to_fe56")?;
+    let (qrfe52aprot_to_ni56, _) = q_pair("rfe52aprot_to_ni56")?;
+    let (qrfe54prot_to_ni56, _) = q_pair("rfe54prot_to_ni56")?;
+    let (qrhe4_breakup, _) = q_pair("rhe4_breakup")?;
+    let (qrhe4_rebuild, _) = q_pair("rhe4_rebuild")?;
+    Ok(Approx21ReactionQs {
+        qtotal_rpp,
+        qneu_rpp,
+        qr33,
+        qtotal_rpp2,
+        qneu_rpp2,
+        qtotal_rpp3,
+        qneu_rpp3,
+        qtotal_rcpg,
+        qneu_rcpg,
+        qtotal_rnpg,
+        qneu_rnpg,
+        qtotal_ropg,
+        qneu_ropg,
+        qrn14_to_o16,
+        qtotal_rpen,
+        qneu_rpen,
+        qtotal_rnep,
+        qneu_rnep,
+        qtotal_rni56ec,
+        qneu_rni56ec,
+        qtotal_rco56ec,
+        qneu_rco56ec,
+        qrn14ag,
+        qr3alf,
+        qrc12ag,
+        qro16ag,
+        qr1212,
+        qr1216_to_mg24,
+        qr1216_to_si28,
+        qr1616a,
+        qr1616g,
+        qrne20ag,
+        qrmg24ag,
+        qrsi28ag,
+        qrs32ag,
+        qrar36ag,
+        qrca40ag,
+        qrti44ag,
+        qrcr48ag,
+        qrfe52ag,
+        qrfe52neut_to_fe54,
+        qrfe52aprot_to_fe54,
+        qrfe54ng_to_fe56,
+        qrfe54aprot_to_fe56,
+        qrfe52aprot_to_ni56,
+        qrfe54prot_to_ni56,
+        qrhe4_breakup,
+        qrhe4_rebuild,
+    })
+}
+
+/// Returns the cached [`Approx21ReactionQs`] table, returning an explicit
+/// error if any standard reaction fails to resolve.
+///
+/// # Errors
+/// Returns [`NetError`] if any built-in `approx21` reaction fails resolution.
+pub fn try_global_approx21_qs() -> Result<&'static Approx21ReactionQs, NetError>
+{
+    match APPROX21_QS
+        .get_or_init(|| build_approx21_qs().map_err(|e| e.to_string()))
+    {
+        Ok(qs) => Ok(qs),
+        Err(msg) => Err(NetError::InvalidReactionOrIso(msg.clone())),
+    }
 }
 
 /// Returns the cached [`Approx21ReactionQs`] table.
 #[must_use]
 pub fn global_approx21_qs() -> &'static Approx21ReactionQs {
-    APPROX21_QS.get_or_init(|| {
-        let (qtotal_rpp, qneu_rpp) = q_pair("rpp_to_he3");
-        let (qr33, _) = q_pair("r_he3_he3_to_h1_h1_he4");
-        let (qtotal_rpp2, qneu_rpp2) = q_pair("r34_pp2");
-        let (qtotal_rpp3, qneu_rpp3) = q_pair("r34_pp3");
-        let (qtotal_rcpg, qneu_rcpg) = q_pair("rc12_to_n14");
-        let (qtotal_rnpg, qneu_rnpg) = q_pair("rn14_to_c12");
-        let (qtotal_ropg, qneu_ropg) = q_pair("ro16_to_n14");
-        let (qrn14_to_o16, _) = q_pair("rn14_to_o16");
-        let (qtotal_rpen, qneu_rpen) = q_pair("rprot_to_neut");
-        let (qtotal_rnep, qneu_rnep) = q_pair("rneut_to_prot");
-        let (qtotal_rni56ec, qneu_rni56ec) = q_pair("rni56ec_to_co56");
-        let (qtotal_rco56ec, qneu_rco56ec) = q_pair("rco56ec_to_fe56");
-        let (qrn14ag, _) = q_pair("rn14ag_lite");
-        let (qr3alf, _) = q_pair("r_he4_he4_he4_to_c12");
-        let (qrc12ag, _) = q_pair("r_c12_ag_o16");
-        let (qro16ag, _) = q_pair("r_o16_ag_ne20");
-        let (qr1212, _) = q_pair("r1212");
-        let (qr1216_to_mg24, _) = q_pair("r1216_to_mg24");
-        let (qr1216_to_si28, _) = q_pair("r1216_to_si28");
-        let (qr1616a, _) = q_pair("r1616a");
-        let (qr1616g, _) = q_pair("r1616g");
-        let (qrne20ag, _) = q_pair("r_ne20_ag_mg24");
-        let (qrmg24ag, _) = q_pair("r_mg24_ag_si28");
-        let (qrsi28ag, _) = q_pair("r_si28_ag_s32");
-        let (qrs32ag, _) = q_pair("r_s32_ag_ar36");
-        let (qrar36ag, _) = q_pair("r_ar36_ag_ca40");
-        let (qrca40ag, _) = q_pair("r_ca40_ag_ti44");
-        let (qrti44ag, _) = q_pair("r_ti44_ag_cr48");
-        let (qrcr48ag, _) = q_pair("r_cr48_ag_fe52");
-        let (qrfe52ag, _) = q_pair("r_fe52_ag_ni56");
-        let (qrfe52neut_to_fe54, _) = q_pair("rfe52neut_to_fe54");
-        let (qrfe52aprot_to_fe54, _) = q_pair("rfe52aprot_to_fe54");
-        let (qrfe54ng_to_fe56, _) = q_pair("rfe54ng_to_fe56");
-        let (qrfe54aprot_to_fe56, _) = q_pair("rfe54aprot_to_fe56");
-        let (qrfe52aprot_to_ni56, _) = q_pair("rfe52aprot_to_ni56");
-        let (qrfe54prot_to_ni56, _) = q_pair("rfe54prot_to_ni56");
-        let (qrhe4_breakup, _) = q_pair("rhe4_breakup");
-        let (qrhe4_rebuild, _) = q_pair("rhe4_rebuild");
-        Approx21ReactionQs {
-            qtotal_rpp,
-            qneu_rpp,
-            qr33,
-            qtotal_rpp2,
-            qneu_rpp2,
-            qtotal_rpp3,
-            qneu_rpp3,
-            qtotal_rcpg,
-            qneu_rcpg,
-            qtotal_rnpg,
-            qneu_rnpg,
-            qtotal_ropg,
-            qneu_ropg,
-            qrn14_to_o16,
-            qtotal_rpen,
-            qneu_rpen,
-            qtotal_rnep,
-            qneu_rnep,
-            qtotal_rni56ec,
-            qneu_rni56ec,
-            qtotal_rco56ec,
-            qneu_rco56ec,
-            qrn14ag,
-            qr3alf,
-            qrc12ag,
-            qro16ag,
-            qr1212,
-            qr1216_to_mg24,
-            qr1216_to_si28,
-            qr1616a,
-            qr1616g,
-            qrne20ag,
-            qrmg24ag,
-            qrsi28ag,
-            qrs32ag,
-            qrar36ag,
-            qrca40ag,
-            qrti44ag,
-            qrcr48ag,
-            qrfe52ag,
-            qrfe52neut_to_fe54,
-            qrfe52aprot_to_fe54,
-            qrfe54ng_to_fe56,
-            qrfe54aprot_to_fe56,
-            qrfe52aprot_to_ni56,
-            qrfe54prot_to_ni56,
-            qrhe4_breakup,
-            qrhe4_rebuild,
-        }
-    })
+    try_global_approx21_qs()
+        .expect("built-in approx21 standard reaction Q table must resolve")
 }
 
-pub(crate) fn get_qs_rfe56ec(g: &NetGeneralInfo) -> (f64, f64) {
+/// Returns standard `(Qtotal, Qneu)` for the `approx21` fake electron-capture
+/// target isotope (`get_Qs_rfe56ec` in `net/private/net_eval.f90:513-552`),
+/// reading from the global standard reaction tables independent of active net
+/// membership and scaling by `reaction_neuqs_factor` (`net.f90:202-210`).
+///
+/// # Errors
+/// Returns [`NetError`] if the mapped reaction cannot be resolved.
+pub(crate) fn get_qs_rfe56ec(
+    g: &NetGeneralInfo,
+) -> Result<(f64, f64), NetError> {
     let nuclides = NuclideCatalog::builtin_ref();
     let iso_name = nuclides
         .get_by_id(g.approx21_ye_iso)
@@ -208,13 +236,8 @@ pub(crate) fn get_qs_rfe56ec(g: &NetGeneralInfo) -> (f64, f64) {
         "cr66" => "rfe56ec_fake_to_cr66",
         _ => "rco56ec_to_fe56",
     };
-    let (q, qneu) = if let Some(idx1) = g.reaction_index_by_name(rxn_name) {
-        let r = &g.reactions[idx1 - 1];
-        (r.std_q, r.std_qneu)
-    } else {
-        q_pair(rxn_name)
-    };
-    (q, qneu * g.reaction_neuqs_factor)
+    let (q, qneu) = q_pair(rxn_name)?;
+    Ok((q, qneu * g.reaction_neuqs_factor))
 }
 
 /// Evaluates `approx21_special_reactions` (`net/private/net_approx21.f90` lines 352–923).
@@ -536,5 +559,127 @@ pub fn approx21_special_reactions(
     if y[idx.ih1] > TINY_Y {
         apply_beta_cap(idx.irnpg, y[idx.ih1], 5.68e-3 / (y[idx.ih1] * 1.57));
         apply_beta_cap(idx.iropg, y[idx.ih1], 0.0105 / y[idx.ih1]);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::reaction_synth::mesa_reaction_qtotal;
+    use flexmesa_rates::RatesCatalog;
+
+    #[test]
+    fn test_q_pair_returns_err_on_unknown_reaction_instead_of_zero() {
+        for bad in ["nonexistent_reaction_649", "r_notaniso_pg_h1", ""] {
+            let err = q_pair(bad).expect_err(bad);
+            assert!(
+                matches!(err, NetError::InvalidReactionOrIso(_)),
+                "unexpected error variant for {bad:?}: {err:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_get_qs_rfe56ec_uses_standard_table_independent_of_net() {
+        let nuclides = NuclideCatalog::builtin_ref();
+        let cat = RatesCatalog::builtin();
+        let mut g = NetGeneralInfo::from_name("approx21_cr60_plus_co56.net")
+            .expect("load approx21_cr60_plus_co56.net");
+
+        // Mutate net-local Q values to prove `get_qs_rfe56ec` ignores
+        // `g.reactions` (`net_eval.f90:513-552`, `net_initialize.f90:197-198`).
+        if let Some(idx1) = g.reaction_index_by_name("rco56ec_to_fe56") {
+            g.reactions[idx1 - 1].std_q = -999.0;
+            g.reactions[idx1 - 1].std_qneu = -888.0;
+        }
+
+        let cases: &[(&str, &str)] = &[
+            ("mn56", "rfe56ec_fake_to_mn56"),
+            ("mn57", "rfe56ec_fake_to_mn57"),
+            ("cr56", "rfe56ec_fake_to_cr56"),
+            ("cr57", "rfe56ec_fake_to_cr57"),
+            ("cr58", "rfe56ec_fake_to_cr58"),
+            ("cr59", "rfe56ec_fake_to_cr59"),
+            ("cr60", "rfe56ec_fake_to_cr60"),
+            ("cr61", "rfe56ec_fake_to_cr61"),
+            ("cr62", "rfe56ec_fake_to_cr62"),
+            ("cr63", "rfe56ec_fake_to_cr63"),
+            ("cr64", "rfe56ec_fake_to_cr64"),
+            ("cr65", "rfe56ec_fake_to_cr65"),
+            ("cr66", "rfe56ec_fake_to_cr66"),
+            ("fe56", "rco56ec_to_fe56"),
+            ("ni56", "rco56ec_to_fe56"),
+        ];
+
+        for &(iso, rxn) in cases {
+            g.approx21_ye_iso = nuclides.get_nuclide_index(iso).expect(iso);
+            g.reaction_neuqs_factor = 1.0;
+            let (q, qneu) = get_qs_rfe56ec(&g).expect(rxn);
+            let ir = cat.reaction_id_by_name(rxn).expect(rxn);
+            let info = cat.reaction_by_id(ir).expect(rxn);
+            let expected_q =
+                mesa_reaction_qtotal(nuclides, info).expect("binding qtotal");
+            assert_eq!(q.to_bits(), expected_q.to_bits(), "{iso} -> {rxn} Q");
+            assert_eq!(
+                qneu.to_bits(),
+                info.std_qneu.to_bits(),
+                "{iso} -> {rxn} Qneu"
+            );
+
+            g.reaction_neuqs_factor = 0.25;
+            let (q_s, qneu_s) = get_qs_rfe56ec(&g).expect(rxn);
+            assert_eq!(q_s.to_bits(), expected_q.to_bits());
+            assert_eq!(
+                qneu_s.to_bits(),
+                (info.std_qneu * 0.25).to_bits(),
+                "{iso} -> {rxn} scaled Qneu"
+            );
+        }
+
+        // Else branch covers `0` and unknown `approx21_ye_iso` ids too.
+        for bogus_id in [0_usize, 999_999] {
+            g.approx21_ye_iso = bogus_id;
+            g.reaction_neuqs_factor = 0.5;
+            let (q, qneu) = get_qs_rfe56ec(&g).expect("else rco56ec_to_fe56");
+            let ir = cat.reaction_id_by_name("rco56ec_to_fe56").unwrap();
+            let info = cat.reaction_by_id(ir).unwrap();
+            let expected_q = mesa_reaction_qtotal(nuclides, info).unwrap();
+            assert_eq!(q.to_bits(), expected_q.to_bits());
+            assert_eq!(qneu.to_bits(), (info.std_qneu * 0.5).to_bits());
+        }
+
+        // Independent of active net membership (`h_burn.net`).
+        let mut h_burn = NetGeneralInfo::from_name("h_burn.net").unwrap();
+        h_burn.approx21_ye_iso = nuclides.get_nuclide_index("cr60").unwrap();
+        let (q, qneu) = get_qs_rfe56ec(&h_burn).expect("cr60 on h_burn");
+        let ir = cat.reaction_id_by_name("rfe56ec_fake_to_cr60").unwrap();
+        let info = cat.reaction_by_id(ir).unwrap();
+        assert_eq!(
+            q.to_bits(),
+            mesa_reaction_qtotal(nuclides, info).unwrap().to_bits()
+        );
+        assert_eq!(qneu.to_bits(), info.std_qneu.to_bits());
+    }
+
+    #[test]
+    fn test_try_global_approx21_qs_resolves_standard_table() {
+        let nuclides = NuclideCatalog::builtin_ref();
+        let cat = RatesCatalog::builtin();
+        let qs = try_global_approx21_qs().expect("try_global_approx21_qs");
+        let ir_lite = cat.reaction_id_by_name("rn14ag_lite").unwrap();
+        let info_lite = cat.reaction_by_id(ir_lite).unwrap();
+        assert_eq!(qs.qrn14ag.to_bits(), info_lite.std_q.to_bits());
+
+        let ir_co = cat.reaction_id_by_name("rco56ec_to_fe56").unwrap();
+        let info_co = cat.reaction_by_id(ir_co).unwrap();
+        let q_co = mesa_reaction_qtotal(nuclides, info_co).unwrap();
+        assert_eq!(qs.qtotal_rco56ec.to_bits(), q_co.to_bits());
+        assert_eq!(qs.qneu_rco56ec.to_bits(), info_co.std_qneu.to_bits());
+
+        let scaled = qs.with_neuqs_factor(0.5);
+        assert_eq!(
+            scaled.qneu_rco56ec.to_bits(),
+            (info_co.std_qneu * 0.5).to_bits()
+        );
     }
 }

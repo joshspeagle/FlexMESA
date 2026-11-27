@@ -7,9 +7,11 @@ use flexmesa_const::{AVO, CLIGHT, QCONV};
 
 use crate::approx21::Approx21Indices;
 use crate::approx21_special::get_qs_rfe56ec;
-pub use crate::approx21_special::{global_approx21_qs, Approx21ReactionQs};
+pub use crate::approx21_special::{
+    global_approx21_qs, try_global_approx21_qs, Approx21ReactionQs,
+};
+use crate::types::{NetError, NetGeneralInfo, NUM_CATEGORIES};
 use flexmesa_math::Quad;
-use crate::types::{NetGeneralInfo, NUM_CATEGORIES};
 
 const CAT_PP: usize = 0;
 const CAT_CNO: usize = 1;
@@ -57,6 +59,9 @@ pub fn approx21_eval_ppii_fraction(
 
 /// Evaluates `approx21_eps_info` (`net/private/net_approx21.f90` lines 1562–1982),
 /// returning `(eps_total, eps_neu)`.
+///
+/// # Errors
+/// Returns [`NetError`] if any standard `approx21` reaction fails resolution.
 #[allow(clippy::too_many_arguments, clippy::similar_names)]
 pub fn approx21_eps_info(
     g: &NetGeneralInfo,
@@ -68,17 +73,17 @@ pub fn approx21_eps_info(
     temp: f64,
     do_eps_nuc_categories: bool,
     eps_nuc_categories: &mut [f64; NUM_CATEGORIES],
-) -> (f64, f64) {
-    let qs = global_approx21_qs().with_neuqs_factor(g.reaction_neuqs_factor);
-    let (qtotal_rfe56ec, qneu_rfe56ec) = get_qs_rfe56ec(g);
+) -> Result<(f64, f64), NetError> {
+    let qs =
+        try_global_approx21_qs()?.with_neuqs_factor(g.reaction_neuqs_factor);
+    let (qtotal_rfe56ec, qneu_rfe56ec) = get_qs_rfe56ec(g)?;
 
     let mut xx = Quad::ZERO;
     for i in 0..g.num_isos {
         xx += Quad::from_f64(dydt[i]) * Quad::from_f64(g.mion[i]);
     }
-    let avo_c2 = Quad::from_f64(AVO)
-        * Quad::from_f64(CLIGHT)
-        * Quad::from_f64(CLIGHT);
+    let avo_c2 =
+        Quad::from_f64(AVO) * Quad::from_f64(CLIGHT) * Quad::from_f64(CLIGHT);
     let eps_total = (-avo_c2 * xx).to_f64();
 
     let fe56ec_fake_factor = if temp >= g.min_t_for_fe56ec_fake_factor {
@@ -144,7 +149,7 @@ pub fn approx21_eps_info(
     let eps_neu = (eps_neu_q * Quad::from_f64(QCONV)).to_f64();
 
     if !do_eps_nuc_categories {
-        return (eps_total, eps_neu);
+        return Ok((eps_total, eps_neu));
     }
 
     let mut cat_q = [Quad::ZERO; NUM_CATEGORIES];
@@ -456,7 +461,7 @@ pub fn approx21_eps_info(
         eps_nuc_categories[k] = (cat_q[k] * Quad::from_f64(QCONV)).to_f64();
     }
 
-    (eps_total, eps_neu)
+    Ok((eps_total, eps_neu))
 }
 
 /// Evaluates `approx21_d_epsneu_dy` (`net/private/net_approx21.f90` lines 1985–2030).

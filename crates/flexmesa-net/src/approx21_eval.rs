@@ -213,7 +213,7 @@ pub(crate) fn eval_net_approx21_into(
         temp,
         true,
         &mut w.direct_eps_nuc_categories,
-    );
+    )?;
     let eps_nuc = eps_total - eps_neu_total;
 
     let nuclides = NuclideCatalog::builtin_ref();
@@ -280,7 +280,7 @@ pub(crate) fn eval_net_approx21_into(
         temp,
         false,
         &mut dummy_cats,
-    );
+    )?;
     let d_eps_nuc_dt = deps_total_dt - deps_neu_dt;
 
     let (deps_total_drho, deps_neu_drho) = approx21_eps_info(
@@ -293,7 +293,7 @@ pub(crate) fn eval_net_approx21_into(
         temp,
         false,
         &mut dummy_cats,
-    );
+    )?;
     let d_eps_nuc_drho = deps_total_drho - deps_neu_drho;
 
     let mut d_epsneu_dy = vec![0.0_f64; species];

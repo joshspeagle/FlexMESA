@@ -121,40 +121,18 @@ fn build_xh_start_buffer(model: &StarModel) -> Vec<f64> {
     let layout = &model.layout;
     for k in 0..nz {
         let base = k * nvar_hydro;
-        buf[base + layout.i_lnd] =
-            model.lnd_start.get(k).copied().unwrap_or(model.lnd[k]);
-        buf[base + layout.i_lnt] =
-            model.ln_t_start.get(k).copied().unwrap_or(model.ln_t[k]);
+        buf[base + layout.i_lnd] = model.lnd_start[k];
+        buf[base + layout.i_lnt] = model.ln_t_start[k];
         buf[base + layout.i_lnr] = model.ln_r_start[k];
-        buf[base + layout.i_lum] =
-            model.lum_start.get(k).copied().unwrap_or(model.lum[k]);
+        buf[base + layout.i_lum] = model.lum_start[k];
         if let Some(iv) = layout.i_v {
-            buf[base + iv] = model
-                .v_start
-                .get(k)
-                .copied()
-                .unwrap_or_else(|| model.v.get(k).copied().unwrap_or(0.0));
+            buf[base + iv] = model.v_start[k];
         }
         if let Some(iu) = layout.i_u {
-            buf[base + iu] = model
-                .u_start
-                .get(k)
-                .copied()
-                .unwrap_or_else(|| model.u.get(k).copied().unwrap_or(0.0));
+            buf[base + iu] = model.u_start[k];
         }
         if let Some(iw) = layout.i_w {
-            buf[base + iw] =
-                model.aux.rsp.w_start.get(k).copied().unwrap_or_else(|| {
-                    model
-                        .aux
-                        .rsp
-                        .et_rsp
-                        .get(k)
-                        .copied()
-                        .unwrap_or(0.0)
-                        .max(0.0)
-                        .sqrt()
-                });
+            buf[base + iw] = model.aux.rsp.w_start[k];
         }
         if let Some(ihp) = layout.i_hp {
             buf[base + ihp] = model

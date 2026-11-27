@@ -181,6 +181,10 @@ pub(crate) fn finish_load_model(
             }
         }
         model.pack_xh();
+        if let Err(e) = crate::hydro_eqns::check_start_of_step_arrays(model) {
+            model.aux.doing_finish_load_model = false;
+            return Err(e);
+        }
         crate::rsp2_ad::update_rsp2_vars_ad(model);
     }
     // `set_viscosity_vars_TDC` after `set_vars` (`read_model.f90:164-167`).

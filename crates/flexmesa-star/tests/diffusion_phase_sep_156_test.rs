@@ -1497,12 +1497,12 @@ fn test_diffusion_phase_sep_guards_energy_gating_and_photo_v26_restart() {
     em.controls.diffusion.do_diffusion_heating = false;
     em.aux.eps_wd_sedimentation[k] = 1.0e3;
     em.aux.eps_diffusion[k] = 2.0e3;
-    let eq_off = setup_sources_and_others(&em, k).1.val;
+    let eq_off = setup_sources_and_others(&em, k).expect("sources").1.val;
     em.controls.diffusion.do_wd_sedimentation_heating = true;
-    let eq_wd = setup_sources_and_others(&em, k).1.val;
+    let eq_wd = setup_sources_and_others(&em, k).expect("sources").1.val;
     em.controls.diffusion.do_wd_sedimentation_heating = false;
     em.controls.diffusion.do_diffusion_heating = true;
-    let eq_diff = setup_sources_and_others(&em, k).1.val;
+    let eq_diff = setup_sources_and_others(&em, k).expect("sources").1.val;
     assert_ne!(
         eq_wd, eq_off,
         "WD sedimentation heating must affect energy eqn"

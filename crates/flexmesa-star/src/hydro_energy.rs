@@ -244,11 +244,15 @@ fn setup_rti_diffusion(model: &StarModel, k: usize) -> StarAdOrder1 {
 /// Evaluates all nuclear, neutrino, extra, diffusion, premix, phase-separation,
 /// turbulent work, RTI diffusion, drag, and irradiation heating terms for cell
 /// `k` (`setup_sources_and_others` in `star/private/hydro_energy.f90:230-330`).
-#[must_use]
+///
+/// # Errors
+/// Returns [`StarError::InvalidInput`] when the TDC eddy-viscous heating term
+/// is active (`star/private/hydro_energy.f90:268-277`): it needs
+/// `compute_tdc_Eq_div_w_face`, which is not ported.
 pub fn setup_sources_and_others(
     model: &StarModel,
     k: usize,
-) -> (StarAdOrder1, StarAdOrder1, bool) {
+) -> Result<(StarAdOrder1, StarAdOrder1, bool), StarError> {
     let t_start_k = flexmesa_math::exp(
         model.ln_t_start.get(k).copied().unwrap_or(model.ln_t[k]),
     );
@@ -307,18 +311,24 @@ pub fn setup_sources_and_others(
         others.val += model.aux.eps_phase_separation[k];
     }
 
-    let eq_ad = if model.controls.rsp2_flag
-        || (model.controls.tdc_alpha_m > 0.0
-            && model.controls.mlt_option == MltOption::Tdc
-            && model.controls.tdc_include_eturb_in_energy_equation
-            && (model.controls.v_flag || model.controls.u_flag))
-    {
+    // `star/private/hydro_energy.f90:264-277`: `RSP2` reads `s% Eq_ad(k)`;
+    // the TDC branch builds `Eq_ad` from `compute_tdc_Eq_div_w_face`
+    // (`star/private/tdc_hydro.f90`), which is not ported.
+    let eq_ad = if model.controls.rsp2_flag {
         model
             .aux
             .eq_ad
             .get(k)
             .copied()
             .unwrap_or(StarAdOrder1::ZERO)
+    } else if model.controls.tdc_alpha_m > 0.0
+        && model.controls.mlt_option == MltOption::Tdc
+        && model.controls.tdc_include_eturb_in_energy_equation
+        && (model.controls.v_flag || model.controls.u_flag)
+    {
+        return Err(StarError::InvalidInput(format!(
+            "energy equation at cell {k}: TDC eddy-viscous heating with TDC_include_eturb_in_energy_equation needs compute_tdc_Eq_div_w_face, which is not ported (star/private/hydro_energy.f90:268-277)"
+        )));
     } else {
         StarAdOrder1::ZERO
     };
@@ -380,7 +390,7 @@ pub fn setup_sources_and_others(
     if model.mstar_dot != 0.0 {
         sources.val += model.eps_mdot[k];
     }
-    (sources, others, doing_op_split_burn)
+    Ok((sources, others, doing_op_split_burn))
 }
 
 /// Evaluates the turbulent energy time derivative $de_{\mathrm{turb}}/dt$ for
@@ -593,9 +603,13 @@ pub(crate) fn do1_energy_eqn_with_ergs_error(
 ) -> Result<f64, StarError> {
     let dl_dm = setup_dl_dm(model, k);
     let (sources, others, doing_op_split_burn) =
-        setup_sources_and_others(model, k);
+        setup_sources_and_others(model, k)?;
     // Every rate in the energy equation divides by `s% dt`
     // (`dt = s% dt`, `star/private/hydro_energy.f90:156`); a solve always has `dt > 0`.
+    // Without `v_flag` or `u_flag`, `eval1_work` returns early for
+    // `dt <= 0` with `work` unset for `k <= nz`
+    // (`star/private/hydro_energy.f90:640-655`), so that path has no defined
+    // value either and stops here.
     // `dm = s% dm(k)` (`star/private/hydro_energy.f90:157`); `set_m_and_dm`
     // flags `dm <= 0` as bad (`star/private/star_utils.f90:642-646`).
     let dm_k = model.dm[k];
@@ -607,7 +621,7 @@ pub(crate) fn do1_energy_eqn_with_ergs_error(
     let dt = model.dt;
     if dt.is_nan() || dt <= 0.0 {
         return Err(StarError::InvalidInput(format!(
-            "energy equation at cell {k}: dt = {dt} is not positive (star/private/hydro_energy.f90)"
+            "energy equation at cell {k}: dt = {dt} is not positive (star/private/hydro_energy.f90:156,640-655)"
         )));
     }
     // `setup_eps_grav` stops for `RSP2_flag` in the `eps_grav` form

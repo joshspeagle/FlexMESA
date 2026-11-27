@@ -200,7 +200,7 @@ fn test_hydro_energy_luminosity_time_centering_and_heating_channels() {
     model.controls.drag_coefficient = 0.2;
 
     let (sources, _others, doing_op_split) =
-        setup_sources_and_others(&model, k);
+        setup_sources_and_others(&model, k).expect("sources");
     assert!(!doing_op_split);
     assert!(sources.val.is_finite() && sources.d1[I_V_00] != 0.0);
 
@@ -1076,4 +1076,20 @@ fn test_eval1_work_pvsc_time_centred_with_captured_pvsc_start() {
     model.controls.include_p_in_velocity_time_centering = false;
     let w_off = work(&model);
     assert!((w_off - expected_plain).abs() <= 1.0e-14 * expected_plain.abs());
+}
+
+/// The TDC eddy-viscous heating term needs `compute_tdc_Eq_div_w_face`
+/// (`star/private/hydro_energy.f90:268-277`), which is not ported, so the
+/// energy equation stops instead of using zero.
+#[test]
+fn test_tdc_eturb_heating_in_energy_equation_is_an_explicit_error() {
+    let mut model = build_solar_test_model(true);
+    let k = 4;
+    model.controls.rsp2_flag = false;
+    model.controls.mlt_option = MltOption::Tdc;
+    model.controls.tdc_alpha_m = 0.25;
+    model.controls.tdc_include_eturb_in_energy_equation = true;
+    assert!(setup_sources_and_others(&model, k).is_err());
+    model.controls.tdc_include_eturb_in_energy_equation = false;
+    assert!(setup_sources_and_others(&model, k).is_ok());
 }

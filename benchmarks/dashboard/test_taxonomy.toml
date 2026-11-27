@@ -1977,6 +1977,12 @@ module = "tooling"
 kind = "invariant"
 
 [[tests]]
+path = "tests/test_stepdump_xtra.py"
+language = "python"
+module = "tooling"
+kind = "invariant"
+
+[[tests]]
 path = "tests/test_stepdump_windows.py"
 language = "python"
 module = "tooling"

@@ -42,7 +42,7 @@ use crate::star_ad::{
 
 /// Evaluates artificial viscosity pressure $P_{\mathrm{vsc},k}$ in cell `k`
 /// (`get_Pvsc_ad` in `star/private/star_utils.f90:3441-3469`). The
-/// `s% Pvsc_start` side effect is [`capture_pvsc_start`].
+/// `s% Pvsc_start` side effect is `capture_pvsc_start`.
 #[must_use]
 pub fn eval_pvsc_cell_ad(model: &StarModel, k: usize) -> StarAdOrder1 {
     if !model.controls.use_pvsc_art_visc

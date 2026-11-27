@@ -21,7 +21,7 @@
         "verified_total": 5640,
         "pct_ported": 35.1,
         "pct_verified": 4.7,
-        "rust_lines": 110596,
+        "rust_lines": 111018,
         "python_jax_lines": 3987
       },
       {
@@ -72,7 +72,7 @@
         "verified_total": 0,
         "pct_ported": 0.0,
         "pct_verified": 0.0,
-        "rust_lines": 11481,
+        "rust_lines": 11488,
         "python_jax_lines": 1295
       },
       {
@@ -455,8 +455,8 @@
       "upstream_panel_modules": 46
     },
     "infrastructure_lines": {
-      "rust_bridge_testing_bench": 22709,
-      "python_testing_bench": 20984
+      "rust_bridge_testing_bench": 22847,
+      "python_testing_bench": 23447
     }
   },
   "numerics": {
@@ -593,12 +593,12 @@
         "total": 90,
         "mesa_26_4_1_ref": 86,
         "no_reference_yet": 4,
-        "strict_validated": 73,
-        "diagnostic_runs": 17,
-        "reached_termination": 73,
-        "within_numeric_tol": 52,
-        "passing": 41,
-        "declared_gaps": 38,
+        "strict_validated": 74,
+        "diagnostic_runs": 16,
+        "reached_termination": 74,
+        "within_numeric_tol": 56,
+        "passing": 50,
+        "declared_gaps": 33,
         "undeclared_failures": 0
       },
       "binary": {
@@ -619,19 +619,14 @@
         "no_reference_yet": 0,
         "strict_validated": 8,
         "diagnostic_runs": 0,
-        "reached_termination": 3,
-        "within_numeric_tol": 3,
-        "passing": 1,
-        "declared_gaps": 5,
+        "reached_termination": 7,
+        "within_numeric_tol": 7,
+        "passing": 3,
+        "declared_gaps": 2,
         "undeclared_failures": 0
       }
     },
     "within_tol_non_pass": [
-      {
-        "suite": "star",
-        "case": "high_z",
-        "issue": "#587"
-      },
       {
         "suite": "star",
         "case": "make_planets",
@@ -644,25 +639,29 @@
       },
       {
         "suite": "star",
-        "case": "wd_he_shell_ignition",
-        "issue": "#587"
+        "case": "relax_composition_j_entropy",
+        "issue": "#154"
       },
       {
         "suite": "binary",
         "case": "wind_fed_bhhmxb",
         "issue": "#587"
+      },
+      {
+        "suite": "astero",
+        "case": "fast_newuoa",
+        "issue": "#162"
       }
     ],
     "gaps_by_issue": {
-      "#161": 17,
-      "#162": 9,
+      "#161": 15,
+      "#162": 7,
       "#154": 6,
-      "#157": 6,
-      "#170": 6,
-      "#587": 5,
+      "#157": 5,
+      "#587": 4,
       "#158": 3,
       "#160": 2,
-      "#171": 1,
+      "#170": 2,
       "#231": 1
     },
     "comparison_figures_count": 0
@@ -671,22 +670,22 @@
     {
       "namelist": "star &controls",
       "upstream_scalars": 1444,
-      "matched_in_flexmesa": 1180,
-      "defaults_agree": 1180,
+      "matched_in_flexmesa": 1189,
+      "defaults_agree": 1189,
       "value_mismatch": 0,
       "disabled_limit_none": 0,
       "skipped_unparseable_rust": 17,
-      "unimplemented": 247
+      "unimplemented": 238
     },
     {
       "namelist": "star &star_job",
       "upstream_scalars": 455,
-      "matched_in_flexmesa": 206,
-      "defaults_agree": 206,
+      "matched_in_flexmesa": 210,
+      "defaults_agree": 210,
       "value_mismatch": 0,
       "disabled_limit_none": 0,
       "skipped_unparseable_rust": 1,
-      "unimplemented": 248
+      "unimplemented": 244
     },
     {
       "namelist": "binary &binary_controls + &binary_job",
@@ -1140,37 +1139,37 @@
         "issues": "#160, #518, #530"
       },
       {
-        "location": "crates/flexmesa-binary/tests/tier5_coupled_suite.rs:1057",
+        "location": "crates/flexmesa-binary/tests/tier5_coupled_suite.rs:1060",
         "reason": "unverified uncapped binary campaign; tracked in #143 and #160",
         "issues": "#143, #160"
       },
       {
-        "location": "crates/flexmesa-binary/tests/tier5_coupled_suite.rs:1065",
+        "location": "crates/flexmesa-binary/tests/tier5_coupled_suite.rs:1068",
         "reason": "unverified uncapped binary campaign; tracked in #143 and #160",
         "issues": "#143, #160"
       },
       {
-        "location": "crates/flexmesa-binary/tests/tier5_coupled_suite.rs:1074",
+        "location": "crates/flexmesa-binary/tests/tier5_coupled_suite.rs:1077",
         "reason": "unverified uncapped binary campaign; tracked in #143 and #160",
         "issues": "#143, #160"
       },
       {
-        "location": "crates/flexmesa-binary/tests/tier5_coupled_suite.rs:1082",
+        "location": "crates/flexmesa-binary/tests/tier5_coupled_suite.rs:1085",
         "reason": "unverified uncapped binary campaign; tracked in #143 and #160",
         "issues": "#143, #160"
       },
       {
-        "location": "crates/flexmesa-binary/tests/tier5_coupled_suite.rs:1090",
+        "location": "crates/flexmesa-binary/tests/tier5_coupled_suite.rs:1093",
         "reason": "unverified uncapped binary campaign; tracked in #143 and #160",
         "issues": "#143, #160"
       },
       {
-        "location": "crates/flexmesa-binary/tests/tier5_coupled_suite.rs:1097",
+        "location": "crates/flexmesa-binary/tests/tier5_coupled_suite.rs:1100",
         "reason": "unverified uncapped binary campaign; tracked in #143 and #160",
         "issues": "#143, #160"
       },
       {
-        "location": "crates/flexmesa-binary/tests/tier5_coupled_suite.rs:1105",
+        "location": "crates/flexmesa-binary/tests/tier5_coupled_suite.rs:1108",
         "reason": "unverified uncapped binary campaign; tracked in #143 and #160",
         "issues": "#143, #160"
       },
@@ -1296,14 +1295,14 @@
     "unlinked_locations": []
   },
   "test_taxonomy": {
-    "total_files": 295,
-    "total_tests": 1645,
+    "total_files": 303,
+    "total_tests": 1733,
     "by_kind": {
       "oracle": {
-        "files": 128
+        "files": 131
       },
       "invariant": {
-        "files": 165
+        "files": 170
       },
       "regression": {
         "files": 2
@@ -1311,46 +1310,16 @@
     },
     "by_language": {
       "rust": {
-        "files": 212,
-        "tests": 1043
+        "files": 214,
+        "tests": 1057
       },
       "python": {
-        "files": 83,
-        "tests": 602
+        "files": 89,
+        "tests": 676
       }
     },
-    "mislabeled_count": 9,
+    "mislabeled_count": 2,
     "mislabeled_files": [
-      {
-        "path": "crates/flexmesa-data/tests/data_161_parity_test.rs",
-        "kind": "invariant",
-        "module": "utils",
-        "mislabel_reason": "#563: W4 audit found boundary/JSON/safetensors invariant checks with no MESA 26.4.1 oracle comparison; rename away from restricted vocabulary under W4 (#563)"
-      },
-      {
-        "path": "crates/flexmesa-net/tests/burn_simpr_161_parity_test.rs",
-        "kind": "invariant",
-        "module": "net",
-        "mislabel_reason": "#563: W4 audit found mass-conservation and determinism checks with no MESA 26.4.1 oracle comparison; rename away from restricted vocabulary under W4 (#563)"
-      },
-      {
-        "path": "crates/flexmesa-net/tests/net_weak_lowt_161_parity_test.rs",
-        "kind": "invariant",
-        "module": "net",
-        "mislabel_reason": "#563: W4 audit found analytical rate/dxdt consistency checks with no committed MESA 26.4.1 oracle artifact; rename away from restricted vocabulary under W4 (#563)"
-      },
-      {
-        "path": "crates/flexmesa-star/tests/elem_diff_156_parity_test.rs",
-        "kind": "invariant",
-        "module": "star",
-        "mislabel_reason": "#563: W4 audit found self-contained element-diffusion solver/accounting invariant checks with no MESA 26.4.1 oracle comparison; rename away from restricted vocabulary under W4 (#563)"
-      },
-      {
-        "path": "crates/flexmesa-star/tests/mesh_adjust_omega_153_parity_test.rs",
-        "kind": "invariant",
-        "module": "star",
-        "mislabel_reason": "#563: W4 audit found self-contained adjust_omega control-volume invariant checks with no MESA 26.4.1 oracle comparison; rename away from restricted vocabulary under W4 (#563)"
-      },
       {
         "path": "crates/flexmesa-star/tests/pulse_rsp2_162_parity_test.rs",
         "kind": "invariant",
@@ -1362,27 +1331,46 @@
         "kind": "invariant",
         "module": "star",
         "mislabel_reason": "#563: W4 audit found no real-MESA 26.4.1 oracle comparison; rename away from restricted vocabulary under W4 (#563)"
-      },
-      {
-        "path": "crates/flexmesa-star/tests/zams_io_154_parity_test.rs",
-        "kind": "invariant",
-        "module": "star",
-        "mislabel_reason": "#563: W4 audit found no real-MESA 26.4.1 oracle comparison; rename away from restricted vocabulary under W4 (#563)"
-      },
-      {
-        "path": "tests/test_py_bindings_161_parity.py",
-        "kind": "invariant",
-        "module": "tooling",
-        "mislabel_reason": "#563: W4 audit found PyO3 boundary guards and analytical checks with no MESA 26.4.1 oracle comparison; rename away from restricted vocabulary under W4 (#563)"
       }
     ],
-    "mapped_routines_total": 249,
-    "listed_oracle_routines_total": 39,
-    "listed_oracle_routines_pct": 15.7,
+    "mapped_routines_total": 401,
+    "listed_oracle_routines_total": 71,
+    "listed_oracle_routines_pct": 17.7,
     "listed_oracle_routine_ids": [
       "binary/private/binary_disk.f90::eval_L2_mass_loss_fraction",
+      "binary/public/binary_lib.f90::binary_L2_mass_loss_fraction",
       "const/public/const_def.f90::do_const_init",
       "const/public/const_lib.f90::const_init",
+      "eos/private/eos_blend.f90::is_contained",
+      "eos/private/eos_blend.f90::min_distance_to_polygon",
+      "eos/private/eos_helm_eval.f90::get_helm_for_eosdt",
+      "eos/private/eoscms_eval.f90::get_CMS_for_eosdt",
+      "eos/private/eosde_eval.f90::Get_eos_gamma_DE_Results",
+      "eos/private/eosdt_eval.f90::Get_eosDT_Results",
+      "eos/private/eosdt_eval.f90::get1_for_eosdt",
+      "eos/private/eosdt_eval.f90::get_Rho",
+      "eos/private/eosdt_eval.f90::get_T",
+      "eos/private/eospc_eval.f90::Get_PC_alfa",
+      "eos/private/eospc_eval.f90::get_PC_for_eosdt",
+      "eos/private/eospt_eval.f90::Get_PT_Results_using_DT",
+      "eos/private/eospt_eval.f90::get_Pgas",
+      "eos/private/eospt_eval.f90::get_T",
+      "eos/private/gauss_fermi.f90::dfermi",
+      "eos/private/helm.f90::helmeos2",
+      "eos/private/ideal.f90::get_ideal_eos_results",
+      "eos/private/ideal.f90::get_ideal_for_eosdt",
+      "eos/private/ion_offset.f90::compute_ion_offset",
+      "eos/private/skye.f90::Get_Skye_alfa",
+      "eos/private/skye.f90::Get_Skye_alfa_simple",
+      "eos/private/skye.f90::get_Skye_for_eosdt",
+      "eos/public/eos_lib.f90::eosDT_get",
+      "eos/public/eos_lib.f90::eosDT_get_Rho",
+      "eos/public/eos_lib.f90::eosDT_get_T",
+      "eos/public/eos_lib.f90::eosPT_get",
+      "eos/public/eos_lib.f90::eosPT_get_T",
+      "eos/public/eos_lib.f90::eos_fermi_dirac_integral",
+      "eos/public/eos_lib.f90::eos_gamma_DE_get",
+      "eos/public/eos_lib.f90::helmeos2_eval",
       "interp_2d/private/bipm_db.f90::do_evbipm_db",
       "interp_2d/private/bipm_db.f90::do_mkbipm_db",
       "neu/private/mod_neu.f90::ifermi12",
@@ -1417,33 +1405,34 @@
       "turb/private/mlt.f90::calc_MLT",
       "turb/private/semiconvection.f90::calc_semiconvection",
       "turb/public/turb.f90::set_MLT",
+      "turb/public/turb.f90::set_TDC",
       "turb/public/turb.f90::set_semiconvection",
       "turb/public/turb.f90::set_thermohaline"
     ],
     "by_module": [
       {
         "module": "star",
-        "oracle_files": 37,
+        "oracle_files": 38,
         "invariant_files": 74,
         "regression_files": 1,
-        "total_files": 112,
-        "total_tests": 671,
-        "mislabeled_files": 5,
+        "total_files": 113,
+        "total_tests": 681,
+        "mislabeled_files": 2,
         "mapped_routines": 189,
         "listed_oracle_routines": 25,
         "listed_oracle_routines_pct": 13.2
       },
       {
         "module": "binary",
-        "oracle_files": 4,
-        "invariant_files": 13,
+        "oracle_files": 5,
+        "invariant_files": 12,
         "regression_files": 0,
         "total_files": 17,
         "total_tests": 86,
         "mislabeled_files": 0,
-        "mapped_routines": 36,
-        "listed_oracle_routines": 1,
-        "listed_oracle_routines_pct": 2.8
+        "mapped_routines": 70,
+        "listed_oracle_routines": 2,
+        "listed_oracle_routines_pct": 2.9
       },
       {
         "module": "astero",
@@ -1451,7 +1440,7 @@
         "invariant_files": 8,
         "regression_files": 0,
         "total_files": 9,
-        "total_tests": 53,
+        "total_tests": 55,
         "mislabeled_files": 0,
         "mapped_routines": 0,
         "listed_oracle_routines": 0,
@@ -1465,9 +1454,9 @@
         "total_files": 21,
         "total_tests": 81,
         "mislabeled_files": 0,
-        "mapped_routines": 0,
-        "listed_oracle_routines": 0,
-        "listed_oracle_routines_pct": 0.0
+        "mapped_routines": 108,
+        "listed_oracle_routines": 30,
+        "listed_oracle_routines_pct": 27.8
       },
       {
         "module": "kap",
@@ -1488,7 +1477,7 @@
         "regression_files": 0,
         "total_files": 12,
         "total_tests": 44,
-        "mislabeled_files": 2,
+        "mislabeled_files": 0,
         "mapped_routines": 0,
         "listed_oracle_routines": 0,
         "listed_oracle_routines_pct": 0.0
@@ -1537,9 +1526,9 @@
         "total_files": 7,
         "total_tests": 22,
         "mislabeled_files": 0,
-        "mapped_routines": 8,
-        "listed_oracle_routines": 5,
-        "listed_oracle_routines_pct": 62.5
+        "mapped_routines": 18,
+        "listed_oracle_routines": 6,
+        "listed_oracle_routines_pct": 33.3
       },
       {
         "module": "chem",
@@ -1668,7 +1657,7 @@
         "regression_files": 0,
         "total_files": 7,
         "total_tests": 43,
-        "mislabeled_files": 1,
+        "mislabeled_files": 0,
         "mapped_routines": 0,
         "listed_oracle_routines": 0,
         "listed_oracle_routines_pct": 0.0
@@ -1676,10 +1665,10 @@
       {
         "module": "gyre",
         "oracle_files": 7,
-        "invariant_files": 2,
+        "invariant_files": 3,
         "regression_files": 0,
-        "total_files": 9,
-        "total_tests": 28,
+        "total_files": 10,
+        "total_tests": 36,
         "mislabeled_files": 0,
         "mapped_routines": 0,
         "listed_oracle_routines": 0,
@@ -1711,12 +1700,12 @@
       },
       {
         "module": "tooling",
-        "oracle_files": 1,
-        "invariant_files": 25,
+        "oracle_files": 2,
+        "invariant_files": 30,
         "regression_files": 1,
-        "total_files": 27,
-        "total_tests": 215,
-        "mislabeled_files": 1,
+        "total_files": 33,
+        "total_tests": 283,
+        "mislabeled_files": 0,
         "mapped_routines": 0,
         "listed_oracle_routines": 0,
         "listed_oracle_routines_pct": 0.0
@@ -2065,8 +2054,8 @@
     ],
     "open_pull_requests": [
       {
-        "number": 609,
-        "title": "Train 14 (draft): manifest terminations checked against MESA, remove-center port, oracle tests, harness step counts",
+        "number": 615,
+        "title": "Train 15 (draft): powN grouping, per-zone other_alpha_mlt, step-dump diagnostics",
         "draft": true
       }
     ],
@@ -4241,6 +4230,19 @@
       "engine_ported_pct": "30.7",
       "all_verified_pct": "1.1",
       "cases_passing": "46",
+      "rust_cov_pct": "77.0",
+      "python_cov_pct": "87.8",
+      "closed_140": "32",
+      "total_140": "56",
+      "deferred_169": "75"
+    },
+    {
+      "date_utc": "2026-11-27",
+      "commit": "964c717",
+      "event": "main merge",
+      "engine_ported_pct": "30.7",
+      "all_verified_pct": "1.1",
+      "cases_passing": "57",
       "rust_cov_pct": "77.0",
       "python_cov_pct": "87.8",
       "closed_140": "32",

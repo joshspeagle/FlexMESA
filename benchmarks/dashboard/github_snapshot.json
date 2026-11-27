@@ -340,8 +340,8 @@
   ],
   "open_pull_requests": [
     {
-      "number": 609,
-      "title": "Train 14 (draft): manifest terminations checked against MESA, remove-center port, oracle tests, harness step counts",
+      "number": 615,
+      "title": "Train 15 (draft): powN grouping, per-zone other_alpha_mlt, step-dump diagnostics",
       "draft": true
     }
   ],

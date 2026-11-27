@@ -51,6 +51,7 @@ struct SplitZoneOutcome {
     eps_neu_total: f64,
     eps_cats: [f64; NUM_CATEGORIES],
     nstep: usize,
+    naccpt: usize,
 }
 
 /// Integrates the 1-zone nuclear reaction network over $[0, \Delta t]$ in
@@ -68,14 +69,16 @@ pub fn op_split_burn_zones(
     model: &mut StarModel,
     dt: f64,
 ) -> Result<(), StarError> {
-    if dt <= 0.0 || model.nz == 0 || model.species == 0 {
-        return Ok(());
-    }
     let nz = model.nz;
     let species = model.species;
-    let net_info = resolve_model_net(model)?;
+    if nz == 0 || species == 0 {
+        return Ok(());
+    }
     if model.aux.burn_avg_epsnuc.len() != nz {
         model.aux.burn_avg_epsnuc.resize(nz, 0.0);
+    }
+    if model.aux.burn_num_iters.len() != nz {
+        model.aux.burn_num_iters.resize(nz, 0);
     }
     if model.aux.eps_nuc_categories.len() != nz {
         model
@@ -83,13 +86,26 @@ pub fn op_split_burn_zones(
             .eps_nuc_categories
             .resize(nz, [0.0; NUM_CATEGORIES]);
     }
+    let eps_nuc_factor = model.controls.eps_nuc_factor;
+    let dxdt_nuc_factor = model.controls.dxdt_nuc_factor;
+    if eps_nuc_factor == 0.0 && dxdt_nuc_factor == 0.0 {
+        // `star/private/struct_burn_mix.f90:832-838`: zero `eps_nuc`,
+        // `burn_num_iters`, and `burn_avg_epsnuc` (`max_burn_correction` at
+        // `:837` is not stored on `HydroAuxState`).
+        model.eps_nuc[..nz].fill(0.0);
+        model.aux.burn_num_iters[..nz].fill(0);
+        model.aux.burn_avg_epsnuc[..nz].fill(0.0);
+        return Ok(());
+    }
+    if dt <= 0.0 {
+        return Ok(());
+    }
+    let net_info = resolve_model_net(model)?;
 
     let min_t_split = model.controls.op_split_burn_min_t;
     let min_t_var = model.controls.op_split_burn_min_t_for_variable_t_solver;
     let max_logt = model.controls.max_logt_for_net;
     let max_abar = model.controls.max_abar_for_burning;
-    let eps_nuc_factor = model.controls.eps_nuc_factor;
-    let dxdt_nuc_factor = model.controls.dxdt_nuc_factor;
     let max_abs_eps_nuc = model.controls.max_abs_eps_nuc;
     let screening_mode = model.controls.screening_mode;
     let use_3a_fl87 = model.job.use_3a_fl87;
@@ -114,6 +130,7 @@ pub fn op_split_burn_zones(
             model.ln_t_start.get(k).copied().unwrap_or(model.ln_t[k]),
         );
         if t_start_k < min_t_split {
+            model.aux.burn_num_iters[k] = 0;
             model.aux.burn_avg_epsnuc[k] = 0.0;
         } else {
             split_indices.push(k);
@@ -147,78 +164,87 @@ pub fn op_split_burn_zones(
                     eps_neu_total: 0.0,
                     eps_cats: [0.0; NUM_CATEGORIES],
                     nstep: 0,
+                    naccpt: 0,
                 });
             }
 
-            let (ending_x, avg_raw, eps_neu, _burn_cats, nstep_zone) =
-                if model.t[k] >= min_t_var {
-                    let input = BurnConstDensityInput {
-                        t_start: 0.0,
-                        t_end: dt,
-                        starting_x: start_x,
-                        starting_log10_t: log_t,
-                        log10_rho: log_rho,
-                        rate_factors: &rate_factors,
-                        weak_rate_factor,
-                        screening_mode,
-                        stptry_in: 0.0,
-                        max_steps,
-                        eps: burn_eps,
-                        odescal: burn_odescal,
-                    };
-                    let out = burn_1_zone_const_density(
-                        &net_info, ht, eos_cfg, &input,
-                    )
-                    .map_err(|e| {
+            let (
+                ending_x,
+                avg_raw,
+                eps_neu,
+                _burn_cats,
+                nstep_zone,
+                naccpt_zone,
+            ) = if model.t[k] >= min_t_var {
+                let input = BurnConstDensityInput {
+                    t_start: 0.0,
+                    t_end: dt,
+                    starting_x: start_x,
+                    starting_log10_t: log_t,
+                    log10_rho: log_rho,
+                    rate_factors: &rate_factors,
+                    weak_rate_factor,
+                    screening_mode,
+                    stptry_in: 0.0,
+                    max_steps,
+                    eps: burn_eps,
+                    odescal: burn_odescal,
+                };
+                let out =
+                    burn_1_zone_const_density(&net_info, ht, eos_cfg, &input)
+                        .map_err(|e| {
                         StarError::MicrophysicsError(format!(
                             "burn_1_zone_const_density failed at zone {k}: {e}"
                         ))
                     })?;
-                    (
-                        out.ending_x,
-                        out.avg_eps_nuc,
-                        out.eps_neu_total,
-                        out.eps_nuc_categories,
-                        out.nstep,
-                    )
-                } else {
-                    let times = [0.0, dt];
-                    let log10_ts = [log_t, log_t];
-                    let log10_rhos = [log_rho, log_rho];
-                    let etas = [model.eta[k], model.eta[k]];
-                    let input = Burn1ZoneInput {
-                        t_start: 0.0,
-                        t_end: dt,
-                        starting_x: start_x,
-                        times: &times,
-                        log10_ts: &log10_ts,
-                        log10_rhos: &log10_rhos,
-                        etas: &etas,
-                        dxdt_source_term: None,
-                        rate_factors: &rate_factors,
-                        weak_rate_factor,
-                        reaction_qs: &[],
-                        reaction_neu_qs: &[],
-                        screening_mode,
-                        stptry_in: 0.0,
-                        max_steps,
-                        eps: burn_eps,
-                        odescal: burn_odescal,
-                    };
-                    let out = burn_1_zone(&net_info, ht, eos_cfg, &input)
-                        .map_err(|e| {
-                            StarError::MicrophysicsError(format!(
-                                "op_split_burn failed at zone {k}: {e}"
-                            ))
-                        })?;
-                    (
-                        out.ending_x,
-                        out.avg_eps_nuc,
-                        out.eps_neu_total,
-                        out.eps_nuc_categories,
-                        out.nstep,
-                    )
+                (
+                    out.ending_x,
+                    out.avg_eps_nuc,
+                    out.eps_neu_total,
+                    out.eps_nuc_categories,
+                    out.nstep,
+                    out.naccpt,
+                )
+            } else {
+                let times = [0.0, dt];
+                let log10_ts = [log_t, log_t];
+                let log10_rhos = [log_rho, log_rho];
+                let etas = [model.eta[k], model.eta[k]];
+                let input = Burn1ZoneInput {
+                    t_start: 0.0,
+                    t_end: dt,
+                    starting_x: start_x,
+                    times: &times,
+                    log10_ts: &log10_ts,
+                    log10_rhos: &log10_rhos,
+                    etas: &etas,
+                    dxdt_source_term: None,
+                    rate_factors: &rate_factors,
+                    weak_rate_factor,
+                    reaction_qs: &[],
+                    reaction_neu_qs: &[],
+                    screening_mode,
+                    stptry_in: 0.0,
+                    max_steps,
+                    eps: burn_eps,
+                    odescal: burn_odescal,
                 };
+                let out = burn_1_zone(&net_info, ht, eos_cfg, &input).map_err(
+                    |e| {
+                        StarError::MicrophysicsError(format!(
+                            "op_split_burn failed at zone {k}: {e}"
+                        ))
+                    },
+                )?;
+                (
+                    out.ending_x,
+                    out.avg_eps_nuc,
+                    out.eps_neu_total,
+                    out.eps_nuc_categories,
+                    out.nstep,
+                    out.naccpt,
+                )
+            };
 
             let mut xa_after = vec![0.0_f64; species];
             let mut x_sum = 0.0_f64;
@@ -290,6 +316,7 @@ pub fn op_split_burn_zones(
                 eps_neu_total: eps_neu,
                 eps_cats: cats,
                 nstep: nstep_zone,
+                naccpt: naccpt_zone,
             })
         })
         .collect();
@@ -300,11 +327,13 @@ pub fn op_split_burn_zones(
         let k = out.k;
         let base_s = k * species;
         let base_ss = k * species * species;
-        // `star/private/struct_burn_mix.f90:1107-1135`: update `xa` without
-        // mutating `xa_start` (`save_start_values` snapshots it afterwards).
+        // `star/private/struct_burn_mix.f90:909,1068,1096,1107-1135`: update
+        // `xa` without mutating `xa_start` (`save_start_values` snapshots it
+        // afterwards), and record accepted 1-zone burn substeps (`num_iters_out = naccpt`).
         model.xa[base_s..base_s + species].copy_from_slice(&out.xa_after);
         model.eps_nuc[k] = out.avg_epsnuc;
         model.aux.burn_avg_epsnuc[k] = out.avg_epsnuc;
+        model.aux.burn_num_iters[k] = out.naccpt;
         model.aux.eps_nuc_categories[k] = out.eps_cats;
         model.eps_nuc_neu_total[k] = out.eps_neu_total;
         model.d_epsnuc_dlnd[k] = 0.0;
@@ -502,6 +531,9 @@ fn run_struct_burn_mix_core(
     model.v_start.clone_from(&pre_burn_start.3);
     model.aux.csound_start.clone_from(&pre_burn_start.4);
 
+    // `star/private/struct_burn_mix.f90:82-84`: only clear `burn_num_iters`
+    // (and `burn_avg_epsnuc`) when `op_split_burn` is active so non-split runs
+    // preserve prior values (`timestep.f90:420`, `history.f90:2839`).
     if op_split_burn {
         let nz = model.nz;
         let sp = model.species;
@@ -509,6 +541,10 @@ fn run_struct_burn_mix_core(
             model.aux.burn_avg_epsnuc.resize(nz, 0.0);
         }
         model.aux.burn_avg_epsnuc.fill(0.0);
+        if model.aux.burn_num_iters.len() != nz {
+            model.aux.burn_num_iters.resize(nz, 0);
+        }
+        model.aux.burn_num_iters.fill(0);
         let min_t_split = model.controls.op_split_burn_min_t;
         for k in 0..nz {
             if model.t[k] >= min_t_split {

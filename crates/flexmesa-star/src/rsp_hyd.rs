@@ -264,7 +264,8 @@ fn set_min_k_for_turbulent_flux(model: &mut StarModel, dc: &RspDerivedConsts) {
     let mut min_k = nz;
     for k0 in 0..(nz.saturating_sub(1)) {
         let rmid = 0.5 * (model.r[k0] + model.r[k0 + 1]);
-        tau += model.dm[k0] * model.opacity[k0] / (4.0 * PI * rmid * rmid);
+        tau += model.dm[k0] * model.opacity[k0]
+            / (4.0 * PI * flexmesa_math::pow2(rmid));
         if tau >= model.controls.rsp.min_tau_for_turbulent_flux {
             min_k = k0 + 1;
             break;

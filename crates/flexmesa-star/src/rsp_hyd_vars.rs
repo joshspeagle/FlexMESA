@@ -242,8 +242,10 @@ fn calc_y_face(
         let hp = model.aux.rsp.hp_face[k0];
         let r_k = model.r[k0];
         let pom_v = 2.0 / v_sum;
-        let pom2_v = 8.0 * PI * r_k * r_k / model.dm_bar[k0] * hp;
-        let y2 = 4.0 * PI * r_k * r_k * hp * pom_v / model.dm_bar[k0];
+        let pom2_v =
+            8.0 * PI * flexmesa_math::pow2(r_k) / model.dm_bar[k0] * hp;
+        let y2 =
+            4.0 * PI * flexmesa_math::pow2(r_k) * hp * pom_v / model.dm_bar[k0];
         let v_sum2 = v_sum * v_sum;
 
         let d_y2_dvol_00 = y2 / hp * wk.dhp_dvol_00[i] - pom2_v / v_sum2;
@@ -378,15 +380,15 @@ fn calc_pvsc(
     let d_dv_dr_in = 2.0 / model.dt - dc.zsh * d_sqrt_pv_dr_in;
     let d_dv_dr_00 = -2.0 / model.dt - dc.zsh * d_sqrt_pv_dr_00;
 
-    let pvsc = dc.cq / v * dv * dv;
+    let pvsc = dc.cq / v * flexmesa_math::pow2(dv);
     model.aux.rsp.pvsc_rsp[k0] = pvsc;
     wk.d_pvsc_dvol[i] = -pvsc / v + 2.0 * d_dv_dvol * dc.cq / v * dv;
     wk.d_pvsc_dt[i] = dc.cq / v * 2.0 * dv * d_dv_dt;
     wk.d_pvsc_der[i] = dc.cq / v * 2.0 * dv * d_dv_der;
     wk.d_pvsc_dr_in[i] = dc.cq / v * 2.0 * dv * d_dv_dr_in
-        - dc.cq * dv * dv * wk.dvol_dr_in[i] / (v * v);
+        - dc.cq * flexmesa_math::pow2(dv) * wk.dvol_dr_in[i] / (v * v);
     wk.d_pvsc_dr_00[i] = dc.cq / v * 2.0 * dv * d_dv_dr_00
-        - dc.cq * dv * dv * wk.dvol_dr_00[i] / (v * v);
+        - dc.cq * flexmesa_math::pow2(dv) * wk.dvol_dr_00[i] / (v * v);
 }
 
 fn check_omega(
@@ -453,11 +455,11 @@ fn calc_pturb(
     } else {
         let vol = model.aux.rsp.vol_rsp[k0];
         let w_k = wk.w[k0];
-        let ptrb = dc.alfap * w_k * w_k / vol;
+        let ptrb = dc.alfap * flexmesa_math::pow2(w_k) / vol;
         model.aux.rsp.ptrb_rsp[k0] = ptrb;
         wk.dptrb_dvol_00[i] = -ptrb / vol;
         wk.dptrb_dw_00[i] = 2.0 * dc.alfap * w_k / vol;
-        let tem1 = -dc.alfap * w_k * w_k / (vol * vol);
+        let tem1 = -dc.alfap * flexmesa_math::pow2(w_k) / (vol * vol);
         wk.dptrb_dr_00[i] = tem1 * wk.dvol_dr_00[i];
         wk.dptrb_dr_in[i] = tem1 * wk.dvol_dr_in[i];
     }

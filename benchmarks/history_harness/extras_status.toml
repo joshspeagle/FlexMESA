@@ -30,9 +30,8 @@ digest = "4b7b570f3a144678fa67d368b2c5b485ad89e03f9b43abe8575c1635939c1a5a"
 [[cases]]
 suite = "star"
 case = "12M_pre_ms_to_core_collapse"
-status = "unported"
+status = "ported"
 digest = "3e46e15f6d5f7cf8386bb429a53265450f755438c18f5632f9243ca0a9ed9212"
-issue = "#231"
 
 [[cases]]
 suite = "star"
@@ -67,9 +66,8 @@ digest = "e08754f3f15ba1e96aeb9f55687a8dd48d6e6ca32e5905f04f00fc1a44dde9c2"
 [[cases]]
 suite = "star"
 case = "20M_pre_ms_to_core_collapse"
-status = "unported"
+status = "ported"
 digest = "0e2039690bea0d4fee20bbd45269f9d7c1b8b68a336384fe569959ef7f1c94d6"
-issue = "#231"
 
 [[cases]]
 suite = "star"
@@ -480,9 +478,8 @@ digest = "d623ee286931eb97a29f194fa76636dd1986b7a5499c46ee5eadad6956181a43"
 [[cases]]
 suite = "star"
 case = "split_burn_big_net"
-status = "unported"
+status = "ported"
 digest = "14f39542397f45183b21c6faab674dec8aa4085924c90f3e1d1250f4b46c9832"
-issue = "#231"
 
 [[cases]]
 suite = "star"
@@ -561,9 +558,8 @@ digest = "4b7b570f3a144678fa67d368b2c5b485ad89e03f9b43abe8575c1635939c1a5a"
 [[cases]]
 suite = "star"
 case = "zams_to_cc_80"
-status = "unported"
+status = "ported"
 digest = "0e2039690bea0d4fee20bbd45269f9d7c1b8b68a336384fe569959ef7f1c94d6"
-issue = "#231"
 
 [[cases]]
 suite = "binary"

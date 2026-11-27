@@ -8,7 +8,7 @@ use flexmesa_const::{
     BOLTZM, CLIGHT, CRAD, MP, MSUN, ONE_THIRD, PI, PI2, RSUN, SECYER,
     STANDARD_CGRAV, TWO_THIRDS,
 };
-use flexmesa_math::{exp10, log10, pow};
+use flexmesa_math::{exp10, log10, pow, pow2, pow4};
 
 const ONE_FOURTH: f64 = 1.0 / 4.0;
 const SEVEN_FOURTHS: f64 = 7.0 / 4.0;
@@ -162,15 +162,17 @@ pub fn eval_l2_mass_loss_fraction(
     let q = accretor_mass / donor_mass;
     let log_q = log10(q);
 
-    let mut xl1 = -0.0355 * log_q * log_q + 0.251 * log_q.abs() + 0.500;
-    let mut xl2 = 0.0756 * log_q * log_q - 0.424 * log_q.abs() + 1.699;
+    // `binary/private/binary_disk.f90:94-95, 104`:
+    // `log_q**2` and `pow4(1 - xL1)`.
+    let mut xl1 = -0.0355 * pow2(log_q) + 0.251 * log_q.abs() + 0.500;
+    let mut xl2 = 0.0756 * pow2(log_q) - 0.424 * log_q.abs() + 1.699;
     if log_q > 0.0 {
         xl1 = 1.0 - xl1;
         xl2 = 1.0 - xl2;
     }
     let mu = q / (1.0 + q);
     let one_m_xl1 = 1.0 - xl1;
-    let rd_over_a = (one_m_xl1 * one_m_xl1 * one_m_xl1 * one_m_xl1) / mu;
+    let rd_over_a = pow4(one_m_xl1) / mu;
 
     let phi_l1_dimless = -((1.0 - mu) / xl1.abs()
         + mu / (1.0 - xl1).abs()

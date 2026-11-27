@@ -642,8 +642,8 @@ pub fn get_cafein_data(
     let s_units = (flexmesa_math::pow3(r_star) / (cgrav1 * m_star)).sqrt();
     let g_units = m_star;
     let cm_units = r_star;
-    let erg_units = cgrav1 * m_star * m_star / r_star;
-    let k_units = cgrav1 * m_star * m_star / (r_star * CGAS);
+    let erg_units = cgrav1 * flexmesa_math::pow2(m_star) / r_star;
+    let k_units = cgrav1 * flexmesa_math::pow2(m_star) / (r_star * CGAS);
     let global_data = [
         m_star / M_SUN,
         r_star / R_SUN,
@@ -716,19 +716,26 @@ pub fn get_cafein_data(
 
         let g = at1(s.grav, k);
         let n2 = eval_face_a_ast(&s, k, 1, nz).map_err(gyre_err)? * g / r;
-        let l2_ll1 = gamma1 * p / (rho * r * r);
+        let l2_ll1 = gamma1 * p / (rho * flexmesa_math::pow2(r));
         let p_scale = at1(sh_slice, k);
         let v = rho * g * r / p;
         let v_g = v / gamma1;
         let a_s = n2 * r / g;
-        let u = PI4 * rho * r * r * r / m;
+        let u = PI4 * rho * flexmesa_math::pow3(r) / m;
 
-        let lr_j = 16.0 * PI * r * CRAD * CLIGHT * t * t * t * t * nabla * v
+        let lr_j = 16.0
+            * PI
+            * r
+            * CRAD
+            * CLIGHT
+            * flexmesa_math::powi_f90(t, 4)
+            * nabla
+            * v
             / (3.0 * kap * rho);
         let c_1 = flexmesa_math::pow3(r / r_star) * (m_star / m);
         let c_2 = (kap_ad - 4.0 * nabla_ad) * v * nabla;
-        let c_3 = PI4 * r * r * r * rho * eps / lr_j;
-        let c_4 = PI4 * r * r * r * rho * t * c_p / lr_j
+        let c_3 = PI4 * flexmesa_math::pow3(r) * rho * eps / lr_j;
+        let c_4 = PI4 * flexmesa_math::pow3(r) * rho * t * c_p / lr_j
             * (cgrav1 * m_star / flexmesa_math::pow3(r_star)).sqrt();
 
         let mut row = [0.0_f64; 35];
@@ -815,9 +822,21 @@ pub fn get_cafein_data(
         let cgrav_nz = at1(s.cgrav, nz);
         let c_1 = 3.0 * (m_star / flexmesa_math::pow3(r_star)) / (PI4 * rho);
         let c_3 = 9.0 * eps * kap * p
-            / (16.0 * PI * CRAD * CLIGHT * t * t * t * t * nabla * cgrav_c);
+            / (16.0
+                * PI
+                * CRAD
+                * CLIGHT
+                * flexmesa_math::powi_f90(t, 4)
+                * nabla
+                * cgrav_c);
         let c_4 = 9.0 * t * c_p * kap * p
-            / (16.0 * PI * CRAD * CLIGHT * t * t * t * t * nabla * cgrav_c)
+            / (16.0
+                * PI
+                * CRAD
+                * CLIGHT
+                * flexmesa_math::powi_f90(t, 4)
+                * nabla
+                * cgrav_c)
             * (cgrav_nz * m_star / flexmesa_math::pow3(r_star)).sqrt();
 
         let mut row = [0.0_f64; 35];

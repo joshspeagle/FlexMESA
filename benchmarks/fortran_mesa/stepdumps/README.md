@@ -15,6 +15,7 @@ solver changes.
 | `windows.toml` | Mid-run windows worth keeping (case, stage, occurrence, first model, steps, reason). |
 | `regenerate_windows.py` | Runs every window of `windows.toml` through `run_stepdumps.py`, one at a time, resumably. |
 | `first_divergence_table.py` | First-divergence table over a directory of dumps. |
+| `xtra_patch.py` | Opt-in `XTRA` diagnostics (`--xtra star`, `--xtra binary-rlo`), see below. |
 | `flexmesa.testing.stepdump_compare` | The comparison (reads any dump described here). |
 
 The bundle builder is `scripts/data/build_mesa_stepdump_windows.py`.
@@ -89,6 +90,13 @@ later output is wanted next to the dump (histories, terminal output in the
 case's scratch copy). The `DONE` record is written once either way, when the
 first star dumps its last model.
 
+A window that ends on the last model of its stage never meets a later model,
+so the patch cannot write `DONE` there. With `--stage` (and no
+`--keep-running`) `run_stepdumps.py` watches the raw file: when the selected
+process has written records and the next stage has started, or the whole run
+has exited, it appends `DONE`, and in the first case stops the remaining
+stages. A stage that ends before the window opens gets no `DONE`.
+
 ## What is recorded
 
 The `#` header carries `steps_per_star`, `first_model`, `occurrence` and
@@ -98,6 +106,78 @@ the comparison tolerates record types it does not know (diagnostic records
 from a locally patched solver, for example): it skips them, counts them per
 type, and prints the counts in its report. Only the first `RUN` section that
 holds records is compared.
+
+## Opt-in diagnostics (`XTRA` records)
+
+`xtra_patch.py` adds write statements for scalars the default records do not
+hold. Nothing changes unless `--xtra` is given: the default overlay, dump
+records and bundles are as before, and the comparators skip the extra record
+types (counting them). The overlay under `--scratch` is built once with the
+chosen options, so pass the same `--xtra` choices on every run that reuses it.
+The full record list is in the docstring of `xtra_patch.py`.
+
+### `--xtra star`: solver scalars
+
+Tagged records in the step-dump file, one value per line:
+`XTRA <tag> model iter j k hex decimal` (hex is the binary64 bit pattern,
+decimal 17 significant digits). They hold, per equation `j`, the sum and the
+maximum (with its zone) of `|equ(j,k)|` at the initial residual evaluation
+(`iter` 0) and after each accepted correction, the sum of `|soln(j,k)|` per
+correction, and the `M_center`, `R_center`, `L_center`, `xmstar` and `mstar`
+values at solver entry. `--xtra-zones` adds per-zone values (the equations and
+`lnd lnT lnR L Peos opacity gradT gradr mlt_vc Cp energy` after each
+residual evaluation); `--xtra-corr-zones` (default: the same list) adds
+`soln` and `dx` at each correction.
+
+```bash
+python run_stepdumps.py --mesa-dir "$MESA_DIR" --mesasdk-root "$MESASDK_ROOT" \
+    --scratch <empty directory> --out <output directory> \
+    --xtra star --xtra-zones 36,37,262,474:481 --xtra-corr-zones 1,262,474:481 \
+    --stage 2 --first-model 9 --steps 3 --cases star/make_planets
+```
+
+`residual_norm` of the `CALL` and `RESID` records is MESA's `sizequ`
+(`star/private/solver_support.f90`), which divides a weighted sum by a term
+count that is not simply `nvar * nz`. With `do_burn` or `do_mix` on, the first
+block adds all `nvar` equations over `nz` zones, then a second block adds the
+`nvar_chem` chemistry equations (`j > nvar_hydro`) to both the sum and the term
+count again, so upstream counts the chemistry equations twice:
+
+```
+residual_norm = (sum_{j=1..nvar} S_j + sum_{j>nvar_hydro} S_j)
+                / ((nvar + nvar_chem) * nz),    S_j = sum_k |equ(j,k) * w(j,k)|
+```
+
+(`w` is `residual_weight`, 1 unless an equation sets it.) For
+`star/make_planets` stage 2, `nvar = 12` and `nvar_chem = 8`, so the divisor is
+`20 * nz`; the printed `RESID_EQUSUM` values reproduce the `RESID` norms to
+rounding (`1e-15` relative). With neither `do_burn` nor `do_mix` only the
+`nvar_hydro` equations count, and `convergence_ignore_equL_residuals` removes
+`j = equL` from the sum and `nz` from the count. `max_residual` is the
+maximum of the same weighted terms, which is the `RESID_EQUMAX` maximum while
+the weights are 1.
+
+### `--xtra binary-rlo`: implicit mass-transfer iterations
+
+Records `XTRA <tag> model rlo_iter name hex decimal` in
+`<out>/binary/<case>.xtra` (cgs; `mdot` is negative for mass loss) for each
+iteration of the implicit scheme: current and explicit `mdot`, the function
+`f`, the brackets `mdot_lo`/`mdot_hi` and their function values, whether
+`pick_mdot_for_implicit_rlo` tries `find0_quadratic` or bisects, the result and
+`ierr` of `find0_quadratic` before and after the `find0` fallback, and the next
+`mdot` before and after the maximum-rate clamp. The bracket records are
+written after the `num_tries == 1` reset, so iteration 1 shows the reset
+values; an iteration that ends within tolerance has `RLO_CALL` and
+`RLO_RESULT_in_tol` only. `--xtra-binary-models FIRST:LAST` is required; the
+run proceeds to model `LAST` (it is not stopped by the step-dump window) and
+stops there.
+
+```bash
+python run_stepdumps.py --mesa-dir "$MESA_DIR" --mesasdk-root "$MESASDK_ROOT" \
+    --scratch <empty directory> --out <output directory> \
+    --xtra binary-rlo --xtra-binary-models 102:102 \
+    --cases binary/wind_fed_bhhmxb
+```
 
 ## Comparing
 
@@ -137,3 +217,26 @@ mesa-stepdump-windows-v1.tar.zst` packs the windows it finds under the given
 directories (matching each file's header to a manifest entry) into the
 opt-in bundle, with `PROVENANCE.json`, a copy of `windows.toml` and a per-file
 SHA-256 manifest.
+
+## Causal checks with a private copy of a case
+
+To test a suspected cause inside MESA itself without editing or rebuilding
+`$MESA_DIR`, work in a disposable private copy of the single test-suite case:
+
+1. **What to copy:** Copy only `$MESA_DIR/<suite>/test_suite/<case>` (its
+   inlists, `src/`, `make/`, `clean`/`mk`/`rn`/`re` scripts, model/column files,
+   and any `photos/` checkpoint needed for `./re`, plus any shared
+   `test_suite` inlist include it references) into a private scratch directory
+   outside `$MESA_DIR`. Leave `$MESA_DIR` untouched.
+2. **Build and run against the unmodified tree:** Register the hypothesized
+   perturbation only in the scratch copy's `src/run_star_extras.f90` (for
+   example via an `other_*` hook such as `other_gradr_factor` gated on an
+   `x_logical_ctrl` switch when the hook runs at the target call site). With
+   `MESA_DIR` and `MESASDK_ROOT` pointing at the unmodified MESA tree (or an
+   already-built step-dump overlay if step-dump records are needed), rebuild
+   only the case executable (`./clean && ./mk`) and run `./rn` or `./re <photo>`
+   from that scratch directory.
+3. **Diagnostic only:** Any run from a modified `run_star_extras.f90` is a
+   one-off causal diagnostic (for example to reproduce an exact ULP shift) and
+   is **never** a MESA reference run, baseline, or golden artifact. Delete the
+   scratch directory after recording the observation.

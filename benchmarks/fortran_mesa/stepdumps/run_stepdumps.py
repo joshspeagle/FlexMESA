@@ -24,6 +24,16 @@ first ``./rn`` stage. The window can be placed later in the run:
   A selected ``--stage`` needs no such option: earlier stages are never
   stopped, only the selected one.
 
+Opt-in diagnostics (``xtra_patch.py``; the default dump is unchanged):
+
+* ``--xtra star``: tagged ``XTRA`` solver records in the same dump file.
+  ``--xtra-zones`` and ``--xtra-corr-zones`` (``1,262,474:481``) choose the
+  zones of the per-zone values.
+* ``--xtra binary-rlo``: implicit mass-transfer iteration records in
+  ``<out>/<suite>/<case>.xtra``. ``--xtra-binary-models FIRST:LAST`` bounds
+  the binary models written; the run stops after ``LAST``. The case runs to
+  that point (the step-dump window is not used to stop it).
+
 Output, per case, ``<out>/<suite>/<case>.stepdump``: a header of ``#`` lines
 recording the MESA version, compiler and SDK (``data/version_number``,
 ``gfortran -dumpfullversion``, ``mesasdk_version``), the window, the thread
@@ -58,15 +68,19 @@ import hashlib
 import os
 import pathlib
 import shutil
+import signal
 import subprocess
 import sys
+import time
 from concurrent import futures
 
 HERE = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 import stepdump_patch  # noqa: E402
+import xtra_patch  # noqa: E402
 
 REPO = HERE.parents[2]
+POLL_SEC = 5.0  # how often a watched run is checked for a finished stage
 RUN_CASE = REPO / "scripts" / "mesa_reference" / "run_mesa_case_26_4_1.sh"
 SUITES = ("star", "binary", "astero")
 OMP_THREADS = 4
@@ -103,7 +117,11 @@ def sdk_env(
 
 
 def build_overlay(
-    mesa_dir: pathlib.Path, overlay: pathlib.Path, env: dict[str, str]
+    mesa_dir: pathlib.Path,
+    overlay: pathlib.Path,
+    env: dict[str, str],
+    xtra: tuple[str, ...] = (),
+    zones: tuple[list[int], list[int] | None] = ([], None),
 ) -> None:
     """Creates and compiles the instrumented overlay of ``mesa_dir``.
 
@@ -111,6 +129,8 @@ def build_overlay(
         mesa_dir: Pristine compiled MESA 26.4.1 tree.
         overlay: Absent directory for the overlay.
         env: SDK environment whose ``MESA_DIR`` is ``overlay``.
+        xtra: Diagnostic patches to add (members of ``xtra_patch.KINDS``).
+        zones: ``(zones, corr_zones)`` for the ``star`` diagnostics.
 
     Raises:
         SystemExit: If the pristine ``libstar.a`` carries the marker.
@@ -118,18 +138,29 @@ def build_overlay(
     overlay.mkdir(parents=True)
     for entry in mesa_dir.iterdir():
         target = overlay / entry.name
-        if entry.name in ("star", "lib", "include"):
+        copied = ("star", "lib", "include")
+        if "binary-rlo" in xtra:
+            copied += ("binary",)
+        if entry.name in copied:
             shutil.copytree(entry, target, symlinks=True)
         else:
             target.symlink_to(entry)
     solver = overlay / "star" / "private" / "star_solver.f90"
-    solver.write_text(
-        stepdump_patch.patch_text(solver.read_text(encoding="utf-8")),
-        encoding="utf-8",
-    )
-    star = overlay / "star"
-    for cmd in (["bash", "./mk"], ["bash", "./export"]):
-        subprocess.run(cmd, cwd=star, env=env, check=True)
+    text = solver.read_text(encoding="utf-8")
+    if "star" in xtra:
+        text = xtra_patch.patch_star(text, zones[0], zones[1])
+    solver.write_text(stepdump_patch.patch_text(text), encoding="utf-8")
+    modules = ["star"]
+    if "binary-rlo" in xtra:
+        mdot = overlay / xtra_patch.BINARY_FILE
+        mdot.write_text(
+            xtra_patch.patch_binary_rlo(mdot.read_text(encoding="utf-8")),
+            encoding="utf-8",
+        )
+        modules.append("binary")
+    for module in modules:
+        for cmd in (["bash", "./mk"], ["bash", "./export"]):
+            subprocess.run(cmd, cwd=overlay / module, env=env, check=True)
     pristine = (mesa_dir / "lib" / "libstar.a").read_bytes()
     if stepdump_patch.MARKER.encode() in pristine:
         raise SystemExit("pristine libstar.a carries the step-dump marker")
@@ -179,6 +210,11 @@ def build_meta(mesa_dir: pathlib.Path, env: dict[str, str]) -> dict[str, str]:
     }
 
 
+def meta_xtra_lines(meta: dict[str, str]) -> list[str]:
+    """Returns the header lines describing the enabled diagnostics."""
+    return [f"# xtra: {meta['xtra']}"] if meta.get("xtra") else []
+
+
 def _header(
     case_dir: pathlib.Path, ident: str, steps: int, meta: dict[str, str]
 ) -> list[str]:
@@ -193,6 +229,7 @@ def _header(
         f"# first_model: {meta.get('first_model', 'first of the run')}",
         f"# occurrence: {meta.get('occurrence', '1')}",
         f"# stage: {meta.get('stage', 'all')}",
+        *meta_xtra_lines(meta),
         "# produced by: benchmarks/fortran_mesa/stepdumps/run_stepdumps.py "
         "(write statements only, MESA_SKIP_OPTIONAL=t); "
         "values are IEEE-754 binary64 bit patterns in hexadecimal",
@@ -267,16 +304,37 @@ def run_case(
     }
     if not meta.get("keep_running"):
         run_env[f"{stepdump_patch.MARKER}_STOP"] = "1"
+    xtra_raw = raw.with_suffix(".xtra.raw")
+    if meta.get("xtra_binary_models"):
+        first, _, last = meta["xtra_binary_models"].partition(":")
+        run_env["FLEXMESA_XTRA_BIN"] = str(xtra_raw)
+        run_env["FLEXMESA_XTRA_FIRSTMODEL"] = first
+        run_env["FLEXMESA_XTRA_STOPMODEL"] = last
+        xtra_raw.unlink(missing_ok=True)
     if (case_root / case).exists():
         status = "reused earlier run"
     else:
         # Records are appended, and the patch numbers its processes by the
         # RUN records already in the file, so a rerun starts from none.
         raw.unlink(missing_ok=True)
-        status = _run(ident, run_env, timeout_sec)
+        stage = int(meta["stage"]) if meta.get("stage") else 0
+        watch = stage if not meta.get("keep_running") else 0
+        status = _run(ident, run_env, timeout_sec, raw, watch)
     if not raw.exists():
         return f"{ident}: {status}, no dump"
-    return _write_dump(ident, raw, dest, case_root / case, steps, meta, status)
+    out = _write_dump(ident, raw, dest, case_root / case, steps, meta, status)
+    if meta.get("xtra_binary_models") and xtra_raw.exists():
+        header = _header(case_root / case, ident, steps, meta)
+        xtra_dest = dest.with_suffix(".xtra")
+        xtra_dest.write_text(
+            "\n".join(
+                header + xtra_raw.read_text(encoding="utf-8").splitlines()
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        out += f"; {xtra_dest.name} written"
+    return out
 
 
 def _case_root(
@@ -301,22 +359,91 @@ def _case_root(
     return overlay / "star" / f"stepdump_cases_{work.name}"
 
 
-def _run(ident: str, run_env: dict[str, str], timeout_sec: int) -> str:
-    """Runs one case through the reference runner; returns its status."""
+def _run(
+    ident: str,
+    run_env: dict[str, str],
+    timeout_sec: int,
+    raw: pathlib.Path | None = None,
+    stage: int = 0,
+) -> str:
+    """Runs one case through the reference runner; returns its status.
+
+    With ``stage`` and ``raw`` given, the run is watched: the patch writes
+    ``DONE`` only when it sees a model after the window, which a stage that
+    ends on the window's last model never does. When the selected stage's
+    process has ended with the window open (the next stage has written its
+    ``RUN`` record, or the whole run has exited), ``DONE`` is appended to
+    ``raw`` and, if a later stage started, the run is stopped.
+    """
     suite, case = ident.split("/", 1)
-    try:
-        proc = subprocess.run(
-            ["bash", str(RUN_CASE), suite, case],
-            env=run_env,
-            capture_output=True,
-            text=True,
-            timeout=timeout_sec,
-            check=False,
-        )
-        status = f"rc={proc.returncode}"
-    except subprocess.TimeoutExpired:
-        status = "timeout"
+    proc = subprocess.Popen(
+        ["bash", str(RUN_CASE), suite, case],
+        env=run_env,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        start_new_session=True,
+    )
+    deadline = time.monotonic() + timeout_sec
+    status = ""
+    while True:
+        try:
+            proc.wait(timeout=POLL_SEC)
+            status = f"rc={proc.returncode}"
+            break
+        except subprocess.TimeoutExpired:
+            pass
+        if time.monotonic() > deadline:
+            status = "timeout"
+            break
+        if stage and raw is not None and raw.exists():
+            state = stage_window_state(raw.read_text().splitlines(), stage)
+            if state == "ended_open":
+                status = "stage ended with the window open"
+                break
+    if proc.poll() is None:
+        os.killpg(proc.pid, signal.SIGTERM)
+        try:
+            proc.wait(timeout=30)
+        except subprocess.TimeoutExpired:
+            os.killpg(proc.pid, signal.SIGKILL)
+            proc.wait()
+    if stage and raw is not None and raw.exists() and status != "timeout":
+        state = stage_window_state(raw.read_text().splitlines(), stage)
+        if state in ("ended_open", "running_open"):
+            with raw.open("a", encoding="utf-8") as fh:
+                fh.write("DONE\n")
+            status += "; DONE appended at the end of the stage"
     return status
+
+
+def stage_window_state(records: list[str], stage: int) -> str:
+    """Classifies the selected stage's section of a raw dump.
+
+    Args:
+        records: Raw dump lines; each process starts with ``RUN``.
+        stage: 1-based number of the selected process.
+
+    Returns:
+        ``"not_started"`` (fewer than ``stage`` processes yet);
+        ``"running_closed"`` (``DONE`` written, or the window has not
+        opened and the stage is still running); ``"running_open"`` (window
+        open, no later stage yet); ``"ended_open"`` (a later process has
+        started while the window was open without ``DONE``);
+        ``"ended_unopened"`` (a later process started and the window never
+        opened).
+    """
+    runs = [i for i, line in enumerate(records) if line == "RUN"]
+    if len(runs) < stage:
+        return "not_started"
+    end = runs[stage] if len(runs) > stage else len(records)
+    section = records[runs[stage - 1] : end]
+    opened = any(line.startswith("CALL ") for line in section)
+    ended = len(runs) > stage
+    if "DONE" in section:
+        return "running_closed"
+    if not opened:
+        return "ended_unopened" if ended else "running_closed"
+    return "ended_open" if ended else "running_open"
 
 
 def _write_dump(
@@ -391,6 +518,29 @@ def main() -> None:
         action="store_true",
         help="Do not stop the run after the window is dumped.",
     )
+    parser.add_argument(
+        "--xtra",
+        action="append",
+        choices=xtra_patch.KINDS,
+        default=[],
+        help="Opt-in diagnostics (see xtra_patch.py); repeatable. The "
+        "overlay under --scratch must be built with the same choices.",
+    )
+    parser.add_argument(
+        "--xtra-zones",
+        default="",
+        help="Zones (1,262,474:481) of the per-zone XTRA star values at each "
+        "residual evaluation, and of the correction values unless "
+        "--xtra-corr-zones is given.",
+    )
+    parser.add_argument("--xtra-corr-zones", default=None)
+    parser.add_argument(
+        "--xtra-binary-models",
+        default=None,
+        metavar="FIRST:LAST",
+        help="Binary models written by --xtra binary-rlo (the run stops "
+        "after LAST).",
+    )
     parser.add_argument("--jobs", type=int, default=2)
     parser.add_argument("--timeout-sec", type=int, default=1800)
     parser.add_argument("--cases", nargs="*", default=None)
@@ -403,11 +553,21 @@ def main() -> None:
     mesa_dir = args.mesa_dir.resolve()
     scratch = args.scratch.resolve()
     overlay = scratch / "mesa_overlay"
+    zones = xtra_patch.parse_zones(args.xtra_zones)
+    corr_zones = (
+        None
+        if args.xtra_corr_zones is None
+        else xtra_patch.parse_zones(args.xtra_corr_zones)
+    )
+    if "binary-rlo" in args.xtra and not args.xtra_binary_models:
+        raise SystemExit("--xtra binary-rlo needs --xtra-binary-models")
     env = sdk_env(args.mesasdk_root.resolve(), overlay)
     if not args.reuse_overlay:
         if scratch.exists() and any(scratch.iterdir()):
             raise SystemExit("--scratch must be empty or absent")
-        build_overlay(mesa_dir, overlay, env)
+        build_overlay(
+            mesa_dir, overlay, env, tuple(args.xtra), (zones, corr_zones)
+        )
     meta = build_meta(mesa_dir, env)
     if args.occurrence < 1 or (args.stage is not None and args.stage < 1):
         raise SystemExit("--occurrence and --stage are 1-based")
@@ -421,6 +581,11 @@ def main() -> None:
     if args.stage is not None:
         env[f"{stepdump_patch.MARKER}_STAGE"] = str(args.stage)
         meta["stage"] = str(args.stage)
+    if args.xtra:
+        meta["xtra"] = ", ".join(args.xtra)
+    if "binary-rlo" in args.xtra:
+        meta["xtra_binary_models"] = args.xtra_binary_models
+        meta["keep_running"] = "1"
     if args.keep_running:
         meta["keep_running"] = "1"
     cases = args.cases or list_cases(mesa_dir)

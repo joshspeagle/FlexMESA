@@ -1549,9 +1549,11 @@ impl BinarySystem {
         }
         let f_irr = if self.controls.accretion_powered_irradiation {
             let lx = self.last_mdot.accretion_luminosity;
+            // `binary/private/binary_irradiation.f90:44`:
+            // `4*pi*pow2(b% separation)`.
             self.controls
                 .max_f_irr
-                .min(lx / (4.0 * PI * self.separation * self.separation))
+                .min(lx / (4.0 * PI * flexmesa_math::pow2(self.separation)))
         } else if self.controls.use_accretor_luminosity_for_irrad {
             let Some(s_acc) = (match &self.companion {
                 BinaryCompanion::Star(s2) => Some(&**s2),
@@ -1560,9 +1562,11 @@ impl BinarySystem {
                 return;
             };
             let lx = eval_photosphere_info(s_acc).l_lsun * LSUN;
+            // `binary/private/binary_irradiation.f90:52`:
+            // `4*pi*pow2(b% separation)`.
             self.controls
                 .max_f_irr
-                .min(lx / (4.0 * PI * self.separation * self.separation))
+                .min(lx / (4.0 * PI * flexmesa_math::pow2(self.separation)))
         } else {
             if self.controls.irrad_flux_at_std_distance <= 0.0 {
                 return;

@@ -935,6 +935,7 @@ fn set_star_report_scalars(
         // and `surface_he4` unconditionally via `surface_avg_x` (returning
         // `0.0` when absent from net; `star/private/report.f90:260-264`).
         if !has_h1 {
+            d.set_item("net_iso_h1", 0_usize)?;
             d.set_item("surface_h1", surface_avg_x_slot(model, None))?;
         }
         if !has_he3 {
@@ -1105,6 +1106,15 @@ fn set_star_aux_radial_arrays(
         Ok(())
     };
     set_f64_or_zeros("alpha_mlt", &model.aux.mixing.alpha_mlt)?;
+    if model.aux.burn_num_iters.len() >= nz {
+        let iters: Vec<i64> = model.aux.burn_num_iters[..nz]
+            .iter()
+            .map(|&n| n as i64)
+            .collect();
+        d.set_item("burn_num_iters", PyArray1::from_vec(py, iters))?;
+    } else {
+        d.set_item("burn_num_iters", PyArray1::from_vec(py, vec![0_i64; nz]))?;
+    }
     set_f64_or_zeros("d_es", &model.aux.rotmix.d_es)?;
     set_f64_or_zeros("d_st", &model.aux.rotmix.d_st)?;
     set_f64_or_zeros("nu_st", &model.aux.rotmix.nu_st)?;

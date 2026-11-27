@@ -88,6 +88,12 @@ module = "astero"
 kind = "invariant"
 
 [[tests]]
+path = "crates/flexmesa-astero/tests/pown_grouping_581c_test.rs"
+language = "rust"
+module = "astero"
+kind = "invariant"
+
+[[tests]]
 path = "crates/flexmesa-atm/tests/atm_161_parity_test.rs"
 language = "rust"
 module = "atm"
@@ -223,6 +229,12 @@ kind = "invariant"
 
 [[tests]]
 path = "crates/flexmesa-binary/tests/phase5c_lifecycle_extras.rs"
+language = "rust"
+module = "binary"
+kind = "invariant"
+
+[[tests]]
+path = "crates/flexmesa-binary/tests/pown_grouping_581_test.rs"
 language = "rust"
 module = "binary"
 kind = "invariant"
@@ -852,6 +864,12 @@ kind = "oracle"
 provenance = "MESA 26.4.1 net/private/net_approx21.f90:1113 & star/test_suite/20M_z2m2_high_rotation IEEE-754 hex captures (#516)"
 
 [[tests]]
+path = "crates/flexmesa-star/tests/approx21_direct_export_test.rs"
+language = "rust"
+module = "star"
+kind = "invariant"
+
+[[tests]]
 path = "crates/flexmesa-star/tests/atm_irradiated_w1_test.rs"
 language = "rust"
 module = "star"
@@ -1144,6 +1162,12 @@ provenance = "benchmarks/fortran_mesa/omega_mix_oracles/mesa_26_4_1_omega_mix_or
 routines = ["star/private/solve_omega_mix.f90::do_solve_omega_mix"]
 
 [[tests]]
+path = "crates/flexmesa-star/tests/other_alpha_mlt_231_test.rs"
+language = "rust"
+module = "star"
+kind = "invariant"
+
+[[tests]]
 path = "crates/flexmesa-star/tests/other_overshoot_hook_test.rs"
 language = "rust"
 module = "star"
@@ -1180,6 +1204,18 @@ kind = "invariant"
 
 [[tests]]
 path = "crates/flexmesa-star/tests/phase5b_fidelity2_test.rs"
+language = "rust"
+module = "star"
+kind = "invariant"
+
+[[tests]]
+path = "crates/flexmesa-star/tests/pown_grouping_581_test.rs"
+language = "rust"
+module = "star"
+kind = "invariant"
+
+[[tests]]
+path = "crates/flexmesa-star/tests/pown_grouping_581c_test.rs"
 language = "rust"
 module = "star"
 kind = "invariant"
@@ -1971,7 +2007,25 @@ module = "star"
 kind = "invariant"
 
 [[tests]]
+path = "tests/test_first_divergence_table.py"
+language = "python"
+module = "tooling"
+kind = "invariant"
+
+[[tests]]
 path = "tests/test_stepdump_compare.py"
+language = "python"
+module = "tooling"
+kind = "invariant"
+
+[[tests]]
+path = "tests/test_stepdump_stage_end.py"
+language = "python"
+module = "tooling"
+kind = "invariant"
+
+[[tests]]
+path = "tests/test_stepdump_xtra.py"
 language = "python"
 module = "tooling"
 kind = "invariant"

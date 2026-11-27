@@ -50,7 +50,7 @@ pub fn znvar(
         // `rsp_build.f90:906,910` binds `log`/`exp` to `math_lib` via `use rsp_def`.
         v = flexmesa_math::exp(flexmesa_math::log(v) - residual / d_res_dlnv);
     }
-    Ok((h, 4.0 * PI * r * r * dtau / kap))
+    Ok((h, 4.0 * PI * flexmesa_math::pow2(r) * dtau / kap))
 }
 
 #[derive(Debug, Clone, Copy, Default)]

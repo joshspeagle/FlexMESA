@@ -532,8 +532,10 @@ pub fn build_pulse_points_with_options(
             )
             .max(1.0e-99)
         };
-        let d2p = -FOUR_THIRDS_PI * model.cgrav[k_in] * p_c.rho * p_c.rho;
-        p_c.p = (model.peos[k_in] - 0.5 * d2p * r_in * r_in).max(1.0e-30);
+        let d2p =
+            -FOUR_THIRDS_PI * model.cgrav[k_in] * flexmesa_math::pow2(p_c.rho);
+        p_c.p = (model.peos[k_in] - 0.5 * d2p * flexmesa_math::pow2(r_in))
+            .max(1.0e-30);
         p_c.t =
             eval_center_parabolic(r_in, r_out, model.t[k_in], model.t[k_out])
                 .max(1.0);

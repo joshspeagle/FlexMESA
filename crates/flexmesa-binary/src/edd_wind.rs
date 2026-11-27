@@ -52,7 +52,8 @@ pub fn bh_initial_equatorial_mass(m_bh_init: f64, a_spin_init: f64) -> f64 {
     let z1 = 1.0
         + pow(one_m_a2, ONE_THIRD)
             * (pow(1.0 + a, ONE_THIRD) + pow(1.0 - a, ONE_THIRD));
-    let z2 = (3.0 * a * a + z1 * z1).sqrt();
+    // `binary/private/binary_evolve.f90:154`: `sqrt(3d0*pow2(a) + pow2(Z1))`.
+    let z2 = (3.0 * pow2(a) + pow2(z1)).sqrt();
     let r_isco =
         3.0 + z2 - ((3.0 - z1) * (3.0 + z1 + 2.0 * z2)).max(0.0).sqrt();
     m_bh_init * (r_isco / 6.0).sqrt()
@@ -72,7 +73,8 @@ pub fn eval_bh_spin(m_bh: f64, m_bh_zero_eq: f64) -> f64 {
     let ratio = m_bh_zero_eq / m_eff;
     ((2.0 / 3.0_f64).sqrt()
         * ratio
-        * (4.0 - (18.0 * ratio * ratio - 2.0).max(0.0).sqrt()))
+        // `binary/private/binary_history.f90:641`: `18d0*pow2(...)`.
+        * (4.0 - (18.0 * pow2(ratio) - 2.0).max(0.0).sqrt()))
     .clamp(0.0, 1.0)
 }
 

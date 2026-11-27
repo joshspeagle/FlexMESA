@@ -186,7 +186,11 @@ pub fn burn_1_zone_const_density(
                 )?;
             if let Some(f) = f_out {
                 for j in 0..species {
-                    f[j] = buf.dydt_buf[j][0].to_f64();
+                    f[j] = if g.doing_approx21 {
+                        w.direct_dxdt[j] / aion[j]
+                    } else {
+                        buf.dydt_buf[j][0].to_f64()
+                    };
                 }
                 f[species] = eps_nuc / (cv * temp);
             }
@@ -194,13 +198,26 @@ pub fn burn_1_zone_const_density(
                 for i in 0..species {
                     let row_n = i * nvar;
                     let row_s = i * species;
-                    dfdy[row_n..row_n + species]
-                        .copy_from_slice(&w.d_dydt_dy[row_s..row_s + species]);
+                    if g.doing_approx21 {
+                        let a_i = aion[i];
+                        for j in 0..species {
+                            dfdy[row_n + j] =
+                                w.direct_d_dxdt_dx[row_s + j] * aion[j] / a_i;
+                        }
+                    } else {
+                        dfdy[row_n..row_n + species].copy_from_slice(
+                            &w.d_dydt_dy[row_s..row_s + species],
+                        );
+                    }
                     // Exact upstream `net_burn_const_density.f90:476` (`dfdy(j,nvar) = 0d0`).
                     dfdy[row_n + species] = 0.0;
                 }
                 for j in 0..species {
-                    let d_eps_dx_j = QCONV * w.d_eps_nuc_dy[j] / aion[j];
+                    let d_eps_dx_j = if g.doing_approx21 {
+                        w.direct_d_eps_nuc_dx[j]
+                    } else {
+                        QCONV * w.d_eps_nuc_dy[j] / aion[j]
+                    };
                     dfdy[species * nvar + j] = d_eps_dx_j / (cv * temp);
                 }
                 let df_t_t = d_eps_nuc_dt / cv
@@ -212,10 +229,15 @@ pub fn burn_1_zone_const_density(
                 }
                 dfdy[species * nvar + species] = df_t_t;
             }
-            let mut cats = [0.0_f64; NUM_CATEGORIES];
-            for c in 0..NUM_CATEGORIES {
-                cats[c] = QCONV * w.eps_nuc_categories[c];
-            }
+            let cats = if g.doing_approx21 {
+                w.direct_eps_nuc_categories
+            } else {
+                let mut cats = [0.0_f64; NUM_CATEGORIES];
+                for c in 0..NUM_CATEGORIES {
+                    cats[c] = QCONV * w.eps_nuc_categories[c];
+                }
+                cats
+            };
             Ok::<_, NetError>((cats, eps_neu))
         })?;
 

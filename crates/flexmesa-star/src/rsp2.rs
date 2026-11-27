@@ -252,7 +252,8 @@ pub fn eval_rsp2_zone(
     let r6_cell =
         0.5 * (flexmesa_math::pow6(r_outer) + flexmesa_math::pow6(r_inner));
     let f_chi = f_eddy * (16.0 / 3.0) * PI * (cfg.alfam * cfg.alfa) / dm_s;
-    let chi_turb = f_chi * rho_s * rho_s * r6_cell * du_over_r * hp_s * w_pos;
+    let chi_turb =
+        f_chi * flexmesa_math::pow2(rho_s) * r6_cell * du_over_r * hp_s * w_pos;
     let eq_visc = PI4 * chi_turb * du_over_r / dm_s;
 
     let (c_s, c_d, c_dr) = rsp2_rate_coeffs(

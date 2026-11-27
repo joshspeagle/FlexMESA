@@ -566,10 +566,13 @@ pub fn evaluate_binary_history_row(
                                 let denom =
                                     (*mass_g).min(6.0_f64.sqrt() * eq_m);
                                 let ratio = eq_m / denom.max(1.0e-99);
+                                // `binary/private/binary_history.f90:641`:
+                                // `18d0*pow2(...)`.
                                 (2.0_f64 / 3.0).sqrt()
                                     * ratio
                                     * (4.0
-                                        - (18.0 * ratio * ratio - 2.0)
+                                        - (18.0 * flexmesa_math::pow2(ratio)
+                                            - 2.0)
                                             .max(0.0)
                                             .sqrt())
                             } else {

@@ -936,9 +936,10 @@ pub(crate) fn do1_mlt_2(
     model.mlt_d[k] = d_f.val;
     let area_rho = FOUR_PI * flexmesa_math::pow2(model.r[k]) * rho_f.val;
     let cdc_val = model.mlt_d[k] * flexmesa_math::pow2(area_rho);
-    let area_rho_ad = FOUR_PI * r_k * r_k * rho_f;
+    // `star/private/turb_info.f90:272`: `pow2(pi4*pow2(s% r(k))*rho_face_ad)`.
+    let area_rho_ad = FOUR_PI * r_k.pow2() * rho_f;
     model.mlt_cdc[k] = cdc_val;
-    model.mlt_cdc_ad[k] = d_f * area_rho_ad * area_rho_ad;
+    model.mlt_cdc_ad[k] = d_f * area_rho_ad.pow2();
     model.mlt_gamma[k] = gamma_f.val;
     model.gradr_ad[k] = gradr_ad;
     model.gradr[k] = gradr_ad.val;
@@ -1152,12 +1153,9 @@ fn set_no_mixing_face(
     model.aux.mixing.mlt_mixing_length[k] =
         (scale_height_ad * mixing_length_alpha).val;
     model.aux.mixing.l_conv[k] = 0.0;
-    if matches!(
-        mix_type,
-        MixingType::Crystallized | MixingType::PhaseSeparationMixing
-    ) {
-        model.sig[k] = 0.0;
-    }
+    // Upstream `set_no_mixing` (`star/private/turb_info.f90:291-332`) never
+    // writes `s% sig(k)`; `sig` is set only by `get_convection_sigmas`
+    // (`star/private/mix_info.f90:1384-1558`), which gives 0 where `D_mix == 0`.
 }
 
 /// Evaluates implicit superadiabaticity reduction (`set_superad_reduction` in
@@ -1868,5 +1866,26 @@ mod tests {
         assert!(thermohaline_xh1(&m, 0, ThermohalineOption::Kippenhahn)
             .unwrap()
             .is_nan());
+    }
+
+    /// `turb_info.f90:291-332`: `set_no_mixing` never writes `s% sig(k)`, so
+    /// crystallized and phase-separation faces keep their `sig` (#161).
+    #[test]
+    fn set_no_mixing_face_leaves_sig_unchanged_for_solid_and_mixed_faces() {
+        for mix_type in
+            [MixingType::Crystallized, MixingType::PhaseSeparationMixing]
+        {
+            let mut m = model(&["h1", "he4"], &[0.5, 0.5, 0.5, 0.5]);
+            m.sig = vec![3.5e-7; m.nz];
+            let ad = StarAdOrder1::ZERO;
+            set_no_mixing_face(&mut m, 1, ad, ad, ad, 1.0, mix_type);
+            assert_eq!(
+                m.sig[1].to_bits(),
+                3.5e-7_f64.to_bits(),
+                "{mix_type:?}"
+            );
+            assert_eq!(m.mlt_d[1], 0.0);
+            assert_eq!(m.aux.mixing.mlt_mixing_type[1], mix_type);
+        }
     }
 }

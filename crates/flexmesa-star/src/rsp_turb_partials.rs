@@ -399,9 +399,8 @@ impl RspTurbPartials {
                                 + 1.0 / mc.k[i] * mc.dk_dv_00[i] * mc.dvrm[i]))
                     / cpk;
                 ddr_dt_00 += tr2
-                    * grid.vol[i]
-                    * grid.vol[i]
-                    * (3.0 * grid.t[i] * grid.t[i]
+                    * flexmesa_math::pow2(grid.vol[i])
+                    * (3.0 * flexmesa_math::pow2(grid.t[i])
                         - flexmesa_math::pow3(grid.t[i])
                             * (1.0 / mc.cps[i] * mc.dcp_dt_00[i]
                                 + 1.0 / mc.k[i] * mc.dk_dt_00[i]))

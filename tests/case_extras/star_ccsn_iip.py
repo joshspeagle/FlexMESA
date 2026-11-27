@@ -279,11 +279,9 @@ class CcsnIIpStarExtras:
         """Read `inlist_stella` (`:105-132`)."""
         self.read_inlist_stella(str(state["case_dir"]))
 
-    def other_alpha_mlt(self, state: dict[str, Any]) -> float | None:
-        """Guard per-cell `alpha_mlt_routine` (`:138-161`)."""
-        return star_core_collapse.require_per_cell_alpha_mlt(
-            state, "ccsn_IIp", ":138-161"
-        )
+    def other_alpha_mlt(self, state: dict[str, Any]) -> list[float] | None:
+        """Set per-cell `alpha_mlt(1:nz)` via H1 mass fraction (`:138-161`)."""
+        return star_core_collapse.compute_alpha_mlt_vector(state)
 
     def other_wind(
         self,

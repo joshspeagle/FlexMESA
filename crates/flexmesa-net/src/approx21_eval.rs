@@ -75,10 +75,11 @@ pub fn approx21_dfdt_dfdrho(
     }
 }
 
-/// Evaluates the full `eval_net_approx21_procs` pipeline (`net/private/net_eval.f90`
-/// lines 302–440 and 621–672).
+/// Evaluates `eval_net_approx21_procs` directly into `w`'s direct-export
+/// buffers without allocating a [`NetEvalResult`] (`net/private/net_eval.f90`
+/// lines 232–237, 302–440, and 621–672).
 #[allow(clippy::too_many_arguments)]
-pub fn eval_net_approx21_procs(
+pub(crate) fn eval_net_approx21_into(
     g: &NetGeneralInfo,
     w: &mut NetWorkState,
     rates_only: bool,
@@ -95,7 +96,7 @@ pub fn eval_net_approx21_procs(
     weak_rate_factor: f64,
     screening_mode: ScreeningMode,
     use_3a_fl87: bool,
-) -> Result<NetEvalResult, NetError> {
+) -> Result<(f64, f64, f64, f64), NetError> {
     let idx = Approx21Indices::from_net(g);
     let m = g.num_reactions;
     let total_r = if g.add_co56_to_approx21 {
@@ -156,22 +157,15 @@ pub fn eval_net_approx21_procs(
     }
 
     let species = g.num_isos;
-    let mut res = NetEvalResult {
-        eps_nuc: 0.0,
-        d_eps_nuc_drho: 0.0,
-        d_eps_nuc_dt: 0.0,
-        d_eps_nuc_dx: vec![0.0; species],
-        dxdt: vec![0.0; species],
-        d_dxdt_drho: vec![0.0; species],
-        d_dxdt_dt: vec![0.0; species],
-        d_dxdt_dx: vec![0.0; species * species],
-        eps_nuc_categories: [0.0; NUM_CATEGORIES],
-        eps_neu_total: 0.0,
-        rate_raw: w.rate_raw[..total_r].to_vec(),
-        rate_screened: w.rate_screened[..total_r].to_vec(),
-    };
+    w.ensure_direct_export_len(species);
+    w.direct_eps_nuc_categories = [0.0; NUM_CATEGORIES];
+    w.direct_dxdt[..species].fill(0.0);
+    w.direct_d_eps_nuc_dx[..species].fill(0.0);
+    w.direct_d_dxdt_drho[..species].fill(0.0);
+    w.direct_d_dxdt_dt[..species].fill(0.0);
+    w.direct_d_dxdt_dx[..species * species].fill(0.0);
     if rates_only {
-        return Ok(res);
+        return Ok((0.0, 0.0, 0.0, 0.0));
     }
 
     let mut dratdumdy1 = vec![0.0_f64; total_r];
@@ -192,7 +186,6 @@ pub fn eval_net_approx21_procs(
         &mut dratdumdy1,
         &mut dratdumdy2,
     );
-    res.rate_screened = w.rate_screened[..total_r].to_vec();
 
     let mut dydt1 = vec![0.0_f64; species];
     approx21_dydt(
@@ -218,10 +211,9 @@ pub fn eval_net_approx21_procs(
         f_ii,
         temp,
         true,
-        &mut res.eps_nuc_categories,
+        &mut w.direct_eps_nuc_categories,
     );
-    res.eps_neu_total = eps_neu_total;
-    res.eps_nuc = eps_total - eps_neu_total;
+    let eps_nuc = eps_total - eps_neu_total;
 
     let nuclides = NuclideCatalog::builtin_ref();
     let mut aion = Vec::with_capacity(species);
@@ -233,10 +225,10 @@ pub fn eval_net_approx21_procs(
         aion.push(ai);
     }
     for (i, &ai) in aion.iter().enumerate() {
-        res.dxdt[i] = dydt1[i] * ai;
+        w.direct_dxdt[i] = dydt1[i] * ai;
     }
     if just_dxdt {
-        return Ok(res);
+        return Ok((eps_nuc, 0.0, 0.0, eps_neu_total));
     }
 
     let mut dfdy = vec![0.0_f64; species * species];
@@ -287,7 +279,7 @@ pub fn eval_net_approx21_procs(
         false,
         &mut dummy_cats,
     );
-    res.d_eps_nuc_dt = deps_total_dt - deps_neu_dt;
+    let d_eps_nuc_dt = deps_total_dt - deps_neu_dt;
 
     let (deps_total_drho, deps_neu_drho) = approx21_eps_info(
         g,
@@ -300,7 +292,7 @@ pub fn eval_net_approx21_procs(
         false,
         &mut dummy_cats,
     );
-    res.d_eps_nuc_drho = deps_total_drho - deps_neu_drho;
+    let d_eps_nuc_drho = deps_total_drho - deps_neu_drho;
 
     let mut d_epsneu_dy = vec![0.0_f64; species];
     approx21_d_epsneu_dy(&idx, &w.y, &w.rate_screened, &mut d_epsneu_dy);
@@ -311,12 +303,75 @@ pub fn eval_net_approx21_procs(
     }
 
     for (i, &ai) in aion.iter().enumerate() {
-        res.d_eps_nuc_dx[i] = (d_epstotal_dy[i] - d_epsneu_dy[i]) / ai;
-        res.d_dxdt_drho[i] = dfdrho[i] * ai;
-        res.d_dxdt_dt[i] = dfdt[i] * ai;
+        w.direct_d_eps_nuc_dx[i] = (d_epstotal_dy[i] - d_epsneu_dy[i]) / ai;
+        w.direct_d_dxdt_drho[i] = dfdrho[i] * ai;
+        w.direct_d_dxdt_dt[i] = dfdt[i] * ai;
         for (j, &aj) in aion.iter().enumerate() {
-            res.d_dxdt_dx[i * species + j] = dfdy[i * species + j] * ai / aj;
+            w.direct_d_dxdt_dx[i * species + j] =
+                dfdy[i * species + j] * ai / aj;
         }
     }
-    Ok(res)
+    Ok((eps_nuc, d_eps_nuc_dt, d_eps_nuc_drho, eps_neu_total))
+}
+
+/// Evaluates `eval_net_approx21_procs` (`net/private/net_eval.f90` lines
+/// 302–440 and 621–672).
+#[allow(clippy::too_many_arguments)]
+pub fn eval_net_approx21_procs(
+    g: &NetGeneralInfo,
+    w: &mut NetWorkState,
+    rates_only: bool,
+    just_dxdt: bool,
+    temp: f64,
+    log_t: f64,
+    rho: f64,
+    log_rho: f64,
+    abar: f64,
+    zbar: f64,
+    z2bar: f64,
+    ye: f64,
+    eta: f64,
+    weak_rate_factor: f64,
+    screening_mode: ScreeningMode,
+    use_3a_fl87: bool,
+) -> Result<NetEvalResult, NetError> {
+    let total_r = if g.add_co56_to_approx21 {
+        APPROX21_CO56_NUM_REACTIONS
+    } else {
+        APPROX21_NUM_REACTIONS
+    };
+    let species = g.num_isos;
+    let (eps_nuc, d_eps_nuc_dt, d_eps_nuc_drho, eps_neu_total) =
+        eval_net_approx21_into(
+            g,
+            w,
+            rates_only,
+            just_dxdt,
+            temp,
+            log_t,
+            rho,
+            log_rho,
+            abar,
+            zbar,
+            z2bar,
+            ye,
+            eta,
+            weak_rate_factor,
+            screening_mode,
+            use_3a_fl87,
+        )?;
+    Ok(NetEvalResult {
+        eps_nuc,
+        d_eps_nuc_drho,
+        d_eps_nuc_dt,
+        d_eps_nuc_dx: w.direct_d_eps_nuc_dx[..species].to_vec(),
+        dxdt: w.direct_dxdt[..species].to_vec(),
+        d_dxdt_drho: w.direct_d_dxdt_drho[..species].to_vec(),
+        d_dxdt_dt: w.direct_d_dxdt_dt[..species].to_vec(),
+        d_dxdt_dx: w.direct_d_dxdt_dx[..species * species].to_vec(),
+        eps_nuc_categories: w.direct_eps_nuc_categories,
+        eps_neu_total,
+        rate_raw: w.rate_raw[..total_r].to_vec(),
+        rate_screened: w.rate_screened[..total_r].to_vec(),
+    })
 }

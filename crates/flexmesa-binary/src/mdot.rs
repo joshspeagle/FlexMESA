@@ -7,7 +7,7 @@
 //! and the Arras potential-expansion scheme (`binary/private/binary_mdot.f90`).
 
 use flexmesa_const::{KERG, MP, ONE_THIRD, PI, STANDARD_CGRAV};
-use flexmesa_math::{exp, log10, pow};
+use flexmesa_math::{exp, log10, pow, pow2, pow3, pow6};
 
 pub use crate::mdot_implicit::{
     update_change_factor_after_step, ImplicitMdotSolver, ImplicitRlofSolver,
@@ -52,9 +52,13 @@ pub fn eval_ritter_mdot_thin(
     let q2 = q.clamp(0.04, 20.0);
     let log_q2 = log10(q2);
     let gamma_q = if q2 < 1.0 {
-        0.954 + 0.025 * log_q2 - 0.038 * log_q2 * log_q2
+        // `binary/private/binary_mdot.f90:710, 865`:
+        // `pow2(log10(q_temp))` grouping.
+        0.954 + 0.025 * log_q2 - 0.038 * pow2(log_q2)
     } else {
-        0.954 + 0.039 * log_q2 + 0.114 * log_q2 * log_q2
+        // `binary/private/binary_mdot.f90:712, 867`:
+        // `pow2(log10(q_temp))` grouping.
+        0.954 + 0.039 * log_q2 + 0.114 * pow2(log_q2)
     };
     let hr = hp / gamma_q;
     let ritter_exponent = (r_donor - rl_donor) / hr;
@@ -388,15 +392,16 @@ pub fn eval_arras_mdot_thin(
     let q13 = pow(q, ONE_THIRD);
     let asl = 4.0 + 4.16 / (-0.96 + q13 + 1.0 / q13);
     let v_om = v_th / omega;
-    let area = 2.0 * PI * v_om * v_om / (asl * (asl - 1.0)).sqrt();
+    // `binary/private/binary_mdot.f90:827`: `2.d0 * pi * pow2(v_th/Omega)`.
+    let area = 2.0 * PI * pow2(v_om) / (asl * (asl - 1.0)).sqrt();
 
     let mfac1 = 1.0 + q;
     let mfac2 = 1.0 + 5.0 * q + 13.0 * q * q;
     let eval_phi = |rv: f64| {
         let rfac = rv / separation;
-        let rfac3 = rfac * rfac * rfac;
+        // `binary/private/binary_mdot.f90:819, 822`: `pow3`/`pow6` grouping.
         -(STANDARD_CGRAV * m_donor / rv)
-            * (1.0 + mfac1 * rfac3 / 3.0 + 4.0 * mfac2 * rfac3 * rfac3 / 45.0)
+            * (1.0 + mfac1 * pow3(rfac) / 3.0 + 4.0 * mfac2 * pow6(rfac) / 45.0)
     };
     let rv_l1 = eval_rlobe(m_donor, m_accretor, separation);
     let phi_l1 = eval_phi(rv_l1);

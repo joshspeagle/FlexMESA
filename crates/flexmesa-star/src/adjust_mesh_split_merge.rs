@@ -117,7 +117,9 @@ fn get_cell_energies(
 ) -> Result<(f64, f64, f64, f64, f64), StarError> {
     let dm = model.dm[k0];
     let ke = if model.controls.u_flag {
-        0.5 * dm * model.u[k0] * model.u[k0]
+        // `star/private/adjust_mesh_split_merge.f90:749`:
+        // `0.5d0*dm*s% u(k)**2`.
+        0.5 * dm * flexmesa_math::pow2(model.u[k0])
     } else if model.controls.v_flag {
         let v0 = model.v[k0];
         let v1 = if k0 + 1 < model.nz {
@@ -1280,4 +1282,34 @@ pub(crate) fn remesh_split_merge_with(
     }
 
     Ok((num_split, num_merge))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{load_zams_model, StarControls, StarJobControls};
+
+    #[test]
+    fn test_get_cell_energies_u_flag_uses_pow2_grouping() {
+        let mut model = load_zams_model(
+            StarControls::default(),
+            StarJobControls::default(),
+        )
+        .expect("load ZAMS");
+        let dm = 1.3e29_f64;
+        let u = 3.7e5_f64;
+        model.controls.u_flag = true;
+        model.controls.rsp2_flag = false;
+        model.cgrav[0] = 0.0;
+        model.dm[0] = dm;
+        model.energy[0] = 1.0e14;
+        model.u[0] = u;
+
+        let (_, ke, _, _, _) =
+            get_cell_energies(&model, 0).expect("get_cell_energies");
+        let expected_ke = 0.5 * dm * flexmesa_math::pow2(u);
+        let legacy_ke = 0.5 * dm * u * u;
+        assert_ne!(expected_ke.to_bits(), legacy_ke.to_bits());
+        assert_eq!(ke.to_bits(), expected_ke.to_bits());
+    }
 }

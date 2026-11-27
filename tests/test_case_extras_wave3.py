@@ -20,8 +20,6 @@ from tests.case_extras import astero_extras, star_extras
 
 _EXPECTED_UNPORTED_STAR: dict[str, type[Any]] = {
     "1.4M_ms_op_mono": star_extras.MsOpMonoStarExtras,
-    "12M_pre_ms_to_core_collapse": star_extras.PreMs12MCoreCollapseStarExtras,
-    "20M_pre_ms_to_core_collapse": star_extras.PreMs20MCoreCollapseStarExtras,
     "c13_pocket": star_extras.C13PocketStarExtras,
     "ccsn_IIp": star_extras.CcsnIIpStarExtras,
     "conductive_flame": star_extras.ConductiveFlameStarExtras,
@@ -34,10 +32,8 @@ _EXPECTED_UNPORTED_STAR: dict[str, type[Any]] = {
     "relax_composition_j_entropy": (
         star_extras.RelaxCompositionJEntropyStarExtras
     ),
-    "split_burn_big_net": star_extras.SplitBurnBigNetStarExtras,
     "tzo": star_extras.TzoStarExtras,
     "wd_aic": star_extras.WdAicStarExtras,
-    "zams_to_cc_80": star_extras.PreMs20MCoreCollapseStarExtras,
 }
 
 _EXPECTED_UNPORTED_ASTERO: dict[str, type[Any]] = {
@@ -335,7 +331,7 @@ def test_relax_composition_j_entropy_surface_l_lsun_fallback_and_guard(
 
 
 def test_wave3_ledger_counts_and_unported_audit() -> None:
-    """All 17 unported `star` and 4 `astero` cases match ledger and guards."""
+    """All 13 unported `star` and 4 `astero` cases match ledger and guards."""
     for case_name, expected_cls in _EXPECTED_UNPORTED_STAR.items():
         case_dir = harness_runner.resolve_case_dir("star", case_name)
         assert (

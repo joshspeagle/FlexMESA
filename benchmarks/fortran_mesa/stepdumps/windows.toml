@@ -260,3 +260,83 @@ occurrence = 1
 first_model = 90
 steps = 12
 why = "second ./rn stage, model 90..101"
+
+[[window]]
+case = "star/pisn"
+stage = 1
+occurrence = 1
+first_model = 175
+steps = 6
+why = "lane B over-stepping trace, Train 14: pisn 762 rows vs MESA 332"
+
+[[window]]
+case = "star/pisn"
+stage = 1
+occurrence = 1
+first_model = 225
+steps = 6
+why = "lane B over-stepping trace, Train 14: pisn 762 rows vs MESA 332"
+
+[[window]]
+case = "star/pisn"
+stage = 1
+occurrence = 1
+first_model = 428
+steps = 5
+why = "lane B over-stepping trace, Train 14: pisn 762 rows vs MESA 332 (models 428..432, the last model of the run)"
+
+[[window]]
+case = "star/tzo"
+stage = 3
+occurrence = 1
+first_model = 1
+steps = 5
+why = "lane B over-stepping trace, Train 14: tzo, start of the evolve stage (stage 3 of 3)"
+
+[[window]]
+case = "star/tzo"
+stage = 3
+occurrence = 1
+first_model = 95
+steps = 6
+why = "lane B over-stepping trace, Train 14: tzo, stage 3 models 95..100"
+
+[[window]]
+case = "star/tzo"
+stage = 3
+occurrence = 1
+first_model = 124
+steps = 10
+why = "lane B over-stepping trace, Train 14: tzo, stage 3 models 124..133"
+
+[[window]]
+case = "star/make_co_wd"
+stage = 1
+occurrence = 2
+first_model = 100
+steps = 5
+why = "lane B over-stepping trace, Train 14: make_co_wd, evolve phase of stage 1 after the relax phase (second rise to model 100)"
+
+[[window]]
+case = "star/make_co_wd"
+stage = 2
+occurrence = 1
+first_model = 1
+steps = 5
+why = "lane B over-stepping trace, Train 14: make_co_wd, start of stage 2 of 5"
+
+[[window]]
+case = "star/make_co_wd"
+stage = 3
+occurrence = 1
+first_model = 1
+steps = 5
+why = "lane B over-stepping trace, Train 14: make_co_wd, start of stage 3 of 5"
+
+[[window]]
+case = "star/make_co_wd"
+stage = 3
+occurrence = 1
+first_model = 820
+steps = 9
+why = "lane B over-stepping trace, Train 14: make_co_wd, end of stage 3 (models 820..828, the last model of the stage)"

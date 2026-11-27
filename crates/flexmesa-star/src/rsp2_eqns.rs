@@ -87,7 +87,7 @@ pub fn eval_rsp2_hp_face_zone(model: &StarModel, k: usize) -> f64 {
     if k > 0 && !model.controls.rsp2.assume_hse {
         let (alfa, beta) = rsp2_face_weights(model, k);
         let rho_face = alfa * d_00 + beta * model.rho[k - 1];
-        let area = PI4 * r_00 * r_00;
+        let area = PI4 * flexmesa_math::pow2(r_00);
         let dlnp = model.ln_peos[k - 1] - model.ln_peos[k];
         if dlnp != 0.0 {
             return -model.dm_bar[k] / (area * rho_face * dlnp);

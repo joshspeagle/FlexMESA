@@ -173,8 +173,13 @@ pub(crate) fn eval1_work_u_flag_ad(
 ) -> StarAdOrder1 {
     if f_idx >= model.nz {
         let p_in = model.peos_start.last().copied().unwrap_or(0.0);
+        // `star/private/hydro_energy.f90:643`:
+        // `pi4*pow2(s% r_center)*s% Peos_start(nz)*s% v_center`.
         return StarAdOrder1::constant(
-            FOUR_PI * model.r_center * model.r_center * p_in * model.v_center,
+            FOUR_PI
+                * flexmesa_math::pow2(model.r_center)
+                * p_in
+                * model.v_center,
         );
     }
     let using_v_tc = model

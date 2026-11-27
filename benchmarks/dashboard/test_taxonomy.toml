@@ -806,6 +806,13 @@ module = "tooling"
 kind = "invariant"
 
 [[tests]]
+path = "crates/flexmesa-replay/tests/mesa_regimes_sample_test.rs"
+language = "rust"
+module = "tooling"
+kind = "oracle"
+provenance = "crates/flexmesa-replay/tests/data/wd_cool_0p6m_sample.replay, crates/flexmesa-replay/tests/data/ns_h_simple_skye_sample.replay, crates/flexmesa-replay/tests/data/split_burn_henyey_80sp_sample.replay, crates/flexmesa-replay/tests/data/tzo_cox_mlt_sample.replay (MESA r26.4.1, gfortran 15.2.0, SDK x86_64-linux-26.6.1; #552, #591)"
+
+[[tests]]
 path = "crates/flexmesa-replay/tests/mesa_sample_test.rs"
 language = "rust"
 module = "tooling"

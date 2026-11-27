@@ -225,7 +225,7 @@ fn build_polytrope_n3_amdl(nn: usize) -> ([f64; 8], Vec<f64>, AmdlAa) {
 
 #[test]
 #[allow(clippy::too_many_lines, clippy::cast_precision_loss)]
-fn test_gensr_linear_algebra_quadrature_diff_and_interp_oracles() {
+fn test_gensr_linear_algebra_quadrature_diff_and_interp_identities() {
     // 1. `zero`, `store`, `notwin`, `notwni`
     let mut buf = [9.0_f64; 5];
     zero(&mut buf, 3);

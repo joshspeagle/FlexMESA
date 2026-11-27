@@ -935,6 +935,7 @@ fn set_star_report_scalars(
         // and `surface_he4` unconditionally via `surface_avg_x` (returning
         // `0.0` when absent from net; `star/private/report.f90:260-264`).
         if !has_h1 {
+            d.set_item("net_iso_h1", 0_usize)?;
             d.set_item("surface_h1", surface_avg_x_slot(model, None))?;
         }
         if !has_he3 {

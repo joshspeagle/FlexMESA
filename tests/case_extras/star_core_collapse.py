@@ -34,7 +34,9 @@ def compute_alpha_mlt_vector(state: dict[str, Any]) -> list[float] | None:
     alpha_h = float(x_ctrl[20])
     alpha_other = float(x_ctrl[21])
     h_limit = float(x_ctrl[22])
-    h1 = int(state.get("net_iso_h1", 0))
+    # Index directly so a missing snapshot key raises `KeyError`, while an
+    # explicit `0` (`s% net_iso(ih1) == 0` when `h1` is absent) returns `None`.
+    h1 = int(state["net_iso_h1"])
     if alpha_h <= 0.0 or alpha_other <= 0.0 or h1 <= 0:
         return None
     nz = int(state["nz"])

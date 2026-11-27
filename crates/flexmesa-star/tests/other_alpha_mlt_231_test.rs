@@ -205,8 +205,9 @@ fn test_op_split_burn_zones_and_do_struct_burn_mix_burn_num_iters() {
         .expect("op_split_burn_zones zero factors");
     assert!(m_zero_factors.aux.burn_num_iters.iter().all(|&n| n == 0));
 
-    // `do_struct_burn_mix` clears `burn_num_iters` when split burn is disabled
-    // and clears cool/skipped zones when split burn runs.
+    // `do_struct_burn_mix` preserves `burn_num_iters` when split burn is
+    // disabled (`struct_burn_mix.f90:82-84`) and clears cool/skipped zones when
+    // split burn runs.
     let mut clean = load_zams_model(
         StarControls {
             zbase: 0.02,
@@ -225,7 +226,7 @@ fn test_op_split_burn_zones_and_do_struct_burn_mix_burn_num_iters() {
     let rep_coupled = do_struct_burn_mix(&mut clean, 10.0, false, true, &[])
         .expect("do_struct_burn_mix coupled");
     assert!(rep_coupled.converged, "coupled sbm = {rep_coupled:?}");
-    assert!(clean.aux.burn_num_iters.iter().all(|&n| n == 0));
+    assert!(clean.aux.burn_num_iters.iter().all(|&n| n == 77));
 
     clean
         .save_start_values()

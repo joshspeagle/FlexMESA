@@ -190,7 +190,8 @@ def test_alpha_mlt_and_core_collapse_split_burn_handlers() -> None:
     ) == [3.0, 3.0, 1.5]
     assert cc12.other_alpha_mlt({"x_ctrl": [0.0] * 30, "net_iso_h1": 2}) is None
     assert cc12.other_alpha_mlt({"x_ctrl": x_ctrl, "net_iso_h1": 0}) is None
-    assert cc12.other_alpha_mlt({"x_ctrl": x_ctrl}) is None
+    with pytest.raises(KeyError):
+        cc12.other_alpha_mlt({"x_ctrl": x_ctrl})
     x_log = [False] * 40
     cc12.extras_startup({"x_logical_ctrl": x_log}, False)
     assert cc12.extras_finish_step({"x_logical_ctrl": x_log}) == "keep_going"

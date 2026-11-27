@@ -1093,3 +1093,93 @@ fn test_tdc_eturb_heating_in_energy_equation_is_an_explicit_error() {
     model.controls.tdc_include_eturb_in_energy_equation = false;
     assert!(setup_sources_and_others(&model, k).is_ok());
 }
+
+/// `eval_simple_PdV_work` with `mlt_Pturb_factor > 0` and velocity time
+/// centering at an interior cell: `Ptot` is the face-averaged
+/// `mlt_Pturb_factor*pow2(mlt_vc_old(k))*get_rho_face(s,k)/3` blended with
+/// `mlt_Pturb_factor*pow2(mlt_vc_old(k))*(rho_start(k-1) + rho_start(k))/6`
+/// by `P_theta_for_velocity_time_centering` (`star/private/star_utils.f90:3390-3432`),
+/// times `Av_face00 - Av_facep1` over `dm` (`star/private/hydro_energy.f90:845-875`).
+/// The density partials are checked against central finite differences.
+#[test]
+fn test_simple_pdv_work_mlt_pturb_time_centred_value_and_density_partials() {
+    let mut model = build_solar_test_model(true);
+    let k = 4;
+    model.controls.using_velocity_time_centering = true;
+    model.controls.include_p_in_velocity_time_centering = true;
+    model.controls.p_theta_for_velocity_time_centering = 0.55;
+    model.controls.mlt_pturb_factor = 0.6;
+    model.controls.use_pvsc_art_visc = false;
+    model.aux.mlt_vc_old[k] = 2.0e5;
+    for j in 0..model.nz {
+        model.ln_r_start[j] = model.ln_r[j] - 1.0e-4;
+        model.lnd_start[j] = model.lnd[j] + 2.0e-3;
+    }
+    let eval = |model: &StarModel| {
+        crate::hydro_work::eval_v_flag_simple_pdv_dm_ad(model, k, true, true).0
+    };
+    let dwork_dm = eval(&model);
+
+    let (alfa_f, beta_f) = model.get_face_weights(k);
+    let rho_face = flexmesa_math::exp(model.lnd[k]) * alfa_f
+        + flexmesa_math::exp(model.lnd[k - 1]) * beta_f;
+    let coef = 0.6 * 2.0e5 * 2.0e5;
+    let p_theta = 0.55;
+    let pturb = coef * rho_face / 3.0;
+    let pturb_start = coef
+        * (flexmesa_math::exp(model.lnd_start[k - 1])
+            + flexmesa_math::exp(model.lnd_start[k]))
+        / 6.0;
+    let p_tot = p_theta * pturb + (1.0 - p_theta) * pturb_start;
+    let av_00 =
+        crate::hydro_work::eval1_a_times_v_face_v_flag_ad(&model, k, true).val;
+    let av_p1 =
+        crate::hydro_work::eval1_a_times_v_face_v_flag_ad(&model, k + 1, true)
+            .val;
+    let expected = p_tot * (av_00 - av_p1) / model.dm[k];
+    assert!(expected != 0.0);
+    assert!(
+        (dwork_dm.val - expected).abs() <= 1.0e-13 * expected.abs(),
+        "{} vs {expected}",
+        dwork_dm.val
+    );
+
+    let h = 1.0e-6;
+    for (cell, idx) in [(k, I_LND_00), (k - 1, crate::star_ad::I_LND_M1)] {
+        let base = model.lnd[cell];
+        model.lnd[cell] = base + h;
+        let up = eval(&model).val;
+        model.lnd[cell] = base - h;
+        let down = eval(&model).val;
+        model.lnd[cell] = base;
+        let fd = (up - down) / (2.0 * h);
+        let ad = dwork_dm.d1[idx];
+        assert!(
+            (ad - fd).abs() <= 1.0e-6 * fd.abs(),
+            "cell {cell}: ad {ad} vs fd {fd}"
+        );
+    }
+}
+
+/// With `u_flag`, upstream switches the work term to `eval_simple_PdV_work`
+/// on the Riemann face velocity when velocity time centering and
+/// `use_P_d_1_div_rho_form_of_work_when_time_centering_velocity` hold
+/// (`star/private/hydro_energy.f90:170-175`); that path is not ported and
+/// the energy equation returns an error.
+#[test]
+fn test_u_flag_simple_pdv_work_form_is_an_explicit_error() {
+    let mut model = build_solar_test_model(true);
+    let k = 4;
+    model.controls.v_flag = false;
+    model.controls.u_flag = true;
+    model.controls.using_velocity_time_centering = true;
+    model
+        .controls
+        .use_p_d_1_div_rho_form_of_work_when_time_centering_velocity = true;
+    let nvar = model.layout.nvar(false);
+    let x_scale = compute_x_scale(&model, false);
+    let mut sys = HenyeySystem::new(model.nz, nvar, x_scale);
+    let err = do1_energy_eqn(&model, k, false, &mut sys)
+        .expect_err("u_flag simple PdV work");
+    assert!(err.to_string().contains("hydro_energy.f90:170-175"));
+}

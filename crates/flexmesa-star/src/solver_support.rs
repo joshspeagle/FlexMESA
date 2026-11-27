@@ -519,7 +519,10 @@ pub fn set_vars_for_solver(
     // `edit_lnR` (`solver_support.f90:1075-1090, 1516-1534`): project `ln_r`
     // from `R_center`, `dm`, and `rho`, and hold `m_grav` constant during
     // Newton iterations.
-    let mut vol00 = FOUR_THIRDS_PI * flexmesa_math::pow3(model.r_center);
+    // Left-to-right product as upstream `solver_support.f90:1524`:
+    // `four_thirds_pi*R_center*R_center*R_center`.
+    let mut vol00 =
+        FOUR_THIRDS_PI * model.r_center * model.r_center * model.r_center;
     for k in (0..nz).rev() {
         let cell_vol = model.dm[k] / model.rho[k];
         vol00 += cell_vol;

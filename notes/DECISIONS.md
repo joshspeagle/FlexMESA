@@ -91,6 +91,7 @@ Scope and the `v0.1.0` definition are in [`SCOPE.md`](SCOPE.md). Work is tracked
 | 75 | Harness Expectations Are Checked Against MESA's Own Output; a Hook Terminate Without a Code Is Named by Its Hook (`#604`) | In force; second bullet amended by decision 77 | below |
 | 76 | A Case That Takes Zero Steps and Writes a Result File Is Judged on That File (`#606`) | In force | below |
 | 77 | Python Star Extras Custom Termination Codes Use Upstream `t_xtra1..t_xtra9` Slots (`#579`) | In force | below |
+| 78 | When MESA Writes a Run's History to Several Files, the Reference Is Their Concatenation in Model Order (`#143`) | In force | below |
 | 79 | A Reviewed Routine Map Evidences a Raise from `absent` to `partial` (`#610`, `#174`) | In force | below |
 
 ## Pre-audit decisions still in force
@@ -1022,6 +1023,20 @@ The text of these four entries predates the audit of 2026-11-16. The decisions s
   - *Allowing empty `"termination_code_str"`*: collides with `FlexMESA`'s `""` sentinel for `s% termination_code == 0` in `termination_code_string_okay`.
   - *Disallowing custom termination strings in Python extras*: leaves `tzo` (`t_xtra1`, `"PASS: Have reached requested NS mass"`) unable to match MESA's `required_termination_code_string`.
 - **Note**: number `#74` is reserved by `#586`.
+
+## DECISIONS #78: When MESA Writes a Run's History to Several Files, the Reference Is Their Concatenation in Model Order (`#143`)
+
+- **Date**: 2026-11-27 (lane A)
+- **Decision**:
+  - The reference history of a `star` case is MESA's own history rows of the final stage from every history file the run wrote, in model order: `LOGS/history.data` followed by `LOGS/map_history.data` where one exists. The six header lines are MESA's; the files must have identical headers and the first model of a later file must exceed the last model of the earlier one, otherwise the builder stops with an error and writes nothing.
+  - MESA switches files because an RSP run with `RSP_write_map` sets `star_history_name` to `RSP_map_history_filename` when the map period starts (`star/private/rsp.f90:510,534-535`). Of the RSP cases only `star/rsp_Delta_Scuti` sets `RSP_write_map = .true.`; in MESA `26.4.1` its `history.data` stops at model 5810 and `map_history.data` holds models 5820 to 7973 with the same header. The other RSP runs have one file whose last model equals the step count.
+  - FlexMESA's per-case output used by the harness is one explicit history file with every model: the explicit-file writer does not rotate and the map step then gets no log directory (`inlist_runner.rs`, `mesa_profile.rs`). A run into a log directory does rotate, as upstream does (`rsp_parity_test.rs`). The reference therefore matches what the harness compares against.
+  - The builder (`scripts/data/build_mesa_histories.py`) also stores `map_history.data` in the bundle's `runs/` tree so the merge can be redone from the bundle.
+- **Why**: with the first file alone the reference for `rsp_Delta_Scuti` ended at model 5810, 27 percent short of MESA's 7973 steps, so the last 2,163 models were never compared and the final values of FlexMESA's last row were paired with MESA's model 5810.
+- **Alternatives Rejected**:
+  - *Truncate FlexMESA's history at MESA's first file*: hides the part of the run that is not compared and discards rows MESA wrote.
+  - *Compare only the first file*: the status quo, which leaves the end of the run unmeasured.
+  - *Make the harness reproduce the file switch*: it adds a second output to match and gives the comparison no new information.
 
 ## DECISIONS #79: A Reviewed Routine Map Evidences a Raise from `absent` to `partial` (`#610`, `#174`)
 

@@ -28,6 +28,7 @@ import json
 import pathlib
 import re
 import tarfile
+from collections.abc import Sequence
 from typing import BinaryIO
 
 CANONICAL_MTIME = 1776902400  # 2026-04-23T00:00:00Z
@@ -146,16 +147,84 @@ def sanitize_text_bytes(raw: bytes) -> bytes:
     return out
 
 
+MAP_HISTORY_NAME = "map_history.data"
+
+
+def history_source_files(
+    cdir: pathlib.Path, final_rel: str, suite: str
+) -> list[pathlib.Path]:
+    """Return the history files MESA wrote for the final stage, in order.
+
+    RSP runs with ``RSP_write_map`` switch ``star_history_name`` to
+    ``RSP_map_history_filename`` when the map period starts
+    (``star/private/rsp.f90:510,534-535``), so later models are in
+    ``map_history.data`` beside ``history.data``.
+
+    Args:
+        cdir: Directory of one stored MESA run.
+        final_rel: Path of the final stage's history file relative to ``cdir``.
+        suite: Suite name.
+
+    Returns:
+        ``[history.data]`` or ``[history.data, map_history.data]``.
+    """
+    first = cdir / final_rel
+    paths = [first]
+    map_path = first.parent / MAP_HISTORY_NAME
+    if suite == "star" and map_path.is_file():
+        paths.append(map_path)
+    return paths
+
+
+def _split_history(path: pathlib.Path) -> tuple[list[str], list[str]]:
+    lines = path.read_text(encoding="utf-8").splitlines()
+    if len(lines) < 7:
+        raise ValueError(f"{path}: fewer than 7 lines ({len(lines)})")
+    if '"r26.4.1"' not in lines[2]:
+        raise ValueError(f"{path}: missing r26.4.1 in header: {lines[2]}")
+    return lines[:6], [ln for ln in lines[6:] if ln.split()]
+
+
 def thin_history_preserving_mesa_header(
-    src_path: pathlib.Path,
+    src_path: pathlib.Path | Sequence[pathlib.Path],
     suite: str,
 ) -> bytes:
-    """Thin ``src_path`` while keeping MESA's exact 6-line header."""
-    lines = src_path.read_text(encoding="utf-8").splitlines()
-    if len(lines) < 7:
-        raise ValueError(f"{src_path}: fewer than 7 lines ({len(lines)})")
-    if '"r26.4.1"' not in lines[2]:
-        raise ValueError(f"{src_path}: missing r26.4.1 in header: {lines[2]}")
+    """Thin one history, or several in model order, keeping MESA's header.
+
+    When MESA wrote the history to more than one file (``DECISIONS #78``) the
+    files are concatenated. Their six header lines must be identical and the
+    model numbers must increase across each boundary; nothing is invented.
+
+    Args:
+        src_path: One history path, or the ordered paths of one run.
+        suite: Suite name.
+
+    Returns:
+        UTF-8 bytes of the thinned file with MESA's six header lines.
+
+    Raises:
+        ValueError: If a header differs between files, the model numbers do
+            not increase across a boundary, or no column is kept.
+    """
+    paths = [src_path] if isinstance(src_path, pathlib.Path) else list(src_path)
+    header, rows = _split_history(paths[0])
+    for extra in paths[1:]:
+        hdr_x, rows_x = _split_history(extra)
+        if hdr_x != header:
+            raise ValueError(
+                f"{extra}: header differs from {paths[0]}; columns not merged"
+            )
+        if (
+            rows
+            and rows_x
+            and int(rows_x[0].split()[0]) <= int(rows[-1].split()[0])
+        ):
+            raise ValueError(
+                f"{extra}: first model {rows_x[0].split()[0]} does not follow "
+                f"model {rows[-1].split()[0]} of {paths[0]}"
+            )
+        rows = rows + rows_x
+    lines = header + rows
 
     col_names = lines[5].split()
     keep_set = (
@@ -165,7 +234,7 @@ def thin_history_preserving_mesa_header(
     )
     kept_indices = [i for i, name in enumerate(col_names) if name in keep_set]
     if not kept_indices:
-        raise ValueError(f"{src_path}: zero kept columns from {col_names}")
+        raise ValueError(f"{paths[0]}: zero kept columns from {col_names}")
 
     kept_names = [col_names[i] for i in kept_indices]
     out_lines: list[str] = [
@@ -178,8 +247,6 @@ def thin_history_preserving_mesa_header(
     ]
     for raw in lines[6:]:
         cols = raw.split()
-        if not cols:
-            continue
         out_lines.append(" ".join(f"{cols[i]:>24s}" for i in kept_indices))
     return ("\n".join(out_lines) + "\n").encode("utf-8")
 
@@ -244,8 +311,10 @@ def build_histories_and_repo_refs(
         if row["status"] != "ok" or not hfiles:
             continue
         final_rel = "binary_history.data" if suite == "binary" else hfiles[-1]
-        src_hist = gt_dir / "runs" / suite / case / final_rel
-        thinned_bytes = thin_history_preserving_mesa_header(src_hist, suite)
+        sources = history_source_files(
+            gt_dir / "runs" / suite / case, final_rel, suite
+        )
+        thinned_bytes = thin_history_preserving_mesa_header(sources, suite)
         rel_key = f"thinned/{suite}/{case}.data"
         thinned_map[rel_key] = thinned_bytes
 
@@ -306,6 +375,10 @@ def build_histories_and_repo_refs(
                 for hrel in row.get("history_files", []):
                     if (cdir / hrel).is_file():
                         keep_rels.add(str(hrel))
+                    if suite == "star":
+                        mrel = pathlib.Path(hrel).parent / MAP_HISTORY_NAME
+                        if (cdir / mrel).is_file():
+                            keep_rels.add(mrel.as_posix())
                 for mrel in row.get("produced_mods", []):
                     if (cdir / mrel).is_file():
                         keep_rels.add(str(mrel))

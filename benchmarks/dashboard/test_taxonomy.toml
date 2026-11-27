@@ -1621,6 +1621,12 @@ module = "tooling"
 kind = "invariant"
 
 [[tests]]
+path = "tests/test_build_mesa_histories.py"
+language = "python"
+module = "tooling"
+kind = "invariant"
+
+[[tests]]
 path = "tests/test_binary_wave5_3.py"
 language = "python"
 module = "binary"

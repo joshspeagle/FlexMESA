@@ -38,14 +38,19 @@ fn wrap_hp(model: &StarModel, k: usize, slot: usize) -> StarAdOrder1 {
     }
 }
 
+/// `wrap_Hp_cell = 0.5d0*(wrap_Hp_00 + wrap_Hp_p1)`
+/// (`star/private/hydro_rsp2.f90:674`), where `wrap_Hp_p1` is exactly zero
+/// at the innermost cell (`star/private/auto_diff_support.f90:1290-1297`),
+/// so that cell gets `0.5*Hp_00` (#642).
 #[inline]
 fn wrap_hp_cell(model: &StarModel, k: usize) -> StarAdOrder1 {
     let hp_00 = wrap_hp(model, k, I_HP_00);
-    if k + 1 < model.nz {
-        (hp_00 + wrap_hp(model, k + 1, I_HP_P1)) * 0.5
+    let hp_p1 = if k + 1 < model.nz {
+        wrap_hp(model, k + 1, I_HP_P1)
     } else {
-        hp_00
-    }
+        StarAdOrder1::ZERO
+    };
+    0.5 * (hp_00 + hp_p1)
 }
 
 #[inline]
@@ -603,5 +608,32 @@ pub fn eval_and_save_rsp2_eqns(model: &mut StarModel, sys: &mut HenyeySystem) {
             };
             sys.save_eqn_residual(&model.layout, k, i_etrb, &resid_w);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::controls::{StarControls, StarJobControls};
+
+    /// `wrap_Hp_cell = 0.5d0*(wrap_Hp_00 + wrap_Hp_p1)` with `wrap_Hp_p1 = 0`
+    /// at the innermost cell (`star/private/hydro_rsp2.f90:674`,
+    /// `star/private/auto_diff_support.f90:1290-1297`): `0.5*Hp_00` in value
+    /// and in the `Hp_00` partial (#642).
+    #[test]
+    fn innermost_wrap_hp_cell_is_half_hp_00() {
+        let mut model = StarModel::new(
+            3,
+            vec![1, 2],
+            StarJobControls::default(),
+            StarControls::default(),
+        );
+        model.aux.rsp.resize(3);
+        model.aux.rsp.hp_face.copy_from_slice(&[3.0, 5.0, 7.0]);
+        let inner = wrap_hp_cell(&model, 2);
+        assert_eq!(inner.val, 3.5);
+        assert_eq!(inner.d1, StarAdOrder1::constant(0.0).d1);
+        let mid = wrap_hp_cell(&model, 1);
+        assert_eq!(mid.val, 6.0);
     }
 }

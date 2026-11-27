@@ -353,16 +353,23 @@ fn test_set_basic_vars_preserves_xa_and_micro_cache_tracks_change_net_and_logt()
     .expect("load ZAMS");
     let sp = model.species;
 
-    // 1. set_basic_vars must update composition moments without mutating xa
-    //    so finite-difference composition Jacobian perturbations stay intact.
+    // 1. set_basic_vars clamps xa to [0, 1] and renormalizes when
+    //    |sum - 1| > 1e-12 (`star/private/hydro_vars.f90:746-754`); a state
+    //    that is already in range and sums to 1 is left bit-identical.
     let ref_bits: Vec<u64> =
         model.xa[0..sp].iter().map(|v| v.to_bits()).collect();
     model.xa[sp] += 1.0e-7;
-    let perturbed_bit = model.xa[sp].to_bits();
     set_basic_vars(&mut model).expect("set_basic_vars");
-    assert_eq!(model.xa[sp].to_bits(), perturbed_bit);
+    let sum_xa: f64 = model.xa[sp..2 * sp].iter().sum();
+    assert!((sum_xa - 1.0).abs() <= 1.0e-12);
     for (j, &b) in ref_bits.iter().enumerate() {
         assert_eq!(model.xa[j].to_bits(), b);
+    }
+    let settled: Vec<u64> =
+        model.xa[sp..2 * sp].iter().map(|v| v.to_bits()).collect();
+    set_basic_vars(&mut model).expect("set_basic_vars again");
+    for (j, &b) in settled.iter().enumerate() {
+        assert_eq!(model.xa[sp + j].to_bits(), b);
     }
 
     // 2. MicrophysicsCache must invalidate on job.change_net/new_net_name and

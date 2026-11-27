@@ -170,10 +170,17 @@ fn test_henyey_jacobian_blocks_match_central_finite_differences() {
                          k_eq: usize,
                          i_equ: usize,
                          j_var: usize,
+                         j_ref: Option<(usize, f64)>,
                          name: &str| {
+            // Columns are derivatives with respect to `x / x_scale`; a step
+            // of `eps * scale_j` on `e_j - e_ref` gives
+            // `blk_j - (scale_j / scale_ref) * blk_ref`.
             let idx_eq = k_eq * nvar + i_equ;
             let fd = (sys_p.equ[idx_eq] - sys_m.equ[idx_eq]) / (2.0 * eps);
-            let ad = blk[k_eq * blk_sz + i_equ * nvar + j_var];
+            let mut ad = blk[k_eq * blk_sz + i_equ * nvar + j_var];
+            if let Some((j_ref, ratio)) = j_ref {
+                ad -= ratio * blk[k_eq * blk_sz + i_equ * nvar + j_ref];
+            }
             let tol = 5.0e-5 * ad.abs().max(fd.abs()).max(1.0);
             assert!(
                 (ad - fd).abs() <= tol,
@@ -189,9 +196,35 @@ fn test_henyey_jacobian_blocks_match_central_finite_differences() {
             vec![0, model.nz / 2, model.nz - 1]
         };
         for k_var in k_list {
+            // `set_basic_vars` clamps `xa` to [0, 1] and renormalizes when
+            // |sum - 1| > 1e-12 (`star/private/hydro_vars.f90:746-754`), so a
+            // lone `xa` perturbation of this size would be rescaled. Chemistry
+            // columns are therefore perturbed along `e_j - e_ref` (sum
+            // preserved) and compared with `ad_j - ad_ref`, where `ref` is the
+            // most abundant isotope of the zone.
+            let j_ref = (nvar_hydro..nvar).max_by(|&a, &b| {
+                model.xa[k_var * model.species + a - nvar_hydro].total_cmp(
+                    &model.xa[k_var * model.species + b - nvar_hydro],
+                )
+            });
             for j_var in 0..nvar {
+                let j_ref = if j_var < nvar_hydro { None } else { j_ref };
+                if j_ref == Some(j_var) {
+                    continue;
+                }
                 let scale = sys.x_scale[k_var * nvar + j_var];
+                let ref_pair =
+                    j_ref.map(|r| (r, scale / sys.x_scale[k_var * nvar + r]));
                 let delta = eps * scale;
+                // A negative step on an isotope with `xa < delta` would be
+                // clamped to 0 by `set_basic_vars`, so those columns cannot
+                // be checked by central differences.
+                if j_var >= nvar_hydro
+                    && model.xa[k_var * model.species + j_var - nvar_hydro]
+                        < 10.0 * delta
+                {
+                    continue;
+                }
 
                 let perturb = |sign: f64| -> HenyeySystem {
                     let mut m = model.clone();
@@ -202,6 +235,10 @@ fn test_henyey_jacobian_blocks_match_central_finite_differences() {
                     } else {
                         let j_iso = j_var - nvar_hydro;
                         m.xa[k_var * m.species + j_iso] += sign * delta;
+                        if let Some(j_ref) = j_ref {
+                            m.xa[k_var * m.species + j_ref - nvar_hydro] -=
+                                sign * delta;
+                        }
                     }
                     eval_henyey_equations(&mut m, include_chem)
                         .expect("perturbed eval")
@@ -212,7 +249,8 @@ fn test_henyey_jacobian_blocks_match_central_finite_differences() {
                 let i_start = if j_var < nvar_hydro { 0 } else { nvar_hydro };
                 for i_equ in i_start..nvar {
                     check_blk(
-                        &sys.dblk, &sys_p, &sys_m, k_var, i_equ, j_var, "dblk",
+                        &sys.dblk, &sys_p, &sys_m, k_var, i_equ, j_var,
+                        ref_pair, "dblk",
                     );
                     if k_var + 1 < model.nz {
                         check_blk(
@@ -222,6 +260,7 @@ fn test_henyey_jacobian_blocks_match_central_finite_differences() {
                             k_var + 1,
                             i_equ,
                             j_var,
+                            ref_pair,
                             "lblk",
                         );
                     }
@@ -233,6 +272,7 @@ fn test_henyey_jacobian_blocks_match_central_finite_differences() {
                             k_var - 1,
                             i_equ,
                             j_var,
+                            ref_pair,
                             "ublk",
                         );
                     }

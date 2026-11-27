@@ -664,6 +664,30 @@ pub fn change_model_network_with_adjust(
     Ok(())
 }
 
+/// Clamps each mass fraction of one zone to `[0, 1]`, then divides all by
+/// their sequential sum when `|sum - 1| > 1e-12`
+/// (`star/private/hydro_vars.f90:746-754`). Values already in range that sum
+/// to 1 within the tolerance are left untouched.
+pub(crate) fn clamp_and_renormalize_xa(xa: &mut [f64]) {
+    for x in xa.iter_mut() {
+        // `max(0d0, min(1d0, x))`: `min`/`max` (not `clamp`) so a NaN is
+        // handled as the Fortran intrinsics do.
+        #[allow(clippy::manual_clamp)]
+        {
+            *x = (*x).min(1.0).max(0.0);
+        }
+    }
+    let mut sum_xa = 0.0;
+    for &x in xa.iter() {
+        sum_xa += x;
+    }
+    if (sum_xa - 1.0).abs() > 1.0e-12 {
+        for x in xa.iter_mut() {
+            *x /= sum_xa;
+        }
+    }
+}
+
 /// Evaluates `rho`, `t`, `r`, `rmid`, `grav`, and composition moments (`abar`,
 /// `zbar`, `z2bar`, `z53bar`, `ye`, `xh_mass`, `yhe_mass`, `z_mass`) across all
 /// `nz` zones (`set_basic_vars` in `star/private/hydro_vars.f90:696-760`).
@@ -693,6 +717,7 @@ pub fn set_basic_vars(model: &mut StarModel) -> Result<(), StarError> {
         model.rho[k] = flexmesa_math::exp(lnd_k);
         model.t[k] = flexmesa_math::exp(lnt_k);
 
+        clamp_and_renormalize_xa(&mut model.xa[k * species..(k + 1) * species]);
         let xa_k = &model.xa[k * species..(k + 1) * species];
         let comp = get_composition_info(catalog, &model.chem_id, xa_k, true)
             .map_err(|e| {
@@ -1798,5 +1823,34 @@ pub fn get_tau(model: &mut StarModel) {
         let dtau = model.dm[k - 1] * model.opacity[k - 1]
             / (FOUR_PI * model.rmid[k - 1] * model.rmid[k - 1]);
         model.tau[k] = model.tau[k - 1] + dtau;
+    }
+}
+
+#[cfg(test)]
+mod clamp_xa_tests {
+    use super::clamp_and_renormalize_xa;
+
+    #[test]
+    fn in_range_sum_within_tolerance_is_untouched() {
+        let mut xa = [0.7, 0.3 + 5.0e-13, 0.0];
+        let before = xa;
+        clamp_and_renormalize_xa(&mut xa);
+        assert_eq!(xa.map(f64::to_bits), before.map(f64::to_bits));
+    }
+
+    #[test]
+    fn negative_fraction_is_clamped_and_sum_renormalized() {
+        let mut xa = [1.0000004, -4.1e-7, 0.0];
+        clamp_and_renormalize_xa(&mut xa);
+        assert_eq!(xa[1], 0.0);
+        assert_eq!(xa[0], 1.0);
+        assert_eq!(xa.iter().sum::<f64>(), 1.0);
+    }
+
+    #[test]
+    fn fraction_above_one_is_clamped_then_sum_divides() {
+        let mut xa = [1.5, 0.5];
+        clamp_and_renormalize_xa(&mut xa);
+        assert_eq!(xa, [1.0 / 1.5, 0.5 / 1.5]);
     }
 }

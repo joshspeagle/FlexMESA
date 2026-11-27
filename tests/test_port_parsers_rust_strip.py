@@ -15,10 +15,10 @@ def _extracted_fns(tmp_path: pathlib.Path, src: str) -> set[str]:
     """Write ``src`` to a scratch Rust file and extract ``fn`` items."""
     rel = "sample.rs"
     (tmp_path / rel).write_text(textwrap.dedent(src), encoding="utf-8")
-    cache: dict[str, set[str]] = {}
-    names = routine_gate._fn_names(tmp_path, rel, cache)
-    assert names is not None
-    return names
+    cache: dict[str, routine_gate._FileFns] = {}
+    fns = routine_gate._fn_names(tmp_path, rel, cache)
+    assert fns is not None
+    return set(fns.counts)
 
 
 def test_char_and_byte_char_literals_preserve_trailing_fns(
@@ -121,7 +121,7 @@ def test_apostrophes_in_strings_raw_strings_and_comments(
 
 def test_previously_truncated_repo_rust_symbols_visible() -> None:
     """Functions following byte-char/char quotes in crates/ remain visible."""
-    cache: dict[str, set[str]] = {}
+    cache: dict[str, routine_gate._FileFns] = {}
     expected = {
         "crates/flexmesa-star/src/report_utils.rs": (
             "eval_surf_avg_rotation_info"
@@ -137,5 +137,5 @@ def test_previously_truncated_repo_rust_symbols_visible() -> None:
         ),
     }
     for rel, sym in expected.items():
-        names = routine_gate._fn_names(REPO_ROOT, rel, cache)
-        assert names is not None and sym in names, f"{rel} missing {sym}"
+        fns = routine_gate._fn_names(REPO_ROOT, rel, cache)
+        assert fns is not None and sym in fns.counts, f"{rel} missing {sym}"

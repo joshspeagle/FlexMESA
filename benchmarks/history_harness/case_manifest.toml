@@ -641,7 +641,7 @@ suite = "star"
 case = "simplex_solar_calibration"
 reference_status = "mesa_26_4_1"
 reference_path = "benchmarks/history_harness/reference_histories/star/simplex_solar_calibration.data"
-required_termination = "max_model_number|extras_finish_step"
+required_termination = "extras_check_model"
 
 [[cases]]
 suite = "star"

@@ -184,11 +184,6 @@ issue = "#170"
 reason = "Upstream run_star_extras calls GYRE for the initial velocities; GYRE is not ported, so the test-side hook raises and the run does not start (#170)."
 [[gaps]]
 suite = "star"
-case = "simplex_solar_calibration"
-issue = "#162"
-reason = "Takes [953] steps as MESA [953] with every history column within tolerance, but stops on extras_check_model where upstream stops on max_model_number or extras_finish_step (#162)."
-[[gaps]]
-suite = "star"
 case = "split_burn_big_net"
 issue = "#161"
 reason = "Large-network silicon burning exceeds wall-time guard with unported rate, burning-limit, and solver controls (#161, #152)."

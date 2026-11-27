@@ -88,6 +88,7 @@ Scope and the `v0.1.0` definition are in [`SCOPE.md`](SCOPE.md). Work is tracked
 | 71 | Large Oracle Bundles Are Opt-In (`#552`) | In force | below |
 | 72 | Every Test File Is Listed in `test_taxonomy.toml` with Enforced Provenance and Checked Routine Maps (`#563`) | In force | below |
 | 73 | Train Campaigns Run on GitHub Actions at 3,000 s per Case, with Step Counts Enforced (`#546`, `#576`, `#598`) | In force | below |
+| 75 | Harness Expectations Are Checked Against MESA's Own Output; a Hook Terminate Without a Code Is Named by Its Hook (`#604`) | In force | below |
 
 ## Pre-audit decisions still in force
 
@@ -979,3 +980,16 @@ The text of these four entries predates the audit of 2026-11-16. The decisions s
   - *Keeping 1,500 s*: in the Train 13 campaign seven cases reached their termination only between 1,500 s and 3,000 s (among them `12M_pre_ms_to_core_collapse` and `20M_pre_ms_to_core_collapse`), and a baseline measured at 3,000 s cannot be gated by a run cut at 1,500 s.
   - *Local campaigns only*: one train a day at best, with every lane frozen while it runs.
   - *Leaving enforcement to a flag chosen per run*: the pass count would then depend on who ran the harness.
+
+## DECISIONS #75: Harness Expectations Are Checked Against MESA's Own Output; a Hook Terminate Without a Code Is Named by Its Hook (`#604`)
+
+- **Date**: 2026-11-26
+- **Decision**:
+  - Every hand-entered expectation in the history harness that has a counterpart in a stored MESA `26.4.1` run (first of all `required_termination` in `case_manifest.toml`) is compared with that run by a script in CI. A value that MESA's own output does not show is corrected in the manifest, with old value, new value and source in the commit body.
+  - When an upstream extras hook returns `terminate` and upstream leaves `termination_code` unset (MESA then prints no `termination code:` line), the required termination is the name of the hook that returned it (`extras_check_model`, `extras_finish_step`, `extras_binary_check_model`, `extras_binary_finish_step`), evidenced by the upstream `file:line`.
+  - When a case is within tolerance with MESA's step count and fails on a harness criterion only, the harness inputs for that case are checked against MESA before any engine work is assigned.
+- **Why**: `star/simplex_solar_calibration` required `max_model_number|extras_finish_step`, which MESA itself never reaches: the run ends in the check-model hook at the target age (`simplex_search_run_support.f90:1291-1293`). The case took MESA's 953 steps with every column in tolerance and was reported as a gap. The manifest was the one harness input that nothing measured against MESA.
+- **Alternatives Rejected**:
+  - *A `none` token for "no termination code"*: it would not say which upstream condition ended the run, so a run ended by a different hook would also match.
+  - *Trusting the collector's summary field of the stored runs*: it labels hook terminations heuristically and mislabels at least two cases; the printed output and the upstream source are the evidence.
+- **Note**: number `#74` is reserved by `#586`.

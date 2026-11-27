@@ -15,11 +15,11 @@ Generated mechanically by `flexmesa harness` from `benchmarks/history_harness/ca
 | Cases executed in this run | 106 |
 | Cases accepted by strict control validation (`#147`) | 89 (87 took at least one step) |
 | Cases rejected by strict validation and rerun as diagnostic (unsupported controls ignored; never a pass) | 17 (13 took at least one step) |
-| Strict runs reaching upstream termination | 76 |
+| Strict runs reaching upstream termination | 77 |
 | Diagnostic runs reaching upstream termination | 8 |
-| Acceptance passes against MESA `26.4.1` (`pass`) | 46 |
+| Acceptance passes against MESA `26.4.1` (`pass`) | 47 |
 | Interim `0b2e6bb` comparisons within manifest tolerance | 0 |
-| Declared known gaps (`known_gaps.toml`) | 56 |
+| Declared known gaps (`known_gaps.toml`) | 55 |
 | Undeclared failures | 0 |
 
 ## Per-Case Status and Reference Availability
@@ -103,7 +103,7 @@ Generated mechanically by `flexmesa harness` from `benchmarks/history_harness/ca
 | `star` | `rsp_gyre` | `mesa_26_4_1` | `extras_finish_step` | strict | `extras_finish_step` | 6215 (6215) | 0 (0) | 0.0 [0] (2.0 [1247/623r]) | - | 0.00% (0) | -0.00% | `log_L`: 4.422e-11 | - | #170 | scaffolding (#170) |
 | `star` | `rsp_save_and_load_file` | `mesa_26_4_1` | `extras_finish_step` | strict | `extras_finish_step` | 7266 (7216) | 0 (0) | 0.0 [0] (3.0 [2167/723r]) | - | 0.00% (0) | -0.00% | `log_L`: 1.810e-10 | - | - | pass |
 | `star` | `semiconvection` | `mesa_26_4_1` | `xa_central_lower_limit` | strict | `xa_central_lower_limit` | 293 (293) | 0 (0) | 7.2 [2094] (7.1 [221/31r]) | - | 0.00% (0) | +0.00% | `log_Teff`: 0.000e+00 | - | - | pass |
-| `star` | `simplex_solar_calibration` | `mesa_26_4_1` | `max_model_number|extras_finish_step` | strict | `extras_check_model` | 953 (953) | 0 (0) | 5.2 [4987] (5.2 [501/97r]) | - | 0.00% (0) | +0.00% | `log_Teff`: 0.000e+00 | - | #162 | declared gap (#162) |
+| `star` | `simplex_solar_calibration` | `mesa_26_4_1` | `extras_check_model` | strict | `extras_check_model` | 953 (953) | 0 (0) | 5.2 [4987] (5.2 [501/97r]) | - | 0.00% (0) | +0.00% | `log_Teff`: 0.000e+00 | - | - | pass |
 | `star` | `split_burn_big_net` | `mesa_26_4_1` | `xa_central_lower_limit` | diagnostic (1 controls ignored) | `xa_central_lower_limit` | 9 (9) | 0 (1) | 8.4 [76] (9.5 [19/2r]) | - | 0.64% (13) | +3.34% | `log_L`: 1.305e-02 | 9 | #161 | declared gap (#161) |
 | `star` | `starspots` | `mesa_26_4_1` | `max_age` | strict | `max_age` | 1496 (1496) | 0 (0) | 7.1 [10563] (7.1 [10563]) | - | - | +0.00% | `log_R`: 0.000e+00 | - | - | pass |
 | `star` | `timing` | `mesa_26_4_1` | `xa_central_lower_limit` | strict | `xa_central_lower_limit` | 50 (50) | 0 (0) | 7.1 [354] (7.0 [14/2r]) | - | 0.00% (0) | +0.00% | `log_Teff`: 0.000e+00 | - | - | pass |

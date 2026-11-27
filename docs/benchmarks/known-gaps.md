@@ -9,10 +9,10 @@ Instead of capping steps or loosening checks to force green runs, unfinished or 
 
 | Suite | Target Cases | Stored `26.4.1` Refs | `no_reference_yet` | Strict-Validated | Diagnostic Runs | Reach Upstream Term | Declared Gaps | Verified Pass |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| `star` | 90 | 86 | 4 | 73 | 17 | 73 | 38 | 41 |
+| `star` | 90 | 86 | 4 | 73 | 17 | 74 | 37 | 42 |
 | `binary` | 8 | 8 | 0 | 8 | 0 | 8 | 4 | 4 |
 | `astero` | 8 | 8 | 0 | 8 | 0 | 3 | 5 | 1 |
-| **Total** | **106** | **102** | **4** | **89** | **17** | **84** | **47** | **46** |
+| **Total** | **106** | **102** | **4** | **89** | **17** | **85** | **46** | **47** |
 
 `Strict-Validated` counts cases whose unmodified inlists pass strict control validation (`#147`). `Diagnostic Runs` counts cases that strict validation rejects and that were rerun with the unsupported controls ignored; their numbers show where the engine stands and can never count as a pass (`DECISIONS #26`). `Reach Upstream Term` counts runs of either kind.
 
@@ -35,7 +35,7 @@ Cases lacking a committed MESA `26.4.1` baseline report `no reference yet` and c
 | Tracking Issue | Declared Case Count | Primary Focus |
 | :--- | ---: | :--- |
 | [#161](https://github.com/joshspeagle/FlexMESA/issues/161) | 17 | Restore upstream EOS, opacity, network, and atm control paths |
-| [#162](https://github.com/joshspeagle/FlexMESA/issues/162) | 8 | Align `astero` search and chi-squared drivers |
+| [#162](https://github.com/joshspeagle/FlexMESA/issues/162) | 7 | Align `astero` search and chi-squared drivers |
 | [#154](https://github.com/joshspeagle/FlexMESA/issues/154) | 6 | Align `timestep.rs` and `star` mass-change `do_adjust_mass` |
 | [#157](https://github.com/joshspeagle/FlexMESA/issues/157) | 5 | Restore MLT/TDC controls and remove non-upstream fallbacks |
 | [#587](https://github.com/joshspeagle/FlexMESA/issues/587) | 5 | Open #140 parity sub-issue |
@@ -43,7 +43,7 @@ Cases lacking a committed MESA `26.4.1` baseline report `no reference yet` and c
 | [#160](https://github.com/joshspeagle/FlexMESA/issues/160) | 2 | Align coupled `BinarySystem` step ordering, tides, and RLOF |
 | [#231](https://github.com/joshspeagle/FlexMESA/issues/231) | 1 | Open #140 parity sub-issue |
 
-## Complete Known-Gaps Registry (47 Cases)
+## Complete Known-Gaps Registry (46 Cases)
 
 | Suite | Case | Issue | Expected Term | Baseline Outcome | Mechanism |
 | :--- | :--- | :--- | :--- | :--- | :--- |
@@ -75,7 +75,6 @@ Cases lacking a committed MESA `26.4.1` baseline report `no reference yet` and c
 | `star` | `relax_composition_j_entropy` | [#154](https://github.com/joshspeagle/FlexMESA/issues/154) | `xa_central_lower_limit` | `xa_central_lower_limit` (263 steps; strict) | Multi-stage composition, angular-momentum, and entropy relaxation reaches upstream xa_central_lower_limit(he4) in diagnostic mode but misses strict tolerances (#154, #152). |
 | `star` | `rsp_Delta_Scuti` | [#162](https://github.com/joshspeagle/FlexMESA/issues/162) | `extras_finish_step` | `extras_finish_step` (7973 steps; strict) | RSP pulsation period and age drift over 100 cycles (#162). |
 | `star` | `rsp_Type_II_Cepheid` | [#162](https://github.com/joshspeagle/FlexMESA/issues/162) | `extras_finish_step` | `extras_finish_step` (14680 steps; strict) | Nonlinear RSP luminosity and Teff exceed strict tolerances over multiple pulsation cycles (#162). |
-| `star` | `simplex_solar_calibration` | [#162](https://github.com/joshspeagle/FlexMESA/issues/162) | `max_model_number\|extras_finish_step` | `extras_check_model` (953 steps; strict) | Takes [953] steps as MESA [953] with every history column within tolerance, but stops on extras_check_model where upstream stops on max_model_number or extras_finish_step (#162). |
 | `star` | `split_burn_big_net` | [#161](https://github.com/joshspeagle/FlexMESA/issues/161) | `xa_central_lower_limit` | `xa_central_lower_limit` (9 steps; diagnostic (1 controls ignored)) | Large-network silicon burning exceeds wall-time guard with unported rate, burning-limit, and solver controls (#161, #152). |
 | `star` | `twin_studies` | [#154](https://github.com/joshspeagle/FlexMESA/issues/154) | `forced_stop` | `min_timestep_limit` (789 steps; diagnostic (1 controls ignored)) | Multi-star evolution exceeds wall-time guard under unported rotational mixing and burning-limit controls (#154, #158, #161). |
 | `star` | `tzo` | [#161](https://github.com/joshspeagle/FlexMESA/issues/161) | `PASS: Have reached requested NS mass` | `timeout` (1050 steps; diagnostic (1 controls ignored)) | Case history_columns.list requests unported colors add_abs_mag and hydro shock columns. |
@@ -180,7 +179,7 @@ from flexmesa.testing import case_manifest
 manifest = case_manifest.load_case_manifest()
 gaps = case_manifest.load_known_gaps()
 assert len(manifest.cases) == 106
-assert len(gaps) == 56
+assert len(gaps) == 55
 no_ref = [
     c.case for c in manifest.cases
     if c.reference_status == "no_reference_yet"

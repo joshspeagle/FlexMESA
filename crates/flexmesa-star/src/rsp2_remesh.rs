@@ -96,20 +96,25 @@ pub fn remesh_for_rsp2(model: &mut StarModel) -> Result<(), StarError> {
             flexmesa_math::exp(model.ln_t[0])
         )));
     }
+    // `find_xm_anchor` (`star/private/hydro_rsp2_support.f90:165-189`): the
+    // interpolation divides by `lnT00 - lnTm1` as is, and only an
+    // interpolated anchor is tested, with `is_bad(xm_anchor) .or.
+    // xm_anchor <= 0d0` (#646).
     let mut xm_anchor = xm_old[nz_old - 1];
     for k in 1..nz_old {
         if model.ln_t[k] >= lnt_anchor {
             let (xmm1, xm00) = (xm_old[k - 1], xm_old[k]);
             let (lntm1, lnt00) = (model.ln_t[k - 1], model.ln_t[k]);
-            let denom = (lnt00 - lntm1).max(1.0e-30);
-            xm_anchor = xmm1 + (xm00 - xmm1) * (lnt_anchor - lntm1) / denom;
+            xm_anchor =
+                xmm1 + (xm00 - xmm1) * (lnt_anchor - lntm1) / (lnt00 - lntm1);
+            if !xm_anchor.is_finite() || xm_anchor <= 0.0 {
+                return Err(StarError::ConvergenceFailure(format!(
+                    "remesh_for_rsp2: bad xm_anchor = {xm_anchor} at k = {}",
+                    k + 1
+                )));
+            }
             break;
         }
-    }
-    if !xm_anchor.is_finite() || xm_anchor <= 0.0 || xm_anchor >= model.xmstar {
-        return Err(StarError::ConvergenceFailure(format!(
-            "remesh_for_rsp2: invalid xm_anchor = {xm_anchor}"
-        )));
     }
 
     // 3. Build new `xm` (`0..=nz`), `dm`, and `xm_mid` (`190-230`).

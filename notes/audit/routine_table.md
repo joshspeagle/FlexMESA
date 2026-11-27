@@ -18,13 +18,13 @@ Derived from `benchmarks/dashboard/routine_inventory.json` (MESA r26.4.1, commit
 | :--- | ---: |
 | Upstream lines | 144,952 |
 | Lines in mapped routines | 25,353 |
-| Lines in routines with oracle evidence | 6,846 |
+| Lines in routines with oracle evidence | 6,625 |
 | Line-weighted mapped fraction | 17.5% |
-| Line-weighted oracle fraction | 4.7% |
+| Line-weighted oracle fraction | 4.6% |
 | Whole-file ported fraction (existing headline) | 30.7% |
 | Mapped fraction of routine lines only | 20.6% |
 | Routines (mapped / total) | 249 / 2,588 |
-| Routines with oracle evidence | 27 |
+| Routines with oracle evidence | 25 |
 
 The fractions answer different questions. The whole-file figure counts every line of a file whose hand-set status is ported; the line-weighted figures count only the lines of routines that carry the named evidence. Neither is a statement about agreement with MESA.
 
@@ -34,7 +34,7 @@ The fractions answer different questions. The whole-file figure counts every lin
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
 | `star` | 173 | 2,176 | 180 | 25 | 120,509 | 107,851 | 22,645 | 6,625 | 12,658 | 18.8% | 5.5% | 35.1% |
 | `star_data` | 12 | 5 | 0 | 0 | 4,870 | 49 | 0 | 0 | 4,821 | 0.0% | 0.0% | 0.0% |
-| `binary` | 47 | 218 | 69 | 2 | 11,638 | 8,881 | 2,708 | 221 | 2,757 | 23.3% | 1.9% | 18.7% |
+| `binary` | 47 | 218 | 69 | 0 | 11,638 | 8,881 | 2,708 | 0 | 2,757 | 23.3% | 0.0% | 18.7% |
 | `astero` | 14 | 189 | 0 | 0 | 7,935 | 6,553 | 0 | 0 | 1,382 | 0.0% | 0.0% | 0.0% |
 | `eos` | 57 | 326 | 108 | 30 | 28,666 | 21,515 | 7,552 | 1,779 | 7,151 | 26.3% | 6.2% | 0.0% |
 | `kap` | 38 | 311 | 0 | 0 | 22,430 | 19,985 | 0 | 0 | 2,445 | 0.0% | 0.0% | 0.0% |
@@ -132,7 +132,7 @@ Candidates for a reviewed raise to `ported_unverified`. Largest ten:
 | `auto_diff/public/auto_diff.f90` | `auto_diff` | partial | - | 30 | 0 | 0 | 0 | 0 | 0 | 0 | 30 |
 | `binary/job/run_binary.f90` | `binary` | ported_unverified | ported_unverified | 44 | 1 | 1 | 0 | 17 | 17 | 0 | 27 |
 | `binary/private/binary_ctrls_io.f90` | `binary` | partial | - | 821 | 9 | 0 | 0 | 568 | 0 | 0 | 253 |
-| `binary/private/binary_disk.f90` | `binary` | ported_unverified | ported_unverified | 318 | 7 | 7 | 1 | 265 | 265 | 206 | 53 |
+| `binary/private/binary_disk.f90` | `binary` | ported_unverified | ported_unverified | 318 | 7 | 7 | 0 | 265 | 265 | 0 | 53 |
 | `binary/private/binary_edot.f90` | `binary` | ported_unverified | ported_unverified | 231 | 4 | 4 | 0 | 186 | 186 | 0 | 45 |
 | `binary/private/binary_evolve.f90` | `binary` | partial | - | 698 | 9 | 0 | 0 | 654 | 0 | 0 | 44 |
 | `binary/private/binary_history.f90` | `binary` | partial | - | 880 | 21 | 0 | 0 | 835 | 0 | 0 | 45 |
@@ -151,7 +151,7 @@ Candidates for a reviewed raise to `ported_unverified`. Largest ten:
 | `binary/public/binary_controls.inc` | `binary` | partial | - | 190 | 0 | 0 | 0 | 0 | 0 | 0 | 190 |
 | `binary/public/binary_data.inc` | `binary` | partial | - | 326 | 0 | 0 | 0 | 0 | 0 | 0 | 326 |
 | `binary/public/binary_def.f90` | `binary` | partial | - | 292 | 4 | 0 | 0 | 25 | 0 | 0 | 267 |
-| `binary/public/binary_lib.f90` | `binary` | partial | partial | 272 | 17 | 11 | 1 | 224 | 113 | 15 | 48 |
+| `binary/public/binary_lib.f90` | `binary` | partial | partial | 272 | 17 | 11 | 0 | 224 | 113 | 0 | 48 |
 | `chem/private/chem_isos_io.f90` | `chem` | partial | - | 233 | 4 | 0 | 0 | 200 | 0 | 0 | 33 |
 | `chem/private/lodders_mod.f90` | `chem` | partial | - | 106 | 2 | 0 | 0 | 76 | 0 | 0 | 30 |
 | `chem/private/nuclide_set_mod.f90` | `chem` | partial | - | 112 | 3 | 0 | 0 | 80 | 0 | 0 | 32 |

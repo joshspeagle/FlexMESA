@@ -9581,7 +9581,7 @@ notes = "seeded from coverage-map.md section 7 (unverified)"
 "set_MLT" = "crates/flexmesa-turb/src/mlt.rs::set_mlt"
 "set_TDC" = "crates/flexmesa-turb/src/tdc.rs::set_tdc+get_tdc_solution"
 "set_semiconvection" = "crates/flexmesa-turb/src/semiconvection.rs::set_semiconvection"
-"set_thermohaline" = "crates/flexmesa-turb/src/thermohaline.rs::get_d_thermohaline"
+"set_thermohaline" = "crates/flexmesa-turb/src/thermohaline.rs::set_thermohaline"
 
 [[files]]
 upstream_path = "utils/private/utils_c_system.c"

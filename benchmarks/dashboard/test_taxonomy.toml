@@ -1564,7 +1564,6 @@ language = "python"
 module = "binary"
 kind = "oracle"
 provenance = "Upstream MESA 26.4.1 binary/test/test_output (pick_next_timestep_rl & eval_L2_mass_loss_fraction)"
-routines = ["binary/private/binary_disk.f90::eval_L2_mass_loss_fraction", "binary/public/binary_lib.f90::binary_L2_mass_loss_fraction"]
 
 [[tests]]
 path = "tests/test_case_extras_batch1.py"
@@ -1646,10 +1645,6 @@ language = "python"
 module = "const"
 kind = "oracle"
 provenance = "Upstream MESA 26.4.1 const/test/test_output & utils/test/test_output pinned outputs"
-routines = [
-  "const/public/const_def.f90::do_const_init",
-  "const/public/const_lib.f90::const_init",
-]
 
 [[tests]]
 path = "tests/test_dashboard.py"
@@ -1723,7 +1718,6 @@ language = "python"
 module = "eos"
 kind = "oracle"
 provenance = "tests/fixtures/golden/eos/test_output.txt & benchmarks/fortran_mesa/eos_oracles/ (#161)"
-routines = ["eos/private/eos_blend.f90::is_contained", "eos/private/eos_blend.f90::min_distance_to_polygon", "eos/private/gauss_fermi.f90::dfermi", "eos/private/ideal.f90::get_ideal_eos_results", "eos/private/ideal.f90::get_ideal_for_eosdt", "eos/public/eos_lib.f90::eos_fermi_dirac_integral"]
 
 [[tests]]
 path = "tests/test_eos_wave3a2.py"
@@ -1731,7 +1725,6 @@ language = "python"
 module = "eos"
 kind = "oracle"
 provenance = "benchmarks/fortran_mesa/eos_oracles/mesa_26_4_1_eos_oracles.tsv (HELM)"
-routines = ["eos/private/eos_helm_eval.f90::get_helm_for_eosdt"]
 
 [[tests]]
 path = "tests/test_eos_wave3a3.py"
@@ -1739,7 +1732,6 @@ language = "python"
 module = "eos"
 kind = "oracle"
 provenance = "benchmarks/fortran_mesa/eos_oracles/mesa_26_4_1_eos_oracles.tsv (PC/Skye/eosDT_get)"
-routines = ["eos/private/eosde_eval.f90::Get_eos_gamma_DE_Results", "eos/private/eosdt_eval.f90::Get_eosDT_Results", "eos/private/eosdt_eval.f90::get_Rho", "eos/private/eosdt_eval.f90::get_T", "eos/private/eospc_eval.f90::Get_PC_alfa", "eos/private/eospc_eval.f90::get_PC_for_eosdt", "eos/private/eospt_eval.f90::Get_PT_Results_using_DT", "eos/private/skye.f90::Get_Skye_alfa", "eos/private/skye.f90::Get_Skye_alfa_simple", "eos/private/skye.f90::get_Skye_for_eosdt", "eos/public/eos_lib.f90::eosDT_get", "eos/public/eos_lib.f90::eosDT_get_Rho", "eos/public/eos_lib.f90::eosDT_get_T", "eos/public/eos_lib.f90::eosPT_get", "eos/public/eos_lib.f90::eos_gamma_DE_get"]
 
 [[tests]]
 path = "tests/test_eos_wave3b1.py"
@@ -1747,7 +1739,6 @@ language = "python"
 module = "eos"
 kind = "oracle"
 provenance = "tests/fixtures/golden/eos/test_output.txt & benchmarks/fortran_mesa/eos_oracles/ (4D EOS)"
-routines = ["eos/private/eos_helm_eval.f90::get_helm_for_eosdt", "eos/private/eoscms_eval.f90::get_CMS_for_eosdt", "eos/private/eosdt_eval.f90::Get_eosDT_Results", "eos/private/eosdt_eval.f90::get1_for_eosdt", "eos/private/eosdt_eval.f90::get_Rho", "eos/private/eosdt_eval.f90::get_T", "eos/private/eospt_eval.f90::Get_PT_Results_using_DT", "eos/private/eospt_eval.f90::get_Pgas", "eos/private/eospt_eval.f90::get_T", "eos/public/eos_lib.f90::eosDT_get", "eos/public/eos_lib.f90::eosDT_get_Rho", "eos/public/eos_lib.f90::eosDT_get_T", "eos/public/eos_lib.f90::eosPT_get", "eos/public/eos_lib.f90::eosPT_get_T"]
 
 [[tests]]
 path = "tests/test_evolution_profile.py"
@@ -1816,10 +1807,6 @@ language = "python"
 module = "interp_2d"
 kind = "oracle"
 provenance = "Upstream MESA 26.4.1 interp_2d/test/test_output pinned values"
-routines = [
-  "interp_2d/private/bipm_db.f90::do_evbipm_db",
-  "interp_2d/private/bipm_db.f90::do_mkbipm_db",
-]
 
 [[tests]]
 path = "tests/test_ionization.py"
@@ -1897,10 +1884,6 @@ language = "python"
 module = "neu"
 kind = "oracle"
 provenance = "Upstream MESA 26.4.1 neu/test/test_output & benchmarks/fortran_mesa/neu_oracles/"
-routines = [
-  "neu/private/mod_neu.f90::neutrinos",
-  "neu/public/neu_lib.f90::neu_get",
-]
 
 [[tests]]
 path = "tests/test_num.py"
@@ -2066,7 +2049,6 @@ language = "python"
 module = "turb"
 kind = "oracle"
 provenance = "Upstream MESA 26.4.1 turb/test/test_output pinned MLT/TDC values"
-routines = ["turb/private/mlt.f90::calc_MLT", "turb/public/turb.f90::set_MLT", "turb/public/turb.f90::set_TDC"]
 
 [[tests]]
 path = "tests/test_turb_autodiff.py"

@@ -24,7 +24,7 @@ import tomllib
 from dataclasses import dataclass
 from typing import Any, Literal, cast
 
-from flexmesa.testing import port_manifest
+from flexmesa.testing import _routine_call_gate, port_manifest
 
 DEFAULT_TAXONOMY_REL: str = "benchmarks/dashboard/test_taxonomy.toml"
 
@@ -60,7 +60,6 @@ _RUST_TEST_KIND_RE = re.compile(
 )
 _HEX64_RE = re.compile(r"0[xX][0-9a-fA-F][0-9a-fA-F_]{11,}")
 _FN_TEST_DEF_RE = re.compile(r"\b(fn|def)\s+test_[A-Za-z0-9_]+\b")
-_IDENT_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 _RUST_MOD_COMMON_RE = re.compile(r"\bmod\s+common\s*;")
 _MESA_PKGS = (
     "adipls|astero|atm|auto_diff|binary|chem|colors|const|eos|gyre|"
@@ -915,38 +914,79 @@ def _collect_manifest_routine_meta(
     return routine_meta
 
 
-def _allowed_routine_symbols(
-    upstream_routine: str,
-    rust_target: str,
-) -> set[str]:
-    """Return code identifiers matching a manifest `routine_map` row."""
-    allowed: set[str] = {upstream_routine}
-    parts = rust_target.split("::")
-    symbol_segments = parts[1:] if len(parts) > 1 else parts
-    for seg in symbol_segments:
-        for item in seg.split("+"):
-            clean = item.strip()
-            if clean:
-                allowed.add(clean)
-    return allowed
+def _scan_rust_stripped(text: str) -> str:
+    """Strip Rust comments and string literals for symbol inspection."""
+    return _scan_rust_code(text, strip_strings=True)
 
 
-def _extract_code_identifiers(
-    path: pathlib.Path,
-    language: TestLanguage,
-) -> set[str]:
-    """Return non-comment, non-string identifiers sans `fn`/`def test_*`."""
-    code = _read_non_comment_code(
-        path,
-        strip_strings=True,
-        strip_test_fn_names=True,
-        include_rust_common=False,
-    )
-    if not code:
-        return set()
-    if language not in VALID_LANGUAGES:
-        return set()
-    return set(_IDENT_RE.findall(code))
+def _verify_routine_claims(
+    rec: TestFileRecord,
+    full_path: pathlib.Path,
+    repo_root: pathlib.Path,
+    routine_meta: dict[str, tuple[str, str, str]],
+    source_cache: dict[str, dict[str, _routine_call_gate.RustSymbolInfo]],
+) -> list[str]:
+    """Verify each `routine_map` claim against real call sites and imports."""
+    errs: list[str] = []
+    rust_ev: _routine_call_gate.RustCallEvidence | None = None
+    py_ev: _routine_call_gate.PythonCallEvidence | None = None
+    if full_path.is_file():
+        if rec.language == "rust":
+            code = _read_non_comment_code(
+                full_path,
+                strip_strings=True,
+                strip_test_fn_names=True,
+                include_rust_common=False,
+            )
+            rust_ev = _routine_call_gate.extract_rust_evidence(code)
+        elif rec.language == "python":
+            py_ev = _routine_call_gate.extract_python_evidence(full_path)
+            if not py_ev.imports_rust:
+                errs.append(
+                    f"{rec.path}: Python test claiming Rust routines must "
+                    "import `flexmesa._rust`"
+                )
+
+    for routine_id in rec.routines:
+        meta = routine_meta.get(routine_id)
+        if meta is None:
+            errs.append(
+                f"{rec.path}: routine {routine_id!r} not in "
+                "port_manifest.toml routine_map"
+            )
+            continue
+        allowed = _routine_call_gate.parse_target_symbols(meta[2])
+        if rec.language == "rust" and rust_ev is not None:
+            missing_crate, matched = (
+                _routine_call_gate.check_rust_routine_claim(
+                    rust_ev,
+                    repo_root,
+                    meta[0],
+                    meta[2],
+                    _scan_rust_stripped,
+                    source_cache,
+                )
+            )
+            if missing_crate is not None:
+                errs.append(
+                    f"{rec.path}: listed routine {routine_id!r} "
+                    f"targets crate {missing_crate!r}, which is "
+                    "not referenced in test code"
+                )
+            if not matched:
+                errs.append(
+                    f"{rec.path}: listed routine {routine_id!r} "
+                    f"(expected call to one of {sorted(allowed)}) not "
+                    "called in non-comment test code"
+                )
+        elif rec.language == "python" and py_ev is not None:
+            if not (py_ev.called_syms & allowed):
+                errs.append(
+                    f"{rec.path}: listed routine {routine_id!r} "
+                    f"(expected call to one of {sorted(allowed)}) not "
+                    "called in non-comment test code"
+                )
+    return errs
 
 
 def _has_restricted_oracle_token(rel_path: str) -> bool:
@@ -992,6 +1032,7 @@ def verify_test_taxonomy(
 
     discovered = set(discover_test_files(repo_root))
     seen: dict[str, int] = {}
+    source_cache: dict[str, dict[str, _routine_call_gate.RustSymbolInfo]] = {}
 
     for rec in taxonomy.entries:
         seen[rec.path] = seen.get(rec.path, 0) + 1
@@ -1012,7 +1053,6 @@ def verify_test_taxonomy(
             errors.append(f"{rec.path}: invalid kind {rec.kind!r}")
 
         full_path = repo_root / rec.path
-        file_idents: set[str] | None = None
         if rec.path in discovered and full_path.is_file():
             inline_kind, inline_err = detect_inline_test_kind(full_path)
             if inline_err:
@@ -1049,24 +1089,11 @@ def verify_test_taxonomy(
                 )
 
         if routine_meta and rec.routines:
-            if file_idents is None and full_path.is_file():
-                file_idents = _extract_code_identifiers(full_path, rec.language)
-            for routine_id in rec.routines:
-                meta = routine_meta.get(routine_id)
-                if meta is None:
-                    errors.append(
-                        f"{rec.path}: routine {routine_id!r} not in "
-                        "port_manifest.toml routine_map"
-                    )
-                    continue
-                if file_idents is not None:
-                    allowed = _allowed_routine_symbols(meta[1], meta[2])
-                    if not (file_idents & allowed):
-                        errors.append(
-                            f"{rec.path}: listed routine {routine_id!r} "
-                            f"(expected one of {sorted(allowed)}) not found "
-                            "in non-comment test code"
-                        )
+            errors.extend(
+                _verify_routine_claims(
+                    rec, full_path, repo_root, routine_meta, source_cache
+                )
+            )
 
     for dup_path, count in sorted(seen.items()):
         if count > 1:

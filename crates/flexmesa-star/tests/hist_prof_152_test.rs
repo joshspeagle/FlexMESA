@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-//! Issue `#152` MESA `26.4.1` parity tests for `flexmesa-star` core
+//! Issue `#152` invariant tests for `flexmesa-star` core
 //! boundaries, radial profiles, step histories, and surface-averaged report
 //! utilities (`star/private/{report,profile_getval,history}.f90`).
 

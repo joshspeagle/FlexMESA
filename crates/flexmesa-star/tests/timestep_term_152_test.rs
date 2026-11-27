@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-//! Zero-`$MESA_DIR` MESA `26.4.1` parity tests for timestep selection and
+//! Zero-`$MESA_DIR` invariant tests for timestep selection and
 //! termination checks (`timestep.rs`, `timestep_limits.rs`, `termination.rs`;
 //! tracking `#152` and `#170`).
 
@@ -38,7 +38,7 @@ fn zams_model(mass_msun: f64) -> StarModel {
 }
 
 #[test]
-fn test_eval_varcontrol_and_h211_closed_form_oracles_zero_mesa_dir() {
+fn test_eval_varcontrol_and_h211_closed_form_identities_zero_mesa_dir() {
     let mut model = StarModel::new(
         6,
         vec![1],
@@ -204,7 +204,7 @@ fn test_mdot_zero_guard_high_t_slice_and_tlim_tie_breaking_order() {
     assert_eq!(act_z, TimestepAction::KeepGoing);
     assert!(rep_z.dt_next.is_finite() && rep_z.dt_next > 0.0);
 
-    // Exact Fortran left-to-right `(atol * M_SUN) / SECYER` denominator.
+    // Exact upstream left-to-right `(atol * M_SUN) / SECYER` denominator.
     m_mdot.controls.mix_wind.delta_mdot_atol = 1.0e-3;
     m_mdot.controls.mix_wind.delta_mdot_rtol = 0.0;
     m_mdot.controls.mix_wind.delta_mdot_limit = 0.5;
@@ -257,7 +257,7 @@ fn test_mdot_zero_guard_high_t_slice_and_tlim_tie_breaking_order() {
         rep_ht2.dt_next / m_hight2.dt
     );
 
-    // Tie-breaking parity (`star_data_def.inc:43-103`):
+    // Tie-breaking order (`star_data_def.inc:43-103`):
     // `Tlim_XH_cntr` < `Tlim_adjust_J_q` < `Tlim_error_in_energy_conservation`
     // using exact power-of-two ratio `0.25 / 0.125 == 2.0`.
     let mut m_tie = base;

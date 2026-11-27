@@ -857,11 +857,10 @@ module = "star"
 kind = "invariant"
 
 [[tests]]
-path = "crates/flexmesa-star/tests/conv_core_cpm_mesh_parity_test.rs"
+path = "crates/flexmesa-star/tests/conv_core_cpm_mesh_test.rs"
 language = "rust"
 module = "star"
 kind = "invariant"
-mislabel_reason = "#563: W4 audit found no real-MESA 26.4.1 oracle comparison; rename away from restricted vocabulary under W4 (#563)"
 
 [[tests]]
 path = "crates/flexmesa-star/tests/diffusion_156_parity_test.rs"
@@ -960,11 +959,10 @@ module = "star"
 kind = "invariant"
 
 [[tests]]
-path = "crates/flexmesa-star/tests/hist_prof_152_parity_test.rs"
+path = "crates/flexmesa-star/tests/hist_prof_152_test.rs"
 language = "rust"
 module = "star"
 kind = "invariant"
-mislabel_reason = "#563: W4 audit found no real-MESA 26.4.1 oracle comparison; rename away from restricted vocabulary under W4 (#563)"
 
 [[tests]]
 path = "crates/flexmesa-star/tests/history_columns_w1_test.rs"
@@ -979,11 +977,10 @@ module = "star"
 kind = "invariant"
 
 [[tests]]
-path = "crates/flexmesa-star/tests/hydro_riem_152_parity_test.rs"
+path = "crates/flexmesa-star/tests/hydro_riem_152_test.rs"
 language = "rust"
 module = "star"
 kind = "invariant"
-mislabel_reason = "#563: W4 audit found no real-MESA 26.4.1 oracle comparison; rename away from restricted vocabulary under W4 (#563)"
 
 [[tests]]
 path = "crates/flexmesa-star/tests/io_controls_299_test.rs"
@@ -1012,11 +1009,10 @@ module = "star"
 kind = "invariant"
 
 [[tests]]
-path = "crates/flexmesa-star/tests/mass_mdot_153_parity_test.rs"
+path = "crates/flexmesa-star/tests/mass_mdot_153_test.rs"
 language = "rust"
 module = "star"
 kind = "invariant"
-mislabel_reason = "#563: W4 audit found no real-MESA 26.4.1 oracle comparison; rename away from restricted vocabulary under W4 (#563)"
 
 [[tests]]
 path = "crates/flexmesa-star/tests/mesa_dir_548_test.rs"
@@ -1057,11 +1053,10 @@ module = "star"
 kind = "invariant"
 
 [[tests]]
-path = "crates/flexmesa-star/tests/mesh_split_153_parity_test.rs"
+path = "crates/flexmesa-star/tests/mesh_split_153_test.rs"
 language = "rust"
 module = "star"
 kind = "invariant"
-mislabel_reason = "#563: W4 audit found no real-MESA 26.4.1 oracle comparison; rename away from restricted vocabulary under W4 (#563)"
 
 [[tests]]
 path = "crates/flexmesa-star/tests/micro_161_parity_test.rs"
@@ -1085,11 +1080,10 @@ module = "star"
 kind = "invariant"
 
 [[tests]]
-path = "crates/flexmesa-star/tests/micro_sbm_161_parity_test.rs"
+path = "crates/flexmesa-star/tests/micro_sbm_161_test.rs"
 language = "rust"
 module = "star"
 kind = "invariant"
-mislabel_reason = "#563: W4 audit found no real-MESA 26.4.1 oracle comparison; rename away from restricted vocabulary under W4 (#563)"
 
 [[tests]]
 path = "crates/flexmesa-star/tests/micro_wiring_161_test.rs"
@@ -1098,11 +1092,10 @@ module = "star"
 kind = "invariant"
 
 [[tests]]
-path = "crates/flexmesa-star/tests/mix_mltpp_157_parity_test.rs"
+path = "crates/flexmesa-star/tests/mix_mltpp_157_test.rs"
 language = "rust"
 module = "star"
 kind = "invariant"
-mislabel_reason = "#563: W4 audit found no real-MESA 26.4.1 oracle comparison; rename away from restricted vocabulary under W4 (#563)"
 
 [[tests]]
 path = "crates/flexmesa-star/tests/mixing_boundaries_155_test.rs"
@@ -1150,11 +1143,10 @@ routines = [
 ]
 
 [[tests]]
-path = "crates/flexmesa-star/tests/overshoot_mix_157_parity_test.rs"
+path = "crates/flexmesa-star/tests/overshoot_mix_157_test.rs"
 language = "rust"
 module = "star"
 kind = "invariant"
-mislabel_reason = "#563: W4 audit found no real-MESA 26.4.1 oracle comparison; rename away from restricted vocabulary under W4 (#563)"
 
 [[tests]]
 path = "crates/flexmesa-star/tests/phase5a_hydro_solver_test.rs"
@@ -1222,11 +1214,10 @@ kind = "oracle"
 provenance = "crates/flexmesa-star/tests/data/pulse_fortran_format/fmt_oracle_expected.txt & star/private/pulse_gyre.f90 (#491)"
 
 [[tests]]
-path = "crates/flexmesa-star/tests/relax_154_parity_test.rs"
+path = "crates/flexmesa-star/tests/relax_154_test.rs"
 language = "rust"
 module = "star"
 kind = "invariant"
-mislabel_reason = "#154/#540/#563: filename uses parity and contains inline decimal profile constants for make_brown_dwarf/15M_dynamo alongside relax/profile invariant tests without a committed hex dump, TSV artifact, or test_output loader"
 
 [[tests]]
 path = "crates/flexmesa-star/tests/relax_comp_parity_test.rs"
@@ -1243,11 +1234,10 @@ kind = "oracle"
 provenance = "MESA 26.4.1 star/private/relax.f90:3536-3873 relax_initial_Z / relax_initial_Y IEEE-754 hex zone oracles (#422)"
 
 [[tests]]
-path = "crates/flexmesa-star/tests/rotation_158_parity_test.rs"
+path = "crates/flexmesa-star/tests/rotation_158_test.rs"
 language = "rust"
 module = "star"
 kind = "invariant"
-mislabel_reason = "#563: W4 audit found no real-MESA 26.4.1 oracle comparison; rename away from restricted vocabulary under W4 (#563)"
 
 [[tests]]
 path = "crates/flexmesa-star/tests/rotmix_oracle_158_test.rs"
@@ -1316,11 +1306,10 @@ routines = [
 ]
 
 [[tests]]
-path = "crates/flexmesa-star/tests/solver_rti_152_parity_test.rs"
+path = "crates/flexmesa-star/tests/solver_rti_152_test.rs"
 language = "rust"
 module = "star"
 kind = "invariant"
-mislabel_reason = "#563: W4 audit found no real-MESA 26.4.1 oracle comparison; rename away from restricted vocabulary under W4 (#563)"
 
 [[tests]]
 path = "crates/flexmesa-star/tests/star_controls_inlist_147_test.rs"
@@ -1347,11 +1336,10 @@ module = "star"
 kind = "invariant"
 
 [[tests]]
-path = "crates/flexmesa-star/tests/timestep_term_152_parity_test.rs"
+path = "crates/flexmesa-star/tests/timestep_term_152_test.rs"
 language = "rust"
 module = "star"
 kind = "invariant"
-mislabel_reason = "#563: W4 audit found no real-MESA 26.4.1 oracle comparison; rename away from restricted vocabulary under W4 (#563)"
 
 [[tests]]
 path = "crates/flexmesa-star/tests/turb_155_bd_parity_test.rs"
@@ -1393,11 +1381,10 @@ routines = [
 ]
 
 [[tests]]
-path = "crates/flexmesa-star/tests/winds_159_v2_parity_test.rs"
+path = "crates/flexmesa-star/tests/winds_159_v2_test.rs"
 language = "rust"
 module = "star"
 kind = "invariant"
-mislabel_reason = "#563: W4 audit found no real-MESA 26.4.1 oracle comparison; rename away from restricted vocabulary under W4 (#563)"
 
 [[tests]]
 path = "crates/flexmesa-star/tests/winds_mass_stops_159_test.rs"

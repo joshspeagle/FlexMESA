@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-//! Standalone zero-`$MESA_DIR` MESA `26.4.1` parity tests for Newton solver
+//! Standalone zero-`$MESA_DIR` invariant tests for Newton solver
 //! line search & norms (`solver.rs`, `solver_norms.rs`), timestep limits &
 //! checks (`timestep.rs`, `timestep_checks.rs`, `timestep_limits.rs`), and
 //! Duffell (2016) Rayleigh-Taylor instability (`hydro_rti.rs`).

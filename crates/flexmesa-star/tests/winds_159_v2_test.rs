@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-//! Standalone zero-`$MESA_DIR` MESA `26.4.1` stellar-wind parity tests (`#159`,
+//! Standalone zero-`$MESA_DIR` stellar-wind invariant tests (`#159`,
 //! `#161`), covering exact closed-form scheme limits, `other_wind` hook
 //! precedence with custom scheme names, `hot_cool_wind` and `7M_prems_to_AGB`
 //! driver pathways, rotational `w / w_crit` enhancement + caps, and single-star
@@ -103,7 +103,7 @@ impl StarExtras for RecordingOtherWindExtras {
 }
 
 #[test]
-fn winds_159_v2_closed_form_scheme_oracles() {
+fn winds_159_v2_closed_form_scheme_identities() {
     // 1. Reimers (1975): exact unity point at (L_SUN, M_SUN, R_SUN).
     let w_reimers = eval_reimers_wind(L_SUN, M_SUN, R_SUN, 0.5);
     assert!(

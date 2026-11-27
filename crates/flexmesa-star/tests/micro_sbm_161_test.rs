@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-//! Standalone Wave 11 (`#161`/`#152`) microphysics and `do_struct_burn_mix`
-//! parity tests (`micro`, `micro_cache`, `micro_net`, `extend_net`, and
+//! Standalone (`#161`/`#152`) microphysics and `do_struct_burn_mix`
+//! invariant tests (`micro`, `micro_cache`, `micro_net`, `extend_net`, and
 //! `struct_burn_mix`), zero external data dependency.
 
 #![forbid(unsafe_code)]

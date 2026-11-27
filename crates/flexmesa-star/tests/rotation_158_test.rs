@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-//! Standalone zero-`$MESA_DIR` MESA `26.4.1` parity tests for Issue `#158`:
+//! Standalone zero-`$MESA_DIR` invariant tests for Issue `#158`:
 //! - `hydro_rotation`: Fabry+2022 fits, `eval_fp_ft`, `eval_i_rot_dual`,
 //!   `w_div_w_roche_{omega,jrot}` sigmoid & hard-cap branches, `set_j_rot`,
 //!   `set_i_rot_from_omega_and_j_rot`, `get1_am_sig`, `get_rotation_sigmas`,

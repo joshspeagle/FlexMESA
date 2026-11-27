@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-//! Standalone MESA `26.4.1` parity tests for Wave 12 (`#45`, `#152`, `#155`)
+//! Standalone invariant tests (`#45`, `#152`, `#155`)
 //! across `hydro_momentum`, `hydro_temperature`, `hydro_brunt_surf`,
 //! `riemann_ad`, and `riemann_eqns`.
 

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-//! Standalone MESA `26.4.1` parity and unit tests for convective overshooting,
+//! Standalone invariant and unit tests for convective overshooting,
 //! convective premixing, mixing state/microphysics, rotational mixing
 //! diffusivities, and `Quad` angular-momentum diffusion (`#157`, `#158`,
 //! `#161`).
@@ -279,7 +279,7 @@ fn test_overshoot_bdy_geometry_hp_limit_cache_and_vc_branches() {
         Err(StarError::InvalidInput(_))
     ));
 
-    // Anchor cache parity and all 3 `conv_vel` interpolation branches.
+    // Anchor cache invariants and all 3 `conv_vel` interpolation branches.
     let f0_small = 1.0e9 / hp_cb;
     let cache = OverBdyAnchorCache::from_model(&m, 0).expect("cache");
     assert_eq!(cache.boundary_index(), 0);

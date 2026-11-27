@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-//! MESA `26.4.1` parity and regression tests for `#154`
+//! Regression snapshot and invariant tests for `#154`
 //! (`create_initial_model`, `pre_ms`, `relax`, `relax_comp`, `relax_mass_comp`,
 //! `relax_driver`, and `job_rotation`).
 
@@ -34,7 +34,7 @@ use flexmesa_star::relax::{
 use flexmesa_star::{MixWindControls, StarControls, StarJobControls};
 use flexmesa_turb::MltOption;
 
-fn assert_zone_matches_oracle(
+fn assert_zone_matches_snapshot(
     label: &str,
     zone: usize,
     model: &StarModel,
@@ -53,14 +53,14 @@ fn assert_zone_matches_oracle(
             && d_lnr <= log_tol
             && d_lum <= 1.0e-13
             && d_dq <= 1.0e-13,
-        "{label} zone {zone} oracle mismatch: \
+        "{label} zone {zone} snapshot mismatch: \
          d_lnd={d_lnd:.3e} d_lnT={d_lnt:.3e} d_lnR={d_lnr:.3e} \
          rel_lum={d_lum:.3e} rel_dq={d_dq:.3e}"
     );
 }
 
 #[test]
-fn test_create_initial_model_with_change_net_matches_mesa_oracle() {
+fn test_create_initial_model_with_change_net_matches_snapshot() {
     let controls = StarControls {
         initial_z: 1.0e-4,
         ..StarControls::default()
@@ -95,8 +95,9 @@ fn test_create_initial_model_with_change_net_matches_mesa_oracle() {
     assert_eq!(model.nz, 774);
     assert_eq!(model.species, 25);
 
-    // MESA 26.4.1 surface, mid, and core structure oracle (`create_initial_model`).
-    assert_zone_matches_oracle(
+    // Surface, mid, and core structure regression snapshot
+    // (`create_initial_model`; no committed MESA capture yet).
+    assert_zone_matches_snapshot(
         "create_initial_model pp_and_cno_extras",
         0,
         &model,
@@ -109,7 +110,7 @@ fn test_create_initial_model_with_change_net_matches_mesa_oracle() {
         ],
         1.0e-14,
     );
-    assert_zone_matches_oracle(
+    assert_zone_matches_snapshot(
         "create_initial_model pp_and_cno_extras",
         387,
         &model,
@@ -122,7 +123,7 @@ fn test_create_initial_model_with_change_net_matches_mesa_oracle() {
         ],
         1.0e-14,
     );
-    assert_zone_matches_oracle(
+    assert_zone_matches_snapshot(
         "create_initial_model pp_and_cno_extras",
         773,
         &model,
@@ -204,7 +205,7 @@ fn test_create_initial_model_with_change_net_matches_mesa_oracle() {
 }
 
 #[test]
-fn test_create_initial_model_brown_dwarf_and_prems_15m_match_mesa_oracles() {
+fn test_create_initial_model_brown_dwarf_and_prems_15m_match_snapshots() {
     let bd_controls = StarControls {
         initial_z: 1.0e-4,
         ..StarControls::default()
@@ -226,7 +227,7 @@ fn test_create_initial_model_brown_dwarf_and_prems_15m_match_mesa_oracles() {
             .expect("brown dwarf initial model");
     assert_eq!(bd.nz, 774);
     assert_eq!(bd.species, 8);
-    assert_zone_matches_oracle(
+    assert_zone_matches_snapshot(
         "make_brown_dwarf basic.net",
         0,
         &bd,
@@ -239,7 +240,7 @@ fn test_create_initial_model_brown_dwarf_and_prems_15m_match_mesa_oracles() {
         ],
         1.0e-14,
     );
-    assert_zone_matches_oracle(
+    assert_zone_matches_snapshot(
         "make_brown_dwarf basic.net",
         387,
         &bd,
@@ -252,7 +253,7 @@ fn test_create_initial_model_brown_dwarf_and_prems_15m_match_mesa_oracles() {
         ],
         1.0e-14,
     );
-    assert_zone_matches_oracle(
+    assert_zone_matches_snapshot(
         "make_brown_dwarf basic.net",
         773,
         &bd,
@@ -298,7 +299,7 @@ fn test_create_initial_model_brown_dwarf_and_prems_15m_match_mesa_oracles() {
     )
     .expect("15M pre-MS model");
     assert_eq!(m15.nz, 1033);
-    assert_zone_matches_oracle(
+    assert_zone_matches_snapshot(
         "15M_dynamo pre_ms",
         0,
         &m15,
@@ -311,7 +312,7 @@ fn test_create_initial_model_brown_dwarf_and_prems_15m_match_mesa_oracles() {
         ],
         1.0e-12,
     );
-    assert_zone_matches_oracle(
+    assert_zone_matches_snapshot(
         "15M_dynamo pre_ms",
         516,
         &m15,
@@ -324,7 +325,7 @@ fn test_create_initial_model_brown_dwarf_and_prems_15m_match_mesa_oracles() {
         ],
         1.0e-12,
     );
-    assert_zone_matches_oracle(
+    assert_zone_matches_snapshot(
         "15M_dynamo pre_ms",
         1032,
         &m15,
@@ -340,7 +341,7 @@ fn test_create_initial_model_brown_dwarf_and_prems_15m_match_mesa_oracles() {
 }
 
 #[test]
-fn test_scalar_profile_parsers_and_eos_modes_parity() {
+fn test_scalar_profile_parsers_and_eos_modes() {
     let j_text = "\
         3\n\
         0.0000000000000000D+00  1.0394233174861947D+19\n\
@@ -565,7 +566,7 @@ fn test_relax_angular_momentum_constant_omega_center_and_restore() {
         "outer j_rot did not relax to target: mean_outer_err={mean_outer_err:.6e}"
     );
 
-    // Core `constant_omega_center` parity (`relax.f90:1208-1230`):
+    // Core `constant_omega_center` invariant (`relax.f90:1208-1230`):
     // innermost cell matches `omega_target = vals[nz - 2] / i_rot[nz - 2]`.
     let nz = model.nz;
     assert!(nz >= 2 && xq_star[nz - 1] > x_last);

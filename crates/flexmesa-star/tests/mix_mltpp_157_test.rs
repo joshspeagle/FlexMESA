@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-//! Standalone, zero-`$MESA_DIR` MESA 26.4.1 parity tests for MLT++
+//! Standalone, zero-`$MESA_DIR` invariant tests for MLT++
 //! (`eval_lrad_div_ledd`, `set_gradt_excess_alpha`, `adjust_gradt_excess`,
 //! `adjust_gradt_fraction`), mixing-state smoothing helpers, and
 //! predictive-mixing / overshooting boundary edge cases.
@@ -66,7 +66,7 @@ fn make_mltpp_model(nz: usize, iso_names: &[&str]) -> StarModel {
     model
 }
 
-fn oracle_lrad_div_ledd(
+fn expected_lrad_div_ledd(
     t: &[f64],
     r: &[f64],
     dm_bar: &[f64],
@@ -105,7 +105,7 @@ fn configure_beta_lambda(
     }
     model.pgas[k_beta] = beta_pgas_ratio * model.peos[k_beta];
 
-    // Enforce target Lrad/Ledd at face k_lambda using exact Fortran scaling:
+    // Enforce target Lrad/Ledd at face k_lambda using upstream scaling:
     // -(area^2 * CRAD * (T_{j-1}^4 - T_j^4) / dm_bar_j / 3) / (4*pi*G*m_grav_j) = target_lambda
     let j = k_lambda;
     let area = FOUR_PI * model.r[j] * model.r[j];
@@ -119,7 +119,7 @@ fn configure_beta_lambda(
 }
 
 #[test]
-fn test_eval_lrad_div_ledd_exact_edge_and_formula_parity() {
+fn test_eval_lrad_div_ledd_exact_edge_and_formula() {
     let mut model = make_mltpp_model(4, &["h1", "he4"]);
     assert_eq!(eval_lrad_div_ledd(&model, 4).to_bits(), 0.0_f64.to_bits());
 
@@ -130,7 +130,7 @@ fn test_eval_lrad_div_ledd_exact_edge_and_formula_parity() {
 
     for k in 0..model.nz {
         let got = eval_lrad_div_ledd(&model, k);
-        let expected = oracle_lrad_div_ledd(
+        let expected = expected_lrad_div_ledd(
             &model.t,
             &model.r,
             &model.dm_bar,
@@ -282,7 +282,7 @@ fn test_set_gradt_excess_alpha_beta_lambda_plane_all_branches() {
     let mut m = base.clone();
     configure_beta_lambda(&mut m, 0.28, 5, 0.75, 2);
     let lam_b1 =
-        oracle_lrad_div_ledd(&m.t, &m.r, &m.dm_bar, &m.cgrav, &m.m_grav, 2);
+        expected_lrad_div_ledd(&m.t, &m.r, &m.dm_bar, &m.cgrav, &m.m_grav, 2);
     assert!((0.5..1.0).contains(&lam_b1));
     set_gradt_excess_alpha(&mut m);
     assert_eq!(m.aux.mixing.gradt_excess_alpha.to_bits(), 1.0_f64.to_bits());
@@ -460,7 +460,8 @@ fn test_adjust_gradt_excess_and_fraction_zero_ulp_all_gates() {
     assert_eq!(m.gradt[k].to_bits(), 0.45_f64.to_bits());
 
     // Gate 5: partial optical-depth taper (max_log_tau_full_off <= log_tau < min_log_tau_full_on).
-    // Deliberately pick non-power-of-two inputs to verify Fortran left-to-right order:
+    // Deliberately pick non-power-of-two inputs to check left-to-right
+    // operation order:
     //   gradT_excess_alpha = (gradT_excess_alpha * (log_tau - off)) / (on - off)
     let mut m = base.clone();
     m.aux.mixing.gradt_excess_alpha = 0.73;
@@ -598,7 +599,8 @@ fn test_mltpp_on_zams_zero_mesa_dir() {
 
 #[test]
 fn test_predictive_mix_on_zams_mlt_vc_and_trailing_blanks() {
-    // Predictive mixing regression (`predictive_mix.f90:806` and Fortran trailing spaces):
+    // Predictive mixing regression (`predictive_mix.f90:806` and trailing
+    // spaces):
     // When `okay_to_set_mlt_vc == false`, `eval_mixing_coeffs` must read `model.mlt_vc[k]`
     // rather than `model.mlt_vc_ad[k].val`, and selectors with trailing blanks must match.
     let controls = StarControls {
@@ -676,7 +678,7 @@ fn test_predictive_mix_on_zams_mlt_vc_and_trailing_blanks() {
 }
 
 #[test]
-fn test_overshoot_zero_and_smoothing_helpers_parity() {
+fn test_overshoot_zero_and_smoothing_helpers() {
     let mut controls = StarControls {
         initial_mass: 5.0,
         zbase: 0.02,
@@ -704,7 +706,7 @@ fn test_overshoot_zero_and_smoothing_helpers_parity() {
     add_overshooting(&mut model).expect("overshoot f=0.014 f0=0.004");
     assert!(model.d_mix.iter().all(|&d| d.is_finite() && d >= 0.0));
 
-    // Exact parity check on threshold_smoothing & weighted_smoothing bounds.
+    // Exact invariant check on threshold_smoothing & weighted_smoothing bounds.
     let mut arr = vec![1.0, 2.0, 10.0, 2.0, 1.0];
     let mut arr_old = vec![0.0; arr.len()];
     weighted_smoothing(&mut arr, 1, true, &mut arr_old);

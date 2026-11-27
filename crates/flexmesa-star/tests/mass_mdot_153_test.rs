@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-//! Standalone Phase A parity tests for MESA `26.4.1` mass adjustment,
+//! Standalone invariant tests for mass adjustment,
 //! accreted composition, `eps_mdot`, `mass_utils`, and critical-rotation
 //! `mdot_redo` (`#153`, `#161`).
 
@@ -92,7 +92,7 @@ impl StarExtras for FixedWind {
 }
 
 #[test]
-fn mass_utils_quad_difference_pass_fractions_and_integrate_conserved_parity() {
+fn mass_utils_quad_difference_pass_fractions_and_integrate_conserved() {
     let dm1 = one_based(&[1.0_f64, 0.25, 1.0e-15, 0.5e-15]);
     let dm2 = one_based(&[1.0_f64, 0.25, 2.0e-15, 0.5e-15]);
 
@@ -345,7 +345,7 @@ fn adjust_mass_conserves_accreted_species_interior_xa_and_cell_volumes() {
 }
 
 #[test]
-fn adjust_mass_rotation_set1_omega_and_adjust_j_lost_parity() {
+fn adjust_mass_rotation_set1_omega_and_adjust_j_lost() {
     // 1. `use_accreted_material_j = true` exact total angular momentum conservation.
     let mut m_acc = zams_model(2.0);
     let nz = m_acc.nz;
@@ -445,7 +445,7 @@ fn adjust_mass_rotation_set1_omega_and_adjust_j_lost_parity() {
 }
 
 #[test]
-fn accretion_xa_scales_custom_missing_metals_and_errors_parity() {
+fn accretion_xa_scales_custom_missing_metals_and_errors() {
     let mut model = zams_model(2.0);
     let catalog = NuclideCatalog::builtin_ref();
     let h1_idx = model.iso_names.iter().position(|n| n == "h1").expect("h1");
@@ -652,7 +652,8 @@ fn mdot_redo_surf_avg_roche_negative_lrad_tau_edge_and_state_machine() {
     let info = eval_surf_avg_rotation_info(&rot);
     assert_eq!(w_redo.to_bits(), info.w_div_w_crit.to_bits());
 
-    // Independent reference calculation using Roche equatorial radii & signed Lrad/Ledd.
+    // Independent analytical calculation using Roche equatorial radii & signed
+    // Lrad/Ledd.
     let tau0 = rot.controls.tau_factor * rot.tau_base;
     let tau_min = rot.controls.output.surf_avg_tau_min;
     let tau_max = rot.controls.output.surf_avg_tau;

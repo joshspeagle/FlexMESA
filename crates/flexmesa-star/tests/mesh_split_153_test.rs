@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-//! Standalone unit and integration parity tests for MESA `26.4.1` adaptive
+//! Standalone unit and invariant tests for adaptive
 //! mesh planning, spacing functions, `delta_gval_max` limits, `remesh_dt_limit`,
 //! `#250` `mesh_max_allowed_ratio` clamping, `#241` / `#243`, and
 //! `split_merge_amr` `alpha_mlt` preservation (`#153`).

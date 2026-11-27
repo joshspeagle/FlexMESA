@@ -340,8 +340,13 @@
   ],
   "open_pull_requests": [
     {
-      "number": 593,
-      "title": "ci(dashboard): raise the Python coverage job limit to 60 minutes (#592)",
+      "number": 598,
+      "title": "Train 13: 44 -> 46 strict passes; Skye blend grouping, eps_grav latent heat, replay oracles, test taxonomy, binary history, RSP builder exits",
+      "draft": true
+    },
+    {
+      "number": 603,
+      "title": "bench(gyre): commit the generator recipe for the G4 complex LAPACK/BLAS vectors (#602)",
       "draft": false
     }
   ],

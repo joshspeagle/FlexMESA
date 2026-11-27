@@ -3,6 +3,7 @@
 //! (`net/private/net_approx21.f90` lines 1407–1544 and 2374–2652).
 
 use crate::approx21::Approx21Indices;
+use crate::approx21_dydt::add_terms;
 use flexmesa_math::Quad;
 
 /// Populates the `crx`, `fe52`, `fe54`, `fe56`, `co56`, `ni56`, `neut`, and
@@ -28,62 +29,93 @@ pub(crate) fn approx21_dydt_iron_group(
         Quad::from_f64(a * b * c * d * e * f)
     };
 
-    let q_crx = m3(y[idx.ife56], fe56ec_fake_factor, ratd[idx.irn56ec]);
+    let mut q_crx = Quad::ZERO;
+    q_crx += m3(y[idx.ife56], fe56ec_fake_factor, ratd[idx.irn56ec]);
     dydt[idx.icrx] = q_crx.to_f64();
 
-    let mut q_fe52 = m3(y[idx.icr48], y[idx.ihe4], ratd[idx.ircrag])
-        + m3(-y[idx.ife52], y[idx.ihe4], ratd[idx.irfeag])
-        + m2(-y[idx.ife52], ratd[idx.irfega])
-        + m2(y[idx.ini56], ratd[idx.irniga]);
+    let mut q_fe52 = Quad::ZERO;
+    add_terms(
+        &mut q_fe52,
+        &[
+            m3(y[idx.icr48], y[idx.ihe4], ratd[idx.ircrag]),
+            m3(-y[idx.ife52], y[idx.ihe4], ratd[idx.irfeag]),
+            m2(-y[idx.ife52], ratd[idx.irfega]),
+            m2(y[idx.ini56], ratd[idx.irniga]),
+        ],
+    );
     if !deriva {
-        q_fe52 += m4(
-            y[idx.icr48],
-            y[idx.ihe4],
-            ratd[idx.ircrap],
-            1.0 - ratd[idx.irx1],
-        ) + m3(-y[idx.ife52], ratd[idx.irx1], ratd[idx.irfegp]);
+        add_terms(
+            &mut q_fe52,
+            &[
+                m4(
+                    y[idx.icr48],
+                    y[idx.ihe4],
+                    ratd[idx.ircrap],
+                    1.0 - ratd[idx.irx1],
+                ),
+                m3(-y[idx.ife52], ratd[idx.irx1], ratd[idx.irfegp]),
+            ],
+        );
     } else {
-        q_fe52 += m4(
-            y[idx.icr48],
-            y[idx.ihe4],
-            ratd[idx.ircrap],
-            1.0 - rat0[idx.irx1],
-        ) + m4(
-            -y[idx.icr48],
-            y[idx.ihe4],
-            rat0[idx.ircrap],
-            ratd[idx.irx1],
-        ) + m3(-y[idx.ife52], rat0[idx.irx1], ratd[idx.irfegp])
-            + m3(-y[idx.ife52], ratd[idx.irx1], rat0[idx.irfegp]);
+        add_terms(
+            &mut q_fe52,
+            &[
+                m4(
+                    y[idx.icr48],
+                    y[idx.ihe4],
+                    ratd[idx.ircrap],
+                    1.0 - rat0[idx.irx1],
+                ),
+                m4(
+                    -y[idx.icr48],
+                    y[idx.ihe4],
+                    rat0[idx.ircrap],
+                    ratd[idx.irx1],
+                ),
+                m3(-y[idx.ife52], rat0[idx.irx1], ratd[idx.irfegp]),
+                m3(-y[idx.ife52], ratd[idx.irx1], rat0[idx.irfegp]),
+            ],
+        );
     }
-    q_fe52 += m2(y[idx.ife54], ratd[idx.ir1f54])
-        + m4(-y[idx.ife52], y[idx.ineut], y[idx.ineut], ratd[idx.ir2f54])
-        + m4(y[idx.ife54], y[idx.iprot], y[idx.iprot], ratd[idx.ir5f54])
-        + m3(-y[idx.ife52], y[idx.ihe4], ratd[idx.ir6f54])
-        + m4(-y[idx.ife52], y[idx.ihe4], y[idx.iprot], ratd[idx.ir7f54])
-        + m3(y[idx.ini56], y[idx.iprot], ratd[idx.ir8f54]);
+    add_terms(
+        &mut q_fe52,
+        &[
+            m2(y[idx.ife54], ratd[idx.ir1f54]),
+            m4(-y[idx.ife52], y[idx.ineut], y[idx.ineut], ratd[idx.ir2f54]),
+            m4(y[idx.ife54], y[idx.iprot], y[idx.iprot], ratd[idx.ir5f54]),
+            m3(-y[idx.ife52], y[idx.ihe4], ratd[idx.ir6f54]),
+            m4(-y[idx.ife52], y[idx.ihe4], y[idx.iprot], ratd[idx.ir7f54]),
+            m3(y[idx.ini56], y[idx.iprot], ratd[idx.ir8f54]),
+        ],
+    );
     dydt[idx.ife52] = q_fe52.to_f64();
 
-    let q_fe54 = m2(-y[idx.ife54], ratd[idx.ir1f54])
-        + m4(y[idx.ife52], y[idx.ineut], y[idx.ineut], ratd[idx.ir2f54])
-        + m4(-y[idx.ife54], y[idx.iprot], y[idx.iprot], ratd[idx.ir3f54])
-        + m2(y[idx.ini56], ratd[idx.ir4f54])
-        + m4(-y[idx.ife54], y[idx.iprot], y[idx.iprot], ratd[idx.ir5f54])
-        + m3(y[idx.ife52], y[idx.ihe4], ratd[idx.ir6f54])
-        + m2(y[idx.ife56], ratd[idx.irfe56_aux1])
-        + m4(
-            -y[idx.ife54],
-            y[idx.ineut],
-            y[idx.ineut],
-            ratd[idx.irfe56_aux2],
-        )
-        + m4(
-            y[idx.ife56],
-            y[idx.iprot],
-            y[idx.iprot],
-            ratd[idx.irfe56_aux3],
-        )
-        + m3(-y[idx.ife54], y[idx.ihe4], ratd[idx.irfe56_aux4]);
+    let mut q_fe54 = Quad::ZERO;
+    add_terms(
+        &mut q_fe54,
+        &[
+            m2(-y[idx.ife54], ratd[idx.ir1f54]),
+            m4(y[idx.ife52], y[idx.ineut], y[idx.ineut], ratd[idx.ir2f54]),
+            m4(-y[idx.ife54], y[idx.iprot], y[idx.iprot], ratd[idx.ir3f54]),
+            m2(y[idx.ini56], ratd[idx.ir4f54]),
+            m4(-y[idx.ife54], y[idx.iprot], y[idx.iprot], ratd[idx.ir5f54]),
+            m3(y[idx.ife52], y[idx.ihe4], ratd[idx.ir6f54]),
+            m2(y[idx.ife56], ratd[idx.irfe56_aux1]),
+            m4(
+                -y[idx.ife54],
+                y[idx.ineut],
+                y[idx.ineut],
+                ratd[idx.irfe56_aux2],
+            ),
+            m4(
+                y[idx.ife56],
+                y[idx.iprot],
+                y[idx.iprot],
+                ratd[idx.irfe56_aux3],
+            ),
+            m3(-y[idx.ife54], y[idx.ihe4], ratd[idx.irfe56_aux4]),
+        ],
+    );
     dydt[idx.ife54] = q_fe54.to_f64();
 
     let a1_fe56 = if idx.plus_co56 {
@@ -91,103 +123,139 @@ pub(crate) fn approx21_dydt_iron_group(
     } else {
         m2(y[idx.ini56], ratd[idx.irn56ec])
     };
-    let q_fe56 = a1_fe56
-        + m3(-y[idx.ife56], fe56ec_fake_factor, ratd[idx.irn56ec])
-        + m2(-y[idx.ife56], ratd[idx.irfe56_aux1])
-        + m4(
-            y[idx.ife54],
-            y[idx.ineut],
-            y[idx.ineut],
-            ratd[idx.irfe56_aux2],
-        )
-        + m4(
-            -y[idx.ife56],
-            y[idx.iprot],
-            y[idx.iprot],
-            ratd[idx.irfe56_aux3],
-        )
-        + m3(y[idx.ife54], y[idx.ihe4], ratd[idx.irfe56_aux4]);
+    let mut q_fe56 = Quad::ZERO;
+    add_terms(
+        &mut q_fe56,
+        &[
+            a1_fe56,
+            m3(-y[idx.ife56], fe56ec_fake_factor, ratd[idx.irn56ec]),
+            m2(-y[idx.ife56], ratd[idx.irfe56_aux1]),
+            m4(
+                y[idx.ife54],
+                y[idx.ineut],
+                y[idx.ineut],
+                ratd[idx.irfe56_aux2],
+            ),
+            m4(
+                -y[idx.ife56],
+                y[idx.iprot],
+                y[idx.iprot],
+                ratd[idx.irfe56_aux3],
+            ),
+            m3(y[idx.ife54], y[idx.ihe4], ratd[idx.irfe56_aux4]),
+        ],
+    );
     dydt[idx.ife56] = q_fe56.to_f64();
 
     if idx.plus_co56 {
-        let q_co56 = m2(y[idx.ini56], ratd[idx.irn56ec])
-            + m2(-y[idx.ico56], ratd[idx.irco56ec]);
+        let mut q_co56 = Quad::ZERO;
+        add_terms(
+            &mut q_co56,
+            &[
+                m2(y[idx.ini56], ratd[idx.irn56ec]),
+                m2(-y[idx.ico56], ratd[idx.irco56ec]),
+            ],
+        );
         dydt[idx.ico56] = q_co56.to_f64();
     }
 
-    let mut q_ni56 = m3(y[idx.ife52], y[idx.ihe4], ratd[idx.irfeag])
-        + m2(-y[idx.ini56], ratd[idx.irniga])
-        + m2(-y[idx.ini56], ratd[idx.irn56ec]);
-    q_ni56 += m4(y[idx.ife54], y[idx.iprot], y[idx.iprot], ratd[idx.ir3f54])
-        + m2(-y[idx.ini56], ratd[idx.ir4f54])
-        + m4(y[idx.ife52], y[idx.ihe4], y[idx.iprot], ratd[idx.ir7f54])
-        + m3(-y[idx.ini56], y[idx.iprot], ratd[idx.ir8f54]);
+    let mut q_ni56 = Quad::ZERO;
+    add_terms(
+        &mut q_ni56,
+        &[
+            m3(y[idx.ife52], y[idx.ihe4], ratd[idx.irfeag]),
+            m2(-y[idx.ini56], ratd[idx.irniga]),
+            m2(-y[idx.ini56], ratd[idx.irn56ec]),
+        ],
+    );
+    add_terms(
+        &mut q_ni56,
+        &[
+            m4(y[idx.ife54], y[idx.iprot], y[idx.iprot], ratd[idx.ir3f54]),
+            m2(-y[idx.ini56], ratd[idx.ir4f54]),
+            m4(y[idx.ife52], y[idx.ihe4], y[idx.iprot], ratd[idx.ir7f54]),
+            m3(-y[idx.ini56], y[idx.iprot], ratd[idx.ir8f54]),
+        ],
+    );
     dydt[idx.ini56] = q_ni56.to_f64();
 
-    let q_neut = m3(2.0, y[idx.ife54], ratd[idx.ir1f54])
-        + m5(
-            -2.0,
-            y[idx.ife52],
-            y[idx.ineut],
-            y[idx.ineut],
-            ratd[idx.ir2f54],
-        )
-        + m3(2.0, y[idx.ihe4], ratd[idx.iralf1])
-        + m6(
-            -2.0,
-            y[idx.ineut],
-            y[idx.ineut],
-            y[idx.iprot],
-            y[idx.iprot],
-            ratd[idx.iralf2],
-        )
-        + m2(y[idx.iprot], ratd[idx.irpen])
-        + m2(-y[idx.ineut], ratd[idx.irnep])
-        + m3(2.0, y[idx.ife56], ratd[idx.irfe56_aux1])
-        + m5(
-            -2.0,
-            y[idx.ife54],
-            y[idx.ineut],
-            y[idx.ineut],
-            ratd[idx.irfe56_aux2],
-        )
-        + m4(-nf, y[idx.ife56], fe56ec_fake_factor, ratd[idx.irn56ec]);
+    let mut q_neut = Quad::ZERO;
+    add_terms(
+        &mut q_neut,
+        &[
+            m3(2.0, y[idx.ife54], ratd[idx.ir1f54]),
+            m5(
+                -2.0,
+                y[idx.ife52],
+                y[idx.ineut],
+                y[idx.ineut],
+                ratd[idx.ir2f54],
+            ),
+            m3(2.0, y[idx.ihe4], ratd[idx.iralf1]),
+            m6(
+                -2.0,
+                y[idx.ineut],
+                y[idx.ineut],
+                y[idx.iprot],
+                y[idx.iprot],
+                ratd[idx.iralf2],
+            ),
+            m2(y[idx.iprot], ratd[idx.irpen]),
+            m2(-y[idx.ineut], ratd[idx.irnep]),
+            m3(2.0, y[idx.ife56], ratd[idx.irfe56_aux1]),
+            m5(
+                -2.0,
+                y[idx.ife54],
+                y[idx.ineut],
+                y[idx.ineut],
+                ratd[idx.irfe56_aux2],
+            ),
+            m4(-nf, y[idx.ife56], fe56ec_fake_factor, ratd[idx.irn56ec]),
+        ],
+    );
     dydt[idx.ineut] = q_neut.to_f64();
 
-    let q_prot = m5(
-        -2.0,
-        y[idx.ife54],
-        y[idx.iprot],
-        y[idx.iprot],
-        ratd[idx.ir3f54],
-    ) + m3(2.0, y[idx.ini56], ratd[idx.ir4f54])
-        + m5(
-            -2.0,
-            y[idx.ife54],
-            y[idx.iprot],
-            y[idx.iprot],
-            ratd[idx.ir5f54],
-        )
-        + m4(2.0, y[idx.ife52], y[idx.ihe4], ratd[idx.ir6f54])
-        + m3(2.0, y[idx.ihe4], ratd[idx.iralf1])
-        + m6(
-            -2.0,
-            y[idx.ineut],
-            y[idx.ineut],
-            y[idx.iprot],
-            y[idx.iprot],
-            ratd[idx.iralf2],
-        )
-        + m2(-y[idx.iprot], ratd[idx.irpen])
-        + m2(y[idx.ineut], ratd[idx.irnep])
-        + m5(
-            -2.0,
-            y[idx.ife56],
-            y[idx.iprot],
-            y[idx.iprot],
-            ratd[idx.irfe56_aux3],
-        )
-        + m4(2.0, y[idx.ife54], y[idx.ihe4], ratd[idx.irfe56_aux4]);
+    let mut q_prot = Quad::ZERO;
+    add_terms(
+        &mut q_prot,
+        &[
+            m5(
+                -2.0,
+                y[idx.ife54],
+                y[idx.iprot],
+                y[idx.iprot],
+                ratd[idx.ir3f54],
+            ),
+            m3(2.0, y[idx.ini56], ratd[idx.ir4f54]),
+            m5(
+                -2.0,
+                y[idx.ife54],
+                y[idx.iprot],
+                y[idx.iprot],
+                ratd[idx.ir5f54],
+            ),
+            m4(2.0, y[idx.ife52], y[idx.ihe4], ratd[idx.ir6f54]),
+            m3(2.0, y[idx.ihe4], ratd[idx.iralf1]),
+            m6(
+                -2.0,
+                y[idx.ineut],
+                y[idx.ineut],
+                y[idx.iprot],
+                y[idx.iprot],
+                ratd[idx.iralf2],
+            ),
+            m2(-y[idx.iprot], ratd[idx.irpen]),
+            m2(y[idx.ineut], ratd[idx.irnep]),
+            m5(
+                -2.0,
+                y[idx.ife56],
+                y[idx.iprot],
+                y[idx.iprot],
+                ratd[idx.irfe56_aux3],
+            ),
+            m4(2.0, y[idx.ife54], y[idx.ihe4], ratd[idx.irfe56_aux4]),
+        ],
+    );
     dydt[idx.iprot] = q_prot.to_f64();
 }
 

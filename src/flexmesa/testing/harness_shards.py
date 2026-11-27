@@ -15,6 +15,7 @@ that the shards form one complete campaign with uniform settings.
 from __future__ import annotations
 
 import dataclasses
+from collections.abc import Mapping
 from typing import Any
 
 from flexmesa.testing import case_manifest
@@ -36,6 +37,7 @@ RUN_SETTING_KEYS: tuple[str, ...] = (
     "short_budget_sec",
     "max_rss_gb",
     "budget_from_baseline",
+    "case_budgets",
     "mesa_step_factor",
     "early_stop_on_divergence",
     "stop_on_excess_steps",
@@ -70,23 +72,45 @@ def shard_entries(
     index: int,
     count: int,
     costly: frozenset[tuple[str, str]] = frozenset(),
+    weights: Mapping[tuple[str, str], float] | None = None,
 ) -> list[case_manifest.CaseManifestEntry]:
     """Select the entries one shard runs.
 
-    The entries are ordered with the ``costly`` cases (those expected to run
-    to their time or memory budget) first, each group in its input order,
-    and dealt round-robin to the shards, so every shard gets a near-equal
-    share of the costly cases. The assignment depends only on the inputs.
+    With ``weights`` the entries are packed by weight: heaviest first, each
+    onto the shard with the smallest total so far (lowest index on a tie),
+    which keeps the heaviest shard close to the mean. An entry without a
+    weight counts as the largest weight given, so an unlisted case is never
+    assumed cheap.
+
+    Without ``weights`` the entries are ordered with the ``costly`` cases
+    (those expected to run to their time or memory budget) first, each group
+    in its input order, and dealt round-robin to the shards, so every shard
+    gets a near-equal share of the costly cases. Either way the assignment
+    depends only on the inputs.
 
     Args:
         entries: Selected entries in manifest order.
         index: 1-based shard index.
         count: Number of shards.
-        costly: ``(suite, case)`` keys dealt out first.
+        costly: ``(suite, case)`` keys dealt out first (ignored when
+            ``weights`` is given).
+        weights: Optional cost per ``(suite, case)``, such as the wall-time
+            budget in seconds (``s``).
 
     Returns:
         The entries of shard ``index``, in manifest order.
     """
+    if weights:
+        heaviest = max(weights.values())
+        cost = {e.key: weights.get(e.key, heaviest) for e in entries}
+        load = [0.0] * count
+        mine = set()
+        for e in sorted(entries, key=lambda e: (-cost[e.key], e.key)):
+            slot = min(range(count), key=lambda i: (load[i], i))
+            load[slot] += cost[e.key]
+            if slot == index - 1:
+                mine.add(e.key)
+        return [e for e in entries if e.key in mine]
     ordered = [e for e in entries if e.key in costly] + [
         e for e in entries if e.key not in costly
     ]

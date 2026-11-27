@@ -21,6 +21,7 @@ from flexmesa.data import fetch
 from flexmesa.testing import (
     artifact_compare,
     baseline_regression,
+    case_budgets,
     case_manifest,
     case_report,
     early_stop,
@@ -632,6 +633,19 @@ def _build_harness_parser() -> argparse.ArgumentParser:
         help="Seconds between early-stop and step-bound checks (default 10).",
     )
     p_run.add_argument(
+        "--case-budgets",
+        default=None,
+        metavar="TOML",
+        help=(
+            "Give each case the wall-clock budget listed for it in this "
+            "generated table (benchmarks/history_harness/case_budgets.toml) "
+            "instead of --timeout-sec; a case without a row keeps "
+            "--timeout-sec. With --shard the cases are packed onto shards by "
+            "budget. A case that ends on its budget is inconclusive, as "
+            "with any time budget (DECISIONS #59)."
+        ),
+    )
+    p_run.add_argument(
         "--shard",
         type=_shard_arg,
         default=None,
@@ -643,7 +657,9 @@ def _build_harness_parser() -> argparse.ArgumentParser:
             "with 'flexmesa harness merge'."
         ),
     )
-    p_run.set_defaults(budgets={}, budgeted_keys=frozenset())
+    p_run.set_defaults(
+        budgets={}, budgeted_keys=frozenset(), case_budget_table={}
+    )
     p_run.add_argument("--max-rss-gb", type=float, default=6.0)
     p_run.add_argument("--markdown-out", default=None)
     p_run.add_argument("--json-out", default=None)
@@ -792,6 +808,9 @@ def _case_timeout(
     """Return the wall-clock budget of one case (``--short-budget-sec``)."""
     if entry.key in ns.short_budget_keys:
         return float(ns.short_budget_sec)
+    table = ns.case_budget_table.get(entry.key)
+    if table is not None:
+        return float(table)
     budget = ns.budgets.get(entry.key)
     if budget is not None:
         return float(budget.timeout_sec)
@@ -1466,6 +1485,15 @@ def harness_main(argv: list[str] | None = None) -> int:
     if refusal:
         print(refusal, file=sys.stderr)
         return 1
+    if ns.case_budgets is not None and (
+        ns.budget_from_baseline or ns.short_budget_sec is not None
+    ):
+        print(
+            "--case-budgets cannot be combined with --budget-from-baseline "
+            "or --short-budget-sec",
+            file=sys.stderr,
+        )
+        return 1
     if ns.budget_from_baseline and ns.short_budget_sec is not None:
         print(
             "--budget-from-baseline replaces --short-budget-sec; give one",
@@ -1494,9 +1522,21 @@ def harness_main(argv: list[str] | None = None) -> int:
         ns.cases,
         harness_budgets.passing_keys(base_records),
     )
+    if ns.case_budgets is not None:
+        try:
+            ns.case_budget_table = case_budgets.load_case_budgets(
+                ns.case_budgets
+            )
+        except (ValueError, OSError) as exc:
+            print(f"cannot read --case-budgets: {exc}", file=sys.stderr)
+            return 1
     if ns.shard is not None:
         selected = harness_shards.shard_entries(
-            selected, ns.shard[0], ns.shard[1], _costly_keys(ns)
+            selected,
+            ns.shard[0],
+            ns.shard[1],
+            _costly_keys(ns),
+            ns.case_budget_table or None,
         )
         print(
             f"[harness] shard {ns.shard[0]}/{ns.shard[1]}: "
@@ -1562,6 +1602,11 @@ def harness_main(argv: list[str] | None = None) -> int:
                 "wall_times_json": ns.wall_times_json is not None,
             }
             if ns.budget_from_baseline
+            else None
+        ),
+        "case_budgets": (
+            pathlib.Path(ns.case_budgets).name
+            if ns.case_budgets is not None
             else None
         ),
         "mesa_step_factor": ns.mesa_step_factor,

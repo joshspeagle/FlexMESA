@@ -34,7 +34,8 @@ MODES = ("harness", "trace", "compare")
 # Time added to the case budget for the build artifact download, the data
 # fetch and the post-step uploads (CLAUDE.md: at least 45 minutes headroom).
 HEADROOM_MIN = 45
-MAX_TIMEOUT_SEC = 18000
+# One hosted job is 330 minutes; less the headroom above leaves 17100 s.
+MAX_TIMEOUT_SEC = (330 - HEADROOM_MIN) * 60
 MAX_RSS_LIMIT_GB = 14.0
 WINDOWS_BUNDLE = "mesa_stepdump_windows"
 _NAME_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.+-]*")
@@ -58,6 +59,28 @@ def manifest_keys(root: pathlib.Path) -> set[tuple[str, str]]:
     with path.open("rb") as fh:
         data = tomllib.load(fh)
     return {(str(c["suite"]), str(c["case"])) for c in data["cases"]}
+
+
+def case_budget_table(root: pathlib.Path) -> dict[tuple[str, str], int]:
+    """Returns the generated per-case budgets in seconds (``s``).
+
+    Args:
+        root: Repository root.
+
+    Raises:
+        InputError: If a budget exceeds what one hosted job holds.
+    """
+    path = root / "benchmarks" / "history_harness" / "case_budgets.toml"
+    with path.open("rb") as fh:
+        data = tomllib.load(fh)
+    out = {
+        (str(c["suite"]), str(c["case"])): int(c["budget_sec"])
+        for c in data["cases"]
+    }
+    too_long = sorted(k for k, v in out.items() if v > MAX_TIMEOUT_SEC)
+    if too_long:
+        raise InputError(f"budgets beyond one hosted job: {too_long}")
+    return out
 
 
 def declared_bundles(root: pathlib.Path) -> set[str]:
@@ -115,7 +138,8 @@ def plan(env: Mapping[str, str], root: pathlib.Path) -> dict[str, str]:
 
     Args:
         env: Mapping with ``CASES``, ``MODE``, ``WINDOW``, ``TIMEOUT_SEC``
-            and ``MAX_RSS_GB``.
+            (empty: the per-case budget of ``case_budgets.toml``) and
+            ``MAX_RSS_GB``.
         root: Repository root of the checked-out ref.
 
     Returns:
@@ -139,21 +163,40 @@ def plan(env: Mapping[str, str], root: pathlib.Path) -> dict[str, str]:
                 f"window given, but the {WINDOWS_BUNDLE} bundle is not "
                 "declared on this ref"
             )
+    raw_timeout = env.get("TIMEOUT_SEC", "").strip()
     try:
-        timeout = int(env.get("TIMEOUT_SEC", ""))
+        override = int(raw_timeout) if raw_timeout else None
         rss = float(env.get("MAX_RSS_GB", ""))
     except ValueError as exc:
         raise InputError(f"bad number: {exc}") from exc
-    if not 1 <= timeout <= MAX_TIMEOUT_SEC:
+    if override is not None and not 1 <= override <= MAX_TIMEOUT_SEC:
         raise InputError(f"timeout_sec must be in 1..{MAX_TIMEOUT_SEC}")
     if not (math.isfinite(rss) and 0.5 <= rss <= MAX_RSS_LIMIT_GB):
         raise InputError(f"max_rss_gb must be in 0.5..{MAX_RSS_LIMIT_GB}")
-    matrix = {
-        "include": [{"suite": s, "case": c, "id": f"{s}-{c}"} for s, c in cases]
-    }
+    budgets = case_budget_table(root) if override is None else {}
+    include = []
+    for suite, case in cases:
+        timeout = (
+            override if override is not None else budgets.get((suite, case))
+        )
+        if timeout is None:
+            raise InputError(
+                f"{suite}/{case} has no row in case_budgets.toml; give "
+                "timeout_sec"
+            )
+        include.append(
+            {
+                "suite": suite,
+                "case": case,
+                "id": f"{suite}-{case}",
+                "timeout_sec": timeout,
+                "job_minutes": math.ceil(timeout / 60) + HEADROOM_MIN,
+            }
+        )
+    matrix = {"include": include}
     return {
         "matrix": json.dumps(matrix, separators=(",", ":")),
-        "job_minutes": str(math.ceil(timeout / 60) + HEADROOM_MIN),
+        "job_minutes": str(max(int(m["job_minutes"]) for m in include)),
     }
 
 

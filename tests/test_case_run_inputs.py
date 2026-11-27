@@ -77,10 +77,26 @@ def test_plan_builds_matrix_and_timeout_with_45_minute_headroom() -> None:
                 "suite": "star",
                 "case": "1.3M_ms_high_Z",
                 "id": "star-1.3M_ms_high_Z",
+                "timeout_sec": 3000,
+                "job_minutes": 95,
             }
         ]
     }
     assert out["job_minutes"] == "95"
+
+
+def test_plan_without_timeout_uses_the_per_case_budget() -> None:
+    out = cri.plan(
+        _env(CASES="star/ns_h star/1.3M_ms_high_Z", TIMEOUT_SEC=""), REPO_ROOT
+    )
+    rows = json.loads(out["matrix"])["include"]
+    budgets = cri.case_budget_table(REPO_ROOT)
+    assert [r["timeout_sec"] for r in rows] == [
+        budgets[("star", "ns_h")],
+        budgets[("star", "1.3M_ms_high_Z")],
+    ]
+    assert rows[0]["timeout_sec"] != rows[1]["timeout_sec"]
+    assert out["job_minutes"] == str(max(r["job_minutes"] for r in rows))
 
 
 @pytest.mark.parametrize(
@@ -90,6 +106,7 @@ def test_plan_builds_matrix_and_timeout_with_45_minute_headroom() -> None:
         {"TIMEOUT_SEC": "0"},
         {"TIMEOUT_SEC": "abc"},
         {"TIMEOUT_SEC": "99999"},
+        {"TIMEOUT_SEC": "17101"},
         {"MAX_RSS_GB": "nan"},
         {"MAX_RSS_GB": "64"},
         {"WINDOW": "w1"},

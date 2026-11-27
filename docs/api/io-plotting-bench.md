@@ -82,6 +82,10 @@ print(
 
 ::: flexmesa.testing.harness_budgets
 
+`flexmesa.testing.case_budgets` reads the committed per-case wall-time budgets, generated from measured campaign and MESA wall times by `scripts/audit/case_budgets.py` (`flexmesa harness run --case-budgets`, `#640`).
+
+::: flexmesa.testing.case_budgets
+
 ::: flexmesa.testing.early_stop
 
 ::: flexmesa.testing.stage_steps

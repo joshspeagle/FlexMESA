@@ -936,7 +936,8 @@ def build_manifest_inventory_records(
 
     Re-evaluates verdicts dynamically against ``case_manifest.toml`` and
     ``known_gaps.toml`` using stored MESA ``26.4.1`` baseline measurements when
-    present.
+    present, judging stage step counts as ``DECISIONS #70`` requires (the
+    committed baseline is a step-count-enforced snapshot).
 
     Args:
         manifest_path: Optional path to ``case_manifest.toml``.
@@ -977,7 +978,13 @@ def build_manifest_inventory_records(
         if manifest_path is not None
         else None
     )
-    records = records_from_stored_rows(manifest, gaps, stored_by_key, base_dir)
+    records = records_from_stored_rows(
+        manifest,
+        gaps,
+        stored_by_key,
+        base_dir,
+        enforce_step_counts=True,
+    )
     return manifest, gaps, records
 
 

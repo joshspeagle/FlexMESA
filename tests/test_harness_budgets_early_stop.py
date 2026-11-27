@@ -762,8 +762,9 @@ def test_pass_with_other_step_count_is_a_warning_not_a_verdict_change(
         "Step counts that differ"
         not in case_report.render_case_table_markdown(manifest, [same])
     )
-    # The committed baseline carries no run-side stage counts.
-    assert "stage_steps" not in case_report.record_to_dict(base)
+    # The committed baseline carries the run's stage counts (it is a
+    # step-count-enforced snapshot), which equal MESA's for a pass.
+    assert base.stage_steps == mesa
 
 
 def test_monitor_stops_a_run_past_the_mesa_step_count(
@@ -855,13 +856,16 @@ def test_unenforced_step_count_difference_keeps_the_pass_verdict() -> None:
 
 
 def test_enforced_step_counts_check_every_stage_of_a_multi_stage_case() -> None:
-    key = ("star", "make_planets")
+    key = ("star", "make_he_wd")
     mesa = stage_steps.load_mesa_stage_steps()[key]
-    assert mesa == (76, 22, 112)
+    assert mesa == (78, 136)
     assert _verdict(key, mesa, enforce=True).verdict == "pass"
-    early = _verdict(key, (76, 23, 112), enforce=True)
-    assert early.verdict == "fail (step count)"
-    assert "stage 2 (23 vs 22)" in early.error_message
+    first = _verdict(key, (79, 136), enforce=True)
+    assert first.verdict == "fail (step count)"
+    assert "stage 1 (79 vs 78)" in first.error_message
+    last = _verdict(key, (78, 137), enforce=True)
+    assert last.verdict == "fail (step count)"
+    assert "stage 2 (137 vs 136)" in last.error_message
 
 
 def test_enforced_step_count_difference_of_a_declared_gap_stays_declared() -> (

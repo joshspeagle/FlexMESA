@@ -936,7 +936,8 @@ def evaluate_case_record(
         if outcome.status == "ok" and max_steps is None
         else ""
     )
-    if enforce_step_counts and step_diff:
+    if enforce_step_counts and step_diff and step_diff not in comp_err:
+        # Idempotent: a stored row already carries the note from its run.
         comp_err = "; ".join(filter(None, [comp_err, step_diff]))
     is_undeclared = False
     is_stale_gap = False

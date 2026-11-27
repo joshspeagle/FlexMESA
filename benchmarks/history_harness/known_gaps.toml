@@ -114,14 +114,14 @@ issue = "#158"
 reason = "Case history_columns.list requests unported gravity-darkening grav_dark_L_polar column."
 [[gaps]]
 suite = "star"
+case = "high_z"
+issue = "#587"
+reason = "Within every MESA 26.4.1 history tolerance but takes a different number of steps than MESA per stage (FlexMESA [446] vs MESA [445]), which DECISIONS #70 does not count as a pass (#587)."
+[[gaps]]
+suite = "star"
 case = "hot_cool_wind"
 issue = "#161"
 reason = "Strict run diverges from step 2 under fixed T(tau) opacity and enters AGB solver retries (789 steps, 135 retries vs MESA 570 steps, 28 retries), exceeding the 900 s wall-time cap (#161, #152, #159)."
-[[gaps]]
-suite = "star"
-case = "magnetic_braking"
-issue = "#539"
-reason = "Reaches upstream xa_central_lower_limit (791 steps) but leaves the MESA 26.4.1 tolerances (log_center_Rho 8.3e-3, num_zones up to 3.85%) since the line search sums one dot product per variable as upstream (star_solver.f90:1915-1918); main plus only that change flips the case from pass to fail, so the Train 9 pass depended on rounding-level details (#539, #538)."
 [[gaps]]
 suite = "star"
 case = "make_co_wd"
@@ -134,14 +134,19 @@ issue = "#157"
 reason = "Case history_columns.list requests unported MLT++ gradT_excess_alpha column."
 [[gaps]]
 suite = "star"
+case = "make_planets"
+issue = "#587"
+reason = "Within every MESA 26.4.1 history tolerance but takes a different number of steps than MESA per stage (FlexMESA [76, 22, 113] vs MESA [76, 22, 112]), which DECISIONS #70 does not count as a pass (#587)."
+[[gaps]]
+suite = "star"
 case = "ns_c"
 issue = "#157"
 reason = "Case history_columns.list requests unported MLT++ gradT_excess_alpha column."
 [[gaps]]
 suite = "star"
 case = "ns_h"
-issue = "#161"
-reason = "Strict neutron-star H envelope burning reaches max_age (496 steps vs MESA 377, 5 retries vs MESA 2, all final tolerances pass) with num_zones (41.75%) and surface luminosity deviations from step 111 (#161, #152)."
+issue = "#587"
+reason = "Within every MESA 26.4.1 history tolerance but takes a different number of steps than MESA per stage (FlexMESA [119, 370] vs MESA [119, 377]), which DECISIONS #70 does not count as a pass (#587)."
 [[gaps]]
 suite = "star"
 case = "ns_he"
@@ -194,11 +199,6 @@ issue = "#161"
 reason = "Large-network silicon burning exceeds wall-time guard with unported rate, burning-limit, and solver controls (#161, #152)."
 [[gaps]]
 suite = "star"
-case = "starspots"
-issue = "#158"
-reason = "Case history_columns.list requests unported starspot cz_bot_radius column."
-[[gaps]]
-suite = "star"
 case = "twin_studies"
 issue = "#154"
 reason = "Multi-star evolution exceeds wall-time guard under unported rotational mixing and burning-limit controls (#154, #158, #161)."
@@ -222,6 +222,11 @@ suite = "star"
 case = "wd_cool_0.6M"
 issue = "#156"
 reason = "Strict run reaches log_center_temp_lower_limit (218 steps vs MESA 219, 3 retries matching MESA 26.4.1) with rel_star_age (-0.66%), num_zones (3.21%), and cooling-track deviations from step 37 (#156, #152)."
+[[gaps]]
+suite = "star"
+case = "wd_he_shell_ignition"
+issue = "#587"
+reason = "Within every MESA 26.4.1 history tolerance but takes a different number of steps than MESA per stage (FlexMESA [1111] vs MESA [1112]), which DECISIONS #70 does not count as a pass (#587)."
 [[gaps]]
 suite = "star"
 case = "wd_nova_burst"
@@ -255,8 +260,8 @@ reason = "Explicit RLOF star+point-mass age and component masses differ from MES
 [[gaps]]
 suite = "binary"
 case = "wind_fed_bhhmxb"
-issue = "#160"
-reason = "Strict binary run passes BH Eddington and wind-budget checks, while implicit RLOF exceeds the 300 s wall-time cap with component mass and age drift (#160, #144)."
+issue = "#587"
+reason = "Within every MESA 26.4.1 history tolerance but takes a different number of steps than MESA per stage (FlexMESA [392] vs MESA [393]), which DECISIONS #70 does not count as a pass (#587)."
 [[gaps]]
 suite = "astero"
 case = "astero_adipls"

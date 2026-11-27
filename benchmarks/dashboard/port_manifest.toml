@@ -7025,8 +7025,21 @@ module = "star"
 upstream_lines = 1164
 upstream_sha256 = "95f825f229efe223c9be84c4b01212c5e08a8702ab4db256d2a12afbd633a780"
 status = "partial"
-flexmesa_files = ["crates/flexmesa-star/src/hydro_eqns.rs"]
-notes = "seeded from coverage-map.md (partial): quick+. `do1_density_eqn`, surface BC eqns, chem, assembly present. Missing: `do1_w_div_wc_eqn`, `do1_dj_rot_dt_eqn` (rotation variables are not solver unknowns), `set_compression_BC`, `fix_d_eos_dxa_partials` (grep)"
+flexmesa_files = ["crates/flexmesa-star/src/hydro_eqns.rs", "crates/flexmesa-star/src/micro.rs"]
+notes = "seeded from coverage-map.md (partial): quick+. `do1_density_eqn`, surface boundary equations (`set_compression_BC`, `set_fixed_vsurf_outer_BC`, `set_momentum_BC`, `set_Psurf_BC`, `set_Tsurf_BC`), `fix_d_eos_dxa_partials` (in `micro.rs`), chem and assembly present. Missing: `do1_w_div_wc_eqn`, `do1_dj_rot_dt_eqn` (rotation variables are not solver unknowns), `equ_extra_profile_columns`, `equ_data_for_extra_profile_columns`, the `other_energy_implicit`, `other_momentum_implicit` and `other_surface_PT` hooks (setting them is an error)"
+[files.routine_map]
+"eval_equ_for_solver" = "crates/flexmesa-star/src/hydro_eqns.rs::assemble_henyey_system"
+"do1_density_eqn" = "crates/flexmesa-star/src/hydro_eqns.rs::do1_density_eqn"
+"PT_eqns_surf" = "crates/flexmesa-star/src/hydro_eqns.rs::do_surf_bc_eqns"
+"set_Psurf_BC" = "crates/flexmesa-star/src/hydro_eqns.rs::do_surf_bc_eqns"
+"set_Tsurf_BC" = "crates/flexmesa-star/src/hydro_eqns.rs::do_surf_bc_eqns"
+"set_momentum_BC" = "crates/flexmesa-star/src/hydro_eqns.rs::set_momentum_bc"
+"set_compression_BC" = "crates/flexmesa-star/src/hydro_eqns.rs::set_compression_bc"
+"set_fixed_vsurf_outer_BC" = "crates/flexmesa-star/src/hydro_eqns.rs::set_fixed_vsurf_outer_bc"
+"get_PT_bc_ad" = "crates/flexmesa-star/src/hydro_eqns.rs::get_pt_bc_ad"
+"fix_d_eos_dxa_partials" = "crates/flexmesa-star/src/micro.rs::fix_d_eos_dxa_partials"
+"check_dxa" = "crates/flexmesa-star/src/micro.rs::fix_d_eos_dxa_partials"
+"eval_equ" = "crates/flexmesa-star/src/hydro_eqns.rs::eval_henyey_equations_into"
 
 [[files]]
 upstream_path = "star/private/hydro_momentum.f90"

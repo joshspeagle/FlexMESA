@@ -10,6 +10,7 @@
 //! differentiation ([`StarAdOrder1`]).
 
 use flexmesa_const::PI;
+use flexmesa_utils::is_bad;
 
 use crate::controls::{StarError, VarLayout};
 use crate::eps_grav::eval_eps_grav;
@@ -483,13 +484,112 @@ fn wrap_surf_bc(
     out
 }
 
+/// `max(1d0, x)` for an `auto_diff_real_star_order1` value
+/// (`auto_diff/private/auto_diff_real_star_order1_module.f90:1181-1187`):
+/// the value is `Max(x%val, 1)` and the derivatives are
+/// `x%d1Array*Heaviside(x%val - 1)` with `Heaviside(0) = 0.5`
+/// (`auto_diff/private/support_functions.f90:59-68`).
+fn max_one_ad(x: StarAdOrder1) -> StarAdOrder1 {
+    if x.val < 1.0 {
+        return StarAdOrder1::ONE;
+    }
+    let heaviside = if x.val == 1.0 { 0.5 } else { 1.0 };
+    let mut out = StarAdOrder1::constant(x.val);
+    for (o, d) in out.d1.iter_mut().zip(x.d1.iter()) {
+        *o = *d * heaviside;
+    }
+    out
+}
+
+/// `set_momentum_BC` (`star/private/hydro_eqns.f90:1070-1081`): the surface
+/// row is the Riemann `du/dt` equation when `u_flag` and the hydrostatic or
+/// `dv/dt` momentum equation otherwise, both with the surface pressure of
+/// the outer boundary condition in force
+/// ([`eval_surf_momentum_bc_pressure_ad`]).
+fn set_momentum_bc(model: &StarModel, sys: &mut HenyeySystem) {
+    if model.controls.u_flag {
+        let p_surf = eval_surf_momentum_bc_pressure_ad(model);
+        crate::riemann_ad::do1_riemann_momentum_eqn(
+            model,
+            0,
+            Some(p_surf),
+            sys,
+        );
+    } else {
+        do1_momentum_eqn(model, 0, sys);
+    }
+}
+
+/// `set_compression_BC` (`star/private/hydro_eqns.f90:1084-1099`): the
+/// gradient of compression vanishes, which fixes the density of cell 1.
+fn set_compression_bc(
+    model: &StarModel,
+    sys: &mut HenyeySystem,
+) -> Result<(), StarError> {
+    // Upstream reads `dxh_lnd(2)` and `lnd(2)` unconditionally, which is
+    // outside the arrays for a one-cell model (DECISIONS #43).
+    if model.nz < 2 {
+        return Err(StarError::InvalidInput(String::from(
+            "use_compression_outer_BC needs at least two cells: upstream reads cell 2 (star/private/hydro_eqns.f90:1093-1095; DECISIONS #43)",
+        )));
+    }
+    let rho_1 = StarAdOrder1::variable(model.lnd[0], I_LND_00).exp();
+    let rho_2 = StarAdOrder1::variable(model.lnd[1], I_LND_P1).exp();
+    // `wrap_dxh_lnd(s, k)` (`auto_diff_support.f90:350-357`): value
+    // `dxh_lnd(k)`, unit derivative with respect to `lnd(k)`.
+    let dlnd_1 = StarAdOrder1::variable(model.aux.dxh_lnd[0], I_LND_00);
+    let dlnd_2 =
+        StarAdOrder1::variable(model.aux.dxh_lnd[1], I_LND_00).shift_p1();
+    let resid = (rho_2 * dlnd_1 - rho_1 * dlnd_2) / model.dt;
+    sys.save_eqn_residual(&model.layout, 0, model.layout.i_dv_dt, &resid);
+    Ok(())
+}
+
+/// `set_fixed_vsurf_outer_BC` (`star/private/hydro_eqns.f90:1102-1121`).
+fn set_fixed_vsurf_outer_bc(
+    model: &StarModel,
+    sys: &mut HenyeySystem,
+) -> Result<(), StarError> {
+    // `do_du_dt` is tested before `do_dv_dt` (`hydro_eqns.f90:1108-1111`).
+    let vsurf_val = if model.controls.u_flag {
+        model.u[0]
+    } else if model.controls.v_flag {
+        model.v[0]
+    } else {
+        return Err(StarError::InvalidInput(String::from(
+            "set_fixed_vsurf_outer_BC requires u_flag or v_flag true (star/private/hydro_eqns.f90:1113-1115)",
+        )));
+    };
+    let Some(&cs_start) = model.aux.csound_start.first() else {
+        return Err(StarError::InvalidInput(String::from(
+            "use_fixed_vsurf_outer_BC needs csound_start(1) (star/private/hydro_eqns.f90:1118; DECISIONS #43)",
+        )));
+    };
+    let vsurf = StarAdOrder1::variable(vsurf_val, I_V_00);
+    let resid = (vsurf - model.controls.fixed_vsurf) / cs_start;
+    sys.save_eqn_residual(&model.layout, 0, model.layout.i_dv_dt, &resid);
+    Ok(())
+}
+
 /// Surface pressure and temperature boundary condition equations at `k = 0`
-/// (`set_Psurf_BC` and `set_Tsurf_BC` in `star/private/hydro_eqns.f90:1002-1067`).
+/// (`PT_eqns_surf` in `star/private/hydro_eqns.f90:728-1067`).
+///
+/// The pressure row is chosen by upstream's `if` chain at `:758-770`:
+/// `use_compression_outer_BC`, then `use_zero_Pgas_outer_BC`, then
+/// `use_fixed_Psurf_outer_BC`, then `use_fixed_vsurf_outer_BC`, and
+/// otherwise `need_P_surf`, which writes the momentum boundary equation for
+/// `use_momentum_outer_BC` and `set_Psurf_BC` otherwise (`:790-796`). Exactly
+/// one of these writes row `0` of the pressure or momentum equation, and the
+/// zone loop in [`assemble_henyey_system`] never writes that row again.
 ///
 /// # Errors
-/// Returns [`StarError::InvalidInput`] for `RSP2_flag` without
-/// `RSP2_use_L_eqn_at_surface`: upstream then never sets `equ(i_equL, 1)`
-/// (DECISIONS #43).
+/// Returns [`StarError::InvalidInput`] for `use_fixed_vsurf_outer_BC`
+/// without `u_flag` or `v_flag` (`:1113-1115`), for
+/// `use_compression_outer_BC` with fewer than two cells, and for `RSP2_flag`
+/// without `RSP2_use_L_eqn_at_surface` (upstream then never sets
+/// `equ(i_equL, 1)`; DECISIONS #43). Returns
+/// [`StarError::MicrophysicsError`] for non-finite boundary values, where
+/// upstream calls `mesa_error` (`:870-887`, `:1026-1031`).
 pub fn do_surf_bc_eqns(
     model: &StarModel,
     sys: &mut HenyeySystem,
@@ -497,76 +597,72 @@ pub fn do_surf_bc_eqns(
     if model.nz == 0 {
         return Ok(());
     }
-    let bc = get_pt_bc_ad(model);
-
-    if model.controls.use_compression_outer_bc && model.nz >= 2 {
-        let lnd_0 = StarAdOrder1::variable(model.lnd[0], I_LND_00);
-        let lnd_1 = StarAdOrder1::variable(model.lnd[1], I_LND_P1);
-        let rho_0 = lnd_0.exp();
-        let rho_1 = lnd_1.exp();
-        let dlnd_0 =
-            lnd_0 - model.lnd_start.first().copied().unwrap_or(model.lnd[0]);
-        let dlnd_1 =
-            lnd_1 - model.lnd_start.get(1).copied().unwrap_or(model.lnd[1]);
-        let resid_c = (rho_1 * dlnd_0 - rho_0 * dlnd_1) / model.dt.max(1.0e-30);
-        sys.save_eqn_residual(&model.layout, 0, model.layout.i_dv_dt, &resid_c);
-    } else if model.controls.use_fixed_vsurf_outer_bc
-        && (model.controls.v_flag || model.controls.u_flag)
-    {
-        let vsurf_val = if model.controls.v_flag {
-            model.v[0]
-        } else {
-            model.u[0]
-        };
-        let vsurf = StarAdOrder1::variable(vsurf_val, I_V_00);
-        let cs_0 = model
-            .aux
-            .csound_start
-            .first()
-            .copied()
-            .filter(|&c| c > 0.0)
-            .unwrap_or(model.csound[0])
-            .max(1.0);
-        let resid_v = (vsurf - model.controls.fixed_vsurf) / cs_0;
-        sys.save_eqn_residual(&model.layout, 0, model.layout.i_dv_dt, &resid_v);
-    } else if !has_surf_momentum_bc(&model.controls) {
-        let ln_p_bc = bc.ln_p_bc;
-        let ln_peos_0 = model.ln_peos_ad[0];
-        let denom_p = if ln_peos_0.val > 1.0 {
-            ln_peos_0
-        } else {
-            StarAdOrder1::ONE
-        };
-        let resid_p = (ln_p_bc - ln_peos_0) / denom_p;
-        sys.save_eqn_residual(&model.layout, 0, model.layout.i_dv_dt, &resid_p);
+    let c = &model.controls;
+    let mut need_p_surf = false;
+    if c.use_compression_outer_bc {
+        set_compression_bc(model, sys)?;
+    } else if c.use_zero_pgas_outer_bc || c.use_fixed_psurf_outer_bc {
+        set_momentum_bc(model, sys);
+    } else if c.use_fixed_vsurf_outer_bc {
+        set_fixed_vsurf_outer_bc(model, sys)?;
+    } else {
+        need_p_surf = true;
     }
 
-    // `need_T_surf` is `.false.` whenever `RSP2_flag` or
-    // `use_RSP_L_eqn_outer_BC` is set (`star/private/hydro_eqns.f90:773-779`),
-    // so `set_Tsurf_BC`'s RSP2 branch (`hydro_eqns.f90:1012-1018`) is
-    // unreachable. With RSP2 the cell-1 `equL` row is the RSP2 luminosity
-    // equation only when `RSP2_use_L_eqn_at_surface` (`hydro_eqns.f90:250-251`);
-    // otherwise upstream never sets `equ(i_equL, 1)`.
-    if model.controls.rsp2_flag && !model.controls.rsp2.use_l_eqn_at_surface {
+    // `star/private/hydro_eqns.f90:773-779`; `do_equL` always holds because
+    // the layout assigns `i_equ_l` within `nvar`.
+    let need_t_surf = !(c.rsp2_flag || c.use_rsp_l_eqn_outer_bc);
+
+    let bc = get_pt_bc_ad(model);
+    // `star/private/hydro_eqns.f90:870-887`.
+    if is_bad(bc.p_bc.val) {
+        return Err(StarError::MicrophysicsError(format!(
+            "PT_eqns_surf: bad P_bc ({}) (star/private/hydro_eqns.f90:870-877)",
+            bc.p_bc.val
+        )));
+    }
+    if is_bad(bc.t_bc.val) {
+        return Err(StarError::MicrophysicsError(format!(
+            "PT_eqns_surf: bad T_bc ({}) (star/private/hydro_eqns.f90:879-887)",
+            bc.t_bc.val
+        )));
+    }
+
+    if need_p_surf {
+        if c.use_momentum_outer_bc {
+            set_momentum_bc(model, sys);
+        } else {
+            // `set_Psurf_BC` (`hydro_eqns.f90:1045-1067`).
+            let ln_p1 = model.ln_peos_ad[0];
+            let resid = (bc.ln_p_bc - ln_p1) / max_one_ad(ln_p1);
+            sys.save_eqn_residual(
+                &model.layout,
+                0,
+                model.layout.i_dv_dt,
+                &resid,
+            );
+        }
+    }
+
+    // With RSP2 the cell-1 `equL` row is the RSP2 luminosity equation only
+    // when `RSP2_use_L_eqn_at_surface` (`hydro_eqns.f90:250-251`); otherwise
+    // upstream never sets `equ(i_equL, 1)`.
+    if c.rsp2_flag && !c.rsp2.use_l_eqn_at_surface {
         return Err(StarError::InvalidInput(String::from(
             "RSP2_flag with RSP2_use_L_eqn_at_surface = .false.: upstream never sets equ(i_equL,1) (star/private/hydro_eqns.f90:250-251, 773-779; DECISIONS #43)",
         )));
     }
-    // Upstream also clears need_T_surf when `.not. do_equL` (hydro_eqns.f90:774),
-    // with do_equL = (i_equL > 0 .and. i_equL <= nvar) (:111). The layout
-    // always assigns i_equ_l within nvar, so do_equL is always true here.
-    let need_t_surf =
-        !(model.controls.rsp2_flag || model.controls.use_rsp_l_eqn_outer_bc);
     if need_t_surf {
-        let lnt_0 = StarAdOrder1::variable(model.ln_t[0], I_LNT_00);
-        let ln_t_bc = bc.ln_t_bc;
-        let denom_t = if lnt_0.val > 1.0 {
-            lnt_0
-        } else {
-            StarAdOrder1::ONE
-        };
-        let resid_t = (ln_t_bc - lnt_0) / denom_t;
-        sys.save_eqn_residual(&model.layout, 0, model.layout.i_equ_l, &resid_t);
+        // `set_Tsurf_BC` non-RSP2 branch (`hydro_eqns.f90:1020-1024`).
+        let lnt_1 = StarAdOrder1::variable(model.ln_t[0], I_LNT_00);
+        let resid = (bc.ln_t_bc - lnt_1) / max_one_ad(lnt_1);
+        if is_bad(resid.val) {
+            return Err(StarError::MicrophysicsError(format!(
+                "set_Tsurf_BC: bad residual ({}) (star/private/hydro_eqns.f90:1026-1031)",
+                resid.val
+            )));
+        }
+        sys.save_eqn_residual(&model.layout, 0, model.layout.i_equ_l, &resid);
     }
     Ok(())
 }
@@ -708,6 +804,40 @@ pub fn do1_chem_eqns(model: &StarModel, k: usize, sys: &mut HenyeySystem) {
     }
 }
 
+/// Rejects the switches that `eval_equations` honours and this port does not
+/// (`star/private/hydro_eqns.f90:82-83,141-159`): upstream aborts for
+/// `u_flag` with `use_mass_corrections`, and calls user hooks for
+/// `use_other_momentum_implicit` and `use_other_surface_PT`
+/// (`:785,838`), none of which are ported. `use_other_energy_implicit` is
+/// not a parsed control and is rejected when the inlist is read.
+fn check_unported_eval_equ_switches(
+    model: &StarModel,
+) -> Result<(), StarError> {
+    let c = &model.controls;
+    if c.u_flag && c.use_mass_corrections {
+        return Err(StarError::InvalidInput(String::from(
+            "use_mass_corrections dP not supported with u_flag true (star/private/hydro_eqns.f90:82-83)",
+        )));
+    }
+    // `star/private/evolve.f90:328-331`.
+    if c.u_flag && c.v_flag {
+        return Err(StarError::InvalidInput(String::from(
+            "must not have both u_flag and v_flag at the same time (star/private/evolve.f90:328-331)",
+        )));
+    }
+    if c.use_other_momentum_implicit {
+        return Err(StarError::InvalidInput(String::from(
+            "use_other_momentum_implicit is not supported (star/private/hydro_eqns.f90:151-159)",
+        )));
+    }
+    if c.use_other_surface_pt {
+        return Err(StarError::InvalidInput(String::from(
+            "use_other_surface_PT is not supported (star/private/hydro_eqns.f90:785,838)",
+        )));
+    }
+    Ok(())
+}
+
 /// Assembles the coupled 1D Henyey residual vector and scaled block-tridiagonal
 /// Jacobian blocks into `sys` from the current microphysical and [`StarAdOrder1`]
 /// fields on `model` without re-running `set_hydro_vars` or `eval_eps_grav`.
@@ -735,27 +865,24 @@ pub fn assemble_henyey_system(
     sys.ublk.clear();
     sys.ublk.resize(blk_len, 0.0);
 
+    check_unported_eval_equ_switches(model)?;
     do_surf_bc_eqns(model, sys)?;
-    let riemann_p_surf = (model.controls.u_flag
-        && !model.controls.v_flag
-        && !model.controls.use_compression_outer_bc
-        && !model.controls.use_fixed_vsurf_outer_bc
-        && has_surf_momentum_bc(&model.controls))
-    .then(|| eval_surf_momentum_bc_pressure_ad(model));
 
     model.aux.ergs_error.resize(nz, 0.0);
     let mut tot_e_equ_err = 0.0_f64;
     for k in 0..nz {
         do1_density_eqn(model, k, sys)?;
-        if model.controls.u_flag && !model.controls.v_flag {
-            crate::riemann_ad::do1_riemann_momentum_eqn(
-                model,
-                k,
-                if k == 0 { riemann_p_surf } else { None },
-                sys,
-            );
-        } else {
-            do1_momentum_eqn(model, k, sys);
+        // Row `0` of the momentum equation is the surface boundary
+        // condition written by `do_surf_bc_eqns`
+        // (`star/private/hydro_eqns.f90:176`: `if (k > 1)`).
+        if k > 0 {
+            if model.controls.u_flag {
+                crate::riemann_ad::do1_riemann_momentum_eqn(
+                    model, k, None, sys,
+                );
+            } else {
+                do1_momentum_eqn(model, k, sys);
+            }
         }
         if !model.controls.rsp2_flag {
             do1_temperature_eqn(model, k, sys);
@@ -836,4 +963,22 @@ pub fn eval_henyey_equations(
     let mut sys = HenyeySystem::new(0, 0, Vec::new());
     eval_henyey_equations_into(model, include_chem, &mut sys)?;
     Ok(sys)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_max_one_ad_heaviside_at_equality_halves_the_derivatives() {
+        // `Heaviside(0) = 0.5` (`auto_diff/private/support_functions.f90:63`).
+        let at_one = StarAdOrder1::variable(1.0, I_LNT_00);
+        let m = max_one_ad(at_one);
+        assert_eq!(m.val, 1.0);
+        assert_eq!(m.d1[I_LNT_00], 0.5);
+        let above = max_one_ad(StarAdOrder1::variable(2.0, I_LNT_00));
+        assert_eq!((above.val, above.d1[I_LNT_00]), (2.0, 1.0));
+        let below = max_one_ad(StarAdOrder1::variable(0.5, I_LNT_00));
+        assert_eq!((below.val, below.d1[I_LNT_00]), (1.0, 0.0));
+    }
 }

@@ -893,3 +893,66 @@ fn test_eval_face_dm_bar_innermost_zone_uses_symmetric_half_sum() {
     let got_mc = crate::hydro_momentum::eval_face_dm_bar(&model, k_last);
     assert!((got_mc - exp_mc).abs() <= 1.0e-15 * exp_mc);
 }
+
+/// Row `0` of the pressure or momentum equation after a full assembly.
+fn surface_row_after_assembly(
+    model: &mut StarModel,
+) -> Result<f64, crate::controls::StarError> {
+    let sys = eval_henyey_equations(model, false)?;
+    Ok(sys.equ[model.layout.i_dv_dt])
+}
+
+#[test]
+fn test_fixed_vsurf_outer_bc_row_zero_survives_momentum_outer_bc() {
+    // `use_fixed_vsurf_outer_BC` is chosen before `need_P_surf`, so
+    // `use_momentum_outer_BC` must not rewrite row 0
+    // (`star/private/hydro_eqns.f90:758-770,796`).
+    let mut model = build_solar_test_model(true);
+    model.controls.use_fixed_vsurf_outer_bc = true;
+    model.controls.use_momentum_outer_bc = true;
+    model.controls.fixed_vsurf = 0.0;
+    let row0 = surface_row_after_assembly(&mut model).expect("assembly");
+    let expected = model.v[0] / model.aux.csound_start[0];
+    assert!((row0 - expected).abs() <= 1.0e-14 * expected.abs());
+}
+
+#[test]
+fn test_compression_outer_bc_row_zero_uses_dxh_lnd_and_survives_momentum_bc() {
+    // `set_compression_BC` (`hydro_eqns.f90:1084-1099`): the row is
+    // `(rho2*dxh_lnd(1) - rho1*dxh_lnd(2))/dt`, and it is not rewritten by
+    // the momentum boundary equation.
+    let mut model = build_solar_test_model(true);
+    model.controls.use_compression_outer_bc = true;
+    model.controls.use_momentum_outer_bc = true;
+    model.aux.dxh_lnd[0] = 2.0e-3;
+    model.aux.dxh_lnd[1] = -1.0e-3;
+    let row0 = surface_row_after_assembly(&mut model).expect("assembly");
+    let rho1 = flexmesa_math::exp(model.lnd[0]);
+    let rho2 = flexmesa_math::exp(model.lnd[1]);
+    let expected = (rho2 * 2.0e-3 - rho1 * -1.0e-3) / model.dt;
+    assert!((row0 - expected).abs() <= 1.0e-12 * expected.abs());
+}
+
+#[test]
+fn test_fixed_vsurf_outer_bc_without_velocity_flag_is_an_error() {
+    // `star/private/hydro_eqns.f90:1113-1115`.
+    let mut model = build_solar_test_model(false);
+    model.controls.use_fixed_vsurf_outer_bc = true;
+    assert!(matches!(
+        surface_row_after_assembly(&mut model),
+        Err(crate::controls::StarError::InvalidInput(_))
+    ));
+}
+
+#[test]
+fn test_u_flag_with_v_flag_or_mass_corrections_is_an_error() {
+    // `star/private/evolve.f90:328-331` and `hydro_eqns.f90:82-83`.
+    let mut model = build_solar_test_model(true);
+    model.controls.u_flag = true;
+    assert!(surface_row_after_assembly(&mut model).is_err());
+    let mut model = build_solar_test_model(true);
+    model.controls.v_flag = false;
+    model.controls.u_flag = true;
+    model.controls.use_mass_corrections = true;
+    assert!(surface_row_after_assembly(&mut model).is_err());
+}

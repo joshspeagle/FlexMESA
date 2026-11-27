@@ -22,20 +22,20 @@ Every routine is at one level. Lines are credited to a routine for its own lines
 | Measure | Value |
 | :--- | ---: |
 | Upstream lines | 144,952 |
-| Lines in routines mapped in full | 21,321 |
+| Lines in routines mapped in full | 22,214 |
 | Lines in routines mapped in part | 0 |
 | Lines in not-applicable routines | 0 |
-| Lines in unmapped routines | 102,013 |
+| Lines in unmapped routines | 101,120 |
 | Lines outside routines | 21,618 |
 | Lines in routines with oracle evidence | 4,911 |
-| Line-weighted full-mapping fraction (all lines) | 14.7% |
+| Line-weighted full-mapping fraction (all lines) | 15.3% |
 | Line-weighted partial-mapping fraction (all lines) | 0.0% |
-| Full-mapping fraction excluding not-applicable lines | 14.7% |
+| Full-mapping fraction excluding not-applicable lines | 15.3% |
 | Partial-mapping fraction excluding not-applicable lines | 0.0% |
 | Not-applicable fraction of all lines | 0.0% |
 | Line-weighted oracle fraction | 3.4% |
 | Whole-file ported fraction (existing headline) | 30.7% |
-| Routines (full / partial / N/A / unmapped / total) | 249 / 0 / 0 / 2,339 / 2,588 |
+| Routines (full / partial / N/A / unmapped / total) | 261 / 0 / 0 / 2,327 / 2,588 |
 | Routines with oracle evidence | 25 |
 
 The fractions answer different questions. The whole-file figure counts every line of a file whose hand-set status is ported; the line-weighted figures count only the own lines of routines that carry the named evidence. Neither is a statement about agreement with MESA.
@@ -44,7 +44,7 @@ The fractions answer different questions. The whole-file figure counts every lin
 
 | Module | Files | Routines | Full | Partial | N/A | Unmapped | Oracle | Upstream lines | Lines full | Lines partial | Lines N/A | Lines unmapped | Outside routines | Full | Partial | Full excl. N/A | Oracle | Whole-file ported |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| `star` | 173 | 2,176 | 180 | 0 | 0 | 1,996 | 25 | 120,509 | 18,613 | 0 | 0 | 89,238 | 12,658 | 15.4% | 0.0% | 15.4% | 4.1% | 35.1% |
+| `star` | 173 | 2,176 | 192 | 0 | 0 | 1,984 | 25 | 120,509 | 19,506 | 0 | 0 | 88,345 | 12,658 | 16.2% | 0.0% | 16.2% | 4.1% | 35.1% |
 | `star_data` | 12 | 5 | 0 | 0 | 0 | 5 | 0 | 4,870 | 0 | 0 | 0 | 49 | 4,821 | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% |
 | `binary` | 47 | 218 | 69 | 0 | 0 | 149 | 0 | 11,638 | 2,708 | 0 | 0 | 6,173 | 2,757 | 23.3% | 0.0% | 23.3% | 0.0% | 18.7% |
 | `astero` | 14 | 189 | 0 | 0 | 0 | 189 | 0 | 7,935 | 0 | 0 | 0 | 6,553 | 1,382 | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% |
@@ -406,7 +406,7 @@ Candidates for a reviewed raise to `ported_unverified`. Largest ten:
 | `star/private/hydro_alpha_rti_eqns.f90` | `star` | ported_unverified | ported_unverified | 195 | 1 | 1 | 0 | 0 | 0 | 161 | 0 | 0 | 0 | 34 |
 | `star/private/hydro_chem_eqns.f90` | `star` | ported_unverified | partial | 224 | 3 | 2 | 0 | 0 | 1 | 175 | 0 | 0 | 13 | 36 |
 | `star/private/hydro_energy.f90` | `star` | ported_unverified | partial | 879 | 17 | 1 | 0 | 0 | 0 | 19 | 0 | 0 | 812 | 48 |
-| `star/private/hydro_eqns.f90` | `star` | partial | - | 1,164 | 18 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 1,113 | 51 |
+| `star/private/hydro_eqns.f90` | `star` | partial | partial | 1,164 | 18 | 12 | 0 | 0 | 0 | 893 | 0 | 0 | 220 | 51 |
 | `star/private/hydro_momentum.f90` | `star` | ported_unverified | partial | 603 | 15 | 4 | 0 | 0 | 0 | 127 | 0 | 0 | 422 | 54 |
 | `star/private/hydro_riemann.f90` | `star` | partial | - | 459 | 10 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 396 | 63 |
 | `star/private/hydro_rotation.f90` | `star` | partial | - | 922 | 26 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 831 | 91 |
@@ -498,7 +498,7 @@ Candidates for a reviewed raise to `ported_unverified`. Largest ten:
 
 ## Backlog of unmapped core-engine routines
 
-1,906 routines in core-engine files with status `stub`, `partial`, or `absent` have no gate-checked `routine_map` entry (78,300 own lines). Partial and not-applicable routines are not in the backlog. Some may already be implemented without a map entry; the table cannot tell.
+1,894 routines in core-engine files with status `stub`, `partial`, or `absent` have no gate-checked `routine_map` entry (77,407 own lines). Partial and not-applicable routines are not in the backlog. Some may already be implemented without a map entry; the table cannot tell.
 
 ### How cases are attributed, and its limits
 
@@ -544,17 +544,17 @@ The 40 largest backlog routines with no case named. The full list is in the JSON
 | 24 | `star/private/net.f90` | `do1_net` | 0 | 289 | - | - |
 | 25 | `star/private/init.f90` | `model_builder` | 0 | 281 | - | - |
 | 26 | `star/private/star_private_def.f90` | `star_private_def_init` | 0 | 277 | - | - |
-| 27 | `star/private/hydro_eqns.f90` | `eval_equ_for_solver` | 0 | 273 | - | - |
-| 28 | `star/private/evolve.f90` | `select_mdot_action` | 0 | 270 | - | - |
-| 29 | `star/private/photo_in.f90` | `read_star_photo` | 0 | 269 | - | - |
-| 30 | `binary/private/binary_history.f90` | `do_binary_history_info` | 0 | 264 | - | - |
-| 31 | `star/private/relax.f90` | `do_internal_evolve` | 0 | 263 | - | - |
-| 32 | `star/private/atm_support.f90` | `get_table` | 0 | 260 | - | - |
-| 33 | `star/private/diffusion_procs.f90` | `redistribute_mass` | 0 | 253 | - | - |
-| 34 | `star/private/hydro_vars.f90` | `get_surf_PT` | 0 | 252 | - | - |
-| 35 | `star/private/remove_shells.f90` | `do_relax_to_star_cut` | 0 | 249 | - | - |
-| 36 | `star/private/evolve.f90` | `do_step_part2` | 0 | 245 | - | - |
-| 37 | `star/private/pulse_cafein.f90` | `get_cafein_data` | 0 | 245 | - | - |
-| 38 | `star/private/read_model.f90` | `do_read_saved_model` | 0 | 245 | - | - |
-| 39 | `binary/private/binary_history.f90` | `binary_history_getval` | 0 | 243 | - | - |
-| 40 | `star/private/pulse_gyre.f90` | `get_gyre_data` | 0 | 239 | - | - |
+| 27 | `star/private/evolve.f90` | `select_mdot_action` | 0 | 270 | - | - |
+| 28 | `star/private/photo_in.f90` | `read_star_photo` | 0 | 269 | - | - |
+| 29 | `binary/private/binary_history.f90` | `do_binary_history_info` | 0 | 264 | - | - |
+| 30 | `star/private/relax.f90` | `do_internal_evolve` | 0 | 263 | - | - |
+| 31 | `star/private/atm_support.f90` | `get_table` | 0 | 260 | - | - |
+| 32 | `star/private/diffusion_procs.f90` | `redistribute_mass` | 0 | 253 | - | - |
+| 33 | `star/private/hydro_vars.f90` | `get_surf_PT` | 0 | 252 | - | - |
+| 34 | `star/private/remove_shells.f90` | `do_relax_to_star_cut` | 0 | 249 | - | - |
+| 35 | `star/private/evolve.f90` | `do_step_part2` | 0 | 245 | - | - |
+| 36 | `star/private/pulse_cafein.f90` | `get_cafein_data` | 0 | 245 | - | - |
+| 37 | `star/private/read_model.f90` | `do_read_saved_model` | 0 | 245 | - | - |
+| 38 | `binary/private/binary_history.f90` | `binary_history_getval` | 0 | 243 | - | - |
+| 39 | `star/private/pulse_gyre.f90` | `get_gyre_data` | 0 | 239 | - | - |
+| 40 | `star/private/adjust_mass.f90` | `set1_xa` | 0 | 235 | - | - |

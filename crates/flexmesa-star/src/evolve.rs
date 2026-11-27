@@ -169,6 +169,12 @@ pub fn restore_from_old(model: &mut StarModel) -> Result<(), StarError> {
     }
     model.mstar_dot = model.aux.step_hist.mstar_dot_old;
     model.aux.step_hist.time_sec = model.aux.step_hist.time_old_sec;
+    let sh = &mut model.aux.step_hist;
+    sh.power_h_burn = sh.power_h_burn_old;
+    sh.power_he_burn = sh.power_he_burn_old;
+    sh.power_z_burn = sh.power_z_burn_old;
+    sh.power_photo = sh.power_photo_old;
+    sh.power_nuc_burn = sh.power_nuc_burn_old;
     model.aux.total_energy = model.aux.step_hist.total_energy_old;
     model.aux.cumulative_energy_error =
         model.aux.step_hist.cumulative_energy_error_old;
@@ -353,11 +359,6 @@ pub fn star_evolve_step_part1(
     let explicit_step_mdot = model.mstar_dot;
 
     model.aux.okay_to_set_mlt_vc = false;
-    // Burning powers as of the end of the previous step, before `do_mesh`
-    // (`evolve.f90:715, 1884`); `new_generation` copies them below.
-    if first_try {
-        crate::core_boundaries::stash_prestep_powers(model);
-    }
     let (num_splits, num_merges, mut pre_remesh_model) =
         if first_try && do_remesh {
             match remesh_star_before_step(model, dt_prev) {
@@ -380,12 +381,9 @@ pub fn star_evolve_step_part1(
         }
     }
     snapshot_step_old_extras(model);
-    // `new_generation` stores `model_number_old = model_number`
-    // (`star/private/evolve_support.f90:80`); a retry enters with
-    // `model_number` restored to the pre-step value, so this is idempotent.
+    // `new_generation` stores `model_number_old = model_number` and
+    // `power_*_old = power_*` (`star/private/evolve_support.f90:80, 94-99`).
     model.save_old_values();
-    // `power_*_old` come from the pre-remesh values (`evolve_support.f90:94-99`).
-    crate::core_boundaries::apply_prestep_powers_to_old(model);
     // `new_generation` ends with `need_to_setvars = .true.`
     // (`star/private/evolve_support.f90:121`).
     model.aux.need_to_setvars = true;
@@ -776,6 +774,9 @@ pub fn star_evolve_step_part2(
                 model.controls.ts_stop.max_timestep =
                     SECYER * model.controls.max_years_for_timestep;
             }
+            // `star/private/evolve.f90:715`: update persisted end-of-step
+            // burning powers after convergence (`set_power_info`).
+            crate::core_boundaries::set_power_info(model);
             return Ok(StarStepAttemptOutcome::Converged(StarStepConverged {
                 solver_report: rep,
                 dt: dt_try,
@@ -1036,6 +1037,7 @@ pub(crate) fn star_evolve_step_outcome_checked(
         sh.total_energy_end = etot;
         sh.error_in_energy_conservation = err_e;
         sh.total_energy_sources_and_sinks = -total_radiation;
+        crate::core_boundaries::set_power_info(model);
 
         let check_term = match extras.extras_check_model(model) {
             ExtrasDirective::Terminate(reason) => Some(reason),
@@ -1107,9 +1109,6 @@ pub(crate) fn star_evolve_step_outcome_checked(
     // `save_old_values()` copies `mlt_vc` into `mlt_vc_old` (`evolve.f90:321`,
     // `evolve_support.f90:58, 193-195`).
     model.aux.okay_to_set_mlt_vc = false;
-    // Burning powers as of the end of the previous step, before `do_mesh`
-    // (`evolve.f90:715, 1884`); `new_generation` copies them below.
-    crate::core_boundaries::stash_prestep_powers(model);
     let (mut num_splits, mut num_merges, mut pre_remesh_model) = if do_remesh {
         match remesh_star_before_step(model, dt_prev) {
             Ok(res) => res,
@@ -1129,11 +1128,9 @@ pub(crate) fn star_evolve_step_outcome_checked(
         return Err(e);
     }
     snapshot_step_old_extras(model);
-    // `new_generation` stores `model_number_old = model_number`
-    // (`star/private/evolve_support.f90:80`).
+    // `new_generation` stores `model_number_old = model_number` and
+    // `power_*_old = power_*` (`star/private/evolve_support.f90:80, 94-99`).
     model.save_old_values();
-    // `power_*_old` come from the pre-remesh values (`evolve_support.f90:94-99`).
-    crate::core_boundaries::apply_prestep_powers_to_old(model);
     // `new_generation` ends with `need_to_setvars = .true.`
     // (`star/private/evolve_support.f90:121`).
     model.aux.need_to_setvars = true;
@@ -1431,6 +1428,9 @@ pub(crate) fn star_evolve_step_outcome_checked(
                     model.controls.ts_stop.max_timestep =
                         SECYER * model.controls.max_years_for_timestep;
                 }
+                // `star/private/evolve.f90:715`: update persisted end-of-step
+                // burning powers after convergence (`set_power_info`).
+                crate::core_boundaries::set_power_info(model);
 
                 // Upstream runs `do_check_limits` before `extras_check_model`
                 // and `pick_next_timestep` (`run_star_support.f90:211-213`);

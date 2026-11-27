@@ -166,6 +166,12 @@ module = "binary"
 kind = "invariant"
 
 [[tests]]
+path = "crates/flexmesa-binary/tests/binary_burn_powers_retry_test.rs"
+language = "rust"
+module = "binary"
+kind = "invariant"
+
+[[tests]]
 path = "crates/flexmesa-binary/tests/binary_core_160_test.rs"
 language = "rust"
 module = "binary"
@@ -1146,6 +1152,12 @@ module = "star"
 kind = "oracle"
 provenance = "MESA 26.4.1 star/private/hydro_vars.f90:225,541 & star/private/hydro_rotation.f90:501-543 MLT IEEE-754 hex oracles (#161)"
 routines = ["star/private/turb_info.f90::set_mlt_vars"]
+
+[[tests]]
+path = "crates/flexmesa-star/tests/model_load_burn_powers_test.rs"
+language = "rust"
+module = "star"
+kind = "invariant"
 
 [[tests]]
 path = "crates/flexmesa-star/tests/newton_retry_semantics_152_test.rs"

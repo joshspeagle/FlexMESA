@@ -619,7 +619,8 @@ impl RelaxHooks for RelaxToRadiativeCore {
         model: &mut StarModel,
     ) -> Result<RelaxHookResult, StarError> {
         // `do_bare_bones_check_model` (`get_history_info`) and
-        // `set_power_info` (`star/private/report.f90`).
+        // `set_power_info` (`star/private/relax.f90:3510`).
+        crate::core_boundaries::set_power_info(model);
         let ctx = crate::report_utils::StepReportContext::compute(model);
         let job = &model.job;
         if ctx.powers.power_nuc_burn / ctx.phot.l_lsun

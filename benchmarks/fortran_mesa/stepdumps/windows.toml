@@ -1,0 +1,262 @@
+# Mid-run MESA 26.4.1 step-dump windows worth keeping (#608).
+#
+# Each [[window]] is one run of run_stepdumps.py with
+#   --stage S --occurrence K --first-model F --steps N --cases <case>
+# (stage = the S-th process of the case that calls the solver; occurrence = the
+# K-th time the model number rises to F). `regenerate_windows.py` runs them;
+# `scripts/data/build_mesa_stepdump_windows.py` packs the outputs into the
+# opt-in mesa-stepdump-windows bundle. A window is identified by
+# (case, stage, occurrence, first_model, steps); its id is derived from those.
+#
+# `why` describes what the window covers. Windows whose reason reads "mid-run
+# window for first-divergence bisection" or "step-count disagreements" were
+# captured while localizing a FlexMESA/MESA difference; the case's own
+# history is the record of which difference.
+
+[[window]]
+case = "star/wd_stable_h_burn"
+stage = 1
+occurrence = 1
+first_model = 44
+steps = 3
+why = "relax phase (models 1..84); start of the window the relax phase passes before it ends"
+
+[[window]]
+case = "star/wd_stable_h_burn"
+stage = 1
+occurrence = 1
+first_model = 70
+steps = 12
+why = "relax-phase model 70..81 (the first rise to model 70); the pitfall case for restarted model numbers"
+
+[[window]]
+case = "star/wd_stable_h_burn"
+stage = 1
+occurrence = 2
+first_model = 70
+steps = 12
+why = "evolve-phase model 70..81 (the second rise to model 70, after the relax phase restarts the numbering)"
+
+[[window]]
+case = "star/wd_stable_h_burn"
+stage = 1
+occurrence = 1
+first_model = 87
+steps = 3
+why = "evolve phase, past the end of the relax phase (84)"
+
+[[window]]
+case = "star/wd_stable_h_burn"
+stage = 1
+occurrence = 1
+first_model = 131
+steps = 3
+why = "evolve phase, later in the run"
+
+[[window]]
+case = "star/wd_c_core_ignition"
+stage = 1
+occurrence = 1
+first_model = 95
+steps = 3
+why = "mid-run window for first-divergence bisection"
+
+[[window]]
+case = "star/wd_c_core_ignition"
+stage = 1
+occurrence = 1
+first_model = 190
+steps = 3
+why = "mid-run window for first-divergence bisection"
+
+[[window]]
+case = "star/wd_c_core_ignition"
+stage = 1
+occurrence = 1
+first_model = 250
+steps = 12
+why = "twelve models of the carbon-ignition approach"
+
+[[window]]
+case = "star/wd_c_core_ignition"
+stage = 1
+occurrence = 1
+first_model = 285
+steps = 3
+why = "mid-run window for first-divergence bisection"
+
+[[window]]
+case = "binary/star_plus_point_mass_explicit_mdot"
+stage = 1
+occurrence = 1
+first_model = 64
+steps = 3
+why = "mid-run window for first-divergence bisection"
+
+[[window]]
+case = "binary/star_plus_point_mass_explicit_mdot"
+stage = 1
+occurrence = 1
+first_model = 127
+steps = 3
+why = "mid-run window for first-divergence bisection"
+
+[[window]]
+case = "binary/star_plus_point_mass_explicit_mdot"
+stage = 1
+occurrence = 1
+first_model = 190
+steps = 3
+why = "mid-run window for first-divergence bisection"
+
+[[window]]
+case = "star/hot_cool_wind"
+stage = 1
+occurrence = 1
+first_model = 92
+steps = 3
+why = "mid-run window for first-divergence bisection"
+
+[[window]]
+case = "star/hot_cool_wind"
+stage = 1
+occurrence = 1
+first_model = 185
+steps = 3
+why = "mid-run window for first-divergence bisection"
+
+[[window]]
+case = "star/hot_cool_wind"
+stage = 1
+occurrence = 1
+first_model = 277
+steps = 3
+why = "mid-run window for first-divergence bisection"
+
+[[window]]
+case = "star/ns_he"
+stage = 1
+occurrence = 1
+first_model = 255
+steps = 30
+why = "thirty models of the helium-burning neutron-star run"
+
+[[window]]
+case = "star/conserve_angular_momentum"
+stage = 1
+occurrence = 1
+first_model = 67
+steps = 3
+why = "mid-run window for first-divergence bisection"
+
+[[window]]
+case = "star/conserve_angular_momentum"
+stage = 1
+occurrence = 1
+first_model = 135
+steps = 3
+why = "mid-run window for first-divergence bisection"
+
+[[window]]
+case = "star/conserve_angular_momentum"
+stage = 1
+occurrence = 1
+first_model = 202
+steps = 3
+why = "mid-run window for first-divergence bisection"
+
+[[window]]
+case = "star/relax_composition_j_entropy"
+stage = 1
+occurrence = 1
+first_model = 49
+steps = 3
+why = "mid-run window for first-divergence bisection"
+
+[[window]]
+case = "star/relax_composition_j_entropy"
+stage = 1
+occurrence = 1
+first_model = 98
+steps = 3
+why = "mid-run window for first-divergence bisection"
+
+[[window]]
+case = "star/relax_composition_j_entropy"
+stage = 1
+occurrence = 1
+first_model = 110
+steps = 12
+why = "twelve models past the second relax stage"
+
+[[window]]
+case = "star/relax_composition_j_entropy"
+stage = 1
+occurrence = 1
+first_model = 147
+steps = 3
+why = "mid-run window for first-divergence bisection"
+
+[[window]]
+case = "star/high_z"
+stage = 1
+occurrence = 1
+first_model = 250
+steps = 11
+why = "mid-run window for step-count disagreements"
+
+[[window]]
+case = "binary/wind_fed_bhhmxb"
+stage = 1
+occurrence = 1
+first_model = 94
+steps = 13
+why = "mid-run window for step-count disagreements"
+
+[[window]]
+case = "star/make_planets"
+stage = 3
+occurrence = 1
+first_model = 23
+steps = 23
+why = "third ./rn stage from its start (stage 3 of 3)"
+
+[[window]]
+case = "star/make_planets"
+stage = 3
+occurrence = 1
+first_model = 107
+steps = 5
+why = "third ./rn stage, later in the stage"
+
+[[window]]
+case = "star/wd_he_shell_ignition"
+stage = 1
+occurrence = 1
+first_model = 810
+steps = 12
+why = "mid-run window for step-count disagreements"
+
+[[window]]
+case = "star/wd_he_shell_ignition"
+stage = 1
+occurrence = 1
+first_model = 850
+steps = 12
+why = "mid-run window for step-count disagreements"
+
+[[window]]
+case = "star/ns_h"
+stage = 2
+occurrence = 1
+first_model = 1
+steps = 22
+why = "second ./rn stage from its start (stage 2 of 2)"
+
+[[window]]
+case = "star/ns_h"
+stage = 2
+occurrence = 1
+first_model = 90
+steps = 12
+why = "second ./rn stage, model 90..101"

@@ -151,3 +151,14 @@ def test_ignore_xa_also_skips_species_residual_columns() -> None:
     )
     assert sc.first_divergence(a, b) is not None
     assert sc.first_divergence(a, b, frozenset({"xa"})) is None
+
+
+def test_unknown_record_types_are_skipped_and_counted() -> None:
+    xtra = f"XTRA 1 5 1 {_h(1.0)}\nXTRA2 1 5 1 {_h(2.0)}\nXTRA 1 5 2 {_h(3.0)}"
+    mesa = sc.parse_dump(_dump(extra=xtra))
+    flex = sc.parse_dump(_dump())
+    assert mesa.skipped == {"XTRA": 2, "XTRA2": 1}
+    assert flex.skipped == {}
+    assert sc.first_divergence(mesa, flex) is None
+    report = sc.format_report(mesa, flex, None)
+    assert "skipped unknown record types: XTRA x2, XTRA2 x1" in report

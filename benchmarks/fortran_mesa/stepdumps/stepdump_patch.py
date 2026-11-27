@@ -6,9 +6,21 @@ or the order of any arithmetic. A record is written only when the
 environment variable ``FLEXMESA_STEPDUMP`` names an output file, and only for
 the first ``FLEXMESA_STEPDUMP_STEPS`` (default 3) distinct model numbers of
 each star, starting at model number ``FLEXMESA_STEPDUMP_FIRST`` when that is
-set (a window later in the run). With ``FLEXMESA_STEPDUMP_STOP`` set, the run
-stops when the next model starts, after a ``DONE`` record; nothing past that
-point is compared.
+set (a window later in the run). Three further variables place that window:
+
+* ``FLEXMESA_STEPDUMP_OCCURRENCE`` (default 1): the window opens the K-th
+  time a star's model number rises from below ``FLEXMESA_STEPDUMP_FIRST`` to
+  it or past it. A run whose model numbers restart (a relax phase followed by
+  the evolve phase) passes that number once per phase, so ``FIRST=70``
+  ``OCCURRENCE=2`` selects model 70 of the second phase. Models below
+  ``FIRST`` are never written.
+* ``FLEXMESA_STEPDUMP_STAGE`` (default every stage): only the process that is
+  the N-th (1-based) to write a ``RUN`` record is dumped; the others write
+  their ``RUN`` record and nothing else.
+* ``FLEXMESA_STEPDUMP_STOP``: the run stops when the next model after the
+  window starts, after a ``DONE`` record; nothing past that point is
+  compared. Without it the run continues and ``DONE`` is written once.
+
 Each process appends a ``RUN`` record when it opens the file, since every
 ``./rn`` stage is a separate process. Every floating-point value is written
 as its IEEE-754 binary64 bit pattern in hexadecimal (``Z16.16``).
@@ -199,44 +211,83 @@ HELPER = f"""
          logical, intent(out) :: new_model
          integer, parameter :: max_ids = 16
          integer, save :: unit = 0, nmax = 3, first_model = -huge(1)
+         integer, save :: occurrence = 1, stage = 0, my_stage = 1
          logical, save :: initialised = .false., stop_when_done = .false.
+         logical, save :: done_written = .false.
          integer, save :: nseen(max_ids) = 0, last_model(max_ids) = -1
+         integer, save :: prev_model(max_ids) = -huge(1)
+         integer, save :: crossings(max_ids) = 0
          logical, save :: named(max_ids) = .false.
          character(len=1024) :: path
-         integer :: st, i
+         character(len=8) :: line
+         integer :: st, i, cu
          new_model = .false.
          u = 0
          if (.not. initialised) then
             initialised = .true.
             call get_environment_variable('{MARKER}', path, status=st)
             if (st == 0 .and. len_trim(path) > 0) then
+               ! Number of this process among those writing to the file:
+               ! one more than the RUN records already in it.
+               open(newunit=cu, file=trim(path), status='old', &
+                  action='read', iostat=st)
+               if (st == 0) then
+                  do
+                     read(cu, '(A)', iostat=st) line
+                     if (st /= 0) exit
+                     if (trim(line) == 'RUN') my_stage = my_stage + 1
+                  end do
+                  close(cu)
+               end if
                ! Append: each ./rn stage is a separate process.
                open(newunit=unit, file=trim(path), status='unknown', &
                   position='append', action='write')
                write(unit, '(A)') 'RUN'
+               flush(unit)
                call get_environment_variable('{MARKER}_STEPS', path, &
                   status=st)
                if (st == 0 .and. len_trim(path) > 0) read(path, *) nmax
                call get_environment_variable('{MARKER}_FIRST', path, &
                   status=st)
                if (st == 0 .and. len_trim(path) > 0) read(path, *) first_model
+               call get_environment_variable('{MARKER}_OCCURRENCE', path, &
+                  status=st)
+               if (st == 0 .and. len_trim(path) > 0) read(path, *) occurrence
+               call get_environment_variable('{MARKER}_STAGE', path, &
+                  status=st)
+               if (st == 0 .and. len_trim(path) > 0) read(path, *) stage
                call get_environment_variable('{MARKER}_STOP', path, &
                   status=st)
                stop_when_done = st == 0 .and. len_trim(path) > 0
             end if
          end if
          if (unit == 0 .or. s% id < 1 .or. s% id > max_ids) return
-         ! Optional window: models before FLEXMESA_STEPDUMP_FIRST are skipped.
+         ! Optional stage: only the stage-th process writes records.
+         if (stage > 0 .and. my_stage /= stage) return
+         ! Optional window: the occurrence-th rise of the model number to
+         ! FLEXMESA_STEPDUMP_FIRST opens it (model numbers restart when a
+         ! relax phase is followed by the evolve phase); models before
+         ! FLEXMESA_STEPDUMP_FIRST are skipped.
+         if (s% model_number /= prev_model(s% id)) then
+            if (prev_model(s% id) < first_model .and. &
+                  s% model_number >= first_model) &
+               crossings(s% id) = crossings(s% id) + 1
+            prev_model(s% id) = s% model_number
+         end if
+         if (crossings(s% id) < occurrence .and. first_model > -huge(1)) &
+            return
          if (s% model_number < first_model) return
          if (s% model_number /= last_model(s% id)) then
             if (nseen(s% id) >= nmax) then
-               ! Optional early end once the requested models are dumped;
-               ! nothing after this point is compared.
-               if (stop_when_done) then
+               ! The requested models are dumped. Optionally end the run
+               ! here; nothing after this point is compared.
+               if (.not. done_written) then
+                  done_written = .true.
                   write(unit, '(A)') 'DONE'
                   flush(unit)
-                  stop 'FLEXMESA_STEPDUMP: requested models dumped'
                end if
+               if (stop_when_done) &
+                  stop 'FLEXMESA_STEPDUMP: requested models dumped'
                return
             end if
             nseen(s% id) = nseen(s% id) + 1

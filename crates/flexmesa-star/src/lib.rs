@@ -426,8 +426,8 @@ pub use pulse_modes::{
     eval_astero_scaling_dnu_numax_uhz, eval_buoyancy_period_spacing_s,
     eval_kappa_mechanism_growth, eval_linear_oscillation_modes,
     eval_target_mode_frequency_and_growth, scan_bounds_from_targets,
-    scan_star_bvp_eigenmodes, solve_adipls_fgong_modes, solve_bvp_eigenmodes,
-    solve_gyre_mesa_modes, LinearOscillationMode, PulseModeScanOptions,
+    solve_adipls_fgong_modes, solve_bvp_eigenmodes, solve_gyre_mesa_modes,
+    LinearOscillationMode,
 };
 pub use relax::{
     apply_uniform_rotation, excise_core_by_temperature,

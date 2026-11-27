@@ -10,10 +10,7 @@
 use flexmesa_const::{L_SUN, M_SUN, PI, R_SUN, STANDARD_CGRAV};
 
 use crate::model::StarModel;
-use crate::pulse::{
-    build_pulse_points, build_pulse_points_with_options, PulseExportOptions,
-    PulsePoint,
-};
+use crate::pulse::{build_pulse_points, PulsePoint};
 use crate::pulse_bvp::{
     shoot_determinant, BvpEigenmode, BvpModel, InertiaNormKind, OuterBoundKind,
 };
@@ -22,36 +19,6 @@ pub use crate::pulse_bvp_recon::{
     parse_fgong_model, parse_fortran_float, parse_gyre_mesa_model,
     reconstruct_and_analyze_mode,
 };
-
-/// Options for scanning adiabatic oscillation modes on a [`StarModel`] (`adipls_support.f90` / `gyre_support.f90`).
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct PulseModeScanOptions {
-    pub l: usize,
-    pub freq_min_uhz: f64,
-    pub freq_max_uhz: f64,
-    pub n_freq: usize,
-    pub add_center_point: bool,
-    pub keep_surface_point: bool,
-    pub add_atmosphere: bool,
-    pub outer_bc: OuterBoundKind,
-    pub inertia_norm: InertiaNormKind,
-}
-
-impl Default for PulseModeScanOptions {
-    fn default() -> Self {
-        Self {
-            l: 0,
-            freq_min_uhz: 20.0,
-            freq_max_uhz: 2500.0,
-            n_freq: 200,
-            add_center_point: true,
-            keep_surface_point: false,
-            add_atmosphere: true,
-            outer_bc: OuterBoundKind::AdiplsIsothermal,
-            inertia_norm: InertiaNormKind::Both,
-        }
-    }
-}
 
 /// Computes `[nu_lower_factor * freq_target(l,1), nu_upper_factor * freq_target(l,nl(l))]` scan bounds in $\mu\mathrm{Hz}$.
 #[must_use]
@@ -76,57 +43,6 @@ pub fn scan_bounds_from_targets(
         let dnu = dnu_uhz.max(10.0);
         (0.5 * dnu, 35.0 * dnu)
     }
-}
-
-/// Scans adiabatic [`BvpEigenmode`]s on `model` honoring atmosphere/center/surface options and frequency bounds.
-#[must_use]
-pub fn scan_star_bvp_eigenmodes(
-    model: &StarModel,
-    opts: &PulseModeScanOptions,
-) -> Vec<BvpEigenmode> {
-    let m_tot = model.mstar.max(0.05 * M_SUN);
-    let r_phot = model
-        .r
-        .first()
-        .copied()
-        .unwrap_or(R_SUN)
-        .max(1.0e-3 * R_SUN);
-    let l_tot = model
-        .lum
-        .first()
-        .copied()
-        .unwrap_or(L_SUN)
-        .max(1.0e-4 * L_SUN);
-    let pts = build_pulse_points_with_options(
-        model,
-        &PulseExportOptions {
-            add_center_point: opts.add_center_point,
-            keep_surface_point: opts.keep_surface_point,
-            add_atmosphere: opts.add_atmosphere,
-            ..PulseExportOptions::default()
-        },
-    );
-    let bvp = build_bvp_model_from_pulse_points(
-        &pts,
-        m_tot,
-        r_phot,
-        l_tot,
-        STANDARD_CGRAV,
-    );
-    let scale_uhz = 1.0e6
-        * (STANDARD_CGRAV * m_tot / flexmesa_math::pow3(r_phot))
-            .sqrt()
-            .max(1.0e-12)
-        / (2.0 * PI);
-    let (om_min, n) = (
-        (opts.freq_min_uhz / scale_uhz).max(0.05),
-        opts.n_freq.max(16),
-    );
-    let om_max = (opts.freq_max_uhz / scale_uhz).max(om_min + 0.5);
-    let grid: Vec<f64> = (0..n)
-        .map(|i| om_min + (om_max - om_min) * (i as f64) / ((n - 1) as f64))
-        .collect();
-    solve_bvp_eigenmodes(&bvp, opts.l, &grid, opts.outer_bc, opts.inertia_norm)
 }
 
 /// Linearized adiabatic and non-adiabatic oscillation eigenmode returned by [`eval_linear_oscillation_modes`].

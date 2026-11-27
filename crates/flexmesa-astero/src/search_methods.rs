@@ -11,7 +11,6 @@ use flexmesa_star::mesa_profile::{
     format_star_profile_text, resolve_star_profile_columns,
 };
 use flexmesa_star::pulse::default_fgong_header;
-use flexmesa_star::pulse_bvp::BvpEigenmode;
 use flexmesa_star::pulse_fgong::{get_fgong_data, PulseDataInput};
 use flexmesa_star::pulse_gyre_data::star_get_pulse_data_gyre;
 use flexmesa_star::pulse_write::{
@@ -1453,43 +1452,6 @@ pub(crate) fn apply_surface_corr(
             "unrecognized astero correction_scheme '{other}'"
         ))),
     }
-}
-
-/// Strictly monotonic mode matching (`set_to_closest` / `find_closest` in
-/// `astero/private/astero_support.f90:223-292`).
-#[allow(dead_code)]
-pub(crate) fn match_degree_modes(
-    targets: &[f64],
-    modes: &[BvpEigenmode],
-) -> Option<(Vec<f64>, Vec<f64>, Vec<isize>)> {
-    let mut mf = Vec::with_capacity(targets.len());
-    let mut mi = Vec::with_capacity(targets.len());
-    let mut mo = Vec::with_capacity(targets.len());
-    let mut jprev: Option<usize> = None;
-
-    for &target_nu in targets {
-        let start = jprev.map_or(0, |jp| jp + 1);
-        if start >= modes.len() {
-            return None;
-        }
-        let mut best_j = start;
-        let mut best_d = (modes[start].freq_uhz - target_nu).abs();
-        for (j, m) in modes.iter().enumerate().skip(start) {
-            let d = (m.freq_uhz - target_nu).abs();
-            if d < best_d {
-                best_d = d;
-                best_j = j;
-            }
-            if m.freq_uhz > target_nu {
-                break;
-            }
-        }
-        mf.push(modes[best_j].freq_uhz);
-        mi.push(modes[best_j].e_norm.max(1.0e-30));
-        mo.push(modes[best_j].n_pg as isize);
-        jprev = Some(best_j);
-    }
-    Some((mf, mi, mo))
 }
 
 #[cfg(test)]

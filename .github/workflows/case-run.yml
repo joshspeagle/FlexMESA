@@ -178,9 +178,15 @@ jobs:
       - name: Fetch verified physics and test bundles
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          WINDOW: ${{ inputs.window }}
         run: |
           command -v zstd >/dev/null || (sudo apt-get update && sudo apt-get install -y zstd)
           python3 src/flexmesa/data/fetch.py fetch --include-test-inputs
+          # The mid-run windows are an on-demand bundle: fetch it only when a
+          # window is requested (the plan job has checked the ref declares it).
+          if [ -n "$WINDOW" ]; then
+            python3 src/flexmesa/data/fetch.py fetch --bundle mesa_stepdump_windows
+          fi
           echo "FLEXMESA_DATA_DIR=$HOME/.cache/flexmesa/data" >> "$GITHUB_ENV"
           echo "MESA_DIR=$HOME/.cache/flexmesa/mesa_test_inputs" >> "$GITHUB_ENV"
 
@@ -224,7 +230,7 @@ jobs:
             compare)
               DUMP=$(python scripts/ci/case_run_inputs.py dump \
                 --suite "$SUITE" --case "$CASE" --window "$WINDOW" \
-                --mesa-dir "$MESA_DIR") || { echo "no step dump" > "$LOG"; STATUS=1; }
+                --mesa-dir "$FLEXMESA_DATA_DIR") || { echo "no step dump" > "$LOG"; STATUS=1; }
               if [ "$STATUS" -eq 0 ]; then
                 # Unsupported controls are ignored so the case reaches its
                 # first solver call; the case may not do what its inlist

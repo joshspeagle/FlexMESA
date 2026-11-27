@@ -946,3 +946,36 @@ fn test_gold_solver_iters_timestep_limit_overrides_relax_limit() {
         rep_gold.dt_next
     );
 }
+
+/// Upstream tests `iter >= max_tries` only after iteration 1 has run
+/// (`star_solver.f90:511`), so `solver_max_tries_before_reject = 0` still
+/// performs one iteration before giving up.
+#[test]
+fn test_zero_max_tries_runs_one_iteration_before_failing() {
+    let mut m = load_zams_model(
+        StarControls {
+            initial_mass: 1.0,
+            zbase: 0.02,
+            solver_max_tries_before_reject: 0,
+            ..StarControls::default()
+        },
+        StarJobControls::default(),
+    )
+    .expect("zams");
+    m.doing_first_model_of_run = false;
+    set_hydro_vars(&mut m, false, false).expect("hydro");
+    m.save_start_values().expect("start");
+    flexmesa_star::record_start_of_step_energy_integrals(&mut m);
+    m.lnd[3] += 0.2;
+    m.pack_xh();
+
+    match solve_henyey_step(&mut m, true, true) {
+        Err(StarError::StepFailure(info)) => {
+            assert_eq!(info.iterations, 1, "{info}");
+            assert!(info.detail.contains("did not converge"), "{info}");
+        }
+        other => {
+            panic!("expected a step failure after one iteration: {other:?}")
+        }
+    }
+}

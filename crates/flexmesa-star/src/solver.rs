@@ -322,7 +322,13 @@ fn solve_linear_henyey_system(
 ) -> Result<Vec<f64>, StarError> {
     rhs_buf.clear();
     rhs_buf.extend(sys.equ.iter().map(|&r| -r));
-    let res = if use_bcyclic && sys.nz >= 2 {
+    // Upstream factors and solves with `bcyclic_factor` / `bcyclic_solve`
+    // for every `nz`, including `nz == 1`, where the cyclic reduction loop is
+    // skipped and only the dense factorization of row 1 runs
+    // (`star_bcyclic.f90:96-171`, `star_solver.f90:1043-1056`). It has no
+    // sequential alternative; `use_bcyclic == false` keeps the block-Thomas
+    // path only as an API option.
+    let res = if use_bcyclic {
         solve_block_tridiag_bcyclic(
             sys.nvar, sys.nz, &sys.lblk, &sys.dblk, &sys.ublk, rhs_buf, true,
         )
@@ -701,25 +707,21 @@ pub fn solve_henyey_step(
     let mut dxsave = Vec::new();
     let mut trial_sys = HenyeySystem::new(0, 0, Vec::new());
 
-    if max_tries == 0 {
-        failure_detail = String::from("out of tries (max_tries == 0)");
-    } else {
-        while !passed_tol_tests {
-            iter_used = iter;
-            model.total_num_solver_iterations += 1;
+    // The iteration limit is tested only after an iteration has run
+    // (`star_solver.f90:511`), so `max_tries == 0` still runs iteration 1.
+    while !passed_tol_tests {
+        iter_used = iter;
+        model.total_num_solver_iterations += 1;
 
-            let (tol_rn, tol_mr) = active_residual_tolerances_with_gold(
-                &model.controls,
-                model.aux.doing_relax,
-                gold_level,
-                iter,
-            );
+        let (tol_rn, tol_mr) = active_residual_tolerances_with_gold(
+            &model.controls,
+            model.aux.doing_relax,
+            gold_level,
+            iter,
+        );
 
-            let mut soln = match solve_linear_henyey_system(
-                &sys,
-                use_bcyclic,
-                &mut rhs_buf,
-            ) {
+        let mut soln =
+            match solve_linear_henyey_system(&sys, use_bcyclic, &mut rhs_buf) {
                 Ok(v) => v,
                 Err(e) => {
                     failure_detail = format!("bad_matrix: {e}");
@@ -727,428 +729,442 @@ pub fn solve_henyey_step(
                 }
             };
 
-            let (cn_raw, mc_raw, corr_argmax) =
-                compute_model_correction_norms_in_solver(
-                    model,
-                    sys.nz,
-                    sys.nvar,
-                    &soln,
-                    Some((iter, tol_mc, &mut flailing)),
-                );
-            correction_norm = cn_raw.abs();
-            max_correction = mc_raw.abs();
-            corr_norm_min = corr_norm_min.min(correction_norm);
-            max_corr_min = max_corr_min.min(max_correction);
+        let (cn_raw, mc_raw, corr_argmax) =
+            compute_model_correction_norms_in_solver(
+                model,
+                sys.nz,
+                sys.nvar,
+                &soln,
+                Some((iter, tol_mc, &mut flailing)),
+            );
+        correction_norm = cn_raw.abs();
+        max_correction = mc_raw.abs();
+        corr_norm_min = corr_norm_min.min(correction_norm);
+        max_corr_min = max_corr_min.min(max_correction);
 
-            if !correction_norm.is_finite() || !max_correction.is_finite() {
-                failure_detail = String::from(
-                    "bad result from sizeB: correction info either NaN or Inf",
-                );
-                break;
-            }
-            // Written once sizeB has succeeded, as the MESA overlay does.
-            // The signed `max_correction` is `B(j,k)*correction_weight(j,k)`
-            // at the arg max (`solver_support.f90:447,492`). `mc_raw` is its
-            // magnitude and the weights are positive, so the sign is that of
-            // `soln` (upstream's `B`) there; the solver itself uses only the
-            // magnitude (`star_solver.f90:367`).
-            if crate::stepdump::active() {
-                let signed_max = match corr_argmax {
-                    Some((k, j)) if soln[k * sys.nvar + j] < 0.0 => -mc_raw,
-                    _ => mc_raw,
-                };
-                stepdump_line(
-                    model,
-                    sys.nvar,
-                    "CORR",
-                    &[iter as i64],
-                    &[cn_raw, signed_max],
-                    &stepdump_loc(corr_argmax),
-                );
-            }
-
-            if !model.controls.ignore_too_large_correction
-                && correction_norm
-                    > corr_param_factor * model.controls.scale_correction_norm
-                && !model.doing_first_model_of_run
-            {
-                failure_detail = String::from("avg corr too large");
-                break;
-            }
-
-            let mut correction_factor = 1.0_f64;
-            let mut temp_correction_factor = 1.0_f64;
-            if correction_norm * correction_factor
-                > model.controls.scale_correction_norm
-                && correction_norm > 0.0
-            {
-                correction_factor = correction_factor.min(
-                    model.controls.scale_correction_norm / correction_norm,
-                );
-            }
-            if max_correction * correction_factor > scale_max_correction
-                && max_correction > 0.0
-            {
-                temp_correction_factor = scale_max_correction / max_correction;
-            }
-            if iter > model.controls.solver_itermin_until_reduce_min_corr_coeff
-                && min_corr_coeff == 1.0
-                && model.controls.solver_reduced_min_corr_coeff < 1.0
-            {
-                min_corr_coeff = model.controls.solver_reduced_min_corr_coeff;
-            }
-            correction_factor = correction_factor.max(min_corr_coeff);
-            if !model
-                .controls
-                .ignore_min_corr_coeff_for_scale_max_correction
-            {
-                temp_correction_factor =
-                    temp_correction_factor.max(min_corr_coeff);
-            }
-            correction_factor = correction_factor.min(temp_correction_factor);
-
-            apply_bdomain(
+        if !correction_norm.is_finite() || !max_correction.is_finite() {
+            failure_detail = String::from(
+                "bad result from sizeB: correction info either NaN or Inf",
+            );
+            break;
+        }
+        // Written once sizeB has succeeded, as the MESA overlay does.
+        // The signed `max_correction` is `B(j,k)*correction_weight(j,k)`
+        // at the arg max (`solver_support.f90:447,492`). `mc_raw` is its
+        // magnitude and the weights are positive, so the sign is that of
+        // `soln` (upstream's `B`) there; the solver itself uses only the
+        // magnitude (`star_solver.f90:367`).
+        if crate::stepdump::active() {
+            let signed_max = match corr_argmax {
+                Some((k, j)) if soln[k * sys.nvar + j] < 0.0 => -mc_raw,
+                _ => mc_raw,
+            };
+            stepdump_line(
                 model,
                 sys.nvar,
-                &xh_start_buf,
-                &solver_dx,
+                "CORR",
+                &[iter as i64],
+                &[cn_raw, signed_max],
+                &stepdump_loc(corr_argmax),
+            );
+        }
+
+        if !model.controls.ignore_too_large_correction
+            && correction_norm
+                > corr_param_factor * model.controls.scale_correction_norm
+            && !model.doing_first_model_of_run
+        {
+            failure_detail = String::from("avg corr too large");
+            break;
+        }
+
+        let mut correction_factor = 1.0_f64;
+        let mut temp_correction_factor = 1.0_f64;
+        if correction_norm * correction_factor
+            > model.controls.scale_correction_norm
+            && correction_norm > 0.0
+        {
+            correction_factor = correction_factor
+                .min(model.controls.scale_correction_norm / correction_norm);
+        }
+        if max_correction * correction_factor > scale_max_correction
+            && max_correction > 0.0
+        {
+            temp_correction_factor = scale_max_correction / max_correction;
+        }
+        if iter > model.controls.solver_itermin_until_reduce_min_corr_coeff
+            && min_corr_coeff == 1.0
+            && model.controls.solver_reduced_min_corr_coeff < 1.0
+        {
+            min_corr_coeff = model.controls.solver_reduced_min_corr_coeff;
+        }
+        correction_factor = correction_factor.max(min_corr_coeff);
+        if !model
+            .controls
+            .ignore_min_corr_coeff_for_scale_max_correction
+        {
+            temp_correction_factor = temp_correction_factor.max(min_corr_coeff);
+        }
+        correction_factor = correction_factor.min(temp_correction_factor);
+
+        apply_bdomain(
+            model,
+            sys.nvar,
+            &xh_start_buf,
+            &solver_dx,
+            &sys.x_scale,
+            &mut soln,
+            &mut correction_factor,
+        );
+
+        let mut slope = 0.0_f64;
+        if min_corr_coeff < 1.0 {
+            grad_f.resize(sys.nz * sys.nvar, 0.0);
+            if let Err(e) = block_multiply_xa(
+                sys.nvar,
+                sys.nz,
+                &sys.lblk,
+                &sys.dblk,
+                &sys.ublk,
+                &sys.equ,
+                &mut grad_f,
+            ) {
+                failure_detail = format!("block_multiply_xa failed: {e}");
+                break;
+            }
+            slope = eval_slope(sys.nvar, sys.nz, &grad_f, &soln);
+            if !slope.is_finite() || slope > 0.0 {
+                slope = 0.0;
+                min_corr_coeff = 1.0;
+            }
+        }
+
+        if crate::stepdump::active() {
+            stepdump_line(
+                model,
+                sys.nvar,
+                "NEWTON",
+                &[iter as i64],
+                &[min_corr_coeff, correction_factor, slope],
+                &[],
+            );
+        }
+
+        // `adjust_correction` (`star/private/star_solver.f90:737-951`).
+        let skip_eval_f = min_corr_coeff == 1.0;
+        // `adjust_correction` saves `dxsave` only when it evaluates `f`
+        // and calls `apply_coeff(..., just_use_dx = skip_eval_f)`
+        // (`star/private/star_solver.f90:771-779, 815`): with the line
+        // search skipped, each try (including the model-1 rescue retries)
+        // adds to the current `solver_dx`.
+        let need_dxsave = !skip_eval_f;
+        if need_dxsave {
+            dxsave.clone_from(&solver_dx);
+        }
+        let fold = if skip_eval_f {
+            0.0
+        } else {
+            let f0 = eval_f(sys.nvar, sys.nz, &sys.equ);
+            if !f0.is_finite() {
+                failure_detail =
+                    String::from("adjust_correction failed in eval_f");
+                break;
+            }
+            f0
+        };
+        if crate::stepdump::active() {
+            stepdump_line(
+                model,
+                sys.nvar,
+                "FOLD",
+                &[iter as i64],
+                &[fold],
+                &[],
+            );
+        }
+
+        let eff_min_coeff = min_corr_coeff.min(correction_factor);
+        let mut alam = correction_factor;
+        let mut first_time = true;
+        let mut f2 = 0.0_f64;
+        let mut alam2 = 0.0_f64;
+        let mut accepted_coeff: Option<f64> = None;
+        let mut adjust_err = String::new();
+        // State of the last search iteration, for the exhausted-search exit
+        // (`star_solver.f90:944-951`).
+        let mut last_coeff_try = 0.0_f64;
+        let mut last_eval_ok = false;
+
+        for adj_iter in 1..=1000_usize {
+            let coeff_try = eff_min_coeff.max(alam);
+            last_coeff_try = coeff_try;
+            last_eval_ok = false;
+            apply_coeff(
+                sys.nvar,
+                sys.nz,
+                &dxsave,
+                &soln,
                 &sys.x_scale,
-                &mut soln,
-                &mut correction_factor,
+                coeff_try,
+                !need_dxsave,
+                &mut solver_dx,
             );
 
-            let mut slope = 0.0_f64;
-            if min_corr_coeff < 1.0 {
-                grad_f.resize(sys.nz * sys.nvar, 0.0);
-                if let Err(e) = block_multiply_xa(
-                    sys.nvar,
-                    sys.nz,
-                    &sys.lblk,
-                    &sys.dblk,
-                    &sys.ublk,
-                    &sys.equ,
-                    &mut grad_f,
-                ) {
-                    failure_detail = format!("block_multiply_xa failed: {e}");
-                    break;
+            let eq_res = set_vars_for_solver(
+                model,
+                include_chem,
+                &xh_start_buf,
+                &mut solver_dx,
+            )
+            .and_then(|()| {
+                eval_henyey_equations_into(model, include_chem, &mut trial_sys)
+            });
+
+            if let Err(e) = eq_res {
+                // `star/private/star_solver.f90:819`: rescue only the
+                // first step of a newly created model. `model_number`
+                // is already `model_number_old + 1` during the solve
+                // (`star/private/evolve.f90:2012`).
+                if alam > eff_min_coeff && model.model_number == 1 {
+                    alam = (alam / 10.0).max(eff_min_coeff);
+                    continue;
                 }
-                slope = eval_slope(sys.nvar, sys.nz, &grad_f, &soln);
-                if !slope.is_finite() || slope > 0.0 {
-                    slope = 0.0;
-                    min_corr_coeff = 1.0;
-                }
+                adjust_err =
+                    format!("adjust_correction failed in eval_equations: {e}");
+                break;
             }
 
+            last_eval_ok = true;
+
+            if eff_min_coeff == 1.0 {
+                std::mem::swap(&mut sys, &mut trial_sys);
+                accepted_coeff = Some(coeff_try);
+                break;
+            }
+
+            let f = eval_f(trial_sys.nvar, trial_sys.nz, &trial_sys.equ);
+            if !f.is_finite() {
+                if alam > eff_min_coeff {
+                    alam = (alam / 10.0).max(eff_min_coeff);
+                    continue;
+                }
+                adjust_err = String::from("equ norm is NaN or other bad num");
+                break;
+            }
+
+            let f_target = (0.5 * fold).max(fold + 1.0e-2 * coeff_try * slope);
             if crate::stepdump::active() {
                 stepdump_line(
                     model,
-                    sys.nvar,
-                    "NEWTON",
-                    &[iter as i64],
-                    &[min_corr_coeff, correction_factor, slope],
+                    trial_sys.nvar,
+                    "TRY",
+                    &[iter as i64, adj_iter as i64],
+                    &[alam, coeff_try, f, f_target],
                     &[],
                 );
             }
-
-            // `adjust_correction` (`star/private/star_solver.f90:737-951`).
-            let skip_eval_f = min_corr_coeff == 1.0;
-            // `adjust_correction` saves `dxsave` only when it evaluates `f`
-            // and calls `apply_coeff(..., just_use_dx = skip_eval_f)`
-            // (`star/private/star_solver.f90:771-779, 815`): with the line
-            // search skipped, each try (including the model-1 rescue retries)
-            // adds to the current `solver_dx`.
-            let need_dxsave = !skip_eval_f;
-            if need_dxsave {
-                dxsave.clone_from(&solver_dx);
-            }
-            let fold = if skip_eval_f {
-                0.0
-            } else {
-                let f0 = eval_f(sys.nvar, sys.nz, &sys.equ);
-                if !f0.is_finite() {
-                    failure_detail =
-                        String::from("adjust_correction failed in eval_f");
-                    break;
-                }
-                f0
-            };
-            if crate::stepdump::active() {
-                stepdump_line(
-                    model,
-                    sys.nvar,
-                    "FOLD",
-                    &[iter as i64],
-                    &[fold],
-                    &[],
-                );
+            if f <= f_target || alam <= eff_min_coeff {
+                std::mem::swap(&mut sys, &mut trial_sys);
+                accepted_coeff = Some(coeff_try);
+                break;
             }
 
-            let eff_min_coeff = min_corr_coeff.min(correction_factor);
-            let mut alam = correction_factor;
-            let mut first_time = true;
-            let mut f2 = 0.0_f64;
-            let mut alam2 = 0.0_f64;
-            let mut accepted_coeff: Option<f64> = None;
-            let mut adjust_err = String::new();
+            let next_alam = next_line_search_alam(
+                first_time,
+                slope,
+                f,
+                fold,
+                f2,
+                alam,
+                alam2,
+                eff_min_coeff,
+            );
+            first_time = false;
+            alam2 = alam;
+            f2 = f;
+            alam = next_alam;
+        }
 
-            for adj_iter in 1..=1000_usize {
-                let coeff_try = eff_min_coeff.max(alam);
-                apply_coeff(
-                    sys.nvar,
-                    sys.nz,
-                    &dxsave,
-                    &soln,
-                    &sys.x_scale,
-                    coeff_try,
-                    !need_dxsave,
-                    &mut solver_dx,
-                );
-
-                let eq_res = set_vars_for_solver(
-                    model,
-                    include_chem,
-                    &xh_start_buf,
-                    &mut solver_dx,
-                )
-                .and_then(|()| {
-                    eval_henyey_equations_into(
-                        model,
-                        include_chem,
-                        &mut trial_sys,
-                    )
-                });
-
-                if let Err(e) = eq_res {
-                    // `star/private/star_solver.f90:819`: rescue only the
-                    // first step of a newly created model. `model_number`
-                    // is already `model_number_old + 1` during the solve
-                    // (`star/private/evolve.f90:2012`).
-                    if alam > eff_min_coeff && model.model_number == 1 {
-                        alam = (alam / 10.0).max(eff_min_coeff);
-                        continue;
-                    }
-                    adjust_err = format!(
-                        "adjust_correction failed in eval_equations: {e}"
-                    );
-                    break;
-                }
-
-                if eff_min_coeff == 1.0 {
-                    std::mem::swap(&mut sys, &mut trial_sys);
-                    accepted_coeff = Some(coeff_try);
-                    break;
-                }
-
-                let f = eval_f(trial_sys.nvar, trial_sys.nz, &trial_sys.equ);
-                if !f.is_finite() {
-                    if alam > eff_min_coeff {
-                        alam = (alam / 10.0).max(eff_min_coeff);
-                        continue;
-                    }
-                    adjust_err =
-                        String::from("equ norm is NaN or other bad num");
-                    break;
-                }
-
-                let f_target =
-                    (0.5 * fold).max(fold + 1.0e-2 * coeff_try * slope);
-                if crate::stepdump::active() {
-                    stepdump_line(
-                        model,
-                        trial_sys.nvar,
-                        "TRY",
-                        &[iter as i64, adj_iter as i64],
-                        &[alam, coeff_try, f, f_target],
-                        &[],
-                    );
-                }
-                if f <= f_target || alam <= eff_min_coeff {
-                    std::mem::swap(&mut sys, &mut trial_sys);
-                    accepted_coeff = Some(coeff_try);
-                    break;
-                }
-
-                let next_alam = next_line_search_alam(
-                    first_time,
-                    slope,
-                    f,
-                    fold,
-                    f2,
-                    alam,
-                    alam2,
-                    eff_min_coeff,
-                );
-                first_time = false;
-                alam2 = alam;
-                f2 = f;
-                alam = next_alam;
-            }
-
-            let Some(coeff) = accepted_coeff else {
-                if !skip_eval_f {
+        // Exhausting all 1000 search iterations is not an error upstream:
+        // the loop ends with `ierr = 0` after the last trial, `solver_dx` is
+        // restored from `dxsave` and the solve continues with the last
+        // `coeff` and the residuals of the last trial
+        // (`star_solver.f90:944-951`).
+        if accepted_coeff.is_none() && adjust_err.is_empty() {
+            if last_eval_ok {
+                if need_dxsave {
                     solver_dx.clone_from(&dxsave);
                 }
-                let trace_model = model.model_number;
-                if crate::step_trace::enabled(trace_model) {
-                    if let Some((k_max, _, eq_name, var_name, v_max)) =
-                        worst_residual_site(model, &sys)
-                    {
-                        let mut jl = crate::step_trace::JsonLine::new(
-                            "solver_line_search_failed",
-                        );
-                        jl.field_usize("model", trace_model);
-                        jl.field_f64("dt", model.dt);
-                        jl.field_usize("iter", iter);
-                        jl.field_f64("rnorm", residual_norm);
-                        jl.field_f64("rmax", max_residual);
-                        jl.field_usize("zone", k_max);
-                        jl.field_str("eq", &eq_name);
-                        jl.field_str("var", &var_name);
-                        jl.field_f64("val", v_max);
-                        jl.emit();
-                    }
-                }
-                failure_detail = if adjust_err.is_empty() {
-                    format!("adjust_correction exhausted at iteration {iter}")
-                } else {
-                    adjust_err
-                };
-                break;
-            };
-
-            if coeff > model.controls.tiny_corr_factor * min_corr_coeff
-                || min_corr_coeff >= 1.0
-            {
-                tiny_corr_cnt = 0;
+                std::mem::swap(&mut sys, &mut trial_sys);
+                accepted_coeff = Some(last_coeff_try);
             } else {
-                tiny_corr_cnt += 1;
-            }
-
-            let (rn_raw, mr_raw, resid_loc) =
-                compute_residual_norms_with_argmax(model, sys.nvar, &sys.equ);
-            if !rn_raw.is_finite() || !mr_raw.is_finite() {
-                failure_detail = String::from(
-                    "residual_norm or max_residual is a bad number (NaN or Inf)",
-                );
-                break;
-            }
-            // Written once sizequ has succeeded, as the MESA overlay does.
-            if crate::stepdump::active() {
-                stepdump_line(
-                    model,
-                    sys.nvar,
-                    "RESID",
-                    &[iter as i64],
-                    &[coeff, rn_raw, mr_raw],
-                    &stepdump_loc(resid_loc),
+                // The last trial was a model-1 rescue retry whose equations
+                // were not evaluated; upstream continues with whatever the
+                // failed evaluation left in `equ` (undefined behaviour).
+                adjust_err = String::from(
+                    "adjust_correction exhausted after a failed evaluation",
                 );
             }
-            residual_norm = rn_raw.abs();
-            max_residual = mr_raw.abs();
-            resid_norm_min = resid_norm_min.min(residual_norm);
-            max_resid_min = max_resid_min.min(max_residual);
+        }
 
+        let Some(coeff) = accepted_coeff else {
+            if !skip_eval_f {
+                solver_dx.clone_from(&dxsave);
+            }
             let trace_model = model.model_number;
             if crate::step_trace::enabled(trace_model) {
-                let (kz, eqi, eq_n, var_n, vmax) = worst_residual_site(
-                    model, &sys,
-                )
-                .unwrap_or((0, 0, String::new(), String::new(), 0.0));
-                let (ckz, cvi) = corr_argmax.unwrap_or((0, 0));
-                let cvar_n = model.layout.variable_name(cvi, &model.iso_names);
-                let mut jl = crate::step_trace::JsonLine::new("solver_iter");
-                jl.field_usize("model", trace_model);
-                jl.field_usize("iter", iter);
-                jl.field_f64("coeff", coeff);
-                jl.field_f64("rnorm", residual_norm);
-                jl.field_f64("rmax", vmax);
-                jl.field_usize("rzone", kz);
-                jl.field_usize("req_idx", eqi);
-                jl.field_str("req", &eq_n);
-                jl.field_str("rvar", &var_n);
-                jl.field_f64("cnorm", correction_norm);
-                jl.field_f64("cmax", max_correction);
-                jl.field_usize("czone", ckz);
-                jl.field_str("cvar", &cvar_n);
-                jl.emit();
-            }
-
-            let disabled_resid_tests = tol_mr > 1.0e2 && tol_rn > 1.0e2;
-            let pass_resid_tests = !disabled_resid_tests
-                && max_residual <= tol_mr
-                && residual_norm <= tol_rn;
-            let pass_corr_without_coeff =
-                max_correction <= tol_mc && correction_norm <= tol_cn;
-            let pass_corr_with_coeff = max_correction <= tol_mc * coeff
-                && correction_norm <= tol_cn * coeff;
-            passed_tol_tests = (pass_resid_tests && pass_corr_with_coeff)
-                || (disabled_resid_tests && pass_corr_without_coeff);
-
-            last_corr_site = if pass_resid_tests || disabled_resid_tests {
-                corr_argmax.map(|(z, v)| {
-                    (z, v, soln.get(z * sys.nvar + v).copied().unwrap_or(0.0))
-                })
-            } else {
-                None
-            };
-
-            if !passed_tol_tests {
-                if iter >= max_tries {
-                    failure_detail = format!(
-                        "solver did not converge within {iter} iterations"
-                    );
-                    break;
-                } else if !first_iter && !model.doing_first_model_of_run {
-                    if correction_norm > corr_norm_jump_limit * corr_norm_min {
-                        failure_detail = String::from("avg correction jumped");
-                        break;
-                    } else if residual_norm
-                        > model.controls.resid_norm_jump_limit * resid_norm_min
-                    {
-                        failure_detail = String::from("avg residual jumped");
-                        break;
-                    } else if max_correction
-                        > max_corr_jump_limit * max_corr_min
-                    {
-                        failure_detail = String::from("max correction jumped");
-                        break;
-                    } else if max_residual
-                        > model.controls.max_resid_jump_limit * max_resid_min
-                    {
-                        failure_detail = String::from("max residual jumped");
-                        break;
-                    } else if tiny_corr_cnt
-                        >= model.controls.tiny_corr_coeff_limit
-                        && min_corr_coeff < 1.0
-                    {
-                        failure_detail = String::from("tiny corrections");
-                        break;
-                    }
-                } else if !model.doing_first_model_of_run
-                    && coeff < min_corr_coeff.min(correction_factor)
+                if let Some((k_max, _, eq_name, var_name, v_max)) =
+                    worst_residual_site(model, &sys)
                 {
-                    failure_detail = String::from("coeff too small");
+                    let mut jl = crate::step_trace::JsonLine::new(
+                        "solver_line_search_failed",
+                    );
+                    jl.field_usize("model", trace_model);
+                    jl.field_f64("dt", model.dt);
+                    jl.field_usize("iter", iter);
+                    jl.field_f64("rnorm", residual_norm);
+                    jl.field_f64("rmax", max_residual);
+                    jl.field_usize("zone", k_max);
+                    jl.field_str("eq", &eq_name);
+                    jl.field_str("var", &var_name);
+                    jl.field_f64("val", v_max);
+                    jl.emit();
+                }
+            }
+            failure_detail = if adjust_err.is_empty() {
+                format!("adjust_correction exhausted at iteration {iter}")
+            } else {
+                adjust_err
+            };
+            break;
+        };
+
+        if coeff > model.controls.tiny_corr_factor * min_corr_coeff
+            || min_corr_coeff >= 1.0
+        {
+            tiny_corr_cnt = 0;
+        } else {
+            tiny_corr_cnt += 1;
+        }
+
+        let (rn_raw, mr_raw, resid_loc) =
+            compute_residual_norms_with_argmax(model, sys.nvar, &sys.equ);
+        if !rn_raw.is_finite() || !mr_raw.is_finite() {
+            failure_detail = String::from(
+                "residual_norm or max_residual is a bad number (NaN or Inf)",
+            );
+            break;
+        }
+        // Written once sizequ has succeeded, as the MESA overlay does.
+        if crate::stepdump::active() {
+            stepdump_line(
+                model,
+                sys.nvar,
+                "RESID",
+                &[iter as i64],
+                &[coeff, rn_raw, mr_raw],
+                &stepdump_loc(resid_loc),
+            );
+        }
+        residual_norm = rn_raw.abs();
+        max_residual = mr_raw.abs();
+        resid_norm_min = resid_norm_min.min(residual_norm);
+        max_resid_min = max_resid_min.min(max_residual);
+
+        let trace_model = model.model_number;
+        if crate::step_trace::enabled(trace_model) {
+            let (kz, eqi, eq_n, var_n, vmax) = worst_residual_site(model, &sys)
+                .unwrap_or((0, 0, String::new(), String::new(), 0.0));
+            let (ckz, cvi) = corr_argmax.unwrap_or((0, 0));
+            let cvar_n = model.layout.variable_name(cvi, &model.iso_names);
+            let mut jl = crate::step_trace::JsonLine::new("solver_iter");
+            jl.field_usize("model", trace_model);
+            jl.field_usize("iter", iter);
+            jl.field_f64("coeff", coeff);
+            jl.field_f64("rnorm", residual_norm);
+            jl.field_f64("rmax", vmax);
+            jl.field_usize("rzone", kz);
+            jl.field_usize("req_idx", eqi);
+            jl.field_str("req", &eq_n);
+            jl.field_str("rvar", &var_n);
+            jl.field_f64("cnorm", correction_norm);
+            jl.field_f64("cmax", max_correction);
+            jl.field_usize("czone", ckz);
+            jl.field_str("cvar", &cvar_n);
+            jl.emit();
+        }
+
+        let disabled_resid_tests = tol_mr > 1.0e2 && tol_rn > 1.0e2;
+        let pass_resid_tests = !disabled_resid_tests
+            && max_residual <= tol_mr
+            && residual_norm <= tol_rn;
+        let pass_corr_without_coeff =
+            max_correction <= tol_mc && correction_norm <= tol_cn;
+        let pass_corr_with_coeff = max_correction <= tol_mc * coeff
+            && correction_norm <= tol_cn * coeff;
+        passed_tol_tests = (pass_resid_tests && pass_corr_with_coeff)
+            || (disabled_resid_tests && pass_corr_without_coeff);
+
+        last_corr_site = if pass_resid_tests || disabled_resid_tests {
+            corr_argmax.map(|(z, v)| {
+                (z, v, soln.get(z * sys.nvar + v).copied().unwrap_or(0.0))
+            })
+        } else {
+            None
+        };
+
+        if !passed_tol_tests {
+            if iter >= max_tries {
+                failure_detail =
+                    format!("solver did not converge within {iter} iterations");
+                break;
+            } else if !first_iter && !model.doing_first_model_of_run {
+                if correction_norm > corr_norm_jump_limit * corr_norm_min {
+                    failure_detail = String::from("avg correction jumped");
+                    break;
+                } else if residual_norm
+                    > model.controls.resid_norm_jump_limit * resid_norm_min
+                {
+                    failure_detail = String::from("avg residual jumped");
+                    break;
+                } else if max_correction > max_corr_jump_limit * max_corr_min {
+                    failure_detail = String::from("max correction jumped");
+                    break;
+                } else if max_residual
+                    > model.controls.max_resid_jump_limit * max_resid_min
+                {
+                    failure_detail = String::from("max residual jumped");
+                    break;
+                } else if tiny_corr_cnt >= model.controls.tiny_corr_coeff_limit
+                    && min_corr_coeff < 1.0
+                {
+                    failure_detail = String::from("tiny corrections");
                     break;
                 }
+            } else if !model.doing_first_model_of_run
+                && coeff < min_corr_coeff.min(correction_factor)
+            {
+                failure_detail = String::from("coeff too small");
+                break;
             }
-
-            if passed_tol_tests && iter + 1 < max_tries {
-                let itermin = model.controls.solver_itermin;
-                if force_another_iteration(model, iter, itermin) {
-                    passed_tol_tests = false;
-                    tiny_corr_cnt = 0;
-                    corr_norm_min = 1.0e99;
-                    resid_norm_min = 1.0e99;
-                    max_corr_min = 1.0e99;
-                    max_resid_min = 1.0e99;
-                }
-            }
-
-            iter += 1;
-            // `s% solver_iter = iter` (`star/private/star_solver.f90:609-610`).
-            model.aux.solver_iter = iter;
-            first_iter = false;
         }
+
+        if passed_tol_tests && iter + 1 < max_tries {
+            let itermin = model.controls.solver_itermin;
+            if force_another_iteration(model, iter, itermin) {
+                passed_tol_tests = false;
+                tiny_corr_cnt = 0;
+                corr_norm_min = 1.0e99;
+                resid_norm_min = 1.0e99;
+                max_corr_min = 1.0e99;
+                max_resid_min = 1.0e99;
+            }
+        }
+
+        iter += 1;
+        // `s% solver_iter = iter` (`star/private/star_solver.f90:609-610`).
+        model.aux.solver_iter = iter;
+        first_iter = false;
     }
 
     model.aux.doing_struct_burn_mix = saved_doing_sbm;

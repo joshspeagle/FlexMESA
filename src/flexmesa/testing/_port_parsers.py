@@ -64,7 +64,9 @@ _INCLUDE_STMT_RE = re.compile(
     flags=re.IGNORECASE,
 )
 _RUST_STRIP_RE = re.compile(
-    r"//[^\n]*|/\*[\s\S]*?\*/|\bb?r(#*)\"[\s\S]*?\"\1|b?\"(?:\\[\s\S]|[^\"\\])*\""
+    r"//[^\n]*|/\*[\s\S]*?\*/|\bb?r(#*)\"[\s\S]*?\"\1"
+    r"|b?\"(?:\\[\s\S]|[^\"\\])*\""
+    r"|(?:\bb)?'(?:\\(?:x[0-9a-fA-F]{2}|u\{[0-9a-fA-F_]+\}|.)|[^'\n\\])'"
 )
 _RUST_SYM_RE = re.compile(
     r"\b(?:pub(?:\([^)]*\))?\s+)?(?:(?:const|async)\s+)*"
@@ -143,7 +145,7 @@ def classify_upstream_relpath(relpath: str) -> str | None:
 
 
 def strip_rust_comments_and_strings(text: str) -> str:
-    """Replace Rust comments and string literals with whitespace.
+    """Replace Rust comments, string, and char literals with whitespace.
 
     Preserves all newline characters so line numbers remain invariant.
 

@@ -1940,6 +1940,12 @@ module = "plotting"
 kind = "invariant"
 
 [[tests]]
+path = "tests/test_port_parsers_rust_strip.py"
+language = "python"
+module = "tooling"
+kind = "invariant"
+
+[[tests]]
 path = "tests/test_py_bindings_161.py"
 language = "python"
 module = "tooling"

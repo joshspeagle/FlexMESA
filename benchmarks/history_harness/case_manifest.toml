@@ -612,6 +612,38 @@ reference_status = "no_reference_yet"
 reference_path = ""
 required_termination = "other_rsp_build_model"
 
+# Artifact comparison (#606): the case takes 0 steps, so it has no history. The
+# hook's file is compared with the committed MESA 26.4.1 copy. Every tolerance
+# is the print precision of the upstream format statement, one unit in the last
+# printed digit, not a fitted value (to be confirmed by the project lead before
+# the case is switched to reference_status = "mesa_26_4_1_artifact"):
+#   header       1pd26.16     17 significant digits
+#   model_*      1pd20.10     11 significant digits
+#   edge, table  f20.10       1e-10 absolute
+#   stdout_*     list-directed Teff, L (17 digits); E-format P, growth (5 digits)
+# Model numbers and table offsets must be equal.
+[cases.artifact]
+file = "7B_2nd_crossing.data"
+reference = "benchmarks/history_harness/reference_artifacts/star/rsp_check_2nd_crossing/7B_2nd_crossing.data"
+parser = "rsp_instability_strip"
+required_steps = 0
+stdout_reference = "benchmarks/history_harness/reference_artifacts/star/rsp_check_2nd_crossing/models_stdout.txt"
+
+[cases.artifact.tolerances]
+header = { sig_digits = 17 }
+model_period = { sig_digits = 11 }
+model_growth = { sig_digits = 11 }
+model_teff = { sig_digits = 11 }
+model_lum = { sig_digits = 11 }
+model_age = { sig_digits = 11 }
+edge = { abs = 1e-10 }
+table_teff = { abs = 1e-10 }
+table_lum = { abs = 1e-10 }
+stdout_teff = { sig_digits = 17 }
+stdout_lum = { sig_digits = 17 }
+stdout_period = { sig_digits = 5 }
+stdout_growth = { sig_digits = 5 }
+
 [[cases]]
 suite = "star"
 case = "rsp_gyre"

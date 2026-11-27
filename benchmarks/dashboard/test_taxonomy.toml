@@ -1487,6 +1487,12 @@ kind = "oracle"
 provenance = "benchmarks/fortran_mesa/adjust_mass_oracle/adjust_mass_4msun_26_4_1.tsv (#385)"
 
 [[tests]]
+path = "tests/test_artifact_compare.py"
+language = "python"
+module = "tooling"
+kind = "invariant"
+
+[[tests]]
 path = "tests/test_astero_empty_set_param.py"
 language = "python"
 module = "astero"

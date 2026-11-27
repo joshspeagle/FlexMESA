@@ -213,17 +213,18 @@ pub(crate) fn build_rsp2_ad_work(model: &mut StarModel) -> Rsp2AdWork {
                 wrap_eos_m1(model, k - 1, model.chi_rho[k - 1], I_CHI_RHO);
             let qq_00 = ct_00 / (d_00 * t_00 * cr_00);
             let qq_m1 = ct_m1 / (d_m1 * t_m1 * cr_m1);
-            let qq_div_cp = (qq_00 / cp_00) * alfa + (qq_m1 / cp_m1) * beta;
+            // `QQ_div_Cp_face = alfa*QQ_00/Cp_00 + beta*QQ_m1/Cp_m1`, left to
+            // right (`star/private/hydro_rsp2.f90:478`).
+            let qq_div_cp = alfa * qq_00 / cp_00 + beta * qq_m1 / cp_m1;
             let y1 = qq_div_cp * (peos_m1 - peos_00) - (lnt_m1 - lnt_00);
             let r_00 = StarAdOrder1::variable(model.ln_r[k], I_LNR_00).exp();
             let hp_00 = wrap_hp(model, k, I_HP_00);
-            let inv_rho_sum =
-                StarAdOrder1::ONE / d_00 + StarAdOrder1::ONE / d_m1;
-            let y2 = r_00
-                * r_00
-                * hp_00
-                * (2.0 * PI4 / model.dm_bar[k].max(1.0e-99))
-                / inv_rho_sum;
+            // `Y2 = 4d0*pi*pow2(r_00)*Hp_face*2d0/(1d0/d_00 + 1d0/d_m1)/dm_bar`
+            // left to right, with `dm_bar = s% dm_bar(k)` as is
+            // (`star/private/hydro_rsp2.f90:490`, #650).
+            let y2 = PI4 * r_00.pow2() * hp_00 * 2.0
+                / (1.0 / d_00 + 1.0 / d_m1)
+                / model.dm_bar[k];
             y1 * y2
         } else {
             let ga_00 = wrap_eos_00(model, k, model.grada[k], I_GRAD_AD);
@@ -232,11 +233,9 @@ pub(crate) fn build_rsp2_ad_work(model: &mut StarModel) -> Rsp2AdWork {
             let grad_ad_f = ga_00 * alfa + ga_m1 * beta;
             let dlnt = lnt_m1 - lnt_00;
             let dlnp = model.ln_peos_ad[k - 1].shift_m1() - model.ln_peos_ad[k];
-            let dlnt_dlnp = if dlnp.val == 0.0 {
-                StarAdOrder1::ZERO
-            } else {
-                dlnt / dlnp
-            };
+            // `dlnT_dlnP = dlnT/dlnP`, then `is_bad` sets `alt_Y_face = 0`
+            // (`star/private/hydro_rsp2.f90:512-523`, #650).
+            let dlnt_dlnp = dlnt / dlnp;
             let alt_y = if !dlnt_dlnp.val.is_finite() {
                 StarAdOrder1::ZERO
             } else if model.controls.use_ledoux_criterion
@@ -363,13 +362,18 @@ pub(crate) fn build_rsp2_ad_work(model: &mut StarModel) -> Rsp2AdWork {
             dv_div_r
         };
         let hp_cell = wrap_hp_cell(model, k);
-        let f_chi =
-            (16.0 / 3.0) * PI * (rsp2.alfam * alpha) / model.dm[k].max(1.0e-99);
-        let r_00_3 = r_00 * r_00 * r_00;
-        let r_p1_3 = r_p1 * r_p1 * r_p1;
-        let r6 = (r_00_3 * r_00_3 + r_p1_3 * r_p1_3) * 0.5;
-        let chi = d_00 * d_00 * r6 * dv_div_r * hp_cell * w_00 * f_chi;
-        let eq = chi * dv_div_r_tc * (PI4 / model.dm[k].max(1.0e-99));
+        // `compute_Chi_cell` (`star/private/hydro_rsp2.f90:736-741`):
+        // `f = (16d0/3d0)*pi*ALFAM_ALFA/s% dm(k)`,
+        // `r6_cell = 0.5d0*(pow6(r_00) + pow6(r_p1))`,
+        // `Chi_cell = f*rho2*r6_cell*d_v_div_r*Hp_cell*w_00`, left to right
+        // with `dm` as is (#650).
+        let alfam_alfa = rsp2.alfam * alpha;
+        let f_chi = (16.0 / 3.0) * PI * alfam_alfa / model.dm[k];
+        let r6 = 0.5 * (r_00.pow6() + r_p1.pow6());
+        let chi = f_chi * d_00.pow2() * r6 * dv_div_r * hp_cell * w_00;
+        // `Eq_cell = 4d0*pi*Chi_cell*d_v_div_r/s% dm(k)`
+        // (`star/private/hydro_rsp2.f90:770`).
+        let eq = PI4 * chi * dv_div_r_tc / model.dm[k];
         chi_ad[k] = chi;
         model.aux.eq_ad[k] = eq;
 
@@ -473,12 +477,19 @@ pub(crate) fn build_rsp2_ad_work(model: &mut StarModel) -> Rsp2AdWork {
             let w_f = w_00 * alfa + w_m1 * beta;
             lc_ad[k] = area * t_rho_f * pii_ad[k] * w_f * (X_ALFAC / X_ALFAS);
             if alpha * rsp2.alfat != 0.0 {
-                let rho2_f = d_00 * d_00 * alfa + d_m1 * d_m1 * beta;
+                // `compute_Lt` (`star/private/hydro_rsp2.f90:1131-1157`):
+                // `Lt = - alpha_alpha_t*area2*rho2_face*Hp_face*w_face*
+                // (etrb_m1 - etrb_00)/s% dm_bar(k)`, left to right with
+                // `dm_bar` as is (#650). The leading sign is exact, so it
+                // is applied to `alpha_alpha_t`.
+                let alpha_alpha_t = alpha * rsp2.alfat;
+                let area2 = area.pow2();
+                let rho2_f = alfa * d_00.pow2() + beta * d_m1.pow2();
                 let hp_00 = wrap_hp(model, k, I_HP_00);
-                let detrb = w_m1 * w_m1 - w_00 * w_00;
-                let c_lt = -(alpha * rsp2.alfat) / model.dm_bar[k].max(1.0e-99);
+                let detrb = w_m1.pow2() - w_00.pow2();
                 lt_ad[k] =
-                    (area * area * rho2_f) * (hp_00 * w_f * detrb) * c_lt;
+                    -alpha_alpha_t * area2 * rho2_f * hp_00 * w_f * detrb
+                        / model.dm_bar[k];
             }
         }
         model.aux.rsp.lc_rsp[k] = lc_ad[k].val;
@@ -497,7 +508,9 @@ pub(crate) fn build_rsp2_ad_work(model: &mut StarModel) -> Rsp2AdWork {
             } else {
                 r_00
             };
-            (chi_m1 - chi_ad[k]) / r_tc * (PI4 / model.dm_bar[k].max(1.0e-99))
+            // `Uq_face = 4d0*pi*(Chi_m1 - Chi_00)/(r_00*s% dm_bar(k))`
+            // (`star/private/hydro_rsp2.f90:799`, #650).
+            PI4 * (chi_m1 - chi_ad[k]) / (r_tc * model.dm_bar[k])
         };
     }
 

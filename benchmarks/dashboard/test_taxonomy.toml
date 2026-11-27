@@ -1564,6 +1564,12 @@ module = "tooling"
 kind = "invariant"
 
 [[tests]]
+path = "tests/test_case_run_inputs.py"
+language = "python"
+module = "tooling"
+kind = "invariant"
+
+[[tests]]
 path = "tests/test_ci_shards.py"
 language = "python"
 module = "tooling"

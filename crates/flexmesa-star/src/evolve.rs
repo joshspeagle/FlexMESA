@@ -490,8 +490,8 @@ pub fn star_evolve_step_part1(
         // `prepare_for_new_step` resets `retry_cnt` once per step (`evolve.f90:1938`).
         model.step_retry_cnt = 0;
         // After `prepare_for_new_step` on the first try
-        // (`star/private/evolve.f90:390-396`).
-        crate::tdc_hydro::set_mlt_option_for_new_step(model);
+        // (`star/private/evolve.f90:386-396`).
+        set_step_switches_for_new_step(model);
     }
     model.dt = dt_try;
     model.solver_first_try_of_step = first_try;
@@ -1008,6 +1008,8 @@ pub(crate) fn star_evolve_step_outcome_checked(
         let prev_dt_old = model.dt_old;
         snapshot_step_old_extras(model);
         model.save_old_values();
+        // `do_step_part1` runs for `RSP` too (`star/private/evolve.f90:386-396`).
+        set_step_switches_for_new_step(model);
         model.generations = 2;
         model.dt_old = prev_dt_old;
         model.aux.rsp.time_old_sec = model.aux.rsp.time_sec;
@@ -1241,8 +1243,8 @@ pub(crate) fn star_evolve_step_outcome_checked(
     }
 
     // After `prepare_for_new_step` on the first try
-    // (`star/private/evolve.f90:390-396`).
-    crate::tdc_hydro::set_mlt_option_for_new_step(model);
+    // (`star/private/evolve.f90:386-396`).
+    set_step_switches_for_new_step(model);
 
     let dt_floor = model.controls.min_timestep_limit.max(0.0);
     let max_retries = model.controls.ts_stop.retry_limit;
@@ -1939,6 +1941,17 @@ struct PreAttemptScalars {
     max_years_for_timestep: f64,
     max_timestep: f64,
     accreted_material_j: f64,
+}
+
+/// The per-step switches `do_step_part1` applies on a step's first try,
+/// after `prepare_for_new_step`, while `model_number` is still the previous
+/// model's: `using_velocity_time_centering`, then `MLT_option`
+/// (`star/private/evolve.f90:386-396`).
+fn set_step_switches_for_new_step(model: &mut StarModel) {
+    model
+        .controls
+        .set_velocity_time_centering_for_new_step(model.model_number);
+    crate::tdc_hydro::set_mlt_option_for_new_step(model);
 }
 
 fn sync_time_sec_from_age(model: &mut StarModel) {

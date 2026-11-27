@@ -52,7 +52,7 @@ pub fn calc_ptot_cell_ad(
         p_ad = p_ad + eval_rsp2_ptrb_cell_ad(model, k, shift_m1);
     }
     if !skip_mlt_pturb && model.controls.mlt_pturb_factor > 0.0 && k > 0 {
-        let vc_old = model.aux.mlt_vc_old.get(k).copied().unwrap_or(0.0);
+        let vc_old = model.aux.mlt_vc_old[k];
         if vc_old > 0.0 {
             let vc2_fac =
                 model.controls.mlt_pturb_factor * flexmesa_math::pow2(vc_old);

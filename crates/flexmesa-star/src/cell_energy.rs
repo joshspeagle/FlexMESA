@@ -301,8 +301,7 @@ pub fn get_dke_dt_dpe_dt(model: &StarModel, k: usize, dt: f64) -> DkeDpeDt {
     let has_p1 = k + 1 < nz;
 
     // Potential energy.
-    let ln_r_start =
-        |j: usize| model.ln_r_start.get(j).copied().unwrap_or(model.ln_r[j]);
+    let ln_r_start = |j: usize| model.ln_r_start[j];
     let r_start_p1 = if has_p1 {
         flexmesa_math::exp(ln_r_start(k + 1))
     } else {

@@ -126,9 +126,7 @@ pub fn eval_rsp2_ptrb_cell_ad(
     // `s% using_velocity_time_centering` is the per-step state, which the
     // control `steps_before_use_velocity_time_centering` switches on
     // (`star/private/star_utils.f90:3344-3345`).
-    let time_center = model
-        .controls
-        .is_velocity_time_centered(model.model_number_old)
+    let time_center = model.controls.using_velocity_time_centering
         && model.controls.include_p_in_velocity_time_centering;
     if time_center {
         let p_theta = model.controls.p_theta_for_velocity_time_centering;

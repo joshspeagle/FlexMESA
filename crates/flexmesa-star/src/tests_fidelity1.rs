@@ -1338,6 +1338,73 @@ fn test_set_mlt_option_for_new_step_switches_and_persists() {
     assert_eq!(model.controls.mlt_option, MltOption::Cox);
 }
 
+/// `s% using_velocity_time_centering` is `.false.` for a new star
+/// (`star/private/init.f90:347`) and `do_step_part1` only ever switches it on,
+/// at `steps_before_use_velocity_time_centering == 0` or once
+/// `model_number >= steps_before_use_velocity_time_centering > 0`
+/// (`star/private/evolve.f90:386-389`).
+#[test]
+fn test_velocity_time_centering_is_step_state_switched_on_only() {
+    let mut c = StarControls::default();
+    assert!(!c.using_velocity_time_centering);
+    c.steps_before_use_velocity_time_centering = -1;
+    c.set_velocity_time_centering_for_new_step(1000);
+    assert!(!c.using_velocity_time_centering);
+    c.steps_before_use_velocity_time_centering = 5;
+    c.set_velocity_time_centering_for_new_step(4);
+    assert!(!c.using_velocity_time_centering);
+    c.set_velocity_time_centering_for_new_step(5);
+    assert!(c.using_velocity_time_centering);
+    c.steps_before_use_velocity_time_centering = -1;
+    c.set_velocity_time_centering_for_new_step(6);
+    assert!(c.using_velocity_time_centering);
+    let mut c0 = StarControls {
+        steps_before_use_velocity_time_centering: 0,
+        ..StarControls::default()
+    };
+    assert!(!c0.using_velocity_time_centering);
+    c0.set_velocity_time_centering_for_new_step(0);
+    assert!(c0.using_velocity_time_centering);
+}
+
+/// `allocate_star_info_arrays` sets `alpha_mlt(1:nz) = mixing_length_alpha`
+/// (`star/private/alloc.f90:980-984`).
+#[test]
+fn test_new_model_alpha_mlt_is_mixing_length_alpha() {
+    let model = build_solar_test_model(false);
+    let alpha = model.controls.mixing_length_alpha;
+    assert!(alpha > 0.0);
+    let fresh = StarModel::new(
+        4,
+        model.chem_id.clone(),
+        model.job.clone(),
+        model.controls.clone(),
+    );
+    assert!(fresh.aux.mixing.alpha_mlt.iter().all(|&a| a == alpha));
+}
+
+/// The equations index `ln_r_start` and `mlt_vc_old` directly; a short array
+/// is an explicit error at assembly, not a silent `r` or zero.
+#[test]
+fn test_assembly_errors_on_short_start_of_step_arrays() {
+    let mut model = build_solar_test_model(false);
+    model.ln_r_start.clone_from(&model.ln_r);
+    let nz = model.nz;
+    model.aux.mlt_vc_old.resize(nz, 0.0);
+    assert!(crate::hydro_eqns::check_start_of_step_arrays(&model).is_ok());
+    model.aux.mlt_vc_old.truncate(nz - 1);
+    let err = crate::hydro_eqns::check_start_of_step_arrays(&model)
+        .expect_err("short mlt_vc_old");
+    assert!(err.to_string().contains("mlt_vc_old"), "{err}");
+    model.aux.mlt_vc_old.resize(nz, 0.0);
+    model.ln_r_start.truncate(nz - 1);
+    let mut sys = HenyeySystem::new(0, 0, Vec::new());
+    let err =
+        crate::hydro_eqns::assemble_henyey_system(&mut model, false, &mut sys)
+            .expect_err("short ln_r_start");
+    assert!(err.to_string().contains("ln_r_start"), "{err}");
+}
+
 /// `eval_simple_PdV_work` with `mlt_Pturb_factor > 0` and velocity time
 /// centering at an interior cell: `Ptot` is the face-averaged
 /// `mlt_Pturb_factor*pow2(mlt_vc_old(k))*get_rho_face(s,k)/3` blended with

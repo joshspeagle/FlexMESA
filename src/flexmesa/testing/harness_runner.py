@@ -33,9 +33,11 @@ from flexmesa.testing._case_verdict import (
     evaluate_case_record,
     extract_reference_run_stats,
     is_unsupported_controls_rejection,
+    load_full_reference_history,
     numbered_track_files,
     resolve_binary_component_reference_paths,
     resolve_full_reference_history_path,
+    resolve_full_reference_history_paths,
     resolve_reference_history_path,
 )
 
@@ -47,6 +49,7 @@ __all__ = [
     "evaluate_case_record",
     "extract_reference_run_stats",
     "is_unsupported_controls_rejection",
+    "load_full_reference_history",
     "locate_track_histories",
     "locate_written_history",
     "proc_rss_gb",
@@ -54,6 +57,7 @@ __all__ = [
     "resolve_case_dir",
     "resolve_effective_numerics_mode",
     "resolve_full_reference_history_path",
+    "resolve_full_reference_history_paths",
     "resolve_mesa_test_root",
     "resolve_reference_history_path",
     "run_case_with_diagnostic",

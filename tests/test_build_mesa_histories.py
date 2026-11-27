@@ -116,3 +116,44 @@ def test_overlapping_model_numbers_across_files_raise(
             build.history_source_files(tmp_path, "history.data", "star"),
             "star",
         )
+
+
+def _stored_run(root: pathlib.Path, with_map: bool) -> None:
+    run = root / "runs" / "star" / "rsp_synth"
+    _write_history(run / "LOGS" / "history.data", [1, 10, 20])
+    if with_map:
+        _write_history(run / "LOGS" / "map_history.data", [30, 40])
+    (run / "case_result.json").write_text(
+        '{"history_files": ["LOGS/history.data"]}', encoding="utf-8"
+    )
+
+
+def test_full_reference_paths_list_map_history_after_history(
+    tmp_path: pathlib.Path,
+) -> None:
+    from flexmesa.testing import _case_verdict as cv
+
+    _stored_run(tmp_path, with_map=True)
+    paths = cv.resolve_full_reference_history_paths(
+        "star", "rsp_synth", root_dir=tmp_path
+    )
+    assert [p.name for p in paths] == ["history.data", "map_history.data"]
+    tbl = cv.load_full_reference_history(paths)
+    assert tbl.num_rows == 5
+    assert tbl.columns["model_number"].tolist() == [1, 10, 20, 30, 40]
+    first = cv.resolve_full_reference_history_path(
+        "star", "rsp_synth", root_dir=tmp_path
+    )
+    assert first == paths[0]
+
+
+def test_full_reference_paths_without_map_history_are_one_file(
+    tmp_path: pathlib.Path,
+) -> None:
+    from flexmesa.testing import _case_verdict as cv
+
+    _stored_run(tmp_path, with_map=False)
+    paths = cv.resolve_full_reference_history_paths(
+        "star", "rsp_synth", root_dir=tmp_path
+    )
+    assert [p.name for p in paths] == ["history.data"]

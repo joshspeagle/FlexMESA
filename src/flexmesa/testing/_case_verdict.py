@@ -308,11 +308,11 @@ def resolve_binary_component_reference_paths(
     return found
 
 
-def resolve_full_reference_history_path(
+def resolve_full_reference_history_paths(
     suite: str,
     case: str,
     root_dir: pathlib.Path | None = None,
-) -> pathlib.Path | None:
+) -> list[pathlib.Path]:
     """Locate the un-thinned MESA ``26.4.1`` history file in ``runs/``.
 
     Only consults the host ``mesa_histories`` cache when ``root_dir`` is
@@ -325,8 +325,10 @@ def resolve_full_reference_history_path(
         root_dir: Optional root directory override.
 
     Returns:
-        Path to the full MESA ``history.data`` or ``binary_history.data`` file
-        if available, else ``None``.
+        Paths of the full MESA history files of the final stage in model
+        order (``history.data`` then ``map_history.data`` where MESA switched
+        files, ``DECISIONS #78``), or ``binary_history.data``; ``[]`` if none
+        is available.
     """
     repo = case_manifest.repo_root()
     if root_dir is not None and root_dir.resolve() != repo.resolve():
@@ -344,7 +346,7 @@ def resolve_full_reference_history_path(
         if suite == "binary":
             cand = case_root / "binary_history.data"
             if cand.is_file():
-                return cand
+                return [cand]
             continue
         result_json = case_root / "case_result.json"
         if result_json.is_file():
@@ -354,13 +356,77 @@ def resolve_full_reference_history_path(
                 if isinstance(hfiles, list) and hfiles:
                     cand = case_root / str(hfiles[-1])
                     if cand.is_file():
-                        return cand
+                        paths = [cand]
+                        if suite == "star":
+                            extra = cand.parent / "map_history.data"
+                            if extra.is_file():
+                                paths.append(extra)
+                        return paths
             except (OSError, ValueError):
                 pass
         cand = case_root / "LOGS" / "history.data"
         if cand.is_file():
-            return cand
-    return None
+            paths = [cand]
+            extra = cand.parent / "map_history.data"
+            if suite == "star" and extra.is_file():
+                paths.append(extra)
+            return paths
+    return []
+
+
+def resolve_full_reference_history_path(
+    suite: str,
+    case: str,
+    *,
+    root_dir: pathlib.Path | None = None,
+) -> pathlib.Path | None:
+    """Return the first full MESA history file of a case, if available.
+
+    Args:
+        suite: Suite name.
+        case: Upstream test-case directory name.
+        root_dir: Optional root directory override.
+
+    Returns:
+        The first path of `resolve_full_reference_history_paths`, else
+        ``None``. Use that function for a run whose history spans files.
+    """
+    paths = resolve_full_reference_history_paths(suite, case, root_dir=root_dir)
+    return paths[0] if paths else None
+
+
+def load_full_reference_history(
+    paths: list[pathlib.Path],
+) -> history_compare.HistoryTable:
+    """Load and concatenate the history files of one MESA run in order.
+
+    Args:
+        paths: Non-empty ordered paths from
+            `resolve_full_reference_history_paths`.
+
+    Returns:
+        One table with ``float64`` columns of shape ``(n_models,)``.
+
+    Raises:
+        ValueError: If the files do not share one column set.
+    """
+    tables = [history_compare.load_history_file(p) for p in paths]
+    first = tables[0]
+    if len(tables) == 1:
+        return first
+    for tbl in tables[1:]:
+        if list(tbl.columns) != list(first.columns):
+            raise ValueError("history files of one run differ in columns")
+    cols = {
+        name: np.concatenate([t.columns[name] for t in tables])
+        for name in first.columns
+    }
+    return history_compare.HistoryTable(
+        columns=cols,
+        num_rows=sum(t.num_rows for t in tables),
+        provenance_comment=first.provenance_comment,
+        mesa_version_number=first.mesa_version_number,
+    )
 
 
 TRACK_REFERENCE_RE = re.compile(r"^track_(\d{4})\.data$")
@@ -558,13 +624,13 @@ def _augment_ref_columns(
         return ref_tbl
     if all(col in ref_tbl.columns for col in AUGMENT_REFERENCE_COLUMNS):
         return ref_tbl
-    full_path = resolve_full_reference_history_path(
+    full_paths = resolve_full_reference_history_paths(
         spec.suite, spec.case, root_dir=root_dir
     )
-    if full_path is None:
+    if not full_paths:
         return ref_tbl
     try:
-        full_tbl = history_compare.load_history_file(full_path)
+        full_tbl = load_full_reference_history(full_paths)
     except (OSError, ValueError):
         return ref_tbl
     if (

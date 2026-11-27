@@ -1,0 +1,24 @@
+! create_initial_model with new_net_name = pp_and_cno_extras.net.
+! Mirrors the setup of relax_154 test_create_initial_model_with_change_net:
+! 0.01 Msun, 3.5d10 cm, initial_z = 1d-4, Freedman11 low-T opacities.
+&star_job
+   create_initial_model = .true.
+   change_net = .true.
+   new_net_name = 'pp_and_cno_extras.net'
+   mass_in_gm_for_create_initial_model = 1.9892d31
+   radius_in_cm_for_create_initial_model = 3.5d10
+   initial_model_relax_num_steps = 0
+   pgstar_flag = .false.
+/ ! end of star_job namelist
+
+&eos
+/ ! end of eos namelist
+
+&kap
+   Zbase = 1d-4
+   kap_lowT_prefix = 'lowT_Freedman11'
+/ ! end of kap namelist
+
+&controls
+   initial_z = 1d-4
+/ ! end of controls namelist

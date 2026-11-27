@@ -1,0 +1,24 @@
+! create_pre_main_sequence_model for the 15M_dynamo setup (15 Msun, Z = 0.02),
+! with only the controls that relax_154 sets for "15M_dynamo pre_ms".
+&star_job
+   create_pre_main_sequence_model = .true.
+   pre_ms_relax_num_steps = 0
+   pgstar_flag = .false.
+/ ! end of star_job namelist
+
+&eos
+/ ! end of eos namelist
+
+&kap
+   use_Type2_opacities = .true.
+   Zbase = 0.02
+/ ! end of kap namelist
+
+&controls
+   initial_mass = 15
+   initial_z = 0.02
+   initial_y = -1
+   mlt_option = 'Cox'
+   mixing_length_alpha = 1.6
+   max_dq = 4d-3
+/ ! end of controls namelist

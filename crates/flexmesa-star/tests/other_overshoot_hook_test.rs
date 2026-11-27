@@ -257,7 +257,7 @@ fn test_other_overshoot_missing_null_oob_and_nan_fail_loudly() {
 }
 
 #[test]
-fn test_other_overshoot_custom_hook_and_anchor_cache_parity() {
+fn test_other_overshoot_custom_hook_and_anchor_cache_consistency() {
     let mut model = load_convective_core_zams("none");
     assert!(
         !model.aux.mixing.conv_bdy_loc.is_empty(),

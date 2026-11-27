@@ -31,7 +31,7 @@ fn zams_model() -> StarModel {
 }
 
 /// `q(1) = 1`, `q(k) = q(k-1) - dq(k-1)` (`set_qs`, `star_utils.f90:729-737`).
-fn set_qs_reference(dq: &[f64]) -> Vec<f64> {
+fn set_qs_helper(dq: &[f64]) -> Vec<f64> {
     let mut q = vec![1.0; dq.len()];
     for k in 1..dq.len() {
         q[k] = q[k - 1] - dq[k - 1];
@@ -45,7 +45,7 @@ fn step_driver_post_adjust_set_vars_rebuilds_q_m_dm_from_set_qs() {
     model.mstar_dot = -1.0e-3 * M_SUN / SECYER;
     do_adjust_mass_step(&mut model, SECYER).expect("do_adjust_mass_step");
     let nz = model.nz;
-    let q_ref = set_qs_reference(&model.dq[..nz]);
+    let q_ref = set_qs_helper(&model.dq[..nz]);
     for k in 0..nz {
         assert_eq!(model.q[k].to_bits(), q_ref[k].to_bits(), "q at k={k}");
         assert_eq!(
@@ -84,7 +84,7 @@ fn do_adjust_mass_entry_returns_q_as_revise_q_and_dq_built_it() {
         .expect("do_adjust_mass");
     let nz = model.nz;
     assert_eq!(model.q[nz - 1].to_bits(), model.dq[nz - 1].to_bits());
-    let q_ref = set_qs_reference(&model.dq[..nz]);
+    let q_ref = set_qs_helper(&model.dq[..nz]);
     // `set_qs` would change `q` at rounding level, so this entry point has not
     // run it.
     let moved = (0..nz)

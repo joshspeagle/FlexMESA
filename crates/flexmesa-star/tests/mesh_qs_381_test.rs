@@ -41,7 +41,7 @@ fn test_set_qs_is_cumulative_from_the_surface_when_q_stays_in_unit_interval() {
 }
 
 #[test]
-fn test_set_qs_fallback_meets_at_first_maximum_like_fortran_maxloc() {
+fn test_set_qs_fallback_meets_at_first_maximum() {
     // q(3) = 1 - 0.75 - 0.75 < 0, so upstream redoes q from both ends,
     // meeting at maxloc(dq) = the first of the two equal maxima (k = 1).
     // Surface inward: q(1) = 1. Center outward: q(3) = 0.125,

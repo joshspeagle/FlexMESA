@@ -231,7 +231,8 @@ kind = "invariant"
 path = "crates/flexmesa-binary/tests/star_plus_point_mass_test.rs"
 language = "rust"
 module = "binary"
-kind = "invariant"
+kind = "oracle"
+provenance = "benchmarks/history_harness/reference_histories/binary/star_plus_point_mass.data (MESA r26.4.1, gfortran 15.2.0, SDK x86_64-linux-26.6.1, date 20261115, model 100; #446, #594)"
 
 [[tests]]
 path = "crates/flexmesa-binary/tests/tier5_coupled_suite.rs"

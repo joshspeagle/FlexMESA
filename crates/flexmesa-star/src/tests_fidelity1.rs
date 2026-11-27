@@ -1299,6 +1299,45 @@ fn test_set_viscosity_vars_tdc_stores_outputs() {
     assert_eq!(model.aux.rsp.uq_rsp[k], 0.0);
 }
 
+/// `set_viscosity_vars_TDC` with velocity time centering on and a short
+/// `ln_r_start` returns an error: `wrap_opt_time_center_r_*` read
+/// `s% r_start(k)` (`star/private/auto_diff_support.f90:1121-1152`) and a
+/// missing value has no upstream counterpart.
+#[test]
+fn test_set_viscosity_vars_tdc_errors_on_short_r_start_when_time_centred() {
+    let mut model = tdc_viscosity_test_model();
+    model.controls.using_velocity_time_centering = true;
+    model.ln_r_start.clone_from(&model.ln_r);
+    crate::tdc_hydro::set_viscosity_vars_tdc(&mut model).expect("tdc vars");
+    model.ln_r_start.truncate(model.nz - 1);
+    let err = crate::tdc_hydro::set_viscosity_vars_tdc(&mut model)
+        .expect_err("short ln_r_start");
+    assert!(err.to_string().contains("r_start"), "{err}");
+}
+
+/// `do_step_part1` sets `s% MLT_option` to `Cox` before
+/// `steps_before_use_TDC` and to `TDC` from it on, outside a relax only,
+/// and the value persists between steps (`star/private/evolve.f90:390-396`).
+#[test]
+fn test_set_mlt_option_for_new_step_switches_and_persists() {
+    let mut model = tdc_viscosity_test_model();
+    model.controls.steps_before_use_tdc = 5;
+    model.model_number = 4;
+    crate::tdc_hydro::set_mlt_option_for_new_step(&mut model);
+    assert_eq!(model.controls.mlt_option, MltOption::Cox);
+    model.model_number = 5;
+    model.aux.doing_relax = true;
+    crate::tdc_hydro::set_mlt_option_for_new_step(&mut model);
+    assert_eq!(model.controls.mlt_option, MltOption::Cox);
+    model.aux.doing_relax = false;
+    crate::tdc_hydro::set_mlt_option_for_new_step(&mut model);
+    assert_eq!(model.controls.mlt_option, MltOption::Tdc);
+    model.controls.steps_before_use_tdc = 0;
+    model.controls.mlt_option = MltOption::Cox;
+    crate::tdc_hydro::set_mlt_option_for_new_step(&mut model);
+    assert_eq!(model.controls.mlt_option, MltOption::Cox);
+}
+
 /// `eval_simple_PdV_work` with `mlt_Pturb_factor > 0` and velocity time
 /// centering at an interior cell: `Ptot` is the face-averaged
 /// `mlt_Pturb_factor*pow2(mlt_vc_old(k))*get_rho_face(s,k)/3` blended with

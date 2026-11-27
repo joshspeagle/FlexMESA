@@ -32,24 +32,42 @@ use crate::star_ad::{
     I_V_P1,
 };
 
-/// `s% MLT_option` for the current step: with `steps_before_use_TDC > 0`
-/// outside a relax, `do_step_part1` sets it to `TDC` once
-/// `model_number >= steps_before_use_TDC` and to `Cox` before
-/// (`star/private/evolve.f90:390-396`), tested before `model_number`
-/// advances, as in `do1_mlt_2`.
-#[must_use]
-pub(crate) fn effective_mlt_option(model: &StarModel) -> MltOption {
+/// Switches `s% MLT_option` at the start of a step's first try: with
+/// `steps_before_use_TDC > 0` outside a relax, `do_step_part1` sets it to
+/// `TDC` once `model_number >= steps_before_use_TDC` and to `Cox` before
+/// (`star/private/evolve.f90:390-396`). Callers run it after
+/// `prepare_for_new_step` and before `prepare_for_new_try` advances
+/// `model_number`. The value persists, as upstream's does: a relax keeps the
+/// last value set (and `relax.f90:3995-3996` turns `TDC` into `Cox` for its
+/// duration), and at load the inlist value is in force.
+pub(crate) fn set_mlt_option_for_new_step(model: &mut StarModel) {
     if !model.aux.doing_relax && model.controls.steps_before_use_tdc > 0 {
-        if (model.model_number_old as isize)
+        model.controls.mlt_option = if (model.model_number as isize)
             >= model.controls.steps_before_use_tdc
         {
             MltOption::Tdc
         } else {
             MltOption::Cox
-        }
-    } else {
-        model.controls.mlt_option
+        };
     }
+}
+
+/// `ln(r_start)` must cover every zone whenever the velocity time-centred
+/// wrappers read `s% r_start(k)`; a missing or short array has no upstream
+/// value. Checked by [`set_viscosity_vars_tdc`], which `set_hydro_vars` runs
+/// under the same conditions as every TDC term of the equations and before
+/// `do1_mlt_2` (`star/private/hydro_vars.f90:602-610`).
+fn check_r_start(model: &StarModel) -> Result<(), StarError> {
+    if time_centered(model) && model.ln_r_start.len() < model.nz {
+        return Err(StarError::MicrophysicsError(format!(
+            "TDC velocity time centring needs r_start for every zone \
+             (`star/private/auto_diff_support.f90:1121-1152`), but \
+             ln_r_start has {} entries for nz = {}",
+            model.ln_r_start.len(),
+            model.nz
+        )));
+    }
+    Ok(())
 }
 
 /// Upstream's `k > s% nz - s% TDC_num_innermost_cells_forced_nonturbulent`
@@ -74,8 +92,7 @@ fn in_forced_outer(model: &StarModel, k: usize) -> bool {
 
 /// `ALFAM_ALFA` (`star/private/tdc_hydro.f90:166-171,249-254`).
 fn alfam_alfa(model: &StarModel) -> f64 {
-    if effective_mlt_option(model) == MltOption::Tdc
-        && !model.controls.rsp2_flag
+    if model.controls.mlt_option == MltOption::Tdc && !model.controls.rsp2_flag
     {
         model.controls.tdc_alpha_m * model.controls.mixing_length_alpha
     } else {
@@ -92,11 +109,9 @@ fn time_centered(model: &StarModel) -> bool {
         .is_velocity_time_centered(model.model_number_old)
 }
 
-/// `s% r_start(k)`.
+/// `s% r_start(k)`; [`check_r_start`] guarantees `k < ln_r_start.len()`.
 fn r_start(model: &StarModel, k: usize) -> f64 {
-    flexmesa_math::exp(
-        model.ln_r_start.get(k).copied().unwrap_or(model.ln_r[k]),
-    )
+    flexmesa_math::exp(model.ln_r_start[k])
 }
 
 /// `wrap_r_m1` (`star/private/auto_diff_support.f90:911-920`).
@@ -601,6 +616,7 @@ pub(crate) fn set_viscosity_vars_tdc(
             model.mlt_vc_ad.len()
         )));
     }
+    check_r_start(model)?;
     for k in 0..nz {
         if model.aux.rsp.hp_face[k] <= 0.0 {
             model.aux.rsp.hp_face[k] = get_scale_height_face_val(model, k);

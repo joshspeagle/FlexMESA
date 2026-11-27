@@ -489,6 +489,9 @@ pub fn star_evolve_step_part1(
     if first_try {
         // `prepare_for_new_step` resets `retry_cnt` once per step (`evolve.f90:1938`).
         model.step_retry_cnt = 0;
+        // After `prepare_for_new_step` on the first try
+        // (`star/private/evolve.f90:390-396`).
+        crate::tdc_hydro::set_mlt_option_for_new_step(model);
     }
     model.dt = dt_try;
     model.solver_first_try_of_step = first_try;
@@ -1236,6 +1239,10 @@ pub(crate) fn star_evolve_step_outcome_checked(
             dt_try = force_dt;
         }
     }
+
+    // After `prepare_for_new_step` on the first try
+    // (`star/private/evolve.f90:390-396`).
+    crate::tdc_hydro::set_mlt_option_for_new_step(model);
 
     let dt_floor = model.controls.min_timestep_limit.max(0.0);
     let max_retries = model.controls.ts_stop.retry_limit;

@@ -410,8 +410,7 @@ pub fn expected_non_hse_term(model: &StarModel, k: usize) -> StarAdOrder1 {
                 }
             }
         } else if model.controls.tdc_alpha_m > 0.0
-            && crate::tdc_hydro::effective_mlt_option(model)
-                == flexmesa_turb::MltOption::Tdc
+            && model.controls.mlt_option == flexmesa_turb::MltOption::Tdc
         {
             // `Uq_ad = compute_tdc_Uq_face(s, k, ierr)`
             // (`star/private/hydro_momentum.f90:433-436`).

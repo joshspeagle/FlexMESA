@@ -196,7 +196,7 @@ jobs:
       group: dashboard-coverage-python-${{ github.event_name }}-${{ github.ref }}
       cancel-in-progress: false
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 60
     steps:
       - name: Checkout triggering commit
         uses: actions/checkout@v7

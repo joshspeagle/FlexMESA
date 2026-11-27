@@ -22,7 +22,7 @@
 //!    system when `(do_burn || do_mix) && species > 0`, or `nvar_hydro` when
 //!    neither burning nor mixing is active.
 
-use flexmesa_chem::{get_composition_info, NuclideCatalog, NUM_CATEGORIES};
+use flexmesa_chem::NUM_CATEGORIES;
 use flexmesa_const::LN10;
 use flexmesa_eos::I_ETA;
 use flexmesa_net::{
@@ -50,8 +50,11 @@ struct SplitZoneOutcome {
     avg_epsnuc: f64,
     eps_neu_total: f64,
     eps_cats: [f64; NUM_CATEGORIES],
-    nstep: usize,
     naccpt: usize,
+    /// `Some(lnT)` after the constant-density burn: `store_lnT_in_xh` and
+    /// `get_T_and_lnT_from_xh` restore `lnT` and `T`
+    /// (`struct_burn_mix.f90:1075-1076`).
+    restore_ln_t: Option<f64>,
 }
 
 /// Integrates the 1-zone nuclear reaction network over $[0, \Delta t]$ in
@@ -144,7 +147,6 @@ pub fn op_split_burn_zones(
     let rate_factors = crate::micro::build_rate_factors(&model.job, &net_info)?;
     let weak_rate_factor = model.controls.weak_rate_factor;
     let eos_cfg = &model.eos_config;
-    let catalog = NuclideCatalog::builtin_ref();
 
     let outcomes: Result<Vec<SplitZoneOutcome>, StarError> = split_indices
         .into_par_iter()
@@ -152,10 +154,12 @@ pub fn op_split_burn_zones(
             let start_x = &model.xa[k * species..(k + 1) * species];
             let log_t = model.ln_t[k] / LN10;
             let log_rho = model.lnd[k] / LN10;
-            if skip_burn
-                || (eps_nuc_factor == 0.0 && dxdt_nuc_factor == 0.0)
-                || model.abar[k] > max_abar
-            {
+            // `burn1_zone` (`struct_burn_mix.f90:957-972`) skips only on
+            // `skip_burn`; a zone with `abar > max_abar_for_burning` is still
+            // integrated and only the trailing `do1_net` returns early
+            // (`net.f90:181`), which
+            // `eval_zone_eps_nuc_categories` reproduces.
+            if skip_burn || (eps_nuc_factor == 0.0 && dxdt_nuc_factor == 0.0) {
                 return Ok(SplitZoneOutcome {
                     k,
                     xa_after: start_x.to_vec(),
@@ -163,8 +167,8 @@ pub fn op_split_burn_zones(
                     avg_epsnuc: 0.0,
                     eps_neu_total: 0.0,
                     eps_cats: [0.0; NUM_CATEGORIES],
-                    nstep: 0,
                     naccpt: 0,
+                    restore_ln_t: None,
                 });
             }
 
@@ -173,7 +177,7 @@ pub fn op_split_burn_zones(
                 avg_raw,
                 eps_neu,
                 _burn_cats,
-                nstep_zone,
+                _nstep_zone,
                 naccpt_zone,
             ) = if model.t[k] >= min_t_var {
                 let input = BurnConstDensityInput {
@@ -206,10 +210,13 @@ pub fn op_split_burn_zones(
                     out.naccpt,
                 )
             } else {
-                let times = [0.0, dt];
-                let log10_ts = [log_t, log_t];
-                let log10_rhos = [log_rho, log_rho];
-                let etas = [model.eta[k], model.eta[k]];
+                // `num_times = 1`, `times => null()`
+                // (`struct_burn_mix.f90:978, 1078-1087`): constant (T, rho)
+                // with no interpolation.
+                let times = [0.0];
+                let log10_ts = [log_t];
+                let log10_rhos = [log_rho];
+                let etas = [model.eta[k]];
                 let input = Burn1ZoneInput {
                     t_start: 0.0,
                     t_end: dt,
@@ -246,36 +253,19 @@ pub fn op_split_burn_zones(
                 )
             };
 
-            let mut xa_after = vec![0.0_f64; species];
-            let mut x_sum = 0.0_f64;
-            for (j, &xj) in ending_x.iter().enumerate() {
-                let xc = xj.clamp(0.0, 1.0);
-                xa_after[j] = xc;
-                x_sum += xc;
-            }
-            if x_sum > 0.0 && (x_sum - 1.0).abs() > 1.0e-12 {
-                for x in &mut xa_after {
-                    *x /= x_sum;
-                }
-            }
+            // `burn1_zone` copies the integrator's `ending_x` straight into
+            // `s% xa(:,k)` (`struct_burn_mix.f90:1068, 1096`) with no clamp or
+            // renormalization.
+            let xa_after = ending_x;
             let dxdt_split: Vec<f64> = (0..species)
                 .map(|j| (xa_after[j] - start_x[j]) / dt)
                 .collect();
 
-            // `star/private/struct_burn_mix.f90:1112`: evaluate `do1_net` on
-            // `ending_x` to populate post-burn `eps_nuc_categories`, preserving
-            // `burn_1_zone`'s `eps_neu` (`struct_burn_mix.f90:1130`).
-            let comp_after = get_composition_info(
-                catalog,
-                &net_info.chem_id,
-                &xa_after,
-                true,
-            )
-            .map_err(|e| {
-                StarError::MicrophysicsError(format!(
-                    "post-burn composition error at zone {k}: {e}"
-                ))
-            })?;
+            // `star/private/struct_burn_mix.f90:1112`: the final `do1_net`
+            // reads `s% xa(:,k)` after the burn but the pre-burn
+            // `abar`, `zbar`, `z2bar`, `ye`, and `eta` (`net.f90:260-266`),
+            // which `set_vars` has not yet refreshed.
+            // `eps_neu` is restored from the burn (`:1130`).
             let eta_k = model.eta.get(k).copied().unwrap_or(0.0);
             let d_eta_dlnt_k =
                 model.eos_d_dlnt.get(k).map_or(0.0, |row| row[I_ETA]);
@@ -289,10 +279,10 @@ pub fn op_split_burn_zones(
                 log_t,
                 model.rho[k],
                 log_rho,
-                comp_after.abar,
-                comp_after.zbar,
-                comp_after.z2bar,
-                comp_after.ye,
+                model.abar[k],
+                model.zbar[k],
+                model.z2bar[k],
+                model.ye[k],
                 eta_k,
                 d_eta_dlnt_k,
                 d_eta_dlnd_k,
@@ -312,21 +302,21 @@ pub fn op_split_burn_zones(
                 k,
                 xa_after,
                 dxdt_split,
-                avg_epsnuc: avg_raw * eps_nuc_factor,
+                // `struct_burn_mix.f90:910`: the unscaled average is stored.
+                avg_epsnuc: avg_raw,
                 eps_neu_total: eps_neu,
                 eps_cats: cats,
-                nstep: nstep_zone,
                 naccpt: naccpt_zone,
+                restore_ln_t: (model.t[k] >= min_t_var).then_some(log_t * LN10),
             })
         })
         .collect();
 
-    let mut max_nstep = 0_usize;
+    let mut max_burn_iters = 0_usize;
     // `star/private/struct_burn_mix.f90:918`: set after the zone loop, before
     // the error return.
     model.aux.need_to_setvars = true;
     for out in outcomes? {
-        max_nstep = max_nstep.max(out.nstep);
         let k = out.k;
         let base_s = k * species;
         let base_ss = k * species * species;
@@ -340,6 +330,11 @@ pub fn op_split_burn_zones(
         model.eps_nuc[k] = 0.0;
         model.aux.burn_avg_epsnuc[k] = out.avg_epsnuc;
         model.aux.burn_num_iters[k] = out.naccpt;
+        if let Some(ln_t) = out.restore_ln_t {
+            // `struct_burn_mix.f90:1075-1076`.
+            model.ln_t[k] = ln_t;
+            model.t[k] = flexmesa_math::exp(ln_t);
+        }
         model.aux.eps_nuc_categories[k] = out.eps_cats;
         model.eps_nuc_neu_total[k] = out.eps_neu_total;
         model.d_epsnuc_dlnd[k] = 0.0;
@@ -351,8 +346,16 @@ pub fn op_split_burn_zones(
         model.d_dxdt_nuc_dlnt[base_s..base_s + species].fill(0.0);
         model.d_dxdt_nuc_dx[base_ss..base_ss + species * species].fill(0.0);
     }
-    model.aux.step_hist.burn_max_num_substeps =
-        model.aux.step_hist.burn_max_num_substeps.max(max_nstep);
+    // `timestep.f90:418-423`: `maxval(burn_num_iters, mask = T > op_split_burn_min_T)`
+    // over all zones, where `burn_num_iters` counts accepted substeps
+    // (`struct_burn_mix.f90:909, 1109`). The mask uses `T` at burn time here;
+    // upstream evaluates it at the time-step limit check.
+    for k in 0..nz {
+        if model.t[k] > min_t_split {
+            max_burn_iters = max_burn_iters.max(model.aux.burn_num_iters[k]);
+        }
+    }
+    model.aux.step_hist.burn_max_num_substeps = max_burn_iters;
     Ok(())
 }
 

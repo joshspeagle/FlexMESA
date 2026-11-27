@@ -157,6 +157,7 @@ pub(crate) fn eval_net_approx21_into(
     }
 
     let species = g.num_isos;
+    w.poison_molar_outputs(species);
     w.ensure_direct_export_len(species);
     w.direct_eps_nuc_categories = [0.0; NUM_CATEGORIES];
     w.direct_dxdt[..species].fill(0.0);
@@ -228,6 +229,7 @@ pub(crate) fn eval_net_approx21_into(
         w.direct_dxdt[i] = dydt1[i] * ai;
     }
     if just_dxdt {
+        w.set_eval_branch(true);
         return Ok((eps_nuc, 0.0, 0.0, eps_neu_total));
     }
 
@@ -311,6 +313,7 @@ pub(crate) fn eval_net_approx21_into(
                 dfdy[i * species + j] * ai / aj;
         }
     }
+    w.set_eval_branch(true);
     Ok((eps_nuc, d_eps_nuc_dt, d_eps_nuc_drho, eps_neu_total))
 }
 

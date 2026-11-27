@@ -238,13 +238,12 @@ pub fn with_thread_local_work<R>(
 /// Evaluates a nuclear reaction network in place using a reusable
 /// [`NetWorkState`] with zero heap allocations.
 ///
-/// For non-`approx21` networks, populates molar/MeV fields on `w`
+/// For non-`approx21` networks, sets `NetWorkState::outputs` to `Molar`
 /// (`eps_nuc_categories`, `d_eps_nuc_dy`, `d_dydt_dy`, `eps_neu_total`) and
-/// `dydt`. When `g.doing_approx21` is true, `dydt` and those legacy molar/MeV
-/// fields remain zeroed and outputs go directly into `w`'s CGS/mass-fraction
-/// buffers (`direct_eps_nuc_categories`, `direct_d_eps_nuc_dx`,
-/// `direct_dxdt`, `direct_d_dxdt_dt`, `direct_d_dxdt_drho`,
-/// `direct_d_dxdt_dx`), matching `net/private/net_eval.f90:215-238`. Returns
+/// fills `dydt`, while poisoning unused `direct_*` buffers with `f64::NAN`.
+/// When `g.doing_approx21` is true, poisons `dydt` (`Quad::NAN`) and molar
+/// buffers (`f64::NAN`) and sets `NetWorkState::outputs` to `DirectCgs`
+/// (`net/private/net_eval.f90:215-238`). Returns
 /// `(eps_nuc, d_eps_nuc_dt, d_eps_nuc_drho, eps_neu_total)` in
 /// $\mathrm{erg\,g^{-1}\,s^{-1}}$.
 #[rustfmt::skip]
@@ -260,7 +259,11 @@ pub fn eval_net_with_work(
 ) -> Result<(f64, f64, f64, f64), NetError> {
     w.reset(g);
     let ni = g.num_isos;
-    dydt[..ni].fill([Quad::ZERO; NUM_RVS]);
+    if g.doing_approx21 {
+        dydt[..ni].fill([Quad::NAN; NUM_RVS]);
+    } else {
+        dydt[..ni].fill([Quad::ZERO; NUM_RVS]);
+    }
     eval_net_setup(
         g, w, x, &mut temp, &mut log_t, rho, abar, zbar, z2bar, ye, eta,
         d_eta_dln_t, d_eta_dln_rho, rate_factors, weak_rate_factor,
@@ -426,6 +429,7 @@ pub fn get_derivs(
             }
         }
     }
+    w.set_eval_branch(false);
     Ok(())
 }
 

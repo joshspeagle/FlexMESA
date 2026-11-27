@@ -19,6 +19,7 @@ use flexmesa_utils::is_bad;
 
 use crate::burn_stepper::netint;
 use crate::derivs::{eval_net_with_work, with_thread_local_work};
+use crate::derivs_support::NetWorkOutputs;
 use crate::types::{NetError, NetGeneralInfo, NUM_RVS};
 use flexmesa_math::Quad;
 
@@ -309,64 +310,74 @@ pub fn burn_1_zone(
                 g.use_suzuki_weak_rates,
                 false,
             )?;
-            if let Some(f) = f_out {
-                if g.doing_approx21 {
-                    for j in 0..species {
-                        let base_f = w.direct_dxdt[j] / aion[j];
-                        f[j] = if let Some(s) = input.dxdt_source_term {
-                            base_f + s[j] / aion[j]
-                        } else {
-                            base_f
-                        };
-                    }
-                } else {
-                    // Match `net/private/net_eval.f90:566` (`dxdt = aion * dydt`)
-                    // followed by `net/private/net_burn.f90:449` (`f = dxdt / aion`).
-                    for j in 0..species {
-                        let dxdt_j = (Quad::from_f64(aion[j])
-                            * buf.dydt_buf[j][0])
-                            .to_f64();
-                        let base_f = dxdt_j / aion[j];
-                        f[j] = if let Some(s) = input.dxdt_source_term {
-                            base_f + s[j] / aion[j]
-                        } else {
-                            base_f
-                        };
-                    }
-                }
-            }
-            if let Some(dfdy) = dfdy_out {
-                if g.doing_approx21 {
-                    for i in 0..species {
-                        let a_i = aion[i];
-                        let row = i * species;
+            let cats = match w.outputs() {
+                NetWorkOutputs::DirectCgs {
+                    eps_nuc_categories,
+                    dxdt,
+                    d_dxdt_dx,
+                    ..
+                } => {
+                    if let Some(f) = f_out {
                         for j in 0..species {
-                            dfdy[row + j] =
-                                w.direct_d_dxdt_dx[row + j] * aion[j] / a_i;
+                            let base_f = dxdt[j] / aion[j];
+                            f[j] = if let Some(s) = input.dxdt_source_term {
+                                base_f + s[j] / aion[j]
+                            } else {
+                                base_f
+                            };
                         }
                     }
-                } else {
-                    // Match `net/private/net_eval.f90:570-571` and
-                    // `net/private/net_burn.f90:461` `aion` round-trip.
-                    for i in 0..species {
-                        let a_i = aion[i];
-                        let row = i * species;
-                        for j in 0..species {
-                            let a_j = aion[j];
-                            let d_dxdt_dx = w.d_dydt_dy[row + j] * a_i / a_j;
-                            dfdy[row + j] = d_dxdt_dx * a_j / a_i;
+                    if let Some(dfdy) = dfdy_out {
+                        for i in 0..species {
+                            let a_i = aion[i];
+                            let row = i * species;
+                            for j in 0..species {
+                                dfdy[row + j] =
+                                    d_dxdt_dx[row + j] * aion[j] / a_i;
+                            }
                         }
                     }
+                    *eps_nuc_categories
                 }
-            }
-            let cats = if g.doing_approx21 {
-                w.direct_eps_nuc_categories
-            } else {
-                let mut cats = [0.0_f64; NUM_CATEGORIES];
-                for c in 0..NUM_CATEGORIES {
-                    cats[c] = QCONV * w.eps_nuc_categories[c];
+                NetWorkOutputs::Molar {
+                    eps_nuc_categories_mev,
+                    d_dydt_dy,
+                    ..
+                } => {
+                    if let Some(f) = f_out {
+                        // Match `net_eval.f90:566` (`dxdt = aion * dydt`)
+                        // then `net_burn.f90:449` (`f = dxdt / aion`).
+                        for j in 0..species {
+                            let dxdt_j = (Quad::from_f64(aion[j])
+                                * buf.dydt_buf[j][0])
+                                .to_f64();
+                            let base_f = dxdt_j / aion[j];
+                            f[j] = if let Some(s) = input.dxdt_source_term {
+                                base_f + s[j] / aion[j]
+                            } else {
+                                base_f
+                            };
+                        }
+                    }
+                    if let Some(dfdy) = dfdy_out {
+                        // Match `net_eval.f90:570-571` and
+                        // `net_burn.f90:461` `aion` round-trip.
+                        for i in 0..species {
+                            let a_i = aion[i];
+                            let row = i * species;
+                            for j in 0..species {
+                                let a_j = aion[j];
+                                let d_dxdt_dx = d_dydt_dy[row + j] * a_i / a_j;
+                                dfdy[row + j] = d_dxdt_dx * a_j / a_i;
+                            }
+                        }
+                    }
+                    let mut cats = [0.0_f64; NUM_CATEGORIES];
+                    for c in 0..NUM_CATEGORIES {
+                        cats[c] = QCONV * eps_nuc_categories_mev[c];
+                    }
+                    cats
                 }
-                cats
             };
             Ok::<_, NetError>((cats, eps_neu))
         })?;

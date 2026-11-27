@@ -242,14 +242,10 @@ pub(crate) fn build_rsp2_ad_work(model: &mut StarModel) -> Rsp2AdWork {
             } else if model.controls.use_ledoux_criterion
                 && model.controls.calculate_brunt_b
             {
-                let gl_comp = model
-                    .aux
-                    .mixing
-                    .gradl_composition_term
-                    .get(k)
-                    .copied()
-                    .unwrap_or(0.0);
-                dlnt_dlnp - (grad_ad_f + gl_comp)
+                // `grad_ad_face + s% gradL_composition_term(k)`
+                // (`star/private/hydro_rsp2.f90:519-520`).
+                dlnt_dlnp
+                    - (grad_ad_f + model.aux.mixing.gradl_composition_term[k])
             } else {
                 dlnt_dlnp - grad_ad_f
             };
@@ -541,32 +537,51 @@ pub fn eval_and_save_rsp2_eqns(
 ) -> Result<(), StarError> {
     let work = build_rsp2_ad_work(model);
     let nz = model.nz;
-    let l_start_max = model.lum_start.iter().copied().fold(0.0_f64, f64::max);
-    let l_scale = if l_start_max > 0.0 {
-        l_start_max
-    } else {
-        model.lum.first().copied().unwrap_or(1.0).abs().max(1.0)
-    };
-    let inv_l_scale = 1.0 / l_scale;
+    // `do1_rsp2_L_eqn` (`star/private/hydro_rsp2.f90:114-159`), called for
+    // `k > 1 .or. RSP2_use_L_eqn_at_surface` (`hydro_eqns.f90:251-252`):
+    // `scale = 1d0/maxval(s% L_start(1:s% nz))`, and `mesa_error` when the
+    // scale `is_bad` (`hydro_rsp2.f90:137-142`).
+    let l_start_max = model.lum_start[..nz]
+        .iter()
+        .copied()
+        .fold(f64::NEG_INFINITY, f64::max);
+    let scale = 1.0 / l_start_max;
+    if !scale.is_finite() {
+        return Err(StarError::ConvergenceFailure(format!(
+            "do1_rsp2_L_eqn: bad scale 1/maxval(L_start) = {scale} \
+             (star/private/hydro_rsp2.f90:139-142)"
+        )));
+    }
     let k_l_start = usize::from(!model.controls.rsp2.use_l_eqn_at_surface);
 
     for k in k_l_start..nz {
         let l_exp = work.lr[k] + work.lc[k] + work.lt[k];
         let l_act = StarAdOrder1::variable(model.lum[k], I_L_00);
-        let resid_l = (l_exp - l_act) * inv_l_scale;
+        // `resid = (L_expected - L_actual)*scale` (`hydro_rsp2.f90:143`).
+        let resid_l = (l_exp - l_act) * scale;
         sys.save_eqn_residual(&model.layout, k, model.layout.i_equ_l, &resid_l);
     }
 
     if let Some(i_equ_hp) = model.layout.i_equ_hp {
         for k in 0..nz {
+            // `do1_rsp2_Hp_eqn` (`star/private/hydro_rsp2.f90:162-211`):
+            // `resid = (Hp_expected - Hp_actual)/max(Hp_expected,Hp_actual)`
+            // with the auto_diff `max` (Heaviside partials), and
+            // `mesa_error` when the residual exceeds 1d3 (`:193-199`).
             let hp_exp = eval_rsp2_hp_face_ad(model, k);
             let hp_act = wrap_hp(model, k, I_HP_00);
-            let denom = if hp_exp.val >= hp_act.val {
-                hp_exp
-            } else {
-                hp_act
-            };
-            let resid_hp = (hp_exp - hp_act) / denom;
+            let resid_hp = (hp_exp - hp_act) / hp_exp.max(hp_act);
+            if resid_hp.val > 1.0e3 {
+                return Err(StarError::ConvergenceFailure(format!(
+                    "do1_rsp2_Hp_eqn: residual {} > 1d3 at k = {} \
+                     (Hp_expected = {}, Hp_actual = {}; \
+                     star/private/hydro_rsp2.f90:193-199)",
+                    resid_hp.val,
+                    k + 1,
+                    hp_exp.val,
+                    hp_act.val
+                )));
+            }
             sys.save_eqn_residual(&model.layout, k, i_equ_hp, &resid_hp);
         }
     }

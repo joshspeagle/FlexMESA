@@ -392,7 +392,9 @@ impl StarModel {
         }
     }
 
-    /// Packs `(lnd, ln_t, ln_r, lum, [v | u], [w, hp])` into `xh` (`pack_xh`).
+    /// Packs `(lnd, ln_t, ln_r, lum, [v | u], [w, hp], [alpha_rti])` into
+    /// `xh` without clamps
+    /// (`set_xh` in `star/private/struct_burn_mix.f90:409-464`).
     pub fn pack_xh(&mut self) {
         let nvar = self.layout.nvar_hydro;
         self.xh.resize(self.nz * nvar, 0.0);
@@ -409,18 +411,20 @@ impl StarModel {
                 self.xh[base + iu] = self.u[k];
             }
             if let Some(iw) = self.layout.i_w {
-                self.xh[base + iw] = self.aux.rsp.et_rsp[k].max(0.0).sqrt();
+                self.xh[base + iw] = self.aux.rsp.w[k];
             }
             if let Some(ihp) = self.layout.i_hp {
-                self.xh[base + ihp] = self.aux.rsp.hp_face[k].max(1.0);
+                self.xh[base + ihp] = self.aux.rsp.hp_face[k];
             }
             if let Some(ia) = self.layout.i_alpha_rti {
-                self.xh[base + ia] = self.aux.alpha_rti[k].max(0.0);
+                self.xh[base + ia] = self.aux.alpha_rti[k];
             }
         }
     }
 
-    /// Unpacks `xh` into `(lnd, ln_t, ln_r, lum, [v | u], [w, hp], [alpha_rti])` (`unpack_xh`).
+    /// Unpacks `xh` into
+    /// `(lnd, ln_t, ln_r, lum, [v | u], [w, hp], [alpha_rti])`
+    /// (`unpack_xh` in `star/private/hydro_vars.f90:314-351`).
     pub fn unpack_xh(&mut self) {
         let nvar = self.layout.nvar_hydro;
         let w_fix = self.controls.rsp2.w_fix_if_neg;
@@ -443,14 +447,12 @@ impl StarModel {
                     self.xh[base + iw] = w;
                 }
                 let et = w * w;
+                self.aux.rsp.w[k] = w;
                 self.aux.rsp.et_rsp[k] = et;
                 self.aux.etrb[k] = et;
             }
             if let Some(ihp) = self.layout.i_hp {
-                let raw_hp = self.xh[base + ihp];
-                let hp = if raw_hp < 1.0 { 1.0 } else { raw_hp };
-                self.xh[base + ihp] = hp;
-                self.aux.rsp.hp_face[k] = hp;
+                self.aux.rsp.hp_face[k] = self.xh[base + ihp];
             }
             if let Some(ia) = self.layout.i_alpha_rti {
                 let raw_a = self.xh[base + ia];
@@ -470,9 +472,11 @@ impl StarModel {
         if self.controls.rsp2_flag {
             let alfap = crate::rsp2::X_ALFAP * self.controls.rsp2.alfap;
             for k in 0..self.nz {
-                let et = self.aux.rsp.et_rsp[k].max(0.0);
+                let w_k = self.aux.rsp.w[k];
+                let et = w_k * w_k;
+                self.aux.rsp.et_rsp[k] = et;
                 self.aux.etrb[k] = et;
-                self.aux.rsp.w_start[k] = et.sqrt();
+                self.aux.rsp.w_start[k] = w_k;
                 self.aux.rsp.ptrb_start[k] = alfap * self.rho[k] * et;
             }
             self.aux.rsp.lt_start.clone_from(&self.aux.rsp.lt_rsp);
@@ -556,6 +560,7 @@ impl StarModel {
         self.u_old.clone_from(&self.u);
         self.xa_old.clone_from(&self.xa);
         self.dq_old.clone_from(&self.dq);
+        self.aux.w_old.clone_from(&self.aux.rsp.w);
         self.aux.et_rsp_old.clone_from(&self.aux.rsp.et_rsp);
         self.aux.hp_face_old.clone_from(&self.aux.rsp.hp_face);
         self.aux.alpha_rti_old.clone_from(&self.aux.alpha_rti);
@@ -733,5 +738,100 @@ impl StarModel {
             ad.resize(nz, StarAdOrder1::ZERO);
         }
         self.aux.resize(nz, sp);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::controls::{StarControls, StarJobControls};
+    use crate::model::StarModel;
+
+    fn make_rsp2_rti_test_model(w_fix_if_neg: f64) -> StarModel {
+        let mut controls = StarControls {
+            rsp2_flag: true,
+            rti_flag: true,
+            ..StarControls::default()
+        };
+        controls.rsp2.w_fix_if_neg = w_fix_if_neg;
+        StarModel::new(2, vec![0], StarJobControls::default(), controls)
+    }
+
+    #[test]
+    fn test_pack_xh_preserves_raw_w_hp_and_alpha_unclamped() {
+        let mut model = make_rsp2_rti_test_model(12.5);
+
+        let iw = model.layout.i_w.expect("i_w");
+        let ihp = model.layout.i_hp.expect("i_hp");
+        let ia = model.layout.i_alpha_rti.expect("i_alpha_rti");
+        let nvar = model.layout.nvar_hydro;
+
+        let w_vals = [-42.5_f64, 5.0e-320_f64];
+        let hp_vals = [0.25_f64, -3.5_f64];
+        let alpha_vals = [-0.5_f64, 0.75_f64];
+        model.aux.rsp.w = w_vals.to_vec();
+        // Divergent `et_rsp` proves `pack_xh` reads `aux.rsp.w`, not
+        // `et_rsp`.
+        model.aux.rsp.et_rsp = vec![999.0, 999.0];
+        model.aux.rsp.hp_face = hp_vals.to_vec();
+        model.aux.alpha_rti = alpha_vals.to_vec();
+
+        model.pack_xh();
+
+        for k in 0..2 {
+            assert_eq!(
+                model.xh[k * nvar + iw].to_bits(),
+                w_vals[k].to_bits(),
+                "pack_xh must preserve raw w at cell {k}"
+            );
+            assert_eq!(
+                model.xh[k * nvar + ihp].to_bits(),
+                hp_vals[k].to_bits(),
+                "pack_xh must preserve raw hp_face at cell {k}"
+            );
+            assert_eq!(
+                model.xh[k * nvar + ia].to_bits(),
+                alpha_vals[k].to_bits(),
+                "pack_xh must preserve raw alpha_rti at cell {k}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_unpack_xh_keeps_hp_unclamped_and_clamps_neg_w_and_alpha() {
+        let mut model = make_rsp2_rti_test_model(12.5);
+
+        let iw = model.layout.i_w.expect("i_w");
+        let ihp = model.layout.i_hp.expect("i_hp");
+        let ia = model.layout.i_alpha_rti.expect("i_alpha_rti");
+        let nvar = model.layout.nvar_hydro;
+
+        let pos_w = 1.0_f64 + 1.0e-12;
+        model.xh.resize(2 * nvar, 0.0);
+        model.xh[iw] = -5.0;
+        model.xh[ihp] = 0.25;
+        model.xh[ia] = -0.25;
+        model.xh[nvar + iw] = pos_w;
+        model.xh[nvar + ihp] = -3.5;
+        model.xh[nvar + ia] = 0.4;
+
+        model.unpack_xh();
+
+        assert_eq!(model.aux.rsp.w[0], 12.5);
+        assert_eq!(model.xh[iw], 12.5);
+        assert_eq!(model.aux.rsp.et_rsp[0], 12.5 * 12.5);
+        assert_eq!(model.aux.etrb[0], 12.5 * 12.5);
+        assert_eq!(model.aux.rsp.w[1].to_bits(), pos_w.to_bits());
+        assert_eq!(model.aux.rsp.hp_face[0].to_bits(), 0.25_f64.to_bits());
+        assert_eq!(model.aux.rsp.hp_face[1].to_bits(), (-3.5_f64).to_bits());
+        assert_eq!(model.aux.alpha_rti[0], 0.0);
+        assert_eq!(model.xh[ia], 0.0);
+        assert_eq!(model.aux.alpha_rti[1].to_bits(), 0.4_f64.to_bits());
+
+        // Negative `w_fix_if_neg` clamps negative `w` to `0.0`.
+        model.controls.rsp2.w_fix_if_neg = -1.0;
+        model.xh[iw] = -0.5;
+        model.unpack_xh();
+        assert_eq!(model.aux.rsp.w[0], 0.0);
+        assert_eq!(model.xh[iw], 0.0);
     }
 }

@@ -190,6 +190,7 @@ fn test_hydro_energy_luminosity_time_centering_and_heating_channels() {
     model.aux.eq_ad[k] = StarAdOrder1::from_dlnd_dlnt_00(5.0e2, 50.0, 25.0);
     // Upstream reads `pow2(w)` and `pow2(w_start)`
     // (`star/private/auto_diff_support.f90:396-400,434-439`).
+    model.aux.rsp.w[k] = 2.0e11_f64.sqrt();
     model.aux.rsp.et_rsp[k] = 2.0e11;
     model.aux.rsp.w_start[k] = 1.0e11_f64.sqrt();
     model.controls.rti_flag = true;

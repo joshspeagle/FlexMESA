@@ -364,6 +364,7 @@ pub fn set_vars_for_solver(
                 )));
             }
             let et = w_k * w_k;
+            model.aux.rsp.w[k] = w_k;
             model.aux.rsp.et_rsp[k] = et;
             model.aux.etrb[k] = et;
         }

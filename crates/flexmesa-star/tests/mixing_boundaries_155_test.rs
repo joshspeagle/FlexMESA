@@ -714,6 +714,7 @@ fn test_set_mixing_info_rsp2_and_rti_branches_match_upstream() {
     let mut m_rsp2 = zams_4m();
     let nz = m_rsp2.nz;
     m_rsp2.controls.rsp2_flag = true;
+    m_rsp2.aux.rsp.w = vec![1.0e5; nz];
     m_rsp2.aux.rsp.et_rsp = vec![1.0e10; nz];
     m_rsp2.aux.rsp.hp_face = vec![1.0e9; nz];
     m_rsp2.aux.rsp.lc_rsp = vec![0.0; nz];
@@ -732,6 +733,7 @@ fn test_set_mixing_info_rsp2_and_rti_branches_match_upstream() {
     // Unsized RSP2 arrays must fail loudly rather than silently skipping.
     let mut m_bad_rsp2 = zams_4m();
     m_bad_rsp2.controls.rsp2_flag = true;
+    m_bad_rsp2.aux.rsp.w.clear();
     m_bad_rsp2.aux.rsp.et_rsp.clear();
     assert!(set_mixing_info(&mut m_bad_rsp2).is_err());
 

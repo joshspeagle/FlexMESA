@@ -496,6 +496,7 @@ fn test_calc_ptot_cell_ad_includes_p_theta_pvsc_rsp2_and_mlt_pturb() {
     m.v_start = m.v.clone();
     m.aux.mlt_vc_old = vec![5.0e4, 6.0e4, 7.0e4];
     m.aux.rsp.et_rsp = vec![1.0e9, 2.0e9, 3.0e9];
+    m.aux.rsp.w = m.aux.rsp.et_rsp.iter().map(|&et| et.sqrt()).collect();
     m.aux.rsp.ptrb_start = (0..m.nz)
         .map(|k| {
             X_ALFAP * m.controls.rsp2.alfap * m.rho[k] * m.aux.rsp.et_rsp[k]
@@ -507,6 +508,7 @@ fn test_calc_ptot_cell_ad_includes_p_theta_pvsc_rsp2_and_mlt_pturb() {
         m.lnd[k] += 0.05;
         m.ln_t[k] += 0.03;
         m.aux.rsp.et_rsp[k] *= 1.2;
+        m.aux.rsp.w[k] = m.aux.rsp.et_rsp[k].sqrt();
     }
     sync_ideal_gas_eos(&mut m);
 
@@ -585,7 +587,8 @@ fn test_calc_ptot_cell_ad_includes_p_theta_pvsc_rsp2_and_mlt_pturb() {
         (
             I_W_00,
             Box::new(|mc: &mut StarModel, d: f64| {
-                let w = mc.aux.rsp.et_rsp[1].sqrt() + d;
+                let w = mc.aux.rsp.w[1] + d;
+                mc.aux.rsp.w[1] = w;
                 mc.aux.rsp.et_rsp[1] = w * w;
             }),
         ),
@@ -631,6 +634,7 @@ fn test_do_uface_and_pface_surface_peos_rsp2_uq_and_per_face_starts() {
     m.save_old_values();
     m.u = vec![1.0e5, 2.0e5, 3.0e5];
     m.aux.rsp.et_rsp = vec![1.0e9, 2.0e9, 3.0e9];
+    m.aux.rsp.w = m.aux.rsp.et_rsp.iter().map(|&et| et.sqrt()).collect();
     m.aux.rsp.ptrb_start = (0..m.nz)
         .map(|k| {
             X_ALFAP * m.controls.rsp2.alfap * m.rho[k] * m.aux.rsp.et_rsp[k]

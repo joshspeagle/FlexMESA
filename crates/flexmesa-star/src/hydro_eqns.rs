@@ -232,15 +232,7 @@ pub fn compute_x_scale_into(
                 .get(k)
                 .copied()
                 .unwrap_or_else(|| {
-                    model
-                        .aux
-                        .rsp
-                        .et_rsp
-                        .get(k)
-                        .copied()
-                        .unwrap_or(0.0)
-                        .max(0.0)
-                        .sqrt()
+                    model.aux.rsp.w.get(k).copied().unwrap_or(0.0)
                 })
                 .abs();
             x_scale[base + iw] = w_s.max(1.0);

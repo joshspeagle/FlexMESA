@@ -134,7 +134,7 @@ pub fn eval_rsp2_profile_equations(
         *slot = (hp_exp - hp_act) / hp_exp.max(hp_act);
     }
     for (k, slot) in equ_etrb.iter_mut().enumerate() {
-        let w = model.aux.rsp.et_rsp[k].max(0.0).sqrt();
+        let w = model.aux.rsp.w[k];
         if !model.controls.rsp2_flag {
             let w_s = model.aux.rsp.w_start.get(k).copied().unwrap_or(0.0);
             *slot = w - w_s;
@@ -240,7 +240,7 @@ pub fn rsp2_adjust_vars_before_call_solver(model: &mut StarModel) {
     let k_hi = nz.saturating_sub(ibotom);
 
     for k in k_lo..k_hi {
-        let w_cur = model.aux.rsp.et_rsp[k].max(0.0).sqrt();
+        let w_cur = model.aux.rsp.w[k];
         if w_cur > rsp2.w_min_for_damping {
             continue;
         }
@@ -266,7 +266,9 @@ pub fn rsp2_adjust_vars_before_call_solver(model: &mut StarModel) {
         if del >= 0.0 && damp > 0.0 {
             let soln = (-dampr + del.sqrt()) / (2.0 * damp);
             if soln > 0.0 {
+                model.aux.rsp.w[k] = soln;
                 model.aux.rsp.et_rsp[k] = soln * soln;
+                model.aux.etrb[k] = soln * soln;
             }
         }
     }

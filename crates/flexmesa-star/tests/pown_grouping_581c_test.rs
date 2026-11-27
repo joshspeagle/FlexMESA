@@ -74,6 +74,7 @@ fn rsp2_ad_eval_ptrb_cell_ad_uses_pow2_w() {
     let lnd = -11.986_3_f64;
     let et = 1.017_3_e10_f64;
     model.lnd[1] = lnd;
+    model.aux.rsp.w[1] = et.sqrt();
     model.aux.rsp.et_rsp[1] = et;
 
     let ptrb_ad = eval_rsp2_ptrb_cell_ad(&model, 1, false);

@@ -222,6 +222,10 @@ impl RspDerivedConsts {
 /// persisted across `.mod` (`32812`) and `.photo` checkpoints.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct RspState {
+    /// Turbulent velocity $w$ ($\mathrm{cm\,s^{-1}}$)
+    /// (`s% w`, `rsp2_flag` / `i_w`).
+    #[serde(default)]
+    pub w: Vec<f64>,
     /// Specific turbulent energy $e_t = w^2$ (`et_RSP`), radiation energy `erad_RSP`, and flux `Fr_RSP`.
     pub et_rsp: Vec<f64>,
     /// Specific radiation energy $e_{\mathrm{rad}}$ ($\mathrm{erg\,g^{-1}}$).
@@ -436,6 +440,7 @@ impl RspState {
     #[must_use]
     pub fn new(nz: usize) -> Self {
         Self {
+            w: vec![0.0; nz],
             et_rsp: vec![0.0; nz],
             erad_rsp: vec![0.0; nz],
             fr_rsp: vec![0.0; nz],

@@ -227,7 +227,8 @@ pub fn cell_specific_rotational_energy(model: &StarModel, k: usize) -> f64 {
 #[must_use]
 pub(crate) fn cell_rsp2_eturb(model: &StarModel, k: usize) -> f64 {
     if model.layout.i_w.is_some() {
-        model.aux.rsp.et_rsp.get(k).copied().unwrap_or(0.0)
+        let w = model.aux.rsp.w.get(k).copied().unwrap_or(0.0);
+        flexmesa_math::pow2(w)
     } else {
         model.aux.etrb.get(k).copied().unwrap_or(0.0)
     }

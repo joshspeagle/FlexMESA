@@ -149,6 +149,7 @@ pub fn restore_from_old(model: &mut StarModel) -> Result<(), StarError> {
     model.u.clone_from(&model.u_old);
     model.xa.clone_from(&model.xa_old);
     model.dq.clone_from(&model.dq_old);
+    model.aux.rsp.w.clone_from(&model.aux.w_old);
     model.aux.rsp.et_rsp.clone_from(&model.aux.et_rsp_old);
     model.aux.rsp.hp_face.clone_from(&model.aux.hp_face_old);
     model.aux.alpha_rti.clone_from(&model.aux.alpha_rti_old);

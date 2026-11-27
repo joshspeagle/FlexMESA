@@ -162,6 +162,7 @@ fn test_rsp2_mod_columns_and_inlist_namelist_roundtrip() {
     for k in 0..rsp2_mod.nz {
         let idx = f64::from(u32::try_from(k).unwrap_or(0));
         let w = 1.0e4 * (idx + 1.0);
+        rsp2_mod.aux.rsp.w[k] = w;
         rsp2_mod.aux.etrb[k] = w * w;
         rsp2_mod.aux.rsp.hp_face[k] = 5.0e10 + 1.0e8 * idx;
     }
@@ -174,6 +175,10 @@ fn test_rsp2_mod_columns_and_inlist_namelist_roundtrip() {
     .expect("read RSP2 .mod");
     assert!(rsp2_back.controls.rsp2_flag && !rsp2_back.controls.rsp_flag);
     for k in [0, rsp2_mod.nz / 2, rsp2_mod.nz - 1] {
+        assert!(
+            (rsp2_back.aux.rsp.w[k] - rsp2_mod.aux.rsp.w[k]).abs()
+                <= 1.0e-14 * rsp2_mod.aux.rsp.w[k]
+        );
         assert!(
             (rsp2_back.aux.etrb[k] - rsp2_mod.aux.etrb[k]).abs()
                 <= 1.0e-13 * rsp2_mod.aux.etrb[k]

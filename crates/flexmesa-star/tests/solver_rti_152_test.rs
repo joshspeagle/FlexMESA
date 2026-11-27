@@ -153,6 +153,7 @@ fn test_solver_norms_gate_chem_on_burn_or_mix_and_exclude_rsp2_w() {
     assert_eq!(nvar_hydro, 7);
     assert_eq!(nvar, 9);
 
+    model.aux.rsp.w = vec![1.0e2; nz];
     model.aux.rsp.et_rsp = vec![1.0e4; nz];
     model.xa = vec![0.5; nz * model.species];
     model.xa_start = model.xa.clone();

@@ -610,6 +610,7 @@ fn do_merge(
     model.energy[i0] = (ie_i + ie_ip) / dm;
     if model.controls.rsp2_flag {
         let et = (etrb_i + etrb_ip) / dm;
+        model.aux.rsp.w[i0] = et.max(0.0).sqrt();
         model.aux.rsp.et_rsp[i0] = et;
         model.aux.etrb[i0] = et;
     }
@@ -655,6 +656,7 @@ fn do_merge(
         &mut model.aux.i_rot,
         &mut model.aux.fp_rot,
         &mut model.aux.ft_rot,
+        &mut model.aux.rsp.w,
         &mut model.aux.rsp.et_rsp,
         &mut model.aux.etrb,
         &mut model.aux.rsp.hp_face,

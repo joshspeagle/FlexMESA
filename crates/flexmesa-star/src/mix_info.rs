@@ -133,13 +133,16 @@ pub fn set_mixing_info_with_skip(
     } else if model.controls.rsp2_flag {
         // Upstream `star/private/mix_info.f90:126-142` and
         // `star/private/auto_diff_support.f90:402-413` (`get_RSP2_conv_velocity`).
-        if model.aux.rsp.et_rsp.len() != nz
+        if model.aux.rsp.w.len() != nz
+            || model.aux.rsp.et_rsp.len() != nz
             || model.aux.rsp.hp_face.len() != nz
             || model.aux.rsp.lc_rsp.len() != nz
             || model.aux.rsp.lt_rsp.len() != nz
         {
             return Err(StarError::InvalidInput(format!(
-                "set_mixing_info: RSP2 arrays unsized (nz={nz}, et={}, hp_face={}, lc={}, lt={})",
+                "set_mixing_info: RSP2 arrays unsized \
+                 (nz={nz}, w={}, et={}, hp_face={}, lc={}, lt={})",
+                model.aux.rsp.w.len(),
                 model.aux.rsp.et_rsp.len(),
                 model.aux.rsp.hp_face.len(),
                 model.aux.rsp.lc_rsp.len(),
@@ -153,8 +156,8 @@ pub fn set_mixing_info_with_skip(
             } else {
                 let alfa = model.dq[k - 1] / (model.dq[k - 1] + model.dq[k]);
                 let beta = 1.0 - alfa;
-                let w_k = model.aux.rsp.et_rsp[k].max(0.0).sqrt();
-                let w_km1 = model.aux.rsp.et_rsp[k - 1].max(0.0).sqrt();
+                let w_k = model.aux.rsp.w[k];
+                let w_km1 = model.aux.rsp.w[k - 1];
                 SQRT_2_DIV_3 * (alfa * w_k + beta * w_km1)
             };
             model.conv_vel[k] = cv;

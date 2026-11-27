@@ -238,6 +238,7 @@ fn build_rsp2_jacobian_test_model() -> StarModel {
         let phase = f64::from(u32::try_from(k).expect("k fits u32")) / nz_f;
         model.v[k] = 4.0e5 * (1.0 - phase) * flexmesa_math::cos(2.5 * phase);
         let w_k = 1.8e5 * flexmesa_math::sin(PI * phase).max(0.05);
+        model.aux.rsp.w[k] = w_k;
         model.aux.rsp.et_rsp[k] = w_k * w_k;
     }
     model.ln_t[15] = model.ln_t[14] + 0.35;

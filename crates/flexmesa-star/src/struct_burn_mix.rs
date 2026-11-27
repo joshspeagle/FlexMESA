@@ -533,10 +533,6 @@ fn run_struct_burn_mix_core(
     use_bcyclic: bool,
     overshoot_configs: &[OvershootConfig],
 ) -> Result<HenyeySolverReport, StarError> {
-    if model.controls.rsp2_flag {
-        crate::rsp2_eqns::rsp2_adjust_vars_before_call_solver(model);
-        model.pack_xh();
-    }
     // Save pre-burn thermodynamic start values (`lnd`, `lnT`, `lnR`, `v`); do
     // NOT restore `csound_start` back to pre-burn `csound`: after
     // `op_split_burn` alters composition, `set_vars` resets
@@ -761,4 +757,119 @@ pub fn do_struct_burn_mix(
         refresh_mixing_state(model, dt, overshoot_configs)?;
     }
     Ok(report)
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::Path;
+
+    use super::*;
+    use crate::controls::{StarControls, StarJobControls, VarLayout};
+    use crate::evolve_support::record_start_of_step_energy_integrals;
+    use crate::hydro_vars::set_hydro_vars;
+    use crate::model_io::read_mod_str;
+    use crate::rsp2_eqns::rsp2_adjust_vars_before_call_solver;
+    use crate::rsp2_remesh::remesh_for_rsp2;
+
+    #[test]
+    fn test_rsp2_start_values_captured_before_adjust_vars_in_solver() {
+        let mod_path = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../tests/fixtures/golden/rsp/rsp_BLAP_cycle0.mod");
+        let text =
+            std::fs::read_to_string(&mod_path).expect("rsp_BLAP_cycle0.mod");
+
+        let mut controls = StarControls {
+            v_flag: true,
+            rsp2_flag: true,
+            op_split_burn: true,
+            do_burn: false,
+            do_mix: false,
+            dxdt_nuc_factor: 0.0,
+            eps_nuc_factor: 0.0,
+            non_nuc_neu_factor: 0.0,
+            mix_factor: 0.0,
+            mixing_length_alpha: 1.5,
+            use_zero_pgas_outer_bc: true,
+            use_pvsc_art_visc: true,
+            pvsc_cq: 4.0,
+            pvsc_zshock: 0.1,
+            using_velocity_time_centering: true,
+            include_p_in_velocity_time_centering: true,
+            include_l_in_velocity_time_centering: true,
+            use_p_d_1_div_rho_form_of_work_when_time_centering_velocity: true,
+            zbase: 0.02,
+            ..StarControls::default()
+        };
+        controls.rsp2.change_rsp_flag = true;
+        controls.rsp2.new_rsp_flag = false;
+        controls.rsp2.change_rsp2_flag = true;
+        controls.rsp2.new_rsp2_flag = true;
+        controls.rsp2.alfap = 1.0;
+        controls.rsp2.alfad = 1.0;
+        controls.rsp2.alfam = 0.25;
+        controls.rsp2.alfar = 1.0;
+        controls.rsp2.alfat = 0.01;
+        controls.rsp2.nz = 150;
+        controls.rsp2.nz_outer = 40;
+        controls.rsp2.t_anchor = 5.0e4;
+        controls.rsp2.dq_1_factor = 1.0;
+
+        let mut model =
+            read_mod_str(&text, controls, StarJobControls::default())
+                .expect("read BLAP mod");
+        model.layout = VarLayout::with_rsp2(model.species, true, false, true);
+        remesh_for_rsp2(&mut model).expect("remesh_for_rsp2");
+        model.dt = 2.0;
+        model.dt_next = 2.0;
+        set_hydro_vars(&mut model, false, false).expect("set_hydro_vars");
+
+        let pre_w = 1.0_f64;
+        let n_out = model.controls.rsp2.num_outermost_cells_forced_nonturbulent;
+        let n_in = model.controls.rsp2.num_innermost_cells_forced_nonturbulent;
+        let lo = n_out + 1;
+        let hi = model.nz.saturating_sub(n_in + 1);
+
+        let mut probe = model.clone();
+        for k in lo..hi {
+            probe.aux.rsp.w[k] = pre_w;
+            probe.aux.rsp.et_rsp[k] = pre_w * pre_w;
+            probe.aux.etrb[k] = pre_w * pre_w;
+        }
+        probe.save_start_values().expect("probe save_start_values");
+        rsp2_adjust_vars_before_call_solver(&mut probe);
+        let k_probe = (lo..hi)
+            .find(|&k| probe.aux.rsp.w[k] > pre_w * 2.0)
+            .expect("active zone raised before solver");
+
+        model.aux.rsp.w[k_probe] = pre_w;
+        model.aux.rsp.et_rsp[k_probe] = pre_w * pre_w;
+        model.aux.etrb[k_probe] = pre_w * pre_w;
+
+        let mut adjusted = model.clone();
+        adjusted.save_start_values().expect("save_start_values");
+        rsp2_adjust_vars_before_call_solver(&mut adjusted);
+        let adj_w = adjusted.aux.rsp.w[k_probe];
+        assert!(adj_w > pre_w * 2.0);
+
+        record_start_of_step_energy_integrals(&mut model);
+        model.save_old_values();
+
+        let report =
+            do_struct_burn_mix(&mut model, 2.0, true, true, &[]).expect("sbm");
+        assert!(report.converged, "expected BLAP RSP2 step to converge");
+
+        let iw = model.layout.i_w.expect("i_w");
+        let nvar = model.layout.nvar_hydro;
+        assert_eq!(
+            model.aux.rsp.w_start[k_probe].to_bits(),
+            pre_w.to_bits(),
+            "w_start must retain pre-adjustment w"
+        );
+        assert_eq!(
+            model.xh_start[k_probe * nvar + iw].to_bits(),
+            pre_w.to_bits(),
+            "xh_start[i_w] must retain pre-adjustment w"
+        );
+        assert_ne!(model.aux.rsp.w_start[k_probe].to_bits(), adj_w.to_bits());
+    }
 }

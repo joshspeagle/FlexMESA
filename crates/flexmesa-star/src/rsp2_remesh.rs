@@ -21,7 +21,9 @@ pub fn seed_rsp2_w_from_mlt_vc_if_needed(
 ) -> Result<(), StarError> {
     let nz = model.nz;
     model.aux.rsp.resize(nz);
-    if model.aux.rsp.et_rsp.iter().any(|&et| et > 0.0) {
+    if model.aux.rsp.w.iter().any(|&w| w != 0.0)
+        || model.aux.rsp.et_rsp.iter().any(|&et| et > 0.0)
+    {
         return Ok(());
     }
     if model.mlt_vc.len() < nz || model.mlt_vc.iter().all(|&v| v <= 0.0) {
@@ -38,6 +40,7 @@ pub fn seed_rsp2_w_from_mlt_vc_if_needed(
         let vc0 = model.mlt_vc[k].max(0.0);
         let vc1 = model.mlt_vc.get(k + 1).copied().unwrap_or(0.0).max(0.0);
         let wk = 0.5 * (vc0 + vc1) / SQRT_2_DIV_3;
+        model.aux.rsp.w[k] = wk;
         model.aux.rsp.et_rsp[k] = wk * wk;
         model.aux.rsp.w_start[k] = wk;
     }
@@ -165,17 +168,7 @@ pub fn remesh_for_rsp2(model: &mut StarModel) -> Result<(), StarError> {
     let lnt_new = interpolate_vector_pm(&xm_mid_old, &model.ln_t, &xm_mid)
         .map_err(pm_err)?;
     let w_old: Vec<f64> = (0..nz_old)
-        .map(|k| {
-            model
-                .aux
-                .rsp
-                .et_rsp
-                .get(k)
-                .copied()
-                .unwrap_or(0.0)
-                .max(0.0)
-                .sqrt()
-        })
+        .map(|k| model.aux.rsp.w.get(k).copied().unwrap_or(0.0))
         .collect();
     let w_new =
         interpolate_vector_pm(&xm_mid_old, &w_old, &xm_mid).map_err(pm_err)?;
@@ -215,6 +208,7 @@ pub fn remesh_for_rsp2(model: &mut StarModel) -> Result<(), StarError> {
         next.ln_t[k] = lnt_new[k];
         next.t[k] = flexmesa_math::exp(lnt_new[k]);
         let wk = w_new[k].max(0.0);
+        next.aux.rsp.w[k] = wk;
         next.aux.rsp.et_rsp[k] = wk * wk;
         next.aux.rsp.w_start[k] = wk;
     }

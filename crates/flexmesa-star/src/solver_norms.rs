@@ -358,15 +358,7 @@ pub fn compute_model_correction_norms_in_solver(
                 if !c.rsp2_flag || !c.include_w_in_correction_limits {
                     continue;
                 }
-                let w_k = model
-                    .aux
-                    .rsp
-                    .et_rsp
-                    .get(k)
-                    .copied()
-                    .unwrap_or(0.0)
-                    .max(0.0)
-                    .sqrt();
+                let w_k = model.aux.rsp.w.get(k).copied().unwrap_or(0.0);
                 if w_k.abs() < 1.0 {
                     0.0
                 } else {

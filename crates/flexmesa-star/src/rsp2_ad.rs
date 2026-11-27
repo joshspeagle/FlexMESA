@@ -33,7 +33,7 @@ fn start_exp(slice: &[f64], k: usize, fallback_exp: f64) -> f64 {
 
 #[inline]
 pub(crate) fn wrap_w(model: &StarModel, k: usize, slot: usize) -> StarAdOrder1 {
-    let w = model.aux.rsp.et_rsp[k].max(0.0).sqrt();
+    let w = model.aux.rsp.w[k];
     if model.layout.i_w.is_some() {
         StarAdOrder1::variable(w, slot)
     } else {

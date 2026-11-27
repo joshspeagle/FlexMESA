@@ -265,6 +265,7 @@ fn test_hydro_velocity_and_rsp2_turbulent_remaps_conserve_control_volumes() {
     let mut mu = load_zams_model(ctrl_u, StarJobControls::default())
         .expect("load 3 Msun ZAMS u_flag + rsp2_flag");
     set_hydro_vars(&mut mu, false, false).expect("set_hydro_vars u_flag");
+    mu.aux.rsp.w = vec![1.0e5; mu.nz];
     mu.aux.rsp.et_rsp = vec![1.0e10; mu.nz];
     mu.aux.rsp.hp_face = vec![1.0e9; mu.nz];
     for k in 0..mu.nz {
@@ -276,6 +277,7 @@ fn test_hydro_velocity_and_rsp2_turbulent_remaps_conserve_control_volumes() {
     assert!(su + mgu > 0);
     assert!(mu.u.iter().all(|u| u.is_finite()));
     assert_eq!(mu.aux.rsp.et_rsp.len(), mu.nz);
+    assert_eq!(mu.aux.rsp.w.len(), mu.nz);
     assert_eq!(mu.aux.rsp.hp_face.len(), mu.nz);
 }
 

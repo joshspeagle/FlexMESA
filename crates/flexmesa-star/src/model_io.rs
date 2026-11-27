@@ -209,14 +209,18 @@ pub fn write_mod_string(model: &StarModel) -> Result<String, StarError> {
             )
             .unwrap();
         } else if write_rsp2 {
-            let w_k = model
-                .aux
-                .etrb
-                .get(k)
-                .copied()
-                .unwrap_or(0.0)
-                .max(0.0)
-                .sqrt();
+            let w_k = if model.aux.rsp.w.len() == model.nz {
+                model.aux.rsp.w[k]
+            } else {
+                model
+                    .aux
+                    .etrb
+                    .get(k)
+                    .copied()
+                    .unwrap_or(0.0)
+                    .max(0.0)
+                    .sqrt()
+            };
             let hp_k = if model.aux.rsp.hp_face[k] > 0.0 {
                 model.aux.rsp.hp_face[k]
             } else {
@@ -623,10 +627,12 @@ pub fn read_mod_str_with_dir(
         if let Some(idx) = w_idx {
             let w_val = parse_fortran_f64(toks[offset + idx])?;
             let et = w_val * w_val;
+            model.aux.rsp.w[k] = w_val;
             model.aux.etrb[k] = et;
             model.aux.rsp.et_rsp[k] = et;
         } else if let Some(idx) = et_rsp_idx {
             let et = parse_fortran_f64(toks[offset + idx])?;
+            model.aux.rsp.w[k] = et.max(0.0).sqrt();
             model.aux.etrb[k] = et;
             model.aux.rsp.et_rsp[k] = et;
         }

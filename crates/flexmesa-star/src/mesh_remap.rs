@@ -1172,17 +1172,7 @@ pub(crate) fn execute_adjust_mesh_from_plan_with(
         (0..nz_old).map(|k| model.xh[k * nvar + iw]).collect()
     } else {
         (0..nz_old)
-            .map(|k| {
-                model
-                    .aux
-                    .rsp
-                    .et_rsp
-                    .get(k)
-                    .copied()
-                    .unwrap_or(0.0)
-                    .max(0.0)
-                    .sqrt()
-            })
+            .map(|k| model.aux.rsp.w.get(k).copied().unwrap_or(0.0))
             .collect()
     };
     let hp_face_old = model.aux.rsp.hp_face.clone();
@@ -1454,6 +1444,7 @@ pub(crate) fn execute_adjust_mesh_from_plan_with(
             if unchanged_face_for_vel(k, &cell_type) {
                 let wk = w_old[comes_from[k]];
                 let et = flexmesa_math::pow2(wk);
+                model.aux.rsp.w[k] = wk;
                 model.aux.rsp.et_rsp[k] = et;
                 model.aux.etrb[k] = et;
                 continue;
@@ -1473,6 +1464,7 @@ pub(crate) fn execute_adjust_mesh_from_plan_with(
             )?;
             let wk = (et_sum / model.dq[k]).max(0.0).sqrt();
             let et = flexmesa_math::pow2(wk);
+            model.aux.rsp.w[k] = wk;
             model.aux.rsp.et_rsp[k] = et;
             model.aux.etrb[k] = et;
         }

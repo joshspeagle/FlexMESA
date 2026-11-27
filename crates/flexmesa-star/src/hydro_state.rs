@@ -660,6 +660,9 @@ pub struct HydroAuxState {
     pub etrb: Vec<f64>,
     /// Start-of-step turbulent specific kinetic energy $e_{\mathrm{trb,start},k}$ (`etrb_start`).
     pub etrb_start: Vec<f64>,
+    /// Previous-step `RSP2` turbulent velocity $w_{\mathrm{old},k}$
+    /// for step retry (`w_old`).
+    pub w_old: Vec<f64>,
     /// Previous-step `RSP2` turbulent energy $e_{t,\mathrm{old},k}$ for step retry (`et_rsp_old`).
     pub et_rsp_old: Vec<f64>,
     /// Previous-step `RSP2` pressure scale height $H_{P,\mathrm{old},k}$ for step retry (`hp_face_old`).
@@ -944,6 +947,7 @@ impl HydroAuxState {
             eq_ad: vec![StarAdOrder1::ZERO; nz],
             etrb: vec![0.0; nz],
             etrb_start: vec![0.0; nz],
+            w_old: vec![0.0; nz],
             et_rsp_old: vec![0.0; nz],
             hp_face_old: vec![0.0; nz],
             csound_start: vec![0.0; nz],
@@ -1066,6 +1070,7 @@ impl HydroAuxState {
             &mut self.irradiation_heat,
             &mut self.etrb,
             &mut self.etrb_start,
+            &mut self.w_old,
             &mut self.et_rsp_old,
             &mut self.hp_face_old,
             &mut self.csound_start,

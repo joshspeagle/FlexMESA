@@ -146,15 +146,7 @@ fn build_xh_start_buffer(model: &StarModel) -> Vec<f64> {
         if let Some(iw) = layout.i_w {
             buf[base + iw] =
                 model.aux.rsp.w_start.get(k).copied().unwrap_or_else(|| {
-                    model
-                        .aux
-                        .rsp
-                        .et_rsp
-                        .get(k)
-                        .copied()
-                        .unwrap_or(0.0)
-                        .max(0.0)
-                        .sqrt()
+                    model.aux.rsp.w.get(k).copied().unwrap_or(0.0)
                 });
         }
         if let Some(ihp) = layout.i_hp {
@@ -580,6 +572,13 @@ pub fn solve_henyey_step(
     model.using_gold_tolerances = gold_level > 0;
     let (tol_cn, tol_mc) = active_correction_tolerances(model);
 
+    let xh_start_buf = build_xh_start_buffer(model);
+    // `set_xh` in `star/private/struct_burn_mix.f90:418-464, 539`: adjust
+    // `RSP2` `w` before packing `xh`, AFTER `save_start_values` captured
+    // `w_start` and `xh_start`.
+    if model.controls.rsp2_flag {
+        crate::rsp2_eqns::rsp2_adjust_vars_before_call_solver(model);
+    }
     model.pack_xh();
     // The variables were set from `xh` before the solve (`unpack_xh`), which
     // zeroes `dxh_lnd`, `dxh_lnT` and `dxh_lnR`
@@ -590,7 +589,6 @@ pub fn solve_henyey_step(
     model.aux.dxh_lnd.resize(nz, 0.0);
     model.aux.dxh_lnt.clear();
     model.aux.dxh_lnt.resize(nz, 0.0);
-    let xh_start_buf = build_xh_start_buffer(model);
     let mut solver_dx = vec![0.0_f64; nz * nvar];
     for k in 0..nz {
         let h_base = k * nvar_hydro;

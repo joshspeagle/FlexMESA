@@ -1676,8 +1676,8 @@ pub(crate) fn set_hydro_vars_with_skips(
             } else {
                 let (alfa, beta) =
                     crate::rsp2_eqns::rsp2_face_weights(model, k);
-                let w_00 = model.aux.rsp.et_rsp[k].max(0.0).sqrt();
-                let w_m1 = model.aux.rsp.et_rsp[k - 1].max(0.0).sqrt();
+                let w_00 = model.aux.rsp.w[k];
+                let w_m1 = model.aux.rsp.w[k - 1];
                 let vc =
                     flexmesa_const::SQRT_2_DIV_3 * (alfa * w_00 + beta * w_m1);
                 let d_mix = vc * alpha * model.aux.rsp.hp_face[k] / 3.0;

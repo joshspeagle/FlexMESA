@@ -355,6 +355,7 @@ fn test_rsp2_time_centering_scal_and_unclamped_hp() {
 
     // 5. `set_energy_eqn_scal` applies `dedt_eqn_r_scale` to `do1_turbulent_energy_eqn`.
     model.aux.rsp.et_rsp[k_turb] *= 1.1;
+    model.aux.rsp.w[k_turb] = model.aux.rsp.et_rsp[k_turb].sqrt();
     model.pack_xh();
     model.controls.dedt_eqn_r_scale = 1.0e8;
     let res_hi = eval_rsp2_profile_equations(&mut model).equ_etrb[k_turb];

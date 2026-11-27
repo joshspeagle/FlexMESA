@@ -2019,6 +2019,12 @@ module = "tooling"
 kind = "invariant"
 
 [[tests]]
+path = "tests/test_stepdump_stage_end.py"
+language = "python"
+module = "tooling"
+kind = "invariant"
+
+[[tests]]
 path = "tests/test_stepdump_xtra.py"
 language = "python"
 module = "tooling"

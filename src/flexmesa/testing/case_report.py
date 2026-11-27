@@ -206,9 +206,12 @@ def record_to_dict(rec: harness_runner.CaseHarnessRecord) -> dict[str, Any]:
         ),
         "error_message": rec.error_message,
     }
+    if rec.stage_steps or rec.mesa_stage_steps:
+        # MESA's counts do not depend on how FlexMESA's run ended, so a row
+        # whose run timed out, was rejected or errored still carries them.
+        out["mesa_stage_steps"] = list(rec.mesa_stage_steps)
     if rec.stage_steps:
         out["stage_steps"] = list(rec.stage_steps)
-        out["mesa_stage_steps"] = list(rec.mesa_stage_steps)
         out["stage_step_deltas"] = [d.delta for d in rec.stage_step_deltas]
         out["step_count_differs"] = rec.step_count_differs
     if rec.component_comparisons:

@@ -8,7 +8,7 @@ import pathlib
 import sys
 from types import ModuleType
 
-from flexmesa.testing import case_manifest
+from flexmesa.testing import case_manifest, stage_steps
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
 
@@ -111,3 +111,17 @@ def test_exception_without_verifiable_evidence_fails() -> None:
         _exc(kind="no_mesa_run", manifest="max_age"),
         "",
     )
+
+
+def test_stage_step_table_equals_the_ledger() -> None:
+    """The harness's MESA stage counts cannot drift from the ledger."""
+    mod = _load()
+    runs = mod._ledger_runs(REPO_ROOT)
+    table = stage_steps.load_mesa_stage_steps()
+    assert set(table) == set(runs)
+    differing = {
+        key: (table[key], tuple(runs[key]["stage_steps"]))
+        for key in table
+        if table[key] != tuple(runs[key]["stage_steps"])
+    }
+    assert differing == {}

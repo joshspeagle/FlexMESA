@@ -567,11 +567,16 @@ fn test_timestep_checks_match_177_and_253() {
     assert!((rep_z.dt_next - 100.0 / 3.0).abs() <= 1.0e-12);
 
     // Verify `#253` out-of-bounds guard when matching species index `j >= 100`.
+    // `check_varcontrol_limit` runs first (`star/private/timestep.f90:128`,
+    // ahead of `check_dX` at `:156`), and `eval_varcontrol` needs an `xh_old`
+    // snapshot (`timestep.f90:2314-2316`) and `nz >= 3` (`2339-2343` read
+    // zones `k - 1:k + 1` around `k = 2` and `k = nz - 1`), so the model has
+    // three zones and saved old values for `check_dX` to be reached.
     let cat = NuclideCatalog::builtin_ref();
     let chem_ids_101: Vec<usize> = (1..=101).collect();
     let iso_101 = cat.get_by_id(101).expect("chem_id 101").name.clone();
     let mut big_net = StarModel::new(
-        2,
+        3,
         chem_ids_101,
         StarJobControls::default(),
         StarControls {
@@ -581,7 +586,7 @@ fn test_timestep_checks_match_177_and_253() {
     );
     big_net.doing_first_model_of_run = false;
     big_net.xa[100] = 0.05;
-    big_net.xa_old.clone_from(&big_net.xa);
+    big_net.save_old_values();
     big_net.xa[100] = 0.06;
     big_net.controls.ts_stop.dx_limit_species[0] = iso_101;
     big_net.controls.ts_stop.dx_limit[0] = 0.001;

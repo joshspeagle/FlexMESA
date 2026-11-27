@@ -228,6 +228,12 @@ module = "binary"
 kind = "invariant"
 
 [[tests]]
+path = "crates/flexmesa-binary/tests/pown_grouping_581_test.rs"
+language = "rust"
+module = "binary"
+kind = "invariant"
+
+[[tests]]
 path = "crates/flexmesa-binary/tests/star_plus_point_mass_test.rs"
 language = "rust"
 module = "binary"

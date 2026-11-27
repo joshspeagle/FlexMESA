@@ -11,7 +11,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 
 use flexmesa_const::{MixingType, MSUN, PI, RSUN};
-use flexmesa_math::{exp, pow};
+use flexmesa_math::{exp, pow, pow2};
 use flexmesa_star::{
     apply_uniform_rotation, eval_photosphere_info, eval_surf_avg_rotation_info,
     update_rotation_distortion_factors, BinaryOtherTorqueHook, StarError,
@@ -656,8 +656,9 @@ fn eval_tdyn_div_tkh_delta_j(
             if layers_in_sync[k] {
                 sum_j_sync += dm_k * dj.abs();
             } else {
-                sum_j_non_sync +=
-                    dm_k * dj.abs() * tdyn_div_tkh[k] * tdyn_div_tkh[k];
+                // `binary/private/binary_tides.f90:223`:
+                // `pow2(tdyn_div_tkh(k))`.
+                sum_j_non_sync += dm_k * dj.abs() * pow2(tdyn_div_tkh[k]);
             }
         }
         if sum_j_non_sync <= 0.0 || delta_total_j <= sum_j_sync {
@@ -674,7 +675,9 @@ fn eval_tdyn_div_tkh_delta_j(
                 continue;
             }
             let dj_full = star.j_rot[k] - j_sync[k];
-            let scaled = dj_full * tdyn_div_tkh[k] * tdyn_div_tkh[k] * ff;
+            // `binary/private/binary_tides.f90:234, 236`:
+            // `pow2(tdyn_div_tkh(k))`.
+            let scaled = dj_full * pow2(tdyn_div_tkh[k]) * ff;
             if (dj_full >= 0.0 && scaled >= dj_full)
                 || (dj_full < 0.0 && scaled <= dj_full)
             {
@@ -1348,6 +1351,104 @@ mod tests {
                 (actual_ej - expected_ej).abs()
                     <= 1.0e-14 * expected_ej.abs().max(1.0),
                 "zone {k}: actual={actual_ej:.16e}, expected={expected_ej:.16e}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_eval_tdyn_div_tkh_delta_j_uses_pow2_grouping() {
+        let mut star = flexmesa_star::load_zams_model(
+            flexmesa_star::StarControls::default(),
+            flexmesa_star::StarJobControls::default(),
+        )
+        .expect("load ZAMS");
+        let nz = star.nz;
+        for k in 0..nz {
+            star.j_rot[k] = 1.0e16 * (1.0 + 0.01 * (k as f64));
+        }
+        let j_sync = vec![0.0_f64; nz];
+        let t_sync = 1.0e10_f64;
+        let dt_next = 1.0e8_f64;
+
+        let actual = eval_tdyn_div_tkh_delta_j(&star, &j_sync, t_sync, dt_next);
+
+        let mut tdyn_div_tkh = vec![0.0_f64; nz];
+        let mut delta_total_j = 0.0_f64;
+        for k in 0..nz {
+            let rho_f = interp_val_to_face(&star.rho, &star.dq, k);
+            let cv_f = interp_val_to_face(&star.cv, &star.dq, k);
+            let t_f = interp_val_to_face(&star.t, &star.dq, k);
+            let cs_f =
+                interp_val_to_face(&star.csound, &star.dq, k).max(1.0e-30);
+            let lum_k = if star.lum[k] == 0.0 {
+                1.0e-30
+            } else {
+                star.lum[k]
+            };
+            let tkh =
+                4.0 * PI * star.r[k] * star.r[k] * rho_f * cv_f * t_f / lum_k;
+            tdyn_div_tkh[k] = if tkh == 0.0 { 0.0 } else { (1.0 / cs_f) / tkh };
+            let dm_k = star.dm_bar.get(k).copied().unwrap_or(star.dm[k]);
+            delta_total_j += (star.j_rot[k] - j_sync[k]).abs() * dm_k;
+        }
+        delta_total_j *= 1.0 - exp(-dt_next / t_sync);
+        let mut layers_in_sync = vec![false; nz];
+        let mut expected = vec![0.0_f64; nz];
+        let mut num_sync_layers = 0_usize;
+        loop {
+            let (mut sum_j_sync, mut sum_j_non_sync) = (0.0_f64, 0.0_f64);
+            for k in 0..nz {
+                let dj = star.j_rot[k] - j_sync[k];
+                expected[k] = dj;
+                let dm_k = star.dm_bar.get(k).copied().unwrap_or(star.dm[k]);
+                if layers_in_sync[k] {
+                    sum_j_sync += dm_k * dj.abs();
+                } else {
+                    sum_j_non_sync += dm_k * dj.abs() * pow2(tdyn_div_tkh[k]);
+                }
+            }
+            if sum_j_non_sync <= 0.0 || delta_total_j <= sum_j_sync {
+                for k in 0..nz {
+                    if !layers_in_sync[k] {
+                        expected[k] = 0.0;
+                    }
+                }
+                break;
+            }
+            let ff = (delta_total_j - sum_j_sync) / sum_j_non_sync;
+            for k in 0..nz {
+                if layers_in_sync[k] {
+                    continue;
+                }
+                let dj_full = star.j_rot[k] - j_sync[k];
+                let scaled = dj_full * pow2(tdyn_div_tkh[k]) * ff;
+                if (dj_full >= 0.0 && scaled >= dj_full)
+                    || (dj_full < 0.0 && scaled <= dj_full)
+                {
+                    expected[k] = dj_full;
+                    layers_in_sync[k] = true;
+                } else {
+                    expected[k] = scaled;
+                }
+            }
+            let new_sync_count = layers_in_sync.iter().filter(|&&b| b).count();
+            if new_sync_count == num_sync_layers {
+                break;
+            }
+            num_sync_layers = new_sync_count;
+        }
+
+        assert_eq!(actual.len(), expected.len());
+        let witness_x = 1.234e-5_f64;
+        assert_ne!(
+            (1.3e29_f64 * pow2(witness_x)).to_bits(),
+            (1.3e29_f64 * witness_x * witness_x).to_bits()
+        );
+        for (k, (&a, &e)) in actual.iter().zip(&expected).enumerate() {
+            assert_eq!(
+                a.to_bits(),
+                e.to_bits(),
+                "zone {k}: bit mismatch {a:.16e} vs {e:.16e}"
             );
         }
     }

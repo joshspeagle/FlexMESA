@@ -88,8 +88,9 @@ Scope and the `v0.1.0` definition are in [`SCOPE.md`](SCOPE.md). Work is tracked
 | 71 | Large Oracle Bundles Are Opt-In (`#552`) | In force | below |
 | 72 | Every Test File Is Listed in `test_taxonomy.toml` with Enforced Provenance and Checked Routine Maps (`#563`) | In force | below |
 | 73 | Train Campaigns Run on GitHub Actions at 3,000 s per Case, with Step Counts Enforced (`#546`, `#576`, `#598`) | In force | below |
-| 75 | Harness Expectations Are Checked Against MESA's Own Output; a Hook Terminate Without a Code Is Named by Its Hook (`#604`) | In force | below |
+| 75 | Harness Expectations Are Checked Against MESA's Own Output; a Hook Terminate Without a Code Is Named by Its Hook (`#604`) | In force; second bullet amended by decision 77 | below |
 | 76 | A Case That Takes Zero Steps and Writes a Result File Is Judged on That File (`#606`) | In force | below |
+| 77 | Python Star Extras Custom Termination Codes Use Upstream `t_xtra1..t_xtra9` Slots (`#579`) | In force | below |
 
 ## Pre-audit decisions still in force
 
@@ -1009,3 +1010,14 @@ The text of these four entries predates the audit of 2026-11-16. The decisions s
   - *Leaving the case at `no reference yet`*: it would stay unmeasured.
   - *Judging the printed per-model lines only*: they carry 5 digits where the file carries 11.
 - **Note**: the case's status is switched, with its declared gap, in the pull request that brings the hook fixes of `#606`; until then the comparison is built and the case stays `no reference yet`.
+
+## DECISIONS #77: Python Star Extras Custom Termination Codes Use Upstream `t_xtra1..t_xtra9` Slots (`#579`)
+
+- **Date**: 2026-11-27
+- **Decision**: Amends the second bullet of `DECISIONS #75`: when an extras hook returns `"action": "terminate"` and sets `s% termination_code = t_xtra1..t_xtra9` rather than leaving `termination_code` unset (`0`) or at the hook default (`t_extras_check_model` / `t_extras_finish_step`), the run reports `termination_code_str(t_xtraN)` instead of the hook name. In Python star hooks (`extras_start_step`, `extras_check_model`, and `extras_finish_step` via `parse_star_directive`), a `"terminate"` dict may select `"termination_code_slot"` in `"t_xtra1".."t_xtra9"` (`star_data/public/star_data_def.inc:238-246`) and optional `"termination_code_str"`. Omitting `"termination_code_str"` emits upstream's default `"customize by setting termination_code_str(t_xtraN)"` (`star/private/star_private_def.f90:215-223`). Trailing whitespace on `"termination_code_str"` is stripped while leading whitespace is preserved, matching Fortran `character(len=128)` `trim()` and blank-padded comparison (`star_data/public/star_data_def.inc:250`, `star/job/run_star_support.f90:837-838,872`). Empty or whitespace-only `"termination_code_str"` raises `ValueError` (`DECISIONS #43`): upstream checks `len_trim /= 0` at initialization (`star/private/star_private_def.f90:225-236`), and although Fortran allows blank runtime overwrites (`run_star_support.f90:831-842,870-873`), `FlexMESA` encodes `s% termination_code == 0` as `""` in `termination_code_string_okay`, so returning `""` for `t_xtraN` would collide with `termination_code == 0` and bypass `required_termination_code_string`. Free-form `"termination_code"`, non-`t_xtra` slots, `"termination_code_str"` without `"termination_code_slot"`, slots on non-`"terminate"` dicts, and slots from other hooks (`other_timestep_limit`) raise `ValueError`.
+- **Why**: Upstream MESA does not let `run_star_extras` overwrite built-in termination strings (`star/private/star_private_def.f90:170-213`); custom stop strings are emitted only by setting `termination_code_str(t_xtraN)` and assigning `s% termination_code = t_xtra1..9`. Requiring explicit `t_xtra1..9` slots preserves built-in `extras_check_model` / `other_timestep_limit` diagnostics (`star/job/standard_run_star_extras.inc:83,228`) while wiring `star/test_suite/tzo`'s `t_xtra1` termination string (`star/test_suite/tzo/src/run_star_extras.f90:143-145`).
+- **Alternatives Rejected**:
+  - *Allowing free-form `"termination_code"` on any hook dict*: masks built-in codes without mapping to `t_xtra1..9`.
+  - *Allowing empty `"termination_code_str"`*: collides with `FlexMESA`'s `""` sentinel for `s% termination_code == 0` in `termination_code_string_okay`.
+  - *Disallowing custom termination strings in Python extras*: leaves `tzo` (`t_xtra1`, `"PASS: Have reached requested NS mass"`) unable to match MESA's `required_termination_code_string`.
+- **Note**: number `#74` is reserved by `#586`.

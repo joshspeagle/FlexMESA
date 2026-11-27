@@ -572,9 +572,22 @@ def test_extended_convective_penetration_peclet_and_after_evolve() -> None:
     assert ecp.checks_okay is True
 
 
-def test_tzo_part4_guards_and_tov_other_cgrav() -> None:
-    """`TzoStarExtras` computes TOV `other_cgrav` and guards part-4 hydro."""
+def test_tzo_part4_updates_termination_and_tov_other_cgrav() -> None:
+    """`TzoStarExtras` updates part-4 core/hydro, terminates, and sets TOV."""
     tzo = star_extras.TzoStarExtras()
+    tzo.extras_controls(
+        {
+            "x_logical_ctrl": [True],
+            "x_integer_ctrl": [3],
+            "x_ctrl": [0.5, 0.5, 1.4],
+        }
+    )
+    assert tzo.extras_start_step({}) == "keep_going"
+    assert (
+        tzo.extras_check_model({"m_center": 1.5 * constants.MSUN})
+        == "keep_going"
+    )
+
     tzo.extras_controls(
         {
             "x_logical_ctrl": [True],
@@ -582,7 +595,7 @@ def test_tzo_part4_guards_and_tov_other_cgrav() -> None:
             "x_ctrl": [0.5, 0.5, 1.4],
         }
     )
-    part4 = {
+    part4: dict[str, Any] = {
         "nz": 1,
         "m_center": constants.MSUN,
         "opacity": [0.2],
@@ -591,12 +604,50 @@ def test_tzo_part4_guards_and_tov_other_cgrav() -> None:
         "v_flag": False,
         "mstar": 5.0 * constants.MSUN,
     }
-    with pytest.raises(NotImplementedError, match="#152"):
-        tzo.extras_start_step(part4)
-    assert (
-        tzo.extras_check_model({"m_center": 1.5 * constants.MSUN})[0]
-        == "terminate"
+    res_hydro = tzo.extras_start_step(part4)
+    assert isinstance(res_hydro, tuple) and res_hydro[0] == "keep_going"
+    updates = res_hydro[1]
+    l_edd = (
+        4.0
+        * constants.PI
+        * constants.STANDARD_CGRAV
+        * constants.MSUN
+        * constants.CLIGHT
+    ) / 0.2
+    mdot_c = 0.5 * l_edd / (constants.CLIGHT * constants.CLIGHT)
+    m_center_exp = constants.MSUN + mdot_c * 10.0
+    assert math.isclose(updates["m_center"], m_center_exp, rel_tol=0.0)
+    assert math.isclose(
+        updates["xmstar"], 5.0 * constants.MSUN - m_center_exp, rel_tol=0.0
     )
+    assert math.isclose(updates["l_center"], 0.5 * l_edd, rel_tol=0.0)
+    assert updates["v_flag"] is True
+
+    # `v_flag` is omitted when age <= 100, v_flag is True, or use_hydro=False.
+    res_young = tzo.extras_start_step({**part4, "star_age": 100.0})
+    assert isinstance(res_young, tuple) and "v_flag" not in res_young[1]
+    res_v_on = tzo.extras_start_step({**part4, "v_flag": True})
+    assert isinstance(res_v_on, tuple) and "v_flag" not in res_v_on[1]
+    tzo_no_hydro = star_extras.TzoStarExtras()
+    tzo_no_hydro.extras_controls(
+        {
+            "x_logical_ctrl": [False],
+            "x_integer_ctrl": [4],
+            "x_ctrl": [0.5, 0.5, 1.4],
+        }
+    )
+    res_no_hydro = tzo_no_hydro.extras_start_step(part4)
+    assert isinstance(res_no_hydro, tuple) and "v_flag" not in res_no_hydro[1]
+
+    assert (
+        tzo.extras_check_model({"m_center": 1.3 * constants.MSUN})
+        == "keep_going"
+    )
+    assert tzo.extras_check_model({"m_center": 1.5 * constants.MSUN}) == {
+        "action": "terminate",
+        "termination_code_slot": "t_xtra1",
+        "termination_code_str": "PASS: Have reached requested NS mass",
+    }
     cgrav = tzo.other_cgrav(
         {
             "nz": 2,
@@ -610,6 +661,236 @@ def test_tzo_part4_guards_and_tov_other_cgrav() -> None:
     assert math.isclose(
         cgrav[0], constants.STANDARD_CGRAV / (1.0 - r_s / 1.0e11), rel_tol=1e-15
     ) and (cgrav[1] > constants.STANDARD_CGRAV)
+
+
+def test_star_snapshot_l_center_and_apply_center_v_flag_updates(
+    tmp_path: pathlib.Path,
+) -> None:
+    """Verify ``l_center`` snapshots and ``v_flag`` / center updates.
+
+    Checks ``star_extras_snapshot`` and ``star_apply_extras_updates``.
+    """
+    model = _rust.RustStarModel.from_zams(1.0, 0.02)
+    snap0 = _rust.star_extras_snapshot(
+        model, str(tmp_path), include_history=False
+    )
+    assert "l_center" in snap0 and float(snap0["l_center"]) == 0.0
+    assert snap0["v_flag"] is False
+
+    m_c = 0.25 * constants.MSUN
+    xm = float(snap0["mstar"]) - m_c
+    l_c = 1.0e37
+    _rust.star_apply_extras_updates(
+        model,
+        {
+            "m_center": m_c,
+            "xmstar": xm,
+            "l_center": l_c,
+            "v_flag": True,
+        },
+    )
+    snap1 = _rust.star_extras_snapshot(
+        model, str(tmp_path), include_history=False
+    )
+    assert snap1["v_flag"] is True
+    assert math.isclose(float(snap1["m_center"]), m_c, rel_tol=0.0)
+    assert math.isclose(float(snap1["xmstar"]), xm, rel_tol=0.0)
+    assert math.isclose(float(snap1["l_center"]), l_c, rel_tol=0.0)
+    # Matching upstream `tzo` (`extras_start_step`), mutating center mass
+    # scalars leaves `m`/`dm`/`m_grav` unchanged until `set_vars` runs.
+    assert list(snap1["m"]) == list(snap0["m"])
+
+    _rust.star_apply_extras_updates(model, {"v_flag": False})
+    snap2 = _rust.star_extras_snapshot(
+        model, str(tmp_path), include_history=False
+    )
+    assert snap2["v_flag"] is False
+
+    # Like upstream, non-positive scalar assignments are accepted directly
+    # without synthetic bounds errors.
+    _rust.star_apply_extras_updates(
+        model, {"m_center": -1.0, "xmstar": 0.5, "l_center": -2.0}
+    )
+    snap3 = _rust.star_extras_snapshot(
+        model, str(tmp_path), include_history=False
+    )
+    assert math.isclose(float(snap3["m_center"]), -1.0, rel_tol=0.0)
+    assert math.isclose(float(snap3["xmstar"]), 0.5, rel_tol=0.0)
+    assert math.isclose(float(snap3["l_center"]), -2.0, rel_tol=0.0)
+
+
+def test_star_directive_custom_termination_code_and_validation(
+    tmp_path: pathlib.Path,
+) -> None:
+    """`parse_star_directive` accepts `t_xtra1..9` slots on `terminate`
+    dicts, rejects free-form/invalid ones, and preserves tuple/string defaults.
+    """
+    case_dir = tmp_path / "term_code_case"
+    case_dir.mkdir()
+    (case_dir / "inlist").write_text(
+        "&star_job\n"
+        "/\n"
+        "&kap\n"
+        "  Zbase = 0.02\n"
+        "/\n"
+        "&controls\n"
+        "  initial_mass = 1.0\n"
+        "  max_model_number = 5\n"
+        "/\n",
+        encoding="utf-8",
+    )
+
+    class _ReturnDirectiveProbe:
+        def __init__(self, result: object) -> None:
+            self._result = result
+
+        def extras_start_step(self, _state: dict[str, Any]) -> object:
+            return self._result
+
+    rep_custom = _rust.trace_star_case(
+        str(case_dir),
+        str(tmp_path / "out_custom"),
+        extras=_ReturnDirectiveProbe(
+            {
+                "action": "terminate",
+                "termination_code_slot": "t_xtra1",
+                "termination_code_str": "PASS: Have reached requested NS mass",
+                "message": "diagnostic note",
+            }
+        ),
+    )
+    assert rep_custom["total_steps"] == 0
+    assert (
+        rep_custom["termination_code"] == "PASS: Have reached requested NS mass"
+    )
+
+    rep_default_slot = _rust.trace_star_case(
+        str(case_dir),
+        str(tmp_path / "out_slot_default"),
+        extras=_ReturnDirectiveProbe(
+            {"action": "terminate", "termination_code_slot": "t_xtra4"}
+        ),
+    )
+    assert rep_default_slot["total_steps"] == 0
+    assert (
+        rep_default_slot["termination_code"]
+        == "customize by setting termination_code_str(t_xtra4)"
+    )
+
+    rep_ws = _rust.trace_star_case(
+        str(case_dir),
+        str(tmp_path / "out_ws"),
+        extras=_ReturnDirectiveProbe(
+            {
+                "action": "terminate",
+                "termination_code_slot": "t_xtra2",
+                "termination_code_str": "  keep_leading  ",
+            }
+        ),
+    )
+    assert rep_ws["total_steps"] == 0
+    assert rep_ws["termination_code"] == "  keep_leading"
+
+    rep_tuple = _rust.trace_star_case(
+        str(case_dir),
+        str(tmp_path / "out_tuple"),
+        extras=_ReturnDirectiveProbe(("terminate", "diagnostic note")),
+    )
+    assert rep_tuple["total_steps"] == 0
+    assert rep_tuple["termination_code"] == "extras_start_step"
+
+    for bad_res, pat in (
+        (
+            {"action": "terminate", "termination_code": "free-form"},
+            "free-form 'termination_code' is unsupported",
+        ),
+        (
+            {
+                "action": "keep_going",
+                "termination_code_slot": "t_xtra1",
+                "termination_code_str": "bad",
+            },
+            "only valid when action == 'terminate'",
+        ),
+        (
+            {"action": "terminate", "termination_code_slot": "t_xtra0"},
+            "invalid termination_code_slot",
+        ),
+        (
+            {"action": "terminate", "termination_code_slot": " t_xtra1 "},
+            "invalid termination_code_slot",
+        ),
+        (
+            {"action": "terminate", "termination_code_str": "missing slot"},
+            "requires 'termination_code_slot'",
+        ),
+        (
+            {
+                "action": "terminate",
+                "termination_code_slot": "t_xtra1",
+                "termination_code_str": "",
+            },
+            "empty or whitespace-only",
+        ),
+        (
+            {
+                "action": "terminate",
+                "termination_code_slot": "t_xtra1",
+                "termination_code_str": "   ",
+            },
+            "empty or whitespace-only",
+        ),
+        (
+            {
+                "action": "terminate",
+                "termination_code_slot": "t_xtra1",
+                "termination_code_str": 123,
+            },
+            "expected str",
+        ),
+    ):
+        with pytest.raises(ValueError, match=pat):
+            _rust.trace_star_case(
+                str(case_dir),
+                str(tmp_path / "out_bad"),
+                extras=_ReturnDirectiveProbe(bad_res),
+            )
+
+    dt_case_dir = tmp_path / "dt_limit_term_slot"
+    dt_case_dir.mkdir()
+    (dt_case_dir / "inlist").write_text(
+        "&star_job\n"
+        "/\n"
+        "&kap\n"
+        "  Zbase = 0.02\n"
+        "/\n"
+        "&controls\n"
+        "  initial_mass = 1.0\n"
+        "  max_model_number = 5\n"
+        "  use_other_timestep_limit = .true.\n"
+        "/\n",
+        encoding="utf-8",
+    )
+
+    class _DtLimitSlotProbe:
+        def other_timestep_limit(
+            self,
+            _state: dict[str, Any],
+            _skip_hard_limit: bool,
+            _dt: float,
+        ) -> object:
+            return {
+                "action": "terminate",
+                "termination_code_slot": "t_xtra1",
+                "termination_code_str": "disallowed from dt limit",
+            }
+
+    with pytest.raises(ValueError, match="only supported by"):
+        _rust.trace_star_case(
+            str(dt_case_dir),
+            str(tmp_path / "out_dt_bad"),
+            extras=_DtLimitSlotProbe(),
+        )
 
 
 def test_other_physics_hooks_kudritzki_grafener_and_invalid_scheme() -> None:

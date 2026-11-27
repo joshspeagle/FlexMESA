@@ -372,6 +372,8 @@ pub struct PrimaryStateBuffer {
     /// Opacity configuration.
     pub kap_config: KapConfig,
 
+    pub(crate) v_flag: bool,
+    pub(crate) u_flag: bool,
     pub(crate) model_number: usize,
     pub(crate) model_number_old: usize,
     pub(crate) generations: u8,
@@ -647,7 +649,7 @@ impl PrimaryStateBuffer {
                 using_gold_tolerances, why_tlim_neg_x,
                 solver_skip_global_corr_coeff_limit, doing_relax,
                 doing_finish_load_model, doing_struct_burn_mix, have_mlt_vc,
-                have_j_rot, okay_to_set_mlt_vc
+                have_j_rot, okay_to_set_mlt_vc, v_flag, u_flag
             ]
         )
     }
@@ -664,6 +666,8 @@ impl PrimaryStateBuffer {
     /// capacities across retries and implicit trials.
     pub fn capture_from(&mut self, model: &StarModel) {
         model_scalar_copy_to_buf(self, model);
+        self.v_flag = model.controls.v_flag;
+        self.u_flag = model.controls.u_flag;
         clone_vecs!(
             self,
             model,
@@ -848,9 +852,10 @@ impl PrimaryStateBuffer {
         }
     }
 
-    /// Restores buffered state into `model` in place while preserving `controls`,
-    /// `job`, `aux.micro_cache`, and all 6 cumulative solver/retry/redo/cache
-    /// counters, then repopulates derived microphysics.
+    /// Restores buffered state into `model` in place while preserving `controls`
+    /// (except layout-coupled `v_flag`/`u_flag` flags, which stay synchronized
+    /// with `layout`), `job`, `aux.micro_cache`, and all 6 cumulative
+    /// solver/retry/redo/cache counters, then repopulates derived microphysics.
     ///
     /// # Errors
     /// Returns [`StarError`] if microphysics recomputation fails.
@@ -861,6 +866,8 @@ impl PrimaryStateBuffer {
             || model.layout != self.layout;
         model.species = self.species;
         clone_vecs!(model, self, [chem_id, iso_names, layout]);
+        model.controls.v_flag = self.v_flag;
+        model.controls.u_flag = self.u_flag;
         if chem_changed {
             model.net_iso.fill(None);
             for (j, &cid) in model.chem_id.iter().enumerate() {

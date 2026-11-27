@@ -32,7 +32,6 @@ _EXPECTED_UNPORTED_STAR: dict[str, type[Any]] = {
     "relax_composition_j_entropy": (
         star_extras.RelaxCompositionJEntropyStarExtras
     ),
-    "tzo": star_extras.TzoStarExtras,
     "wd_aic": star_extras.WdAicStarExtras,
 }
 
@@ -331,7 +330,7 @@ def test_relax_composition_j_entropy_surface_l_lsun_fallback_and_guard(
 
 
 def test_wave3_ledger_counts_and_unported_audit() -> None:
-    """All 13 unported `star` and 4 `astero` cases match ledger and guards."""
+    """All 12 unported `star` and 4 `astero` cases match ledger and guards."""
     for case_name, expected_cls in _EXPECTED_UNPORTED_STAR.items():
         case_dir = harness_runner.resolve_case_dir("star", case_name)
         assert (
@@ -363,6 +362,7 @@ def test_wave3_ledger_counts_and_unported_audit() -> None:
     assert len(rows) == 106
     by_case = {(r["suite"], r["case"]): r for r in rows}
     assert by_case[("star", "make_sdb")]["status"] == "ported"
+    assert by_case[("star", "tzo")]["status"] == "ported"
     unported_star = {
         r["case"]
         for r in rows

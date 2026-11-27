@@ -22,7 +22,7 @@ use flexmesa_const::{MixingType, L_SUN, M_SUN, R_SUN, SECYER, STANDARD_CGRAV};
 use flexmesa_eos::{EosConfig, NUM_EOS_BASIC_RESULTS};
 use flexmesa_kap::KapConfig;
 
-use crate::controls::{StarControls, StarJobControls, VarLayout};
+use crate::controls::{StarControls, StarError, StarJobControls, VarLayout};
 use crate::hydro_state::HydroAuxState;
 use crate::star_ad::{StarAdExt, StarAdOrder1};
 
@@ -852,4 +852,233 @@ impl StarModel {
             + eos_raw
             + size_of_val(self.net_iso.as_slice())
     }
+
+    fn validate_v_flag_buffers(&self, enable_v: bool) -> Result<(), StarError> {
+        let expected_xh = self.nz * self.layout.nvar_hydro;
+        if self.xh.len() != expected_xh {
+            return Err(StarError::InvalidInput(format!(
+                "set_v_flag: xh length {} != nz ({}) * nvar_hydro ({})",
+                self.xh.len(),
+                self.nz,
+                self.layout.nvar_hydro,
+            )));
+        }
+        if self.xh_start.len() != expected_xh {
+            return Err(StarError::InvalidInput(format!(
+                "set_v_flag: xh_start length {} != nz ({}) * nvar_hydro ({})",
+                self.xh_start.len(),
+                self.nz,
+                self.layout.nvar_hydro,
+            )));
+        }
+        let check_old = self.generations > 1 && self.dq_old.len() == self.nz;
+        if self.v.len() != self.nz
+            || self.v_start.len() != self.nz
+            || (check_old && self.v_old.len() != self.nz)
+        {
+            return Err(StarError::InvalidInput(format!(
+                "set_v_flag: velocity vector lengths (v={}, v_start={}, v_old={}) must match nz ({})",
+                self.v.len(),
+                self.v_start.len(),
+                self.v_old.len(),
+                self.nz,
+            )));
+        }
+        if enable_v && self.controls.u_flag {
+            if self.layout.i_u.is_none() {
+                return Err(StarError::InvalidInput(String::from(
+                    "set_v_flag: u_flag is set but layout.i_u is None",
+                )));
+            }
+            if self.u.len() != self.nz
+                || self.u_start.len() != self.nz
+                || (check_old && self.u_old.len() != self.nz)
+            {
+                return Err(StarError::InvalidInput(format!(
+                    "set_v_flag: u-velocity vector lengths (u={}, u_start={}, u_old={}) must match nz ({})",
+                    self.u.len(),
+                    self.u_start.len(),
+                    self.u_old.len(),
+                    self.nz,
+                )));
+            }
+        }
+        if !enable_v && self.layout.i_v.is_none() {
+            return Err(StarError::InvalidInput(String::from(
+                "set_v_flag(false): v_flag is set but layout.i_v is None",
+            )));
+        }
+        Ok(())
+    }
+
+    /// Toggles `controls.v_flag` by shifting columns in `xh` and `xh_start`,
+    /// updates `layout`, and sets `aux.need_to_setvars = true`
+    /// (`star/private/set_flags.f90:31-119`, `star/private/alloc.f90:2435`).
+    ///
+    /// Preserves all non-velocity columns of `xh` and `xh_start` bit-for-bit
+    /// without repacking or clamping (`RSP2` / `RTI` columns remain intact).
+    /// When enabling `v_flag` while `u_flag` is set, computes face velocities
+    /// from `xh[:, i_u]` (`v[0] = xh[0, i_u]`,
+    /// `v[k] = 0.5 * (xh[k - 1, i_u] + xh[k, i_u])`, `set_flags.f90:71-76`),
+    /// clears `controls.u_flag` (`:92-94`, `:122-219`), and also stores them in
+    /// `self.v` (unlike `set_flags.f90:71-76`, where upstream relies on
+    /// `update_vars` -> `unpack_xh` at `hydro_vars.f90:226,331-335`,
+    /// `FlexMESA`'s `hydro_vars::set_vars` copies `self.v` into
+    /// `self.v_start` without calling `unpack_xh`). Enabling `v_flag` zeroes
+    /// `v_center` (`set_flags.f90:68`), `v_start` (matching `insert(xh_start)`
+    /// zeroing `xh_start(i_v, 1:nz)` at `:70,116`), and `v` in the non-`u_flag`
+    /// path (`:78-85`). Disabling `v_flag` (or clearing `u_flag`) leaves
+    /// `v`/`v_start` (and `u`/`u_start`) untouched, matching
+    /// `set_flags.f90:51-55,146-150` (every `flexmesa-star` reader gates on
+    /// `controls.v_flag` / `controls.u_flag`).
+    ///
+    /// Zeroes `v_old` (and `u_old` when clearing `u_flag`) only when
+    /// `generations > 1 && dq_old.len() == nz`: `StarModel` holds no separate
+    /// packed `xh_old` vector (`restore_from_old` copies `v_old`/`u_old` and
+    /// calls `pack_xh`, equivalent to `evolve_support.f90:147-194`), so this
+    /// is the `StarModel` equivalent of upstream's `del(s% xh_old)` /
+    /// `insert(s% xh_old)` column operations (`set_flags.f90:54,87,101,111,116,149`).
+    ///
+    /// # Errors
+    /// Returns [`StarError::InvalidInput`] without modifying `self` when
+    /// `xh`, `xh_start`, or velocity buffer lengths do not match
+    /// `nz` / `layout.nvar_hydro`, or when `layout.i_v` / `layout.i_u` is
+    /// inconsistent with `controls`.
+    pub fn set_v_flag(&mut self, v_flag: bool) -> Result<(), StarError> {
+        if self.controls.v_flag == v_flag {
+            return Ok(());
+        }
+        self.validate_v_flag_buffers(v_flag)?;
+        let nz = self.nz;
+        let old_nvar = self.layout.nvar_hydro;
+        let update_old = self.generations > 1 && self.dq_old.len() == nz;
+        let new_layout = VarLayout::with_flags(
+            self.species,
+            v_flag,
+            if v_flag { false } else { self.controls.u_flag },
+            self.controls.rsp2_flag,
+            self.controls.rti_flag,
+        );
+
+        if v_flag {
+            let i_v = new_layout.i_v.ok_or_else(|| {
+                StarError::InvalidInput(String::from(
+                    "set_v_flag(true): new layout missing i_v",
+                ))
+            })?;
+            if self.controls.u_flag {
+                let i_u_old = self.layout.i_u.ok_or_else(|| {
+                    StarError::InvalidInput(String::from(
+                        "set_v_flag: missing layout.i_u",
+                    ))
+                })?;
+                let mid_nvar = old_nvar + 1;
+                let i_u_shifted =
+                    if i_u_old >= i_v { i_u_old + 1 } else { i_u_old };
+                let mut xh_mid =
+                    shift_insert_hydro_col(&self.xh, nz, old_nvar, i_v);
+                let xh_start_mid =
+                    shift_insert_hydro_col(&self.xh_start, nz, old_nvar, i_v);
+                if nz > 0 {
+                    let v0 = xh_mid[i_u_shifted];
+                    xh_mid[i_v] = v0;
+                    // Upstream writes `xh(i_v, k)` only and relies on
+                    // `update_vars -> unpack_xh` (`hydro_vars.f90:226,331-335`),
+                    // but `hydro_vars::set_vars` copies `v -> v_start` without
+                    // unpacking `xh`, so `self.v` must stay synced here.
+                    self.v[0] = v0;
+                    for k in 1..nz {
+                        let u_m1 = xh_mid[(k - 1) * mid_nvar + i_u_shifted];
+                        let u_00 = xh_mid[k * mid_nvar + i_u_shifted];
+                        let v_k = 0.5 * (u_m1 + u_00);
+                        xh_mid[k * mid_nvar + i_v] = v_k;
+                        self.v[k] = v_k;
+                    }
+                }
+                self.xh =
+                    shift_del_hydro_col(&xh_mid, nz, mid_nvar, i_u_shifted);
+                self.xh_start = shift_del_hydro_col(
+                    &xh_start_mid,
+                    nz,
+                    mid_nvar,
+                    i_u_shifted,
+                );
+                self.controls.u_flag = false;
+                // Equivalent to `del(s% xh_old)` (`set_flags.f90:149`); `u` and
+                // `u_start` stay untouched as in `set_flags.f90:146-150`.
+                if update_old {
+                    self.u_old.fill(0.0);
+                }
+            } else {
+                self.xh = shift_insert_hydro_col(&self.xh, nz, old_nvar, i_v);
+                self.xh_start =
+                    shift_insert_hydro_col(&self.xh_start, nz, old_nvar, i_v);
+                self.v.fill(0.0);
+            }
+            self.v_center = 0.0;
+            // Keeps `v_start` aligned with `insert(s% xh_start)` zeroing
+            // `xh_start(i_v, :)` (`set_flags.f90:70,116`) before `set_vars`.
+            self.v_start.fill(0.0);
+            // Equivalent to `insert(s% xh_old)` (`set_flags.f90:87,111,116`).
+            if update_old {
+                self.v_old.fill(0.0);
+            }
+        } else {
+            let i_v = self.layout.i_v.ok_or_else(|| {
+                StarError::InvalidInput(String::from(
+                    "set_v_flag(false): missing layout.i_v",
+                ))
+            })?;
+            self.xh = shift_del_hydro_col(&self.xh, nz, old_nvar, i_v);
+            self.xh_start =
+                shift_del_hydro_col(&self.xh_start, nz, old_nvar, i_v);
+            // Equivalent to `del(s% xh_old)` (`set_flags.f90:54,101`); `v` and
+            // `v_start` stay untouched as in `set_flags.f90:51-55`.
+            if update_old {
+                self.v_old.fill(0.0);
+            }
+        }
+
+        self.controls.v_flag = v_flag;
+        self.layout = new_layout;
+        // `set_var_info` sets `s% need_to_setvars = .true.` (`alloc.f90:2435`).
+        self.aux.need_to_setvars = true;
+        Ok(())
+    }
+}
+
+fn shift_del_hydro_col(
+    xs: &[f64],
+    nz: usize,
+    old_nvar: usize,
+    col: usize,
+) -> Vec<f64> {
+    let new_nvar = old_nvar - 1;
+    let mut out = vec![0.0; nz * new_nvar];
+    for k in 0..nz {
+        let src = k * old_nvar;
+        let dst = k * new_nvar;
+        out[dst..(dst + col)].copy_from_slice(&xs[src..(src + col)]);
+        out[(dst + col)..(dst + new_nvar)]
+            .copy_from_slice(&xs[(src + col + 1)..(src + old_nvar)]);
+    }
+    out
+}
+
+fn shift_insert_hydro_col(
+    xs: &[f64],
+    nz: usize,
+    old_nvar: usize,
+    col: usize,
+) -> Vec<f64> {
+    let new_nvar = old_nvar + 1;
+    let mut out = vec![0.0; nz * new_nvar];
+    for k in 0..nz {
+        let src = k * old_nvar;
+        let dst = k * new_nvar;
+        out[dst..(dst + col)].copy_from_slice(&xs[src..(src + col)]);
+        out[(dst + col + 1)..(dst + new_nvar)]
+            .copy_from_slice(&xs[(src + col)..(src + old_nvar)]);
+    }
+    out
 }

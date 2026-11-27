@@ -126,9 +126,6 @@ STOCK_EXTRAS_DIGESTS: frozenset[str] = frozenset(
 # case without failing on state the adapter does not provide. A handler not
 # listed here is written but cannot run yet because its hooks require an
 # unported engine or `StarExtras` capability:
-# - `#152` (solver/timestep/state hooks): `TzoStarExtras`
-#   (`star_set_v_flag`, `m_center`/`xmstar`/`L_center` mutations at `:108-125`,
-#   and custom `t_xtra1` `'PASS: Have reached requested NS mass'` at `:143`).
 # - `#153` (mesh/surface-cut hooks): `MakeCoWdStarExtras`
 #   (`star_remove_surface_at_cell_k` at `:207`).
 # - `#154` (relaxation & custom `t_xtra1` hooks):
@@ -209,6 +206,7 @@ ADAPTER_SERVED_STAR_HANDLERS: frozenset[str] = frozenset(
         "SplitBurnBigNetStarExtras",
         "TTauGradrStarExtras",
         "Thermohaline1MStarExtras",
+        "TzoStarExtras",
         "WdAccSmallDmStarExtras",
         "WdCool06MStarExtras",
         "WdDiffusionStarExtras",

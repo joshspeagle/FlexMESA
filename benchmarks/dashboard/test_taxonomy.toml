@@ -1393,6 +1393,12 @@ routines = [
 ]
 
 [[tests]]
+path = "crates/flexmesa-star/tests/set_v_flag_579_test.rs"
+language = "rust"
+module = "star"
+kind = "invariant"
+
+[[tests]]
 path = "crates/flexmesa-star/tests/solver_rti_152_test.rs"
 language = "rust"
 module = "star"

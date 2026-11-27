@@ -686,24 +686,33 @@ class TzoStarExtras:
             "l_center": self._eta_ledd * l_center_edd,
         }
 
-    def extras_start_step(self, state: dict[str, Any]) -> str:
-        """Keep going for parts 1..3; fail loudly in part 4 (`:96-129`)."""
+    def extras_start_step(
+        self, state: dict[str, Any]
+    ) -> str | tuple[str, dict[str, Any]]:
+        """Keep going for parts 1..3; update center and hydro in part 4
+        (`:96-129`).
+        """
         if self._inlist_part != 4:
             return "keep_going"
-        _ = self.compute_part4_center_step(state)
-        raise NotImplementedError(
-            "tzo: extras_start_step case(4) (:108-125) calls star_set_v_flag "
-            "and mutates s% m_center, s% xmstar, and s% L_center, which "
-            "flexmesa-star StarExtras updates do not expose (#152)"
-        )
+        step = self.compute_part4_center_step(state)
+        updates: dict[str, Any] = {
+            "m_center": step["m_center"],
+            "xmstar": step["xmstar"],
+            "l_center": step["l_center"],
+        }
+        if step["enable_v_flag"]:
+            updates["v_flag"] = True
+        return ("keep_going", updates)
 
-    def extras_check_model(
-        self, state: dict[str, Any]
-    ) -> str | tuple[str, str]:
+    def extras_check_model(self, state: dict[str, Any]) -> str | dict[str, str]:
         """Stop when `m_center / Msun > target_mass` in part 4 (`:133-148`)."""
         m_center_msun = float(state["m_center"]) / constants.MSUN
         if m_center_msun > self._target_mass and self._inlist_part == 4:
-            return ("terminate", "PASS: Have reached requested NS mass")
+            return {
+                "action": "terminate",
+                "termination_code_slot": "t_xtra1",
+                "termination_code_str": "PASS: Have reached requested NS mass",
+            }
         return "keep_going"
 
     def other_cgrav(self, state: dict[str, Any]) -> list[float]:

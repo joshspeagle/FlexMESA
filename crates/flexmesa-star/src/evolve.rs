@@ -1722,7 +1722,12 @@ pub(crate) fn star_evolve_step_outcome_checked(
         let restore_snap = if model.controls.mix_wind.restore_mesh_on_retry
             && !model.controls.rsp_flag
         {
-            pre_remesh_model.take()
+            // Upstream skips `prev_mesh_*` restore when `nvar_hydro` or
+            // `species` changed during the step (`evolve.f90:2192-2193`,
+            // `alloc.f90:214`), falling back to `set_current_to_old`.
+            pre_remesh_model.take().filter(|snap| {
+                snap.species == model.species && snap.layout == model.layout
+            })
         } else {
             None
         };

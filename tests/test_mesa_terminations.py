@@ -76,7 +76,7 @@ def _exc(**over: str) -> dict[str, str]:
     row = {
         "manifest": "extras_finish_step",
         "kind": "hook_without_code",
-        "source": "star/x.f90:3",
+        "source": "synthetic-source:3",
         "source_text": "terminate",
         "message": "msg",
     }

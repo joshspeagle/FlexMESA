@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-//! Regression snapshot and invariant tests for `#154`
-//! (`create_initial_model`, `pre_ms`, `relax`, `relax_comp`, `relax_mass_comp`,
-//! `relax_driver`, and `job_rotation`).
+//! MESA `26.4.1` initial-model oracle and `#154` relax/rotation regression
+//! tests (`create_initial_model`, `pre_ms`, `relax`, `relax_comp`,
+//! `relax_mass_comp`, `relax_driver`, and `job_rotation`).
 
 #![forbid(unsafe_code)]
 #![allow(
@@ -13,6 +13,8 @@
 )]
 
 use std::fmt::Write as _;
+use std::fs;
+use std::path::Path;
 
 use flexmesa_const::SECYER;
 use flexmesa_eos::EosConfig;
@@ -34,33 +36,122 @@ use flexmesa_star::relax::{
 use flexmesa_star::{MixWindControls, StarControls, StarJobControls};
 use flexmesa_turb::MltOption;
 
-fn assert_zone_matches_snapshot(
+struct LoadedMesaSample {
+    nz: usize,
+    species: usize,
+    net_name: String,
+    zones: Vec<(usize, [u64; 5])>,
+    xa: Vec<(usize, Vec<u64>)>,
+}
+
+impl LoadedMesaSample {
+    fn zone_bits(&self, k_1based: usize) -> [u64; 5] {
+        self.zones.iter().find(|(k, _)| *k == k_1based).map_or_else(
+            || panic!("missing ZONE LOADED {k_1based}"),
+            |(_, bits)| *bits,
+        )
+    }
+
+    fn xa_bits(&self, k_1based: usize) -> &[u64] {
+        self.xa.iter().find(|(k, _)| *k == k_1based).map_or_else(
+            || panic!("missing XA LOADED {k_1based}"),
+            |(_, bits)| bits.as_slice(),
+        )
+    }
+}
+
+fn parse_hex_u64(tok: &str) -> u64 {
+    u64::from_str_radix(tok, 16)
+        .unwrap_or_else(|e| panic!("invalid IEEE-754 hex token {tok:?}: {e}"))
+}
+
+fn load_relax154_loaded_sample(filename: &str) -> LoadedMesaSample {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../benchmarks/fortran_mesa/relax_154_oracles/samples")
+        .join(filename);
+    let text = fs::read_to_string(&path).unwrap_or_else(|e| {
+        panic!("failed to read MESA oracle {}: {e}", path.display())
+    });
+    assert!(text.contains("# mesa_version: r26.4.1"));
+    assert!(text.contains("# compiler: gfortran 15.2.0"));
+    assert!(text.contains("# mesa_sdk_version: x86_64-linux-26.6.1"));
+
+    let mut nz = None;
+    let mut species = None;
+    let mut net_name = None;
+    let mut zones = Vec::new();
+    let mut xa = Vec::new();
+
+    for line in text.lines() {
+        let toks: Vec<&str> = line.split_whitespace().collect();
+        match toks.as_slice() {
+            ["INT", "LOADED", "nz", v] => {
+                nz = Some(v.parse::<usize>().expect("parse nz"));
+            }
+            ["INT", "LOADED", "species", v] => {
+                species = Some(v.parse::<usize>().expect("parse species"));
+            }
+            ["STR", "LOADED", "net_name", v] => {
+                net_name = Some((*v).to_string());
+            }
+            ["ZONE", "LOADED", k_str, ..] if toks.len() >= 13 => {
+                let k1 = k_str.parse::<usize>().expect("parse zone k");
+                let bits = [
+                    parse_hex_u64(toks[4]),
+                    parse_hex_u64(toks[6]),
+                    parse_hex_u64(toks[8]),
+                    parse_hex_u64(toks[10]),
+                    parse_hex_u64(toks[12]),
+                ];
+                zones.push((k1, bits));
+            }
+            ["XA", "LOADED", k_str, rest @ ..] => {
+                let k1 = k_str.parse::<usize>().expect("parse xa zone k");
+                xa.push((k1, rest.iter().map(|t| parse_hex_u64(t)).collect()));
+            }
+            _ => {}
+        }
+    }
+
+    LoadedMesaSample {
+        nz: nz.expect("sample missing INT LOADED nz"),
+        species: species.expect("sample missing INT LOADED species"),
+        net_name: net_name.expect("sample missing STR LOADED net_name"),
+        zones,
+        xa,
+    }
+}
+
+fn assert_zone_matches_mesa_hex(
     label: &str,
-    zone: usize,
+    k_1based: usize,
     model: &StarModel,
-    expected: [f64; 5],
-    log_tol: f64,
+    sample: &LoadedMesaSample,
 ) {
-    let [exp_lnd, exp_lnt, exp_lnr, exp_lum, exp_dq] = expected;
-    let d_lnd = (model.lnd[zone] - exp_lnd).abs();
-    let d_lnt = (model.ln_t[zone] - exp_lnt).abs();
-    let d_lnr = (model.ln_r[zone] - exp_lnr).abs();
-    let d_lum = (model.lum[zone] - exp_lum).abs() / exp_lum.abs().max(1.0);
-    let d_dq = (model.dq[zone] - exp_dq).abs() / exp_dq.abs().max(1.0);
-    assert!(
-        d_lnd <= log_tol
-            && d_lnt <= log_tol
-            && d_lnr <= log_tol
-            && d_lum <= 1.0e-13
-            && d_dq <= 1.0e-13,
-        "{label} zone {zone} snapshot mismatch: \
-         d_lnd={d_lnd:.3e} d_lnT={d_lnt:.3e} d_lnR={d_lnr:.3e} \
-         rel_lum={d_lum:.3e} rel_dq={d_dq:.3e}"
-    );
+    let zone = k_1based - 1;
+    let exp_bits = sample.zone_bits(k_1based);
+    let actual = [
+        ("lnd", model.lnd[zone], exp_bits[0]),
+        ("lnT", model.ln_t[zone], exp_bits[1]),
+        ("lnR", model.ln_r[zone], exp_bits[2]),
+        ("L", model.lum[zone], exp_bits[3]),
+        ("dq", model.dq[zone], exp_bits[4]),
+    ];
+    for (field, got, want_bits) in actual {
+        let got_bits = got.to_bits();
+        assert_eq!(
+            got_bits,
+            want_bits,
+            "{label} zone k={k_1based} {field} bit mismatch: \
+             got {got_bits:016X} ({got:.17e}), expected {want_bits:016X} \
+             ({:.17e})",
+            f64::from_bits(want_bits),
+        );
+    }
 }
 
 #[test]
-fn test_create_initial_model_with_change_net_matches_snapshot() {
+fn test_create_initial_model_with_change_net_matches_mesa_26_4_1() {
     let controls = StarControls {
         initial_z: 1.0e-4,
         ..StarControls::default()
@@ -91,85 +182,35 @@ fn test_create_initial_model_with_change_net_matches_snapshot() {
     )
     .expect("create_initial_model with pp_and_cno_extras.net");
 
-    assert_eq!(model.job.net_name, "pp_and_cno_extras.net");
-    assert_eq!(model.nz, 774);
-    assert_eq!(model.species, 25);
+    let sample = load_relax154_loaded_sample(
+        "create_initial_model_pp_and_cno_extras.sample",
+    );
+    assert_eq!(model.job.net_name, sample.net_name);
+    assert_eq!(model.nz, sample.nz);
+    assert_eq!(model.species, sample.species);
 
-    // Surface, mid, and core structure regression snapshot
-    // (`create_initial_model`; no committed MESA capture yet).
-    assert_zone_matches_snapshot(
-        "create_initial_model pp_and_cno_extras",
-        0,
-        &model,
-        [
-            -1.502_215_698_358_524_8e1,
-            7.939_228_370_935_964e0,
-            2.427_862_964_894_775_6e1,
-            5.405_347_987_376_163e31,
-            3.036_094_708_974_701_5e-10,
-        ],
-        1.0e-14,
-    );
-    assert_zone_matches_snapshot(
-        "create_initial_model pp_and_cno_extras",
-        387,
-        &model,
-        [
-            -5.963_245_688_581_785e-1,
-            1.199_398_218_312_824e1,
-            2.305_940_819_639_525e1,
-            1.224_299_202_354_761_4e31,
-            6.892_221_727_241_965e-3,
-        ],
-        1.0e-14,
-    );
-    assert_zone_matches_snapshot(
-        "create_initial_model pp_and_cno_extras",
-        773,
-        &model,
-        [
-            -3.321_984_323_330_834e-1,
-            1.218_337_008_424_682_3e1,
-            1.667_771_143_889_374e1,
-            7.714_467_377_693_785e22,
-            8.095_322_172_780_311e-10,
-        ],
-        1.0e-14,
-    );
+    // Surface, mid, and core zones compared bit-exact against MESA 26.4.1
+    // `LOADED` hex captures.
+    for k1 in [1_usize, 388, 774] {
+        assert_zone_matches_mesa_hex(
+            "create_initial_model pp_and_cno_extras",
+            k1,
+            &model,
+            &sample,
+        );
+    }
 
-    let expected_xa_0: [f64; 25] = [
-        7.597_000_000_000_000e-1,
-        0.0,
-        2.556_211_424_044_105_8e-5,
-        2.401_744_378_857_595_7e-1,
-        6.213_055_135_916_682e-11,
-        0.0,
-        0.0,
-        1.702_772_177_330_853_5e-5,
-        2.066_950_306_203_294e-7,
-        0.0,
-        5.031_896_909_381_936e-6,
-        1.981_679_528_553_610_2e-8,
-        0.0,
-        0.0,
-        4.677_854_838_371_318_7e-5,
-        1.853_812_743_945_649_7e-8,
-        1.055_517_145_898_504_9e-7,
-        0.0,
-        0.0,
-        2.488_470_214_224_966e-9,
-        0.0,
-        0.0,
-        1.042_512_211_937_402_3e-5,
-        0.0,
-        2.038_355_854_551_055_4e-5,
-    ];
-    for (j, &exp_x) in expected_xa_0.iter().enumerate() {
-        let diff = (model.xa[j] - exp_x).abs();
-        assert!(
-            diff <= 1.0e-15,
-            "xa[{j}] mismatch: got {}, expected {exp_x}",
-            model.xa[j]
+    let expected_xa_0 = sample.xa_bits(1);
+    assert_eq!(expected_xa_0.len(), sample.species);
+    for (j, &exp_bits) in expected_xa_0.iter().enumerate() {
+        let got_bits = model.xa[j].to_bits();
+        assert_eq!(
+            got_bits,
+            exp_bits,
+            "xa[{j}] bit mismatch: got {got_bits:016X} ({}), expected \
+             {exp_bits:016X} ({})",
+            model.xa[j],
+            f64::from_bits(exp_bits),
         );
     }
 
@@ -205,7 +246,7 @@ fn test_create_initial_model_with_change_net_matches_snapshot() {
 }
 
 #[test]
-fn test_create_initial_model_brown_dwarf_and_prems_15m_match_snapshots() {
+fn test_create_initial_model_brown_dwarf_and_prems_15m_match_mesa_26_4_1() {
     let bd_controls = StarControls {
         initial_z: 1.0e-4,
         ..StarControls::default()
@@ -225,47 +266,19 @@ fn test_create_initial_model_brown_dwarf_and_prems_15m_match_snapshots() {
     let bd =
         build_initial_model(bd_controls, bd_job, EosConfig::default(), bd_kap)
             .expect("brown dwarf initial model");
-    assert_eq!(bd.nz, 774);
-    assert_eq!(bd.species, 8);
-    assert_zone_matches_snapshot(
-        "make_brown_dwarf basic.net",
-        0,
-        &bd,
-        [
-            -1.502_215_698_358_522_1e1,
-            7.939_228_370_935_96e0,
-            2.427_862_964_894_774_2e1,
-            5.405_347_987_375_947_6e31,
-            3.036_094_708_974_701_5e-10,
-        ],
-        1.0e-14,
-    );
-    assert_zone_matches_snapshot(
-        "make_brown_dwarf basic.net",
-        387,
-        &bd,
-        [
-            -5.963_245_688_581_578e-1,
-            1.199_398_218_312_820_5e1,
-            2.305_940_819_639_526e1,
-            1.224_299_202_354_768_8e31,
-            6.892_221_727_242_298e-3,
-        ],
-        1.0e-14,
-    );
-    assert_zone_matches_snapshot(
-        "make_brown_dwarf basic.net",
-        773,
-        &bd,
-        [
-            -3.321_984_323_330_38e-1,
-            1.218_337_008_424_678_4e1,
-            1.667_771_143_889_374e1,
-            7.714_467_377_693_762e22,
-            8.095_322_172_780_746e-10,
-        ],
-        1.0e-14,
-    );
+    let bd_sample =
+        load_relax154_loaded_sample("make_brown_dwarf_basic_net.sample");
+    assert_eq!(bd.nz, bd_sample.nz);
+    assert_eq!(bd.species, bd_sample.species);
+    assert_eq!(bd.job.net_name, bd_sample.net_name);
+    for k1 in [1_usize, 388, 774] {
+        assert_zone_matches_mesa_hex(
+            "make_brown_dwarf basic.net",
+            k1,
+            &bd,
+            &bd_sample,
+        );
+    }
 
     let m15_controls = StarControls {
         initial_mass: 15.0,
@@ -298,46 +311,18 @@ fn test_create_initial_model_brown_dwarf_and_prems_15m_match_snapshots() {
         None,
     )
     .expect("15M pre-MS model");
-    assert_eq!(m15.nz, 1033);
-    assert_zone_matches_snapshot(
-        "15M_dynamo pre_ms",
-        0,
-        &m15,
-        [
-            -1.718_824_429_865_272_7e1,
-            8.550_014_188_513_828e0,
-            3.074_563_644_374_423_2e1,
-            3.335_672_940_956_81e38,
-            5.704_188_204_408_657e-6,
-        ],
-        1.0e-12,
-    );
-    assert_zone_matches_snapshot(
-        "15M_dynamo pre_ms",
-        516,
-        &m15,
-        [
-            -1.549_799_169_346_027e1,
-            1.088_726_828_045_913_6e1,
-            3.059_433_113_892_054_8e1,
-            3.167_745_738_574_408_8e38,
-            3.856_189_376_803_351_3e-4,
-        ],
-        1.0e-12,
-    );
-    assert_zone_matches_snapshot(
-        "15M_dynamo pre_ms",
-        1032,
-        &m15,
-        [
-            -1.248_531_967_587_368e1,
-            1.261_127_651_838_039_6e1,
-            2.630_689_192_729_168_7e1,
-            3.335_800_556_088_442e33,
-            1.000_038_257_687_096_5e-5,
-        ],
-        1.0e-12,
-    );
+    let m15_sample = load_relax154_loaded_sample("pre_ms_15m_dynamo.sample");
+    assert_eq!(m15.nz, m15_sample.nz);
+    assert_eq!(m15.species, m15_sample.species);
+    assert_eq!(m15.job.net_name, m15_sample.net_name);
+    for k1 in [1_usize, 517, 1033] {
+        assert_zone_matches_mesa_hex(
+            "15M_dynamo pre_ms",
+            k1,
+            &m15,
+            &m15_sample,
+        );
+    }
 }
 
 #[test]

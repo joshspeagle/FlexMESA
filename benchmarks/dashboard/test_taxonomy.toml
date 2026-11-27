@@ -1228,10 +1228,11 @@ kind = "oracle"
 provenance = "crates/flexmesa-star/tests/data/pulse_fortran_format/fmt_oracle_expected.txt & star/private/pulse_gyre.f90 (#491)"
 
 [[tests]]
-path = "crates/flexmesa-star/tests/relax_154_test.rs"
+path = "crates/flexmesa-star/tests/relax_154_parity_test.rs"
 language = "rust"
 module = "star"
-kind = "invariant"
+kind = "oracle"
+provenance = "benchmarks/fortran_mesa/relax_154_oracles/samples/create_initial_model_pp_and_cno_extras.sample, benchmarks/fortran_mesa/relax_154_oracles/samples/make_brown_dwarf_basic_net.sample, benchmarks/fortran_mesa/relax_154_oracles/samples/pre_ms_15m_dynamo.sample (MESA r26.4.1, gfortran 15.2.0, SDK x86_64-linux-26.6.1; #154, #595)"
 
 [[tests]]
 path = "crates/flexmesa-star/tests/relax_comp_parity_test.rs"

@@ -11,13 +11,13 @@ Instead of capping steps or loosening checks to force green runs, unfinished or 
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
 | `star` | 90 | 86 | 4 | 73 | 17 | 74 | 37 | 42 |
 | `binary` | 8 | 8 | 0 | 8 | 0 | 8 | 4 | 4 |
-| `astero` | 8 | 8 | 0 | 8 | 0 | 3 | 5 | 1 |
-| **Total** | **106** | **102** | **4** | **89** | **17** | **85** | **46** | **47** |
+| `astero` | 8 | 8 | 0 | 8 | 0 | 7 | 2 | 1 |
+| **Total** | **106** | **102** | **4** | **89** | **17** | **89** | **43** | **47** |
 
 `Strict-Validated` counts cases whose unmodified inlists pass strict control validation (`#147`). `Diagnostic Runs` counts cases that strict validation rejects and that were rerun with the unsupported controls ignored; their numbers show where the engine stands and can never count as a pass (`DECISIONS #26`). `Reach Upstream Term` counts runs of either kind.
 
 - **Undeclared Failures**: `0`
-- **Within Numeric Tolerance While Governed as Gaps**: `14` cases (`star/gyre_in_mesa_bcep` ([#170](https://github.com/joshspeagle/FlexMESA/issues/170)), `star/gyre_in_mesa_envelope` ([#170](https://github.com/joshspeagle/FlexMESA/issues/170)), `star/gyre_in_mesa_ms` ([#170](https://github.com/joshspeagle/FlexMESA/issues/170)), `star/gyre_in_mesa_rsg` ([#170](https://github.com/joshspeagle/FlexMESA/issues/170)), `star/gyre_in_mesa_spb` ([#170](https://github.com/joshspeagle/FlexMESA/issues/170)), `star/gyre_in_mesa_wd` ([#157](https://github.com/joshspeagle/FlexMESA/issues/157)), `star/high_z` ([#587](https://github.com/joshspeagle/FlexMESA/issues/587)), `star/make_planets` ([#587](https://github.com/joshspeagle/FlexMESA/issues/587)), `star/ns_h` ([#587](https://github.com/joshspeagle/FlexMESA/issues/587)), `star/rsp_gyre` ([#170](https://github.com/joshspeagle/FlexMESA/issues/170)), `star/wd_he_shell_ignition` ([#587](https://github.com/joshspeagle/FlexMESA/issues/587)), `binary/wind_fed_bhhmxb` ([#587](https://github.com/joshspeagle/FlexMESA/issues/587)), `astero/astero_adipls` ([#171](https://github.com/joshspeagle/FlexMESA/issues/171)), `astero/surface_effects` ([#162](https://github.com/joshspeagle/FlexMESA/issues/162))) meet numeric tolerances while remaining declared gaps under active tracking issues.
+- **Within Numeric Tolerance While Governed as Gaps**: `18` cases (`star/gyre_in_mesa_bcep` ([#170](https://github.com/joshspeagle/FlexMESA/issues/170)), `star/gyre_in_mesa_envelope` ([#170](https://github.com/joshspeagle/FlexMESA/issues/170)), `star/gyre_in_mesa_ms` ([#170](https://github.com/joshspeagle/FlexMESA/issues/170)), `star/gyre_in_mesa_rsg` ([#170](https://github.com/joshspeagle/FlexMESA/issues/170)), `star/gyre_in_mesa_spb` ([#170](https://github.com/joshspeagle/FlexMESA/issues/170)), `star/gyre_in_mesa_wd` ([#157](https://github.com/joshspeagle/FlexMESA/issues/157)), `star/high_z` ([#587](https://github.com/joshspeagle/FlexMESA/issues/587)), `star/make_planets` ([#587](https://github.com/joshspeagle/FlexMESA/issues/587)), `star/ns_h` ([#587](https://github.com/joshspeagle/FlexMESA/issues/587)), `star/rsp_gyre` ([#170](https://github.com/joshspeagle/FlexMESA/issues/170)), `star/wd_he_shell_ignition` ([#587](https://github.com/joshspeagle/FlexMESA/issues/587)), `binary/wind_fed_bhhmxb` ([#587](https://github.com/joshspeagle/FlexMESA/issues/587)), `astero/astero_adipls` ([#171](https://github.com/joshspeagle/FlexMESA/issues/171)), `astero/fast_from_file` ([#162](https://github.com/joshspeagle/FlexMESA/issues/162)), `astero/fast_newuoa` ([#162](https://github.com/joshspeagle/FlexMESA/issues/162)), `astero/fast_scan_grid` ([#162](https://github.com/joshspeagle/FlexMESA/issues/162)), `astero/fast_simplex` ([#162](https://github.com/joshspeagle/FlexMESA/issues/162)), `astero/surface_effects` ([#162](https://github.com/joshspeagle/FlexMESA/issues/162))) meet numeric tolerances while remaining declared gaps under active tracking issues.
 
 ## Cases Without a Stored `26.4.1` Reference (`no_reference_yet`)
 
@@ -35,15 +35,15 @@ Cases lacking a committed MESA `26.4.1` baseline report `no reference yet` and c
 | Tracking Issue | Declared Case Count | Primary Focus |
 | :--- | ---: | :--- |
 | [#161](https://github.com/joshspeagle/FlexMESA/issues/161) | 17 | Restore upstream EOS, opacity, network, and atm control paths |
-| [#162](https://github.com/joshspeagle/FlexMESA/issues/162) | 7 | Align `astero` search and chi-squared drivers |
 | [#154](https://github.com/joshspeagle/FlexMESA/issues/154) | 6 | Align `timestep.rs` and `star` mass-change `do_adjust_mass` |
 | [#157](https://github.com/joshspeagle/FlexMESA/issues/157) | 5 | Restore MLT/TDC controls and remove non-upstream fallbacks |
 | [#587](https://github.com/joshspeagle/FlexMESA/issues/587) | 5 | Open #140 parity sub-issue |
+| [#162](https://github.com/joshspeagle/FlexMESA/issues/162) | 4 | Align `astero` search and chi-squared drivers |
 | [#158](https://github.com/joshspeagle/FlexMESA/issues/158) | 3 | Align shellular rotation solver variables and Spruit-Tayler |
 | [#160](https://github.com/joshspeagle/FlexMESA/issues/160) | 2 | Align coupled `BinarySystem` step ordering, tides, and RLOF |
 | [#231](https://github.com/joshspeagle/FlexMESA/issues/231) | 1 | Open #140 parity sub-issue |
 
-## Complete Known-Gaps Registry (46 Cases)
+## Complete Known-Gaps Registry (43 Cases)
 
 | Suite | Case | Issue | Expected Term | Baseline Outcome | Mechanism |
 | :--- | :--- | :--- | :--- | :--- | :--- |
@@ -89,10 +89,7 @@ Cases lacking a committed MESA `26.4.1` baseline report `no reference yet` and c
 | `binary` | `star_plus_point_mass_explicit_mdot` | [#160](https://github.com/joshspeagle/FlexMESA/issues/160) | `xa_central_lower_limit` | `xa_central_lower_limit` (539 steps; strict) | Explicit RLOF star+point-mass age and component masses differ from MESA 26.4.1. |
 | `binary` | `wind_fed_bhhmxb` | [#587](https://github.com/joshspeagle/FlexMESA/issues/587) | `xa_central_lower_limit` | `xa_central_lower_limit` (392 steps; strict) | Within every MESA 26.4.1 history tolerance but takes a different number of steps than MESA per stage (FlexMESA [392] vs MESA [393]), which DECISIONS #70 does not count as a pass (#587). |
 | `astero` | `example_astero` | [#162](https://github.com/joshspeagle/FlexMESA/issues/162) | `xtra1` | `astero_use_first_values_samples=1_best_chi2=2.800488e0_term=chi2_search_limit2` (737 steps; strict) | Asteroseismic search driver and in-house pulsation scaffolding (#162, #171). |
-| `astero` | `fast_from_file` | [#162](https://github.com/joshspeagle/FlexMESA/issues/162) | `xtra1` | `astero_from_file_samples=2_best_chi2=7.403041e-1_term=limit_num_chi2_too_big` (1016 steps; strict) | Asteroseismic from_file driver and in-house pulsation scaffolding (#162, #171). |
-| `astero` | `fast_newuoa` | [#162](https://github.com/joshspeagle/FlexMESA/issues/162) | `xtra1` | `astero_newuoa_samples=8_best_chi2=3.333388e5_term=age_target` (3835 steps; strict) | Asteroseismic NEWUOA optimizer times out with in-house pulsation scaffolding (#162, #171). |
-| `astero` | `fast_scan_grid` | [#162](https://github.com/joshspeagle/FlexMESA/issues/162) | `xtra1` | `astero_scan_grid_samples=4_best_chi2=7.650287e-1_term=limit_num_chi2_too_big` (1765 steps; strict) | Asteroseismic scan_grid driver and in-house pulsation scaffolding (#162, #171). |
-| `astero` | `fast_simplex` | [#162](https://github.com/joshspeagle/FlexMESA/issues/162) | `xtra1` | `astero_simplex_samples=6_best_chi2=4.606467e-2_term=chi2_search_limit2` (2724 steps; strict) | Asteroseismic simplex optimizer and in-house pulsation scaffolding (#162, #171). |
+| `astero` | `fast_newuoa` | [#162](https://github.com/joshspeagle/FlexMESA/issues/162) | `age_target` | `astero_newuoa_samples=8_best_chi2=3.333388e5_term=age_target` (3835 steps; strict) | Asteroseismic NEWUOA optimizer times out with in-house pulsation scaffolding (#162, #171). |
 
 ## Declared Test-Suite Gaps (`[[test_gaps]]`, 37 Markers)
 

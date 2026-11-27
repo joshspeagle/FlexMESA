@@ -16,6 +16,10 @@
 #   after_evolve_code       upstream sets termination_code in
 #                           extras_after_evolve, after MESA printed its codes.
 #   hook_error_exit         a hook ends the run by returning an error.
+#   astero_search_message   the final sample of an astero search ends in
+#                           astero_extras_check_model terminating with no
+#                           code; the manifest names the FlexMESA search
+#                           summary `_term=` code that maps to that message.
 #   no_mesa_run             no completed MESA run exists (skipped upstream or
 #                           timed out); the value rests on the upstream line.
 #
@@ -193,29 +197,38 @@ source = "astero/test_suite/example_astero/src/run_star_extras.f90:214"
 source_text = "s% termination_code = t_xtra1"
 message = "chi square within limit"
 
-# Cases reported but not failing, pending a decision on the manifest value.
-# MESA's final stage of each astero search ends in astero_extras_check_model
-# (astero/private/extras_support.f90, messages at lines 496, 511, 517, 524: terminate with
-# termination_code unset, so no code is printed) and these cases' own
-# extras_after_evolve never sets t_xtra1. `xtra1` is the label of FlexMESA's
-# search summary, not a code MESA sets for these cases.
-
-[[unresolved]]
+[[exceptions]]
 suite = "astero"
 case = "fast_from_file"
-note = "final stage printed have reached too many bad chi2 limit and no code; MESA sets no xtra1 here; extras_check_model matches DECISIONS #75"
+manifest = "limit_num_chi2_too_big"
+kind = "astero_search_message"
+source = "astero/private/extras_support.f90:524"
+source_text = "have reached too many bad chi2 limit"
+message = "have reached too many bad chi2 limit"
 
-[[unresolved]]
+[[exceptions]]
 suite = "astero"
 case = "fast_newuoa"
-note = "final stage printed have reached age_target and no code; MESA sets no xtra1 here; extras_check_model matches DECISIONS #75"
+manifest = "age_target"
+kind = "astero_search_message"
+source = "astero/private/extras_support.f90:511"
+source_text = "have reached age_target"
+message = "have reached age_target"
 
-[[unresolved]]
+[[exceptions]]
 suite = "astero"
 case = "fast_scan_grid"
-note = "final stage printed have reached too many bad chi2 limit and no code; MESA sets no xtra1 here; extras_check_model matches DECISIONS #75"
+manifest = "limit_num_chi2_too_big"
+kind = "astero_search_message"
+source = "astero/private/extras_support.f90:524"
+source_text = "have reached too many bad chi2 limit"
+message = "have reached too many bad chi2 limit"
 
-[[unresolved]]
+[[exceptions]]
 suite = "astero"
 case = "fast_simplex"
-note = "final stage printed have reached chi2_search_limit2 and no code; MESA sets no xtra1 here; extras_check_model matches DECISIONS #75"
+manifest = "chi2_search_limit2"
+kind = "astero_search_message"
+source = "astero/private/extras_support.f90:517"
+source_text = "have reached chi2_search_limit2"
+message = "have reached chi2_search_limit2"

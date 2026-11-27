@@ -17,7 +17,7 @@ MESA printed for the final stage. Otherwise the case must appear in
 `benchmarks/history_harness/mesa_termination_exceptions.toml`, whose entry
 names the upstream source line that ends the run and the message MESA printed
 (which the generator verifies is present in `out.txt`). A case in the
-`unresolved` table of that file is reported but does not fail the check.
+`unresolved` table of that file fails the check until it is resolved.
 
 Usage:
     python scripts/audit/mesa_terminations.py --check
@@ -63,6 +63,7 @@ EXCEPTION_KINDS = frozenset(
         "result_reason",
         "after_evolve_code",
         "hook_error_exit",
+        "astero_search_message",
     }
 )
 # Kinds whose upstream message must be visible in the stored out.txt.
@@ -133,6 +134,24 @@ def split_stages(text: str) -> tuple[list[int], list[str], list[str]]:
         else:
             codes.append(current)
     return steps, codes, reasons
+
+
+def last_final_message(text: str) -> str:
+    """Return the last astero `have reached ...` message of the final stage.
+
+    Args:
+        text: Contents of a stored `out.txt`.
+
+    Returns:
+        The stripped message line, or `""` when the final stage has none.
+    """
+    lines = text.splitlines()
+    runs = [
+        i for i, line in enumerate(lines) if _RUNTIME_RE.search(line.rstrip())
+    ]
+    start = runs[-2] + 1 if len(runs) > 1 else 0
+    found = [ln.strip() for ln in lines[start:] if "have reached" in ln]
+    return found[-1] if found else ""
 
 
 def _quote(value: str) -> str:
@@ -237,6 +256,11 @@ def render_ledger(
             status = str(json.loads(result_path.read_text()).get("status", ""))
         text = out.read_text(errors="replace") if out.is_file() else ""
         steps, codes, _ = split_stages(text)
+        case_steps_only = False
+        if not steps and result_path.is_file():
+            recorded = json.loads(result_path.read_text()).get("steps")
+            if status == "ok" and isinstance(recorded, int) and recorded > 0:
+                steps, case_steps_only = [recorded], True
         lines += [
             "[[runs]]",
             f'suite = "{entry.suite}"',
@@ -246,10 +270,15 @@ def render_ledger(
             f"stage_codes = {json.dumps(codes, ensure_ascii=False)}",
             f'out_sha256 = "{sha_table.get(rel + "/out.txt", "")}"',
         ]
+        if case_steps_only:
+            lines.append("steps_from_case_result_only = true")
         exc = exceptions.get(key)
         if exc is not None:
             msg = str(exc.get("message", ""))
-            found = [msg] if msg and msg in text else []
+            if exc.get("kind") == "astero_search_message":
+                found = [msg] if msg and msg == last_final_message(text) else []
+            else:
+                found = [msg] if msg and msg in text else []
             if msg and not found:
                 errors.append(f"{key}: message {msg!r} not in out.txt")
             lines.append(f"evidence = {json.dumps(found, ensure_ascii=False)}")
@@ -314,9 +343,9 @@ def compare(repo_root: pathlib.Path) -> tuple[list[str], list[str]]:
         if key in unresolved:
             row = unresolved[key]
             seen.add(key)
-            notes.append(
-                f"{name}: manifest {required!r}, MESA final code {final!r}; "
-                f"{row['note']}"
+            failures.append(
+                f"{name}: unresolved: manifest {required!r}, MESA final "
+                f"code {final!r}; {row['note']}"
             )
             if exc is not None:
                 failures.append(f"{name}: both exception and unresolved")
@@ -375,6 +404,7 @@ def _check_exception(
                 "hook_without_code",
                 "multi_stage_final_hook",
                 "hook_error_exit",
+                "astero_search_message",
             )
         ):
             out.append(
@@ -431,6 +461,9 @@ def stage_step_report(repo_root: pathlib.Path) -> list[str]:
         rec = row.get("mesa_stage_steps")
         if rec is None:
             absent += 1
+        elif runs[key].get("steps_from_case_result_only"):
+            note = "evidenced by case_result.json steps only (no runtime line)"
+            out.append(f"{key[0]}/{key[1]}: baseline {rec}, {note}: {mesa}")
         elif list(rec) != list(mesa):
             out.append(f"{key[0]}/{key[1]}: baseline {rec} vs out.txt {mesa}")
     out.append(f"{absent} cases have no baseline mesa_stage_steps")

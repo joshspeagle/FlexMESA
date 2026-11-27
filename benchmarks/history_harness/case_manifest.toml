@@ -846,7 +846,7 @@ case = "fast_from_file"
 reference_status = "mesa_26_4_1"
 reference_path = "thinned/astero/fast_from_file.data"
 track_reference_dir = "astero/fast_from_file"
-required_termination = "xtra1"
+required_termination = "limit_num_chi2_too_big"
 uses_pulsation_scaffolding = true
 scaffolding_issue = "#170"
 
@@ -856,7 +856,7 @@ case = "fast_newuoa"
 reference_status = "mesa_26_4_1"
 reference_path = "thinned/astero/fast_newuoa.data"
 track_reference_dir = "astero/fast_newuoa"
-required_termination = "xtra1"
+required_termination = "age_target"
 
 [[cases]]
 suite = "astero"
@@ -864,7 +864,7 @@ case = "fast_scan_grid"
 reference_status = "mesa_26_4_1"
 reference_path = "thinned/astero/fast_scan_grid.data"
 track_reference_dir = "astero/fast_scan_grid"
-required_termination = "xtra1"
+required_termination = "limit_num_chi2_too_big"
 uses_pulsation_scaffolding = true
 scaffolding_issue = "#171"
 
@@ -874,7 +874,7 @@ case = "fast_simplex"
 reference_status = "mesa_26_4_1"
 reference_path = "thinned/astero/fast_simplex.data"
 track_reference_dir = "astero/fast_simplex"
-required_termination = "xtra1"
+required_termination = "chi2_search_limit2"
 uses_pulsation_scaffolding = true
 scaffolding_issue = "#171"
 

@@ -234,9 +234,10 @@ out_sha256 = "7312c9319c1415eb355b731f21b25e5450c9283d883c824586dbc6e36c37e26d"
 suite = "star"
 case = "custom_colors"
 run_status = "ok"
-stage_steps = []
+stage_steps = [683]
 stage_codes = ["xa_central_lower_limit"]
 out_sha256 = "3c56436e0a961b073a85e5a0972349fc605f5d6104a3ecad62fe1dad0e090c9a"
+steps_from_case_result_only = true
 
 [[runs]]
 suite = "star"
@@ -871,6 +872,8 @@ run_status = "ok"
 stage_steps = [508, 508]
 stage_codes = ["", ""]
 out_sha256 = "335a11d1db6e2238b565982bd2f750d0e482b3d4e3f12d30f159f1a7d65db762"
+evidence = ["have reached too many bad chi2 limit"]
+source_checked = true
 
 [[runs]]
 suite = "astero"
@@ -879,6 +882,8 @@ run_status = "ok"
 stage_steps = [480, 479, 479, 479, 480, 479, 480, 479]
 stage_codes = ["", "", "", "", "", "", "", ""]
 out_sha256 = "27b859562d5e540f51c0001210053b1fb3efda4839b6fb8d6e66a2c654db68b2"
+evidence = ["have reached age_target"]
+source_checked = true
 
 [[runs]]
 suite = "astero"
@@ -887,6 +892,8 @@ run_status = "ok"
 stage_steps = [481, 235, 579, 470]
 stage_codes = ["", "", "", ""]
 out_sha256 = "e805de46eee20b40e06329bf92003b9d9da550cb32d90408c1380979cb72ea5e"
+evidence = ["have reached too many bad chi2 limit"]
+source_checked = true
 
 [[runs]]
 suite = "astero"
@@ -895,6 +902,8 @@ run_status = "ok"
 stage_steps = [311, 298, 391, 499, 364, 453, 408]
 stage_codes = ["", "", "", "", "max_age", "", ""]
 out_sha256 = "6bb33c44c70daf59cd1bce2560fb131740ce516aa7052fcc9e7710134e2248ee"
+evidence = ["have reached chi2_search_limit2"]
+source_checked = true
 
 [[runs]]
 suite = "astero"

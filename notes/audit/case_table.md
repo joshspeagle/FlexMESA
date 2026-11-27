@@ -15,7 +15,7 @@ Generated mechanically by `flexmesa harness` from `benchmarks/history_harness/ca
 | Cases executed in this run | 106 |
 | Cases accepted by strict control validation (`#147`) | 89 (87 took at least one step) |
 | Cases rejected by strict validation and rerun as diagnostic (unsupported controls ignored; never a pass) | 17 (13 took at least one step) |
-| Strict runs reaching upstream termination | 77 |
+| Strict runs reaching upstream termination | 81 |
 | Diagnostic runs reaching upstream termination | 8 |
 | Acceptance passes against MESA `26.4.1` (`pass`) | 47 |
 | Interim `0b2e6bb` comparisons within manifest tolerance | 0 |
@@ -129,10 +129,10 @@ Generated mechanically by `flexmesa harness` from `benchmarks/history_harness/ca
 | `astero` | `astero_adipls` | `mesa_26_4_1` | `xa_central_lower_limit` | strict | `xa_central_lower_limit` | 465 (465) | 0 (0) | - | - | 0.00% (0) | +0.00% | `log_L`: 0.000e+00 | - | #171 | scaffolding (#171) |
 | `astero` | `astero_gyre` | `mesa_26_4_1` | `xa_central_lower_limit` | strict | `xa_central_lower_limit` | 465 (465) | 0 (0) | - | - | 0.00% (0) | +0.00% | `log_L`: 0.000e+00 | - | - | pass |
 | `astero` | `example_astero` | `mesa_26_4_1` | `xtra1` | strict | `astero_use_first_values_samples=1_best_chi2=2.800488e0_term=chi2_search_limit2` | 737 (737) | 0 (0) | - | - | 0.00% (0) | +0.00% | `log_L`: 0.000e+00 | - | #162 | declared gap (#162) |
-| `astero` | `fast_from_file` | `mesa_26_4_1` | `xtra1` | strict | `astero_from_file_samples=2_best_chi2=7.403041e-1_term=limit_num_chi2_too_big` | 1016 (508) | 0 (0) | - | - | 0.00% (0) | +0.00% | `log_L`: 0.000e+00 | - | #162 | declared gap (#162) |
-| `astero` | `fast_newuoa` | `mesa_26_4_1` | `xtra1` | strict | `astero_newuoa_samples=8_best_chi2=3.333388e5_term=age_target` | 3835 (479) | 0 (0) | - | - | 0.00% (0) | +0.00% | `log_L`: 0.000e+00 | - | #162 | declared gap (#162) |
-| `astero` | `fast_scan_grid` | `mesa_26_4_1` | `xtra1` | strict | `astero_scan_grid_samples=4_best_chi2=7.650287e-1_term=limit_num_chi2_too_big` | 1765 (470) | 0 (0) | - | - | 0.00% (0) | +0.00% | `log_L`: 0.000e+00 | - | #162 | declared gap (#162) |
-| `astero` | `fast_simplex` | `mesa_26_4_1` | `xtra1` | strict | `astero_simplex_samples=6_best_chi2=4.606467e-2_term=chi2_search_limit2` | 2724 (408) | 0 (0) | - | - | 0.00% (0) | +0.00% | `log_L`: 0.000e+00 | - | #162 | declared gap (#162) |
+| `astero` | `fast_from_file` | `mesa_26_4_1` | `limit_num_chi2_too_big` | strict | `astero_from_file_samples=2_best_chi2=7.403041e-1_term=limit_num_chi2_too_big` | 1016 (508) | 0 (0) | - | - | 0.00% (0) | +0.00% | `log_L`: 0.000e+00 | - | #162 | scaffolding (#170) |
+| `astero` | `fast_newuoa` | `mesa_26_4_1` | `age_target` | strict | `astero_newuoa_samples=8_best_chi2=3.333388e5_term=age_target` | 3835 (479) | 0 (0) | - | - | 0.00% (0) | +0.00% | `log_L`: 0.000e+00 | - | #162 | declared gap (#162) |
+| `astero` | `fast_scan_grid` | `mesa_26_4_1` | `limit_num_chi2_too_big` | strict | `astero_scan_grid_samples=4_best_chi2=7.650287e-1_term=limit_num_chi2_too_big` | 1765 (470) | 0 (0) | - | - | 0.00% (0) | +0.00% | `log_L`: 0.000e+00 | - | #162 | scaffolding (#171) |
+| `astero` | `fast_simplex` | `mesa_26_4_1` | `chi2_search_limit2` | strict | `astero_simplex_samples=6_best_chi2=4.606467e-2_term=chi2_search_limit2` | 2724 (408) | 0 (0) | - | - | 0.00% (0) | +0.00% | `log_L`: 0.000e+00 | - | #162 | scaffolding (#171) |
 | `astero` | `surface_effects` | `mesa_26_4_1` | `max_model_number` | strict | `max_model_number` | 1 (1) | 0 (0) | 5.0 [5] (5.0 [5]) | - | 0.00% (0) | +0.00% | - | - | #162 | scaffolding (#171) |
 
 ## Convective-Core Track Comparisons (`mass_conv_core`, `#155`)
@@ -285,7 +285,7 @@ Model number at the end of each stage, FlexMESA / MESA. A `pass` in this list is
 | `binary` | `star_plus_point_mass_explicit_mdot` | declared gap (#160) | 539 / 548 |
 | `binary` | `wind_fed_bhhmxb` | declared gap (#587) | 392 / 393 |
 | `astero` | `example_astero` | declared gap (#162) | 734 / 737 |
-| `astero` | `fast_from_file` | declared gap (#162) | 446 / 508 |
+| `astero` | `fast_from_file` | scaffolding (#170) | 446 / 508 |
 | `astero` | `fast_newuoa` | declared gap (#162) | 480 / 479 |
-| `astero` | `fast_scan_grid` | declared gap (#162) | 415 / 470 |
-| `astero` | `fast_simplex` | declared gap (#162) | 474 / 408 |
+| `astero` | `fast_scan_grid` | scaffolding (#171) | 415 / 470 |
+| `astero` | `fast_simplex` | scaffolding (#171) | 474 / 408 |

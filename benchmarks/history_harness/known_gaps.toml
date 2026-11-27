@@ -69,27 +69,7 @@ issue = "#161"
 reason = "Custom rate table evolution fails to converge after retries (#161, #152)."
 [[gaps]]
 suite = "star"
-case = "gyre_in_mesa_bcep"
-issue = "#170"
-reason = "Depends on bundled GYRE oscillation solver (#170) and solver/control parity (#152)."
-[[gaps]]
-suite = "star"
 case = "gyre_in_mesa_envelope"
-issue = "#170"
-reason = "Depends on bundled GYRE oscillation solver (#170) and solver/control parity (#152)."
-[[gaps]]
-suite = "star"
-case = "gyre_in_mesa_ms"
-issue = "#170"
-reason = "Depends on bundled GYRE oscillation solver (#170) and solver/control parity (#152)."
-[[gaps]]
-suite = "star"
-case = "gyre_in_mesa_rsg"
-issue = "#170"
-reason = "Depends on bundled GYRE oscillation solver (#170) and solver/control parity (#152)."
-[[gaps]]
-suite = "star"
-case = "gyre_in_mesa_spb"
 issue = "#170"
 reason = "Depends on bundled GYRE oscillation solver (#170) and solver/control parity (#152)."
 [[gaps]]
@@ -227,11 +207,6 @@ suite = "binary"
 case = "wind_fed_bhhmxb"
 issue = "#587"
 reason = "Within every MESA 26.4.1 history tolerance but takes a different number of steps than MESA per stage (FlexMESA [392] vs MESA [393]), which DECISIONS #70 does not count as a pass (#587)."
-[[gaps]]
-suite = "astero"
-case = "astero_adipls"
-issue = "#171"
-reason = "Depends on bundled ADIPLS (#171) and astero mode-matching driver (#162)."
 [[gaps]]
 suite = "astero"
 case = "example_astero"

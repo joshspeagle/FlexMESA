@@ -17,9 +17,9 @@ Generated mechanically by `flexmesa harness` from `benchmarks/history_harness/ca
 | Cases rejected by strict validation and rerun as diagnostic (unsupported controls ignored; never a pass) | 16 (13 took at least one step) |
 | Strict runs reaching upstream termination | 83 |
 | Diagnostic runs reaching upstream termination | 6 |
-| Acceptance passes against MESA `26.4.1` (`pass`) | 51 |
+| Acceptance passes against MESA `26.4.1` (`pass`) | 56 |
 | Interim `0b2e6bb` comparisons within manifest tolerance | 0 |
-| Declared known gaps (`known_gaps.toml`) | 51 |
+| Declared known gaps (`known_gaps.toml`) | 46 |
 | Undeclared failures | 0 |
 
 ## Per-Case Status and Reference Availability
@@ -58,11 +58,11 @@ Generated mechanically by `flexmesa harness` from `benchmarks/history_harness/ca
 | `star` | `custom_rates` | `mesa_26_4_1` | `log_center_temp_upper_limit` | diagnostic (4 controls ignored) | `max_model_number` | 600 (487) | 60 (0) | 5.0 [3006] (4.4 [220/50r]) | - | 12.73% (328) | +14.88% | `log_center_T`: 2.496e-01 | 252 | #161 | declared gap (#161) |
 | `star` | `diffusion_smoothness` | `mesa_26_4_1` | `max_age` | strict | `max_age` | 36 (36) | 0 (0) | 9.4 [337] (9.0 [45/5r]) | - | 0.00% (0) | +0.00% | `log_Teff`: 0.000e+00 | - | - | pass |
 | `star` | `extended_convective_penetration` | `mesa_26_4_1` | `xa_central_lower_limit` | strict | `xa_central_lower_limit` | 64 (64) | 0 (0) | 7.6 [485] (7.6 [486]) | - | 0.23% (2) | -0.01% | `log_L`: 5.212e-04 | - | - | pass |
-| `star` | `gyre_in_mesa_bcep` | `mesa_26_4_1` | `xa_central_lower_limit` | strict | `xa_central_lower_limit` | 108 (108) | 0 (0) | 8.5 [917] (8.2 [98/12r]) | - | 0.00% (0) | +0.00% | `log_Teff`: 0.000e+00 | - | #170 | scaffolding (#170) |
+| `star` | `gyre_in_mesa_bcep` | `mesa_26_4_1` | `xa_central_lower_limit` | strict | `xa_central_lower_limit` | 108 (108) | 0 (0) | 8.5 [917] (8.2 [98/12r]) | - | 0.00% (0) | +0.00% | `log_Teff`: 0.000e+00 | - | - | pass |
 | `star` | `gyre_in_mesa_envelope` | `mesa_26_4_1` | `max_model_number` | strict | `max_model_number` | 129 (5) | 0 (0) | 10.0 [50] (10.0 [20/2r]) | - | 0.00% (0) | +0.00% | `log_L`: 2.418e-12 | - | #170 | scaffolding (#170) |
-| `star` | `gyre_in_mesa_ms` | `mesa_26_4_1` | `xa_central_lower_limit` | strict | `xa_central_lower_limit` | 123 (123) | 0 (0) | 9.1 [1122] (9.1 [128/14r]) | - | 0.00% (0) | +0.00% | `log_Teff`: 0.000e+00 | - | #170 | scaffolding (#170) |
-| `star` | `gyre_in_mesa_rsg` | `mesa_26_4_1` | `max_model_number|extras_finish_step` | strict | `max_model_number` | 20 (20) | 0 (0) | 4.8 [96] (5.3 [16/3r]) | - | 0.00% (0) | +0.00% | `log_Teff`: 0.000e+00 | - | #170 | scaffolding (#170) |
-| `star` | `gyre_in_mesa_spb` | `mesa_26_4_1` | `xa_central_lower_limit` | strict | `xa_central_lower_limit` | 103 (103) | 0 (0) | 8.6 [883] (8.5 [102/12r]) | - | 0.00% (0) | +0.00% | `log_Teff`: 0.000e+00 | - | #170 | scaffolding (#170) |
+| `star` | `gyre_in_mesa_ms` | `mesa_26_4_1` | `xa_central_lower_limit` | strict | `xa_central_lower_limit` | 123 (123) | 0 (0) | 9.1 [1122] (9.1 [128/14r]) | - | 0.00% (0) | +0.00% | `log_Teff`: 0.000e+00 | - | - | pass |
+| `star` | `gyre_in_mesa_rsg` | `mesa_26_4_1` | `max_model_number|extras_finish_step` | strict | `max_model_number` | 20 (20) | 0 (0) | 4.8 [96] (5.3 [16/3r]) | - | 0.00% (0) | +0.00% | `log_Teff`: 0.000e+00 | - | - | pass |
+| `star` | `gyre_in_mesa_spb` | `mesa_26_4_1` | `xa_central_lower_limit` | strict | `xa_central_lower_limit` | 103 (103) | 0 (0) | 8.6 [883] (8.5 [102/12r]) | - | 0.00% (0) | +0.00% | `log_Teff`: 0.000e+00 | - | - | pass |
 | `star` | `gyre_in_mesa_wd` | `mesa_26_4_1` | `log_Teff_lower_limit` | strict | `log_Teff_lower_limit` | 209 (209) | 1 (1) | 3.4 [710] (3.7 [86/23r]) | - | 0.00% (0) | +0.00% | `log_center_T`: 3.960e-08 | - | #157 | scaffolding (#170) |
 | `star` | `hb_2M` | `mesa_26_4_1` | `xa_central_lower_limit` | strict | `xa_central_lower_limit` | 190 (190) | 1 (1) | 8.7 [1660] (8.7 [1660]) | - | 0.00% (0) | +0.00% | `mass_conv_core`: 0.000e+00 | - | - | pass |
 | `star` | `high_mass` | `mesa_26_4_1` | `xa_central_lower_limit` | strict | `xa_central_lower_limit` | 98 (98) | 0 (0) | 8.7 [849] (8.4 [92/11r]) | - | 0.00% (0) | +0.00% | `log_Teff`: 0.000e+00 | - | - | pass |
@@ -126,7 +126,7 @@ Generated mechanically by `flexmesa harness` from `benchmarks/history_harness/ca
 | `binary` | `star_plus_point_mass` | `mesa_26_4_1` | `xa_central_lower_limit` | strict | `xa_central_lower_limit` | 308 (309) | 6 (6) | - | - | - | -0.11% | `star_2_mass`: 2.838e-04 | - | #160 | declared gap (#160) |
 | `binary` | `star_plus_point_mass_explicit_mdot` | `mesa_26_4_1` | `xa_central_lower_limit` | strict | `xa_central_lower_limit` | 539 (548) | 0 (1) | - | - | - | +0.11% | `star_2_mass`: 4.121e-03 | 254 | #160 | declared gap (#160) |
 | `binary` | `wind_fed_bhhmxb` | `mesa_26_4_1` | `xa_central_lower_limit` | strict | `xa_central_lower_limit` | 392 (393) | 3 (4) | - | - | - | -0.00% | `star_1_mass`: 1.510e-03 | - | #587 | declared gap (#587) |
-| `astero` | `astero_adipls` | `mesa_26_4_1` | `xa_central_lower_limit` | strict | `xa_central_lower_limit` | 465 (465) | 0 (0) | - | - | 0.00% (0) | +0.00% | `log_L`: 0.000e+00 | - | #171 | scaffolding (#171) |
+| `astero` | `astero_adipls` | `mesa_26_4_1` | `xa_central_lower_limit` | strict | `xa_central_lower_limit` | 465 (465) | 0 (0) | - | - | 0.00% (0) | +0.00% | `log_L`: 0.000e+00 | - | - | pass |
 | `astero` | `astero_gyre` | `mesa_26_4_1` | `xa_central_lower_limit` | strict | `xa_central_lower_limit` | 465 (465) | 0 (0) | - | - | 0.00% (0) | +0.00% | `log_L`: 0.000e+00 | - | - | pass |
 | `astero` | `example_astero` | `mesa_26_4_1` | `xtra1` | strict | `astero_use_first_values_samples=1_best_chi2=2.800488e0_term=chi2_search_limit2` | 737 (737) | 0 (0) | - | - | 0.00% (0) | +0.00% | `log_L`: 0.000e+00 | - | #162 | declared gap (#162) |
 | `astero` | `fast_from_file` | `mesa_26_4_1` | `limit_num_chi2_too_big` | strict | `astero_from_file_samples=2_best_chi2=7.403041e-1_term=limit_num_chi2_too_big` | 1016 (508) | 0 (0) | - | - | 0.00% (0) | +0.00% | `log_L`: 0.000e+00 | - | #162 | scaffolding (#170) |
@@ -217,7 +217,7 @@ Generated mechanically from `baseline_run_26_4_1.json` / harness comparisons aga
 | `star` | `carbon_kh` | strict | `log_center_density_upper_limit` | 2362 (2362) | `log_rel_run_E_err` | -5.842 | -5.842 | +0.000e+00 | 0.000e+00 | 0.000e+00 | - |
 | `star` | `ccsn_IIp` | diagnostic (1 controls ignored) | `timeout` | 1239 (286) | `log_rel_run_E_err` | -9.420 | -8.599 | -8.204e-01 | - | - | #161 |
 | `star` | `custom_rates` | diagnostic (4 controls ignored) | `max_model_number` | 600 (487) | `log_rel_run_E_err` | -9.056 | -9.439 | +3.831e-01 | 3.956e-01 | 9.141e-02 | #161 |
-| `star` | `gyre_in_mesa_rsg` | strict | `max_model_number` | 20 (20) | `log_rel_run_E_err` | -10.967 | -10.967 | +0.000e+00 | 0.000e+00 | 0.000e+00 | #170 |
+| `star` | `gyre_in_mesa_rsg` | strict | `max_model_number` | 20 (20) | `log_rel_run_E_err` | -10.967 | -10.967 | +0.000e+00 | 0.000e+00 | 0.000e+00 | - |
 | `star` | `gyre_in_mesa_wd` | strict | `log_Teff_lower_limit` | 209 (209) | `log_rel_run_E_err` | -7.551 | -7.551 | -4.382e-07 | 4.382e-07 | 0.000e+00 | #157 |
 | `star` | `hb_2M` | strict | `xa_central_lower_limit` | 190 (190) | `log_rel_run_E_err` | -6.851 | -6.851 | +0.000e+00 | 0.000e+00 | 0.000e+00 | - |
 | `star` | `make_co_wd` | strict | `timeout` | 465 (391) | `log_rel_run_E_err` | -7.508 | -10.019 | +2.511e+00 | 2.524e+00 | 2.517e+00 | #157 |

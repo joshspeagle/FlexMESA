@@ -303,8 +303,6 @@ case = "gyre_in_mesa_bcep"
 reference_status = "mesa_26_4_1"
 reference_path = "benchmarks/history_harness/reference_histories/star/gyre_in_mesa_bcep.data"
 required_termination = "xa_central_lower_limit"
-uses_pulsation_scaffolding = true
-scaffolding_issue = "#170"
 
 [[cases]]
 suite = "star"
@@ -321,8 +319,6 @@ case = "gyre_in_mesa_ms"
 reference_status = "mesa_26_4_1"
 reference_path = "benchmarks/history_harness/reference_histories/star/gyre_in_mesa_ms.data"
 required_termination = "xa_central_lower_limit"
-uses_pulsation_scaffolding = true
-scaffolding_issue = "#170"
 
 [[cases]]
 suite = "star"
@@ -330,8 +326,6 @@ case = "gyre_in_mesa_rsg"
 reference_status = "mesa_26_4_1"
 reference_path = "benchmarks/history_harness/reference_histories/star/gyre_in_mesa_rsg.data"
 required_termination = "max_model_number|extras_finish_step"
-uses_pulsation_scaffolding = true
-scaffolding_issue = "#170"
 
 [[cases]]
 suite = "star"
@@ -339,8 +333,6 @@ case = "gyre_in_mesa_spb"
 reference_status = "mesa_26_4_1"
 reference_path = "benchmarks/history_harness/reference_histories/star/gyre_in_mesa_spb.data"
 required_termination = "xa_central_lower_limit"
-uses_pulsation_scaffolding = true
-scaffolding_issue = "#170"
 
 [[cases]]
 suite = "star"
@@ -852,8 +844,6 @@ case = "astero_adipls"
 reference_status = "mesa_26_4_1"
 reference_path = "benchmarks/history_harness/reference_histories/astero/astero_adipls.data"
 required_termination = "xa_central_lower_limit"
-uses_pulsation_scaffolding = true
-scaffolding_issue = "#171"
 
 [[cases]]
 suite = "astero"

@@ -265,6 +265,11 @@ pub trait StarExtras {
     /// so caller-supplied extras write auxiliary outputs inside the staged copy.
     fn set_staged_case_dir(&mut self, _case_dir: &Path) {}
 
+    /// Receives the optional stage output directory (`output_root`, or parent
+    /// of `explicit_history_file`) before stage execution so caller-supplied
+    /// extras write auxiliary artifacts outside shared test-suite inputs.
+    fn set_output_dir(&mut self, _output_dir: Option<&Path>) {}
+
     /// Optional custom convective overshooting scheme handle installed onto
     /// `model.aux.other_overshooting_scheme` (`other_overshooting_scheme` in
     /// `star/other/other_overshooting_scheme.f90`).
@@ -1370,6 +1375,13 @@ pub fn run_test_suite_case_with_extras(
     let case_dir = staging.staged_dir.as_path();
     let _net_dir_guard = crate::micro::NetSearchDirGuard::new(case_dir);
     extras.set_staged_case_dir(case_dir);
+    let output_dir = logs_opts.output_root.or_else(|| {
+        logs_opts
+            .explicit_history_file
+            .and_then(Path::parent)
+            .filter(|p| !p.as_os_str().is_empty())
+    });
+    extras.set_output_dir(output_dir);
     let case_name = case_dir
         .file_name()
         .and_then(|s| s.to_str())

@@ -58,14 +58,27 @@ use crate::star_py::PyStarModel;
 #[pyclass(module = "flexmesa._rust")]
 pub struct PyRspBuildContext {
     bundle: InlistBundle,
+    output_dir: Option<PathBuf>,
 }
 
 impl PyRspBuildContext {
-    /// Constructs a [`PyRspBuildContext`] from an already-loaded [`InlistBundle`].
+    /// Constructs a [`PyRspBuildContext`] from an already-loaded
+    /// [`InlistBundle`].
     #[must_use]
     pub fn from_bundle(bundle: &InlistBundle) -> Self {
+        Self::from_bundle_with_output_dir(bundle, None)
+    }
+
+    /// Constructs a [`PyRspBuildContext`] from an already-loaded
+    /// [`InlistBundle`] and optional run output directory.
+    #[must_use]
+    pub fn from_bundle_with_output_dir(
+        bundle: &InlistBundle,
+        output_dir: Option<PathBuf>,
+    ) -> Self {
         Self {
             bundle: bundle.clone(),
+            output_dir,
         }
     }
 }
@@ -76,6 +89,23 @@ impl PyRspBuildContext {
     #[getter]
     pub fn case_dir(&self) -> String {
         self.bundle.case_dir.to_string_lossy().into_owned()
+    }
+
+    /// Output directory path for auxiliary `RSP` outputs, falling back to
+    /// `case_dir` when no separate output directory was configured.
+    #[getter]
+    pub fn output_dir(&self) -> String {
+        self.output_dir
+            .as_deref()
+            .unwrap_or(self.bundle.case_dir.as_path())
+            .to_string_lossy()
+            .into_owned()
+    }
+
+    /// Alias for [`Self::output_dir`].
+    #[getter]
+    pub fn work_dir(&self) -> String {
+        self.output_dir()
     }
 
     /// Envelope total mass (`RSP_mass`, $M_\odot$).
@@ -481,6 +511,7 @@ fn lock_unpoisoned<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
 #[derive(Default)]
 struct PyAdapterState {
     staged_case_dir: Mutex<Option<(PathBuf, String)>>,
+    output_dir: Mutex<Option<PathBuf>>,
     pending_err: Mutex<Option<String>>,
 }
 
@@ -489,6 +520,14 @@ impl PyAdapterState {
         let s = case_dir.to_string_lossy().into_owned();
         *lock_unpoisoned(&self.staged_case_dir) =
             Some((case_dir.to_path_buf(), s));
+    }
+
+    fn set_output_dir(&self, output_dir: Option<&Path>) {
+        *lock_unpoisoned(&self.output_dir) = output_dir.map(Path::to_path_buf);
+    }
+
+    fn output_dir_path(&self) -> Option<PathBuf> {
+        lock_unpoisoned(&self.output_dir).clone()
     }
 
     fn staged_dir_string(&self) -> String {
@@ -2592,6 +2631,10 @@ impl StarExtras for PyStarExtrasAdapter {
         self.state.set_staged_case_dir(case_dir);
     }
 
+    fn set_output_dir(&mut self, output_dir: Option<&Path>) {
+        self.state.set_output_dir(output_dir);
+    }
+
     fn extras_controls(
         &mut self,
         model: &mut StarModel,
@@ -2929,7 +2972,10 @@ impl StarExtras for PyStarExtrasAdapter {
             return Ok(None);
         }
         Python::attach(|py| {
-            let ctx = PyRspBuildContext::from_bundle(bundle);
+            let ctx = PyRspBuildContext::from_bundle_with_output_dir(
+                bundle,
+                self.state.output_dir_path(),
+            );
             let py_ctx = Py::new(py, ctx)
                 .map_err(|e| StarError::InvalidInput(format_py_err(py, &e)))?;
             let res = self
@@ -2965,6 +3011,7 @@ impl StarExtras for PyStarExtrasAdapter {
                 return match tag.as_str() {
                     "terminate" => {
                         eprintln!("other_rsp_build_model: {msg}");
+                        println!(" failed in other_rsp_build_model");
                         Ok(Some(RspBuildOutcome::Terminate(String::from(
                             "other_rsp_build_model",
                         ))))
@@ -2982,6 +3029,7 @@ impl StarExtras for PyStarExtrasAdapter {
                          other_rsp_build_model"
                     )));
                 }
+                println!(" failed in other_rsp_build_model");
                 return Ok(Some(RspBuildOutcome::Terminate(String::from(
                     "other_rsp_build_model",
                 ))));

@@ -62,6 +62,26 @@ def _fmt_d(val: float, width: int, digits: int) -> str:
     return f"{val:{width}.{digits}E}".replace("E", "D")
 
 
+def _fmt_e(val: float, width: int, digits: int) -> str:
+    """Format as Fortran `e<width>.<digits>` (`0.ddddE+dd`)."""
+    if val == 0.0:
+        body = f"0.{'0' * digits}E+00"
+        return f"{body:>{width}}"
+    sign = "-" if val < 0.0 else ""
+    s = f"{abs(val):.{digits - 1}E}"
+    mant, exp_str = s.split("E")
+    shifted = f"0.{mant.replace('.', '')[:digits]}"
+    exp_i = int(exp_str) + 1
+    body = f"{sign}{shifted}E{exp_i:+03d}"
+    return f"{body:>{width}}"
+
+
+def _emit_both(out_lines: list[str], line: str) -> None:
+    """Append `line` to `out_lines` and echo it to stdout."""
+    out_lines.append(line)
+    print(line, flush=True)
+
+
 class RspPeriodLimitExtras:
     """Upstream period-limit termination and extra history columns for RSP
     cases (`star/test_suite/rsp_BEP/src/run_star_extras.f90:57-184`,
@@ -272,9 +292,14 @@ class RspCheck2ndCrossingExtras(RspPeriodLimitExtras):
 
     def other_rsp_build_model(self, ctx: Any) -> Any:
         """Scan `LINA` growth rates along `x_character_ctrl(1)` and write
-        instability-strip edges to `x_character_ctrl(2)`.
+        instability-strip edges to `x_character_ctrl(2)` in `work_dir`.
         """
+        print(" rsp_check_2nd_crossing", flush=True)
         case_dir = pathlib.Path(ctx.case_dir)
+        raw_work = getattr(ctx, "work_dir", None) or getattr(
+            ctx, "output_dir", None
+        )
+        work_dir = pathlib.Path(raw_work) if raw_work else case_dir
         x_int = list(ctx.x_integer_ctrl)
         x_char = list(ctx.x_character_ctrl)
 
@@ -348,13 +373,22 @@ class RspCheck2ndCrossingExtras(RspPeriodLimitExtras):
                 )
             ),
         ]
+        completed = False
         try:
-            return self._scan_and_write(ctx, rows, out_lines)
+            outcome = self._scan_and_write(ctx, rows, out_lines)
+            completed = outcome == "terminate"
+            return outcome
         finally:
             if out_name:
-                (case_dir / out_name).write_text(
+                out_path = work_dir / out_name
+                out_path.parent.mkdir(parents=True, exist_ok=True)
+                out_path.write_text(
                     "\n".join(out_lines) + "\n", encoding="utf-8"
                 )
+            if completed:
+                print(" done rsp_check_2nd_crossing", flush=True)
+                if out_name:
+                    print(f" {out_name}", flush=True)
 
     def _scan_and_write(
         self,
@@ -401,9 +435,15 @@ class RspCheck2ndCrossingExtras(RspPeriodLimitExtras):
                 continue
             if have_first and teff - delta_teff < prev_teff:
                 continue
+            print(
+                f" call star_do1_rsp_build model Teff L{modnum:12d}"
+                f"   {teff:<25.17g}{lum:.17g}",
+                flush=True,
+            )
             try:
                 periods_days, growths = ctx.eval_lina(teff, lum, 1)
             except (RuntimeError, ValueError):
+                print(" failed in star_do1_rsp_build", flush=True)
                 if num_beyond_blue > 0 or just_failed:
                     break
                 just_failed = True
@@ -411,7 +451,13 @@ class RspCheck2ndCrossingExtras(RspPeriodLimitExtras):
             just_failed = False
             p_days = float(periods_days[0])
             eta = float(growths[0])
+            print("            P(days)         growth", flush=True)
+            print(
+                f"  0  {_fmt_e(p_days, 16, 5)}{_fmt_e(eta, 16, 5)}",
+                flush=True,
+            )
             if (not have_first) and eta > 0.0:
+                print(" failed to find red edge", flush=True)
                 raise ValueError("failed to find red edge")
             have_first = True
             if eta > 0.0:
@@ -433,6 +479,13 @@ class RspCheck2ndCrossingExtras(RspPeriodLimitExtras):
         n_pts = len(sampled)
         # :227-233 (`n == 0`)
         if n_pts == 0 or sampled[0][2] >= 0.0 or num_beyond_blue < 1:
+            g0 = sampled[0][2] if n_pts > 0 else 0.0
+            print(f" {'n':>54}{n_pts:12d}", flush=True)
+            print(
+                f" {'num_beyond_blue_edge':>54}{num_beyond_blue:12d}",
+                flush=True,
+            )
+            print(f" {'growth(1)':>54}{_fmt_d(g0, 26, 16)}", flush=True)
             raise ValueError(
                 f"insufficient strip coverage (n={n_pts}, "
                 f"beyond_blue={num_beyond_blue})"
@@ -458,15 +511,17 @@ class RspCheck2ndCrossingExtras(RspPeriodLimitExtras):
                             growth[i - 3 : i + 1], temp[i - 3 : i + 1], zero_q
                         )[0]
                     )
-                    out_lines.append("")
-                    out_lines.append(f"{'Teff_red_edge':>20}{teff_red:20.10f}")
+                    _emit_both(out_lines, "")
+                    _emit_both(
+                        out_lines, f"{'Teff_red_edge':>20}{teff_red:20.10f}"
+                    )
                     break
         elif growth[2] > 0.0:
             teff_red = float(
                 interp_1d.interpolate_vector_pm(growth[:3], temp[:3], zero_q)[0]
             )
-            out_lines.append("")
-            out_lines.append(f"{'Teff_red_edge':>20}{teff_red:20.10f}")
+            _emit_both(out_lines, "")
+            _emit_both(out_lines, f"{'Teff_red_edge':>20}{teff_red:20.10f}")
         if teff_red < 0.0:
             raise ValueError("failed to find red edge")
 
@@ -485,8 +540,8 @@ class RspCheck2ndCrossingExtras(RspPeriodLimitExtras):
                             growth[i : i + 4], temp[i : i + 4], zero_q
                         )[0]
                     )
-                    out_lines.append(
-                        f"{'Teff_blue_edge':>20}{teff_blue:20.10f}"
+                    _emit_both(
+                        out_lines, f"{'Teff_blue_edge':>20}{teff_blue:20.10f}"
                     )
                     break
         elif num_beyond_blue == 1 and n_pts > 3:
@@ -502,17 +557,20 @@ class RspCheck2ndCrossingExtras(RspPeriodLimitExtras):
                         zero_q,
                     )[0]
                 )
-                out_lines.append(f"{'Teff_blue_edge':>20}{teff_blue:20.10f}")
-        out_lines.append("")
+                _emit_both(
+                    out_lines, f"{'Teff_blue_edge':>20}{teff_blue:20.10f}"
+                )
+        _emit_both(out_lines, "")
         if teff_blue < 0.0:
             # :319-322: upstream prints 'failed to find blue edge' and
             # returns with ierr = 0, so the run is neither stopped nor
             # failed by the hook. Returning None reports the same to the
             # adapter (no model, no termination).
+            print(" failed to find blue edge", flush=True)
             return None
 
         # :334-348
-        out_lines.append(f"{'offset':>10}{'Teff':>20}{'L':>20}")
+        _emit_both(out_lines, f"{'offset':>10}{'Teff':>20}{'L':>20}")
         offset = 0.0
         while True:
             x_val = teff_blue - offset
@@ -523,13 +581,14 @@ class RspCheck2ndCrossingExtras(RspPeriodLimitExtras):
                     temp, lum_arr, np.array([x_val], dtype=np.float64)
                 )[0]
             )
-            out_lines.append(
-                f"{int(teff_blue - x_val):10d}{x_val:20.10f}{y_val:20.10f}"
+            _emit_both(
+                out_lines,
+                f"{int(teff_blue - x_val):10d}{x_val:20.10f}{y_val:20.10f}",
             )
             if x_val == teff_red:
                 break
             offset += 100.0
-        out_lines.append("")
+        _emit_both(out_lines, "")
         return "terminate"
 
 

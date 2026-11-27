@@ -674,6 +674,8 @@ def w5_eval_astero_seism(nz: int) -> float: ...
 
 class PyRspBuildContext:
     case_dir: str
+    output_dir: str
+    work_dir: str
     rsp_mass: float
     rsp_x: float
     rsp_z: float

@@ -1029,15 +1029,7 @@ fn populate_takata_yy(
     }
 
     if x[0] == 0.0_f64 {
-        let Some(second) = yy.get(1).copied().flatten() else {
-            return Err(AdiplsError::Solver {
-                routine: "takata",
-                message: format!(
-                    "takata center copy x[0]==0 reads unset yy(2) (nn={nn}; #657, takata.d.f:58-63, DECISIONS #43)"
-                ),
-            });
-        };
-        yy[0] = Some(second);
+        yy[0] = yy.get(1).copied().flatten();
     }
 
     Ok(yy)
@@ -1054,10 +1046,10 @@ fn populate_takata_yy(
 /// # Errors
 /// Returns [`AdiplsError::InvalidModel`] when non-empty slice lengths are
 /// inconsistent with `nn` or `iy < 4`, propagates [`AdiplsError`] from
-/// `aa.get(...)`, and returns [`AdiplsError::Solver`] when `iasn == 0`
-/// (`mod(n-2, 0)` undefined) or when the center copy (`takata.d.f:58-63`) or
-/// counting loop (`takata.d.f:67-72`) would read an unset or out-of-range
-/// `yy` point (`#655`, `#657`, `DECISIONS #43`).
+/// `aa.get(...)`, and returns [`AdiplsError::Solver`] when `nn > 0` with
+/// `iasn == 0` (`mod(n-2, 0)` undefined) or when the counting loop
+/// (`takata.d.f:67-72`) would read an unset or out-of-range `yy` point
+/// (`#655`, `#657`, `DECISIONS #43`).
 #[allow(clippy::too_many_arguments, clippy::similar_names)]
 pub fn takata(
     x: &[f64],
@@ -1070,6 +1062,9 @@ pub fn takata(
     sig: f64,
     cgrav: f64,
 ) -> Result<i32, AdiplsError> {
+    if nn == 0 {
+        return Ok(1);
+    }
     if iasn == 0 {
         return Err(AdiplsError::Solver {
             routine: "takata",
@@ -1077,9 +1072,6 @@ pub fn takata(
                 "takata requires iasn >= 1 (mod(n-2, 0) is undefined; #655, DECISIONS #43)",
             ),
         });
-    }
-    if nn == 0 {
-        return Ok(1);
     }
     if x.len() < nn || iy < 4 || y.len() < nn * iy {
         return Err(AdiplsError::InvalidModel {
@@ -2383,17 +2375,39 @@ mod.osc.cst.int.out
     }
 
     #[test]
-    fn test_655_takata_nn_zero_and_iasn_zero() {
-        let (data, aa, _) = build_takata_model(&[0.0, 0.5, 1.0]);
+    fn test_655_takata_nn_zero_nn_one_and_iasn_zero() {
+        let (data, aa, y3) = build_takata_model(&[0.0, 0.5, 1.0]);
         assert_eq!(
             takata(&[], &[], 0, 1, &data, &aa, 8, 10.0, STANDARD_CGRAV)
                 .expect("nn=0 yields iord=1"),
             1
         );
-
-        let err_zero =
+        assert_eq!(
             takata(&[], &[], 0, 0, &data, &aa, 8, 10.0, STANDARD_CGRAV)
-                .expect_err("iasn=0 must fail loudly (#655)");
+                .expect("nn=0 with iasn=0 skips loops and yields iord=1"),
+            1
+        );
+
+        let x1 = [0.0];
+        let (data1, aa1, y1) = build_takata_model(&x1);
+        assert_eq!(
+            takata(&x1, &y1, 1, 1, &data1, &aa1, 8, 10.0, STANDARD_CGRAV)
+                .expect("nn=1 x[0]==0 has empty counting loop -> iord=1"),
+            1
+        );
+
+        let err_zero = takata(
+            &[0.0, 0.5, 1.0],
+            &y3,
+            3,
+            0,
+            &data,
+            &aa,
+            8,
+            10.0,
+            STANDARD_CGRAV,
+        )
+        .expect_err("nn>0 with iasn=0 must fail loudly (#655)");
         assert!(matches!(
             err_zero,
             AdiplsError::Solver {

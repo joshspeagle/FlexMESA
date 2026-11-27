@@ -29,8 +29,7 @@ use crate::solve::{
 /// Mirrors the empty MESA implementation in
 /// `astero/private/adipls_support_procs.f90:68-72` (and standalone stub
 /// `adipls/adipack.c/adipls/user_adi.c.d.f:7-9`).
-#[allow(clippy::too_many_arguments)]
-pub fn modmod(
+pub(crate) fn modmod(
     x: &mut [f64],
     aa: &mut AmdlAa,
     data: &mut [f64; 8],
@@ -349,32 +348,31 @@ impl AdiplsSolver {
         rhs.perfac = (PI / 30.0_f64)
             * (powi_f90(rhs.data[1], 3) / (rhs.data[0] * cgrav)).sqrt();
 
-        // Model modification hook and truncation (`adipls.c.d.f:1613-1655`).
-        if nwmod == 1 || self.input.mod_ctrl.ifind == -2 {
-            apply_model_modifications(
-                &mut x,
-                &mut aa,
-                &mut rhs.data,
-                &mut nn0,
-                &mut nn,
-                nwmod,
-                self.input.mod_ctrl.ifind,
-                self.input.mod_ctrl.imdmod,
-                modmod,
-            );
+        // Model modification hook (`adipls.c.d.f:1613-1618`; on `i_inout == 0`,
+        // `nwmod == 1` unconditionally per `adipls.c.d.f:1546`).
+        apply_model_modifications(
+            &mut x,
+            &mut aa,
+            &mut rhs.data,
+            &mut nn0,
+            &mut nn,
+            nwmod,
+            self.input.mod_ctrl.ifind,
+            self.input.mod_ctrl.imdmod,
+            modmod,
+        );
 
-            if self.input.mod_ctrl.xtrnct > 0.0_f64
-                || self.input.mod_ctrl.ntrnsf >= 1
-            {
-                return Err(AdiplsError::UnsupportedControl {
-                    control: "xtrnct/ntrnsf",
-                    message: String::from(
-                        "model truncation (trnmod) is unported in Package A2a",
-                    ),
-                });
-            }
-            nn = nn0;
+        if self.input.mod_ctrl.xtrnct > 0.0_f64
+            || self.input.mod_ctrl.ntrnsf >= 1
+        {
+            return Err(AdiplsError::UnsupportedControl {
+                control: "xtrnct/ntrnsf",
+                message: String::from(
+                    "model truncation (trnmod) is unported in Package A2a",
+                ),
+            });
         }
+        nn = nn0;
 
         if nn < 2 || x.len() < nn || aa.nn() < nn {
             return Err(AdiplsError::InvalidModel {
@@ -527,53 +525,53 @@ impl AdiplsSolver {
                         break;
                     }
 
-                    let mut sig_opt =
-                        Some(if iscan > 1 { sigs1 } else { sig1 });
+                    let mut sig = if iscan > 1 { sigs1 } else { sig1 };
+                    let mut sig_assigned = true;
                     let mut jstsig =
                         if istsig > 1 && iscan <= 1 { 1 } else { istsig };
 
-                    // Frequency step loop (`30` and `75` in `adipls.c.d.f:1831-1962`).
+                    // Frequency step loop (`30` and `75` in
+                    // `adipls.c.d.f:1831-1962`).
                     loop {
                         if iscan <= 1
                             && istsig >= 1
                             && (itrsig >= 2 || (itrsig == 1 && jstsig >= 2))
                         {
-                            let sigp = sig_opt.ok_or_else(|| {
-                                AdiplsError::Solver {
+                            if !sig_assigned {
+                                return Err(AdiplsError::Solver {
                                     routine: "adipls",
                                     message: String::from(
                                         "frequency-step retry read unassigned signew result after icry=-1 (#658, DECISIONS #43)",
                                     ),
-                                }
-                            })?;
-                            sig_opt = signew(
-                                itrsig, nsig, sigp, dfsig, sgtrw1, sgtrw2,
-                                &mut icry,
-                            )?;
-                            if icry == -1 {
-                                if jstsig < istsig && itrsga >= 1 {
-                                    jstsig += 1;
-                                    continue;
-                                }
-                                break;
-                            } else if icry == -2 {
-                                return Err(AdiplsError::Solver {
-                                    routine: "adipls",
-                                    message: String::from(
-                                        "signew exceeded mode limit (icry=-2)",
-                                    ),
                                 });
                             }
-                        }
-
-                        let mut sig = sig_opt.ok_or_else(|| {
-                            AdiplsError::Solver {
-                                routine: "adipls",
-                                message: String::from(
-                                    "attempted to read unassigned signew result (#658, DECISIONS #43)",
-                                ),
+                            let sigp = sig;
+                            match signew(
+                                itrsig, nsig, sigp, dfsig, sgtrw1, sgtrw2,
+                                &mut icry,
+                            )? {
+                                Some(next_sig) => {
+                                    sig = next_sig;
+                                    sig_assigned = true;
+                                }
+                                None if icry == -2 => {
+                                    return Err(AdiplsError::Solver {
+                                        routine: "adipls",
+                                        message: String::from(
+                                            "signew exceeded mode limit (icry=-2)",
+                                        ),
+                                    });
+                                }
+                                None => {
+                                    sig_assigned = false;
+                                    if jstsig < istsig && itrsga >= 1 {
+                                        jstsig += 1;
+                                        continue;
+                                    }
+                                    break;
+                                }
                             }
-                        })?;
+                        }
 
                         for idx in 18..=38 {
                             csummm.set_f64(idx, 0.0_f64)?;
@@ -644,7 +642,6 @@ impl AdiplsSolver {
                                     ),
                                 });
                             }
-                            sig_opt = Some(sig);
                             let ii_out = if radial || ctx.cincnt.icow >= 2 {
                                 2
                             } else {

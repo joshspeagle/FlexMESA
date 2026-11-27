@@ -78,7 +78,11 @@ pub fn eval_mlt_pturb_cell_ad(
     }
     let rho_slot = if shift_m1 { I_LND_M1 } else { I_LND_00 };
     let rho_ad = StarAdOrder1::variable(model.lnd[k], rho_slot).exp();
-    rho_ad * ((1.0 / 3.0) * model.controls.mlt_pturb_factor * vc_old * vc_old)
+    // `star/private/star_utils.f90:3426`:
+    // `s% mlt_Pturb_factor * pow2(s% mlt_vc_old(k))`
+    // `* get_rho_face(s, k) / 3d0`.
+    (model.controls.mlt_pturb_factor * flexmesa_math::pow2(vc_old) * rho_ad)
+        / 3.0
 }
 
 /// Evaluates time-centered face geometry `(r2, area)` at face `k` for HSE

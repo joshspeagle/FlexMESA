@@ -83,6 +83,10 @@ def _verify_entry_flexmesa_files(
     if entry.status == port_manifest.PortStatus.ABSENT:
         if entry.flexmesa_files:
             errors.append(f"{up}: absent entry must not list flexmesa_files")
+        if entry.routine_map_partial:
+            errors.append(
+                f"{up}: absent entry must not list routine_map_partial"
+            )
         return
     if not entry.flexmesa_files:
         errors.append(
@@ -151,6 +155,12 @@ def _verify_entry_upstream_and_routines(
                 f"{up}: missing upstream source file in {mesa_dir.name}"
             )
 
+    keys = {k for k, _ in entry.routine_map}
+    for name in entry.routine_map_partial:
+        if name not in keys:
+            errors.append(
+                f"{up}: routine_map_partial[{name!r}] is not a routine_map key"
+            )
     if not entry.status.is_ported:
         return
     allowed_files = frozenset(entry.flexmesa_files)

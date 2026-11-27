@@ -13,6 +13,14 @@ Two checks run over every ``routine_map`` entry of ``port_manifest.toml``:
   exists as a function item (``fn`` in Rust, ``def`` in Python) in that file.
   A struct, constant, or enum with the right name does not satisfy it.
 
+Two structural checks run without an allow-list:
+
+* every name in a file's ``routine_map_partial`` is a key of that file's
+  ``routine_map``;
+* every routine declared not applicable in ``port_status_na.toml`` (read by
+  ``routine_na``, when that file exists) names exactly one routine of the
+  inventory and is not also a ``routine_map`` key naming the same routine.
+
 Violations present when the gate was introduced are listed in
 ``benchmarks/dashboard/routine_map_allowlist.toml`` with per-check counts. The
 gate fails on any violation outside the allow-list and on any allow-list entry
@@ -86,6 +94,64 @@ def match_routines(key: str, routines: list[list[Any]]) -> list[list[Any]]:
     return [
         r for r in routines if r[0].lower() == name and r[2].lower() == parent
     ]
+
+
+def structural_errors(
+    manifest: port_manifest.PortManifest,
+    inventory: dict[str, Any],
+    na_entries: list[Any],
+) -> list[str]:
+    """Return errors for partial markers and N/A declarations.
+
+    Args:
+        manifest: Loaded port manifest.
+        inventory: Loaded routine inventory.
+        na_entries: ``routine_na.NotApplicable`` declarations.
+
+    Returns:
+        Error messages, empty when every marker and declaration is valid.
+    """
+    errors: list[str] = []
+    files = inventory.get("files", {})
+    for entry in manifest.entries:
+        keys = {k for k, _ in entry.routine_map}
+        errors.extend(
+            f"{entry.upstream_path}: routine_map_partial[{n!r}] is not a "
+            "routine_map key"
+            for n in entry.routine_map_partial
+            if n not in keys
+        )
+    by_path = {e.upstream_path: e for e in manifest.entries}
+    for na in na_entries:
+        rec = files.get(na.upstream_path)
+        if rec is None:
+            errors.append(f"{na.upstream_path}: N/A file not in inventory")
+            continue
+        rows = na_rows(na, rec["routines"])
+        if len(rows) != 1:
+            errors.append(
+                f"{na.upstream_path}: N/A routine {na.key()!r} matches "
+                f"{len(rows)} inventory routines"
+            )
+            continue
+        mapped_entry = by_path.get(na.upstream_path)
+        for key, _ in mapped_entry.routine_map if mapped_entry else ():
+            if any(r is rows[0] for r in match_routines(key, rec["routines"])):
+                errors.append(
+                    f"{na.upstream_path}: N/A routine {na.key()!r} is also "
+                    f"in routine_map as {key!r}"
+                )
+    return errors
+
+
+def na_rows(na: Any, routines: list[list[Any]]) -> list[Any]:
+    """Return inventory rows named by an N/A entry (name, parent, span)."""
+    rows = match_routines(na.key(), routines)
+    if na.first is not None:
+        rows = [r for r in rows if r[3] == na.first]
+    if na.last is not None:
+        rows = [r for r in rows if r[4] == na.last]
+    return rows
 
 
 def _fn_names(
@@ -206,6 +272,13 @@ def render_allowlist(violations: list[Violation]) -> str:
     return "\n".join(lines)
 
 
+def _load_na_entries(repo_root: pathlib.Path) -> list[Any]:
+    """Load N/A declarations (imported late: ``routine_na`` imports this)."""
+    from flexmesa.testing import routine_na
+
+    return routine_na.load_na(repo_root / routine_na.NA_RELPATH)
+
+
 def verify_routine_map(
     repo_root: pathlib.Path,
     manifest: port_manifest.PortManifest | None = None,
@@ -247,6 +320,9 @@ def verify_routine_map(
         else:
             if fresh != inv_path.read_text(encoding="utf-8"):
                 errors.append("routine inventory differs from regeneration")
+    errors.extend(
+        structural_errors(manifest, inventory, _load_na_entries(repo_root))
+    )
     found = collect_violations(manifest, inventory, repo_root)
     counts, allowed = load_allowlist(repo_root / ALLOWLIST_RELPATH)
     allowed_ids = {a.ident() for a in allowed}

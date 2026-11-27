@@ -469,4 +469,17 @@ def test_routine_table_engine_whole_file_figure_matches_the_manifest() -> None:
     table = routine_table.build_table(manifest, inv, REPO_ROOT)
     assert table["engine"]["upstream_lines"] == total
     assert table["engine"]["lines_in_whole_file_ported"] == ported
-    assert table["engine"]["lines_in_mapped_routines"] <= total
+    assert table["engine"]["lines_full"] <= total
+
+
+def test_own_lines_of_all_routines_plus_outside_lines_equal_file_lines() -> (
+    None
+):
+    """Over the committed inventory, no line is credited twice or dropped."""
+    inv = routine_inventory.load_inventory(
+        REPO_ROOT / routine_inventory.INVENTORY_RELPATH
+    )
+    for path, rec in inv["files"].items():
+        own = routine_table.own_lines(rec["routines"])
+        assert min(own, default=1) >= 0, path
+        assert sum(own) + rec["outside"] == rec["lines"], path

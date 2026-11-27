@@ -120,6 +120,8 @@ class PortManifestEntry:
         flexmesa_files: Implementing repository-relative source paths.
         routine_map: Mapping from upstream public Fortran routine name to
             ``<flexmesa_file>::<symbol>[+<symbol>...]``.
+        routine_map_partial: ``routine_map`` keys whose Rust counterpart is
+            known to implement only part of the upstream routine.
         evidence_artifacts: Committed generated reference/comparison artifacts.
         evidence_tests: Test files exercising ``evidence_artifacts``.
         harness_cases: Passing ``<suite>/<case>`` IDs for case-level evidence.
@@ -133,6 +135,7 @@ class PortManifestEntry:
     status: PortStatus
     flexmesa_files: tuple[str, ...] = ()
     routine_map: tuple[tuple[str, str], ...] = ()
+    routine_map_partial: tuple[str, ...] = ()
     evidence_artifacts: tuple[str, ...] = ()
     evidence_tests: tuple[str, ...] = ()
     harness_cases: tuple[str, ...] = ()
@@ -206,6 +209,9 @@ def parse_port_manifest_text(
                     str(x) for x in item.get("flexmesa_files", [])
                 ),
                 routine_map=rmap,
+                routine_map_partial=tuple(
+                    str(x) for x in item.get("routine_map_partial", [])
+                ),
                 evidence_artifacts=tuple(
                     str(x) for x in item.get("evidence_artifacts", [])
                 ),
@@ -280,6 +286,11 @@ def dump_port_manifest(manifest: PortManifest) -> str:
         if entry.flexmesa_files:
             lines.append(
                 f"flexmesa_files = {_toml_str_array(entry.flexmesa_files)}"
+            )
+        if entry.routine_map_partial:
+            lines.append(
+                "routine_map_partial = "
+                f"{_toml_str_array(entry.routine_map_partial)}"
             )
         if entry.evidence_artifacts:
             lines.append(

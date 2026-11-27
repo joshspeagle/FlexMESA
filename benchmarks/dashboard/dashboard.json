@@ -21,7 +21,7 @@
         "verified_total": 5640,
         "pct_ported": 35.1,
         "pct_verified": 4.7,
-        "rust_lines": 108147,
+        "rust_lines": 108538,
         "python_jax_lines": 3987
       },
       {
@@ -55,7 +55,7 @@
         "verified_total": 0,
         "pct_ported": 18.7,
         "pct_verified": 0.0,
-        "rust_lines": 13698,
+        "rust_lines": 13703,
         "python_jax_lines": 1244
       },
       {
@@ -123,7 +123,7 @@
         "verified_total": 0,
         "pct_ported": 0.0,
         "pct_verified": 0.0,
-        "rust_lines": 11253,
+        "rust_lines": 11372,
         "python_jax_lines": 728
       },
       {
@@ -259,8 +259,8 @@
         "verified_total": 0,
         "pct_ported": 0.0,
         "pct_verified": 0.0,
-        "rust_lines": 5300,
-        "python_jax_lines": 3587
+        "rust_lines": 5330,
+        "python_jax_lines": 3608
       },
       {
         "module": "mtx",
@@ -344,7 +344,7 @@
         "verified_total": 0,
         "pct_ported": 0.0,
         "pct_verified": 0.0,
-        "rust_lines": 2629,
+        "rust_lines": 2745,
         "python_jax_lines": 577
       },
       {
@@ -378,7 +378,7 @@
         "verified_total": 0,
         "pct_ported": 0.0,
         "pct_verified": 0.0,
-        "rust_lines": 5090,
+        "rust_lines": 5189,
         "python_jax_lines": 2676
       },
       {
@@ -455,8 +455,8 @@
       "upstream_panel_modules": 46
     },
     "infrastructure_lines": {
-      "rust_bridge_testing_bench": 21977,
-      "python_testing_bench": 18227
+      "rust_bridge_testing_bench": 22576,
+      "python_testing_bench": 19615
     }
   },
   "numerics": {
@@ -593,12 +593,12 @@
         "total": 90,
         "mesa_26_4_1_ref": 86,
         "no_reference_yet": 4,
-        "strict_validated": 79,
-        "diagnostic_runs": 11,
-        "reached_termination": 65,
-        "within_numeric_tol": 45,
-        "passing": 38,
-        "declared_gaps": 42,
+        "strict_validated": 72,
+        "diagnostic_runs": 18,
+        "reached_termination": 68,
+        "within_numeric_tol": 49,
+        "passing": 39,
+        "declared_gaps": 41,
         "undeclared_failures": 0
       },
       "binary": {
@@ -607,8 +607,8 @@
         "no_reference_yet": 0,
         "strict_validated": 8,
         "diagnostic_runs": 0,
-        "reached_termination": 7,
-        "within_numeric_tol": 4,
+        "reached_termination": 8,
+        "within_numeric_tol": 5,
         "passing": 4,
         "declared_gaps": 4,
         "undeclared_failures": 0
@@ -629,22 +629,42 @@
     "within_tol_non_pass": [
       {
         "suite": "star",
-        "case": "starspots",
-        "issue": "#158"
+        "case": "high_z",
+        "issue": "#587"
+      },
+      {
+        "suite": "star",
+        "case": "make_planets",
+        "issue": "#587"
+      },
+      {
+        "suite": "star",
+        "case": "ns_h",
+        "issue": "#587"
+      },
+      {
+        "suite": "star",
+        "case": "wd_he_shell_ignition",
+        "issue": "#587"
+      },
+      {
+        "suite": "binary",
+        "case": "wind_fed_bhhmxb",
+        "issue": "#587"
       }
     ],
     "gaps_by_issue": {
-      "#161": 20,
+      "#161": 18,
       "#162": 9,
       "#154": 6,
       "#157": 6,
       "#170": 6,
-      "#158": 5,
-      "#160": 3,
+      "#587": 5,
+      "#158": 3,
+      "#160": 2,
       "#156": 1,
       "#171": 1,
-      "#231": 1,
-      "#539": 1
+      "#231": 1
     },
     "comparison_figures_count": 0
   },
@@ -662,12 +682,12 @@
     {
       "namelist": "star &star_job",
       "upstream_scalars": 455,
-      "matched_in_flexmesa": 205,
-      "defaults_agree": 205,
+      "matched_in_flexmesa": 206,
+      "defaults_agree": 206,
       "value_mismatch": 0,
       "disabled_limit_none": 0,
       "skipped_unparseable_rust": 1,
-      "unimplemented": 249
+      "unimplemented": 248
     },
     {
       "namelist": "binary &binary_controls + &binary_job",
@@ -1083,7 +1103,7 @@
     }
   },
   "skips": {
-    "rust_ignore_count": 16,
+    "rust_ignore_count": 15,
     "rust_ignores": [
       {
         "location": "crates/flexmesa-astero/tests/astero_suite.rs:606",
@@ -1119,11 +1139,6 @@
         "location": "crates/flexmesa-binary/tests/binary_160_mesa_parity_test.rs:278",
         "reason": "leaves the MESA 26.4.1 pin after #518's upstream Brunt face arithmetic; tracked in #160 (#530)",
         "issues": "#160, #518, #530"
-      },
-      {
-        "location": "crates/flexmesa-binary/tests/binary_160_mesa_parity_test.rs:420",
-        "reason": "jdot_ml leaves the MESA 26.4.1 pin after the upstream-order energy-equation partials (#536); tracked in #160 (#538)",
-        "issues": "#160, #536, #538"
       },
       {
         "location": "crates/flexmesa-binary/tests/tier5_coupled_suite.rs:1057",
@@ -1384,7 +1399,7 @@
       },
       {
         "phase": "Phase C",
-        "open": 18,
+        "open": 19,
         "closed": 17,
         "issues": [
           {
@@ -1561,6 +1576,11 @@
             "number": 541,
             "title": "[Parity] other_cgrav is applied once per step instead of at every set_vars and set_final_vars",
             "state": "open"
+          },
+          {
+            "number": 587,
+            "title": "[Parity] Step counts differ from MESA 26.4.1 in five cases that are within tolerance (high_z, ns_h, make_planets, wd_he_shell_ignition, wind_fed_bhhmxb)",
+            "state": "open"
           }
         ]
       },
@@ -1618,13 +1638,8 @@
     ],
     "open_pull_requests": [
       {
-        "number": 545,
-        "title": "fix(star): TDC scale source, scale floors and m follow MESA 26.4.1 (#543)",
-        "draft": false
-      },
-      {
-        "number": 553,
-        "title": "fix(star): case hooks inside set_hydro_vars, full post-burn set_vars, hook flags without handlers are unsupported (#541)",
+        "number": 593,
+        "title": "ci(dashboard): raise the Python coverage job limit to 60 minutes (#592)",
         "draft": false
       }
     ],
@@ -2203,6 +2218,30 @@
         "state": "open",
         "kind": "upstream-bug",
         "parity_pending": false,
+        "needs_confirmation": false
+      },
+      {
+        "number": 564,
+        "title": "[Deferred bug] get_xa writes xa(0) when h2 is in the net and h1 is absent",
+        "state": "open",
+        "kind": "upstream-bug",
+        "parity_pending": true,
+        "needs_confirmation": false
+      },
+      {
+        "number": 565,
+        "title": "[Deferred bug] do_binary_job_controls_after compares b% m(i) in grams with new_m{1,2} in Msun",
+        "state": "open",
+        "kind": "upstream-bug",
+        "parity_pending": false,
+        "needs_confirmation": false
+      },
+      {
+        "number": 566,
+        "title": "[Deferred bug] get_xa_for_accretion reads accretion_species arrays out of bounds when num_accretion_species > 250",
+        "state": "open",
+        "kind": "upstream-bug",
+        "parity_pending": true,
         "needs_confirmation": false
       }
     ]
@@ -3702,6 +3741,19 @@
       "closed_140": "32",
       "total_140": "55",
       "deferred_169": "72"
+    },
+    {
+      "date_utc": "2026-11-27",
+      "commit": "b0a3dc2",
+      "event": "main merge",
+      "engine_ported_pct": "30.7",
+      "all_verified_pct": "1.1",
+      "cases_passing": "44",
+      "rust_cov_pct": "77.0",
+      "python_cov_pct": "87.8",
+      "closed_140": "32",
+      "total_140": "56",
+      "deferred_169": "75"
     }
   ]
 }

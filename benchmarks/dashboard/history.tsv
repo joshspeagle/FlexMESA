@@ -116,3 +116,4 @@ date_utc	commit	event	engine_ported_pct	all_verified_pct	cases_passing	rust_cov_
 2026-11-26	6705948	main merge	30.7	1.1	43	77.0	87.8	32	55	71
 2026-11-26	2493662	main merge	30.7	1.1	43	77.0	87.8	32	55	71
 2026-11-26	1ed0b7d	main merge	30.7	1.1	43	77.0	87.8	32	55	72
+2026-11-27	b0a3dc2	main merge	30.7	1.1	44	77.0	87.8	32	56	75

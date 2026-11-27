@@ -340,19 +340,9 @@
   ],
   "open_pull_requests": [
     {
-      "number": 545,
-      "title": "fix(star): TDC scale source, scale floors and m follow MESA 26.4.1 (#543)",
+      "number": 593,
+      "title": "ci(dashboard): raise the Python coverage job limit to 60 minutes (#592)",
       "draft": false
-    },
-    {
-      "number": 553,
-      "title": "fix(star): case hooks inside set_hydro_vars, full post-burn set_vars, hook flags without handlers are unsupported (#541)",
-      "draft": false
-    },
-    {
-      "number": 576,
-      "title": "Train 12: TDC scale, hooks in set_hydro_vars, near misses, composition residuals, harness step counts, lane B batch",
-      "draft": true
     }
   ],
   "deferred_169": [

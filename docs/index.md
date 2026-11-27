@@ -6,7 +6,7 @@ Stellar evolution connects microphysical processes in dense plasma interiors (eq
 
 <!-- BEGIN GENERATED DASHBOARD SUMMARY -->
 !!! info "Development Progress Toward MESA `26.4.1` Parity (`v0.1.0`)"
-    `FlexMESA` is in active parity verification against **MESA release `26.4.1`** ([#140](https://github.com/joshspeagle/FlexMESA/issues/140)). Current script-generated status: **30.7%** of `star`/`star_data`/`binary`/`astero` upstream lines ported (`1.1%` verified), **43 / 106** end-to-end test-suite cases verified passing (`51` declared gaps, `0` undeclared failures), **77.0%** Rust / **87.8%** Python line coverage, and **32 / 55** `#140` packages closed. See the [Live Progress & Verification Dashboard](benchmarks/progress-dashboard.md) for per-module, per-crate, and per-phase tables.
+    `FlexMESA` is in active parity verification against **MESA release `26.4.1`** ([#140](https://github.com/joshspeagle/FlexMESA/issues/140)). Current script-generated status: **30.7%** of `star`/`star_data`/`binary`/`astero` upstream lines ported (`1.1%` verified), **44 / 106** end-to-end test-suite cases verified passing (`50` declared gaps, `0` undeclared failures), **77.0%** Rust / **87.8%** Python line coverage, and **32 / 56** `#140` packages closed. See the [Live Progress & Verification Dashboard](benchmarks/progress-dashboard.md) for per-module, per-crate, and per-phase tables.
 <!-- END GENERATED DASHBOARD SUMMARY -->
 
 ---

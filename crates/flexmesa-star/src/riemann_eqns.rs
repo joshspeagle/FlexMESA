@@ -137,8 +137,7 @@ pub fn do1_riemann_momentum_eqn(
         + diffusion_source;
     // Turbulent eddy viscous force `Uq*dm` for TDC
     // (`star/private/hydro_riemann.f90:127-136`).
-    if crate::tdc_hydro::effective_mlt_option(model)
-        == flexmesa_turb::MltOption::Tdc
+    if model.controls.mlt_option == flexmesa_turb::MltOption::Tdc
         && model.controls.tdc_alpha_m > 0.0
     {
         sum_ad = sum_ad + crate::tdc_hydro::compute_tdc_uq_dm_cell(model, k);

@@ -321,7 +321,7 @@ pub fn setup_sources_and_others(
             .copied()
             .unwrap_or(StarAdOrder1::ZERO)
     } else if model.controls.tdc_alpha_m > 0.0
-        && crate::tdc_hydro::effective_mlt_option(model) == MltOption::Tdc
+        && model.controls.mlt_option == MltOption::Tdc
         && model.controls.tdc_include_eturb_in_energy_equation
         && (model.controls.v_flag || model.controls.u_flag)
     {

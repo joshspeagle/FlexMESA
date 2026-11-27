@@ -1204,7 +1204,8 @@ fn test_phase_separation_co_and_one_match_mesa_26_4_1_oracles() {
         assert_eq!(model.d_mix[nz - 1], 0.0);
         assert_eq!(model.mlt_d[nz - 1], 0.0);
         assert_eq!(model.conv_vel[nz - 1], 0.0);
-        assert_eq!(model.sig[nz - 1], 0.0);
+        // `set_no_mixing` does not write `sig` (`turb_info.f90:291-332`).
+        assert_eq!(model.sig[nz - 1], 1.0e25);
         assert_eq!(model.gradt[nz - 1], model.gradr[nz - 1]);
         assert!(
             model
@@ -1223,7 +1224,10 @@ fn test_phase_separation_co_and_one_match_mesa_26_4_1_oracles() {
                     model.conv_vel[k], 0.0,
                     "{cid}: conv_vel[{k}] must be 0"
                 );
-                assert_eq!(model.sig[k], 0.0, "{cid}: sig[{k}] must be 0");
+                assert_eq!(
+                    model.sig[k], 1.0e25,
+                    "{cid}: sig[{k}] must keep its prior value"
+                );
                 assert_eq!(
                     model.gradt[k], model.gradr[k],
                     "{cid}: gradt[{k}] must equal gradr[{k}]"
@@ -1351,7 +1355,7 @@ fn test_phase_sep_brunt_b_mode_rejection_and_unconditional_solid_shutoff() {
     assert_eq!(m_off.d_mix[nz - 1], 0.0);
     assert_eq!(m_off.mlt_d[nz - 1], 0.0);
     assert_eq!(m_off.conv_vel[nz - 1], 0.0);
-    assert_eq!(m_off.sig[nz - 1], 0.0);
+    assert_eq!(m_off.sig[nz - 1], 1.0e25);
     assert_eq!(m_off.gradt[nz - 1], m_off.gradr[nz - 1]);
 }
 

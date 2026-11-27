@@ -955,3 +955,12 @@ first = 154
 last = 159
 category = "fortran_global"
 reason = "Sets ierr = 0 and calls result_reason_init to populate Fortran global result_reason_str table."
+
+[[na]]
+upstream_path = "star/private/tdc_hydro.f90"
+routine = "compute_d_v_div_r_opt_time_center"
+parent = ""
+first = 475
+last = 489
+category = "dead_code"
+reason = "Private function with no caller in tdc_hydro.f90; hydro_rsp2.f90 calls its own copy (hydro_rsp2.f90:653)."

@@ -10,7 +10,7 @@ Every routine is at one level. Lines are credited to a routine for its own lines
 
 * `full`: the `routine_map` names the routine, the target passes the `routine_map` gate, and the routine is not listed in `routine_map_partial`.
 * `partial`: mapped as above and listed in the file's `routine_map_partial`, because the Rust counterpart implements only part of the upstream routine.
-* `N/A`: declared not applicable to a Rust port in `benchmarks/dashboard/port_status_na.toml` (106 declared). Never counted as mapped and never removed from a denominator; both fractions are shown.
+* `N/A`: declared not applicable to a Rust port in `benchmarks/dashboard/port_status_na.toml` (107 declared). Never counted as mapped and never removed from a denominator; both fractions are shown.
 * `unmapped`: none of the above.
 * `oracle`: the routine is mapped in full and a test file classified `oracle` in the taxonomy lists its `<upstream path>::<routine>` id in its `routines` field. This is the taxonomy's own record of per-routine oracle cover; it is a listing, not a call-site check.
 * `exercised` (reached by a strict-pass history case) is not derived.
@@ -22,20 +22,20 @@ Every routine is at one level. Lines are credited to a routine for its own lines
 | Measure | Value |
 | :--- | ---: |
 | Upstream lines | 144,952 |
-| Lines in routines mapped in full | 32,026 |
-| Lines in routines mapped in part | 44,081 |
-| Lines in not-applicable routines | 2,535 |
-| Lines in unmapped routines | 44,692 |
+| Lines in routines mapped in full | 31,788 |
+| Lines in routines mapped in part | 44,348 |
+| Lines in not-applicable routines | 2,550 |
+| Lines in unmapped routines | 44,648 |
 | Lines outside routines | 21,618 |
 | Lines in routines with oracle evidence | 4,469 |
-| Line-weighted full-mapping fraction (all lines) | 22.1% |
-| Line-weighted partial-mapping fraction (all lines) | 30.4% |
-| Full-mapping fraction excluding not-applicable lines | 22.5% |
-| Partial-mapping fraction excluding not-applicable lines | 31.0% |
-| Not-applicable fraction of all lines | 1.7% |
+| Line-weighted full-mapping fraction (all lines) | 21.9% |
+| Line-weighted partial-mapping fraction (all lines) | 30.6% |
+| Full-mapping fraction excluding not-applicable lines | 22.3% |
+| Partial-mapping fraction excluding not-applicable lines | 31.1% |
+| Not-applicable fraction of all lines | 1.8% |
 | Line-weighted oracle fraction | 3.1% |
 | Whole-file ported fraction (existing headline) | 31.1% |
-| Routines (full / partial / N/A / unmapped / total) | 639 / 489 / 106 / 1,354 / 2,588 |
+| Routines (full / partial / N/A / unmapped / total) | 635 / 494 / 107 / 1,352 / 2,588 |
 | Routines with oracle evidence | 23 |
 
 The fractions answer different questions. The whole-file figure counts every line of a file whose hand-set status is ported; the line-weighted figures count only the own lines of routines that carry the named evidence. Neither is a statement about agreement with MESA.
@@ -44,7 +44,7 @@ The fractions answer different questions. The whole-file figure counts every lin
 
 | Module | Files | Routines | Full | Partial | N/A | Unmapped | Oracle | Upstream lines | Lines full | Lines partial | Lines N/A | Lines unmapped | Outside routines | Full | Partial | Full excl. N/A | Oracle | Whole-file ported |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| `star` | 173 | 2,176 | 560 | 359 | 72 | 1,185 | 23 | 120,509 | 29,641 | 36,546 | 1,843 | 39,821 | 12,658 | 24.6% | 30.3% | 25.0% | 3.7% | 35.6% |
+| `star` | 173 | 2,176 | 556 | 364 | 73 | 1,183 | 23 | 120,509 | 29,403 | 36,813 | 1,858 | 39,777 | 12,658 | 24.4% | 30.5% | 24.8% | 3.7% | 35.6% |
 | `star_data` | 12 | 5 | 0 | 0 | 3 | 2 | 0 | 4,870 | 0 | 0 | 23 | 26 | 4,821 | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% |
 | `binary` | 47 | 218 | 65 | 51 | 11 | 91 | 0 | 11,638 | 2,124 | 3,963 | 367 | 2,427 | 2,757 | 18.3% | 34.1% | 18.8% | 0.0% | 18.7% |
 | `astero` | 14 | 189 | 14 | 79 | 20 | 76 | 0 | 7,935 | 261 | 3,572 | 302 | 2,418 | 1,382 | 3.3% | 45.0% | 3.4% | 0.0% | 0.0% |
@@ -468,7 +468,7 @@ Candidates for a reviewed raise to `ported_unverified`. Largest ten:
 | `star/private/star_solver.f90` | `star` | ported_unverified | partial | 1,940 | 35 | 4 | 8 | 0 | 0 | 115 | 890 | 0 | 894 | 41 |
 | `star/private/star_utils.f90` | `star` | partial | partial | 4,149 | 156 | 86 | 30 | 5 | 0 | 1,941 | 1,022 | 131 | 566 | 489 |
 | `star/private/struct_burn_mix.f90` | `star` | partial | partial | 1,213 | 19 | 1 | 13 | 2 | 0 | 6 | 1,045 | 39 | 60 | 63 |
-| `star/private/tdc_hydro.f90` | `star` | ported_unverified | partial | 658 | 16 | 11 | 0 | 0 | 0 | 467 | 0 | 0 | 128 | 63 |
+| `star/private/tdc_hydro.f90` | `star` | ported_unverified | partial | 658 | 16 | 7 | 5 | 1 | 0 | 229 | 267 | 15 | 84 | 63 |
 | `star/private/timestep.f90` | `star` | ported_unverified | partial | 2,432 | 64 | 58 | 5 | 0 | 0 | 1,687 | 574 | 0 | 10 | 161 |
 | `star/private/turb_info.f90` | `star` | ported_unverified | partial | 608 | 12 | 6 | 5 | 0 | 0 | 305 | 240 | 0 | 7 | 56 |
 | `star/private/turb_support.f90` | `star` | ported_unverified | partial | 512 | 5 | 2 | 3 | 0 | 0 | 71 | 387 | 0 | 0 | 54 |

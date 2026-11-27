@@ -9031,6 +9031,7 @@ upstream_lines = 658
 upstream_sha256 = "8e08492f9e46e7d945494b6160ade5838f642d0faa94dd87c6272accfae1a14f"
 status = "ported_unverified"
 flexmesa_files = ["crates/flexmesa-star/src/tdc_hydro.rs"]
+routine_map_partial = ["get_TDC_alfa_beta_face_weights", "compute_Chi_cell", "compute_Chi_div_w_face", "compute_tdc_Eq_div_w_face", "compute_tdc_Uq_dm_cell"]
 notes = "Ported under #623: Chi_cell, Chi_div_w_face, Eq_div_w_face, Uq_face, Uq_dm_cell, the d(v/r)/dr face and time-centred forms, wrap_Hp_cell and set_viscosity_vars_TDC, wired into the TDC MLT call, the energy, momentum and Riemann equations and finish_load_model. Only the default branches of TDC_use_density_form_for_eddy_viscosity and TDC_alpha_M_use_explicit_mlt_vc_in_momentum_equation (unparsed controls). Checked by unit tests against hand evaluations of the upstream formulas; no test-suite case sets TDC_alpha_M > 0 and nothing is compared with MESA."
 [files.routine_map]
 "set_viscosity_vars_TDC" = "crates/flexmesa-star/src/tdc_hydro.rs::set_viscosity_vars_tdc"
@@ -9044,6 +9045,7 @@ notes = "Ported under #623: Chi_cell, Chi_div_w_face, Eq_div_w_face, Uq_face, Uq
 "compute_d_v_div_r" = "crates/flexmesa-star/src/tdc_hydro.rs::compute_d_v_div_r"
 "compute_d_v_div_r_face" = "crates/flexmesa-star/src/tdc_hydro.rs::compute_d_v_div_r_face"
 "compute_d_v_div_r_opt_time_center_face" = "crates/flexmesa-star/src/tdc_hydro.rs::compute_d_v_div_r_opt_time_center_face"
+"Hp_cell_for_Chi" = "crates/flexmesa-star/src/tdc_hydro.rs::wrap_hp_cell"
 
 [[files]]
 upstream_path = "star/private/tdc_hydro_support.f90"

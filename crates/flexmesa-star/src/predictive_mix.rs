@@ -599,18 +599,14 @@ fn eval_mixing_coeffs(
 
     let cell_snap = CellRangeSnapshot::capture(model, k_top_mz, k_bot_mz);
 
-    let has_alpha = model.aux.mixing.alpha_mlt.len() == model.nz
-        && model.aux.mixing.alpha_mlt.iter().any(|&v| v > 0.0);
     let result = (|| -> Result<(), StarError> {
         eval_uniform_xa_eos_kap_range(model, k_top_mz, k_bot_mz, xa_mx)?;
         // `do1_mlt_2` updates each face `k` in place before reading out MLT results.
         #[allow(clippy::manual_memcpy)]
         for k in k_a..=k_b {
-            let alpha_k = if has_alpha {
-                model.aux.mixing.alpha_mlt[k]
-            } else {
-                model.controls.mixing_length_alpha
-            };
+            // `do1_mlt_2(..., s% alpha_mlt(k), 0._dp)`
+            // (`star/private/predictive_mix.f90:801-802`).
+            let alpha_k = model.aux.mixing.alpha_mlt[k];
             // Explicitly pass `gradL_composition_term = 0.0` (Schwarzschild).
             let _ = do1_mlt_2(model, k, Some(alpha_k), Some(0.0))?;
             d_out[k] = model.mlt_d[k];

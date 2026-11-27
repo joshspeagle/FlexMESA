@@ -130,7 +130,19 @@ pub enum StarPickTimestepOutcome {
 pub fn restore_from_old(model: &mut StarModel) -> Result<(), StarError> {
     let nz_old = model.dq_old.len();
     if nz_old != model.nz && nz_old >= 2 {
+        let nz_cur = model.nz;
         model.resize_zones(nz_old);
+        // Upstream keeps the arrays at their allocated size and sets
+        // `s% nz = s% nz_old` (`star/private/evolve_support.f90:155`). The
+        // remesh's `resize_star_info_arrays` sized them for
+        // `max(prev_mesh_nz, nz)` and set `alpha_mlt` to
+        // `mixing_length_alpha` over that whole range
+        // (`star/private/alloc.f90:488, 980-984`), so the zones regained
+        // here hold `mixing_length_alpha`, not 0.
+        if nz_old > nz_cur {
+            model.aux.mixing.alpha_mlt[nz_cur..nz_old]
+                .fill(model.controls.mixing_length_alpha);
+        }
     }
     model.star_age = model.star_age_old;
     model.time_sec = model.time_old_sec;

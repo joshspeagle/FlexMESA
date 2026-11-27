@@ -178,66 +178,24 @@ pub fn compute_x_scale_into(
 
     for k in 0..nz {
         let base = k * nvar;
-        let lnd_s = model
-            .lnd_start
-            .get(k)
-            .copied()
-            .unwrap_or(model.lnd[k])
-            .abs();
-        let lnt_s = model
-            .ln_t_start
-            .get(k)
-            .copied()
-            .unwrap_or(model.ln_t[k])
-            .abs();
+        let lnd_s = model.lnd_start[k].abs();
+        let lnt_s = model.ln_t_start[k].abs();
         let lnr_s = model.ln_r_start[k].abs();
-        let lum_s = model
-            .lum_start
-            .get(k)
-            .copied()
-            .unwrap_or(model.lum[k])
-            .abs();
+        let lum_s = model.lum_start[k].abs();
         x_scale[base + layout.i_lnd] = lnd_s.max(1.0);
         x_scale[base + layout.i_lnt] = lnt_s.max(1.0);
         x_scale[base + layout.i_lnr] = lnr_s.max(1.0);
         x_scale[base + layout.i_lum] = lum_s.max(1.0);
         if let Some(iv) = layout.i_v {
-            let v_s = model
-                .v_start
-                .get(k)
-                .copied()
-                .unwrap_or_else(|| model.v.get(k).copied().unwrap_or(0.0))
-                .abs();
+            let v_s = model.v_start[k].abs();
             x_scale[base + iv] = v_s.max(1.0);
         }
         if let Some(iu) = layout.i_u {
-            let u_s = model
-                .u_start
-                .get(k)
-                .copied()
-                .unwrap_or_else(|| model.u.get(k).copied().unwrap_or(0.0))
-                .abs();
+            let u_s = model.u_start[k].abs();
             x_scale[base + iu] = u_s.max(1.0);
         }
         if let Some(iw) = layout.i_w {
-            let w_s = model
-                .aux
-                .rsp
-                .w_start
-                .get(k)
-                .copied()
-                .unwrap_or_else(|| {
-                    model
-                        .aux
-                        .rsp
-                        .et_rsp
-                        .get(k)
-                        .copied()
-                        .unwrap_or(0.0)
-                        .max(0.0)
-                        .sqrt()
-                })
-                .abs();
+            let w_s = model.aux.rsp.w_start[k].abs();
             x_scale[base + iw] = w_s.max(1.0);
         }
         if let Some(ihp) = layout.i_hp {
@@ -676,9 +634,7 @@ pub fn do1_chem_eqns(model: &StarModel, k: usize, sys: &mut HenyeySystem) {
     let dt = model.dt.max(1.0e-30);
     let dm_k = model.dm[k].max(1.0e-30);
 
-    let t_start_k = flexmesa_math::exp(
-        model.ln_t_start.get(k).copied().unwrap_or(model.ln_t[k]),
-    );
+    let t_start_k = flexmesa_math::exp(model.ln_t_start[k]);
     let doing_op_split_burn = model.controls.op_split_burn
         && t_start_k >= model.controls.op_split_burn_min_t;
     let active_burn = model.controls.do_burn
@@ -833,15 +789,18 @@ fn check_unported_eval_equ_switches(
     Ok(())
 }
 
-/// Checks that the start-of-step arrays the equations read for every zone,
-/// `s% r_start` (as `ln_r_start`) and `s% mlt_vc_old`, cover all `nz` zones.
-/// Upstream allocates both with the model (`star/private/alloc.f90`) and
-/// sets them at the start of the step (`r_start` in `set_basic_vars`,
-/// `star/private/hydro_vars.f90:744`; `mlt_vc_old` in `new_generation`,
-/// `star/private/evolve_support.f90:58`), so a missing value has no
-/// upstream counterpart. The equation routines index them directly; this is
-/// their single check per evaluation, run by [`assemble_henyey_system`] and
-/// at the start of the solver.
+/// Checks that the start-of-step arrays the equations read for every zone
+/// cover all `nz` zones: `lnd_start`, `ln_t_start`, `ln_r_start` (`s% r_start`),
+/// `lum_start`, `mlt_vc_old`, `v_start` with `v_flag`, `u_start` with `u_flag`,
+/// and with `RSP2_flag` the `w_start`, `Ptrb_start` (`ptrb_start`),
+/// `csound_start`, `Lt_start` and `energy_start` arrays. Upstream allocates
+/// all of them with the model (`star/private/alloc.f90`) and sets them at the
+/// start of the step (`set_start_of_step_info` and `set_basic_vars`,
+/// `star/private/hydro_vars.f90:719-744`; `mlt_vc_old` in `new_generation`,
+/// `star/private/evolve_support.f90:58`), so a missing value has no upstream
+/// counterpart. The equation routines index them directly; this is their
+/// single check per evaluation, run by [`assemble_henyey_system`], at the
+/// start of the solver and before the `RSP2` variables are set.
 ///
 /// # Errors
 /// Returns [`StarError::InvalidInput`] naming the short array.
@@ -849,11 +808,37 @@ pub(crate) fn check_start_of_step_arrays(
     model: &StarModel,
 ) -> Result<(), StarError> {
     let nz = model.nz;
-    for (name, len) in [
-        ("ln_r_start", model.ln_r_start.len()),
-        ("mlt_vc_old", model.aux.mlt_vc_old.len()),
-    ] {
-        if len < nz {
+    let c = &model.controls;
+    let rsp = &model.aux.rsp;
+    let layout = &model.layout;
+    let checks: [(&str, usize, bool); 12] = [
+        ("lnd_start", model.lnd_start.len(), true),
+        ("ln_t_start", model.ln_t_start.len(), true),
+        ("ln_r_start", model.ln_r_start.len(), true),
+        ("lum_start", model.lum_start.len(), true),
+        ("mlt_vc_old", model.aux.mlt_vc_old.len(), true),
+        (
+            "v_start",
+            model.v_start.len(),
+            c.v_flag || layout.i_v.is_some(),
+        ),
+        (
+            "u_start",
+            model.u_start.len(),
+            c.u_flag || layout.i_u.is_some(),
+        ),
+        (
+            "w_start",
+            rsp.w_start.len(),
+            c.rsp2_flag || layout.i_w.is_some(),
+        ),
+        ("ptrb_start", rsp.ptrb_start.len(), c.rsp2_flag),
+        ("csound_start_rsp", rsp.csound_start_rsp.len(), c.rsp2_flag),
+        ("lt_start", rsp.lt_start.len(), c.rsp2_flag),
+        ("energy_start", model.energy_start.len(), c.rsp2_flag),
+    ];
+    for (name, len, needed) in checks {
+        if needed && len < nz {
             return Err(StarError::InvalidInput(format!(
                 "{name} has {len} entries for nz = {nz}; the equations read \
                  it at every zone"

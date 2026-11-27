@@ -256,15 +256,9 @@ pub fn set_mixing_info_with_skip(
     apply_d_mix_zero_regions(model);
 
     // Final `conv_vel` update from `D_mix` and mixing length (`mix_info.f90:364-376`).
-    let has_alpha = model.aux.mixing.alpha_mlt.len() == nz
-        && model.aux.mixing.alpha_mlt.iter().any(|&v| v > 0.0);
+    // `if (s% alpha_mlt(k)*s% scale_height(k) > 0)` (`mix_info.f90:365`).
     for k in 1..nz {
-        let alpha_k = if has_alpha {
-            model.aux.mixing.alpha_mlt[k]
-        } else {
-            model.controls.mixing_length_alpha
-        };
-        let lam = alpha_k * model.scale_height[k];
+        let lam = model.aux.mixing.alpha_mlt[k] * model.scale_height[k];
         if lam > 0.0 {
             model.conv_vel[k] = 3.0 * model.d_mix[k] / lam;
         } else {
@@ -387,8 +381,6 @@ fn remove_tiny_mixing(model: &mut StarModel, tiny: f64) {
 fn remove_mixing_singletons(model: &mut StarModel, remove_conv: bool) {
     // Verbatim `star/private/mix_info.f90:999-1076`.
     let nz = model.nz;
-    let has_alpha = model.aux.mixing.alpha_mlt.len() == nz
-        && model.aux.mixing.alpha_mlt.iter().any(|&v| v > 0.0);
     for k in 1..(nz - 1) {
         if model.aux.mixing.cdc[k] == 0.0 {
             if model.aux.mixing.cdc[k - 1] != 0.0
@@ -402,19 +394,12 @@ fn remove_mixing_singletons(model: &mut StarModel, remove_conv: bool) {
                     FOUR_PI * model.r[k] * model.r[k] * model.rho[k],
                 );
                 model.d_mix[k] = cdc_k / denom;
-                let alpha_k = if has_alpha {
-                    model.aux.mixing.alpha_mlt[k]
-                } else {
-                    model.controls.mixing_length_alpha
-                };
-                let lambda = alpha_k
+                // `conv_vel(k) = 3*D_mix(k)/lambda` with no guard on
+                // `lambda` (`mix_info.f90:1020-1022`).
+                let lambda = model.aux.mixing.alpha_mlt[k]
                     * (model.scale_height[k - 1] + model.scale_height[k + 1])
                     / 2.0;
-                model.conv_vel[k] = if lambda > 0.0 {
-                    3.0 * model.d_mix[k] / lambda
-                } else {
-                    0.0
-                };
+                model.conv_vel[k] = 3.0 * model.d_mix[k] / lambda;
                 let code = model.mixing_type[k - 1]
                     .code()
                     .max(model.mixing_type[k + 1].code());
@@ -1287,8 +1272,6 @@ fn add_rti_turbulence(model: &mut StarModel) -> Result<(), StarError> {
             model.aux.eta_rti.len()
         )));
     }
-    let has_alpha = model.aux.mixing.alpha_mlt.len() == nz
-        && model.aux.mixing.alpha_mlt.iter().any(|&v| v > 0.0);
     for k in 1..nz {
         let mut d = model.aux.eta_rti[k] * coeff;
         if !d.is_finite() {
@@ -1317,12 +1300,8 @@ fn add_rti_turbulence(model: &mut StarModel) -> Result<(), StarError> {
                     * (model.m_center + model.xmstar * q_face)
                     / (r_face * r_face))
         };
-        let alpha_k = if has_alpha {
-            model.aux.mixing.alpha_mlt[k]
-        } else {
-            model.controls.mixing_length_alpha
-        };
-        let vc = 3.0 * d / (alpha_k * hp);
+        // `vc = 3*D/(s% alpha_mlt(k)*Hp)` (`mix_info.f90:2430`).
+        let vc = 3.0 * d / (model.aux.mixing.alpha_mlt[k] * hp);
         model.aux.mixing.cdc[k] = cdc;
         model.d_mix[k] = d;
         model.conv_vel[k] = vc;

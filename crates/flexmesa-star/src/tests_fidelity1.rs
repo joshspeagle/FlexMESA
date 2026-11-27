@@ -1405,6 +1405,64 @@ fn test_assembly_errors_on_short_start_of_step_arrays() {
     assert!(err.to_string().contains("ln_r_start"), "{err}");
 }
 
+/// `lum_start`, `lnd_start`, `ln_t_start` and, with `v_flag`, `v_start` are
+/// covered by the same check; a short one names itself.
+#[test]
+fn test_start_of_step_check_covers_structure_and_velocity_starts() {
+    let mut model = build_solar_test_model(true);
+    model.ln_r_start.clone_from(&model.ln_r);
+    let nz = model.nz;
+    model.aux.mlt_vc_old.resize(nz, 0.0);
+    model.v_start.resize(nz, 0.0);
+    assert!(crate::hydro_eqns::check_start_of_step_arrays(&model).is_ok());
+    for name in ["lum_start", "lnd_start", "ln_t_start", "v_start"] {
+        let mut m = model.clone();
+        match name {
+            "lum_start" => m.lum_start.truncate(nz - 1),
+            "lnd_start" => m.lnd_start.truncate(nz - 1),
+            "ln_t_start" => m.ln_t_start.truncate(nz - 1),
+            _ => m.v_start.truncate(nz - 1),
+        }
+        let err =
+            crate::hydro_eqns::check_start_of_step_arrays(&m).expect_err(name);
+        assert!(err.to_string().contains(name), "{err}");
+    }
+}
+
+/// A retry that restores a larger mesh gives the regained zones
+/// `alpha_mlt = mixing_length_alpha`, which the remesh's resize wrote over
+/// `max(prev_mesh_nz, nz)` (`star/private/alloc.f90:488, 980-984`), even when
+/// `set_hydro_vars` does not refill `alpha_mlt`.
+#[test]
+fn test_restore_from_old_regained_zones_hold_mixing_length_alpha() {
+    let mut model = build_solar_test_model(false);
+    model.save_old_values();
+    let nz = model.nz;
+    // A remesh that removed three zones, with the `*_old` snapshot still on
+    // the previous mesh (`restore_mesh_on_retry`).
+    let snap = model.clone();
+    model.resize_zones(nz - 3);
+    model.lnd_old.clone_from(&snap.lnd_old);
+    model.ln_t_old.clone_from(&snap.ln_t_old);
+    model.ln_r_old.clone_from(&snap.ln_r_old);
+    model.lum_old.clone_from(&snap.lum_old);
+    model.v_old.clone_from(&snap.v_old);
+    model.u_old.clone_from(&snap.u_old);
+    model.xa_old.clone_from(&snap.xa_old);
+    model.dq_old.clone_from(&snap.dq_old);
+    model.aux.mlt_vc_old.clone_from(&snap.aux.mlt_vc_old);
+    model.aux.et_rsp_old.clone_from(&snap.aux.et_rsp_old);
+    model.aux.hp_face_old.clone_from(&snap.aux.hp_face_old);
+    model.aux.alpha_rti_old.clone_from(&snap.aux.alpha_rti_old);
+    model.aux.mixing.okay_to_set_mixing_info = false;
+    crate::evolve::restore_from_old(&mut model).expect("restore");
+    assert_eq!(model.nz, nz);
+    let alpha = model.controls.mixing_length_alpha;
+    assert!(model.aux.mixing.alpha_mlt[nz - 3..nz]
+        .iter()
+        .all(|&a| a == alpha));
+}
+
 /// `eval_simple_PdV_work` with `mlt_Pturb_factor > 0` and velocity time
 /// centering at an interior cell: `Ptot` is the face-averaged
 /// `mlt_Pturb_factor*pow2(mlt_vc_old(k))*get_rho_face(s,k)/3` blended with

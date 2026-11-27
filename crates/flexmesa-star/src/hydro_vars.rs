@@ -1663,6 +1663,7 @@ pub(crate) fn set_hydro_vars_with_skips(
         eval_surf_bc(model)?;
         // `set_vars` does not evaluate `eps_grav`; the energy equation does
         // (`star/private/hydro_vars.f90`, `star/private/hydro_energy.f90:389-418`).
+        crate::hydro_eqns::check_start_of_step_arrays(model)?;
         crate::rsp2_ad::update_rsp2_vars_ad(model);
         let alpha = model.controls.mixing_length_alpha;
         for k in 0..nz {

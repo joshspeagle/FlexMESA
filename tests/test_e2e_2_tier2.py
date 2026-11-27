@@ -97,6 +97,8 @@ def test_accretion_composition_and_super_eddington_nova_wind() -> None:
             "&star_job\n"
             "  load_saved_model = .true.\n"
             "  load_model_filename = 'accreted.mod'\n"
+            "  save_model_when_terminate = .true.\n"
+            "  save_model_filename = 'final.mod'\n"
             "/\n"
             "&kap\n"
             "  zbase = 0.02\n"
@@ -229,7 +231,7 @@ def _check_synthetic_tier2_case(
             shutil.copy2(mod_src, case_dir / mod_src.name)
         (case_dir / "inlist").write_text(inlist_body, encoding="utf-8")
         (case_dir / "rn").write_text(
-            "#!/usr/bin/env bash\ndo_one inlist final.mod\n",
+            "#!/usr/bin/env bash\ndo_one inlist\n",
             encoding="utf-8",
         )
         rep = e2e.run_test_suite_case(
@@ -268,7 +270,7 @@ def test_unimplemented_create_initial_model_and_missing_hook_fail_loudly(
     init_dir = tmp_path / "create_init"
     init_dir.mkdir(parents=True, exist_ok=True)
     (init_dir / "rn").write_text(
-        "#!/usr/bin/env bash\ndo_one inlist final.mod\n", encoding="utf-8"
+        "#!/usr/bin/env bash\ndo_one inlist\n", encoding="utf-8"
     )
     (init_dir / "inlist").write_text(
         "&star_job\n  create_initial_model = .true.\n/\n"
@@ -284,7 +286,7 @@ def test_unimplemented_create_initial_model_and_missing_hook_fail_loudly(
     hook_dir = tmp_path / "missing_build_hook"
     hook_dir.mkdir(parents=True, exist_ok=True)
     (hook_dir / "rn").write_text(
-        "#!/usr/bin/env bash\ndo_one inlist final.mod\n", encoding="utf-8"
+        "#!/usr/bin/env bash\ndo_one inlist\n", encoding="utf-8"
     )
     (hook_dir / "inlist").write_text(
         "&star_job\n  use_other_build_initial_model = .true.\n/\n"

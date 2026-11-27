@@ -44,7 +44,7 @@ def _write_other_overshoot_case(case_dir: pathlib.Path) -> pathlib.Path:
         encoding="utf-8",
     )
     (case_dir / "rn").write_text(
-        "#!/bin/bash\ndo_one inlist_other_overshoot final.mod\n",
+        "#!/bin/bash\ndo_one inlist_other_overshoot\n",
         encoding="utf-8",
     )
     return case_dir

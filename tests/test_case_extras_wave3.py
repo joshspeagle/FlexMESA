@@ -100,7 +100,7 @@ def _write_synthetic_sdb_case(
     """Create a 1 Msun ZAMS case with active Reimers/Blocker winds."""
     case_dir.mkdir(parents=True, exist_ok=True)
     (case_dir / "rn").write_text(
-        "#!/usr/bin/env bash\ndo_one inlist final.mod\n",
+        "#!/usr/bin/env bash\ndo_one inlist\n",
         encoding="utf-8",
     )
     (case_dir / "inlist").write_text(

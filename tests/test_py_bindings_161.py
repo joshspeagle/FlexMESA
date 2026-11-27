@@ -299,7 +299,7 @@ def test_star_and_binary_boundary_guards(tmp_path: pathlib.Path) -> None:
         encoding="utf-8",
     )
     (case_dir / "rn").write_text(
-        "#!/usr/bin/env bash\ndo_one inlist final.mod\n",
+        "#!/usr/bin/env bash\ndo_one inlist\n",
         encoding="utf-8",
     )
     captured: dict[str, Any] = {}

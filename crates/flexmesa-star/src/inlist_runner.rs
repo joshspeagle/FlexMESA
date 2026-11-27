@@ -544,19 +544,19 @@ fn write_photo_to_case_dir(
     Ok(Some(out_path))
 }
 
-fn write_mod_if_missing(
+/// Writes `model` in MESA `.mod` format to `out_path` unconditionally
+/// (`do_saves`, `star/job/run_star_support.f90:1270-1274`).
+fn write_mod_to_path(
     model: &StarModel,
     out_path: &Path,
 ) -> Result<(), StarError> {
-    if !out_path.exists() || model.controls.rsp_flag {
-        let mod_text = write_mod_string(model)?;
-        fs::write(out_path, mod_text).map_err(|e| {
-            StarError::IoError(format!(
-                "failed to write {}: {e}",
-                out_path.display()
-            ))
-        })?;
-    }
+    let mod_text = write_mod_string(model)?;
+    fs::write(out_path, mod_text).map_err(|e| {
+        StarError::IoError(format!(
+            "failed to write {}: {e}",
+            out_path.display()
+        ))
+    })?;
     Ok(())
 }
 
@@ -1158,7 +1158,7 @@ fn run_inlist_stage_with_logs_inner(
             .eq_ignore_ascii_case("undefined")
     {
         let out_path = bundle.case_dir.join(&model.job.save_model_filename);
-        write_mod_if_missing(model, &out_path)?;
+        write_mod_to_path(model, &out_path)?;
     }
 
     // Termination pulsation data save (`star/job/run_star_support.f90:793-794,1283-1290`).
@@ -1435,25 +1435,22 @@ pub fn run_test_suite_case_with_extras(
                 )?;
                 // Remove stale stage output `.mod` before execution so a
                 // `required_termination_code_string` mismatch cannot mask a
-                // withheld save (`star/test_suite/test_suite_helpers:22`).
-                if bundle.job.save_model_when_terminate {
-                    if let Some(out_name) = output_mod {
-                        let out_path = case_dir.join(out_name);
-                        if out_path.is_file() {
-                            fs::remove_file(&out_path).map_err(|e| {
-                                StarError::IoError(format!(
-                                    "failed to remove stale {}: {e}",
-                                    out_path.display()
-                                ))
-                            })?;
-                        }
+                // withheld save, and missing stage output fails loudly
+                // (`star/test_suite/test_suite_helpers:22`).
+                if let Some(out_name) = output_mod {
+                    let out_path = case_dir.join(out_name);
+                    if out_path.is_file() {
+                        fs::remove_file(&out_path).map_err(|e| {
+                            StarError::IoError(format!(
+                                "failed to remove stale {}: {e}",
+                                out_path.display()
+                            ))
+                        })?;
                     }
                 }
 
                 let mut model = match init_or_update_model_from_bundle_outcome(
-                    &bundle,
-                    None,
-                    extras,
+                    &bundle, None, extras,
                 )? {
                     InitModelOutcome::Model(m) => *m,
                     InitModelOutcome::Terminate(reason) => {
@@ -1512,10 +1509,17 @@ pub fn run_test_suite_case_with_extras(
                     let (c1, c2) = verify_photo_restart_parity(&model, 1)?;
                     photo_restart_verified = c1 == c2;
                 }
-                if !stage_abnormal && !stage_term_mismatch {
+                if !stage_abnormal && !stage_term_mismatch && !is_capped_smoke {
                     if let Some(out_name) = output_mod {
                         let out_path = case_dir.join(out_name);
-                        write_mod_if_missing(&model, &out_path)?;
+                        if !out_path.is_file() {
+                            return Err(StarError::IoError(format!(
+                                "failed to create {} when running {} \
+                                 (`star/test_suite/test_suite_helpers:32-43`)",
+                                out_path.display(),
+                                inlist
+                            )));
+                        }
                     }
                 }
                 total_steps += rep.steps_taken;
@@ -1523,7 +1527,7 @@ pub fn run_test_suite_case_with_extras(
                 total_retries += rep.total_retries;
                 stage_reports.push(rep);
                 last_stage_model = Some(model);
-                if stage_abnormal || stage_term_mismatch {
+                if stage_abnormal || stage_term_mismatch || is_capped_smoke {
                     break;
                 }
                 // A selected step-dump stage is the last one that matters.

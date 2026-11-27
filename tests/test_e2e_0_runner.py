@@ -112,6 +112,8 @@ def test_run_test_suite_case_executes_two_stage_pipeline() -> None:
             "&star_job\n"
             "  load_saved_model = .true.\n"
             "  load_model_filename = 'after_stage1.mod'\n"
+            "  save_model_when_terminate = .true.\n"
+            "  save_model_filename = 'final.mod'\n"
             "  change_net = .true.\n"
             "  new_net_name = 'co_burn.net'\n"
             "/\n"

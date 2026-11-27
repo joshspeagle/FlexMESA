@@ -187,6 +187,8 @@ fn test_e2e_0_inlist_bundle_net_change_termination_and_photo_restart_parity() {
 &star_job
    load_saved_model = .true.
    load_model_filename = 'stage1_out.mod'
+   save_model_when_terminate = .true.
+   save_model_filename = 'final.mod'
    change_net = .true.
    new_net_name = 'co_burn.net'
 / ! end of star_job namelist

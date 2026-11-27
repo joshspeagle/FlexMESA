@@ -3887,7 +3887,7 @@
       "wall_time_sec": 0.0,
       "peak_rss_gb": 0.0,
       "known_gap_issue": "#161",
-      "known_gap_reason": "AGB third-dredge-up C13-pocket evolution hits memory/wall-time guard with unsupported controls::atm_off_table_option (#161).",
+      "known_gap_reason": "Strict run (all controls supported) ends on the 3000 s campaign budget at 1843 steps (MESA 1949) with log_L out of tolerance from step 281 (#161).",
       "is_undeclared_failure": false,
       "is_stale_known_gap": false,
       "controls_ignored": false,

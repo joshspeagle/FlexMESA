@@ -1103,6 +1103,12 @@ module = "star"
 kind = "invariant"
 
 [[tests]]
+path = "crates/flexmesa-star/tests/mesh_driver_624_test.rs"
+language = "rust"
+module = "star"
+kind = "invariant"
+
+[[tests]]
 path = "crates/flexmesa-star/tests/mesh_planner_153_test.rs"
 language = "rust"
 module = "star"

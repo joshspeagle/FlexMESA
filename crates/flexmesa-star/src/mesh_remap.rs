@@ -111,6 +111,21 @@ pub(crate) fn clean_up_fractions_slice(
     Ok(())
 }
 
+/// Maps `clean_up_fractions_slice` failures during remeshing to retriable
+/// `StarError::MicrophysicsError` (`remesh = retry` in
+/// `star/private/adjust_mesh.f90:109-116`).
+pub(crate) fn clean_up_fractions_remesh(
+    xa: &mut [f64],
+    nz: usize,
+    species: usize,
+) -> Result<(), StarError> {
+    clean_up_fractions_slice(xa, nz, species, 10.0, 1.0e-2).map_err(|e| {
+        StarError::MicrophysicsError(format!(
+            "clean_up_fractions failed during adjust mesh: {e}"
+        ))
+    })
+}
+
 /// Computes `dq(nz) = 1 - sum(dq(1:nz-1))` with fallback normalization matching
 /// `star/private/adjust_mesh.f90:244-261, 354-369`.
 pub(crate) fn fix_tail_dq(dq: &mut [f64]) -> Result<(), StarError> {
@@ -1125,9 +1140,9 @@ pub(crate) fn execute_adjust_mesh_from_plan_with(
     let j_tot1 = total_angular_momentum(model);
 
     // `clean_up_fractions(1, nz, species, nz, s% xa, 10d0, 1d-2, ierr)`
-    // (`adjust_mesh.f90:109`, `net/private/net_eval.f90:822-850`).
+    // (`adjust_mesh.f90:109-116`, `net/private/net_eval.f90:822-850`).
     if !plan.xa_already_cleaned {
-        clean_up_fractions_slice(&mut model.xa, nz_old, species, 10.0, 1.0e-2)?;
+        clean_up_fractions_remesh(&mut model.xa, nz_old, species)?;
     }
 
     let specific_pe_old: Vec<f64> =
@@ -1150,23 +1165,31 @@ pub(crate) fn execute_adjust_mesh_from_plan_with(
     let lum_old = model.lum.clone();
     let v_old = model.v.clone();
     let u_old = model.u.clone();
-    let w_old: Vec<f64> = (0..nz_old)
-        .map(|k| {
-            model
-                .aux
-                .rsp
-                .et_rsp
-                .get(k)
-                .copied()
-                .unwrap_or(0.0)
-                .max(0.0)
-                .sqrt()
-        })
-        .collect();
+    let nvar = model.layout.nvar_hydro;
+    let w_old: Vec<f64> = if let Some(iw) =
+        model.layout.i_w.filter(|_| model.xh.len() >= nz_old * nvar)
+    {
+        (0..nz_old).map(|k| model.xh[k * nvar + iw]).collect()
+    } else {
+        (0..nz_old)
+            .map(|k| {
+                model
+                    .aux
+                    .rsp
+                    .et_rsp
+                    .get(k)
+                    .copied()
+                    .unwrap_or(0.0)
+                    .max(0.0)
+                    .sqrt()
+            })
+            .collect()
+    };
     let hp_face_old = model.aux.rsp.hp_face.clone();
     let alpha_rti_old = model.aux.alpha_rti.clone();
     let dpdr_drhodr_old = model.aux.dpdr_drhodr_info.clone();
     let j_rot_old = model.j_rot.clone();
+    let d_omega_old = model.aux.rotmix.d_omega.clone();
     let mlt_vc_old = model.mlt_vc.clone();
     let d_mix_old = model.d_mix.clone();
     let old_r = model.r.clone();
@@ -1602,11 +1625,6 @@ pub(crate) fn execute_adjust_mesh_from_plan_with(
     // without a `cell_type` shortcut (`star/private/mesh_adjust.f90:232-236,
     // 1943-2112`), so `xout_new`/`dqbar` rounding enters `j_rot` even on
     // `CellType::Unchanged` faces.
-    // Upstream also interpolates `D_omega` after `adjust_omega` under
-    // `D_omega_flag` (`star/private/mesh_adjust.f90:237-243`). Not ported:
-    // `D_omega` is reset and rebuilt before any use by the next
-    // `set_rotation_mixing_info` (`star/private/rotation_mix_info.f90:94,
-    // 255-328`), so the interpolated values are never read.
     if model.controls.rotation_flag {
         let max_w = model.controls.mix_wind.w_div_wcrit_max;
         let max_w2 = model.controls.mix_wind.w_div_wcrit_max2;
@@ -1637,10 +1655,26 @@ pub(crate) fn execute_adjust_mesh_from_plan_with(
                 model.cgrav[k],
                 max_w,
                 max_w2,
+                // Deferred #505: `w_div_wc_flag` not yet on `StarControls`.
                 false,
             );
             crate::hydro_rotation::update1_i_rot_from_xh(model, k);
             model.omega[k] = model.j_rot[k] / model.aux.i_rot[k];
+        }
+        if model.controls.d_omega_flag && d_omega_old.len() >= nz_old {
+            model.aux.rotmix.d_omega.resize(nz, 0.0);
+            do_interp_pt_val(
+                nz,
+                nz_old,
+                nzlo1,
+                nzhi1,
+                &mut model.aux.rotmix.d_omega,
+                &d_omega_old,
+                0.0,
+                &xq_old_plus1,
+                &xq_new_slice,
+                true,
+            )?;
         }
     }
 
@@ -1938,12 +1972,23 @@ pub fn do_prune_mesh_surface(
         &mut model.aux.alpha_rti,
         &mut model.aux.dpdr_drhodr_info,
     ] {
-        // Upstream also prunes `D_omega` under `D_omega_flag`
-        // (`star/private/mesh_adjust.f90:612-614`). Not ported: it is
-        // rebuilt by the next `set_rotation_mixing_info`
-        // (`star/private/rotation_mix_info.f90:94, 255-328`) before any use.
         if vec.len() >= nz_old {
             vec.copy_within(skip..nz_old, 0);
+        }
+    }
+    for vec in [
+        &mut model.aux.rotmix.nu_st,
+        &mut model.aux.rotmix.d_st,
+        &mut model.aux.rotmix.d_dsi,
+        &mut model.aux.rotmix.d_sh,
+        &mut model.aux.rotmix.d_ssi,
+        &mut model.aux.rotmix.d_es,
+        &mut model.aux.rotmix.d_gsf,
+        &mut model.aux.rotmix.d_omega,
+    ] {
+        if vec.len() >= nz_old {
+            vec.copy_within(skip..nz_old, 0);
+            vec.truncate(nz_new);
         }
     }
     model.resize_zones(nz_new);
@@ -1969,4 +2014,108 @@ pub fn do_prune_mesh_surface(
     model.set_m_grav_and_grav();
     model.unpack_xh();
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::mesh_adjust::{try_plan_standard_mesh, MeshFunctionConfig};
+    use crate::{load_zams_model, StarControls, StarJobControls};
+
+    #[test]
+    fn test_execute_adjust_mesh_for_step_interpolates_d_omega() {
+        let mut model = load_zams_model(
+            StarControls {
+                initial_mass: 1.0,
+                initial_z: 0.02,
+                zbase: 0.02,
+                okay_to_remesh: true,
+                rotation_flag: true,
+                d_omega_flag: true,
+                mesh_delta_coeff: 0.5,
+                ..StarControls::default()
+            },
+            StarJobControls::default(),
+        )
+        .expect("load 1 Msun ZAMS");
+        set_hydro_vars(&mut model, false, false).expect("set_hydro_vars");
+
+        let nz_old = model.nz;
+        let d_omega_orig: Vec<f64> = (0..nz_old)
+            .map(|k| 1.0e6 + 500.0 * f64::from(u32::try_from(k).expect("k")))
+            .collect();
+        model.aux.rotmix.d_omega = d_omega_orig.clone();
+        let d_surf_bits = d_omega_orig[0].to_bits();
+        let d_core_bits = d_omega_orig[nz_old - 1].to_bits();
+
+        let cfg = MeshFunctionConfig::from_controls(&model.controls);
+        let plan = try_plan_standard_mesh(&model, &cfg)
+            .expect("try_plan_standard_mesh")
+            .expect("some mesh plan");
+        assert!(plan.num_splits + plan.num_merges > 0);
+
+        let nz = plan.dq_new.len();
+        let mut nzlo1 = 0_usize;
+        for (k, &ct) in plan.cell_type.iter().enumerate() {
+            if ct != CellType::Unchanged {
+                nzlo1 = k + 1;
+                break;
+            }
+        }
+        if nzlo1 == 0 {
+            nzlo1 = nz;
+        }
+        let mut nzhi1 = nzlo1;
+        for k1 in (nzlo1..=nz).rev() {
+            if plan.cell_type[k1 - 1] != CellType::Unchanged {
+                nzhi1 = k1;
+                break;
+            }
+        }
+        if nzhi1 < nz {
+            nzhi1 += 1;
+        }
+        if nzlo1 > 1 {
+            nzlo1 -= 1;
+        }
+        let mut xq_old_plus1 = Vec::with_capacity(nz_old + 1);
+        xq_old_plus1.extend_from_slice(&plan.xq_old);
+        xq_old_plus1.push(1.0);
+
+        execute_adjust_mesh_from_plan_with(&mut model, plan, false)
+            .expect("execute_adjust_mesh_from_plan_with step");
+        assert_eq!(model.aux.rotmix.d_omega.len(), model.nz);
+        assert!(model
+            .aux
+            .rotmix
+            .d_omega
+            .iter()
+            .all(|&v| v.is_finite() && v >= 0.0));
+        assert_eq!(model.aux.rotmix.d_omega[0].to_bits(), d_surf_bits);
+        assert_eq!(
+            model.aux.rotmix.d_omega[model.nz - 1].to_bits(),
+            d_core_bits
+        );
+
+        let xq_new_slice = model.xq[(nzlo1 - 1)..nzhi1].to_vec();
+        let mut expected = vec![0.0_f64; model.nz];
+        do_interp_pt_val(
+            model.nz,
+            nz_old,
+            nzlo1,
+            nzhi1,
+            &mut expected,
+            &d_omega_orig,
+            0.0,
+            &xq_old_plus1,
+            &xq_new_slice,
+            true,
+        )
+        .expect("reference do_interp_pt_val");
+        for (k, (&got, &want)) in
+            model.aux.rotmix.d_omega.iter().zip(&expected).enumerate()
+        {
+            assert_eq!(got.to_bits(), want.to_bits(), "d_omega[{k}] mismatch");
+        }
+    }
 }

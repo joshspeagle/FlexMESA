@@ -1786,6 +1786,12 @@ module = "tooling"
 kind = "invariant"
 
 [[tests]]
+path = "tests/test_harness_stage_guard.py"
+language = "python"
+module = "tooling"
+kind = "invariant"
+
+[[tests]]
 path = "tests/test_history_harness.py"
 language = "python"
 module = "tooling"

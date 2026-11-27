@@ -208,6 +208,70 @@ def stage_model_numbers(rep: dict[str, Any]) -> tuple[int, ...]:
     )
 
 
+#: File-system timestamps trail ``time.time_ns()`` by a few milliseconds.
+_MTIME_SLACK_NS = 2_000_000_000
+
+
+def stage_progress(
+    suite: str,
+    case_dir: pathlib.Path,
+    skip_optional: bool,
+    started_ns: int,
+    completed: tuple[int, ...] | None,
+) -> tuple[int, int | None]:
+    """Return the stages of a ``star`` case and the stage a run ended in.
+
+    A run that returned its report names its stages itself. A run cut off by
+    a budget or an error did not, so the stage is read from the stage output
+    models of the ``rn`` script: stage ``k`` is complete when its ``.mod``
+    was written after the run started (within a 2 s timestamp slack), and
+    the run ended in the first stage whose declared ``.mod`` is missing or
+    older.
+
+    Args:
+        suite: Suite name; only ``"star"`` has stages.
+        case_dir: Upstream case directory holding the stage output models.
+        skip_optional: Whether the run skipped the optional stages.
+        started_ns: Wall-clock start of the run (``time.time_ns()``).
+        completed: Model number at the end of each completed stage from the
+            run report, or ``None`` when the run returned no report.
+
+    Returns:
+        ``(stages_total, stage_reached)``. ``stages_total`` is ``0`` for a
+        case with at most one stage, and ``stage_reached`` is the 1-based
+        stage the run ended in, or ``None`` when the run does not establish
+        it (a stage without a declared output model decides nothing).
+    """
+    if suite != "star":
+        return 0, None
+    try:
+        rn = _rust.star_parse_rn_stages(str(case_dir), skip_optional)
+    except (ValueError, RuntimeError, OSError):
+        return 0, None
+    stages = [st for st in rn if st[0] == "do_one"]
+    total = len(stages)
+    if total <= 1:
+        return 0, None
+    if completed is not None:
+        return total, min(len(completed), total) if completed else total
+    for idx, (_, _, out_mod) in enumerate(stages):
+        if not out_mod:
+            return total, None
+        written = case_dir / out_mod
+        try:
+            fresh = written.stat().st_mtime_ns >= started_ns - _MTIME_SLACK_NS
+        except OSError:
+            fresh = False
+        if not fresh:
+            return total, idx + 1
+    return total, total
+
+
+def _opt_int(value: Any) -> int | None:
+    """Return ``int(value)``, or ``None`` when the run report has no value."""
+    return None if value is None else int(value)
+
+
 def _sole_history(out_target: pathlib.Path) -> bool:
     """Return whether exactly one ``history.data`` exists under the output.
 
@@ -574,6 +638,9 @@ _RUST_WORKER_BOOTSTRAP = "\n".join(
         "    ),",
         "    'rss_gb': rss_kb / 1.0e6,",
         "}",
+        "for key in ('star1_final_model_number', 'star1_retries'):",
+        "    if rep.get(key) is not None:",
+        "        payload[key] = int(rep[key])",
         "pathlib.Path(ns.meta_json).write_text(",
         "    json.dumps(payload, allow_nan=False), encoding='utf-8'",
         ")",
@@ -651,6 +718,7 @@ def _run_traced_worker(
     timeout_sec: float | None,
     max_rss_gb: float | None,
     t0: float,
+    started_ns: int = 0,
     monitor: early_stop.RunMonitor | None = None,
     monitor_interval_sec: float = MONITOR_INTERVAL_SEC,
 ) -> TraceRunOutcome:
@@ -767,6 +835,23 @@ def _run_traced_worker(
         err_text = stderr_path.read_text(
             encoding="utf-8", errors="replace"
         ).strip()
+        payload_ok = retcode == 0 and meta_json.is_file() and not kill_status
+        payload: dict[str, Any] = (
+            json.loads(meta_json.read_text(encoding="utf-8"))
+            if payload_ok
+            else {}
+        )
+        n_stages, reached = stage_progress(
+            suite,
+            case_dir,
+            skip_optional,
+            started_ns,
+            (
+                tuple(int(n) for n in payload.get("stage_steps", ()))
+                if payload_ok
+                else None
+            ),
+        )
 
         if kill_status:
             return TraceRunOutcome(
@@ -785,10 +870,11 @@ def _run_traced_worker(
                 ),
                 iters=hist_iters,
                 mean_iters=hist_mean_iters,
+                stages_total=n_stages,
+                stage_reached=reached,
             )
 
-        if retcode == 0 and meta_json.is_file():
-            payload = json.loads(meta_json.read_text(encoding="utf-8"))
+        if payload_ok:
             rep_retries = int(payload.get("total_retries", 0))
             if (
                 suite == "binary"
@@ -813,6 +899,12 @@ def _run_traced_worker(
                 history_path=hist,
                 iters=hist_iters,
                 mean_iters=hist_mean_iters,
+                stages_total=n_stages,
+                stage_reached=reached,
+                star1_final_model_number=_opt_int(
+                    payload.get("star1_final_model_number")
+                ),
+                star1_retries=_opt_int(payload.get("star1_retries")),
             )
 
         return TraceRunOutcome(
@@ -825,6 +917,8 @@ def _run_traced_worker(
             wall_time_sec=wall,
             peak_rss_gb=peak_kb / 1.0e6,
             history_path=hist,
+            stages_total=n_stages,
+            stage_reached=reached,
             error_message=(
                 _summarize_worker_error(err_text)
                 if err_text
@@ -946,6 +1040,7 @@ def _run_traced_case_once(
     eff_mode = resolve_effective_numerics_mode(numerics_mode)
     case_name = case_dir.name
     t0 = time.monotonic()
+    started_ns = time.time_ns()
 
     if timeout_sec is not None or max_rss_gb is not None:
         return _run_traced_worker(
@@ -963,6 +1058,7 @@ def _run_traced_case_once(
             timeout_sec=timeout_sec,
             max_rss_gb=max_rss_gb,
             t0=t0,
+            started_ns=started_ns,
             monitor=monitor,
             monitor_interval_sec=monitor_interval_sec,
         )
@@ -986,6 +1082,13 @@ def _run_traced_case_once(
         _, hist_retries, hist_iters, hist_mean_iters = (
             _extract_run_history_telemetry(hist, suite)
         )
+        n_stages, reached = stage_progress(
+            suite,
+            case_dir,
+            skip_optional,
+            started_ns,
+            stage_model_numbers(rep) if suite == "star" else None,
+        )
         rep_retries = int(
             rep.get("total_retries", rep.get("binary_retries", 0))
         )
@@ -998,6 +1101,12 @@ def _run_traced_case_once(
             termination_code=str(rep.get("termination_code", "")),
             steps=int(rep.get("total_steps", 0)),
             stage_steps=stage_model_numbers(rep),
+            stages_total=n_stages,
+            stage_reached=reached,
+            star1_final_model_number=_opt_int(
+                rep.get("star1_final_model_number")
+            ),
+            star1_retries=_opt_int(rep.get("star1_retries")),
             retries=rep_retries,
             wall_time_sec=wall,
             peak_rss_gb=proc_rss_gb(os.getpid()),
@@ -1013,12 +1122,17 @@ def _run_traced_case_once(
         hist_rows, hist_retries, hist_iters, hist_mean_iters = (
             _extract_run_history_telemetry(hist, suite)
         )
+        n_stages, reached = stage_progress(
+            suite, case_dir, skip_optional, started_ns, None
+        )
         return TraceRunOutcome(
             suite=suite,
             case=case_name,
             status="error",
             termination_code="",
             steps=hist_rows,
+            stages_total=n_stages,
+            stage_reached=reached,
             retries=hist_retries if hist_retries is not None else 0,
             wall_time_sec=wall,
             peak_rss_gb=proc_rss_gb(os.getpid()),

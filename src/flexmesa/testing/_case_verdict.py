@@ -66,6 +66,14 @@ class TraceRunOutcome:
         stage_steps: Model number at the end of each ``star`` stage the run
             completed (empty when not reported), compared with MESA's stage
             by stage (``DECISIONS #69``).
+        stages_total: Number of ``do_one`` stages the ``rn`` script runs under
+            the harness (``0`` when not a multi-stage ``star`` run).
+        stage_reached: 1-based stage the run ended in, or ``None`` when the
+            run does not establish it (``stages_total > 1`` only).
+        star1_final_model_number: Final model number of star 1 of a binary
+            run, when the run report provides it.
+        star1_retries: Retry count of star 1 of a binary run, when the run
+            report provides it.
     """
 
     suite: str
@@ -85,6 +93,20 @@ class TraceRunOutcome:
     mean_iters: float | None = None
     track_history_paths: tuple[pathlib.Path, ...] = ()
     stage_steps: tuple[int, ...] = ()
+    stages_total: int = 0
+    stage_reached: int | None = None
+    star1_final_model_number: int | None = None
+    star1_retries: int | None = None
+
+    @property
+    def final_stage_reached(self) -> bool:
+        """Return whether the history is that of the final stage.
+
+        A multi-stage run that ended earlier, or that does not establish the
+        stage it ended in, holds the partial history of another stage, which
+        must not be scored against the reference of the final stage.
+        """
+        return self.stages_total <= 1 or self.stage_reached == self.stages_total
 
 
 _UNSUPPORTED_COUNT_RE = re.compile(
@@ -176,6 +198,9 @@ class CaseHarnessRecord:
     mesa_iters_rows: int = 0
     stage_steps: tuple[int, ...] = ()
     mesa_stage_steps: tuple[int, ...] = ()
+    stages_total: int = 0
+    stage_reached: int | None = None
+    star1_final_model_number: int | None = None
     artifact_comparison: artifact_compare.ArtifactComparison | None = None
 
     @property
@@ -776,16 +801,32 @@ def evaluate_case_record(
     term_ok = case_manifest.termination_matches(
         spec.required_termination, outcome.termination_code
     )
+    # The history of a multi-stage run that did not reach its final stage is
+    # that of an earlier stage; the reference is the final stage's, so the
+    # two are not compared (no column verdict either way).
+    stage_ok = outcome.final_stage_reached
     comp: history_compare.HistoryComparison | None = (
         history_compare.re_evaluate_comparison(precomputed_comparison, spec)
-        if precomputed_comparison is not None
+        if precomputed_comparison is not None and stage_ok
         else None
     )
     comp_err = _sanitize_error_message(outcome.error_message)
+    if not stage_ok and has_history_reference(spec):
+        where = (
+            f"ended in stage {outcome.stage_reached} of {outcome.stages_total}"
+            if outcome.stage_reached is not None
+            else f"stage not established ({outcome.stages_total} stages)"
+        )
+        note = (
+            f"run {where}; history not compared with the final-stage "
+            "MESA reference"
+        )
+        if note not in comp_err:
+            comp_err = "; ".join(filter(None, [comp_err, note]))
     run_iters = outcome.iters
     run_mean_iters = outcome.mean_iters
 
-    if comp is None and has_history_reference(spec):
+    if comp is None and has_history_reference(spec) and stage_ok:
         ref_file = resolve_reference_history_path(
             spec.reference_path, root_dir=base
         )
@@ -970,8 +1011,17 @@ def evaluate_case_record(
         and outcome.history_path is not None
     ):
         # Binary and astero reports carry no per-stage model numbers; a
-        # single-stage MESA run is compared by total steps.
-        run_stages = (outcome.steps,)
+        # single-stage MESA run is compared by total steps. A binary run
+        # whose report names star 1's final model number is compared by
+        # that, as MESA's binary suite prints star 1's count
+        # (binary/job/binary_test_suite_extras.inc:126), since star 1 can
+        # stop before the binary does.
+        run_stages = (
+            (outcome.star1_final_model_number,)
+            if spec.suite == "binary"
+            and outcome.star1_final_model_number is not None
+            else (outcome.steps,)
+        )
     step_diff = (
         first_step_difference(run_stages, mesa_stages)
         if outcome.status == "ok" and max_steps is None
@@ -1059,7 +1109,11 @@ def evaluate_case_record(
         observed_termination=outcome.termination_code,
         termination_matches=term_ok,
         steps=outcome.steps,
-        retries=outcome.retries,
+        retries=(
+            outcome.star1_retries
+            if spec.suite == "binary" and outcome.star1_retries is not None
+            else outcome.retries
+        ),
         wall_time_sec=outcome.wall_time_sec,
         peak_rss_gb=outcome.peak_rss_gb,
         known_gap_issue=gap_issue,
@@ -1077,6 +1131,9 @@ def evaluate_case_record(
         mean_iters=run_mean_iters,
         stage_steps=run_stages,
         mesa_stage_steps=mesa_stages,
+        stages_total=outcome.stages_total,
+        stage_reached=outcome.stage_reached,
+        star1_final_model_number=outcome.star1_final_model_number,
         artifact_comparison=artifact_comparison,
         mesa_steps=mesa_stats.steps if mesa_stats is not None else None,
         mesa_retries=mesa_stats.retries if mesa_stats is not None else None,

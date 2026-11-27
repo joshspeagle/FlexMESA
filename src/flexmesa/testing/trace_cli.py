@@ -98,6 +98,9 @@ def _run_worker(argv: list[str]) -> int:
         ),
         "rss_gb": harness_runner.proc_rss_gb(os.getpid()),
     }
+    for key in ("star1_final_model_number", "star1_retries"):
+        if rep.get(key) is not None:
+            payload[key] = int(rep[key])
     pathlib.Path(ns.meta_json).write_text(
         json.dumps(payload, allow_nan=False), encoding="utf-8"
     )

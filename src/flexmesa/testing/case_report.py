@@ -207,6 +207,17 @@ def record_to_dict(rec: harness_runner.CaseHarnessRecord) -> dict[str, Any]:
         ),
         "error_message": rec.error_message,
     }
+    if rec.executed and rec.wall_time_sec > 0.0:
+        # Absent from a normalized baseline, whose wall time is zeroed, so the
+        # committed baseline stays deterministic.
+        out["wall_time_per_step_sec"] = (
+            round(rec.wall_time_sec / rec.steps, 4) if rec.steps > 0 else None
+        )
+    if rec.stages_total > 1:
+        out["stages_total"] = rec.stages_total
+        out["stage_reached"] = rec.stage_reached
+    if rec.star1_final_model_number is not None:
+        out["star1_final_model_number"] = rec.star1_final_model_number
     if rec.stage_steps or rec.mesa_stage_steps:
         # MESA's counts do not depend on how FlexMESA's run ended, so a row
         # whose run timed out, was rejected or errored still carries them.
@@ -766,6 +777,46 @@ def _render_stage_step_section(
     return lines
 
 
+def _render_time_budget_section(
+    records: list[harness_runner.CaseHarnessRecord],
+) -> list[str]:
+    """Render the wall time per step of the runs cut off by their budget.
+
+    The section appears only for rows that carry a measured wall time, so a
+    normalized deterministic baseline (wall time zeroed) renders without it.
+    A slow runner shows as a large time per step.
+    """
+    rows = [
+        r
+        for r in records
+        if r.executed and r.run_status == "timeout" and r.wall_time_sec > 0.0
+    ]
+    if not rows:
+        return []
+    lines = [
+        "",
+        "## Runs cut off by the time budget",
+        "",
+        "Wall time divided by the steps of the history written when the run "
+        "was cut off. `Stage` is the stage the run ended in, when known.",
+        "",
+        "| Suite | Case | Steps | Wall (s) | Wall per step (s) | Stage |",
+        "| :-- | :-- | --: | --: | --: | :-- |",
+    ]
+    for r in rows:
+        per = f"{r.wall_time_sec / r.steps:.2f}" if r.steps > 0 else "-"
+        stage = (
+            f"{r.stage_reached} of {r.stages_total}"
+            if r.stages_total > 1 and r.stage_reached is not None
+            else "-"
+        )
+        lines.append(
+            f"| `{r.suite}` | `{r.case}` | {r.steps} | "
+            f"{r.wall_time_sec:.0f} | {per} | {stage} |"
+        )
+    return lines
+
+
 def render_case_table_markdown(
     manifest: case_manifest.HarnessManifest,
     records: list[harness_runner.CaseHarnessRecord],
@@ -927,6 +978,7 @@ def render_case_table_markdown(
     lines.extend(_render_search_track_section(records))
     lines.extend(_render_energy_conservation_section(records))
     lines.extend(_render_stage_step_section(records))
+    lines.extend(_render_time_budget_section(records))
     lines.append("")
     return "\n".join(lines)
 
@@ -1051,6 +1103,17 @@ def records_from_stored_rows(
             n_controls_ignored=int(stored.get("n_controls_ignored", 0)),
             strict_rejection=str(stored.get("strict_rejection", "")),
             stage_steps=tuple(int(n) for n in stored.get("stage_steps", ())),
+            stages_total=int(stored.get("stages_total", 0)),
+            stage_reached=(
+                int(stored["stage_reached"])
+                if stored.get("stage_reached") is not None
+                else None
+            ),
+            star1_final_model_number=(
+                int(stored["star1_final_model_number"])
+                if stored.get("star1_final_model_number") is not None
+                else None
+            ),
             iters=int(raw_iters) if raw_iters is not None else None,
             mean_iters=(
                 float(raw_mean_iters) if raw_mean_iters is not None else None

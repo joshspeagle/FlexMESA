@@ -997,7 +997,7 @@ fn standalone_offline_nonradial_magnus_turn_and_match_invariants() {
     }
 
     // 3. AdEqns / AdBound / AdDiff (COLLOC_GL2, COLLOC_GL4, MAGNUS_GL2) + find_turn + AdBvp.
-    let eq4 = AdEqns::new(&cx, &os_p).unwrap();
+    let eq4 = AdEqns::new(&cx, &md_p, &os_p).unwrap();
     let _ = &eq4;
     let nm_gl2 = NumPar {
         diff_scheme: "COLLOC_GL2".into(),
@@ -1012,11 +1012,14 @@ fn standalone_offline_nonradial_magnus_turn_and_match_invariants() {
         ..NumPar::default()
     };
     let df_gl2 =
-        AdDiff::new(&cx, ml.gr.pt[5], ml.gr.pt[6], &nm_gl2, &os_p).unwrap();
+        AdDiff::new(&cx, ml.gr.pt[5], ml.gr.pt[6], &md_p, &nm_gl2, &os_p)
+            .unwrap();
     let df_gl4 =
-        AdDiff::new(&cx, ml.gr.pt[5], ml.gr.pt[6], &nm_gl4, &os_p).unwrap();
+        AdDiff::new(&cx, ml.gr.pt[5], ml.gr.pt[6], &md_p, &nm_gl4, &os_p)
+            .unwrap();
     let df_m2 =
-        AdDiff::new(&cx, ml.gr.pt[5], ml.gr.pt[6], &nm_m2, &os_p).unwrap();
+        AdDiff::new(&cx, ml.gr.pt[5], ml.gr.pt[6], &md_p, &nm_m2, &os_p)
+            .unwrap();
     let _ = (
         df_gl2.build(&cx, 1.5).unwrap(),
         df_gl4.build(&cx, 1.5).unwrap(),
@@ -1085,10 +1088,10 @@ fn standalone_offline_nonradial_magnus_turn_and_match_invariants() {
     .unwrap()
     .build(&cx_zr, Cplx::new(2.0, 0.01))
     .unwrap();
-    let bd_ad = AdBound::new(&cx_zr_jcd, &os_zero_r_jcd).unwrap();
+    let bd_ad = AdBound::new(&cx_zr_jcd, &md_p, &os_zero_r_jcd).unwrap();
     let _ = bd_ad.build_i(&cx_zr_jcd, 2.0).unwrap();
     let _ = bd_ad.build_o(&cx_zr_jcd, 2.0).unwrap();
-    let _ = AdBound::new(&cx_zh, &os_zero_h)
+    let _ = AdBound::new(&cx_zh, &md_p, &os_zero_h)
         .unwrap()
         .build_i(&cx_zh, 2.0)
         .unwrap();
@@ -1109,7 +1112,10 @@ fn standalone_offline_nonradial_magnus_turn_and_match_invariants() {
         .unwrap()
         .build(2.0)
         .unwrap();
-    let _ = AdMatch::new(&cx_s, pa, pb, &os_p).unwrap().build();
+    let _ = AdMatch::new(&cx_s, pa, pb, &md_p, &os_p)
+        .unwrap()
+        .build(&cx_s, 2.0)
+        .unwrap();
     let _ = NadMatch::new(&cx_s, pa, pb, &os_p).unwrap().build();
 
     // 6. Full AdBvp -> Wave -> Mode::classify on l=1 dipole & l=2 non-radial.

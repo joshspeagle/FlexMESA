@@ -677,7 +677,7 @@ fn equations_bvp_prox_and_gyre_mesa_end_to_end() {
     let pt_mid = [Point { s: 1, x: 0.5 }];
     let mut r_eq = RadEqns::new(&os_p).expect("RadEqns");
     r_eq.stencil(&cx, &pt_mid).expect("r stencil");
-    let mut a_eq = AdEqns::new(&cx, &os_p).expect("AdEqns");
+    let mut a_eq = AdEqns::new(&cx, &md_p, &os_p).expect("AdEqns");
     a_eq.stencil(&cx, &pt_mid).expect("a stencil");
     let mut n_eq = NadEqns::new(&cx, &os_p).expect("NadEqns");
     n_eq.stencil(&cx, &pt_mid).expect("n stencil");
@@ -927,11 +927,28 @@ fn equations_bvp_prox_and_gyre_mesa_end_to_end() {
         Err(GyreError::Unported { .. })
     ));
 
-    let mut os_jcd = os_p.clone();
-    os_jcd.variables_set = "JCD".into();
+    for l in [0, 1, 2] {
+        let md_l = ModePar {
+            l,
+            ..ModePar::default()
+        };
+        let mut os_jcd = os_p.clone();
+        os_jcd.variables_set = "JCD".into();
+        assert!(AdTrans::new(&md_l, &os_jcd).is_ok());
+    }
+    for vs in ["DZIEM", "MIX", "LAGP"] {
+        let mut os_other = os_p.clone();
+        os_other.variables_set = vs.into();
+        assert!(matches!(
+            AdTrans::new(&md_p, &os_other),
+            Err(GyreError::Unported { .. })
+        ));
+    }
+    let mut os_bad = os_p.clone();
+    os_bad.variables_set = "INVALID".into();
     assert!(matches!(
-        AdTrans::new(&os_jcd),
-        Err(GyreError::Unported { .. })
+        AdTrans::new(&md_p, &os_bad),
+        Err(GyreError::Abort(_))
     ));
 
     let mut nm_gl4 = nm_p.clone();
@@ -959,4 +976,794 @@ fn equations_bvp_prox_and_gyre_mesa_end_to_end() {
         EvolModel::from_mesa(&ModelPar::default(), &global, &rows, 120, &k),
         Err(GyreError::Unported { .. })
     ));
+}
+
+fn mat4_mul(a: &[f64; 16], b: &[f64; 16]) -> [f64; 16] {
+    let mut out = [0.0_f64; 16];
+    for j in 0..4 {
+        for k in 0..4 {
+            let bkj = b[k + 4 * j];
+            for i in 0..4 {
+                out[i + 4 * j] += a[i + 4 * k] * bkj;
+            }
+        }
+    }
+    out
+}
+
+fn assert_mat4_close(got: &[f64; 16], want: &[f64; 16], tol: f64, label: &str) {
+    for col in 0..4 {
+        for row in 0..4 {
+            let idx = row + 4 * col;
+            let diff = (got[idx] - want[idx]).abs();
+            assert!(
+                diff <= tol,
+                "{label} ({}, {}): got {}, want {}, diff {diff}",
+                row + 1,
+                col + 1,
+                got[idx],
+                want[idx]
+            );
+        }
+    }
+}
+
+fn assert_jcd_algebraic_at_model(
+    ml: &EvolModel,
+    k: &GyreConstants,
+    md_p: &ModePar,
+    rt_p: &RotPar,
+    omega: f64,
+    x_test: f64,
+    dh_fd_tol: f64,
+    label: &str,
+) {
+    use flexmesa_gyre::ad::{AdBound, AdEqns, AdMatch};
+    use flexmesa_gyre::matmul::matvec_r;
+
+    let os_gyre = OscPar {
+        variables_set: "GYRE".into(),
+        ..OscPar::default()
+    };
+    let os_jcd = OscPar {
+        variables_set: "JCD".into(),
+        ..OscPar::default()
+    };
+
+    let cx = Context::new(ml, k, &ml.gr, md_p, &os_jcd, rt_p).expect("cx");
+
+    // Pick an interior point strictly inside a grid cell for smooth FD.
+    let cell = ml
+        .gr
+        .pt
+        .windows(2)
+        .find(|w| w[0].s == w[1].s && w[0].x <= x_test && x_test < w[1].x)
+        .expect("interior cell");
+    let xm = f64::midpoint(cell[0].x, cell[1].x);
+    let h_step =
+        ((cell[1].x - xm).min(xm - cell[0].x) / (4.0 * xm)).min(1.0e-6);
+    let pts = [
+        Point {
+            s: cell[0].s,
+            x: xm,
+        },
+        Point {
+            s: cell[0].s,
+            x: xm * exp(h_step),
+        },
+        Point {
+            s: cell[0].s,
+            x: xm * exp(-h_step),
+        },
+        ml.gr.pt_i(),
+        ml.gr.pt_o(),
+    ];
+
+    let mut tr = AdTrans::new(md_p, &os_jcd).expect("AdTrans JCD");
+    tr.stencil(&cx, &pts).expect("stencil");
+
+    let ident = [
+        1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0,
+        0.0, 1.0,
+    ];
+    for i in [0, 3, 4] {
+        let g = tr.g_jcd(&cx, i, omega).expect("g_jcd");
+        let h = tr.h_jcd(&cx, i, omega).expect("h_jcd");
+        assert_mat4_close(
+            &mat4_mul(&g, &h),
+            &ident,
+            1.0e-13,
+            &format!("{label} G*H pt {i}"),
+        );
+        assert_mat4_close(
+            &mat4_mul(&h, &g),
+            &ident,
+            1.0e-13,
+            &format!("{label} H*G pt {i}"),
+        );
+    }
+
+    // dH_jcd == dH/d(ln x) = x dH/dx (central FD wrt ln x).
+    let hp = tr.h_jcd(&cx, 1, omega).expect("h plus");
+    let hm = tr.h_jcd(&cx, 2, omega).expect("h minus");
+    let mut dh_fd = [0.0_f64; 16];
+    for idx in 0..16 {
+        dh_fd[idx] = (hp[idx] - hm[idx]) / (2.0 * h_step);
+    }
+    let dh = tr.dh_jcd(&cx, 0, omega).expect("dh_jcd");
+    assert_mat4_close(
+        &dh,
+        &dh_fd,
+        dh_fd_tol,
+        &format!("{label} dH vs x dH/dx"),
+    );
+
+    // Operator identities: trans_vars_to(G * y) == y, trans_cond, trans_eqns.
+    let y_sample = [0.75, -1.25, 0.42, -0.19];
+    let g0 = tr.g_jcd(&cx, 0, omega).expect("g0");
+    let z = matvec_r(&g0, &y_sample, 4, 4);
+    let y_rt = tr
+        .trans_vars_to(&cx, [z[0], z[1], z[2], z[3]], 0, omega)
+        .expect("trans_vars_to");
+    for r in 0..4 {
+        assert!(
+            (y_rt[r] - y_sample[r]).abs() <= 1.0e-13,
+            "{label} trans_vars_to row {r}: {} vs {}",
+            y_rt[r],
+            y_sample[r]
+        );
+    }
+
+    // Check AdBound::build_i/o JCD transform vs GYRE * H.
+    let bd_gyre = AdBound::new(&cx, md_p, &os_gyre).expect("bd_gyre");
+    let bd_jcd = AdBound::new(&cx, md_p, &os_jcd).expect("bd_jcd");
+    let (bi_g, _) = bd_gyre.build_i(&cx, omega).expect("bi_g");
+    let (bi_j, _) = bd_jcd.build_i(&cx, omega).expect("bi_j");
+    let bi_g_times_h =
+        tr.trans_cond_2x4(&cx, &bi_g, 3, omega).expect("cond2x4");
+    for k_i in 0..8 {
+        assert!(
+            (bi_j[k_i] - bi_g_times_h[k_i]).abs() <= 1.0e-15,
+            "{label} bound_i JCD vs B*H"
+        );
+    }
+    let (bo_g, _) = bd_gyre.build_o(&cx, omega).expect("bo_g");
+    let (bo_j, _) = bd_jcd.build_o(&cx, omega).expect("bo_j");
+    let bo_g_times_h =
+        tr.trans_cond_2x4(&cx, &bo_g, 4, omega).expect("cond2x4_o");
+    for k_i in 0..8 {
+        assert!(
+            (bo_j[k_i] - bo_g_times_h[k_i]).abs() <= 1.0e-15,
+            "{label} bound_o JCD vs B*H"
+        );
+    }
+
+    // Check AdMatch::build JCD transform vs GYRE * H.
+    let mt_g = AdMatch::new(&cx, pts[0], pts[4], md_p, &os_gyre).expect("mt_g");
+    let mt_j = AdMatch::new(&cx, pts[0], pts[4], md_p, &os_jcd).expect("mt_j");
+    let (el_g, er_g, _) = mt_g.build(&cx, omega).expect("mt_g build");
+    let (el_j, er_j, _) = mt_j.build(&cx, omega).expect("mt_j build");
+    let el_g_h = tr.trans_cond_4x4(&cx, &el_g, 0, omega).expect("el*H");
+    let er_g_h = tr.trans_cond_4x4(&cx, &er_g, 4, omega).expect("er*H");
+    assert_mat4_close(&el_j, &el_g_h, 1.0e-14, &format!("{label} AdMatch E_l"));
+    assert_mat4_close(&er_j, &er_g_h, 1.0e-14, &format!("{label} AdMatch E_r"));
+
+    // Check AdEqns::a in GYRE vs JCD: xA_jcd = G * (xA_gyre * H - dH).
+    let mut eq_g = AdEqns::new(&cx, md_p, &os_gyre).expect("eq_g");
+    let mut eq_j = AdEqns::new(&cx, md_p, &os_jcd).expect("eq_j");
+    eq_g.stencil(&cx, &[pts[0]]).expect("sg");
+    eq_j.stencil(&cx, &[pts[0]]).expect("sj");
+    let a_g = eq_g.a(&cx, 0, omega).expect("a_g");
+    let a_j = eq_j.a(&cx, 0, omega).expect("a_j");
+    let xa_g = a_g.map(|v| v * pts[0].x);
+    let xa_j_manual = tr.trans_eqns(&cx, &xa_g, 0, omega).expect("trans_eqns");
+    let a_j_manual = xa_j_manual.map(|v| v / pts[0].x);
+    assert_mat4_close(
+        &a_j,
+        &a_j_manual,
+        1.0e-14,
+        &format!("{label} AdEqns::a"),
+    );
+
+    // Fast path for GYRE returns bit-identical inputs.
+    let mut tr_gyre = AdTrans::new(md_p, &os_gyre).expect("AdTrans GYRE");
+    tr_gyre.stencil(&cx, &[pts[0]]).expect("stencil gyre");
+    let y_fast = tr_gyre
+        .trans_vars_to(&cx, y_sample, 0, omega)
+        .expect("fast vars");
+    assert_eq!(y_fast.map(f64::to_bits), y_sample.map(f64::to_bits));
+    let bi_fast = tr_gyre
+        .trans_cond_2x4(&cx, &bi_g, 0, omega)
+        .expect("fast cond2");
+    assert_eq!(bi_fast.map(f64::to_bits), bi_g.map(f64::to_bits));
+    let id_fast = tr_gyre
+        .trans_cond_4x4(&cx, &ident, 0, omega)
+        .expect("fast cond4");
+    assert_eq!(id_fast.map(f64::to_bits), ident.map(f64::to_bits));
+    let eq_fast = tr_gyre.trans_eqns(&cx, &xa_g, 0, omega).expect("fast eqns");
+    assert_eq!(eq_fast.map(f64::to_bits), xa_g.map(f64::to_bits));
+}
+
+#[test]
+fn ad_trans_jcd_algebraic_and_derivative_identities() {
+    flexmesa_math::math_init();
+    let k = standard_constants();
+    let (global, rows, version) = pekeris_sphere_mesa_data(65);
+
+    // Exact spline derivative mode (`constrain_derivs = false`) checks every
+    // entry of `dH_jcd` against central FD wrt `ln x` to <= 1e-9.
+    let ml_p_spline = ModelPar {
+        constrain_derivs: false,
+        ..ModelPar::default()
+    };
+    let ml_spline =
+        EvolModel::from_mesa(&ml_p_spline, &global, &rows, version, &k)
+            .expect("from_mesa spline");
+    // Hydrostatic analytic derivative mode (`constrain_derivs = true`).
+    let ml_hydro =
+        EvolModel::from_mesa(&ModelPar::default(), &global, &rows, version, &k)
+            .expect("from_mesa hydro");
+    // Rotating sphere with m = 1 to exercise Omega_rot != 0 in omega_c & lambda.
+    let (g_rot, r_rot, v_rot) =
+        uniform_sphere_mesa_data(41, 1.0e-5, 0.0, 5.0e-5);
+    let ml_rot = EvolModel::from_mesa(&ml_p_spline, &g_rot, &r_rot, v_rot, &k)
+        .expect("from_mesa rot");
+    let rt_rot = RotPar {
+        omega_rot_source: "MODEL".into(),
+        coriolis_method: "NULL".into(),
+        ..RotPar::default()
+    };
+
+    for l in [0, 1, 2] {
+        let md_l = ModePar {
+            l,
+            ..ModePar::default()
+        };
+        assert_jcd_algebraic_at_model(
+            &ml_spline,
+            &k,
+            &md_l,
+            &RotPar::default(),
+            3.25,
+            0.47,
+            1.0e-9,
+            &format!("pekeris-spline l={l}"),
+        );
+        assert_jcd_algebraic_at_model(
+            &ml_hydro,
+            &k,
+            &md_l,
+            &RotPar::default(),
+            2.75,
+            0.73,
+            1.0e-4,
+            &format!("pekeris-hydro l={l}"),
+        );
+    }
+    let md_rot = ModePar {
+        l: 1,
+        m: 1,
+        ..ModePar::default()
+    };
+    assert_jcd_algebraic_at_model(
+        &ml_rot,
+        &k,
+        &md_rot,
+        &rt_rot,
+        3.5,
+        0.55,
+        1.0e-9,
+        "rotating l=1 m=1",
+    );
+}
+
+#[derive(Debug)]
+struct ModeSnapshot {
+    n_p: i32,
+    n_g: i32,
+    n_pg: i32,
+    omega: f64,
+    freq_uhz: f64,
+    e_norm: f64,
+    eig: Vec<[Cplx; 6]>,
+}
+
+fn abs_cplx(z: Cplx) -> f64 {
+    (z.re * z.re + z.im * z.im).sqrt()
+}
+
+fn collect_gyre_mesa_modes(
+    global: &[f64],
+    rows: &[Vec<f64>],
+    version: i32,
+    l: i32,
+    m: i32,
+    variables_set: &str,
+    outer_bound: &str,
+    diff_scheme: &str,
+    reduce_order: bool,
+    omega_rot_source: &str,
+) -> Vec<ModeSnapshot> {
+    let ro_str = if reduce_order { ".true." } else { ".false." };
+    let gyre_in = format!(
+        "&model /\n\
+         &mode l = {l}, m = {m} /\n\
+         &osc variables_set = '{variables_set}', \
+              outer_bound = '{outer_bound}', \
+              reduce_order = {ro_str} /\n\
+         &rot omega_rot_source = '{omega_rot_source}', \
+              coriolis_method = 'NULL' /\n\
+         &num diff_scheme = '{diff_scheme}' /\n\
+         &scan grid_type = 'LINEAR', freq_min = 0.8, freq_max = 10.0, \
+               n_freq = 40 /\n\
+         &grid /\n"
+    );
+    let mut gm = GyreMesa::init(&gyre_in).expect("GyreMesa init");
+    gm.set_constant_str("GYRE_DIR", "inline").expect("set dir");
+    gm.set_model(global, rows, version).expect("set_model");
+    let mut out = Vec::new();
+    gm.get_modes(l, &mut |md| {
+        let w = &md.wave;
+        let mut raw = Vec::with_capacity(w.n);
+        let mut max_xi = 0.0_f64;
+        let mut peak = Cplx::from_real(1.0);
+        for j in 1..=w.n {
+            let xir = w.xi_r(j)?;
+            let xih = w.xi_h(j)?;
+            let y1 = w.y_i(1, j);
+            let y2 = w.y_i(2, j);
+            let y3 = w.y_i(3, j);
+            let y4 = w.y_i(4, j);
+            let mag = abs_cplx(xir);
+            if mag > max_xi {
+                max_xi = mag;
+                peak = xir;
+            }
+            raw.push([xir, xih, y1, y2, y3, y4]);
+        }
+        assert!(max_xi > 0.0, "zero eigenfunction");
+        let inv = Cplx::from_real(1.0) / peak;
+        let eig = raw
+            .into_iter()
+            .map(|r| {
+                [
+                    r[0] * inv,
+                    r[1] * inv,
+                    r[2] * inv,
+                    r[3] * inv,
+                    r[4] * inv,
+                    r[5] * inv,
+                ]
+            })
+            .collect();
+        out.push(ModeSnapshot {
+            n_p: md.n_p,
+            n_g: md.n_g,
+            n_pg: md.n_pg,
+            omega: w.omega.re,
+            freq_uhz: md.freq("UHZ")?.re,
+            e_norm: md.e_norm()?,
+            eig,
+        });
+        Ok(0)
+    })
+    .expect("get_modes");
+    out
+}
+
+fn assert_gyre_jcd_mode_invariance(
+    global: &[f64],
+    rows: &[Vec<f64>],
+    version: i32,
+    l: i32,
+    m: i32,
+    outer_bound: &str,
+    diff_scheme: &str,
+    reduce_order: bool,
+    omega_rot_source: &str,
+    label: &str,
+) {
+    let mg = collect_gyre_mesa_modes(
+        global,
+        rows,
+        version,
+        l,
+        m,
+        "GYRE",
+        outer_bound,
+        diff_scheme,
+        reduce_order,
+        omega_rot_source,
+    );
+    let mj = collect_gyre_mesa_modes(
+        global,
+        rows,
+        version,
+        l,
+        m,
+        "JCD",
+        outer_bound,
+        diff_scheme,
+        reduce_order,
+        omega_rot_source,
+    );
+    assert!(
+        mg.len() >= 2,
+        "{label}: expected >= 2 modes, got {}",
+        mg.len()
+    );
+    assert_eq!(mg.len(), mj.len(), "{label}: mode count mismatch");
+    for (idx_m, (g, j)) in mg.iter().zip(&mj).enumerate() {
+        assert_eq!(g.n_p, j.n_p, "{label} mode {idx_m} n_p");
+        assert_eq!(g.n_g, j.n_g, "{label} mode {idx_m} n_g");
+        assert_eq!(g.n_pg, j.n_pg, "{label} mode {idx_m} n_pg");
+        let rel_w = (g.omega - j.omega).abs() / g.omega.abs().max(1.0e-30);
+        let tol_w = if g.n_pg == 0 {
+            4.0e-3
+        } else if diff_scheme == "COLLOC_GL4" {
+            1.0e-5
+        } else {
+            1.0e-4
+        };
+        assert!(rel_w <= tol_w, "{label} mode {idx_m} rel_w = {rel_w}");
+        let rel_f =
+            (g.freq_uhz - j.freq_uhz).abs() / g.freq_uhz.abs().max(1.0e-30);
+        assert!(rel_f <= tol_w, "{label} mode {idx_m} rel_f = {rel_f}");
+        let tol_eig = if g.n_pg == 0 { 1.0e-2 } else { tol_w * 100.0 };
+        let rel_e = (g.e_norm - j.e_norm).abs() / g.e_norm.abs().max(1.0e-30);
+        assert!(rel_e <= tol_eig, "{label} mode {idx_m} rel_e = {rel_e}");
+        assert_eq!(g.eig.len(), j.eig.len(), "{label} mode {idx_m} grid len");
+        for (k_pt, (vg, vj)) in g.eig.iter().zip(&j.eig).enumerate() {
+            for comp in 0..6 {
+                let d = abs_cplx(vg[comp] - vj[comp]);
+                assert!(
+                    d <= tol_eig,
+                    "{label} mode {idx_m} pt {k_pt} comp {comp} diff = {d}"
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn ad_bvp_and_gyre_mesa_jcd_invariance() {
+    flexmesa_math::math_init();
+    let k = standard_constants();
+    let (global, rows, version) = pekeris_sphere_mesa_data(65);
+
+    // Check l = 0 via AdBvp (reduce_order = false) directly and via GyreMesa.
+    assert_gyre_jcd_mode_invariance(
+        &global,
+        &rows,
+        version,
+        0,
+        0,
+        "VACUUM",
+        "COLLOC_GL4",
+        false,
+        "MODEL",
+        "l=0 reduce_order=false VACUUM GL4",
+    );
+    assert_gyre_jcd_mode_invariance(
+        &global,
+        &rows,
+        version,
+        0,
+        0,
+        "JCD",
+        "COLLOC_GL2",
+        false,
+        "MODEL",
+        "l=0 reduce_order=false JCD GL2",
+    );
+
+    // Monotone grid convergence of GYRE vs JCD across n=65, 129, 257, 513 for
+    // l=2 (both Kelvin f-mode n_pg=0 and bulk p-mode n_pg=1).
+    for ds in ["COLLOC_GL4", "MAGNUS_GL2"] {
+        let mut prev_rw0 = f64::INFINITY;
+        let mut prev_rw1 = f64::INFINITY;
+        for n_pts in [65usize, 129, 257, 513] {
+            let (gn, rn, vn) = pekeris_sphere_mesa_data(n_pts);
+            let mg = collect_gyre_mesa_modes(
+                &gn, &rn, vn, 2, 0, "GYRE", "VACUUM", ds, false, "MODEL",
+            );
+            let mj = collect_gyre_mesa_modes(
+                &gn, &rn, vn, 2, 0, "JCD", "VACUUM", ds, false, "MODEL",
+            );
+            assert_eq!(mg[0].n_pg, 0);
+            assert_eq!(mg[1].n_pg, 1);
+            let rw0 = (mg[0].omega - mj[0].omega).abs() / mg[0].omega.abs();
+            let rw1 = (mg[1].omega - mj[1].omega).abs() / mg[1].omega.abs();
+            if n_pts > 65 {
+                assert!(
+                    rw0 < prev_rw0 / 4.0,
+                    "{ds} n={n_pts} m0 convergence: {rw0} vs {prev_rw0}"
+                );
+                assert!(
+                    rw1 < prev_rw1 / 2.0,
+                    "{ds} n={n_pts} m1 convergence: {rw1} vs {prev_rw1}"
+                );
+            }
+            prev_rw0 = rw0;
+            prev_rw1 = rw1;
+        }
+        assert!(prev_rw0 <= 2.0e-5, "{ds} n=513 m0 rel_w = {prev_rw0}");
+        assert!(prev_rw1 <= 2.5e-9, "{ds} n=513 m1 rel_w = {prev_rw1}");
+    }
+
+    // High-res (n=257) p-mode invariance across l=0,1,2 and VACUUM/JCD bounds.
+    let (g_257, r_257, v_257) = pekeris_sphere_mesa_data(257);
+    for ob in ["VACUUM", "JCD"] {
+        for l in [0, 1, 2] {
+            let mg = collect_gyre_mesa_modes(
+                &g_257,
+                &r_257,
+                v_257,
+                l,
+                0,
+                "GYRE",
+                ob,
+                "COLLOC_GL4",
+                false,
+                "MODEL",
+            );
+            let mj = collect_gyre_mesa_modes(
+                &g_257,
+                &r_257,
+                v_257,
+                l,
+                0,
+                "JCD",
+                ob,
+                "COLLOC_GL4",
+                false,
+                "MODEL",
+            );
+            assert_eq!(mg.len(), mj.len());
+            for (g, j) in mg.iter().zip(&mj).filter(|(g, _)| g.n_pg >= 1) {
+                assert_eq!((g.n_p, g.n_g, g.n_pg), (j.n_p, j.n_g, j.n_pg));
+                let rw = (g.omega - j.omega).abs() / g.omega.abs();
+                assert!(rw <= 1.0e-7, "n=257 ob={ob} l={l} rel_w={rw}");
+                let re = (g.e_norm - j.e_norm).abs() / g.e_norm.abs();
+                assert!(re <= 1.0e-6, "n=257 ob={ob} l={l} rel_e={re}");
+            }
+        }
+    }
+
+    // Direct AdBvp discriminant & eigensolution check for l = 0 and l = 1.
+    let ml =
+        EvolModel::from_mesa(&ModelPar::default(), &global, &rows, version, &k)
+            .expect("ml");
+    assert!(!ml.is_vacuum(ml.gr.pt_o()).expect("non-vacuum pekeris"));
+    for l in [0, 1] {
+        let md_l = ModePar {
+            l,
+            ..ModePar::default()
+        };
+        let nm_p = NumPar {
+            diff_scheme: "COLLOC_GL4".into(),
+            ..NumPar::default()
+        };
+        let os_g = OscPar {
+            outer_bound: "JCD".into(),
+            reduce_order: false,
+            ..OscPar::default()
+        };
+        let os_j = OscPar {
+            variables_set: "JCD".into(),
+            ..os_g.clone()
+        };
+        let rt_p = RotPar::default();
+        let cx_g =
+            Context::new(&ml, &k, &ml.gr, &md_l, &os_g, &rt_p).expect("cx_g");
+        let cx_j =
+            Context::new(&ml, &k, &ml.gr, &md_l, &os_j, &rt_p).expect("cx_j");
+        let mut bp_g =
+            AdBvp::new(&cx_g, &ml.gr, &md_l, &nm_p, &os_g).expect("bp_g");
+        let mut bp_j =
+            AdBvp::new(&cx_j, &ml.gr, &md_l, &nm_p, &os_j).expect("bp_j");
+        let omega_scan: Vec<f64> =
+            (0..30).map(|i| 1.5 + 0.25 * f64::from(i)).collect();
+        let mut modes_g = Vec::new();
+        let mut modes_j = Vec::new();
+        let mut rec_g = |md: &Mode<'_>, _i: i32, _chi: ExtR| {
+            modes_g.push((md.wave.omega.re, md.n_p, md.n_g, md.n_pg));
+            Ok(())
+        };
+        let mut rec_j = |md: &Mode<'_>, _i: i32, _chi: ExtR| {
+            modes_j.push((md.wave.omega.re, md.n_p, md.n_g, md.n_pg));
+            Ok(())
+        };
+        bracket_search(
+            &mut bp_g,
+            &omega_scan,
+            1.0,
+            10.0,
+            &nm_p,
+            &mut NoTap,
+            &mut rec_g,
+        )
+        .expect("bracket g");
+        bracket_search(
+            &mut bp_j,
+            &omega_scan,
+            1.0,
+            10.0,
+            &nm_p,
+            &mut NoTap,
+            &mut rec_j,
+        )
+        .expect("bracket j");
+        assert_ne!(modes_g, [] as [(f64, i32, i32, i32); 0]);
+        assert_eq!(modes_g.len(), modes_j.len());
+        for (mg, mj) in modes_g.iter().zip(&modes_j) {
+            let rel_w = (mg.0 - mj.0).abs() / mg.0.abs();
+            assert!(rel_w <= 1.0e-5, "AdBvp l={l} rel_w={rel_w}");
+            assert_eq!((mg.1, mg.2, mg.3), (mj.1, mj.2, mj.3));
+        }
+    }
+
+    // Nonradial l = 1 and l = 2 across VACUUM / JCD outer BCs & schemes.
+    for l in [1, 2] {
+        assert_gyre_jcd_mode_invariance(
+            &global,
+            &rows,
+            version,
+            l,
+            0,
+            "VACUUM",
+            "COLLOC_GL4",
+            true,
+            "MODEL",
+            &format!("l={l} VACUUM GL4"),
+        );
+        assert_gyre_jcd_mode_invariance(
+            &global,
+            &rows,
+            version,
+            l,
+            0,
+            "JCD",
+            "COLLOC_GL4",
+            true,
+            "MODEL",
+            &format!("l={l} JCD GL4"),
+        );
+        assert_gyre_jcd_mode_invariance(
+            &global,
+            &rows,
+            version,
+            l,
+            0,
+            "JCD",
+            "MAGNUS_GL2",
+            true,
+            "MODEL",
+            &format!("l={l} JCD MAGNUS_GL2"),
+        );
+    }
+
+    // Rotating l = 1, m = 1 model (exercises Omega_rot != 0 in AdTrans).
+    let mut r_rot = rows.clone();
+    for row in &mut r_rot {
+        row[17] = 5.0e-5;
+    }
+    assert_gyre_jcd_mode_invariance(
+        &global,
+        &r_rot,
+        version,
+        1,
+        1,
+        "JCD",
+        "COLLOC_GL4",
+        true,
+        "MODEL",
+        "rotating l=1 m=1 JCD GL4",
+    );
+
+    // Hydrostatically consistent two-zone segmented model (density jump beta =
+    // 0.5 at x_s = 0.5 with exact M_r and P), exercising AdMatch +
+    // trans_cond_4x4 under JCD vs GYRE with constrain_derivs = true.
+    let (g_seg, rows_seg, v_seg) = {
+        let mut r_vec = Vec::with_capacity(66);
+        let beta = 0.5_f64;
+        let x_s = 0.5_f64;
+        let m_norm = (1.0 - beta) * x_s * x_s * x_s + beta;
+        let m_star = fc::MSUN;
+        let r_star = fc::RSUN;
+        let l_star = 1.0e40;
+        let pi = k.math.pi;
+        let r3 = r_star * r_star * r_star;
+        let rho_1 = 3.0 * m_star / (4.0 * pi * r3 * m_norm);
+        let p_fac =
+            (4.0 / 3.0) * pi * k.g_gravity * rho_1 * rho_1 * r_star * r_star;
+        let p_surf = 0.01 * 0.5 * p_fac;
+        let p_zone2 = |x: f64| -> f64 {
+            p_surf
+                + p_fac
+                    * beta
+                    * ((1.0 - beta) * x_s * x_s * x_s * (1.0 / x - 1.0)
+                        + 0.5 * beta * (1.0 - x * x))
+        };
+        let p_s = p_zone2(x_s);
+        let push_pt = |out: &mut Vec<Vec<f64>>, x: f64, zone2: bool| {
+            let x2 = x * x;
+            let x3 = x * x2;
+            let rho = if zone2 { beta * rho_1 } else { rho_1 };
+            let m_r = if zone2 {
+                (4.0 / 3.0)
+                    * pi
+                    * rho_1
+                    * r3
+                    * ((1.0 - beta) * x_s * x_s * x_s + beta * x3)
+            } else {
+                (4.0 / 3.0) * pi * rho_1 * r3 * x3
+            };
+            let pres = if zone2 {
+                p_zone2(x)
+            } else {
+                p_s + 0.5 * p_fac * (x_s * x_s - x2)
+            };
+            let temp = 1.0e6 * (pres / (p_s + 0.5 * p_fac * x_s * x_s));
+            let rad = x * r_star;
+            let gamma_1 = 5.0 / 3.0;
+            let n2 = if rad > 0.0 {
+                let g_grav = k.g_gravity * m_r / (rad * rad);
+                -(g_grav * g_grav * rho) / (gamma_1 * pres)
+            } else {
+                0.0
+            };
+            out.push(vec![
+                rad,
+                m_r,
+                l_star * x3,
+                pres,
+                temp,
+                rho,
+                0.25,
+                n2,
+                gamma_1,
+                0.4,
+                0.0,
+                1.0,
+                -3.5,
+                1.0,
+                l_star / m_star,
+                4.0 * l_star / m_star,
+                l_star / m_star,
+                0.0,
+            ]);
+        };
+        for j in 0..=32 {
+            push_pt(&mut r_vec, x_s * f64::from(j) / 32.0, false);
+        }
+        for j in 0..=32 {
+            push_pt(&mut r_vec, x_s + (1.0 - x_s) * f64::from(j) / 32.0, true);
+        }
+        (vec![m_star, r_star, l_star], r_vec, 101)
+    };
+    let ml_seg = EvolModel::from_mesa(
+        &ModelPar::default(),
+        &g_seg,
+        &rows_seg,
+        v_seg,
+        &k,
+    )
+    .expect("ml_seg");
+    assert!(
+        ml_seg.gr.pt.windows(2).any(|w| w[0].s != w[1].s),
+        "expected segment boundary"
+    );
+    assert_gyre_jcd_mode_invariance(
+        &g_seg,
+        &rows_seg,
+        v_seg,
+        1,
+        0,
+        "VACUUM",
+        "COLLOC_GL4",
+        true,
+        "MODEL",
+        "segmented l=1 AdMatch JCD GL4",
+    );
 }

@@ -465,6 +465,13 @@ kind = "oracle"
 provenance = "benchmarks/fortran_mesa/gyre_oracles/data/astero__* (MESA 26.4.1 GYRE radial adiabatic, #170)"
 
 [[tests]]
+path = "crates/flexmesa-gyre/tests/g3_fast_from_file.rs"
+language = "rust"
+module = "gyre"
+kind = "oracle"
+provenance = "benchmarks/fortran_mesa/gyre_oracles/data/astero__fast_from_file__e000216.* (MESA 26.4.1 GYRE adiabatic l=0,1,2 JCD, #170)"
+
+[[tests]]
 path = "crates/flexmesa-gyre/tests/g4_gyre_in_mesa_ms.rs"
 language = "rust"
 module = "gyre"

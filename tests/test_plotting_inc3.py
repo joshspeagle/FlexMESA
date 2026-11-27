@@ -631,7 +631,7 @@ def test_rti_history_supports_rti_mix_type_6_and_profiles(
     assert not plt.get_fignums()
 
 
-def test_network_chart_and_production_profile_match_chem_oracles(
+def test_network_chart_and_production_profile_match_chem_catalog(
     tmp_path: pathlib.Path,
 ) -> None:
     """Network cells match (N, Z) and Production matches log10(X/X_init)."""

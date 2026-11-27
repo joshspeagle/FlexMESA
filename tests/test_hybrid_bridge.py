@@ -150,7 +150,7 @@ def test_resolve_backend_routes_scalars_numpy_and_jax_arrays() -> None:
         flexmesa.resolve_backend("invalid", x_np)  # type: ignore[arg-type]
 
 
-def test_rust_math_and_autodiff_bindings_match_analytical_oracles() -> None:
+def test_rust_math_and_autodiff_bindings_match_analytical_identities() -> None:
     """Verify `_rust` libm math functions and 2nd-order dual-number kernels.
 
     Tests `pow`, `exp10`, `safe_log10`, `sinpi`, `cospi`, `safe_log_array`,

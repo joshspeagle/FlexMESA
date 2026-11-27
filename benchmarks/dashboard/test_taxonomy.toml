@@ -2041,3 +2041,9 @@ language = "python"
 module = "rates"
 kind = "oracle"
 provenance = "tests/fixtures/golden/rates/test_output.txt & benchmarks/fortran_mesa/rates_oracles/"
+
+[[tests]]
+path = "tests/test_pulse_live_compare.py"
+language = "python"
+module = "gyre"
+kind = "invariant"

@@ -1,0 +1,15 @@
+# FlexMESA star/rsp_gyre run vs MESA 26.4.1 reference run, per oscillation call (#612)
+# reference: mesa_histories bundle runs/star/rsp_gyre/pulse_tap/modes.tsv (MESA r26.4.1, git tag 26.4.1, gfortran 15.2.0, SDK x86_64-linux-26.6.1)
+# generator: benchmarks/fortran_mesa/gyre_pulse_data/compare_pulse_live_run.py
+# command: python benchmarks/fortran_mesa/gyre_pulse_data/compare_pulse_live_run.py --suite star --case rsp_gyre --histories <mesa_histories> --work <scratch> --out benchmarks/fortran_mesa/gyre_pulse_data/results/star_rsp_gyre_flexmesa_vs_mesa.tsv
+# extras: RspGyreExtras (rsp_gyre); units: frequency Hz, growth = imaginary part in Hz
+# flexmesa engine commit (last change under crates/): 5a68ae84
+# flexmesa run: 6215 steps, termination extras_finish_step, wall 37 s, numerics strict
+# columns *_n: values compared; *_bitexact: values with equal binary64 bits; *_max_rel: max |a-b|/|b| over compared values (n/a: not exposed by the extras)
+# summary: calls compared 1, calls only in FlexMESA [], calls only in MESA []
+# summary: modes only in FlexMESA 0, modes only in MESA 0, calls with different mode order 0
+# summary: freq: 4 compared, 0 bit-identical, max relative difference 3.649e-14
+# summary: inertia: not exposed by the extras, not compared
+# summary: growth: 4 compared, 0 bit-identical, max relative difference 1.203e-11
+model_number	occurrence	n_modes	n_modes_mesa	n_common	order_same	freq_n	freq_bitexact	freq_max_rel	inertia_n	inertia_bitexact	inertia_max_rel	growth_n	growth_bitexact	growth_max_rel	n_pg_only_flexmesa	n_pg_only_mesa
+1	0	4	4	4	1	4	0	3.649e-14	n/a	n/a	n/a	4	0	1.203e-11	-	-

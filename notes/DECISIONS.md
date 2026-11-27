@@ -91,6 +91,7 @@ Scope and the `v0.1.0` definition are in [`SCOPE.md`](SCOPE.md). Work is tracked
 | 75 | Harness Expectations Are Checked Against MESA's Own Output; a Hook Terminate Without a Code Is Named by Its Hook (`#604`) | In force; second bullet amended by decision 77 | below |
 | 76 | A Case That Takes Zero Steps and Writes a Result File Is Judged on That File (`#606`) | In force | below |
 | 77 | Python Star Extras Custom Termination Codes Use Upstream `t_xtra1..t_xtra9` Slots (`#579`) | In force | below |
+| 79 | A Reviewed Routine Map Evidences a Raise from `absent` to `partial` (`#610`, `#174`) | In force | below |
 
 ## Pre-audit decisions still in force
 
@@ -1021,3 +1022,15 @@ The text of these four entries predates the audit of 2026-11-16. The decisions s
   - *Allowing empty `"termination_code_str"`*: collides with `FlexMESA`'s `""` sentinel for `s% termination_code == 0` in `termination_code_string_okay`.
   - *Disallowing custom termination strings in Python extras*: leaves `tzo` (`t_xtra1`, `"PASS: Have reached requested NS mass"`) unable to match MESA's `required_termination_code_string`.
 - **Note**: number `#74` is reserved by `#586`.
+
+## DECISIONS #79: A Reviewed Routine Map Evidences a Raise from `absent` to `partial` (`#610`, `#174`)
+
+- **Date**: 2026-11-27 (project lead)
+- **Decision**:
+  - A pull request may raise a file in `port_manifest.toml` from `absent` to `partial` without changing any of its `flexmesa_files` when three conditions hold. First, every entry of the file's `routine_map` passes `routine_gate` (`routine_key` and `fn_item`) outright, with no allow-list credit. Second, the pull request adds or changes a lane A review record in `notes/audit/routine_map_reviews/` that lists the file. Third, that record names its committed review text and gives the seed, the sample sizes and the counts of over-claims, under-claims, wrong targets and not-ported routines. The record format is in `notes/audit/routine_map_reviews/README.md`.
+  - The exception applies to this one raise only. `ported_unverified` still requires a change to the implementing files, and the verified tiers still require evidence artifacts or MESA case evidence. `_port_manifest_verify.py` checks the conditions mechanically. The judgement in the review is the reviewer's, and corrections it finds are applied before the raise. The independent audit can reopen a raise like any closed package (`DECISIONS #21`).
+- **Why**: the rule that a raise must touch the implementing files assumes the raise arrives with new code. Mapping work raises files whose Rust already exists. Lane E mapped 104 GYRE and ADIPLS files (`#610b`), and lane A's sample of 60 of those mappings found none that pointed at the wrong code. Under the old rule those files would stay `absent` until someone edited 28 Rust files only to satisfy the gate, and the dashboard would under-report the port.
+- **Alternatives Rejected**:
+  - *Keeping the code-edit rule*: the raise then waits for an unrelated code change, or invites no-op edits that satisfy the gate while hiding the actual evidence.
+  - *Allowing mapping-only raises up to `ported_unverified`*: that tier claims the whole public interface of the file is ported, which a sampled review cannot establish file by file.
+- **Note**: the first record is the `#610b` review (`notes/audit/routine_map_reviews/610b.md`); its `files` list stays empty until the corrected maps are converted.

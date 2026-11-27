@@ -41,7 +41,8 @@ use crate::star_ad::{
 };
 
 /// Evaluates artificial viscosity pressure $P_{\mathrm{vsc},k}$ in cell `k`
-/// (`get_Pvsc_ad` in `star/private/star_utils.f90:3454-3482`).
+/// (`get_Pvsc_ad` in `star/private/star_utils.f90:3441-3469`). The
+/// `s% Pvsc_start` side effect is [`capture_pvsc_start`].
 #[must_use]
 pub fn eval_pvsc_cell_ad(model: &StarModel, k: usize) -> StarAdOrder1 {
     if !model.controls.use_pvsc_art_visc
@@ -64,6 +65,51 @@ pub fn eval_pvsc_cell_ad(model: &StarModel, k: usize) -> StarAdOrder1 {
         return StarAdOrder1::ZERO;
     }
     rho_00 * model.controls.pvsc_cq * dv.pow2()
+}
+
+/// `s% Pvsc_start(k)` as `get_Pvsc_ad` leaves it once it has evaluated
+/// `Pvsc(k) = pvsc` (`star/private/star_utils.f90:3452-3468`): the value
+/// captured earlier in the step, or `pvsc` itself while the
+/// [`crate::hydro_state::PVSC_START_UNSET`] sentinel is still in place
+/// (`pvsc` is zero when `get_Pvsc_ad` returns early).
+#[must_use]
+pub(crate) fn pvsc_start_after_get(
+    model: &StarModel,
+    k: usize,
+    pvsc: f64,
+) -> f64 {
+    match model.aux.pvsc_start.get(k) {
+        Some(&start) if start < 0.0 => pvsc,
+        Some(&start) => start,
+        None => pvsc,
+    }
+}
+
+/// Stores the `s% Pvsc_start` side effect of the first `get_Pvsc_ad` call of
+/// a step (`star/private/star_utils.f90:3452-3468`): a cell still holding the
+/// `-1d99` sentinel set by `save_start_values`
+/// (`star/private/struct_burn_mix.f90:313`) takes `Pvsc` at the current
+/// state, zero when `get_Pvsc_ad` returns early, and keeps it for the rest of
+/// the step. Upstream calls `get_Pvsc_ad` only under `use_Pvsc_art_visc`
+/// (`star/private/hydro_energy.f90:710`, `star/private/star_utils.f90:3411`),
+/// and every call inside one `eval_equations` sees the same state, so a pass
+/// over all cells before the equations are assembled stores the same values.
+pub(crate) fn capture_pvsc_start(model: &mut StarModel) {
+    if !model.controls.use_pvsc_art_visc {
+        return;
+    }
+    let nz = model.nz;
+    if model.aux.pvsc_start.len() != nz {
+        model
+            .aux
+            .pvsc_start
+            .resize(nz, crate::hydro_state::PVSC_START_UNSET);
+    }
+    for k in 0..nz {
+        if model.aux.pvsc_start[k] < 0.0 {
+            model.aux.pvsc_start[k] = eval_pvsc_cell_ad(model, k).val;
+        }
+    }
 }
 
 /// Evaluates effective cell pressure $P_{\mathrm{cell},k}$ including optional

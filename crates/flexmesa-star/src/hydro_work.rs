@@ -5,9 +5,11 @@
 //! `u_flag` hydrodynamics (`star/private/hydro_energy.f90:582-879` and
 //! `star/private/star_utils.f90:2197-2338`).
 
-use flexmesa_const::FOUR_PI;
+use flexmesa_const::{FOUR_PI, LN10};
 
-use crate::hydro_energy::{eval_face_area_time_centered_ad, eval_pvsc_cell_ad};
+use crate::hydro_energy::{
+    eval_face_area_time_centered_ad, eval_pvsc_cell_ad, pvsc_start_after_get,
+};
 use crate::model::StarModel;
 use crate::star_ad::{
     StarAdExt, StarAdOrder1, I_LND_00, I_LND_M1, I_LNR_00, I_LNR_P1, I_V_00,
@@ -204,13 +206,32 @@ pub fn eval1_work_v_flag_ad(
         pl_ad * alfa + pr_ad * beta
     };
 
+    // `set Pvsc_ad` (`star/private/hydro_energy.f90:709-728`): both sides are
+    // averaged with `Pvsc_start` when `include_P_in_velocity_time_centering`
+    // holds and the face cell's `lnT(k)/ln10` is at most
+    // `max_logT_for_include_P_and_L_in_velocity_time_centering`; upstream
+    // does not test `using_velocity_time_centering` here.
     let pvsc_ad = if model.controls.use_pvsc_art_visc {
-        let pvsc_l = eval_pvsc_cell_ad(model, f_idx);
+        let pvsc_tc = model.controls.include_p_in_velocity_time_centering
+            && model.ln_t[f_idx] / LN10
+                <= model
+                    .controls
+                    .max_logt_for_include_p_and_l_in_velocity_time_centering;
         let pvsc_r = if f_idx > 0 {
-            eval_pvsc_cell_ad(model, f_idx - 1).shift_m1()
+            let mut pvsc_r = eval_pvsc_cell_ad(model, f_idx - 1).shift_m1();
+            if pvsc_tc {
+                let start = pvsc_start_after_get(model, f_idx - 1, pvsc_r.val);
+                pvsc_r = 0.5 * (pvsc_r + start);
+            }
+            pvsc_r
         } else {
             StarAdOrder1::ZERO
         };
+        let mut pvsc_l = eval_pvsc_cell_ad(model, f_idx);
+        if pvsc_tc {
+            let start = pvsc_start_after_get(model, f_idx, pvsc_l.val);
+            pvsc_l = 0.5 * (pvsc_l + start);
+        }
         pvsc_l * alfa + pvsc_r * beta
     } else {
         StarAdOrder1::ZERO

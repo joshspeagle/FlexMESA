@@ -6,6 +6,10 @@
 
 use crate::star_ad::{StarAdExt, StarAdOrder1};
 
+/// Unset marker for [`HydroAuxState::pvsc_start`]: `s% Pvsc_start(k) = -1d99`
+/// (`star/private/struct_burn_mix.f90:313`).
+pub const PVSC_START_UNSET: f64 = -1.0e99;
+
 /// Per-step scalar history, solver/substep counters, and retry-hold state
 /// consumed by [`crate::timestep_limits::timestep_controller`] and
 /// [`crate::evolve`] (`star_data_step_work.inc`).
@@ -720,6 +724,13 @@ pub struct HydroAuxState {
     pub u_face_start: Vec<f64>,
     /// Start-of-step HLLC contact pressure $P_{\mathrm{face,start},k}$ (`P_face_start`, `-1` sentinel).
     pub p_face_start: Vec<f64>,
+    /// Start-of-step artificial viscosity pressure $P_{\mathrm{vsc,start},k}$
+    /// in $\mathrm{dyn\,cm^{-2}}$ (`Pvsc_start`). `save_start_values` sets
+    /// the `-1d99` sentinel (`star/private/struct_burn_mix.f90:313`) and the
+    /// first `get_Pvsc_ad` of the step replaces it with `Pvsc`
+    /// (`star/private/star_utils.f90:3452-3468`).
+    #[serde(default)]
+    pub pvsc_start: Vec<f64>,
     /// Rotational velocity to critical velocity ratio $\omega_k / \omega_{\mathrm{crit},k}$ (`w_div_wc`).
     pub w_div_wc: Vec<f64>,
     /// Rotational pressure distortion correction factor $f_{P,\mathrm{rot},k}$ (`fp_rot`).
@@ -955,6 +966,7 @@ impl HydroAuxState {
             p_face_ad: vec![StarAdOrder1::ZERO; nz],
             u_face_start: vec![0.0; nz],
             p_face_start: vec![-1.0; nz],
+            pvsc_start: vec![PVSC_START_UNSET; nz],
             w_div_wc: vec![0.0; nz],
             fp_rot: vec![1.0; nz],
             d_fp_rot_dlnr: vec![0.0; nz],
@@ -1094,6 +1106,7 @@ impl HydroAuxState {
             v.resize(nz, 0.0);
         }
         self.p_face_start.resize(nz, -1.0);
+        self.pvsc_start.resize(nz, PVSC_START_UNSET);
         for v in [
             &mut self.fp_rot,
             &mut self.ft_rot,

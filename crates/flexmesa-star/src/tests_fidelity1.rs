@@ -1000,3 +1000,80 @@ fn test_hydrostatic_eps_grav_residual_includes_skip_p_work() {
         "{with_pturb} vs {expected}"
     );
 }
+
+/// `Pvsc` in `eval1_work` is averaged with `Pvsc_start` on both sides of the
+/// face when `include_P_in_velocity_time_centering` holds and
+/// `lnT(k)/ln10 <= max_logT_for_include_P_and_L_in_velocity_time_centering`,
+/// with no `using_velocity_time_centering` test
+/// (`star/private/hydro_energy.f90:709-728`); `Pvsc_start` takes the first
+/// `Pvsc` of the step and keeps it (`star/private/star_utils.f90:3452-3468`).
+#[test]
+fn test_eval1_work_pvsc_time_centred_with_captured_pvsc_start() {
+    use crate::hydro_state::PVSC_START_UNSET;
+    let mut model = build_solar_test_model(true);
+    let k = 4;
+    model.controls.using_velocity_time_centering = false;
+    model.controls.include_p_in_velocity_time_centering = true;
+    model.controls.use_pvsc_art_visc = true;
+    model.controls.pvsc_cq = 2.0;
+    model.controls.mlt_pturb_factor = 0.0;
+    let dr_k = (model.r[k] - model.r[k + 1]).max(1.0);
+    let v_shock = -0.25 * model.csound[k] * (model.r[k] / dr_k);
+    model.v[k - 1] = 2.0 * v_shock;
+    model.v[k] = v_shock;
+    model.v[k + 1] = 0.0;
+    let pvsc_l = eval_pvsc_cell_ad(&model, k).val;
+    let pvsc_r = eval_pvsc_cell_ad(&model, k - 1).val;
+    assert!(pvsc_l > 0.0 && pvsc_r > 0.0);
+    let (alfa, beta) = model.get_face_weights(k);
+    let av =
+        crate::hydro_work::eval1_a_times_v_face_v_flag_ad(&model, k, false).val;
+    let work = |model: &StarModel| {
+        crate::hydro_work::eval1_work_v_flag_ad(model, k, true, false)
+            .0
+            .val
+    };
+
+    // Before the first `get_Pvsc_ad` of the step, `Pvsc_start = Pvsc`.
+    model.aux.pvsc_start = vec![PVSC_START_UNSET; model.nz];
+    let expected_unset = av
+        * ((0.5 * (pvsc_l + pvsc_l)) * alfa + (0.5 * (pvsc_r + pvsc_r)) * beta);
+    assert_eq!(work(&model), expected_unset);
+
+    crate::hydro_energy::capture_pvsc_start(&mut model);
+    assert_eq!(model.aux.pvsc_start[k], pvsc_l);
+    assert_eq!(model.aux.pvsc_start[k - 1], pvsc_r);
+    // Cell `k - 2` is not compressed: `get_Pvsc_ad` returns early with 0.
+    assert_eq!(model.aux.pvsc_start[k - 2], 0.0);
+
+    // A captured value is kept for the rest of the step.
+    let (start_l, start_r) = (0.25 * pvsc_l, 3.0 * pvsc_r);
+    model.aux.pvsc_start[k] = start_l;
+    model.aux.pvsc_start[k - 1] = start_r;
+    crate::hydro_energy::capture_pvsc_start(&mut model);
+    assert_eq!(model.aux.pvsc_start[k], start_l);
+    let expected_tc = av
+        * ((0.5 * (pvsc_l + start_l)) * alfa
+            + (0.5 * (pvsc_r + start_r)) * beta);
+    let w_tc = work(&model);
+    assert!(
+        (w_tc - expected_tc).abs() <= 1.0e-14 * expected_tc.abs(),
+        "{w_tc} vs {expected_tc}"
+    );
+
+    // Above `max_logT_for_include_P_and_L_in_velocity_time_centering` or
+    // without `include_P_in_velocity_time_centering`, `Pvsc` is not centred.
+    let expected_plain = av * (pvsc_l * alfa + pvsc_r * beta);
+    model
+        .controls
+        .max_logt_for_include_p_and_l_in_velocity_time_centering =
+        model.ln_t[k] / flexmesa_const::LN10 - 1.0;
+    let w_hot = work(&model);
+    assert!((w_hot - expected_plain).abs() <= 1.0e-14 * expected_plain.abs());
+    model
+        .controls
+        .max_logt_for_include_p_and_l_in_velocity_time_centering = 1.0e99;
+    model.controls.include_p_in_velocity_time_centering = false;
+    let w_off = work(&model);
+    assert!((w_off - expected_plain).abs() <= 1.0e-14 * expected_plain.abs());
+}

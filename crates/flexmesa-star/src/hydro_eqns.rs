@@ -866,6 +866,7 @@ pub fn assemble_henyey_system(
     sys.ublk.resize(blk_len, 0.0);
 
     check_unported_eval_equ_switches(model)?;
+    crate::hydro_energy::capture_pvsc_start(model);
     do_surf_bc_eqns(model, sys)?;
 
     model.aux.ergs_error.resize(nz, 0.0);

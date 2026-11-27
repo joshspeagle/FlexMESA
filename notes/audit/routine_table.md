@@ -22,20 +22,20 @@ Every routine is at one level. Lines are credited to a routine for its own lines
 | Measure | Value |
 | :--- | ---: |
 | Upstream lines | 144,952 |
-| Lines in routines mapped in full | 24,363 |
+| Lines in routines mapped in full | 22,681 |
 | Lines in routines mapped in part | 0 |
 | Lines in not-applicable routines | 0 |
-| Lines in unmapped routines | 98,971 |
+| Lines in unmapped routines | 100,653 |
 | Lines outside routines | 21,618 |
 | Lines in routines with oracle evidence | 4,911 |
-| Line-weighted full-mapping fraction (all lines) | 16.8% |
+| Line-weighted full-mapping fraction (all lines) | 15.6% |
 | Line-weighted partial-mapping fraction (all lines) | 0.0% |
-| Full-mapping fraction excluding not-applicable lines | 16.8% |
+| Full-mapping fraction excluding not-applicable lines | 15.6% |
 | Partial-mapping fraction excluding not-applicable lines | 0.0% |
 | Not-applicable fraction of all lines | 0.0% |
 | Line-weighted oracle fraction | 3.4% |
-| Whole-file ported fraction (existing headline) | 30.7% |
-| Routines (full / partial / N/A / unmapped / total) | 321 / 0 / 0 / 2,267 / 2,588 |
+| Whole-file ported fraction (existing headline) | 31.1% |
+| Routines (full / partial / N/A / unmapped / total) | 272 / 0 / 0 / 2,316 / 2,588 |
 | Routines with oracle evidence | 25 |
 
 The fractions answer different questions. The whole-file figure counts every line of a file whose hand-set status is ported; the line-weighted figures count only the own lines of routines that carry the named evidence. Neither is a statement about agreement with MESA.
@@ -44,7 +44,7 @@ The fractions answer different questions. The whole-file figure counts every lin
 
 | Module | Files | Routines | Full | Partial | N/A | Unmapped | Oracle | Upstream lines | Lines full | Lines partial | Lines N/A | Lines unmapped | Outside routines | Full | Partial | Full excl. N/A | Oracle | Whole-file ported |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| `star` | 173 | 2,176 | 252 | 0 | 0 | 1,924 | 25 | 120,509 | 21,655 | 0 | 0 | 86,196 | 12,658 | 18.0% | 0.0% | 18.0% | 4.1% | 35.1% |
+| `star` | 173 | 2,176 | 203 | 0 | 0 | 1,973 | 25 | 120,509 | 19,973 | 0 | 0 | 87,878 | 12,658 | 16.6% | 0.0% | 16.6% | 4.1% | 35.6% |
 | `star_data` | 12 | 5 | 0 | 0 | 0 | 5 | 0 | 4,870 | 0 | 0 | 0 | 49 | 4,821 | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% |
 | `binary` | 47 | 218 | 69 | 0 | 0 | 149 | 0 | 11,638 | 2,708 | 0 | 0 | 6,173 | 2,757 | 23.3% | 0.0% | 23.3% | 0.0% | 18.7% |
 | `astero` | 14 | 189 | 0 | 0 | 0 | 189 | 0 | 7,935 | 0 | 0 | 0 | 6,553 | 1,382 | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% |
@@ -82,7 +82,7 @@ The ceiling is the highest status that the routine evidence of a file supports. 
 
 `case_level_evidence` is never a ceiling because the `exercised` level is not derived. Contained procedures count as routines. A ceiling over the hand-set status is a candidate for review, not a raise: the table reads no status as evidence and changes none, and nothing gates on this section.
 
-### Hand-set status above the ceiling (38 files)
+### Hand-set status above the ceiling (39 files)
 
 Files whose status needs more than the routine evidence gives. Files with no ceiling claim are not listed; 5 files with a ported status have no ceiling claim. Largest ten:
 
@@ -90,7 +90,7 @@ Files whose status needs more than the routine evidence gives. Files with no cei
 | :--- | :--- | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
 | `star/private/rsp_step.f90` | ported_unverified | partial | 3,834 | 53 | 27 | 0 | 0 | 0 |
 | `star/private/mesh_adjust.f90` | ported_unverified | partial | 2,889 | 39 | 4 | 0 | 0 | 0 |
-| `star/private/timestep.f90` | ported_unverified | partial | 2,432 | 64 | 63 | 0 | 0 | 0 |
+| `star/private/timestep.f90` | ported_unverified | partial | 2,432 | 64 | 3 | 0 | 0 | 0 |
 | `star/private/diffusion.f90` | kernel_reference_vectors | partial | 2,050 | 30 | 2 | 0 | 0 | 1 |
 | `star/private/star_solver.f90` | ported_unverified | partial | 1,940 | 35 | 1 | 0 | 0 | 0 |
 | `star/private/diffusion_support.f90` | kernel_reference_vectors | partial | 1,800 | 16 | 1 | 0 | 0 | 1 |
@@ -467,7 +467,8 @@ Candidates for a reviewed raise to `ported_unverified`. Largest ten:
 | `star/private/star_solver.f90` | `star` | ported_unverified | partial | 1,940 | 35 | 1 | 0 | 0 | 0 | 52 | 0 | 0 | 1,847 | 41 |
 | `star/private/star_utils.f90` | `star` | partial | - | 4,149 | 156 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 3,660 | 489 |
 | `star/private/struct_burn_mix.f90` | `star` | partial | - | 1,213 | 19 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 1,150 | 63 |
-| `star/private/timestep.f90` | `star` | ported_unverified | partial | 2,432 | 64 | 63 | 0 | 0 | 0 | 2,261 | 0 | 0 | 10 | 161 |
+| `star/private/tdc_hydro.f90` | `star` | ported_unverified | partial | 658 | 16 | 11 | 0 | 0 | 0 | 467 | 0 | 0 | 128 | 63 |
+| `star/private/timestep.f90` | `star` | ported_unverified | partial | 2,432 | 64 | 3 | 0 | 0 | 0 | 112 | 0 | 0 | 2,159 | 161 |
 | `star/private/turb_info.f90` | `star` | ported_unverified | partial | 608 | 12 | 5 | 0 | 0 | 1 | 380 | 0 | 0 | 172 | 56 |
 | `star/private/turb_support.f90` | `star` | ported_unverified | partial | 512 | 5 | 3 | 0 | 0 | 0 | 387 | 0 | 0 | 71 | 54 |
 | `star/private/winds.f90` | `star` | ported_unverified | partial | 706 | 14 | 4 | 0 | 0 | 3 | 361 | 0 | 0 | 302 | 43 |
@@ -498,7 +499,7 @@ Candidates for a reviewed raise to `ported_unverified`. Largest ten:
 
 ## Backlog of unmapped core-engine routines
 
-1,894 routines in core-engine files with status `stub`, `partial`, or `absent` have no gate-checked `routine_map` entry (77,407 own lines). Partial and not-applicable routines are not in the backlog. Some may already be implemented without a map entry; the table cannot tell.
+1,878 routines in core-engine files with status `stub`, `partial`, or `absent` have no gate-checked `routine_map` entry (76,812 own lines). Partial and not-applicable routines are not in the backlog. Some may already be implemented without a map entry; the table cannot tell.
 
 ### How cases are attributed, and its limits
 

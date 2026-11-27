@@ -258,6 +258,26 @@ fn otc_u_00(model: &StarModel, k: usize) -> StarAdOrder1 {
     }
 }
 
+/// `get_TDC_alfa_beta_face_weights` (`star/private/tdc_hydro.f90:91-104`):
+/// `face_value = alfa*cell_value(k) + beta*cell_value(k-1)`, with
+/// `TDC_hydro_use_mass_interp_face_values = .false.` (an unparsed control),
+/// so `alfa = beta = 0.5`. Upstream reads it only in the density forms of
+/// `d(v/r)/dr`, which are not reproduced here.
+///
+/// # Errors
+/// Returns [`StarError::InvalidInput`] at the surface face, where upstream
+/// stops with `mesa_error` (`:96`).
+pub fn get_tdc_alfa_beta_face_weights(
+    k: usize,
+) -> Result<(f64, f64), StarError> {
+    if k == 0 {
+        return Err(StarError::InvalidInput(String::from(
+            "bad k==1 for get_TDC_alfa_beta_face_weights (star/private/tdc_hydro.f90:96)",
+        )));
+    }
+    Ok((0.5, 0.5))
+}
+
 /// `get_rho_face` (`star/private/star_utils.f90:3785-3796`).
 fn get_rho_face(model: &StarModel, k: usize) -> StarAdOrder1 {
     if k == 0 {

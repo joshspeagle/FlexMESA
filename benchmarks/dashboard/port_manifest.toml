@@ -8117,8 +8117,21 @@ upstream_path = "star/private/tdc_hydro.f90"
 module = "star"
 upstream_lines = 658
 upstream_sha256 = "8e08492f9e46e7d945494b6160ade5838f642d0faa94dd87c6272accfae1a14f"
-status = "absent"
-notes = "seeded from coverage-map.md (absent): quick. `eq_div_w: StarAdOrder1::ZERO` passed to TDC (hydro_vars.rs:283)"
+status = "ported_unverified"
+flexmesa_files = ["crates/flexmesa-star/src/tdc_hydro.rs"]
+notes = "Ported under #623: Chi_cell, Chi_div_w_face, Eq_div_w_face, Uq_face, Uq_dm_cell, the d(v/r)/dr face and time-centred forms, wrap_Hp_cell and set_viscosity_vars_TDC, wired into the TDC MLT call, the energy, momentum and Riemann equations and finish_load_model. Only the default branches of TDC_use_density_form_for_eddy_viscosity and TDC_alpha_M_use_explicit_mlt_vc_in_momentum_equation (unparsed controls). Checked by unit tests against hand evaluations of the upstream formulas; no test-suite case sets TDC_alpha_M > 0 and nothing is compared with MESA."
+[files.routine_map]
+"set_viscosity_vars_TDC" = "crates/flexmesa-star/src/tdc_hydro.rs::set_viscosity_vars_tdc"
+"get_TDC_alfa_beta_face_weights" = "crates/flexmesa-star/src/tdc_hydro.rs::get_tdc_alfa_beta_face_weights"
+"wrap_Hp_cell" = "crates/flexmesa-star/src/tdc_hydro.rs::wrap_hp_cell"
+"compute_Chi_cell" = "crates/flexmesa-star/src/tdc_hydro.rs::compute_chi_cell"
+"compute_Chi_div_w_face" = "crates/flexmesa-star/src/tdc_hydro.rs::compute_chi_div_w_face"
+"compute_tdc_Eq_div_w_face" = "crates/flexmesa-star/src/tdc_hydro.rs::compute_tdc_eq_div_w_face"
+"compute_tdc_Uq_face" = "crates/flexmesa-star/src/tdc_hydro.rs::compute_tdc_uq_face"
+"compute_tdc_Uq_dm_cell" = "crates/flexmesa-star/src/tdc_hydro.rs::compute_tdc_uq_dm_cell"
+"compute_d_v_div_r" = "crates/flexmesa-star/src/tdc_hydro.rs::compute_d_v_div_r"
+"compute_d_v_div_r_face" = "crates/flexmesa-star/src/tdc_hydro.rs::compute_d_v_div_r_face"
+"compute_d_v_div_r_opt_time_center_face" = "crates/flexmesa-star/src/tdc_hydro.rs::compute_d_v_div_r_opt_time_center_face"
 
 [[files]]
 upstream_path = "star/private/tdc_hydro_support.f90"
@@ -8207,14 +8220,14 @@ module = "star"
 upstream_lines = 608
 upstream_sha256 = "74af2ec21c22460ccb041c904a54e9a0f228187a677b0c423875347e0ef4d5ed"
 status = "ported_unverified"
-flexmesa_files = ["crates/flexmesa-star/src/hydro_vars.rs", "crates/flexmesa-star/src/mixing_state.rs"]
+flexmesa_files = ["crates/flexmesa-star/src/hydro_vars.rs", "crates/flexmesa-star/src/mixing_state.rs", "crates/flexmesa-star/src/mix_info.rs"]
 notes = "Ported under #155: verbatim set_mlt_vars, do1_mlt_2, adjust_gradT_fraction, adjust_gradT_excess, set_gradT_excess_alpha, switch_to_radiative/adiabatic, and separation of mlt_mixing_type/mlt_D from mixing_type/D_mix."
 [files.routine_map]
 "set_mlt_vars" = "crates/flexmesa-star/src/hydro_vars.rs::set_mlt_vars"
 "do1_mlt_2" = "crates/flexmesa-star/src/hydro_vars.rs::do1_mlt_2"
 "switch_to_radiative" = "crates/flexmesa-star/src/hydro_vars.rs::switch_to_radiative"
 "check_for_redo_MLT" = "crates/flexmesa-star/src/hydro_vars.rs::check_for_redo_mlt"
-"set_gradT_excess_alpha" = "crates/flexmesa-star/src/hydro_vars.rs::set_gradt_excess_alpha"
+"set_gradT_excess_alpha" = "crates/flexmesa-star/src/mix_info.rs::set_gradt_excess_alpha"
 
 [[files]]
 upstream_path = "star/private/turb_support.f90"

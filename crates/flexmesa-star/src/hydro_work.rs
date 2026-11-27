@@ -65,8 +65,10 @@ pub fn eval1_a_times_v_face_v_flag_ad(
     vel_tc: bool,
 ) -> StarAdOrder1 {
     if f_idx >= model.nz {
+        // `star/private/hydro_energy.f90:856`:
+        // `4*pi*pow2(s% r_center)*s% v_center`.
         return StarAdOrder1::constant(
-            FOUR_PI * model.r_center * model.r_center * model.v_center,
+            FOUR_PI * flexmesa_math::pow2(model.r_center) * model.v_center,
         );
     }
     let lnr_f = StarAdOrder1::variable(model.ln_r[f_idx], I_LNR_00);
@@ -129,8 +131,12 @@ pub fn eval1_work_v_flag_ad(
     let sp = model.species;
     if f_idx >= model.nz {
         let p_in = model.peos_start.last().copied().unwrap_or(0.0);
-        let work_center =
-            FOUR_PI * model.r_center * model.r_center * p_in * model.v_center;
+        // `star/private/hydro_energy.f90:643`:
+        // `pi4*pow2(s% r_center)*s% Peos_start(nz)*s% v_center`.
+        let work_center = FOUR_PI
+            * flexmesa_math::pow2(model.r_center)
+            * p_in
+            * model.v_center;
         return (
             StarAdOrder1::constant(work_center),
             vec![0.0; sp],

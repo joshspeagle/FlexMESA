@@ -32,7 +32,7 @@ fn start_exp(slice: &[f64], k: usize, fallback_exp: f64) -> f64 {
 }
 
 #[inline]
-fn wrap_w(model: &StarModel, k: usize, slot: usize) -> StarAdOrder1 {
+pub(crate) fn wrap_w(model: &StarModel, k: usize, slot: usize) -> StarAdOrder1 {
     let w = model.aux.rsp.et_rsp[k].max(0.0).sqrt();
     if model.layout.i_w.is_some() {
         StarAdOrder1::variable(w, slot)
@@ -123,7 +123,12 @@ pub fn eval_rsp2_ptrb_cell_ad(
     let w_ad = wrap_w(model, k, w_slot);
     let ptrb_now = rho_ad * w_ad.pow2() * coeff;
 
-    let time_center = model.controls.using_velocity_time_centering
+    // `s% using_velocity_time_centering` is the per-step state, which the
+    // control `steps_before_use_velocity_time_centering` switches on
+    // (`star/private/star_utils.f90:3344-3345`).
+    let time_center = model
+        .controls
+        .is_velocity_time_centered(model.model_number_old)
         && model.controls.include_p_in_velocity_time_centering;
     if time_center {
         let p_theta = model.controls.p_theta_for_velocity_time_centering;

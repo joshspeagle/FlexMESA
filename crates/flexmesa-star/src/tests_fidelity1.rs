@@ -188,8 +188,10 @@ fn test_hydro_energy_luminosity_time_centering_and_heating_channels() {
     model.aux.irradiation_heat[k] = 1.0e2;
     model.controls.rsp2_flag = true;
     model.aux.eq_ad[k] = StarAdOrder1::from_dlnd_dlnt_00(5.0e2, 50.0, 25.0);
-    model.aux.etrb[k] = 2.0e11;
-    model.aux.etrb_start[k] = 1.0e11;
+    // Upstream reads `pow2(w)` and `pow2(w_start)`
+    // (`star/private/auto_diff_support.f90:396-400,434-439`).
+    model.aux.rsp.et_rsp[k] = 2.0e11;
+    model.aux.rsp.w_start[k] = 1.0e11_f64.sqrt();
     model.controls.rti_flag = true;
     model.controls.dedt_rti_diffusion_factor = 1.5;
     model.aux.sig_rti[k] = 1.0e20;
@@ -214,6 +216,7 @@ fn test_hydro_energy_luminosity_time_centering_and_heating_channels() {
         StarAdOrder1::from_dlnd_dlnt_00(0.8e5, 0.5e4, 1.0e4);
     model.aux.mlt_vc_old[k] = 0.9e5;
     model.aux.mlt_vc_old[k + 1] = 0.7e5;
+    model.aux.okay_to_set_mlt_vc = true;
     let d_eturb_tdc = setup_d_turbulent_energy_dt(&model, k);
     let expected_tdc =
         0.75 * ((1.0e10 + 0.64e10) - (0.81e10 + 0.49e10)) / model.dt;
@@ -955,4 +958,45 @@ fn test_u_flag_with_v_flag_or_mass_corrections_is_an_error() {
     model.controls.u_flag = true;
     model.controls.use_mass_corrections = true;
     assert!(surface_row_after_assembly(&mut model).is_err());
+}
+
+/// Hydrostatic `eps_grav` form: upstream sums `- dwork_dm + eps_grav` with
+/// `dwork_dm` evaluated with `skip_P = .true.`
+/// (`star/private/hydro_energy.f90:102-104,166-192`), so work by the
+/// non-`Peos` pressures (here `mlt_Pturb`) still enters the residual, and it
+/// is exactly zero when none of them is active.
+#[test]
+fn test_hydrostatic_eps_grav_residual_includes_skip_p_work() {
+    let mut model = build_solar_test_model(false);
+    let k = 4;
+    model.controls.energy_eqn_option = EnergyEqnOption::EpsGrav;
+    for j in 0..model.nz {
+        model.ln_r_start[j] = model.ln_r[j] - 1.0e-4;
+    }
+    let nvar = model.layout.nvar(false);
+    let i_equ = model.layout.i_dlne_dt;
+    let residual = |model: &StarModel| {
+        let x_scale = compute_x_scale(model, false);
+        let mut sys = HenyeySystem::new(model.nz, nvar, x_scale);
+        do1_energy_eqn(model, k, false, &mut sys).expect("energy eqn");
+        sys.equ[k * nvar + i_equ]
+    };
+    let (w0, _, _) =
+        crate::hydro_work::eval1_work_v_flag_ad(&model, k, true, false);
+    assert_eq!(w0.val, 0.0);
+    let base = residual(&model);
+
+    model.controls.mlt_pturb_factor = 0.6;
+    model.aux.mlt_vc_old[k] = 2.0e5;
+    let with_pturb = residual(&model);
+    let (dwork_dm, _) =
+        crate::hydro_work::eval_v_flag_dwork_dm_ad(&model, k, true, false);
+    let scal = crate::hydro_energy::set_energy_eqn_scal(&model, k).unwrap();
+    assert!(dwork_dm.val != 0.0);
+    let expected = base - scal * dwork_dm.val;
+    assert!(
+        (with_pturb - expected).abs()
+            <= 1.0e-12 * expected.abs().max(base.abs()),
+        "{with_pturb} vs {expected}"
+    );
 }

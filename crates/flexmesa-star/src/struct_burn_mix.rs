@@ -322,6 +322,9 @@ pub fn op_split_burn_zones(
         .collect();
 
     let mut max_nstep = 0_usize;
+    // `star/private/struct_burn_mix.f90:918`: set after the zone loop, before
+    // the error return.
+    model.aux.need_to_setvars = true;
     for out in outcomes? {
         max_nstep = max_nstep.max(out.nstep);
         let k = out.k;
@@ -593,12 +596,18 @@ fn run_struct_burn_mix_core(
         // `star/private/struct_burn_mix.f90:112`: `set_vars_if_needed` after
         // `do_burn` while `doing_struct_burn_mix == true` refreshes EOS, neu,
         // kap, non-split net, and MLT/grads while preserving split-burn zones.
-        // `do_burn` always ends with `need_to_setvars = .true.`
-        // (`struct_burn_mix.f90:918`), so this is a full `set_vars`, including
+        // When it runs it is a full `set_vars`, including
         // `reset_starting_vectors` (`hydro_vars.f90:80`).
-        crate::hydro_vars::set_vars(model)?;
-        // `star/private/hydro_vars.f90:653`.
-        model.aux.need_to_setvars = false;
+        // `set_vars_if_needed` (`hydro_vars.f90:47-59`) skips `set_vars`
+        // when `need_to_setvars` is false. `do_burn` returns early without
+        // setting it when `dt <= 0` or no zone has `T_start >=
+        // op_split_burn_min_T` (`:845, :872`), so no zone burned means no
+        // refresh unless the flag was already set.
+        if model.aux.need_to_setvars {
+            crate::hydro_vars::set_vars(model)?;
+            // `star/private/hydro_vars.f90:653`.
+            model.aux.need_to_setvars = false;
+        }
         let e_after: f64 =
             (0..model.nz).map(|k| model.energy[k] * model.dm[k]).sum();
         model.aux.non_epsnuc_energy_change_from_split_burn = e_after - e_before;

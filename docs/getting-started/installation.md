@@ -139,6 +139,13 @@ flexmesa data fetch --include-test-inputs
   flexmesa data verify --bundle mesa_replay
   ```
 
+  The mid-run solver step-dump windows of MESA `26.4.1` (`mesa-stepdump-windows-v1`: 31 windows of 15 cases, 56 MB compressed and 243 MB unpacked; recipe in `benchmarks/fortran_mesa/stepdumps/README.md`) are opt-in in the same way:
+
+  ```bash
+  flexmesa data fetch --bundle mesa_stepdump_windows
+  flexmesa data verify --bundle mesa_stepdump_windows
+  ```
+
   `--bundle` is repeatable and replaces the default selection; an unknown name is an error. `flexmesa data status` lists the bundle as optional and reports whether it is present.
 
 - **Bundled Core Catalogs**: The reference nuclide catalog (347 built-in reference nuclides plus full `isotopes.data` parser), 286 solar isotopes across 10 solar abundance scales (`AG89` through `AAG21`, including `lodders03`, `gs98`, and `asplund09`), the Kurucz (2003) stellar atmosphere SED atlas (`lcb98cor.dat`), the 316 built-in REACLIB nuclear rates, and the Zero-Age Main Sequence (`ZAMS`) stellar catalog are embedded directly into the repository.

@@ -261,9 +261,10 @@ def test_bundles_manifest_and_directory_resolution(
         "mesa_astero_tracks",
         "mesa_pulse_export",
         "mesa_replay",
+        "mesa_stepdump_windows",
     }
     on_demand = {b.name for b in bundles if b.on_demand}
-    assert on_demand == {"mesa_replay"}
+    assert on_demand == {"mesa_replay", "mesa_stepdump_windows"}
     data_pkg_dir = pathlib.Path(fetch.__file__).resolve().parent
     for b in bundles:
         assert manifest.is_valid_sha256_hex(b.archive_sha256)

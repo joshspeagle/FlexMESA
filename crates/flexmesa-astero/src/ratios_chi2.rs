@@ -3,6 +3,8 @@
 //! ($r_{01}, r_{10}, r_{02}$), and composite asteroseismic + spectroscopic
 //! $\chi^2$ evaluation (`astero/private/astero_support.f90:148-587, 1346-1527`).
 
+use flexmesa_star::controls::StarError;
+
 /// Matches observed target frequencies `obs_freqs` of spherical degree $l$ to
 /// ascending candidate model frequencies `cand_freqs` while enforcing strictly
 /// monotonic mode order assignment (`find_closest` in `astero_support.f90:279-292`).
@@ -56,31 +58,25 @@ pub fn match_modes_by_degree(
     (matched_f, matched_i, matched_n)
 }
 
-/// Finds the longest contiguous radial-order subsequence `(seq_first, seq_last)`
-/// (inclusive 0-based indices) where adjacent modes satisfy
-/// $\nu_i - \nu_{i-1} \le 1.5\Delta\nu$ (`get_max_sequence`,
-/// `astero_support.f90:553-587`).
+/// Finds the longest contiguous radial-order subsequence `(seq_first, seq_count)`
+/// with 1-based start index `seq_first` and length `seq_count` (`(0, 0)` when
+/// `freqs.len() <= 1`) where adjacent modes satisfy
+/// $\nu_{j+1} - \nu_j \le 1.5\Delta\nu$ (`get_max_sequence`,
+/// `astero/private/astero_support.f90:553-587`).
 #[must_use]
 pub fn get_max_sequence(freqs: &[f64], dnu: f64) -> (usize, usize) {
-    let n = freqs.len();
-    if n == 0 {
-        return (0, 0);
-    }
-    if n == 1 || dnu <= 0.0 {
-        return (0, n - 1);
-    }
-    let df_max = 1.5 * dnu;
-    let (mut seq_i, mut seq_n) = (0usize, 0usize);
+    let nl = freqs.len();
     let (mut max_seq_i, mut max_seq_n) = (0usize, 0usize);
+    let (mut seq_i, mut seq_n) = (0usize, 0usize);
     loop {
-        let i = seq_i + seq_n;
-        if i + 1 >= n {
+        let i = seq_i + seq_n + 1;
+        if i >= nl {
             break;
         }
         seq_i = i;
         seq_n = 1;
-        for j in seq_i..(n - 1) {
-            if freqs[j + 1] - freqs[j] > df_max {
+        for j in seq_i..nl {
+            if freqs[j] - freqs[j - 1] > 1.5 * dnu {
                 if seq_n > max_seq_n {
                     max_seq_i = seq_i;
                     max_seq_n = seq_n;
@@ -94,11 +90,7 @@ pub fn get_max_sequence(freqs: &[f64], dnu: f64) -> (usize, usize) {
         max_seq_i = seq_i;
         max_seq_n = seq_n;
     }
-    if max_seq_n == 0 {
-        (0, 0)
-    } else {
-        (max_seq_i, max_seq_i + max_seq_n - 1)
-    }
+    (max_seq_i, max_seq_n)
 }
 
 /// Full output of `get_frequency_ratios` (`astero_support.f90:318-416`).
@@ -127,8 +119,15 @@ pub struct FrequencyRatiosR010 {
 }
 
 /// Evaluates `get_frequency_ratios` with contiguous radial-order trimming and
-/// $l=0/l=1$ interleaving (`astero_support.f90:318-416`).
-#[must_use]
+/// $l=0/l=1$ interleaving (`astero/private/astero_support.f90:318-416`).
+///
+/// # Errors
+///
+/// Returns `StarError::InvalidInput` when `trim_for_obs` is `true`, `l1` is
+/// non-empty, and `get_max_sequence` returns an empty sequence (`count == 0`)
+/// where upstream computes out-of-bounds `last = first - 1`
+/// (`astero/private/astero_support.f90:341-350`; `DECISIONS #43`, `#169` / `#644`).
+#[allow(clippy::too_many_arguments)]
 pub fn eval_frequency_ratios_with_trimming(
     l0_freqs: &[f64],
     l0_sigmas: &[f64],
@@ -139,19 +138,31 @@ pub fn eval_frequency_ratios_with_trimming(
     preset_n: usize,
     preset_l0_first: usize,
     preset_l1_first: usize,
-) -> FrequencyRatiosR010 {
+) -> Result<FrequencyRatiosR010, StarError> {
     let nl0 = l0_freqs.len().min(l0_sigmas.len());
     let nl1 = l1_freqs.len().min(l1_sigmas.len());
-    if nl0 < 3 || nl1 < 3 {
-        return FrequencyRatiosR010::default();
+    if nl1 == 0 {
+        return Ok(FrequencyRatiosR010::default());
     }
     let (l0_first, l1_first, n) = if trim_for_obs {
-        let (mut l0_f, mut l0_l) = get_max_sequence(&l0_freqs[..nl0], dnu);
-        let (mut l1_f, mut l1_l) = get_max_sequence(&l1_freqs[..nl1], dnu);
+        let (l0_seq_i, l0_seq_cnt) = get_max_sequence(&l0_freqs[..nl0], dnu);
+        let (l1_seq_i, l1_seq_cnt) = get_max_sequence(&l1_freqs[..nl1], dnu);
+        if l0_seq_cnt == 0 || l1_seq_cnt == 0 {
+            return Err(StarError::InvalidInput(format!(
+                "get_max_sequence returned empty sequence \
+                 (l0_count={l0_seq_cnt}, l1_count={l1_seq_cnt}); upstream \
+                 computes out-of-bounds last = first - 1 \
+                 (astero/private/astero_support.f90:341-350; DECISIONS #43, #169 / #644)"
+            )));
+        }
+        let mut l0_f = l0_seq_i - 1;
+        let mut l0_l = l0_f + l0_seq_cnt - 1;
+        let mut l1_f = l1_seq_i - 1;
+        let mut l1_l = l1_f + l1_seq_cnt - 1;
         // Trim high end of l0 until < last l1 (`astero_support.f90:349-358`).
         while l0_freqs[l0_l] >= l1_freqs[l1_l] {
             if l0_l <= l0_f {
-                return FrequencyRatiosR010::default();
+                return Ok(FrequencyRatiosR010::default());
             }
             l0_l -= 1;
         }
@@ -159,7 +170,7 @@ pub fn eval_frequency_ratios_with_trimming(
         while l1_freqs[l1_f] <= l0_freqs[l0_f] {
             l1_f += 1;
             if l1_f > l1_l {
-                return FrequencyRatiosR010::default();
+                return Ok(FrequencyRatiosR010::default());
             }
         }
         // Trim low end of l0 until only 1 < 1st l1 (`astero_support.f90:370-374`).
@@ -173,9 +184,11 @@ pub fn eval_frequency_ratios_with_trimming(
         let l0_seq_n = l0_l.saturating_sub(l0_f) + 1;
         let l1_seq_n = l1_l.saturating_sub(l1_f) + 1;
         if l0_seq_n != l1_seq_n || l0_seq_n < 3 {
-            return FrequencyRatiosR010::default();
+            return Ok(FrequencyRatiosR010::default());
         }
         (l0_f, l1_f, l0_seq_n - 2)
+    } else if nl0 < 3 || nl1 < 3 {
+        return Ok(FrequencyRatiosR010::default());
     } else if preset_n == 0
         || preset_l0_first + preset_n + 1 >= nl0
         || preset_l1_first + preset_n + 1 >= nl1
@@ -202,7 +215,7 @@ pub fn eval_frequency_ratios_with_trimming(
         r010_freqs.push(l0_freqs[l0_first + i + 1]);
         r010_freqs.push(l1_freqs[l1_first + i + 1]);
     }
-    FrequencyRatiosR010 {
+    Ok(FrequencyRatiosR010 {
         n,
         l0_first,
         l1_first,
@@ -213,7 +226,7 @@ pub fn eval_frequency_ratios_with_trimming(
         ratios_r010,
         sigmas_r010,
         r010_freqs,
-    }
+    })
 }
 
 /// Evaluates the Roxburgh & Vorontsov (2003, A&A 411, 215) 5-point smoothed
@@ -487,31 +500,33 @@ pub fn eval_frequency_ratios_r02(
 }
 
 /// Linearly interpolates a model $r_{010}$ frequency separation ratio at target
-/// frequency `freq` (`interpolate_ratio_r010` in `astero_support.f90:489-520`).
+/// frequency `freq` (`interpolate_ratio_r010` in
+/// `astero/private/astero_support.f90:489-517`).
 #[must_use]
 pub fn interpolate_ratio_r010(
     freq: f64,
     r010_freqs: &[f64],
     r010_vals: &[f64],
 ) -> f64 {
-    let n = r010_freqs.len().min(r010_vals.len());
-    if n == 0 {
+    let ratios_n = r010_freqs.len().min(r010_vals.len());
+    if ratios_n == 0 {
         return 0.0;
     }
-    if freq <= r010_freqs[0] || n == 1 {
+    if freq <= r010_freqs[0] {
         return r010_vals[0];
     }
-    for i in 0..(n - 1) {
-        if freq >= r010_freqs[i] && freq <= r010_freqs[i + 1] {
-            let df = r010_freqs[i + 1] - r010_freqs[i];
-            if df.abs() <= 1.0e-30 {
-                return r010_vals[i];
-            }
-            let beta = (freq - r010_freqs[i]) / df;
-            return (1.0 - beta) * r010_vals[i] + beta * r010_vals[i + 1];
+    if freq >= r010_freqs[ratios_n - 1] {
+        return r010_vals[ratios_n - 1];
+    }
+    for j in 1..ratios_n {
+        if freq < r010_freqs[j] {
+            let alfa = (freq - r010_freqs[j - 1])
+                / (r010_freqs[j] - r010_freqs[j - 1]);
+            let beta = 1.0 - alfa;
+            return alfa * r010_vals[j] + beta * r010_vals[j - 1];
         }
     }
-    r010_vals[n - 1]
+    0.0
 }
 
 /// Linearly interpolates a model $r_{02}$ frequency separation ratio at target
@@ -685,4 +700,166 @@ pub fn eval_astero_chi2(
         chi2_r010,
         chi2_r02,
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn get_max_sequence_matches_mesa_oracle_edge_cases() {
+        let normal = [900.0, 960.0, 1060.0, 1160.0, 1260.0, 1360.0, 1520.0];
+        assert_eq!(get_max_sequence(&normal, 100.0), (1, 6));
+        assert_eq!(get_max_sequence(&[], 100.0), (0, 0));
+        assert_eq!(get_max_sequence(&normal[..1], 100.0), (0, 0));
+
+        // Non-positive delta_nu causes every spacing > 1.5 * dnu -> length 1.
+        assert_eq!(get_max_sequence(&normal[..5], 0.0), (1, 1));
+        assert_eq!(get_max_sequence(&normal[..5], -1.0), (1, 1));
+
+        // Upstream skips one element (`seq_i + seq_n + 1`) after each gap.
+        let gap = [900.0, 1100.0, 1200.0, 1300.0, 1400.0];
+        assert_eq!(get_max_sequence(&gap[..4], 100.0), (3, 2));
+        assert_eq!(get_max_sequence(&gap, 100.0), (3, 3));
+
+        // Ties keep the earliest sequence (`seq_n > max_seq_n`).
+        let tie = [900.0, 1000.0, 1200.0, 1300.0, 1400.0];
+        assert_eq!(get_max_sequence(&tie, 100.0), (1, 2));
+    }
+
+    #[test]
+    fn eval_frequency_ratios_with_trimming_handles_empty_and_single_mode() {
+        let l0 = [900.0, 1000.0, 1100.0, 1200.0];
+        let s0 = [0.1; 4];
+
+        // `nl1 == 0` returns empty ratios cleanly (`astero_support.f90:339`).
+        let no_l1 = eval_frequency_ratios_with_trimming(
+            &l0,
+            &s0,
+            &[],
+            &[],
+            100.0,
+            true,
+            0,
+            0,
+            0,
+        )
+        .expect("nl1 == 0 should return Ok(default)");
+        assert_eq!(no_l1.n, 0);
+
+        // `nl0 == 1` or `nl1 == 1` returns explicit deferred #169 error.
+        let l1 = [950.0, 1050.0, 1150.0, 1250.0];
+        let s1 = [0.1; 4];
+        let err_l0 = eval_frequency_ratios_with_trimming(
+            &l0[..1],
+            &s0[..1],
+            &l1,
+            &s1,
+            100.0,
+            true,
+            0,
+            0,
+            0,
+        )
+        .expect_err("nl0 == 1 with trim_for_obs must error");
+        assert!(
+            matches!(err_l0, StarError::InvalidInput(ref msg) if msg.contains("#169")),
+            "expected #169 citation, got {err_l0:?}"
+        );
+        let err_l1 = eval_frequency_ratios_with_trimming(
+            &l0,
+            &s0,
+            &l1[..1],
+            &s1[..1],
+            100.0,
+            true,
+            0,
+            0,
+            0,
+        )
+        .expect_err("nl1 == 1 with trim_for_obs must error");
+        assert!(
+            matches!(err_l1, StarError::InvalidInput(ref msg) if msg.contains("#169")),
+            "expected #169 citation, got {err_l1:?}"
+        );
+
+        // `nl0 == 2, nl1 == 2` exits with `n == 0` (`astero_support.f90:389`).
+        let too_short = eval_frequency_ratios_with_trimming(
+            &l0[..2],
+            &s0[..2],
+            &l1[..2],
+            &s1[..2],
+            100.0,
+            true,
+            0,
+            0,
+            0,
+        )
+        .expect("nl0 == 2, nl1 == 2 should return Ok(default)");
+        assert_eq!(too_short.n, 0);
+    }
+
+    #[test]
+    fn interpolate_ratio_r010_matches_mesa_oracle_bit_exact() {
+        let freqs = [1800.0, 1935.0, 2070.0, 2205.0];
+        let vals = [
+            0.0123456789012345,
+            -0.0234567890123456,
+            0.0345678901234567,
+            -0.0456789012345678,
+        ];
+        assert_eq!(
+            interpolate_ratio_r010(1750.0, &freqs, &vals).to_bits(),
+            0x3F89_48B0_F905_91BF
+        );
+        assert_eq!(
+            interpolate_ratio_r010(1800.0, &freqs, &vals).to_bits(),
+            0x3F89_48B0_F905_91BF
+        );
+        assert_eq!(
+            interpolate_ratio_r010(1999.1234567, &freqs, &vals).to_bits(),
+            0x3F70_CFA3_A7CC_C6F2
+        );
+        assert_eq!(
+            interpolate_ratio_r010(2205.0, &freqs, &vals).to_bits(),
+            0xBFA7_6339_95D6_E0A7
+        );
+        assert_eq!(
+            interpolate_ratio_r010(2300.0, &freqs, &vals).to_bits(),
+            0xBFA7_6339_95D6_E0A7
+        );
+        assert_eq!(
+            interpolate_ratio_r010(f64::NAN, &freqs, &vals).to_bits(),
+            0.0_f64.to_bits()
+        );
+
+        // `ratios_n == 0` and `ratios_n == 1` cases.
+        assert_eq!(interpolate_ratio_r010(1900.0, &[], &[]).to_bits(), 0);
+        assert_eq!(
+            interpolate_ratio_r010(2500.0, &freqs[..1], &vals[..1]).to_bits(),
+            0x3F89_48B0_F905_91BF
+        );
+        assert_eq!(
+            interpolate_ratio_r010(f64::NAN, &freqs[..1], &vals[..1]).to_bits(),
+            0
+        );
+
+        // Duplicate and non-monotonic model frequencies follow upstream scan.
+        let dup_f = [100.0, 200.0, 200.0, 300.0];
+        let dup_v = [10.0, 20.0, 30.0, 40.0];
+        assert_eq!(
+            interpolate_ratio_r010(200.0, &dup_f, &dup_v).to_bits(),
+            0x403E_0000_0000_0000
+        );
+        let nm_f1 = [100.0, 300.0, 200.0, 400.0];
+        assert_eq!(
+            interpolate_ratio_r010(250.0, &nm_f1, &dup_v).to_bits(),
+            0x4031_8000_0000_0000
+        );
+        let nm_f2 = [100.0, 200.0, 200.0, 150.0];
+        assert_eq!(
+            interpolate_ratio_r010(160.0, &nm_f2, &dup_v).to_bits(),
+            0x4044_0000_0000_0000
+        );
+    }
 }

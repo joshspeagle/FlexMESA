@@ -425,7 +425,7 @@ fn test_ratios_max_seq_trim_and_r02_fixed_pairing_identity() {
     // Small variation `< 0.75 * dnu` must NOT break sequence; gap `> 1.5 * dnu` MUST split.
     let dnu = 100.0;
     let freqs = [900.0, 960.0, 1060.0, 1160.0, 1260.0, 1360.0, 1520.0];
-    assert_eq!(get_max_sequence(&freqs, dnu), (0, 5));
+    assert_eq!(get_max_sequence(&freqs, dnu), (1, 6));
 
     // Overhanging l=0 low mode & l=1 high mode trimmed to matching sequence lengths.
     let l0 = [850.0, 950.0, 1050.0, 1150.0, 1250.0, 1350.0];
@@ -436,7 +436,8 @@ fn test_ratios_max_seq_trim_and_r02_fixed_pairing_identity() {
     let s2 = [0.2; 6];
     let r010 = eval_frequency_ratios_with_trimming(
         &l0, &s0, &l1, &s1, dnu, true, 0, 0, 0,
-    );
+    )
+    .expect("eval_frequency_ratios_with_trimming should succeed");
     assert_eq!((r010.n, r010.l0_first, r010.l1_first), (4, 0, 0));
 
     let obs_r02 = eval_r02_obs_with_indices(

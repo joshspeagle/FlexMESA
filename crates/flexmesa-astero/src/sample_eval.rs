@@ -150,14 +150,14 @@ fn eval_spectro_obs(
     let teff = model.teff.max(1.0);
     let (mut obs, mut sig, mut mval, mut names) =
         (Vec::new(), Vec::new(), Vec::new(), Vec::new());
-    if ctrl.include_age_in_chi2_spectro && ctrl.age_sigma > 0.0 {
+    if ctrl.include_age_in_chi2_spectro {
         obs.push(ctrl.age_target);
         sig.push(ctrl.age_sigma);
         mval.push(model.star_age);
         names.push(String::from("age"));
     }
     for (i, c) in ctrl.indexed_constraints.iter().enumerate() {
-        if c.include && c.sigma > 0.0 {
+        if c.include {
             obs.push(c.target);
             sig.push(c.sigma);
             mval.push(constraint_values[i]);
@@ -212,16 +212,12 @@ pub fn eval_spectro_and_delta_nu_chi2(
     let (sp_obs, sp_sig, sp_mod, _, teff, _, _, _) =
         eval_spectro_obs(model, ctrl, constraint_values);
     let mut sum_sp = 0.0_f64;
-    let mut n_sp = 0usize;
-    for i in 0..sp_obs.len() {
-        if sp_sig[i] > 0.0 {
-            let d = (sp_mod[i] - sp_obs[i]) / sp_sig[i];
-            sum_sp += d * d;
-            n_sp += 1;
-        }
+    let cnt_sp = sp_obs.len();
+    for i in 0..cnt_sp {
+        sum_sp += flexmesa_math::pow2((sp_mod[i] - sp_obs[i]) / sp_sig[i]);
     }
-    let chi2_spectro = if ctrl.weights.normalize_chi2_spectro && n_sp > 0 {
-        sum_sp / (n_sp as f64)
+    let chi2_spectro = if ctrl.weights.normalize_chi2_spectro {
+        sum_sp / (cnt_sp as f64)
     } else {
         sum_sp
     };
@@ -477,7 +473,7 @@ pub(crate) fn eval_model_astero_sample_with_output_root(
             0,
             0,
             0,
-        );
+        )?;
         let mod_chk = eval_frequency_ratios_with_trimming(
             &model_freqs_corr[0],
             &ctrl.freq_sigma[0],
@@ -488,7 +484,7 @@ pub(crate) fn eval_model_astero_sample_with_output_root(
             0,
             0,
             0,
-        );
+        )?;
         if obs_r.n == 0
             || mod_chk.n != obs_r.n
             || mod_chk.l0_first != obs_r.l0_first
@@ -622,7 +618,7 @@ pub(crate) fn eval_model_astero_sample_with_output_root(
             0,
             0,
             0,
-        );
+        )?;
         ratios_n = obs_r.n;
         ratios_l0_first = obs_r.l0_first;
         ratios_l1_first = obs_r.l1_first;
@@ -637,7 +633,7 @@ pub(crate) fn eval_model_astero_sample_with_output_root(
                 obs_r.n,
                 obs_r.l0_first,
                 obs_r.l1_first,
-            );
+            )?;
             let l0_mod_axis =
                 &model_freqs[0][obs_r.l0_first + 1..=obs_r.l0_first + obs_r.n];
             let l1_mod_axis =
@@ -757,11 +753,13 @@ pub(crate) fn eval_model_astero_sample_with_output_root(
     }
     if ctrl.trace_chi2_spectro_info {
         for i in 0..sp_obs.len() {
-            let d = (sp_mod[i] - sp_obs[i]) / sp_sig[i];
-            println!(
-                "chi2_spectro_info {} val={:.6} obs={:.6} sigma={:.6} chi2term={:.6}",
-                sp_names[i], sp_mod[i], sp_obs[i], sp_sig[i], d * d
-            );
+            if sp_sig[i] > 0.0 {
+                let d = (sp_mod[i] - sp_obs[i]) / sp_sig[i];
+                println!(
+                    "chi2_spectro_info {} val={:.6} obs={:.6} sigma={:.6} chi2term={:.6}",
+                    sp_names[i], sp_mod[i], sp_obs[i], sp_sig[i], d * d
+                );
+            }
         }
         println!("chi2_spectro={chi2_spectro:.6}");
     }
@@ -1117,7 +1115,10 @@ mod tests {
     use flexmesa_star::model::StarModel;
     use flexmesa_star::{load_zams_model, set_hydro_vars};
 
-    use super::{eval_model_astero_sample, scan_and_save_mode_at_number};
+    use super::{
+        eval_model_astero_sample, eval_spectro_and_delta_nu_chi2,
+        scan_and_save_mode_at_number,
+    };
     use crate::inlist_astero::{AsteroSearchControls, MAX_CONSTRAINTS};
 
     static TEST_DIR_SEQ: AtomicUsize = AtomicUsize::new(1);
@@ -1398,5 +1399,101 @@ mod tests {
             ),
             "expected GYRE not ported error, got {err:?}"
         );
+    }
+
+    #[test]
+    fn chi2_spectro_reproduces_upstream_zero_neg_sigma_and_empty_cnt() {
+        use crate::ratios_chi2::eval_astero_chi2;
+
+        let model = hydrated_solar_zams();
+        let values = [0.0_f64; MAX_CONSTRAINTS];
+
+        // 1. Empty spectroscopic selection: NaN when normalized, 0.0 when unnormalized.
+        let mut ctrl = AsteroSearchControls {
+            include_age_in_chi2_spectro: false,
+            ..AsteroSearchControls::default()
+        };
+        ctrl.weights.normalize_chi2_spectro = true;
+        let (chi2_empty_norm, _, _) =
+            eval_spectro_and_delta_nu_chi2(&model, &ctrl, &values);
+        assert!(chi2_empty_norm.is_nan());
+
+        ctrl.weights.normalize_chi2_spectro = false;
+        let (chi2_empty_raw, _, _) =
+            eval_spectro_and_delta_nu_chi2(&model, &ctrl, &values);
+        assert_eq!(chi2_empty_raw.to_bits(), 0.0_f64.to_bits());
+
+        // 2. Constraint with `sigma == 0`: `+Inf` if `value != target`, `NaN` if equal.
+        ctrl.weights.normalize_chi2_spectro = true;
+        ctrl.indexed_constraints[0].include = true;
+        ctrl.indexed_constraints[0].target = 5777.0;
+        ctrl.indexed_constraints[0].sigma = 0.0;
+        let mut vals_diff = values;
+        vals_diff[0] = 5800.0;
+        let (chi2_inf, _, _) =
+            eval_spectro_and_delta_nu_chi2(&model, &ctrl, &vals_diff);
+        assert!(chi2_inf.is_infinite() && chi2_inf.is_sign_positive());
+
+        let mut vals_eq = values;
+        vals_eq[0] = 5777.0;
+        let (chi2_zero_div_zero, _, _) =
+            eval_spectro_and_delta_nu_chi2(&model, &ctrl, &vals_eq);
+        assert!(chi2_zero_div_zero.is_nan());
+
+        // 3. `include_age_in_chi2_spectro = true` with `age_sigma == 0` -> Inf.
+        ctrl.indexed_constraints[0].include = false;
+        ctrl.include_age_in_chi2_spectro = true;
+        ctrl.age_target = model.star_age + 1.0e8;
+        ctrl.age_sigma = 0.0;
+        let (chi2_age_inf, _, _) =
+            eval_spectro_and_delta_nu_chi2(&model, &ctrl, &values);
+        assert!(chi2_age_inf.is_infinite() && chi2_age_inf.is_sign_positive());
+
+        // 4. Negative sigma is squared and included in `cnt`, matching `get_chi2_spectro`.
+        ctrl.include_age_in_chi2_spectro = false;
+        ctrl.indexed_constraints[0].include = true;
+        ctrl.indexed_constraints[0].target = 5777.0;
+        ctrl.indexed_constraints[0].sigma = -10.0;
+        let (chi2_neg_sig, _, _) =
+            eval_spectro_and_delta_nu_chi2(&model, &ctrl, &vals_diff);
+        let expected_term0 = flexmesa_math::pow2((5800.0_f64 - 5777.0) / -10.0);
+        assert_eq!(chi2_neg_sig.to_bits(), 0x4015_28F5_C28F_5C28);
+        assert_eq!(chi2_neg_sig.to_bits(), expected_term0.to_bits());
+
+        // Adding a second constraint confirms `cnt == 2` includes the negative-sigma term.
+        ctrl.indexed_constraints[1].include = true;
+        ctrl.indexed_constraints[1].target = 1.0;
+        ctrl.indexed_constraints[1].sigma = 2.0;
+        vals_diff[1] = 3.0;
+        let (chi2_two_terms, _, _) =
+            eval_spectro_and_delta_nu_chi2(&model, &ctrl, &vals_diff);
+        assert_eq!(
+            chi2_two_terms.to_bits(),
+            ((expected_term0 + 1.0) / 2.0).to_bits()
+        );
+
+        // Meanwhile `get_chi2` (`eval_astero_chi2`) still guards `sigma > 0`.
+        let (_, _, chi2_get_chi2, _, _, _) = eval_astero_chi2(
+            &ctrl.weights,
+            &[],
+            &[],
+            &[],
+            &[],
+            &[],
+            &[],
+            &[],
+            &[],
+            &[],
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            &[5777.0],
+            &[-10.0],
+            &[5800.0],
+        );
+        assert_eq!(chi2_get_chi2.to_bits(), 0.0_f64.to_bits());
     }
 }

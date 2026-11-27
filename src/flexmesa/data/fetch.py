@@ -226,7 +226,7 @@ def resolve_mesa_histories_dir(
     explicit: str | pathlib.Path | None = None,
     data_dir: pathlib.Path | None = None,
 ) -> pathlib.Path:
-    """Resolve the extraction root for ``mesa-histories-v1.tar.zst``."""
+    """Resolve the extraction root for ``mesa-histories-v2.tar.zst``."""
     return _resolve_sibling_bundle_dir(
         explicit, "FLEXMESA_HISTORIES_DIR", "mesa_histories", data_dir
     )

@@ -8,10 +8,10 @@ Produces:
    ``MESA_SDK_version``, ``math_backend``, and ``date`` header), committing
    files ``<= --repo-max-kb`` into
    ``benchmarks/history_harness/reference_histories/<suite>/<case>.data``.
-2. ``mesa-histories-v1.tar.zst`` containing all 102 thinned histories, all full
-   histories, ``.mod`` outputs, ``34,393`` GYRE/ADIPLS oscillation modes and
-   saved pulsation models, flagged incomplete/skipped case records, provenance,
-   and ``SHA256SUMS.tsv``.
+2. ``mesa-histories-v2.tar.zst`` (``--archive-name``) containing all 102
+   thinned histories, all full histories, ``.mod`` outputs, ``34,393``
+   GYRE/ADIPLS oscillation modes and saved pulsation models, flagged
+   incomplete/skipped case records, provenance, and ``SHA256SUMS.tsv``.
 3. ``mesa-module-hex-v1.tar.zst`` containing all 25 module ``test/`` exact
    IEEE-754 hexadecimal / raw ``u64`` reference outputs, compiler FP flags, and
    ``SHA256SUMS.tsv``.
@@ -148,6 +148,7 @@ def sanitize_text_bytes(raw: bytes) -> bytes:
 
 
 MAP_HISTORY_NAME = "map_history.data"
+HISTORIES_ARCHIVE = "mesa-histories-v2.tar.zst"
 
 
 def history_source_files(
@@ -289,8 +290,17 @@ def build_histories_and_repo_refs(
     staging_dir: pathlib.Path,
     repo_root: pathlib.Path,
     repo_max_kb: int = 150,
+    archive_name: str = HISTORIES_ARCHIVE,
 ) -> None:
-    """Build thinned 6-line histories and ``mesa-histories-v1.tar.zst``."""
+    """Build thinned 6-line histories and the histories archive.
+
+    Args:
+        gt_dir: Ground-truth directory holding ``runs/`` and the summary.
+        staging_dir: Output directory of the archive.
+        repo_root: Checkout whose references and manifest are written.
+        repo_max_kb: Largest thinned history committed to the repository.
+        archive_name: File name of the archive.
+    """
     summary_data = json.loads(
         (gt_dir / "summary_table.json").read_text(encoding="utf-8")
     )
@@ -328,7 +338,7 @@ def build_histories_and_repo_refs(
                 dst_repo.unlink()
             release_only_count += 1
 
-    out_arc = staging_dir / "mesa-histories-v1.tar.zst"
+    out_arc = staging_dir / archive_name
     manifest_out = (
         repo_root
         / "src"
@@ -526,16 +536,34 @@ def main() -> None:
     parser.add_argument("--ground-truth-dir", type=pathlib.Path, required=True)
     parser.add_argument("--staging-dir", type=pathlib.Path, required=True)
     parser.add_argument("--repo-root", type=pathlib.Path, required=True)
-    parser.add_argument("--data-dir", type=pathlib.Path, required=True)
+    parser.add_argument("--data-dir", type=pathlib.Path, default=None)
     parser.add_argument("--repo-max-kb", type=int, default=150)
+    parser.add_argument(
+        "--only",
+        choices=("all", "histories"),
+        default="all",
+        help="build only the histories bundle, leaving every other bundle "
+        "and manifest untouched",
+    )
+    parser.add_argument("--archive-name", default=HISTORIES_ARCHIVE)
     args = parser.parse_args()
 
     gt = args.ground_truth_dir.resolve()
     stg = args.staging_dir.resolve()
     repo = args.repo_root.resolve()
-    ddir = args.data_dir.resolve()
 
-    build_histories_and_repo_refs(gt, stg, repo, repo_max_kb=args.repo_max_kb)
+    build_histories_and_repo_refs(
+        gt,
+        stg,
+        repo,
+        repo_max_kb=args.repo_max_kb,
+        archive_name=args.archive_name,
+    )
+    if args.only == "histories":
+        return
+    if args.data_dir is None:
+        parser.error("--data-dir is required unless --only histories")
+    ddir = args.data_dir.resolve()
     build_module_hex_bundle(gt, stg, repo)
     write_existing_physics_bundle_manifests(ddir, repo)
 

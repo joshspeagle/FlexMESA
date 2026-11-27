@@ -3,7 +3,7 @@
 # capture exact IEEE-754 hex values from all module tests, run all 106
 # star/binary/astero test_suite cases (including GYRE/ADIPLS mode + model
 # capture), record provenance, generate summary tables, and package
-# mesa-histories-v1.tar.zst and mesa-module-hex-v1.tar.zst.
+# mesa-histories-v2.tar.zst and mesa-module-hex-v1.tar.zst.
 
 set -euo pipefail
 

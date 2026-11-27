@@ -10,9 +10,9 @@ model number (the k-th call at a model number against the k-th reference
 call there) and then mode by mode on `(l, m, n_pg)` (the k-th repeat of a
 label on one side against the k-th repeat on the other). Per quantity
 (frequency, inertia, growth rate) the result gives the number of values
-compared, how many are bit-identical, and the maximum relative difference. Calls and modes
-present on one side only are counted. A quantity the extras do not expose is
-reported as unavailable, not compared.
+compared, how many are bit-identical, and the maximum relative difference.
+Calls and modes present on one side only are counted. A quantity the extras
+do not expose is reported as unavailable, not compared.
 
 Handlers covered: `GyreInMesaStarExtras` (frequency and growth rate as the
 real and imaginary parts of the mode frequency in Hz; no inertia),

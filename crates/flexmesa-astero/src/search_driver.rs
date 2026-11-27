@@ -51,6 +51,8 @@ pub struct AsteroSearchReport {
     pub best_chi2: f64,
     /// Total Henyey evolutionary steps taken across all tracks.
     pub total_steps: usize,
+    /// Per-track evolutionary stage reports in evaluation order.
+    pub track_stages: Vec<StageRunReport>,
     /// Termination code of the track that achieved `best_chi2`, if any.
     pub best_termination: Option<String>,
     /// Termination code of the last evaluated track.
@@ -63,6 +65,7 @@ struct AsteroTrackExtras<'a, 'h> {
     ctrl: &'a AsteroSearchControls,
     /// The case's own `set_constraint_value` (and `set_param`).
     hooks: Option<&'h mut dyn AsteroCaseHooks>,
+    after_evolve_termination: Option<String>,
     params: AsteroParamSet,
     sample_number: usize,
     case_dir: &'a Path,
@@ -698,6 +701,19 @@ impl StarExtras for AsteroTrackExtras<'_, '_> {
                 return Err(err);
             }
         }
+        let best_chi2 = self.best_sample.as_ref().map_or(-1.0, |b| b.chi2);
+        if let Some(hook) = self.hooks.as_deref_mut() {
+            if let Some(code) = hook.extras_after_evolve(model, best_chi2)? {
+                let trimmed = code.trim();
+                if trimmed.is_empty() {
+                    return Err(StarError::InvalidInput(String::from(
+                        "astero extras_after_evolve returned empty \
+                         termination code",
+                    )));
+                }
+                self.after_evolve_termination = Some(trimmed.to_string());
+            }
+        }
         Ok(())
     }
 }
@@ -740,6 +756,25 @@ pub trait AsteroCaseHooks {
         ctrl: &AsteroSearchControls,
         name: &str,
     ) -> Result<f64, StarError>;
+
+    /// Optional `extras_after_evolve` hook invoked at the end of a track
+    /// (`astero/private/extras_support.f90:1116`), receiving the final model
+    /// and the running `best_chi2` (`-1.0` when no accepted sample exists yet;
+    /// `astero/private/astero_run_support.f90:220`).
+    ///
+    /// Returning `Ok(Some(code))` records a custom post-evolve termination code
+    /// such as `"xtra1"`
+    /// (`astero/test_suite/example_astero/src/run_star_extras.f90:214`),
+    /// overriding the track's [`StageRunReport`] termination code and updating
+    /// [`AsteroSearchReport::last_termination`] and
+    /// [`AsteroSearchReport::best_termination`].
+    fn extras_after_evolve(
+        &mut self,
+        _model: &StarModel,
+        _best_chi2: f64,
+    ) -> Result<Option<String>, StarError> {
+        Ok(None)
+    }
 }
 
 /// Value of the search parameter named `name` in `params`, by the slot the
@@ -952,6 +987,7 @@ fn run_track(
     let mut extras = AsteroTrackExtras {
         ctrl,
         hooks: set_param,
+        after_evolve_termination: None,
         params,
         sample_number,
         case_dir,
@@ -970,7 +1006,7 @@ fn run_track(
     let mut model =
         init_or_update_model_from_bundle(&bundle, None, &mut extras)?;
     let mut logs_writer = logs_opts.build_writer(&model, case_dir, None)?;
-    let stage = run_inlist_stage_with_logs(
+    let mut stage = run_inlist_stage_with_logs(
         &mut model,
         &bundle,
         &mut extras,
@@ -979,6 +1015,9 @@ fn run_track(
     )?;
     if let Some(err) = extras.eval_error.take() {
         return Err(err);
+    }
+    if let Some(code) = extras.after_evolve_termination.take() {
+        stage.termination_code = code;
     }
     let results_dir = output_root.join(&ctrl.astero_results_directory);
     if let Some(ref best_model) = extras.best_model {
@@ -1173,6 +1212,7 @@ pub fn run_star_astero_with_case_hooks(
 
     let is_powell = st == "newuoa" || st == "bobyqa";
     let (mut last_termination, mut last_model) = (String::new(), None);
+    let mut track_stages: Vec<StageRunReport> = Vec::new();
     let mut eval_param_set = |p: AsteroParamSet| -> Result<f64, StarError> {
         if tracks_evaluated >= track_cap {
             return Ok(FAILED_TRACK_CHI2);
@@ -1207,7 +1247,8 @@ pub fn run_star_astero_with_case_hooks(
             SampleAverages::from_samples(&samples, active_ctrl),
         )?;
         total_steps += stage.steps_taken;
-        let stage_term = stage.termination_code;
+        let stage_term = stage.termination_code.clone();
+        track_stages.push(stage);
         last_termination.clone_from(&stage_term);
         let c2 = sample.chi2;
         let accepted = c2.is_finite() && c2 < 1.0e90;
@@ -1353,6 +1394,7 @@ pub fn run_star_astero_with_case_hooks(
         best_sample_idx,
         best_chi2,
         total_steps,
+        track_stages,
         best_termination,
         last_termination,
         last_model,
@@ -1439,6 +1481,7 @@ mod tests {
         AsteroTrackExtras {
             ctrl,
             hooks: Some(hooks),
+            after_evolve_termination: None,
             params: ctrl.first_params(),
             sample_number: 1,
             case_dir: root,
@@ -1702,5 +1745,130 @@ mod tests {
         };
         let mut extras = make_extras(&ctrl, &mut hooks, &root);
         assert!(extras.eval_constraint_values(&model).is_err());
+    }
+
+    struct AfterEvolveCaptureHooks {
+        seen_best_chi2: Vec<f64>,
+        response: Result<Option<String>, StarError>,
+    }
+
+    impl AsteroCaseHooks for AfterEvolveCaptureHooks {
+        fn set_param(
+            &mut self,
+            _bundle: &mut InlistBundle,
+            _ctrl: &AsteroSearchControls,
+            _name: &str,
+            _val: f64,
+        ) -> Result<(), StarError> {
+            Ok(())
+        }
+
+        fn set_constraint_value(
+            &mut self,
+            _model: &StarModel,
+            _ctrl: &AsteroSearchControls,
+            _name: &str,
+        ) -> Result<f64, StarError> {
+            Ok(0.0)
+        }
+
+        fn extras_after_evolve(
+            &mut self,
+            _model: &StarModel,
+            best_chi2: f64,
+        ) -> Result<Option<String>, StarError> {
+            self.seen_best_chi2.push(best_chi2);
+            self.response.clone()
+        }
+    }
+
+    fn make_after_evolve_test_extras<'a, 'h>(
+        ctrl: &'a AsteroSearchControls,
+        hooks: &'h mut AfterEvolveCaptureHooks,
+        root: &'a Path,
+        best_sample: Option<AsteroSampleResult>,
+    ) -> AsteroTrackExtras<'a, 'h> {
+        AsteroTrackExtras {
+            ctrl,
+            hooks: Some(hooks),
+            after_evolve_termination: None,
+            params: ctrl.first_params(),
+            sample_number: 1,
+            case_dir: root,
+            output_root: root,
+            best_sample,
+            best_model: None,
+            averages: SampleAverages::NONE,
+            bad_count: 0,
+            astero_using_revised_max_yr_dt: false,
+            astero_revised_max_yr_dt: 1.0e8,
+            astero_max_dt_next: 1.0e99,
+            constraint_values: [0.0; MAX_CONSTRAINTS],
+            checked_model_number: None,
+            eval_error: None,
+        }
+    }
+
+    #[test]
+    fn test_extras_after_evolve_receives_best_chi2_and_sets_termination() {
+        let ctrl = AsteroSearchControls::default();
+        let root = Path::new(".");
+        let mut model = StarModel::new(
+            4,
+            vec![1],
+            flexmesa_star::controls::StarJobControls::default(),
+            flexmesa_star::controls::StarControls::default(),
+        );
+
+        let mut no_sample_hooks = AfterEvolveCaptureHooks {
+            seen_best_chi2: Vec::new(),
+            response: Ok(None),
+        };
+        {
+            let mut extras = make_after_evolve_test_extras(
+                &ctrl,
+                &mut no_sample_hooks,
+                root,
+                None,
+            );
+            StarExtras::extras_after_evolve(&mut extras, &mut model)
+                .expect("Ok(None) must succeed");
+            assert_eq!(extras.after_evolve_termination, None);
+        }
+        assert_eq!(no_sample_hooks.seen_best_chi2, vec![-1.0]);
+
+        let mut xtra1_hooks = AfterEvolveCaptureHooks {
+            seen_best_chi2: Vec::new(),
+            response: Ok(Some(String::from("  xtra1  "))),
+        };
+        {
+            let mut extras = make_after_evolve_test_extras(
+                &ctrl,
+                &mut xtra1_hooks,
+                root,
+                Some(sample(2.800_488, 4.57e9, 734)),
+            );
+            StarExtras::extras_after_evolve(&mut extras, &mut model)
+                .expect("xtra1 must succeed");
+            assert_eq!(
+                extras.after_evolve_termination.as_deref(),
+                Some("xtra1")
+            );
+        }
+        assert_eq!(xtra1_hooks.seen_best_chi2, vec![2.800_488]);
+
+        let mut empty_hooks = AfterEvolveCaptureHooks {
+            seen_best_chi2: Vec::new(),
+            response: Ok(Some(String::from("   "))),
+        };
+        let mut extras = make_after_evolve_test_extras(
+            &ctrl,
+            &mut empty_hooks,
+            root,
+            Some(sample(2.8, 4.57e9, 734)),
+        );
+        let err = StarExtras::extras_after_evolve(&mut extras, &mut model)
+            .expect_err("blank termination code must fail");
+        assert!(matches!(err, StarError::InvalidInput(_)));
     }
 }

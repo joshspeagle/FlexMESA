@@ -623,9 +623,8 @@ digest = "61c0a560093e701477aff6315aa8f34a0ffc113d0032ddc0c10964692bebad08"
 [[cases]]
 suite = "astero"
 case = "example_astero"
-status = "unported"
+status = "ported"
 digest = "7333be5fc5a0a61015768a1d0ea4f98c8b855ce96cd954a0939be896b1587e10"
-issue = "#231"
 
 [[cases]]
 suite = "astero"

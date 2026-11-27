@@ -163,6 +163,61 @@ class SearchAsteroExtras:
         return _search_set_constraint_value(snap, name)
 
 
+# astero/test_suite/example_astero/src/run_star_extras.f90:199-227
+_EXAMPLE_ASTERO_AFTER_EVOLVE_DIGEST = (
+    "ef3e899136b487763e84db7254b9184e5a4760ce66031a79f2de2bb9b3bd54a8"
+)
+
+
+class ExampleAsteroExtras(SearchAsteroExtras):
+    """Ported `extras_after_evolve` for `astero/example_astero`.
+
+    Upstream:
+    `astero/test_suite/example_astero/src/run_star_extras.f90:199-227`.
+    """
+
+    def __init__(self) -> None:
+        super().__init__(unported_routines=())
+        self.best_chi2: float | None = None
+        self.termination_code_str: str | None = None
+        self.testhub_extras: dict[str, float] = {}
+
+    def extras_after_evolve(
+        self, snap: dict[str, Any]
+    ) -> dict[str, str] | None:
+        """Check `best_chi2` bounds and set `t_xtra1` on `(1, 15)`.
+
+        Args:
+            snap: Post-evolve snapshot containing `best_chi2` and stellar
+                surface state.
+
+        Returns:
+            `{"termination_code_slot": "t_xtra1", "termination_code_str":
+            "good chi^2"}` when `1.0 < best_chi2 < 15.0`, or `None` otherwise
+            after logging the diagnostic branch and recording
+            `testhub_extras["chi2"] = best_chi2`.
+        """
+        best_chi2 = float(snap["best_chi2"])
+        self.best_chi2 = best_chi2
+        self.testhub_extras = {"chi2": best_chi2}
+        self.termination_code_str = None
+        print(f"best_chi2 {best_chi2}")
+        if 1.0 < best_chi2 < 15.0:
+            print("chi square within limit")
+            self.termination_code_str = "good chi^2"
+            return {
+                "termination_code_slot": "t_xtra1",
+                "termination_code_str": "good chi^2",
+            }
+        if best_chi2 <= 0.0:
+            print("ERROR: failed to evaluate chi square")
+        elif best_chi2 <= 1.0:
+            print("bogus chi square ???  value too small??")
+        else:
+            print("ERROR: chi square too large")
+        return None
+
+
 class FastFromFileAsteroExtras(SearchAsteroExtras):
     """`set_param` of fast_from_file: the shared cases plus `semiconv`,
     `thermohal` and `diffusion`.
@@ -1285,6 +1340,12 @@ def match_astero_extras(norm_star: str, digest: Any) -> Any:
     if set_constraint_value != _SEARCH_SET_CONSTRAINT_VALUE_DIGEST:
         return None
     if set_param == _SEARCH_SET_PARAM_DIGEST:
+        if (
+            unported == ("extras_after_evolve",)
+            and routines.get("extras_after_evolve")
+            == _EXAMPLE_ASTERO_AFTER_EVOLVE_DIGEST
+        ):
+            return ExampleAsteroExtras()
         return SearchAsteroExtras(unported)
     if set_param == _FAST_FROM_FILE_SET_PARAM_DIGEST:
         return FastFromFileAsteroExtras(unported)

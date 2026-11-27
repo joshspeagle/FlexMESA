@@ -36,7 +36,6 @@ _EXPECTED_UNPORTED_STAR: dict[str, type[Any]] = {
 }
 
 _EXPECTED_UNPORTED_ASTERO: dict[str, type[Any]] = {
-    "example_astero": astero_extras.SearchAsteroExtras,
     "fast_from_file": astero_extras.FastFromFileAsteroExtras,
     "fast_scan_grid": astero_extras.SearchAsteroExtras,
     "fast_simplex": astero_extras.SearchAsteroExtras,
@@ -330,7 +329,7 @@ def test_relax_composition_j_entropy_surface_l_lsun_fallback_and_guard(
 
 
 def test_wave3_ledger_counts_and_unported_audit() -> None:
-    """All 12 unported `star` and 4 `astero` cases match ledger and guards."""
+    """All 12 unported `star` and 3 `astero` cases match ledger and guards."""
     for case_name, expected_cls in _EXPECTED_UNPORTED_STAR.items():
         case_dir = harness_runner.resolve_case_dir("star", case_name)
         assert (
@@ -352,6 +351,12 @@ def test_wave3_ledger_counts_and_unported_audit() -> None:
             case_extras.classify_case_extras("astero", case_dir) == "unported"
         )
 
+    ex_dir = harness_runner.resolve_case_dir("astero", "example_astero")
+    ex_matched = case_extras.match_case_extras("astero", ex_dir)
+    assert isinstance(ex_matched, astero_extras.ExampleAsteroExtras)
+    assert ex_matched.unported_routines == ()
+    assert case_extras.classify_case_extras("astero", ex_dir) == "ported"
+
     ledger_path = (
         pathlib.Path(__file__).resolve().parents[1]
         / "benchmarks"
@@ -363,6 +368,7 @@ def test_wave3_ledger_counts_and_unported_audit() -> None:
     by_case = {(r["suite"], r["case"]): r for r in rows}
     assert by_case[("star", "make_sdb")]["status"] == "ported"
     assert by_case[("star", "tzo")]["status"] == "ported"
+    assert by_case[("astero", "example_astero")]["status"] == "ported"
     unported_star = {
         r["case"]
         for r in rows

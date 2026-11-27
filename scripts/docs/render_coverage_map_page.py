@@ -324,8 +324,10 @@ def render_coverage_map_markdown(repo_root: pathlib.Path) -> str:
             "stepping remain partial or unverified.",
             "- **Bundled Codes & Plotting (`#170`-`#173`)**: Upstream `GYRE`, "
             f"`ADIPLS`, and `STELLA` (`{bundled_loc:,}` combined upstream LOC) "
-            "are currently unported (`eval_linear_oscillation_modes` uses an "
-            "internal adiabatic BVP stub), and `flexmesa.plotting` provides "
+            "are the bundled codes: `GYRE` and `ADIPLS` are partly ported to "
+            "Safe Rust (`flexmesa-gyre`, `flexmesa-adipls`; per-routine "
+            "status in `notes/audit/routine_table.md`), `STELLA` follows "
+            "`v0.1.0` (`#172`), and `flexmesa.plotting` provides "
             f"`{plot_counts['flexmesa_plot_builders']}` Matplotlib builders "
             f"against `{plot_counts['upstream_panel_modules']}` upstream "
             "`PGSTAR`/`PGBINARY` panel modules.",

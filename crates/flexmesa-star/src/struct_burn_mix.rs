@@ -313,6 +313,16 @@ pub fn op_split_burn_zones(
         .collect();
 
     let mut max_burn_iters = 0_usize;
+    // Upstream calls `do_eos_for_cell` for each zone right after `burn1_zone`
+    // returns (`struct_burn_mix.f90:896-907`). It is not ported here: the
+    // trailing `do1_net` in `burn1_zone` (`:1111`) runs before it and reads
+    // only `xa(:,k)`, `T`, `lnT`, `rho`, `lnd`, `abar`, `zbar`, `z2bar`, `ye`,
+    // `eta`, `d_eos_dlnT(i_eta)`, `d_eos_dlnd(i_eta)` and the rate factors
+    // (`net.f90:104-262`), all taken before the refresh. Later zones' burns
+    // are independent of earlier zones, and the next reader is
+    // `set_vars_if_needed` (`:112`), which reruns basic, micro, net and
+    // MLT variables for every zone (`hydro_vars.f90:62-95`) because
+    // `need_to_setvars` is set below.
     // `star/private/struct_burn_mix.f90:918`: set after the zone loop, before
     // the error return.
     model.aux.need_to_setvars = true;

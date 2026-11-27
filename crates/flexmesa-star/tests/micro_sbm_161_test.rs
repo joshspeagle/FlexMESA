@@ -66,11 +66,6 @@ fn test_do_struct_burn_mix_op_split_burn_preserves_split_outputs_and_neu() {
     let nz = model.nz;
     let sp = model.species;
     let kc = nz - 1;
-    let i_h1 = model
-        .iso_names
-        .iter()
-        .position(|s| s == "h1")
-        .expect("h1 in approx21");
 
     model.controls.do_mix = false;
     model.controls.op_split_burn = true;
@@ -79,6 +74,8 @@ fn test_do_struct_burn_mix_op_split_burn_preserves_split_outputs_and_neu() {
     assert!(flexmesa_math::exp(model.ln_t_start[kc]) >= 1.2e7);
 
     let xa_pre_step = model.xa.clone();
+    let mut clone_before_step = model.clone();
+    clone_before_step.controls.op_split_burn = true;
     let dt = 10.0 * SECYER;
     let rep = do_struct_burn_mix(&mut model, dt, true, true, &[])
         .expect("op_split_burn do_struct_burn_mix");
@@ -104,14 +101,25 @@ fn test_do_struct_burn_mix_op_split_burn_preserves_split_outputs_and_neu() {
         .iter()
         .all(|&v| v == 0.0));
 
-    let expected_dxdt_h1 =
-        (model.xa[kc * sp + i_h1] - xa_pre_step[kc * sp + i_h1]) / dt;
-    assert!(
-        (model.dxdt_nuc[kc * sp + i_h1] - expected_dxdt_h1).abs()
-            <= 1.0e-15 * expected_dxdt_h1.abs().max(1.0e-30),
-        "split-burn dxdt_nuc[h1]={} vs expected={expected_dxdt_h1}",
-        model.dxdt_nuc[kc * sp + i_h1]
-    );
+    // `dxdt_nuc` is `(xa_right_after_burn - xa_start) / dt` for the zone
+    // (`struct_burn_mix.f90:1132-1134`), not a function of the `xa` left by the
+    // solver. Run the split-burn routine alone on a clone and compare bits.
+    let mut burn_only = clone_before_step;
+    op_split_burn_zones(&mut burn_only, dt).expect("op_split_burn_zones");
+    for j in 0..sp {
+        let expected =
+            (burn_only.xa[kc * sp + j] - xa_pre_step[kc * sp + j]) / dt;
+        assert_eq!(
+            burn_only.dxdt_nuc[kc * sp + j].to_bits(),
+            expected.to_bits(),
+            "species {j}"
+        );
+        assert_eq!(
+            model.dxdt_nuc[kc * sp + j].to_bits(),
+            expected.to_bits(),
+            "species {j} after do_struct_burn_mix"
+        );
+    }
 
     // Thermal neutrino losses must match fresh post-burn composition.
     let mut neu_ref = model.clone();

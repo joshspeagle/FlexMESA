@@ -551,10 +551,11 @@ fn run_struct_burn_mix_core(
     if op_split_burn {
         let nz = model.nz;
         let sp = model.species;
+        // `burn_avg_epsnuc` is not cleared here upstream
+        // (`struct_burn_mix.f90:81-97`); `do_burn` sets it per zone.
         if model.aux.burn_avg_epsnuc.len() != nz {
             model.aux.burn_avg_epsnuc.resize(nz, 0.0);
         }
-        model.aux.burn_avg_epsnuc.fill(0.0);
         if model.aux.burn_num_iters.len() != nz {
             model.aux.burn_num_iters.resize(nz, 0);
         }
@@ -593,8 +594,12 @@ fn run_struct_burn_mix_core(
     }
 
     if op_split_burn && do_burn {
-        let e_before: f64 =
-            (0..model.nz).map(|k| model.energy[k] * model.dm[k]).sum();
+        // `struct_burn_mix.f90:101-117`: one accumulator, subtracting the
+        // pre-burn terms and then adding the post-burn terms.
+        let mut total = 0.0_f64;
+        for k in 0..model.nz {
+            total -= model.energy[k] * model.dm[k];
+        }
         op_split_burn_zones(model, dt)?;
         // `star/private/struct_burn_mix.f90:112`: `set_vars_if_needed` after
         // `do_burn` while `doing_struct_burn_mix == true` refreshes EOS, neu,
@@ -611,9 +616,10 @@ fn run_struct_burn_mix_core(
             // `star/private/hydro_vars.f90:653`.
             model.aux.need_to_setvars = false;
         }
-        let e_after: f64 =
-            (0..model.nz).map(|k| model.energy[k] * model.dm[k]).sum();
-        model.aux.non_epsnuc_energy_change_from_split_burn = e_after - e_before;
+        for k in 0..model.nz {
+            total += model.energy[k] * model.dm[k];
+        }
+        model.aux.non_epsnuc_energy_change_from_split_burn = total;
     }
 
     if do_mix {
@@ -672,9 +678,12 @@ pub fn do_struct_burn_mix(
     model.aux.non_epsnuc_energy_change_from_split_burn = 0.0;
     model.aux.step_hist.burn_max_num_substeps = 0;
 
-    let do_burn =
-        model.controls.do_burn && model.controls.dxdt_nuc_factor > 0.0;
-    let do_mix = model.controls.do_mix && model.controls.mix_factor > 0.0;
+    // `struct_burn_mix.f90:79-80`: `s% do_burn` and `s% do_mix` are assigned,
+    // not combined with their previous values, and persist after the step.
+    let do_burn = model.controls.dxdt_nuc_factor > 0.0;
+    let do_mix = model.controls.mix_factor > 0.0;
+    model.controls.do_burn = do_burn;
+    model.controls.do_mix = do_mix;
 
     let step_res = run_struct_burn_mix_core(
         model,

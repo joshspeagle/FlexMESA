@@ -8,9 +8,9 @@ Generated mechanically by `flexmesa harness` from `benchmarks/history_harness/ca
 | Metric | Count |
 | :--- | ---: |
 | Target `v0.1.0` cases (MESA `26.4.1`, Zenodo `19722306`) | 106 (`90` star, `8` binary, `8` astero) |
-| Stored MESA `26.4.1` references (`mesa_26_4_1`) | 102 |
+| Stored MESA `26.4.1` references (`mesa_26_4_1`) | 103 |
 | Interim `0b2e6bb` references (`interim_0b2e6bb`, diagnostic only; never used for acceptance) | 0 |
-| Cases awaiting `26.4.1` reference (`no reference yet`) | 4 |
+| Cases awaiting `26.4.1` reference (`no reference yet`) | 3 |
 | Cases selected in this table | 106 |
 | Cases executed in this run | 106 |
 | Cases accepted by strict control validation (`#147`) | 94 (92 took at least one step) |
@@ -19,7 +19,7 @@ Generated mechanically by `flexmesa harness` from `benchmarks/history_harness/ca
 | Diagnostic runs reaching upstream termination | 3 |
 | Acceptance passes against MESA `26.4.1` (`pass`) | 63 |
 | Interim `0b2e6bb` comparisons within manifest tolerance | 0 |
-| Declared known gaps (`known_gaps.toml`) | 39 |
+| Declared known gaps (`known_gaps.toml`) | 40 |
 | Undeclared failures | 0 |
 
 ## Per-Case Status and Reference Availability
@@ -99,7 +99,7 @@ Generated mechanically by `flexmesa harness` from `benchmarks/history_harness/ca
 | `star` | `rsp_Delta_Scuti` | `mesa_26_4_1` | `extras_finish_step` | strict | `extras_finish_step` | 7973 (5810) | 0 (0) | 0.0 [0] (3.2 [1890/582r]) | - | 0.00% (0) | +0.14% | `log_L`: 2.277e-08 | - | #162 | declared gap (#162) |
 | `star` | `rsp_RR_Lyrae` | `mesa_26_4_1` | `extras_finish_step` | strict | `extras_finish_step` | 7220 (7220) | 0 (0) | 0.0 [0] (2.9 [2104/723r]) | - | 0.00% (0) | -0.00% | `log_L`: 1.544e-10 | - | - | pass |
 | `star` | `rsp_Type_II_Cepheid` | `mesa_26_4_1` | `extras_finish_step` | strict | `extras_finish_step` | 14680 (14683) | 0 (0) | 0.0 [0] (3.6 [5366/1470r]) | - | 0.00% (0) | +0.04% | `log_L`: 9.475e-03 | 4392 | #162 | declared gap (#162) |
-| `star` | `rsp_check_2nd_crossing` | `no_reference_yet` | `other_rsp_build_model` | strict | `other_rsp_build_model` | 0 (-) | 0 (-) | - | - | - | - | - | - | - | no reference yet |
+| `star` | `rsp_check_2nd_crossing` | `mesa_26_4_1_artifact` | `other_rsp_build_model` | strict | `other_rsp_build_model` | 0 (-) | 0 (-) | - | - | - | - | - | - | #162 | declared gap (#162) |
 | `star` | `rsp_gyre` | `mesa_26_4_1` | `extras_finish_step` | strict | `extras_finish_step` | 6215 (6215) | 0 (0) | 0.0 [0] (2.0 [1247/623r]) | - | 0.00% (0) | -0.00% | `log_L`: 6.663e-11 | - | - | pass |
 | `star` | `rsp_save_and_load_file` | `mesa_26_4_1` | `extras_finish_step` | strict | `extras_finish_step` | 7266 (7216) | 0 (0) | 0.0 [0] (3.0 [2167/723r]) | - | 0.00% (0) | -0.00% | `log_L`: 1.265e-10 | - | - | pass |
 | `star` | `semiconvection` | `mesa_26_4_1` | `xa_central_lower_limit` | strict | `xa_central_lower_limit` | 293 (293) | 0 (0) | 7.2 [2094] (7.1 [221/31r]) | - | 0.00% (0) | +0.00% | `log_Teff`: 0.000e+00 | - | - | pass |

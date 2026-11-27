@@ -19,6 +19,7 @@ from typing import Any
 from flexmesa import _dispatch
 from flexmesa.data import fetch
 from flexmesa.testing import (
+    _case_verdict,
     artifact_compare,
     baseline_regression,
     case_budgets,
@@ -1187,11 +1188,7 @@ def _render_harness_figures(
     fig_links: dict[tuple[str, str], str] = {}
     for rec in records:
         entry = entry_by_key[rec.suite, rec.case]
-        if (
-            not rec.executed
-            or entry.reference_status == "no_reference_yet"
-            or not entry.reference_path
-        ):
+        if not rec.executed or not _case_verdict.has_history_reference(entry):
             continue
         hist_p = harness_runner.locate_written_history(
             rec.suite, work_root / rec.suite / rec.case, True

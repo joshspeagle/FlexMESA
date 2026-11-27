@@ -542,9 +542,9 @@ def verify_port_manifest_impl(
             baseline_harness_json.read_text(encoding="utf-8")
         )
         for rec in payload.get("cases", payload.get("results", [])):
-            if (
-                rec.get("verdict") == "pass"
-                and rec.get("reference_status") == "mesa_26_4_1"
+            if rec.get("verdict") == "pass" and rec.get("reference_status") in (
+                "mesa_26_4_1",
+                "mesa_26_4_1_artifact",
             ):
                 passing_cases.add(f"{rec.get('suite')}/{rec.get('case')}")
 

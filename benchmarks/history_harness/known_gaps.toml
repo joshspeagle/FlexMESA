@@ -124,6 +124,11 @@ issue = "#162"
 reason = "Strict run reaches extras_finish_step in [14680] steps (MESA [14683]); final values out of tolerance: log_L, log_Teff; track columns out of tolerance: log_Teff, log_L (first at step 4392) (Train 14 campaign; #162)."
 [[gaps]]
 suite = "star"
+case = "rsp_check_2nd_crossing"
+issue = "#162"
+reason = "Zero-step instability-strip scan judged against committed MESA 26.4.1 artifact 7B_2nd_crossing.data and models_stdout.txt (DECISIONS #76); hook output and stdout blocks are wired on Train 16 (#606), awaiting campaign re-measurement and remaining RSP/LINA parity within print precision (#606; #162)."
+[[gaps]]
+suite = "star"
 case = "split_burn_big_net"
 issue = "#161"
 reason = "Strict run reaches xa_central_lower_limit in [9] steps (MESA [9]); final values out of tolerance: rel_star_age, log_L, log_Teff, log_center_T; track columns out of tolerance: log_Teff, log_L (first at step 9) (Train 15 campaign; #161)."

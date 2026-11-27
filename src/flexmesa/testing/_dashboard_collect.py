@@ -403,7 +403,7 @@ def collect_harness_summary(repo_root: pathlib.Path) -> dict[str, Any]:
     for rec in records:
         sr = by_suite[rec.suite]
         sr["total"] += 1
-        if rec.reference_status == "mesa_26_4_1":
+        if rec.reference_status in ("mesa_26_4_1", "mesa_26_4_1_artifact"):
             sr["mesa_26_4_1_ref"] += 1
         elif rec.reference_status == "no_reference_yet":
             sr["no_reference_yet"] += 1

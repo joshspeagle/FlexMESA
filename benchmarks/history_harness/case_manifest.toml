@@ -598,15 +598,14 @@ required_termination = "extras_finish_step"
 suite = "star"
 # Post-processes saved history_7M.data in extras_rsp_build_model (0 evolutionary steps; tested in rsp_crossing_test.rs).
 case = "rsp_check_2nd_crossing"
-reference_status = "no_reference_yet"
-reference_path = ""
+reference_status = "mesa_26_4_1_artifact"
+reference_path = "benchmarks/history_harness/reference_artifacts/star/rsp_check_2nd_crossing/7B_2nd_crossing.data"
 required_termination = "other_rsp_build_model"
 
 # Artifact comparison (#606): the case takes 0 steps, so it has no history. The
 # hook's file is compared with the committed MESA 26.4.1 copy. Every tolerance
 # is the print precision of the upstream format statement, one unit in the last
-# printed digit, not a fitted value (to be confirmed by the project lead before
-# the case is switched to reference_status = "mesa_26_4_1_artifact"):
+# printed digit, not a fitted value (DECISIONS #76):
 #   header       1pd26.16     17 significant digits
 #   model_*      1pd20.10     11 significant digits
 #   edge, table  f20.10       1e-10 absolute

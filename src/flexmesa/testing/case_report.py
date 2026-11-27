@@ -76,7 +76,11 @@ def summarize_records(
         s: sum(1 for c in all_cases if c.suite == s)
         for s in case_manifest.VALID_SUITES
     }
-    n_ref_26 = sum(1 for c in all_cases if c.reference_status == "mesa_26_4_1")
+    n_ref_26 = sum(
+        1
+        for c in all_cases
+        if c.reference_status in ("mesa_26_4_1", "mesa_26_4_1_artifact")
+    )
     n_ref_interim = sum(
         1 for c in all_cases if c.reference_status == "interim_0b2e6bb"
     )

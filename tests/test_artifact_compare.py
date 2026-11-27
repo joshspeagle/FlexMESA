@@ -194,14 +194,55 @@ def _judged_entry() -> case_manifest.CaseManifestEntry:
 def test_verdict_is_no_reference_yet_while_status_is_unchanged(
     ref_text: str, spec: artifact_compare.ArtifactSpec
 ) -> None:
-    """Declaring the table does not by itself change the case's verdict."""
-    entry = case_manifest.load_case_manifest().by_key()[KEY]
+    """Declaring the table does not judge a `no_reference_yet` entry."""
+    entry = dataclasses.replace(
+        case_manifest.load_case_manifest().by_key()[KEY],
+        reference_status="no_reference_yet",
+        reference_path="",
+    )
     cmp = artifact_compare.compare_artifact(spec, ref_text, ref_text)
     rec = harness_runner.evaluate_case_record(
         entry, {}, _outcome(), artifact_comparison=cmp
     )
     assert rec.verdict == "no reference yet"
     assert rec.artifact_comparison == cmp
+
+
+def test_live_manifest_uses_mesa_26_4_1_artifact_with_declared_gap(
+    ref_text: str, spec: artifact_compare.ArtifactSpec
+) -> None:
+    """Live manifest judges `rsp_check_2nd_crossing` under gap `#162`."""
+    manifest = case_manifest.load_case_manifest()
+    gaps = case_manifest.load_known_gaps()
+    entry = manifest.by_key()[KEY]
+    assert entry.reference_status == "mesa_26_4_1_artifact"
+    assert entry.artifact is not None
+    assert entry.reference_path == entry.artifact.reference
+    assert gaps[KEY].issue == "#162"
+    assert "#606" in gaps[KEY].reason
+
+    miss_cmp = artifact_compare.compare_artifact(spec, ref_text, None)
+    miss_rec = harness_runner.evaluate_case_record(
+        entry, gaps, _outcome(), artifact_comparison=miss_cmp
+    )
+    assert miss_rec.verdict == "declared gap (#162)"
+    assert not miss_rec.is_undeclared_failure
+    assert not miss_rec.is_stale_known_gap
+
+    pass_cmp = artifact_compare.compare_artifact(spec, ref_text, ref_text)
+    pass_rec = harness_runner.evaluate_case_record(
+        entry, gaps, _outcome(), artifact_comparison=pass_cmp
+    )
+    assert pass_rec.verdict == "pass"
+    assert pass_rec.is_stale_known_gap
+
+    _, _, records = case_report.build_manifest_inventory_records()
+    summary = case_report.summarize_records(manifest, records, gaps)
+    assert not summary["undeclared_failures"]
+    stale = [str(item) for item in summary["stale_known_gaps"]]
+    assert not any("rsp_check_2nd_crossing" in item for item in stale)
+    row_rec = next(r for r in records if (r.suite, r.case) == KEY)
+    assert row_rec.verdict == "declared gap (#162)"
 
 
 def test_verdict_passes_when_artifact_steps_and_termination_agree(

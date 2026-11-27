@@ -9,10 +9,10 @@ Instead of capping steps or loosening checks to force green runs, unfinished or 
 
 | Suite | Target Cases | Stored `26.4.1` Refs | `no_reference_yet` | Strict-Validated | Diagnostic Runs | Reach Upstream Term | Declared Gaps | Verified Pass |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| `star` | 90 | 86 | 4 | 78 | 12 | 75 | 29 | 56 |
+| `star` | 90 | 87 | 3 | 78 | 12 | 75 | 30 | 56 |
 | `binary` | 8 | 8 | 0 | 8 | 0 | 8 | 4 | 4 |
 | `astero` | 8 | 8 | 0 | 8 | 0 | 7 | 2 | 3 |
-| **Total** | **106** | **102** | **4** | **94** | **12** | **90** | **35** | **63** |
+| **Total** | **106** | **103** | **3** | **94** | **12** | **90** | **36** | **63** |
 
 `Strict-Validated` counts cases whose unmodified inlists pass strict control validation (`#147`). `Diagnostic Runs` counts cases that strict validation rejects and that were rerun with the unsupported controls ignored; their numbers show where the engine stands and can never count as a pass (`DECISIONS #26`). `Reach Upstream Term` counts runs of either kind.
 
@@ -28,7 +28,6 @@ Cases lacking a committed MESA `26.4.1` baseline report `no reference yet` and c
 | `star` | `1.4M_ms_op_mono` | `max_model_number` | Awaiting MESA 26.4.1 reference run |
 | `star` | `make_pre_ccsn_13bvn` | `fe_core_infall_limit` | Awaiting MESA 26.4.1 reference run |
 | `star` | `radiative_levitation` | `max_age` | Awaiting MESA 26.4.1 reference run |
-| `star` | `rsp_check_2nd_crossing` | `other_rsp_build_model` | Awaiting MESA 26.4.1 reference run |
 
 ## Declared Gaps by Tracking Issue
 
@@ -36,14 +35,14 @@ Cases lacking a committed MESA `26.4.1` baseline report `no reference yet` and c
 | :--- | ---: | :--- |
 | [#161](https://github.com/joshspeagle/FlexMESA/issues/161) | 13 | Restore upstream EOS, opacity, network, and atm control paths |
 | [#154](https://github.com/joshspeagle/FlexMESA/issues/154) | 5 | Align `timestep.rs` and `star` mass-change `do_adjust_mass` |
+| [#162](https://github.com/joshspeagle/FlexMESA/issues/162) | 5 | Align `astero` search and chi-squared drivers |
 | [#157](https://github.com/joshspeagle/FlexMESA/issues/157) | 4 | Restore MLT/TDC controls and remove non-upstream fallbacks |
-| [#162](https://github.com/joshspeagle/FlexMESA/issues/162) | 4 | Align `astero` search and chi-squared drivers |
 | [#158](https://github.com/joshspeagle/FlexMESA/issues/158) | 3 | Align shellular rotation solver variables and Spruit-Tayler |
 | [#587](https://github.com/joshspeagle/FlexMESA/issues/587) | 3 | Open #140 parity sub-issue |
 | [#160](https://github.com/joshspeagle/FlexMESA/issues/160) | 2 | Align coupled `BinarySystem` step ordering, tides, and RLOF |
 | [#231](https://github.com/joshspeagle/FlexMESA/issues/231) | 1 | Open #140 parity sub-issue |
 
-## Complete Known-Gaps Registry (35 Cases)
+## Complete Known-Gaps Registry (36 Cases)
 
 | Suite | Case | Issue | Expected Term | Baseline Outcome | Mechanism |
 | :--- | :--- | :--- | :--- | :--- | :--- |
@@ -69,6 +68,7 @@ Cases lacking a committed MESA `26.4.1` baseline report `no reference yet` and c
 | `star` | `ppisn` | [#154](https://github.com/joshspeagle/FlexMESA/issues/154) | `Successful test: evolved 100 days past first relax` | `error` (0 steps; diagnostic (6 controls ignored)) | Case requires custom other_wind hook alongside unported massive-star relaxation, rotation, retry, and net controls (#154, #152, #158, #161, #231). |
 | `star` | `rsp_Delta_Scuti` | [#162](https://github.com/joshspeagle/FlexMESA/issues/162) | `extras_finish_step` | `extras_finish_step` (7973 steps; strict) | Strict run reaches extras_finish_step in [7973] steps (MESA [7973]); final values out of tolerance: rel_star_age; MESA writes models 5820 to 7973 to map_history.data, which the reference does not include, so the comparison ends at model 5810 (Train 14 campaign; #162). |
 | `star` | `rsp_Type_II_Cepheid` | [#162](https://github.com/joshspeagle/FlexMESA/issues/162) | `extras_finish_step` | `extras_finish_step` (14680 steps; strict) | Strict run reaches extras_finish_step in [14680] steps (MESA [14683]); final values out of tolerance: log_L, log_Teff; track columns out of tolerance: log_Teff, log_L (first at step 4392) (Train 14 campaign; #162). |
+| `star` | `rsp_check_2nd_crossing` | [#162](https://github.com/joshspeagle/FlexMESA/issues/162) | `other_rsp_build_model` | `other_rsp_build_model` (0 steps; strict) | Zero-step instability-strip scan judged against committed MESA 26.4.1 artifact 7B_2nd_crossing.data and models_stdout.txt (DECISIONS #76); hook output and stdout blocks are wired on Train 16 (#606), awaiting campaign re-measurement and remaining RSP/LINA parity within print precision (#606; #162). |
 | `star` | `split_burn_big_net` | [#161](https://github.com/joshspeagle/FlexMESA/issues/161) | `xa_central_lower_limit` | `xa_central_lower_limit` (9 steps; strict) | Strict run reaches xa_central_lower_limit in [9] steps (MESA [9]); final values out of tolerance: rel_star_age, log_L, log_Teff, log_center_T; track columns out of tolerance: log_Teff, log_L (first at step 9) (Train 15 campaign; #161). |
 | `star` | `twin_studies` | [#154](https://github.com/joshspeagle/FlexMESA/issues/154) | `forced_stop` | `timeout` (2634 steps; diagnostic (1 controls ignored)) | Diagnostic run (1 unsupported control ignored) ends on the 3000 s campaign budget after 2634 history rows (450 retries; runner dependent); MESA takes [80, 80, 80] steps; final values out of tolerance: rel_star_age, log_L, log_Teff, log_R, log_center_T, log_center_Rho; track columns out of tolerance: log_L, log_Teff, log_R, log_center_T, log_center_Rho, rel_num_zones (Train 15 campaign; #154). |
 | `star` | `tzo` | [#161](https://github.com/joshspeagle/FlexMESA/issues/161) | `PASS: Have reached requested NS mass` | `timeout` (724 steps; diagnostic (1 controls ignored)) | Diagnostic run (1 unsupported control ignored) ends on the 3000 s campaign budget after 724 history rows (348 retries; runner dependent); MESA takes [1, 1, 467] steps; final values out of tolerance: rel_star_age, log_L, log_Teff, log_R, log_center_T, log_center_Rho; track columns out of tolerance: rel_num_zones, log_L, log_R, log_center_T, log_center_Rho, log_Teff (first at step 4) (Train 15 campaign; #161). |
@@ -168,7 +168,7 @@ from flexmesa.testing import case_manifest
 manifest = case_manifest.load_case_manifest()
 gaps = case_manifest.load_known_gaps()
 assert len(manifest.cases) == 106
-assert len(gaps) == 39
+assert len(gaps) == 40
 no_ref = [
     c.case for c in manifest.cases
     if c.reference_status == "no_reference_yet"

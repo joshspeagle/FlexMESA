@@ -51,8 +51,13 @@ def test_case_manifest_covers_all_106_mesa_26_4_1_cases_and_known_gaps() -> (
     n_none = sum(
         1 for c in manifest.cases if c.reference_status == "no_reference_yet"
     )
+    n_art = sum(
+        1
+        for c in manifest.cases
+        if c.reference_status == "mesa_26_4_1_artifact"
+    )
     n_26 = sum(1 for c in manifest.cases if c.reference_status == "mesa_26_4_1")
-    assert (n_26, n_interim, n_none) == (102, 0, 4)
+    assert (n_26, n_art, n_interim, n_none) == (102, 1, 0, 3)
 
     by_key = manifest.by_key()
     assert (
@@ -63,7 +68,13 @@ def test_case_manifest_covers_all_106_mesa_26_4_1_cases_and_known_gaps() -> (
 
     root = case_manifest.repo_root()
     for entry in manifest.cases:
-        if entry.reference_status != "no_reference_yet":
+        if entry.reference_status == "mesa_26_4_1_artifact":
+            assert entry.artifact is not None
+            assert entry.reference_path == entry.artifact.reference
+            assert (root / entry.reference_path).is_file()
+            if entry.artifact.stdout_reference:
+                assert (root / entry.artifact.stdout_reference).is_file()
+        elif entry.reference_status != "no_reference_yet":
             ref_file = harness_runner.resolve_reference_history_path(
                 entry.reference_path, root_dir=root
             )

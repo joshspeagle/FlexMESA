@@ -2175,3 +2175,9 @@ path = "tests/test_pulse_live_compare.py"
 language = "python"
 module = "gyre"
 kind = "invariant"
+
+[[tests]]
+path = "crates/flexmesa-rates/tests/reaclib_handle_coverage_test.rs"
+language = "rust"
+module = "rates"
+kind = "invariant"

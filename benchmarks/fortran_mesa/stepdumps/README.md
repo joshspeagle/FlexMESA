@@ -217,3 +217,26 @@ mesa-stepdump-windows-v1.tar.zst` packs the windows it finds under the given
 directories (matching each file's header to a manifest entry) into the
 opt-in bundle, with `PROVENANCE.json`, a copy of `windows.toml` and a per-file
 SHA-256 manifest.
+
+## Causal checks with a private copy of a case
+
+To test a suspected cause inside MESA itself without editing or rebuilding
+`$MESA_DIR`, work in a disposable private copy of the single test-suite case:
+
+1. **What to copy:** Copy only `$MESA_DIR/<suite>/test_suite/<case>` (its
+   inlists, `src/`, `make/`, `clean`/`mk`/`rn`/`re` scripts, model/column files,
+   and any `photos/` checkpoint needed for `./re`, plus any shared
+   `test_suite` inlist include it references) into a private scratch directory
+   outside `$MESA_DIR`. Leave `$MESA_DIR` untouched.
+2. **Build and run against the unmodified tree:** Register the hypothesized
+   perturbation only in the scratch copy's `src/run_star_extras.f90` (for
+   example via an `other_*` hook such as `other_gradr_factor` gated on an
+   `x_logical_ctrl` switch when the hook runs at the target call site). With
+   `MESA_DIR` and `MESASDK_ROOT` pointing at the unmodified MESA tree (or an
+   already-built step-dump overlay if step-dump records are needed), rebuild
+   only the case executable (`./clean && ./mk`) and run `./rn` or `./re <photo>`
+   from that scratch directory.
+3. **Diagnostic only:** Any run from a modified `run_star_extras.f90` is a
+   one-off causal diagnostic (for example to reproduce an exact ULP shift) and
+   is **never** a MESA reference run, baseline, or golden artifact. Delete the
+   scratch directory after recording the observation.

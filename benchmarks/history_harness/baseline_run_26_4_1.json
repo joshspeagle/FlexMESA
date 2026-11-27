@@ -248,10 +248,10 @@
         "first_diverging_x": null
       },
       "error_message": "",
-      "stage_steps": [
+      "mesa_stage_steps": [
         219
       ],
-      "mesa_stage_steps": [
+      "stage_steps": [
         219
       ],
       "stage_step_deltas": [
@@ -290,10 +290,10 @@
       "strict_rejection": "ValueError: invalid star input: control \"<inlist>\" at line 1: unsupported control(s) (4): &controls::high_logt_op_mono_full_off, &controls::high_logt_op_mono_full_on, &controls::op_mono_method, &controls::use_op_mono_alt_get_kap (pass --allow-unsupported-controls / allow_unsupported_controls=true to opt out)",
       "comparison": null,
       "error_message": "",
+      "mesa_stage_steps": [],
       "stage_steps": [
         10
       ],
-      "mesa_stage_steps": [],
       "stage_step_deltas": [
         null
       ],
@@ -561,10 +561,10 @@
         }
       },
       "error_message": "",
-      "stage_steps": [
+      "mesa_stage_steps": [
         430
       ],
-      "mesa_stage_steps": [
+      "stage_steps": [
         430
       ],
       "stage_step_deltas": [
@@ -852,11 +852,11 @@
         }
       },
       "error_message": "step count differs from MESA at stage 1 (2910 vs 2916)",
-      "stage_steps": [
-        2910
-      ],
       "mesa_stage_steps": [
         2916
+      ],
+      "stage_steps": [
+        2910
       ],
       "stage_step_deltas": [
         -6
@@ -946,7 +946,12 @@
         "first_diverging_step": null,
         "first_diverging_x": null
       },
-      "error_message": "timeout"
+      "error_message": "timeout",
+      "mesa_stage_steps": [
+        856,
+        3180,
+        3834
+      ]
     },
     {
       "suite": "star",
@@ -1209,10 +1214,10 @@
         }
       },
       "error_message": "",
-      "stage_steps": [
+      "mesa_stage_steps": [
         388
       ],
-      "mesa_stage_steps": [
+      "stage_steps": [
         388
       ],
       "stage_step_deltas": [
@@ -1481,10 +1486,10 @@
         }
       },
       "error_message": "",
-      "stage_steps": [
+      "mesa_stage_steps": [
         387
       ],
-      "mesa_stage_steps": [
+      "stage_steps": [
         387
       ],
       "stage_step_deltas": [
@@ -1588,7 +1593,14 @@
           "rel_E_err": 9.619526334842852e-08
         }
       },
-      "error_message": "timeout"
+      "error_message": "timeout",
+      "mesa_stage_steps": [
+        1,
+        295,
+        11578,
+        12129,
+        12558
+      ]
     },
     {
       "suite": "star",
@@ -1862,11 +1874,11 @@
         }
       },
       "error_message": "step count differs from MESA at stage 1 (1031 vs 3380)",
-      "stage_steps": [
-        1031
-      ],
       "mesa_stage_steps": [
         3380
+      ],
+      "stage_steps": [
+        1031
       ],
       "stage_step_deltas": [
         -2349
@@ -2156,11 +2168,11 @@
         }
       },
       "error_message": "step count differs from MESA at stage 1 (2332 vs 2383)",
-      "stage_steps": [
-        2332
-      ],
       "mesa_stage_steps": [
         2383
+      ],
+      "stage_steps": [
+        2332
       ],
       "stage_step_deltas": [
         -51
@@ -2400,7 +2412,10 @@
         "first_diverging_step": 90,
         "first_diverging_x": 6126079.3214681465
       },
-      "error_message": "warning: --allow-unsupported-controls active; continuing past: unsupported control(s) (1): &controls::use_other_alpha_mlt (pass --allow-unsupported-controls / allow_unsupported_controls=true to opt out)"
+      "error_message": "warning: --allow-unsupported-controls active; continuing past: unsupported control(s) (1): &controls::use_other_alpha_mlt (pass --allow-unsupported-controls / allow_unsupported_controls=true to opt out)",
+      "mesa_stage_steps": [
+        2744
+      ]
     },
     {
       "suite": "star",
@@ -2624,10 +2639,10 @@
         "first_diverging_x": null
       },
       "error_message": "",
-      "stage_steps": [
+      "mesa_stage_steps": [
         2358
       ],
-      "mesa_stage_steps": [
+      "stage_steps": [
         2358
       ],
       "stage_step_deltas": [
@@ -2907,11 +2922,11 @@
         }
       },
       "error_message": "step count differs from MESA at stage 1 (777 vs 772)",
-      "stage_steps": [
-        777
-      ],
       "mesa_stage_steps": [
         772
+      ],
+      "stage_steps": [
+        777
       ],
       "stage_step_deltas": [
         5
@@ -3140,10 +3155,10 @@
         "first_diverging_x": null
       },
       "error_message": "",
-      "stage_steps": [
+      "mesa_stage_steps": [
         167
       ],
-      "mesa_stage_steps": [
+      "stage_steps": [
         167
       ],
       "stage_step_deltas": [
@@ -3372,10 +3387,10 @@
         "first_diverging_x": null
       },
       "error_message": "",
-      "stage_steps": [
+      "mesa_stage_steps": [
         50
       ],
-      "mesa_stage_steps": [
+      "stage_steps": [
         50
       ],
       "stage_step_deltas": [
@@ -3605,10 +3620,10 @@
         "first_diverging_x": null
       },
       "error_message": "",
-      "stage_steps": [
+      "mesa_stage_steps": [
         452
       ],
-      "mesa_stage_steps": [
+      "stage_steps": [
         452
       ],
       "stage_step_deltas": [
@@ -3838,10 +3853,10 @@
         "first_diverging_x": null
       },
       "error_message": "",
-      "stage_steps": [
+      "mesa_stage_steps": [
         39
       ],
-      "mesa_stage_steps": [
+      "stage_steps": [
         39
       ],
       "stage_step_deltas": [
@@ -4085,7 +4100,10 @@
         "first_diverging_step": 281,
         "first_diverging_x": 35995.20456877071
       },
-      "error_message": "timeout"
+      "error_message": "timeout",
+      "mesa_stage_steps": [
+        1949
+      ]
     },
     {
       "suite": "star",
@@ -4337,10 +4355,10 @@
         }
       },
       "error_message": "",
-      "stage_steps": [
+      "mesa_stage_steps": [
         2362
       ],
-      "mesa_stage_steps": [
+      "stage_steps": [
         2362
       ],
       "stage_step_deltas": [
@@ -4583,7 +4601,10 @@
         "first_diverging_step": 14,
         "first_diverging_x": 38650.333860102684
       },
-      "error_message": "timeout"
+      "error_message": "timeout",
+      "mesa_stage_steps": [
+        459
+      ]
     },
     {
       "suite": "star",
@@ -4616,9 +4637,6 @@
       "strict_rejection": "ValueError: invalid star input: control \"<inlist>\" at line 1: unsupported control(s) (2): &star_job::remove_center_set_zero_v_center, &star_job::remove_initial_center_by_entropy (pass --allow-unsupported-controls / allow_unsupported_controls=true to opt out)",
       "comparison": null,
       "error_message": "step count differs from MESA at stage 1 (0 vs 8621)",
-      "stage_steps": [
-        0
-      ],
       "mesa_stage_steps": [
         34,
         42,
@@ -4626,6 +4644,9 @@
         529,
         8335,
         8621
+      ],
+      "stage_steps": [
+        0
       ],
       "stage_step_deltas": [
         -8621
@@ -4853,10 +4874,10 @@
         "first_diverging_x": null
       },
       "error_message": "",
-      "stage_steps": [
+      "mesa_stage_steps": [
         75
       ],
-      "mesa_stage_steps": [
+      "stage_steps": [
         75
       ],
       "stage_step_deltas": [
@@ -5086,10 +5107,10 @@
         "first_diverging_x": null
       },
       "error_message": "",
-      "stage_steps": [
+      "mesa_stage_steps": [
         108
       ],
-      "mesa_stage_steps": [
+      "stage_steps": [
         108
       ],
       "stage_step_deltas": [
@@ -5127,7 +5148,10 @@
       "n_controls_ignored": 1,
       "strict_rejection": "ValueError: invalid star input: control \"<inlist>\" at line 1: unsupported control(s) (1): &controls::use_other_surface_pt (pass --allow-unsupported-controls / allow_unsupported_controls=true to opt out)",
       "comparison": null,
-      "error_message": "ValueError: invalid star input: use_other_build_initial_model = .true. requires an other_build_initial_model hook"
+      "error_message": "ValueError: invalid star input: use_other_build_initial_model = .true. requires an other_build_initial_model hook",
+      "mesa_stage_steps": [
+        459
+      ]
     },
     {
       "suite": "star",
@@ -5360,11 +5384,11 @@
         "first_diverging_x": 12002243732.127604
       },
       "error_message": "step count differs from MESA at stage 1 (507 vs 537)",
-      "stage_steps": [
-        507
-      ],
       "mesa_stage_steps": [
         537
+      ],
+      "stage_steps": [
+        507
       ],
       "stage_step_deltas": [
         -30
@@ -5593,10 +5617,10 @@
         "first_diverging_x": null
       },
       "error_message": "",
-      "stage_steps": [
+      "mesa_stage_steps": [
         92
       ],
-      "mesa_stage_steps": [
+      "stage_steps": [
         92
       ],
       "stage_step_deltas": [
@@ -5718,10 +5742,10 @@
         "first_diverging_x": null
       },
       "error_message": "",
-      "stage_steps": [
+      "mesa_stage_steps": [
         683
       ],
-      "mesa_stage_steps": [
+      "stage_steps": [
         683
       ],
       "stage_step_deltas": [
@@ -6015,11 +6039,11 @@
         }
       },
       "error_message": "step count differs from MESA at stage 1 (600 vs 487)",
-      "stage_steps": [
-        600
-      ],
       "mesa_stage_steps": [
         487
+      ],
+      "stage_steps": [
+        600
       ],
       "stage_step_deltas": [
         113
@@ -6247,10 +6271,10 @@
         "first_diverging_x": null
       },
       "error_message": "",
-      "stage_steps": [
+      "mesa_stage_steps": [
         36
       ],
-      "mesa_stage_steps": [
+      "stage_steps": [
         36
       ],
       "stage_step_deltas": [
@@ -6480,10 +6504,10 @@
         "first_diverging_x": null
       },
       "error_message": "",
-      "stage_steps": [
+      "mesa_stage_steps": [
         64
       ],
-      "mesa_stage_steps": [
+      "stage_steps": [
         64
       ],
       "stage_step_deltas": [
@@ -6713,10 +6737,10 @@
         "first_diverging_x": null
       },
       "error_message": "",
-      "stage_steps": [
+      "mesa_stage_steps": [
         108
       ],
-      "mesa_stage_steps": [
+      "stage_steps": [
         108
       ],
       "stage_step_deltas": [
@@ -6945,12 +6969,12 @@
         "first_diverging_x": null
       },
       "error_message": "",
-      "stage_steps": [
+      "mesa_stage_steps": [
         933,
         934,
         939
       ],
-      "mesa_stage_steps": [
+      "stage_steps": [
         933,
         934,
         939
@@ -7183,10 +7207,10 @@
         "first_diverging_x": null
       },
       "error_message": "",
-      "stage_steps": [
+      "mesa_stage_steps": [
         123
       ],
-      "mesa_stage_steps": [
+      "stage_steps": [
         123
       ],
       "stage_step_deltas": [
@@ -7453,10 +7477,10 @@
         }
       },
       "error_message": "",
-      "stage_steps": [
+      "mesa_stage_steps": [
         20
       ],
-      "mesa_stage_steps": [
+      "stage_steps": [
         20
       ],
       "stage_step_deltas": [
@@ -7686,10 +7710,10 @@
         "first_diverging_x": null
       },
       "error_message": "",
-      "stage_steps": [
+      "mesa_stage_steps": [
         103
       ],
-      "mesa_stage_steps": [
+      "stage_steps": [
         103
       ],
       "stage_step_deltas": [
@@ -7969,10 +7993,10 @@
         }
       },
       "error_message": "",
-      "stage_steps": [
+      "mesa_stage_steps": [
         1307
       ],
-      "mesa_stage_steps": [
+      "stage_steps": [
         1307
       ],
       "stage_step_deltas": [
@@ -8242,10 +8266,10 @@
         }
       },
       "error_message": "",
-      "stage_steps": [
+      "mesa_stage_steps": [
         190
       ],
-      "mesa_stage_steps": [
+      "stage_steps": [
         190
       ],
       "stage_step_deltas": [
@@ -8475,10 +8499,10 @@
         "first_diverging_x": null
       },
       "error_message": "",
-      "stage_steps": [
+      "mesa_stage_steps": [
         490
       ],
-      "mesa_stage_steps": [
+      "stage_steps": [
         490
       ],
       "stage_step_deltas": [
@@ -8728,11 +8752,11 @@
         "first_diverging_x": 6415.002990995846
       },
       "error_message": "step count differs from MESA at stage 1 (184 vs 188)",
-      "stage_steps": [
-        184
-      ],
       "mesa_stage_steps": [
         188
+      ],
+      "stage_steps": [
+        184
       ],
       "stage_step_deltas": [
         -4
@@ -8959,11 +8983,11 @@
         "first_diverging_x": null
       },
       "error_message": "step count differs from MESA at stage 1 (446 vs 445)",
-      "stage_steps": [
-        446
-      ],
       "mesa_stage_steps": [
         445
+      ],
+      "stage_steps": [
+        446
       ],
       "stage_step_deltas": [
         1
@@ -9202,11 +9226,11 @@
         "first_diverging_x": 47795421.338782094
       },
       "error_message": "step count differs from MESA at stage 1 (567 vs 570)",
-      "stage_steps": [
-        567
-      ],
       "mesa_stage_steps": [
         570
+      ],
+      "stage_steps": [
+        567
       ],
       "stage_step_deltas": [
         -3
@@ -9444,10 +9468,10 @@
         "first_diverging_x": null
       },
       "error_message": "",
-      "stage_steps": [
+      "mesa_stage_steps": [
         2011
       ],
-      "mesa_stage_steps": [
+      "stage_steps": [
         2011
       ],
       "stage_step_deltas": [
@@ -9676,11 +9700,11 @@
         "first_diverging_x": null
       },
       "error_message": "",
-      "stage_steps": [
+      "mesa_stage_steps": [
         84,
         127
       ],
-      "mesa_stage_steps": [
+      "stage_steps": [
         84,
         127
       ],
@@ -9911,10 +9935,10 @@
         "first_diverging_x": null
       },
       "error_message": "",
-      "stage_steps": [
+      "mesa_stage_steps": [
         574
       ],
-      "mesa_stage_steps": [
+      "stage_steps": [
         574
       ],
       "stage_step_deltas": [
@@ -10154,11 +10178,11 @@
         "first_diverging_x": null
       },
       "error_message": "",
-      "stage_steps": [
+      "mesa_stage_steps": [
         572,
         219
       ],
-      "mesa_stage_steps": [
+      "stage_steps": [
         572,
         219
       ],
@@ -10389,10 +10413,10 @@
         "first_diverging_x": null
       },
       "error_message": "",
-      "stage_steps": [
+      "mesa_stage_steps": [
         238
       ],
-      "mesa_stage_steps": [
+      "stage_steps": [
         238
       ],
       "stage_step_deltas": [
@@ -10684,7 +10708,14 @@
           "rel_E_err": 1.9422162016313759e-13
         }
       },
-      "error_message": "timeout"
+      "error_message": "timeout",
+      "mesa_stage_steps": [
+        179,
+        539,
+        828,
+        2607,
+        2998
+      ]
     },
     {
       "suite": "star",
@@ -10904,10 +10935,10 @@
         "first_diverging_x": null
       },
       "error_message": "",
-      "stage_steps": [
+      "mesa_stage_steps": [
         172
       ],
-      "mesa_stage_steps": [
+      "stage_steps": [
         172
       ],
       "stage_step_deltas": [
@@ -11136,11 +11167,11 @@
         "first_diverging_x": null
       },
       "error_message": "",
-      "stage_steps": [
+      "mesa_stage_steps": [
         78,
         136
       ],
-      "mesa_stage_steps": [
+      "stage_steps": [
         78,
         136
       ],
@@ -11409,10 +11440,10 @@
         }
       },
       "error_message": "",
-      "stage_steps": [
+      "mesa_stage_steps": [
         511
       ],
-      "mesa_stage_steps": [
+      "stage_steps": [
         511
       ],
       "stage_step_deltas": [
@@ -11700,13 +11731,13 @@
         }
       },
       "error_message": "step count differs from MESA at stage 2 (1264 vs 1267)",
-      "stage_steps": [
-        1099,
-        1264
-      ],
       "mesa_stage_steps": [
         1099,
         1267
+      ],
+      "stage_steps": [
+        1099,
+        1264
       ],
       "stage_step_deltas": [
         0,
@@ -11975,15 +12006,15 @@
         }
       },
       "error_message": "step count differs from MESA at stage 3 (113 vs 112)",
-      "stage_steps": [
-        76,
-        22,
-        113
-      ],
       "mesa_stage_steps": [
         76,
         22,
         112
+      ],
+      "stage_steps": [
+        76,
+        22,
+        113
       ],
       "stage_step_deltas": [
         0,
@@ -12023,10 +12054,10 @@
       "strict_rejection": "ValueError: invalid star input: control \"<inlist>\" at line 1: unsupported control(s) (1): &controls::use_other_alpha_mlt (pass --allow-unsupported-controls / allow_unsupported_controls=true to opt out)",
       "comparison": null,
       "error_message": "",
+      "mesa_stage_steps": [],
       "stage_steps": [
         4390
       ],
-      "mesa_stage_steps": [],
       "stage_step_deltas": [
         null
       ],
@@ -12294,10 +12325,10 @@
         }
       },
       "error_message": "",
-      "stage_steps": [
+      "mesa_stage_steps": [
         61
       ],
-      "mesa_stage_steps": [
+      "stage_steps": [
         61
       ],
       "stage_step_deltas": [
@@ -12526,10 +12557,10 @@
         "first_diverging_x": null
       },
       "error_message": "",
-      "stage_steps": [
+      "mesa_stage_steps": [
         192
       ],
-      "mesa_stage_steps": [
+      "stage_steps": [
         192
       ],
       "stage_step_deltas": [
@@ -12758,10 +12789,10 @@
         "first_diverging_x": null
       },
       "error_message": "",
-      "stage_steps": [
+      "mesa_stage_steps": [
         196
       ],
-      "mesa_stage_steps": [
+      "stage_steps": [
         196
       ],
       "stage_step_deltas": [
@@ -12839,10 +12870,10 @@
         "first_diverging_x": null
       },
       "error_message": "",
-      "stage_steps": [
+      "mesa_stage_steps": [
         75
       ],
-      "mesa_stage_steps": [
+      "stage_steps": [
         75
       ],
       "stage_step_deltas": [
@@ -13134,11 +13165,11 @@
         }
       },
       "error_message": "step count differs from MESA at stage 1 (134 vs 261)",
-      "stage_steps": [
-        134
-      ],
       "mesa_stage_steps": [
         261
+      ],
+      "stage_steps": [
+        134
       ],
       "stage_step_deltas": [
         -127
@@ -13367,13 +13398,13 @@
         "first_diverging_x": null
       },
       "error_message": "step count differs from MESA at stage 2 (372 vs 377)",
-      "stage_steps": [
-        119,
-        372
-      ],
       "mesa_stage_steps": [
         119,
         377
+      ],
+      "stage_steps": [
+        119,
+        372
       ],
       "stage_step_deltas": [
         0,
@@ -13606,10 +13637,10 @@
         "first_diverging_x": null
       },
       "error_message": "",
-      "stage_steps": [
+      "mesa_stage_steps": [
         546
       ],
-      "mesa_stage_steps": [
+      "stage_steps": [
         546
       ],
       "stage_step_deltas": [
@@ -13647,7 +13678,10 @@
       "n_controls_ignored": 0,
       "strict_rejection": "",
       "comparison": null,
-      "error_message": "ValueError: invalid star input: overshoot_scheme(1) = 'other' requires a custom other_overshooting_scheme hook (default null_other_overshooting_scheme returns ierr = -1)"
+      "error_message": "ValueError: invalid star input: overshoot_scheme(1) = 'other' requires a custom other_overshooting_scheme hook (default null_other_overshooting_scheme returns ierr = -1)",
+      "mesa_stage_steps": [
+        156
+      ]
     },
     {
       "suite": "star",
@@ -13925,7 +13959,10 @@
           "rel_E_err": 2.8643893013084037e-09
         }
       },
-      "error_message": "timeout"
+      "error_message": "timeout",
+      "mesa_stage_steps": [
+        432
+      ]
     },
     {
       "suite": "star",
@@ -13957,7 +13994,10 @@
       "n_controls_ignored": 6,
       "strict_rejection": "ValueError: invalid star input: control \"<inlist>\" at line 1: unsupported control(s) (6): &controls::fill_arrays_with_nans, &controls::initial_he3, &controls::use_other_eval_fp_ft, &controls::use_other_kap, &star_job::change_w_div_wc_flag, &star_job::new_w_div_wc_flag (pass --allow-unsupported-controls / allow_unsupported_controls=true to opt out)",
       "comparison": null,
-      "error_message": "ValueError: invalid star input: use_other_kap = .true. requires an other_kap hook"
+      "error_message": "ValueError: invalid star input: use_other_kap = .true. requires an other_kap hook",
+      "mesa_stage_steps": [
+        4613
+      ]
     },
     {
       "suite": "star",
@@ -14223,11 +14263,11 @@
         "first_diverging_x": 513039.00086768623
       },
       "error_message": "step count differs from MESA at stage 1 (264 vs 260)",
-      "stage_steps": [
-        264
-      ],
       "mesa_stage_steps": [
         260
+      ],
+      "stage_steps": [
+        264
       ],
       "stage_step_deltas": [
         4
@@ -14540,10 +14580,10 @@
         }
       },
       "error_message": "",
-      "stage_steps": [
+      "mesa_stage_steps": [
         7255
       ],
-      "mesa_stage_steps": [
+      "stage_steps": [
         7255
       ],
       "stage_step_deltas": [
@@ -14857,10 +14897,10 @@
         }
       },
       "error_message": "",
-      "stage_steps": [
+      "mesa_stage_steps": [
         7318
       ],
-      "mesa_stage_steps": [
+      "stage_steps": [
         7318
       ],
       "stage_step_deltas": [
@@ -15174,10 +15214,10 @@
         }
       },
       "error_message": "",
-      "stage_steps": [
+      "mesa_stage_steps": [
         7266
       ],
-      "mesa_stage_steps": [
+      "stage_steps": [
         7266
       ],
       "stage_step_deltas": [
@@ -15493,10 +15533,10 @@
         }
       },
       "error_message": "",
-      "stage_steps": [
+      "mesa_stage_steps": [
         7973
       ],
-      "mesa_stage_steps": [
+      "stage_steps": [
         7973
       ],
       "stage_step_deltas": [
@@ -15810,10 +15850,10 @@
         }
       },
       "error_message": "",
-      "stage_steps": [
+      "mesa_stage_steps": [
         7220
       ],
-      "mesa_stage_steps": [
+      "stage_steps": [
         7220
       ],
       "stage_step_deltas": [
@@ -16133,11 +16173,11 @@
         }
       },
       "error_message": "step count differs from MESA at stage 1 (14680 vs 14683)",
-      "stage_steps": [
-        14680
-      ],
       "mesa_stage_steps": [
         14683
+      ],
+      "stage_steps": [
+        14680
       ],
       "stage_step_deltas": [
         -3
@@ -16175,10 +16215,10 @@
       "strict_rejection": "",
       "comparison": null,
       "error_message": "",
+      "mesa_stage_steps": [],
       "stage_steps": [
         0
       ],
-      "mesa_stage_steps": [],
       "stage_step_deltas": [
         null
       ],
@@ -16454,10 +16494,10 @@
         }
       },
       "error_message": "",
-      "stage_steps": [
+      "mesa_stage_steps": [
         6215
       ],
-      "mesa_stage_steps": [
+      "stage_steps": [
         6215
       ],
       "stage_step_deltas": [
@@ -16743,11 +16783,11 @@
         "first_diverging_x": null
       },
       "error_message": "",
-      "stage_steps": [
+      "mesa_stage_steps": [
         50,
         7216
       ],
-      "mesa_stage_steps": [
+      "stage_steps": [
         50,
         7216
       ],
@@ -16979,10 +17019,10 @@
         "first_diverging_x": null
       },
       "error_message": "",
-      "stage_steps": [
+      "mesa_stage_steps": [
         293
       ],
-      "mesa_stage_steps": [
+      "stage_steps": [
         293
       ],
       "stage_step_deltas": [
@@ -17211,10 +17251,10 @@
         "first_diverging_x": null
       },
       "error_message": "",
-      "stage_steps": [
+      "mesa_stage_steps": [
         953
       ],
-      "mesa_stage_steps": [
+      "stage_steps": [
         953
       ],
       "stage_step_deltas": [
@@ -17503,10 +17543,10 @@
         }
       },
       "error_message": "",
-      "stage_steps": [
+      "mesa_stage_steps": [
         9
       ],
-      "mesa_stage_steps": [
+      "stage_steps": [
         9
       ],
       "stage_step_deltas": [
@@ -17731,10 +17771,10 @@
         "first_diverging_x": null
       },
       "error_message": "",
-      "stage_steps": [
+      "mesa_stage_steps": [
         1496
       ],
-      "mesa_stage_steps": [
+      "stage_steps": [
         1496
       ],
       "stage_step_deltas": [
@@ -17964,10 +18004,10 @@
         "first_diverging_x": null
       },
       "error_message": "",
-      "stage_steps": [
+      "mesa_stage_steps": [
         50
       ],
-      "mesa_stage_steps": [
+      "stage_steps": [
         50
       ],
       "stage_step_deltas": [
@@ -18073,14 +18113,14 @@
         }
       },
       "error_message": "step count differs from MESA at stage 1 (537 vs 80)",
-      "stage_steps": [
-        537,
-        252
-      ],
       "mesa_stage_steps": [
         80,
         80,
         80
+      ],
+      "stage_steps": [
+        537,
+        252
       ],
       "stage_step_deltas": [
         457,
@@ -18332,7 +18372,12 @@
         "first_diverging_step": 4,
         "first_diverging_x": 9.546468622893987e-06
       },
-      "error_message": "t)\nwarning: --allow-unsupported-controls active; continuing past: unsupported control(s) (1): &controls::use_other_cgrav (pass --allow-unsupported-controls / allow_unsupported_controls=true to opt out)\nwarning: --allow-unsupported-controls active; continuing past: unsupported control(s) (1): &controls::use_other_cgrav (pass --allow-unsupported-controls / allow_unsupported_controls=true to opt out)"
+      "error_message": "t)\nwarning: --allow-unsupported-controls active; continuing past: unsupported control(s) (1): &controls::use_other_cgrav (pass --allow-unsupported-controls / allow_unsupported_controls=true to opt out)\nwarning: --allow-unsupported-controls active; continuing past: unsupported control(s) (1): &controls::use_other_cgrav (pass --allow-unsupported-controls / allow_unsupported_controls=true to opt out)",
+      "mesa_stage_steps": [
+        1,
+        1,
+        467
+      ]
     },
     {
       "suite": "star",
@@ -18556,10 +18601,10 @@
         "first_diverging_x": null
       },
       "error_message": "",
-      "stage_steps": [
+      "mesa_stage_steps": [
         89
       ],
-      "mesa_stage_steps": [
+      "stage_steps": [
         89
       ],
       "stage_step_deltas": [
@@ -18841,11 +18886,11 @@
         }
       },
       "error_message": "step count differs from MESA at stage 1 (1600 vs 524)",
-      "stage_steps": [
-        1600
-      ],
       "mesa_stage_steps": [
         524
+      ],
+      "stage_steps": [
+        1600
       ],
       "stage_step_deltas": [
         1076
@@ -19120,11 +19165,11 @@
         }
       },
       "error_message": "step count differs from MESA at stage 1 (719 vs 668)",
-      "stage_steps": [
-        719
-      ],
       "mesa_stage_steps": [
         668
+      ],
+      "stage_steps": [
+        719
       ],
       "stage_step_deltas": [
         51
@@ -19353,10 +19398,10 @@
         "first_diverging_x": null
       },
       "error_message": "",
-      "stage_steps": [
+      "mesa_stage_steps": [
         219
       ],
-      "mesa_stage_steps": [
+      "stage_steps": [
         219
       ],
       "stage_step_deltas": [
@@ -19586,10 +19631,10 @@
         "first_diverging_x": null
       },
       "error_message": "",
-      "stage_steps": [
+      "mesa_stage_steps": [
         1559
       ],
-      "mesa_stage_steps": [
+      "stage_steps": [
         1559
       ],
       "stage_step_deltas": [
@@ -19860,11 +19905,11 @@
         }
       },
       "error_message": "step count differs from MESA at stage 1 (1104 vs 1112)",
-      "stage_steps": [
-        1104
-      ],
       "mesa_stage_steps": [
         1112
+      ],
+      "stage_steps": [
+        1104
       ],
       "stage_step_deltas": [
         -8
@@ -20101,13 +20146,13 @@
         "first_diverging_x": 24719.058994879877
       },
       "error_message": "step count differs from MESA at stage 2 (476 vs 480)",
-      "stage_steps": [
-        11,
-        476
-      ],
       "mesa_stage_steps": [
         11,
         480
+      ],
+      "stage_steps": [
+        11,
+        476
       ],
       "stage_step_deltas": [
         0,
@@ -20346,11 +20391,11 @@
         "first_diverging_x": 90.35824190190147
       },
       "error_message": "step count differs from MESA at stage 1 (826 vs 829)",
-      "stage_steps": [
-        826
-      ],
       "mesa_stage_steps": [
         829
+      ],
+      "stage_steps": [
+        826
       ],
       "stage_step_deltas": [
         -3
@@ -20641,11 +20686,11 @@
         }
       },
       "error_message": "step count differs from MESA at stage 1 (2466 vs 2477)",
-      "stage_steps": [
-        2466
-      ],
       "mesa_stage_steps": [
         2477
+      ],
+      "stage_steps": [
+        2466
       ],
       "stage_step_deltas": [
         -11
@@ -20927,11 +20972,11 @@
         "first_diverging_x": 670863.0820991861
       },
       "error_message": "step count differs from MESA at stage 1 (1022 vs 888)",
-      "stage_steps": [
-        1022
-      ],
       "mesa_stage_steps": [
         888
+      ],
+      "stage_steps": [
+        1022
       ],
       "stage_step_deltas": [
         134
@@ -25008,10 +25053,10 @@
         "first_diverging_x": null
       },
       "error_message": "",
-      "stage_steps": [
+      "mesa_stage_steps": [
         1295
       ],
-      "mesa_stage_steps": [
+      "stage_steps": [
         1295
       ],
       "stage_step_deltas": [
@@ -26940,10 +26985,10 @@
         "first_diverging_x": null
       },
       "error_message": "",
-      "stage_steps": [
+      "mesa_stage_steps": [
         231
       ],
-      "mesa_stage_steps": [
+      "stage_steps": [
         231
       ],
       "stage_step_deltas": [
@@ -28089,10 +28134,10 @@
         "first_diverging_x": null
       },
       "error_message": "",
-      "stage_steps": [
+      "mesa_stage_steps": [
         259
       ],
-      "mesa_stage_steps": [
+      "stage_steps": [
         259
       ],
       "stage_step_deltas": [
@@ -29239,10 +29284,10 @@
         "first_diverging_x": null
       },
       "error_message": "",
-      "stage_steps": [
+      "mesa_stage_steps": [
         889
       ],
-      "mesa_stage_steps": [
+      "stage_steps": [
         889
       ],
       "stage_step_deltas": [
@@ -30359,11 +30404,11 @@
         "first_diverging_x": null
       },
       "error_message": "step count differs from MESA at stage 1 (308 vs 309)",
-      "stage_steps": [
-        308
-      ],
       "mesa_stage_steps": [
         309
+      ],
+      "stage_steps": [
+        308
       ],
       "stage_step_deltas": [
         -1
@@ -31481,11 +31526,11 @@
         "first_diverging_x": 103232845.7762907
       },
       "error_message": "step count differs from MESA at stage 1 (539 vs 548)",
-      "stage_steps": [
-        539
-      ],
       "mesa_stage_steps": [
         548
+      ],
+      "stage_steps": [
+        539
       ],
       "stage_step_deltas": [
         -9
@@ -32598,11 +32643,11 @@
         "first_diverging_x": null
       },
       "error_message": "step count differs from MESA at stage 1 (392 vs 393)",
-      "stage_steps": [
-        392
-      ],
       "mesa_stage_steps": [
         393
+      ],
+      "stage_steps": [
+        392
       ],
       "stage_step_deltas": [
         -1
@@ -33603,10 +33648,10 @@
         "first_diverging_x": null
       },
       "error_message": "",
-      "stage_steps": [
+      "mesa_stage_steps": [
         465
       ],
-      "mesa_stage_steps": [
+      "stage_steps": [
         465
       ],
       "stage_step_deltas": [
@@ -33775,10 +33820,10 @@
         "first_diverging_x": null
       },
       "error_message": "",
-      "stage_steps": [
+      "mesa_stage_steps": [
         465
       ],
-      "mesa_stage_steps": [
+      "stage_steps": [
         465
       ],
       "stage_step_deltas": [
@@ -33952,11 +33997,11 @@
         }
       },
       "error_message": "step count differs from MESA at stage 1 (734 vs 737)",
-      "stage_steps": [
-        734
-      ],
       "mesa_stage_steps": [
         737
+      ],
+      "stage_steps": [
+        734
       ],
       "stage_step_deltas": [
         -3
@@ -34267,12 +34312,12 @@
         }
       },
       "error_message": "step count differs from MESA at stage 1 (446 vs 508)",
-      "stage_steps": [
-        446
-      ],
       "mesa_stage_steps": [
         508,
         508
+      ],
+      "stage_steps": [
+        446
       ],
       "stage_step_deltas": [
         -62
@@ -34719,9 +34764,6 @@
         }
       },
       "error_message": "step count differs from MESA at stage 1 (480 vs 479)",
-      "stage_steps": [
-        480
-      ],
       "mesa_stage_steps": [
         480,
         479,
@@ -34731,6 +34773,9 @@
         479,
         480,
         479
+      ],
+      "stage_steps": [
+        480
       ],
       "stage_step_deltas": [
         1
@@ -35993,14 +36038,14 @@
         }
       },
       "error_message": "step count differs from MESA at stage 1 (415 vs 470)",
-      "stage_steps": [
-        415
-      ],
       "mesa_stage_steps": [
         481,
         235,
         579,
         470
+      ],
+      "stage_steps": [
+        415
       ],
       "stage_step_deltas": [
         -55
@@ -36719,9 +36764,6 @@
         }
       },
       "error_message": "step count differs from MESA at stage 1 (474 vs 408)",
-      "stage_steps": [
-        474
-      ],
       "mesa_stage_steps": [
         311,
         298,
@@ -36730,6 +36772,9 @@
         364,
         453,
         408
+      ],
+      "stage_steps": [
+        474
       ],
       "stage_step_deltas": [
         66
@@ -37760,10 +37805,10 @@
         "first_diverging_x": null
       },
       "error_message": "",
-      "stage_steps": [
+      "mesa_stage_steps": [
         954
       ],
-      "mesa_stage_steps": [
+      "stage_steps": [
         954
       ],
       "stage_step_deltas": [

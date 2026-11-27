@@ -1898,6 +1898,12 @@ module = "tooling"
 kind = "invariant"
 
 [[tests]]
+path = "tests/test_routine_evidence.py"
+language = "python"
+module = "tooling"
+kind = "invariant"
+
+[[tests]]
 path = "tests/test_routine_inventory.py"
 language = "python"
 module = "tooling"

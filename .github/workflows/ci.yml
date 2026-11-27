@@ -258,6 +258,7 @@ jobs:
           python scripts/audit/render_extras_status.py --check
           python scripts/audit/mesa_terminations.py --check
           python scripts/docs/render_benchmark_pages.py --check
+          python scripts/dashboard/build_routine_table.py --check
           if [ "${{ github.event_name }}" = "pull_request" ]; then
             flexmesa dashboard check --no-outputs --base-ref "origin/${{ github.base_ref }}"
           else

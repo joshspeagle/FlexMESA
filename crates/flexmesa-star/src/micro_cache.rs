@@ -14,7 +14,8 @@ use flexmesa_rates::ScreeningMode;
 
 use crate::controls::StarError;
 use crate::micro::{
-    do_eos, do_kap, do_net, do_neu, resolve_model_net, set_basic_vars,
+    do_eos, do_net, do_neu, eval_kap_all_cells, resolve_model_net,
+    set_basic_vars,
 };
 use crate::model::StarModel;
 use crate::star_ad::StarAdOrder1;
@@ -696,14 +697,21 @@ fn eval_raw_microphysics(
     skip_net: bool,
     skip_net_jacobian: bool,
 ) -> Result<(), StarError> {
+    // `set_micro_vars` order (`star/private/micro.f90:84-88, 146-193`):
+    // `do_eos`, the `csound_start < 0` latch, neutrinos then opacity (per cell
+    // in `do1_neu_kap`), then `do_net`. `get_tau` is not part of
+    // `set_micro_vars`: `set_hydro_vars` calls it afterwards
+    // (`star/private/hydro_vars.f90:527`), so it runs last here.
     set_basic_vars(model)?;
     do_eos(model)?;
-    do_kap(model)?;
+    crate::micro::latch_csound_start(model);
     do_neu(model)?;
+    eval_kap_all_cells(model)?;
     if !skip_net {
         let net_info = resolve_model_net(model)?;
         do_net(model, &net_info, skip_net_jacobian)?;
     }
+    crate::micro::do_get_tau(model)?;
     Ok(())
 }
 
@@ -733,6 +741,7 @@ impl MicrophysicsCache {
                     && (skip_net_jacobian || entry.out.has_net_jac));
             if net_ready {
                 entry.out.restore_pre_net(model);
+                crate::micro::latch_csound_start(model);
                 if !skip_net {
                     entry.out.restore_net(
                         model,
@@ -747,6 +756,7 @@ impl MicrophysicsCache {
 
             // Pre-net outputs match; populate only `do_net` (or its Jacobian).
             entry.out.restore_pre_net(model);
+            crate::micro::latch_csound_start(model);
             model.micro_cache_misses += 1;
             let net_info = resolve_model_net(model)?;
             do_net(model, &net_info, skip_net_jacobian)?;

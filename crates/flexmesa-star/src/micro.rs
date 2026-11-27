@@ -1388,7 +1388,11 @@ fn do_neu_inner(model: &mut StarModel) -> Result<(), StarError> {
     if model.aux.nonnucneu_channels.len() != nz {
         model.aux.nonnucneu_channels.resize(nz, [0.0; 5]);
     }
-    let min_t = model.controls.min_t_for_neu;
+    // `do1_neu_kap` tests `s% T(k) >= Tmin_neu` with the fixed
+    // `Tmin_neu = 1d7` (`star/private/micro.f90:221`, `neu/public/neu_def.f90:24`);
+    // upstream has no `min_t_for_neu` control.
+    const T_MIN_NEU: f64 = 1.0e7;
+    let min_t = T_MIN_NEU;
     let factor = model.controls.non_nuc_neu_factor;
     if factor <= 0.0 {
         model.non_nuc_neu.fill(0.0);
@@ -1479,6 +1483,39 @@ pub fn do_kap(model: &mut StarModel) -> Result<(), StarError> {
         get_tau(model);
         check_tau_with_report_ierr(model)
     })();
+    crate::controls_output::report_result_ierr(report, res)
+}
+
+/// Opacity for every zone without touching `tau` (the `do_kap_for_cell` part
+/// of `do1_neu_kap`, `star/private/micro.f90:219-237`).
+///
+/// # Errors
+/// As [`do_kap`].
+pub(crate) fn eval_kap_all_cells(
+    model: &mut StarModel,
+) -> Result<(), StarError> {
+    let report = model.controls.output.report_ierr;
+    let res = if model.nz > 0 {
+        eval_kap_for_range(model, 0, model.nz - 1)
+    } else if model.controls.use_other_kap {
+        Err(StarError::InvalidInput(String::from(
+            "use_other_kap = .true. requires an other_kap hook",
+        )))
+    } else {
+        Ok(())
+    };
+    crate::controls_output::report_result_ierr(report, res)
+}
+
+/// `get_tau` followed by its non-finite check, as `set_hydro_vars` calls it
+/// after `set_micro_vars` (`star/private/hydro_vars.f90:527`).
+///
+/// # Errors
+/// [`StarError::MicrophysicsError`] on a non-finite `dtau`.
+pub(crate) fn do_get_tau(model: &mut StarModel) -> Result<(), StarError> {
+    let report = model.controls.output.report_ierr;
+    get_tau(model);
+    let res = check_tau_with_report_ierr(model);
     crate::controls_output::report_result_ierr(report, res)
 }
 

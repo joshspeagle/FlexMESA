@@ -906,7 +906,7 @@ path = "crates/flexmesa-star/tests/colors_solar_oracle_test.rs"
 language = "rust"
 module = "star"
 kind = "oracle"
-provenance = "MESA 26.4.1 colors/test/src/test_colors.f90:59-62,183-197 Solar Johnson IEEE-754 hex outputs (mesa-module-hex-v1 colors/exact_tested_values.tsv records 6..15)"
+provenance = "MESA 26.4.1 colors/test/src/test_colors.f90:59-62,183-197 Solar Johnson IEEE-754 hex outputs (mesa-module-hex-v1 colors/exact_tested_values.tsv records 6..15; 9/10 bit-exact plus 1 pinned 1-ULP difference on J: 0x400d_3c59_0bb4_5389 vs MESA 0x400d_3c59_0bb4_538a tracked in #198)"
 
 [[tests]]
 path = "crates/flexmesa-star/tests/controls_147_star_test.rs"

@@ -115,12 +115,19 @@ fn test_builtin_solar_johnson_history_columns() {
         };
         let mut model = solar_surface_model(cc);
         // `0x40da_e592_5ec1_42ce` is a FlexMESA-chosen literal (not an upstream
-        // value), selected as the round-to-nearest `f64` for `10^4.44` so that
-        // `CRMATH` `log10_rd(g0)` evaluates to exact `4.44_f64` (`logg = 4.44`
-        // at `colors/test/src/test_colors.f90:60`; `test_colors.f90:59-62` sets
-        // `Teff = 5778`, `logg = 4.44`, `Fe_H = 0`, `R = Rsun`), rather than
-        // `4.44 - 1 ULP` from `pow(10.0, 4.44)`.
+        // value), equal to the correctly rounded `f64` for `10^(4.44 as f64)`
+        // (7 ULP above decimal `10^4.44`). `solar_surface_model`'s strict-mode
+        // `pow(10.0, 4.44)` returns `0x40da_e592_5ec1_42c8`, whose `log10`
+        // evaluates to `4.44 - 1 ULP` rather than exact `4.44_f64`
+        // (`colors/test/src/test_colors.f90:60`; `test_colors.f90:59-62` sets
+        // `Teff = 5778`, `logg = 4.44`, `Fe_H = 0`, `R = Rsun`), so we keep
+        // this `g0` override to feed exact `4.44_f64` into the table lookup.
         let g0 = f64::from_bits(0x40da_e592_5ec1_42ce);
+        assert_eq!(model.grav[0].to_bits(), 0x40da_e592_5ec1_42c8);
+        assert_ne!(
+            flexmesa_math::log10(model.grav[0]).to_bits(),
+            4.44_f64.to_bits()
+        );
         assert_eq!(flexmesa_math::log10(g0).to_bits(), 4.44_f64.to_bits());
         // Override `solar_surface_model`'s `pow(10.0, 4.44)` gravity with `g0`.
         model.grav = vec![g0, g0];

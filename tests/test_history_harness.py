@@ -618,10 +618,10 @@ def test_flexmesa_trace_and_harness_run_cli_smoke(
     assert not (ast_out / "freqs.dat").exists()
 
     # Smoke harness run writes Markdown + JSON with full 106-case counts.
-    # `starspots` sets only `&star_job::mesa_dir` beyond the ported controls,
-    # which is a supported key since #548 (`star/defaults/star_job.defaults:
-    # 10-18`), so the unmodified inlists pass strict validation and the run
-    # is labelled as a strict smoke run, not a diagnostic.
+    # `1.3M_ms_high_Z` is a `pr_ci = true` strict MESA `26.4.1` case that
+    # loads a saved model directly instead of running `starspots`'s pre-MS
+    # relaxation, so two steps complete in ~6 s vs ~50 s with zero ignored
+    # controls and zero weakened assertions.
     md_out = tmp_path / "smoke_table.md"
     js_out = tmp_path / "smoke_table.json"
     rc_h = cli.main(
@@ -629,7 +629,7 @@ def test_flexmesa_trace_and_harness_run_cli_smoke(
             "harness",
             "run",
             "--cases",
-            "starspots",
+            "1.3M_ms_high_Z",
             "--max-steps",
             "2",
             "--timeout-sec",

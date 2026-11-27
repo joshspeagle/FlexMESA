@@ -397,8 +397,9 @@ pub(crate) enum InitModelOutcome {
     Terminate(String),
 }
 
-/// Initializes a [`StarModel`] from `bundle` (or updates `existing_model` for
-/// subsequent multi-inlist stages) and executes all `&star_job` startup and
+/// Initializes a [`StarModel`] from `bundle` (or updates `existing_model`, an
+/// in-memory model supplied by an API caller; the `./rn` stage runner never
+/// supplies one) and executes all `&star_job` startup and
 /// relaxation directives (`star/private/star_job_controls_io.f90` &
 /// `star/private/init.f90`).
 ///
@@ -634,10 +635,11 @@ fn init_or_update_model_impl(
     let mut did_load_zams_model =
         existing_is_zams_seed && existing_model.is_some();
     // Upstream's `restart` is a photo restart only
-    // (`star/job/run_star_support.f90:433-442`). A model carried over from an
-    // earlier `./rn` stage stands for the `.mod` file that stage saved and
-    // the next one loads, and a binary seed is a freshly loaded model, so
-    // neither is a restart: every `.not. restart` control applies.
+    // (`star/job/run_star_support.f90:433-442`). A model passed in by an API
+    // caller and a binary seed are not restarts either: every
+    // `.not. restart` control applies. The `./rn` stage runner passes no
+    // model, because each `do_one` is a separate MESA process that reads
+    // the `.mod` file the earlier stage saved.
     let restart = false;
     let had_existing_model = existing_model.is_some();
     let mut model = if let Some(prev) = existing_model {

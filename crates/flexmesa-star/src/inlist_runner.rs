@@ -1378,7 +1378,11 @@ pub fn run_test_suite_case_with_extras(
 
     let rn_stages = parse_rn_stages(case_dir, skip_optional)?;
 
-    let mut current_model: Option<StarModel> = None;
+    // Each `do_one` is a separate MESA process: nothing but files in the
+    // work directory crosses a stage boundary, so the model of a finished
+    // stage is kept only for the end-of-case assertions and never handed to
+    // the next stage (`star/job/run_star_support.f90:do_load1_star`).
+    let mut last_stage_model: Option<StarModel> = None;
     let mut stage_reports = Vec::with_capacity(rn_stages.len());
     let (mut total_steps, mut total_newton, mut total_retries) = (0, 0, 0);
     let mut photo_restart_verified = false;
@@ -1389,7 +1393,7 @@ pub fn run_test_suite_case_with_extras(
     for stage in &rn_stages {
         match stage {
             RnStage::CopyCheckpoint { src_mod, dst_mod } => {
-                current_model = None;
+                last_stage_model = None;
                 last_stage_terminated_by_extras = false;
                 let (src, dst) =
                     (case_dir.join(src_mod), case_dir.join(dst_mod));
@@ -1436,7 +1440,7 @@ pub fn run_test_suite_case_with_extras(
 
                 let mut model = match init_or_update_model_from_bundle_outcome(
                     &bundle,
-                    current_model.take(),
+                    None,
                     extras,
                 )? {
                     InitModelOutcome::Model(m) => *m,
@@ -1506,7 +1510,7 @@ pub fn run_test_suite_case_with_extras(
                 total_newton += rep.total_newton_iterations;
                 total_retries += rep.total_retries;
                 stage_reports.push(rep);
-                current_model = Some(model);
+                last_stage_model = Some(model);
                 if stage_abnormal || stage_term_mismatch {
                     break;
                 }
@@ -1520,13 +1524,13 @@ pub fn run_test_suite_case_with_extras(
 
     let runtime_sec = t0.elapsed().as_secs_f64();
     let assertions_passed = terminated_in_init
-        || current_model
+        || last_stage_model
             .as_ref()
             .is_some_and(|m| m.nz >= 2 && m.teff.is_finite() && m.teff > 0.0);
     let final_hr = stage_reports
         .last()
         .map(|s| s.final_history)
-        .or_else(|| current_model.as_ref().map(extract_history_row));
+        .or_else(|| last_stage_model.as_ref().map(extract_history_row));
     let termination_code = stage_reports.last().map_or_else(
         || String::from("no_stages_executed"),
         |s| s.termination_code.clone(),

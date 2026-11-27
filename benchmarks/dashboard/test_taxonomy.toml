@@ -1405,6 +1405,12 @@ module = "star"
 kind = "invariant"
 
 [[tests]]
+path = "crates/flexmesa-star/tests/stage_handoff_reload_test.rs"
+language = "rust"
+module = "star"
+kind = "invariant"
+
+[[tests]]
 path = "crates/flexmesa-star/tests/star_controls_inlist_147_test.rs"
 language = "rust"
 module = "star"

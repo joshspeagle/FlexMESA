@@ -739,7 +739,10 @@ struct RelaxCore {
 }
 
 impl RelaxHooks for RelaxCore {
-    fn before_evolve(&mut self, model: &mut StarModel) -> Result<(), StarError> {
+    fn before_evolve(
+        &mut self,
+        model: &mut StarModel,
+    ) -> Result<(), StarError> {
         setup_before_relax(model);
         model.controls.max_model_number = None;
         model.dt_next = SECYER * self.years_for_dt;
@@ -863,7 +866,10 @@ struct RelaxMCenter {
 }
 
 impl RelaxHooks for RelaxMCenter {
-    fn before_evolve(&mut self, model: &mut StarModel) -> Result<(), StarError> {
+    fn before_evolve(
+        &mut self,
+        model: &mut StarModel,
+    ) -> Result<(), StarError> {
         setup_before_relax(model);
         model.controls.max_model_number = None;
         model.dt_next = self.dt_seconds;
@@ -960,7 +966,10 @@ struct RelaxTauFactor {
 }
 
 impl RelaxHooks for RelaxTauFactor {
-    fn before_evolve(&mut self, model: &mut StarModel) -> Result<(), StarError> {
+    fn before_evolve(
+        &mut self,
+        model: &mut StarModel,
+    ) -> Result<(), StarError> {
         turn_off_winds(model);
         model.controls.max_model_number = None;
         Ok(())
@@ -980,12 +989,20 @@ impl RelaxHooks for RelaxTauFactor {
             let next = flexmesa_math::exp10(
                 flexmesa_math::safe_log10(current) - self.dlogtau_factor,
             );
-            if next < new_tau_factor { new_tau_factor } else { next }
+            if next < new_tau_factor {
+                new_tau_factor
+            } else {
+                next
+            }
         } else {
             let next = flexmesa_math::exp10(
                 flexmesa_math::safe_log10(current) + self.dlogtau_factor,
             );
-            if next > new_tau_factor { new_tau_factor } else { next }
+            if next > new_tau_factor {
+                new_tau_factor
+            } else {
+                next
+            }
         };
         model.controls.tau_factor = next;
         model.controls.ts_stop.max_timestep = SECYER * (model.dt / SECYER);
@@ -1042,7 +1059,10 @@ struct RelaxIrradiation {
 }
 
 impl RelaxHooks for RelaxIrradiation {
-    fn before_evolve(&mut self, model: &mut StarModel) -> Result<(), StarError> {
+    fn before_evolve(
+        &mut self,
+        model: &mut StarModel,
+    ) -> Result<(), StarError> {
         turn_off_winds(model);
         model.controls.max_model_number = None;
         Ok(())
@@ -1067,8 +1087,8 @@ impl RelaxHooks for RelaxIrradiation {
             return Ok(finished());
         }
 
-        model.controls.irradiation_flux = frac * self.new_irrad_flux
-            + (1.0 - frac) * self.old_irrad_flux;
+        model.controls.irradiation_flux =
+            frac * self.new_irrad_flux + (1.0 - frac) * self.old_irrad_flux;
         model.controls.column_depth_for_irradiation = frac
             * self.new_irrad_col_depth
             + (1.0 - frac) * self.old_irrad_col_depth;

@@ -263,13 +263,8 @@ pub fn stah(
                         h / 1.05
                     }
                 };
-                let h_bracket_converged = have_h_large
-                    && have_h_small
-                    && (h_large - h_small).abs() <= 1.0e-13 * h.abs();
-                if n == 0
-                    && ((grid.t[1] - tin).abs() < tin * tin_tol
-                        || h_bracket_converged)
-                {
+                // `star/private/rsp_build.f90:369` (`N==0 .and. abs(T(1)-TIN)<TIN*TIN_tol`)
+                if n == 0 && (grid.t[1] - tin).abs() < tin * tin_tol {
                     let m_center_raw = s.m_0 - s.dm_0;
                     model.mstar = model.controls.rsp_mass * dc.sunm;
                     model.xmstar = model.mstar - m_center_raw;
@@ -358,13 +353,8 @@ pub fn stah(
                         dmn * 0.5
                     };
                 }
-                let dmn_bracket_converged = have_dmn_large
-                    && have_dmn_small
-                    && (dmn_large - dmn_small).abs() <= 1.0e-13 * dmn.abs();
-                if nzn - n + 1 == nzt
-                    && ((s.t_0 - th0).abs() < th0_tol * th0
-                        || dmn_bracket_converged)
-                {
+                // `star/private/rsp_build.f90:420` (`NZN-N+1==NZT .and. abs(T_0-TH0)<TH0_tol*TH0`)
+                if nzn - n + 1 == nzt && (s.t_0 - th0).abs() < th0_tol * th0 {
                     adjusting_dmn = false;
                 }
                 continue 'top;
@@ -465,6 +455,11 @@ fn solve_stah_zone_t(
                     },
                     Some(r_min),
                     Some(r_max),
+                    // `star/private/rsp_build.f90:664, 678` passes `imax = 50`, which
+                    // `num/private/mod_root.f90:42-43` ignores before calling the
+                    // unbounded `do` loop in `num/private/mod_brent.f90:615`
+                    // (`eval_brent_safe_zero`); `brent_safe_zero` requires a finite
+                    // cap (`flexmesa-num/src/root.rs:134` uses `imax.max(200)`).
                     200,
                 );
                 if let Ok((lnt, _)) = root {

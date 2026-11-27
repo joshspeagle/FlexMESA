@@ -6,9 +6,9 @@ Generated mechanically against **MESA 26.4.1** (git tag `26.4.1`, commit `c8c202
 ## Summary
 
 - **Total manifest cases scanned**: `106`
-- **Cases passing strict `#147` validation**: `96`
-- **Cases rejected by strict `#147` validation**: `10`
-- **Distinct unsupported physics/solver controls encountered**: `45`
+- **Cases passing strict `#147` validation**: `97`
+- **Cases rejected by strict `#147` validation**: `9`
+- **Distinct unsupported physics/solver controls encountered**: `44`
 - **Distinct unknown/misspelled controls encountered**: `0`
 - **Cases using headless plotting controls (`#173` / `DECISIONS #25`)**: `78` (`895` distinct keys)
 
@@ -19,7 +19,7 @@ Generated mechanically against **MESA 26.4.1** (git tag `26.4.1`, commit `c8c202
 | `&star_job` | 455 | 220 | 4 | 3 | 8 | 220 |
 | `&eos` | 102 | 91 | 0 | 0 | 9 | 2 |
 | `&kap` | 51 | 39 | 0 | 0 | 10 | 2 |
-| `&controls` | 1448 | 1235 | 15 | 0 | 19 | 179 |
+| `&controls` | 1448 | 1236 | 15 | 0 | 19 | 178 |
 | `&binary_job` | 37 | 22 | 0 | 1 | 1 | 13 |
 | `&binary_controls` | 176 | 124 | 0 | 0 | 2 | 50 |
 | `&astero_search_controls` | 153 | 153 | 0 | 0 | 0 | 0 |
@@ -34,7 +34,6 @@ Generated mechanically against **MESA 26.4.1** (git tag `26.4.1`, commit `c8c202
 | `&star_job::electron_coulomb_corrections` | `unimplemented` | 2 | `star/custom_rates`, `star/wd_aic` |
 | `&star_job::ion_coulomb_corrections` | `unimplemented` | 2 | `star/custom_rates`, `star/wd_aic` |
 | `&star_job::new_w_div_wc_flag` | `unimplemented` | 2 | `star/high_rot_darkening`, `star/ppisn` |
-| `&controls::atm_off_table_option` | `unimplemented` | 1 | `star/c13_pocket` |
 | `&controls::fill_arrays_with_nans` | `unimplemented` | 1 | `star/ppisn` |
 | `&controls::initial_he3` | `unimplemented` | 1 | `star/ppisn` |
 | `&controls::op_mono_method` | `unimplemented` | 1 | `star/1.4M_ms_op_mono` |
@@ -187,7 +186,7 @@ Per `DECISIONS #25` (matching upstream `USE_PGSTAR = NO`), keys in `&pgstar`, `&
 | `star` | `T_tau_gradr` | `pass` | 0 | 0 | 0 |
 | `star` | `accreted_material_j` | `pass` | 0 | 0 | 24 |
 | `star` | `adjust_net` | `pass` | 0 | 0 | 68 |
-| `star` | `c13_pocket` | `fail_unsupported` | 1 | 0 | 100 |
+| `star` | `c13_pocket` | `pass` | 0 | 0 | 100 |
 | `star` | `carbon_kh` | `pass` | 0 | 0 | 81 |
 | `star` | `cburn_inward` | `pass` | 0 | 0 | 66 |
 | `star` | `ccsn_IIp` | `fail_unsupported` | 16 | 0 | 100 |

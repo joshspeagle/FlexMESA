@@ -2,7 +2,7 @@
 //! Unit tests for `flexmesa-star` (Waves 4.1, 4.2, and 4.3).
 
 use super::*;
-use flexmesa_const::{M_SUN, MixingType, SECYER};
+use flexmesa_const::{MixingType, M_SUN, SECYER};
 
 #[test]
 fn test_star_ad_order1_shifts_and_chain_rule_match_analytic_derivatives() {
@@ -432,8 +432,7 @@ fn test_do1_energy_eqn_time_centers_non_nuc_neu() {
     model_trial.non_nuc_neu[k] += delta_neu;
     let mut sys_trial =
         HenyeySystem::new(model.nz, model.layout.nvar_hydro, x_scale);
-    do1_energy_eqn(&model_trial, k, false, &mut sys_trial)
-        .expect("energy eqn");
+    do1_energy_eqn(&model_trial, k, false, &mut sys_trial).expect("energy eqn");
 
     let i_equ = model.layout.i_dlne_dt;
     let idx = k * model.layout.nvar_hydro + i_equ;
@@ -647,8 +646,7 @@ fn test_set_vars_for_new_step_refreshes_rho_after_lnd_reset_and_respects_flag()
     assert_eq!(model.rho, stale);
 
     model.aux.need_to_setvars = true;
-    crate::evolve_support::set_vars_for_new_step(&mut model)
-        .expect("set_vars");
+    crate::evolve_support::set_vars_for_new_step(&mut model).expect("set_vars");
     for k in 0..nz {
         assert_eq!(
             model.rho[k].to_bits(),

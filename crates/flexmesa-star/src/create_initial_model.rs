@@ -16,8 +16,8 @@
 //! transcendental call goes through `flexmesa_math`.
 
 use flexmesa_const::{
-    BOLTZM, BOLTZ_SIGMA, FOUR_THIRDS_PI, MP, PI, PI4, SECYER,
-    STANDARD_CGRAV, TWO_THIRDS,
+    BOLTZM, BOLTZ_SIGMA, FOUR_THIRDS_PI, MP, PI, PI4, SECYER, STANDARD_CGRAV,
+    TWO_THIRDS,
 };
 use flexmesa_eos::{eos_pt_get_t, EosConfig, HelmTable, I_LN_S};
 use flexmesa_kap::{kap_get, KapConfig};
@@ -114,8 +114,17 @@ fn get_kap_from_rho_t(
     log_t: f64,
 ) -> Result<f64, StarError> {
     kap_get(
-        ctx.kap_cfg, ctx.chem_id, ctx.xa, log_rho, log_t, 0.0, 0.0, 0.0, 0.0,
-        0.0, 0.0,
+        ctx.kap_cfg,
+        ctx.chem_id,
+        ctx.xa,
+        log_rho,
+        log_t,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
     )
     .map(|out| out.kap)
     .map_err(|e| {
@@ -211,7 +220,10 @@ fn ps_errfunc(
         let dydp = derivs(ctx, p + d_p, s, &y3)?;
         let dy4 = scale3(&dydp, d_p);
         for j in 0..3 {
-            y[j] = y[j] + dy1[j] / 6.0 + dy2[j] / 3.0 + dy3[j] / 3.0
+            y[j] = y[j]
+                + dy1[j] / 6.0
+                + dy2[j] / 3.0
+                + dy3[j] / 3.0
                 + dy4[j] / 6.0;
         }
         p += d_p;
@@ -282,7 +294,10 @@ fn ps_errfunc(
         cs.lg[k] = luminosity * cs.intdm_tg[k] / intdm_t_nz;
     }
 
-    Ok([(cs.mass - m_target) / m_target, (cs.radius - r_target) / r_target])
+    Ok([
+        (cs.mass - m_target) / m_target,
+        (cs.radius - r_target) / r_target,
+    ])
 }
 
 /// Builds the isentropic initial model for `mass_in_gm_for_create_initial_model`

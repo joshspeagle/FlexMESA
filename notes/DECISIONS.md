@@ -85,7 +85,9 @@ Scope and the `v0.1.0` definition are in [`SCOPE.md`](SCOPE.md). Work is tracked
 | 68 | `&star_job::mesa_dir` Is an Installation-Location Key, Stored but Not Used to Resolve Data (`#548`) | In force | below |
 | 69 | Per-Case Budgets, the `passes` Preset and the Early Divergence Stop in the History Harness (`#554`) | In force | below |
 | 70 | A Passing Case Takes Exactly MESA's Step Count in Every Stage, and E2E Work Is Triaged by Run Time (`#546`, `#554`) | In force | below |
-| 73 | Train Campaigns Run on GitHub Actions at 1,500 s per Case, with Step Counts Enforced (`#546`, `#576`) | In force | below |
+| 71 | Large Oracle Bundles Are Opt-In (`#552`) | In force | below |
+| 72 | Every Test File Is Listed in `test_taxonomy.toml` with Enforced Provenance and Checked Routine Maps (`#563`) | In force | below |
+| 73 | Train Campaigns Run on GitHub Actions at 3,000 s per Case, with Step Counts Enforced (`#546`, `#576`, `#598`) | In force | below |
 
 ## Pre-audit decisions still in force
 
@@ -944,14 +946,36 @@ The text of these four entries predates the audit of 2026-11-16. The decisions s
   - *A step-count tolerance*: any difference already means a departure.
   - *Working cases in table order*: long cases cost up to 85 minutes of MESA time per run and slow every loop.
 
-## DECISIONS #73: Train Campaigns Run on GitHub Actions at 1,500 s per Case, with Step Counts Enforced (`#546`, `#576`)
+## DECISIONS #71: Large Oracle Bundles Are Opt-In (`#552`)
+
+- **Date**: 2026-11-26
+- **Decision**: A release bundle declared in `bundles.toml` with `on_demand = true` is never fetched by `flexmesa data fetch` or `--include-test-inputs`, and is not required by `flexmesa data verify` or `flexmesa data status` to report a complete install. `flexmesa data fetch --bundle NAME` and `flexmesa data verify --bundle NAME` (repeatable) act on exactly the named bundles; an unknown name is an error. `status` lists an on-demand bundle as optional and says whether it is present, and a default `verify` accepts its files if installed. The first such bundle is `mesa_replay` (`mesa-replay-v1`, record/replay oracles; 664 MB compressed, 4.7 GB unpacked). No test depends on an on-demand bundle: CI exercises the replay path with the committed 0.57 MB sample.
+- **Why**: CI and every new checkout run `flexmesa data fetch --include-test-inputs`. Adding 4.7 GB there would slow every job and exhaust cache and disk budgets for data that only a person localizing a divergence needs. The bundle still gets what `DECISIONS #67` asks of oracle data: a pinned archive `SHA-256`, a per-file manifest and a stamp.
+- **Alternatives Rejected**:
+  - *Declare it as an ordinary `test_only` bundle*: it would be downloaded by every CI job and `--include-test-inputs` run.
+  - *Keep it undeclared and local only*: no integrity check, no provenance, and no way for another machine to reproduce a replay result.
+  - *Split into small and large halves*: the sample already covers CI, and two bundles would double the bookkeeping.
+
+## DECISIONS #72: Every Test File Is Listed in `test_taxonomy.toml` with Enforced Provenance and Checked Routine Maps (`#563`)
+
+- **Date**: 2026-11-26
+- **Decision**: Every Rust integration test file (`crates/*/tests/*.rs`) and Python test file (`tests/test_*.py`) is listed in `benchmarks/dashboard/test_taxonomy.toml` with a single classification (`oracle`, `invariant`, or `regression`). `python -m flexmesa.testing.test_taxonomy --check` fails on unlisted or stale test files, rejects `oracle` entries lacking an existing MESA-origin artifact path (plus MESA version header for `tests/fixtures/golden/`) and non-comment code linkage, and confirms that each listed routine maps to a non-comment, non-string symbol in the test file. Dashboard and CLI counts report files by kind (never per-test counts on mixed files) and label the manifest ratio as `Routines with Listed Oracle Test`.
+- **Why**: Naming and status claims drifted from what tests actually checked (27 `*_parity_test.rs` files assert self-generated or invariant checks without MESA output, and mixed files cannot support per-test oracle counts without per-function classification). A checked ledger prevents silent drift as new tests land and gives W4 test harmonization a machine-checked starting inventory.
+- **Alternatives Rejected**:
+  - *Infer test kind heuristically from filenames or numeric literals*: misclassifies `*_parity_test.rs` invariant suites and synthetic floating-point literals as MESA oracles.
+  - *Advisory inventory without a CI gate*: falls stale on the next pull request that adds or renames a test file.
+  - *Block `#563` on per-test-function annotations across all 1,523 tests*: delays the ledger and gate behind work now owned by Lane E (W4).
+- **Note**: number `#71` is reserved by `#552`.
+
+## DECISIONS #73: Train Campaigns Run on GitHub Actions at 3,000 s per Case, with Step Counts Enforced (`#546`, `#576`, `#598`)
 
 - **Date**: 2026-11-26
 - **Decision**:
-  - The strict campaign that gates a train runs on GitHub Actions (`campaign.yml`, dispatched on the train branch with `harness_only`), in 16 shards with a per-case budget of 1,500 s. The baseline is regenerated from that run. Local runs keep the 600 s budget of `DECISIONS #57` and are used for development and for single-case evidence.
+  - The strict campaign that gates a train runs on GitHub Actions (`campaign.yml`, dispatched on the train branch with `harness_only`), in 16 shards with a per-case budget of 3,000 s (1,500 s until Train 13, `#598`). The scheduled campaign uses the same budget, so that it is compared with a baseline measured under the same limit. The baseline is regenerated from that run. Local runs keep the 600 s budget of `DECISIONS #57` and are used for development and for single-case evidence.
   - Every harness invocation in CI passes `--enforce-step-counts` (`DECISIONS #70`): a case within tolerance whose per-stage step counts differ from MESA `26.4.1` is `fail (step count)` unless it is a declared gap.
 - **Why**: a local campaign needs a quiet machine for about three hours, which idles every lane sharing it. Hosted runners are two to three times slower than the development machine: at 600 s, seven baseline passes ended on the budget there on 2026-11-26 (for example `1.5M_with_diffusion`, 470 s locally, reached 199 of 430 steps). Strict results do not depend on the machine, so a longer budget on the slower machine changes which cases finish, not what they compute.
 - **Alternatives Rejected**:
   - *600 s on hosted runners*: cases that pass locally come back `inconclusive (timeout)`.
+  - *Keeping 1,500 s*: in the Train 13 campaign seven cases reached their termination only between 1,500 s and 3,000 s (among them `12M_pre_ms_to_core_collapse` and `20M_pre_ms_to_core_collapse`), and a baseline measured at 3,000 s cannot be gated by a run cut at 1,500 s.
   - *Local campaigns only*: one train a day at best, with every lane frozen while it runs.
   - *Leaving enforcement to a flag chosen per run*: the pass count would then depend on who ran the harness.

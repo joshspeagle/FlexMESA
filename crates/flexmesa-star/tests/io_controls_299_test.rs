@@ -11,15 +11,13 @@ use std::path::{Path, PathBuf};
 use flexmesa_star::inlist::{InlistBundle, InlistLoadOptions};
 use flexmesa_star::inlist_inventory::copy_cleaned_star_case;
 use flexmesa_star::inlist_runner::{
-    DefaultStarExtras, ExtrasDirective, StarExtras, StarLogsOptions,
     photo_restart_filename, rel_run_e_err_exceeds_warn_limit, run_inlist_stage,
     run_test_suite_case_with_extras, termination_code_string_okay,
+    DefaultStarExtras, ExtrasDirective, StarExtras, StarLogsOptions,
 };
 use flexmesa_star::model_io::{load_photo_bytes, write_photo_bytes};
-use flexmesa_star::rn_parser::{RnStage, parse_rn_stages};
-use flexmesa_star::{
-    StarError, StarModel, init_or_update_model_from_bundle,
-};
+use flexmesa_star::rn_parser::{parse_rn_stages, RnStage};
+use flexmesa_star::{init_or_update_model_from_bundle, StarError, StarModel};
 
 struct TempCaseGuard {
     root: PathBuf,
@@ -57,7 +55,10 @@ fn mesa_root_dir() -> Option<PathBuf> {
         },
         PathBuf::from,
     );
-    base.join("star").join("test_suite").is_dir().then_some(base)
+    base.join("star")
+        .join("test_suite")
+        .is_dir()
+        .then_some(base)
 }
 
 /// Exact naming parity with `get_name_for_restart_file` and
@@ -100,10 +101,7 @@ fn test_termination_code_string_okay_matches_upstream_run_star_support() {
     assert!(!termination_code_string_okay(&req, "max_model_number"));
 
     req[3] = String::from("xa_central_lower_limit");
-    assert!(termination_code_string_okay(
-        &req,
-        "xa_central_lower_limit"
-    ));
+    assert!(termination_code_string_okay(&req, "xa_central_lower_limit"));
     assert!(termination_code_string_okay(
         &req,
         "xa_central_lower_limit(h1)"
@@ -145,8 +143,9 @@ fn test_periodic_photo_interval_digits_and_directory() {
     assert_eq!(bundle.controls.output.photo_directory, "photos_custom");
 
     let mut extras = DefaultStarExtras;
-    let mut model = init_or_update_model_from_bundle(&bundle, None, &mut extras)
-        .expect("init periodic model");
+    let mut model =
+        init_or_update_model_from_bundle(&bundle, None, &mut extras)
+            .expect("init periodic model");
     let rep = run_inlist_stage(&mut model, &bundle, &mut extras, None)
         .expect("run periodic stage");
     assert_eq!(rep.steps_taken, 4);
@@ -550,8 +549,9 @@ fn test_x_logical_ctrl_parsing_validation_and_extras_runtime_access() {
         saw_slot36_true: false,
         saw_slot1_false: false,
     };
-    let mut model = init_or_update_model_from_bundle(&bundle, None, &mut extras)
-        .expect("init x_logical_ctrl model");
+    let mut model =
+        init_or_update_model_from_bundle(&bundle, None, &mut extras)
+            .expect("init x_logical_ctrl model");
     let rep = run_inlist_stage(&mut model, &bundle, &mut extras, Some(5))
         .expect("run x_logical_ctrl stage");
     assert_eq!(rep.steps_taken, 1);
@@ -641,15 +641,13 @@ fn test_terminal_timing_controls_validation_and_copy_cleaned() {
     assert_eq!(cleaned_bundle.controls.output.photo_digits, 4);
     assert_eq!(cleaned_bundle.job.save_photo_number, 5);
     assert!(cleaned_bundle.controls.x_logical_ctrl[1]);
-    assert!(
-        cleaned_bundle
-            .validation_report
-            .terminal_output_keys
-            .contains(&(
-                String::from("controls"),
-                String::from("extra_terminal_output_file")
-            ))
-    );
+    assert!(cleaned_bundle
+        .validation_report
+        .terminal_output_keys
+        .contains(&(
+            String::from("controls"),
+            String::from("extra_terminal_output_file")
+        )));
 }
 
 /// Malformed value types and out-of-range `photo_digits` fail loudly.
@@ -657,22 +655,40 @@ fn test_terminal_timing_controls_validation_and_copy_cleaned() {
 fn test_photo_and_terminal_controls_reject_malformed_types() {
     let tmp = TempCaseGuard::new("bad_types");
     for (tag, body) in [
-        ("pause_int", "&star_job\n  pause_before_terminate = 123\n/\n"),
-        ("timing_str", "&star_job\n  first_model_for_timing = 'abc'\n/\n"),
-        ("warn_extras_int", "&star_job\n  warn_run_star_extras = 42\n/\n"),
-        ("save_photo_num_str", "&star_job\n  save_photo_number = 'five'\n/\n"),
+        (
+            "pause_int",
+            "&star_job\n  pause_before_terminate = 123\n/\n",
+        ),
+        (
+            "timing_str",
+            "&star_job\n  first_model_for_timing = 'abc'\n/\n",
+        ),
+        (
+            "warn_extras_int",
+            "&star_job\n  warn_run_star_extras = 42\n/\n",
+        ),
+        (
+            "save_photo_num_str",
+            "&star_job\n  save_photo_number = 'five'\n/\n",
+        ),
         (
             "extra_term_bool",
             "&controls\n  extra_terminal_output_file = .true.\n/\n",
         ),
-        ("solver_prog_str", "&controls\n  report_solver_progress = 'yes'\n/\n"),
+        (
+            "solver_prog_str",
+            "&controls\n  report_solver_progress = 'yes'\n/\n",
+        ),
         (
             "warn_resid_bool",
             "&controls\n  warning_limit_for_max_residual = .false.\n/\n",
         ),
         ("photo_digits_zero", "&controls\n  photo_digits = 0\n/\n"),
         ("photo_digits_huge", "&controls\n  photo_digits = 19\n/\n"),
-        ("photo_interval_str", "&controls\n  photo_interval = 'fifty'\n/\n"),
+        (
+            "photo_interval_str",
+            "&controls\n  photo_interval = 'fifty'\n/\n",
+        ),
         ("photo_dir_int", "&controls\n  photo_directory = 123\n/\n"),
     ] {
         let p = tmp.root.join(format!("inlist_bad_{tag}"));
@@ -789,8 +805,9 @@ fn test_warn_when_large_rel_run_e_err_parsing_roundtrip_and_trigger() {
     assert_eq!(bundle.validation_report.unsupported_controls.len(), 0);
 
     let mut extras = DefaultStarExtras;
-    let mut model = init_or_update_model_from_bundle(&bundle, None, &mut extras)
-        .expect("init model with warn_when_large_rel_run_e_err");
+    let mut model =
+        init_or_update_model_from_bundle(&bundle, None, &mut extras)
+            .expect("init model with warn_when_large_rel_run_e_err");
     assert!(
         (model.controls.output.warn_when_large_rel_run_e_err - 0.025).abs()
             <= 1.0e-15

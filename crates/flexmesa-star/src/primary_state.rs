@@ -551,8 +551,7 @@ pub struct PrimaryStateBuffer {
     pub(crate) tidal_deformation: Option<TidalDeformationHandle>,
     pub(crate) binary_other_torque: Option<BinaryOtherTorqueHandle>,
     pub(crate) binary_other_torque_implicit: Option<BinaryOtherTorqueHandle>,
-    pub(crate) other_overshooting_scheme:
-        Option<OtherOvershootingSchemeHandle>,
+    pub(crate) other_overshooting_scheme: Option<OtherOvershootingSchemeHandle>,
     pub(crate) other_adjust_mlt_gradt_fraction:
         Option<OtherAdjustMltGradtFractionHandle>,
     pub(crate) other_cgrav: Option<StarModelHookHandle>,

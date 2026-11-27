@@ -19,7 +19,7 @@ use crate::conv_premix::do_conv_premix;
 use crate::element_diffusion::{
     do_element_diffusion_step, finish_element_diffusion,
 };
-use crate::mesh_adjust::{MeshFunctionConfig, do_adjust_mesh_for_step};
+use crate::mesh_adjust::{do_adjust_mesh_for_step, MeshFunctionConfig};
 use crate::model::StarModel;
 use crate::phase_separation::do_phase_separation_step;
 use crate::primary_state::PrimaryStateBuffer;

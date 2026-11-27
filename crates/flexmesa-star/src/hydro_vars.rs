@@ -9,9 +9,7 @@
 use flexmesa_const::{
     MixingType, BOLTZ_SIGMA, CGAS, CLIGHT, CRAD, FOUR_PI, LN10,
 };
-use flexmesa_eos::{
-    I_CHI_RHO, I_CHI_T, I_CP, I_GRAD_AD, I_LN_E, I_PHASE,
-};
+use flexmesa_eos::{I_CHI_RHO, I_CHI_T, I_CP, I_GRAD_AD, I_LN_E, I_PHASE};
 use flexmesa_turb::{
     set_mlt, set_semiconvection, set_tdc, set_thermohaline, MltInputs,
     MltOption, MltParams, SemiconvectionInputs, SemiconvectionParams,
@@ -101,10 +99,7 @@ pub(crate) fn set_mlt_vars_range(
     let solver_iter = model.aux.solver_iter;
     for k in k_lo..=k_hi {
         let make_sticky = do1_mlt_2(model, k, None, None)?;
-        if make_sticky
-            && solver_iter > 3
-            && !model.aux.fixed_gradr_sticky[k]
-        {
+        if make_sticky && solver_iter > 3 && !model.aux.fixed_gradr_sticky[k] {
             model.aux.fixed_gradr_sticky[k] =
                 model.aux.mixing.mlt_mixing_type[k] == MixingType::NoMixing;
         }
@@ -114,9 +109,7 @@ pub(crate) fn set_mlt_vars_range(
 
 /// Updates Lagrangian mass-diffusion coefficients `model.sig` from `model.d_mix`
 /// by delegating to [`crate::mix_info::compute_convection_sigmas`].
-pub fn update_sig_from_d_mix(
-    model: &mut StarModel,
-) -> Result<(), StarError> {
+pub fn update_sig_from_d_mix(model: &mut StarModel) -> Result<(), StarError> {
     let eff_mix_factor = if model.controls.do_mix {
         model.controls.mix_factor
     } else {
@@ -224,14 +217,13 @@ pub(crate) fn do1_mlt_2(
 
     let mixing_length_alpha =
         mixing_length_alpha_in.unwrap_or(model.controls.mixing_length_alpha);
-    let gradl_composition_term =
-        if let Some(b_in) = gradl_composition_term_in {
-            b_in
-        } else if model.controls.use_ledoux_criterion {
-            model.aux.mixing.gradl_composition_term[k]
-        } else {
-            0.0
-        };
+    let gradl_composition_term = if let Some(b_in) = gradl_composition_term_in {
+        b_in
+    } else if model.controls.use_ledoux_criterion {
+        model.aux.mixing.gradl_composition_term[k]
+    } else {
+        0.0
+    };
 
     let (alfa, beta_w) = model.get_face_weights(k);
 
@@ -306,8 +298,8 @@ pub(crate) fn do1_mlt_2(
         hp_std
     };
 
-    let gradr_base =
-        p_f * kap_f * lum_k / (4.0 * FOUR_PI * CLIGHT * m_grav_k * cgrav_k * prad_f);
+    let gradr_base = p_f * kap_f * lum_k
+        / (4.0 * FOUR_PI * CLIGHT * m_grav_k * cgrav_k * prad_f);
     let base_gradr_fac = model.aux.mixing.gradr_factor[k];
     let gradr_factor = if model.controls.rotation_flag
         && model.controls.mix_wind.mlt_use_rotation_correction
@@ -399,8 +391,7 @@ pub(crate) fn do1_mlt_2(
         return Ok(false);
     }
 
-    if mw.no_mlt_below_shock
-        && (model.controls.u_flag || model.controls.v_flag)
+    if mw.no_mlt_below_shock && (model.controls.u_flag || model.controls.v_flag)
     {
         let vel = if model.controls.u_flag {
             &model.u
@@ -441,9 +432,7 @@ pub(crate) fn do1_mlt_2(
                 let abs_du_div_cs = if k == 0 {
                     1.0e99
                 } else if k + 1 < nz {
-                    (vel[k] - vel[k + 1])
-                        .abs()
-                        .max((vel[k] - vel[k - 1]).abs())
+                    (vel[k] - vel[k + 1]).abs().max((vel[k] - vel[k - 1]).abs())
                         / cs_start_k
                 } else {
                     0.0
@@ -485,7 +474,12 @@ pub(crate) fn do1_mlt_2(
     }
     // `star/private/turb_info.f90:220`: no solver-iteration test here.
     if make_gradr_sticky
-        && model.aux.fixed_gradr_sticky.get(k).copied().unwrap_or(false)
+        && model
+            .aux
+            .fixed_gradr_sticky
+            .get(k)
+            .copied()
+            .unwrap_or(false)
     {
         set_no_mixing_face(
             model,
@@ -499,23 +493,24 @@ pub(crate) fn do1_mlt_2(
         return Ok(make_gradr_sticky);
     }
 
+    let tap_on = crate::replay_tap::active(model);
+
     // `Get_results` (`star/private/turb_support.f90:198-510`). Upstream picks
     // `MLT_option` on the first try of the step, before `prepare_for_new_try`
     // advances `model_number` (`star/private/evolve.f90:390-396, 2012`), so
     // the threshold is tested against the previous generation's number.
-    let mlt_opt = if !model.aux.doing_relax
-        && model.controls.steps_before_use_tdc > 0
-    {
-        if (model.model_number_old as isize)
-            >= model.controls.steps_before_use_tdc
-        {
-            MltOption::Tdc
+    let mlt_opt =
+        if !model.aux.doing_relax && model.controls.steps_before_use_tdc > 0 {
+            if (model.model_number_old as isize)
+                >= model.controls.steps_before_use_tdc
+            {
+                MltOption::Tdc
+            } else {
+                MltOption::Cox
+            }
         } else {
-            MltOption::Cox
-        }
-    } else {
-        model.controls.mlt_option
-    };
+            model.controls.mlt_option
+        };
 
     // `if (k <= 0 .or. s%dt <= 0d0) using_TDC = .false.` with 1-based `k`
     // (`star/private/turb_support.f90:232`): every face, the surface face
@@ -584,31 +579,7 @@ pub(crate) fn do1_mlt_2(
             } else {
                 model.mlt_vc.get(k).copied().unwrap_or(0.0)
             };
-            let e_00 = wrap_e_cell(model, k);
-            let e_f = if k == 0 {
-                e_00
-            } else {
-                e_00 * alfa + wrap_e_cell(model, k - 1).shift_m1() * beta_w
-            };
-            // `dV = 1d0/rho - 1d0/rho_start` with `rho_start = get_rho_start_face`
-            // (`star/private/turb_support.f90:166-168`, `star_utils.f90:3811-3822`):
-            // `wrap_d_00_start`/`wrap_d_m1_start` carry `rho_start` with the
-            // partial `d/dlnd = rho_start` (`auto_diff_support.f90:288-306`).
-            let rho_start_00 = flexmesa_math::exp(model.lnd_start[k]);
-            let mut d_00_start = StarAdOrder1::ZERO;
-            d_00_start.val = rho_start_00;
-            d_00_start.d1[I_LND_00] = rho_start_00;
-            let rho_start_f = if k == 0 {
-                d_00_start
-            } else {
-                let rho_start_m1 = flexmesa_math::exp(model.lnd_start[k - 1]);
-                let mut d_m1_start = StarAdOrder1::ZERO;
-                d_m1_start.val = rho_start_m1;
-                d_m1_start.d1[I_LND_M1] = rho_start_m1;
-                d_00_start * alfa + d_m1_start * beta_w
-            };
-            let dv_f = (StarAdOrder1::constant(1.0) / rho_f)
-                - (StarAdOrder1::constant(1.0) / rho_start_f);
+            let (dv_f, e_f) = face_dv_and_energy(model, k, alfa, beta_w, rho_f);
             // Scale for the TDC luminosity equation
             // (`star/private/turb_support.f90:319-325`): `L` when
             // `s% solver_iter == 0`, otherwise `L_start`.
@@ -661,13 +632,22 @@ pub(crate) fn do1_mlt_2(
                 grav: grav_f,
                 energy: e_f,
             };
-            let tdc_out = set_tdc(&tdc_params, &tdc_in)
-                .map_err(|e| {
-                    StarError::MicrophysicsError(format!(
-                        "TDC evaluation failed at face {k} (`star/private/turb_support.f90:337-340`): {e}"
-                    ))
-                })?
-                .output;
+            let tdc_full = set_tdc(&tdc_params, &tdc_in).map_err(|e| {
+                StarError::MicrophysicsError(format!(
+                    "TDC evaluation failed at face {k} (`star/private/turb_support.f90:337-340`): {e}"
+                ))
+            })?;
+            if tap_on {
+                crate::replay_tap::tdc(
+                    model,
+                    k,
+                    1,
+                    &tdc_params,
+                    &tdc_in,
+                    &tdc_full,
+                );
+            }
+            let tdc_out = tdc_full.output;
             // Upstream `set_TDC` (`turb/public/turb.f90:114-130`) keeps `Gamma`
             // local and does not modify `Get_results`'s `Gamma = 0`
             // (`star/private/turb_support.f90:288,328-334`).
@@ -690,13 +670,23 @@ pub(crate) fn do1_mlt_2(
                 model.aux.mixing.superad_reduction_factor[k] = gamma_factor.val;
                 if gamma_factor.val > 1.0 {
                     tdc_in.gradr = gradr_scaled;
-                    let tdc_out2 = set_tdc(&tdc_params, &tdc_in)
-                        .map_err(|e| {
+                    let tdc_full2 =
+                        set_tdc(&tdc_params, &tdc_in).map_err(|e| {
                             StarError::MicrophysicsError(format!(
                                 "TDC superad_reduction failed at face {k}: {e}"
                             ))
-                        })?
-                        .output;
+                        })?;
+                    if tap_on {
+                        crate::replay_tap::tdc(
+                            model,
+                            k,
+                            2,
+                            &tdc_params,
+                            &tdc_in,
+                            &tdc_full2,
+                        );
+                    }
+                    let tdc_out2 = tdc_full2.output;
                     mix_type = tdc_out2.mixing_type;
                     grad_t_f = tdc_out2.grad_t;
                     y_face_f = tdc_out2.y_face;
@@ -731,6 +721,9 @@ pub(crate) fn do1_mlt_2(
                     "set_mlt failed at face {k}: {e}"
                 ))
             })?;
+            if tap_on {
+                crate::replay_tap::mlt(model, k, 3, &mlt_params, &mlt_in, &out);
+            }
             mix_type = out.mixing_type;
             grad_t_f = out.grad_t;
             y_face_f = out.y_face;
@@ -756,6 +749,16 @@ pub(crate) fn do1_mlt_2(
                             "set_mlt superad_reduction failed at face {k}: {e}"
                         ))
                     })?;
+                    if tap_on {
+                        crate::replay_tap::mlt(
+                            model,
+                            k,
+                            4,
+                            &mlt_params,
+                            &mlt_in,
+                            &out2,
+                        );
+                    }
                     mix_type = out2.mixing_type;
                     grad_t_f = out2.grad_t;
                     y_face_f = out2.y_face;
@@ -880,6 +883,43 @@ pub(crate) fn do1_mlt_2(
         }
     }
 
+    if tap_on {
+        tap_get_results(
+            model,
+            k,
+            (alfa, beta_w),
+            mlt_opt,
+            &TapFace {
+                r: r_k,
+                l: lum_k,
+                t: t_f,
+                p: p_f,
+                opacity: kap_f,
+                rho: rho_f,
+                chi_rho: chi_rho_f,
+                chi_t: chi_t_f,
+                cp: cp_f,
+                gradr: gradr_spot,
+                grada: grada_face_ad,
+                scale_height: scale_height_ad,
+            },
+            (
+                cgrav_k,
+                m_grav_k,
+                gradl_composition_term,
+                mixing_length_alpha,
+            ),
+            &flexmesa_turb::TurbOutput {
+                gamma: gamma_f,
+                grad_t: grad_t_f,
+                y_face: y_face_f,
+                conv_vel: conv_vel_f,
+                d: d_f,
+                mixing_type: mix_type,
+            },
+        );
+    }
+
     // `store_results` (`star/private/turb_info.f90:252-289`).
     model.aux.mixing.mlt_mixing_type[k] = mix_type;
     model.aux.mixing.grada_face_ad[k] = grada_face_ad;
@@ -960,6 +1000,120 @@ pub(crate) fn thermohaline_xh1(
              #557, DECISIONS #43)",
         ))),
     }
+}
+
+/// `dV` and `energy` at face `k` as `do1_mlt_eval` forms them
+/// (`star/private/turb_support.f90:166-170`).
+fn face_dv_and_energy(
+    model: &StarModel,
+    k: usize,
+    alfa: f64,
+    beta_w: f64,
+    rho_f: StarAdOrder1,
+) -> (StarAdOrder1, StarAdOrder1) {
+    let e_00 = wrap_e_cell(model, k);
+    let e_f = if k == 0 {
+        e_00
+    } else {
+        e_00 * alfa + wrap_e_cell(model, k - 1).shift_m1() * beta_w
+    };
+    // `dV = 1d0/rho - 1d0/rho_start` with `rho_start = get_rho_start_face`
+    // (`star/private/turb_support.f90:166-168`, `star_utils.f90:3811-3822`):
+    // `wrap_d_00_start`/`wrap_d_m1_start` carry `rho_start` with the
+    // partial `d/dlnd = rho_start` (`auto_diff_support.f90:288-306`).
+    let rho_start_00 = flexmesa_math::exp(model.lnd_start[k]);
+    let mut d_00_start = StarAdOrder1::ZERO;
+    d_00_start.val = rho_start_00;
+    d_00_start.d1[I_LND_00] = rho_start_00;
+    let rho_start_f = if k == 0 {
+        d_00_start
+    } else {
+        let rho_start_m1 = flexmesa_math::exp(model.lnd_start[k - 1]);
+        let mut d_m1_start = StarAdOrder1::ZERO;
+        d_m1_start.val = rho_start_m1;
+        d_m1_start.d1[I_LND_M1] = rho_start_m1;
+        d_00_start * alfa + d_m1_start * beta_w
+    };
+    let dv_f = (StarAdOrder1::constant(1.0) / rho_f)
+        - (StarAdOrder1::constant(1.0) / rho_start_f);
+    (dv_f, e_f)
+}
+
+/// Face values `do1_mlt_2` passes to `Get_results`, for the replay tap.
+struct TapFace {
+    r: StarAdOrder1,
+    l: StarAdOrder1,
+    t: StarAdOrder1,
+    p: StarAdOrder1,
+    opacity: StarAdOrder1,
+    rho: StarAdOrder1,
+    chi_rho: StarAdOrder1,
+    chi_t: StarAdOrder1,
+    cp: StarAdOrder1,
+    gradr: StarAdOrder1,
+    grada: StarAdOrder1,
+    scale_height: StarAdOrder1,
+}
+
+/// Writes the `GETR` record of face `k` (`#552`). Reads only; `dV` and
+/// `energy` are formed by [`face_dv_and_energy`], as for `set_tdc`, when the
+/// start-of-step density is available and written as not available
+/// otherwise. `scalars` is `(cgrav, m, gradL_composition_term,
+/// mixing_length_alpha)`.
+fn tap_get_results(
+    model: &StarModel,
+    k: usize,
+    (alfa, beta_w): (f64, f64),
+    mlt_option: MltOption,
+    f: &TapFace,
+    scalars: (f64, f64, f64, f64),
+    out: &flexmesa_turb::TurbOutput<StarAdOrder1>,
+) {
+    let (dv, energy) = if model.lnd_start.len() == model.nz {
+        let (dv, e) = face_dv_and_energy(model, k, alfa, beta_w, f.rho);
+        (Some(dv), Some(e))
+    } else {
+        (None, None)
+    };
+    let (cgrav, m, gradl_composition_term, mixing_length_alpha) = scalars;
+    let args = crate::replay_tap::GetResultsArgs {
+        mlt_option,
+        r: &f.r,
+        l: &f.l,
+        t: &f.t,
+        p: &f.p,
+        opacity: &f.opacity,
+        rho: &f.rho,
+        dv,
+        chi_rho: &f.chi_rho,
+        chi_t: &f.chi_t,
+        cp: &f.cp,
+        gradr: &f.gradr,
+        grada: &f.grada,
+        scale_height: &f.scale_height,
+        iso: model
+            .aux
+            .mixing
+            .dominant_iso_for_thermohaline
+            .get(k)
+            .copied()
+            .unwrap_or(0),
+        // `XH1` as `do1_mlt_2` passes it to `set_thermohaline`: the `h1`
+        // mass fraction (#556). The tap only reads, so when the network
+        // has no `h1` (the engine's explicit error, #557) it records `NaN`
+        // and leaves that error to the engine path.
+        xh1: thermohaline_xh1(model, k, model.controls.thermohaline_option)
+            .unwrap_or(f64::NAN),
+        cgrav,
+        m,
+        gradl_composition_term,
+        mixing_length_alpha,
+        alpha_semiconvection: model.controls.alpha_semiconvection,
+        thermohaline_coeff: model.controls.thermohaline_coeff,
+        energy,
+        out,
+    };
+    crate::replay_tap::get_results(model, k, &args);
 }
 
 fn set_no_mixing_face(
@@ -1070,18 +1224,17 @@ pub(crate) fn eval_superad_reduction(
             if reduction_limit > 1.0 {
                 let lambda_limit = 2.0 / (reduction_limit - 1.0);
                 let exp_limit = ((gamma_factor - 1.0) * (-lambda_limit)).exp();
-                gamma_factor = ((StarAdOrder1::constant(1.0)
-                    / (exp_limit + 1.0))
-                    - 0.5)
-                    * (2.0 * (reduction_limit - 1.0))
-                    + 1.0;
+                gamma_factor =
+                    ((StarAdOrder1::constant(1.0) / (exp_limit + 1.0)) - 0.5)
+                        * (2.0 * (reduction_limit - 1.0))
+                        + 1.0;
             }
         }
     }
 
     let gradr_scaled = if gamma_factor.val > 1.0 {
-        let grad_scale =
-            (gradr_ad - gradl_f) / (gamma_factor * gradr_ad) + gradl_f / gradr_ad;
+        let grad_scale = (gradr_ad - gradl_f) / (gamma_factor * gradr_ad)
+            + gradl_f / gradr_ad;
         grad_scale * gradr_ad
     } else {
         gradr_ad
@@ -1272,8 +1425,8 @@ pub fn check_for_redo_mlt(model: &mut StarModel) -> Result<(), StarError> {
     if model.aux.mixing.mlt_mixing_type.len() != nz {
         return Ok(());
     }
-    let mut in_conv =
-        model.aux.mixing.mlt_mixing_type[nz - 1] == MixingType::ConvectiveMixing;
+    let mut in_conv = model.aux.mixing.mlt_mixing_type[nz - 1]
+        == MixingType::ConvectiveMixing;
     let mut k_bot = nz - 1;
     let mut bot_r = model.r[k_bot];
     let mut bot_hp = model.scale_height[k_bot];
@@ -1386,7 +1539,10 @@ pub fn set_hydro_vars(
         model,
         skip_net,
         skip_net_jacobian,
-        SetHydroVarsSkips { solver, ..SetHydroVarsSkips::default() },
+        SetHydroVarsSkips {
+            solver,
+            ..SetHydroVarsSkips::default()
+        },
     )
 }
 
@@ -1577,15 +1733,13 @@ pub(crate) fn set_hydro_vars_with_skips(
         if model.controls.mix_wind.use_t_tau_gradr_factor {
             let t_tau_id = model.controls.atm_t_tau_relation.id();
             for k in 0..nz {
-                let dq = flexmesa_atm::eval_t_tau_dq_dtau(
-                    t_tau_id,
-                    model.tau[k],
-                )
-                .map_err(|e| {
-                    StarError::MicrophysicsError(format!(
-                        "eval_t_tau_dq_dtau failed at face {k}: {e}"
-                    ))
-                })?;
+                let dq =
+                    flexmesa_atm::eval_t_tau_dq_dtau(t_tau_id, model.tau[k])
+                        .map_err(|e| {
+                            StarError::MicrophysicsError(format!(
+                                "eval_t_tau_dq_dtau failed at face {k}: {e}"
+                            ))
+                        })?;
                 model.aux.mixing.gradr_factor[k] = 1.0 + dq;
             }
         } else {
@@ -1628,8 +1782,7 @@ pub(crate) fn set_hydro_vars_with_skips(
                 model.aux.mixing.mlt_mixing_type[k] = mt;
                 let grada_f = alfa * model.grada[k] + beta * model.grada[k - 1];
                 model.gradt[k] = model.aux.rsp.y_face_rsp[k] + grada_f;
-                model.aux.mixing.gradt_sub_grada[k] =
-                    model.gradt[k] - grada_f;
+                model.aux.mixing.gradt_sub_grada[k] = model.gradt[k] - grada_f;
             }
         }
         if !skips.solver && sig_was_zero {
@@ -1692,16 +1845,11 @@ mod tests {
     #[test]
     fn thermohaline_xh1_is_the_h1_mass_fraction_not_summed_hydrogen() {
         // Zone 1 (0-based) has h1 = 0.25, h2 = 0.125, he4 = 0.625.
-        let m = model(
-            &["h1", "h2", "he4"],
-            &[0.5, 0.25, 0.25, 0.25, 0.125, 0.625],
-        );
-        let x = thermohaline_xh1(
-            &m,
-            1,
-            ThermohalineOption::BrownGaraudStellmach13,
-        )
-        .unwrap();
+        let m =
+            model(&["h1", "h2", "he4"], &[0.5, 0.25, 0.25, 0.25, 0.125, 0.625]);
+        let x =
+            thermohaline_xh1(&m, 1, ThermohalineOption::BrownGaraudStellmach13)
+                .unwrap();
         assert_eq!(x.to_bits(), 0.25_f64.to_bits());
     }
 

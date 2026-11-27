@@ -12,7 +12,7 @@ use flexmesa_math::{exp10, log10};
 use crate::controls::StarError;
 use crate::inlist_runner::StarExtras;
 use crate::model::StarModel;
-use crate::relax_driver::{RelaxOmegaKind, do_relax_uniform_omega};
+use crate::relax_driver::{do_relax_uniform_omega, RelaxOmegaKind};
 
 /// The rotation and `tau_factor` tail of `after_step_loop`
 /// (`star/job/run_star_support.f90:752-763`).
@@ -85,10 +85,18 @@ fn relax_tau_factor(model: &mut StarModel) {
     let target = job.relax_to_this_tau_factor;
     let next = if target < tau {
         let next = exp10(safe_log10(tau) - job.dlogtau_factor);
-        if next < target { target } else { next }
+        if next < target {
+            target
+        } else {
+            next
+        }
     } else {
         let next = exp10(safe_log10(tau) + job.dlogtau_factor);
-        if next > target { target } else { next }
+        if next > target {
+            target
+        } else {
+            next
+        }
     };
     if next != tau {
         model.controls.tau_factor = next;

@@ -5,7 +5,7 @@
 use flexmesa_schema::ControlValue;
 
 use crate::controls::StarError;
-use crate::inlist::{InlistBundle, SectionControls};
+use crate::inlist::{InlistBundle, SectionControls, NUM_XA_LIMITS};
 use crate::inlist_populate::{map_bools, map_f64s, map_opt_f64s, map_strs};
 
 impl InlistBundle {
@@ -136,10 +136,26 @@ impl InlistBundle {
         ctrl.try_f64_into("controls", &mut c.max_years_for_timestep, "max_years_for_timestep")?;
         ctrl.try_bool_into("controls", &mut c.stop_near_zams, "stop_near_zams")?;
         ctrl.try_f64_into("controls", &mut c.lnuc_div_l_zams_limit, "lnuc_div_l_zams_limit")?;
-        c.xa_central_lower_limit_species = ctrl.try_get_indexed_strings("controls", "xa_central_lower_limit_species")?;
-        c.xa_central_lower_limit = ctrl.try_get_indexed_f64s("controls", "xa_central_lower_limit")?;
-        c.xa_central_upper_limit_species = ctrl.try_get_indexed_strings("controls", "xa_central_upper_limit_species")?;
-        c.xa_central_upper_limit = ctrl.try_get_indexed_f64s("controls", "xa_central_upper_limit")?;
+        c.xa_central_lower_limit_species = ctrl.try_get_indexed_strings_bounded(
+            "controls",
+            "xa_central_lower_limit_species",
+            Some(NUM_XA_LIMITS),
+        )?;
+        c.xa_central_lower_limit = ctrl.try_get_indexed_f64s_bounded(
+            "controls",
+            "xa_central_lower_limit",
+            Some(NUM_XA_LIMITS),
+        )?;
+        c.xa_central_upper_limit_species = ctrl.try_get_indexed_strings_bounded(
+            "controls",
+            "xa_central_upper_limit_species",
+            Some(NUM_XA_LIMITS),
+        )?;
+        c.xa_central_upper_limit = ctrl.try_get_indexed_f64s_bounded(
+            "controls",
+            "xa_central_upper_limit",
+            Some(NUM_XA_LIMITS),
+        )?;
 
         map_f64s!("controls", ctrl, c, [
             log_center_temp_upper_limit, log_center_density_upper_limit,

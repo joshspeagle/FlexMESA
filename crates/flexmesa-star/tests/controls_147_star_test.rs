@@ -17,7 +17,7 @@ use flexmesa_star::adjust_mesh_support::{
     OtherMeshDeltaCoeffFactorHandle, OtherMeshDeltaCoeffFactorHook,
 };
 use flexmesa_star::controls::{
-    StarControls, StarError, StarJobControls, VarLayout,
+    AtmOption, StarControls, StarError, StarJobControls, VarLayout,
 };
 use flexmesa_star::controls_output::OutputControls;
 use flexmesa_star::hydro_eqns::HenyeySystem;
@@ -49,9 +49,10 @@ use flexmesa_star::pulse::export_gyre;
 use flexmesa_star::pulse_exporters::{
     export_pulse_by_format, export_pulse_with_controls,
 };
+use flexmesa_star::rn_parser::{parse_rn_stages, RnStage};
 use flexmesa_star::star_job_init::init_or_update_model_from_bundle;
 use flexmesa_star::{
-    apply_step_pre_physics, load_zams_model,
+    apply_step_pre_physics, eval_surf_bc, load_zams_model,
     record_start_of_step_energy_integrals, set_hydro_vars, star_evolve_step,
     yrs_for_init_timestep, StarModel,
 };
@@ -635,6 +636,7 @@ fn test_147_inventory_parity_and_excluded_keys_still_rejected() {
     for key in [
         "add_atmosphere_to_pulse_data",
         "add_center_point_to_pulse_data",
+        "atm_off_table_option",
         "base_of_inject_extra_ergs_sec",
         "duration_for_inject_extra_ergs_sec",
         "inject_extra_ergs_sec",
@@ -654,12 +656,14 @@ fn test_147_inventory_parity_and_excluded_keys_still_rejected() {
         assert!(!CONTROLS_UNUSED.contains(&key), "{key} still in unused");
     }
 
-    // Keys outside our crate/file scope must remain strictly rejected.
+    // Keys outside our crate/file scope (and invalid options on supported
+    // keys) must remain strictly rejected.
     let tmp = TempCaseGuard::new("excluded");
     // (`mesa_dir` left this list when it became a supported
     // installation-location key, `DECISIONS #68`.)
     for (idx, body) in [
         "&controls\n  atm_off_table_option = 'simple'\n/\n",
+        "&controls\n  fill_arrays_with_nans = .true.\n/\n",
         "&star_job\n  electron_coulomb_corrections = 'Itoh2002'\n/\n",
         "&star_job\n  ion_coulomb_corrections = 'PCR2009'\n/\n",
         "&star_job\n  new_w_div_wc_flag = .true.\n/\n",
@@ -1094,4 +1098,151 @@ fn test_147_pulse_center_profile_sidecar_and_terminate_save() {
     assert!(!reloaded.controls.add_center_point_to_pulse_data);
     assert!(reloaded.job.save_pulse_data_when_terminate);
     assert_eq!(reloaded.job.save_pulse_data_filename, "term_pulse.gyre");
+}
+
+#[test]
+fn test_147_atm_off_table_option_parse_and_c13_pocket() {
+    assert!(CONTROLS_SUPPORTED.contains(&"atm_off_table_option"));
+    assert!(!CONTROLS_UNUSED.contains(&"atm_off_table_option"));
+    assert_eq!(StarControls::default().atm_off_table_option, "T_tau");
+
+    let tmp = TempCaseGuard::new("atm_off_table_parse");
+
+    // 1. Strict parsing accepts `'T_tau'` and `''` case-sensitively and
+    // rejects `'simple'`, `'t_tau'`, and `' T_tau'` loudly.
+    let p_ttau = tmp.root.join("inlist_ttau");
+    fs::write(
+        &p_ttau,
+        "&controls\n  atm_option = 'table'\n  atm_table = 'photosphere'\n  \
+         atm_off_table_option = 'T_tau'\n/\n",
+    )
+    .expect("write ttau inlist");
+    let b_ttau = InlistBundle::from_file(&p_ttau).expect("parse T_tau");
+    assert_eq!(b_ttau.controls.atm_off_table_option, "T_tau");
+
+    let p_blank = tmp.root.join("inlist_blank");
+    fs::write(
+        &p_blank,
+        "&controls\n  atm_option = 'table'\n  atm_table = 'photosphere'\n  \
+         atm_off_table_option = ''\n/\n",
+    )
+    .expect("write blank inlist");
+    let b_blank = InlistBundle::from_file(&p_blank).expect("parse empty ''");
+    assert_eq!(b_blank.controls.atm_off_table_option, "");
+
+    for (idx, bad) in ["simple", "t_tau", " T_tau"].iter().enumerate() {
+        let p_bad = tmp.root.join(format!("inlist_bad_{idx}"));
+        fs::write(
+            &p_bad,
+            format!("&controls\n  atm_off_table_option = '{bad}'\n/\n"),
+        )
+        .expect("write bad inlist");
+        let err = InlistBundle::from_file(&p_bad)
+            .expect_err("invalid atm_off_table_option must fail loudly");
+        assert!(
+            matches!(err, StarError::InvalidInput(_)),
+            "expected InvalidInput for '{bad}', got {err}"
+        );
+    }
+
+    // 2. Strict parse (`allow_unsupported_controls = false`) of upstream
+    // `star/test_suite/c13_pocket` passes with zero unsupported controls.
+    if let Some(c13_dir) = flexmesa_utils::require_mesa_test_input_path(
+        "star/test_suite/c13_pocket",
+    ) {
+        let stages = parse_rn_stages(&c13_dir, false)
+            .expect("parse c13_pocket rn stages");
+        let mut saw_c13_header = false;
+        for stage in &stages {
+            let RnStage::DoOne { inlist, .. } = stage else {
+                continue;
+            };
+            let bundle = InlistBundle::from_file_in_case_dir(&c13_dir, inlist)
+                .unwrap_or_else(|e| {
+                    panic!("strict parse of {inlist} failed: {e}")
+                });
+            assert!(
+                bundle.validation_report.unsupported_controls.is_empty(),
+                "unexpected unsupported controls in {inlist}: {:?}",
+                bundle.validation_report.unsupported_controls
+            );
+            assert!(
+                bundle.validation_report.unknown_controls.is_empty(),
+                "unexpected unknown controls in {inlist}: {:?}",
+                bundle.validation_report.unknown_controls
+            );
+            if inlist == "inlist_c13_pocket_header" {
+                saw_c13_header = true;
+                assert_eq!(bundle.controls.atm_off_table_option, "T_tau");
+            }
+        }
+        assert!(saw_c13_header, "expected inlist_c13_pocket_header stage");
+    }
+}
+
+#[test]
+fn test_147_atm_off_table_option_eval_surf_bc_and_roundtrip() {
+    // `eval_surf_bc` -> `get_table` (`star/private/atm_support.f90:604-650`):
+    // when `alfa == 0.0` (on-table solar ZAMS), `atm_off_table_option` is not
+    // checked; when `alfa > 0.0`, `'T_tau'` succeeds, whereas both `''`
+    // (`mesa_error` + `stop`) and unrecognized values raise non-retriable
+    // `InvalidInput`.
+    let mut base_table_model = default_zams();
+    base_table_model.controls.atm_option = AtmOption::Table;
+    base_table_model.controls.atm_table = String::from("tau_100");
+    base_table_model.tau_base = 100.0;
+    set_hydro_vars(&mut base_table_model, false, false)
+        .expect("set_hydro_vars");
+
+    let mut on_table = base_table_model.clone();
+    on_table.controls.atm_off_table_option = String::from("T_tau");
+    eval_surf_bc(&mut on_table).expect("on-table T_tau");
+    let ref_ln_t = on_table.surf_pt.ln_t;
+    let ref_ln_p = on_table.surf_pt.ln_p;
+
+    let mut on_table_blank = base_table_model.clone();
+    on_table_blank.controls.atm_off_table_option = String::new();
+    eval_surf_bc(&mut on_table_blank)
+        .expect("alfa == 0 does not check atm_off_table_option");
+    assert_eq!(on_table_blank.surf_pt.ln_t.to_bits(), ref_ln_t.to_bits());
+    assert_eq!(on_table_blank.surf_pt.ln_p.to_bits(), ref_ln_p.to_bits());
+    assert_eq!(on_table_blank.tau_base, 100.0);
+
+    let mut off_ttau = base_table_model.clone();
+    off_ttau.lum[0] *= 1.0e5;
+    off_ttau.controls.atm_off_table_option = String::from("T_tau");
+    eval_surf_bc(&mut off_ttau).expect("off-table T_tau fallback");
+    assert!((off_ttau.tau_base - 2.0 / 3.0).abs() < 1.0e-12);
+    assert!(off_ttau.surf_pt.ln_t.is_finite());
+    assert!(off_ttau.surf_pt.ln_p.is_finite());
+
+    let mut off_blank = base_table_model.clone();
+    off_blank.lum[0] *= 1.0e5;
+    off_blank.controls.atm_off_table_option = String::new();
+    let err_blank = eval_surf_bc(&mut off_blank)
+        .expect_err("off-table '' must fail loudly");
+    assert!(
+        matches!(err_blank, StarError::InvalidInput(_)),
+        "expected InvalidInput for empty atm_off_table_option, got {err_blank}"
+    );
+    assert!(
+        !err_blank.is_retriable(),
+        "empty atm_off_table_option must not trigger step retries: {err_blank}"
+    );
+
+    let mut off_bogus = base_table_model;
+    off_bogus.lum[0] *= 1.0e5;
+    off_bogus.controls.atm_off_table_option = String::from("bogus");
+    let err_bogus = eval_surf_bc(&mut off_bogus)
+        .expect_err("off-table bogus option must fail loudly");
+    assert!(
+        matches!(err_bogus, StarError::InvalidInput(_)),
+        "expected InvalidInput for bogus atm_off_table_option, got {err_bogus}"
+    );
+
+    // `.photo` roundtrip preserves `atm_off_table_option`.
+    on_table_blank.controls.atm_off_table_option = String::new();
+    let photo = write_photo_bytes(&on_table_blank);
+    let reloaded = load_photo_bytes(&photo).expect("load photo");
+    assert_eq!(reloaded.controls.atm_off_table_option, "");
 }

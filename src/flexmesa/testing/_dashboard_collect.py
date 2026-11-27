@@ -13,6 +13,7 @@ from flexmesa.testing import (
     case_report,
     known_gaps_gate,
     port_manifest,
+    test_taxonomy,
 )
 
 MODULE_CODE_PATHS: dict[str, tuple[tuple[str, ...], tuple[str, ...]]] = {
@@ -589,3 +590,30 @@ def collect_ignored_and_skipped_tests(
         "python_skips": py_skips,
         "unlinked_locations": unlinked,
     }
+
+
+def collect_test_taxonomy(
+    repo_root: pathlib.Path,
+    manifest: port_manifest.PortManifest | None = None,
+) -> dict[str, Any]:
+    """Collect W4 file-level taxonomy and listed routine oracle counts."""
+    tax_path = repo_root / test_taxonomy.DEFAULT_TAXONOMY_REL
+    if not tax_path.is_file():
+        return {
+            "total_files": 0,
+            "total_tests": 0,
+            "by_kind": {k: {"files": 0} for k in test_taxonomy.VALID_KINDS},
+            "by_language": {
+                lang: {"files": 0, "tests": 0}
+                for lang in test_taxonomy.VALID_LANGUAGES
+            },
+            "mislabeled_count": 0,
+            "mislabeled_files": [],
+            "mapped_routines_total": 0,
+            "listed_oracle_routines_total": 0,
+            "listed_oracle_routines_pct": 0.0,
+            "listed_oracle_routine_ids": [],
+            "by_module": [],
+        }
+    taxonomy = test_taxonomy.load_test_taxonomy(tax_path)
+    return test_taxonomy.summarize_test_taxonomy(repo_root, taxonomy, manifest)

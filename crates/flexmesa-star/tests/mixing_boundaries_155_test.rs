@@ -39,7 +39,10 @@ fn zams_4m() -> StarModel {
 fn build_ledoux_core_gradient_4m() -> StarModel {
     let mut model = zams_4m();
     model.controls.use_ledoux_criterion = true;
-    model.controls.mix_wind.num_cells_for_smooth_gradl_composition_term = 0;
+    model
+        .controls
+        .mix_wind
+        .num_cells_for_smooth_gradl_composition_term = 0;
     model.controls.mix_wind.num_cells_for_smooth_brunt_b = 0;
     let _ = locate_convection_boundaries(&mut model)
         .expect("locate_convection_boundaries");
@@ -50,10 +53,16 @@ fn build_ledoux_core_gradient_4m() -> StarModel {
     // `gradL = grada + B > gradr` stabilizes it under Ledoux.
     let sp = model.species;
     let idx_h1 = model.iso_names.iter().position(|s| s == "h1").expect("h1");
-    let idx_he4 = model.iso_names.iter().position(|s| s == "he4").expect("he4");
+    let idx_he4 = model
+        .iso_names
+        .iter()
+        .position(|s| s == "he4")
+        .expect("he4");
     let k_grad_top = (k_bdy + 30).min(model.nz - 25);
     let k_grad_bot = (k_grad_top + 12).min(model.nz - 10);
-    let span = f64::from(u32::try_from((k_grad_bot - k_grad_top).max(1)).expect("small span"));
+    let span = f64::from(
+        u32::try_from((k_grad_bot - k_grad_top).max(1)).expect("small span"),
+    );
     for k in k_grad_top..model.nz {
         let frac = if k < k_grad_bot {
             f64::from(u32::try_from(k - k_grad_top).expect("small offset"))
@@ -177,7 +186,11 @@ fn test_brunt_b_preserves_unsmoothed_b_and_brunt_n2_respects_gates() {
     let mut model = zams_4m();
     let sp = model.species;
     let idx_h1 = model.iso_names.iter().position(|s| s == "h1").expect("h1");
-    let idx_he4 = model.iso_names.iter().position(|s| s == "he4").expect("he4");
+    let idx_he4 = model
+        .iso_names
+        .iter()
+        .position(|s| s == "he4")
+        .expect("he4");
 
     // Inject a sharp step in He inside the interior so `brunt_B` has a sharp peak.
     let k_step = model.nz / 2;
@@ -266,8 +279,8 @@ fn test_mlt_call_site_gates_t_tau_gradr_and_mlt_vs_mixing_separation() {
     m_gf.controls.mix_wind.mlt_gradt_fraction = 0.35;
     set_mlt_vars(&mut m_gf).expect("set_mlt_vars");
     let k_mid = m_gf.nz / 2;
-    let want_gt = 0.35 * m_gf.aux.mixing.grada_face[k_mid]
-        + 0.65 * m_gf.gradr[k_mid];
+    let want_gt =
+        0.35 * m_gf.aux.mixing.grada_face[k_mid] + 0.65 * m_gf.gradr[k_mid];
     assert!((m_gf.gradt[k_mid] - want_gt).abs() < 1.0e-13);
 
     // 4. `set_mlt_vars` and `set_hydro_vars` with `okay_to_set_mixing_info = false`
@@ -333,8 +346,12 @@ fn test_mix_info_glitches_prune_bad_cz_min_d_mix_and_high_tc_sigma_taper() {
     m_hi.xa[(k_core - 1) * sp + idx_he4] -= 0.1;
     m_hi.dt = 1.0e12;
     m_hi.controls.mix_wind.sig_min_factor_for_high_tcenter = 1.0e-4;
-    m_hi.controls.mix_wind.tcenter_max_for_sig_min_factor_full_off = 1.0e6;
-    m_hi.controls.mix_wind.tcenter_min_for_sig_min_factor_full_on = 1.0e7;
+    m_hi.controls
+        .mix_wind
+        .tcenter_max_for_sig_min_factor_full_off = 1.0e6;
+    m_hi.controls
+        .mix_wind
+        .tcenter_min_for_sig_min_factor_full_on = 1.0e7;
     m_hi.controls.mix_wind.delta_m_lower_for_sig_min_factor = 1.0e35;
     m_hi.controls.mix_wind.delta_m_upper_for_sig_min_factor = 2.0e35;
     m_hi.controls.mix_wind.max_delta_m_to_bdy_for_sig_min_factor = 1.0;
@@ -487,8 +504,8 @@ fn test_conv_premix_ingestion_conservation_time_factor_and_fix_pgas_modes() {
     fixed_pgas.controls.mix_wind.conv_premix_fix_pgas = true;
     fixed_pgas.controls.mix_wind.conv_premix_avoid_increase = false;
     let pgas_before = fixed_pgas.pgas.clone();
-    let absorbed_pgas = conv_premix::do_conv_premix(&mut fixed_pgas)
-        .expect("conv_premix PT");
+    let absorbed_pgas =
+        conv_premix::do_conv_premix(&mut fixed_pgas).expect("conv_premix PT");
     assert!(
         absorbed_pgas > 0,
         "conv_premix must absorb Ledoux-stabilized cells"
@@ -515,8 +532,8 @@ fn test_conv_premix_ingestion_conservation_time_factor_and_fix_pgas_modes() {
     fixed_rho.controls.mix_wind.conv_premix_fix_pgas = false;
     fixed_rho.controls.mix_wind.conv_premix_avoid_increase = false;
     let lnd_before = fixed_rho.lnd.clone();
-    let absorbed_rho = conv_premix::do_conv_premix(&mut fixed_rho)
-        .expect("conv_premix DT");
+    let absorbed_rho =
+        conv_premix::do_conv_premix(&mut fixed_rho).expect("conv_premix DT");
     assert!(absorbed_rho > 0);
     assert_eq!(
         fixed_rho.lnd, lnd_before,

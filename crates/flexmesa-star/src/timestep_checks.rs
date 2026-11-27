@@ -8,7 +8,7 @@
 //! `star/private/timestep.f90:384-2246`).
 
 use flexmesa_chem::NuclideCatalog;
-use flexmesa_const::{L_SUN, LN10 as LN_10, M_SUN, MixingType, SECYER};
+use flexmesa_const::{MixingType, LN10 as LN_10, L_SUN, M_SUN, SECYER};
 use flexmesa_num::binary_search_1based;
 
 use crate::controls::StarError;

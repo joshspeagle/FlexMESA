@@ -49,6 +49,11 @@ pythonpath = ["src"]
 testpaths = ["src", "tests"]
 xfail_strict = true
 addopts = "--doctest-modules --strict-markers"
+markers = [
+    "oracle: tests comparing outputs against MESA 26.4.1 reference data (W4, #563)",
+    "invariant: unit, analytical, property, AD, and internal consistency tests (W4, #563)",
+    "regression: tests against self-generated FlexMESA regression snapshots (W4, #563)",
+]
 
 [tool.ruff]
 line-length = 80

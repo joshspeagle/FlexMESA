@@ -14,10 +14,10 @@ use flexmesa_star::{
 };
 
 pub use crate::inlist_inventory::{
+    copy_cleaned_binary_case, supported_binary_control_inventory,
+    validate_binary_sections, BinaryControlInventory,
     BINARY_CONTROLS_SUPPORTED, BINARY_CONTROLS_TERMINAL_OUTPUT,
     BINARY_JOB_HEADLESS_GUI, BINARY_JOB_SUPPORTED, BINARY_JOB_TERMINAL_OUTPUT,
-    BinaryControlInventory, copy_cleaned_binary_case,
-    supported_binary_control_inventory, validate_binary_sections,
 };
 
 /// Parsed `&binary_job` and `&binary_controls` settings corresponding to
@@ -570,6 +570,23 @@ impl BinaryInlistControls {
                 self.m2_msun
             )));
         }
+        if !self.initial_period_in_days.is_finite() {
+            return Err(StarError::InvalidInput(format!(
+                "invalid '&binary_controls::initial_period_in_days' = {} (must be finite)",
+                self.initial_period_in_days
+            )));
+        }
+        // `binary_evolve.f90:106-118`: `initial_separation_in_Rsuns` is used
+        // whenever `initial_period_in_days <= 0` and must define a positive orbit.
+        if self.initial_period_in_days <= 0.0
+            && (!self.initial_separation_in_rsuns.is_finite()
+                || self.initial_separation_in_rsuns <= 0.0)
+        {
+            return Err(StarError::InvalidInput(format!(
+                "invalid '&binary_controls::initial_separation_in_rsuns' = {} (must be > 0 when initial_period_in_days <= 0)",
+                self.initial_separation_in_rsuns
+            )));
+        }
         if !self.initial_eccentricity.is_finite()
             || self.initial_eccentricity < 0.0
             || self.initial_eccentricity >= 1.0
@@ -625,11 +642,51 @@ impl BinaryInlistControls {
         &mut self,
         bjob: &SectionControls,
     ) -> Result<(), StarError> {
-        let names =
-            bjob.try_get_indexed_strings("binary_job", "inlist_names")?;
-        for (idx, dst) in self.inlist_names.iter_mut().enumerate() {
-            if let Some(n) = names.get(idx).filter(|s| !s.trim().is_empty()) {
-                *dst = n.trim().to_string();
+        use flexmesa_schema::ControlValue;
+
+        // `binary/defaults/binary_job.defaults:55-56`, `binary_job_controls.inc:8`:
+        // `inlist_names` is `dimension(2)` with 1-based Fortran subscripts;
+        // preserve sparse assignments such as `inlist_names(2) = '...'`.
+        if let Some(val) = bjob.scalars.get("inlist_names") {
+            match val {
+                ControlValue::String(s) => {
+                    let trimmed = s.trim();
+                    if !trimmed.is_empty() {
+                        self.inlist_names[0] = trimmed.to_string();
+                    }
+                }
+                other => {
+                    return Err(StarError::InvalidInput(format!(
+                        "expected string for '&binary_job::inlist_names', found {other:?}"
+                    )));
+                }
+            }
+        }
+        if let Some(list) = bjob.indexed.get("inlist_names") {
+            for (sub, val) in list {
+                let idx = sub.trim().parse::<usize>().map_err(|_| {
+                    StarError::InvalidInput(format!(
+                        "invalid subscript '({sub})' for '&binary_job::inlist_names'"
+                    ))
+                })?;
+                if idx == 0 || idx > self.inlist_names.len() {
+                    return Err(StarError::InvalidInput(format!(
+                        "out-of-bounds subscript '({idx})' for '&binary_job::inlist_names' (expected 1 or 2)"
+                    )));
+                }
+                match val {
+                    ControlValue::String(s) => {
+                        let trimmed = s.trim();
+                        if !trimmed.is_empty() {
+                            self.inlist_names[idx - 1] = trimmed.to_string();
+                        }
+                    }
+                    other => {
+                        return Err(StarError::InvalidInput(format!(
+                            "expected string for '&binary_job::inlist_names({idx})', found {other:?}"
+                        )));
+                    }
+                }
             }
         }
         if let Some(v) =

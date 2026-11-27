@@ -199,9 +199,6 @@ mod tests {
     fn test_push_line_orders_ints_hex_values_then_tail_ints() {
         let mut s = String::new();
         push_line(&mut s, "CORR", 1, 7, &[2], &[1.0, -2.0], &[734, -1]);
-        assert_eq!(
-            s,
-            "CORR 1 7 2 3FF0000000000000 C000000000000000 734 -1\n"
-        );
+        assert_eq!(s, "CORR 1 7 2 3FF0000000000000 C000000000000000 734 -1\n");
     }
 }

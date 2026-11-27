@@ -141,7 +141,11 @@ fn inner_face_now(model: &StarModel, k: usize, r_p1: f64) -> (f64, f64, f64) {
 
 /// `cell_specific_PE_qp` for cell `k` from the model's current `r`.
 pub(crate) fn cell_specific_pe_qp(model: &StarModel, k: usize) -> CellPe {
-    let r_p1 = if k + 1 < model.nz { model.r[k + 1] } else { 0.0 };
+    let r_p1 = if k + 1 < model.nz {
+        model.r[k + 1]
+    } else {
+        0.0
+    };
     specific_pe_qp(
         mbar_qp(model, k),
         inner_face_now(model, k, r_p1),
@@ -297,9 +301,8 @@ pub fn get_dke_dt_dpe_dt(model: &StarModel, k: usize, dt: f64) -> DkeDpeDt {
     let has_p1 = k + 1 < nz;
 
     // Potential energy.
-    let ln_r_start = |j: usize| {
-        model.ln_r_start.get(j).copied().unwrap_or(model.ln_r[j])
-    };
+    let ln_r_start =
+        |j: usize| model.ln_r_start.get(j).copied().unwrap_or(model.ln_r[j]);
     let r_start_p1 = if has_p1 {
         flexmesa_math::exp(ln_r_start(k + 1))
     } else {
@@ -334,7 +337,8 @@ pub fn get_dke_dt_dpe_dt(model: &StarModel, k: usize, dt: f64) -> DkeDpeDt {
     let dpe_dt = q1 / dt;
 
     // Kinetic energy.
-    let v_start = |j: usize| model.v_start.get(j).copied().unwrap_or(model.v[j]);
+    let v_start =
+        |j: usize| model.v_start.get(j).copied().unwrap_or(model.v[j]);
     let ke_start_vel = if model.controls.u_flag {
         KeVelocity::Cell(model.u_start.get(k).copied().unwrap_or(model.u[k]))
     } else if model.controls.v_flag {

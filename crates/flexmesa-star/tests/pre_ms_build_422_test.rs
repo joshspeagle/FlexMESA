@@ -62,7 +62,10 @@ fn make_zams_pre_ms_build_matches_mesa_26_4_1_bit_for_bit() {
         InlistLoadOptions::default(),
     )
     .expect("load make_zams/inlist_zams_header");
-    assert!(bundle.job.create_pre_ms_model, "make_zams builds a pre-MS model");
+    assert!(
+        bundle.job.create_pre_ms_model,
+        "make_zams builds a pre-MS model"
+    );
 
     let model = build_pre_ms_model_with_configs(
         bundle.controls.clone(),

@@ -185,7 +185,9 @@ fn test_eval_face_mlt_semiconvection_thermohaline_and_tdc_dispatch() {
 
     // 3. Time-Dependent Convection (`MltOption::Tdc`)
     let k_conv = (1..model.nz)
-        .find(|&k| model.aux.mixing.mlt_mixing_type[k] == MixingType::ConvectiveMixing)
+        .find(|&k| {
+            model.aux.mixing.mlt_mixing_type[k] == MixingType::ConvectiveMixing
+        })
         .expect("convective face in 1 Msun ZAMS");
     model.controls.mlt_option = MltOption::Tdc;
     model.dt = 1.0e4;

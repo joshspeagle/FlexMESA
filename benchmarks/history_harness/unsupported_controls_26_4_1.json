@@ -8,9 +8,9 @@
   },
   "summary": {
     "total_cases": 106,
-    "strict_pass_cases": 96,
-    "strict_fail_cases": 10,
-    "distinct_unsupported_controls": 45,
+    "strict_pass_cases": 97,
+    "strict_fail_cases": 9,
+    "distinct_unsupported_controls": 44,
     "distinct_unknown_controls": 0,
     "cases_with_headless_plotting": 78,
     "distinct_headless_plotting_keys": 895
@@ -46,11 +46,11 @@
     {
       "section": "controls",
       "upstream_keys": 1448,
-      "supported_keys": 1235,
+      "supported_keys": 1236,
       "unused_keys": 15,
       "headless_gui_keys": 0,
       "terminal_output_keys": 19,
-      "unimplemented_upstream_keys": 179
+      "unimplemented_upstream_keys": 178
     },
     {
       "section": "binary_job",
@@ -139,15 +139,6 @@
       "cases": [
         "star/high_rot_darkening",
         "star/ppisn"
-      ]
-    },
-    {
-      "section": "controls",
-      "key": "atm_off_table_option",
-      "category": "unimplemented",
-      "case_count": 1,
-      "cases": [
-        "star/c13_pocket"
       ]
     },
     {
@@ -5439,13 +5430,11 @@
     {
       "suite": "star",
       "case": "c13_pocket",
-      "strict_ok": false,
+      "strict_ok": true,
       "entry_files": [
         "inlist_c13_pocket_header"
       ],
-      "unsupported_controls": [
-        "controls::atm_off_table_option::unimplemented"
-      ],
+      "unsupported_controls": [],
       "unknown_controls": [],
       "headless_plotting_keys_count": 100,
       "terminal_output_keys": [

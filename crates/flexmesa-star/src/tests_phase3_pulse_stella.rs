@@ -11,11 +11,11 @@ use std::path::PathBuf;
 use crate::{
     build_pulse_points_with_options, export_cafein, export_fgong, export_gr1d,
     export_gsm, export_gsm_data, export_gyre, export_osc,
-    export_pulse_by_format, export_saio, export_stella_pair,
-    load_zams_model, parse_fortran_float, parse_stella_abn, parse_stella_hyd,
-    parse_stella_lbol, run_stella_from_hyd_abn, set_hydro_vars,
-    solve_adipls_fgong_modes, solve_gyre_mesa_modes, FeII5169EtaTable,
-    PulseExportOptions, StarControls, StarJobControls, StellaExportOptions,
+    export_pulse_by_format, export_saio, export_stella_pair, load_zams_model,
+    parse_fortran_float, parse_stella_abn, parse_stella_hyd, parse_stella_lbol,
+    run_stella_from_hyd_abn, set_hydro_vars, solve_adipls_fgong_modes,
+    solve_gyre_mesa_modes, FeII5169EtaTable, PulseExportOptions, StarControls,
+    StarJobControls, StellaExportOptions,
 };
 
 fn golden_dir() -> PathBuf {
@@ -25,15 +25,14 @@ fn golden_dir() -> PathBuf {
 
 #[test]
 fn test_all_seven_pulsation_exporters_and_double_point_atmosphere_options() {
-    let mut model =
-        load_zams_model(
-            StarControls {
-                zbase: 0.02,
-                ..StarControls::default()
-            },
-            StarJobControls::default(),
-        )
-            .expect("zams");
+    let mut model = load_zams_model(
+        StarControls {
+            zbase: 0.02,
+            ..StarControls::default()
+        },
+        StarJobControls::default(),
+    )
+    .expect("zams");
     set_hydro_vars(&mut model, false, false).expect("hydro_vars");
 
     // Introduce a sharp composition gradient at face k = model.nz / 2 to test double-point splitting
@@ -299,15 +298,14 @@ fn test_stella_export_and_feii_5169_sobolev_golden_fixture_parity() {
     }
 
     // Also verify export_stella_pair on a StarModel produces 400 zones in .hyd and .abn
-    let mut model =
-        load_zams_model(
-            StarControls {
-                zbase: 0.02,
-                ..StarControls::default()
-            },
-            StarJobControls::default(),
-        )
-            .expect("zams");
+    let mut model = load_zams_model(
+        StarControls {
+            zbase: 0.02,
+            ..StarControls::default()
+        },
+        StarJobControls::default(),
+    )
+    .expect("zams");
     set_hydro_vars(&mut model, false, false).expect("hydro_vars");
     let (hyd_out, abn_out) =
         export_stella_pair(&model, &StellaExportOptions::default());

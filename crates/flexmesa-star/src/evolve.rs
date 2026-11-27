@@ -12,8 +12,7 @@ pub use crate::evolve_support::snapshot_step_old_extras;
 use crate::evolve_support::{
     apply_step_pre_physics_with_extras, record_start_of_step_energy_integrals,
     remesh_star_before_step, set_vars_for_new_step, set_vars_for_new_try,
-    snapshot_step_start_extras,
-    update_step_energy_conservation,
+    snapshot_step_start_extras, update_step_energy_conservation,
 };
 use crate::hydro_vars::set_hydro_vars;
 use crate::inlist_runner::{DefaultStarExtras, ExtrasDirective, StarExtras};
@@ -22,7 +21,7 @@ use crate::relax_driver::{RelaxHookResult, RelaxHooks};
 use crate::solver::HenyeySolverReport;
 use crate::star_utils::set_rho_to_dm_div_dv_for_new_step;
 use crate::struct_burn_mix::{do_struct_burn_mix, refresh_mixing_state};
-use crate::termination::{LimitCheckOutcome, do_check_limits};
+use crate::termination::{do_check_limits, LimitCheckOutcome};
 use crate::timestep::TimestepAction;
 use crate::timestep_limits::{
     timestep_controller, timestep_controller_with_extras,
@@ -689,13 +688,12 @@ pub fn star_evolve_step_part2(
                         "velocity exceeded clight at model {target_mod}"
                     )));
                 }
-                if let Err(e) = run_post_henyey_omega_mix(
-                    model, dt_try, target_mod, extras,
-                ) {
+                if let Err(e) =
+                    run_post_henyey_omega_mix(model, dt_try, target_mod, extras)
+                {
                     break Err(e);
                 }
-                match mdot_redo
-                    .select_action_with_extras(model, dt_try, extras)
+                match mdot_redo.select_action_with_extras(model, dt_try, extras)
                 {
                     Ok(crate::mdot_redo::SelectMdotAction::Accept) => {
                         break Ok(rep);
@@ -1413,10 +1411,7 @@ pub(crate) fn star_evolve_step_outcome_checked(
                 }
                 if model.controls.ts_stop.max_timestep_hi_t_limit > 0.0
                     && model.controls.max_years_for_timestep
-                        != model
-                            .controls
-                            .ts_stop
-                            .hi_t_max_years_for_timestep
+                        != model.controls.ts_stop.hi_t_max_years_for_timestep
                     && model.t.iter().copied().fold(0.0_f64, f64::max)
                         >= model.controls.ts_stop.max_timestep_hi_t_limit
                 {
@@ -1446,19 +1441,18 @@ pub(crate) fn star_evolve_step_outcome_checked(
                         })
                     }
                 };
-                let limit_outcome =
-                    match checked {
-                        Ok(out) => out,
-                        Err(e) => {
-                            abandon_step(
-                                model,
-                                pre_remesh_model.take(),
-                                saved,
-                                dt_prev,
-                            )?;
-                            return Err(e);
-                        }
-                    };
+                let limit_outcome = match checked {
+                    Ok(out) => out,
+                    Err(e) => {
+                        abandon_step(
+                            model,
+                            pre_remesh_model.take(),
+                            saved,
+                            dt_prev,
+                        )?;
+                        return Err(e);
+                    }
+                };
                 match limit_outcome {
                     LimitCheckOutcome::Redo { dt_new, .. } => {
                         let max_redos = model.controls.ts_stop.redo_limit;
@@ -1511,15 +1505,8 @@ pub(crate) fn star_evolve_step_outcome_checked(
                         };
                         return Ok((
                             finalize_accepted_step(
-                                model,
-                                rep,
-                                varcontrol,
-                                dt_next,
-                                dt_try,
-                                rsp2_e_old,
-                                retries,
-                                num_splits,
-                                num_merges,
+                                model, rep, varcontrol, dt_next, dt_try,
+                                rsp2_e_old, retries, num_splits, num_merges,
                             ),
                             Some(code),
                         ));

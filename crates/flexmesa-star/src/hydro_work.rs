@@ -178,7 +178,9 @@ pub fn eval1_work_v_flag_ad(
         };
         if f_idx > 0 {
             for j in 0..sp {
-                d_pface_dxa00[j] = alfa * dlnp_dxa(model, f_idx, j) * p_theta
+                d_pface_dxa00[j] = alfa
+                    * dlnp_dxa(model, f_idx, j)
+                    * p_theta
                     * model.peos[f_idx];
             }
             for j in 0..sp {

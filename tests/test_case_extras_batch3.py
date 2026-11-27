@@ -12,10 +12,12 @@ import shutil
 from collections.abc import Sequence
 from typing import Any
 
+import numpy as np
 import pytest
 
 from flexmesa import _rust, constants
 from flexmesa import math as fm_math
+from flexmesa.data import fetch as fm_fetch
 from flexmesa.testing import case_manifest, harness_runner
 from tests import case_extras
 from tests.case_extras import (
@@ -958,3 +960,470 @@ def test_batch3_handlers_raise_key_error_on_missing_snapshot_fields() -> None:
         with pytest.raises(KeyError):
             fn()
     assert not math.isnan(0.0)
+
+
+def test_simplex_inlist_parser_and_nested_includes_reject_unknown_keys(
+    tmp_path: pathlib.Path,
+) -> None:
+    """Verify recursive `inlist_simplex_search_controls` parsing and errors."""
+    sub_dir = tmp_path / "sub"
+    sub_dir.mkdir()
+    (sub_dir / "child_controls").write_text(
+        "&simplex_search_controls\n"
+        "  First_Alpha = 1.91d0 ! mixed case override\n"
+        "  first_f_ov = 2.5d-2\n"
+        "/\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "inlist_simplex_search_controls").write_text(
+        "&simplex_search_controls\n"
+        "  just_do_first_values = .true.\n"
+        "  read_extra_simplex_search_inlist1 = .true.\n"
+        "  extra_simplex_search_inlist1_name = 'sub/child_controls'\n"
+        "/\n",
+        encoding="utf-8",
+    )
+    cfg = star_ns_wd_simplex.read_simplex_search_controls(tmp_path)
+    assert cfg["just_do_first_values"] is True
+    assert cfg["first_alpha"] == pytest.approx(1.91)
+    assert cfg["first_f_ov"] == pytest.approx(0.025)
+    assert cfg["read_extra_simplex_search_inlist1"] is False
+    assert cfg["extra_simplex_search_inlist1_name"] == "undefined"
+
+    # Real MESA 26.4.1 simplex_solar_calibration inlist chain.
+    real_dir = harness_runner.resolve_case_dir(
+        "star", "simplex_solar_calibration"
+    )
+    real_cfg = star_ns_wd_simplex.read_simplex_search_controls(real_dir)
+    assert real_cfg["just_do_first_values"] is True
+    assert real_cfg["first_alpha"] == pytest.approx(1.9446893445)
+    assert real_cfg["age_target"] == pytest.approx(4.61e9)
+    assert real_cfg["f0_ov_div_f_ov"] == pytest.approx(1.0)
+    assert real_cfg["eval_chi2_at_target_age_only"] is True
+    assert real_cfg["num_smaller_steps_before_age_target"] == 200
+
+    # Unknown keys fail loudly instead of silently inheriting defaults.
+    bad_dir = tmp_path / "bad_key"
+    bad_dir.mkdir()
+    (bad_dir / "inlist_simplex_search_controls").write_text(
+        "&simplex_search_controls\n  nonexistent_key = 1.0\n/\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="unknown simplex_search_controls key"):
+        star_ns_wd_simplex.read_simplex_search_controls(bad_dir)
+
+    # Self-recursive include trips upstream depth >= 10 limit.
+    loop_dir = tmp_path / "loop"
+    loop_dir.mkdir()
+    (loop_dir / "inlist_simplex_search_controls").write_text(
+        "&simplex_search_controls\n"
+        "  read_extra_simplex_search_inlist1 = .true.\n"
+        "  extra_simplex_search_inlist1_name = "
+        "'inlist_simplex_search_controls'\n"
+        "/\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="too many levels"):
+        star_ns_wd_simplex.read_simplex_search_controls(loop_dir)
+
+
+def test_simplex_extras_controls_computes_composition_mass_and_overshoot(
+    tmp_path: pathlib.Path,
+) -> None:
+    """Verify `extras_controls` startup updates across `Y_depends_on_Z`."""
+    sim = star_ns_wd_simplex.SimplexSolarCalibrationStarExtras()
+    assert sim.extras_controls({"case_dir": str(tmp_path)}) == {}
+
+    # Multi-sample search mode explicitly errors with #162.
+    (tmp_path / "inlist_simplex_search_controls").write_text(
+        "&simplex_search_controls\n  just_do_first_values = .false.\n/\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(NotImplementedError, match="#162"):
+        sim.extras_controls(
+            {
+                "case_dir": str(tmp_path),
+                "max_years_for_timestep": 1.0e7,
+            }
+        )
+
+    # simplex_just_call_my_extras_check_model returns {} with no overrides.
+    (tmp_path / "inlist_simplex_search_controls").write_text(
+        "&simplex_search_controls\n"
+        "  just_do_first_values = .true.\n"
+        "  simplex_just_call_my_extras_check_model = .true.\n"
+        "/\n",
+        encoding="utf-8",
+    )
+    assert (
+        sim.extras_controls(
+            {
+                "case_dir": str(tmp_path),
+                "max_years_for_timestep": 5.0e6,
+            }
+        )
+        == {}
+    )
+    assert sim.extras_check_model({}) == "keep_going"
+
+    # Y_depends_on_Z = .false. with f_ov /= 0.0 (real solar calibration path).
+    real_dir = harness_runner.resolve_case_dir(
+        "star", "simplex_solar_calibration"
+    )
+    updates = sim.extras_controls(
+        {
+            "case_dir": str(real_dir),
+            "max_years_for_timestep": 1.0e7,
+        }
+    )
+    exp_z_div_x = 0.02293 * _rust.exp10(0.0995779410)
+    exp_y = 0.2772395386
+    exp_x = (1.0 - exp_y) / (1.0 + exp_z_div_x)
+    exp_he3 = 1.0e-4 * exp_y
+    assert updates["mixing_length_alpha"] == pytest.approx(1.9446893445)
+    assert updates["initial_mass"] == pytest.approx(1.0)
+    assert updates["job_new_mass"] == pytest.approx(1.0)
+    assert updates["job_relax_initial_mass"] is True
+    assert updates["job_set_uniform_initial_composition"] is True
+    assert updates["job_initial_h1"] == pytest.approx(exp_x)
+    assert updates["job_initial_h2"] == 0.0
+    assert updates["job_initial_he3"] == pytest.approx(exp_he3)
+    assert updates["job_initial_he4"] == pytest.approx(exp_y - exp_he3)
+    assert updates["overshoot_slot_0"] == {
+        "scheme": "exponential",
+        "zone_type": "any",
+        "zone_loc": "any",
+        "bdy_loc": "any",
+        "f": pytest.approx(0.0314081331),
+        "f0": pytest.approx(0.0314081331),
+    }
+
+    # Y_depends_on_Z = .true. with f_ov = 0 omits overshoot_slot_0.
+    dep_dir = tmp_path / "dep"
+    dep_dir.mkdir()
+    (dep_dir / "inlist_simplex_search_controls").write_text(
+        "&simplex_search_controls\n"
+        "  just_do_first_values = .true.\n"
+        "  Y_depends_on_Z = .true.\n"
+        "  Y0 = 0.248d0\n"
+        "  dYdZ = 1.4d0\n"
+        "  first_FeH = 0.0\n"
+        "  first_mass = 1.05d0\n"
+        "  first_alpha = 1.8d0\n"
+        "  first_f_ov = 0.0\n"
+        "/\n",
+        encoding="utf-8",
+    )
+    dep_up = sim.extras_controls(
+        {
+            "case_dir": str(dep_dir),
+            "max_years_for_timestep": 1.0e7,
+        }
+    )
+    a_val = 0.02293
+    c_val = 1.0 + a_val * (1.0 + 1.4)
+    exp_dep_x = (1.0 - 0.248) / c_val
+    exp_dep_y = (0.248 + a_val * (1.4 + 0.248)) / c_val
+    assert dep_up["job_initial_h1"] == pytest.approx(exp_dep_x)
+    assert dep_up["job_initial_he3"] == pytest.approx(1.0e-4 * exp_dep_y)
+    assert dep_up["job_initial_he4"] == pytest.approx(
+        exp_dep_y * (1.0 - 1.0e-4)
+    )
+    assert "overshoot_slot_0" not in dep_up
+
+
+def test_simplex_age_target_ramp_finish_step_and_terminate(
+    tmp_path: pathlib.Path,
+) -> None:
+    """Verify age-target timestep ramp-down, `dt_next` clamp, and stop."""
+    (tmp_path / "inlist_simplex_search_controls").write_text(
+        "&simplex_search_controls\n"
+        "  just_do_first_values = .true.\n"
+        "  eval_chi2_at_target_age_only = .true.\n"
+        "  age_target = 4.61d9\n"
+        "  age_sigma = 1.0d7\n"
+        "  max_age_for_chi2 = 4.68d9\n"
+        "  num_smaller_steps_before_age_target = 200\n"
+        "  dt_for_smaller_steps_before_age_target = 1.0d6\n"
+        "  include_logL_in_chi2 = .true.\n"
+        "  logL_target = 0.0\n"
+        "  logL_sigma = 0.05\n"
+        "  include_FeH_in_chi2 = .false.\n"
+        "  include_Rcz_in_chi2 = .true.\n"
+        "  Rcz_target = 0.713\n"
+        "  Rcz_sigma = 1.0e-3\n"
+        "  include_my_var1_in_chi2 = .true.\n"
+        "  my_var1_target = 5772.0\n"
+        "  my_var1_sigma = 65.0\n"
+        "/\n",
+        encoding="utf-8",
+    )
+    sim = star_ns_wd_simplex.SimplexSolarCalibrationStarExtras()
+    sim.extras_controls(
+        {
+            "case_dir": str(tmp_path),
+            "max_years_for_timestep": 1.0e7,
+        }
+    )
+
+    # Far below age_target: keeps going without clamping dt_next.
+    assert (
+        sim.extras_check_model(
+            {
+                "star_age": 1.0e8,
+                "max_years_for_timestep": 1.0e7,
+                "reduction_factor_for_max_timestep": 0.5,
+                "dt_next": 1.0e7 * constants.SECYER,
+            }
+        )
+        == "keep_going"
+    )
+    assert (
+        sim.extras_finish_step({"dt_next": 1.0e7 * constants.SECYER})
+        == "keep_going"
+    )
+
+    # Within num_smaller_steps_before_age_target * max_years: reduces max_years.
+    res_ramp = sim.extras_check_model(
+        {
+            "star_age": 4.59e9,
+            "max_years_for_timestep": 1.0e7,
+            "reduction_factor_for_max_timestep": 0.5,
+            "dt_next": 1.0e7 * constants.SECYER,
+        }
+    )
+    assert isinstance(res_ramp, dict)
+    assert res_ramp["action"] == "keep_going"
+    # remaining = 2.0e7 yr, reduction_factor min_max = 5.0e6 yr > 1.0e6 yr.
+    assert res_ramp["updates"]["max_years_for_timestep"] == pytest.approx(5.0e6)
+    fin_ramp = sim.extras_finish_step({"dt_next": 1.0e7 * constants.SECYER})
+    assert isinstance(fin_ramp, tuple)
+    assert fin_ramp[0] == "keep_going"
+    assert fin_ramp[1]["dt_next"] == pytest.approx(5.0e6 * constants.SECYER)
+
+    # Final step before age_target clamps max_years and dt_next identically.
+    res_final = sim.extras_check_model(
+        {
+            "star_age": 4.6095e9,
+            "max_years_for_timestep": 5.0e6,
+            "reduction_factor_for_max_timestep": 0.5,
+            "dt_next": 1.0e6 * constants.SECYER,
+        }
+    )
+    assert isinstance(res_final, dict)
+    assert res_final["action"] == "keep_going"
+    assert res_final["updates"]["max_years_for_timestep"] == pytest.approx(
+        5.0e5
+    )
+    fin_final = sim.extras_finish_step({"dt_next": 1.0e6 * constants.SECYER})
+    assert isinstance(fin_final, tuple)
+    assert fin_final[1]["dt_next"] == pytest.approx(5.0e5 * constants.SECYER)
+
+    # At star_age >= age_target: computes Rcz, my_var1, chi2 and terminates.
+    conv = int(constants.MixingType.CONVECTIVE_MIXING)
+    nomix = int(constants.MixingType.NO_MIXING)
+    target_snap = {
+        "star_age": 4.61e9,
+        "model_number": 950,
+        "max_years_for_timestep": 5.0e5,
+        "reduction_factor_for_max_timestep": 0.5,
+        "dt_next": 5.0e5 * constants.SECYER,
+        "power_nuc_burn": 1.0,
+        "l_phot": 1.0,
+        "surface_h1": 0.73,
+        "surface_he3": 1.0e-4,
+        "surface_he4": 0.25,
+        "grav": [2.74e4],
+        "photosphere_r": 1.0,
+        "teff": 5772.0,
+        "log_surface_luminosity": 0.0,
+        "nz": 3,
+        "mixing_type": [conv, nomix, nomix],
+        "r": [
+            0.713 * constants.RSUN,
+            0.70 * constants.RSUN,
+            0.2 * constants.RSUN,
+        ],
+    }
+    assert sim.extras_check_model(target_snap) == "terminate"
+    sim.extras_after_evolve(target_snap)
+    assert sim._rcz == pytest.approx(0.713)
+    assert sim._chi2 == pytest.approx(0.0)
+
+    # include_age_in_chi2 past age_target rejects stale max_years_for_timestep.
+    age_dir = tmp_path / "age_chi2"
+    age_dir.mkdir()
+    (age_dir / "inlist_simplex_search_controls").write_text(
+        "&simplex_search_controls\n"
+        "  just_do_first_values = .true.\n"
+        "  include_age_in_chi2 = .true.\n"
+        "  age_target = 4.61d9\n"
+        "  age_sigma = 1.0d7\n"
+        "  dt_for_smaller_steps_before_age_target = 1.0d6\n"
+        "/\n",
+        encoding="utf-8",
+    )
+    sim_age = star_ns_wd_simplex.SimplexSolarCalibrationStarExtras()
+    sim_age.extras_controls(
+        {"case_dir": str(age_dir), "max_years_for_timestep": 1.0e7}
+    )
+    with pytest.raises(RuntimeError, match="bad max_years_for_timestep"):
+        sim_age.extras_check_model(
+            {
+                "star_age": 4.61e9,
+                "max_years_for_timestep": 5.0e6,
+                "reduction_factor_for_max_timestep": 0.5,
+                "dt_next": 5.0e6 * constants.SECYER,
+            }
+        )
+
+    # Non-target-age chi2 redo sets dt, max_years_for_timestep, timestep_hold.
+    no_age_dir = tmp_path / "no_age_redo"
+    no_age_dir.mkdir()
+    (no_age_dir / "inlist_simplex_search_controls").write_text(
+        "&simplex_search_controls\n"
+        "  just_do_first_values = .true.\n"
+        "  eval_chi2_at_target_age_only = .false.\n"
+        "  include_age_in_chi2 = .false.\n"
+        "  min_age_for_chi2 = 1.0d9\n"
+        "  max_age_for_chi2 = 5.0d9\n"
+        "  include_FeH_in_chi2 = .false.\n"
+        "  include_logL_in_chi2 = .true.\n"
+        "  logL_target = 0.0\n"
+        "  logL_sigma = 0.05\n"
+        "  chi2_limit_for_smallest_timesteps = 10.0\n"
+        "  max_yrs_dt_chi2_smallest_limit = 5.0d4\n"
+        "/\n",
+        encoding="utf-8",
+    )
+    sim_redo = star_ns_wd_simplex.SimplexSolarCalibrationStarExtras()
+    sim_redo.extras_controls(
+        {"case_dir": str(no_age_dir), "max_years_for_timestep": 1.0e7}
+    )
+    redo_snap = dict(target_snap)
+    redo_snap.update(
+        {
+            "star_age": 4.0e9,
+            "model_number": 42,
+            "dt": 1.0e6 * constants.SECYER,
+            "max_years_for_timestep": 1.0e7,
+        }
+    )
+    redo_res = sim_redo.extras_check_model(redo_snap)
+    assert isinstance(redo_res, dict)
+    assert redo_res["action"] == "redo"
+    assert redo_res["updates"]["max_years_for_timestep"] == pytest.approx(5.0e4)
+    assert redo_res["updates"]["dt"] == pytest.approx(5.0e4 * constants.SECYER)
+    assert redo_res["updates"]["timestep_hold"] == 52
+
+
+def test_simplex_calc_current_rms_reads_solar_csound_data() -> None:
+    """Verify `calc_current_rms` against real `solar_csound.data`."""
+    data_path = (
+        fm_fetch.resolve_mesa_test_inputs_dir()
+        / "data"
+        / "star_data"
+        / "solar_csound.data"
+    )
+    rows: list[tuple[float, float]] = []
+    for line in data_path.read_text(encoding="utf-8").splitlines()[11:]:
+        stripped = line.strip()
+        if not stripped:
+            continue
+        parts = stripped.split()
+        rows.append((float(parts[0]), float(parts[2])))
+        if len(rows) == 79:
+            break
+
+    # Build a strictly decreasing center-to-surface grid matching MESA order.
+    r_rows = [r_frac for r_frac, _ in rows]
+    c_rows = [cs_val for _, cs_val in rows]
+    n_fine = 2001
+    r_fracs_fine = np.linspace(0.99, 0.05, n_fine, dtype=np.float64)
+    r_fine = (constants.RSUN * r_fracs_fine).tolist()
+    cs_fine = np.interp(r_fracs_fine, r_rows, c_rows).tolist()
+    dq_fine = [1.0 / n_fine] * n_fine
+    sim = star_ns_wd_simplex.SimplexSolarCalibrationStarExtras()
+
+    # Dense radial grid resolves sound-speed profile within < 1e-3 RMS.
+    rms_fine = sim.calc_current_rms(
+        {"nz": n_fine, "r": r_fine, "dq": dq_fine, "csound": cs_fine}
+    )
+    assert rms_fine < 1.0e-3
+
+    # Constant radial sound speed verifies zero interpolation mismatch.
+    r_vals = [constants.RSUN * r_frac for r_frac, _ in reversed(rows)]
+    dq_vals = [1.0 / len(rows)] * len(rows)
+    c_const = c_rows[len(c_rows) // 2]
+    in_window = [cs for r_frac, cs in rows if 0.094 <= r_frac <= 0.94]
+    expected_const_rms = math.sqrt(
+        sum(((c_const - cs_obs) / cs_obs) ** 2 for cs_obs in in_window)
+        / float(len(in_window))
+    )
+    rms_const = sim.calc_current_rms(
+        {
+            "nz": len(rows),
+            "r": r_vals,
+            "dq": dq_vals,
+            "csound": [c_const] * len(rows),
+        }
+    )
+    assert rms_const == pytest.approx(expected_const_rms, rel=1.0e-12)
+
+
+def test_simplex_extras_py_roundtrip_and_strict_5step_trace(
+    tmp_path: pathlib.Path,
+) -> None:
+    """Verify `star/simplex_solar_calibration` runs 5 strict steps cleanly."""
+    simplex_dir = harness_runner.resolve_case_dir(
+        "star", "simplex_solar_calibration"
+    )
+    captured: dict[str, Any] = {}
+
+    class _RecordingSimplexExtras(
+        star_ns_wd_simplex.SimplexSolarCalibrationStarExtras
+    ):
+        def extras_controls(self, state: dict[str, Any]) -> dict[str, Any]:
+            up = super().extras_controls(state)
+            captured["controls_updates"] = dict(up)
+            return up
+
+        def extras_finish_step(
+            self, state: dict[str, Any]
+        ) -> str | tuple[str, dict[str, Any]]:
+            captured["last_step"] = {
+                "model_number": state["model_number"],
+                "max_years_for_timestep": state["max_years_for_timestep"],
+                "reduction_factor_for_max_timestep": state[
+                    "reduction_factor_for_max_timestep"
+                ],
+                "surface_he3": state["surface_he3"],
+                "log_surface_luminosity": state["log_surface_luminosity"],
+                "power_nuc_burn": state["power_nuc_burn"],
+                "l_phot": state["l_phot"],
+                "photosphere_r": state["photosphere_r"],
+            }
+            return super().extras_finish_step(state)
+
+    logs_dir = tmp_path / "LOGS"
+    logs_dir.mkdir()
+    rep = harness_runner.run_trace_inprocess(
+        "star",
+        simplex_dir,
+        logs_dir,
+        max_steps=5,
+        numerics_mode="strict",
+        allow_unsupported_controls=False,
+        extras=_RecordingSimplexExtras(),
+    )
+    assert int(rep["total_steps"]) == 5
+    assert "controls_updates" in captured
+    assert captured["controls_updates"]["mixing_length_alpha"] == pytest.approx(
+        1.9446893445
+    )
+    assert captured["last_step"]["model_number"] == 5
+    assert captured["last_step"]["max_years_for_timestep"] == pytest.approx(
+        1.0e7
+    )
+    assert math.isfinite(float(captured["last_step"]["surface_he3"]))
+    assert float(captured["last_step"]["surface_he3"]) > 0.0

@@ -44,6 +44,7 @@ impl Default for StarControls {
             redo_conv_for_dr_lt_mixing_length: false,
             atm_option: AtmOption::TTau,
             atm_table: String::from("tau_100"),
+            atm_off_table_option: String::from("T_tau"),
             atm_t_tau_relation: AtmTTauRelation::Eddington,
             atm_t_tau_opacity: AtmTTauOpacity::Fixed,
             atm_t_tau_errtol: 1.0e-7,

@@ -22,6 +22,10 @@ use flexmesa_schema::{
 use crate::controls::{StarControls, StarError, StarJobControls};
 use crate::inlist_inventory::supported_star_control_inventory;
 
+/// Number of abundance-limit slots per block in MESA
+/// (`star_data/public/star_data_def.inc:374-376`).
+pub(crate) const NUM_XA_LIMITS: usize = 9;
+
 /// Flattened key-value and indexed-element store for a single namelist section.
 #[derive(Debug, Clone, Default)]
 pub struct SectionControls {
@@ -29,22 +33,56 @@ pub struct SectionControls {
     pub scalars: HashMap<String, ControlValue>,
     /// Indexed `name -> [(subscript, ControlValue)]` assignments (lowercased keys).
     pub indexed: HashMap<String, Vec<(String, ControlValue)>>,
+    /// Chronological assignments per lowercased key (`None` = unsubscripted scalar).
+    timeline: HashMap<String, Vec<(Option<String>, ControlValue)>>,
 }
 
 impl SectionControls {
-    /// Records a [`NamelistAssignment`] in `scalars` or `indexed`.
+    /// Records a [`NamelistAssignment`] in `scalars` or `indexed`, preserving
+    /// chronological order across single-element and unsubscripted assignments.
     pub fn insert(&mut self, assign: &NamelistAssignment) {
         let key = assign.name.to_ascii_lowercase();
         if let Some(sub) = &assign.subscript {
-            let entry = self.indexed.entry(key).or_default();
+            let entry = self.indexed.entry(key.clone()).or_default();
             if let Some(existing) = entry.iter_mut().find(|(s, _)| s == sub) {
                 existing.1 = assign.value.clone();
             } else {
                 entry.push((sub.clone(), assign.value.clone()));
             }
+            self.timeline
+                .entry(key)
+                .or_default()
+                .push((Some(sub.clone()), assign.value.clone()));
         } else {
-            self.scalars.insert(key, assign.value.clone());
+            self.scalars.insert(key.clone(), assign.value.clone());
+            self.timeline
+                .entry(key)
+                .or_default()
+                .push((None, assign.value.clone()));
         }
+    }
+
+    fn ordered_assignments(
+        &self,
+        key: &str,
+    ) -> Vec<(Option<&str>, &ControlValue)> {
+        let low = key.to_ascii_lowercase();
+        if let Some(entries) = self.timeline.get(&low) {
+            return entries
+                .iter()
+                .map(|(sub, val)| (sub.as_deref(), val))
+                .collect();
+        }
+        let mut out = Vec::new();
+        if let Some(val) = self.scalars.get(&low) {
+            out.push((None, val));
+        }
+        if let Some(list) = self.indexed.get(&low) {
+            for (sub, val) in list {
+                out.push((Some(sub.as_str()), val));
+            }
+        }
+        out
     }
 
     /// Returns a deduplicated sorted list of lowercase control keys in `self`.
@@ -204,91 +242,114 @@ impl SectionControls {
         self.try_get_str(section, &key)
     }
 
-    /// Strict indexed string array getter sorted by positive integer subscript.
+    fn apply_positional_1based<T: Clone>(
+        &self,
+        section: &str,
+        key: &str,
+        max_len: Option<usize>,
+        default_fill: &T,
+        extract: impl Fn(&ControlValue) -> Result<T, String>,
+    ) -> Result<Vec<T>, StarError> {
+        let low = key.to_ascii_lowercase();
+        let mut out = Vec::new();
+        for (sub_opt, raw_val) in self.ordered_assignments(&low) {
+            let idx = if let Some(sub) = sub_opt {
+                let parsed = sub.trim().parse::<usize>().map_err(|_| {
+                    StarError::InvalidInput(format!(
+                        "invalid subscript '({sub})' for '&{section}::{low}'"
+                    ))
+                })?;
+                if parsed == 0 {
+                    return Err(StarError::InvalidInput(format!(
+                        "non-positive 1-based subscript '(0)' for '&{section}::{low}'"
+                    )));
+                }
+                parsed
+            } else {
+                1
+            };
+            if let Some(limit) = max_len {
+                if idx > limit {
+                    return Err(StarError::InvalidInput(format!(
+                        "subscript '({idx})' out of 1-based bounds (1..={limit}) for '&{section}::{low}'"
+                    )));
+                }
+            }
+            let ctx = sub_opt.map_or_else(
+                || format!("'&{section}::{low}'"),
+                |_| format!("'&{section}::{low}({idx})'"),
+            );
+            let v = extract(raw_val).map_err(|msg| {
+                StarError::InvalidInput(format!(
+                    "invalid value for {ctx}: {msg}"
+                ))
+            })?;
+            if out.len() < idx {
+                out.resize(idx, default_fill.clone());
+            }
+            out[idx - 1] = v;
+        }
+        Ok(out)
+    }
+
+    pub(crate) fn try_get_indexed_strings_bounded(
+        &self,
+        section: &str,
+        key: &str,
+        max_len: Option<usize>,
+    ) -> Result<Vec<String>, StarError> {
+        self.apply_positional_1based(
+            section,
+            key,
+            max_len,
+            &String::new(),
+            |val| match val {
+                ControlValue::String(s) => Ok(s.clone()),
+                other => Err(format!("expected string, found {other:?}")),
+            },
+        )
+    }
+
+    pub(crate) fn try_get_indexed_f64s_bounded(
+        &self,
+        section: &str,
+        key: &str,
+        max_len: Option<usize>,
+    ) -> Result<Vec<f64>, StarError> {
+        self.apply_positional_1based(section, key, max_len, &0.0, |val| {
+            match val {
+                ControlValue::Float(f) if f.is_finite() => Ok(*f),
+                ControlValue::Float(f) => Err(format!("non-finite float {f}")),
+                ControlValue::Integer(i) => Ok(*i as f64),
+                other => Err(format!("expected real number, found {other:?}")),
+            }
+        })
+    }
+
+    /// Strict indexed string array getter preserving 1-based positions and chronological overrides.
+    ///
+    /// # Errors
+    /// Returns [`StarError::InvalidInput`] on non-positive or non-integer
+    /// subscripts or non-string values.
     pub fn try_get_indexed_strings(
         &self,
         section: &str,
         key: &str,
     ) -> Result<Vec<String>, StarError> {
-        let low = key.to_ascii_lowercase();
-        let mut pairs: Vec<(usize, String)> = Vec::new();
-        if let Some(val) = self.scalars.get(&low) {
-            match val {
-                ControlValue::String(s) => pairs.push((1, s.clone())),
-                other => {
-                    return Err(StarError::InvalidInput(format!(
-                        "expected string for '&{section}::{low}', found {other:?}"
-                    )));
-                }
-            }
-        }
-        if let Some(list) = self.indexed.get(&low) {
-            for (sub, val) in list {
-                let idx = sub.trim().parse::<usize>().map_err(|_| {
-                    StarError::InvalidInput(format!(
-                        "invalid subscript '({sub})' for '&{section}::{low}'"
-                    ))
-                })?;
-                if idx == 0 {
-                    return Err(StarError::InvalidInput(format!(
-                        "non-positive 1-based subscript '(0)' for '&{section}::{low}'"
-                    )));
-                }
-                match val {
-                    ControlValue::String(s) => pairs.push((idx, s.clone())),
-                    other => {
-                        return Err(StarError::InvalidInput(format!(
-                            "expected string for '&{section}::{low}({idx})', found {other:?}"
-                        )));
-                    }
-                }
-            }
-        }
-        pairs.sort_by_key(|(idx, _)| *idx);
-        Ok(pairs.into_iter().map(|(_, s)| s).collect())
+        self.try_get_indexed_strings_bounded(section, key, None)
     }
 
-    /// Strict indexed finite `f64` array getter sorted by positive integer subscript.
+    /// Strict indexed finite `f64` array getter preserving 1-based positions and chronological overrides.
+    ///
+    /// # Errors
+    /// Returns [`StarError::InvalidInput`] on non-positive or non-integer
+    /// subscripts or non-numeric / non-finite values.
     pub fn try_get_indexed_f64s(
         &self,
         section: &str,
         key: &str,
     ) -> Result<Vec<f64>, StarError> {
-        let low = key.to_ascii_lowercase();
-        let mut pairs: Vec<(usize, f64)> = Vec::new();
-        let parse_val = |val: &ControlValue, ctx: String| match val {
-            ControlValue::Float(f) if f.is_finite() => Ok(*f),
-            ControlValue::Float(f) => Err(StarError::InvalidInput(format!(
-                "non-finite value for {ctx}: {f}"
-            ))),
-            ControlValue::Integer(i) => Ok(*i as f64),
-            other => Err(StarError::InvalidInput(format!(
-                "expected real number for {ctx}, found {other:?}"
-            ))),
-        };
-        if let Some(val) = self.scalars.get(&low) {
-            pairs.push((1, parse_val(val, format!("'&{section}::{low}'"))?));
-        }
-        if let Some(list) = self.indexed.get(&low) {
-            for (sub, val) in list {
-                let idx = sub.trim().parse::<usize>().map_err(|_| {
-                    StarError::InvalidInput(format!(
-                        "invalid subscript '({sub})' for '&{section}::{low}'"
-                    ))
-                })?;
-                if idx == 0 {
-                    return Err(StarError::InvalidInput(format!(
-                        "non-positive 1-based subscript '(0)' for '&{section}::{low}'"
-                    )));
-                }
-                pairs.push((
-                    idx,
-                    parse_val(val, format!("'&{section}::{low}({idx})'"))?,
-                ));
-            }
-        }
-        pairs.sort_by_key(|(idx, _)| *idx);
-        Ok(pairs.into_iter().map(|(_, v)| v).collect())
+        self.try_get_indexed_f64s_bounded(section, key, None)
     }
 }
 

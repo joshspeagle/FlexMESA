@@ -13,7 +13,7 @@ use flexmesa_const::{M_SUN, RSUN, SECYER};
 use flexmesa_turb::MltOption;
 
 use crate::controls::StarError;
-use crate::evolve::{StepChecks, star_evolve_step_outcome_checked};
+use crate::evolve::{star_evolve_step_outcome_checked, StepChecks};
 use crate::inlist_runner::StarExtras;
 use crate::model::StarModel;
 
@@ -45,7 +45,8 @@ pub(crate) trait RelaxHooks {
     ///
     /// # Errors
     /// Returns [`StarError`] for `ierr /= 0`.
-    fn before_evolve(&mut self, model: &mut StarModel) -> Result<(), StarError>;
+    fn before_evolve(&mut self, model: &mut StarModel)
+        -> Result<(), StarError>;
 
     /// `adjust_model`, called between `do_evolve_step_part1` and
     /// `do_evolve_step_part2`.
@@ -187,7 +188,8 @@ impl SavedStuff {
             steps_before_use_gold2_tolerances: c
                 .steps_before_use_gold2_tolerances,
             use_gold_tolerances: c.use_gold_tolerances,
-            steps_before_use_gold_tolerances: c.steps_before_use_gold_tolerances,
+            steps_before_use_gold_tolerances: c
+                .steps_before_use_gold_tolerances,
             solver_iters_timestep_limit: ts.solver_iters_timestep_limit,
             tol_correction_norm: c.tol_correction_norm,
             tol_max_correction: c.tol_max_correction,
@@ -516,7 +518,10 @@ struct RelaxNumSteps {
 }
 
 impl RelaxHooks for RelaxNumSteps {
-    fn before_evolve(&mut self, model: &mut StarModel) -> Result<(), StarError> {
+    fn before_evolve(
+        &mut self,
+        model: &mut StarModel,
+    ) -> Result<(), StarError> {
         setup_before_relax(model);
         let c = &mut model.controls;
         c.ts_stop.max_timestep = self.max_timestep;
@@ -599,7 +604,10 @@ struct RelaxToRadiativeCore {
 }
 
 impl RelaxHooks for RelaxToRadiativeCore {
-    fn before_evolve(&mut self, model: &mut StarModel) -> Result<(), StarError> {
+    fn before_evolve(
+        &mut self,
+        model: &mut StarModel,
+    ) -> Result<(), StarError> {
         // The `max_timestep` settings are commented out upstream
         // (`star/private/relax.f90:3484-3486`); reproduced, deferred #415.
         setup_before_relax(model);
@@ -697,7 +705,10 @@ struct RelaxOmega {
 }
 
 impl RelaxHooks for RelaxOmega {
-    fn before_evolve(&mut self, model: &mut StarModel) -> Result<(), StarError> {
+    fn before_evolve(
+        &mut self,
+        model: &mut StarModel,
+    ) -> Result<(), StarError> {
         setup_before_relax(model);
         Ok(())
     }
@@ -770,8 +781,7 @@ pub(crate) fn do_relax_uniform_omega(
     }
     let starting_omega = model.omega[0];
     let starting_model_number = model.model_number;
-    let num_steps_to_use = match usize::try_from(num_steps_to_relax_rotation)
-    {
+    let num_steps_to_use = match usize::try_from(num_steps_to_relax_rotation) {
         Ok(n) if n > 0 => n,
         _ => {
             return Err(StarError::InvalidInput(format!(

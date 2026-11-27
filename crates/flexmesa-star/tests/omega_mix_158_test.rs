@@ -11,20 +11,21 @@ use std::path::PathBuf;
 
 use flexmesa_const::{M_SUN, R_SUN, SECYER, STANDARD_CGRAV, TWO_THIRDS};
 use flexmesa_star::hydro_rotation::{
-    LOG_TERM_POWER, eval_fp_ft_single, eval_fp_ft_single_dual, eval_i_rot_dual,
-    roche_a, roche_c, set1_i_rot, w_div_w_roche_omega,
+    eval_fp_ft_single, eval_fp_ft_single_dual, eval_i_rot_dual, roche_a,
+    roche_c, set1_i_rot, w_div_w_roche_omega, LOG_TERM_POWER,
 };
 use flexmesa_star::report_utils::equatorial_and_polar_r_cm;
 use flexmesa_star::{
+    do_adjust_mesh, do_solve_omega_mix, do_solve_omega_mix_with_extras,
+    eval_i_rot, eval_photosphere_info, get_rotation_sigmas,
+    init_or_update_model_from_bundle, load_zams_model, remesh_split_merge,
+    set_hydro_vars, set_rotation_info, solve_omega_mix, star_evolve_step,
+    star_evolve_step_with_extras, total_angular_momentum,
+    update_rotation_distortion_factors, w_div_w_roche_jrot,
     BinaryOtherTorqueHandle, BinaryOtherTorqueHook, DefaultStarExtras,
     InlistBundle, InlistLoadOptions, MeshFunctionConfig, OmegaMixOutcome,
     PrimaryStateBuffer, StarControls, StarError, StarExtras, StarJobControls,
-    StarModel, do_adjust_mesh, do_solve_omega_mix,
-    do_solve_omega_mix_with_extras, eval_i_rot, eval_photosphere_info,
-    get_rotation_sigmas, init_or_update_model_from_bundle, load_zams_model,
-    remesh_split_merge, set_hydro_vars, set_rotation_info, solve_omega_mix,
-    star_evolve_step, star_evolve_step_with_extras, total_angular_momentum,
-    update_rotation_distortion_factors, w_div_w_roche_jrot,
+    StarModel,
 };
 
 fn star_suite_dir() -> PathBuf {
@@ -97,7 +98,8 @@ fn test_quad_solve_omega_mix_conserves_j_at_1e13_stiffness_without_rescaling() {
     let shear0 = (model.omega[0] - model.omega[nz - 1]).abs();
     model.aux.step_hist.num_rotation_solver_steps = 0;
 
-    let outcome = do_solve_omega_mix(&mut model, dt).expect("do_solve_omega_mix");
+    let outcome =
+        do_solve_omega_mix(&mut model, dt).expect("do_solve_omega_mix");
     assert_eq!(outcome, OmegaMixOutcome::KeepGoing);
     assert!(
         (4..=20).contains(&model.aux.step_hist.num_rotation_solver_steps),
@@ -165,7 +167,13 @@ fn test_quad_solve_omega_mix_conserves_j_at_1e13_stiffness_without_rescaling() {
         *om = 1.0e-5 + 4.0e-5 * frac;
     }
     let j_nr0: f64 = (0..nz_nr)
-        .map(|k| non_rot.dm_bar[k] * TWO_THIRDS * non_rot.r[k] * non_rot.r[k] * non_rot.omega[k])
+        .map(|k| {
+            non_rot.dm_bar[k]
+                * TWO_THIRDS
+                * non_rot.r[k]
+                * non_rot.r[k]
+                * non_rot.omega[k]
+        })
         .sum();
     let nu = vec![1.0e12; nz_nr];
     solve_omega_mix(&mut non_rot, 1.0e7, &nu, 4);
@@ -199,7 +207,8 @@ fn test_am_sig_j_d2irot_pure_j_diffusion_relaxes_toward_uniform_j_rot() {
     let omega_core_before = model.omega[nz - 1];
     let omega_surf_before = model.omega[0];
 
-    let outcome = do_solve_omega_mix(&mut model, dt).expect("do_solve_omega_mix");
+    let outcome =
+        do_solve_omega_mix(&mut model, dt).expect("do_solve_omega_mix");
     assert_eq!(outcome, OmegaMixOutcome::KeepGoing);
     assert!(
         model.aux.am_sig_omega.iter().all(|&s| s == 0.0),
@@ -275,7 +284,10 @@ fn test_adaptive_substepping_and_recalc_mixing_info_each_substep() {
     set_hydro_vars(&mut no_recalc, false, false).expect("set_hydro_vars");
 
     let mut with_recalc = no_recalc.clone();
-    with_recalc.controls.mix_wind.recalc_mixing_info_each_substep = true;
+    with_recalc
+        .controls
+        .mix_wind
+        .recalc_mixing_info_each_substep = true;
 
     let j0 = total_angular_momentum(&no_recalc);
     assert_eq!(
@@ -319,7 +331,10 @@ fn test_explicit_other_torque_extra_jdot_extra_omegadot_and_binary_hook() {
 
     struct ConstOmegaDotExtras(f64);
     impl StarExtras for ConstOmegaDotExtras {
-        fn apply_other_torque(&mut self, m: &mut StarModel) -> Result<(), StarError> {
+        fn apply_other_torque(
+            &mut self,
+            m: &mut StarModel,
+        ) -> Result<(), StarError> {
             m.aux.extra_omegadot.fill(self.0);
             Ok(())
         }
@@ -431,7 +446,8 @@ fn test_implicit_other_torque_jacobian_and_retry_on_error() {
         ) -> Result<(), StarError> {
             self.calls += 1;
             for k in 0..m.nz {
-                m.aux.extra_omegadot[k] = -self.lambda * (m.omega[k] - self.target);
+                m.aux.extra_omegadot[k] =
+                    -self.lambda * (m.omega[k] - self.target);
                 m.aux.d_extra_omegadot_domega_00[k] = -self.lambda;
             }
             Ok(())
@@ -504,7 +520,9 @@ fn test_implicit_other_torque_jacobian_and_retry_on_error() {
         true,
         &mut fail_ex,
     )
-    .expect_err("step must fail on implicit torque retry with max_number_retries=0");
+    .expect_err(
+        "step must fail on implicit torque retry with max_number_retries=0",
+    );
     assert!(
         matches!(
             err,
@@ -630,7 +648,8 @@ fn assert_roche_i_rot_and_omega_consistent(model: &StarModel, label: &str) {
             mw.w_div_wcrit_max2,
             false,
         );
-        let i_expected = eval_i_rot(model.r[k], w_expected, mw.simple_i_rot_flag);
+        let i_expected =
+            eval_i_rot(model.r[k], w_expected, mw.simple_i_rot_flag);
         let i_sph = TWO_THIRDS * model.r[k] * model.r[k];
         if (i_expected - i_sph).abs() > 0.01 * i_sph {
             any_nontrivial_distortion = true;
@@ -640,7 +659,8 @@ fn assert_roche_i_rot_and_omega_consistent(model: &StarModel, label: &str) {
             "{label}: w_div_wc[{k}] mismatch: got {}, expected {w_expected}",
             model.aux.w_div_wc[k]
         );
-        let rel_i = (model.aux.i_rot[k] - i_expected).abs() / i_expected.max(1.0);
+        let rel_i =
+            (model.aux.i_rot[k] - i_expected).abs() / i_expected.max(1.0);
         assert!(
             rel_i <= 1.0e-13,
             "{label}: i_rot[{k}] must match Paxton 2019 eval_i_rot: got {:.16e}, expected {:.16e} (rel={rel_i:.3e})",
@@ -648,8 +668,8 @@ fn assert_roche_i_rot_and_omega_consistent(model: &StarModel, label: &str) {
             i_expected
         );
         let expected_om = model.j_rot[k] / model.aux.i_rot[k];
-        let rel_om =
-            (model.omega[k] - expected_om).abs() / expected_om.abs().max(1.0e-30);
+        let rel_om = (model.omega[k] - expected_om).abs()
+            / expected_om.abs().max(1.0e-30);
         assert!(
             rel_om <= 1.0e-13,
             "{label}: omega[{k}] must equal j_rot / i_rot: rel={rel_om:.3e}"
@@ -762,10 +782,12 @@ fn test_rotating_star_smoke_accreted_material_j() {
         .expect("accreted_material_j step");
         assert!(rep.converged);
         let j_after = total_angular_momentum(&m_acc);
-        let expected_dj =
-            m_acc.controls.mix_wind.accreted_material_j * m_acc.mstar_dot * rep.dt;
+        let expected_dj = m_acc.controls.mix_wind.accreted_material_j
+            * m_acc.mstar_dot
+            * rep.dt;
         if expected_dj > 1.0e-5 * j_after {
-            let am_err = (expected_dj - (j_after - j_before)).abs() / expected_dj;
+            let am_err =
+                (expected_dj - (j_after - j_before)).abs() / expected_dj;
             max_rel_acc_j = max_rel_acc_j.max(am_err);
             assert!(
                 am_err < 1.0e-5,
@@ -1140,13 +1162,22 @@ fn test_mesa_26_4_1_oracle_eval_i_rot_fp_ft_and_roche_factors() {
     let mut t_rpol = ErrorTracker::default();
     let mut t_req = ErrorTracker::default();
 
-    for &(cid, simple_flag) in &[("roche_paxton", false), ("roche_simple", true)] {
+    for &(cid, simple_flag) in
+        &[("roche_paxton", false), ("roche_simple", true)]
+    {
         let mut model = make_blank_rotating_model(nz, simple_flag);
         for k in 0..nz {
             let kf = k + 1;
-            model.r[k] = oracle_val(&oracles, "eval_i_rot_fp_ft", cid, "r", kf, 0);
-            model.aux.w_div_wc[k] =
-                oracle_val(&oracles, "eval_i_rot_fp_ft", cid, "w_div_wc", kf, 0);
+            model.r[k] =
+                oracle_val(&oracles, "eval_i_rot_fp_ft", cid, "r", kf, 0);
+            model.aux.w_div_wc[k] = oracle_val(
+                &oracles,
+                "eval_i_rot_fp_ft",
+                cid,
+                "w_div_wc",
+                kf,
+                0,
+            );
             model.j_rot[k] = 1.0e18;
             model.m[k] = 4.0 * M_SUN;
             model.m_grav[k] = 4.0 * M_SUN;
@@ -1212,16 +1243,26 @@ fn test_mesa_26_4_1_oracle_eval_i_rot_fp_ft_and_roche_factors() {
             let got_irot_direct = eval_i_rot(r_k, w_k, simple_flag);
             let got_irot_dual = eval_i_rot_dual(r_k, w_k, simple_flag);
             assert_eq!(got_irot_direct.to_bits(), model.aux.i_rot[k].to_bits());
-            assert_eq!(got_irot_dual.val.to_bits(), model.aux.i_rot[k].to_bits());
+            assert_eq!(
+                got_irot_dual.val.to_bits(),
+                model.aux.i_rot[k].to_bits()
+            );
             assert_eq!(
                 got_irot_dual.d1[1].to_bits(),
                 model.aux.d_i_rot_dlnr[k].to_bits()
             );
             let mut m_one = model.clone();
             set1_i_rot(&mut m_one, k, r_k);
-            assert_eq!(m_one.aux.i_rot[k].to_bits(), model.aux.i_rot[k].to_bits());
+            assert_eq!(
+                m_one.aux.i_rot[k].to_bits(),
+                model.aux.i_rot[k].to_bits()
+            );
 
-            t_irot.record(&format!("{cid}.i_rot[{kf}]"), model.aux.i_rot[k], want_irot);
+            t_irot.record(
+                &format!("{cid}.i_rot[{kf}]"),
+                model.aux.i_rot[k],
+                want_irot,
+            );
             t_dirot_dlnr.record(
                 &format!("{cid}.d_i_rot_dlnR[{kf}]"),
                 model.aux.d_i_rot_dlnr[k],
@@ -1254,7 +1295,11 @@ fn test_mesa_26_4_1_oracle_eval_i_rot_fp_ft_and_roche_factors() {
             }
 
             let (got_req, got_rpol) = equatorial_and_polar_r_cm(&model, k);
-            t_req.record(&format!("{cid}.r_equatorial[{kf}]"), got_req, want_req);
+            t_req.record(
+                &format!("{cid}.r_equatorial[{kf}]"),
+                got_req,
+                want_req,
+            );
             t_rpol.record(&format!("{cid}.r_polar[{kf}]"), got_rpol, want_rpol);
         }
     }
@@ -1263,19 +1308,28 @@ fn test_mesa_26_4_1_oracle_eval_i_rot_fp_ft_and_roche_factors() {
     let mut t_ac = ErrorTracker::default();
     for kf in 1..=12_usize {
         let w = oracle_val(&oracles, "roche_factors", "fabry2022", "w", kf, 0);
-        let want_a =
-            oracle_val(&oracles, "roche_factors", "fabry2022", "roche_A", kf, 0);
-        let want_c =
-            oracle_val(&oracles, "roche_factors", "fabry2022", "roche_C", kf, 0);
+        let want_a = oracle_val(
+            &oracles,
+            "roche_factors",
+            "fabry2022",
+            "roche_A",
+            kf,
+            0,
+        );
+        let want_c = oracle_val(
+            &oracles,
+            "roche_factors",
+            "fabry2022",
+            "roche_C",
+            kf,
+            0,
+        );
         let w2 = flexmesa_math::pow2(w);
         let w4 = flexmesa_math::pow4(w);
         let w6 = flexmesa_math::pow6(w);
-        let w_log = flexmesa_math::log(1.0 - flexmesa_math::pow(w, LOG_TERM_POWER));
-        t_ac.record(
-            &format!("roche_A[{kf}]"),
-            roche_a(w4, w6, w_log),
-            want_a,
-        );
+        let w_log =
+            flexmesa_math::log(1.0 - flexmesa_math::pow(w, LOG_TERM_POWER));
+        t_ac.record(&format!("roche_A[{kf}]"), roche_a(w4, w6, w_log), want_a);
         t_ac.record(
             &format!("roche_C[{kf}]"),
             roche_c(w2, w4, w6, w_log),
@@ -1327,7 +1381,11 @@ fn test_mesa_26_4_1_oracle_eval_i_rot_fp_ft_and_roche_factors() {
         t_ac.worst_label,
     );
 
-    assert_eq!(t_irot.max_ulp, 0, "i_rot ULP mismatch: {}", t_irot.worst_label);
+    assert_eq!(
+        t_irot.max_ulp, 0,
+        "i_rot ULP mismatch: {}",
+        t_irot.worst_label
+    );
     assert_eq!(
         t_dirot_dlnr.max_ulp, 0,
         "d_i_rot_dlnR ULP mismatch: {}",
@@ -1340,11 +1398,31 @@ fn test_mesa_26_4_1_oracle_eval_i_rot_fp_ft_and_roche_factors() {
     );
     assert_eq!(t_fp.max_ulp, 0, "fp_rot ULP mismatch: {}", t_fp.worst_label);
     assert_eq!(t_ft.max_ulp, 0, "ft_rot ULP mismatch: {}", t_ft.worst_label);
-    assert_eq!(t_dfp_dw.max_ulp, 0, "d_fp_dw ULP mismatch: {}", t_dfp_dw.worst_label);
-    assert_eq!(t_dft_dw.max_ulp, 0, "d_ft_dw ULP mismatch: {}", t_dft_dw.worst_label);
-    assert_eq!(t_req.max_ulp, 0, "r_equatorial ULP mismatch: {}", t_req.worst_label);
-    assert_eq!(t_rpol.max_ulp, 0, "r_polar ULP mismatch: {}", t_rpol.worst_label);
-    assert_eq!(t_ac.max_ulp, 0, "roche_A/C ULP mismatch: {}", t_ac.worst_label);
+    assert_eq!(
+        t_dfp_dw.max_ulp, 0,
+        "d_fp_dw ULP mismatch: {}",
+        t_dfp_dw.worst_label
+    );
+    assert_eq!(
+        t_dft_dw.max_ulp, 0,
+        "d_ft_dw ULP mismatch: {}",
+        t_dft_dw.worst_label
+    );
+    assert_eq!(
+        t_req.max_ulp, 0,
+        "r_equatorial ULP mismatch: {}",
+        t_req.worst_label
+    );
+    assert_eq!(
+        t_rpol.max_ulp, 0,
+        "r_polar ULP mismatch: {}",
+        t_rpol.worst_label
+    );
+    assert_eq!(
+        t_ac.max_ulp, 0,
+        "roche_A/C ULP mismatch: {}",
+        t_ac.worst_label
+    );
 }
 
 #[test]
@@ -1364,18 +1442,36 @@ fn test_mesa_26_4_1_oracle_w_div_w_roche_and_rotation_sigmas() {
         for kf in 1..=10_usize {
             let om_in =
                 oracle_val(&oracles, "w_div_w_roche", cid, "omega_in", kf, 0);
-            let want_om =
-                oracle_val(&oracles, "w_div_w_roche", cid, "w_from_omega", kf, 0);
-            let got_om =
-                w_div_w_roche_omega(rpsi, m_phi, om_in, cgrav, max_w, max_w2, w_flag);
-            t_w_om.record(&format!("{cid}.w_from_omega[{kf}]"), got_om, want_om);
+            let want_om = oracle_val(
+                &oracles,
+                "w_div_w_roche",
+                cid,
+                "w_from_omega",
+                kf,
+                0,
+            );
+            let got_om = w_div_w_roche_omega(
+                rpsi, m_phi, om_in, cgrav, max_w, max_w2, w_flag,
+            );
+            t_w_om.record(
+                &format!("{cid}.w_from_omega[{kf}]"),
+                got_om,
+                want_om,
+            );
 
             let jr_in =
                 oracle_val(&oracles, "w_div_w_roche", cid, "jrot_in", kf, 0);
-            let want_jr =
-                oracle_val(&oracles, "w_div_w_roche", cid, "w_from_jrot", kf, 0);
-            let got_jr =
-                w_div_w_roche_jrot(rpsi, m_phi, jr_in, cgrav, max_w, max_w2, w_flag);
+            let want_jr = oracle_val(
+                &oracles,
+                "w_div_w_roche",
+                cid,
+                "w_from_jrot",
+                kf,
+                0,
+            );
+            let got_jr = w_div_w_roche_jrot(
+                rpsi, m_phi, jr_in, cgrav, max_w, max_w2, w_flag,
+            );
             t_w_jr.record(&format!("{cid}.w_from_jrot[{kf}]"), got_jr, want_jr);
         }
     }
@@ -1386,7 +1482,8 @@ fn test_mesa_26_4_1_oracle_w_div_w_roche_and_rotation_sigmas() {
     let nz = 12_usize;
     for &cid in &["sigmas_normal", "sigmas_capped"] {
         let mut model = make_blank_rotating_model(nz, false);
-        model.xmstar = oracle_val(&oracles, "rotation_sigmas", cid, "xmstar", 0, 0);
+        model.xmstar =
+            oracle_val(&oracles, "rotation_sigmas", cid, "xmstar", 0, 0);
         model.mstar = model.xmstar;
         let dt = oracle_val(&oracles, "rotation_sigmas", cid, "dt", 0, 0);
         model.controls.mix_wind.am_sig_term_limit = oracle_val(
@@ -1399,11 +1496,14 @@ fn test_mesa_26_4_1_oracle_w_div_w_roche_and_rotation_sigmas() {
         );
         for k in 0..nz {
             let kf = k + 1;
-            model.r[k] = oracle_val(&oracles, "rotation_sigmas", cid, "r", kf, 0);
+            model.r[k] =
+                oracle_val(&oracles, "rotation_sigmas", cid, "r", kf, 0);
             model.rho[k] =
                 oracle_val(&oracles, "rotation_sigmas", cid, "rho", kf, 0);
-            model.dm[k] = oracle_val(&oracles, "rotation_sigmas", cid, "dm", kf, 0);
-            model.dq[k] = oracle_val(&oracles, "rotation_sigmas", cid, "dq", kf, 0);
+            model.dm[k] =
+                oracle_val(&oracles, "rotation_sigmas", cid, "dm", kf, 0);
+            model.dq[k] =
+                oracle_val(&oracles, "rotation_sigmas", cid, "dq", kf, 0);
             model.aux.am_nu_omega[k] = oracle_val(
                 &oracles,
                 "rotation_sigmas",
@@ -1488,7 +1588,10 @@ fn test_mesa_26_4_1_oracle_do_solve_omega_mix_all_regimes() {
     // Mirror the exact Fortran hook modules from `gen_omega_mix_oracles.f90`.
     struct OracleExplicitJdot;
     impl StarExtras for OracleExplicitJdot {
-        fn apply_other_torque(&mut self, m: &mut StarModel) -> Result<(), StarError> {
+        fn apply_other_torque(
+            &mut self,
+            m: &mut StarModel,
+        ) -> Result<(), StarError> {
             for k in 0..m.nz {
                 let kf = f64::from(u32::try_from(k).unwrap_or(0));
                 m.aux.extra_jdot[k] = -2.0e6 * (1.0 - 0.025 * kf);
@@ -1500,7 +1603,10 @@ fn test_mesa_26_4_1_oracle_do_solve_omega_mix_all_regimes() {
 
     struct OracleExplicitOmegadot;
     impl StarExtras for OracleExplicitOmegadot {
-        fn apply_other_torque(&mut self, m: &mut StarModel) -> Result<(), StarError> {
+        fn apply_other_torque(
+            &mut self,
+            m: &mut StarModel,
+        ) -> Result<(), StarError> {
             for k in 0..m.nz {
                 let kf = f64::from(u32::try_from(k).unwrap_or(0));
                 m.aux.extra_jdot[k] = 0.0;
@@ -1690,8 +1796,10 @@ fn test_mesa_26_4_1_oracle_do_solve_omega_mix_all_regimes() {
                 model.controls.use_other_torque = true;
                 let mut ex = OracleExplicitJdot;
                 (
-                    do_solve_omega_mix_with_extras(&mut model, dt_total, &mut ex)
-                        .expect(cid),
+                    do_solve_omega_mix_with_extras(
+                        &mut model, dt_total, &mut ex,
+                    )
+                    .expect(cid),
                     0_usize,
                 )
             }
@@ -1699,8 +1807,10 @@ fn test_mesa_26_4_1_oracle_do_solve_omega_mix_all_regimes() {
                 model.controls.use_other_torque = true;
                 let mut ex = OracleExplicitOmegadot;
                 (
-                    do_solve_omega_mix_with_extras(&mut model, dt_total, &mut ex)
-                        .expect(cid),
+                    do_solve_omega_mix_with_extras(
+                        &mut model, dt_total, &mut ex,
+                    )
+                    .expect(cid),
                     0_usize,
                 )
             }
@@ -1722,7 +1832,10 @@ fn test_mesa_26_4_1_oracle_do_solve_omega_mix_all_regimes() {
                 .expect(cid);
                 (out, ex.calls)
             }
-            _ => (do_solve_omega_mix(&mut model, dt_total).expect(cid), 0_usize),
+            _ => (
+                do_solve_omega_mix(&mut model, dt_total).expect(cid),
+                0_usize,
+            ),
         };
 
         let want_outcome =
@@ -1802,14 +1915,8 @@ fn test_mesa_26_4_1_oracle_do_solve_omega_mix_all_regimes() {
                 kf,
                 0,
             );
-            let want_sj = oracle_val(
-                &oracles,
-                "solve_omega_mix",
-                cid,
-                "am_sig_j",
-                kf,
-                0,
-            );
+            let want_sj =
+                oracle_val(&oracles, "solve_omega_mix", cid, "am_sig_j", kf, 0);
 
             t_irot.record(
                 &format!("{cid}.i_rot_final[{kf}]"),
@@ -1879,10 +1986,34 @@ fn test_mesa_26_4_1_oracle_do_solve_omega_mix_all_regimes() {
         t_jtot.worst_label,
     );
 
-    assert_eq!(t_irot.max_ulp, 0, "i_rot_final ULP mismatch: {}", t_irot.worst_label);
-    assert_eq!(t_sig_om.max_ulp, 0, "am_sig_omega ULP mismatch: {}", t_sig_om.worst_label);
-    assert_eq!(t_sig_j.max_ulp, 0, "am_sig_j ULP mismatch: {}", t_sig_j.worst_label);
-    assert_eq!(t_omega.max_ulp, 0, "omega_final ULP mismatch: {}", t_omega.worst_label);
-    assert_eq!(t_jrot.max_ulp, 0, "j_rot_final ULP mismatch: {}", t_jrot.worst_label);
-    assert_eq!(t_jtot.max_ulp, 0, "J_tot ULP mismatch: {}", t_jtot.worst_label);
+    assert_eq!(
+        t_irot.max_ulp, 0,
+        "i_rot_final ULP mismatch: {}",
+        t_irot.worst_label
+    );
+    assert_eq!(
+        t_sig_om.max_ulp, 0,
+        "am_sig_omega ULP mismatch: {}",
+        t_sig_om.worst_label
+    );
+    assert_eq!(
+        t_sig_j.max_ulp, 0,
+        "am_sig_j ULP mismatch: {}",
+        t_sig_j.worst_label
+    );
+    assert_eq!(
+        t_omega.max_ulp, 0,
+        "omega_final ULP mismatch: {}",
+        t_omega.worst_label
+    );
+    assert_eq!(
+        t_jrot.max_ulp, 0,
+        "j_rot_final ULP mismatch: {}",
+        t_jrot.worst_label
+    );
+    assert_eq!(
+        t_jtot.max_ulp, 0,
+        "J_tot ULP mismatch: {}",
+        t_jtot.worst_label
+    );
 }

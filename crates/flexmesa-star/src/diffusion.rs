@@ -8,7 +8,9 @@
 use flexmesa_const::{AMU, BOLTZM, CLIGHT, HBAR, KERG, ME, PI, QE};
 use flexmesa_mtx::solve_block_tridiag_bcyclic;
 
-use crate::diffusion_procs::{fixup, get_limit_coeffs, set_new_xa, setup_struct_info};
+use crate::diffusion_procs::{
+    fixup, get_limit_coeffs, set_new_xa, setup_struct_info,
+};
 use crate::diffusion_support::{
     get1_burgers_coeffs, get1_diffusion_velocities, get1_gradient_coeffs,
     get_dstar_ocp, get_matrix_coeffs, MatrixCoeffsInput, MatrixCoeffsOutput,
@@ -268,7 +270,8 @@ fn ros_table(solver: IsolveSolver) -> RosTable {
             t.ra[4][1] = 6.019_134_481_288_629;
             t.ra[4][2] = 12.537_083_329_320_87;
             t.ra[4][3] = -0.687_886_036_105_895;
-            t.ra[5] = [t.ra[4][0], t.ra[4][1], t.ra[4][2], t.ra[4][3], 1.0, 0.0];
+            t.ra[5] =
+                [t.ra[4][0], t.ra[4][1], t.ra[4][2], t.ra[4][3], 1.0, 0.0];
             t.rc[1][0] = -5.668_8;
             t.rc[2][0] = -2.430_093_356_833_875;
             t.rc[2][1] = -0.206_359_915_709_191_5;
@@ -287,7 +290,8 @@ fn ros_table(solver: IsolveSolver) -> RosTable {
                 -6.058_818_238_834_054,
                 0.0,
             ];
-            t.ros_m = [t.ra[4][0], t.ra[4][1], t.ra[4][2], t.ra[4][3], 1.0, 1.0];
+            t.ros_m =
+                [t.ra[4][0], t.ra[4][1], t.ra[4][2], t.ra[4][3], 1.0, 1.0];
             t.ros_e = [0.0, 0.0, 0.0, 0.0, 0.0, 1.0];
         }
         IsolveSolver::Rodasp => {
@@ -305,7 +309,8 @@ fn ros_table(solver: IsolveSolver) -> RosTable {
             t.ra[4][1] = -4.741_636_671_481_785;
             t.ra[4][2] = -16.310_026_313_309_71;
             t.ra[4][3] = -1.062_004_044_111_401;
-            t.ra[5] = [t.ra[4][0], t.ra[4][1], t.ra[4][2], t.ra[4][3], 1.0, 0.0];
+            t.ra[5] =
+                [t.ra[4][0], t.ra[4][1], t.ra[4][2], t.ra[4][3], 1.0, 0.0];
             t.rc[1][0] = -12.0;
             t.rc[2][0] = -8.791_795_173_947_035;
             t.rc[2][1] = -2.207_865_586_973_518;
@@ -324,7 +329,8 @@ fn ros_table(solver: IsolveSolver) -> RosTable {
                 -5.714_285_714_285_717,
                 0.0,
             ];
-            t.ros_m = [t.ra[4][0], t.ra[4][1], t.ra[4][2], t.ra[4][3], 1.0, 1.0];
+            t.ros_m =
+                [t.ra[4][0], t.ra[4][1], t.ra[4][2], t.ra[4][3], 1.0, 1.0];
             t.ros_e = [0.0, 0.0, 0.0, 0.0, 0.0, 1.0];
         }
     }
@@ -609,7 +615,8 @@ pub fn do_solve_diffusion(
     }
 
     let mut r_face = vec![0.0_f64; nz + 1];
-    r_face[(nzlo + 1)..=nzhi].copy_from_slice(&inp.r_face_in[(nzlo + 1)..=nzhi]);
+    r_face[(nzlo + 1)..=nzhi]
+        .copy_from_slice(&inp.r_face_in[(nzlo + 1)..=nzhi]);
     r_face[nzlo] = inp.r_face_in[0];
     r_face[nzhi + 1] = inp.r_center;
 
@@ -849,9 +856,7 @@ pub fn do_solve_diffusion(
             inp.maxsteps_for_isolve
         };
         let uround = 1.0e-16_f64;
-        if inp.atol_for_isolve <= 0.0
-            || inp.rtol_for_isolve <= 10.0 * uround
-        {
+        if inp.atol_for_isolve <= 0.0 || inp.rtol_for_isolve <= 10.0 * uround {
             return Err(StarError::InvalidInput(
                 "diffusion_atol_for_isolve or diffusion_rtol_for_isolve too small"
                     .into(),
@@ -1278,7 +1283,8 @@ pub fn do_solve_diffusion(
                     continue 'retry_same_jac;
                 }
 
-                let mut fac = fac2.max(fac1.min(flexmesa_math::pow(err, eloi) / safe));
+                let mut fac =
+                    fac2.max(fac1.min(flexmesa_math::pow(err, eloi) / safe));
                 let mut hnew = h / fac;
                 if !hnew.is_finite() {
                     h *= 0.5;
@@ -1405,8 +1411,8 @@ pub fn do_solve_diffusion(
                 &cell_dm,
             );
 
-            let mut dt = (inp.dt_div_timescale * timescale)
-                .max(1.0e-4 * remaining_time);
+            let mut dt =
+                (inp.dt_div_timescale * timescale).max(1.0e-4 * remaining_time);
             if inp.min_num_substeps > 0 {
                 dt = dt.min(inp.total_time / (inp.min_num_substeps as f64));
             }
@@ -1647,7 +1653,9 @@ pub fn do_solve_diffusion(
         )));
     }
 
-    set_new_xa(nzlo, nzhi, species, nc, m, inp.class, out.x_init, &x, out.xa)?;
+    set_new_xa(
+        nzlo, nzhi, species, nc, m, inp.class, out.x_init, &x, out.xa,
+    )?;
 
     for k in nzlo..=nzhi {
         for j in 0..nc {
@@ -1703,30 +1711,28 @@ pub fn get_timescale(
                 continue;
             }
             let gt_k = gt_face[k * nc + i];
-            let mut flow_out = if v_advection_face[k * nc + i].abs()
-                >= upwind_limit
-            {
-                if gt_k > 0.0 {
-                    gt_k * x[k * m + i]
+            let mut flow_out =
+                if v_advection_face[k * nc + i].abs() >= upwind_limit {
+                    if gt_k > 0.0 {
+                        gt_k * x[k * m + i]
+                    } else {
+                        gt_k * x[(k - 1) * m + i]
+                    }
                 } else {
-                    gt_k * x[(k - 1) * m + i]
-                }
-            } else {
-                gt_k * x_face[k * m + i]
-            };
+                    gt_k * x_face[k * m + i]
+                };
 
             let gt_kp1 = gt_face[(k + 1) * nc + i];
-            let mut flow_in = if v_advection_face[(k + 1) * nc + i].abs()
-                >= upwind_limit
-            {
-                if gt_kp1 > 0.0 {
-                    gt_kp1 * x[(k + 1) * m + i]
+            let mut flow_in =
+                if v_advection_face[(k + 1) * nc + i].abs() >= upwind_limit {
+                    if gt_kp1 > 0.0 {
+                        gt_kp1 * x[(k + 1) * m + i]
+                    } else {
+                        gt_kp1 * x[k * m + i]
+                    }
                 } else {
-                    gt_kp1 * x[k * m + i]
-                }
-            } else {
-                gt_kp1 * x_face[(k + 1) * m + i]
-            };
+                    gt_kp1 * x_face[(k + 1) * m + i]
+                };
 
             for j in 0..nc {
                 let mut coeff = sig_face[((k + 1) * nc + i) * nc + j]

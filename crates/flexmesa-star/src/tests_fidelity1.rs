@@ -115,14 +115,22 @@ fn test_eps_grav_time_centering_pc_blending_and_latent_heat_match_fortran() {
         (tc.d1[I_LND_00] - fd_dlnd).abs() / fd_dlnd.abs().max(1.0) < 1.0e-5
     );
 
-    // 2. Latent heat terms
+    // 2. Latent heat terms: the current-step term enters the centred
+    // `eps_grav` and the start-of-step term enters `eps_grav_start`, so each
+    // carries the weight 1/2 (`star/private/eps_grav.f90:165-182`).
     model.aux.latent_ddlnrho[k] = 2.5e12;
     model.aux.latent_ddlnt[k] = -1.8e12;
+    model.aux.latent_ddlnrho_start[k] = 1.5e12;
+    model.aux.latent_ddlnt_start[k] = -0.6e12;
     let with_lat =
         eval_eps_grav_std_cell(&model, k).expect("eval_eps_grav_std_cell lat");
     let expected_lat = tc.val
-        - (dlnd_dt * model.aux.latent_ddlnrho[k]
-            + dlnt_dt * model.aux.latent_ddlnt[k]);
+        - 0.5
+            * (dlnd_dt * model.aux.latent_ddlnrho[k]
+                + dlnt_dt * model.aux.latent_ddlnt[k])
+        - 0.5
+            * (dlnd_dt * model.aux.latent_ddlnrho_start[k]
+                + dlnt_dt * model.aux.latent_ddlnt_start[k]);
     assert!(
         (with_lat.val - expected_lat).abs() / expected_lat.abs().max(1.0)
             < 1.0e-12
@@ -498,12 +506,11 @@ fn test_hydro_chem_eqns_op_split_do_burn_do_mix_and_mix_factor() {
 }
 
 #[test]
-fn test_eval_eps_grav_composition_finite_difference_partials_and_d_eps_grav_dx() {
+fn test_eval_eps_grav_composition_finite_difference_partials_and_d_eps_grav_dx()
+{
     use crate::star_ad::I_LNT_00;
     use flexmesa_const::LN10;
-    use flexmesa_eos::{
-        eos_dt_get_zones_with_logs, HelmTable, I_LN_E,
-    };
+    use flexmesa_eos::{eos_dt_get_zones_with_logs, HelmTable, I_LN_E};
 
     let mut model = build_solar_test_model(false);
     // Use pure HELM so smooth analytic EOS partials support tight FD checks.
@@ -630,8 +637,7 @@ fn test_eval_eps_grav_composition_finite_difference_partials_and_d_eps_grav_dx()
         let fd_dlnd =
             (eval_comp_val(&mut mp) - eval_comp_val(&mut mm)) / (2.0 * eps);
         assert!(
-            (comp_ad.d1[I_LND_00] - fd_dlnd).abs()
-                / fd_dlnd.abs().max(1.0e-12)
+            (comp_ad.d1[I_LND_00] - fd_dlnd).abs() / fd_dlnd.abs().max(1.0e-12)
                 < 1.0e-5,
             "comp d/dlnd mismatch (tc={time_centered}): an={}, fd={}",
             comp_ad.d1[I_LND_00],
@@ -645,8 +651,7 @@ fn test_eval_eps_grav_composition_finite_difference_partials_and_d_eps_grav_dx()
         let fd_dlnt =
             (eval_comp_val(&mut tp) - eval_comp_val(&mut tm)) / (2.0 * eps);
         assert!(
-            (comp_ad.d1[I_LNT_00] - fd_dlnt).abs()
-                / fd_dlnt.abs().max(1.0e-12)
+            (comp_ad.d1[I_LNT_00] - fd_dlnt).abs() / fd_dlnt.abs().max(1.0e-12)
                 < 1.0e-5,
             "comp d/dlnT mismatch (tc={time_centered}): an={}, fd={}",
             comp_ad.d1[I_LNT_00],
@@ -670,7 +675,8 @@ fn test_eval_eps_grav_composition_finite_difference_partials_and_d_eps_grav_dx()
     eval_eps_grav(&mut model).expect("eval_eps_grav std");
     let dxh_lnd = model.lnd[k] - model.lnd_start[k];
     for j in 0..sp {
-        let expected = -model.energy[k] * model.aux.dln_e_dxa_for_partials[base + j]
+        let expected = -model.energy[k]
+            * model.aux.dln_e_dxa_for_partials[base + j]
             / model.dt
             + (model.peos[k] / model.rho[k])
                 * model.aux.dln_peos_dxa_for_partials[base + j]
@@ -697,7 +703,8 @@ fn test_eval_eps_grav_composition_finite_difference_partials_and_d_eps_grav_dx()
 }
 
 #[test]
-fn test_fix_d_eos_dxa_partials_populates_skye_ideal_and_skips_below_threshold_or_helm() {
+fn test_fix_d_eos_dxa_partials_populates_skye_ideal_and_skips_below_threshold_or_helm(
+) {
     use flexmesa_const::LN10;
     use flexmesa_eos::{
         eos_dt_get_zones_with_logs, HelmTable, I_FRAC_IDEAL, I_FRAC_PC,
@@ -829,7 +836,9 @@ fn test_fix_d_eos_dxa_partials_populates_skye_ideal_and_skips_below_threshold_or
     crate::micro::set_basic_vars(&mut helm_model).expect("basic helm");
     crate::micro::do_eos(&mut helm_model).expect("eos helm");
     helm_model.save_start_values().expect("save_start helm");
-    crate::evolve_support::record_start_of_step_energy_integrals(&mut helm_model);
+    crate::evolve_support::record_start_of_step_energy_integrals(
+        &mut helm_model,
+    );
     helm_model.xa[base + i_h1] -= 0.02;
     helm_model.xa[base + i_he4] += 0.02;
     crate::micro::set_basic_vars(&mut helm_model).expect("basic helm pert");
@@ -880,8 +889,7 @@ fn test_eval_face_dm_bar_innermost_zone_uses_symmetric_half_sum() {
     model.aux.mass_correction.resize(nz, 1.0);
     model.aux.mass_correction[k_last - 1] = 1.02;
     model.aux.mass_correction[k_last] = 1.08;
-    let exp_mc = 0.5
-        * (1.02 * model.dm[k_last - 1] + 1.08 * model.dm[k_last]);
+    let exp_mc = 0.5 * (1.02 * model.dm[k_last - 1] + 1.08 * model.dm[k_last]);
     let got_mc = crate::hydro_momentum::eval_face_dm_bar(&model, k_last);
     assert!((got_mc - exp_mc).abs() <= 1.0e-15 * exp_mc);
 }

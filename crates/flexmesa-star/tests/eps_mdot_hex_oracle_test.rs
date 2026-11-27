@@ -18,10 +18,10 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 
-use flexmesa_math::{NumericsMode, with_numerics_mode};
+use flexmesa_math::{with_numerics_mode, NumericsMode};
 use flexmesa_star::{
-    AdjustMassRecord, StarControls, StarJobControls, StarModel, calculate_eps_mdot,
-    eval_total_energy_profile,
+    calculate_eps_mdot, eval_total_energy_profile, AdjustMassRecord,
+    StarControls, StarJobControls, StarModel,
 };
 
 #[derive(Default)]
@@ -77,7 +77,9 @@ fn parse_hex_f64(raw: &str) -> f64 {
         .trim()
         .strip_prefix("0x")
         .or_else(|| raw.trim().strip_prefix("0X"))
-        .unwrap_or_else(|| panic!("expected 0x-prefixed hex float, got {raw:?}"));
+        .unwrap_or_else(|| {
+            panic!("expected 0x-prefixed hex float, got {raw:?}")
+        });
     let bits = u64::from_str_radix(trimmed, 16)
         .unwrap_or_else(|e| panic!("invalid hex bits {raw:?}: {e}"));
     f64::from_bits(bits)
@@ -176,17 +178,21 @@ fn load_eps_mdot_oracles() -> Vec<(String, OracleCase)> {
                 let prev = entry
                     .scalars
                     .insert(cols[3].to_string(), parse_hex_f64(cols[4]));
-                assert!(prev.is_none(), "duplicate scalar {} in {case_id}", cols[3]);
+                assert!(
+                    prev.is_none(),
+                    "duplicate scalar {} in {case_id}",
+                    cols[3]
+                );
             }
             "ZONE" => {
                 assert_eq!(cols.len(), 21, "unexpected ZONE row: {trimmed}");
                 let case_id = cols[1].to_string();
-                let entry = map
-                    .get_mut(&case_id)
-                    .unwrap_or_else(|| panic!("ZONE row before SCALAR for {case_id}"));
-                let k_1based: usize = cols[2]
-                    .parse()
-                    .unwrap_or_else(|e| panic!("invalid zone index {}: {e}", cols[2]));
+                let entry = map.get_mut(&case_id).unwrap_or_else(|| {
+                    panic!("ZONE row before SCALAR for {case_id}")
+                });
+                let k_1based: usize = cols[2].parse().unwrap_or_else(|e| {
+                    panic!("invalid zone index {}: {e}", cols[2])
+                });
                 entry.zones.push(ZoneOracleRow {
                     k_1based,
                     dm_before: parse_hex_f64(cols[3]),
@@ -271,19 +277,29 @@ impl SeriesStats {
 #[test]
 fn mesa_26_4_1_eps_mdot_hex_oracles() {
     let cases = load_eps_mdot_oracles();
-    assert_eq!(cases.len(), 2, "expected accreting + mass-losing oracle cases");
+    assert_eq!(
+        cases.len(),
+        2,
+        "expected accreting + mass-losing oracle cases"
+    );
 
     with_numerics_mode(NumericsMode::Strict, || {
         for (case_id, case) in &cases {
             let nz = scalar_exact_usize(case, "nz");
-            assert_eq!(case.zones.len(), nz, "{case_id}: zone row count mismatch");
+            assert_eq!(
+                case.zones.len(),
+                nz,
+                "{case_id}: zone row count mismatch"
+            );
 
             let dt = scalar_f64(case, "dt");
             let mut ctrl = StarControls::default();
-            ctrl.mix_wind.eps_mdot_leak_frac_factor = scalar_f64(case, "eps_mdot_leak_frac_factor");
+            ctrl.mix_wind.eps_mdot_leak_frac_factor =
+                scalar_f64(case, "eps_mdot_leak_frac_factor");
             ctrl.mix_wind.eps_mdot_factor = scalar_f64(case, "eps_mdot_factor");
 
-            let mut model = StarModel::new(nz, vec![1], StarJobControls::default(), ctrl);
+            let mut model =
+                StarModel::new(nz, vec![1], StarJobControls::default(), ctrl);
             model.mstar_dot = scalar_f64(case, "mstar_dot");
             model.m_center = scalar_f64(case, "m_center");
             model.r_center = scalar_f64(case, "r_center");
@@ -292,7 +308,11 @@ fn mesa_26_4_1_eps_mdot_hex_oracles() {
             let mut total_energy_profile_before = Vec::with_capacity(nz);
 
             for (idx, row) in case.zones.iter().enumerate() {
-                assert_eq!(row.k_1based, idx + 1, "{case_id}: non-contiguous zone index");
+                assert_eq!(
+                    row.k_1based,
+                    idx + 1,
+                    "{case_id}: non-contiguous zone index"
+                );
                 dm_before.push(row.dm_before);
                 total_energy_profile_before.push(row.te_profile_before);
                 model.dm[idx] = row.dm;
@@ -320,10 +340,14 @@ fn mesa_26_4_1_eps_mdot_hex_oracles() {
                 k_const_mass: scalar_exact_usize(case, "k_const_mass"),
             };
 
-            let te_after = eval_total_energy_profile(&model)
-                .unwrap_or_else(|e| panic!("{case_id}: eval_total_energy_profile failed: {e}"));
+            let te_after =
+                eval_total_energy_profile(&model).unwrap_or_else(|e| {
+                    panic!("{case_id}: eval_total_energy_profile failed: {e}")
+                });
             let surface = calculate_eps_mdot(&mut model, &record, dt)
-                .unwrap_or_else(|e| panic!("{case_id}: calculate_eps_mdot failed: {e}"));
+                .unwrap_or_else(|e| {
+                    panic!("{case_id}: calculate_eps_mdot failed: {e}")
+                });
 
             let want_acoustic = scalar_f64(case, "mdot_acoustic_surface");
             let want_adiabatic = scalar_f64(case, "mdot_adiabatic_surface");
@@ -331,14 +355,25 @@ fn mesa_26_4_1_eps_mdot_hex_oracles() {
             let mut te_stats = SeriesStats::default();
             let mut eps_stats = SeriesStats::default();
             for (idx, row) in case.zones.iter().enumerate() {
-                te_stats.record(row.k_1based, te_after[idx], row.te_profile_after);
-                eps_stats.record(row.k_1based, model.eps_mdot[idx], row.eps_mdot);
+                te_stats.record(
+                    row.k_1based,
+                    te_after[idx],
+                    row.te_profile_after,
+                );
+                eps_stats.record(
+                    row.k_1based,
+                    model.eps_mdot[idx],
+                    row.eps_mdot,
+                );
             }
 
-            let ac_ulp = ulp_distance(surface.mdot_acoustic_surface, want_acoustic);
+            let ac_ulp =
+                ulp_distance(surface.mdot_acoustic_surface, want_acoustic);
             let ac_rel = rel_err(surface.mdot_acoustic_surface, want_acoustic);
-            let ad_ulp = ulp_distance(surface.mdot_adiabatic_surface, want_adiabatic);
-            let ad_rel = rel_err(surface.mdot_adiabatic_surface, want_adiabatic);
+            let ad_ulp =
+                ulp_distance(surface.mdot_adiabatic_surface, want_adiabatic);
+            let ad_rel =
+                rel_err(surface.mdot_adiabatic_surface, want_adiabatic);
 
             eprintln!(
                 "eps_mdot_oracle[{case_id}]: te_after zero_ulp={}/{} max_ulp={} max_rel={:.3e} (k={})",

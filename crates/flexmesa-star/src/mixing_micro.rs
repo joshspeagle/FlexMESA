@@ -58,10 +58,10 @@ pub(crate) fn eval_uniform_xa_eos_kap_range(
     let catalog = NuclideCatalog::builtin_ref();
     let comp_raw = get_composition_info(catalog, &model.chem_id, xa_mx, true)
         .map_err(|e| {
-            StarError::MicrophysicsError(format!(
-                "composition error in predictive_mix: {e}"
-            ))
-        })?;
+        StarError::MicrophysicsError(format!(
+            "composition error in predictive_mix: {e}"
+        ))
+    })?;
     let zbar = comp_raw.zbar;
     let ht = builtin_helm_table()?;
     let species = model.species;
@@ -152,31 +152,38 @@ pub(crate) fn eval_eos_kap_range_by_mode(
     let ht = builtin_helm_table()?;
     let species = model.species;
 
-    // Refresh cell composition moments (`basic_composition_info` + `get_XYZ`
-    // clamping in `star/private/star_utils.f90:2029-2043`) across `k_lo..=k_hi`.
-    let comp_results: Vec<(f64, f64, f64, f64, f64, f64, f64, f64)> =
+    // Refresh cell composition moments (`basic_composition_info` in
+    // `star/private/micro.f90:321-324` + `get_XYZ` clamping in
+    // `star/private/star_utils.f90:2029-2043`) across `k_lo..=k_hi`.
+    let comp_results: Vec<(f64, f64, f64, f64, f64, f64, f64, f64, f64)> =
         (k_lo..=k_hi)
             .into_par_iter()
             .map(|k| {
                 let xa_k = &model.xa[k * species..(k + 1) * species];
-                let c = get_composition_info(
-                    catalog,
-                    &model.chem_id,
-                    xa_k,
-                    true,
-                )
-                .map_err(|e| {
-                    StarError::MicrophysicsError(format!(
-                        "composition error at zone {k}: {e}"
-                    ))
-                })?;
+                let c =
+                    get_composition_info(catalog, &model.chem_id, xa_k, true)
+                        .map_err(|e| {
+                        StarError::MicrophysicsError(format!(
+                            "composition error at zone {k}: {e}"
+                        ))
+                    })?;
                 let xh = c.xh.clamp(0.0, 1.0);
                 let xhe = c.xhe.clamp(0.0, 1.0);
                 let z = (1.0 - (xh + xhe)).clamp(0.0, 1.0);
-                Ok((c.abar, c.zbar, c.z2bar, c.z53bar, c.ye, xh, xhe, z))
+                Ok((
+                    c.abar,
+                    c.zbar,
+                    c.z2bar,
+                    c.z53bar,
+                    c.ye,
+                    c.mass_correction,
+                    xh,
+                    xhe,
+                    z,
+                ))
             })
             .collect::<Result<Vec<_>, StarError>>()?;
-    for (offset, (abar, zbar, z2bar, z53bar, ye, xh, xhe, z)) in
+    for (offset, (abar, zbar, z2bar, z53bar, ye, mc, xh, xhe, z)) in
         comp_results.into_iter().enumerate()
     {
         let k = k_lo + offset;
@@ -185,6 +192,7 @@ pub(crate) fn eval_eos_kap_range_by_mode(
         model.z2bar[k] = z2bar;
         model.z53bar[k] = z53bar;
         model.ye[k] = ye;
+        model.aux.mass_correction[k] = mc;
         model.xh_mass[k] = xh;
         model.yhe_mass[k] = xhe;
         model.z_mass[k] = z;
@@ -212,14 +220,16 @@ pub(crate) fn eval_eos_kap_range_by_mode(
         let t = &model.t;
         let pt_results: Vec<(usize, f64, f64, EosEvalOutput)> = pt_cells
             .par_iter()
-            .map(|&k| -> Result<(usize, f64, f64, EosEvalOutput), StarError> {
-                let xa_k = &xa[k * species..(k + 1) * species];
-                let (lnd_out, rho_out, eos) = solve_fix_pgas_cell(
-                    ht, chem_id, xa_k, k, ln_t[k], t[k], ln_pgas[k], lnd[k],
-                    eos_cfg,
-                )?;
-                Ok((k, lnd_out, rho_out, eos))
-            })
+            .map(
+                |&k| -> Result<(usize, f64, f64, EosEvalOutput), StarError> {
+                    let xa_k = &xa[k * species..(k + 1) * species];
+                    let (lnd_out, rho_out, eos) = solve_fix_pgas_cell(
+                        ht, chem_id, xa_k, k, ln_t[k], t[k], ln_pgas[k],
+                        lnd[k], eos_cfg,
+                    )?;
+                    Ok((k, lnd_out, rho_out, eos))
+                },
+            )
             .collect::<Result<Vec<_>, _>>()?;
         for (k, lnd_new, rho_new, out) in pt_results {
             model.lnd[k] = lnd_new;
@@ -284,6 +294,7 @@ pub(crate) struct CellRangeSnapshot {
     pub(crate) z2bar: Vec<f64>,
     pub(crate) z53bar: Vec<f64>,
     pub(crate) ye: Vec<f64>,
+    pub(crate) mass_correction: Vec<f64>,
     pub(crate) xh_mass: Vec<f64>,
     pub(crate) yhe_mass: Vec<f64>,
     pub(crate) z_mass: Vec<f64>,
@@ -329,11 +340,7 @@ impl CellRangeSnapshot {
     /// Captures all composition, density, EOS, and opacity state across
     /// `k_lo..=k_hi`.
     #[must_use]
-    pub(crate) fn capture(
-        model: &StarModel,
-        k_lo: usize,
-        k_hi: usize,
-    ) -> Self {
+    pub(crate) fn capture(model: &StarModel, k_lo: usize, k_hi: usize) -> Self {
         let sp = model.species;
         let sp_lo = k_lo * sp;
         let sp_hi = (k_hi + 1) * sp;
@@ -354,6 +361,7 @@ impl CellRangeSnapshot {
             z2bar: model.z2bar[r.clone()].to_vec(),
             z53bar: model.z53bar[r.clone()].to_vec(),
             ye: model.ye[r.clone()].to_vec(),
+            mass_correction: model.aux.mass_correction[r.clone()].to_vec(),
             xh_mass: model.xh_mass[r.clone()].to_vec(),
             yhe_mass: model.yhe_mass[r.clone()].to_vec(),
             z_mass: model.z_mass[r.clone()].to_vec(),
@@ -411,6 +419,8 @@ impl CellRangeSnapshot {
         model.z2bar[r.clone()].copy_from_slice(&self.z2bar);
         model.z53bar[r.clone()].copy_from_slice(&self.z53bar);
         model.ye[r.clone()].copy_from_slice(&self.ye);
+        model.aux.mass_correction[r.clone()]
+            .copy_from_slice(&self.mass_correction);
         model.xh_mass[r.clone()].copy_from_slice(&self.xh_mass);
         model.yhe_mass[r.clone()].copy_from_slice(&self.yhe_mass);
         model.z_mass[r.clone()].copy_from_slice(&self.z_mass);
@@ -496,11 +506,7 @@ pub(crate) struct FaceMltSnapshot {
 impl FaceMltSnapshot {
     /// Captures all face MLT outputs over `k_lo..=k_hi`.
     #[must_use]
-    pub(crate) fn capture(
-        model: &StarModel,
-        k_lo: usize,
-        k_hi: usize,
-    ) -> Self {
+    pub(crate) fn capture(model: &StarModel, k_lo: usize, k_hi: usize) -> Self {
         let r = k_lo..=k_hi;
         let m = &model.aux.mixing;
         Self {

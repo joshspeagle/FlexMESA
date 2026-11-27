@@ -2,12 +2,12 @@
 //! Phase 5a analytical vs. finite-difference Jacobian verification (`Issue #112`).
 
 use flexmesa_const::SECYER;
-use flexmesa_star::hydro_eqns::{HenyeySystem, assemble_henyey_system};
+use flexmesa_star::hydro_eqns::{assemble_henyey_system, HenyeySystem};
 use flexmesa_star::riemann_ad::do_uface_and_pface;
 use flexmesa_star::star_ad::StarAdOrder1;
 use flexmesa_star::{
-    EnergyEqnOption, StarControls, StarJobControls, StarModel,
-    eval_henyey_equations, load_zams_model, set_hydro_vars,
+    eval_henyey_equations, load_zams_model, set_hydro_vars, EnergyEqnOption,
+    StarControls, StarJobControls, StarModel,
 };
 
 /// Zone counts of the compact fixture the Jacobian comparisons run on. The
@@ -147,9 +147,13 @@ fn mlt_zeta_fd_noise(
     if i_equ != m0.layout.i_equ_l || k == 0 || m0.mlt_gamma[k] <= 1.0 {
         return 0.0;
     }
-    let p_cell = flexmesa_star::eval_cell_peos_time_centered_ad(m0, k, false).0.val;
+    let p_cell = flexmesa_star::eval_cell_peos_time_centered_ad(m0, k, false)
+        .0
+        .val;
     let p_above =
-        flexmesa_star::eval_cell_peos_time_centered_ad(m0, k - 1, true).0.val;
+        flexmesa_star::eval_cell_peos_time_centered_ad(m0, k - 1, true)
+            .0
+            .val;
     let dln_p = (p_above - p_cell).abs() / p_cell.min(p_above);
     // Four units in the last place of the exponent for each evaluation: one
     // for each logarithm, and two for the error `Gamma` and `Bcubed` already
@@ -274,8 +278,7 @@ fn assert_tridiagonal_jacobian_matches_fd(
     m0.aux.doing_struct_burn_mix = true;
     m0.pack_xh();
     sync_dxh_with_start(&mut m0);
-    let sys0 =
-        eval_iterate(&mut m0, include_chem).expect("baseline eqns");
+    let sys0 = eval_iterate(&mut m0, include_chem).expect("baseline eqns");
     let (nz, nvar, nvar_hydro) = (sys0.nz, sys0.nvar, m0.layout.nvar_hydro);
     for k_var in 0..nz {
         for j_var in 0..nvar_hydro {
@@ -381,8 +384,9 @@ fn assert_tridiagonal_jacobian_matches_fd(
                 let p_surf = flexmesa_math::exp(m.ln_peos_surf_ad.val);
                 (sys, p_surf, m.energy)
             };
-            let perturb_x =
-                |sgn: f64, sink: Option<usize>| perturb_x_with_p_surf(sgn, sink).0;
+            let perturb_x = |sgn: f64, sink: Option<usize>| {
+                perturb_x_with_p_surf(sgn, sink).0
+            };
             let (sys_p, sys_m) = (perturb_x(1.0, None), perturb_x(-1.0, None));
             for k_equ in 0..nz {
                 if k_equ.abs_diff(k_var) > 1 {
@@ -414,10 +418,11 @@ fn assert_tridiagonal_jacobian_matches_fd(
                 );
                 // Divisor of the surface momentum residual
                 // (`hydro_momentum.rs::do1_momentum_eqn`, `k == 0`).
-                let p_cell_0 =
-                    flexmesa_star::eval_cell_peos_time_centered_ad(&m0, 0, false)
-                        .0
-                        .val;
+                let p_cell_0 = flexmesa_star::eval_cell_peos_time_centered_ad(
+                    &m0, 0, false,
+                )
+                .0
+                .val;
                 for k_equ in 0..nz {
                     if k_equ.abs_diff(k_var) > 1 {
                         continue;
@@ -497,12 +502,14 @@ fn assert_tridiagonal_jacobian_matches_fd(
                             // equation-of-state partial itself belongs to the
                             // equation-of-state tests.
                             let sp = m0.species;
-                            let dlne =
-                                |j: usize| m0.aux.dln_e_dxa_for_partials[k_equ * sp + j];
+                            let dlne = |j: usize| {
+                                m0.aux.dln_e_dxa_for_partials[k_equ * sp + j]
+                            };
                             let an_de = m0.energy[k_equ]
                                 * x_sc
                                 * (dlne(j_sp) - dlne(idx_sink));
-                            let fd_de = (energy_plus[k_equ] - energy_minus[k_equ])
+                            let fd_de = (energy_plus[k_equ]
+                                - energy_minus[k_equ])
                                 / (2.0 * eps_scaled);
                             an_dir += -flexmesa_star::hydro_energy::set_energy_eqn_scal(
                                 &m0, k_equ,
@@ -546,7 +553,9 @@ fn test_frozen_microphysics_star_ad_jacobian_matches_central_fd_to_1e_10() {
     }
 }
 
-fn frozen_microphysics_star_ad_jacobian_matches_central_fd_to_1e_10_at(nz: usize) {
+fn frozen_microphysics_star_ad_jacobian_matches_central_fd_to_1e_10_at(
+    nz: usize,
+) {
     for (v_flag, u_flag, rti_flag) in [
         (false, false, false),
         (true, false, false),
@@ -647,13 +656,16 @@ fn frozen_microphysics_star_ad_jacobian_matches_central_fd_to_1e_10_at(nz: usize
 }
 
 #[test]
-fn test_coupled_hydro_chem_jacobian_matches_central_fd_across_sinks_and_spherical_v_flag() {
+fn test_coupled_hydro_chem_jacobian_matches_central_fd_across_sinks_and_spherical_v_flag(
+) {
     for nz in FIXTURE_ZONES {
         coupled_hydro_chem_jacobian_matches_central_fd_across_sinks_and_spherical_v_flag_at(nz);
     }
 }
 
-fn coupled_hydro_chem_jacobian_matches_central_fd_across_sinks_and_spherical_v_flag_at(nz: usize) {
+fn coupled_hydro_chem_jacobian_matches_central_fd_across_sinks_and_spherical_v_flag_at(
+    nz: usize,
+) {
     // 1. Analytical `HELM` radiative envelope (`alpha_MLT = 0`): strict `2e-5`
     //    relative gate across all zones and both `Dedt` / `EpsGrav` forms.
     for opt in [EnergyEqnOption::Dedt, EnergyEqnOption::EpsGrav] {
@@ -725,7 +737,9 @@ fn test_coupled_u_flag_hllc_jacobian_across_all_outer_bcs_and_chem_rti() {
     }
 }
 
-fn coupled_u_flag_hllc_jacobian_across_all_outer_bcs_and_chem_rti_at(nz: usize) {
+fn coupled_u_flag_hllc_jacobian_across_all_outer_bcs_and_chem_rti_at(
+    nz: usize,
+) {
     for bc_mode in 0..5 {
         let mut c = StarControls {
             u_flag: true,
@@ -782,8 +796,8 @@ fn coupled_u_flag_hllc_jacobian_across_all_outer_bcs_and_chem_rti_at(nz: usize) 
 }
 
 #[test]
-fn test_coupled_v_flag_rti_jacobian_with_active_baroclinic_source_diffusion_and_supersaturation()
- {
+fn test_coupled_v_flag_rti_jacobian_with_active_baroclinic_source_diffusion_and_supersaturation(
+) {
     let mut controls = StarControls {
         v_flag: true,
         rti_flag: true,

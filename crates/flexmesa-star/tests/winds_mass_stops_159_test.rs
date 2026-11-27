@@ -175,7 +175,8 @@ fn test_super_eddington_wind_and_boost_use_prev_ledd_and_half_vesc2() {
 }
 
 #[test]
-fn test_wind_schemes_gates_t_center_taper_envelope_limits_dt_ramp_and_rlo_wind() {
+fn test_wind_schemes_gates_t_center_taper_envelope_limits_dt_ramp_and_rlo_wind()
+{
     // WindScheme::parse_name accepts "" and "other", rejects "none" and typos.
     assert_eq!(WindScheme::parse_name(""), Some(WindScheme::None));
     assert_eq!(WindScheme::parse_name("other"), Some(WindScheme::Other));
@@ -291,7 +292,8 @@ fn test_wind_schemes_gates_t_center_taper_envelope_limits_dt_ramp_and_rlo_wind()
     assert!((xfer - 0.5).abs() < 1.0e-14, "xfer_ratio = {xfer}");
 
     let mut xfer_above = 1.0;
-    let w_above = eval_rlo_wind(&rlo_model, 10.0, 10.2, 5000.0, &mut xfer_above);
+    let w_above =
+        eval_rlo_wind(&rlo_model, 10.0, 10.2, 5000.0, &mut xfer_above);
     let expected_rlo = 1.0e-8 * flexmesa_math::exp((10.2 - 10.0) / 0.1);
     assert!(
         rel_err(w_above, expected_rlo) < 1.0e-13,
@@ -355,7 +357,9 @@ fn test_rotational_mass_loss_surface_avg_alignment_and_caps() {
     model.controls.mix_wind.max_rotational_mdot_boost = 1.2;
     let mdot_cap =
         do_set_mdot_with_extras(&mut model, &extras).expect("rot boost cap");
-    assert!(rel_err(mdot_cap, -(base_msun_yr * 1.2) * M_SUN / SECYER) < 1.0e-12);
+    assert!(
+        rel_err(mdot_cap, -(base_msun_yr * 1.2) * M_SUN / SECYER) < 1.0e-12
+    );
 }
 
 #[test]
@@ -419,7 +423,8 @@ fn test_adjust_mass_limits_crossing_clamp_263_omega_and_smooth_outer_xa() {
     rot_acc.j_rot[0] = 9.99e19;
     rot_acc.save_old_values();
     rot_acc.mstar_dot = 5.0e-4 * M_SUN / SECYER;
-    do_adjust_mass_step(&mut rot_acc, 0.5 * SECYER).expect("accrete default omega");
+    do_adjust_mass_step(&mut rot_acc, 0.5 * SECYER)
+        .expect("accrete default omega");
     // Independent Paxton et al. (2019) `eval_i_rot(r0_before, w_roche)` check:
     // at slow rotation `w = omega / sqrt(G*M/r^3) << 1`, `rpsi/re ~ 1 - w^2/6`
     // so `w_roche ~ omega / sqrt(G*M/r^3)` and `i_rot ~ (2/3)*r0^2*(1 + (8/15)*w^2)`.
@@ -454,7 +459,8 @@ fn test_adjust_mass_limits_crossing_clamp_263_omega_and_smooth_outer_xa() {
     // Set an inward-varying omega so starting_j_rot_surf differs from deeper j_rot,
     // and deliberately zero `j_rot_old` (step-1 state) to verify entry `model.j_rot` is used.
     for k in 0..m_jloss.nz {
-        m_jloss.omega[k] = 1.0e-5 * (1.0 + 0.5 * (k as f64 / m_jloss.nz as f64));
+        m_jloss.omega[k] =
+            1.0e-5 * (1.0 + 0.5 * (k as f64 / m_jloss.nz as f64));
     }
     flexmesa_star::update_rotation_distortion_factors(&mut m_jloss);
     m_jloss.aux.j_rot_old.fill(0.0);
@@ -501,15 +507,13 @@ fn test_adjust_mass_limits_crossing_clamp_263_omega_and_smooth_outer_xa() {
     }
     sm.save_old_values();
     sm.mstar_dot = 1.0e-6 * M_SUN / SECYER;
-    let m_h1_before: f64 = (0..sm.nz)
-        .map(|k| sm.dm[k] * sm.cell_xa(k)[h1_idx])
-        .sum();
+    let m_h1_before: f64 =
+        (0..sm.nz).map(|k| sm.dm[k] * sm.cell_xa(k)[h1_idx]).sum();
     let acc_h1 = sm.cell_xa(0)[h1_idx];
     let dm_add = sm.mstar_dot * (0.1 * SECYER);
     do_adjust_mass_step(&mut sm, 0.1 * SECYER).expect("smooth outer xa");
-    let m_h1_after: f64 = (0..sm.nz)
-        .map(|k| sm.dm[k] * sm.cell_xa(k)[h1_idx])
-        .sum();
+    let m_h1_after: f64 =
+        (0..sm.nz).map(|k| sm.dm[k] * sm.cell_xa(k)[h1_idx]).sum();
     assert!(
         rel_err(m_h1_after, m_h1_before + dm_add * acc_h1) < 1.0e-6,
         "smooth_outer_xa must conserve H1 mass"
@@ -520,7 +524,11 @@ fn test_adjust_mass_limits_crossing_clamp_263_omega_and_smooth_outer_xa() {
 fn test_get_xa_for_accretion_modes_power_categories_and_eps_mdot() {
     let mut model = zams_model(2.0);
     let h1_idx = model.iso_names.iter().position(|n| n == "h1").expect("h1");
-    let he4_idx = model.iso_names.iter().position(|n| n == "he4").expect("he4");
+    let he4_idx = model
+        .iso_names
+        .iter()
+        .position(|n| n == "he4")
+        .expect("he4");
 
     // 1. accrete_same_as_surface = true.
     model.controls.accrete_same_as_surface = true;
@@ -531,7 +539,8 @@ fn test_get_xa_for_accretion_modes_power_categories_and_eps_mdot() {
     model.controls.accrete_same_as_surface = false;
     model.controls.accrete_given_mass_fractions = true;
     model.controls.mix_wind.num_accretion_species = 2;
-    model.controls.accretion_species_id = vec![String::from("h1"), String::from("he4")];
+    model.controls.accretion_species_id =
+        vec![String::from("h1"), String::from("he4")];
     model.controls.accretion_species_xa = vec![0.75, 0.25];
     let xa_given = get_xa_for_accretion(&model).expect("given xa");
     assert!((xa_given[h1_idx] - 0.75).abs() < 1.0e-14);
@@ -539,7 +548,10 @@ fn test_get_xa_for_accretion_modes_power_categories_and_eps_mdot() {
 
     model.controls.accretion_species_xa = vec![0.5, 0.1]; // sum != 1
     assert!(
-        matches!(get_xa_for_accretion(&model), Err(StarError::InvalidInput(_))),
+        matches!(
+            get_xa_for_accretion(&model),
+            Err(StarError::InvalidInput(_))
+        ),
         "out-of-tolerance accretion_species_xa sum must error loudly"
     );
 
@@ -566,7 +578,8 @@ fn test_get_xa_for_accretion_modes_power_categories_and_eps_mdot() {
     //    and separates `power_h_burn = PP + CNO` from total nuclear power.
     let mut p_model = zams_model(5.0);
     let nz = p_model.nz;
-    p_model.aux.eps_nuc_categories = vec![[0.0; flexmesa_chem::NUM_CATEGORIES]; nz];
+    p_model.aux.eps_nuc_categories =
+        vec![[0.0; flexmesa_chem::NUM_CATEGORIES]; nz];
     p_model.eps_nuc.fill(0.0);
     for k in 0..nz {
         p_model.aux.eps_nuc_categories[k][0] = 10.0; // pp
@@ -662,7 +675,9 @@ fn test_set_phase_of_evolution_all_13_stop_phases_and_history_column() {
     m_prems.controls.ts_stop.stop_at_phase_prems = true;
     let out = do_check_limits(&mut m_prems, None, false).expect("prems");
     assert_eq!(m_prems.aux.step_hist.phase_of_evolution, PHASE_PREMS);
-    assert!(matches!(out, LimitCheckOutcome::Terminate { ref code, .. } if code == "phase_PreMS"));
+    assert!(
+        matches!(out, LimitCheckOutcome::Terminate { ref code, .. } if code == "phase_PreMS")
+    );
 
     // 4. ZAMS (`power_nuc_burn >= L * lnuc_div_l_zams_limit`, center_h1 > 0.3).
     let mut m_zams = make_clean(0.7, 0.28);
@@ -672,21 +687,27 @@ fn test_set_phase_of_evolution_all_13_stop_phases_and_history_column() {
     m_zams.controls.ts_stop.stop_at_phase_zams = true;
     let out = do_check_limits(&mut m_zams, None, false).expect("zams");
     assert_eq!(m_zams.aux.step_hist.phase_of_evolution, PHASE_ZAMS);
-    assert!(matches!(out, LimitCheckOutcome::Terminate { ref code, .. } if code == "phase_ZAMS"));
+    assert!(
+        matches!(out, LimitCheckOutcome::Terminate { ref code, .. } if code == "phase_ZAMS")
+    );
 
     // 5. IAMS (`center_h1 <= 0.3`, `> 1e-6`).
     let mut m_iams = make_clean(0.2, 0.78);
     m_iams.controls.ts_stop.stop_at_phase_iams = true;
     let out = do_check_limits(&mut m_iams, None, false).expect("iams");
     assert_eq!(m_iams.aux.step_hist.phase_of_evolution, PHASE_IAMS);
-    assert!(matches!(out, LimitCheckOutcome::Terminate { ref code, .. } if code == "phase_IAMS"));
+    assert!(
+        matches!(out, LimitCheckOutcome::Terminate { ref code, .. } if code == "phase_IAMS")
+    );
 
     // 6. TAMS (`center_h1 <= 1e-6`).
     let mut m_tams = make_clean(1.0e-7, 0.98);
     m_tams.controls.ts_stop.stop_at_phase_tams = true;
     let out = do_check_limits(&mut m_tams, None, false).expect("tams");
     assert_eq!(m_tams.aux.step_hist.phase_of_evolution, PHASE_TAMS);
-    assert!(matches!(out, LimitCheckOutcome::Terminate { ref code, .. } if code == "phase_TAMS"));
+    assert!(
+        matches!(out, LimitCheckOutcome::Terminate { ref code, .. } if code == "phase_TAMS")
+    );
 
     // 7. He_Burn (`cat_lum_lsun[CAT_3ALF] > 1e2`, `center_eps_burn[CAT_3ALF] <= 1e2`).
     let mut m_he = make_clean(0.0, 0.98);
@@ -695,7 +716,9 @@ fn test_set_phase_of_evolution_all_13_stop_phases_and_history_column() {
     m_he.controls.ts_stop.stop_at_phase_he_burn = true;
     let out = do_check_limits(&mut m_he, None, false).expect("he_burn");
     assert_eq!(m_he.aux.step_hist.phase_of_evolution, PHASE_HE_BURN);
-    assert!(matches!(out, LimitCheckOutcome::Terminate { ref code, .. } if code == "phase_He_Burn"));
+    assert!(
+        matches!(out, LimitCheckOutcome::Terminate { ref code, .. } if code == "phase_He_Burn")
+    );
 
     // 8. ZACHeB (`center_eps_burn[CAT_3ALF] > 1e2`).
     let mut m_zacheb = make_clean(0.0, 0.98);
@@ -705,7 +728,9 @@ fn test_set_phase_of_evolution_all_13_stop_phases_and_history_column() {
     m_zacheb.controls.ts_stop.stop_at_phase_zacheb = true;
     let out = do_check_limits(&mut m_zacheb, None, false).expect("zacheb");
     assert_eq!(m_zacheb.aux.step_hist.phase_of_evolution, PHASE_ZACHEB);
-    assert!(matches!(out, LimitCheckOutcome::Terminate { ref code, .. } if code == "phase_ZACHeB"));
+    assert!(
+        matches!(out, LimitCheckOutcome::Terminate { ref code, .. } if code == "phase_ZACHeB")
+    );
 
     // 9. TACHeB (`center_he4 <= 1e-4`, no He-burn convective region).
     let mut m_tacheb = make_clean(0.0, 1.0e-5);
@@ -713,7 +738,9 @@ fn test_set_phase_of_evolution_all_13_stop_phases_and_history_column() {
     m_tacheb.controls.ts_stop.stop_at_phase_tacheb = true;
     let out = do_check_limits(&mut m_tacheb, None, false).expect("tacheb");
     assert_eq!(m_tacheb.aux.step_hist.phase_of_evolution, PHASE_TACHEB);
-    assert!(matches!(out, LimitCheckOutcome::Terminate { ref code, .. } if code == "phase_TACHeB"));
+    assert!(
+        matches!(out, LimitCheckOutcome::Terminate { ref code, .. } if code == "phase_TACHeB")
+    );
 
     // 10. TP_AGB (`center_he4 < 1e-4`, `he_core_mass - co_core_mass <= 0.1`, burn_he_conv_region).
     let mut m_tpagb = make_clean(0.0, 1.0e-5);
@@ -728,7 +755,9 @@ fn test_set_phase_of_evolution_all_13_stop_phases_and_history_column() {
     m_tpagb.controls.stop_at_phase_tp_agb = true;
     let out = do_check_limits(&mut m_tpagb, None, false).expect("tp_agb");
     assert_eq!(m_tpagb.aux.step_hist.phase_of_evolution, PHASE_TP_AGB);
-    assert!(matches!(out, LimitCheckOutcome::Terminate { ref code, .. } if code == "phase_TP_AGB"));
+    assert!(
+        matches!(out, LimitCheckOutcome::Terminate { ref code, .. } if code == "phase_TP_AGB")
+    );
 
     // 11. C_Burn (`cat_lum_lsun[CAT_CC=16] > 1e2 && center_he4 < 1e-4`).
     let mut m_cburn = make_clean(0.0, 1.0e-5);
@@ -738,7 +767,9 @@ fn test_set_phase_of_evolution_all_13_stop_phases_and_history_column() {
     m_cburn.controls.stop_at_phase_c_burn = true;
     let out = do_check_limits(&mut m_cburn, None, false).expect("c_burn");
     assert_eq!(m_cburn.aux.step_hist.phase_of_evolution, PHASE_C_BURN);
-    assert!(matches!(out, LimitCheckOutcome::Terminate { ref code, .. } if code == "phase_C_Burn"));
+    assert!(
+        matches!(out, LimitCheckOutcome::Terminate { ref code, .. } if code == "phase_C_Burn")
+    );
 
     // 12. Ne_Burn (`cat_lum_lsun[CAT_BURN_NE=6] > 1e2 && center_he4 < 1e-4`).
     let mut m_ne = make_clean(0.0, 1.0e-5);
@@ -746,7 +777,9 @@ fn test_set_phase_of_evolution_all_13_stop_phases_and_history_column() {
     m_ne.controls.stop_at_phase_ne_burn = true;
     let out = do_check_limits(&mut m_ne, None, false).expect("ne_burn");
     assert_eq!(m_ne.aux.step_hist.phase_of_evolution, PHASE_NE_BURN);
-    assert!(matches!(out, LimitCheckOutcome::Terminate { ref code, .. } if code == "phase_Ne_Burn"));
+    assert!(
+        matches!(out, LimitCheckOutcome::Terminate { ref code, .. } if code == "phase_Ne_Burn")
+    );
 
     // 13. O_Burn (`cat_lum_lsun[CAT_OO=18] + CAT_CO=17 > 1e2 && center_he4 < 1e-4`).
     let mut m_oburn = make_clean(0.0, 1.0e-5);
@@ -755,7 +788,9 @@ fn test_set_phase_of_evolution_all_13_stop_phases_and_history_column() {
     m_oburn.controls.stop_at_phase_o_burn = true;
     let out = do_check_limits(&mut m_oburn, None, false).expect("o_burn");
     assert_eq!(m_oburn.aux.step_hist.phase_of_evolution, PHASE_O_BURN);
-    assert!(matches!(out, LimitCheckOutcome::Terminate { ref code, .. } if code == "phase_O_Burn"));
+    assert!(
+        matches!(out, LimitCheckOutcome::Terminate { ref code, .. } if code == "phase_O_Burn")
+    );
 
     // 14. Si_Burn (`cat_lum_lsun[CAT_BURN_SI=9] > 1e2`).
     let mut m_si = make_clean(0.0, 1.0e-5);
@@ -763,7 +798,9 @@ fn test_set_phase_of_evolution_all_13_stop_phases_and_history_column() {
     m_si.controls.ts_stop.stop_at_phase_si_burn = true;
     let out = do_check_limits(&mut m_si, None, false).expect("si_burn");
     assert_eq!(m_si.aux.step_hist.phase_of_evolution, PHASE_SI_BURN);
-    assert!(matches!(out, LimitCheckOutcome::Terminate { ref code, .. } if code == "phase_Si_Burn"));
+    assert!(
+        matches!(out, LimitCheckOutcome::Terminate { ref code, .. } if code == "phase_Si_Burn")
+    );
 
     // 15. WDCS (`phot.logg > 6.0`).
     let mut m_wd = make_clean(0.0, 1.0e-5);
@@ -775,7 +812,9 @@ fn test_set_phase_of_evolution_all_13_stop_phases_and_history_column() {
     m_wd.controls.ts_stop.stop_at_phase_wdcs = true;
     let out = do_check_limits(&mut m_wd, None, false).expect("wdcs");
     assert_eq!(m_wd.aux.step_hist.phase_of_evolution, PHASE_WDCS);
-    assert!(matches!(out, LimitCheckOutcome::Terminate { ref code, .. } if code == "phase_WDCS"));
+    assert!(
+        matches!(out, LimitCheckOutcome::Terminate { ref code, .. } if code == "phase_WDCS")
+    );
 
     // Verify `phase_of_evolution` history column reports exact integer code.
     let specs = parse_star_history_columns("phase_of_evolution\n", None, &m_wd)
@@ -805,7 +844,9 @@ fn test_do_check_limits_all_categories_and_deferred_bugs_264_265() {
     m_rc.r_center = 1.0e8; // cm
     m_rc.controls.center_r_lower_limit = Some(2.0e8); // cm
     let out = do_check_limits(&mut m_rc, None, false).expect("center_R");
-    assert!(matches!(out, LimitCheckOutcome::Terminate { ref code, .. } if code == "center_R_lower_limit"));
+    assert!(
+        matches!(out, LimitCheckOutcome::Terminate { ref code, .. } if code == "center_R_lower_limit")
+    );
     m_rc.controls.center_r_lower_limit = Some(0.5e8);
     assert_eq!(
         do_check_limits(&mut m_rc, None, false).expect("center_R ok"),
@@ -869,8 +910,8 @@ fn test_do_check_limits_all_categories_and_deferred_bugs_264_265() {
     m_265.controls.v_flag = true;
     m_265.v[0] = 1.0e5;
     let ctx_265 = StepReportContext::compute(&m_265);
-    let mixed_ratio =
-        m_265.v[0] / (ctx_265.phot.r_rsun / ctx_265.kh_timescale_yr.max(1.0e-99));
+    let mixed_ratio = m_265.v[0]
+        / (ctx_265.phot.r_rsun / ctx_265.kh_timescale_yr.max(1.0e-99));
     m_265.controls.v_surf_div_v_kh_upper_limit = Some(0.5 * mixed_ratio);
     assert!(matches!(
         do_check_limits(&mut m_265, Some(&ctx_265), false).expect("265"),
@@ -914,7 +955,9 @@ fn test_do_check_limits_all_categories_and_deferred_bugs_264_265() {
 
     let mut m_eh = base.clone();
     m_eh.aux.step_hist.cumulative_extra_heating = 5.0e45;
-    m_eh.controls.ts_stop.stop_when_reach_this_cumulative_extra_heating = 1.0e45;
+    m_eh.controls
+        .ts_stop
+        .stop_when_reach_this_cumulative_extra_heating = 1.0e45;
     assert!(matches!(
         do_check_limits(&mut m_eh, None, false).expect("extra_heat"),
         LimitCheckOutcome::Terminate { ref code, .. }
@@ -984,7 +1027,11 @@ fn test_do_check_limits_all_categories_and_deferred_bugs_264_265() {
     let mut m_inf = base.clone();
     m_inf.controls.v_flag = true;
     let h1_slot = m_inf.iso_names.iter().position(|n| n == "h1").expect("h1");
-    let he4_slot = m_inf.iso_names.iter().position(|n| n == "he4").expect("he4");
+    let he4_slot = m_inf
+        .iso_names
+        .iter()
+        .position(|n| n == "he4")
+        .expect("he4");
     let k_core = m_inf.nz / 2;
     for k in k_core..m_inf.nz {
         let mut x = vec![0.0; m_inf.species];
@@ -1069,14 +1116,18 @@ fn test_when_to_stop_rtol_atol_redo_convergence_and_max_age_graded_approach() {
         "expected at least 1 limit-hitting redo, got {}",
         m_redo.num_redos
     );
-    assert_eq!(rep.retries, 0, "limit-hitting redo must not consume retries");
+    assert_eq!(
+        rep.retries, 0,
+        "limit-hitting redo must not consume retries"
+    );
     assert_eq!(
         m_redo.aux.step_hist.timestep_hold, 0,
         "limit-hitting redo must not engage timestep_hold"
     );
     let h1_final = flexmesa_star::center_avg_x_by_name(&m_redo, "h1");
     assert!(
-        (h1_final - target_h1).abs() <= 0.15 * drop + 1.0e-15 || h1_final > target_h1,
+        (h1_final - target_h1).abs() <= 0.15 * drop + 1.0e-15
+            || h1_final > target_h1,
         "after redo, h1_final={h1_final:.12e} vs target={target_h1:.12e}"
     );
 
@@ -1097,7 +1148,10 @@ fn test_when_to_stop_rtol_atol_redo_convergence_and_max_age_graded_approach() {
         matches!(err, StarError::Terminated { ref reason, .. } if reason == "redo_limit"),
         "expected redo_limit termination, got {err:?}"
     );
-    assert_eq!(m_rl.model_number, mod0, "redo_limit must restore model_number");
+    assert_eq!(
+        m_rl.model_number, mod0,
+        "redo_limit must restore model_number"
+    );
 
     // 3. Exact `max_age` landing (no `1e-12` premature stop) and graded approach
     //    (`num_adjusted_dt_steps_before_max_age`, `evolve.f90:2089-2142`).
@@ -1178,7 +1232,10 @@ fn test_log_l_limits_use_surface_l_while_lnuc_div_l_uses_photosphere_l() {
 
     // `power_nuc / L(1) = power_nuc / 4 < mid < power_nuc / photosphere_L`.
     let power_nuc = ctx.powers.power_nuc_burn;
-    assert!(power_nuc > 0.0, "ZAMS model must have positive nuclear power");
+    assert!(
+        power_nuc > 0.0,
+        "ZAMS model must have positive nuclear power"
+    );
     let mid_ratio = 0.5 * (power_nuc / 4.0 + power_nuc / 1.0);
     m.controls.ts_stop.lnuc_div_l_upper_limit = mid_ratio;
     let out_lnuc = do_check_limits(&mut m, Some(&ctx), false)
@@ -1207,7 +1264,10 @@ struct ClearLimitOnFinishExtras {
 }
 
 impl StarExtras for ClearLimitOnFinishExtras {
-    fn extras_check_model(&mut self, _model: &mut StarModel) -> ExtrasDirective {
+    fn extras_check_model(
+        &mut self,
+        _model: &mut StarModel,
+    ) -> ExtrasDirective {
         self.check_calls += 1;
         ExtrasDirective::KeepGoing
     }
@@ -1241,7 +1301,8 @@ fn test_in_step_termination_propagates_across_post_step_refresh() {
     );
 
     m.controls.star_mass_max_limit = 0.0;
-    star_evolve_step(&mut m, false, false, true).expect("normal follow-up step");
+    star_evolve_step(&mut m, false, false, true)
+        .expect("normal follow-up step");
     assert_eq!(
         m.aux.step_hist.termination_code, None,
         "subsequent non-terminating step must clear termination_code"
@@ -1528,7 +1589,11 @@ fn test_wind_driver_dispatch_gates_caps_and_rotation_limits() {
     // Pure cool RGB vs AGB switch (`center_h1 < 0.01 && center_he4 < rgb_to_agb_wind_switch`).
     model.teff = 4_000.0;
     let h1_idx = model.iso_names.iter().position(|n| n == "h1").expect("h1");
-    let he4_idx = model.iso_names.iter().position(|n| n == "he4").expect("he4");
+    let he4_idx = model
+        .iso_names
+        .iter()
+        .position(|n| n == "he4")
+        .expect("he4");
     let nz = model.nz;
     model.cell_xa_mut(nz - 1)[h1_idx] = 0.0;
     model.cell_xa_mut(nz - 1)[he4_idx] = 1.0e-5;
@@ -1840,7 +1905,8 @@ fn test_mass_stopping_limits_check_termination_outcomes_and_set1_irot() {
     m_rot0.reconstruct_ln_r_from_lnd_and_dm();
     m_rot0.save_old_values();
     m_rot0.mstar_dot = 5.0e-4 * M_SUN / SECYER;
-    do_adjust_mass_step(&mut m_rot0, 0.5 * SECYER).expect("adjust mass zero omega");
+    do_adjust_mass_step(&mut m_rot0, 0.5 * SECYER)
+        .expect("adjust mass zero omega");
     let r0_after_zero = flexmesa_math::exp(m_rot0.ln_r[0]);
     let spherical_0 = (2.0 / 3.0) * (r0_after_zero * r0_after_zero);
     assert!(
@@ -1856,7 +1922,8 @@ fn test_mass_stopping_limits_check_termination_outcomes_and_set1_irot() {
     flexmesa_star::update_rotation_distortion_factors(&mut m_rot);
     m_rot.save_old_values();
     m_rot.mstar_dot = 5.0e-4 * M_SUN / SECYER;
-    do_adjust_mass_step(&mut m_rot, 0.5 * SECYER).expect("adjust mass set1_irot");
+    do_adjust_mass_step(&mut m_rot, 0.5 * SECYER)
+        .expect("adjust mass set1_irot");
     let r00 = flexmesa_math::exp(m_rot.ln_r[0]);
     assert!(
         m_rot.aux.i_rot[0] > (2.0 / 3.0) * r00 * r00,

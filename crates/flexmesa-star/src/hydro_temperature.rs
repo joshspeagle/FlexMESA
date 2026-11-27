@@ -198,7 +198,8 @@ pub fn do1_temperature_eqn(
     let grad_t = model.gradt_ad[k];
     let dln_t_dm = dlnp_dm * grad_t;
 
-    let t_m1 = StarAdOrder1::from_dlnd_dlnt_m1(model.t[k - 1], 0.0, model.t[k - 1]);
+    let t_m1 =
+        StarAdOrder1::from_dlnd_dlnt_m1(model.t[k - 1], 0.0, model.t[k - 1]);
     let t_00 = StarAdOrder1::from_dlnd_dlnt_00(model.t[k], 0.0, model.t[k]);
     let d_t = t_m1 - t_00;
     let alfa = model.dm[k - 1] / (model.dm[k - 1] + model.dm[k]);
@@ -217,9 +218,14 @@ pub fn do1_temperature_eqn(
 /// `include_mlt_Pturb_in_thermodynamic_gradients`
 /// (`star/defaults/controls_dev.defaults:212`, default `.false.`), which
 /// `FlexMESA` does not accept, so they are always zero here.
-fn eval_dlnpdm_qhse(model: &StarModel, k: usize) -> (StarAdOrder1, StarAdOrder1) {
+fn eval_dlnpdm_qhse(
+    model: &StarModel,
+    k: usize,
+) -> (StarAdOrder1, StarAdOrder1) {
     let (grav, area) = expected_hse_grav_and_area(model, k);
-    let using_tc = model.controls.is_velocity_time_centered(model.model_number_old);
+    let using_tc = model
+        .controls
+        .is_velocity_time_centered(model.model_number_old);
 
     let mut p00 = wrap_peos_00(model, k);
     if using_tc {

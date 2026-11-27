@@ -62,7 +62,7 @@ def test_e2e_5_test_side_star_extras_and_photo_restart() -> None:
     assert h1 == h2
 
 
-def test_e2e_5_test_side_binary_extras_oracles() -> None:
+def test_e2e_5_test_side_binary_extras_hooks() -> None:
     """Verify test-side `JdotGrCheckBinaryExtras`, `JdotMlCheckBinaryExtras`,
     and `DoubleBhBinaryExtras.other_wind_cgs` follow the upstream routines.
     """

@@ -16,13 +16,13 @@ use flexmesa_mtx::{
 };
 
 use crate::controls::{StarError, StepFailureInfo};
-use crate::hydro_eqns::{HenyeySystem, eval_henyey_equations_into};
+use crate::hydro_eqns::{eval_henyey_equations_into, HenyeySystem};
 use crate::model::StarModel;
 pub use crate::solver_norms::{
-    FlailingTracker, active_correction_tolerances, active_gold_level,
-    active_max_tries, active_solver_tolerances, compute_correction_norms,
+    active_correction_tolerances, active_gold_level, active_max_tries,
+    active_solver_tolerances, compute_correction_norms,
     compute_model_correction_norms, compute_residual_norms,
-    compute_vector_norms,
+    compute_vector_norms, FlailingTracker,
 };
 use crate::solver_norms::{
     active_residual_tolerances_with_gold,
@@ -254,8 +254,10 @@ pub(crate) fn next_line_search_alam(
         // `star_solver.f90:884-925`.
         let rhs1 = f - fold - alam * slope;
         let rhs2 = f2 - fold - alam2 * slope;
-        let a1 = (rhs1 / (alam * alam) - rhs2 / (alam2 * alam2)) / (alam - alam2);
-        let a2 = (-alam2 * rhs1 / (alam * alam) + alam * rhs2 / (alam2 * alam2))
+        let a1 =
+            (rhs1 / (alam * alam) - rhs2 / (alam2 * alam2)) / (alam - alam2);
+        let a2 = (-alam2 * rhs1 / (alam * alam)
+            + alam * rhs2 / (alam2 * alam2))
             / (alam - alam2);
         let mut tmplam = if a1 == 0.0 {
             -slope / (2.0 * a2)
@@ -403,8 +405,12 @@ fn stepdump_names(
 ) -> (Vec<String>, Vec<String>, usize, usize, usize) {
     let l = &model.layout;
     (
-        (0..nvar).map(|i| l.variable_name(i, &model.iso_names)).collect(),
-        (0..nvar).map(|i| l.equation_name(i, &model.iso_names)).collect(),
+        (0..nvar)
+            .map(|i| l.variable_name(i, &model.iso_names))
+            .collect(),
+        (0..nvar)
+            .map(|i| l.equation_name(i, &model.iso_names))
+            .collect(),
         l.nvar_hydro,
         model.species,
         model.nz,
@@ -445,10 +451,17 @@ fn stepdump_call(
             let nvh = model.layout.nvar_hydro;
             let sp = model.species;
             for k in 0..model.nz {
-                let mut row: Vec<f64> = model.xh[k * nvh..(k + 1) * nvh].to_vec();
+                let mut row: Vec<f64> =
+                    model.xh[k * nvh..(k + 1) * nvh].to_vec();
                 row.extend_from_slice(&model.xa[k * sp..(k + 1) * sp]);
                 crate::stepdump::push_line(
-                    buf, "STATE", id, dump_model, &[k as i64 + 1], &row, &[],
+                    buf,
+                    "STATE",
+                    id,
+                    dump_model,
+                    &[k as i64 + 1],
+                    &row,
+                    &[],
                 );
                 crate::stepdump::push_line(
                     buf,
@@ -1228,14 +1241,16 @@ mod tests {
     #[test]
     fn test_first_backtrack_minimises_quadratic_model() {
         // tmplam = -(-2) / (2 * (1.5 - 1 + 2)) = 2 / 5.
-        let alam = next_line_search_alam(true, -2.0, 1.5, 1.0, 0.0, 1.0, 0.0, 1e-3);
+        let alam =
+            next_line_search_alam(true, -2.0, 1.5, 1.0, 0.0, 1.0, 0.0, 1e-3);
         assert_eq!(alam, 2.0 / 5.0);
     }
 
     #[test]
     fn test_first_backtrack_is_floored_at_alam_factor_times_alam() {
         // tmplam = 2 / (2 * (10 - 1 + 2)) = 1/11 < 0.2 * alam = 0.2.
-        let alam = next_line_search_alam(true, -2.0, 10.0, 1.0, 0.0, 1.0, 0.0, 1e-3);
+        let alam =
+            next_line_search_alam(true, -2.0, 10.0, 1.0, 0.0, 1.0, 0.0, 1e-3);
         assert_eq!(alam, 0.2);
     }
 
@@ -1243,7 +1258,8 @@ mod tests {
     fn test_first_backtrack_has_no_upper_cap() {
         // tmplam = 2 / (2 * (-0.5 - 1 + 2)) = 2; upstream caps only the
         // cubic branch (`star_solver.f90:926`).
-        let alam = next_line_search_alam(true, -2.0, -0.5, 1.0, 0.0, 1.0, 0.0, 1e-3);
+        let alam =
+            next_line_search_alam(true, -2.0, -0.5, 1.0, 0.0, 1.0, 0.0, 1e-3);
         assert_eq!(alam, 2.0);
     }
 
@@ -1252,7 +1268,8 @@ mod tests {
         // f - fold - slope = -1 - 1 + 2 = 0, so tmplam = 2 / 0 = +inf.
         // Upstream has no finite-value guard (`star_solver.f90:870-931`),
         // so `alam = max(+inf, 0.2, min_corr_coeff) = +inf`.
-        let alam = next_line_search_alam(true, -2.0, -1.0, 1.0, 0.0, 1.0, 0.0, 1e-3);
+        let alam =
+            next_line_search_alam(true, -2.0, -1.0, 1.0, 0.0, 1.0, 0.0, 1e-3);
         assert_eq!(alam, f64::INFINITY);
     }
 
@@ -1260,13 +1277,15 @@ mod tests {
     fn test_cubic_backtrack_returns_alam_factor_times_alam() {
         // The cubic minimiser is 0.1408... (a2 > 0 branch), capped at
         // 0.2 * alam = 0.1 by line 926 and floored at 0.2 * alam by line 931.
-        let alam = next_line_search_alam(false, -1.0, 1.2, 1.0, 1.5, 0.5, 1.0, 1e-3);
+        let alam =
+            next_line_search_alam(false, -1.0, 1.2, 1.0, 1.5, 0.5, 1.0, 1e-3);
         assert_eq!(alam, 0.5 * 0.2);
     }
 
     #[test]
     fn test_backtrack_is_floored_at_min_corr_coeff() {
-        let alam = next_line_search_alam(false, -1.0, 1.2, 1.0, 1.5, 0.5, 1.0, 0.3);
+        let alam =
+            next_line_search_alam(false, -1.0, 1.2, 1.0, 1.5, 0.5, 1.0, 0.3);
         assert_eq!(alam, 0.3);
     }
 }

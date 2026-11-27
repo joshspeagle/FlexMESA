@@ -62,9 +62,9 @@
 
 pub mod accretion_xa;
 pub mod adjust_mass;
-pub mod adjust_net;
 pub mod adjust_mesh_split_merge;
 pub mod adjust_mesh_support;
+pub mod adjust_net;
 pub mod case_staging;
 pub mod cell_energy;
 pub mod controls;
@@ -73,9 +73,9 @@ pub mod controls_diffusion;
 pub mod controls_mix_wind;
 pub mod controls_output;
 pub mod controls_timestep_stop;
-pub mod create_initial_model;
 pub mod conv_premix;
 pub mod core_boundaries;
+pub mod create_initial_model;
 pub mod diffusion;
 pub mod diffusion_procs;
 pub mod diffusion_support;
@@ -83,8 +83,8 @@ pub mod element_diffusion;
 pub mod eps_grav;
 pub mod eps_mdot;
 pub mod evolve;
-pub mod extend_net;
 pub(crate) mod evolve_support;
+pub mod extend_net;
 pub mod history;
 pub mod hydro_brunt_surf;
 pub mod hydro_energy;
@@ -103,8 +103,9 @@ mod inlist_populate_limits;
 mod inlist_populate_micro;
 mod inlist_populate_phase5b;
 pub mod inlist_runner;
-pub(crate) mod job_rotation;
 pub mod job_controls;
+pub(crate) mod job_rotation;
+pub mod mass_utils;
 pub mod mdot_redo;
 pub mod mesa_history;
 pub mod mesa_log_reader;
@@ -113,7 +114,6 @@ pub mod mesh;
 pub mod mesh_adjust;
 pub mod mesh_functions;
 pub mod mesh_plan;
-pub mod mass_utils;
 pub mod mesh_remap;
 pub mod micro;
 pub mod micro_cache;
@@ -144,10 +144,11 @@ pub mod pulse_utils;
 pub mod pulse_write;
 pub mod relax;
 pub mod relax_comp;
-pub mod relax_entropy;
-pub mod remove_surface_cut;
 pub(crate) mod relax_driver;
+pub mod relax_entropy;
 pub(crate) mod relax_mass_comp;
+pub mod remove_surface_cut;
+pub(crate) mod replay_tap;
 pub mod report_utils;
 pub mod riemann;
 pub mod riemann_ad;
@@ -220,13 +221,12 @@ pub use adjust_mesh_split_merge::{
     get1_grad, minmod3, preview_split_merge_amr, remesh_split_merge,
 };
 pub use adjust_mesh_support::{
-    GvalInfo, OtherMeshDeltaCoeffFactorHandle, OtherMeshDeltaCoeffFactorHook,
-    check_validity, get_gval_info, get_gval_info_with_controls,
+    check_validity, get_gval_info, get_gval_info_with_controls, GvalInfo,
+    OtherMeshDeltaCoeffFactorHandle, OtherMeshDeltaCoeffFactorHook,
 };
 pub use cell_energy::{
-    DkeDpeDt, cell_specific_ke, cell_specific_pe,
-    cell_specific_rotational_energy, cell_specific_total_energy,
-    get_dke_dt_dpe_dt,
+    cell_specific_ke, cell_specific_pe, cell_specific_rotational_energy,
+    cell_specific_total_energy, get_dke_dt_dpe_dt, DkeDpeDt,
 };
 pub use controls::{
     AtmOption, AtmTTauOpacity, AtmTTauRelation, EnergyEqnOption, StarControls,
@@ -234,22 +234,22 @@ pub use controls::{
 };
 pub use controls_diffusion::{DiffusionControls, MAX_NUM_DIFFUSION_CLASSES};
 pub use controls_mix_wind::{
-    MixWindControls, NUM_OVERSHOOT_PARAM_SETS, NUM_PREDICTIVE_PARAM_SETS,
-    OvershootParamSet, PredictiveParamSet,
+    MixWindControls, OvershootParamSet, PredictiveParamSet,
+    NUM_OVERSHOOT_PARAM_SETS, NUM_PREDICTIVE_PARAM_SETS,
 };
 pub use controls_output::OutputControls;
-pub use controls_timestep_stop::{MAX_DX_LIMIT_CTRLS, TimestepStopControls};
+pub use controls_timestep_stop::{TimestepStopControls, MAX_DX_LIMIT_CTRLS};
 pub use core_boundaries::{
-    CoreBoundaryInfo, CoreMasses, PowerCategories, compute_core_masses,
-    compute_power_categories, get_info_at_q, k_for_q_1based,
-    snapshot_step_history_old,
+    compute_core_masses, compute_power_categories, get_info_at_q,
+    k_for_q_1based, snapshot_step_history_old, CoreBoundaryInfo, CoreMasses,
+    PowerCategories,
 };
 pub use diffusion::{
-    BurgersZoneResult, DIFFUSION_MIN_NC, DiffusionScheme, IsolveSolver,
-    SolveDiffusionInput, SolveDiffusionOutput, SolveDiffusionStats,
     do_element_diffusion, do_solve_diffusion, eval_burgers_velocities,
     eval_caplan_ocp_dstar, eval_coulomb_collision_factors,
     eval_radiative_levitation_accel, eval_wd_sedimentation_heating,
+    BurgersZoneResult, DiffusionScheme, IsolveSolver, SolveDiffusionInput,
+    SolveDiffusionOutput, SolveDiffusionStats, DIFFUSION_MIN_NC,
 };
 pub use element_diffusion::{
     do_element_diffusion_step, finish_element_diffusion,
@@ -258,17 +258,17 @@ pub use eps_grav::{
     eval_eps_grav, eval_eps_grav_lns_cell, eval_eps_grav_std_cell,
 };
 pub use eps_mdot::{
-    AdjustMassRecord, EpsMdotSurface, calculate_eps_mdot,
-    eval_total_energy_profile, total_energy_profile_before_adjust_mass,
-    eval_cell_specific_total_energy, eval_specific_total_energy_profile,
-    find_mass_flux,
+    calculate_eps_mdot, eval_cell_specific_total_energy,
+    eval_specific_total_energy_profile, eval_total_energy_profile,
+    find_mass_flux, total_energy_profile_before_adjust_mass, AdjustMassRecord,
+    EpsMdotSurface,
 };
 pub use evolve::{
+    restore_from_old, star_evolve, star_evolve_step, star_evolve_step_part1,
+    star_evolve_step_part2, star_evolve_step_with_extras,
+    star_finalize_terminated_step, star_pick_next_timestep_after_step,
     EvolveStepReport, StarPickTimestepOutcome, StarStepAttemptOutcome,
-    StarStepConverged, StarStepPart1State, restore_from_old, star_evolve,
-    star_evolve_step, star_evolve_step_part1, star_evolve_step_part2,
-    star_evolve_step_with_extras, star_finalize_terminated_step,
-    star_pick_next_timestep_after_step,
+    StarStepConverged, StarStepPart1State,
 };
 pub use evolve_support::{
     apply_step_pre_physics, apply_step_pre_physics_with_extras,
@@ -277,8 +277,8 @@ pub use evolve_support::{
     remesh_star_before_step, update_step_energy_conservation,
 };
 pub use history::{
-    HistoryRow, extract_history_row, format_history_header, format_history_row,
-    format_profile_string,
+    extract_history_row, format_history_header, format_history_row,
+    format_profile_string, HistoryRow,
 };
 pub use hydro_energy::{
     eval_cell_pressure_for_work_ad, eval_face_area_time_centered_ad,
@@ -286,13 +286,13 @@ pub use hydro_energy::{
     setup_d_turbulent_energy_dt, setup_dl_dm, setup_sources_and_others,
 };
 pub use hydro_eqns::{
-    HenyeySystem, compute_x_scale, do_surf_bc_eqns, do1_chem_eqns,
-    do1_density_eqn, do1_energy_eqn, do1_momentum_eqn, do1_radius_eqn,
-    do1_temperature_eqn, eval_henyey_equations,
+    compute_x_scale, do1_chem_eqns, do1_density_eqn, do1_energy_eqn,
+    do1_momentum_eqn, do1_radius_eqn, do1_temperature_eqn, do_surf_bc_eqns,
+    eval_henyey_equations, HenyeySystem,
 };
 pub use hydro_momentum::{
-    eval_cell_peos_time_centered_ad, eval_face_dm_bar, expected_hse_grav_term,
-    expected_non_hse_term, calc_ptot_ad_tw,
+    calc_ptot_ad_tw, eval_cell_peos_time_centered_ad, eval_face_dm_bar,
+    expected_hse_grav_term, expected_non_hse_term,
 };
 pub use hydro_rotation::{
     eval_fp_ft_single, eval_i_rot, get1_am_sig, get_rotation_sigmas,
@@ -314,54 +314,52 @@ pub use hydro_vars::{
     set_gradt_excess_alpha, set_hydro_vars, set_mlt_vars,
     update_sig_from_d_mix,
 };
-pub use mixing_state::{
-    set_grads, threshold_smoothing, weighted_smoothing, MixingAuxState,
-};
 pub use inlist::{InlistBundle, InlistLoadOptions, SectionControls};
 pub use inlist_inventory::{
-    StarControlInventory, copy_cleaned_star_case,
-    supported_star_control_inventory,
+    copy_cleaned_star_case, supported_star_control_inventory,
+    StarControlInventory,
 };
 pub use inlist_runner::{
-    CaseRunReport, DefaultStarExtras, ExtrasDirective, RspBuildOutcome,
-    StageRunReport, StarExtras, StarLogsOptions, run_inlist_stage,
-    run_inlist_stage_with_logs, run_test_suite_case,
+    run_inlist_stage, run_inlist_stage_with_logs, run_test_suite_case,
     run_test_suite_case_with_extras, run_test_suite_case_with_logs,
     run_test_suite_case_with_options, verify_photo_restart_parity,
+    CaseRunReport, DefaultStarExtras, ExtrasDirective, RspBuildOutcome,
+    StageRunReport, StarExtras, StarLogsOptions,
 };
 pub use mdot_redo::{
-    MdotRedoState, SelectMdotAction, eval_surf_avg_w_div_w_crit,
+    eval_surf_avg_w_div_w_crit, MdotRedoState, SelectMdotAction,
 };
 pub use mesa_history::{
-    DEFAULT_STAR_HISTORY_COLUMNS_TEXT, HistoryColumnSpec, HistoryIsoQuery,
-    IncrementalHistoryWriter, MesaCellValue, default_star_history_specs,
-    evaluate_star_history_row, format_star_history_data_line,
-    format_star_history_data_line_with_extra, format_star_history_file_header,
+    default_star_history_specs, evaluate_star_history_row,
+    format_star_history_data_line, format_star_history_data_line_with_extra,
+    format_star_history_file_header,
     format_star_history_file_header_with_extra, parse_star_history_columns,
-    resolve_star_history_columns, star_get_history_output,
+    resolve_star_history_columns, star_get_history_output, HistoryColumnSpec,
+    HistoryIsoQuery, IncrementalHistoryWriter, MesaCellValue,
+    DEFAULT_STAR_HISTORY_COLUMNS_TEXT,
 };
 pub use mesa_log_reader::{
-    MesaHeaderValue, MesaLogTable, read_mesa_log_file, read_mesa_log_str,
-    read_profiles_index_file, read_profiles_index_str,
+    read_mesa_log_file, read_mesa_log_str, read_profiles_index_file,
+    read_profiles_index_str, MesaHeaderValue, MesaLogTable,
 };
 pub use mesa_profile::{
-    DEFAULT_STAR_PROFILE_COLUMNS_TEXT, ProfileColumnSpec, ProfilesIndex,
-    ProfilesIndexEntry, StarLogsWriter, default_star_profile_specs,
-    format_star_profile_text, parse_star_profile_columns,
-    resolve_star_profile_columns,
+    default_star_profile_specs, format_star_profile_text,
+    parse_star_profile_columns, resolve_star_profile_columns,
+    ProfileColumnSpec, ProfilesIndex, ProfilesIndexEntry, StarLogsWriter,
+    DEFAULT_STAR_PROFILE_COLUMNS_TEXT,
 };
 pub use mesh_adjust::{
-    CellType, MeshFunctionConfig, StandardMeshPlan, classify_new_cells,
-    compute_monotone_xa_slopes, do_adjust_mesh, do_prune_mesh_surface,
-    eval_effective_mesh_delta_coeff, eval_mesh_gval, plan_mesh, remap_onto_dq,
-    solve_cell_lnt_for_energy, try_plan_standard_mesh,
+    classify_new_cells, compute_monotone_xa_slopes, do_adjust_mesh,
+    do_prune_mesh_surface, eval_effective_mesh_delta_coeff, eval_mesh_gval,
+    plan_mesh, remap_onto_dq, solve_cell_lnt_for_energy,
+    try_plan_standard_mesh, CellType, MeshFunctionConfig, StandardMeshPlan,
 };
 pub use mesh_functions::{
-    MAX_ALLOWED_GVALS, MeshFunctionData, OtherMeshFunctionColumn,
-    OtherMeshFunctionsHandle, OtherMeshFunctionsHook, num_mesh_functions,
-    set_mesh_function_data,
+    num_mesh_functions, set_mesh_function_data, MeshFunctionData,
+    OtherMeshFunctionColumn, OtherMeshFunctionsHandle, OtherMeshFunctionsHook,
+    MAX_ALLOWED_GVALS,
 };
-pub use mesh_plan::{MeshPlanOutput, do_mesh_plan};
+pub use mesh_plan::{do_mesh_plan, MeshPlanOutput};
 pub use micro::{
     change_model_network, do_eos, do_kap, do_net, do_neu, get_or_load_net,
     get_tau, global_basic_net, set_basic_vars,
@@ -373,14 +371,18 @@ pub use mix_info::{
     set_cz_bdy_mass, set_cz_boundary_info, set_mixing_info,
     set_mixing_info_with_skip,
 };
+pub use mixing_state::{
+    set_grads, threshold_smoothing, weighted_smoothing, MixingAuxState,
+};
 pub use model::{StarModel, SurfPt};
 pub use model_io::{
-    PHOTO_FORMAT_VERSION, STAR_DEF_VERSION, compute_photo_checksum,
-    load_photo_bytes, photo_numerics_mode, read_mod_str, read_mod_str_with_dir, read_photo_bytes,
+    compute_photo_checksum, load_photo_bytes, photo_numerics_mode,
+    read_mod_str, read_mod_str_with_dir, read_photo_bytes,
     try_write_photo_bytes, write_mod_string, write_photo_bytes,
+    PHOTO_FORMAT_VERSION, STAR_DEF_VERSION,
 };
 pub use omega_mix::{
-    OmegaMixOutcome, do_solve_omega_mix, do_solve_omega_mix_with_extras,
+    do_solve_omega_mix, do_solve_omega_mix_with_extras, OmegaMixOutcome,
 };
 pub use overshoot::{
     add_overshooting, apply_overshoot_configs, eval_conv_bdy_hp,
@@ -389,9 +391,9 @@ pub use overshoot::{
 };
 pub use paquette_coeffs::paquette_coefficients;
 pub use phase_separation::{
-    EOS_PHASE_BOUNDARY, apply_phase_sep_mixing_types, blouin_delta_xne,
-    blouin_delta_xo, do_phase_separation, do_phase_separation_step,
-    eval_phase_separation_shift,
+    apply_phase_sep_mixing_types, blouin_delta_xne, blouin_delta_xo,
+    do_phase_separation, do_phase_separation_step, eval_phase_separation_shift,
+    EOS_PHASE_BOUNDARY,
 };
 pub use pre_ms::{build_pre_ms_model, build_pre_ms_model_with_configs};
 pub use premix::{
@@ -400,40 +402,37 @@ pub use premix::{
 };
 pub use primary_state::PrimaryStateBuffer;
 pub use pulse::{
-    PULSE_ISO_NAMES, PulseExportOptions, PulsePoint, build_pulse_points,
-    build_pulse_points_with_options, eval_center_d2, eval_center_parabolic,
-    default_fgong_header, eval_center_rho, eval_face, export_fgong, export_gyre,
-    export_osc, export_pulse_data_text, set_segment_indices,
-    MESA_VERSION_NUMBER,
+    build_pulse_points, build_pulse_points_with_options, default_fgong_header,
+    eval_center_d2, eval_center_parabolic, eval_center_rho, eval_face,
+    export_fgong, export_gyre, export_osc, export_pulse_data_text,
+    set_segment_indices, PulseExportOptions, PulsePoint, MESA_VERSION_NUMBER,
+    PULSE_ISO_NAMES,
 };
 pub use pulse_bvp::{
-    BvpEigenmode, BvpModel, BvpPoint, InertiaNormKind, OuterBoundKind,
-    shoot_determinant, steffen_slopes,
+    shoot_determinant, steffen_slopes, BvpEigenmode, BvpModel, BvpPoint,
+    InertiaNormKind, OuterBoundKind,
 };
 pub use pulse_bvp_recon::{
     classify_mode_orders, parse_fgong_model, parse_fortran_float,
     parse_gyre_mesa_model, reconstruct_and_analyze_mode,
 };
 pub use pulse_exporters::{
-    GsmData, export_cafein, export_gr1d, export_gsm, export_gsm_data,
-    export_pulse_by_format, export_saio,
+    export_cafein, export_gr1d, export_gsm, export_gsm_data,
+    export_pulse_by_format, export_saio, GsmData,
 };
 pub use pulse_modes::{
-    LinearOscillationMode, PulseModeScanOptions,
     build_bvp_model_from_pulse_points, eval_acoustic_large_separation_hz,
     eval_astero_scaling_dnu_numax_uhz, eval_buoyancy_period_spacing_s,
     eval_kappa_mechanism_growth, eval_linear_oscillation_modes,
     eval_target_mode_frequency_and_growth, scan_bounds_from_targets,
     scan_star_bvp_eigenmodes, solve_adipls_fgong_modes, solve_bvp_eigenmodes,
-    solve_gyre_mesa_modes,
+    solve_gyre_mesa_modes, LinearOscillationMode, PulseModeScanOptions,
 };
 pub use relax::{
     apply_uniform_rotation, excise_core_by_temperature,
     set_uniform_initial_composition,
 };
 pub use report_utils::{
-    ConvAndMixSummary, MESA_REF_VERSION_NUMBER, PhotosphereInfo,
-    STAR_LOG_COL_WIDTH, StepReportContext, SurfAvgRotationInfo,
     center_avg_x_by_name, center_value, center_value_by,
     eval_conv_and_mx_summary, eval_conv_time_scale_zone, eval_conv_time_scales,
     eval_photosphere_info, eval_surf_avg_rotation_info,
@@ -442,83 +441,85 @@ pub use report_utils::{
     format_mesa_int_width, format_mesa_txt, format_mesa_txt_width,
     parse_quoted_include_arg, push_mesa_6line_header, safe_log10,
     surface_avg_x_by_name, write_mesa_dbl_width, write_mesa_int_width,
-    write_mesa_txt_width,
+    write_mesa_txt_width, ConvAndMixSummary, PhotosphereInfo,
+    StepReportContext, SurfAvgRotationInfo, MESA_REF_VERSION_NUMBER,
+    STAR_LOG_COL_WIDTH,
 };
 pub use riemann::{
-    HllcFaceState, eval_hllc_face, eval_hllc_surface_face,
-    eval_riemann_momentum_residual, eval_riemann_profile,
+    eval_hllc_face, eval_hllc_surface_face, eval_riemann_momentum_residual,
+    eval_riemann_profile, HllcFaceState,
 };
 pub use riemann_ad::{
-    calc_ptot_cell_ad, do_uface_and_pface, do1_riemann_momentum_eqn,
+    calc_ptot_cell_ad, do1_riemann_momentum_eqn, do_uface_and_pface,
 };
-pub use rn_parser::{RnStage, parse_rn_stages};
+pub use rn_parser::{parse_rn_stages, RnStage};
 pub use rotation::{
-    RI_CRIT_DSI, RotationalMixZone, eval_magnetic_diffusivity, eval_omega_crit,
-    eval_rotation_fp_ft, eval_rotational_mixing_zone, eval_thermal_diffusivity,
+    eval_magnetic_diffusivity, eval_omega_crit, eval_rotation_fp_ft,
+    eval_rotational_mixing_zone, eval_thermal_diffusivity,
     sync_post_henyey_rotation, update_rotation_distortion_factors,
+    RotationalMixZone, RI_CRIT_DSI,
 };
 pub use rotation_mix::update_rotation_mixing_info;
 pub use rotation_mix_info::set_rotation_mixing_info;
-pub use rsp_build::{
-    RspLinaMode, build_rsp_envelope_model, do_rsp_build_model,
-    eval_rsp_lina_modes,
-};
-pub use rsp_config::{Rsp2Controls, RspConfig};
-pub use rsp_def::{
-    F_EDD_FREE_STREAM, F_EDD_ISOTROPIC, MAX_RSP_NZN, RspDerivedConsts, RspState,
-};
-pub use rsp_driver::{
-    rsp_one_step, rsp_one_step_with_extras, rsp_setup_model,
-    rsp_total_energy_integrals,
-};
-pub use rsp_eos_kap::{
-    RspChemCache, RspEosKapOut, compute_standard_metals_xa,
-    eval_mesa_eos_and_kap, eval1_gamma_pt_get_rho, eval1_mesa_eos_and_kap,
-    eval1_mesa_eos_de_and_kap, eval1_mesa_eos_degas_and_kap,
-    eval1_mesa_rho_given_pt, eval1_mesa_t_given_dp, get_surf_p_t_kap,
-    set_rho_for_new_pgas, set_t_for_new_egas, set_t_for_new_energy,
-    set_t_for_new_pgas,
-};
-pub use rsp_grid::{
-    MesaRanmar, RspEnvGrid, RspTotalEosKap, cleanup_for_lina, copy_results,
-    eop, finish_build_rsp_model, mesa_eos_kap,
-};
-pub use rsp_lina::{RspLinaOutput, do_lina};
-pub use rsp_relax_env::relax_env;
-pub use rsp_stah::stah;
 pub use rsp2::{
-    Rsp2Config, Rsp2FaceResult, Rsp2ZoneResult, X_ALFAC, X_ALFAP, X_ALFAS,
-    X_CEDE, X_GAMMAR, compute_rsp2_uq_face, eval_rsp2_face, eval_rsp2_zone,
-    rsp2_flux_limiter, solve_stationary_rsp2_w,
+    compute_rsp2_uq_face, eval_rsp2_face, eval_rsp2_zone, rsp2_flux_limiter,
+    solve_stationary_rsp2_w, Rsp2Config, Rsp2FaceResult, Rsp2ZoneResult,
+    X_ALFAC, X_ALFAP, X_ALFAS, X_CEDE, X_GAMMAR,
 };
 pub use rsp2_ad::{
     eval_and_save_rsp2_eqns, eval_rsp2_hp_face_ad, eval_rsp2_ptrb_cell_ad,
     update_rsp2_vars_ad,
 };
 pub use rsp2_eqns::{
-    Rsp2ProfileResiduals, eval_rsp2_hp_face_zone, eval_rsp2_profile_equations,
-    rsp2_adjust_vars_before_call_solver,
+    eval_rsp2_hp_face_zone, eval_rsp2_profile_equations,
+    rsp2_adjust_vars_before_call_solver, Rsp2ProfileResiduals,
 };
 pub use rsp2_remesh::{remesh_for_rsp2, seed_rsp2_w_from_mlt_vc_if_needed};
+pub use rsp_build::{
+    build_rsp_envelope_model, do_rsp_build_model, eval_rsp_lina_modes,
+    RspLinaMode,
+};
+pub use rsp_config::{Rsp2Controls, RspConfig};
+pub use rsp_def::{
+    RspDerivedConsts, RspState, F_EDD_FREE_STREAM, F_EDD_ISOTROPIC, MAX_RSP_NZN,
+};
+pub use rsp_driver::{
+    rsp_one_step, rsp_one_step_with_extras, rsp_setup_model,
+    rsp_total_energy_integrals,
+};
+pub use rsp_eos_kap::{
+    compute_standard_metals_xa, eval1_gamma_pt_get_rho, eval1_mesa_eos_and_kap,
+    eval1_mesa_eos_de_and_kap, eval1_mesa_eos_degas_and_kap,
+    eval1_mesa_rho_given_pt, eval1_mesa_t_given_dp, eval_mesa_eos_and_kap,
+    get_surf_p_t_kap, set_rho_for_new_pgas, set_t_for_new_egas,
+    set_t_for_new_energy, set_t_for_new_pgas, RspChemCache, RspEosKapOut,
+};
+pub use rsp_grid::{
+    cleanup_for_lina, copy_results, eop, finish_build_rsp_model, mesa_eos_kap,
+    MesaRanmar, RspEnvGrid, RspTotalEosKap,
+};
+pub use rsp_lina::{do_lina, RspLinaOutput};
+pub use rsp_relax_env::relax_env;
+pub use rsp_stah::stah;
 pub use solver::{
-    HenyeySolverReport, active_solver_tolerances, compute_corr_coeff,
-    compute_correction_norms, compute_model_correction_norms,
-    compute_residual_norms, compute_vector_norms, solve_henyey_step,
+    active_solver_tolerances, compute_corr_coeff, compute_correction_norms,
+    compute_model_correction_norms, compute_residual_norms,
+    compute_vector_norms, solve_henyey_step, HenyeySolverReport,
 };
 pub use star_ad::{
-    I_HP_00, I_HP_M1, I_HP_P1, I_L_00, I_L_M1, I_L_P1, I_LND_00, I_LND_M1,
+    StarAdExt, StarAdOrder1, I_HP_00, I_HP_M1, I_HP_P1, I_LND_00, I_LND_M1,
     I_LND_P1, I_LNR_00, I_LNR_M1, I_LNR_P1, I_LNT_00, I_LNT_M1, I_LNT_P1,
-    I_OMEGA_00, I_OMEGA_M1, I_OMEGA_P1, I_V_00, I_V_M1, I_V_P1, I_W_00, I_W_M1,
-    I_W_P1, NUM_STAR_AD_VARS, StarAdExt, StarAdOrder1,
+    I_L_00, I_L_M1, I_L_P1, I_OMEGA_00, I_OMEGA_M1, I_OMEGA_P1, I_V_00, I_V_M1,
+    I_V_P1, I_W_00, I_W_M1, I_W_P1, NUM_STAR_AD_VARS,
 };
 pub use star_job_init::{
     init_model_from_zams_seed, init_or_update_model_from_bundle,
 };
 pub use stella::{
+    eval_sobolev_feii_5169_snapshot, export_stella_pair, parse_stella_abn,
+    parse_stella_hyd, parse_stella_lbol, run_stella_from_hyd_abn,
     FeII5169EtaTable, StellaAbnZone, StellaExportOptions, StellaHydModel,
-    StellaHydZone, StellaVelFeIIRow, eval_sobolev_feii_5169_snapshot,
-    export_stella_pair, parse_stella_abn, parse_stella_hyd, parse_stella_lbol,
-    run_stella_from_hyd_abn,
+    StellaHydZone, StellaVelFeIIRow,
 };
 pub use struct_burn_mix::{
     do_struct_burn_mix, op_split_burn_zones, solve_composition_diffusion,
@@ -526,28 +527,27 @@ pub use struct_burn_mix::{
 };
 pub use termination::{
     check_termination_limits, check_termination_limits_with_history,
-    compute_core_masses_msun, do_check_limits, eval_core_infall_and_rebound_cms,
-    eval_min_gamma1, eval_phase_of_evolution, get_ejecta_mass,
-    get_remnant_mass, get_shock_mass_msun, set_phase_of_evolution,
-    LimitCheckOutcome, PHASE_C_BURN, PHASE_HE_BURN, PHASE_IAMS, PHASE_NE_BURN,
-    PHASE_O_BURN, PHASE_PREMS, PHASE_RELAX, PHASE_SI_BURN, PHASE_STARTING,
-    PHASE_TACHEB, PHASE_TAMS, PHASE_TP_AGB, PHASE_WDCS, PHASE_ZACHEB,
-    PHASE_ZAMS,
+    compute_core_masses_msun, do_check_limits,
+    eval_core_infall_and_rebound_cms, eval_min_gamma1, eval_phase_of_evolution,
+    get_ejecta_mass, get_remnant_mass, get_shock_mass_msun,
+    set_phase_of_evolution, LimitCheckOutcome, PHASE_C_BURN, PHASE_HE_BURN,
+    PHASE_IAMS, PHASE_NE_BURN, PHASE_O_BURN, PHASE_PREMS, PHASE_RELAX,
+    PHASE_SI_BURN, PHASE_STARTING, PHASE_TACHEB, PHASE_TAMS, PHASE_TP_AGB,
+    PHASE_WDCS, PHASE_ZACHEB, PHASE_ZAMS,
 };
 pub use timestep::{
-    TimestepAction, TimestepLimitReason, TimestepReport,
     eval_dx_nuc_drop_ratio, eval_h211_factor, eval_varcontrol, filter_limit,
-    pick_next_timestep,
+    pick_next_timestep, TimestepAction, TimestepLimitReason, TimestepReport,
 };
 pub use timestep_limits::timestep_controller;
 pub use winds::{
-    DutchLowTScheme, WindScheme, do_set_mdot, do_set_mdot_with_extras,
-    eval_bjorklund_wind, eval_blocker_wind, eval_de_jager_wind,
-    eval_dutch_wind, eval_nieuwenhuijzen_wind, eval_nugis_lamers_wind,
-    eval_reimers_wind, eval_rlo_wind, eval_super_eddington_wind,
-    eval_van_loon_wind, eval_vink_wind, set_mdot,
+    do_set_mdot, do_set_mdot_with_extras, eval_bjorklund_wind,
+    eval_blocker_wind, eval_de_jager_wind, eval_dutch_wind,
+    eval_nieuwenhuijzen_wind, eval_nugis_lamers_wind, eval_reimers_wind,
+    eval_rlo_wind, eval_super_eddington_wind, eval_van_loon_wind,
+    eval_vink_wind, set_mdot, DutchLowTScheme, WindScheme,
 };
 pub use zams::{
-    ZamsCatalog, ZamsEntry, interp_q, load_zams_model,
-    load_zams_model_from_catalog, yrs_for_init_timestep,
+    interp_q, load_zams_model, load_zams_model_from_catalog,
+    yrs_for_init_timestep, ZamsCatalog, ZamsEntry,
 };

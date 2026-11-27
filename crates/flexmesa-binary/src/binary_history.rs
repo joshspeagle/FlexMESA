@@ -10,22 +10,18 @@ use std::fs::{self, File, OpenOptions};
 use std::io::{BufWriter, Write};
 use std::path::{Path, PathBuf};
 
-use flexmesa_const::{
-    LSUN, MSUN, MixingType, PI, RSUN, SECDAY, SECYER, STANDARD_CGRAV,
-};
+use flexmesa_const::{LSUN, MSUN, PI, RSUN, SECDAY, SECYER, STANDARD_CGRAV};
 use flexmesa_schema::strip_fortran_comment;
 use flexmesa_star::{
-    MESA_REF_VERSION_NUMBER, MesaCellValue, StarError, StarLogsWriter,
-    StarModel, eval_photosphere_info, eval_surf_avg_rotation_info,
-    format_mesa_dbl_width, format_mesa_header_str_width,
-    parse_quoted_include_arg, push_mesa_6line_header, safe_log10,
-    write_mesa_dbl_width, write_mesa_int_width,
+    eval_photosphere_info, eval_surf_avg_rotation_info, format_mesa_dbl_width,
+    format_mesa_header_str_width, parse_quoted_include_arg,
+    push_mesa_6line_header, safe_log10, write_mesa_dbl_width,
+    write_mesa_int_width, MesaCellValue, StarError, StarLogsWriter,
+    MESA_REF_VERSION_NUMBER,
 };
 
 use crate::edd_wind::eval_accreted_material_j;
-use crate::jdot_tides::{
-    eval_k_div_t_convective, eval_k_div_t_radiative, eval_tsync,
-};
+use crate::orbit::eval_rl_relative_gap;
 use crate::system::{BinaryCompanion, BinarySystem};
 use crate::system_jdot::eval_star_spin_j;
 
@@ -182,36 +178,26 @@ pub fn parse_binary_history_columns(
     Ok(out)
 }
 
-/// Resolves `sys.controls.binary_history_columns_file` (falling back to
-/// `<case_dir>/binary_history_columns.list` or [`DEFAULT_BINARY_HISTORY_COLUMNS_TEXT`]
-/// per `binary_history_specs.f90:66-78`).
+/// Resolves `sys.controls.binary_history_columns_file` (trying local directory
+/// `'binary_history_columns.list'` or named path first, then `binary/defaults/`
+/// per `binary/private/binary_history_specs.f90:66-78`).
 pub fn resolve_binary_history_columns(
     sys: &BinarySystem,
     case_dir: Option<&Path>,
 ) -> Result<Vec<BinaryHistoryColumnSpec>, StarError> {
     let raw = sys.controls.binary_history_columns_file.trim();
-    if raw.is_empty() {
-        if let Some(dir) = case_dir {
-            let local = dir.join("binary_history_columns.list");
-            if local.is_file() {
-                let text = fs::read_to_string(&local).map_err(|e| {
-                    StarError::IoError(format!(
-                        "failed to read {}: {e}",
-                        local.display()
-                    ))
-                })?;
-                return parse_binary_history_columns(&text, Some(dir));
-            }
-        }
-        return Ok(default_binary_history_specs());
-    }
-    if let Some(p) = resolve_binary_col_file_path(raw, case_dir) {
+    let target = if raw.is_empty() {
+        "binary_history_columns.list"
+    } else {
+        raw
+    };
+    if let Some(p) = resolve_binary_col_file_path(target, case_dir) {
         let text = fs::read_to_string(&p).map_err(|e| {
             StarError::IoError(format!("failed to read {}: {e}", p.display()))
         })?;
         return parse_binary_history_columns(&text, p.parent().or(case_dir));
     }
-    if raw == "binary_history_columns.list" {
+    if target == "binary_history_columns.list" {
         return Ok(default_binary_history_specs());
     }
     Err(StarError::IoError(format!(
@@ -224,8 +210,8 @@ fn resolve_binary_col_file_path(
     base_dir: Option<&Path>,
 ) -> Option<PathBuf> {
     let p = Path::new(name);
-    if p.is_file() {
-        return Some(p.to_path_buf());
+    if p.is_absolute() {
+        return p.is_file().then(|| p.to_path_buf());
     }
     if let Some(dir) = base_dir {
         let cand = dir.join(name);
@@ -238,8 +224,10 @@ fn resolve_binary_col_file_path(
                 return Some(d);
             }
         }
+        None
+    } else {
+        p.is_file().then(|| p.to_path_buf())
     }
-    None
 }
 
 fn parse_quoted_arg(rest: &str) -> Option<&str> {
@@ -283,17 +271,17 @@ fn parse_binary_history_columns_rec(
                     ))
                 })?;
                 let inc_trim = inc.trim();
-                if inc_trim.is_empty()
-                    || inc_trim == "binary_history_columns.list"
-                {
-                    parse_binary_history_columns_rec(
-                        DEFAULT_BINARY_HISTORY_COLUMNS_TEXT,
-                        base_dir,
-                        level + 1,
-                        out,
-                    )?;
-                } else if let Some(inc_path) =
-                    resolve_binary_col_file_path(inc_trim, base_dir)
+                // `binary/private/binary_history_specs.f90:66-78`: empty
+                // `include ''` sets `filename = 'binary_history_columns.list'`;
+                // upstream tries opening `trim(filename)` in the local directory
+                // first and falls back to `binary/defaults/` only on failure.
+                let target = if inc_trim.is_empty() {
+                    "binary_history_columns.list"
+                } else {
+                    inc_trim
+                };
+                if let Some(inc_path) =
+                    resolve_binary_col_file_path(target, base_dir)
                 {
                     let inc_text =
                         fs::read_to_string(&inc_path).map_err(|e| {
@@ -305,6 +293,13 @@ fn parse_binary_history_columns_rec(
                     parse_binary_history_columns_rec(
                         &inc_text,
                         inc_path.parent().or(base_dir),
+                        level + 1,
+                        out,
+                    )?;
+                } else if target == "binary_history_columns.list" {
+                    parse_binary_history_columns_rec(
+                        DEFAULT_BINARY_HISTORY_COLUMNS_TEXT,
+                        base_dir,
                         level + 1,
                         out,
                     )?;
@@ -340,138 +335,11 @@ fn parse_binary_history_columns_rec(
 
 #[inline]
 fn map_donor_acc_to_stars<T: Copy>(donor_i: usize, arr: [T; 2]) -> [T; 2] {
-    if donor_i == 1 { arr } else { [arr[1], arr[0]] }
-}
-
-fn eval_upstream_k_div_t(
-    star: &StarModel,
-    presc: &str,
-    r_phot_cm: f64,
-    l_phot_lsun: f64,
-    omega_surf: f64,
-    m_comp_g: f64,
-    separation_cm: f64,
-    period_sec: f64,
-    tidal_reduction: f64,
-) -> f64 {
-    if presc.eq_ignore_ascii_case("Hut_rad") {
-        eval_k_div_t_radiative(star.mstar, m_comp_g, r_phot_cm, separation_cm)
-    } else if presc.eq_ignore_ascii_case("Hut_conv") && star.nz > 0 {
-        // `k_div_T` in `binary/private/binary_tides.f90:417-438`.
-        let mut m_env = star.m[0] / MSUN;
-        let mut r_env = star.r[0] / RSUN;
-        let rho_surf = star.rho[0];
-        for k in 0..star.nz {
-            if star.mixing_type[k] != MixingType::ConvectiveMixing
-                && star.rho[k] > 1.0e5 * rho_surf
-            {
-                r_env = (r_phot_cm - star.r[k]) / RSUN;
-                m_env = (star.m[0] - star.m[k]) / MSUN;
-                break;
-            }
-        }
-        if m_env > 0.0 && r_env > 0.0 && l_phot_lsun > 0.0 {
-            eval_k_div_t_convective(
-                star.mstar / MSUN,
-                m_env,
-                r_phot_cm / RSUN,
-                r_env,
-                l_phot_lsun,
-                period_sec,
-                omega_surf,
-                tidal_reduction,
-            )
-        } else {
-            0.0
-        }
+    if donor_i == 1 {
+        arr
     } else {
-        0.0
+        [arr[1], arr[0]]
     }
-}
-
-fn eval_star_tsync_sec(
-    sys: &BinarySystem,
-    star_idx: usize,
-    m_by_star: [f64; 2],
-) -> f64 {
-    if !sys.controls.do_tidal_sync || sys.point_mass_i == star_idx {
-        return 0.0;
-    }
-    let Some(star) = sys.star_ref(star_idx) else {
-        return 0.0;
-    };
-    if !star.controls.rotation_flag
-        || star.nz == 0
-        || sys.separation <= 0.0
-        || sys.period <= 0.0
-    {
-        return 0.0;
-    }
-    let (sync_type, f_tid, m_comp) = if star_idx == 1 {
-        (
-            sys.controls.sync_type_1.as_str(),
-            sys.controls.ftid_1,
-            m_by_star[1],
-        )
-    } else {
-        (
-            sys.controls.sync_type_2.as_str(),
-            sys.controls.ftid_2,
-            m_by_star[0],
-        )
-    };
-    // `binary_tides.f90:133-134, 142, 159`: `None` and `Instantaneous` leave `t_sync = 0`.
-    if f_tid <= 0.0
-        || sync_type.eq_ignore_ascii_case("None")
-        || sync_type.eq_ignore_ascii_case("Instantaneous")
-    {
-        return 0.0;
-    }
-    if sync_type.eq_ignore_ascii_case("Orb_period") {
-        return sys.period / f_tid;
-    }
-    let phot = eval_photosphere_info(star);
-    let r_phot_cm = phot.r_rsun * RSUN;
-    if r_phot_cm <= 0.0 || star.mstar <= 0.0 {
-        return 0.0;
-    }
-    let omega_surf = eval_surf_avg_rotation_info(star).omega;
-    let k_div_t = eval_upstream_k_div_t(
-        star,
-        sync_type,
-        r_phot_cm,
-        phot.l_lsun,
-        omega_surf,
-        m_comp,
-        sys.separation,
-        sys.period,
-        sys.controls.tidal_reduction,
-    );
-    if k_div_t <= 0.0 {
-        return 0.0;
-    }
-    // `binary_tides.f90:355-359`: `rGyr_squared = moment_of_inertia / (m * r_phot^2)`.
-    let moi: f64 = star
-        .aux
-        .i_rot
-        .iter()
-        .take(star.nz)
-        .zip(star.dm_bar.iter().take(star.nz))
-        .map(|(&ir, &dm)| ir * dm)
-        .sum();
-    let r_gyr_sq = moi / (star.mstar * r_phot_cm * r_phot_cm);
-    if r_gyr_sq <= 0.0 {
-        return 0.0;
-    }
-    let ts = eval_tsync(
-        k_div_t,
-        m_comp / star.mstar,
-        r_gyr_sq,
-        r_phot_cm,
-        sys.separation,
-        f_tid,
-    );
-    if ts.is_finite() && ts > 0.0 { ts } else { 0.0 }
 }
 
 /// Evaluates all requested [`BinaryHistoryColumnSpec`] columns on `sys`
@@ -491,9 +359,8 @@ pub fn evaluate_binary_history_row(
     let rl_by_star = map_donor_acc_to_stars(sys.donor_i, sys.rl);
     // `binary_evolve.f90:367-370`: periastron relative overflow from photospheric `b% r(i)`.
     let gap_by_star = [0_usize, 1_usize].map(|i| {
-        let denom = rl_by_star[i] * (1.0 - sys.eccentricity);
-        if denom > 0.0 {
-            (r_by_star[i] - denom) / denom
+        if rl_by_star[i] > 0.0 && 1.0 - sys.eccentricity > 0.0 {
+            eval_rl_relative_gap(r_by_star[i], rl_by_star[i], sys.eccentricity)
         } else {
             0.0
         }
@@ -573,10 +440,12 @@ pub fn evaluate_binary_history_row(
                 }
                 "rl_relative_overflow_1" => MesaCellValue::Float(gap_by_star[0]),
                 "rl_relative_overflow_2" => MesaCellValue::Float(gap_by_star[1]),
+                // `binary_history.f90:559-574, 434`: non-rotating stars yield
+                // IEEE `+Inf` formatted as `-1e99`; point masses return `0.0`.
                 "P_rot_div_P_orb_1" => {
                     let v = sys.star_ref(1).map_or(0.0, |s| {
                         let om = eval_surf_avg_rotation_info(s).omega;
-                        if om != 0.0 && sys.period > 0.0 {
+                        if sys.period > 0.0 {
                             2.0 * PI / om / sys.period
                         } else {
                             0.0
@@ -587,7 +456,7 @@ pub fn evaluate_binary_history_row(
                 "P_rot_div_P_orb_2" => {
                     let v = sys.star_ref(2).map_or(0.0, |s| {
                         let om = eval_surf_avg_rotation_info(s).omega;
-                        if om != 0.0 && sys.period > 0.0 {
+                        if sys.period > 0.0 {
                             2.0 * PI / om / sys.period
                         } else {
                             0.0
@@ -595,21 +464,13 @@ pub fn evaluate_binary_history_row(
                     });
                     MesaCellValue::Float(v)
                 }
+                // `binary_history.f90:575-578`, `run_binary_support.f90:449-453`:
+                // `t_sync_{1,2}` is `0.0` at model 0 and when `do_tidal_sync` is off.
                 "lg_t_sync_1" => {
-                    let ts = if sys.model_number > 0 {
-                        sys.t_sync[0]
-                    } else {
-                        eval_star_tsync_sec(sys, 1, m_by_star)
-                    };
-                    MesaCellValue::Float(safe_log10(ts.abs() / SECYER))
+                    MesaCellValue::Float(safe_log10(sys.t_sync[0].abs() / SECYER))
                 }
                 "lg_t_sync_2" => {
-                    let ts = if sys.model_number > 0 {
-                        sys.t_sync[1]
-                    } else {
-                        eval_star_tsync_sec(sys, 2, m_by_star)
-                    };
-                    MesaCellValue::Float(safe_log10(ts.abs() / SECYER))
+                    MesaCellValue::Float(safe_log10(sys.t_sync[1].abs() / SECYER))
                 }
                 "star_1_mass" => MesaCellValue::Float(m_by_star[0] / MSUN),
                 "lg_star_1_mass" => {
@@ -1140,6 +1001,8 @@ impl BinaryLogsWriter {
             }
         }
 
+        // `star/private/history.f90:472-480` & `run_binary_support.f90:252-258`:
+        // component `extra_cols`, then `binary` cols, then `extra_binary_cols`.
         for idx in 1..=2_usize {
             if !star_due[idx - 1] {
                 continue;
@@ -1147,11 +1010,21 @@ impl BinaryLogsWriter {
             if let (Some(sw), Some(star)) =
                 (self.star_writers[idx - 1].as_mut(), sys.star_ref(idx))
             {
+                let extra_bin_len = if self.append_to_star_history {
+                    extra_bin_cols.len()
+                } else {
+                    0
+                };
                 let mut combined_star_cols = Vec::with_capacity(
-                    appended_bin_cols.len() + extra_star_cols[idx - 1].len(),
+                    extra_star_cols[idx - 1].len()
+                        + appended_bin_cols.len()
+                        + extra_bin_len,
                 );
-                combined_star_cols.extend_from_slice(&appended_bin_cols);
                 combined_star_cols.extend_from_slice(&extra_star_cols[idx - 1]);
+                if self.append_to_star_history {
+                    combined_star_cols.extend_from_slice(&appended_bin_cols);
+                    combined_star_cols.extend_from_slice(extra_bin_cols);
+                }
                 sw.record_step_with_extra(
                     star,
                     is_first_step,

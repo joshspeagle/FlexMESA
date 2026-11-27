@@ -10,7 +10,7 @@
 suite = "star"
 case = "12M_pre_ms_to_core_collapse"
 issue = "#161"
-reason = "Core-collapse evolution exceeds wall-time guard with unported high-T opacity/rate and rotation controls (#161, #158)."
+reason = "Diagnostic run (unported &controls::use_other_alpha_mlt handler ignored) reaches fe_core_infall_limit in [2910] steps vs MESA [2916] within a 3000 s budget; log_center_T and log_center_Rho leave tolerance from history row 2902 (#161, #158)."
 [[gaps]]
 suite = "star"
 case = "15M_dynamo"
@@ -31,7 +31,7 @@ reason = "Exceeds 300 s wall-time guard with 2 unsupported rotation controls (ch
 suite = "star"
 case = "20M_pre_ms_to_core_collapse"
 issue = "#161"
-reason = "Core-collapse evolution exceeds wall-time guard with unported high-T opacity/rate and rotation controls (#161, #158)."
+reason = "Diagnostic run (unported &controls::use_other_alpha_mlt handler ignored) reaches fe_core_infall_limit in [2332] steps vs MESA [2383] within a 3000 s budget; log_center_T and log_center_Rho leave tolerance from history row 2208 (#161, #158)."
 [[gaps]]
 suite = "star"
 case = "20M_z2m2_high_rotation"
@@ -57,11 +57,6 @@ suite = "star"
 case = "ccsn_IIp"
 issue = "#161"
 reason = "Case history_columns.list requests unported hydro shock and bolometric colors columns."
-[[gaps]]
-suite = "star"
-case = "check_pulse_atm"
-issue = "#161"
-reason = "Atmosphere boundary reconstruction departs from MESA 26.4.1 (#161, #162)."
 [[gaps]]
 suite = "star"
 case = "conductive_flame"
@@ -146,12 +141,12 @@ reason = "Case history_columns.list requests unported MLT++ gradT_excess_alpha c
 suite = "star"
 case = "ns_h"
 issue = "#587"
-reason = "Within every MESA 26.4.1 history tolerance but takes a different number of steps than MESA per stage (FlexMESA [119, 370] vs MESA [119, 377]), which DECISIONS #70 does not count as a pass (#587)."
+reason = "Within every MESA 26.4.1 history tolerance but takes a different number of steps than MESA per stage (FlexMESA [119, 372] vs MESA [119, 377]), which DECISIONS #70 does not count as a pass (#587)."
 [[gaps]]
 suite = "star"
 case = "ns_he"
 issue = "#161"
-reason = "Neutron-star He envelope burning awaits solver_test_partials debug controls and microphysics parity (#161, #152)."
+reason = "Diagnostic run (8 solver_test_partials controls ignored) reaches power_nuc_burn_upper_limit in [546] steps as MESA [546]; rel_star_age and log_center_T are outside the final tolerances (#161, #152)."
 [[gaps]]
 suite = "star"
 case = "other_physics_hooks"
@@ -191,7 +186,7 @@ reason = "Upstream run_star_extras calls GYRE for the initial velocities; GYRE i
 suite = "star"
 case = "simplex_solar_calibration"
 issue = "#162"
-reason = "Simplex solar calibration optimizer times out under non-upstream simplex/solver loop (#162, #152)."
+reason = "Takes [953] steps as MESA [953] with every history column within tolerance, but stops on extras_check_model where upstream stops on max_model_number or extras_finish_step (#162)."
 [[gaps]]
 suite = "star"
 case = "split_burn_big_net"
@@ -211,22 +206,17 @@ reason = "Case history_columns.list requests unported colors add_abs_mag and hyd
 suite = "star"
 case = "wd_aic"
 issue = "#161"
-reason = "Accretion-induced collapse WD requires unbundled wd_aic.net and unsupported Coulomb/weak-rate controls (#161)."
+reason = "Diagnostic run (5 unsupported Coulomb and weak-rate controls ignored) ends on max_model_number after [1600] steps and 250 retries vs MESA [524] steps and 28 retries, without the upstream A=20 electron-capture runaway (#161)."
 [[gaps]]
 suite = "star"
 case = "wd_c_core_ignition"
 issue = "#161"
-reason = "Strict run hits power_nuc_burn_upper_limit at step 1 (23 retries vs MESA 668 steps, 9 retries) (#161, #152)."
-[[gaps]]
-suite = "star"
-case = "wd_cool_0.6M"
-issue = "#156"
-reason = "Strict run reaches log_center_temp_lower_limit (218 steps vs MESA 219, 3 retries matching MESA 26.4.1) with rel_star_age (-0.66%), num_zones (3.21%), and cooling-track deviations from step 37 (#156, #152)."
+reason = "Reaches power_nuc_burn_upper_limit in [719] steps (15 retries) vs MESA [668] (9 retries); final values within tolerance, track columns leave tolerance from history row 424 (#161, #152)."
 [[gaps]]
 suite = "star"
 case = "wd_he_shell_ignition"
 issue = "#587"
-reason = "Within every MESA 26.4.1 history tolerance but takes a different number of steps than MESA per stage (FlexMESA [1111] vs MESA [1112]), which DECISIONS #70 does not count as a pass (#587)."
+reason = "Within every MESA 26.4.1 history tolerance but takes a different number of steps than MESA per stage (FlexMESA [1104] vs MESA [1112]), which DECISIONS #70 does not count as a pass (#587)."
 [[gaps]]
 suite = "star"
 case = "wd_nova_burst"
@@ -241,7 +231,7 @@ reason = "Stable H-burning accreting WD awaits mass-change relaxation controls s
 suite = "star"
 case = "zams_to_cc_80"
 issue = "#161"
-reason = "80 Msun core-collapse evolution hits the 300 s wall-time guard with unported high-T rate, opacity, and rotation controls (#161, #158)."
+reason = "Diagnostic run (unported &controls::use_other_alpha_mlt handler ignored) reaches fe_core_infall_limit in [2466] steps vs MESA [2477] within a 3000 s budget; log_L, log_Teff, log_R and log_center_Rho leave tolerance from history row 2337 (#161, #158)."
 [[gaps]]
 suite = "binary"
 case = "double_bh"

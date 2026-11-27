@@ -140,6 +140,9 @@ fn init_binary_star_component(
         )?,
     };
     model.job = bundle.job.clone();
+    // `binary_controls` in `run_binary_support.f90:879-880`: binary writes photos.
+    model.controls.output.photo_interval = -1;
+    model.job.save_photo_when_terminate = false;
     Ok(model)
 }
 
@@ -283,8 +286,9 @@ pub fn run_binary_test_suite_case_with_options(
 }
 
 /// The per-star `before_step_loop` work a binary run performs
-/// (`star/job/run_star_support.f90:567-582`): `extend_net` when
-/// `auto_extend_net`. Returns whether any star changed net.
+/// (`star/job/run_star_support.f90:567-640`): `extend_net` when
+/// `auto_extend_net` and `set_cumulative_energy_error_each_step_if_age_less_than`.
+/// Returns whether any star changed net.
 ///
 /// # Errors
 /// Returns [`StarError::InvalidInput`] for `enable_adaptive_network`, whose
@@ -307,8 +311,36 @@ fn before_step_loop_for_stars(
         if s.job.auto_extend_net {
             changed |= flexmesa_star::extend_net::extend_net(s, case_dir)?;
         }
+        if s.star_age
+            < s.job.set_cumulative_energy_error_each_step_if_age_less_than
+        {
+            // `star/job/run_star_support.f90:636-640`: sets only
+            // `s% cumulative_energy_error`, leaving `cumulative_energy_error_old`
+            // untouched.
+            s.aux.cumulative_energy_error = s.job.new_cumulative_energy_error;
+        }
     }
     Ok(changed)
+}
+
+/// The per-star `after_step_loop` bookkeeping performed after an accepted binary
+/// step (`binary/private/run_binary_support.f90:691-704` ->
+/// `star/job/run_star_support.f90:689-692`).
+fn after_step_loop_for_stars(bin: &mut BinarySystem) {
+    let reset_at_step = |s: &mut StarModel| {
+        if i64::try_from(s.model_number)
+            .is_ok_and(|m| m == s.job.set_cumulative_energy_error_at_step)
+        {
+            // `star/job/run_star_support.f90:689-692`: sets only
+            // `s% cumulative_energy_error`, leaving `cumulative_energy_error_old`
+            // untouched.
+            s.aux.cumulative_energy_error = s.job.new_cumulative_energy_error;
+        }
+    };
+    reset_at_step(&mut bin.donor);
+    if let BinaryCompanion::Star(ref mut s2) = bin.companion {
+        reset_at_step(s2);
+    }
 }
 
 /// Executes a single coupled binary directory with explicit
@@ -345,9 +377,25 @@ pub fn run_binary_test_suite_case_with_extras(
             bctrl.m2_msun,
             inlist_opts,
         )?;
-        BinarySystem::from_controls_two_stars(donor, accretor, bctrl.clone())?
+        // `run_binary_support.f90:285-294`: reject colliding termination `.mod` paths.
+        if donor.job.save_model_when_terminate
+            && accretor.job.save_model_when_terminate
+        {
+            let f1 = donor.job.save_model_filename.trim();
+            let f2 = accretor.job.save_model_filename.trim();
+            if !f1.is_empty() && f1 == f2 {
+                return Err(StarError::InvalidInput(format!(
+                    "[{case_name}] both stars set save_model_when_terminate with colliding save_model_filename '{f1}'"
+                )));
+            }
+        }
+        BinarySystem::from_controls_two_stars_before_startup(
+            donor,
+            accretor,
+            bctrl.clone(),
+        )?
     } else {
-        BinarySystem::from_controls_point_mass(donor, bctrl)?
+        BinarySystem::from_controls_point_mass_before_startup(donor, bctrl)?
     };
 
     // `run_binary_support.f90:345-350`: `extras_binary_startup` followed by
@@ -430,13 +478,17 @@ pub fn run_binary_test_suite_case_with_extras(
                 contextualize_binary_step_error(&case_name, step_num, e)
             })?;
         dt_next = suggested_dt;
+        after_step_loop_for_stars(&mut bin);
         let has_term = bin.last_termination_reason.is_some();
         let is_terminating = has_term || bin.model_number >= step_limit;
         if let Some(ref mut lw) = logs_writer {
             let is_first = bin.model_number == 1;
             let (bin_due, star_due) =
                 lw.extra_history_due_flags(&bin, is_first, is_terminating);
-            let extra_bin_cols = if bin_due {
+            let need_extra_bin = bin_due
+                || (bin.controls.append_to_star_history
+                    && (star_due[0] || star_due[1]));
+            let extra_bin_cols = if need_extra_bin {
                 extras.extra_binary_history_columns(&bin)
             } else {
                 Vec::new()
@@ -504,4 +556,45 @@ pub fn run_binary_test_suite_case_with_extras(
         donor_retries: bin.donor.num_retries,
         accretor_retries,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use flexmesa_star::{load_zams_model, StarControls, StarJobControls};
+
+    #[test]
+    fn test_cumulative_energy_error_hooks_do_not_overwrite_old() {
+        let mut s1 = load_zams_model(
+            StarControls {
+                initial_mass: 1.0,
+                zbase: 0.02,
+                ..StarControls::default()
+            },
+            StarJobControls::default(),
+        )
+        .expect("1 Msun ZAMS");
+        s1.star_age = 10.0;
+        s1.model_number = 3;
+        s1.job
+            .set_cumulative_energy_error_each_step_if_age_less_than = 100.0;
+        s1.job.set_cumulative_energy_error_at_step = 3;
+        s1.job.new_cumulative_energy_error = -4.5e31;
+
+        let mut bin =
+            BinarySystem::new_point_mass(s1, 1.4, 2.0, 0.0, false, 0.0);
+        // `prep_and_settle_binary_star` resets energy-accounting state at init.
+        bin.donor.aux.cumulative_energy_error = 1.0e30;
+        bin.donor.aux.step_hist.cumulative_energy_error_old = 2.0e30;
+        let changed = before_step_loop_for_stars(&mut bin, Path::new("."))
+            .expect("before_step_loop_for_stars");
+        assert!(!changed);
+        assert_eq!(bin.donor.aux.cumulative_energy_error, -4.5e31);
+        assert_eq!(bin.donor.aux.step_hist.cumulative_energy_error_old, 2.0e30);
+
+        bin.donor.aux.cumulative_energy_error = 3.0e30;
+        after_step_loop_for_stars(&mut bin);
+        assert_eq!(bin.donor.aux.cumulative_energy_error, -4.5e31);
+        assert_eq!(bin.donor.aux.step_hist.cumulative_energy_error_old, 2.0e30);
+    }
 }

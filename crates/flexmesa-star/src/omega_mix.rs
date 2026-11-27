@@ -45,12 +45,20 @@ pub enum OmegaMixOutcome {
 
 #[inline]
 fn q_min(a: Quad, b: Quad) -> Quad {
-    if a < b { a } else { b }
+    if a < b {
+        a
+    } else {
+        b
+    }
 }
 
 #[inline]
 fn q_max(a: Quad, b: Quad) -> Quad {
-    if a > b { a } else { b }
+    if a > b {
+        a
+    } else {
+        b
+    }
 }
 
 /// Solves rotational angular momentum transport (`do_solve_omega_mix` in
@@ -277,9 +285,7 @@ fn run_solve_omega_mix_quad(
                     .copy_from_slice(&model.aux.am_sig_omega[..nz]);
                 am_sig_j_prev.copy_from_slice(&model.aux.am_sig_j[..nz]);
             }
-            crate::hydro_rotation::get_rotation_sigmas(
-                model, 0, nz, dt_total,
-            );
+            crate::hydro_rotation::get_rotation_sigmas(model, 0, nz, dt_total);
             if !model.aux.am_sig_omega[..nz]
                 .iter()
                 .chain(model.aux.am_sig_j[..nz].iter())
@@ -340,7 +346,8 @@ fn run_solve_omega_mix_quad(
                         break 'step_loop;
                     }
                 }
-                if let Some(hook) = model.aux.binary_other_torque_implicit.clone()
+                if let Some(hook) =
+                    model.aux.binary_other_torque_implicit.clone()
                 {
                     if let Err(e) = hook.apply(model) {
                         outcome = OmegaMixOutcome::Retry(format!(
@@ -435,10 +442,12 @@ fn run_solve_omega_mix_quad(
             let j_tot1 = Quad::from_f64(eval_j_tot(model, standalone_mode));
             let err_j = (j_tot0 - j_tot1).abs();
             let abs_j0 = j_tot0.abs();
-            let retry_tol =
-                Quad::from_f64(model.controls.mix_wind.angular_momentum_error_retry);
-            let warn_tol =
-                Quad::from_f64(model.controls.mix_wind.angular_momentum_error_warn);
+            let retry_tol = Quad::from_f64(
+                model.controls.mix_wind.angular_momentum_error_retry,
+            );
+            let warn_tol = Quad::from_f64(
+                model.controls.mix_wind.angular_momentum_error_warn,
+            );
             if err_j > retry_tol * abs_j0 {
                 let rel_err = if abs_j0 > Quad::ZERO {
                     (err_j / abs_j0).to_f64()
@@ -622,8 +631,9 @@ fn create_matrix_and_rhs(
             let irot_mid_00 = (irot + irot_p1) * 0.5;
             // Upstream adds `am_sig_omega(k) + am_sig_j(k)` in `dp` before
             // promoting to `qp` (`solve_omega_mix.f90:553`).
-            let am_sig_omega_00 =
-                Quad::from_f64(model.aux.am_sig_omega[k] + model.aux.am_sig_j[k]);
+            let am_sig_omega_00 = Quad::from_f64(
+                model.aux.am_sig_omega[k] + model.aux.am_sig_j[k],
+            );
             let c_om = am_sig_omega_00 * irot_mid_00;
             let del_om = omega - omega_p1;
 

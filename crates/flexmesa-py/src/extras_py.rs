@@ -672,6 +672,23 @@ impl PreLoadStarState {
     }
 }
 
+/// The `s% add_center_point_to_pulse_data` and
+/// `s% add_atmosphere_to_pulse_data` controls that extras pass to
+/// `star_export_pulse_data` (`star/private/pulse.f90:43-86`).
+fn set_pulse_data_controls(
+    d: &Bound<'_, PyDict>,
+    c: &StarControls,
+) -> PyResult<()> {
+    d.set_item(
+        "add_center_point_to_pulse_data",
+        c.add_center_point_to_pulse_data,
+    )?;
+    d.set_item(
+        "add_atmosphere_to_pulse_data",
+        c.add_atmosphere_to_pulse_data,
+    )
+}
+
 fn set_star_control_scalars(
     d: &Bound<'_, PyDict>,
     model: &StarModel,
@@ -693,9 +710,15 @@ fn set_star_control_scalars(
         "atm_t_tau_opacity",
         atm_t_tau_opacity_name(c.atm_t_tau_opacity),
     )?;
+    set_pulse_data_controls(d, c)?;
     d.set_item("log_l_upper_limit", c.log_l_upper_limit.unwrap_or(1.0e99))?;
     d.set_item("teff_lower_limit", c.teff_lower_limit.unwrap_or(-1.0e99))?;
     d.set_item("max_age", c.max_age)?;
+    d.set_item("max_years_for_timestep", c.max_years_for_timestep)?;
+    d.set_item(
+        "reduction_factor_for_max_timestep",
+        c.ts_stop.reduction_factor_for_max_timestep,
+    )?;
     d.set_item("mixing_length_alpha", c.mixing_length_alpha)?;
     d.set_item("accretion_h1", c.accretion_h1)?;
     d.set_item("reimers_scaling_factor", c.reimers_scaling_factor)?;
@@ -756,8 +779,15 @@ fn set_star_control_scalars(
     d.set_item("use_other_remove_surface", false)?;
     d.set_item("min_d_mix", c.min_d_mix)?;
     d.set_item("overshoot_d_min", c.mix_wind.overshoot_d_min)?;
+    set_star_overshoot_control_scalars(d, model)
+}
+
+fn set_star_overshoot_control_scalars(
+    d: &Bound<'_, PyDict>,
+    model: &StarModel,
+) -> PyResult<()> {
     let py = d.py();
-    let sets = &c.mix_wind.overshoot_sets;
+    let sets = &model.controls.mix_wind.overshoot_sets;
     d.set_item("overshoot_f", PyList::new(py, sets.iter().map(|s| s.f))?)?;
     d.set_item("overshoot_f0", PyList::new(py, sets.iter().map(|s| s.f0))?)?;
     d.set_item("overshoot_d0", PyList::new(py, sets.iter().map(|s| s.d0))?)?;
@@ -879,9 +909,18 @@ fn set_star_report_scalars(
     )?;
 
     let net_iso = PyDict::new(py);
+    let mut has_h1 = false;
+    let mut has_he3 = false;
+    let mut has_he4 = false;
     for (j, name) in model.iso_names.iter().enumerate() {
         let iso_lower = name.to_ascii_lowercase();
         let slot_1based = j + 1;
+        match iso_lower.as_str() {
+            "h1" => has_h1 = true,
+            "he3" => has_he3 = true,
+            "he4" => has_he4 = true,
+            _ => {}
+        }
         net_iso.set_item(&iso_lower, slot_1based)?;
         d.set_item(format!("net_iso_{iso_lower}"), slot_1based)?;
         if nz > 0 {
@@ -889,6 +928,20 @@ fn set_star_report_scalars(
                 format!("surface_{iso_lower}"),
                 surface_avg_x_slot(model, Some(j)),
             )?;
+        }
+    }
+    if nz > 0 {
+        // Upstream `get_star_report_data` sets `surface_h1`, `surface_he3`,
+        // and `surface_he4` unconditionally via `surface_avg_x` (returning
+        // `0.0` when absent from net; `star/private/report.f90:260-264`).
+        if !has_h1 {
+            d.set_item("surface_h1", surface_avg_x_slot(model, None))?;
+        }
+        if !has_he3 {
+            d.set_item("surface_he3", surface_avg_x_slot(model, None))?;
+        }
+        if !has_he4 {
+            d.set_item("surface_he4", surface_avg_x_slot(model, None))?;
         }
     }
     d.set_item("net_iso", net_iso)?;
@@ -1300,13 +1353,75 @@ fn apply_user_ctrl_update(
     Ok(true)
 }
 
+fn apply_overshoot_slot_0_update(
+    model: &mut StarModel,
+    val: &Bound<'_, PyAny>,
+) -> PyResult<()> {
+    let sub = val.cast::<PyDict>().map_err(|_| {
+        PyValueError::new_err("overshoot_slot_0 update must be a dict")
+    })?;
+    let slot = &mut model.controls.mix_wind.overshoot_sets[0];
+    for (sub_k, sub_v) in sub.iter() {
+        let field_name: String = sub_k.extract()?;
+        match field_name.as_str() {
+            "scheme" => slot.scheme = sub_v.extract::<String>()?,
+            "zone_type" => slot.zone_type = sub_v.extract::<String>()?,
+            "zone_loc" => slot.zone_loc = sub_v.extract::<String>()?,
+            "bdy_loc" => slot.bdy_loc = sub_v.extract::<String>()?,
+            "f" => slot.f = sub_v.extract::<f64>()?,
+            "f0" => slot.f0 = sub_v.extract::<f64>()?,
+            "d0" => slot.d0 = sub_v.extract::<f64>()?,
+            "delta0" => slot.delta0 = sub_v.extract::<f64>()?,
+            bad => {
+                return Err(PyValueError::new_err(format!(
+                    "unsupported overshoot_slot_0 field '{bad}'"
+                )));
+            }
+        }
+    }
+    Ok(())
+}
+
+fn apply_star_job_or_overshoot_update(
+    model: &mut StarModel,
+    key: &str,
+    val: &Bound<'_, PyAny>,
+) -> PyResult<bool> {
+    match key {
+        "dt" => model.dt = val.extract::<f64>()?,
+        "timestep_hold" => {
+            model.aux.step_hist.timestep_hold = val.extract::<usize>()?;
+        }
+        "max_years_for_timestep" => {
+            model.controls.max_years_for_timestep = val.extract::<f64>()?;
+        }
+        "job_new_mass" => model.job.new_mass = val.extract::<f64>()?,
+        "job_relax_initial_mass" => {
+            model.job.relax_initial_mass = val.extract::<bool>()?;
+        }
+        "job_set_uniform_initial_composition" => {
+            model.job.set_uniform_initial_composition =
+                val.extract::<bool>()?;
+        }
+        "job_initial_h1" => model.job.initial_h1 = val.extract::<f64>()?,
+        "job_initial_h2" => model.job.initial_h2 = val.extract::<f64>()?,
+        "job_initial_he3" => model.job.initial_he3 = val.extract::<f64>()?,
+        "job_initial_he4" => model.job.initial_he4 = val.extract::<f64>()?,
+        "overshoot_slot_0" => apply_overshoot_slot_0_update(model, val)?,
+        _ => return Ok(false),
+    }
+    Ok(true)
+}
+
 fn apply_star_updates(
     model: &mut StarModel,
     updates: &Bound<'_, PyDict>,
 ) -> PyResult<()> {
     for (key_obj, val) in updates.iter() {
         let key: String = key_obj.extract()?;
-        if apply_user_ctrl_update(model, &key, &val)? {
+        if apply_user_ctrl_update(model, &key, &val)?
+            || apply_star_job_or_overshoot_update(model, &key, &val)?
+        {
             continue;
         }
         match key.as_str() {

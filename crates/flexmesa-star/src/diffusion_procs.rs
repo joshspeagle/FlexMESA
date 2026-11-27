@@ -825,16 +825,18 @@ pub fn redistribute_mass(
                 }
                 total_moved += remaining_needed_mass;
                 for j in 0..nc {
-                    let dm =
-                        integrate_mass(k_source, j, dm0, dm1, diff_dm, sum_mass)?;
+                    let dm = integrate_mass(
+                        k_source, j, dm0, dm1, diff_dm, sum_mass,
+                    )?;
                     if dm < 0.0 {
                         return Err(FixupDiagnostics {
                             bad_j: Some(j),
                             bad_k: Some(k),
                             bad_x: 0.0,
                             bad_xsum: 0.0,
-                            reason: "negative integrated dm in redistribute_mass"
-                                .into(),
+                            reason:
+                                "negative integrated dm in redistribute_mass"
+                                    .into(),
                         });
                     }
                     x_new[k * m + j] += dm / cell_dm_k;
@@ -1075,13 +1077,7 @@ pub fn setup_struct_info(
             let z1 = abar[k] * free_e[k];
             for i in 0..nc {
                 typical_charge[k * nc + i] = get_typical_charge(
-                    class_z[i],
-                    abar[k],
-                    z1,
-                    t[k],
-                    log10_t,
-                    rho[k],
-                    log10_rho,
+                    class_z[i], abar[k], z1, t[k], log10_t, rho[k], log10_rho,
                 );
             }
         }
@@ -1113,27 +1109,27 @@ pub fn setup_struct_info(
         }
         for _pass in 0..nsmooth_typical_charge {
             for i in 0..nc {
-                typical_charge[nzlo * nc + i] =
-                    (2.0 * typical_charge[nzlo * nc + i]
-                        + typical_charge[(nzlo + 1) * nc + i])
-                        / 3.0;
+                typical_charge[nzlo * nc + i] = (2.0
+                    * typical_charge[nzlo * nc + i]
+                    + typical_charge[(nzlo + 1) * nc + i])
+                    / 3.0;
                 for k in (nzlo + 1)..=(nzhi - 2) {
-                    typical_charge[k * nc + i] =
-                        (typical_charge[(k - 1) * nc + i]
-                            + typical_charge[k * nc + i]
-                            + typical_charge[(k + 1) * nc + i])
-                            / 3.0;
-                }
-                typical_charge[(nzhi - 1) * nc + i] =
-                    (2.0 * typical_charge[(nzhi - 1) * nc + i]
-                        + typical_charge[(nzhi - 2) * nc + i])
+                    typical_charge[k * nc + i] = (typical_charge
+                        [(k - 1) * nc + i]
+                        + typical_charge[k * nc + i]
+                        + typical_charge[(k + 1) * nc + i])
                         / 3.0;
+                }
+                typical_charge[(nzhi - 1) * nc + i] = (2.0
+                    * typical_charge[(nzhi - 1) * nc + i]
+                    + typical_charge[(nzhi - 2) * nc + i])
+                    / 3.0;
                 for k in ((nzlo + 1)..=(nzhi - 2)).rev() {
-                    typical_charge[k * nc + i] =
-                        (typical_charge[(k - 1) * nc + i]
-                            + typical_charge[k * nc + i]
-                            + typical_charge[(k + 1) * nc + i])
-                            / 3.0;
+                    typical_charge[k * nc + i] = (typical_charge
+                        [(k - 1) * nc + i]
+                        + typical_charge[k * nc + i]
+                        + typical_charge[(k + 1) * nc + i])
+                        / 3.0;
                 }
                 typical_charge[nzhi * nc + i] =
                     typical_charge[(nzhi - 1) * nc + i];
@@ -1194,8 +1190,7 @@ pub fn set_new_xa(
                     "non-positive or non-finite X_init({cls},{k})={xi0:e} in set_new_xa"
                 )));
             }
-            xa[k * species + j] =
-                xa[k * species + j] * x[k * m + cls] / xi0;
+            xa[k * species + j] = xa[k * species + j] * x[k * m + cls] / xi0;
         }
         let mut tmp = 0.0;
         for j in 0..species {

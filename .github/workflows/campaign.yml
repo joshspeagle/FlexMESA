@@ -16,7 +16,7 @@ on:
       case_timeout_sec:
         description: "Per-case timeout in seconds"
         required: false
-        default: "1500"
+        default: "3000"
       harness_shards:
         description: "Number of parallel shards of the full harness"
         required: false
@@ -158,7 +158,7 @@ jobs:
           N_SHARDS: ${{ inputs.harness_shards || '16' }}
           JOBS: ${{ inputs.harness_jobs || '2' }}
           MAX_RSS: ${{ inputs.max_rss_gb || '5.5' }}
-          TIMEOUT: ${{ inputs.case_timeout_sec || '1500' }}
+          TIMEOUT: ${{ inputs.case_timeout_sec || '3000' }}
           SHORT_BUDGET: ${{ inputs.short_budget_sec || '' }}
         run: |
           OUT_DIR="${{ runner.temp }}/campaign-harness-shard"

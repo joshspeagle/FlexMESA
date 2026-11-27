@@ -869,29 +869,27 @@ fn do_split(
     let dm_parent = rho * dv;
     let mut rho_l = rho - (grad_rho * dr) / 4.0;
     let mut rho_r = rho + (grad_rho * dr) / 4.0;
-    let (mut dm_l, mut dm_r) = if grad_rho == 0.0
-        || rho_l <= 0.0
-        || rho_r <= 0.0
-    {
-        rho_l = rho;
-        let dml = rho_l * dvl;
-        (dml, dm_parent - dml)
-    } else {
-        let dml0 = rho_l * dvl;
-        let dmr0 = rho_r * dvr;
-        let f = dm_parent / (dml0 + dmr0);
-        rho_l *= f;
-        rho_r *= f;
-        let dml = rho_l * dvl;
-        let dmr = rho_r * dvr;
-        if (dml + dmr - dm_parent).abs() > 1.0e-14 * dm_parent {
-            return Err(StarError::InvalidInput(format!(
+    let (mut dm_l, mut dm_r) =
+        if grad_rho == 0.0 || rho_l <= 0.0 || rho_r <= 0.0 {
+            rho_l = rho;
+            let dml = rho_l * dvl;
+            (dml, dm_parent - dml)
+        } else {
+            let dml0 = rho_l * dvl;
+            let dmr0 = rho_r * dvr;
+            let f = dm_parent / (dml0 + dmr0);
+            rho_l *= f;
+            rho_r *= f;
+            let dml = rho_l * dvl;
+            let dmr = rho_r * dvr;
+            if (dml + dmr - dm_parent).abs() > 1.0e-14 * dm_parent {
+                return Err(StarError::InvalidInput(format!(
                 "do_split mass mismatch at cell {i1}: (dML + dMR - dM)/dM = {}",
                 (dml + dmr - dm_parent) / dm_parent
             )));
-        }
-        (dml, dm_parent - dml)
-    };
+            }
+            (dml, dm_parent - dml)
+        };
 
     let min_dm = model.controls.mix_wind.split_merge_amr_dq_min * model.xmstar;
     if dm_l < min_dm || dm_r < min_dm {

@@ -7,8 +7,8 @@ use flexmesa_const::LN10;
 use crate::controls::StarError;
 use crate::controls_mix_wind::{MixWindControls, NUM_MESH_LOGX};
 use crate::mesh_functions::{
-    MeshFunctionData, get_net_iso_0based,
-    set_mesh_function_data_with_controls_and_xa,
+    get_net_iso_0based, set_mesh_function_data_with_controls_and_xa,
+    MeshFunctionData,
 };
 use crate::model::StarModel;
 
@@ -564,12 +564,9 @@ mod tests {
         // Activating only `mesh_dlog_photo_dlogp_extra` must not refine a pure `pnhe4` gradient.
         let mut mw_photo_only = mw_base.clone();
         mw_photo_only.mesh_dlog_photo_dlogp_extra = 0.2;
-        let dg_photo = set_delta_gval_max_with_controls(
-            &model,
-            &mw_photo_only,
-            &model.xa,
-        )
-        .expect("photo only");
+        let dg_photo =
+            set_delta_gval_max_with_controls(&model, &mw_photo_only, &model.xa)
+                .expect("photo only");
         assert!(
             dg_photo.iter().all(|&v| (v - 1.0).abs() < 1.0e-12),
             "photo extra must ignore slot 19 (pnhe4): {dg_photo:?}"
@@ -578,12 +575,9 @@ mod tests {
         // Activating `mesh_dlog_pnhe4_dlogp_extra` must refine slot 19 (`pnhe4`).
         let mut mw_pnhe4_only = mw_base;
         mw_pnhe4_only.mesh_dlog_pnhe4_dlogp_extra = 0.2;
-        let dg_pnhe4 = set_delta_gval_max_with_controls(
-            &model,
-            &mw_pnhe4_only,
-            &model.xa,
-        )
-        .expect("pnhe4 only");
+        let dg_pnhe4 =
+            set_delta_gval_max_with_controls(&model, &mw_pnhe4_only, &model.xa)
+                .expect("pnhe4 only");
         assert!(
             dg_pnhe4[1] < 0.25 && dg_pnhe4[2] < 0.25,
             "pnhe4 extra must refine slot 19 (pnhe4): {dg_pnhe4:?}"

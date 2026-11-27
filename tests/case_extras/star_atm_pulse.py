@@ -383,6 +383,10 @@ class CheckPulseAtmStarExtras:
     `star/test_suite/check_pulse_atm/src/run_star_extras.f90:39-324`.
     """
 
+    # Every snapshot carries a `star_model` handle for
+    # `star_export_pulse_data` (`:122-127`).
+    wants_star_model = True
+
     def __init__(self) -> None:
         self.failed = False
         self.last_t_rms: float | None = None
@@ -443,22 +447,59 @@ class CheckPulseAtmStarExtras:
             self.failed = True
         return res
 
-    def extras_check_model(self, state: dict[str, Any]) -> str:
-        """Keep going between 5-step checks; require `#162`/`#161` on export
-        and atmosphere-control cycling steps (`:100-226`).
+    def extras_check_model(
+        self, state: dict[str, Any]
+    ) -> str | tuple[str, dict[str, Any]]:
+        r"""Every 5 models export the model as FGONG, check its atmosphere
+        $T(\tau)$ against `x_ctrl(1)` and cycle `atm_T_tau_relation`; every
+        20 models also cycle `atm_T_tau_opacity` (`:100-226`).
+
+        Args:
+            state: Hook snapshot with `model_number`, `x_ctrl`,
+                `atm_t_tau_relation`, `atm_t_tau_opacity`,
+                `add_center_point_to_pulse_data`,
+                `add_atmosphere_to_pulse_data` and the `star_model` handle.
+
+        Returns:
+            `"keep_going"`, with the cycled controls on export steps.
         """
         model_number = int(state["model_number"])
-        if model_number % 5 != 0:
-            return "keep_going"
-        next_rel = cycle_atm_t_tau_relation(str(state["atm_t_tau_relation"]))
+        changes: dict[str, Any] = {}
+        if model_number % 5 == 0:
+            rel = str(state["atm_t_tau_relation"])
+            # `star_export_pulse_data(id, 'FGONG', filename,
+            # s% add_center_point_to_pulse_data,
+            # s% keep_surface_point_for_pulse_data,
+            # s% add_atmosphere_to_pulse_data, ierr)` (`:122-127`);
+            # `keep_surface_point_for_pulse_data` is not a FlexMESA control,
+            # so it has its default `.false.`
+            # (`star/defaults/controls.defaults:602`).
+            fgong_text = state["star_model"].fgong_pulse_text(
+                bool(state["add_center_point_to_pulse_data"]),
+                False,
+                bool(state["add_atmosphere_to_pulse_data"]),
+            )
+            # `tau = s% atm_build_tau_outer` (`:170`), not a FlexMESA
+            # control: its default `1d-3`
+            # (`star/defaults/controls.defaults:4741`).
+            t_rms = self.compute_fgong_t_rms(
+                fgong_text, 1.0e-3, rel, float(state["x_ctrl"][0])
+            )
+            if t_rms > float(state["x_ctrl"][0]):
+                print(
+                    "T_rms larger than target: ",
+                    rel,
+                    t_rms,
+                    float(state["x_ctrl"][0]),
+                )
+            changes["atm_t_tau_relation"] = cycle_atm_t_tau_relation(rel)
         if model_number % 20 == 0:
-            _ = cycle_atm_t_tau_opacity(str(state["atm_t_tau_opacity"]))
-        raise NotImplementedError(
-            f"check_pulse_atm: extras_check_model at model {model_number} "
-            "calls star_export_pulse_data('FGONG') (:122-127, #162) and "
-            f"cycles s% atm_T_tau_relation to {next_rel!r} (:195-224, #161, "
-            "#231), which PyStarExtrasAdapter does not expose"
-        )
+            changes["atm_t_tau_opacity"] = cycle_atm_t_tau_opacity(
+                str(state["atm_t_tau_opacity"])
+            )
+        if changes:
+            return ("keep_going", changes)
+        return "keep_going"
 
     def extra_profile_columns(
         self, state: dict[str, Any]
@@ -471,7 +512,9 @@ class CheckPulseAtmStarExtras:
         return "keep_going"
 
     def extras_after_evolve(self, _state: dict[str, Any]) -> None:
-        """Complete post-evolution hook (`:73-85`)."""
+        """Report the check result (`:73-85`)."""
+        if not self.failed:
+            print("all values are within tolerance")
 
 
 def _parse_fgong_tokens(body: str, count: int) -> list[float]:

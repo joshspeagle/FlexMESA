@@ -227,32 +227,88 @@ def test_t_tau_gradr_rms_profile_column_and_cycling_guard() -> None:
     )
 
 
-def test_check_pulse_atm_cycling_guards() -> None:
-    """`CheckPulseAtmStarExtras` guards 5-step and 20-step pulse/atm hooks."""
+def _fgong_v1300_payload(teff: float, t_face: float) -> str:
+    """Two-point FGONG v1300 text with `Teff`, face `T`, `kappa`, `rho`."""
+    globals_15 = [0.0] * 15
+    globals_15[13] = teff
+    pt0 = [0.0] * 40
+    pt1 = [0.0] * 40
+    pt0[0], pt0[2], pt0[4], pt0[7] = 100.0, t_face, 1.0e-6, 1.0
+    pt1[0], pt1[2], pt1[4], pt1[7] = 0.0, t_face, 1.0e-6, 1.0
+    nums = [*globals_15, *pt0, *pt1]
+    rows = [
+        "".join(f"{val:16.9E}" for val in nums[i : i + 5])
+        for i in range(0, len(nums), 5)
+    ]
+    return "\n".join(["h1", "h2", "h3", "h4", "   2  15  40 1300", *rows])
+
+
+class _FakeFgongModel:
+    """Stands in for `StarModelHandle.fgong_pulse_text`, recording flags."""
+
+    def __init__(self, text: str) -> None:
+        self.text = text
+        self.calls: list[tuple[bool, bool, bool]] = []
+
+    def fgong_pulse_text(
+        self,
+        add_center_point: bool,
+        keep_surface_point: bool,
+        add_atmosphere: bool,
+    ) -> str:
+        self.calls.append(
+            (add_center_point, keep_surface_point, add_atmosphere)
+        )
+        return self.text
+
+
+def test_check_pulse_atm_cycles_relation_every_5_and_opacity_every_20() -> None:
+    """`CheckPulseAtmStarExtras` exports FGONG and cycles `atm_T_tau_*`."""
     h = star_extras.CheckPulseAtmStarExtras()
+    assert h.wants_star_model is True
     h.extras_startup({}, False)
     assert h.extras_start_step({}) == "keep_going"
     assert h.extras_check_model({"model_number": 4}) == "keep_going"
-    with pytest.raises(NotImplementedError, match="#162"):
-        h.extras_check_model(
-            {"model_number": 5, "atm_t_tau_relation": "Eddington"}
-        )
-    with pytest.raises(NotImplementedError, match="#162"):
-        h.extras_check_model(
-            {
-                "model_number": 20,
-                "atm_t_tau_relation": "solar_Hopf",
-                "atm_t_tau_opacity": "varying",
-            }
-        )
+    model = _FakeFgongModel(_fgong_v1300_payload(6000.0, 5000.0))
+    base = {
+        "x_ctrl": [1.0e10],
+        "atm_t_tau_opacity": "varying",
+        "add_center_point_to_pulse_data": True,
+        "add_atmosphere_to_pulse_data": True,
+        "star_model": model,
+    }
+    assert h.extras_check_model(
+        {**base, "model_number": 5, "atm_t_tau_relation": "Trampedach_solar"}
+    ) == ("keep_going", {"atm_t_tau_relation": "Eddington"})
+    assert model.calls == [(True, False, True)]
+    assert h.extras_check_model(
+        {**base, "model_number": 20, "atm_t_tau_relation": "Krishna_Swamy"}
+    ) == (
+        "keep_going",
+        {
+            "atm_t_tau_relation": "Trampedach_solar",
+            "atm_t_tau_opacity": "fixed",
+        },
+    )
+    assert h.failed is False
     with pytest.raises(ValueError, match="Invalid atm_T_tau_opacity"):
         h.extras_check_model(
             {
+                **base,
                 "model_number": 20,
                 "atm_t_tau_relation": "Eddington",
                 "atm_t_tau_opacity": "invalid",
             }
         )
+    h.extras_check_model(
+        {
+            **base,
+            "x_ctrl": [0.0],
+            "model_number": 10,
+            "atm_t_tau_relation": "Eddington",
+        }
+    )
+    assert h.failed is True
 
 
 def test_check_pulse_atm_fgong_v1300_parser() -> None:

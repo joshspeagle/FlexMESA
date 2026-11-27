@@ -37,8 +37,7 @@ use crate::controls::{EnergyEqnOption, StarError};
 use crate::hydro_eqns::HenyeySystem;
 use crate::model::StarModel;
 use crate::star_ad::{
-    StarAdExt, StarAdOrder1, I_LND_00, I_LNT_00, I_L_00, I_L_P1, I_V_00,
-    I_V_P1,
+    StarAdExt, StarAdOrder1, I_LND_00, I_LNT_00, I_L_00, I_L_P1, I_V_00, I_V_P1,
 };
 
 /// Evaluates artificial viscosity pressure $P_{\mathrm{vsc},k}$ in cell `k`
@@ -96,7 +95,9 @@ pub fn eval_cell_pressure_for_work_ad(
 #[must_use]
 pub(crate) fn eval_l_theta(model: &StarModel, k: usize) -> f64 {
     let logt = model.ln_t[k] / LN10;
-    if model.controls.is_velocity_time_centered(model.model_number_old)
+    if model
+        .controls
+        .is_velocity_time_centered(model.model_number_old)
         && model.controls.include_l_in_velocity_time_centering
         && logt
             <= model
@@ -420,11 +421,10 @@ pub fn set_energy_eqn_scal(
                     "set_energy_eqn_scal: total_internal_energy_old is not set for this step; upstream reads it undefined (star_utils.f90:3693, evolve.f90:427-436; DECISIONS #43)",
                 ))
             })?;
-        let cell_energy_fraction_start = model.energy_start[k] * model.dm[k]
-            / total_internal_energy_old;
-        scal = scal.min(
-            cell_energy_fraction_start * model.controls.dedt_eqn_r_scale,
-        );
+        let cell_energy_fraction_start =
+            model.energy_start[k] * model.dm[k] / total_internal_energy_old;
+        scal = scal
+            .min(cell_energy_fraction_start * model.controls.dedt_eqn_r_scale);
     }
     Ok(scal * model.dt / model.energy_start[k])
 }
@@ -454,10 +454,8 @@ pub fn eval_surface_and_center_work(model: &StarModel) -> (f64, f64) {
         && model.controls.energy_eqn_option == EnergyEqnOption::EpsGrav;
 
     let p_in = model.peos_start.get(nz - 1).copied().unwrap_or(0.0);
-    let work_inward_at_center = FOUR_PI
-        * flexmesa_math::pow2(model.r_center)
-        * p_in
-        * model.v_center;
+    let work_inward_at_center =
+        FOUR_PI * flexmesa_math::pow2(model.r_center) * p_in * model.v_center;
 
     let work_outward_at_surface = if u_flag_only {
         crate::riemann_eqns::eval1_work_u_flag_ad(model, 0).val
@@ -590,7 +588,8 @@ pub(crate) fn do1_energy_eqn_with_ergs_error(
                 )
                 .0
             };
-            -dl_dm + sources + others - d_eturb_dt - dwork_dm + model.eps_grav_ad[k]
+            -dl_dm + sources + others - d_eturb_dt - dwork_dm
+                + model.eps_grav_ad[k]
         } else {
             has_dedt_dxa = true;
             let de_dt = setup_de_dt(model, k, dt);
@@ -636,10 +635,9 @@ pub(crate) fn do1_energy_eqn_with_ergs_error(
             d_dwork.dxa00 = dxa00;
             -dl_dm + sources + others - d_eturb_dt - dwork_dm - de_dt
         } else {
-            let (dwork_dm, dxa) =
-                crate::hydro_work::eval_v_flag_dwork_dm_ad(
-                    model, k, false, vel_tc,
-                );
+            let (dwork_dm, dxa) = crate::hydro_work::eval_v_flag_dwork_dm_ad(
+                model, k, false, vel_tc,
+            );
             d_dwork = dxa;
             let dpe_dt = crate::hydro_work::eval_cell_dpe_dt_ad(model, k, dt);
             -dl_dm + sources + others - d_eturb_dt - dwork_dm - dpe_dt - de_dt

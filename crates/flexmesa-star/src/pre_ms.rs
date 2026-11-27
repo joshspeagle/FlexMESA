@@ -21,8 +21,8 @@ use flexmesa_const::{
     PI, PI4, R_SUN, SECYER, STANDARD_CGRAV,
 };
 use flexmesa_eos::{
-    eos_dt_get, eos_dt_get_rho, EosConfig, EosEvalOutput, HelmTable,
-    I_CHI_RHO, I_CHI_T, I_CP, I_ETA, I_GRAD_AD, I_LN_FREE_E, I_LN_PGAS,
+    eos_dt_get, eos_dt_get_rho, EosConfig, EosEvalOutput, HelmTable, I_CHI_RHO,
+    I_CHI_T, I_CP, I_ETA, I_GRAD_AD, I_LN_FREE_E, I_LN_PGAS,
 };
 use flexmesa_kap::{get_kap_results, KapConfig};
 use flexmesa_math::{exp, exp10, log, log10, pow, pow2, pow3, pow4};
@@ -494,16 +494,17 @@ fn build1_pre_ms_model(
     #[allow(clippy::cast_possible_truncation)]
     let nz_est =
         (1.0 + (log_p - job.pre_ms_log_p_surf_limit) / dlog_pgas) as i64;
-    let nz0 = usize::try_from(nz_est).ok().filter(|&n| n >= 1).ok_or_else(
-        || {
+    let nz0 = usize::try_from(nz_est)
+        .ok()
+        .filter(|&n| n >= 1)
+        .ok_or_else(|| {
             // Upstream then writes `q(nz)` out of bounds; there is no
             // defined behaviour to reproduce (DECISIONS #43, deferred #398).
             StarError::InvalidInput(format!(
                 "build1_pre_ms_model: estimated nz = {nz_est} < 1 \
                  (`star/private/pre_ms_model.f90:456,499-500`)"
             ))
-        },
-    )?;
+        })?;
 
     // Temperature at nz, K&W 10.9 assuming a convective core
     // (`pre_ms_model.f90:459-461`).
@@ -1012,8 +1013,9 @@ pub fn build_pre_ms_model_with_configs(
     model.dt_old = model.dt;
     // `model_builder` (`star/private/init.f90:1042-1043`).
     if model.controls.max_years_for_timestep > 0.0 {
-        model.dt_next =
-            model.dt_next.min(SECYER * model.controls.max_years_for_timestep);
+        model.dt_next = model
+            .dt_next
+            .min(SECYER * model.controls.max_years_for_timestep);
     }
 
     // Copy the last model (`pre_ms_model.f90:272-281`).

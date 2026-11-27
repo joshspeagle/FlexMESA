@@ -22,9 +22,9 @@ pub use crate::hydro_temperature::do1_temperature_eqn;
 use crate::hydro_vars::set_hydro_vars;
 use crate::model::StarModel;
 use crate::star_ad::{
-    I_HP_00, I_HP_M1, I_HP_P1, I_L_00, I_L_M1, I_L_P1, I_LND_00, I_LND_M1,
+    StarAdExt, StarAdOrder1, I_HP_00, I_HP_M1, I_HP_P1, I_LND_00, I_LND_M1,
     I_LND_P1, I_LNR_00, I_LNR_M1, I_LNR_P1, I_LNT_00, I_LNT_M1, I_LNT_P1,
-    I_V_00, I_V_M1, I_V_P1, I_W_00, I_W_M1, I_W_P1, StarAdExt, StarAdOrder1,
+    I_L_00, I_L_M1, I_L_P1, I_V_00, I_V_M1, I_V_P1, I_W_00, I_W_M1, I_W_P1,
 };
 
 /// Assembled 1D Henyey residual vector and scaled block-tridiagonal Jacobian
@@ -607,8 +607,11 @@ pub fn do1_chem_eqns(model: &StarModel, k: usize, sys: &mut HenyeySystem) {
     // `set_dxdt_mix` (`star/private/mix_info.f90:2318-2345`).
     let dflux00_dxm1 = if k > 0 { -sig_00 } else { 0.0 };
     let dflux00_dx00 = if k > 0 { sig_00 } else { 0.0 };
-    let (dfluxp1_dx00, dfluxp1_dxp1) =
-        if k + 1 < nz { (-sig_p1, sig_p1) } else { (0.0, 0.0) };
+    let (dfluxp1_dx00, dfluxp1_dxp1) = if k + 1 < nz {
+        (-sig_p1, sig_p1)
+    } else {
+        (0.0, 0.0)
+    };
     let d_dxdt_mix_dx00 = (dfluxp1_dx00 - dflux00_dx00) / dm_k;
     let d_dxdt_mix_dxm1 = -dflux00_dxm1 / dm_k;
     let d_dxdt_mix_dxp1 = dfluxp1_dxp1 / dm_k;
@@ -684,10 +687,22 @@ pub fn do1_chem_eqns(model: &StarModel, k: usize, sys: &mut HenyeySystem) {
         if model.controls.do_mix {
             sys.add_partial(k, i_equ, k, i_var, d_dxdt_mix_dx00 / eqn_scale);
             if k > 0 {
-                sys.add_partial(k, i_equ, k - 1, i_var, d_dxdt_mix_dxm1 / eqn_scale);
+                sys.add_partial(
+                    k,
+                    i_equ,
+                    k - 1,
+                    i_var,
+                    d_dxdt_mix_dxm1 / eqn_scale,
+                );
             }
             if k + 1 < nz {
-                sys.add_partial(k, i_equ, k + 1, i_var, d_dxdt_mix_dxp1 / eqn_scale);
+                sys.add_partial(
+                    k,
+                    i_equ,
+                    k + 1,
+                    i_var,
+                    d_dxdt_mix_dxp1 / eqn_scale,
+                );
             }
         }
     }

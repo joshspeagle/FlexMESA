@@ -446,7 +446,8 @@ fn test_star_job_filename_of_special_rate_and_custom_aesopus_inlist() {
 }
 
 #[test]
-fn test_filename_of_special_rate_wires_resolve_model_net_and_invalidates_micro_cache() {
+fn test_filename_of_special_rate_wires_resolve_model_net_and_invalidates_micro_cache(
+) {
     let mut model = flexmesa_star::zams::load_zams_model(
         flexmesa_star::StarControls::default(),
         flexmesa_star::StarJobControls::default(),

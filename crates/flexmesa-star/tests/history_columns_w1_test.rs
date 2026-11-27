@@ -15,18 +15,18 @@
 use std::fs;
 
 use flexmesa_const::{
-    FOUR_PI, L_SUN, LN10, M_SUN, MixingType, PI, R_SUN, SECYER,
+    MixingType, FOUR_PI, LN10, L_SUN, M_SUN, PI, R_SUN, SECYER,
 };
 use flexmesa_star::report_utils::{
     eval_shock_info, eval_surface_w_div_w_kep, gravity_darkening_l_coeff,
     gravity_darkening_table, gravity_darkening_teff_coeff,
 };
 use flexmesa_star::{
-    HistoryColumnSpec, MesaCellValue, PrimaryStateBuffer, StarControls,
-    StarJobControls, StarModel, StepReportContext, do_adjust_mass_step,
-    evaluate_star_history_row, get_shock_mass_msun, load_zams_model,
-    parse_star_history_columns, safe_log10, set_gradt_excess_alpha,
-    set_hydro_vars,
+    do_adjust_mass_step, evaluate_star_history_row, get_shock_mass_msun,
+    load_zams_model, parse_star_history_columns, safe_log10,
+    set_gradt_excess_alpha, set_hydro_vars, HistoryColumnSpec, MesaCellValue,
+    PrimaryStateBuffer, StarControls, StarJobControls, StarModel,
+    StepReportContext,
 };
 use flexmesa_utils::require_mesa_test_input_path;
 

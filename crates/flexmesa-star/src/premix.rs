@@ -32,6 +32,10 @@ pub fn do_conv_premix(
     }
     model.aux.eps_pre_mix.fill(0.0);
     if nz < 2 || model.species == 0 {
+        // Match `star/private/conv_premix.f90:176` (and
+        // `crate::conv_premix::do_conv_premix`): `do_conv_premix` always sets
+        // `need_to_setvars = .true.` before returning.
+        model.aux.need_to_setvars = true;
         return Ok(0);
     }
 

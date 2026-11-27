@@ -851,6 +851,18 @@ pub fn run_inlist_stage_with_logs(
     Ok(rep)
 }
 
+fn is_abnormal_termination(code: &str) -> bool {
+    matches!(
+        code,
+        "min_timestep_limit"
+            | "max_number_retries"
+            | "redo_limit"
+            | "dt_is_zero"
+            | "varcontrol_target < min_allowed_varcontrol_target"
+            | "invalid dt_next in timestep_controller"
+    )
+}
+
 fn run_inlist_stage_with_logs_inner(
     model: &mut StarModel,
     bundle: &InlistBundle,
@@ -874,28 +886,35 @@ fn run_inlist_stage_with_logs_inner(
     let mut terminated_by_extras = false;
     let mut last_default_photo_model: Option<usize> = None;
 
-    let job_step_cap = (model.job.steps_to_take_before_terminate >= 0)
-        .then_some(model.job.steps_to_take_before_terminate as usize);
-    let cap = max_steps_cap
-        .into_iter()
-        .chain(job_step_cap)
-        .min()
-        .unwrap_or(50_000);
-    if job_step_cap.is_some_and(|b| b <= cap) {
-        termination_code = String::from("steps_to_take_before_terminate");
+    // `star/job/run_star_support.f90:2014-2019`: positive/zero
+    // `steps_to_take_before_terminate` sets `max_model_number = model_number + steps`
+    // and MESA still enters `do_evolve_one_step` at least once (`run_star_support.f90:108-116`),
+    // stopping via `do_check_limits` with `"max_model_number"`.
+    if model.job.steps_to_take_before_terminate >= 0 {
+        model.controls.max_model_number =
+            Some(model.model_number.saturating_add(
+                model.job.steps_to_take_before_terminate as usize,
+            ));
     }
+    let cap = max_steps_cap.unwrap_or_else(|| {
+        let min_job_cap = if model.job.steps_to_take_before_terminate >= 0 {
+            (model.job.steps_to_take_before_terminate as usize)
+                .saturating_add(1)
+        } else {
+            0
+        };
+        50_000_usize.max(min_job_cap)
+    });
     let do_remesh =
         model.controls.okay_to_remesh && model.controls.mesh_delta_coeff > 0.0;
     let op_split_burn = model.controls.op_split_burn;
 
     let init_hr = extract_history_row(model);
     if cap == 0 {
-        if job_step_cap != Some(0) {
-            if let LimitCheckOutcome::Terminate { code, .. } =
-                do_check_limits(model, None, true)?
-            {
-                termination_code = code;
-            }
+        if let LimitCheckOutcome::Terminate { code, .. } =
+            do_check_limits(model, None, true)?
+        {
+            termination_code = code;
         }
         if let Some(lw) = logs_writer.as_deref_mut() {
             record_logs_step_with_extras(lw, model, extras, true, true)?;
@@ -1098,15 +1117,7 @@ fn run_inlist_stage_with_logs_inner(
 
     extras.extras_after_evolve(model)?;
 
-    let abnormal_termination = matches!(
-        termination_code.as_str(),
-        "min_timestep_limit"
-            | "max_number_retries"
-            | "redo_limit"
-            | "dt_is_zero"
-            | "varcontrol_target < min_allowed_varcontrol_target"
-            | "invalid dt_next in timestep_controller"
-    );
+    let abnormal_termination = is_abnormal_termination(&termination_code);
     let term_str_ok = termination_code_string_okay(
         &model.job.required_termination_code_string,
         &termination_code,
@@ -1462,15 +1473,8 @@ pub fn run_test_suite_case_with_extras(
                     )?;
                 last_stage_terminated_by_extras = stage_terminated_by_extras;
 
-                let stage_abnormal = matches!(
-                    rep.termination_code.as_str(),
-                    "min_timestep_limit"
-                        | "max_number_retries"
-                        | "redo_limit"
-                        | "dt_is_zero"
-                        | "varcontrol_target < min_allowed_varcontrol_target"
-                        | "invalid dt_next in timestep_controller"
-                );
+                let stage_abnormal =
+                    is_abnormal_termination(&rep.termination_code);
                 let stage_term_ok = termination_code_string_okay(
                     &model.job.required_termination_code_string,
                     &rep.termination_code,
@@ -1517,15 +1521,7 @@ pub fn run_test_suite_case_with_extras(
         || String::from("no_stages_executed"),
         |s| s.termination_code.clone(),
     );
-    let abnormal_termination = matches!(
-        termination_code.as_str(),
-        "min_timestep_limit"
-            | "max_number_retries"
-            | "redo_limit"
-            | "dt_is_zero"
-            | "varcontrol_target < min_allowed_varcontrol_target"
-            | "invalid dt_next in timestep_controller"
-    );
+    let abnormal_termination = is_abnormal_termination(&termination_code);
     let reached_terminal_stop = (last_stage_terminated_by_extras
         || !termination_code.is_empty())
         && termination_code != "max_steps_cap"

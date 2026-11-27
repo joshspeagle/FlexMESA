@@ -3,7 +3,7 @@
 //! (`star/private/mesh_functions.f90:1-327`).
 
 use flexmesa_chem::NuclideCatalog;
-use flexmesa_const::{LN10, M_SUN, MixingType, R_SUN, SECYER};
+use flexmesa_const::{MixingType, LN10, M_SUN, R_SUN, SECYER};
 
 use crate::controls::StarError;
 use crate::controls_mix_wind::{MixWindControls, NUM_XA_FUNCTION};

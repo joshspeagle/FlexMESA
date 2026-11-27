@@ -1623,9 +1623,11 @@ fn fill_reset_starting_vectors(model: &mut StarModel) {
 ///
 /// # Errors
 /// Returns [`StarError`] if `use_other_cgrav` is set without an installed
-/// hook, or if the hook fails.
+/// hook, together with `rotation_flag` or `RSP_flag` (see
+/// [`check_other_cgrav_step_call_points`]), or if the hook fails.
 fn set_cgrav(model: &mut StarModel) -> Result<(), StarError> {
     if model.controls.use_other_cgrav {
+        check_other_cgrav_step_call_points(model)?;
         let hook = model.aux.other_cgrav.clone().ok_or_else(|| {
             StarError::InvalidInput(String::from(
                 "use_other_cgrav is set but no other_cgrav hook is installed",
@@ -1637,6 +1639,39 @@ fn set_cgrav(model: &mut StarModel) -> Result<(), StarError> {
         model.cgrav[..nz].fill(flexmesa_const::STANDARD_CGRAV);
         Ok(())
     }
+}
+
+/// Besides `set_hydro_vars`, upstream calls `set_cgrav` from the step driver
+/// in two places: at the start of `do_step_part1` when `rotation_flag`
+/// (`star/private/evolve.f90:339-341`, before `set_vars` runs for the step)
+/// and once per `implicit_mdot_loop` pass when `RSP_flag`
+/// (`star/private/evolve.f90:583-586`). With the default `set_cgrav` both
+/// rewrite `standard_cgrav` and change nothing; with an `other_cgrav` hook
+/// they set `cgrav` from the state at those points. Neither call point is
+/// ported, so `use_other_cgrav` with either flag is an explicit error. No
+/// upstream test-suite inlist combines them.
+///
+/// # Errors
+/// Returns [`StarError::InvalidInput`] when `use_other_cgrav` is set with
+/// `rotation_flag` or `RSP_flag`.
+pub(crate) fn check_other_cgrav_step_call_points(
+    model: &StarModel,
+) -> Result<(), StarError> {
+    let c = &model.controls;
+    if !c.use_other_cgrav {
+        return Ok(());
+    }
+    if c.rotation_flag {
+        return Err(StarError::InvalidInput(String::from(
+            "use_other_cgrav with rotation_flag: the set_cgrav call at the start of do_step_part1 (star/private/evolve.f90:339-341) is not ported",
+        )));
+    }
+    if c.rsp_flag {
+        return Err(StarError::InvalidInput(String::from(
+            "use_other_cgrav with RSP_flag: the per-step set_cgrav call (star/private/evolve.f90:583-586) is not ported",
+        )));
+    }
+    Ok(())
 }
 
 /// `set_vars` (`star/private/hydro_vars.f90:60-85`): resets the start values
@@ -1890,6 +1925,22 @@ mod tests {
 
     /// #557: no `h1` in the network is an explicit error for the options
     /// that read `XH1`, and an unread `NaN` for `Kippenhahn`.
+    #[test]
+    fn other_cgrav_with_rotation_or_rsp_is_an_explicit_error() {
+        let mut m = model(&["h1", "he4"], &[0.7, 0.3, 0.7, 0.3]);
+        m.controls.use_other_cgrav = true;
+        assert!(check_other_cgrav_step_call_points(&m).is_ok());
+        m.controls.rotation_flag = true;
+        let err = check_other_cgrav_step_call_points(&m).unwrap_err();
+        assert!(format!("{err}").contains("evolve.f90:339-341"), "{err}");
+        m.controls.rotation_flag = false;
+        m.controls.rsp_flag = true;
+        let err = check_other_cgrav_step_call_points(&m).unwrap_err();
+        assert!(format!("{err}").contains("evolve.f90:583-586"), "{err}");
+        m.controls.use_other_cgrav = false;
+        assert!(check_other_cgrav_step_call_points(&m).is_ok());
+    }
+
     #[test]
     fn thermohaline_xh1_without_h1_errors_only_for_options_that_read_it() {
         let m = model(&["he4", "c12"], &[0.5, 0.5, 0.5, 0.5]);

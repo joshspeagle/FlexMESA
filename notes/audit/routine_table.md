@@ -66,8 +66,8 @@ The fractions answer different questions. The whole-file figure counts every lin
 | `math` | 6 | 35 | 0 | 0 | 0 | 35 | 0 | 936 | 0 | 0 | 0 | 485 | 451 | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% |
 | `const` | 2 | 2 | 0 | 0 | 0 | 2 | 0 | 256 | 0 | 0 | 0 | 48 | 208 | 0.0% | 0.0% | 0.0% | 0.0% | 100.0% |
 | `utils` | 11 | 150 | 0 | 0 | 0 | 150 | 0 | 3,398 | 0 | 0 | 0 | 2,614 | 784 | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% |
-| `gyre` | 171 | 983 | 0 | 0 | 0 | 983 | 0 | 55,708 | 0 | 0 | 0 | 40,741 | 14,967 | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% |
-| `adipls` | 133 | 221 | 0 | 0 | 0 | 221 | 0 | 30,923 | 0 | 0 | 0 | 30,764 | 159 | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% |
+| `gyre` | 171 | 983 | 198 | 85 | 0 | 700 | 0 | 55,708 | 7,874 | 4,891 | 0 | 27,976 | 14,967 | 14.1% | 8.8% | 14.1% | 0.0% | 0.0% |
+| `adipls` | 133 | 221 | 36 | 10 | 0 | 175 | 0 | 30,923 | 5,633 | 3,889 | 0 | 21,242 | 159 | 18.2% | 12.6% | 18.2% | 0.0% | 0.0% |
 | `stella` | 109 | 238 | 0 | 0 | 0 | 238 | 0 | 45,351 | 0 | 0 | 0 | 39,716 | 5,635 | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% |
 | `plotting` | 58 | 559 | 0 | 0 | 0 | 559 | 0 | 35,732 | 0 | 0 | 0 | 25,133 | 10,599 | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% |
 
@@ -99,26 +99,67 @@ Files whose status needs more than the routine evidence gives. Files with no cei
 | `star/private/solver_support.f90` | ported_unverified | partial | 1,547 | 21 | 7 | 0 | 0 | 0 |
 | `star/private/adjust_mesh_split_merge.f90` | ported_unverified | partial | 1,461 | 22 | 12 | 6 | 0 | 0 |
 
-### `partial` files with every applicable routine mapped in full (9 files)
+### `partial` files with every applicable routine mapped in full (57 files)
 
 Candidates for a reviewed raise to `ported_unverified`. Largest ten:
 
 | File | Status | Ceiling | Lines | Routines | Full | Partial | N/A | Oracle |
 | :--- | :--- | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
+| `adipls/adipack.c/adipls/setbcs.n.d.f` | partial | ported_unverified | 774 | 1 | 1 | 0 | 0 | 0 |
 | `turb/private/tdc_support.f90` | partial | ported_unverified | 681 | 11 | 11 | 0 | 0 | 0 |
 | `star/private/mass_utils.f90` | partial | ported_unverified | 594 | 9 | 9 | 0 | 0 | 0 |
+| `adipls/adipack.c/adipls/sigscn.c.d.f` | partial | ported_unverified | 480 | 2 | 2 | 0 | 0 | 0 |
+| `gyre/gyre/src/grid/grid_m.fypp` | partial | ported_unverified | 466 | 13 | 13 | 0 | 0 | 0 |
+| `adipls/adipack.c/adipls/varfrq.n.d.f` | partial | ported_unverified | 427 | 1 | 1 | 0 | 0 | 0 |
 | `eos/private/skye_coulomb_solid.f90` | partial | ported_unverified | 348 | 8 | 8 | 0 | 0 | 0 |
-| `eos/private/skye_thermodynamics.f90` | partial | ported_unverified | 241 | 3 | 3 | 0 | 0 | 0 |
-| `eos/private/helm_polynomials.f90` | partial | ported_unverified | 185 | 22 | 22 | 0 | 0 | 0 |
-| `eos/private/skye_coulomb_liquid.f90` | partial | ported_unverified | 181 | 4 | 4 | 0 | 0 | 0 |
-| `star/private/magnetic_diffusion.f90` | partial | ported_unverified | 137 | 5 | 5 | 0 | 0 | 0 |
-| `eos/private/eosde_eval.f90` | partial | kernel_reference_vectors | 113 | 1 | 1 | 0 | 0 | 1 |
-| `eos/private/ion_offset.f90` | partial | kernel_reference_vectors | 84 | 1 | 1 | 0 | 0 | 1 |
+| `adipls/adipack.c/adipls/order.d.f` | partial | ported_unverified | 293 | 1 | 1 | 0 | 0 | 0 |
+| `gyre/gyre/src/ad/ad_eqns_m.fypp` | partial | ported_unverified | 271 | 4 | 4 | 0 | 0 | 0 |
+| `adipls/adipack.c/gensr/lininh4.d.f` | partial | ported_unverified | 259 | 1 | 1 | 0 | 0 | 0 |
 
 ## Per file (files with a non-absent status or a mapped routine)
 
 | File | Module | Status | Ceiling | Lines | Routines | Full | Partial | N/A | Oracle | Lines full | Lines partial | Lines N/A | Lines unmapped | Outside |
 | :--- | :--- | :--- | :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| `adipls/adipack.c/adipls/adipls.c.d.f` | `adipls` | partial | partial | 2,369 | 5 | 0 | 2 | 0 | 0 | 0 | 2,205 | 0 | 164 | 0 |
+| `adipls/adipack.c/adipls/adirhs.c.d.f` | `adipls` | partial | ported_unverified | 252 | 1 | 1 | 0 | 0 | 0 | 252 | 0 | 0 | 0 | 0 |
+| `adipls/adipack.c/adipls/danorm.d.f` | `adipls` | partial | ported_unverified | 34 | 1 | 1 | 0 | 0 | 0 | 32 | 0 | 0 | 0 | 2 |
+| `adipls/adipack.c/adipls/geninh.d.f` | `adipls` | partial | partial | 60 | 2 | 0 | 1 | 0 | 0 | 0 | 51 | 0 | 9 | 0 |
+| `adipls/adipack.c/adipls/kiner.n.d.f` | `adipls` | partial | ported_unverified | 87 | 1 | 1 | 0 | 0 | 0 | 85 | 0 | 0 | 0 | 2 |
+| `adipls/adipack.c/adipls/mchcff.d.f` | `adipls` | partial | ported_unverified | 151 | 2 | 2 | 0 | 0 | 0 | 149 | 0 | 0 | 0 | 2 |
+| `adipls/adipack.c/adipls/mchsol.n.d.f` | `adipls` | partial | partial | 166 | 1 | 0 | 1 | 0 | 0 | 0 | 166 | 0 | 0 | 0 |
+| `adipls/adipack.c/adipls/order.d.f` | `adipls` | partial | ported_unverified | 293 | 1 | 1 | 0 | 0 | 0 | 293 | 0 | 0 | 0 | 0 |
+| `adipls/adipack.c/adipls/res_adimod.c.d.f` | `adipls` | partial | ported_unverified | 195 | 1 | 1 | 0 | 0 | 0 | 195 | 0 | 0 | 0 | 0 |
+| `adipls/adipack.c/adipls/rsnfit.n.d.f` | `adipls` | partial | ported_unverified | 68 | 1 | 1 | 0 | 0 | 0 | 68 | 0 | 0 | 0 | 0 |
+| `adipls/adipack.c/adipls/sclasl.c.d.f` | `adipls` | partial | ported_unverified | 45 | 1 | 1 | 0 | 0 | 0 | 45 | 0 | 0 | 0 | 0 |
+| `adipls/adipack.c/adipls/setbcs.n.d.f` | `adipls` | partial | ported_unverified | 774 | 1 | 1 | 0 | 0 | 0 | 774 | 0 | 0 | 0 | 0 |
+| `adipls/adipack.c/adipls/setobs_st.c.d.f` | `adipls` | partial | ported_unverified | 150 | 1 | 1 | 0 | 0 | 0 | 150 | 0 | 0 | 0 | 0 |
+| `adipls/adipack.c/adipls/setssm.n.d.f` | `adipls` | partial | ported_unverified | 59 | 1 | 1 | 0 | 0 | 0 | 59 | 0 | 0 | 0 | 0 |
+| `adipls/adipack.c/adipls/setups_adi.c.d.f` | `adipls` | partial | ported_unverified | 90 | 2 | 2 | 0 | 0 | 0 | 90 | 0 | 0 | 0 | 0 |
+| `adipls/adipack.c/adipls/shtint.c.d.f` | `adipls` | partial | ported_unverified | 235 | 1 | 1 | 0 | 0 | 0 | 235 | 0 | 0 | 0 | 0 |
+| `adipls/adipack.c/adipls/sigint.n.d.f` | `adipls` | partial | partial | 93 | 1 | 0 | 1 | 0 | 0 | 0 | 93 | 0 | 0 | 0 |
+| `adipls/adipack.c/adipls/sigitc.c.d.f` | `adipls` | partial | ported_unverified | 114 | 1 | 1 | 0 | 0 | 0 | 114 | 0 | 0 | 0 | 0 |
+| `adipls/adipack.c/adipls/sigitr.n.d.f` | `adipls` | partial | ported_unverified | 243 | 1 | 1 | 0 | 0 | 0 | 243 | 0 | 0 | 0 | 0 |
+| `adipls/adipack.c/adipls/signew.n.d.f` | `adipls` | partial | partial | 371 | 1 | 0 | 1 | 0 | 0 | 0 | 371 | 0 | 0 | 0 |
+| `adipls/adipack.c/adipls/sigout.c.d.f` | `adipls` | partial | partial | 418 | 1 | 0 | 1 | 0 | 0 | 0 | 418 | 0 | 0 | 0 |
+| `adipls/adipack.c/adipls/sigscn.c.d.f` | `adipls` | partial | ported_unverified | 480 | 2 | 2 | 0 | 0 | 0 | 480 | 0 | 0 | 0 | 0 |
+| `adipls/adipack.c/adipls/sigsol.c.d.f` | `adipls` | partial | partial | 470 | 1 | 0 | 1 | 0 | 0 | 0 | 470 | 0 | 0 | 0 |
+| `adipls/adipack.c/adipls/stevft.n.d.f` | `adipls` | partial | ported_unverified | 152 | 1 | 1 | 0 | 0 | 0 | 152 | 0 | 0 | 0 | 0 |
+| `adipls/adipack.c/adipls/takata.d.f` | `adipls` | partial | ported_unverified | 96 | 1 | 1 | 0 | 0 | 0 | 96 | 0 | 0 | 0 | 0 |
+| `adipls/adipack.c/adipls/varfrq.n.d.f` | `adipls` | partial | ported_unverified | 427 | 1 | 1 | 0 | 0 | 0 | 427 | 0 | 0 | 0 | 0 |
+| `adipls/adipack.c/adipls/xlmult.d.f` | `adipls` | partial | ported_unverified | 124 | 1 | 1 | 0 | 0 | 0 | 122 | 0 | 0 | 0 | 2 |
+| `adipls/adipack.c/gensr/aramax.d.f` | `adipls` | partial | ported_unverified | 96 | 1 | 1 | 0 | 0 | 0 | 96 | 0 | 0 | 0 | 0 |
+| `adipls/adipack.c/gensr/derive.d.f` | `adipls` | partial | ported_unverified | 234 | 1 | 1 | 0 | 0 | 0 | 234 | 0 | 0 | 0 | 0 |
+| `adipls/adipack.c/gensr/derivk.new.d.f` | `adipls` | partial | ported_unverified | 193 | 1 | 1 | 0 | 0 | 0 | 193 | 0 | 0 | 0 | 0 |
+| `adipls/adipack.c/gensr/leq.d.f` | `adipls` | partial | ported_unverified | 230 | 2 | 2 | 0 | 0 | 0 | 230 | 0 | 0 | 0 | 0 |
+| `adipls/adipack.c/gensr/lininh4.d.f` | `adipls` | partial | ported_unverified | 259 | 1 | 1 | 0 | 0 | 0 | 259 | 0 | 0 | 0 | 0 |
+| `adipls/adipack.c/gensr/lir.d.f` | `adipls` | partial | ported_unverified | 167 | 1 | 1 | 0 | 0 | 0 | 167 | 0 | 0 | 0 | 0 |
+| `adipls/adipack.c/gensr/notwin.d.f` | `adipls` | partial | ported_unverified | 21 | 1 | 1 | 0 | 0 | 0 | 21 | 0 | 0 | 0 | 0 |
+| `adipls/adipack.c/gensr/notwni.f` | `adipls` | partial | ported_unverified | 12 | 1 | 1 | 0 | 0 | 0 | 12 | 0 | 0 | 0 | 0 |
+| `adipls/adipack.c/gensr/ofiles.c.f` | `adipls` | partial | partial | 506 | 12 | 0 | 2 | 0 | 0 | 0 | 115 | 0 | 391 | 0 |
+| `adipls/adipack.c/gensr/store.d.f` | `adipls` | partial | ported_unverified | 21 | 1 | 1 | 0 | 0 | 0 | 21 | 0 | 0 | 0 | 0 |
+| `adipls/adipack.c/gensr/vinta.d.f` | `adipls` | partial | ported_unverified | 134 | 1 | 1 | 0 | 0 | 0 | 134 | 0 | 0 | 0 | 0 |
+| `adipls/adipack.c/gensr/vintk.new.d.f` | `adipls` | partial | ported_unverified | 182 | 1 | 1 | 0 | 0 | 0 | 182 | 0 | 0 | 0 | 0 |
+| `adipls/adipack.c/gensr/zero.d.f` | `adipls` | partial | ported_unverified | 23 | 1 | 1 | 0 | 0 | 0 | 23 | 0 | 0 | 0 | 0 |
 | `astero/private/astero_run_support.f90` | `astero` | partial | partial | 1,127 | 22 | 2 | 12 | 0 | 0 | 66 | 686 | 0 | 306 | 69 |
 | `astero/private/astero_support.f90` | `astero` | partial | partial | 1,530 | 43 | 5 | 35 | 2 | 0 | 111 | 1,280 | 6 | 18 | 115 |
 | `astero/private/extras_support.f90` | `astero` | partial | partial | 1,238 | 28 | 2 | 11 | 7 | 0 | 38 | 771 | 84 | 269 | 76 |
@@ -218,6 +259,69 @@ Candidates for a reviewed raise to `ported_unverified`. Largest ten:
 | `eos/public/eos_def.f90` | `eos` | partial | - | 642 | 8 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 210 | 432 |
 | `eos/public/eos_lib.f90` | `eos` | partial | partial | 910 | 29 | 9 | 0 | 0 | 8 | 468 | 0 | 0 | 335 | 107 |
 | `eos/public/helm_def.dek` | `eos` | partial | - | 646 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 646 |
+| `gyre/gyre/src/ad/ad_bound_m.fypp` | `gyre` | partial | partial | 903 | 14 | 6 | 3 | 0 | 0 | 272 | 202 | 0 | 282 | 147 |
+| `gyre/gyre/src/ad/ad_bvp_m.fypp` | `gyre` | partial | partial | 262 | 4 | 2 | 1 | 0 | 0 | 74 | 56 | 0 | 38 | 94 |
+| `gyre/gyre/src/ad/ad_diff_m.fypp` | `gyre` | partial | ported_unverified | 134 | 2 | 2 | 0 | 0 | 0 | 60 | 0 | 0 | 0 | 74 |
+| `gyre/gyre/src/ad/ad_eqns_m.fypp` | `gyre` | partial | ported_unverified | 271 | 4 | 4 | 0 | 0 | 0 | 173 | 0 | 0 | 0 | 98 |
+| `gyre/gyre/src/ad/ad_match_m.fypp` | `gyre` | partial | ported_unverified | 222 | 3 | 3 | 0 | 0 | 0 | 136 | 0 | 0 | 0 | 86 |
+| `gyre/gyre/src/ad/ad_trans_m.fypp` | `gyre` | partial | partial | 1,039 | 19 | 4 | 7 | 0 | 0 | 287 | 262 | 0 | 330 | 160 |
+| `gyre/gyre/src/bvp/bvp_m.fypp` | `gyre` | partial | partial | 330 | 8 | 4 | 1 | 0 | 0 | 92 | 44 | 0 | 84 | 110 |
+| `gyre/gyre/src/common/atmos_m.fypp` | `gyre` | partial | partial | 298 | 5 | 2 | 0 | 0 | 0 | 78 | 0 | 0 | 148 | 72 |
+| `gyre/gyre/src/common/constants_m.fypp` | `gyre` | partial | partial | 188 | 3 | 2 | 0 | 0 | 0 | 48 | 0 | 0 | 41 | 99 |
+| `gyre/gyre/src/common/freq_context_m.fypp` | `gyre` | partial | partial | 248 | 4 | 0 | 1 | 0 | 0 | 0 | 48 | 0 | 126 | 74 |
+| `gyre/gyre/src/common/freq_m.fypp` | `gyre` | partial | partial | 160 | 4 | 2 | 1 | 0 | 0 | 47 | 24 | 0 | 24 | 65 |
+| `gyre/gyre/src/common/string_m.fypp` | `gyre` | partial | partial | 393 | 8 | 1 | 0 | 0 | 0 | 69 | 0 | 0 | 233 | 91 |
+| `gyre/gyre/src/common/util_m.fypp` | `gyre` | partial | partial | 265 | 6 | 0 | 2 | 0 | 0 | 0 | 48 | 0 | 125 | 92 |
+| `gyre/gyre/src/context/context_m.fypp` | `gyre` | partial | partial | 571 | 15 | 3 | 6 | 0 | 0 | 48 | 200 | 0 | 174 | 149 |
+| `gyre/gyre/src/diff/colloc_diff_m.fypp` | `gyre` | partial | partial | 391 | 6 | 1 | 4 | 0 | 0 | 29 | 202 | 0 | 21 | 139 |
+| `gyre/gyre/src/diff/diff_factory_m.fypp` | `gyre` | partial | partial | 102 | 1 | 0 | 1 | 0 | 0 | 0 | 36 | 0 | 0 | 66 |
+| `gyre/gyre/src/diff/magnus_diff_m.fypp` | `gyre` | partial | partial | 358 | 5 | 1 | 2 | 0 | 0 | 23 | 159 | 0 | 66 | 110 |
+| `gyre/gyre/src/ext/ext_complex_m.fypp` | `gyre` | partial | partial | 921 | 33 | 24 | 0 | 0 | 0 | 525 | 0 | 0 | 133 | 263 |
+| `gyre/gyre/src/ext/ext_real_m.fypp` | `gyre` | partial | partial | 810 | 27 | 23 | 1 | 0 | 0 | 520 | 15 | 0 | 44 | 231 |
+| `gyre/gyre/src/forum/src/lib/order_m.fypp` | `gyre` | partial | partial | 554 | 6 | 0 | 5 | 0 | 0 | 0 | 418 | 0 | 42 | 94 |
+| `gyre/gyre/src/grid/grid_m.fypp` | `gyre` | partial | ported_unverified | 466 | 13 | 13 | 0 | 0 | 0 | 358 | 0 | 0 | 0 | 108 |
+| `gyre/gyre/src/grid/grid_refine_m.fypp` | `gyre` | partial | partial | 701 | 7 | 3 | 2 | 0 | 0 | 274 | 202 | 0 | 145 | 80 |
+| `gyre/gyre/src/grid/grid_scaffold_m.fypp` | `gyre` | partial | partial | 207 | 2 | 0 | 1 | 0 | 0 | 0 | 29 | 0 | 120 | 58 |
+| `gyre/gyre/src/grid/grid_util_m.fypp` | `gyre` | partial | ported_unverified | 227 | 3 | 3 | 0 | 0 | 0 | 170 | 0 | 0 | 0 | 57 |
+| `gyre/gyre/src/interp/cubic_interp_m.fypp` | `gyre` | partial | partial | 369 | 10 | 2 | 3 | 0 | 0 | 60 | 105 | 0 | 89 | 115 |
+| `gyre/gyre/src/interp/deriv_m.fypp` | `gyre` | partial | partial | 272 | 4 | 1 | 1 | 0 | 0 | 59 | 29 | 0 | 115 | 69 |
+| `gyre/gyre/src/lib/gyre_mesa_m.fypp` | `gyre` | partial | partial | 484 | 9 | 2 | 3 | 0 | 0 | 48 | 239 | 0 | 96 | 101 |
+| `gyre/gyre/src/math/crmath/math_m.fypp` | `gyre` | partial | partial | 153 | 2 | 1 | 1 | 0 | 0 | 14 | 15 | 0 | 0 | 124 |
+| `gyre/gyre/src/math/integ_m.fypp` | `gyre` | partial | partial | 124 | 2 | 0 | 2 | 0 | 0 | 0 | 57 | 0 | 0 | 67 |
+| `gyre/gyre/src/math/root_m.fypp` | `gyre` | partial | partial | 1,030 | 9 | 0 | 2 | 0 | 0 | 0 | 383 | 0 | 539 | 108 |
+| `gyre/gyre/src/matrix/block_sysmtx_m.fypp` | `gyre` | partial | partial | 744 | 13 | 9 | 0 | 0 | 0 | 451 | 0 | 0 | 166 | 127 |
+| `gyre/gyre/src/matrix/linalg_m.fypp` | `gyre` | partial | partial | 872 | 19 | 4 | 2 | 0 | 0 | 298 | 63 | 0 | 344 | 167 |
+| `gyre/gyre/src/matrix/sysmtx_factory_m.fypp` | `gyre` | partial | partial | 87 | 1 | 0 | 1 | 0 | 0 | 0 | 25 | 0 | 0 | 62 |
+| `gyre/gyre/src/mode/mode_m.fypp` | `gyre` | partial | partial | 356 | 4 | 2 | 1 | 0 | 0 | 97 | 144 | 0 | 28 | 87 |
+| `gyre/gyre/src/mode/wave_m.fypp` | `gyre` | partial | partial | 2,522 | 62 | 15 | 2 | 0 | 0 | 633 | 70 | 0 | 1,465 | 354 |
+| `gyre/gyre/src/model/evol_model_m.fypp` | `gyre` | partial | partial | 790 | 17 | 7 | 3 | 0 | 0 | 337 | 157 | 0 | 157 | 139 |
+| `gyre/gyre/src/model/mesa_file_m.fypp` | `gyre` | partial | partial | 513 | 6 | 0 | 2 | 0 | 0 | 0 | 213 | 0 | 238 | 62 |
+| `gyre/gyre/src/model/model_util_m.fypp` | `gyre` | partial | partial | 311 | 6 | 2 | 0 | 0 | 0 | 100 | 0 | 0 | 143 | 68 |
+| `gyre/gyre/src/nad/nad_bound_m.fypp` | `gyre` | partial | partial | 893 | 12 | 5 | 3 | 0 | 0 | 263 | 195 | 0 | 292 | 143 |
+| `gyre/gyre/src/nad/nad_bvp_m.fypp` | `gyre` | partial | partial | 231 | 4 | 2 | 1 | 0 | 0 | 55 | 49 | 0 | 36 | 91 |
+| `gyre/gyre/src/nad/nad_diff_m.fypp` | `gyre` | partial | partial | 200 | 2 | 1 | 1 | 0 | 0 | 57 | 62 | 0 | 0 | 81 |
+| `gyre/gyre/src/nad/nad_eqns_m.fypp` | `gyre` | partial | partial | 413 | 4 | 2 | 2 | 0 | 0 | 79 | 209 | 0 | 0 | 125 |
+| `gyre/gyre/src/nad/nad_match_m.fypp` | `gyre` | partial | partial | 275 | 3 | 2 | 1 | 0 | 0 | 61 | 127 | 0 | 0 | 87 |
+| `gyre/gyre/src/nad/nad_trans_m.fypp` | `gyre` | partial | partial | 1,135 | 16 | 1 | 1 | 0 | 0 | 44 | 34 | 0 | 909 | 148 |
+| `gyre/gyre/src/par/grid_par_m.fypp` | `gyre` | partial | ported_unverified | 165 | 1 | 1 | 0 | 0 | 0 | 101 | 0 | 0 | 0 | 64 |
+| `gyre/gyre/src/par/mode_par_m.fypp` | `gyre` | partial | ported_unverified | 117 | 1 | 1 | 0 | 0 | 0 | 65 | 0 | 0 | 0 | 52 |
+| `gyre/gyre/src/par/model_par_m.fypp` | `gyre` | partial | ported_unverified | 192 | 1 | 1 | 0 | 0 | 0 | 118 | 0 | 0 | 0 | 74 |
+| `gyre/gyre/src/par/num_par_m.fypp` | `gyre` | partial | ported_unverified | 146 | 1 | 1 | 0 | 0 | 0 | 86 | 0 | 0 | 0 | 60 |
+| `gyre/gyre/src/par/osc_par_m.fypp` | `gyre` | partial | ported_unverified | 223 | 1 | 1 | 0 | 0 | 0 | 143 | 0 | 0 | 0 | 80 |
+| `gyre/gyre/src/par/rot_par_m.fypp` | `gyre` | partial | ported_unverified | 128 | 1 | 1 | 0 | 0 | 0 | 72 | 0 | 0 | 0 | 56 |
+| `gyre/gyre/src/par/scan_par_m.fypp` | `gyre` | partial | ported_unverified | 151 | 1 | 1 | 0 | 0 | 0 | 90 | 0 | 0 | 0 | 61 |
+| `gyre/gyre/src/rad/rad_bound_m.fypp` | `gyre` | partial | partial | 569 | 10 | 5 | 3 | 0 | 0 | 172 | 178 | 0 | 91 | 128 |
+| `gyre/gyre/src/rad/rad_bvp_m.fypp` | `gyre` | partial | partial | 341 | 4 | 2 | 1 | 0 | 0 | 144 | 65 | 0 | 38 | 94 |
+| `gyre/gyre/src/rad/rad_diff_m.fypp` | `gyre` | partial | ported_unverified | 133 | 2 | 2 | 0 | 0 | 0 | 60 | 0 | 0 | 0 | 73 |
+| `gyre/gyre/src/rad/rad_eqns_m.fypp` | `gyre` | partial | partial | 225 | 4 | 3 | 1 | 0 | 0 | 102 | 29 | 0 | 0 | 94 |
+| `gyre/gyre/src/rad/rad_match_m.fypp` | `gyre` | partial | ported_unverified | 189 | 3 | 3 | 0 | 0 | 0 | 107 | 0 | 0 | 0 | 82 |
+| `gyre/gyre/src/rad/rad_trans_m.fypp` | `gyre` | partial | partial | 614 | 14 | 4 | 7 | 0 | 0 | 137 | 256 | 0 | 85 | 136 |
+| `gyre/gyre/src/rot/null_rot_m.fypp` | `gyre` | partial | ported_unverified | 123 | 3 | 3 | 0 | 0 | 0 | 46 | 0 | 0 | 0 | 77 |
+| `gyre/gyre/src/rot/rot_factory_m.fypp` | `gyre` | partial | partial | 85 | 1 | 0 | 1 | 0 | 0 | 0 | 22 | 0 | 0 | 63 |
+| `gyre/gyre/src/search/bracket_search_m.fypp` | `gyre` | partial | partial | 320 | 4 | 3 | 0 | 0 | 0 | 227 | 0 | 0 | 30 | 63 |
+| `gyre/gyre/src/search/discrim_m.fypp` | `gyre` | partial | ported_unverified | 77 | 1 | 1 | 0 | 0 | 0 | 18 | 0 | 0 | 0 | 59 |
+| `gyre/gyre/src/search/prox_search_m.fypp` | `gyre` | partial | partial | 352 | 4 | 2 | 1 | 0 | 0 | 87 | 168 | 0 | 31 | 66 |
+| `gyre/gyre/src/search/scan_m.fypp` | `gyre` | partial | partial | 336 | 4 | 2 | 1 | 0 | 0 | 160 | 52 | 0 | 62 | 62 |
 | `interp_1d/private/interp_1d_misc.f90` | `interp_1d` | partial | - | 712 | 18 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 653 | 59 |
 | `interp_1d/private/interp_1d_mp.f90` | `interp_1d` | partial | - | 388 | 2 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 353 | 35 |
 | `interp_1d/private/interp_1d_mp_autodiff.f90` | `interp_1d` | partial | - | 391 | 2 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 355 | 36 |

@@ -349,8 +349,13 @@ upstream_path = "adipls/adipack.c/adipls/adipls.c.d.f"
 module = "adipls"
 upstream_lines = 2369
 upstream_sha256 = "db4b917b8781f031be8893457686a6d1e860ba8365f78bc78a9074aa3d68e032"
-status = "absent"
-notes = "not ported (#171)"
+status = "partial"
+flexmesa_files = ["crates/flexmesa-adipls/src/driver.rs", "crates/flexmesa-adipls/src/parser.rs", "crates/flexmesa-adipls/src/solve.rs"]
+routine_map_partial = ["adipls", "setlog"]
+notes = "Routine map reviewed in notes/audit/routine_map_reviews/610b.toml (DECISIONS #79). 2/5 routines mapped. `driver.rs::setup` and `run_call_with_hooks`/`run_call`/`run_call_with_observer` port `adipls` setup and label-10000 scan/solve execution (`adipls.c.d.f:493-2094`, where only `mdintg = 5` runs end-to-end while `mdintg = 1, 2, 4` error in `geninh`), `parser.rs::{parse_adipls_pruned_file, parse_adipls_pruned_in, CntrdSections, parse_*_section}` ports `adipls.c.d.f:499-1208` pruned input parsing, `solve.rs::setlog` records in-memory `AdiStatusLogEntry` omitting `idslog` file I/O and `iordtr`/`eps`/`epssol`/Richardson fields, and `output.rs::{ObsSt, Csummm}` mirrors the common-block summary layouts. `trnmod` (`xtrnct > 0 || ntrnsf >= 1`) returns `UnsupportedControl`; `testri` (`iriche == 1`), `dmpfls`, and `dump_csumma` are unported."
+[files.routine_map]
+"adipls" = "crates/flexmesa-adipls/src/driver.rs::run_call_with_hooks+run_call+run_call_with_observer+setup"
+"setlog" = "crates/flexmesa-adipls/src/solve.rs::setlog"
 
 [[files]]
 upstream_path = "adipls/adipack.c/adipls/adipls.c.d.incl"
@@ -365,8 +370,11 @@ upstream_path = "adipls/adipack.c/adipls/adirhs.c.d.f"
 module = "adipls"
 upstream_lines = 252
 upstream_sha256 = "94fffc991b194348b45324a291c118e09aa802cedd2aaef7874cc5ebb46c3171"
-status = "absent"
-notes = "not ported (#171)"
+status = "partial"
+flexmesa_files = ["crates/flexmesa-adipls/src/rhs.rs"]
+notes = "Routine map reviewed in notes/audit/routine_map_reviews/610b.toml (DECISIONS #79). 1/1 routine ported (`adirhs.c.d.f:1-252`)."
+[files.routine_map]
+"adirhs" = "crates/flexmesa-adipls/src/rhs.rs::adirhs"
 
 [[files]]
 upstream_path = "adipls/adipack.c/adipls/anldet.d.f"
@@ -389,8 +397,11 @@ upstream_path = "adipls/adipack.c/adipls/danorm.d.f"
 module = "adipls"
 upstream_lines = 34
 upstream_sha256 = "23792f12cf5f71db8be5b89c8bc9bed283b83b6dab58d9e30b95536f55ae35b2"
-status = "absent"
-notes = "not ported (#171)"
+status = "partial"
+flexmesa_files = ["crates/flexmesa-adipls/src/rhs.rs"]
+notes = "Routine map reviewed in notes/audit/routine_map_reviews/610b.toml (DECISIONS #79). 1/1 routine ported (`danorm.d.f:1-32`)."
+[files.routine_map]
+"danorm" = "crates/flexmesa-adipls/src/rhs.rs::danorm"
 
 [[files]]
 upstream_path = "adipls/adipack.c/adipls/decicd.d.f"
@@ -461,8 +472,12 @@ upstream_path = "adipls/adipack.c/adipls/geninh.d.f"
 module = "adipls"
 upstream_lines = 60
 upstream_sha256 = "16a71eab554add63b9d507f9287455c4e964c105aa02d89c3aca0e88d3fa0bf6"
-status = "absent"
-notes = "not ported (#171)"
+status = "partial"
+flexmesa_files = ["crates/flexmesa-adipls/src/rhs.rs"]
+routine_map_partial = ["geninh"]
+notes = "Routine map reviewed in notes/audit/routine_map_reviews/610b.toml (DECISIONS #79). 1/2 routines mapped (`geninh.d.f:1-51`). `mdintg == 5` dispatches to `gensr::lininh4`; `mdintg != 5` returns `UnsupportedControl`. `eigin4` (`geninh.d.f:52-60`) is an unimplemented dummy error-stop stub and intentionally unmapped."
+[files.routine_map]
+"geninh" = "crates/flexmesa-adipls/src/rhs.rs::geninh"
 
 [[files]]
 upstream_path = "adipls/adipack.c/adipls/gm1ker.n.d.f"
@@ -485,8 +500,11 @@ upstream_path = "adipls/adipack.c/adipls/kiner.n.d.f"
 module = "adipls"
 upstream_lines = 87
 upstream_sha256 = "89014caa2a1707e746bab817ce6b0ad3738ea1be5e7a591564adfb1dcd2b2061"
-status = "absent"
-notes = "not ported (#171)"
+status = "partial"
+flexmesa_files = ["crates/flexmesa-adipls/src/postproc.rs"]
+notes = "Routine map reviewed in notes/audit/routine_map_reviews/610b.toml (DECISIONS #79). 1/1 routine ported (`kiner.n.d.f:1-85`)."
+[files.routine_map]
+"kiner" = "crates/flexmesa-adipls/src/postproc.rs::kiner+kiner_with_observer"
 
 [[files]]
 upstream_path = "adipls/adipack.c/adipls/main.c.d.f"
@@ -501,16 +519,24 @@ upstream_path = "adipls/adipack.c/adipls/mchcff.d.f"
 module = "adipls"
 upstream_lines = 151
 upstream_sha256 = "239ad90159302e5b6378e14033952b588d5c759d152fa013943d5e7e0a62bbf6"
-status = "absent"
-notes = "not ported (#171)"
+status = "partial"
+flexmesa_files = ["crates/flexmesa-adipls/src/solve.rs"]
+notes = "Routine map reviewed in notes/audit/routine_map_reviews/610b.toml (DECISIONS #79). 2/2 routines ported (`mchcff.d.f:1-149`)."
+[files.routine_map]
+"mchcff" = "crates/flexmesa-adipls/src/solve.rs::mchcff"
+"mchcf1" = "crates/flexmesa-adipls/src/solve.rs::mchcf1"
 
 [[files]]
 upstream_path = "adipls/adipack.c/adipls/mchsol.n.d.f"
 module = "adipls"
 upstream_lines = 166
 upstream_sha256 = "f5163677dcbb7b4d191299d7366a703c92166d2b6caf5275eb290bf3bf6866f2"
-status = "absent"
-notes = "not ported (#171)"
+status = "partial"
+flexmesa_files = ["crates/flexmesa-adipls/src/solve.rs"]
+routine_map_partial = ["mchsol"]
+notes = "Routine map reviewed in notes/audit/routine_map_reviews/610b.toml (DECISIONS #79). 1/1 routine ported (`mchsol.n.d.f:1-166`); `moddet == 1` determinant branch returns `UnsupportedControl`."
+[files.routine_map]
+"mchsol" = "crates/flexmesa-adipls/src/solve.rs::mchsol"
 
 [[files]]
 upstream_path = "adipls/adipack.c/adipls/nrkint.c.d.f"
@@ -541,8 +567,11 @@ upstream_path = "adipls/adipack.c/adipls/order.d.f"
 module = "adipls"
 upstream_lines = 293
 upstream_sha256 = "8b8e0ea5143de63d9610cceb7360e78fbf857e1db458d1c9f99993ac93615a04"
-status = "absent"
-notes = "not ported (#171)"
+status = "partial"
+flexmesa_files = ["crates/flexmesa-adipls/src/solve.rs"]
+notes = "Routine map reviewed in notes/audit/routine_map_reviews/610b.toml (DECISIONS #79). 1/1 routine ported (`order.d.f:1-293`)."
+[files.routine_map]
+"order" = "crates/flexmesa-adipls/src/solve.rs::order"
 
 [[files]]
 upstream_path = "adipls/adipack.c/adipls/rdfrqr.d.f"
@@ -573,8 +602,11 @@ upstream_path = "adipls/adipack.c/adipls/res_adimod.c.d.f"
 module = "adipls"
 upstream_lines = 195
 upstream_sha256 = "95b534e7c190f7b1a1b4292ff84dca0c1f139fb3d061a6f7379a61cb2d290910"
-status = "absent"
-notes = "not ported (#171)"
+status = "partial"
+flexmesa_files = ["crates/flexmesa-adipls/src/rhs.rs"]
+notes = "Routine map reviewed in notes/audit/routine_map_reviews/610b.toml (DECISIONS #79). 1/1 routine ported (`res_adimod.c.d.f:1-195`)."
+[files.routine_map]
+"res_adimod" = "crates/flexmesa-adipls/src/rhs.rs::res_adimod"
 
 [[files]]
 upstream_path = "adipls/adipack.c/adipls/res_adipar.c.d.f"
@@ -597,16 +629,22 @@ upstream_path = "adipls/adipack.c/adipls/rsnfit.n.d.f"
 module = "adipls"
 upstream_lines = 68
 upstream_sha256 = "eeabdcc66e89e94369731a81e298996c3f52d030f834116331b94dad0b17cfb4"
-status = "absent"
-notes = "not ported (#171)"
+status = "partial"
+flexmesa_files = ["crates/flexmesa-adipls/src/solve.rs"]
+notes = "Routine map reviewed in notes/audit/routine_map_reviews/610b.toml (DECISIONS #79). 1/1 routine ported (`rsnfit.n.d.f:1-68`)."
+[files.routine_map]
+"rsnfit" = "crates/flexmesa-adipls/src/solve.rs::rsnfit"
 
 [[files]]
 upstream_path = "adipls/adipack.c/adipls/sclasl.c.d.f"
 module = "adipls"
 upstream_lines = 45
 upstream_sha256 = "94264d5abfe8c060791cdf35e9933f4a4a30ab9543322ea0733484b52312ae5a"
-status = "absent"
-notes = "not ported (#171)"
+status = "partial"
+flexmesa_files = ["crates/flexmesa-adipls/src/rhs.rs"]
+notes = "Routine map reviewed in notes/audit/routine_map_reviews/610b.toml (DECISIONS #79). 1/1 routine ported (`sclasl.c.d.f:1-45`)."
+[files.routine_map]
+"sclasl" = "crates/flexmesa-adipls/src/rhs.rs::sclasl"
 
 [[files]]
 upstream_path = "adipls/adipack.c/adipls/set_rotation.c.d.f"
@@ -621,24 +659,33 @@ upstream_path = "adipls/adipack.c/adipls/setbcs.n.d.f"
 module = "adipls"
 upstream_lines = 774
 upstream_sha256 = "fb6f3c08f69d98f5232e90fdeee442dd50b33c35e4545aab972871bafb8dc8bc"
-status = "absent"
-notes = "not ported (#171)"
+status = "partial"
+flexmesa_files = ["crates/flexmesa-adipls/src/rhs.rs"]
+notes = "Routine map reviewed in notes/audit/routine_map_reviews/610b.toml (DECISIONS #79). 1/1 routine ported (`setbcs.n.d.f:1-774`)."
+[files.routine_map]
+"setbcs" = "crates/flexmesa-adipls/src/rhs.rs::setbcs"
 
 [[files]]
 upstream_path = "adipls/adipack.c/adipls/setobs_st.c.d.f"
 module = "adipls"
 upstream_lines = 150
 upstream_sha256 = "09adeb6de6af1f3a5c02cb6d100986af3c13cad4aa255dd09154edeabac70ef3"
-status = "absent"
-notes = "not ported (#171)"
+status = "partial"
+flexmesa_files = ["crates/flexmesa-adipls/src/postproc.rs"]
+notes = "Routine map reviewed in notes/audit/routine_map_reviews/610b.toml (DECISIONS #79). 1/1 routine ported (`setobs_st.c.d.f:1-150`); `output.rs::ObsSt` mirrors the corresponding `obs_st` grand-summary record layout."
+[files.routine_map]
+"setobs_st" = "crates/flexmesa-adipls/src/postproc.rs::setobs_st"
 
 [[files]]
 upstream_path = "adipls/adipack.c/adipls/setssm.n.d.f"
 module = "adipls"
 upstream_lines = 59
 upstream_sha256 = "87d5e9480f67adf0f9f6ac9aa2a9432d631c69c69ce3fdbf0442522616cb8136"
-status = "absent"
-notes = "not ported (#171)"
+status = "partial"
+flexmesa_files = ["crates/flexmesa-adipls/src/postproc.rs"]
+notes = "Routine map reviewed in notes/audit/routine_map_reviews/610b.toml (DECISIONS #79). 1/1 routine ported (`adipls/adipack.c/adipls/setssm.n.d.f:1-59`, distinguished from the unlinked duplicate `adiajobs/sr/setssm.d.f`)."
+[files.routine_map]
+"setssm" = "crates/flexmesa-adipls/src/postproc.rs::setssm"
 
 [[files]]
 upstream_path = "adipls/adipack.c/adipls/setsum.d.f"
@@ -653,72 +700,105 @@ upstream_path = "adipls/adipack.c/adipls/setups_adi.c.d.f"
 module = "adipls"
 upstream_lines = 90
 upstream_sha256 = "95a0927486937b796595b19f4404840695c4c65d56e19666536638edf6b70ba4"
-status = "absent"
-notes = "not ported (#171)"
+status = "partial"
+flexmesa_files = ["crates/flexmesa-adipls/src/gensr.rs", "crates/flexmesa-adipls/src/rhs.rs"]
+notes = "Routine map reviewed in notes/audit/routine_map_reviews/610b.toml (DECISIONS #79). 2/2 routines ported (`setups_adi.c.d.f:1-90`); `sp_radial_eps` factors out ADIPLS's `el <= 1e-6` radial threshold check documented in `rhs.rs`."
+[files.routine_map]
+"setups_adi" = "crates/flexmesa-adipls/src/rhs.rs::setups_adi+sp_radial_eps"
+"leqdet" = "crates/flexmesa-adipls/src/gensr.rs::leqdet"
 
 [[files]]
 upstream_path = "adipls/adipack.c/adipls/shtint.c.d.f"
 module = "adipls"
 upstream_lines = 235
 upstream_sha256 = "43e4e4aa832cbb2dbf1b6b7452f812bee82b35ea181928f226285f93b74a7f95"
-status = "absent"
-notes = "not ported (#171)"
+status = "partial"
+flexmesa_files = ["crates/flexmesa-adipls/src/solve.rs"]
+notes = "Routine map reviewed in notes/audit/routine_map_reviews/610b.toml (DECISIONS #79). 1/1 routine ported (`shtint.c.d.f:1-235`)."
+[files.routine_map]
+"shtint" = "crates/flexmesa-adipls/src/solve.rs::shtint"
 
 [[files]]
 upstream_path = "adipls/adipack.c/adipls/sigint.n.d.f"
 module = "adipls"
 upstream_lines = 93
 upstream_sha256 = "c62244419805395caff144f1d51bc6092a911d68dec4df8b10933ae6c1691c8e"
-status = "absent"
-notes = "not ported (#171)"
+status = "partial"
+flexmesa_files = ["crates/flexmesa-adipls/src/solve.rs"]
+routine_map_partial = ["sigint"]
+notes = "Routine map reviewed in notes/audit/routine_map_reviews/610b.toml (DECISIONS #79). 1/1 routine ported for `mdintg = 5` (`sigint.n.d.f:1-93`); `mdintg == 3` (`nrkint`) returns `UnsupportedControl`."
+[files.routine_map]
+"sigint" = "crates/flexmesa-adipls/src/solve.rs::sigint"
 
 [[files]]
 upstream_path = "adipls/adipack.c/adipls/sigitc.c.d.f"
 module = "adipls"
 upstream_lines = 114
 upstream_sha256 = "aefa593c6171f9de4700fd675b72d33f87636495bf563f09118701f81e049112"
-status = "absent"
-notes = "not ported (#171)"
+status = "partial"
+flexmesa_files = ["crates/flexmesa-adipls/src/solve.rs"]
+notes = "Routine map reviewed in notes/audit/routine_map_reviews/610b.toml (DECISIONS #79). 1/1 routine ported (`sigitc.c.d.f:1-114`)."
+[files.routine_map]
+"sigitc" = "crates/flexmesa-adipls/src/solve.rs::sigitc"
 
 [[files]]
 upstream_path = "adipls/adipack.c/adipls/sigitr.n.d.f"
 module = "adipls"
 upstream_lines = 243
 upstream_sha256 = "ce3080274932cf9bcb5f4fedfc64af1c8b6e9c22aed08482de029066c8e58fe2"
-status = "absent"
-notes = "not ported (#171)"
+status = "partial"
+flexmesa_files = ["crates/flexmesa-adipls/src/solve.rs"]
+notes = "Routine map reviewed in notes/audit/routine_map_reviews/610b.toml (DECISIONS #79). 1/1 routine ported (`sigitr.n.d.f:1-243`)."
+[files.routine_map]
+"sigitr" = "crates/flexmesa-adipls/src/solve.rs::sigitr"
 
 [[files]]
 upstream_path = "adipls/adipack.c/adipls/signew.n.d.f"
 module = "adipls"
 upstream_lines = 371
 upstream_sha256 = "0aaf5971dd7d3b10595781e29e81ac67974232ed202137a57cd4bf93cf79fc9c"
-status = "absent"
-notes = "not ported (#171)"
+status = "partial"
+flexmesa_files = ["crates/flexmesa-adipls/src/solve.rs"]
+routine_map_partial = ["signew"]
+notes = "Routine map reviewed in notes/audit/routine_map_reviews/610b.toml (DECISIONS #79). 1/1 routine ported for `itrsig == 1` (`signew.n.d.f:1-371`); `|itrsig| >= 2` returns `UnsupportedControl`."
+[files.routine_map]
+"signew" = "crates/flexmesa-adipls/src/solve.rs::signew"
 
 [[files]]
 upstream_path = "adipls/adipack.c/adipls/sigout.c.d.f"
 module = "adipls"
 upstream_lines = 418
 upstream_sha256 = "ce3ad61ab7f7e937a6ab609f19023bf4b6b8e21081c33acc17699e2f1d02eb47"
-status = "absent"
-notes = "not ported (#171)"
+status = "partial"
+flexmesa_files = ["crates/flexmesa-adipls/src/postproc.rs"]
+routine_map_partial = ["sigout"]
+notes = "Routine map reviewed in notes/audit/routine_map_reviews/610b.toml (DECISIONS #79). 1/1 routine ported (`sigout.c.d.f:1-418`); `itssol == 1`, `irotkr > 0` (`rotker`), `igm1kr == 1` (`gm1ker`), and disk `nfmode` return `UnsupportedControl`. `DefaultSigoutHandler::on_sigout` trait wrapper omitted per boilerplate rule."
+[files.routine_map]
+"sigout" = "crates/flexmesa-adipls/src/postproc.rs::sigout"
 
 [[files]]
 upstream_path = "adipls/adipack.c/adipls/sigscn.c.d.f"
 module = "adipls"
 upstream_lines = 480
 upstream_sha256 = "f1dcc729a29784b65d8007d5a03396608c3d0cb50db14b26c9bb0f7ea88ac9d4"
-status = "absent"
-notes = "not ported (#171)"
+status = "partial"
+flexmesa_files = ["crates/flexmesa-adipls/src/solve.rs"]
+notes = "Routine map reviewed in notes/audit/routine_map_reviews/610b.toml (DECISIONS #79). 2/2 routines ported (`sigscn.c.d.f:1-480`)."
+[files.routine_map]
+"sigscn" = "crates/flexmesa-adipls/src/solve.rs::sigscn"
+"signw_pg" = "crates/flexmesa-adipls/src/solve.rs::signw_pg"
 
 [[files]]
 upstream_path = "adipls/adipack.c/adipls/sigsol.c.d.f"
 module = "adipls"
 upstream_lines = 470
 upstream_sha256 = "a3710a9f204210e2d5dbe5e7ec6f583db0b3eee413b7e69671c12531e6278d1c"
-status = "absent"
-notes = "not ported (#171)"
+status = "partial"
+flexmesa_files = ["crates/flexmesa-adipls/src/solve.rs"]
+routine_map_partial = ["sigsol"]
+notes = "Routine map reviewed in notes/audit/routine_map_reviews/610b.toml (DECISIONS #79). 1/1 routine ported (`sigsol.c.d.f:1-470`); `iriche == 1` (`testri`) and nonradial Cowling `icow >= 1` return `UnsupportedControl`."
+[files.routine_map]
+"sigsol" = "crates/flexmesa-adipls/src/solve.rs::sigsol"
 
 [[files]]
 upstream_path = "adipls/adipack.c/adipls/sph.d.f"
@@ -733,8 +813,11 @@ upstream_path = "adipls/adipack.c/adipls/stevft.n.d.f"
 module = "adipls"
 upstream_lines = 152
 upstream_sha256 = "8dd1b295f3681553d0ec09a62f80225460253cd7b2400db53de0d075c9d64b39"
-status = "absent"
-notes = "not ported (#171)"
+status = "partial"
+flexmesa_files = ["crates/flexmesa-adipls/src/solve.rs"]
+notes = "Routine map reviewed in notes/audit/routine_map_reviews/610b.toml (DECISIONS #79). 1/1 routine ported (`stevft.n.d.f:1-152`)."
+[files.routine_map]
+"stevft" = "crates/flexmesa-adipls/src/solve.rs::stevft"
 
 [[files]]
 upstream_path = "adipls/adipack.c/adipls/sumout.d.f"
@@ -749,8 +832,11 @@ upstream_path = "adipls/adipack.c/adipls/takata.d.f"
 module = "adipls"
 upstream_lines = 96
 upstream_sha256 = "0215fc0a5f8a456f21bee8c11f3ea8f3bbcfe31e8b505e23b7c96710b2abc4f2"
-status = "absent"
-notes = "not ported (#171)"
+status = "partial"
+flexmesa_files = ["crates/flexmesa-adipls/src/solve.rs"]
+notes = "Routine map reviewed in notes/audit/routine_map_reviews/610b.toml (DECISIONS #79). 1/1 routine ported (`takata.d.f:1-96`)."
+[files.routine_map]
+"takata" = "crates/flexmesa-adipls/src/solve.rs::takata"
 
 [[files]]
 upstream_path = "adipls/adipack.c/adipls/trnmod.n.d.f"
@@ -781,24 +867,33 @@ upstream_path = "adipls/adipack.c/adipls/varfrq.n.d.f"
 module = "adipls"
 upstream_lines = 427
 upstream_sha256 = "51a2cc3bb8200607b322230ed470e81031488fbad2cd8be112075dda61e8011a"
-status = "absent"
-notes = "not ported (#171)"
+status = "partial"
+flexmesa_files = ["crates/flexmesa-adipls/src/postproc.rs"]
+notes = "Routine map reviewed in notes/audit/routine_map_reviews/610b.toml (DECISIONS #79). 1/1 routine ported (`varfrq.n.d.f:1-427`); `vintk_rows_3` is the 3-row specialization of `vintk` used inside `varfrq`."
+[files.routine_map]
+"varfrq" = "crates/flexmesa-adipls/src/postproc.rs::varfrq+varfrq_with_observer+vintk_rows_3"
 
 [[files]]
 upstream_path = "adipls/adipack.c/adipls/xlmult.d.f"
 module = "adipls"
 upstream_lines = 124
 upstream_sha256 = "d823c9f5e517433f035668f979a9da2dd585ab2b8dd32d0706f62831e8023f89"
-status = "absent"
-notes = "not ported (#171)"
+status = "partial"
+flexmesa_files = ["crates/flexmesa-adipls/src/rhs.rs"]
+notes = "Routine map reviewed in notes/audit/routine_map_reviews/610b.toml (DECISIONS #79). 1/1 routine ported (`xlmult.d.f:1-122`)."
+[files.routine_map]
+"xlmult" = "crates/flexmesa-adipls/src/rhs.rs::xlmult"
 
 [[files]]
 upstream_path = "adipls/adipack.c/gensr/aramax.d.f"
 module = "adipls"
 upstream_lines = 96
 upstream_sha256 = "a7be4be7df7f8715accc26d16384e99e5d8063dc94cae6f10fc3d362afacc223"
-status = "absent"
-notes = "not ported (#171)"
+status = "partial"
+flexmesa_files = ["crates/flexmesa-adipls/src/gensr.rs"]
+notes = "Routine map reviewed in notes/audit/routine_map_reviews/610b.toml (DECISIONS #79). 1/1 routine ported (`aramax.d.f:1-96`)."
+[files.routine_map]
+"aramax" = "crates/flexmesa-adipls/src/gensr.rs::aramax"
 
 [[files]]
 upstream_path = "adipls/adipack.c/gensr/blstio.f"
@@ -829,16 +924,22 @@ upstream_path = "adipls/adipack.c/gensr/derive.d.f"
 module = "adipls"
 upstream_lines = 234
 upstream_sha256 = "190a341bd2679a8efa5b8396692041a6cc006f990f390ac93a22346487f83496"
-status = "absent"
-notes = "not ported (#171)"
+status = "partial"
+flexmesa_files = ["crates/flexmesa-adipls/src/gensr.rs"]
+notes = "Routine map reviewed in notes/audit/routine_map_reviews/610b.toml (DECISIONS #79). 1/1 inventory routine ported (`derive.d.f:1-234`); Fortran `entry deriv2` (`derive.d.f:51-234`) is inside `derive` in `routine_inventory.json` and mapped alongside helpers `derive_impl` and `endpoint_deriv1`."
+[files.routine_map]
+"derive" = "crates/flexmesa-adipls/src/gensr.rs::derive+deriv2+derive_impl+endpoint_deriv1"
 
 [[files]]
 upstream_path = "adipls/adipack.c/gensr/derivk.new.d.f"
 module = "adipls"
 upstream_lines = 193
 upstream_sha256 = "cde104cc49c952d299c2c356386adacfe729c257041ef257b50c0c1f0e1cbbee"
-status = "absent"
-notes = "not ported (#171)"
+status = "partial"
+flexmesa_files = ["crates/flexmesa-adipls/src/gensr.rs"]
+notes = "Routine map reviewed in notes/audit/routine_map_reviews/610b.toml (DECISIONS #79). 1/1 routine ported (`derivk.new.d.f:1-193`)."
+[files.routine_map]
+"derivk" = "crates/flexmesa-adipls/src/gensr.rs::derivk"
 
 [[files]]
 upstream_path = "adipls/adipack.c/gensr/eiginh.d.f"
@@ -893,8 +994,12 @@ upstream_path = "adipls/adipack.c/gensr/leq.d.f"
 module = "adipls"
 upstream_lines = 230
 upstream_sha256 = "5c5f243568b0c529ab8046426fc7d87b6dc168755c6ea29c19b77970a16d1ed0"
-status = "absent"
-notes = "not ported (#171)"
+status = "partial"
+flexmesa_files = ["crates/flexmesa-adipls/src/gensr.rs"]
+notes = "Routine map reviewed in notes/audit/routine_map_reviews/610b.toml (DECISIONS #79). 2/2 routines ported (`leq.d.f:1-230`)."
+[files.routine_map]
+"leq" = "crates/flexmesa-adipls/src/gensr.rs::leq"
+"leqsd" = "crates/flexmesa-adipls/src/gensr.rs::leqsd"
 
 [[files]]
 upstream_path = "adipls/adipack.c/gensr/lininh.new.d.f"
@@ -909,16 +1014,22 @@ upstream_path = "adipls/adipack.c/gensr/lininh4.d.f"
 module = "adipls"
 upstream_lines = 259
 upstream_sha256 = "d859b1c1222f16fc83b10a502ce6854da7121bda6cef2e74a36fbf1cd4a76a9f"
-status = "absent"
-notes = "not ported (#171)"
+status = "partial"
+flexmesa_files = ["crates/flexmesa-adipls/src/gensr.rs"]
+notes = "Routine map reviewed in notes/audit/routine_map_reviews/610b.toml (DECISIONS #79). 1/1 routine ported (`lininh4.d.f:1-259`), providing the `mdintg = 5` fourth-order ODE integrator."
+[files.routine_map]
+"lininh4" = "crates/flexmesa-adipls/src/gensr.rs::lininh4"
 
 [[files]]
 upstream_path = "adipls/adipack.c/gensr/lir.d.f"
 module = "adipls"
 upstream_lines = 167
 upstream_sha256 = "e7fc1a6509106447953c53cc15ea4209581b897d11d428a7c64cec1e294aa785"
-status = "absent"
-notes = "not ported (#171)"
+status = "partial"
+flexmesa_files = ["crates/flexmesa-adipls/src/gensr.rs"]
+notes = "Routine map reviewed in notes/audit/routine_map_reviews/610b.toml (DECISIONS #79). 1/1 inventory routine ported (`lir.d.f:1-167`); Fortran `entry lir1` (`lir.d.f:45-167`) is inside `lir` in `routine_inventory.json` and mapped alongside helper `lir_impl`."
+[files.routine_map]
+"lir" = "crates/flexmesa-adipls/src/gensr.rs::lir+lir1+lir_impl"
 
 [[files]]
 upstream_path = "adipls/adipack.c/gensr/lirt.d.f"
@@ -949,16 +1060,22 @@ upstream_path = "adipls/adipack.c/gensr/notwin.d.f"
 module = "adipls"
 upstream_lines = 21
 upstream_sha256 = "c3e9245664979e90aca0482c5c9ff3217f6d040ca5b4b6afdb0025f2b595424a"
-status = "absent"
-notes = "not ported (#171)"
+status = "partial"
+flexmesa_files = ["crates/flexmesa-adipls/src/gensr.rs"]
+notes = "Routine map reviewed in notes/audit/routine_map_reviews/610b.toml (DECISIONS #79). 1/1 routine ported (`notwin.d.f:1-21`)."
+[files.routine_map]
+"notwin" = "crates/flexmesa-adipls/src/gensr.rs::notwin"
 
 [[files]]
 upstream_path = "adipls/adipack.c/gensr/notwni.f"
 module = "adipls"
 upstream_lines = 12
 upstream_sha256 = "c179992b2166610ae6893d432b13fc3b32229b8b506668f5924c1ae3cf0b4c87"
-status = "absent"
-notes = "not ported (#171)"
+status = "partial"
+flexmesa_files = ["crates/flexmesa-adipls/src/gensr.rs"]
+notes = "Routine map reviewed in notes/audit/routine_map_reviews/610b.toml (DECISIONS #79). 1/1 routine ported (`notwni.f:1-12`)."
+[files.routine_map]
+"notwni" = "crates/flexmesa-adipls/src/gensr.rs::notwni"
 
 [[files]]
 upstream_path = "adipls/adipack.c/gensr/nrk.d.f"
@@ -973,8 +1090,13 @@ upstream_path = "adipls/adipack.c/gensr/ofiles.c.f"
 module = "adipls"
 upstream_lines = 506
 upstream_sha256 = "318e396494d08b299236557a8e57941a32379c21e843f1be31f94999c9fe733b"
-status = "absent"
-notes = "not ported (#171)"
+status = "partial"
+flexmesa_files = ["crates/flexmesa-adipls/src/parser.rs", "crates/flexmesa-adipls/src/postproc.rs"]
+routine_map_partial = ["nscfil", "ofiles"]
+notes = "Routine map reviewed in notes/audit/routine_map_reviews/610b.toml (DECISIONS #79). 2/12 routines mapped: `nscfil` (`postproc.rs::nscfil`, checks the 7 fixed ADIPLS output units in memory rather than general `common/cofile/` via `stfile`) and `ofiles` unit/path block reader (`parser.rs::parse_ofiles_block`, mirroring `ofiles.c.f:61-73` with `'0' -> '/dev/null'` normalization; in-memory `SigoutState` replaces `common/cofile/`). Disk I/O routines (`stfile`, `addfil`, `opnfil`, `newfil`, `openf`, `openfc`, `openfs`, `dmpfil`, `blopen`, `close_file`) are unported; `gensr/ofiles.f` is the unlinked duplicate."
+[files.routine_map]
+"nscfil" = "crates/flexmesa-adipls/src/postproc.rs::nscfil"
+"ofiles" = "crates/flexmesa-adipls/src/parser.rs::parse_ofiles_block"
 
 [[files]]
 upstream_path = "adipls/adipack.c/gensr/ofiles.f"
@@ -1037,8 +1159,11 @@ upstream_path = "adipls/adipack.c/gensr/store.d.f"
 module = "adipls"
 upstream_lines = 21
 upstream_sha256 = "7243cb44e474e0efa714da43261d7369bba42edce2f699f4336349790b261c4f"
-status = "absent"
-notes = "not ported (#171)"
+status = "partial"
+flexmesa_files = ["crates/flexmesa-adipls/src/gensr.rs"]
+notes = "Routine map reviewed in notes/audit/routine_map_reviews/610b.toml (DECISIONS #79). 1/1 routine ported (`store.d.f:1-21`)."
+[files.routine_map]
+"store" = "crates/flexmesa-adipls/src/gensr.rs::store"
 
 [[files]]
 upstream_path = "adipls/adipack.c/gensr/strcompr.f"
@@ -1053,24 +1178,33 @@ upstream_path = "adipls/adipack.c/gensr/vinta.d.f"
 module = "adipls"
 upstream_lines = 134
 upstream_sha256 = "79dc6040bec999e657ec91f831425d7b6141cb118036f18568405d3f75b22dec"
-status = "absent"
-notes = "not ported (#171)"
+status = "partial"
+flexmesa_files = ["crates/flexmesa-adipls/src/gensr.rs"]
+notes = "Routine map reviewed in notes/audit/routine_map_reviews/610b.toml (DECISIONS #79). 1/1 routine ported (`vinta.d.f:1-134`)."
+[files.routine_map]
+"vinta" = "crates/flexmesa-adipls/src/gensr.rs::vinta"
 
 [[files]]
 upstream_path = "adipls/adipack.c/gensr/vintk.new.d.f"
 module = "adipls"
 upstream_lines = 182
 upstream_sha256 = "41780484a9c9019c6426e046cd1b9a05f91d9c02e91dd4519fc49413367bdd75"
-status = "absent"
-notes = "not ported (#171)"
+status = "partial"
+flexmesa_files = ["crates/flexmesa-adipls/src/gensr.rs"]
+notes = "Routine map reviewed in notes/audit/routine_map_reviews/610b.toml (DECISIONS #79). 1/1 routine ported (`vintk.new.d.f:1-182`); `postproc.rs::vintk_rows_3` provides a specialized 3-row helper for `varfrq`."
+[files.routine_map]
+"vintk" = "crates/flexmesa-adipls/src/gensr.rs::vintk"
 
 [[files]]
 upstream_path = "adipls/adipack.c/gensr/zero.d.f"
 module = "adipls"
 upstream_lines = 23
 upstream_sha256 = "b7a15ef8cfadd993dc951950b53bb3d3939aaf60f7ff344f41373304502e67cf"
-status = "absent"
-notes = "not ported (#171)"
+status = "partial"
+flexmesa_files = ["crates/flexmesa-adipls/src/gensr.rs"]
+notes = "Routine map reviewed in notes/audit/routine_map_reviews/610b.toml (DECISIONS #79). 1/1 routine ported (`zero.d.f:1-23`)."
+[files.routine_map]
+"zero" = "crates/flexmesa-adipls/src/gensr.rs::zero"
 
 [[files]]
 upstream_path = "astero/private/adipls_support.f90"
@@ -3022,48 +3156,95 @@ upstream_path = "gyre/gyre/src/ad/ad_bound_m.fypp"
 module = "gyre"
 upstream_lines = 903
 upstream_sha256 = "96ccf95d84360060ab52cdfe8e9305fd707c8d9166375dc25c1cf09c9b96aa8a"
-status = "absent"
-notes = "not ported (#170)"
+status = "partial"
+flexmesa_files = ["crates/flexmesa-gyre/src/ad.rs"]
+routine_map_partial = ["ad_bound_t_", "build_o", "stencil_"]
+notes = "Routine map reviewed in notes/audit/routine_map_reviews/610b.toml (DECISIONS #79). AdBound supports REGULAR/ZERO_R/ZERO_H inner and VACUUM/JCD outer boundaries (with vacuum fallback on other outer types when ml.is_vacuum(pt_o)); non-vacuum DZIEM/ISOTHERMAL/UNNO/GAMMA1/GAMMA2 (build_dziem_o_, build_decomp_o_, build_decomp_o_::H_, build_gamma1_o_, build_gamma2_o_) are unported."
+[files.routine_map]
+"ad_bound_t_" = "crates/flexmesa-gyre/src/ad.rs::AdBound::new"
+"stencil_" = "crates/flexmesa-gyre/src/ad.rs::AdBound::new"
+"build_i" = "crates/flexmesa-gyre/src/ad.rs::build_i"
+"build_regular_i_" = "crates/flexmesa-gyre/src/ad.rs::build_i"
+"build_zero_r_i_" = "crates/flexmesa-gyre/src/ad.rs::build_i"
+"build_zero_h_i_" = "crates/flexmesa-gyre/src/ad.rs::build_i"
+"build_o" = "crates/flexmesa-gyre/src/ad.rs::build_o"
+"build_vacuum_o_" = "crates/flexmesa-gyre/src/ad.rs::build_o"
+"build_jcd_o_" = "crates/flexmesa-gyre/src/ad.rs::build_o"
 
 [[files]]
 upstream_path = "gyre/gyre/src/ad/ad_bvp_m.fypp"
 module = "gyre"
 upstream_lines = 262
 upstream_sha256 = "3df92eb0784d9760d3ebda7ae1d42f017e604b84c67ddc36320e1e7e7e8c77b3"
-status = "absent"
-notes = "not ported (#170)"
+status = "partial"
+flexmesa_files = ["crates/flexmesa-gyre/src/ad.rs"]
+routine_map_partial = ["ad_bvp_t_"]
+notes = "Routine map reviewed in notes/audit/routine_map_reviews/610b.toml (DECISIONS #79). AdBvp constructor (AdBvp::new) and homogeneous wave recovery (ad_wave_hom with inlined wave_t_y_). quasiad_eigfuncs, matrix_type='BAND', and wave_t_inhom_ are unported."
+[files.routine_map]
+"ad_bvp_t_" = "crates/flexmesa-gyre/src/ad.rs::AdBvp::new"
+"wave_t_hom_" = "crates/flexmesa-gyre/src/ad.rs::ad_wave_hom"
+"wave_t_y_" = "crates/flexmesa-gyre/src/ad.rs::ad_wave_hom"
 
 [[files]]
 upstream_path = "gyre/gyre/src/ad/ad_diff_m.fypp"
 module = "gyre"
 upstream_lines = 134
 upstream_sha256 = "427eef14da408a555bb00eb280cdb0d3aaf801fca72103cdb64839a3b149c1f2"
-status = "absent"
-notes = "not ported (#170)"
+status = "partial"
+flexmesa_files = ["crates/flexmesa-gyre/src/ad.rs"]
+notes = "Routine map reviewed in notes/audit/routine_map_reviews/610b.toml (DECISIONS #79). AdDiff dispatches COLLOC_GL2, COLLOC_GL4, MAGNUS_GL2, and segment-boundary AdMatch; remaining diff schemes return Unported."
+[files.routine_map]
+"ad_diff_t_" = "crates/flexmesa-gyre/src/ad.rs::AdDiff::new"
+"build" = "crates/flexmesa-gyre/src/ad.rs::AdDiff::build"
 
 [[files]]
 upstream_path = "gyre/gyre/src/ad/ad_eqns_m.fypp"
 module = "gyre"
 upstream_lines = 271
 upstream_sha256 = "e4a87270b84202fd9d00539ee557a42d080e2e94539da2033161f65e43e5770b"
-status = "absent"
-notes = "not ported (#170)"
+status = "partial"
+flexmesa_files = ["crates/flexmesa-gyre/src/ad.rs"]
+notes = "Routine map reviewed in notes/audit/routine_map_reviews/610b.toml (DECISIONS #79). Full 4x4 adiabatic ODE system (AdEqns) in GYRE canonical variables (OSC and EXP time_factor)."
+[files.routine_map]
+"ad_eqns_t_" = "crates/flexmesa-gyre/src/ad.rs::AdEqns::new"
+"stencil" = "crates/flexmesa-gyre/src/ad.rs::AdEqns::stencil"
+"A" = "crates/flexmesa-gyre/src/ad.rs::a"
+"xA" = "crates/flexmesa-gyre/src/ad.rs::xa"
 
 [[files]]
 upstream_path = "gyre/gyre/src/ad/ad_match_m.fypp"
 module = "gyre"
 upstream_lines = 222
 upstream_sha256 = "76b56da71f1b12a71d2d806c6f50fd2ec847b8976cae9e818ed68d71cd09e497"
-status = "absent"
-notes = "not ported (#170)"
+status = "partial"
+flexmesa_files = ["crates/flexmesa-gyre/src/ad.rs"]
+notes = "Routine map reviewed in notes/audit/routine_map_reviews/610b.toml (DECISIONS #79). AdMatch segment-boundary match conditions (4x4 continuous y_1, y_3 and jump in y_2, y_4)."
+[files.routine_map]
+"ad_match_t_" = "crates/flexmesa-gyre/src/ad.rs::AdMatch::new"
+"stencil_" = "crates/flexmesa-gyre/src/ad.rs::AdMatch::new"
+"build" = "crates/flexmesa-gyre/src/ad.rs::AdMatch::build"
 
 [[files]]
 upstream_path = "gyre/gyre/src/ad/ad_trans_m.fypp"
 module = "gyre"
 upstream_lines = 1039
 upstream_sha256 = "b5ec9d74da6b0797b8f0e6d995007072869d33f54b750e42a7654da23914a721"
-status = "absent"
-notes = "not ported (#170)"
+status = "partial"
+flexmesa_files = ["crates/flexmesa-gyre/src/ad.rs"]
+routine_map_partial = ["G_", "H_", "ad_trans_t_", "dH_", "trans_cond", "trans_eqns", "trans_vars"]
+notes = "Routine map reviewed in notes/audit/routine_map_reviews/610b.toml (DECISIONS #79). AdTrans implements variables_set='GYRE' (SET) and 'JCD' (JCD_SET: full stencil, G_jcd_, H_jcd_, dH_jcd_). G_/H_/dH_ dispatch only JCD_SET (DZIEM/MIX/LAGP unported); trans_eqns and trans_cond implement from=.TRUE. only (from=.FALSE. absent/abort); trans_vars implements from=.FALSE. only."
+[files.routine_map]
+"ad_trans_t_" = "crates/flexmesa-gyre/src/ad.rs::AdTrans::new"
+"stencil" = "crates/flexmesa-gyre/src/ad.rs::AdTrans::stencil"
+"trans_eqns" = "crates/flexmesa-gyre/src/ad.rs::trans_eqns"
+"trans_cond" = "crates/flexmesa-gyre/src/ad.rs::trans_cond_2x4+trans_cond_4x4"
+"G_" = "crates/flexmesa-gyre/src/ad.rs::g_jcd"
+"G_jcd_" = "crates/flexmesa-gyre/src/ad.rs::g_jcd"
+"H_" = "crates/flexmesa-gyre/src/ad.rs::h_jcd"
+"H_jcd_" = "crates/flexmesa-gyre/src/ad.rs::h_jcd"
+"dH_" = "crates/flexmesa-gyre/src/ad.rs::dh_jcd"
+"dH_jcd_" = "crates/flexmesa-gyre/src/ad.rs::dh_jcd"
+"trans_vars" = "crates/flexmesa-gyre/src/ad.rs::trans_vars_to"
 
 [[files]]
 upstream_path = "gyre/gyre/src/bvp/bound_m.fypp"
@@ -3078,40 +3259,66 @@ upstream_path = "gyre/gyre/src/bvp/bvp_m.fypp"
 module = "gyre"
 upstream_lines = 330
 upstream_sha256 = "0ed1c6502d3dc42716e722b5a524b18f86844ba5e68f0be374349c5854bbf4e6"
-status = "absent"
-notes = "not ported (#170)"
+status = "partial"
+flexmesa_files = ["crates/flexmesa-gyre/src/ad.rs", "crates/flexmesa-gyre/src/nad.rs", "crates/flexmesa-gyre/src/rad.rs"]
+routine_map_partial = ["bvp_${S}$_"]
+notes = "Routine map reviewed in notes/audit/routine_map_reviews/610b.toml (DECISIONS #79). Rule A full for both real (rt) and complex (ct) lifecycle methods across AdBvp (ad.rs, canonical target), RadBvp (rad.rs), and NadBvp (nad.rs: NadBvp::new/build/factor/det/soln_vec_hom). soln_vec_inhom_${S}$_, resd_vec_hom_${S}$_, resd_vec_inhom_${S}$_ are unported."
+[files.routine_map]
+"bvp_${S}$_" = "crates/flexmesa-gyre/src/ad.rs::AdBvp::new"
+"build_${S}$_" = "crates/flexmesa-gyre/src/ad.rs::AdBvp::build"
+"factor_${S}$_" = "crates/flexmesa-gyre/src/ad.rs::factor"
+"det_${S}$_" = "crates/flexmesa-gyre/src/ad.rs::det"
+"soln_vec_hom_${S}$_" = "crates/flexmesa-gyre/src/ad.rs::soln_vec_hom"
 
 [[files]]
 upstream_path = "gyre/gyre/src/common/atmos_m.fypp"
 module = "gyre"
 upstream_lines = 298
 upstream_sha256 = "7d33867854e3a2646443a9608d3f6d411ffa92e3aceb7b0aa5be2ed04c545008"
-status = "absent"
-notes = "not ported (#170)"
+status = "partial"
+flexmesa_files = ["crates/flexmesa-gyre/src/ad.rs", "crates/flexmesa-gyre/src/rad.rs"]
+notes = "Routine map reviewed in notes/audit/routine_map_reviews/610b.toml (DECISIONS #79). atmos_chi_r shared by RadBound and AdBound JCD outer boundaries; eval_atmos_coeffs_isothrm inlined in both RadBound::new (rad.rs) and AdBound::new (ad.rs). atmos_chi_c_, eval_atmos_cutoff_freqs, and eval_atmos_coeffs_unno are unported."
+[files.routine_map]
+"atmos_chi_r_" = "crates/flexmesa-gyre/src/rad.rs::atmos_chi_r"
+"eval_atmos_coeffs_isothrm" = "crates/flexmesa-gyre/src/rad.rs::RadBound::new"
 
 [[files]]
 upstream_path = "gyre/gyre/src/common/constants_m.fypp"
 module = "gyre"
 upstream_lines = 188
 upstream_sha256 = "13d3d84a7acb520feb0d06b637a046ade9e4d718f747d9e7dc9b33bdbd0846ee"
-status = "absent"
-notes = "not ported (#170)"
+status = "partial"
+flexmesa_files = ["crates/flexmesa-gyre/src/constants.rs", "crates/flexmesa-gyre/src/mesa.rs"]
+notes = "Routine map reviewed in notes/audit/routine_map_reviews/610b.toml (DECISIONS #79). Physical/GYRE_DIR constant setters in constants.rs (delegated from mesa.rs::set_constant and set_constant_str); read_constants is unported (GyreConstants::new folds forum/const_m defaults)."
+[files.routine_map]
+"set_constant_r_" = "crates/flexmesa-gyre/src/constants.rs::set_real"
+"set_constant_c_" = "crates/flexmesa-gyre/src/constants.rs::set_char"
 
 [[files]]
 upstream_path = "gyre/gyre/src/common/freq_context_m.fypp"
 module = "gyre"
 upstream_lines = 248
 upstream_sha256 = "63fb4f2bc3b99274f7c7704bdcfa0d4438a2b5de0d29785be4bb0348e7ea47fc"
-status = "absent"
-notes = "not ported (#170)"
+status = "partial"
+flexmesa_files = ["crates/flexmesa-gyre/src/context.rs"]
+routine_map_partial = ["freq_scale_context_"]
+notes = "Routine map reviewed in notes/audit/routine_map_reviews/610b.toml (DECISIONS #79). freq_scale supports ACOUSTIC_DELTA/GRAVITY_DELTA/UPPER_DELTA/LOWER_DELTA; ROSSBY_I/ROSSBY_O/ACOUSTIC_CUTOFF/GRAVITY_CUTOFF and COROT_I/COROT_O (freq_shift returns 0 for INERTIAL only and Unported for COROT_*) are unported."
+[files.routine_map]
+"freq_scale_context_" = "crates/flexmesa-gyre/src/context.rs::freq_scale"
 
 [[files]]
 upstream_path = "gyre/gyre/src/common/freq_m.fypp"
 module = "gyre"
 upstream_lines = 160
 upstream_sha256 = "f6ba267eef8c082958418daae8772355e222210a2988657e3bc008b7a0b688f4"
-status = "absent"
-notes = "not ported (#170)"
+status = "partial"
+flexmesa_files = ["crates/flexmesa-gyre/src/context.rs"]
+routine_map_partial = ["freq_scale_model_"]
+notes = "Routine map reviewed in notes/audit/routine_map_reviews/610b.toml (DECISIONS #79). Model-level HZ/UHZ/RAD_PER_SEC/CYC_PER_DAY/NONE/CRITICAL scaling in Context::freq_scale; freq_scale_parfaitd_model_ is unported."
+[files.routine_map]
+"freq_scale_" = "crates/flexmesa-gyre/src/context.rs::freq_scale"
+"freq_scale_model_" = "crates/flexmesa-gyre/src/context.rs::freq_scale"
+"freq_scale_evol_model_" = "crates/flexmesa-gyre/src/context.rs::freq_scale"
 
 [[files]]
 upstream_path = "gyre/gyre/src/common/status_m.fypp"
@@ -3126,16 +3333,24 @@ upstream_path = "gyre/gyre/src/common/string_m.fypp"
 module = "gyre"
 upstream_lines = 393
 upstream_sha256 = "f4334c372b4170c6df53330727265de57577df2fbd7096f60e53be59d4524e07"
-status = "absent"
-notes = "not ported (#170)"
+status = "partial"
+flexmesa_files = ["crates/flexmesa-gyre/src/par.rs"]
+notes = "Routine map reviewed in notes/audit/routine_map_reviews/610b.toml (DECISIONS #79). Comma-delimited tag-list splitting ported for select_par_v; remaining 7 string utilities are unported."
+[files.routine_map]
+"split_list" = "crates/flexmesa-gyre/src/par.rs::split_list"
 
 [[files]]
 upstream_path = "gyre/gyre/src/common/util_m.fypp"
 module = "gyre"
 upstream_lines = 265
 upstream_sha256 = "f044c06885f9da5d95588c0b96c81f3d9122c6479036352b389acacad097f504"
-status = "absent"
-notes = "not ported (#170)"
+status = "partial"
+flexmesa_files = ["crates/flexmesa-gyre/src/par.rs"]
+routine_map_partial = ["select_par_${S}$_1_", "select_par_${S}$_v_"]
+notes = "Routine map reviewed in notes/audit/routine_map_reviews/610b.toml (DECISIONS #79). Parameter tag selection (last-wins and matching vector) for 5/6 types; orbit_par_t (or) is unported. Logging/header helpers (form_header, set_log_level, check_log_level, elem_group_name) are unported."
+[files.routine_map]
+"select_par_${S}$_1_" = "crates/flexmesa-gyre/src/par.rs::select_par_1"
+"select_par_${S}$_v_" = "crates/flexmesa-gyre/src/par.rs::select_par_v"
 
 [[files]]
 upstream_path = "gyre/gyre/src/common/version_m.fypp"
@@ -3150,8 +3365,20 @@ upstream_path = "gyre/gyre/src/context/context_m.fypp"
 module = "gyre"
 upstream_lines = 571
 upstream_sha256 = "cc633a8baea015a3cdf159437b1aec168bbfc208f28e32835eacd3bf4f757b9d"
-status = "absent"
-notes = "not ported (#170)"
+status = "partial"
+flexmesa_files = ["crates/flexmesa-gyre/src/context.rs"]
+routine_map_partial = ["${N}$_${S}$_", "Omega_rot", "context_t_", "l_e_c_", "lambda_c_", "omega_c_c_"]
+notes = "Routine map reviewed in notes/audit/routine_map_reviews/610b.toml (DECISIONS #79). Context supports NULL Coriolis, MODEL Omega_rot_source, MODEL deps_source, and complex_lambda=.FALSE.; omega_c_c_ omits optional use_omega_r, and UNIFORM/FILE sources, complex_lambda=.TRUE., set_Omega_rot, and file deps readers return Unported or are omitted; model/point_i/point_o are pub fields."
+[files.routine_map]
+"context_t_" = "crates/flexmesa-gyre/src/context.rs::new"
+"omega_c_r_" = "crates/flexmesa-gyre/src/context.rs::omega_c_r"
+"omega_c_c_" = "crates/flexmesa-gyre/src/context.rs::omega_c_c"
+"lambda_r_" = "crates/flexmesa-gyre/src/context.rs::lambda_r"
+"lambda_c_" = "crates/flexmesa-gyre/src/context.rs::lambda_c"
+"l_e_r_" = "crates/flexmesa-gyre/src/context.rs::l_e_r"
+"l_e_c_" = "crates/flexmesa-gyre/src/context.rs::l_e_c"
+"Omega_rot" = "crates/flexmesa-gyre/src/context.rs::omega_rot"
+"${N}$_${S}$_" = "crates/flexmesa-gyre/src/context.rs::eps_rho_c+eps_t_c"
 
 [[files]]
 upstream_path = "gyre/gyre/src/context/state_m.fypp"
@@ -3166,16 +3393,28 @@ upstream_path = "gyre/gyre/src/diff/colloc_diff_m.fypp"
 module = "gyre"
 upstream_lines = 391
 upstream_sha256 = "4898184baafbbdaea20f15d69b3668dd8502644b11b4c5a2ce963f405b312d3b"
-status = "absent"
-notes = "not ported (#170)"
+status = "partial"
+flexmesa_files = ["crates/flexmesa-gyre/src/nad.rs", "crates/flexmesa-gyre/src/rad.rs"]
+routine_map_partial = ["build_${S}$_", "build_GL4_${S}$_", "build_irk_${S}$_", "colloc_diff_${S}$_"]
+notes = "Routine map reviewed in notes/audit/routine_map_reviews/610b.toml (DECISIONS #79). Rule A full for build_GL2_${S}$_ (real in rad.rs::colloc_gl2_build; complex inline in nad.rs::NadDiff::build); Rule A partial for build/build_GL4/build_irk/colloc_diff (complex GL4 and build_GL6_${S}$_ are unported)."
+[files.routine_map]
+"colloc_diff_${S}$_" = "crates/flexmesa-gyre/src/rad.rs::colloc_stencil+colloc_scheme+gl4"
+"build_${S}$_" = "crates/flexmesa-gyre/src/rad.rs::colloc_gl2_build+colloc_gl4_build"
+"build_GL2_${S}$_" = "crates/flexmesa-gyre/src/rad.rs::colloc_gl2_build"
+"build_GL4_${S}$_" = "crates/flexmesa-gyre/src/rad.rs::colloc_gl4_build"
+"build_irk_${S}$_" = "crates/flexmesa-gyre/src/rad.rs::colloc_gl4_build"
 
 [[files]]
 upstream_path = "gyre/gyre/src/diff/diff_factory_m.fypp"
 module = "gyre"
 upstream_lines = 102
 upstream_sha256 = "b27d8262d4e73ad52edeae9eb5cec8d58288d991ead7ba36cc3a1bfe923e425d"
-status = "absent"
-notes = "not ported (#170)"
+status = "partial"
+flexmesa_files = ["crates/flexmesa-gyre/src/rad.rs"]
+routine_map_partial = ["diff_${S}$_"]
+notes = "Routine map reviewed in notes/audit/routine_map_reviews/610b.toml (DECISIONS #79). Scheme dispatch (COLLOC_GL2, COLLOC_GL4, MAGNUS_GL2); COLLOC_GL6, MAGNUS_GL4, MAGNUS_GL6, TRAPZ, MIRK return Unported."
+[files.routine_map]
+"diff_${S}$_" = "crates/flexmesa-gyre/src/rad.rs::diff_kind"
 
 [[files]]
 upstream_path = "gyre/gyre/src/diff/diff_m.fypp"
@@ -3198,8 +3437,14 @@ upstream_path = "gyre/gyre/src/diff/magnus_diff_m.fypp"
 module = "gyre"
 upstream_lines = 358
 upstream_sha256 = "063135d0699a8c6302676a41b92addab98c2ffd6766ebf819427322b53b22e66"
-status = "absent"
-notes = "not ported (#170)"
+status = "partial"
+flexmesa_files = ["crates/flexmesa-gyre/src/ad.rs", "crates/flexmesa-gyre/src/magnus.rs", "crates/flexmesa-gyre/src/nad.rs", "crates/flexmesa-gyre/src/rad.rs"]
+routine_map_partial = ["build_${S}$_", "magnus_diff_${S}$_"]
+notes = "Routine map reviewed in notes/audit/routine_map_reviews/610b.toml (DECISIONS #79). Rule A full for dOmega_GL2_${S}$_ across AdDiff/RadDiff::build (rt) and NadDiff::build (ct); Rule A partial for build/magnus_diff (GL4/GL6 and dOmega_GL{4,6}_${S}$_ return Unported)."
+[files.routine_map]
+"magnus_diff_${S}$_" = "crates/flexmesa-gyre/src/magnus.rs::magnus_stencil"
+"build_${S}$_" = "crates/flexmesa-gyre/src/magnus.rs::magnus_build_r+magnus_build_c+magnus_blocks"
+"dOmega_GL2_${S}$_" = "crates/flexmesa-gyre/src/ad.rs::AdDiff::build"
 
 [[files]]
 upstream_path = "gyre/gyre/src/diff/mirk_diff_m.fypp"
@@ -3222,8 +3467,34 @@ upstream_path = "gyre/gyre/src/ext/ext_complex_m.fypp"
 module = "gyre"
 upstream_lines = 921
 upstream_sha256 = "781df1821132ba6031823fc119f5977691e35ba874c65f20eeb5699e36ba6a18"
-status = "absent"
-notes = "not ported (#170)"
+status = "partial"
+flexmesa_files = ["crates/flexmesa-gyre/src/ext_complex.rs"]
+notes = "Routine map reviewed in notes/audit/routine_map_reviews/610b.toml (DECISIONS #79). Extended-range complex arithmetic (ExtC). fraction_, exponent_, op_neq_cx_cx_, and mixed-type operator templates are unported (callers convert via from_*)."
+[files.routine_map]
+"ext_ct_r_" = "crates/flexmesa-gyre/src/ext_complex.rs::from_real"
+"ext_ct_r_i_" = "crates/flexmesa-gyre/src/ext_complex.rs::from_parts"
+"ext_ct_c_" = "crates/flexmesa-gyre/src/ext_complex.rs::from_cplx"
+"ext_ct_rx_" = "crates/flexmesa-gyre/src/ext_complex.rs::from_extr"
+"ext_ct_rx_ix_" = "crates/flexmesa-gyre/src/ext_complex.rs::from_extr_parts"
+"op_plus_cx_cx_" = "crates/flexmesa-gyre/src/ext_complex.rs::plus"
+"op_minus_cx_" = "crates/flexmesa-gyre/src/ext_complex.rs::negate"
+"op_minus_cx_cx_" = "crates/flexmesa-gyre/src/ext_complex.rs::minus"
+"op_times_cx_cx_" = "crates/flexmesa-gyre/src/ext_complex.rs::times"
+"op_divide_cx_cx_" = "crates/flexmesa-gyre/src/ext_complex.rs::divide"
+"op_eq_cx_cx_" = "crates/flexmesa-gyre/src/ext_complex.rs::ext_eq"
+"ext_rt_cx_" = "crates/flexmesa-gyre/src/ext_complex.rs::to_extr"
+"real_" = "crates/flexmesa-gyre/src/ext_complex.rs::to_real"
+"cmplx_" = "crates/flexmesa-gyre/src/ext_complex.rs::to_cplx"
+"real_part_" = "crates/flexmesa-gyre/src/ext_complex.rs::real_part"
+"imag_part_" = "crates/flexmesa-gyre/src/ext_complex.rs::imag_part"
+"valid_" = "crates/flexmesa-gyre/src/ext_complex.rs::valid"
+"conjg_" = "crates/flexmesa-gyre/src/ext_complex.rs::conj"
+"product_" = "crates/flexmesa-gyre/src/ext_complex.rs::product"
+"abs_" = "crates/flexmesa-gyre/src/ext_complex.rs::abs"
+"exp_" = "crates/flexmesa-gyre/src/ext_complex.rs::exp"
+"sqrt_" = "crates/flexmesa-gyre/src/ext_complex.rs::sqrt"
+"scale_" = "crates/flexmesa-gyre/src/ext_complex.rs::scale"
+"split_" = "crates/flexmesa-gyre/src/ext_complex.rs::split"
 
 [[files]]
 upstream_path = "gyre/gyre/src/ext/ext_m.fypp"
@@ -3238,8 +3509,35 @@ upstream_path = "gyre/gyre/src/ext/ext_real_m.fypp"
 module = "gyre"
 upstream_lines = 810
 upstream_sha256 = "71a9baf59cadb59a6272bcae7ab6087b48998c11a7af20a845c196be05fdd0f7"
-status = "absent"
-notes = "not ported (#170)"
+status = "partial"
+flexmesa_files = ["crates/flexmesa-gyre/src/ext_real.rs"]
+routine_map_partial = ["op_${N}$_rx_r_"]
+notes = "Routine map reviewed in notes/audit/routine_map_reviews/610b.toml (DECISIONS #79). Extended-range real arithmetic (ExtR). ext_rt_c_, standalone op_neq_rx_rx_, r_rx helpers, and the 6 relational op_{eq,neq,lt,gt,le,ge}_rx_r_ overloads are unported (op_${N}$_rx_r_ maps 4/10 arithmetic ops only; std::ops traits wrap plus/minus/times/divide/negate)."
+[files.routine_map]
+"ext_rt_r_" = "crates/flexmesa-gyre/src/ext_real.rs::from_real"
+"op_plus_rx_rx_" = "crates/flexmesa-gyre/src/ext_real.rs::plus"
+"op_minus_rx_" = "crates/flexmesa-gyre/src/ext_real.rs::negate"
+"op_minus_rx_rx_" = "crates/flexmesa-gyre/src/ext_real.rs::minus"
+"op_times_rx_rx_" = "crates/flexmesa-gyre/src/ext_real.rs::times"
+"op_divide_rx_rx_" = "crates/flexmesa-gyre/src/ext_real.rs::divide"
+"op_eq_rx_rx_" = "crates/flexmesa-gyre/src/ext_real.rs::ext_eq"
+"op_lt_rx_rx_" = "crates/flexmesa-gyre/src/ext_real.rs::lt"
+"op_gt_rx_rx_" = "crates/flexmesa-gyre/src/ext_real.rs::gt"
+"op_le_rx_rx_" = "crates/flexmesa-gyre/src/ext_real.rs::le"
+"op_ge_rx_rx_" = "crates/flexmesa-gyre/src/ext_real.rs::ge"
+"op_${N}$_rx_r_" = "crates/flexmesa-gyre/src/ext_real.rs::add_r+sub_r+mul_r+div_r"
+"real_" = "crates/flexmesa-gyre/src/ext_real.rs::to_real"
+"valid_" = "crates/flexmesa-gyre/src/ext_real.rs::valid"
+"product_" = "crates/flexmesa-gyre/src/ext_real.rs::product"
+"abs_" = "crates/flexmesa-gyre/src/ext_real.rs::abs"
+"exp_" = "crates/flexmesa-gyre/src/ext_real.rs::exp"
+"sqrt_" = "crates/flexmesa-gyre/src/ext_real.rs::sqrt"
+"fraction_" = "crates/flexmesa-gyre/src/ext_real.rs::fraction"
+"exponent_" = "crates/flexmesa-gyre/src/ext_real.rs::exponent"
+"max_" = "crates/flexmesa-gyre/src/ext_real.rs::max"
+"min_" = "crates/flexmesa-gyre/src/ext_real.rs::min"
+"scale_" = "crates/flexmesa-gyre/src/ext_real.rs::scale"
+"split_" = "crates/flexmesa-gyre/src/ext_real.rs::split"
 
 [[files]]
 upstream_path = "gyre/gyre/src/forum/build/Make.inc"
@@ -3318,8 +3616,16 @@ upstream_path = "gyre/gyre/src/forum/src/lib/order_m.fypp"
 module = "gyre"
 upstream_lines = 554
 upstream_sha256 = "f87a15f2a7e3e99fd8de00f9ccbe262aba56c13b2aad320a72663b4fbccb4d62"
-status = "absent"
-notes = "not ported (#170)"
+status = "partial"
+flexmesa_files = ["crates/flexmesa-gyre/src/forum.rs"]
+routine_map_partial = ["locate_${suffix}$_", "locate_${suffix}$_::locate_l_", "locate_${suffix}$_::locate_r_", "sort_indices_${suffix}$_", "unique_indices_${suffix}$_"]
+notes = "Routine map reviewed in notes/audit/routine_map_reviews/610b.toml (DECISIONS #79). Real f64 Knuth list merge sort, unique_indices, and locate/locate_l/locate_r; locate_uniform is unported."
+[files.routine_map]
+"sort_indices_${suffix}$_" = "crates/flexmesa-gyre/src/forum.rs::sort_indices"
+"unique_indices_${suffix}$_" = "crates/flexmesa-gyre/src/forum.rs::unique_indices"
+"locate_${suffix}$_" = "crates/flexmesa-gyre/src/forum.rs::locate"
+"locate_${suffix}$_::locate_l_" = "crates/flexmesa-gyre/src/forum.rs::locate_l"
+"locate_${suffix}$_::locate_r_" = "crates/flexmesa-gyre/src/forum.rs::locate_r"
 
 [[files]]
 upstream_path = "gyre/gyre/src/forum/src/lib/string_m.fypp"
@@ -3478,24 +3784,51 @@ upstream_path = "gyre/gyre/src/grid/grid_m.fypp"
 module = "gyre"
 upstream_lines = 466
 upstream_sha256 = "3220c562cc4a1187e1e95de2e697c06fdcb2ca7fc2e51a883b19efe5b0b94979"
-status = "absent"
-notes = "not ported (#170)"
+status = "partial"
+flexmesa_files = ["crates/flexmesa-gyre/src/grid.rs"]
+notes = "Routine map reviewed in notes/audit/routine_map_reviews/610b.toml (DECISIONS #79). All 13 grid_t constructors and segment/point query methods are ported."
+[files.routine_map]
+"grid_t_x_" = "crates/flexmesa-gyre/src/grid.rs::from_x"
+"grid_t_nest_" = "crates/flexmesa-gyre/src/grid.rs::nest"
+"grid_t_split_" = "crates/flexmesa-gyre/src/grid.rs::split"
+"pt_i" = "crates/flexmesa-gyre/src/grid.rs::pt_i"
+"pt_o" = "crates/flexmesa-gyre/src/grid.rs::pt_o"
+"pt_x" = "crates/flexmesa-gyre/src/grid.rs::pt_x"
+"s_i" = "crates/flexmesa-gyre/src/grid.rs::s_i"
+"s_o" = "crates/flexmesa-gyre/src/grid.rs::s_o"
+"s_x" = "crates/flexmesa-gyre/src/grid.rs::s_x"
+"x_i" = "crates/flexmesa-gyre/src/grid.rs::x_i"
+"x_o" = "crates/flexmesa-gyre/src/grid.rs::x_o"
+"j_s_i" = "crates/flexmesa-gyre/src/grid.rs::j_s_i"
+"j_s_o" = "crates/flexmesa-gyre/src/grid.rs::j_s_o"
 
 [[files]]
 upstream_path = "gyre/gyre/src/grid/grid_refine_m.fypp"
 module = "gyre"
 upstream_lines = 701
 upstream_sha256 = "2a1f566b00111712c264b365ba8c36aeee570151bfc45682016d6b00bc04da13"
-status = "absent"
-notes = "not ported (#170)"
+status = "partial"
+flexmesa_files = ["crates/flexmesa-gyre/src/grid_refine.rs"]
+routine_map_partial = ["add_points_", "refine_grid_spec_"]
+notes = "Routine map reviewed in notes/audit/routine_map_reviews/610b.toml (DECISIONS #79). Single-grid_spec refinement loop (refine_grid -> split_mech, split_center, dx_max/dx_min). grid_refine.rs::split_therm and ::split_struct only fast-exit on w==0 and return Unported for nonzero weights, so split_therm_ and split_struct_ are unmapped."
+[files.routine_map]
+"refine_grid_context_" = "crates/flexmesa-gyre/src/grid_refine.rs::refine_grid"
+"refine_grid_spec_" = "crates/flexmesa-gyre/src/grid_refine.rs::refine_grid"
+"add_points_" = "crates/flexmesa-gyre/src/grid_refine.rs::refine_grid"
+"split_mech_" = "crates/flexmesa-gyre/src/grid_refine.rs::split_mech"
+"split_center_" = "crates/flexmesa-gyre/src/grid_refine.rs::split_center"
 
 [[files]]
 upstream_path = "gyre/gyre/src/grid/grid_scaffold_m.fypp"
 module = "gyre"
 upstream_lines = 207
 upstream_sha256 = "fd196edc408e8ab791df88b87ef6efbc4629a6796b23d24561ac716e477f5311"
-status = "absent"
-notes = "not ported (#170)"
+status = "partial"
+flexmesa_files = ["crates/flexmesa-gyre/src/mesa.rs"]
+routine_map_partial = ["grid_t_scaffold_"]
+notes = "Routine map reviewed in notes/audit/routine_map_reviews/610b.toml (DECISIONS #79). scaffold_src='MODEL' implemented via Grid::nest in GyreMesa::get_modes_tapped; 'FILE' (grid_from_file_) returns Unported."
+[files.routine_map]
+"grid_t_scaffold_" = "crates/flexmesa-gyre/src/mesa.rs::get_modes_tapped"
 
 [[files]]
 upstream_path = "gyre/gyre/src/grid/grid_spec_m.fypp"
@@ -3510,8 +3843,13 @@ upstream_path = "gyre/gyre/src/grid/grid_util_m.fypp"
 module = "gyre"
 upstream_lines = 227
 upstream_sha256 = "94c389e0f5030761d9b36e1018d5f7f8159b266a4fa1a718a648b69ec416cd1c"
-status = "absent"
-notes = "not ported (#170)"
+status = "partial"
+flexmesa_files = ["crates/flexmesa-gyre/src/search.rs"]
+notes = "Routine map reviewed in notes/audit/routine_map_reviews/610b.toml (DECISIONS #79). All 3 turning-point and propagation-discriminant routines ported in search.rs."
+[files.routine_map]
+"find_turn" = "crates/flexmesa-gyre/src/search.rs::find_turn"
+"find_turn::eval_gamma_" = "crates/flexmesa-gyre/src/search.rs::find_turn"
+"gamma_" = "crates/flexmesa-gyre/src/search.rs::gamma_turn"
 
 [[files]]
 upstream_path = "gyre/gyre/src/grid/grid_weights_m.fypp"
@@ -3550,16 +3888,29 @@ upstream_path = "gyre/gyre/src/interp/cubic_interp_m.fypp"
 module = "gyre"
 upstream_lines = 369
 upstream_sha256 = "167815c4d2bf5e8ea4189d850d1b855e4b1284ce2fc1d52e26353637e5c6e205"
-status = "absent"
-notes = "not ported (#170)"
+status = "partial"
+flexmesa_files = ["crates/flexmesa-gyre/src/model.rs"]
+routine_map_partial = ["cubic_interp_${S}$_", "eval_df_dx_${S}$_", "eval_f_${S}$_"]
+notes = "Routine map reviewed in notes/audit/routine_map_reviews/610b.toml (DECISIONS #79). Real (rt) CubicInterp constructor, Hermite basis evaluators, and eval_f/eval_df_dx; complex (ct) overloads, eval_derivs wrapper, HDF5 read/write, and get_x_min/max are unported."
+[files.routine_map]
+"cubic_interp_${S}$_" = "crates/flexmesa-gyre/src/model.rs::CubicInterp::new"
+"eval_f_${S}$_" = "crates/flexmesa-gyre/src/model.rs::eval_f+bracket"
+"eval_df_dx_${S}$_" = "crates/flexmesa-gyre/src/model.rs::eval_df_dx+bracket"
+"dphi_dt_" = "crates/flexmesa-gyre/src/model.rs::dphi_dt_0+dphi_dt_1"
+"dpsi_dt_" = "crates/flexmesa-gyre/src/model.rs::dpsi_dt_0+dpsi_dt_1"
 
 [[files]]
 upstream_path = "gyre/gyre/src/interp/deriv_m.fypp"
 module = "gyre"
 upstream_lines = 272
 upstream_sha256 = "118e9c2d5cd67f978af1496712dc2c6012fc08f5024112d1bb43bddda5c4f43c"
-status = "absent"
-notes = "not ported (#170)"
+status = "partial"
+flexmesa_files = ["crates/flexmesa-gyre/src/model.rs"]
+routine_map_partial = ["deriv_${S}$_"]
+notes = "Routine map reviewed in notes/audit/routine_map_reviews/610b.toml (DECISIONS #79). Steffen monotone cubic derivative (deriv_mono_r_) dispatched in EvolBuilder::commit; SPLINE and FINDIFF return Unported."
+[files.routine_map]
+"deriv_${S}$_" = "crates/flexmesa-gyre/src/model.rs::commit"
+"deriv_mono_r_" = "crates/flexmesa-gyre/src/model.rs::deriv_mono"
 
 [[files]]
 upstream_path = "gyre/gyre/src/interp/interp_m.fypp"
@@ -3590,8 +3941,16 @@ upstream_path = "gyre/gyre/src/lib/gyre_mesa_m.fypp"
 module = "gyre"
 upstream_lines = 484
 upstream_sha256 = "f3bfb4b6e2f0f7b7779bf449198bc854ebfe0dce76c36ab54699a2c62d7d285e"
-status = "absent"
-notes = "not ported (#170)"
+status = "partial"
+flexmesa_files = ["crates/flexmesa-gyre/src/mesa.rs"]
+routine_map_partial = ["get_modes", "get_modes::process_mode_ad", "get_modes::process_mode_nad"]
+notes = "Routine map reviewed in notes/audit/routine_map_reviews/610b.toml (DECISIONS #79). MESA GYRE interface: init (from input namelist string), set_model (via EvolModel::from_mesa), and get_modes/get_modes_tapped for ad_search='BRACKET' (l==0 reduce_order -> RadBvp; else -> AdBvp) and nad_search='AD' (prox_search -> NadBvp). final, get_par, set_par, read_model, and nad_search='MINMOD'/'CONTOUR' are unported. Public USE_GYRE=NO dummy stub gyre/public/gyre_mesa_m_stub.f90 is excluded."
+[files.routine_map]
+"init" = "crates/flexmesa-gyre/src/mesa.rs::init"
+"set_model" = "crates/flexmesa-gyre/src/mesa.rs::set_model"
+"get_modes" = "crates/flexmesa-gyre/src/mesa.rs::get_modes+get_modes_tapped+run_ad_bracket"
+"get_modes::process_mode_ad" = "crates/flexmesa-gyre/src/mesa.rs::run_ad_bracket+mode_ints"
+"get_modes::process_mode_nad" = "crates/flexmesa-gyre/src/mesa.rs::get_modes_tapped+mode_ints"
 
 [[files]]
 upstream_path = "gyre/gyre/src/math/cheb_fit_m.fypp"
@@ -3606,16 +3965,26 @@ upstream_path = "gyre/gyre/src/math/crmath/math_m.fypp"
 module = "gyre"
 upstream_lines = 153
 upstream_sha256 = "03dacb29d60e5d50ba203ffdb196d4e48dac68a8d8e0d7cb81b825d4c4159b7c"
-status = "absent"
-notes = "not ported (#170)"
+status = "partial"
+flexmesa_files = ["crates/flexmesa-gyre/src/math_m.rs"]
+routine_map_partial = ["pow_${S_X}$_${S_Y}$_"]
+notes = "Routine map reviewed in notes/audit/routine_map_reviews/610b.toml (DECISIONS #79). CRMATH math_m constants and real-base pow_rr/pow_rc; complex-base pow_cr/pow_cc unported. (Intrinsic math_m variant is not ported; crmath.rs implements external CRMATH 1.2 primitives.)"
+[files.routine_map]
+"init_math" = "crates/flexmesa-gyre/src/math_m.rs::init"
+"pow_${S_X}$_${S_Y}$_" = "crates/flexmesa-gyre/src/math_m.rs::pow_rr+pow_rc"
 
 [[files]]
 upstream_path = "gyre/gyre/src/math/integ_m.fypp"
 module = "gyre"
 upstream_lines = 124
 upstream_sha256 = "a817513a682813c688c3e5e574cdc58150f1e7bd72131a7fdf48cab680a94e9e"
-status = "absent"
-notes = "not ported (#170)"
+status = "partial"
+flexmesa_files = ["crates/flexmesa-gyre/src/integ.rs"]
+routine_map_partial = ["integral_${S}$_", "integrate_${S}$_"]
+notes = "Routine map reviewed in notes/audit/routine_map_reviews/610b.toml (DECISIONS #79). Real trapezoidal integrate (with optional mask) and cumulative integral; complex overloads unported."
+[files.routine_map]
+"integrate_${S}$_" = "crates/flexmesa-gyre/src/integ.rs::integrate"
+"integral_${S}$_" = "crates/flexmesa-gyre/src/integ.rs::integral"
 
 [[files]]
 upstream_path = "gyre/gyre/src/math/intrinsic/math_m.fypp"
@@ -3638,8 +4007,13 @@ upstream_path = "gyre/gyre/src/math/root_m.fypp"
 module = "gyre"
 upstream_lines = 1030
 upstream_sha256 = "e874edb6c9118ad60ff45ac5ab8ec647599750fc01a4aa2b51bbc3029312e097"
-status = "absent"
-notes = "not ported (#170)"
+status = "partial"
+flexmesa_files = ["crates/flexmesa-gyre/src/prox.rs", "crates/flexmesa-gyre/src/search.rs"]
+routine_map_partial = ["narrow_brent_${S}$_", "narrow_ridders_${S}$_"]
+notes = "Routine map reviewed in notes/audit/routine_map_reviews/610b.toml (DECISIONS #79). Real Brent solver (search.rs::solve_brent_core) and complex Ridders solver (prox.rs::narrow_bracket); narrow_secant_${S}$_ returns Unported. Note: solve_root_${S}$_, narrow_bracket_${S}$_, and expand_bracket_${S}$_ each appear twice with parent='' in routine_inventory.json (real vs complex template blocks), so they fail routine_gate unique-key matching and are omitted from routine_map (implemented in search.rs::solve_root_r, prox.rs::prox_search, prox.rs::narrow_bracket, prox.rs::expand_bracket)."
+[files.routine_map]
+"narrow_brent_${S}$_" = "crates/flexmesa-gyre/src/search.rs::solve_brent_core"
+"narrow_ridders_${S}$_" = "crates/flexmesa-gyre/src/prox.rs::narrow_bracket"
 
 [[files]]
 upstream_path = "gyre/gyre/src/math/special_m.fypp"
@@ -3678,24 +4052,48 @@ upstream_path = "gyre/gyre/src/matrix/block_sysmtx_m.fypp"
 module = "gyre"
 upstream_lines = 744
 upstream_sha256 = "f0e0ce656a712b24e20b96bcaeab4860b8edf4a3e15d5a69668d8a306cf86cab"
-status = "absent"
-notes = "not ported (#170)"
+status = "partial"
+flexmesa_files = ["crates/flexmesa-gyre/src/sysmtx.rs"]
+notes = "Routine map reviewed in notes/audit/routine_map_reviews/610b.toml (DECISIONS #79). Generic BlockSysmtx<T> cyclic structured LU solver using Scalar + LAPACK. soln_vec_inhom_${S}$_, resd_vec_hom_${S}$_, resd_vec_inhom_${S}$_, dump_${S}$_ are unported."
+[files.routine_map]
+"block_sysmtx_${S}$_" = "crates/flexmesa-gyre/src/sysmtx.rs::new"
+"set_B_i_${S}$_" = "crates/flexmesa-gyre/src/sysmtx.rs::set_b_i"
+"set_B_o_${S}$_" = "crates/flexmesa-gyre/src/sysmtx.rs::set_b_o"
+"set_E_${S}$_" = "crates/flexmesa-gyre/src/sysmtx.rs::set_e"
+"factor_${S}$_" = "crates/flexmesa-gyre/src/sysmtx.rs::factor"
+"scale_rows_${S}$_" = "crates/flexmesa-gyre/src/sysmtx.rs::scale_rows"
+"det_${S}$_" = "crates/flexmesa-gyre/src/sysmtx.rs::det+boundary_matrix"
+"soln_vec_hom_${S}$_" = "crates/flexmesa-gyre/src/sysmtx.rs::soln_vec_hom+boundary_matrix"
+"backsub_${S}$_" = "crates/flexmesa-gyre/src/sysmtx.rs::backsub"
 
 [[files]]
 upstream_path = "gyre/gyre/src/matrix/linalg_m.fypp"
 module = "gyre"
 upstream_lines = 872
 upstream_sha256 = "f5e8f404ec158cd7cdafb5f876c8059732dee97057d771bb0016fb6f58dc0d42"
-status = "absent"
-notes = "not ported (#170)"
+status = "partial"
+flexmesa_files = ["crates/flexmesa-gyre/src/magnus.rs", "crates/flexmesa-gyre/src/scalar.rs"]
+routine_map_partial = ["sing_decompose_c_", "sing_decompose_r_"]
+notes = "Routine map reviewed in notes/audit/routine_map_reviews/610b.toml (DECISIONS #79). 2x2 closed-form & n-D DGEEV/ZGEEV eigendecomposition (magnus.rs) and real/complex SVD (scalar.rs::sing_decompose_vh). Remaining 13 linear_solve_*, matrix_exp*, diagonal*, outer_product*, commutator_, etc. are unported."
+[files.routine_map]
+"eigen_decompose_r_" = "crates/flexmesa-gyre/src/magnus.rs::eigen_decompose_r+sort_eigenpairs"
+"eigen_decompose_r_::reconstruct_eigenvector_" = "crates/flexmesa-gyre/src/magnus.rs::reconstruct_eigenvectors"
+"eigen_decompose_c_" = "crates/flexmesa-gyre/src/magnus.rs::eigen_decompose_c+sort_eigenpairs"
+"eigen_decompose_2_${S}$_" = "crates/flexmesa-gyre/src/magnus.rs::eigen_decompose_2_r+eigen_decompose_2_c"
+"sing_decompose_r_" = "crates/flexmesa-gyre/src/scalar.rs::f64::sing_decompose_vh"
+"sing_decompose_c_" = "crates/flexmesa-gyre/src/scalar.rs::Cplx::sing_decompose_vh"
 
 [[files]]
 upstream_path = "gyre/gyre/src/matrix/sysmtx_factory_m.fypp"
 module = "gyre"
 upstream_lines = 87
 upstream_sha256 = "5187c8f646f2ec203b08d6ca6b8671be1cce36078225433d25d2fe5aebf4141b"
-status = "absent"
-notes = "not ported (#170)"
+status = "partial"
+flexmesa_files = ["crates/flexmesa-gyre/src/ad.rs", "crates/flexmesa-gyre/src/nad.rs", "crates/flexmesa-gyre/src/rad.rs"]
+routine_map_partial = ["sysmtx_${S}$_"]
+notes = "Routine map reviewed in notes/audit/routine_map_reviews/610b.toml (DECISIONS #79). matrix_type='BLOCK' -> BlockSysmtx::new dispatched in AdBvp::new, RadBvp::new, and NadBvp::new; matrix_type='BAND' returns Unported."
+[files.routine_map]
+"sysmtx_${S}$_" = "crates/flexmesa-gyre/src/ad.rs::AdBvp::new"
 
 [[files]]
 upstream_path = "gyre/gyre/src/matrix/sysmtx_m.fypp"
@@ -3710,8 +4108,14 @@ upstream_path = "gyre/gyre/src/mode/mode_m.fypp"
 module = "gyre"
 upstream_lines = 356
 upstream_sha256 = "5cb393928fd8b605a519a7ef7aa96df04d67660feabe0a6ad98da00b3a08a8ed"
-status = "absent"
-notes = "not ported (#170)"
+status = "partial"
+flexmesa_files = ["crates/flexmesa-gyre/src/mode.rs"]
+routine_map_partial = ["classify_"]
+notes = "Routine map reviewed in notes/audit/routine_map_reviews/610b.toml (DECISIONS #79). Mode normalization and radial/dipole/general phase-winding classification. classify_::find_turn_parfait_ is unported (parfait models unported)."
+[files.routine_map]
+"mode_t_" = "crates/flexmesa-gyre/src/mode.rs::Mode::new"
+"classify_" = "crates/flexmesa-gyre/src/mode.rs::classify"
+"classify_::count_windings_" = "crates/flexmesa-gyre/src/mode.rs::count_windings"
 
 [[files]]
 upstream_path = "gyre/gyre/src/mode/resp_m.fypp"
@@ -3726,8 +4130,28 @@ upstream_path = "gyre/gyre/src/mode/wave_m.fypp"
 module = "gyre"
 upstream_lines = 2522
 upstream_sha256 = "0bcb5682e95c06afad1e3613201fceee9cf45ff3704a1cd28981c21a46c64ee0"
-status = "absent"
-notes = "not ported (#170)"
+status = "partial"
+flexmesa_files = ["crates/flexmesa-gyre/src/mode.rs"]
+routine_map_partial = ["dW_dx", "freq"]
+notes = "Routine map reviewed in notes/audit/routine_map_reviews/610b.toml (DECISIONS #79). Wave eigenfunctions, differential work/inertia, Takata Yt_1/Yt_2, propagation type, and inertia normalization (17/62 routines ported; under Rule B, dW_dx is partial because its class default model arm is unported alongside evol_model_t; Wave::freq omits optional freq_frame; remaining accessors/integrals unported)."
+[files.routine_map]
+"wave_t_" = "crates/flexmesa-gyre/src/mode.rs::Wave::new"
+"freq" = "crates/flexmesa-gyre/src/mode.rs::Wave::freq"
+"x" = "crates/flexmesa-gyre/src/mode.rs::x"
+"y_i" = "crates/flexmesa-gyre/src/mode.rs::y_i"
+"xi_r" = "crates/flexmesa-gyre/src/mode.rs::xi_r"
+"xi_h" = "crates/flexmesa-gyre/src/mode.rs::xi_h"
+"lag_S" = "crates/flexmesa-gyre/src/mode.rs::lag_s"
+"lag_P" = "crates/flexmesa-gyre/src/mode.rs::lag_p"
+"lag_T" = "crates/flexmesa-gyre/src/mode.rs::lag_t"
+"lambda" = "crates/flexmesa-gyre/src/mode.rs::lambda"
+"dE_dx" = "crates/flexmesa-gyre/src/mode.rs::de_dx"
+"dW_dx" = "crates/flexmesa-gyre/src/mode.rs::dw_dx"
+"Yt_1" = "crates/flexmesa-gyre/src/mode.rs::yt_1"
+"Yt_2" = "crates/flexmesa-gyre/src/mode.rs::yt_2"
+"prop_type" = "crates/flexmesa-gyre/src/mode.rs::prop_type"
+"E" = "crates/flexmesa-gyre/src/mode.rs::e+e_uncached"
+"E_norm" = "crates/flexmesa-gyre/src/mode.rs::Wave::e_norm"
 
 [[files]]
 upstream_path = "gyre/gyre/src/model/amdl_file_m.fypp"
@@ -3782,8 +4206,21 @@ upstream_path = "gyre/gyre/src/model/evol_model_m.fypp"
 module = "gyre"
 upstream_lines = 790
 upstream_sha256 = "e88f70d3a66fce13087cd370837c75221752239e42211ea839c30ab87a09efa6"
-status = "absent"
-notes = "not ported (#170)"
+status = "partial"
+flexmesa_files = ["crates/flexmesa-gyre/src/model.rs"]
+routine_map_partial = ["commit", "commit::cubic_interp_", "define"]
+notes = "Routine map reviewed in notes/audit/routine_map_reviews/610b.toml (DECISIONS #79). EvolBuilder/EvolModel with CUBIC interpolation; repair_coeff_ (repair_As=true), linear_interp_, M_r/P/rho/T physical accessors, and grid() method (gr is a pub field) are unported."
+[files.routine_map]
+"evol_model_t_" = "crates/flexmesa-gyre/src/model.rs::EvolBuilder::new"
+"define" = "crates/flexmesa-gyre/src/model.rs::define"
+"commit" = "crates/flexmesa-gyre/src/model.rs::commit"
+"commit::cubic_interp_" = "crates/flexmesa-gyre/src/model.rs::commit+interp_for"
+"coeff" = "crates/flexmesa-gyre/src/model.rs::coeff"
+"dcoeff" = "crates/flexmesa-gyre/src/model.rs::dcoeff"
+"is_defined" = "crates/flexmesa-gyre/src/model.rs::is_defined"
+"is_vacuum" = "crates/flexmesa-gyre/src/model.rs::is_vacuum"
+"Delta_p" = "crates/flexmesa-gyre/src/model.rs::delta_p"
+"Delta_g" = "crates/flexmesa-gyre/src/model.rs::delta_g"
 
 [[files]]
 upstream_path = "gyre/gyre/src/model/famdl_file_m.fypp"
@@ -3830,8 +4267,13 @@ upstream_path = "gyre/gyre/src/model/mesa_file_m.fypp"
 module = "gyre"
 upstream_lines = 513
 upstream_sha256 = "aeaf503bc11cc5cbf9e9b085889a746417edaed541b149e6f095989374ddd2e2"
-status = "absent"
-notes = "not ported (#170)"
+status = "partial"
+flexmesa_files = ["crates/flexmesa-gyre/src/model.rs"]
+routine_map_partial = ["init_mesa_model", "init_mesa_model::extract_data_v1_0X_"]
+notes = "Routine map reviewed in notes/audit/routine_map_reviews/610b.toml (DECISIONS #79). In-memory MESA pulsation data ingestion for versions 100/101 (EvolModel::from_mesa); read_mesa_model (disk I/O) and versions 0.01/0.19/1.20 return Unported."
+[files.routine_map]
+"init_mesa_model" = "crates/flexmesa-gyre/src/model.rs::from_mesa"
+"init_mesa_model::extract_data_v1_0X_" = "crates/flexmesa-gyre/src/model.rs::from_mesa"
 
 [[files]]
 upstream_path = "gyre/gyre/src/model/model_factory_m.fypp"
@@ -3854,8 +4296,12 @@ upstream_path = "gyre/gyre/src/model/model_util_m.fypp"
 module = "gyre"
 upstream_lines = 311
 upstream_sha256 = "400a1d82840eb2931fef747aa97bc816923eb6f1a20d7b6a72367a9be0535bb4"
-status = "absent"
-notes = "not ported (#170)"
+status = "partial"
+flexmesa_files = ["crates/flexmesa-gyre/src/model.rs"]
+notes = "Routine map reviewed in notes/audit/routine_map_reviews/610b.toml (DECISIONS #79). snap_points and check_model ported; coefficient name/index lookup fns replaced by idx constants."
+[files.routine_map]
+"snap_points" = "crates/flexmesa-gyre/src/model.rs::snap_points"
+"check_model" = "crates/flexmesa-gyre/src/model.rs::check"
 
 [[files]]
 upstream_path = "gyre/gyre/src/model/osc_file_m.fypp"
@@ -3926,48 +4372,88 @@ upstream_path = "gyre/gyre/src/nad/nad_bound_m.fypp"
 module = "gyre"
 upstream_lines = 893
 upstream_sha256 = "15fcae317d53a8adf4070759ed7c910f798e1049d2c3f4cabe3f55d0506abedd"
-status = "absent"
-notes = "not ported (#170)"
+status = "partial"
+flexmesa_files = ["crates/flexmesa-gyre/src/nad.rs"]
+routine_map_partial = ["build_o", "nad_bound_t_", "stencil_"]
+notes = "Routine map reviewed in notes/audit/routine_map_reviews/610b.toml (DECISIONS #79). NadBound supports REGULAR/ZERO_R/ZERO_H inner and VACUUM outer boundaries with time_factor='OSC'; DZIEM/ISOTHERMAL/UNNO/JCD outer bounds (build_dziem_o_, build_decomp_o_, build_decomp_o_::H_, build_jcd_o_) and EXP return Unported."
+[files.routine_map]
+"nad_bound_t_" = "crates/flexmesa-gyre/src/nad.rs::NadBound::new"
+"stencil_" = "crates/flexmesa-gyre/src/nad.rs::NadBound::new"
+"build_i" = "crates/flexmesa-gyre/src/nad.rs::build_i"
+"build_regular_i_" = "crates/flexmesa-gyre/src/nad.rs::build_i"
+"build_zero_r_i_" = "crates/flexmesa-gyre/src/nad.rs::build_i"
+"build_zero_h_i_" = "crates/flexmesa-gyre/src/nad.rs::build_i"
+"build_o" = "crates/flexmesa-gyre/src/nad.rs::build_o"
+"build_vacuum_o_" = "crates/flexmesa-gyre/src/nad.rs::build_o"
 
 [[files]]
 upstream_path = "gyre/gyre/src/nad/nad_bvp_m.fypp"
 module = "gyre"
 upstream_lines = 231
 upstream_sha256 = "a95a0b36e7209bfce209ee3bf00166720123436da498fe936f236aca13607b0c"
-status = "absent"
-notes = "not ported (#170)"
+status = "partial"
+flexmesa_files = ["crates/flexmesa-gyre/src/nad.rs"]
+routine_map_partial = ["nad_bvp_t_"]
+notes = "Routine map reviewed in notes/audit/routine_map_reviews/610b.toml (DECISIONS #79). NadBvp constructor (BLOCK matrix_type only) and homogeneous wave recovery nad_wave_hom; wave_t_inhom_ is unported."
+[files.routine_map]
+"nad_bvp_t_" = "crates/flexmesa-gyre/src/nad.rs::NadBvp::new"
+"wave_t_hom_" = "crates/flexmesa-gyre/src/nad.rs::nad_wave_hom"
+"wave_t_y_" = "crates/flexmesa-gyre/src/nad.rs::nad_wave_hom"
 
 [[files]]
 upstream_path = "gyre/gyre/src/nad/nad_diff_m.fypp"
 module = "gyre"
 upstream_lines = 200
 upstream_sha256 = "be62b2d4a01bd6ffec352405f8f390a113464e866c5d66c1270dd7e4db6348f1"
-status = "absent"
-notes = "not ported (#170)"
+status = "partial"
+flexmesa_files = ["crates/flexmesa-gyre/src/nad.rs"]
+routine_map_partial = ["nad_diff_t_"]
+notes = "Routine map reviewed in notes/audit/routine_map_reviews/610b.toml (DECISIONS #79). NadDiff dispatches COLLOC_GL2, MAGNUS_GL2 (with midpoint regularization), and segment-boundary NadMatch; COLLOC_GL4 and TRAPZ return Unported."
+[files.routine_map]
+"nad_diff_t_" = "crates/flexmesa-gyre/src/nad.rs::NadDiff::new"
+"build" = "crates/flexmesa-gyre/src/nad.rs::NadDiff::build"
 
 [[files]]
 upstream_path = "gyre/gyre/src/nad/nad_eqns_m.fypp"
 module = "gyre"
 upstream_lines = 413
 upstream_sha256 = "72f8661e81fe023b75c65371c0d226d6cd51e8577537843526582d87daba20a3"
-status = "absent"
-notes = "not ported (#170)"
+status = "partial"
+flexmesa_files = ["crates/flexmesa-gyre/src/nad.rs"]
+routine_map_partial = ["nad_eqns_t_", "xA"]
+notes = "Routine map reviewed in notes/audit/routine_map_reviews/610b.toml (DECISIONS #79). 6x6 complex nonadiabatic equations (NadEqns); supports conv_scheme='FROZEN_PESNELL_1' (P1) and time_factor='OSC'; time_factor='EXP' and conv_scheme='FROZEN_PESNELL_4' (P4) return Unported (xa hardcodes P1)."
+[files.routine_map]
+"nad_eqns_t_" = "crates/flexmesa-gyre/src/nad.rs::NadEqns::new"
+"stencil" = "crates/flexmesa-gyre/src/nad.rs::NadEqns::stencil"
+"A" = "crates/flexmesa-gyre/src/nad.rs::a"
+"xA" = "crates/flexmesa-gyre/src/nad.rs::xa"
 
 [[files]]
 upstream_path = "gyre/gyre/src/nad/nad_match_m.fypp"
 module = "gyre"
 upstream_lines = 275
 upstream_sha256 = "eeaeea9266fd230b02d82637591c9efef1960b8f95e717e97b434ce7be84e2d8"
-status = "absent"
-notes = "not ported (#170)"
+status = "partial"
+flexmesa_files = ["crates/flexmesa-gyre/src/nad.rs"]
+routine_map_partial = ["build"]
+notes = "Routine map reviewed in notes/audit/routine_map_reviews/610b.toml (DECISIONS #79). NadMatch 6x6 complex segment-boundary match conditions (y_1, y_3, y_6 continuous)."
+[files.routine_map]
+"nad_match_t_" = "crates/flexmesa-gyre/src/nad.rs::NadMatch::new"
+"stencil_" = "crates/flexmesa-gyre/src/nad.rs::NadMatch::new"
+"build" = "crates/flexmesa-gyre/src/nad.rs::NadMatch::build"
 
 [[files]]
 upstream_path = "gyre/gyre/src/nad/nad_trans_m.fypp"
 module = "gyre"
 upstream_lines = 1135
 upstream_sha256 = "e9ec4d6acf6f7ad5985313855ffe8db3d949ff61f1ae152e14050b8302b33bbe"
-status = "absent"
-notes = "not ported (#170)"
+status = "partial"
+flexmesa_files = ["crates/flexmesa-gyre/src/nad.rs"]
+routine_map_partial = ["nad_trans_t_"]
+notes = "Routine map reviewed in notes/audit/routine_map_reviews/610b.toml (DECISIONS #79). NadTrans supports variables_set='GYRE' (SET no-op, model check/evaluation in stencil); DZIEM/JCD/LAGP transforms (G_*/H_*/dH_*) and trans_eqns/trans_cond/trans_vars fns are unported."
+[files.routine_map]
+"nad_trans_t_" = "crates/flexmesa-gyre/src/nad.rs::NadTrans::new"
+"stencil" = "crates/flexmesa-gyre/src/nad.rs::NadTrans::stencil"
 
 [[files]]
 upstream_path = "gyre/gyre/src/nad/qad_eval_m.fypp"
@@ -4030,32 +4516,44 @@ upstream_path = "gyre/gyre/src/par/grid_par_m.fypp"
 module = "gyre"
 upstream_lines = 165
 upstream_sha256 = "22986dc68c7f7ffddcc8a30a734361a44d8eed60df8c755e3d219fa499b1ddfa"
-status = "absent"
-notes = "not ported (#170)"
+status = "partial"
+flexmesa_files = ["crates/flexmesa-gyre/src/par.rs"]
+notes = "Routine map reviewed in notes/audit/routine_map_reviews/610b.toml (DECISIONS #79). &grid namelist parsing via namelist.rs::parse_groups + read_all/GridPar::set."
+[files.routine_map]
+"read_grid_par" = "crates/flexmesa-gyre/src/par.rs::read_all+GridPar::set+parse"
 
 [[files]]
 upstream_path = "gyre/gyre/src/par/mode_par_m.fypp"
 module = "gyre"
 upstream_lines = 117
 upstream_sha256 = "0d3a42fefb4d30883350e813a3bb50c394a6c6b598a19de39af9e3efaa94d290"
-status = "absent"
-notes = "not ported (#170)"
+status = "partial"
+flexmesa_files = ["crates/flexmesa-gyre/src/par.rs"]
+notes = "Routine map reviewed in notes/audit/routine_map_reviews/610b.toml (DECISIONS #79). &mode namelist parsing via namelist.rs::parse_groups + read_all/ModePar::set."
+[files.routine_map]
+"read_mode_par" = "crates/flexmesa-gyre/src/par.rs::read_all+ModePar::set+parse"
 
 [[files]]
 upstream_path = "gyre/gyre/src/par/model_par_m.fypp"
 module = "gyre"
 upstream_lines = 192
 upstream_sha256 = "9cc59111d4a512907f208b1ecd41e6937ee99d766e6630404307e21f0fcd04dc"
-status = "absent"
-notes = "not ported (#170)"
+status = "partial"
+flexmesa_files = ["crates/flexmesa-gyre/src/par.rs"]
+notes = "Routine map reviewed in notes/audit/routine_map_reviews/610b.toml (DECISIONS #79). &model namelist parsing (enforces single &model group)."
+[files.routine_map]
+"read_model_par" = "crates/flexmesa-gyre/src/par.rs::read_all+ModelPar::set+parse"
 
 [[files]]
 upstream_path = "gyre/gyre/src/par/num_par_m.fypp"
 module = "gyre"
 upstream_lines = 146
 upstream_sha256 = "5d40b85927eccd8d4093d2a4025cffe9ffa3d2eee6fd16d1ce5f1da76fbbea82"
-status = "absent"
-notes = "not ported (#170)"
+status = "partial"
+flexmesa_files = ["crates/flexmesa-gyre/src/par.rs"]
+notes = "Routine map reviewed in notes/audit/routine_map_reviews/610b.toml (DECISIONS #79). &num namelist parsing via namelist.rs::parse_groups + read_all/NumPar::set."
+[files.routine_map]
+"read_num_par" = "crates/flexmesa-gyre/src/par.rs::read_all+NumPar::set+parse"
 
 [[files]]
 upstream_path = "gyre/gyre/src/par/orbit_par_m.fypp"
@@ -4070,8 +4568,11 @@ upstream_path = "gyre/gyre/src/par/osc_par_m.fypp"
 module = "gyre"
 upstream_lines = 223
 upstream_sha256 = "4ca60111459b48e6de436c8cfce6872e6cc60356131ae86e9c9308a08965a0fb"
-status = "absent"
-notes = "not ported (#170)"
+status = "partial"
+flexmesa_files = ["crates/flexmesa-gyre/src/par.rs"]
+notes = "Routine map reviewed in notes/audit/routine_map_reviews/610b.toml (DECISIONS #79). &osc namelist parsing via namelist.rs::parse_groups + read_all/OscPar::set."
+[files.routine_map]
+"read_osc_par" = "crates/flexmesa-gyre/src/par.rs::read_all+OscPar::set+parse"
 
 [[files]]
 upstream_path = "gyre/gyre/src/par/out_par_m.fypp"
@@ -4086,16 +4587,22 @@ upstream_path = "gyre/gyre/src/par/rot_par_m.fypp"
 module = "gyre"
 upstream_lines = 128
 upstream_sha256 = "38dee9e57121e35d351a418fc468eb9792547433282ab95afb108ae247b17f98"
-status = "absent"
-notes = "not ported (#170)"
+status = "partial"
+flexmesa_files = ["crates/flexmesa-gyre/src/par.rs"]
+notes = "Routine map reviewed in notes/audit/routine_map_reviews/610b.toml (DECISIONS #79). &rot namelist parsing via namelist.rs::parse_groups + read_all/RotPar::set."
+[files.routine_map]
+"read_rot_par" = "crates/flexmesa-gyre/src/par.rs::read_all+RotPar::set+parse"
 
 [[files]]
 upstream_path = "gyre/gyre/src/par/scan_par_m.fypp"
 module = "gyre"
 upstream_lines = 151
 upstream_sha256 = "123783ec74542b512b0d5668a5415e03e5abe9871796f53c9bac71e80582d899"
-status = "absent"
-notes = "not ported (#170)"
+status = "partial"
+flexmesa_files = ["crates/flexmesa-gyre/src/par.rs"]
+notes = "Routine map reviewed in notes/audit/routine_map_reviews/610b.toml (DECISIONS #79). &scan namelist parsing (including freq_min_units/freq_max_units fallback in parse)."
+[files.routine_map]
+"read_scan_par" = "crates/flexmesa-gyre/src/par.rs::read_all+ScanPar::set+parse"
 
 [[files]]
 upstream_path = "gyre/gyre/src/par/tide_par_m.fypp"
@@ -4118,64 +4625,120 @@ upstream_path = "gyre/gyre/src/rad/rad_bound_m.fypp"
 module = "gyre"
 upstream_lines = 569
 upstream_sha256 = "2e997cd83a4b85c16575cf4439d973bc9977b8cae1122d3bd0a5d2fa8e10a1bc"
-status = "absent"
-notes = "not ported (#170)"
+status = "partial"
+flexmesa_files = ["crates/flexmesa-gyre/src/rad.rs"]
+routine_map_partial = ["build_o", "rad_bound_t_", "stencil_"]
+notes = "Routine map reviewed in notes/audit/routine_map_reviews/610b.toml (DECISIONS #79). RadBound supports REGULAR/ZERO_R inner and VACUUM/JCD outer boundaries (with vacuum fallback when ml.is_vacuum(pt_o)); non-vacuum DZIEM/UNNO/ISOTHERMAL (build_dziem_o_, build_decomp_o_) and time_factor='EXP' are unported."
+[files.routine_map]
+"rad_bound_t_" = "crates/flexmesa-gyre/src/rad.rs::RadBound::new"
+"stencil_" = "crates/flexmesa-gyre/src/rad.rs::RadBound::new"
+"build_i" = "crates/flexmesa-gyre/src/rad.rs::build_i"
+"build_regular_i_" = "crates/flexmesa-gyre/src/rad.rs::build_i"
+"build_zero_r_i_" = "crates/flexmesa-gyre/src/rad.rs::build_i"
+"build_o" = "crates/flexmesa-gyre/src/rad.rs::build_o"
+"build_vacuum_o_" = "crates/flexmesa-gyre/src/rad.rs::build_o"
+"build_jcd_o_" = "crates/flexmesa-gyre/src/rad.rs::build_o"
 
 [[files]]
 upstream_path = "gyre/gyre/src/rad/rad_bvp_m.fypp"
 module = "gyre"
 upstream_lines = 341
 upstream_sha256 = "ebba68a6c6d59d59aaaa59b2f5201271f8b4d11d4fedfeedea3746ff3f99eb4c"
-status = "absent"
-notes = "not ported (#170)"
+status = "partial"
+flexmesa_files = ["crates/flexmesa-gyre/src/mode.rs", "crates/flexmesa-gyre/src/rad.rs"]
+routine_map_partial = ["rad_bvp_t_"]
+notes = "Routine map reviewed in notes/audit/routine_map_reviews/610b.toml (DECISIONS #79). RadBvp constructor in rad.rs (BLOCK only, alpha_grv==1, quasiad_eigfuncs=false) and radial-to-6D Wave reconstruction with Eulerian potential integral in mode.rs::rad_wave_hom. wave_t_inhom_ is unported."
+[files.routine_map]
+"rad_bvp_t_" = "crates/flexmesa-gyre/src/rad.rs::RadBvp::new"
+"wave_t_hom_" = "crates/flexmesa-gyre/src/mode.rs::rad_wave_hom"
+"wave_t_y_" = "crates/flexmesa-gyre/src/mode.rs::rad_wave_hom"
 
 [[files]]
 upstream_path = "gyre/gyre/src/rad/rad_diff_m.fypp"
 module = "gyre"
 upstream_lines = 133
 upstream_sha256 = "5ba0d5a4ec3429a9b01200751f943ac4891bcddae4ade2046c3589ac4015c364"
-status = "absent"
-notes = "not ported (#170)"
+status = "partial"
+flexmesa_files = ["crates/flexmesa-gyre/src/rad.rs"]
+notes = "Routine map reviewed in notes/audit/routine_map_reviews/610b.toml (DECISIONS #79). RadDiff dispatches COLLOC_GL2, COLLOC_GL4, MAGNUS_GL2, and segment-boundary RadMatch."
+[files.routine_map]
+"rad_diff_t_" = "crates/flexmesa-gyre/src/rad.rs::RadDiff::new"
+"build" = "crates/flexmesa-gyre/src/rad.rs::RadDiff::build"
 
 [[files]]
 upstream_path = "gyre/gyre/src/rad/rad_eqns_m.fypp"
 module = "gyre"
 upstream_lines = 225
 upstream_sha256 = "a55a4be0812c77ba673da4bf1124f6177f66b83c4c5f7cf6143ed32b627f7a9c"
-status = "absent"
-notes = "not ported (#170)"
+status = "partial"
+flexmesa_files = ["crates/flexmesa-gyre/src/rad.rs"]
+routine_map_partial = ["rad_eqns_t_"]
+notes = "Routine map reviewed in notes/audit/routine_map_reviews/610b.toml (DECISIONS #79). 2x2 radial adiabatic equations (RadEqns) with time_factor='OSC'; EXP returns Unported."
+[files.routine_map]
+"rad_eqns_t_" = "crates/flexmesa-gyre/src/rad.rs::RadEqns::new"
+"stencil" = "crates/flexmesa-gyre/src/rad.rs::RadEqns::stencil"
+"A" = "crates/flexmesa-gyre/src/rad.rs::a"
+"xA" = "crates/flexmesa-gyre/src/rad.rs::xa"
 
 [[files]]
 upstream_path = "gyre/gyre/src/rad/rad_match_m.fypp"
 module = "gyre"
 upstream_lines = 189
 upstream_sha256 = "679c6ef37dfcdc51bdf19aa13ba48691c8ea2da95100e1b50d118db1974f5c70"
-status = "absent"
-notes = "not ported (#170)"
+status = "partial"
+flexmesa_files = ["crates/flexmesa-gyre/src/rad.rs"]
+notes = "Routine map reviewed in notes/audit/routine_map_reviews/610b.toml (DECISIONS #79). RadMatch 2x2 segment-boundary match conditions with RadTrans transformation."
+[files.routine_map]
+"rad_match_t_" = "crates/flexmesa-gyre/src/rad.rs::RadMatch::new"
+"stencil_" = "crates/flexmesa-gyre/src/rad.rs::RadMatch::new"
+"build" = "crates/flexmesa-gyre/src/rad.rs::RadMatch::build"
 
 [[files]]
 upstream_path = "gyre/gyre/src/rad/rad_trans_m.fypp"
 module = "gyre"
 upstream_lines = 614
 upstream_sha256 = "58da7b4588b1f8fe74f405842c7e440a70cfd8cc9328d8ccff1330436ab27e32"
-status = "absent"
-notes = "not ported (#170)"
+status = "partial"
+flexmesa_files = ["crates/flexmesa-gyre/src/rad.rs"]
+routine_map_partial = ["G_", "H_", "dH_", "rad_trans_t_", "trans_cond", "trans_eqns", "trans_vars"]
+notes = "Routine map reviewed in notes/audit/routine_map_reviews/610b.toml (DECISIONS #79). RadTrans implements variables_set='GYRE' (SET) and 'JCD' (JCD_SET: full stencil, G_jcd_, H_jcd_, dH_jcd_). G_/H_/dH_ dispatch JCD_SET only (LAGP_SET unported); trans_eqns and trans_cond implement from=.TRUE. only; trans_vars implements from=.FALSE. only; DZIEM/MIX/LAGP variable sets remain unported."
+[files.routine_map]
+"rad_trans_t_" = "crates/flexmesa-gyre/src/rad.rs::RadTrans::new"
+"stencil" = "crates/flexmesa-gyre/src/rad.rs::RadTrans::stencil"
+"trans_eqns" = "crates/flexmesa-gyre/src/rad.rs::trans_eqns"
+"trans_cond" = "crates/flexmesa-gyre/src/rad.rs::trans_cond+trans_cond_2x2"
+"trans_vars" = "crates/flexmesa-gyre/src/rad.rs::trans_vars_to"
+"G_" = "crates/flexmesa-gyre/src/rad.rs::g"
+"G_jcd_" = "crates/flexmesa-gyre/src/rad.rs::g"
+"H_" = "crates/flexmesa-gyre/src/rad.rs::h"
+"H_jcd_" = "crates/flexmesa-gyre/src/rad.rs::h"
+"dH_" = "crates/flexmesa-gyre/src/rad.rs::dh"
+"dH_jcd_" = "crates/flexmesa-gyre/src/rad.rs::dh"
 
 [[files]]
 upstream_path = "gyre/gyre/src/rot/null_rot_m.fypp"
 module = "gyre"
 upstream_lines = 123
 upstream_sha256 = "61ccf2332e52693c2df206b5726631bff520b6f3465dfaca32f28ff8befd4330"
-status = "absent"
-notes = "not ported (#170)"
+status = "partial"
+flexmesa_files = ["crates/flexmesa-gyre/src/context.rs"]
+notes = "Routine map reviewed in notes/audit/routine_map_reviews/610b.toml (DECISIONS #79). Rule A full for both rt and ct null-rotation methods via Context::{new,lambda_r,lambda_c,l_e_r,l_e_c,rt_lambda,rt_l_e} in context.rs."
+[files.routine_map]
+"null_rot_${S}$_" = "crates/flexmesa-gyre/src/context.rs::new"
+"l_e_${S}$_" = "crates/flexmesa-gyre/src/context.rs::rt_l_e"
+"lambda_${S}$_" = "crates/flexmesa-gyre/src/context.rs::rt_lambda"
 
 [[files]]
 upstream_path = "gyre/gyre/src/rot/rot_factory_m.fypp"
 module = "gyre"
 upstream_lines = 85
 upstream_sha256 = "29de8d7c9a2c5668bed7dadac448ef835e585acac42ef64f94301e1b2e52c5e6"
-status = "absent"
-notes = "not ported (#170)"
+status = "partial"
+flexmesa_files = ["crates/flexmesa-gyre/src/context.rs"]
+routine_map_partial = ["rot_${S}$_"]
+notes = "Routine map reviewed in notes/audit/routine_map_reviews/610b.toml (DECISIONS #79). coriolis_method='NULL' handled in Context::new; TAR/other methods return Unported."
+[files.routine_map]
+"rot_${S}$_" = "crates/flexmesa-gyre/src/context.rs::new"
 
 [[files]]
 upstream_path = "gyre/gyre/src/rot/rot_m.fypp"
@@ -4246,8 +4809,13 @@ upstream_path = "gyre/gyre/src/search/bracket_search_m.fypp"
 module = "gyre"
 upstream_lines = 320
 upstream_sha256 = "bba33c4870988d1d745db283a45b2a1d3e2b490b46a6ee460f84c5beaa7d864f"
-status = "absent"
-notes = "not ported (#170)"
+status = "partial"
+flexmesa_files = ["crates/flexmesa-gyre/src/search.rs"]
+notes = "Routine map reviewed in notes/audit/routine_map_reviews/610b.toml (DECISIONS #79). Real bracket scan and Brent refinement loop; eval_discrim_x_ and find_brackets_ inlined in bracket_search. report_stat_ stdout logging is unported."
+[files.routine_map]
+"bracket_search" = "crates/flexmesa-gyre/src/search.rs::bracket_search"
+"bracket_search::eval_discrim_x_" = "crates/flexmesa-gyre/src/search.rs::bracket_search"
+"find_brackets_" = "crates/flexmesa-gyre/src/search.rs::bracket_search"
 
 [[files]]
 upstream_path = "gyre/gyre/src/search/contour_map_m.fypp"
@@ -4278,8 +4846,11 @@ upstream_path = "gyre/gyre/src/search/discrim_m.fypp"
 module = "gyre"
 upstream_lines = 77
 upstream_sha256 = "91a5cc3f8fbe76fe629032fc6827f59fd015d41f9b11d5ddcd5039d408bcf4bf"
-status = "absent"
-notes = "not ported (#170)"
+status = "partial"
+flexmesa_files = ["crates/flexmesa-gyre/src/prox.rs", "crates/flexmesa-gyre/src/search.rs"]
+notes = "Routine map reviewed in notes/audit/routine_map_reviews/610b.toml (DECISIONS #79). Rule A full for both rt (search.rs::eval_discrim) and ct (prox.rs::eval_discrim_c) instances (build -> factor -> det + GyreTap hook)."
+[files.routine_map]
+"eval_discrim_${S}$_" = "crates/flexmesa-gyre/src/search.rs::eval_discrim"
 
 [[files]]
 upstream_path = "gyre/gyre/src/search/minmod_search_m.fypp"
@@ -4294,16 +4865,28 @@ upstream_path = "gyre/gyre/src/search/prox_search_m.fypp"
 module = "gyre"
 upstream_lines = 352
 upstream_sha256 = "b1221a3e7960f6272008970dfa919f632e0ad48b87d363080486d529229ac7fd"
-status = "absent"
-notes = "not ported (#170)"
+status = "partial"
+flexmesa_files = ["crates/flexmesa-gyre/src/prox.rs"]
+routine_map_partial = ["prox_search_2_"]
+notes = "Routine map reviewed in notes/audit/routine_map_reviews/610b.toml (DECISIONS #79). Complex proximity root search starting from adiabatic roots (deflation + Ridders expansion/narrowing). Under Rule B, prox_search_2_ is partial because its select type (bp) handles NadBvp only (tnad_bvp_t is unported); report_stat_ stdout logging is unported."
+[files.routine_map]
+"prox_search_1_" = "crates/flexmesa-gyre/src/prox.rs::prox_search"
+"prox_search_2_" = "crates/flexmesa-gyre/src/prox.rs::prox_search"
+"prox_search_2_::eval_discrim_z_" = "crates/flexmesa-gyre/src/prox.rs::prox_search"
 
 [[files]]
 upstream_path = "gyre/gyre/src/search/scan_m.fypp"
 module = "gyre"
 upstream_lines = 336
 upstream_sha256 = "f2af5339a914630096d53c64123603b6487e601cd899db176c990083d4043561"
-status = "absent"
-notes = "not ported (#170)"
+status = "partial"
+flexmesa_files = ["crates/flexmesa-gyre/src/search.rs"]
+routine_map_partial = ["build_scan"]
+notes = "Routine map reviewed in notes/audit/routine_map_reviews/610b.toml (DECISIONS #79). Frequency scan construction (LINEAR/INVERSE) and critical-layer/prograde-retrograde check; build_scan_file_ ('FILE') returns Unported."
+[files.routine_map]
+"build_scan" = "crates/flexmesa-gyre/src/search.rs::build_scan"
+"build_scan_grid_" = "crates/flexmesa-gyre/src/search.rs::build_scan_grid"
+"check_scan" = "crates/flexmesa-gyre/src/search.rs::check_scan"
 
 [[files]]
 upstream_path = "gyre/gyre/src/search/search_m.fypp"

@@ -192,7 +192,8 @@ fn test_mdot_zero_guard_high_t_slice_and_tlim_tie_breaking_order() {
     base.controls.ts_stop.min_timestep_factor = 0.0;
     base.controls.ts_stop.max_timestep_factor = 0.0;
 
-    // Zero `mdot == mdot_old` with zero tolerances must not yield `NaN` (`0/0`).
+    // `check_delta_mdot` evaluates `0.0 / 0.0 -> NaN` (`timestep.f90:1893-1911`)
+    // while `maxloc` (`timestep.f90:332`) keeps the finite `Tlim_struc` ratio.
     let mut m_mdot = base.clone();
     m_mdot.controls.mix_wind.delta_mdot_atol = 0.0;
     m_mdot.controls.mix_wind.delta_mdot_rtol = 0.0;
@@ -203,6 +204,21 @@ fn test_mdot_zero_guard_high_t_slice_and_tlim_tie_breaking_order() {
     let (act_z, rep_z) = timestep_controller(&mut m_mdot);
     assert_eq!(act_z, TimestepAction::KeepGoing);
     assert!(rep_z.dt_next.is_finite() && rep_z.dt_next > 0.0);
+
+    // Nonzero `mdot - mdot_old` with zero tolerances yields `+inf`, hitting
+    // `delta_mdot_hard_limit` retry (`timestep.f90:1893-1908`).
+    let mut m_mdot_inf = base.clone();
+    m_mdot_inf.controls.mix_wind.delta_mdot_atol = 0.0;
+    m_mdot_inf.controls.mix_wind.delta_mdot_rtol = 0.0;
+    m_mdot_inf.controls.mix_wind.delta_mdot_limit = 0.1;
+    m_mdot_inf.controls.mix_wind.delta_mdot_hard_limit = 0.2;
+    m_mdot_inf.mstar_dot = -1.0e-5;
+    m_mdot_inf.aux.step_hist.mstar_dot_old = 0.0;
+    let (act_inf, _) = timestep_controller(&mut m_mdot_inf);
+    assert_eq!(
+        act_inf,
+        TimestepAction::Retry(String::from("delta_mdot_hard_limit"))
+    );
 
     // Exact upstream left-to-right `(atol * M_SUN) / SECYER` denominator.
     m_mdot.controls.mix_wind.delta_mdot_atol = 1.0e-3;

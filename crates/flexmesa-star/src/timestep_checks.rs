@@ -1447,24 +1447,27 @@ pub(crate) fn check_delta_mdot(
     let mw = &c.mix_wind;
     let coeff = c.ts_stop.time_delta_coeff;
     let (mdot, mdot_old) = (model.mstar_dot, model.aux.step_hist.mstar_dot_old);
+    // Evaluate `star/private/timestep.f90:1893-1911` without a `denom > 0.0`
+    // guard: `0.0 / 0.0` yields `NaN` (`delta_mdot == 0` is false,
+    // `delta_mdot > hard_lim` is false, and `r_mdot <= 1.0` is false so `NaN`
+    // remains in `*slot`), while `x / 0.0` yields `+inf` (triggering retry if
+    // `hard_lim > 0.0 && !ctx.skip`, else writing `+inf` when `lim > 0.0`).
     let denom = (mw.delta_mdot_atol * M_SUN) / SECYER
         + mw.delta_mdot_rtol * mdot.abs().max(mdot_old.abs());
-    if denom > 0.0 && mdot != mdot_old {
-        let delta_mdot = (mdot - mdot_old).abs() / denom;
-        if delta_mdot != 0.0 {
-            let lim = mw.delta_mdot_limit * coeff;
-            let hard_lim = mw.delta_mdot_hard_limit * coeff;
-            if hard_lim > 0.0 && !ctx.skip && delta_mdot > hard_lim {
-                return Err(CheckFailure::Retry(String::from(
-                    "delta_mdot_hard_limit",
-                )));
-            }
-            if lim > 0.0 {
-                let r_mdot = delta_mdot / lim;
-                *slot = if r_mdot <= 1.0 { 0.0 } else { r_mdot };
-            }
-        }
+    let delta_mdot = (mdot - mdot_old).abs() / denom;
+    if delta_mdot == 0.0 {
+        return Ok(());
     }
+    let lim = mw.delta_mdot_limit * coeff;
+    let hard_lim = mw.delta_mdot_hard_limit * coeff;
+    if hard_lim > 0.0 && !ctx.skip && delta_mdot > hard_lim {
+        return Err(CheckFailure::Retry(String::from("delta_mdot_hard_limit")));
+    }
+    if lim <= 0.0 {
+        return Ok(());
+    }
+    let r_mdot = delta_mdot / lim;
+    *slot = if r_mdot <= 1.0 { 0.0 } else { r_mdot };
     Ok(())
 }
 
@@ -1652,6 +1655,29 @@ pub(crate) fn check_dx_nuc_drop(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::controls::StarControls;
+    use crate::job_controls::StarJobControls;
+
+    fn delta_mdot_model(
+        mdot: f64,
+        mdot_old: f64,
+        atol: f64,
+        rtol: f64,
+        lim: f64,
+        hard_lim: f64,
+    ) -> StarModel {
+        let mut controls = StarControls::default();
+        controls.ts_stop.time_delta_coeff = 1.0;
+        controls.mix_wind.delta_mdot_atol = atol;
+        controls.mix_wind.delta_mdot_rtol = rtol;
+        controls.mix_wind.delta_mdot_limit = lim;
+        controls.mix_wind.delta_mdot_hard_limit = hard_lim;
+        let mut model =
+            StarModel::new(0, vec![1], StarJobControls::default(), controls);
+        model.mstar_dot = mdot;
+        model.aux.step_hist.mstar_dot_old = mdot_old;
+        model
+    }
 
     #[test]
     fn test_check_change_non_finite_delta_is_fatal_not_retry() {
@@ -1680,5 +1706,97 @@ mod tests {
         let r = check_change(1.5, 1.0, 2.0, 1.0, "x", false, &mut slot);
         assert!(r.is_ok());
         assert_eq!(slot, 1.5);
+    }
+
+    #[test]
+    fn test_check_delta_mdot_zero_over_zero_leaves_nan_in_slot() {
+        let model = delta_mdot_model(0.0, 0.0, 0.0, 0.0, 0.1, 0.2);
+        let ctx = LimitCtx::new(&model, false);
+        let mut slot = 0.0;
+        assert!(check_delta_mdot(&ctx, &mut slot).is_ok());
+        assert!(slot.is_nan());
+    }
+
+    #[test]
+    fn test_check_delta_mdot_nonzero_over_zero_retries_or_writes_infinity() {
+        let mdot = -1.0e-5 * M_SUN / SECYER;
+        let m_retry = delta_mdot_model(mdot, 0.0, 0.0, 0.0, 0.1, 0.2);
+        let ctx_retry = LimitCtx::new(&m_retry, false);
+        let mut slot = 0.0;
+        let err = check_delta_mdot(&ctx_retry, &mut slot).unwrap_err();
+        assert!(matches!(
+            err,
+            CheckFailure::Retry(ref msg) if msg == "delta_mdot_hard_limit"
+        ));
+
+        let ctx_skip = LimitCtx::new(&m_retry, true);
+        let mut slot_skip = 0.0;
+        assert!(check_delta_mdot(&ctx_skip, &mut slot_skip).is_ok());
+        assert_eq!(slot_skip, f64::INFINITY);
+
+        let m_nohard = delta_mdot_model(mdot, 0.0, 0.0, 0.0, 0.1, -1.0);
+        let ctx_nohard = LimitCtx::new(&m_nohard, false);
+        let mut slot_nohard = 0.0;
+        assert!(check_delta_mdot(&ctx_nohard, &mut slot_nohard).is_ok());
+        assert_eq!(slot_nohard, f64::INFINITY);
+    }
+
+    #[test]
+    fn test_check_delta_mdot_negative_denom_clamps_ratio_to_zero() {
+        let mdot = -2.0e-3 * M_SUN / SECYER;
+        let model = delta_mdot_model(mdot, 0.0, -1.0e-3, 0.0, 0.5, 0.2);
+        let ctx = LimitCtx::new(&model, false);
+        let mut slot = 7.0;
+        assert!(check_delta_mdot(&ctx, &mut slot).is_ok());
+        assert_eq!(slot, 0.0);
+    }
+
+    #[test]
+    fn test_check_delta_mdot_equal_mdot_positive_denom_preserves_slot() {
+        let mdot = -1.0e-5 * M_SUN / SECYER;
+        let model = delta_mdot_model(mdot, mdot, 1.0e-3, 0.5, 0.1, 0.2);
+        let ctx = LimitCtx::new(&model, false);
+        let mut slot = 7.0;
+        assert!(check_delta_mdot(&ctx, &mut slot).is_ok());
+        assert_eq!(slot, 7.0);
+    }
+
+    #[test]
+    fn test_check_delta_mdot_positive_denom_soft_and_hard_limits() {
+        let atol = 1.0e-3;
+        let rtol = 0.5;
+        let mdot_old = -1.0e-3 * M_SUN / SECYER;
+        let mdot = -2.0e-3 * M_SUN / SECYER;
+        let expected_denom =
+            (atol * M_SUN) / SECYER + rtol * mdot.abs().max(mdot_old.abs());
+        let expected_delta = (mdot - mdot_old).abs() / expected_denom;
+
+        // Soft ratio <= 1.0 clamps to 0.0.
+        let m_low = delta_mdot_model(mdot, mdot_old, atol, rtol, 1.0, -1.0);
+        let ctx_low = LimitCtx::new(&m_low, false);
+        let mut slot_low = 7.0;
+        assert!(check_delta_mdot(&ctx_low, &mut slot_low).is_ok());
+        assert_eq!(slot_low, 0.0);
+
+        // Soft ratio > 1.0 reports `delta_mdot / lim`.
+        let m_soft = delta_mdot_model(mdot, mdot_old, atol, rtol, 0.25, -1.0);
+        let ctx_soft = LimitCtx::new(&m_soft, false);
+        let mut slot_soft = 0.0;
+        assert!(check_delta_mdot(&ctx_soft, &mut slot_soft).is_ok());
+        assert_eq!(slot_soft, expected_delta / 0.25);
+
+        // Hard limit exceeded triggers retry unless skipped.
+        let m_hard = delta_mdot_model(mdot, mdot_old, atol, rtol, 0.25, 0.4);
+        let ctx_hard = LimitCtx::new(&m_hard, false);
+        let mut slot_hard = 0.0;
+        let err = check_delta_mdot(&ctx_hard, &mut slot_hard).unwrap_err();
+        assert!(matches!(
+            err,
+            CheckFailure::Retry(ref msg) if msg == "delta_mdot_hard_limit"
+        ));
+
+        let ctx_skip = LimitCtx::new(&m_hard, true);
+        assert!(check_delta_mdot(&ctx_skip, &mut slot_hard).is_ok());
+        assert_eq!(slot_hard, expected_delta / 0.25);
     }
 }

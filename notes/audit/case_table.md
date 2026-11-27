@@ -17,9 +17,9 @@ Generated mechanically by `flexmesa harness` from `benchmarks/history_harness/ca
 | Cases rejected by strict validation and rerun as diagnostic (unsupported controls ignored; never a pass) | 16 (13 took at least one step) |
 | Strict runs reaching upstream termination | 83 |
 | Diagnostic runs reaching upstream termination | 6 |
-| Acceptance passes against MESA `26.4.1` (`pass`) | 56 |
+| Acceptance passes against MESA `26.4.1` (`pass`) | 57 |
 | Interim `0b2e6bb` comparisons within manifest tolerance | 0 |
-| Declared known gaps (`known_gaps.toml`) | 46 |
+| Declared known gaps (`known_gaps.toml`) | 45 |
 | Undeclared failures | 0 |
 
 ## Per-Case Status and Reference Availability
@@ -133,7 +133,7 @@ Generated mechanically by `flexmesa harness` from `benchmarks/history_harness/ca
 | `astero` | `fast_newuoa` | `mesa_26_4_1` | `age_target` | strict | `astero_newuoa_samples=8_best_chi2=3.333388e5_term=age_target` | 3835 (479) | 0 (0) | - | - | 0.00% (0) | +0.00% | `log_L`: 0.000e+00 | - | #162 | declared gap (#162) |
 | `astero` | `fast_scan_grid` | `mesa_26_4_1` | `limit_num_chi2_too_big` | strict | `astero_scan_grid_samples=4_best_chi2=7.650287e-1_term=limit_num_chi2_too_big` | 1765 (470) | 0 (0) | - | - | 0.00% (0) | +0.00% | `log_L`: 0.000e+00 | - | #162 | scaffolding (#171) |
 | `astero` | `fast_simplex` | `mesa_26_4_1` | `chi2_search_limit2` | strict | `astero_simplex_samples=6_best_chi2=4.606467e-2_term=chi2_search_limit2` | 2724 (408) | 0 (0) | - | - | 0.00% (0) | +0.00% | `log_L`: 0.000e+00 | - | #162 | scaffolding (#171) |
-| `astero` | `surface_effects` | `mesa_26_4_1` | `max_model_number` | strict | `max_model_number` | 1 (1) | 0 (0) | 5.0 [5] (5.0 [5]) | - | 0.00% (0) | +0.00% | - | - | #162 | scaffolding (#171) |
+| `astero` | `surface_effects` | `mesa_26_4_1` | `max_model_number` | strict | `max_model_number` | 1 (1) | 0 (0) | 5.0 [5] (5.0 [5]) | - | 0.00% (0) | +0.00% | - | - | - | pass |
 
 ## Convective-Core Track Comparisons (`mass_conv_core`, `#155`)
 

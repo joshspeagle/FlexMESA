@@ -11,13 +11,13 @@ Instead of capping steps or loosening checks to force green runs, unfinished or 
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
 | `star` | 90 | 86 | 4 | 74 | 16 | 74 | 33 | 50 |
 | `binary` | 8 | 8 | 0 | 8 | 0 | 8 | 4 | 4 |
-| `astero` | 8 | 8 | 0 | 8 | 0 | 7 | 2 | 2 |
-| **Total** | **106** | **102** | **4** | **90** | **16** | **89** | **39** | **56** |
+| `astero` | 8 | 8 | 0 | 8 | 0 | 7 | 2 | 3 |
+| **Total** | **106** | **102** | **4** | **90** | **16** | **89** | **39** | **57** |
 
 `Strict-Validated` counts cases whose unmodified inlists pass strict control validation (`#147`). `Diagnostic Runs` counts cases that strict validation rejects and that were rerun with the unsupported controls ignored; their numbers show where the engine stands and can never count as a pass (`DECISIONS #26`). `Reach Upstream Term` counts runs of either kind.
 
 - **Undeclared Failures**: `0`
-- **Within Numeric Tolerance While Governed as Gaps**: `12` cases (`star/gyre_in_mesa_envelope` ([#170](https://github.com/joshspeagle/FlexMESA/issues/170)), `star/gyre_in_mesa_wd` ([#157](https://github.com/joshspeagle/FlexMESA/issues/157)), `star/make_planets` ([#587](https://github.com/joshspeagle/FlexMESA/issues/587)), `star/ns_h` ([#587](https://github.com/joshspeagle/FlexMESA/issues/587)), `star/relax_composition_j_entropy` ([#154](https://github.com/joshspeagle/FlexMESA/issues/154)), `star/rsp_gyre` ([#170](https://github.com/joshspeagle/FlexMESA/issues/170)), `binary/wind_fed_bhhmxb` ([#587](https://github.com/joshspeagle/FlexMESA/issues/587)), `astero/fast_from_file` ([#162](https://github.com/joshspeagle/FlexMESA/issues/162)), `astero/fast_newuoa` ([#162](https://github.com/joshspeagle/FlexMESA/issues/162)), `astero/fast_scan_grid` ([#162](https://github.com/joshspeagle/FlexMESA/issues/162)), `astero/fast_simplex` ([#162](https://github.com/joshspeagle/FlexMESA/issues/162)), `astero/surface_effects` ([#162](https://github.com/joshspeagle/FlexMESA/issues/162))) meet numeric tolerances while remaining declared gaps under active tracking issues.
+- **Within Numeric Tolerance While Governed as Gaps**: `11` cases (`star/gyre_in_mesa_envelope` ([#170](https://github.com/joshspeagle/FlexMESA/issues/170)), `star/gyre_in_mesa_wd` ([#157](https://github.com/joshspeagle/FlexMESA/issues/157)), `star/make_planets` ([#587](https://github.com/joshspeagle/FlexMESA/issues/587)), `star/ns_h` ([#587](https://github.com/joshspeagle/FlexMESA/issues/587)), `star/relax_composition_j_entropy` ([#154](https://github.com/joshspeagle/FlexMESA/issues/154)), `star/rsp_gyre` ([#170](https://github.com/joshspeagle/FlexMESA/issues/170)), `binary/wind_fed_bhhmxb` ([#587](https://github.com/joshspeagle/FlexMESA/issues/587)), `astero/fast_from_file` ([#162](https://github.com/joshspeagle/FlexMESA/issues/162)), `astero/fast_newuoa` ([#162](https://github.com/joshspeagle/FlexMESA/issues/162)), `astero/fast_scan_grid` ([#162](https://github.com/joshspeagle/FlexMESA/issues/162)), `astero/fast_simplex` ([#162](https://github.com/joshspeagle/FlexMESA/issues/162))) meet numeric tolerances while remaining declared gaps under active tracking issues.
 
 ## Cases Without a Stored `26.4.1` Reference (`no_reference_yet`)
 
@@ -172,7 +172,7 @@ from flexmesa.testing import case_manifest
 manifest = case_manifest.load_case_manifest()
 gaps = case_manifest.load_known_gaps()
 assert len(manifest.cases) == 106
-assert len(gaps) == 46
+assert len(gaps) == 45
 no_ref = [
     c.case for c in manifest.cases
     if c.reference_status == "no_reference_yet"

@@ -232,12 +232,6 @@ suite = "astero"
 case = "fast_simplex"
 issue = "#162"
 reason = "Asteroseismic simplex optimizer and in-house pulsation scaffolding (#162, #171)."
-[[gaps]]
-suite = "astero"
-case = "surface_effects"
-issue = "#162"
-reason = "Asteroseismic surface-effects starting model and ADIPLS scaffolding (#162, #171)."
-
 # Declared test-level known gaps in this same single ledger (#144).
 # Every Rust #[ignore] attribute and Python @pytest.mark.{xfail,skip,skipif}
 # decorator must appear bijectively here and cite an open GitHub issue.

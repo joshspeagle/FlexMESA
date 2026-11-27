@@ -906,5 +906,3 @@ case = "surface_effects"
 reference_status = "mesa_26_4_1"
 reference_path = "benchmarks/history_harness/reference_histories/astero/surface_effects.data"
 required_termination = "max_model_number"
-uses_pulsation_scaffolding = true
-scaffolding_issue = "#171"

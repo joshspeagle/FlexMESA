@@ -292,11 +292,10 @@ module = "math"
 kind = "invariant"
 
 [[tests]]
-path = "crates/flexmesa-data/tests/data_161_parity_test.rs"
+path = "crates/flexmesa-data/tests/data_161_test.rs"
 language = "rust"
 module = "utils"
 kind = "invariant"
-mislabel_reason = "#563: W4 audit found boundary/JSON/safetensors invariant checks with no MESA 26.4.1 oracle comparison; rename away from restricted vocabulary under W4 (#563)"
 
 [[tests]]
 path = "crates/flexmesa-data/tests/data_tests.rs"
@@ -645,11 +644,10 @@ kind = "oracle"
 provenance = "Upstream MESA 26.4.1 mtx/test/test_output (test_square1, test_square2, banded)"
 
 [[tests]]
-path = "crates/flexmesa-net/tests/burn_simpr_161_parity_test.rs"
+path = "crates/flexmesa-net/tests/burn_simpr_161_test.rs"
 language = "rust"
 module = "net"
 kind = "invariant"
-mislabel_reason = "#563: W4 audit found mass-conservation and determinism checks with no MESA 26.4.1 oracle comparison; rename away from restricted vocabulary under W4 (#563)"
 
 [[tests]]
 path = "crates/flexmesa-net/tests/case_nets_w1_test.rs"
@@ -706,11 +704,10 @@ kind = "oracle"
 provenance = "mesa-module-hex-v1.tar.zst bundle (MESA 26.4.1 net IEEE-754 hex outputs)"
 
 [[tests]]
-path = "crates/flexmesa-net/tests/net_weak_lowt_161_parity_test.rs"
+path = "crates/flexmesa-net/tests/net_weak_lowt_161_test.rs"
 language = "rust"
 module = "net"
 kind = "invariant"
-mislabel_reason = "#563: W4 audit found analytical rate/dxdt consistency checks with no committed MESA 26.4.1 oracle artifact; rename away from restricted vocabulary under W4 (#563)"
 
 [[tests]]
 path = "crates/flexmesa-net/tests/special_reactions_test.rs"
@@ -916,11 +913,10 @@ provenance = "MESA 26.4.1 star/private/element_diffusion.f90:562 element_diffusi
 routines = ["star/private/element_diffusion.f90::do_element_diffusion"]
 
 [[tests]]
-path = "crates/flexmesa-star/tests/elem_diff_156_parity_test.rs"
+path = "crates/flexmesa-star/tests/elem_diff_156_test.rs"
 language = "rust"
 module = "star"
 kind = "invariant"
-mislabel_reason = "#563: W4 audit found self-contained element-diffusion solver/accounting invariant checks with no MESA 26.4.1 oracle comparison; rename away from restricted vocabulary under W4 (#563)"
 
 [[tests]]
 path = "crates/flexmesa-star/tests/energy_accounting_151_test.rs"
@@ -1057,11 +1053,10 @@ module = "star"
 kind = "invariant"
 
 [[tests]]
-path = "crates/flexmesa-star/tests/mesh_adjust_omega_153_parity_test.rs"
+path = "crates/flexmesa-star/tests/mesh_adjust_omega_153_test.rs"
 language = "rust"
 module = "star"
 kind = "invariant"
-mislabel_reason = "#563: W4 audit found self-contained adjust_omega control-volume invariant checks with no MESA 26.4.1 oracle comparison; rename away from restricted vocabulary under W4 (#563)"
 
 [[tests]]
 path = "crates/flexmesa-star/tests/mesh_planner_153_test.rs"
@@ -1431,11 +1426,10 @@ provenance = "benchmarks/fortran_mesa/zams_1p0_oracle/zams_model0_1p0Msun_26_4_1
 routines = ["star/private/init_model.f90::get_zams_model"]
 
 [[tests]]
-path = "crates/flexmesa-star/tests/zams_io_154_parity_test.rs"
+path = "crates/flexmesa-star/tests/zams_io_154_test.rs"
 language = "rust"
 module = "star"
 kind = "invariant"
-mislabel_reason = "#563: W4 audit found no real-MESA 26.4.1 oracle comparison; rename away from restricted vocabulary under W4 (#563)"
 
 [[tests]]
 path = "crates/flexmesa-testing/tests/golden_tests.rs"
@@ -1892,11 +1886,10 @@ module = "plotting"
 kind = "invariant"
 
 [[tests]]
-path = "tests/test_py_bindings_161_parity.py"
+path = "tests/test_py_bindings_161.py"
 language = "python"
 module = "tooling"
 kind = "invariant"
-mislabel_reason = "#563: W4 audit found PyO3 boundary guards and analytical checks with no MESA 26.4.1 oracle comparison; rename away from restricted vocabulary under W4 (#563)"
 
 [[tests]]
 path = "tests/test_schema.py"

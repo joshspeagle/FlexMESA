@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //! Standalone zero-`$MESA_DIR` integration tests for `#161` Group 7a
-//! `burn_1_zone` and `simpr` parity (`net/private/net_burn.f90:418-421,449,461`,
+//! `burn_1_zone` and `simpr` invariants (`net/private/net_burn.f90:418-421,449,461`,
 //! `net/private/net_burn_support.f90:515,529,549`,
 //! `net/private/net_eval.f90:274,566,570-571`).
 

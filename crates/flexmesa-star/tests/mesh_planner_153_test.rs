@@ -207,7 +207,7 @@ fn test_species_energy_and_total_angular_momentum_are_conserved_f4_26() {
     //    `omega = j_rot/i_rot` for every new cell, unchanged cells included
     //    (`star/private/mesh_adjust.f90:1943-1952, 2097-2103`), so untouched
     //    zones are not preserved bit-for-bit; that per-cell recomputation is
-    //    checked in `mesh_adjust_omega_153_parity_test.rs` (#153, #559).
+    //    checked in `mesh_adjust_omega_153_test.rs` (#153, #559).
     let j_after = total_angular_momentum_cgs(&model);
     let rel_j = (j_after - j_before).abs() / j_before.abs();
     assert!(

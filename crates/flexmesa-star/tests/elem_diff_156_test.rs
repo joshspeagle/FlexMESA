@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-//! Standalone self-contained unit and parity tests for element diffusion
+//! Standalone self-contained unit and invariant tests for element diffusion
 //! (`#156`): Rosenbrock `isolve` tableau/solver coverage, `use_full_net`
 //! ionization flag persistence, `nzlo`/`nzhi` boundary controls, sedimentation
 //! heating accounting, `diffusion_procs` fixup/taper/remap invariants, and

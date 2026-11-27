@@ -1589,8 +1589,10 @@ pub fn eval_dxdt_mix(model: &StarModel) -> Vec<f64> {
 /// $L_{\mathrm{rad},k} / L_{\mathrm{Edd},k}$ at face `k`
 /// (`get_Lrad_div_Ledd` in `star/private/star_utils.f90:2118-2137`).
 ///
-/// Returns `0.0` if `k >= model.nz`, `model.nz < 2`, `model.cgrav[k] <= 0.0`,
-/// or the shifted face denominators (`dm_bar`, `cgrav`, `m_grav`) vanish.
+/// Returns `0.0` if `k >= model.nz`, `model.nz < 2` (index safety; upstream
+/// reads out of bounds there) or `model.cgrav[k] <= 0.0`
+/// (`star_utils.f90:2123-2126`). A vanishing `dm_bar`, `cgrav` or `m_grav`
+/// at the shifted face gives the same non-finite quotient as upstream.
 #[must_use]
 pub fn eval_lrad_div_ledd(model: &StarModel, k: usize) -> f64 {
     if k >= model.nz || model.nz < 2 || model.cgrav[k] <= 0.0 {
@@ -1598,9 +1600,6 @@ pub fn eval_lrad_div_ledd(model: &StarModel, k: usize) -> f64 {
     }
     let j = if k == 0 { 1 } else { k };
     let del_m = model.dm_bar[j];
-    if del_m == 0.0 || model.cgrav[j] <= 0.0 || model.m_grav[j] == 0.0 {
-        return 0.0;
-    }
     let del_t4 =
         flexmesa_math::pow4(model.t[j - 1]) - flexmesa_math::pow4(model.t[j]);
     let area = FOUR_PI * model.r[j] * model.r[j];

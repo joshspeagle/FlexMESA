@@ -272,6 +272,16 @@ fn test_rsp2_24slot_analytical_jacobian_matches_finite_differences() {
     let i_equ_l = model.layout.i_equ_l;
     let i_dv_dt = model.layout.i_dv_dt;
     let i_dlne = model.layout.i_dlne_dt;
+    let i_w = model.layout.i_w.expect("i_w");
+    // Forced non-turbulent cells (`k <= num_outermost`, `k > nz - nz/IBOTOM`,
+    // 1-based) use `resid_ad = w_00/s% csound(k)`, with `csound` a plain
+    // `real(dp)` array (`star/private/hydro_rsp2.f90:303-311`). Upstream's
+    // analytic row then carries only the `w` partial, while a finite
+    // difference also sees `csound` move with `lnd` and `lnT`.
+    let n_outer = model.controls.rsp2.num_outermost_cells_forced_nonturbulent;
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    let ibotom = (nz as f64 / model.controls.rsp2.nz_div_ibotom) as usize;
+    let nonturbulent = |k: usize| k + 1 <= n_outer || k + 1 > nz - ibotom;
 
     for &k_row in &[0_usize, 15, nz - 1] {
         for dk in -1_i32..=1 {
@@ -303,6 +313,9 @@ fn test_rsp2_24slot_analytical_jacobian_matches_finite_differences() {
                     eval_henyey_equations(&mut model, false).expect("sys_lo");
 
                 for &i_equ in &[i_equ_l, i_equ_hp, i_etrb, i_dv_dt, i_dlne] {
+                    if i_equ == i_etrb && nonturbulent(k_row) && j_var != i_w {
+                        continue;
+                    }
                     let fd = (sys_hi.equ[k_row * nvar + i_equ]
                         - sys_lo.equ[k_row * nvar + i_equ])
                         / (2.0 * eps_scaled);

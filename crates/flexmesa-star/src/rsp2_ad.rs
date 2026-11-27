@@ -7,6 +7,7 @@
 use flexmesa_const::{BOLTZ_SIGMA, CLIGHT, CRAD, PI, PI4, SQRT_2_DIV_3};
 use flexmesa_eos::{I_CHI_RHO, I_CHI_T, I_CP, I_GRAD_AD, I_LN_E};
 
+use crate::controls::StarError;
 use crate::hydro_eqns::HenyeySystem;
 use crate::model::StarModel;
 use crate::rsp2::{
@@ -530,7 +531,14 @@ pub fn update_rsp2_vars_ad(model: &mut StarModel) {
 
 /// Assembles `do1_rsp2_L_eqn`, `do1_rsp2_Hp_eqn`, and `do1_turbulent_energy_eqn`
 /// into `sys` across all zones `0..nz` (`hydro_rsp2.f90:114-417`).
-pub fn eval_and_save_rsp2_eqns(model: &mut StarModel, sys: &mut HenyeySystem) {
+///
+/// # Errors
+/// Returns [`StarError`] when `set_energy_eqn_scal` needs a
+/// `total_internal_energy_old` that is not set for this step.
+pub fn eval_and_save_rsp2_eqns(
+    model: &mut StarModel,
+    sys: &mut HenyeySystem,
+) -> Result<(), StarError> {
     let work = build_rsp2_ad_work(model);
     let nz = model.nz;
     let l_start_max = model.lum_start.iter().copied().fold(0.0_f64, f64::max);
@@ -540,7 +548,6 @@ pub fn eval_and_save_rsp2_eqns(model: &mut StarModel, sys: &mut HenyeySystem) {
         model.lum.first().copied().unwrap_or(1.0).abs().max(1.0)
     };
     let inv_l_scale = 1.0 / l_scale;
-    let dt = model.dt.max(1.0e-30);
     let k_l_start = usize::from(!model.controls.rsp2.use_l_eqn_at_surface);
 
     for k in k_l_start..nz {
@@ -567,19 +574,22 @@ pub fn eval_and_save_rsp2_eqns(model: &mut StarModel, sys: &mut HenyeySystem) {
     if let Some(i_etrb) = model.layout.i_turbulent_energy {
         for k in 0..nz {
             let w_00 = wrap_w(model, k, I_W_00);
+            // `do1_turbulent_energy_eqn` (`star/private/hydro_rsp2.f90:284-409`).
             let resid_w = if !model.controls.rsp2_flag {
                 w_00 - model.aux.rsp.w_start[k]
             } else if is_nonturbulent_cell(model, k) {
-                let cs_s = model.aux.rsp.csound_start_rsp[k];
-                let cs =
-                    (if cs_s > 0.0 { cs_s } else { model.csound[k] }).max(1.0);
-                w_00 * (1.0 / cs)
+                // `resid_ad = w_00/s% csound(k)` (`hydro_rsp2.f90:311`).
+                w_00 / model.csound[k]
             } else {
+                let dt = model.dt;
+                // `wrap_etrb_00 - get_etrb_start` (`hydro_rsp2.f90:356`).
                 let d_et =
                     w_00 * w_00 - flexmesa_math::pow2(model.aux.rsp.w_start[k]);
+                // `Ptrb_ad*(1/d_00 - 1/rho_start(k))`
+                // (`hydro_rsp2.f90:360-369`).
                 let ptrb_ad = eval_rsp2_ptrb_cell_ad(model, k, false);
                 let d_00 = StarAdOrder1::variable(model.lnd[k], I_LND_00).exp();
-                let rho_s = flexmesa_math::exp(model.lnd_start[k]).max(1.0e-99);
+                let rho_s = flexmesa_math::exp(model.lnd_start[k]);
                 let ptrb_dv =
                     ptrb_ad * (StarAdOrder1::ONE / d_00 - 1.0 / rho_s);
 
@@ -599,29 +609,23 @@ pub fn eval_and_save_rsp2_eqns(model: &mut StarModel, sys: &mut HenyeySystem) {
                 } else {
                     StarAdOrder1::ZERO
                 };
-                let dt_dlt_dm =
-                    (lt_00 - lt_p1) * (dt / model.dm[k].max(1.0e-99));
+                // `(Lt_00 - Lt_p1)*s%dt/s%dm(k)` (`hydro_rsp2.f90:390`).
+                let dt_dlt_dm = (lt_00 - lt_p1) * dt / model.dm[k];
+                // `esum_ad = d_turbulent_energy_ad + Ptrb_dV_ad + dt_dLt_dm_ad
+                // - dt_C_ad - dt_Eq_ad` (`hydro_rsp2.f90:320`), with
+                // `dt_C_ad = s%dt*C` and `dt_Eq_ad = s%dt*Eq_cell`.
                 let esum = d_et + ptrb_dv + dt_dlt_dm
-                    - work.coupl[k] * dt
-                    - model.aux.eq_ad[k] * dt;
-                let scal_div_dt = if model.dt > 0.0
-                    && model.aux.total_internal_energy_start.is_some()
-                {
-                    crate::hydro_energy::set_energy_eqn_scal(model, k)
-                        .unwrap_or(0.0)
-                        / model.dt
-                } else {
-                    let e_s = model.energy_start[k];
-                    let e_start =
-                        (if e_s > 0.0 { e_s } else { model.energy[k] })
-                            .max(1.0);
-                    (if k == 0 { 1.0e-6 } else { 1.0 }) / e_start
-                };
-                esum * scal_div_dt
+                    - dt * work.coupl[k]
+                    - dt * model.aux.eq_ad[k];
+                // `resid_ad*scal/s%dt` with `scal` from
+                // `set_energy_eqn_scal` (`hydro_rsp2.f90:318, 328`).
+                let scal = crate::hydro_energy::set_energy_eqn_scal(model, k)?;
+                esum * scal / dt
             };
             sys.save_eqn_residual(&model.layout, k, i_etrb, &resid_w);
         }
     }
+    Ok(())
 }
 
 #[cfg(test)]

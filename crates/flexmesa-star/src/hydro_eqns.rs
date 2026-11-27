@@ -922,7 +922,7 @@ pub fn assemble_henyey_system(
     }
     model.aux.step_hist.tot_e_equ_err = tot_e_equ_err;
     if model.controls.rsp2_flag {
-        crate::rsp2_ad::eval_and_save_rsp2_eqns(model, sys);
+        crate::rsp2_ad::eval_and_save_rsp2_eqns(model, sys)?;
     }
     Ok(())
 }

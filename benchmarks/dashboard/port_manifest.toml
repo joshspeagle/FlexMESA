@@ -3335,7 +3335,8 @@ upstream_lines = 393
 upstream_sha256 = "f4334c372b4170c6df53330727265de57577df2fbd7096f60e53be59d4524e07"
 status = "partial"
 flexmesa_files = ["crates/flexmesa-gyre/src/par.rs"]
-notes = "Routine map reviewed in notes/audit/routine_map_reviews/610b.toml (DECISIONS #79). Comma-delimited tag-list splitting ported for select_par_v; remaining 7 string utilities are unported."
+routine_map_partial = ["split_list"]
+notes = "Routine map reviewed in notes/audit/routine_map_reviews/610b.toml (DECISIONS #79). Comma-delimited tag-list splitting ported for select_par_v (split_list hardcodes comma delimiter and omits optional delim and unique deduplication); remaining 7 string utilities are unported."
 [files.routine_map]
 "split_list" = "crates/flexmesa-gyre/src/par.rs::split_list"
 
@@ -3890,8 +3891,8 @@ upstream_lines = 369
 upstream_sha256 = "167815c4d2bf5e8ea4189d850d1b855e4b1284ce2fc1d52e26353637e5c6e205"
 status = "partial"
 flexmesa_files = ["crates/flexmesa-gyre/src/model.rs"]
-routine_map_partial = ["cubic_interp_${S}$_", "eval_df_dx_${S}$_", "eval_f_${S}$_"]
-notes = "Routine map reviewed in notes/audit/routine_map_reviews/610b.toml (DECISIONS #79). Real (rt) CubicInterp constructor, Hermite basis evaluators, and eval_f/eval_df_dx; complex (ct) overloads, eval_derivs wrapper, HDF5 read/write, and get_x_min/max are unported."
+routine_map_partial = ["cubic_interp_${S}$_", "dphi_dt_", "dpsi_dt_", "eval_df_dx_${S}$_", "eval_f_${S}$_"]
+notes = "Routine map reviewed in notes/audit/routine_map_reviews/610b.toml (DECISIONS #79). Real (rt) CubicInterp constructor, Hermite basis evaluators (dphi_dt_/dpsi_dt_ implement n = 0, 1 only, omitting n = -1, 2, 3, >=4 and abort), and eval_f/eval_df_dx; complex (ct) overloads, eval_derivs wrapper, HDF5 read/write, and get_x_min/max are unported."
 [files.routine_map]
 "cubic_interp_${S}$_" = "crates/flexmesa-gyre/src/model.rs::CubicInterp::new"
 "eval_f_${S}$_" = "crates/flexmesa-gyre/src/model.rs::eval_f+bracket"
@@ -4132,8 +4133,8 @@ upstream_lines = 2522
 upstream_sha256 = "0bcb5682e95c06afad1e3613201fceee9cf45ff3704a1cd28981c21a46c64ee0"
 status = "partial"
 flexmesa_files = ["crates/flexmesa-gyre/src/mode.rs"]
-routine_map_partial = ["dW_dx", "freq"]
-notes = "Routine map reviewed in notes/audit/routine_map_reviews/610b.toml (DECISIONS #79). Wave eigenfunctions, differential work/inertia, Takata Yt_1/Yt_2, propagation type, and inertia normalization (17/62 routines ported; under Rule B, dW_dx is partial because its class default model arm is unported alongside evol_model_t; Wave::freq omits optional freq_frame; remaining accessors/integrals unported)."
+routine_map_partial = ["dW_dx", "freq", "wave_t_"]
+notes = "Routine map reviewed in notes/audit/routine_map_reviews/610b.toml (DECISIONS #79). Wave eigenfunctions, differential work/inertia, Takata Yt_1/Yt_2, propagation type, and inertia normalization (17/62 routines ported; under Rule B, dW_dx is partial because its class default model arm is unported alongside evol_model_t; Wave::freq omits optional freq_frame; Wave::new omits optional static and hardcodes static_mode = false; remaining accessors/integrals unported)."
 [files.routine_map]
 "wave_t_" = "crates/flexmesa-gyre/src/mode.rs::Wave::new"
 "freq" = "crates/flexmesa-gyre/src/mode.rs::Wave::freq"
@@ -4298,7 +4299,8 @@ upstream_lines = 311
 upstream_sha256 = "400a1d82840eb2931fef747aa97bc816923eb6f1a20d7b6a72367a9be0535bb4"
 status = "partial"
 flexmesa_files = ["crates/flexmesa-gyre/src/model.rs"]
-notes = "Routine map reviewed in notes/audit/routine_map_reviews/610b.toml (DECISIONS #79). snap_points and check_model ported; coefficient name/index lookup fns replaced by idx constants."
+routine_map_partial = ["snap_points"]
+notes = "Routine map reviewed in notes/audit/routine_map_reviews/610b.toml (DECISIONS #79). snap_points and check_model ported (snap_points requires m, omitting optional PRESENT(m)); coefficient name/index lookup fns replaced by idx constants."
 [files.routine_map]
 "snap_points" = "crates/flexmesa-gyre/src/model.rs::snap_points"
 "check_model" = "crates/flexmesa-gyre/src/model.rs::check"

@@ -66,7 +66,7 @@ The fractions answer different questions. The whole-file figure counts every lin
 | `math` | 6 | 35 | 0 | 0 | 0 | 35 | 0 | 936 | 0 | 0 | 0 | 485 | 451 | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% |
 | `const` | 2 | 2 | 0 | 0 | 0 | 2 | 0 | 256 | 0 | 0 | 0 | 48 | 208 | 0.0% | 0.0% | 0.0% | 0.0% | 100.0% |
 | `utils` | 11 | 150 | 0 | 0 | 0 | 150 | 0 | 3,398 | 0 | 0 | 0 | 2,614 | 784 | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% |
-| `gyre` | 171 | 983 | 198 | 85 | 0 | 700 | 0 | 55,708 | 7,874 | 4,891 | 0 | 27,976 | 14,967 | 14.1% | 8.8% | 14.1% | 0.0% | 0.0% |
+| `gyre` | 171 | 983 | 193 | 90 | 0 | 700 | 0 | 55,708 | 7,603 | 5,162 | 0 | 27,976 | 14,967 | 13.6% | 9.3% | 13.6% | 0.0% | 0.0% |
 | `adipls` | 133 | 221 | 36 | 10 | 0 | 175 | 0 | 30,923 | 5,633 | 3,889 | 0 | 21,242 | 159 | 18.2% | 12.6% | 18.2% | 0.0% | 0.0% |
 | `stella` | 109 | 238 | 0 | 0 | 0 | 238 | 0 | 45,351 | 0 | 0 | 0 | 39,716 | 5,635 | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% |
 | `plotting` | 58 | 559 | 0 | 0 | 0 | 559 | 0 | 35,732 | 0 | 0 | 0 | 25,133 | 10,599 | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% |
@@ -270,7 +270,7 @@ Candidates for a reviewed raise to `ported_unverified`. Largest ten:
 | `gyre/gyre/src/common/constants_m.fypp` | `gyre` | partial | partial | 188 | 3 | 2 | 0 | 0 | 0 | 48 | 0 | 0 | 41 | 99 |
 | `gyre/gyre/src/common/freq_context_m.fypp` | `gyre` | partial | partial | 248 | 4 | 0 | 1 | 0 | 0 | 0 | 48 | 0 | 126 | 74 |
 | `gyre/gyre/src/common/freq_m.fypp` | `gyre` | partial | partial | 160 | 4 | 2 | 1 | 0 | 0 | 47 | 24 | 0 | 24 | 65 |
-| `gyre/gyre/src/common/string_m.fypp` | `gyre` | partial | partial | 393 | 8 | 1 | 0 | 0 | 0 | 69 | 0 | 0 | 233 | 91 |
+| `gyre/gyre/src/common/string_m.fypp` | `gyre` | partial | partial | 393 | 8 | 0 | 1 | 0 | 0 | 0 | 69 | 0 | 233 | 91 |
 | `gyre/gyre/src/common/util_m.fypp` | `gyre` | partial | partial | 265 | 6 | 0 | 2 | 0 | 0 | 0 | 48 | 0 | 125 | 92 |
 | `gyre/gyre/src/context/context_m.fypp` | `gyre` | partial | partial | 571 | 15 | 3 | 6 | 0 | 0 | 48 | 200 | 0 | 174 | 149 |
 | `gyre/gyre/src/diff/colloc_diff_m.fypp` | `gyre` | partial | partial | 391 | 6 | 1 | 4 | 0 | 0 | 29 | 202 | 0 | 21 | 139 |
@@ -283,7 +283,7 @@ Candidates for a reviewed raise to `ported_unverified`. Largest ten:
 | `gyre/gyre/src/grid/grid_refine_m.fypp` | `gyre` | partial | partial | 701 | 7 | 3 | 2 | 0 | 0 | 274 | 202 | 0 | 145 | 80 |
 | `gyre/gyre/src/grid/grid_scaffold_m.fypp` | `gyre` | partial | partial | 207 | 2 | 0 | 1 | 0 | 0 | 0 | 29 | 0 | 120 | 58 |
 | `gyre/gyre/src/grid/grid_util_m.fypp` | `gyre` | partial | ported_unverified | 227 | 3 | 3 | 0 | 0 | 0 | 170 | 0 | 0 | 0 | 57 |
-| `gyre/gyre/src/interp/cubic_interp_m.fypp` | `gyre` | partial | partial | 369 | 10 | 2 | 3 | 0 | 0 | 60 | 105 | 0 | 89 | 115 |
+| `gyre/gyre/src/interp/cubic_interp_m.fypp` | `gyre` | partial | partial | 369 | 10 | 0 | 5 | 0 | 0 | 0 | 165 | 0 | 89 | 115 |
 | `gyre/gyre/src/interp/deriv_m.fypp` | `gyre` | partial | partial | 272 | 4 | 1 | 1 | 0 | 0 | 59 | 29 | 0 | 115 | 69 |
 | `gyre/gyre/src/lib/gyre_mesa_m.fypp` | `gyre` | partial | partial | 484 | 9 | 2 | 3 | 0 | 0 | 48 | 239 | 0 | 96 | 101 |
 | `gyre/gyre/src/math/crmath/math_m.fypp` | `gyre` | partial | partial | 153 | 2 | 1 | 1 | 0 | 0 | 14 | 15 | 0 | 0 | 124 |
@@ -293,10 +293,10 @@ Candidates for a reviewed raise to `ported_unverified`. Largest ten:
 | `gyre/gyre/src/matrix/linalg_m.fypp` | `gyre` | partial | partial | 872 | 19 | 4 | 2 | 0 | 0 | 298 | 63 | 0 | 344 | 167 |
 | `gyre/gyre/src/matrix/sysmtx_factory_m.fypp` | `gyre` | partial | partial | 87 | 1 | 0 | 1 | 0 | 0 | 0 | 25 | 0 | 0 | 62 |
 | `gyre/gyre/src/mode/mode_m.fypp` | `gyre` | partial | partial | 356 | 4 | 2 | 1 | 0 | 0 | 97 | 144 | 0 | 28 | 87 |
-| `gyre/gyre/src/mode/wave_m.fypp` | `gyre` | partial | partial | 2,522 | 62 | 15 | 2 | 0 | 0 | 633 | 70 | 0 | 1,465 | 354 |
+| `gyre/gyre/src/mode/wave_m.fypp` | `gyre` | partial | partial | 2,522 | 62 | 14 | 3 | 0 | 0 | 552 | 151 | 0 | 1,465 | 354 |
 | `gyre/gyre/src/model/evol_model_m.fypp` | `gyre` | partial | partial | 790 | 17 | 7 | 3 | 0 | 0 | 337 | 157 | 0 | 157 | 139 |
 | `gyre/gyre/src/model/mesa_file_m.fypp` | `gyre` | partial | partial | 513 | 6 | 0 | 2 | 0 | 0 | 0 | 213 | 0 | 238 | 62 |
-| `gyre/gyre/src/model/model_util_m.fypp` | `gyre` | partial | partial | 311 | 6 | 2 | 0 | 0 | 0 | 100 | 0 | 0 | 143 | 68 |
+| `gyre/gyre/src/model/model_util_m.fypp` | `gyre` | partial | partial | 311 | 6 | 1 | 1 | 0 | 0 | 39 | 61 | 0 | 143 | 68 |
 | `gyre/gyre/src/nad/nad_bound_m.fypp` | `gyre` | partial | partial | 893 | 12 | 5 | 3 | 0 | 0 | 263 | 195 | 0 | 292 | 143 |
 | `gyre/gyre/src/nad/nad_bvp_m.fypp` | `gyre` | partial | partial | 231 | 4 | 2 | 1 | 0 | 0 | 55 | 49 | 0 | 36 | 91 |
 | `gyre/gyre/src/nad/nad_diff_m.fypp` | `gyre` | partial | partial | 200 | 2 | 1 | 1 | 0 | 0 | 57 | 62 | 0 | 0 | 81 |
